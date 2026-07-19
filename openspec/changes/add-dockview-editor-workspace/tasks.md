@@ -10,16 +10,16 @@
 - [x] 2.1 先在 `packages/editor/src/index.test.tsx` 增加失败测试，覆盖左/右/底三个 Edge Groups、中央 Canvas 主组、五个面板、六份插槽内容、HTML 属性透传和 React Strict Mode 下不重复初始化。
 - [x] 2.2 在 `packages/editor/src/workspace-context.tsx` 定义 `sceneGraphPanel`、`canvasToolbar`、`children`、`inspectorPanel`、`transactionLogPanel`、`commandPanel` 六份 React 内容的内部 context，不导出 Dockview 类型。
 - [x] 2.3 在 `packages/editor/src/workspace-panels.tsx` 创建 Scene Graph、Canvas、Component Inspector、Transaction Log、Command 五个内部面板渲染器；Canvas 渲染器把工具栏固定在内容顶部，其余插槽缺省时显示可访问的占位内容。
-- [x] 2.4 在 `packages/editor/src/workspace-tab.tsx` 基于 Dockview 默认标签创建固定标签渲染器，保留标题与 Edge Group 活动标签折叠行为，但隐藏关闭入口且不提供关闭上下文菜单。
+- [x] 2.4 在 `packages/editor/src/workspace-tab.tsx` 创建固定标签渲染器：Scene Graph 使用设计组件图标，Component 使用属性图标，左侧活动栏底部显示设置图标，Canvas 使用默认标签，底部标签显示“日志”“命令”；图标带可访问名称，保留 Edge Group 活动标签折叠行为，隐藏关闭入口且不提供关闭上下文菜单。
 - [x] 2.5 在 `packages/editor/src/workspace-layout.ts` 定义固定组 ID、面板 ID 和默认尺寸，并实现幂等的 `initializeWorkspace(api)`：先创建中央 Canvas，再以 `addEdgeGroup('left'|'right'|'bottom')` 创建三个 Edge Groups，最后把两个底部面板放入同一个组。
 - [x] 2.6 在 `packages/editor/src/index.tsx` 集成 `DockviewReact` 和 workspace context，设置 `disableDnd` 与 `disableFloatingGroups` 固定四区骨架，同时保留根 `<section>` 的 ARIA、data 属性和 HTML 属性透传。
 - [x] 2.7 运行 `bun run --cwd packages/editor test` 与 `bun run --cwd packages/editor typecheck`，确认单元测试和公共类型通过。
 
 ## 3. 更新示例纵向流程
 
-- [x] 3.1 修改 `app/src/App.tsx`，在 `sceneGraphPanel` 展示 Page 1 与文本节点，在 `canvasToolbar` 放置“添加文本组件”和画布工具占位，在 `children` 保留可选画布，在 `inspectorPanel` 放置属性输入框，在底部两个插槽提供事务列表和命令输入，并继续通过 `@compose-ui/preview` 展示实时结果。
-- [x] 3.2 修改 `app/src/App.css` 和应用入口样式导入，按效果图建立深色全高工作台，确保编辑器工作区拥有确定高度，并为窄屏提供可操作的最小尺寸而不是把四区改回普通文档流。
-- [x] 3.3 更新 `e2e/integration.spec.ts`，验证 Scene Graph、Canvas、Component、Transaction Log、Command 标题可见，确认左/右/底组具有 Edge Group 标识，添加文本与属性编辑仍能同步 Preview，并验证左侧分隔条缩放及底部活动标签折叠/展开。
+- [x] 3.1 修改 `app/src/App.tsx`，只挂载一个全屏 `ComposeEditor`：在 `sceneGraphPanel` 展示 Page 1 与文本节点，在 `canvasToolbar` 放置“添加文本组件”和画布工具占位，在 `children` 保留可选画布，在 `inspectorPanel` 放置属性输入框，在底部两个插槽提供事务列表和命令输入。
+- [x] 3.2 修改 `app/src/App.css` 和应用入口样式导入，按效果图建立占满视口的深色工作台，确保编辑器工作区拥有确定高度，并为窄屏提供可操作的最小尺寸而不是把四区改回普通文档流。
+- [x] 3.3 更新 `e2e/integration.spec.ts`，验证全屏 ComposeEditor、左右图标标签、Canvas、“日志”“命令”可见，确认左/右/底组具有 Edge Group 标识，添加文本与属性编辑可同步各编辑器区域，并验证左侧分隔条缩放、滚动条样式及底部活动标签折叠/展开。
 - [x] 3.4 运行 `bun run test:e2e`，确认 Chromium 中默认布局与现有操作流程通过。
 
 ## 4. 文档与最终验证

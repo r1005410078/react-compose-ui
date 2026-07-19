@@ -33,7 +33,6 @@
       "version": "0.0.0",
       "dependencies": {
         "@compose-ui/editor": "workspace:*",
-        "@compose-ui/preview": "workspace:*",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
       },

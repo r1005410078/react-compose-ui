@@ -7,7 +7,9 @@
 #### Scenario: 首次挂载编辑器
 
 - **WHEN** 宿主挂载一个 `ComposeEditor`
-- **THEN** 工作区显示标题为“Scene Graph”“Canvas”“Component”“Transaction Log”“Command”的五个 Dockview 面板
+- **THEN** 工作区显示 Scene Graph 与 Component 图标标签，以及标题为“Canvas”“日志”“命令”的三个文字标签
+- **AND** Scene Graph 与 Component 图标分别保留对应的可访问名称和悬停提示
+- **AND** Scene Graph 使用设计组件图标，且左侧活动栏底部显示带可访问名称的设置图标
 - **AND** Canvas Toolbar 显示在 Canvas 内容区域顶部
 - **AND** Canvas 内容显示在中央主要区域
 
@@ -102,6 +104,7 @@
 
 - **WHEN** 宿主导入 `@compose-ui/editor/styles.css` 并为编辑器提供确定高度
 - **THEN** 四区工作台、标签、分隔边界和折叠后的 Edge Group 标题条正确显示在编辑器边界内
+- **AND** 面板滚动条使用作用域限定的细窄深色样式，不出现浏览器默认的亮色滚动条
 
 ### Requirement: 临时布局状态
 

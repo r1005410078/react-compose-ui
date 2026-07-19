@@ -100,7 +100,7 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.transactionLog,
       component: WORKSPACE_COMPONENT_IDS.transactionLog,
       tabComponent: TAB_COMPONENT,
-      title: 'Transaction Log',
+      title: '日志',
       position: { referenceGroup: bottomGroup.id },
     })
   }
@@ -110,7 +110,7 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.command,
       component: WORKSPACE_COMPONENT_IDS.command,
       tabComponent: TAB_COMPONENT,
-      title: 'Command',
+      title: '命令',
       inactive: true,
       position: { referenceGroup: bottomGroup.id },
     })

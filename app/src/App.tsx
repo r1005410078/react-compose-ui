@@ -1,5 +1,4 @@
 import { ComposeEditor } from '@compose-ui/editor'
-import { ComposePreview } from '@compose-ui/preview'
 import { useState } from 'react'
 import './App.css'
 
@@ -18,18 +17,8 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="app-header">
-        <div className="brand-lockup">
-          <h1>React Compose UI</h1>
-          <span>Page 1</span>
-        </div>
-        <p>Dockview workspace integration example</p>
-      </header>
-
-      <section className="workspace-frame" aria-label="编辑器工作台">
-        <ComposeEditor
-          className="editor-workspace"
+    <ComposeEditor
+      className="editor-workspace"
           sceneGraphPanel={
             <div className="scene-panel">
               <div className="panel-search">搜索节点</div>
@@ -139,26 +128,8 @@ function App() {
                 {textContent}
               </button>
             )}
-          </section>
-        </ComposeEditor>
-      </section>
-
-      <ComposePreview className="preview-panel">
-        <div className="preview-heading">
-          <strong>Preview</strong>
-          <span>@compose-ui/preview 实时同步</span>
-        </div>
-        <div className="preview-surface">
-          <div className="preview-canvas">
-            {textContent === null ? (
-              <span>等待编辑器内容</span>
-            ) : (
-              <p>{textContent}</p>
-            )}
-          </div>
-        </div>
-      </ComposePreview>
-    </main>
+        </section>
+    </ComposeEditor>
   )
 }
 

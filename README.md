@@ -117,7 +117,7 @@ bun run dev
 1. 在 Canvas Toolbar 点击“添加文本组件”。
 2. 点击中央画布中的“默认文本”。
 3. 在右侧 Component 面板的“文本内容”输入框中修改文字。
-4. 查看下方 Preview 区域实时同步结果。
+4. 观察画布、Scene Graph、Component 和 Transaction Log 同步更新。
 5. 拖动边缘区分隔线调整尺寸，或点击 Edge Group 的活动标签折叠与展开。
 
 该流程用于验证组件挂载和浏览器操作测试，不代表最终编辑器交互设计。
@@ -133,10 +133,10 @@ bun run test:e2e:ui
 在测试面板中选择：
 
 ```text
-adds a text component and updates the preview
+adds and edits a text component inside the editor
 ```
 
-可以查看“添加组件、选择组件、修改属性、Preview 同步”的每一步浏览器操作和 DOM
+可以查看“添加组件、选择组件、修改属性、编辑器区域同步”的每一步浏览器操作和 DOM
 快照。
 
 无界面运行全部 E2E：

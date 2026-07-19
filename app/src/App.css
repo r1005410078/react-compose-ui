@@ -1,54 +1,9 @@
-.app-shell {
+.editor-workspace {
   width: max(1180px, 100%);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 560px;
   color: #e7ebf1;
   background: #0b0d10;
-}
-
-.app-header {
-  display: flex;
-  height: 52px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  border-bottom: 1px solid #30343a;
-  background: linear-gradient(#191c21, #13161a);
-}
-
-.brand-lockup {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.brand-lockup h1 {
-  margin: 0;
-  padding-right: 20px;
-  border-right: 1px solid #343940;
-  color: #f5f7fa;
-  font-size: 1rem;
-}
-
-.brand-lockup span,
-.app-header p,
-.preview-heading span {
-  color: #9ba5b3;
-}
-
-.app-header p {
-  margin: 0;
-  font-size: 0.78rem;
-}
-
-.workspace-frame {
-  height: 700px;
-  min-height: 560px;
-}
-
-.editor-workspace {
-  width: 100%;
-  height: 100%;
-  min-height: 560px;
 }
 
 button,
@@ -62,8 +17,36 @@ button {
 
 .scene-panel,
 .inspector-panel {
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-color: #454d59 transparent;
+  scrollbar-width: thin;
   background: #111419;
+}
+
+.scene-panel::-webkit-scrollbar,
+.inspector-panel::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scene-panel::-webkit-scrollbar-track,
+.inspector-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scene-panel::-webkit-scrollbar-thumb,
+.inspector-panel::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #454d59;
+  background-clip: content-box;
+}
+
+.scene-panel::-webkit-scrollbar-thumb:hover,
+.inspector-panel::-webkit-scrollbar-thumb:hover {
+  background-color: #606a78;
 }
 
 .panel-search {
@@ -312,46 +295,6 @@ button {
 
 .command-form input {
   flex: 1;
-}
-
-.preview-panel {
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  min-height: 180px;
-  border-top: 1px solid #30343a;
-  background: #101318;
-}
-
-.preview-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 22px;
-  border-right: 1px solid #30343a;
-}
-
-.preview-heading span {
-  font-size: 0.75rem;
-}
-
-.preview-surface {
-  padding: 20px;
-}
-
-.preview-canvas {
-  display: grid;
-  min-height: 138px;
-  place-items: center;
-  border: 1px dashed #3a4658;
-  color: #778292;
-  background: #090c10;
-}
-
-.preview-canvas p {
-  margin: 0;
-  color: #f4f8ff;
-  font-size: 1.4rem;
-  font-weight: 700;
 }
 
 @media (max-width: 1180px) {

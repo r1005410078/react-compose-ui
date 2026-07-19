@@ -15,7 +15,7 @@ import {
   TransactionLogPanel,
 } from './workspace-panels'
 import { initializeWorkspace, WORKSPACE_COMPONENT_IDS } from './workspace-layout'
-import { WorkspaceTab } from './workspace-tab'
+import { WorkspaceHeaderActions, WorkspaceTab } from './workspace-tab'
 import './styles.css'
 
 export interface ComposeEditorProps extends HTMLAttributes<HTMLElement> {
@@ -91,6 +91,7 @@ export function ComposeEditor({
           disableDnd
           disableFloatingGroups
           onReady={handleReady}
+          rightHeaderActionsComponent={WorkspaceHeaderActions}
           tabComponents={workspaceTabComponents}
           theme={themeAbyss}
         />
