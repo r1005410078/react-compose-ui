@@ -15,6 +15,7 @@
     "lint": "eslint . --max-warnings 0",
     "test": "turbo run test",
     "test:e2e": "bun run build && playwright test",
+    "test:e2e:ui": "bun run build && playwright test --ui --project=chromium",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "bun run build && changeset publish",
