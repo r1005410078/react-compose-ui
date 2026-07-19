@@ -44,12 +44,20 @@ bun add react react-dom
 ```tsx
 import { ComposeEditor } from '@compose-ui/editor'
 import { ComposePreview } from '@compose-ui/preview'
+import '@compose-ui/editor/styles.css'
 
 export function ComposePage() {
   return (
     <main>
-      <ComposeEditor className="editor-panel">
-        编辑器挂载区域
+      <ComposeEditor
+        className="editor-panel"
+        sceneGraphPanel={<SceneTree />}
+        canvasToolbar={<CanvasTools />}
+        inspectorPanel={<PropertyInspector />}
+        transactionLogPanel={<TransactionLog />}
+        commandPanel={<CommandInput />}
+      >
+        <Canvas />
       </ComposeEditor>
 
       <ComposePreview className="preview-panel">
@@ -60,20 +68,35 @@ export function ComposePage() {
 }
 ```
 
-`ComposeEditor` 和 `ComposePreview` 当前接受标准的 HTML `section` 属性，包括
-`className`、`style`、事件和 `children`。
+`ComposeEditor` 使用 Dockview 提供固定的 IDE 式工作区：Scene Graph 位于左侧 Edge
+Group，Canvas 位于中央主组，Component Inspector 位于右侧 Edge Group，Transaction
+Log 与 Command 共享底部 Edge Group。三个边缘区可以调整尺寸，并通过活动标签折叠或
+展开。
+
+宿主必须显式导入 `@compose-ui/editor/styles.css`，并为编辑器提供确定的非零高度。
+`ComposeEditor` 接受标准的 HTML `section` 属性；`children` 渲染为中央画布内容，五个
+命名属性分别提供其余工作区内容。
 
 ```tsx
 <ComposeEditor
   className="editor"
-  style={{ minHeight: 480 }}
+  style={{ height: 720 }}
   aria-label="页面编辑器"
+  sceneGraphPanel={<div>Page 1</div>}
+  canvasToolbar={<button>添加组件</button>}
+  inspectorPanel={<div>选择组件后显示属性</div>}
+  transactionLogPanel={<div>暂无事务</div>}
+  commandPanel={<input aria-label="命令" />}
 >
-  自定义编辑器内容
+  <div>自定义画布内容</div>
 </ComposeEditor>
 ```
 
-当前版本尚未提供稳定的文档数据、`value`、`onChange`、组件注册或数据源绑定 API。
+Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API、面板对象或布局 JSON。
+当前实例中的尺寸、折叠状态和活动标签会在挂载期间保留，但不会写入 localStorage、页面
+文档或远端存储；重新挂载后恢复默认布局。
+
+当前版本仍未提供稳定的文档数据、`value`、`onChange`、组件注册或数据源绑定 API。
 
 ## 运行仓库示例
 
@@ -91,10 +114,11 @@ bun run dev
 
 终端会显示 Vite 示例应用地址。打开页面后可以体验当前的最小流程：
 
-1. 点击“添加文本组件”。
-2. 点击画布中的“默认文本”。
-3. 在“文本内容”输入框中修改文字。
-4. 查看 Preview 区域实时同步结果。
+1. 在 Canvas Toolbar 点击“添加文本组件”。
+2. 点击中央画布中的“默认文本”。
+3. 在右侧 Component 面板的“文本内容”输入框中修改文字。
+4. 查看下方 Preview 区域实时同步结果。
+5. 拖动边缘区分隔线调整尺寸，或点击 Edge Group 的活动标签折叠与展开。
 
 该流程用于验证组件挂载和浏览器操作测试，不代表最终编辑器交互设计。
 
@@ -156,10 +180,11 @@ bun run test:e2e
 
 - 页面文档 Schema 和版本迁移
 - 组件物料注册
-- 画布拖拽、缩放、对齐和图层
+- 画布节点拖拽、缩放、对齐和图层编辑
 - 属性配置器
 - 数据源绑定和表达式
 - 撤销、重做、复制和粘贴
 - 页面保存、加载和生产发布协议
+- 工作区布局持久化、自定义面板注册和浮动窗口
 
 这些接口会在后续规范确定后逐步加入；请不要依赖示例应用内部的临时状态结构。

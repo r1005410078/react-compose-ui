@@ -1,0 +1,70 @@
+@import 'dockview-react/dist/styles/dockview.css';
+
+.compose-editor {
+  min-width: 720px;
+  min-height: 480px;
+  overflow: hidden;
+  color: #e6edf7;
+  background: #101216;
+}
+
+.compose-editor__dockview {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  --dv-background-color: #101216;
+  --dv-group-view-background-color: #101216;
+  --dv-tabs-and-actions-container-background-color: #181b20;
+  --dv-activegroup-visiblepanel-tab-background-color: #20242b;
+  --dv-activegroup-hiddenpanel-tab-background-color: #181b20;
+  --dv-inactivegroup-visiblepanel-tab-background-color: #181b20;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #15181d;
+  --dv-activegroup-visiblepanel-tab-color: #f4f7fb;
+  --dv-activegroup-hiddenpanel-tab-color: #b3bcc9;
+  --dv-inactivegroup-visiblepanel-tab-color: #d0d6df;
+  --dv-inactivegroup-hiddenpanel-tab-color: #8e98a8;
+  --dv-tab-divider-color: #303640;
+  --dv-separator-border: 1px solid #303640;
+  --dv-active-sash-color: #3687ff;
+}
+
+.compose-editor__panel,
+.compose-editor__canvas-panel {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #101216;
+}
+
+.compose-editor__canvas-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.compose-editor__canvas-toolbar {
+  flex: 0 0 auto;
+  min-height: 44px;
+  border-bottom: 1px solid #303640;
+  background: #181b20;
+}
+
+.compose-editor__canvas-content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.compose-editor__placeholder {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 16px;
+  color: #8792a2;
+  font-size: 0.8rem;
+}
+
+.compose-editor__tab {
+  cursor: default;
+}

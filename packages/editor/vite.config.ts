@@ -18,6 +18,7 @@ export default defineConfig({
       entry: resolve(__dirname, 'src/index.tsx'),
       formats: ['es'],
       fileName: 'index',
+      cssFileName: 'styles',
     },
     rollupOptions: {
       external: [

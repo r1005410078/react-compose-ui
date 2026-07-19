@@ -2,7 +2,7 @@
   "name": "@compose-ui/editor",
   "version": "0.1.0",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": ["**/*.css"],
   "files": ["dist"],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -11,7 +11,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "publishConfig": {
     "access": "public"
@@ -25,7 +26,8 @@
     "pack:dry-run": "bun pm pack --dry-run"
   },
   "dependencies": {
-    "@compose-ui/core": "workspace:*"
+    "@compose-ui/core": "workspace:*",
+    "dockview-react": "^7.0.2"
   },
   "peerDependencies": {
     "react": "^18.3.0 || ^19.0.0",

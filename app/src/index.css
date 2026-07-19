@@ -18,7 +18,5 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(circle at 75% 15%, rgb(30 64 175 / 22%), transparent 30rem),
-    #080d1a;
+  background: #0b0d10;
 }
