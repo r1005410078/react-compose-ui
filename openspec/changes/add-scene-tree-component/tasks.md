@@ -238,6 +238,29 @@
   Chromium E2E（含黄金文件）、四包 pack dry-run 和 `git diff --check` 全部通过；pack 清单
   包含 scene-tree/editor 的 JS、声明文件和 styles.css。
 
+## 9. 内部逻辑分层与完整组件化
+
+- [x] 9.1 为选择、键盘、拖拽状态和坐标换算添加不依赖 DOM 的 characterization 单元测试。
+- [x] 9.2 提取纯交互模型，保持现有选择、键盘和拖拽行为不变。
+- [x] 9.3 提取交互与拖拽 Hook，并以 fake timers 和可控 RAF 验证副作用生命周期。
+- [x] 9.4 拆分 Toolbar、Virtual Row、Context Menu、Drop Indicator 和 Drag Preview 展示组件。
+- [x] 9.5 将 `SceneTree` 收敛为受控数据、虚拟化和内部模块的组装入口，公共 API 保持不变。
+- [x] 9.6 运行 strict、lint、typecheck、Vitest、build、Chromium E2E、pack dry run 与 diff check，
+  并确认无需更新视觉黄金文件。
+
+### 9.x 执行证据
+
+- Characterization Red/Green：新增纯模型骨架后 7/7 测试因目标计算尚未实现而按预期失败；
+  完成选择、平台键位、拖拽阈值、三段命中、层级量化、滚动速度和 Portal clamp 后 8/8 通过。
+- Hook/Presenter：Pointer Capture、600ms 延迟展开、RAF 清理、虚拟焦点和菜单外部关闭使用
+  `renderHook` 验证；Toolbar、Virtual Row 和 Context Menu 使用 Testing Library 验证 ARIA、
+  命令顺序和事件透传。scene-tree 包最终 63/63 Vitest 通过。
+- Refactor：`scene-tree.tsx` 从 860 行收敛到 202 行，仅保留受控数据、虚拟化与模块连线；
+  纯模型、两个副作用 Hook 和四类展示组件均为包内部实现，公共入口未新增导出。
+- Regression：OpenSpec strict、lint、typecheck、75 个 Vitest、build、26 个 Chromium E2E、
+  四包 pack dry-run 和 `git diff --check` 全部通过；所有既有视觉黄金文件原样比较通过，
+  未生成或更新截图。
+
 ## 执行证据
 
 - Red command/result/reason：`bun run --cwd packages/scene-tree test -- src/tree-model.test.ts`；

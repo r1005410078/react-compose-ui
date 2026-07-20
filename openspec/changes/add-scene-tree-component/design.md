@@ -29,6 +29,10 @@
 - 两个包分别使用 Tailwind 前缀并禁用 Preflight。第三方 Dockview CSS、CSS 变量和伪元素
   规则保留在 Tailwind layer 中。
 - editor 的 CSS 构建合并 scene-tree CSS；scene-tree 同时发布自己的 `styles.css`。
+- 场景树内部按可测试性分层：纯交互模型负责选择、键盘动作、拖拽状态和坐标计算；Hook
+  只封装 Pointer Capture、timer、RAF、焦点等 React/DOM 副作用；Toolbar、Virtual Row、
+  Context Menu 和拖拽反馈为无业务决策的展示组件。`SceneTree` 只负责受控数据组装、虚拟化
+  和模块连线，所有内部模块均不从包公共入口导出。
 
 ## 风险/权衡
 
@@ -37,6 +41,8 @@
   保持会话，并在视口上下边缘启动逐帧纵向自动滚动。
 - 正则可能无效或代价高 → 捕获语法错误、显示零结果；仅对 5000 个短标签同步匹配。
 - Tailwind 可能污染宿主 → 禁用 Preflight、限制扫描源并为每个包设置独立前缀。
+- 单体组件中的交互分支只能通过 DOM 间接验证 → 纯函数使用表驱动 Vitest，副作用 Hook 使用
+  fake timers/可控 RAF，最终 Pointer 与虚拟滚动继续由 Playwright 验证。
 
 ## 迁移计划
 

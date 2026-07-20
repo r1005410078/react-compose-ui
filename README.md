@@ -129,6 +129,26 @@ import '@compose-ui/scene-tree/styles.css'
 `commands` 属性共享新增、删除、复制、剪切和树内粘贴状态。复制粘贴发出 `duplicate` 意图，
 宿主负责生成新 ID 和克隆业务数据；剪切粘贴发出 `move`。该剪贴板不使用系统剪贴板且不持久化。
 
+外部工具栏可以直接通过 controller 请求新增节点：
+
+```tsx
+const commands = useSceneTreeCommands({ nodes, selectedIds, onOperation })
+
+<button
+  disabled={!commands.isEnabled('create-suggested')}
+  onClick={() => commands.execute('create-suggested')}
+>
+  新增节点
+</button>
+
+<SceneTree {...treeProps} commands={commands} />
+```
+
+`create-child`、`create-sibling` 和 `create-root` 可以显式指定子级、兄弟或根级位置；
+`create-suggested` 会根据最近选择自动决定位置。新增只发出 `create` 操作意图，宿主必须处理
+其中的 `parentId` 和 `index`、生成稳定 ID，并更新受控 `nodes`。完整示例和 `targetId` 规则见
+[`@compose-ui/scene-tree` README](./packages/scene-tree/README.md#从外部新增节点)。
+
 场景树通过 `@tanstack/react-virtual` 支持完全展开的 5000 个节点，检索支持大小写敏感、
 Unicode 全词和正则表达式。组件仅发出操作意图，不拥有文档 Schema、持久化或撤销状态。
 拖拽期间节点保持静止，蓝色横线显示最终插入位置；Shift 选择的多个节点可以按原顺序

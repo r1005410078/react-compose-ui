@@ -32,6 +32,12 @@ import { SceneTree, useSceneTreeCommands } from '@compose-ui/scene-tree'
 const commands = useSceneTreeCommands({ nodes, selectedIds, onOperation })
 
 <>
+  <button
+    disabled={!commands.isEnabled('create-suggested')}
+    onClick={() => commands.execute('create-suggested')}
+  >
+    新增节点
+  </button>
   <button onClick={() => commands.execute('copy')}>复制</button>
   <SceneTree
     commands={commands}
@@ -42,6 +48,61 @@ const commands = useSceneTreeCommands({ nodes, selectedIds, onOperation })
   />
 </>
 ```
+
+## 从外部新增节点
+
+`useSceneTreeCommands` 可以驱动场景树之外的工具栏、菜单或快捷入口。新增命令只会通过
+`onOperation` 发出 `{ type: 'create', parentId, index }`，宿主仍负责生成节点 ID、构造业务
+数据并更新受控 `nodes`：
+
+```tsx
+import type { SceneTreeNode, SceneTreeOperation } from '@compose-ui/scene-tree'
+
+const handleOperation = (operation: SceneTreeOperation) => {
+  if (operation.type === 'create') {
+    const node: SceneTreeNode = {
+      id: crypto.randomUUID(),
+      label: '新节点',
+    }
+
+    // insertNodeAt 是宿主自己的树更新函数；scene-tree 不持有文档数据。
+    setNodes((current) => insertNodeAt(
+      current,
+      operation.parentId,
+      operation.index,
+      node,
+    ))
+    return
+  }
+
+  applyOtherOperation(operation)
+}
+
+const commands = useSceneTreeCommands({
+  nodes,
+  selectedIds,
+  onOperation: handleOperation,
+})
+
+<button
+  disabled={!commands.isEnabled('create-suggested')}
+  onClick={() => commands.execute('create-suggested')}
+>
+  新增节点
+</button>
+```
+
+外部入口可以选择以下位置语义：
+
+- `commands.execute('create-suggested')`：容器选中时追加为子节点；叶节点选中时插入为其后
+  兄弟节点；没有选择时追加为根节点。
+- `commands.execute('create-child', parentId)`：追加到指定父节点的子级末尾。
+- `commands.execute('create-sibling', nodeId)`：插入到指定节点之后。
+- `commands.execute('create-root', null)`：追加到根级末尾。
+
+执行前应调用相同目标的 `commands.isEnabled(command, targetId)`。`targetId` 省略时使用
+`selectedIds` 中最近选择的节点，显式传入 `null` 表示根级空白区。外部入口应把同一个
+controller 传给 `SceneTree.commands`，从而与树内右键菜单共享选择解析和剪贴板状态。
 
 宿主必须为组件提供确定的非零高度。组件不会修改、保存或撤销宿主数据，只通过
 `onOperation` 发出 `create`、`rename`、`delete`、`move`、`duplicate`、
@@ -69,3 +130,11 @@ Ctrl/Cmd 点击用于切换单个节点的选择状态，Shift 点击用于连�
 选择，不会进入重命名状态。编辑框内按 Enter 提交，按 Escape 取消。
 
 `styles.css` 由禁用 Preflight 且带包前缀的 Tailwind CSS 构建，不会重置宿主全局样式。
+
+## 内部测试分层
+
+`SceneTree` 只负责受控数据、虚拟化和内部模块连线。选择、键盘、拖拽阈值、坐标命中、自动
+滚动速度和 Portal 边界均为不依赖 DOM 的纯模型，使用表驱动 Vitest 直接验证输入与输出；
+Pointer Capture、600ms 延迟展开、RAF 和焦点等副作用由内部 Hook 测试负责。Toolbar、节点
+行、右键菜单和拖拽反馈作为展示组件验证 ARIA 与事件透传，完整 Pointer 和视觉流程继续由
+Playwright 与版本控制中的黄金文件覆盖。这些内部模型、Hook 和展示组件不属于公共 API。

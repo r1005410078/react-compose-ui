@@ -30,6 +30,13 @@ export type SceneTreeMoveTarget = {
   targetNodeId: string
 }
 
+/**
+ * 将嵌套节点转换为包含父级、深度和 ARIA 位置信息的索引。
+ *
+ * @remarks
+ * 使用显式栈而不是递归，避免极深场景树耗尽调用栈。遇到重复 ID 时保留第一次出现的节点，
+ * 因为组件要求 ID 在树实例内稳定且唯一。
+ */
 export function buildTreeIndex(
   nodes: readonly SceneTreeNode[],
 ): ReadonlyMap<string, IndexedSceneTreeNode> {
@@ -43,6 +50,7 @@ export function buildTreeIndex(
     ancestorIds: readonly string[]
   }> = []
 
+  // 逆序入栈让出栈顺序仍与宿主提供的树顺序一致。
   for (let position = nodes.length - 1; position >= 0; position -= 1) {
     stack.push({
       node: nodes[position],
@@ -76,6 +84,12 @@ export function buildTreeIndex(
   return index
 }
 
+/**
+ * 按树顺序生成当前展开状态下的可见行。
+ *
+ * @remarks
+ * 返回结果是虚拟列表和 Shift 范围选择共同使用的顺序基准。
+ */
 export function flattenVisibleTree(
   nodes: readonly SceneTreeNode[],
   expandedIds: ReadonlySet<string>,
@@ -102,6 +116,11 @@ export function flattenVisibleTree(
   return rows
 }
 
+/**
+ * 检索匹配节点，并保留所有匹配节点的祖先以维持可理解的树路径。
+ *
+ * @returns 可展示行以及用户可访问的正则错误；无匹配不是错误。
+ */
 export function searchTree(
   nodes: readonly SceneTreeNode[],
   query: string,
@@ -113,6 +132,7 @@ export function searchTree(
 
   const flags = `${options.caseSensitive ? '' : 'i'}u`
   if (options.regex) {
+    // 必须先验证用户原始表达式，否则全词包装可能掩盖原表达式的语法错误。
     try {
       new RegExp(query, flags)
     } catch {
@@ -148,6 +168,13 @@ export function searchTree(
   }
 }
 
+/**
+ * 规范化一次拖拽实际移动的顶层节点。
+ *
+ * @remarks
+ * 拖动已选节点时沿用整个可见选择，拖动未选节点时只使用活动节点。锁定或禁止移动的节点
+ * 会被过滤；祖先与后代同时入选时只保留祖先，避免同一子树被移动两次。
+ */
 export function getMovingNodeIds(
   index: ReadonlyMap<string, IndexedSceneTreeNode>,
   rows: readonly IndexedSceneTreeNode[],
@@ -168,6 +195,13 @@ export function getMovingNodeIds(
   })
 }
 
+/**
+ * 将指针命中位置和横向缩进换算为最终的受控 `move` 操作。
+ *
+ * @remarks
+ * `before`、`inside`、`after` 对应顶部横线、父级高亮和底部横线。返回 `null` 表示目标非法
+ * 或移动不会改变树，因此 UI 不应显示有效落点。
+ */
 export function createMoveTarget(
   index: ReadonlyMap<string, IndexedSceneTreeNode>,
   rows: readonly IndexedSceneTreeNode[],
@@ -210,6 +244,8 @@ export function createMoveTarget(
   const previous = rows[Math.min(boundaryIndex, rows.length) - 1]
   const next = rows[boundaryIndex]
   const requestedIntegerDepth = Math.max(1, Math.floor(requestedDepth))
+  // 展开节点后的第一条可见行属于其子树；落在父节点底边时必须插入为首个子项，不能把横线
+  // 推到整个可见子树末尾。
   if (
     placement === 'after'
     && previous
@@ -288,6 +324,7 @@ export function createMoveTarget(
   }
 }
 
+/** 拒绝锁定父级，以及会把节点移入自身或其后代的循环结构。 */
 function isValidMoveParent(
   index: ReadonlyMap<string, IndexedSceneTreeNode>,
   movingIds: readonly string[],
@@ -304,6 +341,7 @@ function isValidMoveParent(
   )
 }
 
+/** 返回锚点完整可见子树之后的边界行索引。 */
 function findVisibleSubtreeEnd(
   rows: readonly IndexedSceneTreeNode[],
   anchorId: string,
@@ -318,6 +356,9 @@ function findVisibleSubtreeEnd(
   return lineIndex
 }
 
+/**
+ * 比较移除再插入后的兄弟顺序，用于抑制不会产生任何结构变化的 move。
+ */
 function isMoveNoOp(
   index: ReadonlyMap<string, IndexedSceneTreeNode>,
   operation: Extract<SceneTreeOperation, { type: 'move' }>,

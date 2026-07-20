@@ -82,3 +82,39 @@ bun run test:e2e:ui
 - 面向 AI/开发代理的架构约束或工作流发生变化时，同步更新本文件。
 - 项目约定、技术栈、测试策略或外部依赖发生变化时，同步更新 `openspec/project.md`。
 - OpenSpec 托管标记内的内容可能被 `openspec update` 重写；项目专属说明应保留在托管块之外。
+
+## 注释规范
+
+### 公共 API
+
+- 所有从包公共入口导出的组件、Hook、函数、类型和接口必须使用 TSDoc；公共接口的属性和
+  方法也应说明业务语义、默认行为或能力限制。
+- TSDoc 应根据实际需要使用 `@remarks`、`@param`、`@returns`、`@example`、`@throws`、
+  `@defaultValue`、`@public` 或 `@internal`，不得机械重复 TypeScript 已表达的类型信息。
+- 每个包的公共入口应使用 `@packageDocumentation` 说明包用途和架构边界。
+
+### 实现注释
+
+- 注释优先解释“为什么”、业务约束、算法不变量、状态转换、性能边界、浏览器兼容性和
+  看似可以简化但实际不能简化的处理，不得逐句翻译显而易见的代码。
+- 复杂状态机、非直观索引换算、批量操作规范化、虚拟化假设和魔法数来源必须在靠近实现的
+  位置说明。代码变化导致约束失效时，必须在同一变更中更新注释。
+- 源码注释以中文为主，标识符、API 名称和标准术语保留英文；同一条注释中避免无必要地
+  混用语言。
+- 禁止保留被注释掉的旧代码、修改历史或作者日期；这些信息由 Git 保存。
+
+### 维护标记与抑制
+
+- 维护标记仅使用 `TODO`、`FIXME`、`WORKAROUND`、`PERF`、`SECURITY` 和
+  `ACCESSIBILITY`。`TODO`/`FIXME` 必须关联 Issue、OpenSpec change 或负责人，并说明完成或
+  删除条件。
+- `eslint-disable` 和 TypeScript 抑制必须限制到最小作用域并在同一行说明原因；优先使用
+  `eslint-disable-next-line` 和 `@ts-expect-error`，禁止无原因的文件级禁用与 `@ts-ignore`。
+- 不使用注释掩盖应通过命名、类型拆分或函数提取解决的可读性问题。
+
+### 测试注释
+
+- 测试名称负责描述行为并追溯到 OpenSpec Requirement/Scenario；测试内注释只解释不明显的
+  夹具、边界条件或失败原因。
+- Red → Green → Refactor 的命令、结果和失败原因记录在 OpenSpec `tasks.md`，不要复制成
+  源码中的长期注释。

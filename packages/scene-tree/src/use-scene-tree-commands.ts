@@ -15,6 +15,10 @@ interface InsertionPoint {
   index: number
 }
 
+/**
+ * 按树遍历顺序筛选来源，并在祖先和后代同时入选时只保留最外层祖先。
+ * 这保证批量移动或复制不会重复处理同一棵子树。
+ */
 function normalizeIds(
   index: ReadonlyMap<string, IndexedSceneTreeNode>,
   requestedIds: readonly string[],
@@ -28,12 +32,14 @@ function normalizeIds(
     .map((row) => row.node.id)
 }
 
+/** 根级始终有效；非根父级必须存在、未锁定且允许包含子节点。 */
 function validParent(index: ReadonlyMap<string, IndexedSceneTreeNode>, parentId: string | null) {
   if (parentId === null) return true
   const parent = index.get(parentId)?.node
   return Boolean(parent && !parent.locked && parent.canHaveChildren !== false)
 }
 
+/** 将显式或建议命令解析为宿主树中的父级与原始插入索引。 */
 function insertionFor(
   command: SceneTreeCommand,
   targetId: string | null,
@@ -61,6 +67,7 @@ function insertionFor(
       : null
   }
   if (command === 'create-suggested' || command === 'paste-suggested') {
+    // 建议位置遵循编辑器常见语义：容器追加子项，叶节点插到自身之后。
     if (validParent(index, targetId)) {
       return { parentId: targetId, index: target.node.children?.length ?? 0 }
     }
@@ -71,6 +78,9 @@ function insertionFor(
   return null
 }
 
+/**
+ * 判断剪切粘贴是否会形成循环、落到无效父级，或保持原有兄弟顺序不变。
+ */
 function isInvalidCutTarget(
   index: ReadonlyMap<string, IndexedSceneTreeNode>,
   nodeIds: readonly string[],
@@ -97,6 +107,18 @@ function isInvalidCutTarget(
   return remaining.every((id, position) => id === siblings[position])
 }
 
+/**
+ * 创建场景树命令控制器，并在当前 Hook 实例中维护内存剪贴板。
+ *
+ * @remarks
+ * Controller 不修改 `nodes`，只通过 `onOperation` 发出受控意图。复制可重复粘贴并发出
+ * `duplicate`；剪切直到成功粘贴才发出 `move` 并清空剪贴板。它不会访问浏览器系统剪贴板。
+ *
+ * @param options - 当前树、选择状态及操作回调。
+ * @returns 可供 `SceneTree` 和外部工具栏共享的稳定命令控制器。
+ *
+ * @public
+ */
 export function useSceneTreeCommands({
   nodes,
   selectedIds,
@@ -110,6 +132,7 @@ export function useSceneTreeCommands({
     kind: 'copy' | 'cut' | 'delete',
     targetId?: string | null,
   ) => {
+    // 键盘焦点或右键目标可能不在受控选择中；显式目标必须优先，避免命令误作用于旧选择。
     const requestedIds = targetId !== undefined
       && targetId !== null
       && !selectedIds.includes(targetId)
@@ -132,6 +155,7 @@ export function useSceneTreeCommands({
     const sourceIds = normalizeIds(index, clipboard.nodeIds, ({ node }) => (
       clipboard.kind === 'copy' || (!node.locked && node.canMove !== false)
     ))
+    // 剪切源在宿主更新后可能消失或变为不可移动，此时整次粘贴失效，不能只移动剩余部分。
     if (sourceIds.length !== clipboard.nodeIds.length) return { insertion, sourceIds: [] }
     return { insertion, sourceIds }
   }, [clipboard, index, nodes.length, selectedTarget])
