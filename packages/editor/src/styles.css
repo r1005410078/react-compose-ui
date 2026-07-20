@@ -1,17 +1,20 @@
 @import 'dockview-react/dist/styles/dockview.css';
+@import '@compose-ui/scene-tree/styles.css';
 
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme) prefix(ct);
+@import 'tailwindcss/utilities.css' layer(utilities) prefix(ct);
+
+@source './';
+
+@layer components {
 .compose-editor {
-  min-width: 720px;
-  min-height: 480px;
-  overflow: hidden;
-  color: #e6edf7;
-  background: #101216;
+  @apply ct:min-w-[720px] ct:min-h-[480px] ct:overflow-hidden ct:bg-[#101216] ct:text-[#e6edf7];
 }
 
 .compose-editor__dockview {
-  width: 100%;
-  height: 100%;
-  min-height: inherit;
+  @apply ct:h-full ct:w-full ct:min-h-[inherit];
   --dv-background-color: #101216;
   --dv-group-view-background-color: #101216;
   --dv-tabs-and-actions-container-background-color: #181b20;
@@ -39,21 +42,15 @@
 }
 
 .compose-editor__canvas-panel {
-  display: flex;
-  flex-direction: column;
+  @apply ct:flex ct:flex-col;
 }
 
 .compose-editor__canvas-toolbar {
-  flex: 0 0 auto;
-  min-height: 44px;
-  border-bottom: 1px solid #303640;
-  background: #181b20;
+  @apply ct:min-h-11 ct:shrink-0 ct:border-b ct:border-[#303640] ct:bg-[#181b20];
 }
 
 .compose-editor__canvas-content {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: auto;
+  @apply ct:min-h-0 ct:flex-1 ct:overflow-auto;
 }
 
 .compose-editor__panel[data-workspace-panel='transaction-log'],
@@ -92,21 +89,11 @@
 }
 
 .compose-editor__placeholder {
-  display: grid;
-  min-height: 100%;
-  place-items: center;
-  padding: 16px;
-  color: #8792a2;
-  font-size: 0.8rem;
+  @apply ct:grid ct:min-h-full ct:place-items-center ct:p-4 ct:text-[0.8rem] ct:text-[#8792a2];
 }
 
 .compose-editor__icon-tab {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  color: currentColor;
-  cursor: default;
+  @apply ct:grid ct:h-full ct:w-full ct:cursor-default ct:place-items-center ct:text-current;
 }
 
 .compose-editor__icon-tab svg {
@@ -120,12 +107,9 @@
 }
 
 .compose-editor__settings-icon {
-  display: grid;
+  @apply ct:grid ct:shrink-0 ct:place-items-center ct:text-[#8e98a8];
   width: var(--dv-tabs-and-actions-container-height);
   height: var(--dv-tabs-and-actions-container-height);
-  flex: 0 0 auto;
-  place-items: center;
-  color: #8e98a8;
 }
 
 .compose-editor__settings-icon svg {
@@ -139,12 +123,7 @@
 }
 
 .compose-editor__visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
+  @apply ct:absolute ct:size-px ct:overflow-hidden ct:border-0 ct:p-0 ct:whitespace-nowrap;
   clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
+}
 }

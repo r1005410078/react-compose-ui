@@ -22,13 +22,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/editor @compose-ui/preview
+bun add @compose-ui/editor @compose-ui/scene-tree @compose-ui/preview
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/editor @compose-ui/preview
+npm install @compose-ui/editor @compose-ui/scene-tree @compose-ui/preview
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -44,6 +44,7 @@ bun add react react-dom
 ```tsx
 import { ComposeEditor } from '@compose-ui/editor'
 import { ComposePreview } from '@compose-ui/preview'
+import type { SceneTreeOperation } from '@compose-ui/scene-tree'
 import '@compose-ui/editor/styles.css'
 
 export function ComposePage() {
@@ -51,7 +52,12 @@ export function ComposePage() {
     <main>
       <ComposeEditor
         className="editor-panel"
-        sceneGraphPanel={<SceneTree />}
+        sceneTreeProps={{
+          nodes: [{ id: 'page', label: 'Page 1' }],
+          selectedIds: [],
+          expandedIds: [],
+          onOperation: (operation: SceneTreeOperation) => console.log(operation),
+        }}
         canvasToolbar={<CanvasTools />}
         inspectorPanel={<PropertyInspector />}
         transactionLogPanel={<TransactionLog />}
@@ -74,15 +80,20 @@ Log 与 Command 共享底部 Edge Group。三个边缘区可以调整尺寸，�
 展开。
 
 宿主必须显式导入 `@compose-ui/editor/styles.css`，并为编辑器提供确定的非零高度。
-`ComposeEditor` 接受标准的 HTML `section` 属性；`children` 渲染为中央画布内容，五个
-命名属性分别提供其余工作区内容。
+`ComposeEditor` 接受标准的 HTML `section` 属性；`children` 渲染为中央画布内容。
+Scene Graph 默认使用 `@compose-ui/scene-tree`，通过 `sceneTreeProps` 接收受控状态；
+`sceneGraphPanel` 仍可完整覆盖默认树，其余四个命名属性提供其他工作区内容。
 
 ```tsx
 <ComposeEditor
   className="editor"
   style={{ height: 720 }}
   aria-label="页面编辑器"
-  sceneGraphPanel={<div>Page 1</div>}
+  sceneTreeProps={{
+    nodes: [{ id: 'page', label: 'Page 1' }],
+    selectedIds: [],
+    expandedIds: [],
+  }}
   canvasToolbar={<button>添加组件</button>}
   inspectorPanel={<div>选择组件后显示属性</div>}
   transactionLogPanel={<div>暂无事务</div>}
@@ -97,6 +108,33 @@ Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API�
 文档或远端存储；重新挂载后恢复默认布局。
 
 当前版本仍未提供稳定的文档数据、`value`、`onChange`、组件注册或数据源绑定 API。
+
+## 独立使用场景树
+
+```tsx
+import { SceneTree, useSceneTreeCommands } from '@compose-ui/scene-tree'
+import '@compose-ui/scene-tree/styles.css'
+
+<SceneTree
+  nodes={nodes}
+  selectedIds={selectedIds}
+  expandedIds={expandedIds}
+  onSelectionChange={(ids) => setSelectedIds([...ids])}
+  onExpandedChange={(ids) => setExpandedIds([...ids])}
+  onOperation={handleOperation}
+/>
+```
+
+`useSceneTreeCommands({ nodes, selectedIds, onOperation })` 可供外部工具栏和 `SceneTree` 的
+`commands` 属性共享新增、删除、复制、剪切和树内粘贴状态。复制粘贴发出 `duplicate` 意图，
+宿主负责生成新 ID 和克隆业务数据；剪切粘贴发出 `move`。该剪贴板不使用系统剪贴板且不持久化。
+
+场景树通过 `@tanstack/react-virtual` 支持完全展开的 5000 个节点，检索支持大小写敏感、
+Unicode 全词和正则表达式。组件仅发出操作意图，不拥有文档 Schema、持久化或撤销状态。
+拖拽期间节点保持静止，蓝色横线显示最终插入位置；Shift 选择的多个节点可以按原顺序
+一起移动，横向移动指针可以调整目标层级，松手后才发出 `move` 操作意图。
+节点聚焦后，macOS 和 Linux 使用 Enter 开始重命名，Windows 使用 F2；双击不会进入
+重命名状态。
 
 ## 运行仓库示例
 
@@ -183,7 +221,7 @@ bun run test:e2e
 - 画布节点拖拽、缩放、对齐和图层编辑
 - 属性配置器
 - 数据源绑定和表达式
-- 撤销、重做、复制和粘贴
+- 撤销、重做以及跨页面或系统剪贴板复制粘贴
 - 页面保存、加载和生产发布协议
 - 工作区布局持久化、自定义面板注册和浮动窗口
 

@@ -150,3 +150,617 @@ test('adds and edits a text component inside the editor', async ({ page }) => {
   ).toBeVisible()
   await expect(editor.getByText('component.text.update', { exact: true })).toBeVisible()
 })
+
+test('OpenSpec: scene-tree / 新增节点入口 / 连续新增多个节点', async ({ page }) => {
+  await page.goto('/')
+
+  const addNode = page.getByRole('button', { name: '新增节点', exact: true })
+  await expect(addNode).toHaveCount(1)
+  for (let index = 0; index < 20; index += 1) await addNode.click()
+
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const canvas = page.getByRole('region', { name: '编辑画布' })
+  await expect(tree.getByRole('row')).toHaveCount(21)
+  await expect(canvas.getByRole('button')).toHaveCount(20)
+  await expect(tree.getByRole('row', { name: /默认文本 20/ })).toBeVisible()
+
+  await tree.getByRole('row', { name: /默认文本 3/ }).click()
+  await page.getByLabel('文本内容').fill('第三个文本')
+  await expect(tree.getByRole('row', { name: /第三个文本/ })).toBeVisible()
+  await expect(canvas.getByRole('button', { name: '第三个文本' })).toBeVisible()
+  await expect(canvas.getByRole('button', { name: '默认文本 2', exact: true })).toBeVisible()
+  await expect(canvas.getByRole('button', { name: '默认文本 4', exact: true })).toBeVisible()
+
+  await tree.getByRole('row', { name: /第三个文本/ }).press('Delete')
+  await expect(tree.getByRole('row')).toHaveCount(20)
+  await expect(canvas.getByRole('button')).toHaveCount(19)
+  await expect(canvas.getByRole('button', { name: '第三个文本' })).toHaveCount(0)
+})
+
+test('OpenSpec: scene-tree / 新增节点入口 / 从选中节点右键新增子节点', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const parent = tree.locator('[data-scene-node-id="text-1"]')
+  await parent.click()
+  await parent.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '新增子节点' }).click()
+
+  await expect(parent).toHaveAttribute('aria-expanded', 'true')
+  await expect(tree.getByRole('row', { name: /默认文本 2/ })).toHaveAttribute('aria-level', '3')
+})
+
+test('OpenSpec: scene-tree / 默认编辑器复制节点 / 复制文本组件并继续编辑', async ({ page }) => {
+  await page.goto('/')
+  const addNode = page.getByRole('button', { name: '新增节点', exact: true })
+  await addNode.click()
+  await addNode.click()
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const first = tree.locator('[data-scene-node-id="text-1"]')
+  const second = tree.locator('[data-scene-node-id="text-2"]')
+
+  await first.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '复制' }).click()
+  await second.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '粘贴为兄弟节点' }).click()
+
+  const copy = tree.locator('[data-scene-node-id="text-3"]')
+  await expect(copy).toBeVisible()
+  await expect(copy).toHaveAttribute('aria-selected', 'true')
+  await page.getByLabel('文本内容').fill('复制后的文本')
+  await expect(copy).toContainText('复制后的文本')
+  await expect(first).toContainText('默认文本')
+  await expect(page.getByRole('region', { name: '编辑画布' }).getByRole('button', { name: '复制后的文本' })).toBeVisible()
+})
+
+test('deleting a parent removes its complete subtree from the tree and canvas', async ({ page }) => {
+  await page.goto('/')
+  const addNode = page.getByRole('button', { name: '新增节点', exact: true })
+  await addNode.click()
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const parent = tree.locator('[data-scene-node-id="text-1"]')
+  await parent.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '新增子节点' }).click()
+  await expect(tree.locator('[data-scene-node-id="text-2"]')).toHaveAttribute('aria-level', '3')
+
+  await parent.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '删除' }).click()
+
+  await expect(tree.locator('[data-scene-node-id="text-1"]')).toHaveCount(0)
+  await expect(tree.locator('[data-scene-node-id="text-2"]')).toHaveCount(0)
+  await expect(page.getByRole('region', { name: '编辑画布' }).getByRole('button')).toHaveCount(0)
+})
+
+test('OpenSpec: scene-tree / 场景树命令菜单与快捷键 / 打开节点命令菜单', async ({ page }) => {
+  await page.goto('/')
+  const pageRow = page.getByRole('treegrid', { name: '场景树' }).locator('[data-scene-node-id="page"]')
+  await pageRow.click({ button: 'right', position: { x: 150, y: 12 } })
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  await expect(menu.getByRole('menuitem')).toHaveCount(7)
+  await expect(menu.getByRole('menuitem', { name: '剪切' })).toBeDisabled()
+  await expect(menu.getByRole('menuitem', { name: '删除' })).toHaveAttribute('data-danger', 'true')
+  await page.mouse.move(900, 400)
+  await expect(page).toHaveScreenshot('scene-tree-context-menu.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+})
+
+test('keeps the node context menu within the viewport edges', async ({ page }) => {
+  await page.goto('/')
+  const pageRow = page.getByRole('treegrid', { name: '场景树' }).locator('[data-scene-node-id="page"]')
+  await pageRow.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+      clientX: window.innerWidth - 2,
+      clientY: window.innerHeight - 2,
+    }))
+  })
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  const viewport = page.viewportSize()
+  expect(viewport).not.toBeNull()
+  await expect.poll(async () => {
+    const box = await menu.boundingBox()
+    return Boolean(
+      box
+      && box.x >= 8
+      && box.y >= 8
+      && box.x + box.width <= viewport!.width - 8
+      && box.y + box.height <= viewport!.height - 8,
+    )
+  }).toBe(true)
+})
+
+test('OpenSpec: scene-tree / 场景树命令菜单与快捷键 / 使用场景树命令快捷键', async ({ page }) => {
+  await page.goto('/')
+  const addNode = page.getByRole('button', { name: '新增节点', exact: true })
+  await addNode.click()
+  await addNode.click()
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const first = tree.locator('[data-scene-node-id="text-1"]')
+  const second = tree.locator('[data-scene-node-id="text-2"]')
+  await first.click()
+  await second.click({ modifiers: ['Control'] })
+  await second.press('Control+c')
+  await second.press('Control+v')
+
+  await expect(tree.locator('[data-scene-node-id="text-3"]')).toHaveAttribute('aria-level', '3')
+  await expect(tree.locator('[data-scene-node-id="text-4"]')).toHaveAttribute('aria-level', '3')
+})
+
+test('OpenSpec: scene-tree / 场景树命令菜单与快捷键 / 打开空白区命令菜单', async ({ page }) => {
+  await page.goto('/')
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  await tree.click({ button: 'right', position: { x: 210, y: 300 } })
+  await expect(page.getByRole('menuitem').allTextContents()).resolves.toEqual([
+    '新增根节点',
+    '粘贴到根级',
+  ])
+  await page.getByRole('menuitem', { name: '新增根节点' }).click()
+  await expect(tree.locator('[data-scene-node-id="text-1"]')).toHaveAttribute('aria-level', '1')
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 使用平台键位开始重命名', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '新增节点', exact: true }).click()
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const row = tree.getByRole('row', { name: /默认文本/ }).first()
+
+  await row.dblclick()
+  await expect(tree.getByRole('textbox', { name: /重命名/ })).toHaveCount(0)
+
+  const renameKey = await page.evaluate(() => (
+    /^Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent)
+      ? 'F2'
+      : 'Enter'
+  ))
+  await row.press(renameKey)
+  const input = tree.getByRole('textbox', { name: /重命名/ })
+  await expect(input).toBeVisible()
+  await input.fill('键盘重命名')
+  await input.press('Enter')
+  await expect(tree.getByRole('row', { name: /键盘重命名/ })).toBeVisible()
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 默认编辑器应用多选移动意图', async ({ page }) => {
+  await page.goto('/')
+  const addNode = page.getByRole('button', { name: '新增节点', exact: true })
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const pageNode = tree.locator('[data-scene-node-id="page"]')
+  for (let index = 0; index < 5; index += 1) {
+    await pageNode.click()
+    await addNode.click()
+  }
+
+  const second = tree.locator('[data-scene-node-id="text-2"]')
+  const third = tree.locator('[data-scene-node-id="text-3"]')
+  const fourth = tree.locator('[data-scene-node-id="text-4"]')
+  const fifth = tree.locator('[data-scene-node-id="text-5"]')
+  await second.click()
+  await fourth.click({ modifiers: ['Shift'] })
+
+  await expect(second).toHaveAttribute('aria-selected', 'true')
+  await expect(third).toHaveAttribute('aria-selected', 'true')
+  await expect(fourth).toHaveAttribute('aria-selected', 'true')
+
+  const sourceBox = await second.boundingBox()
+  const sourceLabelBox = await second.getByRole('gridcell').boundingBox()
+  const targetBox = await fifth.boundingBox()
+  const treeBox = await tree.boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(sourceLabelBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  expect(treeBox).not.toBeNull()
+  await page.mouse.move(sourceLabelBox!.x + 30, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    sourceLabelBox!.x + 30,
+    targetBox!.y + targetBox!.height - 2,
+    { steps: 5 },
+  )
+  await expect(page.getByTestId('scene-tree-drop-indicator')).toBeVisible()
+  await page.mouse.up()
+
+  await expect.poll(async () => {
+    const labels = await tree.getByRole('row').allTextContents()
+    return labels.map((label) => label.match(/默认文本(?: [2-5])?/)?.[0]).filter(Boolean)
+  }).toEqual(['默认文本', '默认文本 5', '默认文本 2', '默认文本 3', '默认文本 4'])
+})
+
+test('OpenSpec: scene-tree / 树选择与导航 / Ctrl 点击切换多选且不打开菜单', async ({ page }) => {
+  await page.goto('/')
+  const addNode = page.getByRole('button', { name: '新增节点', exact: true })
+  await addNode.click()
+  await addNode.click()
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const first = tree.locator('[data-scene-node-id="text-1"]')
+  const second = tree.locator('[data-scene-node-id="text-2"]')
+
+  await first.click()
+  await second.click({ modifiers: ['Control'] })
+
+  await expect(first).toHaveAttribute('aria-selected', 'true')
+  await expect(second).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 从文字区域快速拖动并改变层级', async ({ page }) => {
+  await page.goto('/')
+  const addNode = page.getByRole('button', { name: '新增节点', exact: true })
+  for (let index = 0; index < 5; index += 1) await addNode.click()
+
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const source = tree.locator('[data-scene-node-id="text-2"]')
+  const target = tree.locator('[data-scene-node-id="text-5"]')
+  const sourceBox = await source.boundingBox()
+  const sourceLabelBox = await source.getByRole('gridcell').boundingBox()
+  const targetBox = await target.boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(sourceLabelBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+
+  expect(await source.evaluate((element) => getComputedStyle(element).userSelect)).toBe('none')
+  const startX = sourceLabelBox!.x + 30
+  await page.mouse.move(startX, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(startX + 16, targetBox!.y + targetBox!.height / 2)
+
+  await expect(page.getByTestId('scene-tree-drag-preview')).toContainText('默认文本 2')
+  await expect(target).toHaveAttribute('data-scene-drop-target', 'inside')
+  await expect(page.getByTestId('scene-tree-drop-indicator')).toHaveCount(0)
+  await page.mouse.up()
+
+  await expect(source).toHaveAttribute('aria-level', '3')
+  await expect(target).toHaveAttribute('aria-expanded', 'true')
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 显示单节点和多节点拖拽预览', async ({ page }) => {
+  await page.goto('/?sceneDrag=1')
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const first = tree.getByRole('row', { name: /Layer 1/ })
+  const second = tree.getByRole('row', { name: /Layer 2/ })
+  const target = tree.getByRole('row', { name: /Group B/ })
+  await first.click()
+  await second.click({ modifiers: ['Shift'] })
+
+  const firstBox = await first.boundingBox()
+  const targetBox = await target.boundingBox()
+  expect(firstBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  await page.mouse.move(firstBox!.x + 120, firstBox!.y + firstBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(targetBox!.x + 120, targetBox!.y + targetBox!.height / 2)
+
+  await expect(page.getByTestId('scene-tree-drag-preview')).toContainText('2')
+  await expect(target).toHaveAttribute('data-scene-drop-target', 'inside')
+  await expect(page.getByTestId('scene-tree-drop-indicator')).toHaveCount(0)
+  await expect(page).toHaveScreenshot('scene-tree-drag-preview-multi.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await page.mouse.up()
+
+  await target.getByRole('button', { name: '展开节点' }).click()
+  await expect(first).toHaveAttribute('aria-level', '3')
+  await expect(second).toHaveAttribute('aria-level', '3')
+})
+
+test('OpenSpec: scene-tree / 拖动多个选中节点 / 拖拽保持纵向排序轴', async ({ page }) => {
+  await page.goto('/')
+  const addNode = page.getByRole('button', { name: '新增节点', exact: true })
+  for (let index = 0; index < 6; index += 1) await addNode.click()
+
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const draggedRow = tree.locator('[data-scene-node-id="text-5"]')
+  const initialBox = await draggedRow.boundingBox()
+  expect(initialBox).not.toBeNull()
+  expect(await tree.evaluate((element) => element.scrollWidth)).toBeLessThanOrEqual(
+    await tree.evaluate((element) => element.clientWidth),
+  )
+
+  await page.mouse.move(initialBox!.x + initialBox!.width / 2, initialBox!.y + 16)
+  await page.mouse.down()
+  await page.mouse.move(initialBox!.x + initialBox!.width + 160, initialBox!.y + 16, {
+    steps: 5,
+  })
+
+  await expect.poll(async () => {
+    const currentBox = await draggedRow.boundingBox()
+    return Math.abs((currentBox?.x ?? 0) - initialBox!.x)
+  }).toBeLessThanOrEqual(1)
+  expect(await tree.evaluate((element) => element.scrollLeft)).toBe(0)
+  await page.mouse.up()
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 使用静态节点和落点横线拖拽', async ({ page }) => {
+  await page.goto('/?sceneDrag=1')
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const source = tree.getByRole('row', { name: /Layer 1/ })
+  const target = tree.getByRole('row', { name: /Layer 3/ })
+  const sourceBox = await source.boundingBox()
+  const targetBox = await target.boundingBox()
+  const treeBox = await tree.boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  expect(treeBox).not.toBeNull()
+
+  const before = await tree.getByRole('row').allTextContents()
+  await page.mouse.move(sourceBox!.x + 120, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    sourceBox!.x + 120,
+    targetBox!.y + targetBox!.height - 2,
+    { steps: 5 },
+  )
+
+  await expect(page.getByTestId('scene-tree-drop-indicator')).toBeVisible()
+  const preview = page.getByTestId('scene-tree-drag-preview')
+  await expect(preview).toBeVisible()
+  await expect(preview).toContainText('Layer 1')
+  await expect.poll(async () => (await preview.boundingBox())?.width).toBeGreaterThan(50)
+  await expect(preview).toHaveScreenshot('scene-tree-drag-preview-single.png', {
+    animations: 'disabled',
+    caret: 'hide',
+  })
+  expect(await tree.getByRole('row').allTextContents()).toEqual(before)
+  expect((await source.boundingBox())?.y).toBeCloseTo(sourceBox!.y, 0)
+  await expect(page).toHaveScreenshot('scene-tree-drag-indicator.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await page.mouse.up()
+  await expect(page.getByTestId('scene-tree-drop-indicator')).toHaveCount(0)
+  await expect.poll(async () => {
+    const labels = await tree.getByRole('row').allTextContents()
+    return labels.map((label) => label.match(/Layer \d/)?.[0]).filter(Boolean)
+  }).toEqual(['Layer 2', 'Layer 3', 'Layer 1'])
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 使用静态节点和落点横线拖拽 - 插入嵌套首项之前', async ({ page }) => {
+  await page.goto('/?sceneDrag=1')
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const source = tree.getByRole('row', { name: /Loose/ })
+  const target = tree.getByRole('row', { name: /Layer 1/ })
+  const sourceBox = await source.boundingBox()
+  const targetBox = await target.boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+
+  await page.mouse.move(sourceBox!.x + 120, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(targetBox!.x + 120, targetBox!.y + 1)
+  const indicator = page.getByTestId('scene-tree-drop-indicator')
+  await expect(indicator).toBeVisible()
+  await expect.poll(async () => (await indicator.boundingBox())?.y).toBeCloseTo(targetBox!.y - 2, 0)
+  await page.mouse.up()
+
+  await expect(source).toHaveAttribute('aria-level', '3')
+  await expect.poll(async () => {
+    const labels = await tree.getByRole('row').allTextContents()
+    return labels.map((label) => label.match(/(?:Loose|Layer [123])/)?.[0]).filter(Boolean)
+  }).toEqual(['Loose', 'Layer 1', 'Layer 2', 'Layer 3'])
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 展开节点底部落点紧邻节点行', async ({ page }) => {
+  await page.goto('/?sceneDrag=1')
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const source = tree.getByRole('row', { name: /Loose/ })
+  const target = tree.getByRole('row', { name: /Group A/ })
+  const sourceBox = await source.boundingBox()
+  const targetBox = await target.boundingBox()
+  const treeBox = await tree.boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  expect(treeBox).not.toBeNull()
+
+  await page.mouse.move(sourceBox!.x + 120, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(treeBox!.x + 20, targetBox!.y + targetBox!.height - 2)
+
+  const indicator = page.getByTestId('scene-tree-drop-indicator')
+  await expect(indicator).toBeVisible()
+  await expect.poll(async () => (await indicator.boundingBox())?.y).toBeCloseTo(
+    targetBox!.y + targetBox!.height,
+    0,
+  )
+  await page.mouse.up()
+
+  await expect(source).toHaveAttribute('aria-level', '3')
+  await expect.poll(async () => {
+    const labels = await tree.getByRole('row').allTextContents()
+    return labels.map((label) => label.match(/(?:Loose|Layer [123])/)?.[0]).filter(Boolean)
+  }).toEqual(['Loose', 'Layer 1', 'Layer 2', 'Layer 3'])
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 通过横向位置改变层级', async ({ page }) => {
+  await page.goto('/?sceneDrag=1')
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const layer1 = tree.getByRole('row', { name: /Layer 1/ })
+  const layer2 = tree.getByRole('row', { name: /Layer 2/ })
+  const loose = tree.getByRole('row', { name: /Loose/ })
+
+  await layer1.click()
+  await layer2.click({ modifiers: ['Shift'] })
+  await expect(layer1).toHaveAttribute('aria-selected', 'true')
+  await expect(layer2).toHaveAttribute('aria-selected', 'true')
+
+  const sourceBox = await layer1.boundingBox()
+  const looseBox = await loose.boundingBox()
+  const treeBox = await tree.boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(looseBox).not.toBeNull()
+  expect(treeBox).not.toBeNull()
+  await page.mouse.move(sourceBox!.x + 120, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    sourceBox!.x + 120 - 16,
+    looseBox!.y + looseBox!.height - 2,
+    { steps: 5 },
+  )
+  await page.mouse.up()
+
+  await expect(layer1).toHaveAttribute('aria-level', '2')
+  await expect(layer2).toHaveAttribute('aria-level', '2')
+  await expect.poll(async () => {
+    const labels = await tree.getByRole('row').allTextContents()
+    return labels.map((label) => label.match(/(?:Loose|Layer [12])/)?.[0]).filter(Boolean)
+  }).toEqual(['Loose', 'Layer 1', 'Layer 2'])
+})
+
+test('OpenSpec: scene-tree / 场景节点操作意图 / 拖拽期间展开和滚动', async ({ page }) => {
+  await page.goto('/?sceneSize=5000')
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const source = tree.locator('[data-scene-node-id="node-1"]')
+  const sourceBox = await source.boundingBox()
+  const treeBox = await tree.boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(treeBox).not.toBeNull()
+
+  await page.mouse.move(sourceBox!.x + 100, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(sourceBox!.x + 100, treeBox!.y + treeBox!.height - 4, { steps: 5 })
+  await expect.poll(async () => tree.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  expect(await tree.evaluate((element) => element.scrollLeft)).toBe(0)
+  await page.mouse.up()
+})
+
+test('OpenSpec: scene-tree / 节点检索 / 使用普通与组合检索', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '新增节点', exact: true }).click()
+
+  const search = page.getByRole('searchbox', { name: '搜索节点' })
+  await page.getByRole('button', { name: '大小写敏感' }).click()
+  await page.getByRole('button', { name: '全词匹配' }).click()
+  await search.fill('默认文本')
+
+  await expect(page.getByRole('button', { name: '大小写敏感' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect(page.getByRole('button', { name: '全词匹配' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect(page.getByRole('treegrid', { name: '场景树' }).getByRole('row')).toHaveCount(2)
+
+  await page.getByRole('button', { name: '正则表达式' }).click()
+  await expect(page.getByRole('button', { name: '正则表达式' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect.poll(async () => page.getByRole('button', { name: '正则表达式' }).evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  )).not.toBe('rgba(0, 0, 0, 0)')
+  await search.fill('[')
+  await expect(search).toHaveAttribute('aria-invalid', 'true')
+  await expect(
+    page.locator('[data-compose-ui="scene-tree"]').getByRole('alert'),
+  ).toContainText('正则表达式无效')
+})
+
+test('OpenSpec: scene-tree / 大规模虚拟化树 / 渲染 5000 个展开节点', async ({ page }) => {
+  const initialStartedAt = Date.now()
+  await page.goto('/?sceneSize=5000')
+
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  await expect(tree).toBeVisible()
+  expect(Date.now() - initialStartedAt).toBeLessThan(1500)
+  await expect.poll(async () => tree.getByRole('row').count()).toBeLessThanOrEqual(80)
+
+  await tree.getByRole('row', { name: /Page 1/ }).press('End')
+  await expect(tree.getByRole('row', { name: /Node 4999/ })).toBeVisible()
+
+  const startedAt = Date.now()
+  await page.getByRole('searchbox', { name: '搜索节点' }).fill('Node 4999')
+  await expect(tree.getByRole('row', { name: /Node 4999/ })).toBeVisible()
+  expect(Date.now() - startedAt).toBeLessThan(500)
+})
+
+test('OpenSpec: scene-tree / 场景树视觉与样式隔离 / 显示默认场景树外观', async ({ page }) => {
+  await page.goto('/')
+  const pageRow = page.getByRole('treegrid', { name: '场景树' }).locator('[data-scene-node-id="page"]')
+  await pageRow.click({ modifiers: ['Control'] })
+  await page.mouse.move(800, 400)
+  const addButton = page.getByRole('button', { name: '新增节点', exact: true })
+  const toolbar = addButton.locator('..')
+  const search = page.getByRole('searchbox', { name: '搜索节点' })
+  const searchField = search.locator('..')
+  await expect.poll(async () => (await toolbar.boundingBox())?.height).toBe(32)
+  await expect.poll(async () => (await addButton.boundingBox())?.height).toBe(24)
+  await expect.poll(async () => (await searchField.boundingBox())?.height).toBe(24)
+  await expect.poll(async () => (await addButton.locator('svg').boundingBox())?.height).toBe(14)
+  await expect(search).toHaveCSS('font-size', '11px')
+  await expect(addButton).toHaveCSS('border-top-width', '0px')
+  await expect(addButton).toHaveCSS('cursor', 'pointer')
+  await expect.poll(async () => {
+    const buttonBox = await addButton.boundingBox()
+    const iconBox = await addButton.locator('svg').boundingBox()
+    if (!buttonBox || !iconBox) return Infinity
+    return Math.max(
+      Math.abs(buttonBox.x + buttonBox.width / 2 - (iconBox.x + iconBox.width / 2)),
+      Math.abs(buttonBox.y + buttonBox.height / 2 - (iconBox.y + iconBox.height / 2)),
+    )
+  }).toBeLessThanOrEqual(0.5)
+  await expect(page).toHaveScreenshot('scene-tree-default.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await pageRow.hover()
+  await expect(pageRow).toHaveCSS('background-color', 'rgb(42, 45, 46)')
+
+  await addButton.click()
+  const selectedRow = page.getByRole('treegrid', { name: '场景树' }).getByRole('row', { name: /默认文本/ })
+  await expect(selectedRow).toHaveCSS('cursor', 'default')
+  await selectedRow.click()
+  await page.mouse.move(800, 400)
+  await expect(selectedRow).toHaveCSS('height', '22px')
+  await expect(selectedRow).toHaveCSS('margin-top', '1px')
+  await expect(selectedRow).toHaveCSS('margin-bottom', '1px')
+  await expect(selectedRow).toHaveCSS('margin-left', '4px')
+  await expect(selectedRow).toHaveCSS('margin-right', '4px')
+  await expect(selectedRow).toHaveCSS('border-radius', '5px')
+  await expect.poll(async () => {
+    const pageBox = await pageRow.boundingBox()
+    const selectedBox = await selectedRow.boundingBox()
+    return (selectedBox?.y ?? 0) - (pageBox?.y ?? 0)
+  }).toBe(24)
+  await expect(selectedRow).toHaveCSS('background-color', 'rgb(55, 55, 61)')
+  await expect(selectedRow).toHaveCSS('box-shadow', 'none')
+  await expect(page).toHaveScreenshot('scene-tree-selected.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await selectedRow.press('ArrowUp')
+  await expect(pageRow).toBeFocused()
+  await expect(pageRow).toHaveCSS('background-color', 'rgb(6, 47, 74)')
+  await expect.poll(async () => pageRow.evaluate(
+    (element) => getComputedStyle(element).boxShadow,
+  )).toContain('rgb(0, 127, 212) 0px 0px 0px 1px inset')
+  await expect(page).toHaveScreenshot('scene-tree-focused.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await page.getByRole('button', { name: '大小写敏感' }).click()
+  await page.getByRole('button', { name: '全词匹配' }).click()
+  await page.getByRole('button', { name: '正则表达式' }).click()
+  await page.getByRole('searchbox', { name: '搜索节点' }).fill('默认文本')
+  await expect(page).toHaveScreenshot('scene-tree-search.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+})

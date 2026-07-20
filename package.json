@@ -15,17 +15,19 @@
     "lint": "eslint . --max-warnings 0",
     "test": "turbo run test",
     "test:e2e": "bun run build && playwright test",
+    "test:e2e:update": "bun run build && playwright test --update-snapshots",
     "test:e2e:ui": "bun run build && playwright test --ui --project=chromium",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "bun run build && changeset publish",
-    "pack:dry-run": "bun run --cwd packages/core pack:dry-run && bun run --cwd packages/editor pack:dry-run && bun run --cwd packages/preview pack:dry-run"
+    "pack:dry-run": "bun run --cwd packages/core pack:dry-run && bun run --cwd packages/scene-tree pack:dry-run && bun run --cwd packages/editor pack:dry-run && bun run --cwd packages/preview pack:dry-run"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.29.8",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^26.1.1",
@@ -37,6 +39,7 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
     "jsdom": "^29.1.1",
+    "tailwindcss": "^4.3.3",
     "turbo": "^2.6.3",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.64.0",

@@ -13,7 +13,7 @@ export function SceneGraphPanel() {
 
   return (
     <div className="compose-editor__panel" data-workspace-panel="scene-graph">
-      {sceneGraphPanel ?? <Placeholder>Scene Graph content</Placeholder>}
+      {sceneGraphPanel}
     </div>
   )
 }

@@ -6,6 +6,7 @@ export default mergeConfig(sharedConfig, {
   resolve: {
     alias: {
       '@compose-ui/core': resolve(__dirname, '../core/src/index.ts'),
+      '@compose-ui/scene-tree': resolve(__dirname, '../scene-tree/src/index.tsx'),
     },
   },
   test: {

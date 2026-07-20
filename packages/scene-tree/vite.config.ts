@@ -24,8 +24,7 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
-        '@compose-ui/core',
-        '@compose-ui/scene-tree',
+        '@tanstack/react-virtual',
         'react',
         'react-dom',
         'react/jsx-runtime',

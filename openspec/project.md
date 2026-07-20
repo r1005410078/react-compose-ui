@@ -11,7 +11,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - Bun 1.3.14 monorepo 与 Turbo
 - TypeScript、React 18.3/19、ReactDOM 18.3/19
 - Vite 8 与 ESM 包构建
-- Dockview 7 编辑器工作区
+- Dockview 7 编辑器工作区、Tailwind CSS 4
+- TanStack React Virtual 与内部 Pointer Events 场景树交互
 - Vitest、Testing Library 与 Playwright Chromium
 
 ## Project Conventions
@@ -27,6 +28,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 - `@compose-ui/core` 保持与 React 和 DOM 无关，承载未来的文档模型、命令及通用逻辑。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 `core`。
+- `@compose-ui/scene-tree` 是受控 React 树组件，不依赖 `core` 或 `editor`；editor 可以依赖
+  它，preview 不得依赖它。
 - `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 `core`，不得依赖 `editor`。
 - 跨包导入只使用 `@compose-ui/*` 公共入口，不得引用其他包的内部源码。
 - React、ReactDOM 和 JSX runtime 保持为 peer dependency 和外置依赖。
@@ -91,13 +94,17 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - 黄金文件 MUST 对应明确的 OpenSpec Scenario、viewport 和界面状态。
 - 截图前 MUST 等待字体和界面状态稳定，并禁用动画、隐藏光标及屏蔽非确定性内容。
 - 黄金文件 MUST 纳入版本控制。
-- expected 黄金文件的规范环境 MUST 是 CI 使用的 Ubuntu 24.04、仓库锁定的 Chromium、1280×720 viewport、`deviceScaleFactor: 1`、`zh-CN` locale、`Asia/Shanghai` timezone 和 dark color scheme；字体和测试数据也必须固定。
+- expected 黄金文件 MUST 使用仓库锁定的 Chromium、1280×720 viewport、
+  `deviceScaleFactor: 1`、`zh-CN` locale、`Asia/Shanghai` timezone、dark color scheme、
+  固定字体和确定性测试数据生成；不限制生成黄金文件的操作系统。
+- 为吸收不同操作系统的字体栅格化差异，截图比较 MAY 设置不超过 1% 的
+  `maxDiffPixelRatio`；不得以此掩盖几何、颜色、内容或状态回归。
 - CI MUST NOT 使用 `--update-snapshots`，不得新增、覆盖或接受 expected 黄金文件；CI MAY 生成 actual、diff 和测试报告作为失败产物。
 - 黄金文件更新 MUST 使用独立的 `bun run test:e2e:update` 命令执行，不得把更新参数加入普通 `test:e2e`。
 - 更新前 MUST 检查 expected、actual 和 diff，确认每一处像素变化符合已批准的规范。
 - 不得仅为使 CI 通过而更新黄金文件、扩大差异阈值或遮罩稳定内容。
 - 参考设计图属于设计输入，不得直接视为测试黄金文件；黄金文件必须由确定的测试场景生成。
-- 当前仓库尚未启用视觉黄金文件；首次引入前 MUST 先实现上述独立命令、规范环境和 CI 比较门禁，再接受第一份 expected 文件。
+- 当前仓库已经启用视觉黄金文件、独立更新命令和 CI 比较门禁。
 
 #### 完成门禁
 
@@ -132,7 +139,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 ## External Dependencies
 
-- npm 包：React、ReactDOM、Dockview、Vite、Vitest、Testing Library、Playwright、Turbo。
+- npm 包：React、ReactDOM、Dockview、Tailwind CSS、TanStack React Virtual、
+  Vite、Vitest、Testing Library、Playwright、Turbo。
 - CI：GitHub Actions `ubuntu-24.04` 与 Playwright Chromium。
 - 发布：Changesets 经 GitHub Actions Release 工作流发布到 npm registry（带 provenance）。
 - 当前运行时不依赖数据库、远端服务或第三方业务 API。

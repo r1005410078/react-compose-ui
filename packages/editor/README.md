@@ -8,13 +8,19 @@ Transaction Log 与 Command。
 
 ```tsx
 import { ComposeEditor } from '@compose-ui/editor'
+import type { SceneTreeOperation } from '@compose-ui/scene-tree'
 import '@compose-ui/editor/styles.css'
 
 export function EditorPage() {
   return (
     <ComposeEditor
       style={{ height: 720 }}
-      sceneGraphPanel={<div>Page 1</div>}
+      sceneTreeProps={{
+        nodes: [{ id: 'page', label: 'Page 1' }],
+        selectedIds: [],
+        expandedIds: [],
+        onOperation: (operation: SceneTreeOperation) => console.log(operation),
+      }}
       canvasToolbar={<button>添加组件</button>}
       inspectorPanel={<div>属性</div>}
       transactionLogPanel={<div>事务</div>}
@@ -28,11 +34,15 @@ export function EditorPage() {
 
 必须导入 `@compose-ui/editor/styles.css` 并给 `ComposeEditor` 提供确定的非零高度。
 组件保留标准 `<section>` HTML 属性透传，`children` 对应 Canvas 内容。
+该样式入口已经包含默认场景树样式；只有独立使用 `@compose-ui/scene-tree` 时才需要另行
+导入它的 `styles.css`。
 
 ## 布局行为
 
 - Scene Graph、Component Inspector、Transaction Log/Command 使用可缩放、可折叠的
   Dockview Edge Groups。
+- Scene Graph 默认显示空 `SceneTree`；`sceneTreeProps` 提供受控状态，原
+  `sceneGraphPanel` 插槽仍可完整覆盖默认树。
 - Canvas Toolbar 固定在 Canvas 内容顶部，不是独立面板。
 - 默认布局禁止面板拖拽、关闭和浮动，Dockview 类型不会成为公共 API。
 - 插槽更新不会重建面板或丢失当前实例的尺寸与折叠状态。

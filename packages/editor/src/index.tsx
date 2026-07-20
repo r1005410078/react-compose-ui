@@ -1,4 +1,5 @@
 import { COMPOSE_UI_CORE_PACKAGE } from '@compose-ui/core'
+import { SceneTree } from '@compose-ui/scene-tree'
 import { DockviewReact, themeAbyss } from 'dockview-react'
 import { useCallback, useMemo, useRef } from 'react'
 import type {
@@ -6,6 +7,7 @@ import type {
   IDockviewPanelProps,
 } from 'dockview-react'
 import type { HTMLAttributes, ReactNode } from 'react'
+import type { SceneTreeProps } from '@compose-ui/scene-tree'
 import { WorkspaceContentContext } from './workspace-context'
 import {
   CanvasPanel,
@@ -19,6 +21,7 @@ import { WorkspaceHeaderActions, WorkspaceTab } from './workspace-tab'
 import './styles.css'
 
 export interface ComposeEditorProps extends HTMLAttributes<HTMLElement> {
+  sceneTreeProps?: SceneTreeProps
   sceneGraphPanel?: ReactNode
   canvasToolbar?: ReactNode
   inspectorPanel?: ReactNode
@@ -35,9 +38,15 @@ const workspaceComponents = {
 } satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
 
 const workspaceTabComponents = { workspaceTab: WorkspaceTab }
+const emptySceneTreeProps: SceneTreeProps = {
+  nodes: [],
+  selectedIds: [],
+  expandedIds: [],
+}
 
 export function ComposeEditor({
   children = 'Compose Editor',
+  sceneTreeProps,
   sceneGraphPanel,
   canvasToolbar,
   inspectorPanel,
@@ -49,7 +58,9 @@ export function ComposeEditor({
   const initializedApi = useRef<DockviewReadyEvent['api'] | null>(null)
   const content = useMemo(
     () => ({
-      sceneGraphPanel,
+      sceneGraphPanel: sceneGraphPanel !== undefined
+        ? sceneGraphPanel
+        : <SceneTree {...(sceneTreeProps ?? emptySceneTreeProps)} />,
       canvasToolbar,
       children,
       inspectorPanel,
@@ -58,6 +69,7 @@ export function ComposeEditor({
     }),
     [
       sceneGraphPanel,
+      sceneTreeProps,
       canvasToolbar,
       children,
       inspectorPanel,

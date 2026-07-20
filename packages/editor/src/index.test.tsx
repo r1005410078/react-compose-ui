@@ -13,6 +13,18 @@ vi.mock('./workspace-layout', async (importOriginal) => {
   }
 })
 
+vi.mock('@compose-ui/scene-tree', async () => {
+  const React = await import('react')
+  return {
+    SceneTree: ({ nodes }: { nodes: ReadonlyArray<{ label: string }> }) =>
+      React.createElement(
+        'div',
+        { 'data-testid': 'default-scene-tree' },
+        nodes.map((node) => node.label).join(','),
+      ),
+  }
+})
+
 vi.mock('dockview-react', async () => {
   const React = await import('react')
   const readyEvent = { api: { id: 'test-api' } }
@@ -81,15 +93,41 @@ describe('ComposeEditor', () => {
     expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
   })
 
-  it('shows accessible placeholders for omitted named slots', () => {
+  it('OpenSpec: editor-workspace-layout / React 内容插槽 / 默认显示空场景树', () => {
     render(<ComposeEditor />)
 
-    expect(screen.getAllByRole('status')).toHaveLength(5)
-    expect(screen.getByText('Scene Graph content')).toBeInTheDocument()
+    expect(screen.getByTestId('default-scene-tree')).toBeEmptyDOMElement()
+    expect(screen.getAllByRole('status')).toHaveLength(4)
     expect(screen.getByText('Canvas toolbar')).toBeInTheDocument()
     expect(screen.getByText('Component inspector content')).toBeInTheDocument()
     expect(screen.getByText('Transaction log content')).toBeInTheDocument()
     expect(screen.getByText('Command content')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / React 内容插槽 / 插槽与场景树内容更新', () => {
+    const { rerender } = render(
+      <ComposeEditor
+        sceneTreeProps={{ nodes: [{ id: 'first', label: 'First' }], selectedIds: [], expandedIds: [] }}
+      />,
+    )
+
+    rerender(
+      <ComposeEditor
+        sceneTreeProps={{ nodes: [{ id: 'latest', label: 'Latest' }], selectedIds: [], expandedIds: [] }}
+      />,
+    )
+
+    expect(screen.getByTestId('default-scene-tree')).toHaveTextContent('Latest')
+    expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('OpenSpec: editor-workspace-layout / React 内容插槽 / 宿主覆盖场景树', () => {
+    const { rerender } = render(<ComposeEditor sceneGraphPanel="Custom scene" />)
+    expect(screen.getByText('Custom scene')).toBeInTheDocument()
+    expect(screen.queryByTestId('default-scene-tree')).not.toBeInTheDocument()
+
+    rerender(<ComposeEditor sceneGraphPanel={null} />)
+    expect(screen.queryByTestId('default-scene-tree')).not.toBeInTheDocument()
   })
 
   it('preserves root section attributes and events', () => {
