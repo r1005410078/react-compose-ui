@@ -6,7 +6,8 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 它希望把重复的大屏页面开发工作转化为可视化操作，让使用者能够添加组件、调整配置并
 实时查看最终效果，减少现场修改代码、重新构建和部署的次数。
 
-> 当前版本处于基础能力验证阶段，仅提供编辑器、预览器挂载组件和最小操作演示，尚不是
+> 当前版本处于基础能力验证阶段，提供编辑器、场景树、Schema 属性面板、预览器挂载组件和
+> 最小操作演示，尚不是
 > 完整的低代码编辑器。
 
 ## 环境要求
@@ -22,13 +23,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/editor @compose-ui/scene-tree @compose-ui/preview
+bun add @compose-ui/editor @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/preview valibot
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/editor @compose-ui/scene-tree @compose-ui/preview
+npm install @compose-ui/editor @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/preview valibot
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -107,7 +108,43 @@ Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API�
 当前实例中的尺寸、折叠状态和活动标签会在挂载期间保留，但不会写入 localStorage、页面
 文档或远端存储；重新挂载后恢复默认布局。
 
-当前版本仍未提供稳定的文档数据、`value`、`onChange`、组件注册或数据源绑定 API。
+`ComposeEditor` 当前仍未提供稳定的文档数据、`value`、`onChange`、组件注册或数据源绑定 API。
+
+## 独立使用属性面板
+
+`@compose-ui/property-panel` 从同步 Valibot Schema 自动生成受控属性 UI，支持基础类型、对象、
+数组、tuple/rest、record、union、variant 及 optional/nullable/nullish 包装器。候选完整值只有在
+通过 Schema 校验后才会交给宿主：
+
+```tsx
+import { PropertyPanel } from '@compose-ui/property-panel'
+import '@compose-ui/property-panel/styles.css'
+import * as v from 'valibot'
+
+const schema = v.object({
+  appearance: v.pipe(
+    v.object({
+      opacity: v.pipe(v.number(), v.minValue(0), v.maxValue(1), v.title('不透明度')),
+    }),
+    v.title('Appearance'),
+  ),
+})
+
+<PropertyPanel
+  schema={schema}
+  value={value}
+  defaultValue={{ appearance: { opacity: 1 } }}
+  onValueChange={(nextValue, change) => {
+    setValue(nextValue)
+    console.log(change.path, change.reason, change.output)
+  }}
+/>
+```
+
+面板提供搜索、全部/已修改/有错误筛选、默认值重置和两条可通过 Pointer 或键盘调整的三列
+分隔线。自定义语义类型通过实例级 renderer registry 扩展；Schema metadata 只保存稳定的
+editor ID，不保存 React 组件。完整 API、metadata 和主题变量见
+[`@compose-ui/property-panel` README](./packages/property-panel/README.md)。
 
 ## 独立使用场景树
 
@@ -173,10 +210,11 @@ bun run dev
 终端会显示 Vite 示例应用地址。打开页面后可以体验当前的最小流程：
 
 1. 在 Canvas Toolbar 点击“添加文本组件”。
-2. 点击中央画布中的“默认文本”。
-3. 在右侧 Component 面板的“文本内容”输入框中修改文字。
-4. 观察画布、Scene Graph、Component 和 Transaction Log 同步更新。
-5. 拖动边缘区分隔线调整尺寸，或点击 Edge Group 的活动标签折叠与展开。
+2. 点击中央画布中的“默认文本”，通过右侧 Schema 属性面板修改“文本内容”。
+3. 使用属性搜索、筛选、重置和两条列分隔线。
+4. 点击“添加 ECharts 图表”，在自定义属性 UI 中编辑标题、类型、系列名称和数据。
+5. 观察真实 ECharts Canvas、Scene Graph、属性面板和 Transaction Log 同步更新。
+6. 拖动边缘区分隔线调整尺寸，或点击 Edge Group 的活动标签折叠与展开。
 
 该流程用于验证组件挂载和浏览器操作测试，不代表最终编辑器交互设计。
 
@@ -239,7 +277,6 @@ bun run test:e2e
 - 页面文档 Schema 和版本迁移
 - 组件物料注册
 - 画布节点拖拽、缩放、对齐和图层编辑
-- 属性配置器
 - 数据源绑定和表达式
 - 撤销、重做以及跨页面或系统剪贴板复制粘贴
 - 页面保存、加载和生产发布协议

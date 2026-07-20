@@ -41,6 +41,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`。
 - `@compose-ui/scene-tree` 是独立受控 React 树组件，不得依赖 `core` 或 `editor`；
   `editor` 可以通过公共入口依赖并默认集成它。
+- `@compose-ui/property-panel` 是由同步 Valibot Schema 驱动的独立受控 React 组件，不得依赖
+  `core`、`editor` 或 `scene-tree`；`editor` 只通过 `inspectorPanel` 插槽集成它。
 - `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`，不得依赖 `editor`。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。

@@ -11,7 +11,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - Bun 1.3.14 monorepo 与 Turbo
 - TypeScript、React 18.3/19、ReactDOM 18.3/19
 - Vite 8 与 ESM 包构建
-- Dockview 7 编辑器工作区、Tailwind CSS 4
+- Dockview 7 编辑器工作区、Tailwind CSS 4、Valibot 1.4 Schema 属性面板
 - TanStack React Virtual 与内部 Pointer Events 场景树交互
 - Vitest、Testing Library 与 Playwright Chromium
 
@@ -30,6 +30,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 `core`。
 - `@compose-ui/scene-tree` 是受控 React 树组件，不依赖 `core` 或 `editor`；editor 可以依赖
   它，preview 不得依赖它。
+- `@compose-ui/property-panel` 是同步 Valibot Schema 驱动的受控 React 组件，不依赖 `core`、
+  `editor` 或 `scene-tree`；宿主通过 editor 的 `inspectorPanel` 插槽组合它。
 - `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 `core`，不得依赖 `editor`。
 - 跨包导入只使用 `@compose-ui/*` 公共入口，不得引用其他包的内部源码。
 - React、ReactDOM 和 JSX runtime 保持为 peer dependency 和外置依赖。
@@ -139,8 +141,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 ## External Dependencies
 
-- npm 包：React、ReactDOM、Dockview、Tailwind CSS、TanStack React Virtual、
-  Vite、Vitest、Testing Library、Playwright、Turbo。
+- npm 包：React、ReactDOM、Dockview、Tailwind CSS、TanStack React Virtual、Valibot、Vite、
+  Vitest、Testing Library、Playwright、Turbo；示例应用单独使用 ECharts，属性面板公共包不依赖
+  ECharts。
 - CI：GitHub Actions `ubuntu-24.04` 与 Playwright Chromium。
 - 发布：Changesets 经 GitHub Actions Release 工作流发布到 npm registry（带 provenance）。
 - 当前运行时不依赖数据库、远端服务或第三方业务 API。

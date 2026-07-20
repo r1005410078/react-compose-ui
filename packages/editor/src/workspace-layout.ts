@@ -25,7 +25,7 @@ export const WORKSPACE_COMPONENT_IDS = {
 
 export const WORKSPACE_SIZES = {
   scene: { initialSize: 280, minimumSize: 180 },
-  inspector: { initialSize: 340, minimumSize: 220 },
+  inspector: { initialSize: 480, minimumSize: 300 },
   bottom: { initialSize: 220, minimumSize: 120 },
 } as const
 

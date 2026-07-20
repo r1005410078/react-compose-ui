@@ -151,6 +151,148 @@ test('adds and edits a text component inside the editor', async ({ page }) => {
   await expect(editor.getByText('component.text.update', { exact: true })).toBeVisible()
 })
 
+test('OpenSpec: property-panel / 独立受控属性面板 / 宿主挂载属性面板 - 示例文本', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('region', { name: '编辑画布' })
+    .getByRole('button', { name: '默认文本' })
+    .click()
+
+  const panel = page.locator('[data-compose-ui="property-panel"]')
+  await expect(panel).toBeVisible()
+  await expect(panel.getByRole('searchbox', { name: '搜索属性' })).toBeVisible()
+  await panel.getByLabel('文本内容').fill('Schema 驱动文本')
+  await expect(page.getByRole('region', { name: '编辑画布' })
+    .getByRole('button', { name: 'Schema 驱动文本', exact: true })).toBeVisible()
+})
+
+test('OpenSpec: property-panel / ECharts 自定义类型示例 / 编辑 ECharts 配置', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加 ECharts 图表' }).click()
+
+  const panel = page.locator('[data-compose-ui="property-panel"]')
+  await expect(panel.getByLabel('图表标题')).toHaveValue('季度销售额')
+  await panel.getByLabel('图表标题').fill('区域营收')
+  await panel.getByLabel('系列数据').fill('18, 32, 27, 41')
+
+  const chart = page.getByRole('img', { name: '区域营收 ECharts 图表' })
+  await expect(chart).toBeVisible()
+  await expect(chart.locator('canvas')).toHaveCount(1)
+
+  await panel.getByLabel('系列数据').fill('18, 无效')
+  await expect(panel.getByRole('alert')).toContainText('请输入逗号分隔的数字')
+  await expect(chart).toBeVisible()
+})
+
+test('OpenSpec: property-panel / 双分隔线三列布局 / 键盘调整分隔线 - 示例应用', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('region', { name: '编辑画布' })
+    .getByRole('button', { name: '默认文本' })
+    .click()
+  const labelSeparator = page.getByRole('separator', { name: '调整属性名列宽' })
+  const actionSeparator = page.getByRole('separator', { name: '调整操作列宽' })
+
+  await labelSeparator.focus()
+  await labelSeparator.press('ArrowRight')
+  await actionSeparator.focus()
+  await actionSeparator.press('Shift+ArrowLeft')
+
+  await expect(labelSeparator).toHaveAttribute('aria-valuenow', '168')
+  await expect.poll(async () => Number(await actionSeparator.getAttribute('aria-valuenow')))
+    .toBeGreaterThan(36)
+  expect(Number(await actionSeparator.getAttribute('aria-valuenow'))).toBeLessThanOrEqual(
+    Number(await actionSeparator.getAttribute('aria-valuemax')),
+  )
+})
+
+test('OpenSpec: property-panel / 嵌套与集合属性编辑 / 修改数组和元组 - 示例数组', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('button', { name: '默认文本', exact: true }).click()
+
+  await page.getByRole('button', { name: '添加 关键词' }).click()
+  await page.getByRole('textbox', { name: '关键词 3' }).fill('可视化')
+  await expect(page.getByRole('textbox', { name: '关键词 3' })).toHaveValue('可视化')
+})
+
+test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 宿主加载属性面板样式', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 })
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加矩形组件' }).click()
+  const panel = page.locator('[data-compose-ui="property-panel"]')
+  const inspector = page.locator('.inspector-panel')
+  await expect(panel.getByText('Rectangle', { exact: true })).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Transform' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Appearance' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '属性层级 Property Demo' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Layout' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'State' })).toBeVisible()
+  await page.mouse.move(800, 400)
+  await expect(inspector).toHaveScreenshot('property-panel-default.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  // 元素级截图会调整滚动容器；重新挂载保证 resize 基线从顶部开始。
+  await page.reload()
+  await page.getByRole('button', { name: '添加矩形组件' }).click()
+  await expect(panel.getByText('Rectangle', { exact: true })).toBeVisible()
+  await panel.getByRole('separator', { name: '调整属性名列宽' }).dispatchEvent('keydown', {
+    key: 'ArrowRight',
+    shiftKey: true,
+  })
+  await panel.getByRole('separator', { name: '调整操作列宽' }).dispatchEvent('keydown', {
+    key: 'ArrowLeft',
+  })
+  await panel.evaluate((element) => {
+    element.scrollTop = 0
+    element.style.overflow = 'hidden'
+  })
+  await inspector.evaluate((element) => {
+    element.scrollTop = 0
+    element.style.overflow = 'hidden'
+  })
+  await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBe(0)
+  await page.mouse.move(800, 400)
+  await expect(inspector).toHaveScreenshot('property-panel-resized.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+})
+
+test('OpenSpec: property-panel / ECharts 自定义类型示例 / 选择 ECharts 图表组件', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加 ECharts 图表' }).click()
+  await page.getByLabel('图表类型').selectOption('line')
+  await page.mouse.move(800, 400)
+
+  await expect(page.locator('[data-compose-ui="property-panel"]')).toHaveScreenshot(
+    'property-panel-echart-editor.png',
+    { animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.01 },
+  )
+  await expect(page.getByRole('img', { name: '季度销售额 ECharts 图表' })).toHaveScreenshot(
+    'property-panel-echart-canvas.png',
+    { animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.01 },
+  )
+})
+
+test('OpenSpec: property-panel / ECharts 自定义类型示例 / 选择 ECharts 图表组件 - 复制后仍受控', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加 ECharts 图表' }).click()
+  const tree = page.getByRole('treegrid', { name: '场景树' })
+  const row = tree.getByRole('row', { name: /ECharts 图表/ })
+  await row.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '复制' }).click()
+  await row.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '粘贴为兄弟节点' }).click()
+
+  await expect(page.getByRole('img', { name: '季度销售额 ECharts 图表' })).toHaveCount(2)
+  await expect(tree.getByRole('row', { name: /ECharts 图表/ })).toHaveCount(2)
+})
+
 test('OpenSpec: scene-tree / 新增节点入口 / 连续新增多个节点', async ({ page }) => {
   await page.goto('/')
 
