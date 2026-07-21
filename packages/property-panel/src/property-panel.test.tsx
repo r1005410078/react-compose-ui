@@ -2,7 +2,9 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import * as v from 'valibot'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PropertyPanel } from './index'
+import { PropertyPanel, resolvePropertyBindings } from './index'
+import type { PropertyPanelBinding, PropertyPanelRenderer } from './index'
+import * as propertyPanelModule from './index'
 
 afterEach(() => {
   cleanup()
@@ -157,6 +159,16 @@ function StructuredHarness({
   )
 }
 
+function selectPropertyAction(ownerLabel: string, actionLabel: string) {
+  const directAction = screen.queryByRole('button', { name: actionLabel })
+  if (directAction) {
+    fireEvent.click(directAction)
+    return
+  }
+  fireEvent.click(screen.getByRole('button', { name: `更多 ${ownerLabel} 操作` }))
+  fireEvent.click(screen.getByRole('menuitem', { name: actionLabel }))
+}
+
 describe('OpenSpec: property-panel / Schema 类型自动映射 / 显示存在性包装器', () => {
   it('为 optional 字段显示存在性控制并生成有效值', () => {
     const onChange = vi.fn()
@@ -268,11 +280,178 @@ describe('OpenSpec: property-panel / 自定义类型 Renderer Registry / 使用�
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑 ECharts 1 series' }))
+    const editor = screen.getByRole('button', { name: '编辑 ECharts 1 series' })
+    expect(editor.closest('.property-panel__field')).toHaveAttribute('data-property-layout', 'inline')
+    fireEvent.click(editor)
     expect(onValueChange).toHaveBeenCalledWith(
       { chart: { series: [1, 2, 3] } },
       expect.objectContaining({ path: ['chart'], value: { series: [1, 2, 3] } }),
     )
+  })
+})
+
+describe('OpenSpec: property-panel / 自定义类型 Renderer Registry / 使用全宽自定义 renderer', () => {
+  it('使用 renderer 默认全宽布局并在标题行保留重置操作', () => {
+    const onValueChange = vi.fn()
+    render(
+      <PropertyPanel
+        defaultValue={{ chart: { series: [0] } }}
+        renderers={[{ id: 'echart', component: ChartRenderer, layout: 'full-width' }]}
+        schema={chartSchema}
+        value={{ chart: { series: [1] } }}
+        onValueChange={onValueChange}
+      />,
+    )
+
+    const content = screen.getByRole('group', { name: '图表' })
+    const field = content.closest('.property-panel__field')
+    expect(field).toHaveAttribute('data-property-layout', 'full-width')
+    expect(within(content).getByRole('button', { name: '编辑 ECharts 1 series' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '重置 图表' }))
+    expect(onValueChange).toHaveBeenCalledWith(
+      { chart: { series: [0] } },
+      expect.objectContaining({ path: ['chart'], reason: 'reset' }),
+    )
+  })
+
+  it('字段 metadata 可以双向覆盖 renderer 默认布局', () => {
+    const fullWidthSchema = v.object({
+      chart: v.pipe(
+        v.custom<ChartOptionFixture>(isChartOptionFixture),
+        v.title('全宽图表'),
+        v.metadata({ propertyPanel: { editor: 'echart', layout: 'full-width' } }),
+      ),
+    })
+    const inlineSchema = v.object({
+      chart: v.pipe(
+        v.custom<ChartOptionFixture>(isChartOptionFixture),
+        v.title('行内图表'),
+        v.metadata({ propertyPanel: { editor: 'echart', layout: 'inline' } }),
+      ),
+    })
+    const { unmount } = render(
+      <PropertyPanel
+        renderers={[{ id: 'echart', component: ChartRenderer }]}
+        schema={fullWidthSchema}
+        value={{ chart: { series: [1] } }}
+      />,
+    )
+
+    expect(screen.getByRole('group', { name: '全宽图表' }))
+      .toHaveAttribute('data-property-renderer-content', '')
+    unmount()
+
+    render(
+      <PropertyPanel
+        renderers={[{ id: 'echart', component: ChartRenderer, layout: 'full-width' }]}
+        schema={inlineSchema}
+        value={{ chart: { series: [1] } }}
+      />,
+    )
+
+    expect(screen.queryByRole('group', { name: '行内图表' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '编辑 ECharts 1 series' })
+      .closest('.property-panel__field')).toHaveAttribute('data-property-layout', 'inline')
+  })
+
+  it('深层全宽字段保留封顶缩进和统一受控提交', () => {
+    const schema = v.object({
+      outer: v.pipe(v.object({
+        inner: v.pipe(v.object({
+          chart: v.pipe(
+            v.custom<ChartOptionFixture>(isChartOptionFixture),
+            v.title('深层图表'),
+            v.metadata({ propertyPanel: { editor: 'echart' } }),
+          ),
+        }), v.title('Inner')),
+      }), v.title('Outer')),
+    })
+    const onValueChange = vi.fn()
+    render(
+      <PropertyPanel
+        renderers={[{ id: 'echart', component: ChartRenderer, layout: 'full-width' }]}
+        schema={schema}
+        value={{ outer: { inner: { chart: { series: [1] } } } }}
+        onValueChange={onValueChange}
+      />,
+    )
+
+    const content = screen.getByRole('group', { name: '深层图表' })
+    const field = content.closest('.property-panel__field')
+    expect(field).toHaveAttribute('data-property-depth', '2')
+    expect(field).toHaveStyle({ '--pp-field-indent': '52px', '--pp-branch-indent': '38px' })
+
+    fireEvent.click(within(content).getByRole('button', { name: '编辑 ECharts 1 series' }))
+    expect(onValueChange).toHaveBeenCalledWith(
+      { outer: { inner: { chart: { series: [1, 2, 3] } } } },
+      expect.objectContaining({ path: ['outer', 'inner', 'chart'] }),
+    )
+  })
+
+  it('全宽字段继续响应搜索、只读和 optional 存在性', () => {
+    const customBase = v.custom<ChartOptionFixture>(isChartOptionFixture)
+    const schema = v.object({
+      chart: v.pipe(
+        v.optional(customBase),
+        v.title('可选图表'),
+        v.metadata({ propertyPanel: { editor: 'echart' } }),
+      ),
+    })
+    function ReadOnlyChartRenderer(props: import('./index').PropertyPanelRendererProps) {
+      const chart = props.value as ChartOptionFixture
+      return (
+        <button disabled={props.readOnly} type="button">
+          图表系列 {chart.series.length}
+        </button>
+      )
+    }
+    function Harness() {
+      const [value, setValue] = useState<{ chart?: ChartOptionFixture }>({})
+      return (
+        <PropertyPanel
+          readOnly={false}
+          renderers={[{
+            id: 'echart',
+            component: ReadOnlyChartRenderer,
+            createDefault: () => ({ series: [8] }),
+            layout: 'full-width',
+          }]}
+          schema={schema}
+          value={value}
+          onValueChange={setValue}
+        />
+      )
+    }
+    const { unmount } = render(<Harness />)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '可选图表 存在' }))
+    expect(screen.getByRole('group', { name: '可选图表' })).toHaveTextContent('图表系列 1')
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
+      target: { value: '不匹配' },
+    })
+    expect(screen.queryByRole('group', { name: '可选图表' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
+      target: { value: '可选图表' },
+    })
+    expect(screen.getByRole('group', { name: '可选图表' })).toBeVisible()
+    unmount()
+
+    render(
+      <PropertyPanel
+        readOnly
+        renderers={[{
+          id: 'echart',
+          component: ReadOnlyChartRenderer,
+          layout: 'full-width',
+        }]}
+        schema={v.object({ chart: v.pipe(customBase, v.title('只读图表'), v.metadata({
+          propertyPanel: { editor: 'echart' },
+        })) })}
+        value={{ chart: { series: [1] } }}
+      />,
+    )
+    expect(screen.getByRole('button', { name: '图表系列 1' })).toBeDisabled()
   })
 })
 
@@ -524,7 +703,8 @@ describe('OpenSpec: property-panel / 搜索筛选与默认值重置 / 重置属�
     )
 
     expect(screen.queryByRole('button', { name: '重置 列表 2' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '重置 列表' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '更多 列表 操作' }))
+    expect(screen.getByRole('menuitem', { name: '重置 列表' })).toBeInTheDocument()
   })
 })
 
@@ -569,20 +749,49 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
 })
 
 describe('OpenSpec: property-panel / 嵌套与集合属性编辑 / 修改数组和元组', () => {
+  it('深层字段缩进封顶且不通过嵌套容器挤压共享编辑列', () => {
+    const schema = v.object({
+      level1: v.object({
+        level2: v.object({
+          level3: v.object({
+            level4: v.object({
+              level5: v.object({
+                level6: v.object({ value: v.pipe(v.string(), v.title('深层字段')) }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    })
+    render(<PropertyPanel schema={schema} value={{
+      level1: { level2: { level3: { level4: { level5: { level6: { value: 'visible' } } } } } },
+    }} />)
+
+    const field = screen.getByLabelText('深层字段').closest('.property-panel__field')
+    expect(field).toHaveAttribute('data-property-depth', '6')
+    expect(field).toHaveStyle({ '--pp-field-indent': '88px' })
+    expect(field).toHaveStyle({ '--pp-branch-indent': '74px' })
+
+    const deepestGroup = screen.getByRole('button', { name: 'Level6' }).closest('.property-panel__group')
+    expect(deepestGroup).toHaveAttribute('data-property-depth', '5')
+    expect(deepestGroup).toHaveStyle({ '--pp-group-indent': '66px' })
+    expect(deepestGroup).toHaveStyle({ '--pp-guide-indent': '74px' })
+  })
+
   it('新增、移动和删除数组项，并禁止删除 tuple 固定项', () => {
     const onChange = vi.fn()
     render(<StructuredHarness onChange={onChange} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '添加 标签' }))
+    selectPropertyAction('标签', '添加 标签')
     expect(screen.getByLabelText('标签 3')).toHaveValue('')
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ tags: ['alpha', 'beta', ''] }),
       expect.objectContaining({ path: ['tags'], reason: 'array-add' }),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '上移 标签 3' }))
+    selectPropertyAction('标签 3', '上移 标签 3')
     expect(screen.getByLabelText('标签 2')).toHaveValue('')
-    fireEvent.click(screen.getByRole('button', { name: '删除 标签 2' }))
+    selectPropertyAction('标签 2', '删除 标签 2')
     expect(screen.queryByLabelText('标签 3')).not.toBeInTheDocument()
 
     expect(screen.getByLabelText('坐标 1')).toHaveValue(10)
@@ -668,5 +877,386 @@ describe('OpenSpec: property-panel / 嵌套与集合属性编辑 / 切换联合�
       { config: { type: 'line', smooth: false } },
       expect.objectContaining({ path: ['config'], reason: 'union-switch' }),
     )
+  })
+})
+
+describe('OpenSpec: property-panel / 自适应属性操作轨道 / 窄操作列容纳多个操作', () => {
+  it('默认 36px 下把数组项的移动和删除操作收纳到同一溢出菜单', () => {
+    const schema = v.object({ items: v.pipe(v.array(v.string()), v.title('列表')) })
+    render(<PropertyPanel schema={schema} value={{ items: ['alpha', 'beta'] }} />)
+
+    const overflow = screen.getByRole('button', { name: '更多 列表 1 操作' })
+    expect(overflow).toBeVisible()
+    expect(screen.queryByRole('button', { name: '上移 列表 1' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '下移 列表 1' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '删除 列表 1' })).not.toBeInTheDocument()
+
+    fireEvent.click(overflow)
+    const menu = screen.getByRole('menu', { name: '列表 1 操作' })
+    expect(within(menu).getByRole('menuitem', { name: '上移 列表 1' })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: '下移 列表 1' })).toBeEnabled()
+    expect(within(menu).getByRole('menuitem', { name: '删除 列表 1' })).toBeEnabled()
+  })
+})
+
+describe('OpenSpec: property-panel / 自适应属性操作轨道 / 扩大操作列逐步显示操作', () => {
+  it('把操作列限制在 32 至 96px 并通过键盘逐步增加可见槽位', () => {
+    const schema = v.object({ items: v.pipe(v.array(v.string()), v.title('列表')) })
+    render(<PropertyPanel schema={schema} style={{ width: 500 }} value={{ items: ['alpha', 'beta'] }} />)
+    const separator = screen.getByRole('separator', { name: '调整操作列宽' })
+
+    expect(separator).toHaveAttribute('aria-valuemin', '32')
+    expect(separator).toHaveAttribute('aria-valuemax', '96')
+    fireEvent.keyDown(separator, { key: 'ArrowLeft', shiftKey: true })
+    expect(separator).toHaveAttribute('aria-valuenow', '60')
+    fireEvent.keyDown(separator, { key: 'ArrowLeft', shiftKey: true })
+    fireEvent.keyDown(separator, { key: 'ArrowLeft', shiftKey: true })
+    expect(separator).toHaveAttribute('aria-valuenow', '96')
+    expect(screen.getByRole('button', { name: '下移 列表 1' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '删除 列表 1' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '更多 列表 1 操作' })).not.toBeInTheDocument()
+  })
+})
+
+describe('OpenSpec: property-panel / 自适应属性操作轨道 / 通过行上下文菜单执行操作', () => {
+  it('右键属性行显示完整操作集合', () => {
+    const schema = v.object({ items: v.pipe(v.array(v.string()), v.title('列表')) })
+    render(<PropertyPanel schema={schema} value={{ items: ['alpha', 'beta'] }} />)
+    const row = screen.getByLabelText('列表 1').closest('[data-property-path="items.0"]')
+    expect(row).not.toBeNull()
+
+    fireEvent.contextMenu(row!)
+    const menu = screen.getByRole('menu', { name: '列表 1 操作' })
+    expect(within(menu).getByRole('menuitem', { name: '删除 列表 1' })).toBeVisible()
+  })
+})
+
+describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼容变量', () => {
+  it('提供纯绑定解析能力并在字段尾部显示绑定入口', () => {
+    expect(propertyPanelModule).toHaveProperty('resolvePropertyBindings')
+    const schema = v.object({ opacity: v.pipe(v.number(), v.title('不透明度')) })
+    const experimentalProps = {
+      binding: {
+        value: [],
+        variables: [{ id: 'page.opacity', label: '页面不透明度', scope: 'page', value: 0.6 }],
+        onChange: vi.fn(),
+      },
+    } as Record<string, unknown>
+    render(<PropertyPanel {...experimentalProps} schema={schema} value={{ opacity: 1 }} />)
+
+    expect(screen.getByRole('button', { name: '绑定 不透明度' })).toBeInTheDocument()
+  })
+
+  it('只应用通过目标和完整根 Schema 的变量并逐目标回退字面值', () => {
+    const schema = v.object({
+      opacity: v.pipe(v.number(), v.minValue(0), v.maxValue(1), v.title('不透明度')),
+      title: v.string(),
+    })
+    const literal = { opacity: 1, title: 'Literal' }
+    const result = resolvePropertyBindings({
+      schema,
+      value: literal,
+      bindings: [
+        { target: { path: ['opacity'], targetId: 'value' }, variableId: 'page.opacity' },
+        { target: { path: ['title'], targetId: 'value' }, variableId: 'missing.title' },
+      ],
+      variables: [{ id: 'page.opacity', label: '页面不透明度', scope: 'page', value: 0.6 }],
+    })
+
+    expect(result.value).toEqual({ opacity: 0.6, title: 'Literal' })
+    expect(result.output).toEqual({ opacity: 0.6, title: 'Literal' })
+    expect(result.targets.map((target) => target.status)).toEqual(['resolved', 'missing-variable'])
+    expect(result.issues).toEqual([
+      expect.objectContaining({ code: 'missing-variable', target: { path: ['title'], targetId: 'value' } }),
+    ])
+    expect(literal).toEqual({ opacity: 1, title: 'Literal' })
+  })
+
+  it('筛选兼容变量并在绑定、只读预览和解绑之间保持字面值', () => {
+    const schema = v.object({
+      opacity: v.pipe(
+        v.number(),
+        v.title('不透明度'),
+        v.metadata({ propertyPanel: { binding: { semanticScope: 'opacity' } } }),
+      ),
+    })
+    const onValueChange = vi.fn()
+    function BindingHarness() {
+      const [bindings, setBindings] = useState<readonly PropertyPanelBinding[]>([])
+      return (
+        <PropertyPanel
+          binding={{
+            value: bindings,
+            variables: [
+              {
+                id: 'page.opacity',
+                label: '页面不透明度',
+                scope: 'page',
+                value: 0.6,
+                semanticScopes: ['opacity'],
+              },
+              {
+                id: 'global.opacity',
+                label: '全局透明度',
+                scope: 'global',
+                value: 0.4,
+                semanticScopes: ['opacity'],
+              },
+              {
+                id: 'page.forbiddenOpacity',
+                label: '禁止透明度',
+                scope: 'page',
+                value: 0.2,
+                semanticScopes: ['opacity'],
+              },
+              { id: 'global.count', label: '全局计数', scope: 'global', value: 8 },
+              { id: 'global.title', label: '全局标题', scope: 'global', value: 'wrong' },
+            ],
+            onChange: (next) => setBindings(next),
+            canBind: (_target, variable) => variable.id !== 'page.forbiddenOpacity',
+          }}
+          schema={schema}
+          value={{ opacity: 1 }}
+          onValueChange={onValueChange}
+        />
+      )
+    }
+    render(<BindingHarness />)
+
+    fireEvent.click(screen.getByRole('button', { name: '绑定 不透明度' }))
+    expect(screen.getByRole('heading', { name: '页面变量' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '全局变量' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /页面不透明度/ })).toBeInTheDocument()
+    expect(screen.queryByText('全局计数')).not.toBeInTheDocument()
+    expect(screen.queryByText('全局标题')).not.toBeInTheDocument()
+    expect(screen.queryByText('禁止透明度')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索变量' }), {
+      target: { value: '页面' },
+    })
+    expect(screen.getByRole('button', { name: /页面不透明度/ })).toBeInTheDocument()
+    expect(screen.queryByText('全局透明度')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /页面不透明度/ }))
+
+    expect(screen.getByLabelText('不透明度')).toHaveValue(0.6)
+    expect(screen.getByLabelText('不透明度')).toHaveAttribute('readonly')
+    fireEvent.change(screen.getByLabelText('不透明度'), { target: { value: '0.2' } })
+    expect(onValueChange).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '更换绑定 不透明度' }))
+    fireEvent.click(screen.getByRole('button', { name: '解绑' }))
+    expect(screen.getByLabelText('不透明度')).toHaveValue(1)
+  })
+
+  it('把绑定计入修改和错误筛选，并在 reset 时同时删除绑定', () => {
+    const schema = v.object({ opacity: v.pipe(v.number(), v.title('不透明度')) })
+    const onBindingChange = vi.fn()
+    render(
+      <PropertyPanel
+        binding={{
+          value: [{ target: { path: ['opacity'], targetId: 'value' }, variableId: 'missing' }],
+          variables: [],
+          onChange: onBindingChange,
+        }}
+        defaultValue={{ opacity: 1 }}
+        schema={schema}
+        value={{ opacity: 1 }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '筛选属性' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '有错误' }))
+    expect(screen.getByLabelText('不透明度')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '筛选属性' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '已修改' }))
+    expect(screen.getByLabelText('不透明度')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '重置 不透明度' }))
+    expect(onBindingChange).toHaveBeenCalledWith([], {
+      reason: 'reset',
+      target: { path: ['opacity'], targetId: 'value' },
+    })
+  })
+
+  it('通过 renderer 子目标分别解析复合字段', () => {
+    const pointSchema = v.custom<{ x: number; y: number }>((value) => (
+      Boolean(value && typeof value === 'object' && 'x' in value && 'y' in value)
+    ))
+    const schema = v.object({
+      position: v.pipe(
+        pointSchema,
+        v.title('位置'),
+        v.metadata({ propertyPanel: { editor: 'point' } }),
+      ),
+    })
+    const renderer: PropertyPanelRenderer = {
+      id: 'point',
+      component: () => null,
+      bindingTargets: () => [
+        {
+          id: 'x', label: 'X', schema: v.number(),
+          getValue: (value) => (value as { x: number }).x,
+          setValue: (value, targetValue) => ({ ...(value as object), x: targetValue }),
+        },
+        {
+          id: 'y', label: 'Y', schema: v.number(),
+          getValue: (value) => (value as { y: number }).y,
+          setValue: (value, targetValue) => ({ ...(value as object), y: targetValue }),
+        },
+      ],
+    }
+    const result = resolvePropertyBindings({
+      schema,
+      value: { position: { x: 1, y: 2 } },
+      bindings: [{ target: { path: ['position'], targetId: 'x' }, variableId: 'page.x' }],
+      variables: [{ id: 'page.x', label: '页面 X', scope: 'page', value: 12 }],
+      renderers: [renderer],
+    })
+
+    expect(result.value).toEqual({ position: { x: 12, y: 2 } })
+  })
+
+  it('变量快照更新只刷新 effective value，不发出字面值提交', () => {
+    const schema = v.object({ opacity: v.pipe(v.number(), v.title('不透明度')) })
+    const onValueChange = vi.fn()
+    function Harness() {
+      const [variableValue, setVariableValue] = useState(0.6)
+      return (
+        <>
+          <button type="button" onClick={() => setVariableValue(0.3)}>更新变量</button>
+          <PropertyPanel
+            binding={{
+              value: [{ target: { path: ['opacity'], targetId: 'value' }, variableId: 'opacity' }],
+              variables: [{ id: 'opacity', label: '透明度', scope: 'page', value: variableValue }],
+              onChange: vi.fn(),
+            }}
+            schema={schema}
+            value={{ opacity: 1 }}
+            onValueChange={onValueChange}
+          />
+        </>
+      )
+    }
+    render(<Harness />)
+
+    expect(screen.getByLabelText('不透明度')).toHaveValue(0.6)
+    fireEvent.click(screen.getByRole('button', { name: '更新变量' }))
+    expect(screen.getByLabelText('不透明度')).toHaveValue(0.3)
+    expect(onValueChange).not.toHaveBeenCalled()
+  })
+
+  it('只读面板中的已绑定输入仍可聚焦，但不能修改绑定或字面值', () => {
+    const schema = v.object({ title: v.pipe(v.string(), v.title('标题')) })
+    render(
+      <PropertyPanel
+        binding={{
+          value: [{ target: { path: ['title'], targetId: 'value' }, variableId: 'title' }],
+          variables: [{ id: 'title', label: '页面标题', scope: 'page', value: 'Bound' }],
+          onChange: vi.fn(),
+        }}
+        readOnly
+        schema={schema}
+        value={{ title: 'Literal' }}
+      />,
+    )
+
+    const input = screen.getByLabelText('标题')
+    expect(input).toHaveValue('Bound')
+    expect(input).not.toBeDisabled()
+    expect(input).toHaveAttribute('readonly')
+    expect(screen.getByRole('button', { name: '更换绑定 标题' })).toBeDisabled()
+  })
+})
+
+describe('OpenSpec: property-panel / 结构操作维护绑定地址 / 数组和 Record 重映射绑定', () => {
+  it('数组项移动和删除时同步移动或移除后代绑定', () => {
+    const schema = v.object({ items: v.pipe(v.array(v.string()), v.title('列表')) })
+    const onBindingChange = vi.fn()
+    function Harness() {
+      const [value, setValue] = useState({ items: ['alpha', 'beta'] })
+      const [bindings, setBindings] = useState<readonly PropertyPanelBinding[]>([
+        { target: { path: ['items', 0], targetId: 'value' }, variableId: 'first' },
+        { target: { path: ['items', 1], targetId: 'value' }, variableId: 'second' },
+      ])
+      return (
+        <PropertyPanel
+          binding={{
+            value: bindings,
+            variables: [
+              { id: 'first', label: '第一项', scope: 'page', value: 'A' },
+              { id: 'second', label: '第二项', scope: 'page', value: 'B' },
+            ],
+            onChange: (next, change) => {
+              setBindings(next)
+              onBindingChange(next, change)
+            },
+          }}
+          schema={schema}
+          value={value}
+          onValueChange={setValue}
+        />
+      )
+    }
+    render(<Harness />)
+
+    selectPropertyAction('列表 1', '下移 列表 1')
+    expect(onBindingChange).toHaveBeenLastCalledWith([
+      { target: { path: ['items', 1], targetId: 'value' }, variableId: 'first' },
+      { target: { path: ['items', 0], targetId: 'value' }, variableId: 'second' },
+    ], expect.objectContaining({ reason: 'remap' }))
+
+    selectPropertyAction('列表 1', '删除 列表 1')
+    expect(onBindingChange).toHaveBeenLastCalledWith([
+      { target: { path: ['items', 0], targetId: 'value' }, variableId: 'first' },
+    ], expect.objectContaining({ reason: 'remap' }))
+  })
+
+  it('record 改键和删除、union 切换会重映射或清理后代绑定', () => {
+    const schema = v.object({
+      values: v.pipe(v.record(v.string(), v.number()), v.title('映射')),
+      mode: v.pipe(v.union([
+        v.object({ type: v.literal('a'), value: v.string() }),
+        v.object({ type: v.literal('b'), count: v.number() }),
+      ]), v.title('模式')),
+    })
+    const onBindingChange = vi.fn()
+    function Harness() {
+      const [value, setValue] = useState<v.InferInput<typeof schema>>({
+        values: { width: 10 },
+        mode: { type: 'a' as const, value: 'literal' } as { type: 'a'; value: string } | { type: 'b'; count: number },
+      })
+      const [bindings, setBindings] = useState<readonly PropertyPanelBinding[]>([
+        { target: { path: ['values', 'width'], targetId: 'value' }, variableId: 'width' },
+        { target: { path: ['mode', 'value'], targetId: 'value' }, variableId: 'mode' },
+      ])
+      return (
+        <PropertyPanel
+          binding={{
+            value: bindings,
+            variables: [
+              { id: 'width', label: '宽度', scope: 'page', value: 20 },
+              { id: 'mode', label: '内容', scope: 'page', value: 'bound' },
+            ],
+            onChange: (next, change) => {
+              setBindings(next)
+              onBindingChange(next, change)
+            },
+          }}
+          schema={schema}
+          value={value}
+          onValueChange={setValue}
+        />
+      )
+    }
+    render(<Harness />)
+
+    fireEvent.change(screen.getByLabelText('映射 键 1'), { target: { value: 'height' } })
+    expect(onBindingChange).toHaveBeenLastCalledWith(expect.arrayContaining([
+      { target: { path: ['values', 'height'], targetId: 'value' }, variableId: 'width' },
+    ]), expect.objectContaining({ reason: 'remap' }))
+
+    fireEvent.change(screen.getByRole('combobox', { name: '模式 分支' }), { target: { value: '1' } })
+    expect(onBindingChange).toHaveBeenLastCalledWith([
+      { target: { path: ['values', 'height'], targetId: 'value' }, variableId: 'width' },
+    ], expect.objectContaining({ reason: 'remap' }))
   })
 })

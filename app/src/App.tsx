@@ -1,8 +1,14 @@
 import { ComposeEditor } from '@compose-ui/editor'
 import {
   PropertyPanel,
+  resolvePropertyBindings,
 } from '@compose-ui/property-panel'
-import type { PropertyPanelRendererProps } from '@compose-ui/property-panel'
+import type {
+  PropertyPanelBinding,
+  PropertyPanelRenderer,
+  PropertyPanelRendererProps,
+  PropertyPanelVariable,
+} from '@compose-ui/property-panel'
 import type { SceneTreeNode, SceneTreeOperation } from '@compose-ui/scene-tree'
 import { BarChart, LineChart, PieChart } from 'echarts/charts'
 import {
@@ -15,6 +21,7 @@ import { init as initECharts, use as registerECharts } from 'echarts/core'
 import type { EChartsOption } from 'echarts'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import * as v from 'valibot'
 import '@compose-ui/property-panel/styles.css'
 import './App.css'
@@ -25,12 +32,14 @@ interface TextComponent {
   defaultText: string
   keywords: string[]
   defaultKeywords: string[]
+  bindings: readonly PropertyPanelBinding[]
 }
 
 interface ChartComponent {
   id: string
   option: EChartsOption
   defaultOption: EChartsOption
+  bindings: readonly PropertyPanelBinding[]
 }
 
 interface AxisPair {
@@ -41,6 +50,11 @@ interface AxisPair {
 interface SizePair {
   width: number
   height: number
+}
+
+enum DemoPriority {
+  Normal = 'normal',
+  High = 'high',
 }
 
 interface RectangleProperties {
@@ -78,12 +92,47 @@ interface RectangleProperties {
   diagnostics: {
     debugBounds: boolean
   }
+  supportedTypes: {
+    primitives: {
+      stringValue: string
+      numberValue: number
+      bigintValue: bigint
+      booleanValue: boolean
+      dateValue: Date
+      literalValue: 'rectangle'
+      picklistValue: 'draft' | 'published'
+      enumValue: DemoPriority
+    }
+    presence: {
+      optionalText?: string
+      nullableText: string | null
+      nullishText?: string | null
+    }
+    collections: {
+      arrayValue: string[]
+      tupleValue: [string, number]
+      tupleRestValue: [string, ...number[]]
+      recordValue: Record<string, number>
+    }
+    unions: {
+      unionValue:
+        | { kind: 'static'; value: string }
+        | { kind: 'dynamic'; speed: number }
+      variantValue:
+        | { type: 'bar'; gap: number }
+        | { type: 'line'; smooth: boolean }
+    }
+    custom: {
+      chartOption: EChartsOption
+    }
+  }
 }
 
 interface RectangleComponent {
   id: string
   properties: RectangleProperties
   defaultProperties: RectangleProperties
+  bindings: readonly PropertyPanelBinding[]
 }
 
 type DemoChartType = 'bar' | 'line' | 'pie'
@@ -112,6 +161,64 @@ const DEFAULT_CHART_CONFIG: DemoChartConfig = {
   seriesName: '销售额',
   data: [12, 24, 18, 36],
 }
+
+const DEMO_VARIABLES: readonly PropertyPanelVariable[] = [
+  {
+    id: 'page.positionX',
+    label: '页面偏移 X',
+    scope: 'page',
+    value: 24,
+    semanticScopes: ['position-x'],
+  },
+  {
+    id: 'page.opacity',
+    label: '页面透明度',
+    scope: 'page',
+    value: 0.65,
+    semanticScopes: ['opacity'],
+  },
+  {
+    id: 'page.accentColor',
+    label: '页面强调色',
+    scope: 'page',
+    value: '#22C55E',
+    semanticScopes: ['color'],
+  },
+  {
+    id: 'page.heading',
+    label: '页面标题',
+    scope: 'page',
+    value: '变量驱动标题',
+  },
+  {
+    id: 'global.chartTitle',
+    label: '全局图表标题',
+    scope: 'global',
+    value: '全局季度销售额',
+    semanticScopes: ['chart-title'],
+  },
+  {
+    id: 'global.chartType',
+    label: '全局图表类型',
+    scope: 'global',
+    value: 'line',
+    semanticScopes: ['chart-type'],
+  },
+  {
+    id: 'global.seriesName',
+    label: '全局系列名称',
+    scope: 'global',
+    value: '变量销售额',
+    semanticScopes: ['chart-series'],
+  },
+  {
+    id: 'global.chartData',
+    label: '全局图表数据',
+    scope: 'global',
+    value: [18, 30, 22, 42],
+    semanticScopes: ['chart-data'],
+  },
+]
 
 const textPropertySchema = v.object({
   content: v.pipe(
@@ -188,7 +295,7 @@ const rectanglePropertySchema = v.object({
       angle: v.pipe(
         v.number(),
         v.title('旋转 Angle'),
-        v.metadata({ propertyPanel: { unit: '°' } }),
+        v.metadata({ propertyPanel: { editor: 'angle', unit: '°' } }),
       ),
       scale: v.pipe(
         axisPairSchema,
@@ -205,11 +312,18 @@ const rectanglePropertySchema = v.object({
         v.title('颜色 Color'),
         v.metadata({ propertyPanel: { editor: 'color' } }),
       ),
-      opacity: v.pipe(v.number(), v.minValue(0), v.maxValue(1), v.title('不透明度 Opacity')),
+      opacity: v.pipe(
+        v.number(),
+        v.minValue(0),
+        v.maxValue(1),
+        v.title('不透明度 Opacity'),
+        v.metadata({ propertyPanel: { editor: 'opacity' } }),
+      ),
       cornerRadius: v.pipe(
         v.number(),
         v.minValue(0),
         v.title('圆角 Corner Radius'),
+        v.metadata({ propertyPanel: { editor: 'corner-radius' } }),
       ),
     }),
     v.title('Appearance'),
@@ -229,7 +343,7 @@ const rectanglePropertySchema = v.object({
                 v.number(),
                 v.minValue(0),
                 v.title('宽度 Width'),
-                v.metadata({ propertyPanel: { unit: 'px' } }),
+                v.metadata({ propertyPanel: { editor: 'stroke-width', unit: 'px' } }),
               ),
             }),
             v.title('描边 Stroke'),
@@ -261,7 +375,10 @@ const rectanglePropertySchema = v.object({
       visibility: v.pipe(
         v.picklist(['visible', 'hidden']),
         v.title('可见性 Visibility'),
-        v.metadata({ propertyPanel: { optionLabels: { visible: '◉ Visible', hidden: '○ Hidden' } } }),
+        v.metadata({ propertyPanel: {
+          editor: 'visibility',
+          optionLabels: { visible: 'Visible', hidden: 'Hidden' },
+        } }),
       ),
     }),
     v.title('State'),
@@ -274,6 +391,120 @@ const rectanglePropertySchema = v.object({
   diagnostics: v.pipe(
     v.object({ debugBounds: v.pipe(v.boolean(), v.title('调试边界 Debug Bounds')) }),
     v.title('Diagnostics'),
+    v.metadata({ propertyPanel: { collapsed: true } }),
+  ),
+  supportedTypes: v.pipe(
+    v.object({
+      primitives: v.pipe(
+        v.object({
+          stringValue: v.pipe(v.string(), v.title('字符串 String')),
+          numberValue: v.pipe(v.number(), v.title('数字 Number')),
+          bigintValue: v.pipe(v.bigint(), v.title('大整数 BigInt')),
+          booleanValue: v.pipe(v.boolean(), v.title('布尔值 Boolean')),
+          dateValue: v.pipe(v.date(), v.title('日期 Date')),
+          literalValue: v.pipe(v.literal('rectangle'), v.title('固定值 Literal')),
+          picklistValue: v.pipe(
+            v.picklist(['draft', 'published']),
+            v.title('选择 Picklist'),
+            v.metadata({ propertyPanel: { optionLabels: {
+              draft: '草稿 Draft',
+              published: '已发布 Published',
+            } } }),
+          ),
+          enumValue: v.pipe(
+            v.enum(DemoPriority),
+            v.title('枚举 Enum'),
+            v.metadata({ propertyPanel: { optionLabels: {
+              [DemoPriority.Normal]: '普通 Normal',
+              [DemoPriority.High]: '高 High',
+            } } }),
+          ),
+        }),
+        v.title('基础类型 Primitives'),
+        v.metadata({ propertyPanel: { collapsed: true } }),
+      ),
+      presence: v.pipe(
+        v.object({
+          optionalText: v.pipe(v.optional(v.string()), v.title('可选文本 Optional')),
+          nullableText: v.pipe(v.nullable(v.string()), v.title('可空文本 Nullable')),
+          nullishText: v.pipe(v.nullish(v.string()), v.title('空值文本 Nullish')),
+        }),
+        v.title('存在性包装 Presence'),
+        v.metadata({ propertyPanel: { collapsed: true } }),
+      ),
+      collections: v.pipe(
+        v.object({
+          arrayValue: v.pipe(
+            v.array(v.string()),
+            v.title('列表 Array'),
+            v.metadata({ propertyPanel: { collapsed: true } }),
+          ),
+          tupleValue: v.pipe(
+            v.tuple([v.string(), v.number()]),
+            v.title('元组 Tuple'),
+            v.metadata({ propertyPanel: { collapsed: true } }),
+          ),
+          tupleRestValue: v.pipe(
+            v.tupleWithRest([v.string()], v.number()),
+            v.title('可变元组 Tuple Rest'),
+            v.metadata({ propertyPanel: { collapsed: true } }),
+          ),
+          recordValue: v.pipe(
+            v.record(v.string(), v.number()),
+            v.title('记录 Record'),
+            v.metadata({ propertyPanel: { collapsed: true } }),
+          ),
+        }),
+        v.title('集合结构 Collections'),
+        v.metadata({ propertyPanel: { collapsed: true } }),
+      ),
+      unions: v.pipe(
+        v.object({
+          unionValue: v.pipe(
+            v.union([
+              v.pipe(
+                v.object({ kind: v.literal('static'), value: v.string() }),
+                v.title('静态 Static'),
+              ),
+              v.pipe(
+                v.object({ kind: v.literal('dynamic'), speed: v.number() }),
+                v.title('动态 Dynamic'),
+              ),
+            ]),
+            v.title('联合 Union'),
+            v.metadata({ propertyPanel: { collapsed: true } }),
+          ),
+          variantValue: v.pipe(
+            v.variant('type', [
+              v.pipe(
+                v.object({ type: v.literal('bar'), gap: v.number() }),
+                v.title('柱状图 Bar'),
+              ),
+              v.pipe(
+                v.object({ type: v.literal('line'), smooth: v.boolean() }),
+                v.title('折线图 Line'),
+              ),
+            ]),
+            v.title('变体 Variant'),
+            v.metadata({ propertyPanel: { collapsed: true } }),
+          ),
+        }),
+        v.title('联合结构 Unions'),
+        v.metadata({ propertyPanel: { collapsed: true } }),
+      ),
+      custom: v.pipe(
+        v.object({
+          chartOption: v.pipe(
+            v.custom<EChartsOption>(isEChartsOption, '请输入有效的 EChartsOption'),
+            v.title('图表配置 EChartsOption'),
+            v.metadata({ propertyPanel: { editor: 'echart' } }),
+          ),
+        }),
+        v.title('自定义类型 Custom'),
+        v.metadata({ propertyPanel: { collapsed: true } }),
+      ),
+    }),
+    v.title('支持类型 Supported Types'),
     v.metadata({ propertyPanel: { collapsed: true } }),
   ),
 })
@@ -304,19 +535,190 @@ const DEFAULT_RECTANGLE_PROPERTIES: RectangleProperties = {
   },
   advanced: { pixelSnapping: true },
   diagnostics: { debugBounds: false },
+  supportedTypes: {
+    primitives: {
+      stringValue: 'Rectangle',
+      numberValue: 42,
+      bigintValue: 9007199254740991n,
+      booleanValue: true,
+      dateValue: new Date('2026-07-21T00:00:00.000Z'),
+      literalValue: 'rectangle',
+      picklistValue: 'draft',
+      enumValue: DemoPriority.Normal,
+    },
+    presence: {
+      nullableText: null,
+    },
+    collections: {
+      arrayValue: ['alpha', 'beta'],
+      tupleValue: ['origin', 0],
+      tupleRestValue: ['range', 10, 20],
+      recordValue: { width: 100, height: 100 },
+    },
+    unions: {
+      unionValue: { kind: 'static', value: 'ready' },
+      variantValue: { type: 'bar', gap: 4 },
+    },
+    custom: {
+      chartOption: createChartOption({
+        ...DEFAULT_CHART_CONFIG,
+        title: '类型示例图表',
+      }),
+    },
+  },
 }
+
+const chartDataBindingSchema = v.pipe(v.array(v.number()), v.minLength(1))
 
 const echartRenderer = [{
   id: 'echart',
   component: EChartsOptionRenderer,
-}] as const
+  layout: 'full-width',
+  bindingTargets: () => [
+    {
+      id: 'title',
+      label: '图表标题',
+      schema: v.string(),
+      semanticScope: 'chart-title',
+      getValue: (value: unknown) => readChartConfig(value).title,
+      setValue: (value: unknown, targetValue: unknown) => createChartOption({
+        ...readChartConfig(value),
+        title: targetValue as string,
+      }),
+    },
+    {
+      id: 'type',
+      label: '图表类型',
+      schema: v.picklist(['bar', 'line', 'pie']),
+      semanticScope: 'chart-type',
+      getValue: (value: unknown) => readChartConfig(value).type,
+      setValue: (value: unknown, targetValue: unknown) => createChartOption({
+        ...readChartConfig(value),
+        type: targetValue as DemoChartType,
+      }),
+    },
+    {
+      id: 'seriesName',
+      label: '系列名称',
+      schema: v.string(),
+      semanticScope: 'chart-series',
+      getValue: (value: unknown) => readChartConfig(value).seriesName,
+      setValue: (value: unknown, targetValue: unknown) => createChartOption({
+        ...readChartConfig(value),
+        seriesName: targetValue as string,
+      }),
+    },
+    {
+      id: 'data',
+      label: '系列数据',
+      schema: chartDataBindingSchema,
+      semanticScope: 'chart-data',
+      getValue: (value: unknown) => readChartConfig(value).data,
+      setValue: (value: unknown, targetValue: unknown) => createChartOption({
+        ...readChartConfig(value),
+        data: targetValue as number[],
+      }),
+    },
+  ],
+}] satisfies readonly PropertyPanelRenderer[]
 
 const rectangleRenderers = [
-  { id: 'vector2', component: AxisPairRenderer },
-  { id: 'size2', component: SizePairRenderer },
-  { id: 'color', component: ColorRenderer },
-  { id: 'alignment', component: AlignmentRenderer },
-] as const
+  ...echartRenderer,
+  {
+    id: 'vector2',
+    component: AxisPairRenderer,
+    bindingTargets: ({ path }) => [
+      {
+        id: 'x', label: 'X', schema: v.number(),
+        semanticScope: path[path.length - 1] === 'position' ? 'position-x' : undefined,
+        getValue: (value: unknown) => (value as AxisPair).x,
+        setValue: (value: unknown, targetValue: unknown) => ({
+          ...(value as AxisPair), x: targetValue as number,
+        }),
+      },
+      {
+        id: 'y', label: 'Y', schema: v.number(),
+        getValue: (value: unknown) => (value as AxisPair).y,
+        setValue: (value: unknown, targetValue: unknown) => ({
+          ...(value as AxisPair), y: targetValue as number,
+        }),
+      },
+    ],
+  },
+  {
+    id: 'size2',
+    component: SizePairRenderer,
+    bindingTargets: () => [
+      {
+        id: 'width', label: 'W', schema: v.number(),
+        getValue: (value: unknown) => (value as SizePair).width,
+        setValue: (value: unknown, targetValue: unknown) => ({
+          ...(value as SizePair), width: targetValue as number,
+        }),
+      },
+      {
+        id: 'height', label: 'H', schema: v.number(),
+        getValue: (value: unknown) => (value as SizePair).height,
+        setValue: (value: unknown, targetValue: unknown) => ({
+          ...(value as SizePair), height: targetValue as number,
+        }),
+      },
+    ],
+  },
+  createScalarRenderer('angle', AngleRenderer, '旋转 Angle'),
+  createScalarRenderer('opacity', OpacityRenderer, '不透明度 Opacity', 'opacity'),
+  createScalarRenderer('corner-radius', CornerRadiusRenderer, '圆角 Corner Radius'),
+  createScalarRenderer('stroke-width', StrokeWidthRenderer, '宽度 Width'),
+  {
+    id: 'visibility',
+    component: VisibilityRenderer,
+    bindingTargets: () => [createValueBindingTarget(
+      '可见性 Visibility',
+      v.picklist(['visible', 'hidden']),
+    )],
+  },
+  {
+    id: 'color',
+    component: ColorRenderer,
+    bindingTargets: () => [createValueBindingTarget('颜色 Color', v.string(), 'color')],
+  },
+  {
+    id: 'alignment',
+    component: AlignmentRenderer,
+    bindingTargets: () => [createValueBindingTarget(
+      '对齐',
+      v.picklist(['start', 'center', 'end', 'stretch']),
+    )],
+  },
+] satisfies readonly PropertyPanelRenderer[]
+
+function createValueBindingTarget(
+  label: string,
+  schema: v.GenericSchema,
+  semanticScope?: string,
+) {
+  return {
+    id: 'value',
+    label,
+    schema,
+    semanticScope,
+    getValue: (value: unknown) => value,
+    setValue: (_value: unknown, targetValue: unknown) => targetValue,
+  }
+}
+
+function createScalarRenderer(
+  id: string,
+  component: PropertyPanelRenderer['component'],
+  label: string,
+  semanticScope?: string,
+): PropertyPanelRenderer {
+  return {
+    id,
+    component,
+    bindingTargets: () => [createValueBindingTarget(label, v.number(), semanticScope)],
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
@@ -399,108 +801,296 @@ function readChartConfig(option: unknown): DemoChartConfig {
   }
 }
 
-function AxisPairRenderer({ value, readOnly, commit }: PropertyPanelRendererProps) {
+function FixedNumberInput({
+  label,
+  value,
+  precision,
+  readOnly,
+  disabled = false,
+  bindingTrigger,
+  onCommit,
+}: {
+  label: string
+  value: number
+  precision: number
+  readOnly: boolean
+  disabled?: boolean
+  bindingTrigger?: ReactNode
+  onCommit: (value: number) => boolean
+}) {
+  const format = (candidate: number) => candidate.toFixed(precision)
+  const [draft, setDraft] = useState({ source: value, text: format(value), error: '' })
+  const active = Object.is(draft.source, value)
+  const text = active ? draft.text : format(value)
+  const error = active ? draft.error : ''
+  const submit = () => {
+    if (readOnly) return
+    const candidate = Number(text)
+    const success = Number.isFinite(candidate) && onCommit(candidate)
+    setDraft({
+      source: value,
+      text: success ? format(candidate) : text,
+      error: success ? '' : '完整属性值不符合 Schema',
+    })
+  }
+  return (
+    <>
+      <input
+        aria-invalid={error ? 'true' : undefined}
+        aria-label={label}
+        disabled={disabled}
+        inputMode="decimal"
+        readOnly={readOnly}
+        type="number"
+        value={text}
+        onBlur={submit}
+        onChange={(event) => {
+          if (!readOnly) setDraft({ source: value, text: event.target.value, error: '' })
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') submit()
+          if (event.key === 'Escape') {
+            setDraft({ source: value, text: format(value), error: '' })
+          }
+        }}
+      />
+      {bindingTrigger}
+      {error ? <small className="numeric-draft-error" role="alert">{error}</small> : null}
+    </>
+  )
+}
+
+function AxisPairRenderer({ value, readOnly, commit, binding }: PropertyPanelRendererProps) {
   const pair = value as AxisPair
+  const xTarget = binding?.getTarget('x')
+  const yTarget = binding?.getTarget('y')
   return (
     <div className="compound-number-editor">
       <label>
         <span>X</span>
-        <input
-          aria-label="X"
-          disabled={readOnly}
-          type="number"
-          value={pair.x}
-          onChange={(event) => commit({ ...pair, x: Number(event.target.value) })}
+        <FixedNumberInput
+          label="X"
+          onCommit={(nextValue) => commit({ ...pair, x: nextValue })}
+          precision={1}
+          disabled={readOnly && !xTarget?.binding}
+          bindingTrigger={binding?.renderTrigger('x')}
+          readOnly={readOnly || Boolean(xTarget?.binding)}
+          value={typeof xTarget?.effectiveValue === 'number' ? xTarget.effectiveValue : pair.x}
         />
       </label>
       <label>
         <span>Y</span>
-        <input
-          aria-label="Y"
-          disabled={readOnly}
-          type="number"
-          value={pair.y}
-          onChange={(event) => commit({ ...pair, y: Number(event.target.value) })}
+        <FixedNumberInput
+          label="Y"
+          onCommit={(nextValue) => commit({ ...pair, y: nextValue })}
+          precision={1}
+          disabled={readOnly && !yTarget?.binding}
+          bindingTrigger={binding?.renderTrigger('y')}
+          readOnly={readOnly || Boolean(yTarget?.binding)}
+          value={typeof yTarget?.effectiveValue === 'number' ? yTarget.effectiveValue : pair.y}
         />
       </label>
     </div>
   )
 }
 
-function SizePairRenderer({ value, readOnly, commit }: PropertyPanelRendererProps) {
+function SizePairRenderer({ value, readOnly, commit, binding }: PropertyPanelRendererProps) {
   const pair = value as SizePair
+  const widthTarget = binding?.getTarget('width')
+  const heightTarget = binding?.getTarget('height')
   return (
     <div className="compound-number-editor">
       <label>
         <span>W</span>
-        <input
-          aria-label="W"
-          disabled={readOnly}
-          type="number"
-          value={pair.width}
-          onChange={(event) => commit({ ...pair, width: Number(event.target.value) })}
+        <FixedNumberInput
+          label="W"
+          onCommit={(nextValue) => commit({ ...pair, width: nextValue })}
+          precision={1}
+          disabled={readOnly && !widthTarget?.binding}
+          bindingTrigger={binding?.renderTrigger('width')}
+          readOnly={readOnly || Boolean(widthTarget?.binding)}
+          value={typeof widthTarget?.effectiveValue === 'number'
+            ? widthTarget.effectiveValue
+            : pair.width}
         />
       </label>
       <label>
         <span>H</span>
-        <input
-          aria-label="H"
-          disabled={readOnly}
-          type="number"
-          value={pair.height}
-          onChange={(event) => commit({ ...pair, height: Number(event.target.value) })}
+        <FixedNumberInput
+          label="H"
+          onCommit={(nextValue) => commit({ ...pair, height: nextValue })}
+          precision={1}
+          disabled={readOnly && !heightTarget?.binding}
+          bindingTrigger={binding?.renderTrigger('height')}
+          readOnly={readOnly || Boolean(heightTarget?.binding)}
+          value={typeof heightTarget?.effectiveValue === 'number'
+            ? heightTarget.effectiveValue
+            : pair.height}
         />
       </label>
     </div>
   )
 }
 
-function ColorRenderer({ value, readOnly, commit }: PropertyPanelRendererProps) {
-  const color = typeof value === 'string' ? value : '#000000'
+function ScalarNumberRenderer({
+  ariaLabel,
+  precision,
+  unit,
+  props,
+}: {
+  ariaLabel: string
+  precision: number
+  unit?: string
+  props: PropertyPanelRendererProps
+}) {
+  const target = props.binding?.getTarget('value')
+  const value = typeof target?.effectiveValue === 'number'
+    ? target.effectiveValue
+    : typeof props.value === 'number' ? props.value : 0
+  return (
+    <div className="scalar-number-editor">
+      <FixedNumberInput
+        label={ariaLabel}
+        onCommit={(nextValue) => props.commit(nextValue)}
+        precision={precision}
+        disabled={props.readOnly && !target?.binding}
+        bindingTrigger={props.binding?.renderTrigger('value')}
+        readOnly={props.readOnly || Boolean(target?.binding)}
+        value={value}
+      />
+      {unit ? <span aria-hidden="true">{unit}</span> : null}
+    </div>
+  )
+}
+
+function AngleRenderer(props: PropertyPanelRendererProps) {
+  return <ScalarNumberRenderer ariaLabel="旋转 Angle" precision={1} props={props} unit="°" />
+}
+
+function OpacityRenderer(props: PropertyPanelRendererProps) {
+  return <ScalarNumberRenderer ariaLabel="不透明度 Opacity" precision={1} props={props} />
+}
+
+function CornerRadiusRenderer(props: PropertyPanelRendererProps) {
+  return <ScalarNumberRenderer ariaLabel="圆角 Corner Radius" precision={1} props={props} />
+}
+
+function StrokeWidthRenderer(props: PropertyPanelRendererProps) {
+  return <ScalarNumberRenderer ariaLabel="宽度 Width" precision={0} props={props} unit="px" />
+}
+
+function ColorRenderer({ value, readOnly, commit, binding }: PropertyPanelRendererProps) {
+  const target = binding?.getTarget('value')
+  const color = typeof target?.effectiveValue === 'string'
+    ? target.effectiveValue
+    : typeof value === 'string' ? value : '#000000'
+  const bound = Boolean(target?.binding)
   return (
     <label className="color-property-editor">
       <input
         aria-label="颜色选择器"
-        disabled={readOnly}
+        aria-readonly={bound ? 'true' : undefined}
+        disabled={readOnly && !bound}
         type="color"
         value={color}
-        onChange={(event) => commit(event.target.value.toUpperCase())}
+        onChange={(event) => {
+          if (!bound) commit(event.target.value.toUpperCase())
+        }}
       />
       <input
         aria-label="颜色值"
-        disabled={readOnly}
+        disabled={readOnly && !bound}
+        readOnly={bound}
         value={color.toUpperCase()}
         onChange={(event) => {
-          if (/^#[\dA-F]{6}$/iu.test(event.target.value)) commit(event.target.value.toUpperCase())
+          if (!bound && /^#[\dA-F]{6}$/iu.test(event.target.value)) {
+            commit(event.target.value.toUpperCase())
+          }
         }}
       />
       <svg aria-hidden="true" viewBox="0 0 16 16">
         <path d="m4 6 4 4 4-4" />
       </svg>
+      {binding?.renderTrigger('value')}
     </label>
   )
 }
 
-function AlignmentRenderer({ value, readOnly, commit }: PropertyPanelRendererProps) {
+function VisibilityRenderer({ value, readOnly, commit, binding }: PropertyPanelRendererProps) {
+  const target = binding?.getTarget('value')
+  const displayValue = target?.effectiveValue ?? value
+  const bound = Boolean(target?.binding)
+  return (
+    <label className="visibility-property-editor">
+      <svg aria-hidden="true" viewBox="0 0 20 20">
+        <path d="M1.8 10s3-5 8.2-5 8.2 5 8.2 5-3 5-8.2 5-8.2-5-8.2-5Z" />
+        <circle cx="10" cy="10" r="2.4" />
+      </svg>
+      <select
+        aria-label="可见性 Visibility"
+        aria-readonly={bound ? 'true' : undefined}
+        disabled={readOnly && !bound}
+        value={String(displayValue)}
+        onChange={(event) => {
+          if (!bound) commit(event.target.value)
+        }}
+      >
+        <option value="visible">Visible</option>
+        <option value="hidden">Hidden</option>
+      </select>
+      <svg aria-hidden="true" viewBox="0 0 16 16">
+        <path d="m4 6 4 4 4-4" />
+      </svg>
+      {binding?.renderTrigger('value')}
+    </label>
+  )
+}
+
+function AlignmentRenderer({ value, readOnly, commit, binding }: PropertyPanelRendererProps) {
   const options = ['start', 'center', 'end', 'stretch'] as const
+  const target = binding?.getTarget('value')
+  const displayValue = target?.effectiveValue ?? value
+  const bound = Boolean(target?.binding)
   return (
     <div className="alignment-property-editor">
       {options.map((option) => (
         <button
           aria-label={`对齐 ${option}`}
-          aria-pressed={value === option}
-          disabled={readOnly}
+          aria-disabled={readOnly || bound}
+          aria-pressed={displayValue === option}
+          disabled={readOnly && !bound}
           key={option}
           type="button"
-          onClick={() => commit(option)}
+          onClick={() => {
+            if (!bound) commit(option)
+          }}
         >
-          <span aria-hidden="true" data-alignment={option}>
-            <i />
-            <i />
-            <i />
-          </span>
+          <svg aria-hidden="true" data-alignment={option} viewBox="0 0 24 20">
+            {option === 'start' ? (
+              <>
+                <path d="M4 2v16" />
+                <path d="M7 5h12M7 10h8M7 15h11" />
+              </>
+            ) : option === 'center' ? (
+              <>
+                <path d="M12 2v16" />
+                <path d="M5 5h14M7 10h10M4 15h16" />
+              </>
+            ) : option === 'end' ? (
+              <>
+                <path d="M20 2v16" />
+                <path d="M5 5h12M9 10h8M6 15h11" />
+              </>
+            ) : (
+              <>
+                <path d="M4 2v16M20 2v16" />
+                <path d="M7 5h10M7 10h10M7 15h10" />
+              </>
+            )}
+          </svg>
         </button>
       ))}
+      {binding?.renderTrigger('value')}
     </div>
   )
 }
@@ -515,15 +1105,33 @@ function RectangleIcon() {
   )
 }
 
-function EChartsOptionRenderer({ value, readOnly, commit }: PropertyPanelRendererProps) {
-  const config = readChartConfig(value)
-  const update = (patch: Partial<DemoChartConfig>) => commit(createChartOption({ ...config, ...patch }))
+function EChartsOptionRenderer({ value, readOnly, commit, binding }: PropertyPanelRendererProps) {
+  const literalConfig = readChartConfig(value)
+  const titleTarget = binding?.getTarget('title')
+  const typeTarget = binding?.getTarget('type')
+  const seriesTarget = binding?.getTarget('seriesName')
+  const dataTarget = binding?.getTarget('data')
+  const config: DemoChartConfig = {
+    title: typeof titleTarget?.effectiveValue === 'string'
+      ? titleTarget.effectiveValue : literalConfig.title,
+    type: ['bar', 'line', 'pie'].includes(String(typeTarget?.effectiveValue))
+      ? typeTarget?.effectiveValue as DemoChartType : literalConfig.type,
+    seriesName: typeof seriesTarget?.effectiveValue === 'string'
+      ? seriesTarget.effectiveValue : literalConfig.seriesName,
+    data: Array.isArray(dataTarget?.effectiveValue)
+      ? dataTarget.effectiveValue as number[] : literalConfig.data,
+  }
+  const update = (patch: Partial<DemoChartConfig>) => commit(createChartOption({
+    ...literalConfig,
+    ...patch,
+  }))
+  const dataSource = dataTarget?.binding ? dataTarget.effectiveValue : value
   const [dataDraft, setDataDraft] = useState({
-    source: value,
+    source: dataSource,
     text: config.data.join(', '),
     error: '',
   })
-  const dataDraftActive = Object.is(dataDraft.source, value)
+  const dataDraftActive = Object.is(dataDraft.source, dataSource)
   const dataText = dataDraftActive ? dataDraft.text : config.data.join(', ')
   const dataError = dataDraftActive ? dataDraft.error : ''
   return (
@@ -532,41 +1140,55 @@ function EChartsOptionRenderer({ value, readOnly, commit }: PropertyPanelRendere
         <span>标题</span>
         <input
           aria-label="图表标题"
-          disabled={readOnly}
+          disabled={readOnly && !titleTarget?.binding}
+          readOnly={Boolean(titleTarget?.binding)}
           value={config.title}
-          onChange={(event) => update({ title: event.target.value })}
+          onChange={(event) => {
+            if (!titleTarget?.binding) update({ title: event.target.value })
+          }}
         />
+        {binding?.renderTrigger('title')}
       </label>
       <label>
         <span>类型</span>
         <select
           aria-label="图表类型"
-          disabled={readOnly}
+          aria-readonly={typeTarget?.binding ? 'true' : undefined}
+          disabled={readOnly && !typeTarget?.binding}
           value={config.type}
-          onChange={(event) => update({ type: event.target.value as DemoChartType })}
+          onChange={(event) => {
+            if (!typeTarget?.binding) update({ type: event.target.value as DemoChartType })
+          }}
         >
           <option value="bar">柱状图</option>
           <option value="line">折线图</option>
           <option value="pie">饼图</option>
         </select>
+        {binding?.renderTrigger('type')}
       </label>
       <label>
         <span>系列</span>
         <input
           aria-label="系列名称"
-          disabled={readOnly}
+          disabled={readOnly && !seriesTarget?.binding}
+          readOnly={Boolean(seriesTarget?.binding)}
           value={config.seriesName}
-          onChange={(event) => update({ seriesName: event.target.value })}
+          onChange={(event) => {
+            if (!seriesTarget?.binding) update({ seriesName: event.target.value })
+          }}
         />
+        {binding?.renderTrigger('seriesName')}
       </label>
       <label>
         <span>数据</span>
         <input
           aria-invalid={dataError ? 'true' : undefined}
           aria-label="系列数据"
-          disabled={readOnly}
+          disabled={readOnly && !dataTarget?.binding}
+          readOnly={Boolean(dataTarget?.binding)}
           value={dataText}
           onChange={(event) => {
+            if (dataTarget?.binding) return
             const text = event.target.value
             const tokens = text.split(',').map((item) => item.trim())
             const data = tokens.map(Number)
@@ -585,9 +1207,10 @@ function EChartsOptionRenderer({ value, readOnly, commit }: PropertyPanelRendere
             })
           }}
         />
+        {binding?.renderTrigger('data')}
         {dataError ? <small role="alert">{dataError}</small> : null}
       </label>
-      <EChartView accessible={false} option={value as EChartsOption} />
+      <EChartView accessible={false} option={createChartOption(config)} />
     </div>
   )
 }
@@ -651,7 +1274,11 @@ const defaultSceneNodes: readonly SceneTreeNode[] = [{
   id: 'page',
   label: 'Page 1',
   canMove: false,
-  children: [],
+  children: [{
+    id: 'rectangle-1',
+    label: 'Rectangle',
+    canHaveChildren: false,
+  }],
 }]
 
 function applySceneMove(
@@ -822,12 +1449,48 @@ function collectSceneNodeIds(nodes: readonly SceneTreeNode[]): readonly string[]
   return ids
 }
 
+function resolveTextProperties(component: TextComponent) {
+  return resolvePropertyBindings({
+    schema: textPropertySchema,
+    value: { content: { text: component.text, keywords: component.keywords } },
+    bindings: component.bindings,
+    variables: DEMO_VARIABLES,
+  }).value
+}
+
+function resolveChartOption(component: ChartComponent): EChartsOption {
+  return resolvePropertyBindings({
+    schema: chartPropertySchema,
+    value: { chart: { option: component.option } },
+    bindings: component.bindings,
+    variables: DEMO_VARIABLES,
+    renderers: echartRenderer,
+  }).value.chart.option
+}
+
+function resolveRectangleProperties(component: RectangleComponent): RectangleProperties {
+  return resolvePropertyBindings({
+    schema: rectanglePropertySchema,
+    value: component.properties,
+    bindings: component.bindings,
+    variables: DEMO_VARIABLES,
+    renderers: rectangleRenderers,
+  }).value
+}
+
 function App() {
   const [textComponents, setTextComponents] = useState<readonly TextComponent[]>([])
   const [chartComponents, setChartComponents] = useState<readonly ChartComponent[]>([])
-  const [rectangleComponents, setRectangleComponents] = useState<readonly RectangleComponent[]>([])
+  const [rectangleComponents, setRectangleComponents] = useState<readonly RectangleComponent[]>(
+    () => [{
+      id: 'rectangle-1',
+      properties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
+      defaultProperties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
+      bindings: [],
+    }],
+  )
   const [normalSceneNodes, setNormalSceneNodes] = useState(defaultSceneNodes)
-  const [selectedSceneIds, setSelectedSceneIds] = useState<readonly string[]>(['page'])
+  const [selectedSceneIds, setSelectedSceneIds] = useState<readonly string[]>(['rectangle-1'])
   const [normalExpandedIds, setNormalExpandedIds] = useState<readonly string[]>(['page'])
   const [dragNodes, setDragNodes] = useState(dragFixtureNodes)
   const [dragSelectedIds, setDragSelectedIds] = useState<readonly string[]>([])
@@ -835,7 +1498,7 @@ function App() {
   const [command, setCommand] = useState('')
   const nextTextIdRef = useRef(1)
   const nextChartIdRef = useRef(1)
-  const nextRectangleIdRef = useRef(1)
+  const nextRectangleIdRef = useRef(2)
 
   const selectedText = [...selectedSceneIds]
     .reverse()
@@ -849,6 +1512,7 @@ function App() {
     .reverse()
     .map((nodeId) => rectangleComponents.find(({ id }) => id === nodeId))
     .find((component): component is RectangleComponent => Boolean(component)) ?? null
+  const selectedChartOption = selectedChart ? resolveChartOption(selectedChart) : null
 
   const searchParams = new URLSearchParams(window.location.search)
   const sceneSize = Number(searchParams.get('sceneSize'))
@@ -908,6 +1572,7 @@ function App() {
         defaultText: text,
         keywords: ['大屏', '现场'],
         defaultKeywords: ['大屏', '现场'],
+        bindings: [],
       },
     ])
     setNormalSceneNodes((current) => parentId === null
@@ -929,6 +1594,7 @@ function App() {
       id,
       option,
       defaultOption: createChartOption(DEFAULT_CHART_CONFIG),
+      bindings: [],
     }])
     setNormalSceneNodes((current) => insertSceneNode(current, 'page', undefined, {
       id,
@@ -947,6 +1613,7 @@ function App() {
       id,
       properties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
       defaultProperties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
+      bindings: [],
     }])
     setNormalSceneNodes((current) => insertSceneNode(current, 'page', undefined, {
       id,
@@ -1000,16 +1667,19 @@ function App() {
           defaultText: sourceText.defaultText,
           keywords: [...sourceText.keywords],
           defaultKeywords: [...sourceText.defaultKeywords],
+          bindings: structuredClone(sourceText.bindings),
         })
         if (sourceChart) duplicatedChartComponents.push({
           id,
           option: structuredClone(sourceChart.option),
           defaultOption: structuredClone(sourceChart.defaultOption),
+          bindings: structuredClone(sourceChart.bindings),
         })
         if (sourceRectangle) duplicatedRectangleComponents.push({
           id,
           properties: structuredClone(sourceRectangle.properties),
           defaultProperties: structuredClone(sourceRectangle.defaultProperties),
+          bindings: structuredClone(sourceRectangle.bindings),
         })
         return {
           ...source,
@@ -1117,6 +1787,13 @@ function App() {
               {selectedText ? (
                 <PropertyPanel
                   aria-label="文本组件属性"
+                  binding={{
+                    value: selectedText.bindings,
+                    variables: DEMO_VARIABLES,
+                    onChange: (next) => setTextComponents((current) => current.map((component) => (
+                      component.id === selectedText.id ? { ...component, bindings: next } : component
+                    ))),
+                  }}
                   defaultValue={{ content: {
                     text: selectedText.defaultText,
                     keywords: selectedText.defaultKeywords,
@@ -1153,6 +1830,15 @@ function App() {
               ) : selectedRectangle ? (
                 <PropertyPanel
                   aria-label="Rectangle 属性"
+                  binding={{
+                    value: selectedRectangle.bindings,
+                    variables: DEMO_VARIABLES,
+                    onChange: (next) => setRectangleComponents((current) => current.map((component) => (
+                      component.id === selectedRectangle.id
+                        ? { ...component, bindings: next }
+                        : component
+                    ))),
+                  }}
                   defaultValue={selectedRectangle.defaultProperties}
                   header={{
                     icon: <RectangleIcon />,
@@ -1173,10 +1859,17 @@ function App() {
               ) : selectedChart ? (
                 <PropertyPanel
                   aria-label="ECharts 图表属性"
+                  binding={{
+                    value: selectedChart.bindings,
+                    variables: DEMO_VARIABLES,
+                    onChange: (next) => setChartComponents((current) => current.map((component) => (
+                      component.id === selectedChart.id ? { ...component, bindings: next } : component
+                    ))),
+                  }}
                   defaultValue={{ chart: { option: selectedChart.defaultOption } }}
                   header={{
                     icon: <span className="node-icon node-icon--chart">E</span>,
-                    title: readChartConfig(selectedChart.option).title,
+                    title: readChartConfig(selectedChartOption ?? selectedChart.option).title,
                     subtitle: 'ECharts 图表组件',
                   }}
                   renderers={echartRenderer}
@@ -1251,22 +1944,25 @@ function App() {
                     type="button"
                     onClick={() => setSelectedSceneIds([component.id])}
                   >
-                    {component.text}
+                    {resolveTextProperties(component).content.text}
                   </button>
                 ))}
-                {orderedChartComponents.map((component) => (
+                {orderedChartComponents.map((component) => {
+                  const option = resolveChartOption(component)
+                  return (
                   <button
-                    aria-label={`选择 ${readChartConfig(component.option).title}`}
+                    aria-label={`选择 ${readChartConfig(option).title}`}
                     className="chart-node-button"
                     key={component.id}
                     type="button"
                     onClick={() => setSelectedSceneIds([component.id])}
                   >
-                    <EChartView accessible option={component.option} />
+                    <EChartView accessible option={option} />
                   </button>
-                ))}
+                  )
+                })}
                 {orderedRectangleComponents.map((component) => {
-                  const { transform, appearance, propertyDemo, state } = component.properties
+                  const { transform, appearance, propertyDemo, state } = resolveRectangleProperties(component)
                   return (
                     <button
                       aria-label="选择 Rectangle"

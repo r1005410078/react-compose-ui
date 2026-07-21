@@ -92,7 +92,8 @@ React 组件实例或实现。
 ### Requirement: 自定义类型 Renderer Registry
 
 系统 MUST 允许每个 `PropertyPanel` 实例注册自定义 renderer，并 MUST 支持通过 metadata editor
-ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Registry MUST NOT 使用模块级可变状态。
+ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Renderer MUST 可以声明普通三列或标题行加
+全宽内容区布局，字段 metadata MUST 可以覆盖 renderer 默认布局。Registry MUST NOT 使用模块级可变状态。
 
 #### Scenario: 使用显式自定义 editor
 - **WHEN** 字段 metadata 指定一个已注册 renderer ID
@@ -103,6 +104,13 @@ ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Registry MUST NOT �
 - **WHEN** 字段既没有内置 renderer 也没有匹配的自定义 renderer
 - **THEN** 面板显示包含字段名称和 Schema 类型的可访问不支持状态
 - **AND** 不会用不安全的字符串转换修改该值
+
+#### Scenario: 使用全宽自定义 renderer
+- **WHEN** 匹配的 renderer 或字段 metadata 声明全宽布局
+- **THEN** 面板在紧凑标题行显示字段名称与统一操作
+- **AND** renderer 在下一行跨越属性名、编辑器和操作区三列
+- **AND** metadata 布局优先于 renderer 默认布局，未声明布局时保持普通三列
+- **AND** 搜索、筛选、只读、存在性、重置和受控提交语义保持一致
 
 ### Requirement: 搜索筛选与默认值重置
 
@@ -124,8 +132,8 @@ ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Registry MUST NOT �
 
 ### Requirement: 双分隔线三列布局
 
-系统 MUST 使用共享的属性名、编辑器和右侧操作区三列布局，并 MUST 提供两条可以分别调整相邻
-列边界的垂直分隔线。
+系统 MUST 为普通字段使用共享的属性名、编辑器和右侧操作区三列布局，并 MUST 提供两条可以分别
+调整相邻列边界的垂直分隔线。全宽自定义 renderer 的内容区 MUST 不受三列宽度和普通控件轨道限制。
 
 #### Scenario: 指针调整两条分隔线
 - **WHEN** 用户分别拖动属性名/编辑器和编辑器/操作区分隔线
@@ -139,7 +147,7 @@ ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Registry MUST NOT �
 
 #### Scenario: 恢复默认列宽
 - **WHEN** 用户在设置菜单中执行恢复默认列宽
-- **THEN** 两条分隔线恢复当前面板宽度下的默认位置
+- **THEN** 属性名列和操作列分别恢复到 160px 与 36px，并在窄面板下安全 clamp
 - **AND** 列宽不会写入 localStorage、Schema 或受控 value
 
 ### Requirement: 属性面板视觉与样式隔离
@@ -151,6 +159,24 @@ ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Registry MUST NOT �
 - **WHEN** 宿主导入 `@compose-ui/property-panel/styles.css`
 - **THEN** header、工具栏、分组、字段、错误、操作区和分隔线使用一致的紧凑深色视觉
 - **AND** 面板滚动、焦点和 hover 状态在宿主页面中清晰可见
+
+#### Scenario: 显示 UE4 参考密度
+- **WHEN** 示例应用以默认桌面布局显示 Rectangle 属性面板
+- **THEN** Inspector 约为 400px，属性面板内容区约为 365px，属性名列和操作列分别为 160px 与 36px
+- **AND** 普通编辑控件在不超过 234px 的右对齐轨道内显示，复杂自定义 renderer 可以在标题下占满整行
+- **AND** header、工具栏、一级分组、字段行和输入框分别约为 64px、46px、37px、36px 和 28px
+
+#### Scenario: 深层属性保持可读
+- **WHEN** 属性结构包含多级对象、集合或分组
+- **THEN** 层级只改变标题、字段标签和树形引导线的紧凑缩进，不得移动共享编辑列边界
+- **AND** 每级缩进约为 14px 至 18px，并在深层级封顶以保留字段名称空间
+- **AND** 每条字段横向支线 MUST 从当前父级竖线向右连接字段名，不得从竖线左侧穿过
+
+#### Scenario: 显示 Rectangle 参考控件细节
+- **WHEN** 用户查看默认 Rectangle 的 Transform、Appearance、Layout 和 State
+- **THEN** 参考数值按要求显示一位小数，角度与像素单位显示在控件内部
+- **AND** Checkbox、Visibility 眼睛图标、Alignment 图标、颜色色块和选中态符合 UE4 深色视觉
+- **AND** Advanced、Diagnostics 与 Supported Types 保持默认折叠
 
 ### Requirement: ECharts 自定义类型示例
 
@@ -167,3 +193,17 @@ ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Registry MUST NOT �
 - **THEN** renderer 提交通过自定义 Schema 校验的 `EChartOption`
 - **AND** 画布中的 ECharts 图表显示最新配置
 - **AND** 属性面板公共包中不存在 ECharts 运行时代码或依赖
+
+### Requirement: 默认节点类型覆盖
+
+示例应用启动时 MUST 创建并选中 Rectangle 默认节点；该节点 MUST 在同一个受控 Valibot Schema 中
+覆盖属性面板已经支持的 string、number、bigint、boolean、date、literal、picklist、enum、object、
+optional、nullable、nullish、array、tuple/rest、record、union、variant 和 custom renderer 类型族。
+
+#### Scenario: 展开默认节点的完整类型展厅
+- **WHEN** 用户打开示例应用且未执行任何新增操作
+- **THEN** Scene Tree、Canvas 和属性面板默认显示并选中 Rectangle 节点
+- **WHEN** 用户展开“支持类型 Supported Types”分组
+- **THEN** 面板按基础类型、存在性包装、集合结构、联合结构和自定义类型显示可折叠子分组
+- **AND** 每个受支持类型族至少有一个使用有效默认值的可访问示例字段
+- **AND** ECharts custom 字段继续通过实例级 renderer 显示且不成为公共包依赖

@@ -80,6 +80,10 @@ describe('initializeWorkspace', () => {
       .toHaveBeenCalledTimes(1)
   })
 
+  it('uses a compact, resizable width for the default inspector edge', () => {
+    expect(WORKSPACE_SIZES.inspector).toEqual({ initialSize: 400, minimumSize: 300 })
+  })
+
   it('places both bottom panels in one group and leaves Transaction Log active', () => {
     const { api, spies } = createWorkspaceApi()
 

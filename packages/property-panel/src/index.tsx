@@ -17,6 +17,13 @@ import type {
 } from 'react'
 import * as v from 'valibot'
 import { FilterIcon, SearchIcon, SettingsIcon } from './icons'
+import { remapPropertyBindings } from './property-bindings'
+// eslint-disable-next-line react-refresh/only-export-components -- 公共入口必须同时导出纯绑定解析函数。
+export { resolvePropertyBindings } from './property-bindings'
+export type {
+  ResolvePropertyBindingsOptions,
+  ResolvePropertyBindingsResult,
+} from './property-bindings'
 import {
   getValueAtPath,
   setValueAtPath,
@@ -27,6 +34,199 @@ import './styles.css'
 
 /** 属性在受控值中的稳定路径。 */
 export type PropertyPath = readonly (string | number)[]
+
+/** 自定义 renderer 在属性树中的字段布局。 */
+export type PropertyPanelRendererLayout = 'inline' | 'full-width'
+
+/** 一个可绑定逻辑输入在属性面板中的稳定地址。 */
+export interface PropertyPanelBindingAddress {
+  /** 字段在完整 Valibot input 中的路径。 */
+  path: PropertyPath
+  /** renderer 内的逻辑目标 ID；内置字段固定为 `value`。 */
+  targetId: string
+}
+
+/** 可由宿主提供给属性面板的只读变量。 */
+export interface PropertyPanelVariable {
+  /** 变量在宿主生命周期内的稳定 ID。 */
+  id: string
+  /** 变量选择器中显示的名称。 */
+  label: string
+  /** 变量所属的宿主作用域。 */
+  scope: 'page' | 'global'
+  /** 当前解析值；改变它只会更新 effective value。 */
+  value: unknown
+  /** 变量选择器中的可选补充说明。 */
+  description?: string
+  /** 变量允许匹配的可选业务语义范围。 */
+  semanticScopes?: readonly string[]
+}
+
+/** 一条独立于字面属性值保存的单向变量绑定。 */
+export interface PropertyPanelBinding {
+  /** 被绑定的字段或 renderer 子目标。 */
+  target: PropertyPanelBindingAddress
+  /** 引用的宿主变量 ID。 */
+  variableId: string
+}
+
+/** 绑定目标的展示与校验描述。 */
+export interface PropertyPanelBindingTarget {
+  /** 目标的稳定地址。 */
+  address: PropertyPanelBindingAddress
+  /** 选择器和状态提示使用的名称。 */
+  label: string
+  /** 校验变量当前值的同步 Valibot Schema。 */
+  schema: v.GenericSchema
+  /** 限制候选变量的可选业务语义范围。 */
+  semanticScope?: string
+}
+
+/** 纯绑定解析得到的单个目标状态。 */
+export interface PropertyPanelResolvedBindingTarget extends PropertyPanelBindingTarget {
+  /** 当前保存的绑定。 */
+  binding: PropertyPanelBinding
+  /** 解析到的变量；变量缺失时为空。 */
+  variable?: PropertyPanelVariable
+  /** 绑定前保留的字面值。 */
+  literalValue: unknown
+  /** 实际用于预览或 Canvas 的值；错误时回退为字面值。 */
+  effectiveValue: unknown
+  /** 当前解析状态。 */
+  status: 'resolved' | 'missing-variable' | 'invalid-variable' | 'invalid-root' | 'unknown-target'
+  /** 面向用户的错误说明。 */
+  message?: string
+}
+
+/** 绑定解析结果中的结构化问题。 */
+export interface PropertyPanelBindingIssue {
+  /** 出错的目标地址。 */
+  target: PropertyPanelBindingAddress
+  /** 可稳定判断的问题类型。 */
+  code: Exclude<PropertyPanelResolvedBindingTarget['status'], 'resolved'>
+  /** 面向用户的错误说明。 */
+  message: string
+}
+
+/** 自定义 renderer 声明的一个稳定逻辑输入。 */
+export interface PropertyPanelRendererBindingTargetDescriptor {
+  /** renderer 内稳定且不可随语言变化的目标 ID。 */
+  id: string
+  /** 目标的显示名称。 */
+  label: string
+  /** 校验变量值的同步 Valibot Schema。 */
+  schema: v.GenericSchema
+  /** 限制变量候选的可选业务语义范围。 */
+  semanticScope?: string
+  /** 从 renderer 字段值读取该逻辑输入。 */
+  getValue: (value: unknown) => unknown
+  /** 不可变地把逻辑输入写回 renderer 字段值。 */
+  setValue: (value: unknown, targetValue: unknown) => unknown
+}
+
+/** renderer 创建绑定目标描述时获得的字段上下文。 */
+export interface PropertyPanelRendererBindingTargetsContext {
+  /** renderer 字段路径。 */
+  path: PropertyPath
+  /** 字段原始 Schema。 */
+  schema: v.GenericSchema
+  /** 字段展示 metadata。 */
+  metadata: PropertyPanelMetadata
+  /** 当前字面字段值。 */
+  value: unknown
+}
+
+/** 自定义 renderer 内单个目标的交互状态。 */
+export interface PropertyPanelRendererBindingTargetState extends PropertyPanelBindingTarget {
+  /** 当前保存的绑定；未绑定时为空。 */
+  binding?: PropertyPanelBinding
+  /** 当前解析到的变量。 */
+  variable?: PropertyPanelVariable
+  /** 绑定前保留的字面值。 */
+  literalValue: unknown
+  /** 当前预览和 Canvas 应使用的值。 */
+  effectiveValue: unknown
+  /** 当前绑定解析状态。 */
+  status: PropertyPanelResolvedBindingTarget['status'] | 'literal'
+  /** 绑定错误的可读说明。 */
+  message?: string
+  /** 面板或字段是否禁止变更绑定。 */
+  readOnly: boolean
+  /** 打开该目标的绑定选择器。 */
+  openPicker: () => void
+}
+
+/** 自定义 renderer 用来访问其逻辑子目标的控制器。 */
+export interface PropertyPanelRendererBindingController {
+  /** 当前 renderer 声明的全部逻辑目标状态。 */
+  targets: readonly PropertyPanelRendererBindingTargetState[]
+  /** 按稳定 ID 查询目标。 */
+  getTarget: (targetId: string) => PropertyPanelRendererBindingTargetState | undefined
+  /** 渲染与内置字段一致的绑定入口。 */
+  renderTrigger: (targetId: string) => ReactNode
+}
+
+/** 自定义绑定入口获得的属性。 */
+export interface PropertyPanelBindingTriggerRendererProps {
+  /** 当前目标状态。 */
+  target: PropertyPanelRendererBindingTargetState
+}
+
+/** 自定义变量选择器获得的属性。 */
+export interface PropertyPanelBindingPickerRendererProps {
+  /** 正在选择变量的目标。 */
+  target: PropertyPanelRendererBindingTargetState
+  /** 已通过 Schema、语义范围和宿主规则的候选。 */
+  variables: readonly PropertyPanelVariable[]
+  /** 当前搜索文本。 */
+  query: string
+  /** 更新搜索文本。 */
+  onQueryChange: (query: string) => void
+  /** 选择一个候选变量。 */
+  onBind: (variable: PropertyPanelVariable) => void
+  /** 删除当前绑定。 */
+  onUnbind: () => void
+  /** 关闭选择器并恢复入口焦点。 */
+  onClose: () => void
+}
+
+/** 绑定入口的可替换 React renderer。 */
+export type PropertyPanelBindingTriggerRenderer = ComponentType<PropertyPanelBindingTriggerRendererProps>
+
+/** 绑定选择器的可替换 React renderer。 */
+export type PropertyPanelBindingPickerRenderer = ComponentType<PropertyPanelBindingPickerRendererProps>
+
+/** 宿主提供的独立受控绑定配置。 */
+export interface PropertyPanelBindingConfig {
+  /** 当前组件实例的绑定集合。 */
+  value: readonly PropertyPanelBinding[]
+  /** 页面与全局变量的只读快照。 */
+  variables: readonly PropertyPanelVariable[]
+  /** 绑定集合发生用户或结构变化时调用。 */
+  onChange: (
+    next: readonly PropertyPanelBinding[],
+    change: {
+      /** 绑定变化的业务原因。 */
+      reason: 'bind' | 'unbind' | 'reset' | 'remap'
+      /** 发起变化或结构重映射的目标。 */
+      target: PropertyPanelBindingAddress
+    },
+  ) => void
+  /** 对已通过 Schema 与语义范围的变量执行宿主级授权。 */
+  canBind?: (target: PropertyPanelBindingTarget, variable: PropertyPanelVariable) => boolean
+  /** 覆盖默认绑定入口。 */
+  renderTrigger?: PropertyPanelBindingTriggerRenderer
+  /** 覆盖默认变量选择器。 */
+  renderPicker?: PropertyPanelBindingPickerRenderer
+}
+
+/** 字段 metadata 中的变量绑定配置。 */
+export interface PropertyPanelMetadataBinding {
+  /** 是否允许该字段或 renderer 子目标绑定；可编辑叶子默认为启用。 */
+  enabled?: boolean
+  /** 限制变量候选的业务语义范围。 */
+  semanticScope?: string
+}
 
 /** 属性面板发出的修改原因。 */
 export type PropertyPanelChangeReason =
@@ -46,6 +246,8 @@ export type PropertyPanelChangeReason =
 export interface PropertyPanelMetadata {
   /** 选择实例级 renderer 的稳定 ID。 */
   editor?: string
+  /** 覆盖匹配 renderer 的默认字段布局；仅对自定义 renderer 生效。 */
+  layout?: PropertyPanelRendererLayout
   /** 将同级字段收纳到指定展示分组。 */
   section?: string
   /** 同级字段的升序展示顺序，未设置的字段保持 Schema 顺序。 */
@@ -64,6 +266,8 @@ export interface PropertyPanelMetadata {
   optionLabels?: Readonly<Record<string, string>>
   /** 对象或集合分组是否默认折叠。 */
   collapsed?: boolean
+  /** 变量绑定的可用性和语义范围。 */
+  binding?: PropertyPanelMetadataBinding
 }
 
 /** 属性面板头部内容。 */
@@ -106,6 +310,8 @@ export interface PropertyPanelRendererProps {
   readOnly: boolean
   /** 提交候选字段值；返回值表示完整 Schema 是否校验成功。 */
   commit: (value: unknown, reason?: PropertyPanelChangeReason) => boolean
+  /** renderer 声明逻辑子目标后由面板提供的绑定控制器。 */
+  binding?: PropertyPanelRendererBindingController
 }
 
 /** 实例级自定义属性 renderer 定义。 */
@@ -116,8 +322,14 @@ export interface PropertyPanelRenderer {
   matches?: (schema: v.GenericSchema, metadata: PropertyPanelMetadata) => boolean
   /** 渲染自定义字段 UI 的 React 组件。 */
   component: ComponentType<PropertyPanelRendererProps>
+  /** renderer 的默认字段布局，字段 metadata 可以覆盖该值。 */
+  layout?: PropertyPanelRendererLayout
   /** 为 optional、nullable 等缺失字段生成可校验的初值。 */
   createDefault?: (schema: v.GenericSchema) => unknown
+  /** 声明该 renderer 内可独立绑定的稳定逻辑输入。 */
+  bindingTargets?: (
+    context: PropertyPanelRendererBindingTargetsContext,
+  ) => readonly PropertyPanelRendererBindingTargetDescriptor[]
 }
 
 /** `PropertyPanel` 的受控属性。 */
@@ -135,6 +347,8 @@ export interface PropertyPanelProps<TSchema extends v.GenericSchema>
   renderers?: readonly PropertyPanelRenderer[]
   /** 是否禁用面板内全部修改操作。 */
   readOnly?: boolean
+  /** 与字面 `value` 分离、由宿主保存的可选变量绑定配置。 */
+  binding?: PropertyPanelBindingConfig
   /** 完整候选 input 校验成功后调用的受控变更回调。 */
   onValueChange?: (
     value: v.InferInput<TSchema>,
@@ -155,6 +369,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
   defaultValue,
   header,
   renderers,
+  binding,
   readOnly = false,
   onValueChange,
   className,
@@ -177,7 +392,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
   const [labelWidth, setLabelWidth] = useState(160)
   const [actionWidth, setActionWidth] = useState(36)
   const [availableWidth, setAvailableWidth] = useState(
-    typeof style?.width === 'number' ? style.width : 480,
+    typeof style?.width === 'number' ? style.width : 365,
   )
   const rootClassName = ['property-panel', className].filter(Boolean).join(' ')
   const asyncSchema = (schema as unknown as { async?: boolean }).async === true
@@ -196,7 +411,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
     setLabelWidth(clamp(candidate, 88, Math.max(88, availableWidth - actionWidth - 120)))
   }
   const resizeAction = (candidate: number) => {
-    setActionWidth(clamp(candidate, 32, Math.max(32, availableWidth - labelWidth - 120)))
+    setActionWidth(clamp(candidate, 32, Math.min(96, Math.max(32, availableWidth - labelWidth - 120))))
   }
   const startResize = (kind: 'label' | 'action') => (event: PointerEvent<HTMLDivElement>) => {
     setDrag({
@@ -231,7 +446,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
       const width = entries[0]?.contentRect.width
       if (!width) return
       setAvailableWidth(width)
-      const nextAction = clamp(actionWidth, 32, Math.max(32, width - 88 - 120))
+      const nextAction = clamp(actionWidth, 32, Math.min(96, Math.max(32, width - 88 - 120)))
       setActionWidth(nextAction)
       setLabelWidth(clamp(labelWidth, 88, Math.max(88, width - nextAction - 120)))
     })
@@ -257,6 +472,15 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
       reason,
       output: result.output,
     })
+    if (binding && options?.bindingMutation) {
+      const nextBindings = remapPropertyBindings(binding.value, options.bindingMutation)
+      if (nextBindings !== binding.value) {
+        binding.onChange(nextBindings, {
+          reason: 'remap',
+          target: { path: options.bindingMutation.path, targetId: 'value' },
+        })
+      }
+    }
     return true
   }
 
@@ -368,6 +592,8 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
         <p role="alert">当前版本暂不支持异步 Valibot Schema</p>
       ) : (
         <PropertyTree
+          actionWidth={actionWidth}
+          binding={binding}
           commit={commit}
           defaultValue={defaultValue}
           filter={filter}
@@ -399,7 +625,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
       <div
         aria-label="调整操作列宽"
         aria-orientation="vertical"
-        aria-valuemax={Math.max(32, availableWidth - labelWidth - 120)}
+        aria-valuemax={Math.min(96, Math.max(32, availableWidth - labelWidth - 120))}
         aria-valuemin={32}
         aria-valuenow={actionWidth}
         className="property-panel__separator property-panel__separator--action"

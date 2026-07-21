@@ -1,5 +1,5 @@
-import { createContext, useContext, useState } from 'react'
-import type { ReactNode } from 'react'
+import { createContext, Fragment, useContext, useEffect, useId, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import * as v from 'valibot'
 import {
   ArrowIcon,
@@ -9,10 +9,23 @@ import {
   ResetIcon,
 } from './icons'
 import type {
+  PropertyPanelBindingConfig,
+  PropertyPanelBindingIssue,
+  PropertyPanelBindingTarget,
   PropertyPanelChangeReason,
   PropertyPath,
   PropertyPanelRenderer,
+  PropertyPanelRendererBindingController,
+  PropertyPanelRendererBindingTargetDescriptor,
+  PropertyPanelRendererBindingTargetState,
+  PropertyPanelResolvedBindingTarget,
 } from './index'
+import {
+  canBindPropertyVariable,
+  createBindingAddressKey,
+  resolvePropertyBindings,
+} from './property-bindings'
+import type { PropertyBindingMutation } from './property-bindings'
 import {
   createInitialValue,
   getObjectEntries,
@@ -34,6 +47,7 @@ type RuntimeSchema = v.GenericSchema & {
 export interface TreeCommitOptions {
   eventPath?: PropertyPath
   previousValue?: unknown
+  bindingMutation?: PropertyBindingMutation
 }
 
 interface TreeSharedProps {
@@ -50,6 +64,8 @@ interface TreeSharedProps {
 }
 
 interface PropertyTreeProps extends TreeSharedProps {
+  actionWidth: number
+  binding?: PropertyPanelBindingConfig
   defaultValue?: unknown
   hasDefaultValue: boolean
   filter: PropertyPanelFilter
@@ -63,7 +79,17 @@ interface PropertyNodeProps extends TreeSharedProps {
   label: string
   path: PropertyPath
   schema: v.GenericSchema
-  nodeActions?: ReactNode
+  nodeActions?: readonly RowAction[]
+}
+
+interface RowAction {
+  id: string
+  label: string
+  priority: number
+  disabled?: boolean
+  control?: ReactNode
+  icon?: ReactNode
+  onSelect: () => void
 }
 
 export type PropertyPanelFilter = 'all' | 'modified' | 'errors'
@@ -73,6 +99,8 @@ interface PropertyTreeView {
   hasDefaultValue: boolean
   filter: PropertyPanelFilter
   issues: readonly v.BaseIssue<unknown>[]
+  bindingIssues: readonly PropertyPanelBindingIssue[]
+  boundTargets: readonly PropertyPanelResolvedBindingTarget[]
   query: string
   showAdvanced: boolean
   showDescriptions: boolean
@@ -81,16 +109,35 @@ interface PropertyTreeView {
 const OBJECT_TYPES = new Set(['object', 'loose_object', 'strict_object', 'object_with_rest'])
 const TUPLE_TYPES = new Set(['tuple', 'loose_tuple', 'strict_tuple', 'tuple_with_rest'])
 const RendererContext = createContext<readonly PropertyPanelRenderer[]>([])
+const TreeDepthContext = createContext(0)
+const ActionWidthContext = createContext(36)
+interface PropertyBindingView {
+  config?: PropertyPanelBindingConfig
+  resolvedTargets: ReadonlyMap<string, PropertyPanelResolvedBindingTarget>
+  activeTarget?: PropertyPanelRendererBindingTargetState
+  activeAnchor?: HTMLElement
+  openTarget: (target: PropertyPanelRendererBindingTargetState, anchor?: HTMLElement) => void
+  closePicker: () => void
+}
+const BindingContext = createContext<PropertyBindingView>({
+  resolvedTargets: new Map(),
+  openTarget: () => undefined,
+  closePicker: () => undefined,
+})
 const ViewContext = createContext<PropertyTreeView>({
   hasDefaultValue: false,
   filter: 'all',
   issues: [],
+  bindingIssues: [],
+  boundTargets: [],
   query: '',
   showAdvanced: false,
   showDescriptions: false,
 })
 
 export function PropertyTree({
+  actionWidth,
+  binding,
   schema,
   value,
   defaultValue,
@@ -104,30 +151,400 @@ export function PropertyTree({
   renderers = [],
   commit,
 }: PropertyTreeProps) {
+  const [activeBinding, setActiveBinding] = useState<{
+    target: PropertyPanelRendererBindingTargetState
+    anchor?: HTMLElement
+  }>()
+  const bindingResult = binding ? resolvePropertyBindings({
+    schema,
+    value,
+    bindings: binding.value,
+    variables: binding.variables,
+    renderers,
+    canBind: binding.canBind,
+  }) : { targets: [], issues: [] }
+  const resolvedTargets = new Map(bindingResult.targets.map((target) => [
+    createBindingAddressKey(target.address),
+    target,
+  ]))
+  const closePicker = () => {
+    const anchor = activeBinding?.anchor
+    setActiveBinding(undefined)
+    queueMicrotask(() => anchor?.focus())
+  }
   return (
     <RendererContext.Provider value={renderers}>
-      <ViewContext.Provider value={{
-        defaultValue,
-        hasDefaultValue,
-        filter,
-        issues,
-        query,
-        showAdvanced,
-        showDescriptions,
-      }}>
-        <div className="property-panel__fields">
-          <ObjectChildren
-            commit={commit}
-            path={[]}
-            readOnly={readOnly}
-            renderers={renderers}
-            schema={schema}
-            value={value}
-          />
-        </div>
-      </ViewContext.Provider>
+      <ActionWidthContext.Provider value={actionWidth}>
+        <BindingContext.Provider value={{
+          config: binding,
+          resolvedTargets,
+          activeTarget: activeBinding?.target,
+          activeAnchor: activeBinding?.anchor,
+          openTarget: (target, anchor) => setActiveBinding({ target, anchor }),
+          closePicker,
+        }}>
+          <ViewContext.Provider value={{
+            defaultValue,
+            hasDefaultValue,
+            filter,
+            issues,
+            bindingIssues: bindingResult.issues,
+            boundTargets: bindingResult.targets,
+            query,
+            showAdvanced,
+            showDescriptions,
+          }}>
+            <div className="property-panel__fields">
+              <ObjectChildren
+                commit={commit}
+                path={[]}
+                readOnly={readOnly}
+                renderers={renderers}
+                schema={schema}
+                value={value}
+              />
+            </div>
+            <BindingPicker />
+          </ViewContext.Provider>
+        </BindingContext.Provider>
+      </ActionWidthContext.Provider>
     </RendererContext.Provider>
   )
+}
+
+function RowActionRail({ actions, label }: { actions: readonly RowAction[]; label: string }) {
+  const actionWidth = useContext(ActionWidthContext)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const overflowButtonRef = useRef<HTMLButtonElement>(null)
+  const [menuMode, setMenuMode] = useState<'all' | 'overflow' | null>(null)
+  const ordered = [...actions].sort((left, right) => (
+    left.priority - right.priority
+    || Number(Boolean(left.disabled)) - Number(Boolean(right.disabled))
+  ))
+  const slots = Math.max(1, Math.min(3, Math.floor((actionWidth - 6) / 27)))
+  const hasOverflow = ordered.length > slots
+  const direct = hasOverflow ? ordered.slice(0, Math.max(0, slots - 1)) : ordered
+  const hidden = hasOverflow ? ordered.slice(Math.max(0, slots - 1)) : []
+  const menuActions = menuMode === 'all' ? ordered : hidden
+
+  useEffect(() => {
+    const row = rootRef.current?.closest('.property-panel__field, .property-panel__group-header')
+    if (!row || ordered.length === 0) return
+    const openContextMenu = (event: Event) => {
+      event.preventDefault()
+      setMenuMode('all')
+    }
+    row.addEventListener('contextmenu', openContextMenu)
+    return () => row.removeEventListener('contextmenu', openContextMenu)
+  }, [ordered.length])
+
+  const selectAction = (action: RowAction) => {
+    if (action.disabled) return
+    action.onSelect()
+    setMenuMode(null)
+    overflowButtonRef.current?.focus()
+  }
+
+  return (
+    <div className="property-panel__actions" ref={rootRef}>
+      {direct.map((action) => (
+        <Fragment key={action.id}>
+          {action.control ?? (
+            <button
+              aria-label={action.label}
+              disabled={action.disabled}
+              title={action.label}
+              type="button"
+              onClick={action.onSelect}
+            >{action.icon}</button>
+          )}
+        </Fragment>
+      ))}
+      {hasOverflow ? (
+        <button
+          aria-expanded={menuMode !== null}
+          aria-haspopup="menu"
+          aria-label={`更多 ${label} 操作`}
+          className="property-panel__overflow-trigger"
+          ref={overflowButtonRef}
+          type="button"
+          onClick={() => setMenuMode((current) => current ? null : 'overflow')}
+        ><MoreIcon /></button>
+      ) : null}
+      {menuMode ? (
+        <div
+          aria-label={`${label} 操作`}
+          className="property-panel__row-menu"
+          role="menu"
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return
+            setMenuMode(null)
+            overflowButtonRef.current?.focus()
+          }}
+        >
+          {menuActions.map((action) => (
+            <button
+              disabled={action.disabled}
+              key={action.id}
+              role="menuitem"
+              type="button"
+              onClick={() => selectAction(action)}
+            >
+              {action.icon}<span>{action.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function MoreIcon() {
+  return (
+    <svg aria-hidden="true" fill="currentColor" viewBox="0 0 20 20">
+      <circle cx="4" cy="10" r="1.4" />
+      <circle cx="10" cy="10" r="1.4" />
+      <circle cx="16" cy="10" r="1.4" />
+    </svg>
+  )
+}
+
+function createBindingTargetState(
+  target: PropertyPanelBindingTarget,
+  literalValue: unknown,
+  readOnly: boolean,
+  view: PropertyBindingView,
+): PropertyPanelRendererBindingTargetState {
+  const resolved = view.resolvedTargets.get(createBindingAddressKey(target.address))
+  const state: PropertyPanelRendererBindingTargetState = {
+    ...target,
+    binding: resolved?.binding,
+    variable: resolved?.variable,
+    literalValue,
+    effectiveValue: resolved?.effectiveValue ?? literalValue,
+    status: resolved?.status ?? 'literal',
+    message: resolved?.message,
+    readOnly,
+    openPicker: () => view.openTarget(
+      state,
+      typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : undefined,
+    ),
+  }
+  return state
+}
+
+function useBuiltInBindingTarget(
+  schema: v.GenericSchema,
+  path: PropertyPath,
+  label: string,
+  literalValue: unknown,
+  readOnly: boolean,
+): PropertyPanelRendererBindingTargetState | undefined {
+  const view = useContext(BindingContext)
+  const info = inspectSchema(schema)
+  if (
+    !view.config
+    || info.metadata.binding?.enabled === false
+    || !['string', 'number', 'bigint', 'boolean', 'date', 'picklist', 'enum'].includes(info.type)
+  ) return undefined
+  return createBindingTargetState({
+    address: { path, targetId: 'value' },
+    label,
+    schema,
+    semanticScope: info.metadata.binding?.semanticScope,
+  }, literalValue, readOnly, view)
+}
+
+function useRendererBindingController(
+  descriptors: readonly PropertyPanelRendererBindingTargetDescriptor[],
+  path: PropertyPath,
+  literalValue: unknown,
+  readOnly: boolean,
+  semanticScope?: string,
+): PropertyPanelRendererBindingController | undefined {
+  const view = useContext(BindingContext)
+  if (!view.config || descriptors.length === 0) return undefined
+  const targets = descriptors.map((descriptor) => createBindingTargetState({
+    address: { path, targetId: descriptor.id },
+    label: descriptor.label,
+    schema: descriptor.schema,
+    semanticScope: descriptor.semanticScope ?? semanticScope,
+  }, descriptor.getValue(literalValue), readOnly, view))
+  return {
+    targets,
+    getTarget: (targetId) => targets.find((target) => target.address.targetId === targetId),
+    renderTrigger: (targetId) => {
+      const target = targets.find((candidate) => candidate.address.targetId === targetId)
+      return target ? <BindingTrigger key={targetId} target={target} /> : null
+    },
+  }
+}
+
+function BindingTrigger({ target }: { target: PropertyPanelRendererBindingTargetState }) {
+  const view = useContext(BindingContext)
+  if (!view.config) return null
+  const Trigger = view.config.renderTrigger
+  if (Trigger) return <Trigger target={target} />
+  const bound = Boolean(target.binding)
+  const invalid = target.status !== 'literal' && target.status !== 'resolved'
+  const variableLabel = target.variable?.label ?? target.binding?.variableId
+  const title = bound
+    ? `${variableLabel ?? '未知变量'} · ${formatBindingPreview(target.effectiveValue)}`
+    : `绑定 ${target.label}`
+  return (
+    <button
+      aria-label={bound ? `更换绑定 ${target.label}` : `绑定 ${target.label}`}
+      aria-invalid={invalid ? 'true' : undefined}
+      className={`property-panel__binding-trigger${bound ? ' property-panel__binding-trigger--bound' : ''}${invalid ? ' property-panel__binding-trigger--invalid' : ''}`}
+      disabled={target.readOnly}
+      title={target.message ?? title}
+      type="button"
+      onClick={(event) => view.openTarget(target, event.currentTarget)}
+    >
+      <BindingIcon />
+      {bound ? <span>{variableLabel}</span> : null}
+    </button>
+  )
+}
+
+function BindingPicker() {
+  const view = useContext(BindingContext)
+  const target = view.activeTarget
+  const config = view.config
+  if (!target || !config) return null
+  return (
+    <BindingPickerContent
+      config={config}
+      key={createBindingAddressKey(target.address)}
+      target={target}
+      view={view}
+    />
+  )
+}
+
+function BindingPickerContent({
+  config,
+  target,
+  view,
+}: {
+  config: PropertyPanelBindingConfig
+  target: PropertyPanelRendererBindingTargetState
+  view: PropertyBindingView
+}) {
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const candidates = config.variables.filter((variable) => (
+    canBindPropertyVariable(target, variable, config.canBind)
+    && (!normalizedQuery || [variable.label, variable.id, variable.description]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase()
+      .includes(normalizedQuery))
+  ))
+  const bind = (variable: typeof candidates[number]) => {
+    const next = config.value
+      .filter((binding) => createBindingAddressKey(binding.target) !== createBindingAddressKey(target.address))
+      .concat({ target: target.address, variableId: variable.id })
+    config.onChange(next, { reason: 'bind', target: target.address })
+    view.closePicker()
+  }
+  const unbind = () => {
+    config.onChange(
+      config.value.filter((binding) => (
+        createBindingAddressKey(binding.target) !== createBindingAddressKey(target.address)
+      )),
+      { reason: 'unbind', target: target.address },
+    )
+    view.closePicker()
+  }
+  const Picker = config.renderPicker
+  if (Picker) {
+    return (
+      <Picker
+        onBind={bind}
+        onClose={view.closePicker}
+        onQueryChange={setQuery}
+        onUnbind={unbind}
+        query={query}
+        target={target}
+        variables={candidates}
+      />
+    )
+  }
+  const anchorRect = view.activeAnchor?.getBoundingClientRect()
+  const pickerStyle = anchorRect ? {
+    left: `${Math.max(8, anchorRect.right - 264)}px`,
+    top: `${anchorRect.bottom + 4}px`,
+  } : undefined
+  return (
+    <div
+      aria-label={`绑定 ${target.label}`}
+      className="property-panel__binding-picker"
+      role="dialog"
+      style={pickerStyle}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') view.closePicker()
+      }}
+    >
+      <header>
+        <strong>绑定 {target.label}</strong>
+        <button aria-label="关闭变量选择器" type="button" onClick={view.closePicker}>×</button>
+      </header>
+      <input
+        aria-label="搜索变量"
+        autoFocus
+        placeholder="搜索变量"
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+      <div className="property-panel__binding-options">
+        {(['page', 'global'] as const).map((scope) => {
+          const variables = candidates.filter((variable) => variable.scope === scope)
+          if (variables.length === 0) return null
+          return (
+            <section key={scope}>
+              <h3>{scope === 'page' ? '页面变量' : '全局变量'}</h3>
+              {variables.map((variable) => (
+                <button key={variable.id} type="button" onClick={() => bind(variable)}>
+                  <span>{variable.label}</span>
+                  <output>{formatBindingPreview(variable.value)}</output>
+                </button>
+              ))}
+            </section>
+          )
+        })}
+        {candidates.length === 0 ? <p>没有兼容的变量</p> : null}
+      </div>
+      {target.binding ? (
+        <footer><button disabled={target.readOnly} type="button" onClick={unbind}>解绑</button></footer>
+      ) : null}
+    </div>
+  )
+}
+
+function BindingIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 20 20">
+      <path d="M7.8 6.1 6.2 4.5a3 3 0 0 0-4.2 4.2l2.2 2.2a3 3 0 0 0 4.2 0l1.3-1.3M12.2 13.9l1.6 1.6a3 3 0 0 0 4.2-4.2l-2.2-2.2a3 3 0 0 0-4.2 0l-1.3 1.3M7 13l6-6" />
+    </svg>
+  )
+}
+
+function formatBindingPreview(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'bigint') return value.toString()
+  if (value instanceof Date) return value.toLocaleDateString()
+  if (value === undefined) return 'undefined'
+  try {
+    const serialized = JSON.stringify(value)
+    if (serialized === undefined) return String(value)
+    return serialized.length > 48 ? `${serialized.slice(0, 45)}…` : serialized
+  } catch {
+    return String(value)
+  }
 }
 
 function PropertyNode({
@@ -141,72 +558,152 @@ function PropertyNode({
 }: PropertyNodeProps) {
   const info = inspectSchema(schema)
   const renderers = useContext(RendererContext)
+  const bindingView = useContext(BindingContext)
+  const depth = useContext(TreeDepthContext)
   const view = useContext(ViewContext)
+  const rendererLabelId = useId()
   const baseline = view.hasDefaultValue ? getValueAtPath(view.defaultValue, path) : undefined
+  const descendantBindings = bindingView.config?.value.filter((binding) => (
+    isPathAtOrBelow(binding.target.path, path)
+  )) ?? []
+  const renderer = info.metadata.editor
+    ? renderers.find((candidate) => candidate.id === info.metadata.editor)
+    : renderers.find((candidate) => candidate.matches?.(info.base, info.metadata))
+  const missing = value === undefined || value === null
+  const supportsPresence = info.optional || info.nullable
+  const togglePresence = (present: boolean) => {
+    const nextValue = present
+          ? renderer?.createDefault?.(info.base) ?? createInitialValue(info.base)
+          : info.nullable ? null : undefined
+    commit(path, nextValue, 'set-presence', {
+      bindingMutation: present ? undefined : { type: 'clear-descendants', path },
+    })
+  }
+  const presenceAction: RowAction | null = supportsPresence ? {
+    id: 'presence',
+    label: `${label} 存在`,
+    priority: 10,
+    disabled: readOnly,
+    control: (
+      <input
+        aria-label={`${label} 存在`}
+        checked={!missing}
+        disabled={readOnly}
+        type="checkbox"
+        onChange={(event) => togglePresence(event.target.checked)}
+      />
+    ),
+    onSelect: () => togglePresence(missing),
+  } : null
+  const resetAction: RowAction | null = view.hasDefaultValue
+    && v.safeParse(schema, baseline).success
+    && (!deepEqual(value, baseline) || descendantBindings.length > 0) ? {
+      id: 'reset',
+      label: `重置 ${label}`,
+      priority: 20,
+      disabled: readOnly,
+      icon: <ResetIcon />,
+      onSelect: () => {
+        const committed = commit(path, cloneValue(baseline), 'reset')
+        if (!committed || descendantBindings.length === 0 || !bindingView.config) return
+        bindingView.config.onChange(
+          bindingView.config.value.filter((binding) => (
+            !isPathAtOrBelow(binding.target.path, path)
+          )),
+          {
+            reason: 'reset',
+            target: descendantBindings[0]?.target ?? { path, targetId: 'value' },
+          },
+        )
+      },
+    } : null
+  const actions = [presenceAction, resetAction, ...(nodeActions ?? [])]
+    .filter((action): action is RowAction => action !== null)
+  const rendererBindingDescriptors = renderer && info.metadata.binding?.enabled !== false
+    ? renderer.bindingTargets?.({
+        path,
+        schema,
+        metadata: info.metadata,
+        value,
+      }) ?? []
+    : []
+  const rendererBinding = useRendererBindingController(
+    rendererBindingDescriptors,
+    path,
+    value,
+    readOnly,
+    info.metadata.binding?.semanticScope,
+  )
   if (
     info.metadata.hidden
     || (info.metadata.advanced && !view.showAdvanced)
     || !matchesNode(schema, value, baseline, path, label, view)
   ) return null
 
-  const renderer = info.metadata.editor
-    ? renderers.find((candidate) => candidate.id === info.metadata.editor)
-    : renderers.find((candidate) => candidate.matches?.(info.base, info.metadata))
-  const missing = value === undefined || value === null
-  const supportsPresence = info.optional || info.nullable
-  const presenceControl = supportsPresence ? (
-    <input
-      aria-label={`${label} 存在`}
-      checked={!missing}
-      disabled={readOnly}
-      type="checkbox"
-      onChange={(event) => {
-        const nextValue = event.target.checked
-          ? renderer?.createDefault?.(info.base) ?? createInitialValue(info.base)
-          : info.nullable ? null : undefined
-        commit(path, nextValue, 'set-presence')
-      }}
-    />
-  ) : null
-  const resetControl = view.hasDefaultValue
-    && v.safeParse(schema, baseline).success
-    && !deepEqual(value, baseline) ? (
-    <button
-      aria-label={`重置 ${label}`}
-      disabled={readOnly}
-      title={`重置 ${label}`}
-      type="button"
-      onClick={() => commit(path, cloneValue(baseline), 'reset')}
-    ><ResetIcon /></button>
-  ) : null
-  const actions = <>{presenceControl}{resetControl}{nodeActions}</>
-
   if (supportsPresence && missing) {
     return (
-      <PropertyRow label={label} path={path}>
+      <PropertyRow label={label} nodeActions={actions} path={path}>
         <span className="property-panel__empty">未设置</span>
-        <div className="property-panel__actions">{actions}</div>
       </PropertyRow>
     )
   }
 
   if (renderer) {
     const Renderer = renderer.component
+    const layout = resolveRendererLayout(info.metadata.layout, renderer.layout)
+    const rendererElement = (
+      <Renderer
+        binding={rendererBinding}
+        commit={(candidate, reason = 'commit') => commit(path, candidate, reason)}
+        issues={issuesAtPath(view.issues, path)}
+        metadata={info.metadata}
+        path={path}
+        readOnly={readOnly}
+        schema={schema}
+        value={value}
+      />
+    )
+    if (layout === 'full-width') {
+      return (
+        <div
+          className="property-panel__field property-panel__field--full-width"
+          data-property-depth={depth}
+          data-property-layout={layout}
+          data-property-nested={depth > 1 ? 'true' : undefined}
+          data-property-path={path.join('.')}
+          style={createFieldIndentStyle(depth)}
+        >
+          <span className="property-panel__label" id={rendererLabelId}>{label}</span>
+          <RowActionRail actions={actions} label={label} />
+          <div
+            aria-labelledby={rendererLabelId}
+            className="property-panel__editor property-panel__editor--full-width"
+            data-property-renderer-content=""
+            role="group"
+          >
+            <div className="property-panel__control property-panel__control--full-width">
+              {rendererElement}
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
-      <div className="property-panel__field" data-property-path={path.join('.')}>
+      <div
+        className="property-panel__field"
+        data-property-depth={depth}
+        data-property-layout={layout}
+        data-property-nested={depth > 1 ? 'true' : undefined}
+        data-property-path={path.join('.')}
+        style={createFieldIndentStyle(depth)}
+      >
         <span className="property-panel__label">{label}</span>
         <div className="property-panel__editor">
-          <Renderer
-            commit={(candidate, reason = 'commit') => commit(path, candidate, reason)}
-            issues={issuesAtPath(view.issues, path)}
-            metadata={info.metadata}
-            path={path}
-            readOnly={readOnly}
-            schema={schema}
-            value={value}
-          />
+          <div className="property-panel__control">
+            {rendererElement}
+          </div>
         </div>
-        <div className="property-panel__actions">{actions}</div>
+        <RowActionRail actions={actions} label={label} />
       </div>
     )
   }
@@ -300,7 +797,7 @@ function PropertyNode({
 }
 
 interface GroupProps extends PropertyNodeProps {
-  nodeActions: ReactNode
+  nodeActions: readonly RowAction[]
   initiallyExpanded?: boolean
 }
 
@@ -312,14 +809,19 @@ function GroupShell({
 }: {
   children: ReactNode
   label: string
-  nodeActions: ReactNode
+  nodeActions: readonly RowAction[]
   initiallyExpanded?: boolean
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded)
+  const depth = useContext(TreeDepthContext)
   const { query } = useContext(ViewContext)
   const visibleExpanded = query.trim() ? true : expanded
   return (
-    <section className="property-panel__group">
+    <section
+      className="property-panel__group"
+      data-property-depth={depth}
+      style={createGroupIndentStyle(depth)}
+    >
       <div className="property-panel__group-header">
         <button
           aria-expanded={visibleExpanded}
@@ -329,9 +831,13 @@ function GroupShell({
           <ChevronIcon expanded={visibleExpanded} />
           {label}
         </button>
-        <div className="property-panel__actions">{nodeActions}</div>
+        <RowActionRail actions={nodeActions} label={label} />
       </div>
-      {visibleExpanded ? <div className="property-panel__group-content">{children}</div> : null}
+      {visibleExpanded ? (
+        <TreeDepthContext.Provider value={depth + 1}>
+          <div className="property-panel__group-content">{children}</div>
+        </TreeDepthContext.Provider>
+      ) : null}
     </section>
   )
 }
@@ -382,7 +888,7 @@ function ObjectChildren({
   )
   return groups.map((group, index) => (
     group.section ? (
-      <GroupShell key={`section-${group.section}`} label={group.section} nodeActions={null}>
+      <GroupShell key={`section-${group.section}`} label={group.section} nodeActions={[]}>
         {group.entries.map(renderEntry)}
       </GroupShell>
     ) : <div className="property-panel__ungrouped" key={`field-${index}`}>{group.entries.map(renderEntry)}</div>
@@ -438,12 +944,14 @@ function ArrayGroup({
     <GroupShell
       initiallyExpanded={initiallyExpanded}
       label={label}
-      nodeActions={<>
-        <button aria-label={`添加 ${label}`} disabled={readOnly || !canAdd} type="button" onClick={add}>
-          <PlusIcon />
-        </button>
-        {nodeActions}
-      </>}
+      nodeActions={[{
+        id: 'add',
+        label: `添加 ${label}`,
+        priority: 10,
+        disabled: readOnly || !canAdd,
+        icon: <PlusIcon />,
+        onSelect: add,
+      }, ...nodeActions]}
     >
       {itemSchema ? items.map((item, index) => {
         const itemLabel = `${label} ${index + 1}`
@@ -452,34 +960,49 @@ function ArrayGroup({
             key={`${path.join('.')}-${index}`}
             commit={commit}
             label={itemLabel}
-            nodeActions={<>
-              <button
-                aria-label={`上移 ${itemLabel}`}
-                disabled={readOnly || index === 0}
-                type="button"
-                onClick={() => {
+            nodeActions={[
+              {
+                id: 'move-up',
+                label: `上移 ${itemLabel}`,
+                priority: 40,
+                disabled: readOnly || index === 0,
+                icon: <ArrowIcon direction="up" />,
+                onSelect: () => {
                   const next = [...items]
                   ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
-                  commit(path, next, 'array-move')
-                }}
-              ><ArrowIcon direction="up" /></button>
-              <button
-                aria-label={`下移 ${itemLabel}`}
-                disabled={readOnly || index === items.length - 1}
-                type="button"
-                onClick={() => {
+                  commit(path, next, 'array-move', {
+                    bindingMutation: { type: 'array-move', path, from: index, to: index - 1 },
+                  })
+                },
+              },
+              {
+                id: 'move-down',
+                label: `下移 ${itemLabel}`,
+                priority: 40,
+                disabled: readOnly || index === items.length - 1,
+                icon: <ArrowIcon direction="down" />,
+                onSelect: () => {
                   const next = [...items]
                   ;[next[index], next[index + 1]] = [next[index + 1], next[index]]
-                  commit(path, next, 'array-move')
-                }}
-              ><ArrowIcon direction="down" /></button>
-              <button
-                aria-label={`删除 ${itemLabel}`}
-                disabled={readOnly}
-                type="button"
-                onClick={() => commit(path, items.filter((_, itemIndex) => itemIndex !== index), 'array-remove')}
-              ><CloseIcon /></button>
-            </>}
+                  commit(path, next, 'array-move', {
+                    bindingMutation: { type: 'array-move', path, from: index, to: index + 1 },
+                  })
+                },
+              },
+              {
+                id: 'delete',
+                label: `删除 ${itemLabel}`,
+                priority: 30,
+                disabled: readOnly,
+                icon: <CloseIcon />,
+                onSelect: () => commit(
+                  path,
+                  items.filter((_, itemIndex) => itemIndex !== index),
+                  'array-remove',
+                  { bindingMutation: { type: 'array-remove', path, index } },
+                ),
+              },
+            ]}
             path={[...path, index]}
             readOnly={readOnly}
             schema={itemSchema}
@@ -511,17 +1034,17 @@ function TupleGroup({
     <GroupShell
       initiallyExpanded={initiallyExpanded}
       label={label}
-      nodeActions={<>
-        {restSchema ? (
-          <button
-            aria-label={`添加 ${label}`}
-            disabled={readOnly || !canAdd}
-            type="button"
-            onClick={() => commit(path, [...items, createInitialValue(restSchema)], 'array-add')}
-          ><PlusIcon /></button>
-        ) : null}
-        {nodeActions}
-      </>}
+      nodeActions={[
+        ...(restSchema ? [{
+          id: 'add',
+          label: `添加 ${label}`,
+          priority: 10,
+          disabled: readOnly || !canAdd,
+          icon: <PlusIcon />,
+          onSelect: () => commit(path, [...items, createInitialValue(restSchema)], 'array-add'),
+        } satisfies RowAction] : []),
+        ...nodeActions,
+      ]}
     >
       {schemas.map((itemSchema, index) => {
         const itemLabel = `${label} ${index + 1}`
@@ -531,14 +1054,19 @@ function TupleGroup({
             key={`${path.join('.')}-${index}`}
             commit={commit}
             label={itemLabel}
-            nodeActions={restItem ? (
-              <button
-                aria-label={`删除 ${itemLabel}`}
-                disabled={readOnly}
-                type="button"
-                onClick={() => commit(path, items.filter((_, itemIndex) => itemIndex !== index), 'array-remove')}
-              ><CloseIcon /></button>
-            ) : null}
+            nodeActions={restItem ? [{
+              id: 'delete',
+              label: `删除 ${itemLabel}`,
+              priority: 30,
+              disabled: readOnly,
+              icon: <CloseIcon />,
+              onSelect: () => commit(
+                path,
+                items.filter((_, itemIndex) => itemIndex !== index),
+                'array-remove',
+                { bindingMutation: { type: 'array-remove', path, index } },
+              ),
+            }] : []}
             path={[...path, index]}
             readOnly={readOnly}
             schema={itemSchema}
@@ -578,15 +1106,18 @@ function RecordGroup({
     <GroupShell
       initiallyExpanded={initiallyExpanded}
       label={label}
-      nodeActions={<>
-        <button
-          aria-label={`添加 ${label}`}
-          disabled={readOnly || !canAdd}
-          type="button"
-          onClick={() => commit(path, { ...Object.fromEntries(entries), [nextKey]: nextValue }, 'record-add')}
-        ><PlusIcon /></button>
-        {nodeActions}
-      </>}
+      nodeActions={[{
+        id: 'add',
+        label: `添加 ${label}`,
+        priority: 10,
+        disabled: readOnly || !canAdd,
+        icon: <PlusIcon />,
+        onSelect: () => commit(
+          path,
+          { ...Object.fromEntries(entries), [nextKey]: nextValue },
+          'record-add',
+        ),
+      }, ...nodeActions]}
     >
       {valueSchema ? entries.map(([key, entryValue], index) => (
         <div className="property-panel__record" key={key}>
@@ -609,24 +1140,26 @@ function RecordGroup({
               commit(path, renamed, 'record-rename', {
                 eventPath: [...path, 'key'],
                 previousValue: key,
+                bindingMutation: { type: 'record-rename', path, from: key, to: replacement },
               })
             }}
           />
           <PropertyNode
             commit={commit}
             label={`${label} 值 ${key}`}
-            nodeActions={(
-              <button
-                aria-label={`删除 ${label} ${key}`}
-                disabled={readOnly}
-                type="button"
-                onClick={() => commit(
+            nodeActions={[{
+              id: 'delete',
+              label: `删除 ${label} ${key}`,
+              priority: 30,
+              disabled: readOnly,
+              icon: <CloseIcon />,
+              onSelect: () => commit(
                   path,
                   Object.fromEntries(entries.filter(([entryKey]) => entryKey !== key)),
                   'record-remove',
-                )}
-              ><CloseIcon /></button>
-            )}
+                  { bindingMutation: { type: 'record-remove', path, key } },
+                ),
+            }]}
             path={[...path, key]}
             readOnly={readOnly}
             schema={valueSchema}
@@ -657,14 +1190,16 @@ function UnionGroup({
   const activeSchema = options[activeIndex]
   return (
     <GroupShell initiallyExpanded={initiallyExpanded} label={label} nodeActions={nodeActions}>
-      <PropertyRow label={`${label} 分支`} path={[...path, '$branch']}>
+      <PropertyRow label={`${label} 分支`} nodeActions={[]} path={[...path, '$branch']}>
         <select
           aria-label={`${label} 分支`}
           disabled={readOnly}
           value={String(activeIndex)}
           onChange={(event) => {
             const index = Number(event.target.value)
-            commit(path, candidates[index], 'union-switch')
+            commit(path, candidates[index], 'union-switch', {
+              bindingMutation: { type: 'clear-descendants', path },
+            })
           }}
         >
           {options.map((option, index) => (
@@ -677,7 +1212,6 @@ function UnionGroup({
             </option>
           ))}
         </select>
-        <div className="property-panel__actions" />
       </PropertyRow>
       {activeSchema && OBJECT_TYPES.has(inspectSchema(activeSchema).type)
         ? getObjectEntries(activeSchema, path).map((entry) => (
@@ -708,16 +1242,26 @@ function UnionGroup({
 function PropertyRow({
   children,
   label,
+  nodeActions,
   path,
 }: {
   children: ReactNode
   label: string
+  nodeActions: readonly RowAction[]
   path: PropertyPath
 }) {
+  const depth = useContext(TreeDepthContext)
   return (
-    <div className="property-panel__field" data-property-path={path.join('.')}>
+    <div
+      className="property-panel__field"
+      data-property-depth={depth}
+      data-property-nested={depth > 1 ? 'true' : undefined}
+      data-property-path={path.join('.')}
+      style={createFieldIndentStyle(depth)}
+    >
       <span className="property-panel__label">{label}</span>
       <div className="property-panel__editor">{children}</div>
+      <RowActionRail actions={nodeActions} label={label} />
     </div>
   )
 }
@@ -725,14 +1269,18 @@ function PropertyRow({
 function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActions }: GroupProps) {
   const info = inspectSchema(schema)
   const { showDescriptions } = useContext(ViewContext)
+  const depth = useContext(TreeDepthContext)
   const id = `property-${path.map(String).join('-')}`
   const runtime = info.base as RuntimeSchema
+  const bindingTarget = useBuiltInBindingTarget(schema, path, label, value, readOnly)
+  const bound = Boolean(bindingTarget?.binding)
+  const displayValue = bindingTarget?.effectiveValue ?? value
   const [draft, setDraft] = useState<{ source: unknown; text: string; error?: string }>({
-    source: value,
-    text: value === undefined ? '' : String(value),
+    source: displayValue,
+    text: displayValue === undefined ? '' : String(displayValue),
   })
-  const draftActive = Object.is(draft.source, value)
-  const textValue = draftActive ? draft.text : value === undefined ? '' : String(value)
+  const draftActive = Object.is(draft.source, displayValue)
+  const textValue = draftActive ? draft.text : displayValue === undefined ? '' : String(displayValue)
   const activeError = draftActive ? draft.error : undefined
   let editor: ReactNode
 
@@ -740,13 +1288,15 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
     editor = (
       <input
         aria-label={label}
-        disabled={readOnly}
+        disabled={readOnly && !bound}
         id={id}
         placeholder={info.metadata.placeholder}
+        readOnly={bound || readOnly}
         type="text"
         aria-invalid={activeError ? 'true' : undefined}
         value={textValue}
         onChange={(event) => {
+          if (bound) return
           const text = event.target.value
           const fieldResult = v.safeParse(schema, text)
           const success = fieldResult.success && commit(path, text, 'input')
@@ -762,6 +1312,7 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
     )
   } else if (info.type === 'number' || info.type === 'bigint') {
     const submitNumber = () => {
+      if (bound) return
       if (textValue === '') return
       let nextValue: number | bigint
       try {
@@ -784,18 +1335,21 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
       <input
         aria-label={label}
         aria-invalid={activeError ? 'true' : undefined}
-        disabled={readOnly}
+        disabled={readOnly && !bound}
         id={id}
         max={info.constraints.max?.toString()}
         min={info.constraints.min?.toString()}
         step={info.constraints.step?.toString()}
+        readOnly={bound || readOnly}
         type="number"
         value={textValue}
         onBlur={submitNumber}
-        onChange={(event) => setDraft({ source: value, text: event.target.value })}
+        onChange={(event) => {
+          if (!bound) setDraft({ source: value, text: event.target.value })
+        }}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') submitNumber()
-          if (event.key === 'Escape') setDraft({ source: value, text: String(value ?? '') })
+          if (event.key === 'Enter' && !bound) submitNumber()
+          if (event.key === 'Escape' && !bound) setDraft({ source: value, text: String(value ?? '') })
         }}
       />
     )
@@ -803,35 +1357,43 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
     editor = (
       <input
         aria-label={label}
-        checked={Boolean(value)}
-        disabled={readOnly}
+        aria-readonly={bound ? 'true' : undefined}
+        checked={Boolean(displayValue)}
+        disabled={readOnly && !bound}
         id={id}
         type="checkbox"
-        onChange={(event) => commit(path, event.target.checked, 'input')}
+        onChange={(event) => {
+          if (!bound) commit(path, event.target.checked, 'input')
+        }}
       />
     )
   } else if (info.type === 'date') {
-    const dateValue = value instanceof Date && !Number.isNaN(value.valueOf())
-      ? value.toISOString().slice(0, 10)
+    const dateValue = displayValue instanceof Date && !Number.isNaN(displayValue.valueOf())
+      ? displayValue.toISOString().slice(0, 10)
       : ''
     editor = (
       <input
         aria-label={label}
-        disabled={readOnly}
+        disabled={readOnly && !bound}
         id={id}
+        readOnly={bound || readOnly}
         type="date"
         value={dateValue}
-        onChange={(event) => commit(path, new Date(`${event.target.value}T00:00:00.000Z`), 'commit')}
+        onChange={(event) => {
+          if (!bound) commit(path, new Date(`${event.target.value}T00:00:00.000Z`), 'commit')
+        }}
       />
     )
   } else if (info.type === 'picklist' || info.type === 'enum') {
     editor = (
       <select
         aria-label={label}
-        disabled={readOnly}
+        aria-readonly={bound ? 'true' : undefined}
+        disabled={readOnly && !bound}
         id={id}
-        value={String(value)}
+        value={String(displayValue)}
         onChange={(event) => {
+          if (bound) return
           const option = runtime.options?.find((candidate) => String(candidate) === event.target.value)
           commit(path, option, 'input')
         }}
@@ -850,7 +1412,13 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
   }
 
   return (
-    <div className="property-panel__field" data-property-path={path.join('.')}>
+    <div
+      className="property-panel__field"
+      data-property-depth={depth}
+      data-property-nested={depth > 1 ? 'true' : undefined}
+      data-property-path={path.join('.')}
+      style={createFieldIndentStyle(depth)}
+    >
       <label htmlFor={id}>
         <span>{label}</span>
         {showDescriptions && info.description
@@ -858,13 +1426,48 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
           : null}
       </label>
       <div className="property-panel__editor">
-        {editor}
-        {info.metadata.unit ? <span>{info.metadata.unit}</span> : null}
+        <div className="property-panel__control">
+          {editor}
+          {info.metadata.unit ? <span className="property-panel__unit">{info.metadata.unit}</span> : null}
+          {bindingTarget ? <BindingTrigger target={bindingTarget} /> : null}
+        </div>
         {activeError ? <span role="alert">{activeError}</span> : null}
       </div>
-      <div className="property-panel__actions">{nodeActions}</div>
+      <RowActionRail actions={nodeActions} label={label} />
     </div>
   )
+}
+
+type TreeIndentStyle = CSSProperties & {
+  '--pp-branch-indent'?: string
+  '--pp-field-indent'?: string
+  '--pp-group-indent'?: string
+  '--pp-guide-indent'?: string
+}
+
+// 同一层的 group guide 与下一层 field branch 必须落在同一 X 坐标；18px 是层级步长，
+// 文字比竖线再右移 14px。两者分别在 3/4 层封顶，深层仍保留可读的标签宽度。
+function createGroupIndentStyle(depth: number): TreeIndentStyle {
+  return {
+    '--pp-group-indent': `${12 + Math.min(depth, 3) * 18}px`,
+    '--pp-guide-indent': `${20 + Math.min(depth, 3) * 18}px`,
+  }
+}
+
+function createFieldIndentStyle(depth: number): TreeIndentStyle {
+  return {
+    '--pp-field-indent': `${depth === 0 ? 20 : 16 + Math.min(depth, 4) * 18}px`,
+    '--pp-branch-indent': `${20 + Math.min(Math.max(depth - 1, 0), 3) * 18}px`,
+  }
+}
+
+function resolveRendererLayout(
+  metadataLayout: PropertyPanelRenderer['layout'],
+  rendererLayout: PropertyPanelRenderer['layout'],
+): NonNullable<PropertyPanelRenderer['layout']> {
+  if (metadataLayout === 'inline' || metadataLayout === 'full-width') return metadataLayout
+  if (rendererLayout === 'inline' || rendererLayout === 'full-width') return rendererLayout
+  return 'inline'
 }
 
 function createUniqueKey(keys: ReadonlySet<string>): string {
@@ -914,9 +1517,11 @@ function matchesNode(
 
   let filterMatches = true
   if (view.filter === 'modified') {
-    filterMatches = view.hasDefaultValue && !deepEqual(value, baseline)
+    filterMatches = (view.hasDefaultValue && !deepEqual(value, baseline))
+      || view.boundTargets.some((target) => isPathAtOrBelow(target.address.path, path))
   } else if (view.filter === 'errors') {
     filterMatches = issuesAtPath(view.issues, path, true).length > 0
+      || view.bindingIssues.some((issue) => isPathAtOrBelow(issue.target.path, path))
   }
   return queryMatches && filterMatches
 }
@@ -1015,6 +1620,10 @@ function issuesAtPath(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function isPathAtOrBelow(candidate: PropertyPath, ancestor: PropertyPath): boolean {
+  return ancestor.every((segment, index) => Object.is(candidate[index], segment))
 }
 
 function deepEqual(left: unknown, right: unknown): boolean {

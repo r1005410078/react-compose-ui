@@ -143,7 +143,10 @@ const schema = v.object({
 
 面板提供搜索、全部/已修改/有错误筛选、默认值重置和两条可通过 Pointer 或键盘调整的三列
 分隔线。自定义语义类型通过实例级 renderer registry 扩展；Schema metadata 只保存稳定的
-editor ID，不保存 React 组件。完整 API、metadata 和主题变量见
+editor ID，不保存 React 组件。大型 renderer 可以采用标题行加全宽内容区，并由字段 metadata
+覆盖 renderer 默认布局。可选的受控 bindings 能把已有页面/全局变量单向绑定到内置字段或
+renderer 的稳定子目标；字面值与绑定关系分开保存，Canvas 可复用 `resolvePropertyBindings`
+计算 effective properties。完整 API、metadata 和主题变量见
 [`@compose-ui/property-panel` README](./packages/property-panel/README.md)。
 
 ## 独立使用场景树
@@ -209,10 +212,11 @@ bun run dev
 
 终端会显示 Vite 示例应用地址。打开页面后可以体验当前的最小流程：
 
-1. 在 Canvas Toolbar 点击“添加文本组件”。
-2. 点击中央画布中的“默认文本”，通过右侧 Schema 属性面板修改“文本内容”。
+1. 页面启动后默认选中 Rectangle 节点；展开“支持类型 Supported Types”查看全部内置类型族与
+   ECharts custom renderer，也可以通过 Canvas Toolbar 继续添加矩形组件。
+2. 点击“添加文本组件”，选择中央画布中的“默认文本”，通过右侧 Schema 属性面板修改文本。
 3. 使用属性搜索、筛选、重置和两条列分隔线。
-4. 点击“添加 ECharts 图表”，在自定义属性 UI 中编辑标题、类型、系列名称和数据。
+4. 点击“添加 ECharts 图表”，在独立的自定义属性 UI 中编辑标题、类型、系列名称和数据。
 5. 观察真实 ECharts Canvas、Scene Graph、属性面板和 Transaction Log 同步更新。
 6. 拖动边缘区分隔线调整尺寸，或点击 Edge Group 的活动标签折叠与展开。
 
@@ -277,7 +281,7 @@ bun run test:e2e
 - 页面文档 Schema 和版本迁移
 - 组件物料注册
 - 画布节点拖拽、缩放、对齐和图层编辑
-- 数据源绑定和表达式
+- 正式数据源协议、表达式和变量管理（属性面板只接受宿主提供的只读变量快照）
 - 撤销、重做以及跨页面或系统剪贴板复制粘贴
 - 页面保存、加载和生产发布协议
 - 工作区布局持久化、自定义面板注册和浮动窗口

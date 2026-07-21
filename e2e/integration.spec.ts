@@ -26,7 +26,7 @@ test('mounts ComposeEditor as the full-screen demo', async ({ page }) => {
   await expect(
     editor.locator('[data-workspace-tab="compose-inspector"]'),
   ).toHaveAttribute('title', 'Component')
-  await expect(editor.getByLabel('设置')).toBeVisible()
+  await expect(editor.getByRole('img', { name: '设置' })).toBeVisible()
   await expect(editor.getByText('日志', { exact: true })).toBeVisible()
   await expect(editor.getByText('命令', { exact: true })).toBeVisible()
 })
@@ -141,7 +141,7 @@ test('adds and edits a text component inside the editor', async ({ page }) => {
   await expect(textNode).toBeVisible()
 
   await textNode.click()
-  await editor.getByLabel('文本内容').fill('客户现场大屏')
+  await editor.getByLabel('文本内容', { exact: true }).fill('客户现场大屏')
 
   await expect(
     editor
@@ -161,7 +161,7 @@ test('OpenSpec: property-panel / 独立受控属性面板 / 宿主挂载属性�
   const panel = page.locator('[data-compose-ui="property-panel"]')
   await expect(panel).toBeVisible()
   await expect(panel.getByRole('searchbox', { name: '搜索属性' })).toBeVisible()
-  await panel.getByLabel('文本内容').fill('Schema 驱动文本')
+  await panel.getByLabel('文本内容', { exact: true }).fill('Schema 驱动文本')
   await expect(page.getByRole('region', { name: '编辑画布' })
     .getByRole('button', { name: 'Schema 驱动文本', exact: true })).toBeVisible()
 })
@@ -171,15 +171,15 @@ test('OpenSpec: property-panel / ECharts 自定义类型示例 / 编辑 ECharts 
   await page.getByRole('button', { name: '添加 ECharts 图表' }).click()
 
   const panel = page.locator('[data-compose-ui="property-panel"]')
-  await expect(panel.getByLabel('图表标题')).toHaveValue('季度销售额')
-  await panel.getByLabel('图表标题').fill('区域营收')
-  await panel.getByLabel('系列数据').fill('18, 32, 27, 41')
+  await expect(panel.getByLabel('图表标题', { exact: true })).toHaveValue('季度销售额')
+  await panel.getByLabel('图表标题', { exact: true }).fill('区域营收')
+  await panel.getByLabel('系列数据', { exact: true }).fill('18, 32, 27, 41')
 
   const chart = page.getByRole('img', { name: '区域营收 ECharts 图表' })
   await expect(chart).toBeVisible()
   await expect(chart.locator('canvas')).toHaveCount(1)
 
-  await panel.getByLabel('系列数据').fill('18, 无效')
+  await panel.getByLabel('系列数据', { exact: true }).fill('18, 无效')
   await expect(panel.getByRole('alert')).toContainText('请输入逗号分隔的数字')
   await expect(chart).toBeVisible()
 })
@@ -216,18 +216,77 @@ test('OpenSpec: property-panel / 嵌套与集合属性编辑 / 修改数组和�
   await expect(page.getByRole('textbox', { name: '关键词 3' })).toHaveValue('可视化')
 })
 
+test('OpenSpec: property-panel / 自适应属性操作轨道 / 窄列溢出并随列宽展开', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('button', { name: '默认文本', exact: true }).click()
+  const panel = page.getByRole('region', { name: '文本组件属性' })
+
+  await expect(panel.getByRole('button', { name: '更多 关键词 1 操作' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '删除 关键词 1' })).toHaveCount(0)
+  const separator = panel.getByRole('separator', { name: '调整操作列宽' })
+  await separator.focus()
+  await separator.press('Shift+ArrowLeft')
+
+  await expect(panel.getByRole('button', { name: '删除 关键词 1' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '更多 关键词 1 操作' })).toBeVisible()
+})
+
 test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 宿主加载属性面板样式', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
   await page.getByRole('button', { name: '添加矩形组件' }).click()
   const panel = page.locator('[data-compose-ui="property-panel"]')
   const inspector = page.locator('.inspector-panel')
+  const inspectorEdge = page.getByTestId('dv-edge-group-compose-inspector-edge')
   await expect(panel.getByText('Rectangle', { exact: true })).toBeVisible()
   await expect(panel.getByRole('button', { name: 'Transform' })).toBeVisible()
   await expect(panel.getByRole('button', { name: 'Appearance' })).toBeVisible()
   await expect(panel.getByRole('button', { name: '属性层级 Property Demo' })).toBeVisible()
   await expect(panel.getByRole('button', { name: 'Layout' })).toBeVisible()
   await expect(panel.getByRole('button', { name: 'State' })).toBeVisible()
+  await expect.poll(async () => Math.round((await inspectorEdge.boundingBox())?.width ?? 0)).toBe(400)
+  await expect.poll(async () => Math.round((await panel.boundingBox())?.width ?? 0)).toBe(365)
+  await expect(panel.getByRole('separator', { name: '调整属性名列宽' }))
+    .toHaveAttribute('aria-valuenow', '160')
+  await expect(panel.getByRole('separator', { name: '调整操作列宽' }))
+    .toHaveAttribute('aria-valuenow', '36')
+  const labelSeparator = panel.getByRole('separator', { name: '调整属性名列宽' })
+  const resizeHandle = labelSeparator.locator('.property-panel__resize-handle')
+  await expect(resizeHandle).toHaveCSS('opacity', '0')
+  await labelSeparator.hover()
+  await expect(resizeHandle).toHaveCSS('opacity', '1')
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__header').boundingBox())?.height ?? 0)).toBe(64)
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__toolbar').boundingBox())?.height ?? 0)).toBe(46)
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__group-header').first().boundingBox())?.height ?? 0)).toBe(37)
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__field').first().boundingBox())?.height ?? 0)).toBe(36)
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__control').first().boundingBox())?.width ?? 0)).toBeLessThanOrEqual(234)
+  const topEditorX = await panel.locator('[data-property-path="appearance.opacity"] .property-panel__editor').boundingBox()
+  const deepEditorX = await panel.locator('[data-property-path="propertyDemo.border.stroke.width"] .property-panel__editor').boundingBox()
+  expect(Math.round(deepEditorX?.x ?? 0)).toBe(Math.round(topEditorX?.x ?? 0))
+  const deepFieldLocator = panel.locator('[data-property-path="propertyDemo.border.stroke.width"]')
+  const deepLabelLocator = deepFieldLocator.locator('.property-panel__label')
+  const deepLabel = await deepLabelLocator.boundingBox()
+  const deepLabelPadding = await deepLabelLocator.evaluate((element) => (
+    Number.parseFloat(getComputedStyle(element).paddingLeft)
+  ))
+  const panelBox = await panel.boundingBox()
+  expect(Math.round((deepLabel?.x ?? 0) - (panelBox?.x ?? 0) + deepLabelPadding)).toBeLessThanOrEqual(90)
+  const treeLineGeometry = await deepFieldLocator.evaluate((field) => {
+    const branch = getComputedStyle(field, '::before')
+    const parentGroup = field.closest('.property-panel__group')
+    const groupContent = parentGroup?.querySelector(':scope > .property-panel__group-content')
+    const guide = groupContent ? getComputedStyle(groupContent, '::before') : null
+    return {
+      branchLeft: Number.parseFloat(branch.left),
+      branchWidth: Number.parseFloat(branch.width),
+      fieldIndent: Number.parseFloat(getComputedStyle(field).getPropertyValue('--pp-field-indent')),
+      guideLeft: guide ? Number.parseFloat(guide.left) : Number.NaN,
+    }
+  })
+  expect(treeLineGeometry.branchLeft).toBe(treeLineGeometry.guideLeft)
+  expect(treeLineGeometry.branchLeft + treeLineGeometry.branchWidth + 4)
+    .toBe(treeLineGeometry.fieldIndent)
   await page.mouse.move(800, 400)
   await expect(inspector).toHaveScreenshot('property-panel-default.png', {
     animations: 'disabled',
@@ -263,13 +322,231 @@ test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 宿主加�
   })
 })
 
+test('OpenSpec: property-panel / 默认节点类型覆盖 / 展开默认节点的完整类型展厅', async ({ page }) => {
+  await page.goto('/')
+  const panel = page.getByRole('region', { name: 'Rectangle 属性' })
+
+  await expect(panel.getByText('Rectangle', { exact: true })).toBeVisible()
+
+  const supportedTypes = panel.getByRole('button', {
+    name: '支持类型 Supported Types',
+    exact: true,
+  })
+  await expect(supportedTypes).toHaveAttribute('aria-expanded', 'false')
+  await supportedTypes.click()
+
+  for (const groupName of [
+    '基础类型 Primitives',
+    '存在性包装 Presence',
+    '集合结构 Collections',
+    '联合结构 Unions',
+    '自定义类型 Custom',
+  ]) {
+    await expect(panel.getByRole('button', { name: groupName, exact: true })).toBeVisible()
+  }
+
+  await panel.getByRole('button', { name: '基础类型 Primitives', exact: true }).click()
+  await expect(panel.getByLabel('字符串 String', { exact: true })).toHaveAttribute('type', 'text')
+  await expect(panel.getByLabel('数字 Number', { exact: true })).toHaveAttribute('type', 'number')
+  await expect(panel.getByLabel('大整数 BigInt', { exact: true })).toHaveAttribute('type', 'number')
+  await expect(panel.getByLabel('日期 Date', { exact: true })).toHaveAttribute('type', 'date')
+  await expect(panel.getByLabel('选择 Picklist', { exact: true })).toHaveRole('combobox')
+  await expect(panel.getByLabel('枚举 Enum', { exact: true })).toHaveRole('combobox')
+  await expect(panel.getByLabel('固定值 Literal', { exact: true })).toHaveText('rectangle')
+
+  await panel.getByRole('button', { name: '存在性包装 Presence', exact: true }).click()
+  await expect(panel.getByRole('checkbox', { name: '可选文本 Optional 存在' })).toBeVisible()
+  await expect(panel.getByRole('checkbox', { name: '可空文本 Nullable 存在' })).toBeVisible()
+  await expect(panel.getByRole('checkbox', { name: '空值文本 Nullish 存在' })).toBeVisible()
+
+  await panel.getByRole('button', { name: '集合结构 Collections', exact: true }).click()
+  await expect(panel.getByRole('button', { name: '列表 Array', exact: true })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '元组 Tuple', exact: true })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '可变元组 Tuple Rest', exact: true })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '记录 Record', exact: true })).toBeVisible()
+
+  await panel.getByRole('button', { name: '联合结构 Unions', exact: true }).click()
+  await expect(panel.getByRole('button', { name: '联合 Union', exact: true })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '变体 Variant', exact: true })).toBeVisible()
+
+  await panel.getByRole('button', { name: '自定义类型 Custom', exact: true }).click()
+  await expect(panel.getByLabel('图表标题', { exact: true })).toBeVisible()
+  const customField = panel.locator(
+    '[data-property-path="supportedTypes.custom.chartOption"][data-property-layout="full-width"]',
+  )
+  await expect(customField.getByRole('group', { name: '图表配置 EChartsOption' })).toBeVisible()
+  const customTreeGeometry = await customField.evaluate((field) => {
+    const branch = getComputedStyle(field, '::before')
+    const parentGroup = field.closest('.property-panel__group')
+    const groupContent = parentGroup?.querySelector(':scope > .property-panel__group-content')
+    const guide = groupContent ? getComputedStyle(groupContent, '::before') : null
+    return {
+      branchLeft: Number.parseFloat(branch.left),
+      branchTop: Number.parseFloat(branch.top),
+      guideLeft: guide ? Number.parseFloat(guide.left) : Number.NaN,
+    }
+  })
+  expect(customTreeGeometry.branchLeft).toBe(customTreeGeometry.guideLeft)
+  expect(customTreeGeometry.branchTop).toBe(17)
+})
+
+test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 显示 UE4 参考控件细节', async ({ page }) => {
+  await page.goto('/')
+  const panel = page.getByRole('region', { name: 'Rectangle 属性' })
+
+  await expect(panel.locator('[data-property-path="transform.position"]').getByLabel('X', { exact: true }))
+    .toHaveValue('0.0')
+  await expect(panel.locator('[data-property-path="transform.size"]').getByLabel('W', { exact: true }))
+    .toHaveValue('100.0')
+  await expect(panel.getByLabel('旋转 Angle', { exact: true })).toHaveValue('0.0')
+  await expect(panel.locator('[data-property-path="appearance.opacity"] input'))
+    .toHaveValue('1.0')
+  await expect(panel.locator('[data-property-path="appearance.cornerRadius"] input'))
+    .toHaveValue('4.0')
+  await expect(panel.locator('[data-property-path="propertyDemo.border.stroke.width"]'))
+    .toContainText('px')
+
+  const enabled = panel.getByRole('checkbox', { name: '交互状态 Is Enabled' })
+  await expect(enabled).toHaveCSS('appearance', 'none')
+  await expect(enabled).toHaveCSS('background-image', /svg/)
+  await expect(panel.locator('.visibility-property-editor svg').first()).toBeVisible()
+  await expect(panel.locator(
+    '.alignment-property-editor > button:not(.property-panel__binding-trigger) svg',
+  )).toHaveCount(8)
+  await expect.poll(async () => Math.round(
+    (await panel.locator('.color-property-editor input[type="color"]').first().boundingBox())?.width ?? 0,
+  )).toBe(28)
+
+  await expect(panel.getByRole('button', { name: 'Advanced' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(panel.getByRole('button', { name: 'Diagnostics' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(panel.getByRole('button', { name: '支持类型 Supported Types' }))
+    .toHaveAttribute('aria-expanded', 'false')
+
+  const opacity = panel.locator('[data-property-path="appearance.opacity"] input')
+  await opacity.fill('2.0')
+  await opacity.blur()
+  await expect(opacity).toHaveValue('2.0')
+  await expect(panel.getByRole('alert')).toContainText('完整属性值不符合 Schema')
+})
+
+test('OpenSpec: property-panel / 受控属性变量绑定 / Rectangle 逻辑输入绑定到页面变量', async ({ page }) => {
+  await page.goto('/')
+  const panel = page.getByRole('region', { name: 'Rectangle 属性' })
+  const canvasRectangle = page.getByRole('button', { name: '选择 Rectangle' })
+  const position = panel.locator('[data-property-path="transform.position"]')
+  const trigger = position.getByRole('button', { name: '绑定 X' })
+
+  await expect(trigger).toHaveCSS('opacity', '0')
+  await position.hover()
+  await expect(trigger).toHaveCSS('opacity', '1')
+  await trigger.click()
+  await page.getByRole('button', { name: /页面偏移 X/ }).click()
+
+  await expect(position.getByLabel('X', { exact: true })).toHaveValue('24.0')
+  await expect(position.getByLabel('X', { exact: true })).toHaveAttribute('readonly')
+  await expect(position.getByRole('button', { name: '更换绑定 X' })).toHaveCSS('opacity', '1')
+  await expect(canvasRectangle).toHaveCSS('transform', /matrix\(1, 0, 0, 1, 24, 0\)/)
+
+  const opacity = panel.locator('[data-property-path="appearance.opacity"]')
+  await opacity.hover()
+  await opacity.getByRole('button', { name: '绑定 不透明度 Opacity' }).click()
+  await page.getByRole('button', { name: /页面透明度/ }).click()
+  await expect(opacity.getByLabel('不透明度 Opacity', { exact: true })).toHaveValue('0.7')
+
+  const color = panel.locator('[data-property-path="appearance.color"]')
+  await color.hover()
+  await color.getByRole('button', { name: '绑定 颜色 Color' }).click()
+  await page.getByRole('button', { name: /页面强调色/ }).click()
+  await expect(color.getByLabel('颜色值', { exact: true })).toHaveValue('#22C55E')
+  await expect(canvasRectangle).toHaveCSS('background-color', 'rgb(34, 197, 94)')
+})
+
+test('OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / ECharts 标题与数据独立绑定', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加 ECharts 图表' }).click()
+  const panel = page.getByRole('region', { name: 'ECharts 图表属性' })
+  const optionField = panel.locator('[data-property-path="chart.option"]')
+
+  await optionField.hover()
+  await panel.getByRole('button', { name: '绑定 图表标题' }).click()
+  await page.getByRole('button', { name: /全局图表标题/ }).click()
+  await expect(panel.getByLabel('图表标题', { exact: true })).toHaveValue('全局季度销售额')
+  await expect(panel.getByLabel('图表标题', { exact: true })).toHaveAttribute('readonly')
+  await expect(page.getByRole('img', { name: '全局季度销售额 ECharts 图表' })).toBeVisible()
+
+  await optionField.hover()
+  await panel.getByRole('button', { name: '绑定 系列数据' }).click()
+  await page.getByRole('button', { name: /全局图表数据/ }).click()
+  await expect(panel.getByLabel('系列数据', { exact: true })).toHaveValue('18, 30, 22, 42')
+  await expect(panel.getByLabel('系列数据', { exact: true })).toHaveAttribute('readonly')
+})
+
+test('OpenSpec: property-panel / 受控属性变量绑定 / 默认变量选择器视觉', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 })
+  await page.goto('/')
+  const panel = page.getByRole('region', { name: 'Rectangle 属性' })
+  const inspector = page.locator('.inspector-panel')
+  const color = panel.locator('[data-property-path="appearance.color"]')
+  await color.hover()
+  await color.getByRole('button', { name: '绑定 颜色 Color' }).click()
+  await expect(page.getByRole('dialog', { name: '绑定 颜色 Color' })).toBeVisible()
+  await expect(inspector).toHaveScreenshot('property-panel-binding-picker.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+})
+
 test('OpenSpec: property-panel / ECharts 自定义类型示例 / 选择 ECharts 图表组件', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: '添加 ECharts 图表' }).click()
-  await page.getByLabel('图表类型').selectOption('line')
+  const panel = page.locator('[data-compose-ui="property-panel"]')
+  const fullWidthField = panel.locator(
+    '[data-property-path="chart.option"][data-property-layout="full-width"]',
+  )
+  const rendererContent = fullWidthField.getByRole('group', { name: '图表配置' })
+  await expect(rendererContent).toBeVisible()
+
+  const panelBox = await panel.boundingBox()
+  const rendererBox = await rendererContent.locator('.echart-option-editor').boundingBox()
+  expect(panelBox).not.toBeNull()
+  expect(rendererBox).not.toBeNull()
+  expect(rendererBox!.x).toBeLessThan(panelBox!.x + 80)
+  expect(rendererBox!.x + rendererBox!.width).toBeGreaterThan(panelBox!.x + panelBox!.width - 12)
+  const rendererWidth = Math.round(rendererBox!.width)
+
+  await panel.getByRole('separator', { name: '调整属性名列宽' }).dispatchEvent('keydown', {
+    key: 'ArrowRight',
+    shiftKey: true,
+  })
+  await panel.getByRole('separator', { name: '调整操作列宽' }).dispatchEvent('keydown', {
+    key: 'ArrowLeft',
+  })
+  await expect.poll(async () => Math.round(
+    (await rendererContent.locator('.echart-option-editor').boundingBox())?.width ?? 0,
+  )).toBe(rendererWidth)
+  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+
+  const fullWidthContentWinsHitTest = await panel.evaluate((element) => {
+    const preview = element.querySelector('.echart-editor-preview')
+    if (!preview) return false
+    const panelRect = element.getBoundingClientRect()
+    const previewRect = preview.getBoundingClientRect()
+    const labelWidth = Number.parseFloat(
+      getComputedStyle(element).getPropertyValue('--pp-label-width'),
+    )
+    const hit = document.elementFromPoint(
+      panelRect.left + labelWidth,
+      previewRect.top + previewRect.height / 2,
+    )
+    return Boolean(hit?.closest('[data-property-renderer-content]'))
+  })
+  expect(fullWidthContentWinsHitTest).toBe(true)
+
+  await page.getByLabel('图表类型', { exact: true }).selectOption('line')
   await page.mouse.move(800, 400)
 
-  await expect(page.locator('[data-compose-ui="property-panel"]')).toHaveScreenshot(
+  await expect(panel).toHaveScreenshot(
     'property-panel-echart-editor.png',
     { animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.01 },
   )
@@ -302,20 +579,20 @@ test('OpenSpec: scene-tree / 新增节点入口 / 连续新增多个节点', asy
 
   const tree = page.getByRole('treegrid', { name: '场景树' })
   const canvas = page.getByRole('region', { name: '编辑画布' })
-  await expect(tree.getByRole('row')).toHaveCount(21)
-  await expect(canvas.getByRole('button')).toHaveCount(20)
+  await expect(tree.getByRole('row')).toHaveCount(22)
+  await expect(canvas.getByRole('button')).toHaveCount(21)
   await expect(tree.getByRole('row', { name: /默认文本 20/ })).toBeVisible()
 
   await tree.getByRole('row', { name: /默认文本 3/ }).click()
-  await page.getByLabel('文本内容').fill('第三个文本')
+  await page.getByLabel('文本内容', { exact: true }).fill('第三个文本')
   await expect(tree.getByRole('row', { name: /第三个文本/ })).toBeVisible()
   await expect(canvas.getByRole('button', { name: '第三个文本' })).toBeVisible()
   await expect(canvas.getByRole('button', { name: '默认文本 2', exact: true })).toBeVisible()
   await expect(canvas.getByRole('button', { name: '默认文本 4', exact: true })).toBeVisible()
 
   await tree.getByRole('row', { name: /第三个文本/ }).press('Delete')
-  await expect(tree.getByRole('row')).toHaveCount(20)
-  await expect(canvas.getByRole('button')).toHaveCount(19)
+  await expect(tree.getByRole('row')).toHaveCount(21)
+  await expect(canvas.getByRole('button')).toHaveCount(20)
   await expect(canvas.getByRole('button', { name: '第三个文本' })).toHaveCount(0)
 })
 
@@ -349,7 +626,7 @@ test('OpenSpec: scene-tree / 默认编辑器复制节点 / 复制文本组件并
   const copy = tree.locator('[data-scene-node-id="text-3"]')
   await expect(copy).toBeVisible()
   await expect(copy).toHaveAttribute('aria-selected', 'true')
-  await page.getByLabel('文本内容').fill('复制后的文本')
+  await page.getByLabel('文本内容', { exact: true }).fill('复制后的文本')
   await expect(copy).toContainText('复制后的文本')
   await expect(first).toContainText('默认文本')
   await expect(page.getByRole('region', { name: '编辑画布' }).getByRole('button', { name: '复制后的文本' })).toBeVisible()
@@ -370,7 +647,9 @@ test('deleting a parent removes its complete subtree from the tree and canvas', 
 
   await expect(tree.locator('[data-scene-node-id="text-1"]')).toHaveCount(0)
   await expect(tree.locator('[data-scene-node-id="text-2"]')).toHaveCount(0)
-  await expect(page.getByRole('region', { name: '编辑画布' }).getByRole('button')).toHaveCount(0)
+  const canvas = page.getByRole('region', { name: '编辑画布' })
+  await expect(canvas.getByRole('button')).toHaveCount(1)
+  await expect(canvas.getByRole('button', { name: '选择 Rectangle' })).toBeVisible()
 })
 
 test('OpenSpec: scene-tree / 场景树命令菜单与快捷键 / 打开节点命令菜单', async ({ page }) => {
@@ -829,7 +1108,6 @@ test('OpenSpec: scene-tree / 大规模虚拟化树 / 渲染 5000 个展开节点
 test('OpenSpec: scene-tree / 场景树视觉与样式隔离 / 显示默认场景树外观', async ({ page }) => {
   await page.goto('/')
   const pageRow = page.getByRole('treegrid', { name: '场景树' }).locator('[data-scene-node-id="page"]')
-  await pageRow.click({ modifiers: ['Control'] })
   await page.mouse.move(800, 400)
   const addButton = page.getByRole('button', { name: '新增节点', exact: true })
   const toolbar = addButton.locator('..')
@@ -875,7 +1153,7 @@ test('OpenSpec: scene-tree / 场景树视觉与样式隔离 / 显示默认场景
     const pageBox = await pageRow.boundingBox()
     const selectedBox = await selectedRow.boundingBox()
     return (selectedBox?.y ?? 0) - (pageBox?.y ?? 0)
-  }).toBe(24)
+  }).toBe(48)
   await expect(selectedRow).toHaveCSS('background-color', 'rgb(55, 55, 61)')
   await expect(selectedRow).toHaveCSS('box-shadow', 'none')
   await expect(page).toHaveScreenshot('scene-tree-selected.png', {
@@ -885,6 +1163,7 @@ test('OpenSpec: scene-tree / 场景树视觉与样式隔离 / 显示默认场景
   })
 
   await selectedRow.press('ArrowUp')
+  await page.keyboard.press('ArrowUp')
   await expect(pageRow).toBeFocused()
   await expect(pageRow).toHaveCSS('background-color', 'rgb(6, 47, 74)')
   await expect.poll(async () => pageRow.evaluate(

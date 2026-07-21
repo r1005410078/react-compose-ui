@@ -45,11 +45,14 @@ Valibot Schema 是可遍历的普通对象：Schema 通过 `type` 标识种类�
 
 ### 自定义 renderer registry
 
-- renderer 定义包含稳定 `id`、可选 `matches`、React Component 和可选默认值生成函数。
+- renderer 定义包含稳定 `id`、可选 `matches`、React Component、可选默认值生成函数，以及可选的
+  `inline`/`full-width` 默认布局。
 - 解析顺序为：metadata 显式 editor ID、调用方 renderer matcher、包内置 renderer、不支持状态。
 - 同 ID 的实例 renderer 可以覆盖内置 renderer；registry 不写入模块全局状态。
 - renderer props 包含 path、schema、metadata、value、issues、readOnly 和 `commit(candidate)`。
   自定义 renderer 可以拥有临时 UI 状态，但所有提交仍经过面板的完整 Schema 校验。
+- 字段 metadata 可以覆盖匹配 renderer 的默认布局；全宽模式由面板保留标题和统一操作行，renderer
+  在下一行跨越三列，避免大型控件自行重复实现搜索、重置和存在性语义。
 
 ### 校验、草稿和默认值
 
@@ -80,7 +83,7 @@ Valibot Schema 是可遍历的普通对象：Schema 通过 `type` 标识种类�
 - ECharts 仅作为示例应用依赖，不进入属性面板包的依赖或公共声明。
 - 示例定义 `EChartOption` 的同步 `v.custom` Schema，并通过 metadata 指定
   `editor: 'echart'`；validator 至少验证 option 为普通对象且 series 为可接受数组。
-- 示例注册 `echart` renderer，字段行显示图表类型和 series 数量摘要，并提供编辑入口。
+- 示例注册默认使用 `full-width` 的 `echart` renderer，在统一标题行下展示完整结构化编辑器。
 - 编辑界面提供标题、图表类型、series 名称和数值的结构化控件以及真实 ECharts 预览；不会把
   option 退化为无约束 JSON 字符串。
 - 示例新增 ECharts 图表节点，Scene Tree、Canvas、PropertyPanel 使用同一份受控临时状态；

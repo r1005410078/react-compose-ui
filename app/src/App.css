@@ -25,8 +25,8 @@ button {
 }
 
 .inspector-panel::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .inspector-panel::-webkit-scrollbar-track {
@@ -34,7 +34,7 @@ button {
 }
 
 .inspector-panel::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   border-radius: 999px;
   background: #454d59;
   background-clip: content-box;
@@ -219,8 +219,8 @@ button {
 
 .rectangle-component-icon {
   display: grid;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border: 1px solid #34383d;
   border-radius: 5px;
@@ -232,8 +232,8 @@ button {
 }
 
 .rectangle-component-icon svg {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   filter: drop-shadow(0 0 3px rgb(30 112 255 / 64%));
 }
 
@@ -252,14 +252,15 @@ button {
 }
 
 .compound-number-editor label {
+  position: relative;
   display: grid;
   min-width: 0;
-  height: 27px;
+  height: 28px;
   grid-template-columns: 25px minmax(0, 1fr);
   align-items: center;
   overflow: hidden;
-  border: 1px solid #393a3a;
-  border-radius: 5px;
+  border: 1px solid #343535;
+  border-radius: 4px;
   color: #b7b8b8;
   background: linear-gradient(180deg, #131414, #0c0d0d);
   box-shadow: inset 0 1px 3px rgb(0 0 0 / 46%);
@@ -290,21 +291,127 @@ button {
   appearance: textfield;
 }
 
+.scalar-number-editor {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  align-items: center;
+}
+
+.scalar-number-editor > input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 3px 9px;
+  border: 1px solid #343535;
+  border-radius: 4px;
+  outline: 0;
+  color: #dedede;
+  background: linear-gradient(180deg, #121313, #0b0c0c);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 52%);
+  appearance: textfield;
+}
+
+.scalar-number-editor > .property-panel__binding-trigger,
+.compound-number-editor .property-panel__binding-trigger,
+.color-property-editor > .property-panel__binding-trigger,
+.visibility-property-editor > .property-panel__binding-trigger,
+.alignment-property-editor > .property-panel__binding-trigger,
+.echart-option-editor .property-panel__binding-trigger {
+  width: 24px;
+  max-width: 24px;
+}
+
+.compound-number-editor .property-panel__binding-trigger,
+.scalar-number-editor > .property-panel__binding-trigger,
+.color-property-editor > .property-panel__binding-trigger,
+.visibility-property-editor > .property-panel__binding-trigger,
+.echart-option-editor .property-panel__binding-trigger {
+  position: absolute;
+  z-index: 3;
+  top: 1px;
+  right: 2px;
+  background: #11171c;
+}
+
+.compound-number-editor label:has(.property-panel__binding-trigger--bound) input,
+.scalar-number-editor:has(.property-panel__binding-trigger--bound) > input,
+.echart-option-editor label:has(.property-panel__binding-trigger--bound) > input,
+.echart-option-editor label:has(.property-panel__binding-trigger--bound) > select {
+  padding-right: 28px;
+}
+
+.scalar-number-editor:has(> span) > .property-panel__binding-trigger {
+  right: 28px;
+}
+
+.color-property-editor > .property-panel__binding-trigger,
+.visibility-property-editor > .property-panel__binding-trigger {
+  right: 22px;
+}
+
+.color-property-editor:has(.property-panel__binding-trigger--bound) input:not([type="color"]),
+.visibility-property-editor:has(.property-panel__binding-trigger--bound) select {
+  padding-right: 28px;
+}
+
+.scalar-number-editor:has(> span):has(.property-panel__binding-trigger--bound) > input {
+  padding-right: 58px;
+}
+
+.scalar-number-editor:has(> span) > input {
+  padding-right: 34px;
+}
+
+.scalar-number-editor > span {
+  position: absolute;
+  right: 10px;
+  color: #c8c9c9;
+  pointer-events: none;
+}
+
+.scalar-number-editor > input:focus {
+  border-color: #3979c9;
+}
+
+.scalar-number-editor > input[aria-invalid="true"] {
+  border-color: #b85555;
+}
+
+.numeric-draft-error {
+  position: absolute;
+  z-index: 10;
+  top: 31px;
+  right: 0;
+  width: max-content;
+  max-width: 234px;
+  padding: 4px 7px;
+  border: 1px solid #784242;
+  border-radius: 3px;
+  color: #ffc5c5;
+  background: #351f22;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 42%);
+  font-size: 11px;
+}
+
 .compound-number-editor input::-webkit-inner-spin-button,
 .compound-number-editor input::-webkit-outer-spin-button {
   appearance: none;
 }
 
 .color-property-editor {
+  position: relative;
   display: grid;
   width: 100%;
   min-width: 0;
   height: 28px;
-  grid-template-columns: 43px minmax(0, 1fr) 25px;
+  grid-template-columns: 35px minmax(0, 1fr) 24px;
   align-items: center;
   overflow: hidden;
-  border: 1px solid #393a3a;
-  border-radius: 5px;
+  border: 1px solid #343535;
+  border-radius: 4px;
   background: linear-gradient(180deg, #131414, #0c0d0d);
   box-shadow: inset 0 1px 3px rgb(0 0 0 / 46%);
 }
@@ -314,9 +421,9 @@ button {
 }
 
 .color-property-editor input[type="color"] {
-  width: 35px;
+  width: 28px;
   height: 22px;
-  margin-left: 5px;
+  margin-left: 4px;
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -357,15 +464,25 @@ button {
 }
 
 .alignment-property-editor {
+  position: relative;
   display: grid;
   width: 100%;
   min-width: 0;
-  height: 29px;
+  height: 28px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid #393a3a;
-  border-radius: 5px;
+  border: 1px solid #343535;
+  border-radius: 4px;
   background: #101111;
+}
+
+.alignment-property-editor > .property-panel__binding-trigger {
+  position: absolute;
+  z-index: 2;
+  right: 2px;
+  top: 1px;
+  border: 1px solid transparent;
+  background: #10161c;
 }
 
 .alignment-property-editor button {
@@ -390,37 +507,62 @@ button {
   box-shadow: inset 0 0 0 1px #286cbd, inset 0 5px 12px rgb(55 135 245 / 10%);
 }
 
-.alignment-property-editor button > span {
+.alignment-property-editor button > svg {
+  width: 24px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: square;
+  stroke-width: 1.8;
+  filter: drop-shadow(0 1px #000);
+}
+
+.visibility-property-editor {
   position: relative;
-  display: flex;
-  width: 23px;
-  height: 17px;
-  flex-direction: column;
-  justify-content: space-around;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  grid-template-columns: 28px minmax(0, 1fr) 24px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #343535;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #121313, #0b0c0c);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 52%);
 }
 
-.alignment-property-editor button i {
-  display: block;
-  width: 14px;
-  height: 2px;
-  background: currentColor;
-  box-shadow: 0 1px #000;
+.visibility-property-editor > svg {
+  width: 18px;
+  height: 18px;
+  justify-self: center;
+  fill: none;
+  stroke: #aeb0b0;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
 }
 
-.alignment-property-editor [data-alignment="start"] i {
-  align-self: flex-start;
+.visibility-property-editor > svg:last-child {
+  width: 15px;
+  height: 15px;
+  pointer-events: none;
 }
 
-.alignment-property-editor [data-alignment="center"] i {
-  align-self: center;
+.visibility-property-editor select {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: #d7d8d8;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
 }
 
-.alignment-property-editor [data-alignment="end"] i {
-  align-self: flex-end;
-}
-
-.alignment-property-editor [data-alignment="stretch"] i {
-  width: 22px;
+.visibility-property-editor:focus-within {
+  border-color: #3979c9;
 }
 
 .echart-node,
@@ -438,6 +580,7 @@ button {
 }
 
 .echart-option-editor > label {
+  position: relative;
   display: grid;
   min-width: 0;
   grid-template-columns: 34px minmax(0, 1fr);
@@ -487,16 +630,6 @@ button {
   border: 1px solid #333b46;
   border-radius: 4px;
   background: #11151a;
-}
-
-.property-panel .property-panel__field:has(.echart-option-editor) {
-  min-height: 300px;
-  align-items: start;
-}
-
-.property-panel .property-panel__field:has(.echart-option-editor) > .property-panel__label {
-  min-height: 300px;
-  justify-content: flex-start;
 }
 
 .inspector-heading {

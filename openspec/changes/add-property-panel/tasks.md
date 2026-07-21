@@ -124,3 +124,121 @@
   全部通过；Chromium 33/33，property-panel 30/30。
 - Package result：`bun run pack:dry-run` 的 5 个公共包全部通过；property-panel 包含公开声明、
   JS、CSS 和 README，unpacked 53.42KB。
+
+## 8. 默认节点完整类型覆盖（Red → Green → Refactor）
+
+- [x] 8.1 Red：新增 Rectangle 默认节点完整类型展厅 E2E，并确认当前缺少支持类型分组
+- [x] 8.2 Green：扩展 Rectangle Schema、默认值和 renderer registry，覆盖全部已支持类型族
+- [x] 8.3 Refactor：保持类型演示默认折叠，不破坏 UE 主属性视觉和 ECharts 独立示例
+- [x] 8.4 Regression：运行 strict validate、lint、typecheck、test、build 和 Chromium E2E
+- [x] 8.5 Clarification：示例启动时直接创建并选中 Rectangle，不要求用户先点击新增按钮
+
+### 8.x 执行证据
+
+- Red command/result/reason：`bunx playwright test --grep '展开默认节点的完整类型展厅' --workers=1`；
+  1/1 按目标行为失败，Rectangle 面板尚无“支持类型 Supported Types”分组。
+- Green command/result：同一命令 1/1 通过；Rectangle 默认节点现已覆盖 string、number、bigint、
+  boolean、date、literal、picklist、enum、object、optional、nullable、nullish、array、tuple/rest、
+  record、union、variant，并通过自定义 renderer 展示 EChartsOption。
+- Clarification Red command/result/reason：移除目标 E2E 中“添加矩形组件”点击后，同一命令 1/1 失败；
+  首屏找不到 Rectangle 属性面板，证明实现仍依赖用户手动新增。
+- Clarification Green command/result：初始化 Scene Tree、Canvas、受控 Rectangle 数据和选择状态后，
+  同一命令 1/1 通过；无需任何操作即可展开完整类型展厅。
+- Refactor/visual result：完整类型展厅及其五个子分组默认折叠；浏览器实际首屏确认 Scene Tree、Canvas、
+  属性面板三处均显示并选中 Rectangle；属性面板黄金图保持不变，受新首屏影响的场景树全页黄金图已
+  更新并通过回归。
+- Regression command/result：`bun run lint`、`bun run typecheck`、`bun run test` 通过；
+  `bun run test:e2e` 同时完成 6/6 packages 构建及 Chromium 34/34 测试，全部通过。
+
+## 9. UE4 视觉精细还原（Red → Green → Refactor）
+
+- [x] 9.1 Red：锁定 650px Inspector、236/36px 列宽、234px 控件轨道及紧凑区域高度
+- [x] 9.2 Green：实现公共包默认 UE4 几何、层次、缩进、Checkbox 和窄面板响应式行为
+- [x] 9.3 Green：实现 Rectangle 小数、内嵌单位、Visibility、Color 与 Alignment 细节
+- [x] 9.4 Refactor：浏览器逐项对照参考图并更新必要的视觉黄金文件
+- [x] 9.5 Regression：运行 strict validate、lint、typecheck、test、build、Chromium E2E 和 diff check
+
+### 9.x 执行证据
+
+- Red command/result/reason：`bun run --cwd packages/property-panel test` 中 2/30 按目标失败，默认及恢复
+  列宽仍为 160px；`bun run --cwd packages/editor test` 中 1/11 按目标失败，Inspector 仍为 480px；
+  `bunx playwright test --grep '宿主加载属性面板样式' --workers=1` 1/1 按目标失败，首个几何断言
+  实测 480px 而非 650px。
+- Green command/result：property-panel 30/30、editor 11/11 通过；目标 Chromium 几何与控件细节
+  2/2 通过。浏览器实测 Inspector 650px、属性面板内容 615px、两列 236/36px、普通控件轨道
+  234px，Header/工具栏/一级分组/字段行/输入框分别为 64/46/37/36/28px；窄面板 clamp、Pointer
+  拖动、键盘调整和恢复默认列宽均通过组件回归。
+- Visual review：使用浏览器逐项检查默认、resize 与 ECharts 展开状态；Rectangle 的一位小数、内嵌
+  `°`/`px`、眼睛 Visibility、深色 Checkbox、四种 Alignment 图标和 28px 色块与参考图一致，Advanced、
+  Diagnostics、Supported Types 默认折叠。ECharts 自定义 renderer 的 control/editor 实测 326/342px，
+  未受 234px 上限约束；已更新 property-panel 三张基线及受 Inspector 变宽影响的场景树全页基线，人工
+  检查无裁切、重叠或非预期状态。
+- Regression command/result：`openspec validate add-property-panel --strict`、`bun run lint`、
+  `bun run typecheck`、`bun run test`、`bun run build`、`bun run test:e2e`、`bun run pack:dry-run`
+  和 `git diff --check` 全部通过；Chromium 35/35，property-panel 30/30，5 个公共包 dry-run 成功。
+
+## 10. Inspector 宽度与深层树紧凑化（Red → Green → Refactor）
+
+- [x] 10.1 Research：核对桌面 Inspector 的常见默认宽度与可调整模式
+- [x] 10.2 Red：锁定 400px Inspector、160/36px 默认列宽与深层共享编辑列
+- [x] 10.3 Green：移除嵌套内容整体偏移，改为小步长、深度封顶的标题/标签/引导线缩进
+- [x] 10.4 Visual：浏览器检查 Rectangle 深层属性、默认布局和 resize 基线
+- [x] 10.5 Regression：运行 strict validate、lint、typecheck、test、build、Chromium E2E 和 diff check
+
+### 10.x 执行证据
+
+- Research：Apple AppKit 的标准 Inspector 宽度为 270pt；SwiftUI 官方示例使用 225pt ideal、400pt max；
+  Figma 与 Godot 官方文档均采用可调整面板。结合中英双语标签，本示例选择 400px 作为紧凑默认值。
+- Red command/result/reason：`bun run --cwd packages/property-panel test` 新增/更新用例 3/31 按目标失败，
+  默认列宽仍为 236px 且深层字段没有受控深度；`bun run --cwd packages/editor test` 1/11 按目标失败，
+  Inspector 仍为 650px。目标 Chromium 用例在全部新几何断言通过后，仅因旧 615px 黄金图失败。
+- Green command/result：property-panel 31/31、editor 11/11 通过；六层嵌套字段的标签缩进封顶为 62px，
+  分组缩进封顶为 84px。键盘列宽与 Supported Types 点击目标 E2E 2/2 通过；分隔线命中区由 9px
+  收紧至 5px，不再遮挡窄面板中的分组按钮。
+- Visual review：浏览器实测 Inspector/内容区/属性名列为 400/365/160px，顶层与深层编辑列 X 坐标
+  完全一致，Rectangle 深层文字起点 70px、六层嵌套封顶 88px，横向溢出为 0；人工检查默认、
+  resize、ECharts 和全页基线，无裁切、重叠或不可见字段。
+- Tree-line correction Red/Green：新增伪元素坐标断言后 property-panel 1/31 按目标失败，字段支线使用
+  14px 步长而父级竖线使用 18px 步长；统一坐标公式后 31/31 通过。浏览器实测 Stroke 子字段的
+  branch/guide 均为 56px，Supported Types 基础字段均为 38px，支线宽度统一为 10px、文字间隔为 4px。
+- Regression command/result：`bun run lint`、`bun run typecheck`、`bun run test`、`bun run build`、
+  `bun run test:e2e` 与 `bun run pack:dry-run` 全部通过；Chromium 35/35、property-panel 31/31、
+  editor 11/11、5 个公共包 dry-run 成功；OpenSpec strict 与 `git diff --check` 亦通过，校验结束后的
+  遥测域名不可达警告不影响结果。
+
+## 11. 自定义 Renderer 全宽布局（Red → Green → Refactor）
+
+- [x] 11.1 Spec：补充 renderer 布局、metadata 覆盖优先级和全宽内容行为
+- [x] 11.2 Red：为 inline 默认值、full-width、双向 metadata 覆盖及统一操作添加失败组件测试
+- [x] 11.3 Green：实现公共布局类型、全宽标题/内容结构、树线定位和分隔线交互隔离
+- [x] 11.4 Example：将 ECharts renderer 迁移到全宽布局并移除应用级 `:has()` 布局特例
+- [x] 11.5 Docs/Visual：更新包文档、Chromium 几何断言和 ECharts 视觉基线
+- [x] 11.6 Regression：运行 strict validate、lint、typecheck、test、build、Chromium E2E、pack dry run 和 diff check
+
+### 11.x 执行证据
+
+- Red command/result/reason：`bun run --cwd packages/property-panel test`；新增 3 条全宽布局组件测试
+  按目标失败，当前 renderer 定义忽略 `layout`，没有标题行加可访问全宽内容区；原有 31 条测试通过。
+  `openspec validate add-property-panel --strict` 同时通过，仅有遥测域名不可达警告。
+- E2E Red command/result/reason：`bunx playwright test --grep '选择 ECharts 图表组件$' --workers=1`；
+  1/1 按目标失败，示例 registry 尚未声明全宽布局，找不到 `chart.option` 的全宽可访问内容区。
+- Green command/result：`bun run --cwd packages/property-panel test` 35/35 通过，包 typecheck 通过；
+  ECharts 几何、列宽无关性、点击命中和深层树线两个目标 Chromium 用例均通过。
+- Visual result：浏览器检查独立 ECharts 与 Rectangle 类型展厅；标题和操作位于紧凑首行，内容从
+  当前树缩进延伸至面板右侧，父级竖线与标题支线对齐，分隔线不穿过内容。人工确认后将 ECharts
+  属性面板黄金图从 365×450 更新为 365×468。
+- Regression command/result：`openspec validate add-property-panel --strict`、`bun run lint`、
+  `bun run typecheck`、`bun run test`、`bun run build`、`bun run test:e2e`、`bun run pack:dry-run`
+  和 `git diff --check` 全部通过；Chromium 35/35、property-panel 35/35、5 个公共包 dry-run 成功。
+
+## 12. 分隔线拖拽柄按需显示
+
+- [x] 12.1 Red：在属性面板视觉 E2E 中断言拖拽柄默认透明、hover 后显示
+- [x] 12.2 Green：拖拽柄仅在分隔线 hover、键盘 focus-visible 或按下拖动时显示
+
+### 12.x 执行证据
+
+- Red command/result/reason：`bunx playwright test --grep '宿主加载属性面板样式' --workers=1`；1/1 按
+  目标失败，拖拽柄初始 opacity 为 1。
+- Green command/result：重新构建后同一命令 1/1 通过；默认 opacity 为 0，hover 后为 1，视觉
+  黄金图保持通过。
