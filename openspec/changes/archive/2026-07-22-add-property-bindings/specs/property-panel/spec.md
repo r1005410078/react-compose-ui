@@ -22,13 +22,33 @@
 
 ### Requirement: 受控属性变量绑定
 
-系统 MUST 允许宿主把页面或全局变量单向绑定到可编辑逻辑输入，并 MUST 将绑定关系与 Valibot 字面
-input 分开受控。未提供绑定配置时现有属性面板行为 MUST 保持兼容。
+系统 MUST 允许宿主把页面或全局变量单向绑定到显式声明可绑定的逻辑输入，并 MUST 将绑定关系与
+Valibot 字面 input 分开受控。所有字段 MUST 通过 Schema metadata 显式授权；自定义类型还 MUST 通过
+renderer 的 binding target descriptor 描述可绑定子目标。未提供绑定配置时现有属性面板行为 MUST
+保持兼容。
+
+#### Scenario: 未声明字段不启用变量绑定
+- **WHEN** 宿主提供 binding 配置，但内置或自定义字段没有声明 `propertyPanel.binding.enabled: true`
+- **THEN** 字段不显示绑定入口并继续作为普通字面输入编辑
+- **AND** 指向该字段的外部 binding 地址被报告为不存在的目标且不会改变 effective value
+
+#### Scenario: 显式启用内置字段变量绑定
+- **WHEN** 内置字段声明 `propertyPanel.binding.enabled: true` 且宿主提供 binding 配置
+- **THEN** 字段显示绑定入口并使用固定 target ID `value`
+- **AND** `semanticScope` 和宿主 `canBind` 继续过滤兼容候选
 
 #### Scenario: 绑定类型兼容变量
 - **WHEN** 用户在属性绑定选择器中选择通过目标 Schema、语义 scope 和宿主规则的变量
 - **THEN** 面板发出独立 binding change 而不修改字面 value
-- **AND** 输入显示变量名称和解析预览并阻止直接字面编辑
+- **AND** 输入显示解析后的有效值并阻止直接字面编辑
+- **AND** 绑定入口与选择器提供变量名称和解析预览
+
+#### Scenario: 绑定入口不遮挡原控件
+- **WHEN** 一个显式启用绑定的逻辑输入处于未绑定、已绑定或错误状态
+- **THEN** 系统在原控件旁的独立槽位中显示绑定入口且不覆盖控件内容
+- **AND** 未绑定、已绑定和错误入口始终可见，不依赖 hover 或键盘聚焦
+- **AND** 默认入口使用约 `36px × 20px` 的 UE4 风格紧凑链条按钮，窄复合输入可缩至约 `20px`
+- **AND** 变量名称、解析预览与错误状态通过 tooltip、ARIA 和选择器完整提供
 
 #### Scenario: 搜索分组变量候选
 - **WHEN** 用户打开未绑定输入的选择器并输入查询
@@ -57,12 +77,12 @@ input 分开受控。未提供绑定配置时现有属性面板行为 MUST 保�
 通过同一组纯 getter/setter 解析有效值。
 
 #### Scenario: 复合数值输入分别绑定
-- **WHEN** vector2 或 size2 renderer 声明 X/Y 或 W/H 子目标
+- **WHEN** 字段 metadata 启用绑定，且 vector2 或 size2 renderer 显式声明 X/Y 或 W/H 子目标
 - **THEN** 每个逻辑输入可以独立绑定、预览和解绑
 - **AND** 未绑定的同级输入继续编辑原字面字段值
 
 #### Scenario: ECharts 输入分别绑定
-- **WHEN** ECharts renderer 声明标题、类型、系列名称和数据子目标
+- **WHEN** 字段 metadata 启用绑定，且 ECharts renderer 显式声明标题、类型、系列名称和数据子目标
 - **THEN** 四个输入可以分别绑定兼容变量
 - **AND** 有效绑定通过现有 EChartsOption 映射同步更新真实图表
 

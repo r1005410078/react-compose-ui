@@ -43,7 +43,11 @@ export function SettingsIcon(props: IconProps) {
 export function ChevronIcon({ expanded, ...props }: IconProps & { expanded: boolean }) {
   return (
     <svg {...sharedProps} {...props} viewBox="0 0 16 16">
-      <path d={expanded ? 'm3.5 6 4.5 4.5L12.5 6' : 'm6 3.5 4.5 4.5L6 12.5'} />
+      <path
+        d={expanded ? 'M2.5 5.25h11L8 11Z' : 'M5.25 2.5 11 8l-5.75 5.5Z'}
+        fill="currentColor"
+        stroke="none"
+      />
     </svg>
   )
 }

@@ -67,7 +67,8 @@ export type PropertyBindingMutation =
  * 把独立绑定应用到字面属性 input，并为失败目标保留安全回退。
  *
  * @remarks
- * 函数不会修改传入值，也不会缓存最后有效变量值；变量异常时只回退对应目标。
+ * 函数不会修改传入值，也不会缓存最后有效变量值；变量异常时只回退对应目标。内置字段只有
+ * 声明 `propertyPanel.binding.enabled: true` 才是有效目标，自定义类型还只接受 renderer 声明的目标。
  *
  * @param options - 根 Schema、字面值、绑定、变量与 renderer registry。
  * @returns effective input、parsed output、逐目标状态和结构化问题。
@@ -266,12 +267,14 @@ function resolveTargetDescriptor(
   const renderer = info.metadata.editor
     ? renderers.find((candidate) => candidate.id === info.metadata.editor)
     : renderers.find((candidate) => candidate.matches?.(info.base, info.metadata))
-  const descriptors = renderer?.bindingTargets?.({
-    path: address.path,
-    schema: fieldSchema,
-    metadata: info.metadata,
-    value: literalFieldValue,
-  }) ?? []
+  const descriptors = info.metadata.binding?.enabled === true
+    ? renderer?.bindingTargets?.({
+        path: address.path,
+        schema: fieldSchema,
+        metadata: info.metadata,
+        value: literalFieldValue,
+      }) ?? []
+    : []
   const descriptor = descriptors.find((candidate) => candidate.id === address.targetId)
   if (descriptor) {
     return {
@@ -286,7 +289,12 @@ function resolveTargetDescriptor(
       literalValue: descriptor.getValue(literalFieldValue),
     }
   }
-  if (address.targetId !== 'value' || renderer || !isBindableBuiltIn(info.type)) return undefined
+  if (
+    address.targetId !== 'value'
+    || renderer
+    || info.metadata.binding?.enabled !== true
+    || !isBindableBuiltIn(info.type)
+  ) return undefined
   return {
     target: {
       address,

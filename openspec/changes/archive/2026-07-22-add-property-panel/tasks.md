@@ -242,3 +242,83 @@
   目标失败，拖拽柄初始 opacity 为 1。
 - Green command/result：重新构建后同一命令 1/1 通过；默认 opacity 为 0，hover 后为 1，视觉
   黄金图保持通过。
+
+## 13. UE4 紧凑信息密度（Red → Green → Refactor）
+
+- [x] 13.1 Spec/Red：锁定 12px 正文、52/36/28/26/22px 区域几何和可覆盖密度变量
+- [x] 13.2 Red：锁定 14px 树缩进、72px 深层封顶和树线共享坐标
+- [x] 13.3 Green：实现公共面板密度变量、紧凑控件、菜单、绑定入口和错误状态
+- [x] 13.4 Green：同步 Rectangle、Visibility、Alignment、颜色与 ECharts renderer 密度
+- [x] 13.5 Refactor/Visual：更新并人工检查默认、resize、绑定选择器和 ECharts 黄金文件
+- [x] 13.6 Regression：运行 strict validate、lint、typecheck、test、build、Chromium E2E、pack dry run 和 diff check
+
+### 13.x 执行证据
+
+- Red command/result/reason：`bun run --cwd packages/property-panel test -- -t "深层全宽字段保留封顶缩进|深层字段缩进封顶"`；
+  2/2 按目标失败，现有行内坐标仍为 18px 步长，深层字段仍封顶于 88px 而非 72px。
+  `bun run build && bunx playwright test --grep "宿主加载属性面板样式" --workers=1` 完成构建后 1/1
+  按目标失败，面板正文实测仍为 14px 而非 12px；失败来自尚未实现的新密度，不是选择器或环境错误。
+- Green command/result：`bun run --cwd packages/property-panel typecheck` 与目标缩进测试通过；随后完整
+  `bun run --cwd packages/property-panel test` 47/47 通过。Chromium 几何用例锁定 12px 正文、
+  52/36/28/26/22px 区域尺寸、16px Checkbox、22px 操作按钮、20px 绑定入口、14px 树缩进及
+  `--pp-row-height`/`--pp-tree-indent` 宿主覆盖；功能断言转绿后仅旧黄金图按预期失败。
+- Visual command/result：`bun run test:e2e:update` 构建成功且 Chromium 39/39 通过；更新默认、resize、
+  绑定选择器、ECharts 以及包含 Inspector 的受影响全页基线。人工检查四个属性面板基线，普通字段、
+  树线、复合数值、颜色、Alignment 和全宽图表均无重叠或横向溢出，ECharts 预览保持可读。
+- Regression command/result：`openspec validate add-property-panel --strict && bun run lint && bun run typecheck && bun run test && bun run build && bun run pack:dry-run && git diff --check`；
+  strict validation、全仓 lint/typecheck/test/build、5 个公共包 dry run 和差异检查全部通过，property-panel
+  47/47。最终非更新模式 `bun run test:e2e` 构建成功，39/39 Chromium 场景与视觉基线全部通过。
+
+## 14. UE4 扁平分组标题栏（Red → Green → Refactor）
+
+- [x] 14.1 Red：锁定一级栏纯色背景、单层边线、无阴影及展开/收起视觉一致
+- [x] 14.2 Red：锁定靠左实心三角和更弱的嵌套分组纯色层级
+- [x] 14.3 Green：移除分组渐变、双线和卡片式阴影并重绘三角图标
+- [x] 14.4 Visual/Regression：更新目标黄金文件并运行完整质量门禁
+
+### 14.x 执行证据
+
+- Red command/result/reason：`bunx playwright test --grep "宿主加载属性面板样式" --workers=1`；
+  1/1 按目标失败，一级 Appearance 标题栏仍返回三层 radial/linear gradient，而规范要求
+  `background-image: none`；失败准确证明旧高光渐变尚未移除。OpenSpec strict validation 同时通过。
+- Green command/result：重新构建并运行同一 Chromium 用例后，一级/嵌套分组纯色、无阴影、
+  单层边线、实心三角及展开/收起背景一致等新增断言全部通过；用例仅因旧视觉黄金文件按预期失败。
+- Visual command/result：`bun run test:e2e:update` 39/39 通过并更新默认、resize、绑定选择器和
+  ECharts 四张受影响基线；人工检查确认标题栏连续铺满、嵌套层级可辨，字段控件与弹层无重叠。
+- Regression command/result：`openspec validate add-property-panel --strict && bun run lint && bun run typecheck &&
+  bun run test && bun run build && bun run pack:dry-run && git diff --check` 全部通过，property-panel 47/47；
+  最终非更新模式 `bun run test:e2e` 39/39 通过。
+
+## 15. 层级线避让 Record 控件（Red → Green → Refactor）
+
+- [x] 15.1 Red：锁定 Record key 输入位于引导线之上且保持 Pointer/焦点交互
+- [x] 15.2 Green：修正 Record key 输入的堆叠层级并保持不透明控件背景
+- [x] 15.3 Regression：运行属性面板测试、strict validation 和完整质量门禁
+
+### 15.x 执行证据
+
+- Red command/result/reason：`bun run build && bunx playwright test --grep "展开默认节点的完整类型展厅" --workers=1`；
+  1/1 按目标失败，真实 Chromium 中 Record key 输入的 computed `position` 为 `static`，父级
+  `z-index: 1` 引导线因而绘制在控件之上并穿过其内容。
+- Green command/result：加入 Record key 的局部 stacking context 后，同一 Chromium 用例的 position、
+  z-index、Pointer 命中与引导线层级断言全部通过；人工检查新增局部黄金图，竖线在输入框下方消失，
+  并在值字段处继续保持树形连接。
+- Regression command/result：两个 OpenSpec change strict validation、全仓 lint/typecheck/test/build、
+  5 个公共包 pack dry run 与 `git diff --check` 全部通过，property-panel 48/48；最终非更新模式
+  `bun run test:e2e` 39/39 通过，包含新增 Record 局部视觉基线。
+
+## 16. 自定义数值 Renderer 外部重置同步（Red → Green → Refactor）
+
+- [x] 16.1 Red：复现 Angle 与 Scale 提交后执行 Transform 重置仍显示旧草稿
+- [x] 16.2 Green：提交成功后更新草稿基线，使受控 value 变化时不再命中旧草稿
+- [x] 16.3 Regression：运行 strict validation、lint、typecheck、test、build、Chromium E2E 和 diff check
+
+### 16.x 执行证据
+
+- Red command/result/reason：`bun run test:e2e -- --grep "外部重置清除数值 renderer 草稿"`；
+  1/1 按目标失败，点击 `重置 Transform` 后 Angle 期望 `0.0`、实际仍为 `5.0`，证明 renderer
+  使用了提交前 value 作为草稿 source，外部值回到默认值时错误命中旧草稿。
+- Green command/result：将成功提交后的草稿 source 更新为候选值后，同一 Chromium 用例 1/1 通过；
+  Angle 恢复 `0.0`，Scale X/Y 均恢复 `1.0`。
+- Regression command/result：两个 OpenSpec change strict validation、全仓 lint/typecheck/test/build 与
+  `git diff --check` 全部通过；最终非更新模式 `bun run test:e2e` 40/40 通过。

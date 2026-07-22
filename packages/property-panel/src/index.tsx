@@ -162,7 +162,13 @@ export interface PropertyPanelRendererBindingController {
   targets: readonly PropertyPanelRendererBindingTargetState[]
   /** 按稳定 ID 查询目标。 */
   getTarget: (targetId: string) => PropertyPanelRendererBindingTargetState | undefined
-  /** 渲染与内置字段一致的绑定入口。 */
+  /**
+   * 渲染与内置字段一致的完整绑定槽位。
+   *
+   * @remarks
+   * 把返回节点放在对应逻辑控件之后，并让二者共同位于
+   * `.property-panel__binding-target` 中；槽位负责常驻占位、响应式收缩和 trigger 状态显示。
+   */
   renderTrigger: (targetId: string) => ReactNode
 }
 
@@ -222,7 +228,7 @@ export interface PropertyPanelBindingConfig {
 
 /** 字段 metadata 中的变量绑定配置。 */
 export interface PropertyPanelMetadataBinding {
-  /** 是否允许该字段或 renderer 子目标绑定；可编辑叶子默认为启用。 */
+  /** 是否允许该字段绑定；内置与自定义字段均默认关闭。 */
   enabled?: boolean
   /** 限制变量候选的业务语义范围。 */
   semanticScope?: string
@@ -326,7 +332,7 @@ export interface PropertyPanelRenderer {
   layout?: PropertyPanelRendererLayout
   /** 为 optional、nullable 等缺失字段生成可校验的初值。 */
   createDefault?: (schema: v.GenericSchema) => unknown
-  /** 声明该 renderer 内可独立绑定的稳定逻辑输入。 */
+  /** 声明该 renderer 内可独立绑定的稳定逻辑输入；字段 metadata 还必须显式启用绑定。 */
   bindingTargets?: (
     context: PropertyPanelRendererBindingTargetsContext,
   ) => readonly PropertyPanelRendererBindingTargetDescriptor[]

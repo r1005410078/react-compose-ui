@@ -6,7 +6,7 @@
 
 ## 目标/非目标
 
-- 目标：已有页面/全局变量到每个逻辑输入的单向绑定。
+- 目标：已有页面/全局变量到显式声明逻辑输入的单向绑定。
 - 目标：变量异常时保持 Canvas 可渲染，并把问题暴露给面板错误筛选。
 - 目标：多行操作在任何操作列宽度下都可发现、可键盘访问且不被裁剪。
 - 非目标：变量创建管理、表达式、数据源、转换函数、双向绑定或正式编辑器文档协议。
@@ -16,6 +16,9 @@
 ### 绑定状态与解析
 
 - 字面 `value` 和 bindings 分开受控；绑定地址由属性路径与 target ID 组成，内置 target ID 为 `value`。
+- 绑定能力采用显式 opt-in：所有字段只有声明 `propertyPanel.binding.enabled: true` 才生成目标；
+  自定义类型还必须由 renderer 声明 `bindingTargets`，metadata 负责业务授权，descriptor 负责子目标
+  映射。任一条件缺失时，外部 binding 按 `unknown-target` 处理，不能影响 effective value。
 - 变量是带当前快照值的页面或全局候选。候选先通过目标 Schema、语义 scope 和宿主 `canBind` 过滤。
 - 纯解析函数按地址稳定排序应用绑定；单目标变量缺失或无效时回退对应字面值并产生 issue，最终候选仍
   通过完整根 Schema。绑定更新不触发 `onValueChange`。
@@ -31,7 +34,11 @@
 
 ### 绑定交互
 
-- 未绑定 trigger 仅在行 hover、focus-within 或自身聚焦时可见；绑定、断链和错误状态始终可见。
+- 所有显式启用的 binding trigger 始终可见，不依赖行 hover 或 focus；绑定、断链和错误状态通过颜色区分。
+- trigger 位于每个逻辑输入旁的独立 accessory slot，不得绝对定位覆盖输入、单位、色块或选择箭头；
+  只有显式启用绑定的目标生成槽位。槽位在未绑定时也保留，避免 hover 和绑定造成布局跳动。
+- 常规槽位使用约 `36px × 20px` 的 UE4 风格仅图标按钮，窄复合输入可缩至约 `20px`；变量全名、
+  解析预览与错误原因继续通过 tooltip、ARIA 和 picker 暴露。
 - 已绑定输入保留焦点与预览但阻止字面编辑。解绑保留原字面值；reset 删除绑定并恢复 `defaultValue`。
 - 绑定计入 modified；解析 issue 计入 errors。只读面板显示绑定状态但禁止更改。
 - 数组移动/删除、record 改键/删除重映射地址；分组 reset、取消存在性、删除和 union 切换清理失效后代。

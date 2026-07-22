@@ -130,6 +130,11 @@ ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Renderer MUST 可以
 - **THEN** 面板发出一次以默认分组值替换当前分组值的 reset 变更
 - **AND** default value 本身保持不变
 
+#### Scenario: 外部重置清除自定义数值草稿
+- **WHEN** 自定义数值 renderer 提交有效值后，受控 value 因分组重置发生变化
+- **THEN** renderer 显示新的受控值而不是先前提交时的本地草稿
+- **AND** 同一复合 renderer 中的每个数值输入均同步恢复默认值
+
 ### Requirement: 双分隔线三列布局
 
 系统 MUST 为普通字段使用共享的属性名、编辑器和右侧操作区三列布局，并 MUST 提供两条可以分别
@@ -152,7 +157,7 @@ ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Renderer MUST 可以
 
 ### Requirement: 属性面板视觉与样式隔离
 
-系统 MUST 提供作用域限定的紧凑深色样式入口，并 MUST 允许宿主通过包级 CSS 变量调整主题。
+系统 MUST 提供作用域限定的紧凑深色样式入口，并 MUST 允许宿主通过包级 CSS 变量调整主题与密度。
 样式不得重置宿主的全局元素样式。
 
 #### Scenario: 宿主加载属性面板样式
@@ -164,13 +169,31 @@ ID 或 renderer matcher 为 `v.custom` 等类型选择 UI。Renderer MUST 可以
 - **WHEN** 示例应用以默认桌面布局显示 Rectangle 属性面板
 - **THEN** Inspector 约为 400px，属性面板内容区约为 365px，属性名列和操作列分别为 160px 与 36px
 - **AND** 普通编辑控件在不超过 234px 的右对齐轨道内显示，复杂自定义 renderer 可以在标题下占满整行
-- **AND** header、工具栏、一级分组、字段行和输入框分别约为 64px、46px、37px、36px 和 28px
+- **AND** 正文约为 12px，header、工具栏、一级分组、嵌套分组、字段行和输入框分别约为
+  52px、36px、28px、26px、26px 和 22px
+- **AND** Checkbox、操作按钮和绑定入口分别约为 16px、22px 和 20px
+
+#### Scenario: 宿主覆盖紧凑密度
+- **WHEN** 宿主覆盖公开的字体、Header、工具栏、分组、字段、控件或树缩进 CSS 变量
+- **THEN** 公共面板区域使用覆盖后的几何值
+- **AND** 未覆盖的密度变量继续使用 UE4 紧凑默认值
+
+#### Scenario: 显示 UE4 扁平分组标题栏
+- **WHEN** 面板同时显示展开和收起的一级、嵌套属性分组
+- **THEN** 一级标题栏使用贯穿整行的扁平深灰背景、单层低对比边线和靠左的小型实心三角
+- **AND** 展开与收起只改变三角方向及内容可见性，不改变标题栏背景、尺寸或边线
+- **AND** 嵌套标题栏使用更弱的纯色层级，不使用高光渐变、阴影或卡片式分隔
 
 #### Scenario: 深层属性保持可读
 - **WHEN** 属性结构包含多级对象、集合或分组
 - **THEN** 层级只改变标题、字段标签和树形引导线的紧凑缩进，不得移动共享编辑列边界
-- **AND** 每级缩进约为 14px 至 18px，并在深层级封顶以保留字段名称空间
+- **AND** 每级缩进约为 14px，并在深层级封顶于约 72px 以保留字段名称空间
 - **AND** 每条字段横向支线 MUST 从当前父级竖线向右连接字段名，不得从竖线左侧穿过
+
+#### Scenario: 层级线避让交互控件
+- **WHEN** Record key 等独立交互控件跨过父级树形竖线的坐标
+- **THEN** 控件使用不透明背景显示在层级线之上，层级线不得穿过控件内容或边框
+- **AND** 层级线不得拦截控件的 Pointer、焦点或文本编辑交互
 
 #### Scenario: 显示 Rectangle 参考控件细节
 - **WHEN** 用户查看默认 Rectangle 的 Transform、Appearance、Layout 和 State

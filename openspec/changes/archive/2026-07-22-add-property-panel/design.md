@@ -77,6 +77,10 @@ Valibot Schema 是可遍历的普通对象：Schema 通过 `type` 标识种类�
 - 分隔线使用 Pointer Capture，并以 `role="separator"` 暴露当前值和边界；方向键每次移动
   8px，Shift+方向键移动 24px。列宽、折叠、搜索、筛选和草稿只存活于组件实例。
 - 使用禁用 Preflight、带 `pp` 前缀的 Tailwind CSS，并提供包级 CSS 变量覆盖紧凑深色主题。
+- 默认密度使用 12px 正文、52px Header、36px 工具栏、28/26px 分组、26px 字段、22px 控件和
+  14px 树缩进；字段说明、错误提示和全宽 renderer 仍按内容自然增高。
+- Header、工具栏、分组、字段、控件和树缩进均从同一组 `--pp-*` 密度变量取值；示例 renderer
+  复用这些变量，避免公共包与宿主自定义控件再次出现尺寸漂移。
 
 ### ECharts 自定义类型示例
 

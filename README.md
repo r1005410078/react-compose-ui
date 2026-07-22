@@ -144,9 +144,9 @@ const schema = v.object({
 面板提供搜索、全部/已修改/有错误筛选、默认值重置和两条可通过 Pointer 或键盘调整的三列
 分隔线。自定义语义类型通过实例级 renderer registry 扩展；Schema metadata 只保存稳定的
 editor ID，不保存 React 组件。大型 renderer 可以采用标题行加全宽内容区，并由字段 metadata
-覆盖 renderer 默认布局。可选的受控 bindings 能把已有页面/全局变量单向绑定到内置字段或
-renderer 的稳定子目标；字面值与绑定关系分开保存，Canvas 可复用 `resolvePropertyBindings`
-计算 effective properties。完整 API、metadata 和主题变量见
+覆盖 renderer 默认布局。可选的受控 bindings 能把已有页面/全局变量单向绑定到 Schema metadata
+显式启用的内置字段，或 renderer 明确声明的稳定子目标；字面值与绑定关系分开保存，Canvas 可复用
+`resolvePropertyBindings` 计算 effective properties。完整 API、metadata 和主题变量见
 [`@compose-ui/property-panel` README](./packages/property-panel/README.md)。
 
 ## 独立使用场景树

@@ -346,7 +346,7 @@ function useBuiltInBindingTarget(
   const info = inspectSchema(schema)
   if (
     !view.config
-    || info.metadata.binding?.enabled === false
+    || info.metadata.binding?.enabled !== true
     || !['string', 'number', 'bigint', 'boolean', 'date', 'picklist', 'enum'].includes(info.type)
   ) return undefined
   return createBindingTargetState({
@@ -386,26 +386,34 @@ function BindingTrigger({ target }: { target: PropertyPanelRendererBindingTarget
   const view = useContext(BindingContext)
   if (!view.config) return null
   const Trigger = view.config.renderTrigger
-  if (Trigger) return <Trigger target={target} />
   const bound = Boolean(target.binding)
   const invalid = target.status !== 'literal' && target.status !== 'resolved'
   const variableLabel = target.variable?.label ?? target.binding?.variableId
   const title = bound
     ? `${variableLabel ?? '未知变量'} · ${formatBindingPreview(target.effectiveValue)}`
     : `绑定 ${target.label}`
+  const state = invalid ? 'invalid' : bound ? 'bound' : 'literal'
   return (
-    <button
-      aria-label={bound ? `更换绑定 ${target.label}` : `绑定 ${target.label}`}
-      aria-invalid={invalid ? 'true' : undefined}
-      className={`property-panel__binding-trigger${bound ? ' property-panel__binding-trigger--bound' : ''}${invalid ? ' property-panel__binding-trigger--invalid' : ''}`}
-      disabled={target.readOnly}
-      title={target.message ?? title}
-      type="button"
-      onClick={(event) => view.openTarget(target, event.currentTarget)}
+    <span
+      className="property-panel__binding-slot"
+      data-binding-state={state}
     >
-      <BindingIcon />
-      {bound ? <span>{variableLabel}</span> : null}
-    </button>
+      {Trigger ? <Trigger target={target} /> : (
+        <button
+          aria-description={bound ? title : undefined}
+          aria-label={bound ? `更换绑定 ${target.label}` : `绑定 ${target.label}`}
+          aria-invalid={invalid ? 'true' : undefined}
+          className={`property-panel__binding-trigger${bound ? ' property-panel__binding-trigger--bound' : ''}${invalid ? ' property-panel__binding-trigger--invalid' : ''}`}
+          disabled={target.readOnly}
+          title={target.message ?? title}
+          type="button"
+          onClick={(event) => view.openTarget(target, event.currentTarget)}
+        >
+          <BindingIcon />
+          {bound ? <span>{variableLabel}</span> : null}
+        </button>
+      )}
+    </span>
   )
 }
 
@@ -619,7 +627,7 @@ function PropertyNode({
     } : null
   const actions = [presenceAction, resetAction, ...(nodeActions ?? [])]
     .filter((action): action is RowAction => action !== null)
-  const rendererBindingDescriptors = renderer && info.metadata.binding?.enabled !== false
+  const rendererBindingDescriptors = renderer && info.metadata.binding?.enabled === true
     ? renderer.bindingTargets?.({
         path,
         schema,
@@ -1427,9 +1435,24 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
       </label>
       <div className="property-panel__editor">
         <div className="property-panel__control">
-          {editor}
-          {info.metadata.unit ? <span className="property-panel__unit">{info.metadata.unit}</span> : null}
-          {bindingTarget ? <BindingTrigger target={bindingTarget} /> : null}
+          {bindingTarget ? (
+            <div className="property-panel__binding-target">
+              <div className="property-panel__binding-control">
+                {editor}
+                {info.metadata.unit
+                  ? <span className="property-panel__unit">{info.metadata.unit}</span>
+                  : null}
+              </div>
+              <BindingTrigger target={bindingTarget} />
+            </div>
+          ) : (
+            <>
+              {editor}
+              {info.metadata.unit
+                ? <span className="property-panel__unit">{info.metadata.unit}</span>
+                : null}
+            </>
+          )}
         </div>
         {activeError ? <span role="alert">{activeError}</span> : null}
       </div>
@@ -1439,25 +1462,23 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
 }
 
 type TreeIndentStyle = CSSProperties & {
-  '--pp-branch-indent'?: string
-  '--pp-field-indent'?: string
-  '--pp-group-indent'?: string
-  '--pp-guide-indent'?: string
+  '--pp-branch-depth'?: number
+  '--pp-field-depth'?: number
+  '--pp-group-depth'?: number
 }
 
-// 同一层的 group guide 与下一层 field branch 必须落在同一 X 坐标；18px 是层级步长，
+// 同一层的 group guide 与下一层 field branch 必须落在同一 X 坐标；14px 是 UE4 紧凑层级步长，
 // 文字比竖线再右移 14px。两者分别在 3/4 层封顶，深层仍保留可读的标签宽度。
 function createGroupIndentStyle(depth: number): TreeIndentStyle {
   return {
-    '--pp-group-indent': `${12 + Math.min(depth, 3) * 18}px`,
-    '--pp-guide-indent': `${20 + Math.min(depth, 3) * 18}px`,
+    '--pp-group-depth': Math.min(depth, 3),
   }
 }
 
 function createFieldIndentStyle(depth: number): TreeIndentStyle {
   return {
-    '--pp-field-indent': `${depth === 0 ? 20 : 16 + Math.min(depth, 4) * 18}px`,
-    '--pp-branch-indent': `${20 + Math.min(Math.max(depth - 1, 0), 3) * 18}px`,
+    '--pp-field-depth': Math.min(depth, 4),
+    '--pp-branch-depth': Math.min(Math.max(depth - 1, 0), 3),
   }
 }
 

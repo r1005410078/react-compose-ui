@@ -256,10 +256,43 @@ test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 宿主加�
   await expect(resizeHandle).toHaveCSS('opacity', '0')
   await labelSeparator.hover()
   await expect(resizeHandle).toHaveCSS('opacity', '1')
-  await expect.poll(async () => Math.round((await panel.locator('.property-panel__header').boundingBox())?.height ?? 0)).toBe(64)
-  await expect.poll(async () => Math.round((await panel.locator('.property-panel__toolbar').boundingBox())?.height ?? 0)).toBe(46)
-  await expect.poll(async () => Math.round((await panel.locator('.property-panel__group-header').first().boundingBox())?.height ?? 0)).toBe(37)
-  await expect.poll(async () => Math.round((await panel.locator('.property-panel__field').first().boundingBox())?.height ?? 0)).toBe(36)
+  await expect(panel).toHaveCSS('font-size', '12px')
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__header').boundingBox())?.height ?? 0)).toBe(52)
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__toolbar').boundingBox())?.height ?? 0)).toBe(36)
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__group-header').first().boundingBox())?.height ?? 0)).toBe(28)
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__group .property-panel__group .property-panel__group-header').first().boundingBox())?.height ?? 0)).toBe(26)
+  const appearanceButton = panel.getByRole('button', { name: 'Appearance', exact: true })
+  const appearanceHeader = appearanceButton.locator('..')
+  const appearanceGroup = appearanceHeader.locator('..')
+  await expect(appearanceHeader).toHaveCSS('background-image', 'none')
+  await expect(appearanceHeader).toHaveCSS('background-color', 'rgb(42, 42, 42)')
+  await expect(appearanceGroup).toHaveCSS('box-shadow', 'none')
+  await expect(appearanceGroup).toHaveCSS('border-bottom-width', '0px')
+  await expect(appearanceButton.locator('svg path')).toHaveAttribute('fill', 'currentColor')
+  await expect(appearanceButton.locator('svg path')).toHaveAttribute('stroke', 'none')
+
+  const nestedHeader = panel.getByRole('button', { name: '边框 Border', exact: true }).locator('..')
+  await expect(nestedHeader).toHaveCSS('background-image', 'none')
+  await expect(nestedHeader).toHaveCSS('background-color', 'rgb(27, 28, 28)')
+
+  const advancedButton = panel.getByRole('button', { name: 'Advanced', exact: true })
+  const advancedHeader = advancedButton.locator('..')
+  const collapsedBackground = await advancedHeader.evaluate((element) => getComputedStyle(element).backgroundColor)
+  await advancedButton.click()
+  await expect(advancedHeader).toHaveCSS('background-color', collapsedBackground)
+  await advancedButton.click()
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__field').first().boundingBox())?.height ?? 0)).toBe(26)
+  const opacityInput = panel.locator('[data-property-path="appearance.opacity"] input')
+  await expect.poll(async () => Math.round((await opacityInput.boundingBox())?.height ?? 0)).toBe(22)
+  await expect.poll(async () => Math.round((await panel.getByRole('checkbox', { name: '交互状态 Is Enabled' }).boundingBox())?.height ?? 0)).toBe(16)
+  await opacityInput.fill('0.5')
+  await opacityInput.blur()
+  const opacityReset = panel.getByRole('button', { name: '重置 不透明度 Opacity' })
+  await expect.poll(async () => Math.round((await opacityReset.boundingBox())?.height ?? 0)).toBe(22)
+  await opacityReset.click()
+  await opacityInput.fill('1.0')
+  await opacityInput.blur()
+  await expect(opacityInput).toHaveValue('1.0')
   await expect.poll(async () => Math.round((await panel.locator('.property-panel__control').first().boundingBox())?.width ?? 0)).toBeLessThanOrEqual(234)
   const topEditorX = await panel.locator('[data-property-path="appearance.opacity"] .property-panel__editor').boundingBox()
   const deepEditorX = await panel.locator('[data-property-path="propertyDemo.border.stroke.width"] .property-panel__editor').boundingBox()
@@ -280,13 +313,38 @@ test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 宿主加�
     return {
       branchLeft: Number.parseFloat(branch.left),
       branchWidth: Number.parseFloat(branch.width),
-      fieldIndent: Number.parseFloat(getComputedStyle(field).getPropertyValue('--pp-field-indent')),
+      fieldIndent: Number.parseFloat(getComputedStyle(
+        field.querySelector('.property-panel__label') ?? field,
+      ).paddingLeft),
       guideLeft: guide ? Number.parseFloat(guide.left) : Number.NaN,
     }
   })
   expect(treeLineGeometry.branchLeft).toBe(treeLineGeometry.guideLeft)
   expect(treeLineGeometry.branchLeft + treeLineGeometry.branchWidth + 4)
     .toBe(treeLineGeometry.fieldIndent)
+  expect(treeLineGeometry.branchLeft).toBe(44)
+
+  const appearance = panel.locator('[data-property-path="appearance.opacity"]')
+  const bindingSlot = appearance.locator('.property-panel__binding-slot')
+  await expect(bindingSlot).toHaveCSS('opacity', '1')
+  await expect.poll(async () => Math.round((await bindingSlot.boundingBox())?.width ?? 0)).toBe(36)
+  await expect.poll(async () => Math.round((await appearance.locator('.property-panel__binding-trigger').boundingBox())?.height ?? 0)).toBe(20)
+  await expect.poll(async () => appearance.evaluate((element) => ({
+    compactSlot: getComputedStyle(element).getPropertyValue('--pp-binding-slot-compact-width').trim(),
+    slot: getComputedStyle(element).getPropertyValue('--pp-binding-slot-width').trim(),
+  }))).toEqual({ compactSlot: '20px', slot: '36px' })
+
+  await panel.evaluate((element) => element.style.setProperty('--pp-row-height', '30px'))
+  await expect.poll(async () => Math.round((await panel.locator('.property-panel__field').first().boundingBox())?.height ?? 0)).toBe(30)
+  await panel.evaluate((element) => element.style.removeProperty('--pp-row-height'))
+  await panel.evaluate((element) => element.style.setProperty('--pp-tree-indent', '10px'))
+  const overriddenTreeIndent = await deepLabelLocator.evaluate((label) => ({
+    fieldIndent: getComputedStyle(label).getPropertyValue('--pp-field-indent'),
+    treeStep: getComputedStyle(label).getPropertyValue('--pp-tree-indent'),
+  }))
+  expect(overriddenTreeIndent.treeStep.trim()).toBe('10px')
+  expect(overriddenTreeIndent.fieldIndent).toContain('10px')
+  await panel.evaluate((element) => element.style.removeProperty('--pp-tree-indent'))
   await page.mouse.move(800, 400)
   await expect(inspector).toHaveScreenshot('property-panel-default.png', {
     animations: 'disabled',
@@ -363,7 +421,28 @@ test('OpenSpec: property-panel / 默认节点类型覆盖 / 展开默认节点�
   await expect(panel.getByRole('button', { name: '列表 Array', exact: true })).toBeVisible()
   await expect(panel.getByRole('button', { name: '元组 Tuple', exact: true })).toBeVisible()
   await expect(panel.getByRole('button', { name: '可变元组 Tuple Rest', exact: true })).toBeVisible()
-  await expect(panel.getByRole('button', { name: '记录 Record', exact: true })).toBeVisible()
+  const recordButton = panel.getByRole('button', { name: '记录 Record', exact: true })
+  await expect(recordButton).toBeVisible()
+  await recordButton.click()
+  const recordKey = panel.getByRole('textbox', { name: '记录 Record 键 1' })
+  await expect(recordKey).toBeVisible()
+  await expect(recordKey).toHaveCSS('position', 'relative')
+  await expect(recordKey).toHaveCSS('z-index', '2')
+  const recordStacking = await recordKey.evaluate((input) => {
+    const group = input.closest('.property-panel__group')
+    const content = group?.querySelector(':scope > .property-panel__group-content')
+    return {
+      guideZIndex: content ? Number.parseFloat(getComputedStyle(content, '::before').zIndex) : Number.NaN,
+      inputZIndex: Number.parseFloat(getComputedStyle(input).zIndex),
+      pointerEvents: getComputedStyle(input).pointerEvents,
+    }
+  })
+  expect(recordStacking.inputZIndex).toBeGreaterThan(recordStacking.guideZIndex)
+  expect(recordStacking.pointerEvents).not.toBe('none')
+  await expect(recordKey.locator('..')).toHaveScreenshot('property-panel-record-lines.png', {
+    animations: 'disabled',
+    maxDiffPixelRatio: 0.01,
+  })
 
   await panel.getByRole('button', { name: '联合结构 Unions', exact: true }).click()
   await expect(panel.getByRole('button', { name: '联合 Union', exact: true })).toBeVisible()
@@ -387,7 +466,7 @@ test('OpenSpec: property-panel / 默认节点类型覆盖 / 展开默认节点�
     }
   })
   expect(customTreeGeometry.branchLeft).toBe(customTreeGeometry.guideLeft)
-  expect(customTreeGeometry.branchTop).toBe(17)
+  expect(customTreeGeometry.branchTop).toBe(13)
 })
 
 test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 显示 UE4 参考控件细节', async ({ page }) => {
@@ -415,7 +494,19 @@ test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 显示 UE4 
   )).toHaveCount(8)
   await expect.poll(async () => Math.round(
     (await panel.locator('.color-property-editor input[type="color"]').first().boundingBox())?.width ?? 0,
-  )).toBe(28)
+  )).toBe(22)
+  await expect.poll(async () => Math.round(
+    (await panel.locator('.compound-number-editor label').first().boundingBox())?.height ?? 0,
+  )).toBe(22)
+  await expect.poll(async () => Math.round(
+    (await panel.locator('.scalar-number-editor').first().boundingBox())?.height ?? 0,
+  )).toBe(22)
+  await expect.poll(async () => Math.round(
+    (await panel.locator('.alignment-property-editor').first().boundingBox())?.height ?? 0,
+  )).toBe(22)
+  await expect.poll(async () => Math.round(
+    (await panel.locator('.visibility-property-editor').first().boundingBox())?.height ?? 0,
+  )).toBe(22)
 
   await expect(panel.getByRole('button', { name: 'Advanced' })).toHaveAttribute('aria-expanded', 'false')
   await expect(panel.getByRole('button', { name: 'Diagnostics' })).toHaveAttribute('aria-expanded', 'false')
@@ -429,36 +520,82 @@ test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 显示 UE4 
   await expect(panel.getByRole('alert')).toContainText('完整属性值不符合 Schema')
 })
 
+test('OpenSpec: property-panel / 搜索筛选与默认值重置 / 外部重置清除数值 renderer 草稿', async ({ page }) => {
+  await page.goto('/')
+  const panel = page.getByRole('region', { name: 'Rectangle 属性' })
+  const angle = panel.getByLabel('旋转 Angle', { exact: true })
+  const scale = panel.locator('[data-property-path="transform.scale"]')
+  const scaleX = scale.getByLabel('X', { exact: true })
+  const scaleY = scale.getByLabel('Y', { exact: true })
+
+  await angle.fill('5')
+  await angle.blur()
+  await scaleX.fill('222')
+  await scaleX.blur()
+  await scaleY.fill('333')
+  await scaleY.blur()
+  await expect(angle).toHaveValue('5.0')
+  await expect(scaleX).toHaveValue('222.0')
+  await expect(scaleY).toHaveValue('333.0')
+
+  await panel.getByRole('button', { name: '重置 Transform', exact: true }).click()
+
+  await expect(angle).toHaveValue('0.0')
+  await expect(scaleX).toHaveValue('1.0')
+  await expect(scaleY).toHaveValue('1.0')
+})
+
 test('OpenSpec: property-panel / 受控属性变量绑定 / Rectangle 逻辑输入绑定到页面变量', async ({ page }) => {
   await page.goto('/')
   const panel = page.getByRole('region', { name: 'Rectangle 属性' })
   const canvasRectangle = page.getByRole('button', { name: '选择 Rectangle' })
   const position = panel.locator('[data-property-path="transform.position"]')
-  const trigger = position.getByRole('button', { name: '绑定 X' })
+  const xTarget = position.locator('.property-panel__binding-target').first()
+  const xSlot = xTarget.locator('.property-panel__binding-slot')
+  const xInput = position.getByLabel('X', { exact: true })
+  const initialXInputBox = await xInput.boundingBox()
 
-  await expect(trigger).toHaveCSS('opacity', '0')
-  await position.hover()
-  await expect(trigger).toHaveCSS('opacity', '1')
-  await trigger.click()
+  await expect(xSlot).toHaveCSS('opacity', '1')
+  await xSlot.getByRole('button', { name: '绑定 X' }).click()
   await page.getByRole('button', { name: /页面偏移 X/ }).click()
 
-  await expect(position.getByLabel('X', { exact: true })).toHaveValue('24.0')
-  await expect(position.getByLabel('X', { exact: true })).toHaveAttribute('readonly')
-  await expect(position.getByRole('button', { name: '更换绑定 X' })).toHaveCSS('opacity', '1')
+  await expect(xInput).toHaveValue('24.0')
+  await expect(xInput).toHaveAttribute('readonly')
+  await expect(xSlot).toHaveCSS('opacity', '1')
+  await expect(xSlot.locator('.property-panel__binding-trigger > span')).toHaveCSS('display', 'none')
+  const boundXInputBox = await xInput.boundingBox()
+  const boundXTriggerBox = await xSlot.getByRole('button', { name: '更换绑定 X' }).boundingBox()
+  expect(Math.round(boundXInputBox?.x ?? 0)).toBe(Math.round(initialXInputBox?.x ?? 0))
+  expect(Math.round(boundXInputBox?.width ?? 0)).toBe(Math.round(initialXInputBox?.width ?? 0))
+  expect((boundXInputBox?.x ?? 0) + (boundXInputBox?.width ?? 0))
+    .toBeLessThanOrEqual((boundXTriggerBox?.x ?? 0) - 2)
   await expect(canvasRectangle).toHaveCSS('transform', /matrix\(1, 0, 0, 1, 24, 0\)/)
 
   const opacity = panel.locator('[data-property-path="appearance.opacity"]')
-  await opacity.hover()
+  const opacityInput = opacity.getByLabel('不透明度 Opacity', { exact: true })
+  const initialOpacityInputBox = await opacityInput.boundingBox()
   await opacity.getByRole('button', { name: '绑定 不透明度 Opacity' }).click()
   await page.getByRole('button', { name: /页面透明度/ }).click()
-  await expect(opacity.getByLabel('不透明度 Opacity', { exact: true })).toHaveValue('0.7')
+  await expect(opacityInput).toHaveValue('0.7')
+  const opacityTrigger = opacity.getByRole('button', { name: '更换绑定 不透明度 Opacity' })
+  await expect(opacityTrigger).toContainText('页面透明度')
+  await expect(opacityTrigger.locator('span')).toHaveCSS('display', 'none')
+  const boundOpacityInputBox = await opacityInput.boundingBox()
+  const boundOpacityTriggerBox = await opacityTrigger.boundingBox()
+  expect(Math.round(boundOpacityInputBox?.width ?? 0)).toBe(Math.round(initialOpacityInputBox?.width ?? 0))
+  expect((boundOpacityInputBox?.x ?? 0) + (boundOpacityInputBox?.width ?? 0))
+    .toBeLessThanOrEqual((boundOpacityTriggerBox?.x ?? 0) - 2)
 
   const color = panel.locator('[data-property-path="appearance.color"]')
-  await color.hover()
   await color.getByRole('button', { name: '绑定 颜色 Color' }).click()
   await page.getByRole('button', { name: /页面强调色/ }).click()
   await expect(color.getByLabel('颜色值', { exact: true })).toHaveValue('#22C55E')
   await expect(canvasRectangle).toHaveCSS('background-color', 'rgb(34, 197, 94)')
+  await expect(page.locator('.inspector-panel')).toHaveScreenshot('property-panel-bound.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
 })
 
 test('OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / ECharts 标题与数据独立绑定', async ({ page }) => {
@@ -470,8 +607,15 @@ test('OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / ECharts �
   await optionField.hover()
   await panel.getByRole('button', { name: '绑定 图表标题' }).click()
   await page.getByRole('button', { name: /全局图表标题/ }).click()
-  await expect(panel.getByLabel('图表标题', { exact: true })).toHaveValue('全局季度销售额')
-  await expect(panel.getByLabel('图表标题', { exact: true })).toHaveAttribute('readonly')
+  const titleInput = panel.getByLabel('图表标题', { exact: true })
+  const titleTrigger = panel.getByRole('button', { name: '更换绑定 图表标题' })
+  await expect(titleInput).toHaveValue('全局季度销售额')
+  await expect(titleInput).toHaveAttribute('readonly')
+  await expect(titleTrigger).toContainText('全局图表标题')
+  const titleInputBox = await titleInput.boundingBox()
+  const titleTriggerBox = await titleTrigger.boundingBox()
+  expect((titleInputBox?.x ?? 0) + (titleInputBox?.width ?? 0))
+    .toBeLessThanOrEqual((titleTriggerBox?.x ?? 0) - 2)
   await expect(page.getByRole('img', { name: '全局季度销售额 ECharts 图表' })).toBeVisible()
 
   await optionField.hover()
@@ -514,6 +658,12 @@ test('OpenSpec: property-panel / ECharts 自定义类型示例 / 选择 ECharts 
   expect(rendererBox!.x).toBeLessThan(panelBox!.x + 80)
   expect(rendererBox!.x + rendererBox!.width).toBeGreaterThan(panelBox!.x + panelBox!.width - 12)
   const rendererWidth = Math.round(rendererBox!.width)
+  await expect.poll(async () => Math.round(
+    (await rendererContent.locator('.echart-option-editor input').first().boundingBox())?.height ?? 0,
+  )).toBe(22)
+  await expect.poll(async () => Math.round(
+    (await rendererContent.locator('.echart-editor-preview').boundingBox())?.height ?? 0,
+  )).toBe(120)
 
   await panel.getByRole('separator', { name: '调整属性名列宽' }).dispatchEvent('keydown', {
     key: 'ArrowRight',

@@ -127,6 +127,21 @@ renderer 默认值、最后回退到 `inline`。该布局配置只影响已经�
 绑定关系与 Valibot 字面 input 分开受控。变量变化只更新 effective value，不会改写字面值或调用
 `onValueChange`；宿主可以用同一个纯函数为 Canvas 计算实际属性：
 
+绑定能力默认关闭。内置字段必须在 Schema 中显式声明允许绑定：
+
+```ts
+const schema = v.object({
+  opacity: v.pipe(
+    v.number(),
+    v.metadata({ propertyPanel: {
+      binding: { enabled: true, semanticScope: 'opacity' },
+    } }),
+  ),
+  // 未声明 binding.enabled，仍是普通字面输入。
+  cornerRadius: v.number(),
+})
+```
+
 ```tsx
 import { PropertyPanel, resolvePropertyBindings } from '@compose-ui/property-panel'
 
@@ -157,14 +172,24 @@ const effective = resolvePropertyBindings({
 })
 ```
 
-内置可编辑叶子使用固定 target ID `value`。变量选择器会按目标 Schema、`semanticScope` 和
-`canBind` 过滤候选，再按页面/全局作用域分组；变量缺失或失效时只回退该目标的字面值，并在
-`issues` 中报告。已绑定输入保持可聚焦和只读；解绑继续使用原字面值，reset 同时删除绑定并恢复
-`defaultValue`。数组移动/删除、record 改键/删除和 union 切换由面板同步维护绑定地址。
+显式启用的内置叶子使用固定 target ID `value`。变量选择器会按目标 Schema、`semanticScope` 和
+`canBind` 过滤候选，再按页面/全局作用域分组；未声明的目标即使出现在外部 bindings 中也不会生效，
+并以 `unknown-target` issue 报告。变量缺失或失效时只回退该目标的字面值。已绑定输入保持可聚焦和
+只读；解绑继续使用原字面值，reset 同时删除绑定并恢复 `defaultValue`。数组移动/删除、record 改键/
+删除和 union 切换由面板同步维护绑定地址。
 
-复合 renderer 用稳定 descriptor 暴露多个逻辑输入，并在 UI 中把统一 trigger 放到对应控件尾部：
+自定义类型同样默认不可绑定。字段 Schema 必须声明 `binding.enabled: true`，renderer 还要通过稳定
+descriptor 明确暴露逻辑输入；两者缺一不可：
 
 ```tsx
+const positionSchema = v.pipe(
+  vectorSchema,
+  v.metadata({ propertyPanel: {
+    editor: 'vector2',
+    binding: { enabled: true },
+  } }),
+)
+
 const vectorRenderer = {
   id: 'vector2',
   component: VectorEditor,
@@ -179,16 +204,23 @@ const vectorRenderer = {
 
 function VectorEditor({ value, commit, binding }) {
   const x = binding?.getTarget('x')
-  return <label>
-    <input
-      readOnly={Boolean(x?.binding)}
-      value={x?.effectiveValue ?? value.x}
-      onChange={(event) => commit({ ...value, x: Number(event.target.value) })}
-    />
+  return <div className="property-panel__binding-target">
+    <div className="property-panel__binding-control">
+      <input
+        readOnly={Boolean(x?.binding)}
+        value={x?.effectiveValue ?? value.x}
+        onChange={(event) => commit({ ...value, x: Number(event.target.value) })}
+      />
+    </div>
     {binding?.renderTrigger('x')}
-  </label>
+  </div>
 }
 ```
+
+`renderTrigger()` 返回已经带 `.property-panel__binding-slot` 的完整 accessory slot。renderer 只需把
+控件主体与 slot 依次放入 `.property-panel__binding-target`；原输入、单位、色块或选择箭头应留在
+`.property-panel__binding-control` 内。显式启用的目标始终显示 UE4 风格紧凑链条按钮；完整变量名和
+解析状态通过 tooltip、ARIA description 与变量选择器提供，目标过窄时槽位会进一步收缩。
 
 ECharts 等依赖仍由宿主 renderer 持有；本包只处理 target 描述、选择器、受控 bindings 和解析。
 
@@ -216,7 +248,21 @@ ECharts 等依赖仍由宿主 renderer 持有；本包只处理 target 描述、
   --pp-text: #e2e8f0;
   --pp-text-muted: #94a3b8;
   --pp-accent: #60a5fa;
+  --pp-font-size: 12px;
+  --pp-header-height: 52px;
+  --pp-toolbar-height: 36px;
+  --pp-group-height: 28px;
+  --pp-nested-group-height: 26px;
+  --pp-row-height: 26px;
+  --pp-control-height: 22px;
+  --pp-tree-indent: 14px;
+  --pp-binding-slot-width: 36px;
+  --pp-binding-slot-compact-width: 20px;
 }
 ```
+
+默认密度按 UE4 桌面 Details Panel 设置。自定义 renderer 应优先复用 `--pp-control-height` 和
+`--pp-font-size`，这样宿主覆盖密度时，内置控件与领域控件仍保持同一行高和字号。字段说明、错误信息
+及 `full-width` renderer 不受普通字段固定高度限制，会按内容自然增高。
 
 首版只支持同步 Valibot Schema；异步 Schema 会显示可访问的不支持提示并停止渲染字段。

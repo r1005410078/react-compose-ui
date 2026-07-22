@@ -245,7 +245,7 @@ const chartPropertySchema = v.object({
         v.custom<EChartsOption>(isEChartsOption, '请输入有效的 EChartsOption'),
         v.title('图表配置'),
         v.description('通过实例 renderer 编辑并实时应用到 ECharts'),
-        v.metadata({ propertyPanel: { editor: 'echart' } }),
+        v.metadata({ propertyPanel: { editor: 'echart', binding: { enabled: true } } }),
       ),
     }),
     v.title('Chart'),
@@ -274,7 +274,7 @@ const rectanglePropertySchema = v.object({
       position: v.pipe(
         axisPairSchema,
         v.title('位置 Position'),
-        v.metadata({ propertyPanel: { editor: 'vector2' } }),
+        v.metadata({ propertyPanel: { editor: 'vector2', binding: { enabled: true } } }),
       ),
       size: v.pipe(
         sizePairSchema,
@@ -310,14 +310,14 @@ const rectanglePropertySchema = v.object({
       color: v.pipe(
         v.string(),
         v.title('颜色 Color'),
-        v.metadata({ propertyPanel: { editor: 'color' } }),
+        v.metadata({ propertyPanel: { editor: 'color', binding: { enabled: true } } }),
       ),
       opacity: v.pipe(
         v.number(),
         v.minValue(0),
         v.maxValue(1),
         v.title('不透明度 Opacity'),
-        v.metadata({ propertyPanel: { editor: 'opacity' } }),
+        v.metadata({ propertyPanel: { editor: 'opacity', binding: { enabled: true } } }),
       ),
       cornerRadius: v.pipe(
         v.number(),
@@ -801,6 +801,38 @@ function readChartConfig(option: unknown): DemoChartConfig {
   }
 }
 
+function BindingTargetLayout({
+  children,
+  trigger,
+}: {
+  children: ReactNode
+  trigger?: ReactNode
+}) {
+  if (!trigger) return <>{children}</>
+  return (
+    <span className="property-panel__binding-target">
+      <span className="property-panel__binding-control">{children}</span>
+      {trigger}
+    </span>
+  )
+}
+
+function BindingTargetBlock({
+  children,
+  trigger,
+}: {
+  children: ReactNode
+  trigger?: ReactNode
+}) {
+  if (!trigger) return <>{children}</>
+  return (
+    <div className="property-panel__binding-target">
+      <div className="property-panel__binding-control">{children}</div>
+      {trigger}
+    </div>
+  )
+}
+
 function FixedNumberInput({
   label,
   value,
@@ -808,6 +840,7 @@ function FixedNumberInput({
   readOnly,
   disabled = false,
   bindingTrigger,
+  unit,
   onCommit,
 }: {
   label: string
@@ -816,6 +849,7 @@ function FixedNumberInput({
   readOnly: boolean
   disabled?: boolean
   bindingTrigger?: ReactNode
+  unit?: string
   onCommit: (value: number) => boolean
 }) {
   const format = (candidate: number) => candidate.toFixed(precision)
@@ -828,13 +862,13 @@ function FixedNumberInput({
     const candidate = Number(text)
     const success = Number.isFinite(candidate) && onCommit(candidate)
     setDraft({
-      source: value,
+      source: success ? candidate : value,
       text: success ? format(candidate) : text,
       error: success ? '' : '完整属性值不符合 Schema',
     })
   }
   return (
-    <>
+    <BindingTargetLayout trigger={bindingTrigger}>
       <input
         aria-invalid={error ? 'true' : undefined}
         aria-label={label}
@@ -854,9 +888,9 @@ function FixedNumberInput({
           }
         }}
       />
-      {bindingTrigger}
+      {unit ? <span aria-hidden="true" className="scalar-number-unit">{unit}</span> : null}
       {error ? <small className="numeric-draft-error" role="alert">{error}</small> : null}
-    </>
+    </BindingTargetLayout>
   )
 }
 
@@ -956,9 +990,9 @@ function ScalarNumberRenderer({
         disabled={props.readOnly && !target?.binding}
         bindingTrigger={props.binding?.renderTrigger('value')}
         readOnly={props.readOnly || Boolean(target?.binding)}
+        unit={unit}
         value={value}
       />
-      {unit ? <span aria-hidden="true">{unit}</span> : null}
     </div>
   )
 }
@@ -986,33 +1020,34 @@ function ColorRenderer({ value, readOnly, commit, binding }: PropertyPanelRender
     : typeof value === 'string' ? value : '#000000'
   const bound = Boolean(target?.binding)
   return (
-    <label className="color-property-editor">
-      <input
-        aria-label="颜色选择器"
-        aria-readonly={bound ? 'true' : undefined}
-        disabled={readOnly && !bound}
-        type="color"
-        value={color}
-        onChange={(event) => {
-          if (!bound) commit(event.target.value.toUpperCase())
-        }}
-      />
-      <input
-        aria-label="颜色值"
-        disabled={readOnly && !bound}
-        readOnly={bound}
-        value={color.toUpperCase()}
-        onChange={(event) => {
-          if (!bound && /^#[\dA-F]{6}$/iu.test(event.target.value)) {
-            commit(event.target.value.toUpperCase())
-          }
-        }}
-      />
-      <svg aria-hidden="true" viewBox="0 0 16 16">
-        <path d="m4 6 4 4 4-4" />
-      </svg>
-      {binding?.renderTrigger('value')}
-    </label>
+    <BindingTargetBlock trigger={binding?.renderTrigger('value')}>
+      <label className="color-property-editor">
+        <input
+          aria-label="颜色选择器"
+          aria-readonly={bound ? 'true' : undefined}
+          disabled={readOnly && !bound}
+          type="color"
+          value={color}
+          onChange={(event) => {
+            if (!bound) commit(event.target.value.toUpperCase())
+          }}
+        />
+        <input
+          aria-label="颜色值"
+          disabled={readOnly && !bound}
+          readOnly={bound}
+          value={color.toUpperCase()}
+          onChange={(event) => {
+            if (!bound && /^#[\dA-F]{6}$/iu.test(event.target.value)) {
+              commit(event.target.value.toUpperCase())
+            }
+          }}
+        />
+        <svg aria-hidden="true" viewBox="0 0 16 16">
+          <path d="m4 6 4 4 4-4" />
+        </svg>
+      </label>
+    </BindingTargetBlock>
   )
 }
 
@@ -1021,28 +1056,29 @@ function VisibilityRenderer({ value, readOnly, commit, binding }: PropertyPanelR
   const displayValue = target?.effectiveValue ?? value
   const bound = Boolean(target?.binding)
   return (
-    <label className="visibility-property-editor">
-      <svg aria-hidden="true" viewBox="0 0 20 20">
-        <path d="M1.8 10s3-5 8.2-5 8.2 5 8.2 5-3 5-8.2 5-8.2-5-8.2-5Z" />
-        <circle cx="10" cy="10" r="2.4" />
-      </svg>
-      <select
-        aria-label="可见性 Visibility"
-        aria-readonly={bound ? 'true' : undefined}
-        disabled={readOnly && !bound}
-        value={String(displayValue)}
-        onChange={(event) => {
-          if (!bound) commit(event.target.value)
-        }}
-      >
-        <option value="visible">Visible</option>
-        <option value="hidden">Hidden</option>
-      </select>
-      <svg aria-hidden="true" viewBox="0 0 16 16">
-        <path d="m4 6 4 4 4-4" />
-      </svg>
-      {binding?.renderTrigger('value')}
-    </label>
+    <BindingTargetBlock trigger={binding?.renderTrigger('value')}>
+      <label className="visibility-property-editor">
+        <svg aria-hidden="true" viewBox="0 0 20 20">
+          <path d="M1.8 10s3-5 8.2-5 8.2 5 8.2 5-3 5-8.2 5-8.2-5-8.2-5Z" />
+          <circle cx="10" cy="10" r="2.4" />
+        </svg>
+        <select
+          aria-label="可见性 Visibility"
+          aria-readonly={bound ? 'true' : undefined}
+          disabled={readOnly && !bound}
+          value={String(displayValue)}
+          onChange={(event) => {
+            if (!bound) commit(event.target.value)
+          }}
+        >
+          <option value="visible">Visible</option>
+          <option value="hidden">Hidden</option>
+        </select>
+        <svg aria-hidden="true" viewBox="0 0 16 16">
+          <path d="m4 6 4 4 4-4" />
+        </svg>
+      </label>
+    </BindingTargetBlock>
   )
 }
 
@@ -1052,46 +1088,47 @@ function AlignmentRenderer({ value, readOnly, commit, binding }: PropertyPanelRe
   const displayValue = target?.effectiveValue ?? value
   const bound = Boolean(target?.binding)
   return (
-    <div className="alignment-property-editor">
-      {options.map((option) => (
-        <button
-          aria-label={`对齐 ${option}`}
-          aria-disabled={readOnly || bound}
-          aria-pressed={displayValue === option}
-          disabled={readOnly && !bound}
-          key={option}
-          type="button"
-          onClick={() => {
-            if (!bound) commit(option)
-          }}
-        >
-          <svg aria-hidden="true" data-alignment={option} viewBox="0 0 24 20">
-            {option === 'start' ? (
-              <>
-                <path d="M4 2v16" />
-                <path d="M7 5h12M7 10h8M7 15h11" />
-              </>
-            ) : option === 'center' ? (
-              <>
-                <path d="M12 2v16" />
-                <path d="M5 5h14M7 10h10M4 15h16" />
-              </>
-            ) : option === 'end' ? (
-              <>
-                <path d="M20 2v16" />
-                <path d="M5 5h12M9 10h8M6 15h11" />
-              </>
-            ) : (
-              <>
-                <path d="M4 2v16M20 2v16" />
-                <path d="M7 5h10M7 10h10M7 15h10" />
-              </>
-            )}
-          </svg>
-        </button>
-      ))}
-      {binding?.renderTrigger('value')}
-    </div>
+    <BindingTargetBlock trigger={binding?.renderTrigger('value')}>
+      <div className="alignment-property-editor">
+        {options.map((option) => (
+          <button
+            aria-label={`对齐 ${option}`}
+            aria-disabled={readOnly || bound}
+            aria-pressed={displayValue === option}
+            disabled={readOnly && !bound}
+            key={option}
+            type="button"
+            onClick={() => {
+              if (!bound) commit(option)
+            }}
+          >
+            <svg aria-hidden="true" data-alignment={option} viewBox="0 0 24 20">
+              {option === 'start' ? (
+                <>
+                  <path d="M4 2v16" />
+                  <path d="M7 5h12M7 10h8M7 15h11" />
+                </>
+              ) : option === 'center' ? (
+                <>
+                  <path d="M12 2v16" />
+                  <path d="M5 5h14M7 10h10M4 15h16" />
+                </>
+              ) : option === 'end' ? (
+                <>
+                  <path d="M20 2v16" />
+                  <path d="M5 5h12M9 10h8M6 15h11" />
+                </>
+              ) : (
+                <>
+                  <path d="M4 2v16M20 2v16" />
+                  <path d="M7 5h10M7 10h10M7 15h10" />
+                </>
+              )}
+            </svg>
+          </button>
+        ))}
+      </div>
+    </BindingTargetBlock>
   )
 }
 
@@ -1138,76 +1175,80 @@ function EChartsOptionRenderer({ value, readOnly, commit, binding }: PropertyPan
     <div className="echart-option-editor">
       <label>
         <span>标题</span>
-        <input
-          aria-label="图表标题"
-          disabled={readOnly && !titleTarget?.binding}
-          readOnly={Boolean(titleTarget?.binding)}
-          value={config.title}
-          onChange={(event) => {
-            if (!titleTarget?.binding) update({ title: event.target.value })
-          }}
-        />
-        {binding?.renderTrigger('title')}
+        <BindingTargetLayout trigger={binding?.renderTrigger('title')}>
+          <input
+            aria-label="图表标题"
+            disabled={readOnly && !titleTarget?.binding}
+            readOnly={Boolean(titleTarget?.binding)}
+            value={config.title}
+            onChange={(event) => {
+              if (!titleTarget?.binding) update({ title: event.target.value })
+            }}
+          />
+        </BindingTargetLayout>
       </label>
       <label>
         <span>类型</span>
-        <select
-          aria-label="图表类型"
-          aria-readonly={typeTarget?.binding ? 'true' : undefined}
-          disabled={readOnly && !typeTarget?.binding}
-          value={config.type}
-          onChange={(event) => {
-            if (!typeTarget?.binding) update({ type: event.target.value as DemoChartType })
-          }}
-        >
-          <option value="bar">柱状图</option>
-          <option value="line">折线图</option>
-          <option value="pie">饼图</option>
-        </select>
-        {binding?.renderTrigger('type')}
+        <BindingTargetLayout trigger={binding?.renderTrigger('type')}>
+          <select
+            aria-label="图表类型"
+            aria-readonly={typeTarget?.binding ? 'true' : undefined}
+            disabled={readOnly && !typeTarget?.binding}
+            value={config.type}
+            onChange={(event) => {
+              if (!typeTarget?.binding) update({ type: event.target.value as DemoChartType })
+            }}
+          >
+            <option value="bar">柱状图</option>
+            <option value="line">折线图</option>
+            <option value="pie">饼图</option>
+          </select>
+        </BindingTargetLayout>
       </label>
       <label>
         <span>系列</span>
-        <input
-          aria-label="系列名称"
-          disabled={readOnly && !seriesTarget?.binding}
-          readOnly={Boolean(seriesTarget?.binding)}
-          value={config.seriesName}
-          onChange={(event) => {
-            if (!seriesTarget?.binding) update({ seriesName: event.target.value })
-          }}
-        />
-        {binding?.renderTrigger('seriesName')}
+        <BindingTargetLayout trigger={binding?.renderTrigger('seriesName')}>
+          <input
+            aria-label="系列名称"
+            disabled={readOnly && !seriesTarget?.binding}
+            readOnly={Boolean(seriesTarget?.binding)}
+            value={config.seriesName}
+            onChange={(event) => {
+              if (!seriesTarget?.binding) update({ seriesName: event.target.value })
+            }}
+          />
+        </BindingTargetLayout>
       </label>
       <label>
         <span>数据</span>
-        <input
-          aria-invalid={dataError ? 'true' : undefined}
-          aria-label="系列数据"
-          disabled={readOnly && !dataTarget?.binding}
-          readOnly={Boolean(dataTarget?.binding)}
-          value={dataText}
-          onChange={(event) => {
-            if (dataTarget?.binding) return
-            const text = event.target.value
-            const tokens = text.split(',').map((item) => item.trim())
-            const data = tokens.map(Number)
-            const valid = tokens.length > 0
-              && tokens.every((token) => token !== '')
-              && data.every(Number.isFinite)
-            if (!valid) {
-              setDataDraft({ source: value, text, error: '请输入逗号分隔的数字' })
-              return
-            }
-            const success = update({ data })
-            setDataDraft({
-              source: value,
-              text,
-              error: success ? '' : 'EChartsOption 未通过 Schema 校验',
-            })
-          }}
-        />
-        {binding?.renderTrigger('data')}
+        <BindingTargetLayout trigger={binding?.renderTrigger('data')}>
+          <input
+            aria-invalid={dataError ? 'true' : undefined}
+            aria-label="系列数据"
+            disabled={readOnly && !dataTarget?.binding}
+            readOnly={Boolean(dataTarget?.binding)}
+            value={dataText}
+            onChange={(event) => {
+              if (dataTarget?.binding) return
+              const text = event.target.value
+              const tokens = text.split(',').map((item) => item.trim())
+              const data = tokens.map(Number)
+              const valid = tokens.length > 0
+                && tokens.every((token) => token !== '')
+                && data.every(Number.isFinite)
+              if (!valid) {
+                setDataDraft({ source: value, text, error: '请输入逗号分隔的数字' })
+                return
+              }
+              const success = update({ data })
+              setDataDraft({
+                source: value,
+                text,
+                error: success ? '' : 'EChartsOption 未通过 Schema 校验',
+              })
+            }}
+          />
+        </BindingTargetLayout>
         {dataError ? <small role="alert">{dataError}</small> : null}
       </label>
       <EChartView accessible={false} option={createChartOption(config)} />

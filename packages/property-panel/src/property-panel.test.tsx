@@ -380,7 +380,7 @@ describe('OpenSpec: property-panel / 自定义类型 Renderer Registry / 使用�
     const content = screen.getByRole('group', { name: '深层图表' })
     const field = content.closest('.property-panel__field')
     expect(field).toHaveAttribute('data-property-depth', '2')
-    expect(field).toHaveStyle({ '--pp-field-indent': '52px', '--pp-branch-indent': '38px' })
+    expect(field).toHaveStyle({ '--pp-field-depth': '2', '--pp-branch-depth': '1' })
 
     fireEvent.click(within(content).getByRole('button', { name: '编辑 ECharts 1 series' }))
     expect(onValueChange).toHaveBeenCalledWith(
@@ -769,13 +769,12 @@ describe('OpenSpec: property-panel / 嵌套与集合属性编辑 / 修改数组�
 
     const field = screen.getByLabelText('深层字段').closest('.property-panel__field')
     expect(field).toHaveAttribute('data-property-depth', '6')
-    expect(field).toHaveStyle({ '--pp-field-indent': '88px' })
-    expect(field).toHaveStyle({ '--pp-branch-indent': '74px' })
+    expect(field).toHaveStyle({ '--pp-field-depth': '4' })
+    expect(field).toHaveStyle({ '--pp-branch-depth': '3' })
 
     const deepestGroup = screen.getByRole('button', { name: 'Level6' }).closest('.property-panel__group')
     expect(deepestGroup).toHaveAttribute('data-property-depth', '5')
-    expect(deepestGroup).toHaveStyle({ '--pp-group-indent': '66px' })
-    expect(deepestGroup).toHaveStyle({ '--pp-guide-indent': '74px' })
+    expect(deepestGroup).toHaveStyle({ '--pp-group-depth': '3' })
   })
 
   it('新增、移动和删除数组项，并禁止删除 tuple 固定项', () => {
@@ -932,9 +931,9 @@ describe('OpenSpec: property-panel / 自适应属性操作轨道 / 通过行上�
 })
 
 describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼容变量', () => {
-  it('提供纯绑定解析能力并在字段尾部显示绑定入口', () => {
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 未声明字段不启用变量绑定', () => {
     expect(propertyPanelModule).toHaveProperty('resolvePropertyBindings')
-    const schema = v.object({ opacity: v.pipe(v.number(), v.title('不透明度')) })
+    const schema = v.object({ title: v.pipe(v.string(), v.title('标题')) })
     const experimentalProps = {
       binding: {
         value: [],
@@ -942,15 +941,185 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
         onChange: vi.fn(),
       },
     } as Record<string, unknown>
-    render(<PropertyPanel {...experimentalProps} schema={schema} value={{ opacity: 1 }} />)
+    render(<PropertyPanel
+      {...experimentalProps}
+      schema={schema}
+      value={{ title: 'Literal' }}
+    />)
+
+    expect(screen.queryByRole('button', { name: '绑定 标题' })).not.toBeInTheDocument()
+
+    const result = resolvePropertyBindings({
+      schema,
+      value: { title: 'Literal' },
+      bindings: [{ target: { path: ['title'], targetId: 'value' }, variableId: 'page.title' }],
+      variables: [{ id: 'page.title', label: '页面标题', scope: 'page', value: 'Bound' }],
+    })
+    expect(result.value).toEqual({ title: 'Literal' })
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'unknown-target',
+        target: { path: ['title'], targetId: 'value' },
+      }),
+    ])
+
+    const pointSchema = v.custom<{ x: number }>((value) => (
+      Boolean(value && typeof value === 'object' && 'x' in value)
+    ))
+    const customSchema = v.object({
+      point: v.pipe(
+        pointSchema,
+        v.title('坐标'),
+        v.metadata({ propertyPanel: { editor: 'point' } }),
+      ),
+    })
+    const pointRenderer: PropertyPanelRenderer = {
+      id: 'point',
+      component: ({ binding }) => <output>{binding ? 'binding-on' : 'binding-off'}</output>,
+      bindingTargets: () => [{
+        id: 'x',
+        label: 'X',
+        schema: v.number(),
+        getValue: (value) => (value as { x: number }).x,
+        setValue: (value, targetValue) => ({ ...(value as object), x: targetValue }),
+      }],
+    }
+    render(
+      <PropertyPanel
+        binding={{ value: [], variables: [], onChange: vi.fn() }}
+        renderers={[pointRenderer]}
+        schema={customSchema}
+        value={{ point: { x: 1 } }}
+      />,
+    )
+    expect(screen.getByText('binding-off')).toBeInTheDocument()
+
+    const customResult = resolvePropertyBindings({
+      schema: customSchema,
+      value: { point: { x: 1 } },
+      bindings: [{ target: { path: ['point'], targetId: 'x' }, variableId: 'page.x' }],
+      variables: [{ id: 'page.x', label: '页面 X', scope: 'page', value: 8 }],
+      renderers: [pointRenderer],
+    })
+    expect(customResult.value).toEqual({ point: { x: 1 } })
+    expect(customResult.issues).toEqual([
+      expect.objectContaining({
+        code: 'unknown-target',
+        target: { path: ['point'], targetId: 'x' },
+      }),
+    ])
+  })
+
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 显式启用内置字段变量绑定', () => {
+    const schema = v.object({
+      opacity: v.pipe(
+        v.number(),
+        v.title('不透明度'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+    })
+    render(
+      <PropertyPanel
+        binding={{
+          value: [],
+          variables: [],
+          onChange: vi.fn(),
+        }}
+        schema={schema}
+        value={{ opacity: 1 }}
+      />,
+    )
 
     expect(screen.getByRole('button', { name: '绑定 不透明度' })).toBeInTheDocument()
   })
 
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 绑定入口不遮挡原控件', () => {
+    const schema = v.object({
+      opacity: v.pipe(
+        v.number(),
+        v.title('不透明度'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+      title: v.pipe(v.string(), v.title('标题')),
+    })
+    render(
+      <PropertyPanel
+        binding={{
+          value: [{ target: { path: ['opacity'], targetId: 'value' }, variableId: 'page.opacity' }],
+          variables: [{
+            id: 'page.opacity',
+            label: '页面中的超长不透明度变量',
+            scope: 'page',
+            value: 0.6,
+          }],
+          onChange: vi.fn(),
+        }}
+        schema={schema}
+        value={{ opacity: 1, title: 'Literal' }}
+      />,
+    )
+
+    const input = screen.getByLabelText('不透明度')
+    const trigger = screen.getByRole('button', { name: '更换绑定 不透明度' })
+    const slot = trigger.closest<HTMLElement>('.property-panel__binding-slot')
+    const target = trigger.closest<HTMLElement>('.property-panel__binding-target')
+
+    expect(input).toHaveValue(0.6)
+    expect(input).toHaveAttribute('readonly')
+    expect(slot).toHaveAttribute('data-binding-state', 'bound')
+    expect(slot).toHaveTextContent('页面中的超长不透明度变量')
+    expect(target).toContainElement(input)
+    expect(target).toContainElement(slot)
+    expect(input.closest('.property-panel__binding-control')?.nextElementSibling).toBe(slot)
+    expect(screen.getByLabelText('标题').closest('.property-panel__binding-target')).toBeNull()
+  })
+
+  it('把宿主自定义 trigger 包裹在统一绑定槽位内', () => {
+    const schema = v.object({
+      title: v.pipe(
+        v.string(),
+        v.title('标题'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+    })
+    render(
+      <PropertyPanel
+        binding={{
+          value: [],
+          variables: [],
+          onChange: vi.fn(),
+          renderTrigger: ({ target }) => (
+            <button aria-label={`自定义绑定 ${target.label}`} type="button">自定义</button>
+          ),
+        }}
+        schema={schema}
+        value={{ title: 'Literal' }}
+      />,
+    )
+
+    const trigger = screen.getByRole('button', { name: '自定义绑定 标题' })
+    expect(trigger.closest('.property-panel__binding-slot')).toHaveAttribute(
+      'data-binding-state',
+      'literal',
+    )
+    expect(trigger.closest('.property-panel__binding-target')).toContainElement(
+      screen.getByLabelText('标题'),
+    )
+  })
+
   it('只应用通过目标和完整根 Schema 的变量并逐目标回退字面值', () => {
     const schema = v.object({
-      opacity: v.pipe(v.number(), v.minValue(0), v.maxValue(1), v.title('不透明度')),
-      title: v.string(),
+      opacity: v.pipe(
+        v.number(),
+        v.minValue(0),
+        v.maxValue(1),
+        v.title('不透明度'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+      title: v.pipe(
+        v.string(),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
     })
     const literal = { opacity: 1, title: 'Literal' }
     const result = resolvePropertyBindings({
@@ -977,7 +1146,7 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
       opacity: v.pipe(
         v.number(),
         v.title('不透明度'),
-        v.metadata({ propertyPanel: { binding: { semanticScope: 'opacity' } } }),
+        v.metadata({ propertyPanel: { binding: { enabled: true, semanticScope: 'opacity' } } }),
       ),
     })
     const onValueChange = vi.fn()
@@ -1048,7 +1217,13 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
   })
 
   it('把绑定计入修改和错误筛选，并在 reset 时同时删除绑定', () => {
-    const schema = v.object({ opacity: v.pipe(v.number(), v.title('不透明度')) })
+    const schema = v.object({
+      opacity: v.pipe(
+        v.number(),
+        v.title('不透明度'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+    })
     const onBindingChange = vi.fn()
     render(
       <PropertyPanel
@@ -1085,7 +1260,7 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
       position: v.pipe(
         pointSchema,
         v.title('位置'),
-        v.metadata({ propertyPanel: { editor: 'point' } }),
+        v.metadata({ propertyPanel: { editor: 'point', binding: { enabled: true } } }),
       ),
     })
     const renderer: PropertyPanelRenderer = {
@@ -1115,8 +1290,61 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     expect(result.value).toEqual({ position: { x: 12, y: 2 } })
   })
 
+  it('为显式启用的自定义 renderer 子目标提供绑定槽位', () => {
+    const pointSchema = v.custom<{ x: number; y: number }>((value) => (
+      Boolean(value && typeof value === 'object' && 'x' in value && 'y' in value)
+    ))
+    const schema = v.object({
+      position: v.pipe(
+        pointSchema,
+        v.title('位置'),
+        v.metadata({ propertyPanel: { editor: 'point', binding: { enabled: true } } }),
+      ),
+    })
+    const renderer: PropertyPanelRenderer = {
+      id: 'point',
+      component: ({ binding }) => (
+        <div>
+          {binding?.renderTrigger('x')}
+          {binding?.renderTrigger('y')}
+        </div>
+      ),
+      bindingTargets: () => [
+        {
+          id: 'x', label: 'X', schema: v.number(),
+          getValue: (value) => (value as { x: number }).x,
+          setValue: (value, targetValue) => ({ ...(value as object), x: targetValue }),
+        },
+        {
+          id: 'y', label: 'Y', schema: v.number(),
+          getValue: (value) => (value as { y: number }).y,
+          setValue: (value, targetValue) => ({ ...(value as object), y: targetValue }),
+        },
+      ],
+    }
+    render(
+      <PropertyPanel
+        binding={{ value: [], variables: [], onChange: vi.fn() }}
+        renderers={[renderer]}
+        schema={schema}
+        value={{ position: { x: 1, y: 2 } }}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '绑定 X' }))
+      .toHaveClass('property-panel__binding-trigger')
+    expect(screen.getByRole('button', { name: '绑定 Y' }).closest('.property-panel__binding-slot'))
+      .toHaveAttribute('data-binding-state', 'literal')
+  })
+
   it('变量快照更新只刷新 effective value，不发出字面值提交', () => {
-    const schema = v.object({ opacity: v.pipe(v.number(), v.title('不透明度')) })
+    const schema = v.object({
+      opacity: v.pipe(
+        v.number(),
+        v.title('不透明度'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+    })
     const onValueChange = vi.fn()
     function Harness() {
       const [variableValue, setVariableValue] = useState(0.6)
@@ -1145,7 +1373,13 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
   })
 
   it('只读面板中的已绑定输入仍可聚焦，但不能修改绑定或字面值', () => {
-    const schema = v.object({ title: v.pipe(v.string(), v.title('标题')) })
+    const schema = v.object({
+      title: v.pipe(
+        v.string(),
+        v.title('标题'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+    })
     render(
       <PropertyPanel
         binding={{

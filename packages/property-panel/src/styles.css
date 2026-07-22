@@ -10,6 +10,16 @@
     --pp-label-width: 160px;
     --pp-action-width: 36px;
     --pp-control-width: 234px;
+    --pp-font-size: 12px;
+    --pp-header-height: 52px;
+    --pp-toolbar-height: 36px;
+    --pp-group-height: 28px;
+    --pp-nested-group-height: 26px;
+    --pp-row-height: 26px;
+    --pp-control-height: 22px;
+    --pp-tree-indent: 14px;
+    --pp-binding-slot-width: 36px;
+    --pp-binding-slot-compact-width: 20px;
     --pp-border: #303131;
     --pp-border-strong: #3a3b3b;
     --pp-border-soft: #242525;
@@ -32,8 +42,8 @@
       linear-gradient(112deg, rgb(255 255 255 / 1.7%), transparent 34%),
       linear-gradient(100deg, #181919, #121313 72%);
     font-family: Inter, "Noto Sans SC", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 14px;
-    line-height: 1.25;
+    font-size: var(--pp-font-size);
+    line-height: 1.2;
   }
 
   .property-panel::-webkit-scrollbar {
@@ -70,10 +80,10 @@
 
   .property-panel__header {
     display: flex;
-    min-height: 64px;
+    min-height: var(--pp-header-height);
     align-items: center;
-    gap: 10px;
-    padding: 8px 11px;
+    gap: 8px;
+    padding: 5px 9px;
     border-bottom: 1px solid #0b0c0c;
     background:
       radial-gradient(ellipse at 36% 48%, rgb(255 255 255 / 5%), transparent 46%),
@@ -89,13 +99,13 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
   }
 
   .property-panel__header strong {
     overflow: hidden;
     color: #e5e5e5;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 540;
     letter-spacing: 0.01em;
     line-height: 1.25;
@@ -106,15 +116,15 @@
 
   .property-panel__header > div > span {
     color: #a6a6a6;
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .property-panel__toolbar {
     position: relative;
     z-index: 6;
     display: grid;
-    min-height: 46px;
-    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    min-height: var(--pp-toolbar-height);
+    grid-template-columns: minmax(0, 1fr) 34px 34px;
     align-items: stretch;
     border-bottom: 1px solid #0b0c0c;
     background:
@@ -127,20 +137,20 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 8px;
-    margin: 7px 8px;
-    padding: 0 9px;
+    gap: 6px;
+    margin: 5px 6px;
+    padding: 0 7px;
     border: 1px solid #343535;
-    border-radius: 4px;
+    border-radius: 3px;
     color: #9d9e9e;
     background: linear-gradient(180deg, #111212, #0b0c0c);
     box-shadow: inset 0 1px 4px rgb(0 0 0 / 46%);
   }
 
   .property-panel__search > svg {
-    width: 19px;
-    height: 19px;
-    flex: 0 0 19px;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
     stroke-width: 1.8;
   }
 
@@ -181,8 +191,8 @@
   }
 
   .property-panel__menu-anchor > button > svg {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
     color: #b7b8b8;
     filter: drop-shadow(0 1px 1px #000);
   }
@@ -200,16 +210,16 @@
     right: 3px;
     display: grid;
     width: max-content;
-    min-width: 156px;
-    padding: 4px;
+    min-width: 148px;
+    padding: 3px;
     border: 1px solid #4c4d4d;
-    border-radius: 4px;
+    border-radius: 3px;
     background: #202121;
     box-shadow: 0 10px 30px rgb(0 0 0 / 54%);
   }
 
   .property-panel__menu button {
-    padding: 7px 9px;
+    padding: 5px 7px;
     border: 0;
     border-radius: 3px;
     text-align: left;
@@ -240,8 +250,11 @@
   }
 
   .property-panel__group {
-    border-bottom: 1px solid #090a0a;
-    box-shadow: inset 0 -1px #343535;
+    --pp-group-indent: calc(6px + var(--pp-group-depth, 0) * var(--pp-tree-indent));
+    --pp-guide-indent: calc(16px + var(--pp-group-depth, 0) * var(--pp-tree-indent));
+
+    border-bottom: 0;
+    box-shadow: none;
   }
 
   .property-panel__group .property-panel__group {
@@ -251,56 +264,55 @@
 
   .property-panel__group-header {
     display: grid;
-    min-height: 37px;
+    min-height: var(--pp-group-height);
     grid-template-columns: minmax(0, 1fr) var(--pp-action-width);
     align-items: stretch;
-    border-top: 1px solid #393a3a;
-    background:
-      radial-gradient(ellipse at 26% 48%, rgb(255 255 255 / 4.5%), transparent 50%),
-      linear-gradient(104deg, rgb(255 255 255 / 1.8%), transparent 45%),
-      linear-gradient(180deg, #212222, #191a1a);
+    border-top: 1px solid #151616;
+    border-bottom: 1px solid #363737;
+    background: #2a2a2a;
   }
 
   .property-panel__group .property-panel__group .property-panel__group-header {
-    min-height: 34px;
-    border-top: 1px solid var(--pp-border-soft);
-    background: linear-gradient(90deg, #1a1b1b, #151616);
+    min-height: var(--pp-nested-group-height);
+    border-top: 1px solid #242525;
+    border-bottom: 1px solid #101111;
+    background: #1b1c1c;
   }
 
   .property-panel__group-header > button {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
     overflow: hidden;
-    padding: 0 12px 0 var(--pp-group-indent, 12px);
+    padding: 0 8px 0 var(--pp-group-indent, 10px);
     border: 0;
     text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
     background: transparent;
     cursor: pointer;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 590;
-    text-shadow: 0 1px #000;
+    text-shadow: none;
   }
 
   .property-panel__group-header > button > svg {
-    width: 13px;
-    height: 13px;
-    flex: 0 0 13px;
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
     color: #bfc0c0;
     stroke-width: 2;
   }
 
   .property-panel__group .property-panel__group .property-panel__group-header > button {
     color: #b8b9b9;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 470;
   }
 
   .property-panel__group-header > button:hover {
-    background: rgb(255 255 255 / 3.5%);
+    background: #303131;
   }
 
   .property-panel__group-content {
@@ -312,7 +324,7 @@
     z-index: 1;
     top: 0;
     bottom: 0;
-    left: var(--pp-guide-indent, 38px);
+    left: var(--pp-guide-indent, 30px);
     width: 1px;
     background: #676868;
     content: "";
@@ -323,8 +335,8 @@
     position: absolute;
     z-index: 1;
     top: 50%;
-    left: var(--pp-branch-indent, 34px);
-    width: calc(var(--pp-field-indent, 48px) - var(--pp-branch-indent, 34px) - 4px);
+    left: var(--pp-branch-indent, 30px);
+    width: calc(var(--pp-field-indent, 44px) - var(--pp-branch-indent, 30px) - 4px);
     height: 1px;
     background: #676868;
     content: "";
@@ -332,9 +344,12 @@
   }
 
   .property-panel__field {
+    --pp-branch-indent: calc(16px + var(--pp-branch-depth, 0) * var(--pp-tree-indent));
+    --pp-field-indent: calc(16px + var(--pp-field-depth, 0) * var(--pp-tree-indent));
+
     position: relative;
     display: grid;
-    min-height: 35px;
+    min-height: var(--pp-row-height);
     grid-template-columns: var(--pp-label-width) minmax(0, 1fr) var(--pp-action-width);
     align-items: stretch;
     border-top: 1px solid var(--pp-border-soft);
@@ -348,11 +363,11 @@
   }
 
   .property-panel__field--full-width {
-    grid-template-rows: minmax(35px, auto) auto;
+    grid-template-rows: minmax(var(--pp-row-height), auto) auto;
   }
 
   .property-panel__field--full-width[data-property-nested="true"]::before {
-    top: 17px;
+    top: calc(var(--pp-row-height) / 2);
   }
 
   .property-panel__field--full-width > .property-panel__label {
@@ -371,9 +386,9 @@
     min-width: 0;
     flex-direction: column;
     justify-content: center;
-    gap: 2px;
+    gap: 1px;
     overflow: hidden;
-    padding: 6px 14px 6px var(--pp-field-indent, 34px);
+    padding: 3px 8px 3px var(--pp-field-indent, 16px);
     border-right: 1px solid var(--pp-border);
     color: #bfc0c0;
     line-height: 1.25;
@@ -389,7 +404,7 @@
   .property-panel__description {
     overflow: hidden;
     color: #747575;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 400;
     line-height: 1.25;
     text-overflow: ellipsis;
@@ -400,8 +415,8 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 6px;
-    padding: 3px 8px 4px;
+    gap: 4px;
+    padding: 1px 6px 2px;
   }
 
   .property-panel__editor--full-width {
@@ -411,7 +426,7 @@
     grid-column: 1 / -1;
     grid-row: 2;
     align-items: stretch;
-    padding: 7px 8px 9px var(--pp-field-indent, 20px);
+    padding: 5px 6px 6px var(--pp-field-indent, 16px);
     border-top: 1px solid var(--pp-border-soft);
     background: rgb(13 14 14 / 42%);
   }
@@ -423,7 +438,7 @@
     max-width: var(--pp-control-width);
     min-width: 0;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     margin-left: auto;
   }
 
@@ -435,13 +450,15 @@
   }
 
   .property-panel__control > input:not([type="checkbox"]),
-  .property-panel__control > select {
+  .property-panel__control > select,
+  .property-panel__binding-control > input:not([type="checkbox"]),
+  .property-panel__binding-control > select {
     width: 100%;
     min-width: 0;
-    height: 28px;
-    padding: 3px 8px;
+    height: var(--pp-control-height);
+    padding: 1px 6px;
     border: 1px solid #343535;
-    border-radius: 4px;
+    border-radius: 3px;
     outline: 0;
     color: #dedede;
     background: linear-gradient(180deg, #121313, #0b0c0c);
@@ -449,24 +466,28 @@
   }
 
   .property-panel__control > input[readonly],
-  .property-panel__control > select[aria-readonly="true"] {
+  .property-panel__control > select[aria-readonly="true"],
+  .property-panel__binding-control > input[readonly],
+  .property-panel__binding-control > select[aria-readonly="true"] {
     color: #c9d9ec;
     background: linear-gradient(180deg, #10171d, #0b1014);
   }
 
   .property-panel__control > input:focus,
-  .property-panel__control > select:focus {
+  .property-panel__control > select:focus,
+  .property-panel__binding-control > input:focus,
+  .property-panel__binding-control > select:focus {
     border-color: #3979c9;
     box-shadow: 0 0 0 1px rgb(44 132 246 / 22%), inset 0 1px 3px rgb(0 0 0 / 46%);
   }
 
   .property-panel__editor input[type="checkbox"] {
     appearance: none;
-    width: 19px;
-    height: 19px;
+    width: 16px;
+    height: 16px;
     margin: 0;
     border: 1px solid #3c4145;
-    border-radius: 4px;
+    border-radius: 3px;
     outline: 0;
     background: linear-gradient(180deg, #17191a, #101112);
     box-shadow: inset 0 1px 3px rgb(0 0 0 / 52%);
@@ -479,7 +500,7 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m4 10 4 4 8-9' fill='none' stroke='%233d91ff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2.8'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
-    background-size: 17px 17px;
+    background-size: 15px 15px;
   }
 
   .property-panel__editor input[type="checkbox"]:focus-visible {
@@ -487,15 +508,16 @@
     box-shadow: 0 0 0 1px rgb(44 132 246 / 35%), inset 0 1px 3px rgb(0 0 0 / 52%);
   }
 
-  .property-panel__control > input[aria-invalid="true"] {
+  .property-panel__control > input[aria-invalid="true"],
+  .property-panel__binding-control > input[aria-invalid="true"] {
     border-color: #d05b5b;
   }
 
   .property-panel__editor > [role="alert"] {
     position: absolute;
     z-index: 8;
-    margin-top: 54px;
-    padding: 4px 7px;
+    margin-top: calc(var(--pp-control-height) + 22px);
+    padding: 3px 6px;
     border: 1px solid #784242;
     border-radius: 3px;
     color: #ffc5c5;
@@ -503,68 +525,83 @@
     box-shadow: 0 6px 14px rgb(0 0 0 / 42%);
   }
 
-  .property-panel__control:has(.property-panel__unit) > input {
+  .property-panel__control:has(> .property-panel__unit) > input,
+  .property-panel__binding-control:has(> .property-panel__unit) > input {
     padding-right: 34px;
   }
 
   .property-panel__unit {
     position: absolute;
-    right: 10px;
+    right: 8px;
     color: #c6c7c7;
     pointer-events: none;
   }
 
-  .property-panel__binding-trigger {
-    position: absolute;
-    z-index: 3;
-    top: 2px;
-    right: 2px;
-    display: flex;
-    width: 24px;
-    height: 24px;
-    flex: 0 0 24px;
+  .property-panel__binding-target {
+    container: pp-binding-target / inline-size;
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: center;
-    gap: 4px;
-    overflow: hidden;
-    padding: 0 4px;
-    border: 1px solid transparent;
-    border-radius: 3px;
-    opacity: 0;
-    color: #8d959d;
-    background: transparent;
-    cursor: pointer;
-    pointer-events: none;
-    transition: opacity 80ms ease, color 80ms ease, background 80ms ease;
+    gap: 2px;
   }
 
-  .property-panel__field:hover .property-panel__binding-trigger,
-  .property-panel__field:focus-within .property-panel__binding-trigger,
-  .property-panel__binding-trigger:focus,
-  .property-panel__binding-trigger--bound,
-  .property-panel__binding-trigger--invalid {
+  .property-panel__binding-control {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+  }
+
+  .property-panel__binding-control > input:not([type="checkbox"]),
+  .property-panel__binding-control > select {
+    flex: 1 1 auto;
+  }
+
+  .property-panel__binding-slot {
+    display: flex;
+    width: var(--pp-binding-slot-width);
+    min-width: 0;
+    height: var(--pp-control-height);
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
     opacity: 1;
     pointer-events: auto;
   }
 
+  .property-panel__binding-slot > * {
+    max-width: 100%;
+  }
+
+  .property-panel__binding-trigger {
+    display: flex;
+    width: 100%;
+    height: 20px;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid #191a1b;
+    border-radius: 2px;
+    color: #d0d2d3;
+    background: linear-gradient(180deg, #3a3b3c, #303132);
+    box-shadow: inset 0 1px rgb(255 255 255 / 9%), 0 1px 1px rgb(0 0 0 / 45%);
+    cursor: pointer;
+    transition: color 80ms ease, background 80ms ease, border-color 80ms ease;
+  }
+
+  .property-panel__binding-trigger:hover:not(:disabled) {
+    border-color: #55585b;
+    background: linear-gradient(180deg, #46484a, #37393b);
+  }
+
   .property-panel__binding-trigger--bound {
-    width: auto;
-    max-width: 92px;
     color: #68a9ff;
-    background: rgb(39 99 168 / 18%);
-  }
-
-  .property-panel__control:has(.property-panel__binding-trigger--bound) > input:not([type="checkbox"]),
-  .property-panel__control:has(.property-panel__binding-trigger--bound) > select {
-    padding-right: 30px;
-  }
-
-  .property-panel__control:has(.property-panel__unit) > .property-panel__binding-trigger {
-    right: 28px;
-  }
-
-  .property-panel__control:has(.property-panel__unit):has(.property-panel__binding-trigger--bound) > input {
-    padding-right: 56px;
+    border-color: #3c5f82;
+    background: linear-gradient(180deg, #263849, #182633);
   }
 
   .property-panel__binding-trigger--invalid {
@@ -579,9 +616,9 @@
   }
 
   .property-panel__binding-trigger > svg {
-    width: 16px;
-    height: 16px;
-    flex: 0 0 16px;
+    width: 13px;
+    height: 13px;
+    flex: 0 0 13px;
     stroke: currentColor;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -589,20 +626,27 @@
   }
 
   .property-panel__binding-trigger > span {
-    overflow: hidden;
-    font-size: 11px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: none;
+  }
+
+  @container pp-binding-target (max-width: 128px) {
+    .property-panel__binding-slot {
+      width: var(--pp-binding-slot-compact-width);
+    }
+
+    .property-panel__binding-trigger {
+      padding-inline: 0;
+    }
   }
 
   .property-panel__binding-picker {
     position: fixed;
     z-index: 80;
     display: grid;
-    width: 264px;
+    width: 248px;
     max-height: min(420px, calc(100vh - 16px));
     overflow: hidden;
-    padding: 5px;
+    padding: 4px;
     border: 1px solid #4a4d50;
     border-radius: 5px;
     color: var(--pp-text);
@@ -612,16 +656,16 @@
 
   .property-panel__binding-picker > header {
     display: flex;
-    min-height: 30px;
+    min-height: 26px;
     align-items: center;
     justify-content: space-between;
-    padding: 0 4px 0 7px;
+    padding: 0 3px 0 6px;
   }
 
   .property-panel__binding-picker > header > button,
   .property-panel__binding-picker > footer button {
-    min-width: 26px;
-    height: 25px;
+    min-width: 22px;
+    height: 22px;
     border: 0;
     border-radius: 3px;
     color: #b8babb;
@@ -630,9 +674,9 @@
   }
 
   .property-panel__binding-picker > input {
-    height: 29px;
-    margin: 2px 3px 5px;
-    padding: 3px 8px;
+    height: 24px;
+    margin: 2px 2px 4px;
+    padding: 2px 6px;
     border: 1px solid #3c4145;
     border-radius: 4px;
     outline: 0;
@@ -646,7 +690,7 @@
 
   .property-panel__binding-options h3 {
     margin: 0;
-    padding: 6px 8px 4px;
+    padding: 5px 7px 3px;
     color: #777e84;
     font-size: 10px;
     font-weight: 600;
@@ -656,11 +700,11 @@
   .property-panel__binding-options section > button {
     display: grid;
     width: 100%;
-    min-height: 31px;
+    min-height: 27px;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
-    padding: 4px 8px;
+    gap: 6px;
+    padding: 3px 7px;
     border: 0;
     border-radius: 3px;
     color: #cfd1d2;
@@ -680,7 +724,7 @@
     max-width: 90px;
     overflow: hidden;
     color: #7f9ab8;
-    font-size: 11px;
+    font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -706,7 +750,7 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    padding: 3px;
+    padding: 2px;
     overflow: visible;
     border-left: 1px solid var(--pp-border);
   }
@@ -717,9 +761,9 @@
 
   .property-panel__actions button {
     display: grid;
-    width: 25px;
-    height: 25px;
-    flex: 0 0 25px;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
     place-items: center;
     padding: 0;
     border: 0;
@@ -730,8 +774,8 @@
   }
 
   .property-panel__actions button > svg {
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
   }
 
   .property-panel__actions button:hover:not(:disabled) {
@@ -749,8 +793,8 @@
     top: calc(100% - 2px);
     right: 3px;
     display: grid;
-    min-width: 156px;
-    padding: 4px;
+    min-width: 148px;
+    padding: 3px;
     border: 1px solid #474949;
     border-radius: 4px;
     background: #191a1a;
@@ -760,19 +804,19 @@
   .property-panel__row-menu > button {
     display: flex;
     width: 100%;
-    height: 27px;
+    height: 24px;
     align-items: center;
     justify-content: flex-start;
-    gap: 7px;
-    padding: 0 8px;
+    gap: 6px;
+    padding: 0 7px;
     border-radius: 3px;
     white-space: nowrap;
   }
 
   .property-panel__row-menu > button > svg {
-    width: 15px;
-    height: 15px;
-    flex: 0 0 15px;
+    width: 13px;
+    height: 13px;
+    flex: 0 0 13px;
   }
 
   .property-panel__empty {
@@ -781,9 +825,11 @@
   }
 
   .property-panel__record > input {
+    position: relative;
+    z-index: 2;
     width: calc(var(--pp-label-width) - 18px);
-    height: 27px;
-    margin: 4px 9px;
+    height: var(--pp-control-height);
+    margin: 2px 7px;
     border: 1px solid #393a3a;
     border-radius: 4px;
     color: var(--pp-text);
@@ -793,7 +839,7 @@
   .property-panel__separator {
     position: absolute;
     z-index: 8;
-    top: 110px;
+    top: calc(var(--pp-header-height) + var(--pp-toolbar-height));
     bottom: 0;
     width: 5px;
     border: 0;
@@ -804,7 +850,7 @@
   }
 
   .property-panel:not(:has(.property-panel__header)) .property-panel__separator {
-    top: 46px;
+    top: var(--pp-toolbar-height);
   }
 
   .property-panel__separator::after {
@@ -827,10 +873,10 @@
 
   .property-panel__resize-handle {
     position: absolute;
-    top: 100px;
+    top: 72px;
     display: grid;
-    width: 15px;
-    height: 25px;
+    width: 13px;
+    height: 21px;
     place-items: center;
     margin-left: -5px;
     border: 1px solid #3b3c3c;
