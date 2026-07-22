@@ -32,6 +32,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   它，preview 不得依赖它。
 - `@compose-ui/property-panel` 是同步 Valibot Schema 驱动的受控 React 组件，不依赖 `core`、
   `editor` 或 `scene-tree`；宿主通过 editor 的 `inspectorPanel` 插槽组合它。
+- `@compose-ui/operation-log` 是独立的本地操作审计包，不依赖 `core`、`editor`、`scene-tree` 或
+  `property-panel`；宿主在成功提交边界显式记录，并通过 editor 的 `transactionLogPanel` 插槽组合面板。
 - `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 `core`，不得依赖 `editor`。
 - 跨包导入只使用 `@compose-ui/*` 公共入口，不得引用其他包的内部源码。
 - React、ReactDOM 和 JSX runtime 保持为 peer dependency 和外置依赖。
@@ -144,6 +146,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - npm 包：React、ReactDOM、Dockview、Tailwind CSS、TanStack React Virtual、Valibot、Vite、
   Vitest、Testing Library、Playwright、Turbo；示例应用单独使用 ECharts，属性面板公共包不依赖
   ECharts。
+- 浏览器运行时：操作日志包默认使用 IndexedDB，失败时降级为进程内存；不依赖服务器数据库。
 - CI：GitHub Actions `ubuntu-24.04` 与 Playwright Chromium。
 - 发布：Changesets 经 GitHub Actions Release 工作流发布到 npm registry（带 provenance）。
 - 当前运行时不依赖数据库、远端服务或第三方业务 API。

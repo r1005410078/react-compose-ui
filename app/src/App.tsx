@@ -1,10 +1,16 @@
 import { ComposeEditor } from '@compose-ui/editor'
 import {
+  OperationLogPanel,
+  OperationLogProvider,
+  useOperationLog,
+} from '@compose-ui/operation-log'
+import {
   PropertyPanel,
   resolvePropertyBindings,
 } from '@compose-ui/property-panel'
 import type {
   PropertyPanelBinding,
+  PropertyPanelChange,
   PropertyPanelRenderer,
   PropertyPanelRendererProps,
   PropertyPanelVariable,
@@ -24,6 +30,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import * as v from 'valibot'
 import '@compose-ui/property-panel/styles.css'
+import '@compose-ui/operation-log/styles.css'
 import './App.css'
 
 interface TextComponent {
@@ -1490,6 +1497,48 @@ function collectSceneNodeIds(nodes: readonly SceneTreeNode[]): readonly string[]
   return ids
 }
 
+function findSceneNodeLocation(
+  nodes: readonly SceneTreeNode[],
+  nodeId: string,
+  parentId: string | null = null,
+): { parentId: string | null; index: number } | null {
+  for (const [index, node] of nodes.entries()) {
+    if (node.id === nodeId) return { parentId, index }
+    if (node.children) {
+      const location = findSceneNodeLocation(node.children, nodeId, node.id)
+      if (location) return location
+    }
+  }
+  return null
+}
+
+function pathsEqual(
+  left: readonly (string | number)[],
+  right: readonly (string | number)[],
+) {
+  return left.length === right.length && left.every((segment, index) => segment === right[index])
+}
+
+const propertyLabels: Readonly<Record<string, string>> = {
+  transform: 'Transform',
+  'content.text': '文本内容',
+  'content.keywords': '关键词',
+  'chart.option': '图表配置',
+  'transform.position': '位置',
+  'transform.size': '尺寸',
+  'transform.anchor': '锚点',
+  'transform.angle': '旋转',
+  'transform.scale': '缩放',
+  'appearance.color': '颜色',
+  'appearance.opacity': '不透明度',
+  'appearance.cornerRadius': '圆角',
+}
+
+function propertyLabel(path: readonly (string | number)[]) {
+  const key = path.join('.')
+  return propertyLabels[key] ?? key
+}
+
 function resolveTextProperties(component: TextComponent) {
   return resolvePropertyBindings({
     schema: textPropertySchema,
@@ -1519,7 +1568,8 @@ function resolveRectangleProperties(component: RectangleComponent): RectanglePro
   }).value
 }
 
-function App() {
+function DemoWorkspace() {
+  const operationLog = useOperationLog()
   const [textComponents, setTextComponents] = useState<readonly TextComponent[]>([])
   const [chartComponents, setChartComponents] = useState<readonly ChartComponent[]>([])
   const [rectangleComponents, setRectangleComponents] = useState<readonly RectangleComponent[]>(
@@ -1600,22 +1650,74 @@ function App() {
     )
   }, [normalSceneNodes, rectangleComponents])
 
-  const addTextComponent = (parentId: string | null = 'page', index?: number) => {
+  const recordPropertyChange = (
+    componentId: string,
+    componentLabel: string,
+    change: PropertyPanelChange,
+  ) => {
+    const reset = change.reason === 'reset'
+    const label = propertyLabel(change.path)
+    const coalesces = change.reason === 'input' || change.reason === 'commit'
+    void operationLog.record({
+      action: reset ? 'property.reset' : 'property.change',
+      category: 'property',
+      summary: `${reset ? '重置' : '修改'} ${label}`,
+      targets: [{ componentId, componentLabel, path: change.path }],
+      source: 'property-panel',
+      before: change.previousValue,
+      after: change.value,
+      metadata: { reason: change.reason },
+    }, coalesces ? { coalesceKey: `${componentId}:${change.path.join('.')}` } : undefined)
+  }
+
+  const recordBindingChange = (
+    componentId: string,
+    componentLabel: string,
+    current: readonly PropertyPanelBinding[],
+    next: readonly PropertyPanelBinding[],
+    change: {
+      reason: 'bind' | 'unbind' | 'reset' | 'remap'
+      target: { path: readonly (string | number)[]; targetId: string }
+    },
+  ) => {
+    const matchesTarget = (binding: PropertyPanelBinding) => (
+      binding.target.targetId === change.target.targetId
+      && pathsEqual(binding.target.path, change.target.path)
+    )
+    void operationLog.record({
+      action: `binding.${change.reason}`,
+      category: 'binding',
+      summary: `${change.reason === 'bind' ? '绑定' : change.reason === 'unbind' ? '解绑' : change.reason === 'reset' ? '重置绑定' : '重映射绑定'} ${propertyLabel(change.target.path)}`,
+      targets: [{
+        componentId,
+        componentLabel,
+        path: change.target.path,
+      }],
+      source: 'property-panel',
+      before: current.find(matchesTarget),
+      after: next.find(matchesTarget),
+      metadata: { targetId: change.target.targetId },
+    })
+  }
+
+  const addTextComponent = (
+    parentId: string | null = 'page',
+    index?: number,
+    source = 'canvas-toolbar',
+  ) => {
     const number = nextTextIdRef.current
     nextTextIdRef.current += 1
     const id = `text-${number}`
     const text = number === 1 ? '默认文本' : `默认文本 ${number}`
-    setTextComponents((current) => [
-      ...current,
-      {
-        id,
-        text,
-        defaultText: text,
-        keywords: ['大屏', '现场'],
-        defaultKeywords: ['大屏', '现场'],
-        bindings: [],
-      },
-    ])
+    const component: TextComponent = {
+      id,
+      text,
+      defaultText: text,
+      keywords: ['大屏', '现场'],
+      defaultKeywords: ['大屏', '现场'],
+      bindings: [],
+    }
+    setTextComponents((current) => [...current, component])
     setNormalSceneNodes((current) => parentId === null
       ? insertSceneNodes(current, null, index ?? current.length, [{ id, label: text }])
       : insertSceneNode(current, parentId, index, { id, label: text }))
@@ -1624,6 +1726,15 @@ function App() {
         ? current
         : [...current, parentId])
     }
+    void operationLog.record({
+      action: 'component.create',
+      category: 'component',
+      summary: '新增文本组件',
+      targets: [{ componentId: id, componentLabel: text }],
+      source,
+      after: component,
+      metadata: { parentId, index },
+    })
   }
 
   const addChartComponent = () => {
@@ -1644,6 +1755,14 @@ function App() {
     }))
     setNormalExpandedIds((current) => current.includes('page') ? current : [...current, 'page'])
     setSelectedSceneIds([id])
+    void operationLog.record({
+      action: 'component.create',
+      category: 'component',
+      summary: '新增 ECharts 图表',
+      targets: [{ componentId: id, componentLabel: 'ECharts 图表' }],
+      source: 'canvas-toolbar',
+      after: { id, option },
+    })
   }
 
   const addRectangleComponent = () => {
@@ -1663,6 +1782,14 @@ function App() {
     }))
     setNormalExpandedIds((current) => current.includes('page') ? current : [...current, 'page'])
     setSelectedSceneIds([id])
+    void operationLog.record({
+      action: 'component.create',
+      category: 'component',
+      summary: '新增矩形组件',
+      targets: [{ componentId: id, componentLabel: `Rectangle ${number}` }],
+      source: 'canvas-toolbar',
+      after: { id, properties: DEFAULT_RECTANGLE_PROPERTIES },
+    })
   }
 
   const updateTextComponent = (nodeId: string, text: string) => {
@@ -1674,17 +1801,45 @@ function App() {
 
   const handleSceneOperation = (operation: SceneTreeOperation) => {
     if (useDragFixture && operation.type === 'move') {
-      setDragNodes((current) => applySceneMove(current, operation))
+      const nextNodes = applySceneMove(dragNodes, operation)
+      if (nextNodes === dragNodes) return
+      setDragNodes(nextNodes)
+      void operationLog.record({
+        action: 'scene.move',
+        category: 'scene',
+        summary: `移动 ${operation.nodeIds.length} 个场景节点`,
+        targets: operation.nodeIds.map((nodeId) => ({
+          componentId: nodeId,
+          componentLabel: findSceneNode(dragNodes, nodeId)?.label,
+        })),
+        source: 'scene-tree',
+        before: operation.nodeIds.map((nodeId) => ({ nodeId, ...findSceneNodeLocation(dragNodes, nodeId) })),
+        after: { parentId: operation.parentId, index: operation.index },
+      })
       return
     }
     if (!useDragFixture && operation.type === 'move') {
-      setNormalSceneNodes((current) => applySceneMove(current, operation))
+      const nextNodes = applySceneMove(normalSceneNodes, operation)
+      if (nextNodes === normalSceneNodes) return
+      setNormalSceneNodes(nextNodes)
       const parentId = operation.parentId
       if (parentId) {
         setNormalExpandedIds((current) => current.includes(parentId)
           ? current
           : [...current, parentId])
       }
+      void operationLog.record({
+        action: 'scene.move',
+        category: 'scene',
+        summary: `移动 ${operation.nodeIds.length} 个场景节点`,
+        targets: operation.nodeIds.map((nodeId) => ({
+          componentId: nodeId,
+          componentLabel: findSceneNode(normalSceneNodes, nodeId)?.label,
+        })),
+        source: 'scene-tree',
+        before: operation.nodeIds.map((nodeId) => ({ nodeId, ...findSceneNodeLocation(normalSceneNodes, nodeId) })),
+        after: { parentId: operation.parentId, index: operation.index },
+      })
       return
     }
     if (!useDragFixture && operation.type === 'duplicate') {
@@ -1748,22 +1903,59 @@ function App() {
           ? current
           : [...current, operation.parentId!])
       }
+      void operationLog.record({
+        action: 'component.duplicate',
+        category: 'component',
+        summary: `复制 ${duplicatedIds.length} 个组件`,
+        targets: duplicatedIds.map((componentId, index) => ({
+          componentId,
+          componentLabel: copies[index]?.label,
+        })),
+        source: 'scene-tree',
+        before: operation.sourceNodeIds,
+        after: duplicatedIds,
+        metadata: { parentId: operation.parentId, index: operation.index },
+      })
       return
     }
     if (operation.type === 'create') {
-      addTextComponent(operation.parentId, operation.index)
+      addTextComponent(operation.parentId, operation.index, 'scene-tree')
     }
     if (operation.type === 'rename') {
+      const previousLabel = findSceneNode(normalSceneNodes, operation.nodeId)?.label
       updateTextComponent(operation.nodeId, operation.label)
+      void operationLog.record({
+        action: 'component.rename',
+        category: 'component',
+        summary: `重命名 ${previousLabel ?? operation.nodeId}`,
+        targets: [{ componentId: operation.nodeId, componentLabel: operation.label }],
+        source: 'scene-tree',
+        before: previousLabel,
+        after: operation.label,
+      })
     }
     if (operation.type === 'delete') {
       const deletedIds = collectSceneSubtreeIds(normalSceneNodes, operation.nodeIds)
+      if (deletedIds.size === 0) return
+      const deletedNodes = [...deletedIds].map((nodeId) => findSceneNode(normalSceneNodes, nodeId))
       setTextComponents((current) => current.filter(({ id }) => !deletedIds.has(id)))
       setChartComponents((current) => current.filter(({ id }) => !deletedIds.has(id)))
       setRectangleComponents((current) => current.filter(({ id }) => !deletedIds.has(id)))
       setNormalSceneNodes((current) => removeSceneNodes(current, deletedIds))
       setSelectedSceneIds((current) => current.filter((nodeId) => !deletedIds.has(nodeId)))
       setNormalExpandedIds((current) => current.filter((nodeId) => !deletedIds.has(nodeId)))
+      void operationLog.record({
+        action: 'component.delete',
+        category: 'component',
+        summary: `删除 ${deletedIds.size} 个组件`,
+        targets: deletedNodes.filter((node): node is SceneTreeNode => Boolean(node)).map((node) => ({
+          componentId: node.id,
+          componentLabel: node.label,
+        })),
+        source: 'scene-tree',
+        before: deletedNodes,
+        after: undefined,
+      })
     }
   }
 
@@ -1831,9 +2023,18 @@ function App() {
                   binding={{
                     value: selectedText.bindings,
                     variables: DEMO_VARIABLES,
-                    onChange: (next) => setTextComponents((current) => current.map((component) => (
-                      component.id === selectedText.id ? { ...component, bindings: next } : component
-                    ))),
+                    onChange: (next, change) => {
+                      setTextComponents((current) => current.map((component) => (
+                        component.id === selectedText.id ? { ...component, bindings: next } : component
+                      )))
+                      recordBindingChange(
+                        selectedText.id,
+                        selectedText.text,
+                        selectedText.bindings,
+                        next,
+                        change,
+                      )
+                    },
                   }}
                   defaultValue={{ content: {
                     text: selectedText.defaultText,
@@ -1849,7 +2050,7 @@ function App() {
                     text: selectedText.text,
                     keywords: selectedText.keywords,
                   } }}
-                  onValueChange={(nextValue) => {
+                  onValueChange={(nextValue, change) => {
                     setTextComponents((current) => current.map((component) => (
                       component.id === selectedText.id
                         ? {
@@ -1866,6 +2067,7 @@ function App() {
                         nextValue.content.text,
                       ))
                     }
+                    recordPropertyChange(selectedText.id, selectedText.text, change)
                   }}
                 />
               ) : selectedRectangle ? (
@@ -1874,11 +2076,20 @@ function App() {
                   binding={{
                     value: selectedRectangle.bindings,
                     variables: DEMO_VARIABLES,
-                    onChange: (next) => setRectangleComponents((current) => current.map((component) => (
-                      component.id === selectedRectangle.id
-                        ? { ...component, bindings: next }
-                        : component
-                    ))),
+                    onChange: (next, change) => {
+                      setRectangleComponents((current) => current.map((component) => (
+                        component.id === selectedRectangle.id
+                          ? { ...component, bindings: next }
+                          : component
+                      )))
+                      recordBindingChange(
+                        selectedRectangle.id,
+                        'Rectangle',
+                        selectedRectangle.bindings,
+                        next,
+                        change,
+                      )
+                    },
                   }}
                   defaultValue={selectedRectangle.defaultProperties}
                   header={{
@@ -1889,12 +2100,13 @@ function App() {
                   renderers={rectangleRenderers}
                   schema={rectanglePropertySchema}
                   value={selectedRectangle.properties}
-                  onValueChange={(nextValue) => {
+                  onValueChange={(nextValue, change) => {
                     setRectangleComponents((current) => current.map((component) => (
                       component.id === selectedRectangle.id
                         ? { ...component, properties: nextValue }
                         : component
                     )))
+                    recordPropertyChange(selectedRectangle.id, 'Rectangle', change)
                   }}
                 />
               ) : selectedChart ? (
@@ -1903,9 +2115,18 @@ function App() {
                   binding={{
                     value: selectedChart.bindings,
                     variables: DEMO_VARIABLES,
-                    onChange: (next) => setChartComponents((current) => current.map((component) => (
-                      component.id === selectedChart.id ? { ...component, bindings: next } : component
-                    ))),
+                    onChange: (next, change) => {
+                      setChartComponents((current) => current.map((component) => (
+                        component.id === selectedChart.id ? { ...component, bindings: next } : component
+                      )))
+                      recordBindingChange(
+                        selectedChart.id,
+                        readChartConfig(selectedChart.option).title,
+                        selectedChart.bindings,
+                        next,
+                        change,
+                      )
+                    },
                   }}
                   defaultValue={{ chart: { option: selectedChart.defaultOption } }}
                   header={{
@@ -1916,12 +2137,17 @@ function App() {
                   renderers={echartRenderer}
                   schema={chartPropertySchema}
                   value={{ chart: { option: selectedChart.option } }}
-                  onValueChange={(nextValue) => {
+                  onValueChange={(nextValue, change) => {
                     setChartComponents((current) => current.map((component) => (
                       component.id === selectedChart.id
                         ? { ...component, option: nextValue.chart.option }
                         : component
                     )))
+                    recordPropertyChange(
+                      selectedChart.id,
+                      readChartConfig(selectedChart.option).title,
+                      change,
+                    )
                   }}
                 />
               ) : (
@@ -1930,30 +2156,7 @@ function App() {
             </div>
           }
           transactionLogPanel={
-            <ol className="transaction-list">
-              <li>
-                <span>workspace.ready</span>
-                <time>当前会话</time>
-              </li>
-              {textComponents.map((component) => (
-                <li key={component.id}>
-                  <span>component.text.update</span>
-                  <time>{component.text}</time>
-                </li>
-              ))}
-              {chartComponents.map((component) => (
-                <li key={component.id}>
-                  <span>component.echart.update</span>
-                  <time>{readChartConfig(component.option).title}</time>
-                </li>
-              ))}
-              {rectangleComponents.map((component) => (
-                <li key={component.id}>
-                  <span>component.rectangle.update</span>
-                  <time>Rectangle</time>
-                </li>
-              ))}
-            </ol>
+            <OperationLogPanel />
           }
           commandPanel={
             <form className="command-form" onSubmit={(event) => event.preventDefault()}>
@@ -2030,6 +2233,15 @@ function App() {
             )}
         </section>
     </ComposeEditor>
+  )
+}
+
+function App() {
+  const workspace = new URLSearchParams(window.location.search).get('workspace') ?? 'default'
+  return (
+    <OperationLogProvider scopeId={`compose-ui-demo:${workspace}`}>
+      <DemoWorkspace />
+    </OperationLogProvider>
   )
 }
 

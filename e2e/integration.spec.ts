@@ -125,7 +125,7 @@ test('resizes and collapses edge groups without losing content', async ({ page }
   await expect.poll(async () => (await bottom.boundingBox())?.height).toBeGreaterThan(
     initialBottomBox!.height - 10,
   )
-  await expect(bottom.getByText('workspace.ready', { exact: true })).toBeVisible()
+  await expect(bottom.getByRole('region', { name: '操作日志' })).toBeVisible()
 })
 
 test('adds and edits a text component inside the editor', async ({ page }) => {
@@ -148,7 +148,87 @@ test('adds and edits a text component inside the editor', async ({ page }) => {
       .getByRole('region', { name: '编辑画布' })
       .getByRole('button', { name: '客户现场大屏' }),
   ).toBeVisible()
-  await expect(editor.getByText('component.text.update', { exact: true })).toBeVisible()
+  await expect(editor.getByRole('region', { name: '操作日志' })
+    .getByRole('button', { name: /修改 文本内容/ })).toBeVisible()
+})
+
+test('OpenSpec: operation-log / 示例成功提交集成 / 记录编辑器纵向操作并在刷新后恢复', async ({ page }) => {
+  await page.goto('/?workspace=operation-log-e2e')
+
+  const log = page.getByRole('region', { name: '操作日志' })
+  await expect(log).toBeVisible()
+  await expect(log.getByText('暂无操作日志')).toBeVisible()
+
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('region', { name: '编辑画布' })
+    .getByRole('button', { name: '默认文本' })
+    .click()
+  const input = page.getByLabel('文本内容', { exact: true })
+  await input.fill('审计')
+  await input.fill('审计日志')
+
+  await expect(log.getByRole('button', { name: /新增文本组件/ })).toBeVisible()
+  const propertyEntry = log.getByRole('button', { name: /修改 文本内容/ })
+  await expect(propertyEntry).toBeVisible()
+  await expect(propertyEntry.getByText('×2')).toBeVisible()
+  await propertyEntry.click()
+  await expect(log.getByRole('region', { name: '日志详情' })).toContainText('审计日志')
+
+  const entryCount = await log.getByRole('button', { name: /新增文本组件|修改 文本内容/ }).count()
+  await page.getByRole('button', { name: '审计日志', exact: true }).click()
+  await page.getByRole('button', { name: 'Content', exact: true }).click()
+  await expect(log.getByRole('button', { name: /新增文本组件|修改 文本内容/ })).toHaveCount(entryCount)
+
+  await page.reload()
+  await expect(page.getByRole('region', { name: '操作日志' })
+    .getByRole('button', { name: /修改 文本内容/ })).toBeVisible()
+
+  await page.goto('/?workspace=operation-log-isolated')
+  await expect(page.getByRole('region', { name: '操作日志' })
+    .getByText('暂无操作日志')).toBeVisible()
+})
+
+test('OpenSpec: operation-log / 示例成功提交集成 / 记录 reset 和绑定并忽略无效草稿与 UI 操作', async ({ page }) => {
+  await page.goto('/?workspace=operation-log-actions')
+  const log = page.getByRole('region', { name: '操作日志' })
+  const panel = page.getByRole('region', { name: 'Rectangle 属性' })
+
+  const invalidOpacity = panel.getByLabel('不透明度 Opacity', { exact: true })
+  await invalidOpacity.fill('2')
+  await invalidOpacity.blur()
+  await expect(panel.getByRole('alert')).toBeVisible()
+  await expect(log.locator('.operation-log__entry')).toHaveCount(0)
+
+  await panel.getByRole('button', { name: 'Advanced', exact: true }).click()
+  await panel.getByRole('separator', { name: '调整属性名列宽' }).press('ArrowRight')
+  await expect(log.locator('.operation-log__entry')).toHaveCount(0)
+
+  const angle = panel.getByLabel('旋转 Angle', { exact: true })
+  await angle.fill('5')
+  await angle.blur()
+  await panel.getByRole('button', { name: '重置 Transform', exact: true }).click()
+  await expect(log.getByRole('button', { name: /修改 旋转/ })).toBeVisible()
+  await expect(log.getByRole('button', { name: /重置 Transform/ })).toBeVisible()
+
+  const position = panel.locator('[data-property-path="transform.position"]')
+  await position.getByRole('button', { name: '绑定 X' }).click()
+  await page.getByRole('button', { name: /页面偏移 X/ }).click()
+  await expect(log.getByRole('button', { name: /绑定 位置/ })).toBeVisible()
+})
+
+test('OpenSpec: operation-log / 可访问日志查看面板 / 搜索和筛选日志 - 紧凑视觉', async ({ page }) => {
+  await page.goto('/?workspace=operation-log-visual')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('button', { name: '默认文本', exact: true }).click()
+  await page.getByLabel('文本内容', { exact: true }).fill('日志视觉示例')
+
+  const bottom = page.getByTestId('dv-edge-group-compose-bottom-edge')
+  await expect(bottom.getByRole('region', { name: '操作日志' })).toBeVisible()
+  await expect(bottom).toHaveScreenshot('operation-log-panel.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
 })
 
 test('OpenSpec: property-panel / 独立受控属性面板 / 宿主挂载属性面板 - 示例文本', async ({ page }) => {
@@ -780,6 +860,9 @@ test('OpenSpec: scene-tree / 默认编辑器复制节点 / 复制文本组件并
   await expect(copy).toContainText('复制后的文本')
   await expect(first).toContainText('默认文本')
   await expect(page.getByRole('region', { name: '编辑画布' }).getByRole('button', { name: '复制后的文本' })).toBeVisible()
+  // OpenSpec: operation-log / 示例成功提交集成 / 记录编辑器纵向操作
+  await expect(page.getByRole('region', { name: '操作日志' })
+    .getByRole('button', { name: /复制 1 个组件/ })).toBeVisible()
 })
 
 test('deleting a parent removes its complete subtree from the tree and canvas', async ({ page }) => {
@@ -800,6 +883,9 @@ test('deleting a parent removes its complete subtree from the tree and canvas', 
   const canvas = page.getByRole('region', { name: '编辑画布' })
   await expect(canvas.getByRole('button')).toHaveCount(1)
   await expect(canvas.getByRole('button', { name: '选择 Rectangle' })).toBeVisible()
+  // OpenSpec: operation-log / 示例成功提交集成 / 记录编辑器纵向操作
+  await expect(page.getByRole('region', { name: '操作日志' })
+    .getByRole('button', { name: /删除 2 个组件/ })).toBeVisible()
 })
 
 test('OpenSpec: scene-tree / 场景树命令菜单与快捷键 / 打开节点命令菜单', async ({ page }) => {
@@ -896,6 +982,9 @@ test('OpenSpec: scene-tree / 场景节点操作意图 / 使用平台键位开始
   await input.fill('键盘重命名')
   await input.press('Enter')
   await expect(tree.getByRole('row', { name: /键盘重命名/ })).toBeVisible()
+  // OpenSpec: operation-log / 示例成功提交集成 / 记录编辑器纵向操作
+  await expect(page.getByRole('region', { name: '操作日志' })
+    .getByRole('button', { name: /重命名 默认文本/ })).toBeVisible()
 })
 
 test('OpenSpec: scene-tree / 场景节点操作意图 / 默认编辑器应用多选移动意图', async ({ page }) => {
@@ -941,6 +1030,9 @@ test('OpenSpec: scene-tree / 场景节点操作意图 / 默认编辑器应用多
     const labels = await tree.getByRole('row').allTextContents()
     return labels.map((label) => label.match(/默认文本(?: [2-5])?/)?.[0]).filter(Boolean)
   }).toEqual(['默认文本', '默认文本 5', '默认文本 2', '默认文本 3', '默认文本 4'])
+  // OpenSpec: operation-log / 示例成功提交集成 / 记录编辑器纵向操作
+  await expect(page.getByRole('region', { name: '操作日志' })
+    .getByRole('button', { name: /移动 3 个场景节点/ })).toBeVisible()
 })
 
 test('OpenSpec: scene-tree / 树选择与导航 / Ctrl 点击切换多选且不打开菜单', async ({ page }) => {

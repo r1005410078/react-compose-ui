@@ -6,7 +6,7 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 它希望把重复的大屏页面开发工作转化为可视化操作，让使用者能够添加组件、调整配置并
 实时查看最终效果，减少现场修改代码、重新构建和部署的次数。
 
-> 当前版本处于基础能力验证阶段，提供编辑器、场景树、Schema 属性面板、预览器挂载组件和
+> 当前版本处于基础能力验证阶段，提供编辑器、场景树、Schema 属性面板、本地操作日志、预览器挂载组件和
 > 最小操作演示，尚不是
 > 完整的低代码编辑器。
 
@@ -23,13 +23,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/editor @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/preview valibot
+bun add @compose-ui/editor @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/editor @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/preview valibot
+npm install @compose-ui/editor @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -196,6 +196,47 @@ Unicode 全词和正则表达式。组件仅发出操作意图，不拥有文档
 节点聚焦后，macOS 和 Linux 使用 Enter 开始重命名，Windows 使用 F2；双击不会进入
 重命名状态。
 
+## 记录本地操作日志
+
+`@compose-ui/operation-log` 记录宿主已经成功应用的组件、场景、属性和绑定变更，并默认按
+`scopeId` 保存到 IndexedDB。它可以直接放入编辑器已有的 `transactionLogPanel` 插槽：
+
+```tsx
+import {
+  OperationLogPanel,
+  OperationLogProvider,
+  useOperationLog,
+} from '@compose-ui/operation-log'
+import '@compose-ui/operation-log/styles.css'
+
+function Workspace() {
+  const log = useOperationLog()
+  return (
+    <ComposeEditor transactionLogPanel={<OperationLogPanel />}>
+      <button onClick={() => {
+        applySuccessfulChange()
+        void log.record({
+          action: 'component.create',
+          category: 'component',
+          summary: '新增组件',
+        })
+      }}>
+        新增
+      </button>
+    </ComposeEditor>
+  )
+}
+
+<OperationLogProvider scopeId="workspace-42">
+  <Workspace />
+</OperationLogProvider>
+```
+
+日志按 scope 隔离，默认保留最新 1000 条；IndexedDB 不可用时自动降级到当前会话内存存储。
+连续属性输入只有在宿主提供相同 `coalesceKey` 时才会在 800ms 内合并，reset、绑定和结构操作
+保持独立。选择、展开、搜索、resize、非法属性草稿和变量值刷新不应调用 recorder。完整 API 与
+快照格式见 [`@compose-ui/operation-log` README](./packages/operation-log/README.md)。
+
 ## 运行仓库示例
 
 安装依赖：
@@ -217,7 +258,7 @@ bun run dev
 2. 点击“添加文本组件”，选择中央画布中的“默认文本”，通过右侧 Schema 属性面板修改文本。
 3. 使用属性搜索、筛选、重置和两条列分隔线。
 4. 点击“添加 ECharts 图表”，在独立的自定义属性 UI 中编辑标题、类型、系列名称和数据。
-5. 观察真实 ECharts Canvas、Scene Graph、属性面板和 Transaction Log 同步更新。
+5. 观察真实 ECharts Canvas、Scene Graph、属性面板和持久化 Operation Log 同步更新。
 6. 拖动边缘区分隔线调整尺寸，或点击 Edge Group 的活动标签折叠与展开。
 
 该流程用于验证组件挂载和浏览器操作测试，不代表最终编辑器交互设计。
@@ -283,6 +324,7 @@ bun run test:e2e
 - 画布节点拖拽、缩放、对齐和图层编辑
 - 正式数据源协议、表达式和变量管理（属性面板只接受宿主提供的只读变量快照）
 - 撤销、重做以及跨页面或系统剪贴板复制粘贴
+- 服务端审计同步、防篡改、日志导出和跨标签页实时同步（当前操作日志仅保存在本地）
 - 页面保存、加载和生产发布协议
 - 工作区布局持久化、自定义面板注册和浮动窗口
 
