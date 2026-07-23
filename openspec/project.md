@@ -32,6 +32,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   它，preview 不得依赖它。
 - `@compose-ui/property-panel` 是同步 Valibot Schema 驱动的受控 React 组件，不依赖 `core`、
   `editor` 或 `scene-tree`；宿主通过 editor 的 `inspectorPanel` 插槽组合它。
+- `@compose-ui/history` 提供当前 React 实例内的不可变快照历史、快捷键和受控面板，不依赖
+  `core`、`editor`、`scene-tree` 或 `property-panel`；editor 可以通过公共入口组合它。
 - `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 `core`，不得依赖 `editor`。
 - 跨包导入只使用 `@compose-ui/*` 公共入口，不得引用其他包的内部源码。
 - React、ReactDOM 和 JSX runtime 保持为 peer dependency 和外置依赖。
@@ -127,7 +129,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ## Domain Context
 
 - 目标用户需要在客户现场快速调整数据大屏，编辑器必须能嵌入现有 React 宿主。
-- 当前仓库只验证组件挂载、固定编辑器工作区和最小文本编辑纵向流程。
+- 当前仓库验证组件挂载、固定编辑器工作区、会话快照历史和最小文本编辑纵向流程。
 - 正式文档 Schema、组件注册、拖拽系统、数据源协议、命令模型与持久化接口尚未确定。
 - 示例中的临时状态、面板 ID 和 Dockview 对象都不是编辑器领域模型或公共协议。
 
@@ -138,6 +140,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `editor` 与 `preview` 只能通过未来的公开协议共享文档状态，不得相互引用内部源码。
 - 修改编辑器交互、示例应用或预览行为时，除常规质量检查外必须运行 Chromium E2E。
 - 工作区必须由宿主提供确定的非零高度；当前布局状态只存活于组件实例。
+- 当前历史只保存在 Hook 实例内，不持久化；未来的 Transaction/inverse History Extension
+  可以实现相同的导航控制器协议。
 
 ## External Dependencies
 

@@ -6,7 +6,7 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 它希望把重复的大屏页面开发工作转化为可视化操作，让使用者能够添加组件、调整配置并
 实时查看最终效果，减少现场修改代码、重新构建和部署的次数。
 
-> 当前版本处于基础能力验证阶段，提供编辑器、场景树、Schema 属性面板、预览器挂载组件和
+> 当前版本处于基础能力验证阶段，提供编辑器、场景树、会话历史、Schema 属性面板、预览器挂载组件和
 > 最小操作演示，尚不是
 > 完整的低代码编辑器。
 
@@ -23,13 +23,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/editor @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/preview valibot
+bun add @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/preview valibot
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/editor @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/preview valibot
+npm install @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/preview valibot
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -44,15 +44,19 @@ bun add react react-dom
 
 ```tsx
 import { ComposeEditor } from '@compose-ui/editor'
+import { useHistory } from '@compose-ui/history'
 import { ComposePreview } from '@compose-ui/preview'
 import type { SceneTreeOperation } from '@compose-ui/scene-tree'
 import '@compose-ui/editor/styles.css'
 
 export function ComposePage() {
+  const history = useHistory({ nodes: [], title: '未命名页面' })
+
   return (
     <main>
       <ComposeEditor
         className="editor-panel"
+        history={history}
         sceneTreeProps={{
           nodes: [{ id: 'page', label: 'Page 1' }],
           selectedIds: [],
@@ -83,7 +87,10 @@ Log 与 Command 共享底部 Edge Group。三个边缘区可以调整尺寸，�
 宿主必须显式导入 `@compose-ui/editor/styles.css`，并为编辑器提供确定的非零高度。
 `ComposeEditor` 接受标准的 HTML `section` 属性；`children` 渲染为中央画布内容。
 Scene Graph 默认使用 `@compose-ui/scene-tree`，通过 `sceneTreeProps` 接收受控状态；
-`sceneGraphPanel` 仍可完整覆盖默认树，其余四个命名属性提供其他工作区内容。
+`sceneGraphPanel` 仍可完整覆盖默认树。提供 `history` 后，Scene Graph 外层面板会挂载一个
+子 Dockview，场景树与 History 分别成为上、下两个真实 Dockview 面板；`historyPanel` 可完整
+覆盖 History 面板内容，`history` 同时启用编辑器范围快捷键。
+其余四个命名属性提供其他工作区内容。
 
 ```tsx
 <ComposeEditor
@@ -109,6 +116,27 @@ Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API�
 文档或远端存储；重新挂载后恢复默认布局。
 
 `ComposeEditor` 当前仍未提供稳定的文档数据、`value`、`onChange`、组件注册或数据源绑定 API。
+
+## 独立使用历史
+
+`@compose-ui/history` 提供会话级不可变快照历史。默认保留 100 个动作，相同 `mergeKey` 的连续
+输入会在 750ms 窗口内合并；在历史中间提交会裁剪后续重做分支。
+
+```tsx
+import { HistoryPanel, useHistory, useHistoryShortcuts } from '@compose-ui/history'
+import '@compose-ui/history/styles.css'
+
+const history = useHistory(initialDocument)
+const onKeyDownCapture = useHistoryShortcuts(history)
+
+<section onKeyDownCapture={onKeyDownCapture}>
+  <HistoryPanel controller={history} />
+</section>
+```
+
+快捷键支持 `Cmd/Ctrl+Z`、`Cmd/Ctrl+Shift+Z` 和 `Ctrl+Y`。历史不跨刷新持久化，也不会深拷贝
+宿主值；每次 `commit` 都必须产生不可变快照。完整说明见
+[`@compose-ui/history` README](./packages/history/README.md)。
 
 ## 独立使用属性面板
 
@@ -214,7 +242,9 @@ bun run dev
 3. 使用属性搜索、筛选、重置和两条列分隔线。
 4. 点击“添加 ECharts 图表”，在自定义属性 UI 中编辑标题、类型、系列名称和数据。
 5. 观察真实 ECharts Canvas、Scene Graph、属性面板和 Transaction Log 同步更新。
-6. 拖动边缘区分隔线调整尺寸，或点击 Edge Group 的活动标签折叠与展开。
+6. 在左侧历史面板点击任意状态，或用撤销/重做快捷键切换文档快照。
+7. 拖动边缘区及 Scene Graph/History 之间的 Dockview sash 调整尺寸，或点击 Edge Group 的
+   活动标签折叠与展开。
 
 该流程用于验证组件挂载和浏览器操作测试，不代表最终编辑器交互设计。
 
@@ -278,7 +308,7 @@ bun run test:e2e
 - 组件物料注册
 - 画布节点拖拽、缩放、对齐和图层编辑
 - 数据源绑定和表达式
-- 撤销、重做以及跨页面或系统剪贴板复制粘贴
+- 基于正式 Transaction/inverse 协议的持久化、协作历史，以及跨页面或系统剪贴板复制粘贴
 - 页面保存、加载和生产发布协议
 - 工作区布局持久化、自定义面板注册和浮动窗口
 

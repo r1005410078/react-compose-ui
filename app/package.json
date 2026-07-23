@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@compose-ui/editor": "workspace:*",
+    "@compose-ui/history": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/scene-tree": "workspace:*",
     "echarts": "^6.1.0",
