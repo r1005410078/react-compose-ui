@@ -108,6 +108,35 @@ describe('OpenSpec: property-panel / 有效受控变更 / 提交有效字段值'
       }),
     )
   })
+
+  it('受控值回退后不复用已提交的新值草稿', () => {
+    const onValueChange = vi.fn()
+    const { rerender } = render(
+      <PropertyPanel
+        schema={basicSchema}
+        value={basicValue}
+        onValueChange={onValueChange}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('名称'), { target: { value: 'Panel' } })
+    rerender(
+      <PropertyPanel
+        schema={basicSchema}
+        value={{ ...basicValue, label: 'Panel' }}
+        onValueChange={onValueChange}
+      />,
+    )
+    rerender(
+      <PropertyPanel
+        schema={basicSchema}
+        value={basicValue}
+        onValueChange={onValueChange}
+      />,
+    )
+
+    expect(screen.getByLabelText('名称')).toHaveValue('Rectangle')
+  })
 })
 
 const structuredSchema = v.object({

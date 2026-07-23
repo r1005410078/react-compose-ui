@@ -1,4 +1,5 @@
 import { ComposeEditor } from '@compose-ui/editor'
+import { useHistory } from '@compose-ui/history'
 import {
   OperationLogPanel,
   OperationLogProvider,
@@ -140,6 +141,13 @@ interface RectangleComponent {
   properties: RectangleProperties
   defaultProperties: RectangleProperties
   bindings: readonly PropertyPanelBinding[]
+}
+
+interface DemoDocumentSnapshot {
+  textComponents: readonly TextComponent[]
+  chartComponents: readonly ChartComponent[]
+  rectangleComponents: readonly RectangleComponent[]
+  sceneNodes: readonly SceneTreeNode[]
 }
 
 type DemoChartType = 'bar' | 'line' | 'pie'
@@ -1568,19 +1576,34 @@ function resolveRectangleProperties(component: RectangleComponent): RectanglePro
   }).value
 }
 
+function propertyHistoryMergeKey(
+  componentId: string,
+  change: PropertyPanelChange,
+): string | undefined {
+  return change.reason === 'input'
+    ? `${componentId}:${change.path.join('.')}`
+    : undefined
+}
+
 function DemoWorkspace() {
   const operationLog = useOperationLog()
-  const [textComponents, setTextComponents] = useState<readonly TextComponent[]>([])
-  const [chartComponents, setChartComponents] = useState<readonly ChartComponent[]>([])
-  const [rectangleComponents, setRectangleComponents] = useState<readonly RectangleComponent[]>(
-    () => [{
+  const history = useHistory<DemoDocumentSnapshot>({
+    textComponents: [],
+    chartComponents: [],
+    rectangleComponents: [{
       id: 'rectangle-1',
       properties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
       defaultProperties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
       bindings: [],
     }],
-  )
-  const [normalSceneNodes, setNormalSceneNodes] = useState(defaultSceneNodes)
+    sceneNodes: defaultSceneNodes,
+  })
+  const {
+    textComponents,
+    chartComponents,
+    rectangleComponents,
+    sceneNodes: normalSceneNodes,
+  } = history.value
   const [selectedSceneIds, setSelectedSceneIds] = useState<readonly string[]>(['rectangle-1'])
   const [normalExpandedIds, setNormalExpandedIds] = useState<readonly string[]>(['page'])
   const [dragNodes, setDragNodes] = useState(dragFixtureNodes)
@@ -1590,16 +1613,29 @@ function DemoWorkspace() {
   const nextTextIdRef = useRef(1)
   const nextChartIdRef = useRef(1)
   const nextRectangleIdRef = useRef(2)
+  const normalSceneIdSet = useMemo(
+    () => new Set(collectSceneNodeIds(normalSceneNodes)),
+    [normalSceneNodes],
+  )
+  const validSelectedSceneIds = selectedSceneIds.filter(
+    (nodeId) => normalSceneIdSet.has(nodeId),
+  )
+  const effectiveSelectedSceneIds = validSelectedSceneIds.length > 0
+    ? validSelectedSceneIds
+    : selectedSceneIds.length > 0 && normalSceneIdSet.has('page') ? ['page'] : []
+  const effectiveExpandedIds = normalExpandedIds.filter(
+    (nodeId) => normalSceneIdSet.has(nodeId),
+  )
 
-  const selectedText = [...selectedSceneIds]
+  const selectedText = [...effectiveSelectedSceneIds]
     .reverse()
     .map((nodeId) => textComponents.find(({ id }) => id === nodeId))
     .find((component): component is TextComponent => Boolean(component)) ?? null
-  const selectedChart = [...selectedSceneIds]
+  const selectedChart = [...effectiveSelectedSceneIds]
     .reverse()
     .map((nodeId) => chartComponents.find(({ id }) => id === nodeId))
     .find((component): component is ChartComponent => Boolean(component)) ?? null
-  const selectedRectangle = [...selectedSceneIds]
+  const selectedRectangle = [...effectiveSelectedSceneIds]
     .reverse()
     .map((nodeId) => rectangleComponents.find(({ id }) => id === nodeId))
     .find((component): component is RectangleComponent => Boolean(component)) ?? null
@@ -1717,10 +1753,18 @@ function DemoWorkspace() {
       defaultKeywords: ['大屏', '现场'],
       bindings: [],
     }
-    setTextComponents((current) => [...current, component])
-    setNormalSceneNodes((current) => parentId === null
-      ? insertSceneNodes(current, null, index ?? current.length, [{ id, label: text }])
-      : insertSceneNode(current, parentId, index, { id, label: text }))
+    history.commit((current) => ({
+      ...current,
+      textComponents: [...current.textComponents, component],
+      sceneNodes: parentId === null
+        ? insertSceneNodes(
+            current.sceneNodes,
+            null,
+            index ?? current.sceneNodes.length,
+            [{ id, label: text }],
+          )
+        : insertSceneNode(current.sceneNodes, parentId, index, { id, label: text }),
+    }), { label: '新增文本组件' })
     if (parentId !== null) {
       setNormalExpandedIds((current) => current.includes(parentId)
         ? current
@@ -1742,17 +1786,20 @@ function DemoWorkspace() {
     nextChartIdRef.current += 1
     const id = `chart-${number}`
     const option = createChartOption(DEFAULT_CHART_CONFIG)
-    setChartComponents((current) => [...current, {
-      id,
-      option,
-      defaultOption: createChartOption(DEFAULT_CHART_CONFIG),
-      bindings: [],
-    }])
-    setNormalSceneNodes((current) => insertSceneNode(current, 'page', undefined, {
-      id,
-      label: number === 1 ? 'ECharts 图表' : `ECharts 图表 ${number}`,
-      canHaveChildren: false,
-    }))
+    history.commit((current) => ({
+      ...current,
+      chartComponents: [...current.chartComponents, {
+        id,
+        option,
+        defaultOption: createChartOption(DEFAULT_CHART_CONFIG),
+        bindings: [],
+      }],
+      sceneNodes: insertSceneNode(current.sceneNodes, 'page', undefined, {
+        id,
+        label: number === 1 ? 'ECharts 图表' : `ECharts 图表 ${number}`,
+        canHaveChildren: false,
+      }),
+    }), { label: '新增 ECharts 图表' })
     setNormalExpandedIds((current) => current.includes('page') ? current : [...current, 'page'])
     setSelectedSceneIds([id])
     void operationLog.record({
@@ -1769,17 +1816,20 @@ function DemoWorkspace() {
     const number = nextRectangleIdRef.current
     nextRectangleIdRef.current += 1
     const id = `rectangle-${number}`
-    setRectangleComponents((current) => [...current, {
-      id,
-      properties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
-      defaultProperties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
-      bindings: [],
-    }])
-    setNormalSceneNodes((current) => insertSceneNode(current, 'page', undefined, {
-      id,
-      label: number === 1 ? 'Rectangle' : `Rectangle ${number}`,
-      canHaveChildren: false,
-    }))
+    history.commit((current) => ({
+      ...current,
+      rectangleComponents: [...current.rectangleComponents, {
+        id,
+        properties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
+        defaultProperties: structuredClone(DEFAULT_RECTANGLE_PROPERTIES),
+        bindings: [],
+      }],
+      sceneNodes: insertSceneNode(current.sceneNodes, 'page', undefined, {
+        id,
+        label: number === 1 ? 'Rectangle' : `Rectangle ${number}`,
+        canHaveChildren: false,
+      }),
+    }), { label: '新增 Rectangle' })
     setNormalExpandedIds((current) => current.includes('page') ? current : [...current, 'page'])
     setSelectedSceneIds([id])
     void operationLog.record({
@@ -1793,10 +1843,13 @@ function DemoWorkspace() {
   }
 
   const updateTextComponent = (nodeId: string, text: string) => {
-    setTextComponents((current) => current.map((component) => (
-      component.id === nodeId ? { ...component, text } : component
-    )))
-    setNormalSceneNodes((current) => updateSceneNodeLabel(current, nodeId, text))
+    history.commit((current) => ({
+      ...current,
+      textComponents: current.textComponents.map((component) => (
+        component.id === nodeId ? { ...component, text } : component
+      )),
+      sceneNodes: updateSceneNodeLabel(current.sceneNodes, nodeId, text),
+    }), { label: '重命名节点' })
   }
 
   const handleSceneOperation = (operation: SceneTreeOperation) => {
@@ -1821,7 +1874,10 @@ function DemoWorkspace() {
     if (!useDragFixture && operation.type === 'move') {
       const nextNodes = applySceneMove(normalSceneNodes, operation)
       if (nextNodes === normalSceneNodes) return
-      setNormalSceneNodes(nextNodes)
+      history.commit((current) => ({
+        ...current,
+        sceneNodes: applySceneMove(current.sceneNodes, operation),
+      }), { label: operation.nodeIds.length > 1 ? '移动多个节点' : '移动节点' })
       const parentId = operation.parentId
       if (parentId) {
         setNormalExpandedIds((current) => current.includes(parentId)
@@ -1888,15 +1944,23 @@ function DemoWorkspace() {
         .filter((node): node is SceneTreeNode => Boolean(node))
         .map(cloneNode)
       if (copies.length !== operation.sourceNodeIds.length) return
-      setNormalSceneNodes((current) => insertSceneNodes(
-        current,
-        operation.parentId,
-        operation.index,
-        copies,
-      ))
-      setTextComponents((current) => [...current, ...duplicatedTextComponents])
-      setChartComponents((current) => [...current, ...duplicatedChartComponents])
-      setRectangleComponents((current) => [...current, ...duplicatedRectangleComponents])
+      history.commit((current) => ({
+        ...current,
+        sceneNodes: insertSceneNodes(
+          current.sceneNodes,
+          operation.parentId,
+          operation.index,
+          copies,
+        ),
+        textComponents: [...current.textComponents, ...duplicatedTextComponents],
+        chartComponents: [...current.chartComponents, ...duplicatedChartComponents],
+        rectangleComponents: [
+          ...current.rectangleComponents,
+          ...duplicatedRectangleComponents,
+        ],
+      }), {
+        label: operation.sourceNodeIds.length > 1 ? '复制多个节点' : '复制节点',
+      })
       setSelectedSceneIds(duplicatedIds)
       if (operation.parentId) {
         setNormalExpandedIds((current) => current.includes(operation.parentId!)
@@ -1938,11 +2002,20 @@ function DemoWorkspace() {
       const deletedIds = collectSceneSubtreeIds(normalSceneNodes, operation.nodeIds)
       if (deletedIds.size === 0) return
       const deletedNodes = [...deletedIds].map((nodeId) => findSceneNode(normalSceneNodes, nodeId))
-      setTextComponents((current) => current.filter(({ id }) => !deletedIds.has(id)))
-      setChartComponents((current) => current.filter(({ id }) => !deletedIds.has(id)))
-      setRectangleComponents((current) => current.filter(({ id }) => !deletedIds.has(id)))
-      setNormalSceneNodes((current) => removeSceneNodes(current, deletedIds))
-      setSelectedSceneIds((current) => current.filter((nodeId) => !deletedIds.has(nodeId)))
+      history.commit((current) => ({
+        ...current,
+        textComponents: current.textComponents.filter(({ id }) => !deletedIds.has(id)),
+        chartComponents: current.chartComponents.filter(({ id }) => !deletedIds.has(id)),
+        rectangleComponents: current.rectangleComponents.filter(
+          ({ id }) => !deletedIds.has(id),
+        ),
+        sceneNodes: removeSceneNodes(current.sceneNodes, deletedIds),
+      }), { label: operation.nodeIds.length > 1 ? '删除多个节点' : '删除节点' })
+      setSelectedSceneIds((current) => {
+        const remaining = current.filter((nodeId) => !deletedIds.has(nodeId))
+        if (remaining.length > 0 || deletedIds.has('page')) return remaining
+        return ['page']
+      })
       setNormalExpandedIds((current) => current.filter((nodeId) => !deletedIds.has(nodeId)))
       void operationLog.record({
         action: 'component.delete',
@@ -1962,10 +2035,11 @@ function DemoWorkspace() {
   return (
     <ComposeEditor
       className="editor-workspace"
+      history={history}
       sceneTreeProps={{
         nodes: sceneNodes,
-        selectedIds: useDragFixture ? dragSelectedIds : selectedSceneIds,
-        expandedIds: useDragFixture ? dragExpandedIds : normalExpandedIds,
+        selectedIds: useDragFixture ? dragSelectedIds : effectiveSelectedSceneIds,
+        expandedIds: useDragFixture ? dragExpandedIds : effectiveExpandedIds,
         onSelectionChange: (nodeIds) => {
           if (useDragFixture) {
             setDragSelectedIds(nodeIds)
@@ -2024,9 +2098,14 @@ function DemoWorkspace() {
                     value: selectedText.bindings,
                     variables: DEMO_VARIABLES,
                     onChange: (next, change) => {
-                      setTextComponents((current) => current.map((component) => (
-                        component.id === selectedText.id ? { ...component, bindings: next } : component
-                      )))
+                      history.commit((current) => ({
+                        ...current,
+                        textComponents: current.textComponents.map((component) => (
+                          component.id === selectedText.id
+                            ? { ...component, bindings: next }
+                            : component
+                        )),
+                      }), { label: '修改文本变量绑定' })
                       recordBindingChange(
                         selectedText.id,
                         selectedText.text,
@@ -2051,22 +2130,28 @@ function DemoWorkspace() {
                     keywords: selectedText.keywords,
                   } }}
                   onValueChange={(nextValue, change) => {
-                    setTextComponents((current) => current.map((component) => (
-                      component.id === selectedText.id
-                        ? {
-                            ...component,
-                            text: nextValue.content.text,
-                            keywords: nextValue.content.keywords,
-                          }
-                        : component
-                    )))
-                    if (nextValue.content.text !== selectedText.text) {
-                      setNormalSceneNodes((current) => updateSceneNodeLabel(
-                        current,
+                    history.commit((current) => ({
+                      ...current,
+                      textComponents: current.textComponents.map((component) => (
+                        component.id === selectedText.id
+                          ? {
+                              ...component,
+                              text: nextValue.content.text,
+                              keywords: nextValue.content.keywords,
+                            }
+                          : component
+                      )),
+                      sceneNodes: updateSceneNodeLabel(
+                        current.sceneNodes,
                         selectedText.id,
                         nextValue.content.text,
-                      ))
-                    }
+                      ),
+                    }), {
+                      label: change.path.includes('text')
+                        ? '修改文本内容'
+                        : '修改文本属性',
+                      mergeKey: propertyHistoryMergeKey(selectedText.id, change),
+                    })
                     recordPropertyChange(selectedText.id, selectedText.text, change)
                   }}
                 />
@@ -2077,11 +2162,14 @@ function DemoWorkspace() {
                     value: selectedRectangle.bindings,
                     variables: DEMO_VARIABLES,
                     onChange: (next, change) => {
-                      setRectangleComponents((current) => current.map((component) => (
-                        component.id === selectedRectangle.id
-                          ? { ...component, bindings: next }
-                          : component
-                      )))
+                      history.commit((current) => ({
+                        ...current,
+                        rectangleComponents: current.rectangleComponents.map((component) => (
+                          component.id === selectedRectangle.id
+                            ? { ...component, bindings: next }
+                            : component
+                        )),
+                      }), { label: '修改 Rectangle 变量绑定' })
                       recordBindingChange(
                         selectedRectangle.id,
                         'Rectangle',
@@ -2101,11 +2189,17 @@ function DemoWorkspace() {
                   schema={rectanglePropertySchema}
                   value={selectedRectangle.properties}
                   onValueChange={(nextValue, change) => {
-                    setRectangleComponents((current) => current.map((component) => (
-                      component.id === selectedRectangle.id
-                        ? { ...component, properties: nextValue }
-                        : component
-                    )))
+                    history.commit((current) => ({
+                      ...current,
+                      rectangleComponents: current.rectangleComponents.map((component) => (
+                        component.id === selectedRectangle.id
+                          ? { ...component, properties: nextValue }
+                          : component
+                      )),
+                    }), {
+                      label: '修改 Rectangle 属性',
+                      mergeKey: propertyHistoryMergeKey(selectedRectangle.id, change),
+                    })
                     recordPropertyChange(selectedRectangle.id, 'Rectangle', change)
                   }}
                 />
@@ -2116,9 +2210,14 @@ function DemoWorkspace() {
                     value: selectedChart.bindings,
                     variables: DEMO_VARIABLES,
                     onChange: (next, change) => {
-                      setChartComponents((current) => current.map((component) => (
-                        component.id === selectedChart.id ? { ...component, bindings: next } : component
-                      )))
+                      history.commit((current) => ({
+                        ...current,
+                        chartComponents: current.chartComponents.map((component) => (
+                          component.id === selectedChart.id
+                            ? { ...component, bindings: next }
+                            : component
+                        )),
+                      }), { label: '修改 ECharts 变量绑定' })
                       recordBindingChange(
                         selectedChart.id,
                         readChartConfig(selectedChart.option).title,
@@ -2138,11 +2237,17 @@ function DemoWorkspace() {
                   schema={chartPropertySchema}
                   value={{ chart: { option: selectedChart.option } }}
                   onValueChange={(nextValue, change) => {
-                    setChartComponents((current) => current.map((component) => (
-                      component.id === selectedChart.id
-                        ? { ...component, option: nextValue.chart.option }
-                        : component
-                    )))
+                    history.commit((current) => ({
+                      ...current,
+                      chartComponents: current.chartComponents.map((component) => (
+                        component.id === selectedChart.id
+                          ? { ...component, option: nextValue.chart.option }
+                          : component
+                      )),
+                    }), {
+                      label: '修改 ECharts 配置',
+                      mergeKey: propertyHistoryMergeKey(selectedChart.id, change),
+                    })
                     recordPropertyChange(
                       selectedChart.id,
                       readChartConfig(selectedChart.option).title,

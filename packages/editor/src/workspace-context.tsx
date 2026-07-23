@@ -1,8 +1,11 @@
 import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
+import type { HistoryNavigationController } from '@compose-ui/history'
 
 export interface WorkspaceContent {
   sceneGraphPanel?: ReactNode
+  history?: HistoryNavigationController
+  historyPanel?: ReactNode
   canvasToolbar?: ReactNode
   children?: ReactNode
   inspectorPanel?: ReactNode

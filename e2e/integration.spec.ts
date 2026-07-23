@@ -231,6 +231,111 @@ test('OpenSpec: operation-log / 可访问日志查看面板 / 搜索和筛选日
   })
 })
 
+test('OpenSpec: history / 历史快捷键 / 输入框内撤销编辑器历史 - 示例应用', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('region', { name: '编辑画布' })
+    .getByRole('button', { name: '默认文本' })
+    .click()
+
+  const history = page.getByLabel('历史记录', { exact: true })
+  const input = page.getByRole('textbox', { name: '文本内容', exact: true })
+  await expect(history).toBeVisible()
+  await expect(history.getByRole('button').allTextContents()).resolves.toEqual([
+    '新增文本组件',
+    '开始',
+  ])
+
+  await input.fill('历史文本')
+  await expect(history.getByRole('button').first()).toContainText('修改文本内容')
+
+  await input.press('Control+z')
+  await expect(input).toHaveValue('默认文本')
+  await expect(page.getByRole('region', { name: '编辑画布' })
+    .getByRole('button', { name: '默认文本' })).toBeVisible()
+
+  await input.press('Control+Shift+z')
+  await expect(input).toHaveValue('历史文本')
+  await expect(page.getByRole('region', { name: '编辑画布' })
+    .getByRole('button', { name: '历史文本' })).toBeVisible()
+})
+
+test('OpenSpec: history / 合并、分支与容量限制 / 从过去状态创建新分支 - 示例应用', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('button', { name: '默认文本', exact: true }).click()
+  const history = page.getByLabel('历史记录', { exact: true })
+  await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('旧分支')
+
+  await history.getByRole('button', { name: '开始' }).click()
+  await expect(page.getByRole('region', { name: '编辑画布' })
+    .getByRole('button', { name: '旧分支' })).toHaveCount(0)
+
+  await history.getByRole('button', { name: '修改文本内容' }).click()
+  await expect(page.getByRole('button', { name: '旧分支', exact: true })).toBeVisible()
+
+  await history.getByRole('button', { name: '新增文本组件' }).click()
+  const input = page.getByRole('textbox', { name: '文本内容', exact: true })
+  await expect(input).toHaveValue('默认文本')
+  await input.fill('新分支')
+
+  await expect(history.getByRole('button')).toHaveCount(3)
+  await input.press('Control+Shift+z')
+  await expect(input).toHaveValue('新分支')
+  await expect(page.getByRole('button', { name: '旧分支', exact: true })).toHaveCount(0)
+})
+
+test('OpenSpec: history / 样式与包文档 / 宿主独立加载样式 - 视觉', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '添加文本组件' }).click()
+  await page.getByRole('button', { name: '默认文本', exact: true }).click()
+  await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('历史面板示例')
+  await page.mouse.move(800, 400)
+
+  const left = page.getByTestId('dv-edge-group-compose-scene-edge')
+  const sceneHistoryDockview = page.locator('.compose-editor__scene-history-dockview')
+  await expect(page.getByLabel('历史记录', { exact: true })).toBeVisible()
+  await expect(sceneHistoryDockview.getByRole('tab', { name: 'History' })).toBeVisible()
+  await expect(sceneHistoryDockview.locator('.dv-sash')).toHaveCount(1)
+  await expect(left).toHaveScreenshot('history-panel-default.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+})
+
+test('OpenSpec: editor-workspace-layout / Dockview 场景历史布局 / 调整历史高度 - 示例应用', async ({ page }) => {
+  await page.goto('/')
+  const dockview = page.locator('.compose-editor__scene-history-dockview')
+  const scenePanel = dockview.getByRole('tabpanel', { name: 'Scene Graph' })
+  const historyPanel = dockview.getByRole('tabpanel', { name: 'History' })
+  const sash = dockview.locator('.dv-sash')
+  const sceneBefore = await scenePanel.boundingBox()
+  const historyBefore = await historyPanel.boundingBox()
+  const sashBox = await sash.boundingBox()
+
+  expect(sceneBefore).not.toBeNull()
+  expect(historyBefore).not.toBeNull()
+  expect(sashBox).not.toBeNull()
+  await page.mouse.move(
+    sashBox!.x + sashBox!.width / 2,
+    sashBox!.y + sashBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    sashBox!.x + sashBox!.width / 2,
+    sashBox!.y + sashBox!.height / 2 + 40,
+  )
+  await page.mouse.up()
+
+  await expect.poll(async () => (await scenePanel.boundingBox())?.height)
+    .toBeGreaterThan(sceneBefore!.height + 20)
+  await expect.poll(async () => (await historyPanel.boundingBox())?.height)
+    .toBeLessThan(historyBefore!.height - 20)
+  await expect(page.getByLabel('历史记录', { exact: true })).toBeVisible()
+  await expect(page.getByRole('treegrid', { name: '场景树' })).toBeVisible()
+})
+
 test('OpenSpec: property-panel / 独立受控属性面板 / 宿主挂载属性面板 - 示例文本', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: '添加文本组件' }).click()
@@ -953,7 +1058,7 @@ test('OpenSpec: scene-tree / 场景树命令菜单与快捷键 / 使用场景树
 test('OpenSpec: scene-tree / 场景树命令菜单与快捷键 / 打开空白区命令菜单', async ({ page }) => {
   await page.goto('/')
   const tree = page.getByRole('treegrid', { name: '场景树' })
-  await tree.click({ button: 'right', position: { x: 210, y: 300 } })
+  await tree.click({ button: 'right', position: { x: 210, y: 200 } })
   await expect(page.getByRole('menuitem').allTextContents()).resolves.toEqual([
     '新增根节点',
     '粘贴到根级',

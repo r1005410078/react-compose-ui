@@ -1,0 +1,84 @@
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme) prefix(hi);
+@import 'tailwindcss/utilities.css' layer(utilities) prefix(hi);
+
+@source './';
+
+@layer components {
+  .history-panel {
+    @apply hi:flex hi:h-full hi:min-h-0 hi:flex-col hi:overflow-hidden hi:bg-[#111419] hi:text-[#c5ccd6];
+  }
+
+  .history-panel__header {
+    @apply hi:flex hi:h-9 hi:shrink-0 hi:items-center hi:border-b hi:border-[#303640] hi:bg-[#181b20] hi:px-3;
+  }
+
+  .history-panel__header h2 {
+    @apply hi:m-0 hi:text-[0.78rem] hi:font-semibold hi:text-[#d8dee8];
+  }
+
+  .history-panel__list {
+    @apply hi:m-0 hi:min-h-0 hi:flex-1 hi:list-none hi:overflow-x-hidden hi:overflow-y-auto hi:p-1;
+    scrollbar-color: #454d59 transparent;
+    scrollbar-width: thin;
+  }
+
+  .history-panel__list::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .history-panel__list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .history-panel__list::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: #454d59;
+    background-clip: content-box;
+  }
+
+  .history-panel__list button {
+    @apply hi:flex hi:h-7 hi:w-full hi:min-w-0 hi:items-center hi:gap-1.5 hi:rounded hi:border-0 hi:bg-transparent hi:px-1.5 hi:text-left hi:text-[0.78rem] hi:text-[#c5ccd6] hi:outline-none;
+  }
+
+  .history-panel__list button:hover,
+  .history-panel__list button:focus-visible {
+    @apply hi:bg-[#252b34] hi:text-[#f2f5f9];
+  }
+
+  .history-panel__list button[data-history-state='current'] {
+    @apply hi:bg-[#3b4654] hi:text-white;
+  }
+
+  .history-panel__list button[data-history-state='future'] {
+    @apply hi:text-[#727d8c];
+  }
+
+  .history-panel__list button > svg,
+  .history-panel__list button > span:first-child {
+    @apply hi:size-4 hi:shrink-0;
+  }
+
+  .history-panel__list button > svg {
+    fill: none;
+    stroke: #7eb1ff;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  .history-panel__list button > span:last-child {
+    @apply hi:min-w-0 hi:flex-1 hi:overflow-hidden hi:text-ellipsis hi:whitespace-nowrap;
+  }
+
+  .history-panel__empty {
+    @apply hi:grid hi:min-h-0 hi:flex-1 hi:place-items-center hi:m-0 hi:p-4 hi:text-center hi:text-[0.76rem] hi:text-[#778292];
+  }
+
+  .history-panel__visually-hidden {
+    @apply hi:absolute hi:size-px hi:overflow-hidden hi:border-0 hi:p-0 hi:whitespace-nowrap;
+    clip: rect(0 0 0 0);
+  }
+}

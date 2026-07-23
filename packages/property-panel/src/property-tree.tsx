@@ -1309,7 +1309,8 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
           const fieldResult = v.safeParse(schema, text)
           const success = fieldResult.success && commit(path, text, 'input')
           setDraft({
-            source: value,
+            // 提交成功后以新值标记草稿归属，历史跳转回旧值时才不会误复用新草稿。
+            source: success ? text : value,
             text,
             error: success ? undefined : fieldResult.success
               ? '完整属性值不符合 Schema'
@@ -1332,7 +1333,7 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
       const fieldResult = v.safeParse(schema, nextValue)
       const success = fieldResult.success && commit(path, nextValue, 'commit')
       setDraft({
-        source: value,
+        source: success ? nextValue : value,
         text: textValue,
         error: success ? undefined : fieldResult.success
           ? '完整属性值不符合 Schema'

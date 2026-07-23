@@ -8,13 +8,17 @@ Transaction Log 与 Command。
 
 ```tsx
 import { ComposeEditor } from '@compose-ui/editor'
+import { useHistory } from '@compose-ui/history'
 import type { SceneTreeOperation } from '@compose-ui/scene-tree'
 import '@compose-ui/editor/styles.css'
 
 export function EditorPage() {
+  const history = useHistory({ nodes: [] })
+
   return (
     <ComposeEditor
       style={{ height: 720 }}
+      history={history}
       sceneTreeProps={{
         nodes: [{ id: 'page', label: 'Page 1' }],
         selectedIds: [],
@@ -34,8 +38,8 @@ export function EditorPage() {
 
 必须导入 `@compose-ui/editor/styles.css` 并给 `ComposeEditor` 提供确定的非零高度。
 组件保留标准 `<section>` HTML 属性透传，`children` 对应 Canvas 内容。
-该样式入口已经包含默认场景树样式；只有独立使用 `@compose-ui/scene-tree` 时才需要另行
-导入它的 `styles.css`。
+该样式入口已经包含默认场景树和历史面板样式；只有独立使用 `@compose-ui/scene-tree` 或
+`@compose-ui/history` 时才需要另行导入对应的 `styles.css`。
 
 ## 布局行为
 
@@ -43,6 +47,10 @@ export function EditorPage() {
   Dockview Edge Groups。
 - Scene Graph 默认显示空 `SceneTree`；`sceneTreeProps` 提供受控状态，原
   `sceneGraphPanel` 插槽仍可完整覆盖默认树。
+- 提供 `history` 或显式 `historyPanel` 时，Scene Graph 外层面板内部才挂载子 Dockview；场景树
+  与 History 分别使用上、下两个真实 Dockview 面板，默认比例为 60%/40%，通过原生 sash 调整。
+- `history` 默认渲染独立包的 `HistoryPanel` 并驱动编辑器范围快捷键；`historyPanel` 可完整
+  覆盖下方内容，但不会关闭 `history` 的快捷键处理。
 - Canvas Toolbar 固定在 Canvas 内容顶部，不是独立面板。
 - 默认布局禁止面板拖拽、关闭和浮动，Dockview 类型不会成为公共 API。
 - 插槽更新不会重建面板或丢失当前实例的尺寸与折叠状态。

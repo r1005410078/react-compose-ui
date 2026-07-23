@@ -23,14 +23,7 @@ export default defineConfig({
       cssFileName: 'styles',
     },
     rollupOptions: {
-      external: [
-        '@compose-ui/core',
-        '@compose-ui/history',
-        '@compose-ui/scene-tree',
-        'react',
-        'react-dom',
-        'react/jsx-runtime',
-      ],
+      external: ['react', 'react-dom', 'react/jsx-runtime'],
     },
   },
 })

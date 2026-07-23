@@ -774,8 +774,10 @@ Extension 必须显式声明依赖。Command Handler 可以扩展为 Operation�
 Validator 不得产生变化；Normalizer 只能在受控阶段追加或替换 Operation。微内核必须检测循环
 依赖，并避免把插件注册顺序变成不可见的业务优先级。
 
-History 是消费已提交 Transaction 和 inverse 的 Extension；Persistence、Collaboration 和
-Audit 也是事务流消费者。它们不应成为所有领域代码都必须依赖的内核模块。
+正式 History 是消费已提交 Transaction 和 inverse 的 Extension；Persistence、Collaboration
+和 Audit 也是事务流消费者。它们不应成为所有领域代码都必须依赖的内核模块。当前
+`@compose-ui/history` 仅提供会话级快照时间线与通用导航面板，用于在事务协议稳定前验证交互；
+未来实现可以继续满足同一个 `HistoryNavigationController`，无需替换面板协议。
 
 ### Editor Kernel State
 
@@ -1012,7 +1014,7 @@ Host Adapter 直接访问任意网络、文件系统或设备控制接口。
 
 ## 包边界
 
-现阶段继续保留四个主要包，不按 ECS 概念机械拆包。
+现阶段保留六个主要包，不按 ECS 概念机械拆包。
 
 ### `@compose-ui/core`
 
@@ -1031,6 +1033,19 @@ Host Adapter 直接访问任意网络、文件系统或设备控制接口。
 - 只发出选择变化和操作意图；
 - 不依赖 `core` 或 `editor`，不拥有 Document World。
 
+### `@compose-ui/property-panel`
+
+- 独立的同步 Valibot Schema 驱动受控 React 组件；
+- 不依赖 `core`、`editor`、`scene-tree` 或特定业务渲染器；
+- 通过公共 Schema、值和变化事件与宿主组合，不拥有 Document World。
+
+### `@compose-ui/history`
+
+- 独立的 React 会话快照时间线、快捷键和受控历史面板；
+- 不依赖 `core`、`editor`、`scene-tree` 或 `property-panel`；
+- 当前只保存实例内不可变快照，不承担持久化、协作或审计；
+- 面板只依赖导航控制器，未来可由 Transaction/inverse History Extension 复用。
+
 ### `@compose-ui/preview`
 
 - 当前仓库中的独立 React DOM 预览入口；
@@ -1043,7 +1058,7 @@ Host Adapter 直接访问任意网络、文件系统或设备控制接口。
 ### `@compose-ui/editor`
 
 - 可嵌入 React 编辑器入口；
-- 可以依赖 `core` 和 `scene-tree`；
+- 可以依赖 `core`、`scene-tree` 和 `history`；
 - 提供 Entity Inspector、Component Designer 和组合编辑界面；
 - 组装微内核 Extension，但不把编辑逻辑分散到 UI 事件处理器；
 - 提供有界内存日志缓冲以及 Transaction、Problems、Runtime Log 面板；
