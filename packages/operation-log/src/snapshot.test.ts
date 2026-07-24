@@ -23,7 +23,7 @@ describe('OpenSpec: operation-log / 结构化操作日志协议 / 生成可持�
 
     expect(createOperationLogSnapshot(circular)).toMatchObject({
       status: 'unavailable',
-      reason: expect.stringContaining('循环'),
+      reason: expect.stringContaining('Circular'),
     })
     expect(createOperationLogSnapshot(() => undefined)).toMatchObject({
       status: 'unavailable',

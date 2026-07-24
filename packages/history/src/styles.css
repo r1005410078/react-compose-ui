@@ -40,7 +40,7 @@
   }
 
   .history-panel__list button {
-    @apply hi:flex hi:h-7 hi:w-full hi:min-w-0 hi:items-center hi:gap-1.5 hi:rounded hi:border-0 hi:bg-transparent hi:px-1.5 hi:text-left hi:text-[0.78rem] hi:text-[#c5ccd6] hi:outline-none;
+    @apply hi:flex hi:min-h-7 hi:w-full hi:min-w-0 hi:items-center hi:gap-1.5 hi:rounded hi:border-0 hi:bg-transparent hi:px-1.5 hi:py-1 hi:text-left hi:text-[0.78rem] hi:text-[#c5ccd6] hi:outline-none;
   }
 
   .history-panel__list button:hover,
@@ -69,8 +69,25 @@
     stroke-width: 2;
   }
 
-  .history-panel__list button > span:last-child {
-    @apply hi:min-w-0 hi:flex-1 hi:overflow-hidden hi:text-ellipsis hi:whitespace-nowrap;
+  .history-panel__entry-copy {
+    @apply hi:flex hi:min-w-0 hi:flex-1 hi:flex-col hi:overflow-hidden;
+  }
+
+  .history-panel__entry-copy strong,
+  .history-panel__entry-copy small {
+    @apply hi:overflow-hidden hi:text-ellipsis hi:whitespace-nowrap;
+  }
+
+  .history-panel__entry-copy strong {
+    @apply hi:font-medium hi:text-current;
+  }
+
+  .history-panel__entry-copy small {
+    @apply hi:text-[0.68rem] hi:leading-3 hi:text-[#8994a3];
+  }
+
+  .history-panel__list button[data-history-state='current'] .history-panel__entry-copy small {
+    @apply hi:text-[#c2d4ec];
   }
 
   .history-panel__empty {

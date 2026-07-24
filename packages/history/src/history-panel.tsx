@@ -45,10 +45,14 @@ export function HistoryPanel({
               const state = index === activeIndex
                 ? 'current'
                 : index > activeIndex ? 'future' : 'past'
+              const separator = entry.label.indexOf(' · ')
+              const title = separator >= 0 ? entry.label.slice(0, separator) : entry.label
+              const detail = separator >= 0 ? entry.label.slice(separator + 3) : undefined
               return (
                 <li key={entry.id}>
                   <button
                     ref={state === 'current' ? activeButtonRef : undefined}
+                    aria-label={entry.label}
                     aria-current={state === 'current' ? 'step' : undefined}
                     data-history-state={state}
                     title={entry.label}
@@ -62,7 +66,10 @@ export function HistoryPanel({
                         <path d="m3 8.25 3 3L13 4.5" />
                       </svg>
                     ) : <span aria-hidden="true" />}
-                    <span>{entry.label}</span>
+                    <span className="history-panel__entry-copy">
+                      <strong>{title}</strong>
+                      {detail ? <small>{detail}</small> : null}
+                    </span>
                   </button>
                 </li>
               )

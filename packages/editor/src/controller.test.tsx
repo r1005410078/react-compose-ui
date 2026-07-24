@@ -145,6 +145,26 @@ describe('useComposeEditorController', () => {
     expect(result.current.activeFrameId).toBeNull()
   })
 
+  it('以紧凑图标工具栏暴露完整的可访问名称和工具状态', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+      initialActiveFrameId: 'frame',
+    }))
+    const toolbar = render(result.current.stageToolbar)
+
+    expect(screen.getByRole('toolbar', { name: 'Stage 工具栏' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '适配选择' })).toBeDisabled()
+    expect(screen.getByLabelText('缩放比例')).toHaveTextContent('100%')
+
+    fireEvent.click(screen.getByRole('button', { name: '平移' }))
+    toolbar.rerender(result.current.stageToolbar)
+    expect(result.current.tool).toBe('pan')
+    expect(screen.getByRole('button', { name: '平移' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('maps a cross-parent SceneTree move to a geometry-preserving transaction', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({

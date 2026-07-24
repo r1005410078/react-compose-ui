@@ -14,6 +14,11 @@ const api = stagePackage as unknown as {
   getNodeWorldMatrix(document: ComposeDocument, nodeId: string): Matrix
   applyMatrix(matrix: Matrix, point: Point): Point
   invertMatrix(matrix: Matrix): Matrix
+  decomposeMatrix(
+    matrix: Matrix,
+    width: number,
+    height: number,
+  ): { x: number; y: number; width: number; height: number; rotation: number }
   getNodeWorldBounds(document: ComposeDocument, nodeId: string): Rect
   snapTranslation(
     bounds: Rect,
@@ -140,6 +145,20 @@ describe('Stage geometry', () => {
       y: 20,
       width: 150,
       height: 75,
+    })
+  })
+
+  it('OpenSpec: stage / 直接移动缩放与旋转 / resize 矩阵分解不重复偏移位置', () => {
+    expect(api.decomposeMatrix(
+      { a: 0.75, b: 0, c: 0, d: 0.5, e: 80, f: 80 },
+      960,
+      360,
+    )).toEqual({
+      x: 80,
+      y: 80,
+      width: 960,
+      height: 360,
+      rotation: 0,
     })
   })
 

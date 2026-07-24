@@ -17,6 +17,7 @@ import {
   translationMatrix,
   unionRects,
 } from './geometry'
+import { describeNodeTargets } from './transaction-labels'
 
 function transformUnderParent(
   document: ComposeDocument,
@@ -89,7 +90,7 @@ export function createGroupCommand(
       childTransforms,
     },
     meta: {
-      label: '分组节点',
+      label: `Group ${describeNodeTargets(document, nodeIds)}`,
       source: 'stage',
       targetIds: nodeIds,
     },
@@ -127,7 +128,7 @@ export function createUngroupCommand(
     type: 'node.ungroup',
     payload: { groupId, childTransforms },
     meta: {
-      label: '取消分组',
+      label: `Ungroup ${group?.name ?? 'Group'}`,
       source: 'stage',
       targetIds: [groupId],
     },
@@ -184,7 +185,8 @@ export function createReparentCommand(
       ],
     },
     meta: {
-      label: '重设节点父级',
+      label: `Move ${describeNodeTargets(document, nodeIds)}`
+        + ` to ${document.nodes[parentId]?.name ?? 'parent'}`,
       source: 'stage',
       targetIds: nodeIds,
     },
@@ -268,7 +270,7 @@ export function createDuplicateCommand(
         index: Math.max(0, siblings.indexOf(sourceId) + 1),
       },
       meta: {
-        label: '复制节点',
+        label: `Duplicate ${source.name}`,
         source: 'stage',
         targetIds: [sourceId],
       },

@@ -75,7 +75,7 @@ export function ComponentPalette({
   return (
     <div
       {...props}
-      aria-label={props['aria-label'] ?? '组件库'}
+      aria-label={props['aria-label'] ?? 'Component Library'}
       className={['component-palette', className].filter(Boolean).join(' ')}
       role="region"
     >
@@ -83,7 +83,7 @@ export function ComponentPalette({
         {registry.list().map((definition) => (
           <li key={definition.type}>
             <button
-              aria-label={`添加${definition.label}`}
+              aria-label={`Add ${definition.label}`}
               type="button"
               onClick={() => {
                 if (suppressClickRef.current) {

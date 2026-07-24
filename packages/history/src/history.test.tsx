@@ -159,7 +159,7 @@ function createNavigationController(
       { id: 'beginning', label: '开始' },
       { id: 'past', label: '新增节点' },
       { id: 'current', label: '修改文本' },
-      { id: 'future', label: '移动节点' },
+      { id: 'future', label: 'Move Text · x 20 → 40, y 10 → 18' },
     ],
     activeEntryId: 'current',
     canUndo: true,
@@ -177,7 +177,7 @@ describe('HistoryPanel', () => {
     render(<HistoryPanel controller={controller} />)
 
     expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
-      '移动节点',
+      'Move Textx 20 → 40, y 10 → 18',
       '修改文本',
       '新增节点',
       '开始',
@@ -186,14 +186,14 @@ describe('HistoryPanel', () => {
       'aria-current',
       'step',
     )
-    expect(screen.getByRole('button', { name: '移动节点' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Move Text · x 20 → 40, y 10 → 18' })).toHaveAttribute(
       'data-history-state',
       'future',
     )
 
     fireEvent.click(screen.getByRole('button', { name: '新增节点' }))
     expect(controller.navigate).toHaveBeenCalledWith('past')
-    fireEvent.click(screen.getByRole('button', { name: '移动节点' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Move Text · x 20 → 40, y 10 → 18' }))
     expect(controller.navigate).toHaveBeenCalledWith('future')
     expect(screen.getByRole('button', { name: '修改文本' })).toHaveAttribute(
       'title',

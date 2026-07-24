@@ -71,6 +71,9 @@
 - [x] 7.5 Refactor：删除重复 commit/record glue，并记录包测试与 Chromium E2E 证据
   - Regression command/result：命令事务流程并入根路径完整 Stage 示例；目标 Chromium E2E 1/1
     通过，app typecheck、lint、build 通过。
+  - Green command/result：History 使用英文数据摘要展示目标和关键字段变化；Operation Log 在
+    committed/undo/redo/navigate 时记录目标 Before/After 快照、forward/inverse patches、
+    command type 与 transaction IDs，目标 Chromium 纵向流程 1/1 通过。
 
 ## 8. 文档与完成门禁
 
@@ -78,6 +81,6 @@
 - [x] 8.2 逐项核对 Scenario 与 `OpenSpec: <capability> / <Requirement> / <Scenario>` 测试映射
 - [x] 8.3 运行 strict validate、lint、typecheck、test、build、test:e2e、pack dry run 和 diff check
   - Regression command/result：两份 change strict validate 通过；root lint、typecheck、test、build、
-    pack dry run 均退出 0；完整 Chromium E2E 4/4 通过。
+    pack dry run 均退出 0；完整 Chromium E2E 6/6 通过。
 - [x] 8.4 在对应任务下补齐 `Red command/result/reason`、`Green command/result`、
   `Regression command/result` 并仅勾选实际完成项

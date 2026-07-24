@@ -45,6 +45,7 @@ import type {
   StageTool,
   StageViewport,
 } from '@compose-ui/stage'
+import { StageToolbarIcon } from './stage-toolbar-icons'
 
 function defaultIdFactory() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -114,6 +115,11 @@ function validExpanded(document: ComposeDocument, ids: readonly string[]) {
     const node = document.nodes[id]
     return node?.kind === 'frame' || node?.kind === 'group'
   })
+}
+
+function describeNodeTargets(document: ComposeDocument, nodeIds: readonly string[]) {
+  if (nodeIds.length === 1) return document.nodes[nodeIds[0]!]?.name ?? 'node'
+  return `${nodeIds.length} nodes`
 }
 
 /**
@@ -370,7 +376,12 @@ export function useComposeEditorController({
             },
             index: operation.index,
           },
-          meta: { label: '创建 Frame', source: 'scene-tree', targetIds: [nodeId] },
+          meta: {
+            label: `Create Frame · 1280 × 720 at (`
+              + `${80 + document.rootIds.length * 40}, ${80 + document.rootIds.length * 40})`,
+            source: 'scene-tree',
+            targetIds: [nodeId],
+          },
         }
       }
       else {
@@ -390,7 +401,11 @@ export function useComposeEditorController({
             parentId: operation.parentId,
             index: operation.index,
           },
-          meta: { label: '创建 Group', source: 'scene-tree', targetIds: [nodeId] },
+          meta: {
+            label: 'Create Group · 320 × 180 at (0, 0)',
+            source: 'scene-tree',
+            targetIds: [nodeId],
+          },
         }
       }
       nextSelection = [nodeId]
@@ -401,7 +416,8 @@ export function useComposeEditorController({
         type: 'node.rename',
         payload: { nodeId: operation.nodeId, name: operation.label },
         meta: {
-          label: '重命名节点',
+          label: `Rename ${document.nodes[operation.nodeId]?.name ?? 'node'}`
+            + ` · “${document.nodes[operation.nodeId]?.name ?? ''}” → “${operation.label}”`,
           source: 'scene-tree',
           targetIds: [operation.nodeId],
         },
@@ -412,7 +428,11 @@ export function useComposeEditorController({
         id: nextId(),
         type: 'node.delete',
         payload: { nodeIds: operation.nodeIds },
-        meta: { label: '删除节点', source: 'scene-tree', targetIds: operation.nodeIds },
+        meta: {
+          label: `Delete ${describeNodeTargets(document, operation.nodeIds)}`,
+          source: 'scene-tree',
+          targetIds: operation.nodeIds,
+        },
       }
     }
     else if (operation.type === 'set-visibility') {
@@ -421,7 +441,8 @@ export function useComposeEditorController({
         type: 'node.set-visibility',
         payload: { nodeIds: operation.nodeIds, visible: operation.visible },
         meta: {
-          label: operation.visible ? '显示节点' : '隐藏节点',
+          label: `${operation.visible ? 'Show' : 'Hide'} `
+            + describeNodeTargets(document, operation.nodeIds),
           source: 'scene-tree',
           targetIds: operation.nodeIds,
         },
@@ -433,7 +454,8 @@ export function useComposeEditorController({
         type: 'node.set-locked',
         payload: { nodeIds: operation.nodeIds, locked: operation.locked },
         meta: {
-          label: operation.locked ? '锁定节点' : '解锁节点',
+          label: `${operation.locked ? 'Lock' : 'Unlock'} `
+            + describeNodeTargets(document, operation.nodeIds),
           source: 'scene-tree',
           targetIds: operation.nodeIds,
         },
@@ -460,7 +482,8 @@ export function useComposeEditorController({
               index: operation.index,
             },
             meta: {
-              label: '重排节点',
+              label: `Reorder ${describeNodeTargets(document, operation.nodeIds)}`
+                + ` · position ${operation.index + 1}`,
               source: 'scene-tree',
               targetIds: operation.nodeIds,
             },
@@ -479,7 +502,7 @@ export function useComposeEditorController({
             commands: duplicates.map((item) => item.command) as unknown as JsonValue,
           },
           meta: {
-            label: '复制节点',
+            label: `Duplicate ${describeNodeTargets(document, operation.sourceNodeIds)}`,
             source: 'scene-tree',
             targetIds: operation.sourceNodeIds,
           },
@@ -610,46 +633,72 @@ export function useComposeEditorController({
     ),
     stageToolbar: (
       <div aria-label="Stage 工具栏" className="compose-editor__stage-toolbar" role="toolbar">
-        <button
-          aria-pressed={tool === 'select'}
-          type="button"
-          onClick={() => setTool('select')}
-        >
-          选择
-        </button>
-        <button
-          aria-pressed={tool === 'pan'}
-          type="button"
-          onClick={() => setTool('pan')}
-        >
-          平移
-        </button>
-        <button type="button" onClick={createFrame}>创建 Frame</button>
-        <button
-          aria-label="缩小"
-          type="button"
-          onClick={() => setViewport((current) => ({
-            ...current,
-            zoom: Math.max(0.1, current.zoom / 1.2),
-          }))}
-        >
-          −
-        </button>
-        <span aria-label="缩放比例">{Math.round(viewport.zoom * 100)}%</span>
-        <button
-          aria-label="放大"
-          type="button"
-          onClick={() => setViewport((current) => ({
-            ...current,
-            zoom: Math.min(8, current.zoom * 1.2),
-          }))}
-        >
-          +
-        </button>
-        <button type="button" onClick={fitFrame}>适配 Frame</button>
-        <button disabled={selectedIds.length === 0} type="button" onClick={fitSelection}>
-          适配选择
-        </button>
+        <div aria-label="交互工具" className="compose-editor__toolbar-group" role="group">
+          <button
+            aria-label="选择"
+            aria-pressed={tool === 'select'}
+            title="选择"
+            type="button"
+            onClick={() => setTool('select')}
+          >
+            <StageToolbarIcon name="select" />
+          </button>
+          <button
+            aria-label="平移"
+            aria-pressed={tool === 'pan'}
+            title="平移"
+            type="button"
+            onClick={() => setTool('pan')}
+          >
+            <StageToolbarIcon name="pan" />
+          </button>
+        </div>
+        <span aria-hidden="true" className="compose-editor__toolbar-divider" />
+        <div aria-label="Frame 工具" className="compose-editor__toolbar-group" role="group">
+          <button aria-label="创建 Frame" title="创建 Frame" type="button" onClick={createFrame}>
+            <StageToolbarIcon name="create-frame" />
+          </button>
+          <button aria-label="适配 Frame" title="适配 Frame" type="button" onClick={fitFrame}>
+            <StageToolbarIcon name="fit-frame" />
+          </button>
+          <button
+            aria-label="适配选择"
+            disabled={selectedIds.length === 0}
+            title="适配选择"
+            type="button"
+            onClick={fitSelection}
+          >
+            <StageToolbarIcon name="fit-selection" />
+          </button>
+        </div>
+        <span aria-hidden="true" className="compose-editor__toolbar-divider" />
+        <div aria-label="缩放工具" className="compose-editor__toolbar-group" role="group">
+          <button
+            aria-label="缩小"
+            title="缩小"
+            type="button"
+            onClick={() => setViewport((current) => ({
+              ...current,
+              zoom: Math.max(0.1, current.zoom / 1.2),
+            }))}
+          >
+            <StageToolbarIcon name="zoom-out" />
+          </button>
+          <span aria-label="缩放比例" className="compose-editor__zoom-value">
+            {Math.round(viewport.zoom * 100)}%
+          </span>
+          <button
+            aria-label="放大"
+            title="放大"
+            type="button"
+            onClick={() => setViewport((current) => ({
+              ...current,
+              zoom: Math.min(8, current.zoom * 1.2),
+            }))}
+          >
+            <StageToolbarIcon name="zoom-in" />
+          </button>
+        </div>
       </div>
     ),
   }

@@ -15,13 +15,13 @@ export interface OperationLogPanelProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const categoryLabels: Record<OperationLogCategory, string> = {
-  component: '组件',
-  scene: '场景',
-  property: '属性',
-  binding: '绑定',
+  component: 'Component',
+  scene: 'Scene',
+  property: 'Property',
+  binding: 'Binding',
 }
 
-const timeFormatter = new Intl.DateTimeFormat('zh-CN', {
+const timeFormatter = new Intl.DateTimeFormat('en-US', {
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
@@ -40,8 +40,8 @@ function Snapshot({ label, snapshot }: { label: string; snapshot?: OperationLogS
     <section className="operation-log__snapshot">
       <div className="operation-log__detail-label">
         {label}
-        {snapshot.status === 'truncated' ? <span>已截断 · {snapshot.byteLength} B</span> : null}
-        {snapshot.status === 'unavailable' ? <span>不可保存</span> : null}
+        {snapshot.status === 'truncated' ? <span>Truncated · {snapshot.byteLength} B</span> : null}
+        {snapshot.status === 'unavailable' ? <span>Unavailable</span> : null}
       </div>
       <pre>{content}</pre>
     </section>
@@ -50,35 +50,35 @@ function Snapshot({ label, snapshot }: { label: string; snapshot?: OperationLogS
 
 function Detail({ entry, onClose }: { entry: OperationLogEntry; onClose: () => void }) {
   return (
-    <section className="operation-log__detail" aria-label="日志详情">
+    <section className="operation-log__detail" aria-label="Operation details">
       <header>
         <strong>{entry.summary}</strong>
         <div>
           <span>{formatTime(entry.updatedAt)}</span>
-          <button type="button" aria-label="关闭日志详情" onClick={onClose}>×</button>
+          <button type="button" aria-label="Close operation details" onClick={onClose}>×</button>
         </div>
       </header>
       <dl>
-        <div><dt>操作</dt><dd>{entry.action}</dd></div>
-        <div><dt>分类</dt><dd>{categoryLabels[entry.category]}</dd></div>
-        {entry.count > 1 ? <div><dt>合并</dt><dd>{entry.count} 次</dd></div> : null}
-        {entry.source ? <div><dt>来源</dt><dd>{entry.source}</dd></div> : null}
-        {entry.actor ? <div><dt>操作者</dt><dd>{entry.actor.label ?? entry.actor.id}</dd></div> : null}
+        <div><dt>Action</dt><dd>{entry.action}</dd></div>
+        <div><dt>Category</dt><dd>{categoryLabels[entry.category]}</dd></div>
+        {entry.count > 1 ? <div><dt>Merged</dt><dd>{entry.count} times</dd></div> : null}
+        {entry.source ? <div><dt>Source</dt><dd>{entry.source}</dd></div> : null}
+        {entry.actor ? <div><dt>Actor</dt><dd>{entry.actor.label ?? entry.actor.id}</dd></div> : null}
       </dl>
       {entry.targets.length > 0 ? (
         <section className="operation-log__targets">
-          <div className="operation-log__detail-label">目标</div>
+          <div className="operation-log__detail-label">Targets</div>
           {entry.targets.map((target, index) => (
             <div key={`${target.componentId ?? 'target'}-${index}`}>
-              <span>{target.componentLabel ?? target.componentId ?? '未知目标'}</span>
+              <span>{target.componentLabel ?? target.componentId ?? 'Unknown target'}</span>
               {target.path?.length ? <code>{target.path.join('.')}</code> : null}
             </div>
           ))}
         </section>
       ) : null}
-      <Snapshot label="变更前" snapshot={entry.before} />
-      <Snapshot label="变更后" snapshot={entry.after} />
-      <Snapshot label="元数据" snapshot={entry.metadata} />
+      <Snapshot label="Before" snapshot={entry.before} />
+      <Snapshot label="After" snapshot={entry.after} />
+      <Snapshot label="Metadata" snapshot={entry.metadata} />
     </section>
   )
 }
@@ -91,8 +91,8 @@ function Detail({ entry, onClose }: { entry: OperationLogEntry; onClose: () => v
  */
 export function OperationLogPanel({
   className,
-  emptyMessage = '暂无操作日志',
-  'aria-label': ariaLabel = '操作日志',
+  emptyMessage = 'No operations yet',
+  'aria-label': ariaLabel = 'Operation log',
   ...props
 }: OperationLogPanelProps) {
   const { status, entries } = useOperationLog()
@@ -107,7 +107,7 @@ export function OperationLogPanel({
         values.set(target.componentId, target.componentLabel ?? target.componentId)
       }
     }))
-    return [...values].sort((left, right) => left[1].localeCompare(right[1], 'zh-CN'))
+    return [...values].sort((left, right) => left[1].localeCompare(right[1], 'en-US'))
   }, [entries])
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const filteredEntries = useMemo(() => entries.filter((entry) => {
@@ -131,19 +131,19 @@ export function OperationLogPanel({
   const selectedEntry = filteredEntries.find(({ id }) => id === selectedId)
   let content: ReactNode
   if (status === 'loading') {
-    content = <div className="operation-log__empty">正在加载操作日志…</div>
+    content = <div className="operation-log__empty">Loading operation log…</div>
   } else if (filteredEntries.length === 0) {
     content = (
       <div className="operation-log__empty">
         {entries.length === 0 && !normalizedQuery && category === 'all' && componentId === 'all'
           ? emptyMessage
-          : '没有匹配的操作日志'}
+          : 'No matching operations'}
       </div>
     )
   } else {
     content = (
       <div className="operation-log__content">
-        <div className="operation-log__list" aria-label="日志列表">
+        <div className="operation-log__list" aria-label="Operation list">
           {filteredEntries.map((entry) => (
             <button
               type="button"
@@ -178,36 +178,36 @@ export function OperationLogPanel({
       aria-label={ariaLabel}
     >
       {status === 'degraded' ? (
-        <div className="operation-log__warning" role="status">本地持久化不可用</div>
+        <div className="operation-log__warning" role="status">Local persistence unavailable</div>
       ) : null}
       <div className="operation-log__toolbar">
         <label className="operation-log__search">
-          <span className="operation-log__sr-only">搜索操作日志</span>
+          <span className="operation-log__sr-only">Search operations</span>
           <span aria-hidden="true">⌕</span>
           <input
-            aria-label="搜索操作日志"
-            placeholder="搜索操作日志"
+            aria-label="Search operations"
+            placeholder="Search operations"
             type="search"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
           />
         </label>
         <select
-          aria-label="日志分类"
+          aria-label="Operation category"
           value={category}
           onChange={(event) => setCategory(event.currentTarget.value as OperationLogCategory | 'all')}
         >
-          <option value="all">全部分类</option>
+          <option value="all">All categories</option>
           {(Object.keys(categoryLabels) as OperationLogCategory[]).map((value) => (
             <option key={value} value={value}>{categoryLabels[value]}</option>
           ))}
         </select>
         <select
-          aria-label="日志组件"
+          aria-label="Operation component"
           value={componentId}
           onChange={(event) => setComponentId(event.currentTarget.value)}
         >
-          <option value="all">全部组件</option>
+          <option value="all">All components</option>
           {components.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         </select>
       </div>

@@ -50,7 +50,8 @@
 }
 
 .compose-stage__node.is-group {
-  pointer-events: none;
+  cursor: move;
+  pointer-events: auto;
 }
 
 .compose-stage__node.is-group > .compose-stage__node {

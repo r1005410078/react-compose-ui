@@ -6,8 +6,10 @@ import type {
 } from '@compose-ui/component-registry'
 import { createTransactionRuntime } from '@compose-ui/core'
 import type {
+  ComposeComponentNode,
   ComposeDocument,
   JsonObject,
+  JsonValue,
 } from '@compose-ui/core'
 import {
   ComposeEditor,
@@ -18,6 +20,7 @@ import {
   OperationLogPanel,
   useOperationLog,
 } from '@compose-ui/operation-log'
+import type { OperationLogCategory, OperationLogRecordInput } from '@compose-ui/operation-log'
 import { PropertyPanel } from '@compose-ui/property-panel'
 import { ComposePreview } from '@compose-ui/preview'
 import { BarChart } from 'echarts/charts'
@@ -34,6 +37,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as v from 'valibot'
 
 registerECharts([BarChart, GridComponent, TitleComponent, CanvasRenderer])
+
+function PreviewIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.75" />
+    </svg>
+  )
+}
 
 const emptyDocument: ComposeDocument = {
   schemaVersion: 1,
@@ -59,22 +71,32 @@ const chartSchema = v.object({
 })
 
 function setAllProps(
-  nodeId: string,
+  node: ComposeComponentNode,
   value: JsonObject,
   dispatch: ComponentInspectorProps['dispatch'],
   mergeKey: string,
 ) {
+  const changed = [...new Set([...Object.keys(node.props), ...Object.keys(value)])]
+    .filter((key) => JSON.stringify(node.props[key]) !== JSON.stringify(value[key]))
+    .slice(0, 2)
+    .map((key) => `${key} ${formatLogValue(node.props[key])} → ${formatLogValue(value[key])}`)
   dispatch({
-    id: `inspector:${nodeId}:${Date.now()}`,
+    id: `inspector:${node.id}:${Date.now()}`,
     type: 'node.props.set',
-    payload: { nodeId, path: [], value },
+    payload: { nodeId: node.id, path: [], value },
     meta: {
-      label: '修改组件属性',
+      label: `Update ${node.name}${changed.length > 0 ? ` · ${changed.join(', ')}` : ''}`,
       source: 'inspector',
-      targetIds: [nodeId],
+      targetIds: [node.id],
       mergeKey,
     },
   })
+}
+
+function formatLogValue(value: JsonValue | undefined) {
+  if (value === undefined) return 'undefined'
+  const serialized = JSON.stringify(value)
+  return serialized.length > 28 ? `${serialized.slice(0, 27)}…` : serialized
 }
 
 function RectangleRenderer({ props }: ComponentRendererProps) {
@@ -106,7 +128,7 @@ function RectangleInspector({ node, dispatch }: ComponentInspectorProps) {
       schema={rectangleSchema}
       value={value}
       onValueChange={(next) =>
-        setAllProps(node.id, next, dispatch, `inspector:${node.id}`)}
+        setAllProps(node, next, dispatch, `inspector:${node.id}`)}
     />
   )
 }
@@ -138,7 +160,7 @@ function TextInspector({ node, dispatch }: ComponentInspectorProps) {
       schema={textSchema}
       value={value}
       onValueChange={(next) =>
-        setAllProps(node.id, next, dispatch, `inspector:${node.id}`)}
+        setAllProps(node, next, dispatch, `inspector:${node.id}`)}
     />
   )
 }
@@ -193,7 +215,7 @@ function ChartInspector({ node, dispatch }: ComponentInspectorProps) {
       schema={chartSchema}
       value={value}
       onValueChange={(next) =>
-        setAllProps(node.id, next, dispatch, `inspector:${node.id}`)}
+        setAllProps(node, next, dispatch, `inspector:${node.id}`)}
     />
   )
 }
@@ -201,7 +223,7 @@ function ChartInspector({ node, dispatch }: ComponentInspectorProps) {
 const definitions = [
   {
     type: 'rectangle',
-    label: '矩形',
+    label: 'Rectangle',
     icon: <span aria-hidden="true">▭</span>,
     defaultSize: { width: 240, height: 140 },
     createDefaultProps: () => ({
@@ -214,7 +236,7 @@ const definitions = [
   },
   {
     type: 'text',
-    label: '文本',
+    label: 'Text',
     icon: <span aria-hidden="true">T</span>,
     defaultSize: { width: 280, height: 72 },
     createDefaultProps: () => ({
@@ -227,7 +249,7 @@ const definitions = [
   },
   {
     type: 'echarts-bar',
-    label: 'ECharts 图表',
+    label: 'ECharts Chart',
     icon: <span aria-hidden="true">▥</span>,
     defaultSize: { width: 420, height: 260 },
     createDefaultProps: () => ({
@@ -242,35 +264,84 @@ const definitions = [
 const registry = createComponentRegistry(definitions)
 
 function eventSummary(event: ComposeEditorTransactionEvent) {
-  if (event.direction === 'commit') return event.transaction?.label ?? '提交事务'
-  if (event.direction === 'undo') return '撤销事务'
-  if (event.direction === 'redo') return '重做事务'
-  return '跳转历史'
+  const label = event.transaction?.label ?? 'transaction'
+  if (event.direction === 'commit') return label
+  if (event.direction === 'undo') return `Undo · ${label}`
+  if (event.direction === 'redo') return `Redo · ${label}`
+  return `Navigate history · ${event.transactionIds.length} transaction`
+    + (event.transactionIds.length === 1 ? '' : 's')
+}
+
+function snapshotTargets(document: ComposeDocument, targetIds: readonly string[]) {
+  if (targetIds.length === 1) return document.nodes[targetIds[0]!] ?? null
+  return Object.fromEntries(targetIds.map((id) => [id, document.nodes[id] ?? null]))
+}
+
+function eventCategory(event: ComposeEditorTransactionEvent): OperationLogCategory {
+  const commandType = event.transaction?.commandType ?? ''
+  if (commandType.startsWith('node.props.')) return 'property'
+  if (
+    commandType === 'node.create'
+    || commandType === 'node.delete'
+    || commandType === 'node.duplicate'
+  ) {
+    return 'component'
+  }
+  return 'scene'
+}
+
+function targetPath(event: ComposeEditorTransactionEvent, targetId: string) {
+  const patch = event.transaction?.forward.find((item) =>
+    item.path[0] === 'nodes' && item.path[1] === targetId)
+  return patch?.path.slice(2)
 }
 
 export function StageDemoWorkspace() {
   const operationLog = useOperationLog()
   const [runtime] = useState(() => createTransactionRuntime({
     document: emptyDocument,
+    initialLabel: 'Initial state',
   }))
+  const previousDocument = useRef(runtime.document)
   const [previewOpen, setPreviewOpen] = useState(false)
   const nextId = useRef(0)
   const idFactory = useCallback(() => `stage-demo-${nextId.current++}`, [])
-  const recordTransaction = useCallback((event: ComposeEditorTransactionEvent) =>
-    operationLog.record({
-      action: `document.${event.direction}`,
-      category: event.source === 'inspector' ? 'property' : 'scene',
+  const recordTransaction = useCallback((event: ComposeEditorTransactionEvent) => {
+    const beforeDocument = previousDocument.current
+    const afterDocument = runtime.document
+    previousDocument.current = afterDocument
+    const transaction = event.transaction
+    const input: OperationLogRecordInput = {
+      action: event.direction === 'commit'
+        ? transaction?.commandType ?? 'document.commit'
+        : `document.${event.direction}`,
+      category: eventCategory(event),
       summary: eventSummary(event),
       source: event.source,
       targets: event.targets.map((componentId) => ({
         componentId,
-        componentLabel: runtime.document.nodes[componentId]?.name,
+        componentLabel: afterDocument.nodes[componentId]?.name
+          ?? beforeDocument.nodes[componentId]?.name,
+        path: targetPath(event, componentId),
       })),
       metadata: {
+        commandType: transaction?.commandType,
         direction: event.direction,
+        forwardPatches: transaction?.forward,
+        inversePatches: transaction?.inverse,
         transactionIds: event.transactionIds,
       },
-    }).then(() => undefined), [operationLog, runtime])
+      ...(event.targets.length > 0 ? {
+        before: snapshotTargets(beforeDocument, event.targets),
+        after: snapshotTargets(afterDocument, event.targets),
+      } : {}),
+    }
+    return operationLog.record(input, {
+      coalesceKey: event.direction === 'commit' && transaction?.mergeKey
+        ? `transaction:${transaction.id}`
+        : undefined,
+    }).then(() => undefined)
+  }, [operationLog, runtime])
   const controller = useComposeEditorController({
     runtime,
     registry,
@@ -289,10 +360,12 @@ export function StageDemoWorkspace() {
             <button
               className="stage-demo__preview-button"
               disabled={!controller.activeFrameId}
+              aria-label="预览 Frame"
+              title="预览 Frame"
               type="button"
               onClick={() => setPreviewOpen(true)}
             >
-              预览 Frame
+              <PreviewIcon />
             </button>
           </>
         )}

@@ -47,7 +47,7 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.canvas,
       component: WORKSPACE_COMPONENT_IDS.canvas,
       tabComponent: TAB_COMPONENT,
-      title: 'Canvas',
+      title: '画布',
       position: { referenceGroup: WORKSPACE_GROUP_IDS.canvas },
     })
   }

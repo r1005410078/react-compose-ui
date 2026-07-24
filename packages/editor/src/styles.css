@@ -70,27 +70,69 @@
 }
 
 .compose-editor__canvas-toolbar {
-  @apply ct:min-h-11 ct:shrink-0 ct:border-b ct:border-[#303640] ct:bg-[#181b20];
+  @apply ct:flex ct:min-h-12 ct:shrink-0 ct:items-center ct:border-b ct:border-[#30343b] ct:bg-[#181b20];
+  box-shadow: inset 0 1px rgb(255 255 255 / 2%);
 }
 
 .compose-editor__stage-toolbar {
-  @apply ct:flex ct:min-h-11 ct:items-center ct:gap-1 ct:px-2;
+  @apply ct:flex ct:min-h-12 ct:items-center ct:gap-2 ct:px-3;
 }
 
-.compose-editor__stage-toolbar button {
-  @apply ct:rounded ct:border ct:border-[#39404a] ct:bg-[#22262d] ct:px-2 ct:py-1 ct:text-xs ct:text-[#d8dde6];
+.compose-editor__toolbar-group {
+  @apply ct:flex ct:items-center ct:gap-1;
+}
+
+.compose-editor__stage-toolbar button,
+.compose-editor__canvas-toolbar > button {
+  @apply ct:grid ct:size-9 ct:shrink-0 ct:cursor-pointer ct:place-items-center ct:rounded-[5px] ct:border ct:border-[#303640] ct:bg-[#1d2025] ct:p-0 ct:text-[#b9c0ca];
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 3%),
+    0 1px 2px rgb(0 0 0 / 18%);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.compose-editor__stage-toolbar button:hover:not(:disabled),
+.compose-editor__canvas-toolbar > button:hover:not(:disabled) {
+  @apply ct:border-[#454d59] ct:bg-[#292e36] ct:text-[#f2f5f8];
 }
 
 .compose-editor__stage-toolbar button[aria-pressed='true'] {
-  @apply ct:border-[#4d9cff] ct:bg-[#17345c] ct:text-white;
+  @apply ct:border-[#317fdc] ct:bg-[#1b395f] ct:text-[#eaf3ff];
+  box-shadow:
+    inset 0 0 0 1px rgb(77 156 255 / 16%),
+    0 0 0 1px rgb(19 77 145 / 22%);
 }
 
-.compose-editor__stage-toolbar button:disabled {
+.compose-editor__stage-toolbar button:disabled,
+.compose-editor__canvas-toolbar > button:disabled {
   @apply ct:cursor-not-allowed ct:opacity-45;
 }
 
-.compose-editor__stage-toolbar span {
-  @apply ct:min-w-12 ct:text-center ct:text-xs ct:text-[#aeb7c4];
+.compose-editor__stage-toolbar button:focus-visible,
+.compose-editor__canvas-toolbar > button:focus-visible {
+  @apply ct:outline-none ct:ring-2 ct:ring-[#4d9cff] ct:ring-offset-1 ct:ring-offset-[#181b20];
+}
+
+.compose-editor__stage-toolbar button svg,
+.compose-editor__canvas-toolbar > button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.compose-editor__toolbar-divider {
+  @apply ct:h-6 ct:w-px ct:shrink-0 ct:bg-[#343a43];
+}
+
+.compose-editor__zoom-value {
+  @apply ct:min-w-12 ct:text-center ct:text-xs ct:font-medium ct:tabular-nums ct:text-[#aeb7c4];
 }
 
 .compose-editor__canvas-content {

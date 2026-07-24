@@ -62,7 +62,7 @@ describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / 刷新后恢复
       </OperationLogProvider>,
     )
 
-    const list = await screen.findByLabelText('日志列表')
+    const list = await screen.findByLabelText('Operation list')
     expect(within(list).getByText('修改矩形宽度')).toBeInTheDocument()
     expect(screen.getByLabelText('日志状态')).toHaveTextContent('ready')
 
@@ -87,9 +87,9 @@ describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / 刷新后恢复
       )
     }
     render(<Harness />)
-    expect(within(await screen.findByLabelText('日志列表')).getByText('修改矩形宽度')).toBeInTheDocument()
+    expect(within(await screen.findByLabelText('Operation list')).getByText('修改矩形宽度')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '切换' }))
-    const list = await screen.findByLabelText('日志列表')
+    const list = await screen.findByLabelText('Operation list')
     expect(within(list).getByText('移动图表')).toBeInTheDocument()
     expect(within(list).queryByText('修改矩形宽度')).not.toBeInTheDocument()
   })
@@ -112,9 +112,9 @@ describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / IndexedDB 不�
       </OperationLogProvider>,
     )
 
-    expect(await screen.findByText('本地持久化不可用')).toBeInTheDocument()
+    expect(await screen.findByText('Local persistence unavailable')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '记录' }))
-    expect(within(await screen.findByLabelText('日志列表')).getByText('新增文本组件')).toBeInTheDocument()
+    expect(within(await screen.findByLabelText('Operation list')).getByText('新增文本组件')).toBeInTheDocument()
     expect(screen.getByLabelText('日志状态')).toHaveTextContent('degraded')
     expect(onStorageError).toHaveBeenCalledWith(error)
   })
@@ -140,23 +140,23 @@ describe('OpenSpec: operation-log / 可访问日志查看面板 / 搜索和筛�
       </OperationLogProvider>,
     )
     const panel = await screen.findByRole('region', { name: '操作日志' })
-    expect(within(within(panel).getByLabelText('日志分类')).getAllByRole('option')).toHaveLength(5)
+    expect(within(within(panel).getByLabelText('Operation category')).getAllByRole('option')).toHaveLength(5)
 
-    fireEvent.change(within(panel).getByLabelText('日志分类'), { target: { value: 'scene' } })
-    const list = within(panel).getByLabelText('日志列表')
+    fireEvent.change(within(panel).getByLabelText('Operation category'), { target: { value: 'scene' } })
+    const list = within(panel).getByLabelText('Operation list')
     expect(within(list).getByText('移动图表层级')).toBeInTheDocument()
     expect(within(list).queryByText('修改矩形宽度')).not.toBeInTheDocument()
 
-    fireEvent.change(within(panel).getByLabelText('日志分类'), { target: { value: 'all' } })
-    fireEvent.change(within(panel).getByLabelText('日志组件'), { target: { value: 'rectangle-1' } })
+    fireEvent.change(within(panel).getByLabelText('Operation category'), { target: { value: 'all' } })
+    fireEvent.change(within(panel).getByLabelText('Operation component'), { target: { value: 'rectangle-1' } })
     expect(within(list).getByText('修改矩形宽度')).toBeInTheDocument()
     fireEvent.click(within(panel).getByRole('button', { name: /修改矩形宽度/ }))
-    expect(within(panel).getByRole('region', { name: '日志详情' })).toHaveTextContent('size.width')
+    expect(within(panel).getByRole('region', { name: 'Operation details' })).toHaveTextContent('size.width')
     expect(within(panel).getByText('100')).toBeInTheDocument()
     expect(within(panel).getByText('120')).toBeInTheDocument()
 
-    fireEvent.change(within(panel).getByLabelText('搜索操作日志'), { target: { value: '不存在' } })
-    expect(within(panel).getByText('没有匹配的操作日志')).toBeInTheDocument()
+    fireEvent.change(within(panel).getByLabelText('Search operations'), { target: { value: '不存在' } })
+    expect(within(panel).getByText('No matching operations')).toBeInTheDocument()
   })
 
   it('初始加载结束后显示空状态', async () => {
@@ -165,7 +165,7 @@ describe('OpenSpec: operation-log / 可访问日志查看面板 / 搜索和筛�
         <OperationLogPanel />
       </OperationLogProvider>,
     )
-    await waitFor(() => expect(screen.getByText('暂无操作日志')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('No operations yet')).toBeInTheDocument())
   })
 
 })
@@ -177,7 +177,7 @@ describe('OpenSpec: operation-log / 可访问日志查看面板 / 查看结构�
       before: { status: 'truncated', preview: '{"large":…', byteLength: 70000 },
       after: {
         status: 'unavailable',
-        preview: '不可保存：检测到循环引用',
+        preview: 'Unavailable: Circular reference detected',
         byteLength: 0,
         reason: '检测到循环引用',
       },
@@ -188,11 +188,11 @@ describe('OpenSpec: operation-log / 可访问日志查看面板 / 查看结构�
       </OperationLogProvider>,
     )
 
-    const list = await screen.findByLabelText('日志列表')
+    const list = await screen.findByLabelText('Operation list')
     fireEvent.click(within(list).getByRole('button', { name: /修改矩形宽度/ }))
-    const detail = screen.getByRole('region', { name: '日志详情' })
-    expect(detail).toHaveTextContent('已截断 · 70000 B')
-    expect(detail).toHaveTextContent('不可保存')
-    expect(detail).toHaveTextContent('检测到循环引用')
+    const detail = screen.getByRole('region', { name: 'Operation details' })
+    expect(detail).toHaveTextContent('Truncated · 70000 B')
+    expect(detail).toHaveTextContent('Unavailable')
+    expect(detail).toHaveTextContent('Circular reference detected')
   })
 })

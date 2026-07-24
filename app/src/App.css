@@ -38,12 +38,18 @@
 }
 
 .stage-demo__preview-button {
-  align-self: center;
-  margin: 7px 10px 7px auto;
-  border: 1px solid #4d9cff;
-  border-radius: 4px;
-  color: #eaf3ff;
-  background: #174a91;
+  position: relative;
+  margin-left: 1px;
+  color: #b9c0ca;
+}
+
+.stage-demo__preview-button::before {
+  position: absolute;
+  width: 1px;
+  height: 24px;
+  content: '';
+  right: calc(100% + 8px);
+  background: #343a43;
 }
 
 .stage-demo__preview-button:disabled {

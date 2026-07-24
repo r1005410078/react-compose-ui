@@ -45,6 +45,11 @@ import {
   createGroupCommand,
   createUngroupCommand,
 } from './commands'
+import {
+  describeNodeCreation,
+  describeNodeTargets,
+  describeTransform,
+} from './transaction-labels'
 
 type TransformMap = Readonly<Record<string, NodeTransform>>
 type Modifiers = { shift: boolean; alt: boolean; command: boolean }
@@ -540,9 +545,7 @@ export function Stage({
       type: 'node.transform.set',
       payload: { updates },
       meta: {
-        label: gesture.type === 'move'
-          ? '移动节点'
-          : gesture.type === 'resize' ? '缩放节点' : '旋转节点',
+        label: describeTransform(document, updates, gesture.type),
         source: 'stage',
         targetIds: gesture.ids,
       },
@@ -639,7 +642,9 @@ export function Stage({
             parentId: frame?.kind === 'frame' ? frame.id : null,
           },
           meta: {
-            label: frame ? `创建${node.name}` : `拒绝在 Frame 外创建${node.name}`,
+            label: frame
+              ? describeNodeCreation(node)
+              : `Reject ${node.name} outside a Frame`,
             source: 'component-palette',
             targetIds: [nodeId],
           },
@@ -757,7 +762,11 @@ export function Stage({
         id: idFactory(),
         type: 'node.delete',
         payload: { nodeIds: editableIds },
-        meta: { label: '删除节点', source: 'stage', targetIds: editableIds },
+        meta: {
+          label: `Delete ${describeNodeTargets(document, editableIds)}`,
+          source: 'stage',
+          targetIds: editableIds,
+        },
       })
       event.preventDefault()
       return
@@ -787,7 +796,7 @@ export function Stage({
         type: 'node.transform.set',
         payload: { updates },
         meta: {
-          label: '微调节点',
+          label: describeTransform(document, updates, 'move'),
           source: 'stage',
           targetIds: editableIds,
           mergeKey: `stage:nudge:${editableIds.join(',')}`,

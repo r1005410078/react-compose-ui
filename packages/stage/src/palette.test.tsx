@@ -135,7 +135,7 @@ describe('ComponentPalette', () => {
     )
     rect(screen.getByRole('application', { name: 'one Stage' }))
 
-    const item = screen.getByRole('button', { name: '添加方块' })
+    const item = screen.getByRole('button', { name: 'Add 方块' })
     fireEvent.pointerDown(item, { clientX: 700, clientY: 500, pointerId: 1 })
     fireEvent.pointerMove(window, { clientX: 120, clientY: 140, pointerId: 1 })
     fireEvent.pointerUp(window, { clientX: 120, clientY: 140, pointerId: 1 })
@@ -166,7 +166,7 @@ describe('ComponentPalette', () => {
     )
     rect(screen.getByRole('application', { name: 'one Stage' }))
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: '添加方块' }), {
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Add 方块' }), {
       clientX: 10,
       clientY: 10,
       pointerId: 1,
@@ -202,7 +202,7 @@ describe('ComponentPalette', () => {
     rect(screen.getByRole('application', { name: 'first Stage' }))
     rect(screen.getByRole('application', { name: 'second Stage' }))
 
-    fireEvent.click(screen.getAllByRole('button', { name: '添加方块' })[0]!)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add 方块' })[0]!)
 
     expect(firstRuntime.document.nodes['first-box']).toBeDefined()
     expect(secondRuntime.document.nodes['second-box']).toBeUndefined()
@@ -224,7 +224,7 @@ describe('ComponentPalette', () => {
     )
     rect(screen.getByRole('application', { name: 'one Stage' }))
 
-    const item = screen.getByRole('button', { name: '添加方块' })
+    const item = screen.getByRole('button', { name: 'Add 方块' })
     fireEvent.pointerDown(item, { clientX: 250, clientY: 200, pointerId: 1 })
     fireEvent.pointerUp(window, { clientX: 250, clientY: 200, pointerId: 1 })
     fireEvent.click(item)

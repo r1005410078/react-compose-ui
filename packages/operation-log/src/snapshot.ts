@@ -13,20 +13,20 @@ function encodeValue(
   }
   if (typeof value === 'bigint') return { $type: 'bigint', value: value.toString() }
   if (typeof value === 'undefined') return { $type: 'undefined' }
-  if (typeof value === 'function') throw new SnapshotEncodingError('函数不能写入操作日志')
-  if (typeof value === 'symbol') throw new SnapshotEncodingError('Symbol 不能写入操作日志')
+  if (typeof value === 'function') throw new SnapshotEncodingError('Functions cannot be stored')
+  if (typeof value === 'symbol') throw new SnapshotEncodingError('Symbols cannot be stored')
 
   if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) throw new SnapshotEncodingError('无效 Date 不能写入操作日志')
+    if (Number.isNaN(value.getTime())) throw new SnapshotEncodingError('Invalid dates cannot be stored')
     return { $type: 'date', value: value.toISOString() }
   }
-  if (ancestors.has(value)) throw new SnapshotEncodingError('检测到循环引用')
+  if (ancestors.has(value)) throw new SnapshotEncodingError('Circular reference detected')
   ancestors.add(value)
   try {
     if (Array.isArray(value)) return value.map((item) => encodeValue(item, ancestors))
     const prototype = Object.getPrototypeOf(value) as object | null
     if (prototype !== Object.prototype && prototype !== null) {
-      throw new SnapshotEncodingError('只支持普通对象、数组、Date 和基础值')
+      throw new SnapshotEncodingError('Only plain objects, arrays, dates, and primitive values are supported')
     }
     return Object.fromEntries(
       Object.keys(value)
@@ -72,10 +72,10 @@ export function createOperationLogSnapshot(
       value: encoded,
     }
   } catch (error) {
-    const reason = error instanceof Error ? error.message : '无法生成操作日志快照'
+    const reason = error instanceof Error ? error.message : 'Unable to create operation snapshot'
     return {
       status: 'unavailable',
-      preview: `不可保存：${reason}`,
+      preview: `Unavailable: ${reason}`,
       byteLength: 0,
       reason,
     }

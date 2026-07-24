@@ -35,7 +35,7 @@ function Workspace() {
     void operationLog.record({
       action: 'component.rename',
       category: 'component',
-      summary: `重命名 ${before}`,
+      summary: `Rename ${before} → ${after}`,
       targets: [{ componentId: id, componentLabel: after }],
       source: 'scene-tree',
       before,
@@ -61,10 +61,11 @@ export function Page() {
 
 Provider 默认每个 scope 保留最近 `1000` 条记录，每个 before、after 或 metadata 快照上限为
 `64KiB`。IndexedDB 初始化或写入失败时会自动转为当前会话内存存储，`status` 变为
-`degraded`，面板显示“本地持久化不可用”，同时通过 `onStorageError` 通知宿主。
+`degraded`，面板显示“Local persistence unavailable”，同时通过 `onStorageError` 通知宿主。
 
 面板按更新时间倒序显示，支持搜索 action、摘要、组件和路径，也支持分类与组件筛选。选择记录后
-可查看目标、来源、合并次数及结构化前后值。面板没有清空按钮；需要时宿主可以调用
+可查看目标、来源、合并次数、结构化 Before/After 以及 metadata。默认界面文案使用英文；
+面板没有清空按钮，需要时宿主可以调用
 `useOperationLog().clear()`。
 
 ## 连续输入合并
@@ -75,7 +76,7 @@ Provider 默认每个 scope 保留最近 `1000` 条记录，每个 before、afte
 void operationLog.record({
   action: 'property.change',
   category: 'property',
-  summary: '修改不透明度',
+  summary: `Update opacity · ${previousOpacity} → ${nextOpacity}`,
   targets: [{ componentId, path: ['appearance', 'opacity'] }],
   before: previousOpacity,
   after: nextOpacity,

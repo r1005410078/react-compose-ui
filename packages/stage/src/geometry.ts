@@ -182,6 +182,7 @@ export function matrixFromTransform(transform: NodeTransform): StageMatrix {
 /**
  * 将无 skew 的世界/局部矩阵分解回节点 transform。
  *
+ * @remarks resize 产生的正 scale 已由 width/height 表达，位置反解会剥离矩阵 scale。
  * @param matrix - 要分解的二维矩阵。
  * @param width - 结果节点宽度。
  * @param height - 结果节点高度。
@@ -192,12 +193,17 @@ export function decomposeMatrix(
   width: number,
   height: number,
 ): NodeTransform {
-  const rotation = Math.atan2(matrix.b, matrix.a) * 180 / Math.PI
+  const rotationRadians = Math.atan2(matrix.b, matrix.a)
+  const rotation = rotationRadians * 180 / Math.PI
+  const cosine = Math.cos(rotationRadians)
+  const sine = Math.sin(rotationRadians)
   const centerX = width / 2
   const centerY = height / 2
   return {
-    x: matrix.e - centerX + matrix.a * centerX + matrix.c * centerY,
-    y: matrix.f - centerY + matrix.b * centerX + matrix.d * centerY,
+    // Resize mapping 已把 scale 写入目标 width/height；位置反解只能使用纯旋转分量，
+    // 否则会再次应用 scale，导致手柄相对指针向固定边的反方向漂移。
+    x: matrix.e - centerX + cosine * centerX - sine * centerY,
+    y: matrix.f - centerY + sine * centerX + cosine * centerY,
     width,
     height,
     rotation,

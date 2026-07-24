@@ -41,6 +41,14 @@
 - [x] 5.6 Green/Refactor：完成取消恢复、键盘 nudge/duplicate/delete/group/ungroup 并记录证据
   - Green command/result：geometry 6/6、Stage 19/19、commands 3/3 通过。
   - Regression command/result：吸附视觉测试显示 Frame guide，pointerup 前不增加历史且取消保持文档。
+  - Bugfix Red command/result/reason：真实 Chromium 中将 `se` 手柄移动到 `(936, 513)`，预览手柄
+    错误停在 `(867, 470)`；geometry 回归同时得到 `x=-40/y=-10` 而非固定边 `x=80/y=80`，
+    确认 resize scale 在矩阵分解时被重复用于位置反解。
+  - Bugfix Green command/result：位置分解改用剥离 scale 后的纯旋转分量；geometry 7/7 通过，
+    Chromium 中 8 个手柄逐一向内、向外拖动均与鼠标目标坐标重合。
+  - Group Bugfix Red/Green：Chromium 在 Group 两个子节点之间的空白区域命中 Frame
+    `stage-demo-0` 而非 Group `stage-demo-8`；移除 Group 容器的 Pointer 穿透后，Group 可精确移动
+    80×40px，内部 Component 仍可单独命中并移动 40×20px。
 
 ## 6. ComponentPalette Red → Green → Refactor
 
@@ -61,9 +69,12 @@
 - [x] 7.5 Refactor：确认无 controller 时既有面板数量、内容和快捷键回归，记录测试证据
   - Red command/result/reason：`bun run --cwd packages/editor test`，新增六面板、Library slot、
     toolbar 优先和 controller 默认组合后 7/21 失败；原工作区仍只有五面板并透传未知 props。
-  - Green command/result：editor 26/26 通过。
+  - Green command/result：editor 27/27 通过。
   - Regression command/result：editor typecheck、lint、build 通过；无 controller 的空树、历史
     快捷键、显式 children 和旧 `canvasToolbar` 测试继续通过。
+  - Toolbar Refactor：Stage 工具栏恢复为紧凑深色图标栏，交互、Frame、缩放按语义分组；
+    Chromium 实测 toolbar 48px、按钮 36×36px、分隔线 24px，图标按钮保留完整可访问名称、
+    pressed/disabled 状态和键盘焦点。
 
 ## 8. Preview Red → Green → Refactor
 
@@ -85,11 +96,13 @@
 - [x] 9.5 Refactor：删除示例手写 Canvas/状态 glue，记录 Chromium E2E 与视觉证据
   - Green command/result：目标 Chromium Stage 纵向流程 1/1 通过，覆盖 Frame、Pointer drop、
     多选分组、PropertyPanel、undo/redo、Command rejection、Operation Log 和 Preview。
+  - Green command/result：Stage 创建、移动、缩放与旋转事务生成英文数据摘要；History 分行展示
+    动作与数值，Operation Log 详情展示相同事务的 Before/After 和 patches。
   - Regression command/result：根路径只挂载 Stage controller 完整示例并从 runtime 派生文档；
     旧手写 Canvas、事务专用入口及其状态 glue 已删除。
   - Visual result：`stage-workspace-default.png`、`stage-workspace-selected.png`、
     `stage-workspace-snapping.png`、`stage-workspace-command-rejected.png` 在锁定 Chromium
-    1280×720 下生成并逐张人工审查通过。
+    1280×720 下按图标工具栏重新生成并逐张人工审查通过。
 
 ## 10. 文档与完成门禁
 
@@ -97,5 +110,5 @@
 - [x] 10.2 逐项核对 Scenario 与 `OpenSpec: <capability> / <Requirement> / <Scenario>` 测试映射
 - [x] 10.3 运行 strict validate、lint、typecheck、test、build、test:e2e、pack dry run 和 diff check
   - Regression command/result：两份 change strict validate 通过；root lint、typecheck、test、build、
-    pack dry run 均退出 0；完整 Chromium E2E 4/4 通过并比较 Stage 视觉黄金文件。
+    pack dry run 均退出 0；完整 Chromium E2E 6/6 通过并比较 Stage 视觉黄金文件。
 - [x] 10.4 补齐每个循环的 Red/Green/Regression 证据并仅勾选实际完成项
