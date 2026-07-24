@@ -4,9 +4,10 @@ import type { HistoryNavigationController } from '@compose-ui/history'
 
 export interface WorkspaceContent {
   sceneGraphPanel?: ReactNode
+  componentLibraryPanel?: ReactNode
   history?: HistoryNavigationController
   historyPanel?: ReactNode
-  canvasToolbar?: ReactNode
+  stageToolbar?: ReactNode
   children?: ReactNode
   inspectorPanel?: ReactNode
   transactionLogPanel?: ReactNode

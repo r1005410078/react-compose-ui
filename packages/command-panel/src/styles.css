@@ -1,0 +1,137 @@
+.command-panel {
+  --command-panel-bg: #181a1f;
+  --command-panel-border: #30343b;
+  --command-panel-muted: #939aa5;
+  --command-panel-text: #d8dde6;
+  --command-panel-accent: #4ea1f3;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  color: var(--command-panel-text);
+  background: var(--command-panel-bg);
+  font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
+.command-panel *,
+.command-panel *::before,
+.command-panel *::after {
+  box-sizing: border-box;
+}
+
+.command-panel__form,
+.command-panel__event {
+  border-bottom: 1px solid var(--command-panel-border);
+  padding: 8px;
+}
+
+.command-panel__field {
+  display: grid;
+  grid-template-columns: minmax(80px, 120px) minmax(120px, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.command-panel__field [role='alert'] {
+  grid-column: 2;
+  color: #ff8b8b;
+}
+
+.command-panel input,
+.command-panel select,
+.command-panel textarea,
+.command-panel button {
+  color: inherit;
+  border: 1px solid var(--command-panel-border);
+  border-radius: 3px;
+  background: #22252b;
+  font: inherit;
+}
+
+.command-panel button {
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.command-panel button:focus-visible,
+.command-panel input:focus-visible,
+.command-panel select:focus-visible,
+.command-panel textarea:focus-visible {
+  outline: 1px solid var(--command-panel-accent);
+  outline-offset: 1px;
+}
+
+.command-panel__events,
+.command-panel__issues,
+.command-panel__details ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.command-panel__event-summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.command-panel__status {
+  min-width: 42px;
+  color: var(--command-panel-accent);
+}
+
+.command-panel__label {
+  font-weight: 600;
+}
+
+.command-panel__source {
+  color: var(--command-panel-muted);
+}
+
+.command-panel code {
+  overflow-wrap: anywhere;
+  color: #b9c4d3;
+}
+
+.command-panel__coalesced,
+.command-panel__empty {
+  color: var(--command-panel-muted);
+}
+
+.command-panel__issues {
+  margin-top: 6px;
+  color: #ff8b8b;
+}
+
+.command-panel__details {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 3px;
+  background: #111318;
+}
+
+.command-panel__details dl {
+  margin: 0 0 8px;
+}
+
+.command-panel__details dl > div {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+}
+
+.command-panel__details dt {
+  color: var(--command-panel-muted);
+}
+
+.command-panel__details dd {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+}
+
+.command-panel__empty {
+  margin: 0;
+  padding: 12px;
+}

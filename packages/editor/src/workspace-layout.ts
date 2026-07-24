@@ -9,6 +9,7 @@ export const WORKSPACE_GROUP_IDS = {
 
 export const WORKSPACE_PANEL_IDS = {
   scene: 'compose-scene-graph',
+  componentLibrary: 'compose-component-library',
   canvas: 'compose-canvas',
   inspector: 'compose-inspector',
   transactionLog: 'compose-transaction-log',
@@ -17,6 +18,7 @@ export const WORKSPACE_PANEL_IDS = {
 
 export const WORKSPACE_COMPONENT_IDS = {
   scene: 'sceneGraph',
+  componentLibrary: 'componentLibrary',
   canvas: 'canvas',
   inspector: 'inspector',
   transactionLog: 'transactionLog',
@@ -58,8 +60,9 @@ export function initializeWorkspace(api: DockviewApi) {
     })
   sceneGroup.locked = 'no-drop-target'
 
-  if (!api.getPanel(WORKSPACE_PANEL_IDS.scene)) {
-    api.addPanel({
+  let scenePanel = api.getPanel(WORKSPACE_PANEL_IDS.scene)
+  if (!scenePanel) {
+    scenePanel = api.addPanel({
       id: WORKSPACE_PANEL_IDS.scene,
       component: WORKSPACE_COMPONENT_IDS.scene,
       tabComponent: TAB_COMPONENT,
@@ -67,6 +70,18 @@ export function initializeWorkspace(api: DockviewApi) {
       position: { referenceGroup: sceneGroup.id },
     })
   }
+
+  if (!api.getPanel(WORKSPACE_PANEL_IDS.componentLibrary)) {
+    api.addPanel({
+      id: WORKSPACE_PANEL_IDS.componentLibrary,
+      component: WORKSPACE_COMPONENT_IDS.componentLibrary,
+      tabComponent: TAB_COMPONENT,
+      title: 'Component Library',
+      inactive: true,
+      position: { referenceGroup: sceneGroup.id },
+    })
+  }
+  scenePanel.api.setActive()
 
   const inspectorGroup =
     api.getEdgeGroup('right') ??

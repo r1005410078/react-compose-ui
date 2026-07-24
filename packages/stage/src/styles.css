@@ -1,0 +1,148 @@
+.compose-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 240px;
+  overflow: hidden;
+  outline: none;
+  background: #11151b;
+  color: #e6edf7;
+  touch-action: none;
+  user-select: none;
+}
+
+.compose-stage:focus-visible {
+  box-shadow: inset 0 0 0 2px #4d9cff;
+}
+
+.compose-stage__grid,
+.compose-stage__scene,
+.compose-stage__overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.compose-stage__grid {
+  opacity: 0.45;
+  background-image:
+    linear-gradient(#28313d 1px, transparent 1px),
+    linear-gradient(90deg, #28313d 1px, transparent 1px);
+}
+
+.compose-stage__scene {
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+.compose-stage__node {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.compose-stage__node.is-frame {
+  overflow: hidden;
+  border: 1px solid #4a5667;
+  background: #f8fafc;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  color: #172033;
+}
+
+.compose-stage__node.is-group {
+  pointer-events: none;
+}
+
+.compose-stage__node.is-group > .compose-stage__node {
+  pointer-events: auto;
+}
+
+.compose-stage__node.is-component {
+  overflow: hidden;
+}
+
+.compose-stage__node.is-locked {
+  cursor: not-allowed;
+}
+
+.compose-stage__overlay {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.compose-stage__selection,
+.compose-stage__marquee {
+  fill: rgb(54 135 255 / 10%);
+  stroke: #3687ff;
+  stroke-width: 1;
+}
+
+.compose-stage__marquee {
+  stroke-dasharray: 4 3;
+}
+
+.compose-stage__handle {
+  fill: #f8fbff;
+  stroke: #3687ff;
+  stroke-width: 1;
+  pointer-events: all;
+}
+
+.compose-stage__rotation {
+  cursor: grab;
+}
+
+.compose-stage__guide {
+  stroke: #ff4fc3;
+  stroke-width: 1;
+}
+
+.component-palette {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  color: #d8dde6;
+  background: #181a1f;
+  font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
+.component-palette ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+}
+
+.component-palette button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid #30343b;
+  border-radius: 4px;
+  color: inherit;
+  background: #22262d;
+  cursor: grab;
+  font: inherit;
+}
+
+.component-palette button:focus-visible {
+  outline: 1px solid #4d9cff;
+  outline-offset: 1px;
+}
+
+.component-palette__drag-preview {
+  position: fixed;
+  z-index: 10000;
+  top: 12px;
+  left: 12px;
+  padding: 6px 10px;
+  border: 1px solid #4d9cff;
+  border-radius: 4px;
+  background: #172b49;
+  pointer-events: none;
+}

@@ -1,0 +1,656 @@
+import { CommandPanel } from '@compose-ui/command-panel'
+import { RegistryInspector } from '@compose-ui/component-registry'
+import {
+  ComponentPalette,
+  Stage,
+  createDuplicateCommand,
+  createReparentCommand,
+  createStageDragController,
+  getNodeParentId,
+  getNodeWorldBounds,
+  unionRects,
+} from '@compose-ui/stage'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
+import type { ReactNode } from 'react'
+import type {
+  CommandPreset,
+} from '@compose-ui/command-panel'
+import type { ComponentRegistry } from '@compose-ui/component-registry'
+import type {
+  CommandDispatchResult,
+  ComposeDocument,
+  ComposeFrameNode,
+  ComposeNode,
+  EditorCommand,
+  EditorTransaction,
+  JsonValue,
+  TransactionRuntime,
+} from '@compose-ui/core'
+import type { HistoryNavigationController } from '@compose-ui/history'
+import type {
+  SceneTreeNode,
+  SceneTreeOperation,
+  SceneTreeProps,
+} from '@compose-ui/scene-tree'
+import type {
+  StageDragController,
+  StageProps,
+  StageTool,
+  StageViewport,
+} from '@compose-ui/stage'
+
+function defaultIdFactory() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
+  return `editor-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function firstVisibleFrame(document: ComposeDocument) {
+  return document.rootIds.find((id) => {
+    const node = document.nodes[id]
+    return node?.kind === 'frame' && node.visible
+  }) ?? null
+}
+
+function sceneNode(
+  document: ComposeDocument,
+  registry: ComponentRegistry,
+  node: ComposeNode,
+): SceneTreeNode {
+  const common = {
+    id: node.id,
+    label: node.name,
+    visible: node.visible,
+    locked: node.locked,
+    canHaveChildren: node.kind !== 'component',
+    canRename: !node.locked,
+    canDelete: !node.locked,
+    canMove: !node.locked,
+    canToggleVisibility: true,
+    canToggleLocked: true,
+  }
+  if (node.kind === 'component') {
+    return {
+      ...common,
+      icon: registry.get(node.componentType)?.icon,
+      canHaveChildren: false,
+    }
+  }
+  return {
+    ...common,
+    children: node.childIds
+      .map((id) => document.nodes[id])
+      .filter((child): child is ComposeNode => child !== undefined)
+      .map((child) => sceneNode(document, registry, child)),
+  }
+}
+
+function deriveSceneNodes(
+  document: ComposeDocument,
+  registry: ComponentRegistry,
+): readonly SceneTreeNode[] {
+  return document.rootIds
+    .map((id) => document.nodes[id])
+    .filter((node): node is ComposeFrameNode => node?.kind === 'frame')
+    .map((node) => sceneNode(document, registry, node))
+}
+
+function unique(values: readonly string[]) {
+  return [...new Set(values)]
+}
+
+function validSelection(document: ComposeDocument, ids: readonly string[]) {
+  return unique(ids).filter((id) => Boolean(document.nodes[id]?.visible))
+}
+
+function validExpanded(document: ComposeDocument, ids: readonly string[]) {
+  return unique(ids).filter((id) => {
+    const node = document.nodes[id]
+    return node?.kind === 'frame' || node?.kind === 'group'
+  })
+}
+
+/**
+ * controller 成功事务或历史导航的单一宿主观察事件。
+ *
+ * @public
+ */
+export interface ComposeEditorTransactionEvent {
+  /** 当前通知对应的编辑或导航方向。 */
+  readonly direction: 'commit' | 'undo' | 'redo' | 'navigate'
+  /** 导航涉及多个事务时，提供离当前状态最近的一个；记录已被裁剪时为 `null`。 */
+  readonly transaction: EditorTransaction | null
+  /** 当前事件涉及的全部稳定事务 ID。 */
+  readonly transactionIds: readonly string[]
+  /** committed 使用原命令来源，历史导航固定为 `history`。 */
+  readonly source: string
+  /** committed 或被导航事务涉及的节点 ID 去重集合。 */
+  readonly targets: readonly string[]
+}
+
+/**
+ * 编辑器 controller 的初始化依赖与会话默认值。
+ *
+ * @public
+ */
+export interface UseComposeEditorControllerOptions {
+  /** 所有编辑入口共享的正式文档与历史运行时。 */
+  readonly runtime: TransactionRuntime
+  /** Palette、Stage、Inspector 共用的实例级组件注册表。 */
+  readonly registry: ComponentRegistry
+  /** 初始选择；不会写入文档历史。 */
+  readonly initialSelection?: readonly string[]
+  /** 初始场景树展开项；不会写入文档历史。 */
+  readonly initialExpandedIds?: readonly string[]
+  /** 初始活动 Frame；省略时使用第一个可见 Frame。 */
+  readonly initialActiveFrameId?: string | null
+  /** 初始无限 Stage 视口。 @defaultValue `{ x: 80, y: 64, zoom: 1 }` */
+  readonly initialViewport?: StageViewport
+  /** 初始 Stage 工具。 @defaultValue `"select"` */
+  readonly initialTool?: StageTool
+  /** CommandPanel 显示的结构化命令预设。 */
+  readonly commandPresets?: readonly CommandPreset[]
+  /** 成功事务和成功历史导航的唯一外部审计边界。 */
+  readonly onTransaction?: (
+    event: ComposeEditorTransactionEvent,
+  ) => void | Promise<void>
+  /** controller 创建节点和命令时使用的稳定 ID factory。 */
+  readonly idFactory?: () => string
+}
+
+/**
+ * `ComposeEditor` 默认工作区消费的受控组合结果。
+ *
+ * @public
+ */
+export interface ComposeEditorController {
+  /** 当前正式文档；直接来自 runtime 快照。 */
+  readonly document: ComposeDocument
+  /** controller 使用的事务运行时，同时驱动默认 HistoryPanel。 */
+  readonly runtime: TransactionRuntime
+  /** controller 使用的组件注册表。 */
+  readonly registry: ComponentRegistry
+  /** 结构兼容 `HistoryNavigationController` 的事务历史。 */
+  readonly history: HistoryNavigationController
+  /** 当前有效且可见的选择。 */
+  readonly selectedIds: readonly string[]
+  /** 当前有效容器展开项。 */
+  readonly expandedIds: readonly string[]
+  /** 当前有效且可见的活动 Frame。 */
+  readonly activeFrameId: string | null
+  /** 当前 Stage 视口会话状态。 */
+  readonly viewport: StageViewport
+  /** 当前选择或平移工具。 */
+  readonly tool: StageTool
+  /** 当前实例 Palette 与 Stage 的拖入会话。 */
+  readonly dragController: StageDragController
+  /** 替换当前选择。 */
+  readonly setSelectedIds: (ids: readonly string[]) => void
+  /** 替换场景树展开项。 */
+  readonly setExpandedIds: (ids: readonly string[]) => void
+  /** 替换活动 Frame。 */
+  readonly setActiveFrameId: (id: string | null) => void
+  /** 替换 Stage 视口。 */
+  readonly setViewport: (viewport: StageViewport) => void
+  /** 替换 Stage 工具。 */
+  readonly setTool: (tool: StageTool) => void
+  /** 向同一 runtime 派发结构化命令。 */
+  readonly dispatch: (command: EditorCommand) => CommandDispatchResult
+  /** 默认 SceneTree 的完整受控属性。 */
+  readonly sceneTreeProps: SceneTreeProps
+  /** 默认 Stage 的完整受控属性。 */
+  readonly stageProps: StageProps
+  /** 默认 Component Library 内容。 */
+  readonly componentLibraryPanel: ReactNode
+  /** 默认中央 Stage 内容。 */
+  readonly stage: ReactNode
+  /** 默认 definition Inspector 内容。 */
+  readonly inspectorPanel: ReactNode
+  /** 默认 CommandPanel 内容。 */
+  readonly commandPanel: ReactNode
+  /** 默认 Stage 工具栏内容。 */
+  readonly stageToolbar: ReactNode
+}
+
+function invokeObserver(
+  observer: UseComposeEditorControllerOptions['onTransaction'],
+  event: ComposeEditorTransactionEvent,
+) {
+  if (!observer) return
+  try {
+    const pending = observer(event)
+    if (pending && typeof pending.then === 'function') void pending.catch(() => undefined)
+  }
+  catch {
+    // 宿主审计是已提交事务后的副作用；同步异常也不能影响文档与历史。
+  }
+}
+
+/**
+ * 把 runtime、registry 与编辑器会话状态组合成默认工作区 controller。
+ *
+ * @remarks
+ * Hook 不复制 ComposeDocument。文档变更始终先进入 runtime，再由所有派生视图读取同一个快照。
+ *
+ * @param options - 正式运行时、注册表、会话默认值和可选审计 observer。
+ * @returns 可直接传给 `ComposeEditor` 的 controller。
+ * @public
+ */
+export function useComposeEditorController({
+  runtime,
+  registry,
+  initialSelection = [],
+  initialExpandedIds = [],
+  initialActiveFrameId,
+  initialViewport = { x: 80, y: 64, zoom: 1 },
+  initialTool = 'select',
+  commandPresets,
+  onTransaction,
+  idFactory = defaultIdFactory,
+}: UseComposeEditorControllerOptions): ComposeEditorController {
+  const snapshot = useSyncExternalStore(
+    runtime.subscribe,
+    runtime.getState,
+    runtime.getState,
+  )
+  const document = snapshot.document
+  const [selectedIds, setSelectedIdsState] = useState<readonly string[]>(() =>
+    validSelection(document, initialSelection))
+  const [expandedIds, setExpandedIdsState] = useState<readonly string[]>(() =>
+    validExpanded(document, initialExpandedIds))
+  const [activeFrameId, setActiveFrameIdState] = useState<string | null>(() =>
+    initialActiveFrameId === undefined
+      ? firstVisibleFrame(document)
+      : initialActiveFrameId)
+  const [viewport, setViewport] = useState<StageViewport>(initialViewport)
+  const [tool, setTool] = useState<StageTool>(initialTool)
+  const [dragController] = useState(createStageDragController)
+  const transactionById = useRef(new Map<string, EditorTransaction>())
+  const observerRef = useRef(onTransaction)
+  const idFactoryRef = useRef(idFactory)
+
+  useEffect(() => {
+    observerRef.current = onTransaction
+  }, [onTransaction])
+  useEffect(() => {
+    idFactoryRef.current = idFactory
+  }, [idFactory])
+
+  useEffect(() => {
+    const cleanupSession = (nextDocument: ComposeDocument) => {
+      setSelectedIdsState((current) => validSelection(nextDocument, current))
+      setExpandedIdsState((current) => validExpanded(nextDocument, current))
+      setActiveFrameIdState((current) => {
+        if (current) {
+          const frame = nextDocument.nodes[current]
+          if (frame?.kind === 'frame' && frame.visible) return current
+        }
+        return firstVisibleFrame(nextDocument)
+      })
+    }
+    return runtime.subscribeEvents((event) => {
+      if (event.type === 'committed') {
+        cleanupSession(runtime.document)
+        transactionById.current.set(event.transaction.id, event.transaction)
+        invokeObserver(observerRef.current, {
+          direction: 'commit',
+          transaction: event.transaction,
+          transactionIds: [event.transaction.id],
+          source: event.transaction.source ?? event.command.meta?.source ?? 'runtime',
+          targets: unique(event.transaction.targetIds),
+        })
+        return
+      }
+      if (event.type === 'history-navigation') {
+        cleanupSession(event.document)
+        const transactions = event.transactionIds
+          .map((id) => transactionById.current.get(id))
+          .filter((item): item is EditorTransaction => item !== undefined)
+        invokeObserver(observerRef.current, {
+          direction: event.direction,
+          transaction: transactions[0] ?? null,
+          transactionIds: event.transactionIds,
+          source: 'history',
+          targets: unique(transactions.flatMap((transaction) => transaction.targetIds)),
+        })
+        return
+      }
+      if (event.type === 'reset') {
+        transactionById.current.clear()
+        cleanupSession(event.document)
+      }
+    })
+  }, [runtime])
+
+  const setSelectedIds = useCallback((ids: readonly string[]) => {
+    setSelectedIdsState(unique(ids))
+  }, [])
+  const setExpandedIds = useCallback((ids: readonly string[]) => {
+    setExpandedIdsState(unique(ids))
+  }, [])
+  const setActiveFrameId = useCallback((id: string | null) => {
+    setActiveFrameIdState(id)
+  }, [])
+  const dispatch = useCallback(
+    (command: EditorCommand) => runtime.dispatch(command),
+    [runtime],
+  )
+  const nextId = useCallback(() => idFactoryRef.current(), [])
+
+  const onSceneOperation = useCallback((operation: SceneTreeOperation) => {
+    let command: EditorCommand | null = null
+    let nextSelection: readonly string[] | null = null
+    if (operation.type === 'create') {
+      const nodeId = nextId()
+      if (operation.parentId === null) {
+        command = {
+          id: nextId(),
+          type: 'frame.create',
+          payload: {
+            node: {
+              id: nodeId,
+              kind: 'frame',
+              name: 'Frame',
+              visible: true,
+              locked: false,
+              transform: {
+                x: 80 + document.rootIds.length * 40,
+                y: 80 + document.rootIds.length * 40,
+                width: 1280,
+                height: 720,
+                rotation: 0,
+              },
+              childIds: [],
+            },
+            index: operation.index,
+          },
+          meta: { label: '创建 Frame', source: 'scene-tree', targetIds: [nodeId] },
+        }
+      }
+      else {
+        command = {
+          id: nextId(),
+          type: 'node.create',
+          payload: {
+            node: {
+              id: nodeId,
+              kind: 'group',
+              name: 'Group',
+              visible: true,
+              locked: false,
+              transform: { x: 0, y: 0, width: 320, height: 180, rotation: 0 },
+              childIds: [],
+            },
+            parentId: operation.parentId,
+            index: operation.index,
+          },
+          meta: { label: '创建 Group', source: 'scene-tree', targetIds: [nodeId] },
+        }
+      }
+      nextSelection = [nodeId]
+    }
+    else if (operation.type === 'rename') {
+      command = {
+        id: nextId(),
+        type: 'node.rename',
+        payload: { nodeId: operation.nodeId, name: operation.label },
+        meta: {
+          label: '重命名节点',
+          source: 'scene-tree',
+          targetIds: [operation.nodeId],
+        },
+      }
+    }
+    else if (operation.type === 'delete') {
+      command = {
+        id: nextId(),
+        type: 'node.delete',
+        payload: { nodeIds: operation.nodeIds },
+        meta: { label: '删除节点', source: 'scene-tree', targetIds: operation.nodeIds },
+      }
+    }
+    else if (operation.type === 'set-visibility') {
+      command = {
+        id: nextId(),
+        type: 'node.set-visibility',
+        payload: { nodeIds: operation.nodeIds, visible: operation.visible },
+        meta: {
+          label: operation.visible ? '显示节点' : '隐藏节点',
+          source: 'scene-tree',
+          targetIds: operation.nodeIds,
+        },
+      }
+    }
+    else if (operation.type === 'set-locked') {
+      command = {
+        id: nextId(),
+        type: 'node.set-locked',
+        payload: { nodeIds: operation.nodeIds, locked: operation.locked },
+        meta: {
+          label: operation.locked ? '锁定节点' : '解锁节点',
+          source: 'scene-tree',
+          targetIds: operation.nodeIds,
+        },
+      }
+    }
+    else if (operation.type === 'move') {
+      const crossesParent = operation.nodeIds.some(
+        (id) => getNodeParentId(document, id) !== operation.parentId,
+      )
+      command = crossesParent && operation.parentId !== null
+        ? createReparentCommand(
+            document,
+            operation.nodeIds,
+            operation.parentId,
+            operation.index,
+            nextId(),
+          )
+        : {
+            id: nextId(),
+            type: 'node.move',
+            payload: {
+              nodeIds: operation.nodeIds,
+              parentId: operation.parentId,
+              index: operation.index,
+            },
+            meta: {
+              label: '重排节点',
+              source: 'scene-tree',
+              targetIds: operation.nodeIds,
+            },
+          }
+    }
+    else if (operation.type === 'duplicate') {
+      const duplicates = operation.sourceNodeIds
+        .map((id) => createDuplicateCommand(document, id, nextId, nextId()))
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+      if (duplicates.length === 1) command = duplicates[0]!.command
+      else if (duplicates.length > 1) {
+        command = {
+          id: nextId(),
+          type: 'transaction.batch',
+          payload: {
+            commands: duplicates.map((item) => item.command) as unknown as JsonValue,
+          },
+          meta: {
+            label: '复制节点',
+            source: 'scene-tree',
+            targetIds: operation.sourceNodeIds,
+          },
+        }
+      }
+      nextSelection = duplicates.map((item) => item.rootId)
+    }
+    if (!command) return
+    const result = runtime.dispatch(command)
+    if (result.status === 'committed' && nextSelection) setSelectedIdsState(nextSelection)
+  }, [document, nextId, runtime])
+
+  const sceneTreeProps = useMemo<SceneTreeProps>(() => ({
+    nodes: deriveSceneNodes(document, registry),
+    selectedIds,
+    expandedIds,
+    onSelectionChange: setSelectedIds,
+    onExpandedChange: setExpandedIds,
+    onOperation: onSceneOperation,
+  }), [
+    document,
+    registry,
+    selectedIds,
+    expandedIds,
+    setSelectedIds,
+    setExpandedIds,
+    onSceneOperation,
+  ])
+
+  const stageProps = useMemo<StageProps>(() => ({
+    document,
+    registry,
+    dispatch,
+    viewport,
+    onViewportChange: setViewport,
+    tool,
+    selectedIds,
+    onSelectedIdsChange: setSelectedIds,
+    activeFrameId,
+    onActiveFrameIdChange: setActiveFrameId,
+    dragController,
+    idFactory: nextId,
+  }), [
+    document,
+    registry,
+    dispatch,
+    viewport,
+    tool,
+    selectedIds,
+    setSelectedIds,
+    activeFrameId,
+    setActiveFrameId,
+    dragController,
+    nextId,
+  ])
+
+  const createFrame = useCallback(() => {
+    onSceneOperation({
+      type: 'create',
+      parentId: null,
+      index: document.rootIds.length,
+    })
+  }, [document.rootIds.length, onSceneOperation])
+  const fitBounds = useCallback((ids: readonly string[]) => {
+    const bounds = unionRects(
+      ids
+        .filter((id) => document.nodes[id] !== undefined)
+        .map((id) => getNodeWorldBounds(document, id)),
+    )
+    if (!bounds) return
+    const width = 900
+    const height = 600
+    const zoom = Math.min(
+      8,
+      Math.max(0.1, Math.min((width - 128) / bounds.width, (height - 128) / bounds.height)),
+    )
+    setViewport({
+      x: width / 2 - (bounds.x + bounds.width / 2) * zoom,
+      y: height / 2 - (bounds.y + bounds.height / 2) * zoom,
+      zoom,
+    })
+  }, [document])
+  const fitFrame = useCallback(() => {
+    if (activeFrameId) fitBounds([activeFrameId])
+  }, [activeFrameId, fitBounds])
+  const fitSelection = useCallback(() => fitBounds(selectedIds), [fitBounds, selectedIds])
+
+  const selectedComponent = selectedIds.length === 1
+    ? document.nodes[selectedIds[0]!]
+    : undefined
+
+  return {
+    document,
+    runtime,
+    registry,
+    history: runtime,
+    selectedIds,
+    expandedIds,
+    activeFrameId,
+    viewport,
+    tool,
+    dragController,
+    setSelectedIds,
+    setExpandedIds,
+    setActiveFrameId,
+    setViewport,
+    setTool,
+    dispatch,
+    sceneTreeProps,
+    stageProps,
+    componentLibraryPanel: (
+      <ComponentPalette dragController={dragController} registry={registry} />
+    ),
+    stage: <Stage {...stageProps} />,
+    inspectorPanel: selectedComponent?.kind === 'component' ? (
+      <RegistryInspector
+        dispatch={dispatch}
+        node={selectedComponent}
+        registry={registry}
+      />
+    ) : (
+      <div className="compose-editor__empty-inspector" role="status">
+        选择一个组件以编辑属性
+      </div>
+    ),
+    commandPanel: (
+      <CommandPanel presets={commandPresets} runtime={runtime} />
+    ),
+    stageToolbar: (
+      <div aria-label="Stage 工具栏" className="compose-editor__stage-toolbar" role="toolbar">
+        <button
+          aria-pressed={tool === 'select'}
+          type="button"
+          onClick={() => setTool('select')}
+        >
+          选择
+        </button>
+        <button
+          aria-pressed={tool === 'pan'}
+          type="button"
+          onClick={() => setTool('pan')}
+        >
+          平移
+        </button>
+        <button type="button" onClick={createFrame}>创建 Frame</button>
+        <button
+          aria-label="缩小"
+          type="button"
+          onClick={() => setViewport((current) => ({
+            ...current,
+            zoom: Math.max(0.1, current.zoom / 1.2),
+          }))}
+        >
+          −
+        </button>
+        <span aria-label="缩放比例">{Math.round(viewport.zoom * 100)}%</span>
+        <button
+          aria-label="放大"
+          type="button"
+          onClick={() => setViewport((current) => ({
+            ...current,
+            zoom: Math.min(8, current.zoom * 1.2),
+          }))}
+        >
+          +
+        </button>
+        <button type="button" onClick={fitFrame}>适配 Frame</button>
+        <button disabled={selectedIds.length === 0} type="button" onClick={fitSelection}>
+          适配选择
+        </button>
+      </div>
+    ),
+  }
+}

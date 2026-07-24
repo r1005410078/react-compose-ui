@@ -29,6 +29,17 @@ function InspectorIcon() {
   )
 }
 
+function ComponentLibraryIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <rect height="7" rx="1" width="7" x="3" y="3" />
+      <rect height="7" rx="1" width="7" x="14" y="3" />
+      <rect height="7" rx="1" width="7" x="3" y="14" />
+      <path d="M14 17.5h7M17.5 14v7" />
+    </svg>
+  )
+}
+
 function SettingsIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -59,6 +70,8 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
   const icon =
     props.api.id === WORKSPACE_PANEL_IDS.scene ? (
       <SceneGraphIcon />
+    ) : props.api.id === WORKSPACE_PANEL_IDS.componentLibrary ? (
+      <ComponentLibraryIcon />
     ) : props.api.id === WORKSPACE_PANEL_IDS.inspector ? (
       <InspectorIcon />
     ) : null

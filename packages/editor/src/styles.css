@@ -1,6 +1,8 @@
 @import 'dockview-react/dist/styles/dockview.css';
 @import '@compose-ui/history/styles.css';
 @import '@compose-ui/scene-tree/styles.css';
+@import '@compose-ui/stage/styles.css';
+@import '@compose-ui/command-panel/styles.css';
 
 @layer theme, base, components, utilities;
 
@@ -71,8 +73,36 @@
   @apply ct:min-h-11 ct:shrink-0 ct:border-b ct:border-[#303640] ct:bg-[#181b20];
 }
 
+.compose-editor__stage-toolbar {
+  @apply ct:flex ct:min-h-11 ct:items-center ct:gap-1 ct:px-2;
+}
+
+.compose-editor__stage-toolbar button {
+  @apply ct:rounded ct:border ct:border-[#39404a] ct:bg-[#22262d] ct:px-2 ct:py-1 ct:text-xs ct:text-[#d8dde6];
+}
+
+.compose-editor__stage-toolbar button[aria-pressed='true'] {
+  @apply ct:border-[#4d9cff] ct:bg-[#17345c] ct:text-white;
+}
+
+.compose-editor__stage-toolbar button:disabled {
+  @apply ct:cursor-not-allowed ct:opacity-45;
+}
+
+.compose-editor__stage-toolbar span {
+  @apply ct:min-w-12 ct:text-center ct:text-xs ct:text-[#aeb7c4];
+}
+
 .compose-editor__canvas-content {
   @apply ct:min-h-0 ct:flex-1 ct:overflow-auto;
+}
+
+.compose-editor__canvas-content > .compose-stage {
+  height: 100%;
+}
+
+.compose-editor__empty-inspector {
+  @apply ct:grid ct:min-h-full ct:place-items-center ct:p-4 ct:text-xs ct:text-[#8792a2];
 }
 
 .compose-editor__panel[data-workspace-panel='transaction-log'],

@@ -1,4 +1,46 @@
 # @compose-ui/core
 
-React-free shared primitives for React Compose UI. The initial release only
-exposes package identity while the document model is designed separately.
+React Compose UI 的 React/DOM 无关领域内核。
+
+它提供：
+
+- `schemaVersion: 1` 的规范化 JSON `ComposeDocument` 与结构校验；
+- `set`、`insert`、`remove`、`move` 原子可逆 Patch；
+- 可注册同步 handler 的 `TransactionRuntime`；
+- undo、redo、navigate、750ms `mergeKey` 合并、100 条默认历史和 `reset`；
+- Frame、Group、Component 的结构、属性、变换、分组与原子 batch 内置命令。
+
+```ts
+import {
+  createTransactionRuntime,
+  validateComposeDocument,
+  type ComposeDocument,
+} from '@compose-ui/core'
+
+const result = validateComposeDocument(candidate)
+if (!result.valid) {
+  console.error(result.issues)
+}
+
+const runtime = createTransactionRuntime({
+  document: candidate as ComposeDocument,
+})
+
+const dispatched = runtime.dispatch({
+  id: crypto.randomUUID(),
+  type: 'node.rename',
+  payload: { nodeId: 'heading', name: '季度销售额' },
+  meta: {
+    label: '重命名标题',
+    source: 'scene-tree',
+    targetIds: ['heading'],
+  },
+})
+```
+
+`dispatch` 同步返回 `committed | noop | rejected`。只有 committed 改变文档并进入 History；
+持久化、审计和网络调用应订阅 `subscribeEvents` 后在 runtime 外执行。订阅者失败不会回滚已经
+提交的事务。
+
+文档只保存 JSON 数据，不保存 React renderer、DOM 引用、Inspector 或注册表实例。选择、
+场景树展开、工具模式和 Stage 视口属于宿主会话状态。

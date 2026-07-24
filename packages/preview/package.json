@@ -22,9 +22,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint . --max-warnings 0",
-    "pack:dry-run": "bun pm pack --dry-run"
+    "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
   "dependencies": {
+    "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*"
   },
   "peerDependencies": {

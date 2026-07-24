@@ -69,6 +69,7 @@ vi.mock('dockview-react', async () => {
 })
 
 import { ComposeEditor } from './index'
+import type { ComposeEditorController } from './index'
 
 function createHistoryController(
   overrides: Partial<HistoryNavigationController> = {},
@@ -97,11 +98,12 @@ afterEach(() => {
 })
 
 describe('ComposeEditor', () => {
-  it('mounts the six content sources in their semantic workspace panels', () => {
+  it('OpenSpec: editor-workspace-layout / React 内容插槽 / 宿主提供全部工作区内容', () => {
     render(
       <ComposeEditor
         sceneGraphPanel="Scene slot"
-        canvasToolbar="Toolbar slot"
+        componentLibraryPanel="Library slot"
+        stageToolbar="Toolbar slot"
         inspectorPanel="Inspector slot"
         transactionLogPanel="Transaction slot"
         commandPanel="Command slot"
@@ -111,11 +113,82 @@ describe('ComposeEditor', () => {
     )
 
     expect(screen.getByText('Scene slot')).toBeInTheDocument()
+    expect(screen.getByText('Library slot')).toBeInTheDocument()
     expect(screen.getByText('Toolbar slot')).toBeInTheDocument()
     expect(screen.getByText('Canvas slot')).toBeInTheDocument()
     expect(screen.getByText('Inspector slot')).toBeInTheDocument()
     expect(screen.getByText('Transaction slot')).toBeInTheDocument()
     expect(screen.getByText('Command slot')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / React 内容插槽 / Stage Toolbar 优先级', () => {
+    const { rerender } = render(
+      <ComposeEditor
+        canvasToolbar="Legacy toolbar"
+        stageToolbar="Stage toolbar"
+      />,
+    )
+
+    expect(screen.getByText('Stage toolbar')).toBeInTheDocument()
+    expect(screen.queryByText('Legacy toolbar')).not.toBeInTheDocument()
+
+    rerender(<ComposeEditor canvasToolbar="Legacy toolbar" />)
+    expect(screen.getByText('Legacy toolbar')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使用默认 Controller 工作区', () => {
+    const controllerHistory = createHistoryController()
+    const controller = {
+      runtime: controllerHistory,
+      history: controllerHistory,
+      sceneTreeProps: {
+        nodes: [{ id: 'from-controller', label: 'Controller node' }],
+        selectedIds: [],
+        expandedIds: [],
+      },
+      componentLibraryPanel: <div>Controller palette</div>,
+      stage: <div>Controller stage</div>,
+      inspectorPanel: <div>Controller inspector</div>,
+      commandPanel: <div>Controller command</div>,
+      stageToolbar: <div>Controller toolbar</div>,
+    } as unknown as ComposeEditorController
+
+    render(<ComposeEditor controller={controller} />)
+
+    expect(screen.getByText('Controller node')).toBeInTheDocument()
+    expect(screen.getByText('Controller palette')).toBeInTheDocument()
+    expect(screen.getByText('Controller stage')).toBeInTheDocument()
+    expect(screen.getByText('Controller inspector')).toBeInTheDocument()
+    expect(screen.getByText('Controller command')).toBeInTheDocument()
+    expect(screen.getByText('Controller toolbar')).toBeInTheDocument()
+    expect(screen.getByLabelText('历史记录')).toBeInTheDocument()
+  })
+
+  it('keeps explicit children ahead of a controller default Stage', () => {
+    const controllerHistory = createHistoryController()
+    const controller = {
+      runtime: controllerHistory,
+      history: controllerHistory,
+      sceneTreeProps: {
+        nodes: [],
+        selectedIds: [],
+        expandedIds: [],
+      },
+      componentLibraryPanel: null,
+      stage: <div>Controller stage</div>,
+      inspectorPanel: null,
+      commandPanel: null,
+      stageToolbar: null,
+    } as unknown as ComposeEditorController
+
+    render(
+      <ComposeEditor controller={controller}>
+        Explicit canvas
+      </ComposeEditor>,
+    )
+
+    expect(screen.getByText('Explicit canvas')).toBeInTheDocument()
+    expect(screen.queryByText('Controller stage')).not.toBeInTheDocument()
   })
 
   it('updates slot content without reinitializing the workspace', () => {
@@ -247,8 +320,9 @@ describe('ComposeEditor', () => {
     render(<ComposeEditor />)
 
     expect(screen.getByTestId('default-scene-tree')).toBeEmptyDOMElement()
-    expect(screen.getAllByRole('status')).toHaveLength(4)
-    expect(screen.getByText('Canvas toolbar')).toBeInTheDocument()
+    expect(screen.getAllByRole('status')).toHaveLength(5)
+    expect(screen.getByText('Stage toolbar')).toBeInTheDocument()
+    expect(screen.getByText('Component library content')).toBeInTheDocument()
     expect(screen.getByText('Component inspector content')).toBeInTheDocument()
     expect(screen.getByText('Transaction log content')).toBeInTheDocument()
     expect(screen.getByText('Command content')).toBeInTheDocument()
@@ -280,7 +354,7 @@ describe('ComposeEditor', () => {
     expect(screen.queryByTestId('default-scene-tree')).not.toBeInTheDocument()
   })
 
-  it('preserves root section attributes and events', () => {
+  it('OpenSpec: editor-workspace-layout / 嵌入与公共 API 边界 / 透传宿主属性', () => {
     const handleClick = vi.fn()
     render(
       <ComposeEditor
@@ -301,7 +375,7 @@ describe('ComposeEditor', () => {
     expect(handleClick).toHaveBeenCalledTimes(1)
   })
 
-  it('guards workspace initialization during Strict Mode effect replay', () => {
+  it('OpenSpec: editor-workspace-layout / 四区编辑器工作区 / Strict Mode 重放初始化', () => {
     render(
       <StrictMode>
         <ComposeEditor />

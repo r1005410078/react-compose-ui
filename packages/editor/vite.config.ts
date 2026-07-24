@@ -25,8 +25,11 @@ export default defineConfig({
     rollupOptions: {
       external: [
         '@compose-ui/core',
+        '@compose-ui/command-panel',
+        '@compose-ui/component-registry',
         '@compose-ui/history',
         '@compose-ui/scene-tree',
+        '@compose-ui/stage',
         'react',
         'react-dom',
         'react/jsx-runtime',

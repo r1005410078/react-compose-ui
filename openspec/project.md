@@ -26,8 +26,15 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 ### Architecture Patterns
 
-- `@compose-ui/core` 保持与 React 和 DOM 无关，承载未来的文档模型、命令及通用逻辑。
-- `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 `core`。
+- `@compose-ui/core` 保持与 React 和 DOM 无关，承载版本化 JSON 文档、同步命令、可逆 Patch、
+  事务历史及通用逻辑。
+- `@compose-ui/command-panel` 是订阅 core TransactionRuntime 的独立 React 调试台，只接受宿主
+  声明的结构化命令预设，不依赖 editor、history、scene-tree、property-panel 或 operation-log。
+- `@compose-ui/component-registry` 是实例级宿主组件注册协议，依赖 core，以 React 为 peer，
+  不依赖 editor 或 property-panel。
+- `@compose-ui/stage` 是 DOM Scene/SVG Overlay 无限编辑舞台，依赖 core 与 component-registry，
+  不依赖 editor、property-panel 或 operation-log。
+- `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage 与独立面板包。
 - `@compose-ui/scene-tree` 是受控 React 树组件，不依赖 `core` 或 `editor`；editor 可以依赖
   它，preview 不得依赖它。
 - `@compose-ui/property-panel` 是同步 Valibot Schema 驱动的受控 React 组件，不依赖 `core`、
@@ -36,7 +43,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   `property-panel`；宿主在成功提交边界显式记录，并通过 editor 的 `transactionLogPanel` 插槽组合面板。
 - `@compose-ui/history` 提供当前 React 实例内的不可变快照历史、快捷键和受控面板，不依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；editor 可以通过公共入口组合它。
-- `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 `core`，不得依赖 `editor`。
+- `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 core 与 component-registry，不得依赖
+  editor 或 stage。
 - 跨包导入只使用 `@compose-ui/*` 公共入口，不得引用其他包的内部源码。
 - React、ReactDOM 和 JSX runtime 保持为 peer dependency 和外置依赖。
 - 示例应用只承担集成与 E2E 演示，不得把临时状态提升为稳定公共 API。
@@ -131,8 +139,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ## Domain Context
 
 - 目标用户需要在客户现场快速调整数据大屏，编辑器必须能嵌入现有 React 宿主。
-- 当前仓库验证组件挂载、固定编辑器工作区、会话快照历史和最小文本编辑纵向流程。
-- 正式文档 Schema、组件注册、拖拽系统、数据源协议、命令模型与持久化接口尚未确定。
+- 当前仓库验证版本化 JSON 文档、同步命令事务、组件注册、无限 Stage、controller 默认工作区、
+  Frame Preview、事务/会话历史和 Rectangle/Text/ECharts 纵向流程。
+- 数据源协议与持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
 - 示例中的临时状态、面板 ID 和 Dockview 对象都不是编辑器领域模型或公共协议。
 
 ## Important Constraints
@@ -142,8 +151,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `editor` 与 `preview` 只能通过未来的公开协议共享文档状态，不得相互引用内部源码。
 - 修改编辑器交互、示例应用或预览行为时，除常规质量检查外必须运行 Chromium E2E。
 - 工作区必须由宿主提供确定的非零高度；当前布局状态只存活于组件实例。
-- 当前历史只保存在 Hook 实例内，不持久化；未来的 Transaction/inverse History Extension
-  可以实现相同的导航控制器协议。
+- `useHistory` 继续提供独立会话快照历史；core TransactionRuntime 以 forward/inverse Patch
+  提供结构兼容的正式事务历史。两者都不跨刷新持久化。
 
 ## External Dependencies
 

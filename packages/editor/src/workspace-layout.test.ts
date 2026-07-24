@@ -52,7 +52,7 @@ describe('initializeWorkspace', () => {
     vi.clearAllMocks()
   })
 
-  it('creates the fixed main group, three edge groups, and five panels', () => {
+  it('OpenSpec: editor-workspace-layout / 四区编辑器工作区 / 首次挂载编辑器', () => {
     const { api, spies, edgeGroups, panels } = createWorkspaceApi()
 
     initializeWorkspace(api)
@@ -72,12 +72,35 @@ describe('initializeWorkspace', () => {
       id: WORKSPACE_GROUP_IDS.bottom,
       ...WORKSPACE_SIZES.bottom,
     })
-    expect(spies.addPanel).toHaveBeenCalledTimes(5)
+    expect(spies.addPanel).toHaveBeenCalledTimes(6)
+    expect(panels.get(WORKSPACE_PANEL_IDS.scene)?.api.setActive)
+      .toHaveBeenCalledTimes(1)
     expect(edgeGroups.get('bottom')).toEqual(
       expect.objectContaining({ id: WORKSPACE_GROUP_IDS.bottom }),
     )
     expect(panels.get(WORKSPACE_PANEL_IDS.transactionLog)?.api.setActive)
       .toHaveBeenCalledTimes(1)
+  })
+
+  it('OpenSpec: editor-workspace-layout / 边缘工具区 / 检查默认边缘组', () => {
+    const { api, spies } = createWorkspaceApi()
+
+    initializeWorkspace(api)
+
+    const sceneOptions = spies.addPanel.mock.calls.find(
+      ([options]) => options.id === WORKSPACE_PANEL_IDS.scene,
+    )?.[0]
+    const libraryOptions = spies.addPanel.mock.calls.find(
+      ([options]) => options.id === WORKSPACE_PANEL_IDS.componentLibrary,
+    )?.[0]
+
+    expect(sceneOptions).toEqual(expect.objectContaining({
+      position: { referenceGroup: WORKSPACE_GROUP_IDS.scene },
+    }))
+    expect(libraryOptions).toEqual(expect.objectContaining({
+      inactive: true,
+      position: { referenceGroup: WORKSPACE_GROUP_IDS.scene },
+    }))
   })
 
   it('uses a compact, resizable width for the default inspector edge', () => {
@@ -117,6 +140,6 @@ describe('initializeWorkspace', () => {
 
     expect(spies.addGroup).toHaveBeenCalledTimes(1)
     expect(spies.addEdgeGroup).toHaveBeenCalledTimes(3)
-    expect(spies.addPanel).toHaveBeenCalledTimes(5)
+    expect(spies.addPanel).toHaveBeenCalledTimes(6)
   })
 })

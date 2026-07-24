@@ -6,10 +6,9 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 它希望把重复的大屏页面开发工作转化为可视化操作，让使用者能够添加组件、调整配置并
 实时查看最终效果，减少现场修改代码、重新构建和部署的次数。
 
-> 当前版本处于基础能力验证阶段，提供编辑器、场景树、会话历史、Schema 属性面板、本地操作日志、
-> 预览器挂载组件和
-> 最小操作演示，尚不是
-> 完整的低代码编辑器。
+> 当前版本处于基础能力验证阶段，提供版本化 JSON 文档、同步命令事务、组件注册表、
+> DOM/SVG 无限 Stage、编辑器 controller、场景树、会话历史、Schema 属性面板、本地操作日志、
+> Command 调试台和 Frame 文档预览，尚不是完整的低代码编辑器。
 
 ## 环境要求
 
@@ -24,13 +23,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+bun add @compose-ui/core @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+npm install @compose-ui/core @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -64,7 +63,7 @@ export function ComposePage() {
           expandedIds: [],
           onOperation: (operation: SceneTreeOperation) => console.log(operation),
         }}
-        canvasToolbar={<CanvasTools />}
+        stageToolbar={<StageTools />}
         inspectorPanel={<PropertyInspector />}
         transactionLogPanel={<TransactionLog />}
         commandPanel={<CommandInput />}
@@ -80,10 +79,10 @@ export function ComposePage() {
 }
 ```
 
-`ComposeEditor` 使用 Dockview 提供固定的 IDE 式工作区：Scene Graph 位于左侧 Edge
-Group，Canvas 位于中央主组，Component Inspector 位于右侧 Edge Group，Transaction
-Log 与 Command 共享底部 Edge Group。三个边缘区可以调整尺寸，并通过活动标签折叠或
-展开。
+`ComposeEditor` 使用 Dockview 提供固定的 IDE 式工作区：Scene Graph 与 Component Library
+共享左侧 Edge Group，Stage 位于中央 Canvas 主组，Component Inspector 位于右侧 Edge Group，
+Transaction Log 与 Command 共享底部 Edge Group。三个边缘区可以调整尺寸，并通过活动标签
+折叠或展开。
 
 宿主必须显式导入 `@compose-ui/editor/styles.css`，并为编辑器提供确定的非零高度。
 `ComposeEditor` 接受标准的 HTML `section` 属性；`children` 渲染为中央画布内容。
@@ -91,7 +90,8 @@ Scene Graph 默认使用 `@compose-ui/scene-tree`，通过 `sceneTreeProps` 接�
 `sceneGraphPanel` 仍可完整覆盖默认树。提供 `history` 后，Scene Graph 外层面板会挂载一个
 子 Dockview，场景树与 History 分别成为上、下两个真实 Dockview 面板；`historyPanel` 可完整
 覆盖 History 面板内容，`history` 同时启用编辑器范围快捷键。
-其余四个命名属性提供其他工作区内容。
+其余命名属性提供其他工作区内容。`stageToolbar` 是首选工具栏插槽；`canvasToolbar` 只作为
+兼容别名保留。
 
 ```tsx
 <ComposeEditor
@@ -103,7 +103,7 @@ Scene Graph 默认使用 `@compose-ui/scene-tree`，通过 `sceneTreeProps` 接�
     selectedIds: [],
     expandedIds: [],
   }}
-  canvasToolbar={<button>添加组件</button>}
+  stageToolbar={<button>添加组件</button>}
   inspectorPanel={<div>选择组件后显示属性</div>}
   transactionLogPanel={<div>暂无事务</div>}
   commandPanel={<input aria-label="命令" />}
@@ -116,7 +116,116 @@ Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API�
 当前实例中的尺寸、折叠状态和活动标签会在挂载期间保留，但不会写入 localStorage、页面
 文档或远端存储；重新挂载后恢复默认布局。
 
-`ComposeEditor` 当前仍未提供稳定的文档数据、`value`、`onChange`、组件注册或数据源绑定 API。
+`ComposeEditor` 不直接拥有文档 `value`/`onChange`。推荐由宿主创建下方
+`TransactionRuntime` 和 `ComponentRegistry`，再使用 `useComposeEditorController` 组合默认
+Palette、SceneTree、Stage、History、Inspector 与 CommandPanel。显式插槽和 `children` 始终可
+覆盖 controller 默认内容。
+
+## 文档与命令事务
+
+`@compose-ui/core` 提供 React/DOM 无关的 `ComposeDocument`、文档校验、可逆 Patch、内置命令和
+`TransactionRuntime`。成功命令形成唯一正式事务历史；noop 与 rejected 只发布命令事件，
+不会进入 History。`reset` 用于载入文档并创建新的历史基线。
+
+```tsx
+import {
+  createTransactionRuntime,
+  type ComposeDocument,
+} from '@compose-ui/core'
+
+const document: ComposeDocument = {
+  schemaVersion: 1,
+  rootIds: ['page'],
+  nodes: {
+    page: {
+      id: 'page',
+      kind: 'frame',
+      name: 'Page',
+      visible: true,
+      locked: false,
+      transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0 },
+      childIds: [],
+    },
+  },
+}
+
+const runtime = createTransactionRuntime({ document })
+runtime.dispatch({
+  id: crypto.randomUUID(),
+  type: 'frame.create',
+  payload: {
+    node: {
+      id: 'mobile',
+      kind: 'frame',
+      name: 'Mobile',
+      visible: true,
+      locked: false,
+      transform: { x: 2100, y: 0, width: 390, height: 844, rotation: 0 },
+      childIds: [],
+    },
+  },
+  meta: { label: '创建 Mobile Frame', source: 'toolbar', targetIds: ['mobile'] },
+})
+```
+
+`@compose-ui/command-panel` 订阅同一个 runtime，显示 committed、noop、rejected、事务来源和
+可逆 Patch，并只接受宿主声明的结构化 JSON 字段预设：
+
+```tsx
+import { CommandPanel } from '@compose-ui/command-panel'
+import '@compose-ui/command-panel/styles.css'
+
+<CommandPanel runtime={runtime} presets={commandPresets} />
+```
+
+文档拓扑、内置命令与运行时完整说明见
+[`@compose-ui/core` README](./packages/core/README.md)，调试台说明见
+[`@compose-ui/command-panel` README](./packages/command-panel/README.md)。
+
+## 组件注册、无限 Stage 与 Preview
+
+`@compose-ui/component-registry` 由宿主按稳定 `type` 注册默认 JSON props、默认尺寸、React
+renderer 和可选 Inspector。`@compose-ui/stage` 使用 DOM 渲染 Frame 与业务组件，以屏幕坐标
+SVG Overlay 绘制选区、手柄和吸附线；组件内部仍可使用 Canvas，例如 ECharts。
+
+```tsx
+import { createComponentRegistry } from '@compose-ui/component-registry'
+import { createTransactionRuntime } from '@compose-ui/core'
+import type { ComposeDocument } from '@compose-ui/core'
+import { ComposeEditor, useComposeEditorController } from '@compose-ui/editor'
+import { useState } from 'react'
+
+const registry = createComponentRegistry([{
+  type: 'text',
+  label: '文本',
+  defaultSize: { width: 240, height: 72 },
+  createDefaultProps: () => ({ text: '大屏标题' }),
+  renderer: ({ props }) => <strong>{String(props.text)}</strong>,
+}])
+
+function Workspace({ document }: { document: ComposeDocument }) {
+  const [runtime] = useState(() => createTransactionRuntime({ document }))
+  const controller = useComposeEditorController({ runtime, registry })
+
+  return <ComposeEditor controller={controller} style={{ height: 720 }} />
+}
+```
+
+选择、工具、场景树展开项和 viewport 是 controller 会话状态，不进入文档事务。Palette 拖入、
+SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全部派发到同一 runtime。
+成功事务可通过 controller 的 `onTransaction` 单点映射到 Operation Log；noop、rejected 与 reset
+不会被当作成功编辑记录。
+
+`ComposePreview` 接收 `document`、`registry` 和明确的 `frameId`，以普通 DOM 渲染目标 Frame，
+不包含 Stage 的 SVG 编辑覆盖层：
+
+```tsx
+<ComposePreview document={runtime.document} registry={registry} frameId="desktop" />
+```
+
+完整说明见 [`component-registry`](./packages/component-registry/README.md)、
+[`stage`](./packages/stage/README.md)、[`editor`](./packages/editor/README.md) 与
+[`preview`](./packages/preview/README.md)。
 
 ## 独立使用历史
 
@@ -280,19 +389,18 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-终端会显示 Vite 示例应用地址。打开页面后可以体验当前的最小流程：
+终端会显示 Vite 示例应用地址。根路径直接打开由统一 controller 驱动的完整 Stage 编排示例，
+不再保留旧手写 Canvas 或事务专用入口：
 
-1. 页面启动后默认选中 Rectangle 节点；展开“支持类型 Supported Types”查看全部内置类型族与
-   ECharts custom renderer，也可以通过 Canvas Toolbar 继续添加矩形组件。
-2. 点击“添加文本组件”，选择中央画布中的“默认文本”，通过右侧 Schema 属性面板修改文本。
-3. 使用属性搜索、筛选、重置和两条列分隔线。
-4. 点击“添加 ECharts 图表”，在独立的自定义属性 UI 中编辑标题、类型、系列名称和数据。
-5. 观察真实 ECharts Canvas、Scene Graph、属性面板和持久化 Operation Log 同步更新。
-6. 在左侧历史面板点击任意状态，或用撤销/重做快捷键切换文档快照。
-7. 拖动边缘区及 Scene Graph/History 之间的 Dockview sash 调整尺寸，或点击 Edge Group 的
-   活动标签折叠与展开。
+1. 点击“创建 Frame”，在无限 Stage 中建立明确的输出边界。
+2. 打开 Component Library，把 Rectangle、Text 或 ECharts 拖入 Frame。
+3. 在 Stage 或 Scene Graph 中选择、移动、多选和分组节点，并通过右侧 Inspector 修改属性。
+4. 使用撤销/重做或 History 查看同一事务文档的变化。
+5. 在 Command 调试台查看 committed、noop、rejected 及可逆 patches；Operation Log 只记录成功
+   事务与历史导航。
+6. 点击“预览 Frame”，用独立 `ComposePreview` 检查目标 Frame 的普通 DOM 输出。
 
-该流程用于验证组件挂载和浏览器操作测试，不代表最终编辑器交互设计。
+该完整示例用于验证各包通过公开协议协同工作，不代表其内部 fixture 是稳定公共 API。
 
 ## 查看可视化 E2E 测试
 
@@ -305,10 +413,11 @@ bun run test:e2e:ui
 在测试面板中选择：
 
 ```text
-adds and edits a text component inside the editor
+使用完整示例完成 Stage 纵向流程
 ```
 
-可以查看“添加组件、选择组件、修改属性、编辑器区域同步”的每一步浏览器操作和 DOM
+可以查看“创建 Frame、拖入组件、多选分组、修改属性、撤销重做、查看命令与日志、预览
+Frame”的每一步浏览器操作和 DOM
 快照。
 
 无界面运行全部 E2E：

@@ -149,8 +149,18 @@ export function SceneGraphPanel() {
   )
 }
 
+export function ComponentLibraryPanel() {
+  const { componentLibraryPanel } = useWorkspaceContent()
+
+  return (
+    <div className="compose-editor__panel" data-workspace-panel="component-library">
+      {componentLibraryPanel ?? <Placeholder>Component library content</Placeholder>}
+    </div>
+  )
+}
+
 export function CanvasPanel() {
-  const { canvasToolbar, children } = useWorkspaceContent()
+  const { stageToolbar, children } = useWorkspaceContent()
 
   return (
     <div
@@ -158,7 +168,7 @@ export function CanvasPanel() {
       data-workspace-panel="canvas"
     >
       <div className="compose-editor__canvas-toolbar">
-        {canvasToolbar ?? <Placeholder>Canvas toolbar</Placeholder>}
+        {stageToolbar ?? <Placeholder>Stage toolbar</Placeholder>}
       </div>
       <div className="compose-editor__canvas-content">{children}</div>
     </div>

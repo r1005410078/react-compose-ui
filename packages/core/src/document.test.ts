@@ -1,0 +1,227 @@
+import { describe, expect, it } from 'vitest'
+import * as core from './index'
+
+type ValidationIssue = {
+  code: string
+  path: readonly (string | number)[]
+  message: string
+}
+
+type ValidationResult =
+  | { valid: true; document: unknown }
+  | { valid: false; issues: readonly ValidationIssue[] }
+
+type FixtureNode = {
+  id: string
+  kind: 'frame' | 'group' | 'component'
+  name: string
+  visible: boolean
+  locked: boolean
+  transform: {
+    x: number
+    y: number
+    width: number
+    height: number
+    rotation: number
+  }
+  childIds?: string[]
+  componentType?: string
+  props?: Record<string, unknown>
+}
+
+type FixtureDocument = {
+  schemaVersion: number
+  rootIds: string[]
+  nodes: Record<string, FixtureNode>
+}
+
+const validateComposeDocument = (
+  core as unknown as {
+    validateComposeDocument(input: unknown): ValidationResult
+  }
+).validateComposeDocument
+
+function validDocument(): FixtureDocument {
+  return {
+    schemaVersion: 1,
+    rootIds: ['frame-a', 'frame-b'],
+    nodes: {
+      'frame-a': {
+        id: 'frame-a',
+        kind: 'frame',
+        name: 'Frame A',
+        visible: true,
+        locked: false,
+        transform: { x: -320, y: 24, width: 1920, height: 1080, rotation: 0 },
+        childIds: ['group-a'],
+      },
+      'group-a': {
+        id: 'group-a',
+        kind: 'group',
+        name: 'Group A',
+        visible: true,
+        locked: false,
+        transform: { x: 100, y: 80, width: 400, height: 240, rotation: 15 },
+        childIds: ['text-a'],
+      },
+      'text-a': {
+        id: 'text-a',
+        kind: 'component',
+        name: 'Heading',
+        visible: true,
+        locked: false,
+        transform: { x: 12, y: 16, width: 240, height: 48, rotation: 0 },
+        componentType: 'text',
+        props: { text: '季度销售额', lines: [1, true, null] },
+      },
+      'frame-b': {
+        id: 'frame-b',
+        kind: 'frame',
+        name: 'Frame B',
+        visible: true,
+        locked: false,
+        transform: { x: 1800, y: -400, width: 1280, height: 720, rotation: 0 },
+        childIds: [],
+      },
+    },
+  }
+}
+
+describe('ComposeDocument', () => {
+  it('OpenSpec: compose-document / 版本化 JSON 文档 / 校验合法多 Frame 文档', () => {
+    const input = validDocument()
+    const result = validateComposeDocument(input)
+
+    expect(result).toEqual({ valid: true, document: input })
+    expect(JSON.parse(JSON.stringify(input))).toEqual(input)
+  })
+
+  it('OpenSpec: compose-document / 版本化 JSON 文档 / 拒绝非 JSON 属性', () => {
+    const input = validDocument()
+    input.nodes['text-a'].props = {
+      onClick: () => undefined,
+      infinite: Number.POSITIVE_INFINITY,
+    } as never
+
+    const result = validateComposeDocument(input)
+
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'json.unsupported',
+        path: ['nodes', 'text-a', 'props', 'onClick'],
+      }),
+      expect.objectContaining({
+        code: 'json.non-finite-number',
+        path: ['nodes', 'text-a', 'props', 'infinite'],
+      }),
+    ]))
+  })
+
+  it('OpenSpec: compose-document / 版本化 JSON 文档 / 拒绝未知文档版本', () => {
+    const input = { ...validDocument(), schemaVersion: 2 }
+    const result = validateComposeDocument(input)
+
+    expect(result).toEqual({
+      valid: false,
+      issues: [expect.objectContaining({
+        code: 'document.unsupported-version',
+        path: ['schemaVersion'],
+      })],
+    })
+  })
+
+  it('OpenSpec: compose-document / 规范化节点拓扑 / 使用合法 Frame 子树', () => {
+    const input = validDocument()
+    const result = validateComposeDocument(input)
+
+    expect(result.valid).toBe(true)
+    expect(input.nodes['frame-a'].childIds).toEqual(['group-a'])
+  })
+
+  it('OpenSpec: compose-document / 规范化节点拓扑 / 拒绝悬空或重复父节点', () => {
+    const input = validDocument()
+    input.nodes['frame-a'].childIds?.push('missing')
+    input.nodes['frame-b'].childIds?.push('text-a')
+    const result = validateComposeDocument(input)
+
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining([
+      'document.missing-child',
+      'document.multiple-parents',
+    ]))
+  })
+
+  it('OpenSpec: compose-document / 规范化节点拓扑 / 拒绝根级普通节点或循环', () => {
+    const input = validDocument()
+    input.rootIds.push('group-a')
+    input.nodes['group-a'].childIds?.push('group-a')
+    const result = validateComposeDocument(input)
+
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining([
+      'document.invalid-root-kind',
+      'document.cycle',
+    ]))
+  })
+
+  it('OpenSpec: compose-document / 节点变换与显示状态 / 拒绝非法变换', () => {
+    const input = validDocument()
+    input.nodes['frame-a'].transform.rotation = 1
+    input.nodes['group-a'].transform.width = 0
+    input.nodes['text-a'].transform.x = Number.NaN
+    const result = validateComposeDocument(input)
+
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'transform.frame-rotation',
+        path: ['nodes', 'frame-a', 'transform', 'rotation'],
+      }),
+      expect.objectContaining({
+        code: 'transform.invalid-size',
+        path: ['nodes', 'group-a', 'transform', 'width'],
+      }),
+      expect.objectContaining({
+        code: 'transform.non-finite',
+        path: ['nodes', 'text-a', 'transform', 'x'],
+      }),
+    ]))
+  })
+
+  it('OpenSpec: compose-document / 节点变换与显示状态 / 接受无限空间负坐标', () => {
+    const input = validDocument()
+    input.nodes['frame-a'].transform.x = -10_000
+    input.nodes['group-a'].transform.y = -2_400
+
+    const result = validateComposeDocument(input)
+
+    expect(result).toEqual({ valid: true, document: input })
+    expect(input.nodes['frame-a'].transform.x).toBe(-10_000)
+    expect(input.nodes['group-a'].transform.y).toBe(-2_400)
+  })
+
+  it('OpenSpec: compose-document / 可序列化组件节点 / 保存未知组件类型', () => {
+    const input = validDocument()
+    input.nodes['text-a'].componentType = 'host.unknown'
+
+    expect(validateComposeDocument(input)).toEqual({ valid: true, document: input })
+  })
+
+  it('OpenSpec: compose-document / 可序列化组件节点 / 拒绝空组件类型', () => {
+    const input = validDocument()
+    input.nodes['text-a'].componentType = ''
+    const result = validateComposeDocument(input)
+
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: 'component.empty-type',
+      path: ['nodes', 'text-a', 'componentType'],
+    }))
+  })
+})

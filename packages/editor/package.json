@@ -26,9 +26,12 @@
     "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
   "dependencies": {
+    "@compose-ui/command-panel": "workspace:*",
+    "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/history": "workspace:*",
     "@compose-ui/scene-tree": "workspace:*",
+    "@compose-ui/stage": "workspace:*",
     "dockview-react": "^7.0.2"
   },
   "peerDependencies": {
