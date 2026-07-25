@@ -13,10 +13,12 @@ import type {
 } from 'react'
 import type {
   ComposeDocument,
+  ComposeFrameNode,
   ComposeNode,
   JsonValue,
   NodeTransform,
 } from '@compose-ui/core'
+import { resolveNodeStyle } from '@compose-ui/core'
 import {
   decomposeMatrix,
   getNodeParentId,
@@ -258,6 +260,17 @@ function snapCandidates(
 }
 
 function nodeStyle(node: ComposeNode): CSSProperties {
+  const visual = resolveNodeStyle(node)
+  const shadows: string[] = []
+  if (visual.borderWidth > 0) {
+    shadows.push(`inset 0 0 0 ${visual.borderWidth}px ${visual.borderColor}`)
+  }
+  if (visual.shadow) {
+    shadows.push(
+      `${visual.shadow.offsetX}px ${visual.shadow.offsetY}px ${visual.shadow.blur}px `
+      + `${visual.shadow.spread}px ${visual.shadow.color}`,
+    )
+  }
   return {
     left: node.transform.x,
     top: node.transform.y,
@@ -265,6 +278,11 @@ function nodeStyle(node: ComposeNode): CSSProperties {
     height: node.transform.height,
     transform: `rotate(${node.transform.rotation}deg)`,
     transformOrigin: 'center',
+    backgroundColor: visual.backgroundColor,
+    borderRadius: visual.borderRadius,
+    opacity: visual.opacity,
+    boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
+    overflow: node.kind === 'group' ? 'visible' : 'hidden',
   }
 }
 
@@ -617,7 +635,7 @@ export function Stage({
         const node = {
           id: nodeId,
           kind: 'component' as const,
-          name: registry.get(componentType)?.label ?? componentType,
+          name: seed.seed.name,
           visible: true,
           locked: false,
           transform: {
@@ -633,6 +651,7 @@ export function Stage({
           },
           componentType,
           props: seed.seed.props,
+          ...(seed.seed.style ? { style: seed.seed.style } : {}),
         }
         const result = dispatch({
           id: idFactory(),
@@ -652,6 +671,61 @@ export function Stage({
         if (result.status === 'committed' && frame?.kind === 'frame') {
           onSelectedIdsChange([nodeId])
           onActiveFrameIdChange(frame.id)
+        }
+        return true
+      },
+      dropFrame(preset, clientPoint) {
+        const root = rootRef.current
+        if (!root) return false
+        const rect = root.getBoundingClientRect()
+        const point = clientPoint
+          ? screenToWorld(screenPoint({
+              clientX: clientPoint.x,
+              clientY: clientPoint.y,
+            }, root), viewport)
+          : screenToWorld({ x: rect.width / 2, y: rect.height / 2 }, viewport)
+        const nodeId = idFactory()
+        let style: ComposeFrameNode['style']
+        let validPreset = true
+        try {
+          style = preset.createDefaultStyle()
+        }
+        catch {
+          // factory 异常仍需通过 runtime 产生可观察的 rejected，而不是静默丢失用户意图。
+          validPreset = false
+        }
+        const node: ComposeFrameNode = {
+          id: nodeId,
+          kind: 'frame',
+          name: preset.name,
+          visible: true,
+          locked: false,
+          transform: {
+            x: point.x - preset.defaultSize.width / 2,
+            y: point.y - preset.defaultSize.height / 2,
+            width: validPreset ? preset.defaultSize.width : 0,
+            height: preset.defaultSize.height,
+            rotation: 0,
+          },
+          style,
+          childIds: [],
+        }
+        const result = dispatch({
+          id: idFactory(),
+          type: 'frame.create',
+          payload: {
+            node: node as unknown as JsonValue,
+            index: document.rootIds.length,
+          },
+          meta: {
+            label: describeNodeCreation(node),
+            source: 'component-palette',
+            targetIds: [nodeId],
+          },
+        })
+        if (result.status === 'committed') {
+          onSelectedIdsChange([nodeId])
+          onActiveFrameIdChange(nodeId)
         }
         return true
       },

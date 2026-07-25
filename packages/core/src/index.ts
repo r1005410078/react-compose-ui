@@ -9,6 +9,12 @@
  */
 
 export { validateComposeDocument } from './document'
+export {
+  DEFAULT_NODE_SHADOW,
+  DEFAULT_NODE_STYLES,
+  resolveNodeStyle,
+  validateNodeStyle,
+} from './node-style'
 export { applyDocumentPatches } from './patches'
 export { createTransactionRuntime } from './runtime'
 export {
@@ -51,8 +57,15 @@ export type {
   JsonObject,
   JsonPrimitive,
   JsonValue,
+  NodeShadow,
+  NodeStyle,
   NodeTransform,
+  ResolvedNodeStyle,
 } from './document-types'
+export type {
+  NodeStyleValidationIssue,
+  NodeStyleValidationResult,
+} from './node-style'
 
 /** `@compose-ui/core` 的稳定包标识。 @public */
 export const COMPOSE_UI_CORE_PACKAGE = '@compose-ui/core' as const

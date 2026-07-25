@@ -1,8 +1,10 @@
 import type { ComponentType, ReactNode } from 'react'
 import type {
   ComposeComponentNode,
+  ComposeNode,
   EditorCommand,
   JsonObject,
+  NodeStyle,
 } from '@compose-ui/core'
 
 /**
@@ -36,12 +38,19 @@ export interface ComponentRendererProps {
  *
  * @public
  */
-export interface ComponentInspectorProps {
-  /** 当前只读 Component 节点。 */
-  readonly node: ComposeComponentNode
+export interface NodeInspectorProps<TNode extends ComposeNode = ComposeNode> {
+  /** 当前只读文档节点。 */
+  readonly node: TNode
   /** 向同一个 TransactionRuntime 派发结构化命令。 */
   readonly dispatch: (command: EditorCommand) => unknown
 }
+
+/**
+ * Component definition Inspector renderer 获得的命令上下文。
+ *
+ * @public
+ */
+export type ComponentInspectorProps = NodeInspectorProps<ComposeComponentNode>
 
 /**
  * 一个可由 Stage 与 Preview 共同解析的宿主组件定义。
@@ -53,12 +62,16 @@ export interface ComponentDefinition {
   readonly type: string
   /** Palette 与错误信息中的用户可读名称。 */
   readonly label: string
+  /** 新建文档 Component 节点使用的名称；省略时回退到 label。 */
+  readonly defaultName?: string
   /** Palette 可选图标；不会写入 ComposeDocument。 */
   readonly icon?: ReactNode
   /** 创建节点时使用的合法默认尺寸。 */
   readonly defaultSize: ComponentDefaultSize
   /** 每次调用必须返回一份严格 JSON 对象。 */
   readonly createDefaultProps: () => JsonObject
+  /** 可选通用节点 style factory；每次调用必须返回合法独立 JSON。 */
+  readonly createDefaultStyle?: () => NodeStyle
   /** Stage 与 Preview 共享的宿主 React renderer。 */
   readonly renderer: ComponentType<ComponentRendererProps>
   /** 可选宿主 Inspector；可以在其内部组合 PropertyPanel。 */
@@ -71,9 +84,17 @@ export interface ComponentDefinition {
  * @public
  */
 export interface ComponentSeed {
+  /** definition 的稳定组件类型。 */
   readonly componentType: string
+  /** 新建文档节点使用的名称。 */
+  readonly name: string
+  /** 每次 seed 独立的 JSON props。 */
   readonly props: JsonObject
+  /** 每次 seed 独立的可选通用节点样式。 */
+  readonly style?: NodeStyle
+  /** 默认节点宽度。 */
   readonly width: number
+  /** 默认节点高度。 */
   readonly height: number
 }
 
@@ -83,7 +104,10 @@ export interface ComponentSeed {
  * @public
  */
 export interface ComponentSeedError {
-  readonly code: 'definition.unknown-type' | 'definition.invalid-props'
+  readonly code:
+    | 'definition.unknown-type'
+    | 'definition.invalid-props'
+    | 'definition.invalid-style'
   readonly message: string
 }
 

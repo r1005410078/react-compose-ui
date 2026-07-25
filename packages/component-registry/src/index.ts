@@ -11,6 +11,7 @@ export {
   type ComponentDefaultSize,
   type ComponentDefinition,
   type ComponentInspectorProps,
+  type NodeInspectorProps,
   type ComponentRegistry,
   type ComponentRendererProps,
   type ComponentSeed,

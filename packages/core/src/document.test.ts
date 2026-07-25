@@ -27,6 +27,7 @@ type FixtureNode = {
   childIds?: string[]
   componentType?: string
   props?: Record<string, unknown>
+  style?: Record<string, unknown>
 }
 
 type FixtureDocument = {
@@ -88,6 +89,97 @@ function validDocument(): FixtureDocument {
 }
 
 describe('ComposeDocument', () => {
+  it('OpenSpec: compose-document / 可选通用节点样式 / 兼容没有 style 的旧文档', () => {
+    const input = validDocument()
+    const resolveNodeStyle = (
+      core as unknown as {
+        resolveNodeStyle(node: FixtureNode): Record<string, unknown>
+      }
+    ).resolveNodeStyle
+
+    expect(validateComposeDocument(input)).toEqual({ valid: true, document: input })
+    expect(resolveNodeStyle(input.nodes['frame-a'])).toEqual({
+      backgroundColor: '#f8fafc',
+      borderColor: '#4a5667',
+      borderWidth: 1,
+      borderRadius: 0,
+      opacity: 1,
+      shadow: null,
+    })
+    expect(resolveNodeStyle(input.nodes['group-a'])).toEqual({
+      backgroundColor: 'transparent',
+      borderColor: 'transparent',
+      borderWidth: 0,
+      borderRadius: 0,
+      opacity: 1,
+      shadow: null,
+    })
+    expect(input.nodes['frame-a'].style).toBeUndefined()
+  })
+
+  it('OpenSpec: compose-document / 可选通用节点样式 / 校验合法部分 style', () => {
+    const input = validDocument()
+    input.nodes['text-a'].style = {
+      backgroundColor: '#102030',
+      shadow: {
+        color: 'rgba(0, 0, 0, 0.3)',
+        offsetX: 4,
+        offsetY: 8,
+        blur: 16,
+        spread: -2,
+      },
+    }
+    const resolveNodeStyle = (
+      core as unknown as {
+        resolveNodeStyle(node: FixtureNode): Record<string, unknown>
+      }
+    ).resolveNodeStyle
+
+    expect(validateComposeDocument(input)).toEqual({ valid: true, document: input })
+    expect(resolveNodeStyle(input.nodes['text-a'])).toMatchObject({
+      backgroundColor: '#102030',
+      borderWidth: 0,
+      opacity: 1,
+      shadow: input.nodes['text-a'].style.shadow,
+    })
+  })
+
+  it('OpenSpec: compose-document / 可选通用节点样式 / 拒绝非法 style', () => {
+    const cases = [
+      { style: { unknown: true }, path: ['nodes', 'text-a', 'style', 'unknown'] },
+      { style: { backgroundColor: '' }, path: ['nodes', 'text-a', 'style', 'backgroundColor'] },
+      { style: { opacity: 1.2 }, path: ['nodes', 'text-a', 'style', 'opacity'] },
+      { style: { opacity: undefined }, path: ['nodes', 'text-a', 'style', 'opacity'] },
+      { style: { borderWidth: -1 }, path: ['nodes', 'text-a', 'style', 'borderWidth'] },
+      { style: { shadow: '0 0 2px black' }, path: ['nodes', 'text-a', 'style', 'shadow'] },
+      {
+        style: {
+          shadow: {
+            color: '#000',
+            offsetX: 0,
+            offsetY: 0,
+            blur: -1,
+            spread: 0,
+          },
+        },
+        path: ['nodes', 'text-a', 'style', 'shadow', 'blur'],
+      },
+    ]
+
+    cases.forEach(({ style, path }) => {
+      const input = validDocument()
+      input.nodes['text-a'].style = style
+      const result = validateComposeDocument(input)
+
+      expect(result.valid).toBe(false)
+      if (result.valid) return
+      expect(result.issues).toContainEqual(expect.objectContaining({
+        code: 'style.invalid',
+        path,
+      }))
+    })
+  })
+
   it('OpenSpec: compose-document / 版本化 JSON 文档 / 校验合法多 Frame 文档', () => {
     const input = validDocument()
     const result = validateComposeDocument(input)

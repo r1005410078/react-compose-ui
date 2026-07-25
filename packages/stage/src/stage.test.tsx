@@ -54,7 +54,21 @@ function fixture(): ComposeDocument {
         visible: true,
         locked: false,
         transform: { x: 0, y: 0, width: 500, height: 400, rotation: 0 },
-        childIds: ['a', 'b', 'hidden', 'locked', 'unknown'],
+        style: {
+          backgroundColor: '#ffeedd',
+          borderColor: '#112233',
+          borderWidth: 3,
+          borderRadius: 8,
+          opacity: 0.9,
+          shadow: {
+            color: '#000000',
+            offsetX: 2,
+            offsetY: 4,
+            blur: 6,
+            spread: 1,
+          },
+        },
+        childIds: ['a', 'b', 'hidden', 'locked', 'unknown', 'styled-group'],
       },
       a: {
         id: 'a',
@@ -65,6 +79,13 @@ function fixture(): ComposeDocument {
         transform: { x: 20, y: 30, width: 100, height: 50, rotation: 0 },
         componentType: 'box',
         props: { text: 'A' },
+        style: {
+          backgroundColor: '#336699',
+          borderColor: '#ffffff',
+          borderWidth: 2,
+          borderRadius: 12,
+          opacity: 0.75,
+        },
       },
       b: {
         id: 'b',
@@ -105,6 +126,19 @@ function fixture(): ComposeDocument {
         transform: { x: 220, y: 120, width: 80, height: 40, rotation: 0 },
         componentType: 'host.missing',
         props: { preserved: true },
+      },
+      'styled-group': {
+        id: 'styled-group',
+        kind: 'group',
+        name: 'Styled group',
+        visible: true,
+        locked: false,
+        transform: { x: 340, y: 250, width: 80, height: 60, rotation: 0 },
+        childIds: [],
+        style: {
+          backgroundColor: '#abcdef',
+          borderRadius: 5,
+        },
       },
       'frame-negative': {
         id: 'frame-negative',
@@ -211,6 +245,32 @@ describe('Stage', () => {
     })
     expect(screen.getByRole('img', { name: 'Stage 编辑覆盖层' })).toBeInTheDocument()
     expect(screen.getAllByTestId('stage-frame')).toHaveLength(2)
+  })
+
+  it('OpenSpec: stage / Stage 统一节点样式 / 渲染通用节点样式', () => {
+    render(<Harness runtime={stageRuntime()} />)
+
+    expect(screen.getAllByTestId('stage-frame')[0]).toHaveStyle({
+      backgroundColor: '#ffeedd',
+      borderRadius: '8px',
+      opacity: '0.9',
+    })
+    expect(screen.getAllByTestId('stage-frame')[0]?.style.boxShadow).toContain(
+      'inset 0 0 0 3px #112233',
+    )
+    expect(screen.getAllByTestId('stage-frame')[0]?.style.boxShadow).toContain(
+      '2px 4px 6px 1px #000000',
+    )
+    expect(screen.getByTestId('stage-node-a')).toHaveStyle({
+      backgroundColor: '#336699',
+      borderRadius: '12px',
+      opacity: '0.75',
+    })
+    expect(screen.getByTestId('stage-node-styled-group')).toHaveStyle({
+      backgroundColor: '#abcdef',
+      borderRadius: '5px',
+      overflow: 'visible',
+    })
   })
 
   it('OpenSpec: stage / DOM 与 SVG 分层 Stage / 渲染组件内部 Canvas', () => {

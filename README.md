@@ -7,7 +7,7 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 实时查看最终效果，减少现场修改代码、重新构建和部署的次数。
 
 > 当前版本处于基础能力验证阶段，提供版本化 JSON 文档、同步命令事务、组件注册表、
-> DOM/SVG 无限 Stage、编辑器 controller、场景树、会话历史、Schema 属性面板、本地操作日志、
+> DOM/SVG 无限 Stage、Frame/Rectangle/Text 基础物料、编辑器 controller、场景树、会话历史、Schema 属性面板、本地操作日志、
 > Command 调试台和 Frame 文档预览，尚不是完整的低代码编辑器。
 
 ## 环境要求
@@ -23,13 +23,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/core @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+bun add @compose-ui/core @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/core @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+npm install @compose-ui/core @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -184,7 +184,7 @@ import '@compose-ui/command-panel/styles.css'
 
 ## 组件注册、无限 Stage 与 Preview
 
-`@compose-ui/component-registry` 由宿主按稳定 `type` 注册默认 JSON props、默认尺寸、React
+`@compose-ui/component-registry` 由宿主按稳定 `type` 注册默认 JSON props/style、默认尺寸、React
 renderer 和可选 Inspector。`@compose-ui/stage` 使用 DOM 渲染 Frame 与业务组件，以屏幕坐标
 SVG Overlay 绘制选区、手柄和吸附线；组件内部仍可使用 Canvas，例如 ECharts。
 
@@ -211,6 +211,25 @@ function Workspace({ document }: { document: ComposeDocument }) {
 }
 ```
 
+需要开箱即用的 Frame、Rectangle 与 Text 时，可使用独立 materials factory，并继续在末尾追加
+宿主 definitions：
+
+```tsx
+import { createBasicMaterials } from '@compose-ui/materials'
+import '@compose-ui/materials/styles.css'
+
+const materials = createBasicMaterials({ extensions: [echartsDefinition] })
+const controller = useComposeEditorController({
+  runtime,
+  registry: materials.registry,
+  framePresets: materials.framePresets,
+  containerInspector: materials.ContainerInspector,
+})
+```
+
+基础物料把背景、边框、圆角、透明度和结构化 shadow 统一写入 `node.style`。Stage 与 Preview
+使用同一 resolved style；Rectangle 仍兼容读取无 style 旧文档的视觉 props。
+
 选择、工具、场景树展开项和 viewport 是 controller 会话状态，不进入文档事务。Palette 拖入、
 SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全部派发到同一 runtime。
 成功事务可通过 controller 的 `onTransaction` 单点映射到 Operation Log；noop、rejected 与 reset
@@ -224,7 +243,8 @@ SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全
 ```
 
 完整说明见 [`component-registry`](./packages/component-registry/README.md)、
-[`stage`](./packages/stage/README.md)、[`editor`](./packages/editor/README.md) 与
+[`stage`](./packages/stage/README.md)、[`materials`](./packages/materials/README.md)、
+[`editor`](./packages/editor/README.md) 与
 [`preview`](./packages/preview/README.md)。
 
 ## 独立使用历史

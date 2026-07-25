@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import { createTransactionRuntime } from '@compose-ui/core'
+import type { NodeInspectorProps } from '@compose-ui/component-registry'
+import type { ComposeFrameNode, ComposeGroupNode } from '@compose-ui/core'
 import type {
   ComposeDocument,
   EditorCommand,
@@ -75,6 +77,29 @@ const registry = createComponentRegistry([{
   ),
 }])
 
+function ContainerInspector({
+  node,
+  dispatch,
+}: NodeInspectorProps<ComposeFrameNode | ComposeGroupNode>) {
+  return (
+    <button
+      type="button"
+      onClick={() => dispatch({
+        id: 'container-style',
+        type: 'node.style.set',
+        payload: { nodeId: node.id, path: ['backgroundColor'], value: '#123456' },
+        meta: {
+          label: `Update ${node.name} · background #123456`,
+          source: 'inspector',
+          targetIds: [node.id],
+        },
+      })}
+    >
+      修改容器样式
+    </button>
+  )
+}
+
 afterEach(cleanup)
 
 describe('useComposeEditorController', () => {
@@ -143,6 +168,53 @@ describe('useComposeEditorController', () => {
     })
     expect(result.current.expandedIds).toEqual([])
     expect(result.current.activeFrameId).toBeNull()
+  })
+
+  // OpenSpec: component-registry / 通用节点 Inspector 上下文 / 组合结构节点 Inspector
+  it('OpenSpec: editor-workspace-layout / Frame presets 与结构节点 Inspector / 默认工作区组合基础物料', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+      initialSelection: ['frame'],
+      containerInspector: ContainerInspector,
+      framePresets: [{
+        id: 'desktop',
+        label: 'Frame',
+        name: 'Desktop',
+        defaultSize: { width: 1280, height: 720 },
+        createDefaultStyle: () => ({ backgroundColor: '#ffffff' }),
+      }],
+      idFactory: () => 'controller-frame',
+    }))
+
+    const inspector = render(result.current.inspectorPanel)
+    fireEvent.click(screen.getByRole('button', { name: '修改容器样式' }))
+    expect(editorRuntime.document.nodes.frame?.style?.backgroundColor).toBe('#123456')
+    inspector.unmount()
+
+    render(result.current.componentLibraryPanel)
+    expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')))
+      .toEqual(['Add Frame', 'Add 文本'])
+  })
+
+  it('OpenSpec: editor-workspace-layout / Frame presets 与结构节点 Inspector / 保持未配置宿主兼容', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+      initialSelection: ['frame'],
+    }))
+
+    render(result.current.componentLibraryPanel)
+    expect(screen.queryByRole('button', { name: 'Add Frame' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add 文本' })).toBeInTheDocument()
+    cleanup()
+
+    render(result.current.inspectorPanel)
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Select one node to edit its properties',
+    )
   })
 
   it('以紧凑图标工具栏暴露完整的可访问名称和工具状态', () => {

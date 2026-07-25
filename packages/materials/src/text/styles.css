@@ -1,0 +1,13 @@
+:root {
+  --compose-material-text-color: #172033;
+  --compose-material-text-font-size: 24px;
+}
+
+.compose-material--text {
+  display: flex;
+  align-items: center;
+  color: var(--compose-material-text-color);
+  font-size: var(--compose-material-text-font-size);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

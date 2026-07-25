@@ -43,9 +43,6 @@
 
 .compose-stage__node.is-frame {
   overflow: hidden;
-  border: 1px solid #4a5667;
-  background: #f8fafc;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
   color: #172033;
 }
 

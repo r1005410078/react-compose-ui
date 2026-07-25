@@ -1,7 +1,10 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import type { HTMLAttributes, PointerEvent as ReactPointerEvent } from 'react'
 import type { ComponentRegistry } from '@compose-ui/component-registry'
-import type { StageDragController } from './drag-controller'
+import type {
+  StageDragController,
+  StageFramePreset,
+} from './drag-controller'
 
 /**
  * ComponentPalette 属性。
@@ -11,6 +14,8 @@ import type { StageDragController } from './drag-controller'
 export interface ComponentPaletteProps extends HTMLAttributes<HTMLDivElement> {
   readonly registry: ComponentRegistry
   readonly dragController: StageDragController
+  /** 显示在 registry definitions 之前的根级 Frame 预设。 */
+  readonly framePresets?: readonly StageFramePreset[]
 }
 
 /**
@@ -21,6 +26,7 @@ export interface ComponentPaletteProps extends HTMLAttributes<HTMLDivElement> {
 export function ComponentPalette({
   registry,
   dragController,
+  framePresets = [],
   className,
   ...props
 }: ComponentPaletteProps) {
@@ -38,11 +44,14 @@ export function ComponentPalette({
     if (resetClickTimerRef.current !== null) clearTimeout(resetClickTimerRef.current)
   }, [])
 
-  const start = (componentType: string, event: ReactPointerEvent<HTMLButtonElement>) => {
+  const start = (
+    begin: (clientPoint: { x: number; y: number }) => void,
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
     cleanupRef.current?.()
     suppressClickRef.current = true
     if (resetClickTimerRef.current !== null) clearTimeout(resetClickTimerRef.current)
-    dragController.start(componentType, { x: event.clientX, y: event.clientY })
+    begin({ x: event.clientX, y: event.clientY })
     const move = (pointerEvent: PointerEvent) => {
       dragController.move({ x: pointerEvent.clientX, y: pointerEvent.clientY })
     }
@@ -80,6 +89,32 @@ export function ComponentPalette({
       role="region"
     >
       <ul>
+        {framePresets.map((preset) => (
+          <li key={`frame:${preset.id}`}>
+            <button
+              aria-label={`Add ${preset.label}`}
+              type="button"
+              onClick={() => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false
+                  if (resetClickTimerRef.current !== null) {
+                    clearTimeout(resetClickTimerRef.current)
+                    resetClickTimerRef.current = null
+                  }
+                  return
+                }
+                dragController.addFrame(preset)
+              }}
+              onPointerDown={(event) => start(
+                (point) => dragController.startFrame(preset, point),
+                event,
+              )}
+            >
+              {preset.icon}
+              <span>{preset.label}</span>
+            </button>
+          </li>
+        ))}
         {registry.list().map((definition) => (
           <li key={definition.type}>
             <button
@@ -96,7 +131,10 @@ export function ComponentPalette({
                 }
                 dragController.add(definition.type)
               }}
-              onPointerDown={(event) => start(definition.type, event)}
+              onPointerDown={(event) => start(
+                (point) => dragController.start(definition.type, point),
+                event,
+              )}
             >
               {definition.icon}
               <span>{definition.label}</span>
@@ -104,9 +142,12 @@ export function ComponentPalette({
           </li>
         ))}
       </ul>
-      {state.active && state.componentType ? (
+      {state.active && (state.componentType || state.framePreset) ? (
         <div className="component-palette__drag-preview" role="status">
-          {registry.get(state.componentType)?.label ?? state.componentType}
+          {state.framePreset?.label
+            ?? (state.componentType
+              ? registry.get(state.componentType)?.label ?? state.componentType
+              : null)}
         </div>
       ) : null}
     </div>

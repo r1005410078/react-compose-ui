@@ -4,8 +4,16 @@ import type {
   ComposeNode,
   JsonObject,
   JsonValue,
+  NodeShadow,
+  NodeStyle,
   NodeTransform,
 } from './document-types'
+import {
+  DEFAULT_NODE_SHADOW,
+  DEFAULT_NODE_STYLES,
+  resolveNodeStyle,
+  validateNodeStyle,
+} from './node-style'
 import type {
   CommandHandler,
   CommandHandlerResult,
@@ -30,6 +38,8 @@ export const BUILTIN_COMMAND_TYPES = {
   setLocked: 'node.set-locked',
   setProps: 'node.props.set',
   resetProps: 'node.props.reset',
+  setStyle: 'node.style.set',
+  resetStyle: 'node.style.reset',
   setTransform: 'node.transform.set',
   groupNode: 'node.group',
   ungroupNode: 'node.ungroup',
@@ -418,6 +428,122 @@ function propsHandler(type: string): CommandHandler {
   }
 }
 
+const styleFields = new Set([
+  'backgroundColor',
+  'borderColor',
+  'borderWidth',
+  'borderRadius',
+  'opacity',
+  'shadow',
+])
+const shadowFields = new Set(['color', 'offsetX', 'offsetY', 'blur', 'spread'])
+
+function stylePath(value: unknown): readonly string[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) return null
+  if (value.length === 0) return []
+  if (value.length === 1 && styleFields.has(value[0]!)) return value
+  if (value.length === 2 && value[0] === 'shadow' && shadowFields.has(value[1]!)) return value
+  return null
+}
+
+function sameValue(left: unknown, right: unknown) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function setStyleValue(
+  current: ReturnType<typeof resolveNodeStyle>,
+  path: readonly string[],
+  value: unknown,
+): NodeStyle | null {
+  if (path.length === 0) return isRecord(value) ? value as NodeStyle : null
+  const next: Record<string, unknown> = {
+    ...current,
+    shadow: current.shadow ? { ...current.shadow } : null,
+  }
+  if (path.length === 1) {
+    next[path[0]!] = value
+  }
+  else {
+    const shadow: Record<string, unknown> = {
+      ...(current.shadow ?? DEFAULT_NODE_SHADOW),
+    }
+    shadow[path[1]!] = value
+    next.shadow = shadow
+  }
+  return next as NodeStyle
+}
+
+function resetStyleValue(
+  current: ReturnType<typeof resolveNodeStyle>,
+  kind: ComposeNode['kind'],
+  path: readonly string[],
+): NodeStyle {
+  const defaults = DEFAULT_NODE_STYLES[kind]
+  const next: Record<string, unknown> = {
+    ...current,
+    shadow: current.shadow ? { ...current.shadow } : null,
+  }
+  if (path.length === 1) {
+    next[path[0]!] = defaults[path[0] as keyof typeof defaults]
+  }
+  else {
+    const shadow: Record<string, unknown> = {
+      ...(current.shadow ?? DEFAULT_NODE_SHADOW),
+    }
+    shadow[path[1]!] = DEFAULT_NODE_SHADOW[path[1] as keyof NodeShadow]
+    next.shadow = shadow
+  }
+  return next as NodeStyle
+}
+
+function styleHandler(type: string): CommandHandler {
+  return {
+    type,
+    execute(document, command) {
+      const nodeId = valueAt(command.payload, 'nodeId')
+      const pathValue = valueAt(command.payload, 'path')
+      if (typeof nodeId !== 'string') return issue('node.invalid-targets', '样式命令目标无效')
+      const path = stylePath(pathValue)
+      if (!path) return issue('style.invalid-path', '样式命令 path 无效')
+      const node = document.nodes[nodeId]
+      if (!node) return issue('node.missing', `节点 ${nodeId} 不存在`)
+      if (node.locked) return issue('node.locked', `节点 ${nodeId} 已锁定`)
+
+      if (type === BUILTIN_COMMAND_TYPES.resetStyle && path.length === 0) {
+        return node.style === undefined
+          ? { status: 'noop', reason: '节点未保存自定义样式' }
+          : patches([{ op: 'remove', path: ['nodes', nodeId, 'style'] }])
+      }
+
+      const current = resolveNodeStyle(node)
+      const candidate = type === BUILTIN_COMMAND_TYPES.resetStyle
+        ? resetStyleValue(current, node.kind, path)
+        : setStyleValue(current, path, valueAt(command.payload, 'value'))
+      if (!candidate) return issue('style.invalid', '候选 style 必须是对象')
+      const validation = validateNodeStyle(candidate)
+      if (!validation.valid) {
+        return {
+          status: 'rejected',
+          issues: validation.issues.map((item) => ({
+            code: item.code,
+            path: ['style', ...item.path],
+            message: item.message,
+          })),
+        }
+      }
+      const resolvedCandidate = resolveNodeStyle({ kind: node.kind, style: validation.style })
+      if (sameValue(current, resolvedCandidate)) {
+        return { status: 'noop', reason: '样式命令没有产生可见修改' }
+      }
+      return patches([{
+        op: 'set',
+        path: ['nodes', nodeId, 'style'],
+        value: validation.style as unknown as JsonValue,
+      }])
+    },
+  }
+}
+
 function transformHandler(): CommandHandler {
   return {
     type: BUILTIN_COMMAND_TYPES.setTransform,
@@ -570,6 +696,8 @@ export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
     simpleNodeHandler(BUILTIN_COMMAND_TYPES.setLocked, 'locked'),
     propsHandler(BUILTIN_COMMAND_TYPES.setProps),
     propsHandler(BUILTIN_COMMAND_TYPES.resetProps),
+    styleHandler(BUILTIN_COMMAND_TYPES.setStyle),
+    styleHandler(BUILTIN_COMMAND_TYPES.resetStyle),
     transformHandler(),
     groupHandler(),
     ungroupHandler(),

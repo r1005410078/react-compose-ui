@@ -34,6 +34,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   不依赖 editor 或 property-panel。
 - `@compose-ui/stage` 是 DOM Scene/SVG Overlay 无限编辑舞台，依赖 core 与 component-registry，
   不依赖 editor、property-panel 或 operation-log。
+- `@compose-ui/materials` 提供 Frame、Rectangle、Text 的实例级基础物料组合，依赖 core、
+  component-registry、stage、property-panel 与 Valibot，不依赖 editor。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage 与独立面板包。
 - `@compose-ui/scene-tree` 是受控 React 树组件，不依赖 `core` 或 `editor`；editor 可以依赖
   它，preview 不得依赖它。

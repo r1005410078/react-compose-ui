@@ -7,6 +7,8 @@ DOM Scene Layer 与屏幕坐标 SVG Overlay 组合的无限编辑 Stage。
 - SVG Overlay 渲染 marquee、选区、八向缩放/旋转手柄、6 屏幕像素吸附线。
 - Pointer 手势仅维护 rAF 预览，pointerup 派发一个 `node.transform.set` 事务；取消会恢复。
 - `ComponentPalette` 与 `Stage` 通过实例级 `StageDragController` 共享 Pointer/键盘拖入会话。
+- `StageFramePreset` 让 Palette 在 definitions 之前显示并创建根级 Frame。
+- Frame、Group 与 Component 使用 core `resolveNodeStyle`；inset 边框不改变文档几何。
 
 ```tsx
 import {
@@ -19,7 +21,11 @@ import '@compose-ui/stage/styles.css'
 const dragController = createStageDragController()
 
 <>
-  <ComponentPalette registry={registry} dragController={dragController} />
+  <ComponentPalette
+    registry={registry}
+    framePresets={framePresets}
+    dragController={dragController}
+  />
   <Stage
     document={runtime.document}
     registry={registry}

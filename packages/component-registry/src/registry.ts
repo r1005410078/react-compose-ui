@@ -1,4 +1,5 @@
-import type { JsonObject } from '@compose-ui/core'
+import { validateNodeStyle } from '@compose-ui/core'
+import type { JsonObject, NodeStyle } from '@compose-ui/core'
 import {
   ComponentRegistryError,
   type ComponentDefinition,
@@ -56,6 +57,33 @@ function createProps(
   }
 }
 
+function createStyle(
+  definition: ComponentDefinition,
+): { ok: true; style?: NodeStyle } | { ok: false; message: string } {
+  if (!definition.createDefaultStyle) return { ok: true }
+  try {
+    const style = definition.createDefaultStyle()
+    const result = validateNodeStyle(style)
+    if (!result.valid) {
+      const first = result.issues[0]
+      return {
+        ok: false,
+        message: `${definition.type} 默认 style 无效：${first?.message ?? '未知错误'}`,
+      }
+    }
+    // style 与 props 一样属于文档 JSON，seed 不得共享 shadow 等嵌套引用。
+    return { ok: true, style: structuredClone(result.style) }
+  }
+  catch (error) {
+    return {
+      ok: false,
+      message: `${definition.type} 默认 style factory 失败：${
+        error instanceof Error ? error.message : '未知错误'
+      }`,
+    }
+  }
+}
+
 /**
  * 从宿主 definitions 创建隔离的只读组件注册表。
  *
@@ -77,6 +105,9 @@ export function createComponentRegistry(
     if (byType.has(definition.type)) {
       throw new ComponentRegistryError(index, `definition type ${definition.type} 重复`)
     }
+    if (definition.defaultName !== undefined && definition.defaultName.trim().length === 0) {
+      throw new ComponentRegistryError(index, `${definition.type} defaultName 不能为空`)
+    }
     for (const field of ['width', 'height'] as const) {
       const value = definition.defaultSize[field]
       if (!Number.isFinite(value) || value <= 0) {
@@ -89,6 +120,10 @@ export function createComponentRegistry(
     const initialProps = createProps(definition)
     if (!initialProps.ok) {
       throw new ComponentRegistryError(index, initialProps.message)
+    }
+    const initialStyle = createStyle(definition)
+    if (!initialStyle.ok) {
+      throw new ComponentRegistryError(index, initialStyle.message)
     }
     const normalized = Object.freeze({
       ...definition,
@@ -127,11 +162,23 @@ export function createComponentRegistry(
           },
         }
       }
+      const styleResult = createStyle(definition)
+      if (!styleResult.ok) {
+        return {
+          ok: false,
+          error: {
+            code: 'definition.invalid-style',
+            message: styleResult.message,
+          },
+        }
+      }
       return {
         ok: true,
         seed: {
           componentType: definition.type,
+          name: definition.defaultName ?? definition.label,
           props: result.props,
+          ...(styleResult.style ? { style: styleResult.style } : {}),
           width: definition.defaultSize.width,
           height: definition.defaultSize.height,
         },

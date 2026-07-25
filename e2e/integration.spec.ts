@@ -64,11 +64,19 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   ).toHaveAttribute('title', 'Component Library')
 
   await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await expect(editor.getByRole('button').filter({ hasText: /Frame|Rectangle|Text|ECharts/ }))
+    .toHaveCount(4)
   await editor.getByRole('button', { name: 'Add Rectangle' }).click()
 
-  await editor.getByRole('button', { name: '创建 Frame' }).click()
+  const stageBox = await stage.boundingBox()
+  expect(stageBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: 'Add Frame' }), {
+    x: stageBox!.x + stageBox!.width / 2,
+    y: stageBox!.y + stageBox!.height / 2,
+  })
   const frame = stage.getByTestId('stage-frame')
   await expect(frame).toHaveCount(1)
+  await expect(frame).toHaveCSS('background-color', 'rgb(248, 250, 252)')
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
 
@@ -83,7 +91,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(stage.locator('.compose-stage__node.is-component')).toHaveCount(2)
 
   const components = stage.locator('.compose-stage__node.is-component')
-  const textComponent = components.filter({ hasText: '大屏标题' })
+  const textComponent = components.filter({ hasText: 'Text' })
   await textComponent.click()
   await stage.press('Shift+ArrowRight')
   await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
@@ -96,15 +104,24 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await components.nth(1).click({ modifiers: ['Shift'] })
   await stage.press('Control+g')
   await expect(stage.locator('.compose-stage__node.is-group')).toHaveCount(1)
+  const group = stage.locator('.compose-stage__node.is-group')
+  const groupBackground = editor.getByLabel('Background')
+  await groupBackground.fill('#123456')
+  await groupBackground.blur()
+  await expect(group).toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  await stage.press('Control+z')
+  await expect(group).not.toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  await stage.press('Control+Shift+z')
+  await expect(group).toHaveCSS('background-color', 'rgb(18, 52, 86)')
 
   await stage.locator('.compose-stage__node.is-component').filter({
-    hasText: '大屏标题',
+    hasText: 'Text',
   }).click()
-  const property = editor.getByRole('textbox', { name: '文本内容', exact: true })
+  const property = editor.getByRole('textbox', { name: 'Text', exact: true })
   await property.fill('统一事务舞台')
   await expect(stage.getByText('统一事务舞台')).toBeVisible()
   await property.press('Control+z')
-  await expect(property).toHaveValue('大屏标题')
+  await expect(property).toHaveValue('Text')
   await property.press('Control+Shift+z')
   await expect(property).toHaveValue('统一事务舞台')
 
@@ -119,6 +136,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(
     log.getByRole('button', { name: /^Property Update Text ·/ }),
   ).toBeVisible()
+  await expect(log.getByRole('button', { name: /^Property Update Group ·/ })).toBeVisible()
   await expect(log.getByRole('button', { name: /Undo · Update Text/ })).toBeVisible()
   await expect(log.getByText(/Reject .* outside a Frame/)).toHaveCount(0)
   await log.getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).click()
@@ -131,6 +149,11 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   const preview = page.getByRole('dialog', { name: 'Frame 预览对话框' })
   await expect(preview.getByRole('region', { name: 'Compose preview' })).toBeVisible()
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
+  const previewGroup = preview.getByTestId(/compose-preview-node-stage-demo-/).filter({
+    has: preview.getByText('统一事务舞台'),
+  }).first()
+  await expect(previewGroup).toBeVisible()
+  await expect(previewGroup).toHaveCSS('background-color', 'rgb(18, 52, 86)')
 })
 
 test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染 ECharts Canvas', async ({ page }) => {
@@ -148,7 +171,7 @@ test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染
     y: frameBox!.y + 240,
   })
 
-  const chart = stage.getByRole('img', { name: '季度数据' })
+  const chart = stage.getByRole('img', { name: 'Quarterly data' })
   await expect(chart).toBeVisible()
   await expect(chart.locator('canvas')).toBeVisible()
 })
@@ -359,7 +382,7 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   })
   const rectangleBox = await rectangle.boundingBox()
   expect(rectangleBox).not.toBeNull()
-  await expect(editor.getByRole('region', { name: 'Rectangle 属性' })).toBeVisible()
+  await expect(editor.getByRole('region', { name: 'Rectangle properties' })).toBeVisible()
   const pointerStart = {
     clientX: rectangleBox!.x + rectangleBox!.width / 2,
     clientY: rectangleBox!.y + rectangleBox!.height / 2,

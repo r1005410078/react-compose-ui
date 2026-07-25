@@ -1,0 +1,10 @@
+:root {
+  --compose-material-rectangle-background: #2f7df6;
+}
+
+.compose-material--rectangle {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--compose-material-rectangle-background);
+}

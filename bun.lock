@@ -37,6 +37,7 @@
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/core": "workspace:*",
         "@compose-ui/editor": "workspace:*",
+        "@compose-ui/materials": "workspace:*",
         "@compose-ui/operation-log": "workspace:*",
         "@compose-ui/preview": "workspace:*",
         "@compose-ui/property-panel": "workspace:*",
@@ -92,6 +93,21 @@
     "packages/history": {
       "name": "@compose-ui/history",
       "version": "0.1.0",
+      "peerDependencies": {
+        "react": "^18.3.0 || ^19.0.0",
+        "react-dom": "^18.3.0 || ^19.0.0",
+      },
+    },
+    "packages/materials": {
+      "name": "@compose-ui/materials",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/component-registry": "workspace:*",
+        "@compose-ui/core": "workspace:*",
+        "@compose-ui/property-panel": "workspace:*",
+        "@compose-ui/stage": "workspace:*",
+        "valibot": "^1.4.0",
+      },
       "peerDependencies": {
         "react": "^18.3.0 || ^19.0.0",
         "react-dom": "^18.3.0 || ^19.0.0",
@@ -249,6 +265,8 @@
     "@compose-ui/example": ["@compose-ui/example@workspace:app"],
 
     "@compose-ui/history": ["@compose-ui/history@workspace:packages/history"],
+
+    "@compose-ui/materials": ["@compose-ui/materials@workspace:packages/materials"],
 
     "@compose-ui/operation-log": ["@compose-ui/operation-log@workspace:packages/operation-log"],
 

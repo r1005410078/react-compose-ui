@@ -13,6 +13,7 @@ export {
   type StageDragController,
   type StageDragState,
   type StageDropTarget,
+  type StageFramePreset,
 } from './drag-controller'
 export type { StageDispatch, StageProps, StageTool } from './types'
 export {

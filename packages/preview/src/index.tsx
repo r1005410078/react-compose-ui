@@ -5,13 +5,16 @@
  */
 
 import { RegistryComponent } from '@compose-ui/component-registry'
-import { COMPOSE_UI_CORE_PACKAGE } from '@compose-ui/core'
+import {
+  COMPOSE_UI_CORE_PACKAGE,
+  resolveNodeStyle,
+} from '@compose-ui/core'
 import type { ComponentRegistry } from '@compose-ui/component-registry'
 import type {
   ComposeDocument,
   ComposeNode,
 } from '@compose-ui/core'
-import type { HTMLAttributes } from 'react'
+import type { CSSProperties, HTMLAttributes } from 'react'
 
 /**
  * ComposePreview 属性。
@@ -27,8 +30,30 @@ export interface ComposePreviewProps extends HTMLAttributes<HTMLElement> {
   readonly frameId?: string
 }
 
-function nodeStyle(node: ComposeNode) {
+function visualStyle(node: ComposeNode): CSSProperties {
+  const visual = resolveNodeStyle(node)
+  const shadows: string[] = []
+  if (visual.borderWidth > 0) {
+    shadows.push(`inset 0 0 0 ${visual.borderWidth}px ${visual.borderColor}`)
+  }
+  if (visual.shadow) {
+    shadows.push(
+      `${visual.shadow.offsetX}px ${visual.shadow.offsetY}px ${visual.shadow.blur}px `
+      + `${visual.shadow.spread}px ${visual.shadow.color}`,
+    )
+  }
   return {
+    backgroundColor: visual.backgroundColor,
+    borderRadius: visual.borderRadius,
+    opacity: visual.opacity,
+    boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
+    overflow: node.kind === 'group' ? 'visible' : 'hidden',
+  }
+}
+
+function nodeStyle(node: ComposeNode): CSSProperties {
+  return {
+    ...visualStyle(node),
     position: 'absolute' as const,
     left: node.transform.x,
     top: node.transform.y,
@@ -36,7 +61,6 @@ function nodeStyle(node: ComposeNode) {
     height: node.transform.height,
     transform: `rotate(${node.transform.rotation}deg)`,
     transformOrigin: 'center',
-    overflow: 'hidden',
   }
 }
 
@@ -100,10 +124,10 @@ export function ComposePreview({
       <div
         data-testid="compose-preview-frame"
         style={{
+          ...visualStyle(frame),
           position: 'relative',
           width: frame.transform.width,
           height: frame.transform.height,
-          overflow: 'hidden',
         }}
       >
         {frame.visible

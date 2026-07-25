@@ -5,6 +5,7 @@ import type {
   DocumentValidationIssueCode,
   DocumentValidationResult,
 } from './document-types'
+import { validateNodeStyle } from './node-style'
 
 type Path = readonly (string | number)[]
 type MutableRecord = Record<string, unknown>
@@ -146,6 +147,17 @@ function validateNode(
     return false
   }
   validateTransform(value.transform, [...path, 'transform'], kind, issues)
+  if (value.style !== undefined) {
+    const styleResult = validateNodeStyle(value.style)
+    if (!styleResult.valid) {
+      styleResult.issues.forEach((styleIssue) => addIssue(
+        issues,
+        styleIssue.code,
+        [...path, 'style', ...styleIssue.path],
+        styleIssue.message,
+      ))
+    }
+  }
 
   if (kind === 'component') {
     if (typeof value.componentType !== 'string' || value.componentType.trim().length === 0) {

@@ -19,6 +19,8 @@ export function EditorPage() {
   const controller = useComposeEditorController({
     runtime,
     registry,
+    framePresets,
+    containerInspector: ContainerInspector,
     onTransaction: (event) => operationLog.record(toLogRecord(event)),
   })
 
@@ -45,7 +47,7 @@ runtime 当前文档派生：
 
 - `sceneTreeProps` 与 `stageProps`
 - `history`（直接复用 runtime 的兼容导航协议）
-- ComponentPalette、definition Inspector、CommandPanel 与 Stage Toolbar 内容
+- ComponentPalette、definition/Container Inspector、CommandPanel 与 Stage Toolbar 内容
 - 默认中央 Stage
 
 SceneTree、Inspector、Stage 与 CommandPanel 均向同一 runtime 派发。成功命令、undo、redo 和

@@ -6,31 +6,10 @@
   background: #0b0d10;
 }
 
-.stage-demo__rectangle,
-.stage-demo__text,
 .stage-demo__chart {
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-}
-
-.stage-demo__rectangle,
-.stage-demo__text {
-  display: grid;
-  place-items: center;
-}
-
-.stage-demo__rectangle {
-  color: white;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 22%);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.stage-demo__text {
-  overflow: hidden;
-  font-weight: 700;
-  white-space: nowrap;
 }
 
 .stage-demo__chart {

@@ -19,6 +19,20 @@ function document(): ComposeDocument {
         locked: false,
         transform: { x: -500, y: 200, width: 800, height: 600, rotation: 0 },
         childIds: ['group', 'hidden', 'unknown'],
+        style: {
+          backgroundColor: '#fef3c7',
+          borderColor: '#92400e',
+          borderWidth: 2,
+          borderRadius: 10,
+          opacity: 0.95,
+          shadow: {
+            color: '#000000',
+            offsetX: 1,
+            offsetY: 3,
+            blur: 5,
+            spread: 0,
+          },
+        },
       },
       group: {
         id: 'group',
@@ -28,6 +42,7 @@ function document(): ComposeDocument {
         locked: false,
         transform: { x: 100, y: 80, width: 300, height: 200, rotation: 15 },
         childIds: ['text'],
+        style: { backgroundColor: '#ddeeff', borderRadius: 6 },
       },
       text: {
         id: 'text',
@@ -38,6 +53,12 @@ function document(): ComposeDocument {
         transform: { x: 20, y: 30, width: 120, height: 50, rotation: -5 },
         componentType: 'text',
         props: { text: 'Desktop text' },
+        style: {
+          backgroundColor: '#ffffff',
+          borderColor: '#172033',
+          borderWidth: 1,
+          opacity: 0.8,
+        },
       },
       hidden: {
         id: 'hidden',
@@ -134,6 +155,28 @@ describe('ComposePreview', () => {
       transform: 'rotate(-5deg)',
     })
     expect(screen.queryByLabelText('Stage 编辑覆盖层')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: compose-preview / Preview 节点样式一致性 / 预览统一节点样式', () => {
+    render(<ComposePreview document={document()} frameId="desktop" registry={registry()} />)
+
+    const frame = screen.getByTestId('compose-preview-frame')
+    expect(frame).toHaveStyle({
+      backgroundColor: '#fef3c7',
+      borderRadius: '10px',
+      opacity: '0.95',
+    })
+    expect(frame.style.boxShadow).toContain('inset 0 0 0 2px #92400e')
+    expect(frame.style.boxShadow).toContain('1px 3px 5px 0px #000000')
+    expect(screen.getByTestId('compose-preview-node-group')).toHaveStyle({
+      backgroundColor: '#ddeeff',
+      borderRadius: '6px',
+      overflow: 'visible',
+    })
+    expect(screen.getByTestId('compose-preview-node-text')).toHaveStyle({
+      backgroundColor: '#ffffff',
+      opacity: '0.8',
+    })
   })
 
   it('OpenSpec: compose-preview / 文档驱动的 Frame Preview / 未知或失败 Renderer', () => {

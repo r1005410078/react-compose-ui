@@ -104,6 +104,97 @@ function containerChildIds(runtime: TransactionRuntime, nodeId: string) {
 }
 
 describe('built-in document commands', () => {
+  it('OpenSpec: command-transaction / 原子节点样式命令 / 更新并撤销样式路径', () => {
+    const runtime = createTransactionRuntime({ document: fixture() })
+
+    expect(dispatch(runtime, 'node.style.set', {
+      nodeId: 'frame',
+      path: ['backgroundColor'],
+      value: '#101820',
+    }).status).toBe('committed')
+    expect(runtime.document.nodes.frame.style).toMatchObject({
+      backgroundColor: '#101820',
+      borderColor: '#4a5667',
+      opacity: 1,
+    })
+
+    expect(dispatch(runtime, 'node.style.set', {
+      nodeId: 'frame',
+      path: ['shadow'],
+      value: {
+        color: '#00000066',
+        offsetX: 2,
+        offsetY: 8,
+        blur: 24,
+        spread: 0,
+      },
+    }).status).toBe('committed')
+    expect(runtime.document.nodes.frame.style?.shadow).toMatchObject({ blur: 24 })
+
+    runtime.undo()
+    runtime.undo()
+    expect(runtime.document.nodes.frame.style).toBeUndefined()
+  })
+
+  it('OpenSpec: command-transaction / 原子节点样式命令 / 重置样式', () => {
+    const runtime = createTransactionRuntime({ document: fixture() })
+
+    expect(dispatch(runtime, 'node.style.set', {
+      nodeId: 'frame',
+      path: ['backgroundColor'],
+      value: '#101820',
+    }).status).toBe('committed')
+    expect(dispatch(runtime, 'node.style.reset', {
+      nodeId: 'frame',
+      path: ['backgroundColor'],
+    }).status).toBe('committed')
+    expect(runtime.document.nodes.frame.style?.backgroundColor).toBe('#f8fafc')
+
+    expect(dispatch(runtime, 'node.style.reset', {
+      nodeId: 'frame',
+      path: [],
+    }).status).toBe('committed')
+    expect(runtime.document.nodes.frame.style).toBeUndefined()
+    expect(dispatch(runtime, 'node.style.reset', {
+      nodeId: 'frame',
+      path: [],
+    }).status).toBe('noop')
+  })
+
+  it('OpenSpec: command-transaction / 原子节点样式命令 / 拒绝非法或锁定目标', () => {
+    const runtime = createTransactionRuntime({ document: fixture() })
+
+    expect(dispatch(runtime, 'node.style.set', {
+      nodeId: 'frame',
+      path: ['opacity'],
+      value: 2,
+    })).toMatchObject({
+      status: 'rejected',
+      issues: [expect.objectContaining({ code: 'style.invalid' })],
+    })
+    expect(dispatch(runtime, 'node.style.set', {
+      nodeId: 'frame',
+      path: ['unknown'],
+      value: 1,
+    })).toMatchObject({
+      status: 'rejected',
+      issues: [expect.objectContaining({ code: 'style.invalid-path' })],
+    })
+
+    expect(dispatch(runtime, 'node.set-locked', {
+      nodeIds: ['frame'],
+      locked: true,
+    }).status).toBe('committed')
+    expect(dispatch(runtime, 'node.style.set', {
+      nodeId: 'frame',
+      path: ['opacity'],
+      value: 0.5,
+    })).toMatchObject({
+      status: 'rejected',
+      issues: [expect.objectContaining({ code: 'node.locked' })],
+    })
+  })
+
   it('OpenSpec: command-transaction / 内置文档命令 / 原子创建和删除节点', () => {
     const runtime = createTransactionRuntime({ document: fixture() })
     const frame = {

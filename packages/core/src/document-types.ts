@@ -46,6 +46,55 @@ export interface NodeTransform {
 }
 
 /**
+ * 单层节点阴影。
+ *
+ * @public
+ */
+export interface NodeShadow {
+  /** CSS 颜色字符串；core 只要求非空，不解释具体颜色语法。 */
+  readonly color: string
+  /** 水平偏移，单位为世界像素。 */
+  readonly offsetX: number
+  /** 垂直偏移，单位为世界像素。 */
+  readonly offsetY: number
+  /** 模糊半径，必须为非负有限值。 */
+  readonly blur: number
+  /** 扩展半径，可以为有限负值。 */
+  readonly spread: number
+}
+
+/**
+ * 节点可持久化的部分视觉样式。
+ *
+ * @remarks
+ * 字段缺失时由 `resolveNodeStyle` 按节点 kind 补齐；`shadow: null` 表示明确关闭阴影。
+ *
+ * @public
+ */
+export interface NodeStyle {
+  readonly backgroundColor?: string
+  readonly borderColor?: string
+  readonly borderWidth?: number
+  readonly borderRadius?: number
+  readonly opacity?: number
+  readonly shadow?: NodeShadow | null
+}
+
+/**
+ * 渲染端使用的完整节点视觉样式。
+ *
+ * @public
+ */
+export interface ResolvedNodeStyle {
+  readonly backgroundColor: string
+  readonly borderColor: string
+  readonly borderWidth: number
+  readonly borderRadius: number
+  readonly opacity: number
+  readonly shadow: NodeShadow | null
+}
+
+/**
  * 所有 ComposeDocument 节点共享的字段。
  *
  * @public
@@ -61,6 +110,8 @@ export interface ComposeNodeBase {
   readonly locked: boolean
   /** 相对直接父节点的二维几何。 */
   readonly transform: NodeTransform
+  /** 可选通用视觉样式；缺失时按节点 kind 使用稳定默认值。 */
+  readonly style?: NodeStyle
 }
 
 /**
@@ -147,6 +198,7 @@ export type DocumentValidationIssueCode =
   | 'transform.non-finite'
   | 'transform.invalid-size'
   | 'transform.frame-rotation'
+  | 'style.invalid'
   | 'component.empty-type'
 
 /**

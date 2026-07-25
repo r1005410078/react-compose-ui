@@ -51,6 +51,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `component-registry`，不得依赖 `editor`、`property-panel` 或 `operation-log`。
 - `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core` 和
   `component-registry`，不得依赖 `editor` 或 `stage`。
+- `@compose-ui/materials` 是 Frame、Rectangle、Text 的独立基础物料包，可以依赖 `core`、
+  `component-registry`、`stage`、`property-panel` 和 Valibot，不得依赖 `editor`。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。

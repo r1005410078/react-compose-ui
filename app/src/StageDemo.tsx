@@ -1,4 +1,3 @@
-import { createComponentRegistry } from '@compose-ui/component-registry'
 import type {
   ComponentDefinition,
   ComponentInspectorProps,
@@ -16,6 +15,7 @@ import {
   useComposeEditorController,
 } from '@compose-ui/editor'
 import type { ComposeEditorTransactionEvent } from '@compose-ui/editor'
+import { createBasicMaterials } from '@compose-ui/materials'
 import {
   OperationLogPanel,
   useOperationLog,
@@ -53,18 +53,6 @@ const emptyDocument: ComposeDocument = {
   nodes: {},
 }
 
-const rectangleSchema = v.object({
-  color: v.pipe(v.string(), v.title('填充颜色')),
-  opacity: v.pipe(v.number(), v.minValue(0), v.maxValue(1), v.title('不透明度')),
-  cornerRadius: v.pipe(v.number(), v.minValue(0), v.title('圆角')),
-})
-
-const textSchema = v.object({
-  text: v.pipe(v.string(), v.title('文本内容')),
-  color: v.pipe(v.string(), v.title('文字颜色')),
-  fontSize: v.pipe(v.number(), v.minValue(8), v.title('字号')),
-})
-
 const chartSchema = v.object({
   title: v.pipe(v.string(), v.title('图表标题')),
   values: v.pipe(v.array(v.number()), v.title('数据')),
@@ -97,72 +85,6 @@ function formatLogValue(value: JsonValue | undefined) {
   if (value === undefined) return 'undefined'
   const serialized = JSON.stringify(value)
   return serialized.length > 28 ? `${serialized.slice(0, 27)}…` : serialized
-}
-
-function RectangleRenderer({ props }: ComponentRendererProps) {
-  const color = typeof props.color === 'string' ? props.color : '#2f7df6'
-  const opacity = typeof props.opacity === 'number' ? props.opacity : 1
-  const cornerRadius = typeof props.cornerRadius === 'number' ? props.cornerRadius : 12
-  return (
-    <div
-      className="stage-demo__rectangle"
-      style={{ backgroundColor: color, borderRadius: cornerRadius, opacity }}
-    >
-      Rectangle
-    </div>
-  )
-}
-
-function RectangleInspector({ node, dispatch }: ComponentInspectorProps) {
-  const value = {
-    color: typeof node.props.color === 'string' ? node.props.color : '#2f7df6',
-    opacity: typeof node.props.opacity === 'number' ? node.props.opacity : 1,
-    cornerRadius: typeof node.props.cornerRadius === 'number'
-      ? node.props.cornerRadius
-      : 12,
-  }
-  return (
-    <PropertyPanel
-      aria-label="Rectangle 属性"
-      defaultValue={{ color: '#2f7df6', opacity: 1, cornerRadius: 12 }}
-      schema={rectangleSchema}
-      value={value}
-      onValueChange={(next) =>
-        setAllProps(node, next, dispatch, `inspector:${node.id}`)}
-    />
-  )
-}
-
-function TextRenderer({ props }: ComponentRendererProps) {
-  return (
-    <div
-      className="stage-demo__text"
-      style={{
-        color: typeof props.color === 'string' ? props.color : '#172033',
-        fontSize: typeof props.fontSize === 'number' ? props.fontSize : 24,
-      }}
-    >
-      {typeof props.text === 'string' ? props.text : '文本'}
-    </div>
-  )
-}
-
-function TextInspector({ node, dispatch }: ComponentInspectorProps) {
-  const value = {
-    text: typeof node.props.text === 'string' ? node.props.text : '大屏标题',
-    color: typeof node.props.color === 'string' ? node.props.color : '#172033',
-    fontSize: typeof node.props.fontSize === 'number' ? node.props.fontSize : 24,
-  }
-  return (
-    <PropertyPanel
-      aria-label="文本组件属性"
-      defaultValue={{ text: '大屏标题', color: '#172033', fontSize: 24 }}
-      schema={textSchema}
-      value={value}
-      onValueChange={(next) =>
-        setAllProps(node, next, dispatch, `inspector:${node.id}`)}
-    />
-  )
 }
 
 function ChartRenderer({ props }: ComponentRendererProps) {
@@ -220,48 +142,23 @@ function ChartInspector({ node, dispatch }: ComponentInspectorProps) {
   )
 }
 
-const definitions = [
-  {
-    type: 'rectangle',
-    label: 'Rectangle',
-    icon: <span aria-hidden="true">▭</span>,
-    defaultSize: { width: 240, height: 140 },
-    createDefaultProps: () => ({
-      color: '#2f7df6',
-      opacity: 1,
-      cornerRadius: 12,
-    }),
-    renderer: RectangleRenderer,
-    inspector: RectangleInspector,
-  },
-  {
-    type: 'text',
-    label: 'Text',
-    icon: <span aria-hidden="true">T</span>,
-    defaultSize: { width: 280, height: 72 },
-    createDefaultProps: () => ({
-      text: '大屏标题',
-      color: '#172033',
-      fontSize: 24,
-    }),
-    renderer: TextRenderer,
-    inspector: TextInspector,
-  },
-  {
-    type: 'echarts-bar',
-    label: 'ECharts Chart',
-    icon: <span aria-hidden="true">▥</span>,
-    defaultSize: { width: 420, height: 260 },
-    createDefaultProps: () => ({
-      title: '季度数据',
-      values: [18, 28, 22, 36],
-    }),
-    renderer: ChartRenderer,
-    inspector: ChartInspector,
-  },
-] satisfies readonly ComponentDefinition[]
+const echartsDefinition = {
+  type: 'echarts-bar',
+  label: 'ECharts Chart',
+  icon: <span aria-hidden="true">▥</span>,
+  defaultSize: { width: 420, height: 260 },
+  createDefaultProps: () => ({
+    title: 'Quarterly data',
+    values: [18, 28, 22, 36],
+  }),
+  renderer: ChartRenderer,
+  inspector: ChartInspector,
+} satisfies ComponentDefinition
 
-const registry = createComponentRegistry(definitions)
+const basicMaterials = createBasicMaterials({
+  extensions: [echartsDefinition],
+})
+const { registry } = basicMaterials
 
 function eventSummary(event: ComposeEditorTransactionEvent) {
   const label = event.transaction?.label ?? 'transaction'
@@ -279,7 +176,12 @@ function snapshotTargets(document: ComposeDocument, targetIds: readonly string[]
 
 function eventCategory(event: ComposeEditorTransactionEvent): OperationLogCategory {
   const commandType = event.transaction?.commandType ?? ''
-  if (commandType.startsWith('node.props.')) return 'property'
+  if (
+    commandType.startsWith('node.props.')
+    || commandType.startsWith('node.style.')
+    || commandType === 'transaction.batch'
+      && event.source === 'inspector'
+  ) return 'property'
   if (
     commandType === 'node.create'
     || commandType === 'node.delete'
@@ -345,6 +247,8 @@ export function StageDemoWorkspace() {
   const controller = useComposeEditorController({
     runtime,
     registry,
+    framePresets: basicMaterials.framePresets,
+    containerInspector: basicMaterials.ContainerInspector,
     idFactory,
     onTransaction: recordTransaction,
   })

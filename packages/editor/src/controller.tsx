@@ -18,15 +18,19 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import type { ReactNode } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type {
   CommandPreset,
 } from '@compose-ui/command-panel'
-import type { ComponentRegistry } from '@compose-ui/component-registry'
+import type {
+  ComponentRegistry,
+  NodeInspectorProps,
+} from '@compose-ui/component-registry'
 import type {
   CommandDispatchResult,
   ComposeDocument,
   ComposeFrameNode,
+  ComposeGroupNode,
   ComposeNode,
   EditorCommand,
   EditorTransaction,
@@ -41,6 +45,7 @@ import type {
 } from '@compose-ui/scene-tree'
 import type {
   StageDragController,
+  StageFramePreset,
   StageProps,
   StageTool,
   StageViewport,
@@ -150,6 +155,12 @@ export interface UseComposeEditorControllerOptions {
   readonly runtime: TransactionRuntime
   /** Palette、Stage、Inspector 共用的实例级组件注册表。 */
   readonly registry: ComponentRegistry
+  /** 显示在组件 definitions 之前的根级 Frame 预设。 */
+  readonly framePresets?: readonly StageFramePreset[]
+  /** Frame 或 Group 单选时使用的公共容器 Inspector。 */
+  readonly containerInspector?: ComponentType<
+    NodeInspectorProps<ComposeFrameNode | ComposeGroupNode>
+  >
   /** 初始选择；不会写入文档历史。 */
   readonly initialSelection?: readonly string[]
   /** 初始场景树展开项；不会写入文档历史。 */
@@ -251,6 +262,8 @@ function invokeObserver(
 export function useComposeEditorController({
   runtime,
   registry,
+  framePresets = [],
+  containerInspector: ContainerInspector,
   initialSelection = [],
   initialExpandedIds = [],
   initialActiveFrameId,
@@ -590,7 +603,7 @@ export function useComposeEditorController({
   }, [activeFrameId, fitBounds])
   const fitSelection = useCallback(() => fitBounds(selectedIds), [fitBounds, selectedIds])
 
-  const selectedComponent = selectedIds.length === 1
+  const selectedNode = selectedIds.length === 1
     ? document.nodes[selectedIds[0]!]
     : undefined
 
@@ -614,18 +627,24 @@ export function useComposeEditorController({
     sceneTreeProps,
     stageProps,
     componentLibraryPanel: (
-      <ComponentPalette dragController={dragController} registry={registry} />
-    ),
-    stage: <Stage {...stageProps} />,
-    inspectorPanel: selectedComponent?.kind === 'component' ? (
-      <RegistryInspector
-        dispatch={dispatch}
-        node={selectedComponent}
+      <ComponentPalette
+        dragController={dragController}
+        framePresets={framePresets}
         registry={registry}
       />
+    ),
+    stage: <Stage {...stageProps} />,
+    inspectorPanel: selectedNode?.kind === 'component' ? (
+      <RegistryInspector
+        dispatch={dispatch}
+        node={selectedNode}
+        registry={registry}
+      />
+    ) : selectedNode && ContainerInspector ? (
+      <ContainerInspector dispatch={dispatch} node={selectedNode} />
     ) : (
       <div className="compose-editor__empty-inspector" role="status">
-        选择一个组件以编辑属性
+        Select one node to edit its properties
       </div>
     ),
     commandPanel: (

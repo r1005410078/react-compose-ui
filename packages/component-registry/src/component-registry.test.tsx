@@ -3,6 +3,7 @@ import type {
   ComposeComponentNode,
   EditorCommand,
   JsonObject,
+  NodeStyle,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as registryPackage from './index'
@@ -10,8 +11,10 @@ import * as registryPackage from './index'
 type Definition = {
   type: string
   label: string
+  defaultName?: string
   defaultSize: { width: number; height: number }
   createDefaultProps(): JsonObject
+  createDefaultStyle?(): NodeStyle
   renderer(props: {
     node: ComposeComponentNode
     props: JsonObject
@@ -31,7 +34,9 @@ type Registry = {
         ok: true
         seed: {
           componentType: string
+          name: string
           props: JsonObject
+          style?: NodeStyle
           width: number
           height: number
         }
@@ -79,6 +84,55 @@ function definition(type = 'text', label = '文本'): Definition {
 }
 
 describe('ComponentRegistry', () => {
+  it('OpenSpec: component-registry / 组件默认节点样式 / 创建带独立 style 的组件种子', () => {
+    const registry = api.createComponentRegistry([{
+      ...definition(),
+      createDefaultStyle: () => ({
+        backgroundColor: '#2463eb',
+        shadow: {
+          color: '#00000040',
+          offsetX: 0,
+          offsetY: 4,
+          blur: 12,
+          spread: 0,
+        },
+      }),
+    }])
+
+    const first = registry.createSeed('text')
+    const second = registry.createSeed('text')
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(true)
+    if (!first.ok || !second.ok) return
+    expect(first.seed.style).toEqual(second.seed.style)
+    expect(first.seed.style).not.toBe(second.seed.style)
+    expect(first.seed.style?.shadow).not.toBe(second.seed.style?.shadow)
+  })
+
+  it('OpenSpec: component-registry / 组件默认节点样式 / 拒绝非法默认 style', () => {
+    expect(() => api.createComponentRegistry([{
+      ...definition(),
+      createDefaultStyle: () => ({ opacity: 2 }),
+    }])).toThrow(/style/)
+    expect(() => api.createComponentRegistry([{
+      ...definition(),
+      createDefaultStyle: () => ({ opacity: undefined }),
+    }])).toThrow(/style/)
+
+    let attempt = 0
+    const registry = api.createComponentRegistry([{
+      ...definition(),
+      createDefaultStyle: () => {
+        attempt += 1
+        return attempt === 1 ? { opacity: 1 } : { shadow: 'invalid' } as never
+      },
+    }])
+    expect(registry.createSeed('text')).toMatchObject({
+      ok: false,
+      error: { code: 'definition.invalid-style' },
+    })
+  })
+
   it('OpenSpec: component-registry / 独立宿主组件注册表 / 创建有序注册表', () => {
     const input = [definition('text', '文本'), definition('chart', '图表')]
     const registry = api.createComponentRegistry(input)
@@ -126,6 +180,7 @@ describe('ComponentRegistry', () => {
     expect(first.seed.props).not.toBe(second.seed.props)
     expect(first.seed.props.nested).not.toBe(second.seed.props.nested)
     expect(first.seed).toMatchObject({ width: 100, height: 50 })
+    expect(first.seed.name).toBe('文本')
   })
 
   it('OpenSpec: component-registry / 可序列化组件默认值 / 默认值 factory 返回非法数据', () => {

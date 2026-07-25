@@ -8,7 +8,7 @@ React Compose UI 的 React/DOM 无关领域内核。
 - `set`、`insert`、`remove`、`move` 原子可逆 Patch；
 - 可注册同步 handler 的 `TransactionRuntime`；
 - undo、redo、navigate、750ms `mergeKey` 合并、100 条默认历史和 `reset`；
-- Frame、Group、Component 的结构、属性、变换、分组与原子 batch 内置命令。
+- Frame、Group、Component 的结构、属性、通用 style、变换、分组与原子 batch 内置命令。
 
 ```ts
 import {
@@ -44,3 +44,7 @@ const dispatched = runtime.dispatch({
 
 文档只保存 JSON 数据，不保存 React renderer、DOM 引用、Inspector 或注册表实例。选择、
 场景树展开、工具模式和 Stage 视口属于宿主会话状态。
+
+`ComposeNodeBase.style` 是兼容旧文档的可选部分对象。`resolveNodeStyle(node)` 按节点 kind 补齐
+背景、边框、圆角、透明度和单层结构化 shadow；`node.style.set/reset` 支持路径更新、锁定拒绝、
+noop、undo/redo 和 `transaction.batch`。

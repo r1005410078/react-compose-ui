@@ -11,12 +11,23 @@ import * as stagePackage from './index'
 
 type DragController = unknown
 type Registry = ReturnType<typeof createComponentRegistry>
+type FramePreset = {
+  readonly id: string
+  readonly label: string
+  readonly name: string
+  readonly defaultSize: { readonly width: number; readonly height: number }
+  readonly createDefaultStyle: () => {
+    readonly backgroundColor: string
+    readonly borderRadius: number
+  }
+}
 
 const api = stagePackage as unknown as {
   createStageDragController(): DragController
   ComponentPalette(props: {
     registry: Registry
     dragController: DragController
+    framePresets?: readonly FramePreset[]
     'aria-label'?: string
   }): React.ReactNode
   Stage(props: {
@@ -71,23 +82,27 @@ function Workspace({
   registry: definitions,
   controller,
   prefix,
+  framePresets = [],
 }: {
   runtime: TransactionRuntime
   registry: Registry
   controller: DragController
   prefix: string
+  framePresets?: readonly FramePreset[]
 }) {
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const [selection, setSelection] = useState<readonly string[]>([])
+  const [activeFrame, setActiveFrame] = useState<string | null>('frame')
   return (
     <>
       <api.ComponentPalette
         aria-label={`${prefix} Palette`}
         dragController={controller}
+        framePresets={framePresets}
         registry={definitions}
       />
       <api.Stage
-        activeFrameId="frame"
+        activeFrameId={activeFrame}
         aria-label={`${prefix} Stage`}
         dispatch={runtime.dispatch}
         document={state.document}
@@ -97,11 +112,12 @@ function Workspace({
         selectedIds={selection}
         tool="select"
         viewport={{ x: 0, y: 0, zoom: 1 }}
-        onActiveFrameIdChange={() => undefined}
+        onActiveFrameIdChange={setActiveFrame}
         onSelectedIdsChange={setSelection}
         onViewportChange={() => undefined}
       />
       <output aria-label={`${prefix} selection`}>{selection.join(',')}</output>
+      <output aria-label={`${prefix} active frame`}>{activeFrame}</output>
     </>
   )
 }
@@ -120,8 +136,19 @@ function rect(element: HTMLElement) {
   })
 }
 
+const framePreset: FramePreset = {
+  id: 'desktop',
+  label: 'Frame',
+  name: 'Desktop Frame',
+  defaultSize: { width: 300, height: 200 },
+  createDefaultStyle: () => ({
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+  }),
+}
+
 describe('ComponentPalette', () => {
-  it('OpenSpec: stage / ComponentPalette 拖入 / 拖入有效 Frame', () => {
+  it('OpenSpec: stage / Frame Palette 拖入 / 保持 Component 拖入兼容', () => {
     const runtime = createTransactionRuntime({ document: document() })
     const definitions = registry()
     const controller = api.createStageDragController()
@@ -231,5 +258,67 @@ describe('ComponentPalette', () => {
 
     expect(events.filter((type) => type === 'committed')).toHaveLength(1)
     expect(events).not.toContain('rejected')
+  })
+
+  it('OpenSpec: stage / Frame Palette 拖入 / Pointer 居中创建根 Frame', () => {
+    const runtime = createTransactionRuntime({ document: document() })
+    const definitions = registry()
+    const controller = api.createStageDragController()
+    render(
+      <Workspace
+        controller={controller}
+        framePresets={[framePreset]}
+        prefix="one"
+        registry={definitions}
+        runtime={runtime}
+      />,
+    )
+    rect(screen.getByRole('application', { name: 'one Stage' }))
+
+    const buttons = screen.getAllByRole('button')
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Add Frame',
+      'Add 方块',
+    ])
+    fireEvent.pointerDown(buttons[0]!, {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+    })
+    fireEvent.pointerUp(window, { clientX: 650, clientY: 500, pointerId: 1 })
+
+    expect(runtime.document.rootIds).toEqual(['frame', 'one-box'])
+    expect(runtime.document.nodes['one-box']).toMatchObject({
+      kind: 'frame',
+      name: 'Desktop Frame',
+      style: { backgroundColor: '#ffffff', borderRadius: 8 },
+      transform: { x: 500, y: 400, width: 300, height: 200, rotation: 0 },
+    })
+    expect(screen.getByLabelText('one selection')).toHaveTextContent('one-box')
+    expect(screen.getByLabelText('one active frame')).toHaveTextContent('one-box')
+  })
+
+  it('OpenSpec: stage / Frame Palette 拖入 / 键盘新增 Frame', () => {
+    const runtime = createTransactionRuntime({ document: document() })
+    const definitions = registry()
+    const controller = api.createStageDragController()
+    render(
+      <Workspace
+        controller={controller}
+        framePresets={[framePreset]}
+        prefix="one"
+        registry={definitions}
+        runtime={runtime}
+      />,
+    )
+    rect(screen.getByRole('application', { name: 'one Stage' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Frame' }))
+
+    expect(runtime.document.nodes['one-box']).toMatchObject({
+      kind: 'frame',
+      transform: { x: 250, y: 200, width: 300, height: 200, rotation: 0 },
+    })
+    expect(screen.getByLabelText('one active frame')).toHaveTextContent('one-box')
   })
 })
