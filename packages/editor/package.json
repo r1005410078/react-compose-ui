@@ -32,6 +32,7 @@
     "@compose-ui/history": "workspace:*",
     "@compose-ui/scene-tree": "workspace:*",
     "@compose-ui/stage": "workspace:*",
+    "@compose-ui/stage-engine": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
     "dockview-react": "^7.0.2"
   },

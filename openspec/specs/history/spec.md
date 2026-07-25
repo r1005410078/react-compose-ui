@@ -6,7 +6,6 @@
 的提交、撤销、重做与任意历史跳转。能力范围包括不可变时间线、受控历史面板、文档级快捷键、
 独立样式入口和包发布边界，并明确连续输入合并、历史分支裁剪、容量上限、会话生命周期以及
 宿主不可变更新责任，确保 UI 展示协议与未来可能采用的底层事务实现保持解耦。
-
 ## Requirements
 ### Requirement: 独立历史记录包
 
@@ -111,3 +110,19 @@ Cmd/Ctrl+Shift+Z 和 Ctrl+Y 重做。识别到快捷键时 MUST 阻止浏览器�
 - **WHEN** 宿主导入 history 样式并为面板提供确定高度
 - **THEN** 标题、列表、当前态、未来态、空状态和滚动条正确显示
 - **AND** history 样式不重置宿主全局元素样式
+
+### Requirement: 历史面板内建本地化
+
+HistoryPanel MUST 接受可选 zh-CN 或 en-US locale，并在未提供时保持 zh-CN。标题、当前/未来状态、
+空状态和可访问名称 MUST 使用内建词典；宿主提供的历史 label MUST 保持原文。
+
+#### Scenario: 使用英文历史面板
+
+- **WHEN** 宿主以 en-US 挂载 HistoryPanel
+- **THEN** 面板 chrome、状态和可访问名称显示英文
+- **AND** 各历史条目的宿主 label 不被翻译
+
+#### Scenario: 独立使用默认语言
+
+- **WHEN** 宿主独立挂载 HistoryPanel 且不提供 locale
+- **THEN** 现有简体中文内建文案和导航行为保持不变

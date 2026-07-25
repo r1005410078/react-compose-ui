@@ -206,28 +206,28 @@ Dockview 的公共成员、序列化布局、Edge Group 对象或内部面板对
 ### Requirement: Controller 驱动的默认组合
 
 `useComposeEditorController` MUST 组合宿主提供的 TransactionRuntime 与 ComponentRegistry，并
-管理 selection、expandedIds、activeFrameId、viewport、tool 和 StageDragController。Controller
-MUST 从 runtime 当前文档派生 SceneTree、Stage、History、Inspector、Palette 与 Command 数据，
-不得复制或直接修改正式文档。
+管理 selection、expandedIds、activeFrameId、viewport、tool 和 StageInteractionController。
+Controller MUST 为每个 Editor 实例创建一个 interaction controller 并同时交给默认 Stage 与
+ComponentPalette；它 MUST 从 runtime 当前文档派生 SceneTree、Stage、History、Inspector、
+Palette 与 Command 数据，不得复制或直接修改正式文档。
 
 #### Scenario: 使用默认 Controller 工作区
 
 - **WHEN** 宿主向 ComposeEditor 提供 controller，且没有覆盖对应插槽或 children
-- **THEN** Component Library 显示 ComponentPalette，Scene Graph 显示派生 SceneTree
-- **AND** 中央显示默认 Stage，右侧显示当前 definition Inspector
-- **AND** 现有 HistoryPanel 使用 runtime 导航 controller，Command 区显示 CommandPanel
+- **THEN** Component Library 与中央 Stage 使用同一 interaction controller
+- **AND** Scene Graph、History、Inspector 与 Command 继续使用同一 runtime 文档
 
 #### Scenario: 统一派发不同面板意图
 
-- **WHEN** SceneTree 发出结构操作、Inspector 发出属性修改、Stage 完成手势或 CommandPanel 提交预设
-- **THEN** controller 把意图映射为同一 runtime 的结构化命令
-- **AND** 所有未覆盖视图从提交后的同一 ComposeDocument 重新派生
+- **WHEN** 用户从 Stage、Palette、SceneTree 或 Inspector 发起文档编辑
+- **THEN** 对应意图通过同一 runtime dispatch
+- **AND** Stage group 与 SceneTree reparent 使用 stage-engine 的同一空间命令工厂
 
-#### Scenario: 清理失效会话状态
+#### Scenario: 卸载 Controller
 
-- **WHEN** 成功命令、undo、redo、navigate 或 reset 删除或隐藏当前选中节点
-- **THEN** controller 从 selection、expandedIds 与 activeFrameId 中移除失效 ID
-- **AND** 视口、Dockview 布局和其他仍有效会话状态保持不变
+- **WHEN** 默认 Editor controller 卸载
+- **THEN** interaction controller 断开 surface、取消活动会话并清理订阅
+- **AND** 不产生新的文档事务
 
 ### Requirement: 单一事务观察边界
 
@@ -291,3 +291,40 @@ MUST 立即派发可逆 canvas.configure；数值设置 MUST 使用本地 draft�
 - **WHEN** 用户在设置弹层选择清空全部辅助线
 - **THEN** controller 使用一个原子 batch 删除现有 guides
 - **AND** undo 一次恢复全部 guide 顺序和位置
+
+### Requirement: 设置入口保持布局独立
+
+默认工作区左侧活动栏底部 MUST 提供可聚焦设置按钮。设置模态 MUST 作为 editor root 内的
+sibling 渲染并只覆盖当前 Editor，不得成为 Dockview 面板、portal 到宿主页面或改变左侧
+Edge Group 的展开尺寸。
+
+#### Scenario: 从活动栏打开设置
+
+- **WHEN** 用户通过鼠标或键盘激活左下角设置按钮
+- **THEN** 编辑器范围内显示居中模态弹框与遮罩
+- **AND** 当前 Edge Group、中央 Canvas 与其他面板保持挂载和原尺寸
+
+#### Scenario: 更新设置期间保持布局
+
+- **WHEN** 用户切换主题、语言或修改快捷键
+- **THEN** Dockview group 和 panel 实例不被重建
+- **AND** 用户已调整的尺寸、折叠状态与活动标签保持不变
+
+### Requirement: 工作区主题 token
+
+共享 UI Context 样式入口 MUST 定义可继承的 dark 与 light 工作区 token，并让 Editor、Stage、
+SceneTree、History、CommandPanel、PropertyPanel、OperationLog 与基础材料 Inspector 的默认
+surface、border、text、hover、selected、focus 和 scrollbar 使用这些 token。Dark MUST 保持
+既有视觉层级，editor 不得依赖逐包浅色祖先覆盖。
+
+#### Scenario: 显示浅色默认工作区
+
+- **WHEN** ComposeEditor 解析主题为 light 并使用全部默认面板
+- **THEN** 所有工作区区域使用完整浅色层级且文本、选中态与焦点态清晰可辨
+- **AND** 不出现只适合深色背景的孤立内建区域或浏览器默认滚动条
+
+#### Scenario: 保持深色视觉
+
+- **WHEN** ComposeEditor 使用默认 dark 主题
+- **THEN** 既有 Stage、Dockview 和内建面板颜色层级不发生非预期改变
+- **AND** 主题 token 不重置 editor 外的宿主全局样式

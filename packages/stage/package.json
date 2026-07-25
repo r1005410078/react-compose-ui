@@ -28,6 +28,7 @@
   "dependencies": {
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*",
+    "@compose-ui/stage-engine": "workspace:*",
     "@compose-ui/ui-context": "workspace:*"
   },
   "peerDependencies": {

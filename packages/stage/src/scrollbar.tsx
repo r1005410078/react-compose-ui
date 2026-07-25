@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import type { KeyboardEvent, PointerEvent } from 'react'
-import type { StageScrollAxis } from './canvas-geometry'
+import type { StageScrollAxis } from '@compose-ui/stage-engine'
 
 type StageScrollbarProps = {
   readonly axis: 'x' | 'y'

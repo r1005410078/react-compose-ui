@@ -2,8 +2,8 @@ import type { ComposeDocument } from '@compose-ui/core'
 import type {
   StageProps,
   StageTool,
-  StageViewport,
 } from '@compose-ui/stage'
+import type { StageViewport } from '@compose-ui/stage-engine'
 import type {
   Dispatch,
   SetStateAction,

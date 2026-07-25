@@ -6,8 +6,11 @@ import type {
   ComposeDocument,
   EditorCommand,
 } from '@compose-ui/core'
-import type { StageViewport } from './geometry'
-import type { StageDragController } from './drag-controller'
+import type {
+  StageInteractionController,
+  StageViewport,
+} from '@compose-ui/stage-engine'
+import type { StageFramePreset } from './frame-preset'
 
 /**
  * Stage 的受控工具模式。
@@ -108,7 +111,10 @@ export interface StageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChan
   readonly onSurfaceSizeChange?: (
     size: { readonly width: number; readonly height: number },
   ) => void
-  readonly dragController?: StageDragController
+  /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */
+  readonly interactionController?: StageInteractionController
+  /** external Frame descriptor 的 preset resolver。 */
+  readonly framePresets?: readonly StageFramePreset[]
   /** 节点与命令 ID factory。默认使用 crypto.randomUUID 或时间回退。 */
   readonly idFactory?: () => string
 }

@@ -261,3 +261,19 @@ MUST 使用接近 Unity 层级面板的紧凑密度，同时保留清晰的焦�
 - **AND** 键盘聚焦行使用 `#062f4a` 背景与 `#007fd4` 内描边，并优先于悬停和选中样式
 - **AND** 开关启用状态与上述节点行状态可被视觉区分
 
+### Requirement: 场景树内建本地化
+
+SceneTree MUST 接受可选 zh-CN 或 en-US locale，并在未提供时保持 zh-CN。检索、空状态、菜单、
+操作名称、错误和 ARIA 文案 MUST 来自完整内建词典；节点 label MUST 保持宿主值。
+
+#### Scenario: 使用英文场景树
+
+- **WHEN** 宿主以 en-US 挂载 SceneTree 并打开检索与命令菜单
+- **THEN** 内建控件、状态、菜单和可访问名称显示英文
+- **AND** 节点 label 不被翻译
+
+#### Scenario: 独立使用默认语言
+
+- **WHEN** 宿主独立挂载 SceneTree 且不提供 locale
+- **THEN** 现有简体中文内建文案和行为保持不变
+

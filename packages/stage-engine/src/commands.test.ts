@@ -6,6 +6,7 @@ import {
 import { describe, expect, it } from 'vitest'
 import {
   applyMatrix,
+  createDuplicateCommand,
   createGroupCommand,
   createReparentCommand,
   createUngroupCommand,
@@ -142,5 +143,35 @@ describe('Stage structure commands', () => {
     )).toMatchObject({ status: 'committed' })
     expect(runtime.document.nodes.right).toMatchObject({ childIds: ['c', 'a'] })
     expectPointsClose(worldPoints(runtime.document, 'a'), beforeReparent)
+  })
+
+  it('OpenSpec: stage-engine / 空间命令规划 / duplicate 可逆且 inverse Patch 完整', () => {
+    const runtime = createTransactionRuntime({ document: fixture() })
+    const ids = ['copy-a']
+    const duplicate = createDuplicateCommand(
+      runtime.document,
+      'a',
+      () => ids.shift() ?? 'unexpected',
+      'duplicate-a',
+    )
+    expect(duplicate).not.toBeNull()
+
+    const result = runtime.dispatch(duplicate!.command)
+    expect(result).toMatchObject({
+      status: 'committed',
+      transaction: {
+        forward: expect.any(Array),
+        inverse: expect.any(Array),
+      },
+    })
+    expect(runtime.document.nodes['copy-a']).toMatchObject({
+      name: 'A 副本',
+      transform: expect.objectContaining({ x: 30, y: 40 }),
+    })
+
+    runtime.undo()
+    expect(runtime.document.nodes['copy-a']).toBeUndefined()
+    runtime.redo()
+    expect(runtime.document.nodes['copy-a']).toBeDefined()
   })
 })

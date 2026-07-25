@@ -142,19 +142,30 @@ move 与 resize MUST 支持网格、可见未选中节点和全局辅助线吸�
 
 ### Requirement: Pointer 手势原子性与取消
 
-Stage MUST 使用原生 Pointer Events、pointer capture 与 `requestAnimationFrame` 合并瞬时更新。
-pointermove MUST NOT dispatch；pointerup MUST 最多 dispatch 一次。Escape、pointercancel 或
-lostpointercapture MUST 恢复手势开始前画面且不创建事务。
+Stage MUST 使用原生 Pointer Events、独立活动 Pointer session、pointer capture 与
+`requestAnimationFrame` 合并瞬时更新。pointermove MUST NOT dispatch；正常 pointerup 或
+buttons 为 0 的遗漏松手恢复路径 MUST 使用最终坐标且最多 dispatch 一次。Escape、
+pointercancel、window blur 或匹配当前活动 session 的真实 lostpointercapture MUST 恢复手势
+开始前画面且不创建事务。子节点冒泡、不同 Pointer、旧 generation、finishing/ended session
+或正常 release 后迟到的 lostpointercapture MUST 被忽略。
 
-#### Scenario: 高频 Pointer 移动
+#### Scenario: 下一帧前快速松手
 
-- **WHEN** 一次手势产生多次 pointermove
-- **THEN** Stage 以 animation frame 合并可视预览
-- **AND** History 与 Operation Log 在 pointerup 前没有新条目
+- **WHEN** 多次 pointermove 已排入 rAF，但用户在下一帧执行前 pointerup
+- **THEN** Stage 同步使用 pointerup 最终坐标完成 preview 和一次正式提交
+- **AND** 迟到的旧 rAF callback 不修改新手势或重复提交
+
+#### Scenario: capture 事件不拥有活动手势
+
+- **WHEN** pointer capture 失败，或收到子节点冒泡、不同 Pointer、旧 release 的迟到
+  lostpointercapture
+- **THEN** 当前活动 session 继续由唯一 window 路由接收 move/up/cancel
+- **AND** 正常松手仍恰好提交一次
 
 #### Scenario: 取消进行中的手势
 
-- **WHEN** 用户按 Escape、浏览器发出 pointercancel 或 Stage 丢失 pointer capture
+- **WHEN** 用户按 Escape、浏览器发出 pointercancel、window blur，或 Stage 根节点在 buttons
+  非零时真正丢失当前 Pointer capture
 - **THEN** DOM Scene 与 SVG Overlay 恢复手势前几何并清理临时 UI
 - **AND** runtime 未收到 transform 命令
 
@@ -326,3 +337,69 @@ MUST 只修改 viewport。
 - **WHEN** 聚焦 scrollbar 后使用 Arrow、Page、Home 或 End
 - **THEN** viewport 按小步、翻页或边界规则移动
 - **AND** scrollbar 暴露 orientation、controls、valuemin、valuemax 与 valuenow
+
+### Requirement: 可配置 Stage 快捷键
+
+Stage MUST 接受可选 locale 与快捷键配置，并在未提供时保持 zh-CN 和现有默认键位。默认动作
+MUST 包括临时平移、select/pan 工具、适配选择/Frame、100%/放大/缩小、grid/smart snap、
+duplicate、group/ungroup 和 delete；动作只通过现有会话回调或 dispatch 边界生效。
+
+#### Scenario: 执行默认 Stage 快捷键
+
+- **WHEN** Stage 聚焦且用户使用默认 V/H、F/Shift+F、primary+0/Equal/Minus、Shift+G/S 或编辑命令键位
+- **THEN** Stage 执行对应工具、适配、缩放、吸附或文档命令
+- **AND** 会话动作不产生文档事务，编辑动作仍只产生既有事务
+
+#### Scenario: 执行自定义临时平移键
+
+- **WHEN** 宿主把临时平移动作绑定到非 Space 键并按住该键拖动
+- **THEN** Stage 使用新键临时平移 viewport
+- **AND** Space 不再触发该动作
+
+#### Scenario: 忽略可编辑与组合输入
+
+- **WHEN** 键盘事件来自可编辑元素或处于 IME composing
+- **THEN** Stage 不执行导航、工具、适配、吸附或临时平移快捷键
+- **AND** 现有文本编辑行为保持不变
+
+### Requirement: 临时平移生命周期
+
+Stage MUST 在统一 pointer capture 决策边界识别临时平移，使拖动可以从空白、Frame 或节点开始。
+临时平移期间 MUST 只请求 viewport 更新，并在 keyup、window blur、pointercancel 或
+lostpointercapture 时清理按键与手势状态。
+
+#### Scenario: 从任意命中区域临时平移
+
+- **WHEN** 用户按住临时平移键并从 Stage 空白、Frame 或节点开始拖动
+- **THEN** viewport 按指针位移更新
+- **AND** selection、document、History 与 Operation Log 保持不变
+
+#### Scenario: 清理中断的临时平移
+
+- **WHEN** 临时平移期间发生按键释放、窗口失焦、pointer cancel 或失去 capture
+- **THEN** Stage 结束手势并清理临时按键状态
+- **AND** 后续普通点击或拖动不会继续平移
+
+### Requirement: Stage 内建本地化
+
+Stage 的默认 toolbar、ruler/scrollbar ARIA、空状态、错误占位与手势反馈 MUST 支持 zh-CN 和
+en-US；宿主 renderer 和 registry label MUST 保持原文。
+
+#### Scenario: 使用英文 Stage chrome
+
+- **WHEN** 宿主以 en-US 挂载 Stage
+- **THEN** Stage 内建可见文案和可访问名称显示英文
+- **AND** Frame 名称、registry label 与组件业务内容不被翻译
+
+### Requirement: Stage 包导出边界
+
+`@compose-ui/stage` MUST NOT 重导出坐标、矩阵、画布几何、空间命令、SceneIndex 或 interaction
+controller，也 MUST NOT 提供 `StageDragController`、`dragController` prop 或兼容 facade。
+消费者 MUST 从 `@compose-ui/stage-engine` 导入 headless API，并使用
+`interactionController` 连接 Stage 与 Palette。
+
+#### Scenario: 使用新的破坏性导入边界
+
+- **WHEN** 消费者升级 Stage 与 Editor 的 major 版本
+- **THEN** UI 组件和 StageFramePreset 继续从 stage 包导入
+- **AND** 几何、命令与 controller 只从 stage-engine 包导入

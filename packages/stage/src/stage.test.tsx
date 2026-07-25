@@ -7,7 +7,7 @@ import {
 } from '@compose-ui/core'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
-import { useState, useSyncExternalStore } from 'react'
+import { StrictMode, useState, useSyncExternalStore } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as stagePackage from './index'
 
@@ -54,6 +54,31 @@ beforeEach(() => {
   })
   vi.stubGlobal('cancelAnimationFrame', () => undefined)
 })
+
+function installControllableAnimationFrames() {
+  let nextId = 1
+  const callbacks = new Map<number, FrameRequestCallback>()
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    const id = nextId++
+    callbacks.set(id, callback)
+    return id
+  })
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+    callbacks.delete(id)
+  })
+  return {
+    flush() {
+      const pending = [...callbacks.entries()]
+      callbacks.clear()
+      pending.forEach(([, callback]) => callback(0))
+    },
+    takeCallbacks() {
+      const pending = [...callbacks.values()]
+      callbacks.clear()
+      return pending
+    },
+  }
+}
 
 function fixture(): ComposeDocument {
   return {
@@ -271,6 +296,22 @@ function viewportElement() {
 }
 
 describe('Stage', () => {
+  it('OpenSpec: stage / Stage 包导出边界 / 使用新的破坏性导入边界', () => {
+    expect(stagePackage).not.toHaveProperty('createStageInteractionController')
+    expect(stagePackage).not.toHaveProperty('createGroupCommand')
+    expect(stagePackage).not.toHaveProperty('worldToScreen')
+  })
+
+  it('OpenSpec: stage / Surface 生命周期 / StrictMode 重放私有 controller', () => {
+    expect(() => render(
+      <StrictMode>
+        <Harness runtime={stageRuntime()} />
+      </StrictMode>,
+    )).not.toThrow()
+
+    expect(screen.getByRole('application', { name: '测试 Stage' })).toBeInTheDocument()
+  })
+
   it('OpenSpec: stage / DOM 与 SVG 分层 Stage / 渲染 Stage 分层', () => {
     render(<Harness runtime={stageRuntime()} />)
 
@@ -345,7 +386,12 @@ describe('Stage', () => {
       clientY: 10,
       pointerId: 1,
     })
-    fireEvent.pointerMove(viewport, { clientX: 51, clientY: 120, pointerId: 1 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 51,
+      clientY: 120,
+      pointerId: 1,
+    })
     expect(runtime.entries).toHaveLength(1)
     fireEvent.pointerUp(viewport, { clientX: 51, clientY: 120, pointerId: 1 })
     expect(runtime.entries).toHaveLength(2)
@@ -395,7 +441,12 @@ describe('Stage', () => {
       clientY: 12,
       pointerId: 5,
     })
-    fireEvent.pointerMove(viewport, { clientX: 88, clientY: 104, pointerId: 5 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 88,
+      clientY: 104,
+      pointerId: 5,
+    })
     expect(runtime.entries).toHaveLength(1)
     fireEvent.pointerUp(viewport, { clientX: 88, clientY: 104, pointerId: 5 })
 
@@ -499,7 +550,12 @@ describe('Stage', () => {
     render(<Harness runtime={runtime} tool="pan" />)
     const viewport = viewportElement()
     fireEvent.pointerDown(viewport, { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
-    fireEvent.pointerMove(viewport, { clientX: 160, clientY: 140, pointerId: 1 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 160,
+      clientY: 140,
+      pointerId: 1,
+    })
     fireEvent.pointerUp(viewport, { clientX: 160, clientY: 140, pointerId: 1 })
 
     expect(screen.getByLabelText('当前视口')).toHaveTextContent(
@@ -548,7 +604,12 @@ describe('Stage', () => {
     render(<Harness runtime={stageRuntime()} />)
     const viewport = viewportElement()
     fireEvent.pointerDown(viewport, { button: 0, clientX: 10, clientY: 10, pointerId: 1 })
-    fireEvent.pointerMove(viewport, { clientX: 290, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 290,
+      clientY: 100,
+      pointerId: 1,
+    })
     expect(screen.getByTestId('stage-marquee')).toBeInTheDocument()
     fireEvent.pointerUp(viewport, { clientX: 290, clientY: 100, pointerId: 1 })
 
@@ -573,7 +634,12 @@ describe('Stage', () => {
       clientY: 40,
       pointerId: 1,
     })
-    fireEvent.pointerMove(viewport, { clientX: 85, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 85,
+      clientY: 40,
+      pointerId: 1,
+    })
     expect(runtime.entries).toHaveLength(1)
     expect(screen.getByTestId('stage-snap-guide-x')).toBeInTheDocument()
     fireEvent.pointerUp(viewport, { clientX: 85, clientY: 40, pointerId: 1 })
@@ -593,6 +659,7 @@ describe('Stage', () => {
       pointerId: 1,
     })
     fireEvent.pointerMove(viewport, {
+      buttons: 1,
       clientX: 85,
       clientY: 40,
       pointerId: 1,
@@ -615,6 +682,7 @@ describe('Stage', () => {
     const handle = screen.getByTestId('stage-resize-se')
     fireEvent.pointerDown(handle, { clientX: 120, clientY: 80, pointerId: 1 })
     fireEvent.pointerMove(viewport, {
+      buttons: 1,
       clientX: 170,
       clientY: 105,
       pointerId: 1,
@@ -631,6 +699,33 @@ describe('Stage', () => {
     expect(runtime.document.nodes.a.transform).toMatchObject({ width: 148, height: 74 })
   })
 
+  it('OpenSpec: stage / Frame resize / 拖动边界不缩放内部节点', () => {
+    const runtime = stageRuntime()
+    const childBefore = { ...runtime.document.nodes.a.transform }
+    render(<Harness initialSelection={['frame']} runtime={runtime} />)
+    const viewport = viewportElement()
+
+    fireEvent.pointerDown(screen.getByTestId('stage-resize-se'), {
+      clientX: 500,
+      clientY: 400,
+      pointerId: 1,
+      ctrlKey: true,
+    })
+    fireEvent.pointerUp(viewport, {
+      clientX: 600,
+      clientY: 500,
+      pointerId: 1,
+      ctrlKey: true,
+    })
+
+    expect(runtime.document.nodes.frame.transform).toMatchObject({
+      width: 600,
+      height: 500,
+    })
+    expect(runtime.document.nodes.a.transform).toEqual(childBefore)
+    expect(runtime.entries).toHaveLength(2)
+  })
+
   it('OpenSpec: stage / 直接移动缩放与旋转 / 旋转选择', () => {
     const runtime = stageRuntime()
     render(<Harness initialSelection={['a']} runtime={runtime} />)
@@ -641,6 +736,7 @@ describe('Stage', () => {
       pointerId: 1,
     })
     fireEvent.pointerMove(viewport, {
+      buttons: 1,
       clientX: 130,
       clientY: 55,
       pointerId: 1,
@@ -665,11 +761,282 @@ describe('Stage', () => {
       clientY: 40,
       pointerId: 1,
     })
-    fireEvent.pointerMove(viewport, { clientX: 40, clientY: 40, pointerId: 1 })
-    fireEvent.pointerMove(viewport, { clientX: 50, clientY: 40, pointerId: 1 })
-    fireEvent.pointerMove(viewport, { clientX: 60, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 40,
+      clientY: 40,
+      pointerId: 1,
+    })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 50,
+      clientY: 40,
+      pointerId: 1,
+    })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 60,
+      clientY: 40,
+      pointerId: 1,
+    })
     expect(runtime.entries).toHaveLength(1)
     fireEvent.pointerUp(viewport, { clientX: 60, clientY: 40, pointerId: 1 })
+    expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('OpenSpec: stage / Pointer 手势原子性与取消 / 下一帧前快速松手使用最终点', () => {
+    const animationFrames = installControllableAnimationFrames()
+    const runtime = stageRuntime()
+    render(<Harness initialSelection={['a']} runtime={runtime} />)
+    const viewport = viewportElement()
+
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      buttons: 1,
+      clientX: 30,
+      clientY: 40,
+      pointerId: 71,
+    })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 50,
+      clientY: 40,
+      pointerId: 71,
+    })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 90,
+      clientY: 40,
+      pointerId: 71,
+    })
+    const lateCallbacks = animationFrames.takeCallbacks()
+
+    fireEvent.pointerUp(viewport, {
+      buttons: 0,
+      clientX: 110,
+      clientY: 40,
+      pointerId: 71,
+    })
+    expect(runtime.document.nodes.a.transform.x).toBe(100)
+    expect(runtime.entries).toHaveLength(2)
+
+    lateCallbacks.forEach((callback) => callback(0))
+    animationFrames.flush()
+    expect(runtime.document.nodes.a.transform.x).toBe(100)
+    expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('OpenSpec: stage / Pointer 手势原子性与取消 / 忽略冒泡、不同 Pointer 与迟到 lost capture', () => {
+    const runtime = stageRuntime()
+    render(<Harness initialSelection={['a']} runtime={runtime} />)
+    const viewport = viewportElement()
+    Object.defineProperties(viewport, {
+      setPointerCapture: { configurable: true, value: vi.fn() },
+      releasePointerCapture: { configurable: true, value: vi.fn() },
+    })
+
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      buttons: 1,
+      clientX: 30,
+      clientY: 40,
+      pointerId: 72,
+    })
+    fireEvent.pointerUp(viewport, {
+      buttons: 0,
+      clientX: 70,
+      clientY: 40,
+      pointerId: 72,
+    })
+    expect(runtime.document.nodes.a.transform.x).toBe(60)
+
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      buttons: 1,
+      clientX: 70,
+      clientY: 40,
+      pointerId: 72,
+    })
+    fireEvent.lostPointerCapture(screen.getByTestId('stage-node-a'), {
+      buttons: 1,
+      pointerId: 72,
+    })
+    fireEvent.lostPointerCapture(viewport, {
+      buttons: 1,
+      pointerId: 999,
+    })
+    fireEvent.lostPointerCapture(viewport, {
+      buttons: 0,
+      pointerId: 72,
+    })
+    fireEvent.pointerMove(window, {
+      buttons: 1,
+      clientX: 110,
+      clientY: 40,
+      pointerId: 72,
+    })
+    fireEvent.pointerUp(window, {
+      buttons: 0,
+      clientX: 110,
+      clientY: 40,
+      pointerId: 72,
+    })
+
+    expect(runtime.document.nodes.a.transform.x).toBe(100)
+    expect(runtime.entries).toHaveLength(3)
+  })
+
+  it('OpenSpec: stage / Pointer 手势原子性与取消 / buttons 为零的 lost capture 完成最终点', () => {
+    const runtime = stageRuntime()
+    render(<Harness initialSelection={['a']} runtime={runtime} />)
+    const viewport = viewportElement()
+
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      buttons: 1,
+      clientX: 30,
+      clientY: 40,
+      pointerId: 73,
+    })
+    fireEvent.lostPointerCapture(viewport, {
+      buttons: 0,
+      clientX: 90,
+      clientY: 40,
+      pointerId: 73,
+    })
+
+    expect(runtime.document.nodes.a.transform.x).toBe(80)
+    expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('OpenSpec: stage / Pointer 手势原子性与取消 / pointercancel 与 blur 均零提交', () => {
+    const firstRuntime = stageRuntime()
+    const firstView = render(
+      <Harness initialSelection={['a']} runtime={firstRuntime} />,
+    )
+    let viewport = viewportElement()
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      buttons: 1,
+      clientX: 30,
+      clientY: 40,
+      pointerId: 74,
+    })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 90,
+      clientY: 40,
+      pointerId: 74,
+    })
+    fireEvent.pointerCancel(viewport, { buttons: 0, pointerId: 74 })
+    expect(firstRuntime.document.nodes.a.transform.x).toBe(20)
+    expect(firstRuntime.entries).toHaveLength(1)
+    firstView.unmount()
+
+    const secondRuntime = stageRuntime()
+    render(<Harness initialSelection={['a']} runtime={secondRuntime} />)
+    viewport = viewportElement()
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      buttons: 1,
+      clientX: 30,
+      clientY: 40,
+      pointerId: 75,
+    })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 90,
+      clientY: 40,
+      pointerId: 75,
+    })
+    fireEvent.blur(window)
+    expect(secondRuntime.document.nodes.a.transform.x).toBe(20)
+    expect(secondRuntime.entries).toHaveLength(1)
+  })
+
+  it('OpenSpec: stage / Surface 输入适配 / surface 重测时冻结 pointerdown 原点', () => {
+    let resizeCallback: ResizeObserverCallback | null = null
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback
+      }
+
+      observe() {}
+
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock)
+    const runtime = stageRuntime()
+    render(<Harness initialSelection={['a']} runtime={runtime} />)
+    viewportElement()
+    const surface = screen.getByTestId('stage-surface')
+    const rect = vi.spyOn(surface, 'getBoundingClientRect')
+    rect.mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 600,
+      width: 800,
+      height: 600,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      buttons: 1,
+      clientX: 30,
+      clientY: 40,
+      ctrlKey: true,
+      pointerId: 76,
+    })
+    rect.mockReturnValue({
+      x: 100,
+      y: 50,
+      left: 100,
+      top: 50,
+      right: 1060,
+      bottom: 770,
+      width: 960,
+      height: 720,
+      toJSON: () => ({}),
+    })
+    act(() => resizeCallback?.([], {} as ResizeObserver))
+    fireEvent.pointerUp(window, {
+      buttons: 0,
+      clientX: 70,
+      clientY: 40,
+      ctrlKey: true,
+      pointerId: 76,
+    })
+
+    expect(runtime.document.nodes.a.transform.x).toBe(60)
+    expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('OpenSpec: stage / Surface 输入适配 / capture 失败时继续路由活动 Pointer', () => {
+    const runtime = stageRuntime()
+    render(<Harness initialSelection={['a']} runtime={runtime} />)
+    const viewport = viewportElement()
+    Object.defineProperty(viewport, 'setPointerCapture', {
+      value: () => {
+        throw new DOMException('Pointer is not active', 'NotFoundError')
+      },
+    })
+
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      clientX: 30,
+      clientY: 40,
+      pointerId: 91,
+    })
+    fireEvent.pointerMove(window, {
+      buttons: 1,
+      clientX: 70,
+      clientY: 40,
+      pointerId: 91,
+    })
+    fireEvent.pointerUp(window, {
+      buttons: 0,
+      clientX: 70,
+      clientY: 40,
+      pointerId: 91,
+    })
+
+    expect(runtime.document.nodes.a.transform.x).toBe(60)
     expect(runtime.entries).toHaveLength(2)
   })
 
@@ -685,8 +1052,13 @@ describe('Stage', () => {
       pointerId: 1,
     })
     expect(capture).toHaveBeenCalledWith(1)
-    fireEvent.pointerMove(viewport, { clientX: 80, clientY: 40, pointerId: 1 })
-    fireEvent.lostPointerCapture(viewport, { pointerId: 1 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 80,
+      clientY: 40,
+      pointerId: 1,
+    })
+    fireEvent.lostPointerCapture(viewport, { buttons: 1, pointerId: 1 })
 
     expect(runtime.entries).toHaveLength(1)
     expect(runtime.document.nodes.a.transform.x).toBe(20)
@@ -793,7 +1165,12 @@ describe('Stage', () => {
       clientY: 40,
       pointerId: 31,
     })
-    fireEvent.pointerMove(viewport, { clientX: 90, clientY: 80, pointerId: 31 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 90,
+      clientY: 80,
+      pointerId: 31,
+    })
     fireEvent.pointerUp(viewport, { clientX: 90, clientY: 80, pointerId: 31 })
 
     expect(screen.getByLabelText('当前视口')).toHaveTextContent(
@@ -840,7 +1217,12 @@ describe('Stage', () => {
       clientY: 420,
       pointerId: 30,
     })
-    fireEvent.pointerMove(viewport, { clientX: 540, clientY: 450, pointerId: 30 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 540,
+      clientY: 450,
+      pointerId: 30,
+    })
     fireEvent.pointerUp(viewport, { clientX: 540, clientY: 450, pointerId: 30 })
     fireEvent.keyUp(viewport, { code: 'Space', key: ' ' })
     expect(screen.getByLabelText('当前视口')).toHaveTextContent(
@@ -854,7 +1236,12 @@ describe('Stage', () => {
       clientY: 10,
       pointerId: 33,
     })
-    fireEvent.pointerMove(viewport, { clientX: 42, clientY: 26, pointerId: 33 })
+    fireEvent.pointerMove(viewport, {
+      buttons: 1,
+      clientX: 42,
+      clientY: 26,
+      pointerId: 33,
+    })
     fireEvent.pointerUp(viewport, { clientX: 42, clientY: 26, pointerId: 33 })
 
     expect(screen.getByLabelText('当前视口')).toHaveTextContent(

@@ -35,12 +35,15 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   property-panel 或 operation-log。
 - `@compose-ui/component-registry` 是实例级宿主组件注册协议，依赖 core，以 React 为 peer，
   不依赖 editor 或 property-panel。
-- `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台，提供固定标尺、文档网格与
-  全局辅助线、世界原点、智能/网格吸附和会话级动态滚动导航；依赖 core 与
+- `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
+  外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
+- `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
+  网格与全局辅助线、世界原点和滚动 chrome；依赖 core、stage-engine、
   component-registry、ui-context，不依赖 editor、property-panel 或 operation-log。
 - `@compose-ui/materials` 提供 Frame、Rectangle、Text 的实例级基础物料组合，依赖 core、
   component-registry、stage、property-panel、ui-context 与 Valibot，不依赖 editor。
-- `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage 与独立面板包。
+- `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage、
+  stage-engine 与独立面板包。
 - `@compose-ui/scene-tree` 是受控 React 树组件，可依赖 `ui-context`，不依赖 `core` 或 `editor`；editor 可以依赖
   它，preview 不得依赖它。
 - `@compose-ui/property-panel` 是同步 Valibot Schema 驱动的受控 React 组件，可依赖

@@ -78,7 +78,8 @@ dark/light token 和稳定 message ID 覆盖。第一方面板直接读取 Conte
 
 `useComposeEditorController` 组合宿主提供的 `TransactionRuntime` 与 `ComponentRegistry`，管理
 selection、expandedIds、activeFrameId、viewport、tool、真实 Stage surface 尺寸和实例级
-`StageDragController`。它从 runtime 当前文档派生：
+`StageInteractionController`。Editor 拥有该 controller，并把同一实例交给 Stage 与 Palette；
+卸载时统一 dispose。它从 runtime 当前文档派生：
 
 - `sceneTreeProps` 与 `stageProps`
 - `history`（直接复用 runtime 的兼容导航协议）

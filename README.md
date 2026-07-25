@@ -23,13 +23,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/core @compose-ui/ui-context @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+bun add @compose-ui/core @compose-ui/stage-engine @compose-ui/ui-context @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/core @compose-ui/ui-context @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+npm install @compose-ui/core @compose-ui/stage-engine @compose-ui/ui-context @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -214,7 +214,9 @@ import '@compose-ui/command-panel/styles.css'
 `@compose-ui/component-registry` 由宿主按稳定 `type` 注册默认 JSON props/style、默认尺寸、React
 renderer 和可选 Inspector。`@compose-ui/stage` 使用 DOM 渲染 Frame 与业务组件，以屏幕坐标
 SVG/DOM Overlay 绘制正负坐标标尺、主/细网格、世界原点轴、选区尺寸、手柄、全局辅助线和
-可访问滚动条；组件内部仍可使用 Canvas，例如 ECharts。
+可访问滚动条；组件内部仍可使用 Canvas，例如 ECharts。坐标换算、SceneIndex、吸附、内部
+手势、Palette 拖入和 group/reparent 空间规划统一由无 React/DOM 的
+`@compose-ui/stage-engine` 承载。
 
 ```tsx
 import { createComponentRegistry } from '@compose-ui/component-registry'
@@ -273,7 +275,8 @@ SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全
 ```
 
 完整说明见 [`component-registry`](./packages/component-registry/README.md)、
-[`stage`](./packages/stage/README.md)、[`materials`](./packages/materials/README.md)、
+[`stage-engine`](./packages/stage-engine/README.md)、[`stage`](./packages/stage/README.md)、
+[`materials`](./packages/materials/README.md)、
 [`editor`](./packages/editor/README.md) 与
 [`preview`](./packages/preview/README.md)。
 

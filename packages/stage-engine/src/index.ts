@@ -1,0 +1,74 @@
+/**
+ * 提供 React 与 DOM 无关的 Stage 坐标、空间命令与交互运行时。
+ *
+ * @packageDocumentation
+ */
+
+export {
+  createDuplicateCommand,
+  createGroupCommand,
+  createReparentCommand,
+  createUngroupCommand,
+} from './commands'
+export {
+  createRulerTicks,
+  expandScrollRange,
+  scrollAxisToViewport,
+  snapResizePoint,
+  snapValueToGrid,
+  viewportToScrollAxes,
+  type StageRulerTick,
+  type StageScrollAxis,
+} from './canvas-geometry'
+export {
+  applyMatrix,
+  decomposeMatrix,
+  getNodeParentId,
+  getNodeWorldBounds,
+  getNodeWorldMatrix,
+  invertMatrix,
+  matrixFromTransform,
+  multiplyMatrices,
+  rectMappingMatrix,
+  resizeBounds,
+  rotationFromPointer,
+  rotationMatrixAround,
+  screenToWorld,
+  snapTranslation,
+  translationMatrix,
+  unionRects,
+  worldToScreen,
+  zoomViewportAt,
+  type ResizeHandle,
+  type StageGuide,
+  type StageMatrix,
+  type StagePoint,
+  type StageRect,
+  type StageViewport,
+} from './geometry'
+export {
+  createStageSceneIndex,
+  type StageSceneIndex,
+} from './scene-index'
+export {
+  createStageInteractionController,
+  type StageExternalDragItem,
+  type StageInteractionContext,
+  type StageInteractionController,
+  type StageInteractionEffect,
+  type StageInteractionEvent,
+  type StageInteractionHit,
+  type StageInteractionModifiers,
+  type StageInteractionPhase,
+  type StageInteractionSnapshot,
+  type StageInteractionSurfacePort,
+  type StagePreviewGuide,
+} from './interaction-controller'
+export {
+  describeNodeCreation,
+  describeNodeTargets,
+  describeTransform,
+} from './transaction-labels'
+
+/** `@compose-ui/stage-engine` 的稳定包标识。 @public */
+export const COMPOSE_UI_STAGE_ENGINE_PACKAGE = '@compose-ui/stage-engine' as const

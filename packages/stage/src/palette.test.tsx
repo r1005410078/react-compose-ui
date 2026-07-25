@@ -5,49 +5,17 @@ import {
   type ComposeDocument,
   type TransactionRuntime,
 } from '@compose-ui/core'
+import {
+  createStageInteractionController,
+  type StageInteractionController,
+} from '@compose-ui/stage-engine'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState, useSyncExternalStore } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import * as stagePackage from './index'
+import { ComponentPalette, Stage } from './index'
+import type { StageFramePreset } from './frame-preset'
 
-type DragController = unknown
 type Registry = ReturnType<typeof createComponentRegistry>
-type FramePreset = {
-  readonly id: string
-  readonly label: string
-  readonly name: string
-  readonly defaultSize: { readonly width: number; readonly height: number }
-  readonly createDefaultStyle: () => {
-    readonly backgroundColor: string
-    readonly borderRadius: number
-  }
-}
-
-const api = stagePackage as unknown as {
-  createStageDragController(): DragController
-  ComponentPalette(props: {
-    registry: Registry
-    dragController: DragController
-    framePresets?: readonly FramePreset[]
-    locale?: 'zh-CN' | 'en-US'
-    'aria-label'?: string
-  }): React.ReactNode
-  Stage(props: {
-    document: ComposeDocument
-    registry: Registry
-    dispatch: TransactionRuntime['dispatch']
-    viewport: { x: number; y: number; zoom: number }
-    onViewportChange(value: { x: number; y: number; zoom: number }): void
-    tool: 'select' | 'pan'
-    selectedIds: readonly string[]
-    onSelectedIdsChange(ids: readonly string[]): void
-    activeFrameId: string | null
-    onActiveFrameIdChange(id: string | null): void
-    dragController: DragController
-    idFactory(): string
-    'aria-label'?: string
-  }): React.ReactNode
-}
 
 afterEach(cleanup)
 
@@ -89,27 +57,28 @@ function Workspace({
 }: {
   runtime: TransactionRuntime
   registry: Registry
-  controller: DragController
+  controller: StageInteractionController
   prefix: string
-  framePresets?: readonly FramePreset[]
+  framePresets?: readonly StageFramePreset[]
 }) {
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const [selection, setSelection] = useState<readonly string[]>([])
   const [activeFrame, setActiveFrame] = useState<string | null>('frame')
   return (
     <>
-      <api.ComponentPalette
+      <ComponentPalette
         aria-label={`${prefix} Palette`}
-        dragController={controller}
+        interactionController={controller}
         framePresets={framePresets}
         registry={definitions}
       />
-      <api.Stage
+      <Stage
         activeFrameId={activeFrame}
         aria-label={`${prefix} Stage`}
         dispatch={runtime.dispatch}
         document={state.document}
-        dragController={controller}
+        interactionController={controller}
+        framePresets={framePresets}
         idFactory={() => `${prefix}-box`}
         registry={definitions}
         selectedIds={selection}
@@ -139,7 +108,7 @@ function rect(element: HTMLElement) {
   })
 }
 
-const framePreset: FramePreset = {
+const framePreset: StageFramePreset = {
   id: 'desktop',
   label: 'Frame',
   name: 'Desktop Frame',
@@ -152,10 +121,10 @@ const framePreset: FramePreset = {
 
 describe('ComponentPalette', () => {
   it('localizes built-in Palette chrome without changing registry labels', () => {
-    const controller = api.createStageDragController()
+    const controller = createStageInteractionController()
     render(
-      <api.ComponentPalette
-        dragController={controller}
+      <ComponentPalette
+        interactionController={controller}
         locale="zh-CN"
         registry={registry()}
       />,
@@ -169,7 +138,7 @@ describe('ComponentPalette', () => {
   it('OpenSpec: stage / Frame Palette 拖入 / 保持 Component 拖入兼容', () => {
     const runtime = createTransactionRuntime({ document: document() })
     const definitions = registry()
-    const controller = api.createStageDragController()
+    const controller = createStageInteractionController()
     render(
       <Workspace
         controller={controller}
@@ -200,7 +169,7 @@ describe('ComponentPalette', () => {
     const events: string[] = []
     runtime.subscribeEvents((event) => events.push(event.type))
     const definitions = registry()
-    const controller = api.createStageDragController()
+    const controller = createStageInteractionController()
     render(
       <Workspace
         controller={controller}
@@ -226,8 +195,8 @@ describe('ComponentPalette', () => {
     const definitions = registry()
     const firstRuntime = createTransactionRuntime({ document: document() })
     const secondRuntime = createTransactionRuntime({ document: document() })
-    const firstController = api.createStageDragController()
-    const secondController = api.createStageDragController()
+    const firstController = createStageInteractionController()
+    const secondController = createStageInteractionController()
     render(
       <>
         <Workspace
@@ -258,7 +227,7 @@ describe('ComponentPalette', () => {
     const events: string[] = []
     runtime.subscribeEvents((event) => events.push(event.type))
     const definitions = registry()
-    const controller = api.createStageDragController()
+    const controller = createStageInteractionController()
     render(
       <Workspace
         controller={controller}
@@ -281,7 +250,7 @@ describe('ComponentPalette', () => {
   it('OpenSpec: stage / Frame Palette 拖入 / Pointer 居中创建根 Frame', () => {
     const runtime = createTransactionRuntime({ document: document() })
     const definitions = registry()
-    const controller = api.createStageDragController()
+    const controller = createStageInteractionController()
     render(
       <Workspace
         controller={controller}
@@ -319,7 +288,7 @@ describe('ComponentPalette', () => {
   it('OpenSpec: stage / Frame Palette 拖入 / 键盘新增 Frame', () => {
     const runtime = createTransactionRuntime({ document: document() })
     const definitions = registry()
-    const controller = api.createStageDragController()
+    const controller = createStageInteractionController()
     render(
       <Workspace
         controller={controller}
@@ -335,8 +304,37 @@ describe('ComponentPalette', () => {
 
     expect(runtime.document.nodes['one-box']).toMatchObject({
       kind: 'frame',
-      transform: { x: 250, y: 200, width: 300, height: 200, rotation: 0 },
+      // JSDOM 没有 ResizeObserver，键盘新增按 Stage 的 900×600 安全回退尺寸居中。
+      transform: { x: 300, y: 200, width: 300, height: 200, rotation: 0 },
     })
     expect(screen.getByLabelText('one active frame')).toHaveTextContent('one-box')
+  })
+
+  it('OpenSpec: stage-engine / 统一外部拖入 / factory 异常不泄漏到 Palette', () => {
+    const runtime = createTransactionRuntime({ document: document() })
+    const controller = createStageInteractionController()
+    const brokenPreset: StageFramePreset = {
+      ...framePreset,
+      id: 'broken',
+      label: 'Broken Frame',
+      createDefaultStyle: () => {
+        throw new Error('factory exploded')
+      },
+    }
+    render(
+      <Workspace
+        controller={controller}
+        framePresets={[brokenPreset]}
+        prefix="one"
+        registry={registry()}
+        runtime={runtime}
+      />,
+    )
+
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Broken Frame' }))
+    }).not.toThrow()
+    expect(runtime.document.nodes['one-box']).toBeUndefined()
+    expect(runtime.entries).toHaveLength(1)
   })
 })

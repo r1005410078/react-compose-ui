@@ -85,6 +85,7 @@
         "@compose-ui/history": "workspace:*",
         "@compose-ui/scene-tree": "workspace:*",
         "@compose-ui/stage": "workspace:*",
+        "@compose-ui/stage-engine": "workspace:*",
         "@compose-ui/ui-context": "workspace:*",
         "dockview-react": "^7.0.2",
       },
@@ -176,11 +177,19 @@
       "dependencies": {
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/core": "workspace:*",
+        "@compose-ui/stage-engine": "workspace:*",
         "@compose-ui/ui-context": "workspace:*",
       },
       "peerDependencies": {
         "react": "^18.3.0 || ^19.0.0",
         "react-dom": "^18.3.0 || ^19.0.0",
+      },
+    },
+    "packages/stage-engine": {
+      "name": "@compose-ui/stage-engine",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/core": "workspace:*",
       },
     },
     "packages/ui-context": {
@@ -300,6 +309,8 @@
     "@compose-ui/scene-tree": ["@compose-ui/scene-tree@workspace:packages/scene-tree"],
 
     "@compose-ui/stage": ["@compose-ui/stage@workspace:packages/stage"],
+
+    "@compose-ui/stage-engine": ["@compose-ui/stage-engine@workspace:packages/stage-engine"],
 
     "@compose-ui/ui-context": ["@compose-ui/ui-context@workspace:packages/ui-context"],
 

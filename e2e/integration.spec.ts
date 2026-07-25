@@ -227,7 +227,144 @@ test('OpenSpec: stage / 八向缩放 / resize 手柄在预览阶段跟随鼠标'
           : Number.POSITIVE_INFINITY
       }).toBeLessThanOrEqual(1.5)
       await page.mouse.up()
+      await expect.poll(async () => {
+        const box = await handle.boundingBox()
+        return box
+          ? Math.max(
+              Math.abs(box.x + box.width / 2 - to.x),
+              Math.abs(box.y + box.height / 2 - to.y),
+            )
+          : Number.POSITIVE_INFINITY
+      }).toBeLessThanOrEqual(1.5)
     }
+  }
+})
+
+test('OpenSpec: stage / Pointer 手势原子性与取消 / 高速 move 与 resize 松手后不回弹', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const historyEntries = editor.locator('[data-compose-ui="history"] li')
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await editor.getByRole('button', { name: '创建 Frame' }).click()
+  await editor.getByRole('button', { name: '适配 Frame' }).click()
+  const frame = stage.getByTestId('stage-frame')
+  const frameBox = await frame.boundingBox()
+  expect(frameBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: frameBox!.x + frameBox!.width * 0.35,
+    y: frameBox!.y + frameBox!.height * 0.4,
+  })
+  const rectangle = stage.locator('.compose-stage__node.is-component').filter({
+    hasText: 'Rectangle',
+  })
+  await rectangle.click()
+  await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
+
+  let expectedHistoryCount = await historyEntries.count()
+  for (let round = 0; round < 20; round += 1) {
+    const before = await rectangle.boundingBox()
+    expect(before).not.toBeNull()
+    const delta = round % 2 === 0 ? 24 : -24
+    const start = {
+      x: before!.x + before!.width / 2,
+      y: before!.y + before!.height / 2,
+    }
+    await page.keyboard.down('Control')
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(start.x + delta, start.y, { steps: 1 })
+    await page.mouse.up()
+    await page.keyboard.up('Control')
+    expectedHistoryCount += 1
+
+    await expect.poll(async () => {
+      const after = await rectangle.boundingBox()
+      return after
+        ? Math.abs(after.x - before!.x - delta)
+        : Number.POSITIVE_INFINITY
+    }).toBeLessThanOrEqual(1.5)
+    await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  }
+
+  const latestFrameBox = await frame.boundingBox()
+  expect(latestFrameBox).not.toBeNull()
+  await page.mouse.click(latestFrameBox!.x + 8, latestFrameBox!.y + 8)
+  const resize = stage.getByTestId('stage-resize-se')
+  expectedHistoryCount = await historyEntries.count()
+  for (let round = 0; round < 20; round += 1) {
+    const before = await resize.boundingBox()
+    expect(before).not.toBeNull()
+    const delta = round % 2 === 0 ? 20 : -20
+    const start = {
+      x: before!.x + before!.width / 2,
+      y: before!.y + before!.height / 2,
+    }
+    await page.keyboard.down('Control')
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(start.x + delta, start.y + delta, { steps: 1 })
+    await page.mouse.up()
+    await page.keyboard.up('Control')
+    expectedHistoryCount += 1
+
+    await expect.poll(async () => {
+      const after = await resize.boundingBox()
+      return after
+        ? Math.max(
+            Math.abs(after.x + after.width / 2 - (start.x + delta)),
+            Math.abs(after.y + after.height / 2 - (start.y + delta)),
+          )
+        : Number.POSITIVE_INFINITY
+    }).toBeLessThanOrEqual(1.5)
+    await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  }
+
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  const resizedFrameBox = await frame.boundingBox()
+  expect(resizedFrameBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: resizedFrameBox!.x + resizedFrameBox!.width * 0.65,
+    y: resizedFrameBox!.y + resizedFrameBox!.height * 0.55,
+  })
+  await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
+  const rectangles = stage.locator('.compose-stage__node.is-component').filter({
+    hasText: 'Rectangle',
+  })
+  await rectangles.nth(0).click()
+  await rectangles.nth(1).click({ modifiers: ['Shift'] })
+  expectedHistoryCount = await historyEntries.count()
+  for (let round = 0; round < 6; round += 1) {
+    const firstBefore = await rectangles.nth(0).boundingBox()
+    const secondBefore = await rectangles.nth(1).boundingBox()
+    expect(firstBefore).not.toBeNull()
+    expect(secondBefore).not.toBeNull()
+    const delta = round % 2 === 0 ? 18 : -18
+    const start = {
+      x: firstBefore!.x + firstBefore!.width / 2,
+      y: firstBefore!.y + firstBefore!.height / 2,
+    }
+    await page.keyboard.down('Control')
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(start.x + delta, start.y, { steps: 1 })
+    await page.mouse.up()
+    await page.keyboard.up('Control')
+    expectedHistoryCount += 1
+
+    await expect.poll(async () => {
+      const firstAfter = await rectangles.nth(0).boundingBox()
+      const secondAfter = await rectangles.nth(1).boundingBox()
+      return firstAfter && secondAfter
+        ? Math.max(
+            Math.abs(firstAfter.x - firstBefore!.x - delta),
+            Math.abs(secondAfter.x - secondBefore!.x - delta),
+          )
+        : Number.POSITIVE_INFINITY
+    }).toBeLessThanOrEqual(1.5)
+    await expect(historyEntries).toHaveCount(expectedHistoryCount)
   }
 })
 
@@ -630,12 +767,14 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
     ...pointerStart,
     bubbles: true,
     button: 0,
+    buttons: 1,
     pointerId: 41,
   })
   await stage.dispatchEvent('pointermove', {
     ...pointerEnd,
     bubbles: true,
     button: 0,
+    buttons: 1,
     pointerId: 41,
   })
   await expect(stage.locator('.compose-stage__guide')).not.toHaveCount(0)
@@ -648,6 +787,7 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
     ...pointerEnd,
     bubbles: true,
     button: 0,
+    buttons: 0,
     pointerId: 41,
   })
 })

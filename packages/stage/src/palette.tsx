@@ -11,10 +11,11 @@ import {
 } from '@compose-ui/ui-context'
 import type { ComponentRegistry } from '@compose-ui/component-registry'
 import type {
-  StageDragController,
-  StageFramePreset,
-} from './drag-controller'
+  StageExternalDragItem,
+  StageInteractionController,
+} from '@compose-ui/stage-engine'
 import type { StageLocale } from './types'
+import type { StageFramePreset } from './frame-preset'
 import { getStageMessages } from './stage-i18n'
 
 /**
@@ -24,7 +25,8 @@ import { getStageMessages } from './stage-i18n'
  */
 export interface ComponentPaletteProps extends HTMLAttributes<HTMLDivElement> {
   readonly registry: ComponentRegistry
-  readonly dragController: StageDragController
+  /** 与目标 Stage 共享的实例级 headless controller。 */
+  readonly interactionController: StageInteractionController
   /** 显示在 registry definitions 之前的根级 Frame 预设。 */
   readonly framePresets?: readonly StageFramePreset[]
   /** 内建区域和新增动作的语言；registry/preset label 保持宿主值。 */
@@ -38,7 +40,7 @@ export interface ComponentPaletteProps extends HTMLAttributes<HTMLDivElement> {
  */
 export function ComponentPalette({
   registry,
-  dragController,
+  interactionController,
   framePresets = [],
   locale,
   className,
@@ -50,9 +52,9 @@ export function ComponentPalette({
   const resolvedLocale = locale ?? i18n?.locale ?? 'en-US'
   const messages = getStageMessages(resolvedLocale, i18n?.formatMessage)
   const state = useSyncExternalStore(
-    dragController.subscribe,
-    dragController.getState,
-    dragController.getState,
+    interactionController.subscribe,
+    interactionController.getSnapshot,
+    interactionController.getSnapshot,
   )
   const cleanupRef = useRef<(() => void) | null>(null)
   const suppressClickRef = useRef(false)
@@ -64,29 +66,55 @@ export function ComponentPalette({
   }, [])
 
   const start = (
-    begin: (clientPoint: { x: number; y: number }) => void,
+    item: StageExternalDragItem,
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => {
     cleanupRef.current?.()
-    suppressClickRef.current = true
+    suppressClickRef.current = false
     if (resetClickTimerRef.current !== null) clearTimeout(resetClickTimerRef.current)
-    begin({ x: event.clientX, y: event.clientY })
+    const startPoint = { x: event.clientX, y: event.clientY }
+    let dragged = false
+    interactionController.send({
+      type: 'external.begin',
+      item,
+      clientPoint: startPoint,
+    })
     const move = (pointerEvent: PointerEvent) => {
-      dragController.move({ x: pointerEvent.clientX, y: pointerEvent.clientY })
+      dragged ||= Math.hypot(
+        pointerEvent.clientX - startPoint.x,
+        pointerEvent.clientY - startPoint.y,
+      ) >= 4
+      interactionController.send({
+        type: 'external.move',
+        clientPoint: { x: pointerEvent.clientX, y: pointerEvent.clientY },
+      })
     }
     const release = (pointerEvent: PointerEvent) => {
       cleanup()
-      dragController.end({ x: pointerEvent.clientX, y: pointerEvent.clientY })
-      // Pointer 完成后浏览器可能继续派发 click；延迟复位可避免同一意图再走键盘新增路径。
-      resetClickTimerRef.current = setTimeout(() => {
-        suppressClickRef.current = false
-        resetClickTimerRef.current = null
-      }, 0)
+      dragged ||= Math.hypot(
+        pointerEvent.clientX - startPoint.x,
+        pointerEvent.clientY - startPoint.y,
+      ) >= 4
+      if (dragged) {
+        suppressClickRef.current = true
+        interactionController.send({
+          type: 'external.end',
+          clientPoint: { x: pointerEvent.clientX, y: pointerEvent.clientY },
+        })
+        // 真正拖放后浏览器仍会派发 click；延迟复位避免同一意图再走键盘新增。
+        resetClickTimerRef.current = setTimeout(() => {
+          suppressClickRef.current = false
+          resetClickTimerRef.current = null
+        }, 0)
+      }
+      else {
+        interactionController.send({ type: 'external.cancel' })
+      }
     }
     const cancel = () => {
       cleanup()
       suppressClickRef.current = false
-      dragController.cancel()
+      interactionController.send({ type: 'external.cancel' })
     }
     const cleanup = () => {
       window.removeEventListener('pointermove', move)
@@ -99,6 +127,15 @@ export function ComponentPalette({
     window.addEventListener('pointercancel', cancel)
     cleanupRef.current = cleanup
   }
+  const externalLabel = (() => {
+    const item = state.external?.item
+    if (!item) return null
+    if (item.kind === 'frame') {
+      return framePresets.find((preset) => preset.id === item.presetId)?.label
+        ?? item.presetId
+    }
+    return registry.get(item.componentType)?.label ?? item.componentType
+  })()
 
   return (
     <div
@@ -128,12 +165,15 @@ export function ComponentPalette({
                   }
                   return
                 }
-                dragController.addFrame(preset)
+                interactionController.send({
+                  type: 'external.add',
+                  item: { kind: 'frame', presetId: preset.id },
+                })
               }}
-              onPointerDown={(event) => start(
-                (point) => dragController.startFrame(preset, point),
-                event,
-              )}
+              onPointerDown={(event) => start({
+                kind: 'frame',
+                presetId: preset.id,
+              }, event)}
             >
               {preset.icon}
               <span>{preset.label}</span>
@@ -154,12 +194,15 @@ export function ComponentPalette({
                   }
                   return
                 }
-                dragController.add(definition.type)
+                interactionController.send({
+                  type: 'external.add',
+                  item: { kind: 'component', componentType: definition.type },
+                })
               }}
-              onPointerDown={(event) => start(
-                (point) => dragController.start(definition.type, point),
-                event,
-              )}
+              onPointerDown={(event) => start({
+                kind: 'component',
+                componentType: definition.type,
+              }, event)}
             >
               {definition.icon}
               <span>{definition.label}</span>
@@ -167,12 +210,9 @@ export function ComponentPalette({
           </li>
         ))}
       </ul>
-      {state.active && (state.componentType || state.framePreset) ? (
+      {state.external ? (
         <div className="component-palette__drag-preview" role="status">
-          {state.framePreset?.label
-            ?? (state.componentType
-              ? registry.get(state.componentType)?.label ?? state.componentType
-              : null)}
+          {externalLabel}
         </div>
       ) : null}
     </div>

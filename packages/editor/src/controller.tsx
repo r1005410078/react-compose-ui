@@ -3,13 +3,15 @@ import { RegistryInspector } from '@compose-ui/component-registry'
 import {
   ComponentPalette,
   Stage,
+} from '@compose-ui/stage'
+import {
   createDuplicateCommand,
   createReparentCommand,
-  createStageDragController,
+  createStageInteractionController,
   getNodeParentId,
   getNodeWorldBounds,
   unionRects,
-} from '@compose-ui/stage'
+} from '@compose-ui/stage-engine'
 import {
   useCallback,
   useEffect,
@@ -44,12 +46,14 @@ import type {
   SceneTreeProps,
 } from '@compose-ui/scene-tree'
 import type {
-  StageDragController,
   StageFramePreset,
   StageProps,
   StageTool,
-  StageViewport,
 } from '@compose-ui/stage'
+import type {
+  StageInteractionController,
+  StageViewport,
+} from '@compose-ui/stage-engine'
 import {
   DefaultEmptyInspector,
   DefaultStageToolbar,
@@ -58,6 +62,20 @@ import {
 function defaultIdFactory() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
   return `editor-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function useFinalControllerDisposal(controller: StageInteractionController) {
+  const effectGeneration = useRef(0)
+  useEffect(() => {
+    effectGeneration.current += 1
+    const mountedGeneration = effectGeneration.current
+    return () => {
+      // StrictMode 会同步 cleanup 后重放 setup；只在没有后续 setup 的最终卸载后永久释放。
+      queueMicrotask(() => {
+        if (effectGeneration.current === mountedGeneration) controller.dispose()
+      })
+    }
+  }, [controller])
 }
 
 function firstVisibleFrame(document: ComposeDocument) {
@@ -208,8 +226,8 @@ export interface ComposeEditorController {
   readonly viewport: StageViewport
   /** 当前选择或平移工具。 */
   readonly tool: StageTool
-  /** 当前实例 Palette 与 Stage 的拖入会话。 */
-  readonly dragController: StageDragController
+  /** 当前实例 Palette 与 Stage 共享的无 UI 交互控制器。 */
+  readonly interactionController: StageInteractionController
   /** 替换当前选择。 */
   readonly setSelectedIds: (ids: readonly string[]) => void
   /** 替换场景树展开项。 */
@@ -297,7 +315,7 @@ export function useComposeEditorController({
     readonly height: number
   } | null>(null)
   const [canvasSettingsOpen, setCanvasSettingsOpen] = useState(false)
-  const [dragController] = useState(createStageDragController)
+  const [interactionController] = useState(createStageInteractionController)
   const transactionById = useRef(new Map<string, EditorTransaction>())
   const observerRef = useRef(onTransaction)
   const idFactoryRef = useRef(idFactory)
@@ -308,6 +326,7 @@ export function useComposeEditorController({
   useEffect(() => {
     idFactoryRef.current = idFactory
   }, [idFactory])
+  useFinalControllerDisposal(interactionController)
 
   useEffect(() => {
     const cleanupSession = (nextDocument: ComposeDocument) => {
@@ -566,7 +585,8 @@ export function useComposeEditorController({
     activeFrameId,
     onActiveFrameIdChange: setActiveFrameId,
     onSurfaceSizeChange: setSurfaceSize,
-    dragController,
+    interactionController,
+    framePresets,
     idFactory: nextId,
   }), [
     document,
@@ -579,7 +599,8 @@ export function useComposeEditorController({
     activeFrameId,
     setActiveFrameId,
     setSurfaceSize,
-    dragController,
+    interactionController,
+    framePresets,
     nextId,
   ])
 
@@ -652,7 +673,7 @@ export function useComposeEditorController({
     activeFrameId,
     viewport,
     tool,
-    dragController,
+    interactionController,
     setSelectedIds,
     setExpandedIds,
     setActiveFrameId,
@@ -663,7 +684,7 @@ export function useComposeEditorController({
     stageProps,
     componentLibraryPanel: (
       <ComponentPalette
-        dragController={dragController}
+        interactionController={interactionController}
         framePresets={framePresets}
         registry={registry}
       />

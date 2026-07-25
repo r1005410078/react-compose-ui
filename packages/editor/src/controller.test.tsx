@@ -1,4 +1,6 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { StrictMode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import {
@@ -104,9 +106,83 @@ function ContainerInspector({
   )
 }
 
+function StrictControllerWorkspace({
+  transactionRuntime,
+}: {
+  transactionRuntime: TransactionRuntime
+}) {
+  const controller = useComposeEditorController({
+    runtime: transactionRuntime,
+    registry,
+  })
+  return (
+    <>
+      {controller.componentLibraryPanel}
+      {controller.stage}
+    </>
+  )
+}
+
 afterEach(cleanup)
 
 describe('useComposeEditorController', () => {
+  it('OpenSpec: editor-workspace-layout / 共享 Stage controller / Stage 与 Palette 使用同一实例并在卸载时释放', async () => {
+    const editorRuntime = runtime()
+    const hook = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+    const controller = hook.result.current.interactionController
+    const palette = hook.result.current.componentLibraryPanel as ReactElement<{
+      interactionController: unknown
+    }>
+
+    expect(hook.result.current.stageProps.interactionController).toBe(controller)
+    expect(palette.props.interactionController).toBe(controller)
+
+    hook.unmount()
+    await act(async () => new Promise<void>((resolve) => queueMicrotask(resolve)))
+    expect(() => controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: () => undefined,
+    })).toThrow(/disposed/)
+  })
+
+  it('OpenSpec: editor-workspace-layout / 共享 Stage controller / StrictMode 重放后保持可用', async () => {
+    const editorRuntime = runtime()
+    const hook = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <StrictMode>{children}</StrictMode>
+      ),
+    })
+    const controller = hook.result.current.interactionController
+    const disconnect = controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: () => undefined,
+    })
+
+    disconnect()
+    hook.unmount()
+    await act(async () => new Promise<void>((resolve) => queueMicrotask(resolve)))
+    expect(() => controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: () => undefined,
+    })).toThrow(/disposed/)
+  })
+
+  it('OpenSpec: editor-workspace-layout / 共享 Stage controller / StrictMode 组合 Stage 与 Palette', () => {
+    expect(() => render(
+      <StrictMode>
+        <StrictControllerWorkspace transactionRuntime={runtime()} />
+      </StrictMode>,
+    )).not.toThrow()
+
+    expect(screen.getByRole('application', { name: 'Stage' })).toBeInTheDocument()
+  })
+
   it('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 统一派发不同面板意图', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
