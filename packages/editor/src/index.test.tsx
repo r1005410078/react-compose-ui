@@ -1,7 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HistoryNavigationController } from '@compose-ui/history'
+import {
+  ComposeUIProvider,
+  useComposeI18nContext,
+  useComposeThemeContext,
+} from '@compose-ui/ui-context'
 
 const initializeWorkspaceMock = vi.hoisted(() => vi.fn())
 const sceneHistoryDockviewMock = vi.hoisted(() => ({
@@ -47,10 +52,13 @@ vi.mock('dockview-react', async () => {
     themeAbyss: { name: 'abyss', className: 'dockview-theme-abyss' },
     DockviewDefaultTab: ({ api }: { api: { title?: string } }) =>
       React.createElement('span', null, api.title),
-    DockviewReact: ({ className, components, onReady }: {
+    DockviewReact: ({ className, components, onReady, rightHeaderActionsComponent: HeaderActions }: {
       className?: string
       components: Record<string, React.FunctionComponent>
       onReady: (event: { api: unknown }) => void
+      rightHeaderActionsComponent?: React.FunctionComponent<{
+        group: { id: string }
+      }>
     }) => {
       const nested = className === 'compose-editor__scene-history-dockview'
       React.useEffect(() => {
@@ -60,6 +68,11 @@ vi.mock('dockview-react', async () => {
       return React.createElement(
         'div',
         { 'data-testid': nested ? 'scene-history-dockview' : 'dockview' },
+        !nested && HeaderActions
+          ? React.createElement(HeaderActions, {
+              group: { id: 'compose-scene-edge' },
+            })
+          : null,
         Object.entries(components).map(([name, Component]) =>
           React.createElement(Component, { key: name }),
         ),
@@ -70,6 +83,24 @@ vi.mock('dockview-react', async () => {
 
 import { ComposeEditor } from './index'
 import type { ComposeEditorController } from './index'
+import { getRequiredEditorMessage } from './editor-i18n'
+import { createDefaultComposeEditorPreferences } from './preferences'
+
+function UIContextProbe() {
+  const theme = useComposeThemeContext()
+  const i18n = useComposeI18nContext()
+  return (
+    <output data-testid="ui-context-probe">
+      {JSON.stringify({
+        theme: theme?.theme,
+        resolvedTheme: theme?.resolvedTheme,
+        accent: theme?.tokens.accent,
+        locale: i18n?.locale,
+        settings: i18n?.formatMessage('editor.settings', '设置'),
+      })}
+    </output>
+  )
+}
 
 function createHistoryController(
   overrides: Partial<HistoryNavigationController> = {},
@@ -91,6 +122,7 @@ function createHistoryController(
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
   initializeWorkspaceMock.mockClear()
   Object.values(sceneHistoryDockviewMock).forEach((member) => {
     if (typeof member === 'function' && 'mockClear' in member) member.mockClear()
@@ -321,11 +353,11 @@ describe('ComposeEditor', () => {
 
     expect(screen.getByTestId('default-scene-tree')).toBeEmptyDOMElement()
     expect(screen.getAllByRole('status')).toHaveLength(5)
-    expect(screen.getByText('Stage toolbar')).toBeInTheDocument()
-    expect(screen.getByText('Component library content')).toBeInTheDocument()
-    expect(screen.getByText('Component inspector content')).toBeInTheDocument()
-    expect(screen.getByText('Transaction log content')).toBeInTheDocument()
-    expect(screen.getByText('Command content')).toBeInTheDocument()
+    expect(screen.getByText('舞台工具栏')).toBeInTheDocument()
+    expect(screen.getByText('组件库内容')).toBeInTheDocument()
+    expect(screen.getByText('组件属性内容')).toBeInTheDocument()
+    expect(screen.getByText('事务日志内容')).toBeInTheDocument()
+    expect(screen.getByText('命令内容')).toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 插槽与场景树内容更新', () => {
@@ -383,5 +415,359 @@ describe('ComposeEditor', () => {
     )
 
     expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('OpenSpec: editor-preferences / 设置模态弹框 / 打开和关闭设置', () => {
+    render(<ComposeEditor />)
+
+    const button = screen.getByRole('button', { name: '设置' })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog')
+
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('dialog', { name: '设置' })).toHaveAttribute(
+      'aria-modal',
+      'true',
+    )
+    expect(screen.getByTestId('dockview').parentElement).toHaveAttribute('inert')
+    expect(screen.getByRole('searchbox', { name: '搜索设置' })).toHaveFocus()
+    const lastControl = screen.getByRole('radio', { name: '跟随系统' })
+    lastControl.focus()
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '设置' }), {
+      key: 'Tab',
+    })
+    expect(screen.getByRole('button', { name: '关闭设置' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
+    expect(button).toHaveFocus()
+  })
+
+  it('OpenSpec: editor-preferences / 设置模态弹框 / 使用 Escape 关闭设置', () => {
+    render(<ComposeEditor />)
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
+    const capture = screen.getByRole('button', { name: '修改临时平移快捷键' })
+    fireEvent.click(capture)
+    fireEvent.keyDown(capture, {
+      code: 'Escape',
+      key: 'Escape',
+    })
+    expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
+
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '设置' }), {
+      code: 'Escape',
+      key: 'Escape',
+    })
+
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '设置' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.mouseDown(screen.getByTestId('settings-backdrop'))
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-preferences / 主题解析 / 切换明确主题', () => {
+    const onPreferencesChange = vi.fn()
+    render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
+    const editor = screen.getByRole('region', { name: 'Compose editor' })
+
+    expect(editor).toHaveAttribute('data-compose-theme', 'dark')
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('radio', { name: '浅色' }))
+
+    expect(editor).toHaveAttribute('data-compose-theme', 'light')
+    expect(onPreferencesChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ theme: 'light', locale: 'zh-CN' }),
+    )
+  })
+
+  it('OpenSpec: editor-preferences / 主题解析 / 跟随系统主题', () => {
+    let dark = false
+    let listener: (() => void) | null = null
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      get matches() {
+        return dark
+      },
+      addEventListener: (_type: string, next: () => void) => {
+        listener = next
+      },
+      removeEventListener: vi.fn(),
+    })))
+    const onPreferencesChange = vi.fn()
+    const preferences = {
+      ...createDefaultComposeEditorPreferences(),
+      theme: 'system' as const,
+    }
+    render(
+      <ComposeEditor
+        onPreferencesChange={onPreferencesChange}
+        preferences={preferences}
+      />,
+    )
+    const editor = screen.getByRole('region', { name: 'Compose editor' })
+    expect(editor).toHaveAttribute('data-compose-theme', 'light')
+
+    dark = true
+    act(() => listener?.())
+
+    expect(editor).toHaveAttribute('data-compose-theme', 'dark')
+    expect(onPreferencesChange).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: editor-preferences / 实例级编辑器偏好 / 使用受控偏好', () => {
+    const preferences = createDefaultComposeEditorPreferences()
+    const onPreferencesChange = vi.fn()
+    const { rerender } = render(
+      <ComposeEditor
+        onPreferencesChange={onPreferencesChange}
+        preferences={preferences}
+      />,
+    )
+    const editor = screen.getByRole('region', { name: 'Compose editor' })
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('radio', { name: '浅色' }))
+
+    expect(onPreferencesChange).toHaveBeenCalledWith(
+      expect.objectContaining({ theme: 'light' }),
+    )
+    expect(editor).toHaveAttribute('data-compose-theme', 'dark')
+
+    rerender(
+      <ComposeEditor
+        onPreferencesChange={onPreferencesChange}
+        preferences={{ ...preferences, theme: 'light' }}
+      />,
+    )
+    expect(editor).toHaveAttribute('data-compose-theme', 'light')
+  })
+
+  it('OpenSpec: editor-preferences / 内建界面语言 / 切换默认工作区语言', () => {
+    render(<ComposeEditor />)
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'English' }))
+
+    const editor = screen.getByRole('region', { name: 'Compose editor' })
+    expect(editor).toHaveAttribute('lang', 'en-US')
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-preferences / 内建界面语言 / 检测缺失翻译', () => {
+    expect(() => getRequiredEditorMessage('en-US', 'missing-key'))
+      .toThrow('Missing editor translation: en-US.missing-key')
+  })
+
+  it('opens settings from the configurable primary shortcut', () => {
+    render(<ComposeEditor />)
+    const editor = screen.getByRole('region', { name: 'Compose editor' })
+
+    fireEvent.keyDown(editor, {
+      code: 'Comma',
+      key: ',',
+      ctrlKey: true,
+    })
+    expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
+
+    fireEvent.keyDown(editor, {
+      code: 'Comma',
+      key: ',',
+      ctrlKey: true,
+    })
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-preferences / 可配置单次快捷键 / 执行重绑定历史动作', () => {
+    const history = createHistoryController()
+    const defaults = createDefaultComposeEditorPreferences()
+    render(
+      <ComposeEditor
+        history={history}
+        preferences={{
+          ...defaults,
+          shortcuts: {
+            ...defaults.shortcuts,
+            'history.undo': [{ code: 'KeyU' }],
+          },
+        }}
+      />,
+    )
+    const editor = screen.getByRole('region', { name: 'Compose editor' })
+
+    fireEvent.keyDown(editor, { code: 'KeyZ', key: 'z', ctrlKey: true })
+    expect(history.undo).not.toHaveBeenCalled()
+    fireEvent.keyDown(editor, { code: 'KeyU', key: 'u' })
+    expect(history.undo).toHaveBeenCalledTimes(1)
+  })
+
+  it('OpenSpec: editor-preferences / 可配置单次快捷键 / 拒绝同作用域冲突', () => {
+    const onPreferencesChange = vi.fn()
+    render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
+    fireEvent.click(screen.getByRole('button', { name: '修改平移工具快捷键' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: '修改平移工具快捷键' }), {
+      code: 'KeyV',
+      key: 'v',
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('选择工具')
+    expect(onPreferencesChange).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: editor-preferences / 实例级编辑器偏好 / 通知完整偏好', () => {
+    const onPreferencesChange = vi.fn()
+    render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
+    const capture = screen.getByRole('button', { name: '修改临时平移快捷键' })
+    fireEvent.click(capture)
+    fireEvent.keyDown(capture, { code: 'KeyP', key: 'p' })
+
+    expect(onPreferencesChange).toHaveBeenCalledTimes(1)
+    expect(onPreferencesChange).toHaveBeenCalledWith(expect.objectContaining({
+      theme: 'dark',
+      locale: 'zh-CN',
+      shortcuts: expect.objectContaining({
+        'stage.temporaryPan': [{ code: 'KeyP' }],
+      }),
+    }))
+  })
+
+  it('OpenSpec: editor-workspace-layout / 设置入口保持布局独立 / 从活动栏打开设置', () => {
+    const { container } = render(<ComposeEditor />)
+    const canvasPanel = container.querySelector('[data-workspace-panel="canvas"]')
+
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+
+    expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
+    expect(canvasPanel).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 设置入口保持布局独立 / 更新设置期间保持布局', () => {
+    const { container } = render(<ComposeEditor />)
+    const canvasPanel = container.querySelector('[data-workspace-panel="canvas"]')
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+
+    fireEvent.click(screen.getByRole('radio', { name: '浅色' }))
+
+    expect(canvasPanel).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Compose editor' }))
+      .toHaveAttribute('data-compose-theme', 'light')
+  })
+
+  it('OpenSpec: editor-workspace-layout / 工作区主题 token / 显示浅色默认工作区', () => {
+    const { container } = render(
+      <ComposeEditor
+        defaultPreferences={{
+          ...createDefaultComposeEditorPreferences(),
+          theme: 'light',
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: 'Compose editor' }))
+      .toHaveAttribute('data-compose-theme', 'light')
+    expect(container.querySelector('[data-workspace-panel="canvas"]'))
+      .toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 工作区主题 token / 保持深色视觉', () => {
+    const { container } = render(<ComposeEditor />)
+
+    expect(screen.getByRole('region', { name: 'Compose editor' }))
+      .toHaveAttribute('data-compose-theme', 'dark')
+    expect(container.querySelector('[data-workspace-panel="canvas"]'))
+      .toBeInTheDocument()
+  })
+
+  it('OpenSpec: ui-context / 共享 UI Context 包 / 组合共享 UI 环境 - Editor 注入并继承覆盖', () => {
+    const defaults = createDefaultComposeEditorPreferences()
+    render(
+      <ComposeUIProvider
+        locale="zh-CN"
+        messages={{ 'editor.settings': '偏好设置' }}
+        overrides={{ light: { accent: '#ff00aa' } }}
+        theme="dark"
+      >
+        <ComposeEditor
+          defaultPreferences={{
+            ...defaults,
+            locale: 'en-US',
+            theme: 'light',
+          }}
+          stageToolbar={<UIContextProbe />}
+        />
+      </ComposeUIProvider>,
+    )
+
+    expect(screen.getByTestId('ui-context-probe')).toHaveTextContent(
+      JSON.stringify({
+        theme: 'light',
+        resolvedTheme: 'light',
+        accent: '#ff00aa',
+        locale: 'en-US',
+        settings: '偏好设置',
+      }),
+    )
+    expect(screen.getByRole('region', { name: 'Compose editor' }))
+      .toHaveStyle({ '--compose-accent': '#ff00aa' })
+    expect(screen.getByRole('button', { name: '偏好设置' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-preferences / 可配置单次快捷键 / 清除和恢复快捷键', () => {
+    const onPreferencesChange = vi.fn()
+    render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '清除临时平移快捷键' }))
+    expect(onPreferencesChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      shortcuts: expect.objectContaining({ 'stage.temporaryPan': [] }),
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: '恢复临时平移默认快捷键' }))
+    expect(onPreferencesChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      shortcuts: expect.objectContaining({
+        'stage.temporaryPan': [{ code: 'Space' }],
+      }),
+    }))
+  })
+
+  it('OpenSpec: editor-preferences / 设置模态弹框 / 搜索设置', () => {
+    render(<ComposeEditor />)
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索设置' }), {
+      target: { value: '临时平移' },
+    })
+
+    expect(screen.getByText('临时平移')).toBeInTheDocument()
+    expect(screen.queryByText('选择工具')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '外观' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
+    expect(screen.getByRole('searchbox', { name: '搜索设置' })).toHaveValue('')
+    expect(screen.getByRole('heading', { name: '外观' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '快捷键' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    expect(screen.getByRole('searchbox', { name: '搜索设置' })).toHaveValue('')
+    expect(screen.getByRole('heading', { name: '外观' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-preferences / 快捷键输入隔离 / 查看只读手势', () => {
+    render(<ComposeEditor />)
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索设置' }), {
+      target: { value: '方向键' },
+    })
+
+    expect(screen.getByText('方向键')).toBeInTheDocument()
+    expect(screen.getByText('微调 1 世界单位；Shift 为 10')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /方向键/ })).not.toBeInTheDocument()
   })
 })

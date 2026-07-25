@@ -12,6 +12,10 @@ export interface WorkspaceContent {
   inspectorPanel?: ReactNode
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
+  settingsOpen: boolean
+  settingsPanelId: string
+  setSettingsButton: (element: HTMLButtonElement | null) => void
+  toggleSettings: () => void
 }
 
 export const WorkspaceContentContext = createContext<WorkspaceContent | null>(null)

@@ -1,6 +1,8 @@
 import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import { ChevronIcon, CubeIcon, DocumentIcon, EyeIcon, LockIcon } from './icons'
 import type { IndexedSceneTreeNode } from './tree-model'
+import { getSceneTreeMessages } from './scene-tree-i18n'
+import type { SceneTreeMessages } from './scene-tree-i18n'
 
 interface NodeActionProps {
   children: ReactNode
@@ -48,6 +50,7 @@ interface SceneTreeRowProps {
   onToggleExpanded: () => void
   onToggleLocked: (locked: boolean) => void
   onToggleVisibility: (visible: boolean) => void
+  messages?: SceneTreeMessages
 }
 
 function canOperate(locked: boolean, capability: boolean | undefined) {
@@ -75,6 +78,7 @@ export function SceneTreeRow({
   onToggleExpanded,
   onToggleLocked,
   onToggleVisibility,
+  messages = getSceneTreeMessages('zh-CN'),
 }: SceneTreeRowProps) {
   const hasChildren = (row.node.children?.length ?? 0) > 0
   const visible = row.node.visible !== false
@@ -104,7 +108,7 @@ export function SceneTreeRow({
       >
         <span className="st:shrink-0" style={{ width: 8 + (row.depth - 1) * 16 }} />
         <button
-          aria-label={expanded ? '折叠节点' : '展开节点'}
+          aria-label={expanded ? messages.collapse : messages.expand}
           className="st:grid st:size-5 st:shrink-0 st:cursor-pointer st:place-items-center st:border-0 st:bg-transparent st:text-[#9aa3ae] st:disabled:invisible"
           disabled={!hasChildren}
           tabIndex={-1}
@@ -124,7 +128,7 @@ export function SceneTreeRow({
         {editing ? (
           <input
             autoFocus
-            aria-label={`重命名 ${row.node.label}`}
+            aria-label={messages.rename(row.node.label)}
             className="st:min-w-0 st:flex-1 st:rounded-sm st:border st:border-[#2388ff] st:bg-[#0f1216] st:px-1 st:text-sm st:text-white st:outline-none"
             defaultValue={row.node.label}
             onBlur={(event) => onRenameCommit(event.target.value)}
@@ -140,14 +144,14 @@ export function SceneTreeRow({
         )}
         <NodeAction
           disabled={!canOperate(locked, row.node.canToggleVisibility)}
-          label={visible ? `隐藏 ${row.node.label}` : `显示 ${row.node.label}`}
+          label={visible ? messages.hide(row.node.label) : messages.show(row.node.label)}
           onClick={() => onToggleVisibility(!visible)}
         >
           <EyeIcon className="st:stroke-current st:stroke-[1.6]" hidden={!visible} />
         </NodeAction>
         <NodeAction
           disabled={row.node.canToggleLocked === false}
-          label={locked ? `解锁 ${row.node.label}` : `锁定 ${row.node.label}`}
+          label={locked ? messages.unlock(row.node.label) : messages.lock(row.node.label)}
           onClick={() => onToggleLocked(!locked)}
         >
           <LockIcon className="st:stroke-current st:stroke-[1.6]" locked={locked} />

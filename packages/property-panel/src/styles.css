@@ -20,15 +20,15 @@
     --pp-tree-indent: 14px;
     --pp-binding-slot-width: 36px;
     --pp-binding-slot-compact-width: 20px;
-    --pp-border: #303131;
-    --pp-border-strong: #3a3b3b;
-    --pp-border-soft: #242525;
-    --pp-bg: #141515;
-    --pp-bg-raised: #1d1e1e;
-    --pp-bg-input: #0d0e0e;
-    --pp-text: #d0d0d0;
-    --pp-text-muted: #929393;
-    --pp-accent: #2c84f6;
+    --pp-border: var(--compose-border, #303131);
+    --pp-border-strong: var(--compose-border-strong, #3a3b3b);
+    --pp-border-soft: var(--compose-border, #242525);
+    --pp-bg: var(--compose-panel-bg, #141515);
+    --pp-bg-raised: var(--compose-surface-raised, #1d1e1e);
+    --pp-bg-input: var(--compose-surface-control, #0d0e0e);
+    --pp-text: var(--compose-text, #d0d0d0);
+    --pp-text-muted: var(--compose-text-muted, #929393);
+    --pp-accent: var(--compose-accent, #2c84f6);
 
     position: relative;
     min-width: 300px;
@@ -911,4 +911,36 @@
       transition: background-color 120ms ease, box-shadow 120ms ease;
     }
   }
+}
+
+/* Context 主题覆盖放在 layer 外，确保能覆盖包内精细的暗色纹理。 */
+.property-panel[data-compose-theme='light'] {
+  color-scheme: light;
+  scrollbar-color: var(--compose-scrollbar) transparent;
+  background: var(--compose-panel-bg);
+}
+
+.property-panel[data-compose-theme='light'] .property-panel__header,
+.property-panel[data-compose-theme='light'] .property-panel__toolbar,
+.property-panel[data-compose-theme='light'] .property-panel__group-header,
+.property-panel[data-compose-theme='light'] .property-panel__field {
+  border-color: var(--compose-border);
+  background: var(--compose-panel-bg);
+  box-shadow: none;
+}
+
+.property-panel[data-compose-theme='light'] .property-panel__search,
+.property-panel[data-compose-theme='light'] input,
+.property-panel[data-compose-theme='light'] select,
+.property-panel[data-compose-theme='light'] .property-panel__menu,
+.property-panel[data-compose-theme='light'] .property-panel__binding-picker {
+  border-color: var(--compose-border);
+  background: var(--compose-surface-control);
+  color: var(--compose-text);
+  box-shadow: none;
+}
+
+.property-panel[data-compose-theme='light'] .property-panel__menu button:hover,
+.property-panel[data-compose-theme='light'] .property-panel__binding-options button:hover {
+  background: var(--compose-surface-hover);
 }

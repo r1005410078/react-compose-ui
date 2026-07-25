@@ -49,7 +49,19 @@ type TestHandler = {
 }
 
 type TestDocument = {
-  schemaVersion: 1
+  schemaVersion: 2
+  canvas: {
+    grid: {
+      stepX: number
+      stepY: number
+      offsetX: number
+      offsetY: number
+      primaryLineEvery: number
+      snapEnabled: boolean
+    }
+    smartSnap: { nodes: boolean; guides: boolean }
+    guides: { id: string; axis: 'x' | 'y'; position: number }[]
+  }
   rootIds: string[]
   nodes: Record<string, {
     id: string
@@ -79,7 +91,19 @@ const createTransactionRuntime = (
 
 function documentFixture(): TestDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: {
+      grid: {
+        stepX: 8,
+        stepY: 8,
+        offsetX: 0,
+        offsetY: 0,
+        primaryLineEvery: 8,
+        snapEnabled: true,
+      },
+      smartSnap: { nodes: true, guides: true },
+      guides: [],
+    },
     rootIds: ['frame'],
     nodes: {
       frame: {

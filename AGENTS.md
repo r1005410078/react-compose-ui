@@ -37,22 +37,25 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 
 ## 架构边界
 
+- `@compose-ui/ui-context` 是跨包共享的 React 主题与国际化 Context，只依赖 React peer；
+  第一方 React chrome 包可以依赖它，但必须在构建中外置，避免产生多份 Context 实例。
 - `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载未来的文档模型、命令及通用逻辑。
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`。
-- `@compose-ui/scene-tree` 是独立受控 React 树组件，不得依赖 `core` 或 `editor`；
+- `@compose-ui/scene-tree` 是独立受控 React 树组件，可依赖 `ui-context`，不得依赖 `core` 或 `editor`；
   `editor` 可以通过公共入口依赖并默认集成它。
-- `@compose-ui/property-panel` 是由同步 Valibot Schema 驱动的独立受控 React 组件，不得依赖
-  `core`、`editor` 或 `scene-tree`；`editor` 只通过 `inspectorPanel` 插槽集成它。
-- `@compose-ui/history` 是独立的 React 会话快照历史与受控面板，不得依赖 `core`、`editor`、
-  `scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
+- `@compose-ui/property-panel` 是由同步 Valibot Schema 驱动的独立受控 React 组件，可依赖
+  `ui-context`，不得依赖 `core`、`editor` 或 `scene-tree`；`editor` 只通过
+  `inspectorPanel` 插槽集成它。
+- `@compose-ui/history` 是独立的 React 会话快照历史与受控面板，可依赖 `ui-context`，不得依赖
+  `core`、`editor`、`scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
 - `@compose-ui/component-registry` 是实例级宿主组件注册协议，可以依赖 `core`，以 React 为
   peer dependency，不得依赖 `editor` 或 `property-panel`。
-- `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台，可以依赖 `core` 和
-  `component-registry`，不得依赖 `editor`、`property-panel` 或 `operation-log`。
+- `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台，可以依赖 `core`、
+  `component-registry` 和 `ui-context`，不得依赖 `editor`、`property-panel` 或 `operation-log`。
 - `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core` 和
   `component-registry`，不得依赖 `editor` 或 `stage`。
 - `@compose-ui/materials` 是 Frame、Rectangle、Text 的独立基础物料包，可以依赖 `core`、
-  `component-registry`、`stage`、`property-panel` 和 Valibot，不得依赖 `editor`。
+  `component-registry`、`stage`、`property-panel`、`ui-context` 和 Valibot，不得依赖 `editor`。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。

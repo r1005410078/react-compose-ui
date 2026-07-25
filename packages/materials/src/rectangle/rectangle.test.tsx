@@ -2,6 +2,7 @@ import { RegistryComponent } from '@compose-ui/component-registry'
 import type { ComposeComponentNode } from '@compose-ui/core'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ComposeUIProvider } from '@compose-ui/ui-context'
 import { createBasicMaterials } from '../index'
 
 afterEach(cleanup)
@@ -23,6 +24,56 @@ function rectangleNode(
 }
 
 describe('@compose-ui/materials Rectangle', () => {
+  it('OpenSpec: basic-materials / 基础材料 Inspector 共享 UI 环境 / 使用英文基础材料 Inspector', () => {
+    const materials = createBasicMaterials({
+      extensions: [{
+        type: 'host.widget',
+        label: '宿主业务物料',
+        defaultSize: { width: 10, height: 10 },
+        createDefaultProps: () => ({}),
+        renderer: () => null,
+      }],
+    })
+    const Inspector = materials.registry.get('rectangle')?.inspector
+    expect(Inspector).toBeDefined()
+    if (!Inspector) return
+    render(
+      <ComposeUIProvider locale="en-US">
+        <Inspector dispatch={vi.fn()} node={rectangleNode({ name: '宿主矩形' })} />
+      </ComposeUIProvider>,
+    )
+
+    expect(screen.getByRole('region', { name: '宿主矩形 properties' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Border radius')).toBeInTheDocument()
+    expect(materials.registry.get('host.widget')?.label).toBe('宿主业务物料')
+  })
+
+  it('OpenSpec: basic-materials / 基础材料 Inspector 共享 UI 环境 / 切换 Inspector 主题', () => {
+    const materials = createBasicMaterials()
+    const registry = materials.registry
+    const Inspector = registry.get('rectangle')?.inspector
+    const dispatch = vi.fn()
+    expect(Inspector).toBeDefined()
+    if (!Inspector) return
+    const { rerender } = render(
+      <ComposeUIProvider locale="en-US" theme="dark">
+        <Inspector dispatch={dispatch} node={rectangleNode()} />
+      </ComposeUIProvider>,
+    )
+    const panel = screen.getByRole('region', { name: 'Rectangle properties' })
+    expect(panel).toHaveAttribute('data-compose-theme', 'dark')
+
+    rerender(
+      <ComposeUIProvider locale="en-US" theme="light">
+        <Inspector dispatch={dispatch} node={rectangleNode()} />
+      </ComposeUIProvider>,
+    )
+    expect(panel).toHaveAttribute('data-compose-theme', 'light')
+    expect(materials.registry).toBe(registry)
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
   it('OpenSpec: basic-materials / 完整基础物料与 Inspector / 兼容旧 Rectangle props', () => {
     const materials = createBasicMaterials()
     render(

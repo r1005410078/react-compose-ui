@@ -31,3 +31,30 @@
     background-color: #606a78;
   }
 }
+
+[data-compose-ui='scene-tree'][data-compose-theme='light'] {
+  background: var(--compose-panel-bg);
+  color: var(--compose-text);
+}
+
+[data-compose-ui='scene-tree'][data-compose-theme='light'] > div:first-child {
+  border-color: var(--compose-border);
+}
+
+[data-compose-ui='scene-tree'][data-compose-theme='light'] > div:first-child > div {
+  border-color: var(--compose-border);
+  background: var(--compose-surface-control);
+}
+
+[data-compose-ui='scene-tree'][data-compose-theme='light'] input {
+  color: var(--compose-text);
+}
+
+[data-compose-ui='scene-tree'][data-compose-theme='light'] [role='row']:hover {
+  background: var(--compose-surface-hover);
+}
+
+[data-compose-ui='scene-tree'][data-compose-theme='light'] [role='row'][aria-selected='true'] {
+  background: var(--compose-surface-selected);
+  color: var(--compose-text-strong);
+}

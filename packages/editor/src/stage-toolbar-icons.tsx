@@ -2,8 +2,11 @@ type StageToolbarIconName =
   | 'create-frame'
   | 'fit-frame'
   | 'fit-selection'
+  | 'grid-snap'
   | 'pan'
   | 'select'
+  | 'settings'
+  | 'smart-snap'
   | 'zoom-in'
   | 'zoom-out'
 
@@ -36,6 +39,11 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="m9 9 6 6M15 9l-6 6" />
       </>
     ),
+    'grid-snap': (
+      <>
+        <path d="M4 4h16v16H4zM4 9.33h16M4 14.67h16M9.33 4v16M14.67 4v16" />
+      </>
+    ),
     pan: (
       <>
         <path d="M8.5 11V5.5a1.5 1.5 0 0 1 3 0V10" />
@@ -48,6 +56,18 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
       <>
         <path d="m5 3 13 9-6.2 1.35L9 19Z" />
         <path d="m12 13.35 4.5 6" />
+      </>
+    ),
+    settings: (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19 13.5v-3l-2.1-.7-.5-1.2 1-2-2.1-2.1-2 1-1.2-.5L10.5 3h-3l-.7 2.1-1.2.5-2-1-2.1 2.1 1 2-.5 1.2-2 .7v3l2 .7.5 1.2-1 2 2.1 2.1 2-1 1.2.5.7 2.1h3l.7-2.1 1.2-.5 2 1 2.1-2.1-1-2 .5-1.2z" transform="translate(2.5 0) scale(.79 1)" />
+      </>
+    ),
+    'smart-snap': (
+      <>
+        <path d="M7 4v9a5 5 0 0 0 10 0V4M7 8h4M13 8h4" />
+        <path d="M4 18h3M17 18h3" />
       </>
     ),
     'zoom-in': (

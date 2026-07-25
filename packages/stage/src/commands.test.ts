@@ -1,4 +1,5 @@
 import {
+  createDefaultCanvasSettings,
   createTransactionRuntime,
   type ComposeDocument,
 } from '@compose-ui/core'
@@ -13,7 +14,8 @@ import {
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: createDefaultCanvasSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {

@@ -226,6 +226,11 @@ ECharts 等依赖仍由宿主 renderer 持有；本包只处理 target 描述、
 
 ## 面板交互和主题
 
+面板默认消费 `@compose-ui/ui-context` 的主题、语言、token 和
+`propertyPanel.*` message 覆盖；Provider 外保留原有中文 chrome 与暗色视觉。Schema title、
+description、option label 和自定义 renderer 内容始终由宿主控制，不会自动翻译。绑定解析继续
+返回稳定 issue code，React 展示层才按当前 Context 本地化错误。
+
 - 搜索匹配 title、key、完整路径和 description。
 - 筛选支持全部、相对 `defaultValue` 已修改、以及有 Schema issue 的属性。
 - 设置菜单可以显示高级属性、字段说明，并恢复列宽。
@@ -236,7 +241,8 @@ ECharts 等依赖仍由宿主 renderer 持有；本包只处理 target 描述、
   被层级空白挤压。
 - 分组和字段的重置只在 `defaultValue` 能通过完整 Schema 时提供。
 
-可在 `.property-panel` 或其祖先范围内覆盖主题变量：
+共享语义 token 是首选主题入口；单实例仍可在 `.property-panel` 或其祖先范围内覆盖
+PropertyPanel 专用变量：
 
 ```css
 .my-inspector .property-panel {

@@ -61,12 +61,14 @@ export function Page() {
 
 Provider 默认每个 scope 保留最近 `1000` 条记录，每个 before、after 或 metadata 快照上限为
 `64KiB`。IndexedDB 初始化或写入失败时会自动转为当前会话内存存储，`status` 变为
-`degraded`，面板显示“Local persistence unavailable”，同时通过 `onStorageError` 通知宿主。
+`degraded`，面板显示本地化的持久化不可用状态，同时通过 `onStorageError` 通知宿主。
 
 面板按更新时间倒序显示，支持搜索 action、摘要、组件和路径，也支持分类与组件筛选。选择记录后
 可查看目标、来源、合并次数、结构化 Before/After 以及 metadata。默认界面文案使用英文；
 面板没有清空按钮，需要时宿主可以调用
-`useOperationLog().clear()`。
+`useOperationLog().clear()`。面板从 `@compose-ui/ui-context` 读取主题和语言；Provider 外默认
+保持英文兼容。宿主可覆盖 `operationLog.*` message，`emptyMessage` 与显式 `aria-label` 仍有
+最高优先级，日志摘要、目标标签和业务 action 不会被翻译。
 
 ## 连续输入合并
 

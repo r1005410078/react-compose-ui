@@ -1,12 +1,12 @@
 @layer components {
   .operation-log {
-    --ol-bg: #111315;
-    --ol-panel: #17191b;
-    --ol-panel-raised: #202225;
-    --ol-border: #303337;
-    --ol-text: #d6d8db;
-    --ol-muted: #92979e;
-    --ol-accent: #3984ee;
+    --ol-bg: var(--compose-workspace-bg, #111315);
+    --ol-panel: var(--compose-panel-bg, #17191b);
+    --ol-panel-raised: var(--compose-surface-raised, #202225);
+    --ol-border: var(--compose-border, #303337);
+    --ol-text: var(--compose-text, #d6d8db);
+    --ol-muted: var(--compose-text-muted, #92979e);
+    --ol-accent: var(--compose-accent, #3984ee);
     container-type: size;
     display: flex;
     position: relative;
@@ -275,4 +275,32 @@
       z-index: 2;
     }
   }
+}
+
+.operation-log[data-compose-theme='light'] {
+  color-scheme: light;
+}
+
+.operation-log[data-compose-theme='light'] .operation-log__toolbar,
+.operation-log[data-compose-theme='light'] .operation-log__entry,
+.operation-log[data-compose-theme='light'] .operation-log__detail {
+  border-color: var(--compose-border);
+  background: var(--compose-panel-bg);
+}
+
+.operation-log[data-compose-theme='light'] .operation-log__toolbar input,
+.operation-log[data-compose-theme='light'] .operation-log__toolbar select,
+.operation-log[data-compose-theme='light'] .operation-log__targets > div,
+.operation-log[data-compose-theme='light'] .operation-log__snapshot pre {
+  border-color: var(--compose-border);
+  background: var(--compose-surface-control);
+  color: var(--compose-text);
+}
+
+.operation-log[data-compose-theme='light'] .operation-log__entry:hover {
+  background: var(--compose-surface-hover);
+}
+
+.operation-log[data-compose-theme='light'] .operation-log__entry[aria-current='true'] {
+  background: var(--compose-surface-selected);
 }

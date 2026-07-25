@@ -1,9 +1,9 @@
 .command-panel {
-  --command-panel-bg: #181a1f;
-  --command-panel-border: #30343b;
-  --command-panel-muted: #939aa5;
-  --command-panel-text: #d8dde6;
-  --command-panel-accent: #4ea1f3;
+  --command-panel-bg: var(--compose-panel-bg, #181a1f);
+  --command-panel-border: var(--compose-border, #30343b);
+  --command-panel-muted: var(--compose-text-muted, #939aa5);
+  --command-panel-text: var(--compose-text, #d8dde6);
+  --command-panel-accent: var(--compose-accent, #4ea1f3);
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
@@ -98,6 +98,21 @@
 .command-panel__coalesced,
 .command-panel__empty {
   color: var(--command-panel-muted);
+}
+
+.command-panel[data-compose-theme='light'] input,
+.command-panel[data-compose-theme='light'] select,
+.command-panel[data-compose-theme='light'] textarea,
+.command-panel[data-compose-theme='light'] button {
+  background: var(--compose-surface-control);
+}
+
+.command-panel[data-compose-theme='light'] code {
+  color: var(--compose-text-subtle);
+}
+
+.command-panel[data-compose-theme='light'] .command-panel__details {
+  background: var(--compose-surface-raised);
 }
 
 .command-panel__issues {

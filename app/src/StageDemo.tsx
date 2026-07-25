@@ -3,7 +3,10 @@ import type {
   ComponentInspectorProps,
   ComponentRendererProps,
 } from '@compose-ui/component-registry'
-import { createTransactionRuntime } from '@compose-ui/core'
+import {
+  createDefaultCanvasSettings,
+  createTransactionRuntime,
+} from '@compose-ui/core'
 import type {
   ComposeComponentNode,
   ComposeDocument,
@@ -48,7 +51,8 @@ function PreviewIcon() {
 }
 
 const emptyDocument: ComposeDocument = {
-  schemaVersion: 1,
+  schemaVersion: 2,
+  canvas: createDefaultCanvasSettings(),
   rootIds: [],
   nodes: {},
 }

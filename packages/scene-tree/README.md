@@ -1,5 +1,8 @@
 # @compose-ui/scene-tree
 
+独立受控场景树。内建搜索、菜单、操作与 ARIA 默认消费 `@compose-ui/ui-context` 的主题和语言；
+显式 `locale` prop 作为兼容覆盖且优先于 Context，宿主节点 label、icon 和业务内容保持原文。
+
 可独立嵌入 React 应用的受控场景树组件。它使用虚拟化行支持 5000 个节点，并提供选择、
 展开、检索、重命名、删除、可见性、锁定、新增、复制、剪切、粘贴和拖拽操作意图。
 
@@ -15,6 +18,7 @@ import { SceneTree } from '@compose-ui/scene-tree'
 import '@compose-ui/scene-tree/styles.css'
 
 <SceneTree
+  locale="zh-CN"
   nodes={nodes}
   selectedIds={selectedIds}
   expandedIds={expandedIds}
@@ -23,6 +27,8 @@ import '@compose-ui/scene-tree/styles.css'
   onOperation={handleOperation}
 />
 ```
+
+`locale` 支持 zh-CN 和 en-US，覆盖检索、菜单、错误和 ARIA 文案；宿主节点 label 不翻译。
 
 需要让外部工具栏与树的右键菜单共享命令状态时，可创建并传入同一个 controller：
 

@@ -23,13 +23,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/core @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+bun add @compose-ui/core @compose-ui/ui-context @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/core @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+npm install @compose-ui/core @compose-ui/ui-context @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -121,6 +121,31 @@ Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API�
 Palette、SceneTree、Stage、History、Inspector 与 CommandPanel。显式插槽和 `children` 始终可
 覆盖 controller 默认内容。
 
+## 共享主题、国际化与设置
+
+`@compose-ui/ui-context` 提供可嵌套的 `ComposeThemeProvider`、`ComposeI18nProvider` 和
+`ComposeUIProvider`。Stage、Palette、SceneTree、History、CommandPanel、PropertyPanel、
+OperationLog 与基础材料 Inspector 会直接消费同一个 Context；宿主可按 dark/light 覆盖语义
+token，也可用稳定 message ID 覆盖单条内建文案。registry label、Schema metadata、插槽内容和
+业务组件不会被猜测翻译。
+
+```tsx
+import { ComposeUIProvider } from '@compose-ui/ui-context'
+
+<ComposeUIProvider
+  locale="en-US"
+  theme="system"
+  overrides={{ light: { accent: '#7c3aed' } }}
+  messages={{ 'propertyPanel.search': 'Find a property' }}
+>
+  <ComposeEditor controller={controller} />
+</ComposeUIProvider>
+```
+
+`ComposeEditor` 会根据实例 preferences 在根部组合一层 Provider，同时继承外层宿主的 token 和
+message 覆盖。左下角齿轮打开仅覆盖当前 Editor 的模态设置中心：顶部全局搜索、左侧外观/语言/
+键盘快捷方式分类、右侧即时生效内容。偏好仍由宿主选择是否受控和持久化，不进入文档事务。
+
 ## 文档与命令事务
 
 `@compose-ui/core` 提供 React/DOM 无关的 `ComposeDocument`、文档校验、可逆 Patch、内置命令和
@@ -129,12 +154,14 @@ Palette、SceneTree、Stage、History、Inspector 与 CommandPanel。显式插�
 
 ```tsx
 import {
+  createDefaultCanvasSettings,
   createTransactionRuntime,
   type ComposeDocument,
 } from '@compose-ui/core'
 
 const document: ComposeDocument = {
-  schemaVersion: 1,
+  schemaVersion: 2,
+  canvas: createDefaultCanvasSettings(),
   rootIds: ['page'],
   nodes: {
     page: {
@@ -186,7 +213,8 @@ import '@compose-ui/command-panel/styles.css'
 
 `@compose-ui/component-registry` 由宿主按稳定 `type` 注册默认 JSON props/style、默认尺寸、React
 renderer 和可选 Inspector。`@compose-ui/stage` 使用 DOM 渲染 Frame 与业务组件，以屏幕坐标
-SVG Overlay 绘制选区、手柄和吸附线；组件内部仍可使用 Canvas，例如 ECharts。
+SVG/DOM Overlay 绘制正负坐标标尺、主/细网格、世界原点轴、选区尺寸、手柄、全局辅助线和
+可访问滚动条；组件内部仍可使用 Canvas，例如 ECharts。
 
 ```tsx
 import { createComponentRegistry } from '@compose-ui/component-registry'
@@ -230,7 +258,9 @@ const controller = useComposeEditorController({
 基础物料把背景、边框、圆角、透明度和结构化 shadow 统一写入 `node.style`。Stage 与 Preview
 使用同一 resolved style；Rectangle 仍兼容读取无 style 旧文档的视觉 props。
 
-选择、工具、场景树展开项和 viewport 是 controller 会话状态，不进入文档事务。Palette 拖入、
+网格步长/偏移/主线间隔、节点/辅助线吸附开关和全局世界辅助线保存在
+`ComposeDocument.canvas`，会进入事务 History 与 Operation Log。选择、工具、场景树展开项、
+viewport 和动态滚动范围是 controller 会话状态，不进入文档事务。Palette 拖入、
 SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全部派发到同一 runtime。
 成功事务可通过 controller 的 `onTransaction` 单点映射到 Operation Log；noop、rejected 与 reset
 不会被当作成功编辑记录。
@@ -267,6 +297,10 @@ const onKeyDownCapture = useHistoryShortcuts(history)
 快捷键支持 `Cmd/Ctrl+Z`、`Cmd/Ctrl+Shift+Z` 和 `Ctrl+Y`。历史不跨刷新持久化，也不会深拷贝
 宿主值；每次 `commit` 都必须产生不可变快照。完整说明见
 [`@compose-ui/history` README](./packages/history/README.md)。
+
+编辑器左侧活动栏底部提供设置中心，支持 Dark/Light/System、简体中文/English，以及
+Space 临时平移、工具、适配、缩放、吸附、编辑和历史动作的快捷键重绑。偏好仅属于当前
+Editor 实例；宿主可用受控 `preferences` 自行持久化，编辑器不会写 localStorage 或文档历史。
 
 ## 独立使用属性面板
 
@@ -415,10 +449,12 @@ bun run dev
 1. 点击“创建 Frame”，在无限 Stage 中建立明确的输出边界。
 2. 打开 Component Library，把 Rectangle、Text 或 ECharts 拖入 Frame。
 3. 在 Stage 或 Scene Graph 中选择、移动、多选和分组节点，并通过右侧 Inspector 修改属性。
-4. 使用撤销/重做或 History 查看同一事务文档的变化。
-5. 在 Command 调试台查看 committed、noop、rejected 及可逆 patches；Operation Log 只记录成功
+4. 使用工具栏调整网格/智能吸附，或从标尺拖出全局辅助线；用滚动条在动态世界范围中导航。
+5. 使用撤销/重做或 History 查看同一事务文档的变化。
+6. 在 Command 调试台查看 committed、noop、rejected 及可逆 patches；Operation Log 只记录成功
    事务与历史导航。
-6. 点击“预览 Frame”，用独立 `ComposePreview` 检查目标 Frame 的普通 DOM 输出。
+7. 点击“预览 Frame”，用独立 `ComposePreview` 检查目标 Frame 的普通 DOM 输出；canvas 编辑
+   元数据不会进入预览。
 
 该完整示例用于验证各包通过公开协议协同工作，不代表其内部 fixture 是稳定公共 API。
 

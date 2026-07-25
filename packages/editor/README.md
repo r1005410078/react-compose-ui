@@ -39,11 +39,46 @@ export function EditorPage() {
 该样式入口包含默认 SceneTree、HistoryPanel、Stage、ComponentPalette 与 CommandPanel 样式。
 只有独立使用这些包时才需要另行导入对应的 `styles.css`。
 
+## 实例偏好与设置中心
+
+左侧活动栏底部齿轮会打开当前 Editor 范围内的模态设置弹框。顶部为跨分类搜索，左侧固定
+外观、语言和键盘快捷方式分类，右侧修改即时生效；打开时 Dockview 进入 inert 状态。内建设置
+支持 Dark、Light、System、简体中文、English，以及 Stage、编辑和历史动作的单次快捷键重绑、
+冲突检查、清除和恢复。默认按住 Space 可从 Stage 空白、Frame 或节点开始临时平移；
+`Cmd/Ctrl+,` 打开或关闭设置。
+
+```tsx
+import {
+  ComposeEditor,
+  createDefaultComposeEditorPreferences,
+} from '@compose-ui/editor'
+import { useState } from 'react'
+
+const [preferences, setPreferences] = useState(
+  createDefaultComposeEditorPreferences,
+)
+
+<ComposeEditor
+  controller={controller}
+  preferences={preferences}
+  onPreferencesChange={setPreferences}
+/>
+```
+
+提供 `preferences` 时由宿主受控；否则偏好只存在当前 `ComposeEditor` 实例。组件不会访问
+`localStorage`，主题、语言和快捷键也不会进入 ComposeDocument、History 或 Operation Log。
+`system` 会实时监听 `prefers-color-scheme`。宿主插槽、registry label 与业务组件文案不会被
+自动翻译。
+
+Editor 会根据 preferences 自动组合 `@compose-ui/ui-context` Provider，并继承外层宿主的
+dark/light token 和稳定 message ID 覆盖。第一方面板直接读取 Context，不再由 Editor clone
+`locale` prop；旧 locale prop 仅作为独立组件的显式兼容覆盖保留。
+
 ## Controller
 
 `useComposeEditorController` 组合宿主提供的 `TransactionRuntime` 与 `ComponentRegistry`，管理
-selection、expandedIds、activeFrameId、viewport、tool 和实例级 `StageDragController`。它从
-runtime 当前文档派生：
+selection、expandedIds、activeFrameId、viewport、tool、真实 Stage surface 尺寸和实例级
+`StageDragController`。它从 runtime 当前文档派生：
 
 - `sceneTreeProps` 与 `stageProps`
 - `history`（直接复用 runtime 的兼容导航协议）
@@ -67,10 +102,18 @@ navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Pr
   覆盖下方内容，但不会关闭 `history` 的快捷键处理。
 - Stage Toolbar 固定在 Canvas 内容顶部，不是独立面板；`stageToolbar` 优先于已废弃的
   `canvasToolbar`。
+- 默认 Stage Toolbar 提供网格吸附、智能吸附快捷开关和画布设置弹层。弹层可编辑 X/Y
+  步长、X/Y 偏移、主线间隔、节点/辅助线吸附并清空辅助线；Apply 最多提交一个事务，
+  Cancel 不修改文档。
+- fit Frame/selection 使用 Stage 实际上报的 surface 尺寸，不包含固定标尺和滚动条占用。
 - 默认布局禁止面板拖拽、关闭和浮动，Dockview 类型不会成为公共 API。
 - 插槽更新不会重建面板或丢失当前实例的尺寸与折叠状态。
+- 主题和语言更新只刷新内建 chrome，不重建 Dockview group/panel；根节点提供
+  `data-compose-theme` 与 `lang`。
 - 布局只在当前组件实例存活期间保留，不读取或写入持久化存储。
 
 提供 controller 且没有显式覆盖时，工作区自动显示 Palette、派生 SceneTree、Stage、
 HistoryPanel、Inspector 与 CommandPanel。显式 `children` 始终覆盖默认 Stage；无 controller
 时既有受控插槽和快捷键行为保持兼容。编辑器不依赖 operation-log，也不会持久化文档或会话状态。
+网格设置和全局辅助线属于 `ComposeDocument`，因此会进入 runtime History 和宿主 Operation Log；
+viewport、选择、工具、surface 尺寸与滚动范围仍只存在于当前编辑器会话。

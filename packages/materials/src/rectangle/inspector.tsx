@@ -3,8 +3,8 @@ import type { NodeStyle } from '@compose-ui/core'
 import { PropertyPanel } from '@compose-ui/property-panel'
 import { dispatchInspectorUpdate } from '../shared/inspector/dispatch-update'
 import type { InspectorIdFactory } from '../shared/inspector/dispatch-update'
-import { containerSchema } from '../shared/inspector/schemas'
 import { createContainerValue } from '../shared/inspector/values'
+import { useMaterialInspectorI18n } from '../shared/inspector/use-material-inspector-i18n'
 import { resolveLegacyRectangleStyle } from './legacy-style'
 
 interface RectangleInspectorDefaults {
@@ -22,6 +22,7 @@ export function createRectangleInspector(
   idFactory: InspectorIdFactory,
 ) {
   return function RectangleInspector({ node, dispatch }: ComponentInspectorProps) {
+    const i18n = useMaterialInspectorI18n()
     const value = createContainerValue(
       node,
       resolveLegacyRectangleStyle(node, defaults.style),
@@ -34,10 +35,10 @@ export function createRectangleInspector(
     })
     return (
       <PropertyPanel
-        aria-label={`${node.name} properties`}
+        aria-label={i18n.propertiesLabel(node.name)}
         defaultValue={defaultValue}
         readOnly={node.locked}
-        schema={containerSchema}
+        schema={i18n.schemas.container}
         value={value}
         onValueChange={(next) =>
           dispatchInspectorUpdate(

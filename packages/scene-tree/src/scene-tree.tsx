@@ -1,5 +1,11 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
+import {
+  createComposeThemeStyle,
+  useComposeI18nContext,
+  useComposeThemeContext,
+} from '@compose-ui/ui-context'
 import { useRef } from 'react'
+import type { CSSProperties } from 'react'
 import { ROW_HEIGHT } from './drag-model'
 import type { SceneTreeProps } from './index'
 import { SceneTreeContextMenu } from './scene-tree-context-menu'
@@ -9,6 +15,7 @@ import { SceneTreeToolbar } from './scene-tree-toolbar'
 import { useSceneTreeCommands } from './use-scene-tree-commands'
 import { useSceneTreeDrag } from './use-scene-tree-drag'
 import { useSceneTreeInteraction } from './use-scene-tree-interaction'
+import { getSceneTreeMessages } from './scene-tree-i18n'
 
 interface DragControlsRef {
   cancelDrag: () => void
@@ -35,9 +42,15 @@ export function SceneTree({
   onExpandedChange,
   onOperation,
   commands: providedCommands,
+  locale,
   className,
+  style,
   ...htmlProps
 }: SceneTreeProps) {
+  const i18n = useComposeI18nContext()
+  const theme = useComposeThemeContext()
+  const resolvedLocale = locale ?? i18n?.locale ?? 'zh-CN'
+  const messages = getSceneTreeMessages(resolvedLocale, i18n?.formatMessage)
   const scrollRef = useRef<HTMLDivElement>(null)
   const dragControlsRef = useRef<DragControlsRef | null>(null)
   const scrollToIndexRef = useRef<(rowIndex: number) => void>(() => undefined)
@@ -113,11 +126,18 @@ export function SceneTree({
       {...htmlProps}
       className={rootClassName}
       data-compose-ui="scene-tree"
+      data-compose-theme={theme?.resolvedTheme}
+      lang={resolvedLocale}
       onContextMenu={(event) => interaction.openContextMenu(event, null)}
+      style={{
+        ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
+        ...style,
+      } as CSSProperties}
     >
       <SceneTreeToolbar
         caseSensitive={interaction.caseSensitive}
-        error={interaction.searchResult.error}
+        error={interaction.searchResult.error ? messages.invalidRegex : null}
+        messages={messages}
         query={interaction.query}
         regex={interaction.regex}
         wholeWord={interaction.wholeWord}
@@ -129,7 +149,7 @@ export function SceneTree({
       />
       <div
         ref={scrollRef}
-        aria-label={htmlProps['aria-label'] ?? '场景树'}
+        aria-label={htmlProps['aria-label'] ?? messages.tree}
         className="scene-tree__scroll st:min-h-0 st:min-w-0 st:flex-1 st:overflow-x-hidden st:overflow-y-auto st:outline-none"
         role="treegrid"
         onContextMenu={(event) => interaction.openContextMenu(event, null)}
@@ -160,6 +180,7 @@ export function SceneTree({
                   || (!interaction.focusedId && virtualRow.index === 0)}
                 insideDropTarget={insideDropTarget}
                 isDragging={drag.isDragging}
+                messages={messages}
                 queryActive={interaction.query.length > 0}
                 row={row}
                 selected={selectedIds.includes(row.node.id)}
@@ -192,6 +213,7 @@ export function SceneTree({
         <SceneTreeContextMenu
           {...interaction.contextMenu}
           commands={commands}
+          messages={messages}
           menuRef={interaction.contextMenuRef}
           onClose={() => interaction.setContextMenu(null)}
         />

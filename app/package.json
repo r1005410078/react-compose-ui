@@ -18,6 +18,7 @@
     "@compose-ui/operation-log": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/preview": "workspace:*",
+    "@compose-ui/ui-context": "workspace:*",
     "echarts": "^6.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

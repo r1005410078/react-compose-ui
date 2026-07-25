@@ -50,7 +50,10 @@ import type {
   StageTool,
   StageViewport,
 } from '@compose-ui/stage'
-import { StageToolbarIcon } from './stage-toolbar-icons'
+import {
+  DefaultEmptyInspector,
+  DefaultStageToolbar,
+} from './default-workspace-content'
 
 function defaultIdFactory() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -289,6 +292,11 @@ export function useComposeEditorController({
       : initialActiveFrameId)
   const [viewport, setViewport] = useState<StageViewport>(initialViewport)
   const [tool, setTool] = useState<StageTool>(initialTool)
+  const [surfaceSize, setSurfaceSize] = useState<{
+    readonly width: number
+    readonly height: number
+  } | null>(null)
+  const [canvasSettingsOpen, setCanvasSettingsOpen] = useState(false)
   const [dragController] = useState(createStageDragController)
   const transactionById = useRef(new Map<string, EditorTransaction>())
   const observerRef = useRef(onTransaction)
@@ -552,10 +560,12 @@ export function useComposeEditorController({
     viewport,
     onViewportChange: setViewport,
     tool,
+    onToolChange: setTool,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
     activeFrameId,
     onActiveFrameIdChange: setActiveFrameId,
+    onSurfaceSizeChange: setSurfaceSize,
     dragController,
     idFactory: nextId,
   }), [
@@ -568,6 +578,7 @@ export function useComposeEditorController({
     setSelectedIds,
     activeFrameId,
     setActiveFrameId,
+    setSurfaceSize,
     dragController,
     nextId,
   ])
@@ -580,14 +591,14 @@ export function useComposeEditorController({
     })
   }, [document.rootIds.length, onSceneOperation])
   const fitBounds = useCallback((ids: readonly string[]) => {
+    if (!surfaceSize) return
     const bounds = unionRects(
       ids
         .filter((id) => document.nodes[id] !== undefined)
         .map((id) => getNodeWorldBounds(document, id)),
     )
     if (!bounds) return
-    const width = 900
-    const height = 600
+    const { width, height } = surfaceSize
     const zoom = Math.min(
       8,
       Math.max(0.1, Math.min((width - 128) / bounds.width, (height - 128) / bounds.height)),
@@ -597,7 +608,7 @@ export function useComposeEditorController({
       y: height / 2 - (bounds.y + bounds.height / 2) * zoom,
       zoom,
     })
-  }, [document])
+  }, [document, surfaceSize])
   const fitFrame = useCallback(() => {
     if (activeFrameId) fitBounds([activeFrameId])
   }, [activeFrameId, fitBounds])
@@ -606,6 +617,30 @@ export function useComposeEditorController({
   const selectedNode = selectedIds.length === 1
     ? document.nodes[selectedIds[0]!]
     : undefined
+  const smartSnapEnabled = document.canvas.smartSnap.nodes
+    || document.canvas.smartSnap.guides
+  const configureCanvas = (
+    gridSnapEnabled: boolean,
+    smartEnabled: boolean,
+    label: string,
+  ) => dispatch({
+    id: nextId(),
+    type: 'canvas.configure',
+    payload: {
+      grid: {
+        ...document.canvas.grid,
+        snapEnabled: gridSnapEnabled,
+      },
+      smartSnap: {
+        nodes: smartEnabled,
+        guides: smartEnabled,
+      },
+    },
+    meta: {
+      label,
+      source: 'stage-toolbar',
+    },
+  })
 
   return {
     document,
@@ -643,82 +678,31 @@ export function useComposeEditorController({
     ) : selectedNode && ContainerInspector ? (
       <ContainerInspector dispatch={dispatch} node={selectedNode} />
     ) : (
-      <div className="compose-editor__empty-inspector" role="status">
-        Select one node to edit its properties
-      </div>
+      <DefaultEmptyInspector />
     ),
     commandPanel: (
       <CommandPanel presets={commandPresets} runtime={runtime} />
     ),
     stageToolbar: (
-      <div aria-label="Stage 工具栏" className="compose-editor__stage-toolbar" role="toolbar">
-        <div aria-label="交互工具" className="compose-editor__toolbar-group" role="group">
-          <button
-            aria-label="选择"
-            aria-pressed={tool === 'select'}
-            title="选择"
-            type="button"
-            onClick={() => setTool('select')}
-          >
-            <StageToolbarIcon name="select" />
-          </button>
-          <button
-            aria-label="平移"
-            aria-pressed={tool === 'pan'}
-            title="平移"
-            type="button"
-            onClick={() => setTool('pan')}
-          >
-            <StageToolbarIcon name="pan" />
-          </button>
-        </div>
-        <span aria-hidden="true" className="compose-editor__toolbar-divider" />
-        <div aria-label="Frame 工具" className="compose-editor__toolbar-group" role="group">
-          <button aria-label="创建 Frame" title="创建 Frame" type="button" onClick={createFrame}>
-            <StageToolbarIcon name="create-frame" />
-          </button>
-          <button aria-label="适配 Frame" title="适配 Frame" type="button" onClick={fitFrame}>
-            <StageToolbarIcon name="fit-frame" />
-          </button>
-          <button
-            aria-label="适配选择"
-            disabled={selectedIds.length === 0}
-            title="适配选择"
-            type="button"
-            onClick={fitSelection}
-          >
-            <StageToolbarIcon name="fit-selection" />
-          </button>
-        </div>
-        <span aria-hidden="true" className="compose-editor__toolbar-divider" />
-        <div aria-label="缩放工具" className="compose-editor__toolbar-group" role="group">
-          <button
-            aria-label="缩小"
-            title="缩小"
-            type="button"
-            onClick={() => setViewport((current) => ({
-              ...current,
-              zoom: Math.max(0.1, current.zoom / 1.2),
-            }))}
-          >
-            <StageToolbarIcon name="zoom-out" />
-          </button>
-          <span aria-label="缩放比例" className="compose-editor__zoom-value">
-            {Math.round(viewport.zoom * 100)}%
-          </span>
-          <button
-            aria-label="放大"
-            title="放大"
-            type="button"
-            onClick={() => setViewport((current) => ({
-              ...current,
-              zoom: Math.min(8, current.zoom * 1.2),
-            }))}
-          >
-            <StageToolbarIcon name="zoom-in" />
-          </button>
-        </div>
-      </div>
+      <DefaultStageToolbar
+        activeFrameId={activeFrameId}
+        canvasSettingsOpen={canvasSettingsOpen}
+        configureCanvas={configureCanvas}
+        createFrame={createFrame}
+        dispatch={dispatch}
+        document={document}
+        fitFrame={fitFrame}
+        fitSelection={fitSelection}
+        nextId={nextId}
+        selectedIds={selectedIds}
+        setCanvasSettingsOpen={setCanvasSettingsOpen}
+        setTool={setTool}
+        setViewport={setViewport}
+        smartSnapEnabled={smartSnapEnabled}
+        surfaceSize={surfaceSize}
+        tool={tool}
+        viewport={viewport}
+      />
     ),
   }
 }

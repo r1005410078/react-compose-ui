@@ -16,6 +16,11 @@ import type {
   ReactNode,
 } from 'react'
 import * as v from 'valibot'
+import {
+  createComposeThemeStyle,
+  useComposeI18nContext,
+  useComposeThemeContext,
+} from '@compose-ui/ui-context'
 import { FilterIcon, SearchIcon, SettingsIcon } from './icons'
 import { remapPropertyBindings } from './property-bindings'
 // eslint-disable-next-line react-refresh/only-export-components -- 公共入口必须同时导出纯绑定解析函数。
@@ -29,6 +34,7 @@ import {
   setValueAtPath,
 } from './schema-model'
 import { PropertyTree } from './property-tree'
+import { usePropertyPanelMessages } from './property-panel-i18n'
 import type { PropertyPanelFilter, TreeCommitOptions } from './property-tree'
 import './styles.css'
 
@@ -382,6 +388,9 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
   style,
   ...htmlProps
 }: PropertyPanelProps<TSchema>) {
+  const i18n = useComposeI18nContext()
+  const theme = useComposeThemeContext()
+  const messages = usePropertyPanelMessages()
   const rootRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{
     kind: 'label' | 'action'
@@ -408,6 +417,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
     && !asyncSchema
     && v.safeParse(schema, defaultValue).success
   const panelStyle = {
+    ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
     ...style,
     '--pp-label-width': `${labelWidth}px`,
     '--pp-action-width': `${actionWidth}px`,
@@ -493,9 +503,11 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
   return (
     <div
       {...htmlProps}
-      aria-label={htmlProps['aria-label'] ?? '组件属性'}
+      aria-label={htmlProps['aria-label'] ?? messages.region}
       className={rootClassName}
       data-compose-ui="property-panel"
+      data-compose-theme={theme?.resolvedTheme}
+      lang={i18n?.locale ?? 'zh-CN'}
       ref={rootRef}
       role="region"
       style={panelStyle}
@@ -513,8 +525,8 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
         <label className="property-panel__search">
           <SearchIcon />
           <input
-            aria-label="搜索属性"
-            placeholder="Search"
+            aria-label={messages.search}
+            placeholder={messages.searchPlaceholder}
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -523,7 +535,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
         <div className="property-panel__menu-anchor">
           <button
             aria-expanded={filterOpen}
-            aria-label="筛选属性"
+            aria-label={messages.filter}
             type="button"
             onClick={() => {
               setFilterOpen((current) => !current)
@@ -531,11 +543,11 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
             }}
           ><FilterIcon /></button>
           {filterOpen ? (
-            <div aria-label="属性筛选" className="property-panel__menu" role="menu">
+            <div aria-label={messages.filterMenu} className="property-panel__menu" role="menu">
               {([
-                ['all', '全部'],
-                ['modified', '已修改'],
-                ['errors', '有错误'],
+                ['all', messages.all],
+                ['modified', messages.modified],
+                ['errors', messages.errors],
               ] as const).map(([id, label]) => (
                 <button
                   aria-checked={filter === id}
@@ -554,7 +566,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
         <div className="property-panel__menu-anchor">
           <button
             aria-expanded={settingsOpen}
-            aria-label="属性面板设置"
+            aria-label={messages.settings}
             type="button"
             onClick={() => {
               setSettingsOpen((current) => !current)
@@ -562,7 +574,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
             }}
           ><SettingsIcon /></button>
           {settingsOpen ? (
-            <div aria-label="属性面板设置" className="property-panel__menu" role="menu">
+            <div aria-label={messages.settings} className="property-panel__menu" role="menu">
               <button
                 aria-checked={showAdvanced}
                 role="menuitemcheckbox"
@@ -571,7 +583,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
                   setShowAdvanced((current) => !current)
                   setSettingsOpen(false)
                 }}
-              >显示高级属性</button>
+              >{messages.showAdvanced}</button>
               <button
                 aria-checked={showDescriptions}
                 role="menuitemcheckbox"
@@ -580,7 +592,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
                   setShowDescriptions((current) => !current)
                   setSettingsOpen(false)
                 }}
-              >显示字段说明</button>
+              >{messages.showDescriptions}</button>
               <button
                 role="menuitem"
                 type="button"
@@ -589,13 +601,13 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
                   setActionWidth(36)
                   setSettingsOpen(false)
                 }}
-              >恢复默认列宽</button>
+              >{messages.resetColumns}</button>
             </div>
           ) : null}
         </div>
       </div>
       {asyncSchema ? (
-        <p role="alert">当前版本暂不支持异步 Valibot Schema</p>
+        <p role="alert">{messages.asyncUnsupported}</p>
       ) : (
         <PropertyTree
           actionWidth={actionWidth}
@@ -615,7 +627,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
         />
       )}
       <div
-        aria-label="调整属性名列宽"
+        aria-label={messages.resizeLabel}
         aria-orientation="vertical"
         aria-valuemax={Math.max(88, availableWidth - actionWidth - 120)}
         aria-valuemin={88}
@@ -629,7 +641,7 @@ export function PropertyPanel<TSchema extends v.GenericSchema>({
         onPointerUp={stopResize}
       ><span aria-hidden="true" className="property-panel__resize-handle">＝</span></div>
       <div
-        aria-label="调整操作列宽"
+        aria-label={messages.resizeAction}
         aria-orientation="vertical"
         aria-valuemax={Math.min(96, Math.max(32, availableWidth - labelWidth - 120))}
         aria-valuemin={32}

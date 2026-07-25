@@ -1,6 +1,7 @@
 import { HistoryPanel } from '@compose-ui/history'
+import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { DockviewReact, themeAbyss } from 'dockview-react'
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type {
   DockviewApi,
   DockviewReadyEvent,
@@ -8,6 +9,9 @@ import type {
 } from 'dockview-react'
 import { useWorkspaceContent } from './workspace-context'
 import { WorkspaceTab } from './workspace-tab'
+import { getEditorMessages } from './editor-i18n'
+import type { ComposeEditorLocale } from './preferences'
+import type { ComposeI18nContextValue } from '@compose-ui/ui-context'
 
 const SCENE_MIN_HEIGHT = 160
 const HISTORY_MIN_HEIGHT = 120
@@ -61,7 +65,28 @@ const sceneHistoryTabComponents = {
   [SCENE_HISTORY_TAB_COMPONENT]: WorkspaceTab,
 }
 
-function initializeSceneHistoryWorkspace(api: DockviewApi) {
+function localizeSceneHistoryWorkspace(
+  api: DockviewApi,
+  locale: ComposeEditorLocale,
+  formatMessage?: ComposeI18nContextValue['formatMessage'],
+) {
+  const messages = getEditorMessages(locale, formatMessage).workspace
+  const scenePanel = api.getPanel(SCENE_HISTORY_PANEL_IDS.scene)
+  const historyPanel = api.getPanel(SCENE_HISTORY_PANEL_IDS.history)
+  if (typeof scenePanel?.api.setTitle === 'function') {
+    scenePanel.api.setTitle(messages.sceneGraph)
+  }
+  if (typeof historyPanel?.api.setTitle === 'function') {
+    historyPanel.api.setTitle(messages.history)
+  }
+}
+
+function initializeSceneHistoryWorkspace(
+  api: DockviewApi,
+  locale: ComposeEditorLocale,
+  formatMessage?: ComposeI18nContextValue['formatMessage'],
+) {
+  const messages = getEditorMessages(locale, formatMessage).workspace
   const availableHeight = api.height > 0 ? api.height : DEFAULT_SCENE_HISTORY_HEIGHT
   const historyInitialHeight = Math.min(
     Math.max(HISTORY_MIN_HEIGHT, Math.round(availableHeight * 0.4)),
@@ -90,7 +115,7 @@ function initializeSceneHistoryWorkspace(api: DockviewApi) {
       minimumHeight: SCENE_MIN_HEIGHT,
       position: { referenceGroup: sceneGroup.id },
       tabComponent: SCENE_HISTORY_TAB_COMPONENT,
-      title: 'Scene Graph',
+      title: messages.sceneGraph,
     })
   }
 
@@ -102,20 +127,33 @@ function initializeSceneHistoryWorkspace(api: DockviewApi) {
       minimumHeight: HISTORY_MIN_HEIGHT,
       position: { referenceGroup: historyGroup.id },
       tabComponent: SCENE_HISTORY_TAB_COMPONENT,
-      title: 'History',
+      title: messages.history,
     })
   }
 
   scenePanel.api.setActive()
+  localizeSceneHistoryWorkspace(api, locale, formatMessage)
 }
 
 function SceneHistoryDockview() {
+  const i18n = useComposeI18nContext()
+  const locale = i18n?.locale ?? 'zh-CN'
   const initializedApi = useRef<DockviewApi | null>(null)
   const handleReady = useCallback((event: DockviewReadyEvent) => {
     if (initializedApi.current === event.api) return
-    initializeSceneHistoryWorkspace(event.api)
+    initializeSceneHistoryWorkspace(event.api, locale, i18n?.formatMessage)
     initializedApi.current = event.api
-  }, [])
+  }, [i18n?.formatMessage, locale])
+
+  useEffect(() => {
+    if (initializedApi.current) {
+      localizeSceneHistoryWorkspace(
+        initializedApi.current,
+        locale,
+        i18n?.formatMessage,
+      )
+    }
+  }, [i18n?.formatMessage, locale])
 
   return (
     <DockviewReact
@@ -151,16 +189,21 @@ export function SceneGraphPanel() {
 
 export function ComponentLibraryPanel() {
   const { componentLibraryPanel } = useWorkspaceContent()
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
 
   return (
     <div className="compose-editor__panel" data-workspace-panel="component-library">
-      {componentLibraryPanel ?? <Placeholder>Component library content</Placeholder>}
+      {componentLibraryPanel
+        ?? <Placeholder>{messages.workspace.componentLibraryEmpty}</Placeholder>}
     </div>
   )
 }
 
 export function CanvasPanel() {
   const { stageToolbar, children } = useWorkspaceContent()
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
 
   return (
     <div
@@ -168,7 +211,7 @@ export function CanvasPanel() {
       data-workspace-panel="canvas"
     >
       <div className="compose-editor__canvas-toolbar">
-        {stageToolbar ?? <Placeholder>Stage toolbar</Placeholder>}
+        {stageToolbar ?? <Placeholder>{messages.workspace.stageToolbarEmpty}</Placeholder>}
       </div>
       <div className="compose-editor__canvas-content">{children}</div>
     </div>
@@ -177,33 +220,42 @@ export function CanvasPanel() {
 
 export function InspectorPanel() {
   const { inspectorPanel } = useWorkspaceContent()
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
 
   return (
     <div className="compose-editor__panel" data-workspace-panel="inspector">
-      {inspectorPanel ?? <Placeholder>Component inspector content</Placeholder>}
+      {inspectorPanel
+        ?? <Placeholder>{messages.workspace.inspectorEmpty}</Placeholder>}
     </div>
   )
 }
 
 export function TransactionLogPanel() {
   const { transactionLogPanel } = useWorkspaceContent()
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
 
   return (
     <div
       className="compose-editor__panel"
       data-workspace-panel="transaction-log"
     >
-      {transactionLogPanel ?? <Placeholder>Transaction log content</Placeholder>}
+      {transactionLogPanel
+        ?? <Placeholder>{messages.workspace.transactionLogEmpty}</Placeholder>}
     </div>
   )
 }
 
 export function CommandPanel() {
   const { commandPanel } = useWorkspaceContent()
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
 
   return (
     <div className="compose-editor__panel" data-workspace-panel="command">
-      {commandPanel ?? <Placeholder>Command content</Placeholder>}
+      {commandPanel
+        ?? <Placeholder>{messages.workspace.commandEmpty}</Placeholder>}
     </div>
   )
 }

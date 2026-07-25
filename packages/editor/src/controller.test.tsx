@@ -1,7 +1,10 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComponentRegistry } from '@compose-ui/component-registry'
-import { createTransactionRuntime } from '@compose-ui/core'
+import {
+  createDefaultCanvasSettings,
+  createTransactionRuntime,
+} from '@compose-ui/core'
 import type { NodeInspectorProps } from '@compose-ui/component-registry'
 import type { ComposeFrameNode, ComposeGroupNode } from '@compose-ui/core'
 import type {
@@ -13,7 +16,8 @@ import { useComposeEditorController } from './controller'
 import type { ComposeEditorTransactionEvent } from './controller'
 
 const documentFixture: ComposeDocument = {
-  schemaVersion: 1,
+  schemaVersion: 2,
+  canvas: createDefaultCanvasSettings(),
   rootIds: ['frame'],
   nodes: {
     frame: {
@@ -213,7 +217,7 @@ describe('useComposeEditorController', () => {
 
     render(result.current.inspectorPanel)
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Select one node to edit its properties',
+      '选择一个节点以编辑其属性',
     )
   })
 
@@ -229,12 +233,117 @@ describe('useComposeEditorController', () => {
     expect(screen.getByRole('toolbar', { name: 'Stage 工具栏' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '选择' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '适配选择' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '适配 Frame' })).toBeDisabled()
     expect(screen.getByLabelText('缩放比例')).toHaveTextContent('100%')
 
     fireEvent.click(screen.getByRole('button', { name: '平移' }))
     toolbar.rerender(result.current.stageToolbar)
     expect(result.current.tool).toBe('pan')
     expect(screen.getByRole('button', { name: '平移' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('OpenSpec: stage / 受控无限视口 / 使用真实 surface 尺寸 - fit Frame', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+      initialActiveFrameId: 'frame',
+    }))
+    const toolbar = render(result.current.stageToolbar)
+
+    act(() => result.current.stageProps.onSurfaceSizeChange?.({ width: 400, height: 300 }))
+    toolbar.rerender(result.current.stageToolbar)
+    fireEvent.click(screen.getByRole('button', { name: '适配 Frame' }))
+
+    const expectedZoom = 172 / 600
+    expect(result.current.viewport).toEqual({
+      x: 400 / 2 - (40 + 800 / 2) * expectedZoom,
+      y: 300 / 2 - (30 + 600 / 2) * expectedZoom,
+      zoom: expectedZoom,
+    })
+  })
+
+  // OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 清空辅助线
+  it('OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 快捷切换吸附', () => {
+    const editorRuntime = runtime()
+    act(() => {
+      editorRuntime.dispatch({
+        id: 'seed-guide',
+        type: 'canvas.guide.create',
+        payload: { guide: { id: 'guide', axis: 'x', position: 32 } },
+      })
+      editorRuntime.dispatch({
+        id: 'seed-guide-y',
+        type: 'canvas.guide.create',
+        payload: { guide: { id: 'guide-y', axis: 'y', position: -16 } },
+      })
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+      initialActiveFrameId: 'frame',
+      idFactory: (() => {
+        let value = 0
+        return () => `canvas-command-${value++}`
+      })(),
+    }))
+    const toolbar = render(result.current.stageToolbar)
+
+    fireEvent.click(screen.getByRole('button', { name: '网格吸附' }))
+    toolbar.rerender(result.current.stageToolbar)
+    expect(editorRuntime.document.canvas.grid.snapEnabled).toBe(false)
+    expect(screen.getByRole('button', { name: '网格吸附' }))
+      .toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: '画布设置' }))
+    toolbar.rerender(result.current.stageToolbar)
+    fireEvent.change(screen.getByRole('textbox', { name: 'X 步长' }), {
+      target: { value: '0' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '应用' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('步长必须为正数')
+    expect(editorRuntime.document.canvas.grid.stepX).toBe(8)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'X 步长' }), {
+      target: { value: '16' },
+    })
+    fireEvent.click(screen.getByRole('checkbox', { name: '节点吸附' }))
+    fireEvent.click(screen.getByRole('button', { name: '清空辅助线（2）' }))
+    const beforeApply = editorRuntime.entries.length
+    fireEvent.click(screen.getByRole('button', { name: '应用' }))
+
+    expect(editorRuntime.entries).toHaveLength(beforeApply + 1)
+    expect(editorRuntime.document.canvas.grid.stepX).toBe(16)
+    expect(editorRuntime.document.canvas.smartSnap.nodes).toBe(false)
+    expect(editorRuntime.document.canvas.guides).toEqual([])
+    toolbar.rerender(result.current.stageToolbar)
+    expect(screen.queryByRole('dialog', { name: '画布网格与吸附设置' }))
+      .not.toBeInTheDocument()
+
+    act(() => editorRuntime.undo())
+    expect(editorRuntime.document.canvas.grid.stepX).toBe(8)
+    expect(editorRuntime.document.canvas.guides).toEqual([
+      { id: 'guide', axis: 'x', position: 32 },
+      { id: 'guide-y', axis: 'y', position: -16 },
+    ])
+  })
+
+  it('OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 应用或取消画布设置', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+    const toolbar = render(result.current.stageToolbar)
+    fireEvent.click(screen.getByRole('button', { name: '画布设置' }))
+    toolbar.rerender(result.current.stageToolbar)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Y 偏移' }), {
+      target: { value: '42' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    expect(editorRuntime.document.canvas.grid.offsetY).toBe(0)
+    expect(editorRuntime.entries).toHaveLength(1)
   })
 
   it('maps a cross-parent SceneTree move to a geometry-preserving transaction', () => {

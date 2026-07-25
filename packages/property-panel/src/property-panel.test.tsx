@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import * as v from 'valibot'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ComposeUIProvider } from '@compose-ui/ui-context'
 import { PropertyPanel, resolvePropertyBindings } from './index'
 import type { PropertyPanelBinding, PropertyPanelRenderer } from './index'
 import * as propertyPanelModule from './index'
@@ -9,6 +10,47 @@ import * as propertyPanelModule from './index'
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+})
+
+describe('OpenSpec: property-panel / 属性面板共享 UI 环境', () => {
+  it('OpenSpec: property-panel / 属性面板共享 UI 环境 / 使用英文浅色属性面板', () => {
+    const schema = v.object({
+      items: v.pipe(v.array(v.string()), v.title('宿主列表')),
+    })
+    render(
+      <ComposeUIProvider locale="en-US" theme="light">
+        <PropertyPanel schema={schema} value={{ items: [] }} />
+      </ComposeUIProvider>,
+    )
+
+    const panel = screen.getByRole('region', { name: 'Component properties' })
+    expect(panel).toHaveAttribute('data-compose-theme', 'light')
+    expect(panel).toHaveAttribute('lang', 'en-US')
+    expect(screen.getByRole('searchbox', { name: 'Search properties' }))
+      .toHaveAttribute('placeholder', 'Search')
+    expect(screen.getByRole('button', { name: 'Add 宿主列表' })).toBeInTheDocument()
+    expect(screen.getByText('宿主列表')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: property-panel / 属性面板共享 UI 环境 / 覆盖属性面板消息', () => {
+    const onValueChange = vi.fn()
+    render(
+      <ComposeUIProvider
+        locale="en-US"
+        messages={{ 'propertyPanel.search': 'Find fields' }}
+      >
+        <PropertyPanel
+          schema={basicSchema}
+          value={basicValue}
+          onValueChange={onValueChange}
+        />
+      </ComposeUIProvider>,
+    )
+
+    expect(screen.getByRole('searchbox', { name: 'Find fields' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('名称'), { target: { value: 'Panel' } })
+    expect(onValueChange).toHaveBeenCalledTimes(1)
+  })
 })
 
 enum Alignment {

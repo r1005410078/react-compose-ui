@@ -1,4 +1,7 @@
 import type { DockviewApi } from 'dockview-react'
+import { getEditorMessages } from './editor-i18n'
+import type { ComposeEditorLocale } from './preferences'
+import type { ComposeI18nContextValue } from '@compose-ui/ui-context'
 
 export const WORKSPACE_GROUP_IDS = {
   scene: 'compose-scene-edge',
@@ -33,7 +36,33 @@ export const WORKSPACE_SIZES = {
 
 const TAB_COMPONENT = 'workspaceTab'
 
-export function initializeWorkspace(api: DockviewApi) {
+export function localizeWorkspace(
+  api: DockviewApi,
+  locale: ComposeEditorLocale,
+  formatMessage?: ComposeI18nContextValue['formatMessage'],
+) {
+  const messages = getEditorMessages(locale, formatMessage).workspace
+  const titles = {
+    [WORKSPACE_PANEL_IDS.scene]: messages.sceneGraph,
+    [WORKSPACE_PANEL_IDS.componentLibrary]: messages.componentLibrary,
+    [WORKSPACE_PANEL_IDS.canvas]: messages.canvas,
+    [WORKSPACE_PANEL_IDS.inspector]: messages.inspector,
+    [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
+    [WORKSPACE_PANEL_IDS.command]: messages.command,
+  }
+  for (const [panelId, title] of Object.entries(titles)) {
+    const getPanel = (api as Partial<DockviewApi>).getPanel
+    const panel = typeof getPanel === 'function' ? getPanel.call(api, panelId) : undefined
+    if (typeof panel?.api.setTitle === 'function') panel.api.setTitle(title)
+  }
+}
+
+export function initializeWorkspace(
+  api: DockviewApi,
+  locale: ComposeEditorLocale = 'zh-CN',
+  formatMessage?: ComposeI18nContextValue['formatMessage'],
+) {
+  const messages = getEditorMessages(locale, formatMessage).workspace
   if (!api.getGroup(WORKSPACE_GROUP_IDS.canvas)) {
     api.addGroup({
       direction: 'right',
@@ -47,7 +76,7 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.canvas,
       component: WORKSPACE_COMPONENT_IDS.canvas,
       tabComponent: TAB_COMPONENT,
-      title: '画布',
+      title: messages.canvas,
       position: { referenceGroup: WORKSPACE_GROUP_IDS.canvas },
     })
   }
@@ -66,7 +95,7 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.scene,
       component: WORKSPACE_COMPONENT_IDS.scene,
       tabComponent: TAB_COMPONENT,
-      title: 'Scene Graph',
+      title: messages.sceneGraph,
       position: { referenceGroup: sceneGroup.id },
     })
   }
@@ -76,7 +105,7 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.componentLibrary,
       component: WORKSPACE_COMPONENT_IDS.componentLibrary,
       tabComponent: TAB_COMPONENT,
-      title: 'Component Library',
+      title: messages.componentLibrary,
       inactive: true,
       position: { referenceGroup: sceneGroup.id },
     })
@@ -96,7 +125,7 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.inspector,
       component: WORKSPACE_COMPONENT_IDS.inspector,
       tabComponent: TAB_COMPONENT,
-      title: 'Component',
+      title: messages.inspector,
       position: { referenceGroup: inspectorGroup.id },
     })
   }
@@ -115,7 +144,7 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.transactionLog,
       component: WORKSPACE_COMPONENT_IDS.transactionLog,
       tabComponent: TAB_COMPONENT,
-      title: '日志',
+      title: messages.transactionLog,
       position: { referenceGroup: bottomGroup.id },
     })
   }
@@ -125,11 +154,12 @@ export function initializeWorkspace(api: DockviewApi) {
       id: WORKSPACE_PANEL_IDS.command,
       component: WORKSPACE_COMPONENT_IDS.command,
       tabComponent: TAB_COMPONENT,
-      title: '命令',
+      title: messages.command,
       inactive: true,
       position: { referenceGroup: bottomGroup.id },
     })
   }
 
   transactionLog.api.setActive()
+  localizeWorkspace(api, locale, formatMessage)
 }

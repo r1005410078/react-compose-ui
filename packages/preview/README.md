@@ -1,9 +1,8 @@
 # @compose-ui/preview
 
-# @compose-ui/preview
-
 独立的 Compose 文档 Frame 预览入口。Preview 复用 ComponentRegistry renderer，但自行建立普通
-DOM Frame 树，不依赖 editor/stage，也不包含选区、手柄或吸附线。
+DOM Frame 树，不依赖 editor/stage。它接受 `schemaVersion: 2` 文档，但忽略 `canvas` 编辑元数据，
+不会渲染网格、标尺、辅助线、世界坐标轴、选区、手柄或滚动条。
 
 ```tsx
 import { ComposePreview } from '@compose-ui/preview'

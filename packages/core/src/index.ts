@@ -9,6 +9,7 @@
  */
 
 export { validateComposeDocument } from './document'
+export { createDefaultCanvasSettings } from './canvas-settings'
 export {
   DEFAULT_NODE_SHADOW,
   DEFAULT_NODE_STYLES,
@@ -45,6 +46,8 @@ export type {
   TransactionRuntimeState,
 } from './command-types'
 export type {
+  ComposeCanvasGuide,
+  ComposeCanvasSettings,
   ComposeComponentNode,
   ComposeDocument,
   ComposeFrameNode,

@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
+import { ComposeUIProvider } from '@compose-ui/ui-context'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SceneTree, useSceneTreeCommands } from './index'
 import type { SceneTreeNode, SceneTreeOperation } from './index'
@@ -48,6 +49,59 @@ describe('SceneTree', () => {
       'aria-selected',
       'true',
     )
+  })
+
+  it('OpenSpec: scene-tree / 场景树内建本地化 / 使用英文场景树', async () => {
+    renderTree({ locale: 'en-US' })
+
+    expect(screen.getByRole('treegrid', { name: 'Scene tree' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add node' })).toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search nodes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Case sensitive' })).toBeInTheDocument()
+    expect(
+      within(await screen.findByRole('row', { name: /Red rectangle/ }))
+        .getByRole('button', { name: 'Hide Red rectangle' }),
+    ).toBeInTheDocument()
+
+    fireEvent.contextMenu(screen.getByRole('row', { name: /Red rectangle/ }))
+    expect(screen.getByRole('menuitem', { name: 'Add child' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.getByText('Red rectangle')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: scene-tree / 场景树内建本地化 / 独立使用默认语言', () => {
+    renderTree()
+    expect(screen.getByRole('treegrid', { name: '场景树' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '新增节点' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: ui-context / 共享 UI Context 包 / 独立组件保持兼容 - SceneTree Context 与 prop 优先级', () => {
+    const { rerender } = render(
+      <ComposeUIProvider locale="en-US" theme="light">
+        <SceneTree
+          expandedIds={['page']}
+          nodes={nodes}
+          selectedIds={[]}
+        />
+      </ComposeUIProvider>,
+    )
+    expect(screen.getByRole('treegrid', { name: 'Scene tree' })).toBeInTheDocument()
+    expect(document.querySelector('[data-compose-ui="scene-tree"]')).toHaveAttribute(
+      'data-compose-theme',
+      'light',
+    )
+
+    rerender(
+      <ComposeUIProvider locale="en-US" theme="light">
+        <SceneTree
+          expandedIds={['page']}
+          locale="zh-CN"
+          nodes={nodes}
+          selectedIds={[]}
+        />
+      </ComposeUIProvider>,
+    )
+    expect(screen.getByRole('treegrid', { name: '场景树' })).toBeInTheDocument()
   })
 
   it('OpenSpec: scene-tree / 大规模虚拟化树 / 渲染 5000 个展开节点', async () => {

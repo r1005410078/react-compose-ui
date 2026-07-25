@@ -17,8 +17,11 @@ export type {
   HistoryCommitOptions,
   HistoryController,
   HistoryEntry,
+  HistoryKeybinding,
+  HistoryLocale,
   HistoryNavigationController,
   HistoryPanelProps,
+  HistoryShortcuts,
   UseHistoryOptions,
 } from './types'
 import './styles.css'

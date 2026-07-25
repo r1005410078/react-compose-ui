@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
+import {
+  createComposeThemeStyle,
+  useComposeI18nContext,
+  useComposeThemeContext,
+} from '@compose-ui/ui-context'
 import type {
   EditorCommand,
   EditorTransaction,
@@ -7,10 +12,124 @@ import type {
   TransactionRuntimeEvent,
 } from '@compose-ui/core'
 import type {
+  CommandPanelLocale,
   CommandPanelProps,
   CommandPreset,
   CommandPresetField,
 } from './types'
+
+const commandMessages = {
+  'zh-CN': {
+    region: '命令调试台',
+    succeeded: '成功',
+    noop: '无变化',
+    rejected: '已拒绝',
+    unknownSource: '未知来源',
+    unknown: '未知',
+    merged: '已合并',
+    viewDetails: (label: string) => `查看 ${label} 详情`,
+    collapse: '收起',
+    details: '详情',
+    source: '来源',
+    targets: '目标',
+    none: '无',
+    committedAt: '提交时间',
+    unselected: '未选择',
+    preset: '命令预设',
+    run: (label: string) => `执行${label}`,
+    command: '命令',
+    empty: '暂无命令事件',
+    factoryFailed: '命令工厂执行失败',
+    required: (label: string) => `${label}为必填项`,
+    finite: (label: string) => `${label}必须是有限数字`,
+    candidate: (label: string) => `${label}不属于有效候选`,
+    json: (label: string) => `${label}必须是有效 JSON`,
+  },
+  'en-US': {
+    region: 'Command debugger',
+    succeeded: 'Succeeded',
+    noop: 'No change',
+    rejected: 'Rejected',
+    unknownSource: 'Unknown source',
+    unknown: 'Unknown',
+    merged: 'Coalesced',
+    viewDetails: (label: string) => `View ${label} details`,
+    collapse: 'Collapse',
+    details: 'Details',
+    source: 'Source',
+    targets: 'Targets',
+    none: 'None',
+    committedAt: 'Committed at',
+    unselected: 'Not selected',
+    preset: 'Command preset',
+    run: (label: string) => `Run ${label}`,
+    command: 'command',
+    empty: 'No command events',
+    factoryFailed: 'Command factory failed',
+    required: (label: string) => `${label} is required`,
+    finite: (label: string) => `${label} must be a finite number`,
+    candidate: (label: string) => `${label} is not a valid option`,
+    json: (label: string) => `${label} must be valid JSON`,
+  },
+} as const
+
+type CommandMessages = (typeof commandMessages)[CommandPanelLocale]
+
+function getCommandMessages(
+  locale: CommandPanelLocale,
+  formatMessage?: (
+    id: string,
+    fallback: string,
+    variables?: Readonly<Record<string, string | number>>,
+  ) => string,
+): CommandMessages {
+  const messages = commandMessages[locale]
+  const format = formatMessage ?? ((_id: string, fallback: string) => fallback)
+  const withLabel = (id: string, fallback: string, label: string) =>
+    format(id, fallback, { label })
+  return {
+    region: format('commandPanel.region', messages.region),
+    succeeded: format('commandPanel.succeeded', messages.succeeded),
+    noop: format('commandPanel.noop', messages.noop),
+    rejected: format('commandPanel.rejected', messages.rejected),
+    unknownSource: format('commandPanel.unknownSource', messages.unknownSource),
+    unknown: format('commandPanel.unknown', messages.unknown),
+    merged: format('commandPanel.merged', messages.merged),
+    viewDetails: (label: string) => withLabel(
+      'commandPanel.viewDetails',
+      messages.viewDetails(label),
+      label,
+    ),
+    collapse: format('commandPanel.collapse', messages.collapse),
+    details: format('commandPanel.details', messages.details),
+    source: format('commandPanel.source', messages.source),
+    targets: format('commandPanel.targets', messages.targets),
+    none: format('commandPanel.none', messages.none),
+    committedAt: format('commandPanel.committedAt', messages.committedAt),
+    unselected: format('commandPanel.unselected', messages.unselected),
+    preset: format('commandPanel.preset', messages.preset),
+    run: (label: string) => withLabel('commandPanel.run', messages.run(label), label),
+    command: format('commandPanel.command', messages.command),
+    empty: format('commandPanel.empty', messages.empty),
+    factoryFailed: format('commandPanel.factoryFailed', messages.factoryFailed),
+    required: (label: string) => withLabel(
+      'commandPanel.required',
+      messages.required(label),
+      label,
+    ),
+    finite: (label: string) => withLabel(
+      'commandPanel.finite',
+      messages.finite(label),
+      label,
+    ),
+    candidate: (label: string) => withLabel(
+      'commandPanel.candidate',
+      messages.candidate(label),
+      label,
+    ),
+    json: (label: string) => withLabel('commandPanel.json', messages.json(label), label),
+  } as CommandMessages
+}
 
 type VisibleEvent = Extract<
   TransactionRuntimeEvent,
@@ -61,7 +180,11 @@ function initialFormState(preset: CommandPreset | undefined): FormState {
   }
 }
 
-function fieldError(field: CommandPresetField, raw: DraftValue | undefined) {
+function fieldError(
+  field: CommandPresetField,
+  raw: DraftValue | undefined,
+  t: CommandMessages,
+) {
   if (field.type === 'boolean') return null
   const text = typeof raw === 'string' ? raw : ''
   if (field.type === 'number') {
@@ -69,13 +192,13 @@ function fieldError(field: CommandPresetField, raw: DraftValue | undefined) {
     const value = Number(text)
     return Number.isFinite(value) && text.trim().length > 0
       ? null
-      : `${field.label}必须是有限数字`
+      : t.finite(field.label)
   }
   if (field.type === 'select') {
-    if (text.length === 0 && field.required) return `${field.label}为必填项`
+    if (text.length === 0 && field.required) return t.required(field.label)
     return field.options?.some((option) => option.value === text)
       ? null
-      : `${field.label}不属于有效候选`
+      : t.candidate(field.label)
   }
   if (field.type === 'json') {
     if (text.trim().length === 0 && !field.required) return null
@@ -84,11 +207,11 @@ function fieldError(field: CommandPresetField, raw: DraftValue | undefined) {
       return null
     }
     catch {
-      return `${field.label}必须是有效 JSON`
+      return t.json(field.label)
     }
   }
   return field.required && text.trim().length === 0
-    ? `${field.label}为必填项`
+    ? t.required(field.label)
     : null
 }
 
@@ -106,11 +229,11 @@ function patchSummary(transaction: EditorTransaction) {
   ))
 }
 
-function EventItem({ event }: { event: VisibleEvent }) {
+function EventItem({ event, t }: { event: VisibleEvent; t: CommandMessages }) {
   const [expanded, setExpanded] = useState(false)
   const status = event.type === 'committed'
-    ? '成功'
-    : event.type === 'noop' ? '无变化' : '已拒绝'
+    ? t.succeeded
+    : event.type === 'noop' ? t.noop : t.rejected
   const label = event.command.meta?.label ?? event.command.type
 
   return (
@@ -119,21 +242,21 @@ function EventItem({ event }: { event: VisibleEvent }) {
         <span className="command-panel__status">{status}</span>
         <span className="command-panel__label">{label}</span>
         <span className="command-panel__source">
-          {event.command.meta?.source ?? '未知来源'}
+          {event.command.meta?.source ?? t.unknownSource}
         </span>
         <code>{event.command.id}</code>
         {event.type === 'committed' ? <code>{event.transaction.id}</code> : null}
         {event.type === 'committed' && event.coalesced
-          ? <span className="command-panel__coalesced">已合并</span>
+          ? <span className="command-panel__coalesced">{t.merged}</span>
           : null}
         {event.type === 'committed' ? (
           <button
             aria-expanded={expanded}
-            aria-label={`查看 ${label} 详情`}
+            aria-label={t.viewDetails(label)}
             type="button"
             onClick={() => setExpanded((current) => !current)}
           >
-            {expanded ? '收起' : '详情'}
+            {expanded ? t.collapse : t.details}
           </button>
         ) : null}
       </div>
@@ -147,14 +270,14 @@ function EventItem({ event }: { event: VisibleEvent }) {
       {event.type === 'committed' && expanded ? (
         <div className="command-panel__details">
           <dl>
-            <div><dt>来源</dt><dd>{event.transaction.source ?? '未知'}</dd></div>
+            <div><dt>{t.source}</dt><dd>{event.transaction.source ?? t.unknown}</dd></div>
             <div>
-              <dt>目标</dt>
+              <dt>{t.targets}</dt>
               <dd>{event.transaction.targetIds.length > 0
                 ? event.transaction.targetIds.map((id) => <span key={id}>{id}</span>)
-                : '无'}</dd>
+                : t.none}</dd>
             </div>
-            <div><dt>提交时间</dt><dd>{event.transaction.committedAt}</dd></div>
+            <div><dt>{t.committedAt}</dt><dd>{event.transaction.committedAt}</dd></div>
           </dl>
           <ol aria-label="Forward patches">
             {patchSummary(event.transaction).map((summary, index) => (
@@ -178,11 +301,13 @@ function FieldEditor({
   field,
   value,
   error,
+  t,
   onChange,
 }: {
   field: CommandPresetField
   value: DraftValue | undefined
   error?: string
+  t: CommandMessages
   onChange(value: DraftValue): void
 }) {
   const id = `command-field-${field.name}`
@@ -207,7 +332,7 @@ function FieldEditor({
         value={typeof value === 'string' ? value : ''}
         onChange={(event) => onChange(event.currentTarget.value)}
       >
-        {!field.required ? <option value="">未选择</option> : null}
+        {!field.required ? <option value="">{t.unselected}</option> : null}
         {field.options?.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
@@ -256,9 +381,15 @@ export function CommandPanel({
   runtime,
   presets = [],
   eventLimit = 100,
+  locale,
   className,
+  style,
   ...props
 }: CommandPanelProps) {
+  const i18n = useComposeI18nContext()
+  const theme = useComposeThemeContext()
+  const resolvedLocale = locale ?? i18n?.locale ?? 'zh-CN'
+  const t = getCommandMessages(resolvedLocale, i18n?.formatMessage)
   const normalizedLimit = Number.isInteger(eventLimit) && eventLimit > 0 ? eventLimit : 100
   const [eventState, setEventState] = useState<{
     runtime: CommandPanelProps['runtime']
@@ -302,7 +433,7 @@ export function CommandPanel({
     const nextErrors: Record<string, string> = {}
     const values: Record<string, JsonValue> = {}
     for (const field of activePreset.fields) {
-      const error = fieldError(field, formState.draft[field.name])
+      const error = fieldError(field, formState.draft[field.name], t)
       if (error) nextErrors[field.name] = error
       else values[field.name] = parsedValue(field, formState.draft[field.name])
     }
@@ -326,7 +457,7 @@ export function CommandPanel({
       setStoredFormState({
         ...formState,
         errors: {},
-        formError: error instanceof Error ? error.message : '命令工厂执行失败',
+        formError: error instanceof Error ? error.message : t.factoryFailed,
       })
       return
     }
@@ -338,17 +469,23 @@ export function CommandPanel({
   return (
     <div
       {...props}
-      aria-label={props['aria-label'] ?? '命令调试台'}
+      aria-label={props['aria-label'] ?? t.region}
       className={rootClassName}
+      data-compose-theme={theme?.resolvedTheme}
+      lang={resolvedLocale}
       role="region"
+      style={{
+        ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
+        ...style,
+      } as CSSProperties}
     >
       {presets.length > 0 ? (
         <form className="command-panel__form" onSubmit={submit}>
           {presets.length > 1 ? (
             <label>
-              命令预设
+              {t.preset}
               <select
-                aria-label="命令预设"
+                aria-label={t.preset}
                 value={activePreset?.id ?? ''}
                 onChange={(event) => {
                   const nextId = event.currentTarget.value
@@ -368,6 +505,7 @@ export function CommandPanel({
               error={formState.errors[field.name]}
               field={field}
               key={field.name}
+              t={t}
               value={formState.draft[field.name]}
               onChange={(value) => setStoredFormState({
                 ...formState,
@@ -380,17 +518,18 @@ export function CommandPanel({
             />
           ))}
           {formState.formError ? <p role="alert">{formState.formError}</p> : null}
-          <button type="submit">执行{activePreset?.label ?? '命令'}</button>
+          <button type="submit">{t.run(activePreset?.label ?? t.command)}</button>
         </form>
       ) : null}
       {events.length === 0 ? (
-        <p className="command-panel__empty">暂无命令事件</p>
+        <p className="command-panel__empty">{t.empty}</p>
       ) : (
         <ol className="command-panel__events">
           {events.map((event, index) => (
             <EventItem
               event={event}
               key={`${event.command.id}:${event.type}:${index}`}
+              t={t}
             />
           ))}
         </ol>

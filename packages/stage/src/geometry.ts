@@ -52,6 +52,8 @@ export interface StageMatrix {
 export interface StageGuide {
   readonly axis: 'x' | 'y'
   readonly value: number
+  /** 候选来源；距离相同时持久化辅助线优先于节点。 */
+  readonly source?: 'guide' | 'node'
 }
 
 /** @public */
@@ -345,6 +347,13 @@ export function snapTranslation(
   candidates: readonly StageGuide[],
   zoom: number,
   disabled = false,
+  grid?: {
+    readonly stepX: number
+    readonly stepY: number
+    readonly offsetX: number
+    readonly offsetY: number
+    readonly enabled: boolean
+  },
 ): { readonly delta: StagePoint; readonly guides: readonly StageGuide[] } {
   if (disabled) return { delta, guides: [] }
   const threshold = 6 / zoom
@@ -356,7 +365,11 @@ export function snapTranslation(
       for (const line of rectLines(bounds, delta, axis)) {
         const correction = guide.value - line
         const distance = Math.abs(correction)
-        if (distance <= threshold && (!best || distance < best.distance)) {
+        const preferred = best
+          && distance === best.distance
+          && guide.source === 'guide'
+          && best.guide.source !== 'guide'
+        if (distance <= threshold && (!best || distance < best.distance || preferred)) {
           best = { distance, correction, guide }
         }
       }
@@ -365,6 +378,16 @@ export function snapTranslation(
       if (axis === 'x') next.x += best.correction
       else next.y += best.correction
       guides.push(best.guide)
+    }
+    else if (grid?.enabled) {
+      const step = axis === 'x' ? grid.stepX : grid.stepY
+      const offset = axis === 'x' ? grid.offsetX : grid.offsetY
+      const coordinate = axis === 'x'
+        ? bounds.x + delta.x
+        : bounds.y + delta.y
+      const snapped = offset + Math.round((coordinate - offset) / step) * step
+      if (axis === 'x') next.x += snapped - coordinate
+      else next.y += snapped - coordinate
     }
   }
   return { delta: next, guides }

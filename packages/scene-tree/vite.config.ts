@@ -25,6 +25,8 @@ export default defineConfig({
     rollupOptions: {
       external: [
         '@tanstack/react-virtual',
+        // Context 必须由宿主共享同一实例，不能内联进组件包。
+        '@compose-ui/ui-context',
         'react',
         'react-dom',
         'react/jsx-runtime',

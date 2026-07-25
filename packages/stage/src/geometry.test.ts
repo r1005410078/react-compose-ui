@@ -1,4 +1,7 @@
-import type { ComposeDocument } from '@compose-ui/core'
+import {
+  createDefaultCanvasSettings,
+  type ComposeDocument,
+} from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import * as stagePackage from './index'
 
@@ -23,10 +26,43 @@ const api = stagePackage as unknown as {
   snapTranslation(
     bounds: Rect,
     delta: Point,
-    candidates: { axis: 'x' | 'y'; value: number }[],
+    candidates: { axis: 'x' | 'y'; value: number; source?: 'guide' | 'node' }[],
     zoom: number,
     disabled?: boolean,
+    grid?: {
+      stepX: number
+      stepY: number
+      offsetX: number
+      offsetY: number
+      enabled: boolean
+    },
   ): { delta: Point; guides: { axis: 'x' | 'y'; value: number }[] }
+  createRulerTicks(options: {
+    axis: 'x' | 'y'
+    viewport: Viewport
+    length: number
+    step: number
+    offset: number
+    primaryLineEvery: number
+  }): { value: number; screen: number; major: boolean; label?: string }[]
+  snapResizePoint(options: {
+    point: Point
+    handle: 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'
+    candidates: { axis: 'x' | 'y'; value: number; source?: 'guide' | 'node' }[]
+    canvas: ComposeDocument['canvas']
+    zoom: number
+    disabled?: boolean
+  }): { point: Point; guides: { axis: 'x' | 'y'; value: number }[] }
+  expandScrollRange(previous: Rect | null, content: Rect | null, visible: Rect): Rect
+  viewportToScrollAxes(
+    viewport: Viewport,
+    surface: { width: number; height: number },
+    range: Rect,
+  ): {
+    x: { min: number; max: number; value: number }
+    y: { min: number; max: number; value: number }
+  }
+  scrollAxisToViewport(viewport: Viewport, axis: 'x' | 'y', value: number): Viewport
   resizeBounds(
     bounds: Rect,
     handle: 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw',
@@ -38,7 +74,8 @@ const api = stagePackage as unknown as {
 
 function document(): ComposeDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: createDefaultCanvasSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -74,6 +111,114 @@ function document(): ComposeDocument {
 }
 
 describe('Stage geometry', () => {
+  it('OpenSpec: stage / 自适应网格标尺与世界原点 / 平移缩放标尺网格', () => {
+    const ticks = api.createRulerTicks({
+      axis: 'x',
+      viewport: { x: 40, y: 0, zoom: 0.25 },
+      length: 240,
+      step: 8,
+      offset: 0,
+      primaryLineEvery: 8,
+    })
+
+    expect(ticks.some((tick) => tick.value < 0)).toBe(true)
+    expect(ticks.every((tick, index) => index === 0
+      || tick.screen - ticks[index - 1]!.screen >= 8)).toBe(true)
+    expect(ticks.find((tick) => tick.value === 0)).toMatchObject({
+      major: true,
+      screen: 40,
+    })
+    const labels = ticks.filter((tick) => tick.label)
+    expect(labels.every((tick, index) => index === 0
+      || tick.screen - labels[index - 1]!.screen >= 48)).toBe(true)
+  })
+
+  // OpenSpec: stage / 直接移动缩放与旋转 / 八向缩放并吸附活动边
+  it('OpenSpec: stage / 屏幕距离吸附 / 智能吸附优先', () => {
+    const canvas = createDefaultCanvasSettings()
+    const smart = api.snapTranslation(
+      { x: 3, y: 5, width: 20, height: 20 },
+      { x: 0, y: 0 },
+      [
+        { axis: 'x', value: 4, source: 'node' },
+        { axis: 'x', value: 2, source: 'guide' },
+      ],
+      1,
+      false,
+      {
+        stepX: canvas.grid.stepX,
+        stepY: canvas.grid.stepY,
+        offsetX: canvas.grid.offsetX,
+        offsetY: canvas.grid.offsetY,
+        enabled: true,
+      },
+    )
+    expect(smart.delta.x).toBe(-1)
+    expect(smart.guides).toEqual([{ axis: 'x', value: 2, source: 'guide' }])
+
+    const grid = api.snapTranslation(
+      { x: 11, y: 13, width: 20, height: 20 },
+      { x: 3, y: 4 },
+      [],
+      1,
+      false,
+      {
+        stepX: 8,
+        stepY: 8,
+        offsetX: 2,
+        offsetY: 4,
+        enabled: true,
+      },
+    )
+    expect(grid.delta).toEqual({ x: 7, y: 7 })
+
+    const resized = api.snapResizePoint({
+      point: { x: 31, y: 29 },
+      handle: 'se',
+      candidates: [{ axis: 'x', value: 30, source: 'guide' }],
+      canvas,
+      zoom: 1,
+    })
+    expect(resized.point).toEqual({ x: 30, y: 32 })
+    expect(api.snapResizePoint({
+      point: { x: 31, y: 29 },
+      handle: 'se',
+      candidates: [],
+      canvas,
+      zoom: 1,
+      disabled: true,
+    }).point).toEqual({ x: 31, y: 29 })
+  })
+
+  it('OpenSpec: stage / 无限画布滚动条 / 动态扩展无限范围', () => {
+    const visible = { x: -50, y: 25, width: 200, height: 100 }
+    const initial = api.expandScrollRange(
+      null,
+      { x: -400, y: -200, width: 900, height: 500 },
+      visible,
+    )
+    expect(initial.x).toBeLessThanOrEqual(-600)
+    expect(initial.x + initial.width).toBeGreaterThanOrEqual(700)
+
+    const expanded = api.expandScrollRange(
+      initial,
+      { x: 1000, y: 800, width: 10, height: 10 },
+      visible,
+    )
+    expect(expanded.x).toBe(initial.x)
+    expect(expanded.width).toBeGreaterThan(initial.width)
+
+    const viewport = { x: 100, y: -50, zoom: 2 }
+    const axes = api.viewportToScrollAxes(viewport, { width: 400, height: 200 }, expanded)
+    expect(axes.x.value).toBe(-50)
+    expect(axes.y.value).toBe(25)
+    expect(api.scrollAxisToViewport(viewport, 'x', 75)).toEqual({
+      x: -150,
+      y: -50,
+      zoom: 2,
+    })
+  })
+
   it('OpenSpec: stage / 受控无限视口 / 更新受控状态 - world 与 screen 负坐标往返', () => {
     const viewport = { x: 320, y: 180, zoom: 1.75 }
     const world = { x: -840.5, y: 230.25 }

@@ -7,6 +7,7 @@ import type {
   JsonObject,
   TransactionRuntime,
 } from './index'
+import { createDefaultCanvasSettings } from './index'
 
 const createTransactionRuntime = (
   core as unknown as {
@@ -16,7 +17,8 @@ const createTransactionRuntime = (
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: createDefaultCanvasSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -104,6 +106,108 @@ function containerChildIds(runtime: TransactionRuntime, nodeId: string) {
 }
 
 describe('built-in document commands', () => {
+  it('OpenSpec: command-transaction / 内置文档命令 / 配置画布并撤销', () => {
+    const runtime = createTransactionRuntime({ document: fixture() })
+
+    expect(dispatch(runtime, 'canvas.configure', {
+      grid: {
+        stepX: 16,
+        stepY: 12,
+        offsetX: -4,
+        offsetY: 6,
+        primaryLineEvery: 4,
+        snapEnabled: false,
+      },
+      smartSnap: { nodes: false, guides: true },
+    }).status).toBe('committed')
+    expect(runtime.document.canvas).toMatchObject({
+      grid: { stepX: 16, stepY: 12, offsetX: -4, offsetY: 6, primaryLineEvery: 4 },
+      smartSnap: { nodes: false, guides: true },
+    })
+    expect(runtime.entries).toHaveLength(2)
+
+    expect(dispatch(runtime, 'canvas.configure', {
+      grid: runtime.document.canvas.grid,
+      smartSnap: runtime.document.canvas.smartSnap,
+    }).status).toBe('noop')
+    expect(dispatch(runtime, 'canvas.configure', {
+      grid: { ...runtime.document.canvas.grid, stepX: 0 },
+      smartSnap: runtime.document.canvas.smartSnap,
+    }).status).toBe('rejected')
+
+    runtime.undo()
+    expect(runtime.document.canvas).toEqual(createDefaultCanvasSettings())
+    runtime.redo()
+    expect(runtime.document.canvas.grid.stepX).toBe(16)
+  })
+
+  it('OpenSpec: command-transaction / 内置文档命令 / 创建移动和删除辅助线', () => {
+    const runtime = createTransactionRuntime({ document: fixture() })
+    const batch: EditorCommand = {
+      id: 'guide-batch',
+      type: 'transaction.batch',
+      payload: {
+        commands: [
+          {
+            id: 'guide-x',
+            type: 'canvas.guide.create',
+            payload: { guide: { id: 'guide-x', axis: 'x', position: 32 } },
+          },
+          {
+            id: 'guide-y',
+            type: 'canvas.guide.create',
+            payload: { guide: { id: 'guide-y', axis: 'y', position: -16 } },
+          },
+        ],
+      },
+      meta: { label: '创建双轴辅助线' },
+    }
+
+    const created = runtime.dispatch(batch)
+    expect(created.status).toBe('committed')
+    if (created.status !== 'committed') return
+    expect(created.transaction.forward).toHaveLength(2)
+    expect(created.transaction.inverse).toHaveLength(2)
+    expect(runtime.document.canvas.guides).toEqual([
+      { id: 'guide-x', axis: 'x', position: 32 },
+      { id: 'guide-y', axis: 'y', position: -16 },
+    ])
+    expect(dispatch(runtime, 'canvas.guide.create', {
+      guide: { id: 'guide-x', axis: 'x', position: 64 },
+    }).status).toBe('rejected')
+    expect(dispatch(runtime, 'canvas.guide.create', {
+      guide: { id: 'invalid', axis: 'x', position: Number.POSITIVE_INFINITY },
+    }).status).toBe('rejected')
+    expect(dispatch(runtime, 'canvas.guide.move', {
+      guideId: 'missing',
+      position: 0,
+    }).status).toBe('rejected')
+    expect(dispatch(runtime, 'canvas.guide.delete', {
+      guideId: 'missing',
+    }).status).toBe('rejected')
+
+    expect(dispatch(runtime, 'canvas.guide.move', {
+      guideId: 'guide-x',
+      position: 48,
+    }).status).toBe('committed')
+    expect(dispatch(runtime, 'canvas.guide.move', {
+      guideId: 'guide-x',
+      position: 48,
+    }).status).toBe('noop')
+    expect(dispatch(runtime, 'canvas.guide.delete', {
+      guideId: 'guide-y',
+    }).status).toBe('committed')
+    expect(runtime.document.canvas.guides).toEqual([
+      { id: 'guide-x', axis: 'x', position: 48 },
+    ])
+
+    runtime.undo()
+    runtime.undo()
+    expect(runtime.document.canvas.guides).toHaveLength(2)
+    runtime.undo()
+    expect(runtime.document.canvas.guides).toEqual([])
+  })
+
   it('OpenSpec: command-transaction / 原子节点样式命令 / 更新并撤销样式路径', () => {
     const runtime = createTransactionRuntime({ document: fixture() })
 

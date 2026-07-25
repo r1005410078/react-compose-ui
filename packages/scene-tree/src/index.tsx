@@ -7,11 +7,19 @@
  * @packageDocumentation
  */
 import type { HTMLAttributes, ReactNode } from 'react'
+import type { ComposeLocale } from '@compose-ui/ui-context'
 import './styles.css'
 export { SceneTree } from './scene-tree'
 // 公共入口需要同时导出组件和 Hook，因此只针对这一行豁免 Fast Refresh 的组件导出限制。
 // eslint-disable-next-line react-refresh/only-export-components
 export { useSceneTreeCommands } from './use-scene-tree-commands'
+
+/**
+ * SceneTree 内建界面语言。
+ *
+ * @public
+ */
+export type SceneTreeLocale = ComposeLocale
 
 /**
  * 场景树渲染和交互所需的最小节点描述。
@@ -103,6 +111,8 @@ export interface SceneTreeProps
    * 省略时组件会创建仅供自身菜单和快捷键使用的控制器。
    */
   commands?: SceneTreeCommandController
+  /** 内建控件、菜单和 ARIA 文案语言。 @defaultValue `"zh-CN"` */
+  locale?: SceneTreeLocale
 }
 
 /**

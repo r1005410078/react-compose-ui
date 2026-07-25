@@ -32,6 +32,7 @@ import {
   getValueAtPath,
   inspectSchema,
 } from './schema-model'
+import { usePropertyPanelMessages } from './property-panel-i18n'
 
 type RuntimeSchema = v.GenericSchema & {
   entries?: Readonly<Record<string, v.GenericSchema>>
@@ -104,6 +105,7 @@ interface PropertyTreeView {
   query: string
   showAdvanced: boolean
   showDescriptions: boolean
+  recordValue: (label: string, key: string) => string
 }
 
 const OBJECT_TYPES = new Set(['object', 'loose_object', 'strict_object', 'object_with_rest'])
@@ -133,6 +135,7 @@ const ViewContext = createContext<PropertyTreeView>({
   query: '',
   showAdvanced: false,
   showDescriptions: false,
+  recordValue: (label, key) => `${label} 值 ${key}`,
 })
 
 export function PropertyTree({
@@ -151,6 +154,7 @@ export function PropertyTree({
   renderers = [],
   commit,
 }: PropertyTreeProps) {
+  const messages = usePropertyPanelMessages()
   const [activeBinding, setActiveBinding] = useState<{
     target: PropertyPanelRendererBindingTargetState
     anchor?: HTMLElement
@@ -193,6 +197,7 @@ export function PropertyTree({
             query,
             showAdvanced,
             showDescriptions,
+            recordValue: messages.recordValue,
           }}>
             <div className="property-panel__fields">
               <ObjectChildren
@@ -213,6 +218,7 @@ export function PropertyTree({
 }
 
 function RowActionRail({ actions, label }: { actions: readonly RowAction[]; label: string }) {
+  const messages = usePropertyPanelMessages()
   const actionWidth = useContext(ActionWidthContext)
   const rootRef = useRef<HTMLDivElement>(null)
   const overflowButtonRef = useRef<HTMLButtonElement>(null)
@@ -264,7 +270,7 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
         <button
           aria-expanded={menuMode !== null}
           aria-haspopup="menu"
-          aria-label={`更多 ${label} 操作`}
+          aria-label={messages.moreActions(label)}
           className="property-panel__overflow-trigger"
           ref={overflowButtonRef}
           type="button"
@@ -273,7 +279,7 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
       ) : null}
       {menuMode ? (
         <div
-          aria-label={`${label} 操作`}
+          aria-label={messages.actions(label)}
           className="property-panel__row-menu"
           role="menu"
           onKeyDown={(event) => {
@@ -383,6 +389,7 @@ function useRendererBindingController(
 }
 
 function BindingTrigger({ target }: { target: PropertyPanelRendererBindingTargetState }) {
+  const messages = usePropertyPanelMessages()
   const view = useContext(BindingContext)
   if (!view.config) return null
   const Trigger = view.config.renderTrigger
@@ -390,8 +397,8 @@ function BindingTrigger({ target }: { target: PropertyPanelRendererBindingTarget
   const invalid = target.status !== 'literal' && target.status !== 'resolved'
   const variableLabel = target.variable?.label ?? target.binding?.variableId
   const title = bound
-    ? `${variableLabel ?? '未知变量'} · ${formatBindingPreview(target.effectiveValue)}`
-    : `绑定 ${target.label}`
+    ? `${variableLabel ?? messages.unknownVariable} · ${formatBindingPreview(target.effectiveValue)}`
+    : messages.bind(target.label)
   const state = invalid ? 'invalid' : bound ? 'bound' : 'literal'
   return (
     <span
@@ -401,11 +408,15 @@ function BindingTrigger({ target }: { target: PropertyPanelRendererBindingTarget
       {Trigger ? <Trigger target={target} /> : (
         <button
           aria-description={bound ? title : undefined}
-          aria-label={bound ? `更换绑定 ${target.label}` : `绑定 ${target.label}`}
+          aria-label={bound
+            ? messages.replaceBinding(target.label)
+            : messages.bind(target.label)}
           aria-invalid={invalid ? 'true' : undefined}
           className={`property-panel__binding-trigger${bound ? ' property-panel__binding-trigger--bound' : ''}${invalid ? ' property-panel__binding-trigger--invalid' : ''}`}
           disabled={target.readOnly}
-          title={target.message ?? title}
+          title={target.status !== 'literal' && target.status !== 'resolved'
+            ? messages.issue(target.status)
+            : title}
           type="button"
           onClick={(event) => view.openTarget(target, event.currentTarget)}
         >
@@ -441,6 +452,7 @@ function BindingPickerContent({
   target: PropertyPanelRendererBindingTargetState
   view: PropertyBindingView
 }) {
+  const messages = usePropertyPanelMessages()
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const candidates = config.variables.filter((variable) => (
@@ -488,7 +500,7 @@ function BindingPickerContent({
   } : undefined
   return (
     <div
-      aria-label={`绑定 ${target.label}`}
+      aria-label={messages.bind(target.label)}
       className="property-panel__binding-picker"
       role="dialog"
       style={pickerStyle}
@@ -497,13 +509,17 @@ function BindingPickerContent({
       }}
     >
       <header>
-        <strong>绑定 {target.label}</strong>
-        <button aria-label="关闭变量选择器" type="button" onClick={view.closePicker}>×</button>
+        <strong>{messages.bind(target.label)}</strong>
+        <button
+          aria-label={messages.closeVariablePicker}
+          type="button"
+          onClick={view.closePicker}
+        >×</button>
       </header>
       <input
-        aria-label="搜索变量"
+        aria-label={messages.searchVariables}
         autoFocus
-        placeholder="搜索变量"
+        placeholder={messages.searchVariables}
         type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
@@ -514,7 +530,7 @@ function BindingPickerContent({
           if (variables.length === 0) return null
           return (
             <section key={scope}>
-              <h3>{scope === 'page' ? '页面变量' : '全局变量'}</h3>
+              <h3>{scope === 'page' ? messages.pageVariables : messages.globalVariables}</h3>
               {variables.map((variable) => (
                 <button key={variable.id} type="button" onClick={() => bind(variable)}>
                   <span>{variable.label}</span>
@@ -524,10 +540,14 @@ function BindingPickerContent({
             </section>
           )
         })}
-        {candidates.length === 0 ? <p>没有兼容的变量</p> : null}
+        {candidates.length === 0 ? <p>{messages.noVariables}</p> : null}
       </div>
       {target.binding ? (
-        <footer><button disabled={target.readOnly} type="button" onClick={unbind}>解绑</button></footer>
+        <footer>
+          <button disabled={target.readOnly} type="button" onClick={unbind}>
+            {messages.unbind}
+          </button>
+        </footer>
       ) : null}
     </div>
   )
@@ -564,6 +584,7 @@ function PropertyNode({
   commit,
   nodeActions,
 }: PropertyNodeProps) {
+  const messages = usePropertyPanelMessages()
   const info = inspectSchema(schema)
   const renderers = useContext(RendererContext)
   const bindingView = useContext(BindingContext)
@@ -589,12 +610,12 @@ function PropertyNode({
   }
   const presenceAction: RowAction | null = supportsPresence ? {
     id: 'presence',
-    label: `${label} 存在`,
+    label: messages.presence(label),
     priority: 10,
     disabled: readOnly,
     control: (
       <input
-        aria-label={`${label} 存在`}
+        aria-label={messages.presence(label)}
         checked={!missing}
         disabled={readOnly}
         type="checkbox"
@@ -607,7 +628,7 @@ function PropertyNode({
     && v.safeParse(schema, baseline).success
     && (!deepEqual(value, baseline) || descendantBindings.length > 0) ? {
       id: 'reset',
-      label: `重置 ${label}`,
+      label: messages.reset(label),
       priority: 20,
       disabled: readOnly,
       icon: <ResetIcon />,
@@ -940,6 +961,7 @@ function ArrayGroup({
   nodeActions,
   initiallyExpanded,
 }: GroupProps) {
+  const messages = usePropertyPanelMessages()
   const runtime = schema as RuntimeSchema
   const items = Array.isArray(value) ? value : []
   const itemSchema = runtime.item
@@ -954,7 +976,7 @@ function ArrayGroup({
       label={label}
       nodeActions={[{
         id: 'add',
-        label: `添加 ${label}`,
+        label: messages.add(label),
         priority: 10,
         disabled: readOnly || !canAdd,
         icon: <PlusIcon />,
@@ -971,7 +993,7 @@ function ArrayGroup({
             nodeActions={[
               {
                 id: 'move-up',
-                label: `上移 ${itemLabel}`,
+                label: messages.moveUp(itemLabel),
                 priority: 40,
                 disabled: readOnly || index === 0,
                 icon: <ArrowIcon direction="up" />,
@@ -985,7 +1007,7 @@ function ArrayGroup({
               },
               {
                 id: 'move-down',
-                label: `下移 ${itemLabel}`,
+                label: messages.moveDown(itemLabel),
                 priority: 40,
                 disabled: readOnly || index === items.length - 1,
                 icon: <ArrowIcon direction="down" />,
@@ -999,7 +1021,7 @@ function ArrayGroup({
               },
               {
                 id: 'delete',
-                label: `删除 ${itemLabel}`,
+                label: messages.remove(itemLabel),
                 priority: 30,
                 disabled: readOnly,
                 icon: <CloseIcon />,
@@ -1032,6 +1054,7 @@ function TupleGroup({
   nodeActions,
   initiallyExpanded,
 }: GroupProps) {
+  const messages = usePropertyPanelMessages()
   const runtime = schema as RuntimeSchema
   const items = Array.isArray(value) ? value : []
   const fixedSchemas = runtime.items ?? []
@@ -1045,7 +1068,7 @@ function TupleGroup({
       nodeActions={[
         ...(restSchema ? [{
           id: 'add',
-          label: `添加 ${label}`,
+          label: messages.add(label),
           priority: 10,
           disabled: readOnly || !canAdd,
           icon: <PlusIcon />,
@@ -1064,7 +1087,7 @@ function TupleGroup({
             label={itemLabel}
             nodeActions={restItem ? [{
               id: 'delete',
-              label: `删除 ${itemLabel}`,
+              label: messages.remove(itemLabel),
               priority: 30,
               disabled: readOnly,
               icon: <CloseIcon />,
@@ -1096,6 +1119,7 @@ function RecordGroup({
   nodeActions,
   initiallyExpanded,
 }: GroupProps) {
+  const messages = usePropertyPanelMessages()
   const runtime = schema as RuntimeSchema
   const entries = value && typeof value === 'object' && !Array.isArray(value)
     ? Object.entries(value as Record<string, unknown>)
@@ -1116,7 +1140,7 @@ function RecordGroup({
       label={label}
       nodeActions={[{
         id: 'add',
-        label: `添加 ${label}`,
+        label: messages.add(label),
         priority: 10,
         disabled: readOnly || !canAdd,
         icon: <PlusIcon />,
@@ -1130,7 +1154,7 @@ function RecordGroup({
       {valueSchema ? entries.map(([key, entryValue], index) => (
         <div className="property-panel__record" key={key}>
           <input
-            aria-label={`${label} 键 ${index + 1}`}
+            aria-label={messages.recordKey(label, index + 1)}
             disabled={readOnly}
             value={key}
             onChange={(event) => {
@@ -1154,10 +1178,10 @@ function RecordGroup({
           />
           <PropertyNode
             commit={commit}
-            label={`${label} 值 ${key}`}
+            label={messages.recordValue(label, key)}
             nodeActions={[{
               id: 'delete',
-              label: `删除 ${label} ${key}`,
+              label: messages.remove(`${label} ${key}`),
               priority: 30,
               disabled: readOnly,
               icon: <CloseIcon />,
@@ -1189,6 +1213,7 @@ function UnionGroup({
   nodeActions,
   initiallyExpanded,
 }: GroupProps) {
+  const messages = usePropertyPanelMessages()
   const runtime = schema as RuntimeSchema
   const options = (runtime.options ?? []).filter((option): option is v.GenericSchema => (
     Boolean(option && typeof option === 'object' && 'kind' in option)
@@ -1198,9 +1223,9 @@ function UnionGroup({
   const activeSchema = options[activeIndex]
   return (
     <GroupShell initiallyExpanded={initiallyExpanded} label={label} nodeActions={nodeActions}>
-      <PropertyRow label={`${label} 分支`} nodeActions={[]} path={[...path, '$branch']}>
+      <PropertyRow label={messages.unionBranch(label)} nodeActions={[]} path={[...path, '$branch']}>
         <select
-          aria-label={`${label} 分支`}
+          aria-label={messages.unionBranch(label)}
           disabled={readOnly}
           value={String(activeIndex)}
           onChange={(event) => {
@@ -1216,7 +1241,7 @@ function UnionGroup({
               key={index}
               value={String(index)}
             >
-              {inspectSchema(option).title ?? `分支 ${index + 1}`}
+              {inspectSchema(option).title ?? messages.branch(index + 1)}
             </option>
           ))}
         </select>
@@ -1522,7 +1547,7 @@ function matchesNode(
     .filter(Boolean)
     .join(' ')
     .toLocaleLowerCase()
-  const children = childNodes(info.base, value, baseline, path, label)
+  const children = childNodes(info.base, value, baseline, path, label, view.recordValue)
   const descendantMatchesQuery = normalizedQuery
     ? children.some((child) => matchesNode(
         child.schema,
@@ -1562,6 +1587,7 @@ function childNodes(
   baseline: unknown,
   path: PropertyPath,
   parentLabel: string,
+  recordValue: (label: string, key: string) => string,
 ): readonly ChildNode[] {
   const info = inspectSchema(schema)
   const runtime = info.base as RuntimeSchema
@@ -1612,7 +1638,7 @@ function childNodes(
       value: values[key],
       baseline: baselines[key],
       path: [...path, key],
-      label: `${parentLabel} 值 ${key}`,
+      label: recordValue(parentLabel, key),
     }))
   }
   if (info.type === 'union' || info.type === 'variant') {
@@ -1620,7 +1646,9 @@ function childNodes(
       Boolean(option && typeof option === 'object' && 'kind' in option)
       && v.safeParse(option as v.GenericSchema, value).success
     ))
-    return active ? childNodes(active, value, baseline, path, parentLabel) : []
+    return active
+      ? childNodes(active, value, baseline, path, parentLabel, recordValue)
+      : []
   }
   return []
 }

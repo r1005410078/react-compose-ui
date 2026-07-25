@@ -10,6 +10,7 @@ import { CommandPanel } from '@compose-ui/command-panel'
 import '@compose-ui/command-panel/styles.css'
 
 <CommandPanel
+  locale="zh-CN"
   runtime={runtime}
   presets={[{
     id: 'rename',
@@ -24,3 +25,7 @@ import '@compose-ui/command-panel/styles.css'
   }]}
 />
 ```
+
+`locale` 支持 zh-CN 和 en-US，只翻译内建状态、详情、验证、空状态和 ARIA；命令 label/type、
+source、字段 label 与选项保持宿主原文。未提供 `locale` 时优先读取
+`@compose-ui/ui-context`；显式 prop 优先于 Context，Provider 外保持原独立默认语言。

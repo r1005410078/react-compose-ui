@@ -1,4 +1,5 @@
 import type {
+  ComposeCanvasSettings,
   ComposeDocument,
   ComposeNode,
   DocumentValidationIssue,
@@ -113,6 +114,112 @@ function validateTransform(
       'Frame rotation 必须为零',
     )
   }
+}
+
+function validateCanvas(
+  value: unknown,
+  issues: DocumentValidationIssue[],
+): value is ComposeCanvasSettings {
+  const path = ['canvas'] as const
+  if (!isRecord(value)) {
+    addIssue(issues, 'canvas.invalid', path, 'canvas 必须是对象')
+    return false
+  }
+  const { grid, smartSnap, guides } = value
+  if (!isRecord(grid)) {
+    addIssue(issues, 'canvas.invalid', [...path, 'grid'], 'canvas.grid 必须是对象')
+  }
+  else {
+    for (const field of ['stepX', 'stepY'] as const) {
+      const candidate = grid[field]
+      if (typeof candidate !== 'number' || !Number.isFinite(candidate) || candidate <= 0) {
+        addIssue(
+          issues,
+          'canvas.invalid-step',
+          [...path, 'grid', field],
+          `${field} 必须是有限正数`,
+        )
+      }
+    }
+    for (const field of ['offsetX', 'offsetY'] as const) {
+      const candidate = grid[field]
+      if (typeof candidate !== 'number' || !Number.isFinite(candidate)) {
+        addIssue(
+          issues,
+          'canvas.invalid-offset',
+          [...path, 'grid', field],
+          `${field} 必须是有限数字`,
+        )
+      }
+    }
+    if (
+      typeof grid.primaryLineEvery !== 'number'
+      || !Number.isInteger(grid.primaryLineEvery)
+      || grid.primaryLineEvery <= 0
+    ) {
+      addIssue(
+        issues,
+        'canvas.invalid-primary-interval',
+        [...path, 'grid', 'primaryLineEvery'],
+        'primaryLineEvery 必须是正整数',
+      )
+    }
+    if (typeof grid.snapEnabled !== 'boolean') {
+      addIssue(
+        issues,
+        'canvas.invalid',
+        [...path, 'grid', 'snapEnabled'],
+        'snapEnabled 必须是 boolean',
+      )
+    }
+  }
+
+  if (!isRecord(smartSnap)) {
+    addIssue(issues, 'canvas.invalid', [...path, 'smartSnap'], 'canvas.smartSnap 必须是对象')
+  }
+  else {
+    for (const field of ['nodes', 'guides'] as const) {
+      if (typeof smartSnap[field] !== 'boolean') {
+        addIssue(
+          issues,
+          'canvas.invalid',
+          [...path, 'smartSnap', field],
+          `${field} 必须是 boolean`,
+        )
+      }
+    }
+  }
+
+  if (!Array.isArray(guides)) {
+    addIssue(issues, 'canvas.invalid', [...path, 'guides'], 'canvas.guides 必须是数组')
+  }
+  else {
+    const ids = new Set<string>()
+    guides.forEach((guide, index) => {
+      const guidePath = [...path, 'guides', index] as const
+      if (
+        !isRecord(guide)
+        || typeof guide.id !== 'string'
+        || guide.id.trim().length === 0
+        || (guide.axis !== 'x' && guide.axis !== 'y')
+        || typeof guide.position !== 'number'
+        || !Number.isFinite(guide.position)
+      ) {
+        addIssue(issues, 'canvas.invalid-guide', guidePath, '辅助线 id、axis 或 position 无效')
+        return
+      }
+      if (ids.has(guide.id)) {
+        addIssue(
+          issues,
+          'canvas.duplicate-guide',
+          [...guidePath, 'id'],
+          `辅助线 ID ${guide.id} 重复`,
+        )
+      }
+      ids.add(guide.id)
+    })
+  }
+  return true
 }
 
 function validateNode(
@@ -303,7 +410,7 @@ function validateTopology(
 }
 
 /**
- * 校验未知输入是否满足 ComposeDocument v1 的 JSON、节点和拓扑约束。
+ * 校验未知输入是否满足 ComposeDocument v2 的画布、JSON、节点和拓扑约束。
  *
  * @param input - 可能来自宿主持久化层或网络边界的未知值。
  * @returns 成功时保留原文档引用；失败时返回全部可定位问题。
@@ -320,7 +427,7 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
       }],
     }
   }
-  if (input.schemaVersion !== 1) {
+  if (input.schemaVersion !== 2) {
     return {
       valid: false,
       issues: [{
@@ -332,6 +439,7 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
   }
 
   const issues: DocumentValidationIssue[] = []
+  validateCanvas(input.canvas, issues)
   if (!Array.isArray(input.rootIds) || input.rootIds.some((id) => typeof id !== 'string')) {
     addIssue(issues, 'document.invalid', ['rootIds'], 'rootIds 必须是字符串数组')
   }

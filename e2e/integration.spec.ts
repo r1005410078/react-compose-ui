@@ -22,8 +22,8 @@ test('OpenSpec: editor-workspace-layout / 完整示例入口 / 根路径直接�
   await expect(page.locator('#root > .compose-editor')).toHaveCount(1)
   await expect(
     editor.locator('[data-workspace-tab="compose-component-library"]'),
-  ).toHaveAttribute('title', 'Component Library')
-  await expect(editor.getByRole('button', { name: 'Add Text component' })).toHaveCount(0)
+  ).toHaveAttribute('title', '组件库')
+  await expect(editor.getByRole('button', { name: '添加 Text' })).toHaveCount(0)
 
   const editorBox = await editor.boundingBox()
   const viewport = page.viewportSize()
@@ -61,32 +61,33 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(stage).toBeVisible()
   await expect(
     editor.locator('[data-workspace-tab="compose-component-library"]'),
-  ).toHaveAttribute('title', 'Component Library')
+  ).toHaveAttribute('title', '组件库')
 
   await editor.locator('[data-workspace-tab="compose-component-library"]').click()
   await expect(editor.getByRole('button').filter({ hasText: /Frame|Rectangle|Text|ECharts/ }))
     .toHaveCount(4)
-  await editor.getByRole('button', { name: 'Add Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
 
   const stageBox = await stage.boundingBox()
   expect(stageBox).not.toBeNull()
-  await pointerDrop(page, editor.getByRole('button', { name: 'Add Frame' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Frame' }), {
     x: stageBox!.x + stageBox!.width / 2,
     y: stageBox!.y + stageBox!.height / 2,
   })
   const frame = stage.getByTestId('stage-frame')
   await expect(frame).toHaveCount(1)
   await expect(frame).toHaveCSS('background-color', 'rgb(248, 250, 252)')
+  await editor.getByRole('button', { name: '适配 Frame' }).click()
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
 
-  await pointerDrop(page, editor.getByRole('button', { name: 'Add Rectangle' }), {
-    x: frameBox!.x + 160,
-    y: frameBox!.y + 180,
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: frameBox!.x + frameBox!.width * 0.25,
+    y: frameBox!.y + frameBox!.height * 0.35,
   })
-  await pointerDrop(page, editor.getByRole('button', { name: 'Add Text' }), {
-    x: frameBox!.x + 480,
-    y: frameBox!.y + 180,
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Text' }), {
+    x: frameBox!.x + frameBox!.width * 0.7,
+    y: frameBox!.y + frameBox!.height * 0.35,
   })
   await expect(stage.locator('.compose-stage__node.is-component')).toHaveCount(2)
 
@@ -97,7 +98,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
   await expect(
     editor.locator('[data-compose-ui="history"]')
-      .getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }),
+      .getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).first(),
   ).toBeVisible()
 
   await components.nth(0).click()
@@ -105,7 +106,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await stage.press('Control+g')
   await expect(stage.locator('.compose-stage__node.is-group')).toHaveCount(1)
   const group = stage.locator('.compose-stage__node.is-group')
-  const groupBackground = editor.getByLabel('Background')
+  const groupBackground = editor.getByRole('textbox', { name: '背景', exact: true })
   await groupBackground.fill('#123456')
   await groupBackground.blur()
   await expect(group).toHaveCSS('background-color', 'rgb(18, 52, 86)')
@@ -117,7 +118,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await stage.locator('.compose-stage__node.is-component').filter({
     hasText: 'Text',
   }).click()
-  const property = editor.getByRole('textbox', { name: 'Text', exact: true })
+  const property = editor.getByRole('textbox', { name: '文本', exact: true })
   await property.fill('统一事务舞台')
   await expect(stage.getByText('统一事务舞台')).toBeVisible()
   await property.press('Control+z')
@@ -131,26 +132,26 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(commandPanel.getByText('成功').first()).toBeVisible()
 
   await editor.getByText('日志', { exact: true }).click()
-  const log = editor.getByRole('region', { name: 'Operation log' })
+  const log = editor.getByRole('region', { name: '操作日志' })
   await expect(log.getByRole('button', { name: /Create Frame/ })).toBeVisible()
   await expect(
-    log.getByRole('button', { name: /^Property Update Text ·/ }),
+    log.getByRole('button', { name: /^属性 Update Text ·/ }),
   ).toBeVisible()
-  await expect(log.getByRole('button', { name: /^Property Update Group ·/ })).toBeVisible()
+  await expect(log.getByRole('button', { name: /^属性 Update Group ·/ })).toBeVisible()
   await expect(log.getByRole('button', { name: /Undo · Update Text/ })).toBeVisible()
   await expect(log.getByText(/Reject .* outside a Frame/)).toHaveCount(0)
   await log.getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).click()
-  const operationDetail = log.getByRole('region', { name: 'Operation details' })
-  await expect(operationDetail).toContainText('Before')
-  await expect(operationDetail).toContainText('After')
+  const operationDetail = log.getByRole('region', { name: '操作详情' })
+  await expect(operationDetail).toContainText('之前')
+  await expect(operationDetail).toContainText('之后')
   await expect(operationDetail).toContainText('forwardPatches')
 
   await editor.getByRole('button', { name: '预览 Frame' }).click()
   const preview = page.getByRole('dialog', { name: 'Frame 预览对话框' })
   await expect(preview.getByRole('region', { name: 'Compose preview' })).toBeVisible()
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
-  const previewGroup = preview.getByTestId(/compose-preview-node-stage-demo-/).filter({
-    has: preview.getByText('统一事务舞台'),
+  const previewGroup = preview.locator('[data-testid^="compose-preview-node-"]').filter({
+    hasText: '统一事务舞台',
   }).first()
   await expect(previewGroup).toBeVisible()
   await expect(previewGroup).toHaveCSS('background-color', 'rgb(18, 52, 86)')
@@ -166,7 +167,7 @@ test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染
   const frameBox = await stage.getByTestId('stage-frame').boundingBox()
   expect(frameBox).not.toBeNull()
 
-  await pointerDrop(page, editor.getByRole('button', { name: 'Add ECharts Chart' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 ECharts Chart' }), {
     x: frameBox!.x + 320,
     y: frameBox!.y + 240,
   })
@@ -218,14 +219,13 @@ test('OpenSpec: stage / 八向缩放 / resize 手柄在预览阶段跟随鼠标'
       await page.mouse.move(to.x, to.y, { steps: 5 })
       await expect.poll(async () => {
         const box = await handle.boundingBox()
-        return box && {
-          x: Math.round(box.x + box.width / 2),
-          y: Math.round(box.y + box.height / 2),
-        }
-      }).toEqual({
-        x: Math.round(to.x),
-        y: Math.round(to.y),
-      })
+        return box
+          ? Math.max(
+              Math.abs(box.x + box.width / 2 - to.x),
+              Math.abs(box.y + box.height / 2 - to.y),
+            )
+          : Number.POSITIVE_INFINITY
+      }).toBeLessThanOrEqual(1.5)
       await page.mouse.up()
     }
   }
@@ -242,7 +242,7 @@ test('OpenSpec: stage / Group 直接操纵 / 舞台可拖动 Group 且子节点�
   await editor.getByRole('button', { name: '适配 Frame' }).click()
   const frameBox = await stage.getByTestId('stage-frame').boundingBox()
   expect(frameBox).not.toBeNull()
-  const rectangleButton = editor.getByRole('button', { name: 'Add Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
   await pointerDrop(page, rectangleButton, {
     x: frameBox!.x + 220,
     y: frameBox!.y + 220,
@@ -317,14 +317,249 @@ test('OpenSpec: stage / Group 直接操纵 / 舞台可拖动 Group 且子节点�
   await page.keyboard.up('Control')
   await expect.poll(async () => {
     const box = await child.boundingBox()
-    return box && {
-      x: Math.round(box.x),
-      y: Math.round(box.y),
-    }
-  }).toEqual({
-    x: Math.round(childBefore!.x + 40),
-    y: Math.round(childBefore!.y + 20),
+    return box
+      ? Math.max(
+          Math.abs(box.x - (childBefore!.x + 40)),
+          Math.abs(box.y - (childBefore!.y + 20)),
+        )
+      : Number.POSITIVE_INFINITY
+  }).toBeLessThanOrEqual(1)
+})
+
+test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风格纵向流程', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await editor.getByRole('button', { name: '创建 Frame' }).click()
+  await editor.getByRole('button', { name: '适配 Frame' }).click()
+
+  await editor.getByRole('button', { name: '智能吸附' }).click()
+  await editor.getByRole('button', { name: '画布设置' }).click()
+  const settings = editor.getByRole('dialog', { name: '画布网格与吸附设置' })
+  await settings.getByRole('textbox', { name: 'X 步长' }).fill('16')
+  await settings.getByRole('textbox', { name: 'Y 步长' }).fill('16')
+  await settings.getByRole('button', { name: '应用' }).click()
+  await expect(editor.getByRole('button', { name: '智能吸附' }))
+    .toHaveAttribute('aria-pressed', 'false')
+
+  const frame = stage.getByTestId('stage-frame')
+  const frameBox = await frame.boundingBox()
+  expect(frameBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: frameBox!.x + frameBox!.width * 0.3,
+    y: frameBox!.y + frameBox!.height * 0.35,
   })
+  const rectangle = stage.locator('.compose-stage__node.is-component').filter({
+    hasText: 'Rectangle',
+  })
+  await rectangle.click()
+
+  const beforeMove = await rectangle.boundingBox()
+  expect(beforeMove).not.toBeNull()
+  await page.mouse.move(
+    beforeMove!.x + beforeMove!.width / 2,
+    beforeMove!.y + beforeMove!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    beforeMove!.x + beforeMove!.width / 2 + 27,
+    beforeMove!.y + beforeMove!.height / 2 + 19,
+    { steps: 5 },
+  )
+  await page.mouse.up()
+  const xField = editor.getByRole('spinbutton', { name: 'X', exact: true })
+  await expect.poll(async () => Number(await xField.inputValue()) % 16).toBe(0)
+
+  const resize = stage.getByTestId('stage-resize-se')
+  const resizeBox = await resize.boundingBox()
+  expect(resizeBox).not.toBeNull()
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2,
+    resizeBox!.y + resizeBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2 + 31,
+    resizeBox!.y + resizeBox!.height / 2 + 23,
+    { steps: 5 },
+  )
+  await page.mouse.up()
+  const widthField = editor.getByRole('spinbutton', { name: '宽度', exact: true })
+  await expect.poll(async () => Number(await widthField.inputValue()) % 16).toBe(0)
+
+  const originX = await stage.getByTestId('stage-origin-y').getAttribute('x1')
+  const originY = await stage.getByTestId('stage-origin-x').getAttribute('y1')
+  await expect(stage.getByTestId('stage-ruler-x')
+    .locator('[data-world-value="0"]')).toHaveAttribute(
+    'transform',
+    `translate(${originX} 0)`,
+  )
+  await expect(stage.getByTestId('stage-ruler-y')
+    .locator('[data-world-value="0"]')).toHaveAttribute(
+    'transform',
+    `translate(0 ${originY})`,
+  )
+
+  const ruler = stage.getByTestId('stage-ruler-x')
+  const rulerBox = await ruler.boundingBox()
+  const surfaceBox = await stage.getByTestId('stage-surface').boundingBox()
+  expect(rulerBox).not.toBeNull()
+  expect(surfaceBox).not.toBeNull()
+  await page.mouse.move(rulerBox!.x + rulerBox!.width * 0.6, rulerBox!.y + 10)
+  await page.mouse.down()
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.62, surfaceBox!.y + 120)
+  await page.mouse.up()
+  await expect(stage.locator('.compose-stage__canvas-guide')).toHaveCount(1)
+  await expect(editor).toHaveScreenshot('stage-workspace-guide.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await stage.press('Control+z')
+  await expect(stage.locator('.compose-stage__canvas-guide')).toHaveCount(0)
+  await stage.press('Control+Shift+z')
+  await expect(stage.locator('.compose-stage__canvas-guide')).toHaveCount(1)
+
+  const horizontal = stage.getByRole('scrollbar', { name: '水平画布滚动条' })
+  const beforeScroll = await horizontal.getAttribute('aria-valuenow')
+  await horizontal.press('End')
+  await expect(horizontal).not.toHaveAttribute('aria-valuenow', beforeScroll!)
+  await horizontal.press('Home')
+  const negativeTicks = stage.getByTestId('stage-ruler-x').locator('[data-world-value^="-"]')
+  await expect.poll(() => negativeTicks.evaluateAll((ticks) => {
+    const ruler = ticks[0]?.closest('[data-testid="stage-ruler-x"]')
+    if (!ruler) return false
+    const rulerRect = ruler.getBoundingClientRect()
+    return ticks.some((tick) => {
+      const rect = tick.getBoundingClientRect()
+      return rect.right > rulerRect.left && rect.left < rulerRect.right
+    })
+  })).toBe(true)
+  await expect(editor).toHaveScreenshot('stage-workspace-negative-scroll.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+})
+
+test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语言并重绑临时平移', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const settingsButton = editor.getByRole('button', { name: '设置', exact: true })
+  await settingsButton.click()
+  const settingsDialog = editor.getByRole('dialog', { name: '设置' })
+  await expect(settingsDialog).toBeVisible()
+  await expect(settingsDialog.getByRole('searchbox', { name: '搜索设置' })).toBeFocused()
+  await expect(editor.locator('.compose-editor__workspace')).toHaveAttribute('inert', '')
+  await expect(editor).toHaveScreenshot('editor-preferences-dark.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await editor.getByRole('radio', { name: '浅色' }).click()
+  await expect(editor).toHaveAttribute('data-compose-theme', 'light')
+  await editor.getByRole('button', { name: '关闭设置' }).click()
+  await expect(settingsButton).toBeFocused()
+  await expect(editor).toHaveScreenshot('editor-workspace-light.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await editor.getByRole('button', { name: '设置', exact: true }).click()
+  await editor.getByRole('button', { name: '语言', exact: true }).click()
+  await editor.getByRole('radio', { name: 'English' }).click()
+  await expect(editor).toHaveAttribute('lang', 'en-US')
+  await expect(editor.getByRole('button', { name: 'Canvas settings' })).toBeVisible()
+  await editor.getByRole('button', { name: 'Close settings' }).click()
+  await expect(
+    editor.locator('[data-workspace-tab="compose-component-library"]'),
+  ).toHaveAttribute('title', 'Component Library')
+  await expect(editor).toHaveScreenshot('editor-workspace-english.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await editor.getByRole('button', { name: 'Settings', exact: true }).click()
+  await editor.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  const temporaryPanBinding = editor.getByRole('button', {
+    name: 'Change Temporary pan shortcut',
+  })
+  await temporaryPanBinding.click()
+  await page.keyboard.press('p')
+  await expect(temporaryPanBinding).toHaveText('P')
+  await editor.getByRole('button', { name: 'Close settings' }).click()
+
+  const surface = stage.getByTestId('stage-surface')
+  const surfaceBox = await surface.boundingBox()
+  expect(surfaceBox).not.toBeNull()
+  const origin = stage.getByTestId('stage-origin-y')
+  const beforeCustomPan = Number(await origin.getAttribute('x1'))
+  const start = {
+    x: surfaceBox!.x + surfaceBox!.width * 0.72,
+    y: surfaceBox!.y + surfaceBox!.height * 0.68,
+  }
+  await surface.click({
+    position: {
+      x: surfaceBox!.width * 0.72,
+      y: surfaceBox!.height * 0.68,
+    },
+  })
+  await page.keyboard.down('p')
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x + 64, start.y + 36, { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.up('p')
+  await expect.poll(async () => Number(await origin.getAttribute('x1')))
+    .toBeCloseTo(beforeCustomPan + 64, 0)
+
+  await editor.getByRole('button', { name: 'Settings', exact: true }).click()
+  await expect(editor.getByRole('heading', { name: 'Appearance' })).toBeVisible()
+  await editor.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  await editor.getByRole('button', {
+    name: 'Restore default Temporary pan shortcut',
+  }).click()
+  await expect(editor.getByRole('button', {
+    name: 'Change Temporary pan shortcut',
+  })).toHaveText('Space')
+  await editor.getByRole('button', { name: 'Close settings' }).click()
+
+  const beforeRestoredPan = Number(await origin.getAttribute('x1'))
+  await surface.click({
+    position: {
+      x: surfaceBox!.width * 0.72,
+      y: surfaceBox!.height * 0.68,
+    },
+  })
+  await page.keyboard.down('Space')
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x + 40, start.y + 24, { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.up('Space')
+  await expect.poll(async () => Number(await origin.getAttribute('x1')))
+    .toBeCloseTo(beforeRestoredPan + 40, 0)
+
+  await page.reload()
+  const reloadedEditor = page.getByRole('region', { name: 'Compose editor' })
+  await expect(reloadedEditor).toHaveAttribute('data-compose-theme', 'dark')
+  await expect(reloadedEditor).toHaveAttribute('lang', 'zh-CN')
+
+  await page.goto('/?message-overrides')
+  const overriddenEditor = page.getByRole('region', { name: 'Compose editor' })
+  await overriddenEditor.getByRole('button', { name: '偏好设置' }).click()
+  await expect(
+    overriddenEditor.getByRole('dialog', { name: '偏好设置' }),
+  ).toBeVisible()
 })
 
 test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄金文件', async ({ page }) => {
@@ -338,7 +573,7 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   })
 
   await editor.locator('[data-workspace-tab="compose-component-library"]').click()
-  await editor.getByRole('button', { name: 'Add Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   await editor.getByText('命令', { exact: true }).click()
   await expect(editor.getByRole('region', { name: '命令调试台' })
     .getByText('已拒绝').first()).toBeVisible()
@@ -353,11 +588,11 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   const stage = editor.getByRole('application', { name: 'Stage' })
   const frameBox = await stage.getByTestId('stage-frame').boundingBox()
   expect(frameBox).not.toBeNull()
-  await pointerDrop(page, editor.getByRole('button', { name: 'Add Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
     x: frameBox!.x + 160,
     y: frameBox!.y + 180,
   })
-  await pointerDrop(page, editor.getByRole('button', { name: 'Add Text' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Text' }), {
     x: frameBox!.x + 480,
     y: frameBox!.y + 180,
   })
@@ -382,7 +617,7 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   })
   const rectangleBox = await rectangle.boundingBox()
   expect(rectangleBox).not.toBeNull()
-  await expect(editor.getByRole('region', { name: 'Rectangle properties' })).toBeVisible()
+  await expect(editor.getByRole('region', { name: 'Rectangle 属性' })).toBeVisible()
   const pointerStart = {
     clientX: rectangleBox!.x + rectangleBox!.width / 2,
     clientY: rectangleBox!.y + rectangleBox!.height / 2,

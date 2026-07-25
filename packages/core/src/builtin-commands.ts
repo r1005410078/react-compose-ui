@@ -1,4 +1,6 @@
 import type {
+  ComposeCanvasGuide,
+  ComposeCanvasSettings,
   ComposeDocument,
   ComposeGroupNode,
   ComposeNode,
@@ -28,6 +30,10 @@ import type {
  * @public
  */
 export const BUILTIN_COMMAND_TYPES = {
+  configureCanvas: 'canvas.configure',
+  createCanvasGuide: 'canvas.guide.create',
+  moveCanvasGuide: 'canvas.guide.move',
+  deleteCanvasGuide: 'canvas.guide.delete',
   createFrame: 'frame.create',
   createNode: 'node.create',
   deleteNode: 'node.delete',
@@ -96,6 +102,140 @@ function asTransform(value: unknown): NodeTransform | null {
   const fields = ['x', 'y', 'width', 'height', 'rotation'] as const
   if (!fields.every((field) => typeof value[field] === 'number')) return null
   return value as unknown as NodeTransform
+}
+
+function asCanvasSettings(value: unknown): Omit<ComposeCanvasSettings, 'guides'> | null {
+  if (!isRecord(value)) return null
+  const { grid, smartSnap } = value
+  if (!isRecord(grid) || !isRecord(smartSnap)) return null
+  if (
+    typeof grid.stepX !== 'number'
+    || !Number.isFinite(grid.stepX)
+    || grid.stepX <= 0
+    || typeof grid.stepY !== 'number'
+    || !Number.isFinite(grid.stepY)
+    || grid.stepY <= 0
+    || typeof grid.offsetX !== 'number'
+    || !Number.isFinite(grid.offsetX)
+    || typeof grid.offsetY !== 'number'
+    || !Number.isFinite(grid.offsetY)
+    || typeof grid.primaryLineEvery !== 'number'
+    || !Number.isInteger(grid.primaryLineEvery)
+    || grid.primaryLineEvery <= 0
+    || typeof grid.snapEnabled !== 'boolean'
+    || typeof smartSnap.nodes !== 'boolean'
+    || typeof smartSnap.guides !== 'boolean'
+  ) {
+    return null
+  }
+  return {
+    grid: {
+      stepX: grid.stepX,
+      stepY: grid.stepY,
+      offsetX: grid.offsetX,
+      offsetY: grid.offsetY,
+      primaryLineEvery: grid.primaryLineEvery,
+      snapEnabled: grid.snapEnabled,
+    },
+    smartSnap: {
+      nodes: smartSnap.nodes,
+      guides: smartSnap.guides,
+    },
+  }
+}
+
+function asCanvasGuide(value: unknown): ComposeCanvasGuide | null {
+  if (
+    !isRecord(value)
+    || typeof value.id !== 'string'
+    || value.id.trim().length === 0
+    || (value.axis !== 'x' && value.axis !== 'y')
+    || typeof value.position !== 'number'
+    || !Number.isFinite(value.position)
+  ) {
+    return null
+  }
+  return {
+    id: value.id,
+    axis: value.axis,
+    position: value.position,
+  }
+}
+
+function configureCanvasHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.configureCanvas,
+    execute(document, command) {
+      const settings = asCanvasSettings(command.payload)
+      if (!settings) return issue('canvas.invalid-settings', 'canvas.configure 参数无效')
+      if (
+        sameValue(document.canvas.grid, settings.grid)
+        && sameValue(document.canvas.smartSnap, settings.smartSnap)
+      ) {
+        return { status: 'noop', reason: '画布设置没有变化' }
+      }
+      return patches([
+        {
+          op: 'set',
+          path: ['canvas', 'grid'],
+          value: settings.grid as unknown as JsonValue,
+        },
+        {
+          op: 'set',
+          path: ['canvas', 'smartSnap'],
+          value: settings.smartSnap as unknown as JsonValue,
+        },
+      ])
+    },
+  }
+}
+
+function createCanvasGuideHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.createCanvasGuide,
+    execute(document, command) {
+      const guide = asCanvasGuide(valueAt(command.payload, 'guide'))
+      if (!guide) return issue('canvas.invalid-guide', 'canvas.guide.create 参数无效')
+      if (document.canvas.guides.some(({ id }) => id === guide.id)) {
+        return issue('canvas.duplicate-guide', `辅助线 ${guide.id} 已存在`)
+      }
+      return patches([{
+        op: 'insert',
+        path: ['canvas', 'guides'],
+        index: document.canvas.guides.length,
+        value: guide as unknown as JsonValue,
+      }])
+    },
+  }
+}
+
+function canvasGuideHandler(type: string): CommandHandler {
+  return {
+    type,
+    execute(document, command) {
+      const guideId = valueAt(command.payload, 'guideId')
+      if (typeof guideId !== 'string' || guideId.length === 0) {
+        return issue('canvas.invalid-guide', '辅助线 ID 无效')
+      }
+      const index = document.canvas.guides.findIndex(({ id }) => id === guideId)
+      if (index < 0) return issue('canvas.guide-missing', `辅助线 ${guideId} 不存在`)
+      if (type === BUILTIN_COMMAND_TYPES.deleteCanvasGuide) {
+        return patches([{ op: 'remove', path: ['canvas', 'guides', index] }])
+      }
+      const position = valueAt(command.payload, 'position')
+      if (typeof position !== 'number' || !Number.isFinite(position)) {
+        return issue('canvas.invalid-guide', '辅助线 position 必须是有限数字')
+      }
+      if (document.canvas.guides[index]?.position === position) {
+        return { status: 'noop', reason: '辅助线位置没有变化' }
+      }
+      return patches([{
+        op: 'set',
+        path: ['canvas', 'guides', index, 'position'],
+        value: position,
+      }])
+    },
+  }
 }
 
 function childIds(document: ComposeDocument, parentId: string | null): readonly string[] | null {
@@ -679,13 +819,17 @@ function ungroupHandler(): CommandHandler {
 }
 
 /**
- * 创建首版 ComposeDocument 内置命令处理器。
+ * 创建 ComposeDocument v2 内置命令处理器。
  *
  * @returns 每次调用都返回没有可变共享状态的新 handler 列表。
  * @public
  */
 export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
   return [
+    configureCanvasHandler(),
+    createCanvasGuideHandler(),
+    canvasGuideHandler(BUILTIN_COMMAND_TYPES.moveCanvasGuide),
+    canvasGuideHandler(BUILTIN_COMMAND_TYPES.deleteCanvasGuide),
     createFrameHandler(),
     createNodeHandler(),
     deleteNodeHandler(),

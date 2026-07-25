@@ -9,6 +9,7 @@ import './styles.css'
 export { CommandPanel } from './command-panel'
 export type {
   CommandPanelProps,
+  CommandPanelLocale,
   CommandPreset,
   CommandPresetField,
   CommandPresetOption,

@@ -1,4 +1,7 @@
 .compose-stage {
+  --compose-stage-ruler-size: 24px;
+  --compose-stage-scrollbar-size: 10px;
+
   position: relative;
   width: 100%;
   height: 100%;
@@ -6,17 +9,84 @@
   min-height: 240px;
   overflow: hidden;
   outline: none;
-  background: #11151b;
-  color: #e6edf7;
+  background: var(--compose-workspace-bg, #11151b);
+  color: var(--compose-text, #e6edf7);
   touch-action: none;
   user-select: none;
 }
 
+.compose-stage[data-compose-theme='light'] {
+  --compose-stage-grid-minor: rgb(71 84 103 / 14%);
+  --compose-stage-grid-primary: rgb(52 64 84 / 27%);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__surface {
+  background: var(--compose-surface-control);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__ruler,
+.compose-stage[data-compose-theme='light'] .compose-stage__ruler-corner,
+.compose-stage[data-compose-theme='light'] .compose-stage__scrollbar {
+  border-color: var(--compose-border-strong);
+  background: var(--compose-surface-raised);
+  color: var(--compose-text-subtle);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__ruler line {
+  stroke: var(--compose-text-muted);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__ruler line.is-major {
+  stroke: var(--compose-text);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__ruler text {
+  fill: var(--compose-text-subtle);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__ruler-selection text {
+  stroke: var(--compose-surface-raised);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__scrollbar-thumb {
+  background: var(--compose-scrollbar);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__scrollbar-thumb:hover {
+  background: var(--compose-text-muted);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-stage__scroll-corner {
+  background: var(--compose-border);
+}
+
+.component-palette[data-compose-theme='light'] {
+  background: var(--compose-panel-bg);
+  color: var(--compose-text);
+}
+
+.component-palette[data-compose-theme='light'] button {
+  border-color: var(--compose-border);
+  background: var(--compose-surface-control);
+}
+
 .compose-stage:focus-visible {
-  box-shadow: inset 0 0 0 2px #4d9cff;
+  box-shadow: inset 0 0 0 2px var(--compose-focus, #4d9cff);
+}
+
+.compose-stage__surface {
+  position: absolute;
+  z-index: 1;
+  top: var(--compose-stage-ruler-size);
+  right: var(--compose-stage-scrollbar-size);
+  bottom: var(--compose-stage-scrollbar-size);
+  left: var(--compose-stage-ruler-size);
+  overflow: hidden;
+  background: var(--compose-surface-sunken, #25282d);
 }
 
 .compose-stage__grid,
+.compose-stage__world-overlay,
 .compose-stage__scene,
 .compose-stage__overlay {
   position: absolute;
@@ -24,13 +94,31 @@
 }
 
 .compose-stage__grid {
-  opacity: 0.45;
-  background-image:
-    linear-gradient(#28313d 1px, transparent 1px),
-    linear-gradient(90deg, #28313d 1px, transparent 1px);
+  pointer-events: none;
+}
+
+.compose-stage__world-overlay {
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.compose-stage__axis {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1;
+}
+
+.compose-stage__axis.is-x {
+  stroke: #e45757;
+}
+
+.compose-stage__axis.is-y {
+  stroke: #45b86b;
 }
 
 .compose-stage__scene {
+  z-index: 2;
   width: 0;
   height: 0;
   transform-origin: 0 0;
@@ -64,6 +152,7 @@
 }
 
 .compose-stage__overlay {
+  z-index: 3;
   width: 100%;
   height: 100%;
   overflow: visible;
@@ -95,6 +184,152 @@
 .compose-stage__guide {
   stroke: #ff4fc3;
   stroke-width: 1;
+}
+
+.compose-stage__canvas-guide {
+  stroke: #4da3ff;
+  stroke-width: 1;
+  pointer-events: stroke;
+  cursor: grab;
+}
+
+.compose-stage__canvas-guide:hover {
+  stroke-width: 2;
+}
+
+.compose-stage__ruler-corner,
+.compose-stage__ruler {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-color: #17191d;
+  color: #aeb7c4;
+  background: #303338;
+  font: 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.compose-stage__ruler-corner {
+  top: 0;
+  left: 0;
+  display: grid;
+  width: var(--compose-stage-ruler-size);
+  height: var(--compose-stage-ruler-size);
+  place-items: center;
+  border-right: 1px solid #17191d;
+  border-bottom: 1px solid #17191d;
+  color: #7f8997;
+  cursor: crosshair;
+}
+
+.compose-stage__ruler.is-horizontal {
+  top: 0;
+  right: var(--compose-stage-scrollbar-size);
+  left: var(--compose-stage-ruler-size);
+  height: var(--compose-stage-ruler-size);
+  border-bottom: 1px solid #17191d;
+  cursor: ns-resize;
+}
+
+.compose-stage__ruler.is-vertical {
+  top: var(--compose-stage-ruler-size);
+  bottom: var(--compose-stage-scrollbar-size);
+  left: 0;
+  width: var(--compose-stage-ruler-size);
+  border-right: 1px solid #17191d;
+  cursor: ew-resize;
+}
+
+.compose-stage__ruler svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.compose-stage__ruler line {
+  stroke: #76808d;
+  stroke-width: 1;
+}
+
+.compose-stage__ruler line.is-major {
+  stroke: #c0c7d0;
+}
+
+.compose-stage__ruler text {
+  fill: #b8c0ca;
+  font: inherit;
+  pointer-events: none;
+}
+
+.compose-stage__ruler-selection line {
+  stroke: #f29b64;
+}
+
+.compose-stage__ruler-selection text {
+  paint-order: stroke;
+  fill: #ffd0b3;
+  stroke: #303338;
+  stroke-width: 3px;
+}
+
+.compose-stage__scrollbar {
+  position: absolute;
+  z-index: 6;
+  box-sizing: border-box;
+  border: 1px solid #17191d;
+  outline: none;
+  background: #25282d;
+  touch-action: none;
+}
+
+.compose-stage__scrollbar.is-x {
+  right: var(--compose-stage-scrollbar-size);
+  bottom: 0;
+  left: var(--compose-stage-ruler-size);
+  height: var(--compose-stage-scrollbar-size);
+}
+
+.compose-stage__scrollbar.is-y {
+  top: var(--compose-stage-ruler-size);
+  right: 0;
+  bottom: var(--compose-stage-scrollbar-size);
+  width: var(--compose-stage-scrollbar-size);
+}
+
+.compose-stage__scrollbar:focus-visible {
+  box-shadow: inset 0 0 0 1px #4d9cff;
+}
+
+.compose-stage__scrollbar-thumb {
+  position: absolute;
+  border-radius: 5px;
+  background: #727985;
+  cursor: grab;
+}
+
+.compose-stage__scrollbar.is-x .compose-stage__scrollbar-thumb {
+  top: 2px;
+  bottom: 2px;
+}
+
+.compose-stage__scrollbar.is-y .compose-stage__scrollbar-thumb {
+  right: 2px;
+  left: 2px;
+}
+
+.compose-stage__scrollbar-thumb:hover {
+  background: #939ba8;
+}
+
+.compose-stage__scroll-corner {
+  position: absolute;
+  z-index: 7;
+  right: 0;
+  bottom: 0;
+  width: var(--compose-stage-scrollbar-size);
+  height: var(--compose-stage-scrollbar-size);
+  background: #1d2024;
 }
 
 .component-palette {

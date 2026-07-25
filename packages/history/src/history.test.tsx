@@ -1,12 +1,16 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { StrictMode } from 'react'
+import { ComposeUIProvider } from '@compose-ui/ui-context'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   HistoryPanel,
   useHistory,
   useHistoryShortcuts,
 } from './index'
-import type { HistoryNavigationController } from './index'
+import type {
+  HistoryNavigationController,
+  HistoryShortcuts,
+} from './index'
 
 afterEach(cleanup)
 
@@ -226,10 +230,46 @@ describe('HistoryPanel', () => {
     expect(panel).toHaveAttribute('data-compose-ui', 'history')
     expect(panel).toHaveAttribute('data-customer', 'history')
   })
+
+  it('OpenSpec: history / 历史面板内建本地化 / 使用英文历史面板', () => {
+    const controller = createNavigationController()
+    render(<HistoryPanel controller={controller} locale="en-US" />)
+
+    expect(screen.getByRole('region', { name: 'History' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'History' })).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'History entries' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '修改文本' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Current history: 修改文本')
+  })
+
+  it('OpenSpec: history / 历史面板内建本地化 / 独立使用默认语言', () => {
+    render(<HistoryPanel controller={createNavigationController()} />)
+    expect(screen.getByRole('region', { name: '历史记录' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '历史' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: ui-context / 共享 UI Context 包 / 独立组件保持兼容 - History 消费 Context', () => {
+    const controller = createNavigationController()
+    render(
+      <ComposeUIProvider locale="en-US" theme="light">
+        <HistoryPanel controller={controller} />
+      </ComposeUIProvider>,
+    )
+
+    expect(screen.getByRole('heading', { name: 'History' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'History' }))
+      .toHaveAttribute('data-compose-theme', 'light')
+  })
 })
 
-function ShortcutFixture({ controller }: { controller: HistoryNavigationController }) {
-  const onKeyDownCapture = useHistoryShortcuts(controller)
+function ShortcutFixture({
+  controller,
+  shortcuts,
+}: {
+  controller: HistoryNavigationController
+  shortcuts?: HistoryShortcuts
+}) {
+  const onKeyDownCapture = useHistoryShortcuts(controller, shortcuts)
   return (
     <div onKeyDownCapture={onKeyDownCapture}>
       <input aria-label="属性输入" />
@@ -273,5 +313,21 @@ describe('useHistoryShortcuts', () => {
     expect(fireEvent.keyDown(input, { key: 'y', ctrlKey: true })).toBe(false)
     expect(controller.undo).not.toHaveBeenCalled()
     expect(controller.redo).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: history / 可配置历史快捷键 / 使用宿主键位覆盖', () => {
+    const controller = createNavigationController()
+    render(
+      <ShortcutFixture
+        controller={controller}
+        shortcuts={{ redo: [], undo: [{ code: 'KeyU' }] }}
+      />,
+    )
+    const input = screen.getByLabelText('属性输入')
+
+    fireEvent.keyDown(input, { code: 'KeyZ', key: 'z', ctrlKey: true })
+    expect(controller.undo).not.toHaveBeenCalled()
+    expect(fireEvent.keyDown(input, { code: 'KeyU', key: 'u' })).toBe(false)
+    expect(controller.undo).toHaveBeenCalledTimes(1)
   })
 })

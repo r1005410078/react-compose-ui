@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ComposeUIProvider } from '@compose-ui/ui-context'
 import {
   OperationLogPanel,
   OperationLogProvider,
@@ -10,6 +11,39 @@ import {
 import type { OperationLogEntry, OperationLogStore } from './index'
 
 afterEach(cleanup)
+
+describe('OpenSpec: operation-log / 操作日志共享 UI 环境', () => {
+  it('OpenSpec: operation-log / 操作日志共享 UI 环境 / 使用中文浅色日志面板', async () => {
+    render(
+      <ComposeUIProvider locale="zh-CN" theme="light">
+        <OperationLogProvider scopeId="empty-zh" store={createMemoryOperationLogStore()}>
+          <OperationLogPanel />
+        </OperationLogProvider>
+      </ComposeUIProvider>,
+    )
+
+    const panel = screen.getByRole('region', { name: '操作日志' })
+    expect(panel).toHaveAttribute('data-compose-theme', 'light')
+    expect(panel).toHaveAttribute('lang', 'zh-CN')
+    expect(screen.getByRole('searchbox', { name: '搜索操作' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('暂无操作记录')).toBeInTheDocument())
+  })
+
+  it('OpenSpec: operation-log / 操作日志共享 UI 环境 / 覆盖日志消息', async () => {
+    render(
+      <ComposeUIProvider
+        locale="en-US"
+        messages={{ 'operationLog.empty': 'Nothing recorded' }}
+      >
+        <OperationLogProvider scopeId="empty-custom" store={createMemoryOperationLogStore()}>
+          <OperationLogPanel />
+        </OperationLogProvider>
+      </ComposeUIProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText('Nothing recorded')).toBeInTheDocument())
+  })
+})
 
 function entry(overrides: Partial<OperationLogEntry> = {}): OperationLogEntry {
   return {

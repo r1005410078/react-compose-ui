@@ -3,8 +3,9 @@ import type { JsonObject, NodeStyle } from '@compose-ui/core'
 import { PropertyPanel } from '@compose-ui/property-panel'
 import { dispatchInspectorUpdate } from '../shared/inspector/dispatch-update'
 import type { InspectorIdFactory } from '../shared/inspector/dispatch-update'
-import { textSchema, type TextValue } from '../shared/inspector/schemas'
+import type { TextValue } from '../shared/inspector/schemas'
 import { createContainerValue } from '../shared/inspector/values'
+import { useMaterialInspectorI18n } from '../shared/inspector/use-material-inspector-i18n'
 
 interface TextInspectorDefaults {
   readonly name: string
@@ -22,6 +23,7 @@ export function createTextInspector(
   idFactory: InspectorIdFactory,
 ) {
   return function TextInspector({ node, dispatch }: ComponentInspectorProps) {
+    const i18n = useMaterialInspectorI18n()
     const props = {
       text: typeof node.props.text === 'string'
         ? node.props.text
@@ -47,10 +49,10 @@ export function createTextInspector(
     }
     return (
       <PropertyPanel
-        aria-label={`${node.name} properties`}
+        aria-label={i18n.propertiesLabel(node.name)}
         defaultValue={defaultValue}
         readOnly={node.locked}
-        schema={textSchema}
+        schema={i18n.schemas.text}
         value={value}
         onValueChange={(next) =>
           dispatchInspectorUpdate(node, value, next, dispatch, idFactory)}

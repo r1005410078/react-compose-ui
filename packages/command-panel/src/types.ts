@@ -1,9 +1,13 @@
 import type { HTMLAttributes } from 'react'
+import type { ComposeLocale } from '@compose-ui/ui-context'
 import type {
   EditorCommand,
   JsonValue,
   TransactionRuntime,
 } from '@compose-ui/core'
+
+/** CommandPanel 内建界面语言。 @public */
+export type CommandPanelLocale = ComposeLocale
 
 /**
  * select 字段中的一个稳定候选。
@@ -70,4 +74,6 @@ export interface CommandPanelProps extends HTMLAttributes<HTMLDivElement> {
   readonly presets?: readonly CommandPreset[]
   /** 面板最多保留的会话事件数。 @defaultValue 100 */
   readonly eventLimit?: number
+  /** 内建调试台文案语言。 @defaultValue `"zh-CN"` */
+  readonly locale?: CommandPanelLocale
 }

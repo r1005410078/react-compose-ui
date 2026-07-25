@@ -1,10 +1,12 @@
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import {
+  createDefaultCanvasSettings,
   createTransactionRuntime,
   type ComposeDocument,
   type TransactionRuntime,
 } from '@compose-ui/core'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { ComposeUIProvider } from '@compose-ui/ui-context'
 import { useState, useSyncExternalStore } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as stagePackage from './index'
@@ -20,10 +22,20 @@ const api = stagePackage as unknown as {
     viewport: Viewport
     onViewportChange(viewport: Viewport): void
     tool: Tool
+    onToolChange?(tool: Tool): void
     selectedIds: readonly string[]
     onSelectedIdsChange(ids: readonly string[]): void
     activeFrameId: string | null
     onActiveFrameIdChange(id: string | null): void
+    onSurfaceSizeChange?(size: { width: number; height: number }): void
+    shortcuts?: Readonly<Record<string, readonly {
+      code: string
+      primary?: boolean
+      control?: boolean
+      shift?: boolean
+      alt?: boolean
+    }[]>>
+    locale?: 'zh-CN' | 'en-US'
     idFactory?: () => string
     'aria-label'?: string
   }): React.ReactNode
@@ -32,6 +44,7 @@ const api = stagePackage as unknown as {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 beforeEach(() => {
@@ -44,7 +57,8 @@ beforeEach(() => {
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: createDefaultCanvasSettings(),
     rootIds: ['frame', 'frame-negative'],
     nodes: {
       frame: {
@@ -177,16 +191,31 @@ function Harness({
   initialSelection = [],
   initialViewport = { x: 0, y: 0, zoom: 1 },
   tool = 'select',
+  onSurfaceSizeChange,
+  idFactory = () => 'generated',
+  shortcuts,
+  locale,
 }: {
   runtime: TransactionRuntime
   initialSelection?: readonly string[]
   initialViewport?: Viewport
   tool?: Tool
+  onSurfaceSizeChange?: (size: { width: number; height: number }) => void
+  idFactory?: () => string
+  shortcuts?: Readonly<Record<string, readonly {
+    code: string
+    primary?: boolean
+    control?: boolean
+    shift?: boolean
+    alt?: boolean
+  }[]>>
+  locale?: 'zh-CN' | 'en-US'
 }) {
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const [viewport, setViewport] = useState(initialViewport)
   const [selectedIds, setSelectedIds] = useState(initialSelection)
   const [activeFrameId, setActiveFrameId] = useState<string | null>('frame')
+  const [currentTool, setCurrentTool] = useState(tool)
   return (
     <>
       <api.Stage
@@ -194,16 +223,21 @@ function Harness({
         aria-label="测试 Stage"
         dispatch={runtime.dispatch}
         document={state.document}
-        idFactory={() => 'generated'}
+        idFactory={idFactory}
+        locale={locale}
         registry={registry()}
         selectedIds={selectedIds}
-        tool={tool}
+        shortcuts={shortcuts}
+        tool={currentTool}
         viewport={viewport}
         onActiveFrameIdChange={setActiveFrameId}
         onSelectedIdsChange={setSelectedIds}
+        onSurfaceSizeChange={onSurfaceSizeChange}
+        onToolChange={setCurrentTool}
         onViewportChange={setViewport}
       />
       <output aria-label="当前选择">{selectedIds.join(',')}</output>
+      <output aria-label="当前工具">{currentTool}</output>
       <output aria-label="当前视口">{JSON.stringify(viewport)}</output>
     </>
   )
@@ -245,6 +279,163 @@ describe('Stage', () => {
     })
     expect(screen.getByRole('img', { name: 'Stage 编辑覆盖层' })).toBeInTheDocument()
     expect(screen.getAllByTestId('stage-frame')).toHaveLength(2)
+  })
+
+  it('OpenSpec: stage / 受控无限视口 / 使用真实 surface 尺寸', () => {
+    let resizeCallback: ResizeObserverCallback | null = null
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback
+      }
+
+      observe() {}
+
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock)
+    const onSurfaceSizeChange = vi.fn()
+    render(
+      <Harness
+        onSurfaceSizeChange={onSurfaceSizeChange}
+        runtime={stageRuntime()}
+      />,
+    )
+    const surface = screen.getByTestId('stage-surface')
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({
+      x: 24,
+      y: 24,
+      left: 24,
+      top: 24,
+      right: 790,
+      bottom: 590,
+      width: 766,
+      height: 566,
+      toJSON: () => ({}),
+    })
+
+    act(() => {
+      resizeCallback?.([], {} as ResizeObserver)
+    })
+
+    expect(onSurfaceSizeChange).toHaveBeenLastCalledWith({ width: 766, height: 566 })
+  })
+
+  // OpenSpec: stage / 自适应网格标尺与世界原点 / 标记选择尺寸
+  it('OpenSpec: stage / 自适应网格标尺与世界原点 / 显示世界原点交叉', () => {
+    render(<Harness initialSelection={['a', 'b']} runtime={stageRuntime()} />)
+
+    expect(screen.getByTestId('stage-ruler-x')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-ruler-y')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-origin-x')).toHaveAttribute('y1', '0')
+    expect(screen.getByTestId('stage-origin-y')).toHaveAttribute('x1', '0')
+    expect(screen.getByTestId('stage-ruler-selection-x')).toHaveTextContent('260')
+    expect(screen.getByTestId('stage-ruler-selection-y')).toHaveTextContent('50')
+  })
+
+  // OpenSpec: stage / 可拖拽全局辅助线 / 移动删除或取消辅助线
+  it('OpenSpec: stage / 可拖拽全局辅助线 / 从标尺创建辅助线', () => {
+    const runtime = stageRuntime()
+    render(<Harness runtime={runtime} />)
+    const viewport = viewportElement()
+    const ruler = screen.getByTestId('stage-ruler-x')
+
+    fireEvent.pointerDown(ruler, {
+      button: 0,
+      clientX: 35,
+      clientY: 10,
+      pointerId: 1,
+    })
+    fireEvent.pointerMove(viewport, { clientX: 51, clientY: 120, pointerId: 1 })
+    expect(runtime.entries).toHaveLength(1)
+    fireEvent.pointerUp(viewport, { clientX: 51, clientY: 120, pointerId: 1 })
+    expect(runtime.entries).toHaveLength(2)
+    expect(runtime.document.canvas.guides).toEqual([
+      { id: 'generated', axis: 'x', position: 48 },
+    ])
+
+    fireEvent.pointerDown(screen.getByTestId('stage-canvas-guide-generated'), {
+      button: 0,
+      clientX: 48,
+      clientY: 120,
+      pointerId: 2,
+    })
+    fireEvent.pointerUp(viewport, { clientX: 72, clientY: 140, pointerId: 2 })
+    expect(runtime.document.canvas.guides[0]?.position).toBe(72)
+    expect(runtime.entries).toHaveLength(3)
+
+    fireEvent.pointerDown(screen.getByTestId('stage-canvas-guide-generated'), {
+      button: 0,
+      clientX: 72,
+      clientY: 140,
+      pointerId: 3,
+    })
+    fireEvent.pointerUp(viewport, { clientX: 72, clientY: -2, pointerId: 3 })
+    expect(runtime.document.canvas.guides).toEqual([])
+    expect(runtime.entries).toHaveLength(4)
+
+    fireEvent.pointerDown(ruler, {
+      button: 0,
+      clientX: 80,
+      clientY: 10,
+      pointerId: 4,
+    })
+    fireEvent.keyDown(viewport, { key: 'Escape' })
+    expect(runtime.entries).toHaveLength(4)
+  })
+
+  it('OpenSpec: stage / 可拖拽全局辅助线 / 从交叉角创建双轴辅助线', () => {
+    const runtime = stageRuntime()
+    let id = 0
+    render(<Harness idFactory={() => `generated-${id++}`} runtime={runtime} />)
+    const viewport = viewportElement()
+
+    fireEvent.pointerDown(screen.getByTestId('stage-ruler-corner'), {
+      button: 0,
+      clientX: 12,
+      clientY: 12,
+      pointerId: 5,
+    })
+    fireEvent.pointerMove(viewport, { clientX: 88, clientY: 104, pointerId: 5 })
+    expect(runtime.entries).toHaveLength(1)
+    fireEvent.pointerUp(viewport, { clientX: 88, clientY: 104, pointerId: 5 })
+
+    expect(runtime.document.canvas.guides).toEqual([
+      { id: 'generated-0', axis: 'x', position: 88 },
+      { id: 'generated-1', axis: 'y', position: 104 },
+    ])
+    expect(runtime.entries).toHaveLength(2)
+    act(() => runtime.undo())
+    expect(runtime.document.canvas.guides).toEqual([])
+  })
+
+  // OpenSpec: stage / 无限画布滚动条 / 拖动滚动条平移
+  it('OpenSpec: stage / 无限画布滚动条 / 键盘操作可访问滚动条', () => {
+    const runtime = stageRuntime()
+    render(<Harness runtime={runtime} />)
+    const horizontal = screen.getByRole('scrollbar', { name: '水平画布滚动条' })
+    const before = screen.getByLabelText('当前视口').textContent
+
+    fireEvent.keyDown(horizontal, { key: 'PageDown' })
+
+    expect(screen.getByLabelText('当前视口').textContent).not.toBe(before)
+    expect(runtime.entries).toHaveLength(1)
+    expect(horizontal).toHaveAttribute('aria-valuemin')
+    expect(horizontal).toHaveAttribute('aria-valuemax')
+    expect(horizontal).toHaveAttribute('aria-valuenow')
+    expect(horizontal).toHaveAttribute(
+      'aria-controls',
+      screen.getByTestId('stage-surface').id,
+    )
+
+    const thumb = horizontal.querySelector<HTMLElement>('.compose-stage__scrollbar-thumb')
+    expect(thumb).not.toBeNull()
+    const beforeDrag = screen.getByLabelText('当前视口').textContent
+    fireEvent.pointerDown(thumb!, { clientX: 10, pointerId: 6 })
+    fireEvent.pointerMove(thumb!, { clientX: 60, pointerId: 6 })
+    fireEvent.pointerUp(thumb!, { clientX: 60, pointerId: 6 })
+
+    expect(screen.getByLabelText('当前视口').textContent).not.toBe(beforeDrag)
+    expect(runtime.entries).toHaveLength(1)
   })
 
   it('OpenSpec: stage / Stage 统一节点样式 / 渲染通用节点样式', () => {
@@ -391,7 +582,7 @@ describe('Stage', () => {
     expect(runtime.document.nodes.a.transform.x).toBe(80)
   })
 
-  it('OpenSpec: stage / 屏幕距离吸附 / 临时关闭吸附', () => {
+  it('OpenSpec: stage / 屏幕距离吸附 / 临时关闭全部吸附', () => {
     const runtime = stageRuntime()
     render(<Harness initialSelection={['a']} runtime={runtime} />)
     const viewport = viewportElement()
@@ -417,7 +608,7 @@ describe('Stage', () => {
     expect(runtime.document.nodes.a.transform.x).toBe(75)
   })
 
-  it('OpenSpec: stage / 直接移动缩放与旋转 / 八向缩放 - 单事务', () => {
+  it('OpenSpec: stage / 直接移动缩放与旋转 / 八向缩放并吸附活动边', () => {
     const runtime = stageRuntime()
     render(<Harness initialSelection={['a']} runtime={runtime} />)
     const viewport = viewportElement()
@@ -437,10 +628,10 @@ describe('Stage', () => {
       shiftKey: true,
     })
     expect(runtime.entries).toHaveLength(2)
-    expect(runtime.document.nodes.a.transform).toMatchObject({ width: 150, height: 75 })
+    expect(runtime.document.nodes.a.transform).toMatchObject({ width: 148, height: 74 })
   })
 
-  it('OpenSpec: stage / 直接移动缩放与旋转 / 旋转选择 - 单事务', () => {
+  it('OpenSpec: stage / 直接移动缩放与旋转 / 旋转选择', () => {
     const runtime = stageRuntime()
     render(<Harness initialSelection={['a']} runtime={runtime} />)
     const viewport = viewportElement()
@@ -542,18 +733,162 @@ describe('Stage', () => {
     expect(groupRuntime.document.nodes.generated).toBeUndefined()
   })
 
-  it('OpenSpec: stage / Stage 键盘命令 / 不拦截文本输入', () => {
+  it('OpenSpec: stage / 可配置 Stage 快捷键 / 执行默认 Stage 快捷键', () => {
     const runtime = stageRuntime()
-    render(
-      <>
-        <Harness initialSelection={['a']} runtime={runtime} />
-        <input aria-label="文本输入" />
-      </>,
-    )
-    fireEvent.keyDown(screen.getByRole('textbox', { name: '文本输入' }), {
+    render(<Harness initialSelection={['a']} runtime={runtime} />)
+    const viewport = viewportElement()
+
+    fireEvent.keyDown(viewport, { code: 'KeyH', key: 'h' })
+    expect(screen.getByLabelText('当前工具')).toHaveTextContent('pan')
+    fireEvent.keyDown(viewport, { code: 'KeyV', key: 'v' })
+    expect(screen.getByLabelText('当前工具')).toHaveTextContent('select')
+    fireEvent.keyDown(viewport, { code: 'KeyF', key: 'f' })
+    expect(screen.getByLabelText('当前视口')).not.toHaveTextContent('"zoom":1')
+    fireEvent.keyDown(viewport, {
+      code: 'Equal',
+      key: '=',
+      ctrlKey: true,
+    })
+    expect(runtime.entries).toHaveLength(1)
+
+    fireEvent.keyDown(viewport, {
+      code: 'KeyG',
+      key: 'G',
+      shiftKey: true,
+    })
+    expect(runtime.document.canvas.grid.snapEnabled).toBe(false)
+    expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('OpenSpec: stage / 可配置 Stage 快捷键 / 忽略可编辑与组合输入', () => {
+    const runtime = stageRuntime()
+    render(<Harness initialSelection={['a']} runtime={runtime} />)
+    const input = document.createElement('input')
+    input.setAttribute('aria-label', '文本输入')
+    viewportElement().append(input)
+
+    fireEvent.keyDown(input, {
       key: 'Delete',
+    })
+    fireEvent.keyDown(input, { code: 'KeyH', key: 'h' })
+    fireEvent.keyDown(viewportElement(), {
+      code: 'KeyH',
+      isComposing: true,
+      key: 'h',
     })
     expect(runtime.document.nodes.a).toBeDefined()
     expect(runtime.entries).toHaveLength(1)
+    expect(screen.getByLabelText('当前工具')).toHaveTextContent('select')
+  })
+
+  it('OpenSpec: stage / 临时平移生命周期 / 从任意命中区域临时平移', () => {
+    const runtime = stageRuntime()
+    render(<Harness runtime={runtime} />)
+    const viewport = viewportElement()
+
+    fireEvent.keyDown(viewport, { code: 'Space', key: ' ' })
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      button: 0,
+      clientX: 30,
+      clientY: 40,
+      pointerId: 31,
+    })
+    fireEvent.pointerMove(viewport, { clientX: 90, clientY: 80, pointerId: 31 })
+    fireEvent.pointerUp(viewport, { clientX: 90, clientY: 80, pointerId: 31 })
+
+    expect(screen.getByLabelText('当前视口')).toHaveTextContent(
+      '{"x":60,"y":40,"zoom":1}',
+    )
+    expect(screen.getByLabelText('当前选择')).toBeEmptyDOMElement()
+    expect(runtime.document.nodes.a.transform.x).toBe(20)
+    expect(runtime.entries).toHaveLength(1)
+  })
+
+  it('OpenSpec: stage / 临时平移生命周期 / 清理中断的临时平移', () => {
+    const runtime = stageRuntime()
+    render(<Harness runtime={runtime} />)
+    const viewport = viewportElement()
+
+    fireEvent.keyDown(viewport, { code: 'Space', key: ' ' })
+    fireEvent.blur(window)
+    fireEvent.pointerDown(screen.getByTestId('stage-node-a'), {
+      button: 0,
+      clientX: 30,
+      clientY: 40,
+      pointerId: 32,
+    })
+    fireEvent.pointerUp(viewport, { clientX: 30, clientY: 40, pointerId: 32 })
+
+    expect(screen.getByLabelText('当前选择')).toHaveTextContent('a')
+    expect(screen.getByLabelText('当前视口')).toHaveTextContent(
+      '{"x":0,"y":0,"zoom":1}',
+    )
+  })
+
+  it('OpenSpec: stage / 可配置 Stage 快捷键 / 执行自定义临时平移键', () => {
+    const runtime = stageRuntime()
+    const defaults = {
+      'stage.temporaryPan': [{ code: 'KeyP' }],
+    }
+    render(<Harness runtime={runtime} shortcuts={defaults} />)
+    const viewport = viewportElement()
+
+    fireEvent.keyDown(viewport, { code: 'Space', key: ' ' })
+    fireEvent.pointerDown(viewport, {
+      button: 0,
+      clientX: 500,
+      clientY: 420,
+      pointerId: 30,
+    })
+    fireEvent.pointerMove(viewport, { clientX: 540, clientY: 450, pointerId: 30 })
+    fireEvent.pointerUp(viewport, { clientX: 540, clientY: 450, pointerId: 30 })
+    fireEvent.keyUp(viewport, { code: 'Space', key: ' ' })
+    expect(screen.getByLabelText('当前视口')).toHaveTextContent(
+      '{"x":0,"y":0,"zoom":1}',
+    )
+
+    fireEvent.keyDown(viewport, { code: 'KeyP', key: 'p' })
+    fireEvent.pointerDown(screen.getAllByTestId('stage-frame')[0]!, {
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 33,
+    })
+    fireEvent.pointerMove(viewport, { clientX: 42, clientY: 26, pointerId: 33 })
+    fireEvent.pointerUp(viewport, { clientX: 42, clientY: 26, pointerId: 33 })
+
+    expect(screen.getByLabelText('当前视口')).toHaveTextContent(
+      '{"x":32,"y":16,"zoom":1}',
+    )
+    expect(screen.getByLabelText('当前选择')).toBeEmptyDOMElement()
+    expect(runtime.entries).toHaveLength(1)
+  })
+
+  it('OpenSpec: stage / Stage 内建本地化 / 使用英文 Stage chrome', () => {
+    render(<Harness locale="en-US" runtime={stageRuntime()} />)
+
+    expect(screen.getByLabelText('Ruler origin')).toBeInTheDocument()
+    expect(screen.getByLabelText('Horizontal ruler')).toBeInTheDocument()
+    expect(screen.getByLabelText('Vertical ruler')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Stage editing overlay' })).toBeInTheDocument()
+    expect(screen.getByRole('scrollbar', { name: 'Horizontal canvas scrollbar' }))
+      .toBeInTheDocument()
+    expect(screen.getByText('A')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: ui-context / 共享 UI Context 包 / 独立组件保持兼容 - Stage 消费 Context', () => {
+    render(
+      <ComposeUIProvider
+        locale="en-US"
+        messages={{ 'stage.rulerOrigin': 'Coordinate origin' }}
+        theme="light"
+      >
+        <Harness runtime={stageRuntime()} />
+      </ComposeUIProvider>,
+    )
+
+    expect(screen.getByLabelText('Coordinate origin')).toBeInTheDocument()
+    expect(viewportElement().closest('.compose-stage'))
+      .toHaveAttribute('data-compose-theme', 'light')
   })
 })

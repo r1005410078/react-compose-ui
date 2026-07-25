@@ -5,33 +5,35 @@ import { clampPortalPosition } from './drag-model'
 import type { SceneTreeCommand, SceneTreeCommandController } from './index'
 import { resolveMenuFocusIndex } from './interaction-model'
 import type { ContextMenuState } from './use-scene-tree-interaction'
+import { getSceneTreeMessages } from './scene-tree-i18n'
+import type { SceneTreeMessages } from './scene-tree-i18n'
 
 interface MenuEntry {
   command: SceneTreeCommand
-  label: string
   danger?: boolean
   separatorBefore?: boolean
 }
 
 const NODE_MENU_ENTRIES: readonly MenuEntry[] = [
-  { command: 'create-child', label: '新增子节点' },
-  { command: 'create-sibling', label: '新增兄弟节点' },
-  { command: 'copy', label: '复制', separatorBefore: true },
-  { command: 'cut', label: '剪切' },
-  { command: 'paste-child', label: '粘贴为子节点' },
-  { command: 'paste-sibling', label: '粘贴为兄弟节点' },
-  { command: 'delete', label: '删除', danger: true, separatorBefore: true },
+  { command: 'create-child' },
+  { command: 'create-sibling' },
+  { command: 'copy', separatorBefore: true },
+  { command: 'cut' },
+  { command: 'paste-child' },
+  { command: 'paste-sibling' },
+  { command: 'delete', danger: true, separatorBefore: true },
 ]
 
 const ROOT_MENU_ENTRIES: readonly MenuEntry[] = [
-  { command: 'create-root', label: '新增根节点' },
-  { command: 'paste-root', label: '粘贴到根级' },
+  { command: 'create-root' },
+  { command: 'paste-root' },
 ]
 
 interface SceneTreeContextMenuProps extends ContextMenuState {
   commands: SceneTreeCommandController
   menuRef: RefObject<HTMLDivElement | null>
   onClose: () => void
+  messages?: SceneTreeMessages
 }
 
 /** Portal 渲染的场景树命令菜单。 */
@@ -40,6 +42,7 @@ export function SceneTreeContextMenu({
   menuRef,
   nodeId,
   onClose,
+  messages = getSceneTreeMessages('zh-CN'),
   x,
   y,
 }: SceneTreeContextMenuProps) {
@@ -104,7 +107,7 @@ export function SceneTreeContextMenu({
               }}
               onKeyDown={handleKeyDown}
             >
-              {entry.label}
+              {messages.commands[entry.command]}
             </button>
           </div>
         )

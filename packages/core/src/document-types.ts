@@ -160,13 +160,64 @@ export type ComposeNode =
   | ComposeComponentNode
 
 /**
- * 编辑器、Stage 与 Preview 共享的首版正式文档。
+ * 一条全局世界坐标辅助线。
+ *
+ * @public
+ */
+export interface ComposeCanvasGuide {
+  /** 文档内稳定且唯一的辅助线 ID。 */
+  readonly id: string
+  /** `x` 表示垂直辅助线，`y` 表示水平辅助线。 */
+  readonly axis: 'x' | 'y'
+  /** 辅助线所在的世界坐标。 */
+  readonly position: number
+}
+
+/**
+ * 编辑器画布的持久化设置。
+ *
+ * @remarks
+ * 这些设置参与事务历史；viewport、选择、工具和滚动范围仍属于会话状态。
+ *
+ * @public
+ */
+export interface ComposeCanvasSettings {
+  /** 网格渲染与基础刻度吸附设置。 */
+  readonly grid: {
+    /** 水平方向刻度，单位为世界像素。 */
+    readonly stepX: number
+    /** 垂直方向刻度，单位为世界像素。 */
+    readonly stepY: number
+    /** 水平方向网格世界坐标偏移。 */
+    readonly offsetX: number
+    /** 垂直方向网格世界坐标偏移。 */
+    readonly offsetY: number
+    /** 每隔多少细网格绘制一条主线。 */
+    readonly primaryLineEvery: number
+    /** 是否启用基础网格吸附。 */
+    readonly snapEnabled: boolean
+  }
+  /** 节点与辅助线智能吸附开关。 */
+  readonly smartSnap: {
+    /** 是否吸附到其他节点的边缘和中心。 */
+    readonly nodes: boolean
+    /** 是否吸附到全局辅助线。 */
+    readonly guides: boolean
+  }
+  /** 对所有 Frame 生效的全局世界坐标辅助线。 */
+  readonly guides: readonly ComposeCanvasGuide[]
+}
+
+/**
+ * 编辑器、Stage 与 Preview 共享的 v2 正式文档。
  *
  * @public
  */
 export interface ComposeDocument {
-  /** 当前文档协议版本。 @defaultValue 1 */
-  readonly schemaVersion: 1
+  /** 当前且唯一支持的文档协议版本。 @defaultValue 2 */
+  readonly schemaVersion: 2
+  /** Stage 使用、Preview 忽略的持久化画布元数据。 */
+  readonly canvas: ComposeCanvasSettings
   /** 按世界场景顺序排列的 Frame ID。 */
   readonly rootIds: readonly string[]
   /** 以稳定 ID 规范化保存的全部节点。 */
@@ -192,6 +243,12 @@ export type DocumentValidationIssueCode =
   | 'document.cycle'
   | 'document.orphan-node'
   | 'document.invalid-child-kind'
+  | 'canvas.invalid'
+  | 'canvas.invalid-step'
+  | 'canvas.invalid-offset'
+  | 'canvas.invalid-primary-interval'
+  | 'canvas.invalid-guide'
+  | 'canvas.duplicate-guide'
   | 'node.invalid'
   | 'node.id-mismatch'
   | 'node.invalid-field'

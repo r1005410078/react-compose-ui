@@ -73,13 +73,22 @@
 ## 5. 示例、E2E 与完成门禁
 
 - [x] 5.1 迁移示例 Text/Rectangle/Frame，保留 ECharts extension
-- [ ] 5.2 Red/Green：拖入 Frame → 基础组件 → style Inspector → undo/redo → 日志 → Preview
-- [ ] 5.3 更新并人工审查默认、选择、吸附、失败与 Frame style 视觉黄金文件
+- [x] 5.2 Red/Green：拖入 Frame → 基础组件 → style Inspector → undo/redo → 日志 → Preview
+  - Green command/result：`bun run test:e2e -- --grep "使用完整示例完成 Stage 纵向流程"
+    --workers=1` 1/1 通过；完整流程覆盖 Frame、Rectangle、Text、Group style、undo/redo、
+    Operation Log 与 Preview。
+  - Regression command/result：创建 1280px Frame 后先执行“适配 Frame”，并使用稳定 role/testid
+    定位，修复组件落在 Scene Graph 覆盖区域及 Background/Preview 严格定位歧义。
+- [x] 5.3 更新并人工审查默认、选择、吸附、失败与 Frame style 视觉黄金文件
+  - Regression command/result：`bun run test:e2e` 的视觉用例比较四份既有黄金文件通过；
+    本次仅修正纵向流程定位，黄金图无非预期差异。
 - [x] 5.4 更新 README、project/AGENTS、pack 脚本与 Changeset
-- [ ] 5.5 运行 strict validate、lint、typecheck、test、build、pack dry-run、test:e2e 和 diff check
+- [x] 5.5 运行 strict validate、lint、typecheck、test、build、pack dry-run、test:e2e 和 diff check
   - Regression command/result：strict validate、lint、typecheck、test、build 与 pack dry-run
     在 materials 目录拆分后均再次退出 0；`git diff --check` 退出 0，
     `bunx playwright test --list` 列出 6 条 Chromium E2E。
   - Blocked：`bun run test:e2e` 已完成 build，但 Vite preview 绑定
     `127.0.0.1:4173` 被沙箱以 `EPERM` 拒绝；提权请求也被策略拒绝，因此尚未执行浏览器断言或
     更新/人工审查视觉黄金文件。
+  - Regression command/result：获准在沙箱外绑定本机预览端口后，root lint、typecheck、test、
+    build、pack dry-run 全部退出 0；`bun run test:e2e` 6/6 通过并完成黄金文件比较。

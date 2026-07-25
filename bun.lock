@@ -41,6 +41,7 @@
         "@compose-ui/operation-log": "workspace:*",
         "@compose-ui/preview": "workspace:*",
         "@compose-ui/property-panel": "workspace:*",
+        "@compose-ui/ui-context": "workspace:*",
         "echarts": "^6.1.0",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
@@ -52,6 +53,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@compose-ui/core": "workspace:*",
+        "@compose-ui/ui-context": "workspace:*",
       },
       "peerDependencies": {
         "react": "^18.3.0 || ^19.0.0",
@@ -83,6 +85,7 @@
         "@compose-ui/history": "workspace:*",
         "@compose-ui/scene-tree": "workspace:*",
         "@compose-ui/stage": "workspace:*",
+        "@compose-ui/ui-context": "workspace:*",
         "dockview-react": "^7.0.2",
       },
       "peerDependencies": {
@@ -93,6 +96,9 @@
     "packages/history": {
       "name": "@compose-ui/history",
       "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/ui-context": "workspace:*",
+      },
       "peerDependencies": {
         "react": "^18.3.0 || ^19.0.0",
         "react-dom": "^18.3.0 || ^19.0.0",
@@ -106,6 +112,7 @@
         "@compose-ui/core": "workspace:*",
         "@compose-ui/property-panel": "workspace:*",
         "@compose-ui/stage": "workspace:*",
+        "@compose-ui/ui-context": "workspace:*",
         "valibot": "^1.4.0",
       },
       "peerDependencies": {
@@ -116,6 +123,9 @@
     "packages/operation-log": {
       "name": "@compose-ui/operation-log",
       "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/ui-context": "workspace:*",
+      },
       "peerDependencies": {
         "react": "^18.3.0 || ^19.0.0",
         "react-dom": "^18.3.0 || ^19.0.0",
@@ -136,6 +146,9 @@
     "packages/property-panel": {
       "name": "@compose-ui/property-panel",
       "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/ui-context": "workspace:*",
+      },
       "devDependencies": {
         "valibot": "^1.4.0",
       },
@@ -149,6 +162,7 @@
       "name": "@compose-ui/scene-tree",
       "version": "0.1.0",
       "dependencies": {
+        "@compose-ui/ui-context": "workspace:*",
         "@tanstack/react-virtual": "^3.14.6",
       },
       "peerDependencies": {
@@ -162,7 +176,16 @@
       "dependencies": {
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/core": "workspace:*",
+        "@compose-ui/ui-context": "workspace:*",
       },
+      "peerDependencies": {
+        "react": "^18.3.0 || ^19.0.0",
+        "react-dom": "^18.3.0 || ^19.0.0",
+      },
+    },
+    "packages/ui-context": {
+      "name": "@compose-ui/ui-context",
+      "version": "0.1.0",
       "peerDependencies": {
         "react": "^18.3.0 || ^19.0.0",
         "react-dom": "^18.3.0 || ^19.0.0",
@@ -277,6 +300,8 @@
     "@compose-ui/scene-tree": ["@compose-ui/scene-tree@workspace:packages/scene-tree"],
 
     "@compose-ui/stage": ["@compose-ui/stage@workspace:packages/stage"],
+
+    "@compose-ui/ui-context": ["@compose-ui/ui-context@workspace:packages/ui-context"],
 
     "@csstools/color-helpers": ["@csstools/color-helpers@6.1.0", "https://registry.npmmirror.com/@csstools/color-helpers/-/color-helpers-6.1.0.tgz", {}, "sha512-064IFJdjTfUqnjpCVpMOdbr8FLQBhinbZj6yRv2An2E41O/pLEXqfFRWqGq/SxlE5PEUYTlvWsG2r8MswAVvkg=="],
 

@@ -2,8 +2,8 @@
   width: max(1180px, 100%);
   height: 100vh;
   min-height: 560px;
-  color: #e7ebf1;
-  background: #0b0d10;
+  color: var(--compose-text, #e7ebf1);
+  background: var(--compose-workspace-bg, #0b0d10);
 }
 
 .stage-demo__chart {

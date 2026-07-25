@@ -15,7 +15,15 @@ export {
   type StageDropTarget,
   type StageFramePreset,
 } from './drag-controller'
-export type { StageDispatch, StageProps, StageTool } from './types'
+export type {
+  StageDispatch,
+  StageKeybinding,
+  StageLocale,
+  StageProps,
+  StageShortcutAction,
+  StageShortcuts,
+  StageTool,
+} from './types'
 export {
   createDuplicateCommand,
   createGroupCommand,
@@ -48,6 +56,16 @@ export {
   type StageRect,
   type StageViewport,
 } from './geometry'
+export {
+  createRulerTicks,
+  expandScrollRange,
+  scrollAxisToViewport,
+  snapResizePoint,
+  snapValueToGrid,
+  viewportToScrollAxes,
+  type StageRulerTick,
+  type StageScrollAxis,
+} from './canvas-geometry'
 
 /** `@compose-ui/stage` 的稳定包标识。 @public */
 export const COMPOSE_UI_STAGE_PACKAGE = '@compose-ui/stage' as const

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { AddIcon } from './icons'
+import { getSceneTreeMessages } from './scene-tree-i18n'
+import type { SceneTreeMessages } from './scene-tree-i18n'
 
 interface SearchToggleProps {
   active: boolean
@@ -34,6 +36,7 @@ interface SceneTreeToolbarProps {
   query: string
   regex: boolean
   wholeWord: boolean
+  messages?: SceneTreeMessages
 }
 
 /** 无状态的新增与检索工具栏。 */
@@ -48,14 +51,15 @@ export function SceneTreeToolbar({
   query,
   regex,
   wholeWord,
+  messages = getSceneTreeMessages('zh-CN'),
 }: SceneTreeToolbarProps) {
   return (
     <>
       <div className="st:flex st:h-8 st:shrink-0 st:items-center st:gap-1 st:border-b st:border-[#282e36] st:px-1">
         <button
-          aria-label="新增节点"
+          aria-label={messages.addNode}
           className="st:grid st:size-6 st:shrink-0 st:cursor-pointer st:place-items-center st:rounded-[3px] st:border-0 st:bg-transparent st:p-0 st:text-[#b9c1cc] st:hover:bg-[#2a2d2e] st:hover:text-white st:focus-visible:outline-1 st:focus-visible:outline-offset-1 st:focus-visible:outline-[#2388ff]"
-          title="新增节点"
+          title={messages.addNode}
           type="button"
           onClick={onAdd}
         >
@@ -64,16 +68,16 @@ export function SceneTreeToolbar({
         <div className="st:flex st:h-6 st:min-w-0 st:flex-1 st:items-center st:rounded-[3px] st:border st:border-[#343b44] st:bg-[#15181d] st:focus-within:border-[#007acc] st:focus-within:ring-1 st:focus-within:ring-[#007acc]">
           <input
             aria-invalid={error ? 'true' : undefined}
-            aria-label="搜索节点"
+            aria-label={messages.searchNodes}
             className="st:h-full st:w-0 st:min-w-0 st:flex-1 st:cursor-text st:border-0 st:bg-transparent st:px-1.5 st:!text-[11px] st:text-[#e1e5eb] st:outline-none st:placeholder:text-[#77818d]"
-            placeholder="搜索"
+            placeholder={messages.searchPlaceholder}
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
           />
-          <SearchToggle active={caseSensitive} label="大小写敏感" onClick={onCaseSensitiveChange}>Aa</SearchToggle>
-          <SearchToggle active={wholeWord} label="全词匹配" onClick={onWholeWordChange}><span className="st:underline">ab</span></SearchToggle>
-          <SearchToggle active={regex} label="正则表达式" onClick={onRegexChange}>.*</SearchToggle>
+          <SearchToggle active={caseSensitive} label={messages.caseSensitive} onClick={onCaseSensitiveChange}>Aa</SearchToggle>
+          <SearchToggle active={wholeWord} label={messages.wholeWord} onClick={onWholeWordChange}><span className="st:underline">ab</span></SearchToggle>
+          <SearchToggle active={regex} label={messages.regex} onClick={onRegexChange}>.*</SearchToggle>
         </div>
       </div>
       {error ? (

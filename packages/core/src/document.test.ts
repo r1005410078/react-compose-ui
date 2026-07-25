@@ -32,6 +32,18 @@ type FixtureNode = {
 
 type FixtureDocument = {
   schemaVersion: number
+  canvas: {
+    grid: {
+      stepX: number
+      stepY: number
+      offsetX: number
+      offsetY: number
+      primaryLineEvery: number
+      snapEnabled: boolean
+    }
+    smartSnap: { nodes: boolean; guides: boolean }
+    guides: { id: string; axis: 'x' | 'y'; position: number }[]
+  }
   rootIds: string[]
   nodes: Record<string, FixtureNode>
 }
@@ -44,7 +56,19 @@ const validateComposeDocument = (
 
 function validDocument(): FixtureDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: {
+      grid: {
+        stepX: 8,
+        stepY: 8,
+        offsetX: 0,
+        offsetY: 0,
+        primaryLineEvery: 8,
+        snapEnabled: true,
+      },
+      smartSnap: { nodes: true, guides: true },
+      guides: [],
+    },
     rootIds: ['frame-a', 'frame-b'],
     nodes: {
       'frame-a': {
@@ -89,7 +113,7 @@ function validDocument(): FixtureDocument {
 }
 
 describe('ComposeDocument', () => {
-  it('OpenSpec: compose-document / 可选通用节点样式 / 兼容没有 style 的旧文档', () => {
+  it('OpenSpec: compose-document / 可选通用节点样式 / 解析没有 style 的 v2 节点', () => {
     const input = validDocument()
     const resolveNodeStyle = (
       core as unknown as {
@@ -180,7 +204,7 @@ describe('ComposeDocument', () => {
     })
   })
 
-  it('OpenSpec: compose-document / 版本化 JSON 文档 / 校验合法多 Frame 文档', () => {
+  it('OpenSpec: compose-document / 版本化 JSON 文档 / 校验合法 v2 多 Frame 文档', () => {
     const input = validDocument()
     const result = validateComposeDocument(input)
 
@@ -211,17 +235,79 @@ describe('ComposeDocument', () => {
     ]))
   })
 
-  it('OpenSpec: compose-document / 版本化 JSON 文档 / 拒绝未知文档版本', () => {
-    const input = { ...validDocument(), schemaVersion: 2 }
+  it('OpenSpec: compose-document / 版本化 JSON 文档 / 拒绝 v1 与未知版本', () => {
+    for (const schemaVersion of [1, 3]) {
+      const input = { ...validDocument(), schemaVersion }
+      const result = validateComposeDocument(input)
+
+      expect(result).toEqual({
+        valid: false,
+        issues: [expect.objectContaining({
+          code: 'document.unsupported-version',
+          path: ['schemaVersion'],
+        })],
+      })
+    }
+  })
+
+  it('OpenSpec: compose-document / 可持久化画布设置与辅助线 / 创建默认画布设置', () => {
+    const createDefaultCanvasSettings = (
+      core as unknown as {
+        createDefaultCanvasSettings(): FixtureDocument['canvas']
+      }
+    ).createDefaultCanvasSettings
+
+    expect(createDefaultCanvasSettings()).toEqual(validDocument().canvas)
+    expect(createDefaultCanvasSettings()).not.toBe(createDefaultCanvasSettings())
+  })
+
+  it('OpenSpec: compose-document / 可持久化画布设置与辅助线 / 保存全局辅助线', () => {
+    const input = validDocument()
+    input.canvas.guides = [
+      { id: 'vertical', axis: 'x', position: -32.5 },
+      { id: 'horizontal', axis: 'y', position: 48 },
+    ]
+
+    expect(validateComposeDocument(input)).toEqual({ valid: true, document: input })
+    expect(JSON.parse(JSON.stringify(input)).canvas.guides).toEqual(input.canvas.guides)
+  })
+
+  it('OpenSpec: compose-document / 可持久化画布设置与辅助线 / 拒绝非法画布配置', () => {
+    const input = validDocument()
+    input.canvas.grid.stepX = 0
+    input.canvas.grid.offsetY = Number.POSITIVE_INFINITY
+    input.canvas.grid.primaryLineEvery = 1.5
+    input.canvas.smartSnap.nodes = 'yes' as never
+    input.canvas.guides = [
+      { id: 'guide', axis: 'x', position: -32 },
+      { id: 'guide', axis: 'y', position: 16 },
+      { id: 'bad', axis: 'x', position: Number.NaN },
+    ]
+
     const result = validateComposeDocument(input)
 
-    expect(result).toEqual({
-      valid: false,
-      issues: [expect.objectContaining({
-        code: 'document.unsupported-version',
-        path: ['schemaVersion'],
-      })],
-    })
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'canvas.invalid-step', path: ['canvas', 'grid', 'stepX'] }),
+      expect.objectContaining({ code: 'canvas.invalid-offset', path: ['canvas', 'grid', 'offsetY'] }),
+      expect.objectContaining({
+        code: 'canvas.invalid-primary-interval',
+        path: ['canvas', 'grid', 'primaryLineEvery'],
+      }),
+      expect.objectContaining({
+        code: 'canvas.invalid',
+        path: ['canvas', 'smartSnap', 'nodes'],
+      }),
+      expect.objectContaining({
+        code: 'canvas.duplicate-guide',
+        path: ['canvas', 'guides', 1, 'id'],
+      }),
+      expect.objectContaining({
+        code: 'canvas.invalid-guide',
+        path: ['canvas', 'guides', 2],
+      }),
+    ]))
   })
 
   it('OpenSpec: compose-document / 规范化节点拓扑 / 使用合法 Frame 子树', () => {

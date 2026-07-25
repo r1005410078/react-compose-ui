@@ -1,4 +1,36 @@
 import type { HTMLAttributes } from 'react'
+import type { ComposeLocale } from '@compose-ui/ui-context'
+
+/** HistoryPanel 内建界面语言。 @public */
+export type HistoryLocale = ComposeLocale
+
+/**
+ * 撤销或重做动作使用的单次键位。
+ *
+ * @public
+ */
+export interface HistoryKeybinding {
+  /** `KeyboardEvent.code` 物理键位。 */
+  readonly code: string
+  /** macOS 使用 Command，其他平台使用 Control。 */
+  readonly primary?: boolean
+  /** 所有平台都明确使用 Control。 */
+  readonly control?: boolean
+  /** 是否要求 Shift。 */
+  readonly shift?: boolean
+  /** 是否要求 Alt/Option。 */
+  readonly alt?: boolean
+}
+
+/**
+ * 历史导航快捷键覆盖；空数组表示禁用对应动作。
+ *
+ * @public
+ */
+export interface HistoryShortcuts {
+  readonly undo?: readonly HistoryKeybinding[]
+  readonly redo?: readonly HistoryKeybinding[]
+}
 
 /** 历史面板可展示的一条稳定记录。 */
 export interface HistoryEntry {
@@ -74,4 +106,6 @@ export interface HistoryController<T> extends HistoryNavigationController {
 export interface HistoryPanelProps extends HTMLAttributes<HTMLDivElement> {
   /** 驱动列表、当前状态和记录跳转的受控历史协议。 */
   controller: HistoryNavigationController
+  /** 内建面板文案语言。 @defaultValue `"zh-CN"` */
+  locale?: HistoryLocale
 }

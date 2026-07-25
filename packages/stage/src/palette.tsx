@@ -1,10 +1,21 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
-import type { HTMLAttributes, PointerEvent as ReactPointerEvent } from 'react'
+import type {
+  CSSProperties,
+  HTMLAttributes,
+  PointerEvent as ReactPointerEvent,
+} from 'react'
+import {
+  createComposeThemeStyle,
+  useComposeI18nContext,
+  useComposeThemeContext,
+} from '@compose-ui/ui-context'
 import type { ComponentRegistry } from '@compose-ui/component-registry'
 import type {
   StageDragController,
   StageFramePreset,
 } from './drag-controller'
+import type { StageLocale } from './types'
+import { getStageMessages } from './stage-i18n'
 
 /**
  * ComponentPalette 属性。
@@ -16,6 +27,8 @@ export interface ComponentPaletteProps extends HTMLAttributes<HTMLDivElement> {
   readonly dragController: StageDragController
   /** 显示在 registry definitions 之前的根级 Frame 预设。 */
   readonly framePresets?: readonly StageFramePreset[]
+  /** 内建区域和新增动作的语言；registry/preset label 保持宿主值。 */
+  readonly locale?: StageLocale
 }
 
 /**
@@ -27,9 +40,15 @@ export function ComponentPalette({
   registry,
   dragController,
   framePresets = [],
+  locale,
   className,
+  style,
   ...props
 }: ComponentPaletteProps) {
+  const i18n = useComposeI18nContext()
+  const theme = useComposeThemeContext()
+  const resolvedLocale = locale ?? i18n?.locale ?? 'en-US'
+  const messages = getStageMessages(resolvedLocale, i18n?.formatMessage)
   const state = useSyncExternalStore(
     dragController.subscribe,
     dragController.getState,
@@ -84,15 +103,21 @@ export function ComponentPalette({
   return (
     <div
       {...props}
-      aria-label={props['aria-label'] ?? 'Component Library'}
+      aria-label={props['aria-label'] ?? messages.library}
       className={['component-palette', className].filter(Boolean).join(' ')}
+      data-compose-theme={theme?.resolvedTheme}
+      lang={resolvedLocale}
       role="region"
+      style={{
+        ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
+        ...style,
+      } as CSSProperties}
     >
       <ul>
         {framePresets.map((preset) => (
           <li key={`frame:${preset.id}`}>
             <button
-              aria-label={`Add ${preset.label}`}
+              aria-label={messages.add(preset.label)}
               type="button"
               onClick={() => {
                 if (suppressClickRef.current) {
@@ -118,7 +143,7 @@ export function ComponentPalette({
         {registry.list().map((definition) => (
           <li key={definition.type}>
             <button
-              aria-label={`Add ${definition.label}`}
+              aria-label={messages.add(definition.label)}
               type="button"
               onClick={() => {
                 if (suppressClickRef.current) {

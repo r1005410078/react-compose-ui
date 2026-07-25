@@ -1,11 +1,13 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
+  createDefaultCanvasSettings,
   createTransactionRuntime,
   type CommandHandler,
   type ComposeDocument,
   type EditorCommand,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it } from 'vitest'
+import { ComposeUIProvider } from '@compose-ui/ui-context'
 import * as commandPanelPackage from './index'
 
 type Preset = {
@@ -27,6 +29,7 @@ const CommandPanel = (
       runtime: ReturnType<typeof createTransactionRuntime>
       presets?: readonly Preset[]
       eventLimit?: number
+      locale?: 'zh-CN' | 'en-US'
       'aria-label'?: string
     }): React.ReactNode
   }
@@ -36,7 +39,8 @@ afterEach(cleanup)
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: createDefaultCanvasSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -309,5 +313,49 @@ describe('CommandPanel', () => {
     fireEvent.click(details)
     expect(details).toHaveAttribute('aria-expanded', 'true')
     expect(controller.document.nodes.a.name).toBe('Keyboard')
+  })
+
+  it('OpenSpec: command-panel / 命令面板内建本地化 / 使用英文命令面板', () => {
+    const controller = runtime()
+    const preset: Preset = {
+      id: 'english',
+      label: '宿主预设',
+      fields: [{ name: 'name', label: '宿主名称', type: 'string', required: true }],
+      createCommand(values) {
+        return renameCommand(values.name as string)
+      },
+    }
+    render(<CommandPanel locale="en-US" presets={[preset]} runtime={controller} />)
+
+    expect(screen.getByRole('region', { name: 'Command debugger' })).toBeInTheDocument()
+    expect(screen.getByText('No command events')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Run 宿主预设' }))
+    expect(screen.getByText('宿主名称 is required')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('textbox', { name: '宿主名称' }), {
+      target: { value: 'English' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Run 宿主预设' }))
+    expect(screen.getByText('Succeeded')).toBeInTheDocument()
+    expect(screen.getByText('修改名称')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: command-panel / 命令面板内建本地化 / 独立使用默认语言', () => {
+    render(<CommandPanel runtime={runtime()} />)
+    expect(screen.getByRole('region', { name: '命令调试台' })).toBeInTheDocument()
+    expect(screen.getByText('暂无命令事件')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: ui-context / 共享 UI Context 包 / 独立组件保持兼容 - CommandPanel 消费 Context', () => {
+    const runtime = createTransactionRuntime({ document: fixture() })
+    render(
+      <ComposeUIProvider locale="en-US" theme="light">
+        <CommandPanel presets={[]} runtime={runtime} />
+      </ComposeUIProvider>,
+    )
+
+    expect(screen.getByText('No command events')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Command debugger' }))
+      .toHaveAttribute('data-compose-theme', 'light')
   })
 })

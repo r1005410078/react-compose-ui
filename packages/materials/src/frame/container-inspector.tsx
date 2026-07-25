@@ -4,8 +4,8 @@ import { PropertyPanel } from '@compose-ui/property-panel'
 import type { ComponentType } from 'react'
 import { dispatchInspectorUpdate } from '../shared/inspector/dispatch-update'
 import type { InspectorIdFactory } from '../shared/inspector/dispatch-update'
-import { containerSchema } from '../shared/inspector/schemas'
 import { createContainerValue } from '../shared/inspector/values'
+import { useMaterialInspectorI18n } from '../shared/inspector/use-material-inspector-i18n'
 import type { ContainerNode } from '../types'
 
 interface ContainerInspectorDefaults {
@@ -23,6 +23,7 @@ export function createContainerInspector(
   idFactory: InspectorIdFactory,
 ): ComponentType<NodeInspectorProps<ContainerNode>> {
   return function ContainerInspector({ node, dispatch }) {
+    const i18n = useMaterialInspectorI18n()
     const value = createContainerValue(node)
     const defaultValue = node.kind === 'frame'
       ? createContainerValue({
@@ -45,10 +46,10 @@ export function createContainerInspector(
         })
     return (
       <PropertyPanel
-        aria-label={`${node.name} properties`}
+        aria-label={i18n.propertiesLabel(node.name)}
         defaultValue={defaultValue}
         readOnly={node.locked}
-        schema={containerSchema}
+        schema={i18n.schemas.container}
         value={value}
         onValueChange={(next) =>
           dispatchInspectorUpdate(

@@ -1,5 +1,9 @@
 # @compose-ui/materials
 
+Frame、Rectangle 与 Text 的第一方 Inspector 通过 `@compose-ui/ui-context` 生成当前语言的内建
+Schema 标题，并由 PropertyPanel 消费共享主题 token。切换主题或语言不会重新创建 registry，
+宿主扩展 definition、label、自定义 Inspector 与自定义 Schema metadata 保持原文。
+
 Frame、Rectangle 与 Text 的独立基础物料包。它组合 core 文档样式、component-registry、
 Stage Frame preset 与 PropertyPanel Inspector，但不依赖 editor。
 

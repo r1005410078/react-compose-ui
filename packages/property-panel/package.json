@@ -25,6 +25,9 @@
     "lint": "eslint . --max-warnings 0",
     "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
+  "dependencies": {
+    "@compose-ui/ui-context": "workspace:*"
+  },
   "devDependencies": {
     "valibot": "^1.4.0"
   },

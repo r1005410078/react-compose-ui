@@ -30,6 +30,7 @@
     "@compose-ui/core": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/stage": "workspace:*",
+    "@compose-ui/ui-context": "workspace:*",
     "valibot": "^1.4.0"
   },
   "peerDependencies": {

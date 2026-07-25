@@ -1,10 +1,12 @@
-import { DockviewDefaultTab } from 'dockview-react'
 import type {
   IDockviewHeaderActionsProps,
   IDockviewPanelHeaderProps,
 } from 'dockview-react'
 import type { PointerEventHandler } from 'react'
+import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { WORKSPACE_GROUP_IDS, WORKSPACE_PANEL_IDS } from './workspace-layout'
+import { useWorkspaceContent } from './workspace-context'
+import { getEditorMessages } from './editor-i18n'
 
 type WorkspaceTabProps = IDockviewPanelHeaderProps & {
   onPointerDown?: PointerEventHandler<HTMLDivElement>
@@ -50,23 +52,52 @@ function SettingsIcon() {
 }
 
 export function WorkspaceHeaderActions(props: IDockviewHeaderActionsProps) {
+  const i18n = useComposeI18nContext()
+  const {
+    settingsOpen,
+    settingsPanelId,
+    setSettingsButton,
+    toggleSettings,
+  } = useWorkspaceContent()
   if (props.group.id !== WORKSPACE_GROUP_IDS.scene) {
     return null
   }
+  const t = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
 
   return (
-    <div
-      aria-label="设置"
+    <button
+      aria-controls={settingsPanelId}
+      aria-expanded={settingsOpen}
+      aria-haspopup="dialog"
+      aria-label={t.settings}
       className="compose-editor__settings-icon"
-      role="img"
-      title="设置"
+      onClick={toggleSettings}
+      ref={setSettingsButton}
+      title={t.settings}
+      type="button"
     >
       <SettingsIcon />
-    </div>
+    </button>
   )
 }
 
 export function WorkspaceTab(props: WorkspaceTabProps) {
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(
+    i18n?.locale ?? 'zh-CN',
+    i18n?.formatMessage,
+  ).workspace
+  const titles: Record<string, string> = {
+    [WORKSPACE_PANEL_IDS.scene]: messages.sceneGraph,
+    [WORKSPACE_PANEL_IDS.componentLibrary]: messages.componentLibrary,
+    [WORKSPACE_PANEL_IDS.canvas]: messages.canvas,
+    [WORKSPACE_PANEL_IDS.inspector]: messages.inspector,
+    [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
+    [WORKSPACE_PANEL_IDS.command]: messages.command,
+    'compose-scene-content-panel': messages.sceneGraph,
+    'compose-history-panel': messages.history,
+  }
+  const title = titles[props.api.id] ?? props.api.title
   const icon =
     props.api.id === WORKSPACE_PANEL_IDS.scene ? (
       <SceneGraphIcon />
@@ -84,15 +115,23 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
         onPointerDown={props.onPointerDown}
         onPointerLeave={props.onPointerLeave}
         onPointerUp={props.onPointerUp}
-        title={props.api.title}
+        title={title}
       >
         {icon}
-        <span className="compose-editor__visually-hidden">{props.api.title}</span>
+        <span className="compose-editor__visually-hidden">{title}</span>
       </div>
     )
   }
 
   return (
-    <DockviewDefaultTab {...props} hideClose />
+    <div
+      className="compose-editor__text-tab"
+      onPointerDown={props.onPointerDown}
+      onPointerLeave={props.onPointerLeave}
+      onPointerUp={props.onPointerUp}
+      title={title}
+    >
+      {title}
+    </div>
   )
 }

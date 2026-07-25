@@ -24,7 +24,10 @@ export function DocumentEditor() {
     title: '未命名页面',
     nodes: [],
   })
-  const onKeyDownCapture = useHistoryShortcuts(history)
+  const onKeyDownCapture = useHistoryShortcuts(history, {
+    undo: [{ code: 'KeyZ', primary: true }],
+    redo: [{ code: 'KeyZ', primary: true, shift: true }],
+  })
 
   return (
     <section onKeyDownCapture={onKeyDownCapture}>
@@ -38,7 +41,7 @@ export function DocumentEditor() {
           )
         }}
       />
-      <HistoryPanel controller={history} />
+      <HistoryPanel controller={history} locale="zh-CN" />
     </section>
   )
 }
@@ -49,7 +52,10 @@ export function DocumentEditor() {
 记录。在历史中间提交新值会删除后续重做分支。
 
 快捷键支持 `Cmd/Ctrl+Z`、`Cmd/Ctrl+Shift+Z` 和 `Ctrl+Y`。处理器应挂在编辑器范围容器上，
-因此输入框聚焦时仍操作文档历史；IME 组合输入期间不会拦截。
+也可通过 `HistoryShortcuts` 覆盖或以空数组禁用。处理器应挂在编辑器范围容器上，因此输入框
+聚焦时仍操作文档历史；IME 组合输入期间不会拦截。`HistoryPanel.locale` 支持 zh-CN 和 en-US，
+显式 prop 优先于 `@compose-ui/ui-context`，Provider 外保持原独立默认语言；宿主历史 label
+保持原文。
 
 ## 快照约束
 

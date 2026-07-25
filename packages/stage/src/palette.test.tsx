@@ -1,5 +1,6 @@
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import {
+  createDefaultCanvasSettings,
   createTransactionRuntime,
   type ComposeDocument,
   type TransactionRuntime,
@@ -28,6 +29,7 @@ const api = stagePackage as unknown as {
     registry: Registry
     dragController: DragController
     framePresets?: readonly FramePreset[]
+    locale?: 'zh-CN' | 'en-US'
     'aria-label'?: string
   }): React.ReactNode
   Stage(props: {
@@ -51,7 +53,8 @@ afterEach(cleanup)
 
 function document(): ComposeDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: createDefaultCanvasSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -148,6 +151,21 @@ const framePreset: FramePreset = {
 }
 
 describe('ComponentPalette', () => {
+  it('localizes built-in Palette chrome without changing registry labels', () => {
+    const controller = api.createStageDragController()
+    render(
+      <api.ComponentPalette
+        dragController={controller}
+        locale="zh-CN"
+        registry={registry()}
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: '组件库' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '添加 方块' })).toBeInTheDocument()
+    expect(screen.getByText('方块')).toBeInTheDocument()
+  })
+
   it('OpenSpec: stage / Frame Palette 拖入 / 保持 Component 拖入兼容', () => {
     const runtime = createTransactionRuntime({ document: document() })
     const definitions = registry()

@@ -1,5 +1,8 @@
 import { createComponentRegistry } from '@compose-ui/component-registry'
-import type { ComposeDocument } from '@compose-ui/core'
+import {
+  createDefaultCanvasSettings,
+  type ComposeDocument,
+} from '@compose-ui/core'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposePreview } from './index'
@@ -8,7 +11,8 @@ afterEach(cleanup)
 
 function document(): ComposeDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    canvas: createDefaultCanvasSettings(),
     rootIds: ['desktop', 'mobile'],
     nodes: {
       desktop: {
@@ -155,6 +159,25 @@ describe('ComposePreview', () => {
       transform: 'rotate(-5deg)',
     })
     expect(screen.queryByLabelText('Stage 编辑覆盖层')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: compose-preview / 忽略画布编辑元数据 / 不渲染网格标尺辅助线或坐标轴', () => {
+    const base = document()
+    const input: ComposeDocument = {
+      ...base,
+      canvas: {
+        ...base.canvas,
+        grid: { ...base.canvas.grid, stepX: 16, stepY: 24 },
+        guides: [{ id: 'preview-guide', axis: 'x', position: 48 }],
+      },
+    }
+    render(<ComposePreview document={input} frameId="desktop" registry={registry()} />)
+
+    expect(screen.getByTestId('compose-preview-frame')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-ruler-x')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-canvas-guide-preview-guide')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-origin-x')).not.toBeInTheDocument()
+    expect(screen.queryByRole('scrollbar')).not.toBeInTheDocument()
   })
 
   it('OpenSpec: compose-preview / Preview 节点样式一致性 / 预览统一节点样式', () => {

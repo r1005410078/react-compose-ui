@@ -1,6 +1,12 @@
 import { RegistryComponent } from '@compose-ui/component-registry'
 import {
+  createComposeThemeStyle,
+  useComposeI18nContext,
+  useComposeThemeContext,
+} from '@compose-ui/ui-context'
+import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -19,6 +25,14 @@ import type {
   NodeTransform,
 } from '@compose-ui/core'
 import { resolveNodeStyle } from '@compose-ui/core'
+import {
+  createRulerTicks,
+  expandScrollRange,
+  scrollAxisToViewport,
+  snapResizePoint,
+  snapValueToGrid,
+  viewportToScrollAxes,
+} from './canvas-geometry'
 import {
   decomposeMatrix,
   getNodeParentId,
@@ -41,7 +55,12 @@ import {
   type StagePoint,
   type StageRect,
 } from './geometry'
-import type { StageProps } from './types'
+import type {
+  StageKeybinding,
+  StageShortcutAction,
+  StageProps,
+} from './types'
+import { StageScrollbar } from './scrollbar'
 import {
   createDuplicateCommand,
   createGroupCommand,
@@ -52,6 +71,7 @@ import {
   describeNodeTargets,
   describeTransform,
 } from './transaction-labels'
+import { getStageMessages } from './stage-i18n'
 
 type TransformMap = Readonly<Record<string, NodeTransform>>
 type Modifiers = { shift: boolean; alt: boolean; command: boolean }
@@ -96,6 +116,24 @@ type Gesture =
       transforms: TransformMap
       modifiers: Modifiers
     }
+  | {
+      type: 'guide-create'
+      guides: readonly {
+        id: string
+        axis: 'x' | 'y'
+        position: number
+      }[]
+      currentScreen: StagePoint
+      modifiers: Modifiers
+    }
+  | {
+      type: 'guide-move'
+      guideId: string
+      axis: 'x' | 'y'
+      position: number
+      currentScreen: StagePoint
+      modifiers: Modifiers
+    }
 
 function defaultId() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -106,7 +144,16 @@ function screenPoint(
   event: { clientX: number; clientY: number },
   element: HTMLElement,
 ): StagePoint {
-  const rect = element.getBoundingClientRect()
+  let rect = element.getBoundingClientRect()
+  if (
+    rect.width === 0
+    && rect.height === 0
+    && element.classList.contains('compose-stage__surface')
+    && element.parentElement
+  ) {
+    // JSDOM 不做布局；组件测试仍可通过根元素的显式 rect 验证坐标算法。
+    rect = element.parentElement.getBoundingClientRect()
+  }
   return { x: event.clientX - rect.left, y: event.clientY - rect.top }
 }
 
@@ -234,29 +281,81 @@ function snapCandidates(
   const selected = new Set(ids)
   const firstId = ids[0]
   if (!firstId) return []
-  const parentId = getNodeParentId(document, firstId)
-  const frameId = frameForNode(document, firstId)
+  const excluded = new Set(selected)
+  const excludeDescendants = (id: string) => {
+    const node = document.nodes[id]
+    if (!node || node.kind === 'component') return
+    node.childIds.forEach((childId) => {
+      excluded.add(childId)
+      excludeDescendants(childId)
+    })
+  }
+  ids.forEach(excludeDescendants)
   const candidates: StageGuide[] = []
   const addRect = (rect: StageRect) => {
     candidates.push(
-      { axis: 'x', value: rect.x },
-      { axis: 'x', value: rect.x + rect.width / 2 },
-      { axis: 'x', value: rect.x + rect.width },
-      { axis: 'y', value: rect.y },
-      { axis: 'y', value: rect.y + rect.height / 2 },
-      { axis: 'y', value: rect.y + rect.height },
+      { axis: 'x', value: rect.x, source: 'node' },
+      { axis: 'x', value: rect.x + rect.width / 2, source: 'node' },
+      { axis: 'x', value: rect.x + rect.width, source: 'node' },
+      { axis: 'y', value: rect.y, source: 'node' },
+      { axis: 'y', value: rect.y + rect.height / 2, source: 'node' },
+      { axis: 'y', value: rect.y + rect.height, source: 'node' },
     )
   }
-  if (frameId && !selected.has(frameId)) addRect(getNodeWorldBounds(document, frameId))
-  const parent = parentId ? document.nodes[parentId] : null
-  const siblingIds = parent && parent.kind !== 'component'
-    ? parent.childIds
-    : document.rootIds
-  for (const id of siblingIds) {
-    const node = document.nodes[id]
-    if (node?.visible && !selected.has(id)) addRect(getNodeWorldBounds(document, id))
+  if (document.canvas.smartSnap.nodes) {
+    for (const id of documentOrder(document)) {
+      const node = document.nodes[id]
+      if (node?.visible && !excluded.has(id)) addRect(getNodeWorldBounds(document, id))
+    }
+  }
+  if (document.canvas.smartSnap.guides) {
+    document.canvas.guides.forEach((guide) => candidates.push({
+      axis: guide.axis,
+      value: guide.position,
+      source: 'guide',
+    }))
   }
   return candidates
+}
+
+function visualGridStyle(
+  document: ComposeDocument,
+  viewport: StageProps['viewport'],
+): CSSProperties {
+  const { grid } = document.canvas
+  const layers: string[] = []
+  const sizes: string[] = []
+  const positions: string[] = []
+  const addVertical = (step: number, color: string) => {
+    layers.push(`linear-gradient(90deg, ${color} 1px, transparent 1px)`)
+    sizes.push(`${step * viewport.zoom}px 100%`)
+    positions.push(`${grid.offsetX * viewport.zoom + viewport.x}px 0`)
+  }
+  const addHorizontal = (step: number, color: string) => {
+    layers.push(`linear-gradient(${color} 1px, transparent 1px)`)
+    sizes.push(`100% ${step * viewport.zoom}px`)
+    positions.push(`0 ${grid.offsetY * viewport.zoom + viewport.y}px`)
+  }
+  const minorColor = 'var(--compose-stage-grid-minor, rgb(120 137 158 / 18%))'
+  const primaryColor = 'var(--compose-stage-grid-primary, rgb(151 166 185 / 34%))'
+  if (grid.stepX * viewport.zoom >= 8) addVertical(grid.stepX, minorColor)
+  if (grid.stepY * viewport.zoom >= 8) addHorizontal(grid.stepY, minorColor)
+  let primaryX = grid.stepX * grid.primaryLineEvery
+  let primaryY = grid.stepY * grid.primaryLineEvery
+  while (primaryX * viewport.zoom < 8) primaryX *= 2
+  while (primaryY * viewport.zoom < 8) primaryY *= 2
+  addVertical(primaryX, primaryColor)
+  addHorizontal(primaryY, primaryColor)
+  return {
+    backgroundImage: layers.join(','),
+    backgroundSize: sizes.join(','),
+    backgroundPosition: positions.join(','),
+  }
+}
+
+function formatDimension(value: number) {
+  const rounded = Math.round(value * 100) / 100
+  return Object.is(rounded, -0) ? '0' : String(rounded)
 }
 
 function nodeStyle(node: ComposeNode): CSSProperties {
@@ -287,8 +386,82 @@ function nodeStyle(node: ComposeNode): CSSProperties {
 }
 
 function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false
-  return target.matches('input, textarea, select, [contenteditable="true"]')
+  if (!(target instanceof Element)) return false
+  if (target.closest('input, textarea, select')) return true
+  if (target instanceof HTMLElement && target.contentEditable === 'true') return true
+  return target.closest('[contenteditable]:not([contenteditable="false"])') !== null
+}
+
+const STAGE_SHORTCUT_ACTIONS = [
+  'stage.temporaryPan',
+  'stage.selectTool',
+  'stage.panTool',
+  'stage.fitSelection',
+  'stage.fitFrame',
+  'stage.zoomReset',
+  'stage.zoomIn',
+  'stage.zoomOut',
+  'stage.toggleGridSnap',
+  'stage.toggleSmartSnap',
+  'edit.duplicate',
+  'edit.group',
+  'edit.ungroup',
+  'edit.delete',
+] as const satisfies readonly StageShortcutAction[]
+
+const DEFAULT_STAGE_SHORTCUTS: Readonly<
+  Record<StageShortcutAction, readonly StageKeybinding[]>
+> = {
+  'stage.temporaryPan': [{ code: 'Space' }],
+  'stage.selectTool': [{ code: 'KeyV' }],
+  'stage.panTool': [{ code: 'KeyH' }],
+  'stage.fitSelection': [{ code: 'KeyF' }],
+  'stage.fitFrame': [{ code: 'KeyF', shift: true }],
+  'stage.zoomReset': [{ code: 'Digit0', primary: true }],
+  'stage.zoomIn': [{ code: 'Equal', primary: true }],
+  'stage.zoomOut': [{ code: 'Minus', primary: true }],
+  'stage.toggleGridSnap': [{ code: 'KeyG', shift: true }],
+  'stage.toggleSmartSnap': [{ code: 'KeyS', shift: true }],
+  'edit.duplicate': [{ code: 'KeyD', primary: true }],
+  'edit.group': [{ code: 'KeyG', primary: true }],
+  'edit.ungroup': [{ code: 'KeyG', primary: true, shift: true }],
+  'edit.delete': [{ code: 'Delete' }, { code: 'Backspace' }],
+}
+
+function keyboardEventCode(event: {
+  code: string
+  key: string
+}) {
+  if (event.code) return event.code
+  if (/^[a-z]$/i.test(event.key)) return `Key${event.key.toUpperCase()}`
+  if (/^[0-9]$/.test(event.key)) return `Digit${event.key}`
+  const codes: Record<string, string> = {
+    ' ': 'Space',
+    ',': 'Comma',
+    '=': 'Equal',
+    '-': 'Minus',
+  }
+  return codes[event.key] ?? event.key
+}
+
+function isStageShortcutMatch(
+  event: {
+    altKey: boolean
+    code: string
+    ctrlKey: boolean
+    key: string
+    metaKey: boolean
+    shiftKey: boolean
+  },
+  binding: StageKeybinding,
+) {
+  const modifierMatches = binding.primary
+    ? event.ctrlKey !== event.metaKey
+    : event.ctrlKey === Boolean(binding.control) && !event.metaKey
+  return keyboardEventCode(event) === binding.code
+    && modifierMatches
+    && event.shiftKey === Boolean(binding.shift)
+    && event.altKey === Boolean(binding.alt)
 }
 
 /**
@@ -303,13 +476,19 @@ export function Stage({
   viewport,
   onViewportChange,
   tool,
+  onToolChange,
+  locale,
+  shortcuts,
   selectedIds,
   onSelectedIdsChange,
   activeFrameId,
   onActiveFrameIdChange,
+  onSurfaceSizeChange,
   dragController,
   idFactory = defaultId,
+  id,
   className,
+  style,
   onKeyDown,
   onPointerDown,
   onPointerMove,
@@ -319,7 +498,14 @@ export function Stage({
   onWheel,
   ...props
 }: StageProps) {
+  const i18n = useComposeI18nContext()
+  const theme = useComposeThemeContext()
+  const resolvedLocale = locale ?? i18n?.locale ?? 'zh-CN'
+  const messages = getStageMessages(resolvedLocale, i18n?.formatMessage)
+  const generatedSurfaceId = useId()
+  const surfaceId = id ? `${id}-surface` : generatedSurfaceId
   const rootRef = useRef<HTMLDivElement>(null)
+  const surfaceRef = useRef<HTMLDivElement>(null)
   const gestureRef = useRef<Gesture | null>(null)
   const capturedPointerIdRef = useRef<number | null>(null)
   const pendingRef = useRef<{
@@ -329,8 +515,25 @@ export function Stage({
   const frameRequestRef = useRef<number | null>(null)
   const [previewTransforms, setPreviewTransforms] = useState<TransformMap>({})
   const [marquee, setMarquee] = useState<StageRect | null>(null)
-  const [guides, setGuides] = useState<readonly StageGuide[]>([])
-  const [spacePressed, setSpacePressed] = useState(false)
+  const [snapGuides, setSnapGuides] = useState<readonly StageGuide[]>([])
+  const [guidePreview, setGuidePreview] = useState<readonly {
+    id: string
+    axis: 'x' | 'y'
+    position: number
+  }[]>([])
+  const [surfaceSize, setSurfaceSize] = useState({ width: 900, height: 600 })
+  const [scrollRange, setScrollRange] = useState<StageRect | null>(null)
+  const [temporaryPanPressed, setTemporaryPanPressed] = useState(false)
+  const activeTemporaryPanCodeRef = useRef<string | null>(null)
+  const resolvedShortcuts = useMemo(
+    () => Object.fromEntries(STAGE_SHORTCUT_ACTIONS.map((action) => [
+      action,
+      shortcuts?.[action] ?? DEFAULT_STAGE_SHORTCUTS[action],
+    ])) as unknown as Readonly<
+      Record<StageShortcutAction, readonly StageKeybinding[]>
+    >,
+    [shortcuts],
+  )
   const previewDocument = useMemo(
     () => transformDocument(document, previewTransforms),
     [document, previewTransforms],
@@ -342,6 +545,74 @@ export function Stage({
       const node = document.nodes[id]
       return node?.visible && !node.locked
     })
+
+  useEffect(() => {
+    const surface = surfaceRef.current
+    if (!surface) return
+    const measure = () => {
+      const rect = surface.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+      const next = { width: rect.width, height: rect.height }
+      setSurfaceSize((current) => current.width === next.width && current.height === next.height
+        ? current
+        : next)
+      onSurfaceSizeChange?.(next)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(surface)
+    return () => observer.disconnect()
+  }, [onSurfaceSizeChange])
+
+  const visibleWorld = {
+    ...screenToWorld({ x: 0, y: 0 }, viewport),
+    width: surfaceSize.width / viewport.zoom,
+    height: surfaceSize.height / viewport.zoom,
+  }
+  const contentBounds = unionRects(Object.values(previewDocument.nodes)
+    .filter((node) => node.visible)
+    .map((node) => getNodeWorldBounds(previewDocument, node.id)))
+
+  const contentX = contentBounds?.x
+  const contentY = contentBounds?.y
+  const contentWidth = contentBounds?.width
+  const contentHeight = contentBounds?.height
+  const visibleX = visibleWorld.x
+  const visibleY = visibleWorld.y
+  const visibleWidth = visibleWorld.width
+  const visibleHeight = visibleWorld.height
+  useEffect(() => {
+    const request = requestAnimationFrame(() => {
+      const content = contentX === undefined
+        || contentY === undefined
+        || contentWidth === undefined
+        || contentHeight === undefined
+        ? null
+        : {
+            x: contentX,
+            y: contentY,
+            width: contentWidth,
+            height: contentHeight,
+          }
+      setScrollRange((current) => expandScrollRange(current, content, {
+        x: visibleX,
+        y: visibleY,
+        width: visibleWidth,
+        height: visibleHeight,
+      }))
+    })
+    return () => cancelAnimationFrame(request)
+  }, [
+    contentHeight,
+    contentWidth,
+    contentX,
+    contentY,
+    visibleHeight,
+    visibleWidth,
+    visibleX,
+    visibleY,
+  ])
 
   const capturePointer = (root: HTMLDivElement, pointerId: number) => {
     try {
@@ -381,6 +652,37 @@ export function Stage({
       return
     }
     const world = screenToWorld(point, viewport)
+    if (gesture.type === 'guide-create') {
+      gesture.currentScreen = point
+      gesture.modifiers = currentModifiers
+      gesture.guides = gesture.guides.map((guide) => ({
+        ...guide,
+        position: snapValueToGrid(
+          guide.axis === 'x' ? world.x : world.y,
+          guide.axis === 'x' ? document.canvas.grid.stepX : document.canvas.grid.stepY,
+          guide.axis === 'x' ? document.canvas.grid.offsetX : document.canvas.grid.offsetY,
+          document.canvas.grid.snapEnabled && !currentModifiers.command,
+        ),
+      }))
+      setGuidePreview(gesture.guides)
+      return
+    }
+    if (gesture.type === 'guide-move') {
+      gesture.currentScreen = point
+      gesture.modifiers = currentModifiers
+      gesture.position = snapValueToGrid(
+        gesture.axis === 'x' ? world.x : world.y,
+        gesture.axis === 'x' ? document.canvas.grid.stepX : document.canvas.grid.stepY,
+        gesture.axis === 'x' ? document.canvas.grid.offsetX : document.canvas.grid.offsetY,
+        document.canvas.grid.snapEnabled && !currentModifiers.command,
+      )
+      setGuidePreview([{
+        id: gesture.guideId,
+        axis: gesture.axis,
+        position: gesture.position,
+      }])
+      return
+    }
     if (gesture.type === 'marquee') {
       gesture.currentWorld = world
       setMarquee(rectFromPoints(gesture.startWorld, world))
@@ -393,12 +695,26 @@ export function Stage({
         x: world.x - gesture.startWorld.x,
         y: world.y - gesture.startWorld.y,
       }
+      if (Math.hypot(rawDelta.x, rawDelta.y) * viewport.zoom < 2) {
+        gesture.transforms = {}
+        gesture.guides = []
+        setPreviewTransforms({})
+        setSnapGuides([])
+        return
+      }
       const snapped = snapTranslation(
         gesture.bounds,
         rawDelta,
         snapCandidates(document, gesture.ids),
         viewport.zoom,
         currentModifiers.command,
+        {
+          stepX: document.canvas.grid.stepX,
+          stepY: document.canvas.grid.stepY,
+          offsetX: document.canvas.grid.offsetX,
+          offsetY: document.canvas.grid.offsetY,
+          enabled: document.canvas.grid.snapEnabled,
+        },
       )
       gesture.guides = snapped.guides
       gesture.transforms = transformedSelection(
@@ -407,14 +723,22 @@ export function Stage({
         translationMatrix(snapped.delta.x, snapped.delta.y),
       )
       setPreviewTransforms(gesture.transforms)
-      setGuides(snapped.guides)
+      setSnapGuides(snapped.guides)
       return
     }
     if (gesture.type === 'resize') {
+      const snapped = snapResizePoint({
+        point: world,
+        handle: gesture.handle,
+        candidates: snapCandidates(document, gesture.ids),
+        canvas: document.canvas,
+        zoom: viewport.zoom,
+        disabled: currentModifiers.command,
+      })
       const nextBounds = resizeBounds(
         gesture.bounds,
         gesture.handle,
-        world,
+        snapped.point,
         currentModifiers,
       )
       const mapping = rectMappingMatrix(gesture.bounds, nextBounds)
@@ -423,6 +747,7 @@ export function Stage({
         scaleY: nextBounds.height / gesture.bounds.height,
       })
       setPreviewTransforms(gesture.transforms)
+      setSnapGuides(snapped.guides)
       return
     }
     const center = {
@@ -475,8 +800,43 @@ export function Stage({
     gestureRef.current = null
     setPreviewTransforms({})
     setMarquee(null)
-    setGuides([])
+    setSnapGuides([])
+    setGuidePreview([])
     releasePointer()
+  }
+
+  useEffect(() => {
+    const stopTemporaryPan = () => {
+      activeTemporaryPanCodeRef.current = null
+      setTemporaryPanPressed(false)
+      if (gestureRef.current?.type === 'pan') cancelGesture()
+    }
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (activeTemporaryPanCodeRef.current === keyboardEventCode(event)) {
+        stopTemporaryPan()
+      }
+    }
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', stopTemporaryPan)
+    return () => {
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', stopTemporaryPan)
+    }
+  })
+
+  const beginPan = (
+    event: ReactPointerEvent<Element>,
+    root: HTMLDivElement,
+    surface: HTMLDivElement,
+  ) => {
+    const point = screenPoint(event, surface)
+    gestureRef.current = {
+      type: 'pan',
+      startScreen: point,
+      currentScreen: point,
+      startViewport: viewport,
+    }
+    capturePointer(root, event.pointerId)
   }
 
   const beginTransform = (
@@ -526,13 +886,69 @@ export function Stage({
     }
   }
 
+  const beginGuideCreate = (
+    axes: readonly ('x' | 'y')[],
+    event: ReactPointerEvent<Element>,
+  ) => {
+    event.stopPropagation()
+    if (event.button !== 0) return
+    const root = rootRef.current
+    const surface = surfaceRef.current
+    if (!root || !surface) return
+    root.focus({ preventScroll: true })
+    const point = screenPoint(event, surface)
+    const world = screenToWorld(point, viewport)
+    const currentModifiers = modifiers(event)
+    const created = axes.map((axis) => ({
+      id: idFactory(),
+      axis,
+      position: snapValueToGrid(
+        axis === 'x' ? world.x : world.y,
+        axis === 'x' ? document.canvas.grid.stepX : document.canvas.grid.stepY,
+        axis === 'x' ? document.canvas.grid.offsetX : document.canvas.grid.offsetY,
+        document.canvas.grid.snapEnabled && !currentModifiers.command,
+      ),
+    }))
+    gestureRef.current = {
+      type: 'guide-create',
+      guides: created,
+      currentScreen: point,
+      modifiers: currentModifiers,
+    }
+    setGuidePreview(created)
+    capturePointer(root, event.pointerId)
+  }
+
+  const beginGuideMove = (
+    guide: ComposeDocument['canvas']['guides'][number],
+    event: ReactPointerEvent<Element>,
+  ) => {
+    event.stopPropagation()
+    if (event.button !== 0) return
+    const root = rootRef.current
+    const surface = surfaceRef.current
+    if (!root || !surface) return
+    const point = screenPoint(event, surface)
+    gestureRef.current = {
+      type: 'guide-move',
+      guideId: guide.id,
+      axis: guide.axis,
+      position: guide.position,
+      currentScreen: point,
+      modifiers: modifiers(event),
+    }
+    setGuidePreview([guide])
+    capturePointer(root, event.pointerId)
+  }
+
   const finishGesture = () => {
     flushPending()
     const gesture = gestureRef.current
     gestureRef.current = null
     releasePointer()
     setMarquee(null)
-    setGuides([])
+    setSnapGuides([])
+    setGuidePreview([])
     setPreviewTransforms({})
     if (!gesture) return
     if (gesture.type === 'marquee') {
@@ -553,6 +969,46 @@ export function Stage({
       return
     }
     if (gesture.type === 'pan') return
+    if (gesture.type === 'guide-create') {
+      const created = gesture.guides.filter((guide) => guide.axis === 'x'
+        ? gesture.currentScreen.y >= 0
+        : gesture.currentScreen.x >= 0)
+      if (created.length === 0) return
+      const commands = created.map((guide) => ({
+        id: idFactory(),
+        type: 'canvas.guide.create',
+        payload: { guide },
+      }))
+      dispatch(created.length === 1
+        ? {
+            ...commands[0]!,
+            meta: { label: messages.createGuide, source: 'stage' },
+          }
+        : {
+            id: idFactory(),
+            type: 'transaction.batch',
+            payload: { commands },
+            meta: { label: messages.createGuides, source: 'stage' },
+          })
+      return
+    }
+    if (gesture.type === 'guide-move') {
+      const shouldDelete = gesture.axis === 'x'
+        ? gesture.currentScreen.y < 0
+        : gesture.currentScreen.x < 0
+      dispatch({
+        id: idFactory(),
+        type: shouldDelete ? 'canvas.guide.delete' : 'canvas.guide.move',
+        payload: shouldDelete
+          ? { guideId: gesture.guideId }
+          : { guideId: gesture.guideId, position: gesture.position },
+        meta: {
+          label: shouldDelete ? messages.deleteGuide : messages.moveGuide,
+          source: 'stage',
+        },
+      })
+      return
+    }
     const updates = Object.entries(gesture.transforms).map(([nodeId, transform]) => ({
       nodeId,
       transform: { ...transform },
@@ -573,7 +1029,12 @@ export function Stage({
   const beginNode = (node: ComposeNode, event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
     const root = rootRef.current
-    if (!root || tool === 'pan' || spacePressed || event.button === 1) return
+    const surface = surfaceRef.current
+    if (!root || !surface) return
+    if (tool === 'pan' || temporaryPanPressed || event.button === 1) {
+      beginPan(event, root, surface)
+      return
+    }
     const nextSelection = event.shiftKey
       ? normalizedSelection.includes(node.id)
         ? normalizedSelection.filter((id) => id !== node.id)
@@ -582,7 +1043,7 @@ export function Stage({
     onSelectedIdsChange(nextSelection)
     onActiveFrameIdChange(frameForNode(document, node.id))
     if (node.locked) return
-    const point = screenPoint(event, root)
+    const point = screenPoint(event, surface)
     const ids = topLevelSelection(document, nextSelection)
     const nextBounds = selectionBounds(document, ids)
     if (!nextBounds) return
@@ -604,15 +1065,15 @@ export function Stage({
     if (!dragController) return
     return dragController.registerTarget({
       drop(componentType, clientPoint) {
-        const root = rootRef.current
-        if (!root) return false
+        const surface = surfaceRef.current
+        if (!surface) return false
         const seed = registry.createSeed(componentType)
         if (!seed.ok) return true
         const point = clientPoint
-          ? screenToWorld(screenPoint({
-              clientX: clientPoint.x,
-              clientY: clientPoint.y,
-            }, root), viewport)
+            ? screenToWorld(screenPoint({
+                clientX: clientPoint.x,
+                clientY: clientPoint.y,
+            }, surface), viewport)
           : (() => {
               const frame = activeFrameId ? document.nodes[activeFrameId] : undefined
               return frame?.kind === 'frame'
@@ -675,14 +1136,17 @@ export function Stage({
         return true
       },
       dropFrame(preset, clientPoint) {
-        const root = rootRef.current
-        if (!root) return false
-        const rect = root.getBoundingClientRect()
+        const surface = surfaceRef.current
+        if (!surface) return false
+        const surfaceRect = surface.getBoundingClientRect()
+        const rect = surfaceRect.width > 0 && surfaceRect.height > 0
+          ? surfaceRect
+          : rootRef.current?.getBoundingClientRect() ?? surfaceRect
         const point = clientPoint
-          ? screenToWorld(screenPoint({
-              clientX: clientPoint.x,
-              clientY: clientPoint.y,
-            }, root), viewport)
+            ? screenToWorld(screenPoint({
+                clientX: clientPoint.x,
+                clientY: clientPoint.y,
+            }, surface), viewport)
           : screenToWorld({ x: rect.width / 2, y: rect.height / 2 }, viewport)
         const nodeId = idFactory()
         let style: ComposeFrameNode['style']
@@ -785,12 +1249,40 @@ export function Stage({
     sw: [screenBounds.x, screenBounds.y + screenBounds.height],
     w: [screenBounds.x, screenBounds.y + screenBounds.height / 2],
   } satisfies Record<ResizeHandle, readonly [number, number]> : null
+  const horizontalTicks = createRulerTicks({
+    axis: 'x',
+    viewport,
+    length: surfaceSize.width,
+    step: document.canvas.grid.stepX,
+    offset: document.canvas.grid.offsetX,
+    primaryLineEvery: document.canvas.grid.primaryLineEvery,
+  })
+  const verticalTicks = createRulerTicks({
+    axis: 'y',
+    viewport,
+    length: surfaceSize.height,
+    step: document.canvas.grid.stepY,
+    offset: document.canvas.grid.offsetY,
+    primaryLineEvery: document.canvas.grid.primaryLineEvery,
+  })
+  const previewById = new Map(guidePreview.map((guide) => [guide.id, guide]))
+  const canvasGuides = [
+    ...document.canvas.guides.map((guide) => previewById.get(guide.id) ?? guide),
+    ...guidePreview.filter((guide) => !document.canvas.guides.some(({ id }) => id === guide.id)),
+  ]
+  const activeScrollRange = scrollRange
+    ?? expandScrollRange(null, contentBounds, visibleWorld)
+  const scrollAxes = viewportToScrollAxes(viewport, surfaceSize, activeScrollRange)
 
   const keyboardCommand = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     onKeyDown?.(event)
     if (event.defaultPrevented || event.nativeEvent.isComposing || isEditableTarget(event.target)) return
-    if (event.key === ' ') {
-      setSpacePressed(true)
+    const actionMatches = (action: StageShortcutAction) =>
+      resolvedShortcuts[action].some((binding) =>
+        isStageShortcutMatch(event.nativeEvent, binding))
+    if (actionMatches('stage.temporaryPan')) {
+      activeTemporaryPanCodeRef.current = keyboardEventCode(event.nativeEvent)
+      setTemporaryPanPressed(true)
       event.preventDefault()
       return
     }
@@ -798,10 +1290,101 @@ export function Stage({
       cancelGesture()
       return
     }
+    if (actionMatches('stage.selectTool')) {
+      onToolChange?.('select')
+      event.preventDefault()
+      return
+    }
+    if (actionMatches('stage.panTool')) {
+      onToolChange?.('pan')
+      event.preventDefault()
+      return
+    }
+    const fitViewport = (target: StageRect | null) => {
+      if (!target || target.width <= 0 || target.height <= 0) return
+      const zoom = Math.min(
+        8,
+        Math.max(
+          0.1,
+          Math.min(surfaceSize.width / target.width, surfaceSize.height / target.height) * 0.85,
+        ),
+      )
+      onViewportChange({
+        zoom,
+        x: (surfaceSize.width - target.width * zoom) / 2 - target.x * zoom,
+        y: (surfaceSize.height - target.height * zoom) / 2 - target.y * zoom,
+      })
+    }
+    if (actionMatches('stage.fitSelection')) {
+      fitViewport(bounds)
+      event.preventDefault()
+      return
+    }
+    if (actionMatches('stage.fitFrame')) {
+      const frame = activeFrameId ? document.nodes[activeFrameId] : undefined
+      fitViewport(frame?.kind === 'frame' ? getNodeWorldBounds(document, frame.id) : null)
+      event.preventDefault()
+      return
+    }
+    const viewportCenter = {
+      x: surfaceSize.width / 2,
+      y: surfaceSize.height / 2,
+    }
+    if (actionMatches('stage.zoomReset')) {
+      onViewportChange(zoomViewportAt(viewport, viewportCenter, 1))
+      event.preventDefault()
+      return
+    }
+    if (actionMatches('stage.zoomIn')) {
+      onViewportChange(zoomViewportAt(viewport, viewportCenter, viewport.zoom * 1.2))
+      event.preventDefault()
+      return
+    }
+    if (actionMatches('stage.zoomOut')) {
+      onViewportChange(zoomViewportAt(viewport, viewportCenter, viewport.zoom / 1.2))
+      event.preventDefault()
+      return
+    }
+    if (
+      actionMatches('stage.toggleGridSnap')
+      || actionMatches('stage.toggleSmartSnap')
+    ) {
+      const gridAction = actionMatches('stage.toggleGridSnap')
+      dispatch({
+        id: idFactory(),
+        type: 'canvas.configure',
+        payload: gridAction
+          ? {
+              grid: {
+                ...document.canvas.grid,
+                snapEnabled: !document.canvas.grid.snapEnabled,
+              },
+              smartSnap: document.canvas.smartSnap,
+            }
+          : {
+              grid: document.canvas.grid,
+              smartSnap: {
+                nodes: !(
+                  document.canvas.smartSnap.nodes
+                  || document.canvas.smartSnap.guides
+                ),
+                guides: !(
+                  document.canvas.smartSnap.nodes
+                  || document.canvas.smartSnap.guides
+                ),
+              },
+            },
+        meta: {
+          label: gridAction ? messages.toggleGridSnap : messages.toggleSmartSnap,
+          source: 'stage',
+        },
+      })
+      event.preventDefault()
+      return
+    }
     const editableIds = normalizedSelection.filter((id) => !document.nodes[id]?.locked)
     if (editableIds.length === 0) return
-    const commandPressed = event.ctrlKey || event.metaKey
-    if (commandPressed && event.key.toLowerCase() === 'd') {
+    if (actionMatches('edit.duplicate')) {
       const duplicate = createDuplicateCommand(
         document,
         editableIds[0]!,
@@ -815,8 +1398,8 @@ export function Stage({
       event.preventDefault()
       return
     }
-    if (commandPressed && event.key.toLowerCase() === 'g') {
-      if (event.shiftKey && editableIds.length === 1) {
+    if (actionMatches('edit.group') || actionMatches('edit.ungroup')) {
+      if (actionMatches('edit.ungroup') && editableIds.length === 1) {
         const group = document.nodes[editableIds[0]!]
         const result = dispatch(createUngroupCommand(document, editableIds[0]!, idFactory()))
         if (result.status === 'committed' && group?.kind === 'group') {
@@ -831,7 +1414,7 @@ export function Stage({
       event.preventDefault()
       return
     }
-    if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (actionMatches('edit.delete')) {
       dispatch({
         id: idFactory(),
         type: 'node.delete',
@@ -885,33 +1468,49 @@ export function Stage({
       {...props}
       aria-label={props['aria-label'] ?? 'Stage'}
       className={['compose-stage', className].filter(Boolean).join(' ')}
+      data-compose-theme={theme?.resolvedTheme}
+      id={id}
+      lang={resolvedLocale}
       ref={rootRef}
       role="application"
+      style={{
+        ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
+        ...style,
+      } as CSSProperties}
       tabIndex={0}
       onKeyDown={keyboardCommand}
       onKeyUp={(event) => {
-        if (event.key === ' ') setSpacePressed(false)
+        if (activeTemporaryPanCodeRef.current === keyboardEventCode(event.nativeEvent)) {
+          activeTemporaryPanCodeRef.current = null
+          setTemporaryPanPressed(false)
+          if (gestureRef.current?.type === 'pan') cancelGesture()
+        }
       }}
       onLostPointerCapture={(event) => {
         onLostPointerCapture?.(event)
         capturedPointerIdRef.current = null
+        activeTemporaryPanCodeRef.current = null
+        setTemporaryPanPressed(false)
         if (gestureRef.current) cancelGesture()
       }}
       onPointerCancel={(event) => {
         onPointerCancel?.(event)
+        activeTemporaryPanCodeRef.current = null
+        setTemporaryPanPressed(false)
         cancelGesture()
       }}
       onPointerDown={(event) => {
         onPointerDown?.(event)
-        if (event.defaultPrevented || event.currentTarget !== event.target) return
-        const point = screenPoint(event, event.currentTarget)
-        if (tool === 'pan' || spacePressed || event.button === 1) {
-          gestureRef.current = {
-            type: 'pan',
-            startScreen: point,
-            currentScreen: point,
-            startViewport: viewport,
-          }
+        event.currentTarget.focus({ preventScroll: true })
+        const surface = surfaceRef.current
+        if (
+          event.defaultPrevented
+          || !surface
+          || (event.target !== surface && event.target !== event.currentTarget)
+        ) return
+        const point = screenPoint(event, surface)
+        if (tool === 'pan' || temporaryPanPressed || event.button === 1) {
+          beginPan(event, event.currentTarget, surface)
         }
         else if (tool === 'select' && event.button === 0) {
           const world = screenToWorld(point, viewport)
@@ -921,22 +1520,31 @@ export function Stage({
             currentWorld: world,
           }
         }
-        if (gestureRef.current) capturePointer(event.currentTarget, event.pointerId)
+        if (gestureRef.current && gestureRef.current.type !== 'pan') {
+          capturePointer(event.currentTarget, event.pointerId)
+        }
       }}
       onPointerMove={(event) => {
         onPointerMove?.(event)
-        if (!gestureRef.current) return
-        scheduleUpdate(screenPoint(event, event.currentTarget), modifiers(event))
+        const surface = surfaceRef.current
+        if (!gestureRef.current || !surface) return
+        scheduleUpdate(screenPoint(event, surface), modifiers(event))
       }}
       onPointerUp={(event) => {
         onPointerUp?.(event)
-        if (!gestureRef.current) return
-        scheduleUpdate(screenPoint(event, event.currentTarget), modifiers(event))
+        const surface = surfaceRef.current
+        if (!gestureRef.current || !surface) return
+        scheduleUpdate(screenPoint(event, surface), modifiers(event))
         finishGesture()
       }}
       onWheel={(event: ReactWheelEvent<HTMLDivElement>) => {
         onWheel?.(event)
-        const point = screenPoint(event, event.currentTarget)
+        const surface = surfaceRef.current
+        if (
+          !surface
+          || (!surface.contains(event.target as Node) && event.target !== event.currentTarget)
+        ) return
+        const point = screenPoint(event, surface)
         if (event.ctrlKey || event.metaKey) {
           const factor = Math.exp(-event.deltaY * 0.002)
           onViewportChange(zoomViewportAt(viewport, point, viewport.zoom * factor))
@@ -952,108 +1560,247 @@ export function Stage({
       }}
     >
       <div
-        aria-hidden="true"
-        className="compose-stage__grid"
-        style={{
-          backgroundPosition: `${viewport.x}px ${viewport.y}px`,
-          backgroundSize: `${32 * viewport.zoom}px ${32 * viewport.zoom}px`,
-        }}
-      />
-      <div
-        className="compose-stage__scene"
-        data-testid="stage-scene-layer"
-        style={{
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
-        }}
+        aria-label={messages.rulerOrigin}
+        className="compose-stage__ruler-corner"
+        data-testid="stage-ruler-corner"
+        onPointerDown={(event) => beginGuideCreate(['x', 'y'], event)}
       >
-        {previewDocument.rootIds.map(renderNode)}
+        <span aria-hidden="true">＋</span>
       </div>
-      <svg
-        aria-label="Stage 编辑覆盖层"
-        className="compose-stage__overlay"
-        role="img"
+      <div
+        aria-label={messages.horizontalRuler}
+        className="compose-stage__ruler is-horizontal"
+        data-testid="stage-ruler-x"
+        onPointerDown={(event) => beginGuideCreate(['x'], event)}
       >
-        {screenBounds ? (
-          <rect
-            className="compose-stage__selection"
-            data-testid="stage-selection-bounds"
-            height={screenBounds.height}
-            width={screenBounds.width}
-            x={screenBounds.x}
-            y={screenBounds.y}
-          />
-        ) : null}
-        {editableSelection && handlePoints ? (
-          <>
-            {(Object.entries(handlePoints) as [ResizeHandle, readonly [number, number]][])
-              .map(([handle, [x, y]]) => (
-                <rect
-                  className="compose-stage__handle"
-                  data-testid={`stage-resize-${handle}`}
-                  height="8"
-                  key={handle}
-                  width="8"
-                  x={x - 4}
-                  y={y - 4}
-                  onPointerDown={(event) => {
-                    event.stopPropagation()
-                    const root = rootRef.current
-                    if (root) {
-                      beginTransform('resize', screenPoint(event, root), handle)
-                      capturePointer(root, event.pointerId)
-                    }
-                  }}
-                />
-              ))}
-            <circle
-              className="compose-stage__handle compose-stage__rotation"
-              cx={handlePoints.n[0]}
-              cy={handlePoints.n[1] - 24}
-              data-testid="stage-rotation-handle"
-              r="5"
-              onPointerDown={(event) => {
-                event.stopPropagation()
-                const root = rootRef.current
-                if (root) {
-                  beginTransform('rotate', screenPoint(event, root))
-                  capturePointer(root, event.pointerId)
-                }
-              }}
-            />
-          </>
-        ) : null}
-        {marqueeScreen ? (
-          <rect
-            className="compose-stage__marquee"
-            data-testid="stage-marquee"
-            height={marqueeScreen.height}
-            width={marqueeScreen.width}
-            x={marqueeScreen.x}
-            y={marqueeScreen.y}
-          />
-        ) : null}
-        {guides.map((guide) => guide.axis === 'x' ? (
+        <svg aria-hidden="true">
+          {horizontalTicks.map((tick) => (
+            <g
+              data-world-value={tick.value}
+              key={tick.value}
+              transform={`translate(${tick.screen} 0)`}
+            >
+              <line className={tick.major ? 'is-major' : ''} x1="0" x2="0" y1={tick.major ? 12 : 17} y2="24" />
+              {tick.label ? <text x="3" y="10">{tick.label}</text> : null}
+            </g>
+          ))}
+          {screenBounds ? (
+            <g className="compose-stage__ruler-selection" data-testid="stage-ruler-selection-x">
+              <line x1={screenBounds.x} x2={screenBounds.x + screenBounds.width} y1="21" y2="21" />
+              <line x1={screenBounds.x} x2={screenBounds.x} y1="15" y2="24" />
+              <line x1={screenBounds.x + screenBounds.width} x2={screenBounds.x + screenBounds.width} y1="15" y2="24" />
+              <text x={screenBounds.x + screenBounds.width / 2} y="19" textAnchor="middle">
+                {formatDimension(bounds!.width)}
+              </text>
+            </g>
+          ) : null}
+        </svg>
+      </div>
+      <div
+        aria-label={messages.verticalRuler}
+        className="compose-stage__ruler is-vertical"
+        data-testid="stage-ruler-y"
+        onPointerDown={(event) => beginGuideCreate(['y'], event)}
+      >
+        <svg aria-hidden="true">
+          {verticalTicks.map((tick) => (
+            <g
+              data-world-value={tick.value}
+              key={tick.value}
+              transform={`translate(0 ${tick.screen})`}
+            >
+              <line className={tick.major ? 'is-major' : ''} x1={tick.major ? 12 : 17} x2="24" y1="0" y2="0" />
+              {tick.label ? (
+                <text x="3" y="-3" transform="rotate(90)">
+                  {tick.label}
+                </text>
+              ) : null}
+            </g>
+          ))}
+          {screenBounds ? (
+            <g className="compose-stage__ruler-selection" data-testid="stage-ruler-selection-y">
+              <line x1="21" x2="21" y1={screenBounds.y} y2={screenBounds.y + screenBounds.height} />
+              <line x1="15" x2="24" y1={screenBounds.y} y2={screenBounds.y} />
+              <line x1="15" x2="24" y1={screenBounds.y + screenBounds.height} y2={screenBounds.y + screenBounds.height} />
+              <text
+                textAnchor="middle"
+                transform={`translate(18 ${screenBounds.y + screenBounds.height / 2}) rotate(-90)`}
+              >
+                {formatDimension(bounds!.height)}
+              </text>
+            </g>
+          ) : null}
+        </svg>
+      </div>
+      <div
+        className="compose-stage__surface"
+        data-testid="stage-surface"
+        id={surfaceId}
+        ref={surfaceRef}
+      >
+        <div
+          aria-hidden="true"
+          className="compose-stage__grid"
+          style={visualGridStyle(document, viewport)}
+        />
+        <svg aria-hidden="true" className="compose-stage__world-overlay">
           <line
-            className="compose-stage__guide"
-            data-testid="stage-snap-guide-x"
-            key={`x:${guide.value}`}
-            x1={worldToScreen({ x: guide.value, y: 0 }, viewport).x}
-            x2={worldToScreen({ x: guide.value, y: 0 }, viewport).x}
+            className="compose-stage__axis is-x"
+            data-testid="stage-origin-x"
+            x1="0"
+            x2="100%"
+            y1={worldToScreen({ x: 0, y: 0 }, viewport).y}
+            y2={worldToScreen({ x: 0, y: 0 }, viewport).y}
+          />
+          <line
+            className="compose-stage__axis is-y"
+            data-testid="stage-origin-y"
+            x1={worldToScreen({ x: 0, y: 0 }, viewport).x}
+            x2={worldToScreen({ x: 0, y: 0 }, viewport).x}
             y1="0"
             y2="100%"
           />
-        ) : (
-          <line
-            className="compose-stage__guide"
-            data-testid="stage-snap-guide-y"
-            key={`y:${guide.value}`}
-            x1="0"
-            x2="100%"
-            y1={worldToScreen({ x: 0, y: guide.value }, viewport).y}
-            y2={worldToScreen({ x: 0, y: guide.value }, viewport).y}
-          />
-        ))}
-      </svg>
+        </svg>
+        <div
+          className="compose-stage__scene"
+          data-testid="stage-scene-layer"
+          style={{
+            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+          }}
+        >
+          {previewDocument.rootIds.map(renderNode)}
+        </div>
+        <svg
+          aria-label={messages.editingOverlay}
+          className="compose-stage__overlay"
+          role="img"
+        >
+          {canvasGuides.map((guide) => guide.axis === 'x' ? (
+            <line
+              className="compose-stage__canvas-guide"
+              data-guide-id={guide.id}
+              data-testid={`stage-canvas-guide-${guide.id}`}
+              key={guide.id}
+              x1={worldToScreen({ x: guide.position, y: 0 }, viewport).x}
+              x2={worldToScreen({ x: guide.position, y: 0 }, viewport).x}
+              y1="0"
+              y2="100%"
+              onPointerDown={(event) => beginGuideMove(guide, event)}
+            />
+          ) : (
+            <line
+              className="compose-stage__canvas-guide"
+              data-guide-id={guide.id}
+              data-testid={`stage-canvas-guide-${guide.id}`}
+              key={guide.id}
+              x1="0"
+              x2="100%"
+              y1={worldToScreen({ x: 0, y: guide.position }, viewport).y}
+              y2={worldToScreen({ x: 0, y: guide.position }, viewport).y}
+              onPointerDown={(event) => beginGuideMove(guide, event)}
+            />
+          ))}
+          {screenBounds ? (
+            <rect
+              className="compose-stage__selection"
+              data-testid="stage-selection-bounds"
+              height={screenBounds.height}
+              width={screenBounds.width}
+              x={screenBounds.x}
+              y={screenBounds.y}
+            />
+          ) : null}
+          {editableSelection && handlePoints ? (
+            <>
+              {(Object.entries(handlePoints) as [ResizeHandle, readonly [number, number]][])
+                .map(([handle, [x, y]]) => (
+                  <rect
+                    className="compose-stage__handle"
+                    data-testid={`stage-resize-${handle}`}
+                    height="8"
+                    key={handle}
+                    width="8"
+                    x={x - 4}
+                    y={y - 4}
+                    onPointerDown={(event) => {
+                      event.stopPropagation()
+                      const root = rootRef.current
+                      const surface = surfaceRef.current
+                      if (root && surface) {
+                        beginTransform('resize', screenPoint(event, surface), handle)
+                        capturePointer(root, event.pointerId)
+                      }
+                    }}
+                  />
+                ))}
+              <circle
+                className="compose-stage__handle compose-stage__rotation"
+                cx={handlePoints.n[0]}
+                cy={handlePoints.n[1] - 24}
+                data-testid="stage-rotation-handle"
+                r="5"
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                  const root = rootRef.current
+                  const surface = surfaceRef.current
+                  if (root && surface) {
+                    beginTransform('rotate', screenPoint(event, surface))
+                    capturePointer(root, event.pointerId)
+                  }
+                }}
+              />
+            </>
+          ) : null}
+          {marqueeScreen ? (
+            <rect
+              className="compose-stage__marquee"
+              data-testid="stage-marquee"
+              height={marqueeScreen.height}
+              width={marqueeScreen.width}
+              x={marqueeScreen.x}
+              y={marqueeScreen.y}
+            />
+          ) : null}
+          {snapGuides.map((guide) => guide.axis === 'x' ? (
+            <line
+              className="compose-stage__guide"
+              data-testid="stage-snap-guide-x"
+              key={`x:${guide.value}`}
+              x1={worldToScreen({ x: guide.value, y: 0 }, viewport).x}
+              x2={worldToScreen({ x: guide.value, y: 0 }, viewport).x}
+              y1="0"
+              y2="100%"
+            />
+          ) : (
+            <line
+              className="compose-stage__guide"
+              data-testid="stage-snap-guide-y"
+              key={`y:${guide.value}`}
+              x1="0"
+              x2="100%"
+              y1={worldToScreen({ x: 0, y: guide.value }, viewport).y}
+              y2={worldToScreen({ x: 0, y: guide.value }, viewport).y}
+            />
+          ))}
+        </svg>
+      </div>
+      <StageScrollbar
+        axis="x"
+        controls={surfaceId}
+        label={messages.horizontalScrollbar}
+        model={scrollAxes.x}
+        trackLength={surfaceSize.width}
+        onValueChange={(value) => onViewportChange(scrollAxisToViewport(viewport, 'x', value))}
+      />
+      <StageScrollbar
+        axis="y"
+        controls={surfaceId}
+        label={messages.verticalScrollbar}
+        model={scrollAxes.y}
+        trackLength={surfaceSize.height}
+        onValueChange={(value) => onViewportChange(scrollAxisToViewport(viewport, 'y', value))}
+      />
+      <div aria-hidden="true" className="compose-stage__scroll-corner" />
     </div>
   )
 }
