@@ -1,4 +1,4 @@
-import type { StageLocale } from './types'
+import type { ComposeLocale } from '@compose-ui/ui-context'
 
 type FormatMessage = (
   id: string,
@@ -42,7 +42,7 @@ const translations = {
 } as const
 
 export function getStageMessages(
-  locale: StageLocale,
+  locale: ComposeLocale,
   formatMessage: FormatMessage = (_id, fallback) => fallback,
 ) {
   const messages = translations[locale]

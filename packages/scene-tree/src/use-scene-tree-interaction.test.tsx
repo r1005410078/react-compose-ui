@@ -2,15 +2,15 @@ import { act, fireEvent, renderHook } from '@testing-library/react'
 import type { KeyboardEvent, MouseEvent, RefObject } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { useSceneTreeInteraction } from './use-scene-tree-interaction'
-import type { SceneTreeCommandController, SceneTreeNode } from './index'
+import type { ComposeSceneTreeCommandController, ComposeSceneTreeNode } from './index'
 
-const nodes: readonly SceneTreeNode[] = [{
+const nodes: readonly ComposeSceneTreeNode[] = [{
   id: 'page',
   label: 'Page',
   children: [{ id: 'child', label: 'Child' }],
 }]
 
-function commands(): SceneTreeCommandController {
+function commands(): ComposeSceneTreeCommandController {
   return {
     clipboard: null,
     clearClipboard: vi.fn(),

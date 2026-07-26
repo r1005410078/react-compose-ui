@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent, RefObject } from 'react'
-import type { SceneTreeNode, SceneTreeOperation } from './index'
+import type { ComposeSceneTreeNode, ComposeSceneTreeOperation } from './index'
 import {
   crossedDragThreshold,
   resolveAutoScrollVelocity,
@@ -36,7 +36,7 @@ interface UseSceneTreeDragOptions {
   expandedIds: readonly string[]
   index: ReadonlyMap<string, IndexedSceneTreeNode>
   onExpandedChange?: (nodeIds: readonly string[]) => void
-  onOperation?: (operation: SceneTreeOperation) => void
+  onOperation?: (operation: ComposeSceneTreeOperation) => void
   onSelectionChange?: (nodeIds: readonly string[]) => void
   query: string
   rows: readonly IndexedSceneTreeNode[]
@@ -44,7 +44,7 @@ interface UseSceneTreeDragOptions {
   selectedIds: readonly string[]
 }
 
-function canMove(node: SceneTreeNode) {
+function canMove(node: ComposeSceneTreeNode) {
   return !node.locked && node.canMove !== false
 }
 

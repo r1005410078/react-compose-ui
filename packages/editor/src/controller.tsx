@@ -1,8 +1,8 @@
-import { CommandPanel } from '@compose-ui/command-panel'
-import { RegistryInspector } from '@compose-ui/component-registry'
+import { ComposeCommandPanel } from '@compose-ui/command-panel'
+import { ComposeRegistryInspector } from '@compose-ui/component-registry'
 import {
-  ComponentPalette,
-  Stage,
+  ComposeComponentPalette,
+  ComposeStage,
 } from '@compose-ui/stage'
 import {
   createDuplicateCommand,
@@ -23,11 +23,11 @@ import {
 } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import type {
-  CommandPreset,
+  ComposeCommandPreset,
 } from '@compose-ui/command-panel'
 import type {
-  ComponentRegistry,
-  NodeInspectorProps,
+  ComposeComponentRegistry,
+  ComposeNodeInspectorProps,
 } from '@compose-ui/component-registry'
 import type {
   CommandDispatchResult,
@@ -39,16 +39,16 @@ import type {
   JsonValue,
   TransactionRuntime,
 } from '@compose-ui/core'
-import type { HistoryNavigationController } from '@compose-ui/history'
+import type { ComposeHistoryNavigationController } from '@compose-ui/history'
 import type {
-  SceneTreeNode,
-  SceneTreeOperation,
-  SceneTreeProps,
+  ComposeSceneTreeNode,
+  ComposeSceneTreeOperation,
+  ComposeSceneTreeProps,
 } from '@compose-ui/scene-tree'
 import type {
-  StageFramePreset,
-  StageProps,
-  StageTool,
+  ComposeStageFramePreset,
+  ComposeStageProps,
+  ComposeStageTool,
 } from '@compose-ui/stage'
 import type {
   StageInteractionController,
@@ -83,9 +83,9 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
 
 function sceneNode(
   document: ComposeDocument,
-  registry: ComponentRegistry,
+  registry: ComposeComponentRegistry,
   node: ComposeNode,
-): SceneTreeNode {
+): ComposeSceneTreeNode {
   const common = {
     id: node.id,
     label: node.name,
@@ -116,8 +116,8 @@ function sceneNode(
 
 function deriveSceneNodes(
   document: ComposeDocument,
-  registry: ComponentRegistry,
-): readonly SceneTreeNode[] {
+  registry: ComposeComponentRegistry,
+): readonly ComposeSceneTreeNode[] {
   return document.rootIds
     .map((id) => document.nodes[id])
     .filter((node): node is ComposeNode => node !== undefined)
@@ -171,12 +171,12 @@ export interface UseComposeEditorControllerOptions {
   /** 所有编辑入口共享的正式文档与历史运行时。 */
   readonly runtime: TransactionRuntime
   /** Palette、Stage、Inspector 共用的实例级组件注册表。 */
-  readonly registry: ComponentRegistry
+  readonly registry: ComposeComponentRegistry
   /** 显示在组件 definitions 之前的根级 Frame 预设。 */
-  readonly framePresets?: readonly StageFramePreset[]
+  readonly framePresets?: readonly ComposeStageFramePreset[]
   /** Frame 单选时使用的公共容器 Inspector。 */
   readonly containerInspector?: ComponentType<
-    NodeInspectorProps<ComposeFrameNode>
+    ComposeNodeInspectorProps<ComposeFrameNode>
   >
   /** 初始选择；不会写入文档历史。 */
   readonly initialSelection?: readonly string[]
@@ -185,9 +185,9 @@ export interface UseComposeEditorControllerOptions {
   /** 初始无限 Stage 视口。 @defaultValue `{ x: 80, y: 64, zoom: 1 }` */
   readonly initialViewport?: StageViewport
   /** 初始 Stage 工具。 @defaultValue `"select"` */
-  readonly initialTool?: StageTool
-  /** CommandPanel 显示的结构化命令预设。 */
-  readonly commandPresets?: readonly CommandPreset[]
+  readonly initialTool?: ComposeStageTool
+  /** ComposeCommandPanel 显示的结构化命令预设。 */
+  readonly commandPresets?: readonly ComposeCommandPreset[]
   /** 成功事务和成功历史导航的唯一外部审计边界。 */
   readonly onTransaction?: (
     event: ComposeEditorTransactionEvent,
@@ -204,12 +204,12 @@ export interface UseComposeEditorControllerOptions {
 export interface ComposeEditorController {
   /** 当前正式文档；直接来自 runtime 快照。 */
   readonly document: ComposeDocument
-  /** controller 使用的事务运行时，同时驱动默认 HistoryPanel。 */
+  /** controller 使用的事务运行时，同时驱动默认 ComposeHistoryPanel。 */
   readonly runtime: TransactionRuntime
   /** controller 使用的组件注册表。 */
-  readonly registry: ComponentRegistry
-  /** 结构兼容 `HistoryNavigationController` 的事务历史。 */
-  readonly history: HistoryNavigationController
+  readonly registry: ComposeComponentRegistry
+  /** 结构兼容 `ComposeHistoryNavigationController` 的事务历史。 */
+  readonly history: ComposeHistoryNavigationController
   /** 当前有效且可见的选择。 */
   readonly selectedIds: readonly string[]
   /** 当前有效容器展开项。 */
@@ -217,7 +217,7 @@ export interface ComposeEditorController {
   /** 当前 Stage 视口会话状态。 */
   readonly viewport: StageViewport
   /** 当前选择或平移工具。 */
-  readonly tool: StageTool
+  readonly tool: ComposeStageTool
   /** 当前实例 Palette 与 Stage 共享的无 UI 交互控制器。 */
   readonly interactionController: StageInteractionController
   /** 替换当前选择。 */
@@ -227,20 +227,20 @@ export interface ComposeEditorController {
   /** 替换 Stage 视口。 */
   readonly setViewport: (viewport: StageViewport) => void
   /** 替换 Stage 工具。 */
-  readonly setTool: (tool: StageTool) => void
+  readonly setTool: (tool: ComposeStageTool) => void
   /** 向同一 runtime 派发结构化命令。 */
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
-  /** 默认 SceneTree 的完整受控属性。 */
-  readonly sceneTreeProps: SceneTreeProps
+  /** 默认 ComposeSceneTree 的完整受控属性。 */
+  readonly sceneTreeProps: ComposeSceneTreeProps
   /** 默认 Stage 的完整受控属性。 */
-  readonly stageProps: StageProps
+  readonly stageProps: ComposeStageProps
   /** 默认 Component Library 内容。 */
   readonly componentLibraryPanel: ReactNode
   /** 默认中央 Stage 内容。 */
   readonly stage: ReactNode
   /** 默认 definition Inspector 内容。 */
   readonly inspectorPanel: ReactNode
-  /** 默认 CommandPanel 内容。 */
+  /** 默认 ComposeCommandPanel 内容。 */
   readonly commandPanel: ReactNode
   /** 默认 Stage 工具栏内容。 */
   readonly stageToolbar: ReactNode
@@ -296,7 +296,7 @@ export function useComposeEditorController({
   const [expandedIds, setExpandedIdsState] = useState<readonly string[]>(() =>
     validExpanded(document, initialExpandedIds))
   const [viewport, setViewport] = useState<StageViewport>(initialViewport)
-  const [tool, setTool] = useState<StageTool>(initialTool)
+  const [tool, setTool] = useState<ComposeStageTool>(initialTool)
   const [surfaceSize, setSurfaceSize] = useState<{
     readonly width: number
     readonly height: number
@@ -376,7 +376,7 @@ export function useComposeEditorController({
   )
   const nextId = useCallback(() => idFactoryRef.current(), [])
 
-  const onSceneOperation = useCallback((operation: SceneTreeOperation) => {
+  const onSceneOperation = useCallback((operation: ComposeSceneTreeOperation) => {
     let command: EditorCommand | null = null
     let nextSelection: readonly string[] | null = null
     if (operation.type === 'create') {
@@ -522,7 +522,7 @@ export function useComposeEditorController({
     if (result.status === 'committed' && nextSelection) setSelectedIds(nextSelection)
   }, [document, nextId, runtime, setSelectedIds])
 
-  const sceneTreeProps = useMemo<SceneTreeProps>(() => ({
+  const sceneTreeProps = useMemo<ComposeSceneTreeProps>(() => ({
     nodes: deriveSceneNodes(document, registry),
     selectedIds,
     expandedIds,
@@ -539,7 +539,7 @@ export function useComposeEditorController({
     onSceneOperation,
   ])
 
-  const stageProps = useMemo<StageProps>(() => ({
+  const stageProps = useMemo<ComposeStageProps>(() => ({
     document,
     registry,
     dispatch,
@@ -657,13 +657,13 @@ export function useComposeEditorController({
     sceneTreeProps,
     stageProps,
     componentLibraryPanel: (
-      <ComponentPalette
+      <ComposeComponentPalette
         interactionController={interactionController}
         framePresets={framePresets}
         registry={registry}
       />
     ),
-    stage: <Stage {...stageProps} />,
+    stage: <ComposeStage {...stageProps} />,
     inspectorPanel: resolvedInspectionTarget === 'output' ? (
       <CanvasInspector
         key={[
@@ -676,7 +676,7 @@ export function useComposeEditorController({
         idFactory={nextId}
       />
     ) : selectedNode?.kind === 'component' ? (
-      <RegistryInspector
+      <ComposeRegistryInspector
         dispatch={dispatch}
         node={selectedNode}
         registry={registry}
@@ -687,7 +687,7 @@ export function useComposeEditorController({
       <DefaultEmptyInspector />
     ),
     commandPanel: (
-      <CommandPanel presets={commandPresets} runtime={runtime} />
+      <ComposeCommandPanel presets={commandPresets} runtime={runtime} />
     ),
     stageToolbar: (
       <DefaultStageToolbar

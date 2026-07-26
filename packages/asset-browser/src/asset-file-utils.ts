@@ -1,4 +1,4 @@
-import type { ComposeAssetEntry } from './asset-types'
+import type { ComposeAssetEntry } from '@compose-ui/assets'
 
 const imageExtensions = new Set(['svg', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'bmp', 'ico'])
 const canvasImageMediaTypes = new Set([

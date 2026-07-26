@@ -2,14 +2,14 @@ import { useLayoutEffect } from 'react'
 import type { KeyboardEvent, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { clampPortalPosition } from './drag-model'
-import type { SceneTreeCommand, SceneTreeCommandController } from './index'
+import type { ComposeSceneTreeCommand, ComposeSceneTreeCommandController } from './index'
 import { resolveMenuFocusIndex } from './interaction-model'
 import type { ContextMenuState } from './use-scene-tree-interaction'
 import { getSceneTreeMessages } from './scene-tree-i18n'
 import type { SceneTreeMessages } from './scene-tree-i18n'
 
 interface MenuEntry {
-  command: SceneTreeCommand
+  command: ComposeSceneTreeCommand
   danger?: boolean
   separatorBefore?: boolean
 }
@@ -30,7 +30,7 @@ const ROOT_MENU_ENTRIES: readonly MenuEntry[] = [
 ]
 
 interface SceneTreeContextMenuProps extends ContextMenuState {
-  commands: SceneTreeCommandController
+  commands: ComposeSceneTreeCommandController
   menuRef: RefObject<HTMLDivElement | null>
   onClose: () => void
   messages?: SceneTreeMessages

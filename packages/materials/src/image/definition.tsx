@@ -1,7 +1,7 @@
-import type { ComponentDefinition } from '@compose-ui/component-registry'
-import { cloneProps, cloneStyle } from '../shared/default-values'
-import { measureRasterAsset } from '../shared/assets'
-import type { BasicMaterialComponentOptions } from '../types'
+import type { ComposeComponentDefinition } from '@compose-ui/component-registry'
+import { cloneProps, cloneStyle } from '../material-inspector-kit/default-values'
+import { measureRasterAsset } from '../material-inspector-kit/assets'
+import type { ComposeBasicMaterialComponentOptions } from '../types'
 import {
   DEFAULT_IMAGE_PROPS,
   DEFAULT_IMAGE_SIZE,
@@ -23,9 +23,9 @@ const rasterTypes = new Set([
 
 /** 创建 Image definition。 @internal */
 export function createImageDefinition(
-  options: BasicMaterialComponentOptions = {},
+  options: ComposeBasicMaterialComponentOptions = {},
   idFactory: () => string = () => crypto.randomUUID(),
-): ComponentDefinition {
+): ComposeComponentDefinition {
   const defaultSize = options.defaultSize ?? DEFAULT_IMAGE_SIZE
   const defaultProps = cloneProps(DEFAULT_IMAGE_PROPS, options.defaultProps)
   const defaultStyle = cloneStyle(DEFAULT_IMAGE_STYLE, options.defaultStyle)
@@ -60,4 +60,4 @@ export function createImageDefinition(
 }
 
 /** 默认 Image definition。 @public */
-export const DEFAULT_IMAGE_DEFINITION = createImageDefinition()
+export const DEFAULT_COMPOSE_IMAGE_DEFINITION = createImageDefinition()

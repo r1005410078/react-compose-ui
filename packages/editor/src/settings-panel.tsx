@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import type { ComposeLocale, ComposeTheme } from '@compose-ui/ui-context'
 import {
   COMPOSE_EDITOR_SHORTCUT_ACTIONS,
   createDefaultComposeEditorPreferences,
@@ -9,10 +10,8 @@ import {
 } from './preferences'
 import type {
   ComposeEditorKeybinding,
-  ComposeEditorLocale,
   ComposeEditorPreferences,
   ComposeEditorShortcutAction,
-  ComposeEditorTheme,
 } from './preferences'
 import {
   getEditorMessages,
@@ -110,10 +109,10 @@ export function SettingsDialog({
     searchRef.current?.focus()
   }, [])
 
-  const setTheme = (theme: ComposeEditorTheme) => {
+  const setTheme = (theme: ComposeTheme) => {
     onChange({ ...preferences, theme })
   }
-  const setLocale = (nextLocale: ComposeEditorLocale) => {
+  const setLocale = (nextLocale: ComposeLocale) => {
     onChange({ ...preferences, locale: nextLocale })
   }
   const replaceShortcut = (

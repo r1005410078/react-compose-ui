@@ -1,12 +1,12 @@
 import { useCallback, useId, useMemo, useState } from 'react'
 import type {
-  HistoryCommitOptions,
-  HistoryController,
-  HistoryEntry,
-  UseHistoryOptions,
+  ComposeHistoryCommitOptions,
+  ComposeHistoryController,
+  ComposeHistoryEntry,
+  ComposeUseHistoryOptions,
 } from './types'
 
-interface HistoryRecord<T> extends HistoryEntry {
+interface HistoryRecord<T> extends ComposeHistoryEntry {
   value: T
   mergeKey?: string
   committedAt: number
@@ -80,10 +80,10 @@ function pruneRecords<T>(
  * @returns 当前值、历史元数据及提交和导航命令。
  * @public
  */
-export function useHistory<T>(
+export function useComposeHistory<T>(
   initialValue: T,
-  options: UseHistoryOptions<T> = {},
-): HistoryController<T> {
+  options: ComposeUseHistoryOptions<T> = {},
+): ComposeHistoryController<T> {
   const reactId = useId().replace(/:/gu, '')
   const idPrefix = `history-${reactId || 'instance'}`
   const limit = normalizedLimit(options.limit)
@@ -98,7 +98,7 @@ export function useHistory<T>(
 
   const commit = useCallback((
     candidate: T | ((current: T) => T),
-    commitOptions: HistoryCommitOptions,
+    commitOptions: ComposeHistoryCommitOptions,
   ) => {
     setState((current) => {
       const currentRecord = current.records[current.cursor]
@@ -179,7 +179,7 @@ export function useHistory<T>(
     }))
   }, [idPrefix, initialLabel])
 
-  const entries = useMemo<readonly HistoryEntry[]>(() => (
+  const entries = useMemo<readonly ComposeHistoryEntry[]>(() => (
     state.records.map(({ id, label }) => ({ id, label }))
   ), [state.records])
   const activeRecord = state.records[state.cursor]

@@ -19,7 +19,7 @@ import type {
   PropertyPanelRendererBindingTargetDescriptor,
   PropertyPanelRendererBindingTargetState,
   PropertyPanelResolvedBindingTarget,
-} from './index'
+} from './property-panel/compose-property-panel'
 import {
   canBindPropertyVariable,
   createBindingAddressKey,

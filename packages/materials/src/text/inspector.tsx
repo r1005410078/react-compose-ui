@@ -1,11 +1,11 @@
-import type { ComponentInspectorProps } from '@compose-ui/component-registry'
+import type { ComposeComponentInspectorProps } from '@compose-ui/component-registry'
 import type { JsonObject, NodeStyle } from '@compose-ui/core'
-import { PropertyPanel } from '@compose-ui/property-panel'
-import { dispatchInspectorUpdate } from '../shared/inspector/dispatch-update'
-import type { InspectorIdFactory } from '../shared/inspector/dispatch-update'
-import type { TextValue } from '../shared/inspector/schemas'
-import { createContainerValue } from '../shared/inspector/values'
-import { useMaterialInspectorI18n } from '../shared/inspector/use-material-inspector-i18n'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
+import { dispatchInspectorUpdate } from '../material-inspector-kit/inspector/dispatch-update'
+import type { InspectorIdFactory } from '../material-inspector-kit/inspector/dispatch-update'
+import type { TextValue } from '../material-inspector-kit/inspector/schemas'
+import { createContainerValue } from '../material-inspector-kit/inspector/values'
+import { useMaterialInspectorI18n } from '../material-inspector-kit/inspector/use-material-inspector-i18n'
 
 interface TextInspectorDefaults {
   readonly name: string
@@ -22,7 +22,7 @@ export function createTextInspector(
   defaults: TextInspectorDefaults,
   idFactory: InspectorIdFactory,
 ) {
-  return function TextInspector({ node, dispatch }: ComponentInspectorProps) {
+  return function TextInspector({ node, dispatch }: ComposeComponentInspectorProps) {
     const i18n = useMaterialInspectorI18n()
     const props = {
       text: typeof node.props.text === 'string'
@@ -48,7 +48,7 @@ export function createTextInspector(
       fontSize: Number(defaults.props.fontSize),
     }
     return (
-      <PropertyPanel
+      <ComposePropertyPanel
         aria-label={i18n.propertiesLabel(node.name)}
         defaultValue={defaultValue}
         readOnly={node.locked}

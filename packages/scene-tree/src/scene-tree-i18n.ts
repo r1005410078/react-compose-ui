@@ -1,8 +1,6 @@
-import type { SceneTreeCommand } from './index'
+import type { ComposeSceneTreeCommand } from './index'
 
 import type { ComposeLocale } from '@compose-ui/ui-context'
-
-export type SceneTreeLocale = ComposeLocale
 
 type FormatMessage = (
   id: string,
@@ -39,7 +37,7 @@ const translations = {
       'paste-root': '粘贴到根级',
       'paste-suggested': '粘贴',
       delete: '删除',
-    } satisfies Record<SceneTreeCommand, string>,
+    } satisfies Record<ComposeSceneTreeCommand, string>,
   },
   'en-US': {
     tree: 'Scene tree',
@@ -69,14 +67,14 @@ const translations = {
       'paste-root': 'Paste at root',
       'paste-suggested': 'Paste',
       delete: 'Delete',
-    } satisfies Record<SceneTreeCommand, string>,
+    } satisfies Record<ComposeSceneTreeCommand, string>,
   },
 } as const
 
 export type SceneTreeMessages = ReturnType<typeof getSceneTreeMessages>
 
 export function getSceneTreeMessages(
-  locale: SceneTreeLocale,
+  locale: ComposeLocale,
   formatMessage: FormatMessage = (_id, fallback) => fallback,
 ) {
   const messages = translations[locale]
@@ -114,6 +112,6 @@ export function getSceneTreeMessages(
         command,
         formatMessage(`sceneTree.command.${command}`, fallback),
       ]),
-    ) as Record<SceneTreeCommand, string>,
+    ) as Record<ComposeSceneTreeCommand, string>,
   }
 }

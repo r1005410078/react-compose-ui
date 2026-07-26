@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { ComposeAssetEntry, ComposeAssetProvider } from './asset-types'
-import { normalizeComposeAssetError } from './asset-operations'
+import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
+import { normalizeComposeAssetError } from '@compose-ui/assets'
 
 export interface LoadedAsset {
   readonly blob: Blob

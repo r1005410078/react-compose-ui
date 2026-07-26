@@ -1,7 +1,7 @@
 import type {
-  ComponentDefinition,
-  ComponentInspectorProps,
-  ComponentRendererProps,
+  ComposeComponentDefinition,
+  ComposeComponentInspectorProps,
+  ComposeComponentRendererProps,
 } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
@@ -20,13 +20,13 @@ import {
 } from '@compose-ui/editor'
 import type { ComposeEditorTransactionEvent } from '@compose-ui/editor'
 import { createComposeAssetResolver } from '@compose-ui/assets'
-import { createBasicMaterials } from '@compose-ui/materials'
+import { createComposeBasicMaterials } from '@compose-ui/materials'
 import {
-  OperationLogPanel,
-  useOperationLog,
+  ComposeOperationLogPanel,
+  useComposeOperationLog,
 } from '@compose-ui/operation-log'
-import type { OperationLogCategory, OperationLogRecordInput } from '@compose-ui/operation-log'
-import { PropertyPanel } from '@compose-ui/property-panel'
+import type { ComposeOperationLogCategory, ComposeOperationLogRecordInput } from '@compose-ui/operation-log'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import { ComposePreview } from '@compose-ui/preview'
 import { BarChart } from 'echarts/charts'
 import {
@@ -69,7 +69,7 @@ const chartSchema = v.object({
 function setAllProps(
   node: ComposeComponentNode,
   value: JsonObject,
-  dispatch: ComponentInspectorProps['dispatch'],
+  dispatch: ComposeComponentInspectorProps['dispatch'],
   mergeKey: string,
 ) {
   const changed = [...new Set([...Object.keys(node.props), ...Object.keys(value)])]
@@ -95,7 +95,7 @@ function formatLogValue(value: JsonValue | undefined) {
   return serialized.length > 28 ? `${serialized.slice(0, 27)}…` : serialized
 }
 
-function ChartRenderer({ props }: ComponentRendererProps) {
+function ChartRenderer({ props }: ComposeComponentRendererProps) {
   const root = useRef<HTMLDivElement>(null)
   const title = typeof props.title === 'string' ? props.title : '季度数据'
   const values = useMemo(() => Array.isArray(props.values)
@@ -130,7 +130,7 @@ function ChartRenderer({ props }: ComponentRendererProps) {
   return <div aria-label={title} className="stage-demo__chart" ref={root} role="img" />
 }
 
-function ChartInspector({ node, dispatch }: ComponentInspectorProps) {
+function ChartInspector({ node, dispatch }: ComposeComponentInspectorProps) {
   const values = Array.isArray(node.props.values)
     ? node.props.values.filter((item): item is number => typeof item === 'number')
     : [18, 28, 22, 36]
@@ -139,7 +139,7 @@ function ChartInspector({ node, dispatch }: ComponentInspectorProps) {
     values,
   }
   return (
-    <PropertyPanel
+    <ComposePropertyPanel
       aria-label="ECharts 图表属性"
       defaultValue={{ title: '季度数据', values: [18, 28, 22, 36] }}
       schema={chartSchema}
@@ -161,9 +161,9 @@ const echartsDefinition = {
   }),
   renderer: ChartRenderer,
   inspector: ChartInspector,
-} satisfies ComponentDefinition
+} satisfies ComposeComponentDefinition
 
-const basicMaterials = createBasicMaterials({
+const basicMaterials = createComposeBasicMaterials({
   extensions: [echartsDefinition],
 })
 const { registry } = basicMaterials
@@ -182,7 +182,7 @@ function snapshotTargets(document: ComposeDocument, targetIds: readonly string[]
   return Object.fromEntries(targetIds.map((id) => [id, document.nodes[id] ?? null]))
 }
 
-function eventCategory(event: ComposeEditorTransactionEvent): OperationLogCategory {
+function eventCategory(event: ComposeEditorTransactionEvent): ComposeOperationLogCategory {
   const commandType = event.transaction?.commandType ?? ''
   if (
     commandType.startsWith('node.props.')
@@ -207,7 +207,7 @@ function targetPath(event: ComposeEditorTransactionEvent, targetId: string) {
 }
 
 export function StageDemoWorkspace() {
-  const operationLog = useOperationLog()
+  const operationLog = useComposeOperationLog()
   const [runtime] = useState(() => createTransactionRuntime({
     document: emptyDocument,
     initialLabel: 'Initial state',
@@ -222,7 +222,7 @@ export function StageDemoWorkspace() {
     const afterDocument = runtime.document
     previousDocument.current = afterDocument
     const transaction = event.transaction
-    const input: OperationLogRecordInput = {
+    const input: ComposeOperationLogRecordInput = {
       action: event.direction === 'commit'
         ? transaction?.commandType ?? 'document.commit'
         : `document.${event.direction}`,
@@ -275,27 +275,31 @@ export function StageDemoWorkspace() {
     <>
       <ComposeEditor
         className="editor-workspace"
-        assetResolver={assetResolver}
-        assetBrowserProps={{ provider: assetProvider }}
+        assets={{
+          browser: { provider: assetProvider },
+          resolver: assetResolver,
+        }}
         controller={controller}
-        stageToolbar={(
-          <>
-            {controller.stageToolbar}
-            <button
-              className="stage-demo__preview-button"
-              aria-label="打开预览"
-              title="打开预览"
-              type="button"
-              onClick={() => {
-                setPreviewMode('document')
-                setPreviewOpen(true)
-              }}
-            >
-              <PreviewIcon />
-            </button>
-          </>
-        )}
-        transactionLogPanel={<OperationLogPanel />}
+        slots={{
+          stageToolbar: (
+            <>
+              {controller.stageToolbar}
+              <button
+                className="stage-demo__preview-button"
+                aria-label="打开预览"
+                title="打开预览"
+                type="button"
+                onClick={() => {
+                  setPreviewMode('document')
+                  setPreviewOpen(true)
+                }}
+              >
+                <PreviewIcon />
+              </button>
+            </>
+          ),
+          transactionLog: <ComposeOperationLogPanel />,
+        }}
       />
       {previewOpen ? (
         <div aria-label="文档预览对话框" className="stage-demo__preview-backdrop" role="dialog">

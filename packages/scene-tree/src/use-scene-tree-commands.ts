@@ -4,10 +4,10 @@ import type {
   IndexedSceneTreeNode,
 } from './tree-model'
 import type {
-  SceneTreeClipboard,
-  SceneTreeCommand,
-  SceneTreeCommandController,
-  UseSceneTreeCommandsOptions,
+  ComposeSceneTreeClipboard,
+  ComposeSceneTreeCommand,
+  ComposeSceneTreeCommandController,
+  ComposeUseSceneTreeCommandsOptions,
 } from './index'
 
 interface InsertionPoint {
@@ -41,7 +41,7 @@ function validParent(index: ReadonlyMap<string, IndexedSceneTreeNode>, parentId:
 
 /** 将显式或建议命令解析为宿主树中的父级与原始插入索引。 */
 function insertionFor(
-  command: SceneTreeCommand,
+  command: ComposeSceneTreeCommand,
   targetId: string | null,
   index: ReadonlyMap<string, IndexedSceneTreeNode>,
   rootSize: number,
@@ -115,16 +115,16 @@ function isInvalidCutTarget(
  * `duplicate`；剪切直到成功粘贴才发出 `move` 并清空剪贴板。它不会访问浏览器系统剪贴板。
  *
  * @param options - 当前树、选择状态及操作回调。
- * @returns 可供 `SceneTree` 和外部工具栏共享的稳定命令控制器。
+ * @returns 可供 `ComposeSceneTree` 和外部工具栏共享的稳定命令控制器。
  *
  * @public
  */
-export function useSceneTreeCommands({
+export function useComposeSceneTreeCommands({
   nodes,
   selectedIds,
   onOperation,
-}: UseSceneTreeCommandsOptions): SceneTreeCommandController {
-  const [clipboard, setClipboard] = useState<SceneTreeClipboard | null>(null)
+}: ComposeUseSceneTreeCommandsOptions): ComposeSceneTreeCommandController {
+  const [clipboard, setClipboard] = useState<ComposeSceneTreeClipboard | null>(null)
   const index = useMemo(() => buildTreeIndex(nodes), [nodes])
   const selectedTarget = selectedIds[selectedIds.length - 1] ?? null
 
@@ -146,7 +146,7 @@ export function useSceneTreeCommands({
   }, [index, selectedIds])
 
   const resolve = useCallback((
-    command: SceneTreeCommand,
+    command: ComposeSceneTreeCommand,
     targetId: string | null | undefined,
   ): { insertion: InsertionPoint | null; sourceIds: readonly string[] } => {
     const target = targetId === undefined ? selectedTarget : targetId
@@ -160,7 +160,7 @@ export function useSceneTreeCommands({
     return { insertion, sourceIds }
   }, [clipboard, index, nodes.length, selectedTarget])
 
-  const isEnabled = useCallback((command: SceneTreeCommand, targetId?: string | null) => {
+  const isEnabled = useCallback((command: ComposeSceneTreeCommand, targetId?: string | null) => {
     if (command === 'copy') return normalizedSelection('copy', targetId).length > 0
     if (command === 'cut') return normalizedSelection('cut', targetId).length > 0
     if (command === 'delete') return normalizedSelection('delete', targetId).length > 0
@@ -172,7 +172,7 @@ export function useSceneTreeCommands({
     return clipboard.kind === 'copy' || !isInvalidCutTarget(index, sourceIds, insertion)
   }, [clipboard, index, nodes.length, normalizedSelection, resolve, selectedTarget])
 
-  const execute = useCallback((command: SceneTreeCommand, targetId?: string | null) => {
+  const execute = useCallback((command: ComposeSceneTreeCommand, targetId?: string | null) => {
     if (command === 'copy' || command === 'cut') {
       const nodeIds = normalizedSelection(command, targetId)
       if (nodeIds.length > 0) setClipboard({ kind: command, nodeIds })

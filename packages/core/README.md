@@ -60,7 +60,7 @@ const dispatched = runtime.dispatch({
 `parentId: null` 表示不写入 `nodes`、不可变换的隐式 Canvas；`rootIds` 可同时包含 Frame 和
 Component，Frame 可递归包含 Frame/Component，Component 始终是叶节点。默认 output 为
 固定世界原点的 `1280×720` 透明区域；Stage 可以把其边界作为独立检查目标，但它不会进入
-`selectedIds`、SceneTree 或节点命令。
+`selectedIds`、ComposeSceneTree 或节点命令。
 
 `ComposeNodeBase.style` 是兼容旧文档的可选部分对象。`resolveNodeStyle(node)` 按节点 kind 补齐
 背景、边框、圆角、透明度和单层结构化 shadow；`node.style.set/reset` 支持路径更新、锁定拒绝、

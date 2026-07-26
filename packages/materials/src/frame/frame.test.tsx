@@ -1,15 +1,15 @@
-import type { ComponentInspectorProps } from '@compose-ui/component-registry'
+import type { ComposeComponentInspectorProps } from '@compose-ui/component-registry'
 import type { ComposeFrameNode } from '@compose-ui/core'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createBasicMaterials } from '../index'
+import { createComposeBasicMaterials } from '../index'
 
 afterEach(cleanup)
 
 describe('@compose-ui/materials Frame', () => {
   // OpenSpec: basic-materials / 独立基础物料包 / 创建统一 Frame 物料
   it('提供稳定的默认 preset 和独立 style 副本', () => {
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     const preset = materials.framePresets[0]
     expect(preset).toMatchObject({
       id: 'frame',
@@ -31,8 +31,8 @@ describe('@compose-ui/materials Frame', () => {
 
   // OpenSpec: basic-materials / 完整基础物料与 Inspector / 编辑 Frame 裁剪和旋转
   it('OpenSpec: basic-materials / Container Inspector / Frame 使用公共原子编辑路径', () => {
-    const materials = createBasicMaterials({ idFactory: () => 'container-command' })
-    const dispatch = vi.fn<ComponentInspectorProps['dispatch']>()
+    const materials = createComposeBasicMaterials({ idFactory: () => 'container-command' })
+    const dispatch = vi.fn<ComposeComponentInspectorProps['dispatch']>()
     const frame: ComposeFrameNode = {
       id: 'frame-1',
       kind: 'frame',

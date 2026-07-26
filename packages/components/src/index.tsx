@@ -8,13 +8,18 @@
  */
 import './tree/styles.css'
 
-export { Tree } from './tree'
+export { ComposeTree } from './tree'
 // 公共入口同时导出组件与纯 Tree 模型工具，因此只针对工具导出豁免 Fast Refresh。
 // eslint-disable-next-line react-refresh/only-export-components
-export { createTreeIndex, createTreeMove, flattenTree, type IndexedTreeItem } from './tree'
+export {
+  createComposeTreeIndex,
+  createComposeTreeMove,
+  flattenComposeTree,
+  type ComposeIndexedTreeItem,
+} from './tree'
 export type {
-  TreeItemAdapter,
-  TreeItemRenderContext,
-  TreeMoveOperation,
-  TreeProps,
+  ComposeTreeItemAdapter,
+  ComposeTreeItemRenderContext,
+  ComposeTreeMoveOperation,
+  ComposeTreeProps,
 } from './tree'

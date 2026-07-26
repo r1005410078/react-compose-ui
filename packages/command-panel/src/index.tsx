@@ -6,13 +6,12 @@
 
 import './styles.css'
 
-export { CommandPanel } from './command-panel'
+export { ComposeCommandPanel } from './command-panel'
 export type {
-  CommandPanelProps,
-  CommandPanelLocale,
-  CommandPreset,
-  CommandPresetField,
-  CommandPresetOption,
+  ComposeCommandPanelProps,
+  ComposeCommandPreset,
+  ComposeCommandPresetField,
+  ComposeCommandPresetOption,
 } from './types'
 
 /** `@compose-ui/command-panel` 的稳定包标识。 @public */

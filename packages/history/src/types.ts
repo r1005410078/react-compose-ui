@@ -1,15 +1,10 @@
 import type { HTMLAttributes } from 'react'
-import type { ComposeLocale } from '@compose-ui/ui-context'
-
-/** HistoryPanel 内建界面语言。 @public */
-export type HistoryLocale = ComposeLocale
-
 /**
  * 撤销或重做动作使用的单次键位。
  *
  * @public
  */
-export interface HistoryKeybinding {
+export interface ComposeHistoryKeybinding {
   /** `KeyboardEvent.code` 物理键位。 */
   readonly code: string
   /** macOS 使用 Command，其他平台使用 Control。 */
@@ -27,20 +22,20 @@ export interface HistoryKeybinding {
  *
  * @public
  */
-export interface HistoryShortcuts {
-  readonly undo?: readonly HistoryKeybinding[]
-  readonly redo?: readonly HistoryKeybinding[]
+export interface ComposeHistoryShortcuts {
+  readonly undo?: readonly ComposeHistoryKeybinding[]
+  readonly redo?: readonly ComposeHistoryKeybinding[]
 }
 
 /** 历史面板可展示的一条稳定记录。 */
-export interface HistoryEntry {
+export interface ComposeHistoryEntry {
   /** 当前时间线内唯一且稳定的记录标识。 */
   id: string
   /** 描述一次用户可理解编辑动作的显示名称。 */
   label: string
 }
 /** 提交不可变快照时附带的动作语义。 */
-export interface HistoryCommitOptions {
+export interface ComposeHistoryCommitOptions {
   /** 显示在历史面板中的动作名称。 */
   label: string
   /**
@@ -52,8 +47,8 @@ export interface HistoryCommitOptions {
   mergeKey?: string
 }
 
-/** `useHistory` 的会话级行为选项。 */
-export interface UseHistoryOptions<T> {
+/** `useComposeHistory` 的会话级行为选项。 */
+export interface ComposeUseHistoryOptions<T> {
   /** 最多保留的可撤销动作数，基线不计入该数量。 @defaultValue 100 */
   limit?: number
   /** 相同 `mergeKey` 连续提交的合并窗口。 @defaultValue 750 */
@@ -64,10 +59,10 @@ export interface UseHistoryOptions<T> {
   isEqual?: (left: T, right: T) => boolean
 }
 
-/** HistoryPanel 和编辑器集成所需的只读时间线与导航命令。 */
-export interface HistoryNavigationController {
+/** ComposeHistoryPanel 和编辑器集成所需的只读时间线与导航命令。 */
+export interface ComposeHistoryNavigationController {
   /** 从最旧基线到最新动作排列的完整可达记录。 */
-  readonly entries: readonly HistoryEntry[]
+  readonly entries: readonly ComposeHistoryEntry[]
   /** 当前快照对应的记录 ID；没有可用记录时为 `null`。 */
   readonly activeEntryId: string | null
   /** 当前是否可以向前撤销一个动作。 */
@@ -82,8 +77,8 @@ export interface HistoryNavigationController {
   navigate(entryId: string): void
 }
 
-/** `useHistory` 返回的完整不可变快照控制器。 */
-export interface HistoryController<T> extends HistoryNavigationController {
+/** `useComposeHistory` 返回的完整不可变快照控制器。 */
+export interface ComposeHistoryController<T> extends ComposeHistoryNavigationController {
   /** 当前活动记录对应的不可变值。 */
   readonly value: T
   /**
@@ -92,7 +87,7 @@ export interface HistoryController<T> extends HistoryNavigationController {
    * @param value - 新不可变值，或根据当前值计算新值的无副作用函数。
    * @param options - 动作名称和可选连续输入合并标识。
    */
-  commit(value: T | ((current: T) => T), options: HistoryCommitOptions): void
+  commit(value: T | ((current: T) => T), options: ComposeHistoryCommitOptions): void
   /**
    * 丢弃现有时间线并建立新基线。
    *
@@ -102,10 +97,8 @@ export interface HistoryController<T> extends HistoryNavigationController {
   reset(value: T, label?: string): void
 }
 
-/** 独立受控 `HistoryPanel` 的属性。 */
-export interface HistoryPanelProps extends HTMLAttributes<HTMLDivElement> {
+/** 独立受控 `ComposeHistoryPanel` 的属性。 */
+export interface ComposeHistoryPanelProps extends HTMLAttributes<HTMLDivElement> {
   /** 驱动列表、当前状态和记录跳转的受控历史协议。 */
-  controller: HistoryNavigationController
-  /** 内建面板文案语言。 @defaultValue `"zh-CN"` */
-  locale?: HistoryLocale
+  controller: ComposeHistoryNavigationController
 }

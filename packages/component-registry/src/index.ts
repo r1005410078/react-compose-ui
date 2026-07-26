@@ -4,22 +4,25 @@
  * @packageDocumentation
  */
 
-export { createComponentRegistry } from './registry'
-export { RegistryComponent, RegistryInspector } from './renderers'
+export { createComposeComponentRegistry } from './registry'
 export {
-  ComponentRegistryError,
-  type ComponentDefaultSize,
-  type ComponentAssetDropDefinition,
-  type ComponentAssetDropInput,
-  type ComponentDefinition,
-  type ComponentInspectorProps,
-  type NodeInspectorProps,
-  type ComponentRegistry,
-  type ComponentRendererProps,
-  type ComponentSeed,
-  type ComponentSeedError,
-  type ComponentSeedResult,
-} from './types'
+  ComposeRegistryComponent,
+  ComposeRegistryInspector,
+} from './registry-renderers'
+export {
+  ComposeComponentRegistryError,
+  type ComposeComponentDefaultSize,
+  type ComposeComponentAssetDropDefinition,
+  type ComposeComponentAssetDropInput,
+  type ComposeComponentDefinition,
+  type ComposeComponentInspectorProps,
+  type ComposeNodeInspectorProps,
+  type ComposeComponentRegistry,
+  type ComposeComponentRendererProps,
+  type ComposeComponentSeed,
+  type ComposeComponentSeedError,
+  type ComposeComponentSeedResult,
+} from './registry'
 
 /** `@compose-ui/component-registry` 的稳定包标识。 @public */
 export const COMPOSE_UI_COMPONENT_REGISTRY_PACKAGE = '@compose-ui/component-registry' as const

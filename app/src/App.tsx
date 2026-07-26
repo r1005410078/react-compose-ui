@@ -1,4 +1,4 @@
-import { OperationLogProvider } from '@compose-ui/operation-log'
+import { ComposeOperationLogProvider } from '@compose-ui/operation-log'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
 import '@compose-ui/operation-log/styles.css'
 import '@compose-ui/property-panel/styles.css'
@@ -17,9 +17,9 @@ function App() {
     <ComposeUIProvider
       messages={demonstrateMessageOverrides ? hostMessageOverrides : undefined}
     >
-      <OperationLogProvider scopeId="compose-ui-full-example">
+      <ComposeOperationLogProvider scopeId="compose-ui-full-example">
         <StageDemoWorkspace />
-      </OperationLogProvider>
+      </ComposeOperationLogProvider>
     </ComposeUIProvider>
   )
 }

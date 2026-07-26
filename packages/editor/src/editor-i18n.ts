@@ -1,7 +1,5 @@
-import type {
-  ComposeEditorLocale,
-  ComposeEditorShortcutAction,
-} from './preferences'
+import type { ComposeLocale } from '@compose-ui/ui-context'
+import type { ComposeEditorShortcutAction } from './preferences'
 
 type FormatMessage = (
   id: string,
@@ -201,7 +199,7 @@ const messages = {
 } as const
 
 const actionLabels: Record<
-  ComposeEditorLocale,
+  ComposeLocale,
   Record<ComposeEditorShortcutAction, string>
 > = {
   'zh-CN': {
@@ -245,7 +243,7 @@ const actionLabels: Record<
 }
 
 export function getEditorMessages(
-  locale: ComposeEditorLocale,
+  locale: ComposeLocale,
   formatMessage: FormatMessage = (_id, fallback) => fallback,
 ) {
   const current = messages[locale]
@@ -344,7 +342,7 @@ export function getEditorMessages(
 }
 
 export function getRequiredEditorMessage(
-  locale: ComposeEditorLocale,
+  locale: ComposeLocale,
   key: string,
 ) {
   const dictionary = messages[locale] as unknown as Record<string, unknown>
@@ -355,7 +353,7 @@ export function getRequiredEditorMessage(
 }
 
 export function getEditorShortcutActionLabel(
-  locale: ComposeEditorLocale,
+  locale: ComposeLocale,
   action: ComposeEditorShortcutAction,
   formatMessage: FormatMessage = (_id, fallback) => fallback,
 ) {

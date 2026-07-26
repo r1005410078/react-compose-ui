@@ -1,9 +1,9 @@
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import { RegistryComponent } from '@compose-ui/component-registry'
+import { ComposeRegistryComponent } from '@compose-ui/component-registry'
 import type { ComposeComponentNode } from '@compose-ui/core'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createBasicMaterials } from '../index'
+import { createComposeBasicMaterials } from '../index'
 
 const maliciousSvg = `
   <svg viewBox="0 0 64 32" onclick="alert(1)">
@@ -53,9 +53,9 @@ describe('@compose-ui/materials SVG', () => {
         mediaType: 'image/svg+xml',
       }),
     }
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     render(
-      <RegistryComponent
+      <ComposeRegistryComponent
         assetResolver={resolver}
         mode="preview"
         node={svgNode()}
@@ -78,9 +78,9 @@ describe('@compose-ui/materials SVG', () => {
         mediaType: 'image/svg+xml',
       }),
     }
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     render(
-      <RegistryComponent
+      <ComposeRegistryComponent
         assetResolver={resolver}
         mode="editor"
         node={svgNode()}

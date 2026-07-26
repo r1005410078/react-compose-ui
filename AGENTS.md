@@ -97,12 +97,12 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 
 - **Primitive**：Button、Input 等无业务语义基础 UI。
 - **Pattern**：Tree、Dialog、SplitPane、VirtualList 等完整但无业务语义的交互模式。
-- **Domain Component**：SceneTree、AssetPreview、HistoryList 等包含领域词汇的组件。
-- **Widget**：Stage、AssetBrowser、PropertyPanel 等可独立完成一块用户任务的组件。
+- **Domain Component**：ComposeSceneTree、AssetPreview、HistoryList 等包含领域词汇的组件。
+- **Widget**：Stage、ComposeAssetBrowser、ComposePropertyPanel 等可独立完成一块用户任务的组件。
 - **Shell**：Editor、Preview 等负责跨域组合、Provider 和宿主接线的入口。
 
 `@compose-ui/components` 只接收 Primitive 和 Pattern。包含 ComposeDocument、资源 Provider、
-事务历史、场景命令、物料或编辑器工作流语义的组件必须留在对应领域包。SceneTree 和
+事务历史、场景命令、物料或编辑器工作流语义的组件必须留在对应领域包。ComposeSceneTree 和
 AssetTree 应组合共享 Tree，而不能把业务分支塞回 Tree。
 
 ### Feature-first 目录

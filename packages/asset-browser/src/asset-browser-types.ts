@@ -1,10 +1,9 @@
 import type { HTMLAttributes, ReactNode } from 'react'
-import type { ComposeLocale } from '@compose-ui/ui-context'
 import type {
   ComposeAssetReference,
   ComposeAssetOperationEvent,
   ComposeAssetProvider,
-} from './asset-types'
+} from '@compose-ui/assets'
 
 /** 一项可写入 Canvas 的资源拖拽描述。 @public */
 export interface ComposeAssetCanvasDragItem {
@@ -27,11 +26,11 @@ export type ComposeAssetCanvasDragEvent =
   | { readonly type: 'cancel' }
 
 /**
- * AssetBrowser 受控组件属性。
+ * ComposeAssetBrowser 受控组件属性。
  *
  * @public
  */
-export interface AssetBrowserProps
+export interface ComposeAssetBrowserProps
   extends Omit<HTMLAttributes<HTMLDivElement>, 'onSelect'> {
   /** 当前资源 Provider；省略时可通过本地目录入口连接。 */
   readonly provider?: ComposeAssetProvider
@@ -55,8 +54,6 @@ export interface AssetBrowserProps
   readonly onCanvasDrag?: (event: ComposeAssetCanvasDragEvent) => void
   /** 是否显示浏览器本地目录入口。 */
   readonly allowLocalDirectory?: boolean
-  /** 兼容的单实例语言覆盖；优先于 UI Context。 */
-  readonly locale?: ComposeLocale
   /** Provider 未连接时的自定义空状态。 */
   readonly emptyState?: ReactNode
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, RefObject } from 'react'
-import type { SceneTreeNode, SceneTreeOperation, SceneTreeCommandController } from './index'
+import type { ComposeSceneTreeNode, ComposeSceneTreeOperation, ComposeSceneTreeCommandController } from './index'
 import { resolveKeyboardAction, resolveSelection } from './interaction-model'
 import { buildTreeIndex, flattenVisibleTree, searchTree } from './tree-model'
 
@@ -12,12 +12,12 @@ export interface ContextMenuState {
 
 interface UseSceneTreeInteractionOptions {
   cancelDrag: () => void
-  commands: SceneTreeCommandController
+  commands: ComposeSceneTreeCommandController
   expandedIds: readonly string[]
   isDragging: () => boolean
-  nodes: readonly SceneTreeNode[]
+  nodes: readonly ComposeSceneTreeNode[]
   onExpandedChange?: (nodeIds: readonly string[]) => void
-  onOperation?: (operation: SceneTreeOperation) => void
+  onOperation?: (operation: ComposeSceneTreeOperation) => void
   onSelectionChange?: (nodeIds: readonly string[]) => void
   scrollRef: RefObject<HTMLDivElement | null>
   scrollToIndex: (rowIndex: number) => void

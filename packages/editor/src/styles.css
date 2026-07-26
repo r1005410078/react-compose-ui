@@ -1,3 +1,5 @@
+@import 'tailwindcss/theme.css' layer(theme) prefix(ct);
+@import 'tailwindcss/utilities.css' layer(utilities) prefix(ct);
 @import 'dockview-react/dist/styles/dockview.css';
 @import '@compose-ui/history/styles.css';
 @import '@compose-ui/scene-tree/styles.css';
@@ -6,9 +8,6 @@
 @import '@compose-ui/asset-browser/styles.css';
 
 @layer theme, base, components, utilities;
-
-@import 'tailwindcss/theme.css' layer(theme) prefix(ct);
-@import 'tailwindcss/utilities.css' layer(utilities) prefix(ct);
 
 @source './';
 
@@ -62,6 +61,11 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.compose-editor__scene-history-dockview-host {
+  min-height: 0;
+  height: 100%;
 }
 
 .compose-editor__scene-content,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ComposeAssetEntry } from './asset-types'
+import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { getAssetScriptLanguage } from './script-language'
 
 interface ScriptEditorProps {

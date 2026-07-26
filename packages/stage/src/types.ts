@@ -1,7 +1,6 @@
 import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComponentRegistry } from '@compose-ui/component-registry'
-import type { ComposeLocale } from '@compose-ui/ui-context'
+import type { ComposeComponentRegistry } from '@compose-ui/component-registry'
 import type {
   CommandDispatchResult,
   ComposeDocument,
@@ -11,28 +10,21 @@ import type {
   StageInteractionController,
   StageViewport,
 } from '@compose-ui/stage-engine'
-import type { StageFramePreset } from './frame-preset'
+import type { ComposeStageFramePreset } from './frame-preset'
 
 /**
  * Stage 的受控工具模式。
  *
  * @public
  */
-export type StageTool = 'select' | 'pan'
-
-/**
- * Stage 内建界面语言。
- *
- * @public
- */
-export type StageLocale = ComposeLocale
+export type ComposeStageTool = 'select' | 'pan'
 
 /**
  * Stage 可配置的单次键位。
  *
  * @public
  */
-export interface StageKeybinding {
+export interface ComposeStageKeybinding {
   /** `KeyboardEvent.code` 物理键位。 */
   readonly code: string
   /** macOS 使用 Command，其他平台使用 Control。 */
@@ -50,7 +42,7 @@ export interface StageKeybinding {
  *
  * @public
  */
-export type StageShortcutAction =
+export type ComposeStageShortcutAction =
   | 'stage.temporaryPan'
   | 'stage.selectTool'
   | 'stage.panTool'
@@ -71,8 +63,8 @@ export type StageShortcutAction =
  *
  * @public
  */
-export type StageShortcuts = Readonly<
-  Partial<Record<StageShortcutAction, readonly StageKeybinding[]>>
+export type ComposeStageShortcuts = Readonly<
+  Partial<Record<ComposeStageShortcutAction, readonly ComposeStageKeybinding[]>>
 >
 
 /**
@@ -80,28 +72,26 @@ export type StageShortcuts = Readonly<
  *
  * @public
  */
-export type StageDispatch = (command: EditorCommand) => CommandDispatchResult
+export type ComposeStageDispatch = (command: EditorCommand) => CommandDispatchResult
 
 /**
  * 受控无限 Stage 属性。
  *
  * @public
  */
-export interface StageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
+export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   readonly document: ComposeDocument
-  readonly registry: ComponentRegistry
+  readonly registry: ComposeComponentRegistry
   /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
-  readonly dispatch: StageDispatch
+  readonly dispatch: ComposeStageDispatch
   readonly viewport: StageViewport
   readonly onViewportChange: (viewport: StageViewport) => void
-  readonly tool: StageTool
+  readonly tool: ComposeStageTool
   /** 请求切换选择或平移工具；省略时对应快捷键不改变工具。 */
-  readonly onToolChange?: (tool: StageTool) => void
-  /** 内建 Stage chrome 语言。 @defaultValue `"zh-CN"` */
-  readonly locale?: StageLocale
+  readonly onToolChange?: (tool: ComposeStageTool) => void
   /** 覆盖 Stage 默认动作键位；动作空数组表示禁用。 */
-  readonly shortcuts?: StageShortcuts
+  readonly shortcuts?: ComposeStageShortcuts
   readonly selectedIds: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   /** 隐式 Canvas 输出区域当前是否为 Inspector 目标。 */
@@ -119,7 +109,7 @@ export interface StageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChan
   /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */
   readonly interactionController?: StageInteractionController
   /** external Frame descriptor 的 preset resolver。 */
-  readonly framePresets?: readonly StageFramePreset[]
+  readonly framePresets?: readonly ComposeStageFramePreset[]
   /** 节点与命令 ID factory。默认使用 crypto.randomUUID 或时间回退。 */
   readonly idFactory?: () => string
 }

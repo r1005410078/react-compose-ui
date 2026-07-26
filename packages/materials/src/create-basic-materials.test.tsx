@@ -1,17 +1,17 @@
-import type { ComponentDefinition } from '@compose-ui/component-registry'
+import type { ComposeComponentDefinition } from '@compose-ui/component-registry'
 import { describe, expect, it } from 'vitest'
 import * as materialsEntry from './index'
 import {
-  DEFAULT_BASIC_COMPONENT_DEFINITIONS,
-  DEFAULT_BASIC_FRAME_PRESETS,
-  createBasicMaterials,
+  DEFAULT_COMPOSE_BASIC_COMPONENT_DEFINITIONS,
+  DEFAULT_COMPOSE_BASIC_FRAME_PRESETS,
+  createComposeBasicMaterials,
 } from './index'
 import type {
-  BasicMaterials,
-  CreateBasicMaterialsOptions,
+  ComposeBasicMaterials,
+  ComposeCreateBasicMaterialsOptions,
 } from './index'
 
-const extension: ComponentDefinition = {
+const extension: ComposeComponentDefinition = {
   type: 'extension',
   label: 'Extension',
   defaultSize: { width: 100, height: 80 },
@@ -21,7 +21,7 @@ const extension: ComponentDefinition = {
 
 describe('@compose-ui/materials factory', () => {
   it('OpenSpec: basic-materials / 独立基础物料包 / 覆盖默认值并追加扩展', () => {
-    const options: CreateBasicMaterialsOptions = {
+    const options: ComposeCreateBasicMaterialsOptions = {
       frame: {
         label: 'Desktop Frame',
         name: 'Desktop',
@@ -35,10 +35,10 @@ describe('@compose-ui/materials factory', () => {
       },
       extensions: [extension],
     }
-    const materials: BasicMaterials = createBasicMaterials(options)
+    const materials: ComposeBasicMaterials = createComposeBasicMaterials(options)
 
-    expect(DEFAULT_BASIC_FRAME_PRESETS.map((item) => item.label)).toEqual(['Frame'])
-    expect(DEFAULT_BASIC_COMPONENT_DEFINITIONS.map((item) => item.type))
+    expect(DEFAULT_COMPOSE_BASIC_FRAME_PRESETS.map((item) => item.label)).toEqual(['Frame'])
+    expect(DEFAULT_COMPOSE_BASIC_COMPONENT_DEFINITIONS.map((item) => item.type))
       .toEqual(['rectangle', 'text', 'image', 'svg'])
     expect(materials.framePresets.map((item) => item.label)).toEqual(['Desktop Frame'])
     expect(materials.componentDefinitions.map((item) => item.type))
@@ -58,7 +58,7 @@ describe('@compose-ui/materials factory', () => {
   })
 
   it('OpenSpec: basic-materials / 独立基础物料包 / 创建默认物料 bundle', () => {
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     const first = materials.registry.createSeed('rectangle')
     const second = materials.registry.createSeed('rectangle')
     expect(first.ok && second.ok).toBe(true)
@@ -91,12 +91,12 @@ describe('@compose-ui/materials factory', () => {
   it('保持根入口的公共值导出兼容', () => {
     expect(materialsEntry).toMatchObject({
       COMPOSE_UI_MATERIALS_PACKAGE: '@compose-ui/materials',
-      DEFAULT_FRAME_PRESET: expect.any(Object),
-      DEFAULT_RECTANGLE_DEFINITION: expect.any(Object),
-      DEFAULT_TEXT_DEFINITION: expect.any(Object),
-      DEFAULT_BASIC_FRAME_PRESETS: expect.any(Array),
-      DEFAULT_BASIC_COMPONENT_DEFINITIONS: expect.any(Array),
-      createBasicMaterials: expect.any(Function),
+      DEFAULT_COMPOSE_FRAME_PRESET: expect.any(Object),
+      DEFAULT_COMPOSE_RECTANGLE_DEFINITION: expect.any(Object),
+      DEFAULT_COMPOSE_TEXT_DEFINITION: expect.any(Object),
+      DEFAULT_COMPOSE_BASIC_FRAME_PRESETS: expect.any(Array),
+      DEFAULT_COMPOSE_BASIC_COMPONENT_DEFINITIONS: expect.any(Array),
+      createComposeBasicMaterials: expect.any(Function),
     })
   })
 })

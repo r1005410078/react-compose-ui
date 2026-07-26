@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
-import { Tree, type TreeItemAdapter } from './index'
+import { ComposeTree, type ComposeTreeItemAdapter } from './index'
 
 interface Item {
   id: string
@@ -15,7 +15,7 @@ const nodes: readonly Item[] = [{
   children: [{ id: 'child', label: 'Child' }],
 }]
 
-const adapter: TreeItemAdapter<Item> = {
+const adapter: ComposeTreeItemAdapter<Item> = {
   getChildren: (item) => item.children,
   getId: (item) => item.id,
   getLabel: (item) => item.label,
@@ -23,12 +23,12 @@ const adapter: TreeItemAdapter<Item> = {
 
 afterEach(cleanup)
 
-describe('Tree', () => {
-  it('OpenSpec: components / Tree 选择、键盘与过滤 / 使用键盘浏览和选择', () => {
+describe('ComposeTree', () => {
+  it('OpenSpec: components / ComposeTree 选择、键盘与过滤 / 使用键盘浏览和选择', () => {
     const onSelectionChange = vi.fn()
     const onExpandedChange = vi.fn()
     render(
-      <Tree
+      <ComposeTree
         adapter={adapter}
         aria-label="Files"
         expandedIds={[]}
@@ -48,9 +48,9 @@ describe('Tree', () => {
     expect(onExpandedChange).toHaveBeenCalledWith(['root'])
   })
 
-  it('OpenSpec: components / 通用受控虚拟 Tree / 组合领域行内容', () => {
+  it('OpenSpec: components / 通用受控虚拟 ComposeTree / 组合领域行内容', () => {
     render(
-      <Tree
+      <ComposeTree
         adapter={adapter}
         aria-label="Files"
         expandedIds={[]}
@@ -66,13 +66,13 @@ describe('Tree', () => {
     expect(screen.getByRole('button', { name: 'Action Root' })).toBeInTheDocument()
   })
 
-  it('OpenSpec: components / 通用受控虚拟 Tree / 虚拟化 5000+ 个节点', () => {
+  it('OpenSpec: components / 通用受控虚拟 ComposeTree / 虚拟化 5000+ 个节点', () => {
     const manyItems = Array.from({ length: 5_001 }, (_, index) => ({
       id: `item-${index}`,
       label: `Item ${index}`,
     }))
     render(
-      <Tree
+      <ComposeTree
         adapter={adapter}
         aria-label="Large files"
         expandedIds={[]}
@@ -85,11 +85,11 @@ describe('Tree', () => {
     expect(renderedRows[0]).toHaveAttribute('aria-setsize', '5001')
   })
 
-  it('OpenSpec: components / Tree 选择、键盘与过滤 / Shift 范围选择保持受控状态', () => {
+  it('OpenSpec: components / ComposeTree 选择、键盘与过滤 / Shift 范围选择保持受控状态', () => {
     function Harness() {
       const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
       return (
-        <Tree
+        <ComposeTree
           adapter={adapter}
           aria-label="Selectable files"
           expandedIds={['root']}

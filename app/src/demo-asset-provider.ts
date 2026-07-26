@@ -1,11 +1,11 @@
 import {
   ComposeAssetError,
   validateAssetName,
-} from '@compose-ui/asset-browser'
+} from '@compose-ui/assets'
 import type {
   ComposeAssetEntry,
   ComposeAssetProvider,
-} from '@compose-ui/asset-browser'
+} from '@compose-ui/assets'
 
 interface MemoryAsset {
   entry: ComposeAssetEntry

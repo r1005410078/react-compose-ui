@@ -1,14 +1,14 @@
 import type {
-  ComponentDefinition,
-  ComponentRegistry,
-  NodeInspectorProps,
+  ComposeComponentDefinition,
+  ComposeComponentRegistry,
+  ComposeNodeInspectorProps,
 } from '@compose-ui/component-registry'
 import type {
   ComposeFrameNode,
   JsonObject,
   NodeStyle,
 } from '@compose-ui/core'
-import type { StageFramePreset } from '@compose-ui/stage'
+import type { ComposeStageFramePreset } from '@compose-ui/stage'
 import type { ComponentType } from 'react'
 
 /** Container Inspector 支持的 Frame 节点类型。 @internal */
@@ -19,7 +19,7 @@ export type ContainerNode = ComposeFrameNode
  *
  * @public
  */
-export interface BasicMaterialComponentOptions {
+export interface ComposeBasicMaterialComponentOptions {
   /** Palette 展示名称。 */
   readonly label?: string
   /** 新建文档节点名称。 */
@@ -40,7 +40,7 @@ export interface BasicMaterialComponentOptions {
  *
  * @public
  */
-export interface BasicMaterialFrameOptions {
+export interface ComposeBasicMaterialFrameOptions {
   /** Palette 展示名称。 */
   readonly label?: string
   /** 新建文档节点名称。 */
@@ -57,23 +57,23 @@ export interface BasicMaterialFrameOptions {
 }
 
 /**
- * `createBasicMaterials` 配置。
+ * `createComposeBasicMaterials` 配置。
  *
  * @public
  */
-export interface CreateBasicMaterialsOptions {
+export interface ComposeCreateBasicMaterialsOptions {
   /** Frame preset 的可选覆盖。 */
-  readonly frame?: BasicMaterialFrameOptions
+  readonly frame?: ComposeBasicMaterialFrameOptions
   /** Rectangle definition 的可选覆盖。 */
-  readonly rectangle?: BasicMaterialComponentOptions
+  readonly rectangle?: ComposeBasicMaterialComponentOptions
   /** Text definition 的可选覆盖。 */
-  readonly text?: BasicMaterialComponentOptions
+  readonly text?: ComposeBasicMaterialComponentOptions
   /** Image definition 的默认节点覆盖。 */
-  readonly image?: BasicMaterialComponentOptions
+  readonly image?: ComposeBasicMaterialComponentOptions
   /** SVG definition 的默认节点覆盖。 */
-  readonly svg?: BasicMaterialComponentOptions
+  readonly svg?: ComposeBasicMaterialComponentOptions
   /** 按给定顺序追加到内建 definitions 之后的宿主 definitions。 */
-  readonly extensions?: readonly ComponentDefinition[]
+  readonly extensions?: readonly ComposeComponentDefinition[]
   /** Inspector 命令 ID factory；测试或宿主可注入确定性实现。 */
   readonly idFactory?: () => string
 }
@@ -83,13 +83,13 @@ export interface CreateBasicMaterialsOptions {
  *
  * @public
  */
-export interface BasicMaterials {
+export interface ComposeBasicMaterials {
   /** Rectangle、Text、Image、SVG 与宿主扩展组成的实例级 registry。 */
-  readonly registry: ComponentRegistry
+  readonly registry: ComposeComponentRegistry
   /** 按 Palette 顺序排列的 Component definitions。 */
-  readonly componentDefinitions: readonly ComponentDefinition[]
+  readonly componentDefinitions: readonly ComposeComponentDefinition[]
   /** 当前实例使用的 Frame presets。 */
-  readonly framePresets: readonly StageFramePreset[]
+  readonly framePresets: readonly ComposeStageFramePreset[]
   /** 绑定当前 Frame 默认值的 Frame Inspector。 */
-  readonly ContainerInspector: ComponentType<NodeInspectorProps<ContainerNode>>
+  readonly ContainerInspector: ComponentType<ComposeNodeInspectorProps<ContainerNode>>
 }

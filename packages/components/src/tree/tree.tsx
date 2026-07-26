@@ -608,36 +608,38 @@ export function Tree<T>(props: TreeProps<T>) {
                     if (!event.defaultPrevented) handlePointerDown(event, row)
                   }}
                 >
-                  <span
-                    className="compose-tree__indent"
-                    style={{ width: INDENT_BASE + (row.depth - 1) * INDENT }}
-                  />
-                  <button
-                    aria-label={context.expanded
-                      ? getCollapseLabel?.(row.item) ?? defaultCollapseLabel
-                      : getExpandLabel?.(row.item) ?? defaultExpandLabel}
-                    className="compose-tree__chevron"
-                    disabled={!context.hasChildren}
-                    tabIndex={-1}
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      toggleExpanded(row.id)
-                    }}
-                  >
-                    <svg aria-hidden="true" viewBox="0 0 16 16">
-                      <path d={context.expanded ? 'm4 6 4 4 4-4' : 'm6 4 4 4-4 4'} />
-                    </svg>
-                  </button>
-                  {renderIcon ? (
-                    <span className="compose-tree__icon">{renderIcon(context)}</span>
-                  ) : null}
-                  <span className="compose-tree__label" role="gridcell">
-                    {renderLabel?.(context) ?? adapter.getLabel(row.item)}
-                  </span>
-                  {renderActions ? (
-                    <span className="compose-tree__actions">{renderActions(context)}</span>
-                  ) : null}
+                  <div className="compose-tree__cell" role="gridcell">
+                    <span
+                      className="compose-tree__indent"
+                      style={{ width: INDENT_BASE + (row.depth - 1) * INDENT }}
+                    />
+                    <button
+                      aria-label={context.expanded
+                        ? getCollapseLabel?.(row.item) ?? defaultCollapseLabel
+                        : getExpandLabel?.(row.item) ?? defaultExpandLabel}
+                      className="compose-tree__chevron"
+                      disabled={!context.hasChildren}
+                      tabIndex={-1}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        toggleExpanded(row.id)
+                      }}
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 16 16">
+                        <path d={context.expanded ? 'm4 6 4 4 4-4' : 'm6 4 4 4-4 4'} />
+                      </svg>
+                    </button>
+                    {renderIcon ? (
+                      <span className="compose-tree__icon">{renderIcon(context)}</span>
+                    ) : null}
+                    <span className="compose-tree__label">
+                      {renderLabel?.(context) ?? adapter.getLabel(row.item)}
+                    </span>
+                    {renderActions ? (
+                      <span className="compose-tree__actions">{renderActions(context)}</span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             )

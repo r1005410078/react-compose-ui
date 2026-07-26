@@ -3,7 +3,7 @@ import type { PointerEvent, RefObject } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildTreeIndex, flattenVisibleTree } from './tree-model'
 import { useSceneTreeDrag } from './use-scene-tree-drag'
-import type { SceneTreeNode } from './index'
+import type { ComposeSceneTreeNode } from './index'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -52,7 +52,7 @@ function scrollRef(height = 240, scrollHeight = 480): RefObject<HTMLDivElement> 
 describe('useSceneTreeDrag', () => {
   it('captures the pointer and expands a valid parent after 600ms', async () => {
     vi.useFakeTimers()
-    const nodes: readonly SceneTreeNode[] = [
+    const nodes: readonly ComposeSceneTreeNode[] = [
       { id: 'folder', label: 'Folder', children: [{ id: 'child', label: 'Child' }] },
       { id: 'loose', label: 'Loose', canHaveChildren: false },
     ]

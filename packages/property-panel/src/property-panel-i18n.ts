@@ -103,7 +103,7 @@ type DynamicKey =
   | 'moveUp'
   | 'moveDown'
 
-/** 读取 PropertyPanel 内建 chrome 文案，并应用共享消息覆盖。 */
+/** 读取 ComposePropertyPanel 内建 chrome 文案，并应用共享消息覆盖。 */
 export function usePropertyPanelMessages() {
   const i18n = useComposeI18nContext()
   const current = translations[i18n?.locale ?? 'zh-CN']

@@ -1,7 +1,7 @@
 # @compose-ui/scene-tree
 
-独立受控场景树。内建搜索、菜单、操作与 ARIA 默认消费 `@compose-ui/ui-context` 的主题和语言；
-显式 `locale` prop 作为兼容覆盖且优先于 Context，宿主节点 label、icon 和业务内容保持原文。
+独立受控场景树。内建搜索、菜单、操作与 ARIA 统一消费 `@compose-ui/ui-context` 的主题和语言；
+宿主节点 label、icon 和业务内容保持原文。
 
 可独立嵌入 React 应用的受控场景树组件。它使用虚拟化行支持 5000 个节点，并提供选择、
 展开、检索、重命名、删除、可见性、锁定、新增、复制、剪切、粘贴和拖拽操作意图。
@@ -14,11 +14,10 @@
 ## 使用
 
 ```tsx
-import { SceneTree } from '@compose-ui/scene-tree'
+import { ComposeSceneTree } from '@compose-ui/scene-tree'
 import '@compose-ui/scene-tree/styles.css'
 
-<SceneTree
-  locale="zh-CN"
+<ComposeSceneTree
   nodes={nodes}
   selectedIds={selectedIds}
   expandedIds={expandedIds}
@@ -28,14 +27,14 @@ import '@compose-ui/scene-tree/styles.css'
 />
 ```
 
-`locale` 支持 zh-CN 和 en-US，覆盖检索、菜单、错误和 ARIA 文案；宿主节点 label 不翻译。
+使用 `ComposeUIProvider` 设置 zh-CN/en-US，覆盖检索、菜单、错误和 ARIA 文案；宿主节点 label 不翻译。
 
 需要让外部工具栏与树的右键菜单共享命令状态时，可创建并传入同一个 controller：
 
 ```tsx
-import { SceneTree, useSceneTreeCommands } from '@compose-ui/scene-tree'
+import { ComposeSceneTree, useComposeSceneTreeCommands } from '@compose-ui/scene-tree'
 
-const commands = useSceneTreeCommands({ nodes, selectedIds, onOperation })
+const commands = useComposeSceneTreeCommands({ nodes, selectedIds, onOperation })
 
 <>
   <button
@@ -45,7 +44,7 @@ const commands = useSceneTreeCommands({ nodes, selectedIds, onOperation })
     新增节点
   </button>
   <button onClick={() => commands.execute('copy')}>复制</button>
-  <SceneTree
+  <ComposeSceneTree
     commands={commands}
     nodes={nodes}
     selectedIds={selectedIds}
@@ -57,16 +56,16 @@ const commands = useSceneTreeCommands({ nodes, selectedIds, onOperation })
 
 ## 从外部新增节点
 
-`useSceneTreeCommands` 可以驱动场景树之外的工具栏、菜单或快捷入口。新增命令只会通过
+`useComposeSceneTreeCommands` 可以驱动场景树之外的工具栏、菜单或快捷入口。新增命令只会通过
 `onOperation` 发出 `{ type: 'create', parentId, index }`，宿主仍负责生成节点 ID、构造业务
 数据并更新受控 `nodes`：
 
 ```tsx
-import type { SceneTreeNode, SceneTreeOperation } from '@compose-ui/scene-tree'
+import type { ComposeSceneTreeNode, ComposeSceneTreeOperation } from '@compose-ui/scene-tree'
 
-const handleOperation = (operation: SceneTreeOperation) => {
+const handleOperation = (operation: ComposeSceneTreeOperation) => {
   if (operation.type === 'create') {
-    const node: SceneTreeNode = {
+    const node: ComposeSceneTreeNode = {
       id: crypto.randomUUID(),
       label: '新节点',
     }
@@ -84,7 +83,7 @@ const handleOperation = (operation: SceneTreeOperation) => {
   applyOtherOperation(operation)
 }
 
-const commands = useSceneTreeCommands({
+const commands = useComposeSceneTreeCommands({
   nodes,
   selectedIds,
   onOperation: handleOperation,
@@ -108,7 +107,7 @@ const commands = useSceneTreeCommands({
 
 执行前应调用相同目标的 `commands.isEnabled(command, targetId)`。`targetId` 省略时使用
 `selectedIds` 中最近选择的节点，显式传入 `null` 表示根级空白区。外部入口应把同一个
-controller 传给 `SceneTree.commands`，从而与树内右键菜单共享选择解析和剪贴板状态。
+controller 传给 `ComposeSceneTree.commands`，从而与树内右键菜单共享选择解析和剪贴板状态。
 
 宿主必须为组件提供确定的非零高度。组件不会修改、保存或撤销宿主数据，只通过
 `onOperation` 发出 `create`、`rename`、`delete`、`move`、`duplicate`、
@@ -139,7 +138,7 @@ Ctrl/Cmd 点击用于切换单个节点的选择状态，Shift 点击用于连�
 
 ## 内部测试分层
 
-`SceneTree` 只负责受控数据、虚拟化和内部模块连线。选择、键盘、拖拽阈值、坐标命中、自动
+`ComposeSceneTree` 只负责受控数据、虚拟化和内部模块连线。选择、键盘、拖拽阈值、坐标命中、自动
 滚动速度和 Portal 边界均为不依赖 DOM 的纯模型，使用表驱动 Vitest 直接验证输入与输出；
 Pointer Capture、600ms 延迟展开、RAF 和焦点等副作用由内部 Hook 测试负责。Toolbar、节点
 行、右键菜单和拖拽反馈作为展示组件验证 ARIA 与事件透传，完整 Pointer 和视觉流程继续由

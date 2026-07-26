@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  ComposeAssetError,
-  createFileSystemAssetProvider,
-} from './index'
+import { ComposeAssetError } from '@compose-ui/assets'
+import { createComposeFileSystemAssetProvider } from './index'
 
 class FakeFileHandle {
   readonly kind = 'file' as const
@@ -124,7 +122,7 @@ describe('File System Asset Provider', () => {
   it('OpenSpec: asset-browser / 本地目录 Provider / 读取、创建并拒绝同名覆盖', async () => {
     const root = new FakeDirectoryHandle('Assets')
     root.entriesMap.set('logo.svg', new FakeFileHandle('logo.svg', new Blob(['svg'])))
-    const provider = createFileSystemAssetProvider(asDirectory(root))
+    const provider = createComposeFileSystemAssetProvider(asDirectory(root))
     const entries = await provider.list({ folderId: provider.root.id })
     expect(entries).toEqual([
       expect.objectContaining({ name: 'logo.svg', kind: 'file' }),
@@ -147,7 +145,7 @@ describe('File System Asset Provider', () => {
       'logo.svg',
       new FakeFileHandle('logo.svg', new Blob(['<svg/>'], { type: 'image/svg+xml' })),
     )
-    const provider = createFileSystemAssetProvider(asDirectory(root))
+    const provider = createComposeFileSystemAssetProvider(asDirectory(root))
     const first = await provider.list({ folderId: provider.root.id })
     const second = await provider.list({ folderId: provider.root.id })
     const assetKey = first[0]?.assetKey
@@ -166,7 +164,7 @@ describe('File System Asset Provider', () => {
     const root = new FakeDirectoryHandle('Assets')
     const file = new FakeFileHandle('main.ts', new Blob(['old']))
     root.entriesMap.set(file.name, file)
-    const provider = createFileSystemAssetProvider(asDirectory(root))
+    const provider = createComposeFileSystemAssetProvider(asDirectory(root))
     const [entry] = await provider.list({ folderId: provider.root.id })
     if (!entry) throw new Error('fixture')
     file.lastModified += 1
@@ -186,7 +184,7 @@ describe('File System Asset Provider', () => {
   it('OpenSpec: asset-browser / 本地目录 Provider / 不模拟不稳定的 move 和 rename', async () => {
     const root = new FakeDirectoryHandle('Assets')
     root.entriesMap.set('main.ts', new FakeFileHandle('main.ts'))
-    const provider = createFileSystemAssetProvider(asDirectory(root))
+    const provider = createComposeFileSystemAssetProvider(asDirectory(root))
     const [entry] = await provider.list({ folderId: provider.root.id })
     expect(provider.capabilities.move).toBe(false)
     await expect(provider.moveEntry?.({

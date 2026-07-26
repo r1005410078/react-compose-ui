@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createOperationLogRuntime } from './controller'
-import { createMemoryOperationLogStore } from './stores'
-import type { OperationLogStore } from './types'
+import { createComposeMemoryOperationLogStore } from './stores'
+import type { ComposeOperationLogStore } from './types'
 
 function input(after: number) {
   return {
@@ -20,7 +20,7 @@ describe('OpenSpec: operation-log / 连续属性操作合并 / 合并同一属�
     const runtime = createOperationLogRuntime({
       scopeId: 'page-1',
       sessionId: 'session-1',
-      store: createMemoryOperationLogStore(),
+      store: createComposeMemoryOperationLogStore(),
       now: () => currentTime,
       createId: () => 'entry-1',
     })
@@ -44,7 +44,7 @@ describe('OpenSpec: operation-log / 连续属性操作合并 / 中断或跳过�
     const runtime = createOperationLogRuntime({
       scopeId: 'page-1',
       sessionId: 'session-1',
-      store: createMemoryOperationLogStore(),
+      store: createComposeMemoryOperationLogStore(),
       now: () => currentTime,
       createId: () => `entry-${++id}`,
     })
@@ -64,7 +64,7 @@ describe('OpenSpec: operation-log / 连续属性操作合并 / 中断或跳过�
 
 describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / 限制每个 scope 的记录数量', () => {
   it('按 scope 隔离并删除超过上限的最旧记录', async () => {
-    const store = createMemoryOperationLogStore()
+    const store = createComposeMemoryOperationLogStore()
     let id = 0
     let currentTime = 0
     const first = createOperationLogRuntime({
@@ -91,7 +91,7 @@ describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / 限制每个 sc
   })
 
   it('初始化时清理 store 中已经超过上限的最旧记录', async () => {
-    const store = createMemoryOperationLogStore()
+    const store = createComposeMemoryOperationLogStore()
     await store.put({
       id: 'old', scopeId: 'page-1', sessionId: 'old-session', action: 'property.change',
       category: 'property', summary: 'Old', targets: [], startedAt: 1, updatedAt: 1, count: 1,
@@ -116,7 +116,7 @@ describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / 限制每个 sc
 describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / IndexedDB 不可用时降级', () => {
   it('继续保留会话日志并报告错误', async () => {
     const error = new Error('quota')
-    const failingStore: OperationLogStore = {
+    const failingStore: ComposeOperationLogStore = {
       load: vi.fn().mockResolvedValue([]),
       put: vi.fn().mockRejectedValue(error),
       remove: vi.fn().mockResolvedValue(undefined),
@@ -139,7 +139,7 @@ describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / IndexedDB 不�
 
 describe('OpenSpec: operation-log / Scoped IndexedDB 持久化 / 程序化清理当前 scope', () => {
   it('clear 同时清空响应式状态和当前 scope store', async () => {
-    const store = createMemoryOperationLogStore()
+    const store = createComposeMemoryOperationLogStore()
     const runtime = createOperationLogRuntime({ scopeId: 'page-1', store })
     await runtime.initialize()
     await runtime.record(input(1))

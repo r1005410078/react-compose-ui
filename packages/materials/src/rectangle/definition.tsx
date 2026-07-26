@@ -1,19 +1,19 @@
-import type { ComponentDefinition } from '@compose-ui/component-registry'
-import { cloneProps, cloneStyle } from '../shared/default-values'
+import type { ComposeComponentDefinition } from '@compose-ui/component-registry'
+import { cloneProps, cloneStyle } from '../material-inspector-kit/default-values'
 import {
   createDefaultInspectorId,
   type InspectorIdFactory,
-} from '../shared/inspector/dispatch-update'
-import type { BasicMaterialComponentOptions } from '../types'
+} from '../material-inspector-kit/inspector/dispatch-update'
+import type { ComposeBasicMaterialComponentOptions } from '../types'
 import { DEFAULT_RECTANGLE_SIZE, DEFAULT_RECTANGLE_STYLE } from './defaults'
 import { createRectangleInspector } from './inspector'
 import { RectangleRenderer } from './renderer'
 
 /** 根据实例配置创建 Rectangle definition。 @internal */
 export function createRectangleDefinition(
-  options: BasicMaterialComponentOptions = {},
+  options: ComposeBasicMaterialComponentOptions = {},
   idFactory: InspectorIdFactory = createDefaultInspectorId,
-): ComponentDefinition {
+): ComposeComponentDefinition {
   const name = options.name ?? 'Rectangle'
   const defaultSize = options.defaultSize ?? DEFAULT_RECTANGLE_SIZE
   const defaultProps = cloneProps({}, options.defaultProps)
@@ -36,4 +36,4 @@ export function createRectangleDefinition(
 }
 
 /** 默认 Rectangle definition；不会创建模块级 registry。 @public */
-export const DEFAULT_RECTANGLE_DEFINITION = createRectangleDefinition()
+export const DEFAULT_COMPOSE_RECTANGLE_DEFINITION = createRectangleDefinition()

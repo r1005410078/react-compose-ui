@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import { AssetPreview } from './asset-preview'
 import { getAssetBrowserMessages } from './asset-browser-i18n'
-import { ComposeAssetError } from './asset-types'
-import type { ComposeAssetEntry, ComposeAssetProvider } from './asset-types'
+import { ComposeAssetError } from '@compose-ui/assets'
+import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import type { ScriptEditor } from './script-editor'
 
 vi.mock('./script-editor', () => ({

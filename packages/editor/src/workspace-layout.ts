@@ -1,7 +1,6 @@
 import type { DockviewApi } from 'dockview-react'
 import { getEditorMessages } from './editor-i18n'
-import type { ComposeEditorLocale } from './preferences'
-import type { ComposeI18nContextValue } from '@compose-ui/ui-context'
+import type { ComposeI18nContextValue, ComposeLocale } from '@compose-ui/ui-context'
 
 export const WORKSPACE_GROUP_IDS = {
   scene: 'compose-scene-edge',
@@ -40,7 +39,7 @@ const TAB_COMPONENT = 'workspaceTab'
 
 export function localizeWorkspace(
   api: DockviewApi,
-  locale: ComposeEditorLocale,
+  locale: ComposeLocale,
   formatMessage?: ComposeI18nContextValue['formatMessage'],
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
@@ -62,7 +61,7 @@ export function localizeWorkspace(
 
 export function initializeWorkspace(
   api: DockviewApi,
-  locale: ComposeEditorLocale = 'zh-CN',
+  locale: ComposeLocale = 'zh-CN',
   formatMessage?: ComposeI18nContextValue['formatMessage'],
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace

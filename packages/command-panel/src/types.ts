@@ -1,20 +1,16 @@
 import type { HTMLAttributes } from 'react'
-import type { ComposeLocale } from '@compose-ui/ui-context'
 import type {
   EditorCommand,
   JsonValue,
   TransactionRuntime,
 } from '@compose-ui/core'
 
-/** CommandPanel 内建界面语言。 @public */
-export type CommandPanelLocale = ComposeLocale
-
 /**
  * select 字段中的一个稳定候选。
  *
  * @public
  */
-export interface CommandPresetOption {
+export interface ComposeCommandPresetOption {
   /** 提交给命令工厂的字符串值。 */
   readonly value: string
   /** 表单中显示的用户可读名称。 */
@@ -26,7 +22,7 @@ export interface CommandPresetOption {
  *
  * @public
  */
-export interface CommandPresetField {
+export interface ComposeCommandPresetField {
   /** values 对象中的稳定字段名。 */
   readonly name: string
   /** 表单控件的可访问名称。 */
@@ -36,23 +32,23 @@ export interface CommandPresetField {
   /** 是否必须提供非空有效值。 @defaultValue false */
   readonly required?: boolean
   /** select 字段的候选；其他字段忽略。 */
-  readonly options?: readonly CommandPresetOption[]
+  readonly options?: readonly ComposeCommandPresetOption[]
   /** 表单首次显示时使用的 JSON 默认值。 */
   readonly defaultValue?: JsonValue
 }
 
 /**
- * CommandPanel 中一个可执行的结构化命令预设。
+ * ComposeCommandPanel 中一个可执行的结构化命令预设。
  *
  * @public
  */
-export interface CommandPreset {
+export interface ComposeCommandPreset {
   /** 当前面板内稳定且唯一的预设 ID。 */
   readonly id: string
   /** 预设选择器与提交按钮中的名称。 */
   readonly label: string
   /** 按显示顺序排列的字段。 */
-  readonly fields: readonly CommandPresetField[]
+  readonly fields: readonly ComposeCommandPresetField[]
   /**
    * 把已经校验的 JSON 字段值转换为一个命令。
    *
@@ -63,17 +59,15 @@ export interface CommandPreset {
 }
 
 /**
- * 独立 CommandPanel 的属性。
+ * 独立 ComposeCommandPanel 的属性。
  *
  * @public
  */
-export interface CommandPanelProps extends HTMLAttributes<HTMLDivElement> {
+export interface ComposeCommandPanelProps extends HTMLAttributes<HTMLDivElement> {
   /** 提供命令事件并接收预设 dispatch 的外部运行时。 */
   readonly runtime: TransactionRuntime
   /** 可选结构化命令表单。 */
-  readonly presets?: readonly CommandPreset[]
+  readonly presets?: readonly ComposeCommandPreset[]
   /** 面板最多保留的会话事件数。 @defaultValue 100 */
   readonly eventLimit?: number
-  /** 内建调试台文案语言。 @defaultValue `"zh-CN"` */
-  readonly locale?: CommandPanelLocale
 }

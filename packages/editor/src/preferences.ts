@@ -1,20 +1,6 @@
 import type { ComposeLocale, ComposeTheme } from '@compose-ui/ui-context'
 
 /**
- * 编辑器主题偏好。
- *
- * @public
- */
-export type ComposeEditorTheme = ComposeTheme
-
-/**
- * 编辑器内建界面语言。
- *
- * @public
- */
-export type ComposeEditorLocale = ComposeLocale
-
-/**
  * 可由设置面板修改的编辑器动作。
  *
  * @public
@@ -66,9 +52,9 @@ export interface ComposeEditorKeybinding {
  */
 export interface ComposeEditorPreferences {
   /** 明确主题或跟随系统主题。 */
-  readonly theme: ComposeEditorTheme
+  readonly theme: ComposeTheme
   /** 内建工作区界面语言。 */
-  readonly locale: ComposeEditorLocale
+  readonly locale: ComposeLocale
   /** 每个可修改动作的单次键位列表；空列表表示禁用动作。 */
   readonly shortcuts: Readonly<
     Record<ComposeEditorShortcutAction, readonly ComposeEditorKeybinding[]>

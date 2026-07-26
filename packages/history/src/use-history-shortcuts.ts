@@ -1,9 +1,9 @@
 import { useCallback } from 'react'
 import type { KeyboardEventHandler } from 'react'
 import type {
-  HistoryKeybinding,
-  HistoryNavigationController,
-  HistoryShortcuts,
+  ComposeHistoryKeybinding,
+  ComposeHistoryNavigationController,
+  ComposeHistoryShortcuts,
 } from './types'
 
 const DEFAULT_HISTORY_SHORTCUTS = {
@@ -12,7 +12,7 @@ const DEFAULT_HISTORY_SHORTCUTS = {
     { code: 'KeyZ', primary: true, shift: true },
     { code: 'KeyY', control: true },
   ],
-} satisfies Required<HistoryShortcuts>
+} satisfies Required<ComposeHistoryShortcuts>
 
 function eventCode(event: KeyboardEvent) {
   if (event.code) return event.code
@@ -20,7 +20,7 @@ function eventCode(event: KeyboardEvent) {
   return event.key
 }
 
-function matches(event: KeyboardEvent, binding: HistoryKeybinding) {
+function matches(event: KeyboardEvent, binding: ComposeHistoryKeybinding) {
   const modifierMatches = binding.primary
     ? event.ctrlKey !== event.metaKey
     : event.ctrlKey === Boolean(binding.control) && !event.metaKey
@@ -42,9 +42,9 @@ function matches(event: KeyboardEvent, binding: HistoryKeybinding) {
  * @returns 可赋给容器 `onKeyDownCapture` 的事件处理器。
  * @public
  */
-export function useHistoryShortcuts(
-  controller: HistoryNavigationController,
-  shortcuts?: HistoryShortcuts,
+export function useComposeHistoryShortcuts(
+  controller: ComposeHistoryNavigationController,
+  shortcuts?: ComposeHistoryShortcuts,
 ): KeyboardEventHandler<HTMLElement> {
   return useCallback((event) => {
     if (event.nativeEvent.isComposing) return

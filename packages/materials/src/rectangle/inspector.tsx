@@ -1,10 +1,10 @@
-import type { ComponentInspectorProps } from '@compose-ui/component-registry'
+import type { ComposeComponentInspectorProps } from '@compose-ui/component-registry'
 import type { NodeStyle } from '@compose-ui/core'
-import { PropertyPanel } from '@compose-ui/property-panel'
-import { dispatchInspectorUpdate } from '../shared/inspector/dispatch-update'
-import type { InspectorIdFactory } from '../shared/inspector/dispatch-update'
-import { createContainerValue } from '../shared/inspector/values'
-import { useMaterialInspectorI18n } from '../shared/inspector/use-material-inspector-i18n'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
+import { dispatchInspectorUpdate } from '../material-inspector-kit/inspector/dispatch-update'
+import type { InspectorIdFactory } from '../material-inspector-kit/inspector/dispatch-update'
+import { createContainerValue } from '../material-inspector-kit/inspector/values'
+import { useMaterialInspectorI18n } from '../material-inspector-kit/inspector/use-material-inspector-i18n'
 import { resolveLegacyRectangleStyle } from './legacy-style'
 
 interface RectangleInspectorDefaults {
@@ -21,7 +21,7 @@ export function createRectangleInspector(
   defaults: RectangleInspectorDefaults,
   idFactory: InspectorIdFactory,
 ) {
-  return function RectangleInspector({ node, dispatch }: ComponentInspectorProps) {
+  return function RectangleInspector({ node, dispatch }: ComposeComponentInspectorProps) {
     const i18n = useMaterialInspectorI18n()
     const value = createContainerValue(
       node,
@@ -34,7 +34,7 @@ export function createRectangleInspector(
       style: defaults.style,
     })
     return (
-      <PropertyPanel
+      <ComposePropertyPanel
         aria-label={i18n.propertiesLabel(node.name)}
         defaultValue={defaultValue}
         readOnly={node.locked}

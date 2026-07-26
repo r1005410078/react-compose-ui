@@ -1,7 +1,7 @@
 # @compose-ui/property-panel
 
 由同步 Valibot Schema 生成受控 React 属性编辑 UI。包本身不拥有页面文档、撤销历史或持久化，
-可以单独嵌入任意 React 18.3/19 宿主，也可以通过 `ComposeEditor` 的 `inspectorPanel` 插槽使用。
+可以单独嵌入任意 React 18.3/19 宿主，也可以通过 `ComposeEditor` 的 `slots.inspector` 使用。
 
 ## 安装与样式
 
@@ -18,7 +18,7 @@ import '@compose-ui/property-panel/styles.css'
 ## Schema 驱动的受控面板
 
 ```tsx
-import { PropertyPanel } from '@compose-ui/property-panel'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import { useState } from 'react'
 import * as v from 'valibot'
 
@@ -44,7 +44,7 @@ const defaults = { transform: { x: 0, y: 0 }, opacity: 1 }
 function Inspector() {
   const [value, setValue] = useState(defaults)
   return (
-    <PropertyPanel
+    <ComposePropertyPanel
       schema={schema}
       value={value}
       defaultValue={defaults}
@@ -101,7 +101,7 @@ const chartSchema = v.object({
   ),
 })
 
-<PropertyPanel
+<ComposePropertyPanel
   schema={chartSchema}
   value={value}
   renderers={[{
@@ -143,7 +143,7 @@ const schema = v.object({
 ```
 
 ```tsx
-import { PropertyPanel, resolvePropertyBindings } from '@compose-ui/property-panel'
+import { ComposePropertyPanel, resolvePropertyBindings } from '@compose-ui/property-panel'
 
 const variables = [
   { id: 'page.opacity', label: '页面透明度', scope: 'page', value: 0.65 },
@@ -151,7 +151,7 @@ const variables = [
 
 const [bindings, setBindings] = useState([])
 
-<PropertyPanel
+<ComposePropertyPanel
   schema={schema}
   value={literalValue}
   binding={{
@@ -242,7 +242,7 @@ description、option label 和自定义 renderer 内容始终由宿主控制，�
 - 分组和字段的重置只在 `defaultValue` 能通过完整 Schema 时提供。
 
 共享语义 token 是首选主题入口；单实例仍可在 `.property-panel` 或其祖先范围内覆盖
-PropertyPanel 专用变量：
+ComposePropertyPanel 专用变量：
 
 ```css
 .my-inspector .property-panel {

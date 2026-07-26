@@ -1,17 +1,17 @@
 # @compose-ui/materials
 
 Frame、Rectangle、Text、Image 与 SVG 的第一方 Inspector 通过 `@compose-ui/ui-context` 生成当前语言的内建
-Schema 标题，并由 PropertyPanel 消费共享主题 token。切换主题或语言不会重新创建 registry，
+Schema 标题，并由 ComposePropertyPanel 消费共享主题 token。切换主题或语言不会重新创建 registry，
 宿主扩展 definition、label、自定义 Inspector 与自定义 Schema metadata 保持原文。
 
 五种独立基础物料组合 core 文档样式、assets resolver、component-registry、Stage Frame preset
-与 PropertyPanel Inspector，但不依赖 editor 或包含 Monaco 的 asset-browser。
+与 ComposePropertyPanel Inspector，但不依赖 editor 或包含 Monaco 的 asset-browser。
 
 ```tsx
-import { createBasicMaterials } from '@compose-ui/materials'
+import { createComposeBasicMaterials } from '@compose-ui/materials'
 import '@compose-ui/materials/styles.css'
 
-const materials = createBasicMaterials({
+const materials = createComposeBasicMaterials({
   extensions: [echartsDefinition],
 })
 
@@ -23,7 +23,7 @@ const controller = useComposeEditorController({
 })
 ```
 
-`createBasicMaterials` 每次返回独立 registry。Component Library 顺序固定为 Frame preset，
+`createComposeBasicMaterials` 每次返回独立 registry。Component Library 顺序固定为 Frame preset，
 然后 Rectangle、Text，最后按输入顺序追加 `extensions`；Image/SVG 虽已注册但通过
 `paletteHidden` 隐藏，只能由兼容资源拖入创建。五种物料均可覆盖
 `label`、新节点 `name`、尺寸、默认 props/style；Frame preset 还可通过

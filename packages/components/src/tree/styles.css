@@ -81,6 +81,14 @@
   box-shadow: inset 0 0 0 1px var(--compose-accent, #2388ff);
 }
 
+.compose-tree__cell {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
 .compose-tree__indent {
   flex: 0 0 auto;
 }

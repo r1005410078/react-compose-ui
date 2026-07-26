@@ -1,8 +1,8 @@
-import { RegistryComponent } from '@compose-ui/component-registry'
+import { ComposeRegistryComponent } from '@compose-ui/component-registry'
 import type { ComposeComponentNode } from '@compose-ui/core'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createBasicMaterials } from '../index'
+import { createComposeBasicMaterials } from '../index'
 
 afterEach(cleanup)
 
@@ -24,9 +24,9 @@ function textNode(
 
 describe('@compose-ui/materials Text', () => {
   it('使用文档 props 渲染文字内容与排版', () => {
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     render(
-      <RegistryComponent
+      <ComposeRegistryComponent
         mode="preview"
         node={textNode({
           props: { text: 'Dashboard', color: '#ff00aa', fontSize: 32 },
@@ -43,7 +43,7 @@ describe('@compose-ui/materials Text', () => {
   })
 
   it('OpenSpec: basic-materials / 完整基础物料与 Inspector / 编辑基础物料 - Text props', () => {
-    const materials = createBasicMaterials({ idFactory: () => 'text-command' })
+    const materials = createComposeBasicMaterials({ idFactory: () => 'text-command' })
     const definition = materials.registry.get('text')
     const Inspector = definition?.inspector
     const dispatch = vi.fn()

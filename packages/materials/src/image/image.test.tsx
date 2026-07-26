@@ -2,11 +2,11 @@ import type {
   ComposeAssetReference,
   ComposeAssetResolver,
 } from '@compose-ui/assets'
-import { RegistryComponent } from '@compose-ui/component-registry'
+import { ComposeRegistryComponent } from '@compose-ui/component-registry'
 import type { ComposeComponentNode } from '@compose-ui/core'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createBasicMaterials } from '../index'
+import { createComposeBasicMaterials } from '../index'
 
 const reference: ComposeAssetReference = {
   providerId: 'library',
@@ -53,9 +53,9 @@ describe('@compose-ui/materials Image', () => {
         return () => listeners.delete(listener)
       },
     }
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     const view = render(
-      <RegistryComponent
+      <ComposeRegistryComponent
         assetResolver={resolver}
         mode="preview"
         node={imageNode()}
@@ -73,9 +73,9 @@ describe('@compose-ui/materials Image', () => {
   })
 
   it('缺少 resolver 时显示可访问占位', () => {
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     render(
-      <RegistryComponent
+      <ComposeRegistryComponent
         mode="editor"
         node={imageNode()}
         registry={materials.registry}

@@ -1,7 +1,7 @@
-import { RegistryComponent } from '@compose-ui/component-registry'
+import { ComposeRegistryComponent } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import { resolveNodeStyle } from '@compose-ui/core'
-import type { ComponentRegistry } from '@compose-ui/component-registry'
+import type { ComposeComponentRegistry } from '@compose-ui/component-registry'
 import type { ComposeDocument, ComposeNode } from '@compose-ui/core'
 import type { StageViewport } from '@compose-ui/stage-engine'
 import type {
@@ -38,7 +38,7 @@ function nodeStyle(node: ComposeNode): CSSProperties {
 
 interface StageSceneLayerProps {
   readonly document: ComposeDocument
-  readonly registry: ComponentRegistry
+  readonly registry: ComposeComponentRegistry
   readonly assetResolver?: ComposeAssetResolver
   readonly viewport: StageViewport
   readonly onNodePointerDown: (
@@ -69,7 +69,7 @@ export function StageSceneLayer({
       >
         {node.kind === 'component'
           ? (
-              <RegistryComponent
+              <ComposeRegistryComponent
                 assetResolver={assetResolver}
                 mode="editor"
                 node={node}

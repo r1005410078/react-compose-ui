@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SceneTreeNode } from './index'
+import type { ComposeSceneTreeNode } from './index'
 import {
   buildTreeIndex,
   createMoveTarget,
@@ -8,7 +8,7 @@ import {
   searchTree,
 } from './tree-model'
 
-const nodes: readonly SceneTreeNode[] = [
+const nodes: readonly ComposeSceneTreeNode[] = [
   {
     id: 'page',
     label: 'Page 1',
@@ -19,7 +19,7 @@ const nodes: readonly SceneTreeNode[] = [
   },
 ]
 
-const dragNodes: readonly SceneTreeNode[] = [{
+const dragNodes: readonly ComposeSceneTreeNode[] = [{
   id: 'page',
   label: 'Page',
   children: [

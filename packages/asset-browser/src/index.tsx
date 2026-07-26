@@ -9,43 +9,16 @@
  */
 import './styles.css'
 
-// 公共入口同时导出组件与纯协议 factory，因此只针对该导出豁免 Fast Refresh。
-// eslint-disable-next-line react-refresh/only-export-components
-export { createComposeAssetResolver } from '@compose-ui/assets'
-export { AssetBrowser } from './asset-browser'
+export { ComposeAssetBrowser } from './asset-browser'
 export type {
-  AssetBrowserProps,
+  ComposeAssetBrowserProps,
   ComposeAssetCanvasDragEvent,
   ComposeAssetCanvasDragItem,
 } from './asset-browser-types'
-export {
-  ComposeAssetError,
-} from './asset-types'
-export type {
-  ComposeAssetBatchResult,
-  ComposeAssetCapabilities,
-  ComposeAssetEntry,
-  ComposeAssetErrorCode,
-  ComposeAssetItemResult,
-  ComposeAssetOperationEvent,
-  ComposeAssetProvider,
-  ComposeAssetReference,
-  ComposeAssetResolver,
-  ComposeResolvedAsset,
-  CreateFileInput,
-  CreateFolderInput,
-  DeleteAssetInput,
-  MoveAssetInput,
-  RenameAssetInput,
-  ResolveAssetInput,
-  WriteAssetInput,
-} from './asset-types'
-// 公共入口同时导出组件与纯工具，因此只针对该工具导出豁免 Fast Refresh。
-// eslint-disable-next-line react-refresh/only-export-components
-export { executeAssetBatch, normalizeComposeAssetError, validateAssetName } from './asset-operations'
 // 公共入口同时导出组件与 Provider factory，因此只针对该 factory 导出豁免 Fast Refresh。
 // eslint-disable-next-line react-refresh/only-export-components
-export { createFileSystemAssetProvider, isFileSystemAssetProviderSupported, openFileSystemAssetProvider } from './file-system-provider'
-// 公共入口同时导出组件与工具函数，因此只针对工具导出豁免 Fast Refresh。
-// eslint-disable-next-line react-refresh/only-export-components
-export { getAssetScriptLanguage } from './script-language'
+export {
+  createFileSystemAssetProvider as createComposeFileSystemAssetProvider,
+  isFileSystemAssetProviderSupported as isComposeFileSystemAssetProviderSupported,
+  openFileSystemAssetProvider as openComposeFileSystemAssetProvider,
+} from './file-system-provider'

@@ -2,11 +2,11 @@ import type { ReactNode } from 'react'
 import type { NodeStyle } from '@compose-ui/core'
 
 /**
- * ComponentPalette 可创建的根级 Frame 预设。
+ * ComposeComponentPalette 可创建的根级 Frame 预设。
  *
  * @public
  */
-export interface StageFramePreset {
+export interface ComposeStageFramePreset {
   /** 一个 Palette 实例内唯一且稳定的预设 ID。 */
   readonly id: string
   /** Palette 显示名称。 */

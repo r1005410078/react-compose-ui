@@ -1,7 +1,7 @@
-import type { SceneTreeNode, SceneTreeOperation } from './index'
+import type { ComposeSceneTreeNode, ComposeSceneTreeOperation } from './index'
 
 export interface IndexedSceneTreeNode {
-  node: SceneTreeNode
+  node: ComposeSceneTreeNode
   parentId: string | null
   depth: number
   index: number
@@ -21,12 +21,12 @@ export interface SceneTreeSearchResult {
 }
 
 export type SceneTreeMoveTarget = {
-  operation: Extract<SceneTreeOperation, { type: 'move' }>
+  operation: Extract<ComposeSceneTreeOperation, { type: 'move' }>
   depth: number
   lineIndex: number
 } | {
   kind: 'inside'
-  operation: Extract<SceneTreeOperation, { type: 'move' }>
+  operation: Extract<ComposeSceneTreeOperation, { type: 'move' }>
   targetNodeId: string
 }
 
@@ -38,11 +38,11 @@ export type SceneTreeMoveTarget = {
  * 因为组件要求 ID 在树实例内稳定且唯一。
  */
 export function buildTreeIndex(
-  nodes: readonly SceneTreeNode[],
+  nodes: readonly ComposeSceneTreeNode[],
 ): ReadonlyMap<string, IndexedSceneTreeNode> {
   const index = new Map<string, IndexedSceneTreeNode>()
   const stack: Array<{
-    node: SceneTreeNode
+    node: ComposeSceneTreeNode
     parentId: string | null
     depth: number
     index: number
@@ -91,7 +91,7 @@ export function buildTreeIndex(
  * 返回结果是虚拟列表和 Shift 范围选择共同使用的顺序基准。
  */
 export function flattenVisibleTree(
-  nodes: readonly SceneTreeNode[],
+  nodes: readonly ComposeSceneTreeNode[],
   expandedIds: ReadonlySet<string>,
 ): readonly IndexedSceneTreeNode[] {
   const index = buildTreeIndex(nodes)
@@ -122,7 +122,7 @@ export function flattenVisibleTree(
  * @returns 可展示行以及用户可访问的正则错误；无匹配不是错误。
  */
 export function searchTree(
-  nodes: readonly SceneTreeNode[],
+  nodes: readonly ComposeSceneTreeNode[],
   query: string,
   options: SceneTreeSearchOptions,
 ): SceneTreeSearchResult {
@@ -361,7 +361,7 @@ function findVisibleSubtreeEnd(
  */
 function isMoveNoOp(
   index: ReadonlyMap<string, IndexedSceneTreeNode>,
-  operation: Extract<SceneTreeOperation, { type: 'move' }>,
+  operation: Extract<ComposeSceneTreeOperation, { type: 'move' }>,
 ): boolean {
   if (operation.nodeIds.some((nodeId) => index.get(nodeId)?.parentId !== operation.parentId)) {
     return false

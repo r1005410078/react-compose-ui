@@ -1,7 +1,7 @@
 import type { ComposeDocument } from '@compose-ui/core'
 import type {
-  StageProps,
-  StageTool,
+  ComposeStageProps,
+  ComposeStageTool,
 } from '@compose-ui/stage'
 import type { StageViewport } from '@compose-ui/stage-engine'
 import type {
@@ -33,7 +33,7 @@ type DefaultStageToolbarProps = {
     label: string,
   ) => void
   readonly createFrame: () => void
-  readonly dispatch: NonNullable<StageProps['dispatch']>
+  readonly dispatch: NonNullable<ComposeStageProps['dispatch']>
   readonly document: ComposeDocument
   readonly fitFrame: () => void
   readonly fitSelection: () => void
@@ -41,11 +41,11 @@ type DefaultStageToolbarProps = {
   readonly selectedIds: readonly string[]
   readonly selectedFrameId: string | null
   readonly setCanvasSettingsOpen: Dispatch<SetStateAction<boolean>>
-  readonly setTool: (tool: StageTool) => void
+  readonly setTool: (tool: ComposeStageTool) => void
   readonly setViewport: Dispatch<SetStateAction<StageViewport>>
   readonly smartSnapEnabled: boolean
   readonly surfaceSize: { readonly width: number; readonly height: number } | null
-  readonly tool: StageTool
+  readonly tool: ComposeStageTool
   readonly viewport: StageViewport
 }
 

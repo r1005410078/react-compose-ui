@@ -6,17 +6,16 @@
 
 import './styles.css'
 
-export { Stage } from './stage'
-export { ComponentPalette, type ComponentPaletteProps } from './palette'
-export { type StageFramePreset } from './frame-preset'
+export { ComposeStage } from './stage-surface'
+export { ComposeComponentPalette, type ComposeComponentPaletteProps } from './component-palette'
+export { type ComposeStageFramePreset } from './frame-preset'
 export type {
-  StageDispatch,
-  StageKeybinding,
-  StageLocale,
-  StageProps,
-  StageShortcutAction,
-  StageShortcuts,
-  StageTool,
+  ComposeStageDispatch,
+  ComposeStageKeybinding,
+  ComposeStageProps,
+  ComposeStageShortcutAction,
+  ComposeStageShortcuts,
+  ComposeStageTool,
 } from './types'
 /** `@compose-ui/stage` 的稳定包标识。 @public */
 export const COMPOSE_UI_STAGE_PACKAGE = '@compose-ui/stage' as const

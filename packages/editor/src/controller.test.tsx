@@ -10,13 +10,13 @@ import {
 import { StrictMode } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createComponentRegistry } from '@compose-ui/component-registry'
+import { createComposeComponentRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
   createTransactionRuntime,
 } from '@compose-ui/core'
-import type { NodeInspectorProps } from '@compose-ui/component-registry'
+import type { ComposeNodeInspectorProps } from '@compose-ui/component-registry'
 import type { ComposeFrameNode } from '@compose-ui/core'
 import type {
   ComposeDocument,
@@ -74,7 +74,7 @@ function runtime() {
   })
 }
 
-const registry = createComponentRegistry([{
+const registry = createComposeComponentRegistry([{
   type: 'text',
   label: '文本',
   defaultSize: { width: 180, height: 40 },
@@ -98,7 +98,7 @@ const registry = createComponentRegistry([{
 function ContainerInspector({
   node,
   dispatch,
-}: NodeInspectorProps<ComposeFrameNode>) {
+}: ComposeNodeInspectorProps<ComposeFrameNode>) {
   return (
     <button
       type="button"
@@ -287,7 +287,7 @@ describe('useComposeEditorController', () => {
 
     render(result.current.componentLibraryPanel)
     expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')))
-      .toEqual(['Add Frame', 'Add 文本'])
+      .toEqual(['添加 Frame', '添加 文本'])
   })
 
   it('OpenSpec: editor-workspace-layout / Frame presets 与结构节点 Inspector / 保持未配置宿主兼容', () => {
@@ -299,8 +299,8 @@ describe('useComposeEditorController', () => {
     }))
 
     render(result.current.componentLibraryPanel)
-    expect(screen.queryByRole('button', { name: 'Add Frame' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add 文本' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '添加 Frame' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '添加 文本' })).toBeInTheDocument()
     cleanup()
 
     render(result.current.inspectorPanel)
@@ -492,7 +492,7 @@ describe('useComposeEditorController', () => {
   })
 
   // OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使用任意根工作区
-  it('maps a cross-parent SceneTree move to a geometry-preserving transaction', () => {
+  it('maps a cross-parent ComposeSceneTree move to a geometry-preserving transaction', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
       runtime: editorRuntime,

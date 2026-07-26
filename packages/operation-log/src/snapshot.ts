@@ -1,11 +1,11 @@
-import type { OperationLogEncodedValue, OperationLogSnapshot } from './types'
+import type { ComposeOperationLogEncodedValue, ComposeOperationLogSnapshot } from './types'
 
 class SnapshotEncodingError extends Error {}
 
 function encodeValue(
   value: unknown,
   ancestors: WeakSet<object>,
-): OperationLogEncodedValue {
+): ComposeOperationLogEncodedValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
   if (typeof value === 'number') {
     if (Number.isFinite(value)) return value
@@ -50,10 +50,10 @@ function preview(serialized: string) {
  * @returns 完整、截断或不可用的快照；本函数不会因值不可序列化而抛出。
  * @defaultValue maxBytes 为 65536。
  */
-export function createOperationLogSnapshot(
+export function createComposeOperationLogSnapshot(
   value: unknown,
   maxBytes = 64 * 1024,
-): OperationLogSnapshot {
+): ComposeOperationLogSnapshot {
   try {
     const encoded = encodeValue(value, new WeakSet())
     const serialized = JSON.stringify(encoded)

@@ -1,7 +1,7 @@
-import type { ComponentRendererProps } from '@compose-ui/component-registry'
+import type { ComposeComponentRendererProps } from '@compose-ui/component-registry'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { readAssetReference, useResolvedAsset } from '../shared/assets'
+import { readAssetReference, useResolvedAsset } from '../material-inspector-kit/assets'
 
 const fits = new Set(['contain', 'cover', 'fill', 'none', 'scale-down'])
 
@@ -10,7 +10,7 @@ export function ImageRenderer({
   assetResolver,
   node,
   props,
-}: ComponentRendererProps) {
+}: ComposeComponentRendererProps) {
   const reference = readAssetReference(props.asset)
   const resolved = useResolvedAsset(reference, assetResolver)
   const [resolvedUrl, setResolvedUrl] = useState<{

@@ -1,0 +1,34 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "types": ["vite/client"],
+    "paths": {
+      "@compose-ui/storybook-fixtures": ["src/fixtures/index.tsx"],
+      "@compose-ui/asset-browser": ["../../packages/asset-browser/src/index.tsx"],
+      "@compose-ui/assets": ["../../packages/assets/src/index.ts"],
+      "@compose-ui/command-panel": ["../../packages/command-panel/src/index.tsx"],
+      "@compose-ui/component-registry": ["../../packages/component-registry/src/index.ts"],
+      "@compose-ui/components": ["../../packages/components/src/index.tsx"],
+      "@compose-ui/core": ["../../packages/core/src/index.ts"],
+      "@compose-ui/editor": ["../../packages/editor/src/index.tsx"],
+      "@compose-ui/history": ["../../packages/history/src/index.tsx"],
+      "@compose-ui/materials": ["../../packages/materials/src/index.ts"],
+      "@compose-ui/operation-log": ["../../packages/operation-log/src/index.tsx"],
+      "@compose-ui/preview": ["../../packages/preview/src/index.tsx"],
+      "@compose-ui/property-panel": ["../../packages/property-panel/src/index.tsx"],
+      "@compose-ui/scene-tree": ["../../packages/scene-tree/src/index.tsx"],
+      "@compose-ui/stage": ["../../packages/stage/src/index.ts"],
+      "@compose-ui/stage-engine": ["../../packages/stage-engine/src/index.ts"],
+      "@compose-ui/ui-context": ["../../packages/ui-context/src/index.ts"]
+    }
+  },
+  "include": [
+    ".storybook",
+    "src",
+    "../../packages/asset-browser/src/monaco-editor.d.ts",
+    "../../packages/*/src/**/*.stories.ts",
+    "../../packages/*/src/**/*.stories.tsx"
+  ]
+}

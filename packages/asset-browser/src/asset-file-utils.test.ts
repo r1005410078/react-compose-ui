@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ComposeAssetEntry } from './asset-types'
+import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { canvasImageMediaType } from './asset-file-utils'
 
 function file(name: string, mediaType?: string): ComposeAssetEntry {

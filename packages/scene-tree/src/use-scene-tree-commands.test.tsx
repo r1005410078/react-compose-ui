@@ -1,9 +1,9 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { useSceneTreeCommands } from './index'
-import type { SceneTreeNode, SceneTreeOperation } from './index'
+import { useComposeSceneTreeCommands } from './index'
+import type { ComposeSceneTreeNode, ComposeSceneTreeOperation } from './index'
 
-const nodes: readonly SceneTreeNode[] = [{
+const nodes: readonly ComposeSceneTreeNode[] = [{
   id: 'page',
   label: 'Page',
   canMove: false,
@@ -15,12 +15,12 @@ const nodes: readonly SceneTreeNode[] = [{
 }]
 
 function setup(selectedIds: readonly string[]) {
-  const onOperation = vi.fn<(operation: SceneTreeOperation) => void>()
-  const hook = renderHook(() => useSceneTreeCommands({ nodes, selectedIds, onOperation }))
+  const onOperation = vi.fn<(operation: ComposeSceneTreeOperation) => void>()
+  const hook = renderHook(() => useComposeSceneTreeCommands({ nodes, selectedIds, onOperation }))
   return { ...hook, onOperation }
 }
 
-describe('useSceneTreeCommands', () => {
+describe('useComposeSceneTreeCommands', () => {
   it('OpenSpec: scene-tree / 受控场景树命令 / 计算新增命令位置', () => {
     const { result, onOperation } = setup(['a'])
     act(() => result.current.execute('create-child', 'a'))

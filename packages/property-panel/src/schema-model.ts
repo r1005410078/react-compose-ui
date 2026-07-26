@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import type { PropertyPanelMetadata, PropertyPath } from './index'
+import type { PropertyPanelMetadata, PropertyPath } from './property-panel/compose-property-panel'
 
 type RuntimeSchema = v.GenericSchema & {
   default?: unknown

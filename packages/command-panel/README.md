@@ -6,11 +6,10 @@ Patch；也可以通过宿主提供的结构化预设派发命令。面板不解
 页面文档或历史。
 
 ```tsx
-import { CommandPanel } from '@compose-ui/command-panel'
+import { ComposeCommandPanel } from '@compose-ui/command-panel'
 import '@compose-ui/command-panel/styles.css'
 
-<CommandPanel
-  locale="zh-CN"
+<ComposeCommandPanel
   runtime={runtime}
   presets={[{
     id: 'rename',
@@ -26,6 +25,5 @@ import '@compose-ui/command-panel/styles.css'
 />
 ```
 
-`locale` 支持 zh-CN 和 en-US，只翻译内建状态、详情、验证、空状态和 ARIA；命令 label/type、
-source、字段 label 与选项保持宿主原文。未提供 `locale` 时优先读取
-`@compose-ui/ui-context`；显式 prop 优先于 Context，Provider 外保持原独立默认语言。
+通过 `ComposeUIProvider` 设置 zh-CN 或 en-US；它只翻译内建状态、详情、验证、空状态和 ARIA。
+命令 label/type、source、字段 label 与选项保持宿主原文。

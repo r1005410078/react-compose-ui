@@ -1,0 +1,40 @@
+{
+  "name": "@compose-ui/storybook",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "storybook dev --port 6006",
+    "build": "storybook build",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@compose-ui/asset-browser": "workspace:*",
+    "@compose-ui/assets": "workspace:*",
+    "@compose-ui/command-panel": "workspace:*",
+    "@compose-ui/component-registry": "workspace:*",
+    "@compose-ui/components": "workspace:*",
+    "@compose-ui/core": "workspace:*",
+    "@compose-ui/editor": "workspace:*",
+    "@compose-ui/history": "workspace:*",
+    "@compose-ui/materials": "workspace:*",
+    "@compose-ui/operation-log": "workspace:*",
+    "@compose-ui/preview": "workspace:*",
+    "@compose-ui/property-panel": "workspace:*",
+    "@compose-ui/scene-tree": "workspace:*",
+    "@compose-ui/stage": "workspace:*",
+    "@compose-ui/stage-engine": "workspace:*",
+    "@compose-ui/ui-context": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "^10.5.4",
+    "@storybook/addon-vitest": "^10.5.4",
+    "@storybook/react-vite": "^10.5.4",
+    "@vitest/browser-playwright": "^4.0.18",
+    "monaco-editor": "^0.55.1",
+    "storybook": "^10.5.4",
+    "vitest": "^4.0.18"
+  }
+}

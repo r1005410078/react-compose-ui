@@ -16,6 +16,7 @@ dist-ssr
 coverage
 playwright-report
 test-results
+apps/storybook/storybook-static
 *.tsbuildinfo
 *.tgz
 

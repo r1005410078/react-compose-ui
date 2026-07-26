@@ -1,1 +1,1 @@
-export { DEFAULT_TEXT_DEFINITION, createTextDefinition } from './definition'
+export { DEFAULT_COMPOSE_TEXT_DEFINITION, createTextDefinition } from './definition'

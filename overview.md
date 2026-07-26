@@ -249,7 +249,7 @@ ECS Component 必须以数据为中心。Registry 为每个 `ComponentType` 注�
 下面的接口只表达方向：
 
 ```ts
-interface ComponentDefinition<T> {
+interface ComposeComponentDefinition<T> {
   type: string
   version: string
   validate(data: unknown): T
@@ -777,7 +777,7 @@ Validator 不得产生变化；Normalizer 只能在受控阶段追加或替换 O
 正式 History 是消费已提交 Transaction 和 inverse 的 Extension；Persistence、Collaboration
 和 Audit 也是事务流消费者。它们不应成为所有领域代码都必须依赖的内核模块。当前
 `@compose-ui/history` 仅提供会话级快照时间线与通用导航面板，用于在事务协议稳定前验证交互；
-未来实现可以继续满足同一个 `HistoryNavigationController`，无需替换面板协议。
+未来实现可以继续满足同一个 `ComposeHistoryNavigationController`，无需替换面板协议。
 
 ### Editor Kernel State
 

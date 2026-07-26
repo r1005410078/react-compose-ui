@@ -1,19 +1,19 @@
-import type { ComponentDefinition } from '@compose-ui/component-registry'
-import { cloneProps, cloneStyle } from '../shared/default-values'
+import type { ComposeComponentDefinition } from '@compose-ui/component-registry'
+import { cloneProps, cloneStyle } from '../material-inspector-kit/default-values'
 import {
   createDefaultInspectorId,
   type InspectorIdFactory,
-} from '../shared/inspector/dispatch-update'
-import type { BasicMaterialComponentOptions } from '../types'
+} from '../material-inspector-kit/inspector/dispatch-update'
+import type { ComposeBasicMaterialComponentOptions } from '../types'
 import { DEFAULT_TEXT_PROPS, DEFAULT_TEXT_SIZE, DEFAULT_TEXT_STYLE } from './defaults'
 import { createTextInspector } from './inspector'
 import { TextRenderer } from './renderer'
 
 /** 根据实例配置创建 Text definition。 @internal */
 export function createTextDefinition(
-  options: BasicMaterialComponentOptions = {},
+  options: ComposeBasicMaterialComponentOptions = {},
   idFactory: InspectorIdFactory = createDefaultInspectorId,
-): ComponentDefinition {
+): ComposeComponentDefinition {
   const name = options.name ?? 'Text'
   const defaultSize = options.defaultSize ?? DEFAULT_TEXT_SIZE
   const defaultProps = cloneProps(DEFAULT_TEXT_PROPS, options.defaultProps)
@@ -37,4 +37,4 @@ export function createTextDefinition(
 }
 
 /** 默认 Text definition；不会创建模块级 registry。 @public */
-export const DEFAULT_TEXT_DEFINITION = createTextDefinition()
+export const DEFAULT_COMPOSE_TEXT_DEFINITION = createTextDefinition()

@@ -8,9 +8,9 @@
 
 ```tsx
 import {
-  HistoryPanel,
-  useHistory,
-  useHistoryShortcuts,
+  ComposeHistoryPanel,
+  useComposeHistory,
+  useComposeHistoryShortcuts,
 } from '@compose-ui/history'
 import '@compose-ui/history/styles.css'
 
@@ -20,11 +20,11 @@ interface DocumentSnapshot {
 }
 
 export function DocumentEditor() {
-  const history = useHistory<DocumentSnapshot>({
+  const history = useComposeHistory<DocumentSnapshot>({
     title: '未命名页面',
     nodes: [],
   })
-  const onKeyDownCapture = useHistoryShortcuts(history, {
+  const onKeyDownCapture = useComposeHistoryShortcuts(history, {
     undo: [{ code: 'KeyZ', primary: true }],
     redo: [{ code: 'KeyZ', primary: true, shift: true }],
   })
@@ -41,19 +41,19 @@ export function DocumentEditor() {
           )
         }}
       />
-      <HistoryPanel controller={history} locale="zh-CN" />
-    </section>
+      <ComposeHistoryPanel controller={history} />
+</section>
   )
 }
 ```
 
-`useHistory` 默认保留 100 个动作，初始基线不计入上限；超过容量后最早可达状态显示为
+`useComposeHistory` 默认保留 100 个动作，初始基线不计入上限；超过容量后最早可达状态显示为
 “较早状态”。相同 `mergeKey` 且 750ms 内的连续提交会合并，未提供 `mergeKey` 的提交各自形成
 记录。在历史中间提交新值会删除后续重做分支。
 
 快捷键支持 `Cmd/Ctrl+Z`、`Cmd/Ctrl+Shift+Z` 和 `Ctrl+Y`。处理器应挂在编辑器范围容器上，
-也可通过 `HistoryShortcuts` 覆盖或以空数组禁用。处理器应挂在编辑器范围容器上，因此输入框
-聚焦时仍操作文档历史；IME 组合输入期间不会拦截。`HistoryPanel.locale` 支持 zh-CN 和 en-US，
+也可通过 `ComposeHistoryShortcuts` 覆盖或以空数组禁用。处理器应挂在编辑器范围容器上，因此输入框
+聚焦时仍操作文档历史；IME 组合输入期间不会拦截。`ComposeHistoryPanel.locale` 支持 zh-CN 和 en-US，
 显式 prop 优先于 `@compose-ui/ui-context`，Provider 外保持原独立默认语言；宿主历史 label
 保持原文。
 
@@ -63,5 +63,5 @@ export function DocumentEditor() {
 深拷贝；宿主必须以不可变方式更新快照，且传给 `commit` 的更新函数必须无副作用。加载另一份
 文档时应显式调用 `history.reset(nextDocument, '开始')`。
 
-`HistoryPanel` 只依赖 `HistoryNavigationController`，因此未来基于 Transaction/inverse 的历史
+`ComposeHistoryPanel` 只依赖 `ComposeHistoryNavigationController`，因此未来基于 Transaction/inverse 的历史
 实现也可以复用同一个面板协议。

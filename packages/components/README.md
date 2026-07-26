@@ -1,13 +1,13 @@
 # @compose-ui/components
 
-跨 Compose UI 包复用的无业务 React 组件。首个公共组件 `Tree<T>` 提供受控选择/展开、多选、
+跨 Compose UI 包复用的无业务 React 组件。首个公共组件 `ComposeTree<T>` 提供受控选择/展开、多选、
 Shift 范围选择、键盘导航、Treegrid ARIA、5000+ 节点虚拟化、祖先保留过滤和可选 Pointer 拖排。
 
 ```tsx
-import { Tree } from '@compose-ui/components'
+import { ComposeTree } from '@compose-ui/components'
 import '@compose-ui/components/styles.css'
 
-<Tree
+<ComposeTree
   items={items}
   adapter={{
     getId: (item) => item.id,

@@ -3,8 +3,8 @@ import {
   type ComposeAssetCapabilities,
   type ComposeAssetEntry,
   type ComposeAssetProvider,
-} from './asset-types'
-import { normalizeComposeAssetError, validateAssetName } from './asset-operations'
+} from '@compose-ui/assets'
+import { normalizeComposeAssetError, validateAssetName } from '@compose-ui/assets'
 
 interface FileSystemHandleWithMove extends FileSystemHandle {
   move(destination: FileSystemDirectoryHandle, name?: string): Promise<void>

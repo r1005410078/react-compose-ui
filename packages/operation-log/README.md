@@ -2,7 +2,7 @@
 
 用于记录宿主已经成功应用的数据变更，并在 IndexedDB 中按 `scopeId` 隔离保存。本包不负责
 undo/redo、技术诊断日志、服务端同步或防篡改审计，可以独立使用，也可以放入
-`ComposeEditor.transactionLogPanel`。
+`ComposeEditor` 的 `slots.transactionLog`。
 
 ## 安装与样式
 
@@ -20,14 +20,14 @@ import '@compose-ui/operation-log/styles.css'
 
 ```tsx
 import {
-  OperationLogPanel,
-  OperationLogProvider,
-  useOperationLog,
+  ComposeOperationLogPanel,
+  ComposeOperationLogProvider,
+  useComposeOperationLog,
 } from '@compose-ui/operation-log'
 import { ComposeEditor } from '@compose-ui/editor'
 
 function Workspace() {
-  const operationLog = useOperationLog()
+  const operationLog = useComposeOperationLog()
 
   const rename = (id: string, before: string, after: string) => {
     // 先成功应用业务数据，再记录；日志失败不会回滚业务状态。
@@ -44,7 +44,7 @@ function Workspace() {
   }
 
   return (
-    <ComposeEditor transactionLogPanel={<OperationLogPanel />}>
+    <ComposeEditor slots={{ transactionLog: <ComposeOperationLogPanel /> }}>
       <Canvas onRename={rename} />
     </ComposeEditor>
   )
@@ -52,9 +52,9 @@ function Workspace() {
 
 export function Page() {
   return (
-    <OperationLogProvider scopeId="workspace-42">
+    <ComposeOperationLogProvider scopeId="workspace-42">
       <Workspace />
-    </OperationLogProvider>
+    </ComposeOperationLogProvider>
   )
 }
 ```
@@ -66,7 +66,7 @@ Provider 默认每个 scope 保留最近 `1000` 条记录，每个 before、afte
 面板按更新时间倒序显示，支持搜索 action、摘要、组件和路径，也支持分类与组件筛选。选择记录后
 可查看目标、来源、合并次数、结构化 Before/After 以及 metadata。默认界面文案使用英文；
 面板没有清空按钮，需要时宿主可以调用
-`useOperationLog().clear()`。面板从 `@compose-ui/ui-context` 读取主题和语言；Provider 外默认
+`useComposeOperationLog().clear()`。面板从 `@compose-ui/ui-context` 读取主题和语言；Provider 外默认
 保持英文兼容。宿主可覆盖 `operationLog.*` message，`emptyMessage` 与显式 `aria-label` 仍有
 最高优先级，日志摘要、目标标签和业务 action 不会被翻译。
 
@@ -93,22 +93,22 @@ void operationLog.record({
 
 ## 快照和自定义 store
 
-`createOperationLogSnapshot()` 支持普通对象、数组、Date、BigInt 和 undefined。循环引用、函数、
+`createComposeOperationLogSnapshot()` 支持普通对象、数组、Date、BigInt 和 undefined。循环引用、函数、
 Symbol 以及不支持的对象会生成 `unavailable` 快照；超出上限时只保存稳定预览、原始字节数和
 `truncated` 状态，不会阻断宿主操作。
 
 测试或非浏览器环境可以显式使用内存 store：
 
 ```tsx
-const store = createMemoryOperationLogStore()
+const store = createComposeMemoryOperationLogStore()
 
-<OperationLogProvider scopeId="test" store={store}>
+<ComposeOperationLogProvider scopeId="test" store={store}>
   <App />
-</OperationLogProvider>
+</ComposeOperationLogProvider>
 ```
 
-`createIndexedDbOperationLogStore({ databaseName, storeName })` 可用于隔离不同产品实例。自定义
-`OperationLogStore` 只需实现 `load`、`put`、`remove` 和 `clear`。
+`createComposeIndexedDbOperationLogStore({ databaseName, storeName })` 可用于隔离不同产品实例。自定义
+`ComposeOperationLogStore` 只需实现 `load`、`put`、`remove` 和 `clear`。
 
 ## 记录边界
 

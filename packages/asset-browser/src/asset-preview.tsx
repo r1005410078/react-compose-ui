@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ComposeAssetEntry, ComposeAssetProvider } from './asset-types'
+import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import type { AssetBrowserMessages } from './asset-browser-i18n'
-import { normalizeComposeAssetError } from './asset-operations'
+import { normalizeComposeAssetError } from '@compose-ui/assets'
 import { ScriptEditor } from './script-editor'
 import {
   extensionOf,

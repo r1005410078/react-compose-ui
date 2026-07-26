@@ -1,5 +1,6 @@
-import { HistoryPanel } from '@compose-ui/history'
+import { ComposeHistoryPanel } from '@compose-ui/history'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import type { ComposeI18nContextValue, ComposeLocale } from '@compose-ui/ui-context'
 import { DockviewReact, themeAbyss } from 'dockview-react'
 import { useCallback, useEffect, useRef } from 'react'
 import type {
@@ -10,8 +11,6 @@ import type {
 import { useWorkspaceContent } from './workspace-context'
 import { WorkspaceTab } from './workspace-tab'
 import { getEditorMessages } from './editor-i18n'
-import type { ComposeEditorLocale } from './preferences'
-import type { ComposeI18nContextValue } from '@compose-ui/ui-context'
 
 const SCENE_MIN_HEIGHT = 160
 const HISTORY_MIN_HEIGHT = 120
@@ -44,7 +43,7 @@ function HistoryContentPanel() {
   const historyContent = historyPanel !== undefined
     ? historyPanel
     : history ? (
-        <HistoryPanel
+        <ComposeHistoryPanel
           className="compose-editor__history-panel"
           controller={history}
         />
@@ -67,7 +66,7 @@ const sceneHistoryTabComponents = {
 
 function localizeSceneHistoryWorkspace(
   api: DockviewApi,
-  locale: ComposeEditorLocale,
+  locale: ComposeLocale,
   formatMessage?: ComposeI18nContextValue['formatMessage'],
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
@@ -83,7 +82,7 @@ function localizeSceneHistoryWorkspace(
 
 function initializeSceneHistoryWorkspace(
   api: DockviewApi,
-  locale: ComposeEditorLocale,
+  locale: ComposeLocale,
   formatMessage?: ComposeI18nContextValue['formatMessage'],
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
@@ -139,6 +138,9 @@ function SceneHistoryDockview() {
   const i18n = useComposeI18nContext()
   const locale = i18n?.locale ?? 'zh-CN'
   const initializedApi = useRef<DockviewApi | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const messages = getEditorMessages(locale, i18n?.formatMessage).workspace
+  const sceneContentLabel = locale === 'zh-CN' ? '场景图内容' : 'Scene Graph content'
   const handleReady = useCallback((event: DockviewReadyEvent) => {
     if (initializedApi.current === event.api) return
     initializeSceneHistoryWorkspace(event.api, locale, i18n?.formatMessage)
@@ -155,16 +157,30 @@ function SceneHistoryDockview() {
     }
   }, [i18n?.formatMessage, locale])
 
+  useEffect(() => {
+    // 外层 Edge Group 与内层 split Dockview 都有 Scene Graph 标签。视觉上保留两处原始标题，
+    // 但内层 landmark 必须有不同可访问名称，避免辅助技术把两个 region 当作同一个区域。
+    rootRef.current
+      ?.querySelectorAll<HTMLElement>('.dv-groupview:not(.dv-edge-group)')
+      .forEach((group) => {
+        if (group.getAttribute('aria-label') === messages.sceneGraph) {
+          group.setAttribute('aria-label', sceneContentLabel)
+        }
+      })
+  }, [messages.sceneGraph, sceneContentLabel])
+
   return (
-    <DockviewReact
-      className="compose-editor__scene-history-dockview"
-      components={sceneHistoryComponents}
-      disableDnd
-      disableFloatingGroups
-      onReady={handleReady}
-      tabComponents={sceneHistoryTabComponents}
-      theme={themeAbyss}
-    />
+    <div className="compose-editor__scene-history-dockview-host" ref={rootRef}>
+      <DockviewReact
+        className="compose-editor__scene-history-dockview"
+        components={sceneHistoryComponents}
+        disableDnd
+        disableFloatingGroups
+        onReady={handleReady}
+        tabComponents={sceneHistoryTabComponents}
+        theme={themeAbyss}
+      />
+    </div>
   )
 }
 
@@ -247,7 +263,7 @@ export function TransactionLogPanel() {
   )
 }
 
-export function CommandPanel() {
+export function ComposeCommandPanel() {
   const { commandPanel } = useWorkspaceContent()
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)

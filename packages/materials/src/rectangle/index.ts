@@ -1,4 +1,4 @@
 export {
-  DEFAULT_RECTANGLE_DEFINITION,
+  DEFAULT_COMPOSE_RECTANGLE_DEFINITION,
   createRectangleDefinition,
 } from './definition'

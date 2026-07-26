@@ -7,26 +7,18 @@
  * @packageDocumentation
  */
 import type { HTMLAttributes, ReactNode } from 'react'
-import type { ComposeLocale } from '@compose-ui/ui-context'
 import './styles.css'
-export { SceneTree } from './scene-tree'
+export { ComposeSceneTree } from './scene-tree'
 // 公共入口需要同时导出组件和 Hook，因此只针对这一行豁免 Fast Refresh 的组件导出限制。
 // eslint-disable-next-line react-refresh/only-export-components
-export { useSceneTreeCommands } from './use-scene-tree-commands'
-
-/**
- * SceneTree 内建界面语言。
- *
- * @public
- */
-export type SceneTreeLocale = ComposeLocale
+export { useComposeSceneTreeCommands } from './use-scene-tree-commands'
 
 /**
  * 场景树渲染和交互所需的最小节点描述。
  *
  * @public
  */
-export interface SceneTreeNode {
+export interface ComposeSceneTreeNode {
   /** 在当前树实例及其操作意图中稳定且唯一的节点标识。 */
   id: string
   /** 显示名称，同时用于检索和单节点拖拽预览。 */
@@ -34,7 +26,7 @@ export interface SceneTreeNode {
   /** 覆盖默认文档或组件图标的自定义内容。 */
   icon?: ReactNode
   /** 子节点；空数组表示能够包含子节点但当前为空。 */
-  children?: readonly SceneTreeNode[]
+  children?: readonly ComposeSceneTreeNode[]
   /** 当前可见状态。省略时视为可见。 */
   visible?: boolean
   /** 当前锁定状态；锁定节点不能执行结构修改。 */
@@ -54,7 +46,7 @@ export interface SceneTreeNode {
 }
 
 /**
- * `SceneTree` 发给宿主的受控操作意图。
+ * `ComposeSceneTree` 发给宿主的受控操作意图。
  *
  * @remarks
  * 组件不会直接修改 `nodes`。宿主必须应用操作并将新树重新传入。`duplicate` 只描述复制
@@ -62,7 +54,7 @@ export interface SceneTreeNode {
  *
  * @public
  */
-export type SceneTreeOperation =
+export type ComposeSceneTreeOperation =
   | { type: 'create'; parentId: string | null; index: number }
   | { type: 'rename'; nodeId: string; label: string }
   | { type: 'delete'; nodeIds: readonly string[] }
@@ -90,10 +82,10 @@ export type SceneTreeOperation =
  *
  * @public
  */
-export interface SceneTreeProps
+export interface ComposeSceneTreeProps
   extends Omit<HTMLAttributes<HTMLDivElement>, 'onSelect'> {
   /** 完整的树数据。 */
-  nodes: readonly SceneTreeNode[]
+  nodes: readonly ComposeSceneTreeNode[]
   /** 当前选中节点 ID，顺序用于确定最近选中的命令目标。 */
   selectedIds: readonly string[]
   /** 当前展开节点 ID。 */
@@ -103,16 +95,14 @@ export interface SceneTreeProps
   /** 请求宿主替换展开状态。 */
   onExpandedChange?: (nodeIds: readonly string[]) => void
   /** 节点结构或属性操作意图。 */
-  onOperation?: (operation: SceneTreeOperation) => void
+  onOperation?: (operation: ComposeSceneTreeOperation) => void
   /**
    * 外部创建的共享命令控制器。
    *
    * @remarks
    * 省略时组件会创建仅供自身菜单和快捷键使用的控制器。
    */
-  commands?: SceneTreeCommandController
-  /** 内建控件、菜单和 ARIA 文案语言。 @defaultValue `"zh-CN"` */
-  locale?: SceneTreeLocale
+  commands?: ComposeSceneTreeCommandController
 }
 
 /**
@@ -120,7 +110,7 @@ export interface SceneTreeProps
  *
  * @public
  */
-export type SceneTreeCommand =
+export type ComposeSceneTreeCommand =
   | 'create-child'
   | 'create-sibling'
   | 'create-root'
@@ -138,7 +128,7 @@ export type SceneTreeCommand =
  *
  * @public
  */
-export interface SceneTreeClipboard {
+export interface ComposeSceneTreeClipboard {
   /** 复制可以重复粘贴；剪切在成功移动后自动清空。 */
   readonly kind: 'copy' | 'cut'
   /** 已按树顺序规范化，并去除重复后代的顶层源节点。 */
@@ -146,41 +136,41 @@ export interface SceneTreeClipboard {
 }
 
 /**
- * `useSceneTreeCommands` 的受控输入。
+ * `useComposeSceneTreeCommands` 的受控输入。
  *
  * @public
  */
-export interface UseSceneTreeCommandsOptions {
+export interface ComposeUseSceneTreeCommandsOptions {
   /** 用于解析父子关系、能力限制和插入位置的完整树。 */
-  nodes: readonly SceneTreeNode[]
+  nodes: readonly ComposeSceneTreeNode[]
   /** 未显式传入命令目标时使用的当前选择。 */
   selectedIds: readonly string[]
   /** 命令执行后发出的操作意图。 */
-  onOperation?: (operation: SceneTreeOperation) => void
+  onOperation?: (operation: ComposeSceneTreeOperation) => void
 }
 
 /**
- * 可由 `SceneTree` 和外部工具栏共享的命令控制器。
+ * 可由 `ComposeSceneTree` 和外部工具栏共享的命令控制器。
  *
  * @public
  */
-export interface SceneTreeCommandController {
+export interface ComposeSceneTreeCommandController {
   /** 当前 Hook 实例持有的内存剪贴板。 */
-  readonly clipboard: SceneTreeClipboard | null
+  readonly clipboard: ComposeSceneTreeClipboard | null
   /**
    * 判断命令在指定目标上是否可执行。
    *
    * @param command - 要检查的命令。
    * @param targetId - 省略时使用最近选择；`null` 明确表示树根空白区。
    */
-  isEnabled(command: SceneTreeCommand, targetId?: string | null): boolean
+  isEnabled(command: ComposeSceneTreeCommand, targetId?: string | null): boolean
   /**
    * 执行命令并在需要时发出一个受控操作意图。
    *
    * @param command - 要执行的命令。
    * @param targetId - 省略时使用最近选择；`null` 明确表示树根空白区。
    */
-  execute(command: SceneTreeCommand, targetId?: string | null): void
+  execute(command: ComposeSceneTreeCommand, targetId?: string | null): void
   /** 清空当前 Hook 实例的内存剪贴板。 */
   clearClipboard(): void
 }

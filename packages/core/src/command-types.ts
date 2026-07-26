@@ -132,7 +132,7 @@ export interface EditorCommand<TPayload extends JsonObject = JsonObject> {
  * @public
  */
 export interface CommandIssue {
-  /** 供程序判断和 CommandPanel 显示的稳定机器码。 */
+  /** 供程序判断和 ComposeCommandPanel 显示的稳定机器码。 */
   readonly code: string
   /** 面向开发者或编辑器用户的简短说明。 */
   readonly message: string
@@ -293,7 +293,7 @@ export type TransactionResetResult =
  *
  * @remarks
  * 该接口在 entries、activeEntryId、canUndo、canRedo、undo、redo、navigate 上结构兼容
- * `@compose-ui/history` 的 HistoryNavigationController。
+ * `@compose-ui/history` 的 ComposeHistoryNavigationController。
  *
  * @public
  */

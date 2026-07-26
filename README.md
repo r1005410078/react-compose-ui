@@ -44,37 +44,21 @@ bun add react react-dom
 ## 在 React 中使用
 
 ```tsx
-import { ComposeEditor } from '@compose-ui/editor'
-import { useHistory } from '@compose-ui/history'
+import { createComposeComponentRegistry } from '@compose-ui/component-registry'
+import { createTransactionRuntime } from '@compose-ui/core'
+import { ComposeEditor, useComposeEditorController } from '@compose-ui/editor'
 import { ComposePreview } from '@compose-ui/preview'
-import type { SceneTreeOperation } from '@compose-ui/scene-tree'
 import '@compose-ui/editor/styles.css'
 
 export function ComposePage() {
-  const history = useHistory({ nodes: [], title: '未命名页面' })
+  const runtime = useMemo(() => createTransactionRuntime({ document }), [])
+  const registry = useMemo(() => createComposeComponentRegistry(definitions), [])
+  const controller = useComposeEditorController({ runtime, registry })
 
   return (
     <main>
-      <ComposeEditor
-        className="editor-panel"
-        history={history}
-        sceneTreeProps={{
-          nodes: [{ id: 'page', label: 'Page 1' }],
-          selectedIds: [],
-          expandedIds: [],
-          onOperation: (operation: SceneTreeOperation) => console.log(operation),
-        }}
-        stageToolbar={<StageTools />}
-        inspectorPanel={<PropertyInspector />}
-        transactionLogPanel={<TransactionLog />}
-        commandPanel={<CommandInput />}
-      >
-        <Canvas />
-      </ComposeEditor>
-
-      <ComposePreview className="preview-panel">
-        预览器挂载区域
-      </ComposePreview>
+      <ComposeEditor controller={controller} style={{ height: 720 }} />
+      <ComposePreview document={runtime.document} registry={registry} />
     </main>
   )
 }
@@ -86,32 +70,10 @@ Transaction Log、Command 与 Assets 共享底部 Edge Group。三个边缘区�
 折叠或展开。
 
 宿主必须显式导入 `@compose-ui/editor/styles.css`，并为编辑器提供确定的非零高度。
-`ComposeEditor` 接受标准的 HTML `section` 属性；`children` 渲染为中央画布内容。
-Scene Graph 默认使用 `@compose-ui/scene-tree`，通过 `sceneTreeProps` 接收受控状态；
-`sceneGraphPanel` 仍可完整覆盖默认树。提供 `history` 后，Scene Graph 外层面板会挂载一个
-子 Dockview，场景树与 History 分别成为上、下两个真实 Dockview 面板；`historyPanel` 可完整
-覆盖 History 面板内容，`history` 同时启用编辑器范围快捷键。
-其余命名属性提供其他工作区内容。`stageToolbar` 是首选工具栏插槽；`canvasToolbar` 只作为
-兼容别名保留。
-
-```tsx
-<ComposeEditor
-  className="editor"
-  style={{ height: 720 }}
-  aria-label="页面编辑器"
-  sceneTreeProps={{
-    nodes: [{ id: 'page', label: 'Page 1' }],
-    selectedIds: [],
-    expandedIds: [],
-  }}
-  stageToolbar={<button>添加组件</button>}
-  inspectorPanel={<div>选择组件后显示属性</div>}
-  transactionLogPanel={<div>暂无事务</div>}
-  commandPanel={<input aria-label="命令" />}
->
-  <div>自定义画布内容</div>
-</ComposeEditor>
-```
+`ComposeEditor` 接受标准的 HTML `section` 属性；替换工作区区域时使用语义化 `slots`，例如
+`slots={{ stageToolbar: <StageTools />, inspector: <PropertyInspector /> }}`。默认 Scene Graph
+由 `sceneTree` 配置，默认资源浏览器由 `assets.browser` 配置；`ComposePreview` 始终需要正式
+`document` 和 `registry`，不再接受 children 容器模式。
 
 Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API、面板对象或布局 JSON。
 当前实例中的尺寸、折叠状态和活动标签会在挂载期间保留，但不会写入 localStorage、页面
@@ -119,43 +81,43 @@ Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API�
 
 ## 资源浏览器与共享 Tree
 
-`@compose-ui/components` 提供无业务语义的受控虚拟 `Tree<T>`：多选、范围选择、键盘/ARIA、
-过滤祖先保留和可选 Pointer 拖排。`SceneTree` 与 `AssetBrowser` 组合这一个树内核，但场景
+`@compose-ui/components` 提供无业务语义的受控虚拟 `ComposeTree<T>`：多选、范围选择、键盘/ARIA、
+过滤祖先保留和可选 Pointer 拖排。`ComposeSceneTree` 与 `ComposeAssetBrowser` 组合这一个树内核，但场景
 命令、资源 Provider 和持久化仍分别留在各自包中。
 
 轻量 `@compose-ui/assets` 定义 `ComposeAssetProvider`、稳定资源引用和运行时 resolver；
-`@compose-ui/asset-browser` 兼容转导这些类型并连接任意资源事实来源，提供目录树、
+`@compose-ui/asset-browser` 连接任意资源事实来源，提供目录树、
 文件夹缩略图网格、SVG/常见图片安全预览、二进制信息和按需加载的 Monaco 脚本编辑。写入使用
 `expectedRevision` 乐观并发；资源操作不进入 ComposeDocument、History 或 Operation Log。
 
 ```tsx
 import { createComposeAssetResolver } from '@compose-ui/assets'
-import { AssetBrowser } from '@compose-ui/asset-browser'
+import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import '@compose-ui/asset-browser/styles.css'
 
 const assetResolver = createComposeAssetResolver(assetProvider)
 
-<AssetBrowser
+<ComposeAssetBrowser
   provider={assetProvider}
   onCanvasDrag={handleCanvasDrag}
   style={{ height: 560 }}
 />
 ```
 
-浏览器支持时，也可由用户手势调用 `openFileSystemAssetProvider()` 打开本地可读写目录。目录
+浏览器支持时，也可由用户手势调用 `openComposeFileSystemAssetProvider()` 打开本地可读写目录。目录
 句柄只保留在当前组件实例，不会自动写入 IndexedDB。只有 Provider 提供 reference capability、
 不可变 `assetKey` 和 `resolveAsset` 时，兼容 SVG/位图才可拖到 Stage。节点仅保存引用，资源
 内容更新会刷新 renderer，但不会产生文档事务。
 
 `ComposeEditor` 不直接拥有文档 `value`/`onChange`。推荐由宿主创建下方
-`TransactionRuntime` 和 `ComponentRegistry`，再使用 `useComposeEditorController` 组合默认
-Palette、SceneTree、Stage、History、Inspector 与 CommandPanel。显式插槽和 `children` 始终可
-覆盖 controller 默认内容。
+`TransactionRuntime` 和 `ComposeComponentRegistry`，再使用 `useComposeEditorController` 组合默认
+Palette、ComposeSceneTree、ComposeStage、History、Inspector 与 ComposeCommandPanel。显式 `slots`
+可覆盖 controller 默认内容。
 
 ## 共享主题、国际化与设置
 
 `@compose-ui/ui-context` 提供可嵌套的 `ComposeThemeProvider`、`ComposeI18nProvider` 和
-`ComposeUIProvider`。Stage、Palette、SceneTree、History、CommandPanel、PropertyPanel、
+`ComposeUIProvider`。Stage、Palette、ComposeSceneTree、History、ComposeCommandPanel、ComposePropertyPanel、
 OperationLog 与基础材料 Inspector 会直接消费同一个 Context；宿主可按 dark/light 覆盖语义
 token，也可用稳定 message ID 覆盖单条内建文案。registry label、Schema metadata、插槽内容和
 业务组件不会被猜测翻译。
@@ -235,10 +197,10 @@ runtime.dispatch({
 可逆 Patch，并只接受宿主声明的结构化 JSON 字段预设：
 
 ```tsx
-import { CommandPanel } from '@compose-ui/command-panel'
+import { ComposeCommandPanel } from '@compose-ui/command-panel'
 import '@compose-ui/command-panel/styles.css'
 
-<CommandPanel runtime={runtime} presets={commandPresets} />
+<ComposeCommandPanel runtime={runtime} presets={commandPresets} />
 ```
 
 文档拓扑、内置命令与运行时完整说明见
@@ -255,13 +217,13 @@ SVG/DOM Overlay 绘制正负坐标标尺、主/细网格、世界原点轴、选
 `@compose-ui/stage-engine` 承载。
 
 ```tsx
-import { createComponentRegistry } from '@compose-ui/component-registry'
+import { createComposeComponentRegistry } from '@compose-ui/component-registry'
 import { createTransactionRuntime } from '@compose-ui/core'
 import type { ComposeDocument } from '@compose-ui/core'
 import { ComposeEditor, useComposeEditorController } from '@compose-ui/editor'
 import { useState } from 'react'
 
-const registry = createComponentRegistry([{
+const registry = createComposeComponentRegistry([{
   type: 'text',
   label: '文本',
   defaultSize: { width: 240, height: 72 },
@@ -281,10 +243,10 @@ function Workspace({ document }: { document: ComposeDocument }) {
 宿主 definitions：
 
 ```tsx
-import { createBasicMaterials } from '@compose-ui/materials'
+import { createComposeBasicMaterials } from '@compose-ui/materials'
 import '@compose-ui/materials/styles.css'
 
-const materials = createBasicMaterials({ extensions: [echartsDefinition] })
+const materials = createComposeBasicMaterials({ extensions: [echartsDefinition] })
 const controller = useComposeEditorController({
   runtime,
   registry: materials.registry,
@@ -301,7 +263,7 @@ Component Library 隐藏，通过资源面板拖入创建；两者使用同一�
 网格步长/偏移/主线间隔、节点/辅助线吸附开关和全局世界辅助线保存在
 `ComposeDocument.canvas`，会进入事务 History 与 Operation Log。选择、工具、场景树展开项、
 viewport 和动态滚动范围是 controller 会话状态，不进入文档事务。Palette 拖入、
-SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全部派发到同一 runtime。
+ComposeSceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全部派发到同一 runtime。
 成功事务可通过 controller 的 `onTransaction` 单点映射到 Operation Log；noop、rejected 与 reset
 不会被当作成功编辑记录。
 
@@ -311,7 +273,7 @@ SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全
 16×16 双填充前景标记。
 点击边界会打开 Canvas Inspector，可直接选择 1280×720、1366×768、1440×900、
 1920×1080、2560×1440 或 3840×2160，也可编辑自定义宽高和背景。Canvas 只是检查目标，
-不会出现在 SceneTree、`nodes` 或节点选择中。
+不会出现在 ComposeSceneTree、`nodes` 或节点选择中。
 
 `ComposePreview` 接收 `document`、`registry`、可选 `assetResolver` 和 `target`。默认按文档固定输出边界渲染
 完整文档，也可输出任意根级或嵌套 Frame；两种模式都不包含 Stage 的 SVG 编辑覆盖层：
@@ -342,14 +304,14 @@ SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全
 输入会在 750ms 窗口内合并；在历史中间提交会裁剪后续重做分支。
 
 ```tsx
-import { HistoryPanel, useHistory, useHistoryShortcuts } from '@compose-ui/history'
+import { ComposeHistoryPanel, useComposeHistory, useComposeHistoryShortcuts } from '@compose-ui/history'
 import '@compose-ui/history/styles.css'
 
-const history = useHistory(initialDocument)
-const onKeyDownCapture = useHistoryShortcuts(history)
+const history = useComposeHistory(initialDocument)
+const onKeyDownCapture = useComposeHistoryShortcuts(history)
 
 <section onKeyDownCapture={onKeyDownCapture}>
-  <HistoryPanel controller={history} />
+  <ComposeHistoryPanel controller={history} />
 </section>
 ```
 
@@ -368,7 +330,7 @@ Editor 实例；宿主可用受控 `preferences` 自行持久化，编辑器不�
 通过 Schema 校验后才会交给宿主：
 
 ```tsx
-import { PropertyPanel } from '@compose-ui/property-panel'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import '@compose-ui/property-panel/styles.css'
 import * as v from 'valibot'
 
@@ -381,7 +343,7 @@ const schema = v.object({
   ),
 })
 
-<PropertyPanel
+<ComposePropertyPanel
   schema={schema}
   value={value}
   defaultValue={{ appearance: { opacity: 1 } }}
@@ -403,10 +365,10 @@ editor ID，不保存 React 组件。大型 renderer 可以采用标题行加全
 ## 独立使用场景树
 
 ```tsx
-import { SceneTree, useSceneTreeCommands } from '@compose-ui/scene-tree'
+import { ComposeSceneTree, useComposeSceneTreeCommands } from '@compose-ui/scene-tree'
 import '@compose-ui/scene-tree/styles.css'
 
-<SceneTree
+<ComposeSceneTree
   nodes={nodes}
   selectedIds={selectedIds}
   expandedIds={expandedIds}
@@ -416,14 +378,14 @@ import '@compose-ui/scene-tree/styles.css'
 />
 ```
 
-`useSceneTreeCommands({ nodes, selectedIds, onOperation })` 可供外部工具栏和 `SceneTree` 的
+`useComposeSceneTreeCommands({ nodes, selectedIds, onOperation })` 可供外部工具栏和 `ComposeSceneTree` 的
 `commands` 属性共享新增、删除、复制、剪切和树内粘贴状态。复制粘贴发出 `duplicate` 意图，
 宿主负责生成新 ID 和克隆业务数据；剪切粘贴发出 `move`。该剪贴板不使用系统剪贴板且不持久化。
 
 外部工具栏可以直接通过 controller 请求新增节点：
 
 ```tsx
-const commands = useSceneTreeCommands({ nodes, selectedIds, onOperation })
+const commands = useComposeSceneTreeCommands({ nodes, selectedIds, onOperation })
 
 <button
   disabled={!commands.isEnabled('create-suggested')}
@@ -432,7 +394,7 @@ const commands = useSceneTreeCommands({ nodes, selectedIds, onOperation })
   新增节点
 </button>
 
-<SceneTree {...treeProps} commands={commands} />
+<ComposeSceneTree {...treeProps} commands={commands} />
 ```
 
 `create-child`、`create-sibling` 和 `create-root` 可以显式指定子级、兄弟或根级位置；
@@ -450,20 +412,20 @@ Unicode 全词和正则表达式。组件仅发出操作意图，不拥有文档
 ## 记录本地操作日志
 
 `@compose-ui/operation-log` 记录宿主已经成功应用的组件、场景、属性和绑定变更，并默认按
-`scopeId` 保存到 IndexedDB。它可以直接放入编辑器已有的 `transactionLogPanel` 插槽：
+`scopeId` 保存到 IndexedDB。它可以直接放入编辑器已有的 `slots.transactionLog`：
 
 ```tsx
 import {
-  OperationLogPanel,
-  OperationLogProvider,
-  useOperationLog,
+  ComposeOperationLogPanel,
+  ComposeOperationLogProvider,
+  useComposeOperationLog,
 } from '@compose-ui/operation-log'
 import '@compose-ui/operation-log/styles.css'
 
 function Workspace() {
-  const log = useOperationLog()
+  const log = useComposeOperationLog()
   return (
-    <ComposeEditor transactionLogPanel={<OperationLogPanel />}>
+    <ComposeEditor slots={{ transactionLog: <ComposeOperationLogPanel /> }}>
       <button onClick={() => {
         applySuccessfulChange()
         void log.record({
@@ -478,9 +440,9 @@ function Workspace() {
   )
 }
 
-<OperationLogProvider scopeId="workspace-42">
+<ComposeOperationLogProvider scopeId="workspace-42">
   <Workspace />
-</OperationLogProvider>
+</ComposeOperationLogProvider>
 ```
 
 日志按 scope 隔离，默认保留最新 1000 条；IndexedDB 不可用时自动降级到当前会话内存存储。

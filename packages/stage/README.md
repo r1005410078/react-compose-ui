@@ -20,25 +20,24 @@ DOM Scene Layer 与屏幕坐标 SVG/DOM Overlay 组合的无限编辑 Stage。
   preview snapshot，pointerup 最多返回一个 `node.transform.set`、canvas 命令或原子 batch。
 - 滚动范围包含可见节点、世界原点和当前视口，在 Stage 会话内单调扩展；滚动只更新受控
   viewport，不进入文档历史。
-- `ComponentPalette` 与 `Stage` 通过实例级 `StageInteractionController` 共享内部手势和
+- `ComposeComponentPalette` 与 `ComposeStage` 通过实例级 `StageInteractionController` 共享内部手势和
   Pointer/键盘外部拖入会话。
-- `StageFramePreset` 让 Palette 在 definitions 之前显示 Frame；拖入最深合法 Frame，未命中时
+- `ComposeStageFramePreset` 让 Palette 在 definitions 之前显示 Frame；拖入最深合法 Frame，未命中时
   创建为隐式 Canvas 根节点。
 - Asset Browser 可通过同一 controller 发送 `assets` descriptor。Stage 使用 `assetResolver`
   并发解析资源、调用 registry asset factory，按最多四列布局成功项并以一个原子 batch 创建；
   目标 Frame 失效时回退 Canvas 根，部分失败不会污染 batch。
 - Frame 与 Component 使用 core `resolveNodeStyle`；Frame 由 `clipContent` 决定内容溢出，
   resize 只改变 Frame 自身边界，不递归缩放后代。
-- 默认从 `@compose-ui/ui-context` 读取主题与语言；`locale="zh-CN|en-US"` 作为显式兼容覆盖，
-  优先于 Context。内建标尺、滚动条与覆盖层 ARIA 会翻译，registry label 与 renderer 内容
-  保持宿主原文。
+- 主题与语言从 `@compose-ui/ui-context` 读取。内建标尺、滚动条与覆盖层 ARIA 会翻译，
+  registry label 与 renderer 内容保持宿主原文。
 - `shortcuts` 可覆盖临时平移、V/H 工具、F/Shift+F 适配、缩放、吸附、复制、分组和删除；
   动作空数组表示禁用。输入控件、contenteditable 和 IME composing 不触发 Stage 导航键。
 
 ```tsx
 import {
-  ComponentPalette,
-  Stage,
+  ComposeComponentPalette,
+  ComposeStage,
 } from '@compose-ui/stage'
 import { createStageInteractionController } from '@compose-ui/stage-engine'
 import '@compose-ui/stage/styles.css'
@@ -46,12 +45,12 @@ import '@compose-ui/stage/styles.css'
 const interactionController = createStageInteractionController()
 
 <>
-  <ComponentPalette
+  <ComposeComponentPalette
     registry={registry}
     framePresets={framePresets}
     interactionController={interactionController}
   />
-  <Stage
+  <ComposeStage
     document={runtime.document}
     registry={registry}
     assetResolver={assetResolver}
@@ -60,7 +59,6 @@ const interactionController = createStageInteractionController()
     onViewportChange={setViewport}
     tool="select"
     onToolChange={setTool}
-    locale="zh-CN"
     shortcuts={{
       'stage.temporaryPan': [{ code: 'Space' }],
     }}
@@ -82,6 +80,6 @@ fit Frame/selection。适配 Frame 从当前选择或最近 Frame 祖先派生�
 `createDuplicateCommand` 只从 `@compose-ui/stage-engine` 导出；Stage 不提供旧路径或兼容
 facade。一个 controller 同时只能连接一个 Stage surface，多个编辑器实例应各自创建 controller。
 
-省略 `Stage.interactionController` 时，Stage 会创建并销毁私有 controller；由于 Palette 必须
-与目标 Stage 共享外部拖入会话，`ComponentPalette.interactionController` 是必填属性。Editor
+省略 `ComposeStage.interactionController` 时，ComposeStage 会创建并销毁私有 controller；由于 Palette 必须
+与目标 Stage 共享外部拖入会话，`ComposeComponentPalette.interactionController` 是必填属性。Editor
 组合场景下建议使用 `useComposeEditorController`，它会负责 controller 的单实例所有权与释放。

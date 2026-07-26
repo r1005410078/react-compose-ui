@@ -1,7 +1,7 @@
-import type { ComponentRendererProps } from '@compose-ui/component-registry'
+import type { ComposeComponentRendererProps } from '@compose-ui/component-registry'
 
 /** Materials 内置 Text renderer。 @internal */
-export function TextRenderer({ props }: ComponentRendererProps) {
+export function TextRenderer({ props }: ComposeComponentRendererProps) {
   return (
     <div
       className="compose-material compose-material--text"

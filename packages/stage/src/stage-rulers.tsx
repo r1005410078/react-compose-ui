@@ -41,6 +41,7 @@ export function StageRulers({
         aria-label={labels.origin}
         className="compose-stage__ruler-corner"
         data-testid="stage-ruler-corner"
+        role="img"
         onPointerDown={onCornerPointerDown}
       >
         <span aria-hidden="true">＋</span>
@@ -49,6 +50,7 @@ export function StageRulers({
         aria-label={labels.horizontal}
         className="compose-stage__ruler is-horizontal"
         data-testid="stage-ruler-x"
+        role="group"
         onPointerDown={onHorizontalPointerDown}
       >
         <svg aria-hidden="true">
@@ -78,6 +80,7 @@ export function StageRulers({
         aria-label={labels.vertical}
         className="compose-stage__ruler is-vertical"
         data-testid="stage-ruler-y"
+        role="group"
         onPointerDown={onVerticalPointerDown}
       >
         <svg aria-hidden="true">

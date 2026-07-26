@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { SceneTreeContextMenu } from './scene-tree-context-menu'
 import { SceneTreeRow } from './scene-tree-row'
 import { SceneTreeToolbar } from './scene-tree-toolbar'
-import type { SceneTreeCommandController } from './index'
+import type { ComposeSceneTreeCommandController } from './index'
 import type { IndexedSceneTreeNode } from './tree-model'
 
 describe('scene tree presenters', () => {
@@ -77,7 +77,7 @@ describe('scene tree presenters', () => {
 
   it('renders menu ordering and forwards the selected command', () => {
     const execute = vi.fn()
-    const controller: SceneTreeCommandController = {
+    const controller: ComposeSceneTreeCommandController = {
       clipboard: null,
       clearClipboard: vi.fn(),
       execute,

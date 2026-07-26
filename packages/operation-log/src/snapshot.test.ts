@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createOperationLogSnapshot } from './snapshot'
+import { createComposeOperationLogSnapshot } from './snapshot'
 
 describe('OpenSpec: operation-log / 结构化操作日志协议 / 生成可持久化快照', () => {
   it('编码 Date、BigInt 和 undefined', () => {
-    const snapshot = createOperationLogSnapshot({
+    const snapshot = createComposeOperationLogSnapshot({
       createdAt: new Date('2026-07-22T00:00:00.000Z'),
       count: 9007199254740993n,
       optional: undefined,
@@ -21,17 +21,17 @@ describe('OpenSpec: operation-log / 结构化操作日志协议 / 生成可持�
     const circular: Record<string, unknown> = {}
     circular.self = circular
 
-    expect(createOperationLogSnapshot(circular)).toMatchObject({
+    expect(createComposeOperationLogSnapshot(circular)).toMatchObject({
       status: 'unavailable',
       reason: expect.stringContaining('Circular'),
     })
-    expect(createOperationLogSnapshot(() => undefined)).toMatchObject({
+    expect(createComposeOperationLogSnapshot(() => undefined)).toMatchObject({
       status: 'unavailable',
     })
   })
 
   it('截断超过上限的快照并保留稳定预览和原始字节数', () => {
-    const snapshot = createOperationLogSnapshot({ text: 'x'.repeat(200) }, 64)
+    const snapshot = createComposeOperationLogSnapshot({ text: 'x'.repeat(200) }, 64)
 
     expect(snapshot.status).toBe('truncated')
     expect(snapshot.byteLength).toBeGreaterThan(64)

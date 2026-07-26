@@ -1,8 +1,8 @@
-import type { ComponentRendererProps } from '@compose-ui/component-registry'
+import type { ComposeComponentRendererProps } from '@compose-ui/component-registry'
 import type { CSSProperties } from 'react'
 
 /** Materials 内置 Rectangle renderer。 @internal */
-export function RectangleRenderer({ node, props }: ComponentRendererProps) {
+export function RectangleRenderer({ node, props }: ComposeComponentRendererProps) {
   const legacy = node.style === undefined
   const style: CSSProperties | undefined = legacy ? {
     backgroundColor: typeof props.color === 'string' ? props.color : undefined,

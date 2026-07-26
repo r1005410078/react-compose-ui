@@ -1,6 +1,6 @@
-import type { OperationLogEntry, OperationLogStore } from './types'
+import type { ComposeOperationLogEntry, ComposeOperationLogStore } from './types'
 
-function sortEntries(entries: readonly OperationLogEntry[]) {
+function sortEntries(entries: readonly ComposeOperationLogEntry[]) {
   return [...entries].sort((left, right) => (
     right.updatedAt - left.updatedAt
       || right.startedAt - left.startedAt
@@ -13,8 +13,8 @@ function sortEntries(entries: readonly OperationLogEntry[]) {
  *
  * @returns 可用于测试、SSR 或显式非持久化场景的独立 store。
  */
-export function createMemoryOperationLogStore(): OperationLogStore {
-  const entries = new Map<string, OperationLogEntry>()
+export function createComposeMemoryOperationLogStore(): ComposeOperationLogStore {
+  const entries = new Map<string, ComposeOperationLogEntry>()
   return {
     async load(scopeId) {
       return sortEntries([...entries.values()].filter((entry) => entry.scopeId === scopeId))
@@ -63,9 +63,9 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
  * @param options - 可覆盖的数据库与 object store 名称。
  * @returns 延迟打开 IndexedDB 的日志 store；不可用错误由 Provider 降级处理。
  */
-export function createIndexedDbOperationLogStore(
+export function createComposeIndexedDbOperationLogStore(
   options: IndexedDbOperationLogStoreOptions = {},
-): OperationLogStore {
+): ComposeOperationLogStore {
   const databaseName = options.databaseName ?? 'compose-ui-operation-log'
   const storeName = options.storeName ?? 'entries'
   let databasePromise: Promise<IDBDatabase> | undefined
@@ -99,7 +99,7 @@ export function createIndexedDbOperationLogStore(
       const done = transactionDone(transaction)
       const index = transaction.objectStore(storeName).index('scope-updated-at')
       const range = IDBKeyRange.bound([scopeId, 0], [scopeId, Number.MAX_SAFE_INTEGER])
-      const entries = await requestResult(index.getAll(range) as IDBRequest<OperationLogEntry[]>)
+      const entries = await requestResult(index.getAll(range) as IDBRequest<ComposeOperationLogEntry[]>)
       await done
       return sortEntries(entries)
     },

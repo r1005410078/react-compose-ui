@@ -1,12 +1,12 @@
-import type { StageFramePreset } from '@compose-ui/stage'
-import { cloneStyle } from '../shared/default-values'
-import type { BasicMaterialFrameOptions } from '../types'
+import type { ComposeStageFramePreset } from '@compose-ui/stage'
+import { cloneStyle } from '../material-inspector-kit/default-values'
+import type { ComposeBasicMaterialFrameOptions } from '../types'
 import { DEFAULT_FRAME_SIZE, DEFAULT_FRAME_STYLE } from './defaults'
 
 /** 根据实例配置创建 Frame preset。 @internal */
 export function createFramePreset(
-  options: BasicMaterialFrameOptions = {},
-): StageFramePreset {
+  options: ComposeBasicMaterialFrameOptions = {},
+): ComposeStageFramePreset {
   const defaultSize = options.defaultSize ?? DEFAULT_FRAME_SIZE
   const style = cloneStyle(DEFAULT_FRAME_STYLE, options.defaultStyle)
   return {
@@ -21,4 +21,4 @@ export function createFramePreset(
 }
 
 /** 默认 Frame preset；不会创建模块级 registry。 @public */
-export const DEFAULT_FRAME_PRESET = createFramePreset()
+export const DEFAULT_COMPOSE_FRAME_PRESET = createFramePreset()

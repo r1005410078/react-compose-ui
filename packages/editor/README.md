@@ -7,7 +7,7 @@ Transaction Log/Command/Assets。
 ## 使用
 
 ```tsx
-import { createComponentRegistry } from '@compose-ui/component-registry'
+import { createComposeComponentRegistry } from '@compose-ui/component-registry'
 import { createTransactionRuntime } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import { ComposeEditor, useComposeEditorController } from '@compose-ui/editor'
@@ -16,7 +16,7 @@ import '@compose-ui/editor/styles.css'
 
 export function EditorPage() {
   const [runtime] = useState(() => createTransactionRuntime({ document }))
-  const [registry] = useState(() => createComponentRegistry(definitions))
+  const [registry] = useState(() => createComposeComponentRegistry(definitions))
   const [assetResolver] = useState(() => createComposeAssetResolver(assetProvider))
   const controller = useComposeEditorController({
     runtime,
@@ -30,17 +30,16 @@ export function EditorPage() {
     <ComposeEditor
       controller={controller}
       style={{ height: 720 }}
-      transactionLogPanel={<OperationLogPanel />}
-      assetBrowserProps={{ provider: assetProvider }}
-      assetResolver={assetResolver}
+      assets={{ browser: { provider: assetProvider }, resolver: assetResolver }}
+      slots={{ transactionLog: <ComposeOperationLogPanel /> }}
     />
   )
 }
 ```
 
 必须导入 `@compose-ui/editor/styles.css` 并给 `ComposeEditor` 提供确定的非零高度。
-组件保留标准 `<section>` HTML 属性透传，`children` 对应 Canvas 内容。
-该样式入口包含默认 SceneTree、HistoryPanel、Stage、ComponentPalette 与 CommandPanel 样式。
+组件保留标准 `<section>` HTML 属性透传；工作区覆盖内容通过 `slots` 提供。
+该样式入口包含默认 ComposeSceneTree、ComposeHistoryPanel、Stage、ComposeComponentPalette 与 ComposeCommandPanel 样式。
 只有独立使用这些包时才需要另行导入对应的 `styles.css`。
 
 ## 实例偏好与设置中心
@@ -76,21 +75,21 @@ const [preferences, setPreferences] = useState(
 
 Editor 会根据 preferences 自动组合 `@compose-ui/ui-context` Provider，并继承外层宿主的
 dark/light token 和稳定 message ID 覆盖。第一方面板直接读取 Context，不再由 Editor clone
-`locale` prop；旧 locale prop 仅作为独立组件的显式兼容覆盖保留。
+`locale` prop；第一方组件不再提供独立 locale 覆盖。
 
 ## Controller
 
-`useComposeEditorController` 组合宿主提供的 `TransactionRuntime` 与 `ComponentRegistry`，管理
+`useComposeEditorController` 组合宿主提供的 `TransactionRuntime` 与 `ComposeComponentRegistry`，管理
 selection、expandedIds、viewport、tool、真实 Stage surface 尺寸和实例级
 `StageInteractionController`。Editor 拥有该 controller，并把同一实例交给 Stage 与 Palette；
 卸载时统一 dispose。它从 runtime 当前文档派生：
 
-- `sceneTreeProps` 与 `stageProps`
+- `sceneTree` 与 `stageProps`
 - `history`（直接复用 runtime 的兼容导航协议）
-- ComponentPalette、definition/Container Inspector、CommandPanel 与 Stage Toolbar 内容
+- ComposeComponentPalette、definition/Container Inspector、ComposeCommandPanel 与 Stage Toolbar 内容
 - 默认中央 Stage
 
-SceneTree、Inspector、Stage 与 CommandPanel 均向同一 runtime 派发。成功命令、undo、redo 和
+ComposeSceneTree、Inspector、Stage 与 ComposeCommandPanel 均向同一 runtime 派发。成功命令、undo、redo 和
 navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Promise rejection 不会回滚
 事务。noop、rejected 与 reset 不调用该 observer。
 
@@ -98,27 +97,26 @@ navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Pr
 
 - Scene Graph/Component Library、Component Inspector、Transaction Log/Command 使用可缩放、可折叠的
   Dockview Edge Groups。
-- Assets 与 Transaction Log、Command 共享底部 Edge Group，默认 inactive；`assetBrowserProps`
-  组合默认 `AssetBrowser`，`assetBrowserPanel` 可完整覆盖且优先。
-- 默认 AssetBrowser 的兼容图片拖拽会映射到当前 Editor 独有的 interaction controller。
-  显式 `assetResolver` 优先；省略时 Editor 会从支持稳定引用的 `assetBrowserProps.provider`
-  自动创建 resolver。自定义 `assetBrowserPanel` 由宿主自行桥接拖拽和 resolver。
+- Assets 与 Transaction Log、Command 共享底部 Edge Group，默认 inactive；`assets.browser`
+  组合默认 `ComposeAssetBrowser`，`slots.assetBrowser` 可完整覆盖且优先。
+- 默认 ComposeAssetBrowser 的兼容图片拖拽会映射到当前 Editor 独有的 interaction controller。
+  显式 `assets.resolver` 优先；省略时 Editor 会从支持稳定引用的 `assets.browser.provider`
+  自动创建 resolver。自定义 `slots.assetBrowser` 由宿主自行桥接拖拽和 resolver。
 - Scene Graph 与 Component Library 共享左侧组，Scene Graph 初始活动。
-- Scene Graph 默认显示空 `SceneTree`；`sceneTreeProps` 提供受控状态，原
-  `sceneGraphPanel` 插槽仍可完整覆盖默认树。
-- 提供 `history` 或显式 `historyPanel` 时，Scene Graph 外层面板内部才挂载子 Dockview；场景树
+- Scene Graph 默认显示空 `ComposeSceneTree`；`sceneTree` 提供受控状态，
+  `slots.sceneGraph` 可完整覆盖默认树。
+- 提供 `history` 或显式 `slots.history` 时，Scene Graph 外层面板内部才挂载子 Dockview；场景树
   与 History 分别使用上、下两个真实 Dockview 面板，默认比例为 60%/40%，通过原生 sash 调整。
-- `history` 默认渲染独立包的 `HistoryPanel` 并驱动编辑器范围快捷键；`historyPanel` 可完整
+- `history` 默认渲染独立包的 `ComposeHistoryPanel` 并驱动编辑器范围快捷键；`slots.history` 可完整
   覆盖下方内容，但不会关闭 `history` 的快捷键处理。
-- Stage Toolbar 固定在 Canvas 内容顶部，不是独立面板；`stageToolbar` 优先于已废弃的
-  `canvasToolbar`。
+- Stage Toolbar 固定在 Canvas 内容顶部，不是独立面板；使用 `slots.stageToolbar` 覆盖。
 - 默认 Stage Toolbar 提供网格吸附、智能吸附快捷开关和画布设置弹层。弹层只编辑 X/Y
   步长、X/Y 偏移、主线间隔、节点/辅助线吸附并清空辅助线；Apply 最多提交一个事务，
   Cancel 不修改文档。
 - Stage 的透明输出边界始终显示 1 屏幕像素边框。点击边界会清空节点选择并在右侧 Properties
   中打开 Canvas Inspector；输出宽度、高度和背景逐项确认后派发可逆 `output.configure`。
   尺寸可选择 1280×720、1366×768、1440×900、1920×1080、2560×1440、3840×2160，
-  也可输入任意合法自定义值。该检查目标不进入 SceneTree 或 `selectedIds`。
+  也可输入任意合法自定义值。该检查目标不进入 ComposeSceneTree 或 `selectedIds`。
 - fit Frame/selection 使用 Stage 实际上报的 surface 尺寸，不包含固定标尺和滚动条占用。
 - 默认布局禁止面板拖拽、关闭和浮动，Dockview 类型不会成为公共 API。
 - 插槽更新不会重建面板或丢失当前实例的尺寸与折叠状态。
@@ -126,8 +124,8 @@ navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Pr
   `data-compose-theme` 与 `lang`。
 - 布局只在当前组件实例存活期间保留，不读取或写入持久化存储。
 
-提供 controller 且没有显式覆盖时，工作区自动显示 Palette、派生 SceneTree、Stage、
-HistoryPanel、Inspector 与 CommandPanel。显式 `children` 始终覆盖默认 Stage；无 controller
+提供 controller 且没有显式覆盖时，工作区自动显示 Palette、派生 ComposeSceneTree、Stage、
+ComposeHistoryPanel、Inspector 与 ComposeCommandPanel。显式 `slots.stage` 覆盖默认 Stage；无 controller
 时既有受控插槽和快捷键行为保持兼容。编辑器不依赖 operation-log，也不会持久化文档或会话状态。
 网格、输出设置和全局辅助线属于 `ComposeDocument`，因此会进入 runtime History 和宿主 Operation Log；
 viewport、选择、工具、surface 尺寸与滚动范围仍只存在于当前编辑器会话。

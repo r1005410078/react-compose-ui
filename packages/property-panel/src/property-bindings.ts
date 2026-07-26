@@ -9,7 +9,7 @@ import type {
   PropertyPanelResolvedBindingTarget,
   PropertyPanelVariable,
   PropertyPath,
-} from './index'
+} from './property-panel/compose-property-panel'
 import { getValueAtPath, inspectSchema, setValueAtPath } from './schema-model'
 
 type RuntimeSchema = v.GenericSchema & {

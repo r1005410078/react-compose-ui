@@ -134,7 +134,7 @@ export interface ComposeFrameNode extends ComposeNodeBase {
  */
 export interface ComposeComponentNode extends ComposeNodeBase {
   readonly kind: 'component'
-  /** 解析宿主 ComponentDefinition 的稳定类型。 */
+  /** 解析宿主 ComposeComponentDefinition 的稳定类型。 */
   readonly componentType: string
   /** 严格 JSON 可序列化的组件属性。 */
   readonly props: JsonObject

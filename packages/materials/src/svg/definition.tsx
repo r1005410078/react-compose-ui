@@ -1,7 +1,7 @@
-import type { ComponentDefinition } from '@compose-ui/component-registry'
-import { cloneProps, cloneStyle } from '../shared/default-values'
-import { measureSvgAsset } from '../shared/assets'
-import type { BasicMaterialComponentOptions } from '../types'
+import type { ComposeComponentDefinition } from '@compose-ui/component-registry'
+import { cloneProps, cloneStyle } from '../material-inspector-kit/default-values'
+import { measureSvgAsset } from '../material-inspector-kit/assets'
+import type { ComposeBasicMaterialComponentOptions } from '../types'
 import {
   DEFAULT_SVG_PROPS,
   DEFAULT_SVG_SIZE,
@@ -12,9 +12,9 @@ import { createSvgInspector } from './inspector'
 
 /** 创建 SVG definition。 @internal */
 export function createSvgDefinition(
-  options: BasicMaterialComponentOptions = {},
+  options: ComposeBasicMaterialComponentOptions = {},
   idFactory: () => string = () => crypto.randomUUID(),
-): ComponentDefinition {
+): ComposeComponentDefinition {
   const defaultSize = options.defaultSize ?? DEFAULT_SVG_SIZE
   const defaultProps = cloneProps(DEFAULT_SVG_PROPS, options.defaultProps)
   const defaultStyle = cloneStyle(DEFAULT_SVG_STYLE, options.defaultStyle)
@@ -56,4 +56,4 @@ export function createSvgDefinition(
 }
 
 /** 默认 SVG definition。 @public */
-export const DEFAULT_SVG_DEFINITION = createSvgDefinition()
+export const DEFAULT_COMPOSE_SVG_DEFINITION = createSvgDefinition()

@@ -1,4 +1,4 @@
-import type { SceneTreeCommand } from './index'
+import type { ComposeSceneTreeCommand } from './index'
 import type { IndexedSceneTreeNode } from './tree-model'
 
 export interface SelectionModifiers {
@@ -12,7 +12,7 @@ export interface SelectionResult {
 }
 
 export type SceneTreeKeyboardAction =
-  | { type: 'command'; command: SceneTreeCommand }
+  | { type: 'command'; command: ComposeSceneTreeCommand }
   | { type: 'focus-index'; index: number }
   | { type: 'focus-parent'; parentId: string }
   | { type: 'toggle-expanded'; nodeId: string }

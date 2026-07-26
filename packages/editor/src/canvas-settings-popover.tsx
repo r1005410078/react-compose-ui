@@ -5,12 +5,12 @@ import type {
   EditorCommand,
   JsonValue,
 } from '@compose-ui/core'
-import type { StageDispatch } from '@compose-ui/stage'
+import type { ComposeStageDispatch } from '@compose-ui/stage'
 import { getEditorMessages } from './editor-i18n'
 
 type CanvasSettingsPopoverProps = {
   readonly document: ComposeDocument
-  readonly dispatch: StageDispatch
+  readonly dispatch: ComposeStageDispatch
   readonly idFactory: () => string
   readonly onClose: () => void
 }

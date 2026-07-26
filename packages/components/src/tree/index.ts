@@ -1,13 +1,13 @@
-export { Tree } from './tree'
+export { Tree as ComposeTree } from './tree'
 export {
-  createTreeIndex,
-  createTreeMove,
-  flattenTree,
-  type IndexedTreeItem,
+  createTreeIndex as createComposeTreeIndex,
+  createTreeMove as createComposeTreeMove,
+  flattenTree as flattenComposeTree,
+  type IndexedTreeItem as ComposeIndexedTreeItem,
 } from './tree-model'
 export type {
-  TreeItemAdapter,
-  TreeItemRenderContext,
-  TreeMoveOperation,
-  TreeProps,
+  TreeItemAdapter as ComposeTreeItemAdapter,
+  TreeItemRenderContext as ComposeTreeItemRenderContext,
+  TreeMoveOperation as ComposeTreeMoveOperation,
+  TreeProps as ComposeTreeProps,
 } from './tree-types'

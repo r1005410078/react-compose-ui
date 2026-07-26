@@ -170,6 +170,15 @@
   padding: 14px;
 }
 
+.asset-browser__grid > [role="row"] {
+  min-width: 0;
+}
+
+.asset-browser__grid > [role="row"] > .asset-browser__asset-card {
+  width: 100%;
+  height: 100%;
+}
+
 .asset-browser__asset-card {
   display: grid;
   min-width: 0;

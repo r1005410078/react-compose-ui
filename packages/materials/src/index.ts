@@ -8,28 +8,28 @@ import './styles.css'
 
 export {
   COMPOSE_UI_MATERIALS_PACKAGE,
-  DEFAULT_BASIC_COMPONENT_DEFINITIONS,
-  DEFAULT_BASIC_FRAME_PRESETS,
-  createBasicMaterials,
+  DEFAULT_COMPOSE_BASIC_COMPONENT_DEFINITIONS,
+  DEFAULT_COMPOSE_BASIC_FRAME_PRESETS,
+  createComposeBasicMaterials,
 } from './create-basic-materials'
 export {
-  DEFAULT_FRAME_PRESET,
+  DEFAULT_COMPOSE_FRAME_PRESET,
 } from './frame'
 export {
-  DEFAULT_RECTANGLE_DEFINITION,
+  DEFAULT_COMPOSE_RECTANGLE_DEFINITION,
 } from './rectangle'
 export {
-  DEFAULT_TEXT_DEFINITION,
+  DEFAULT_COMPOSE_TEXT_DEFINITION,
 } from './text'
 export {
-  DEFAULT_IMAGE_DEFINITION,
+  DEFAULT_COMPOSE_IMAGE_DEFINITION,
 } from './image'
 export {
-  DEFAULT_SVG_DEFINITION,
+  DEFAULT_COMPOSE_SVG_DEFINITION,
 } from './svg'
 export type {
-  BasicMaterialComponentOptions,
-  BasicMaterialFrameOptions,
-  BasicMaterials,
-  CreateBasicMaterialsOptions,
+  ComposeBasicMaterialComponentOptions,
+  ComposeBasicMaterialFrameOptions,
+  ComposeBasicMaterials,
+  ComposeCreateBasicMaterialsOptions,
 } from './types'

@@ -1,9 +1,9 @@
-import { RegistryComponent } from '@compose-ui/component-registry'
+import { ComposeRegistryComponent } from '@compose-ui/component-registry'
 import type { ComposeComponentNode } from '@compose-ui/core'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
-import { createBasicMaterials } from '../index'
+import { createComposeBasicMaterials } from '../index'
 
 afterEach(cleanup)
 
@@ -25,7 +25,7 @@ function rectangleNode(
 
 describe('@compose-ui/materials Rectangle', () => {
   it('OpenSpec: basic-materials / 基础材料 Inspector 共享 UI 环境 / 使用英文基础材料 Inspector', () => {
-    const materials = createBasicMaterials({
+    const materials = createComposeBasicMaterials({
       extensions: [{
         type: 'host.widget',
         label: '宿主业务物料',
@@ -50,7 +50,7 @@ describe('@compose-ui/materials Rectangle', () => {
   })
 
   it('OpenSpec: basic-materials / 基础材料 Inspector 共享 UI 环境 / 切换 Inspector 主题', () => {
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     const registry = materials.registry
     const Inspector = registry.get('rectangle')?.inspector
     const dispatch = vi.fn()
@@ -75,9 +75,9 @@ describe('@compose-ui/materials Rectangle', () => {
   })
 
   it('OpenSpec: basic-materials / 完整基础物料与 Inspector / 兼容旧 Rectangle props', () => {
-    const materials = createBasicMaterials()
+    const materials = createComposeBasicMaterials()
     render(
-      <RegistryComponent
+      <ComposeRegistryComponent
         mode="preview"
         node={rectangleNode({
           props: { color: '#ff00aa', opacity: 0.4, cornerRadius: 18 },
@@ -136,7 +136,7 @@ describe('@compose-ui/materials Rectangle', () => {
   })
 
   it('OpenSpec: basic-materials / 完整基础物料与 Inspector / 编辑基础物料', () => {
-    const materials = createBasicMaterials({ idFactory: () => 'material-command' })
+    const materials = createComposeBasicMaterials({ idFactory: () => 'material-command' })
     const definition = materials.registry.get('rectangle')
     const Inspector = definition?.inspector
     const dispatch = vi.fn()

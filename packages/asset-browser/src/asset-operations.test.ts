@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { ComposeAssetError } from '@compose-ui/assets'
 import {
-  ComposeAssetError,
   executeAssetBatch,
   normalizeComposeAssetError,
   validateAssetName,
-} from './index'
+} from '@compose-ui/assets'
 
 describe('asset operations', () => {
   it('OpenSpec: asset-browser / Provider 能力与错误 / 规范化 Provider 错误', () => {

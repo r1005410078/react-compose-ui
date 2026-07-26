@@ -7,7 +7,7 @@ export default defineConfig({
     dts({
       entryRoot: 'src',
       include: ['src'],
-      exclude: ['src/**/*.test.*'],
+      exclude: ['src/**/*.test.*', 'src/**/*.stories.*'],
       tsconfigPath: 'tsconfig.json',
     }),
   ],

@@ -1,26 +1,26 @@
 import type {
-  OperationLogEntry,
-  OperationLogRecordInput,
-  OperationLogRecordOptions,
-  OperationLogActor,
-  OperationLogController,
-  OperationLogState,
-  OperationLogStore,
+  ComposeOperationLogEntry,
+  ComposeOperationLogRecordInput,
+  ComposeOperationLogRecordOptions,
+  ComposeOperationLogActor,
+  ComposeOperationLogController,
+  ComposeOperationLogState,
+  ComposeOperationLogStore,
 } from './types'
-import { createOperationLogSnapshot } from './snapshot'
-import { createMemoryOperationLogStore } from './stores'
+import { createComposeOperationLogSnapshot } from './snapshot'
+import { createComposeMemoryOperationLogStore } from './stores'
 
-export interface OperationLogRuntime extends OperationLogController {
+export interface OperationLogRuntime extends ComposeOperationLogController {
   initialize(): Promise<void>
-  getState(): OperationLogState
+  getState(): ComposeOperationLogState
   subscribe(listener: () => void): () => void
 }
 
 export interface CreateOperationLogRuntimeOptions {
   scopeId: string
   sessionId?: string
-  actor?: OperationLogActor
-  store: OperationLogStore
+  actor?: ComposeOperationLogActor
+  store: ComposeOperationLogStore
   maxEntries?: number
   maxSnapshotBytes?: number
   now?: () => number
@@ -41,16 +41,16 @@ export function createOperationLogRuntime(
   const createId = options.createId
     ?? (() => globalThis.crypto?.randomUUID?.() ?? `${sessionId}-${now()}-${++generatedId}`)
   const listeners = new Set<() => void>()
-  const memoryStore = createMemoryOperationLogStore()
+  const memoryStore = createComposeMemoryOperationLogStore()
   let activeStore = options.store
-  let state: OperationLogState = { status: 'loading', entries: [] }
+  let state: ComposeOperationLogState = { status: 'loading', entries: [] }
   let lastCoalesce: { id: string; key: string } | undefined
   let writeQueue = Promise.resolve()
   let initialized = false
   let initializePromise: Promise<void> | undefined
 
   const emit = () => listeners.forEach((listener) => listener())
-  const updateState = (next: OperationLogState) => {
+  const updateState = (next: ComposeOperationLogState) => {
     state = next
     emit()
   }
@@ -71,10 +71,10 @@ export function createOperationLogRuntime(
     }
   }
   const snapshotProperty = (
-    input: OperationLogRecordInput,
+    input: ComposeOperationLogRecordInput,
     property: 'before' | 'after' | 'metadata',
   ) => Object.prototype.hasOwnProperty.call(input, property)
-    ? createOperationLogSnapshot(input[property], maxSnapshotBytes)
+    ? createComposeOperationLogSnapshot(input[property], maxSnapshotBytes)
     : undefined
 
   const loadEntries = async () => {
@@ -103,9 +103,9 @@ export function createOperationLogRuntime(
   }
 
   const record = async (
-    input: OperationLogRecordInput,
-    recordOptions: OperationLogRecordOptions = {},
-  ): Promise<OperationLogEntry> => {
+    input: ComposeOperationLogRecordInput,
+    recordOptions: ComposeOperationLogRecordOptions = {},
+  ): Promise<ComposeOperationLogEntry> => {
     if (!initialized) await initialize()
     const timestamp = now()
     const head = state.entries[0]
@@ -119,7 +119,7 @@ export function createOperationLogRuntime(
     )
     const after = snapshotProperty(input, 'after')
     const metadata = snapshotProperty(input, 'metadata')
-    let entry: OperationLogEntry
+    let entry: ComposeOperationLogEntry
     let removedIds: readonly string[] = []
     if (canCoalesce && head) {
       entry = {
