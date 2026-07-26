@@ -72,6 +72,111 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。
 
+## React 组件架构与目录规范
+
+### 分层与依赖方向
+
+第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
+比本节的通用分类优先：
+
+1. **Headless Domain / Protocol**：`core`、`assets`、`stage-engine`，不得依赖 React 或 DOM。
+2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
+   Context 与无业务语义的交互组件。
+3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、
+   `property-panel`、`operation-log`、`command-panel`、`materials`，拥有明确领域职责。
+4. **Composition / Entry**：`editor`、`preview`，负责组合 Provider、领域组件和宿主协议。
+5. **Application**：`app`，只承担集成示例与端到端演示。
+
+不得为了复用方便让低层包反向依赖高层包。需要跨层共享时，先判断应下沉的是无框架协议、
+无业务 UI primitive，还是由上层通过 prop、slot、adapter 注入；不得通过深层源码导入、
+循环依赖或在低层复制领域类型绕过边界。
+
+### 组件分类
+
+新增或评审 React 组件时必须先确认其类别与归属：
+
+- **Primitive**：Button、Input 等无业务语义基础 UI。
+- **Pattern**：Tree、Dialog、SplitPane、VirtualList 等完整但无业务语义的交互模式。
+- **Domain Component**：SceneTree、AssetPreview、HistoryList 等包含领域词汇的组件。
+- **Widget**：Stage、AssetBrowser、PropertyPanel 等可独立完成一块用户任务的组件。
+- **Shell**：Editor、Preview 等负责跨域组合、Provider 和宿主接线的入口。
+
+`@compose-ui/components` 只接收 Primitive 和 Pattern。包含 ComposeDocument、资源 Provider、
+事务历史、场景命令、物料或编辑器工作流语义的组件必须留在对应领域包。SceneTree 和
+AssetTree 应组合共享 Tree，而不能把业务分支塞回 Tree。
+
+### Feature-first 目录
+
+- 包内默认按功能或公共组件组织目录，不按 `components/`、`hooks/`、`types/`、`utils/`
+  等技术类型横向堆放。
+- `@compose-ui/components` 中每个公共组件必须拥有独立目录，例如 `src/tree/`、
+  `src/dialog/`；目录内共同放置实现、类型、纯模型、样式、测试和可选 Story。
+- 复杂领域包按用户能力拆分，例如 Asset Browser 可拆为 `asset-tree/`、`asset-grid/`、
+  `asset-preview/`、`script-editor/` 和 `operations/`，而不是建立一个包级大 `components/`。
+- 与单一功能绑定的 Hook、类型、常量和辅助函数必须与该功能同目录。只有具有稳定、单一、
+  可说明的跨功能职责时才能上移；禁止创建含义模糊的 `common`、`shared`、`helpers` 或
+  万能 `utils` 大杂烩。
+- 包根 `src/index.ts`/`src/index.tsx` 只定义公共入口；功能目录使用自己的 `index.ts`
+  控制导出。其他包不得绕过公共入口导入内部文件。
+- 不要求为简单私有 JSX 片段机械创建目录；当它形成独立公共 API、拥有自己的状态机/样式/
+  测试，或包含三个及以上协同实现文件时，再提升为独立功能目录。
+
+复杂公共组件建议采用以下结构，并按实际职责删减，不得为凑结构创建空文件：
+
+```text
+src/tree/
+├── index.ts
+├── tree.tsx
+├── tree-types.ts
+├── tree-model.ts
+├── tree-keyboard.ts
+├── tree-parts.tsx
+├── styles.css
+├── tree.test.tsx
+└── tree.stories.tsx
+```
+
+### React、状态与 Headless 边界
+
+- React 组件负责渲染、Context 消费、DOM 测量、浏览器事件归一化和 Effect 应用；可确定性
+  业务规则、几何、状态转换和命令规划优先放入纯函数、reducer、model 或 headless controller。
+- 复杂拖拽、虚拟化、异步操作或多阶段交互不得全部堆在一个 TSX 文件中；至少分离状态模型/
+  session、React 适配和渲染部分。简单展示组件不应为了形式强制引入 controller。
+- 只保存最小且不可派生的状态，避免重复、矛盾和深层嵌套状态。局部瞬时状态留在最近组件；
+  Theme/I18n 等横切配置使用共享 Context；文档、事务和资源事实来源遵守各自公开协议。
+- Context 不得作为普通 prop 透传或局部状态管理的默认替代。优先使用 props、children、slot
+  和组合；只有跨越多个层级且语义稳定的配置才进入 Context。
+- Headless 包和协议不得暴露 React Event、HTMLElement 或浏览器对象。React 公共回调优先
+  返回规范化的业务数据；确需暴露原生事件时必须在 TSDoc 中说明用途和生命周期限制。
+
+### 公共组件准入与 API
+
+组件进入 `@compose-ui/components` 或成为其他包的公共导出前，必须满足：
+
+- 职责、非目标、受控/非受控模式、默认值和状态归属明确。
+- 事件回调表达用户动作或规范化结果，不能要求消费者读取内部 DOM 才能理解结果。
+- loading、empty、error、disabled、readonly 等适用状态具有确定行为。
+- Theme/I18n 通过 `ui-context` 消费；不得硬编码第一方 chrome 颜色或可翻译文案。
+- 样式使用包内语义 token 并与功能同目录；显式 `className`/`style` 的覆盖能力和优先级保持稳定。
+- 异步组件定义取消、迟到结果、并发冲突和卸载清理；Blob URL、订阅、observer、model 和
+  全局监听必须可释放。
+- 公共入口、组件、Hook、函数和类型遵守本文件的 TSDoc 规则；内部实现默认不导出。
+
+只有已经被至少两个第一方包复用，或明确作为经过评审的公共 Pattern/Primitive 发布时，
+才能将领域包内组件上移到 `@compose-ui/components`。不得以“未来可能复用”为理由提前抽象。
+
+### 可访问性与测试
+
+- 交互组件必须选择并完整实现对应的 WAI-ARIA Pattern，包括 role、accessible name、状态、
+  键盘、焦点进入/退出和焦点恢复；不能只添加 ARIA 属性而缺少交互语义。
+- selection、focus、active、expanded 和 checked 是不同状态，不得用一个布尔值或同一视觉
+  样式含混表示。虚拟化组件还必须维护正确的集合位置和焦点可达性。
+- 纯 model/reducer/算法使用 Vitest；React 契约、键盘、焦点、ARIA、异步清理使用 Testing
+  Library；真实布局、Pointer capture、跨包流程使用 Playwright。
+- 测试断言用户可观察行为，不以私有 state、内部方法或脆弱 DOM 层级为主要契约。
+- 仓库引入 Storybook 前，可复用视觉状态由组件测试与既有黄金图承载；引入后 Story 应与
+  功能同目录，并覆盖正常、空、加载、错误、禁用、长文本和大数据量等适用状态。
+
 ## 变更规则
 
 - 新能力、公共 API、文档 Schema、架构调整或破坏性变更必须先遵循上方 OpenSpec 流程。

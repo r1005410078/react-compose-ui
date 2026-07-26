@@ -26,6 +26,20 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 ### Architecture Patterns
 
+- 第一方代码采用单向五层结构：无 React/DOM 的 Headless Domain/Protocol（core、assets、
+  stage-engine）→ Shared UI Foundation（ui-context、component-registry、components）→
+  Domain Components/Widgets → Composition/Entry（editor、preview）→ Application（app）。
+  高层可以依赖低层，低层不得反向依赖高层；下列包级约束优先于此通用分类。
+- React 包内部采用 Feature-first 目录。每个共享公共组件拥有独立功能目录，并将实现、类型、
+  纯模型、样式和测试 colocate；不得按 `components/hooks/types/utils` 横向堆放，也不得创建
+  含义模糊的 `common`、`shared`、`helpers` 大杂烩。
+- React 组件负责 DOM/浏览器适配和渲染；可确定性业务规则、状态转换、几何与命令规划优先
+  下沉到纯函数、reducer、model 或 headless controller。复杂交互必须分离状态模型、React
+  适配和渲染部分，简单组件不强制引入 controller。
+- `@compose-ui/components` 只接收无业务语义的 Primitive 和 Pattern，并且必须已经被至少两个
+  第一方包复用或经过公共 API 评审；Domain Component、Widget 与 Shell 留在各自领域包。
+- 公共交互组件必须定义受控状态、状态归属、语义事件、异步清理、Theme/I18n、WAI-ARIA
+  键盘与焦点行为，并以纯逻辑单测、Testing Library 组件测试和必要的 Playwright 流程分层验证。
 - `@compose-ui/ui-context` 提供跨包共享的 React Theme/I18n Context，只依赖 React peer；
   第一方 React chrome 包可以依赖它，并必须在构建时外置以保持 Context 单例。
 - `@compose-ui/core` 保持与 React 和 DOM 无关，承载版本化 JSON 文档、同步命令、可逆 Patch、
