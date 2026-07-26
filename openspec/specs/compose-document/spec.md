@@ -5,67 +5,42 @@ TBD - created by archiving change add-command-transaction-runtime. Update Purpos
 ## Requirements
 ### Requirement: 版本化 JSON 文档
 
-系统 MUST 在 `@compose-ui/core` 提供仅支持 `schemaVersion: 2` 的 `ComposeDocument`、严格 JSON 值
-类型和无 React/DOM 依赖的文档校验器。文档 MUST 使用必填 canvas 设置、稳定 `rootIds` 与规范化
-节点表，并且不得保存 `undefined`、函数、symbol、bigint、循环对象、React 元素或类实例。
+系统 MUST 在 `@compose-ui/core` 提供仅支持 `schemaVersion: 3` 的 ComposeDocument、严格 JSON
+类型和无 React/DOM 的校验器。文档 MUST 保存 output、canvas、稳定 rootIds 与规范化 nodes；
+v2、Group 和未知版本 MUST 被拒绝且不得自动迁移。
 
-#### Scenario: 校验合法 v2 多 Frame 文档
+#### Scenario: 接受 v3 并拒绝旧版本
 
-- **WHEN** 宿主校验包含 canvas、多个 Frame、Group、Component 和 JSON props 的版本 2 文档
-- **THEN** 校验结果返回该文档有效
-- **AND** 文档通过 JSON 序列化后保持相同业务结构
-
-#### Scenario: 拒绝非 JSON 属性
-
-- **WHEN** Component props 或 canvas 包含 undefined、函数、bigint、非有限数字或循环引用
-- **THEN** 校验结果返回稳定 issue code、可定位 path 和可读消息
-- **AND** 校验器不会把候选值强制转换成另一种数据
-
-#### Scenario: 拒绝 v1 与未知版本
-
-- **WHEN** 候选文档的 `schemaVersion` 不是 2
-- **THEN** 校验结果明确报告不支持的版本
-- **AND** 候选文档不会被迁移或当成当前版本继续处理
+- **WHEN** 宿主分别校验合法 v3 文档、v2 文档和包含 Group 的候选文档
+- **THEN** 只有 v3 Frame/Component 文档有效
+- **AND** 失败结果包含稳定版本或节点字段问题
 
 ### Requirement: 规范化节点拓扑
 
-系统 MUST 将节点建模为 `frame`、`group` 或 `component` 判别联合。Frame MUST 且只能位于
-`rootIds`；Group 与 Component MUST 由且仅由一个 Frame 子树可达；每个 child ID MUST 存在，
-同一节点不得拥有多个父节点，拓扑不得形成环。
+系统 MUST 使用隐式 Canvas 作为结构根，允许 Frame 或 Component 出现在 rootIds。Frame MUST
+可以递归包含 Frame/Component，Component MUST 保持叶节点；每个节点必须从 rootIds 恰好可达
+一次且不得形成环。
 
-#### Scenario: 使用合法 Frame 子树
+#### Scenario: 使用任意根与嵌套 Frame
 
-- **WHEN** Frame 的 childIds 引用 Group 与 Component，且每个后代只出现一次
-- **THEN** 校验结果保留给定子节点顺序
-- **AND** 宿主可以从 rootIds 确定性遍历完整文档
+- **WHEN** rootIds 同时包含 Component 与 Frame，且 Frame 包含旋转 Frame 和 Component
+- **THEN** 文档校验通过并保留确定性场景顺序
+- **AND** `parentId: null` 可稳定表示任意根节点位置
 
-#### Scenario: 拒绝悬空或重复父节点
+#### Scenario: 拒绝非法拓扑
 
-- **WHEN** childIds 引用不存在节点，或同一节点同时属于两个父节点
-- **THEN** 校验结果分别报告悬空引用或重复父节点
-- **AND** 无效拓扑不会产生部分可用的文档
-
-#### Scenario: 拒绝根级普通节点或循环
-
-- **WHEN** rootIds 包含 Group/Component，或任意 childIds 链回祖先
-- **THEN** 校验结果报告根节点种类或循环路径错误
+- **WHEN** childIds 缺失、重复拥有父级、指向 Component 后代或形成循环
+- **THEN** 校验器返回对应稳定 issue 和路径
 
 ### Requirement: 节点变换与显示状态
 
-每个节点 MUST 保存稳定 ID、名称、visible、locked 与相对父节点的 transform。无限空间 MUST
-允许有限负坐标；width/height MUST 为有限正数；rotation MUST 为有限角度，且 Frame rotation
-MUST 为零。
+每个节点 MUST 保存有限局部 transform、visible 与 locked。Frame 与 Component MUST 都允许有限
+rotation，width/height MUST 为有限正数；Frame MUST 保存 boolean `clipContent`。
 
-#### Scenario: 接受无限空间负坐标
+#### Scenario: 旋转并裁剪 Frame
 
-- **WHEN** Frame 或后代节点使用有限负 x/y 与合法尺寸
-- **THEN** 文档校验通过且坐标保持不变
-
-#### Scenario: 拒绝非法变换
-
-- **WHEN** transform 包含 NaN、Infinity、零或负尺寸，或者 Frame 使用非零 rotation
-- **THEN** 校验结果定位到对应 transform 字段
-- **AND** 不返回经过静默修正的文档
+- **WHEN** 根级或嵌套 Frame 使用有限 rotation 和任一 clipContent 值
+- **THEN** 文档校验通过并保持字段原值
 
 ### Requirement: 可序列化组件节点
 
@@ -130,3 +105,15 @@ axis MUST 为 `x|y`，position MUST 为有限数。
 - **WHEN** canvas 缺失、grid 数值非法、主线间隔不是正整数或 guide ID 重复
 - **THEN** 校验返回稳定 issue code 和 canvas 字段 path
 - **AND** 不返回经过静默修正的文档
+
+### Requirement: 固定原点输出设置
+
+ComposeDocument MUST 保存正有限 width/height 与非空 backgroundColor 的 output，并导出默认
+`1280×720`、`transparent` 的 `createDefaultOutputSettings()`。输出原点 MUST 固定为世界
+`(0,0)`；backgroundColor MUST 继续允许宿主配置其他非空 CSS 颜色字符串。
+
+#### Scenario: 校验输出设置
+
+- **WHEN** 宿主创建默认输出或提供合法自定义尺寸和背景
+- **THEN** 文档校验通过且值可 JSON 往返
+- **AND** 非正、非有限尺寸或空背景被拒绝

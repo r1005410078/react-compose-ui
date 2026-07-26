@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   createTransactionRuntime,
   type CommandHandler,
   type ComposeDocument,
@@ -39,8 +40,9 @@ afterEach(cleanup)
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: createDefaultCanvasSettings(),
+    output: createDefaultOutputSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -51,6 +53,7 @@ function fixture(): ComposeDocument {
         locked: false,
         transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0 },
         childIds: ['a'],
+        clipContent: true,
       },
       a: {
         id: 'a',

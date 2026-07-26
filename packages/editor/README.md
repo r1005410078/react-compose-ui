@@ -77,7 +77,7 @@ dark/light token 和稳定 message ID 覆盖。第一方面板直接读取 Conte
 ## Controller
 
 `useComposeEditorController` 组合宿主提供的 `TransactionRuntime` 与 `ComponentRegistry`，管理
-selection、expandedIds、activeFrameId、viewport、tool、真实 Stage surface 尺寸和实例级
+selection、expandedIds、viewport、tool、真实 Stage surface 尺寸和实例级
 `StageInteractionController`。Editor 拥有该 controller，并把同一实例交给 Stage 与 Palette；
 卸载时统一 dispose。它从 runtime 当前文档派生：
 
@@ -103,9 +103,13 @@ navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Pr
   覆盖下方内容，但不会关闭 `history` 的快捷键处理。
 - Stage Toolbar 固定在 Canvas 内容顶部，不是独立面板；`stageToolbar` 优先于已废弃的
   `canvasToolbar`。
-- 默认 Stage Toolbar 提供网格吸附、智能吸附快捷开关和画布设置弹层。弹层可编辑 X/Y
+- 默认 Stage Toolbar 提供网格吸附、智能吸附快捷开关和画布设置弹层。弹层只编辑 X/Y
   步长、X/Y 偏移、主线间隔、节点/辅助线吸附并清空辅助线；Apply 最多提交一个事务，
   Cancel 不修改文档。
+- Stage 的透明输出边界始终显示 1 屏幕像素边框。点击边界会清空节点选择并在右侧 Properties
+  中打开 Canvas Inspector；输出宽度、高度和背景逐项确认后派发可逆 `output.configure`。
+  尺寸可选择 1280×720、1366×768、1440×900、1920×1080、2560×1440、3840×2160，
+  也可输入任意合法自定义值。该检查目标不进入 SceneTree 或 `selectedIds`。
 - fit Frame/selection 使用 Stage 实际上报的 surface 尺寸，不包含固定标尺和滚动条占用。
 - 默认布局禁止面板拖拽、关闭和浮动，Dockview 类型不会成为公共 API。
 - 插槽更新不会重建面板或丢失当前实例的尺寸与折叠状态。
@@ -116,5 +120,5 @@ navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Pr
 提供 controller 且没有显式覆盖时，工作区自动显示 Palette、派生 SceneTree、Stage、
 HistoryPanel、Inspector 与 CommandPanel。显式 `children` 始终覆盖默认 Stage；无 controller
 时既有受控插槽和快捷键行为保持兼容。编辑器不依赖 operation-log，也不会持久化文档或会话状态。
-网格设置和全局辅助线属于 `ComposeDocument`，因此会进入 runtime History 和宿主 Operation Log；
+网格、输出设置和全局辅助线属于 `ComposeDocument`，因此会进入 runtime History 和宿主 Operation Log；
 viewport、选择、工具、surface 尺寸与滚动范围仍只存在于当前编辑器会话。

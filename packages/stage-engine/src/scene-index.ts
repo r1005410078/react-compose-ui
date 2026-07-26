@@ -1,7 +1,9 @@
 import type { ComposeDocument } from '@compose-ui/core'
 import {
+  applyMatrix,
   getNodeWorldBounds,
   getNodeWorldMatrix,
+  invertMatrix,
   type StageGuide,
   type StageMatrix,
   type StageRect,
@@ -27,8 +29,12 @@ export interface StageSceneIndex {
   isVisible(nodeId: string): boolean
   /** 移除其祖先也在输入集合中的后代选择。 */
   topLevelSelection(nodeIds: readonly string[]): readonly string[]
-  /** 查询节点所属根 Frame。 */
-  frameForNode(nodeId: string): string | null
+  /** 查询节点自身或最近 Frame 祖先。 */
+  closestFrameForNode(nodeId: string): string | null
+  /** 查询全部节点共享的最近可用 Frame；没有共同 Frame 时返回 null。 */
+  commonFrameForSelection(nodeIds: readonly string[]): string | null
+  /** 按 paint order 查询包含世界点的最深可用 Frame。 */
+  frameAtPoint(point: { readonly x: number; readonly y: number }): string | null
   /** 为选区建立节点与文档辅助线吸附候选。 */
   snapCandidates(excludedIds: readonly string[]): readonly StageGuide[]
 }
@@ -89,7 +95,7 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
         return document.nodes[nodeId] !== undefined
       })
     },
-    frameForNode(nodeId) {
+    closestFrameForNode(nodeId) {
       let current: string | null = nodeId
       while (current) {
         const node = document.nodes[current]
@@ -97,6 +103,54 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
         current = parents.get(current) ?? null
       }
       return null
+    },
+    commonFrameForSelection(nodeIds) {
+      const validIds = nodeIds.filter((id) => document.nodes[id] !== undefined)
+      if (validIds.length === 0) return null
+      const frameChain = (nodeId: string) => {
+        const result: string[] = []
+        let current: string | null = nodeId
+        while (current) {
+          const node = document.nodes[current]
+          if (node?.kind === 'frame' && !node.locked) result.push(current)
+          current = parents.get(current) ?? null
+        }
+        return result
+      }
+      const chains = validIds.map(frameChain)
+      return chains[0]?.find((frameId) =>
+        chains.every((chain) => chain.includes(frameId))) ?? null
+    },
+    frameAtPoint(point) {
+      const contains = (frameId: string) => {
+        const frame = document.nodes[frameId]
+        const matrix = matrices.get(frameId)
+        if (!frame || frame.kind !== 'frame' || !matrix) return false
+        const local = applyMatrix(invertMatrix(matrix), point)
+        return local.x >= 0
+          && local.x <= frame.transform.width
+          && local.y >= 0
+          && local.y <= frame.transform.height
+      }
+      const isExposed = (frameId: string) => {
+        let current = parents.get(frameId) ?? null
+        while (current) {
+          const ancestor = document.nodes[current]
+          if (ancestor?.kind === 'frame' && ancestor.clipContent && !contains(current)) {
+            return false
+          }
+          current = parents.get(current) ?? null
+        }
+        return true
+      }
+      return [...order].reverse().find((nodeId) => {
+        const node = document.nodes[nodeId]
+        return node?.kind === 'frame'
+          && !node.locked
+          && visibility.get(nodeId)
+          && contains(nodeId)
+          && isExposed(nodeId)
+      }) ?? null
     },
     snapCandidates(excludedIds) {
       const excluded = new Set(excludedIds)

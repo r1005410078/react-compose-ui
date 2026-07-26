@@ -31,7 +31,7 @@ function nodeStyle(node: ComposeNode): CSSProperties {
     borderRadius: visual.borderRadius,
     opacity: visual.opacity,
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
-    overflow: node.kind === 'group' ? 'visible' : 'hidden',
+    overflow: node.kind === 'frame' && !node.clipContent ? 'visible' : 'hidden',
   }
 }
 

@@ -53,6 +53,102 @@ test('OpenSpec: editor-workspace-layout / 完整示例入口 / 根路径直接�
   expect(bottomBox!.y).toBeGreaterThan(canvasBox!.y)
 })
 
+test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择常见 PC 尺寸', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  const xAxis = stage.getByTestId('stage-origin-x')
+  const yAxis = stage.getByTestId('stage-origin-y')
+  const bottomEdge = stage.getByTestId('stage-output-edge-bottom')
+  const rightEdge = stage.getByTestId('stage-output-edge-right')
+  const origin = stage.getByTestId('stage-world-origin')
+  const originSilhouette = stage.getByTestId('stage-world-origin-silhouette')
+  const originPosition = stage.getByTestId('stage-world-origin-position')
+  await expect(output).toHaveAttribute('fill', 'transparent')
+  await expect(xAxis).toHaveCSS('stroke', 'rgba(245, 51, 82, 0.75)')
+  await expect(yAxis).toHaveCSS('stroke', 'rgba(135, 214, 3, 0.75)')
+  await expect(bottomEdge).toHaveCSS('stroke', 'rgb(142, 152, 168)')
+  await expect(rightEdge).toHaveCSS('stroke', 'rgb(142, 152, 168)')
+  await expect(bottomEdge).toHaveCSS('stroke-opacity', '0.72')
+  await expect(rightEdge).toHaveCSS('stroke-opacity', '0.72')
+  await expect(originSilhouette).toHaveCSS('fill', 'rgb(255, 255, 255)')
+  await expect(originSilhouette).toHaveCSS('fill-opacity', '0.706')
+  await expect(originPosition).toHaveCSS('fill', 'rgb(255, 95, 95)')
+  const originTransform = await origin.getAttribute('transform')
+  const translatedOrigin = originTransform?.match(/^translate\(([-\d.]+) ([-\d.]+)\)$/)
+  expect(translatedOrigin).not.toBeNull()
+  expect(Number(translatedOrigin![1]) + 8).toBe(Number(await yAxis.getAttribute('x1')))
+  expect(Number(translatedOrigin![2]) + 8).toBe(Number(await xAxis.getAttribute('y1')))
+  expect(await origin.evaluate((element) => {
+    const yAxisElement = element.previousElementSibling
+    return yAxisElement?.getAttribute('data-testid') === 'stage-origin-y'
+  })).toBe(true)
+  await expect(bottomEdge).toHaveCSS('stroke-width', '1px')
+  await expect(rightEdge).toHaveCSS('stroke-width', '1px')
+
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+  await page.mouse.click(outputBox!.x + 40, outputBox!.y + 40)
+
+  const inspector = editor.getByRole('region', { name: '画布属性' })
+  await expect(inspector).toBeVisible()
+  await expect(output).toHaveClass(/is-selected/)
+  await expect(bottomEdge).toHaveCSS('stroke', 'rgb(54, 135, 255)')
+  await expect(rightEdge).toHaveCSS('stroke', 'rgb(54, 135, 255)')
+  await expect(bottomEdge).toHaveCSS('stroke-opacity', '1')
+  await expect(rightEdge).toHaveCSS('stroke-opacity', '1')
+  const grid = stage.getByTestId('stage-grid')
+  for (let index = 0; index < 2; index += 1) {
+    await stage.press('Control+-')
+  }
+  await expect.poll(() => grid.evaluate((element) =>
+    getComputedStyle(element).backgroundSize.split(',').length)).toBe(4)
+  await expect.poll(() => grid.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
+    .toBeGreaterThan(4)
+  for (let index = 0; index < 6; index += 1) {
+    await stage.press('Control+-')
+  }
+  await expect.poll(() => grid.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
+    .toBeGreaterThanOrEqual(2)
+  await expect(editor).toHaveScreenshot('stage-workspace-canvas-inspector.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  for (let index = 0; index < 5; index += 1) {
+    await stage.press('Control+-')
+  }
+  await expect.poll(() => grid.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
+    .toBeCloseTo(3.2, 1)
+  await expect(editor).toHaveScreenshot('stage-workspace-low-zoom-grid.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await stage.press('Control+0')
+
+  await inspector.getByRole('combobox', { name: '常见 PC 尺寸' })
+    .selectOption('1920x1080')
+  await expect(inspector.getByRole('spinbutton', { name: '输出宽度' })).toHaveValue('1920')
+  await expect(inspector.getByRole('spinbutton', { name: '输出高度' })).toHaveValue('1080')
+  await expect(output).toHaveAttribute('width', '1920')
+  await expect(output).toHaveAttribute('height', '1080')
+
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect(inspector.getByRole('spinbutton', { name: '输出宽度' })).toHaveValue('1280')
+  await expect(inspector.getByRole('spinbutton', { name: '输出高度' })).toHaveValue('720')
+  await expect(output).toHaveClass(/is-selected/)
+  await stage.press('Control+Shift+z')
+  await expect(inspector.getByRole('spinbutton', { name: '输出宽度' })).toHaveValue('1920')
+  await expect(inspector.getByRole('spinbutton', { name: '输出高度' })).toHaveValue('1080')
+})
+
 test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使用完整示例完成 Stage 纵向流程', async ({ page }) => {
   await page.goto('/')
 
@@ -67,6 +163,8 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(editor.getByRole('button').filter({ hasText: /Frame|Rectangle|Text|ECharts/ }))
     .toHaveCount(4)
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-component'))
+    .toHaveCount(1)
 
   const stageBox = await stage.boundingBox()
   expect(stageBox).not.toBeNull()
@@ -74,7 +172,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     x: stageBox!.x + stageBox!.width / 2,
     y: stageBox!.y + stageBox!.height / 2,
   })
-  const frame = stage.getByTestId('stage-frame')
+  const frame = stage.locator('.compose-stage__scene > .compose-stage__node.is-frame')
   await expect(frame).toHaveCount(1)
   await expect(frame).toHaveCSS('background-color', 'rgb(248, 250, 252)')
   await editor.getByRole('button', { name: '适配 Frame' }).click()
@@ -89,9 +187,9 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     x: frameBox!.x + frameBox!.width * 0.7,
     y: frameBox!.y + frameBox!.height * 0.35,
   })
-  await expect(stage.locator('.compose-stage__node.is-component')).toHaveCount(2)
+  await expect(stage.locator('.compose-stage__node.is-component')).toHaveCount(3)
 
-  const components = stage.locator('.compose-stage__node.is-component')
+  const components = frame.locator(':scope > .compose-stage__node.is-component')
   const textComponent = components.filter({ hasText: 'Text' })
   await textComponent.click()
   await stage.press('Shift+ArrowRight')
@@ -104,8 +202,10 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await components.nth(0).click()
   await components.nth(1).click({ modifiers: ['Shift'] })
   await stage.press('Control+g')
-  await expect(stage.locator('.compose-stage__node.is-group')).toHaveCount(1)
-  const group = stage.locator('.compose-stage__node.is-group')
+  const group = frame.locator(':scope > .compose-stage__node.is-frame')
+  await expect(group).toHaveCount(1)
+  const groupId = await group.getAttribute('data-node-id')
+  expect(groupId).not.toBeNull()
   const groupBackground = editor.getByRole('textbox', { name: '背景', exact: true })
   await groupBackground.fill('#123456')
   await groupBackground.blur()
@@ -128,7 +228,6 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
 
   await editor.getByText('命令', { exact: true }).click()
   const commandPanel = editor.getByRole('region', { name: '命令调试台' })
-  await expect(commandPanel.getByText('已拒绝')).toBeVisible()
   await expect(commandPanel.getByText('成功').first()).toBeVisible()
 
   await editor.getByText('日志', { exact: true }).click()
@@ -137,7 +236,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(
     log.getByRole('button', { name: /^属性 Update Text ·/ }),
   ).toBeVisible()
-  await expect(log.getByRole('button', { name: /^属性 Update Group ·/ })).toBeVisible()
+  await expect(log.getByRole('button', { name: /^属性 Update Frame ·/ })).toBeVisible()
   await expect(log.getByRole('button', { name: /Undo · Update Text/ })).toBeVisible()
   await expect(log.getByText(/Reject .* outside a Frame/)).toHaveCount(0)
   await log.getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).click()
@@ -146,15 +245,28 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(operationDetail).toContainText('之后')
   await expect(operationDetail).toContainText('forwardPatches')
 
-  await editor.getByRole('button', { name: '预览 Frame' }).click()
-  const preview = page.getByRole('dialog', { name: 'Frame 预览对话框' })
-  await expect(preview.getByRole('region', { name: 'Compose preview' })).toBeVisible()
+  await group.click()
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const preview = page.getByRole('dialog', { name: '文档预览对话框' })
+  const previewRegion = preview.getByRole('region', { name: 'Compose preview' })
+  await expect(previewRegion).toBeVisible()
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
-  const previewGroup = preview.locator('[data-testid^="compose-preview-node-"]').filter({
-    hasText: '统一事务舞台',
-  }).first()
+  const previewGroup = preview.getByTestId(`compose-preview-node-${groupId}`)
   await expect(previewGroup).toBeVisible()
   await expect(previewGroup).toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  await expect(previewRegion).toHaveScreenshot('document-preview.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await preview.getByRole('button', { name: '选中 Frame' }).click()
+  await expect(preview.getByTestId('compose-preview-frame')).toBeVisible()
+  await expect(preview.getByText('统一事务舞台')).toBeVisible()
+  await expect(previewRegion).toHaveScreenshot('frame-preview.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
 })
 
 test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染 ECharts Canvas', async ({ page }) => {
@@ -238,6 +350,69 @@ test('OpenSpec: stage / 八向缩放 / resize 手柄在预览阶段跟随鼠标'
       }).toBeLessThanOrEqual(1.5)
     }
   }
+})
+
+test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍显示网格并保持 8 单位吸附', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-component')
+  await rectangle.click()
+  await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
+
+  const historyEntries = editor.locator('[data-compose-ui="history"] li')
+  let expectedHistoryCount = await historyEntries.count()
+  for (let index = 0; index < 13; index += 1) {
+    await stage.press('Control+-')
+  }
+  await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  const grid = stage.getByTestId('stage-grid')
+  await expect.poll(() => grid.evaluate((element) =>
+    getComputedStyle(element).backgroundSize.split(',').length)).toBe(4)
+  await expect.poll(() => grid.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
+    .toBeCloseTo(3.2, 1)
+
+  const beforeMove = await rectangle.boundingBox()
+  expect(beforeMove).not.toBeNull()
+  await page.mouse.move(
+    beforeMove!.x + beforeMove!.width / 2,
+    beforeMove!.y + beforeMove!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    beforeMove!.x + beforeMove!.width / 2 + 19,
+    beforeMove!.y + beforeMove!.height / 2 + 13,
+    { steps: 1 },
+  )
+  await page.mouse.up()
+  expectedHistoryCount += 1
+  await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  const xField = editor.getByRole('spinbutton', { name: 'X', exact: true })
+  await expect.poll(async () => Number(await xField.inputValue()) % 8).toBe(0)
+
+  const resize = stage.getByTestId('stage-resize-se')
+  const resizeBox = await resize.boundingBox()
+  expect(resizeBox).not.toBeNull()
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2,
+    resizeBox!.y + resizeBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2 + 17,
+    resizeBox!.y + resizeBox!.height / 2 + 11,
+    { steps: 1 },
+  )
+  await page.mouse.up()
+  expectedHistoryCount += 1
+  await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  const widthField = editor.getByRole('spinbutton', { name: '宽度', exact: true })
+  await expect.poll(async () => Number(await widthField.inputValue()) % 8).toBe(0)
 })
 
 test('OpenSpec: stage / Pointer 手势原子性与取消 / 高速 move 与 resize 松手后不回弹', async ({ page }) => {
@@ -368,7 +543,7 @@ test('OpenSpec: stage / Pointer 手势原子性与取消 / 高速 move 与 resiz
   }
 })
 
-test('OpenSpec: stage / Group 直接操纵 / 舞台可拖动 Group 且子节点保持可命中', async ({ page }) => {
+test('OpenSpec: stage / 组合 Frame 直接操纵 / 舞台可拖动组合 Frame 且子节点保持可命中', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
 
@@ -377,7 +552,8 @@ test('OpenSpec: stage / Group 直接操纵 / 舞台可拖动 Group 且子节点�
   await editor.locator('[data-workspace-tab="compose-component-library"]').click()
   await editor.getByRole('button', { name: '创建 Frame' }).click()
   await editor.getByRole('button', { name: '适配 Frame' }).click()
-  const frameBox = await stage.getByTestId('stage-frame').boundingBox()
+  const frame = stage.locator('.compose-stage__scene > .compose-stage__node.is-frame')
+  const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
   const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
   await pointerDrop(page, rectangleButton, {
@@ -393,7 +569,7 @@ test('OpenSpec: stage / Group 直接操纵 / 舞台可拖动 Group 且子节点�
   await components.nth(0).click()
   await components.nth(1).click({ modifiers: ['Shift'] })
   await stage.press('Control+g')
-  const group = stage.locator('.compose-stage__node.is-group')
+  const group = frame.locator(':scope > .compose-stage__node.is-frame')
   await expect(group).toHaveCount(1)
   const groupId = await group.getAttribute('data-node-id')
   const componentBoxes = await Promise.all([
@@ -711,10 +887,13 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
 
   await editor.locator('[data-workspace-tab="compose-component-library"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-component'))
+    .toHaveCount(1)
   await editor.getByText('命令', { exact: true }).click()
   await expect(editor.getByRole('region', { name: '命令调试台' })
-    .getByText('已拒绝').first()).toBeVisible()
-  await expect(editor).toHaveScreenshot('stage-workspace-command-rejected.png', {
+    .getByText('成功').first()).toBeVisible()
+  await expect(editor).toHaveScreenshot('stage-workspace-root-component.png', {
     animations: 'disabled',
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
@@ -722,7 +901,6 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   await editor.getByText('命令', { exact: true }).click()
 
   await editor.getByRole('button', { name: '创建 Frame' }).click()
-  const stage = editor.getByRole('application', { name: 'Stage' })
   const frameBox = await stage.getByTestId('stage-frame').boundingBox()
   expect(frameBox).not.toBeNull()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
@@ -733,8 +911,10 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
     x: frameBox!.x + 480,
     y: frameBox!.y + 180,
   })
-  await stage.locator('.compose-stage__node.is-component').nth(0).click()
-  await stage.locator('.compose-stage__node.is-component').nth(1).click({
+  const frame = stage.getByTestId('stage-frame')
+  const frameComponents = frame.locator(':scope > .compose-stage__node.is-component')
+  await frameComponents.nth(0).click()
+  await frameComponents.nth(1).click({
     modifiers: ['Shift'],
   })
 
@@ -743,13 +923,22 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+  await stage.press('Control+g')
+  await expect(stage.locator('.compose-stage__node.is-frame .compose-stage__node.is-frame'))
+    .toHaveCount(1)
+  await expect(editor).toHaveScreenshot('stage-workspace-nested-frame.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await stage.press('Control+Shift+g')
 
   await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
   await editor.getByRole('row', { name: /Frame/ })
     .getByRole('button', { name: '展开节点' })
     .click()
-  await editor.getByRole('row', { name: /Rectangle/ }).click()
-  const rectangle = stage.locator('.compose-stage__node.is-component').filter({
+  await editor.getByRole('row', { name: /Rectangle/ }).last().click()
+  const rectangle = frame.locator(':scope > .compose-stage__node.is-component').filter({
     hasText: 'Rectangle',
   })
   const rectangleBox = await rectangle.boundingBox()

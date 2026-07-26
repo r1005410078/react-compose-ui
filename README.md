@@ -155,13 +155,15 @@ message 覆盖。左下角齿轮打开仅覆盖当前 Editor 的模态设置中�
 ```tsx
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   createTransactionRuntime,
   type ComposeDocument,
 } from '@compose-ui/core'
 
 const document: ComposeDocument = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvas: createDefaultCanvasSettings(),
+  output: createDefaultOutputSettings(),
   rootIds: ['page'],
   nodes: {
     page: {
@@ -172,6 +174,7 @@ const document: ComposeDocument = {
       locked: false,
       transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0 },
       childIds: [],
+      clipContent: true,
     },
   },
 }
@@ -179,7 +182,7 @@ const document: ComposeDocument = {
 const runtime = createTransactionRuntime({ document })
 runtime.dispatch({
   id: crypto.randomUUID(),
-  type: 'frame.create',
+  type: 'node.create',
   payload: {
     node: {
       id: 'mobile',
@@ -189,7 +192,9 @@ runtime.dispatch({
       locked: false,
       transform: { x: 2100, y: 0, width: 390, height: 844, rotation: 0 },
       childIds: [],
+      clipContent: true,
     },
+    parentId: null,
   },
   meta: { label: '创建 Mobile Frame', source: 'toolbar', targetIds: ['mobile'] },
 })
@@ -267,11 +272,24 @@ SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全
 成功事务可通过 controller 的 `onTransaction` 单点映射到 Operation Log；noop、rejected 与 reset
 不会被当作成功编辑记录。
 
-`ComposePreview` 接收 `document`、`registry` 和明确的 `frameId`，以普通 DOM 渲染目标 Frame，
-不包含 Stage 的 SVG 编辑覆盖层：
+文档 output 默认是世界 `(0,0)` 起始的 `1280×720` 透明区域。Stage 以固定 1 屏幕像素的
+主题中性边框标识它，选中 Canvas 时四边统一使用编辑器强调色；Godot 风格的红色 X 轴与
+绿色 Y 轴保留独立坐标语义，世界原点在连续坐标轴之上显示精确复刻 `EditorPosition` 的
+16×16 双填充前景标记。
+点击边界会打开 Canvas Inspector，可直接选择 1280×720、1366×768、1440×900、
+1920×1080、2560×1440 或 3840×2160，也可编辑自定义宽高和背景。Canvas 只是检查目标，
+不会出现在 SceneTree、`nodes` 或节点选择中。
+
+`ComposePreview` 接收 `document`、`registry` 和可选 `target`。默认按文档固定输出边界渲染
+完整文档，也可输出任意根级或嵌套 Frame；两种模式都不包含 Stage 的 SVG 编辑覆盖层：
 
 ```tsx
-<ComposePreview document={runtime.document} registry={registry} frameId="desktop" />
+<ComposePreview document={runtime.document} registry={registry} />
+<ComposePreview
+  document={runtime.document}
+  registry={registry}
+  target={{ kind: 'frame', frameId: 'desktop' }}
+/>
 ```
 
 完整说明见 [`component-registry`](./packages/component-registry/README.md)、
@@ -449,15 +467,15 @@ bun run dev
 终端会显示 Vite 示例应用地址。根路径直接打开由统一 controller 驱动的完整 Stage 编排示例，
 不再保留旧手写 Canvas 或事务专用入口：
 
-1. 点击“创建 Frame”，在无限 Stage 中建立明确的输出边界。
-2. 打开 Component Library，把 Rectangle、Text 或 ECharts 拖入 Frame。
-3. 在 Stage 或 Scene Graph 中选择、移动、多选和分组节点，并通过右侧 Inspector 修改属性。
+1. 点击“创建 Frame”，或把 Component 直接添加到无限 Stage 的隐式 Canvas 根。
+2. 打开 Component Library，把 Rectangle、Text 或 ECharts 拖入根部或任意嵌套 Frame。
+3. 在 Stage 或 Scene Graph 中选择、移动、多选和分组节点，并通过右侧 Inspector 修改属性；
+   点击透明输出边界可在 Canvas Inspector 中选择常见 PC 尺寸或编辑自定义输出。
 4. 使用工具栏调整网格/智能吸附，或从标尺拖出全局辅助线；用滚动条在动态世界范围中导航。
 5. 使用撤销/重做或 History 查看同一事务文档的变化。
 6. 在 Command 调试台查看 committed、noop、rejected 及可逆 patches；Operation Log 只记录成功
    事务与历史导航。
-7. 点击“预览 Frame”，用独立 `ComposePreview` 检查目标 Frame 的普通 DOM 输出；canvas 编辑
-   元数据不会进入预览。
+7. 点击“打开预览”，在完整文档输出与选中 Frame 输出之间切换；canvas 编辑元数据不会进入预览。
 
 该完整示例用于验证各包通过公开协议协同工作，不代表其内部 fixture 是稳定公共 API。
 

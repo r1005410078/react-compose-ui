@@ -1,5 +1,6 @@
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   type ComposeDocument,
 } from '@compose-ui/core'
 import { describe, expect, it, vi } from 'vitest'
@@ -9,8 +10,9 @@ import {
 } from './index'
 
 const document: ComposeDocument = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvas: createDefaultCanvasSettings(),
+  output: createDefaultOutputSettings(),
   rootIds: ['frame'],
   nodes: {
     frame: {
@@ -21,6 +23,7 @@ const document: ComposeDocument = {
       locked: false,
       transform: { x: 0, y: 0, width: 400, height: 300, rotation: 0 },
       childIds: ['node'],
+      clipContent: true,
     },
     node: {
       id: 'node',
@@ -46,15 +49,17 @@ const groupDocument: ComposeDocument = {
       locked: false,
       transform: { x: 0, y: 0, width: 400, height: 300, rotation: 0 },
       childIds: ['group'],
+      clipContent: true,
     },
     group: {
       id: 'group',
-      kind: 'group',
-      name: 'Group',
+      kind: 'frame',
+      name: 'Nested Frame',
       visible: true,
       locked: false,
       transform: { x: 20, y: 30, width: 40, height: 30, rotation: 0 },
       childIds: ['child'],
+      clipContent: false,
     },
     child: {
       id: 'child',
@@ -81,6 +86,7 @@ const mixedDocument: ComposeDocument = {
       locked: false,
       transform: { x: 0, y: 0, width: 400, height: 300, rotation: 0 },
       childIds: ['group', 'sibling'],
+      clipContent: true,
     },
     sibling: {
       id: 'sibling',
@@ -108,7 +114,6 @@ function connect() {
     surfaceSize: { width: 800, height: 600 },
     tool: 'select' as const,
     selectedIds: ['node'],
-    activeFrameId: 'frame',
     idFactory: vi.fn(() => 'command'),
   }
   controller.updateContext(context)
@@ -116,6 +121,85 @@ function connect() {
 }
 
 describe('StageInteractionController', () => {
+  it('OpenSpec: stage-engine / 输出区域检查命中 / 点击输出区域请求检查 Canvas', () => {
+    const { controller, effects } = connect()
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 90,
+      button: 0,
+      point: { x: 300, y: 200 },
+      hit: { kind: 'output' },
+      modifiers: { shift: false, alt: false, command: false },
+    })
+    controller.send({
+      type: 'pointer.up',
+      pointerId: 90,
+      point: { x: 300, y: 200 },
+      modifiers: { shift: false, alt: false, command: false },
+    })
+
+    expect(effects).toContainEqual({
+      type: 'selection.change',
+      selectedIds: [],
+    })
+    expect(effects).toContainEqual({ type: 'output.select' })
+  })
+
+  it('OpenSpec: stage-engine / 输出区域检查命中 / 输出区域框选切回节点选择', () => {
+    const { controller, effects } = connect()
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 91,
+      button: 0,
+      point: { x: 0, y: 0 },
+      hit: { kind: 'output' },
+      modifiers: { shift: false, alt: false, command: false },
+    })
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 91,
+      point: { x: 100, y: 100 },
+      modifiers: { shift: false, alt: false, command: false },
+    })
+    controller.send({
+      type: 'pointer.up',
+      pointerId: 91,
+      point: { x: 100, y: 100 },
+      modifiers: { shift: false, alt: false, command: false },
+    })
+
+    const selections = effects.filter((effect) => effect.type === 'selection.change')
+    expect(effects).toContainEqual({ type: 'output.select' })
+    expect(selections[selections.length - 1]).toEqual({
+      type: 'selection.change',
+      selectedIds: ['node'],
+    })
+  })
+
+  it('OpenSpec: stage-engine / 输出区域检查命中 / 平移不切换检查目标', () => {
+    const { controller, effects, context } = connect()
+    controller.updateContext({ ...context, tool: 'pan' })
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 92,
+      button: 0,
+      point: { x: 300, y: 200 },
+      hit: { kind: 'output' },
+      modifiers: { shift: false, alt: false, command: false },
+    })
+    controller.send({
+      type: 'pointer.up',
+      pointerId: 92,
+      point: { x: 300, y: 200 },
+      modifiers: { shift: false, alt: false, command: false },
+    })
+
+    expect(effects).not.toContainEqual({ type: 'output.select' })
+  })
+
   it('OpenSpec: stage-engine / Headless 交互 Controller / 拒绝第二个同时连接的 surface', () => {
     const { controller } = connect()
     expect(() => controller.connectSurface({
@@ -177,7 +261,6 @@ describe('StageInteractionController', () => {
       surfaceSize: { width: 800, height: 600 },
       tool: 'select',
       selectedIds: ['node'],
-      activeFrameId: 'frame',
       idFactory: () => 'command',
     })
     controller.send({
@@ -296,9 +379,44 @@ describe('StageInteractionController', () => {
       item: { kind: 'component', componentType: 'box' },
       clientPoint: { x: 100, y: 100 },
       worldPoint: { x: 100, y: 100 },
-      frameId: 'frame',
+      parentId: 'frame',
     })
     expect(controller.getSnapshot().phase).toBe('idle')
+  })
+
+  // OpenSpec: stage-engine / 统一外部拖入 / 拖入根或嵌套 Frame
+  it('OpenSpec: stage-engine / 统一外部拖入 / Frame 外落到隐式 Canvas 根', () => {
+    const { controller, effects } = connect()
+    controller.send({
+      type: 'external.begin',
+      item: { kind: 'component', componentType: 'box' },
+      clientPoint: { x: 700, y: 500 },
+    })
+    controller.send({ type: 'external.end', clientPoint: { x: 700, y: 500 } })
+
+    expect(effects).toContainEqual({
+      type: 'external.drop',
+      item: { kind: 'component', componentType: 'box' },
+      clientPoint: { x: 700, y: 500 },
+      worldPoint: { x: 700, y: 500 },
+      parentId: null,
+    })
+  })
+
+  it('OpenSpec: stage-engine / 统一外部拖入 / 键盘新增推导父级', () => {
+    const { controller, effects } = connect()
+    controller.send({
+      type: 'external.add',
+      item: { kind: 'component', componentType: 'box' },
+    })
+
+    expect(effects).toContainEqual({
+      type: 'external.drop',
+      item: { kind: 'component', componentType: 'box' },
+      clientPoint: null,
+      worldPoint: { x: 200, y: 150 },
+      parentId: 'frame',
+    })
   })
 
   it('OpenSpec: stage-engine / Snapshot 派生状态 / 选区、光标与滚动范围由引擎维护', () => {
@@ -419,6 +537,7 @@ describe('StageInteractionController', () => {
     })
   })
 
+  // OpenSpec: stage-engine / 世界几何保持的结构命令 / Resize Frame 不缩放孩子
   it('OpenSpec: stage / Frame resize / 只改变 Frame 边界且保持后代局部几何', () => {
     const { controller, effects, context } = connect()
     controller.updateContext({
@@ -458,7 +577,7 @@ describe('StageInteractionController', () => {
     })
   })
 
-  it('OpenSpec: stage / 多选 resize / 按顶层节点语义规划 Group 与 Component', () => {
+  it('OpenSpec: stage / 多选 resize / 只规划顶层 Frame 与 Component', () => {
     const { controller, effects, context } = connect()
     controller.updateContext({
       ...context,
@@ -487,13 +606,12 @@ describe('StageInteractionController', () => {
     const updates = dispatch?.command.payload.updates
     expect(updates).toEqual(expect.arrayContaining([
       expect.objectContaining({ nodeId: 'group' }),
-      expect.objectContaining({ nodeId: 'child' }),
       expect.objectContaining({ nodeId: 'sibling' }),
     ]))
-    expect(updates).toHaveLength(3)
+    expect(updates).toHaveLength(2)
   })
 
-  it('OpenSpec: stage-engine / Group resize / 一次映射全部后代局部 transform', () => {
+  it('OpenSpec: stage-engine / Frame resize / 后代局部 transform 保持不变', () => {
     const { controller, effects, context } = connect()
     controller.updateContext({
       ...context,
@@ -519,22 +637,11 @@ describe('StageInteractionController', () => {
       (effect): effect is Extract<StageInteractionEffect, { type: 'command.dispatch' }> =>
         effect.type === 'command.dispatch',
     )
-    expect(dispatch?.command.payload).toMatchObject({
-      updates: expect.arrayContaining([
-        {
-          nodeId: 'group',
-          transform: expect.objectContaining({ width: 80, height: 60 }),
-        },
-        {
-          nodeId: 'child',
-          transform: expect.objectContaining({
-            x: 10,
-            y: 12,
-            width: 20,
-            height: 16,
-          }),
-        },
-      ]),
+    expect(dispatch?.command.payload).toEqual({
+      updates: [{
+        nodeId: 'group',
+        transform: expect.objectContaining({ width: 80, height: 60 }),
+      }],
     })
   })
 })

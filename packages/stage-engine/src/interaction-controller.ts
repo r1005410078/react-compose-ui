@@ -65,6 +65,7 @@ export type StageExternalDragItem =
 /** Pointer 命中的 Stage 语义目标。 @public */
 export type StageInteractionHit =
   | { readonly kind: 'surface' }
+  | { readonly kind: 'output' }
   | { readonly kind: 'node'; readonly nodeId: string }
   | { readonly kind: 'resize'; readonly handle: ResizeHandle }
   | { readonly kind: 'rotate' }
@@ -84,8 +85,6 @@ export interface StageInteractionContext {
   readonly tool: 'select' | 'pan'
   /** 最新受控选择，按宿主顺序排列。 */
   readonly selectedIds: readonly string[]
-  /** 键盘新增 Component 时优先使用的 Frame。 */
-  readonly activeFrameId: string | null
   /** 为命令、batch、guide 和结构节点创建稳定 ID。 */
   readonly idFactory: () => string
   /** 保留 React/i18n 层提供的命令标签。 */
@@ -103,14 +102,14 @@ export type StageInteractionEffect =
   | { readonly type: 'pointer.release'; readonly pointerId: number }
   | { readonly type: 'viewport.change'; readonly viewport: StageViewport }
   | { readonly type: 'selection.change'; readonly selectedIds: readonly string[] }
-  | { readonly type: 'active-frame.change'; readonly frameId: string | null }
+  | { readonly type: 'output.select' }
   | { readonly type: 'command.dispatch'; readonly command: EditorCommand }
   | {
       readonly type: 'external.drop'
       readonly item: StageExternalDragItem
       readonly clientPoint: StagePoint | null
       readonly worldPoint: StagePoint
-      readonly frameId: string | null
+      readonly parentId: string | null
     }
 
 /** surface 与 controller 之间唯一允许的命令式端口。 @public */
@@ -235,6 +234,7 @@ type Gesture =
       readonly pointerId: number
       readonly viewport: StageViewport
       readonly startWorld: StagePoint
+      readonly origin: 'surface' | 'output'
       currentWorld: StagePoint
     }
   | {
@@ -399,65 +399,18 @@ function transformedSelection(
   return updates
 }
 
-function transformedScaleSubtrees(
-  index: StageSceneIndex,
-  ids: readonly string[],
-  worldTransform: StageMatrix,
-  resize: { readonly scaleX: number; readonly scaleY: number },
-) {
-  const updates: Record<string, NodeTransform> = {}
-  const actualWorlds = new Map<string, StageMatrix>()
-  const visit = (id: string) => {
-    const node = index.document.nodes[id]
-    const oldWorld = index.getWorldMatrix(id)
-    if (!node || !oldWorld) return
-    const desiredWorld = multiplyMatrices(worldTransform, oldWorld)
-    const parentId = index.getParentId(id)
-    const parentWorld = parentId
-      ? actualWorlds.get(parentId) ?? index.getWorldMatrix(parentId)
-      : null
-    const local = parentWorld
-      ? multiplyMatrices(invertMatrix(parentWorld), desiredWorld)
-      : desiredWorld
-    const transform = decomposeMatrix(
-      local,
-      node.transform.width * resize.scaleX,
-      node.transform.height * resize.scaleY,
-    )
-    updates[id] = transform
-    const actualLocal = matrixFromTransform(transform)
-    actualWorlds.set(
-      id,
-      parentWorld
-        ? multiplyMatrices(parentWorld, actualLocal)
-        : actualLocal,
-    )
-    if (node.kind !== 'component') node.childIds.forEach(visit)
-  }
-  index.topLevelSelection(ids).forEach(visit)
-  return updates
-}
-
 function transformedResizeSelection(
   index: StageSceneIndex,
   ids: readonly string[],
   worldTransform: StageMatrix,
   resize: { readonly scaleX: number; readonly scaleY: number },
 ) {
-  const updates: Record<string, NodeTransform> = {}
-  index.topLevelSelection(ids).forEach((id) => {
-    const node = index.document.nodes[id]
-    if (!node) return
-    // Frame 是独立布局边界，普通 resize 只改变自身；Group 的边界来自内容，
-    // 因此必须由选择根决定递归模式，不能在遍历到嵌套 Frame 时提前停止。
-    Object.assign(
-      updates,
-      node.kind === 'group'
-        ? transformedScaleSubtrees(index, [id], worldTransform, resize)
-        : transformedSelection(index, [id], worldTransform, resize),
-    )
-  })
-  return updates
+  return transformedSelection(
+    index,
+    index.topLevelSelection(ids),
+    worldTransform,
+    resize,
+  )
 }
 
 function initialSnapshot(temporaryPan: boolean): StageInteractionSnapshot {
@@ -495,6 +448,12 @@ export function createStageInteractionController(): StageInteractionController {
         height: context.surfaceSize.height / context.viewport.zoom,
       }
       const content = unionRects([
+        {
+          x: 0,
+          y: 0,
+          width: context.document.output.width,
+          height: context.document.output.height,
+        },
         ...index.order
           .filter((id) => index!.isVisible(id))
           .map((id) => index!.getWorldBounds(id))
@@ -790,7 +749,6 @@ export function createStageInteractionController(): StageInteractionController {
         : selected.includes(node.id) ? selected : [node.id]
       effects.push(
         { type: 'selection.change', selectedIds: nextSelection },
-        { type: 'active-frame.change', frameId: index.frameForNode(node.id) },
       )
       if (!node.locked) startTransform('move', nextSelection)
       apply(effects)
@@ -867,15 +825,23 @@ export function createStageInteractionController(): StageInteractionController {
     }
     const viewport = context.viewport
     const startWorld = worldPoint(event.point, viewport)
+    const outputHit = event.hit.kind === 'output'
+    if (outputHit) {
+      effects.push(
+        { type: 'selection.change', selectedIds: [] },
+        { type: 'output.select' },
+      )
+    }
     gesture = {
       type: 'marquee',
       pointerId: event.pointerId,
       viewport,
       startWorld,
+      origin: outputHit ? 'output' : 'surface',
       currentWorld: startWorld,
     }
     publish({ ...initialSnapshot(snapshot.temporaryPan), phase: 'marquee' })
-    apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
+    apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
   }
 
   const finish = (
@@ -903,7 +869,9 @@ export function createStageInteractionController(): StageInteractionController {
               && intersects(area, bounds),
             )
           })
-      effects.push({ type: 'selection.change', selectedIds })
+      if (finished.origin !== 'output' || selectedIds.length > 0) {
+        effects.push({ type: 'selection.change', selectedIds })
+      }
     }
     else if (finished.type === 'guide-create') {
       const created = finished.guides.filter((guide) => guide.axis === 'x'
@@ -999,50 +967,34 @@ export function createStageInteractionController(): StageInteractionController {
     clientPoint: StagePoint | null,
   ) => {
     if (!context || !index || !surface) return
+    const selectionParentId = index.commonFrameForSelection(context.selectedIds)
+    const selectionParentBounds = selectionParentId
+      ? index.getWorldBounds(selectionParentId)
+      : null
     const surfacePoint = clientPoint
       ? surface.resolveClientPoint(clientPoint)
-      : item.kind === 'component'
-        ? (() => {
-            const active = context!.activeFrameId
-              ? index!.getWorldBounds(context!.activeFrameId)
-              : null
-            return active
-              ? {
-                  x: (active.x + active.width / 2) * context!.viewport.zoom
-                    + context!.viewport.x,
-                  y: (active.y + active.height / 2) * context!.viewport.zoom
-                    + context!.viewport.y,
-                }
-              : { x: 0, y: 0 }
-          })()
+      : selectionParentBounds
+        ? {
+            x: (selectionParentBounds.x + selectionParentBounds.width / 2)
+              * context.viewport.zoom + context.viewport.x,
+            y: (selectionParentBounds.y + selectionParentBounds.height / 2)
+              * context.viewport.zoom + context.viewport.y,
+          }
         : {
             x: context.surfaceSize.width / 2,
             y: context.surfaceSize.height / 2,
           }
     if (!surfacePoint) return
     const world = worldPoint(surfacePoint)
-    const frameId = item.kind === 'component'
-      ? context.document.rootIds.find((id) => {
-          const node = context!.document.nodes[id]
-          const bounds = index!.getWorldBounds(id)
-          return Boolean(
-            node?.kind === 'frame'
-            && index!.isVisible(id)
-            && !node.locked
-            && bounds
-            && world.x >= bounds.x
-            && world.x <= bounds.x + bounds.width
-            && world.y >= bounds.y
-            && world.y <= bounds.y + bounds.height,
-          )
-        }) ?? null
-      : null
+    const parentId = clientPoint
+      ? index.frameAtPoint(world)
+      : selectionParentId
     apply([{
       type: 'external.drop',
       item,
       clientPoint,
       worldPoint: world,
-      frameId,
+      parentId,
     }])
   }
 

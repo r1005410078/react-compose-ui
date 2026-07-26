@@ -101,8 +101,10 @@ export interface StageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChan
   readonly shortcuts?: StageShortcuts
   readonly selectedIds: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
-  readonly activeFrameId: string | null
-  readonly onActiveFrameIdChange: (frameId: string | null) => void
+  /** 隐式 Canvas 输出区域当前是否为 Inspector 目标。 */
+  readonly outputSelected?: boolean
+  /** 请求清空节点选择并检查隐式 Canvas 输出属性。 */
+  readonly onOutputSelect?: () => void
   /**
    * surface 可视尺寸变化回调。
    *

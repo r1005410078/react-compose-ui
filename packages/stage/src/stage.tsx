@@ -29,6 +29,7 @@ import type {
 import {
   createRulerTicks,
   createStageInteractionController,
+  createStageSceneIndex,
   expandScrollRange,
   scrollAxisToViewport,
   viewportToScrollAxes,
@@ -65,10 +66,13 @@ import {
   describeTransform,
 } from '@compose-ui/stage-engine'
 import { getStageMessages } from './stage-i18n'
+import { createVisualGridStyle } from './grid-rendering'
 
 type TransformMap = Readonly<Record<string, NodeTransform>>
 type Modifiers = { shift: boolean; alt: boolean; command: boolean }
 type PointerSessionStatus = 'active' | 'finishing' | 'ended'
+
+const WORLD_ORIGIN_ICON_HALF_SIZE = 8
 
 interface FrozenSurfaceRect {
   readonly left: number
@@ -202,41 +206,6 @@ function bootstrapSelectionBounds(
     .map((id) => getNodeWorldBounds(document, id)))
 }
 
-function visualGridStyle(
-  document: ComposeDocument,
-  viewport: StageProps['viewport'],
-): CSSProperties {
-  const { grid } = document.canvas
-  const layers: string[] = []
-  const sizes: string[] = []
-  const positions: string[] = []
-  const addVertical = (step: number, color: string) => {
-    layers.push(`linear-gradient(90deg, ${color} 1px, transparent 1px)`)
-    sizes.push(`${step * viewport.zoom}px 100%`)
-    positions.push(`${grid.offsetX * viewport.zoom + viewport.x}px 0`)
-  }
-  const addHorizontal = (step: number, color: string) => {
-    layers.push(`linear-gradient(${color} 1px, transparent 1px)`)
-    sizes.push(`100% ${step * viewport.zoom}px`)
-    positions.push(`0 ${grid.offsetY * viewport.zoom + viewport.y}px`)
-  }
-  const minorColor = 'var(--compose-stage-grid-minor, rgb(120 137 158 / 18%))'
-  const primaryColor = 'var(--compose-stage-grid-primary, rgb(151 166 185 / 34%))'
-  if (grid.stepX * viewport.zoom >= 8) addVertical(grid.stepX, minorColor)
-  if (grid.stepY * viewport.zoom >= 8) addHorizontal(grid.stepY, minorColor)
-  let primaryX = grid.stepX * grid.primaryLineEvery
-  let primaryY = grid.stepY * grid.primaryLineEvery
-  while (primaryX * viewport.zoom < 8) primaryX *= 2
-  while (primaryY * viewport.zoom < 8) primaryY *= 2
-  addVertical(primaryX, primaryColor)
-  addHorizontal(primaryY, primaryColor)
-  return {
-    backgroundImage: layers.join(','),
-    backgroundSize: sizes.join(','),
-    backgroundPosition: positions.join(','),
-  }
-}
-
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
   if (target.closest('input, textarea, select')) return true
@@ -333,8 +302,8 @@ export function Stage({
   shortcuts,
   selectedIds,
   onSelectedIdsChange,
-  activeFrameId,
-  onActiveFrameIdChange,
+  outputSelected = false,
+  onOutputSelect,
   onSurfaceSizeChange,
   interactionController,
   framePresets = [],
@@ -415,7 +384,7 @@ export function Stage({
     viewport,
     onViewportChange,
     onSelectedIdsChange,
-    onActiveFrameIdChange,
+    onOutputSelect,
     framePresets,
     idFactory,
   })
@@ -427,7 +396,7 @@ export function Stage({
       viewport,
       onViewportChange,
       onSelectedIdsChange,
-      onActiveFrameIdChange,
+      onOutputSelect,
       framePresets,
       idFactory,
     }
@@ -680,8 +649,8 @@ export function Stage({
           current.onSelectedIdsChange(effect.selectedIds)
           return
         }
-        if (effect.type === 'active-frame.change') {
-          current.onActiveFrameIdChange(effect.frameId)
+        if (effect.type === 'output.select') {
+          current.onOutputSelect?.()
           return
         }
         if (effect.type === 'command.dispatch') {
@@ -692,8 +661,8 @@ export function Stage({
         if (effect.item.kind === 'component') {
           const seed = current.registry.createSeed(effect.item.componentType)
           if (!seed.ok) return
-          const frame = effect.frameId
-            ? current.document.nodes[effect.frameId]
+          const frame = effect.parentId
+            ? current.document.nodes[effect.parentId]
             : undefined
           const localCenter = frame?.kind === 'frame'
             ? applyMatrix(
@@ -726,16 +695,13 @@ export function Stage({
               parentId: frame?.kind === 'frame' ? frame.id : null,
             },
             meta: {
-              label: frame
-                ? describeNodeCreation(node)
-                : `Reject ${node.name} outside a Frame`,
+              label: describeNodeCreation(node),
               source: 'component-palette',
               targetIds: [nodeId],
             },
           })
-          if (result.status === 'committed' && frame?.kind === 'frame') {
+          if (result.status === 'committed') {
             current.onSelectedIdsChange([nodeId])
-            current.onActiveFrameIdChange(frame.id)
           }
           return
         }
@@ -752,6 +718,15 @@ export function Stage({
           validPreset = false
         }
         const size = preset?.defaultSize ?? { width: 0, height: 1 }
+        const parent = effect.parentId
+          ? current.document.nodes[effect.parentId]
+          : undefined
+        const localCenter = parent?.kind === 'frame'
+          ? applyMatrix(
+              invertMatrix(getNodeWorldMatrix(current.document, parent.id)),
+              effect.worldPoint,
+            )
+          : effect.worldPoint
         const node: ComposeFrameNode = {
           id: nodeId,
           kind: 'frame',
@@ -759,21 +734,22 @@ export function Stage({
           visible: true,
           locked: false,
           transform: {
-            x: effect.worldPoint.x - size.width / 2,
-            y: effect.worldPoint.y - size.height / 2,
+            x: localCenter.x - size.width / 2,
+            y: localCenter.y - size.height / 2,
             width: validPreset ? size.width : 0,
             height: size.height,
             rotation: 0,
           },
           style: frameStyle,
           childIds: [],
+          clipContent: preset?.defaultClipContent ?? true,
         }
         const result = current.dispatch({
           id: current.idFactory(),
-          type: 'frame.create',
+          type: 'node.create',
           payload: {
             node: node as unknown as JsonValue,
-            index: current.document.rootIds.length,
+            parentId: parent?.kind === 'frame' ? parent.id : null,
           },
           meta: {
             label: describeNodeCreation(node),
@@ -783,7 +759,6 @@ export function Stage({
         })
         if (result.status === 'committed') {
           current.onSelectedIdsChange([nodeId])
-          current.onActiveFrameIdChange(nodeId)
         }
       })
     },
@@ -796,7 +771,6 @@ export function Stage({
       surfaceSize,
       tool,
       selectedIds: normalizedSelection,
-      activeFrameId,
       idFactory,
       labels: {
         createGuide: messages.createGuide,
@@ -806,7 +780,6 @@ export function Stage({
       },
     })
   }, [
-    activeFrameId,
     controller,
     document,
     idFactory,
@@ -903,8 +876,15 @@ export function Stage({
         ...worldToScreen(bounds, viewport),
         width: bounds.width * viewport.zoom,
         height: bounds.height * viewport.zoom,
-      }
+    }
     : null
+  const outputScreenBounds = {
+    x: viewport.x,
+    y: viewport.y,
+    width: document.output.width * viewport.zoom,
+    height: document.output.height * viewport.zoom,
+  }
+  const worldOriginScreen = worldToScreen({ x: 0, y: 0 }, viewport)
   const marqueeScreen = marquee
     ? {
         ...worldToScreen(marquee, viewport),
@@ -950,9 +930,17 @@ export function Stage({
     width: visibleWidth,
     height: visibleHeight,
   }
-  const bootstrapContentBounds = unionRects(Object.values(previewDocument.nodes)
-    .filter((node) => node.visible)
-    .map((node) => getNodeWorldBounds(previewDocument, node.id)))
+  const bootstrapContentBounds = unionRects([
+    {
+      x: 0,
+      y: 0,
+      width: previewDocument.output.width,
+      height: previewDocument.output.height,
+    },
+    ...Object.values(previewDocument.nodes)
+      .filter((node) => node.visible)
+      .map((node) => getNodeWorldBounds(previewDocument, node.id)),
+  ])
   const activeScrollRange = interaction.scrollRange
     ?? expandScrollRange(null, bootstrapContentBounds, visibleWorld)
   const scrollAxes = viewportToScrollAxes(viewport, surfaceSize, activeScrollRange)
@@ -1004,7 +992,12 @@ export function Stage({
       return
     }
     if (actionMatches('stage.fitFrame')) {
-      const frame = activeFrameId ? document.nodes[activeFrameId] : undefined
+      const index = createStageSceneIndex(document)
+      const selectedFrameId = normalizedSelection.length === 1
+        && document.nodes[normalizedSelection[0]!]?.kind === 'frame'
+        ? normalizedSelection[0]!
+        : index.commonFrameForSelection(normalizedSelection)
+      const frame = selectedFrameId ? document.nodes[selectedFrameId] : undefined
       fitViewport(frame?.kind === 'frame' ? getNodeWorldBounds(document, frame.id) : null)
       event.preventDefault()
       return
@@ -1083,10 +1076,10 @@ export function Stage({
     }
     if (actionMatches('edit.group') || actionMatches('edit.ungroup')) {
       if (actionMatches('edit.ungroup') && editableIds.length === 1) {
-        const group = document.nodes[editableIds[0]!]
+        const frame = document.nodes[editableIds[0]!]
         const result = dispatch(createUngroupCommand(document, editableIds[0]!, idFactory()))
-        if (result.status === 'committed' && group?.kind === 'group') {
-          onSelectedIdsChange(group.childIds)
+        if (result.status === 'committed' && frame?.kind === 'frame') {
+          onSelectedIdsChange(frame.childIds)
         }
       }
       else {
@@ -1279,9 +1272,59 @@ export function Stage({
         <div
           aria-hidden="true"
           className="compose-stage__grid"
-          style={visualGridStyle(document, viewport)}
+          data-testid="stage-grid"
+          style={createVisualGridStyle(document.canvas.grid, viewport)}
         />
         <svg aria-hidden="true" className="compose-stage__world-overlay">
+          <rect
+            className={`compose-stage__output-boundary${outputSelected ? ' is-selected' : ''}`}
+            data-testid="stage-output-boundary"
+            fill={document.output.backgroundColor}
+            height={outputScreenBounds.height}
+            width={outputScreenBounds.width}
+            x={outputScreenBounds.x}
+            y={outputScreenBounds.y}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+              beginInteraction({ kind: 'output' }, event)
+            }}
+          />
+          <g
+            className={`compose-stage__output-decoration${outputSelected ? ' is-selected' : ''}`}
+          >
+            <line
+              className="compose-stage__output-edge"
+              data-testid="stage-output-edge-top"
+              x1={outputScreenBounds.x}
+              x2={outputScreenBounds.x + outputScreenBounds.width}
+              y1={outputScreenBounds.y}
+              y2={outputScreenBounds.y}
+            />
+            <line
+              className="compose-stage__output-edge"
+              data-testid="stage-output-edge-left"
+              x1={outputScreenBounds.x}
+              x2={outputScreenBounds.x}
+              y1={outputScreenBounds.y}
+              y2={outputScreenBounds.y + outputScreenBounds.height}
+            />
+            <line
+              className="compose-stage__output-edge"
+              data-testid="stage-output-edge-bottom"
+              x1={outputScreenBounds.x}
+              x2={outputScreenBounds.x + outputScreenBounds.width}
+              y1={outputScreenBounds.y + outputScreenBounds.height}
+              y2={outputScreenBounds.y + outputScreenBounds.height}
+            />
+            <line
+              className="compose-stage__output-edge"
+              data-testid="stage-output-edge-right"
+              x1={outputScreenBounds.x + outputScreenBounds.width}
+              x2={outputScreenBounds.x + outputScreenBounds.width}
+              y1={outputScreenBounds.y}
+              y2={outputScreenBounds.y + outputScreenBounds.height}
+            />
+          </g>
           <line
             className="compose-stage__axis is-x"
             data-testid="stage-origin-x"
@@ -1298,6 +1341,28 @@ export function Stage({
             y1="0"
             y2="100%"
           />
+          <g
+            aria-hidden="true"
+            className="compose-stage__world-origin"
+            data-testid="stage-world-origin"
+            transform={`translate(${
+              worldOriginScreen.x - WORLD_ORIGIN_ICON_HALF_SIZE
+            } ${
+              worldOriginScreen.y - WORLD_ORIGIN_ICON_HALF_SIZE
+            })`}
+          >
+            <path
+              d="M6 0v4.42A4 4 0 0 0 4.42 6H0v4h4.42A4 4 0 0 0 6 11.58V16h4v-4.42A4 4 0 0 0 11.58 10H16V6h-4.42A4 4 0 0 0 10 4.42V0Z"
+              data-testid="stage-world-origin-silhouette"
+              fill="#fff"
+              fillOpacity="0.706"
+            />
+            <path
+              d="M7 1v3a4 4 0 0 1 2 0V1Zm1 4a3 3 0 0 0 0 6 3 3 0 0 0 0-6ZM1 7v2h3a4 4 0 0 1 0-2H1Zm11 0a4 4 0 0 1 0 2h3V7Zm-5 8h2v-3a4 4 0 0 1-2 0Z"
+              data-testid="stage-world-origin-position"
+              fill="#ff5f5f"
+            />
+          </g>
         </svg>
         <StageSceneLayer
           document={previewDocument}

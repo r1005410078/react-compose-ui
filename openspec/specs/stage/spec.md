@@ -54,20 +54,36 @@ Stage MUST 接收受控 viewport、tool、selectedIds 和 activeFrameId，并通
 
 ### Requirement: 多 Frame 与输出边界
 
-Stage MUST 在无限世界中显示文档全部 Frame。Frame MUST 使用自身 x/y/width/height 形成明确边界，
-普通节点 MUST 在所属 Frame 子树中渲染；Frame 外 drop 不得创建普通节点。
+Stage MUST 渲染位于世界 `(0,0)` 的可检查文档输出边界，并渲染 rootIds 中任意 Frame 或
+Component。输出背景 MUST 使用 document.output，默认透明并显示 1 屏幕像素非缩放边框；
+未选中边框 MUST 使用统一的主题中性色且不得复用 X/Y 轴颜色，选中输出检查目标时四边 MUST
+统一使用编辑器强调色。Stage MUST 在世界 `(0,0)` 显示固定屏幕尺寸、Godot 风格的前景十字
+标记：MUST 精确使用 16×16 `EditorPosition` 双填充轮廓，外层为
+`rgba(255,255,255,0.706)`，内层为 `#ff5f5f`；不得以描边线条近似，也不得通过 halo 或轴线
+分段在原点周围制造缺口。X/Y 轴 MUST 分别使用 `rgba(245,51,82,0.75)` 与
+`rgba(135,214,3,0.75)`。平移、缩放或 output 尺寸变化不得改变其世界锚点。
+激活输出检查时不得显示节点变换手柄。Frame MUST 可以嵌套、旋转，并按 clipContent 裁剪或
+显示溢出；输出边界不得限制无限 Stage 中的编辑和滚动范围。
 
-#### Scenario: 显示多个 Frame
+#### Scenario: 编辑输出边界外的根组件
 
-- **WHEN** 文档包含位于不同正负世界坐标的多个 Frame
-- **THEN** Stage 在对应世界位置显示每个 Frame 及其后代
-- **AND** 用户可以平移或适配视口访问任意 Frame
+- **WHEN** 根 Component 位于文档输出边界外
+- **THEN** Stage 仍渲染、选择、移动和 resize 该组件
+- **AND** 输出区域只作为网格之上、节点之下的检查目标，不阻止边界外编辑
 
-#### Scenario: 隐藏和锁定节点
+#### Scenario: 检查透明输出区域
 
-- **WHEN** 节点 visible 为 false 或 locked 为 true
-- **THEN** hidden 节点不渲染且不参与吸附
-- **AND** locked 节点可以保持场景树选择，但 Stage 不允许直接变换或删除
+- **WHEN** 用户点击没有节点覆盖的输出区域
+- **THEN** Stage 发送 output inspection 回调并清空节点选择
+- **AND** 网格透过 transparent 背景可见，边框在任意 zoom 下保持 1 屏幕像素
+- **AND** 未选中时四边使用同一主题中性色且不与 X/Y 轴混淆，选中时四边统一使用强调色
+- **AND** 原点标记在连续 X/Y 轴之后按 Godot `EditorPosition` 的双填充路径和精确颜色绘制
+
+#### Scenario: 渲染嵌套 Frame 裁剪
+
+- **WHEN** 嵌套 Frame 切换 clipContent
+- **THEN** Stage 对越界后代切换 hidden/visible overflow
+- **AND** Frame rotation 与后代世界几何保持一致
 
 ### Requirement: 选择与框选
 
@@ -171,26 +187,14 @@ pointercancel、window blur 或匹配当前活动 session 的真实 lostpointerc
 
 ### Requirement: 分组与重设父节点
 
-Stage MUST 只允许同一直接父节点下的未锁定非 Frame 节点 group。Ungroup 与合法 reparent MUST
-保持节点的世界位置、尺寸和旋转；Group resize MUST 通过一个 batch 比例更新后代局部几何。
+Stage MUST 允许根或 Frame 内的同父级混合选择通过 group 创建 Frame，并允许 ungroup 任意含孩子
+Frame。SceneTree 与 Stage MUST 使用同一 nullable reparent 规划器保持世界几何。
 
-#### Scenario: 分组同级节点
+#### Scenario: 根级分组和取消分组
 
-- **WHEN** 用户选择同一父节点下多个合法节点并执行 group
-- **THEN** 新 Group 使用选择的世界包围框
-- **AND** 后代转换为 Group 局部 transform 后保持原世界几何
-
-#### Scenario: 拒绝跨父节点分组
-
-- **WHEN** 选择来自不同直接父节点、包含 Frame 或 locked 节点
-- **THEN** group 返回 rejected 且文档不变
-- **AND** CommandPanel 可以显示稳定拒绝原因
-
-#### Scenario: 取消分组或重设父节点
-
-- **WHEN** 用户 ungroup 或把节点移动到另一个合法 Group/Frame
-- **THEN** 新局部 transform 产生与操作前相同的世界几何
-- **AND** 结构与坐标修改属于同一事务
+- **WHEN** 用户组合根级 Frame/Component 并随后取消组合
+- **THEN** 选择先变为新 Frame，再变为提升后的孩子
+- **AND** 每个动作最多提交一个事务
 
 ### Requirement: Stage 键盘命令
 
@@ -211,27 +215,19 @@ Shift+方向键移动 10、Cmd/Ctrl+D 复制、Cmd/Ctrl+G group 和 Cmd/Ctrl+Shi
 
 ### Requirement: ComponentPalette 拖入
 
-系统 MUST 提供使用同一 registry 的 `ComponentPalette` 和实例级 `StageDragController`。Palette
-拖入 MUST 使用 Pointer Events；有效 Frame drop MUST 创建并选择一个 Component，Frame 外 drop
-MUST 发布 rejection 且不修改文档。
+ComponentPalette MUST 允许 Component 和 Frame descriptor 落到最深合法 Frame或 Canvas；Pointer
+和键盘路径 MUST 使用同一 selection/hit 父级规则且不依赖 activeFrameId。
 
-#### Scenario: 拖入有效 Frame
+#### Scenario: 拖到空白 Canvas
 
-- **WHEN** 用户从 Palette 拖动 definition 并在未锁定 Frame 内松开
-- **THEN** definition factory 生成独立 JSON props，并在 drop 世界位置派发一次 component.create
-- **AND** 成功后 selection 更新为新节点 ID
+- **WHEN** 用户把 Component 或 Frame 拖到没有 Frame 命中的世界点
+- **THEN** 节点作为 rootIds 末尾的根节点创建并选中
 
-#### Scenario: 拖到 Frame 外
+#### Scenario: 拖到嵌套 Frame
 
-- **WHEN** 用户在所有 Frame 之外或 locked Frame 中结束 palette drag
-- **THEN** 不创建 Component 或事务历史
-- **AND** CommandPanel 收到包含稳定原因的 rejected 事件
-
-#### Scenario: 隔离多个 Stage 实例
-
-- **WHEN** 页面同时挂载两个 drag controller、Palette 和 Stage 组合
-- **THEN** 一个 Palette 会话只影响绑定到同一 controller 的 Stage
-- **AND** 结束或卸载后 window 监听与拖拽状态被释放
+- **WHEN** 用户把 Component 或 Frame 拖到可见未锁定的嵌套 Frame
+- **THEN** 新节点成为该 Frame 的最后一个孩子
+- **AND** 提交后的世界中心匹配 drop 点
 
 ### Requirement: Frame Palette 拖入
 
@@ -271,13 +267,16 @@ Stage MUST 对 Frame、Group 与 Component wrapper 应用 resolved node style。
 ### Requirement: 自适应网格标尺与世界原点
 
 Stage MUST 在 24px 顶部和左侧 ruler 内显示随 viewport 与 canvas grid 更新的正负世界坐标，
-并在 surface 显示细网格、主网格、红色 X 轴与绿色 Y 轴。视觉抽稀 MUST NOT 改变实际 snap step。
+并在 surface 显示细网格、主网格、红色 X 轴与绿色 Y 轴。画布网格投影间距达到 2 CSS px
+时 MUST 显示每条配置网格线；更密时 MUST 只按二次幂 stride 抽稀为原网格子集。视觉抽稀
+MUST NOT 改变实际 snap step，标尺仍可按独立可读性阈值抽稀。
 
 #### Scenario: 平移缩放标尺网格
 
 - **WHEN** viewport 平移、缩放或 grid step/offset/primaryLineEvery 改变
 - **THEN** ruler label、tick、细线与主线在相同世界位置对齐
-- **AND** 过密线按 zoom 抽稀但节点仍吸附到原始配置刻度
+- **AND** 默认 8 单位网格在 75% 与 25% 缩放时分别显示 6px 与 2px 细线
+- **AND** 更低缩放只隐藏部分原始格线，节点仍吸附到原始配置刻度
 
 #### Scenario: 显示世界原点交叉
 

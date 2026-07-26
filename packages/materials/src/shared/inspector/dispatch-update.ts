@@ -5,7 +5,7 @@ import type {
   JsonObject,
   JsonValue,
 } from '@compose-ui/core'
-import type { ContainerValue, TextValue } from './schemas'
+import type { ContainerValue, FrameValue, TextValue } from './schemas'
 import {
   createStyleValue,
   createTransformValue,
@@ -27,13 +27,14 @@ function formatValue(value: unknown) {
   return text.length > 32 ? `${text.slice(0, 31)}…` : text
 }
 
-const describedFields: readonly [keyof TextValue, string][] = [
+const describedFields: readonly [(keyof TextValue | 'clipContent'), string][] = [
   ['name', 'Name'],
   ['x', 'X'],
   ['y', 'Y'],
   ['width', 'Width'],
   ['height', 'Height'],
   ['rotation', 'Rotation'],
+  ['clipContent', 'Clip content'],
   ['backgroundColor', 'Background'],
   ['borderColor', 'Border color'],
   ['borderWidth', 'Border width'],
@@ -47,8 +48,8 @@ const describedFields: readonly [keyof TextValue, string][] = [
 
 function describeUpdate(
   node: ComposeNode,
-  current: ContainerValue | TextValue,
-  next: ContainerValue | TextValue,
+  current: ContainerValue | FrameValue | TextValue,
+  next: ContainerValue | FrameValue | TextValue,
 ) {
   const currentRecord = current as unknown as Readonly<Record<string, unknown>>
   const nextRecord = next as unknown as Readonly<Record<string, unknown>>
@@ -81,8 +82,8 @@ function commandMeta(node: ComposeNode, label: string) {
  */
 export function dispatchInspectorUpdate(
   node: ComposeNode,
-  current: ContainerValue | TextValue,
-  next: ContainerValue | TextValue,
+  current: ContainerValue | FrameValue | TextValue,
+  next: ContainerValue | FrameValue | TextValue,
   dispatch: NodeInspectorProps['dispatch'],
   idFactory: InspectorIdFactory,
   forceStyle = false,
@@ -117,6 +118,19 @@ export function dispatchInspectorUpdate(
       id: idFactory(),
       type: 'node.style.set',
       payload: { nodeId: node.id, path: [], value: nextStyle as unknown as JsonValue },
+      meta,
+    })
+  }
+  if (
+    node.kind === 'frame'
+    && 'clipContent' in current
+    && 'clipContent' in next
+    && current.clipContent !== next.clipContent
+  ) {
+    commands.push({
+      id: idFactory(),
+      type: 'frame.clip-content.set',
+      payload: { frameId: node.id, clipContent: next.clipContent },
       meta,
     })
   }

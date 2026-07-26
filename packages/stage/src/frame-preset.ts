@@ -20,6 +20,8 @@ export interface StageFramePreset {
     readonly width: number
     readonly height: number
   }
+  /** 新建 Frame 是否默认裁剪后代内容。 */
+  readonly defaultClipContent: boolean
   /** 为每个新 Frame 创建独立的通用 style。 */
   readonly createDefaultStyle: () => NodeStyle
 }

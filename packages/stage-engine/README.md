@@ -17,3 +17,7 @@ const index = createStageSceneIndex(document)
 ```
 
 一个 controller 同时只连接一个 surface。多个编辑器或 Stage 必须创建不同实例。
+
+SceneIndex 支持隐式 Canvas 下的任意根、嵌套旋转 Frame、裁剪祖先命中和选择派生的最近 Frame。
+外部拖入未命中 Frame 时返回 `parentId: null`。`createReparentCommand` 同样接受 nullable parent，
+group/ungroup 以透明且不裁剪的 Frame 保持世界几何；Frame resize 只更新 Frame 自身 transform。

@@ -1,6 +1,7 @@
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   createTransactionRuntime,
   type ComposeDocument,
   type TransactionRuntime,
@@ -25,8 +26,8 @@ const api = stagePackage as unknown as {
     onToolChange?(tool: Tool): void
     selectedIds: readonly string[]
     onSelectedIdsChange(ids: readonly string[]): void
-    activeFrameId: string | null
-    onActiveFrameIdChange(id: string | null): void
+    outputSelected?: boolean
+    onOutputSelect?(): void
     onSurfaceSizeChange?(size: { width: number; height: number }): void
     shortcuts?: Readonly<Record<string, readonly {
       code: string
@@ -82,8 +83,9 @@ function installControllableAnimationFrames() {
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: createDefaultCanvasSettings(),
+    output: createDefaultOutputSettings(),
     rootIds: ['frame', 'frame-negative'],
     nodes: {
       frame: {
@@ -108,6 +110,7 @@ function fixture(): ComposeDocument {
           },
         },
         childIds: ['a', 'b', 'hidden', 'locked', 'unknown', 'styled-group'],
+        clipContent: true,
       },
       a: {
         id: 'a',
@@ -168,12 +171,13 @@ function fixture(): ComposeDocument {
       },
       'styled-group': {
         id: 'styled-group',
-        kind: 'group',
-        name: 'Styled group',
+        kind: 'frame',
+        name: 'Styled frame',
         visible: true,
         locked: false,
         transform: { x: 340, y: 250, width: 80, height: 60, rotation: 0 },
         childIds: [],
+        clipContent: false,
         style: {
           backgroundColor: '#abcdef',
           borderRadius: 5,
@@ -187,6 +191,7 @@ function fixture(): ComposeDocument {
         locked: false,
         transform: { x: -600, y: -300, width: 320, height: 240, rotation: 0 },
         childIds: [],
+        clipContent: true,
       },
     },
   }
@@ -239,12 +244,11 @@ function Harness({
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const [viewport, setViewport] = useState(initialViewport)
   const [selectedIds, setSelectedIds] = useState(initialSelection)
-  const [activeFrameId, setActiveFrameId] = useState<string | null>('frame')
+  const [outputSelected, setOutputSelected] = useState(false)
   const [currentTool, setCurrentTool] = useState(tool)
   return (
     <>
       <api.Stage
-        activeFrameId={activeFrameId}
         aria-label="测试 Stage"
         dispatch={runtime.dispatch}
         document={state.document}
@@ -252,16 +256,18 @@ function Harness({
         locale={locale}
         registry={registry()}
         selectedIds={selectedIds}
+        outputSelected={outputSelected}
         shortcuts={shortcuts}
         tool={currentTool}
         viewport={viewport}
-        onActiveFrameIdChange={setActiveFrameId}
         onSelectedIdsChange={setSelectedIds}
+        onOutputSelect={() => setOutputSelected(true)}
         onSurfaceSizeChange={onSurfaceSizeChange}
         onToolChange={setCurrentTool}
         onViewportChange={setViewport}
       />
       <output aria-label="当前选择">{selectedIds.join(',')}</output>
+      <output aria-label="输出区域选择">{String(outputSelected)}</output>
       <output aria-label="当前工具">{currentTool}</output>
       <output aria-label="当前视口">{JSON.stringify(viewport)}</output>
     </>
@@ -319,7 +325,89 @@ describe('Stage', () => {
       transform: 'translate(0px, 0px) scale(1)',
     })
     expect(screen.getByRole('img', { name: 'Stage 编辑覆盖层' })).toBeInTheDocument()
-    expect(screen.getAllByTestId('stage-frame')).toHaveLength(2)
+    expect(screen.getAllByTestId('stage-frame')).toHaveLength(3)
+    expect(screen.getByTestId('stage-output-boundary')).toHaveAttribute('fill', 'transparent')
+    expect(screen.getByTestId('stage-output-edge-bottom')).not.toHaveClass('is-x')
+    expect(screen.getByTestId('stage-output-edge-bottom')).toHaveClass(
+      'compose-stage__output-edge',
+    )
+    expect(screen.getByTestId('stage-output-edge-bottom')).toHaveAttribute('y1', '720')
+    expect(screen.getByTestId('stage-output-edge-right')).not.toHaveClass('is-y')
+    expect(screen.getByTestId('stage-output-edge-right')).toHaveClass(
+      'compose-stage__output-edge',
+    )
+    expect(screen.getByTestId('stage-output-edge-right')).toHaveAttribute('x1', '1280')
+    const xAxis = screen.getByTestId('stage-origin-x')
+    const yAxis = screen.getByTestId('stage-origin-y')
+    const origin = screen.getByTestId('stage-world-origin')
+    const worldOverlay = xAxis.parentElement
+    expect(worldOverlay).not.toBeNull()
+    expect(xAxis).toHaveAttribute('x1', '0')
+    expect(xAxis).toHaveAttribute('x2', '100%')
+    expect(yAxis).toHaveAttribute('y1', '0')
+    expect(yAxis).toHaveAttribute('y2', '100%')
+    expect([...worldOverlay!.children].indexOf(origin)).toBeGreaterThan(
+      [...worldOverlay!.children].indexOf(yAxis),
+    )
+    expect(origin).toHaveAttribute('transform', 'translate(-8 -8)')
+    expect(screen.getByTestId('stage-world-origin-silhouette')).toHaveAttribute(
+      'd',
+      'M6 0v4.42A4 4 0 0 0 4.42 6H0v4h4.42A4 4 0 0 0 6 11.58V16h4v-4.42A4 4 0 0 0 11.58 10H16V6h-4.42A4 4 0 0 0 10 4.42V0Z',
+    )
+    expect(screen.getByTestId('stage-world-origin-silhouette')).toHaveAttribute('fill', '#fff')
+    expect(screen.getByTestId('stage-world-origin-silhouette')).toHaveAttribute(
+      'fill-opacity',
+      '0.706',
+    )
+    expect(screen.getByTestId('stage-world-origin-position')).toHaveAttribute(
+      'd',
+      'M7 1v3a4 4 0 0 1 2 0V1Zm1 4a3 3 0 0 0 0 6 3 3 0 0 0 0-6ZM1 7v2h3a4 4 0 0 1 0-2H1Zm11 0a4 4 0 0 1 0 2h3V7Zm-5 8h2v-3a4 4 0 0 1-2 0Z',
+    )
+    expect(screen.getByTestId('stage-world-origin-position')).toHaveAttribute('fill', '#ff5f5f')
+    expect(screen.queryByTestId('stage-world-origin-outline')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-world-origin-halo')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-output-center-x')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 多 Frame 与输出边界 / 世界原点标记随视口移动且保持固定尺寸', () => {
+    render(
+      <Harness
+        initialViewport={{ x: 100, y: 80, zoom: 0.25 }}
+        runtime={stageRuntime()}
+      />,
+    )
+
+    expect(screen.getByTestId('stage-world-origin')).toHaveAttribute(
+      'transform',
+      'translate(92 72)',
+    )
+  })
+
+  it('OpenSpec: stage / 多 Frame 与输出边界 / 点击透明输出区域请求检查 Canvas', () => {
+    render(<Harness initialSelection={['a']} runtime={stageRuntime()} />)
+    const output = screen.getByTestId('stage-output-boundary')
+
+    fireEvent.pointerDown(output, {
+      button: 0,
+      buttons: 1,
+      clientX: 300,
+      clientY: 200,
+      pointerId: 39,
+    })
+    fireEvent.pointerUp(viewportElement(), {
+      buttons: 0,
+      clientX: 300,
+      clientY: 200,
+      pointerId: 39,
+    })
+
+    expect(screen.getByRole('status', { name: '当前选择' })).toBeEmptyDOMElement()
+    expect(screen.getByRole('status', { name: '输出区域选择' })).toHaveTextContent('true')
+    expect(output).toHaveClass('is-selected')
+    expect(screen.getByTestId('stage-output-edge-bottom').parentElement).toHaveClass(
+      'is-selected',
+    )
+    expect(screen.queryByTestId('stage-selection-bounds')).not.toBeInTheDocument()
   })
 
   it('OpenSpec: stage / 受控无限视口 / 使用真实 surface 尺寸', () => {
@@ -371,6 +459,23 @@ describe('Stage', () => {
     expect(screen.getByTestId('stage-origin-y')).toHaveAttribute('x1', '0')
     expect(screen.getByTestId('stage-ruler-selection-x')).toHaveTextContent('260')
     expect(screen.getByTestId('stage-ruler-selection-y')).toHaveTextContent('50')
+  })
+
+  it('OpenSpec: stage / 自适应网格标尺与世界原点 / 低于 100% 仍显示真实细网格', () => {
+    render(
+      <Harness
+        initialViewport={{ x: 100, y: 80, zoom: 0.75 }}
+        runtime={stageRuntime()}
+      />,
+    )
+
+    const grid = screen.getByTestId('stage-grid')
+    expect(grid.style.backgroundSize).toBe(
+      '48px 100%, 100% 48px, 6px 100%, 100% 6px',
+    )
+    expect(grid.style.backgroundPosition).toBe(
+      '4px 0px, 0px 32px, 4px 0px, 0px 2px',
+    )
   })
 
   // OpenSpec: stage / 可拖拽全局辅助线 / 移动删除或取消辅助线
@@ -508,10 +613,51 @@ describe('Stage', () => {
       borderRadius: '12px',
       opacity: '0.75',
     })
-    expect(screen.getByTestId('stage-node-styled-group')).toHaveStyle({
+    expect(document.querySelector('[data-node-id="styled-group"]')).toHaveStyle({
       backgroundColor: '#abcdef',
       borderRadius: '5px',
       overflow: 'visible',
+    })
+  })
+
+  it('OpenSpec: stage / 多 Frame 与输出边界 / 渲染嵌套 Frame 裁剪', () => {
+    const runtime = stageRuntime()
+    render(<Harness runtime={runtime} />)
+    const nested = document.querySelector('[data-node-id="styled-group"]')
+    expect(nested).toHaveStyle({ overflow: 'visible', transform: 'rotate(0deg)' })
+
+    act(() => {
+      runtime.dispatch({
+        id: 'clip-frame',
+        type: 'transaction.batch',
+        payload: {
+          commands: [
+            {
+              id: 'set-clip',
+              type: 'frame.clip-content.set',
+              payload: { frameId: 'styled-group', clipContent: true },
+            },
+            {
+              id: 'rotate-frame',
+              type: 'node.transform.set',
+              payload: {
+                updates: [{
+                  nodeId: 'styled-group',
+                  transform: {
+                    ...runtime.document.nodes['styled-group']!.transform,
+                    rotation: 18,
+                  },
+                }],
+              },
+            },
+          ],
+        },
+      })
+    })
+
+    expect(document.querySelector('[data-node-id="styled-group"]')).toHaveStyle({
+      overflow: 'hidden',
+      transform: 'rotate(18deg)',
     })
   })
 
@@ -1094,8 +1240,9 @@ describe('Stage', () => {
     render(<Harness initialSelection={['a', 'b']} runtime={groupRuntime} />)
     fireEvent.keyDown(viewportElement(), { key: 'g', ctrlKey: true })
     expect(groupRuntime.document.nodes.generated).toMatchObject({
-      kind: 'group',
+      kind: 'frame',
       childIds: ['a', 'b'],
+      clipContent: false,
     })
     fireEvent.keyDown(viewportElement(), {
       key: 'g',
@@ -1103,6 +1250,39 @@ describe('Stage', () => {
       shiftKey: true,
     })
     expect(groupRuntime.document.nodes.generated).toBeUndefined()
+  })
+
+  // OpenSpec: stage / 分组与重设父节点 / 根级分组和取消分组
+  it('OpenSpec: editor-preferences / 可配置单次快捷键 / 使用组合快捷键', () => {
+    const runtime = stageRuntime()
+    act(() => {
+      runtime.dispatch({
+        id: 'move-root-targets',
+        type: 'node.move',
+        payload: { nodeIds: ['a', 'b'], parentId: null, index: 2 },
+      })
+    })
+    render(<Harness initialSelection={['a', 'b']} runtime={runtime} />)
+    const viewport = viewportElement()
+
+    fireEvent.keyDown(viewport, { code: 'KeyG', key: 'g', ctrlKey: true })
+    expect(runtime.document.rootIds).toContain('generated')
+    expect(runtime.document.nodes.generated).toMatchObject({
+      kind: 'frame',
+      clipContent: false,
+      childIds: ['a', 'b'],
+    })
+    expect(screen.getByLabelText('当前选择')).toHaveTextContent('generated')
+
+    fireEvent.keyDown(viewport, {
+      code: 'KeyG',
+      key: 'G',
+      ctrlKey: true,
+      shiftKey: true,
+    })
+    expect(runtime.document.nodes.generated).toBeUndefined()
+    expect(runtime.document.rootIds).toEqual(['frame', 'frame-negative', 'a', 'b'])
+    expect(screen.getByLabelText('当前选择')).toHaveTextContent('a,b')
   })
 
   it('OpenSpec: stage / 可配置 Stage 快捷键 / 执行默认 Stage 快捷键', () => {
@@ -1130,6 +1310,31 @@ describe('Stage', () => {
     })
     expect(runtime.document.canvas.grid.snapEnabled).toBe(false)
     expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('OpenSpec: editor-preferences / 可配置单次快捷键 / 使用选择推导的 Frame 快捷键', () => {
+    const nestedRuntime = stageRuntime()
+    const nested = render(<Harness initialSelection={['a']} runtime={nestedRuntime} />)
+    const viewport = viewportElement()
+    fireEvent.keyDown(viewport, { code: 'KeyF', key: 'F', shiftKey: true })
+    expect(screen.getByLabelText('当前视口')).not.toHaveTextContent(
+      JSON.stringify({ x: 0, y: 0, zoom: 1 }),
+    )
+    nested.unmount()
+
+    const rootRuntime = stageRuntime()
+    act(() => {
+      rootRuntime.dispatch({
+        id: 'move-a-root',
+        type: 'node.move',
+        payload: { nodeIds: ['a'], parentId: null, index: 2 },
+      })
+    })
+    render(<Harness initialSelection={['a']} runtime={rootRuntime} />)
+    fireEvent.keyDown(viewportElement(), { code: 'KeyF', key: 'F', shiftKey: true })
+    expect(screen.getByLabelText('当前视口')).toHaveTextContent(
+      JSON.stringify({ x: 0, y: 0, zoom: 1 }),
+    )
   })
 
   it('OpenSpec: stage / 可配置 Stage 快捷键 / 忽略可编辑与组合输入', () => {

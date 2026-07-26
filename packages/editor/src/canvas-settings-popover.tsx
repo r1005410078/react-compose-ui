@@ -58,7 +58,11 @@ export function CanvasSettingsPopover({
   const [error, setError] = useState('')
   const updateNumber = (field: keyof Pick<
     Draft,
-    'stepX' | 'stepY' | 'offsetX' | 'offsetY' | 'primaryLineEvery'
+    | 'stepX'
+    | 'stepY'
+    | 'offsetX'
+    | 'offsetY'
+    | 'primaryLineEvery'
   >) => (value: string) => setDraft((current) => ({ ...current, [field]: value }))
 
   const apply = () => {
@@ -107,15 +111,21 @@ export function CanvasSettingsPopover({
           payload: { guideId: guide.id },
         }))
       : []
-    const command = deletes.length === 0
-      ? configure
+    const commands = [configure, ...deletes]
+    const command = commands.length === 1
+      ? commands[0]!
       : {
           id: idFactory(),
           type: 'transaction.batch',
           payload: {
-            commands: [configure, ...deletes] as unknown as JsonValue,
+            commands: commands as unknown as JsonValue,
           },
-          meta: { label: messages.configureAndClearTransaction, source: 'stage-toolbar' },
+          meta: {
+            label: deletes.length > 0
+              ? messages.configureAndClearTransaction
+              : messages.configureTransaction,
+            source: 'stage-toolbar',
+          },
         }
     const result = dispatch(command)
     if (result.status === 'rejected') {

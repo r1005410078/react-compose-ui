@@ -43,7 +43,6 @@ export const DEFAULT_NODE_STYLES: Readonly<Record<ComposeNode['kind'], ResolvedN
     opacity: 1,
     shadow: null,
   },
-  group: transparentStyle,
   component: transparentStyle,
 }
 

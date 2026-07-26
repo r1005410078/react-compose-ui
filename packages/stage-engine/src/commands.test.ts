@@ -1,5 +1,6 @@
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   createTransactionRuntime,
   type ComposeDocument,
 } from '@compose-ui/core'
@@ -15,8 +16,9 @@ import {
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: createDefaultCanvasSettings(),
+    output: createDefaultOutputSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -27,24 +29,27 @@ function fixture(): ComposeDocument {
         locked: false,
         transform: { x: -200, y: 100, width: 800, height: 600, rotation: 0 },
         childIds: ['left', 'right'],
+        clipContent: true,
       },
       left: {
         id: 'left',
-        kind: 'group',
+        kind: 'frame',
         name: 'Left',
         visible: true,
         locked: false,
         transform: { x: 80, y: 60, width: 300, height: 240, rotation: 20 },
         childIds: ['a', 'b'],
+        clipContent: false,
       },
       right: {
         id: 'right',
-        kind: 'group',
+        kind: 'frame',
         name: 'Right',
         visible: true,
         locked: false,
         transform: { x: 480, y: 180, width: 200, height: 160, rotation: -10 },
         childIds: ['c'],
+        clipContent: false,
       },
       a: {
         id: 'a',
@@ -107,20 +112,21 @@ describe('Stage structure commands', () => {
     })
 
     expect(runtime.document.nodes.selection).toMatchObject({
-      kind: 'group',
+      kind: 'frame',
       childIds: ['a', 'b'],
+      clipContent: false,
     })
     expectPointsClose(worldPoints(runtime.document, 'a'), beforeA)
     expectPointsClose(worldPoints(runtime.document, 'b'), beforeB)
   })
 
-  it('OpenSpec: stage / 分组与重设父节点 / 拒绝跨父节点分组', () => {
+  it('OpenSpec: command-transaction / Stage Engine 空间命令规划 / 拒绝无效组合', () => {
     const runtime = createTransactionRuntime({ document: fixture() })
     const result = runtime.dispatch(createGroupCommand(runtime.document, ['a', 'c'], 'invalid'))
 
     expect(result).toMatchObject({
       status: 'rejected',
-      issues: [expect.objectContaining({ code: 'group.invalid-parent' })],
+      issues: [expect.objectContaining({ code: 'node.invalid-parent' })],
     })
     expect(runtime.entries).toHaveLength(1)
     expect(runtime.document.nodes.invalid).toBeUndefined()
@@ -143,6 +149,13 @@ describe('Stage structure commands', () => {
     )).toMatchObject({ status: 'committed' })
     expect(runtime.document.nodes.right).toMatchObject({ childIds: ['c', 'a'] })
     expectPointsClose(worldPoints(runtime.document, 'a'), beforeReparent)
+
+    const beforeRoot = worldPoints(runtime.document, 'a')
+    expect(runtime.dispatch(
+      createReparentCommand(runtime.document, ['a'], null, 1),
+    )).toMatchObject({ status: 'committed' })
+    expect(runtime.document.rootIds).toEqual(['frame', 'a'])
+    expectPointsClose(worldPoints(runtime.document, 'a'), beforeRoot)
   })
 
   it('OpenSpec: stage-engine / 空间命令规划 / duplicate 可逆且 inverse Patch 完整', () => {

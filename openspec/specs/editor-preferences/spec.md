@@ -67,27 +67,21 @@ PropertyPanel、OperationLog、基础材料 Inspector 和默认 Palette；系统
 
 ### Requirement: 可配置单次快捷键
 
-偏好 MUST 用 KeyboardEvent.code 与 primary/shift/alt 修饰键保存单个按键或组合键。系统 MUST
-按平台显示 primary，允许重新绑定、清除、单项恢复和全部恢复；同一作用域的规范化冲突 MUST
-显示冲突动作并拒绝写入。
+编辑器 MUST 保留现有可配置 Stage 动作和默认键位。`stage.fitFrame` MUST 从当前选择或最近 Frame
+祖先推导目标；`edit.group`/`edit.ungroup` MUST 操作统一 Frame，不依赖 Group 节点或
+activeFrameId。
 
-#### Scenario: 重新绑定动作
+#### Scenario: 使用选择推导的 Frame 快捷键
 
-- **WHEN** 用户捕获一个当前作用域未占用的单键或组合键
-- **THEN** 完整 preferences 使用规范化 binding 更新该动作
-- **AND** 后续键盘事件执行新 binding 而不再执行旧 binding
+- **WHEN** 用户选择 Frame 后代并触发适配 Frame
+- **THEN** Stage 适配最近 Frame 祖先
+- **AND** 根 Component 没有 Frame 祖先时动作稳定 no-op
 
-#### Scenario: 拒绝同作用域冲突
+#### Scenario: 使用组合快捷键
 
-- **WHEN** 用户为动作捕获已被同作用域另一个动作占用的 binding
-- **THEN** 设置面板显示冲突动作名称且保持原 binding
-- **AND** 不调用偏好变更回调
-
-#### Scenario: 清除和恢复快捷键
-
-- **WHEN** 用户清除、恢复单项或恢复全部快捷键
-- **THEN** 对应动作变为禁用、恢复默认或全部恢复默认
-- **AND** 每次有效操作只通知一次完整 preferences
+- **WHEN** 用户在 Canvas 根选择多个节点并触发 group/ungroup
+- **THEN** 快捷键分别创建或解除统一 Frame
+- **AND** 默认键位和可配置冲突规则保持不变
 
 ### Requirement: 设置模态弹框
 

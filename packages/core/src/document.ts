@@ -2,6 +2,7 @@ import type {
   ComposeCanvasSettings,
   ComposeDocument,
   ComposeNode,
+  ComposeOutputSettings,
   DocumentValidationIssue,
   DocumentValidationIssueCode,
   DocumentValidationResult,
@@ -72,7 +73,6 @@ function validateJsonValue(
 function validateTransform(
   value: unknown,
   path: Path,
-  kind: string,
   issues: DocumentValidationIssue[],
 ) {
   if (!isRecord(value)) {
@@ -101,19 +101,37 @@ function validateTransform(
       )
     }
   }
-  if (
-    kind === 'frame'
-    && typeof value.rotation === 'number'
-    && Number.isFinite(value.rotation)
-    && value.rotation !== 0
-  ) {
+}
+
+function validateOutput(
+  value: unknown,
+  issues: DocumentValidationIssue[],
+): value is ComposeOutputSettings {
+  const path = ['output'] as const
+  if (!isRecord(value)) {
+    addIssue(issues, 'output.invalid', path, 'output 必须是对象')
+    return false
+  }
+  for (const field of ['width', 'height'] as const) {
+    const candidate = value[field]
+    if (typeof candidate !== 'number' || !Number.isFinite(candidate) || candidate <= 0) {
+      addIssue(
+        issues,
+        'output.invalid-size',
+        [...path, field],
+        `${field} 必须是有限正数`,
+      )
+    }
+  }
+  if (typeof value.backgroundColor !== 'string' || value.backgroundColor.trim().length === 0) {
     addIssue(
       issues,
-      'transform.frame-rotation',
-      [...path, 'rotation'],
-      'Frame rotation 必须为零',
+      'output.invalid-background',
+      [...path, 'backgroundColor'],
+      'backgroundColor 必须是非空字符串',
     )
   }
+  return true
 }
 
 function validateCanvas(
@@ -249,11 +267,11 @@ function validateNode(
   }
 
   const kind = value.kind
-  if (kind !== 'frame' && kind !== 'group' && kind !== 'component') {
+  if (kind !== 'frame' && kind !== 'component') {
     addIssue(issues, 'node.invalid-field', [...path, 'kind'], '节点 kind 不受支持')
     return false
   }
-  validateTransform(value.transform, [...path, 'transform'], kind, issues)
+  validateTransform(value.transform, [...path, 'transform'], issues)
   if (value.style !== undefined) {
     const styleResult = validateNodeStyle(value.style)
     if (!styleResult.valid) {
@@ -267,6 +285,14 @@ function validateNode(
   }
 
   if (kind === 'component') {
+    if (value.childIds !== undefined) {
+      addIssue(
+        issues,
+        'node.invalid-field',
+        [...path, 'childIds'],
+        'Component 必须是叶节点，不得提供 childIds',
+      )
+    }
     if (typeof value.componentType !== 'string' || value.componentType.trim().length === 0) {
       addIssue(
         issues,
@@ -296,6 +322,14 @@ function validateNode(
         )
       }
     })
+    if (typeof value.clipContent !== 'boolean') {
+      addIssue(
+        issues,
+        'node.invalid-field',
+        [...path, 'clipContent'],
+        'Frame clipContent 必须是 boolean',
+      )
+    }
   }
 
   return true
@@ -307,7 +341,7 @@ function validateTopology(
   issues: DocumentValidationIssue[],
 ) {
   const roots = new Set<string>()
-  const parentById = new Map<string, string>()
+  const parentById = new Map<string, string | null>()
   const reached = new Set<string>()
 
   for (const [index, rootId] of rootIds.entries()) {
@@ -316,7 +350,7 @@ function validateTopology(
         issues,
         'document.duplicate-root',
         ['rootIds', index],
-        `Frame ${rootId} 在 rootIds 中重复`,
+        `节点 ${rootId} 在 rootIds 中重复`,
       )
       continue
     }
@@ -331,14 +365,7 @@ function validateTopology(
       )
       continue
     }
-    if (root.kind !== 'frame') {
-      addIssue(
-        issues,
-        'document.invalid-root-kind',
-        ['rootIds', index],
-        `根节点 ${rootId} 必须是 Frame`,
-      )
-    }
+    parentById.set(rootId, null)
   }
 
   const visit = (nodeId: string, ancestors: ReadonlySet<string>) => {
@@ -361,21 +388,13 @@ function validateTopology(
         )
         return
       }
-      if (child.kind === 'frame') {
-        addIssue(
-          issues,
-          'document.invalid-child-kind',
-          childPath,
-          'Frame 只能位于 rootIds',
-        )
-      }
       const previousParent = parentById.get(childId)
-      if (previousParent !== undefined) {
+      if (parentById.has(childId)) {
         addIssue(
           issues,
           'document.multiple-parents',
           childPath,
-          `节点 ${childId} 已属于 ${previousParent}`,
+          `节点 ${childId} 已属于 ${previousParent ?? 'Canvas'}`,
         )
       }
       else {
@@ -403,14 +422,14 @@ function validateTopology(
         issues,
         'document.orphan-node',
         ['nodes', nodeId],
-        `节点 ${nodeId} 未从任何 Frame 可达`,
+        `节点 ${nodeId} 未从隐式 Canvas 可达`,
       )
     }
   }
 }
 
 /**
- * 校验未知输入是否满足 ComposeDocument v2 的画布、JSON、节点和拓扑约束。
+ * 校验未知输入是否满足 ComposeDocument v3 的输出、画布、JSON、节点和拓扑约束。
  *
  * @param input - 可能来自宿主持久化层或网络边界的未知值。
  * @returns 成功时保留原文档引用；失败时返回全部可定位问题。
@@ -427,7 +446,7 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
       }],
     }
   }
-  if (input.schemaVersion !== 2) {
+  if (input.schemaVersion !== 3) {
     return {
       valid: false,
       issues: [{
@@ -439,6 +458,7 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
   }
 
   const issues: DocumentValidationIssue[] = []
+  validateOutput(input.output, issues)
   validateCanvas(input.canvas, issues)
   if (!Array.isArray(input.rootIds) || input.rootIds.some((id) => typeof id !== 'string')) {
     addIssue(issues, 'document.invalid', ['rootIds'], 'rootIds 必须是字符串数组')

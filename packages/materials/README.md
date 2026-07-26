@@ -25,8 +25,10 @@ const controller = useComposeEditorController({
 
 `createBasicMaterials` 每次返回独立 registry。Component Library 顺序固定为 Frame preset，
 然后 Rectangle、Text，最后按输入顺序追加 `extensions`。Frame、Rectangle 和 Text 均可覆盖
-`label`、新节点 `name`、尺寸、默认 props/style。
+`label`、新节点 `name`、尺寸、默认 props/style；Frame preset 还可通过
+`defaultClipContent` 覆盖默认裁剪行为，默认值为 `true`。
 
 通用视觉字段保存在 `node.style`。Text 的内容、文字颜色和字号保存在 props；Rectangle 新节点
 props 为空。无 `node.style` 的旧 Rectangle 仍从 `color`、`opacity`、`cornerRadius` props
 读取视觉值，首次 Inspector 编辑会写入标准 style，但不会删除旧 props。
+Container Inspector 只接受 Frame，并同时编辑 rotation 与 `clipContent`。

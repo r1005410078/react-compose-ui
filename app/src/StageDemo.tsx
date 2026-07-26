@@ -5,6 +5,7 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   createTransactionRuntime,
 } from '@compose-ui/core'
 import type {
@@ -51,8 +52,9 @@ function PreviewIcon() {
 }
 
 const emptyDocument: ComposeDocument = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvas: createDefaultCanvasSettings(),
+  output: createDefaultOutputSettings(),
   rootIds: [],
   nodes: {},
 }
@@ -210,6 +212,7 @@ export function StageDemoWorkspace() {
   }))
   const previousDocument = useRef(runtime.document)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewMode, setPreviewMode] = useState<'document' | 'frame'>('document')
   const nextId = useRef(0)
   const idFactory = useCallback(() => `stage-demo-${nextId.current++}`, [])
   const recordTransaction = useCallback((event: ComposeEditorTransactionEvent) => {
@@ -256,6 +259,10 @@ export function StageDemoWorkspace() {
     idFactory,
     onTransaction: recordTransaction,
   })
+  const selectedFrameId = controller.selectedIds.length === 1
+    && controller.document.nodes[controller.selectedIds[0]!]?.kind === 'frame'
+    ? controller.selectedIds[0]!
+    : null
 
   return (
     <>
@@ -267,11 +274,13 @@ export function StageDemoWorkspace() {
             {controller.stageToolbar}
             <button
               className="stage-demo__preview-button"
-              disabled={!controller.activeFrameId}
-              aria-label="预览 Frame"
-              title="预览 Frame"
+              aria-label="打开预览"
+              title="打开预览"
               type="button"
-              onClick={() => setPreviewOpen(true)}
+              onClick={() => {
+                setPreviewMode('document')
+                setPreviewOpen(true)
+              }}
             >
               <PreviewIcon />
             </button>
@@ -279,14 +288,24 @@ export function StageDemoWorkspace() {
         )}
         transactionLogPanel={<OperationLogPanel />}
       />
-      {previewOpen && controller.activeFrameId ? (
-        <div aria-label="Frame 预览对话框" className="stage-demo__preview-backdrop" role="dialog">
+      {previewOpen ? (
+        <div aria-label="文档预览对话框" className="stage-demo__preview-backdrop" role="dialog">
           <div className="stage-demo__preview-shell">
             <button type="button" onClick={() => setPreviewOpen(false)}>关闭预览</button>
+            <button type="button" onClick={() => setPreviewMode('document')}>文档</button>
+            <button
+              disabled={!selectedFrameId}
+              type="button"
+              onClick={() => setPreviewMode('frame')}
+            >
+              选中 Frame
+            </button>
             <ComposePreview
               document={controller.document}
-              frameId={controller.activeFrameId}
               registry={registry}
+              target={previewMode === 'frame' && selectedFrameId
+                ? { kind: 'frame', frameId: selectedFrameId }
+                : { kind: 'document' }}
             />
           </div>
         </div>

@@ -28,7 +28,7 @@ export interface JsonObject {
  * 节点相对直接父节点的二维几何。
  *
  * @remarks
- * 无限 Stage 允许负坐标。宽高必须为有限正数；Frame 的 rotation 必须为零。
+ * 无限 Stage 允许负坐标。宽高必须为有限正数，所有节点都允许有限 rotation。
  *
  * @public
  */
@@ -115,7 +115,7 @@ export interface ComposeNodeBase {
 }
 
 /**
- * 无限 Stage 中定义预览输出边界的根节点。
+ * 可嵌套、可旋转并可选择裁剪后代内容的统一容器节点。
  *
  * @public
  */
@@ -123,17 +123,8 @@ export interface ComposeFrameNode extends ComposeNodeBase {
   readonly kind: 'frame'
   /** 按场景顺序排列的直接子节点 ID。 */
   readonly childIds: readonly string[]
-}
-
-/**
- * 用于组织后代并承载局部坐标系的分组节点。
- *
- * @public
- */
-export interface ComposeGroupNode extends ComposeNodeBase {
-  readonly kind: 'group'
-  /** 按场景顺序排列的直接子节点 ID。 */
-  readonly childIds: readonly string[]
+  /** 是否裁剪超出 Frame 本地边界的后代内容。 */
+  readonly clipContent: boolean
 }
 
 /**
@@ -156,7 +147,6 @@ export interface ComposeComponentNode extends ComposeNodeBase {
  */
 export type ComposeNode =
   | ComposeFrameNode
-  | ComposeGroupNode
   | ComposeComponentNode
 
 /**
@@ -209,16 +199,32 @@ export interface ComposeCanvasSettings {
 }
 
 /**
- * 编辑器、Stage 与 Preview 共享的 v2 正式文档。
+ * 文档发布与 Preview 使用的固定原点输出设置。
+ *
+ * @public
+ */
+export interface ComposeOutputSettings {
+  /** 输出宽度，必须为有限正数。 */
+  readonly width: number
+  /** 输出高度，必须为有限正数。 */
+  readonly height: number
+  /** 输出背景色；core 只要求非空，不解释颜色语法。 */
+  readonly backgroundColor: string
+}
+
+/**
+ * 编辑器、Stage 与 Preview 共享的 v3 正式文档。
  *
  * @public
  */
 export interface ComposeDocument {
-  /** 当前且唯一支持的文档协议版本。 @defaultValue 2 */
-  readonly schemaVersion: 2
+  /** 当前且唯一支持的文档协议版本。 @defaultValue 3 */
+  readonly schemaVersion: 3
   /** Stage 使用、Preview 忽略的持久化画布元数据。 */
   readonly canvas: ComposeCanvasSettings
-  /** 按世界场景顺序排列的 Frame ID。 */
+  /** 固定在世界原点的发布与 Preview 输出设置。 */
+  readonly output: ComposeOutputSettings
+  /** 按世界场景顺序排列的隐式 Canvas 直接子节点 ID。 */
   readonly rootIds: readonly string[]
   /** 以稳定 ID 规范化保存的全部节点。 */
   readonly nodes: Readonly<Record<string, ComposeNode>>
@@ -236,13 +242,14 @@ export type DocumentValidationIssueCode =
   | 'document.invalid'
   | 'document.unsupported-version'
   | 'document.invalid-root'
-  | 'document.invalid-root-kind'
   | 'document.duplicate-root'
   | 'document.missing-child'
   | 'document.multiple-parents'
   | 'document.cycle'
   | 'document.orphan-node'
-  | 'document.invalid-child-kind'
+  | 'output.invalid'
+  | 'output.invalid-size'
+  | 'output.invalid-background'
   | 'canvas.invalid'
   | 'canvas.invalid-step'
   | 'canvas.invalid-offset'
@@ -254,7 +261,6 @@ export type DocumentValidationIssueCode =
   | 'node.invalid-field'
   | 'transform.non-finite'
   | 'transform.invalid-size'
-  | 'transform.frame-rotation'
   | 'style.invalid'
   | 'component.empty-type'
 

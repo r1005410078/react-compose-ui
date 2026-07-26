@@ -1,20 +1,31 @@
 import {
   resolveNodeStyle,
+  type ComposeFrameNode,
   type ComposeNode,
   type NodeStyle,
   type NodeTransform,
   type ResolvedNodeStyle,
 } from '@compose-ui/core'
-import type { ContainerValue } from './schemas'
+import type { ContainerValue, FrameValue } from './schemas'
 
+/** 将 Frame 转换为专用 Inspector 表单值。 @internal */
+export function createContainerValue(
+  node: ComposeFrameNode,
+  style?: ResolvedNodeStyle,
+): FrameValue
 /** 将文档节点转换为通用 Inspector 表单值。 @internal */
 export function createContainerValue(
   node: ComposeNode,
+  style?: ResolvedNodeStyle,
+): ContainerValue
+export function createContainerValue(
+  node: ComposeNode,
   style: ResolvedNodeStyle = resolveNodeStyle(node),
-): ContainerValue {
+): ContainerValue | FrameValue {
   return {
     name: node.name,
     ...node.transform,
+    ...(node.kind === 'frame' ? { clipContent: node.clipContent } : {}),
     backgroundColor: style.backgroundColor,
     borderColor: style.borderColor,
     borderWidth: style.borderWidth,
@@ -25,7 +36,7 @@ export function createContainerValue(
 }
 
 /** 从表单值提取标准节点 style。 @internal */
-export function createStyleValue(value: ContainerValue): NodeStyle {
+export function createStyleValue(value: ContainerValue | FrameValue): NodeStyle {
   return {
     backgroundColor: value.backgroundColor,
     borderColor: value.borderColor,
@@ -37,7 +48,7 @@ export function createStyleValue(value: ContainerValue): NodeStyle {
 }
 
 /** 从表单值提取节点几何。 @internal */
-export function createTransformValue(value: ContainerValue): NodeTransform {
+export function createTransformValue(value: ContainerValue | FrameValue): NodeTransform {
   return {
     x: value.x,
     y: value.y,

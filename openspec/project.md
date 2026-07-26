@@ -151,10 +151,13 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ## Domain Context
 
 - 目标用户需要在客户现场快速调整数据大屏，编辑器必须能嵌入现有 React 宿主。
-- 当前仓库验证仅支持 v2 的版本化 JSON 文档、同步命令事务、组件注册、Godot 风格无限 Stage、
-  controller 默认工作区、Frame Preview、事务/会话历史和 Rectangle/Text/ECharts 纵向流程。
+- 当前仓库验证仅支持 v3 的版本化 JSON 文档、隐式 Canvas 根、统一可嵌套 Frame 容器、同步
+  命令事务、组件注册、Godot 风格无限 Stage、controller 默认工作区、文档/Frame Preview、
+  事务/会话历史和 Rectangle/Text/ECharts 纵向流程。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
-  surface 尺寸和动态滚动范围是会话状态。Preview 接受 v2 但忽略 canvas 编辑元数据。
+  surface 尺寸和动态滚动范围是会话状态。`document.output` 定义固定原点输出边界；Preview
+  接受 v3 但忽略 canvas 编辑元数据。output 默认透明；Stage 输出边界可作为独立 Canvas
+  Inspector 会话目标，但不进入节点选择或 SceneTree。
 - 数据源协议与持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
 - 示例中的临时状态、面板 ID 和 Dockview 对象都不是编辑器领域模型或公共协议。
 

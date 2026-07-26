@@ -28,6 +28,7 @@ type FixtureNode = {
   componentType?: string
   props?: Record<string, unknown>
   style?: Record<string, unknown>
+  clipContent?: boolean
 }
 
 type FixtureDocument = {
@@ -44,6 +45,7 @@ type FixtureDocument = {
     smartSnap: { nodes: boolean; guides: boolean }
     guides: { id: string; axis: 'x' | 'y'; position: number }[]
   }
+  output: { width: number; height: number; backgroundColor: string }
   rootIds: string[]
   nodes: Record<string, FixtureNode>
 }
@@ -56,7 +58,7 @@ const validateComposeDocument = (
 
 function validDocument(): FixtureDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: {
       grid: {
         stepX: 8,
@@ -69,6 +71,7 @@ function validDocument(): FixtureDocument {
       smartSnap: { nodes: true, guides: true },
       guides: [],
     },
+    output: { width: 1280, height: 720, backgroundColor: '#f8fafc' },
     rootIds: ['frame-a', 'frame-b'],
     nodes: {
       'frame-a': {
@@ -78,15 +81,17 @@ function validDocument(): FixtureDocument {
         visible: true,
         locked: false,
         transform: { x: -320, y: 24, width: 1920, height: 1080, rotation: 0 },
+        clipContent: true,
         childIds: ['group-a'],
       },
       'group-a': {
         id: 'group-a',
-        kind: 'group',
-        name: 'Group A',
+        kind: 'frame',
+        name: 'Nested Frame',
         visible: true,
         locked: false,
         transform: { x: 100, y: 80, width: 400, height: 240, rotation: 15 },
+        clipContent: false,
         childIds: ['text-a'],
       },
       'text-a': {
@@ -106,6 +111,7 @@ function validDocument(): FixtureDocument {
         visible: true,
         locked: false,
         transform: { x: 1800, y: -400, width: 1280, height: 720, rotation: 0 },
+        clipContent: true,
         childIds: [],
       },
     },
@@ -113,7 +119,51 @@ function validDocument(): FixtureDocument {
 }
 
 describe('ComposeDocument', () => {
-  it('OpenSpec: compose-document / 可选通用节点样式 / 解析没有 style 的 v2 节点', () => {
+  // OpenSpec: compose-document / 节点变换与显示状态 / 旋转并裁剪 Frame
+  it('OpenSpec: compose-document / 规范化节点拓扑 / 使用任意根与嵌套 Frame', () => {
+    const input = {
+      schemaVersion: 3,
+      canvas: validDocument().canvas,
+      output: { width: 1280, height: 720, backgroundColor: '#f8fafc' },
+      rootIds: ['root-component', 'outer-frame'],
+      nodes: {
+        'root-component': {
+          id: 'root-component',
+          kind: 'component',
+          name: 'Root component',
+          visible: true,
+          locked: false,
+          transform: { x: -40, y: 20, width: 120, height: 60, rotation: 5 },
+          componentType: 'text',
+          props: { text: 'Root' },
+        },
+        'outer-frame': {
+          id: 'outer-frame',
+          kind: 'frame',
+          name: 'Outer',
+          visible: true,
+          locked: false,
+          transform: { x: 100, y: 80, width: 500, height: 320, rotation: 12 },
+          clipContent: true,
+          childIds: ['inner-frame'],
+        },
+        'inner-frame': {
+          id: 'inner-frame',
+          kind: 'frame',
+          name: 'Inner',
+          visible: true,
+          locked: false,
+          transform: { x: 20, y: 30, width: 200, height: 120, rotation: -8 },
+          clipContent: false,
+          childIds: [],
+        },
+      },
+    }
+
+    expect(validateComposeDocument(input)).toEqual({ valid: true, document: input })
+  })
+
+  it('OpenSpec: compose-document / 可选通用节点样式 / 解析没有 style 的 v3 节点', () => {
     const input = validDocument()
     const resolveNodeStyle = (
       core as unknown as {
@@ -130,7 +180,7 @@ describe('ComposeDocument', () => {
       opacity: 1,
       shadow: null,
     })
-    expect(resolveNodeStyle(input.nodes['group-a'])).toEqual({
+    expect(resolveNodeStyle(input.nodes['text-a'])).toEqual({
       backgroundColor: 'transparent',
       borderColor: 'transparent',
       borderWidth: 0,
@@ -204,7 +254,7 @@ describe('ComposeDocument', () => {
     })
   })
 
-  it('OpenSpec: compose-document / 版本化 JSON 文档 / 校验合法 v2 多 Frame 文档', () => {
+  it('OpenSpec: compose-document / 版本化 JSON 文档 / 校验合法 v3 多 Frame 文档', () => {
     const input = validDocument()
     const result = validateComposeDocument(input)
 
@@ -235,8 +285,8 @@ describe('ComposeDocument', () => {
     ]))
   })
 
-  it('OpenSpec: compose-document / 版本化 JSON 文档 / 拒绝 v1 与未知版本', () => {
-    for (const schemaVersion of [1, 3]) {
+  it('OpenSpec: compose-document / 版本化 JSON 文档 / 接受 v3 并拒绝旧版本', () => {
+    for (const schemaVersion of [1, 2, 4]) {
       const input = { ...validDocument(), schemaVersion }
       const result = validateComposeDocument(input)
 
@@ -248,6 +298,16 @@ describe('ComposeDocument', () => {
         })],
       })
     }
+
+    const groupDocument = validDocument()
+    groupDocument.nodes['group-a'].kind = 'group'
+    const groupResult = validateComposeDocument(groupDocument)
+    expect(groupResult.valid).toBe(false)
+    if (groupResult.valid) return
+    expect(groupResult.issues).toContainEqual(expect.objectContaining({
+      code: 'node.invalid-field',
+      path: ['nodes', 'group-a', 'kind'],
+    }))
   })
 
   it('OpenSpec: compose-document / 可持久化画布设置与辅助线 / 创建默认画布设置', () => {
@@ -259,6 +319,37 @@ describe('ComposeDocument', () => {
 
     expect(createDefaultCanvasSettings()).toEqual(validDocument().canvas)
     expect(createDefaultCanvasSettings()).not.toBe(createDefaultCanvasSettings())
+  })
+
+  it('OpenSpec: compose-document / 固定原点输出设置 / 创建并校验输出设置', () => {
+    const createDefaultOutputSettings = (
+      core as unknown as {
+        createDefaultOutputSettings(): FixtureDocument['output']
+      }
+    ).createDefaultOutputSettings
+
+    expect(createDefaultOutputSettings()).toEqual({
+      width: 1280,
+      height: 720,
+      backgroundColor: 'transparent',
+    })
+    expect(createDefaultOutputSettings()).not.toBe(createDefaultOutputSettings())
+
+    const input = validDocument()
+    input.output.width = 0
+    input.output.height = Number.POSITIVE_INFINITY
+    input.output.backgroundColor = ''
+    const result = validateComposeDocument(input)
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'output.invalid-size', path: ['output', 'width'] }),
+      expect.objectContaining({ code: 'output.invalid-size', path: ['output', 'height'] }),
+      expect.objectContaining({
+        code: 'output.invalid-background',
+        path: ['output', 'backgroundColor'],
+      }),
+    ]))
   })
 
   it('OpenSpec: compose-document / 可持久化画布设置与辅助线 / 保存全局辅助线', () => {
@@ -310,7 +401,7 @@ describe('ComposeDocument', () => {
     ]))
   })
 
-  it('OpenSpec: compose-document / 规范化节点拓扑 / 使用合法 Frame 子树', () => {
+  it('OpenSpec: compose-document / 规范化节点拓扑 / 使用合法嵌套 Frame 子树', () => {
     const input = validDocument()
     const result = validateComposeDocument(input)
 
@@ -332,23 +423,40 @@ describe('ComposeDocument', () => {
     ]))
   })
 
-  it('OpenSpec: compose-document / 规范化节点拓扑 / 拒绝根级普通节点或循环', () => {
+  it('OpenSpec: compose-document / 规范化节点拓扑 / 拒绝非法拓扑', () => {
     const input = validDocument()
-    input.rootIds.push('group-a')
+    input.nodes['text-a'].childIds = ['frame-b']
+
+    const result = validateComposeDocument(input)
+
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: 'node.invalid-field',
+      path: ['nodes', 'text-a', 'childIds'],
+    }))
+  })
+
+  it('OpenSpec: compose-document / 规范化节点拓扑 / 接受根 Component 并拒绝循环', () => {
+    const input = validDocument()
+    input.nodes['frame-a'].childIds = ['group-a']
+    input.nodes['root-component'] = {
+      ...input.nodes['text-a'],
+      id: 'root-component',
+      name: 'Root component',
+    }
+    input.rootIds.push('root-component')
     input.nodes['group-a'].childIds?.push('group-a')
     const result = validateComposeDocument(input)
 
     expect(result.valid).toBe(false)
     if (result.valid) return
-    expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining([
-      'document.invalid-root-kind',
-      'document.cycle',
-    ]))
+    expect(result.issues.map((issue) => issue.code)).toContain('document.cycle')
   })
 
   it('OpenSpec: compose-document / 节点变换与显示状态 / 拒绝非法变换', () => {
     const input = validDocument()
-    input.nodes['frame-a'].transform.rotation = 1
+    input.nodes['frame-a'].transform.rotation = 18
     input.nodes['group-a'].transform.width = 0
     input.nodes['text-a'].transform.x = Number.NaN
     const result = validateComposeDocument(input)
@@ -356,10 +464,6 @@ describe('ComposeDocument', () => {
     expect(result.valid).toBe(false)
     if (result.valid) return
     expect(result.issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        code: 'transform.frame-rotation',
-        path: ['nodes', 'frame-a', 'transform', 'rotation'],
-      }),
       expect.objectContaining({
         code: 'transform.invalid-size',
         path: ['nodes', 'group-a', 'transform', 'width'],
@@ -369,6 +473,9 @@ describe('ComposeDocument', () => {
         path: ['nodes', 'text-a', 'transform', 'x'],
       }),
     ]))
+    expect(result.issues).not.toContainEqual(expect.objectContaining({
+      path: ['nodes', 'frame-a', 'transform', 'rotation'],
+    }))
   })
 
   it('OpenSpec: compose-document / 节点变换与显示状态 / 接受无限空间负坐标', () => {

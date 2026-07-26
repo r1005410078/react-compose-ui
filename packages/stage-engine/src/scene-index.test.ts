@@ -1,18 +1,25 @@
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   type ComposeDocument,
+  type ComposeFrameNode,
 } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
-import { createStageSceneIndex } from './index'
+import {
+  applyMatrix,
+  createStageSceneIndex,
+  getNodeWorldMatrix,
+} from './index'
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: {
       ...createDefaultCanvasSettings(),
       smartSnap: { nodes: true, guides: true },
       guides: [{ id: 'guide-x', axis: 'x', position: 24 }],
     },
+    output: createDefaultOutputSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -23,15 +30,17 @@ function fixture(): ComposeDocument {
         locked: false,
         transform: { x: 100, y: 50, width: 500, height: 400, rotation: 0 },
         childIds: ['group'],
+        clipContent: true,
       },
       group: {
         id: 'group',
-        kind: 'group',
-        name: 'Group',
+        kind: 'frame',
+        name: 'Nested Frame',
         visible: true,
         locked: false,
         transform: { x: 20, y: 30, width: 100, height: 80, rotation: 0 },
         childIds: ['node'],
+        clipContent: false,
       },
       node: {
         id: 'node',
@@ -61,7 +70,9 @@ describe('StageSceneIndex', () => {
       height: 20,
     })
     expect(index.topLevelSelection(['group', 'node'])).toEqual(['group'])
-    expect(index.frameForNode('node')).toBe('frame')
+    expect(index.closestFrameForNode('node')).toBe('group')
+    expect(index.commonFrameForSelection(['node'])).toBe('group')
+    expect(index.frameAtPoint({ x: 135, y: 90 })).toBe('group')
     expect(index.snapCandidates(['node'])).toContainEqual({
       axis: 'x',
       value: 24,
@@ -85,5 +96,40 @@ describe('StageSceneIndex', () => {
     expect(createStageSceneIndex(first)).toBe(createStageSceneIndex(first))
     expect(createStageSceneIndex(second)).not.toBe(createStageSceneIndex(first))
     expect(createStageSceneIndex(second).getWorldBounds('node')?.x).toBe(170)
+  })
+
+  it('OpenSpec: stage-engine / 场景索引与坐标空间 / 命中旋转嵌套 Frame', () => {
+    const base = fixture()
+    const rotated: ComposeDocument = {
+      ...base,
+      nodes: {
+        ...base.nodes,
+        group: {
+          ...base.nodes.group!,
+          transform: {
+            ...base.nodes.group!.transform,
+            x: 480,
+            rotation: 30,
+          },
+        },
+      },
+    }
+    const center = applyMatrix(
+      getNodeWorldMatrix(rotated, 'group'),
+      { x: 75, y: 40 },
+    )
+    expect(createStageSceneIndex(rotated).frameAtPoint(center)).toBeNull()
+
+    const unclipped: ComposeDocument = {
+      ...rotated,
+      nodes: {
+        ...rotated.nodes,
+        frame: {
+          ...(rotated.nodes.frame as ComposeFrameNode),
+          clipContent: false,
+        },
+      },
+    }
+    expect(createStageSceneIndex(unclipped).frameAtPoint(center)).toBe('group')
   })
 })

@@ -1,14 +1,23 @@
-import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { StrictMode } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   createTransactionRuntime,
 } from '@compose-ui/core'
 import type { NodeInspectorProps } from '@compose-ui/component-registry'
-import type { ComposeFrameNode, ComposeGroupNode } from '@compose-ui/core'
+import type { ComposeFrameNode } from '@compose-ui/core'
 import type {
   ComposeDocument,
   EditorCommand,
@@ -18,8 +27,9 @@ import { useComposeEditorController } from './controller'
 import type { ComposeEditorTransactionEvent } from './controller'
 
 const documentFixture: ComposeDocument = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvas: createDefaultCanvasSettings(),
+  output: createDefaultOutputSettings(),
   rootIds: ['frame'],
   nodes: {
     frame: {
@@ -30,15 +40,17 @@ const documentFixture: ComposeDocument = {
       locked: false,
       transform: { x: 40, y: 30, width: 800, height: 600, rotation: 0 },
       childIds: ['group'],
+      clipContent: true,
     },
     group: {
       id: 'group',
-      kind: 'group',
+      kind: 'frame',
       name: 'Header',
       visible: true,
       locked: false,
       transform: { x: 20, y: 20, width: 400, height: 100, rotation: 0 },
       childIds: ['title'],
+      clipContent: false,
     },
     title: {
       id: 'title',
@@ -86,7 +98,7 @@ const registry = createComponentRegistry([{
 function ContainerInspector({
   node,
   dispatch,
-}: NodeInspectorProps<ComposeFrameNode | ComposeGroupNode>) {
+}: NodeInspectorProps<ComposeFrameNode>) {
   return (
     <button
       type="button"
@@ -190,11 +202,12 @@ describe('useComposeEditorController', () => {
       registry,
       initialSelection: ['title'],
       initialExpandedIds: ['frame', 'group'],
-      initialActiveFrameId: 'frame',
       idFactory: () => 'controller-command',
     }))
 
     expect(result.current.document).toBe(editorRuntime.document)
+    expect(result.current).not.toHaveProperty('activeFrameId')
+    expect(result.current).not.toHaveProperty('setActiveFrameId')
     expect(result.current.stageProps.document).toBe(editorRuntime.document)
     expect(result.current.sceneTreeProps.nodes[0]?.children?.[0]?.children?.[0]?.label)
       .toBe('Title')
@@ -225,7 +238,6 @@ describe('useComposeEditorController', () => {
       registry,
       initialSelection: ['title'],
       initialExpandedIds: ['frame', 'group', 'title'],
-      initialActiveFrameId: 'frame',
     }))
 
     act(() => {
@@ -247,7 +259,6 @@ describe('useComposeEditorController', () => {
       })
     })
     expect(result.current.expandedIds).toEqual([])
-    expect(result.current.activeFrameId).toBeNull()
   })
 
   // OpenSpec: component-registry / 通用节点 Inspector 上下文 / 组合结构节点 Inspector
@@ -263,6 +274,7 @@ describe('useComposeEditorController', () => {
         label: 'Frame',
         name: 'Desktop',
         defaultSize: { width: 1280, height: 720 },
+        defaultClipContent: true,
         createDefaultStyle: () => ({ backgroundColor: '#ffffff' }),
       }],
       idFactory: () => 'controller-frame',
@@ -302,7 +314,6 @@ describe('useComposeEditorController', () => {
     const { result } = renderHook(() => useComposeEditorController({
       runtime: editorRuntime,
       registry,
-      initialActiveFrameId: 'frame',
     }))
     const toolbar = render(result.current.stageToolbar)
 
@@ -323,7 +334,7 @@ describe('useComposeEditorController', () => {
     const { result } = renderHook(() => useComposeEditorController({
       runtime: editorRuntime,
       registry,
-      initialActiveFrameId: 'frame',
+      initialSelection: ['frame'],
     }))
     const toolbar = render(result.current.stageToolbar)
 
@@ -340,6 +351,7 @@ describe('useComposeEditorController', () => {
   })
 
   // OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 清空辅助线
+  // OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 原子修改网格和辅助线
   it('OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 快捷切换吸附', () => {
     const editorRuntime = runtime()
     act(() => {
@@ -357,7 +369,6 @@ describe('useComposeEditorController', () => {
     const { result } = renderHook(() => useComposeEditorController({
       runtime: editorRuntime,
       registry,
-      initialActiveFrameId: 'frame',
       idFactory: (() => {
         let value = 0
         return () => `canvas-command-${value++}`
@@ -392,6 +403,7 @@ describe('useComposeEditorController', () => {
     expect(editorRuntime.document.canvas.grid.stepX).toBe(16)
     expect(editorRuntime.document.canvas.smartSnap.nodes).toBe(false)
     expect(editorRuntime.document.canvas.guides).toEqual([])
+    expect(editorRuntime.document.output).toEqual(createDefaultOutputSettings())
     toolbar.rerender(result.current.stageToolbar)
     expect(screen.queryByRole('dialog', { name: '画布网格与吸附设置' }))
       .not.toBeInTheDocument()
@@ -402,6 +414,7 @@ describe('useComposeEditorController', () => {
       { id: 'guide', axis: 'x', position: 32 },
       { id: 'guide-y', axis: 'y', position: -16 },
     ])
+    expect(editorRuntime.document.output).toEqual(createDefaultOutputSettings())
   })
 
   it('OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 应用或取消画布设置', () => {
@@ -422,6 +435,63 @@ describe('useComposeEditorController', () => {
     expect(editorRuntime.entries).toHaveLength(1)
   })
 
+  it('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择常见桌面尺寸', async () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+      idFactory: (() => {
+        let value = 0
+        return () => `output-command-${value++}`
+      })(),
+    }))
+    const inspector = render(result.current.inspectorPanel)
+
+    act(() => result.current.stageProps.onOutputSelect?.())
+    inspector.rerender(result.current.inspectorPanel)
+
+    expect(screen.getByRole('region', { name: '画布属性' })).toBeInTheDocument()
+    expect(result.current.stageProps.outputSelected).toBe(true)
+    expect(result.current.selectedIds).toEqual([])
+
+    const beforePreset = editorRuntime.entries.length
+    fireEvent.change(screen.getByRole('combobox', { name: '常见 PC 尺寸' }), {
+      target: { value: '1920x1080' },
+    })
+    expect(editorRuntime.entries).toHaveLength(beforePreset + 1)
+    expect(editorRuntime.document.output).toEqual({
+      width: 1920,
+      height: 1080,
+      backgroundColor: 'transparent',
+    })
+
+    inspector.rerender(result.current.inspectorPanel)
+    fireEvent.change(screen.getByRole('spinbutton', { name: '输出宽度' }), {
+      target: { value: '0' },
+    })
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '输出宽度' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('输出尺寸必须是正数')
+    expect(editorRuntime.document.output.width).toBe(1920)
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: '输出宽度' }), {
+      target: { value: '1600' },
+    })
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '输出宽度' }))
+    expect(editorRuntime.document.output.width).toBe(1600)
+    await waitFor(() => expect(result.current.document.output.width).toBe(1600))
+    inspector.rerender(result.current.inspectorPanel)
+
+    act(() => editorRuntime.undo())
+    expect(editorRuntime.document.output.width).toBe(1920)
+    await waitFor(() => expect(result.current.document.output.width).toBe(1920))
+    inspector.rerender(result.current.inspectorPanel)
+    await waitFor(() => {
+      expect(screen.getByRole('spinbutton', { name: '输出宽度' })).toHaveValue(1920)
+    })
+    expect(result.current.stageProps.outputSelected).toBe(true)
+  })
+
+  // OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使用任意根工作区
   it('maps a cross-parent SceneTree move to a geometry-preserving transaction', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
@@ -445,6 +515,63 @@ describe('useComposeEditorController', () => {
     expect(editorRuntime.document.nodes.title?.transform).toEqual(
       expect.objectContaining({ x: 30, y: 30 }),
     )
+
+    act(() => {
+      result.current.sceneTreeProps.onOperation?.({
+        type: 'move',
+        nodeIds: ['title'],
+        parentId: null,
+        index: 1,
+      })
+    })
+    expect(editorRuntime.document.rootIds).toEqual(['frame', 'title'])
+    expect(editorRuntime.document.nodes.title?.transform).toEqual(
+      expect.objectContaining({ x: 70, y: 60 }),
+    )
+    expect(result.current.sceneTreeProps.nodes[1]).toMatchObject({
+      id: 'title',
+      label: 'Title',
+      canHaveChildren: false,
+    })
+  })
+
+  it('OpenSpec: editor-workspace-layout / Frame presets 与结构节点 Inspector / 在根和 Frame 内新增 Frame', () => {
+    const editorRuntime = runtime()
+    const ids = ['root-frame', 'create-root', 'nested-frame', 'create-nested']
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+      idFactory: () => ids.shift() ?? 'unexpected',
+    }))
+
+    act(() => {
+      result.current.sceneTreeProps.onOperation?.({
+        type: 'create',
+        parentId: null,
+        index: 1,
+      })
+    })
+    expect(editorRuntime.document.rootIds).toEqual(['frame', 'root-frame'])
+    expect(editorRuntime.document.nodes['root-frame']).toMatchObject({
+      kind: 'frame',
+      clipContent: true,
+    })
+
+    act(() => {
+      result.current.sceneTreeProps.onOperation?.({
+        type: 'create',
+        parentId: 'frame',
+        index: 1,
+      })
+    })
+    expect(editorRuntime.document.nodes.frame).toMatchObject({
+      childIds: ['group', 'nested-frame'],
+    })
+    expect(editorRuntime.document.nodes['nested-frame']).toMatchObject({
+      kind: 'frame',
+      clipContent: true,
+    })
+    expect(result.current.selectedIds).toEqual(['nested-frame'])
   })
 
   // OpenSpec: editor-workspace-layout / 单一事务观察边界 / 日志写入失败

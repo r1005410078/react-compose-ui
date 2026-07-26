@@ -130,40 +130,21 @@ MUST 保留 100 个可撤销事务，超限时提升最早可达文档为新基�
 
 ### Requirement: 内置文档命令
 
-core MUST 提供 Frame、Group、Component 创建、删除、复制、重命名、重排、移动、显隐、锁定、
-属性路径更新/重置、transform 更新、group/ungroup、canvas configure、guide create/move/delete
-与 batch 命令。命令 MUST 复用同一文档校验与事务边界；无效目标或配置 MUST 返回 noop 或带稳定
-原因的 rejection。
+core MUST 提供 `output.configure`、统一 `node.create`、delete、duplicate、move、rename、visibility、
+locked、props、style、transform、group、ungroup 与 batch 命令。`frame.create` MUST 被移除；
+所有结构命令 MUST 支持 Canvas 根和嵌套 Frame，并继续返回 committed/noop/rejected。
 
-#### Scenario: 原子创建和删除节点
+#### Scenario: 创建和移动任意根节点
 
-- **WHEN** 宿主创建合法 Frame 或在 Frame/Group 中创建 Component，再删除任意合法子树
-- **THEN** 节点表、rootIds/childIds 与事务 inverse 保持一致
+- **WHEN** node.create 或 node.move 把 Frame/Component 放入 Canvas 或合法 Frame
+- **THEN** rootIds/childIds 与节点表通过一个可逆事务同步更新
+- **AND** Component 父级、循环、锁定父级和非法索引被拒绝
 
-#### Scenario: 修改属性和变换
+#### Scenario: 配置输出
 
-- **WHEN** 宿主更新 Component JSON 属性路径或未锁定节点 transform
-- **THEN** 只修改指定目标并生成可逆 Patch
-- **AND** 非法 JSON、尺寸或锁定目标不会修改文档
-
-#### Scenario: 配置画布并撤销
-
-- **WHEN** 宿主派发合法 canvas.configure 后执行 undo/redo
-- **THEN** grid 与 smartSnap 先精确恢复旧值再恢复新值
-- **AND** 每次成功配置只形成一个可审计事务
-
-#### Scenario: 创建移动和删除辅助线
-
-- **WHEN** 宿主依次创建、移动、删除一个合法 guide
-- **THEN** 每个命令生成精确 forward/inverse Patch
-- **AND** 缺失、重复或非法 guide 请求被稳定拒绝且文档不变
-
-#### Scenario: 批处理命令
-
-- **WHEN** batch 中的全部子命令有效
-- **THEN** 它们作为一个可撤销事务提交
-- **WHEN** 任一子命令失败
-- **THEN** 整个 batch 被拒绝且文档不变
+- **WHEN** output.configure 提交合法、相同或非法输出设置
+- **THEN** 分别得到 committed、noop 或 rejected
+- **AND** committed 事务可撤销重做并具有 inverse Patch
 
 ### Requirement: 确定性运行时依赖
 
@@ -201,18 +182,16 @@ core MUST 提供 `node.style.set` 与 `node.style.reset` 内置同步命令。�
 
 ### Requirement: Stage Engine 空间命令规划
 
-`@compose-ui/stage-engine` MUST 基于当前只读文档创建 core 可执行的 transform、group、ungroup、
-reparent 与 duplicate 命令。空间规划 MUST 与 runtime dispatch 分离；只有 surface adapter
-应用 dispatch effect 时才允许进入正式事务。
+stage-engine MUST 为任意同父级顶层选择创建 Frame-backed group，为任意含孩子 Frame 创建
+ungroup，并为 Canvas 或 Frame 目标创建保持世界几何的 reparent/duplicate 命令。
 
-#### Scenario: 预览不进入事务
+#### Scenario: 在根级组合并解除 Frame
 
-- **WHEN** interaction controller 计算一次或多次节点变换 preview
-- **THEN** runtime 文档、事务历史和 operation event 保持不变
-- **AND** pointerup 的最终 dispatch effect 最多形成一个正式事务
+- **WHEN** 根级 Frame/Component 被组合后再解除
+- **THEN** group 创建透明且不裁剪的 Frame，ungroup 把孩子提升回 rootIds
+- **AND** 两次事务前后的孩子世界几何保持一致
 
-#### Scenario: SceneTree 与 Stage 共用规划
+#### Scenario: 拒绝无效组合
 
-- **WHEN** SceneTree 跨父级移动或 Stage 执行分组结构操作
-- **THEN** 两者使用同一 stage-engine 空间命令工厂
-- **AND** core 继续独立校验 payload、生成 Patch 与 inverse
+- **WHEN** 选择少于两个、不同父级、锁定或 Frame 没有孩子
+- **THEN** group/ungroup 被稳定拒绝且文档不变

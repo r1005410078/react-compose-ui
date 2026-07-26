@@ -15,6 +15,7 @@ export function createFramePreset(
     name: options.name ?? 'Frame',
     icon: <span aria-hidden="true">▱</span>,
     defaultSize: { ...defaultSize },
+    defaultClipContent: options.defaultClipContent ?? true,
     createDefaultStyle: () => cloneStyle(style),
   }
 }

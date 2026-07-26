@@ -26,7 +26,6 @@ export function DefaultEmptyInspector() {
 }
 
 type DefaultStageToolbarProps = {
-  readonly activeFrameId: string | null
   readonly canvasSettingsOpen: boolean
   readonly configureCanvas: (
     gridSnapEnabled: boolean,
@@ -40,6 +39,7 @@ type DefaultStageToolbarProps = {
   readonly fitSelection: () => void
   readonly nextId: () => string
   readonly selectedIds: readonly string[]
+  readonly selectedFrameId: string | null
   readonly setCanvasSettingsOpen: Dispatch<SetStateAction<boolean>>
   readonly setTool: (tool: StageTool) => void
   readonly setViewport: Dispatch<SetStateAction<StageViewport>>
@@ -50,7 +50,6 @@ type DefaultStageToolbarProps = {
 }
 
 export function DefaultStageToolbar({
-  activeFrameId,
   canvasSettingsOpen,
   configureCanvas,
   createFrame,
@@ -60,6 +59,7 @@ export function DefaultStageToolbar({
   fitSelection,
   nextId,
   selectedIds,
+  selectedFrameId,
   setCanvasSettingsOpen,
   setTool,
   setViewport,
@@ -106,7 +106,7 @@ export function DefaultStageToolbar({
         </button>
         <button
           {...titled(messages.fitFrame)}
-          disabled={!surfaceSize || !activeFrameId}
+          disabled={!surfaceSize || !selectedFrameId}
           type="button"
           onClick={fitFrame}
         >

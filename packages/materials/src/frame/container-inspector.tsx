@@ -17,7 +17,7 @@ interface ContainerInspectorDefaults {
   readonly style: NodeStyle
 }
 
-/** 创建绑定当前 Frame defaults 的 Frame/Group Inspector。 @internal */
+/** 创建绑定当前 Frame defaults 的 Frame Inspector。 @internal */
 export function createContainerInspector(
   frameDefaults: ContainerInspectorDefaults,
   idFactory: InspectorIdFactory,
@@ -25,31 +25,24 @@ export function createContainerInspector(
   return function ContainerInspector({ node, dispatch }) {
     const i18n = useMaterialInspectorI18n()
     const value = createContainerValue(node)
-    const defaultValue = node.kind === 'frame'
-      ? createContainerValue({
-          ...node,
-          name: frameDefaults.name,
-          transform: {
-            x: 0,
-            y: 0,
-            width: frameDefaults.size.width,
-            height: frameDefaults.size.height,
-            rotation: 0,
-          },
-          style: frameDefaults.style,
-        })
-      : createContainerValue({
-          ...node,
-          name: 'Group',
-          transform: { x: 0, y: 0, width: 320, height: 180, rotation: 0 },
-          style: undefined,
-        })
+    const defaultValue = createContainerValue({
+      ...node,
+      name: frameDefaults.name,
+      transform: {
+        x: 0,
+        y: 0,
+        width: frameDefaults.size.width,
+        height: frameDefaults.size.height,
+        rotation: 0,
+      },
+      style: frameDefaults.style,
+    })
     return (
       <PropertyPanel
         aria-label={i18n.propertiesLabel(node.name)}
         defaultValue={defaultValue}
         readOnly={node.locked}
-        schema={i18n.schemas.container}
+        schema={i18n.schemas.frame}
         value={value}
         onValueChange={(next) =>
           dispatchInspectorUpdate(

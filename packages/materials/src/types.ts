@@ -5,15 +5,14 @@ import type {
 } from '@compose-ui/component-registry'
 import type {
   ComposeFrameNode,
-  ComposeGroupNode,
   JsonObject,
   NodeStyle,
 } from '@compose-ui/core'
 import type { StageFramePreset } from '@compose-ui/stage'
 import type { ComponentType } from 'react'
 
-/** Frame/Group 共用 Container Inspector 支持的节点类型。 @internal */
-export type ContainerNode = ComposeFrameNode | ComposeGroupNode
+/** Container Inspector 支持的 Frame 节点类型。 @internal */
+export type ContainerNode = ComposeFrameNode
 
 /**
  * 单个基础 Component 物料的 factory 覆盖项。
@@ -53,6 +52,8 @@ export interface BasicMaterialFrameOptions {
   }
   /** 与内置值浅合并的默认通用 style。 */
   readonly defaultStyle?: NodeStyle
+  /** 新建 Frame 是否默认裁剪内容。 @defaultValue `true` */
+  readonly defaultClipContent?: boolean
 }
 
 /**
@@ -85,6 +86,6 @@ export interface BasicMaterials {
   readonly componentDefinitions: readonly ComponentDefinition[]
   /** 当前实例使用的 Frame presets。 */
   readonly framePresets: readonly StageFramePreset[]
-  /** 绑定当前 Frame 默认值的 Frame/Group Inspector。 */
+  /** 绑定当前 Frame 默认值的 Frame Inspector。 */
   readonly ContainerInspector: ComponentType<NodeInspectorProps<ContainerNode>>
 }

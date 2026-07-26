@@ -1,6 +1,7 @@
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   createTransactionRuntime,
   type ComposeDocument,
   type TransactionRuntime,
@@ -21,8 +22,9 @@ afterEach(cleanup)
 
 function document(): ComposeDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: createDefaultCanvasSettings(),
+    output: createDefaultOutputSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -33,6 +35,7 @@ function document(): ComposeDocument {
         locked: false,
         transform: { x: 0, y: 0, width: 500, height: 400, rotation: 0 },
         childIds: [],
+        clipContent: true,
       },
     },
   }
@@ -63,7 +66,6 @@ function Workspace({
 }) {
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const [selection, setSelection] = useState<readonly string[]>([])
-  const [activeFrame, setActiveFrame] = useState<string | null>('frame')
   return (
     <>
       <ComponentPalette
@@ -73,7 +75,6 @@ function Workspace({
         registry={definitions}
       />
       <Stage
-        activeFrameId={activeFrame}
         aria-label={`${prefix} Stage`}
         dispatch={runtime.dispatch}
         document={state.document}
@@ -84,12 +85,10 @@ function Workspace({
         selectedIds={selection}
         tool="select"
         viewport={{ x: 0, y: 0, zoom: 1 }}
-        onActiveFrameIdChange={setActiveFrame}
         onSelectedIdsChange={setSelection}
         onViewportChange={() => undefined}
       />
       <output aria-label={`${prefix} selection`}>{selection.join(',')}</output>
-      <output aria-label={`${prefix} active frame`}>{activeFrame}</output>
     </>
   )
 }
@@ -113,6 +112,7 @@ const framePreset: StageFramePreset = {
   label: 'Frame',
   name: 'Desktop Frame',
   defaultSize: { width: 300, height: 200 },
+  defaultClipContent: true,
   createDefaultStyle: () => ({
     backgroundColor: '#ffffff',
     borderRadius: 8,
@@ -164,7 +164,8 @@ describe('ComponentPalette', () => {
     expect(screen.getByLabelText('one selection')).toHaveTextContent('one-box')
   })
 
-  it('OpenSpec: stage / ComponentPalette 拖入 / 拖到 Frame 外', () => {
+  // OpenSpec: stage / ComponentPalette 拖入 / 拖到空白 Canvas
+  it('OpenSpec: stage / 多 Frame 与输出边界 / 编辑输出边界外的根组件', () => {
     const runtime = createTransactionRuntime({ document: document() })
     const events: string[] = []
     runtime.subscribeEvents((event) => events.push(event.type))
@@ -185,10 +186,64 @@ describe('ComponentPalette', () => {
       clientY: 10,
       pointerId: 1,
     })
-    fireEvent.pointerUp(window, { clientX: 700, clientY: 500, pointerId: 1 })
+    fireEvent.pointerUp(window, { clientX: 1500, clientY: 900, pointerId: 1 })
 
-    expect(runtime.entries).toHaveLength(1)
-    expect(events).toContain('rejected')
+    expect(runtime.entries).toHaveLength(2)
+    expect(runtime.document.rootIds).toEqual(['frame', 'one-box'])
+    expect(runtime.document.nodes['one-box']).toMatchObject({
+      kind: 'component',
+      transform: { x: 1450, y: 875 },
+    })
+    expect(screen.getByTestId('stage-node-one-box')).toBeInTheDocument()
+    expect(events).toContain('committed')
+  })
+
+  it('OpenSpec: stage / ComponentPalette 拖入 / 拖到嵌套 Frame', () => {
+    const base = document()
+    const rootFrame = base.nodes.frame
+    if (rootFrame?.kind !== 'frame') throw new Error('fixture frame is missing')
+    const nestedDocument: ComposeDocument = {
+      ...base,
+      nodes: {
+        ...base.nodes,
+        frame: {
+          ...rootFrame,
+          childIds: ['nested'],
+        },
+        nested: {
+          id: 'nested',
+          kind: 'frame',
+          name: 'Nested',
+          visible: true,
+          locked: false,
+          transform: { x: 100, y: 100, width: 200, height: 150, rotation: 0 },
+          childIds: [],
+          clipContent: false,
+        },
+      },
+    }
+    const runtime = createTransactionRuntime({ document: nestedDocument })
+    const controller = createStageInteractionController()
+    render(
+      <Workspace
+        controller={controller}
+        prefix="one"
+        registry={registry()}
+        runtime={runtime}
+      />,
+    )
+    rect(screen.getByRole('application', { name: 'one Stage' }))
+
+    const item = screen.getByRole('button', { name: 'Add 方块' })
+    fireEvent.pointerDown(item, { clientX: 10, clientY: 10, pointerId: 1 })
+    fireEvent.pointerUp(window, { clientX: 180, clientY: 160, pointerId: 1 })
+
+    expect(runtime.document.nodes.nested).toMatchObject({
+      childIds: ['one-box'],
+    })
+    expect(runtime.document.nodes['one-box']).toMatchObject({
+      transform: { x: 30, y: 35, width: 100, height: 50 },
+    })
   })
 
   it('OpenSpec: stage / ComponentPalette 拖入 / 隔离多个 Stage 实例', () => {
@@ -278,11 +333,11 @@ describe('ComponentPalette', () => {
     expect(runtime.document.nodes['one-box']).toMatchObject({
       kind: 'frame',
       name: 'Desktop Frame',
+      clipContent: true,
       style: { backgroundColor: '#ffffff', borderRadius: 8 },
       transform: { x: 500, y: 400, width: 300, height: 200, rotation: 0 },
     })
     expect(screen.getByLabelText('one selection')).toHaveTextContent('one-box')
-    expect(screen.getByLabelText('one active frame')).toHaveTextContent('one-box')
   })
 
   it('OpenSpec: stage / Frame Palette 拖入 / 键盘新增 Frame', () => {
@@ -306,8 +361,8 @@ describe('ComponentPalette', () => {
       kind: 'frame',
       // JSDOM 没有 ResizeObserver，键盘新增按 Stage 的 900×600 安全回退尺寸居中。
       transform: { x: 300, y: 200, width: 300, height: 200, rotation: 0 },
+      clipContent: true,
     })
-    expect(screen.getByLabelText('one active frame')).toHaveTextContent('one-box')
   })
 
   it('OpenSpec: stage-engine / 统一外部拖入 / factory 异常不泄漏到 Palette', () => {

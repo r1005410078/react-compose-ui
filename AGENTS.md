@@ -32,14 +32,15 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 
 - 当前仓库已经完成 Bun monorepo、包构建、测试、CI 和发布基座。
 - `app/` 提供集成示例和最小 E2E 操作演示，不是正式编辑器产品。
-- 目前尚未确定正式的文档 Schema、组件注册协议、拖拽系统、数据源协议和持久化接口。
+- 当前正式文档协议为仅支持 v3 的隐式 Canvas 根、统一 Frame 容器与 Component 叶节点；
+  数据源协议和持久化接口仍未确定。
 - 不要把示例应用中的临时状态或演示交互当成稳定公共 API。
 
 ## 架构边界
 
 - `@compose-ui/ui-context` 是跨包共享的 React 主题与国际化 Context，只依赖 React peer；
   第一方 React chrome 包可以依赖它，但必须在构建中外置，避免产生多份 Context 实例。
-- `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载未来的文档模型、命令及通用逻辑。
+- `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载 v3 文档模型、命令及通用逻辑。
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`。
 - `@compose-ui/scene-tree` 是独立受控 React 树组件，可依赖 `ui-context`，不得依赖 `core` 或 `editor`；
   `editor` 可以通过公共入口依赖并默认集成它。

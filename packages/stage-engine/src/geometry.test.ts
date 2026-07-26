@@ -1,5 +1,6 @@
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   type ComposeDocument,
 } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
@@ -74,8 +75,9 @@ const api = stagePackage as unknown as {
 
 function document(): ComposeDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: createDefaultCanvasSettings(),
+    output: createDefaultOutputSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -86,15 +88,17 @@ function document(): ComposeDocument {
         locked: false,
         transform: { x: -400, y: 120, width: 800, height: 600, rotation: 0 },
         childIds: ['group'],
+        clipContent: true,
       },
       group: {
         id: 'group',
-        kind: 'group',
-        name: 'Group',
+        kind: 'frame',
+        name: 'Nested Frame',
         visible: true,
         locked: false,
         transform: { x: 100, y: 80, width: 300, height: 200, rotation: 30 },
         childIds: ['component'],
+        clipContent: false,
       },
       component: {
         id: 'component',
@@ -188,6 +192,34 @@ describe('Stage geometry', () => {
       zoom: 1,
       disabled: true,
     }).point).toEqual({ x: 31, y: 29 })
+  })
+
+  it('OpenSpec: stage / 自适应网格标尺与世界原点 / 低缩放不改变原始吸附刻度', () => {
+    const canvas = createDefaultCanvasSettings()
+    const grid = {
+      stepX: canvas.grid.stepX,
+      stepY: canvas.grid.stepY,
+      offsetX: canvas.grid.offsetX,
+      offsetY: canvas.grid.offsetY,
+      enabled: true,
+    }
+
+    expect(api.snapTranslation(
+      { x: 0, y: 0, width: 20, height: 20 },
+      { x: 13, y: 27 },
+      [],
+      0.1,
+      false,
+      grid,
+    ).delta).toEqual({ x: 16, y: 24 })
+    expect(api.snapResizePoint({
+      point: { x: 13, y: 27 },
+      handle: 'se',
+      candidates: [],
+      canvas,
+      zoom: 0.1,
+    }).point).toEqual({ x: 16, y: 24 })
+    expect(stagePackage.snapValueToGrid(13, 8, 0)).toBe(16)
   })
 
   it('OpenSpec: stage / 无限画布滚动条 / 动态扩展无限范围', () => {

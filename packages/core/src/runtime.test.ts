@@ -49,7 +49,7 @@ type TestHandler = {
 }
 
 type TestDocument = {
-  schemaVersion: 2
+  schemaVersion: 3
   canvas: {
     grid: {
       stepX: number
@@ -62,15 +62,17 @@ type TestDocument = {
     smartSnap: { nodes: boolean; guides: boolean }
     guides: { id: string; axis: 'x' | 'y'; position: number }[]
   }
+  output: { width: number; height: number; backgroundColor: string }
   rootIds: string[]
   nodes: Record<string, {
     id: string
-    kind: 'frame' | 'group' | 'component'
+    kind: 'frame' | 'component'
     name: string
     visible: boolean
     locked: boolean
     transform: { x: number; y: number; width: number; height: number; rotation: number }
     childIds?: string[]
+    clipContent?: boolean
     componentType?: string
     props?: Record<string, unknown>
   }>
@@ -91,7 +93,7 @@ const createTransactionRuntime = (
 
 function documentFixture(): TestDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: {
       grid: {
         stepX: 8,
@@ -104,6 +106,7 @@ function documentFixture(): TestDocument {
       smartSnap: { nodes: true, guides: true },
       guides: [],
     },
+    output: { width: 1280, height: 720, backgroundColor: '#f8fafc' },
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -113,6 +116,7 @@ function documentFixture(): TestDocument {
         visible: true,
         locked: false,
         transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0 },
+        clipContent: true,
         childIds: ['a', 'b'],
       },
       a: {
@@ -497,7 +501,7 @@ describe('TransactionRuntime', () => {
     expect(runtime.entries).toEqual([{ id: expect.any(String), label: '载入页面' }])
 
     const invalid = documentFixture()
-    invalid.rootIds = ['a']
+    invalid.rootIds = ['missing']
     expect(runtime.reset(invalid)).toMatchObject({ status: 'rejected' })
     expect(runtime.document.nodes.a.name).toBe('Reset')
   })

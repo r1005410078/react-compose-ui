@@ -7,7 +7,7 @@ import type {
   JsonObject,
   TransactionRuntime,
 } from './index'
-import { createDefaultCanvasSettings } from './index'
+import { createDefaultCanvasSettings, createDefaultOutputSettings } from './index'
 
 const createTransactionRuntime = (
   core as unknown as {
@@ -17,8 +17,9 @@ const createTransactionRuntime = (
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: createDefaultCanvasSettings(),
+    output: createDefaultOutputSettings(),
     rootIds: ['frame'],
     nodes: {
       frame: {
@@ -28,6 +29,7 @@ function fixture(): ComposeDocument {
         visible: true,
         locked: false,
         transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0 },
+        clipContent: true,
         childIds: ['a', 'b', 'group'],
       },
       a: {
@@ -52,11 +54,12 @@ function fixture(): ComposeDocument {
       },
       group: {
         id: 'group',
-        kind: 'group',
-        name: 'Existing Group',
+        kind: 'frame',
+        name: 'Existing Frame',
         visible: true,
         locked: false,
         transform: { x: 50, y: 200, width: 400, height: 200, rotation: 0 },
+        clipContent: false,
         childIds: ['c'],
       },
       c: {
@@ -139,6 +142,29 @@ describe('built-in document commands', () => {
     expect(runtime.document.canvas).toEqual(createDefaultCanvasSettings())
     runtime.redo()
     expect(runtime.document.canvas.grid.stepX).toBe(16)
+  })
+
+  it('OpenSpec: command-transaction / 内置文档命令 / 配置输出', () => {
+    const runtime = createTransactionRuntime({ document: fixture() })
+
+    expect(dispatch(runtime, 'output.configure', {
+      width: 1920,
+      height: 1080,
+      backgroundColor: '#101820',
+    }).status).toBe('committed')
+    expect(runtime.document.output).toEqual({
+      width: 1920,
+      height: 1080,
+      backgroundColor: '#101820',
+    })
+    expect(dispatch(runtime, 'output.configure', { ...runtime.document.output }).status).toBe('noop')
+    expect(dispatch(runtime, 'output.configure', {
+      width: 0,
+      height: 1080,
+      backgroundColor: '#101820',
+    }).status).toBe('rejected')
+    runtime.undo()
+    expect(runtime.document.output).toEqual(createDefaultOutputSettings())
   })
 
   it('OpenSpec: command-transaction / 内置文档命令 / 创建移动和删除辅助线', () => {
@@ -299,6 +325,7 @@ describe('built-in document commands', () => {
     })
   })
 
+  // OpenSpec: command-transaction / 内置文档命令 / 创建和移动任意根节点
   it('OpenSpec: command-transaction / 内置文档命令 / 原子创建和删除节点', () => {
     const runtime = createTransactionRuntime({ document: fixture() })
     const frame = {
@@ -308,17 +335,38 @@ describe('built-in document commands', () => {
       visible: true,
       locked: false,
       transform: { x: 2200, y: 0, width: 1280, height: 720, rotation: 0 },
+      clipContent: true,
       childIds: [],
     }
 
-    expect(dispatch(runtime, 'frame.create', { node: frame, index: 1 }).status).toBe('committed')
+    expect(dispatch(runtime, 'node.create', {
+      node: frame,
+      parentId: null,
+      index: 1,
+    }).status).toBe('committed')
     expect(dispatch(runtime, 'node.create', {
       node: component('new'),
       parentId: 'frame',
       index: 1,
     }).status).toBe('committed')
-    expect(runtime.document.rootIds).toEqual(['frame', 'frame-2'])
-    expect(containerChildIds(runtime, 'frame')).toEqual(['a', 'new', 'b', 'group'])
+    expect(dispatch(runtime, 'node.create', {
+      node: component('root-component'),
+      parentId: null,
+      index: 2,
+    }).status).toBe('committed')
+    expect(dispatch(runtime, 'node.create', {
+      node: { ...frame, id: 'nested-frame', name: 'Nested' },
+      parentId: 'frame',
+      index: 2,
+    }).status).toBe('committed')
+    expect(runtime.document.rootIds).toEqual(['frame', 'frame-2', 'root-component'])
+    expect(containerChildIds(runtime, 'frame')).toEqual([
+      'a',
+      'new',
+      'nested-frame',
+      'b',
+      'group',
+    ])
 
     expect(dispatch(runtime, 'node.delete', { nodeIds: ['group'] }).status).toBe('committed')
     expect(runtime.document.nodes.group).toBeUndefined()
@@ -344,10 +392,10 @@ describe('built-in document commands', () => {
         'a-copy': { ...component('a-copy', 'A copy'), props: { text: 'A' } },
       },
       rootIds: ['a-copy'],
-      parentId: 'frame',
-      index: 0,
+      parentId: null,
+      index: 1,
     }).status).toBe('committed')
-    expect(containerChildIds(runtime, 'frame')[0]).toBe('a-copy')
+    expect(runtime.document.rootIds[1]).toBe('a-copy')
     expect(runtime.document.nodes['a-copy']).toMatchObject({ name: 'A copy' })
 
     expect(dispatch(runtime, 'node.move', {
@@ -385,6 +433,15 @@ describe('built-in document commands', () => {
       height: 160,
       rotation: 30,
     })
+    expect(dispatch(runtime, 'frame.clip-content.set', {
+      frameId: 'frame',
+      clipContent: false,
+    }).status).toBe('committed')
+    expect(runtime.document.nodes.frame).toMatchObject({ clipContent: false })
+    expect(dispatch(runtime, 'frame.clip-content.set', {
+      frameId: 'frame',
+      clipContent: false,
+    }).status).toBe('noop')
 
     expect(dispatch(runtime, 'node.set-locked', {
       nodeIds: ['a'],
@@ -400,38 +457,53 @@ describe('built-in document commands', () => {
     })
   })
 
-  it('OpenSpec: command-transaction / 内置文档命令 / 分组和取消分组', () => {
+  it('OpenSpec: command-transaction / Stage Engine 空间命令规划 / 根级分组和取消分组', () => {
     const runtime = createTransactionRuntime({ document: fixture() })
-    const group = {
+    expect(dispatch(runtime, 'node.move', {
+      nodeIds: ['a', 'b'],
+      parentId: null,
+      index: 1,
+    }).status).toBe('committed')
+    const frame = {
       id: 'selection-group',
-      kind: 'group',
+      kind: 'frame',
       name: 'Selection',
       visible: true,
       locked: false,
       transform: { x: 10, y: 20, width: 290, height: 50, rotation: 0 },
+      clipContent: false,
+      style: {
+        backgroundColor: 'transparent',
+        borderColor: 'transparent',
+        borderWidth: 0,
+      },
       childIds: ['a', 'b'],
     }
 
     expect(dispatch(runtime, 'node.group', {
-      group,
+      frame,
       nodeIds: ['a', 'b'],
       childTransforms: {
         a: { x: 0, y: 0, width: 100, height: 50, rotation: 0 },
         b: { x: 190, y: 0, width: 100, height: 50, rotation: 0 },
       },
     }).status).toBe('committed')
-    expect(containerChildIds(runtime, 'frame')).toEqual(['selection-group', 'group'])
-    expect(runtime.document.nodes['selection-group']).toMatchObject({ childIds: ['a', 'b'] })
+    expect(runtime.document.rootIds).toEqual(['frame', 'selection-group'])
+    expect(runtime.document.nodes['selection-group']).toMatchObject({
+      kind: 'frame',
+      clipContent: false,
+      childIds: ['a', 'b'],
+    })
 
     expect(dispatch(runtime, 'node.ungroup', {
-      groupId: 'selection-group',
+      frameId: 'selection-group',
       childTransforms: {
         a: { x: 10, y: 20, width: 100, height: 50, rotation: 0 },
         b: { x: 200, y: 20, width: 100, height: 50, rotation: 0 },
       },
     }).status).toBe('committed')
     expect(runtime.document.nodes['selection-group']).toBeUndefined()
-    expect(containerChildIds(runtime, 'frame')).toEqual(['a', 'b', 'group'])
+    expect(runtime.document.rootIds).toEqual(['frame', 'a', 'b'])
   })
 
   it('OpenSpec: command-transaction / 内置文档命令 / 批处理命令', () => {

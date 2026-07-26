@@ -7,6 +7,7 @@ import {
 import {
   createDuplicateCommand,
   createReparentCommand,
+  createStageSceneIndex,
   createStageInteractionController,
   getNodeParentId,
   getNodeWorldBounds,
@@ -32,7 +33,6 @@ import type {
   CommandDispatchResult,
   ComposeDocument,
   ComposeFrameNode,
-  ComposeGroupNode,
   ComposeNode,
   EditorCommand,
   EditorTransaction,
@@ -58,6 +58,9 @@ import {
   DefaultEmptyInspector,
   DefaultStageToolbar,
 } from './default-workspace-content'
+import { CanvasInspector } from './canvas-inspector'
+
+type InspectionTarget = 'nodes' | 'output' | null
 
 function defaultIdFactory() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -76,13 +79,6 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
       })
     }
   }, [controller])
-}
-
-function firstVisibleFrame(document: ComposeDocument) {
-  return document.rootIds.find((id) => {
-    const node = document.nodes[id]
-    return node?.kind === 'frame' && node.visible
-  }) ?? null
 }
 
 function sceneNode(
@@ -124,7 +120,7 @@ function deriveSceneNodes(
 ): readonly SceneTreeNode[] {
   return document.rootIds
     .map((id) => document.nodes[id])
-    .filter((node): node is ComposeFrameNode => node?.kind === 'frame')
+    .filter((node): node is ComposeNode => node !== undefined)
     .map((node) => sceneNode(document, registry, node))
 }
 
@@ -139,7 +135,7 @@ function validSelection(document: ComposeDocument, ids: readonly string[]) {
 function validExpanded(document: ComposeDocument, ids: readonly string[]) {
   return unique(ids).filter((id) => {
     const node = document.nodes[id]
-    return node?.kind === 'frame' || node?.kind === 'group'
+    return node?.kind === 'frame'
   })
 }
 
@@ -178,16 +174,14 @@ export interface UseComposeEditorControllerOptions {
   readonly registry: ComponentRegistry
   /** 显示在组件 definitions 之前的根级 Frame 预设。 */
   readonly framePresets?: readonly StageFramePreset[]
-  /** Frame 或 Group 单选时使用的公共容器 Inspector。 */
+  /** Frame 单选时使用的公共容器 Inspector。 */
   readonly containerInspector?: ComponentType<
-    NodeInspectorProps<ComposeFrameNode | ComposeGroupNode>
+    NodeInspectorProps<ComposeFrameNode>
   >
   /** 初始选择；不会写入文档历史。 */
   readonly initialSelection?: readonly string[]
   /** 初始场景树展开项；不会写入文档历史。 */
   readonly initialExpandedIds?: readonly string[]
-  /** 初始活动 Frame；省略时使用第一个可见 Frame。 */
-  readonly initialActiveFrameId?: string | null
   /** 初始无限 Stage 视口。 @defaultValue `{ x: 80, y: 64, zoom: 1 }` */
   readonly initialViewport?: StageViewport
   /** 初始 Stage 工具。 @defaultValue `"select"` */
@@ -220,8 +214,6 @@ export interface ComposeEditorController {
   readonly selectedIds: readonly string[]
   /** 当前有效容器展开项。 */
   readonly expandedIds: readonly string[]
-  /** 当前有效且可见的活动 Frame。 */
-  readonly activeFrameId: string | null
   /** 当前 Stage 视口会话状态。 */
   readonly viewport: StageViewport
   /** 当前选择或平移工具。 */
@@ -232,8 +224,6 @@ export interface ComposeEditorController {
   readonly setSelectedIds: (ids: readonly string[]) => void
   /** 替换场景树展开项。 */
   readonly setExpandedIds: (ids: readonly string[]) => void
-  /** 替换活动 Frame。 */
-  readonly setActiveFrameId: (id: string | null) => void
   /** 替换 Stage 视口。 */
   readonly setViewport: (viewport: StageViewport) => void
   /** 替换 Stage 工具。 */
@@ -287,7 +277,6 @@ export function useComposeEditorController({
   containerInspector: ContainerInspector,
   initialSelection = [],
   initialExpandedIds = [],
-  initialActiveFrameId,
   initialViewport = { x: 80, y: 64, zoom: 1 },
   initialTool = 'select',
   commandPresets,
@@ -302,12 +291,10 @@ export function useComposeEditorController({
   const document = snapshot.document
   const [selectedIds, setSelectedIdsState] = useState<readonly string[]>(() =>
     validSelection(document, initialSelection))
+  const [inspectionTarget, setInspectionTarget] = useState<InspectionTarget>(() =>
+    validSelection(document, initialSelection).length > 0 ? 'nodes' : null)
   const [expandedIds, setExpandedIdsState] = useState<readonly string[]>(() =>
     validExpanded(document, initialExpandedIds))
-  const [activeFrameId, setActiveFrameIdState] = useState<string | null>(() =>
-    initialActiveFrameId === undefined
-      ? firstVisibleFrame(document)
-      : initialActiveFrameId)
   const [viewport, setViewport] = useState<StageViewport>(initialViewport)
   const [tool, setTool] = useState<StageTool>(initialTool)
   const [surfaceSize, setSurfaceSize] = useState<{
@@ -332,13 +319,6 @@ export function useComposeEditorController({
     const cleanupSession = (nextDocument: ComposeDocument) => {
       setSelectedIdsState((current) => validSelection(nextDocument, current))
       setExpandedIdsState((current) => validExpanded(nextDocument, current))
-      setActiveFrameIdState((current) => {
-        if (current) {
-          const frame = nextDocument.nodes[current]
-          if (frame?.kind === 'frame' && frame.visible) return current
-        }
-        return firstVisibleFrame(nextDocument)
-      })
     }
     return runtime.subscribeEvents((event) => {
       if (event.type === 'committed') {
@@ -375,13 +355,20 @@ export function useComposeEditorController({
   }, [runtime])
 
   const setSelectedIds = useCallback((ids: readonly string[]) => {
-    setSelectedIdsState(unique(ids))
+    const next = unique(ids)
+    setSelectedIdsState(next)
+    setInspectionTarget(next.length > 0 ? 'nodes' : null)
   }, [])
+  const selectOutput = useCallback(() => {
+    setSelectedIdsState([])
+    setInspectionTarget('output')
+  }, [])
+  const resolvedInspectionTarget = inspectionTarget === 'nodes'
+    && selectedIds.length === 0
+    ? null
+    : inspectionTarget
   const setExpandedIds = useCallback((ids: readonly string[]) => {
     setExpandedIdsState(unique(ids))
-  }, [])
-  const setActiveFrameId = useCallback((id: string | null) => {
-    setActiveFrameIdState(id)
   }, [])
   const dispatch = useCallback(
     (command: EditorCommand) => runtime.dispatch(command),
@@ -394,59 +381,39 @@ export function useComposeEditorController({
     let nextSelection: readonly string[] | null = null
     if (operation.type === 'create') {
       const nodeId = nextId()
-      if (operation.parentId === null) {
-        command = {
-          id: nextId(),
-          type: 'frame.create',
-          payload: {
-            node: {
-              id: nodeId,
-              kind: 'frame',
-              name: 'Frame',
-              visible: true,
-              locked: false,
-              transform: {
-                x: 80 + document.rootIds.length * 40,
-                y: 80 + document.rootIds.length * 40,
-                width: 1280,
-                height: 720,
-                rotation: 0,
-              },
-              childIds: [],
-            },
-            index: operation.index,
+      const rootOffset = 80 + document.rootIds.length * 40
+      command = {
+        id: nextId(),
+        type: 'node.create',
+        payload: {
+          node: {
+            id: nodeId,
+            kind: 'frame',
+            name: 'Frame',
+            visible: true,
+            locked: false,
+            transform: operation.parentId === null
+              ? {
+                  x: rootOffset,
+                  y: rootOffset,
+                  width: 1280,
+                  height: 720,
+                  rotation: 0,
+                }
+              : { x: 0, y: 0, width: 320, height: 180, rotation: 0 },
+            childIds: [],
+            clipContent: true,
           },
-          meta: {
-            label: `Create Frame · 1280 × 720 at (`
-              + `${80 + document.rootIds.length * 40}, ${80 + document.rootIds.length * 40})`,
-            source: 'scene-tree',
-            targetIds: [nodeId],
-          },
-        }
-      }
-      else {
-        command = {
-          id: nextId(),
-          type: 'node.create',
-          payload: {
-            node: {
-              id: nodeId,
-              kind: 'group',
-              name: 'Group',
-              visible: true,
-              locked: false,
-              transform: { x: 0, y: 0, width: 320, height: 180, rotation: 0 },
-              childIds: [],
-            },
-            parentId: operation.parentId,
-            index: operation.index,
-          },
-          meta: {
-            label: 'Create Group · 320 × 180 at (0, 0)',
-            source: 'scene-tree',
-            targetIds: [nodeId],
-          },
-        }
+          parentId: operation.parentId,
+          index: operation.index,
+        },
+        meta: {
+          label: operation.parentId === null
+            ? `Create Frame · 1280 × 720 at (${rootOffset}, ${rootOffset})`
+            : 'Create Frame · 320 × 180 at (0, 0)',
+          source: 'scene-tree',
+          targetIds: [nodeId],
+        },
       }
       nextSelection = [nodeId]
     }
@@ -505,7 +472,7 @@ export function useComposeEditorController({
       const crossesParent = operation.nodeIds.some(
         (id) => getNodeParentId(document, id) !== operation.parentId,
       )
-      command = crossesParent && operation.parentId !== null
+      command = crossesParent
         ? createReparentCommand(
             document,
             operation.nodeIds,
@@ -552,8 +519,8 @@ export function useComposeEditorController({
     }
     if (!command) return
     const result = runtime.dispatch(command)
-    if (result.status === 'committed' && nextSelection) setSelectedIdsState(nextSelection)
-  }, [document, nextId, runtime])
+    if (result.status === 'committed' && nextSelection) setSelectedIds(nextSelection)
+  }, [document, nextId, runtime, setSelectedIds])
 
   const sceneTreeProps = useMemo<SceneTreeProps>(() => ({
     nodes: deriveSceneNodes(document, registry),
@@ -582,8 +549,8 @@ export function useComposeEditorController({
     onToolChange: setTool,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
-    activeFrameId,
-    onActiveFrameIdChange: setActiveFrameId,
+    outputSelected: resolvedInspectionTarget === 'output',
+    onOutputSelect: selectOutput,
     onSurfaceSizeChange: setSurfaceSize,
     interactionController,
     framePresets,
@@ -595,9 +562,9 @@ export function useComposeEditorController({
     viewport,
     tool,
     selectedIds,
+    resolvedInspectionTarget,
     setSelectedIds,
-    activeFrameId,
-    setActiveFrameId,
+    selectOutput,
     setSurfaceSize,
     interactionController,
     framePresets,
@@ -631,13 +598,22 @@ export function useComposeEditorController({
     })
   }, [document, surfaceSize])
   const fitFrame = useCallback(() => {
-    if (activeFrameId) fitBounds([activeFrameId])
-  }, [activeFrameId, fitBounds])
+    const index = createStageSceneIndex(document)
+    const frameId = selectedIds.length === 1
+      && document.nodes[selectedIds[0]!]?.kind === 'frame'
+      ? selectedIds[0]!
+      : index.commonFrameForSelection(selectedIds)
+    if (frameId) fitBounds([frameId])
+  }, [document, fitBounds, selectedIds])
   const fitSelection = useCallback(() => fitBounds(selectedIds), [fitBounds, selectedIds])
 
   const selectedNode = selectedIds.length === 1
     ? document.nodes[selectedIds[0]!]
     : undefined
+  const selectedFrameId = selectedIds.length === 1
+    && selectedNode?.kind === 'frame'
+    ? selectedNode.id
+    : createStageSceneIndex(document).commonFrameForSelection(selectedIds)
   const smartSnapEnabled = document.canvas.smartSnap.nodes
     || document.canvas.smartSnap.guides
   const configureCanvas = (
@@ -670,13 +646,11 @@ export function useComposeEditorController({
     history: runtime,
     selectedIds,
     expandedIds,
-    activeFrameId,
     viewport,
     tool,
     interactionController,
     setSelectedIds,
     setExpandedIds,
-    setActiveFrameId,
     setViewport,
     setTool,
     dispatch,
@@ -690,7 +664,18 @@ export function useComposeEditorController({
       />
     ),
     stage: <Stage {...stageProps} />,
-    inspectorPanel: selectedNode?.kind === 'component' ? (
+    inspectorPanel: resolvedInspectionTarget === 'output' ? (
+      <CanvasInspector
+        key={[
+          document.output.width,
+          document.output.height,
+          document.output.backgroundColor,
+        ].join(':')}
+        dispatch={dispatch}
+        document={document}
+        idFactory={nextId}
+      />
+    ) : selectedNode?.kind === 'component' ? (
       <RegistryInspector
         dispatch={dispatch}
         node={selectedNode}
@@ -706,7 +691,6 @@ export function useComposeEditorController({
     ),
     stageToolbar: (
       <DefaultStageToolbar
-        activeFrameId={activeFrameId}
         canvasSettingsOpen={canvasSettingsOpen}
         configureCanvas={configureCanvas}
         createFrame={createFrame}
@@ -716,6 +700,7 @@ export function useComposeEditorController({
         fitSelection={fitSelection}
         nextId={nextId}
         selectedIds={selectedIds}
+        selectedFrameId={selectedFrameId}
         setCanvasSettingsOpen={setCanvasSettingsOpen}
         setTool={setTool}
         setViewport={setViewport}

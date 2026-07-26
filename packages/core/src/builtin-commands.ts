@@ -2,8 +2,9 @@ import type {
   ComposeCanvasGuide,
   ComposeCanvasSettings,
   ComposeDocument,
-  ComposeGroupNode,
+  ComposeFrameNode,
   ComposeNode,
+  ComposeOutputSettings,
   JsonObject,
   JsonValue,
   NodeShadow,
@@ -31,10 +32,10 @@ import type {
  */
 export const BUILTIN_COMMAND_TYPES = {
   configureCanvas: 'canvas.configure',
+  configureOutput: 'output.configure',
   createCanvasGuide: 'canvas.guide.create',
   moveCanvasGuide: 'canvas.guide.move',
   deleteCanvasGuide: 'canvas.guide.delete',
-  createFrame: 'frame.create',
   createNode: 'node.create',
   deleteNode: 'node.delete',
   duplicateNode: 'node.duplicate',
@@ -47,6 +48,7 @@ export const BUILTIN_COMMAND_TYPES = {
   setStyle: 'node.style.set',
   resetStyle: 'node.style.reset',
   setTransform: 'node.transform.set',
+  setFrameClipContent: 'frame.clip-content.set',
   groupNode: 'node.group',
   ungroupNode: 'node.ungroup',
   batch: 'transaction.batch',
@@ -93,7 +95,7 @@ function asIndex(value: unknown, fallback: number): number | null {
 
 function asNode(value: unknown): ComposeNode | null {
   if (!isRecord(value) || typeof value.id !== 'string') return null
-  if (value.kind !== 'frame' && value.kind !== 'group' && value.kind !== 'component') return null
+  if (value.kind !== 'frame' && value.kind !== 'component') return null
   return value as unknown as ComposeNode
 }
 
@@ -159,6 +161,45 @@ function asCanvasGuide(value: unknown): ComposeCanvasGuide | null {
     id: value.id,
     axis: value.axis,
     position: value.position,
+  }
+}
+
+function asOutputSettings(value: unknown): ComposeOutputSettings | null {
+  if (
+    !isRecord(value)
+    || typeof value.width !== 'number'
+    || !Number.isFinite(value.width)
+    || value.width <= 0
+    || typeof value.height !== 'number'
+    || !Number.isFinite(value.height)
+    || value.height <= 0
+    || typeof value.backgroundColor !== 'string'
+    || value.backgroundColor.trim().length === 0
+  ) {
+    return null
+  }
+  return {
+    width: value.width,
+    height: value.height,
+    backgroundColor: value.backgroundColor,
+  }
+}
+
+function configureOutputHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.configureOutput,
+    execute(document, command) {
+      const output = asOutputSettings(command.payload)
+      if (!output) return issue('output.invalid-settings', 'output.configure 参数无效')
+      if (sameValue(document.output, output)) {
+        return { status: 'noop', reason: '输出设置没有变化' }
+      }
+      return patches([{
+        op: 'set',
+        path: ['output'],
+        value: output as unknown as JsonValue,
+      }])
+    },
   }
 }
 
@@ -309,43 +350,28 @@ function validateTargets(
   return issues
 }
 
-function createFrameHandler(): CommandHandler {
-  return {
-    type: BUILTIN_COMMAND_TYPES.createFrame,
-    execute(document, command) {
-      const node = asNode(valueAt(command.payload, 'node'))
-      if (!node || node.kind !== 'frame') return issue('frame.invalid', 'frame.create 需要 Frame node')
-      if (document.nodes[node.id]) return issue('node.duplicate-id', `节点 ${node.id} 已存在`)
-      const index = asIndex(valueAt(command.payload, 'index'), document.rootIds.length)
-      if (index === null || index < 0 || index > document.rootIds.length) {
-        return issue('node.invalid-index', 'Frame 插入位置无效')
-      }
-      return patches([
-        {
-          op: 'set',
-          path: ['nodes', node.id],
-          value: node as unknown as JsonValue,
-        },
-        { op: 'insert', path: ['rootIds'], index, value: node.id },
-      ])
-    },
-  }
-}
-
 function createNodeHandler(): CommandHandler {
   return {
     type: BUILTIN_COMMAND_TYPES.createNode,
     execute(document, command) {
       const node = asNode(valueAt(command.payload, 'node'))
-      const parentId = valueAt(command.payload, 'parentId')
-      if (!node || node.kind === 'frame') return issue('node.invalid', 'node.create 需要 Group 或 Component')
-      if (typeof parentId !== 'string') return issue('node.invalid-parent', '普通节点必须属于 Frame 或 Group')
+      const parentValue = valueAt(command.payload, 'parentId')
+      const parentId = parentValue === null || typeof parentValue === 'string'
+        ? parentValue
+        : undefined
+      if (!node) return issue('node.invalid', 'node.create 需要 Frame 或 Component')
+      if (node.kind === 'frame' && typeof node.clipContent !== 'boolean') {
+        return issue('node.invalid', 'Frame clipContent 必须是 boolean')
+      }
+      if (parentId === undefined) return issue('node.invalid-parent', 'parentId 必须是 Frame ID 或 null')
       if (document.nodes[node.id]) return issue('node.duplicate-id', `节点 ${node.id} 已存在`)
-      const parent = document.nodes[parentId]
-      if (!parent || parent.kind === 'component') return issue('node.invalid-parent', `父节点 ${parentId} 无效`)
-      if (parent.locked) return issue('node.locked', `父节点 ${parentId} 已锁定`)
-      const index = asIndex(valueAt(command.payload, 'index'), parent.childIds.length)
-      if (index === null || index < 0 || index > parent.childIds.length) {
+      const target = childIds(document, parentId)
+      if (!target) return issue('node.invalid-parent', `父节点 ${String(parentId)} 无效`)
+      if (parentId !== null && document.nodes[parentId]?.locked) {
+        return issue('node.locked', `父节点 ${parentId} 已锁定`)
+      }
+      const index = asIndex(valueAt(command.payload, 'index'), target.length)
+      if (index === null || index < 0 || index > target.length) {
         return issue('node.invalid-index', '节点插入位置无效')
       }
       return patches([
@@ -356,7 +382,7 @@ function createNodeHandler(): CommandHandler {
         },
         {
           op: 'insert',
-          path: ['nodes', parentId, 'childIds'],
+          path: childPath(parentId),
           index,
           value: node.id,
         },
@@ -411,12 +437,6 @@ function moveNodeHandler(): CommandHandler {
       const moving = normalizeRoots(document, requested)
       const targetIssues = validateTargets(document, moving)
       if (targetIssues.length > 0) return { status: 'rejected', issues: targetIssues }
-      const movingNodes = moving.map((id) => document.nodes[id])
-      const framesOnly = movingNodes.every((node) => node.kind === 'frame')
-      const ordinaryOnly = movingNodes.every((node) => node.kind !== 'frame')
-      if ((!framesOnly && !ordinaryOnly) || (framesOnly && parentId !== null) || (ordinaryOnly && parentId === null)) {
-        return issue('node.invalid-parent', 'Frame 与普通节点不能混合或移动到错误层级')
-      }
       if (parentId !== null) {
         const parent = document.nodes[parentId]
         if (!parent || parent.kind === 'component') return issue('node.invalid-parent', `父节点 ${parentId} 无效`)
@@ -488,12 +508,6 @@ function duplicateNodeHandler(): CommandHandler {
       }
       const roots = rootIds.map((id) => asNode(nodeValues[id]))
       if (roots.some((node) => !node)) return issue('node.invalid-duplicate', '复制 rootIds 不完整')
-      if (parentId === null && roots.some((node) => node?.kind !== 'frame')) {
-        return issue('node.invalid-parent', '只有 Frame 可以复制到根级')
-      }
-      if (parentId !== null && roots.some((node) => node?.kind === 'frame')) {
-        return issue('node.invalid-parent', 'Frame 不能复制到普通父节点')
-      }
       const target = childIds(document, parentId)
       if (!target) return issue('node.invalid-parent', '复制目标父节点无效')
       if (parentId !== null && document.nodes[parentId]?.locked) {
@@ -713,56 +727,82 @@ function transformHandler(): CommandHandler {
   }
 }
 
+function frameClipContentHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.setFrameClipContent,
+    execute(document, command) {
+      const frameId = valueAt(command.payload, 'frameId')
+      const clipContent = valueAt(command.payload, 'clipContent')
+      if (typeof frameId !== 'string' || typeof clipContent !== 'boolean') {
+        return issue('frame.invalid-clip', 'frame.clip-content.set 参数无效')
+      }
+      const frame = document.nodes[frameId]
+      if (!frame || frame.kind !== 'frame') {
+        return issue('frame.invalid', `Frame ${frameId} 不存在`)
+      }
+      if (frame.locked) return issue('node.locked', `节点 ${frameId} 已锁定`)
+      if (frame.clipContent === clipContent) {
+        return { status: 'noop', reason: 'Frame 裁剪设置没有变化' }
+      }
+      return patches([{
+        op: 'set',
+        path: ['nodes', frameId, 'clipContent'],
+        value: clipContent,
+      }])
+    },
+  }
+}
+
 function groupHandler(): CommandHandler {
   return {
     type: BUILTIN_COMMAND_TYPES.groupNode,
     execute(document, command) {
-      const groupValue = asNode(valueAt(command.payload, 'group'))
+      const frameValue = asNode(valueAt(command.payload, 'frame'))
       const requested = asStringArray(valueAt(command.payload, 'nodeIds'))
       const transformValues = valueAt(command.payload, 'childTransforms')
       if (
-        !groupValue
-        || groupValue.kind !== 'group'
+        !frameValue
+        || frameValue.kind !== 'frame'
         || !requested
         || requested.length < 2
         || !isRecord(transformValues)
       ) {
-        return issue('group.invalid', 'node.group 参数无效')
+        return issue('node.invalid-group', 'node.group 参数无效')
       }
-      if (document.nodes[groupValue.id]) return issue('node.duplicate-id', `节点 ${groupValue.id} 已存在`)
+      if (document.nodes[frameValue.id]) return issue('node.duplicate-id', `节点 ${frameValue.id} 已存在`)
       const nodes = normalizeRoots(document, requested)
-      if (nodes.length !== requested.length || nodes.some((id) => document.nodes[id]?.kind === 'frame')) {
-        return issue('group.invalid-targets', 'Group 只能包含同级非 Frame 节点')
+      if (nodes.length !== requested.length) {
+        return issue('node.invalid-targets', '组合目标必须是顶层选择')
       }
       const targetIssues = validateTargets(document, nodes)
       if (targetIssues.length > 0) return { status: 'rejected', issues: targetIssues }
       const locations = buildLocations(document)
       const first = locations.get(nodes[0])
-      if (!first || first.parentId === null) return issue('group.invalid-parent', 'Group 必须位于 Frame 子树')
+      if (!first) return issue('node.invalid-parent', '组合目标没有场景位置')
       if (nodes.some((id) => locations.get(id)?.parentId !== first.parentId)) {
-        return issue('group.invalid-parent', '待分组节点必须具有同一直接父节点')
+        return issue('node.invalid-parent', '待组合节点必须具有同一直接父节点')
       }
-      const parent = document.nodes[first.parentId]
+      const parent = first.parentId ? document.nodes[first.parentId] : undefined
       if (parent?.locked) return issue('node.locked', `父节点 ${first.parentId} 已锁定`)
       const indexes = nodes.map((id) => locations.get(id)?.index ?? -1)
       const result: DocumentPatch[] = [...indexes]
         .sort((a, b) => b - a)
         .map((index) => ({ op: 'remove', path: [...childPath(first.parentId), index] }))
-      const group: ComposeGroupNode = { ...groupValue, childIds: nodes }
+      const frame: ComposeFrameNode = { ...frameValue, childIds: nodes }
       result.push({
         op: 'set',
-        path: ['nodes', group.id],
-        value: group as unknown as JsonValue,
+        path: ['nodes', frame.id],
+        value: frame as unknown as JsonValue,
       })
       result.push({
         op: 'insert',
         path: childPath(first.parentId),
         index: Math.min(...indexes),
-        value: group.id,
+        value: frame.id,
       })
       for (const nodeId of nodes) {
         const transform = asTransform(transformValues[nodeId])
-        if (!transform) return issue('group.invalid-transform', `节点 ${nodeId} 缺少局部 transform`)
+        if (!transform) return issue('node.invalid-transform', `节点 ${nodeId} 缺少局部 transform`)
         result.push({
           op: 'set',
           path: ['nodes', nodeId, 'transform'],
@@ -778,48 +818,49 @@ function ungroupHandler(): CommandHandler {
   return {
     type: BUILTIN_COMMAND_TYPES.ungroupNode,
     execute(document, command) {
-      const groupId = valueAt(command.payload, 'groupId')
+      const frameId = valueAt(command.payload, 'frameId')
       const transformValues = valueAt(command.payload, 'childTransforms')
-      if (typeof groupId !== 'string' || !isRecord(transformValues)) {
-        return issue('group.invalid', 'node.ungroup 参数无效')
+      if (typeof frameId !== 'string' || !isRecord(transformValues)) {
+        return issue('node.invalid-ungroup', 'node.ungroup 参数无效')
       }
-      const group = document.nodes[groupId]
-      if (!group || group.kind !== 'group') return issue('group.invalid', `Group ${groupId} 不存在`)
-      if (group.locked) return issue('node.locked', `Group ${groupId} 已锁定`)
-      const targetIssues = validateTargets(document, group.childIds)
+      const frame = document.nodes[frameId]
+      if (!frame || frame.kind !== 'frame') return issue('frame.invalid', `Frame ${frameId} 不存在`)
+      if (frame.locked) return issue('node.locked', `Frame ${frameId} 已锁定`)
+      if (frame.childIds.length === 0) return issue('frame.empty', `Frame ${frameId} 没有孩子`)
+      const targetIssues = validateTargets(document, frame.childIds)
       if (targetIssues.length > 0) return { status: 'rejected', issues: targetIssues }
-      const location = buildLocations(document).get(groupId)
-      if (!location || location.parentId === null) return issue('group.invalid-parent', 'Group 父节点无效')
-      if (document.nodes[location.parentId]?.locked) {
+      const location = buildLocations(document).get(frameId)
+      if (!location) return issue('node.invalid-parent', 'Frame 父节点无效')
+      if (location.parentId !== null && document.nodes[location.parentId]?.locked) {
         return issue('node.locked', `父节点 ${location.parentId} 已锁定`)
       }
       const result: DocumentPatch[] = [{
         op: 'remove',
         path: [...childPath(location.parentId), location.index],
       }]
-      group.childIds.forEach((nodeId, offset) => result.push({
+      frame.childIds.forEach((nodeId, offset) => result.push({
         op: 'insert',
         path: childPath(location.parentId),
         index: location.index + offset,
         value: nodeId,
       }))
-      for (const nodeId of group.childIds) {
+      for (const nodeId of frame.childIds) {
         const transform = asTransform(transformValues[nodeId])
-        if (!transform) return issue('group.invalid-transform', `节点 ${nodeId} 缺少父级 transform`)
+        if (!transform) return issue('node.invalid-transform', `节点 ${nodeId} 缺少父级 transform`)
         result.push({
           op: 'set',
           path: ['nodes', nodeId, 'transform'],
           value: transform as unknown as JsonValue,
         })
       }
-      result.push({ op: 'remove', path: ['nodes', groupId] })
+      result.push({ op: 'remove', path: ['nodes', frameId] })
       return patches(result)
     },
   }
 }
 
 /**
- * 创建 ComposeDocument v2 内置命令处理器。
+ * 创建 ComposeDocument v3 内置命令处理器。
  *
  * @returns 每次调用都返回没有可变共享状态的新 handler 列表。
  * @public
@@ -827,10 +868,10 @@ function ungroupHandler(): CommandHandler {
 export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
   return [
     configureCanvasHandler(),
+    configureOutputHandler(),
     createCanvasGuideHandler(),
     canvasGuideHandler(BUILTIN_COMMAND_TYPES.moveCanvasGuide),
     canvasGuideHandler(BUILTIN_COMMAND_TYPES.deleteCanvasGuide),
-    createFrameHandler(),
     createNodeHandler(),
     deleteNodeHandler(),
     duplicateNodeHandler(),
@@ -843,6 +884,7 @@ export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
     styleHandler(BUILTIN_COMMAND_TYPES.setStyle),
     styleHandler(BUILTIN_COMMAND_TYPES.resetStyle),
     transformHandler(),
+    frameClipContentHandler(),
     groupHandler(),
     ungroupHandler(),
   ]

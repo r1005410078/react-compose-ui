@@ -109,12 +109,35 @@
   stroke-width: 1;
 }
 
+.compose-stage__output-boundary {
+  cursor: default;
+  pointer-events: all;
+  stroke: none;
+}
+
+.compose-stage__output-edge,
+.compose-stage__world-origin {
+  pointer-events: none;
+}
+
+.compose-stage__output-edge {
+  vector-effect: non-scaling-stroke;
+  stroke: var(--compose-text-muted, #8e98a8);
+  stroke-opacity: 0.72;
+  stroke-width: 1;
+}
+
+.compose-stage__output-decoration.is-selected .compose-stage__output-edge {
+  stroke: var(--compose-accent, #3687ff);
+  stroke-opacity: 1;
+}
+
 .compose-stage__axis.is-x {
-  stroke: #e45757;
+  stroke: rgb(245 51 82 / 75%);
 }
 
 .compose-stage__axis.is-y {
-  stroke: #45b86b;
+  stroke: rgb(135 214 3 / 75%);
 }
 
 .compose-stage__scene {
@@ -130,17 +153,7 @@
 }
 
 .compose-stage__node.is-frame {
-  overflow: hidden;
   color: #172033;
-}
-
-.compose-stage__node.is-group {
-  cursor: move;
-  pointer-events: auto;
-}
-
-.compose-stage__node.is-group > .compose-stage__node {
-  pointer-events: auto;
 }
 
 .compose-stage__node.is-component {

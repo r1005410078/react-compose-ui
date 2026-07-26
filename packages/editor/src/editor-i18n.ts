@@ -40,7 +40,7 @@ const messages = {
       sceneGraph: '场景图',
       componentLibrary: '组件库',
       canvas: '画布',
-      inspector: '组件',
+      inspector: '属性',
       transactionLog: '日志',
       command: '命令',
       history: '历史',
@@ -88,6 +88,19 @@ const messages = {
       configureTransaction: '配置画布网格与吸附',
       configureAndClearTransaction: '配置画布并清空辅助线',
     },
+    canvasInspector: {
+      label: '画布属性',
+      title: '画布',
+      preset: '常见 PC 尺寸',
+      custom: '自定义',
+      width: '输出宽度',
+      height: '输出高度',
+      background: '输出背景',
+      invalidSize: '输出尺寸必须是正数。',
+      invalidBackground: '输出背景不能为空。',
+      rejected: '输出设置无效。',
+      configureTransaction: '配置画布输出',
+    },
   },
   'en-US': {
     settings: 'Settings',
@@ -119,7 +132,7 @@ const messages = {
       sceneGraph: 'Scene Graph',
       componentLibrary: 'Component Library',
       canvas: 'Canvas',
-      inspector: 'Component',
+      inspector: 'Properties',
       transactionLog: 'Log',
       command: 'Command',
       history: 'History',
@@ -166,6 +179,19 @@ const messages = {
       rejected: 'Canvas settings are invalid.',
       configureTransaction: 'Configure canvas grid and snapping',
       configureAndClearTransaction: 'Configure canvas and clear guides',
+    },
+    canvasInspector: {
+      label: 'Canvas properties',
+      title: 'Canvas',
+      preset: 'Common PC sizes',
+      custom: 'Custom',
+      width: 'Output width',
+      height: 'Output height',
+      background: 'Output background',
+      invalidSize: 'Output dimensions must be positive numbers.',
+      invalidBackground: 'Output background cannot be empty.',
+      rejected: 'Output settings are invalid.',
+      configureTransaction: 'Configure canvas output',
     },
   },
 } as const
@@ -304,6 +330,12 @@ export function getEditorMessages(
         current.canvasSettings.configureAndClearTransaction,
       ),
     },
+    canvasInspector: Object.fromEntries(
+      Object.entries(current.canvasInspector).map(([key, fallback]) => [
+        key,
+        format(`canvasInspector.${key}`, fallback),
+      ]),
+    ) as Record<keyof typeof current.canvasInspector, string>,
   }
 }
 

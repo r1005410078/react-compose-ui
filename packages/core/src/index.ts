@@ -10,6 +10,7 @@
 
 export { validateComposeDocument } from './document'
 export { createDefaultCanvasSettings } from './canvas-settings'
+export { createDefaultOutputSettings } from './output-settings'
 export {
   DEFAULT_NODE_SHADOW,
   DEFAULT_NODE_STYLES,
@@ -51,9 +52,9 @@ export type {
   ComposeComponentNode,
   ComposeDocument,
   ComposeFrameNode,
-  ComposeGroupNode,
   ComposeNode,
   ComposeNodeBase,
+  ComposeOutputSettings,
   DocumentValidationIssue,
   DocumentValidationIssueCode,
   DocumentValidationResult,

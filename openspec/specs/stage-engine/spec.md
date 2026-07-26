@@ -102,11 +102,28 @@ Frame 命中，React adapter MUST 在 drop effect 中解析 registry seed 或 Fr
 
 ### Requirement: 世界几何保持的结构命令
 
-stage-engine MUST 创建 group、ungroup 与跨父级 reparent 命令，使用操作前世界矩阵与目标父级
-逆矩阵计算新的局部 transform。Stage 与 Editor SceneTree MUST 使用同一工厂。
+stage-engine MUST 支持 nullable reparent，并使用 Frame 实现 group/ungroup。Frame resize MUST
+只更新所选 Frame 自身 transform；移动或旋转 MUST 通过父矩阵影响后代。
 
-#### Scenario: 分组与重设父级
+#### Scenario: Resize Frame 不缩放孩子
 
-- **WHEN** 合法同级选择被分组、取消分组或移动到另一个合法父级
-- **THEN** 命令 payload 中的局部 transform 在提交后产生与操作前相同的世界几何
-- **AND** 拓扑和 transform 修改进入同一事务
+- **WHEN** 用户 resize 根级或嵌套 Frame
+- **THEN** Frame 的边界更新而全部后代局部 transform 保持不变
+- **AND** pointerup 仍只派发一个 transform 事务
+
+### Requirement: 输出区域检查命中
+
+controller MUST 接受独立的 output hit，并通过 output selection effect 请求宿主检查隐式 Canvas。
+输出检查不得写入 selectedIds；节点、resize、rotate、guide 和平移命中 MUST 保持原优先级。
+
+#### Scenario: 点击与框选输出区域
+
+- **WHEN** 选择工具在输出区域空白处按下并松开
+- **THEN** controller 清空节点选择并请求检查 output
+- **AND** 从输出区域拖出有效框选后改为返回命中的节点选择
+
+#### Scenario: 平移不切换检查目标
+
+- **WHEN** pan 工具、Space 临时平移或中键从输出区域开始
+- **THEN** controller 只更新 viewport
+- **AND** 不发送 output selection effect

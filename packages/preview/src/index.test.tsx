@@ -1,6 +1,7 @@
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
+  createDefaultOutputSettings,
   type ComposeDocument,
 } from '@compose-ui/core'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -11,8 +12,14 @@ afterEach(cleanup)
 
 function document(): ComposeDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvas: createDefaultCanvasSettings(),
+    output: {
+      ...createDefaultOutputSettings(),
+      width: 1440,
+      height: 900,
+      backgroundColor: '#eef2ff',
+    },
     rootIds: ['desktop', 'mobile'],
     nodes: {
       desktop: {
@@ -37,15 +44,17 @@ function document(): ComposeDocument {
             spread: 0,
           },
         },
+        clipContent: true,
       },
       group: {
         id: 'group',
-        kind: 'group',
-        name: 'Group',
+        kind: 'frame',
+        name: 'Nested Frame',
         visible: true,
         locked: false,
         transform: { x: 100, y: 80, width: 300, height: 200, rotation: 15 },
         childIds: ['text'],
+        clipContent: false,
         style: { backgroundColor: '#ddeeff', borderRadius: 6 },
       },
       text: {
@@ -92,6 +101,7 @@ function document(): ComposeDocument {
         locked: false,
         transform: { x: 600, y: 200, width: 390, height: 844, rotation: 0 },
         childIds: ['mobile-text'],
+        clipContent: true,
       },
       'mobile-text': {
         id: 'mobile-text',
@@ -134,7 +144,13 @@ describe('ComposePreview', () => {
   })
 
   it('OpenSpec: compose-preview / 文档驱动的 Frame Preview / 预览指定 Frame', () => {
-    render(<ComposePreview document={document()} frameId="desktop" registry={registry()} />)
+    render(
+      <ComposePreview
+        document={document()}
+        registry={registry()}
+        target={{ kind: 'frame', frameId: 'desktop' }}
+      />,
+    )
 
     const preview = screen.getByRole('region', { name: 'Compose preview' })
     const frame = screen.getByTestId('compose-preview-frame')
@@ -146,7 +162,13 @@ describe('ComposePreview', () => {
   })
 
   it('OpenSpec: compose-preview / 文档驱动的 Frame Preview / 应用嵌套变换', () => {
-    render(<ComposePreview document={document()} frameId="desktop" registry={registry()} />)
+    render(
+      <ComposePreview
+        document={document()}
+        registry={registry()}
+        target={{ kind: 'frame', frameId: 'desktop' }}
+      />,
+    )
 
     expect(screen.getByTestId('compose-preview-node-group')).toHaveStyle({
       left: '100px',
@@ -161,6 +183,24 @@ describe('ComposePreview', () => {
     expect(screen.queryByLabelText('Stage 编辑覆盖层')).not.toBeInTheDocument()
   })
 
+  it('OpenSpec: compose-preview / 文档驱动的 Frame Preview / 预览嵌套 Frame', () => {
+    render(
+      <ComposePreview
+        document={document()}
+        registry={registry()}
+        target={{ kind: 'frame', frameId: 'group' }}
+      />,
+    )
+
+    expect(screen.getByTestId('compose-preview-frame')).toHaveStyle({
+      width: '300px',
+      height: '200px',
+      overflow: 'hidden',
+    })
+    expect(screen.getByText('preview:Desktop text')).toBeInTheDocument()
+    expect(screen.queryByTestId('compose-preview-node-group')).not.toBeInTheDocument()
+  })
+
   it('OpenSpec: compose-preview / 忽略画布编辑元数据 / 不渲染网格标尺辅助线或坐标轴', () => {
     const base = document()
     const input: ComposeDocument = {
@@ -171,7 +211,13 @@ describe('ComposePreview', () => {
         guides: [{ id: 'preview-guide', axis: 'x', position: 48 }],
       },
     }
-    render(<ComposePreview document={input} frameId="desktop" registry={registry()} />)
+    render(
+      <ComposePreview
+        document={input}
+        registry={registry()}
+        target={{ kind: 'frame', frameId: 'desktop' }}
+      />,
+    )
 
     expect(screen.getByTestId('compose-preview-frame')).toBeInTheDocument()
     expect(screen.queryByTestId('stage-ruler-x')).not.toBeInTheDocument()
@@ -181,7 +227,13 @@ describe('ComposePreview', () => {
   })
 
   it('OpenSpec: compose-preview / Preview 节点样式一致性 / 预览统一节点样式', () => {
-    render(<ComposePreview document={document()} frameId="desktop" registry={registry()} />)
+    render(
+      <ComposePreview
+        document={document()}
+        registry={registry()}
+        target={{ kind: 'frame', frameId: 'desktop' }}
+      />,
+    )
 
     const frame = screen.getByTestId('compose-preview-frame')
     expect(frame).toHaveStyle({
@@ -203,26 +255,56 @@ describe('ComposePreview', () => {
   })
 
   it('OpenSpec: compose-preview / 文档驱动的 Frame Preview / 未知或失败 Renderer', () => {
-    render(<ComposePreview document={document()} frameId="desktop" registry={registry()} />)
+    render(
+      <ComposePreview
+        document={document()}
+        registry={registry()}
+        target={{ kind: 'frame', frameId: 'desktop' }}
+      />,
+    )
     expect(screen.getByRole('status', { name: /missing/ })).toBeInTheDocument()
     expect(screen.getByText('preview:Desktop text')).toBeInTheDocument()
   })
 
   it('OpenSpec: compose-preview / Preview 配置与兼容 / 拒绝不完整文档配置', () => {
     render(<ComposePreview document={document()}>Legacy must not render</ComposePreview>)
-    expect(screen.getByRole('alert')).toHaveTextContent(/registry.*frameId/)
+    expect(screen.getByRole('alert')).toHaveTextContent(/registry/)
     expect(screen.queryByText('Legacy must not render')).not.toBeInTheDocument()
   })
 
-  it('OpenSpec: compose-preview / Preview 配置与兼容 / 拒绝未知 Frame', () => {
+  it('OpenSpec: compose-preview / Preview 配置与兼容 / 拒绝无效 target 配置', () => {
     const view = render(
-      <ComposePreview document={document()} frameId="missing-frame" registry={registry()} />,
+      <ComposePreview
+        document={document()}
+        registry={registry()}
+        target={{ kind: 'frame', frameId: 'missing-frame' }}
+      />,
     )
     expect(screen.getByRole('alert')).toHaveTextContent('missing-frame')
 
     view.rerender(
-      <ComposePreview document={document()} frameId="text" registry={registry()} />,
+      <ComposePreview
+        document={document()}
+        registry={registry()}
+        target={{ kind: 'frame', frameId: 'text' }}
+      />,
     )
     expect(screen.getByRole('alert')).toHaveTextContent('text')
+  })
+
+  it('OpenSpec: compose-preview / 文档驱动的 Frame Preview / 预览完整文档', () => {
+    render(<ComposePreview document={document()} registry={registry()} />)
+
+    expect(screen.getByTestId('compose-preview-document')).toHaveStyle({
+      width: '1440px',
+      height: '900px',
+      overflow: 'hidden',
+      backgroundColor: '#eef2ff',
+    })
+    expect(screen.getByTestId('compose-preview-node-desktop')).toHaveStyle({
+      left: '-500px',
+      top: '200px',
+    })
+    expect(screen.getByText('preview:Mobile text')).toBeInTheDocument()
   })
 })

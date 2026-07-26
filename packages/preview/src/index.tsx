@@ -1,5 +1,5 @@
 /**
- * 提供可独立嵌入的 legacy 容器或指定 Frame 文档预览。
+ * 提供可独立嵌入的 legacy 容器、完整文档或指定 Frame 预览。
  *
  * @packageDocumentation
  */
@@ -22,13 +22,22 @@ import type { CSSProperties, HTMLAttributes } from 'react'
  * @public
  */
 export interface ComposePreviewProps extends HTMLAttributes<HTMLElement> {
-  /** 文档模式的正式 JSON 文档；必须与 registry、frameId 一起提供。 */
+  /** 文档模式的正式 JSON 文档；必须与 registry 一起提供。 */
   readonly document?: ComposeDocument
   /** Stage 与 Preview 共享的实例级组件注册表。 */
   readonly registry?: ComponentRegistry
-  /** 文档模式必须显式指定的 Frame ID。 */
-  readonly frameId?: string
+  /** 输出完整文档或某个根级/嵌套 Frame；省略时输出完整文档。 */
+  readonly target?: ComposePreviewTarget
 }
+
+/**
+ * Preview 输出目标。
+ *
+ * @public
+ */
+export type ComposePreviewTarget =
+  | { readonly kind: 'document' }
+  | { readonly kind: 'frame'; readonly frameId: string }
 
 function visualStyle(node: ComposeNode): CSSProperties {
   const visual = resolveNodeStyle(node)
@@ -47,7 +56,7 @@ function visualStyle(node: ComposeNode): CSSProperties {
     borderRadius: visual.borderRadius,
     opacity: visual.opacity,
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
-    overflow: node.kind === 'group' ? 'visible' : 'hidden',
+    overflow: node.kind === 'frame' && !node.clipContent ? 'visible' : 'hidden',
   }
 }
 
@@ -92,7 +101,7 @@ function PreviewNode({
 }
 
 /**
- * 渲染 legacy children，或用普通 DOM 预览显式指定的 ComposeDocument Frame。
+ * 渲染 legacy children，或用普通 DOM 预览 ComposeDocument 输出。
  *
  * @public
  */
@@ -100,26 +109,47 @@ export function ComposePreview({
   children = 'Compose Preview',
   document,
   registry,
-  frameId,
+  target = { kind: 'document' },
   ...props
 }: ComposePreviewProps) {
   const providedCount = Number(document !== undefined)
     + Number(registry !== undefined)
-    + Number(frameId !== undefined)
   let content
   if (providedCount === 0) {
     content = children
   }
-  else if (providedCount !== 3 || !document || !registry || !frameId) {
+  else if (providedCount !== 2 || !document || !registry) {
     const missing = [
       document ? null : 'document',
       registry ? null : 'registry',
-      frameId ? null : 'frameId',
     ].filter(Boolean).join('、')
     content = <div role="alert">Preview 缺少配置：{missing}</div>
   }
+  else if (target.kind === 'document') {
+    content = (
+      <div
+        data-testid="compose-preview-document"
+        style={{
+          position: 'relative',
+          width: document.output.width,
+          height: document.output.height,
+          overflow: 'hidden',
+          backgroundColor: document.output.backgroundColor,
+        }}
+      >
+        {document.rootIds.map((nodeId) => (
+          <PreviewNode
+            document={document}
+            key={nodeId}
+            nodeId={nodeId}
+            registry={registry}
+          />
+        ))}
+      </div>
+    )
+  }
   else {
-    const frame = document.nodes[frameId]
+    const frame = document.nodes[target.frameId]
     content = frame?.kind === 'frame' ? (
       <div
         data-testid="compose-preview-frame"
@@ -128,6 +158,7 @@ export function ComposePreview({
           position: 'relative',
           width: frame.transform.width,
           height: frame.transform.height,
+          overflow: 'hidden',
         }}
       >
         {frame.visible
@@ -142,7 +173,9 @@ export function ComposePreview({
           : null}
       </div>
     ) : (
-      <div role="alert">Preview Frame {frameId} 不存在或不是 Frame</div>
+      <div role="alert">
+        Preview Frame {target.frameId} 不存在或不是 Frame
+      </div>
     )
   }
 

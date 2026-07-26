@@ -26,6 +26,7 @@ function createTitles(
     width: title('width', 'Width', '宽度'),
     height: title('height', 'Height', '高度'),
     rotation: title('rotation', 'Rotation', '旋转'),
+    clipContent: title('clipContent', 'Clip content', '裁剪内容'),
     backgroundColor: title('backgroundColor', 'Background', '背景'),
     borderColor: title('borderColor', 'Border color', '边框颜色'),
     borderWidth: title('borderWidth', 'Border width', '边框宽度'),
@@ -38,7 +39,7 @@ function createTitles(
   }
 }
 
-/** 按共享语言创建 Frame、Group 与 Component 共用的容器属性 Schema。 @internal */
+/** 按共享语言创建 Frame 与 Component 共用的视觉和变换 Schema。 @internal */
 export function createContainerSchema(
   locale: ComposeLocale,
   formatMessage?: FormatMessage,
@@ -67,8 +68,21 @@ export function createContainerSchema(
   })
 }
 
-/** Frame、Group 与 Component 共用的英文兼容 Schema。 @internal */
+/** Frame 与 Component 共用的英文兼容 Schema。 @internal */
 export const containerSchema = createContainerSchema('en-US')
+
+/** 按共享语言创建 Frame 专用属性 Schema。 @internal */
+export function createFrameSchema(
+  locale: ComposeLocale,
+  formatMessage?: FormatMessage,
+) {
+  const container = createContainerSchema(locale, formatMessage)
+  const titles = createTitles(locale, formatMessage)
+  return v.object({
+    ...container.entries,
+    clipContent: v.pipe(v.boolean(), v.title(titles.clipContent)),
+  })
+}
 
 /** 按共享语言创建 Text Inspector Schema。 @internal */
 export function createTextSchema(
@@ -90,6 +104,8 @@ export const textSchema = createTextSchema('en-US')
 
 /** 通用 Container Inspector 表单值。 @internal */
 export type ContainerValue = v.InferInput<typeof containerSchema>
+/** Frame Inspector 表单值。 @internal */
+export type FrameValue = v.InferInput<ReturnType<typeof createFrameSchema>>
 
 /** Text Inspector 表单值。 @internal */
 export type TextValue = v.InferInput<typeof textSchema>

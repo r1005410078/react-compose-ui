@@ -1,6 +1,6 @@
 import type {
   ComposeDocument,
-  ComposeGroupNode,
+  ComposeFrameNode,
   ComposeNode,
   EditorCommand,
   JsonObject,
@@ -38,7 +38,7 @@ function transformUnderParent(
  *
  * @param document - 当前正式文档。
  * @param nodeIds - 按选择顺序排列的待分组节点。
- * @param groupId - 新 Group 稳定 ID。
+ * @param frameId - 新 Frame 稳定 ID。
  * @param commandId - 命令稳定 ID。
  * @returns 交给同一 TransactionRuntime 的结构化命令。
  * @public
@@ -46,8 +46,8 @@ function transformUnderParent(
 export function createGroupCommand(
   document: ComposeDocument,
   nodeIds: readonly string[],
-  groupId: string,
-  commandId = `group:${groupId}`,
+  frameId: string,
+  commandId = `group:${frameId}`,
 ): EditorCommand {
   const bounds = unionRects(nodeIds
     .filter((id) => Boolean(document.nodes[id]))
@@ -62,13 +62,22 @@ export function createGroupCommand(
     safeBounds.width,
     safeBounds.height,
   )
-  const group: ComposeGroupNode = {
-    id: groupId,
-    kind: 'group',
-    name: 'Group',
+  const frame: ComposeFrameNode = {
+    id: frameId,
+    kind: 'frame',
+    name: 'Frame',
     visible: true,
     locked: false,
     transform: groupTransform,
+    clipContent: false,
+    style: {
+      backgroundColor: 'transparent',
+      borderColor: 'transparent',
+      borderWidth: 0,
+      borderRadius: 0,
+      opacity: 1,
+      shadow: null,
+    },
     childIds: [...nodeIds],
   }
   const childTransforms: Record<string, JsonValue> = {}
@@ -85,7 +94,7 @@ export function createGroupCommand(
     id: commandId,
     type: 'node.group',
     payload: {
-      group: group as unknown as JsonValue,
+      frame: frame as unknown as JsonValue,
       nodeIds,
       childTransforms,
     },
@@ -104,14 +113,14 @@ export function createGroupCommand(
  */
 export function createUngroupCommand(
   document: ComposeDocument,
-  groupId: string,
-  commandId = `ungroup:${groupId}`,
+  frameId: string,
+  commandId = `ungroup:${frameId}`,
 ): EditorCommand {
-  const group = document.nodes[groupId]
-  const parentId = getNodeParentId(document, groupId)
+  const frame = document.nodes[frameId]
+  const parentId = getNodeParentId(document, frameId)
   const childTransforms: Record<string, JsonValue> = {}
-  if (group?.kind === 'group') {
-    for (const childId of group.childIds) {
+  if (frame?.kind === 'frame') {
+    for (const childId of frame.childIds) {
       const child = document.nodes[childId]
       if (!child) continue
       childTransforms[childId] = transformUnderParent(
@@ -126,11 +135,11 @@ export function createUngroupCommand(
   return {
     id: commandId,
     type: 'node.ungroup',
-    payload: { groupId, childTransforms },
+    payload: { frameId, childTransforms },
     meta: {
-      label: `Ungroup ${group?.name ?? 'Group'}`,
+      label: `Ungroup ${frame?.name ?? 'Frame'}`,
       source: 'stage',
-      targetIds: [groupId],
+      targetIds: [frameId],
     },
   }
 }
@@ -143,7 +152,7 @@ export function createUngroupCommand(
 export function createReparentCommand(
   document: ComposeDocument,
   nodeIds: readonly string[],
-  parentId: string,
+  parentId: string | null,
   index: number,
   commandId = `reparent:${nodeIds.join(',')}`,
 ): EditorCommand {
@@ -186,7 +195,7 @@ export function createReparentCommand(
     },
     meta: {
       label: `Move ${describeNodeTargets(document, nodeIds)}`
-        + ` to ${document.nodes[parentId]?.name ?? 'parent'}`,
+        + ` to ${parentId ? document.nodes[parentId]?.name ?? 'Frame' : 'Canvas'}`,
       source: 'stage',
       targetIds: nodeIds,
     },
