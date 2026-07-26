@@ -6,15 +6,15 @@
  *
  * @packageDocumentation
  */
-import './styles.css'
+import './tree/styles.css'
 
 export { Tree } from './tree'
 // 公共入口同时导出组件与纯 Tree 模型工具，因此只针对工具导出豁免 Fast Refresh。
 // eslint-disable-next-line react-refresh/only-export-components
-export { createTreeIndex, createTreeMove, flattenTree, type IndexedTreeItem } from './tree-model'
+export { createTreeIndex, createTreeMove, flattenTree, type IndexedTreeItem } from './tree'
 export type {
   TreeItemAdapter,
   TreeItemRenderContext,
   TreeMoveOperation,
   TreeProps,
-} from './tree-types'
+} from './tree'
