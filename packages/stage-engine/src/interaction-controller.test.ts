@@ -384,6 +384,31 @@ describe('StageInteractionController', () => {
     expect(controller.getSnapshot().phase).toBe('idle')
   })
 
+  it('OpenSpec: stage-engine / 资源批量外部拖入会话 / 资源落到 Frame 或 Canvas', () => {
+    const { controller, effects } = connect()
+    const item = {
+      kind: 'assets' as const,
+      items: [{
+        providerId: 'library',
+        assetKey: 'hero',
+        scope: 'persistent' as const,
+        name: 'hero.png',
+        mediaType: 'image/png',
+      }],
+    }
+    controller.send({
+      type: 'external.begin',
+      item,
+      clientPoint: { x: 20, y: 20 },
+    })
+    controller.send({ type: 'external.end', clientPoint: { x: 100, y: 100 } })
+    expect(effects).toContainEqual(expect.objectContaining({
+      type: 'external.drop',
+      item,
+      parentId: 'frame',
+    }))
+  })
+
   // OpenSpec: stage-engine / 统一外部拖入 / 拖入根或嵌套 Frame
   it('OpenSpec: stage-engine / 统一外部拖入 / Frame 外落到隐式 Canvas 根', () => {
     const { controller, effects } = connect()
@@ -505,11 +530,21 @@ describe('StageInteractionController', () => {
     })
   })
 
+  // OpenSpec: stage-engine / 资源批量外部拖入会话 / 取消资源拖入
   it('OpenSpec: stage-engine / 取消外部拖入 / 清空 preview 且不产生 drop', () => {
     const { controller, effects } = connect()
     controller.send({
       type: 'external.begin',
-      item: { kind: 'frame', presetId: 'desktop' },
+      item: {
+        kind: 'assets',
+        items: [{
+          providerId: 'memory',
+          assetKey: 'logo',
+          scope: 'persistent',
+          name: 'logo.svg',
+          mediaType: 'image/svg+xml',
+        }],
+      },
       clientPoint: { x: 10, y: 20 },
     })
     controller.send({ type: 'external.cancel' })

@@ -4,6 +4,8 @@
  * @packageDocumentation
  */
 import { COMPOSE_UI_CORE_PACKAGE } from '@compose-ui/core'
+import { AssetBrowser } from '@compose-ui/asset-browser'
+import { createComposeAssetResolver } from '@compose-ui/assets'
 import { useHistoryShortcuts } from '@compose-ui/history'
 import { SceneTree } from '@compose-ui/scene-tree'
 import {
@@ -30,8 +32,14 @@ import type {
 import type { CSSProperties, HTMLAttributes, ReactNode } from 'react'
 import type { HistoryNavigationController } from '@compose-ui/history'
 import type { SceneTreeProps } from '@compose-ui/scene-tree'
+import type {
+  AssetBrowserProps,
+  ComposeAssetCanvasDragEvent,
+} from '@compose-ui/asset-browser'
+import type { ComposeAssetResolver } from '@compose-ui/assets'
 import { WorkspaceContentContext } from './workspace-context'
 import {
+  AssetBrowserPanel,
   CanvasPanel,
   CommandPanel,
   ComponentLibraryPanel,
@@ -107,6 +115,12 @@ export interface ComposeEditorProps extends HTMLAttributes<HTMLElement> {
   transactionLogPanel?: ReactNode
   /** 显示在底部 Command 标签中的宿主内容。 */
   commandPanel?: ReactNode
+  /** 驱动底部默认 AssetBrowser 的 Provider 与受控会话状态。 */
+  assetBrowserProps?: AssetBrowserProps
+  /** Stage 与 Preview 资源型物料使用的显式运行时解析器。 */
+  assetResolver?: ComposeAssetResolver
+  /** 完整覆盖底部资源标签；显式 `null` 优先于 `assetBrowserProps`。 */
+  assetBrowserPanel?: ReactNode
 }
 
 const workspaceComponents = {
@@ -116,6 +130,7 @@ const workspaceComponents = {
   [WORKSPACE_COMPONENT_IDS.inspector]: InspectorPanel,
   [WORKSPACE_COMPONENT_IDS.transactionLog]: TransactionLogPanel,
   [WORKSPACE_COMPONENT_IDS.command]: CommandPanel,
+  [WORKSPACE_COMPONENT_IDS.assetBrowser]: AssetBrowserPanel,
 } satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
 
 const workspaceTabComponents = { workspaceTab: WorkspaceTab }
@@ -189,6 +204,9 @@ export function ComposeEditor({
   inspectorPanel,
   transactionLogPanel,
   commandPanel,
+  assetBrowserProps,
+  assetResolver,
+  assetBrowserPanel,
   preferences,
   defaultPreferences,
   onPreferencesChange,
@@ -213,6 +231,53 @@ export function ComposeEditor({
     [preferences, uncontrolledPreferences],
   )
   const resolvedHistory = history ?? controller?.history
+  const resolvedAssetResolver = useMemo(() => {
+    if (assetResolver) return assetResolver
+    const provider = assetBrowserProps?.provider
+    if (
+      !provider?.capabilities.reference
+      || !provider.resolveAsset
+    ) return undefined
+    return createComposeAssetResolver(provider)
+  }, [assetBrowserProps?.provider, assetResolver])
+  const handleAssetCanvasDrag = useCallback((
+    event: ComposeAssetCanvasDragEvent,
+  ) => {
+    assetBrowserProps?.onCanvasDrag?.(event)
+    const interactionController = controller?.interactionController
+    if (!interactionController) return
+    if (event.type === 'start') {
+      interactionController.send({
+        type: 'external.begin',
+        clientPoint: event.clientPoint,
+        item: {
+          kind: 'assets',
+          items: event.items.map((item) => ({
+            providerId: item.reference.providerId,
+            assetKey: item.reference.assetKey,
+            scope: item.reference.scope,
+            name: item.name,
+            mediaType: item.mediaType,
+          })),
+        },
+      })
+    }
+    else if (event.type === 'move') {
+      interactionController.send({
+        type: 'external.move',
+        clientPoint: event.clientPoint,
+      })
+    }
+    else if (event.type === 'end') {
+      interactionController.send({
+        type: 'external.end',
+        clientPoint: event.clientPoint,
+      })
+    }
+    else {
+      interactionController.send({ type: 'external.cancel' })
+    }
+  }, [assetBrowserProps, controller?.interactionController])
   const closeSettings = useCallback(() => {
     restoreSettingsFocusRef.current = true
     setSettingsOpen(false)
@@ -259,6 +324,7 @@ export function ComposeEditor({
       children: children !== undefined
         ? children
         : addDefaultElementProps(controller?.stage ?? 'Compose Editor', {
+            assetResolver: resolvedAssetResolver,
             onToolChange: controller?.setTool,
             shortcuts: resolvedPreferences.shortcuts,
           }),
@@ -269,6 +335,16 @@ export function ComposeEditor({
       commandPanel: commandPanel !== undefined
         ? commandPanel
         : controller?.commandPanel,
+      assetBrowserPanel: assetBrowserPanel !== undefined
+        ? assetBrowserPanel
+        : assetBrowserProps
+          ? (
+              <AssetBrowser
+                {...assetBrowserProps}
+                onCanvasDrag={handleAssetCanvasDrag}
+              />
+            )
+          : undefined,
       settingsOpen,
       settingsPanelId,
       setSettingsButton: (element: HTMLButtonElement | null) => {
@@ -289,6 +365,10 @@ export function ComposeEditor({
       inspectorPanel,
       transactionLogPanel,
       commandPanel,
+      assetBrowserPanel,
+      assetBrowserProps,
+      resolvedAssetResolver,
+      handleAssetCanvasDrag,
       resolvedPreferences.shortcuts,
       settingsOpen,
       settingsPanelId,

@@ -128,6 +128,31 @@ function registry() {
 }
 
 describe('ComposePreview', () => {
+  it('OpenSpec: compose-preview / Preview 资源解析 / 预览资源组件', () => {
+    const assetResolver = {
+      resolve: vi.fn(),
+    }
+    const assetRegistry = createComponentRegistry([{
+      type: 'text',
+      label: '文本',
+      defaultSize: { width: 120, height: 50 },
+      createDefaultProps: () => ({ text: 'Text' }),
+      renderer: ({ assetResolver: received }) => (
+        <span>{received === assetResolver ? 'resolver connected' : 'resolver missing'}</span>
+      ),
+    }])
+    render(
+      <ComposePreview
+        assetResolver={assetResolver}
+        document={document()}
+        registry={assetRegistry}
+        target={{ kind: 'frame', frameId: 'group' }}
+      />,
+    )
+
+    expect(screen.getByText('resolver connected')).toBeInTheDocument()
+  })
+
   it('OpenSpec: compose-preview / Preview 配置与兼容 / 保留 legacy children', () => {
     const click = vi.fn()
     render(

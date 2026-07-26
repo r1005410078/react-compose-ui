@@ -1,4 +1,8 @@
 import { createComponentRegistry } from '@compose-ui/component-registry'
+import type {
+  ComposeAssetResolver,
+  ComposeResolvedAsset,
+} from '@compose-ui/assets'
 import {
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
@@ -6,8 +10,19 @@ import {
   type ComposeDocument,
   type TransactionRuntime,
 } from '@compose-ui/core'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
+import {
+  createStageInteractionController,
+  type StageInteractionController,
+} from '@compose-ui/stage-engine'
 import { StrictMode, useState, useSyncExternalStore } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as stagePackage from './index'
@@ -19,6 +34,7 @@ const api = stagePackage as unknown as {
   Stage(props: {
     document: ComposeDocument
     registry: ReturnType<typeof createComponentRegistry>
+    assetResolver?: ComposeAssetResolver
     dispatch: TransactionRuntime['dispatch']
     viewport: Viewport
     onViewportChange(viewport: Viewport): void
@@ -38,6 +54,7 @@ const api = stagePackage as unknown as {
     }[]>>
     locale?: 'zh-CN' | 'en-US'
     idFactory?: () => string
+    interactionController?: StageInteractionController
     'aria-label'?: string
   }): React.ReactNode
 }
@@ -225,6 +242,9 @@ function Harness({
   idFactory = () => 'generated',
   shortcuts,
   locale,
+  assetResolver,
+  interactionController,
+  testRegistry = registry(),
 }: {
   runtime: TransactionRuntime
   initialSelection?: readonly string[]
@@ -240,6 +260,9 @@ function Harness({
     alt?: boolean
   }[]>>
   locale?: 'zh-CN' | 'en-US'
+  assetResolver?: ComposeAssetResolver
+  interactionController?: StageInteractionController
+  testRegistry?: ReturnType<typeof createComponentRegistry>
 }) {
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const [viewport, setViewport] = useState(initialViewport)
@@ -252,9 +275,11 @@ function Harness({
         aria-label="测试 Stage"
         dispatch={runtime.dispatch}
         document={state.document}
+        assetResolver={assetResolver}
         idFactory={idFactory}
         locale={locale}
-        registry={registry()}
+        registry={testRegistry}
+        interactionController={interactionController}
         selectedIds={selectedIds}
         outputSelected={outputSelected}
         shortcuts={shortcuts}
@@ -1454,6 +1479,281 @@ describe('Stage', () => {
     )
     expect(screen.getByLabelText('当前选择')).toBeEmptyDOMElement()
     expect(runtime.entries).toHaveLength(1)
+  })
+
+  // OpenSpec: stage / 异步资源节点创建 / 单项固有尺寸创建
+  it('OpenSpec: stage / 异步资源节点创建 / 批量网格创建与部分失败', async () => {
+    const runtime = stageRuntime()
+    const interactionController = createStageInteractionController()
+    const assetResolver: ComposeAssetResolver = {
+      async resolve({ reference }) {
+        if (reference.assetKey === 'broken') throw new Error('read failed')
+        return {
+          blob: new Blob(['image'], { type: 'image/png' }),
+          mediaType: 'image/png',
+          revision: '1',
+        }
+      },
+    }
+    const assetRegistry = createComponentRegistry([{
+      type: 'asset.image',
+      label: 'Image',
+      paletteHidden: true,
+      defaultSize: { width: 320, height: 180 },
+      createDefaultProps: () => ({ asset: null }),
+      assetDrop: {
+        accepts: ({ mediaType }) => mediaType === 'image/png',
+        createSeed: ({ reference }) => ({
+          name: 'Dropped image',
+          props: { asset: reference },
+          width: 64,
+          height: 32,
+        }),
+      },
+      renderer: ({ assetResolver: rendererResolver }) => (
+        <span>{rendererResolver ? 'asset-resolver-ready' : 'asset-resolver-missing'}</span>
+      ),
+    }])
+    let id = 0
+    render(
+      <Harness
+        assetResolver={assetResolver}
+        idFactory={() => `asset-${id++}`}
+        interactionController={interactionController}
+        runtime={runtime}
+        testRegistry={assetRegistry}
+      />,
+    )
+
+    act(() => {
+      interactionController.send({
+        type: 'external.add',
+        item: {
+          kind: 'assets',
+          items: [
+            {
+              providerId: 'memory',
+              assetKey: 'good',
+              scope: 'persistent',
+              name: 'good.png',
+              mediaType: 'image/png',
+            },
+            {
+              providerId: 'memory',
+              assetKey: 'broken',
+              scope: 'persistent',
+              name: 'broken.png',
+              mediaType: 'image/png',
+            },
+          ],
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(runtime.document.rootIds).toContain('asset-0')
+    })
+    expect(runtime.entries).toHaveLength(2)
+    expect(runtime.document.nodes['asset-0']).toMatchObject({
+      componentType: 'asset.image',
+      props: {
+        asset: {
+          providerId: 'memory',
+          assetKey: 'good',
+          scope: 'persistent',
+        },
+      },
+      transform: {
+        width: 64,
+        height: 32,
+      },
+    })
+    expect(screen.getByLabelText('当前选择')).toHaveTextContent('asset-0')
+    expect(screen.getByText('已添加 1 项，1 项失败。')).toBeInTheDocument()
+    expect(screen.getByText('asset-resolver-ready')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 异步资源节点创建 / 等待期间父级失效', async () => {
+    const runtime = stageRuntime()
+    const interactionController = createStageInteractionController()
+    let finishResolve: ((value: {
+      blob: Blob
+      mediaType: string
+      revision: string
+    }) => void) | undefined
+    const assetResolver: ComposeAssetResolver = {
+      resolve: vi.fn(() => new Promise<ComposeResolvedAsset>((resolve) => {
+        finishResolve = resolve
+      })),
+    }
+    const assetRegistry = createComponentRegistry([{
+      type: 'asset.image',
+      label: 'Image',
+      paletteHidden: true,
+      defaultSize: { width: 64, height: 32 },
+      createDefaultProps: () => ({ asset: null }),
+      assetDrop: {
+        accepts: ({ mediaType }) => mediaType === 'image/png',
+        createSeed: ({ reference, name }) => ({
+          name,
+          props: { asset: reference },
+          width: 64,
+          height: 32,
+        }),
+      },
+      renderer: () => <span>asset</span>,
+    }])
+    let id = 0
+    render(
+      <Harness
+        assetResolver={assetResolver}
+        idFactory={() => `asset-${id++}`}
+        interactionController={interactionController}
+        runtime={runtime}
+        testRegistry={assetRegistry}
+      />,
+    )
+
+    act(() => {
+      interactionController.send({
+        type: 'external.begin',
+        clientPoint: { x: 100, y: 100 },
+        item: {
+          kind: 'assets',
+          items: [{
+            providerId: 'memory',
+            assetKey: 'image',
+            scope: 'persistent',
+            name: 'image.png',
+            mediaType: 'image/png',
+          }],
+        },
+      })
+      interactionController.send({
+        type: 'external.end',
+        clientPoint: { x: 100, y: 100 },
+      })
+    })
+    expect(finishResolve).toBeTypeOf('function')
+    act(() => {
+      runtime.dispatch({
+        id: 'lock-frame',
+        type: 'node.set-locked',
+        payload: { nodeIds: ['frame'], locked: true },
+      })
+    })
+    await act(async () => {
+      finishResolve?.({
+        blob: new Blob(['image'], { type: 'image/png' }),
+        mediaType: 'image/png',
+        revision: '1',
+      })
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(runtime.document.rootIds).toContain('asset-0')
+    })
+    expect(runtime.document.nodes.frame).toMatchObject({
+      kind: 'frame',
+      childIds: expect.not.arrayContaining(['asset-0']),
+    })
+    expect(runtime.document.nodes['asset-0']).toMatchObject({
+      transform: {
+        x: 68,
+        y: 84,
+        width: 64,
+        height: 32,
+        rotation: 0,
+      },
+    })
+  })
+
+  it('OpenSpec: stage / 异步资源节点创建 / 资源解析取消', async () => {
+    const runtime = stageRuntime()
+    const interactionController = createStageInteractionController()
+    let finishResolve: ((value: {
+      blob: Blob
+      mediaType: string
+      revision: string
+    }) => void) | undefined
+    let requestSignal: AbortSignal | undefined
+    const firstResolver: ComposeAssetResolver = {
+      resolve: vi.fn(({ signal }) => {
+        requestSignal = signal
+        return new Promise<ComposeResolvedAsset>((resolve) => {
+          finishResolve = resolve
+        })
+      }),
+    }
+    const nextResolver: ComposeAssetResolver = {
+      resolve: vi.fn(async () => ({
+        blob: new Blob(),
+        mediaType: 'image/png',
+        revision: 'next',
+      })),
+    }
+    const assetRegistry = createComponentRegistry([{
+      type: 'asset.image',
+      label: 'Image',
+      paletteHidden: true,
+      defaultSize: { width: 64, height: 32 },
+      createDefaultProps: () => ({ asset: null }),
+      assetDrop: {
+        accepts: () => true,
+        createSeed: ({ reference, name }) => ({
+          name,
+          props: { asset: reference },
+          width: 64,
+          height: 32,
+        }),
+      },
+      renderer: () => <span>asset</span>,
+    }])
+    const view = render(
+      <Harness
+        assetResolver={firstResolver}
+        interactionController={interactionController}
+        runtime={runtime}
+        testRegistry={assetRegistry}
+      />,
+    )
+    act(() => {
+      interactionController.send({
+        type: 'external.add',
+        item: {
+          kind: 'assets',
+          items: [{
+            providerId: 'memory',
+            assetKey: 'image',
+            scope: 'persistent',
+            name: 'image.png',
+            mediaType: 'image/png',
+          }],
+        },
+      })
+    })
+    expect(requestSignal).toBeDefined()
+
+    view.rerender(
+      <Harness
+        assetResolver={nextResolver}
+        interactionController={interactionController}
+        runtime={runtime}
+        testRegistry={assetRegistry}
+      />,
+    )
+    expect(requestSignal?.aborted).toBe(true)
+    await act(async () => {
+      finishResolve?.({
+        blob: new Blob(['late'], { type: 'image/png' }),
+        mediaType: 'image/png',
+        revision: 'late',
+      })
+      await Promise.resolve()
+    })
+    expect(runtime.entries).toHaveLength(1)
+    expect(runtime.document.rootIds).toEqual(['frame', 'frame-negative'])
   })
 
   it('OpenSpec: stage / Stage 内建本地化 / 使用英文 Stage chrome', () => {

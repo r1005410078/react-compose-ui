@@ -12,6 +12,7 @@ export interface WorkspaceContent {
   inspectorPanel?: ReactNode
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
+  assetBrowserPanel?: ReactNode
   settingsOpen: boolean
   settingsPanelId: string
   setSettingsButton: (element: HTMLButtonElement | null) => void

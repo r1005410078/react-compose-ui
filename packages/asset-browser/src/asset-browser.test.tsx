@@ -1,0 +1,370 @@
+import {
+  cleanup,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ComposeUIProvider } from '@compose-ui/ui-context'
+import type {
+  ComposeAssetEntry,
+  ComposeAssetProvider,
+} from './index'
+import { AssetBrowser } from './index'
+
+const root: ComposeAssetEntry = {
+  id: 'root',
+  parentId: null,
+  name: 'Assets',
+  kind: 'folder',
+}
+const images: ComposeAssetEntry = {
+  id: 'images',
+  parentId: 'root',
+  name: 'Images',
+  kind: 'folder',
+}
+const logo: ComposeAssetEntry = {
+  id: 'logo',
+  parentId: 'root',
+  name: 'logo.svg',
+  kind: 'file',
+  mediaType: 'image/svg+xml',
+  size: 64,
+  revision: '1',
+  assetKey: 'logo-key',
+}
+const nestedLogo: ComposeAssetEntry = {
+  id: 'nested-logo',
+  parentId: 'images',
+  name: 'nested-logo.svg',
+  kind: 'file',
+  mediaType: 'image/svg+xml',
+  size: 32,
+  revision: '1',
+  assetKey: 'nested-logo-key',
+}
+const binary: ComposeAssetEntry = {
+  id: 'binary',
+  parentId: 'root',
+  name: 'mesh.bin',
+  kind: 'file',
+  mediaType: 'application/octet-stream',
+  size: 1024,
+  revision: '1',
+}
+
+function createProvider(overrides: Partial<ComposeAssetProvider> = {}): ComposeAssetProvider {
+  return {
+    id: 'memory',
+    label: 'Assets',
+    root,
+    capabilities: {
+      createFile: true,
+      createFolder: true,
+      rename: true,
+      move: true,
+      delete: true,
+      write: true,
+    },
+    list: vi.fn(async ({ folderId }) => {
+      if (folderId === 'root') return [images, logo, binary]
+      if (folderId === 'images') return [nestedLogo]
+      return []
+    }),
+    read: vi.fn(async ({ fileId }) => ({
+      blob: fileId === 'logo'
+        ? new Blob(['<svg><script>unsafe()</script><rect /></svg>'], { type: 'image/svg+xml' })
+        : new Blob(['binary']),
+      revision: '1',
+    })),
+    createFolder: vi.fn(async ({ parentId, name }) => ({
+      id: `created-${name}`,
+      parentId,
+      name,
+      kind: 'folder' as const,
+    })),
+    createFile: vi.fn(async ({ parentId, name, content }) => ({
+      id: `created-${name}`,
+      parentId,
+      name,
+      kind: 'file' as const,
+      size: content.size,
+    })),
+    renameEntry: vi.fn(async ({ entryId, name }) => ({
+      ...(entryId === 'logo' ? logo : binary),
+      id: `${entryId}-renamed`,
+      name,
+    })),
+    moveEntry: vi.fn(async ({ entryId, parentId }) => ({
+      ...(entryId === 'logo' ? logo : binary),
+      id: `${parentId}-${entryId}`,
+      parentId,
+    })),
+    deleteEntry: vi.fn(async () => undefined),
+    writeFile: vi.fn(async () => logo),
+    ...overrides,
+  }
+}
+
+beforeEach(() => {
+  vi.stubGlobal('IntersectionObserver', undefined)
+  vi.stubGlobal('URL', {
+    ...URL,
+    createObjectURL: vi.fn(() => 'blob:asset'),
+    revokeObjectURL: vi.fn(),
+  })
+})
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+describe('AssetBrowser', () => {
+  it('OpenSpec: asset-browser / 资源 Canvas 拖拽意图 / 拖动单项或多项图片', async () => {
+    const onCanvasDrag = vi.fn()
+    const provider = createProvider({
+      referenceScope: 'persistent',
+      capabilities: {
+        createFile: true,
+        createFolder: true,
+        rename: true,
+        move: true,
+        delete: true,
+        write: true,
+        reference: true,
+      },
+      resolveAsset: vi.fn(async () => ({
+        blob: new Blob(['svg'], { type: 'image/svg+xml' }),
+        revision: '1',
+        mediaType: 'image/svg+xml',
+      })),
+    })
+    render(
+      <AssetBrowser
+        onCanvasDrag={onCanvasDrag}
+        provider={provider}
+      />,
+    )
+    const treeItem = await screen.findByRole('row', { name: /logo.svg/ })
+    fireEvent.click(treeItem)
+    fireEvent.click(screen.getByRole('row', { name: /mesh.bin/ }), {
+      ctrlKey: true,
+    })
+    expect(treeItem).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('row', { name: /mesh.bin/ }))
+      .toHaveAttribute('aria-selected', 'true')
+    const dragStart = createEvent.dragStart(treeItem)
+    Object.defineProperties(dragStart, {
+      clientX: { value: 100 },
+      clientY: { value: 200 },
+      dataTransfer: {
+        value: {
+          effectAllowed: 'uninitialized',
+          setData: vi.fn(),
+        },
+      },
+    })
+    fireEvent(treeItem, dragStart)
+    expect(onCanvasDrag).toHaveBeenCalledWith({
+      type: 'start',
+      clientPoint: { x: 100, y: 200 },
+      items: [{
+        name: 'logo.svg',
+        mediaType: 'image/svg+xml',
+        reference: {
+          providerId: 'memory',
+          assetKey: 'logo-key',
+          scope: 'persistent',
+        },
+      }],
+    })
+  })
+
+  it('OpenSpec: asset-browser / 资源 Canvas 拖拽意图 / 资源内部移动不创建节点', async () => {
+    const onCanvasDrag = vi.fn()
+    const provider = createProvider({
+      referenceScope: 'persistent',
+      capabilities: {
+        createFile: true,
+        createFolder: true,
+        rename: true,
+        move: true,
+        delete: true,
+        write: true,
+        reference: true,
+      },
+      resolveAsset: vi.fn(async () => ({
+        blob: new Blob(['svg'], { type: 'image/svg+xml' }),
+        revision: '1',
+        mediaType: 'image/svg+xml',
+      })),
+    })
+    render(<AssetBrowser onCanvasDrag={onCanvasDrag} provider={provider} />)
+    const logoRow = await screen.findByRole('row', { name: /logo.svg/ })
+    const imagesRow = screen.getByRole('row', { name: /Images/ })
+    const dataTransfer = {
+      effectAllowed: 'uninitialized',
+      setData: vi.fn(),
+      types: [] as string[],
+    }
+    const dragStart = createEvent.dragStart(logoRow)
+    Object.defineProperties(dragStart, {
+      clientX: { value: 40 },
+      clientY: { value: 50 },
+      dataTransfer: { value: dataTransfer },
+    })
+    fireEvent(logoRow, dragStart)
+    fireEvent.dragOver(imagesRow, { dataTransfer })
+    fireEvent.drop(imagesRow, { dataTransfer })
+    fireEvent.dragEnd(logoRow, {
+      clientX: 100,
+      clientY: 120,
+      dataTransfer,
+    })
+
+    await waitFor(() => {
+      expect(provider.moveEntry).toHaveBeenCalledWith({
+        entryId: 'logo',
+        parentId: 'images',
+      })
+    })
+    expect(onCanvasDrag).toHaveBeenCalledWith({
+      type: 'start',
+      clientPoint: { x: 40, y: 50 },
+      items: [expect.objectContaining({ name: 'logo.svg' })],
+    })
+    expect(onCanvasDrag).toHaveBeenCalledWith({ type: 'cancel' })
+    expect(onCanvasDrag).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'end' }),
+    )
+  })
+  it('OpenSpec: asset-browser / 目录浏览与预览 / 懒加载目录并显示直属资源网格', async () => {
+    const provider = createProvider()
+    render(<AssetBrowser provider={provider} />)
+    const grid = await screen.findByRole('grid', { name: 'Assets' })
+    expect(await within(grid).findByRole('gridcell', { name: /logo.svg/ })).toBeVisible()
+    expect(provider.list).toHaveBeenCalledWith(expect.objectContaining({
+      folderId: 'root',
+      signal: expect.any(AbortSignal),
+    }))
+    fireEvent.doubleClick(within(grid).getByRole('gridcell', { name: /Images/ }))
+    await waitFor(() => expect(provider.list).toHaveBeenCalledWith(expect.objectContaining({
+      folderId: 'images',
+    })))
+    expect(await within(screen.getByRole('grid', { name: 'Images' }))
+      .findByRole('gridcell', { name: /nested-logo.svg/ })).toBeVisible()
+  })
+
+  it('OpenSpec: asset-browser / 安全资源预览 / 通过 img 和 Blob URL 预览 SVG', async () => {
+    const provider = createProvider()
+    render(<AssetBrowser provider={provider} />)
+    const grid = await screen.findByRole('grid', { name: 'Assets' })
+    fireEvent.click(within(grid).getByRole('gridcell', { name: /logo.svg/ }))
+    const image = await screen.findByRole('img', { name: 'logo.svg' })
+    expect(image).toHaveAttribute('src', 'blob:asset')
+    expect(document.querySelector('.asset-browser__image-preview script')).toBeNull()
+    expect(URL.createObjectURL).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('row', { name: /mesh.bin/ }))
+    await screen.findByText('此文件类型暂不支持预览')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:asset')
+  })
+
+  it('OpenSpec: asset-browser / 安全资源预览 / 显示不支持文件的元数据和下载', async () => {
+    render(<AssetBrowser provider={createProvider()} />)
+    const grid = await screen.findByRole('grid', { name: 'Assets' })
+    fireEvent.click(within(grid).getByRole('gridcell', { name: /mesh.bin/ }))
+    expect(await screen.findByText('此文件类型暂不支持预览')).toBeVisible()
+    expect(screen.getByRole('link', { name: '下载' })).toHaveAttribute('download', 'mesh.bin')
+  })
+
+  it('OpenSpec: asset-browser / 资源写操作与部分成功 / 新建目录并刷新当前目录', async () => {
+    const provider = createProvider()
+    render(<AssetBrowser provider={provider} />)
+    await screen.findByRole('grid', { name: 'Assets' })
+    fireEvent.click(screen.getByTitle('新建目录'))
+    const dialog = screen.getByRole('dialog', { name: '新建目录' })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '名称' }), {
+      target: { value: 'Textures' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: '创建' }))
+    await waitFor(() => expect(provider.createFolder).toHaveBeenCalledWith({
+      parentId: 'root',
+      name: 'Textures',
+    }))
+    expect(provider.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('OpenSpec: asset-browser / Provider 能力与错误 / 禁用缺失 capability 的操作', async () => {
+    const provider = createProvider({
+      capabilities: {
+        createFile: false,
+        createFolder: false,
+        rename: false,
+        move: false,
+        delete: false,
+        write: false,
+      },
+      createFolder: undefined,
+      createFile: undefined,
+      renameEntry: undefined,
+      moveEntry: undefined,
+      deleteEntry: undefined,
+      writeFile: undefined,
+    })
+    render(<AssetBrowser provider={provider} />)
+    await screen.findByRole('grid', { name: 'Assets' })
+    expect(screen.getByTitle('新建文件')).toBeDisabled()
+    expect(screen.getByTitle('新建目录')).toBeDisabled()
+    expect(screen.getByTitle('删除')).toBeDisabled()
+  })
+
+  it('OpenSpec: editor-preferences / 资源面板 Context / 使用浅色 token、英文及消息覆盖', async () => {
+    render(
+      <ComposeUIProvider
+        locale="en-US"
+        messages={{ 'assetBrowser.search': 'Find files' }}
+        theme="light"
+      >
+        <AssetBrowser provider={createProvider()} />
+      </ComposeUIProvider>,
+    )
+    await screen.findByRole('grid', { name: 'Assets' })
+    const browser = screen.getByRole('searchbox', { name: 'Find files' })
+      .closest('[data-compose-ui="asset-browser"]')
+    expect(browser).toHaveAttribute('lang', 'en-US')
+    expect(browser).toHaveAttribute('data-compose-theme', 'light')
+    expect(browser).toHaveStyle({ '--compose-panel-bg': '#ffffff' })
+  })
+
+  it('OpenSpec: asset-browser / 异步生命周期 / 选择切换时中止迟到 read', async () => {
+    let firstSignal: AbortSignal | undefined
+    let resolveFirst: ((value: { blob: Blob; revision: string }) => void) | undefined
+    const provider = createProvider({
+      read: vi.fn(({
+        fileId,
+        signal,
+      }): Promise<{ blob: Blob; revision: string }> => {
+        if (fileId === 'logo') {
+          firstSignal = signal
+          return new Promise((resolve) => {
+            resolveFirst = resolve
+          })
+        }
+        return Promise.resolve({ blob: new Blob(['binary']), revision: '1' })
+      }),
+    })
+    render(<AssetBrowser provider={provider} />)
+    const grid = await screen.findByRole('grid', { name: 'Assets' })
+    fireEvent.click(within(grid).getByRole('gridcell', { name: /logo.svg/ }))
+    await waitFor(() => expect(firstSignal).toBeDefined())
+    fireEvent.click(screen.getByRole('row', { name: /mesh.bin/ }))
+    expect(firstSignal?.aborted).toBe(true)
+    resolveFirst?.({ blob: new Blob(['late']), revision: 'late' })
+    expect(await screen.findByText('此文件类型暂不支持预览')).toBeVisible()
+  })
+})

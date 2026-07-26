@@ -19,6 +19,7 @@ import {
   useComposeEditorController,
 } from '@compose-ui/editor'
 import type { ComposeEditorTransactionEvent } from '@compose-ui/editor'
+import { createComposeAssetResolver } from '@compose-ui/assets'
 import { createBasicMaterials } from '@compose-ui/materials'
 import {
   OperationLogPanel,
@@ -39,6 +40,7 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as v from 'valibot'
+import { createDemoAssetProvider } from './demo-asset-provider'
 
 registerECharts([BarChart, GridComponent, TitleComponent, CanvasRenderer])
 
@@ -259,6 +261,11 @@ export function StageDemoWorkspace() {
     idFactory,
     onTransaction: recordTransaction,
   })
+  const [assetProvider] = useState(createDemoAssetProvider)
+  const assetResolver = useMemo(
+    () => createComposeAssetResolver(assetProvider),
+    [assetProvider],
+  )
   const selectedFrameId = controller.selectedIds.length === 1
     && controller.document.nodes[controller.selectedIds[0]!]?.kind === 'frame'
     ? controller.selectedIds[0]!
@@ -268,6 +275,8 @@ export function StageDemoWorkspace() {
     <>
       <ComposeEditor
         className="editor-workspace"
+        assetResolver={assetResolver}
+        assetBrowserProps={{ provider: assetProvider }}
         controller={controller}
         stageToolbar={(
           <>
@@ -301,6 +310,7 @@ export function StageDemoWorkspace() {
               选中 Frame
             </button>
             <ComposePreview
+              assetResolver={assetResolver}
               document={controller.document}
               registry={registry}
               target={previewMode === 'frame' && selectedFrameId

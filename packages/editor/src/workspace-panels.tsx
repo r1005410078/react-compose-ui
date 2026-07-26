@@ -259,3 +259,16 @@ export function CommandPanel() {
     </div>
   )
 }
+
+export function AssetBrowserPanel() {
+  const { assetBrowserPanel } = useWorkspaceContent()
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
+
+  return (
+    <div className="compose-editor__panel" data-workspace-panel="asset-browser">
+      {assetBrowserPanel
+        ?? <Placeholder>{messages.workspace.assetBrowserEmpty}</Placeholder>}
+    </div>
+  )
+}

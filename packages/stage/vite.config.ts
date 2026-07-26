@@ -22,6 +22,7 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
+        '@compose-ui/assets',
         '@compose-ui/component-registry',
         '@compose-ui/core',
         '@compose-ui/stage-engine',

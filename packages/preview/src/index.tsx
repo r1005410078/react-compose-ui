@@ -5,6 +5,7 @@
  */
 
 import { RegistryComponent } from '@compose-ui/component-registry'
+import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
   COMPOSE_UI_CORE_PACKAGE,
   resolveNodeStyle,
@@ -26,6 +27,8 @@ export interface ComposePreviewProps extends HTMLAttributes<HTMLElement> {
   readonly document?: ComposeDocument
   /** Stage 与 Preview 共享的实例级组件注册表。 */
   readonly registry?: ComponentRegistry
+  /** 资源型组件解析稳定引用时使用的运行时端口。 */
+  readonly assetResolver?: ComposeAssetResolver
   /** 输出完整文档或某个根级/嵌套 Frame；省略时输出完整文档。 */
   readonly target?: ComposePreviewTarget
 }
@@ -74,10 +77,12 @@ function nodeStyle(node: ComposeNode): CSSProperties {
 }
 
 function PreviewNode({
+  assetResolver,
   document,
   registry,
   nodeId,
 }: {
+  assetResolver?: ComposeAssetResolver
   document: ComposeDocument
   registry: ComponentRegistry
   nodeId: string
@@ -87,9 +92,17 @@ function PreviewNode({
   return (
     <div data-testid={`compose-preview-node-${node.id}`} style={nodeStyle(node)}>
       {node.kind === 'component'
-        ? <RegistryComponent mode="preview" node={node} registry={registry} />
+        ? (
+            <RegistryComponent
+              assetResolver={assetResolver}
+              mode="preview"
+              node={node}
+              registry={registry}
+            />
+          )
         : node.childIds.map((childId) => (
             <PreviewNode
+              assetResolver={assetResolver}
               document={document}
               key={childId}
               nodeId={childId}
@@ -109,6 +122,7 @@ export function ComposePreview({
   children = 'Compose Preview',
   document,
   registry,
+  assetResolver,
   target = { kind: 'document' },
   ...props
 }: ComposePreviewProps) {
@@ -139,6 +153,7 @@ export function ComposePreview({
       >
         {document.rootIds.map((nodeId) => (
           <PreviewNode
+            assetResolver={assetResolver}
             document={document}
             key={nodeId}
             nodeId={nodeId}
@@ -164,6 +179,7 @@ export function ComposePreview({
         {frame.visible
           ? frame.childIds.map((childId) => (
               <PreviewNode
+                assetResolver={assetResolver}
                 document={document}
                 key={childId}
                 nodeId={childId}

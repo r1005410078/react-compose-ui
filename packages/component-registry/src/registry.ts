@@ -3,6 +3,7 @@ import type { JsonObject, NodeStyle } from '@compose-ui/core'
 import {
   ComponentRegistryError,
   type ComponentDefinition,
+  type ComponentAssetDropInput,
   type ComponentRegistry,
   type ComponentSeedResult,
 } from './types'
@@ -182,6 +183,66 @@ export function createComponentRegistry(
           width: definition.defaultSize.width,
           height: definition.defaultSize.height,
         },
+      }
+    },
+    async createAssetSeed(input: ComponentAssetDropInput): Promise<ComponentSeedResult> {
+      const definition = ordered.find((candidate) => {
+        try {
+          return candidate.assetDrop?.accepts({
+            name: input.name,
+            mediaType: input.resolved.mediaType,
+          }) === true
+        } catch {
+          return false
+        }
+      })
+      if (!definition?.assetDrop) {
+        return {
+          ok: false,
+          error: {
+            code: 'definition.asset-unsupported',
+            message: `没有组件支持资源 ${input.name}`,
+          },
+        }
+      }
+      try {
+        const seed = await definition.assetDrop.createSeed(input)
+        const issue = propsIssue(seed.props)
+        if (
+          issue
+          || !Number.isFinite(seed.width)
+          || seed.width <= 0
+          || !Number.isFinite(seed.height)
+          || seed.height <= 0
+          || seed.name.trim().length === 0
+        ) {
+          throw new Error(issue ?? '资源 seed 名称和尺寸必须有效')
+        }
+        if (seed.style) {
+          const style = validateNodeStyle(seed.style)
+          if (!style.valid) throw new Error(style.issues[0]?.message ?? '资源 seed style 无效')
+        }
+        return {
+          ok: true,
+          seed: {
+            componentType: definition.type,
+            name: seed.name,
+            props: structuredClone(seed.props),
+            ...(seed.style ? { style: structuredClone(seed.style) } : {}),
+            width: seed.width,
+            height: seed.height,
+          },
+        }
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: 'definition.asset-factory-failed',
+            message: `${definition.type} 资源 factory 失败：${
+              error instanceof Error ? error.message : '未知错误'
+            }`,
+          },
+        }
       }
     },
   })

@@ -39,12 +39,12 @@ describe('@compose-ui/materials factory', () => {
 
     expect(DEFAULT_BASIC_FRAME_PRESETS.map((item) => item.label)).toEqual(['Frame'])
     expect(DEFAULT_BASIC_COMPONENT_DEFINITIONS.map((item) => item.type))
-      .toEqual(['rectangle', 'text'])
+      .toEqual(['rectangle', 'text', 'image', 'svg'])
     expect(materials.framePresets.map((item) => item.label)).toEqual(['Desktop Frame'])
     expect(materials.componentDefinitions.map((item) => item.type))
-      .toEqual(['rectangle', 'text', 'extension'])
+      .toEqual(['rectangle', 'text', 'image', 'svg', 'extension'])
     expect(materials.registry.list().map((item) => item.label))
-      .toEqual(['Box', 'Text', 'Extension'])
+      .toEqual(['Box', 'Text', 'Image', 'SVG', 'Extension'])
     expect(materials.framePresets[0]?.defaultSize).toEqual({ width: 1440, height: 900 })
     expect(materials.registry.createSeed('rectangle')).toMatchObject({
       ok: true,

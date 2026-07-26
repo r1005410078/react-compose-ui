@@ -1,5 +1,10 @@
 import type { ComponentType, ReactNode } from 'react'
 import type {
+  ComposeAssetReference,
+  ComposeAssetResolver,
+  ComposeResolvedAsset,
+} from '@compose-ui/assets'
+import type {
   ComposeComponentNode,
   ComposeNode,
   EditorCommand,
@@ -31,6 +36,25 @@ export interface ComponentRendererProps {
   readonly props: JsonObject
   /** 编辑 Stage 与只读 Preview 的渲染语义。 */
   readonly mode: 'editor' | 'preview'
+  /** 资源型 definition 读取节点引用时使用的可选运行时端口。 */
+  readonly assetResolver?: ComposeAssetResolver
+}
+
+/** Asset Browser drop 交给 definition 的已解析资源。 @public */
+export interface ComponentAssetDropInput {
+  readonly reference: ComposeAssetReference
+  readonly resolved: ComposeResolvedAsset
+  readonly name: string
+}
+
+/** 资源型 definition 创建 seed 的可选协议。 @public */
+export interface ComponentAssetDropDefinition {
+  /** 仅使用稳定元数据判断是否接受资源。 */
+  accepts(input: { readonly name: string; readonly mediaType: string }): boolean
+  /** 从已解析内容创建组件 seed；componentType 由 Registry 补充。 */
+  createSeed(
+    input: ComponentAssetDropInput,
+  ): Promise<Omit<ComponentSeed, 'componentType'>> | Omit<ComponentSeed, 'componentType'>
 }
 
 /**
@@ -66,6 +90,8 @@ export interface ComponentDefinition {
   readonly defaultName?: string
   /** Palette 可选图标；不会写入 ComposeDocument。 */
   readonly icon?: ReactNode
+  /** 隐藏 ComponentPalette 项，但仍保留 registry 渲染与资源创建能力。 */
+  readonly paletteHidden?: boolean
   /** 创建节点时使用的合法默认尺寸。 */
   readonly defaultSize: ComponentDefaultSize
   /** 每次调用必须返回一份严格 JSON 对象。 */
@@ -76,6 +102,8 @@ export interface ComponentDefinition {
   readonly renderer: ComponentType<ComponentRendererProps>
   /** 可选宿主 Inspector；可以在其内部组合 PropertyPanel。 */
   readonly inspector?: ComponentType<ComponentInspectorProps>
+  /** 可选资源 drop 匹配与 seed factory。 */
+  readonly assetDrop?: ComponentAssetDropDefinition
 }
 
 /**
@@ -108,6 +136,8 @@ export interface ComponentSeedError {
     | 'definition.unknown-type'
     | 'definition.invalid-props'
     | 'definition.invalid-style'
+    | 'definition.asset-unsupported'
+    | 'definition.asset-factory-failed'
   readonly message: string
 }
 
@@ -132,6 +162,8 @@ export interface ComponentRegistry {
   list(): readonly ComponentDefinition[]
   /** 调用 definition factory 并创建独立 JSON 节点种子。 */
   createSeed(type: string): ComponentSeedResult
+  /** 按 definition 顺序从已解析资源创建组件 seed。 */
+  createAssetSeed(input: ComponentAssetDropInput): Promise<ComponentSeedResult>
 }
 
 /**

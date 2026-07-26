@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev --concurrency=15",
+    "dev": "turbo run dev --concurrency=18",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "lint": "eslint . --max-warnings 0",
@@ -20,7 +20,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "bun run build && changeset publish",
-    "pack:dry-run": "bun run --cwd packages/core pack:dry-run && bun run --cwd packages/stage-engine pack:dry-run && bun run --cwd packages/ui-context pack:dry-run && bun run --cwd packages/command-panel pack:dry-run && bun run --cwd packages/component-registry pack:dry-run && bun run --cwd packages/stage pack:dry-run && bun run --cwd packages/property-panel pack:dry-run && bun run --cwd packages/materials pack:dry-run && bun run --cwd packages/scene-tree pack:dry-run && bun run --cwd packages/history pack:dry-run && bun run --cwd packages/operation-log pack:dry-run && bun run --cwd packages/editor pack:dry-run && bun run --cwd packages/preview pack:dry-run"
+    "pack:dry-run": "bun run --cwd packages/core pack:dry-run && bun run --cwd packages/assets pack:dry-run && bun run --cwd packages/stage-engine pack:dry-run && bun run --cwd packages/ui-context pack:dry-run && bun run --cwd packages/components pack:dry-run && bun run --cwd packages/command-panel pack:dry-run && bun run --cwd packages/component-registry pack:dry-run && bun run --cwd packages/stage pack:dry-run && bun run --cwd packages/property-panel pack:dry-run && bun run --cwd packages/materials pack:dry-run && bun run --cwd packages/scene-tree pack:dry-run && bun run --cwd packages/history pack:dry-run && bun run --cwd packages/operation-log pack:dry-run && bun run --cwd packages/asset-browser pack:dry-run && bun run --cwd packages/editor pack:dry-run && bun run --cwd packages/preview pack:dry-run"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.7.0",

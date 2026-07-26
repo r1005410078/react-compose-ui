@@ -7,8 +7,9 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 实时查看最终效果，减少现场修改代码、重新构建和部署的次数。
 
 > 当前版本处于基础能力验证阶段，提供版本化 JSON 文档、同步命令事务、组件注册表、
-> DOM/SVG 无限 Stage、Frame/Rectangle/Text 基础物料、编辑器 controller、场景树、会话历史、Schema 属性面板、本地操作日志、
-> Command 调试台和 Frame 文档预览，尚不是完整的低代码编辑器。
+> DOM/SVG 无限 Stage、Frame/Rectangle/Text/Image/SVG 基础物料、编辑器 controller、场景树、
+> 会话历史、Schema 属性面板、本地操作日志、Command 调试台、资源浏览/预览/画布拖入与
+> Frame 文档预览，尚不是完整的低代码编辑器。
 
 ## 环境要求
 
@@ -23,13 +24,13 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 相关包发布到 npm 后，可以安装需要的组件：
 
 ```bash
-bun add @compose-ui/core @compose-ui/stage-engine @compose-ui/ui-context @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+bun add @compose-ui/core @compose-ui/assets @compose-ui/stage-engine @compose-ui/ui-context @compose-ui/components @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/asset-browser @compose-ui/preview valibot
 ```
 
 也可以使用 npm：
 
 ```bash
-npm install @compose-ui/core @compose-ui/stage-engine @compose-ui/ui-context @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/preview valibot
+npm install @compose-ui/core @compose-ui/assets @compose-ui/stage-engine @compose-ui/ui-context @compose-ui/components @compose-ui/command-panel @compose-ui/component-registry @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/history @compose-ui/scene-tree @compose-ui/property-panel @compose-ui/operation-log @compose-ui/asset-browser @compose-ui/preview valibot
 ```
 
 React 和 ReactDOM 由宿主项目提供：
@@ -81,7 +82,7 @@ export function ComposePage() {
 
 `ComposeEditor` 使用 Dockview 提供固定的 IDE 式工作区：Scene Graph 与 Component Library
 共享左侧 Edge Group，Stage 位于中央 Canvas 主组，Component Inspector 位于右侧 Edge Group，
-Transaction Log 与 Command 共享底部 Edge Group。三个边缘区可以调整尺寸，并通过活动标签
+Transaction Log、Command 与 Assets 共享底部 Edge Group。三个边缘区可以调整尺寸，并通过活动标签
 折叠或展开。
 
 宿主必须显式导入 `@compose-ui/editor/styles.css`，并为编辑器提供确定的非零高度。
@@ -115,6 +116,36 @@ Scene Graph 默认使用 `@compose-ui/scene-tree`，通过 `sceneTreeProps` 接�
 Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API、面板对象或布局 JSON。
 当前实例中的尺寸、折叠状态和活动标签会在挂载期间保留，但不会写入 localStorage、页面
 文档或远端存储；重新挂载后恢复默认布局。
+
+## 资源浏览器与共享 Tree
+
+`@compose-ui/components` 提供无业务语义的受控虚拟 `Tree<T>`：多选、范围选择、键盘/ARIA、
+过滤祖先保留和可选 Pointer 拖排。`SceneTree` 与 `AssetBrowser` 组合这一个树内核，但场景
+命令、资源 Provider 和持久化仍分别留在各自包中。
+
+轻量 `@compose-ui/assets` 定义 `ComposeAssetProvider`、稳定资源引用和运行时 resolver；
+`@compose-ui/asset-browser` 兼容转导这些类型并连接任意资源事实来源，提供目录树、
+文件夹缩略图网格、SVG/常见图片安全预览、二进制信息和按需加载的 Monaco 脚本编辑。写入使用
+`expectedRevision` 乐观并发；资源操作不进入 ComposeDocument、History 或 Operation Log。
+
+```tsx
+import { createComposeAssetResolver } from '@compose-ui/assets'
+import { AssetBrowser } from '@compose-ui/asset-browser'
+import '@compose-ui/asset-browser/styles.css'
+
+const assetResolver = createComposeAssetResolver(assetProvider)
+
+<AssetBrowser
+  provider={assetProvider}
+  onCanvasDrag={handleCanvasDrag}
+  style={{ height: 560 }}
+/>
+```
+
+浏览器支持时，也可由用户手势调用 `openFileSystemAssetProvider()` 打开本地可读写目录。目录
+句柄只保留在当前组件实例，不会自动写入 IndexedDB。只有 Provider 提供 reference capability、
+不可变 `assetKey` 和 `resolveAsset` 时，兼容 SVG/位图才可拖到 Stage。节点仅保存引用，资源
+内容更新会刷新 renderer，但不会产生文档事务。
 
 `ComposeEditor` 不直接拥有文档 `value`/`onChange`。推荐由宿主创建下方
 `TransactionRuntime` 和 `ComponentRegistry`，再使用 `useComposeEditorController` 组合默认
@@ -246,7 +277,7 @@ function Workspace({ document }: { document: ComposeDocument }) {
 }
 ```
 
-需要开箱即用的 Frame、Rectangle 与 Text 时，可使用独立 materials factory，并继续在末尾追加
+需要开箱即用的 Frame、Rectangle、Text、Image 与 SVG 时，可使用独立 materials factory，并继续在末尾追加
 宿主 definitions：
 
 ```tsx
@@ -263,7 +294,9 @@ const controller = useComposeEditorController({
 ```
 
 基础物料把背景、边框、圆角、透明度和结构化 shadow 统一写入 `node.style`。Stage 与 Preview
-使用同一 resolved style；Rectangle 仍兼容读取无 style 旧文档的视觉 props。
+使用同一 resolved style；Rectangle 仍兼容读取无 style 旧文档的视觉 props。Image/SVG 默认从
+Component Library 隐藏，通过资源面板拖入创建；两者使用同一个 runtime resolver，SVG 必须净化
+后才内联并支持填充/描边覆盖。
 
 网格步长/偏移/主线间隔、节点/辅助线吸附开关和全局世界辅助线保存在
 `ComposeDocument.canvas`，会进入事务 History 与 Operation Log。选择、工具、场景树展开项、
@@ -280,11 +313,15 @@ SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全
 1920×1080、2560×1440 或 3840×2160，也可编辑自定义宽高和背景。Canvas 只是检查目标，
 不会出现在 SceneTree、`nodes` 或节点选择中。
 
-`ComposePreview` 接收 `document`、`registry` 和可选 `target`。默认按文档固定输出边界渲染
+`ComposePreview` 接收 `document`、`registry`、可选 `assetResolver` 和 `target`。默认按文档固定输出边界渲染
 完整文档，也可输出任意根级或嵌套 Frame；两种模式都不包含 Stage 的 SVG 编辑覆盖层：
 
 ```tsx
-<ComposePreview document={runtime.document} registry={registry} />
+<ComposePreview
+  document={runtime.document}
+  registry={registry}
+  assetResolver={assetResolver}
+/>
 <ComposePreview
   document={runtime.document}
   registry={registry}
@@ -292,7 +329,8 @@ SceneTree 操作、Inspector 修改、Stage 手势和结构化 Command 表单全
 />
 ```
 
-完整说明见 [`component-registry`](./packages/component-registry/README.md)、
+完整说明见 [`assets`](./packages/assets/README.md)、
+[`component-registry`](./packages/component-registry/README.md)、
 [`stage-engine`](./packages/stage-engine/README.md)、[`stage`](./packages/stage/README.md)、
 [`materials`](./packages/materials/README.md)、
 [`editor`](./packages/editor/README.md) 与

@@ -58,9 +58,19 @@ export interface StageInteractionModifiers {
 }
 
 /** Palette 交给引擎的无 React descriptor。 @public */
+export interface StageExternalAssetItem {
+  readonly providerId: string
+  readonly assetKey: string
+  readonly scope: 'persistent' | 'session'
+  readonly name: string
+  readonly mediaType: string
+}
+
+/** Palette 或 Asset Browser 交给引擎的无 React descriptor。 @public */
 export type StageExternalDragItem =
   | { readonly kind: 'component'; readonly componentType: string }
   | { readonly kind: 'frame'; readonly presetId: string }
+  | { readonly kind: 'assets'; readonly items: readonly StageExternalAssetItem[] }
 
 /** Pointer 命中的 Stage 语义目标。 @public */
 export type StageInteractionHit =

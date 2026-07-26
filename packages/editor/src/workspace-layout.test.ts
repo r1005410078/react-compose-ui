@@ -72,7 +72,7 @@ describe('initializeWorkspace', () => {
       id: WORKSPACE_GROUP_IDS.bottom,
       ...WORKSPACE_SIZES.bottom,
     })
-    expect(spies.addPanel).toHaveBeenCalledTimes(6)
+    expect(spies.addPanel).toHaveBeenCalledTimes(7)
     expect(panels.get(WORKSPACE_PANEL_IDS.scene)?.api.setActive)
       .toHaveBeenCalledTimes(1)
     expect(edgeGroups.get('bottom')).toEqual(
@@ -107,7 +107,7 @@ describe('initializeWorkspace', () => {
     expect(WORKSPACE_SIZES.inspector).toEqual({ initialSize: 400, minimumSize: 300 })
   })
 
-  it('places both bottom panels in one group and leaves Transaction Log active', () => {
+  it('OpenSpec: editor-workspace-layout / 资源面板标签 / 将三个底部面板放入一组并保持日志活动', () => {
     const { api, spies } = createWorkspaceApi()
 
     initializeWorkspace(api)
@@ -118,6 +118,9 @@ describe('initializeWorkspace', () => {
     const commandOptions = spies.addPanel.mock.calls.find(
       ([options]) => options.id === WORKSPACE_PANEL_IDS.command,
     )?.[0]
+    const assetOptions = spies.addPanel.mock.calls.find(
+      ([options]) => options.id === WORKSPACE_PANEL_IDS.assetBrowser,
+    )?.[0]
 
     expect(transactionOptions).toEqual(
       expect.objectContaining({
@@ -125,6 +128,12 @@ describe('initializeWorkspace', () => {
       }),
     )
     expect(commandOptions).toEqual(
+      expect.objectContaining({
+        inactive: true,
+        position: { referenceGroup: WORKSPACE_GROUP_IDS.bottom },
+      }),
+    )
+    expect(assetOptions).toEqual(
       expect.objectContaining({
         inactive: true,
         position: { referenceGroup: WORKSPACE_GROUP_IDS.bottom },
@@ -140,6 +149,6 @@ describe('initializeWorkspace', () => {
 
     expect(spies.addGroup).toHaveBeenCalledTimes(1)
     expect(spies.addEdgeGroup).toHaveBeenCalledTimes(3)
-    expect(spies.addPanel).toHaveBeenCalledTimes(6)
+    expect(spies.addPanel).toHaveBeenCalledTimes(7)
   })
 })

@@ -1,0 +1,178 @@
+.compose-tree {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--compose-panel-bg, #111419);
+  color: var(--compose-text, #c5ccd6);
+  font-family: inherit;
+}
+
+.compose-tree--dragging,
+.compose-tree--dragging .compose-tree__row {
+  cursor: grabbing;
+}
+
+.compose-tree__scroll {
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  outline: none;
+  scrollbar-color: var(--compose-scrollbar, #454d59) transparent;
+  scrollbar-width: thin;
+}
+
+.compose-tree__virtual {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.compose-tree__row-positioner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.compose-tree__row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  width: calc(100% - 0.5rem);
+  min-width: 0;
+  height: 22px;
+  margin: 1px 4px;
+  padding-right: 2px;
+  overflow: hidden;
+  border-radius: 5px;
+  color: inherit;
+  cursor: default;
+  font-size: 13px;
+  outline: none;
+  user-select: none;
+}
+
+.compose-tree__row:hover {
+  background: var(--compose-surface-hover, #2a2d2e);
+}
+
+.compose-tree__row--selected {
+  background: var(--compose-surface-selected, #37373d);
+  color: var(--compose-text-strong, #fff);
+}
+
+.compose-tree__row:focus-visible {
+  background: color-mix(in srgb, var(--compose-focus, #007fd4) 22%, var(--compose-panel-bg, #111419));
+  color: var(--compose-text-strong, #fff);
+  box-shadow: inset 0 0 0 1px var(--compose-focus, #007fd4);
+}
+
+.compose-tree__row--drop-inside {
+  background: color-mix(in srgb, var(--compose-accent, #2388ff) 28%, var(--compose-panel-bg, #111419));
+  color: var(--compose-text-strong, #fff);
+  box-shadow: inset 0 0 0 1px var(--compose-accent, #2388ff);
+}
+
+.compose-tree__indent {
+  flex: 0 0 auto;
+}
+
+.compose-tree__chevron {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--compose-text-muted, #9aa3ae);
+  cursor: pointer;
+}
+
+.compose-tree__chevron:disabled {
+  visibility: hidden;
+}
+
+.compose-tree__chevron svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.compose-tree__icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  margin-right: 4px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--compose-text-muted, #aab3bf);
+}
+
+.compose-tree__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.compose-tree__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-tree__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.compose-tree__drop-line {
+  position: absolute;
+  z-index: 10;
+  right: 4px;
+  height: 2px;
+  pointer-events: none;
+  background: var(--compose-accent, #2388ff);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--compose-accent, #2388ff) 70%, transparent);
+}
+
+.compose-tree__drag-preview {
+  position: fixed;
+  z-index: 1000;
+  width: max-content;
+  max-width: 200px;
+  overflow: hidden;
+  padding: 6px 12px;
+  border: 1px solid var(--compose-accent, #2388ff);
+  border-radius: 999px;
+  background: var(--compose-surface-active, #172a3a);
+  color: var(--compose-text-strong, #fff);
+  font-size: 14px;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 45%);
+}
+
+.compose-tree__drag-preview--count {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+}

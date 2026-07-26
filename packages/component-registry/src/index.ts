@@ -9,6 +9,8 @@ export { RegistryComponent, RegistryInspector } from './renderers'
 export {
   ComponentRegistryError,
   type ComponentDefaultSize,
+  type ComponentAssetDropDefinition,
+  type ComponentAssetDropInput,
   type ComponentDefinition,
   type ComponentInspectorProps,
   type NodeInspectorProps,

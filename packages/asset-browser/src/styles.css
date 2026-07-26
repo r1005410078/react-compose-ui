@@ -1,0 +1,343 @@
+@import '@compose-ui/components/styles.css';
+
+.asset-browser {
+  --asset-bg: var(--compose-panel-bg, #111419);
+  --asset-surface: var(--compose-surface-sunken, #171b21);
+  --asset-raised: var(--compose-surface-raised, #20252d);
+  --asset-border: var(--compose-border, #2a3039);
+  --asset-text: var(--compose-text, #c5ccd6);
+  --asset-muted: var(--compose-text-muted, #8893a2);
+  --asset-accent: var(--compose-accent, #3784f6);
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--asset-text);
+  background: var(--asset-bg);
+  font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
+.asset-browser--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.asset-browser__connect {
+  display: grid;
+  max-width: 360px;
+  justify-items: center;
+  gap: 12px;
+  color: var(--asset-muted);
+  text-align: center;
+}
+
+.asset-browser__connect svg {
+  width: 52px;
+  color: var(--asset-accent);
+}
+
+.asset-browser button,
+.asset-browser input {
+  color: inherit;
+  font: inherit;
+}
+
+.asset-browser button {
+  border: 1px solid var(--asset-border);
+  border-radius: 4px;
+  background: var(--asset-raised);
+}
+
+.asset-browser button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--asset-accent) 60%, var(--asset-border));
+  background: color-mix(in srgb, var(--asset-raised) 80%, var(--asset-accent));
+}
+
+.asset-browser button:focus-visible,
+.asset-browser input:focus-visible,
+.asset-browser [role="separator"]:focus-visible {
+  outline: 2px solid var(--compose-focus, #69a5ff);
+  outline-offset: -2px;
+}
+
+.asset-browser button:disabled {
+  cursor: not-allowed;
+  opacity: .38;
+}
+
+.asset-browser__toolbar {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--asset-border);
+  background: var(--asset-surface);
+}
+
+.asset-browser__toolbar strong {
+  max-width: 180px;
+  overflow: hidden;
+  margin-right: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-browser__toolbar button {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+}
+
+.asset-browser__search {
+  width: min(260px, 35%);
+  height: 26px;
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--asset-border);
+  border-radius: 4px;
+  background: var(--asset-bg);
+}
+
+.asset-browser__notice {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  color: var(--compose-danger, #ff7474);
+  background: color-mix(in srgb, var(--compose-danger, #ff7474) 10%, var(--asset-bg));
+}
+
+.asset-browser__notice button {
+  border: 0;
+  background: transparent;
+}
+
+.asset-browser__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.asset-browser__tree-pane {
+  min-width: 180px;
+  max-width: 560px;
+  min-height: 0;
+  background: var(--asset-bg);
+}
+
+.asset-browser__tree-pane .compose-tree {
+  height: 100%;
+}
+
+.asset-browser__tree-pane .compose-tree__icon svg {
+  width: 15px;
+}
+
+.asset-browser__splitter {
+  z-index: 1;
+  width: 5px;
+  flex: 0 0 5px;
+  cursor: col-resize;
+  border-inline: 1px solid var(--asset-border);
+  background: var(--asset-surface);
+}
+
+.asset-browser__splitter:hover {
+  background: var(--asset-accent);
+}
+
+.asset-browser__content {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 2%) 25%, transparent 25%) 0 0 / 10px 10px,
+    var(--asset-bg);
+}
+
+.asset-browser__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+}
+
+.asset-browser__asset-card {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: 88px auto;
+  gap: 6px;
+  padding: 6px;
+  cursor: default;
+  text-align: center;
+}
+
+.asset-browser__asset-card[aria-selected="true"] {
+  border-color: var(--asset-accent);
+  box-shadow: inset 0 0 0 1px var(--asset-accent);
+  background: color-mix(in srgb, var(--asset-accent) 18%, var(--asset-raised));
+}
+
+.asset-browser__asset-card > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-browser__thumbnail {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 2px;
+  color: var(--asset-muted);
+  background: var(--asset-surface);
+  font-size: 11px;
+}
+
+.asset-browser__thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.asset-browser__thumbnail svg {
+  width: 42px;
+  color: var(--asset-accent);
+}
+
+.asset-browser__status {
+  display: grid;
+  min-height: 140px;
+  place-items: center;
+  color: var(--asset-muted);
+}
+
+.asset-browser__status--error {
+  color: var(--compose-danger, #ff7474);
+}
+
+.asset-browser__image-preview {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  padding: 24px;
+  place-items: center;
+  background:
+    linear-gradient(45deg, #80808022 25%, transparent 25%, transparent 75%, #80808022 75%),
+    linear-gradient(45deg, #80808022 25%, transparent 25%, transparent 75%, #80808022 75%);
+  background-position: 0 0, 8px 8px;
+  background-size: 16px 16px;
+}
+
+.asset-browser__image-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgb(0 0 0 / 30%));
+}
+
+.asset-browser__binary,
+.asset-browser__selection-summary {
+  max-width: 640px;
+  padding: 32px;
+}
+
+.asset-browser__binary dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 18px;
+}
+
+.asset-browser__binary dt {
+  color: var(--asset-muted);
+}
+
+.asset-browser__script,
+.asset-browser__monaco {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+}
+
+.asset-browser__dialog-layer {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background: rgb(0 0 0 / 48%);
+}
+
+.asset-browser__dialog-layer--conflict {
+  z-index: 35;
+}
+
+.asset-browser__dialog {
+  width: min(420px, 100%);
+  padding: 18px;
+  border: 1px solid var(--asset-border);
+  border-radius: 7px;
+  background: var(--asset-surface);
+  box-shadow: 0 18px 60px var(--compose-shadow, rgb(0 0 0 / 45%));
+}
+
+.asset-browser__dialog h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.asset-browser__dialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.asset-browser__dialog input {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--asset-border);
+  border-radius: 4px;
+  background: var(--asset-bg);
+}
+
+.asset-browser__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.asset-browser__dialog-actions button {
+  min-width: 72px;
+  min-height: 28px;
+}
+
+.asset-browser__context-menu {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--asset-border);
+  border-radius: 5px;
+  background: var(--asset-surface);
+  box-shadow: 0 10px 30px var(--compose-shadow, rgb(0 0 0 / 38%));
+}
+
+.asset-browser__context-menu button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  text-align: start;
+}

@@ -5,134 +5,219 @@
 
 @source './';
 
-@layer components {
-  .history-panel {
-    @apply hi:flex hi:h-full hi:min-h-0 hi:flex-col hi:overflow-hidden hi:bg-[#111419] hi:text-[#c5ccd6];
-  }
+/*
+ * History 会被嵌入未知宿主。组件 chrome 故意保持在未分层样式中，避免宿主常见的
+ * `button { font: inherit }` reset 凭借未分层优先级覆盖按钮字号与颜色。
+ */
+.history-panel {
+  --history-background: var(--compose-panel-bg, #111419);
+  --history-header-background: var(--compose-surface-raised, #181b20);
+  --history-border: var(--compose-border, #303640);
+  --history-text: var(--compose-text, #c5ccd6);
+  --history-text-strong: var(--compose-text-strong, #f2f5f9);
+  --history-text-muted: var(--compose-text-muted, #8994a3);
+  --history-hover: var(--compose-surface-hover, #252b34);
+  --history-current: var(--compose-surface-selected, #3b4654);
+  --history-accent: var(--compose-accent, #69a7ff);
+  --history-focus: var(--compose-focus, #8bbcff);
+  --history-scrollbar: var(--compose-scrollbar, #454d59);
 
-  .history-panel__header {
-    @apply hi:flex hi:h-9 hi:shrink-0 hi:items-center hi:border-b hi:border-[#303640] hi:bg-[#181b20] hi:px-3;
-  }
-
-  .history-panel__header h2 {
-    @apply hi:m-0 hi:text-[0.78rem] hi:font-semibold hi:text-[#d8dee8];
-  }
-
-  .history-panel__list {
-    @apply hi:m-0 hi:min-h-0 hi:flex-1 hi:list-none hi:overflow-x-hidden hi:overflow-y-auto hi:p-1;
-    scrollbar-color: #454d59 transparent;
-    scrollbar-width: thin;
-  }
-
-  .history-panel__list::-webkit-scrollbar {
-    width: 8px;
-  }
-
-  .history-panel__list::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .history-panel__list::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background: #454d59;
-    background-clip: content-box;
-  }
-
-  .history-panel__list button {
-    @apply hi:flex hi:min-h-7 hi:w-full hi:min-w-0 hi:items-center hi:gap-1.5 hi:rounded hi:border-0 hi:bg-transparent hi:px-1.5 hi:py-1 hi:text-left hi:text-[0.78rem] hi:text-[#c5ccd6] hi:outline-none;
-  }
-
-  .history-panel__list button:hover,
-  .history-panel__list button:focus-visible {
-    @apply hi:bg-[#252b34] hi:text-[#f2f5f9];
-  }
-
-  .history-panel__list button[data-history-state='current'] {
-    @apply hi:bg-[#3b4654] hi:text-white;
-  }
-
-  .history-panel__list button[data-history-state='future'] {
-    @apply hi:text-[#727d8c];
-  }
-
-  .history-panel__list button > svg,
-  .history-panel__list button > span:first-child {
-    @apply hi:size-4 hi:shrink-0;
-  }
-
-  .history-panel__list button > svg {
-    fill: none;
-    stroke: #7eb1ff;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 2;
-  }
-
-  .history-panel__entry-copy {
-    @apply hi:flex hi:min-w-0 hi:flex-1 hi:flex-col hi:overflow-hidden;
-  }
-
-  .history-panel__entry-copy strong,
-  .history-panel__entry-copy small {
-    @apply hi:overflow-hidden hi:text-ellipsis hi:whitespace-nowrap;
-  }
-
-  .history-panel__entry-copy strong {
-    @apply hi:font-medium hi:text-current;
-  }
-
-  .history-panel__entry-copy small {
-    @apply hi:text-[0.68rem] hi:leading-3 hi:text-[#8994a3];
-  }
-
-  .history-panel__list button[data-history-state='current'] .history-panel__entry-copy small {
-    @apply hi:text-[#c2d4ec];
-  }
-
-  .history-panel__empty {
-    @apply hi:grid hi:min-h-0 hi:flex-1 hi:place-items-center hi:m-0 hi:p-4 hi:text-center hi:text-[0.76rem] hi:text-[#778292];
-  }
-
-  .history-panel__visually-hidden {
-    @apply hi:absolute hi:size-px hi:overflow-hidden hi:border-0 hi:p-0 hi:whitespace-nowrap;
-    clip: rect(0 0 0 0);
-  }
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--history-text);
+  background: var(--history-background);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
-.history-panel[data-compose-theme='light'] {
-  background: var(--compose-panel-bg);
-  color: var(--compose-text);
+.history-panel,
+.history-panel *,
+.history-panel *::before,
+.history-panel *::after {
+  box-sizing: border-box;
 }
 
-.history-panel[data-compose-theme='light'] .history-panel__header {
-  border-color: var(--compose-border);
-  background: var(--compose-surface-raised);
+.history-panel__header {
+  display: flex;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: center;
+  padding-inline: 12px;
+  border-bottom: 1px solid var(--history-border);
+  background: var(--history-header-background);
 }
 
-.history-panel[data-compose-theme='light'] .history-panel__header h2 {
-  color: var(--compose-text-strong);
+.history-panel__header h2 {
+  margin: 0;
+  color: var(--history-text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
 }
 
-.history-panel[data-compose-theme='light'] .history-panel__list button {
-  color: var(--compose-text);
+.history-panel__list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-color: var(--history-scrollbar) transparent;
+  scrollbar-width: thin;
 }
 
-.history-panel[data-compose-theme='light'] .history-panel__list button:hover,
-.history-panel[data-compose-theme='light'] .history-panel__list button:focus-visible {
-  background: var(--compose-surface-hover);
-  color: var(--compose-text-strong);
+.history-panel__list::-webkit-scrollbar {
+  width: 8px;
 }
 
-.history-panel[data-compose-theme='light']
-  .history-panel__list button[data-history-state='current'] {
-  background: var(--compose-surface-selected);
-  color: var(--compose-text-strong);
+.history-panel__list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.history-panel[data-compose-theme='light']
-  .history-panel__list button[data-history-state='future'],
-.history-panel[data-compose-theme='light'] .history-panel__entry-copy small,
-.history-panel[data-compose-theme='light'] .history-panel__empty {
-  color: var(--compose-text-muted);
+.history-panel__list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--history-scrollbar);
+  background-clip: content-box;
+}
+
+.history-panel__list button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  margin: 0;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 5px;
+  outline: none;
+  color: var(--history-text);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    color 100ms ease,
+    background-color 100ms ease;
+}
+
+.history-panel__list button:hover {
+  color: var(--history-text-strong);
+  background: var(--history-hover);
+}
+
+.history-panel__list button:focus-visible {
+  color: var(--history-text-strong);
+  background: var(--history-hover);
+  box-shadow: inset 0 0 0 1px var(--history-focus);
+}
+
+.history-panel__list button[data-history-state='current'] {
+  color: var(--history-text-strong);
+  background: var(--history-current);
+  box-shadow: inset 2px 0 var(--history-accent);
+}
+
+.history-panel__list button[data-history-state='future'] {
+  color: var(--history-text-muted);
+}
+
+.history-panel__list button > svg,
+.history-panel__list button > span:first-child {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.history-panel__list button > svg {
+  fill: none;
+  stroke: var(--history-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2px;
+}
+
+.history-panel__list button > span:first-child {
+  position: relative;
+}
+
+.history-panel__list button > span:first-child::after {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+  opacity: 0.42;
+}
+
+.history-panel__entry-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.history-panel__entry-copy strong,
+.history-panel__entry-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-panel__entry-copy strong {
+  color: currentColor;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.history-panel__entry-copy small {
+  color: var(--history-text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+}
+
+.history-panel__list button[data-history-state='current'] .history-panel__entry-copy small {
+  color: var(--history-text);
+}
+
+.history-panel__empty {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  margin: 0;
+  padding: 16px;
+  color: var(--history-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.history-panel__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  white-space: nowrap;
+  clip: rect(0 0 0 0);
 }

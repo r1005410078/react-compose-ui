@@ -24,6 +24,9 @@ DOM Scene Layer 与屏幕坐标 SVG/DOM Overlay 组合的无限编辑 Stage。
   Pointer/键盘外部拖入会话。
 - `StageFramePreset` 让 Palette 在 definitions 之前显示 Frame；拖入最深合法 Frame，未命中时
   创建为隐式 Canvas 根节点。
+- Asset Browser 可通过同一 controller 发送 `assets` descriptor。Stage 使用 `assetResolver`
+  并发解析资源、调用 registry asset factory，按最多四列布局成功项并以一个原子 batch 创建；
+  目标 Frame 失效时回退 Canvas 根，部分失败不会污染 batch。
 - Frame 与 Component 使用 core `resolveNodeStyle`；Frame 由 `clipContent` 决定内容溢出，
   resize 只改变 Frame 自身边界，不递归缩放后代。
 - 默认从 `@compose-ui/ui-context` 读取主题与语言；`locale="zh-CN|en-US"` 作为显式兼容覆盖，
@@ -51,6 +54,7 @@ const interactionController = createStageInteractionController()
   <Stage
     document={runtime.document}
     registry={registry}
+    assetResolver={assetResolver}
     dispatch={runtime.dispatch}
     viewport={viewport}
     onViewportChange={setViewport}

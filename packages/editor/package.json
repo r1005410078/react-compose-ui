@@ -26,6 +26,8 @@
     "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
   "dependencies": {
+    "@compose-ui/asset-browser": "workspace:*",
+    "@compose-ui/assets": "workspace:*",
     "@compose-ui/command-panel": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*",

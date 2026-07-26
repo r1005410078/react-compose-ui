@@ -1,0 +1,13 @@
+.compose-material--image {
+  display: block;
+}
+
+.compose-material--asset-missing {
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  color: var(--compose-text-muted, #9aa6b5);
+  background: color-mix(in srgb, var(--compose-surface, #171b22) 90%, transparent);
+  font-size: 12px;
+  text-align: center;
+}

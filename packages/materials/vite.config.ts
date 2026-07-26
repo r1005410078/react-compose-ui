@@ -24,12 +24,14 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
+        '@compose-ui/assets',
         '@compose-ui/component-registry',
         '@compose-ui/core',
         '@compose-ui/property-panel',
         '@compose-ui/stage',
         // Context 必须由宿主共享同一实例，不能内联进材料包。
         '@compose-ui/ui-context',
+        'dompurify',
         'react',
         'react-dom',
         'react/jsx-runtime',

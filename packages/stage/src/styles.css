@@ -345,6 +345,21 @@
   background: #1d2024;
 }
 
+.compose-stage__asset-drop-status {
+  position: absolute;
+  z-index: 6;
+  right: 16px;
+  bottom: 16px;
+  max-width: min(360px, calc(100% - 32px));
+  padding: 7px 10px;
+  border: 1px solid var(--compose-border, #3c424d);
+  border-radius: 4px;
+  color: var(--compose-text, #d8dde6);
+  background: var(--compose-panel, #22262d);
+  box-shadow: var(--compose-shadow, 0 8px 24px rgb(0 0 0 / 28%));
+  pointer-events: none;
+}
+
 .component-palette {
   position: relative;
   box-sizing: border-box;

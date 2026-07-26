@@ -21,6 +21,7 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
+        '@compose-ui/assets',
         '@compose-ui/core',
         'react',
         'react-dom',

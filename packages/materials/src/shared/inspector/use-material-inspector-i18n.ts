@@ -1,6 +1,12 @@
 import { useMemo } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
-import { createContainerSchema, createFrameSchema, createTextSchema } from './schemas'
+import {
+  createContainerSchema,
+  createFrameSchema,
+  createImageSchema,
+  createSvgSchema,
+  createTextSchema,
+} from './schemas'
 
 /** 为第一方材料 Inspector 解析共享语言、消息覆盖与本地化 Schema。 @internal */
 export function useMaterialInspectorI18n() {
@@ -11,6 +17,8 @@ export function useMaterialInspectorI18n() {
     container: createContainerSchema(locale, formatMessage),
     frame: createFrameSchema(locale, formatMessage),
     text: createTextSchema(locale, formatMessage),
+    image: createImageSchema(locale, formatMessage),
+    svg: createSvgSchema(locale, formatMessage),
   }), [formatMessage, locale])
   return {
     schemas,

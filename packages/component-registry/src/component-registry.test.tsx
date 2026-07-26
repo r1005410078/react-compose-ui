@@ -1,5 +1,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type {
+  ComposeAssetReference,
+  ComposeAssetResolver,
+  ComposeResolvedAsset,
+} from '@compose-ui/assets'
+import type {
   ComposeComponentNode,
   EditorCommand,
   JsonObject,
@@ -15,6 +20,20 @@ type Definition = {
   defaultSize: { width: number; height: number }
   createDefaultProps(): JsonObject
   createDefaultStyle?(): NodeStyle
+  paletteHidden?: boolean
+  assetDrop?: {
+    accepts(input: { name: string; mediaType: string }): boolean
+    createSeed(input: {
+      reference: ComposeAssetReference
+      resolved: ComposeResolvedAsset
+      name: string
+    }): Promise<{
+      name: string
+      props: JsonObject
+      width: number
+      height: number
+    }>
+  }
   renderer(props: {
     node: ComposeComponentNode
     props: JsonObject
@@ -42,6 +61,14 @@ type Registry = {
         }
       }
     | { ok: false; error: { code: string; message: string } }
+  createAssetSeed(input: {
+    reference: ComposeAssetReference
+    resolved: ComposeResolvedAsset
+    name: string
+  }): Promise<
+    | { ok: true; seed: { componentType: string; name: string; props: JsonObject; width: number; height: number } }
+    | { ok: false; error: { code: string; message: string } }
+  >
 }
 
 const api = registryPackage as unknown as {
@@ -50,6 +77,7 @@ const api = registryPackage as unknown as {
     registry: Registry
     node: ComposeComponentNode
     mode: 'editor' | 'preview'
+    assetResolver?: ComposeAssetResolver
   }): React.ReactNode
   RegistryInspector(props: {
     registry: Registry
@@ -84,6 +112,76 @@ function definition(type = 'text', label = '文本'): Definition {
 }
 
 describe('ComponentRegistry', () => {
+  it('OpenSpec: component-registry / Definition 资源创建协议 / 从图片资源创建 seed', async () => {
+    const first = {
+      ...definition('image'),
+      paletteHidden: true,
+      assetDrop: {
+        accepts: ({ mediaType }: { mediaType: string }) => mediaType === 'image/png',
+        createSeed: async ({ reference, name }: {
+          reference: ComposeAssetReference
+          name: string
+        }) => ({
+          name,
+          props: { asset: reference },
+          width: 320,
+          height: 180,
+        }),
+      },
+    }
+    const registry = api.createComponentRegistry([first, definition('fallback')])
+    const reference = {
+      providerId: 'library',
+      assetKey: 'hero',
+      scope: 'persistent' as const,
+    }
+    const result = await registry.createAssetSeed({
+      reference,
+      resolved: {
+        blob: new Blob(['image']),
+        revision: '1',
+        mediaType: 'image/png',
+      },
+      name: 'hero.png',
+    })
+    expect(result).toEqual({
+      ok: true,
+      seed: {
+        componentType: 'image',
+        name: 'hero.png',
+        props: { asset: reference },
+        width: 320,
+        height: 180,
+      },
+    })
+    expect(registry.list()[0]?.paletteHidden).toBe(true)
+  })
+
+  it('OpenSpec: component-registry / Definition 资源创建协议 / 资源 factory 失败', async () => {
+    const registry = api.createComponentRegistry([{
+      ...definition('broken'),
+      assetDrop: {
+        accepts: () => true,
+        createSeed: async () => {
+          throw new Error('decode failed')
+        },
+      },
+    }])
+    const result = await registry.createAssetSeed({
+      reference: { providerId: 'p', assetKey: 'a', scope: 'persistent' },
+      resolved: {
+        blob: new Blob(),
+        revision: '1',
+        mediaType: 'image/png',
+      },
+      name: 'broken.png',
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'definition.asset-factory-failed' },
+    })
+  })
+
   it('OpenSpec: component-registry / 组件默认节点样式 / 创建带独立 style 的组件种子', () => {
     const registry = api.createComponentRegistry([{
       ...definition(),
@@ -212,6 +310,15 @@ describe('ComponentRegistry', () => {
     )
     expect(screen.getByText('preview:Hello')).toBeInTheDocument()
     expect(renderer.mock.calls[0]?.[0].props).toEqual({ text: 'Hello' })
+  })
+
+  it('OpenSpec: component-registry / Renderer 资源解析上下文 / 独立组件无 Resolver', () => {
+    const renderer = vi.fn(definition().renderer)
+    const registry = api.createComponentRegistry([{ ...definition(), renderer }])
+    render(<api.RegistryComponent mode="editor" node={node()} registry={registry} />)
+    expect(renderer.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      assetResolver: undefined,
+    }))
   })
 
   it('OpenSpec: component-registry / Renderer 与 Inspector 上下文 / Inspector 派发属性命令', () => {

@@ -1,4 +1,5 @@
 import type { HTMLAttributes } from 'react'
+import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComponentRegistry } from '@compose-ui/component-registry'
 import type { ComposeLocale } from '@compose-ui/ui-context'
 import type {
@@ -89,6 +90,8 @@ export type StageDispatch = (command: EditorCommand) => CommandDispatchResult
 export interface StageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   readonly document: ComposeDocument
   readonly registry: ComponentRegistry
+  /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
+  readonly assetResolver?: ComposeAssetResolver
   readonly dispatch: StageDispatch
   readonly viewport: StageViewport
   readonly onViewportChange: (viewport: StageViewport) => void

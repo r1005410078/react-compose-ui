@@ -36,6 +36,12 @@ function createTitles(
     text: title('text', 'Text', '文本'),
     color: title('color', 'Text color', '文字颜色'),
     fontSize: title('fontSize', 'Font size', '字号'),
+    alt: title('alt', 'Alternative text', '替代文本'),
+    fit: title('fit', 'Fit', '适配方式'),
+    overrideFill: title('overrideFill', 'Override fill', '覆盖填充'),
+    fillColor: title('fillColor', 'Fill color', '填充颜色'),
+    overrideStroke: title('overrideStroke', 'Override stroke', '覆盖描边'),
+    strokeColor: title('strokeColor', 'Stroke color', '描边颜色'),
   }
 }
 
@@ -102,6 +108,39 @@ export function createTextSchema(
 /** Text 的英文兼容 Schema。 @internal */
 export const textSchema = createTextSchema('en-US')
 
+/** 按共享语言创建 Image Inspector Schema。 @internal */
+export function createImageSchema(
+  locale: ComposeLocale,
+  formatMessage?: FormatMessage,
+) {
+  const container = createContainerSchema(locale, formatMessage)
+  const titles = createTitles(locale, formatMessage)
+  return v.object({
+    ...container.entries,
+    alt: v.pipe(v.string(), v.title(titles.alt)),
+    fit: v.pipe(
+      v.picklist(['contain', 'cover', 'fill', 'none', 'scale-down']),
+      v.title(titles.fit),
+    ),
+  })
+}
+
+/** 按共享语言创建 SVG Inspector Schema。 @internal */
+export function createSvgSchema(
+  locale: ComposeLocale,
+  formatMessage?: FormatMessage,
+) {
+  const image = createImageSchema(locale, formatMessage)
+  const titles = createTitles(locale, formatMessage)
+  return v.object({
+    ...image.entries,
+    overrideFill: v.pipe(v.boolean(), v.title(titles.overrideFill)),
+    fillColor: v.pipe(v.string(), v.minLength(1), v.title(titles.fillColor)),
+    overrideStroke: v.pipe(v.boolean(), v.title(titles.overrideStroke)),
+    strokeColor: v.pipe(v.string(), v.minLength(1), v.title(titles.strokeColor)),
+  })
+}
+
 /** 通用 Container Inspector 表单值。 @internal */
 export type ContainerValue = v.InferInput<typeof containerSchema>
 /** Frame Inspector 表单值。 @internal */
@@ -109,3 +148,7 @@ export type FrameValue = v.InferInput<ReturnType<typeof createFrameSchema>>
 
 /** Text Inspector 表单值。 @internal */
 export type TextValue = v.InferInput<typeof textSchema>
+/** Image Inspector 表单值。 @internal */
+export type ImageValue = v.InferInput<ReturnType<typeof createImageSchema>>
+/** SVG Inspector 表单值。 @internal */
+export type SvgValue = v.InferInput<ReturnType<typeof createSvgSchema>>

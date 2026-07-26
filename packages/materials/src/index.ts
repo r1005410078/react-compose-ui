@@ -1,5 +1,5 @@
 /**
- * 提供 Frame、Rectangle 与 Text 基础物料及其通用 Inspector。
+ * 提供 Frame、Rectangle、Text、Image 与 SVG 基础物料及其 Inspector。
  *
  * @packageDocumentation
  */
@@ -21,6 +21,12 @@ export {
 export {
   DEFAULT_TEXT_DEFINITION,
 } from './text'
+export {
+  DEFAULT_IMAGE_DEFINITION,
+} from './image'
+export {
+  DEFAULT_SVG_DEFINITION,
+} from './svg'
 export type {
   BasicMaterialComponentOptions,
   BasicMaterialFrameOptions,

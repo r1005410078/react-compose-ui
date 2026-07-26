@@ -11,7 +11,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - Bun 1.3.14 monorepo 与 Turbo
 - TypeScript、React 18.3/19、ReactDOM 18.3/19
 - Vite 8 与 ESM 包构建
-- Dockview 7 编辑器工作区、Tailwind CSS 4、Valibot 1.4 Schema 属性面板
+- Dockview 7 编辑器工作区、Tailwind CSS 4、Valibot 1.4 Schema 属性面板、Monaco Editor
 - TanStack React Virtual 与内部 Pointer Events 场景树交互
 - Vitest、Testing Library 与 Playwright Chromium
 
@@ -30,21 +30,29 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   第一方 React chrome 包可以依赖它，并必须在构建时外置以保持 Context 单例。
 - `@compose-ui/core` 保持与 React 和 DOM 无关，承载版本化 JSON 文档、同步命令、可逆 Patch、
   事务历史及通用逻辑。
+- `@compose-ui/assets` 保持与 React、DOM 和 ComposeDocument 无关，承载资源 Provider、稳定
+  `assetKey` 引用与运行时 Resolver 协议。
 - `@compose-ui/command-panel` 是订阅 core TransactionRuntime 的独立 React 调试台，只接受宿主
   声明的结构化命令预设，可依赖 ui-context，不依赖 editor、history、scene-tree、
   property-panel 或 operation-log。
-- `@compose-ui/component-registry` 是实例级宿主组件注册协议，依赖 core，以 React 为 peer，
+- `@compose-ui/component-registry` 是实例级宿主组件注册协议，依赖 core 与 assets，以 React 为 peer，
   不依赖 editor 或 property-panel。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
   外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
-  网格与全局辅助线、世界原点和滚动 chrome；依赖 core、stage-engine、
+  网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、stage-engine、
   component-registry、ui-context，不依赖 editor、property-panel 或 operation-log。
-- `@compose-ui/materials` 提供 Frame、Rectangle、Text 的实例级基础物料组合，依赖 core、
-  component-registry、stage、property-panel、ui-context 与 Valibot，不依赖 editor。
+- `@compose-ui/materials` 提供 Frame、Rectangle、Text、Image、SVG 的实例级基础物料组合，
+  依赖 core、assets、component-registry、stage、property-panel、ui-context、DOMPurify 与
+  Valibot，不依赖 editor 或 asset-browser。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage、
   stage-engine 与独立面板包。
-- `@compose-ui/scene-tree` 是受控 React 树组件，可依赖 `ui-context`，不依赖 `core` 或 `editor`；editor 可以依赖
+- `@compose-ui/components` 是共享的无业务 Tree 等 React 交互组件包，可依赖 `ui-context`；
+  不拥有场景命令、资源 Provider 或持久化。
+- `@compose-ui/asset-browser` 是独立目录浏览、文件预览与 Monaco 脚本编辑包，可依赖
+  `assets`、`components` 和 `ui-context`，不依赖 core、editor、scene-tree 或文档历史；
+  Provider 类型由 assets 定义并从此包兼容转导。
+- `@compose-ui/scene-tree` 是受控 React 树组件，可依赖 `components` 与 `ui-context`，不依赖 `core` 或 `editor`；editor 可以依赖
   它，preview 不得依赖它。
 - `@compose-ui/property-panel` 是同步 Valibot Schema 驱动的受控 React 组件，可依赖
   `ui-context`，不依赖 `core`、
@@ -55,7 +63,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/history` 提供当前 React 实例内的不可变快照历史、快捷键和受控面板，可依赖
   `ui-context`，不依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；editor 可以通过公共入口组合它。
-- `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 core 与 component-registry，不得依赖
+- `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 core、assets 与 component-registry，不得依赖
   editor 或 stage。
 - 跨包导入只使用 `@compose-ui/*` 公共入口，不得引用其他包的内部源码。
 - React、ReactDOM 和 JSX runtime 保持为 peer dependency 和外置依赖。
@@ -153,7 +161,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - 目标用户需要在客户现场快速调整数据大屏，编辑器必须能嵌入现有 React 宿主。
 - 当前仓库验证仅支持 v3 的版本化 JSON 文档、隐式 Canvas 根、统一可嵌套 Frame 容器、同步
   命令事务、组件注册、Godot 风格无限 Stage、controller 默认工作区、文档/Frame Preview、
-  事务/会话历史和 Rectangle/Text/ECharts 纵向流程。
+  事务/会话历史和 Rectangle/Text/Image/SVG/ECharts 纵向流程。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
   surface 尺寸和动态滚动范围是会话状态。`document.output` 定义固定原点输出边界；Preview
   接受 v3 但忽略 canvas 编辑元数据。output 默认透明；Stage 输出边界可作为独立 Canvas
@@ -173,7 +181,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 ## External Dependencies
 
-- npm 包：React、ReactDOM、Dockview、Tailwind CSS、TanStack React Virtual、Valibot、Vite、
+- npm 包：React、ReactDOM、Dockview、Tailwind CSS、TanStack React Virtual、Monaco Editor、Valibot、Vite、
   Vitest、Testing Library、Playwright、Turbo；示例应用单独使用 ECharts，属性面板公共包不依赖
   ECharts。
 - 浏览器运行时：操作日志包默认使用 IndexedDB，失败时降级为进程内存；不依赖服务器数据库。

@@ -26,11 +26,13 @@
     "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
   "dependencies": {
+    "@compose-ui/assets": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/stage": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
+    "dompurify": "^3.2.6",
     "valibot": "^1.4.0"
   },
   "peerDependencies": {

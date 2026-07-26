@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react'
+import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComponentInspectorProps, ComponentRegistry } from './types'
 import type { ComposeComponentNode } from '@compose-ui/core'
 
@@ -45,6 +46,7 @@ export function RegistryComponent({
   registry,
   node,
   mode,
+  assetResolver,
 }: {
   /** 当前消费方的实例级注册表。 */
   readonly registry: ComponentRegistry
@@ -52,6 +54,8 @@ export function RegistryComponent({
   readonly node: ComposeComponentNode
   /** editor 或 preview 渲染模式。 */
   readonly mode: 'editor' | 'preview'
+  /** 资源型 renderer 使用的可选解析器。 */
+  readonly assetResolver?: ComposeAssetResolver
 }) {
   const definition = registry.get(node.componentType)
   if (!definition) {
@@ -64,7 +68,12 @@ export function RegistryComponent({
   const Renderer = definition.renderer
   return (
     <DefinitionErrorBoundary area="renderer" type={node.componentType}>
-      <Renderer mode={mode} node={node} props={node.props} />
+      <Renderer
+        assetResolver={assetResolver}
+        mode={mode}
+        node={node}
+        props={node.props}
+      />
     </DefinitionErrorBoundary>
   )
 }

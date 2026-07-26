@@ -17,6 +17,7 @@ export const WORKSPACE_PANEL_IDS = {
   inspector: 'compose-inspector',
   transactionLog: 'compose-transaction-log',
   command: 'compose-command',
+  assetBrowser: 'compose-assets',
 } as const
 
 export const WORKSPACE_COMPONENT_IDS = {
@@ -26,6 +27,7 @@ export const WORKSPACE_COMPONENT_IDS = {
   inspector: 'inspector',
   transactionLog: 'transactionLog',
   command: 'command',
+  assetBrowser: 'assetBrowser',
 } as const
 
 export const WORKSPACE_SIZES = {
@@ -49,6 +51,7 @@ export function localizeWorkspace(
     [WORKSPACE_PANEL_IDS.inspector]: messages.inspector,
     [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
     [WORKSPACE_PANEL_IDS.command]: messages.command,
+    [WORKSPACE_PANEL_IDS.assetBrowser]: messages.assets,
   }
   for (const [panelId, title] of Object.entries(titles)) {
     const getPanel = (api as Partial<DockviewApi>).getPanel
@@ -155,6 +158,17 @@ export function initializeWorkspace(
       component: WORKSPACE_COMPONENT_IDS.command,
       tabComponent: TAB_COMPONENT,
       title: messages.command,
+      inactive: true,
+      position: { referenceGroup: bottomGroup.id },
+    })
+  }
+
+  if (!api.getPanel(WORKSPACE_PANEL_IDS.assetBrowser)) {
+    api.addPanel({
+      id: WORKSPACE_PANEL_IDS.assetBrowser,
+      component: WORKSPACE_COMPONENT_IDS.assetBrowser,
+      tabComponent: TAB_COMPONENT,
+      title: messages.assets,
       inactive: true,
       position: { referenceGroup: bottomGroup.id },
     })

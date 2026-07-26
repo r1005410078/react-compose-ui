@@ -2,13 +2,14 @@
 
 可嵌入 React 应用的 Compose UI 编辑器工作区。Dockview 布局包含共享左侧 Edge Group 的
 Scene Graph/Component Library、中央 Stage、右侧 Component Inspector，以及共享底部区域的
-Transaction Log/Command。
+Transaction Log/Command/Assets。
 
 ## 使用
 
 ```tsx
 import { createComponentRegistry } from '@compose-ui/component-registry'
 import { createTransactionRuntime } from '@compose-ui/core'
+import { createComposeAssetResolver } from '@compose-ui/assets'
 import { ComposeEditor, useComposeEditorController } from '@compose-ui/editor'
 import { useState } from 'react'
 import '@compose-ui/editor/styles.css'
@@ -16,6 +17,7 @@ import '@compose-ui/editor/styles.css'
 export function EditorPage() {
   const [runtime] = useState(() => createTransactionRuntime({ document }))
   const [registry] = useState(() => createComponentRegistry(definitions))
+  const [assetResolver] = useState(() => createComposeAssetResolver(assetProvider))
   const controller = useComposeEditorController({
     runtime,
     registry,
@@ -29,6 +31,8 @@ export function EditorPage() {
       controller={controller}
       style={{ height: 720 }}
       transactionLogPanel={<OperationLogPanel />}
+      assetBrowserProps={{ provider: assetProvider }}
+      assetResolver={assetResolver}
     />
   )
 }
@@ -94,6 +98,11 @@ navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Pr
 
 - Scene Graph/Component Library、Component Inspector、Transaction Log/Command 使用可缩放、可折叠的
   Dockview Edge Groups。
+- Assets 与 Transaction Log、Command 共享底部 Edge Group，默认 inactive；`assetBrowserProps`
+  组合默认 `AssetBrowser`，`assetBrowserPanel` 可完整覆盖且优先。
+- 默认 AssetBrowser 的兼容图片拖拽会映射到当前 Editor 独有的 interaction controller。
+  显式 `assetResolver` 优先；省略时 Editor 会从支持稳定引用的 `assetBrowserProps.provider`
+  自动创建 resolver。自定义 `assetBrowserPanel` 由宿主自行桥接拖拽和 resolver。
 - Scene Graph 与 Component Library 共享左侧组，Scene Graph 初始活动。
 - Scene Graph 默认显示空 `SceneTree`；`sceneTreeProps` 提供受控状态，原
   `sceneGraphPanel` 插槽仍可完整覆盖默认树。

@@ -8,6 +8,8 @@ import {
   createDefaultInspectorId,
 } from './shared/inspector/dispatch-update'
 import { DEFAULT_TEXT_DEFINITION, createTextDefinition } from './text'
+import { DEFAULT_IMAGE_DEFINITION, createImageDefinition } from './image'
+import { DEFAULT_SVG_DEFINITION, createSvgDefinition } from './svg'
 import type { BasicMaterials, CreateBasicMaterialsOptions } from './types'
 
 /** `@compose-ui/materials` 的稳定包标识。 @public */
@@ -22,6 +24,8 @@ export const DEFAULT_BASIC_FRAME_PRESETS: readonly StageFramePreset[] = Object.f
 export const DEFAULT_BASIC_COMPONENT_DEFINITIONS: readonly ComponentDefinition[] = Object.freeze([
   DEFAULT_RECTANGLE_DEFINITION,
   DEFAULT_TEXT_DEFINITION,
+  DEFAULT_IMAGE_DEFINITION,
+  DEFAULT_SVG_DEFINITION,
 ])
 
 /**
@@ -38,9 +42,13 @@ export function createBasicMaterials(
   const framePreset = createFramePreset(options.frame)
   const rectangle = createRectangleDefinition(options.rectangle, idFactory)
   const text = createTextDefinition(options.text, idFactory)
+  const image = createImageDefinition(options.image, idFactory)
+  const svg = createSvgDefinition(options.svg, idFactory)
   const componentDefinitions = Object.freeze([
     rectangle,
     text,
+    image,
+    svg,
     ...(options.extensions ?? []),
   ])
   const framePresets = Object.freeze([framePreset])

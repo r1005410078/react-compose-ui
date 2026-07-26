@@ -1,3 +1,5 @@
+@import '@compose-ui/components/styles.css';
+
 @layer theme, base, components, utilities;
 
 @import 'tailwindcss/theme.css' layer(theme) prefix(st);
@@ -57,4 +59,14 @@
 [data-compose-ui='scene-tree'][data-compose-theme='light'] [role='row'][aria-selected='true'] {
   background: var(--compose-surface-selected);
   color: var(--compose-text-strong);
+}
+
+.scene-tree__common-tree {
+  min-height: 0;
+  flex: 1;
+  background: transparent;
+}
+
+[data-compose-ui='scene-tree'] .compose-tree__row {
+  font-size: 13px;
 }

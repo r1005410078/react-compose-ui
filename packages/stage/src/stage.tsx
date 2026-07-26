@@ -20,9 +20,19 @@ import type {
   WheelEvent as ReactWheelEvent,
 } from 'react'
 import type {
+  ComposeAssetReference,
+  ComposeAssetResolver,
+  ComposeResolvedAsset,
+} from '@compose-ui/assets'
+import type {
+  ComponentSeed,
+} from '@compose-ui/component-registry'
+import type {
+  ComposeComponentNode,
   ComposeDocument,
   ComposeFrameNode,
   ComposeNode,
+  EditorCommand,
   JsonValue,
   NodeTransform,
 } from '@compose-ui/core'
@@ -206,6 +216,61 @@ function bootstrapSelectionBounds(
     .map((id) => getNodeWorldBounds(document, id)))
 }
 
+interface ResolvedAssetSeed {
+  readonly seed: ComponentSeed
+  readonly reference: ComposeAssetReference
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<readonly R[]> {
+  const results = new Array<R>(items.length)
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < items.length) {
+      const index = cursor
+      cursor += 1
+      results[index] = await mapper(items[index]!, index)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  )
+  return results
+}
+
+function assetSeedCenters(
+  seeds: readonly ResolvedAssetSeed[],
+  gap = 24,
+): readonly StagePoint[] {
+  const rows: ResolvedAssetSeed[][] = []
+  for (let index = 0; index < seeds.length; index += 4) {
+    rows.push(seeds.slice(index, index + 4))
+  }
+  const points: StagePoint[] = []
+  let rowCenterY = 0
+  let previousRowHeight = 0
+  rows.forEach((row, rowIndex) => {
+    const rowHeight = Math.max(...row.map(({ seed }) => seed.height))
+    if (rowIndex > 0) {
+      rowCenterY += previousRowHeight / 2 + gap + rowHeight / 2
+    }
+    let centerX = 0
+    let previousWidth = 0
+    row.forEach(({ seed }, columnIndex) => {
+      if (columnIndex > 0) {
+        centerX += previousWidth / 2 + gap + seed.width / 2
+      }
+      points.push({ x: centerX, y: rowCenterY })
+      previousWidth = seed.width
+    })
+    previousRowHeight = rowHeight
+  })
+  return points
+}
+
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
   if (target.closest('input, textarea, select')) return true
@@ -293,6 +358,7 @@ function isStageShortcutMatch(
 export function Stage({
   document,
   registry,
+  assetResolver,
   dispatch,
   viewport,
   onViewportChange,
@@ -351,6 +417,8 @@ export function Stage({
   const snapGuides = interaction.snapGuides
   const guidePreview = interaction.guidePreview
   const [surfaceSize, setSurfaceSize] = useState({ width: 900, height: 600 })
+  const [assetDropStatus, setAssetDropStatus] = useState('')
+  const pendingAssetDropsRef = useRef(new Set<AbortController>())
   const activeTemporaryPanCodeRef = useRef<string | null>(null)
   const resolvedShortcuts = useMemo(
     () => Object.fromEntries(STAGE_SHORTCUT_ACTIONS.map((action) => [
@@ -380,6 +448,7 @@ export function Stage({
   const latestRef = useRef({
     document,
     registry,
+    assetResolver,
     dispatch,
     viewport,
     onViewportChange,
@@ -392,6 +461,7 @@ export function Stage({
     latestRef.current = {
       document,
       registry,
+      assetResolver,
       dispatch,
       viewport,
       onViewportChange,
@@ -401,6 +471,14 @@ export function Stage({
       idFactory,
     }
   })
+
+  useEffect(() => {
+    const pending = pendingAssetDropsRef.current
+    return () => {
+      pending.forEach((request) => request.abort())
+      pending.clear()
+    }
+  }, [assetResolver])
 
   useEffect(() => {
     const surface = surfaceRef.current
@@ -624,6 +702,150 @@ export function Stage({
     }
   }, [installPointerRoute])
 
+  const createDroppedAssets = useCallback(async (
+    effect: Extract<StageInteractionEffect, { readonly type: 'external.drop' }>,
+  ) => {
+    if (effect.item.kind !== 'assets' || effect.item.items.length === 0) return
+    const started = latestRef.current
+    const resolver: ComposeAssetResolver | undefined = started.assetResolver
+    if (!resolver) {
+      setAssetDropStatus(
+        resolvedLocale === 'en-US'
+          ? 'Assets could not be added: no asset resolver is connected.'
+          : '无法添加资源：未连接资源解析器。',
+      )
+      return
+    }
+    const request = new AbortController()
+    pendingAssetDropsRef.current.add(request)
+    try {
+      const results = await mapWithConcurrency(effect.item.items, 4, async (item) => {
+        const reference: ComposeAssetReference = {
+          providerId: item.providerId,
+          assetKey: item.assetKey,
+          scope: item.scope,
+        }
+        try {
+          const resolved: ComposeResolvedAsset = await resolver.resolve({
+            reference,
+            signal: request.signal,
+          })
+          const created = await started.registry.createAssetSeed({
+            reference,
+            resolved,
+            name: item.name,
+          })
+          return created.ok
+            ? { ok: true as const, value: { reference, seed: created.seed } }
+            : { ok: false as const }
+        }
+        catch {
+          return { ok: false as const }
+        }
+      })
+      if (request.signal.aborted || latestRef.current.assetResolver !== resolver) return
+      const successful = results.flatMap((result) => result.ok ? [result.value] : [])
+      const failedCount = results.length - successful.length
+      if (successful.length === 0) {
+        setAssetDropStatus(
+          resolvedLocale === 'en-US'
+            ? `No assets were added. ${failedCount} failed.`
+            : `未添加任何资源，${failedCount} 项失败。`,
+        )
+        return
+      }
+
+      const current = latestRef.current
+      const target = effect.parentId
+        ? current.document.nodes[effect.parentId]
+        : undefined
+      const parent = target?.kind === 'frame' && target.visible && !target.locked
+        ? target
+        : undefined
+      const inverseParent = parent
+        ? invertMatrix(getNodeWorldMatrix(current.document, parent.id))
+        : null
+      const offsets = assetSeedCenters(successful)
+      const nodes = successful.map(({ seed }, index): ComposeComponentNode => {
+        const offset = offsets[index]!
+        const worldCenter = {
+          x: effect.worldPoint.x + offset.x,
+          y: effect.worldPoint.y + offset.y,
+        }
+        const localCenter = inverseParent
+          ? applyMatrix(inverseParent, worldCenter)
+          : worldCenter
+        return {
+          id: current.idFactory(),
+          kind: 'component',
+          name: seed.name,
+          visible: true,
+          locked: false,
+          transform: {
+            x: localCenter.x - seed.width / 2,
+            y: localCenter.y - seed.height / 2,
+            width: seed.width,
+            height: seed.height,
+            rotation: 0,
+          },
+          componentType: seed.componentType,
+          props: seed.props,
+          ...(seed.style ? { style: seed.style } : {}),
+        }
+      })
+      const commands: EditorCommand[] = nodes.map((node) => ({
+        id: current.idFactory(),
+        type: 'node.create',
+        payload: {
+          node: node as unknown as JsonValue,
+          parentId: parent?.id ?? null,
+        },
+        meta: {
+          label: describeNodeCreation(node),
+          source: 'asset-browser',
+          targetIds: [node.id],
+        },
+      }))
+      const result = current.dispatch({
+        id: current.idFactory(),
+        type: 'transaction.batch',
+        payload: {
+          commands: commands as unknown as JsonValue,
+        },
+        meta: {
+          label: resolvedLocale === 'en-US'
+            ? `Add ${nodes.length} asset${nodes.length === 1 ? '' : 's'}`
+            : `添加 ${nodes.length} 个资源`,
+          source: 'asset-browser',
+          targetIds: nodes.map((node) => node.id),
+        },
+      })
+      if (result.status === 'committed') {
+        current.onSelectedIdsChange(nodes.map((node) => node.id))
+      }
+      else {
+        setAssetDropStatus(
+          resolvedLocale === 'en-US'
+            ? `No assets were added. ${results.length} failed.`
+            : `未添加任何资源，${results.length} 项失败。`,
+        )
+        return
+      }
+      setAssetDropStatus(
+        failedCount === 0
+          ? resolvedLocale === 'en-US'
+            ? `${nodes.length} asset${nodes.length === 1 ? '' : 's'} added.`
+            : `已添加 ${nodes.length} 个资源。`
+          : resolvedLocale === 'en-US'
+            ? `${nodes.length} added, ${failedCount} failed.`
+            : `已添加 ${nodes.length} 项，${failedCount} 项失败。`,
+      )
+    }
+    finally {
+      pendingAssetDropsRef.current.delete(request)
+    }
+  }, [resolvedLocale])
+
   useEffect(() => controller.connectSurface({
     resolveClientPoint(point) {
       const surface = surfaceRef.current
@@ -655,6 +877,10 @@ export function Stage({
         }
         if (effect.type === 'command.dispatch') {
           current.dispatch(effect.command)
+          return
+        }
+        if (effect.item.kind === 'assets') {
+          void createDroppedAssets(effect)
           return
         }
         const nodeId = current.idFactory()
@@ -762,7 +988,7 @@ export function Stage({
         }
       })
     },
-  }), [capturePointer, controller, releasePointer])
+  }), [capturePointer, controller, createDroppedAssets, releasePointer])
 
   useLayoutEffect(() => {
     controller.updateContext({
@@ -1365,11 +1591,19 @@ export function Stage({
           </g>
         </svg>
         <StageSceneLayer
+          assetResolver={assetResolver}
           document={previewDocument}
           registry={registry}
           viewport={viewport}
           onNodePointerDown={beginNode}
         />
+        {assetDropStatus
+          ? (
+              <div className="compose-stage__asset-drop-status" role="status">
+                {assetDropStatus}
+              </div>
+            )
+          : null}
         <StageOverlay
           canvasGuides={canvasGuides}
           editableSelection={editableSelection}

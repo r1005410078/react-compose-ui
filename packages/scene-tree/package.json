@@ -19,13 +19,14 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch",
+    "dev": "vite build --watch --emptyOutDir false",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint . --max-warnings 0",
     "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
   "dependencies": {
+    "@compose-ui/components": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
     "@tanstack/react-virtual": "^3.14.6"
   },

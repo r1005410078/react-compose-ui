@@ -5,7 +5,13 @@ import type {
   JsonObject,
   JsonValue,
 } from '@compose-ui/core'
-import type { ContainerValue, FrameValue, TextValue } from './schemas'
+import type {
+  ContainerValue,
+  FrameValue,
+  ImageValue,
+  SvgValue,
+  TextValue,
+} from './schemas'
 import {
   createStyleValue,
   createTransformValue,
@@ -27,7 +33,9 @@ function formatValue(value: unknown) {
   return text.length > 32 ? `${text.slice(0, 31)}…` : text
 }
 
-const describedFields: readonly [(keyof TextValue | 'clipContent'), string][] = [
+type InspectorValue = ContainerValue | FrameValue | TextValue | ImageValue | SvgValue
+
+const describedFields: readonly [string, string][] = [
   ['name', 'Name'],
   ['x', 'X'],
   ['y', 'Y'],
@@ -44,12 +52,18 @@ const describedFields: readonly [(keyof TextValue | 'clipContent'), string][] = 
   ['text', 'Text'],
   ['color', 'Text color'],
   ['fontSize', 'Font size'],
+  ['alt', 'Alternative text'],
+  ['fit', 'Fit'],
+  ['overrideFill', 'Override fill'],
+  ['fillColor', 'Fill color'],
+  ['overrideStroke', 'Override stroke'],
+  ['strokeColor', 'Stroke color'],
 ]
 
 function describeUpdate(
   node: ComposeNode,
-  current: ContainerValue | FrameValue | TextValue,
-  next: ContainerValue | FrameValue | TextValue,
+  current: InspectorValue,
+  next: InspectorValue,
 ) {
   const currentRecord = current as unknown as Readonly<Record<string, unknown>>
   const nextRecord = next as unknown as Readonly<Record<string, unknown>>
@@ -82,8 +96,8 @@ function commandMeta(node: ComposeNode, label: string) {
  */
 export function dispatchInspectorUpdate(
   node: ComposeNode,
-  current: ContainerValue | FrameValue | TextValue,
-  next: ContainerValue | FrameValue | TextValue,
+  current: InspectorValue,
+  next: InspectorValue,
   dispatch: NodeInspectorProps['dispatch'],
   idFactory: InspectorIdFactory,
   forceStyle = false,
@@ -140,6 +154,27 @@ export function dispatchInspectorUpdate(
       text: next.text,
       color: next.color,
       fontSize: next.fontSize,
+    }
+    if (!isEqualValue(node.props, nextProps)) {
+      commands.push({
+        id: idFactory(),
+        type: 'node.props.set',
+        payload: { nodeId: node.id, path: [], value: nextProps },
+        meta,
+      })
+    }
+  }
+  if (node.kind === 'component' && 'alt' in current && 'alt' in next) {
+    const nextProps: JsonObject = {
+      ...node.props,
+      alt: next.alt,
+      fit: next.fit,
+      ...('overrideFill' in next ? {
+        overrideFill: next.overrideFill,
+        fillColor: next.fillColor,
+        overrideStroke: next.overrideStroke,
+        strokeColor: next.strokeColor,
+      } : {}),
     }
     if (!isEqualValue(node.props, nextProps)) {
       commands.push({

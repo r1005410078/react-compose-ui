@@ -11,6 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@compose-ui/asset-browser": "workspace:*",
+    "@compose-ui/assets": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/editor": "workspace:*",

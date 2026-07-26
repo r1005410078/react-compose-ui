@@ -24,6 +24,8 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
+        '@compose-ui/asset-browser',
+        '@compose-ui/assets',
         '@compose-ui/core',
         '@compose-ui/command-panel',
         '@compose-ui/component-registry',

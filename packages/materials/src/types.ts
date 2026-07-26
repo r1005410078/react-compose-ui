@@ -68,7 +68,11 @@ export interface CreateBasicMaterialsOptions {
   readonly rectangle?: BasicMaterialComponentOptions
   /** Text definition 的可选覆盖。 */
   readonly text?: BasicMaterialComponentOptions
-  /** 按给定顺序追加到 Rectangle、Text 之后的宿主 definitions。 */
+  /** Image definition 的默认节点覆盖。 */
+  readonly image?: BasicMaterialComponentOptions
+  /** SVG definition 的默认节点覆盖。 */
+  readonly svg?: BasicMaterialComponentOptions
+  /** 按给定顺序追加到内建 definitions 之后的宿主 definitions。 */
   readonly extensions?: readonly ComponentDefinition[]
   /** Inspector 命令 ID factory；测试或宿主可注入确定性实现。 */
   readonly idFactory?: () => string
@@ -80,7 +84,7 @@ export interface CreateBasicMaterialsOptions {
  * @public
  */
 export interface BasicMaterials {
-  /** Rectangle、Text 与宿主扩展组成的实例级 registry。 */
+  /** Rectangle、Text、Image、SVG 与宿主扩展组成的实例级 registry。 */
   readonly registry: ComponentRegistry
   /** 按 Palette 顺序排列的 Component definitions。 */
   readonly componentDefinitions: readonly ComponentDefinition[]

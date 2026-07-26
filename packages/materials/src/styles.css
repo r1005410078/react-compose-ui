@@ -1,6 +1,8 @@
 @import './frame/styles.css';
 @import './rectangle/styles.css';
 @import './text/styles.css';
+@import './image/styles.css';
+@import './svg/styles.css';
 
 :root {
   --compose-material-font-family: Inter, ui-sans-serif, system-ui, sans-serif;

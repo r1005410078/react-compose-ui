@@ -134,6 +134,9 @@ export function ComponentPalette({
       return framePresets.find((preset) => preset.id === item.presetId)?.label
         ?? item.presetId
     }
+    if (item.kind === 'assets') {
+      return item.items.length === 1 ? item.items[0]?.name : `${item.items.length} assets`
+    }
     return registry.get(item.componentType)?.label ?? item.componentType
   })()
 
@@ -180,7 +183,7 @@ export function ComponentPalette({
             </button>
           </li>
         ))}
-        {registry.list().map((definition) => (
+        {registry.list().filter((definition) => !definition.paletteHidden).map((definition) => (
           <li key={definition.type}>
             <button
               aria-label={messages.add(definition.label)}

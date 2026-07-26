@@ -53,6 +53,96 @@ test('OpenSpec: editor-workspace-layout / 完整示例入口 / 根路径直接�
   expect(bottomBox!.y).toBeGreaterThan(canvasBox!.y)
 })
 
+test('OpenSpec: asset-browser / Editor 资源面板 / 浏览 SVG 并显式保存 Monaco 脚本', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  const rootGrid = assets.getByRole('grid', { name: 'Demo Assets' })
+  await expect(rootGrid).toBeVisible()
+  await expect(assets).toHaveScreenshot('asset-browser-directory-grid.png', {
+    animations: 'disabled',
+    maxDiffPixelRatio: 0.01,
+  })
+  await rootGrid.getByRole('gridcell', { name: /Images/ }).click()
+  await assets.getByRole('grid', { name: 'Images' })
+    .getByRole('gridcell', { name: /compose-grid.svg/ }).click()
+  await expect(assets.getByRole('img', { name: 'compose-grid.svg' })).toBeVisible()
+  await expect(assets).toHaveScreenshot('asset-browser-svg-preview.png', {
+    animations: 'disabled',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await assets.getByRole('row', { name: /dashboard.ts/ }).click()
+  const monaco = assets.locator('.monaco-editor')
+  await expect(monaco).toBeVisible()
+  await expect(assets).toHaveScreenshot('asset-browser-monaco-editor.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await monaco.click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('\n// saved from e2e')
+  await assets.getByRole('row', { name: /Images/ }).click()
+  await expect(assets.getByRole('alertdialog', { name: '文件尚未保存' })).toBeVisible()
+  await assets.getByRole('button', { name: '取消' }).click()
+  await monaco.click()
+  await page.keyboard.press('Control+S')
+  await assets.getByRole('row', { name: /Images/ }).click()
+  await expect(assets.getByRole('alertdialog', { name: '文件尚未保存' })).toHaveCount(0)
+})
+
+test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG 并原子撤销重做', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const surface = stage.getByTestId('stage-surface')
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  const imagesRow = assets.getByRole('row', { name: /Images/ })
+  await imagesRow.getByRole('button', { name: '展开' }).click()
+  const svgRow = assets.getByRole('row', { name: /compose-grid\.svg/ })
+  const imageRow = assets.getByRole('row', { name: /dashboard\.bmp/ })
+  await svgRow.click()
+  await imageRow.click({ modifiers: ['Shift'] })
+  await expect(svgRow).toHaveAttribute('aria-selected', 'true')
+  await expect(imageRow).toHaveAttribute('aria-selected', 'true')
+
+  await svgRow.dragTo(surface, {
+    targetPosition: { x: 80, y: 180 },
+  })
+
+  await expect(stage.getByTestId('compose-material-svg')).toBeVisible()
+  await expect(stage.getByTestId('compose-material-image')).toBeVisible()
+  await expect(stage.getByText('已添加 2 个资源。')).toBeVisible()
+  await expect(editor).toHaveScreenshot('asset-materials-batch-drop.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect(stage.getByTestId('compose-material-svg')).toHaveCount(0)
+  await expect(stage.getByTestId('compose-material-image')).toHaveCount(0)
+  await stage.press('Control+Shift+z')
+  await expect(stage.getByTestId('compose-material-svg')).toBeVisible()
+  await expect(stage.getByTestId('compose-material-image')).toBeVisible()
+
+  await stage.getByTestId('compose-material-svg').click()
+  const inspector = editor.getByRole('region', { name: 'compose-grid.svg 属性' })
+  await inspector.getByRole('checkbox', { name: '覆盖填充' }).check()
+  await expect(stage.getByTestId('compose-material-svg').locator('rect').last())
+    .toHaveAttribute('fill', '#ffffff')
+  await expect(inspector).toHaveScreenshot('svg-material-inspector.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+})
+
 test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择常见 PC 尺寸', async ({ page }) => {
   await page.goto('/')
 
@@ -194,10 +284,17 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await textComponent.click()
   await stage.press('Shift+ArrowRight')
   await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
-  await expect(
-    editor.locator('[data-compose-ui="history"]')
-      .getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).first(),
-  ).toBeVisible()
+  const historyPanel = editor.locator('[data-compose-ui="history"]')
+  const moveHistoryEntry = historyPanel
+    .getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).first()
+  await expect(moveHistoryEntry).toBeVisible()
+  await expect(moveHistoryEntry.locator('strong')).toHaveCSS('font-size', '12px')
+  await expect(moveHistoryEntry.locator('small')).toHaveCSS('font-size', '10.5px')
+  await expect(historyPanel).toHaveScreenshot('history-panel-compact.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
 
   await components.nth(0).click()
   await components.nth(1).click({ modifiers: ['Shift'] })

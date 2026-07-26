@@ -52,6 +52,7 @@ export {
 } from './scene-index'
 export {
   createStageInteractionController,
+  type StageExternalAssetItem,
   type StageExternalDragItem,
   type StageInteractionContext,
   type StageInteractionController,

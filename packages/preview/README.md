@@ -10,6 +10,7 @@ import { ComposePreview } from '@compose-ui/preview'
 <ComposePreview
   document={runtime.document}
   registry={registry}
+  assetResolver={assetResolver}
 />
 
 <ComposePreview
@@ -25,6 +26,8 @@ import { ComposePreview } from '@compose-ui/preview'
 边框、棋盘格或实色背景。未知 renderer 显示 registry 的可访问错误占位。
 
 Frame 与 Component 通过 core `resolveNodeStyle` 应用与 Stage 相同的通用视觉语义。
+Image/SVG 等资源 renderer 通过可选 `assetResolver` 读取文档引用的最新内容；缺少 resolver 或
+会话 Provider 未重连时显示物料定义的可访问缺失占位。
 
 为兼容既有宿主，`document` 与 `registry` 均省略时仍渲染 legacy `children`；只提供其中一项时
 显示配置错误。

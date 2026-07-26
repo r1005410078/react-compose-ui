@@ -44,6 +44,40 @@ vi.mock('@compose-ui/scene-tree', async () => {
   }
 })
 
+vi.mock('@compose-ui/asset-browser', async () => {
+  const React = await import('react')
+  return {
+    AssetBrowser: ({
+      provider,
+      onCanvasDrag,
+    }: {
+      provider?: { label?: string }
+      onCanvasDrag?: (event: unknown) => void
+    }) =>
+      React.createElement(
+        'div',
+        { 'data-testid': 'default-asset-browser' },
+        provider?.label ?? 'No asset provider',
+        React.createElement('button', {
+          'aria-label': 'mock asset drag',
+          onClick: () => onCanvasDrag?.({
+            type: 'start',
+            clientPoint: { x: 10, y: 20 },
+            items: [{
+              name: 'logo.svg',
+              mediaType: 'image/svg+xml',
+              reference: {
+                providerId: 'memory',
+                assetKey: 'logo',
+                scope: 'persistent',
+              },
+            }],
+          }),
+        }),
+      ),
+  }
+})
+
 vi.mock('dockview-react', async () => {
   const React = await import('react')
   const readyEvent = { api: { id: 'test-api' } }
@@ -130,6 +164,77 @@ afterEach(() => {
 })
 
 describe('ComposeEditor', () => {
+  it('OpenSpec: editor-workspace-layout / Editor 资源拖入桥接 / 默认资源面板拖入当前 Stage', async () => {
+    const send = vi.fn()
+    const resolved = {
+      blob: new Blob(['svg'], { type: 'image/svg+xml' }),
+      revision: '1',
+      mediaType: 'image/svg+xml',
+    }
+    const provider = {
+      id: 'memory',
+      label: 'Memory assets',
+      root: { id: 'root', parentId: null, name: 'Assets', kind: 'folder' as const },
+      capabilities: {
+        createFile: false,
+        createFolder: false,
+        rename: false,
+        move: false,
+        delete: false,
+        write: false,
+        reference: true,
+      },
+      list: vi.fn(async () => []),
+      read: vi.fn(),
+      resolveAsset: vi.fn(async () => resolved),
+    }
+    function StageProbe(props: {
+      assetResolver?: { resolve(input: unknown): Promise<unknown> }
+    }) {
+      return (
+        <div data-has-asset-resolver={String(Boolean(props.assetResolver))}>
+          Asset Stage
+        </div>
+      )
+    }
+    const controller = {
+      sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
+      stage: <StageProbe />,
+      componentLibraryPanel: null,
+      inspectorPanel: null,
+      commandPanel: null,
+      stageToolbar: null,
+      interactionController: { send },
+    } as unknown as ComposeEditorController
+
+    render(
+      <ComposeEditor
+        assetBrowserProps={{ provider }}
+        controller={controller}
+      />,
+    )
+
+    expect(screen.getByText('Asset Stage')).toHaveAttribute(
+      'data-has-asset-resolver',
+      'true',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'mock asset drag' }))
+    expect(send).toHaveBeenCalledWith({
+      type: 'external.begin',
+      clientPoint: { x: 10, y: 20 },
+      item: {
+        kind: 'assets',
+        items: [{
+          providerId: 'memory',
+          assetKey: 'logo',
+          scope: 'persistent',
+          name: 'logo.svg',
+          mediaType: 'image/svg+xml',
+        }],
+      },
+    })
+  })
+
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 宿主提供全部工作区内容', () => {
     render(
       <ComposeEditor
@@ -139,6 +244,7 @@ describe('ComposeEditor', () => {
         inspectorPanel="Inspector slot"
         transactionLogPanel="Transaction slot"
         commandPanel="Command slot"
+        assetBrowserPanel="Asset slot"
       >
         Canvas slot
       </ComposeEditor>,
@@ -151,6 +257,36 @@ describe('ComposeEditor', () => {
     expect(screen.getByText('Inspector slot')).toBeInTheDocument()
     expect(screen.getByText('Transaction slot')).toBeInTheDocument()
     expect(screen.getByText('Command slot')).toBeInTheDocument()
+    expect(screen.getByText('Asset slot')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 资源面板标签 / panel 覆盖优先于 props', () => {
+    const provider = {
+      id: 'memory',
+      label: 'Memory assets',
+      root: { id: 'root', parentId: null, name: 'Assets', kind: 'folder' as const },
+      capabilities: {
+        createFile: false,
+        createFolder: false,
+        rename: false,
+        move: false,
+        delete: false,
+        write: false,
+      },
+      list: vi.fn(async () => []),
+      read: vi.fn(),
+    }
+    const { rerender } = render(<ComposeEditor assetBrowserProps={{ provider }} />)
+    expect(screen.getByTestId('default-asset-browser')).toHaveTextContent('Memory assets')
+
+    rerender(
+      <ComposeEditor
+        assetBrowserPanel={<div>Custom asset panel</div>}
+        assetBrowserProps={{ provider }}
+      />,
+    )
+    expect(screen.getByText('Custom asset panel')).toBeInTheDocument()
+    expect(screen.queryByTestId('default-asset-browser')).not.toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / Stage Toolbar 优先级', () => {
@@ -352,9 +488,10 @@ describe('ComposeEditor', () => {
     render(<ComposeEditor />)
 
     expect(screen.getByTestId('default-scene-tree')).toBeEmptyDOMElement()
-    expect(screen.getAllByRole('status')).toHaveLength(5)
+    expect(screen.getAllByRole('status')).toHaveLength(6)
     expect(screen.getByText('舞台工具栏')).toBeInTheDocument()
     expect(screen.getByText('组件库内容')).toBeInTheDocument()
+    expect(screen.getByText('连接资源 Provider 以浏览文件')).toBeInTheDocument()
     expect(screen.getByText('组件属性内容')).toBeInTheDocument()
     expect(screen.getByText('事务日志内容')).toBeInTheDocument()
     expect(screen.getByText('命令内容')).toBeInTheDocument()

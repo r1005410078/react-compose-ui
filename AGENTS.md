@@ -41,25 +41,33 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 - `@compose-ui/ui-context` 是跨包共享的 React 主题与国际化 Context，只依赖 React peer；
   第一方 React chrome 包可以依赖它，但必须在构建中外置，避免产生多份 Context 实例。
 - `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载 v3 文档模型、命令及通用逻辑。
+- `@compose-ui/assets` 是无 React、无 DOM 的资源 Provider、稳定引用与运行时 Resolver 协议包；
+  不得依赖资源浏览 UI、编辑器、文档历史或组件注册表。
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`。
-- `@compose-ui/scene-tree` 是独立受控 React 树组件，可依赖 `ui-context`，不得依赖 `core` 或 `editor`；
-  `editor` 可以通过公共入口依赖并默认集成它。
+- `@compose-ui/components` 是跨第一方包复用的 React 交互组件层，可依赖 `ui-context`，
+  不包含场景、资源 Provider、文档命令或持久化语义。
+- `@compose-ui/scene-tree` 是独立受控 React 树组件，可依赖 `components` 和 `ui-context`，
+  不得依赖 `core` 或 `editor`；`editor` 可以通过公共入口依赖并默认集成它。
+- `@compose-ui/asset-browser` 是独立文件浏览预览和 Monaco 编辑包，可依赖 `assets`、
+  `components` 与 `ui-context`，不得依赖 `core`、`editor`、`scene-tree` 或文档历史；
+  Provider 类型只从 `assets` 兼容转导。
 - `@compose-ui/property-panel` 是由同步 Valibot Schema 驱动的独立受控 React 组件，可依赖
   `ui-context`，不得依赖 `core`、`editor` 或 `scene-tree`；`editor` 只通过
   `inspectorPanel` 插槽集成它。
 - `@compose-ui/history` 是独立的 React 会话快照历史与受控面板，可依赖 `ui-context`，不得依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
-- `@compose-ui/component-registry` 是实例级宿主组件注册协议，可以依赖 `core`，以 React 为
+- `@compose-ui/component-registry` 是实例级宿主组件注册协议，可以依赖 `core` 和 `assets`，以 React 为
   peer dependency，不得依赖 `editor` 或 `property-panel`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
   包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
-  `stage-engine`、`component-registry` 和 `ui-context`，不得依赖 `editor`、`property-panel`
+  `assets`、`stage-engine`、`component-registry` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。
-- `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core` 和
+- `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`、`assets` 和
   `component-registry`，不得依赖 `editor` 或 `stage`。
-- `@compose-ui/materials` 是 Frame、Rectangle、Text 的独立基础物料包，可以依赖 `core`、
-  `component-registry`、`stage`、`property-panel`、`ui-context` 和 Valibot，不得依赖 `editor`。
+- `@compose-ui/materials` 是 Frame、Rectangle、Text、Image、SVG 的独立基础物料包，可以依赖
+  `core`、`assets`、`component-registry`、`stage`、`property-panel`、`ui-context`、DOMPurify
+  和 Valibot，不得依赖 `editor` 或 `asset-browser`。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。

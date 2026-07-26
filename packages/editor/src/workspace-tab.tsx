@@ -94,6 +94,7 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
     [WORKSPACE_PANEL_IDS.inspector]: messages.inspector,
     [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
     [WORKSPACE_PANEL_IDS.command]: messages.command,
+    [WORKSPACE_PANEL_IDS.assetBrowser]: messages.assets,
     'compose-scene-content-panel': messages.sceneGraph,
     'compose-history-panel': messages.history,
   }
@@ -126,6 +127,7 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
   return (
     <div
       className="compose-editor__text-tab"
+      data-workspace-tab={props.api.id}
       onPointerDown={props.onPointerDown}
       onPointerLeave={props.onPointerLeave}
       onPointerUp={props.onPointerUp}
