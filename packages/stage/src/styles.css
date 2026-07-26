@@ -130,6 +130,7 @@
 .compose-stage__output-decoration.is-selected .compose-stage__output-edge {
   stroke: var(--compose-accent, #3687ff);
   stroke-opacity: 1;
+  stroke-width: 0.5;
 }
 
 .compose-stage__axis.is-x {

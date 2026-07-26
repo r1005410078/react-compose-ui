@@ -189,6 +189,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await expect(rightEdge).toHaveCSS('stroke', 'rgb(54, 135, 255)')
   await expect(bottomEdge).toHaveCSS('stroke-opacity', '1')
   await expect(rightEdge).toHaveCSS('stroke-opacity', '1')
+  await expect(bottomEdge).toHaveCSS('stroke-width', '0.5px')
+  await expect(rightEdge).toHaveCSS('stroke-width', '0.5px')
   const grid = stage.getByTestId('stage-grid')
   for (let index = 0; index < 2; index += 1) {
     await stage.press('Control+-')
