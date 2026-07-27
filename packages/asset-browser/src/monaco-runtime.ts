@@ -1,3 +1,5 @@
+/// <reference path="./monaco-editor.d.ts" />
+
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import 'monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution'
 import 'monaco-editor/esm/vs/language/css/monaco.contribution'

@@ -1,7 +1,24 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    "paths": {
+      "@compose-ui/asset-browser": ["../asset-browser/src/index.tsx"],
+      "@compose-ui/assets": ["../assets/src/index.ts"],
+      "@compose-ui/command-panel": ["../command-panel/src/index.tsx"],
+      "@compose-ui/component-registry": ["../component-registry/src/index.ts"],
+      "@compose-ui/components": ["../components/src/index.tsx"],
+      "@compose-ui/core": ["../core/src/index.ts"],
+      "@compose-ui/history": ["../history/src/index.tsx"],
+      "@compose-ui/materials": ["../materials/src/index.ts"],
+      "@compose-ui/operation-log": ["../operation-log/src/index.tsx"],
+      "@compose-ui/preview": ["../preview/src/index.tsx"],
+      "@compose-ui/property-panel": ["../property-panel/src/index.tsx"],
+      "@compose-ui/scene-tree": ["../scene-tree/src/index.tsx"],
+      "@compose-ui/stage": ["../stage/src/index.ts"],
+      "@compose-ui/stage-engine": ["../stage-engine/src/index.ts"],
+      "@compose-ui/ui-context": ["../ui-context/src/index.ts"]
+    }
   },
   "include": ["src", "vite.config.ts", "vitest.config.ts"],
   "exclude": ["src/**/*.stories.ts", "src/**/*.stories.tsx"]

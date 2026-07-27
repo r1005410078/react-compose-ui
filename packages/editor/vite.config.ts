@@ -12,7 +12,9 @@ export default defineConfig({
       entryRoot: 'src',
       include: ['src'],
       exclude: ['src/**/*.test.*', 'src/**/*.stories.*'],
-      tsconfigPath: 'tsconfig.json',
+      // 编辑器开发 tsconfig 会把 workspace 依赖指向源码，供 IDE 在未构建 dist 时解析。
+      // 声明构建必须保留包边界，否则 vite-plugin-dts 会把相邻包带入当前 rootDir。
+      tsconfigPath: 'tsconfig.build.json',
     }),
   ],
   build: {
