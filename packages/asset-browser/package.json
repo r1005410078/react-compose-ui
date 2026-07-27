@@ -25,7 +25,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch",
+    "dev": "vite build --watch --emptyOutDir false",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint . --max-warnings 0",
