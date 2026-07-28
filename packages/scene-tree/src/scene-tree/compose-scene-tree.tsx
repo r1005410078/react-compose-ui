@@ -275,15 +275,12 @@ export function ComposeSceneTree({
         })}
         onSelectionChange={onSelectionChange}
       />
-      {interaction.contextMenu ? (
-        <SceneTreeContextMenu
-          {...interaction.contextMenu}
-          commands={commands}
-          messages={messages}
-          menuRef={interaction.contextMenuRef}
-          onClose={() => interaction.setContextMenu(null)}
-        />
-      ) : null}
+      <SceneTreeContextMenu
+        commands={commands}
+        messages={messages}
+        nodeId={interaction.contextMenu.payload}
+        rootProps={interaction.contextMenu.rootProps}
+      />
     </div>
   )
 }

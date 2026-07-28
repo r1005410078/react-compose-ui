@@ -11,7 +11,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - Bun 1.3.14 monorepo 与 Turbo
 - TypeScript、React 18.3/19、ReactDOM 18.3/19
 - Vite 8 与 ESM 包构建
-- Dockview 7 编辑器工作区、Tailwind CSS 4、Valibot 1.4 Schema 属性面板、Monaco Editor
+- Dockview 7 编辑器工作区、Tailwind CSS 4、Shadcn source primitives、Valibot 1.4 Schema 属性面板、Monaco Editor
 - TanStack React Virtual 与内部 Pointer Events 场景树交互
 - Vitest、Testing Library 与 Playwright Chromium
 
@@ -38,6 +38,10 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   适配和渲染部分，简单组件不强制引入 controller。
 - `@compose-ui/components` 只接收无业务语义的 Primitive 和 Pattern，并且必须已经被至少两个
   第一方包复用或经过公共 API 评审；Domain Component、Widget 与 Shell 留在各自领域包。
+- `@compose-ui/components` 的新增共享 Primitive/Pattern MUST 以包内 Shadcn CLI 生成的源码为默认
+  起点；生成源码仍是第一方代码，必须保持 Compose 命名、Feature-first、TSDoc、共置测试/Story
+  与单一公开入口。只有 Shadcn 无法覆盖所需语义时才可手写并说明原因。不得公开转导原始
+  Shadcn 名称、引入 Preflight 或 Shadcn 默认全局主题；语义色 MUST 映射 Compose Theme token。
 - 公共交互组件必须定义受控状态、状态归属、语义事件、异步清理、Theme/I18n、WAI-ARIA
   键盘与焦点行为，并以纯逻辑单测、Testing Library 组件测试和必要的 Playwright 流程分层验证。
 - `@compose-ui/ui-context` 提供跨包共享的 React Theme/I18n Context，只依赖 React peer；
@@ -195,7 +199,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 ## External Dependencies
 
-- npm 包：React、ReactDOM、Dockview、Tailwind CSS、TanStack React Virtual、Monaco Editor、Valibot、Vite、
+- npm 包：React、ReactDOM、Dockview、Tailwind CSS、Shadcn、Base UI、TanStack React Virtual、Monaco Editor、Valibot、Vite、
   Vitest、Testing Library、Playwright、Turbo；示例应用单独使用 ECharts，属性面板公共包不依赖
   ECharts。
 - 浏览器运行时：操作日志包默认使用 IndexedDB，失败时降级为进程内存；不依赖服务器数据库。

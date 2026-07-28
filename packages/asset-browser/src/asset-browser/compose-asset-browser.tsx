@@ -1,4 +1,10 @@
-import { ComposeTree } from '@compose-ui/components'
+import {
+  ComposeContextMenu,
+  ComposeContextMenuContent,
+  ComposeContextMenuItem,
+  ComposeTree,
+  useComposeContextMenu,
+} from '@compose-ui/components'
 import type { ComposeTreeItemAdapter } from '@compose-ui/components'
 import {
   createComposeThemeStyle,
@@ -185,11 +191,7 @@ export function ComposeAssetBrowser({
   const [pendingDelete, setPendingDelete] = useState(false)
   const [saveRequest, setSaveRequest] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<{
-    readonly x: number
-    readonly y: number
-    readonly entryId: string
-  } | null>(null)
+  const contextMenu = useComposeContextMenu<string>()
   const [draggedIds, setDraggedIds] = useState<readonly string[]>([])
   const canvasDragRef = useRef<{
     lastPoint: { x: number; y: number }
@@ -530,7 +532,6 @@ export function ComposeAssetBrowser({
         ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
         ...style,
       } as CSSProperties}
-      onClick={() => setContextMenu(null)}
       onKeyDown={(event) => {
         htmlProps.onKeyDown?.(event)
         if (event.defaultPrevented) return
@@ -629,7 +630,7 @@ export function ComposeAssetBrowser({
               onItemContextMenu={(event, entry) => {
                 event.preventDefault()
                 if (!selectedIds.includes(entry.id)) requestSelection([entry.id])
-                setContextMenu({ x: event.clientX, y: event.clientY, entryId: entry.id })
+                contextMenu.openAt(event, entry.id)
               }}
               onSelectionChange={requestSelection}
             />
@@ -739,7 +740,7 @@ export function ComposeAssetBrowser({
                   onContextMenu={(event) => {
                     event.preventDefault()
                     if (!selectedIds.includes(entry.id)) requestSelection([entry.id])
-                    setContextMenu({ x: event.clientX, y: event.clientY, entryId: entry.id })
+                    contextMenu.openAt(event, entry.id)
                   }}
                 >
                   <AssetThumbnail entry={entry} provider={provider} />
@@ -787,53 +788,30 @@ export function ComposeAssetBrowser({
           </div>
         </div>
       ) : null}
-      {contextMenu ? (
-        <div
-          aria-label={messages.assets}
-          className="asset-browser__context-menu"
-          role="menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
+      <ComposeContextMenu {...contextMenu.rootProps}>
+        <ComposeContextMenuContent aria-label={messages.assets}>
+          <ComposeContextMenuItem
             disabled={!canCreateFile}
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              setContextMenu(null)
-              setNameDialog({ mode: 'file', initialValue: 'untitled.ts' })
-            }}
-          >{messages.newFile}</button>
-          <button
+            onClick={() => setNameDialog({ mode: 'file', initialValue: 'untitled.ts' })}
+          >{messages.newFile}</ComposeContextMenuItem>
+          <ComposeContextMenuItem
             disabled={!canCreateFolder}
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              setContextMenu(null)
-              setNameDialog({ mode: 'folder', initialValue: 'New Folder' })
-            }}
-          >{messages.newFolder}</button>
-          <button
+            onClick={() => setNameDialog({ mode: 'folder', initialValue: 'New Folder' })}
+          >{messages.newFolder}</ComposeContextMenuItem>
+          <ComposeContextMenuItem
             disabled={!canRename}
-            role="menuitem"
-            type="button"
             onClick={() => {
-              const entry = source.entriesById.get(contextMenu.entryId)
-              setContextMenu(null)
+              const entry = contextMenu.payload ? source.entriesById.get(contextMenu.payload) : undefined
               if (entry) setNameDialog({ mode: 'rename', initialValue: entry.name })
             }}
-          >{messages.rename}</button>
-          <button
+          >{messages.rename}</ComposeContextMenuItem>
+          <ComposeContextMenuItem
             disabled={!canDelete}
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              setContextMenu(null)
-              requestDelete()
-            }}
-          >{messages.delete}</button>
-        </div>
-      ) : null}
+            variant="destructive"
+            onClick={requestDelete}
+          >{messages.delete}</ComposeContextMenuItem>
+        </ComposeContextMenuContent>
+      </ComposeContextMenu>
     </div>
   )
 }

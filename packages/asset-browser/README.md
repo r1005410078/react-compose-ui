@@ -21,3 +21,6 @@ SVG/位图可通过 `onCanvasDrag` 发出普通数据生命周期；脚本、目
 
 浏览器支持 File System Access API 时，可在用户手势中调用
 `openComposeFileSystemAssetProvider()`；本包不会自动持久化目录句柄。
+
+资源树与目录网格的右键菜单复用 `@compose-ui/components` 的 `ComposeContextMenu`：右键目标会先同步
+资源选择，再由本包根据 Provider capability 决定新建、重命名、移动和删除动作是否可用。

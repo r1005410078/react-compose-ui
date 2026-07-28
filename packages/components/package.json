@@ -2,6 +2,11 @@
   "name": "@compose-ui/components",
   "version": "0.1.0",
   "type": "module",
+  "imports": {
+    "#ui/*": "./src/*/compose-*.tsx",
+    "#lib/*": "./src/lib/*.ts",
+    "#hooks/*": "./src/hooks/*.ts"
+  },
   "sideEffects": ["**/*.css"],
   "files": ["dist"],
   "main": "./dist/index.js",
@@ -23,14 +28,22 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint . --max-warnings 0",
+    "shadcn": "shadcn",
     "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
   "dependencies": {
+    "@base-ui/react": "^1.6.0",
     "@compose-ui/ui-context": "workspace:*",
-    "@tanstack/react-virtual": "^3.14.6"
+    "@tanstack/react-virtual": "^3.14.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.6.0"
   },
   "peerDependencies": {
     "react": "^18.3.0 || ^19.0.0",
     "react-dom": "^18.3.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "shadcn": "^4.15.0"
   }
 }

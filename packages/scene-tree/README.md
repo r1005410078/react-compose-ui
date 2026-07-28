@@ -130,6 +130,8 @@ controller 传给 `ComposeSceneTree.commands`，从而与树内右键菜单共�
 Ctrl/Cmd 点击用于切换单个节点的选择状态，Shift 点击用于连续范围选择。节点右键菜单提供
 新增子节点、兄弟节点、复制、剪切、粘贴和删除；空白区菜单提供根级新增与粘贴。聚焦树行后
 可使用 Ctrl/Cmd+C、X、V 和 Delete，搜索与重命名输入框保留原生文本编辑快捷键。
+菜单由 `@compose-ui/components` 的 `ComposeContextMenu` 呈现；本包仅保留选择同步、命令顺序和
+可用性判断。
 
 节点聚焦后，macOS 和 Linux 使用 Enter 开始重命名，Windows 使用 F2；双击仅执行普通
 选择，不会进入重命名状态。编辑框内按 Enter 提交，按 Escape 取消。

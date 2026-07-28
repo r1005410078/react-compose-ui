@@ -1,4 +1,4 @@
-import { act, fireEvent, renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import type { KeyboardEvent, MouseEvent, RefObject } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { useSceneTreeInteraction } from './use-scene-tree-interaction'
@@ -71,7 +71,7 @@ describe('useSceneTreeInteraction', () => {
     container.remove()
   })
 
-  it('owns search state and closes a context menu on outside pointer down', () => {
+  it('owns search state and uses the shared context-menu Hook', () => {
     const { result } = renderHook(() => useSceneTreeInteraction({
       cancelDrag: vi.fn(),
       commands: commands(),
@@ -86,8 +86,12 @@ describe('useSceneTreeInteraction', () => {
     act(() => result.current.setQuery('Child'))
     expect(result.current.rows.map((row) => row.node.id)).toEqual(['page', 'child'])
     act(() => result.current.openContextMenu(mouseEvent(), 'child'))
-    expect(result.current.contextMenu).toMatchObject({ nodeId: 'child', x: 20, y: 30 })
-    fireEvent.pointerDown(document.body)
-    expect(result.current.contextMenu).toBeNull()
+    expect(result.current.contextMenu).toMatchObject({
+      anchorPoint: { x: 20, y: 30 },
+      open: true,
+      payload: 'child',
+    })
+    act(() => result.current.contextMenu.close())
+    expect(result.current.contextMenu.open).toBe(false)
   })
 })

@@ -105,6 +105,13 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 事务历史、场景命令、物料或编辑器工作流语义的组件必须留在对应领域包。ComposeSceneTree 和
 AssetTree 应组合共享 Tree，而不能把业务分支塞回 Tree。
 
+`@compose-ui/components` 的新增共享 Primitive/Pattern 默认以包内 Shadcn CLI 生成的源码为基础；
+Shadcn 是源码分发工具而非运行时 UI 黑盒，生成代码必须继续遵守 Compose 命名、Feature-first、
+TSDoc、共置测试/Story 与公开入口边界。只有 Shadcn 无法表达所需语义时才可手写，并在实现
+注释或 OpenSpec 中说明原因。不得把领域 Widget 迁入该包只为使用 Shadcn，也不得从公共入口
+转导原始 Shadcn 名称。Shadcn 语义色必须映射 Compose Theme token，禁止引入 Preflight、默认
+`:root`/`.dark` 主题或第二套全局主题状态。
+
 ### Feature-first 目录
 
 - 包内默认按功能或公共组件组织目录，不按 `components/`、`hooks/`、`types/`、`utils/`

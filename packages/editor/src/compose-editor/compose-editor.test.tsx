@@ -573,6 +573,7 @@ describe('ComposeEditor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
     expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('dockview').parentElement).not.toHaveAttribute('inert')
     expect(button).toHaveFocus()
   })
 

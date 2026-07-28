@@ -1,0 +1,31 @@
+@import 'tailwindcss/theme.css' layer(theme) prefix(cu);
+@import 'tailwindcss/utilities.css' layer(utilities) prefix(cu);
+@import './tree/styles.css';
+
+@source './';
+
+/*
+ * Shadcn 使用的语义色仍由 ComposeUIProvider 提供。这里仅把 utility token 映射到
+ * 现有 Compose token，避免产生第二套 :root/.dark 主题或影响宿主基础元素。
+ */
+@theme inline {
+  --color-background: var(--compose-panel-bg, #111419);
+  --color-foreground: var(--compose-text, #c5ccd6);
+  --color-card: var(--compose-surface-raised, #181b20);
+  --color-card-foreground: var(--compose-text, #c5ccd6);
+  --color-popover: var(--compose-surface-active, #20242b);
+  --color-popover-foreground: var(--compose-text, #c5ccd6);
+  --color-primary: var(--compose-accent, #3687ff);
+  --color-primary-foreground: var(--compose-text-strong, #f4f7fb);
+  --color-secondary: var(--compose-surface-control, #1d2025);
+  --color-secondary-foreground: var(--compose-text, #c5ccd6);
+  --color-muted: var(--compose-surface-sunken, #15181d);
+  --color-muted-foreground: var(--compose-text-muted, #8e98a8);
+  --color-accent: var(--compose-surface-hover, #292e36);
+  --color-accent-foreground: var(--compose-text-strong, #f4f7fb);
+  --color-destructive: var(--compose-danger, #ff9c9c);
+  --color-destructive-foreground: var(--compose-text-strong, #f4f7fb);
+  --color-border: var(--compose-border, #303640);
+  --color-input: var(--compose-border-strong, #414853);
+  --color-ring: var(--compose-focus, #4d9cff);
+}

@@ -329,6 +329,18 @@ describe('ComposeAssetBrowser', () => {
     expect(screen.getByTitle('删除')).toBeDisabled()
   })
 
+  it('OpenSpec: asset-browser / 资源浏览器复用共享右键菜单 / 在不同资源视图中打开一致菜单', async () => {
+    render(<ComposeAssetBrowser provider={createProvider()} />)
+    const treeLogo = await findAssetTreeRow(/logo.svg/)
+
+    fireEvent.contextMenu(treeLogo, { clientX: 96, clientY: 72 })
+
+    const menu = screen.getByRole('menu')
+    expect(menu).toHaveAttribute('data-compose-ui', 'context-menu')
+    expect(within(menu).getByRole('menuitem', { name: '重命名' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: '删除' })).toHaveAttribute('data-danger', 'true')
+  })
+
   it('OpenSpec: editor-preferences / 资源面板 Context / 使用浅色 token、英文及消息覆盖', async () => {
     render(
       <ComposeUIProvider

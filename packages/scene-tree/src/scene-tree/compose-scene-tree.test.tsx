@@ -276,7 +276,7 @@ describe('ComposeSceneTree', () => {
 
     expect(onSelectionChange).toHaveBeenCalledWith(['blue'])
     const menuItem = screen.getByRole('menuitem', { name: '新增兄弟节点' })
-    expect(menuItem).toHaveFocus()
+    await waitFor(() => expect(screen.getByRole('menu')).toContainElement(document.activeElement as HTMLElement))
     fireEvent.click(menuItem)
     expect(onOperation).toHaveBeenCalledWith({
       type: 'create',
@@ -302,6 +302,7 @@ describe('ComposeSceneTree', () => {
     fireEvent.contextMenu(await screen.findByRole('row', { name: /Red rectangle/ }))
 
     const menu = screen.getByRole('menu')
+    expect(menu).toHaveAttribute('data-compose-ui', 'context-menu')
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       '新增子节点',
       '新增兄弟节点',
@@ -311,7 +312,7 @@ describe('ComposeSceneTree', () => {
       '粘贴为兄弟节点',
       '删除',
     ])
-    expect(within(menu).getByRole('menuitem', { name: '粘贴为子节点' })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: '粘贴为子节点' })).toHaveAttribute('aria-disabled', 'true')
     expect(within(menu).getByRole('menuitem', { name: '删除' })).toHaveAttribute('data-danger', 'true')
     expect(onSelectionChange).not.toHaveBeenCalled()
   })
@@ -343,12 +344,15 @@ describe('ComposeSceneTree', () => {
   it('OpenSpec: scene-tree / 场景树命令菜单与快捷键 / 使用命令菜单键盘导航', async () => {
     renderTree({ selectedIds: ['red'] })
     fireEvent.contextMenu(await screen.findByRole('row', { name: /Red rectangle/ }))
+    const menu = screen.getByRole('menu')
     const first = screen.getByRole('menuitem', { name: '新增子节点' })
     const second = screen.getByRole('menuitem', { name: '新增兄弟节点' })
-    expect(first).toHaveFocus()
-    fireEvent.keyDown(first, { key: 'ArrowDown' })
-    expect(second).toHaveFocus()
-    fireEvent.keyDown(second, { key: 'Escape' })
+    await waitFor(() => expect(menu).toContainElement(document.activeElement as HTMLElement))
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' })
+    expect(first).toHaveAttribute('data-highlighted', '')
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' })
+    expect(second).toHaveAttribute('data-highlighted', '')
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' })
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 

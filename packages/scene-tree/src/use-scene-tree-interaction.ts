@@ -1,14 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, RefObject } from 'react'
+import { useComposeContextMenu } from '@compose-ui/components'
 import type { ComposeSceneTreeNode, ComposeSceneTreeOperation, ComposeSceneTreeCommandController } from './index'
 import { resolveKeyboardAction, resolveSelection } from './interaction-model'
 import { buildTreeIndex, flattenVisibleTree, searchTree } from './tree-model'
-
-export interface ContextMenuState {
-  nodeId: string | null
-  x: number
-  y: number
-}
 
 interface UseSceneTreeInteractionOptions {
   cancelDrag: () => void
@@ -50,8 +45,7 @@ export function useSceneTreeInteraction({
   const [regex, setRegex] = useState(false)
   const [focusedId, setFocusedId] = useState<string | null>(selectedIds[selectedIds.length - 1] ?? null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
-  const contextMenuRef = useRef<HTMLDivElement>(null)
+  const contextMenu = useComposeContextMenu<string | null>()
   const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds])
   const index = useMemo(() => buildTreeIndex(nodes), [nodes])
   const searchResult = useMemo(
@@ -133,28 +127,18 @@ export function useSceneTreeInteraction({
   const openContextMenu = useCallback((event: MouseEvent, nodeId: string | null) => {
     event.preventDefault()
     if (event.ctrlKey || event.metaKey) {
-      setContextMenu(null)
+      contextMenu.close()
       if (nodeId) requestSelection(nodeId, event)
       return
     }
     if (nodeId && !selectedIds.includes(nodeId)) onSelectionChange?.([nodeId])
-    setContextMenu({ nodeId, x: event.clientX, y: event.clientY })
-  }, [onSelectionChange, requestSelection, selectedIds])
-
-  useEffect(() => {
-    if (!contextMenu) return
-    const closeOnOutsidePointer = (event: globalThis.PointerEvent) => {
-      if (!contextMenuRef.current?.contains(event.target as Node)) setContextMenu(null)
-    }
-    document.addEventListener('pointerdown', closeOnOutsidePointer)
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
-  }, [contextMenu])
+    contextMenu.openAt(event, nodeId)
+  }, [contextMenu, onSelectionChange, requestSelection, selectedIds])
 
   return {
     caseSensitive,
     commitRename,
     contextMenu,
-    contextMenuRef,
     editingId,
     focusedId,
     handleKeyDown,
@@ -166,7 +150,6 @@ export function useSceneTreeInteraction({
     rows,
     searchResult,
     setCaseSensitive,
-    setContextMenu,
     setEditingId,
     setFocusedId,
     setQuery,

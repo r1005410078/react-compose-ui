@@ -997,7 +997,8 @@ describe('OpenSpec: property-panel / 自适应属性操作轨道 / 通过行上�
 
     fireEvent.contextMenu(row!)
     const menu = screen.getByRole('menu', { name: '列表 1 操作' })
-    expect(within(menu).getByRole('menuitem', { name: '删除 列表 1' })).toBeVisible()
+    expect(menu).toHaveAttribute('data-compose-ui', 'context-menu')
+    expect(within(menu).getByRole('menuitem', { name: '删除 列表 1' })).toBeInTheDocument()
   })
 })
 

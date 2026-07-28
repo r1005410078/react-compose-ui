@@ -404,7 +404,7 @@ export function ComposeEditor({
         <WorkspaceContentContext.Provider value={content}>
           <div
             className="compose-editor__workspace"
-            inert={settingsOpen}
+            inert={settingsOpen || undefined}
           >
             <DockviewReact
               className="compose-editor__dockview"

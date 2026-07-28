@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { SceneTreeContextMenu } from './scene-tree-context-menu'
 import { SceneTreeRow } from './scene-tree-row'
@@ -83,15 +82,15 @@ describe('scene tree presenters', () => {
       execute,
       isEnabled: vi.fn(() => true),
     }
-    const onClose = vi.fn()
     render(
       <SceneTreeContextMenu
         commands={controller}
-        menuRef={createRef<HTMLDivElement>()}
         nodeId="node"
-        x={20}
-        y={30}
-        onClose={onClose}
+        rootProps={{
+          anchorPoint: { x: 20, y: 30 },
+          onOpenChange: vi.fn(),
+          open: true,
+        }}
       />,
     )
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
@@ -105,6 +104,5 @@ describe('scene tree presenters', () => {
     ])
     fireEvent.click(screen.getByRole('menuitem', { name: '新增子节点' }))
     expect(execute).toHaveBeenCalledWith('create-child', 'node')
-    expect(onClose).toHaveBeenCalledOnce()
   })
 })

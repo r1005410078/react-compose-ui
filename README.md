@@ -85,6 +85,16 @@ Dockview 是 editor 包的内部实现，公共入口不会导出 Dockview API�
 过滤祖先保留和可选 Pointer 拖排。`ComposeSceneTree` 与 `ComposeAssetBrowser` 组合这一个树内核，但场景
 命令、资源 Provider 和持久化仍分别留在各自包中。
 
+共享 Primitive/Pattern 采用包内 Shadcn 源码作为默认实现基础，并只公开 Compose 命名 API。例如可直接
+使用 `ComposeButton`；它跟随 `ComposeUIProvider` 的 token，不注入全局 Preflight 或另一套主题：
+
+```tsx
+import { ComposeButton } from '@compose-ui/components'
+import '@compose-ui/components/styles.css'
+
+<ComposeButton>保存</ComposeButton>
+```
+
 轻量 `@compose-ui/assets` 定义 `ComposeAssetProvider`、稳定资源引用和运行时 resolver；
 `@compose-ui/asset-browser` 连接任意资源事实来源，提供目录树、
 文件夹缩略图网格、SVG/常见图片安全预览、二进制信息和按需加载的 Monaco 脚本编辑。写入使用

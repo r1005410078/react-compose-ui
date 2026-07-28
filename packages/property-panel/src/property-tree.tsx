@@ -2,6 +2,12 @@ import { createContext, Fragment, useContext, useEffect, useId, useRef, useState
 import type { CSSProperties, ReactNode } from 'react'
 import * as v from 'valibot'
 import {
+  ComposeContextMenu,
+  ComposeContextMenuContent,
+  ComposeContextMenuItem,
+  useComposeContextMenu,
+} from '@compose-ui/components'
+import {
   ArrowIcon,
   ChevronIcon,
   CloseIcon,
@@ -222,7 +228,8 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
   const actionWidth = useContext(ActionWidthContext)
   const rootRef = useRef<HTMLDivElement>(null)
   const overflowButtonRef = useRef<HTMLButtonElement>(null)
-  const [menuMode, setMenuMode] = useState<'all' | 'overflow' | null>(null)
+  const [menuMode, setMenuMode] = useState<'overflow' | null>(null)
+  const contextMenu = useComposeContextMenu<readonly RowAction[]>()
   const ordered = [...actions].sort((left, right) => (
     left.priority - right.priority
     || Number(Boolean(left.disabled)) - Number(Boolean(right.disabled))
@@ -231,18 +238,18 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
   const hasOverflow = ordered.length > slots
   const direct = hasOverflow ? ordered.slice(0, Math.max(0, slots - 1)) : ordered
   const hidden = hasOverflow ? ordered.slice(Math.max(0, slots - 1)) : []
-  const menuActions = menuMode === 'all' ? ordered : hidden
+  const menuActions = hidden
 
   useEffect(() => {
     const row = rootRef.current?.closest('.property-panel__field, .property-panel__group-header')
     if (!row || ordered.length === 0) return
     const openContextMenu = (event: Event) => {
-      event.preventDefault()
-      setMenuMode('all')
+      if (!(event instanceof MouseEvent)) return
+      contextMenu.openAt(event, ordered)
     }
     row.addEventListener('contextmenu', openContextMenu)
     return () => row.removeEventListener('contextmenu', openContextMenu)
-  }, [ordered.length])
+  }, [contextMenu, ordered])
 
   const selectAction = (action: RowAction) => {
     if (action.disabled) return
@@ -252,6 +259,7 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
   }
 
   return (
+    <>
     <div className="property-panel__actions" ref={rootRef}>
       {direct.map((action) => (
         <Fragment key={action.id}>
@@ -268,7 +276,7 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
       ))}
       {hasOverflow ? (
         <button
-          aria-expanded={menuMode !== null}
+          aria-expanded={menuMode === 'overflow'}
           aria-haspopup="menu"
           aria-label={messages.moreActions(label)}
           className="property-panel__overflow-trigger"
@@ -277,10 +285,10 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
           onClick={() => setMenuMode((current) => current ? null : 'overflow')}
         ><MoreIcon /></button>
       ) : null}
-      {menuMode ? (
+      {menuMode === 'overflow' ? (
         <div
           aria-label={messages.actions(label)}
-          className="property-panel__row-menu"
+          className="property-panel__overflow-menu"
           role="menu"
           onKeyDown={(event) => {
             if (event.key !== 'Escape') return
@@ -302,6 +310,20 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
         </div>
       ) : null}
     </div>
+      <ComposeContextMenu {...contextMenu.rootProps}>
+        <ComposeContextMenuContent aria-label={messages.actions(label)}>
+          {(contextMenu.payload ?? []).map((action) => (
+            <ComposeContextMenuItem
+              disabled={action.disabled}
+              key={action.id}
+              onClick={action.onSelect}
+            >
+              {action.icon}<span>{action.label}</span>
+            </ComposeContextMenuItem>
+          ))}
+        </ComposeContextMenuContent>
+      </ComposeContextMenu>
+    </>
   )
 }
 
