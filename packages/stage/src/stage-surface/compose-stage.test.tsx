@@ -734,13 +734,15 @@ describe('Stage', () => {
   it('OpenSpec: stage / 受控无限视口 / 以游标为锚缩放', () => {
     const runtime = stageRuntime()
     render(<Harness runtime={runtime} />)
-    fireEvent.wheel(viewportElement(), {
+    const dispatched = fireEvent.wheel(viewportElement(), {
       clientX: 200,
       clientY: 100,
       ctrlKey: true,
       deltaY: -100,
     })
 
+    // Stage 的原生 non-passive listener 必须实际阻止浏览器的页面缩放/滚动。
+    expect(dispatched).toBe(false)
     expect(screen.getByLabelText('当前视口')).not.toHaveTextContent('"zoom":1}')
     expect(runtime.entries).toHaveLength(1)
   })

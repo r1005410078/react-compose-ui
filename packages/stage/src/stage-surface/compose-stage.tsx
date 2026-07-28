@@ -30,7 +30,6 @@ import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
 } from 'react'
 import type {
   ComposeAssetReference,
@@ -492,6 +491,41 @@ export function ComposeStage({
       idFactory,
     }
   })
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    const handleWheel = (event: WheelEvent) => {
+      const surface = surfaceRef.current
+      if (
+        !surface
+        || (!surface.contains(event.target as Node) && event.target !== root)
+      ) return
+      const current = latestRef.current
+      const point = screenPoint(event, surface)
+      if (event.ctrlKey || event.metaKey) {
+        const factor = Math.exp(-event.deltaY * 0.002)
+        current.onViewportChange(zoomViewportAt(
+          current.viewport,
+          point,
+          current.viewport.zoom * factor,
+        ))
+      }
+      else {
+        current.onViewportChange({
+          ...current.viewport,
+          x: current.viewport.x - event.deltaX,
+          y: current.viewport.y - event.deltaY,
+        })
+      }
+      // React 将 wheel 事件作为 passive listener 委托；在其 SyntheticEvent 中调用
+      // preventDefault 会产生浏览器警告且无法阻止页面滚动。Stage 需要独占画布平移，
+      // 因此在根元素上安装显式的非 passive 原生监听器。
+      event.preventDefault()
+    }
+    root.addEventListener('wheel', handleWheel, { passive: false })
+    return () => root.removeEventListener('wheel', handleWheel)
+  }, [])
 
   useEffect(() => {
     const pending = pendingAssetDropsRef.current
@@ -1477,27 +1511,7 @@ export function ComposeStage({
       onPointerUp={(event) => {
         onPointerUp?.(event)
       }}
-      onWheel={(event: ReactWheelEvent<HTMLDivElement>) => {
-        onWheel?.(event)
-        const surface = surfaceRef.current
-        if (
-          !surface
-          || (!surface.contains(event.target as Node) && event.target !== event.currentTarget)
-        ) return
-        const point = screenPoint(event, surface)
-        if (event.ctrlKey || event.metaKey) {
-          const factor = Math.exp(-event.deltaY * 0.002)
-          onViewportChange(zoomViewportAt(viewport, point, viewport.zoom * factor))
-        }
-        else {
-          onViewportChange({
-            ...viewport,
-            x: viewport.x - event.deltaX,
-            y: viewport.y - event.deltaY,
-          })
-        }
-        event.preventDefault()
-      }}
+      onWheel={onWheel}
     >
       <StageRulers
         bounds={bounds}
