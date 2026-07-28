@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import {
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
@@ -315,6 +315,18 @@ describe('ComposeCommandPanel', () => {
     fireEvent.click(details)
     expect(details).toHaveAttribute('aria-expanded', 'true')
     expect(controller.document.nodes.a.name).toBe('Keyboard')
+  })
+
+  it('OpenSpec: command-panel / 右键菜单 / 不展示并不存在的快捷键', () => {
+    const controller = runtime()
+    render(<ComposeCommandPanel runtime={controller} />)
+    act(() => controller.dispatch(renameCommand('Context menu')))
+
+    fireEvent.contextMenu(screen.getByText('rename-Context menu'))
+
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getByRole('menuitem', { name: '重放命令' })).toBeInTheDocument()
+    expect(menu.querySelector('[data-slot="context-menu-shortcut"]')).toBeNull()
   })
 
   it('OpenSpec: command-panel / 命令面板内建本地化 / 使用英文命令面板', () => {

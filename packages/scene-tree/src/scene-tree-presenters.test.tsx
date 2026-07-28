@@ -96,11 +96,11 @@ describe('scene tree presenters', () => {
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       '新增子节点',
       '新增兄弟节点',
-      '复制',
-      '剪切',
+      '复制Ctrl+C',
+      '剪切Ctrl+X',
       '粘贴为子节点',
       '粘贴为兄弟节点',
-      '删除',
+      '删除Delete',
     ])
     fireEvent.click(screen.getByRole('menuitem', { name: '新增子节点' }))
     expect(execute).toHaveBeenCalledWith('create-child', 'node')

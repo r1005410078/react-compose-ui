@@ -3,8 +3,13 @@ import {
   ComposeContextMenuContent,
   ComposeContextMenuItem,
   ComposeContextMenuSeparator,
+  ComposeContextMenuShortcut,
+  formatComposeKeybindings,
 } from '@compose-ui/components'
-import type { ComposeContextMenuRootProps } from '@compose-ui/components'
+import type {
+  ComposeContextMenuRootProps,
+  ComposeKeybinding,
+} from '@compose-ui/components'
 import type { ComposeSceneTreeCommand, ComposeSceneTreeCommandController } from './index'
 import { getSceneTreeMessages } from './scene-tree-i18n'
 import type { SceneTreeMessages } from './scene-tree-i18n'
@@ -13,16 +18,17 @@ interface MenuEntry {
   command: ComposeSceneTreeCommand
   danger?: boolean
   separatorBefore?: boolean
+  shortcut?: readonly ComposeKeybinding[]
 }
 
 const NODE_MENU_ENTRIES: readonly MenuEntry[] = [
   { command: 'create-child' },
   { command: 'create-sibling' },
-  { command: 'copy', separatorBefore: true },
-  { command: 'cut' },
+  { command: 'copy', separatorBefore: true, shortcut: [{ code: 'KeyC', primary: true }] },
+  { command: 'cut', shortcut: [{ code: 'KeyX', primary: true }] },
   { command: 'paste-child' },
   { command: 'paste-sibling' },
-  { command: 'delete', danger: true, separatorBefore: true },
+  { command: 'delete', danger: true, separatorBefore: true, shortcut: [{ code: 'Delete' }] },
 ]
 
 const ROOT_MENU_ENTRIES: readonly MenuEntry[] = [
@@ -50,6 +56,7 @@ export function SceneTreeContextMenu({
       <ComposeContextMenuContent>
         {entries.map((entry) => {
           const enabled = commands.isEnabled(entry.command, nodeId)
+          const shortcut = formatComposeKeybindings(entry.shortcut)
           return (
             <div key={entry.command}>
               {entry.separatorBefore ? <ComposeContextMenuSeparator /> : null}
@@ -59,6 +66,7 @@ export function SceneTreeContextMenu({
                 onClick={() => commands.execute(entry.command, nodeId)}
               >
                 {messages.commands[entry.command]}
+                {shortcut ? <ComposeContextMenuShortcut>{shortcut}</ComposeContextMenuShortcut> : null}
               </ComposeContextMenuItem>
             </div>
           )

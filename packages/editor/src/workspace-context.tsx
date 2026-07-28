@@ -1,12 +1,16 @@
 import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
-import type { ComposeHistoryNavigationController } from '@compose-ui/history'
+import type {
+  ComposeHistoryNavigationController,
+  ComposeHistoryShortcuts,
+} from '@compose-ui/history'
 
 export interface WorkspaceContent {
   sceneGraphPanel?: ReactNode
   componentLibraryPanel?: ReactNode
   history?: ComposeHistoryNavigationController
   historyPanel?: ReactNode
+  historyShortcuts?: ComposeHistoryShortcuts
   stageToolbar?: ReactNode
   children?: ReactNode
   inspectorPanel?: ReactNode

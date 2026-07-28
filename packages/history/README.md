@@ -55,7 +55,8 @@ export function DocumentEditor() {
 也可通过 `ComposeHistoryShortcuts` 覆盖或以空数组禁用。处理器应挂在编辑器范围容器上，因此输入框
 聚焦时仍操作文档历史；IME 组合输入期间不会拦截。`ComposeHistoryPanel.locale` 支持 zh-CN 和 en-US，
 显式 prop 优先于 `@compose-ui/ui-context`，Provider 外保持原独立默认语言；宿主历史 label
-保持原文。
+保持原文。若独立 HistoryPanel 已随 `shortcuts` prop 获知宿主实际安装的键位，右键菜单会为撤销与
+重做显示相同提示；省略该 prop 时不显示，避免暗示不存在的监听器。
 
 ## 快照约束
 

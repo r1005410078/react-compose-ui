@@ -70,7 +70,7 @@ describe('ComposeSceneTree', () => {
 
     fireEvent.contextMenu(screen.getByRole('row', { name: /Red rectangle/ }))
     expect(screen.getByRole('menuitem', { name: 'Add child' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'DeleteDelete' })).toBeInTheDocument()
     expect(screen.getByText('Red rectangle')).toBeInTheDocument()
   })
 
@@ -306,14 +306,18 @@ describe('ComposeSceneTree', () => {
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       '新增子节点',
       '新增兄弟节点',
-      '复制',
-      '剪切',
+      '复制Ctrl+C',
+      '剪切Ctrl+X',
       '粘贴为子节点',
       '粘贴为兄弟节点',
-      '删除',
+      '删除Delete',
     ])
     expect(within(menu).getByRole('menuitem', { name: '粘贴为子节点' })).toHaveAttribute('aria-disabled', 'true')
-    expect(within(menu).getByRole('menuitem', { name: '删除' })).toHaveAttribute('data-danger', 'true')
+    expect(within(menu).getByRole('menuitem', { name: '删除Delete' })).toHaveAttribute('data-danger', 'true')
+    expect(within(menu).getByRole('menuitem', { name: '复制Ctrl+C' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toHaveTextContent('Ctrl+C')
+    expect(within(menu).getByRole('menuitem', { name: '粘贴为子节点' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toBeNull()
     expect(onSelectionChange).not.toHaveBeenCalled()
   })
 

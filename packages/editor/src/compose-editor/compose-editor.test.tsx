@@ -736,6 +736,28 @@ describe('ComposeEditor', () => {
     expect(history.undo).toHaveBeenCalledTimes(1)
   })
 
+  it('OpenSpec: editor-workspace-layout / 默认历史面板 / 将当前历史快捷键同步到右键菜单', () => {
+    const history = createHistoryController()
+    const defaults = createDefaultComposeEditorPreferences()
+    render(
+      <ComposeEditor
+        history={history}
+        preferences={{
+          ...defaults,
+          shortcuts: {
+            ...defaults.shortcuts,
+            'history.undo': [{ code: 'KeyU' }],
+          },
+        }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '新增节点' }))
+
+    expect(screen.getByRole('menuitem', { name: '撤销U' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toHaveTextContent('U')
+  })
+
   it('OpenSpec: editor-preferences / 可配置单次快捷键 / 拒绝同作用域冲突', () => {
     const onPreferencesChange = vi.fn()
     render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)

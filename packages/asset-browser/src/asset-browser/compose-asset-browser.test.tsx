@@ -337,8 +337,12 @@ describe('ComposeAssetBrowser', () => {
 
     const menu = screen.getByRole('menu')
     expect(menu).toHaveAttribute('data-compose-ui', 'context-menu')
-    expect(within(menu).getByRole('menuitem', { name: '重命名' })).toBeInTheDocument()
-    expect(within(menu).getByRole('menuitem', { name: '删除' })).toHaveAttribute('data-danger', 'true')
+    expect(within(menu).getByRole('menuitem', { name: '重命名F2' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: '删除Delete' })).toHaveAttribute('data-danger', 'true')
+    expect(within(menu).getByRole('menuitem', { name: '重命名F2' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toHaveTextContent('F2')
+    expect(within(menu).getByRole('menuitem', { name: '删除Delete' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toHaveTextContent('Delete')
   })
 
   it('OpenSpec: editor-preferences / 资源面板 Context / 使用浅色 token、英文及消息覆盖', async () => {

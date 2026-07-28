@@ -17,6 +17,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
 import {
@@ -1477,6 +1478,46 @@ describe('Stage', () => {
     )
     expect(screen.getByLabelText('当前选择')).toBeEmptyDOMElement()
     expect(runtime.entries).toHaveLength(1)
+  })
+
+  it('OpenSpec: stage / Stage 右键操作菜单 / 同步当前快捷键并隐藏已禁用键位', () => {
+    render(
+      <Harness
+        initialSelection={['a']}
+        runtime={stageRuntime()}
+        shortcuts={{
+          'edit.duplicate': [{ code: 'KeyU' }],
+          'edit.delete': [],
+        }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByTestId('stage-node-a'), { clientX: 80, clientY: 60 })
+
+    const menu = screen.getByRole('menu', { name: '画布操作' })
+    expect(within(menu).getByRole('menuitem', { name: '创建副本U' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toHaveTextContent('U')
+    expect(within(menu).getByRole('menuitem', { name: '删除' }))
+      .toHaveAttribute('data-danger', 'true')
+    expect(within(menu).getByRole('menuitem', { name: '删除' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toBeNull()
+  })
+
+  it('keeps configured hints on disabled Stage menu actions', () => {
+    render(
+      <Harness
+        initialSelection={['locked']}
+        runtime={stageRuntime()}
+        shortcuts={{ 'edit.duplicate': [{ code: 'KeyU' }] }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByTestId('stage-node-locked'), { clientX: 80, clientY: 60 })
+
+    expect(screen.getByRole('menuitem', { name: '创建副本U' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   })
 
   // OpenSpec: stage / 异步资源节点创建 / 单项固有尺寸创建

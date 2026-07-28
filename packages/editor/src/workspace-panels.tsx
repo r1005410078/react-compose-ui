@@ -39,13 +39,14 @@ function SceneContentPanel() {
 }
 
 function HistoryContentPanel() {
-  const { history, historyPanel } = useWorkspaceContent()
+  const { history, historyPanel, historyShortcuts } = useWorkspaceContent()
   const historyContent = historyPanel !== undefined
     ? historyPanel
     : history ? (
         <ComposeHistoryPanel
           className="compose-editor__history-panel"
           controller={history}
+          shortcuts={historyShortcuts}
         />
       ) : null
 

@@ -161,6 +161,7 @@
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/command-panel": "workspace:*",
         "@compose-ui/component-registry": "workspace:*",
+        "@compose-ui/components": "workspace:*",
         "@compose-ui/core": "workspace:*",
         "@compose-ui/history": "workspace:*",
         "@compose-ui/property-panel": "workspace:*",

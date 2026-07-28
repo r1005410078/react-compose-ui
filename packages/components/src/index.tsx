@@ -29,6 +29,8 @@ export {
   ComposeContextMenuSubContent,
   ComposeContextMenuSubTrigger,
   ComposeContextMenuTrigger,
+  formatComposeKeybinding,
+  formatComposeKeybindings,
   useComposeContextMenu,
 } from './context-menu'
 export type {
@@ -51,6 +53,7 @@ export type {
   ComposeContextMenuSubContentProps,
   ComposeContextMenuSubTriggerProps,
   ComposeContextMenuTriggerProps,
+  ComposeKeybinding,
 } from './context-menu'
 export { ComposeTree } from './tree'
 // 公共入口同时导出组件与纯 Tree 模型工具，因此只针对工具导出豁免 Fast Refresh。

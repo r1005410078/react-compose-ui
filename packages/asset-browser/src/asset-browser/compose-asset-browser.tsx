@@ -2,6 +2,7 @@ import {
   ComposeContextMenu,
   ComposeContextMenuContent,
   ComposeContextMenuItem,
+  ComposeContextMenuShortcut,
   ComposeTree,
   useComposeContextMenu,
 } from '@compose-ui/components'
@@ -804,12 +805,12 @@ export function ComposeAssetBrowser({
               const entry = contextMenu.payload ? source.entriesById.get(contextMenu.payload) : undefined
               if (entry) setNameDialog({ mode: 'rename', initialValue: entry.name })
             }}
-          >{messages.rename}</ComposeContextMenuItem>
+          >{messages.rename}<ComposeContextMenuShortcut>F2</ComposeContextMenuShortcut></ComposeContextMenuItem>
           <ComposeContextMenuItem
             disabled={!canDelete}
             variant="destructive"
             onClick={requestDelete}
-          >{messages.delete}</ComposeContextMenuItem>
+          >{messages.delete}<ComposeContextMenuShortcut>Delete</ComposeContextMenuShortcut></ComposeContextMenuItem>
         </ComposeContextMenuContent>
       </ComposeContextMenu>
     </div>

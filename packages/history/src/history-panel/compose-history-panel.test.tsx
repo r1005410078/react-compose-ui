@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -246,6 +246,38 @@ describe('ComposeHistoryPanel', () => {
     render(<ComposeHistoryPanel controller={createNavigationController()} />)
     expect(screen.getByRole('region', { name: '历史记录' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '历史' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: history / 历史右键导航菜单 / 仅展示宿主已安装的快捷键', () => {
+    const controller = createNavigationController()
+    render(
+      <ComposeHistoryPanel
+        controller={controller}
+        shortcuts={{
+          undo: [{ code: 'KeyU' }],
+          redo: [{ code: 'KeyR' }, { code: 'KeyY', control: true }],
+        }}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '修改文本' }))
+
+    const menu = screen.getByRole('menu', { name: '历史记录' })
+    expect(within(menu).getByRole('menuitem', { name: '撤销U' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toHaveTextContent('U')
+    expect(within(menu).getByRole('menuitem', { name: '重做R / Ctrl+Y' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toHaveTextContent('R / Ctrl+Y')
+  })
+
+  it('does not imply shortcuts when the standalone panel has none installed', () => {
+    render(<ComposeHistoryPanel controller={createNavigationController()} />)
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '修改文本' }))
+
+    expect(screen.getByRole('menuitem', { name: '撤销' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toBeNull()
+    expect(screen.getByRole('menuitem', { name: '重做' })
+      .querySelector('[data-slot="context-menu-shortcut"]')).toBeNull()
   })
 
   it('OpenSpec: ui-context / 共享 UI Context 包 / 独立组件保持兼容 - History 消费 Context', () => {

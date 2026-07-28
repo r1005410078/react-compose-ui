@@ -290,6 +290,10 @@ export function ComposeEditor({
         : controller?.componentLibraryPanel,
       history: resolvedHistory,
       historyPanel: slots?.history,
+      historyShortcuts: {
+        undo: resolvedPreferences.shortcuts['history.undo'],
+        redo: resolvedPreferences.shortcuts['history.redo'],
+      },
       stageToolbar: slots?.stageToolbar !== undefined
         ? slots.stageToolbar
         : controller?.stageToolbar,

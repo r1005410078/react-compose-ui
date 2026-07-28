@@ -11,9 +11,11 @@ import {
   ComposeContextMenuRadioGroup,
   ComposeContextMenuRadioItem,
   ComposeContextMenuSeparator,
+  ComposeContextMenuShortcut,
   ComposeContextMenuSub,
   ComposeContextMenuSubContent,
   ComposeContextMenuSubTrigger,
+  formatComposeKeybindings,
   useComposeContextMenu,
 } from '@compose-ui/components'
 import {
@@ -1420,6 +1422,11 @@ export function ComposeStage({
     }
   }
 
+  const contextMenuShortcut = (action: ComposeStageShortcutAction) => {
+    const label = formatComposeKeybindings(resolvedShortcuts[action])
+    return label ? <ComposeContextMenuShortcut>{label}</ComposeContextMenuShortcut> : null
+  }
+
   return (
     <div
       {...props}
@@ -1690,27 +1697,27 @@ export function ComposeStage({
               const id = contextEditableIds[0]
               const duplicate = id ? createDuplicateCommand(document, id, idFactory, idFactory()) : null
               if (duplicate && dispatch(duplicate.command).status === 'committed') onSelectedIdsChange([duplicate.rootId])
-            }}>创建副本</ComposeContextMenuItem>
+            }}>创建副本{contextMenuShortcut('edit.duplicate')}</ComposeContextMenuItem>
             <ComposeContextMenuItem disabled={!canGroup} onClick={() => {
               const groupId = idFactory()
               if (dispatch(createGroupCommand(document, contextEditableIds, groupId, idFactory())).status === 'committed') onSelectedIdsChange([groupId])
-            }}>编组</ComposeContextMenuItem>
+            }}>编组{contextMenuShortcut('edit.group')}</ComposeContextMenuItem>
             <ComposeContextMenuItem disabled={!canUngroup} onClick={() => {
               const frame = document.nodes[contextEditableIds[0]!]
               if (dispatch(createUngroupCommand(document, contextEditableIds[0]!, idFactory())).status === 'committed' && frame?.kind === 'frame') onSelectedIdsChange(frame.childIds)
-            }}>取消编组</ComposeContextMenuItem>
-            <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: 'node.delete', payload: { nodeIds: contextEditableIds }, meta: { label: `Delete ${describeNodeTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除</ComposeContextMenuItem>
+            }}>取消编组{contextMenuShortcut('edit.ungroup')}</ComposeContextMenuItem>
+            <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: 'node.delete', payload: { nodeIds: contextEditableIds }, meta: { label: `Delete ${describeNodeTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除{contextMenuShortcut('edit.delete')}</ComposeContextMenuItem>
             <ComposeContextMenuSeparator />
           </> : null}
           <ComposeContextMenuSub><ComposeContextMenuSubTrigger>视图</ComposeContextMenuSubTrigger><ComposeContextMenuSubContent aria-label="视图">
-            <ComposeContextMenuItem disabled={!bounds} onClick={() => { if (!bounds) return; const zoom = Math.min(8, Math.max(.1, Math.min(surfaceSize.width / bounds.width, surfaceSize.height / bounds.height) * .85)); onViewportChange({ zoom, x: (surfaceSize.width - bounds.width * zoom) / 2 - bounds.x * zoom, y: (surfaceSize.height - bounds.height * zoom) / 2 - bounds.y * zoom }) }}>适配选择</ComposeContextMenuItem>
-            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, viewport.zoom * 1.2))}>放大</ComposeContextMenuItem>
-            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, viewport.zoom / 1.2))}>缩小</ComposeContextMenuItem>
-            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, 1))}>100%</ComposeContextMenuItem>
+            <ComposeContextMenuItem disabled={!bounds} onClick={() => { if (!bounds) return; const zoom = Math.min(8, Math.max(.1, Math.min(surfaceSize.width / bounds.width, surfaceSize.height / bounds.height) * .85)); onViewportChange({ zoom, x: (surfaceSize.width - bounds.width * zoom) / 2 - bounds.x * zoom, y: (surfaceSize.height - bounds.height * zoom) / 2 - bounds.y * zoom }) }}>适配选择{contextMenuShortcut('stage.fitSelection')}</ComposeContextMenuItem>
+            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, viewport.zoom * 1.2))}>放大{contextMenuShortcut('stage.zoomIn')}</ComposeContextMenuItem>
+            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, viewport.zoom / 1.2))}>缩小{contextMenuShortcut('stage.zoomOut')}</ComposeContextMenuItem>
+            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, 1))}>100%{contextMenuShortcut('stage.zoomReset')}</ComposeContextMenuItem>
           </ComposeContextMenuSubContent></ComposeContextMenuSub>
-          <ComposeContextMenuSub><ComposeContextMenuSubTrigger>工具</ComposeContextMenuSubTrigger><ComposeContextMenuSubContent aria-label="工具"><ComposeContextMenuRadioGroup value={tool} onValueChange={(value) => onToolChange?.(value as typeof tool)}><ComposeContextMenuRadioItem value="select">选择</ComposeContextMenuRadioItem><ComposeContextMenuRadioItem value="pan">平移</ComposeContextMenuRadioItem></ComposeContextMenuRadioGroup></ComposeContextMenuSubContent></ComposeContextMenuSub>
-          <ComposeContextMenuCheckboxItem checked={document.canvas.grid.snapEnabled} onCheckedChange={() => dispatch({ id: idFactory(), type: 'canvas.configure', payload: { grid: { ...document.canvas.grid, snapEnabled: !document.canvas.grid.snapEnabled }, smartSnap: document.canvas.smartSnap }, meta: { label: messages.toggleGridSnap, source: 'stage' } })}>网格吸附</ComposeContextMenuCheckboxItem>
-          <ComposeContextMenuCheckboxItem checked={document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides} onCheckedChange={() => dispatch({ id: idFactory(), type: 'canvas.configure', payload: { grid: document.canvas.grid, smartSnap: { nodes: !(document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides), guides: !(document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides) } }, meta: { label: messages.toggleSmartSnap, source: 'stage' } })}>智能吸附</ComposeContextMenuCheckboxItem>
+          <ComposeContextMenuSub><ComposeContextMenuSubTrigger>工具</ComposeContextMenuSubTrigger><ComposeContextMenuSubContent aria-label="工具"><ComposeContextMenuRadioGroup value={tool} onValueChange={(value) => onToolChange?.(value as typeof tool)}><ComposeContextMenuRadioItem value="select">选择{contextMenuShortcut('stage.selectTool')}</ComposeContextMenuRadioItem><ComposeContextMenuRadioItem value="pan">平移{contextMenuShortcut('stage.panTool')}</ComposeContextMenuRadioItem></ComposeContextMenuRadioGroup></ComposeContextMenuSubContent></ComposeContextMenuSub>
+          <ComposeContextMenuCheckboxItem checked={document.canvas.grid.snapEnabled} onCheckedChange={() => dispatch({ id: idFactory(), type: 'canvas.configure', payload: { grid: { ...document.canvas.grid, snapEnabled: !document.canvas.grid.snapEnabled }, smartSnap: document.canvas.smartSnap }, meta: { label: messages.toggleGridSnap, source: 'stage' } })}>网格吸附{contextMenuShortcut('stage.toggleGridSnap')}</ComposeContextMenuCheckboxItem>
+          <ComposeContextMenuCheckboxItem checked={document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides} onCheckedChange={() => dispatch({ id: idFactory(), type: 'canvas.configure', payload: { grid: document.canvas.grid, smartSnap: { nodes: !(document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides), guides: !(document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides) } }, meta: { label: messages.toggleSmartSnap, source: 'stage' } })}>智能吸附{contextMenuShortcut('stage.toggleSmartSnap')}</ComposeContextMenuCheckboxItem>
         </ComposeContextMenuContent>
       </ComposeContextMenu>
     </div>

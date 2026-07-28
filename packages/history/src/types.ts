@@ -101,4 +101,11 @@ export interface ComposeHistoryController<T> extends ComposeHistoryNavigationCon
 export interface ComposeHistoryPanelProps extends HTMLAttributes<HTMLDivElement> {
   /** 驱动列表、当前状态和记录跳转的受控历史协议。 */
   controller: ComposeHistoryNavigationController
+  /**
+   * 当前容器实际安装的撤销/重做快捷键。
+   *
+   * @remarks
+   * HistoryPanel 不自行注册键盘监听器；省略时菜单不会显示快捷键，以免暗示并不存在的键盘行为。
+   */
+  shortcuts?: ComposeHistoryShortcuts
 }

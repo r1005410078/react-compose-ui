@@ -10,6 +10,8 @@ import {
   ComposeContextMenuContent,
   ComposeContextMenuItem,
   ComposeContextMenuSeparator,
+  ComposeContextMenuShortcut,
+  formatComposeKeybindings,
   useComposeContextMenu,
 } from '@compose-ui/components'
 import type { ComposeHistoryPanelProps } from '../types'
@@ -41,6 +43,7 @@ const historyMessages = {
 export function ComposeHistoryPanel({
   controller,
   className,
+  shortcuts,
   style,
   ...htmlProps
 }: ComposeHistoryPanelProps) {
@@ -68,6 +71,8 @@ export function ComposeHistoryPanel({
   const activeEntry = activeIndex >= 0 ? controller.entries[activeIndex] : undefined
   const contextMenu = useComposeContextMenu<string | null>()
   const latestEntry = controller.entries[controller.entries.length - 1]
+  const undoShortcut = formatComposeKeybindings(shortcuts?.undo)
+  const redoShortcut = formatComposeKeybindings(shortcuts?.redo)
 
   useEffect(() => {
     activeButtonRef.current?.scrollIntoView?.({ block: 'nearest' })
@@ -152,8 +157,12 @@ export function ComposeHistoryPanel({
               onClick={() => controller.navigate(contextMenu.payload!)}
             >跳转到此状态</ComposeContextMenuItem>
           ) : null}
-          <ComposeContextMenuItem disabled={!controller.canUndo} onClick={() => controller.undo()}>撤销</ComposeContextMenuItem>
-          <ComposeContextMenuItem disabled={!controller.canRedo} onClick={() => controller.redo()}>重做</ComposeContextMenuItem>
+          <ComposeContextMenuItem disabled={!controller.canUndo} onClick={() => controller.undo()}>
+            撤销{undoShortcut ? <ComposeContextMenuShortcut>{undoShortcut}</ComposeContextMenuShortcut> : null}
+          </ComposeContextMenuItem>
+          <ComposeContextMenuItem disabled={!controller.canRedo} onClick={() => controller.redo()}>
+            重做{redoShortcut ? <ComposeContextMenuShortcut>{redoShortcut}</ComposeContextMenuShortcut> : null}
+          </ComposeContextMenuItem>
           <ComposeContextMenuSeparator />
           <ComposeContextMenuItem
             disabled={!latestEntry || latestEntry.id === controller.activeEntryId}

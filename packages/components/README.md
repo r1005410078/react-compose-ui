@@ -61,6 +61,25 @@ Hook 的 `openAt()` 会阻止浏览器原生菜单、保存关闭后的焦点目
 `anchorPoint`。`ComposeContextMenuContent` 使用固定虚拟锚点和非模态的 Base UI Menu 后端处理视口
 避让、Escape、外部按压、roving focus 与子菜单。
 
+需要在菜单项末尾显示已生效的键位时，使用 `formatComposeKeybindings()` 和已有的
+`ComposeContextMenuShortcut`。格式化器按当前平台显示 macOS 符号键或其他平台的 `Ctrl+…`，多个
+替代键位以 ` / ` 分隔；它不注册键盘监听器，也不赋予菜单项任何领域动作。
+
+```tsx
+import {
+  ComposeContextMenuItem,
+  ComposeContextMenuShortcut,
+  formatComposeKeybindings,
+} from '@compose-ui/components'
+
+const shortcut = formatComposeKeybindings([{ code: 'KeyZ', primary: true }])
+
+<ComposeContextMenuItem>
+  撤销
+  {shortcut ? <ComposeContextMenuShortcut>{shortcut}</ComposeContextMenuShortcut> : null}
+</ComposeContextMenuItem>
+```
+
 ```tsx
 import { ComposeTree } from '@compose-ui/components'
 import '@compose-ui/components/styles.css'

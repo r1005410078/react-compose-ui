@@ -48,7 +48,8 @@ export function EditorPage() {
 外观、语言和键盘快捷方式分类，右侧修改即时生效；打开时 Dockview 进入 inert 状态。内建设置
 支持 Dark、Light、System、简体中文、English，以及 Stage、编辑和历史动作的单次快捷键重绑、
 冲突检查、清除和恢复。默认按住 Space 可从 Stage 空白、Frame 或节点开始临时平移；
-`Cmd/Ctrl+,` 打开或关闭设置。
+`Cmd/Ctrl+,` 打开或关闭设置。默认历史面板会把当前偏好中的撤销/重做键位透传给右键菜单，因此
+设置面板的重绑结果与菜单提示始终一致。
 
 ```tsx
 import {

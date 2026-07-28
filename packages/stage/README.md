@@ -32,7 +32,8 @@ DOM Scene Layer 与屏幕坐标 SVG/DOM Overlay 组合的无限编辑 Stage。
 - 主题与语言从 `@compose-ui/ui-context` 读取。内建标尺、滚动条与覆盖层 ARIA 会翻译，
   registry label 与 renderer 内容保持宿主原文。
 - `shortcuts` 可覆盖临时平移、V/H 工具、F/Shift+F 适配、缩放、吸附、复制、分组和删除；
-  动作空数组表示禁用。输入控件、contenteditable 和 IME composing 不触发 Stage 导航键。
+  动作空数组表示禁用。画布右键菜单会用相同的当前配置显示动作键位；空数组不显示提示，已禁用的
+  菜单动作仍可保留其配置键位。输入控件、contenteditable 和 IME composing 不触发 Stage 导航键。
 
 ```tsx
 import {

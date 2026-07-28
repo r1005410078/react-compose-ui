@@ -202,6 +202,21 @@ describe('OpenSpec: operation-log / 可访问日志查看面板 / 搜索和筛�
     await waitFor(() => expect(screen.getByText('No operations yet')).toBeInTheDocument())
   })
 
+  it('OpenSpec: operation-log / 右键菜单 / 不展示并不存在的快捷键', async () => {
+    const store = createComposeMemoryOperationLogStore()
+    await store.put(entry())
+    render(
+      <ComposeOperationLogProvider scopeId="workspace-a" store={store}>
+        <ComposeOperationLogPanel />
+      </ComposeOperationLogProvider>,
+    )
+
+    const list = await screen.findByLabelText('Operation list')
+    fireEvent.contextMenu(within(list).getByRole('button', { name: /修改矩形宽度/ }))
+
+    expect(screen.getByRole('menu').querySelector('[data-slot="context-menu-shortcut"]')).toBeNull()
+  })
+
 })
 
 describe('OpenSpec: operation-log / 可访问日志查看面板 / 查看结构化详情', () => {

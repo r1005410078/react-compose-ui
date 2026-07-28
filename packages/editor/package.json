@@ -29,6 +29,7 @@
     "@compose-ui/asset-browser": "workspace:*",
     "@compose-ui/assets": "workspace:*",
     "@compose-ui/command-panel": "workspace:*",
+    "@compose-ui/components": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/history": "workspace:*",

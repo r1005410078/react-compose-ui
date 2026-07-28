@@ -1,4 +1,5 @@
 import type { ComposeLocale, ComposeTheme } from '@compose-ui/ui-context'
+import { formatComposeKeybinding } from '@compose-ui/components'
 
 /**
  * 可由设置面板修改的编辑器动作。
@@ -211,24 +212,7 @@ export function formatComposeEditorKeybinding(
   binding: ComposeEditorKeybinding,
   platform: string,
 ) {
-  const mac = isMacPlatform(platform)
-  const key = displayKey(binding.code)
-  if (mac) {
-    return [
-      binding.primary ? '⌘' : '',
-      binding.control ? '⌃' : '',
-      binding.alt ? '⌥' : '',
-      binding.shift ? '⇧' : '',
-      key,
-    ].join('')
-  }
-
-  return [
-    binding.primary || binding.control ? 'Ctrl' : '',
-    binding.alt ? 'Alt' : '',
-    binding.shift ? 'Shift' : '',
-    key,
-  ].filter(Boolean).join('+')
+  return formatComposeKeybinding(binding, platform)
 }
 
 export function findComposeEditorShortcutConflict(
@@ -275,21 +259,4 @@ function serializeBinding(binding: ComposeEditorKeybinding) {
 
 function isMacPlatform(platform: string) {
   return /Mac|iPhone|iPad|iPod/i.test(platform)
-}
-
-function displayKey(code: string) {
-  const names: Record<string, string> = {
-    Backspace: 'Backspace',
-    Comma: ',',
-    Delete: 'Delete',
-    Digit0: '0',
-    Equal: '=',
-    Escape: 'Esc',
-    Minus: '-',
-    Space: 'Space',
-  }
-  if (names[code]) return names[code]
-  if (/^Key[A-Z]$/.test(code)) return code.slice(3)
-  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
-  return code
 }
