@@ -707,6 +707,7 @@ function PropertyNode({
         binding={rendererBinding}
         commit={(candidate, reason = 'commit') => commit(path, candidate, reason)}
         issues={issuesAtPath(view.issues, path)}
+        label={label}
         metadata={info.metadata}
         path={path}
         readOnly={readOnly}

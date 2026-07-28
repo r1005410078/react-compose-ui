@@ -94,6 +94,28 @@ test('OpenSpec: asset-browser / Editor 资源面板 / 浏览 SVG 并显式保存
   await expect(assets.getByRole('alertdialog', { name: '文件尚未保存' })).toHaveCount(0)
 })
 
+test('OpenSpec: asset-browser / Editor 资源面板 / 右键菜单不被其他工作区遮挡', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' }).getByRole('gridcell', { name: /Images/ }).click({ button: 'right' })
+
+  const menu = page.getByRole('menu', { name: '资源' })
+  await expect(menu).toBeVisible()
+  for (const name of ['新建文件', '新建目录', '重命名', '删除']) {
+    const item = menu.getByRole('menuitem', { name })
+    await expect(item).toBeVisible()
+    const box = await item.boundingBox()
+    expect(box).not.toBeNull()
+    const topmostMenu = await page.evaluate(({ x, y }) => (
+      document.elementFromPoint(x, y)?.closest('[data-compose-ui="context-menu"]') !== null
+    ), { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 })
+    expect(topmostMenu).toBe(true)
+  }
+})
+
 test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG 并原子撤销重做', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
@@ -224,21 +246,37 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   })
   await stage.press('Control+0')
 
-  await inspector.getByRole('combobox', { name: '常见 PC 尺寸' })
+  await expect(inspector.getByTestId('semantic-editor-size')).toBeVisible()
+  await expect(inspector.getByTestId('semantic-editor-color')).toBeVisible()
+  await expect(inspector.locator('[data-property-path="size.preset"]')).toHaveCount(0)
+  const canvasColor = inspector.getByRole('button', { name: '选择输出背景颜色', exact: true })
+  await canvasColor.click()
+  const canvasColorPicker = page.getByRole('dialog', { name: '输出背景颜色', exact: true })
+  await expect(canvasColorPicker.getByRole('textbox')).toHaveCount(0)
+  await expect(canvasColorPicker.getByLabel('输出背景色盘')).toBeVisible()
+  await expect(canvasColorPicker.getByLabel('输出背景色相')).toBeVisible()
+  await expect(editor).toHaveScreenshot('stage-workspace-canvas-color-picker.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await canvasColorPicker.press('Escape')
+  await expect(canvasColor).toBeFocused()
+  await inspector.getByRole('combobox', { name: '输出尺寸预设' })
     .selectOption('1920x1080')
-  await expect(inspector.getByRole('spinbutton', { name: '输出宽度' })).toHaveValue('1920')
-  await expect(inspector.getByRole('spinbutton', { name: '输出高度' })).toHaveValue('1080')
+  await expect(inspector.getByRole('spinbutton', { name: '输出尺寸宽度' })).toHaveValue('1920')
+  await expect(inspector.getByRole('spinbutton', { name: '输出尺寸高度' })).toHaveValue('1080')
   await expect(output).toHaveAttribute('width', '1920')
   await expect(output).toHaveAttribute('height', '1080')
 
   await stage.focus()
   await stage.press('Control+z')
-  await expect(inspector.getByRole('spinbutton', { name: '输出宽度' })).toHaveValue('1280')
-  await expect(inspector.getByRole('spinbutton', { name: '输出高度' })).toHaveValue('720')
+  await expect(inspector.getByRole('spinbutton', { name: '输出尺寸宽度' })).toHaveValue('1280')
+  await expect(inspector.getByRole('spinbutton', { name: '输出尺寸高度' })).toHaveValue('720')
   await expect(output).toHaveClass(/is-selected/)
   await stage.press('Control+Shift+z')
-  await expect(inspector.getByRole('spinbutton', { name: '输出宽度' })).toHaveValue('1920')
-  await expect(inspector.getByRole('spinbutton', { name: '输出高度' })).toHaveValue('1080')
+  await expect(inspector.getByRole('spinbutton', { name: '输出尺寸宽度' })).toHaveValue('1920')
+  await expect(inspector.getByRole('spinbutton', { name: '输出尺寸高度' })).toHaveValue('1080')
 })
 
 test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使用完整示例完成 Stage 纵向流程', async ({ page }) => {
@@ -305,14 +343,16 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(group).toHaveCount(1)
   const groupId = await group.getAttribute('data-node-id')
   expect(groupId).not.toBeNull()
-  const groupBackground = editor.getByRole('textbox', { name: '背景', exact: true })
-  await groupBackground.fill('#123456')
-  await groupBackground.blur()
-  await expect(group).toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  const groupBackground = editor.getByRole('button', { name: '选择背景颜色', exact: true })
+  await groupBackground.click()
+  const colorPicker = page.getByRole('dialog', { name: '背景颜色', exact: true })
+  await expect(colorPicker.getByRole('textbox')).toHaveCount(0)
+  await colorPicker.getByLabel('背景色盘').press('ArrowRight')
+  await expect(group).toHaveCSS('background-color', 'rgb(0, 0, 0)')
   await stage.press('Control+z')
-  await expect(group).not.toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  await expect(group).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await stage.press('Control+Shift+z')
-  await expect(group).toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  await expect(group).toHaveCSS('background-color', 'rgb(0, 0, 0)')
 
   await stage.locator('.compose-stage__node.is-component').filter({
     hasText: 'Text',
@@ -352,7 +392,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
   const previewGroup = preview.getByTestId(`compose-preview-node-${groupId}`)
   await expect(previewGroup).toBeVisible()
-  await expect(previewGroup).toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  await expect(previewGroup).toHaveCSS('background-color', 'rgb(0, 0, 0)')
   await expect(previewRegion).toHaveScreenshot('document-preview.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -491,7 +531,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   await page.mouse.up()
   expectedHistoryCount += 1
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
-  const xField = editor.getByRole('spinbutton', { name: 'X', exact: true })
+  const xField = editor.getByRole('spinbutton', { name: '位置 X', exact: true })
   await expect.poll(async () => Number(await xField.inputValue()) % 8).toBe(0)
 
   const resize = stage.getByTestId('stage-resize-se')
@@ -510,7 +550,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   await page.mouse.up()
   expectedHistoryCount += 1
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
-  const widthField = editor.getByRole('spinbutton', { name: '宽度', exact: true })
+  const widthField = editor.getByRole('spinbutton', { name: '尺寸宽度', exact: true })
   await expect.poll(async () => Number(await widthField.inputValue()) % 8).toBe(0)
 })
 
@@ -782,7 +822,7 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
     { steps: 5 },
   )
   await page.mouse.up()
-  const xField = editor.getByRole('spinbutton', { name: 'X', exact: true })
+  const xField = editor.getByRole('spinbutton', { name: '位置 X', exact: true })
   await expect.poll(async () => Number(await xField.inputValue()) % 16).toBe(0)
 
   const resize = stage.getByTestId('stage-resize-se')
@@ -799,7 +839,7 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
     { steps: 5 },
   )
   await page.mouse.up()
-  const widthField = editor.getByRole('spinbutton', { name: '宽度', exact: true })
+  const widthField = editor.getByRole('spinbutton', { name: '尺寸宽度', exact: true })
   await expect.poll(async () => Number(await widthField.inputValue()) % 16).toBe(0)
 
   const originX = await stage.getByTestId('stage-origin-y').getAttribute('x1')

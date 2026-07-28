@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useMemo } from 'react'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type {
   CommandDispatchResult,
   ComposeDocument,
-  ComposeOutputSettings,
   EditorCommand,
 } from '@compose-ui/core'
+import * as v from 'valibot'
 import { getEditorMessages } from './editor-i18n'
 
 type CanvasInspectorProps = {
@@ -14,6 +14,18 @@ type CanvasInspectorProps = {
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   readonly idFactory: () => string
 }
+
+const OUTPUT_PRESET_VALUES = [
+  'custom',
+  '1280x720',
+  '1366x768',
+  '1440x900',
+  '1920x1080',
+  '2560x1440',
+  '3840x2160',
+] as const
+
+type OutputPresetValue = (typeof OUTPUT_PRESET_VALUES)[number]
 
 const OUTPUT_PRESETS = [
   { value: '1280x720', width: 1280, height: 720, label: '1280 × 720 (HD)' },
@@ -24,18 +36,44 @@ const OUTPUT_PRESETS = [
   { value: '3840x2160', width: 3840, height: 2160, label: '3840 × 2160 (4K UHD)' },
 ] as const
 
-type Draft = {
-  readonly width: string
-  readonly height: string
-  readonly backgroundColor: string
-}
-
-function draftFromOutput(output: ComposeOutputSettings): Draft {
-  return {
-    width: String(output.width),
-    height: String(output.height),
-    backgroundColor: output.backgroundColor,
-  }
+function createCanvasOutputSchema(messages: ReturnType<typeof getEditorMessages>['canvasInspector']) {
+  return v.object({
+    size: v.pipe(
+      v.object({
+        preset: v.pipe(
+          v.picklist(OUTPUT_PRESET_VALUES),
+          v.metadata({ propertyPanel: {
+            optionLabels: Object.fromEntries([
+              ['custom', messages.custom],
+              ...OUTPUT_PRESETS.map((preset) => [preset.value, preset.label]),
+            ]),
+          } }),
+        ),
+        width: v.pipe(
+          v.number(),
+          v.finite(messages.invalidSize),
+          v.minValue(0.000001, messages.invalidSize),
+        ),
+        height: v.pipe(
+          v.number(),
+          v.finite(messages.invalidSize),
+          v.minValue(0.000001, messages.invalidSize),
+        ),
+      }),
+      v.title(messages.size),
+      v.metadata({ propertyPanel: {
+        editor: 'size',
+        sizePresets: OUTPUT_PRESETS.map(({ value, width, height }) => ({ value, width, height })),
+      } }),
+    ),
+    backgroundColor: v.pipe(
+      v.string(),
+      v.trim(),
+      v.minLength(1, messages.invalidBackground),
+      v.title(messages.background),
+      v.metadata({ propertyPanel: { editor: 'color' } }),
+    ),
+  })
 }
 
 /** Editor 内部的隐式 Canvas 输出属性编辑器。 */
@@ -49,144 +87,49 @@ export function CanvasInspector({
     i18n?.locale ?? 'zh-CN',
     i18n?.formatMessage,
   ).canvasInspector
-  const [draft, setDraft] = useState(() => draftFromOutput(document.output))
-  const [error, setError] = useState('')
-
-  const selectedPreset = useMemo(
-    () => OUTPUT_PRESETS.find((preset) =>
-      preset.width === document.output.width
-      && preset.height === document.output.height)?.value ?? 'custom',
+  const schema = useMemo(() => createCanvasOutputSchema(messages), [messages])
+  const preset = useMemo<OutputPresetValue>(
+    () => OUTPUT_PRESETS.find((candidate) => (
+      candidate.width === document.output.width
+      && candidate.height === document.output.height
+    ))?.value ?? 'custom',
     [document.output.height, document.output.width],
   )
-
-  const commit = (nextDraft: Draft) => {
-    const width = Number(nextDraft.width)
-    const height = Number(nextDraft.height)
-    if (
-      !Number.isFinite(width)
-      || width <= 0
-      || !Number.isFinite(height)
-      || height <= 0
-    ) {
-      setError(messages.invalidSize)
-      return
-    }
-    const backgroundColor = nextDraft.backgroundColor.trim()
-    if (backgroundColor.length === 0) {
-      setError(messages.invalidBackground)
-      return
-    }
-    const result = dispatch({
-      id: idFactory(),
-      type: 'output.configure',
-      payload: { width, height, backgroundColor },
-      meta: {
-        label: messages.configureTransaction,
-        source: 'inspector',
+  const value = useMemo(
+    () => ({
+      size: {
+        preset,
+        width: document.output.width,
+        height: document.output.height,
       },
-    })
-    if (result.status === 'rejected') {
-      setError(result.issues[0]?.message ?? messages.rejected)
-      return
-    }
-    setError('')
-  }
-
-  const update = (field: keyof Draft, value: string) => {
-    setDraft((current) => ({ ...current, [field]: value }))
-  }
-
-  const restoreField = (field: keyof Draft) => {
-    setDraft((current) => ({
-      ...current,
-      [field]: draftFromOutput(document.output)[field],
-    }))
-    setError('')
-  }
-
-  const fieldKeyDown = (
-    field: keyof Draft,
-    event: ReactKeyboardEvent<HTMLInputElement>,
-  ) => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      commit(draft)
-    }
-    else if (event.key === 'Escape') {
-      event.preventDefault()
-      restoreField(field)
-    }
-  }
+      backgroundColor: document.output.backgroundColor,
+    }),
+    [document.output, preset],
+  )
 
   return (
-    <section
+    <ComposePropertyPanel
       aria-label={messages.label}
       className="compose-editor__canvas-inspector"
-      role="region"
-    >
-      <h2>{messages.title}</h2>
-      <label>
-        {messages.preset}
-        <select
-          aria-label={messages.preset}
-          value={selectedPreset}
-          onChange={(event) => {
-            const preset = OUTPUT_PRESETS.find(
-              (candidate) => candidate.value === event.target.value,
-            )
-            if (!preset) return
-            const next = {
-              ...draft,
-              width: String(preset.width),
-              height: String(preset.height),
-            }
-            setDraft(next)
-            commit(next)
-          }}
-        >
-          <option value="custom">{messages.custom}</option>
-          {OUTPUT_PRESETS.map((preset) => (
-            <option key={preset.value} value={preset.value}>{preset.label}</option>
-          ))}
-        </select>
-      </label>
-      <div className="compose-editor__canvas-inspector-grid">
-        <label>
-          {messages.width}
-          <input
-            aria-label={messages.width}
-            inputMode="decimal"
-            type="number"
-            value={draft.width}
-            onBlur={() => commit(draft)}
-            onChange={(event) => update('width', event.target.value)}
-            onKeyDown={(event) => fieldKeyDown('width', event)}
-          />
-        </label>
-        <label>
-          {messages.height}
-          <input
-            aria-label={messages.height}
-            inputMode="decimal"
-            type="number"
-            value={draft.height}
-            onBlur={() => commit(draft)}
-            onChange={(event) => update('height', event.target.value)}
-            onKeyDown={(event) => fieldKeyDown('height', event)}
-          />
-        </label>
-      </div>
-      <label>
-        {messages.background}
-        <input
-          aria-label={messages.background}
-          value={draft.backgroundColor}
-          onBlur={() => commit(draft)}
-          onChange={(event) => update('backgroundColor', event.target.value)}
-          onKeyDown={(event) => fieldKeyDown('backgroundColor', event)}
-        />
-      </label>
-      {error ? <p role="alert">{error}</p> : null}
-    </section>
+      defaultValue={value}
+      header={{ title: messages.title }}
+      schema={schema}
+      value={value}
+      onValueChange={(_nextValue, change) => {
+        dispatch({
+          id: idFactory(),
+          type: 'output.configure',
+          payload: {
+            width: change.output.size.width,
+            height: change.output.size.height,
+            backgroundColor: change.output.backgroundColor,
+          },
+          meta: {
+            label: messages.configureTransaction,
+            source: 'inspector',
+          },
+        })
+      }}
+    />
   )
 }

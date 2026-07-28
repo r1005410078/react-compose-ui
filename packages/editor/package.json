@@ -32,11 +32,13 @@
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/history": "workspace:*",
+    "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/scene-tree": "workspace:*",
     "@compose-ui/stage": "workspace:*",
     "@compose-ui/stage-engine": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
-    "dockview-react": "^7.0.2"
+    "dockview-react": "^7.0.2",
+    "valibot": "^1.4.0"
   },
   "peerDependencies": {
     "react": "^18.3.0 || ^19.0.0",

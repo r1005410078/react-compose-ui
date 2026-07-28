@@ -18,6 +18,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@compose-ui/components": "workspace:*",
     "@compose-ui/ui-context": "workspace:*"
   },
   "scripts": {

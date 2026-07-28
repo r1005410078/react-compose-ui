@@ -28,6 +28,7 @@
   "dependencies": {
     "@compose-ui/assets": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
+    "@compose-ui/components": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/stage": "workspace:*",

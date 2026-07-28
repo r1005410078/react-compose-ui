@@ -37,11 +37,10 @@ type InspectorValue = ContainerValue | FrameValue | TextValue | ImageValue | Svg
 
 const describedFields: readonly [string, string][] = [
   ['name', 'Name'],
-  ['x', 'X'],
-  ['y', 'Y'],
-  ['width', 'Width'],
-  ['height', 'Height'],
+  ['position', 'Position'],
+  ['size', 'Size'],
   ['rotation', 'Rotation'],
+  ['visible', 'Visibility'],
   ['clipContent', 'Clip content'],
   ['backgroundColor', 'Background'],
   ['borderColor', 'Border color'],
@@ -113,6 +112,14 @@ export function dispatchInspectorUpdate(
       meta,
     })
   }
+  if (current.visible !== next.visible) {
+    commands.push({
+      id: idFactory(),
+      type: 'node.set-visibility',
+      payload: { nodeIds: [node.id], visible: next.visible },
+      meta,
+    })
+  }
   const currentTransform = createTransformValue(current)
   const nextTransform = createTransformValue(next)
   if (!isEqualValue(currentTransform, nextTransform)) {
@@ -127,7 +134,10 @@ export function dispatchInspectorUpdate(
   }
   const currentStyle = createStyleValue(current)
   const nextStyle = createStyleValue(next)
-  if (forceStyle || !isEqualValue(currentStyle, nextStyle)) {
+  // 旧 Rectangle 的首次非可见性编辑仍需写入标准 style；仅切换 visible 不得产生无关 style 变更。
+  const styleChanged = !isEqualValue(currentStyle, nextStyle)
+  const migrateLegacyStyle = forceStyle && current.visible === next.visible
+  if (migrateLegacyStyle || styleChanged) {
     commands.push({
       id: idFactory(),
       type: 'node.style.set',

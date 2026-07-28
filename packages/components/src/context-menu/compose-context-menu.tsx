@@ -1,4 +1,5 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
+import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu'
 import type {
   ContextMenuCheckboxItemProps as BaseCheckboxItemProps,
   ContextMenuGroupLabelProps as BaseGroupLabelProps,
@@ -128,14 +129,13 @@ export function ComposeContextMenu({
   )
   return (
     <ComposeContextMenuRootContext.Provider value={contextValue}>
-      <MenuPrimitive.Root
+      <ContextMenuPrimitive.Root
         {...rootProps}
-        modal={false}
         onOpenChange={(nextOpen) => setOpen(nextOpen)}
         open={open}
       >
         {children}
-      </MenuPrimitive.Root>
+      </ContextMenuPrimitive.Root>
     </ComposeContextMenuRootContext.Provider>
   )
 }
@@ -214,6 +214,7 @@ function ComposeContextMenuSurface({
         align={align}
         alignOffset={alignOffset}
         anchor={anchor}
+        className="cu:z-[10000]"
         collisionPadding={collisionPadding}
         positionMethod="fixed"
         side={isSubmenu ? side : side ?? 'bottom'}
@@ -222,7 +223,9 @@ function ComposeContextMenuSurface({
         <MenuPrimitive.Popup
           {...popupProps}
           className={cn(
-            'cu:z-50 cu:min-w-44 cu:overflow-hidden cu:rounded-md cu:border cu:border-border cu:bg-popover cu:p-1 cu:text-popover-foreground cu:shadow-lg cu:outline-none cu:data-[ending-style]:opacity-0',
+            // Dockview 的拖拽覆盖层最高使用 z-index 9999。菜单通过 Portal 挂到 body，仍需高于它，
+            // 否则位于底部 Edge Group 的菜单会被其他工作区截住，导致顶部操作项不可见。
+            'cu:min-w-44 cu:overflow-hidden cu:rounded-md cu:border cu:border-border cu:bg-popover cu:p-1 cu:text-popover-foreground cu:shadow-lg cu:outline-none cu:data-[ending-style]:opacity-0',
             className,
           )}
           data-compose-theme={theme?.resolvedTheme}

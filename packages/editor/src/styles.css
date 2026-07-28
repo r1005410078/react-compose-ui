@@ -2,6 +2,7 @@
 @import 'tailwindcss/utilities.css' layer(utilities) prefix(ct);
 @import 'dockview-react/dist/styles/dockview.css';
 @import '@compose-ui/history/styles.css';
+@import '@compose-ui/property-panel/styles.css';
 @import '@compose-ui/scene-tree/styles.css';
 @import '@compose-ui/stage/styles.css';
 @import '@compose-ui/command-panel/styles.css';
@@ -240,40 +241,9 @@
 }
 
 .compose-editor__canvas-inspector {
-  @apply ct:grid ct:content-start ct:gap-4 ct:p-4 ct:text-xs;
-  color: var(--compose-text);
-}
-
-.compose-editor__canvas-inspector h2 {
-  @apply ct:m-0 ct:text-sm ct:font-semibold;
-}
-
-.compose-editor__canvas-inspector label {
-  @apply ct:grid ct:gap-1.5;
-  color: var(--compose-text-subtle);
-}
-
-.compose-editor__canvas-inspector input,
-.compose-editor__canvas-inspector select {
-  @apply ct:h-8 ct:min-w-0 ct:rounded ct:border ct:px-2 ct:text-xs ct:outline-none;
-  border-color: var(--compose-border);
-  background: var(--compose-surface-control);
-  color: var(--compose-text);
-}
-
-.compose-editor__canvas-inspector input:focus,
-.compose-editor__canvas-inspector select:focus {
-  border-color: var(--compose-focus);
-  box-shadow: 0 0 0 1px var(--compose-focus);
-}
-
-.compose-editor__canvas-inspector-grid {
-  @apply ct:grid ct:grid-cols-2 ct:gap-3;
-}
-
-.compose-editor__canvas-inspector p[role='alert'] {
-  @apply ct:m-0;
-  color: var(--compose-danger);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
 }
 
 .compose-editor__panel[data-workspace-panel='transaction-log'],

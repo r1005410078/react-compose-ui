@@ -26,6 +26,7 @@
     "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
   "dependencies": {
+    "@compose-ui/components": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/ui-context": "workspace:*"
   },

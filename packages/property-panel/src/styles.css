@@ -1,3 +1,4 @@
+@import '@compose-ui/components/styles.css';
 @import 'tailwindcss/theme.css' layer(theme) prefix(pp);
 @import 'tailwindcss/utilities.css' layer(utilities) prefix(pp);
 
@@ -447,6 +448,59 @@
     max-width: none;
     align-items: stretch;
     margin-left: 0;
+  }
+
+  .property-panel__semantic {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .property-panel__semantic--pair,
+  .property-panel__semantic-pair {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .property-panel__semantic--size {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+    gap: 5px;
+  }
+
+  .property-panel__semantic--size-with-preset {
+    grid-template-columns: minmax(72px, 0.8fr) minmax(0, 1.2fr);
+  }
+
+  .property-panel__semantic--size > select {
+    min-width: 0;
+  }
+
+  .property-panel__semantic--size:not(.property-panel__semantic--size-with-preset) > .property-panel__semantic-pair {
+    grid-column: 1 / -1;
+  }
+
+  .property-panel__semantic--color {
+    display: flex;
+  }
+
+  .property-panel__semantic .property-panel__binding-target {
+    min-width: 0;
+  }
+
+  .property-panel__semantic .property-panel__binding-control > input,
+  .property-panel__semantic .property-panel__binding-control > select,
+  .property-panel__semantic .property-panel__binding-control > .compose-color-picker__trigger {
+    width: 100%;
+    min-width: 0;
   }
 
   .property-panel__control > input:not([type="checkbox"]),

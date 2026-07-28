@@ -5,6 +5,14 @@ import {
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
+import {
+  ComposeConfirmDialog,
+  ComposeContextMenu,
+  ComposeContextMenuContent,
+  ComposeContextMenuItem,
+  ComposeContextMenuSeparator,
+  useComposeContextMenu,
+} from '@compose-ui/components'
 import { useComposeOperationLog } from '../react'
 import type {
   ComposeOperationLogCategory,
@@ -179,11 +187,14 @@ export function ComposeOperationLogPanel({
   const theme = useComposeThemeContext()
   const locale = i18n?.locale ?? 'en-US'
   const messages = getOperationLogMessages(locale, i18n?.formatMessage)
-  const { status, entries } = useComposeOperationLog()
+  const { status, entries, clear } = useComposeOperationLog()
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<ComposeOperationLogCategory | 'all'>('all')
   const [componentId, setComponentId] = useState('all')
   const [selectedId, setSelectedId] = useState<string>()
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clipboardStatus, setClipboardStatus] = useState('')
+  const contextMenu = useComposeContextMenu<string | null>()
   const components = useMemo(() => {
     const values = new Map<string, string>()
     entries.forEach((entry) => entry.targets.forEach((target) => {
@@ -213,6 +224,17 @@ export function ComposeOperationLogPanel({
     return searchable.includes(normalizedQuery)
   }), [category, componentId, entries, normalizedQuery])
   const selectedEntry = filteredEntries.find(({ id }) => id === selectedId)
+  const menuEntry = contextMenu.payload ? entries.find(({ id }) => id === contextMenu.payload) : undefined
+  const canCopy = typeof navigator !== 'undefined' && Boolean(navigator.clipboard?.writeText)
+  const copy = async (value: string, label: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable')
+      await navigator.clipboard.writeText(value)
+      setClipboardStatus(`已复制${label}`)
+    } catch {
+      setClipboardStatus(`复制${label}失败`)
+    }
+  }
   let content: ReactNode
   if (status === 'loading') {
     content = <div className="operation-log__empty">{messages.loading}</div>
@@ -235,6 +257,12 @@ export function ComposeOperationLogPanel({
               aria-current={selectedEntry?.id === entry.id ? 'true' : undefined}
               key={entry.id}
               onClick={() => setSelectedId(entry.id)}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setSelectedId(entry.id)
+                contextMenu.openAt(event, entry.id)
+              }}
             >
               <span className={`operation-log__category operation-log__category--${entry.category}`}>
                 {messages.categories[entry.category]}
@@ -273,6 +301,11 @@ export function ComposeOperationLogPanel({
         ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
         ...style,
       } as CSSProperties}
+      onContextMenu={(event) => {
+        props.onContextMenu?.(event)
+        if (event.defaultPrevented || (event.target as Element).closest('input, select, textarea, [contenteditable="true"]')) return
+        contextMenu.openAt(event, null)
+      }}
     >
       {status === 'degraded' ? (
         <div className="operation-log__warning" role="status">{messages.degraded}</div>
@@ -309,6 +342,37 @@ export function ComposeOperationLogPanel({
         </select>
       </div>
       {content}
+      <p aria-live="polite" className="operation-log__sr-only">{clipboardStatus}</p>
+      <ComposeContextMenu {...contextMenu.rootProps}>
+        <ComposeContextMenuContent aria-label={messages.region}>
+          {menuEntry ? <>
+            <ComposeContextMenuItem onClick={() => setSelectedId(menuEntry.id)}>查看详情</ComposeContextMenuItem>
+            <ComposeContextMenuItem onClick={() => setCategory(menuEntry.category)}>按分类筛选</ComposeContextMenuItem>
+            <ComposeContextMenuItem
+              disabled={!menuEntry.targets[0]?.componentId}
+              onClick={() => menuEntry.targets[0]?.componentId && setComponentId(menuEntry.targets[0].componentId)}
+            >按组件筛选</ComposeContextMenuItem>
+            <ComposeContextMenuSeparator />
+            <ComposeContextMenuItem disabled={!canCopy} onClick={() => void copy(menuEntry.summary, '操作摘要')}>复制摘要</ComposeContextMenuItem>
+            <ComposeContextMenuItem disabled={!canCopy} onClick={() => void copy(JSON.stringify(menuEntry, null, 2), '操作 JSON')}>复制 JSON</ComposeContextMenuItem>
+            <ComposeContextMenuSeparator />
+          </> : null}
+          <ComposeContextMenuItem disabled={!normalizedQuery && category === 'all' && componentId === 'all'} onClick={() => {
+            setQuery(''); setCategory('all'); setComponentId('all')
+          }}>清除筛选</ComposeContextMenuItem>
+          <ComposeContextMenuItem disabled={entries.length === 0} variant="destructive" onClick={() => setConfirmClear(true)}>清空当前日志</ComposeContextMenuItem>
+        </ComposeContextMenuContent>
+      </ComposeContextMenu>
+      <ComposeConfirmDialog
+        cancelLabel="取消"
+        confirmLabel="清空日志"
+        description={`将永久清空当前 scope 的 ${entries.length} 条操作记录。`}
+        destructive
+        open={confirmClear}
+        title="确认清空日志"
+        onConfirm={() => { void clear(); setSelectedId(undefined); setConfirmClear(false) }}
+        onOpenChange={setConfirmClear}
+      />
     </div>
   )
 }

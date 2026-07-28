@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CSSProperties, FormEvent } from 'react'
+import type { CSSProperties, FormEvent, MouseEvent as ReactMouseEvent } from 'react'
 import {
   createComposeThemeStyle,
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
+import {
+  ComposeConfirmDialog,
+  ComposeContextMenu,
+  ComposeContextMenuContent,
+  ComposeContextMenuItem,
+  ComposeContextMenuSeparator,
+  useComposeContextMenu,
+} from '@compose-ui/components'
 import type { ComposeLocale } from '@compose-ui/ui-context'
 import type {
   EditorCommand,
@@ -229,15 +237,14 @@ function patchSummary(transaction: EditorTransaction) {
   ))
 }
 
-function EventItem({ event, t }: { event: VisibleEvent; t: CommandMessages }) {
-  const [expanded, setExpanded] = useState(false)
+function EventItem({ event, t, expanded, onExpandedChange, onContextMenu }: { event: VisibleEvent; t: CommandMessages; expanded: boolean; onExpandedChange(expanded: boolean): void; onContextMenu?: (event: ReactMouseEvent) => void }) {
   const status = event.type === 'committed'
     ? t.succeeded
     : event.type === 'noop' ? t.noop : t.rejected
   const label = event.command.meta?.label ?? event.command.type
 
   return (
-    <li className={`command-panel__event is-${event.type}`}>
+    <li className={`command-panel__event is-${event.type}`} onContextMenu={onContextMenu}>
       <div className="command-panel__event-summary">
         <span className="command-panel__status">{status}</span>
         <span className="command-panel__label">{label}</span>
@@ -254,7 +261,7 @@ function EventItem({ event, t }: { event: VisibleEvent; t: CommandMessages }) {
             aria-expanded={expanded}
             aria-label={t.viewDetails(label)}
             type="button"
-            onClick={() => setExpanded((current) => !current)}
+            onClick={() => onExpandedChange(!expanded)}
           >
             {expanded ? t.collapse : t.details}
           </button>
@@ -382,6 +389,7 @@ export function ComposeCommandPanel({
   presets = [],
   eventLimit = 100,
   className,
+  idFactory = () => globalThis.crypto?.randomUUID?.() ?? `command-replay-${Date.now()}`,
   style,
   ...props
 }: ComposeCommandPanelProps) {
@@ -396,6 +404,10 @@ export function ComposeCommandPanel({
   }>(() => ({ runtime, events: [] }))
   const events = eventState.runtime === runtime ? eventState.events : []
   const [presetId, setPresetId] = useState(presets[0]?.id ?? '')
+  const [confirmAction, setConfirmAction] = useState<'clear' | VisibleEvent | null>(null)
+  const [clipboardStatus, setClipboardStatus] = useState('')
+  const [expandedCommandIds, setExpandedCommandIds] = useState<readonly string[]>([])
+  const contextMenu = useComposeContextMenu<VisibleEvent | null>()
   const activePreset = useMemo(
     () => presets.find((preset) => preset.id === presetId) ?? presets[0],
     [presetId, presets],
@@ -465,6 +477,22 @@ export function ComposeCommandPanel({
   }
 
   const rootClassName = ['command-panel', className].filter(Boolean).join(' ')
+  const canCopy = typeof navigator !== 'undefined' && Boolean(navigator.clipboard?.writeText)
+  const copy = async (value: string, label: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable')
+      await navigator.clipboard.writeText(value)
+      setClipboardStatus(`已复制${label}`)
+    } catch { setClipboardStatus(`复制${label}失败`) }
+  }
+  const replay = (event: VisibleEvent) => {
+    runtime.dispatch({
+      ...event.command,
+      id: idFactory(),
+      meta: { ...event.command.meta, source: 'command-panel-replay', mergeKey: undefined },
+    })
+    setConfirmAction(null)
+  }
   return (
     <div
       {...props}
@@ -477,6 +505,11 @@ export function ComposeCommandPanel({
         ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
         ...style,
       } as CSSProperties}
+      onContextMenu={(event) => {
+        props.onContextMenu?.(event)
+        if (event.defaultPrevented || (event.target as Element).closest('input, select, textarea, [contenteditable="true"]')) return
+        contextMenu.openAt(event, null)
+      }}
     >
       {presets.length > 0 ? (
         <form className="command-panel__form" onSubmit={submit}>
@@ -526,13 +559,52 @@ export function ComposeCommandPanel({
         <ol className="command-panel__events">
           {events.map((event, index) => (
             <EventItem
+              expanded={expandedCommandIds.includes(event.command.id)}
               event={event}
               key={`${event.command.id}:${event.type}:${index}`}
               t={t}
+              onExpandedChange={(expanded) => setExpandedCommandIds((ids) => expanded
+                ? [...new Set([...ids, event.command.id])]
+                : ids.filter((id) => id !== event.command.id))}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                contextMenu.openAt(event, events[index]!)
+              }}
             />
           ))}
         </ol>
       )}
+      <p aria-live="polite" className="command-panel__empty">{clipboardStatus}</p>
+      <ComposeContextMenu {...contextMenu.rootProps}>
+        <ComposeContextMenuContent aria-label={t.region}>
+          {contextMenu.payload ? <>
+            {contextMenu.payload.type === 'committed' ? <ComposeContextMenuItem onClick={() => setExpandedCommandIds((ids) => ids.includes(contextMenu.payload!.command.id)
+              ? ids.filter((id) => id !== contextMenu.payload!.command.id)
+              : [...ids, contextMenu.payload!.command.id])}>查看详情</ComposeContextMenuItem> : null}
+            <ComposeContextMenuItem disabled={!canCopy} onClick={() => void copy(contextMenu.payload!.command.id, '命令 ID')}>复制命令 ID</ComposeContextMenuItem>
+            <ComposeContextMenuItem disabled={!canCopy} onClick={() => void copy(JSON.stringify(contextMenu.payload!.command, null, 2), '命令 JSON')}>复制命令 JSON</ComposeContextMenuItem>
+            {contextMenu.payload.type === 'committed' ? <ComposeContextMenuItem disabled={!canCopy} onClick={() => void copy((contextMenu.payload as Extract<VisibleEvent, { type: 'committed' }>).transaction.id, '事务 ID')}>复制事务 ID</ComposeContextMenuItem> : null}
+            <ComposeContextMenuSeparator />
+            <ComposeContextMenuItem onClick={() => setConfirmAction(contextMenu.payload!)}>重放命令</ComposeContextMenuItem>
+            <ComposeContextMenuSeparator />
+          </> : null}
+          <ComposeContextMenuItem disabled={events.length === 0} variant="destructive" onClick={() => setConfirmAction('clear')}>清空会话事件</ComposeContextMenuItem>
+        </ComposeContextMenuContent>
+      </ComposeContextMenu>
+      <ComposeConfirmDialog
+        cancelLabel="取消"
+        confirmLabel={confirmAction === 'clear' ? '清空事件' : '重放命令'}
+        description={confirmAction === 'clear' ? '仅清空当前调试台可见事件，不影响文档或事务历史。' : '将对当前文档重新派发此命令，命令可能产生修改、无变化或被拒绝。'}
+        destructive={confirmAction === 'clear'}
+        open={confirmAction !== null}
+        title={confirmAction === 'clear' ? '确认清空会话事件' : '确认重放命令'}
+        onConfirm={() => {
+          if (confirmAction === 'clear') { setEventState({ runtime, events: [] }); setConfirmAction(null) }
+          else if (confirmAction) replay(confirmAction)
+        }}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null) }}
+      />
     </div>
   )
 }

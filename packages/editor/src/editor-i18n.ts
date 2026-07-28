@@ -91,6 +91,7 @@ const messages = {
     canvasInspector: {
       label: '画布属性',
       title: '画布',
+      size: '输出尺寸',
       preset: '常见 PC 尺寸',
       custom: '自定义',
       width: '输出宽度',
@@ -185,6 +186,7 @@ const messages = {
     canvasInspector: {
       label: 'Canvas properties',
       title: 'Canvas',
+      size: 'Output size',
       preset: 'Common PC sizes',
       custom: 'Custom',
       width: 'Output width',

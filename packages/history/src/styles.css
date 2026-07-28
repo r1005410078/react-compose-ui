@@ -1,5 +1,6 @@
 @import 'tailwindcss/theme.css' layer(theme) prefix(hi);
 @import 'tailwindcss/utilities.css' layer(utilities) prefix(hi);
+@import '@compose-ui/components/styles.css';
 
 @layer theme, base, components, utilities;
 

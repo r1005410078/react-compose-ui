@@ -35,6 +35,7 @@ import {
 } from '../schema-model'
 import { PropertyTree } from '../property-tree'
 import { usePropertyPanelMessages } from '../property-panel-i18n'
+import { mergePropertyPanelRenderers } from '../semantic-editors'
 import type { PropertyPanelFilter, TreeCommitOptions } from '../property-tree'
 import '../styles.css'
 
@@ -240,6 +241,16 @@ export interface PropertyPanelMetadataBinding {
   semanticScope?: string
 }
 
+/** Size 语义 editor 的一个可选预设。 */
+export interface PropertyPanelSizePreset {
+  /** 写入 Size schema picklist 的稳定 ID。 */
+  value: string
+  /** 该预设对应的宽度。 */
+  width: number
+  /** 该预设对应的高度。 */
+  height: number
+}
+
 /** 属性面板发出的修改原因。 */
 export type PropertyPanelChangeReason =
   | 'input'
@@ -276,6 +287,8 @@ export interface PropertyPanelMetadata {
   placeholder?: string
   /** picklist 或 enum 值到显示名称的映射。 */
   optionLabels?: Readonly<Record<string, string>>
+  /** Size editor 可选的宽高预设；显示文案由 preset 字段的 optionLabels 提供。 */
+  sizePresets?: readonly PropertyPanelSizePreset[]
   /** 对象或集合分组是否默认折叠。 */
   collapsed?: boolean
   /** 变量绑定的可用性和语义范围。 */
@@ -314,6 +327,8 @@ export interface PropertyPanelRendererProps {
   schema: v.GenericSchema
   /** 字段的 `propertyPanel` metadata。 */
   metadata: PropertyPanelMetadata
+  /** Schema 解析出的字段显示名，用于 renderer 的可访问名称和本地化文案。 */
+  label: string
   /** 当前受控字段值。 */
   value: unknown
   /** 当前字段的完整 Schema issues。 */
@@ -391,6 +406,7 @@ export function ComposePropertyPanel<TSchema extends v.GenericSchema>({
   const i18n = useComposeI18nContext()
   const theme = useComposeThemeContext()
   const messages = usePropertyPanelMessages()
+  const effectiveRenderers = mergePropertyPanelRenderers(renderers)
   const rootRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{
     kind: 'label' | 'action'
@@ -619,7 +635,7 @@ export function ComposePropertyPanel<TSchema extends v.GenericSchema>({
           issues={issues}
           query={query}
           readOnly={readOnly}
-          renderers={renderers}
+          renderers={effectiveRenderers}
           schema={schema}
           showAdvanced={showAdvanced}
           showDescriptions={showDescriptions}

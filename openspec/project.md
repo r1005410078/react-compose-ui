@@ -51,7 +51,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/assets` 保持与 React、DOM 和 ComposeDocument 无关，承载资源 Provider、稳定
   `assetKey` 引用与运行时 Resolver 协议。
 - `@compose-ui/command-panel` 是订阅 core TransactionRuntime 的独立 React 调试台，只接受宿主
-  声明的结构化命令预设，可依赖 ui-context，不依赖 editor、history、scene-tree、
+  声明的结构化命令预设，可依赖 components、ui-context，不依赖 editor、history、scene-tree、
   property-panel 或 operation-log。
 - `@compose-ui/component-registry` 是实例级宿主组件注册协议，依赖 core 与 assets，以 React 为 peer，
   不依赖 editor 或 property-panel。
@@ -59,9 +59,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、stage-engine、
-  component-registry、ui-context，不依赖 editor、property-panel 或 operation-log。
+  component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
 - `@compose-ui/materials` 提供 Frame、Rectangle、Text、Image、SVG 的实例级基础物料组合，
-  依赖 core、assets、component-registry、stage、property-panel、ui-context、DOMPurify 与
+  依赖 core、assets、component-registry、components、stage、property-panel、ui-context、DOMPurify 与
   Valibot，不依赖 editor 或 asset-browser。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage、
   stage-engine 与独立面板包。
@@ -72,14 +72,14 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   Provider 类型由 assets 定义并从此包兼容转导。
 - `@compose-ui/scene-tree` 是受控 React 树组件，可依赖 `components` 与 `ui-context`，不依赖 `core` 或 `editor`；editor 可以依赖
   它，preview 不得依赖它。
-- `@compose-ui/property-panel` 是同步 Valibot Schema 驱动的受控 React 组件，可依赖
-  `ui-context`，不依赖 `core`、
-  `editor` 或 `scene-tree`；宿主通过 editor 的 `inspectorPanel` 插槽组合它。
-- `@compose-ui/operation-log` 是独立的本地操作审计包，可依赖 `ui-context`，不依赖
+- `@compose-ui/property-panel` 是同步 Valibot Schema 驱动的受控 React 组件，内建无文档语义的
+  Vector2、Size、Color 等基础属性 editor，可依赖 `components`、`ui-context`，不依赖 `core`、`editor` 或
+  `scene-tree`；宿主通过 editor 的 `inspectorPanel` 插槽组合它。
+- `@compose-ui/operation-log` 是独立的本地操作审计包，可依赖 `components`、`ui-context`，不依赖
   `core`、`editor`、`scene-tree` 或
   `property-panel`；宿主在成功提交边界显式记录，并通过 editor 的 `transactionLogPanel` 插槽组合面板。
 - `@compose-ui/history` 提供当前 React 实例内的不可变快照历史、快捷键和受控面板，可依赖
-  `ui-context`，不依赖
+  `components`、`ui-context`，不依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；editor 可以通过公共入口组合它。
 - `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 core、assets 与 component-registry，不得依赖
   editor 或 stage。

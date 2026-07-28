@@ -15,6 +15,20 @@ import '@compose-ui/components/styles.css'
 `ComposeButton` 会直接跟随 `ComposeThemeProvider` 的 Dark/Light 与 token override。样式仅输出带
 `cu:` 前缀的 utility，并且不注入 Preflight 或 Shadcn 的默认全局主题。
 
+`ComposeColorPicker` 是受控的颜色 Pattern，基于包内 Shadcn CLI 生成的 Base UI Popover 源码组合色盘、
+色相滑条和透明选项。触发器与弹层均不显示 HEX/RGB/HSL 文本；选择只会提交小写 `#rrggbb` 或
+`transparent`。无法精确编辑的既有 CSS 色值仍会作为色块预览，直到用户主动修改。
+
+```tsx
+import { ComposeColorPicker } from '@compose-ui/components'
+
+<ComposeColorPicker
+  label="背景"
+  value={backgroundColor}
+  onValueChange={setBackgroundColor}
+/>
+```
+
 `ComposeContextMenu` 是可同时服务声明式区域与虚拟列表委托事件的共享右键菜单。Portal 内容会自行
 继承 Compose Theme/I18n token，因此不会因为脱离 Editor 根节点而丢失深浅主题或语言；它不拥有
 场景命令、资源权限等领域语义。

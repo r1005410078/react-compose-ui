@@ -5,6 +5,13 @@ import {
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
+import {
+  ComposeContextMenu,
+  ComposeContextMenuContent,
+  ComposeContextMenuItem,
+  ComposeContextMenuSeparator,
+  useComposeContextMenu,
+} from '@compose-ui/components'
 import type { ComposeHistoryPanelProps } from '../types'
 
 const historyMessages = {
@@ -59,6 +66,8 @@ export function ComposeHistoryPanel({
     index,
   })).reverse()
   const activeEntry = activeIndex >= 0 ? controller.entries[activeIndex] : undefined
+  const contextMenu = useComposeContextMenu<string | null>()
+  const latestEntry = controller.entries[controller.entries.length - 1]
 
   useEffect(() => {
     activeButtonRef.current?.scrollIntoView?.({ block: 'nearest' })
@@ -77,6 +86,10 @@ export function ComposeHistoryPanel({
         ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
         ...style,
       } as CSSProperties}
+      onContextMenu={(event) => {
+        htmlProps.onContextMenu?.(event)
+        if (!event.defaultPrevented) contextMenu.openAt(event, null)
+      }}
     >
       <div className="history-panel__header">
         <h2>{t.heading}</h2>
@@ -103,6 +116,10 @@ export function ComposeHistoryPanel({
                     onClick={() => {
                       if (state !== 'current') controller.navigate(entry.id)
                     }}
+                    onContextMenu={(event) => {
+                      event.stopPropagation()
+                      contextMenu.openAt(event, entry.id)
+                    }}
                   >
                     {state === 'current' ? (
                       <svg aria-hidden="true" viewBox="0 0 16 16">
@@ -127,6 +144,23 @@ export function ComposeHistoryPanel({
           {t.empty}
         </p>
       )}
+      <ComposeContextMenu {...contextMenu.rootProps}>
+        <ComposeContextMenuContent aria-label={t.region}>
+          {contextMenu.payload ? (
+            <ComposeContextMenuItem
+              disabled={contextMenu.payload === controller.activeEntryId}
+              onClick={() => controller.navigate(contextMenu.payload!)}
+            >跳转到此状态</ComposeContextMenuItem>
+          ) : null}
+          <ComposeContextMenuItem disabled={!controller.canUndo} onClick={() => controller.undo()}>撤销</ComposeContextMenuItem>
+          <ComposeContextMenuItem disabled={!controller.canRedo} onClick={() => controller.redo()}>重做</ComposeContextMenuItem>
+          <ComposeContextMenuSeparator />
+          <ComposeContextMenuItem
+            disabled={!latestEntry || latestEntry.id === controller.activeEntryId}
+            onClick={() => latestEntry && controller.navigate(latestEntry.id)}
+          >跳转到最新</ComposeContextMenuItem>
+        </ComposeContextMenuContent>
+      </ComposeContextMenu>
     </div>
   )
 }

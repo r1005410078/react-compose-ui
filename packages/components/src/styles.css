@@ -1,5 +1,6 @@
 @import 'tailwindcss/theme.css' layer(theme) prefix(cu);
 @import 'tailwindcss/utilities.css' layer(utilities) prefix(cu);
+@import './color-picker/styles.css';
 @import './tree/styles.css';
 
 @source './';

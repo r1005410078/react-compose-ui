@@ -70,4 +70,6 @@ export interface ComposeCommandPanelProps extends HTMLAttributes<HTMLDivElement>
   readonly presets?: readonly ComposeCommandPreset[]
   /** 面板最多保留的会话事件数。 @defaultValue 100 */
   readonly eventLimit?: number
+  /** 右键重放命令时生成新的稳定命令 ID。 */
+  readonly idFactory?: () => string
 }

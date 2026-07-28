@@ -16,16 +16,14 @@ function createTitles(
     formatMessage(`materials.field.${id}`, zh ? chinese : en)
   return {
     shadowColor: title('shadowColor', 'Shadow color', '阴影颜色'),
-    shadowX: title('shadowX', 'Shadow X', '阴影 X'),
-    shadowY: title('shadowY', 'Shadow Y', '阴影 Y'),
+    shadowOffset: title('shadowOffset', 'Shadow offset', '阴影偏移'),
     shadowBlur: title('shadowBlur', 'Shadow blur', '阴影模糊'),
     shadowSpread: title('shadowSpread', 'Shadow spread', '阴影扩散'),
     name: title('name', 'Name', '名称'),
-    x: title('x', 'X', 'X'),
-    y: title('y', 'Y', 'Y'),
-    width: title('width', 'Width', '宽度'),
-    height: title('height', 'Height', '高度'),
+    position: title('position', 'Position', '位置'),
+    size: title('size', 'Size', '尺寸'),
     rotation: title('rotation', 'Rotation', '旋转'),
+    visible: title('visible', 'Visibility', '可见性'),
     clipContent: title('clipContent', 'Clip content', '裁剪内容'),
     backgroundColor: title('backgroundColor', 'Background', '背景'),
     borderColor: title('borderColor', 'Border color', '边框颜色'),
@@ -52,24 +50,75 @@ export function createContainerSchema(
 ) {
   const titles = createTitles(locale, formatMessage)
   const shadowSchema = v.nullable(v.object({
-    color: v.pipe(v.string(), v.title(titles.shadowColor)),
-    offsetX: v.pipe(v.number(), v.title(titles.shadowX)),
-    offsetY: v.pipe(v.number(), v.title(titles.shadowY)),
+    color: v.pipe(
+      v.string(),
+      v.title(titles.shadowColor),
+      v.metadata({ propertyPanel: { editor: 'color' } }),
+    ),
+    offset: v.pipe(
+      v.object({ x: v.number(), y: v.number() }),
+      v.title(titles.shadowOffset),
+      v.metadata({ propertyPanel: { editor: 'vector2' } }),
+    ),
     blur: v.pipe(v.number(), v.minValue(0), v.title(titles.shadowBlur)),
     spread: v.pipe(v.number(), v.title(titles.shadowSpread)),
   }))
   return v.object({
     name: v.pipe(v.string(), v.minLength(1), v.title(titles.name)),
-    x: v.pipe(v.number(), v.title(titles.x)),
-    y: v.pipe(v.number(), v.title(titles.y)),
-    width: v.pipe(v.number(), v.minValue(0.000001), v.title(titles.width)),
-    height: v.pipe(v.number(), v.minValue(0.000001), v.title(titles.height)),
-    rotation: v.pipe(v.number(), v.title(titles.rotation)),
-    backgroundColor: v.pipe(v.string(), v.minLength(1), v.title(titles.backgroundColor)),
-    borderColor: v.pipe(v.string(), v.minLength(1), v.title(titles.borderColor)),
-    borderWidth: v.pipe(v.number(), v.minValue(0), v.title(titles.borderWidth)),
-    borderRadius: v.pipe(v.number(), v.minValue(0), v.title(titles.borderRadius)),
-    opacity: v.pipe(v.number(), v.minValue(0), v.maxValue(1), v.title(titles.opacity)),
+    position: v.pipe(
+      v.object({ x: v.number(), y: v.number() }),
+      v.title(titles.position),
+      v.metadata({ propertyPanel: { editor: 'vector2' } }),
+    ),
+    size: v.pipe(
+      v.object({
+        width: v.pipe(v.number(), v.minValue(0.000001)),
+        height: v.pipe(v.number(), v.minValue(0.000001)),
+      }),
+      v.title(titles.size),
+      v.metadata({ propertyPanel: { editor: 'size' } }),
+    ),
+    rotation: v.pipe(
+      v.number(),
+      v.title(titles.rotation),
+      v.metadata({ propertyPanel: { editor: 'angle' } }),
+    ),
+    visible: v.pipe(
+      v.boolean(),
+      v.title(titles.visible),
+      v.metadata({ propertyPanel: { editor: 'visibility' } }),
+    ),
+    backgroundColor: v.pipe(
+      v.string(),
+      v.minLength(1),
+      v.title(titles.backgroundColor),
+      v.metadata({ propertyPanel: { editor: 'color' } }),
+    ),
+    borderColor: v.pipe(
+      v.string(),
+      v.minLength(1),
+      v.title(titles.borderColor),
+      v.metadata({ propertyPanel: { editor: 'color' } }),
+    ),
+    borderWidth: v.pipe(
+      v.number(),
+      v.minValue(0),
+      v.title(titles.borderWidth),
+      v.metadata({ propertyPanel: { editor: 'stroke-width' } }),
+    ),
+    borderRadius: v.pipe(
+      v.number(),
+      v.minValue(0),
+      v.title(titles.borderRadius),
+      v.metadata({ propertyPanel: { editor: 'corner-radius' } }),
+    ),
+    opacity: v.pipe(
+      v.number(),
+      v.minValue(0),
+      v.maxValue(1),
+      v.title(titles.opacity),
+      v.metadata({ propertyPanel: { editor: 'opacity' } }),
+    ),
     shadow: v.pipe(shadowSchema, v.title(titles.shadow)),
   })
 }
@@ -100,7 +149,12 @@ export function createTextSchema(
   return v.object({
     ...container.entries,
     text: v.pipe(v.string(), v.title(titles.text)),
-    color: v.pipe(v.string(), v.minLength(1), v.title(titles.color)),
+    color: v.pipe(
+      v.string(),
+      v.minLength(1),
+      v.title(titles.color),
+      v.metadata({ propertyPanel: { editor: 'color' } }),
+    ),
     fontSize: v.pipe(v.number(), v.minValue(1), v.title(titles.fontSize)),
   })
 }
@@ -135,9 +189,19 @@ export function createSvgSchema(
   return v.object({
     ...image.entries,
     overrideFill: v.pipe(v.boolean(), v.title(titles.overrideFill)),
-    fillColor: v.pipe(v.string(), v.minLength(1), v.title(titles.fillColor)),
+    fillColor: v.pipe(
+      v.string(),
+      v.minLength(1),
+      v.title(titles.fillColor),
+      v.metadata({ propertyPanel: { editor: 'color' } }),
+    ),
     overrideStroke: v.pipe(v.boolean(), v.title(titles.overrideStroke)),
-    strokeColor: v.pipe(v.string(), v.minLength(1), v.title(titles.strokeColor)),
+    strokeColor: v.pipe(
+      v.string(),
+      v.minLength(1),
+      v.title(titles.strokeColor),
+      v.metadata({ propertyPanel: { editor: 'color' } }),
+    ),
   })
 }
 

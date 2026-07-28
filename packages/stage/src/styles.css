@@ -1,3 +1,5 @@
+@import '@compose-ui/components/styles.css';
+
 .compose-stage {
   --compose-stage-ruler-size: 24px;
   --compose-stage-scrollbar-size: 10px;

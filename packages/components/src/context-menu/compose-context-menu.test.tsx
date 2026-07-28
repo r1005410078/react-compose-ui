@@ -28,7 +28,7 @@ describe('ComposeContextMenu', () => {
     expect(screen.getByRole('menuitem', { name: '删除' })).toHaveAttribute('data-danger', 'true')
     expect(screen.getByRole('menuitem', { name: '删除' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('menuitem', { name: '删除' })).toHaveAttribute('data-disabled')
-    expect(screen.getByLabelText('目标').parentElement).not.toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByLabelText('目标').parentElement).toHaveAttribute('aria-hidden', 'true')
     expect(screen.getByLabelText('目标').parentElement).not.toHaveAttribute('inert')
   })
 

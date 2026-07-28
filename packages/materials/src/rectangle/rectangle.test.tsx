@@ -151,10 +151,8 @@ describe('@compose-ui/materials Rectangle', () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText('Background'), {
-      target: { value: '#123456' },
-    })
-    fireEvent.blur(screen.getByLabelText('Background'))
+    fireEvent.click(screen.getByRole('button', { name: '选择Background color' }))
+    fireEvent.click(screen.getByRole('button', { name: '透明' }))
 
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
       id: 'material-command',
@@ -171,7 +169,7 @@ describe('@compose-ui/materials Rectangle', () => {
             payload: expect.objectContaining({
               nodeId: 'rectangle-1',
               path: [],
-              value: expect.objectContaining({ backgroundColor: '#123456' }),
+              value: expect.objectContaining({ backgroundColor: 'transparent' }),
             }),
           }),
         ],

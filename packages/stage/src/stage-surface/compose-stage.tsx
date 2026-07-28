@@ -4,6 +4,19 @@ import {
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
 import {
+  ComposeContextMenu,
+  ComposeContextMenuCheckboxItem,
+  ComposeContextMenuContent,
+  ComposeContextMenuItem,
+  ComposeContextMenuRadioGroup,
+  ComposeContextMenuRadioItem,
+  ComposeContextMenuSeparator,
+  ComposeContextMenuSub,
+  ComposeContextMenuSubContent,
+  ComposeContextMenuSubTrigger,
+  useComposeContextMenu,
+} from '@compose-ui/components'
+import {
   useCallback,
   useEffect,
   useId,
@@ -54,6 +67,7 @@ import {
   unionRects,
   worldToScreen,
   zoomViewportAt,
+  getNodeParentId,
   type ResizeHandle,
   type StagePoint,
   type StageRect,
@@ -417,6 +431,7 @@ export function ComposeStage({
   const guidePreview = interaction.guidePreview
   const [surfaceSize, setSurfaceSize] = useState({ width: 900, height: 600 })
   const [assetDropStatus, setAssetDropStatus] = useState('')
+  const contextMenu = useComposeContextMenu<string | null>()
   const pendingAssetDropsRef = useRef(new Set<AbortController>())
   const activeTemporaryPanCodeRef = useRef<string | null>(null)
   const resolvedShortcuts = useMemo(
@@ -444,6 +459,13 @@ export function ComposeStage({
       const node = document.nodes[id]
       return node?.visible && !node.locked
     })
+  const contextNodeId = contextMenu.payload
+  const contextEditableIds = normalizedSelection.filter((id) => !document.nodes[id]?.locked)
+  const canGroup = contextEditableIds.length >= 2
+    && contextEditableIds.every((id) => getNodeParentId(document, id) === getNodeParentId(document, contextEditableIds[0]!))
+  const canUngroup = contextEditableIds.length === 1
+    && document.nodes[contextEditableIds[0]!]?.kind === 'frame'
+    && (document.nodes[contextEditableIds[0]!] as ComposeFrameNode).childIds.length > 0
   const latestRef = useRef({
     document,
     registry,
@@ -1381,6 +1403,16 @@ export function ComposeStage({
         ...style,
       } as CSSProperties}
       tabIndex={0}
+      onContextMenu={(event) => {
+        props.onContextMenu?.(event)
+        // ContextMenu 的 Portal 在 React 事件树中仍会冒泡到 Stage；不能把菜单自身的右键
+        // 当作新的画布右键，否则会重置根菜单。
+        if (event.defaultPrevented || !rootRef.current?.contains(event.target as Node)) return
+        const nodeId = (event.target as Element).closest<HTMLElement>('[data-node-id]')?.dataset.nodeId ?? null
+        if (nodeId && !normalizedSelection.includes(nodeId)) onSelectedIdsChange([nodeId])
+        event.preventDefault()
+        contextMenu.openAt(event, nodeId)
+      }}
       onKeyDown={keyboardCommand}
       onKeyUp={(event) => {
         if (activeTemporaryPanCodeRef.current === keyboardEventCode(event.nativeEvent)) {
@@ -1428,13 +1460,15 @@ export function ComposeStage({
       }}
       onPointerDown={(event) => {
         onPointerDown?.(event)
-        event.currentTarget.focus({ preventScroll: true })
         const surface = surfaceRef.current
         if (
           event.defaultPrevented
           || !surface
           || (event.target !== surface && event.target !== event.currentTarget)
         ) return
+        // Portal 中子菜单的 pointerdown 会沿 React 树冒泡到此处；仅真实画布点击才夺取焦点，
+        // 否则触发项失焦会让二级菜单立即关闭。
+        event.currentTarget.focus({ preventScroll: true })
         beginInteraction({ kind: 'surface' }, event)
       }}
       onPointerMove={(event) => {
@@ -1635,6 +1669,36 @@ export function ComposeStage({
         onValueChange={(value) => onViewportChange(scrollAxisToViewport(viewport, 'y', value))}
       />
       <div aria-hidden="true" className="compose-stage__scroll-corner" />
+      <ComposeContextMenu {...contextMenu.rootProps}>
+        <ComposeContextMenuContent aria-label="画布操作">
+          {contextNodeId ? <>
+            <ComposeContextMenuItem disabled={contextEditableIds.length !== 1} onClick={() => {
+              const id = contextEditableIds[0]
+              const duplicate = id ? createDuplicateCommand(document, id, idFactory, idFactory()) : null
+              if (duplicate && dispatch(duplicate.command).status === 'committed') onSelectedIdsChange([duplicate.rootId])
+            }}>创建副本</ComposeContextMenuItem>
+            <ComposeContextMenuItem disabled={!canGroup} onClick={() => {
+              const groupId = idFactory()
+              if (dispatch(createGroupCommand(document, contextEditableIds, groupId, idFactory())).status === 'committed') onSelectedIdsChange([groupId])
+            }}>编组</ComposeContextMenuItem>
+            <ComposeContextMenuItem disabled={!canUngroup} onClick={() => {
+              const frame = document.nodes[contextEditableIds[0]!]
+              if (dispatch(createUngroupCommand(document, contextEditableIds[0]!, idFactory())).status === 'committed' && frame?.kind === 'frame') onSelectedIdsChange(frame.childIds)
+            }}>取消编组</ComposeContextMenuItem>
+            <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: 'node.delete', payload: { nodeIds: contextEditableIds }, meta: { label: `Delete ${describeNodeTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除</ComposeContextMenuItem>
+            <ComposeContextMenuSeparator />
+          </> : null}
+          <ComposeContextMenuSub><ComposeContextMenuSubTrigger>视图</ComposeContextMenuSubTrigger><ComposeContextMenuSubContent aria-label="视图">
+            <ComposeContextMenuItem disabled={!bounds} onClick={() => { if (!bounds) return; const zoom = Math.min(8, Math.max(.1, Math.min(surfaceSize.width / bounds.width, surfaceSize.height / bounds.height) * .85)); onViewportChange({ zoom, x: (surfaceSize.width - bounds.width * zoom) / 2 - bounds.x * zoom, y: (surfaceSize.height - bounds.height * zoom) / 2 - bounds.y * zoom }) }}>适配选择</ComposeContextMenuItem>
+            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, viewport.zoom * 1.2))}>放大</ComposeContextMenuItem>
+            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, viewport.zoom / 1.2))}>缩小</ComposeContextMenuItem>
+            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, 1))}>100%</ComposeContextMenuItem>
+          </ComposeContextMenuSubContent></ComposeContextMenuSub>
+          <ComposeContextMenuSub><ComposeContextMenuSubTrigger>工具</ComposeContextMenuSubTrigger><ComposeContextMenuSubContent aria-label="工具"><ComposeContextMenuRadioGroup value={tool} onValueChange={(value) => onToolChange?.(value as typeof tool)}><ComposeContextMenuRadioItem value="select">选择</ComposeContextMenuRadioItem><ComposeContextMenuRadioItem value="pan">平移</ComposeContextMenuRadioItem></ComposeContextMenuRadioGroup></ComposeContextMenuSubContent></ComposeContextMenuSub>
+          <ComposeContextMenuCheckboxItem checked={document.canvas.grid.snapEnabled} onCheckedChange={() => dispatch({ id: idFactory(), type: 'canvas.configure', payload: { grid: { ...document.canvas.grid, snapEnabled: !document.canvas.grid.snapEnabled }, smartSnap: document.canvas.smartSnap }, meta: { label: messages.toggleGridSnap, source: 'stage' } })}>网格吸附</ComposeContextMenuCheckboxItem>
+          <ComposeContextMenuCheckboxItem checked={document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides} onCheckedChange={() => dispatch({ id: idFactory(), type: 'canvas.configure', payload: { grid: document.canvas.grid, smartSnap: { nodes: !(document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides), guides: !(document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides) } }, meta: { label: messages.toggleSmartSnap, source: 'stage' } })}>智能吸附</ComposeContextMenuCheckboxItem>
+        </ComposeContextMenuContent>
+      </ComposeContextMenu>
     </div>
   )
 }

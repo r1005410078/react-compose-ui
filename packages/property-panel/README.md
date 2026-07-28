@@ -87,6 +87,41 @@ v.metadata({
 
 metadata 只保存稳定数据，不能放 React 组件或函数。
 
+## 内建语义类型
+
+所有实例默认具备以下稳定 editor ID：`vector2`、`size`、`angle`、`opacity`、
+`corner-radius`、`stroke-width`、`visibility`、`color`、`alignment`。可从包入口导入
+`COMPOSE_PROPERTY_PANEL_BASE_EDITOR_IDS` 获取同一不可变列表；实例 `renderers` 使用相同 ID 时，
+宿主 renderer 优先，其他内建 editor 仍继续可用。
+
+Vector2 使用 X/Y，Size 使用 W/H；两者都保留在同一条属性行中（左侧名称、右侧并排子输入）。
+启用变量绑定后，它们分别暴露稳定的 `x`/`y` 和 `width`/`height` 子目标。Size 可以把常见尺寸
+嵌套在一个属性中，而不是额外创建一行 preset：
+
+```ts
+const outputSize = v.pipe(
+  v.object({
+    preset: v.pipe(
+      v.picklist(['custom', 'hd']),
+      v.metadata({ propertyPanel: { optionLabels: { custom: '自定义', hd: '1280 × 720' } } }),
+    ),
+    width: v.pipe(v.number(), v.minValue(1)),
+    height: v.pipe(v.number(), v.minValue(1)),
+  }),
+  v.title('输出尺寸'),
+  v.metadata({ propertyPanel: {
+    editor: 'size',
+    sizePresets: [{ value: 'hd', width: 1280, height: 720 }],
+  } }),
+)
+```
+
+选择 Size 预设会在一次提交中同步 preset/W/H；手动修改为不匹配的尺寸时会回到 schema
+允许的 `custom` 值。Color 使用共享 `ComposeColorPicker`：属性行和弹层都只显示颜色，不显示
+HEX、RGB、HSL 或 CSS 文本输入。它提供不透明色与完全透明两种选择；既有 `transparent`、
+`rgb()`、`hsl()` 等值继续原样读取和预览，只有用户首次选择颜色后才写入小写 HEX 或
+`transparent`。
+
 ## 自定义类型和 renderer
 
 自定义类型由 Schema 声明，UI 由每个面板实例的 registry 提供。所有 `commit` 仍走完整 Schema
@@ -179,20 +214,21 @@ const effective = resolvePropertyBindings({
 删除和 union 切换由面板同步维护绑定地址。
 
 自定义类型同样默认不可绑定。字段 Schema 必须声明 `binding.enabled: true`，renderer 还要通过稳定
-descriptor 明确暴露逻辑输入；两者缺一不可：
+descriptor 明确暴露逻辑输入；两者缺一不可。Vector2 和 Size 已由内建语义类型实现这一约定，不需要
+重复注册 renderer。下例说明宿主自定义复合类型如何声明同样的目标：
 
 ```tsx
 const positionSchema = v.pipe(
-  vectorSchema,
+  chartRangeSchema,
   v.metadata({ propertyPanel: {
-    editor: 'vector2',
+    editor: 'chart-range',
     binding: { enabled: true },
   } }),
 )
 
-const vectorRenderer = {
-  id: 'vector2',
-  component: VectorEditor,
+const chartRangeRenderer = {
+  id: 'chart-range',
+  component: ChartRangeEditor,
   bindingTargets: () => [{
     id: 'x',
     label: 'X',
@@ -202,7 +238,7 @@ const vectorRenderer = {
   }],
 }
 
-function VectorEditor({ value, commit, binding }) {
+function ChartRangeEditor({ value, commit, binding }) {
   const x = binding?.getTarget('x')
   return <div className="property-panel__binding-target">
     <div className="property-panel__binding-control">

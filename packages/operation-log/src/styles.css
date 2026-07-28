@@ -1,3 +1,5 @@
+@import '@compose-ui/components/styles.css';
+
 @layer components {
   .operation-log {
     --ol-bg: var(--compose-workspace-bg, #111315);

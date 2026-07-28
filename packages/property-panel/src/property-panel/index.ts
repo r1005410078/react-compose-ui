@@ -23,6 +23,7 @@ export type {
   PropertyPanelBindingPickerRenderer as ComposePropertyPanelBindingPickerRenderer,
   PropertyPanelBindingConfig as ComposePropertyPanelBindingConfig,
   PropertyPanelMetadataBinding as ComposePropertyPanelMetadataBinding,
+  PropertyPanelSizePreset as ComposePropertyPanelSizePreset,
   PropertyPanelChangeReason as ComposePropertyPanelChangeReason,
   PropertyPanelMetadata as ComposePropertyPanelMetadata,
   PropertyPanelHeader as ComposePropertyPanelHeader,

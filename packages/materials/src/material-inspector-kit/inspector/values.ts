@@ -24,14 +24,22 @@ export function createContainerValue(
 ): ContainerValue | FrameValue {
   return {
     name: node.name,
-    ...node.transform,
+    position: { x: node.transform.x, y: node.transform.y },
+    size: { width: node.transform.width, height: node.transform.height },
+    rotation: node.transform.rotation,
+    visible: node.visible,
     ...(node.kind === 'frame' ? { clipContent: node.clipContent } : {}),
     backgroundColor: style.backgroundColor,
     borderColor: style.borderColor,
     borderWidth: style.borderWidth,
     borderRadius: style.borderRadius,
     opacity: style.opacity,
-    shadow: style.shadow ? { ...style.shadow } : null,
+    shadow: style.shadow ? {
+      color: style.shadow.color,
+      offset: { x: style.shadow.offsetX, y: style.shadow.offsetY },
+      blur: style.shadow.blur,
+      spread: style.shadow.spread,
+    } : null,
   }
 }
 
@@ -43,17 +51,23 @@ export function createStyleValue(value: ContainerValue | FrameValue): NodeStyle 
     borderWidth: value.borderWidth,
     borderRadius: value.borderRadius,
     opacity: value.opacity,
-    shadow: value.shadow ? { ...value.shadow } : null,
+    shadow: value.shadow ? {
+      color: value.shadow.color,
+      offsetX: value.shadow.offset.x,
+      offsetY: value.shadow.offset.y,
+      blur: value.shadow.blur,
+      spread: value.shadow.spread,
+    } : null,
   }
 }
 
 /** 从表单值提取节点几何。 @internal */
 export function createTransformValue(value: ContainerValue | FrameValue): NodeTransform {
   return {
-    x: value.x,
-    y: value.y,
-    width: value.width,
-    height: value.height,
+    x: value.position.x,
+    y: value.position.y,
+    width: value.size.width,
+    height: value.size.height,
     rotation: value.rotation,
   }
 }

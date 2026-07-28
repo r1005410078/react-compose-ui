@@ -11,6 +11,7 @@ import type {
   PropertyPath,
 } from './property-panel/compose-property-panel'
 import { getValueAtPath, inspectSchema, setValueAtPath } from './schema-model'
+import { mergePropertyPanelRenderers } from './semantic-editors'
 
 type RuntimeSchema = v.GenericSchema & {
   entries?: Readonly<Record<string, v.GenericSchema>>
@@ -87,7 +88,7 @@ export function resolvePropertyBindings<TSchema extends v.GenericSchema>(
       options.schema,
       options.value,
       binding.target,
-      options.renderers ?? [],
+      mergePropertyPanelRenderers(options.renderers),
     )
     if (!descriptor) {
       pushFailure('unknown-target', '绑定目标已不存在', binding, undefined, undefined)

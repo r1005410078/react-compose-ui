@@ -10,6 +10,10 @@ import './styles.css'
 
 export { ComposeButton } from './button'
 export type { ComposeButtonProps } from './button'
+export { ComposeColorPicker } from './color-picker'
+export type { ComposeColorPickerProps } from './color-picker'
+export { ComposeConfirmDialog } from './confirm-dialog'
+export type { ComposeConfirmDialogProps } from './confirm-dialog'
 export {
   ComposeContextMenu,
   ComposeContextMenuCheckboxItem,
