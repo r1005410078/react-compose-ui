@@ -30,3 +30,4 @@ apps/storybook/storybook-static
 *.njsproj
 *.sln
 *.sw?
+.playwright-cli/
