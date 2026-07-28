@@ -21,13 +21,21 @@
 
 Size metadata 可声明 `{ value, width, height }` 列表。若 Size schema 还包含一个 picklist `preset` 字段，renderer 在同一属性内容区同时呈现 preset 和 W/H：选择预设原子更新三个字段，手动宽高只要不再命中预设就写回 `custom`。option label 继续来自 Schema metadata 的 `optionLabels`，不会把显示文案重复存入 preset 配置。
 
+### 单键分支 Map
+
+`map` 是单行、固定结构的分支键值对，不替代可增删键的 Valibot `record`。它要求
+`v.variant('key', [...])` 的每个分支精确声明 `{ key: literal string, value: schema }`：Key control
+通过 renderer `labelComponent` 放入属性左列，Value control 由 `renderInlineValue` 在右列复用现有
+renderer。父 metadata 的 `optionLabels` 提供 Key 显示名，`mapValueDefaults` 在自动初值不满足分支
+Schema 时提供有效 Value。Map 不声明变量绑定目标；其 Value 仍可使用无绑定的内建或宿主 renderer。
+
 ### Color Picker 与兼容读取
 
 `@compose-ui/components` 提供由 Shadcn CLI 生成的 Base UI Popover 源码组合的 `ComposeColorPicker`，受控输入为既有 CSS 字符串，输出只可能是小写不透明 HEX 或 `transparent`。属性行和弹层不显示 CSS 文本。非 HEX/transparent 的存量色仍作为 CSS 色块预览，色盘从安全回退色开始；用户首次主动选择后才替换该存量值。Color 仍通过 Property Panel 的统一 Schema 校验、只读、重置与绑定链路提交。
 
 ### 领域适配
 
-Materials Inspector 的表单值可以组合为 `position`、`size`、`rotation`、颜色、阴影 offset 与 `visible` 等语义字段；发送命令前适配回既有 transform、style、props 和 `node.set-visibility` payload。Canvas 临时 Inspector 值以 `size` 复合对象与 `backgroundColor` 表达，仍只派发一次 `output.configure`。
+Materials Inspector 的表单值可以组合为 `position`、`size`、`rotation`、颜色、阴影 offset 与 `visible` 等语义字段；发送命令前适配回既有 transform、style、props 和 `node.set-visibility` payload。Canvas 临时 Inspector 值以 `outputSize: { key, value }` Map 与 `backgroundColor` 表达。切换 Key 只切换瞬时 UI 状态，不派发命令；选择常见尺寸或提交自定义 W/H 仍只派发一次 `output.configure`，并在 Undo/Redo 或宿主更新后由当前 W/H 重新推导 Key 与 Value。
 
 ## Risks / Trade-offs
 

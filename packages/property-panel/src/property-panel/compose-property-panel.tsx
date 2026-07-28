@@ -289,6 +289,11 @@ export interface PropertyPanelMetadata {
   optionLabels?: Readonly<Record<string, string>>
   /** Size editor 可选的宽高预设；显示文案由 preset 字段的 optionLabels 提供。 */
   sizePresets?: readonly PropertyPanelSizePreset[]
+  /**
+   * Map editor 切换到指定 Key 时写入 `value` 的候选初值。
+   * 未提供时，Map 从分支 Value Schema 推导初值；无法得到有效候选的 Key 会被禁用。
+   */
+  mapValueDefaults?: Readonly<Record<string, unknown>>
   /** 对象或集合分组是否默认折叠。 */
   collapsed?: boolean
   /** 变量绑定的可用性和语义范围。 */
@@ -339,6 +344,26 @@ export interface PropertyPanelRendererProps {
   commit: (value: unknown, reason?: PropertyPanelChangeReason) => boolean
   /** renderer 声明逻辑子目标后由面板提供的绑定控制器。 */
   binding?: PropertyPanelRendererBindingController
+  /**
+   * 在当前 renderer 的内容区渲染一个未包裹 property row 的子值控件。
+   *
+   * @remarks
+   * 该能力用于 Map 这类复合 editor 让 Value 继续复用宿主或内建 renderer；子控件的提交
+   * 必须通过 `commit` 回写当前 renderer 的完整候选值。它不创建独立的变量绑定目标。
+   */
+  renderInlineValue?: (options: PropertyPanelInlineValueProps) => ReactNode
+}
+
+/** renderer 在自身内容区嵌入子值控件时提供的上下文。 */
+export interface PropertyPanelInlineValueProps {
+  /** 子值的 Schema。 */
+  schema: v.GenericSchema
+  /** 子值显示名称，用于无障碍名称和本地化文案。 */
+  label: string
+  /** 当前子值。 */
+  value: unknown
+  /** 提交子值候选；调用方负责把它适配回 renderer 的完整候选值。 */
+  commit: (value: unknown, reason?: PropertyPanelChangeReason) => boolean
 }
 
 /** 实例级自定义属性 renderer 定义。 */
@@ -349,6 +374,14 @@ export interface PropertyPanelRenderer {
   matches?: (schema: v.GenericSchema, metadata: PropertyPanelMetadata) => boolean
   /** 渲染自定义字段 UI 的 React 组件。 */
   component: ComponentType<PropertyPanelRendererProps>
+  /**
+   * 可选的左列属性名称控件；未提供时继续显示 Schema 的静态 title。
+   *
+   * @remarks
+   * 适用于 Map 等由 Key 决定右侧 Value 的字段。组件获得与 `component` 相同的受控
+   * 字段上下文，必须自行提供可访问名称。
+   */
+  labelComponent?: ComponentType<PropertyPanelRendererProps>
   /** renderer 的默认字段布局，字段 metadata 可以覆盖该值。 */
   layout?: PropertyPanelRendererLayout
   /** 为 optional、nullable 等缺失字段生成可校验的初值。 */

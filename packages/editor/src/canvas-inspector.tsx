@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type {
@@ -16,7 +16,6 @@ type CanvasInspectorProps = {
 }
 
 const OUTPUT_PRESET_VALUES = [
-  'custom',
   '1280x720',
   '1366x768',
   '1440x900',
@@ -26,6 +25,7 @@ const OUTPUT_PRESET_VALUES = [
 ] as const
 
 type OutputPresetValue = (typeof OUTPUT_PRESET_VALUES)[number]
+type OutputSizeKey = 'preset' | 'custom'
 
 const OUTPUT_PRESETS = [
   { value: '1280x720', width: 1280, height: 720, label: '1280 × 720 (HD)' },
@@ -36,34 +36,60 @@ const OUTPUT_PRESETS = [
   { value: '3840x2160', width: 3840, height: 2160, label: '3840 × 2160 (4K UHD)' },
 ] as const
 
+type CanvasOutputSize =
+  | { readonly key: 'preset'; readonly value: OutputPresetValue | '' }
+  | {
+    readonly key: 'custom'
+    readonly value: { readonly width: number; readonly height: number }
+  }
+
+type CanvasInspectorValue = {
+  readonly outputSize: CanvasOutputSize
+  readonly backgroundColor: string
+}
+
+function findOutputPreset(width: number, height: number) {
+  return OUTPUT_PRESETS.find((candidate) => candidate.width === width && candidate.height === height)
+}
+
 function createCanvasOutputSchema(messages: ReturnType<typeof getEditorMessages>['canvasInspector']) {
   return v.object({
-    size: v.pipe(
-      v.object({
-        preset: v.pipe(
-          v.picklist(OUTPUT_PRESET_VALUES),
-          v.metadata({ propertyPanel: {
-            optionLabels: Object.fromEntries([
-              ['custom', messages.custom],
-              ...OUTPUT_PRESETS.map((preset) => [preset.value, preset.label]),
-            ]),
-          } }),
-        ),
-        width: v.pipe(
-          v.number(),
-          v.finite(messages.invalidSize),
-          v.minValue(0.000001, messages.invalidSize),
-        ),
-        height: v.pipe(
-          v.number(),
-          v.finite(messages.invalidSize),
-          v.minValue(0.000001, messages.invalidSize),
-        ),
-      }),
+    outputSize: v.pipe(
+      v.variant('key', [
+        v.object({
+          key: v.literal('preset'),
+          value: v.pipe(
+            v.picklist(['', ...OUTPUT_PRESET_VALUES]),
+            v.metadata({ propertyPanel: {
+              optionLabels: Object.fromEntries(OUTPUT_PRESETS.map((preset) => [preset.value, preset.label])),
+            } }),
+          ),
+        }),
+        v.object({
+          key: v.literal('custom'),
+          value: v.pipe(
+            v.object({
+              width: v.pipe(
+                v.number(),
+                v.finite(messages.invalidSize),
+                v.minValue(0.000001, messages.invalidSize),
+              ),
+              height: v.pipe(
+                v.number(),
+                v.finite(messages.invalidSize),
+                v.minValue(0.000001, messages.invalidSize),
+              ),
+            }),
+            v.metadata({ propertyPanel: { editor: 'size' } }),
+          ),
+        }),
+      ]),
       v.title(messages.size),
       v.metadata({ propertyPanel: {
-        editor: 'size',
-        sizePresets: OUTPUT_PRESETS.map(({ value, width, height }) => ({ value, width, height })),
+        editor: 'map',
+        mapValueDefaults: { preset: '', custom: { width: 1, height: 1 } },
+        optionLabels: { preset: messages.common, custom: messages.custom },
+        order: 0,
       } }),
     ),
     backgroundColor: v.pipe(
@@ -71,7 +97,7 @@ function createCanvasOutputSchema(messages: ReturnType<typeof getEditorMessages>
       v.trim(),
       v.minLength(1, messages.invalidBackground),
       v.title(messages.background),
-      v.metadata({ propertyPanel: { editor: 'color' } }),
+      v.metadata({ propertyPanel: { editor: 'color', order: 1 } }),
     ),
   })
 }
@@ -87,24 +113,37 @@ export function CanvasInspector({
     i18n?.locale ?? 'zh-CN',
     i18n?.formatMessage,
   ).canvasInspector
-  const schema = useMemo(() => createCanvasOutputSchema(messages), [messages])
-  const preset = useMemo<OutputPresetValue>(
-    () => OUTPUT_PRESETS.find((candidate) => (
-      candidate.width === document.output.width
-      && candidate.height === document.output.height
-    ))?.value ?? 'custom',
+  const documentPreset = useMemo(
+    () => findOutputPreset(document.output.width, document.output.height),
     [document.output.height, document.output.width],
   )
+  const [outputSizeKey, setOutputSizeKey] = useState<OutputSizeKey>(
+    documentPreset ? 'preset' : 'custom',
+  )
+  const previousDimensions = useRef({
+    width: document.output.width,
+    height: document.output.height,
+  })
+
+  useEffect(() => {
+    const dimensionsChanged = previousDimensions.current.width !== document.output.width
+      || previousDimensions.current.height !== document.output.height
+    previousDimensions.current = { width: document.output.width, height: document.output.height }
+    if (dimensionsChanged) setOutputSizeKey(documentPreset ? 'preset' : 'custom')
+  }, [document.output.height, document.output.width, documentPreset])
+
+  const schema = useMemo(() => createCanvasOutputSchema(messages), [messages])
   const value = useMemo(
-    () => ({
-      size: {
-        preset,
-        width: document.output.width,
-        height: document.output.height,
-      },
+    (): CanvasInspectorValue => ({
+      outputSize: outputSizeKey === 'preset'
+        ? { key: 'preset', value: documentPreset?.value ?? '' }
+        : {
+          key: 'custom',
+          value: { width: document.output.width, height: document.output.height },
+        },
       backgroundColor: document.output.backgroundColor,
     }),
-    [document.output, preset],
+    [document.output, documentPreset, outputSizeKey],
   )
 
   return (
@@ -116,18 +155,57 @@ export function CanvasInspector({
       schema={schema}
       value={value}
       onValueChange={(_nextValue, change) => {
+        const next = change.output as CanvasInspectorValue
+        if (change.path[0] === 'outputSize') {
+          const nextOutputSize = next.outputSize
+          if (nextOutputSize.key !== value.outputSize.key) {
+            setOutputSizeKey(nextOutputSize.key)
+            return
+          }
+          if (nextOutputSize.key === 'preset') {
+            const preset = OUTPUT_PRESETS.find((candidate) => candidate.value === nextOutputSize.value)
+            if (!preset || (
+              preset.width === document.output.width
+              && preset.height === document.output.height
+            )) return
+            dispatch({
+              id: idFactory(),
+              type: 'output.configure',
+              payload: {
+                width: preset.width,
+                height: preset.height,
+                backgroundColor: document.output.backgroundColor,
+              },
+              meta: { label: messages.configureTransaction, source: 'inspector' },
+            })
+            return
+          }
+          const dimensions = nextOutputSize.value
+          if (
+            dimensions.width === document.output.width
+            && dimensions.height === document.output.height
+          ) return
+          dispatch({
+            id: idFactory(),
+            type: 'output.configure',
+            payload: {
+              width: dimensions.width,
+              height: dimensions.height,
+              backgroundColor: document.output.backgroundColor,
+            },
+            meta: { label: messages.configureTransaction, source: 'inspector' },
+          })
+          return
+        }
         dispatch({
           id: idFactory(),
           type: 'output.configure',
           payload: {
-            width: change.output.size.width,
-            height: change.output.size.height,
-            backgroundColor: change.output.backgroundColor,
+            width: document.output.width,
+            height: document.output.height,
+            backgroundColor: next.backgroundColor,
           },
-          meta: {
-            label: messages.configureTransaction,
-            source: 'inspector',
-          },
+          meta: { label: messages.configureTransaction, source: 'inspector' },
         })
       }}
     />

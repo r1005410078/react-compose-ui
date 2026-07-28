@@ -395,6 +395,28 @@
     line-height: 1.25;
   }
 
+  .property-panel__label--interactive {
+    padding: 2px 6px;
+  }
+
+  .property-panel__label-control {
+    width: 100%;
+    min-width: 0;
+    height: var(--pp-control-height);
+    padding: 1px 6px;
+    border: 1px solid #343535;
+    border-radius: 3px;
+    outline: 0;
+    color: #dedede;
+    background: linear-gradient(180deg, #121313, #0b0c0c);
+    box-shadow: inset 0 1px 3px rgb(0 0 0 / 52%);
+  }
+
+  .property-panel__label-control:focus {
+    border-color: #3979c9;
+    box-shadow: 0 0 0 1px rgb(44 132 246 / 22%), inset 0 1px 3px rgb(0 0 0 / 46%);
+  }
+
   .property-panel__field > label > span,
   .property-panel__label {
     overflow: hidden;

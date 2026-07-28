@@ -9,7 +9,7 @@ import type {
   PropertyPanelRendererBindingTargetDescriptor,
   PropertyPanelRendererProps,
 } from '../property-panel/compose-property-panel'
-import { getObjectEntries, inspectSchema } from '../schema-model'
+import { createInitialValue, getObjectEntries, inspectSchema } from '../schema-model'
 
 /** 第一方内建语义 editor 的稳定 ID。 */
 export const PROPERTY_PANEL_BASE_EDITOR_IDS = [
@@ -22,12 +22,19 @@ export const PROPERTY_PANEL_BASE_EDITOR_IDS = [
   'visibility',
   'color',
   'alignment',
+  'map',
 ] as const
 
 /** 第一方内建语义 editor ID。 */
 export type PropertyPanelBaseEditorId = (typeof PROPERTY_PANEL_BASE_EDITOR_IDS)[number]
 
 type ObjectValue = Record<string, unknown>
+
+type MapBranch = {
+  readonly key: string
+  readonly schema: v.GenericSchema
+  readonly valueSchema: v.GenericSchema
+}
 
 function isObjectValue(value: unknown): value is ObjectValue {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -44,6 +51,55 @@ function getFieldSchema(schema: v.GenericSchema, key: string): v.GenericSchema |
 function getOptions(schema: v.GenericSchema | undefined): readonly unknown[] {
   if (!schema) return []
   return (inspectSchema(schema).base as v.GenericSchema & { options?: readonly unknown[] }).options ?? []
+}
+
+function getLiteralString(schema: v.GenericSchema | undefined): string | undefined {
+  if (!schema) return undefined
+  const base = inspectSchema(schema).base as v.GenericSchema & { literal?: unknown }
+  return base.type === 'literal' && typeof base.literal === 'string' ? base.literal : undefined
+}
+
+function resolveMapBranches(schema: v.GenericSchema): readonly MapBranch[] | undefined {
+  const variant = inspectSchema(schema).base as v.GenericSchema & {
+    key?: unknown
+    options?: readonly unknown[]
+  }
+  if (variant.type !== 'variant' || variant.key !== 'key') return undefined
+  const branches: MapBranch[] = []
+  for (const option of variant.options ?? []) {
+    if (!option || typeof option !== 'object' || !('kind' in option)) return undefined
+    const entries = getObjectEntries(option as v.GenericSchema)
+    if (entries.length !== 2 || !entries.some((entry) => entry.key === 'key') || !entries.some((entry) => entry.key === 'value')) {
+      return undefined
+    }
+    const key = getLiteralString(entries.find((entry) => entry.key === 'key')?.info.schema)
+    const valueSchema = entries.find((entry) => entry.key === 'value')?.info.schema
+    if (!key || !valueSchema || branches.some((branch) => branch.key === key)) return undefined
+    branches.push({ key, schema: option as v.GenericSchema, valueSchema })
+  }
+  return branches.length > 0 ? branches : undefined
+}
+
+function cloneMapValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(cloneMapValue)
+  if (isObjectValue(value)) return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneMapValue(item)]))
+  return value
+}
+
+function getMapBranchLabel(props: PropertyPanelRendererProps, key: string): string {
+  return props.metadata.optionLabels?.[key] ?? key
+}
+
+function createMapBranchCandidate(
+  props: PropertyPanelRendererProps,
+  branch: MapBranch,
+): Record<string, unknown> | undefined {
+  const configuredDefault = props.metadata.mapValueDefaults?.[branch.key]
+  const value = configuredDefault === undefined
+    ? createInitialValue(branch.valueSchema)
+    : cloneMapValue(configuredDefault)
+  const candidate = { key: branch.key, value }
+  return v.safeParse(props.schema, candidate).success ? candidate : undefined
 }
 
 function isChineseLabel(label: string): boolean {
@@ -354,6 +410,53 @@ function AlignmentEditor(props: PropertyPanelRendererProps) {
   )
 }
 
+function MapLabelEditor(props: PropertyPanelRendererProps) {
+  const branches = resolveMapBranches(props.schema)
+  const value = getObjectValue(props.value)
+  const activeKey = typeof value.key === 'string' ? value.key : ''
+  if (!branches) return <span>{props.label}</span>
+  return (
+    <select
+      aria-label={subLabel(props.label, '键', 'key')}
+      className="property-panel__label-control"
+      disabled={props.readOnly}
+      value={activeKey}
+      onChange={(event) => {
+        const branch = branches.find((candidate) => candidate.key === event.target.value)
+        const candidate = branch ? createMapBranchCandidate(props, branch) : undefined
+        if (candidate) props.commit(candidate, 'input')
+      }}
+    >
+      {branches.map((branch) => (
+        <option
+          disabled={!createMapBranchCandidate(props, branch)}
+          key={branch.key}
+          value={branch.key}
+        >{getMapBranchLabel(props, branch.key)}</option>
+      ))}
+    </select>
+  )
+}
+
+function MapEditor(props: PropertyPanelRendererProps) {
+  const branches = resolveMapBranches(props.schema)
+  const value = getObjectValue(props.value)
+  const activeKey = typeof value.key === 'string' ? value.key : ''
+  const branch = branches?.find((candidate) => candidate.key === activeKey)
+  if (!branches || !branch) {
+    return <span role="alert">{props.label} 必须是包含 string literal `key` 与 `value` 的 Valibot variant。</span>
+  }
+  if (!props.renderInlineValue) {
+    return <span role="alert">{props.label} Map Value 无法渲染。</span>
+  }
+  return props.renderInlineValue({
+    commit: (nextValue, reason = 'commit') => props.commit({ key: branch.key, value: nextValue }, reason),
+    label: getMapBranchLabel(props, branch.key),
+    schema: branch.valueSchema,
+    value: value.value,
+  })
+}
+
 function singleValueBindingTarget(
   label: string,
   schema: v.GenericSchema,
@@ -417,6 +520,11 @@ export const PROPERTY_PANEL_BASE_RENDERERS: readonly PropertyPanelRenderer[] = [
   withSingleValueBinding('visibility', VisibilityEditor),
   withSingleValueBinding('color', ColorEditor),
   withSingleValueBinding('alignment', AlignmentEditor),
+  {
+    id: 'map',
+    component: MapEditor,
+    labelComponent: MapLabelEditor,
+  },
 ]
 
 /** 合并实例 registry 与默认 renderer；同 ID 的实例 renderer 始终优先。 */

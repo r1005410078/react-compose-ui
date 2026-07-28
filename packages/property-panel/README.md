@@ -90,7 +90,7 @@ metadata 只保存稳定数据，不能放 React 组件或函数。
 ## 内建语义类型
 
 所有实例默认具备以下稳定 editor ID：`vector2`、`size`、`angle`、`opacity`、
-`corner-radius`、`stroke-width`、`visibility`、`color`、`alignment`。可从包入口导入
+`corner-radius`、`stroke-width`、`visibility`、`color`、`alignment`、`map`。可从包入口导入
 `COMPOSE_PROPERTY_PANEL_BASE_EDITOR_IDS` 获取同一不可变列表；实例 `renderers` 使用相同 ID 时，
 宿主 renderer 优先，其他内建 editor 仍继续可用。
 
@@ -121,6 +121,32 @@ const outputSize = v.pipe(
 HEX、RGB、HSL 或 CSS 文本输入。它提供不透明色与完全透明两种选择；既有 `transparent`、
 `rgb()`、`hsl()` 等值继续原样读取和预览，只有用户首次选择颜色后才写入小写 HEX 或
 `transparent`。
+
+`map` 是一个固定的单键分支属性：左侧属性列显示 Key，右侧 Value 根据当前 Key 的分支 Schema
+自动复用内建或实例 renderer。它使用严格的 `v.variant('key', [...])`，每个分支必须恰好是
+`{ key: v.literal(string), value: schema }`；父字段的 `optionLabels` 提供 Key 文案，
+`mapValueDefaults` 为切换分支时提供有效 Value 初值。动态增删的键值集合继续使用 Valibot `record`。
+
+```ts
+const outputSize = v.pipe(
+  v.variant('key', [
+    v.object({ key: v.literal('preset'), value: v.picklist(['1280x720', '1920x1080']) }),
+    v.object({
+      key: v.literal('custom'),
+      value: v.pipe(
+        v.object({ width: v.pipe(v.number(), v.minValue(1)), height: v.pipe(v.number(), v.minValue(1)) }),
+        v.metadata({ propertyPanel: { editor: 'size' } }),
+      ),
+    }),
+  ]),
+  v.title('输出尺寸'),
+  v.metadata({ propertyPanel: {
+    editor: 'map',
+    optionLabels: { preset: '常见尺寸', custom: '自定义尺寸' },
+    mapValueDefaults: { preset: '1280x720', custom: { width: 1, height: 1 } },
+  } }),
+)
+```
 
 ## 自定义类型和 renderer
 
@@ -153,6 +179,10 @@ const chartSchema = v.object({
 声明 `layout: 'full-width'`：面板继续统一渲染字段标题和 reset/存在性操作，renderer 在下一行
 跨越三列。具体字段也可以通过 `propertyPanel.layout` 覆盖 renderer 默认值；优先级为字段 metadata、
 renderer 默认值、最后回退到 `inline`。该布局配置只影响已经匹配的自定义 renderer。
+
+renderer 可选 `labelComponent` 在左列替换静态属性名；它与 `component` 获得相同受控字段上下文。
+`renderInlineValue` 仅用于 renderer 把子 Value 嵌入当前右列；Map 用它复用分支的内建和宿主
+renderer，且不会创建独立变量绑定目标。
 
 仓库示例在 `app/src/App.tsx` 中使用同一机制实现 ECharts `EChartOption` 自定义类型、结构化属性
 编辑器和真实 Canvas 联动；ECharts 不属于本包的依赖或公共类型。

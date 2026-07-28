@@ -54,6 +54,41 @@ const semanticValue: SemanticValue = {
   background: 'transparent',
 }
 
+const mapSchema = v.object({
+  outputSize: v.pipe(
+    v.variant('key', [
+      v.object({
+        key: v.literal('preset'),
+        value: v.pipe(
+          v.picklist(['1280x720', '1920x1080']),
+          v.metadata({ propertyPanel: { optionLabels: {
+            '1280x720': '1280 × 720',
+            '1920x1080': '1920 × 1080',
+          } } }),
+        ),
+      }),
+      v.object({
+        key: v.literal('custom'),
+        value: v.pipe(
+          v.object({
+            width: v.pipe(v.number(), v.minValue(1, '宽度必须为正数')),
+            height: v.pipe(v.number(), v.minValue(1, '高度必须为正数')),
+          }),
+          v.metadata({ propertyPanel: { editor: 'size' } }),
+        ),
+      }),
+    ]),
+    v.title('输出尺寸'),
+    v.metadata({ propertyPanel: {
+      editor: 'map',
+      optionLabels: { preset: '常见尺寸', custom: '自定义尺寸' },
+      mapValueDefaults: { preset: '1280x720', custom: { width: 1, height: 1 } },
+    } }),
+  ),
+})
+
+type MapValue = v.InferInput<typeof mapSchema>
+
 describe('OpenSpec: property-panel / 内建语义属性编辑器', () => {
   it('OpenSpec: property-panel / 内建语义属性编辑器 / 自动使用内建 editor', () => {
     render(
@@ -72,7 +107,7 @@ describe('OpenSpec: property-panel / 内建语义属性编辑器', () => {
     expect(screen.getByTestId('semantic-editor-size').closest('.property-panel__field'))
       .toHaveAttribute('data-property-layout', 'inline')
     expect(COMPOSE_PROPERTY_PANEL_BASE_EDITOR_IDS).toEqual([
-      'vector2', 'size', 'angle', 'opacity', 'corner-radius', 'stroke-width', 'visibility', 'color', 'alignment',
+      'vector2', 'size', 'angle', 'opacity', 'corner-radius', 'stroke-width', 'visibility', 'color', 'alignment', 'map',
     ])
   })
 
@@ -93,6 +128,75 @@ describe('OpenSpec: property-panel / 内建语义属性编辑器', () => {
 
     expect(screen.getByTestId('host-vector2')).toHaveTextContent('位置')
     expect(screen.queryByTestId('semantic-editor-vector2')).not.toBeInTheDocument()
+  })
+})
+
+describe('OpenSpec: property-panel / 单键分支 Map', () => {
+  it('OpenSpec: property-panel / 单键分支 Map / Key 在左列且 Value 随分支复用 editor', () => {
+    function Harness() {
+      const [value, setValue] = useState<MapValue>({ outputSize: { key: 'preset', value: '1280x720' } })
+      return <ComposePropertyPanel schema={mapSchema} value={value} onValueChange={setValue} />
+    }
+    render(<Harness />)
+
+    const key = screen.getByRole('combobox', { name: '输出尺寸键' })
+    const preset = screen.getByRole('combobox', { name: '常见尺寸' })
+    expect(key.closest('.property-panel__label')).toHaveClass('property-panel__label--interactive')
+    expect(preset.closest('.property-panel__editor')).toBeInTheDocument()
+    expect(screen.queryByText('输出尺寸')).not.toBeInTheDocument()
+    fireEvent.change(preset, { target: { value: '1920x1080' } })
+    expect(screen.getByRole('combobox', { name: '常见尺寸' })).toHaveValue('1920x1080')
+
+    fireEvent.change(key, { target: { value: 'custom' } })
+    expect(screen.getByRole('combobox', { name: '输出尺寸键' })).toHaveValue('custom')
+    expect(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' })).toHaveValue(1)
+    expect(screen.getByRole('spinbutton', { name: '自定义尺寸高度' })).toHaveValue(1)
+    fireEvent.change(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }), {
+      target: { value: '1600' },
+    })
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }))
+    expect(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' })).toHaveValue(1600)
+  })
+
+  it('OpenSpec: property-panel / 单键分支 Map / 保持只读、重置和宿主覆盖', () => {
+    const onValueChange = vi.fn()
+    const customValue: MapValue = { outputSize: { key: 'custom', value: { width: 1600, height: 900 } } }
+    const defaultValue: MapValue = { outputSize: { key: 'preset', value: '1280x720' } }
+    const hostMap: ComposePropertyPanelRenderer = {
+      id: 'map',
+      component: () => <output data-testid="host-map-value">value</output>,
+      labelComponent: () => <output data-testid="host-map-key">key</output>,
+    }
+    const view = render(
+      <ComposePropertyPanel
+        defaultValue={defaultValue}
+        readOnly
+        schema={mapSchema}
+        value={customValue}
+        onValueChange={onValueChange}
+      />,
+    )
+    expect(screen.getByRole('combobox', { name: '输出尺寸键' })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '重置 输出尺寸' }))
+    expect(onValueChange).not.toHaveBeenCalled()
+
+    view.rerender(<ComposePropertyPanel renderers={[hostMap]} schema={mapSchema} value={customValue} />)
+    expect(screen.getByTestId('host-map-key').closest('.property-panel__label')).toBeInTheDocument()
+    expect(screen.getByTestId('host-map-value')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '输出尺寸键' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: property-panel / 单键分支 Map / 拒绝不符合契约的 Schema', () => {
+    const invalidSchema = v.object({
+      invalidMap: v.pipe(
+        v.object({ key: v.literal('only'), value: v.string() }),
+        v.title('无效 Map'),
+        v.metadata({ propertyPanel: { editor: 'map' } }),
+      ),
+    })
+    render(<ComposePropertyPanel schema={invalidSchema} value={{ invalidMap: { key: 'only', value: 'x' } }} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('无效 Map 必须是包含 string literal `key` 与 `value` 的 Valibot variant。')
   })
 })
 

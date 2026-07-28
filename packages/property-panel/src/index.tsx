@@ -35,6 +35,7 @@ export type {
   ComposePropertyPanelMetadata,
   ComposePropertyPanelHeader,
   ComposePropertyPanelChange,
+  ComposePropertyPanelInlineValueProps,
   ComposePropertyPanelRendererProps,
   ComposePropertyPanelRenderer,
   ComposePropertyPanelProps,

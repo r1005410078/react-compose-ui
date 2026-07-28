@@ -114,11 +114,12 @@ navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Pr
   步长、X/Y 偏移、主线间隔、节点/辅助线吸附并清空辅助线；Apply 最多提交一个事务，
   Cancel 不修改文档。
 - Stage 的透明输出边界始终显示 1 屏幕像素边框。点击边界会清空节点选择并在右侧 Properties
-  中打开 Canvas Inspector；输出尺寸是一个 `Size` 属性，预设、W/H 在同一属性区内。尺寸可选择
-  1280×720、1366×768、1440×900、1920×1080、2560×1440、3840×2160，也可输入任意合法
-  自定义值；手动尺寸不再匹配预设时显示 custom。背景使用仅展示色块的 `Color` Picker，支持
-  不透明颜色和 `transparent`；旧 CSS 色值在未编辑前仍保持原值。每次有效编辑仍只派发一次可逆
-  `output.configure`。该检查目标不进入 ComposeSceneTree 或 `selectedIds`。
+  中打开 Canvas Inspector；输出尺寸使用单行 Map 属性：左侧 Key 选择“常见尺寸”或“自定义尺寸”，
+  右侧 Value 分别显示 1280×720、1366×768、1440×900、1920×1080、2560×1440、3840×2160 的预设
+  或紧凑 W/H。选择预设会提交一次可逆 `output.configure`；切换到“自定义尺寸”不会改写文档。
+  手动 W/H 不再匹配预设时保持“自定义尺寸”，重新匹配后自动回到“常见尺寸”。背景使用仅展示色块的
+  `Color` Picker，支持不透明颜色和 `transparent`；旧 CSS 色值在未编辑前仍保持原值。该检查目标
+  不进入 ComposeSceneTree 或 `selectedIds`。
 - fit Frame/selection 使用 Stage 实际上报的 surface 尺寸，不包含固定标尺和滚动条占用。
 - 默认布局禁止面板拖拽、关闭和浮动，Dockview 类型不会成为公共 API。
 - 插槽更新不会重建面板或丢失当前实例的尺寸与折叠状态。

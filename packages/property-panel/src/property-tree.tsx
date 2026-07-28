@@ -19,6 +19,7 @@ import type {
   PropertyPanelBindingIssue,
   PropertyPanelBindingTarget,
   PropertyPanelChangeReason,
+  PropertyPanelInlineValueProps,
   PropertyPath,
   PropertyPanelRenderer,
   PropertyPanelRendererBindingController,
@@ -701,20 +702,34 @@ function PropertyNode({
 
   if (renderer) {
     const Renderer = renderer.component
+    const LabelRenderer = renderer.labelComponent
     const layout = resolveRendererLayout(info.metadata.layout, renderer.layout)
+    const rendererProps = {
+      binding: rendererBinding,
+      commit: (candidate: unknown, reason: PropertyPanelChangeReason = 'commit') => (
+        commit(path, candidate, reason)
+      ),
+      issues: issuesAtPath(view.issues, path),
+      label,
+      metadata: info.metadata,
+      path,
+      readOnly,
+      renderInlineValue: (options: PropertyPanelInlineValueProps) => (
+        <InlinePropertyControl
+          {...options}
+          issues={issuesAtPath(view.issues, path, true)}
+          path={[...path, '$value']}
+          readOnly={readOnly}
+          renderers={renderers}
+        />
+      ),
+      schema,
+      value,
+    }
     const rendererElement = (
-      <Renderer
-        binding={rendererBinding}
-        commit={(candidate, reason = 'commit') => commit(path, candidate, reason)}
-        issues={issuesAtPath(view.issues, path)}
-        label={label}
-        metadata={info.metadata}
-        path={path}
-        readOnly={readOnly}
-        schema={schema}
-        value={value}
-      />
+      <Renderer {...rendererProps} />
     )
+    const labelElement = LabelRenderer ? <LabelRenderer {...rendererProps} /> : label
     if (layout === 'full-width') {
       return (
         <div
@@ -725,7 +740,10 @@ function PropertyNode({
           data-property-path={path.join('.')}
           style={createFieldIndentStyle(depth)}
         >
-          <span className="property-panel__label" id={rendererLabelId}>{label}</span>
+          <span
+            className={`property-panel__label${LabelRenderer ? ' property-panel__label--interactive' : ''}`}
+            id={rendererLabelId}
+          >{labelElement}</span>
           <RowActionRail actions={actions} label={label} />
           <div
             aria-labelledby={rendererLabelId}
@@ -749,7 +767,9 @@ function PropertyNode({
         data-property-path={path.join('.')}
         style={createFieldIndentStyle(depth)}
       >
-        <span className="property-panel__label">{label}</span>
+        <span className={`property-panel__label${LabelRenderer ? ' property-panel__label--interactive' : ''}`}>
+          {labelElement}
+        </span>
         <div className="property-panel__editor">
           <div className="property-panel__control">
             {rendererElement}
@@ -846,6 +866,109 @@ function PropertyNode({
       value={value}
     />
   )
+}
+
+/**
+ * 复用实例 renderer registry 渲染嵌在复合 editor 内的 Value。
+ * Map 的 Value 不能再创建一层 property row，否则会把 Key/Value 拆成两行。
+ */
+function InlinePropertyControl({
+  commit,
+  issues,
+  label,
+  path,
+  readOnly,
+  renderers,
+  schema,
+  value,
+}: PropertyPanelInlineValueProps & {
+  readonly issues: readonly v.BaseIssue<unknown>[]
+  readonly path: PropertyPath
+  readonly readOnly: boolean
+  readonly renderers: readonly PropertyPanelRenderer[]
+}) {
+  const info = inspectSchema(schema)
+  const renderer = info.metadata.editor
+    ? renderers.find((candidate) => candidate.id === info.metadata.editor)
+    : renderers.find((candidate) => candidate.matches?.(info.base, info.metadata))
+  if (renderer) {
+    const Renderer = renderer.component
+    return (
+      <Renderer
+        commit={commit}
+        issues={issues}
+        label={label}
+        metadata={info.metadata}
+        path={path}
+        readOnly={readOnly}
+        renderInlineValue={(options) => (
+          <InlinePropertyControl
+            {...options}
+            issues={issues}
+            path={[...path, '$value']}
+            readOnly={readOnly}
+            renderers={renderers}
+          />
+        )}
+        schema={schema}
+        value={value}
+      />
+    )
+  }
+
+  const runtime = info.base as RuntimeSchema
+  if (info.type === 'picklist' || info.type === 'enum') {
+    return (
+      <select
+        aria-label={label}
+        disabled={readOnly}
+        value={String(value ?? '')}
+        onChange={(event) => {
+          const option = runtime.options?.find((candidate) => String(candidate) === event.target.value)
+          commit(option, 'input')
+        }}
+      >
+        {runtime.options?.map((option) => {
+          const key = String(option)
+          return <option key={key} value={key}>{info.metadata.optionLabels?.[key] ?? key}</option>
+        })}
+      </select>
+    )
+  }
+  if (info.type === 'string') {
+    return (
+      <input
+        aria-label={label}
+        disabled={readOnly}
+        type="text"
+        value={typeof value === 'string' ? value : ''}
+        onChange={(event) => commit(event.target.value, 'input')}
+      />
+    )
+  }
+  if (info.type === 'number') {
+    return (
+      <input
+        aria-label={label}
+        disabled={readOnly}
+        type="number"
+        value={typeof value === 'number' ? value : ''}
+        onChange={(event) => commit(Number(event.target.value), 'input')}
+      />
+    )
+  }
+  if (info.type === 'boolean') {
+    return (
+      <input
+        aria-label={label}
+        checked={Boolean(value)}
+        disabled={readOnly}
+        type="checkbox"
+        onChange={(event) => commit(event.target.checked, 'input')}
+      />
+    )
+  }
+  return <span role="alert">{label}（{info.type}）暂不支持作为 Map Value</span>
 }
 
 interface GroupProps extends PropertyNodeProps {

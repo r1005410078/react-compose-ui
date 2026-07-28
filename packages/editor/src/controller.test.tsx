@@ -435,7 +435,7 @@ describe('useComposeEditorController', () => {
     expect(editorRuntime.entries).toHaveLength(1)
   })
 
-  it('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择常见桌面尺寸', async () => {
+  it('OpenSpec: editor-workspace-layout / Map Canvas 输出尺寸 / 选择常见尺寸或编辑自定义 W/H', async () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
       runtime: editorRuntime,
@@ -452,14 +452,19 @@ describe('useComposeEditorController', () => {
 
     const canvasInspector = screen.getByRole('region', { name: '画布属性' })
     expect(canvasInspector).toHaveAttribute('data-compose-ui', 'property-panel')
-    expect(screen.getByTestId('semantic-editor-size')).toBeInTheDocument()
     expect(screen.getByTestId('semantic-editor-color')).toBeInTheDocument()
-    expect(canvasInspector.querySelector('[data-property-path="size.preset"]')).not.toBeInTheDocument()
+    const outputSizeKey = () => screen.getByRole('combobox', { name: '输出尺寸键' })
+    const commonOutputSize = () => screen.getByRole('combobox', { name: '常见尺寸' })
+    expect(outputSizeKey()).toHaveValue('preset')
+    expect(outputSizeKey().closest('.property-panel__label')).toHaveClass('property-panel__label--interactive')
+    expect(commonOutputSize()).toHaveValue('1280x720')
+    expect(screen.queryByTestId('semantic-editor-size')).not.toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton', { name: '自定义尺寸宽度' })).not.toBeInTheDocument()
     expect(result.current.stageProps.outputSelected).toBe(true)
     expect(result.current.selectedIds).toEqual([])
 
     const beforePreset = editorRuntime.entries.length
-    fireEvent.change(screen.getByRole('combobox', { name: '输出尺寸预设' }), {
+    fireEvent.change(commonOutputSize(), {
       target: { value: '1920x1080' },
     })
     expect(editorRuntime.entries).toHaveLength(beforePreset + 1)
@@ -470,27 +475,68 @@ describe('useComposeEditorController', () => {
     })
 
     inspector.rerender(result.current.inspectorPanel)
-    fireEvent.change(screen.getByRole('spinbutton', { name: '输出尺寸宽度' }), {
+    expect(outputSizeKey()).toHaveValue('preset')
+    expect(commonOutputSize()).toHaveValue('1920x1080')
+    expect(screen.queryByRole('spinbutton', { name: '自定义尺寸宽度' })).not.toBeInTheDocument()
+
+    const beforeCustom = editorRuntime.entries.length
+    fireEvent.change(outputSizeKey(), {
+      target: { value: 'custom' },
+    })
+    expect(editorRuntime.entries).toHaveLength(beforeCustom)
+    expect(outputSizeKey()).toHaveValue('custom')
+    expect(screen.getByTestId('semantic-editor-size')).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' })).toHaveValue(1920)
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }), {
       target: { value: '0' },
     })
-    fireEvent.blur(screen.getByRole('spinbutton', { name: '输出尺寸宽度' }))
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }))
     expect(screen.getByRole('alert')).toHaveTextContent('输出尺寸必须是正数')
     expect(editorRuntime.document.output.width).toBe(1920)
 
-    fireEvent.change(screen.getByRole('spinbutton', { name: '输出尺寸宽度' }), {
+    fireEvent.change(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }), {
       target: { value: '1600' },
     })
-    fireEvent.blur(screen.getByRole('spinbutton', { name: '输出尺寸宽度' }))
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }))
     expect(editorRuntime.document.output.width).toBe(1600)
     await waitFor(() => expect(result.current.document.output.width).toBe(1600))
     inspector.rerender(result.current.inspectorPanel)
+    expect(outputSizeKey()).toHaveValue('custom')
 
     act(() => editorRuntime.undo())
     expect(editorRuntime.document.output.width).toBe(1920)
     await waitFor(() => expect(result.current.document.output.width).toBe(1920))
     inspector.rerender(result.current.inspectorPanel)
     await waitFor(() => {
-      expect(screen.getByRole('spinbutton', { name: '输出尺寸宽度' })).toHaveValue(1920)
+      expect(outputSizeKey()).toHaveValue('preset')
+      expect(commonOutputSize()).toHaveValue('1920x1080')
+      expect(screen.queryByRole('spinbutton', { name: '自定义尺寸宽度' })).not.toBeInTheDocument()
+    })
+
+    act(() => editorRuntime.redo())
+    expect(editorRuntime.document.output.width).toBe(1600)
+    await waitFor(() => expect(result.current.document.output.width).toBe(1600))
+    inspector.rerender(result.current.inspectorPanel)
+    await waitFor(() => {
+      expect(outputSizeKey()).toHaveValue('custom')
+      expect(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' })).toHaveValue(1600)
+    })
+
+    act(() => {
+      editorRuntime.dispatch({
+        id: 'host-output-configure',
+        type: 'output.configure',
+        payload: { width: 1440, height: 900, backgroundColor: 'transparent' },
+        meta: { label: '宿主配置画布输出', source: 'host' },
+      })
+    })
+    await waitFor(() => expect(result.current.document.output.width).toBe(1440))
+    inspector.rerender(result.current.inspectorPanel)
+    await waitFor(() => {
+      expect(outputSizeKey()).toHaveValue('preset')
+      expect(commonOutputSize()).toHaveValue('1440x900')
+      expect(screen.queryByRole('spinbutton', { name: '自定义尺寸宽度' })).not.toBeInTheDocument()
     })
     expect(result.current.stageProps.outputSelected).toBe(true)
   })

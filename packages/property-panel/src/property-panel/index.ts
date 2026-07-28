@@ -28,6 +28,7 @@ export type {
   PropertyPanelMetadata as ComposePropertyPanelMetadata,
   PropertyPanelHeader as ComposePropertyPanelHeader,
   PropertyPanelChange as ComposePropertyPanelChange,
+  PropertyPanelInlineValueProps as ComposePropertyPanelInlineValueProps,
   PropertyPanelRendererProps as ComposePropertyPanelRendererProps,
   PropertyPanelRenderer as ComposePropertyPanelRenderer,
   ComposePropertyPanelProps,
