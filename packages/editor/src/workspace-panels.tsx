@@ -1,8 +1,11 @@
 import { ComposeHistoryPanel } from '@compose-ui/history'
+import { ComposeAssetPreview } from '@compose-ui/asset-browser'
+import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComposeI18nContextValue, ComposeLocale } from '@compose-ui/ui-context'
 import { DockviewReact, themeAbyss } from 'dockview-react'
 import { useCallback, useEffect, useRef } from 'react'
+import type { ComposeAssetPreviewHandle } from '@compose-ui/asset-browser'
 import type {
   DockviewApi,
   DockviewReadyEvent,
@@ -286,6 +289,49 @@ export function AssetBrowserPanel() {
     <div className="compose-editor__panel" data-workspace-panel="asset-browser">
       {assetBrowserPanel
         ?? <Placeholder>{messages.workspace.assetBrowserEmpty}</Placeholder>}
+    </div>
+  )
+}
+
+/** 渲染中央 Canvas Group 中的临时资源文档。 @internal */
+export function AssetDocumentPanel(props: IDockviewPanelProps) {
+  const {
+    assetDocuments,
+    registerAssetDocumentSave,
+    setAssetDocumentDirty,
+    setAssetDocumentSaved,
+  } = useWorkspaceContent()
+  const panelId = props.api?.id
+  const session = panelId ? assetDocuments.get(panelId) : undefined
+  const previewRef = useRef<ComposeAssetPreviewHandle>(null)
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    if (panelId) setAssetDocumentDirty(panelId, dirty)
+  }, [panelId, setAssetDocumentDirty])
+  const handleSaved = useCallback((entry: ComposeAssetEntry) => {
+    if (panelId) setAssetDocumentSaved(panelId, entry)
+  }, [panelId, setAssetDocumentSaved])
+
+  useEffect(() => {
+    if (!panelId) return
+    registerAssetDocumentSave(panelId, () => previewRef.current?.save() ?? Promise.resolve(false))
+    return () => registerAssetDocumentSave(panelId, null)
+  }, [panelId, registerAssetDocumentSave])
+
+  if (!panelId || !session) return null
+
+  return (
+    <div
+      className="compose-editor__asset-document"
+      data-asset-entry-id={session.entry.id}
+      data-workspace-panel="asset-document"
+    >
+      <ComposeAssetPreview
+        ref={previewRef}
+        entry={session.entry}
+        provider={session.provider}
+        onDirtyChange={handleDirtyChange}
+        onSaved={handleSaved}
+      />
     </div>
   )
 }

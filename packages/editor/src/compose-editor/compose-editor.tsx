@@ -5,7 +5,20 @@
  */
 import { COMPOSE_UI_CORE_PACKAGE } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
+import {
+  ComposeDialog,
+  ComposeDialogBackdrop,
+  ComposeDialogContent,
+  ComposeDialogDescription,
+  ComposeDialogFooter,
+  ComposeDialogHeader,
+  ComposeDialogPortal,
+  ComposeDialogTitle,
+  ComposeDialogViewport,
+  ComposeButton,
+} from '@compose-ui/components'
 import { createComposeAssetResolver } from '@compose-ui/assets'
+import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeHistoryShortcuts } from '@compose-ui/history'
 import { ComposeSceneTree } from '@compose-ui/scene-tree'
 import {
@@ -35,11 +48,16 @@ import type { ComposeSceneTreeProps } from '@compose-ui/scene-tree'
 import type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragEvent,
+  ComposeAssetMutation,
 } from '@compose-ui/asset-browser'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import { WorkspaceContentContext } from '../workspace-context'
+import {
+  WorkspaceContentContext,
+} from '../workspace-context'
+import type { ComposeAssetDocumentSession } from '../workspace-context'
 import {
   AssetBrowserPanel,
+  AssetDocumentPanel,
   CanvasPanel,
   ComposeCommandPanel,
   ComponentLibraryPanel,
@@ -48,10 +66,13 @@ import {
   TransactionLogPanel,
 } from '../workspace-panels'
 import {
+  createAssetDocumentPanelId,
   initializeWorkspace,
   localizeWorkspace,
+  WORKSPACE_GROUP_IDS,
   WORKSPACE_COMPONENT_IDS,
 } from '../workspace-layout'
+import { getEditorMessages } from '../editor-i18n'
 import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-tab'
 import type { ComposeEditorController } from '../controller'
 import { SettingsDialog } from '../settings-panel'
@@ -117,6 +138,7 @@ const workspaceComponents = {
   [WORKSPACE_COMPONENT_IDS.transactionLog]: TransactionLogPanel,
   [WORKSPACE_COMPONENT_IDS.command]: ComposeCommandPanel,
   [WORKSPACE_COMPONENT_IDS.assetBrowser]: AssetBrowserPanel,
+  [WORKSPACE_COMPONENT_IDS.assetDocument]: AssetDocumentPanel,
 } satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
 
 const workspaceTabComponents = { workspaceTab: WorkspaceTab }
@@ -133,6 +155,11 @@ const disabledHistory: ComposeHistoryNavigationController = {
   undo: () => undefined,
   redo: () => undefined,
   navigate: () => undefined,
+}
+
+type PendingAssetDocumentClose = {
+  readonly panelId: string
+  readonly resolve: (allowed: boolean) => void
 }
 
 function addDefaultElementProps(
@@ -214,6 +241,132 @@ export function ComposeEditor({
     ) return undefined
     return createComposeAssetResolver(provider)
   }, [assets?.browser?.provider, assets?.resolver])
+  const [assetDocuments, setAssetDocuments] = useState<ReadonlyMap<string, ComposeAssetDocumentSession>>(
+    () => new Map(),
+  )
+  const assetDocumentsRef = useRef(assetDocuments)
+  const [pendingAssetDocumentClose, setPendingAssetDocumentClose] = useState<
+    PendingAssetDocumentClose | null
+  >(null)
+  const pendingAssetDocumentCloseRef = useRef<PendingAssetDocumentClose | null>(null)
+  const replaceAssetDocuments = useCallback((next: ReadonlyMap<string, ComposeAssetDocumentSession>) => {
+    assetDocumentsRef.current = next
+    setAssetDocuments(next)
+  }, [])
+  const updateAssetDocument = useCallback((
+    panelId: string,
+    update: (current: ComposeAssetDocumentSession) => ComposeAssetDocumentSession,
+  ) => {
+    const current = assetDocumentsRef.current.get(panelId)
+    if (!current) return
+    const next = new Map(assetDocumentsRef.current)
+    next.set(panelId, update(current))
+    replaceAssetDocuments(next)
+  }, [replaceAssetDocuments])
+  const closeAssetDocumentImmediately = useCallback((panelId: string) => {
+    const panel = initializedApi.current?.getPanel(panelId)
+    panel?.api.close?.()
+    if (!assetDocumentsRef.current.has(panelId)) return
+    const next = new Map(assetDocumentsRef.current)
+    next.delete(panelId)
+    replaceAssetDocuments(next)
+  }, [replaceAssetDocuments])
+  const settleAssetDocumentClose = useCallback((allowed: boolean) => {
+    const pending = pendingAssetDocumentCloseRef.current
+    if (!pending) return
+    pendingAssetDocumentCloseRef.current = null
+    setPendingAssetDocumentClose(null)
+    if (allowed) closeAssetDocumentImmediately(pending.panelId)
+    pending.resolve(allowed)
+  }, [closeAssetDocumentImmediately])
+  const requestAssetDocumentClose = useCallback((panelId: string) => {
+    const session = assetDocumentsRef.current.get(panelId)
+    if (!session) return Promise.resolve(true)
+    if (!session.dirty) {
+      closeAssetDocumentImmediately(panelId)
+      return Promise.resolve(true)
+    }
+    if (pendingAssetDocumentCloseRef.current) return Promise.resolve(false)
+    return new Promise<boolean>((resolve) => {
+      const pending = { panelId, resolve }
+      pendingAssetDocumentCloseRef.current = pending
+      setPendingAssetDocumentClose(pending)
+    })
+  }, [closeAssetDocumentImmediately])
+  const saveAndClosePendingAssetDocument = useCallback(async () => {
+    const pending = pendingAssetDocumentCloseRef.current
+    if (!pending) return
+    const saved = await assetDocumentsRef.current.get(pending.panelId)?.save?.() ?? false
+    settleAssetDocumentClose(saved)
+  }, [settleAssetDocumentClose])
+  const registerAssetDocumentSave = useCallback((
+    panelId: string,
+    save: (() => Promise<boolean>) | null,
+  ) => updateAssetDocument(panelId, (current) => ({ ...current, save })), [updateAssetDocument])
+  const setAssetDocumentDirty = useCallback((panelId: string, dirty: boolean) => {
+    updateAssetDocument(panelId, (current) => current.dirty === dirty ? current : { ...current, dirty })
+  }, [updateAssetDocument])
+  const setAssetDocumentSaved = useCallback((panelId: string, entry: ComposeAssetEntry) => {
+    updateAssetDocument(panelId, (current) => ({ ...current, dirty: false, entry }))
+    assets?.browser?.onOperation?.({
+      type: 'write',
+      entryIds: [entry.id],
+      succeeded: 1,
+      failed: 0,
+    })
+  }, [assets?.browser])
+  const openAssetDocument = useCallback((entry: ComposeAssetEntry) => {
+    const provider = assets?.browser?.provider
+    if (!provider || entry.kind !== 'file') return
+    const panelId = createAssetDocumentPanelId(provider.id, entry.assetKey ?? entry.id)
+    const existing = initializedApi.current?.getPanel(panelId)
+    if (existing) {
+      existing.api.setActive()
+      return
+    }
+    const next = new Map(assetDocumentsRef.current)
+    next.set(panelId, {
+      entry,
+      panelId,
+      provider,
+      dirty: false,
+      save: null,
+    })
+    replaceAssetDocuments(next)
+    initializedApi.current?.addPanel({
+      id: panelId,
+      component: WORKSPACE_COMPONENT_IDS.assetDocument,
+      tabComponent: 'workspaceTab',
+      title: entry.name,
+      renderer: 'always',
+      position: {
+        direction: 'within',
+        referenceGroup: WORKSPACE_GROUP_IDS.canvas,
+      },
+    })
+  }, [assets?.browser?.provider, replaceAssetDocuments])
+  const handleDefaultAssetMutation = useCallback(async (mutation: ComposeAssetMutation) => {
+    const hostDecision = assets?.browser?.onBeforeAssetMutation
+    if (hostDecision && await hostDecision(mutation) === false) return false
+    const providerId = assets?.browser?.provider?.id
+    const affectedIds = new Set(mutation.entries.map((entry) => entry.id))
+    const affectedKeys = new Set(mutation.entries.flatMap((entry) => entry.assetKey ? [entry.assetKey] : []))
+    const panelIds = [...assetDocumentsRef.current.values()]
+      .filter((session) => (
+        session.provider.id === providerId
+        && (affectedIds.has(session.entry.id)
+          || (session.entry.assetKey !== undefined && affectedKeys.has(session.entry.assetKey)))
+      ))
+      .map((session) => session.panelId)
+    for (const panelId of panelIds) {
+      if (!await requestAssetDocumentClose(panelId)) return false
+    }
+    return true
+  }, [assets?.browser, requestAssetDocumentClose])
+  const handleAssetOpen = useCallback((entry: ComposeAssetEntry) => {
+    assets?.browser?.onAssetOpen?.(entry)
+    openAssetDocument(entry)
+  }, [assets?.browser, openAssetDocument])
   const handleAssetCanvasDrag = useCallback((
     event: ComposeAssetCanvasDragEvent,
   ) => {
@@ -269,6 +422,13 @@ export function ComposeEditor({
     onPreferencesChange?.(normalized)
   }, [onPreferencesChange, preferences])
 
+  const setWorkspaceElement = useCallback((element: HTMLDivElement | null) => {
+    if (!element) return
+    // React 18 不会稳定地写入新标准 inert 的布尔属性；直接同步 presence，确保真实 Dockview
+    // DOM 与焦点陷阱一致地隔离，同时在关闭时移除该属性。
+    element.toggleAttribute('inert', settingsOpen)
+  }, [settingsOpen])
+
   useEffect(() => {
     if (!settingsOpen && restoreSettingsFocusRef.current) {
       restoreSettingsFocusRef.current = false
@@ -317,10 +477,19 @@ export function ComposeEditor({
           ? (
               <ComposeAssetBrowser
                 {...assets.browser}
+                onAssetOpen={handleAssetOpen}
+                onBeforeAssetMutation={handleDefaultAssetMutation}
                 onCanvasDrag={handleAssetCanvasDrag}
               />
             )
           : undefined,
+      assetDocuments,
+      registerAssetDocumentSave,
+      setAssetDocumentDirty,
+      setAssetDocumentSaved,
+      requestAssetDocumentClose: (panelId: string) => {
+        void requestAssetDocumentClose(panelId)
+      },
       settingsOpen,
       settingsPanelId,
       setSettingsButton: (element: HTMLButtonElement | null) => {
@@ -334,8 +503,15 @@ export function ComposeEditor({
       controller,
       resolvedHistory,
       assets?.browser,
+      assetDocuments,
+      handleAssetOpen,
+      handleDefaultAssetMutation,
       resolvedAssetResolver,
       handleAssetCanvasDrag,
+      registerAssetDocumentSave,
+      requestAssetDocumentClose,
+      setAssetDocumentDirty,
+      setAssetDocumentSaved,
       resolvedPreferences.shortcuts,
       settingsOpen,
       settingsPanelId,
@@ -372,6 +548,13 @@ export function ComposeEditor({
     }
   }, [hostI18n?.formatMessage, resolvedPreferences.locale])
 
+  const assetDocumentMessages = getEditorMessages(
+    resolvedPreferences.locale,
+    hostI18n?.formatMessage,
+  )
+  const pendingAssetDocument = pendingAssetDocumentClose
+    ? assetDocuments.get(pendingAssetDocumentClose.panelId)
+    : undefined
   const rootClassName = ['compose-editor', className].filter(Boolean).join(' ')
 
   return (
@@ -408,7 +591,7 @@ export function ComposeEditor({
         <WorkspaceContentContext.Provider value={content}>
           <div
             className="compose-editor__workspace"
-            inert={settingsOpen || undefined}
+            ref={setWorkspaceElement}
           >
             <DockviewReact
               className="compose-editor__dockview"
@@ -428,6 +611,47 @@ export function ComposeEditor({
               onClose={closeSettings}
               preferences={resolvedPreferences}
             />
+          ) : null}
+          {pendingAssetDocumentClose && pendingAssetDocument ? (
+            <ComposeDialog
+              open
+              onOpenChange={(open) => {
+                if (!open) settleAssetDocumentClose(false)
+              }}
+            >
+              <ComposeDialogPortal>
+                <ComposeDialogBackdrop />
+                <ComposeDialogViewport>
+                  <ComposeDialogContent>
+                    <ComposeDialogHeader>
+                      <ComposeDialogTitle>{assetDocumentMessages.unsavedAssetTitle}</ComposeDialogTitle>
+                      <ComposeDialogDescription>
+                        {assetDocumentMessages.unsavedAssetQuestion(pendingAssetDocument.entry.name)}
+                      </ComposeDialogDescription>
+                    </ComposeDialogHeader>
+                    <ComposeDialogFooter>
+                      <ComposeButton
+                        type="button"
+                        variant="outline"
+                        onClick={() => settleAssetDocumentClose(false)}
+                      >
+                        {assetDocumentMessages.canvasSettings.cancel}
+                      </ComposeButton>
+                      <ComposeButton
+                        type="button"
+                        variant="destructive"
+                        onClick={() => settleAssetDocumentClose(true)}
+                      >
+                        {assetDocumentMessages.discard}
+                      </ComposeButton>
+                      <ComposeButton type="button" onClick={() => void saveAndClosePendingAssetDocument()}>
+                        {assetDocumentMessages.save}
+                      </ComposeButton>
+                    </ComposeDialogFooter>
+                  </ComposeDialogContent>
+                </ComposeDialogViewport>
+              </ComposeDialogPortal>
+            </ComposeDialog>
           ) : null}
         </WorkspaceContentContext.Provider>
       </EditorRoot>

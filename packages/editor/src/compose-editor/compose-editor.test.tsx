@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
@@ -9,6 +9,21 @@ import {
 } from '@compose-ui/ui-context'
 
 const initializeWorkspaceMock = vi.hoisted(() => vi.fn())
+const workspaceDockviewMock = vi.hoisted(() => {
+  const panels = new Map<string, { id: string; api: { close: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> } }>()
+  return {
+    addPanel: vi.fn((options: { id: string }) => {
+      const panel = {
+        id: options.id,
+        api: { close: vi.fn(), setActive: vi.fn() },
+      }
+      panels.set(options.id, panel)
+      return panel
+    }),
+    getPanel: vi.fn((id: string) => panels.get(id)),
+    panels,
+  }
+})
 const sceneHistoryDockviewMock = vi.hoisted(() => ({
   height: 480,
   addGroup: vi.fn((options: { id: string }) => ({
@@ -49,9 +64,11 @@ vi.mock('@compose-ui/asset-browser', async () => {
   return {
     ComposeAssetBrowser: ({
       provider,
+      onAssetOpen,
       onCanvasDrag,
     }: {
       provider?: { label?: string }
+      onAssetOpen?: (entry: unknown) => void
       onCanvasDrag?: (event: unknown) => void
     }) =>
       React.createElement(
@@ -74,13 +91,24 @@ vi.mock('@compose-ui/asset-browser', async () => {
             }],
           }),
         }),
+        React.createElement('button', {
+          'aria-label': 'mock asset open',
+          onClick: () => onAssetOpen?.({
+            id: 'logo',
+            assetKey: 'logo-key',
+            parentId: 'root',
+            name: 'logo.svg',
+            kind: 'file',
+            mediaType: 'image/svg+xml',
+          }),
+        }),
       ),
   }
 })
 
 vi.mock('dockview-react', async () => {
   const React = await import('react')
-  const readyEvent = { api: { id: 'test-api' } }
+  const readyEvent = { api: workspaceDockviewMock }
 
   return {
     themeAbyss: { name: 'abyss', className: 'dockview-theme-abyss' },
@@ -158,12 +186,48 @@ afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
   initializeWorkspaceMock.mockClear()
+  workspaceDockviewMock.addPanel.mockClear()
+  workspaceDockviewMock.getPanel.mockClear()
+  workspaceDockviewMock.panels.clear()
   Object.values(sceneHistoryDockviewMock).forEach((member) => {
     if (typeof member === 'function' && 'mockClear' in member) member.mockClear()
   })
 })
 
 describe('ComposeEditor', () => {
+  it('OpenSpec: editor-workspace-layout / 中央 Canvas Group 承载资源文档 / 打开同一资源只创建一个 always 标签', async () => {
+    const provider = {
+      id: 'memory',
+      label: 'Memory assets',
+      root: { id: 'root', parentId: null, name: 'Assets', kind: 'folder' as const },
+      capabilities: {
+        createFile: false,
+        createFolder: false,
+        rename: false,
+        move: false,
+        delete: false,
+        write: false,
+      },
+      list: vi.fn(async () => []),
+      read: vi.fn(),
+    }
+    render(<ComposeEditor assets={{ browser: { provider } }} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'mock asset open' }))
+    await waitFor(() => expect(workspaceDockviewMock.addPanel).toHaveBeenCalledWith(expect.objectContaining({
+      component: 'assetDocument',
+      id: 'compose-asset-document:memory:logo-key',
+      renderer: 'always',
+      title: 'logo.svg',
+      position: { direction: 'within', referenceGroup: 'compose-canvas-group' },
+    })))
+
+    fireEvent.click(screen.getByRole('button', { name: 'mock asset open' }))
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledTimes(1)
+    expect(workspaceDockviewMock.getPanel('compose-asset-document:memory:logo-key')?.api.setActive)
+      .toHaveBeenCalledTimes(1)
+  })
+
   it('OpenSpec: editor-workspace-layout / Editor 资源拖入桥接 / 默认资源面板拖入当前 Stage', async () => {
     const send = vi.fn()
     const resolved = {
@@ -549,8 +613,8 @@ describe('ComposeEditor', () => {
     expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
   })
 
-  it('OpenSpec: editor-preferences / 设置模态弹框 / 打开和关闭设置', () => {
-    render(<ComposeEditor />)
+  it('OpenSpec: editor-preferences / 设置模态弹框 / 打开和关闭设置', async () => {
+    const { container } = render(<ComposeEditor />)
 
     const button = screen.getByRole('button', { name: '设置' })
     expect(button).toHaveAttribute('aria-expanded', 'false')
@@ -563,13 +627,11 @@ describe('ComposeEditor', () => {
       'true',
     )
     expect(screen.getByTestId('dockview').parentElement).toHaveAttribute('inert')
-    expect(screen.getByRole('searchbox', { name: '搜索设置' })).toHaveFocus()
-    const lastControl = screen.getByRole('radio', { name: '跟随系统' })
-    lastControl.focus()
-    fireEvent.keyDown(screen.getByRole('dialog', { name: '设置' }), {
-      key: 'Tab',
+    await waitFor(() => {
+      expect(screen.getByRole('searchbox', { name: '搜索设置' })).toHaveFocus()
     })
-    expect(screen.getByRole('button', { name: '关闭设置' })).toHaveFocus()
+    expect(screen.getByRole('dialog', { name: '设置' }).closest('[data-base-ui-portal]'))
+      .not.toBe(container)
 
     fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
     expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
@@ -678,14 +740,17 @@ describe('ComposeEditor', () => {
   })
 
   it('OpenSpec: editor-preferences / 内建界面语言 / 切换默认工作区语言', () => {
-    render(<ComposeEditor />)
+    const { container } = render(<ComposeEditor />)
     fireEvent.click(screen.getByRole('button', { name: '设置' }))
     fireEvent.click(screen.getByRole('button', { name: '语言' }))
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
 
-    const editor = screen.getByRole('region', { name: 'Compose editor' })
+    // Modal 打开时 Base UI 会将背景从可访问树隔离，仍通过渲染容器断言其语言状态。
+    const editor = container.querySelector('[data-compose-ui="editor"]')
+    expect(editor).not.toBeNull()
     expect(editor).toHaveAttribute('lang', 'en-US')
-    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(container.querySelector('.compose-editor__settings-icon'))
+      .toHaveAttribute('aria-label', 'Settings')
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
   })
 
@@ -810,7 +875,7 @@ describe('ComposeEditor', () => {
     fireEvent.click(screen.getByRole('radio', { name: '浅色' }))
 
     expect(canvasPanel).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Compose editor' }))
+    expect(container.querySelector('[data-compose-ui="editor"]'))
       .toHaveAttribute('data-compose-theme', 'light')
   })
 

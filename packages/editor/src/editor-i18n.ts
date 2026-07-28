@@ -27,6 +27,11 @@ const messages = {
     restore: (action: string) => `恢复${action}默认快捷键`,
     edit: (action: string) => `修改${action}快捷键`,
     disabled: '未设置',
+    save: '保存',
+    discard: '放弃',
+    closeAsset: (name: string) => `关闭资源 ${name}`,
+    unsavedAssetTitle: '资源尚未保存',
+    unsavedAssetQuestion: (name: string) => `关闭“${name}”前要保存吗？`,
     readonly: '固定手势',
     readonlyItems: [
       ['方向键', '微调 1 世界单位；Shift 为 10'],
@@ -120,6 +125,11 @@ const messages = {
     restore: (action: string) => `Restore default ${action} shortcut`,
     edit: (action: string) => `Change ${action} shortcut`,
     disabled: 'Not assigned',
+    save: 'Save',
+    discard: 'Discard',
+    closeAsset: (name: string) => `Close ${name}`,
+    unsavedAssetTitle: 'Unsaved resource',
+    unsavedAssetQuestion: (name: string) => `Save “${name}” before closing?`,
     readonly: 'Fixed gestures',
     readonlyItems: [
       ['Arrow keys', 'Nudge by 1 world unit; Shift uses 10'],
@@ -279,6 +289,19 @@ export function getEditorMessages(
     ),
     edit: (action: string) => withVariables('edit', current.edit(action), { action }),
     disabled: format('disabled', current.disabled),
+    save: format('save', current.save),
+    discard: format('discard', current.discard),
+    closeAsset: (name: string) => withVariables(
+      'closeAsset',
+      current.closeAsset(name),
+      { name },
+    ),
+    unsavedAssetTitle: format('unsavedAssetTitle', current.unsavedAssetTitle),
+    unsavedAssetQuestion: (name: string) => withVariables(
+      'unsavedAssetQuestion',
+      current.unsavedAssetQuestion(name),
+      { name },
+    ),
     readonly: format('readonly', current.readonly),
     readonlyItems: current.readonlyItems.map(([term, description], index) => [
       format(`readonlyItems.${index}.term`, term),

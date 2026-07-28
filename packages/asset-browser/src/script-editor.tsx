@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { getAssetScriptLanguage } from './script-language'
 
@@ -7,7 +13,6 @@ interface ScriptEditorProps {
   readonly entry: ComposeAssetEntry
   readonly providerId: string
   readonly revision: string
-  readonly saveRequest?: number
   readonly loadingLabel: string
   readonly theme: 'dark' | 'light'
   readonly onDirtyChange: (dirty: boolean) => void
@@ -18,22 +23,25 @@ interface ScriptEditorProps {
   ) => Promise<boolean>
 }
 
-export function ScriptEditor({
+/** @internal 资源预览通过此接口协调脚本保存。 */
+export interface ComposeScriptEditorHandle {
+  save(): Promise<boolean>
+}
+
+export const ScriptEditor = forwardRef<ComposeScriptEditorHandle, ScriptEditorProps>(function ScriptEditor({
   content,
   entry,
   onDirtyChange,
   onSave,
   providerId,
   revision,
-  saveRequest = 0,
   loadingLabel,
   theme,
-}: ScriptEditorProps) {
+}: ScriptEditorProps, ref) {
   const hostRef = useRef<HTMLDivElement>(null)
   const saveRef = useRef(onSave)
   const revisionRef = useRef(revision)
-  const requestRef = useRef(saveRequest)
-  const executeSaveRef = useRef<(() => Promise<void>) | null>(null)
+  const executeSaveRef = useRef<(() => Promise<boolean>) | null>(null)
   const setThemeRef = useRef<((theme: 'dark' | 'light') => void) | null>(null)
   const initialThemeRef = useRef(theme)
   const [loading, setLoading] = useState(true)
@@ -77,9 +85,10 @@ export function ScriptEditor({
       })
       const save = async () => {
         const saved = await saveRef.current(model.getValue(), revisionRef.current)
-        if (!saved) return
+        if (!saved) return false
         baseline = model.getValue()
         onDirtyChange(false)
+        return true
       }
       executeSaveRef.current = save
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -110,11 +119,9 @@ export function ScriptEditor({
     setThemeRef.current?.(theme)
   }, [theme])
 
-  useEffect(() => {
-    if (requestRef.current === saveRequest) return
-    requestRef.current = saveRequest
-    void executeSaveRef.current?.()
-  }, [saveRequest])
+  useImperativeHandle(ref, () => ({
+    save: async () => executeSaveRef.current?.() ?? false,
+  }), [])
 
   return (
     <div className="asset-browser__script">
@@ -122,4 +129,4 @@ export function ScriptEditor({
       <div ref={hostRef} className="asset-browser__monaco" data-testid="asset-monaco-host" />
     </div>
   )
-}
+})

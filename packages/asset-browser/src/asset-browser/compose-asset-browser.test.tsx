@@ -266,34 +266,57 @@ describe('ComposeAssetBrowser', () => {
       .findByRole('gridcell', { name: /nested-logo.svg/ })).toBeVisible()
   })
 
-  it('OpenSpec: asset-browser / 安全资源预览 / 通过 img 和 Blob URL 预览 SVG', async () => {
+  it('OpenSpec: asset-browser / 资源浏览与显式打开预览分离 / 单击不读取，激活才发出打开意图', async () => {
     const provider = createProvider()
-    render(<ComposeAssetBrowser provider={provider} />)
+    const onAssetOpen = vi.fn()
+    render(<ComposeAssetBrowser provider={provider} onAssetOpen={onAssetOpen} />)
     const grid = await screen.findByRole('grid', { name: 'Assets' })
-    fireEvent.click(within(grid).getByRole('gridcell', { name: /logo.svg/ }))
-    const image = await screen.findByRole('img', { name: 'logo.svg' })
-    expect(image).toHaveAttribute('src', 'blob:asset')
-    expect(document.querySelector('.asset-browser__image-preview script')).toBeNull()
-    expect(URL.createObjectURL).toHaveBeenCalled()
-    fireEvent.click(getAssetTreeRow(/mesh.bin/))
-    await screen.findByText('此文件类型暂不支持预览')
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:asset')
+    const card = within(grid).getByRole('gridcell', { name: /logo.svg/ })
+    const readMock = provider.read as ReturnType<typeof vi.fn>
+    const readsBeforeSelection = readMock.mock.calls.length
+    fireEvent.click(card)
+    expect(readMock).toHaveBeenCalledTimes(readsBeforeSelection)
+    expect(screen.getByRole('grid', { name: 'Assets' })).toBeVisible()
+
+    const readsBeforeOpen = readMock.mock.calls.length
+    fireEvent.doubleClick(card)
+    expect(onAssetOpen).toHaveBeenCalledTimes(1)
+    expect(onAssetOpen).toHaveBeenCalledWith(logo)
+    expect(readMock).toHaveBeenCalledTimes(readsBeforeOpen)
   })
 
-  it('OpenSpec: asset-browser / 安全资源预览 / 显示不支持文件的元数据和下载', async () => {
-    render(<ComposeAssetBrowser provider={createProvider()} />)
+  it('OpenSpec: asset-browser / 资源浏览与显式打开预览分离 / Tree Enter 激活文件且目录仍导航', async () => {
+    const onAssetOpen = vi.fn()
+    const provider = createProvider()
+    render(<ComposeAssetBrowser provider={provider} onAssetOpen={onAssetOpen} />)
+    const treeLogo = await findAssetTreeRow(/logo.svg/)
+    fireEvent.keyDown(treeLogo, { key: 'Enter' })
+    expect(onAssetOpen).toHaveBeenCalledTimes(1)
+    expect(onAssetOpen).toHaveBeenCalledWith(logo)
+
     const grid = await screen.findByRole('grid', { name: 'Assets' })
-    fireEvent.click(within(grid).getByRole('gridcell', { name: /mesh.bin/ }))
-    expect(await screen.findByText('此文件类型暂不支持预览')).toBeVisible()
-    expect(screen.getByRole('link', { name: '下载' })).toHaveAttribute('download', 'mesh.bin')
+    fireEvent.doubleClick(within(grid).getByRole('gridcell', { name: /Images/ }))
+    expect(await screen.findByRole('grid', { name: 'Images' })).toBeVisible()
   })
 
   it('OpenSpec: asset-browser / 资源写操作与部分成功 / 新建目录并刷新当前目录', async () => {
     const provider = createProvider()
-    render(<ComposeAssetBrowser provider={provider} />)
+    const { container } = render(<ComposeAssetBrowser provider={provider} />)
     await screen.findByRole('grid', { name: 'Assets' })
     fireEvent.click(screen.getByTitle('新建目录'))
     const dialog = screen.getByRole('dialog', { name: '新建目录' })
+    expect(dialog.closest('[data-base-ui-portal]')).not.toBe(container)
+    await waitFor(() => {
+      expect(within(dialog).getByRole('textbox', { name: '名称' })).toHaveFocus()
+    })
+    expect(within(dialog).getByRole('textbox', { name: '名称' })).toHaveAttribute(
+      'data-compose-ui',
+      'input',
+    )
+    expect(within(dialog).getByRole('button', { name: '创建' })).toHaveAttribute(
+      'data-compose-ui',
+      'button',
+    )
     fireEvent.change(within(dialog).getByRole('textbox', { name: '名称' }), {
       target: { value: 'Textures' },
     })
@@ -345,6 +368,67 @@ describe('ComposeAssetBrowser', () => {
       .querySelector('[data-slot="context-menu-shortcut"]')).toHaveTextContent('Delete')
   })
 
+  it('Asset Browser / 资源网格右键菜单 / 右键后的非主键 click 不会重复资源选择', async () => {
+    const onSelectionChange = vi.fn()
+    render(
+      <ComposeAssetBrowser
+        provider={createProvider()}
+        selectedIds={['root']}
+        onSelectionChange={onSelectionChange}
+      />,
+    )
+    const grid = await screen.findByRole('grid', { name: 'Assets' })
+    const logoCard = within(grid).getByRole('gridcell', { name: /logo.svg/ })
+
+    fireEvent.contextMenu(logoCard, { button: 2, clientX: 96, clientY: 72 })
+    fireEvent.click(logoCard, { button: 2 })
+
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+    expect(onSelectionChange).toHaveBeenCalledWith(['logo'])
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
+
+  it('Asset Browser / 资源网格右键菜单 / 右键后的主键兼容 click 不会重复资源选择', async () => {
+    const onSelectionChange = vi.fn()
+    render(
+      <ComposeAssetBrowser
+        provider={createProvider()}
+        selectedIds={['root']}
+        onSelectionChange={onSelectionChange}
+      />,
+    )
+    const grid = await screen.findByRole('grid', { name: 'Assets' })
+    const logoCard = within(grid).getByRole('gridcell', { name: /logo.svg/ })
+
+    fireEvent.contextMenu(logoCard, { button: 2, clientX: 96, clientY: 72 })
+    // 部分浏览器/宿主会在 contextmenu 后补发 button=0 的 click。
+    fireEvent.click(logoCard, { button: 0 })
+
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+    expect(onSelectionChange).toHaveBeenCalledWith(['logo'])
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
+
+  it('Asset Browser / 资源树右键菜单 / 右键后的主键兼容 click 不会重复资源选择', async () => {
+    const onSelectionChange = vi.fn()
+    render(
+      <ComposeAssetBrowser
+        provider={createProvider()}
+        selectedIds={['root']}
+        onSelectionChange={onSelectionChange}
+      />,
+    )
+    const treeLogo = await findAssetTreeRow(/logo.svg/)
+
+    fireEvent.contextMenu(treeLogo, { button: 2, clientX: 96, clientY: 72 })
+    fireEvent.click(treeLogo, { button: 0 })
+
+    // contextmenu 自身会选中未选中行；后续兼容 click 不得再次触发选择。
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+    expect(onSelectionChange).toHaveBeenCalledWith(['logo'])
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
+
   it('OpenSpec: editor-preferences / 资源面板 Context / 使用浅色 token、英文及消息覆盖', async () => {
     render(
       <ComposeUIProvider
@@ -363,30 +447,26 @@ describe('ComposeAssetBrowser', () => {
     expect(browser).toHaveStyle({ '--compose-panel-bg': '#ffffff' })
   })
 
-  it('OpenSpec: asset-browser / 异步生命周期 / 选择切换时中止迟到 read', async () => {
-    let firstSignal: AbortSignal | undefined
-    let resolveFirst: ((value: { blob: Blob; revision: string }) => void) | undefined
-    const provider = createProvider({
-      read: vi.fn(({
-        fileId,
-        signal,
-      }): Promise<{ blob: Blob; revision: string }> => {
-        if (fileId === 'logo') {
-          firstSignal = signal
-          return new Promise((resolve) => {
-            resolveFirst = resolve
-          })
-        }
-        return Promise.resolve({ blob: new Blob(['binary']), revision: '1' })
-      }),
-    })
-    render(<ComposeAssetBrowser provider={provider} />)
+  it('OpenSpec: asset-browser / 资源浏览与显式打开预览分离 / 宿主拒绝 rename 时不调用 Provider', async () => {
+    const provider = createProvider()
+    const onBeforeAssetMutation = vi.fn(async () => false)
+    render(
+      <ComposeAssetBrowser
+        provider={provider}
+        onBeforeAssetMutation={onBeforeAssetMutation}
+      />,
+    )
     const grid = await screen.findByRole('grid', { name: 'Assets' })
     fireEvent.click(within(grid).getByRole('gridcell', { name: /logo.svg/ }))
-    await waitFor(() => expect(firstSignal).toBeDefined())
-    fireEvent.click(getAssetTreeRow(/mesh.bin/))
-    expect(firstSignal?.aborted).toBe(true)
-    resolveFirst?.({ blob: new Blob(['late']), revision: 'late' })
-    expect(await screen.findByText('此文件类型暂不支持预览')).toBeVisible()
+    fireEvent.click(screen.getByTitle('重命名'))
+    fireEvent.change(screen.getByRole('textbox', { name: '名称' }), {
+      target: { value: 'renamed.svg' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '重命名' }))
+    await waitFor(() => expect(onBeforeAssetMutation).toHaveBeenCalledWith({
+      type: 'rename',
+      entries: [logo],
+    }))
+    expect(provider.renameEntry).not.toHaveBeenCalled()
   })
 })

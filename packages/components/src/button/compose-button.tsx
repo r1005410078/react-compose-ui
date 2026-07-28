@@ -21,7 +21,7 @@ const composeButtonVariants = cva(
         ghost:
           'cu:hover:bg-muted cu:hover:text-foreground cu:aria-expanded:bg-muted cu:aria-expanded:text-foreground',
         destructive:
-          'cu:bg-destructive/10 cu:text-destructive cu:hover:bg-destructive/20 cu:focus-visible:border-destructive/40 cu:focus-visible:ring-destructive/20',
+          'cu:bg-destructive cu:text-destructive-foreground cu:hover:bg-destructive/90 cu:focus-visible:border-destructive/40 cu:focus-visible:ring-destructive/20',
         link: 'cu:text-primary cu:underline-offset-4 cu:hover:underline',
       },
       size: {
@@ -75,7 +75,7 @@ export function ComposeButton({
     <ButtonPrimitive
       {...buttonProps}
       className={cn(composeButtonVariants({ className, size, variant }))}
-      data-compose-theme={theme?.resolvedTheme}
+      data-compose-theme={theme?.resolvedTheme ?? 'dark'}
       data-compose-ui="button"
       data-slot="button"
       lang={lang ?? i18n?.locale ?? 'zh-CN'}

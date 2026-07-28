@@ -1,18 +1,38 @@
 # @compose-ui/asset-browser
 
-独立的双栏资源浏览器。左侧使用 `@compose-ui/components` Tree 懒加载目录，右侧显示目录网格、
-图片/SVG 安全预览、二进制元数据或按需加载的 Monaco 脚本编辑器。
+独立的双栏资源浏览器。左侧使用 `@compose-ui/components` Tree 懒加载目录，右侧始终显示当前目录网格。
+文件单击只更新选择；双击或 Enter 会通过 `onAssetOpen` 发出显式打开意图。图片/SVG 安全预览、二进制
+元数据或按需加载的 Monaco 脚本编辑器由可独立组合的 `ComposeAssetPreview` 提供，适合放入宿主的文档标签。
 
 ```tsx
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import '@compose-ui/asset-browser/styles.css'
 
-<ComposeAssetBrowser provider={provider} style={{ height: 560 }} />
+<ComposeAssetBrowser
+  provider={provider}
+  onAssetOpen={(entry) => openAssetDocument(entry)}
+  style={{ height: 560 }}
+/>
 ```
 
 Provider 是资源事实来源，资源写入使用不透明 `revision` 与 `expectedRevision` 做乐观并发。
-缺少方法或 capability 为 false 时动作会禁用。资源选择、分隔条和 dirty 状态只存活于组件实例，
-不会进入 ComposeDocument、History 或 Operation Log。
+缺少方法或 capability 为 false 时动作会禁用。`onBeforeAssetMutation` 可在 rename、move、delete 前
+异步允许或拒绝整批操作。资源选择、展开和分隔条只存活于组件实例，不会进入 ComposeDocument、History
+或 Operation Log。
+
+```tsx
+import { ComposeAssetPreview } from '@compose-ui/asset-browser'
+
+<ComposeAssetPreview
+  entry={entry}
+  provider={provider}
+  onDirtyChange={setDirty}
+  onSaved={refreshEntry}
+/>
+```
+
+预览卸载时会取消迟到读取、回收 Blob URL，并释放 Monaco editor/model 与 ResizeObserver。其 ref 暴露
+`save(): Promise<boolean>`，供宿主在关闭 dirty 文档前确认保存结果。
 
 Provider、Entry、错误和批处理类型只由轻量 `@compose-ui/assets` 定义；本包不转导资源协议。
 当 Provider 同时提供引用 capability、稳定 `assetKey` 和 `resolveAsset` 时，树和目录网格中的

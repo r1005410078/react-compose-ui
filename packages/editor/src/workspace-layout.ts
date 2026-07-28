@@ -27,7 +27,20 @@ export const WORKSPACE_COMPONENT_IDS = {
   transactionLog: 'transactionLog',
   command: 'command',
   assetBrowser: 'assetBrowser',
+  assetDocument: 'assetDocument',
 } as const
+
+const ASSET_DOCUMENT_PANEL_PREFIX = 'compose-asset-document:'
+
+/** 从 Provider 与稳定资源 key 派生当前 Editor 实例中的资源标签 ID。 @internal */
+export function createAssetDocumentPanelId(providerId: string, assetIdentity: string) {
+  return `${ASSET_DOCUMENT_PANEL_PREFIX}${encodeURIComponent(providerId)}:${encodeURIComponent(assetIdentity)}`
+}
+
+/** 判断 Dockview panel 是否为 Editor 临时资源文档。 @internal */
+export function isAssetDocumentPanelId(panelId: string) {
+  return panelId.startsWith(ASSET_DOCUMENT_PANEL_PREFIX)
+}
 
 export const WORKSPACE_SIZES = {
   scene: { initialSize: 280, minimumSize: 180 },

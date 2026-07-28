@@ -6,14 +6,18 @@
 祖先保留过滤和可选 Pointer 拖排。
 
 ```tsx
-import { ComposeButton } from '@compose-ui/components'
+import { ComposeButton, ComposeInput } from '@compose-ui/components'
 import '@compose-ui/components/styles.css'
 
+<label>
+  文件名
+  <ComposeInput defaultValue="untitled.ts" />
+</label>
 <ComposeButton variant="destructive">删除</ComposeButton>
 ```
 
-`ComposeButton` 会直接跟随 `ComposeThemeProvider` 的 Dark/Light 与 token override。样式仅输出带
-`cu:` 前缀的 utility，并且不注入 Preflight 或 Shadcn 的默认全局主题。
+`ComposeButton` 与 `ComposeInput` 会直接跟随 `ComposeThemeProvider` 的 Dark/Light 与 token override。
+样式仅输出带 `cu:` 前缀的 utility，并且不注入 Preflight 或 Shadcn 的默认全局主题。
 
 `ComposeColorPicker` 是受控的颜色 Pattern，基于包内 Shadcn CLI 生成的 Base UI Popover 源码组合色盘、
 色相滑条和透明选项。触发器与弹层均不显示 HEX/RGB/HSL 文本；选择只会提交小写 `#rrggbb` 或
@@ -60,6 +64,41 @@ const menu = useComposeContextMenu<string>()
 Hook 的 `openAt()` 会阻止浏览器原生菜单、保存关闭后的焦点目标并返回 `open`、`payload` 与
 `anchorPoint`。`ComposeContextMenuContent` 使用固定虚拟锚点和非模态的 Base UI Menu 后端处理视口
 避让、Escape、外部按压、roving focus 与子菜单。
+
+`ComposeDialog` 是面向工作区模态流程的共享弹框。它的 Portal 固定挂到 `document.body`：遮罩与交互
+边界覆盖完整浏览器窗口，因而不会被 Dockview 面板、Editor 根节点或任意 `overflow: hidden` 容器截断；
+内容本身仍由 `max-width`/`max-height` 控制，并不会被强制全屏。不可逆确认继续使用
+`ComposeConfirmDialog`，以保留 `alertdialog` 语义。
+
+```tsx
+import {
+  ComposeDialog,
+  ComposeDialogBackdrop,
+  ComposeDialogClose,
+  ComposeDialogContent,
+  ComposeDialogFooter,
+  ComposeDialogPortal,
+  ComposeDialogTitle,
+  ComposeDialogTrigger,
+  ComposeDialogViewport,
+} from '@compose-ui/components'
+
+<ComposeDialog>
+  <ComposeDialogTrigger>新建文件</ComposeDialogTrigger>
+  <ComposeDialogPortal>
+    <ComposeDialogBackdrop />
+    <ComposeDialogViewport>
+      <ComposeDialogContent>
+        <ComposeDialogTitle>新建文件</ComposeDialogTitle>
+        {/* 表单内容 */}
+        <ComposeDialogFooter>
+          <ComposeDialogClose>取消</ComposeDialogClose>
+        </ComposeDialogFooter>
+      </ComposeDialogContent>
+    </ComposeDialogViewport>
+  </ComposeDialogPortal>
+</ComposeDialog>
+```
 
 需要在菜单项末尾显示已生效的键位时，使用 `formatComposeKeybindings()` 和已有的
 `ComposeContextMenuShortcut`。格式化器按当前平台显示 macOS 符号键或其他平台的 `Ctrl+…`，多个

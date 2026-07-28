@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
+import type { MouseEvent } from 'react'
 import { ComposeTree, type ComposeTreeItemAdapter } from './index'
 
 interface Item {
@@ -104,5 +105,56 @@ describe('ComposeTree', () => {
     fireEvent.click(screen.getByRole('row', { name: /Child/ }), { shiftKey: true })
     expect(screen.getByRole('row', { name: /Root/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('row', { name: /Child/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('ComposeTree / 右键菜单 / 右键后的非主键 click 不会落入普通选择', () => {
+    const onSelectionChange = vi.fn()
+    const onItemContextMenu = vi.fn((event: MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+    })
+    render(
+      <ComposeTree
+        adapter={adapter}
+        aria-label="Files"
+        expandedIds={[]}
+        items={nodes}
+        selectedIds={[]}
+        onItemContextMenu={onItemContextMenu}
+        onSelectionChange={onSelectionChange}
+      />,
+    )
+
+    const row = screen.getByRole('row', { name: /Root/ })
+    fireEvent.contextMenu(row, { button: 2, clientX: 96, clientY: 72 })
+    fireEvent.click(row, { button: 2 })
+
+    expect(onItemContextMenu).toHaveBeenCalledTimes(1)
+    expect(onSelectionChange).not.toHaveBeenCalled()
+  })
+
+  it('ComposeTree / 右键菜单 / 右键后的主键兼容 click 不会落入普通选择', () => {
+    const onSelectionChange = vi.fn()
+    const onItemContextMenu = vi.fn((event: MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+    })
+    render(
+      <ComposeTree
+        adapter={adapter}
+        aria-label="Files"
+        expandedIds={[]}
+        items={nodes}
+        selectedIds={[]}
+        onItemContextMenu={onItemContextMenu}
+        onSelectionChange={onSelectionChange}
+      />,
+    )
+
+    const row = screen.getByRole('row', { name: /Root/ })
+    fireEvent.contextMenu(row, { button: 2, clientX: 96, clientY: 72 })
+    // 部分浏览器/宿主会在 contextmenu 后补发 button=0 的 click。
+    fireEvent.click(row, { button: 0 })
+
+    expect(onItemContextMenu).toHaveBeenCalledTimes(1)
+    expect(onSelectionChange).not.toHaveBeenCalled()
   })
 })

@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 import type {
+  ComposeAssetEntry,
   ComposeAssetReference,
   ComposeAssetOperationEvent,
   ComposeAssetProvider,
@@ -24,6 +25,14 @@ export type ComposeAssetCanvasDragEvent =
       readonly clientPoint: { readonly x: number; readonly y: number }
     }
   | { readonly type: 'cancel' }
+
+/** 在 Provider 写入前由宿主确认的资源批次。 @public */
+export interface ComposeAssetMutation {
+  /** 即将调用的 Provider 变更方法。 */
+  readonly type: 'rename' | 'move' | 'delete'
+  /** 此次操作影响的规范化资源条目。 */
+  readonly entries: readonly ComposeAssetEntry[]
+}
 
 /**
  * ComposeAssetBrowser 受控组件属性。
@@ -50,6 +59,12 @@ export interface ComposeAssetBrowserProps
   readonly onProviderChange?: (provider: ComposeAssetProvider) => void
   /** 完成资源写操作后供宿主审计。 */
   readonly onOperation?: (event: ComposeAssetOperationEvent) => void
+  /** 文件双击或键盘激活时发出；选择文件本身不会读取其内容。 */
+  readonly onAssetOpen?: (entry: ComposeAssetEntry) => void
+  /** rename、move 或 delete 前由宿主接受或拒绝整个资源批次。 */
+  readonly onBeforeAssetMutation?: (
+    mutation: ComposeAssetMutation,
+  ) => boolean | Promise<boolean>
   /** 兼容图片向 Canvas 拖入时发出的普通数据事件。 */
   readonly onCanvasDrag?: (event: ComposeAssetCanvasDragEvent) => void
   /** 是否显示浏览器本地目录入口。 */

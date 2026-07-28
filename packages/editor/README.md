@@ -98,8 +98,13 @@ navigate 通过唯一 `onTransaction` observer 发布；observer 的异常或 Pr
 
 - Scene Graph/Component Library、Component Inspector、Transaction Log/Command 使用可缩放、可折叠的
   Dockview Edge Groups。
-- Assets 与 Transaction Log、Command 共享底部 Edge Group，默认 inactive；`assets.browser`
-  组合默认 `ComposeAssetBrowser`，`slots.assetBrowser` 可完整覆盖且优先。
+- Assets 与 Transaction Log、Command 共享底部 Edge Group，默认 inactive；默认 `assets.browser`
+  只浏览目录树和当前目录网格。双击/Enter 打开文件时，Editor 在中央 Canvas Group 创建可关闭的资源文档
+  标签；同一 `provider.id + assetKey`（缺失时 entry.id）只会复用并激活一个标签，Canvas 本身始终保留。
+  `slots.assetBrowser` 可完整覆盖且优先，此时打开文档桥接由宿主负责。
+- 资源文档以 `renderer: 'always'` 保持 Monaco 草稿。关闭 dirty 脚本，以及对已打开 dirty 资源的 rename、
+  move、delete，都会要求保存、放弃或取消；资源写入只通知 `assets.browser.onOperation`，不进入
+  ComposeDocument、History 或 Operation Log。
 - 默认 ComposeAssetBrowser 的兼容图片拖拽会映射到当前 Editor 独有的 interaction controller。
   显式 `assets.resolver` 优先；省略时 Editor 会从支持稳定引用的 `assets.browser.provider`
   自动创建 resolver。自定义 `slots.assetBrowser` 由宿主自行桥接拖拽和 resolver。

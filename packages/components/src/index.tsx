@@ -14,6 +14,35 @@ export { ComposeColorPicker } from './color-picker'
 export type { ComposeColorPickerProps } from './color-picker'
 export { ComposeConfirmDialog } from './confirm-dialog'
 export type { ComposeConfirmDialogProps } from './confirm-dialog'
+export { ComposeInput } from './input'
+export type { ComposeInputProps } from './input'
+export {
+  ComposeDialog,
+  ComposeDialogBackdrop,
+  ComposeDialogClose,
+  ComposeDialogContent,
+  ComposeDialogDescription,
+  ComposeDialogFooter,
+  ComposeDialogHeader,
+  ComposeDialogPortal,
+  ComposeDialogTitle,
+  ComposeDialogTrigger,
+  ComposeDialogViewport,
+} from './dialog'
+export type {
+  ComposeDialogBackdropProps,
+  ComposeDialogCloseProps,
+  ComposeDialogContentProps,
+  ComposeDialogDescriptionProps,
+  ComposeDialogFooterProps,
+  ComposeDialogHeaderProps,
+  ComposeDialogOpenChange,
+  ComposeDialogPortalProps,
+  ComposeDialogProps,
+  ComposeDialogTitleProps,
+  ComposeDialogTriggerProps,
+  ComposeDialogViewportProps,
+} from './dialog'
 export {
   ComposeContextMenu,
   ComposeContextMenuCheckboxItem,

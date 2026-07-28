@@ -53,7 +53,7 @@ test('OpenSpec: editor-workspace-layout / 完整示例入口 / 根路径直接�
   expect(bottomBox!.y).toBeGreaterThan(canvasBox!.y)
 })
 
-test('OpenSpec: asset-browser / Editor 资源面板 / 浏览 SVG 并显式保存 Monaco 脚本', async ({ page }) => {
+test('OpenSpec: asset-browser / Editor 资源文档 / 双击在中央标签打开 SVG 与脚本', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
@@ -65,33 +65,38 @@ test('OpenSpec: asset-browser / Editor 资源面板 / 浏览 SVG 并显式保存
     animations: 'disabled',
     maxDiffPixelRatio: 0.01,
   })
-  await rootGrid.getByRole('gridcell', { name: /Images/ }).click()
-  await assets.getByRole('grid', { name: 'Images' })
-    .getByRole('gridcell', { name: /compose-grid.svg/ }).click()
-  await expect(assets.getByRole('img', { name: 'compose-grid.svg' })).toBeVisible()
-  await expect(assets).toHaveScreenshot('asset-browser-svg-preview.png', {
-    animations: 'disabled',
-    maxDiffPixelRatio: 0.01,
-  })
+  await rootGrid.getByRole('gridcell', { name: /Images/ }).dblclick()
+  const imagesGrid = assets.getByRole('grid', { name: 'Images' })
+  const svg = imagesGrid.getByRole('gridcell', { name: /compose-grid.svg/ })
+  await svg.click()
+  await expect(imagesGrid).toBeVisible()
+  await svg.dblclick()
+  const svgDocument = editor.locator('[data-workspace-panel="asset-document"][data-asset-entry-id="compose-logo"]')
+  await expect(svgDocument.getByRole('img', { name: 'compose-grid.svg' })).toBeVisible()
+  await svg.dblclick()
+  await expect(editor.locator('[data-workspace-panel="asset-document"][data-asset-entry-id="compose-logo"]')).toHaveCount(1)
 
-  await assets.getByRole('row', { name: /dashboard.ts/ }).click()
-  const monaco = assets.locator('.monaco-editor')
+  await assets.getByRole('treegrid').getByRole('row', { name: 'Demo Assets' }).click()
+  const dashboard = assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /dashboard.ts/ })
+  await dashboard.dblclick()
+  const scriptDocument = editor.locator('[data-workspace-panel="asset-document"][data-asset-entry-id="dashboard-script"]')
+  const monaco = scriptDocument.locator('.monaco-editor')
   await expect(monaco).toBeVisible()
-  await expect(assets).toHaveScreenshot('asset-browser-monaco-editor.png', {
-    animations: 'disabled',
-    caret: 'hide',
-    maxDiffPixelRatio: 0.01,
-  })
-  await monaco.click()
+  const monacoInput = scriptDocument.getByRole('textbox', { name: 'Editor content' })
+  await monacoInput.focus()
   await page.keyboard.press('Control+End')
   await page.keyboard.type('\n// saved from e2e')
-  await assets.getByRole('row', { name: /Images/ }).click()
-  await expect(assets.getByRole('alertdialog', { name: '文件尚未保存' })).toBeVisible()
-  await assets.getByRole('button', { name: '取消' }).click()
-  await monaco.click()
+  await expect(scriptDocument.locator('.view-lines')).toContainText('saved from e2e')
+  await editor.getByRole('button', { name: '关闭资源 dashboard.ts' }).click()
+  const dirtyDialog = page.getByRole('dialog', { name: '资源尚未保存' })
+  await expect(dirtyDialog).toBeVisible()
+  await dirtyDialog.getByRole('button', { name: '取消' }).click()
+  await monacoInput.focus()
   await page.keyboard.press('Control+S')
-  await assets.getByRole('row', { name: /Images/ }).click()
-  await expect(assets.getByRole('alertdialog', { name: '文件尚未保存' })).toHaveCount(0)
+  await editor.getByRole('button', { name: '关闭资源 dashboard.ts' }).click()
+  await expect(scriptDocument).toHaveCount(0)
+
 })
 
 test('OpenSpec: asset-browser / Editor 资源面板 / 右键菜单不被其他工作区遮挡', async ({ page }) => {
@@ -125,8 +130,9 @@ test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG �
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   const imagesRow = assets.getByRole('row', { name: /Images/ })
   await imagesRow.getByRole('button', { name: '展开' }).click()
-  const svgRow = assets.getByRole('row', { name: /compose-grid\.svg/ })
-  const imageRow = assets.getByRole('row', { name: /dashboard\.bmp/ })
+  const assetTree = assets.getByRole('treegrid')
+  const svgRow = assetTree.getByRole('row', { name: /compose-grid\.svg/ })
+  const imageRow = assetTree.getByRole('row', { name: /dashboard\.bmp/ })
   await svgRow.click()
   await imageRow.click({ modifiers: ['Shift'] })
   await expect(svgRow).toHaveAttribute('aria-selected', 'true')
@@ -921,19 +927,19 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const settingsButton = editor.getByRole('button', { name: '设置', exact: true })
   await settingsButton.click()
-  const settingsDialog = editor.getByRole('dialog', { name: '设置' })
+  const settingsDialog = page.getByRole('dialog', { name: '设置' })
   await expect(settingsDialog).toBeVisible()
   await expect(settingsDialog.getByRole('searchbox', { name: '搜索设置' })).toBeFocused()
   await expect(editor.locator('.compose-editor__workspace')).toHaveAttribute('inert', '')
-  await expect(editor).toHaveScreenshot('editor-preferences-dark.png', {
+  await expect(page).toHaveScreenshot('editor-preferences-dark.png', {
     animations: 'disabled',
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
 
-  await editor.getByRole('radio', { name: '浅色' }).click()
+  await settingsDialog.getByRole('radio', { name: '浅色' }).click()
   await expect(editor).toHaveAttribute('data-compose-theme', 'light')
-  await editor.getByRole('button', { name: '关闭设置' }).click()
+  await settingsDialog.getByRole('button', { name: '关闭设置' }).click()
   await expect(settingsButton).toBeFocused()
   await expect(editor).toHaveScreenshot('editor-workspace-light.png', {
     animations: 'disabled',
@@ -942,11 +948,11 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
   })
 
   await editor.getByRole('button', { name: '设置', exact: true }).click()
-  await editor.getByRole('button', { name: '语言', exact: true }).click()
-  await editor.getByRole('radio', { name: 'English' }).click()
+  await page.getByRole('button', { name: '语言', exact: true }).click()
+  await page.getByRole('radio', { name: 'English' }).click()
   await expect(editor).toHaveAttribute('lang', 'en-US')
-  await expect(editor.getByRole('button', { name: 'Canvas settings' })).toBeVisible()
-  await editor.getByRole('button', { name: 'Close settings' }).click()
+  await expect(editor.locator('button[aria-label="Canvas settings"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Close settings' }).click()
   await expect(
     editor.locator('[data-workspace-tab="compose-component-library"]'),
   ).toHaveAttribute('title', 'Component Library')
@@ -957,14 +963,14 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
   })
 
   await editor.getByRole('button', { name: 'Settings', exact: true }).click()
-  await editor.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
-  const temporaryPanBinding = editor.getByRole('button', {
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  const temporaryPanBinding = page.getByRole('button', {
     name: 'Change Temporary pan shortcut',
   })
   await temporaryPanBinding.click()
   await page.keyboard.press('p')
   await expect(temporaryPanBinding).toHaveText('P')
-  await editor.getByRole('button', { name: 'Close settings' }).click()
+  await page.getByRole('button', { name: 'Close settings' }).click()
 
   const surface = stage.getByTestId('stage-surface')
   const surfaceBox = await surface.boundingBox()
@@ -991,15 +997,15 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
     .toBeCloseTo(beforeCustomPan + 64, 0)
 
   await editor.getByRole('button', { name: 'Settings', exact: true }).click()
-  await expect(editor.getByRole('heading', { name: 'Appearance' })).toBeVisible()
-  await editor.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
-  await editor.getByRole('button', {
+  await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  await page.getByRole('button', {
     name: 'Restore default Temporary pan shortcut',
   }).click()
-  await expect(editor.getByRole('button', {
+  await expect(page.getByRole('button', {
     name: 'Change Temporary pan shortcut',
   })).toHaveText('Space')
-  await editor.getByRole('button', { name: 'Close settings' }).click()
+  await page.getByRole('button', { name: 'Close settings' }).click()
 
   const beforeRestoredPan = Number(await origin.getAttribute('x1'))
   await surface.click({
@@ -1026,7 +1032,7 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
   const overriddenEditor = page.getByRole('region', { name: 'Compose editor' })
   await overriddenEditor.getByRole('button', { name: '偏好设置' }).click()
   await expect(
-    overriddenEditor.getByRole('dialog', { name: '偏好设置' }),
+    page.getByRole('dialog', { name: '偏好设置' }),
   ).toBeVisible()
 })
 

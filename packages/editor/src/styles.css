@@ -235,6 +235,58 @@
   height: 100%;
 }
 
+.compose-editor__asset-document {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--compose-panel-bg);
+}
+
+.compose-editor__asset-document > .asset-browser__image-preview,
+.compose-editor__asset-document > .asset-browser__binary,
+.compose-editor__asset-document > .asset-browser__script,
+.compose-editor__asset-document > .asset-browser__status {
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.compose-editor__asset-document-tab {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.compose-editor__asset-document-tab > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-editor__asset-document-close {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  place-items: center;
+  cursor: pointer;
+  border: 0;
+  border-radius: 3px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: 1;
+}
+
+.compose-editor__asset-document-close:hover,
+.compose-editor__asset-document-close:focus-visible {
+  color: var(--compose-text-strong);
+  background: var(--compose-surface-hover);
+}
+
 .compose-editor__empty-inspector {
   @apply ct:grid ct:min-h-full ct:place-items-center ct:p-4 ct:text-xs;
   color: var(--compose-text-muted);
@@ -337,21 +389,13 @@
   clip: rect(0 0 0 0);
 }
 
-.compose-editor__settings-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgb(0 0 0 / 42%);
-}
-
 .compose-editor__settings-dialog {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  width: min(960px, 100%);
-  height: min(680px, 100%);
+  width: min(960px, calc(100vw - 48px));
+  height: min(680px, calc(100dvh - 48px));
+  max-width: none;
+  max-height: none;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -359,6 +403,7 @@
   border-radius: 8px;
   background: var(--compose-panel-bg);
   color: var(--compose-text);
+  padding: 0;
   box-shadow: 0 24px 72px var(--compose-shadow);
 }
 

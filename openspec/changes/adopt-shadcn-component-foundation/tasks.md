@@ -27,11 +27,14 @@
 ## 3. Verification
 
 - [ ] 3.1 Run strict OpenSpec validation, affected package tests/typecheck/build and Storybook tests. Strict
-  validation, affected-package tests/typecheck/build and Storybook build pass. `storybook:test` remains blocked by
-  this sandbox's `listen EPERM ::1` restriction; it needs a browser-capable environment.
+  validation, affected-package tests/typecheck/build and Storybook build pass. The prior ComposeButton contrast
+  failures are fixed; Button, Dialog and Input Storybook tests pass in Chromium. The full Storybook runner starts
+  successfully but did not exit after unrelated remaining Stories in this environment, so its global gate remains
+  pending.
 - [ ] 3.2 Run repository lint, typecheck, test, build, pack dry-run, E2E and `git diff --check`. Lint, full
-  typecheck, build, pack dry-run and `git diff --check` pass. Full test reaches only the same Storybook listener
-  restriction; E2E remains pending a browser-capable environment.
+  typecheck, build, pack dry-run and `git diff --check` pass. The non-Storybook package suite passes; the full
+  Storybook process remains pending its non-exit investigation. Targeted real-Chromium E2E flows pass, while the
+  full E2E suite remains pending.
 
 ## 4. Shared ContextMenu and integration
 
@@ -56,3 +59,67 @@
 - [x] 4.6 Refactor: add integration visual coverage, update package documentation and changesets, then record
   affected-package regression evidence. Evidence: ComposeContextMenu Storybook states build, consumer README files
   and release notes are updated; browser visual regression remains covered by the global browser gate in 3.1/3.2.
+
+## 5. Shared Dialog and Dockview modal migration
+
+- [x] 5.1 Red: add ComposeDialog contract tests for controlled/uncontrolled opening, full-viewport Portal mounting,
+  backdrop/Escape dismissal, focus restoration, Dark/Light token inheritance and keyboard navigation. Extend Editor
+  and Asset Browser tests to assert their modals use the shared primitive and are not clipped by Dockview. Red
+  command/result/reason: `bun run --cwd packages/components test -- compose-dialog.test.tsx` failed because the
+  feature module and its public exports did not yet exist.
+- [x] 5.2 Green: add source-owned ComposeDialog parts and Storybook states; retain ComposeConfirmDialog's alert
+  semantics while applying the same full-viewport Portal/token conventions. Evidence: ComposeDialog and
+  ComposeConfirmDialog tests, `@compose-ui/components` typecheck/build, Storybook build, and all three Dialog
+  Stories in Chromium pass.
+- [x] 5.3 Green: migrate SettingsDialog and all Asset Browser modal workflows (name, delete, dirty, conflict) to
+  shared components. Preserve shortcut-capture Escape behavior, asset operation callbacks, focus targets and
+  non-modal popovers. Evidence: Editor (38) and Asset Browser (21) tests pass; the real-Chromium settings flow
+  verifies viewport-wide modal coverage, inert Dockview content and dark/light plus locale transitions.
+- [x] 5.4 Refactor: remove duplicate dialog layers, focus loops and styles; update public README, architecture
+  checks, change notes and exact component/integration tests. Evidence: the components feature check requires the
+  co-located Dialog source, test and Story; obsolete Asset Browser layers and Editor's manual focus loop are gone.
+- [ ] 5.5 Run strict OpenSpec validation, affected package tests/typecheck/build, Storybook build/test, repository
+  lint/typecheck/test/build/pack dry-run/E2E and `git diff --check`. Strict validation, affected tests, lint,
+  full typecheck, full build, pack dry-run, targeted Chromium E2E and diff check pass. Changed Storybook Stories
+  pass in Chromium; the full Storybook process remains pending its non-exit investigation, and the full E2E suite
+  remains pending.
+- [x] 5.6 Refactor Dialog form visuals: add the shared Shadcn-adapted ComposeInput, standardize Dialog and
+  ConfirmDialog surfaces/actions, replace Asset Browser modal native controls, remove domain overrides, and verify
+  Dark/Light contrast plus Chromium screenshots. Evidence: component (11) and Asset Browser (21) tests, component/
+  Asset Browser/Editor builds, architecture check, and Button/Dialog/Input Storybook Chromium tests (11) pass;
+  the Asset Browser save-and-dirty Dialog E2E passes.
+
+## 6. Asset documents in the Canvas group
+
+- [x] 6.1 Red: add Asset Browser tests proving file selection remains a directory-grid operation, while double
+  click and Enter emit exactly one asset-open intent without reading file content or loading Monaco. Add preview-ref
+  tests for saving and cleanup, plus Editor tests for panel reuse and dirty-operation guards. Red command/result:
+  `bun run --cwd packages/asset-browser test -- compose-asset-browser.test.tsx` failed because file selection mounted
+  the inline `AssetPreview` and invoked `read`; `onAssetOpen` did not exist.
+- [x] 6.2 Green: add `onAssetOpen`, `onBeforeAssetMutation` and exported `ComposeAssetPreview`; move preview and
+  script lifecycle out of the Asset Browser's selection path while preserving safe image/SVG/binary rendering and
+  Provider operation behavior. Evidence: Asset Browser focused tests pass (16 tests), including image Blob URL cleanup,
+  binary metadata and the preview ref's non-script save result.
+- [x] 6.3 Green: add the Editor-scoped asset-document manager, Canvas-group Dockview panels with `renderer: 'always'`,
+  custom close affordance, dirty save/discard/cancel flow and sequential rename/move/delete protection for the
+  default Asset Browser only. Evidence: Editor focused tests pass (39 tests); Chromium verifies repeated SVG open
+  reuse, Monaco dirty close cancellation and explicit save before close.
+- [x] 6.4 Refactor: update localized chrome, README, stories, type fixtures and Chromium flows for directory-grid
+  browsing and central resource documents; retain no-preview-on-single-click and no-document-history invariants.
+  Evidence: `ComposeAssetPreview` Storybook states, asset/browser and editor README guidance, and the focused Chromium
+  flow all pass; stable Preview callbacks prevent Monaco from being disposed on its first dirty update.
+- [ ] 6.5 Verification: run strict validation, affected package/unit tests, Storybook build/test, lint, typecheck,
+  test, build, pack dry-run, Chromium E2E and `git diff --check`. Strict validation, focused Asset Browser/Editor
+  tests, full lint/typecheck/test/build, Storybook build/test, pack dry-run and diff check pass. The focused
+  resource-document Chromium flow passes; the full E2E suite remains pending three unrelated Stage regressions:
+  SVG Inspector snapshot drift, high-speed gesture atomicity and grouped Frame direct manipulation.
+
+## 7. Color channel alpha
+
+- [ ] 7.1 Red: add ComposeColorPicker tests for parsing eight/four-digit HEX, Alpha pointer/keyboard updates,
+  normalization at 100%, `allowAlpha`, checkerboard preview and Portal labels. Add Property Panel coverage for a
+  schema-validated eight-digit color commit. Record the failing commands and missing behavior.
+- [ ] 7.2 Green: model RGB and alpha independently in the shared Picker, add the localized accessible Alpha range
+  and transparency track, then wire the semantic Color renderer without altering node `opacity`.
+- [ ] 7.3 Refactor: update component/material documentation and Storybook Dark/Light alpha states; run affected
+  package tests/typechecks/builds and full repository quality gates.

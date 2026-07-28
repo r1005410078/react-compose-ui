@@ -10,11 +10,19 @@
 import './styles.css'
 
 export { ComposeAssetBrowser } from './asset-browser'
+export {
+  ComposeAssetPreview,
+} from './asset-preview'
 export type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragEvent,
   ComposeAssetCanvasDragItem,
+  ComposeAssetMutation,
 } from './asset-browser-types'
+export type {
+  ComposeAssetPreviewHandle,
+  ComposeAssetPreviewProps,
+} from './asset-preview'
 // 公共入口同时导出组件与 Provider factory，因此只针对该 factory 导出豁免 Fast Refresh。
 // eslint-disable-next-line react-refresh/only-export-components
 export {

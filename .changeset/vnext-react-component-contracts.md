@@ -16,4 +16,5 @@
 ---
 
 发布 vNext React API：第一方视觉组件统一为 Compose 命名、移除 legacy React facade，并以功能目录和
-Storybook 组件文档作为稳定维护边界。
+Storybook 组件文档作为稳定维护边界。资源浏览器的文件预览改为显式打开的 Canvas Dockview 文档标签，
+避免单击资源时读取内容或替换当前目录网格。

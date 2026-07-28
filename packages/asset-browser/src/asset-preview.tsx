@@ -1,8 +1,32 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import type { HTMLAttributes } from 'react'
+import {
+  ComposeButton,
+  ComposeDialog,
+  ComposeDialogBackdrop,
+  ComposeDialogContent,
+  ComposeDialogDescription,
+  ComposeDialogFooter,
+  ComposeDialogHeader,
+  ComposeDialogPortal,
+  ComposeDialogTitle,
+  ComposeDialogViewport,
+} from '@compose-ui/components'
+import {
+  useComposeI18nContext,
+  useComposeThemeContext,
+} from '@compose-ui/ui-context'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
-import type { AssetBrowserMessages } from './asset-browser-i18n'
 import { normalizeComposeAssetError } from '@compose-ui/assets'
 import { ScriptEditor } from './script-editor'
+import type { ComposeScriptEditorHandle } from './script-editor'
 import {
   extensionOf,
   formatAssetSize,
@@ -10,6 +34,7 @@ import {
   isScriptAsset,
 } from './asset-file-utils'
 import { useAssetRead } from './use-asset-read'
+import { getAssetBrowserMessages } from './asset-browser-i18n'
 
 function useBlobUrl(blob: Blob | undefined) {
   const url = useMemo(() => blob ? URL.createObjectURL(blob) : null, [blob])
@@ -19,42 +44,66 @@ function useBlobUrl(blob: Blob | undefined) {
   return url
 }
 
-interface AssetPreviewProps {
-  readonly entry: ComposeAssetEntry
-  readonly locale: string
-  readonly messages: AssetBrowserMessages
-  readonly provider: ComposeAssetProvider
-  readonly saveRequest?: number
-  readonly theme: 'dark' | 'light'
-  readonly onDirtyChange: (dirty: boolean) => void
-  readonly onSaved: (entry: ComposeAssetEntry) => void
+/** 资源预览的 imperative 保存接口。 @public */
+export interface ComposeAssetPreviewHandle {
+  /** 保存脚本草稿；非脚本资源始终成功且不会产生写入。 */
+  save(): Promise<boolean>
 }
 
-export function AssetPreview({
+/** 可独立置于资源文档中的安全资源预览属性。 @public */
+export interface ComposeAssetPreviewProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'onError'> {
+  readonly entry: ComposeAssetEntry
+  readonly provider: ComposeAssetProvider
+  /** 脚本 dirty 状态变更。 */
+  readonly onDirtyChange?: (dirty: boolean) => void
+  /** Provider 成功写入后返回最新条目。 */
+  readonly onSaved?: (entry: ComposeAssetEntry) => void
+}
+
+/**
+ * 渲染显式打开的图片、SVG、脚本或二进制资源。
+ *
+ * @remarks
+ * 组件的读取和 Monaco 生命周期只在它挂载时开始；资源浏览器选择文件不会挂载它。
+ *
+ * @public
+ */
+export const ComposeAssetPreview = forwardRef<
+  ComposeAssetPreviewHandle,
+  ComposeAssetPreviewProps
+>(function ComposeAssetPreview({
   entry,
-  locale,
-  messages,
-  onDirtyChange,
-  onSaved,
+  onDirtyChange = () => undefined,
+  onSaved = () => undefined,
   provider,
-  saveRequest,
-  theme,
-}: AssetPreviewProps) {
+  className,
+  ...htmlProps
+}, ref) {
+  const scriptRef = useRef<ComposeScriptEditorHandle>(null)
+  const i18n = useComposeI18nContext()
+  const theme = useComposeThemeContext()
+  const locale = i18n?.locale ?? 'zh-CN'
+  const messages = getAssetBrowserMessages(locale, i18n?.formatMessage)
   const [reloadKey, setReloadKey] = useState(0)
   const [forceContent, setForceContent] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
   const state = useAssetRead(provider, entry, reloadKey)
   const blobUrl = useBlobUrl(state.status === 'ready' ? state.data?.blob : undefined)
 
+  useImperativeHandle(ref, () => ({
+    save: async () => scriptRef.current?.save() ?? true,
+  }), [])
+
   if (state.status === 'loading' || state.status === 'idle') {
-    return <div className="asset-browser__status">{messages.loading}</div>
+    return <div {...htmlProps} className={['asset-browser__status', className].filter(Boolean).join(' ')}>{messages.loading}</div>
   }
   if (state.status === 'error' || !state.data) {
-    return <div className="asset-browser__status asset-browser__status--error">{messages.error(state.error ?? '')}</div>
+    return <div {...htmlProps} className={['asset-browser__status', 'asset-browser__status--error', className].filter(Boolean).join(' ')}>{messages.error(state.error ?? '')}</div>
   }
   if (isImageAsset(entry)) {
     return (
-      <div className="asset-browser__image-preview">
+      <div {...htmlProps} className={['asset-browser__image-preview', className].filter(Boolean).join(' ')}>
         {blobUrl ? <img alt={entry.name} src={blobUrl} /> : null}
       </div>
     )
@@ -63,13 +112,13 @@ export function AssetPreview({
     return (
       <>
         <ScriptEditor
+          ref={scriptRef}
           content={state.data.blob}
           entry={entry}
           loadingLabel={messages.loading}
           providerId={provider.id}
           revision={state.data.revision}
-          saveRequest={saveRequest}
-          theme={theme}
+          theme={theme?.resolvedTheme ?? 'dark'}
           onDirtyChange={onDirtyChange}
           onSave={async (content, expectedRevision, force = false) => {
             if (!provider.writeFile) return false
@@ -96,23 +145,28 @@ export function AssetPreview({
           }}
         />
         {conflict ? (
-          <div
-            aria-labelledby="asset-conflict-title"
-            aria-modal="true"
-            className="asset-browser__dialog-layer asset-browser__dialog-layer--conflict"
-            role="alertdialog"
+          <ComposeDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) setConflict(false)
+            }}
           >
-            <div className="asset-browser__dialog">
-              <h3 id="asset-conflict-title">{messages.conflictTitle}</h3>
-              <p>{messages.conflictQuestion}</p>
-              <div className="asset-browser__dialog-actions">
-                <button type="button" onClick={() => {
+            <ComposeDialogPortal>
+              <ComposeDialogBackdrop />
+              <ComposeDialogViewport>
+                <ComposeDialogContent>
+                  <ComposeDialogHeader>
+                    <ComposeDialogTitle>{messages.conflictTitle}</ComposeDialogTitle>
+                    <ComposeDialogDescription>{messages.conflictQuestion}</ComposeDialogDescription>
+                  </ComposeDialogHeader>
+                  <ComposeDialogFooter>
+                <ComposeButton type="button" variant="outline" onClick={() => {
                   setConflict(false)
                   setForceContent(null)
                   setReloadKey((value) => value + 1)
                   onDirtyChange(false)
-                }}>{messages.reload}</button>
-                <button type="button" onClick={() => {
+                }}>{messages.reload}</ComposeButton>
+                <ComposeButton type="button" variant="destructive" onClick={() => {
                   if (forceContent !== null) {
                     void provider.writeFile?.({
                       fileId: entry.id,
@@ -126,17 +180,19 @@ export function AssetPreview({
                       onDirtyChange(false)
                     })
                   }
-                }}>{messages.force}</button>
-                <button type="button" onClick={() => setConflict(false)}>{messages.cancel}</button>
-              </div>
-            </div>
-          </div>
+                }}>{messages.force}</ComposeButton>
+                <ComposeButton type="button" variant="outline" onClick={() => setConflict(false)}>{messages.cancel}</ComposeButton>
+                  </ComposeDialogFooter>
+                </ComposeDialogContent>
+              </ComposeDialogViewport>
+            </ComposeDialogPortal>
+          </ComposeDialog>
         ) : null}
       </>
     )
   }
   return (
-    <div className="asset-browser__binary">
+    <div {...htmlProps} className={['asset-browser__binary', className].filter(Boolean).join(' ')}>
       <strong>{entry.name}</strong>
       <p>{messages.binary}</p>
       <dl>
@@ -148,7 +204,7 @@ export function AssetPreview({
       {blobUrl ? <a download={entry.name} href={blobUrl}>{messages.download}</a> : null}
     </div>
   )
-}
+})
 
 interface AssetThumbnailProps {
   readonly entry: ComposeAssetEntry

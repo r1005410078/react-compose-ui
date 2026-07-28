@@ -1,8 +1,19 @@
 import {
+  ComposeButton,
+  ComposeConfirmDialog,
   ComposeContextMenu,
   ComposeContextMenuContent,
   ComposeContextMenuItem,
   ComposeContextMenuShortcut,
+  ComposeDialog,
+  ComposeDialogBackdrop,
+  ComposeDialogContent,
+  ComposeDialogFooter,
+  ComposeDialogHeader,
+  ComposeDialogPortal,
+  ComposeDialogTitle,
+  ComposeDialogViewport,
+  ComposeInput,
   ComposeTree,
   useComposeContextMenu,
 } from '@compose-ui/components'
@@ -37,7 +48,6 @@ import {
   normalizeComposeAssetError,
 } from '@compose-ui/assets'
 import {
-  AssetPreview,
   AssetThumbnail,
 } from '../asset-preview'
 import { getAssetBrowserMessages } from '../asset-browser-i18n'
@@ -115,28 +125,44 @@ interface NameDialogProps {
 
 function AssetNameDialog({ dialog, messages, onClose, onSubmit }: NameDialogProps) {
   const [value, setValue] = useState(dialog.initialValue)
+  const inputRef = useRef<HTMLInputElement>(null)
   const title = dialog.mode === 'folder'
     ? messages.newFolder
     : dialog.mode === 'file'
       ? messages.newFile
       : messages.rename
   return (
-    <div aria-labelledby="asset-name-dialog-title" aria-modal="true" className="asset-browser__dialog-layer" role="dialog">
-      <form className="asset-browser__dialog" onSubmit={(event) => {
-        event.preventDefault()
-        onSubmit(value)
-      }}>
-        <h3 id="asset-name-dialog-title">{title}</h3>
-        <label>
-          <span>{messages.name}</span>
-          <input autoFocus value={value} onChange={(event) => setValue(event.target.value)} />
-        </label>
-        <div className="asset-browser__dialog-actions">
-          <button type="submit">{dialog.mode === 'rename' ? messages.rename : messages.create}</button>
-          <button type="button" onClick={onClose}>{messages.cancel}</button>
-        </div>
-      </form>
-    </div>
+    <ComposeDialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <ComposeDialogPortal>
+        <ComposeDialogBackdrop />
+        <ComposeDialogViewport>
+          <ComposeDialogContent
+            initialFocus={inputRef}
+          >
+            <form className="cu:grid cu:gap-5" onSubmit={(event) => {
+              event.preventDefault()
+              onSubmit(value)
+            }}>
+              <ComposeDialogHeader>
+                <ComposeDialogTitle>{title}</ComposeDialogTitle>
+              </ComposeDialogHeader>
+              <label className="cu:grid cu:gap-2 cu:text-sm cu:font-medium cu:text-foreground">
+                <span>{messages.name}</span>
+                <ComposeInput
+                  ref={inputRef}
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                />
+              </label>
+              <ComposeDialogFooter>
+                <ComposeButton type="button" variant="outline" onClick={onClose}>{messages.cancel}</ComposeButton>
+                <ComposeButton type="submit">{dialog.mode === 'rename' ? messages.rename : messages.create}</ComposeButton>
+              </ComposeDialogFooter>
+            </form>
+          </ComposeDialogContent>
+        </ComposeDialogViewport>
+      </ComposeDialogPortal>
+    </ComposeDialog>
   )
 }
 
@@ -158,6 +184,8 @@ export function ComposeAssetBrowser({
   onExpandedChange,
   onProviderChange,
   onOperation,
+  onAssetOpen,
+  onBeforeAssetMutation,
   onCanvasDrag,
   allowLocalDirectory = true,
   emptyState,
@@ -187,10 +215,6 @@ export function ComposeAssetBrowser({
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const [nameDialog, setNameDialog] = useState<NameDialog>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [dirty, setDirty] = useState(false)
-  const [pendingSelection, setPendingSelection] = useState<readonly string[] | null>(null)
-  const [pendingDelete, setPendingDelete] = useState(false)
-  const [saveRequest, setSaveRequest] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
   const contextMenu = useComposeContextMenu<string>()
   const [draggedIds, setDraggedIds] = useState<readonly string[]>([])
@@ -199,6 +223,8 @@ export function ComposeAssetBrowser({
     active: boolean
     internalDrop: boolean
   } | null>(null)
+  /** 网格卡片右键后短时抑制兼容 click，避免误触选择。 */
+  const suppressGridClickUntilRef = useRef(0)
   const importRef = useRef<HTMLInputElement>(null)
   const splitterRef = useRef<{ startX: number; width: number; pointerId: number } | null>(null)
 
@@ -238,31 +264,22 @@ export function ComposeAssetBrowser({
   )
 
   const requestSelection = useCallback((next: readonly string[]) => {
-    if (dirty && next.some((id) => !selectedIds.includes(id))) {
-      setPendingSelection(next)
-      return
-    }
     setSelectedIds(next)
-  }, [dirty, selectedIds, setSelectedIds])
-
-  const handleDirtyChange = useCallback((nextDirty: boolean) => {
-    setDirty(nextDirty)
-    if (!nextDirty) {
-      setPendingSelection((current) => {
-        if (current) setSelectedIds(current)
-        return null
-      })
-      setPendingDelete((current) => {
-        if (current) setDeleteOpen(true)
-        return false
-      })
-    }
   }, [setSelectedIds])
 
-  const requestDelete = useCallback(() => {
-    if (dirty) setPendingDelete(true)
-    else setDeleteOpen(true)
-  }, [dirty])
+  const allowMutation = useCallback(async (
+    type: 'rename' | 'move' | 'delete',
+    entries: readonly ComposeAssetEntry[],
+  ) => {
+    if (!onBeforeAssetMutation) return true
+    try {
+      return await onBeforeAssetMutation({ type, entries }) !== false
+    } catch {
+      return false
+    }
+  }, [onBeforeAssetMutation])
+
+  const requestDelete = useCallback(() => setDeleteOpen(true), [])
 
   const report = useCallback((event: ComposeAssetOperationEvent) => {
     onOperation?.(event)
@@ -291,6 +308,7 @@ export function ComposeAssetBrowser({
         requestSelection([created.id])
         report(eventOf('create', [created.id]))
       } else if (nameDialog.mode === 'rename' && selectedEntry && provider.renameEntry) {
+        if (!await allowMutation('rename', [selectedEntry])) return
         const renamed = await provider.renameEntry({ entryId: selectedEntry.id, name })
         refreshFolders([selectedEntry.parentId ?? provider.root.id])
         requestSelection([renamed.id])
@@ -302,6 +320,7 @@ export function ComposeAssetBrowser({
       setNotice(messages.error(normalizeComposeAssetError(error).message))
     }
   }, [
+    allowMutation,
     folder,
     messages,
     nameDialog,
@@ -332,6 +351,10 @@ export function ComposeAssetBrowser({
   const deleteSelected = useCallback(async () => {
     if (!provider?.deleteEntry) return
     const entries = selectedEntries.filter((entry) => entry.parentId !== null)
+    if (!await allowMutation('delete', entries)) {
+      setDeleteOpen(false)
+      return
+    }
     const result = await executeAssetBatch(entries, (entry) => provider.deleteEntry?.({
       entryId: entry.id,
       recursive: entry.kind === 'folder',
@@ -340,8 +363,7 @@ export function ComposeAssetBrowser({
     requestSelection([folder?.id ?? provider.root.id])
     report(eventOf('delete', entries.map((entry) => entry.id), result.succeeded, result.failed))
     setDeleteOpen(false)
-    setDirty(false)
-  }, [folder?.id, provider, refreshFolders, report, requestSelection, selectedEntries])
+  }, [allowMutation, folder?.id, provider, refreshFolders, report, requestSelection, selectedEntries])
 
   const connectLocal = useCallback(async () => {
     try {
@@ -364,6 +386,7 @@ export function ComposeAssetBrowser({
     const entries = itemIds
       .map((id) => source.entriesById.get(id))
       .filter((entry): entry is ComposeAssetEntry => Boolean(entry))
+    if (!await allowMutation('move', entries)) return
     const result = await executeAssetBatch(entries, (entry) => provider.moveEntry?.({
       entryId: entry.id,
       parentId: targetId,
@@ -376,7 +399,7 @@ export function ComposeAssetBrowser({
     ))
     if (movedIds.length > 0) requestSelection(movedIds)
     report(eventOf('move', itemIds, result.succeeded, result.failed))
-  }, [provider, refreshFolders, report, requestSelection, source.entriesById])
+  }, [allowMutation, provider, refreshFolders, report, requestSelection, source.entriesById])
 
   const canMoveTo = useCallback((itemIds: readonly string[], parentId: string | null) => {
     if (!provider?.moveEntry || !provider.capabilities.move) return false
@@ -604,6 +627,8 @@ export function ComposeAssetBrowser({
                 if (entry.kind === 'folder') {
                   void source.loadFolder(entry.id)
                   if (!expandedIds.includes(entry.id)) setExpandedIds([...expandedIds, entry.id])
+                } else {
+                  onAssetOpen?.(entry)
                 }
               }}
               onExpandedChange={(ids) => {
@@ -630,6 +655,7 @@ export function ComposeAssetBrowser({
               }}
               onItemContextMenu={(event, entry) => {
                 event.preventDefault()
+                event.stopPropagation()
                 if (!selectedIds.includes(entry.id)) requestSelection([entry.id])
                 contextMenu.openAt(event, entry.id)
               }}
@@ -672,27 +698,7 @@ export function ComposeAssetBrowser({
           }}
         />
         <main className="asset-browser__content">
-          {selectedEntries.length > 1 ? (
-            <div className="asset-browser__selection-summary">
-              <strong>{messages.selected(selectedEntries.length)}</strong>
-              <ul>{selectedEntries.map((entry) => <li key={entry.id}>{entry.name}</li>)}</ul>
-            </div>
-          ) : selectedEntry?.kind === 'file' ? (
-            <AssetPreview
-              entry={selectedEntry}
-              locale={resolvedLocale}
-              messages={messages}
-              provider={provider}
-              saveRequest={saveRequest}
-              theme={theme?.resolvedTheme ?? 'dark'}
-              onDirtyChange={handleDirtyChange}
-              onSaved={(entry) => {
-                report(eventOf('write', [entry.id]))
-                refreshFolders([entry.parentId ?? provider.root.id])
-              }}
-            />
-          ) : (
-            <div aria-label={folder?.name} className="asset-browser__grid" role="grid">
+          <div aria-label={folder?.name} className="asset-browser__grid" role="grid">
               {source.loading.has(folder?.id ?? '') ? (
                 <div role="row">
                   <div className="asset-browser__status" role="gridcell">{messages.loading}</div>
@@ -712,6 +718,10 @@ export function ComposeAssetBrowser({
                     role="gridcell"
                     type="button"
                     onClick={(event) => {
+                      // 右键菜单会在少数浏览器/嵌入宿主中伴随兼容 click（含 button=0）。
+                      // 资源卡片普通选择仅接受主键，并在右键窗口内忽略补发 click。
+                      if (event.button !== 0) return
+                      if (performance.now() < suppressGridClickUntilRef.current) return
                       if (event.metaKey || event.ctrlKey) {
                         requestSelection(selectedIds.includes(entry.id)
                           ? selectedIds.filter((id) => id !== entry.id)
@@ -725,6 +735,8 @@ export function ComposeAssetBrowser({
                         void source.loadFolder(entry.id)
                         requestSelection([entry.id])
                         if (!expandedIds.includes(entry.id)) setExpandedIds([...expandedIds, entry.id])
+                      } else {
+                        onAssetOpen?.(entry)
                       }
                     }}
                     onDragStart={(event) => startNativeDrag(event, entry)}
@@ -740,6 +752,8 @@ export function ComposeAssetBrowser({
                   }}
                   onContextMenu={(event) => {
                     event.preventDefault()
+                    event.stopPropagation()
+                    suppressGridClickUntilRef.current = performance.now() + 400
                     if (!selectedIds.includes(entry.id)) requestSelection([entry.id])
                     contextMenu.openAt(event, entry.id)
                   }}
@@ -749,8 +763,7 @@ export function ComposeAssetBrowser({
                 </button>
                 </div>
               ))}
-            </div>
-          )}
+          </div>
         </main>
       </div>
       {nameDialog ? (
@@ -762,32 +775,16 @@ export function ComposeAssetBrowser({
         />
       ) : null}
       {deleteOpen ? (
-        <div aria-labelledby="asset-delete-title" aria-modal="true" className="asset-browser__dialog-layer" role="alertdialog">
-          <div className="asset-browser__dialog">
-            <h3 id="asset-delete-title">{messages.confirmDelete}</h3>
-            <p>{messages.deleteQuestion(selectedEntries.length)}</p>
-            <div className="asset-browser__dialog-actions">
-              <button type="button" onClick={() => void deleteSelected()}>{messages.delete}</button>
-              <button type="button" onClick={() => setDeleteOpen(false)}>{messages.cancel}</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {pendingSelection || pendingDelete ? (
-        <div aria-labelledby="asset-dirty-title" aria-modal="true" className="asset-browser__dialog-layer" role="alertdialog">
-          <div className="asset-browser__dialog">
-            <h3 id="asset-dirty-title">{messages.dirtyTitle}</h3>
-            <p>{messages.dirtyQuestion(selectedEntry?.name ?? '')}</p>
-            <div className="asset-browser__dialog-actions">
-              <button type="button" onClick={() => setSaveRequest((value) => value + 1)}>{messages.save}</button>
-              <button type="button" onClick={() => handleDirtyChange(false)}>{messages.discard}</button>
-              <button type="button" onClick={() => {
-                setPendingSelection(null)
-                setPendingDelete(false)
-              }}>{messages.cancel}</button>
-            </div>
-          </div>
-        </div>
+        <ComposeConfirmDialog
+          cancelLabel={messages.cancel}
+          confirmLabel={messages.delete}
+          description={messages.deleteQuestion(selectedEntries.length)}
+          destructive
+          open={deleteOpen}
+          title={messages.confirmDelete}
+          onConfirm={() => void deleteSelected()}
+          onOpenChange={setDeleteOpen}
+        />
       ) : null}
       <ComposeContextMenu {...contextMenu.rootProps}>
         <ComposeContextMenuContent aria-label={messages.assets}>

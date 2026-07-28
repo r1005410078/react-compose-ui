@@ -1,3 +1,12 @@
+import {
+  ComposeDialog,
+  ComposeDialogBackdrop,
+  ComposeDialogClose,
+  ComposeDialogContent,
+  ComposeDialogPortal,
+  ComposeDialogTitle,
+  ComposeDialogViewport,
+} from '@compose-ui/components'
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
@@ -46,15 +55,6 @@ function bindingFromEvent(
 
 type SettingsCategory = 'appearance' | 'language' | 'shortcuts'
 
-const focusableSelector = [
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[href]',
-  '[tabindex]:not([tabindex="-1"])',
-].join(',')
-
 export function SettingsDialog({
   id,
   preferences,
@@ -65,7 +65,6 @@ export function SettingsDialog({
   const locale = preferences.locale
   const t = getEditorMessages(locale, i18n?.formatMessage)
   const searchRef = useRef<HTMLInputElement>(null)
-  const dialogRef = useRef<HTMLElement>(null)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<SettingsCategory>('appearance')
   const [capturing, setCapturing] = useState<ComposeEditorShortcutAction | null>(null)
@@ -126,51 +125,49 @@ export function SettingsDialog({
   }
 
   return (
-    <div
-      className="compose-editor__settings-backdrop"
-      data-testid="settings-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
+    <ComposeDialog
+      open
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) return
+        if (capturing) {
+          setCapturing(null)
+          setConflict(null)
+          return
+        }
+        onClose()
       }}
     >
-      <section
-        aria-labelledby={`${id}-title`}
-        aria-modal="true"
-        className="compose-editor__settings-dialog"
-        id={id}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
+      <ComposeDialogPortal>
+        <ComposeDialogBackdrop
+          data-testid="settings-backdrop"
+          onMouseDown={(event) => {
             event.preventDefault()
-            event.stopPropagation()
-            if (capturing) {
-              setCapturing(null)
-              setConflict(null)
-            }
-            else onClose()
-            return
-          }
-          if (event.key !== 'Tab') return
-          const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
-            focusableSelector,
-          ) ?? [])].filter((element) => !element.hidden)
-          if (focusable.length === 0) return
-          const first = focusable[0]
-          const last = focusable[focusable.length - 1]
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault()
-            last?.focus()
-          }
-          else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault()
-            first?.focus()
-          }
-        }}
-        ref={dialogRef}
-        role="dialog"
-      >
+            if (!capturing) onClose()
+          }}
+        />
+        <ComposeDialogViewport>
+          <ComposeDialogContent
+            aria-labelledby={`${id}-title`}
+            className="compose-editor__settings-dialog"
+            id={id}
+            initialFocus={searchRef}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+                if (capturing) {
+                  setCapturing(null)
+                  setConflict(null)
+                  return
+                }
+                onClose()
+                return
+              }
+            }}
+          >
         <header className="compose-editor__settings-header">
-          <h2 id={`${id}-title`}>{t.settings}</h2>
-          <button aria-label={t.close} onClick={onClose} type="button">×</button>
+          <ComposeDialogTitle id={`${id}-title`}>{t.settings}</ComposeDialogTitle>
+          <ComposeDialogClose aria-label={t.close}>×</ComposeDialogClose>
         </header>
         <div className="compose-editor__settings-search">
           <input
@@ -362,7 +359,9 @@ export function SettingsDialog({
             ) : null}
           </main>
         </div>
-      </section>
-    </div>
+          </ComposeDialogContent>
+        </ComposeDialogViewport>
+      </ComposeDialogPortal>
+    </ComposeDialog>
   )
 }

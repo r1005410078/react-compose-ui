@@ -17,7 +17,12 @@
   --color-popover: var(--compose-surface-active, #20242b);
   --color-popover-foreground: var(--compose-text, #c5ccd6);
   --color-primary: var(--compose-accent, #3687ff);
-  --color-primary-foreground: var(--compose-text-strong, #f4f7fb);
+  /*
+   * 当前 Compose 主题只提供 accent 本身，不包含独立 foreground token。
+   * 深色工作区的亮蓝色需要深色文字，而 Light 的较深蓝色需要白色文字；将该派生值限定在
+   * 带 data-compose-theme 的共享 Primitive 上，既保持独立使用安全，也避免向宿主注入全局主题。
+   */
+  --color-primary-foreground: var(--compose-primary-foreground, #101828);
   --color-secondary: var(--compose-surface-control, #1d2025);
   --color-secondary-foreground: var(--compose-text, #c5ccd6);
   --color-muted: var(--compose-surface-sunken, #15181d);
@@ -25,8 +30,18 @@
   --color-accent: var(--compose-surface-hover, #292e36);
   --color-accent-foreground: var(--compose-text-strong, #f4f7fb);
   --color-destructive: var(--compose-danger, #ff9c9c);
-  --color-destructive-foreground: var(--compose-text-strong, #f4f7fb);
+  --color-destructive-foreground: var(--compose-destructive-foreground, #101828);
   --color-border: var(--compose-border, #303640);
   --color-input: var(--compose-border-strong, #414853);
   --color-ring: var(--compose-focus, #4d9cff);
+}
+
+[data-compose-theme='dark'] {
+  --compose-primary-foreground: #101828;
+  --compose-destructive-foreground: #101828;
+}
+
+[data-compose-theme='light'] {
+  --compose-primary-foreground: #fff;
+  --compose-destructive-foreground: #fff;
 }

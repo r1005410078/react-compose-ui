@@ -4,7 +4,11 @@ import type {
 } from 'dockview-react'
 import type { PointerEventHandler } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
-import { WORKSPACE_GROUP_IDS, WORKSPACE_PANEL_IDS } from './workspace-layout'
+import {
+  isAssetDocumentPanelId,
+  WORKSPACE_GROUP_IDS,
+  WORKSPACE_PANEL_IDS,
+} from './workspace-layout'
 import { useWorkspaceContent } from './workspace-context'
 import { getEditorMessages } from './editor-i18n'
 
@@ -83,10 +87,12 @@ export function WorkspaceHeaderActions(props: IDockviewHeaderActionsProps) {
 
 export function WorkspaceTab(props: WorkspaceTabProps) {
   const i18n = useComposeI18nContext()
-  const messages = getEditorMessages(
+  const editorMessages = getEditorMessages(
     i18n?.locale ?? 'zh-CN',
     i18n?.formatMessage,
-  ).workspace
+  )
+  const messages = editorMessages.workspace
+  const { requestAssetDocumentClose } = useWorkspaceContent()
   const titles: Record<string, string> = {
     [WORKSPACE_PANEL_IDS.scene]: messages.sceneGraph,
     [WORKSPACE_PANEL_IDS.componentLibrary]: messages.componentLibrary,
@@ -99,6 +105,7 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
     'compose-history-panel': messages.history,
   }
   const title = titles[props.api.id] ?? props.api.title
+  const isAssetDocument = isAssetDocumentPanelId(props.api.id)
   const icon =
     props.api.id === WORKSPACE_PANEL_IDS.scene ? (
       <SceneGraphIcon />
@@ -120,6 +127,33 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
       >
         {icon}
         <span className="compose-editor__visually-hidden">{title}</span>
+      </div>
+    )
+  }
+
+  if (isAssetDocument) {
+    return (
+      <div
+        className="compose-editor__text-tab compose-editor__asset-document-tab"
+        data-workspace-tab={props.api.id}
+        onPointerDown={props.onPointerDown}
+        onPointerLeave={props.onPointerLeave}
+        onPointerUp={props.onPointerUp}
+        title={title}
+      >
+        <span>{title}</span>
+        <button
+          aria-label={editorMessages.closeAsset(title)}
+          className="compose-editor__asset-document-close"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            requestAssetDocumentClose(props.api.id)
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          ×
+        </button>
       </div>
     )
   }

@@ -59,3 +59,57 @@ Compose UI 以 `ComposeUIProvider` 的 token 作为唯一主题来源，而 Shad
   右键事件完成领域状态同步后调用 Hook。Scene Tree 的 Ctrl/Meta 特例继续在调用 Hook 前退出。
 - Property Panel 的三点 overflow 是普通点击菜单，不迁移；右键路径从其手写 `all` 模式拆出为共享
   ContextMenu。删除只被旧 ContextMenu 使用的 Portal 坐标、键盘循环、外部点击逻辑和专有样式。
+
+## Dialog extension
+
+- `ComposeDialog` 使用 Base UI Dialog 的 source primitive，公开 Root、Trigger、Portal、Backdrop、
+  Viewport、Content、Header、Footer、Title、Description 与 Close 等 Compose 命名部件。Root 同时支持
+  controlled 与 uncontrolled open；原始 Base UI 符号不成为公共 API。
+- Portal 默认挂到 `document.body`，Backdrop 与 Viewport 固定覆盖浏览器 visual viewport。这里的“全屏”
+  指遮罩和交互边界覆盖完整宿主窗口，内容仍按其自身 max-width/max-height 居中显示，不能被某个
+  Dockview panel 的 overflow 或 z-index 裁剪。首版不暴露限定 Portal container 的公共 prop。
+- Portal 内容与 ContextMenu 一样同步 `data-compose-theme`、`lang` 和 token style；Base UI 负责 modal
+  focus trap、Escape、遮罩按压和焦点恢复。所有内建 Dialog 保持当前可访问名称、关闭语义和业务回调。
+- `ComposeConfirmDialog` 继续使用 AlertDialog 以保留高风险确认的 `alertdialog` 语义，但共享同一全视口
+  Portal 与 Compose token 视觉约定；它已经属于 components，不需要被领域包重新实现。
+- Editor Settings 删除手写 backdrop/focus-loop，改由 ComposeDialog 处理；快捷键 capture 中 Escape 仍仅
+  取消 capture，通过 Content 的 keydown 在 Dialog 收到关闭请求前拦截。打开时 Dockview 继续 inert，关闭后
+  保留现有焦点恢复与布局实例。
+- Asset Browser 的名称表单、删除确认、dirty 选择和 Monaco revision 冲突都由 ComposeDialog 或既有
+  ComposeConfirmDialog 承载。Canvas settings、Property Panel variable binding picker 都是与 trigger 对齐的
+  非模态 popover，不得为了复用而改为全屏 Dialog。
+- `ComposeInput` 采用 Shadcn Input source 样式，并像 `ComposeButton` 一样在根节点应用 Theme token。
+  Dialog 表单使用统一的 `Header → label/Input → Footer` 层级；Asset Browser 不再用领域 CSS 重写 Dialog
+  的背景、边框、padding 或按钮。`ComposeButton` 的 primary/destructive 前景色按解析主题派生：Dark 的
+  亮色 accent/danger 使用深色文字，Light 的深色 accent/danger 使用白色文字，以满足文字对比度。
+
+## Asset document workspace extension
+
+- `ComposeAssetBrowser` 只维护资源目录的选择、展开、目录网格与 Provider 操作。文件选择不再触发
+  `read()`、Blob URL 或 Monaco 动态加载；文件双击和 Tree Enter 通过 `onAssetOpen(entry)` 把打开意图交给
+  宿主，目录激活继续只改变当前目录。
+- `ComposeAssetPreview` 是独立的预览 surface，保留资源读取取消、Blob URL 回收、SVG 安全预览、Monaco
+  model/ResizeObserver 清理、保存与 revision 冲突。其 ref 的 `save()` 返回布尔结果，使 Editor 能在关闭或
+  操作前确认保存是否真的成功；预览本身不拥有 Dockview 状态。
+- 默认 Editor 以 `provider.id + assetKey（缺失时 entry.id）` 派生稳定资源 document panel ID。动态 panel
+  加入已锁定的 Canvas Group，`renderer: 'always'` 确保切换标签不销毁 Monaco 草稿；重复打开仅激活既有
+  panel。Canvas panel 没有关闭入口，资源 panel 使用专用关闭按钮。
+- Editor 将每个资源文档的 entry、dirty 状态和 `save()` ref 保存在实例会话中。关闭、rename、move、delete
+  通过同一串行决策器处理 dirty 文档：保存成功或放弃后才关闭并允许 Provider 操作；取消、保存失败或冲突则
+  拒绝整次 Provider 操作。外部 Provider 删除不在可预拦截范围内，读取/保存错误仍由 preview 显示。
+- 自定义 `slots.assetBrowser` 是完整宿主替换，不获得自动 Dockview 桥接。默认浏览器仍转发宿主的
+  `onAssetOpen`/`onBeforeAssetMutation`，并在其许可后执行 Editor 的资源文档会话逻辑。
+
+## Color alpha extension
+
+- `ComposeColorPicker` 的编辑状态为 HSV（RGB 三通道）加 0–255 alpha。它接受 `#rgb`、`#rgba`、
+  `#rrggbb`、`#rrggbbaa` 和 legacy `transparent`；其他 CSS 色仍只作为可预览回退值，直到用户主动编辑。
+- 色盘和色相只修改 RGB，Alpha range 只修改 alpha。range 的步长为 1%，Shift+方向键为 10%，并以本地化的
+  `aria-label`/`aria-valuetext` 暴露百分比。触发器、Alpha 轨道和滑块下方颜色预览均使用棋盘格，避免
+  透明色在 Dark/Light 下看起来像实色。
+- 用户主动编辑时，alpha 为 255 输出小写 `#rrggbb` 以保持既有文档和快照稳定；alpha 小于 255 输出
+  小写 `#rrggbbaa` 以保留 RGB 信息。现有“透明”快捷操作继续输出 `transparent`，因此不把已有文档值
+  迁移为八位 HEX。
+- `allowAlpha` 作为 `ComposeColorPicker` 的可选能力开关，默认开启；`allowTransparent` 仍只控制完全透明
+  快捷操作。Property Panel 的 `Color` renderer 默认保留两者。Color channel alpha 与节点 `opacity` 是独立
+  的 CSS 语义，渲染时自然叠乘；不修改 ComposeDocument、命令或材料 schema。

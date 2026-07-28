@@ -97,7 +97,9 @@ import '@compose-ui/components/styles.css'
 
 轻量 `@compose-ui/assets` 定义 `ComposeAssetProvider`、稳定资源引用和运行时 resolver；
 `@compose-ui/asset-browser` 连接任意资源事实来源，提供目录树、
-文件夹缩略图网格、SVG/常见图片安全预览、二进制信息和按需加载的 Monaco 脚本编辑。写入使用
+文件夹缩略图网格，并在文件双击/Enter 后由 `ComposeAssetPreview` 提供 SVG/常见图片安全预览、二进制信息
+和按需加载的 Monaco 脚本编辑。默认 `ComposeEditor` 会把这些显式打开的资源放进中央 Canvas Group 的可关闭
+文档标签；单击文件不会读取内容或替换目录网格。写入使用
 `expectedRevision` 乐观并发；资源操作不进入 ComposeDocument、History 或 Operation Log。
 
 ```tsx

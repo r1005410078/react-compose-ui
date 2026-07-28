@@ -156,6 +156,8 @@ export function Tree<T>(props: TreeProps<T>) {
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoScrollRef = useRef<number | null>(null)
   const suppressClickRef = useRef(false)
+  /** 右键后短时抑制兼容 click；部分浏览器/宿主会在 contextmenu 后补发 button=0 的 click。 */
+  const suppressClickUntilRef = useRef(0)
 
   // TanStack Virtual 暴露命令式实例，不适合由 React Compiler 自动记忆化。
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -578,6 +580,10 @@ export function Tree<T>(props: TreeProps<T>) {
                   style={{ ...itemAttributes.style, touchAction: 'none' }}
                   tabIndex={context.focused || (!focusedId && virtualRow.index === 0) ? 0 : -1}
                   onClick={(event) => {
+                    // 浏览器或宿主测试工具可能在右键后补发 compatibility click。Tree 的选择只能由
+                    // 主键点击或键盘触发，避免右键菜单意图落入普通选择/激活路径。
+                    if (event.button !== 0) return
+                    if (performance.now() < suppressClickUntilRef.current) return
                     itemAttributes.onClick?.(event)
                     if (event.defaultPrevented) return
                     if (suppressClickRef.current) {
@@ -589,6 +595,13 @@ export function Tree<T>(props: TreeProps<T>) {
                   onContextMenu={(event) => {
                     itemAttributes.onContextMenu?.(event)
                     if (!event.defaultPrevented) onItemContextMenu?.(event, row.item)
+                    // 领域层接管右键菜单时，不能再冒泡给宿主的普通区域处理器；未接管时仍保留
+                    // 原生 contextmenu 行为，保持 Tree 作为通用组件的默认语义。
+                    if (event.defaultPrevented) {
+                      event.stopPropagation()
+                      // 覆盖 contextmenu 之后可能到达的兼容 click（含 button=0）。
+                      suppressClickUntilRef.current = performance.now() + 400
+                    }
                   }}
                   onDoubleClick={(event) => {
                     itemAttributes.onDoubleClick?.(event)
