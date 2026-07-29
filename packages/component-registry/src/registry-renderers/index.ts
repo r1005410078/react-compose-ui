@@ -4,3 +4,7 @@ export {
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
 } from './compose-registry-renderers'
+export {
+  composeEntitySceneStyle,
+  composeEntityVisualStyle,
+} from './entity-scene-style'

@@ -1,53 +1,18 @@
-import { ComposeRegistryEntityRenderer } from '@compose-ui/component-registry'
+import {
+  ComposeRegistryEntityRenderer,
+  composeEntitySceneStyle,
+} from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
-  getComposeClip,
   getComposeHierarchy,
   getComposeLock,
-  getComposeTransform,
   getComposeVisibility,
-  resolveComposeAppearance,
   type ComposeDocument,
   type ComposeEntity,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { StageViewport } from '@compose-ui/stage-engine'
-import type {
-  CSSProperties,
-  PointerEvent as ReactPointerEvent,
-} from 'react'
-
-function entityStyle(entity: ComposeEntity): CSSProperties {
-  const transform = getComposeTransform(entity)
-  const visual = resolveComposeAppearance(entity.components.Appearance)
-  const hierarchy = getComposeHierarchy(entity)
-  const clip = getComposeClip(entity)
-  const shadows: string[] = []
-  if (visual.borderWidth > 0) {
-    shadows.push(`inset 0 0 0 ${visual.borderWidth}px ${visual.borderColor}`)
-  }
-  if (visual.shadow) {
-    shadows.push(
-      `${visual.shadow.offsetX}px ${visual.shadow.offsetY}px ${visual.shadow.blur}px `
-      + `${visual.shadow.spread}px ${visual.shadow.color}`,
-    )
-  }
-  return {
-    left: transform.position.x,
-    top: transform.position.y,
-    width: transform.size.width,
-    height: transform.size.height,
-    transform: `rotate(${transform.rotation}deg)`,
-    transformOrigin: 'center',
-    backgroundColor: visual.backgroundColor,
-    borderRadius: visual.borderRadius,
-    opacity: visual.opacity,
-    boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
-    overflow: hierarchy
-      ? (clip?.enabled ? 'hidden' : 'visible')
-      : 'hidden',
-  }
-}
+import type { PointerEvent as ReactPointerEvent } from 'react'
 
 interface StageSceneLayerProps {
   readonly document: ComposeDocument
@@ -81,7 +46,7 @@ export function StageSceneLayer({
         data-entity-id={entity.id}
         data-testid={hierarchy ? 'stage-container' : `stage-entity-${entity.id}`}
         key={entity.id}
-        style={entityStyle(entity)}
+        style={composeEntitySceneStyle(entity)}
         onPointerDown={(event) => onEntityPointerDown(entity, event)}
       >
         <ComposeRegistryEntityRenderer

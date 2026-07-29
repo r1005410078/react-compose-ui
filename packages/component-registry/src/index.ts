@@ -9,6 +9,8 @@ export {
   ComposeRegistryComponentInspector,
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
+  composeEntitySceneStyle,
+  composeEntityVisualStyle,
 } from './registry-renderers'
 export {
   ComposeEntityRegistryError,

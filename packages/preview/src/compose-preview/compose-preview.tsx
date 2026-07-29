@@ -4,15 +4,17 @@
  * @packageDocumentation
  */
 
-import { ComposeRegistryEntityRenderer } from '@compose-ui/component-registry'
+import {
+  ComposeRegistryEntityRenderer,
+  composeEntitySceneStyle,
+  composeEntityVisualStyle,
+} from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
   COMPOSE_UI_CORE_PACKAGE,
-  getComposeClip,
   getComposeHierarchy,
   getComposeTransform,
   getComposeVisibility,
-  resolveComposeAppearance,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type {
@@ -46,42 +48,10 @@ export type ComposePreviewTarget =
   | { readonly kind: 'document' }
   | { readonly kind: 'container'; readonly entityId: string }
 
-function visualStyle(entity: ComposeEntity): CSSProperties {
-  const visual = resolveComposeAppearance(entity)
-  const hierarchy = getComposeHierarchy(entity)
-  const clip = getComposeClip(entity)
-  const shadows: string[] = []
-  if (visual.borderWidth > 0) {
-    shadows.push(`inset 0 0 0 ${visual.borderWidth}px ${visual.borderColor}`)
-  }
-  if (visual.shadow) {
-    shadows.push(
-      `${visual.shadow.offsetX}px ${visual.shadow.offsetY}px ${visual.shadow.blur}px `
-      + `${visual.shadow.spread}px ${visual.shadow.color}`,
-    )
-  }
-  return {
-    backgroundColor: visual.backgroundColor,
-    borderRadius: visual.borderRadius,
-    opacity: visual.opacity,
-    boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
-    overflow: hierarchy
-      ? (clip?.enabled ? 'hidden' : 'visible')
-      : 'hidden',
-  }
-}
-
 function entityStyle(entity: ComposeEntity): CSSProperties {
-  const transform = getComposeTransform(entity)
   return {
-    ...visualStyle(entity),
+    ...composeEntitySceneStyle(entity),
     position: 'absolute' as const,
-    left: transform.position.x,
-    top: transform.position.y,
-    width: transform.size.width,
-    height: transform.size.height,
-    transform: `rotate(${transform.rotation}deg)`,
-    transformOrigin: 'center',
   }
 }
 
@@ -163,7 +133,7 @@ export function ComposePreview({
           <div
             data-testid="compose-preview-container"
             style={{
-              ...visualStyle(entity),
+              ...composeEntityVisualStyle(entity),
               position: 'relative',
               width: transform.size.width,
               height: transform.size.height,
