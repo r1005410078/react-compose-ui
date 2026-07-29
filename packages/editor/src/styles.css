@@ -78,10 +78,6 @@
   overflow: hidden;
 }
 
-.compose-editor__history-panel > .history-panel__header {
-  display: none;
-}
-
 .compose-editor__canvas-panel {
   @apply ct:flex ct:flex-col;
 }
@@ -636,6 +632,10 @@
 }
 
 /* 这些覆盖位于 cascade layer 之外，以便主题 token 能覆盖各独立包编译出的 utility。 */
+.compose-editor__history-panel > .history-panel__header {
+  display: none;
+}
+
 .compose-editor__dockview,
 .compose-editor__scene-history-dockview {
   --dv-background-color: var(--compose-workspace-bg);

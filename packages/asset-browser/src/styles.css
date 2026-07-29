@@ -70,26 +70,100 @@
 
 .asset-browser__toolbar {
   display: flex;
-  min-height: 36px;
+  min-height: 38px;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 8px;
+  padding: 5px 9px;
   border-bottom: 1px solid var(--asset-border);
   background: var(--asset-surface);
+  box-shadow: inset 0 -1px rgb(0 0 0 / 16%);
 }
 
 .asset-browser__toolbar strong {
-  max-width: 180px;
+  display: flex;
+  height: 28px;
+  align-items: center;
+  max-width: 196px;
   overflow: hidden;
-  margin-right: 4px;
+  color: var(--compose-text-strong, #f2f5f9);
+  font-size: 12px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.asset-browser__toolbar button {
+.asset-browser__toolbar-actions {
+  display: flex;
+  height: 28px;
+  align-self: center;
+  align-items: center;
+  gap: 3px;
+  box-sizing: border-box;
+  padding-left: 8px;
+  border-left: 1px solid var(--asset-border);
+}
+
+.asset-browser__toolbar .asset-browser__toolbar-actions button {
+  display: grid;
+  width: 28px;
   min-width: 28px;
-  height: 26px;
-  padding: 0 6px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--asset-muted);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.asset-browser__toolbar .asset-browser__toolbar-actions button:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--asset-raised) 76%, var(--asset-accent));
+  color: var(--compose-text-strong, #f2f5f9);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--asset-border) 72%, var(--asset-accent));
+  transform: translateY(-1px);
+}
+
+.asset-browser__toolbar .asset-browser__toolbar-actions button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--asset-accent) 28%, var(--asset-raised));
+  color: var(--compose-text-strong, #f2f5f9);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 30%);
+  transform: translateY(0) scale(.94);
+}
+
+.asset-browser__toolbar .asset-browser__toolbar-actions button:focus-visible {
+  outline: none;
+  color: var(--compose-text-strong, #f2f5f9);
+  background: color-mix(in srgb, var(--asset-raised) 70%, var(--asset-accent));
+  box-shadow:
+    inset 0 0 0 1px var(--compose-focus, #69a5ff),
+    0 0 0 2px color-mix(in srgb, var(--compose-focus, #69a5ff) 38%, transparent);
+}
+
+.asset-browser__toolbar .asset-browser__toolbar-actions button svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+  transition: transform 120ms ease;
+}
+
+.asset-browser__toolbar .asset-browser__toolbar-actions button:hover:not(:disabled) svg {
+  transform: translateY(-.25px);
+}
+
+.asset-browser__toolbar .asset-browser__toolbar-actions button:active:not(:disabled) svg {
+  transform: scale(.94);
 }
 
 .asset-browser__search {
@@ -136,6 +210,17 @@
 
 .asset-browser__tree-pane .compose-tree__icon svg {
   width: 15px;
+}
+
+.asset-browser__tree-pane .compose-tree__chevron {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.asset-browser__tree-pane .compose-tree__chevron:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--asset-raised) 72%, var(--asset-accent));
 }
 
 .asset-browser__splitter {

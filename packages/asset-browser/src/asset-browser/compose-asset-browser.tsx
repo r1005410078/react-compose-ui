@@ -116,6 +116,41 @@ function FileIcon() {
   )
 }
 
+function ToolbarIcon({ name }: { readonly name: 'new-file' | 'new-folder' | 'import' | 'refresh' | 'rename' | 'delete' }) {
+  const paths = {
+    'new-file': <>
+      <path d="M4 1.75h5l3 3v9.5H4z" />
+      <path d="M9 1.75v3h3M8 8v4M6 10h4" />
+    </>,
+    'new-folder': <>
+      <path d="M1.75 4h4.1l1.25 1.5h7.15v7.25H1.75z" />
+      <path d="M10.5 7.75v4M8.5 9.75h4" />
+    </>,
+    import: <>
+      <path d="M8 1.75v8.5M5 5l3 3 3-3M2.25 10.25v3h11.5v-3" />
+    </>,
+    refresh: <>
+      <path d="M12.75 7.25A4.75 4.75 0 1 0 11.5 11.5" />
+      <path d="M12.75 3.5v3.75H9" />
+    </>,
+    rename: <>
+      <path d="m3 11.75 1.1-3.15 6.5-6.5 2.4 2.4-6.5 6.5zM9.5 3.1l2.4 2.4" />
+    </>,
+    delete: <>
+      <path d="M3.25 4.25h9.5M6 4.25v-2h4v2M4.5 4.25l.65 9h5.7l.65-9M6.5 7v3.5M9.5 7v3.5" />
+    </>,
+  } as const
+  return (
+    <svg
+      aria-hidden="true"
+      className={`asset-browser__toolbar-icon asset-browser__toolbar-icon--${name}`}
+      viewBox="0 0 16 16"
+    >
+      {paths[name]}
+    </svg>
+  )
+}
+
 interface NameDialogProps {
   readonly dialog: NonNullable<NameDialog>
   readonly messages: AssetBrowserMessages
@@ -583,13 +618,15 @@ export function ComposeAssetBrowser({
       }}
     >
       <header className="asset-browser__toolbar">
-        <strong>{provider.label}</strong>
-        <button disabled={!canCreateFile} title={messages.newFile} type="button" onClick={() => setNameDialog({ mode: 'file', initialValue: 'untitled.ts' })}>＋F</button>
-        <button disabled={!canCreateFolder} title={messages.newFolder} type="button" onClick={() => setNameDialog({ mode: 'folder', initialValue: 'New Folder' })}>＋▰</button>
-        <button disabled={!canCreateFile} title={messages.import} type="button" onClick={() => importRef.current?.click()}>⇧</button>
-        <button title={messages.refresh} type="button" onClick={() => folder && source.loadFolder(folder.id, true)}>↻</button>
-        <button disabled={!canRename} title={messages.rename} type="button" onClick={() => selectedEntry && setNameDialog({ mode: 'rename', initialValue: selectedEntry.name })}>✎</button>
-        <button disabled={!canDelete} title={messages.delete} type="button" onClick={requestDelete}>⌫</button>
+        <strong title={provider.label}>{provider.label}</strong>
+        <div className="asset-browser__toolbar-actions">
+          <button aria-label={messages.newFile} disabled={!canCreateFile} title={messages.newFile} type="button" onClick={() => setNameDialog({ mode: 'file', initialValue: 'untitled.ts' })}><ToolbarIcon name="new-file" /></button>
+          <button aria-label={messages.newFolder} disabled={!canCreateFolder} title={messages.newFolder} type="button" onClick={() => setNameDialog({ mode: 'folder', initialValue: 'New Folder' })}><ToolbarIcon name="new-folder" /></button>
+          <button aria-label={messages.import} disabled={!canCreateFile} title={messages.import} type="button" onClick={() => importRef.current?.click()}><ToolbarIcon name="import" /></button>
+          <button aria-label={messages.refresh} title={messages.refresh} type="button" onClick={() => folder && source.loadFolder(folder.id, true)}><ToolbarIcon name="refresh" /></button>
+          <button aria-label={messages.rename} disabled={!canRename} title={messages.rename} type="button" onClick={() => selectedEntry && setNameDialog({ mode: 'rename', initialValue: selectedEntry.name })}><ToolbarIcon name="rename" /></button>
+          <button aria-label={messages.delete} disabled={!canDelete} title={messages.delete} type="button" onClick={requestDelete}><ToolbarIcon name="delete" /></button>
+        </div>
         <input ref={importRef} hidden multiple type="file" onChange={(event) => void importFiles(event)} />
         <input
           aria-label={messages.search}
