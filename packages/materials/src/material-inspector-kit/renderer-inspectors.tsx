@@ -75,7 +75,12 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
         readOnly={context.readOnly}
         schema={schema}
         value={value}
-        onValueChange={(next) => dispatchProps(context, next, idFactory)}
+        onValueChange={(next) => dispatchProps(
+          context,
+          // setRendererProps 是整体替换语义；schema 之外的宿主 props 必须原样保留。
+          { ...context.renderer.props, ...next },
+          idFactory,
+        )}
       />
     )
   }
