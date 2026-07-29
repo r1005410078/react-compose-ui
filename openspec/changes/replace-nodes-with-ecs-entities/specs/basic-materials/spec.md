@@ -43,3 +43,26 @@ Materials MUST 注册“容器”和“几何限制”能力。“容器”默�
 - **WHEN** 用户向 Rectangle 添加容器能力并放入子项
 - **THEN** Rectangle 同时渲染自身和子项
 - **AND** 含子项时能力不可移除
+
+## ADDED Requirements
+
+### Requirement: 内建 Component 定义自带 Inspector
+
+createComposeBuiltinComponentDefinitions MUST 为 Transform、Visibility、Lock、Appearance、
+Hierarchy 与 TransformConstraints 提供符合 Registry Inspector 协议的编辑 UI；Lock Inspector
+MUST 在 readOnly 上下文中仍可解除锁定；Clip 的开关由 Hierarchy Inspector 呈现。
+
+#### Scenario: Registry 协议驱动内建分组
+
+- **WHEN** 宿主使用 createComposeBasicMaterials 构建 Registry
+- **THEN** 编辑器无需硬编码即可按定义顺序渲染全部内建 Component 分组
+
+### Requirement: Renderer Inspector 保留 schema 之外的 props
+
+内容 Inspector 提交 setRendererProps 时 MUST 合并当前 Renderer props，
+不得丢弃 schema 未覆盖的宿主字段。
+
+#### Scenario: 编辑 Text 内容保留宿主扩展字段
+
+- **WHEN** Text Renderer props 含 schema 之外的宿主字段且用户修改文本
+- **THEN** 派发的 props 同时包含新文本与原有宿主字段

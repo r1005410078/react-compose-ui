@@ -46,3 +46,15 @@ Capability 添加和移除 MUST 由 Registry 规划为一个 transaction.batch�
 
 - **WHEN** 目标被锁定、存在冲突或任一 Component 无效
 - **THEN** 整个 batch 被拒绝且不留下部分 Component
+
+## ADDED Requirements
+
+### Requirement: batch 命令构造器
+
+core MUST 提供 createComposeBatchCommand，从类型化子命令数组构造 transaction.batch 命令，
+调用方 MUST NOT 需要自行对子命令做 JSON 类型强转。
+
+#### Scenario: 构造可执行的原子 batch
+
+- **WHEN** 调用方传入子命令数组与 meta
+- **THEN** 返回的命令经 dispatch 后原子应用全部子命令

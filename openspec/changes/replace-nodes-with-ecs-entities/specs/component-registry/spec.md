@@ -64,3 +64,40 @@ Registry 消费方 MUST 为未知 Component、Capability 和 Renderer 显示包�
 - **WHEN** 文档包含当前 Registry 未注册的合法 Component、Capability 或 Renderer
 - **THEN** Stage/Preview/Inspector 只降级对应区域
 - **AND** 其他 Entity 与编辑操作保持可用
+
+## ADDED Requirements
+
+### Requirement: 能力可用性携带移除可行性
+
+listCapabilityAvailability MUST 对已附加能力返回与 planRemoveCapability 同一套阻塞规则
+（锁定、定义缺失、被依赖、基础项、含子项容器）的 disabled 状态与稳定 issue，
+消费方 MUST NOT 需要额外调用移除规划来推导按钮状态。
+
+#### Scenario: 已附加能力被依赖时禁用移除
+
+- **WHEN** Entity 附加了 container 与依赖它的 geometry 能力
+- **THEN** availability 中 container 项 disabled 为 true 且 issue.code 为 capability.required
+
+#### Scenario: 锁定 Entity 禁用全部能力操作
+
+- **WHEN** Entity 的 Lock.locked 为 true
+- **THEN** availability 中已附加与未附加项都 disabled 且 issue.code 为 capability.locked
+
+### Requirement: 定义错误边界在数据修复后恢复
+
+Renderer 与 Inspector 错误边界 MUST 在 identity 或输入数据引用变化时清除失败状态并重试渲染。
+
+#### Scenario: 修复坏 props 后恢复渲染
+
+- **WHEN** 宿主 Renderer 因坏 props 抛错后文档中的 Renderer 数据被修复
+- **THEN** Stage 恢复渲染宿主内容而不再显示失败占位
+
+### Requirement: Stage 与 Preview 共享 Entity 视觉样式
+
+系统 MUST 提供 composeEntityVisualStyle 与 composeEntitySceneStyle，把 Appearance、Clip 与
+Transform 解析为一致的盒样式；Stage 与 Preview MUST 使用同一实现渲染 Entity 盒。
+
+#### Scenario: 边框与阴影合成一致的 boxShadow
+
+- **WHEN** Entity Appearance 同时含边框与 shadow
+- **THEN** 两个消费方得到相同的 inset 边框加投影 boxShadow 与 Clip 决定的 overflow

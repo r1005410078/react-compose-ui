@@ -68,3 +68,61 @@
   - `bun run build`: 18/18 tasks 通过。
   - `bun run test:e2e`: 15/15 tests 通过。
   - `git diff --check`: 通过。
+
+## 5. 衔接层 Review 修复（数据流精化）
+
+- [x] 5.1 core：createComposeBatchCommand 构造器与 targetIds 措辞
+  - Red: `builtin-commands.test.ts` 新增 batch 构造器测试，因导出缺失失败。
+  - Green: 实现构造器并从公共入口导出；12/12 通过。
+- [x] 5.2 component-registry：listCapabilityAvailability 携带移除可行性
+  - Red: `registry.test.ts` 断言已附加项 disabled/issue，旧实现恒为 disabled: false。
+  - Green: 抽取 removalBlocker 与 planRemoveCapability 共用；5/5 通过。
+- [x] 5.3 component-registry：错误边界 resetSignal 数据修复后恢复
+  - Red: `compose-registry-renderers.test.tsx` 修复 props 后仍显示失败占位。
+  - Green: identity 或输入数据引用变化时清除失败状态；3/3 通过。
+- [x] 5.4 component-registry：composeEntityVisualStyle / composeEntitySceneStyle 共享样式
+  - Red: `entity-scene-style.test.ts` 模块不存在。
+  - Green: 实现并导出；stage/preview 切换为共享实现，各自测试通过。
+- [x] 5.5 materials：内建 Component inspectors 迁入 + Text props 合并
+  - Red: `component-inspectors.test.tsx` 6 项失败（工厂缺失、Text 整体替换 props）。
+  - Green: createComposeBuiltinComponentDefinitions 携带 inspectors，Text 合并当前 props；
+    11/11 通过。
+- [x] 5.6 core：resolveComposeAppearance 收窄为仅接受 Entity（移除鸭子类型联合）
+- [x] 5.7 editor：通用 Registry inspector 循环、availability 驱动移除按钮、
+  EntityInspector 按 entity.id 重挂载、containerPresetId 选项与缺失警告
+  - Red→Green: `controller.test.tsx` 迁移为聚合契约测试并新增 2 项；65/65 通过。
+  - 内建 inspector 行为测试随实现迁至 materials。
+- [x] 5.8 全量验证 lint、typecheck、test、build、test:e2e
+
+## 6. Editor controller 分派表重构
+
+- [x] 6.1 补 delete、move、duplicate 场景树操作的特征测试作为重构安全网
+  - Baseline: 6 项场景树测试在重构前对现有实现全部通过。
+  - 过程发现：测试内联 `idFactory: ids()` 会在每次重渲染重置计数器，导致后续
+    操作复用已存在 Entity ID 被运行时拒绝；已改为跨渲染稳定的 factory 并加注释。
+- [x] 6.2 抽出 `scene-operations.ts`：7 个纯函数规划器 + 判别键分派表
+  - `planSceneOperation` 返回 planned / skipped / unavailable 判别结果，
+    命令规划与 React 副作用（dispatch、console.warn）分离。
+  - 分派表以 `ComposeSceneTreeOperation['type']` 为映射键，新增操作类型缺少
+    规划器时直接编译报错。
+- [x] 6.3 controller 接入分派表并把 inspectorPanel 三元提出返回对象
+  - `onSceneOperation` 从 140 行 7 分支 if/else 降到 16 行；controller.tsx 727 → 579 行。
+- [x] 6.4 为纯函数规划器补充 8 项单元测试（无 React，覆盖分派完整性、
+  Preset 缺失、根级/嵌套创建、reparent 与重排序、跳过与 batch 合并、标签与来源）
+- [x] 6.5 全量验证 lint、typecheck、test、build、test:e2e
+
+## 7. Editor 包 Feature-first 目录分层
+
+- [x] 7.1 按用户能力建立功能目录，各自用 `index.ts` 控制导出
+  - `compose-editor/`（Shell）、`editor-controller/`（受控会话）、
+    `workspace-layout/`（面板拓扑与标签页）、`inspector/`（属性检查）、
+    `stage-toolbar/`（工具栏与画布设置）、`editor-preferences/`（偏好与设置中心）。
+- [x] 7.2 拆分语义模糊的 `default-workspace-content.tsx`
+  - `DefaultEmptyInspector` → `inspector/empty-inspector.tsx`；
+    `DefaultStageToolbar` → `stage-toolbar/default-stage-toolbar.tsx`。
+- [x] 7.3 `editor-i18n.ts` 与 `styles.css` 保留在 src 根
+  - 前者被全部 5 个功能目录消费，属稳定跨功能职责；后者维持包级样式入口，
+    宿主 `@compose-ui/editor/styles.css` 深引用路径不变。
+- [x] 7.4 公共入口 `src/index.tsx` 导出面保持不变，无破坏性变更
+- [x] 7.5 验证 check:architecture、lint、typecheck、test、build、test:e2e
+  - 76/76 editor 测试通过；e2e 15/15 通过（含视觉黄金文件）。

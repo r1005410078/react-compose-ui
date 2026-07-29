@@ -77,3 +77,31 @@ Stage、Inspector、History、Command Panel 和 Preview 集成。选择、命令
 - **WHEN** 用户通过 Stage、Scene Tree 或 Inspector 修改同一 Entity
 - **THEN** 所有面板显示相同 name、Components、层级和选择
 - **AND** undo/redo 同步恢复全部区域
+
+## ADDED Requirements
+
+### Requirement: 聚合 Inspector 通过 Registry Inspector 协议渲染
+
+EntityInspector MUST 通过 ComposeComponentDefinition.inspector 渲染包括内建 Component 在内的
+全部分组，MUST NOT 按 Component Key 硬编码内建编辑 UI；能力移除按钮状态 MUST 直接来自
+listCapabilityAvailability；切换选中 Entity 时 MUST 重置移除确认等局部会话状态。
+
+#### Scenario: 内建与宿主 Component 走同一条渲染路径
+
+- **WHEN** Registry 内建与宿主 Component 定义都带 inspector
+- **THEN** Inspector 按 order 渲染全部分组且无编辑器侧特判
+
+#### Scenario: 切换选中重置移除确认
+
+- **WHEN** 能力移除确认对话框打开时选中 Entity 发生变化
+- **THEN** 对话框关闭且不会作用于新选中的 Entity
+
+### Requirement: 容器创建 Preset 可配置
+
+controller MUST 提供 containerPresetId 选项（默认 "container"）；Preset 缺失时创建入口
+MUST 输出可定位的警告而不是静默失败。
+
+#### Scenario: 缺失容器 Preset 时给出警告
+
+- **WHEN** Registry 中不存在 containerPresetId 指向的 Preset 且用户触发创建
+- **THEN** 不产生事务并输出包含该 Preset ID 的警告
