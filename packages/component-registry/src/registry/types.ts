@@ -187,7 +187,13 @@ export interface ComposeCapabilityAvailability {
   readonly capabilityId: string
   /** Entity 当前是否已附加该能力。 */
   readonly attached: boolean
-  /** 当前上下文中能否执行添加或移除。 */
+  /**
+   * 当前上下文中能否执行添加或移除。
+   *
+   * @remarks
+   * 已附加项的 disabled 表示移除会被阻止（锁定、被依赖、基础项或含子项容器），
+   * 与 planRemoveCapability 使用同一套规则；未附加项表示添加会被阻止。
+   */
   readonly disabled: boolean
   /** 禁用时的稳定原因。 */
   readonly issue?: ComposeCapabilityIssue

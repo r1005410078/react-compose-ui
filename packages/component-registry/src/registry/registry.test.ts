@@ -246,4 +246,68 @@ describe('ComposeEntityRegistry', () => {
       () => 'command',
     )).toMatchObject({ ok: false, issue: { code: 'capability.has-children' } })
   })
+
+  it('OpenSpec: Capability 状态 / availability 直接携带已附加项的移除可行性', () => {
+    const registry = createComposeEntityRegistry({
+      components: [component('Hierarchy'), component('Clip'), component('TransformConstraints')],
+      presets: [preset()],
+      capabilities: [
+        capability('container', ['Hierarchy', 'Clip']),
+        capability('geometry', ['TransformConstraints'], { requires: ['container'] }),
+      ],
+    })
+    const base = entityFromSeed(registry.createSeed('rectangle'))
+    const attached: ComposeEntity = {
+      ...base,
+      components: {
+        ...base.components,
+        Composition: {
+          presetId: 'rectangle',
+          baseComponentKeys: ['Transform', 'Visibility', 'Lock', 'Appearance', 'Renderer'],
+          capabilityIds: ['container', 'geometry'],
+        },
+        Hierarchy: { childIds: [] },
+        Clip: { enabled: true },
+        TransformConstraints: component('TransformConstraints').createDefault(),
+      },
+    }
+
+    const availability = registry.listCapabilityAvailability(attached)
+    const container = availability.find((item) => item.capabilityId === 'container')
+    const geometry = availability.find((item) => item.capabilityId === 'geometry')
+    expect(container).toMatchObject({
+      attached: true,
+      disabled: true,
+      issue: { code: 'capability.required', relatedCapabilityIds: ['geometry'] },
+    })
+    expect(geometry).toMatchObject({ attached: true, disabled: false })
+    expect(geometry?.issue).toBeUndefined()
+
+    const locked: ComposeEntity = {
+      ...attached,
+      components: { ...attached.components, Lock: { locked: true } },
+    }
+    for (const item of registry.listCapabilityAvailability(locked)) {
+      expect(item).toMatchObject({ disabled: true, issue: { code: 'capability.locked' } })
+    }
+
+    const withChild: ComposeEntity = {
+      ...attached,
+      components: {
+        ...attached.components,
+        Composition: {
+          ...attached.components.Composition,
+          capabilityIds: ['container'],
+        },
+        Hierarchy: { childIds: ['child'] },
+      },
+    }
+    const childItem = registry.listCapabilityAvailability(withChild)
+      .find((item) => item.capabilityId === 'container')
+    expect(childItem).toMatchObject({
+      attached: true,
+      disabled: true,
+      issue: { code: 'capability.has-children' },
+    })
+  })
 })

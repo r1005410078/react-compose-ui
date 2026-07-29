@@ -1,5 +1,6 @@
 import {
   BUILTIN_COMMAND_TYPES,
+  createComposeBatchCommand,
   getComposeComposition,
   getComposeHierarchy,
   getComposeLock,
@@ -10,7 +11,6 @@ import {
   type ComposeEntity,
   type EditorCommand,
   type JsonObject,
-  type JsonValue,
 } from '@compose-ui/core'
 import {
   ComposeEntityRegistryError,
@@ -455,13 +455,65 @@ export function createComposeEntityRegistry(
     ))
     return {
       ok: true,
-      command: command(
-        idFactory,
-        BUILTIN_COMMAND_TYPES.batch,
-        { commands: children as unknown as JsonValue },
-        entityId,
-      ),
+      command: createComposeBatchCommand({
+        id: idFactory(),
+        commands: children,
+        meta: { source: 'entity-registry', targetIds: [entityId] },
+      }),
     }
+  }
+
+  // 已附加能力的移除前置检查；planRemoveCapability 与 listCapabilityAvailability 必须
+  // 使用同一套阻塞规则，避免 UI 状态与实际规划结果不一致。锁定检查由调用方先行处理，
+  // 因为两个入口对锁定的报告顺序不同。
+  const removalBlocker = (
+    entity: ComposeEntity,
+    capabilityId: string,
+  ):
+    | { readonly issue: ComposeCapabilityIssue }
+    | { readonly owned: Readonly<Record<string, JsonObject>> } => {
+    const composition = getComposeComposition(entity)
+    const target = capabilities.byId.get(capabilityId)
+    if (!target) {
+      return {
+        issue: {
+          code: 'capability.unknown',
+          message: `能力 ${capabilityId} 的定义缺失，无法安全移除`,
+        },
+      }
+    }
+    const dependants = composition.capabilityIds.filter((id) =>
+      capabilities.byId.get(id)?.requires?.includes(capabilityId))
+    if (dependants.length) {
+      return {
+        issue: {
+          code: 'capability.required',
+          message: `能力 ${capabilityId} 正被 ${dependants.join('、')} 依赖`,
+          relatedCapabilityIds: dependants,
+        },
+      }
+    }
+    const index = capabilityIndexes.get(target.id)!
+    const owned = callComponentsFactory('capability', index, target.id, target.createComponents)
+    const protectedKey = Object.keys(owned).find((key) =>
+      composition.baseComponentKeys.includes(key))
+    if (protectedKey) {
+      return {
+        issue: {
+          code: 'capability.protected',
+          message: `基础 Component ${protectedKey} 不可移除`,
+        },
+      }
+    }
+    if (owned.Hierarchy && getComposeHierarchy(entity)?.childIds.length) {
+      return {
+        issue: {
+          code: 'capability.has-children',
+          message: '容器仍有子项，不能移除容器能力',
+        },
+      }
+    }
+    return { owned }
   }
 
   const removePlan = (
@@ -477,27 +529,9 @@ export function createComposeEntityRegistry(
     if (!composition.capabilityIds.includes(capabilityId)) {
       return issue('capability.not-attached', `能力 ${capabilityId} 未附加`)
     }
-    const target = capabilities.byId.get(capabilityId)
-    if (!target) return issue('capability.unknown', `能力 ${capabilityId} 的定义缺失，无法安全移除`)
-    const dependants = composition.capabilityIds.filter((id) =>
-      capabilities.byId.get(id)?.requires?.includes(capabilityId))
-    if (dependants.length) {
-      return issue(
-        'capability.required',
-        `能力 ${capabilityId} 正被 ${dependants.join('、')} 依赖`,
-        dependants,
-      )
-    }
-    const index = capabilityIndexes.get(target.id)!
-    const owned = callComponentsFactory('capability', index, target.id, target.createComponents)
-    const protectedKey = Object.keys(owned).find((key) =>
-      composition.baseComponentKeys.includes(key))
-    if (protectedKey) {
-      return issue('capability.protected', `基础 Component ${protectedKey} 不可移除`)
-    }
-    if (owned.Hierarchy && getComposeHierarchy(entity)?.childIds.length) {
-      return issue('capability.has-children', '容器仍有子项，不能移除容器能力')
-    }
+    const blocker = removalBlocker(entity, capabilityId)
+    if ('issue' in blocker) return { ok: false, issue: blocker.issue }
+    const { owned } = blocker
     const children = Object.keys(owned).reverse().map((key) => command(
       idFactory,
       BUILTIN_COMMAND_TYPES.removeComponent,
@@ -516,12 +550,11 @@ export function createComposeEntityRegistry(
     ))
     return {
       ok: true,
-      command: command(
-        idFactory,
-        BUILTIN_COMMAND_TYPES.batch,
-        { commands: children as unknown as JsonValue },
-        entityId,
-      ),
+      command: createComposeBatchCommand({
+        id: idFactory(),
+        commands: children,
+        meta: { source: 'entity-registry', targetIds: [entityId] },
+      }),
     }
   }
 
@@ -602,20 +635,25 @@ export function createComposeEntityRegistry(
     listCapabilityAvailability(entity: ComposeEntity): readonly ComposeCapabilityAvailability[] {
       const composition = getComposeComposition(entity)
       const attached = new Set(composition.capabilityIds)
+      const locked = getComposeLock(entity).locked
       const known = capabilities.ordered.map((definition) => {
         const isAttached = attached.has(definition.id)
         if (isAttached) {
+          const blocker = locked
+            ? { issue: { code: 'capability.locked' as const, message: '锁定 Entity 不可移除能力' } }
+            : removalBlocker(entity, definition.id)
+          const itemIssue = 'issue' in blocker ? blocker.issue : undefined
           return {
             definition,
             capabilityId: definition.id,
             attached: true,
-            disabled: false,
+            disabled: Boolean(itemIssue),
+            ...(itemIssue ? { issue: itemIssue } : {}),
           }
         }
         const conflict = (definition.conflicts ?? []).find((id) => attached.has(id))
           ?? [...attached].find((id) =>
             capabilities.byId.get(id)?.conflicts?.includes(definition.id))
-        const locked = getComposeLock(entity).locked
         const itemIssue: ComposeCapabilityIssue | undefined = locked
           ? { code: 'capability.locked', message: '锁定 Entity 不可添加能力' }
           : conflict
