@@ -42,6 +42,7 @@ export { createTransactionRuntime } from './runtime'
 export {
   BUILTIN_COMMAND_TYPES,
   createBuiltinCommandHandlers,
+  createComposeBatchCommand,
 } from './builtin-commands'
 export type {
   ApplyDocumentPatchesResult,

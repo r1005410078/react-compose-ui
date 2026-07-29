@@ -104,7 +104,7 @@ export interface EditorCommandMeta {
   readonly label?: string
   /** 产生命令的工作区或宿主区域。 */
   readonly source?: string
-  /** 命令涉及的稳定节点 ID。 */
+  /** 命令涉及的稳定 Entity ID。 */
   readonly targetIds?: readonly string[]
   /** 高频连续输入允许合并时使用的稳定 key。 */
   readonly mergeKey?: string

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BUILTIN_COMMAND_TYPES,
+  createComposeBatchCommand,
   createTransactionRuntime,
   type ComposeEntity,
   type EditorCommand,
@@ -232,5 +233,33 @@ describe('ComposeDocument v4 built-in commands', () => {
       entityId: 'parent',
       key: 'Hierarchy',
     }).status).toBe('rejected')
+  })
+
+  it('OpenSpec: command-transaction / batch 构造器 / 无强转创建可执行的原子 batch', () => {
+    const runtime = createTransactionRuntime({ document: documentFixture() })
+    const children: readonly EditorCommand[] = [
+      {
+        id: 'child-rename',
+        type: BUILTIN_COMMAND_TYPES.renameEntity,
+        payload: { entityId: 'rectangle', name: 'Renamed' },
+      },
+      {
+        id: 'child-hide',
+        type: BUILTIN_COMMAND_TYPES.setVisibility,
+        payload: { entityIds: ['rectangle'], visible: false },
+      },
+    ]
+    const command = createComposeBatchCommand({
+      id: 'batch-1',
+      commands: children,
+      meta: { label: 'Batch update', source: 'test', targetIds: ['rectangle'] },
+    })
+
+    expect(command.type).toBe(BUILTIN_COMMAND_TYPES.batch)
+    const result = runtime.dispatch(command)
+    expect(result.status).toBe('committed')
+    expect(runtime.document.entities.rectangle?.name).toBe('Renamed')
+    expect(runtime.document.entities.rectangle?.components.Visibility).toEqual({ visible: false })
+    expect(runtime.entries).toHaveLength(2)
   })
 })

@@ -25,6 +25,7 @@ import type {
   CommandIssue,
   DocumentPatch,
   EditorCommand,
+  EditorCommandMeta,
 } from './command-types'
 
 /** ComposeDocument v4 内置命令 type。 @public */
@@ -932,6 +933,32 @@ export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
     groupHandler(),
     ungroupHandler(),
   ]
+}
+
+/**
+ * 从已构造的子命令创建原子 transaction.batch 命令。
+ *
+ * @remarks
+ * EditorCommand 结构上是严格 JSON，但 TypeScript 接口无法直接赋值给带索引签名的
+ * JsonObject；本构造器把这次不可避免的类型收窄集中在 core，调用方不再需要
+ * `as unknown as JsonValue` 强转。
+ *
+ * @public
+ */
+export function createComposeBatchCommand(input: {
+  /** 宿主生成的 batch 命令 ID。 */
+  readonly id: string
+  /** 依序原子执行的子命令；不允许嵌套 batch。 */
+  readonly commands: readonly EditorCommand[]
+  /** 可选展示、来源与目标语义。 */
+  readonly meta?: EditorCommandMeta
+}): EditorCommand {
+  return {
+    id: input.id,
+    type: BUILTIN_COMMAND_TYPES.batch,
+    payload: { commands: input.commands as unknown as JsonValue },
+    ...(input.meta ? { meta: input.meta } : {}),
+  }
 }
 
 /** 解析不允许嵌套的 transaction.batch 子命令。 @public */
