@@ -2,10 +2,34 @@ import type {
   ComposeCapabilityDefinition,
   ComposeComponentDefinition,
 } from '@compose-ui/component-registry'
+import {
+  createAppearanceInspector,
+  createConstraintsInspector,
+  createHierarchyInspector,
+  createLockInspector,
+  createTransformInspector,
+  createVisibilityInspector,
+} from './material-inspector-kit/component-inspectors'
+import {
+  createDefaultInspectorId,
+  type InspectorIdFactory,
+} from './material-inspector-kit/renderer-inspectors'
 
-/** 内建 ECS Component Registry 定义。 @public */
-export const DEFAULT_COMPOSE_COMPONENT_DEFINITIONS: readonly ComposeComponentDefinition[] =
-  Object.freeze([
+/**
+ * 创建带 Inspector 的内建 ECS Component Registry 定义。
+ *
+ * @remarks
+ * Editor 通过 Registry 的 `ComposeComponentDefinition.inspector` 协议聚合全部
+ * Component 分组；内建 Component 的编辑 UI 与宿主扩展走同一条路径。Clip 的开关
+ * 由 Hierarchy（容器）Inspector 呈现，因此 Clip 自身不携带 Inspector。
+ *
+ * @param idFactory - Inspector 派发命令使用的稳定 ID factory。
+ * @public
+ */
+export function createComposeBuiltinComponentDefinitions(
+  idFactory: InspectorIdFactory = createDefaultInspectorId,
+): readonly ComposeComponentDefinition[] {
+  return Object.freeze([
     {
       key: 'Composition',
       label: '组合',
@@ -26,18 +50,21 @@ export const DEFAULT_COMPOSE_COMPONENT_DEFINITIONS: readonly ComposeComponentDef
         size: { width: 100, height: 100 },
         rotation: 0,
       }),
+      inspector: createTransformInspector(idFactory),
     },
     {
       key: 'Visibility',
       label: '可见性',
       order: 20,
       createDefault: () => ({ visible: true }),
+      inspector: createVisibilityInspector(idFactory),
     },
     {
       key: 'Lock',
       label: '锁定',
       order: 30,
       createDefault: () => ({ locked: false }),
+      inspector: createLockInspector(idFactory),
     },
     {
       key: 'Appearance',
@@ -51,12 +78,14 @@ export const DEFAULT_COMPOSE_COMPONENT_DEFINITIONS: readonly ComposeComponentDef
         opacity: 1,
         shadow: null,
       }),
+      inspector: createAppearanceInspector(idFactory),
     },
     {
       key: 'Hierarchy',
       label: '容器',
       order: 50,
       createDefault: () => ({ childIds: [] }),
+      inspector: createHierarchyInspector(idFactory),
     },
     {
       key: 'Clip',
@@ -75,6 +104,7 @@ export const DEFAULT_COMPOSE_COMPONENT_DEFINITIONS: readonly ComposeComponentDef
         minSize: { width: 1, height: 1 },
         maxSize: null,
       }),
+      inspector: createConstraintsInspector(idFactory),
     },
     {
       key: 'Renderer',
@@ -84,6 +114,11 @@ export const DEFAULT_COMPOSE_COMPONENT_DEFINITIONS: readonly ComposeComponentDef
       createDefault: () => ({ type: 'unknown', props: {} }),
     },
   ])
+}
+
+/** 使用默认命令 ID factory 的内建 ECS Component Registry 定义。 @public */
+export const DEFAULT_COMPOSE_COMPONENT_DEFINITIONS: readonly ComposeComponentDefinition[] =
+  createComposeBuiltinComponentDefinitions()
 
 /** 内建可添加能力。 @public */
 export const DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS: readonly ComposeCapabilityDefinition[] =

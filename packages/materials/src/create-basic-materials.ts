@@ -1,7 +1,7 @@
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
+  createComposeBuiltinComponentDefinitions,
   DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS,
-  DEFAULT_COMPOSE_COMPONENT_DEFINITIONS,
 } from './builtin-components'
 import { createContainerPreset, DEFAULT_COMPOSE_CONTAINER_PRESET } from './container'
 import {
@@ -67,7 +67,7 @@ export function createComposeBasicMaterials(
     ...(options.extensions?.renderers ?? []),
   ])
   const componentDefinitions = Object.freeze([
-    ...DEFAULT_COMPOSE_COMPONENT_DEFINITIONS,
+    ...createComposeBuiltinComponentDefinitions(idFactory),
     ...(options.extensions?.components ?? []),
   ])
   const presets = Object.freeze([

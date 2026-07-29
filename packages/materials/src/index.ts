@@ -13,6 +13,7 @@ export {
   createComposeBasicMaterials,
 } from './create-basic-materials'
 export {
+  createComposeBuiltinComponentDefinitions,
   DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS,
   DEFAULT_COMPOSE_COMPONENT_DEFINITIONS,
 } from './builtin-components'
