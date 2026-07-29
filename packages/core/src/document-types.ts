@@ -1,8 +1,10 @@
 /**
- * ComposeDocument v4 的严格 JSON 与 ECS Entity/Component 公共协议。
+ * ComposeDocument v5 的严格 JSON 与 ECS Entity/Component 公共协议。
  *
  * @packageDocumentation
  */
+
+import type { ComposeColor, ComposePaint } from './paint'
 
 /** 严格 JSON 标量。 @public */
 export type JsonPrimitive = string | number | boolean | null
@@ -83,7 +85,7 @@ export interface ComposeClip extends JsonObject {
 
 /** 单个结构化阴影。 @public */
 export interface ComposeShadow extends JsonObject {
-  readonly color: string
+  readonly color: ComposeColor
   readonly offsetX: number
   readonly offsetY: number
   readonly blur: number
@@ -92,8 +94,8 @@ export interface ComposeShadow extends JsonObject {
 
 /** Entity 可选的部分外观数据。 @public */
 export type ComposeAppearance = JsonObject & {
-  readonly backgroundColor?: string
-  readonly borderColor?: string
+  readonly backgroundPaint?: ComposePaint
+  readonly borderColor?: ComposeColor
   readonly borderWidth?: number
   readonly borderRadius?: number
   readonly opacity?: number
@@ -102,8 +104,8 @@ export type ComposeAppearance = JsonObject & {
 
 /** 渲染端使用的完整稳定外观。 @public */
 export interface ResolvedComposeAppearance {
-  readonly backgroundColor: string
-  readonly borderColor: string
+  readonly backgroundPaint: ComposePaint
+  readonly borderColor: ComposeColor
   readonly borderWidth: number
   readonly borderRadius: number
   readonly opacity: number
@@ -116,7 +118,7 @@ export interface ComposeRenderer extends JsonObject {
   readonly props: JsonObject
 }
 
-/** ComposeDocument v4 内建 Component Key。 @public */
+/** ComposeDocument v5 内建 Component Key。 @public */
 export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   composition: 'Composition',
   transform: 'Transform',
@@ -129,7 +131,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   renderer: 'Renderer',
 } as const
 
-/** ComposeDocument v4 内建 Component Key 联合。 @public */
+/** ComposeDocument v5 内建 Component Key 联合。 @public */
 export type ComposeBuiltinComponentKey =
   typeof COMPOSE_BUILTIN_COMPONENT_KEYS[keyof typeof COMPOSE_BUILTIN_COMPONENT_KEYS]
 
@@ -171,13 +173,13 @@ export interface ComposeCanvasSettings {
 export interface ComposeOutputSettings {
   readonly width: number
   readonly height: number
-  readonly backgroundColor: string
+  readonly backgroundColor: ComposeColor
 }
 
-/** 编辑器、Stage 与 Preview 共享的 v4 ECS 文档。 @public */
+/** 编辑器、Stage 与 Preview 共享的 v5 ECS 文档。 @public */
 export interface ComposeDocument {
-  /** 当前且唯一支持的文档协议版本。 @defaultValue 4 */
-  readonly schemaVersion: 4
+  /** 当前且唯一支持的文档协议版本。 @defaultValue 5 */
+  readonly schemaVersion: 5
   readonly canvas: ComposeCanvasSettings
   readonly output: ComposeOutputSettings
   readonly rootIds: readonly string[]
@@ -218,6 +220,7 @@ export type DocumentValidationIssueCode =
   | 'transform.invalid-size'
   | 'transform-constraints.invalid'
   | 'appearance.invalid'
+  | 'appearance.invalid-paint'
   | 'renderer.invalid'
 
 /** 一个可定位的文档校验问题。 @public */

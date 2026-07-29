@@ -12,6 +12,19 @@ import type {
   JsonObject,
 } from '@compose-ui/core'
 
+/** Inspector 与宿主 Stage Paint 会话之间的无 DOM 桥接。 @public */
+export interface ComposePaintEditPort {
+  /** 打开指定 Entity 的背景填充编辑，并显示其画布控制柄。 */
+  open(input: { readonly entityId: string }): void
+  /** 关闭当前 Paint 编辑并清理所有瞬时预览。 */
+  close(): void
+  /** 原生吸管不可用时，进入当前字段的 Stage 图层取色模式。 */
+  sample(input: {
+    readonly entityId: string
+    readonly field: 'backgroundPaint' | 'borderColor'
+  }): void
+}
+
 /** Renderer 获得的 Stage/Preview 共享上下文。 @public */
 export interface ComposeRendererProps {
   /** 当前只读 Entity。 */
@@ -34,6 +47,8 @@ export interface ComposeEntityInspectorContext {
   readonly dispatch: (command: EditorCommand) => unknown
   /** 锁定或宿主只读状态。 */
   readonly readOnly: boolean
+  /** 可选的 Editor Paint 编辑桥接；Registry 与物料包不依赖 Stage。 */
+  readonly paintEditPort?: ComposePaintEditPort
 }
 
 /** Renderer 内容 Inspector 的上下文。 @public */

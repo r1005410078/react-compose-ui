@@ -5,6 +5,7 @@
  */
 
 import {
+  ComposeEntityPaintLayer,
   ComposeRegistryEntityRenderer,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
@@ -71,6 +72,7 @@ function PreviewEntity({
   const hierarchy = getComposeHierarchy(entity)
   return (
     <div data-testid={`compose-preview-entity-${entity.id}`} style={entityStyle(entity)}>
+      <ComposeEntityPaintLayer entity={entity} />
       <ComposeRegistryEntityRenderer
         assetResolver={assetResolver}
         entity={entity}
@@ -142,6 +144,7 @@ export function ComposePreview({
             {getComposeVisibility(entity).visible
               ? (
                   <>
+                    <ComposeEntityPaintLayer entity={entity} />
                     <ComposeRegistryEntityRenderer
                       assetResolver={assetResolver}
                       entity={entity}

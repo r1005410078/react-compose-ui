@@ -4,77 +4,37 @@ import {
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
-import { useCallback } from 'react'
-import type { CSSProperties, KeyboardEvent, PointerEvent, ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent,
+  ReactNode,
+} from 'react'
+import { normalizeComposeColor, type ComposeColor } from '@compose-ui/core'
 import { cn } from '#lib/utils'
+import {
+  clampComposeColor,
+  COMPOSE_COMMON_COLORS,
+  composeColorFromHsv,
+  composeColorWithAlpha,
+  parseComposeEditableColor,
+  type ComposeHsvColor,
+} from './color-model'
+import { useComposeColorHistory } from './use-compose-color-history'
 
-type HsvColor = {
-  readonly hue: number
-  readonly saturation: number
-  readonly value: number
-}
-
-const FALLBACK_COLOR = '#000000'
-
-function clamp(value: number, minimum = 0, maximum = 100) {
-  return Math.min(maximum, Math.max(minimum, value))
-}
-
-function normalizeHex(value: string): string | undefined {
-  const compact = /^#([\da-f]{3})$/i.exec(value.trim())
-  if (compact) return `#${compact[1].split('').map((part) => part.repeat(2)).join('')}`.toLowerCase()
-  const full = /^#([\da-f]{6})$/i.exec(value.trim())
-  return full ? `#${full[1].toLowerCase()}` : undefined
-}
-
-function hexToHsv(hex: string): HsvColor {
-  const red = Number.parseInt(hex.slice(1, 3), 16) / 255
-  const green = Number.parseInt(hex.slice(3, 5), 16) / 255
-  const blue = Number.parseInt(hex.slice(5, 7), 16) / 255
-  const maximum = Math.max(red, green, blue)
-  const minimum = Math.min(red, green, blue)
-  const difference = maximum - minimum
-  let hue = 0
-  if (difference !== 0) {
-    if (maximum === red) hue = 60 * (((green - blue) / difference) % 6)
-    else if (maximum === green) hue = 60 * ((blue - red) / difference + 2)
-    else hue = 60 * ((red - green) / difference + 4)
-  }
-  return {
-    hue: Math.round((hue + 360) % 360),
-    saturation: maximum === 0 ? 0 : Math.round((difference / maximum) * 100),
-    value: Math.round(maximum * 100),
-  }
-}
-
-function hsvToHex({ hue, saturation, value }: HsvColor): string {
-  const normalizedHue = ((hue % 360) + 360) % 360
-  const chroma = (value / 100) * (saturation / 100)
-  const secondary = chroma * (1 - Math.abs((normalizedHue / 60) % 2 - 1))
-  const match = value / 100 - chroma
-  const [red, green, blue] = normalizedHue < 60
-    ? [chroma, secondary, 0]
-    : normalizedHue < 120
-      ? [secondary, chroma, 0]
-      : normalizedHue < 180
-        ? [0, chroma, secondary]
-        : normalizedHue < 240
-          ? [0, secondary, chroma]
-          : normalizedHue < 300
-            ? [secondary, 0, chroma]
-            : [chroma, 0, secondary]
-  const channel = (color: number) => Math.round((color + match) * 255).toString(16).padStart(2, '0')
-  return `#${channel(red)}${channel(green)}${channel(blue)}`
-}
+type EyeDropperResult = { readonly sRGBHex: string }
+type EyeDropperInstance = { open(input?: { readonly signal?: AbortSignal }): Promise<EyeDropperResult> }
+type EyeDropperConstructor = new () => EyeDropperInstance
 
 function useColorPickerMessages() {
   const i18n = useComposeI18nContext()
   const chinese = i18n ? i18n.locale !== 'en-US' : true
-  const text = (id: string, zh: string, en: string, variables?: Readonly<Record<string, string>>) => {
+  const text = (id: string, zh: string, en: string, variables?: Readonly<Record<string, string | number>>) => {
     const fallback = chinese ? zh : en
     if (i18n) return i18n.formatMessage(id, fallback, variables)
     return variables
-      ? fallback.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (match, key: string) => variables[key] ?? match)
+      ? fallback.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (match, key: string) => String(variables[key] ?? match))
       : fallback
   }
   const localizedChinese = (label: string) => i18n ? chinese : /[\u3400-\u9fff]/.test(label)
@@ -82,25 +42,16 @@ function useColorPickerMessages() {
     ? label.endsWith('颜色') ? label : `${label}颜色`
     : /color$/i.test(label) ? label : `${label} color`
   return {
+    alpha: (label: string) => text('components.colorPicker.alpha', '{label}不透明度', '{label} opacity', { label }),
+    common: text('components.colorPicker.common', '常用', 'Common'),
     dialog: (label: string) => suffix(label),
-    hue: (label: string) => text(
-      'components.colorPicker.hue',
-      '{label}色相',
-      '{label} hue',
-      { label },
-    ),
-    plane: (label: string) => text(
-      'components.colorPicker.plane',
-      '{label}色盘',
-      '{label} color plane',
-      { label },
-    ),
-    select: (label: string) => text(
-      'components.colorPicker.select',
-      '选择{label}',
-      'Select {label}',
-      { label: suffix(label) },
-    ),
+    eyedropper: text('components.colorPicker.eyedropper', '吸管', 'Eyedropper'),
+    exact: text('components.colorPicker.exact', '精确', 'Exact'),
+    hex: text('components.colorPicker.hex', 'HEX', 'HEX'),
+    hue: (label: string) => text('components.colorPicker.hue', '{label}色相', '{label} hue', { label }),
+    plane: (label: string) => text('components.colorPicker.plane', '{label}色盘', '{label} color plane', { label }),
+    recent: text('components.colorPicker.recent', '最近使用', 'Recent'),
+    select: (label: string) => text('components.colorPicker.select', '选择{label}', 'Select {label}', { label: suffix(label) }),
     transparent: text('components.colorPicker.transparent', '透明', 'Transparent'),
   }
 }
@@ -116,17 +67,11 @@ function ColorPickerPopoverContent({
   const theme = useComposeThemeContext()
   return (
     <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Positioner
-        align="end"
-        className="cu:isolate cu:z-[20000]"
-        collisionPadding={8}
-        side="bottom"
-        sideOffset={4}
-      >
+      <PopoverPrimitive.Positioner align="end" className="cu:isolate cu:z-[20000]" collisionPadding={8} side="bottom" sideOffset={4}>
         <PopoverPrimitive.Popup
           aria-label={label}
           className={cn(
-            'cu:w-56 cu:origin-(--transform-origin) cu:rounded-md cu:border cu:border-border cu:bg-popover cu:p-3 cu:text-popover-foreground cu:shadow-lg cu:outline-none',
+            'cu:w-[min(384px,calc(100vw-24px))] cu:origin-(--transform-origin) cu:rounded-lg cu:border cu:border-border cu:bg-popover cu:p-3 cu:text-popover-foreground cu:shadow-xl cu:outline-none',
             'cu:duration-100 cu:data-[side=bottom]:slide-in-from-top-2 cu:data-[side=top]:slide-in-from-bottom-2 cu:data-open:animate-in cu:data-open:fade-in-0 cu:data-open:zoom-in-95',
           )}
           data-compose-theme={theme?.resolvedTheme}
@@ -141,12 +86,12 @@ function ColorPickerPopoverContent({
   )
 }
 
-/** 共享 Color Picker 的受控属性。 */
+/** ComposeColorPicker 的受控属性。 @public */
 export interface ComposeColorPickerProps {
-  /** 当前 CSS 色值；Picker 会保留无法精确编辑的已有值，并在用户选择后归一化。 */
+  /** 当前颜色。非法旧 CSS 值只显示为安全回退，用户修改后会改写为规范 ComposeColor。 */
   readonly value: string
-  /** 选择颜色或完全透明时提交的受控值。 */
-  readonly onValueChange?: (value: string) => void
+  /** 颜色实时变化时的受控回调。 */
+  readonly onValueChange?: (value: ComposeColor) => void
   /** 色块触发器及色盘控件的可访问名称基础。 */
   readonly label: string
   /** 禁用整个 Picker。 */
@@ -155,14 +100,25 @@ export interface ComposeColorPickerProps {
   readonly readOnly?: boolean
   /** 是否提供完全透明选项；默认开启。 */
   readonly allowTransparent?: boolean
+  /** 原生吸管不可用或失败时进入宿主图层取色的入口。 */
+  readonly onEyedropperFallback?: () => void
+  /** Popover 可见性变化；Paint 编辑端口可据此锁定/释放画布手柄。 */
+  readonly onOpenChange?: (open: boolean) => void
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement
+    && (target.matches('input, textarea, select, [contenteditable="true"]') || target.isContentEditable)
 }
 
 /**
- * 基于 Shadcn Popover 源码组合的受控颜色选择器。
+ * 基于 Shadcn Popover 组合的 Figma 风格纯色选择器。
  *
  * @remarks
- * Trigger 与弹层均不显示 HEX、RGB、HSL 等颜色字符串。Picker 只输出不透明小写 HEX 或
- * `transparent`；不支持精确编辑的既有 CSS 色仅在用户主动选择后才会被替换。
+ * 指针拖动会在动画帧中合并 `onValueChange`，并在松手时同步提交最后一个采样点；这样既保留
+ * 舞台实时预览，又不会把原生高频 pointermove 直接放大为文档、历史和审计的高频更新。颜色
+ * MRU 只在 Popover 关闭时记录，因此连续拖动不会污染历史。原生 EyeDropper 始终由用户手势
+ * 启动，浏览器拒绝或不支持时交给宿主图层取色。
  *
  * @public
  */
@@ -170,49 +126,147 @@ export function ComposeColorPicker({
   allowTransparent = true,
   disabled = false,
   label,
+  onEyedropperFallback,
+  onOpenChange,
   onValueChange,
   readOnly = false,
   value,
 }: ComposeColorPickerProps) {
   const messages = useColorPickerMessages()
-  const parsedValue = normalizeHex(value)
-  const transparent = value.trim().toLowerCase() === 'transparent'
-  const fallback = !parsedValue
-  const hsv = hexToHsv(parsedValue ?? FALLBACK_COLOR)
+  const { colors: recentColors, record } = useComposeColorHistory()
+  const [open, setOpen] = useState(false)
+  const [dragPreviewColor, setDragPreviewColor] = useState<ComposeColor | null>(null)
+  const emittedColor = useRef<ComposeColor | null>(null)
+  const pendingColor = useRef<ComposeColor | null>(null)
+  const animationFrame = useRef<number | null>(null)
+  const pointerDrag = useRef(false)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const parsed = parseComposeEditableColor(dragPreviewColor ?? value)
   const locked = disabled || readOnly
-  const emit = useCallback((next: HsvColor) => {
-    if (!locked) onValueChange?.(hsvToHex(next))
+  const fallback = normalizeComposeColor(value) === null
+  const transparent = parsed.color === 'transparent'
+  const flushPointerColor = useCallback(() => {
+    if (animationFrame.current !== null) {
+      globalThis.cancelAnimationFrame(animationFrame.current)
+      animationFrame.current = null
+    }
+    const next = pendingColor.current
+    pendingColor.current = null
+    if (next) onValueChange?.(next)
+  }, [onValueChange])
+  const emitColor = useCallback((next: ComposeColor) => {
+    if (locked) return
+    emittedColor.current = next
+    if (!pointerDrag.current) {
+      onValueChange?.(next)
+      return
+    }
+    // 父组件往往要把颜色写入完整 ComposeDocument；保留本地采样值可让控制柄不等待
+    // React/事务 round-trip，同时每帧至多派发一次正式受控更新。
+    setDragPreviewColor(next)
+    pendingColor.current = next
+    if (animationFrame.current !== null) return
+    animationFrame.current = globalThis.requestAnimationFrame(() => {
+      animationFrame.current = null
+      const pending = pendingColor.current
+      pendingColor.current = null
+      if (pending) onValueChange?.(pending)
+    })
   }, [locked, onValueChange])
+  const emit = useCallback((next: ComposeHsvColor, alpha: number) => {
+    if (locked) return
+    emitColor(composeColorFromHsv(next, alpha))
+  }, [emitColor, locked])
+  const emitAlpha = useCallback((alpha: number) => {
+    if (locked) return
+    emitColor(composeColorWithAlpha(parsed.color, alpha))
+  }, [emitColor, locked, parsed.color])
+  const startPointerDrag = useCallback((event: PointerEvent<HTMLElement>) => {
+    if (locked) return
+    pointerDrag.current = true
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }, [locked])
+  const finishPointerDrag = useCallback(() => {
+    if (!pointerDrag.current) return
+    pointerDrag.current = false
+    flushPointerColor()
+  }, [flushPointerColor])
   const updatePlane = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (locked) return
     const bounds = event.currentTarget.getBoundingClientRect()
     if (bounds.width === 0 || bounds.height === 0) return
-    event.currentTarget.setPointerCapture?.(event.pointerId)
     emit({
-      ...hsv,
-      saturation: Math.round(clamp(((event.clientX - bounds.left) / bounds.width) * 100)),
-      value: Math.round(100 - clamp(((event.clientY - bounds.top) / bounds.height) * 100)),
-    })
-  }, [emit, hsv, locked])
-  const updatePlaneByKey = (event: KeyboardEvent<HTMLDivElement>) => {
+      ...parsed.hsv,
+      saturation: Math.round(clampComposeColor(((event.clientX - bounds.left) / bounds.width) * 100)),
+      value: Math.round(100 - clampComposeColor(((event.clientY - bounds.top) / bounds.height) * 100)),
+    }, parsed.alpha === 0 ? 1 : parsed.alpha)
+  }, [emit, locked, parsed.alpha, parsed.hsv])
+  const updatePlaneByKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? 10 : 1
-    const next = event.key === 'ArrowRight' ? { ...hsv, saturation: clamp(hsv.saturation + step) }
-      : event.key === 'ArrowLeft' ? { ...hsv, saturation: clamp(hsv.saturation - step) }
-        : event.key === 'ArrowUp' ? { ...hsv, value: clamp(hsv.value + step) }
-          : event.key === 'ArrowDown' ? { ...hsv, value: clamp(hsv.value - step) }
+    const next = event.key === 'ArrowRight' ? { ...parsed.hsv, saturation: clampComposeColor(parsed.hsv.saturation + step) }
+      : event.key === 'ArrowLeft' ? { ...parsed.hsv, saturation: clampComposeColor(parsed.hsv.saturation - step) }
+        : event.key === 'ArrowUp' ? { ...parsed.hsv, value: clampComposeColor(parsed.hsv.value + step) }
+          : event.key === 'ArrowDown' ? { ...parsed.hsv, value: clampComposeColor(parsed.hsv.value - step) }
             : undefined
     if (!next) return
     event.preventDefault()
-    emit(next)
+    // 从“透明”开始在色盘上选色，用户意图是得到可见颜色，而不是保持不可见 RGB 数据。
+    emit(next, parsed.alpha === 0 ? 1 : parsed.alpha)
   }
-  const triggerStyle = transparent ? undefined : { backgroundColor: value }
-  const planeStyle = {
-    '--compose-color-picker-hue': String(hsv.hue),
-  } as CSSProperties
+  const startEyedropper = useCallback(async () => {
+    if (locked) return
+    const EyeDropper = (globalThis as unknown as { readonly EyeDropper?: EyeDropperConstructor }).EyeDropper
+    if (!EyeDropper || !globalThis.isSecureContext) {
+      onEyedropperFallback?.()
+      return
+    }
+    try {
+      const result = await new EyeDropper().open()
+      const sampled = normalizeComposeColor(result.sRGBHex)
+      if (sampled) emitColor(sampled)
+      else onEyedropperFallback?.()
+    }
+    catch {
+      onEyedropperFallback?.()
+    }
+  }, [emitColor, locked, onEyedropperFallback])
+  useEffect(() => {
+    if (!open) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'i' || event.metaKey || event.ctrlKey || event.altKey || isEditableTarget(event.target)) return
+      event.preventDefault()
+      void startEyedropper()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open, startEyedropper])
+  useEffect(() => {
+    // 受控值确认本地最终采样后再清草稿，避免拖动中的 thumb 被慢一拍的文档回传拉回。
+    if (!pointerDrag.current && dragPreviewColor !== null && normalizeComposeColor(value) === dragPreviewColor) {
+      setDragPreviewColor(null)
+    }
+  }, [dragPreviewColor, value])
+  useEffect(() => () => {
+    if (animationFrame.current !== null) globalThis.cancelAnimationFrame(animationFrame.current)
+  }, [])
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) finishPointerDrag()
+    setOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+    if (!nextOpen && emittedColor.current) {
+      record(emittedColor.current)
+      emittedColor.current = null
+      triggerRef.current?.focus()
+    }
+  }
+  const triggerStyle = transparent ? undefined : { backgroundColor: parsed.color }
+  const planeStyle = { '--compose-color-picker-hue': String(parsed.hsv.hue) } as CSSProperties
 
   return (
-    <PopoverPrimitive.Root modal="trap-focus">
+    <PopoverPrimitive.Root modal="trap-focus" open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger
+        ref={triggerRef}
         aria-label={messages.select(label)}
         aria-readonly={readOnly ? 'true' : undefined}
         className="compose-color-picker__trigger"
@@ -220,59 +274,72 @@ export function ComposeColorPicker({
         disabled={locked}
         type="button"
       >
-        <span
-          aria-hidden="true"
-          className="compose-color-picker__swatch"
-          style={triggerStyle}
-        />
+        <span aria-hidden="true" className="compose-color-picker__swatch" style={triggerStyle} />
       </PopoverPrimitive.Trigger>
       {!locked ? (
         <ColorPickerPopoverContent label={messages.dialog(label)}>
           <div className="compose-color-picker__content">
-            <div
-              aria-label={messages.plane(label)}
-              className="compose-color-picker__plane"
-              role="group"
-              style={planeStyle}
-              tabIndex={0}
-              onKeyDown={updatePlaneByKey}
-              onPointerDown={updatePlane}
-              onPointerMove={(event) => {
-                if (event.buttons !== 0) updatePlane(event)
-              }}
-            >
-              <span
-                aria-hidden="true"
-                className="compose-color-picker__plane-thumb"
-                style={{
-                  left: `${hsv.saturation}%`,
-                  top: `${100 - hsv.value}%`,
+            <div className="compose-color-picker__controls">
+              <div
+                aria-label={messages.plane(label)}
+                className="compose-color-picker__plane"
+                role="group"
+                style={planeStyle}
+                tabIndex={0}
+                onKeyDown={updatePlaneByKey}
+                onPointerDown={(event) => {
+                  startPointerDrag(event)
+                  updatePlane(event)
                 }}
-              />
-            </div>
-            <input
-              aria-label={messages.hue(label)}
-              className="compose-color-picker__hue"
-              max="359"
-              min="0"
-              type="range"
-              value={hsv.hue}
-              onChange={(event) => emit({ ...hsv, hue: Number(event.target.value) })}
-            />
-            {allowTransparent ? (
-              <button
-                aria-pressed={transparent}
-                className="compose-color-picker__transparent"
-                type="button"
-                onClick={() => onValueChange?.('transparent')}
+                onPointerMove={(event) => { if (event.buttons !== 0) updatePlane(event) }}
+                onPointerUp={finishPointerDrag}
+                onPointerCancel={finishPointerDrag}
+                onLostPointerCapture={finishPointerDrag}
               >
-                <span aria-hidden="true" className="compose-color-picker__transparent-swatch" />
-                {messages.transparent}
-              </button>
-            ) : null}
+                <span aria-hidden="true" className="compose-color-picker__plane-thumb" style={{ left: `${parsed.hsv.saturation}%`, top: `${100 - parsed.hsv.value}%` }} />
+              </div>
+              <div className="compose-color-picker__sliders">
+                <input aria-label={messages.hue(label)} className="compose-color-picker__hue" max="359" min="0" type="range" value={parsed.hsv.hue} onChange={(event) => emit({ ...parsed.hsv, hue: Number(event.target.value) }, parsed.alpha)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />
+                <input aria-label={messages.alpha(label)} className="compose-color-picker__alpha" max="100" min="0" type="range" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />
+              </div>
+            </div>
+            <div className="compose-color-picker__actions">
+              <button aria-label={messages.eyedropper} className="compose-color-picker__eyedropper" type="button" onClick={() => { void startEyedropper() }}>⌖</button>
+              {allowTransparent ? <button aria-pressed={transparent} className="compose-color-picker__transparent" type="button" onClick={() => emitColor('transparent')}><span aria-hidden="true" className="compose-color-picker__transparent-swatch" />{messages.transparent}</button> : null}
+            </div>
+            <ColorRow colors={recentColors} label={messages.recent} onSelect={emitColor} />
+            <ColorRow colors={COMPOSE_COMMON_COLORS} label={messages.common} onSelect={emitColor} />
+            <details className="compose-color-picker__exact">
+              <summary>{messages.exact}</summary>
+              <label>
+                {messages.hex}
+                <input aria-label={messages.hex} defaultValue={parsed.color === 'transparent' ? '#000000' : parsed.color.slice(0, 7)} onBlur={(event) => {
+                  const normalized = normalizeComposeColor(event.target.value)
+                  if (normalized) emitColor(parsed.alpha < 1 ? composeColorFromHsv(parseComposeEditableColor(normalized).hsv, parsed.alpha) : normalized)
+                }} />
+              </label>
+              <label>
+                {messages.alpha(label)}
+                <input aria-label={`${messages.alpha(label)} 精确输入`} max="100" min="0" type="number" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} />
+              </label>
+            </details>
           </div>
         </ColorPickerPopoverContent>
       ) : null}
     </PopoverPrimitive.Root>
+  )
+}
+
+function ColorRow({ colors, label, onSelect }: { readonly colors: readonly ComposeColor[]; readonly label: string; readonly onSelect: (color: ComposeColor) => void }) {
+  if (colors.length === 0) return null
+  return (
+    <section aria-label={label} className="compose-color-picker__row">
+      <span>{label}</span>
+      <div>
+        {colors.map((color) => (
+          <button aria-label={color} className="compose-color-picker__color-chip" data-transparent={color === 'transparent' || undefined} key={color} style={color === 'transparent' ? undefined : { background: color }} type="button" onClick={() => onSelect(color)} />
+        ))}
+      </div>
+    </section>
   )
 }

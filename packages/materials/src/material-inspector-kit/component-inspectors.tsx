@@ -7,7 +7,9 @@ import {
   getComposeHierarchy,
   resolveComposeAppearance,
   type ComposeAppearance,
+  type ComposeColor,
   type ComposeEntity,
+  type ComposePaint,
   type ComposeTransform,
   type ComposeTransformConstraints,
   type EditorCommand,
@@ -155,13 +157,13 @@ export function createLockInspector(
 export function createAppearanceInspector(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeComponentInspectorProps> {
-  return function AppearanceInspector({ entity, dispatch, readOnly }) {
+  return function AppearanceInspector({ entity, dispatch, paintEditPort, readOnly }) {
     const zh = useZh()
     const schema = useMemo(() => v.object({
-      backgroundColor: v.pipe(
-        v.string(),
-        v.title(zh ? '背景颜色' : 'Background'),
-        v.metadata({ propertyPanel: { editor: 'color' } }),
+      backgroundPaint: v.pipe(
+        v.unknown(),
+        v.title(zh ? '背景填充' : 'Background fill'),
+        v.metadata({ propertyPanel: { editor: 'paint' } }),
       ),
       borderColor: v.pipe(
         v.string(),
@@ -193,9 +195,25 @@ export function createAppearanceInspector(
       <ComposePropertyPanel
         aria-label={zh ? '外观属性' : 'Appearance properties'}
         readOnly={readOnly}
+        colorEditor={{
+          onEyedropperFallback: () => paintEditPort?.sample({
+            entityId: entity.id,
+            field: 'borderColor',
+          }),
+        }}
+        paintEditor={{
+          onOpenChange: (open) => {
+            if (open) paintEditPort?.open({ entityId: entity.id })
+            else paintEditPort?.close()
+          },
+          onEyedropperFallback: () => paintEditPort?.sample({
+            entityId: entity.id,
+            field: 'backgroundPaint',
+          }),
+        }}
         schema={schema}
         value={{
-          backgroundColor: appearance.backgroundColor,
+          backgroundPaint: appearance.backgroundPaint,
           borderColor: appearance.borderColor,
           borderWidth: appearance.borderWidth,
           borderRadius: appearance.borderRadius,
@@ -204,7 +222,12 @@ export function createAppearanceInspector(
         onValueChange={(next) => {
           // shadow 等未进入本 schema 的字段必须原样保留，setAppearance 是整体替换语义。
           const current = getComposeAppearance(entity)
-          const appearanceValue: ComposeAppearance = { ...current, ...next }
+          const appearanceValue: ComposeAppearance = {
+            ...current,
+            ...next,
+            backgroundPaint: next.backgroundPaint as ComposePaint,
+            borderColor: next.borderColor as ComposeColor,
+          }
           dispatch(command(
             idFactory,
             entity,

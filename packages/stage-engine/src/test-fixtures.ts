@@ -79,7 +79,7 @@ export function document(
   rootIds: readonly string[] = entities.map(({ id }) => id),
 ): ComposeDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: {
       grid: {
         stepX: 8,

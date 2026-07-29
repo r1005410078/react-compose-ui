@@ -11,8 +11,17 @@ import './styles.css'
 
 export { ComposeButton } from './button'
 export type { ComposeButtonProps } from './button'
-export { ComposeColorPicker } from './color-picker'
-export type { ComposeColorPickerProps } from './color-picker'
+export {
+  ComposeColorHistoryProvider,
+  ComposeColorPicker,
+  ComposePaintPicker,
+  useComposeColorHistory,
+} from './color-picker'
+export type {
+  ComposeColorHistoryProviderProps,
+  ComposeColorPickerProps,
+  ComposePaintPickerProps,
+} from './color-picker'
 export { ComposeConfirmDialog } from './confirm-dialog'
 export type { ComposeConfirmDialogProps } from './confirm-dialog'
 export { ComposeInput } from './input'

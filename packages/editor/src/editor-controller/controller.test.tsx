@@ -70,7 +70,7 @@ function entity(
 
 function documentFixture(): ComposeDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds: ['dashboard'],
@@ -79,11 +79,11 @@ function documentFixture(): ComposeDocument {
         Transform: transform(40, 30, 800, 600),
         Hierarchy: { childIds: ['title'] },
         Clip: { enabled: true },
-        Appearance: { backgroundColor: '#111827' },
+        Appearance: { backgroundPaint: { kind: 'solid', color: '#111827' } },
       }, 'Dashboard', 'container'),
       title: entity('title', {
         Transform: transform(10, 10, 180, 40),
-        Appearance: { backgroundColor: 'transparent' },
+        Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
         Renderer: { type: 'text', props: { text: 'Before' } },
       }, 'Title', 'text'),
     },
@@ -149,23 +149,27 @@ function TestLockInspector({ entity, dispatch, value }: ComposeComponentInspecto
 }
 
 const testAppearanceSchema = v.object({
-  backgroundColor: v.pipe(
-    v.string(),
-    v.title('背景颜色'),
-    v.metadata({ propertyPanel: { editor: 'color' } }),
+  backgroundPaint: v.pipe(
+    v.unknown(),
+    v.title('背景填充'),
+    v.metadata({ propertyPanel: { editor: 'paint' } }),
   ),
 })
 
-function TestAppearanceInspector({ value, readOnly }: ComposeComponentInspectorProps) {
+function TestAppearanceInspector({ paintEditPort, value, readOnly }: ComposeComponentInspectorProps) {
   return (
     <ComposePropertyPanel
       aria-label="外观属性"
+      paintEditor={{
+        onOpenChange: (open) => {
+          if (open) paintEditPort?.open({ entityId: 'title' })
+          else paintEditPort?.close()
+        },
+      }}
       readOnly={readOnly}
       schema={testAppearanceSchema}
       value={{
-        backgroundColor: typeof value.backgroundColor === 'string'
-          ? value.backgroundColor
-          : 'transparent',
+        backgroundPaint: value.backgroundPaint ?? { kind: 'solid', color: 'transparent' },
       }}
     />
   )
@@ -223,7 +227,7 @@ const componentDefinitions = [
     key: 'Appearance',
     label: '外观',
     order: 40,
-    createDefault: () => ({ backgroundColor: 'transparent' }),
+    createDefault: () => ({ backgroundPaint: { kind: 'solid', color: 'transparent' } }),
     inspector: TestAppearanceInspector,
   },
   {
@@ -291,7 +295,7 @@ const registry = createComposeEntityRegistry({
         Lock: { locked: false },
         Hierarchy: { childIds: [] },
         Clip: { enabled: true },
-        Appearance: { backgroundColor: '#ffffff' },
+        Appearance: { backgroundPaint: { kind: 'solid', color: '#ffffff' } },
       }),
     },
     {
@@ -301,7 +305,7 @@ const registry = createComposeEntityRegistry({
         Transform: transform(0, 0, 180, 40),
         Visibility: { visible: true },
         Lock: { locked: false },
-        Appearance: { backgroundColor: 'transparent' },
+        Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
         Renderer: { type: 'text', props: { text: 'New' } },
       }),
     },
@@ -398,7 +402,7 @@ describe('useComposeEditorController', () => {
     })
   })
 
-  it('场景树创建操作从 Container Preset 创建 v4 Entity', () => {
+  it('场景树创建操作从 Container Preset 创建 v5 Entity', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
       idFactory: ids(),
@@ -589,11 +593,24 @@ describe('useComposeEditorController', () => {
     expect(titles).toEqual(['基础', '变换', '可见性', '锁定', '外观', '内容'])
 
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
-      target: { value: '背景颜色' },
+      target: { value: '背景填充' },
     })
     expect(screen.queryByRole('button', { name: '基础' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '外观' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择背景颜色' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '背景填充' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage-paint-tools / Inspector 打开背景填充后同步 Stage Paint 编辑会话', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      initialSelection: ['title'],
+      registry,
+      runtime: editorRuntime,
+    }))
+    render(<>{result.current.inspectorPanel}</>)
+
+    fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
+    expect(result.current.stageProps.paintEditing).toEqual({ entityId: 'title' })
   })
 
   it('添加能力通过单个 batch 原子写入 Component 和 Composition', () => {

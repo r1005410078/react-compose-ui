@@ -8,6 +8,8 @@ import type {
 } from '@compose-ui/core'
 import type {
   StageInteractionController,
+  StagePaintEditing,
+  StagePaintSampling,
   StageViewport,
 } from '@compose-ui/stage-engine'
 
@@ -107,6 +109,12 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   ) => void
   /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */
   readonly interactionController?: StageInteractionController
+  /** 仅当单选 Entity 的背景 Paint Inspector 打开时传入，Stage 才显示渐变画布控制柄。 */
+  readonly paintEditing?: StagePaintEditing | null
+  /** 仅在 Inspector 启动图层取色时传入；Stage 会暂时拦截普通选择和拖动。 */
+  readonly paintSampling?: StagePaintSampling | null
+  /** 图层取色点击完成后通知宿主退出临时采样模式。 */
+  readonly onPaintSamplingComplete?: () => void
   /** Entity 与命令 ID factory。默认使用 crypto.randomUUID 或时间回退。 */
   readonly idFactory?: () => string
 }

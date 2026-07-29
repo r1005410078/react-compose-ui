@@ -42,6 +42,8 @@ export interface StageSceneIndex {
   commonContainerForSelection(entityIds: readonly string[]): string | null
   /** 按 paint order 查询包含世界点的最深可用 Container。 */
   containerAtPoint(point: { readonly x: number; readonly y: number }): string | null
+  /** 按 paint order 查询包含世界点且未被裁剪祖先遮蔽的最上层可见 Entity。 */
+  entityAtPoint(point: { readonly x: number; readonly y: number }): string | null
   /** 为选区建立 Entity 与文档辅助线吸附候选。 */
   snapCandidates(excludedIds: readonly string[]): readonly StageGuide[]
 }
@@ -130,9 +132,9 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
         chains.every((chain) => chain.includes(containerId))) ?? null
     },
     containerAtPoint(point) {
-      const contains = (containerId: string) => {
-        const entity = document.entities[containerId]
-        const matrix = matrices.get(containerId)
+      const contains = (entityId: string) => {
+        const entity = document.entities[entityId]
+        const matrix = matrices.get(entityId)
         if (!entity || !getComposeHierarchy(entity) || !matrix) return false
         const transform = getComposeTransform(entity)
         const local = applyMatrix(invertMatrix(matrix), point)
@@ -141,8 +143,8 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
           && local.y >= 0
           && local.y <= transform.size.height
       }
-      const isExposed = (containerId: string) => {
-        let current = parents.get(containerId) ?? null
+      const isExposed = (entityId: string) => {
+        let current = parents.get(entityId) ?? null
         while (current) {
           const ancestor = document.entities[current]
           if (ancestor && getComposeClip(ancestor)?.enabled && !contains(current)) {
@@ -161,6 +163,31 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
           && contains(entityId)
           && isExposed(entityId)
       }) ?? null
+    },
+    entityAtPoint(point) {
+      const contains = (entityId: string) => {
+        const entity = document.entities[entityId]
+        const matrix = matrices.get(entityId)
+        if (!entity || !matrix) return false
+        const transform = getComposeTransform(entity)
+        const local = applyMatrix(invertMatrix(matrix), point)
+        return local.x >= 0
+          && local.x <= transform.size.width
+          && local.y >= 0
+          && local.y <= transform.size.height
+      }
+      const isExposed = (entityId: string) => {
+        let current = parents.get(entityId) ?? null
+        while (current) {
+          const ancestor = document.entities[current]
+          if (ancestor && getComposeClip(ancestor)?.enabled && !contains(current)) return false
+          current = parents.get(current) ?? null
+        }
+        return true
+      }
+      return [...order].reverse().find((entityId) => (
+        visibility.get(entityId) === true && contains(entityId) && isExposed(entityId)
+      )) ?? null
     },
     snapCandidates(excludedIds) {
       const excluded = new Set(excludedIds)

@@ -39,7 +39,7 @@ afterEach(cleanup)
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds: ['container'],

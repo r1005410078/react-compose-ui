@@ -27,7 +27,13 @@ describe('Stage ECS commands', () => {
     const current = runtime.getState().document
     expect(current.rootIds).toEqual(['container'])
     expect(getComposeHierarchy(current.entities.container!)?.childIds).toEqual(['a', 'b'])
+    expect(getComposeTransform(current.entities.container!)).toEqual({
+      position: { x: 20, y: 30 },
+      size: { width: 230, height: 80 },
+      rotation: 0,
+    })
     expect(getComposeTransform(current.entities.a!).position).toEqual({ x: 0, y: 0 })
+    expect(getComposeTransform(current.entities.b!).position).toEqual({ x: 130, y: 30 })
 
     const ungroup = runtime.dispatch(createUngroupCommand(current, 'container'))
     expect(ungroup.status).toBe('committed')

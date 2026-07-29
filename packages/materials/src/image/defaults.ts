@@ -7,10 +7,10 @@ export const DEFAULT_IMAGE_PROPS: JsonObject = Object.freeze({
   fit: 'contain',
 })
 export const DEFAULT_IMAGE_APPEARANCE: ComposeAppearance = Object.freeze({
-  backgroundColor: 'transparent',
+  backgroundPaint: { kind: 'solid', color: 'transparent' },
   borderColor: 'transparent',
   borderWidth: 0,
   borderRadius: 0,
   opacity: 1,
   shadow: null,
-})
+} satisfies ComposeAppearance)

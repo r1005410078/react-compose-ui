@@ -425,6 +425,9 @@ export function ComposeStage({
   selectedIds,
   onSelectedIdsChange,
   outputSelected = false,
+  paintEditing = null,
+  paintSampling = null,
+  onPaintSamplingComplete,
   onOutputSelect,
   onSurfaceSizeChange,
   interactionController,
@@ -549,6 +552,7 @@ export function ComposeStage({
     onViewportChange,
     onSelectedIdsChange,
     onOutputSelect,
+    onPaintSamplingComplete,
     idFactory,
   })
   useLayoutEffect(() => {
@@ -561,6 +565,7 @@ export function ComposeStage({
       onViewportChange,
       onSelectedIdsChange,
       onOutputSelect,
+      onPaintSamplingComplete,
       idFactory,
     }
   })
@@ -990,6 +995,10 @@ export function ComposeStage({
           current.onOutputSelect?.()
           return
         }
+        if (effect.type === 'paint.sample.complete') {
+          current.onPaintSamplingComplete?.()
+          return
+        }
         if (effect.type === 'command.dispatch') {
           current.dispatch(effect.command)
           return
@@ -1044,6 +1053,8 @@ export function ComposeStage({
       surfaceSize,
       tool,
       selectedIds: normalizedSelection,
+      paintEditing,
+      paintSampling,
       idFactory,
       labels: {
         createGuide: messages.createGuide,
@@ -1061,6 +1072,8 @@ export function ComposeStage({
     messages.deleteGuide,
     messages.moveGuide,
     normalizedSelection,
+    paintEditing,
+    paintSampling,
     surfaceSize,
     tool,
     viewport,
@@ -1658,6 +1671,7 @@ export function ComposeStage({
         <StageSceneLayer
           assetResolver={assetResolver}
           document={previewDocument}
+          paintPreview={interaction.paintPreview}
           registry={registry}
           viewport={viewport}
           onEntityPointerDown={beginEntity}
@@ -1675,6 +1689,8 @@ export function ComposeStage({
           handlePoints={handlePoints}
           label={messages.editingOverlay}
           marqueeScreen={marqueeScreen}
+          paintHandles={interaction.paintHandles}
+          paintSample={interaction.paintSample}
           resizeHandles={resizeHandles}
           rotatable={selectionRotatable}
           screenBounds={screenBounds}

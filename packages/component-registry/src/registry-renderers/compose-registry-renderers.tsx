@@ -6,6 +6,7 @@ import {
   type EditorCommand,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '../registry/types'
+import type { ComposePaintEditPort } from '../registry/types'
 
 interface BoundaryProps {
   readonly children: ReactNode
@@ -99,6 +100,7 @@ export function ComposeRegistryComponentInspector({
   entity,
   componentKey,
   dispatch,
+  paintEditPort,
   readOnly,
 }: {
   readonly registry: ComposeEntityRegistry
@@ -106,6 +108,7 @@ export function ComposeRegistryComponentInspector({
   readonly componentKey: string
   readonly dispatch: (command: EditorCommand) => unknown
   readonly readOnly: boolean
+  readonly paintEditPort?: ComposePaintEditPort
 }) {
   const value = entity.components[componentKey]
   const definition = registry.getComponent(componentKey)
@@ -127,6 +130,7 @@ export function ComposeRegistryComponentInspector({
         dispatch={dispatch}
         entity={entity}
         readOnly={readOnly}
+        paintEditPort={paintEditPort}
         value={value}
       />
     </DefinitionErrorBoundary>
@@ -138,12 +142,14 @@ export function ComposeRegistryRendererInspector({
   registry,
   entity,
   dispatch,
+  paintEditPort,
   readOnly,
 }: {
   readonly registry: ComposeEntityRegistry
   readonly entity: ComposeEntity
   readonly dispatch: (command: EditorCommand) => unknown
   readonly readOnly: boolean
+  readonly paintEditPort?: ComposePaintEditPort
 }) {
   const renderer = getComposeRenderer(entity)
   if (!renderer) return null
@@ -167,6 +173,7 @@ export function ComposeRegistryRendererInspector({
         dispatch={dispatch}
         entity={entity}
         readOnly={readOnly}
+        paintEditPort={paintEditPort}
         renderer={renderer}
       />
     </DefinitionErrorBoundary>

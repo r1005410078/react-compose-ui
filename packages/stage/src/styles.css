@@ -197,6 +197,36 @@
   cursor: grab;
 }
 
+.compose-stage__paint-handle,
+.compose-stage__paint-stop {
+  fill: var(--compose-surface-raised, #f8fbff);
+  stroke: #a855f7;
+  stroke-width: 1.5;
+  pointer-events: all;
+}
+
+.compose-stage__paint-axis {
+  pointer-events: none;
+  stroke: color-mix(in srgb, var(--compose-accent, #3b82f6) 70%, white);
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+}
+
+.compose-stage__paint-sample { pointer-events: none; }
+.compose-stage__paint-sample path { stroke: var(--compose-accent, #3b82f6); stroke-width: 1; }
+.compose-stage__paint-sample circle { fill: var(--compose-surface, #15181d); stroke: var(--compose-accent, #3b82f6); stroke-width: 1.5; }
+.compose-stage__paint-sample-label { fill: color-mix(in srgb, var(--compose-surface, #15181d) 94%, transparent); stroke: var(--compose-border, #394250); }
+.compose-stage__paint-sample-swatch { stroke: rgba(255, 255, 255, .5); }
+.compose-stage__paint-sample text { fill: var(--compose-text, #eef2ff); font-size: 11px; dominant-baseline: middle; }
+
+.compose-stage__paint-handle {
+  cursor: move;
+}
+
+.compose-stage__paint-stop {
+  cursor: ew-resize;
+}
+
 .compose-stage__guide {
   stroke: #ff4fc3;
   stroke-width: 1;

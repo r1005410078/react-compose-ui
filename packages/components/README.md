@@ -19,9 +19,9 @@ import '@compose-ui/components/styles.css'
 `ComposeButton` 与 `ComposeInput` 会直接跟随 `ComposeThemeProvider` 的 Dark/Light 与 token override。
 样式仅输出带 `cu:` 前缀的 utility，并且不注入 Preflight 或 Shadcn 的默认全局主题。
 
-`ComposeColorPicker` 是受控的颜色 Pattern，基于包内 Shadcn CLI 生成的 Base UI Popover 源码组合色盘、
-色相滑条和透明选项。触发器与弹层均不显示 HEX/RGB/HSL 文本；选择只会提交小写 `#rrggbb` 或
-`transparent`。无法精确编辑的既有 CSS 色值仍会作为色块预览，直到用户主动修改。
+`ComposeColorPicker` 是受控的纯色 Pattern，基于包内 Shadcn CLI 生成的 Base UI Popover 源码组合
+色盘、色相/透明度滑条、透明色、Recent、Common 与可折叠的精确 HEX/Alpha 输入。选择会提交规范的
+`#rrggbb`、`#rrggbbaa` 或 `transparent`；无法精确编辑的既有 CSS 色值仍会作为色块预览，直到用户主动修改。
 
 ```tsx
 import { ComposeColorPicker } from '@compose-ui/components'
@@ -31,6 +31,24 @@ import { ComposeColorPicker } from '@compose-ui/components'
   value={backgroundColor}
   onValueChange={setBackgroundColor}
 />
+```
+
+需要结构化背景填充时使用 `ComposePaintPicker`。它在同一会话颜色历史中编辑纯色、Linear、Radial 与
+Angular gradient；Solid 切换为渐变时会创建“当前颜色 → 透明”的两个色标。`I` 优先调用浏览器原生
+`EyeDropper`，不可用时通过 `onEyedropperFallback` 让宿主进入画布图层取色。`ComposeColorHistoryProvider`
+默认只保留当前 React 会话的 16 条 MRU，不会读写 localStorage 或任何文档状态。
+
+```tsx
+import { ComposeColorHistoryProvider, ComposePaintPicker } from '@compose-ui/components'
+
+<ComposeColorHistoryProvider>
+  <ComposePaintPicker
+    label="背景填充"
+    value={backgroundPaint}
+    onValueChange={setBackgroundPaint}
+    onEyedropperFallback={startStagePaintSampling}
+  />
+</ComposeColorHistoryProvider>
 ```
 
 `ComposeContextMenu` 是可同时服务声明式区域与虚拟列表委托事件的共享右键菜单。Portal 内容会自行

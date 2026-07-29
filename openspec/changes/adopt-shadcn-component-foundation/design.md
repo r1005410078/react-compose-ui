@@ -99,17 +99,3 @@ Compose UI 以 `ComposeUIProvider` 的 token 作为唯一主题来源，而 Shad
   拒绝整次 Provider 操作。外部 Provider 删除不在可预拦截范围内，读取/保存错误仍由 preview 显示。
 - 自定义 `slots.assetBrowser` 是完整宿主替换，不获得自动 Dockview 桥接。默认浏览器仍转发宿主的
   `onAssetOpen`/`onBeforeAssetMutation`，并在其许可后执行 Editor 的资源文档会话逻辑。
-
-## Color alpha extension
-
-- `ComposeColorPicker` 的编辑状态为 HSV（RGB 三通道）加 0–255 alpha。它接受 `#rgb`、`#rgba`、
-  `#rrggbb`、`#rrggbbaa` 和 legacy `transparent`；其他 CSS 色仍只作为可预览回退值，直到用户主动编辑。
-- 色盘和色相只修改 RGB，Alpha range 只修改 alpha。range 的步长为 1%，Shift+方向键为 10%，并以本地化的
-  `aria-label`/`aria-valuetext` 暴露百分比。触发器、Alpha 轨道和滑块下方颜色预览均使用棋盘格，避免
-  透明色在 Dark/Light 下看起来像实色。
-- 用户主动编辑时，alpha 为 255 输出小写 `#rrggbb` 以保持既有文档和快照稳定；alpha 小于 255 输出
-  小写 `#rrggbbaa` 以保留 RGB 信息。现有“透明”快捷操作继续输出 `transparent`，因此不把已有文档值
-  迁移为八位 HEX。
-- `allowAlpha` 作为 `ComposeColorPicker` 的可选能力开关，默认开启；`allowTransparent` 仍只控制完全透明
-  快捷操作。Property Panel 的 `Color` renderer 默认保留两者。Color channel alpha 与节点 `opacity` 是独立
-  的 CSS 语义，渲染时自然叠乘；不修改 ComposeDocument、命令或材料 schema。

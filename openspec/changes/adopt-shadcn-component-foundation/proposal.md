@@ -34,16 +34,13 @@ Primitive 以一致、可维护且可审查的方式开发。
   面板迁移到该资源文档；Canvas 标签始终保留。
 - 导出可独立组合的 `ComposeAssetPreview`，并让默认 Editor 为 dirty 资源文档的关闭、重命名、移动与
   删除接入既有共享 Dialog 决策；资源写入继续只通知 Provider/宿主审计，不进入 ComposeDocument。
-- 扩展共享 `ComposeColorPicker` 与 Property Panel 的 `Color` 语义类型：除完全透明外，提供可访问的
-  Alpha 滑条。用户编辑后规范化为小写 `#rrggbb`（100%）或 `#rrggbbaa`（其余透明度），并继续读取
-  `transparent` 和现有 CSS 色值。
 
 ## Impact
 
 - Affected specs: `components`、`scene-tree`、`asset-browser`、`property-panel`、
   `editor-workspace-layout`、`editor-preferences`。
 - Affected packages: `@compose-ui/components`、`@compose-ui/scene-tree`、`@compose-ui/asset-browser`、
-  `@compose-ui/property-panel`、`@compose-ui/materials`、`@compose-ui/editor`、私有 Storybook workspace；不改变 core、assets、
-  stage-engine 或 ComposeDocument。
+  `@compose-ui/property-panel`、`@compose-ui/editor`、私有 Storybook workspace；不改变 core、assets、
+  stage-engine、materials 或 ComposeDocument。
 - New runtime dependencies are added only when selected Shadcn primitives require them; CLI and CSS build tooling
   remain development dependencies.

@@ -57,7 +57,7 @@ function PreviewIcon() {
 }
 
 const emptyDocument: ComposeDocument = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   canvas: createDefaultCanvasSettings(),
   output: createDefaultOutputSettings(),
   rootIds: [],
@@ -182,7 +182,7 @@ const echartsPreset = {
     Visibility: { visible: true },
     Lock: { locked: false },
     Appearance: {
-      backgroundColor: 'transparent',
+      backgroundPaint: { kind: 'solid', color: 'transparent' },
       borderColor: 'transparent',
       borderWidth: 0,
       borderRadius: 0,
@@ -254,6 +254,7 @@ export function StageDemoWorkspace() {
     initialLabel: 'Initial state',
   }))
   const previousDocument = useRef(runtime.document)
+  const lastRecordedCommitId = useRef<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewMode, setPreviewMode] = useState<'document' | 'container'>('document')
   const nextId = useRef(0)
@@ -263,6 +264,10 @@ export function StageDemoWorkspace() {
     const afterDocument = runtime.document
     previousDocument.current = afterDocument
     const transaction = event.transaction
+    // runtime 会为同一 mergeKey 保留稳定 transaction ID。连续色盘采样仍需驱动舞台
+    // 预览，但不应反复序列化不断增长的 Patch 列表并写入 IndexedDB 操作日志。
+    if (event.direction === 'commit' && transaction?.id === lastRecordedCommitId.current) return
+    if (event.direction === 'commit') lastRecordedCommitId.current = transaction?.id ?? null
     const input: ComposeOperationLogRecordInput = {
       action: event.direction === 'commit'
         ? transaction?.commandType ?? 'document.commit'

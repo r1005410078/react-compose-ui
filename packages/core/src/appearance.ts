@@ -4,6 +4,7 @@ import type {
   ResolvedComposeAppearance,
 } from './document-types'
 import { getComposeAppearance } from './entity'
+import { DEFAULT_COMPOSE_BACKGROUND_PAINT } from './paint'
 
 /** 从关闭状态开始编辑单个 shadow 子字段时使用的稳定基线。 @public */
 export const DEFAULT_COMPOSE_SHADOW: ComposeShadow = {
@@ -16,7 +17,7 @@ export const DEFAULT_COMPOSE_SHADOW: ComposeShadow = {
 
 /** 缺失 Appearance 时使用的透明外观。 @public */
 export const DEFAULT_COMPOSE_APPEARANCE: ResolvedComposeAppearance = {
-  backgroundColor: 'transparent',
+  backgroundPaint: DEFAULT_COMPOSE_BACKGROUND_PAINT,
   borderColor: 'transparent',
   borderWidth: 0,
   borderRadius: 0,
@@ -39,8 +40,8 @@ export function resolveComposeAppearance(entity: ComposeEntity): ResolvedCompose
     ? DEFAULT_COMPOSE_APPEARANCE.shadow
     : appearance.shadow
   return {
-    backgroundColor: appearance?.backgroundColor
-      ?? DEFAULT_COMPOSE_APPEARANCE.backgroundColor,
+    backgroundPaint: appearance?.backgroundPaint
+      ?? DEFAULT_COMPOSE_APPEARANCE.backgroundPaint,
     borderColor: appearance?.borderColor ?? DEFAULT_COMPOSE_APPEARANCE.borderColor,
     borderWidth: appearance?.borderWidth ?? DEFAULT_COMPOSE_APPEARANCE.borderWidth,
     borderRadius: appearance?.borderRadius ?? DEFAULT_COMPOSE_APPEARANCE.borderRadius,

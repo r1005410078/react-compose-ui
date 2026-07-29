@@ -35,7 +35,7 @@ export function rendererEntity(
     Transform: overrides.transform ?? transform(),
     Visibility: { visible: overrides.visible ?? true },
     Lock: { locked: overrides.locked ?? false },
-    Appearance: { backgroundColor: '#3b82f6', opacity: 1 },
+    Appearance: { backgroundPaint: { kind: 'solid', color: '#3b82f6' }, opacity: 1 },
     Renderer: { type: 'rectangle', props: {} },
   }
   return {
@@ -68,7 +68,7 @@ export function containerEntity(
     Lock: { locked: overrides.locked ?? false },
     Hierarchy: { childIds },
     Clip: { enabled: true },
-    Appearance: { backgroundColor: 'transparent' },
+    Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
     ...(overrides.renderer ? { Renderer: { type: 'rectangle', props: {} } } : {}),
   }
   return {
@@ -92,7 +92,7 @@ export function documentFixture(
   rootIds: readonly string[] = Object.keys(entities),
 ): ComposeDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds,

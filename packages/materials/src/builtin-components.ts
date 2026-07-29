@@ -71,7 +71,7 @@ export function createComposeBuiltinComponentDefinitions(
       label: '外观',
       order: 40,
       createDefault: () => ({
-        backgroundColor: 'transparent',
+        backgroundPaint: { kind: 'solid', color: 'transparent' },
         borderColor: 'transparent',
         borderWidth: 0,
         borderRadius: 0,

@@ -45,7 +45,7 @@ function preset(id = 'rectangle'): ComposeEntityPreset {
       Transform: transform,
       Visibility: { visible: true },
       Lock: { locked: false },
-      Appearance: { backgroundColor: '#2463eb' },
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#2463eb' } },
       Renderer: { type: 'rectangle', props: {} },
     }),
   }
@@ -73,7 +73,7 @@ function capability(
 
 function document(entity: ComposeEntity): ComposeDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: {
       grid: {
         stepX: 8,

@@ -18,6 +18,7 @@ import {
   resolveComposeTransformConstraints,
 } from './entity'
 import { isValidComposeTransform } from './document'
+import { isComposeColor, isValidComposePaint } from './paint'
 import { jsonEqual } from './patches'
 import type {
   CommandHandler,
@@ -28,7 +29,7 @@ import type {
   EditorCommandMeta,
 } from './command-types'
 
-/** ComposeDocument v4 内置命令 type。 @public */
+/** ComposeDocument v5 内置命令 type。 @public */
 export const BUILTIN_COMMAND_TYPES = {
   configureCanvas: 'canvas.configure',
   configureOutput: 'output.configure',
@@ -151,8 +152,7 @@ function asOutputSettings(value: unknown): ComposeOutputSettings | null {
     || typeof value.height !== 'number'
     || !Number.isFinite(value.height)
     || value.height <= 0
-    || typeof value.backgroundColor !== 'string'
-    || value.backgroundColor.trim().length === 0
+    || !isComposeColor(value.backgroundColor)
   ) return null
   return {
     width: value.width,
@@ -662,6 +662,13 @@ function appearanceHandler(): CommandHandler {
       if (typeof entityId !== 'string' || !isRecord(appearance)) {
         return issue('appearance.invalid', 'Appearance 参数无效')
       }
+      if (
+        'backgroundColor' in appearance
+        || ('backgroundPaint' in appearance && !isValidComposePaint(appearance.backgroundPaint))
+        || ('borderColor' in appearance && !isComposeColor(appearance.borderColor))
+      ) {
+        return issue('appearance.invalid', 'Appearance 包含非法 Paint 或颜色')
+      }
       const entity = document.entities[entityId]
       if (!entity) return issue('entity.missing', `Entity ${entityId} 不存在`)
       if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${entityId} 已锁定`)
@@ -908,7 +915,7 @@ function ungroupHandler(): CommandHandler {
   }
 }
 
-/** 创建 ComposeDocument v4 内置命令处理器。 @public */
+/** 创建 ComposeDocument v5 内置命令处理器。 @public */
 export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
   return [
     configureCanvasHandler(),

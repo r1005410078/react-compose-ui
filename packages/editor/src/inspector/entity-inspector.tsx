@@ -4,6 +4,7 @@ import {
   ComposeRegistryComponentInspector,
   ComposeRegistryRendererInspector,
   type ComposeEntityRegistry,
+  type ComposePaintEditPort,
 } from '@compose-ui/component-registry'
 import { ComposeButton, ComposeConfirmDialog } from '@compose-ui/components'
 import {
@@ -30,6 +31,7 @@ interface EntityInspectorProps {
   readonly registry: ComposeEntityRegistry
   readonly dispatch: (command: EditorCommand) => unknown
   readonly idFactory: () => string
+  readonly paintEditPort?: ComposePaintEditPort
 }
 
 // 内建 Component 由 Registry 定义的 inspector 呈现；缺失定义时也不进入“未知”分组，
@@ -122,6 +124,7 @@ export function EntityInspector({
   registry,
   dispatch,
   idFactory,
+  paintEditPort,
 }: EntityInspectorProps) {
   const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
   const locked = getComposeLock(entity).locked
@@ -234,6 +237,7 @@ export function EntityInspector({
                 dispatch={dispatch}
                 entity={entity}
                 readOnly={locked}
+                paintEditPort={paintEditPort}
                 registry={registry}
               />
             </ComposePropertyPanelSection>
@@ -259,6 +263,7 @@ export function EntityInspector({
                 dispatch={dispatch}
                 entity={entity}
                 readOnly={locked}
+                paintEditPort={paintEditPort}
                 registry={registry}
               />
             ) : (

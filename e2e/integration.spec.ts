@@ -305,6 +305,45 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await expect(customHeight).toHaveValue('1080')
 })
 
+test('OpenSpec: components / Color Picker / 色盘与透明度滑动在真实指针拖动后保持打开', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+  await page.mouse.click(outputBox!.x + 40, outputBox!.y + 40)
+
+  const inspector = editor.getByRole('region', { name: '画布属性' })
+  const trigger = inspector.getByRole('button', { name: '选择输出背景颜色', exact: true })
+  await trigger.click()
+  const picker = page.getByRole('dialog', { name: '输出背景颜色', exact: true })
+  const plane = picker.getByLabel('输出背景色盘', { exact: true })
+  const planeBox = await plane.boundingBox()
+  const history = editor.locator('[data-compose-ui="history"] li')
+  const historyBefore = await history.count()
+  expect(planeBox).not.toBeNull()
+
+  await page.mouse.move(planeBox!.x + planeBox!.width * 0.15, planeBox!.y + planeBox!.height * 0.2)
+  await page.mouse.down()
+  await page.mouse.move(planeBox!.x + planeBox!.width * 0.75, planeBox!.y + planeBox!.height * 0.7, { steps: 4 })
+  await page.mouse.up()
+  await expect(picker).toBeVisible()
+
+  const alpha = picker.getByRole('slider', { name: '输出背景不透明度', exact: true })
+  const alphaBox = await alpha.boundingBox()
+  expect(alphaBox).not.toBeNull()
+  await expect(alpha).toHaveValue('100')
+  await page.mouse.move(alphaBox!.x + alphaBox!.width / 2, alphaBox!.y + alphaBox!.height * 0.9)
+  await page.mouse.down()
+  await page.mouse.move(alphaBox!.x + alphaBox!.width / 2, alphaBox!.y + alphaBox!.height * 0.3, { steps: 4 })
+  await page.mouse.up()
+  await expect(alpha).not.toHaveValue('100')
+  await expect(picker).toBeVisible()
+  await expect(history).toHaveCount(historyBefore + 1)
+})
+
 test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使用完整示例完成 Stage 纵向流程', async ({ page }) => {
   await page.goto('/')
 
@@ -477,14 +516,14 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
 
   const appearance = propertyRoot.getByRole('button', { name: '外观' })
   await appearance.click()
-  await expect(propertyRoot.getByRole('button', { name: '选择背景颜色' })).toHaveCount(0)
-  await propertyRoot.getByRole('searchbox', { name: '搜索属性' }).fill('背景颜色')
+  await expect(propertyRoot.getByRole('button', { name: '背景填充' })).toHaveCount(0)
+  await propertyRoot.getByRole('searchbox', { name: '搜索属性' }).fill('背景填充')
   await expect(appearance).toHaveAttribute('aria-expanded', 'true')
-  await expect(propertyRoot.getByRole('button', { name: '选择背景颜色' })).toBeVisible()
+  await expect(propertyRoot.getByRole('button', { name: '背景填充' })).toBeVisible()
   await expect(propertyRoot.getByRole('button', { name: '变换' })).toHaveCount(0)
   await propertyRoot.getByRole('searchbox', { name: '搜索属性' }).fill('')
   await expect(appearance).toHaveAttribute('aria-expanded', 'false')
-  await expect(propertyRoot.getByRole('button', { name: '选择背景颜色' })).toHaveCount(0)
+  await expect(propertyRoot.getByRole('button', { name: '背景填充' })).toHaveCount(0)
 
   await capability.selectOption('geometry-constraints')
   const constraints = propertyRoot.getByRole('button', { name: '几何限制' })
@@ -533,6 +572,41 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   expect(inspectorBox).not.toBeNull()
   expect(toolbarBox).not.toBeNull()
   expect(toolbarBox!.y).toBeCloseTo(inspectorBox!.y, 0)
+})
+
+test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交画布控制柄编辑', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+
+  const rectangle = stage.locator('.compose-stage__node.is-renderer').first()
+  await rectangle.click()
+  // 历史列表只在 Scene Graph Dock 激活时挂载。先切换再打开 Paint
+  // 编辑器，避免 Dockview 激活操作触发 Popover 的失焦关闭。
+  await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
+  await editor.getByRole('button', { name: '背景填充', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: '背景填充', exact: true })
+  await picker.getByRole('button', { name: '线性', exact: true }).click()
+  await expect(stage.getByTestId('stage-paint-handles')).toBeVisible()
+  await expect(stage.getByTestId('stage-paint-linear-start')).toBeVisible()
+  const end = stage.getByTestId('stage-paint-linear-end')
+  await expect(end).toBeVisible()
+
+  const history = editor.locator('[data-compose-ui="history"] li')
+  const historyBeforeDrag = await history.count()
+  const endBox = await end.boundingBox()
+  expect(endBox).not.toBeNull()
+  await page.mouse.move(endBox!.x + endBox!.width / 2, endBox!.y + endBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(endBox!.x - 48, endBox!.y + 32, { steps: 4 })
+  await page.mouse.up()
+  await expect(history).toHaveCount(historyBeforeDrag + 1)
+
+  await page.keyboard.press('Escape')
+  await expect(stage.getByTestId('stage-paint-handles')).toHaveCount(0)
 })
 
 test('OpenSpec: stage / 八向缩放 / resize 手柄在预览阶段跟随鼠标', async ({ page }) => {

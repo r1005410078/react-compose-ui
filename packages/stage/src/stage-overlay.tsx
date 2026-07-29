@@ -3,6 +3,8 @@ import type {
   ResizeHandle,
   StageGuide,
   StageInteractionHit,
+  StagePaintHandle,
+  StagePaintSamplePreview,
   StagePreviewGuide,
   StageRect,
   StageViewport,
@@ -22,6 +24,8 @@ interface StageOverlayProps {
   readonly rotatable: boolean
   readonly marqueeScreen: StageRect | null
   readonly snapGuides: readonly StageGuide[]
+  readonly paintHandles: readonly StagePaintHandle[]
+  readonly paintSample: StagePaintSamplePreview | null
   readonly onInteraction: (
     hit: StageInteractionHit,
     event: ReactPointerEvent<Element>,
@@ -39,9 +43,19 @@ export function StageOverlay({
   resizeHandles,
   rotatable,
   marqueeScreen,
+  paintHandles,
+  paintSample,
   snapGuides,
   onInteraction,
 }: StageOverlayProps) {
+  const paintPoint = (kind: StagePaintHandle['kind']) => paintHandles.find((handle) => handle.kind === kind)?.point
+  const linearStart = paintPoint('linear-start')
+  const linearEnd = paintPoint('linear-end')
+  const radialCenter = paintPoint('radial-center')
+  const radialX = paintPoint('radial-radius-x')
+  const radialY = paintPoint('radial-radius-y')
+  const angularCenter = paintPoint('angular-center')
+  const angularArm = paintPoint('angular-arm')
   return (
     <svg
       aria-label={label}
@@ -89,7 +103,7 @@ export function StageOverlay({
           y={screenBounds.y}
         />
       ) : null}
-      {editableSelection && handlePoints ? (
+      {editableSelection && handlePoints && paintHandles.length === 0 ? (
         <>
           {(Object.entries(handlePoints) as [ResizeHandle, readonly [number, number]][])
             .filter(([handle]) => resizeHandles.includes(handle))
@@ -120,6 +134,69 @@ export function StageOverlay({
           ) : null}
         </>
       ) : null}
+      {paintHandles.length > 0 ? (
+        <g className="compose-stage__paint-handles" data-testid="stage-paint-handles">
+          {linearStart && linearEnd ? (() => {
+            const start = worldToScreen(linearStart, viewport)
+            const end = worldToScreen(linearEnd, viewport)
+            return <line className="compose-stage__paint-axis" x1={start.x} x2={end.x} y1={start.y} y2={end.y} />
+          })() : null}
+          {radialCenter && radialX ? (() => {
+            const center = worldToScreen(radialCenter, viewport)
+            const x = worldToScreen(radialX, viewport)
+            const y = radialY ? worldToScreen(radialY, viewport) : undefined
+            return <>
+              <line className="compose-stage__paint-axis" x1={center.x} x2={x.x} y1={center.y} y2={x.y} />
+              {y ? <line className="compose-stage__paint-axis" x1={center.x} x2={y.x} y1={center.y} y2={y.y} /> : null}
+            </>
+          })() : null}
+          {angularCenter && angularArm ? (() => {
+            const center = worldToScreen(angularCenter, viewport)
+            const arm = worldToScreen(angularArm, viewport)
+            return <line className="compose-stage__paint-axis" x1={center.x} x2={arm.x} y1={center.y} y2={arm.y} />
+          })() : null}
+          {paintHandles.map((handle) => {
+            const point = worldToScreen(handle.point, viewport)
+            const stop = handle.kind.endsWith('stop')
+            return stop ? (
+              <circle
+                className="compose-stage__paint-stop"
+                cx={point.x}
+                cy={point.y}
+                data-testid={`stage-paint-${handle.kind}-${handle.stopId}`}
+                key={`${handle.kind}:${handle.stopId}`}
+                r="5"
+                onPointerDown={(event) => onInteraction({ kind: 'paint-handle', handle: handle.kind, stopId: handle.stopId }, event)}
+              />
+            ) : (
+              <rect
+                className="compose-stage__paint-handle"
+                data-testid={`stage-paint-${handle.kind}`}
+                height="10"
+                key={handle.kind}
+                width="10"
+                x={point.x - 5}
+                y={point.y - 5}
+                onPointerDown={(event) => onInteraction({ kind: 'paint-handle', handle: handle.kind }, event)}
+              />
+            )
+          })}
+        </g>
+      ) : null}
+      {paintSample ? (() => {
+        const point = worldToScreen(paintSample.point, viewport)
+        return (
+          <g className="compose-stage__paint-sample" data-testid="stage-paint-sample">
+            <path d={`M${point.x - 10} ${point.y}H${point.x + 10}M${point.x} ${point.y - 10}V${point.y + 10}`} />
+            <circle cx={point.x} cy={point.y} r="4" />
+            <g transform={`translate(${point.x + 12} ${point.y + 12})`}>
+              <rect className="compose-stage__paint-sample-label" height="22" rx="4" width="104" />
+              {paintSample.color ? <rect className="compose-stage__paint-sample-swatch" height="14" rx="2" width="14" x="4" y="4" style={{ fill: paintSample.color }} /> : null}
+              <text x={paintSample.color ? 24 : 6} y="15">{paintSample.color ?? 'No Paint'}</text>
+            </g>
+          </g>
+        )
+      })() : null}
       {marqueeScreen ? (
         <rect
           className="compose-stage__marquee"

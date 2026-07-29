@@ -44,7 +44,7 @@ function entity(
       },
       Visibility: { visible: true },
       Lock: { locked: false },
-      Appearance: { backgroundColor: '#2463eb' },
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#2463eb' } },
       ...(hierarchy
         ? {
             Hierarchy: { childIds: [...(options.childIds ?? [])] },
@@ -71,7 +71,7 @@ function document(
   rootIds: readonly string[] = entities.map(({ id }) => id),
 ): ComposeDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: {
       grid: {
         stepX: 8,
@@ -101,7 +101,7 @@ const preset: ComposeEntityPreset = {
     },
     Visibility: { visible: true },
     Lock: { locked: false },
-    Appearance: { backgroundColor: '#2463eb' },
+    Appearance: { backgroundPaint: { kind: 'solid', color: '#2463eb' } },
     Renderer: { type: 'test', props: { text: 'seed' } },
   }),
 }
@@ -117,7 +117,7 @@ const registry = createComposeEntityRegistry({
 
 function renderStage(
   value: ComposeDocument,
-  options: { selectedIds?: readonly string[] } = {},
+  options: { selectedIds?: readonly string[]; paintEditing?: { readonly entityId: string } } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
   const dispatchSpy = vi.fn()
@@ -132,6 +132,7 @@ function renderStage(
       onSelectedIdsChange={vi.fn()}
       onViewportChange={vi.fn()}
       registry={registry}
+      paintEditing={options.paintEditing}
       selectedIds={options.selectedIds ?? []}
       tool="select"
       viewport={{ x: 0, y: 0, zoom: 1 }}
@@ -207,5 +208,30 @@ describe('ComposeStage ECS', () => {
       type: BUILTIN_COMMAND_TYPES.deleteEntity,
       payload: { entityIds: ['a'] },
     }))
+  })
+
+  it('OpenSpec: stage-paint-tools / 打开单选背景填充时以 Paint 控制柄替换普通 resize 控制柄', () => {
+    const painted: ComposeEntity = {
+      ...entity('a'),
+      components: {
+        ...entity('a').components,
+        Appearance: {
+          backgroundPaint: {
+            kind: 'linear-gradient',
+            start: { x: 0, y: 0.5 },
+            end: { x: 1, y: 0.5 },
+            stops: [
+              { id: 'start', position: 0, color: '#ef4444' },
+              { id: 'end', position: 1, color: '#3b82f6' },
+            ],
+          },
+        },
+      },
+    }
+    renderStage(document([painted]), { paintEditing: { entityId: 'a' }, selectedIds: ['a'] })
+    expect(screen.getByTestId('stage-paint-handles')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-paint-linear-start')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-paint-linear-end')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-resize-se')).not.toBeInTheDocument()
   })
 })

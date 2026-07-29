@@ -6,6 +6,7 @@ import {
   ComposeRegistryComponentInspector,
   ComposeRegistryEntityRenderer,
 } from './compose-registry-renderers'
+import { ComposeEntityPaintLayer } from './compose-entity-paint-layer'
 
 function entity(rendererType = 'text'): ComposeEntity {
   return {
@@ -77,6 +78,40 @@ describe('Entity Registry React boundaries', () => {
       />,
     )
     expect(screen.getByRole('status', { name: /HostCapability/ })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage-paint-tools / Stage 与 Preview 共用受控 SVG Paint Layer', () => {
+    const painted: ComposeEntity = {
+      ...entity(),
+      components: {
+        ...entity().components,
+        Appearance: {
+          backgroundPaint: {
+            kind: 'linear-gradient',
+            start: { x: 0, y: 0.5 },
+            end: { x: 1, y: 0.5 },
+            stops: [
+              { id: 'start', position: 0, color: '#ff0000' },
+              { id: 'end', position: 1, color: '#0000ff80' },
+            ],
+          },
+        },
+      },
+    }
+    const { container } = render(<ComposeEntityPaintLayer entity={painted} />)
+
+    expect(container.querySelector('[data-compose-paint="linear-gradient"]')).toBeInTheDocument()
+    const layer = container.querySelector('[data-compose-paint="linear-gradient"]')
+    expect(layer?.querySelectorAll('stop')).toHaveLength(2)
+    expect(layer?.querySelector('stop:last-child')).toHaveAttribute('stop-color', '#0000ff80')
+  })
+
+  it('OpenSpec: stage-paint-tools / 编辑 Stage 可让透明 Paint 层承接组合空白区域命中', () => {
+    const { container } = render(<ComposeEntityPaintLayer entity={entity()} interactive />)
+
+    expect(container.querySelector('[data-compose-paint="solid"]')).toHaveStyle({
+      pointerEvents: 'auto',
+    })
   })
 
   it('OpenSpec: Renderer 隔离 / 数据修复后错误边界自动恢复', () => {

@@ -147,7 +147,7 @@ describe('内建 Component inspectors', () => {
     const Inspector = inspectorOf('Appearance')
     const shadowed = entity({
       Appearance: {
-        backgroundColor: '#111111',
+        backgroundPaint: { kind: 'solid', color: '#111111' },
         shadow: { color: '#00000040', offsetX: 0, offsetY: 4, blur: 12, spread: 0 },
       },
     })
@@ -172,5 +172,29 @@ describe('内建 Component inspectors', () => {
         shadow: { color: '#00000040', offsetX: 0, offsetY: 4, blur: 12, spread: 0 },
       }),
     })
+  })
+
+  it('OpenSpec: stage-paint-tools / 背景填充打开时通过共享 Paint edit port 驱动画布控制柄', () => {
+    const dispatch = vi.fn()
+    const open = vi.fn()
+    const close = vi.fn()
+    const sample = vi.fn()
+    const Inspector = inspectorOf('Appearance')
+    const target = entity({
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#2563eb' } },
+    })
+    render(
+      <Inspector
+        componentKey="Appearance"
+        dispatch={dispatch}
+        entity={target}
+        paintEditPort={{ open, close, sample }}
+        readOnly={false}
+        value={target.components.Appearance!}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
+    expect(open).toHaveBeenCalledWith({ entityId: 'entity-a' })
   })
 })

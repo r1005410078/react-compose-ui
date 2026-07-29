@@ -116,7 +116,7 @@ metadata 只保存稳定数据，不能放 React 组件或函数。
 ## 内建语义类型
 
 所有实例默认具备以下稳定 editor ID：`vector2`、`size`、`angle`、`opacity`、
-`corner-radius`、`stroke-width`、`visibility`、`color`、`alignment`、`map`。可从包入口导入
+`corner-radius`、`stroke-width`、`visibility`、`color`、`paint`、`alignment`、`map`。可从包入口导入
 `COMPOSE_PROPERTY_PANEL_BASE_EDITOR_IDS` 获取同一不可变列表；实例 `renderers` 使用相同 ID 时，
 宿主 renderer 优先，其他内建 editor 仍继续可用。
 
@@ -143,10 +143,10 @@ const outputSize = v.pipe(
 ```
 
 选择 Size 预设会在一次提交中同步 preset/W/H；手动修改为不匹配的尺寸时会回到 schema
-允许的 `custom` 值。Color 使用共享 `ComposeColorPicker`：属性行和弹层都只显示颜色，不显示
-HEX、RGB、HSL 或 CSS 文本输入。它提供不透明色与完全透明两种选择；既有 `transparent`、
-`rgb()`、`hsl()` 等值继续原样读取和预览，只有用户首次选择颜色后才写入小写 HEX 或
-`transparent`。
+允许的 `custom` 值。Color 使用共享 `ComposeColorPicker`：支持 Alpha、透明色、Recent/Common、吸管和
+折叠的精确 HEX/Alpha 输入，提交规范 `#rrggbb`、`#rrggbbaa` 或 `transparent`。`paint` editor 接受
+`ComposePaint`，用于背景填充的 Solid/Linear/Radial/Angular gradient；宿主可通过
+`paintEditor.onOpenChange` 和 `onEyedropperFallback` 连接 Stage 的渐变控制柄与图层取色。
 
 `map` 是一个固定的单键分支属性：左侧属性列显示 Key，右侧 Value 根据当前 Key 的分支 Schema
 自动复用内建或实例 renderer。它使用严格的 `v.variant('key', [...])`，每个分支必须恰好是

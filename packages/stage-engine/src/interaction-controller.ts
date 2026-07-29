@@ -1,4 +1,5 @@
 import type {
+  ComposePaint,
   ComposeDocument,
   EditorCommand,
   JsonValue,
@@ -6,7 +7,11 @@ import type {
 import {
   BUILTIN_COMMAND_TYPES,
   getComposeLock,
+  getComposeAppearance,
+  getComposeRenderer,
+  evaluateComposePaintAtLocalPoint,
   getComposeTransform,
+  resolveComposeAppearance,
   resolveComposeTransformConstraints,
 } from '@compose-ui/core'
 import {
@@ -55,6 +60,8 @@ export type StageInteractionPhase =
   | 'rotate'
   | 'guide-create'
   | 'guide-move'
+  | 'paint-edit'
+  | 'paint-sample'
   | 'external'
 
 /** 不依赖 KeyboardEvent 的交互修饰键。 @public */
@@ -88,6 +95,52 @@ export type StageInteractionHit =
   | { readonly kind: 'ruler'; readonly axis: 'x' | 'y' }
   | { readonly kind: 'ruler-corner' }
   | { readonly kind: 'guide'; readonly guideId: string }
+  | {
+      readonly kind: 'paint-handle'
+      readonly handle: StagePaintHandleKind
+      readonly stopId?: string
+    }
+
+/** 渐变画布控制柄的稳定语义。 @public */
+export type StagePaintHandleKind =
+  | 'linear-start'
+  | 'linear-end'
+  | 'linear-stop'
+  | 'radial-center'
+  | 'radial-radius-x'
+  | 'radial-radius-y'
+  | 'radial-stop'
+  | 'angular-center'
+  | 'angular-arm'
+  | 'angular-stop'
+
+/** 当前 Inspector 已打开的单 Entity Paint 编辑上下文。 @public */
+export interface StagePaintEditing {
+  readonly entityId: string
+  readonly activeStopId?: string
+}
+
+/** 当前画布图层取色的目标字段。 @public */
+export interface StagePaintSampling {
+  readonly entityId: string
+  readonly field: 'backgroundPaint' | 'borderColor'
+}
+
+/** 图层取色过程中的瞬时反馈。 @public */
+export interface StagePaintSamplePreview {
+  readonly target: StagePaintSampling
+  readonly point: StagePoint
+  readonly sampledEntityId?: string
+  readonly color?: string
+  readonly status: 'ready' | 'unavailable'
+}
+
+/** SVG/DOM overlay 可绘制的世界坐标 Paint 控制柄。 @public */
+export interface StagePaintHandle {
+  readonly kind: StagePaintHandleKind
+  readonly point: StagePoint
+  readonly stopId?: string
+}
 
 /** Stage surface 最新受控上下文。 @public */
 export interface StageInteractionContext {
@@ -101,6 +154,10 @@ export interface StageInteractionContext {
   readonly tool: 'select' | 'pan'
   /** 最新受控选择，按宿主顺序排列。 */
   readonly selectedIds: readonly string[]
+  /** Inspector 打开的单 Entity 背景填充编辑；缺失时不渲染也不接收 Paint 控制柄。 */
+  readonly paintEditing?: StagePaintEditing | null
+  /** Inspector 请求的画布图层取色目标；存在时普通 Stage 命中被临时屏蔽。 */
+  readonly paintSampling?: StagePaintSampling | null
   /** 为命令、batch、guide 和结构节点创建稳定 ID。 */
   readonly idFactory: () => string
   /** 保留 React/i18n 层提供的命令标签。 */
@@ -119,6 +176,7 @@ export type StageInteractionEffect =
   | { readonly type: 'viewport.change'; readonly viewport: StageViewport }
   | { readonly type: 'selection.change'; readonly selectedIds: readonly string[] }
   | { readonly type: 'output.select' }
+  | { readonly type: 'paint.sample.complete' }
   | { readonly type: 'command.dispatch'; readonly command: EditorCommand }
   | {
       readonly type: 'external.drop'
@@ -155,6 +213,16 @@ export interface StageInteractionSnapshot {
   readonly snapGuides: readonly StageGuide[]
   /** 创建或移动中的文档辅助线 preview。 */
   readonly guidePreview: readonly StagePreviewGuide[]
+  /** 尚未提交的背景 Paint；仅控制柄拖动期间存在。 */
+  readonly paintPreview: {
+    readonly entityId: string
+    readonly paint: ComposePaint
+    readonly activeStopId?: string
+  } | null
+  /** 当前 Inspector Paint 编辑目标的控制柄；坐标均为 world 坐标。 */
+  readonly paintHandles: readonly StagePaintHandle[]
+  /** 当前图层取色准星和命中反馈。 */
+  readonly paintSample: StagePaintSamplePreview | null
   /** Palette 外部拖入 preview；非 external phase 时为空。 */
   readonly external: {
     readonly item: StageExternalDragItem
@@ -231,6 +299,9 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   marquee: null,
   snapGuides: [],
   guidePreview: [],
+  paintPreview: null,
+  paintHandles: [],
+  paintSample: null,
   external: null,
   temporaryPan: false,
   selectionBounds: null,
@@ -289,6 +360,23 @@ type Gesture =
       point: StagePoint
     }
   | {
+      readonly type: 'paint'
+      readonly pointerId: number
+      readonly viewport: StageViewport
+      readonly entityId: string
+      readonly handle: StagePaintHandleKind
+      readonly stopId?: string
+      paint: ComposePaint
+    }
+  | {
+      readonly type: 'paint-sample'
+      readonly pointerId: number
+      readonly viewport: StageViewport
+      readonly target: StagePaintSampling
+      point: StagePoint
+      alt: boolean
+    }
+  | {
       readonly type: 'guide-move'
       readonly pointerId: number
       readonly viewport: StageViewport
@@ -342,6 +430,107 @@ function matrixBounds(matrix: StageMatrix, width: number, height: number): Stage
   }
 }
 
+function localPaintPointToWorld(
+  matrix: StageMatrix,
+  transform: { readonly size: { readonly width: number; readonly height: number } },
+  point: { readonly x: number; readonly y: number },
+): StagePoint {
+  return applyMatrix(matrix, {
+    x: point.x * transform.size.width,
+    y: point.y * transform.size.height,
+  })
+}
+
+function paintHandlesFor(
+  index: StageSceneIndex,
+  entityId: string,
+  paint: ComposePaint,
+): readonly StagePaintHandle[] {
+  if (paint.kind === 'solid') return []
+  const entity = index.document.entities[entityId]
+  const matrix = index.getWorldMatrix(entityId)
+  if (!entity || !matrix) return []
+  const transform = getComposeTransform(entity)
+  const world = (point: { readonly x: number; readonly y: number }) =>
+    localPaintPointToWorld(matrix, transform, point)
+  if (paint.kind === 'linear-gradient') {
+    const pointAt = (position: number) => ({
+      x: paint.start.x + (paint.end.x - paint.start.x) * position,
+      y: paint.start.y + (paint.end.y - paint.start.y) * position,
+    })
+    return [
+      { kind: 'linear-start', point: world(paint.start) },
+      { kind: 'linear-end', point: world(paint.end) },
+      ...paint.stops.map((stop) => ({ kind: 'linear-stop' as const, point: world(pointAt(stop.position)), stopId: stop.id })),
+    ]
+  }
+  if (paint.kind === 'radial-gradient') {
+    return [
+      { kind: 'radial-center', point: world(paint.center) },
+      { kind: 'radial-radius-x', point: world({ x: paint.center.x + paint.radiusX, y: paint.center.y }) },
+      { kind: 'radial-radius-y', point: world({ x: paint.center.x, y: paint.center.y + paint.radiusY }) },
+      ...paint.stops.map((stop) => ({
+        kind: 'radial-stop' as const,
+        point: world({ x: paint.center.x + paint.radiusX * stop.position, y: paint.center.y }),
+        stopId: stop.id,
+      })),
+    ]
+  }
+  const radialPoint = (position: number) => {
+    const radians = (paint.angle + position * 360) * Math.PI / 180
+    return { x: paint.center.x + Math.cos(radians) * 0.5, y: paint.center.y + Math.sin(radians) * 0.5 }
+  }
+  return [
+    { kind: 'angular-center', point: world(paint.center) },
+    { kind: 'angular-arm', point: world(radialPoint(0)) },
+    ...paint.stops.map((stop) => ({ kind: 'angular-stop' as const, point: world(radialPoint(stop.position)), stopId: stop.id })),
+  ]
+}
+
+function paintAtLocalPoint(
+  index: StageSceneIndex,
+  entityId: string,
+  worldPoint: StagePoint,
+): { readonly x: number; readonly y: number } | null {
+  const entity = index.document.entities[entityId]
+  const matrix = index.getWorldMatrix(entityId)
+  if (!entity || !matrix) return null
+  const transform = getComposeTransform(entity)
+  const local = applyMatrix(invertMatrix(matrix), worldPoint)
+  return { x: local.x / transform.size.width, y: local.y / transform.size.height }
+}
+
+function updatePaintFromPointer(
+  paint: ComposePaint,
+  handle: StagePaintHandleKind,
+  stopId: string | undefined,
+  local: { readonly x: number; readonly y: number },
+): ComposePaint {
+  if (paint.kind === 'solid') return paint
+  if (paint.kind === 'linear-gradient') {
+    if (handle === 'linear-start') return { ...paint, start: local }
+    if (handle === 'linear-end') return { ...paint, end: local }
+    const x = paint.end.x - paint.start.x
+    const y = paint.end.y - paint.start.y
+    const length = x * x + y * y
+    const position = length === 0 ? 0 : Math.min(1, Math.max(0, ((local.x - paint.start.x) * x + (local.y - paint.start.y) * y) / length))
+    return { ...paint, stops: paint.stops.map((stop) => stop.id === stopId ? { ...stop, position } : stop) }
+  }
+  if (paint.kind === 'radial-gradient') {
+    if (handle === 'radial-center') return { ...paint, center: local }
+    if (handle === 'radial-radius-x') return { ...paint, radiusX: Math.max(0.000_001, Math.abs(local.x - paint.center.x)) }
+    if (handle === 'radial-radius-y') return { ...paint, radiusY: Math.max(0.000_001, Math.abs(local.y - paint.center.y)) }
+    const position = Math.min(1, Math.max(0, Math.abs(local.x - paint.center.x) / paint.radiusX))
+    return { ...paint, stops: paint.stops.map((stop) => stop.id === stopId ? { ...stop, position } : stop) }
+  }
+  if (handle === 'angular-center') return { ...paint, center: local }
+  const degrees = Math.atan2(local.y - paint.center.y, local.x - paint.center.x) * 180 / Math.PI
+  const angle = ((degrees % 360) + 360) % 360
+  if (handle === 'angular-arm') return { ...paint, angle }
+  const position = (((angle - paint.angle) % 360) + 360) % 360 / 360
+  return { ...paint, stops: paint.stops.map((stop) => stop.id === stopId ? { ...stop, position } : stop) }
+}
+
 function previewSelectionBounds(
   index: StageSceneIndex,
   ids: readonly string[],
@@ -376,6 +565,29 @@ function equalRect(left: StageRect | null, right: StageRect | null) {
 
 function sameIds(left: readonly string[], right: readonly string[]) {
   return left.length === right.length && left.every((id, index) => id === right[index])
+}
+
+function samePaintEditing(
+  left: StagePaintEditing | null | undefined,
+  right: StagePaintEditing | null | undefined,
+) {
+  return left?.entityId === right?.entityId && left?.activeStopId === right?.activeStopId
+}
+
+function samePaintSampling(
+  left: StagePaintSampling | null | undefined,
+  right: StagePaintSampling | null | undefined,
+) {
+  return left?.entityId === right?.entityId && left?.field === right?.field
+}
+
+/**
+ * 图层取色只能读取我们能用结构化 Paint 精确解释的层。Image/SVG 的可见像素来自资源内容，
+ * 自定义 Renderer 的像素也没有 headless 采样协议；把它们当作背景色会制造错误的取色结果。
+ */
+function hasSampleableBackgroundPaint(entity: ComposeDocument['entities'][string]): boolean {
+  const renderer = getComposeRenderer(entity)
+  return renderer === undefined || renderer.type === 'rectangle' || renderer.type === 'text'
 }
 
 function targetTransform(
@@ -491,6 +703,46 @@ export function createStageInteractionController(): StageInteractionController {
   let scrollRange: StageRect | null = null
   let disposed = false
 
+  const samplePaintAt = (
+    target: StagePaintSampling,
+    world: StagePoint,
+    alt: boolean,
+  ): {
+    readonly preview: StagePaintSamplePreview
+    readonly paint?: ComposePaint
+    readonly color?: string
+  } => {
+    const currentContext = context
+    const currentIndex = index
+    if (!currentContext || !currentIndex) {
+      return { preview: { target, point: world, status: 'unavailable' } }
+    }
+    const sampledEntityId = currentIndex.entityAtPoint(world)
+    if (!sampledEntityId) {
+      return { preview: { target, point: world, status: 'unavailable' } }
+    }
+    const sampled = currentContext.document.entities[sampledEntityId]
+    if (sampled && !hasSampleableBackgroundPaint(sampled)) {
+      return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
+    }
+    const explicitPaint = sampled ? getComposeAppearance(sampled)?.backgroundPaint : undefined
+    if (!sampled || !explicitPaint) {
+      return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
+    }
+    const matrix = currentIndex.getWorldMatrix(sampledEntityId)
+    const transform = getComposeTransform(sampled)
+    if (!matrix) return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
+    const local = applyMatrix(invertMatrix(matrix), world)
+    const point = { x: local.x / transform.size.width, y: local.y / transform.size.height }
+    const color = evaluateComposePaintAtLocalPoint(explicitPaint, point)
+    return {
+      preview: { target, point: world, sampledEntityId, color, status: 'ready' },
+      ...(target.field === 'backgroundPaint' && alt
+        ? { paint: explicitPaint }
+        : { color }),
+    }
+  }
+
   const enrich = (next: StageInteractionSnapshot): StageInteractionSnapshot => {
     const selected = context && index
       ? previewSelectionBounds(
@@ -520,6 +772,17 @@ export function createStageInteractionController(): StageInteractionController {
       ])
       scrollRange = expandScrollRange(scrollRange, content, visible)
     }
+    const paintEntity = context?.paintEditing
+      ? context.document.entities[context.paintEditing.entityId]
+      : undefined
+    const activePaint = context?.paintEditing
+      && context.selectedIds.length === 1
+      && context.selectedIds[0] === context.paintEditing.entityId
+      && paintEntity
+      ? next.paintPreview?.entityId === context.paintEditing.entityId
+        ? next.paintPreview.paint
+        : resolveComposeAppearance(paintEntity).backgroundPaint
+      : null
     const cursor = next.phase === 'pan'
       ? 'grabbing'
       : next.phase === 'move'
@@ -531,6 +794,8 @@ export function createStageInteractionController(): StageInteractionController {
             : next.phase === 'marquee'
               || next.phase === 'guide-create'
               || next.phase === 'guide-move'
+              || next.phase === 'paint-edit'
+              || next.phase === 'paint-sample'
               ? 'crosshair'
               : next.phase === 'external'
                 ? 'copy'
@@ -539,6 +804,12 @@ export function createStageInteractionController(): StageInteractionController {
                   : 'default'
     return {
       ...next,
+      paintPreview: activePaint && next.paintPreview?.entityId !== context?.paintEditing?.entityId
+        ? null
+        : next.paintPreview,
+      paintHandles: activePaint && context && index
+        ? paintHandlesFor(index, context.paintEditing!.entityId, activePaint)
+        : [],
       selectionBounds: selected,
       scrollRange,
       cursor,
@@ -606,6 +877,17 @@ export function createStageInteractionController(): StageInteractionController {
         ),
       }))
       publish({ ...snapshot, phase: 'guide-create', guidePreview: gesture.guides })
+      return
+    }
+    if (gesture.type === 'paint-sample') {
+      const result = samplePaintAt(gesture.target, world, modifiers.alt)
+      gesture.point = world
+      gesture.alt = modifiers.alt
+      publish({
+        ...snapshot,
+        phase: 'paint-sample',
+        paintSample: result.preview,
+      })
       return
     }
     if (gesture.type === 'guide-move') {
@@ -706,6 +988,21 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
+    if (gesture.type === 'paint') {
+      const local = paintAtLocalPoint(index, gesture.entityId, world)
+      if (!local) return
+      gesture.paint = updatePaintFromPointer(gesture.paint, gesture.handle, gesture.stopId, local)
+      publish({
+        ...snapshot,
+        phase: 'paint-edit',
+        paintPreview: {
+          entityId: gesture.entityId,
+          paint: gesture.paint,
+          activeStopId: gesture.stopId,
+        },
+      })
+      return
+    }
     const center = {
       x: gesture.bounds.x + gesture.bounds.width / 2,
       y: gesture.bounds.y + gesture.bounds.height / 2,
@@ -743,6 +1040,54 @@ export function createStageInteractionController(): StageInteractionController {
         startViewport: context.viewport,
       }
       publish({ ...initialSnapshot(snapshot.temporaryPan), phase: 'pan' })
+      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
+      return
+    }
+    if (context.paintSampling) {
+      gesture = {
+        type: 'paint-sample',
+        pointerId: event.pointerId,
+        viewport: context.viewport,
+        target: context.paintSampling,
+        point: worldPoint(event.point, context.viewport),
+        alt: event.modifiers.alt,
+      }
+      const result = samplePaintAt(
+        context.paintSampling,
+        gesture.point,
+        event.modifiers.alt,
+      )
+      publish({
+        ...initialSnapshot(snapshot.temporaryPan),
+        phase: 'paint-sample',
+        paintSample: result.preview,
+      })
+      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
+      return
+    }
+    if (event.hit.kind === 'paint-handle') {
+      const editing = context.paintEditing
+      const entity = editing ? context.document.entities[editing.entityId] : undefined
+      if (
+        !editing
+        || !entity
+        || context.selectedIds.length !== 1
+        || context.selectedIds[0] !== editing.entityId
+        || getComposeLock(entity).locked
+      ) return
+      gesture = {
+        type: 'paint',
+        pointerId: event.pointerId,
+        viewport: context.viewport,
+        entityId: editing.entityId,
+        handle: event.hit.handle,
+        stopId: event.hit.stopId,
+        paint: resolveComposeAppearance(entity).backgroundPaint,
+      }
+      publish({
+        ...initialSnapshot(snapshot.temporaryPan),
+        phase: 'paint-edit',
+      })
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
     }
@@ -947,6 +1292,33 @@ export function createStageInteractionController(): StageInteractionController {
         effects.push({ type: 'selection.change', selectedIds })
       }
     }
+    else if (finished.type === 'paint-sample') {
+      const result = samplePaintAt(finished.target, finished.point, finished.alt)
+      if (result.preview.status === 'ready') {
+        const entity = context.document.entities[finished.target.entityId]
+        if (entity && !getComposeLock(entity).locked) {
+          const current = resolveComposeAppearance(entity)
+          const appearance = finished.target.field === 'backgroundPaint'
+            ? { ...current, backgroundPaint: result.paint ?? { kind: 'solid' as const, color: result.color! } }
+            : { ...current, borderColor: result.color! }
+          effects.push({
+            type: 'command.dispatch',
+            command: {
+              id: context.idFactory(),
+              type: BUILTIN_COMMAND_TYPES.setAppearance,
+              payload: { entityId: entity.id, appearance: appearance as unknown as JsonValue },
+              meta: {
+                label: `Sample ${entity.name} paint`,
+                source: 'stage',
+                targetIds: [entity.id],
+                mergeKey: `stage:paint-sample:${entity.id}:${finished.target.field}`,
+              },
+            },
+          })
+        }
+      }
+      effects.push({ type: 'paint.sample.complete' })
+    }
     else if (finished.type === 'guide-create') {
       const created = finished.guides.filter((guide) => guide.axis === 'x'
         ? finished.point.y >= 0
@@ -999,6 +1371,31 @@ export function createStageInteractionController(): StageInteractionController {
           },
         },
       })
+    }
+    else if (finished.type === 'paint') {
+      const entity = context.document.entities[finished.entityId]
+      if (entity && !getComposeLock(entity).locked) {
+        effects.push({
+          type: 'command.dispatch',
+          command: {
+            id: context.idFactory(),
+            type: BUILTIN_COMMAND_TYPES.setAppearance,
+            payload: {
+              entityId: entity.id,
+              appearance: {
+                ...resolveComposeAppearance(entity),
+                backgroundPaint: finished.paint,
+              } as unknown as JsonValue,
+            },
+            meta: {
+              label: `Update ${entity.name} background paint`,
+              source: 'stage',
+              targetIds: [entity.id],
+              mergeKey: `stage:paint:${entity.id}`,
+            },
+          },
+        })
+      }
     }
     else if (
       finished.type === 'move'
@@ -1104,6 +1501,10 @@ export function createStageInteractionController(): StageInteractionController {
         )
         ? gesture.ids
         : null
+      const paintGestureId = gesture?.type === 'paint' ? gesture.entityId : null
+      const documentChanged = context?.document !== nextContext.document
+      const paintEditingChanged = !samePaintEditing(context?.paintEditing, nextContext.paintEditing)
+      const paintSamplingChanged = !samePaintSampling(context?.paintSampling, nextContext.paintSampling)
       const incompatible = Boolean(
         gesture
         && context
@@ -1117,6 +1518,15 @@ export function createStageInteractionController(): StageInteractionController {
               nextIndex.topLevelSelection(nextContext.selectedIds),
             )
           )
+          || (paintGestureId !== null && (
+            nextContext.selectedIds.length !== 1
+            || nextContext.selectedIds[0] !== paintGestureId
+            || nextContext.paintEditing?.entityId !== paintGestureId
+          ))
+          || (gesture?.type === 'paint-sample' && !samePaintSampling(
+            gesture.target,
+            nextContext.paintSampling,
+          ))
         ),
       )
       context = nextContext
@@ -1130,6 +1540,11 @@ export function createStageInteractionController(): StageInteractionController {
         next.cursor !== snapshot.cursor
         || !equalRect(next.selectionBounds, snapshot.selectionBounds)
         || !equalRect(next.scrollRange, snapshot.scrollRange)
+        // Inspector 更新背景填充时编辑目标不变；仍须发布新的 handles，避免 Solid
+        // 切到 Gradient 后 React 持有旧的空快照。
+        || documentChanged
+        || paintEditingChanged
+        || paintSamplingChanged
       ) {
         snapshot = next
         listeners.forEach((listener) => listener())

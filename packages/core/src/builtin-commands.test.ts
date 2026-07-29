@@ -24,7 +24,7 @@ function dispatch(
   return runtime.dispatch(command)
 }
 
-describe('ComposeDocument v4 built-in commands', () => {
+describe('ComposeDocument v5 built-in commands', () => {
   it('OpenSpec: command-transaction / Entity 与 Component 内置命令 / 原子修改 Component', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
     expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.addComponent, {

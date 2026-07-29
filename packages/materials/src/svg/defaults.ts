@@ -11,10 +11,10 @@ export const DEFAULT_SVG_PROPS: JsonObject = Object.freeze({
   strokeColor: '#ffffff',
 })
 export const DEFAULT_SVG_APPEARANCE: ComposeAppearance = Object.freeze({
-  backgroundColor: 'transparent',
+  backgroundPaint: { kind: 'solid', color: 'transparent' },
   borderColor: 'transparent',
   borderWidth: 0,
   borderRadius: 0,
   opacity: 1,
   shadow: null,
-})
+} satisfies ComposeAppearance)

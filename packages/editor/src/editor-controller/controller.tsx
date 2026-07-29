@@ -32,7 +32,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import type { ComposeCommandPreset } from '@compose-ui/command-panel'
-import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
+import type { ComposeEntityRegistry, ComposePaintEditPort } from '@compose-ui/component-registry'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
 import type {
   ComposeSceneTreeNode,
@@ -45,6 +45,8 @@ import type {
 } from '@compose-ui/stage'
 import type {
   StageInteractionController,
+  StagePaintEditing,
+  StagePaintSampling,
   StageViewport,
 } from '@compose-ui/stage-engine'
 import {
@@ -294,6 +296,10 @@ export function useComposeEditorController({
     readonly height: number
   } | null>(null)
   const [canvasSettingsOpen, setCanvasSettingsOpen] = useState(false)
+  // Paint 编辑与图层取色都是 Editor 会话状态：它们只协调 Inspector 和 Stage，
+  // 不进入 ComposeDocument、事务历史或 operation log。
+  const [paintEditing, setPaintEditing] = useState<StagePaintEditing | null>(null)
+  const [paintSampling, setPaintSampling] = useState<StagePaintSampling | null>(null)
   const [interactionController] = useState(createStageInteractionController)
   const transactionById = useRef(new Map<string, EditorTransaction>())
   const observerRef = useRef(onTransaction)
@@ -350,10 +356,16 @@ export function useComposeEditorController({
     const next = unique(ids)
     setSelectedIdsState(next)
     setInspectionTarget(next.length > 0 ? 'entities' : null)
+    if (next.length !== 1) {
+      setPaintEditing(null)
+      setPaintSampling(null)
+    }
   }, [])
   const selectOutput = useCallback(() => {
     setSelectedIdsState([])
     setInspectionTarget('output')
+    setPaintEditing(null)
+    setPaintSampling(null)
   }, [])
   const resolvedInspectionTarget = inspectionTarget === 'entities'
     && selectedIds.length === 0
@@ -367,6 +379,30 @@ export function useComposeEditorController({
     [runtime],
   )
   const nextId = useCallback(() => idFactoryRef.current(), [])
+  const paintEditPort = useMemo<ComposePaintEditPort>(() => ({
+    open: ({ entityId }) => {
+      if (!document.entities[entityId]) return
+      setPaintSampling(null)
+      setPaintEditing({ entityId })
+    },
+    close: () => {
+      setPaintSampling(null)
+      setPaintEditing(null)
+    },
+    sample: (target) => {
+      if (!document.entities[target.entityId]) return
+      setPaintSampling(target)
+    },
+  }), [document.entities])
+
+  // 选择变化无需在 effect 中再写一次状态；Stage 只接收与当前单选目标一致的会话，
+  // 因而不兼容的 Paint 手势会由 engine 立即取消，也避免 React 产生级联渲染。
+  const activePaintEditing = selectedIds.length === 1 && paintEditing?.entityId === selectedIds[0]
+    ? paintEditing
+    : null
+  const activePaintSampling = selectedIds.length === 1 && paintSampling?.entityId === selectedIds[0]
+    ? paintSampling
+    : null
 
   const onSceneOperation = useCallback((operation: ComposeSceneTreeOperation) => {
     const result = planSceneOperation(operation, {
@@ -418,6 +454,9 @@ export function useComposeEditorController({
     onOutputSelect: selectOutput,
     onSurfaceSizeChange: setSurfaceSize,
     interactionController,
+    paintEditing: activePaintEditing,
+    paintSampling: activePaintSampling,
+    onPaintSamplingComplete: () => setPaintSampling(null),
     idFactory: nextId,
   }), [
     document,
@@ -431,6 +470,8 @@ export function useComposeEditorController({
     selectOutput,
     interactionController,
     nextId,
+    activePaintEditing,
+    activePaintSampling,
   ])
 
   const createContainer = useCallback(() => {
@@ -502,12 +543,9 @@ export function useComposeEditorController({
 
   // Inspector 目标只有画布输出、单选 Entity 和空态三种；三者互斥且由会话状态决定。
   const inspectorPanel = resolvedInspectionTarget === 'output' ? (
+    // 输出配置会在色盘拖动的每个采样点更新。不能以输出值作为 key，
+    // 否则会卸载活跃的 ColorPicker 并中断原生 pointer 手势。
     <CanvasInspector
-      key={[
-        document.output.width,
-        document.output.height,
-        document.output.backgroundColor,
-      ].join(':')}
       dispatch={dispatch}
       document={document}
       idFactory={nextId}
@@ -520,6 +558,7 @@ export function useComposeEditorController({
       idFactory={nextId}
       // 按 Entity 重挂载：能力移除确认等局部会话状态不得跨选中目标残留。
       key={selectedEntity.id}
+      paintEditPort={paintEditPort}
       registry={registry}
     />
   ) : (

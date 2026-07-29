@@ -69,7 +69,7 @@ export const storyRegistry = createComposeEntityRegistry({
       key: 'Appearance',
       label: 'Appearance',
       order: 40,
-      createDefault: () => ({ backgroundColor: 'transparent' }),
+      createDefault: () => ({ backgroundPaint: { kind: 'solid', color: 'transparent' } }),
     },
     {
       key: 'Hierarchy',
@@ -105,7 +105,7 @@ export const storyRegistry = createComposeEntityRegistry({
         Lock: { locked: false },
         Hierarchy: { childIds: [] },
         Clip: { enabled: true },
-        Appearance: { backgroundColor: '#ffffff' },
+        Appearance: { backgroundPaint: { kind: 'solid', color: '#ffffff' } },
       }),
     },
     {
@@ -119,7 +119,7 @@ export const storyRegistry = createComposeEntityRegistry({
         },
         Visibility: { visible: true },
         Lock: { locked: false },
-        Appearance: { backgroundColor: 'transparent' },
+        Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
         Renderer: { type: 'story.card', props: { label: 'Compose card' } },
       }),
     },
@@ -129,7 +129,7 @@ export const storyRegistry = createComposeEntityRegistry({
 /** 返回新的文档对象，避免每个 Story 或 play function 相互污染。 */
 export function createStoryDocument(): ComposeDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds: ['story-container'],
@@ -158,7 +158,7 @@ export function createStoryDocument(): ComposeDocument {
           Visibility: { visible: true },
           Lock: { locked: false },
           Appearance: {
-            backgroundColor: '#ffffff',
+            backgroundPaint: { kind: 'solid', color: '#ffffff' },
             borderColor: '#94a3b8',
             borderWidth: 1,
           },
@@ -188,7 +188,7 @@ export function createStoryDocument(): ComposeDocument {
           },
           Visibility: { visible: true },
           Lock: { locked: false },
-          Appearance: { backgroundColor: 'transparent' },
+          Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
           Renderer: { type: 'story.card', props: { label: 'Compose card' } },
         },
       },

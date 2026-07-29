@@ -2,7 +2,7 @@
 
 DOM Scene Layer 与屏幕坐标 Overlay 组合的无限编辑 Stage。
 
-Stage 只消费 `ComposeDocument v4` 与 `ComposeEntityRegistry`。Scene 渲染查询拥有 `Transform`
+Stage 只消费 `ComposeDocument v5` 与 `ComposeEntityRegistry`。Scene 渲染查询拥有 `Transform`
 且包含 `Renderer` 或 `Hierarchy` 的 Entity；同一 Entity 可以先渲染 Renderer 内容，再渲染
 Hierarchy 子项。`Appearance`、`Clip`、`Visibility` 与 `Lock` 分别由对应查询处理。
 

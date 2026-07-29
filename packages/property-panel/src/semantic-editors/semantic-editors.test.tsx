@@ -107,7 +107,7 @@ describe('OpenSpec: property-panel / 内建语义属性编辑器', () => {
     expect(screen.getByTestId('semantic-editor-size').closest('.property-panel__field'))
       .toHaveAttribute('data-property-layout', 'inline')
     expect(COMPOSE_PROPERTY_PANEL_BASE_EDITOR_IDS).toEqual([
-      'vector2', 'size', 'angle', 'opacity', 'corner-radius', 'stroke-width', 'visibility', 'color', 'alignment', 'map',
+      'vector2', 'size', 'angle', 'opacity', 'corner-radius', 'stroke-width', 'visibility', 'color', 'paint', 'alignment', 'map',
     ])
   })
 

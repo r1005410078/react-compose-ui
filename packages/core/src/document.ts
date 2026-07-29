@@ -11,6 +11,7 @@ import {
   type JsonObject,
 } from './document-types'
 import { isComposeComponentKey } from './entity'
+import { isComposeColor, isValidComposePaint } from './paint'
 
 type Path = readonly (string | number)[]
 type UnknownRecord = Record<string, unknown>
@@ -106,12 +107,12 @@ function validateOutput(
   if (!positive(value.height)) {
     addIssue(issues, 'output.invalid-size', [...path, 'height'], '输出高度必须是有限正数')
   }
-  if (!nonEmpty(value.backgroundColor)) {
+  if (!isComposeColor(value.backgroundColor)) {
     addIssue(
       issues,
       'output.invalid-background',
       [...path, 'backgroundColor'],
-      '输出背景色必须是非空字符串',
+      '输出背景色必须是规范 ComposeColor',
     )
   }
 }
@@ -395,7 +396,7 @@ function validateAppearance(
 ) {
   if (!isRecord(value)) return
   const allowed = [
-    'backgroundColor',
+    'backgroundPaint',
     'borderColor',
     'borderWidth',
     'borderRadius',
@@ -403,10 +404,14 @@ function validateAppearance(
     'shadow',
   ]
   rejectUnknownFields(value, allowed, path, issues, 'appearance.invalid')
-  for (const key of ['backgroundColor', 'borderColor'] as const) {
-    if (key in value && !nonEmpty(value[key])) {
-      addIssue(issues, 'appearance.invalid', [...path, key], `${key} 必须是非空字符串`)
-    }
+  if ('backgroundColor' in value) {
+    addIssue(issues, 'appearance.invalid', [...path, 'backgroundColor'], 'v5 不支持 backgroundColor')
+  }
+  if ('backgroundPaint' in value && !isValidComposePaint(value.backgroundPaint)) {
+    addIssue(issues, 'appearance.invalid-paint', [...path, 'backgroundPaint'], 'backgroundPaint 不满足 Paint 不变量')
+  }
+  if ('borderColor' in value && !isComposeColor(value.borderColor)) {
+    addIssue(issues, 'appearance.invalid', [...path, 'borderColor'], 'borderColor 必须是规范 ComposeColor')
   }
   for (const [key, min, max] of [
     ['borderWidth', 0, undefined],
@@ -437,12 +442,12 @@ function validateAppearance(
         issues,
         'appearance.invalid',
       )
-      if (!nonEmpty(value.shadow.color)) {
+      if (!isComposeColor(value.shadow.color)) {
         addIssue(
           issues,
           'appearance.invalid',
           [...path, 'shadow', 'color'],
-          'shadow.color 必须是非空字符串',
+          'shadow.color 必须是规范 ComposeColor',
         )
       }
       for (const key of ['offsetX', 'offsetY', 'blur', 'spread'] as const) {
@@ -723,7 +728,7 @@ function validateTopology(
   })
 }
 
-/** 校验未知输入是否满足 ComposeDocument v4 ECS 协议。 @public */
+/** 校验未知输入是否满足 ComposeDocument v5 ECS 协议。 @public */
 export function validateComposeDocument(input: unknown): DocumentValidationResult {
   if (!isRecord(input)) {
     return {
@@ -733,12 +738,12 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
   }
   const issues: DocumentValidationIssue[] = []
   validateJson(input, [], issues)
-  if (input.schemaVersion !== 4) {
+  if (input.schemaVersion !== 5) {
     addIssue(
       issues,
       'document.unsupported-version',
       ['schemaVersion'],
-      '只支持 ComposeDocument schemaVersion 4',
+      '只支持 ComposeDocument schemaVersion 5',
     )
   }
   validateCanvas(input.canvas, issues)

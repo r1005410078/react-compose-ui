@@ -113,13 +113,3 @@
   tests, full lint/typecheck/test/build, Storybook build/test, pack dry-run and diff check pass. The focused
   resource-document Chromium flow passes; the full E2E suite remains pending three unrelated Stage regressions:
   SVG Inspector snapshot drift, high-speed gesture atomicity and grouped Frame direct manipulation.
-
-## 7. Color channel alpha
-
-- [ ] 7.1 Red: add ComposeColorPicker tests for parsing eight/four-digit HEX, Alpha pointer/keyboard updates,
-  normalization at 100%, `allowAlpha`, checkerboard preview and Portal labels. Add Property Panel coverage for a
-  schema-validated eight-digit color commit. Record the failing commands and missing behavior.
-- [ ] 7.2 Green: model RGB and alpha independently in the shared Picker, add the localized accessible Alpha range
-  and transparency track, then wire the semantic Color renderer without altering node `opacity`.
-- [ ] 7.3 Refactor: update component/material documentation and Storybook Dark/Light alpha states; run affected
-  package tests/typechecks/builds and full repository quality gates.

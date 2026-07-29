@@ -24,7 +24,7 @@ describe('composeEntityVisualStyle', () => {
   it('OpenSpec: 共享渲染语义 / 边框与阴影合成 boxShadow，裁剪决定 overflow', () => {
     const styled = composeEntityVisualStyle(entity({
       Appearance: {
-        backgroundColor: '#102030',
+        backgroundPaint: { kind: 'solid', color: '#102030' },
         borderColor: '#405060',
         borderWidth: 2,
         borderRadius: 8,
@@ -32,6 +32,8 @@ describe('composeEntityVisualStyle', () => {
         shadow: { color: '#00000040', offsetX: 1, offsetY: 2, blur: 3, spread: 4 },
       },
     }))
+    // Solid 色也保留在 Entity 壳上：透明/纯色容器都拥有稳定的浏览器命中区域；
+    // 渐变仍仅由共享 Paint Layer 渲染，避免 CSS/SVG 解释分叉。
     expect(styled.backgroundColor).toBe('#102030')
     expect(styled.borderRadius).toBe(8)
     expect(styled.opacity).toBe(0.5)
@@ -69,6 +71,7 @@ describe('composeEntitySceneStyle', () => {
       top: 34,
       width: 200,
       height: 100,
+      position: 'absolute',
       transform: 'rotate(45deg)',
       transformOrigin: 'center',
       overflow: 'hidden',

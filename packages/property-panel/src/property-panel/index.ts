@@ -4,6 +4,10 @@ export {
   ComposePropertyPanelSection,
   resolvePropertyBindings as resolveComposePropertyBindings,
 } from './compose-property-panel'
+export {
+  useComposePropertyPanelColorEditorPort,
+  useComposePropertyPanelPaintEditorPort,
+} from './editor-ports'
 export type {
   ResolvePropertyBindingsOptions as ComposeResolvePropertyBindingsOptions,
   ResolvePropertyBindingsResult as ComposeResolvePropertyBindingsResult,
@@ -37,3 +41,7 @@ export type {
   ComposePropertyPanelRootProps,
   ComposePropertyPanelSectionProps,
 } from './compose-property-panel'
+export type {
+  ComposePropertyPanelColorEditorPort,
+  ComposePropertyPanelPaintEditorPort,
+} from './editor-ports'

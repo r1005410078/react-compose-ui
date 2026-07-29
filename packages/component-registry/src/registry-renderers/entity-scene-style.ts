@@ -19,6 +19,9 @@ import type { CSSProperties } from 'react'
  */
 export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
   const visual = resolveComposeAppearance(entity)
+  const backgroundColor = visual.backgroundPaint.kind === 'solid'
+    ? visual.backgroundPaint.color
+    : 'transparent'
   const hierarchy = getComposeHierarchy(entity)
   const clip = getComposeClip(entity)
   const shadows: string[] = []
@@ -32,7 +35,9 @@ export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
     )
   }
   return {
-    backgroundColor: visual.backgroundColor,
+    position: 'relative',
+    // 纯色同时写入宿主盒子，维持 DOM Scene 的稳定视觉与命中盒契约；复杂 Paint 仍由共享图层绘制。
+    backgroundColor,
     borderRadius: visual.borderRadius,
     opacity: visual.opacity,
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
@@ -51,6 +56,9 @@ export function composeEntitySceneStyle(entity: ComposeEntity): CSSProperties {
   const transform = getComposeTransform(entity)
   return {
     ...composeEntityVisualStyle(entity),
+    // 共享外观层需要 relative 作为 Paint Layer 的 containing block；Stage Scene 的节点
+    // 则必须脱离文档流，否则同级 Entity 会随前一个节点的高度向下排布。
+    position: 'absolute',
     left: transform.position.x,
     top: transform.position.y,
     width: transform.size.width,

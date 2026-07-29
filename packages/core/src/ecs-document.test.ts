@@ -3,7 +3,7 @@ import { validateComposeDocument } from './document'
 
 function rectangleDocument() {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: {
       grid: {
         stepX: 8,
@@ -41,7 +41,7 @@ function rectangleDocument() {
           },
           Visibility: { visible: true },
           Lock: { locked: false },
-          Appearance: { backgroundColor: '#3b82f6', opacity: 1 },
+          Appearance: { backgroundPaint: { kind: 'solid', color: '#3b82f6' }, opacity: 1 },
           Renderer: { type: 'rectangle', props: {} },
           HostMetadata: { stable: true },
         },
@@ -50,11 +50,11 @@ function rectangleDocument() {
   }
 }
 
-describe('ComposeDocument v4 ECS', () => {
-  it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v4 并拒绝 v3', () => {
+describe('ComposeDocument v5 ECS', () => {
+  it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v5 并拒绝 v4', () => {
     expect(validateComposeDocument(rectangleDocument()).valid).toBe(true)
     expect(validateComposeDocument({
-      schemaVersion: 3,
+      schemaVersion: 4,
       canvas: rectangleDocument().canvas,
       output: rectangleDocument().output,
       rootIds: [],

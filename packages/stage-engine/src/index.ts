@@ -66,6 +66,11 @@ export {
   type StageInteractionPhase,
   type StageInteractionSnapshot,
   type StageInteractionSurfacePort,
+  type StagePaintEditing,
+  type StagePaintHandle,
+  type StagePaintHandleKind,
+  type StagePaintSamplePreview,
+  type StagePaintSampling,
   type StagePreviewGuide,
 } from './interaction-controller'
 export {

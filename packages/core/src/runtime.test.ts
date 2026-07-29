@@ -15,7 +15,7 @@ function rename(id: string, name: string): EditorCommand {
   }
 }
 
-describe('TransactionRuntime v4', () => {
+describe('TransactionRuntime v5', () => {
   it('提交 Entity 命令并发布正式事务', () => {
     const runtime = createTransactionRuntime({
       document: documentFixture(),
@@ -29,7 +29,7 @@ describe('TransactionRuntime v4', () => {
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'committed' }))
   })
 
-  it('undo、redo 和 navigate 恢复 v4 Entity 快照', () => {
+  it('undo、redo 和 navigate 恢复 v5 Entity 快照', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
     runtime.dispatch(rename('one', 'One'))
     runtime.dispatch(rename('two', 'Two'))
@@ -41,7 +41,7 @@ describe('TransactionRuntime v4', () => {
     expect(runtime.document.entities.rectangle?.name).toBe('rectangle')
   })
 
-  it('reset 拒绝 v3 且接受 v4', () => {
+  it('reset 拒绝 v4 且接受 v5', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
     expect(runtime.reset({
       ...documentFixture(),

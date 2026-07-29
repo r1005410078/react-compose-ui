@@ -32,7 +32,7 @@ export function EditorPage() {
 ```
 
 必须导入 `@compose-ui/editor/styles.css` 并提供非零高度。Controller 拥有一个实例级
-`StageInteractionController`，从 runtime 的当前 `ComposeDocument v4` 派生 Scene Tree、
+`StageInteractionController`，从 runtime 的当前 `ComposeDocument v5` 派生 Scene Tree、
 Palette、Stage、History、Inspector 和 Command Panel，并把所有编辑入口接到同一事务时间线。
 
 Scene Tree 根据 `rootIds` 和 `Hierarchy.childIds` 生成。Palette 只显示 Registry Presets。

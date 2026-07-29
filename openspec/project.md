@@ -179,13 +179,13 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ## Domain Context
 
 - 目标用户需要在客户现场快速调整数据大屏，编辑器必须能嵌入现有 React 宿主。
-- 当前仓库只支持 `ComposeDocument v4`：隐式 Canvas 根、统一 ECS Entity/Component 组合、
+- 当前仓库只支持 `ComposeDocument v5`：隐式 Canvas 根、统一 ECS Entity/Component 组合、
   `Hierarchy` 容器、`Renderer` 内容、同步命令事务、Entity Registry、Godot 风格无限 Stage、
   聚合 Inspector、controller 默认工作区、文档/Container Preview、事务/会话历史和
   Container/Rectangle/Text/Image/SVG/ECharts 纵向流程。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
   surface 尺寸和动态滚动范围是会话状态。`document.output` 定义固定原点输出边界；Preview
-  接受 v4 并忽略 canvas 编辑元数据。output 默认透明；Stage 输出边界可作为独立 Canvas
+  接受 v5 并忽略 canvas 编辑元数据。output 默认透明；Stage 输出边界可作为独立 Canvas
   Inspector 会话目标，但不进入 Entity 选择或 SceneTree。
 - 每个场景 Entity 必须拥有 `Composition`、`Transform`、`Visibility`、`Lock`，并至少拥有
   `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法

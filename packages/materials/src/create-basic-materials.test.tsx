@@ -50,7 +50,7 @@ describe('Basic ECS materials', () => {
     const materials = createComposeBasicMaterials()
     const rectangle = seedEntity(materials, 'rectangle')
     expect(rectangle.components.Appearance).toEqual(expect.objectContaining({
-      backgroundColor: '#2f7df6',
+      backgroundPaint: { kind: 'solid', color: '#2f7df6' },
       borderRadius: 12,
     }))
     expect(getComposeRenderer(rectangle)?.props).toEqual({})

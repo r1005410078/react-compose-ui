@@ -48,7 +48,7 @@ function document(): ComposeDocument {
       Hierarchy: { childIds: ['group', 'hidden', 'unknown'] },
       Clip: { enabled: true },
       Appearance: {
-        backgroundColor: '#fef3c7',
+        backgroundPaint: { kind: 'solid', color: '#fef3c7' },
         borderColor: '#92400e',
         borderWidth: 2,
         borderRadius: 10,
@@ -71,7 +71,7 @@ function document(): ComposeDocument {
       },
       Hierarchy: { childIds: ['text'] },
       Clip: { enabled: false },
-      Appearance: { backgroundColor: '#ddeeff', borderRadius: 6 },
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#ddeeff' }, borderRadius: 6 },
     }, 'Nested Container'),
     text: entity('text', {
       Transform: {
@@ -80,7 +80,7 @@ function document(): ComposeDocument {
         rotation: -5,
       },
       Appearance: {
-        backgroundColor: '#ffffff',
+        backgroundPaint: { kind: 'solid', color: '#ffffff' },
         borderColor: '#172033',
         borderWidth: 1,
         opacity: 0.8,
@@ -108,7 +108,7 @@ function document(): ComposeDocument {
     }, 'Mobile Text'),
   }
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     canvas: createDefaultCanvasSettings(),
     output: {
       ...createDefaultOutputSettings(),
@@ -231,7 +231,6 @@ describe('ComposePreview', () => {
 
     const container = screen.getByTestId('compose-preview-container')
     expect(container).toHaveStyle({
-      backgroundColor: '#fef3c7',
       borderRadius: '10px',
       opacity: '0.95',
     })

@@ -1,8 +1,12 @@
 /* eslint-disable react-refresh/only-export-components -- 内建 renderer 与仅供 registry 使用的组件必须共置，避免 registry 与组件产生循环依赖。 */
 import { useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { ComponentProps, KeyboardEvent } from 'react'
 import * as v from 'valibot'
-import { ComposeColorPicker } from '@compose-ui/components'
+import { ComposeColorPicker, ComposePaintPicker } from '@compose-ui/components'
+import {
+  useComposePropertyPanelColorEditorPort,
+  useComposePropertyPanelPaintEditorPort,
+} from '../property-panel/editor-ports'
 import type {
   PropertyPanelRenderer,
   PropertyPanelRendererBindingController,
@@ -21,6 +25,7 @@ export const PROPERTY_PANEL_BASE_EDITOR_IDS = [
   'stroke-width',
   'visibility',
   'color',
+  'paint',
   'alignment',
   'map',
 ] as const
@@ -346,6 +351,7 @@ function VisibilityEditor(props: PropertyPanelRendererProps) {
 }
 
 function ColorEditor(props: PropertyPanelRendererProps) {
+  const colorEditor = useComposePropertyPanelColorEditorPort()
   const bindingTarget = props.binding?.getTarget('value')
   const bound = Boolean(bindingTarget?.binding)
   const effectiveValue = bindingTarget?.effectiveValue ?? props.value
@@ -372,7 +378,43 @@ function ColorEditor(props: PropertyPanelRendererProps) {
             label={props.label}
             readOnly={props.readOnly || bound}
             value={value}
+            onEyedropperFallback={colorEditor?.onEyedropperFallback}
             onValueChange={updateColor}
+          />
+        </div>
+        {props.binding?.renderTrigger('value')}
+      </div>
+      {error ? <span role="alert">{error}</span> : null}
+    </div>
+  )
+}
+
+function PaintEditor(props: PropertyPanelRendererProps) {
+  const paintEditor = useComposePropertyPanelPaintEditorPort()
+  const bindingTarget = props.binding?.getTarget('value')
+  const bound = Boolean(bindingTarget?.binding)
+  const effectiveValue = bindingTarget?.effectiveValue ?? props.value
+  const value = effectiveValue as ComponentProps<typeof ComposePaintPicker>['value']
+  const [error, setError] = useState<string | undefined>()
+  const updatePaint = (nextValue: ComponentProps<typeof ComposePaintPicker>['value']) => {
+    if (bound) return
+    const result = v.safeParse(props.schema, nextValue)
+    const committed = result.success && props.commit(nextValue, 'input')
+    setError(committed ? undefined : result.success
+      ? '完整属性值不符合 Schema'
+      : result.issues[0]?.message)
+  }
+  return (
+    <div className="property-panel__semantic property-panel__semantic--paint" data-testid="semantic-editor-paint">
+      <div className="property-panel__binding-target">
+        <div className="property-panel__binding-control">
+          <ComposePaintPicker
+            label={props.label}
+            readOnly={props.readOnly || bound}
+            value={value}
+            onEyedropperFallback={paintEditor?.onEyedropperFallback}
+            onOpenChange={paintEditor?.onOpenChange}
+            onValueChange={updatePaint}
           />
         </div>
         {props.binding?.renderTrigger('value')}
@@ -519,6 +561,7 @@ export const PROPERTY_PANEL_BASE_RENDERERS: readonly PropertyPanelRenderer[] = [
   withSingleValueBinding('stroke-width', SingleNumberEditor),
   withSingleValueBinding('visibility', VisibilityEditor),
   withSingleValueBinding('color', ColorEditor),
+  withSingleValueBinding('paint', PaintEditor),
   withSingleValueBinding('alignment', AlignmentEditor),
   {
     id: 'map',

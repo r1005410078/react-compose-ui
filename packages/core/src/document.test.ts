@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { validateComposeDocument } from './document'
 import { containerEntity, documentFixture, rendererEntity, transform } from './test-fixtures'
 
-describe('ComposeDocument v4 validation', () => {
-  it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v4 并拒绝 v3', () => {
+describe('ComposeDocument v5 validation', () => {
+  it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v5 并拒绝 v4', () => {
     expect(validateComposeDocument(documentFixture()).valid).toBe(true)
     expect(validateComposeDocument({
       ...documentFixture(),
-      schemaVersion: 3,
+      schemaVersion: 4,
       nodes: {},
     }).valid).toBe(false)
   })

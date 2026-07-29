@@ -1,4 +1,5 @@
 import {
+  ComposeEntityPaintLayer,
   ComposeRegistryEntityRenderer,
   composeEntitySceneStyle,
 } from '@compose-ui/component-registry'
@@ -9,6 +10,7 @@ import {
   getComposeVisibility,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposePaint,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { StageViewport } from '@compose-ui/stage-engine'
@@ -19,6 +21,7 @@ interface StageSceneLayerProps {
   readonly registry: ComposeEntityRegistry
   readonly assetResolver?: ComposeAssetResolver
   readonly viewport: StageViewport
+  readonly paintPreview?: { readonly entityId: string; readonly paint: ComposePaint } | null
   readonly onEntityPointerDown: (
     entity: ComposeEntity,
     event: ReactPointerEvent<HTMLDivElement>,
@@ -31,6 +34,7 @@ export function StageSceneLayer({
   registry,
   assetResolver,
   viewport,
+  paintPreview,
   onEntityPointerDown,
 }: StageSceneLayerProps) {
   const renderEntity = (entityId: string) => {
@@ -49,6 +53,11 @@ export function StageSceneLayer({
         style={composeEntitySceneStyle(entity)}
         onPointerDown={(event) => onEntityPointerDown(entity, event)}
       >
+        <ComposeEntityPaintLayer
+          entity={entity}
+          interactive
+          paint={paintPreview?.entityId === entity.id ? paintPreview.paint : undefined}
+        />
         <ComposeRegistryEntityRenderer
           assetResolver={assetResolver}
           entity={entity}

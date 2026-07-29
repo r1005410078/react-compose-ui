@@ -16,6 +16,7 @@ import {
   ComposeDialogTitle,
   ComposeDialogViewport,
   ComposeButton,
+  ComposeColorHistoryProvider,
 } from '@compose-ui/components'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
@@ -562,6 +563,7 @@ export function ComposeEditor({
       locale={resolvedPreferences.locale}
       theme={resolvedPreferences.theme}
     >
+      <ComposeColorHistoryProvider>
       <EditorRoot
         {...props}
         aria-label={props['aria-label'] ?? 'Compose editor'}
@@ -655,6 +657,7 @@ export function ComposeEditor({
           ) : null}
         </WorkspaceContentContext.Provider>
       </EditorRoot>
+      </ComposeColorHistoryProvider>
     </ComposeUIProvider>
   )
 }

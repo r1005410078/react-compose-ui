@@ -44,6 +44,12 @@ import {
 import { PropertyTree } from '../property-tree'
 import { usePropertyPanelMessages } from '../property-panel-i18n'
 import { mergePropertyPanelRenderers } from '../semantic-editors'
+import {
+  PropertyPanelEditorPortsContext,
+  type ComposePropertyPanelColorEditorPort,
+  type ComposePropertyPanelPaintEditorPort,
+  type PropertyPanelEditorPorts,
+} from './editor-ports'
 import type { PropertyPanelFilter, TreeCommitOptions } from '../property-tree'
 import '../styles.css'
 
@@ -417,6 +423,10 @@ export interface ComposePropertyPanelProps<TSchema extends v.GenericSchema>
   readOnly?: boolean
   /** 与字面 `value` 分离、由宿主保存的可选变量绑定配置。 */
   binding?: PropertyPanelBindingConfig
+  /** 可选 Paint 编辑会话桥接；未提供时仍可独立使用颜色控件。 */
+  paintEditor?: ComposePropertyPanelPaintEditorPort
+  /** 可选纯色图层取色桥接；未提供时原生吸管失败只保留控件状态。 */
+  colorEditor?: ComposePropertyPanelColorEditorPort
   /** 完整候选 input 校验成功后调用的受控变更回调。 */
   onValueChange?: (
     value: v.InferInput<TSchema>,
@@ -767,10 +777,17 @@ export function ComposePropertyPanel<TSchema extends v.GenericSchema>({
 }: ComposePropertyPanelProps<TSchema>) {
   const root = useContext(PropertyPanelRootContext)
   const section = useContext(PropertyPanelSectionContext)
-  if (root && section) {
-    return <EmbeddedComposePropertyPanel {...props} root={root} section={section} />
-  }
-  return <StandaloneComposePropertyPanel {...props} />
+  const ports = useMemo<PropertyPanelEditorPorts>(() => ({
+    color: props.colorEditor,
+    paint: props.paintEditor,
+  }), [props.colorEditor, props.paintEditor])
+  return (
+    <PropertyPanelEditorPortsContext.Provider value={ports}>
+      {root && section ? (
+        <EmbeddedComposePropertyPanel {...props} root={root} section={section} />
+      ) : <StandaloneComposePropertyPanel {...props} />}
+    </PropertyPanelEditorPortsContext.Provider>
+  )
 }
 
 function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
@@ -779,6 +796,8 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
   defaultValue,
   renderers,
   binding,
+  paintEditor: _paintEditor,
+  colorEditor: _colorEditor,
   readOnly = false,
   onValueChange,
   root,
@@ -787,6 +806,8 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
   readonly root: PropertyPanelRootView
   readonly section: PropertyPanelSectionView
 }) {
+  void _paintEditor
+  void _colorEditor
   const messages = usePropertyPanelMessages()
   const effectiveRenderers = mergePropertyPanelRenderers(renderers)
   const asyncSchema = (schema as unknown as { async?: boolean }).async === true
@@ -858,12 +879,16 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   header,
   renderers,
   binding,
+  paintEditor: _paintEditor,
+  colorEditor: _colorEditor,
   readOnly = false,
   onValueChange,
   className,
   style,
   ...htmlProps
 }: ComposePropertyPanelProps<TSchema>) {
+  void _paintEditor
+  void _colorEditor
   const i18n = useComposeI18nContext()
   const theme = useComposeThemeContext()
   const messages = usePropertyPanelMessages()

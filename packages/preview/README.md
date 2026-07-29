@@ -1,6 +1,6 @@
 # @compose-ui/preview
 
-独立的 `ComposeDocument v4` 预览入口。Preview 复用 `ComposeEntityRegistry` Renderer，并自行
+独立的 `ComposeDocument v5` 预览入口。Preview 复用 `ComposeEntityRegistry` Renderer，并自行
 建立普通 DOM Entity 树，不依赖 editor 或 stage。
 
 ```tsx

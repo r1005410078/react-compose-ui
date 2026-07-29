@@ -32,7 +32,7 @@ const registry = createComposeEntityRegistry({
         Transform: transform,
         Visibility: { visible: true },
         Lock: { locked: false },
-        Appearance: { backgroundColor: '#2463eb' },
+        Appearance: { backgroundPaint: { kind: 'solid', color: '#2463eb' } },
         Renderer: { type: 'rectangle', props: {} },
       }),
     },
@@ -40,7 +40,7 @@ const registry = createComposeEntityRegistry({
 })
 
 const document: ComposeDocument = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   canvas: {
     grid: {
       stepX: 8,

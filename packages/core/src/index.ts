@@ -21,6 +21,26 @@ export {
   resolveComposeAppearance,
 } from './appearance'
 export {
+  DEFAULT_COMPOSE_BACKGROUND_PAINT,
+  describeComposePaint,
+  evaluateComposePaintAtLocalPoint,
+  isComposeColor,
+  isValidComposePaint,
+  normalizeComposeColor,
+  normalizeComposePaint,
+} from './paint'
+export type {
+  ComposeAngularGradientPaint,
+  ComposeColor,
+  ComposeGradientStop,
+  ComposeLinearGradientPaint,
+  ComposePaint,
+  ComposePaintPoint,
+  ComposePaintRenderDescriptor,
+  ComposeRadialGradientPaint,
+  ComposeSolidPaint,
+} from './paint'
+export {
   getComposeAppearance,
   getComposeClip,
   getComposeComponent,

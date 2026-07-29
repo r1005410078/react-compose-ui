@@ -35,7 +35,7 @@ import { useMemo } from 'react'
 import '@compose-ui/editor/styles.css'
 
 const document: ComposeDocument = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   canvas: createDefaultCanvasSettings(),
   output: createDefaultOutputSettings(),
   rootIds: [],
@@ -62,13 +62,13 @@ export function ComposePage() {
 宿主必须导入 `@compose-ui/editor/styles.css` 并给编辑器确定的非零高度。Dockview 是 editor 的
 内部实现；面板对象、布局 JSON、选择、viewport 和临时交互状态都不会写入文档。
 
-## ComposeDocument v4
+## ComposeDocument v5
 
 文档只保存严格 JSON：
 
 ```ts
 interface ComposeDocument {
-  readonly schemaVersion: 4
+  readonly schemaVersion: 5
   readonly canvas: ComposeCanvasSettings
   readonly output: ComposeOutputSettings
   readonly rootIds: readonly string[]
@@ -168,7 +168,7 @@ bun run test:e2e
 
 本轮只完成单文档内 Entity/Component 组合重构。页面系统、复用 Instance、Interaction、
 Animation、结构变体、数据源和正式持久化仍需独立 OpenSpec。未来页面可以持有一个
-`ComposeDocument v4`，无需再次改变节点能力模型。
+`ComposeDocument v5`，无需再次改变节点能力模型。
 
 ## License
 

@@ -2,7 +2,7 @@
 
 React Compose UI 的 React/DOM 无关领域内核。
 
-当前公共文档协议只支持 `ComposeDocument v4`。场景项统一为 `ComposeEntity`，能力由 PascalCase
+当前公共文档协议只支持 `ComposeDocument v5`。场景项统一为 `ComposeEntity`，能力由 PascalCase
 Component Key 组合，不再存在 Frame/Component 联合类型或节点继承结构。
 
 ```ts
@@ -15,7 +15,7 @@ import {
 } from '@compose-ui/core'
 
 const document: ComposeDocument = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   canvas: createDefaultCanvasSettings(),
   output: createDefaultOutputSettings(),
   rootIds: [],

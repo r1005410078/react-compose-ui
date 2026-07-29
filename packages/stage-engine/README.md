@@ -23,6 +23,12 @@ Move/Resize/Rotate 的命令规划会查询 `TransformConstraints`，并生成�
 `entity.transform.set`。多选、吸附、group/ungroup、reparent 和 duplicate 继续保持单事务与
 可逆 Patch 边界。
 
+Paint 编辑也在 controller 内作为独立、无 DOM session 运行。`paintEditing` 只在单选 Entity 的
+Inspector 打开 `backgroundPaint` 时产生 Linear/Radial/Angular 的世界坐标控制柄；拖动只更新 snapshot
+preview，`pointerup` 才提交一次 `entity.appearance.set`。`paintSampling` 按 SceneIndex 的可见 z-order 与
+裁剪命中取得结构化 Paint：普通点击写入点击处解析的纯色，Alt/Option 点击可复制完整背景 Paint。
+图片、SVG 和未知 Renderer 没有 headless 像素采样协议，因此会明确返回 unavailable。
+
 外部 descriptor 还支持纯数据 `assets` 批次。Engine 只负责会话、世界 drop 点和父级命中，
 不读取 Blob、调用 Registry 或依赖资源 UI；异步解析、Preset seed、布局和提交由 Stage 适配层
 完成。一个 controller 同时只连接一个 surface，多个编辑器必须创建不同实例。

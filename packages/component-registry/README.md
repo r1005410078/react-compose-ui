@@ -30,7 +30,7 @@ const registry = createComposeEntityRegistry({
       },
       Visibility: { visible: true },
       Lock: { locked: false },
-      Appearance: { backgroundColor: '#172033' },
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#172033' } },
       Renderer: { type: 'metric', props: { title: '销售额', value: 0 } },
     }),
   }],

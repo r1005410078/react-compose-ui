@@ -79,7 +79,7 @@ export function createGroupCommand(
       Hierarchy: { childIds: [...entityIds] },
       Clip: { enabled: false },
       Appearance: {
-        backgroundColor: 'transparent',
+        backgroundPaint: { kind: 'solid', color: 'transparent' },
         borderColor: 'transparent',
         borderWidth: 0,
         borderRadius: 0,
