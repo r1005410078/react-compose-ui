@@ -6,7 +6,7 @@ import type {
   JsonValue,
 } from '@compose-ui/core'
 import type { ComposeStageDispatch } from '@compose-ui/stage'
-import { getEditorMessages } from './editor-i18n'
+import { getEditorMessages } from '../editor-i18n'
 
 type CanvasSettingsPopoverProps = {
   readonly document: ComposeDocument

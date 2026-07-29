@@ -146,7 +146,7 @@ vi.mock('dockview-react', async () => {
 import { ComposeEditor } from '../index'
 import type { ComposeEditorController } from '../index'
 import { getRequiredEditorMessage } from '../editor-i18n'
-import { createDefaultComposeEditorPreferences } from '../preferences'
+import { createDefaultComposeEditorPreferences } from '../editor-preferences'
 
 function UIContextProbe() {
   const theme = useComposeThemeContext()

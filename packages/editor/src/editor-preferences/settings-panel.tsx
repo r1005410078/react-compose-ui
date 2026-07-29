@@ -25,7 +25,7 @@ import type {
 import {
   getEditorMessages,
   getEditorShortcutActionLabel,
-} from './editor-i18n'
+} from '../editor-i18n'
 
 interface SettingsDialogProps {
   readonly id: string

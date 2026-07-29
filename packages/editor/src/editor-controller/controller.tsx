@@ -4,11 +4,8 @@ import {
   ComposeStage,
 } from '@compose-ui/stage'
 import {
-  createDuplicateCommand,
-  createReparentCommand,
   createStageInteractionController,
   createStageSceneIndex,
-  getEntityParentId,
   getEntityWorldBounds,
   unionRects,
 } from '@compose-ui/stage-engine'
@@ -21,10 +18,8 @@ import {
   type CommandDispatchResult,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposeTransform,
   type EditorCommand,
   type EditorTransaction,
-  type JsonValue,
   type TransactionRuntime,
 } from '@compose-ui/core'
 import {
@@ -53,11 +48,12 @@ import type {
   StageViewport,
 } from '@compose-ui/stage-engine'
 import {
+  CanvasInspector,
   DefaultEmptyInspector,
-  DefaultStageToolbar,
-} from './default-workspace-content'
-import { CanvasInspector } from './canvas-inspector'
-import { EntityInspector } from './entity-inspector'
+  EntityInspector,
+} from '../inspector'
+import { DefaultStageToolbar } from '../stage-toolbar'
+import { planSceneOperation } from './scene-operations'
 
 type InspectionTarget = 'entities' | 'output' | null
 
@@ -141,11 +137,6 @@ function validExpanded(document: ComposeDocument, ids: readonly string[]) {
   })
 }
 
-function describeEntityTargets(document: ComposeDocument, entityIds: readonly string[]) {
-  if (entityIds.length === 1) return document.entities[entityIds[0]!]?.name ?? 'entity'
-  return `${entityIds.length} entities`
-}
-
 /**
  * controller 成功事务或历史导航的单一宿主观察事件。
  *
@@ -184,6 +175,16 @@ export interface UseComposeEditorControllerOptions {
   readonly initialTool?: ComposeStageTool
   /** ComposeCommandPanel 显示的结构化命令预设。 */
   readonly commandPresets?: readonly ComposeCommandPreset[]
+  /**
+   * 场景树与工具栏“新建容器”使用的 Entity Preset ID。
+   *
+   * @remarks
+   * Registry 中必须存在该 Preset（默认物料由 `@compose-ui/materials` 的
+   * `createComposeBasicMaterials` 提供）；缺失时创建入口会失败并输出警告。
+   *
+   * @defaultValue `"container"`
+   */
+  readonly containerPresetId?: string
   /** 成功事务和成功历史导航的唯一外部审计边界。 */
   readonly onTransaction?: (
     event: ComposeEditorTransactionEvent,
@@ -256,21 +257,6 @@ function invokeObserver(
   }
 }
 
-function entityFromSeed(
-  id: string,
-  seed: { readonly name: string; readonly components: ComposeEntity['components'] },
-  transform: ComposeTransform,
-): ComposeEntity {
-  return {
-    id,
-    name: seed.name,
-    components: {
-      ...seed.components,
-      Transform: transform,
-    },
-  }
-}
-
 /**
  * 把 runtime、registry 与编辑器会话状态组合成默认工作区 controller。
  *
@@ -289,6 +275,7 @@ export function useComposeEditorController({
   initialViewport = { x: 80, y: 64, zoom: 1 },
   initialTool = 'select',
   commandPresets,
+  containerPresetId = 'container',
   onTransaction,
   idFactory = defaultIdFactory,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
@@ -382,146 +369,23 @@ export function useComposeEditorController({
   const nextId = useCallback(() => idFactoryRef.current(), [])
 
   const onSceneOperation = useCallback((operation: ComposeSceneTreeOperation) => {
-    let editorCommand: EditorCommand | null = null
-    let nextSelection: readonly string[] | null = null
-    if (operation.type === 'create') {
-      const created = registry.createSeed('container')
-      if (!created.ok) return
-      const entityId = nextId()
-      const rootOffset = 80 + document.rootIds.length * 40
-      const initial = created.seed.components.Transform as ComposeTransform
-      const transform: ComposeTransform = {
-        ...initial,
-        position: operation.parentId === null
-          ? { x: rootOffset, y: rootOffset }
-          : { x: 0, y: 0 },
-        size: operation.parentId === null
-          ? initial.size
-          : { width: 320, height: 180 },
-      }
-      const entity = entityFromSeed(entityId, created.seed, transform)
-      editorCommand = {
-        id: nextId(),
-        type: BUILTIN_COMMAND_TYPES.createEntity,
-        payload: {
-          entity: entity as unknown as JsonValue,
-          parentId: operation.parentId,
-          index: operation.index,
-        },
-        meta: {
-          label: operation.parentId === null
-            ? `Create Container · ${transform.size.width} × ${transform.size.height}`
-            : 'Create Container · 320 × 180',
-          source: 'scene-tree',
-          targetIds: [entityId],
-        },
-      }
-      nextSelection = [entityId]
+    const result = planSceneOperation(operation, {
+      document,
+      registry,
+      containerPresetId,
+      nextId,
+    })
+    if (result.status === 'unavailable') {
+      // 宿主配置缺失时静默失败会让入口看起来“坏了”却无从排查。
+      console.warn(`[compose-editor] ${result.reason}`)
+      return
     }
-    else if (operation.type === 'rename') {
-      const previousName = document.entities[operation.nodeId]?.name ?? 'entity'
-      editorCommand = {
-        id: nextId(),
-        type: BUILTIN_COMMAND_TYPES.renameEntity,
-        payload: { entityId: operation.nodeId, name: operation.label },
-        meta: {
-          label: `Rename ${previousName} · “${previousName}” → “${operation.label}”`,
-          source: 'scene-tree',
-          targetIds: [operation.nodeId],
-        },
-      }
+    if (result.status === 'skipped') return
+    const dispatched = runtime.dispatch(result.plan.command)
+    if (dispatched.status === 'committed' && result.plan.nextSelection) {
+      setSelectedIds(result.plan.nextSelection)
     }
-    else if (operation.type === 'delete') {
-      editorCommand = {
-        id: nextId(),
-        type: BUILTIN_COMMAND_TYPES.deleteEntity,
-        payload: { entityIds: operation.nodeIds },
-        meta: {
-          label: `Delete ${describeEntityTargets(document, operation.nodeIds)}`,
-          source: 'scene-tree',
-          targetIds: operation.nodeIds,
-        },
-      }
-    }
-    else if (operation.type === 'set-visibility') {
-      editorCommand = {
-        id: nextId(),
-        type: BUILTIN_COMMAND_TYPES.setVisibility,
-        payload: { entityIds: operation.nodeIds, visible: operation.visible },
-        meta: {
-          label: `${operation.visible ? 'Show' : 'Hide'} `
-            + describeEntityTargets(document, operation.nodeIds),
-          source: 'scene-tree',
-          targetIds: operation.nodeIds,
-        },
-      }
-    }
-    else if (operation.type === 'set-locked') {
-      editorCommand = {
-        id: nextId(),
-        type: BUILTIN_COMMAND_TYPES.setLock,
-        payload: { entityIds: operation.nodeIds, locked: operation.locked },
-        meta: {
-          label: `${operation.locked ? 'Lock' : 'Unlock'} `
-            + describeEntityTargets(document, operation.nodeIds),
-          source: 'scene-tree',
-          targetIds: operation.nodeIds,
-        },
-      }
-    }
-    else if (operation.type === 'move') {
-      const crossesParent = operation.nodeIds.some(
-        (id) => getEntityParentId(document, id) !== operation.parentId,
-      )
-      editorCommand = crossesParent
-        ? createReparentCommand(
-            document,
-            operation.nodeIds,
-            operation.parentId,
-            operation.index,
-            nextId(),
-          )
-        : {
-            id: nextId(),
-            type: BUILTIN_COMMAND_TYPES.moveEntity,
-            payload: {
-              entityIds: operation.nodeIds,
-              parentId: operation.parentId,
-              index: operation.index,
-            },
-            meta: {
-              label: `Reorder ${describeEntityTargets(document, operation.nodeIds)}`
-                + ` · position ${operation.index + 1}`,
-              source: 'scene-tree',
-              targetIds: operation.nodeIds,
-            },
-          }
-    }
-    else if (operation.type === 'duplicate') {
-      const duplicates = operation.sourceNodeIds
-        .map((id) => createDuplicateCommand(document, id, nextId, nextId()))
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-      if (duplicates.length === 1) editorCommand = duplicates[0]!.command
-      else if (duplicates.length > 1) {
-        editorCommand = {
-          id: nextId(),
-          type: BUILTIN_COMMAND_TYPES.batch,
-          payload: {
-            commands: duplicates.map((item) => item.command) as unknown as JsonValue,
-          },
-          meta: {
-            label: `Duplicate ${describeEntityTargets(document, operation.sourceNodeIds)}`,
-            source: 'scene-tree',
-            targetIds: operation.sourceNodeIds,
-          },
-        }
-      }
-      nextSelection = duplicates.map((item) => item.rootId)
-    }
-    if (!editorCommand) return
-    const result = runtime.dispatch(editorCommand)
-    if (result.status === 'committed' && nextSelection) setSelectedIds(nextSelection)
-  }, [document, nextId, registry, runtime, setSelectedIds])
+  }, [containerPresetId, document, nextId, registry, runtime, setSelectedIds])
 
   const sceneTreeProps = useMemo<ComposeSceneTreeProps>(() => ({
     nodes: deriveSceneEntities(document, registry),
@@ -636,6 +500,32 @@ export function useComposeEditorController({
     meta: { label, source: 'stage-toolbar' },
   })
 
+  // Inspector 目标只有画布输出、单选 Entity 和空态三种；三者互斥且由会话状态决定。
+  const inspectorPanel = resolvedInspectionTarget === 'output' ? (
+    <CanvasInspector
+      key={[
+        document.output.width,
+        document.output.height,
+        document.output.backgroundColor,
+      ].join(':')}
+      dispatch={dispatch}
+      document={document}
+      idFactory={nextId}
+    />
+  ) : selectedEntity ? (
+    <EntityInspector
+      dispatch={dispatch}
+      document={document}
+      entity={selectedEntity}
+      idFactory={nextId}
+      // 按 Entity 重挂载：能力移除确认等局部会话状态不得跨选中目标残留。
+      key={selectedEntity.id}
+      registry={registry}
+    />
+  ) : (
+    <DefaultEmptyInspector />
+  )
+
   return {
     document,
     runtime,
@@ -660,28 +550,7 @@ export function useComposeEditorController({
       />
     ),
     stage: <ComposeStage {...stageProps} />,
-    inspectorPanel: resolvedInspectionTarget === 'output' ? (
-      <CanvasInspector
-        key={[
-          document.output.width,
-          document.output.height,
-          document.output.backgroundColor,
-        ].join(':')}
-        dispatch={dispatch}
-        document={document}
-        idFactory={nextId}
-      />
-    ) : selectedEntity ? (
-      <EntityInspector
-        dispatch={dispatch}
-        document={document}
-        entity={selectedEntity}
-        idFactory={nextId}
-        registry={registry}
-      />
-    ) : (
-      <DefaultEmptyInspector />
-    ),
+    inspectorPanel,
     commandPanel: (
       <ComposeCommandPanel presets={commandPresets} runtime={runtime} />
     ),

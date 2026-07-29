@@ -1,5 +1,5 @@
 import type { DockviewApi } from 'dockview-react'
-import { getEditorMessages } from './editor-i18n'
+import { getEditorMessages } from '../editor-i18n'
 import type { ComposeI18nContextValue, ComposeLocale } from '@compose-ui/ui-context'
 
 export const WORKSPACE_GROUP_IDS = {

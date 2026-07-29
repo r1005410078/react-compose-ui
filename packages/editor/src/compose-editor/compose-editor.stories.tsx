@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { useMemo } from 'react'
 import { createTransactionRuntime } from '@compose-ui/core'
 import { createStoryDocument, storyRegistry } from '@compose-ui/storybook-fixtures'
-import { useComposeEditorController } from '../controller'
+import { useComposeEditorController } from '../editor-controller'
 import { ComposeEditor } from './compose-editor'
 
 function EditorFixture() {

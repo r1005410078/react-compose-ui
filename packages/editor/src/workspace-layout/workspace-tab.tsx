@@ -10,7 +10,7 @@ import {
   WORKSPACE_PANEL_IDS,
 } from './workspace-layout'
 import { useWorkspaceContent } from './workspace-context'
-import { getEditorMessages } from './editor-i18n'
+import { getEditorMessages } from '../editor-i18n'
 
 type WorkspaceTabProps = IDockviewPanelHeaderProps & {
   onPointerDown?: PointerEventHandler<HTMLDivElement>

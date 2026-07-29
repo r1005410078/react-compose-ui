@@ -8,7 +8,12 @@ import {
   waitFor,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createComposeEntityRegistry } from '@compose-ui/component-registry'
+import * as v from 'valibot'
+import {
+  createComposeEntityRegistry,
+  type ComposeComponentInspectorProps,
+} from '@compose-ui/component-registry'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
@@ -85,6 +90,106 @@ function documentFixture(): ComposeDocument {
   }
 }
 
+// 编辑器测试只验证聚合契约：分组来自 Registry 定义顺序、readOnly 与 dispatch 正确
+// 透传；内建 Inspector 的真实行为由 @compose-ui/materials 的测试覆盖。
+let testCommandIndex = 0
+
+const testTransformSchema = v.object({
+  position: v.pipe(
+    v.object({ x: v.number(), y: v.number() }),
+    v.title('位置'),
+    v.metadata({ propertyPanel: { editor: 'vector2' } }),
+  ),
+})
+
+function TestTransformInspector({ value }: ComposeComponentInspectorProps) {
+  return (
+    <ComposePropertyPanel
+      aria-label="变换属性"
+      schema={testTransformSchema}
+      value={{ position: (value as ComposeTransform).position }}
+    />
+  )
+}
+
+const testVisibilitySchema = v.object({
+  visible: v.pipe(v.boolean(), v.title('可见')),
+})
+
+function TestVisibilityInspector({ value, readOnly }: ComposeComponentInspectorProps) {
+  return (
+    <ComposePropertyPanel
+      aria-label="状态属性"
+      readOnly={readOnly}
+      schema={testVisibilitySchema}
+      value={{ visible: value.visible === true }}
+    />
+  )
+}
+
+const testLockSchema = v.object({
+  locked: v.pipe(v.boolean(), v.title('锁定')),
+})
+
+// 镜像内建 Lock Inspector 的契约：即使聚合层传入 readOnly，锁定仍必须可解除。
+function TestLockInspector({ entity, dispatch, value }: ComposeComponentInspectorProps) {
+  return (
+    <ComposePropertyPanel
+      aria-label="锁定属性"
+      schema={testLockSchema}
+      value={{ locked: value.locked === true }}
+      onValueChange={(next) => dispatch({
+        id: `test-lock-${testCommandIndex++}`,
+        type: BUILTIN_COMMAND_TYPES.setLock,
+        payload: { entityIds: [entity.id], locked: next.locked },
+        meta: { source: 'inspector', targetIds: [entity.id] },
+      })}
+    />
+  )
+}
+
+const testAppearanceSchema = v.object({
+  backgroundColor: v.pipe(
+    v.string(),
+    v.title('背景颜色'),
+    v.metadata({ propertyPanel: { editor: 'color' } }),
+  ),
+})
+
+function TestAppearanceInspector({ value, readOnly }: ComposeComponentInspectorProps) {
+  return (
+    <ComposePropertyPanel
+      aria-label="外观属性"
+      readOnly={readOnly}
+      schema={testAppearanceSchema}
+      value={{
+        backgroundColor: typeof value.backgroundColor === 'string'
+          ? value.backgroundColor
+          : 'transparent',
+      }}
+    />
+  )
+}
+
+const testHierarchySchema = v.object({
+  childCount: v.pipe(
+    v.number(),
+    v.title('子项数量'),
+    v.metadata({ propertyPanel: { readOnly: true } }),
+  ),
+})
+
+function TestHierarchyInspector({ entity }: ComposeComponentInspectorProps) {
+  return (
+    <ComposePropertyPanel
+      aria-label="容器属性"
+      readOnly
+      schema={testHierarchySchema}
+      value={{ childCount: getComposeHierarchy(entity)?.childIds.length ?? 0 }}
+    />
+  )
+}
+
 const componentDefinitions = [
   {
     key: 'Composition',
@@ -98,30 +203,35 @@ const componentDefinitions = [
     label: '变换',
     order: 10,
     createDefault: () => transform(0, 0, 100, 100),
+    inspector: TestTransformInspector,
   },
   {
     key: 'Visibility',
     label: '可见性',
     order: 20,
     createDefault: () => ({ visible: true }),
+    inspector: TestVisibilityInspector,
   },
   {
     key: 'Lock',
     label: '锁定',
     order: 30,
     createDefault: () => ({ locked: false }),
+    inspector: TestLockInspector,
   },
   {
     key: 'Appearance',
     label: '外观',
     order: 40,
     createDefault: () => ({ backgroundColor: 'transparent' }),
+    inspector: TestAppearanceInspector,
   },
   {
     key: 'Hierarchy',
     label: '容器',
     order: 50,
     createDefault: () => ({ childIds: [] }),
+    inspector: TestHierarchyInspector,
   },
   {
     key: 'Clip',
@@ -340,6 +450,90 @@ describe('useComposeEditorController', () => {
     expect(getComposeLock(editorRuntime.document.entities.dashboard!).locked).toBe(true)
   })
 
+  it('场景树删除操作移除 Entity 并从父容器解除引用', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'delete',
+      nodeIds: ['title'],
+    }))
+
+    expect(editorRuntime.document.entities.title).toBeUndefined()
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds).toEqual([])
+  })
+
+  it('场景树移动操作跨父级 reparent 并在同父级内重排序', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'move',
+      nodeIds: ['title'],
+      parentId: null,
+      index: 0,
+    }))
+
+    expect(editorRuntime.document.rootIds).toEqual(['title', 'dashboard'])
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds).toEqual([])
+    // reparent 保持世界坐标：title 原本在 dashboard(40,30) 内偏移 (10,10)。
+    expect(getComposeTransform(editorRuntime.document.entities.title!).position)
+      .toEqual({ x: 50, y: 40 })
+
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'move',
+      nodeIds: ['title'],
+      parentId: null,
+      index: 2,
+    }))
+    expect(editorRuntime.document.rootIds).toEqual(['dashboard', 'title'])
+  })
+
+  it('场景树复制操作创建副本并选中；多个来源合并为一个事务', () => {
+    const editorRuntime = runtime()
+    // idFactory 必须跨渲染稳定：写成 `ids()` 会在每次重渲染重置计数器，
+    // 使后续操作复用已存在的 Entity ID 而被运行时拒绝。
+    const idFactory = ids()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory,
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'duplicate',
+      sourceNodeIds: ['title'],
+      parentId: 'dashboard',
+      index: 1,
+    }))
+
+    const children = getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds ?? []
+    expect(children).toHaveLength(2)
+    const copyId = children.find((id) => id !== 'title')!
+    expect(editorRuntime.document.entities[copyId]).toBeDefined()
+    expect(result.current.selectedIds).toEqual([copyId])
+
+    const entriesBefore = editorRuntime.entries.length
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'duplicate',
+      sourceNodeIds: ['title', copyId],
+      parentId: 'dashboard',
+      index: 2,
+    }))
+    expect(editorRuntime.entries).toHaveLength(entriesBefore + 1)
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
+      .toHaveLength(4)
+    expect(result.current.selectedIds).toHaveLength(2)
+  })
+
   it('Renderer Inspector 派发 entity.renderer.props.set', () => {
     const editorRuntime = runtime()
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
@@ -436,7 +630,7 @@ describe('useComposeEditorController', () => {
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
     expect(screen.getByRole('button', { name: 'HostState' })).toBeInTheDocument()
-    expect(screen.getByLabelText('未知能力')).toHaveValue('未知能力：HostState')
+    expect(screen.getByLabelText('未知 Component')).toHaveValue('未知 Component：HostState')
     expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
   })
 
@@ -484,6 +678,56 @@ describe('useComposeEditorController', () => {
     act(() => result.current.stageProps.onOutputSelect?.())
     expect(result.current.selectedIds).toEqual([])
     expect(result.current.stageProps.outputSelected).toBe(true)
+  })
+
+  it('切换选中 Entity 时重置能力移除确认对话框', () => {
+    const editorRuntime = runtime()
+    const plan = registry.planAddCapability(editorRuntime.document, 'title', 'container', ids())
+    if (!plan.ok) throw new Error(plan.issue.message)
+    editorRuntime.dispatch(plan.command)
+
+    // 模态对话框会阻挡页面交互；选择变化的真实来源是场景树或文档事务，测试直接
+    // 通过 controller API 切换。
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      initialSelection: ['title'],
+      registry,
+      runtime: editorRuntime,
+    }))
+    const view = render(<>{result.current.inspectorPanel}</>)
+
+    fireEvent.click(screen.getByRole('button', { name: '移除容器' }))
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+
+    act(() => result.current.setSelectedIds(['dashboard']))
+    view.rerender(<>{result.current.inspectorPanel}</>)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('containerPresetId 缺失时创建入口输出警告且不产生事务', () => {
+    const editorRuntime = runtime()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const { result } = renderHook(() => useComposeEditorController({
+        containerPresetId: 'missing-container',
+        idFactory: ids(),
+        registry,
+        runtime: editorRuntime,
+      }))
+      const entriesBefore = editorRuntime.entries.length
+      act(() => {
+        result.current.sceneTreeProps.onOperation?.({
+          type: 'create',
+          parentId: null,
+          index: 0,
+        })
+      })
+      expect(editorRuntime.entries).toHaveLength(entriesBefore)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing-container'))
+    }
+    finally {
+      warn.mockRestore()
+    }
   })
 
   it('成功事务只通过 onTransaction 通知一次', () => {

@@ -7,7 +7,7 @@ import type {
   EditorCommand,
 } from '@compose-ui/core'
 import * as v from 'valibot'
-import { getEditorMessages } from './editor-i18n'
+import { getEditorMessages } from '../editor-i18n'
 
 type CanvasInspectorProps = {
   readonly document: ComposeDocument

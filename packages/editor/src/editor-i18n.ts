@@ -1,5 +1,5 @@
 import type { ComposeLocale } from '@compose-ui/ui-context'
-import type { ComposeEditorShortcutAction } from './preferences'
+import type { ComposeEditorShortcutAction } from './editor-preferences'
 
 type FormatMessage = (
   id: string,

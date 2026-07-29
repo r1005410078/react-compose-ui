@@ -1,0 +1,306 @@
+import {
+  createDuplicateCommand,
+  createReparentCommand,
+  getEntityParentId,
+} from '@compose-ui/stage-engine'
+import {
+  BUILTIN_COMMAND_TYPES,
+  createComposeBatchCommand,
+  type ComposeDocument,
+  type ComposeEntity,
+  type ComposeTransform,
+  type EditorCommand,
+  type JsonValue,
+} from '@compose-ui/core'
+import type { ComposeEntityRegistry, ComposeEntitySeed } from '@compose-ui/component-registry'
+import type { ComposeSceneTreeOperation } from '@compose-ui/scene-tree'
+
+/** 场景树操作命令的统一来源标识。 @internal */
+const SCENE_TREE_SOURCE = 'scene-tree'
+
+/** 嵌套容器创建时使用的默认尺寸。 @internal */
+const NESTED_CONTAINER_SIZE = { width: 320, height: 180 } as const
+
+/**
+ * 规划场景树操作所需的只读上下文。
+ *
+ * @remarks
+ * 规划器是纯函数：只读取上下文并返回结果，不派发命令、不修改文档、不产生副作用。
+ *
+ * @internal
+ */
+export interface SceneOperationContext {
+  /** 规划开始时的完整文档快照。 */
+  readonly document: ComposeDocument
+  /** 提供 Entity Preset 的实例级注册表。 */
+  readonly registry: ComposeEntityRegistry
+  /** 创建容器使用的 Entity Preset ID。 */
+  readonly containerPresetId: string
+  /** 命令与 Entity ID factory。 */
+  readonly nextId: () => string
+}
+
+/** 一次场景树操作规划出的命令与选择副作用。 @internal */
+export interface SceneOperationPlan {
+  /** 待派发的结构化命令。 */
+  readonly command: EditorCommand
+  /** 命令提交成功后替换的选择；省略表示保持当前选择。 */
+  readonly nextSelection?: readonly string[]
+}
+
+/**
+ * 场景树操作的规划结果。
+ *
+ * @remarks
+ * `unavailable` 表示宿主配置缺失（例如未注册容器 Preset），调用方应输出可定位的
+ * 诊断信息；`skipped` 表示该操作在当前文档下不产生任何变更。
+ *
+ * @internal
+ */
+export type SceneOperationResult =
+  | { readonly status: 'planned'; readonly plan: SceneOperationPlan }
+  | { readonly status: 'skipped' }
+  | { readonly status: 'unavailable'; readonly reason: string }
+
+type SceneOperationType = ComposeSceneTreeOperation['type']
+
+type SceneOperationPlanners = {
+  readonly [K in SceneOperationType]: (
+    operation: Extract<ComposeSceneTreeOperation, { type: K }>,
+    context: SceneOperationContext,
+  ) => SceneOperationResult
+}
+
+function planned(
+  command: EditorCommand,
+  nextSelection?: readonly string[],
+): SceneOperationResult {
+  return {
+    status: 'planned',
+    plan: { command, ...(nextSelection ? { nextSelection } : {}) },
+  }
+}
+
+function sceneCommand(
+  context: SceneOperationContext,
+  type: string,
+  payload: EditorCommand['payload'],
+  label: string,
+  targetIds: readonly string[],
+): EditorCommand {
+  return {
+    id: context.nextId(),
+    type,
+    payload,
+    meta: { label, source: SCENE_TREE_SOURCE, targetIds },
+  }
+}
+
+/** 事务标签中对一批目标 Entity 的简短描述。 @internal */
+export function describeEntityTargets(
+  document: ComposeDocument,
+  entityIds: readonly string[],
+): string {
+  if (entityIds.length === 1) return document.entities[entityIds[0]!]?.name ?? 'entity'
+  return `${entityIds.length} entities`
+}
+
+function entityFromSeed(
+  id: string,
+  seed: ComposeEntitySeed,
+  transform: ComposeTransform,
+): ComposeEntity {
+  return {
+    id,
+    name: seed.name,
+    components: {
+      ...seed.components,
+      Transform: transform,
+    },
+  }
+}
+
+function planCreate(
+  operation: Extract<ComposeSceneTreeOperation, { type: 'create' }>,
+  context: SceneOperationContext,
+): SceneOperationResult {
+  const created = context.registry.createSeed(context.containerPresetId)
+  if (!created.ok) {
+    return {
+      status: 'unavailable',
+      reason: `无法创建容器 Preset "${context.containerPresetId}"：${created.error.message}`,
+    }
+  }
+  const isRoot = operation.parentId === null
+  const entityId = context.nextId()
+  const initial = created.seed.components.Transform as ComposeTransform
+  // 根级新建沿对角线依次错开，避免多个容器完全重叠；子级从父容器原点开始。
+  const rootOffset = 80 + context.document.rootIds.length * 40
+  const transform: ComposeTransform = {
+    ...initial,
+    position: isRoot ? { x: rootOffset, y: rootOffset } : { x: 0, y: 0 },
+    size: isRoot ? initial.size : { ...NESTED_CONTAINER_SIZE },
+  }
+  const entity = entityFromSeed(entityId, created.seed, transform)
+  return planned(
+    sceneCommand(
+      context,
+      BUILTIN_COMMAND_TYPES.createEntity,
+      {
+        entity: entity as unknown as JsonValue,
+        parentId: operation.parentId,
+        index: operation.index,
+      },
+      `Create Container · ${transform.size.width} × ${transform.size.height}`,
+      [entityId],
+    ),
+    [entityId],
+  )
+}
+
+function planRename(
+  operation: Extract<ComposeSceneTreeOperation, { type: 'rename' }>,
+  context: SceneOperationContext,
+): SceneOperationResult {
+  const previousName = context.document.entities[operation.nodeId]?.name ?? 'entity'
+  return planned(sceneCommand(
+    context,
+    BUILTIN_COMMAND_TYPES.renameEntity,
+    { entityId: operation.nodeId, name: operation.label },
+    `Rename ${previousName} · “${previousName}” → “${operation.label}”`,
+    [operation.nodeId],
+  ))
+}
+
+function planDelete(
+  operation: Extract<ComposeSceneTreeOperation, { type: 'delete' }>,
+  context: SceneOperationContext,
+): SceneOperationResult {
+  return planned(sceneCommand(
+    context,
+    BUILTIN_COMMAND_TYPES.deleteEntity,
+    { entityIds: operation.nodeIds },
+    `Delete ${describeEntityTargets(context.document, operation.nodeIds)}`,
+    operation.nodeIds,
+  ))
+}
+
+function planSetVisibility(
+  operation: Extract<ComposeSceneTreeOperation, { type: 'set-visibility' }>,
+  context: SceneOperationContext,
+): SceneOperationResult {
+  return planned(sceneCommand(
+    context,
+    BUILTIN_COMMAND_TYPES.setVisibility,
+    { entityIds: operation.nodeIds, visible: operation.visible },
+    `${operation.visible ? 'Show' : 'Hide'} `
+    + describeEntityTargets(context.document, operation.nodeIds),
+    operation.nodeIds,
+  ))
+}
+
+function planSetLocked(
+  operation: Extract<ComposeSceneTreeOperation, { type: 'set-locked' }>,
+  context: SceneOperationContext,
+): SceneOperationResult {
+  return planned(sceneCommand(
+    context,
+    BUILTIN_COMMAND_TYPES.setLock,
+    { entityIds: operation.nodeIds, locked: operation.locked },
+    `${operation.locked ? 'Lock' : 'Unlock'} `
+    + describeEntityTargets(context.document, operation.nodeIds),
+    operation.nodeIds,
+  ))
+}
+
+function planMove(
+  operation: Extract<ComposeSceneTreeOperation, { type: 'move' }>,
+  context: SceneOperationContext,
+): SceneOperationResult {
+  // 跨父级移动必须保持世界坐标，交由 stage-engine 重算局部 Transform；
+  // 同父级内只是顺序变化，用轻量的 moveEntity 即可。
+  const crossesParent = operation.nodeIds.some(
+    (id) => getEntityParentId(context.document, id) !== operation.parentId,
+  )
+  if (crossesParent) {
+    return planned(createReparentCommand(
+      context.document,
+      operation.nodeIds,
+      operation.parentId,
+      operation.index,
+      context.nextId(),
+    ))
+  }
+  return planned(sceneCommand(
+    context,
+    BUILTIN_COMMAND_TYPES.moveEntity,
+    {
+      entityIds: operation.nodeIds,
+      parentId: operation.parentId,
+      index: operation.index,
+    },
+    `Reorder ${describeEntityTargets(context.document, operation.nodeIds)}`
+    + ` · position ${operation.index + 1}`,
+    operation.nodeIds,
+  ))
+}
+
+function planDuplicate(
+  operation: Extract<ComposeSceneTreeOperation, { type: 'duplicate' }>,
+  context: SceneOperationContext,
+): SceneOperationResult {
+  const duplicates = operation.sourceNodeIds
+    .map((id) => createDuplicateCommand(context.document, id, context.nextId, context.nextId()))
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+  if (duplicates.length === 0) return { status: 'skipped' }
+  const selection = duplicates.map((item) => item.rootId)
+  if (duplicates.length === 1) return planned(duplicates[0]!.command, selection)
+  return planned(
+    createComposeBatchCommand({
+      id: context.nextId(),
+      commands: duplicates.map((item) => item.command),
+      meta: {
+        label: `Duplicate ${describeEntityTargets(context.document, operation.sourceNodeIds)}`,
+        source: SCENE_TREE_SOURCE,
+        targetIds: operation.sourceNodeIds,
+      },
+    }),
+    selection,
+  )
+}
+
+const SCENE_OPERATION_PLANNERS: SceneOperationPlanners = {
+  create: planCreate,
+  rename: planRename,
+  delete: planDelete,
+  move: planMove,
+  duplicate: planDuplicate,
+  'set-visibility': planSetVisibility,
+  'set-locked': planSetLocked,
+}
+
+/**
+ * 把一次受控场景树操作规划成待派发命令。
+ *
+ * @remarks
+ * 按 operation.type 查表分派。映射表以 ComposeSceneTreeOperation 的判别键构建，
+ * 新增操作类型时缺少对应规划器会直接产生编译错误。
+ *
+ * @param operation - 场景树发出的受控操作。
+ * @param context - 规划所需的文档、注册表与 ID factory。
+ * @returns 待派发命令、跳过或宿主配置缺失。
+ * @internal
+ */
+export function planSceneOperation(
+  operation: ComposeSceneTreeOperation,
+  context: SceneOperationContext,
+): SceneOperationResult {
+  // 映射表的每个成员都接受精确窄化后的操作，但用联合类型索引只能得到函数联合，
+  // TypeScript 无法自证参数与键的对应关系；此处一次断言把该关系交回映射表，
+  // 从而避免在调用点重新按 type 分支。
+  const planners = SCENE_OPERATION_PLANNERS as Record<
+    SceneOperationType,
+    (operation: ComposeSceneTreeOperation, context: SceneOperationContext) => SceneOperationResult
+  >
+  return planners[operation.type](operation, context)
+}

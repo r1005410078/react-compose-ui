@@ -17,11 +17,11 @@ export {
   type ComposeEditorController,
   type ComposeEditorTransactionEvent,
   type UseComposeEditorControllerOptions,
-} from './controller'
-export { createDefaultComposeEditorPreferences } from './preferences'
+} from './editor-controller'
+export { createDefaultComposeEditorPreferences } from './editor-preferences'
 export type {
   ComposeEditorKeybinding,
   ComposeEditorPreferences,
   ComposeEditorShortcutAction,
   ComposeEditorShortcutScope,
-} from './preferences'
+} from './editor-preferences'

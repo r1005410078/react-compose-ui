@@ -13,7 +13,7 @@ import type {
 } from 'dockview-react'
 import { useWorkspaceContent } from './workspace-context'
 import { WorkspaceTab } from './workspace-tab'
-import { getEditorMessages } from './editor-i18n'
+import { getEditorMessages } from '../editor-i18n'
 
 const SCENE_MIN_HEIGHT = 160
 const HISTORY_MIN_HEIGHT = 120

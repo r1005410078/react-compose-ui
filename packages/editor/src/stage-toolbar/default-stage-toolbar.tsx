@@ -9,21 +9,9 @@ import type {
   SetStateAction,
 } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import { getEditorMessages } from '../editor-i18n'
 import { CanvasSettingsPopover } from './canvas-settings-popover'
-import { getEditorMessages } from './editor-i18n'
 import { StageToolbarIcon } from './stage-toolbar-icons'
-
-export function DefaultEmptyInspector() {
-  const i18n = useComposeI18nContext()
-  return (
-    <div className="compose-editor__empty-inspector" role="status">
-      {getEditorMessages(
-        i18n?.locale ?? 'zh-CN',
-        i18n?.formatMessage,
-      ).workspace.selectNode}
-    </div>
-  )
-}
 
 type DefaultStageToolbarProps = {
   readonly canvasSettingsOpen: boolean
@@ -49,6 +37,7 @@ type DefaultStageToolbarProps = {
   readonly viewport: StageViewport
 }
 
+/** 默认舞台工具栏：交互工具、容器操作、吸附开关与缩放。 @internal */
 export function DefaultStageToolbar({
   canvasSettingsOpen,
   configureCanvas,

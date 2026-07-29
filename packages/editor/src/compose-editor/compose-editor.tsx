@@ -53,8 +53,8 @@ import type {
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
   WorkspaceContentContext,
-} from '../workspace-context'
-import type { ComposeAssetDocumentSession } from '../workspace-context'
+} from '../workspace-layout'
+import type { ComposeAssetDocumentSession } from '../workspace-layout'
 import {
   AssetBrowserPanel,
   AssetDocumentPanel,
@@ -64,7 +64,7 @@ import {
   InspectorPanel,
   SceneGraphPanel,
   TransactionLogPanel,
-} from '../workspace-panels'
+} from '../workspace-layout'
 import {
   createAssetDocumentPanelId,
   initializeWorkspace,
@@ -73,16 +73,16 @@ import {
   WORKSPACE_COMPONENT_IDS,
 } from '../workspace-layout'
 import { getEditorMessages } from '../editor-i18n'
-import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-tab'
-import type { ComposeEditorController } from '../controller'
-import { SettingsDialog } from '../settings-panel'
+import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-layout'
+import type { ComposeEditorController } from '../editor-controller'
+import { SettingsDialog } from '../editor-preferences'
 import {
   createDefaultComposeEditorPreferences,
   isComposeEditorKeybindingMatch,
   isEditableKeyboardTarget,
   normalizeComposeEditorPreferences,
-} from '../preferences'
-import type { ComposeEditorPreferences } from '../preferences'
+} from '../editor-preferences'
+import type { ComposeEditorPreferences } from '../editor-preferences'
 import '../styles.css'
 
 /** 编辑器内各个可替换工作区区域。未提供的区域保持默认面板或可访问占位。 */
