@@ -1,5 +1,4 @@
 import type {
-  ComposeAppearance,
   ComposeEntity,
   ComposeShadow,
   ResolvedComposeAppearance,
@@ -25,17 +24,17 @@ export const DEFAULT_COMPOSE_APPEARANCE: ResolvedComposeAppearance = {
   shadow: null,
 }
 
-/** 将部分 Appearance 解析为渲染端完整值。 @public */
-export function resolveComposeAppearance(
-  entityOrAppearance: ComposeEntity | ComposeAppearance | undefined,
-): ResolvedComposeAppearance {
-  const isEntity = entityOrAppearance !== undefined
-    && typeof entityOrAppearance.id === 'string'
-    && typeof entityOrAppearance.name === 'string'
-    && typeof entityOrAppearance.components === 'object'
-  const appearance: ComposeAppearance | undefined = isEntity
-    ? getComposeAppearance(entityOrAppearance as ComposeEntity)
-    : entityOrAppearance as ComposeAppearance | undefined
+/**
+ * 将 Entity 的部分 Appearance 解析为渲染端完整值。
+ *
+ * @remarks
+ * 只接受 Entity：Appearance 是带索引签名的 JsonObject，直接接受它需要在运行时
+ * 靠字段猜测与 Entity 区分，可能被含 id/name/components 键的宿主数据误判。
+ *
+ * @public
+ */
+export function resolveComposeAppearance(entity: ComposeEntity): ResolvedComposeAppearance {
+  const appearance = getComposeAppearance(entity)
   const shadow = appearance?.shadow === undefined
     ? DEFAULT_COMPOSE_APPEARANCE.shadow
     : appearance.shadow
