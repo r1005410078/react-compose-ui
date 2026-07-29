@@ -1,3 +1,8 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: Controller 驱动的默认组合`
+- TO: `### Requirement: 默认 ECS 工作区同步`
+
 ## ADDED Requirements
 
 ### Requirement: ECS 聚合 Entity Inspector
@@ -64,22 +69,6 @@ Inspector 顶部 MUST 提供“添加能力”，列出 Registry 中可用、已
 - **WHEN** 能力被依赖、定义缺失、属于基础组合、目标锁定或 Container 含子项
 - **THEN** 移除入口禁用并提供对应可访问说明
 
-## MODIFIED Requirements
-
-### Requirement: 默认 ECS 工作区同步
-
-默认 Editor MUST 使用同一 ComposeDocument v4 与 ComposeEntityRegistry 驱动 Scene Tree、Palette、
-Stage、Inspector、History、Command Panel 和 Preview 集成。选择、命令和撤销后所有区域 MUST
-读取相同 Entity 快照。
-
-#### Scenario: 编辑 Entity 并跨面板同步
-
-- **WHEN** 用户通过 Stage、Scene Tree 或 Inspector 修改同一 Entity
-- **THEN** 所有面板显示相同 name、Components、层级和选择
-- **AND** undo/redo 同步恢复全部区域
-
-## ADDED Requirements
-
 ### Requirement: 聚合 Inspector 通过 Registry Inspector 协议渲染
 
 EntityInspector MUST 通过 ComposeComponentDefinition.inspector 渲染包括内建 Component 在内的
@@ -105,3 +94,27 @@ MUST 输出可定位的警告而不是静默失败。
 
 - **WHEN** Registry 中不存在 containerPresetId 指向的 Preset 且用户触发创建
 - **THEN** 不产生事务并输出包含该 Preset ID 的警告
+
+## MODIFIED Requirements
+
+### Requirement: 默认 ECS 工作区同步
+
+默认 Editor MUST 使用同一 ComposeDocument v4 与 ComposeEntityRegistry 驱动 Scene Tree、Palette、
+Stage、Inspector、History、Command Panel 和 Preview 集成。选择、命令和撤销后所有区域 MUST
+读取相同 Entity 快照。
+
+#### Scenario: 编辑 Entity 并跨面板同步
+
+- **WHEN** 用户通过 Stage、Scene Tree 或 Inspector 修改同一 Entity
+- **THEN** 所有面板显示相同 name、Components、层级和选择
+- **AND** undo/redo 同步恢复全部区域
+
+## REMOVED Requirements
+
+### Requirement: Frame presets 与结构节点 Inspector
+
+**原因**：Frame preset 与结构节点 Inspector 基于 v3 节点模型，已被 Entity Preset 和
+Registry 协议驱动的聚合 Inspector 取代。
+
+**迁移**：由「ECS 聚合 Entity Inspector」「聚合 Inspector 通过 Registry Inspector 协议渲染」
+与「容器创建 Preset 可配置」共同承接。

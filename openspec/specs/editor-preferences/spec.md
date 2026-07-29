@@ -67,20 +67,20 @@ PropertyPanel、OperationLog、基础材料 Inspector 和默认 Palette；系统
 
 ### Requirement: 可配置单次快捷键
 
-编辑器 MUST 保留现有可配置 Stage 动作和默认键位。`stage.fitFrame` MUST 从当前选择或最近 Frame
-祖先推导目标；`edit.group`/`edit.ungroup` MUST 操作统一 Frame，不依赖 Group 节点或
-activeFrameId。
+编辑器 MUST 保留现有可配置 Stage 动作和默认键位。`stage.fitContainer` MUST 从当前选择或最近
+Container 祖先推导目标；`edit.group`/`edit.ungroup` MUST 操作统一 Container，不依赖旧 Frame
+节点或 activeFrameId。
 
-#### Scenario: 使用选择推导的 Frame 快捷键
+#### Scenario: 使用选择推导的 Container 快捷键
 
-- **WHEN** 用户选择 Frame 后代并触发适配 Frame
-- **THEN** Stage 适配最近 Frame 祖先
-- **AND** 根 Component 没有 Frame 祖先时动作稳定 no-op
+- **WHEN** 用户选择 Container 后代并触发适配 Container
+- **THEN** Stage 适配最近 Container 祖先
+- **AND** 根 Renderer Entity 没有 Container 祖先时动作稳定 no-op
 
 #### Scenario: 使用组合快捷键
 
-- **WHEN** 用户在 Canvas 根选择多个节点并触发 group/ungroup
-- **THEN** 快捷键分别创建或解除统一 Frame
+- **WHEN** 用户在 Canvas 根选择多个 Entity 并触发 group/ungroup
+- **THEN** 快捷键分别创建或解除统一 Container
 - **AND** 默认键位和可配置冲突规则保持不变
 
 ### Requirement: 设置模态弹框
@@ -142,3 +142,4 @@ Asset Browser MUST 直接消费共享 Theme/I18n Context。内建中英文词典
 - **WHEN** 宿主在无 Provider Context 环境独立挂载 AssetBrowser
 - **THEN** Browser 使用 dark 与 zh-CN 默认 chrome
 - **AND** 不要求依赖 ComposeEditor 或 ComposeDocument
+

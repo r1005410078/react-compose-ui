@@ -1,3 +1,8 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: 内置文档命令`
+- TO: `### Requirement: Entity 与 Component 内置命令`
+
 ## MODIFIED Requirements
 
 ### Requirement: Entity 与 Component 内置命令
@@ -16,6 +21,8 @@ Patch，并继续形成唯一正式事务。
 
 - **WHEN** 命令尝试移除 Composition 或 Composition.baseComponentKeys 中的 Component
 - **THEN** 命令被拒绝且文档与历史不变
+
+## ADDED Requirements
 
 ### Requirement: 受约束 Transform 命令
 
@@ -47,8 +54,6 @@ Capability 添加和移除 MUST 由 Registry 规划为一个 transaction.batch�
 - **WHEN** 目标被锁定、存在冲突或任一 Component 无效
 - **THEN** 整个 batch 被拒绝且不留下部分 Component
 
-## ADDED Requirements
-
 ### Requirement: batch 命令构造器
 
 core MUST 提供 createComposeBatchCommand，从类型化子命令数组构造 transaction.batch 命令，
@@ -58,3 +63,13 @@ core MUST 提供 createComposeBatchCommand，从类型化子命令数组构造 t
 
 - **WHEN** 调用方传入子命令数组与 meta
 - **THEN** 返回的命令经 dispatch 后原子应用全部子命令
+
+## REMOVED Requirements
+
+### Requirement: 原子节点样式命令
+
+**原因**：`node.style.set` 与 `node.style.reset` 作用于 v3 NodeStyle，该数据结构已被
+Appearance Component 取代。
+
+**迁移**：外观修改改用 `entity.appearance.set`，其余 Component 修改使用
+`entity.component.add|update|remove`。

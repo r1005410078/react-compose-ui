@@ -1,43 +1,21 @@
-# compose-document Specification
+## RENAMED Requirements
 
-## Purpose
-TBD - created by archiving change add-command-transaction-runtime. Update Purpose after archive.
-## Requirements
-### Requirement: 可持久化画布设置与辅助线
+- FROM: `### Requirement: 版本化 JSON 文档`
+- TO: `### Requirement: 版本化 ECS JSON 文档`
 
-ComposeDocument v4 MUST 保存 grid、smartSnap 与全局世界坐标 guides。Grid stepX/stepY MUST 为有限
-正数，offsetX/offsetY MUST 为有限数，primaryLineEvery MUST 为正整数；guide ID MUST 非空且唯一，
-axis MUST 为 `x|y`，position MUST 为有限数。
+- FROM: `### Requirement: 可序列化组件节点`
+- TO: `### Requirement: 统一 Entity 与 PascalCase Components`
 
-#### Scenario: 创建默认画布设置
+- FROM: `### Requirement: 节点变换与显示状态`
+- TO: `### Requirement: Transform 与几何限制`
 
-- **WHEN** 宿主调用 `createDefaultCanvasSettings`
-- **THEN** 得到 8×8、零偏移、每 8 格主线且三类吸附开启的独立 JSON
-- **AND** guides 初始为空且多次调用不共享可变对象
+- FROM: `### Requirement: 规范化节点拓扑`
+- TO: `### Requirement: ECS 层级拓扑`
 
-#### Scenario: 保存全局辅助线
+- FROM: `### Requirement: 可选通用节点样式`
+- TO: `### Requirement: Component 化外观和渲染数据`
 
-- **WHEN** v4 文档包含位于正负世界坐标的合法水平和垂直辅助线
-- **THEN** 校验保留 guide 顺序、ID、axis 与 position
-- **AND** guides 不依赖任何 Container Entity 或 viewport
-
-#### Scenario: 拒绝非法画布配置
-
-- **WHEN** canvas 缺失、grid 数值非法、主线间隔不是正整数或 guide ID 重复
-- **THEN** 校验返回稳定 issue code 和 canvas 字段 path
-- **AND** 不返回经过静默修正的文档
-
-### Requirement: 固定原点输出设置
-
-ComposeDocument MUST 保存正有限 width/height 与非空 backgroundColor 的 output，并导出默认
-`1280×720`、`transparent` 的 `createDefaultOutputSettings()`。输出原点 MUST 固定为世界
-`(0,0)`；backgroundColor MUST 继续允许宿主配置其他非空 CSS 颜色字符串。
-
-#### Scenario: 校验输出设置
-
-- **WHEN** 宿主创建默认输出或提供合法自定义尺寸和背景
-- **THEN** 文档校验通过且值可 JSON 往返
-- **AND** 非正、非有限尺寸或空背景被拒绝
+## MODIFIED Requirements
 
 ### Requirement: 版本化 ECS JSON 文档
 
@@ -114,6 +92,44 @@ Renderer MUST 保存非空 type 与严格 JsonObject props，不得保存 React�
 - **WHEN** Renderer.type 当前未注册但非空
 - **THEN** Core 文档仍有效且 props 保持不变
 
+### Requirement: 可持久化画布设置与辅助线
+
+ComposeDocument v4 MUST 保存 grid、smartSnap 与全局世界坐标 guides。Grid stepX/stepY MUST 为有限
+正数，offsetX/offsetY MUST 为有限数，primaryLineEvery MUST 为正整数；guide ID MUST 非空且唯一，
+axis MUST 为 `x|y`，position MUST 为有限数。
+
+#### Scenario: 创建默认画布设置
+
+- **WHEN** 宿主调用 `createDefaultCanvasSettings`
+- **THEN** 得到 8×8、零偏移、每 8 格主线且三类吸附开启的独立 JSON
+- **AND** guides 初始为空且多次调用不共享可变对象
+
+#### Scenario: 保存全局辅助线
+
+- **WHEN** v4 文档包含位于正负世界坐标的合法水平和垂直辅助线
+- **THEN** 校验保留 guide 顺序、ID、axis 与 position
+- **AND** guides 不依赖任何 Container Entity 或 viewport
+
+#### Scenario: 拒绝非法画布配置
+
+- **WHEN** canvas 缺失、grid 数值非法、主线间隔不是正整数或 guide ID 重复
+- **THEN** 校验返回稳定 issue code 和 canvas 字段 path
+- **AND** 不返回经过静默修正的文档
+
+### Requirement: 固定原点输出设置
+
+ComposeDocument MUST 保存正有限 width/height 与非空 backgroundColor 的 output，并导出默认
+`1280×720`、`transparent` 的 `createDefaultOutputSettings()`。输出原点 MUST 固定为世界
+`(0,0)`；backgroundColor MUST 继续允许宿主配置其他非空 CSS 颜色字符串。
+
+#### Scenario: 校验输出设置
+
+- **WHEN** 宿主创建默认输出或提供合法自定义尺寸和背景
+- **THEN** 文档校验通过且值可 JSON 往返
+- **AND** 非正、非有限尺寸或空背景被拒绝
+
+## ADDED Requirements
+
 ### Requirement: 场景 Entity 最小组合
 
 每个 Entity MUST 拥有合法 Composition、Transform、Visibility 与 Lock，并 MUST 至少拥有 Renderer
@@ -140,4 +156,3 @@ baseComponentKeys MUST 指向 Entity 当前存在的 Components，Composition �
 - **WHEN** Entity 由 Preset 创建并添加能力
 - **THEN** Composition 保留基础 Component Keys 和能力 ID
 - **AND** JSON 往返不依赖运行时 Registry
-

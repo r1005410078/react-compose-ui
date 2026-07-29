@@ -15,24 +15,6 @@ TBD - created by archiving change extract-stage-interaction-engine. Update Purpo
 - **THEN** 可以计算文档世界几何、创建空间命令并驱动交互 controller
 - **AND** 构建产物与 package manifest 不包含第一方 UI 包或 React 运行时
 
-### Requirement: 场景索引与坐标空间
-
-系统 MUST 从一个不可变 ComposeDocument 派生 parent、确定性文档顺序、世界矩阵、世界边界、
-可见性和吸附候选，并 MUST 使用同一 viewport/surface 坐标协议完成 client、surface 与 world
-换算。新 document 引用 MUST 产生对应的新索引结果。
-
-#### Scenario: 查询嵌套世界几何
-
-- **WHEN** 文档包含嵌套旋转 Group 与 Component
-- **THEN** SceneIndex 返回由全部父级矩阵组合得到的世界矩阵和轴对齐边界
-- **AND** world/surface 往返在正负坐标与不同 zoom 下保持一致
-
-#### Scenario: 文档更新后刷新索引
-
-- **WHEN** controller 收到新的不可变 document 引用
-- **THEN** 后续 hit、selection 和 snap 查询只使用新文档结果
-- **AND** 不复用旧文档的 parent、矩阵或可见性条目
-
 ### Requirement: Headless 交互 Controller
 
 系统 MUST 提供实例级 `StageInteractionController`，使用普通数据事件、不可变 snapshot 和
@@ -82,35 +64,6 @@ MUST 清理预览且不提交文档；surface 尺寸重测 MUST NOT 取消活动
 - **THEN** session 继续使用开始时的 viewport 与 adapter 冻结的 surface 原点计算最终几何
 - **AND** 不因纯测量变化取消或丢失正常 pointerup
 
-### Requirement: 统一外部拖入
-
-controller MUST 使用 `{ kind: 'component', componentType }` 与 `{ kind: 'frame', presetId }`
-descriptor 管理 Palette Pointer 和键盘新增会话。Engine MUST 负责 surface/world 定位与合法
-Frame 命中，React adapter MUST 在 drop effect 中解析 registry seed 或 Frame preset。
-
-#### Scenario: 拖入 Component
-
-- **WHEN** external component 会话在未锁定 Frame 内结束
-- **THEN** controller 产生包含最终世界点和 Frame ID 的 external drop effect
-- **AND** external Pointer 过程不直接创建文档事务
-
-#### Scenario: 取消或落在 Frame 外
-
-- **WHEN** external 会话被取消或 Component 在所有合法 Frame 外结束
-- **THEN** 取消会话不产生 effect，Frame 外 drop 产生可观察 rejection 所需的 drop effect
-- **AND** controller 返回 idle
-
-### Requirement: 世界几何保持的结构命令
-
-stage-engine MUST 支持 nullable reparent，并使用 Frame 实现 group/ungroup。Frame resize MUST
-只更新所选 Frame 自身 transform；移动或旋转 MUST 通过父矩阵影响后代。
-
-#### Scenario: Resize Frame 不缩放孩子
-
-- **WHEN** 用户 resize 根级或嵌套 Frame
-- **THEN** Frame 的边界更新而全部后代局部 transform 保持不变
-- **AND** pointerup 仍只派发一个 transform 事务
-
 ### Requirement: 输出区域检查命中
 
 controller MUST 接受独立的 output hit，并通过 output selection effect 请求宿主检查隐式 Canvas。
@@ -143,3 +96,52 @@ SceneIndex 解析 drop 世界点和最深合法 Frame。
 
 - **WHEN** 拖拽取消或未落在已连接 surface
 - **THEN** preview 被清理且没有 drop effect
+
+### Requirement: ECS SceneIndex
+
+Stage Engine MUST 从 ComposeDocument v4 entities 建立 parent、世界矩阵、可见性、锁定、容器和
+TransformConstraints 索引，不得依赖旧节点 kind。
+
+#### Scenario: 索引可渲染容器
+
+- **WHEN** Entity 同时包含 Renderer 和 Hierarchy
+- **THEN** SceneIndex 保留其世界几何、子项顺序与容器命中能力
+
+### Requirement: ECS 结构命令
+
+Stage Engine MUST 使用 Hierarchy 实现 nullable reparent、group 和 ungroup。Container Resize
+MUST 只更新所选 Entity 自身 Transform，后代局部 Transform 保持不变。
+
+#### Scenario: 创建和取消容器结构
+
+- **WHEN** 用户 group 或 ungroup Entity
+- **THEN** 命令创建或移除具有 Hierarchy 的 Container Entity
+- **AND** 全部目标保持世界几何
+
+### Requirement: ECS 外部拖入
+
+External descriptor MUST 统一使用 Entity Preset ID。Engine MUST 只负责世界定位和最深合法
+Hierarchy 命中，React adapter MUST 使用 Registry 创建 Entity seed。
+
+#### Scenario: 拖入任意 Entity Preset
+
+- **WHEN** 用户从 Palette 拖入 Container 或 Renderer Preset
+- **THEN** drop effect 包含 presetId、世界点和合法 parentId
+- **AND** Engine 不读取 Renderer props 或 React Definition
+
+### Requirement: 受约束变换 System
+
+Move、Resize 与 Rotate MUST 查询 Transform、Visibility、Lock 和 TransformConstraints。缺失约束
+时保持当前自由变换；存在约束时 MUST 限制操作、Resize 轴、宽高比和尺寸区间。
+
+#### Scenario: 使用全部 Resize 模式
+
+- **WHEN** 选区分别配置 free、preserve-aspect、horizontal、vertical 和 none
+- **THEN** Engine 只生成对应允许方向的 Transform preview
+- **AND** pointerup 命令声明正确操作语义
+
+#### Scenario: Core 与 Engine 一致拒绝锁定
+
+- **WHEN** Entity 不可见、锁定或禁止目标变换
+- **THEN** Engine 不开始对应手势且不产生命令 effect
+

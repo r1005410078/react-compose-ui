@@ -1,3 +1,14 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: 场景索引与坐标空间`
+- TO: `### Requirement: ECS SceneIndex`
+
+- FROM: `### Requirement: 世界几何保持的结构命令`
+- TO: `### Requirement: ECS 结构命令`
+
+- FROM: `### Requirement: 统一外部拖入`
+- TO: `### Requirement: ECS 外部拖入`
+
 ## MODIFIED Requirements
 
 ### Requirement: ECS SceneIndex
@@ -9,22 +20,6 @@ TransformConstraints 索引，不得依赖旧节点 kind。
 
 - **WHEN** Entity 同时包含 Renderer 和 Hierarchy
 - **THEN** SceneIndex 保留其世界几何、子项顺序与容器命中能力
-
-### Requirement: 受约束变换 System
-
-Move、Resize 与 Rotate MUST 查询 Transform、Visibility、Lock 和 TransformConstraints。缺失约束
-时保持当前自由变换；存在约束时 MUST 限制操作、Resize 轴、宽高比和尺寸区间。
-
-#### Scenario: 使用全部 Resize 模式
-
-- **WHEN** 选区分别配置 free、preserve-aspect、horizontal、vertical 和 none
-- **THEN** Engine 只生成对应允许方向的 Transform preview
-- **AND** pointerup 命令声明正确操作语义
-
-#### Scenario: Core 与 Engine 一致拒绝锁定
-
-- **WHEN** Entity 不可见、锁定或禁止目标变换
-- **THEN** Engine 不开始对应手势且不产生命令 effect
 
 ### Requirement: ECS 结构命令
 
@@ -47,3 +42,21 @@ Hierarchy 命中，React adapter MUST 使用 Registry 创建 Entity seed。
 - **WHEN** 用户从 Palette 拖入 Container 或 Renderer Preset
 - **THEN** drop effect 包含 presetId、世界点和合法 parentId
 - **AND** Engine 不读取 Renderer props 或 React Definition
+
+## ADDED Requirements
+
+### Requirement: 受约束变换 System
+
+Move、Resize 与 Rotate MUST 查询 Transform、Visibility、Lock 和 TransformConstraints。缺失约束
+时保持当前自由变换；存在约束时 MUST 限制操作、Resize 轴、宽高比和尺寸区间。
+
+#### Scenario: 使用全部 Resize 模式
+
+- **WHEN** 选区分别配置 free、preserve-aspect、horizontal、vertical 和 none
+- **THEN** Engine 只生成对应允许方向的 Transform preview
+- **AND** pointerup 命令声明正确操作语义
+
+#### Scenario: Core 与 Engine 一致拒绝锁定
+
+- **WHEN** Entity 不可见、锁定或禁止目标变换
+- **THEN** Engine 不开始对应手势且不产生命令 effect

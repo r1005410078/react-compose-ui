@@ -1,3 +1,17 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: 独立宿主组件注册表`
+- TO: `### Requirement: 独立 ComposeEntityRegistry`
+
+- FROM: `### Requirement: 可序列化组件默认值`
+- TO: `### Requirement: Entity Preset 创建`
+
+- FROM: `### Requirement: Renderer 与 Inspector 上下文`
+- TO: `### Requirement: Renderer 与 Component Inspector`
+
+- FROM: `### Requirement: 未知和失败 Renderer 隔离`
+- TO: `### Requirement: 未知 Definition 降级`
+
 ## MODIFIED Requirements
 
 ### Requirement: 独立 ComposeEntityRegistry
@@ -39,6 +53,19 @@ Component Definition MAY 提供对应 Component Inspector；Renderer Definition 
 - **THEN** 各 Component Inspector 按 Registry 顺序渲染
 - **AND** Renderer 内容 Inspector 收到同一 Entity 和统一 dispatch
 
+### Requirement: 未知 Definition 降级
+
+Registry 消费方 MUST 为未知 Component、Capability 和 Renderer 显示包含稳定 ID 的可访问占位，
+并 MUST 保留原始 JSON。
+
+#### Scenario: 缺失插件后打开文档
+
+- **WHEN** 文档包含当前 Registry 未注册的合法 Component、Capability 或 Renderer
+- **THEN** Stage/Preview/Inspector 只降级对应区域
+- **AND** 其他 Entity 与编辑操作保持可用
+
+## ADDED Requirements
+
 ### Requirement: Capability 规划
 
 Registry MUST 计算可添加、冲突、依赖和可移除状态。添加 MUST 自动补齐依赖且不得覆盖已有未知
@@ -53,19 +80,6 @@ Component；移除 MUST 阻止基础项、依赖方、缺失定义和含子项 C
 
 - **WHEN** 能力仍被依赖、定义缺失、拥有基础 Component 或 Container 含有子项
 - **THEN** 移除入口禁用并返回可读原因
-
-### Requirement: 未知 Definition 降级
-
-Registry 消费方 MUST 为未知 Component、Capability 和 Renderer 显示包含稳定 ID 的可访问占位，
-并 MUST 保留原始 JSON。
-
-#### Scenario: 缺失插件后打开文档
-
-- **WHEN** 文档包含当前 Registry 未注册的合法 Component、Capability 或 Renderer
-- **THEN** Stage/Preview/Inspector 只降级对应区域
-- **AND** 其他 Entity 与编辑操作保持可用
-
-## ADDED Requirements
 
 ### Requirement: 能力可用性携带移除可行性
 
@@ -101,3 +115,26 @@ Transform 解析为一致的盒样式；Stage 与 Preview MUST 使用同一实�
 
 - **WHEN** Entity Appearance 同时含边框与 shadow
 - **THEN** 两个消费方得到相同的 inset 边框加投影 boxShadow 与 Clip 决定的 overflow
+
+## REMOVED Requirements
+
+### Requirement: 组件默认节点样式
+
+**原因**：ComponentDefinition 的 NodeStyle factory 随 v3 NodeStyle 一同移除。
+
+**迁移**：默认外观由 Entity Preset 的 Appearance Component 提供。
+
+### Requirement: 通用节点 Inspector 上下文
+
+**原因**：NodeInspectorProps 基于 v3 节点模型，已被 ComposeComponentInspectorProps 与
+ComposeRendererInspectorProps 取代。
+
+**迁移**：Inspector 改为按 Component Key 或 Renderer type 注册，从 Registry 协议获取
+只读 Entity、dispatch 与 readOnly。
+
+### Requirement: Definition 资源创建协议
+
+**原因**：资源 MIME 匹配与 Palette 隐藏语义已整体迁移到 ComposeEntityPreset 的
+`assetDrop` 与 `paletteHidden`。
+
+**迁移**：由「Entity Preset 创建」承接，宿主改为在 Preset 上声明 assetDrop。

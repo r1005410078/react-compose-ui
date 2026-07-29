@@ -3,30 +3,6 @@
 ## Purpose
 TBD - created by archiving change add-infinite-stage-composition. Update Purpose after archive.
 ## Requirements
-### Requirement: DOM 与 SVG 分层 Stage
-
-系统 MUST 提供 `@compose-ui/stage` React 包。`Stage` MUST 使用 DOM Viewport 与 Scene Layer 渲染
-Frame、Group 和宿主 React Component，并使用覆盖视口的 SVG Overlay 渲染编辑反馈；首版 MUST
-NOT 使用纯 Canvas 2D 场景或公开多渲染后端选择。
-
-#### Scenario: 渲染 Stage 分层
-
-- **WHEN** 宿主使用文档与 registry 挂载 Stage
-- **THEN** Frame 和组件渲染在应用 viewport transform 的 DOM Scene Layer
-- **AND** 选择、控制点与参考线渲染在不随 zoom 改变控制点尺寸的 SVG Overlay
-
-#### Scenario: 渲染组件内部 Canvas
-
-- **WHEN** definition renderer 返回 ECharts Canvas 或其他宿主 DOM/SVG 内容
-- **THEN** 内容正常保留在对应 Component DOM 边界内
-- **AND** Stage 不尝试把宿主内容重绘进统一 Canvas
-
-#### Scenario: 显示未知或失败组件
-
-- **WHEN** Component type 未注册或 renderer 抛出异常
-- **THEN** 对应节点显示包含 type 的可访问占位
-- **AND** 节点仍可被选择并通过命令移动或删除
-
 ### Requirement: 受控无限视口
 
 Stage MUST 接收受控 viewport、tool、selectedIds 和 activeFrameId，并通过回调请求替换这些会话
@@ -51,39 +27,6 @@ Stage MUST 接收受控 viewport、tool、selectedIds 和 activeFrameId，并通
 - **WHEN** ruler、scrollbar 或宿主布局改变 Stage 可视区域
 - **THEN** Stage 上报扣除固定 UI 后的真实 surface width/height
 - **AND** Scene、Overlay、ruler、scrollbar 和 fit 计算使用同一尺寸
-
-### Requirement: 多 Frame 与输出边界
-
-Stage MUST 渲染位于世界 `(0,0)` 的可检查文档输出边界，并渲染 rootIds 中任意 Frame 或
-Component。输出背景 MUST 使用 document.output，默认透明并显示 1 屏幕像素非缩放边框；
-未选中边框 MUST 使用统一的主题中性色且不得复用 X/Y 轴颜色，选中输出检查目标时四边 MUST
-统一使用编辑器强调色。Stage MUST 在世界 `(0,0)` 显示固定屏幕尺寸、Godot 风格的前景十字
-标记：MUST 精确使用 16×16 `EditorPosition` 双填充轮廓，外层为
-`rgba(255,255,255,0.706)`，内层为 `#ff5f5f`；不得以描边线条近似，也不得通过 halo 或轴线
-分段在原点周围制造缺口。X/Y 轴 MUST 分别使用 `rgba(245,51,82,0.75)` 与
-`rgba(135,214,3,0.75)`。平移、缩放或 output 尺寸变化不得改变其世界锚点。
-激活输出检查时不得显示节点变换手柄。Frame MUST 可以嵌套、旋转，并按 clipContent 裁剪或
-显示溢出；输出边界不得限制无限 Stage 中的编辑和滚动范围。
-
-#### Scenario: 编辑输出边界外的根组件
-
-- **WHEN** 根 Component 位于文档输出边界外
-- **THEN** Stage 仍渲染、选择、移动和 resize 该组件
-- **AND** 输出区域只作为网格之上、节点之下的检查目标，不阻止边界外编辑
-
-#### Scenario: 检查透明输出区域
-
-- **WHEN** 用户点击没有节点覆盖的输出区域
-- **THEN** Stage 发送 output inspection 回调并清空节点选择
-- **AND** 网格透过 transparent 背景可见，边框在任意 zoom 下保持 1 屏幕像素
-- **AND** 未选中时四边使用同一主题中性色且不与 X/Y 轴混淆，选中时四边统一使用强调色
-- **AND** 原点标记在连续 X/Y 轴之后按 Godot `EditorPosition` 的双填充路径和精确颜色绘制
-
-#### Scenario: 渲染嵌套 Frame 裁剪
-
-- **WHEN** 嵌套 Frame 切换 clipContent
-- **THEN** Stage 对越界后代切换 hidden/visible overflow
-- **AND** Frame rotation 与后代世界几何保持一致
 
 ### Requirement: 选择与框选
 
@@ -185,17 +128,6 @@ pointercancel、window blur 或匹配当前活动 session 的真实 lostpointerc
 - **THEN** DOM Scene 与 SVG Overlay 恢复手势前几何并清理临时 UI
 - **AND** runtime 未收到 transform 命令
 
-### Requirement: 分组与重设父节点
-
-Stage MUST 允许根或 Frame 内的同父级混合选择通过 group 创建 Frame，并允许 ungroup 任意含孩子
-Frame。SceneTree 与 Stage MUST 使用同一 nullable reparent 规划器保持世界几何。
-
-#### Scenario: 根级分组和取消分组
-
-- **WHEN** 用户组合根级 Frame/Component 并随后取消组合
-- **THEN** 选择先变为新 Frame，再变为提升后的孩子
-- **AND** 每个动作最多提交一个事务
-
 ### Requirement: Stage 键盘命令
 
 Stage 聚焦且目标可编辑时 MUST 支持 Delete/Backspace 删除、方向键移动 1 世界单位、
@@ -212,57 +144,6 @@ Shift+方向键移动 10、Cmd/Ctrl+D 复制、Cmd/Ctrl+G group 和 Cmd/Ctrl+Shi
 
 - **WHEN** 焦点位于 input、textarea、contenteditable 或正在进行 IME 组合
 - **THEN** Stage 不派发删除、复制、分组或微调命令
-
-### Requirement: ComponentPalette 拖入
-
-ComponentPalette MUST 允许 Component 和 Frame descriptor 落到最深合法 Frame或 Canvas；Pointer
-和键盘路径 MUST 使用同一 selection/hit 父级规则且不依赖 activeFrameId。
-
-#### Scenario: 拖到空白 Canvas
-
-- **WHEN** 用户把 Component 或 Frame 拖到没有 Frame 命中的世界点
-- **THEN** 节点作为 rootIds 末尾的根节点创建并选中
-
-#### Scenario: 拖到嵌套 Frame
-
-- **WHEN** 用户把 Component 或 Frame 拖到可见未锁定的嵌套 Frame
-- **THEN** 新节点成为该 Frame 的最后一个孩子
-- **AND** 提交后的世界中心匹配 drop 点
-
-### Requirement: Frame Palette 拖入
-
-ComponentPalette MUST 可以在 registry components 前显示 Frame presets。StageDragController MUST
-以附加 API 支持 Frame Pointer 与键盘新增，同时保持既有 componentType API；Frame drop MUST
-创建真正的根级 Frame。
-
-#### Scenario: Pointer 居中创建根 Frame
-
-- **WHEN** 用户把 Frame preset 拖到任意 Stage 屏幕位置
-- **THEN** Stage 在对应世界点居中创建根级 Frame并追加到 rootIds
-- **AND** 新 Frame 被选中并成为 activeFrame，不会嵌套进已有 Frame
-
-#### Scenario: 键盘新增 Frame
-
-- **WHEN** 键盘用户激活 Frame Palette 项
-- **THEN** Frame 在当前 viewport 世界中心创建
-- **AND** 只产生一个 frame.create 事务
-
-#### Scenario: 保持 Component 拖入兼容
-
-- **WHEN** 旧宿主继续调用 StageDragController 的 start/add componentType 方法
-- **THEN** Component 仍只允许创建在有效未锁定 Frame 内
-- **AND** Frame presets 不改变旧 drop target 方法签名
-
-### Requirement: Stage 统一节点样式
-
-Stage MUST 对 Frame、Group 与 Component wrapper 应用 resolved node style。Style border MUST NOT
-改变文档几何；Frame/Component MUST 保持裁剪，Group MUST 保持可见子节点的原溢出语义。
-
-#### Scenario: 渲染通用节点样式
-
-- **WHEN** 三种节点包含背景、边框、圆角、透明度或 shadow
-- **THEN** Stage 在对应节点边界渲染样式
-- **AND** 选区、手柄、吸附和世界坐标不因边框宽度改变
 
 ### Requirement: 自适应网格标尺与世界原点
 
@@ -429,3 +310,92 @@ Stage MUST 使用 assetResolver 和 Registry seed factory 异步创建资源节�
 
 - **WHEN** Stage 卸载或 assetResolver 更换
 - **THEN** pending drop 被中止且不派发命令
+
+### Requirement: 多 Container 与输出边界
+
+Stage MUST 渲染位于世界 `(0,0)` 的可检查文档输出边界，并渲染 rootIds 中任意 Entity。
+输出背景 MUST 使用 document.output，默认透明并显示 1 屏幕像素非缩放边框；
+未选中边框 MUST 使用统一的主题中性色且不得复用 X/Y 轴颜色，选中输出检查目标时四边 MUST
+统一使用编辑器强调色。Stage MUST 在世界 `(0,0)` 显示固定屏幕尺寸、Godot 风格的前景十字
+标记：MUST 精确使用 16×16 `EditorPosition` 双填充轮廓，外层为
+`rgba(255,255,255,0.706)`，内层为 `#ff5f5f`；不得以描边线条近似，也不得通过 halo 或轴线
+分段在原点周围制造缺口。X/Y 轴 MUST 分别使用 `rgba(245,51,82,0.75)` 与
+`rgba(135,214,3,0.75)`。平移、缩放或 output 尺寸变化不得改变其世界锚点。
+激活输出检查时不得显示 Entity 变换手柄。带 Hierarchy 的 Container Entity MUST 可以嵌套、
+旋转，并按 Clip 裁剪或显示溢出；输出边界不得限制无限 Stage 中的编辑和滚动范围。
+
+#### Scenario: 编辑输出边界外的根 Entity
+
+- **WHEN** 根 Entity 位于文档输出边界外
+- **THEN** Stage 仍渲染、选择、移动和 resize 该 Entity
+- **AND** 输出区域只作为网格之上、Entity 之下的检查目标，不阻止边界外编辑
+
+#### Scenario: 检查透明输出区域
+
+- **WHEN** 用户点击没有 Entity 覆盖的输出区域
+- **THEN** Stage 发送 output inspection 回调并清空 Entity 选择
+- **AND** 网格透过 transparent 背景可见，边框在任意 zoom 下保持 1 屏幕像素
+- **AND** 未选中时四边使用同一主题中性色且不与 X/Y 轴混淆，选中时四边统一使用强调色
+- **AND** 原点标记在连续 X/Y 轴之后按 Godot `EditorPosition` 的双填充路径和精确颜色绘制
+
+#### Scenario: 渲染嵌套 Container 裁剪
+
+- **WHEN** 嵌套 Container Entity 切换 Clip.enabled
+- **THEN** Stage 对越界后代切换 hidden/visible overflow
+- **AND** Container 的 Transform rotation 与后代世界几何保持一致
+
+### Requirement: 分组与重设父级
+
+Stage MUST 允许根或 Container 内的同父级混合选择通过 group 创建 Container Entity，并允许
+ungroup 任意含子项的 Container。SceneTree 与 Stage MUST 使用同一 nullable reparent 规划器
+保持世界几何。
+
+#### Scenario: 根级分组和取消分组
+
+- **WHEN** 用户组合根级 Entity 并随后取消组合
+- **THEN** 选择先变为新 Container Entity，再变为提升后的子项
+- **AND** 每个动作最多提交一个事务
+
+### Requirement: ECS DOM 与 SVG 分层 Stage
+
+Stage MUST 使用 ComposeDocument v4 Entity 渲染 DOM Scene，并用 SVG Overlay 渲染编辑反馈。
+Entity MAY 同时渲染 Renderer 内容和 Hierarchy 子项；未知 Renderer MUST 降级且 Entity 仍可选择。
+
+#### Scenario: 渲染可渲染容器
+
+- **WHEN** Entity 同时拥有 Renderer、Hierarchy、Appearance 和 Clip
+- **THEN** Stage 先渲染 Renderer 再渲染子项
+- **AND** Appearance、裁剪、旋转和嵌套世界几何正确应用
+
+### Requirement: 统一 Entity Palette
+
+Component Palette MUST 只消费 ComposeEntityRegistry Presets，不再区分 Frame Preset 与 Component
+Definition。Container、Rectangle、Text、Image、SVG MUST 使用相同拖入和键盘新增流程。
+
+#### Scenario: 拖入五种基础 Preset
+
+- **WHEN** 用户依次拖入 Container 与四种 Renderer Preset
+- **THEN** 每次都创建合法 v4 Entity 并选中新实体
+- **AND** 不产生旧 Frame/Component Node
+
+### Requirement: 按约束显示变换手柄
+
+Stage MUST 仅为允许编辑的选区显示对应手柄：free 显示八向，preserve-aspect 显示四角，
+horizontal 显示 E/W，vertical 显示 N/S，none 不显示 Resize；rotatable 为 false 时不显示旋转。
+
+#### Scenario: 动态切换几何限制
+
+- **WHEN** Inspector 修改 TransformConstraints
+- **THEN** Stage 手柄和直接操作立即同步
+- **AND** 禁用但仍可选择的 Entity 保留选择框
+
+### Requirement: ECS 上下文菜单与结构操作
+
+Stage 上下文菜单 MUST 根据 Hierarchy、Lock 与 TransformConstraints 计算 duplicate、group、
+ungroup、delete 和视图操作状态，不得读取旧 kind。
+
+#### Scenario: 取消容器分组
+
+- **WHEN** 单选含子项的可编辑 Hierarchy Entity
+- **THEN** 菜单启用取消编组并保留现有快捷键提示
+
