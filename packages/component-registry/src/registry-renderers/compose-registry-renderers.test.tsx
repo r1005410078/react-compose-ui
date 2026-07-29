@@ -78,4 +78,40 @@ describe('Entity Registry React boundaries', () => {
     )
     expect(screen.getByRole('status', { name: /HostCapability/ })).toBeInTheDocument()
   })
+
+  it('OpenSpec: Renderer 隔离 / 数据修复后错误边界自动恢复', () => {
+    const registry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'text',
+        label: '文本',
+        renderer: ({ props }) => {
+          if (props.text === 'boom') throw new Error('bad props')
+          return <span>ok:{String(props.text)}</span>
+        },
+      }],
+    })
+    const broken: ComposeEntity = {
+      ...entity(),
+      components: {
+        ...entity().components,
+        Renderer: { type: 'text', props: { text: 'boom' } },
+      },
+    }
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const view = render(
+        <ComposeRegistryEntityRenderer entity={broken} mode="editor" registry={registry} />,
+      )
+      expect(screen.getByRole('status', { name: /text/ })).toBeInTheDocument()
+
+      view.rerender(
+        <ComposeRegistryEntityRenderer entity={entity()} mode="editor" registry={registry} />,
+      )
+      expect(screen.getByText('ok:Hello')).toBeInTheDocument()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    }
+    finally {
+      consoleError.mockRestore()
+    }
+  })
 })

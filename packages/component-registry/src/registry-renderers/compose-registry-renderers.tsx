@@ -11,6 +11,8 @@ interface BoundaryProps {
   readonly children: ReactNode
   readonly identity: string
   readonly area: 'renderer' | 'component-inspector' | 'renderer-inspector'
+  /** 定义输入数据；引用变化说明用户可能已修复数据，边界应重试渲染。 */
+  readonly resetSignal: unknown
 }
 
 interface BoundaryState {
@@ -25,7 +27,13 @@ class DefinitionErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 
   componentDidUpdate(previous: BoundaryProps) {
-    if (previous.identity !== this.props.identity && this.state.failed) {
+    // 文档不可变：数据被命令修改后 resetSignal 引用必然变化。失败后不重试会让
+    // 用户在 Inspector 修复坏 props 或 undo 后仍然只看到失败占位。
+    if (
+      this.state.failed
+      && (previous.identity !== this.props.identity
+        || previous.resetSignal !== this.props.resetSignal)
+    ) {
       this.setState({ failed: false })
     }
   }
@@ -73,7 +81,7 @@ export function ComposeRegistryEntityRenderer({
   }
   const Renderer = definition.renderer
   return (
-    <DefinitionErrorBoundary area="renderer" identity={renderer.type}>
+    <DefinitionErrorBoundary area="renderer" identity={renderer.type} resetSignal={renderer}>
       <Renderer
         assetResolver={assetResolver}
         entity={entity}
@@ -101,17 +109,19 @@ export function ComposeRegistryComponentInspector({
 }) {
   const value = entity.components[componentKey]
   const definition = registry.getComponent(componentKey)
-  if (!value || !definition) {
+  if (!definition) {
     return (
-      <div aria-label={`未知能力 ${componentKey}`} role="status">
-        未知能力：{componentKey}
+      <div aria-label={`未知 Component ${componentKey}`} role="status">
+        未知 Component：{componentKey}
       </div>
     )
   }
+  // 定义存在但 Entity 上没有数据：该分组不应展示内容，而不是报告“未知”。
+  if (!value) return null
   if (!definition.inspector) return null
   const Inspector = definition.inspector
   return (
-    <DefinitionErrorBoundary area="component-inspector" identity={componentKey}>
+    <DefinitionErrorBoundary area="component-inspector" identity={componentKey} resetSignal={value}>
       <Inspector
         componentKey={componentKey}
         dispatch={dispatch}
@@ -148,7 +158,11 @@ export function ComposeRegistryRendererInspector({
   if (!definition.inspector) return null
   const Inspector = definition.inspector
   return (
-    <DefinitionErrorBoundary area="renderer-inspector" identity={renderer.type}>
+    <DefinitionErrorBoundary
+      area="renderer-inspector"
+      identity={renderer.type}
+      resetSignal={renderer}
+    >
       <Inspector
         dispatch={dispatch}
         entity={entity}
