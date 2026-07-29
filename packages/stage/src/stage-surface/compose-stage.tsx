@@ -39,16 +39,19 @@ import type {
   ComposeResolvedAsset,
 } from '@compose-ui/assets'
 import type {
-  ComposeComponentSeed,
+  ComposeEntitySeed,
 } from '@compose-ui/component-registry'
-import type {
-  ComposeComponentNode,
-  ComposeDocument,
-  ComposeFrameNode,
-  ComposeNode,
-  EditorCommand,
-  JsonValue,
-  NodeTransform,
+import {
+  BUILTIN_COMMAND_TYPES,
+  getComposeHierarchy,
+  getComposeLock,
+  getComposeTransform,
+  getComposeVisibility,
+  resolveComposeTransformConstraints,
+  type ComposeDocument,
+  type ComposeEntity,
+  type EditorCommand,
+  type JsonValue,
 } from '@compose-ui/core'
 import {
   createRulerTicks,
@@ -61,20 +64,23 @@ import {
   createGroupCommand,
   createUngroupCommand,
   applyMatrix,
-  getNodeWorldBounds,
-  getNodeWorldMatrix,
+  getEntityWorldBounds,
+  getEntityWorldMatrix,
   invertMatrix,
   screenToWorld,
   unionRects,
   worldToScreen,
   zoomViewportAt,
-  getNodeParentId,
+  getEntityParentId,
+  toComposeTransform,
+  toStageTransform,
   type ResizeHandle,
   type StagePoint,
   type StageRect,
   type StageInteractionEffect,
   type StageInteractionHit,
   type StageInteractionController,
+  type StageTransform,
 } from '@compose-ui/stage-engine'
 import type {
   ComposeStageKeybinding,
@@ -86,14 +92,14 @@ import { StageOverlay } from '../stage-overlay'
 import { StageRulers } from '../stage-rulers'
 import { StageSceneLayer } from '../stage-scene-layer'
 import {
-  describeNodeCreation,
-  describeNodeTargets,
+  describeEntityCreation,
+  describeEntityTargets,
   describeTransform,
 } from '@compose-ui/stage-engine'
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
 
-type TransformMap = Readonly<Record<string, NodeTransform>>
+type TransformMap = Readonly<Record<string, StageTransform>>
 type Modifiers = { shift: boolean; alt: boolean; command: boolean }
 type PointerSessionStatus = 'active' | 'finishing' | 'ended'
 
@@ -214,12 +220,20 @@ function modifiers(event: {
 
 function transformDocument(document: ComposeDocument, transforms: TransformMap): ComposeDocument {
   if (Object.keys(transforms).length === 0) return document
-  const nodes = { ...document.nodes }
+  const entities = { ...document.entities }
   for (const [id, transform] of Object.entries(transforms)) {
-    const node = nodes[id]
-    if (node) nodes[id] = { ...node, transform } as ComposeNode
+    const entity = entities[id]
+    if (entity) {
+      entities[id] = {
+        ...entity,
+        components: {
+          ...entity.components,
+          Transform: toComposeTransform(transform),
+        },
+      }
+    }
   }
-  return { ...document, nodes }
+  return { ...document, entities }
 }
 
 function bootstrapSelectionBounds(
@@ -227,12 +241,15 @@ function bootstrapSelectionBounds(
   ids: readonly string[],
 ) {
   return unionRects(ids
-    .filter((id) => Boolean(document.nodes[id]?.visible))
-    .map((id) => getNodeWorldBounds(document, id)))
+    .filter((id) => {
+      const entity = document.entities[id]
+      return entity ? getComposeVisibility(entity).visible : false
+    })
+    .map((id) => getEntityWorldBounds(document, id)))
 }
 
 interface ResolvedAssetSeed {
-  readonly seed: ComposeComponentSeed
+  readonly seed: ComposeEntitySeed
   readonly reference: ComposeAssetReference
 }
 
@@ -268,7 +285,8 @@ function assetSeedCenters(
   let rowCenterY = 0
   let previousRowHeight = 0
   rows.forEach((row, rowIndex) => {
-    const rowHeight = Math.max(...row.map(({ seed }) => seed.height))
+    const rowHeight = Math.max(...row.map(({ seed }) =>
+      getComposeTransform({ id: '__seed__', ...seed }).size.height))
     if (rowIndex > 0) {
       rowCenterY += previousRowHeight / 2 + gap + rowHeight / 2
     }
@@ -276,14 +294,38 @@ function assetSeedCenters(
     let previousWidth = 0
     row.forEach(({ seed }, columnIndex) => {
       if (columnIndex > 0) {
-        centerX += previousWidth / 2 + gap + seed.width / 2
+        centerX += previousWidth / 2
+          + gap
+          + getComposeTransform({ id: '__seed__', ...seed }).size.width / 2
       }
       points.push({ x: centerX, y: rowCenterY })
-      previousWidth = seed.width
+      previousWidth = getComposeTransform({ id: '__seed__', ...seed }).size.width
     })
     previousRowHeight = rowHeight
   })
   return points
+}
+
+function entityFromSeed(
+  seed: ComposeEntitySeed,
+  id: string,
+  center: StagePoint,
+): ComposeEntity {
+  const transform = getComposeTransform({ id: '__seed__', ...seed })
+  return {
+    id,
+    name: seed.name,
+    components: {
+      ...structuredClone(seed.components),
+      Transform: {
+        ...transform,
+        position: {
+          x: center.x - transform.size.width / 2,
+          y: center.y - transform.size.height / 2,
+        },
+      },
+    },
+  }
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -298,7 +340,7 @@ const STAGE_SHORTCUT_ACTIONS = [
   'stage.selectTool',
   'stage.panTool',
   'stage.fitSelection',
-  'stage.fitFrame',
+  'stage.fitContainer',
   'stage.zoomReset',
   'stage.zoomIn',
   'stage.zoomOut',
@@ -317,7 +359,7 @@ const DEFAULT_STAGE_SHORTCUTS: Readonly<
   'stage.selectTool': [{ code: 'KeyV' }],
   'stage.panTool': [{ code: 'KeyH' }],
   'stage.fitSelection': [{ code: 'KeyF' }],
-  'stage.fitFrame': [{ code: 'KeyF', shift: true }],
+  'stage.fitContainer': [{ code: 'KeyF', shift: true }],
   'stage.zoomReset': [{ code: 'Digit0', primary: true }],
   'stage.zoomIn': [{ code: 'Equal', primary: true }],
   'stage.zoomOut': [{ code: 'Minus', primary: true }],
@@ -386,7 +428,6 @@ export function ComposeStage({
   onOutputSelect,
   onSurfaceSizeChange,
   interactionController,
-  framePresets = [],
   idFactory = defaultId,
   id,
   className,
@@ -449,7 +490,7 @@ export function ComposeStage({
     [document, previewTransforms],
   )
   const normalizedSelection = useMemo(
-    () => selectedIds.filter((id) => Boolean(document.nodes[id])),
+    () => selectedIds.filter((id) => Boolean(document.entities[id])),
     [document, selectedIds],
   )
   // 首帧可能先于 effect 中的 context 注入；之后（含 gesture preview）以 engine snapshot 为准。
@@ -457,16 +498,48 @@ export function ComposeStage({
     ?? bootstrapSelectionBounds(previewDocument, normalizedSelection)
   const editableSelection = normalizedSelection.length > 0
     && normalizedSelection.every((id) => {
-      const node = document.nodes[id]
-      return node?.visible && !node.locked
+      const entity = document.entities[id]
+      return entity
+        && getComposeVisibility(entity).visible
+        && !getComposeLock(entity).locked
     })
+  const selectionConstraints = normalizedSelection.flatMap((id) => {
+    const entity = document.entities[id]
+    return entity ? [resolveComposeTransformConstraints(entity)] : []
+  })
+  const allResizeHandles = [
+    'n',
+    'ne',
+    'e',
+    'se',
+    's',
+    'sw',
+    'w',
+    'nw',
+  ] as const satisfies readonly ResizeHandle[]
+  const resizeHandles = allResizeHandles.filter((handle) =>
+    selectionConstraints.every((constraints) => {
+      if (constraints.resize === 'none') return false
+      if (constraints.resize === 'horizontal') return handle === 'e' || handle === 'w'
+      if (constraints.resize === 'vertical') return handle === 'n' || handle === 's'
+      if (constraints.resize === 'preserve-aspect') {
+        return handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw'
+      }
+      return true
+    }))
+  const selectionRotatable = selectionConstraints.length > 0
+    && selectionConstraints.every(({ rotatable }) => rotatable)
   const contextNodeId = contextMenu.payload
-  const contextEditableIds = normalizedSelection.filter((id) => !document.nodes[id]?.locked)
+  const contextEditableIds = normalizedSelection.filter((id) => {
+    const entity = document.entities[id]
+    return entity && !getComposeLock(entity).locked
+  })
   const canGroup = contextEditableIds.length >= 2
-    && contextEditableIds.every((id) => getNodeParentId(document, id) === getNodeParentId(document, contextEditableIds[0]!))
+    && contextEditableIds.every((id) =>
+      getEntityParentId(document, id)
+      === getEntityParentId(document, contextEditableIds[0]!))
   const canUngroup = contextEditableIds.length === 1
-    && document.nodes[contextEditableIds[0]!]?.kind === 'frame'
-    && (document.nodes[contextEditableIds[0]!] as ComposeFrameNode).childIds.length > 0
+    && Boolean(getComposeHierarchy(document.entities[contextEditableIds[0]!]!)?.childIds.length)
   const latestRef = useRef({
     document,
     registry,
@@ -476,7 +549,6 @@ export function ComposeStage({
     onViewportChange,
     onSelectedIdsChange,
     onOutputSelect,
-    framePresets,
     idFactory,
   })
   useLayoutEffect(() => {
@@ -489,7 +561,6 @@ export function ComposeStage({
       onViewportChange,
       onSelectedIdsChange,
       onOutputSelect,
-      framePresets,
       idFactory,
     }
   })
@@ -814,16 +885,19 @@ export function ComposeStage({
 
       const current = latestRef.current
       const target = effect.parentId
-        ? current.document.nodes[effect.parentId]
+        ? current.document.entities[effect.parentId]
         : undefined
-      const parent = target?.kind === 'frame' && target.visible && !target.locked
+      const parent = target
+        && getComposeHierarchy(target)
+        && getComposeVisibility(target).visible
+        && !getComposeLock(target).locked
         ? target
         : undefined
       const inverseParent = parent
-        ? invertMatrix(getNodeWorldMatrix(current.document, parent.id))
+        ? invertMatrix(getEntityWorldMatrix(current.document, parent.id))
         : null
       const offsets = assetSeedCenters(successful)
-      const nodes = successful.map(({ seed }, index): ComposeComponentNode => {
+      const entities = successful.map(({ seed }, index): ComposeEntity => {
         const offset = offsets[index]!
         const worldCenter = {
           x: effect.worldPoint.x + offset.x,
@@ -832,53 +906,37 @@ export function ComposeStage({
         const localCenter = inverseParent
           ? applyMatrix(inverseParent, worldCenter)
           : worldCenter
-        return {
-          id: current.idFactory(),
-          kind: 'component',
-          name: seed.name,
-          visible: true,
-          locked: false,
-          transform: {
-            x: localCenter.x - seed.width / 2,
-            y: localCenter.y - seed.height / 2,
-            width: seed.width,
-            height: seed.height,
-            rotation: 0,
-          },
-          componentType: seed.componentType,
-          props: seed.props,
-          ...(seed.style ? { style: seed.style } : {}),
-        }
+        return entityFromSeed(seed, current.idFactory(), localCenter)
       })
-      const commands: EditorCommand[] = nodes.map((node) => ({
+      const commands: EditorCommand[] = entities.map((entity) => ({
         id: current.idFactory(),
-        type: 'node.create',
+        type: BUILTIN_COMMAND_TYPES.createEntity,
         payload: {
-          node: node as unknown as JsonValue,
+          entity: entity as unknown as JsonValue,
           parentId: parent?.id ?? null,
         },
         meta: {
-          label: describeNodeCreation(node),
+          label: describeEntityCreation(entity),
           source: 'asset-browser',
-          targetIds: [node.id],
+          targetIds: [entity.id],
         },
       }))
       const result = current.dispatch({
         id: current.idFactory(),
-        type: 'transaction.batch',
+        type: BUILTIN_COMMAND_TYPES.batch,
         payload: {
           commands: commands as unknown as JsonValue,
         },
         meta: {
           label: resolvedLocale === 'en-US'
-            ? `Add ${nodes.length} asset${nodes.length === 1 ? '' : 's'}`
-            : `添加 ${nodes.length} 个资源`,
+            ? `Add ${entities.length} asset${entities.length === 1 ? '' : 's'}`
+            : `添加 ${entities.length} 个资源`,
           source: 'asset-browser',
-          targetIds: nodes.map((node) => node.id),
+          targetIds: entities.map((entity) => entity.id),
         },
       })
       if (result.status === 'committed') {
-        current.onSelectedIdsChange(nodes.map((node) => node.id))
+        current.onSelectedIdsChange(entities.map((entity) => entity.id))
       }
       else {
         setAssetDropStatus(
@@ -891,11 +949,11 @@ export function ComposeStage({
       setAssetDropStatus(
         failedCount === 0
           ? resolvedLocale === 'en-US'
-            ? `${nodes.length} asset${nodes.length === 1 ? '' : 's'} added.`
-            : `已添加 ${nodes.length} 个资源。`
+            ? `${entities.length} asset${entities.length === 1 ? '' : 's'} added.`
+            : `已添加 ${entities.length} 个资源。`
           : resolvedLocale === 'en-US'
-            ? `${nodes.length} added, ${failedCount} failed.`
-            : `已添加 ${nodes.length} 项，${failedCount} 项失败。`,
+            ? `${entities.length} added, ${failedCount} failed.`
+            : `已添加 ${entities.length} 项，${failedCount} 项失败。`,
       )
     }
     finally {
@@ -940,108 +998,40 @@ export function ComposeStage({
           void createDroppedAssets(effect)
           return
         }
-        const nodeId = current.idFactory()
-        if (effect.item.kind === 'component') {
-          const seed = current.registry.createSeed(effect.item.componentType)
-          if (!seed.ok) return
-          const frame = effect.parentId
-            ? current.document.nodes[effect.parentId]
-            : undefined
-          const localCenter = frame?.kind === 'frame'
-            ? applyMatrix(
-                invertMatrix(getNodeWorldMatrix(current.document, frame.id)),
-                effect.worldPoint,
-              )
-            : effect.worldPoint
-          const node = {
-            id: nodeId,
-            kind: 'component' as const,
-            name: seed.seed.name,
-            visible: true,
-            locked: false,
-            transform: {
-              x: localCenter.x - seed.seed.width / 2,
-              y: localCenter.y - seed.seed.height / 2,
-              width: seed.seed.width,
-              height: seed.seed.height,
-              rotation: 0,
-            },
-            componentType: effect.item.componentType,
-            props: seed.seed.props,
-            ...(seed.seed.style ? { style: seed.seed.style } : {}),
-          }
-          const result = current.dispatch({
-            id: current.idFactory(),
-            type: 'node.create',
-            payload: {
-              node: node as unknown as JsonValue,
-              parentId: frame?.kind === 'frame' ? frame.id : null,
-            },
-            meta: {
-              label: describeNodeCreation(node),
-              source: 'component-palette',
-              targetIds: [nodeId],
-            },
-          })
-          if (result.status === 'committed') {
-            current.onSelectedIdsChange([nodeId])
-          }
-          return
-        }
-        const frameItem = effect.item
-        const preset = current.framePresets.find(
-          (candidate) => candidate.id === frameItem.presetId,
-        )
-        let frameStyle: ComposeFrameNode['style']
-        let validPreset = Boolean(preset)
-        try {
-          frameStyle = preset?.createDefaultStyle()
-        }
-        catch {
-          validPreset = false
-        }
-        const size = preset?.defaultSize ?? { width: 0, height: 1 }
+        const entityId = current.idFactory()
+        const seed = current.registry.createSeed(effect.item.presetId)
+        if (!seed.ok) return
         const parent = effect.parentId
-          ? current.document.nodes[effect.parentId]
+          ? current.document.entities[effect.parentId]
           : undefined
-        const localCenter = parent?.kind === 'frame'
+        const validParent = parent
+          && getComposeHierarchy(parent)
+          && !getComposeLock(parent).locked
+          && getComposeVisibility(parent).visible
+          ? parent
+          : undefined
+        const localCenter = validParent
           ? applyMatrix(
-              invertMatrix(getNodeWorldMatrix(current.document, parent.id)),
+              invertMatrix(getEntityWorldMatrix(current.document, validParent.id)),
               effect.worldPoint,
             )
           : effect.worldPoint
-        const node: ComposeFrameNode = {
-          id: nodeId,
-          kind: 'frame',
-          name: preset?.name ?? frameItem.presetId,
-          visible: true,
-          locked: false,
-          transform: {
-            x: localCenter.x - size.width / 2,
-            y: localCenter.y - size.height / 2,
-            width: validPreset ? size.width : 0,
-            height: size.height,
-            rotation: 0,
-          },
-          style: frameStyle,
-          childIds: [],
-          clipContent: preset?.defaultClipContent ?? true,
-        }
+        const entity = entityFromSeed(seed.seed, entityId, localCenter)
         const result = current.dispatch({
           id: current.idFactory(),
-          type: 'node.create',
+          type: BUILTIN_COMMAND_TYPES.createEntity,
           payload: {
-            node: node as unknown as JsonValue,
-            parentId: parent?.kind === 'frame' ? parent.id : null,
+            entity: entity as unknown as JsonValue,
+            parentId: validParent?.id ?? null,
           },
           meta: {
-            label: describeNodeCreation(node),
+            label: describeEntityCreation(entity),
             source: 'component-palette',
-            targetIds: [nodeId],
+            targetIds: [entityId],
           },
         })
         if (result.status === 'committed') {
-          current.onSelectedIdsChange([nodeId])
+          current.onSelectedIdsChange([entityId])
         }
       })
     },
@@ -1149,9 +1139,9 @@ export function ComposeStage({
     }
   }
 
-  const beginNode = (node: ComposeNode, event: ReactPointerEvent<HTMLDivElement>) => {
+  const beginEntity = (entity: ComposeEntity, event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
-    beginInteraction({ kind: 'node', nodeId: node.id }, event)
+    beginInteraction({ kind: 'entity', entityId: entity.id }, event)
   }
 
   const screenBounds = bounds
@@ -1220,9 +1210,9 @@ export function ComposeStage({
       width: previewDocument.output.width,
       height: previewDocument.output.height,
     },
-    ...Object.values(previewDocument.nodes)
-      .filter((node) => node.visible)
-      .map((node) => getNodeWorldBounds(previewDocument, node.id)),
+    ...Object.values(previewDocument.entities)
+      .filter((entity) => getComposeVisibility(entity).visible)
+      .map((entity) => getEntityWorldBounds(previewDocument, entity.id)),
   ])
   const activeScrollRange = interaction.scrollRange
     ?? expandScrollRange(null, bootstrapContentBounds, visibleWorld)
@@ -1274,14 +1264,20 @@ export function ComposeStage({
       event.preventDefault()
       return
     }
-    if (actionMatches('stage.fitFrame')) {
+    if (actionMatches('stage.fitContainer')) {
       const index = createStageSceneIndex(document)
-      const selectedFrameId = normalizedSelection.length === 1
-        && document.nodes[normalizedSelection[0]!]?.kind === 'frame'
+      const selectedContainerId = normalizedSelection.length === 1
+        && getComposeHierarchy(document.entities[normalizedSelection[0]!]!)
         ? normalizedSelection[0]!
-        : index.commonFrameForSelection(normalizedSelection)
-      const frame = selectedFrameId ? document.nodes[selectedFrameId] : undefined
-      fitViewport(frame?.kind === 'frame' ? getNodeWorldBounds(document, frame.id) : null)
+        : index.commonContainerForSelection(normalizedSelection)
+      const container = selectedContainerId
+        ? document.entities[selectedContainerId]
+        : undefined
+      fitViewport(
+        container && getComposeHierarchy(container)
+          ? getEntityWorldBounds(document, container.id)
+          : null,
+      )
       event.preventDefault()
       return
     }
@@ -1341,7 +1337,10 @@ export function ComposeStage({
       event.preventDefault()
       return
     }
-    const editableIds = normalizedSelection.filter((id) => !document.nodes[id]?.locked)
+    const editableIds = normalizedSelection.filter((id) => {
+      const entity = document.entities[id]
+      return entity && !getComposeLock(entity).locked
+    })
     if (editableIds.length === 0) return
     if (actionMatches('edit.duplicate')) {
       const duplicate = createDuplicateCommand(
@@ -1359,10 +1358,11 @@ export function ComposeStage({
     }
     if (actionMatches('edit.group') || actionMatches('edit.ungroup')) {
       if (actionMatches('edit.ungroup') && editableIds.length === 1) {
-        const frame = document.nodes[editableIds[0]!]
+        const container = document.entities[editableIds[0]!]
+        const hierarchy = container && getComposeHierarchy(container)
         const result = dispatch(createUngroupCommand(document, editableIds[0]!, idFactory()))
-        if (result.status === 'committed' && frame?.kind === 'frame') {
-          onSelectedIdsChange(frame.childIds)
+        if (result.status === 'committed' && hierarchy) {
+          onSelectedIdsChange(hierarchy.childIds)
         }
       }
       else {
@@ -1376,10 +1376,10 @@ export function ComposeStage({
     if (actionMatches('edit.delete')) {
       dispatch({
         id: idFactory(),
-        type: 'node.delete',
-        payload: { nodeIds: editableIds },
+        type: BUILTIN_COMMAND_TYPES.deleteEntity,
+        payload: { entityIds: editableIds },
         meta: {
-          label: `Delete ${describeNodeTargets(document, editableIds)}`,
+          label: `Delete ${describeEntityTargets(document, editableIds)}`,
           source: 'stage',
           targetIds: editableIds,
         },
@@ -1395,27 +1395,35 @@ export function ComposeStage({
     }
     const direction = directions[event.key]
     if (direction) {
+      const movableIds = editableIds.filter((id) =>
+        resolveComposeTransformConstraints(document.entities[id]!).movable)
+      if (movableIds.length === 0) return
       const distance = event.shiftKey ? 10 : 1
-      const updates = editableIds.map((nodeId) => {
-        const node = document.nodes[nodeId]!
+      const stageUpdates = movableIds.map((entityId) => {
+        const entity = document.entities[entityId]!
+        const transform = toStageTransform(getComposeTransform(entity))
         return {
-          nodeId,
+          entityId,
           transform: {
-            ...node.transform,
-            x: node.transform.x + direction.x * distance,
-            y: node.transform.y + direction.y * distance,
+            ...transform,
+            x: transform.x + direction.x * distance,
+            y: transform.y + direction.y * distance,
           },
         }
       })
+      const updates = stageUpdates.map(({ entityId, transform }) => ({
+        entityId,
+        transform: toComposeTransform(transform),
+      }))
       dispatch({
         id: idFactory(),
-        type: 'node.transform.set',
-        payload: { updates },
+        type: BUILTIN_COMMAND_TYPES.setTransform,
+        payload: { operation: 'move', updates },
         meta: {
-          label: describeTransform(document, updates, 'move'),
+          label: describeTransform(document, stageUpdates, 'move'),
           source: 'stage',
-          targetIds: editableIds,
-          mergeKey: `stage:nudge:${editableIds.join(',')}`,
+          targetIds: movableIds,
+          mergeKey: `stage:nudge:${movableIds.join(',')}`,
         },
       })
       event.preventDefault()
@@ -1449,10 +1457,13 @@ export function ComposeStage({
         // ContextMenu 的 Portal 在 React 事件树中仍会冒泡到 Stage；不能把菜单自身的右键
         // 当作新的画布右键，否则会重置根菜单。
         if (event.defaultPrevented || !rootRef.current?.contains(event.target as Node)) return
-        const nodeId = (event.target as Element).closest<HTMLElement>('[data-node-id]')?.dataset.nodeId ?? null
-        if (nodeId && !normalizedSelection.includes(nodeId)) onSelectedIdsChange([nodeId])
+        const entityId = (event.target as Element)
+          .closest<HTMLElement>('[data-entity-id]')?.dataset.entityId ?? null
+        if (entityId && !normalizedSelection.includes(entityId)) {
+          onSelectedIdsChange([entityId])
+        }
         event.preventDefault()
-        contextMenu.openAt(event, nodeId)
+        contextMenu.openAt(event, entityId)
       }}
       onKeyDown={keyboardCommand}
       onKeyUp={(event) => {
@@ -1649,7 +1660,7 @@ export function ComposeStage({
           document={previewDocument}
           registry={registry}
           viewport={viewport}
-          onNodePointerDown={beginNode}
+          onEntityPointerDown={beginEntity}
         />
         {assetDropStatus
           ? (
@@ -1664,6 +1675,8 @@ export function ComposeStage({
           handlePoints={handlePoints}
           label={messages.editingOverlay}
           marqueeScreen={marqueeScreen}
+          resizeHandles={resizeHandles}
+          rotatable={selectionRotatable}
           screenBounds={screenBounds}
           snapGuides={snapGuides}
           viewport={viewport}
@@ -1703,10 +1716,18 @@ export function ComposeStage({
               if (dispatch(createGroupCommand(document, contextEditableIds, groupId, idFactory())).status === 'committed') onSelectedIdsChange([groupId])
             }}>编组{contextMenuShortcut('edit.group')}</ComposeContextMenuItem>
             <ComposeContextMenuItem disabled={!canUngroup} onClick={() => {
-              const frame = document.nodes[contextEditableIds[0]!]
-              if (dispatch(createUngroupCommand(document, contextEditableIds[0]!, idFactory())).status === 'committed' && frame?.kind === 'frame') onSelectedIdsChange(frame.childIds)
+              const container = document.entities[contextEditableIds[0]!]
+              const hierarchy = container && getComposeHierarchy(container)
+              if (
+                dispatch(createUngroupCommand(
+                  document,
+                  contextEditableIds[0]!,
+                  idFactory(),
+                )).status === 'committed'
+                && hierarchy
+              ) onSelectedIdsChange(hierarchy.childIds)
             }}>取消编组{contextMenuShortcut('edit.ungroup')}</ComposeContextMenuItem>
-            <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: 'node.delete', payload: { nodeIds: contextEditableIds }, meta: { label: `Delete ${describeNodeTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除{contextMenuShortcut('edit.delete')}</ComposeContextMenuItem>
+            <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: BUILTIN_COMMAND_TYPES.deleteEntity, payload: { entityIds: contextEditableIds }, meta: { label: `Delete ${describeEntityTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除{contextMenuShortcut('edit.delete')}</ComposeContextMenuItem>
             <ComposeContextMenuSeparator />
           </> : null}
           <ComposeContextMenuSub><ComposeContextMenuSubTrigger>视图</ComposeContextMenuSubTrigger><ComposeContextMenuSubContent aria-label="视图">

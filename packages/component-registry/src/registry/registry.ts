@@ -1,12 +1,33 @@
-import { validateNodeStyle } from '@compose-ui/core'
-import type { JsonObject, NodeStyle } from '@compose-ui/core'
 import {
-  ComposeComponentRegistryError,
+  BUILTIN_COMMAND_TYPES,
+  getComposeComposition,
+  getComposeHierarchy,
+  getComposeLock,
+  isComposeComponentKey,
+  validateComposeDocument,
+  type ComposeComposition,
+  type ComposeDocument,
+  type ComposeEntity,
+  type EditorCommand,
+  type JsonObject,
+  type JsonValue,
+} from '@compose-ui/core'
+import {
+  ComposeEntityRegistryError,
+  type ComposeCapabilityAvailability,
+  type ComposeCapabilityDefinition,
+  type ComposeCapabilityIssue,
+  type ComposeCapabilityPlanResult,
   type ComposeComponentDefinition,
-  type ComposeComponentAssetDropInput,
-  type ComposeComponentRegistry,
-  type ComposeComponentSeedResult,
+  type ComposeEntityAssetDropInput,
+  type ComposeEntityPreset,
+  type ComposeEntityRegistry,
+  type ComposeEntityRegistryOptions,
+  type ComposeEntitySeed,
+  type ComposeEntitySeedResult,
 } from './types'
+
+type DefinitionCategory = ComposeEntityRegistryError['category']
 
 function jsonIssue(value: unknown, ancestors = new WeakSet<object>()): string | null {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return null
@@ -17,7 +38,6 @@ function jsonIssue(value: unknown, ancestors = new WeakSet<object>()): string | 
   if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) {
     return 'JSON 对象必须是普通对象'
   }
-
   ancestors.add(value)
   const entries = Array.isArray(value) ? value.entries() : Object.entries(value)
   for (const [, item] of entries) {
@@ -31,219 +51,602 @@ function jsonIssue(value: unknown, ancestors = new WeakSet<object>()): string | 
   return null
 }
 
-function propsIssue(value: unknown) {
+function componentsIssue(value: unknown): string | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return '默认 props 必须是 JSON 对象'
+    return 'Component 组合必须是对象'
   }
-  return jsonIssue(value)
+  for (const [key, component] of Object.entries(value)) {
+    if (!isComposeComponentKey(key)) return `${key} 不是 PascalCase Component Key`
+    if (component === null || typeof component !== 'object' || Array.isArray(component)) {
+      return `${key} 必须是 JsonObject`
+    }
+    const issue = jsonIssue(component)
+    if (issue) return `${key} 不是合法 JSON：${issue}`
+  }
+  return null
 }
 
-function createProps(
-  definition: ComposeComponentDefinition,
-): { ok: true; props: JsonObject } | { ok: false; message: string } {
+function cloneComponents(
+  value: Readonly<Record<string, JsonObject>>,
+): Readonly<Record<string, JsonObject>> {
+  return structuredClone(value)
+}
+
+function callComponentsFactory(
+  category: 'component' | 'preset' | 'capability',
+  index: number,
+  label: string,
+  factory: () => Readonly<Record<string, JsonObject>>,
+): Readonly<Record<string, JsonObject>> {
   try {
-    const props = definition.createDefaultProps()
-    const issue = propsIssue(props)
-    if (issue) return { ok: false, message: `${definition.type} 默认 props 不是合法 JSON：${issue}` }
-    // JSON 协议不保留对象身份；clone 同时保证每次创建不会共享嵌套引用。
-    return { ok: true, props: structuredClone(props) }
+    const components = factory()
+    const issue = componentsIssue(components)
+    if (issue) throw new Error(issue)
+    return cloneComponents(components)
   }
   catch (error) {
-    return {
-      ok: false,
-      message: `${definition.type} 默认 props factory 失败：${
-        error instanceof Error ? error.message : '未知错误'
-      }`,
-    }
+    throw new ComposeEntityRegistryError(
+      category,
+      index,
+      `${label} 默认 Component 无效：${error instanceof Error ? error.message : '未知错误'}`,
+    )
   }
 }
 
-function createStyle(
+function callComponentFactory(
   definition: ComposeComponentDefinition,
-): { ok: true; style?: NodeStyle } | { ok: false; message: string } {
-  if (!definition.createDefaultStyle) return { ok: true }
-  try {
-    const style = definition.createDefaultStyle()
-    const result = validateNodeStyle(style)
-    if (!result.valid) {
-      const first = result.issues[0]
-      return {
-        ok: false,
-        message: `${definition.type} 默认 style 无效：${first?.message ?? '未知错误'}`,
-      }
+  index: number,
+): JsonObject {
+  const result = callComponentsFactory(
+    'component',
+    index,
+    definition.key,
+    () => ({ [definition.key]: definition.createDefault() }),
+  )
+  const value = result[definition.key]!
+  if (definition.validate) {
+    let verdict: boolean | string
+    try {
+      verdict = definition.validate(value)
     }
-    // style 与 props 一样属于文档 JSON，seed 不得共享 shadow 等嵌套引用。
-    return { ok: true, style: structuredClone(result.style) }
+    catch (error) {
+      throw new ComposeEntityRegistryError(
+        'component',
+        index,
+        `${definition.key} 校验器失败：${error instanceof Error ? error.message : '未知错误'}`,
+      )
+    }
+    if (verdict !== true) {
+      throw new ComposeEntityRegistryError(
+        'component',
+        index,
+        `${definition.key} 默认值未通过校验：${
+          typeof verdict === 'string' ? verdict : 'validate 返回 false'
+        }`,
+      )
+    }
   }
-  catch (error) {
-    return {
-      ok: false,
-      message: `${definition.type} 默认 style factory 失败：${
-        error instanceof Error ? error.message : '未知错误'
-      }`,
+  return value
+}
+
+function normalizeDefinitions<T>(
+  category: DefinitionCategory,
+  definitions: readonly T[],
+  idOf: (definition: T) => string,
+  validate: (definition: T, index: number) => void,
+): { readonly ordered: readonly T[]; readonly byId: ReadonlyMap<string, T> } {
+  const byId = new Map<string, T>()
+  const ordered = definitions.map((definition, index) => {
+    const id = idOf(definition)
+    if (id.trim().length === 0) {
+      throw new ComposeEntityRegistryError(category, index, `${category} 标识不能为空`)
     }
+    if (byId.has(id)) {
+      throw new ComposeEntityRegistryError(category, index, `${category} 标识 ${id} 重复`)
+    }
+    validate(definition, index)
+    const normalized = Object.freeze({ ...definition }) as T
+    byId.set(id, normalized)
+    return normalized
+  })
+  return { ordered: Object.freeze(ordered), byId }
+}
+
+function validatePresetSeed(preset: ComposeEntityPreset, components: Record<string, JsonObject>) {
+  if ('Composition' in components) return 'Preset 不得自行写入 Composition'
+  const baseComponentKeys = Object.keys(components)
+  const entity: ComposeEntity = {
+    id: '__preset__',
+    name: preset.defaultName ?? preset.label,
+    components: {
+      ...components,
+      Composition: {
+        presetId: preset.id,
+        baseComponentKeys,
+        capabilityIds: [],
+      },
+    },
+  }
+  const result = validateComposeDocument({
+    schemaVersion: 4,
+    canvas: {
+      grid: {
+        stepX: 8,
+        stepY: 8,
+        offsetX: 0,
+        offsetY: 0,
+        primaryLineEvery: 5,
+        snapEnabled: true,
+      },
+      smartSnap: { nodes: true, guides: true },
+      guides: [],
+    },
+    output: { width: 1280, height: 720, backgroundColor: '#111827' },
+    rootIds: [entity.id],
+    entities: { [entity.id]: entity },
+  })
+  return result.valid ? null : result.issues[0]?.message ?? 'Preset Entity 无效'
+}
+
+function createPresetSeed(
+  preset: ComposeEntityPreset,
+  index: number,
+  value?: ComposeEntitySeed,
+): ComposeEntitySeed {
+  const name = value?.name ?? preset.defaultName ?? preset.label
+  if (name.trim().length === 0) {
+    throw new ComposeEntityRegistryError('preset', index, `${preset.id} 默认名称不能为空`)
+  }
+  const raw = value?.components ?? callComponentsFactory(
+    'preset',
+    index,
+    preset.id,
+    preset.createComponents,
+  )
+  const components = cloneComponents(raw) as Record<string, JsonObject>
+  const issue = validatePresetSeed(preset, components)
+  if (issue) throw new ComposeEntityRegistryError('preset', index, `${preset.id}：${issue}`)
+  const baseComponentKeys = Object.keys(components)
+  return {
+    name,
+    components: {
+      ...components,
+      Composition: {
+        presetId: preset.id,
+        baseComponentKeys,
+        capabilityIds: [],
+      },
+    },
   }
 }
 
-/**
- * 从宿主 definitions 创建隔离的只读组件注册表。
- *
- * @param definitions - 按 Palette 展示顺序提供的组件定义。
- * @returns 独立注册表实例。
- * @throws definition type、尺寸或首次默认 props 校验失败时抛出 ComposeComponentRegistryError。
- * @public
- */
-export function createComposeComponentRegistry(
-  definitions: readonly ComposeComponentDefinition[],
-): ComposeComponentRegistry {
-  const byType = new Map<string, ComposeComponentDefinition>()
-  const ordered: ComposeComponentDefinition[] = []
+function issue(
+  code: ComposeCapabilityIssue['code'],
+  message: string,
+  relatedCapabilityIds?: readonly string[],
+): ComposeCapabilityPlanResult {
+  return {
+    ok: false,
+    issue: { code, message, ...(relatedCapabilityIds ? { relatedCapabilityIds } : {}) },
+  }
+}
 
-  definitions.forEach((definition, index) => {
-    if (definition.type.trim().length === 0) {
-      throw new ComposeComponentRegistryError(index, `definition ${index} 的 type 不能为空`)
-    }
-    if (byType.has(definition.type)) {
-      throw new ComposeComponentRegistryError(index, `definition type ${definition.type} 重复`)
-    }
-    if (definition.defaultName !== undefined && definition.defaultName.trim().length === 0) {
-      throw new ComposeComponentRegistryError(index, `${definition.type} defaultName 不能为空`)
-    }
-    for (const field of ['width', 'height'] as const) {
-      const value = definition.defaultSize[field]
-      if (!Number.isFinite(value) || value <= 0) {
-        throw new ComposeComponentRegistryError(
+function command(
+  idFactory: () => string,
+  type: string,
+  payload: JsonObject,
+  entityId: string,
+): EditorCommand {
+  return {
+    id: idFactory(),
+    type,
+    payload,
+    meta: { source: 'entity-registry', targetIds: [entityId] },
+  }
+}
+
+function validateCapabilityGraph(
+  capabilities: readonly ComposeCapabilityDefinition[],
+  capabilityById: ReadonlyMap<string, ComposeCapabilityDefinition>,
+) {
+  capabilities.forEach((definition, index) => {
+    for (const dependency of definition.requires ?? []) {
+      if (!capabilityById.has(dependency)) {
+        throw new ComposeEntityRegistryError(
+          'capability',
           index,
-          `${definition.type} defaultSize.${field} 必须是有限正数`,
+          `${definition.id} 依赖未注册能力 ${dependency}`,
         )
       }
     }
-    const initialProps = createProps(definition)
-    if (!initialProps.ok) {
-      throw new ComposeComponentRegistryError(index, initialProps.message)
+    for (const conflict of definition.conflicts ?? []) {
+      if (!capabilityById.has(conflict)) {
+        throw new ComposeEntityRegistryError(
+          'capability',
+          index,
+          `${definition.id} 冲突能力 ${conflict} 未注册`,
+        )
+      }
     }
-    const initialStyle = createStyle(definition)
-    if (!initialStyle.ok) {
-      throw new ComposeComponentRegistryError(index, initialStyle.message)
-    }
-    const normalized = Object.freeze({
-      ...definition,
-      defaultSize: Object.freeze({ ...definition.defaultSize }),
-    })
-    byType.set(normalized.type, normalized)
-    ordered.push(normalized)
   })
+  const visiting = new Set<string>()
+  const visited = new Set<string>()
+  const visit = (id: string) => {
+    if (visiting.has(id)) {
+      const index = capabilities.findIndex((item) => item.id === id)
+      throw new ComposeEntityRegistryError('capability', index, `能力依赖图包含循环：${id}`)
+    }
+    if (visited.has(id)) return
+    visiting.add(id)
+    for (const dependency of capabilityById.get(id)?.requires ?? []) visit(dependency)
+    visiting.delete(id)
+    visited.add(id)
+  }
+  capabilities.forEach(({ id }) => visit(id))
+}
 
-  const snapshot = Object.freeze([...ordered])
+/**
+ * 从四类宿主定义创建隔离的 Entity Registry。
+ *
+ * @param options - Renderer、Component、Preset 与 Capability 定义。
+ * @returns 独立只读 Registry。
+ * @throws 定义重复、默认值非法或能力图无效时抛出 ComposeEntityRegistryError。
+ * @public
+ */
+export function createComposeEntityRegistry(
+  options: ComposeEntityRegistryOptions = {},
+): ComposeEntityRegistry {
+  const renderers = normalizeDefinitions(
+    'renderer',
+    options.renderers ?? [],
+    ({ type }) => type,
+    () => undefined,
+  )
+  const components = normalizeDefinitions(
+    'component',
+    options.components ?? [],
+    ({ key }) => key,
+    (definition, index) => {
+      if (!isComposeComponentKey(definition.key)) {
+        throw new ComposeEntityRegistryError(
+          'component',
+          index,
+          `${definition.key} 不是 PascalCase Component Key`,
+        )
+      }
+      callComponentFactory(definition, index)
+    },
+  )
+  const presets = normalizeDefinitions(
+    'preset',
+    options.presets ?? [],
+    ({ id }) => id,
+    (definition, index) => {
+      createPresetSeed(definition, index)
+    },
+  )
+  const capabilities = normalizeDefinitions(
+    'capability',
+    options.capabilities ?? [],
+    ({ id }) => id,
+    (definition, index) => {
+      const owned = callComponentsFactory(
+        'capability',
+        index,
+        definition.id,
+        definition.createComponents,
+      )
+      for (const key of Object.keys(owned)) {
+        if (!components.byId.has(key)) {
+          throw new ComposeEntityRegistryError(
+            'capability',
+            index,
+            `${definition.id} 使用了未注册 Component ${key}`,
+          )
+        }
+      }
+    },
+  )
+
+  const ownerByKey = new Map<string, string>()
+  capabilities.ordered.forEach((definition, index) => {
+    const owned = callComponentsFactory(
+      'capability',
+      index,
+      definition.id,
+      definition.createComponents,
+    )
+    Object.keys(owned).forEach((key) => {
+      const previous = ownerByKey.get(key)
+      if (previous) {
+        throw new ComposeEntityRegistryError(
+          'capability',
+          index,
+          `Component ${key} 已由能力 ${previous} 拥有，不能再由 ${definition.id} 拥有`,
+        )
+      }
+      ownerByKey.set(key, definition.id)
+    })
+  })
+  validateCapabilityGraph(capabilities.ordered, capabilities.byId)
+
+  const presetIndexes = new Map(presets.ordered.map((definition, index) => [definition.id, index]))
+  const capabilityIndexes = new Map(
+    capabilities.ordered.map((definition, index) => [definition.id, index]),
+  )
+
+  const addPlan = (
+    document: ComposeDocument,
+    entityId: string,
+    capabilityId: string,
+    idFactory: () => string,
+  ): ComposeCapabilityPlanResult => {
+    const entity = document.entities[entityId]
+    if (!entity) return issue('capability.entity-missing', `Entity ${entityId} 不存在`)
+    if (getComposeLock(entity).locked) return issue('capability.locked', '锁定 Entity 不可添加能力')
+    const target = capabilities.byId.get(capabilityId)
+    if (!target) return issue('capability.unknown', `能力 ${capabilityId} 未注册`)
+    const composition = getComposeComposition(entity)
+    if (composition.capabilityIds.includes(capabilityId)) {
+      return issue('capability.already-attached', `能力 ${capabilityId} 已附加`)
+    }
+
+    const attached = new Set(composition.capabilityIds)
+    const planned: ComposeCapabilityDefinition[] = []
+    const collect = (definition: ComposeCapabilityDefinition): ComposeCapabilityIssue | null => {
+      if (attached.has(definition.id) || planned.some(({ id }) => id === definition.id)) return null
+      for (const dependencyId of definition.requires ?? []) {
+        const dependency = capabilities.byId.get(dependencyId)!
+        const dependencyIssue = collect(dependency)
+        if (dependencyIssue) return dependencyIssue
+      }
+      const active = new Set([...attached, ...planned.map(({ id }) => id)])
+      const conflict = (definition.conflicts ?? []).find((id) => active.has(id))
+        ?? [...active].find((id) =>
+          capabilities.byId.get(id)?.conflicts?.includes(definition.id))
+      if (conflict) {
+        return {
+          code: 'capability.conflict',
+          message: `能力 ${definition.id} 与 ${conflict} 冲突`,
+          relatedCapabilityIds: [conflict],
+        }
+      }
+      planned.push(definition)
+      return null
+    }
+    const collectIssue = collect(target)
+    if (collectIssue) return { ok: false, issue: collectIssue }
+
+    const children: EditorCommand[] = []
+    const existingKeys = new Set(Object.keys(entity.components))
+    for (const definition of planned) {
+      const index = capabilityIndexes.get(definition.id)!
+      const owned = callComponentsFactory(
+        'capability',
+        index,
+        definition.id,
+        definition.createComponents,
+      )
+      for (const [key, value] of Object.entries(owned)) {
+        if (existingKeys.has(key)) {
+          return issue(
+            'capability.component-exists',
+            `能力 ${definition.id} 需要的 Component ${key} 已存在`,
+          )
+        }
+        existingKeys.add(key)
+        children.push(command(
+          idFactory,
+          BUILTIN_COMMAND_TYPES.addComponent,
+          { entityId, key, value },
+          entityId,
+        ))
+      }
+    }
+    const nextComposition: ComposeComposition = {
+      ...composition,
+      capabilityIds: [...composition.capabilityIds, ...planned.map(({ id }) => id)],
+    }
+    children.push(command(
+      idFactory,
+      BUILTIN_COMMAND_TYPES.updateComponent,
+      { entityId, key: 'Composition', value: nextComposition },
+      entityId,
+    ))
+    return {
+      ok: true,
+      command: command(
+        idFactory,
+        BUILTIN_COMMAND_TYPES.batch,
+        { commands: children as unknown as JsonValue },
+        entityId,
+      ),
+    }
+  }
+
+  const removePlan = (
+    document: ComposeDocument,
+    entityId: string,
+    capabilityId: string,
+    idFactory: () => string,
+  ): ComposeCapabilityPlanResult => {
+    const entity = document.entities[entityId]
+    if (!entity) return issue('capability.entity-missing', `Entity ${entityId} 不存在`)
+    if (getComposeLock(entity).locked) return issue('capability.locked', '锁定 Entity 不可移除能力')
+    const composition = getComposeComposition(entity)
+    if (!composition.capabilityIds.includes(capabilityId)) {
+      return issue('capability.not-attached', `能力 ${capabilityId} 未附加`)
+    }
+    const target = capabilities.byId.get(capabilityId)
+    if (!target) return issue('capability.unknown', `能力 ${capabilityId} 的定义缺失，无法安全移除`)
+    const dependants = composition.capabilityIds.filter((id) =>
+      capabilities.byId.get(id)?.requires?.includes(capabilityId))
+    if (dependants.length) {
+      return issue(
+        'capability.required',
+        `能力 ${capabilityId} 正被 ${dependants.join('、')} 依赖`,
+        dependants,
+      )
+    }
+    const index = capabilityIndexes.get(target.id)!
+    const owned = callComponentsFactory('capability', index, target.id, target.createComponents)
+    const protectedKey = Object.keys(owned).find((key) =>
+      composition.baseComponentKeys.includes(key))
+    if (protectedKey) {
+      return issue('capability.protected', `基础 Component ${protectedKey} 不可移除`)
+    }
+    if (owned.Hierarchy && getComposeHierarchy(entity)?.childIds.length) {
+      return issue('capability.has-children', '容器仍有子项，不能移除容器能力')
+    }
+    const children = Object.keys(owned).reverse().map((key) => command(
+      idFactory,
+      BUILTIN_COMMAND_TYPES.removeComponent,
+      { entityId, key },
+      entityId,
+    ))
+    const nextComposition: ComposeComposition = {
+      ...composition,
+      capabilityIds: composition.capabilityIds.filter((id) => id !== capabilityId),
+    }
+    children.push(command(
+      idFactory,
+      BUILTIN_COMMAND_TYPES.updateComponent,
+      { entityId, key: 'Composition', value: nextComposition },
+      entityId,
+    ))
+    return {
+      ok: true,
+      command: command(
+        idFactory,
+        BUILTIN_COMMAND_TYPES.batch,
+        { commands: children as unknown as JsonValue },
+        entityId,
+      ),
+    }
+  }
+
   return Object.freeze({
-    get(type: string) {
-      return byType.get(type)
-    },
-    list() {
-      return snapshot
-    },
-    createSeed(type: string): ComposeComponentSeedResult {
-      const definition = byType.get(type)
-      if (!definition) {
+    getRenderer: (type: string) => renderers.byId.get(type),
+    listRenderers: () => renderers.ordered,
+    getComponent: (key: string) => components.byId.get(key),
+    listComponents: () => [...components.ordered].sort((left, right) =>
+      (left.order ?? 0) - (right.order ?? 0)),
+    getPreset: (id: string) => presets.byId.get(id),
+    listPresets: () => presets.ordered,
+    getCapability: (id: string) => capabilities.byId.get(id),
+    listCapabilities: () => capabilities.ordered,
+    createSeed(presetId: string): ComposeEntitySeedResult {
+      const preset = presets.byId.get(presetId)
+      if (!preset) {
+        return {
+          ok: false,
+          error: { code: 'preset.unknown', message: `未注册 Preset ${presetId}` },
+        }
+      }
+      try {
+        return {
+          ok: true,
+          seed: createPresetSeed(preset, presetIndexes.get(presetId)!),
+        }
+      }
+      catch (error) {
         return {
           ok: false,
           error: {
-            code: 'definition.unknown-type',
-            message: `未注册组件类型 ${type}`,
+            code: 'preset.invalid',
+            message: error instanceof Error ? error.message : 'Preset 创建失败',
           },
         }
-      }
-      const result = createProps(definition)
-      if (!result.ok) {
-        return {
-          ok: false,
-          error: {
-            code: 'definition.invalid-props',
-            message: result.message,
-          },
-        }
-      }
-      const styleResult = createStyle(definition)
-      if (!styleResult.ok) {
-        return {
-          ok: false,
-          error: {
-            code: 'definition.invalid-style',
-            message: styleResult.message,
-          },
-        }
-      }
-      return {
-        ok: true,
-        seed: {
-          componentType: definition.type,
-          name: definition.defaultName ?? definition.label,
-          props: result.props,
-          ...(styleResult.style ? { style: styleResult.style } : {}),
-          width: definition.defaultSize.width,
-          height: definition.defaultSize.height,
-        },
       }
     },
-    async createAssetSeed(input: ComposeComponentAssetDropInput): Promise<ComposeComponentSeedResult> {
-      const definition = ordered.find((candidate) => {
+    async createAssetSeed(input: ComposeEntityAssetDropInput): Promise<ComposeEntitySeedResult> {
+      const preset = presets.ordered.find((candidate) => {
         try {
           return candidate.assetDrop?.accepts({
             name: input.name,
             mediaType: input.resolved.mediaType,
           }) === true
-        } catch {
+        }
+        catch {
           return false
         }
       })
-      if (!definition?.assetDrop) {
+      if (!preset?.assetDrop) {
         return {
           ok: false,
           error: {
-            code: 'definition.asset-unsupported',
-            message: `没有组件支持资源 ${input.name}`,
+            code: 'preset.asset-unsupported',
+            message: `没有 Preset 支持资源 ${input.name}`,
           },
         }
       }
       try {
-        const seed = await definition.assetDrop.createSeed(input)
-        const issue = propsIssue(seed.props)
-        if (
-          issue
-          || !Number.isFinite(seed.width)
-          || seed.width <= 0
-          || !Number.isFinite(seed.height)
-          || seed.height <= 0
-          || seed.name.trim().length === 0
-        ) {
-          throw new Error(issue ?? '资源 seed 名称和尺寸必须有效')
-        }
-        if (seed.style) {
-          const style = validateNodeStyle(seed.style)
-          if (!style.valid) throw new Error(style.issues[0]?.message ?? '资源 seed style 无效')
-        }
+        const raw = await preset.assetDrop.createSeed(input)
         return {
           ok: true,
-          seed: {
-            componentType: definition.type,
-            name: seed.name,
-            props: structuredClone(seed.props),
-            ...(seed.style ? { style: structuredClone(seed.style) } : {}),
-            width: seed.width,
-            height: seed.height,
-          },
+          seed: createPresetSeed(preset, presetIndexes.get(preset.id)!, raw),
         }
-      } catch (error) {
+      }
+      catch (error) {
         return {
           ok: false,
           error: {
-            code: 'definition.asset-factory-failed',
-            message: `${definition.type} 资源 factory 失败：${
+            code: 'preset.asset-factory-failed',
+            message: `${preset.id} 资源 factory 失败：${
               error instanceof Error ? error.message : '未知错误'
             }`,
           },
         }
       }
     },
+    listCapabilityAvailability(entity: ComposeEntity): readonly ComposeCapabilityAvailability[] {
+      const composition = getComposeComposition(entity)
+      const attached = new Set(composition.capabilityIds)
+      const known = capabilities.ordered.map((definition) => {
+        const isAttached = attached.has(definition.id)
+        if (isAttached) {
+          return {
+            definition,
+            capabilityId: definition.id,
+            attached: true,
+            disabled: false,
+          }
+        }
+        const conflict = (definition.conflicts ?? []).find((id) => attached.has(id))
+          ?? [...attached].find((id) =>
+            capabilities.byId.get(id)?.conflicts?.includes(definition.id))
+        const locked = getComposeLock(entity).locked
+        const itemIssue: ComposeCapabilityIssue | undefined = locked
+          ? { code: 'capability.locked', message: '锁定 Entity 不可添加能力' }
+          : conflict
+            ? {
+                code: 'capability.conflict',
+                message: `与 ${conflict} 冲突`,
+                relatedCapabilityIds: [conflict],
+              }
+            : undefined
+        return {
+          definition,
+          capabilityId: definition.id,
+          attached: false,
+          disabled: Boolean(itemIssue),
+          ...(itemIssue ? { issue: itemIssue } : {}),
+        }
+      })
+      const unknown = composition.capabilityIds
+        .filter((id) => !capabilities.byId.has(id))
+        .map((capabilityId) => ({
+          capabilityId,
+          attached: true,
+          disabled: true,
+          issue: {
+            code: 'capability.unknown' as const,
+            message: `能力 ${capabilityId} 的 Registry 定义缺失`,
+          },
+        }))
+      return [...known, ...unknown]
+    },
+    planAddCapability: addPlan,
+    planRemoveCapability: removePlan,
   })
 }

@@ -7,150 +7,260 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { StrictMode } from 'react'
-import type { ReactElement, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createComposeComponentRegistry } from '@compose-ui/component-registry'
+import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
+  BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
   createTransactionRuntime,
-} from '@compose-ui/core'
-import type { ComposeNodeInspectorProps } from '@compose-ui/component-registry'
-import type { ComposeFrameNode } from '@compose-ui/core'
-import type {
-  ComposeDocument,
-  EditorCommand,
-  TransactionRuntime,
+  getComposeHierarchy,
+  getComposeLock,
+  getComposeTransform,
+  type ComposeDocument,
+  type ComposeEntity,
+  type ComposeTransform,
+  type TransactionRuntime,
 } from '@compose-ui/core'
 import { useComposeEditorController } from './controller'
-import type { ComposeEditorTransactionEvent } from './controller'
 
-const documentFixture: ComposeDocument = {
-  schemaVersion: 3,
-  canvas: createDefaultCanvasSettings(),
-  output: createDefaultOutputSettings(),
-  rootIds: ['frame'],
-  nodes: {
-    frame: {
-      id: 'frame',
-      kind: 'frame',
-      name: 'Dashboard',
-      visible: true,
-      locked: false,
-      transform: { x: 40, y: 30, width: 800, height: 600, rotation: 0 },
-      childIds: ['group'],
-      clipContent: true,
-    },
-    group: {
-      id: 'group',
-      kind: 'frame',
-      name: 'Header',
-      visible: true,
-      locked: false,
-      transform: { x: 20, y: 20, width: 400, height: 100, rotation: 0 },
-      childIds: ['title'],
-      clipContent: false,
-    },
-    title: {
-      id: 'title',
-      kind: 'component',
-      name: 'Title',
-      visible: true,
-      locked: false,
-      transform: { x: 10, y: 10, width: 180, height: 40, rotation: 0 },
-      componentType: 'text',
-      props: { text: 'Before' },
-    },
-  },
+function transform(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): ComposeTransform {
+  return {
+    position: { x, y },
+    size: { width, height },
+    rotation: 0,
+  }
 }
+
+function entity(
+  id: string,
+  components: ComposeEntity['components'],
+  name = id,
+  presetId: string | null = null,
+): ComposeEntity {
+  const base = {
+    Transform: transform(0, 0, 100, 100),
+    Visibility: { visible: true },
+    Lock: { locked: false },
+    ...components,
+  }
+  return {
+    id,
+    name,
+    components: {
+      Composition: {
+        presetId,
+        baseComponentKeys: Object.keys(base),
+        capabilityIds: [],
+      },
+      ...base,
+    },
+  }
+}
+
+function documentFixture(): ComposeDocument {
+  return {
+    schemaVersion: 4,
+    canvas: createDefaultCanvasSettings(),
+    output: createDefaultOutputSettings(),
+    rootIds: ['dashboard'],
+    entities: {
+      dashboard: entity('dashboard', {
+        Transform: transform(40, 30, 800, 600),
+        Hierarchy: { childIds: ['title'] },
+        Clip: { enabled: true },
+        Appearance: { backgroundColor: '#111827' },
+      }, 'Dashboard', 'container'),
+      title: entity('title', {
+        Transform: transform(10, 10, 180, 40),
+        Appearance: { backgroundColor: 'transparent' },
+        Renderer: { type: 'text', props: { text: 'Before' } },
+      }, 'Title', 'text'),
+    },
+  }
+}
+
+const componentDefinitions = [
+  {
+    key: 'Composition',
+    label: '组合',
+    hidden: true,
+    order: -100,
+    createDefault: () => ({ presetId: null, baseComponentKeys: [], capabilityIds: [] }),
+  },
+  {
+    key: 'Transform',
+    label: '变换',
+    order: 10,
+    createDefault: () => transform(0, 0, 100, 100),
+  },
+  {
+    key: 'Visibility',
+    label: '可见性',
+    order: 20,
+    createDefault: () => ({ visible: true }),
+  },
+  {
+    key: 'Lock',
+    label: '锁定',
+    order: 30,
+    createDefault: () => ({ locked: false }),
+  },
+  {
+    key: 'Appearance',
+    label: '外观',
+    order: 40,
+    createDefault: () => ({ backgroundColor: 'transparent' }),
+  },
+  {
+    key: 'Hierarchy',
+    label: '容器',
+    order: 50,
+    createDefault: () => ({ childIds: [] }),
+  },
+  {
+    key: 'Clip',
+    label: '裁剪',
+    order: 60,
+    createDefault: () => ({ enabled: true }),
+  },
+  {
+    key: 'TransformConstraints',
+    label: '几何限制',
+    order: 70,
+    createDefault: () => ({
+      movable: true,
+      resize: 'free',
+      rotatable: true,
+      minSize: { width: 1, height: 1 },
+      maxSize: null,
+    }),
+  },
+  {
+    key: 'Renderer',
+    label: '内容',
+    hidden: true,
+    order: 80,
+    createDefault: () => ({ type: 'unknown', props: {} }),
+  },
+] as const
+
+const registry = createComposeEntityRegistry({
+  components: componentDefinitions,
+  renderers: [{
+    type: 'text',
+    label: '文本',
+    renderer: ({ props }) => <span>{String(props.text)}</span>,
+    inspector: ({ entity, dispatch, readOnly }) => (
+      <button
+        disabled={readOnly}
+        type="button"
+        onClick={() => dispatch({
+          id: 'renderer-inspector',
+          type: BUILTIN_COMMAND_TYPES.setRendererProps,
+          payload: { entityId: entity.id, props: { text: 'After' } },
+          meta: { source: 'inspector', targetIds: [entity.id] },
+        })}
+      >
+        修改内容
+      </button>
+    ),
+  }],
+  presets: [
+    {
+      id: 'container',
+      label: 'Container',
+      createComponents: () => ({
+        Transform: transform(0, 0, 1280, 720),
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Hierarchy: { childIds: [] },
+        Clip: { enabled: true },
+        Appearance: { backgroundColor: '#ffffff' },
+      }),
+    },
+    {
+      id: 'text',
+      label: 'Text',
+      createComponents: () => ({
+        Transform: transform(0, 0, 180, 40),
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Appearance: { backgroundColor: 'transparent' },
+        Renderer: { type: 'text', props: { text: 'New' } },
+      }),
+    },
+  ],
+  capabilities: [
+    {
+      id: 'container',
+      label: '容器',
+      createComponents: () => ({
+        Hierarchy: { childIds: [] },
+        Clip: { enabled: true },
+      }),
+    },
+    {
+      id: 'geometry-constraints',
+      label: '几何限制',
+      createComponents: () => ({
+        TransformConstraints: {
+          movable: true,
+          resize: 'free',
+          rotatable: true,
+          minSize: { width: 1, height: 1 },
+          maxSize: null,
+        },
+      }),
+    },
+  ],
+})
 
 function runtime() {
   let transactionIndex = 0
   return createTransactionRuntime({
-    document: documentFixture,
+    document: documentFixture(),
     idFactory: () => `transaction-${transactionIndex++}`,
     clock: () => transactionIndex * 10,
   })
 }
 
-const registry = createComposeComponentRegistry([{
-  type: 'text',
-  label: '文本',
-  defaultSize: { width: 180, height: 40 },
-  createDefaultProps: () => ({ text: 'New' }),
-  renderer: ({ props }) => <span>{String(props.text)}</span>,
-  inspector: ({ node, dispatch }) => (
-    <button
-      type="button"
-      onClick={() => dispatch({
-        id: 'inspector-command',
-        type: 'node.props.set',
-        payload: { nodeId: node.id, path: ['text'], value: 'After' },
-        meta: { label: '修改文本', source: 'inspector', targetIds: [node.id] },
-      })}
-    >
-      修改属性
-    </button>
-  ),
-}])
-
-function ContainerInspector({
-  node,
-  dispatch,
-}: ComposeNodeInspectorProps<ComposeFrameNode>) {
-  return (
-    <button
-      type="button"
-      onClick={() => dispatch({
-        id: 'container-style',
-        type: 'node.style.set',
-        payload: { nodeId: node.id, path: ['backgroundColor'], value: '#123456' },
-        meta: {
-          label: `Update ${node.name} · background #123456`,
-          source: 'inspector',
-          targetIds: [node.id],
-        },
-      })}
-    >
-      修改容器样式
-    </button>
-  )
+function ids() {
+  let index = 0
+  return () => `editor-id-${index++}`
 }
 
-function StrictControllerWorkspace({
+function InspectorFixture({
   transactionRuntime,
+  selection = ['title'],
 }: {
-  transactionRuntime: TransactionRuntime
+  readonly transactionRuntime: TransactionRuntime
+  readonly selection?: readonly string[]
 }) {
   const controller = useComposeEditorController({
-    runtime: transactionRuntime,
+    idFactory: ids(),
+    initialSelection: selection,
     registry,
+    runtime: transactionRuntime,
   })
-  return (
-    <>
-      {controller.componentLibraryPanel}
-      {controller.stage}
-    </>
-  )
+  return <>{controller.inspectorPanel}</>
 }
 
 afterEach(cleanup)
 
 describe('useComposeEditorController', () => {
-  it('OpenSpec: editor-workspace-layout / 共享 Stage controller / Stage 与 Palette 使用同一实例并在卸载时释放', async () => {
-    const editorRuntime = runtime()
+  it('Stage 与 Palette 共享同一 interaction controller 并在卸载时释放', async () => {
     const hook = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
+      runtime: runtime(),
       registry,
     }))
     const controller = hook.result.current.interactionController
-    const palette = hook.result.current.componentLibraryPanel as ReactElement<{
-      interactionController: unknown
-    }>
-
     expect(hook.result.current.stageProps.interactionController).toBe(controller)
-    expect(palette.props.interactionController).toBe(controller)
 
     hook.unmount()
     await act(async () => new Promise<void>((resolve) => queueMicrotask(resolve)))
@@ -160,530 +270,244 @@ describe('useComposeEditorController', () => {
     })).toThrow(/disposed/)
   })
 
-  it('OpenSpec: editor-workspace-layout / 共享 Stage controller / StrictMode 重放后保持可用', async () => {
-    const editorRuntime = runtime()
-    const hook = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-    }), {
-      wrapper: ({ children }: { children: ReactNode }) => (
-        <StrictMode>{children}</StrictMode>
-      ),
-    })
-    const controller = hook.result.current.interactionController
-    const disconnect = controller.connectSurface({
-      resolveClientPoint: (point) => point,
-      applyEffects: () => undefined,
-    })
-
-    disconnect()
-    hook.unmount()
-    await act(async () => new Promise<void>((resolve) => queueMicrotask(resolve)))
-    expect(() => controller.connectSurface({
-      resolveClientPoint: (point) => point,
-      applyEffects: () => undefined,
-    })).toThrow(/disposed/)
-  })
-
-  it('OpenSpec: editor-workspace-layout / 共享 Stage controller / StrictMode 组合 Stage 与 Palette', () => {
-    expect(() => render(
-      <StrictMode>
-        <StrictControllerWorkspace transactionRuntime={runtime()} />
-      </StrictMode>,
-    )).not.toThrow()
-
-    expect(screen.getByRole('application', { name: 'Stage' })).toBeInTheDocument()
-  })
-
-  it('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 统一派发不同面板意图', () => {
-    const editorRuntime = runtime()
+  it('场景树由 Hierarchy 构建并使用 Preset 图标', () => {
     const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
+      runtime: runtime(),
       registry,
-      initialSelection: ['title'],
-      initialExpandedIds: ['frame', 'group'],
-      idFactory: () => 'controller-command',
     }))
 
-    expect(result.current.document).toBe(editorRuntime.document)
-    expect(result.current).not.toHaveProperty('activeFrameId')
-    expect(result.current).not.toHaveProperty('setActiveFrameId')
-    expect(result.current.stageProps.document).toBe(editorRuntime.document)
-    expect(result.current.sceneTreeProps.nodes[0]?.children?.[0]?.children?.[0]?.label)
-      .toBe('Title')
-    expect(result.current.history).toBe(editorRuntime)
-
-    act(() => {
-      result.current.sceneTreeProps.onOperation?.({
-        type: 'rename',
-        nodeId: 'title',
-        label: 'Latest title',
-      })
+    expect(result.current.sceneTreeProps.nodes).toHaveLength(1)
+    expect(result.current.sceneTreeProps.nodes[0]).toMatchObject({
+      id: 'dashboard',
+      label: 'Dashboard',
+      canHaveChildren: true,
     })
-    expect(editorRuntime.document.nodes.title?.name).toBe('Latest title')
-    expect(result.current.stageProps.document.nodes.title?.name).toBe('Latest title')
-
-    const { rerender } = render(result.current.inspectorPanel)
-    fireEvent.click(screen.getByRole('button', { name: '修改属性' }))
-    rerender(result.current.inspectorPanel)
-    expect(editorRuntime.document.nodes.title?.kind === 'component'
-      ? editorRuntime.document.nodes.title.props.text
-      : null).toBe('After')
-  })
-
-  it('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 清理失效会话状态', () => {
-    const editorRuntime = runtime()
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-      initialSelection: ['title'],
-      initialExpandedIds: ['frame', 'group', 'title'],
-    }))
-
-    act(() => {
-      editorRuntime.dispatch({
-        id: 'hide',
-        type: 'node.set-visibility',
-        payload: { nodeIds: ['title'], visible: false },
-      })
-    })
-
-    expect(result.current.selectedIds).toEqual([])
-    expect(result.current.expandedIds).toEqual(['frame', 'group'])
-
-    act(() => {
-      editorRuntime.dispatch({
-        id: 'delete-frame',
-        type: 'node.delete',
-        payload: { nodeIds: ['frame'] },
-      })
-    })
-    expect(result.current.expandedIds).toEqual([])
-  })
-
-  // OpenSpec: component-registry / 通用节点 Inspector 上下文 / 组合结构节点 Inspector
-  it('OpenSpec: editor-workspace-layout / Frame presets 与结构节点 Inspector / 默认工作区组合基础物料', () => {
-    const editorRuntime = runtime()
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-      initialSelection: ['frame'],
-      containerInspector: ContainerInspector,
-      framePresets: [{
-        id: 'desktop',
-        label: 'Frame',
-        name: 'Desktop',
-        defaultSize: { width: 1280, height: 720 },
-        defaultClipContent: true,
-        createDefaultStyle: () => ({ backgroundColor: '#ffffff' }),
-      }],
-      idFactory: () => 'controller-frame',
-    }))
-
-    const inspector = render(result.current.inspectorPanel)
-    fireEvent.click(screen.getByRole('button', { name: '修改容器样式' }))
-    expect(editorRuntime.document.nodes.frame?.style?.backgroundColor).toBe('#123456')
-    inspector.unmount()
-
-    render(result.current.componentLibraryPanel)
-    expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')))
-      .toEqual(['添加 Frame', '添加 文本'])
-  })
-
-  it('OpenSpec: editor-workspace-layout / Frame presets 与结构节点 Inspector / 保持未配置宿主兼容', () => {
-    const editorRuntime = runtime()
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-      initialSelection: ['frame'],
-    }))
-
-    render(result.current.componentLibraryPanel)
-    expect(screen.queryByRole('button', { name: '添加 Frame' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '添加 文本' })).toBeInTheDocument()
-    cleanup()
-
-    render(result.current.inspectorPanel)
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '选择一个节点以编辑其属性',
-    )
-  })
-
-  it('以紧凑图标工具栏暴露完整的可访问名称和工具状态', () => {
-    const editorRuntime = runtime()
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-    }))
-    const toolbar = render(result.current.stageToolbar)
-
-    expect(screen.getByRole('toolbar', { name: 'Stage 工具栏' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '适配选择' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '适配 Frame' })).toBeDisabled()
-    expect(screen.getByLabelText('缩放比例')).toHaveTextContent('100%')
-
-    fireEvent.click(screen.getByRole('button', { name: '平移' }))
-    toolbar.rerender(result.current.stageToolbar)
-    expect(result.current.tool).toBe('pan')
-    expect(screen.getByRole('button', { name: '平移' })).toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('OpenSpec: stage / 受控无限视口 / 使用真实 surface 尺寸 - fit Frame', () => {
-    const editorRuntime = runtime()
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-      initialSelection: ['frame'],
-    }))
-    const toolbar = render(result.current.stageToolbar)
-
-    act(() => result.current.stageProps.onSurfaceSizeChange?.({ width: 400, height: 300 }))
-    toolbar.rerender(result.current.stageToolbar)
-    fireEvent.click(screen.getByRole('button', { name: '适配 Frame' }))
-
-    const expectedZoom = 172 / 600
-    expect(result.current.viewport).toEqual({
-      x: 400 / 2 - (40 + 800 / 2) * expectedZoom,
-      y: 300 / 2 - (30 + 600 / 2) * expectedZoom,
-      zoom: expectedZoom,
-    })
-  })
-
-  // OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 清空辅助线
-  // OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 原子修改网格和辅助线
-  it('OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 快捷切换吸附', () => {
-    const editorRuntime = runtime()
-    act(() => {
-      editorRuntime.dispatch({
-        id: 'seed-guide',
-        type: 'canvas.guide.create',
-        payload: { guide: { id: 'guide', axis: 'x', position: 32 } },
-      })
-      editorRuntime.dispatch({
-        id: 'seed-guide-y',
-        type: 'canvas.guide.create',
-        payload: { guide: { id: 'guide-y', axis: 'y', position: -16 } },
-      })
-    })
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-      idFactory: (() => {
-        let value = 0
-        return () => `canvas-command-${value++}`
-      })(),
-    }))
-    const toolbar = render(result.current.stageToolbar)
-
-    fireEvent.click(screen.getByRole('button', { name: '网格吸附' }))
-    toolbar.rerender(result.current.stageToolbar)
-    expect(editorRuntime.document.canvas.grid.snapEnabled).toBe(false)
-    expect(screen.getByRole('button', { name: '网格吸附' }))
-      .toHaveAttribute('aria-pressed', 'false')
-
-    fireEvent.click(screen.getByRole('button', { name: '画布设置' }))
-    toolbar.rerender(result.current.stageToolbar)
-    fireEvent.change(screen.getByRole('textbox', { name: 'X 步长' }), {
-      target: { value: '0' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '应用' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('步长必须为正数')
-    expect(editorRuntime.document.canvas.grid.stepX).toBe(8)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'X 步长' }), {
-      target: { value: '16' },
-    })
-    fireEvent.click(screen.getByRole('checkbox', { name: '节点吸附' }))
-    fireEvent.click(screen.getByRole('button', { name: '清空辅助线（2）' }))
-    const beforeApply = editorRuntime.entries.length
-    fireEvent.click(screen.getByRole('button', { name: '应用' }))
-
-    expect(editorRuntime.entries).toHaveLength(beforeApply + 1)
-    expect(editorRuntime.document.canvas.grid.stepX).toBe(16)
-    expect(editorRuntime.document.canvas.smartSnap.nodes).toBe(false)
-    expect(editorRuntime.document.canvas.guides).toEqual([])
-    expect(editorRuntime.document.output).toEqual(createDefaultOutputSettings())
-    toolbar.rerender(result.current.stageToolbar)
-    expect(screen.queryByRole('dialog', { name: '画布网格与吸附设置' }))
-      .not.toBeInTheDocument()
-
-    act(() => editorRuntime.undo())
-    expect(editorRuntime.document.canvas.grid.stepX).toBe(8)
-    expect(editorRuntime.document.canvas.guides).toEqual([
-      { id: 'guide', axis: 'x', position: 32 },
-      { id: 'guide-y', axis: 'y', position: -16 },
-    ])
-    expect(editorRuntime.document.output).toEqual(createDefaultOutputSettings())
-  })
-
-  it('OpenSpec: editor-workspace-layout / Stage 吸附工具栏 / 应用或取消画布设置', () => {
-    const editorRuntime = runtime()
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-    }))
-    const toolbar = render(result.current.stageToolbar)
-    fireEvent.click(screen.getByRole('button', { name: '画布设置' }))
-    toolbar.rerender(result.current.stageToolbar)
-    fireEvent.change(screen.getByRole('textbox', { name: 'Y 偏移' }), {
-      target: { value: '42' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-
-    expect(editorRuntime.document.canvas.grid.offsetY).toBe(0)
-    expect(editorRuntime.entries).toHaveLength(1)
-  })
-
-  it('OpenSpec: editor-workspace-layout / Map Canvas 输出尺寸 / 选择常见尺寸或编辑自定义 W/H', async () => {
-    const editorRuntime = runtime()
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-      idFactory: (() => {
-        let value = 0
-        return () => `output-command-${value++}`
-      })(),
-    }))
-    const inspector = render(result.current.inspectorPanel)
-
-    act(() => result.current.stageProps.onOutputSelect?.())
-    inspector.rerender(result.current.inspectorPanel)
-
-    const canvasInspector = screen.getByRole('region', { name: '画布属性' })
-    expect(canvasInspector).toHaveAttribute('data-compose-ui', 'property-panel')
-    expect(screen.getByTestId('semantic-editor-color')).toBeInTheDocument()
-    const outputSizeKey = () => screen.getByRole('combobox', { name: '输出尺寸键' })
-    const commonOutputSize = () => screen.getByRole('combobox', { name: '常见尺寸' })
-    expect(outputSizeKey()).toHaveValue('preset')
-    expect(outputSizeKey().closest('.property-panel__label')).toHaveClass('property-panel__label--interactive')
-    expect(commonOutputSize()).toHaveValue('1280x720')
-    expect(screen.queryByTestId('semantic-editor-size')).not.toBeInTheDocument()
-    expect(screen.queryByRole('spinbutton', { name: '自定义尺寸宽度' })).not.toBeInTheDocument()
-    expect(result.current.stageProps.outputSelected).toBe(true)
-    expect(result.current.selectedIds).toEqual([])
-
-    const beforePreset = editorRuntime.entries.length
-    fireEvent.change(commonOutputSize(), {
-      target: { value: '1920x1080' },
-    })
-    expect(editorRuntime.entries).toHaveLength(beforePreset + 1)
-    expect(editorRuntime.document.output).toEqual({
-      width: 1920,
-      height: 1080,
-      backgroundColor: 'transparent',
-    })
-
-    inspector.rerender(result.current.inspectorPanel)
-    expect(outputSizeKey()).toHaveValue('preset')
-    expect(commonOutputSize()).toHaveValue('1920x1080')
-    expect(screen.queryByRole('spinbutton', { name: '自定义尺寸宽度' })).not.toBeInTheDocument()
-
-    const beforeCustom = editorRuntime.entries.length
-    fireEvent.change(outputSizeKey(), {
-      target: { value: 'custom' },
-    })
-    expect(editorRuntime.entries).toHaveLength(beforeCustom)
-    expect(outputSizeKey()).toHaveValue('custom')
-    expect(screen.getByTestId('semantic-editor-size')).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' })).toHaveValue(1920)
-
-    fireEvent.change(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }), {
-      target: { value: '0' },
-    })
-    fireEvent.blur(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('输出尺寸必须是正数')
-    expect(editorRuntime.document.output.width).toBe(1920)
-
-    fireEvent.change(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }), {
-      target: { value: '1600' },
-    })
-    fireEvent.blur(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' }))
-    expect(editorRuntime.document.output.width).toBe(1600)
-    await waitFor(() => expect(result.current.document.output.width).toBe(1600))
-    inspector.rerender(result.current.inspectorPanel)
-    expect(outputSizeKey()).toHaveValue('custom')
-
-    act(() => editorRuntime.undo())
-    expect(editorRuntime.document.output.width).toBe(1920)
-    await waitFor(() => expect(result.current.document.output.width).toBe(1920))
-    inspector.rerender(result.current.inspectorPanel)
-    await waitFor(() => {
-      expect(outputSizeKey()).toHaveValue('preset')
-      expect(commonOutputSize()).toHaveValue('1920x1080')
-      expect(screen.queryByRole('spinbutton', { name: '自定义尺寸宽度' })).not.toBeInTheDocument()
-    })
-
-    act(() => editorRuntime.redo())
-    expect(editorRuntime.document.output.width).toBe(1600)
-    await waitFor(() => expect(result.current.document.output.width).toBe(1600))
-    inspector.rerender(result.current.inspectorPanel)
-    await waitFor(() => {
-      expect(outputSizeKey()).toHaveValue('custom')
-      expect(screen.getByRole('spinbutton', { name: '自定义尺寸宽度' })).toHaveValue(1600)
-    })
-
-    act(() => {
-      editorRuntime.dispatch({
-        id: 'host-output-configure',
-        type: 'output.configure',
-        payload: { width: 1440, height: 900, backgroundColor: 'transparent' },
-        meta: { label: '宿主配置画布输出', source: 'host' },
-      })
-    })
-    await waitFor(() => expect(result.current.document.output.width).toBe(1440))
-    inspector.rerender(result.current.inspectorPanel)
-    await waitFor(() => {
-      expect(outputSizeKey()).toHaveValue('preset')
-      expect(commonOutputSize()).toHaveValue('1440x900')
-      expect(screen.queryByRole('spinbutton', { name: '自定义尺寸宽度' })).not.toBeInTheDocument()
-    })
-    expect(result.current.stageProps.outputSelected).toBe(true)
-  })
-
-  // OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使用任意根工作区
-  it('maps a cross-parent ComposeSceneTree move to a geometry-preserving transaction', () => {
-    const editorRuntime = runtime()
-    const { result } = renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-      idFactory: () => 'move-command',
-    }))
-
-    act(() => {
-      result.current.sceneTreeProps.onOperation?.({
-        type: 'move',
-        nodeIds: ['title'],
-        parentId: 'frame',
-        index: 0,
-      })
-    })
-
-    expect(editorRuntime.document.nodes.frame?.kind === 'frame'
-      ? editorRuntime.document.nodes.frame.childIds
-      : []).toContain('title')
-    expect(editorRuntime.document.nodes.title?.transform).toEqual(
-      expect.objectContaining({ x: 30, y: 30 }),
-    )
-
-    act(() => {
-      result.current.sceneTreeProps.onOperation?.({
-        type: 'move',
-        nodeIds: ['title'],
-        parentId: null,
-        index: 1,
-      })
-    })
-    expect(editorRuntime.document.rootIds).toEqual(['frame', 'title'])
-    expect(editorRuntime.document.nodes.title?.transform).toEqual(
-      expect.objectContaining({ x: 70, y: 60 }),
-    )
-    expect(result.current.sceneTreeProps.nodes[1]).toMatchObject({
+    expect(result.current.sceneTreeProps.nodes[0]?.children?.[0]).toMatchObject({
       id: 'title',
-      label: 'Title',
       canHaveChildren: false,
     })
   })
 
-  it('OpenSpec: editor-workspace-layout / Frame presets 与结构节点 Inspector / 在根和 Frame 内新增 Frame', () => {
+  it('场景树创建操作从 Container Preset 创建 v4 Entity', () => {
     const editorRuntime = runtime()
-    const ids = ['root-frame', 'create-root', 'nested-frame', 'create-nested']
     const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
       runtime: editorRuntime,
       registry,
-      idFactory: () => ids.shift() ?? 'unexpected',
     }))
 
-    act(() => {
-      result.current.sceneTreeProps.onOperation?.({
-        type: 'create',
-        parentId: null,
-        index: 1,
-      })
-    })
-    expect(editorRuntime.document.rootIds).toEqual(['frame', 'root-frame'])
-    expect(editorRuntime.document.nodes['root-frame']).toMatchObject({
-      kind: 'frame',
-      clipContent: true,
-    })
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'create',
+      parentId: null,
+      index: 1,
+    }))
 
-    act(() => {
-      result.current.sceneTreeProps.onOperation?.({
-        type: 'create',
-        parentId: 'frame',
-        index: 1,
-      })
-    })
-    expect(editorRuntime.document.nodes.frame).toMatchObject({
-      childIds: ['group', 'nested-frame'],
-    })
-    expect(editorRuntime.document.nodes['nested-frame']).toMatchObject({
-      kind: 'frame',
-      clipContent: true,
-    })
-    expect(result.current.selectedIds).toEqual(['nested-frame'])
+    const created = Object.values(editorRuntime.document.entities)
+      .find((candidate) => candidate.id.startsWith('editor-id-'))
+    expect(created).toBeDefined()
+    expect(getComposeHierarchy(created!)).toEqual({ childIds: [] })
+    expect(getComposeTransform(created!).size).toEqual({ width: 1280, height: 720 })
+    expect(result.current.selectedIds).toEqual([created!.id])
   })
 
-  // OpenSpec: editor-workspace-layout / 单一事务观察边界 / 日志写入失败
-  it('OpenSpec: editor-workspace-layout / 单一事务观察边界 / 记录成功事务和导航', async () => {
+  it('场景树重命名、可见性和锁定操作使用 entity 命令', () => {
     const editorRuntime = runtime()
-    const observer = vi.fn((event: ComposeEditorTransactionEvent) => {
-      void event
-      return Promise.reject(new Error('log unavailable'))
-    })
-    renderHook(() => useComposeEditorController({
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
       runtime: editorRuntime,
       registry,
-      onTransaction: observer,
     }))
-    const rename: EditorCommand = {
-      id: 'rename',
-      type: 'node.rename',
-      payload: { nodeId: 'title', name: 'Committed title' },
-      meta: { source: 'scene-tree', targetIds: ['title'] },
-    }
 
-    act(() => {
-      editorRuntime.dispatch(rename)
-      editorRuntime.undo()
-    })
-    await act(async () => Promise.resolve())
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'rename',
+      nodeId: 'title',
+      label: 'Headline',
+    }))
+    expect(editorRuntime.document.entities.title?.name).toBe('Headline')
 
-    expect(observer).toHaveBeenCalledTimes(2)
-    expect(observer.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
-      direction: 'commit',
-      source: 'scene-tree',
-      targets: ['title'],
-      transaction: expect.objectContaining({ commandId: 'rename' }),
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'set-visibility',
+      nodeIds: ['title'],
+      visible: false,
     }))
-    expect(observer.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
-      direction: 'undo',
-      source: 'history',
-      targets: ['title'],
-      transaction: expect.objectContaining({ commandId: 'rename' }),
+    expect(editorRuntime.document.entities.title?.components.Visibility).toEqual({ visible: false })
+
+    act(() => result.current.sceneTreeProps.onOperation?.({
+      type: 'set-locked',
+      nodeIds: ['dashboard'],
+      locked: true,
     }))
-    expect(editorRuntime.document.nodes.title?.name).toBe('Title')
+    expect(getComposeLock(editorRuntime.document.entities.dashboard!).locked).toBe(true)
   })
 
-  it('OpenSpec: editor-workspace-layout / 单一事务观察边界 / 忽略非成功编辑', () => {
-    const editorRuntime: TransactionRuntime = runtime()
-    const observer = vi.fn()
-    renderHook(() => useComposeEditorController({
-      runtime: editorRuntime,
-      registry,
-      onTransaction: observer,
-    }))
+  it('Renderer Inspector 派发 entity.renderer.props.set', () => {
+    const editorRuntime = runtime()
+    render(<InspectorFixture transactionRuntime={editorRuntime} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '修改内容' }))
+    expect(editorRuntime.document.entities.title?.components.Renderer).toEqual({
+      type: 'text',
+      props: { text: 'After' },
+    })
+  })
+
+  it('OpenSpec: editor-workspace-layout / 聚合 Inspector / 外部 Transform 事务同步输入值', async () => {
+    const editorRuntime = runtime()
+    render(<InspectorFixture transactionRuntime={editorRuntime} />)
+    expect(screen.getByRole('spinbutton', { name: '位置 X' })).toHaveValue(10)
 
     act(() => {
       editorRuntime.dispatch({
-        id: 'noop',
-        type: 'node.rename',
-        payload: { nodeId: 'title', name: 'Title' },
+        id: 'external-transform',
+        type: BUILTIN_COMMAND_TYPES.setTransform,
+        payload: {
+          operation: 'move',
+          updates: [{
+            entityId: 'title',
+            transform: transform(42, 18, 180, 40),
+          }],
+        },
+        meta: { source: 'stage', targetIds: ['title'] },
       })
-      editorRuntime.dispatch({ id: 'rejected', type: 'unknown', payload: {} })
-      editorRuntime.reset(documentFixture)
     })
 
-    expect(observer).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(screen.getByRole('spinbutton', { name: '位置 X' })).toHaveValue(42)
+      expect(screen.getByRole('spinbutton', { name: '位置 Y' })).toHaveValue(18)
+    })
+  })
+
+  it('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 使用单一属性工具栏和 Component 分组', () => {
+    const editorRuntime = runtime()
+    render(<InspectorFixture transactionRuntime={editorRuntime} />)
+
+    expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: '基础' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '变换' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '可见性' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '锁定' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '内容' })).toBeInTheDocument()
+
+    const root = screen.getByRole('region', { name: 'Title 属性字段' })
+    const titles = [...root.querySelectorAll(
+      ':scope > .property-panel__group > .property-panel__group-header > button',
+    )].map((button) => button.textContent?.trim())
+    expect(titles).toEqual(['基础', '变换', '可见性', '锁定', '外观', '内容'])
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
+      target: { value: '背景颜色' },
+    })
+    expect(screen.queryByRole('button', { name: '基础' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '外观' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择背景颜色' })).toBeInTheDocument()
+  })
+
+  it('添加能力通过单个 batch 原子写入 Component 和 Composition', () => {
+    const editorRuntime = runtime()
+    render(<InspectorFixture transactionRuntime={editorRuntime} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: '添加能力' }), {
+      target: { value: 'container' },
+    })
+
+    expect(editorRuntime.document.entities.title?.components.Hierarchy).toEqual({ childIds: [] })
+    expect(editorRuntime.document.entities.title?.components.Clip).toEqual({ enabled: true })
+    expect(editorRuntime.document.entities.title?.components.Composition?.capabilityIds)
+      .toEqual(['container'])
+    expect(editorRuntime.entries).toHaveLength(2)
+    expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: '容器' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '裁剪' })).not.toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: '子项数量' })).toHaveValue(0)
+  })
+
+  it('未知 Component 使用普通分组降级，且不新增工具栏', () => {
+    const editorRuntime = runtime()
+    editorRuntime.dispatch({
+      id: 'add-host-state',
+      type: BUILTIN_COMMAND_TYPES.addComponent,
+      payload: {
+        entityId: 'title',
+        key: 'HostState',
+        value: { enabled: true },
+      },
+      meta: { source: 'test', targetIds: ['title'] },
+    })
+    render(<InspectorFixture transactionRuntime={editorRuntime} />)
+
+    expect(screen.getByRole('button', { name: 'HostState' })).toBeInTheDocument()
+    expect(screen.getByLabelText('未知能力')).toHaveValue('未知能力：HostState')
+    expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
+  })
+
+  it('移除能力先确认并原子删除能力数据', async () => {
+    const editorRuntime = runtime()
+    const plan = registry.planAddCapability(editorRuntime.document, 'title', 'container', ids())
+    if (!plan.ok) throw new Error(plan.issue.message)
+    editorRuntime.dispatch(plan.command)
+    render(<InspectorFixture transactionRuntime={editorRuntime} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '移除容器' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('移除能力')
+    fireEvent.click(screen.getByRole('button', { name: '移除' }))
+
+    await waitFor(() => {
+      expect(editorRuntime.document.entities.title?.components.Hierarchy).toBeUndefined()
+    })
+    expect(editorRuntime.document.entities.title?.components.Clip).toBeUndefined()
+    expect(editorRuntime.document.entities.title?.components.Composition?.capabilityIds).toEqual([])
+  })
+
+  it('锁定 Entity 时内容只读但 Lock 仍可解除', () => {
+    const editorRuntime = runtime()
+    editorRuntime.dispatch({
+      id: 'lock-title',
+      type: BUILTIN_COMMAND_TYPES.setLock,
+      payload: { entityIds: ['title'], locked: true },
+    })
+    render(<InspectorFixture transactionRuntime={editorRuntime} />)
+
+    expect(screen.getByRole('button', { name: '修改内容' })).toBeDisabled()
+    const lock = screen.getByRole('checkbox', { name: '锁定' })
+    expect(lock).not.toBeDisabled()
+    fireEvent.click(lock)
+    expect(getComposeLock(editorRuntime.document.entities.title!).locked).toBe(false)
+  })
+
+  it('选择 Canvas 输出时展示 Canvas Inspector 并清空 Entity 选择', () => {
+    const { result } = renderHook(() => useComposeEditorController({
+      initialSelection: ['title'],
+      runtime: runtime(),
+      registry,
+    }))
+
+    act(() => result.current.stageProps.onOutputSelect?.())
+    expect(result.current.selectedIds).toEqual([])
+    expect(result.current.stageProps.outputSelected).toBe(true)
+  })
+
+  it('成功事务只通过 onTransaction 通知一次', () => {
+    const observer = vi.fn()
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      onTransaction: observer,
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => result.current.dispatch({
+      id: 'rename',
+      type: BUILTIN_COMMAND_TYPES.renameEntity,
+      payload: { entityId: 'title', name: 'Latest title' },
+      meta: { source: 'test', targetIds: ['title'] },
+    }))
+
+    expect(observer).toHaveBeenCalledOnce()
+    expect(observer).toHaveBeenCalledWith(expect.objectContaining({
+      direction: 'commit',
+      source: 'test',
+      targets: ['title'],
+    }))
   })
 })

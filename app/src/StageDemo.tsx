@@ -1,16 +1,19 @@
 import type {
-  ComposeComponentDefinition,
-  ComposeComponentInspectorProps,
-  ComposeComponentRendererProps,
+  ComposeEntityPreset,
+  ComposeRendererDefinition,
+  ComposeRendererInspectorProps,
+  ComposeRendererProps,
 } from '@compose-ui/component-registry'
 import {
+  BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
   createTransactionRuntime,
+  getComposeHierarchy,
 } from '@compose-ui/core'
 import type {
-  ComposeComponentNode,
   ComposeDocument,
+  ComposeEntity,
   JsonObject,
   JsonValue,
 } from '@compose-ui/core'
@@ -54,11 +57,11 @@ function PreviewIcon() {
 }
 
 const emptyDocument: ComposeDocument = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   canvas: createDefaultCanvasSettings(),
   output: createDefaultOutputSettings(),
   rootIds: [],
-  nodes: {},
+  entities: {},
 }
 
 const chartSchema = v.object({
@@ -67,23 +70,24 @@ const chartSchema = v.object({
 })
 
 function setAllProps(
-  node: ComposeComponentNode,
+  entity: ComposeEntity,
+  current: JsonObject,
   value: JsonObject,
-  dispatch: ComposeComponentInspectorProps['dispatch'],
+  dispatch: ComposeRendererInspectorProps['dispatch'],
   mergeKey: string,
 ) {
-  const changed = [...new Set([...Object.keys(node.props), ...Object.keys(value)])]
-    .filter((key) => JSON.stringify(node.props[key]) !== JSON.stringify(value[key]))
+  const changed = [...new Set([...Object.keys(current), ...Object.keys(value)])]
+    .filter((key) => JSON.stringify(current[key]) !== JSON.stringify(value[key]))
     .slice(0, 2)
-    .map((key) => `${key} ${formatLogValue(node.props[key])} → ${formatLogValue(value[key])}`)
+    .map((key) => `${key} ${formatLogValue(current[key])} → ${formatLogValue(value[key])}`)
   dispatch({
-    id: `inspector:${node.id}:${Date.now()}`,
-    type: 'node.props.set',
-    payload: { nodeId: node.id, path: [], value },
+    id: `inspector:${entity.id}:${Date.now()}`,
+    type: BUILTIN_COMMAND_TYPES.setRendererProps,
+    payload: { entityId: entity.id, props: value },
     meta: {
-      label: `Update ${node.name}${changed.length > 0 ? ` · ${changed.join(', ')}` : ''}`,
+      label: `Update ${entity.name}${changed.length > 0 ? ` · ${changed.join(', ')}` : ''}`,
       source: 'inspector',
-      targetIds: [node.id],
+      targetIds: [entity.id],
       mergeKey,
     },
   })
@@ -95,7 +99,7 @@ function formatLogValue(value: JsonValue | undefined) {
   return serialized.length > 28 ? `${serialized.slice(0, 27)}…` : serialized
 }
 
-function ChartRenderer({ props }: ComposeComponentRendererProps) {
+function ChartRenderer({ props }: ComposeRendererProps) {
   const root = useRef<HTMLDivElement>(null)
   const title = typeof props.title === 'string' ? props.title : '季度数据'
   const values = useMemo(() => Array.isArray(props.values)
@@ -130,41 +134,76 @@ function ChartRenderer({ props }: ComposeComponentRendererProps) {
   return <div aria-label={title} className="stage-demo__chart" ref={root} role="img" />
 }
 
-function ChartInspector({ node, dispatch }: ComposeComponentInspectorProps) {
-  const values = Array.isArray(node.props.values)
-    ? node.props.values.filter((item): item is number => typeof item === 'number')
+function ChartInspector({ entity, renderer, dispatch, readOnly }: ComposeRendererInspectorProps) {
+  const values = Array.isArray(renderer.props.values)
+    ? renderer.props.values.filter((item): item is number => typeof item === 'number')
     : [18, 28, 22, 36]
   const value = {
-    title: typeof node.props.title === 'string' ? node.props.title : '季度数据',
+    title: typeof renderer.props.title === 'string' ? renderer.props.title : '季度数据',
     values,
   }
   return (
     <ComposePropertyPanel
       aria-label="ECharts 图表属性"
       defaultValue={{ title: '季度数据', values: [18, 28, 22, 36] }}
+      readOnly={readOnly}
       schema={chartSchema}
       value={value}
       onValueChange={(next) =>
-        setAllProps(node, next, dispatch, `inspector:${node.id}`)}
+        setAllProps(
+          entity,
+          renderer.props,
+          next,
+          dispatch,
+          `inspector:${entity.id}`,
+        )}
     />
   )
 }
 
-const echartsDefinition = {
+const echartsRenderer = {
   type: 'echarts-bar',
   label: 'ECharts Chart',
-  icon: <span aria-hidden="true">▥</span>,
-  defaultSize: { width: 420, height: 260 },
-  createDefaultProps: () => ({
-    title: 'Quarterly data',
-    values: [18, 28, 22, 36],
-  }),
   renderer: ChartRenderer,
   inspector: ChartInspector,
-} satisfies ComposeComponentDefinition
+} satisfies ComposeRendererDefinition
+
+const echartsPreset = {
+  id: 'echarts-bar',
+  label: 'ECharts Chart',
+  defaultName: 'ECharts Chart',
+  icon: <span aria-hidden="true">▥</span>,
+  createComponents: () => ({
+    Transform: {
+      position: { x: 0, y: 0 },
+      size: { width: 420, height: 260 },
+      rotation: 0,
+    },
+    Visibility: { visible: true },
+    Lock: { locked: false },
+    Appearance: {
+      backgroundColor: 'transparent',
+      borderColor: 'transparent',
+      borderWidth: 0,
+      borderRadius: 0,
+      opacity: 1,
+      shadow: null,
+    },
+    Renderer: {
+      type: 'echarts-bar',
+      props: {
+        title: 'Quarterly data',
+        values: [18, 28, 22, 36],
+      },
+    },
+  }),
+} satisfies ComposeEntityPreset
 
 const basicMaterials = createComposeBasicMaterials({
-  extensions: [echartsDefinition],
+  extensions: {
+    renderers: [echartsRenderer],
+    presets: [echartsPreset],
+  },
 })
 const { registry } = basicMaterials
 
@@ -178,22 +217,24 @@ function eventSummary(event: ComposeEditorTransactionEvent) {
 }
 
 function snapshotTargets(document: ComposeDocument, targetIds: readonly string[]) {
-  if (targetIds.length === 1) return document.nodes[targetIds[0]!] ?? null
-  return Object.fromEntries(targetIds.map((id) => [id, document.nodes[id] ?? null]))
+  if (targetIds.length === 1) return document.entities[targetIds[0]!] ?? null
+  return Object.fromEntries(targetIds.map((id) => [id, document.entities[id] ?? null]))
 }
 
 function eventCategory(event: ComposeEditorTransactionEvent): ComposeOperationLogCategory {
   const commandType = event.transaction?.commandType ?? ''
   if (
-    commandType.startsWith('node.props.')
-    || commandType.startsWith('node.style.')
+    commandType.startsWith('entity.renderer.')
+    || commandType.startsWith('entity.appearance.')
+    || commandType.startsWith('entity.component.')
+    || commandType.startsWith('entity.transform.')
     || commandType === 'transaction.batch'
       && event.source === 'inspector'
   ) return 'property'
   if (
-    commandType === 'node.create'
-    || commandType === 'node.delete'
-    || commandType === 'node.duplicate'
+    commandType === BUILTIN_COMMAND_TYPES.createEntity
+    || commandType === BUILTIN_COMMAND_TYPES.deleteEntity
+    || commandType === BUILTIN_COMMAND_TYPES.duplicateEntity
   ) {
     return 'component'
   }
@@ -202,7 +243,7 @@ function eventCategory(event: ComposeEditorTransactionEvent): ComposeOperationLo
 
 function targetPath(event: ComposeEditorTransactionEvent, targetId: string) {
   const patch = event.transaction?.forward.find((item) =>
-    item.path[0] === 'nodes' && item.path[1] === targetId)
+    item.path[0] === 'entities' && item.path[1] === targetId)
   return patch?.path.slice(2)
 }
 
@@ -214,7 +255,7 @@ export function StageDemoWorkspace() {
   }))
   const previousDocument = useRef(runtime.document)
   const [previewOpen, setPreviewOpen] = useState(false)
-  const [previewMode, setPreviewMode] = useState<'document' | 'frame'>('document')
+  const [previewMode, setPreviewMode] = useState<'document' | 'container'>('document')
   const nextId = useRef(0)
   const idFactory = useCallback(() => `stage-demo-${nextId.current++}`, [])
   const recordTransaction = useCallback((event: ComposeEditorTransactionEvent) => {
@@ -231,8 +272,8 @@ export function StageDemoWorkspace() {
       source: event.source,
       targets: event.targets.map((componentId) => ({
         componentId,
-        componentLabel: afterDocument.nodes[componentId]?.name
-          ?? beforeDocument.nodes[componentId]?.name,
+        componentLabel: afterDocument.entities[componentId]?.name
+          ?? beforeDocument.entities[componentId]?.name,
         path: targetPath(event, componentId),
       })),
       metadata: {
@@ -256,8 +297,6 @@ export function StageDemoWorkspace() {
   const controller = useComposeEditorController({
     runtime,
     registry,
-    framePresets: basicMaterials.framePresets,
-    containerInspector: basicMaterials.ContainerInspector,
     idFactory,
     onTransaction: recordTransaction,
   })
@@ -266,8 +305,9 @@ export function StageDemoWorkspace() {
     () => createComposeAssetResolver(assetProvider),
     [assetProvider],
   )
-  const selectedFrameId = controller.selectedIds.length === 1
-    && controller.document.nodes[controller.selectedIds[0]!]?.kind === 'frame'
+  const selectedContainerId = controller.selectedIds.length === 1
+    && controller.document.entities[controller.selectedIds[0]!]
+    && getComposeHierarchy(controller.document.entities[controller.selectedIds[0]!]!)
     ? controller.selectedIds[0]!
     : null
 
@@ -307,18 +347,18 @@ export function StageDemoWorkspace() {
             <button type="button" onClick={() => setPreviewOpen(false)}>关闭预览</button>
             <button type="button" onClick={() => setPreviewMode('document')}>文档</button>
             <button
-              disabled={!selectedFrameId}
+              disabled={!selectedContainerId}
               type="button"
-              onClick={() => setPreviewMode('frame')}
+              onClick={() => setPreviewMode('container')}
             >
-              选中 Frame
+              选中容器
             </button>
             <ComposePreview
               assetResolver={assetResolver}
               document={controller.document}
               registry={registry}
-              target={previewMode === 'frame' && selectedFrameId
-                ? { kind: 'frame', frameId: selectedFrameId }
+              target={previewMode === 'container' && selectedContainerId
+                ? { kind: 'container', entityId: selectedContainerId }
                 : { kind: 'document' }}
             />
           </div>

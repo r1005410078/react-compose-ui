@@ -1,35 +1,54 @@
 # @compose-ui/component-registry
 
-宿主 React 组件的实例级注册协议。注册表不拥有文档或模块级全局状态。
+实例级 ECS 注册协议。Registry 不拥有文档、History 或模块级全局状态，统一注册 Renderer、
+Component、Entity Preset 和 Capability。
 
 ```tsx
-import { createComposeComponentRegistry } from '@compose-ui/component-registry'
+import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 
-const registry = createComposeComponentRegistry([{
-  type: 'metric',
-  label: '指标卡',
-  defaultName: '销售指标',
-  icon: <MetricIcon />,
-  defaultSize: { width: 280, height: 140 },
-  createDefaultProps: () => ({ title: '销售额', value: 0 }),
-  createDefaultStyle: () => ({ backgroundColor: '#172033', borderRadius: 12 }),
-  renderer: ({ props, mode }) => (
-    <MetricCard mode={mode} title={String(props.title)} value={Number(props.value)} />
-  ),
-  inspector: ({ node, dispatch }) => (
-    <MetricInspector node={node} dispatch={dispatch} />
-  ),
-}])
+const registry = createComposeEntityRegistry({
+  renderers: [{
+    type: 'metric',
+    label: '指标卡',
+    renderer: ({ props, mode }) => (
+      <MetricCard
+        mode={mode}
+        title={String(props.title)}
+        value={Number(props.value)}
+      />
+    ),
+  }],
+  presets: [{
+    id: 'metric',
+    label: '指标卡',
+    defaultName: '销售指标',
+    createComponents: () => ({
+      Transform: {
+        position: { x: 0, y: 0 },
+        size: { width: 280, height: 140 },
+        rotation: 0,
+      },
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Appearance: { backgroundColor: '#172033' },
+      Renderer: { type: 'metric', props: { title: '销售额', value: 0 } },
+    }),
+  }],
+})
 ```
 
-`type` 在实例内必须唯一且非空，默认尺寸必须为有限正数，默认 props 必须是严格 JSON 对象。
-`createSeed(type)` 每次返回独立的 props/style 副本和新节点名称。`ComposeRegistryComponent` 与 `ComposeRegistryInspector` 隔离
-宿主 renderer 异常；未知组件显示可访问占位，文档节点仍可在 Stage 中选择、移动和删除。
+`createSeed(presetId)` 会自动写入 `Composition`，记录 Preset 的基础 Component Keys，并为每次
+调用返回隔离的数据副本。Palette 只消费 Preset；Renderer 负责 Stage/Preview 内容，Component
+Definition 负责校验、排序和可选 Inspector。
 
-资源型 definition 可设置 `paletteHidden: true` 隐藏普通 Component Library 入口，并通过
-`assetDrop` 声明 MIME 接受规则和异步 seed factory。`createAssetSeed()` 按注册顺序选择第一个
-接受资源的 definition，返回结构化成功、不支持或 factory 错误。renderer 通过
-`ComposeComponentRendererProps.assetResolver` 读取最新资源内容，引用本身保持为普通 JSON props。
+Capability 是用户可添加的一组 Component。Registry 校验依赖无环、冲突关系和 Component Key
+归属不重叠；添加能力会自动补齐依赖并规划为单个 `transaction.batch`。基础 Component 不可移除，
+被其他能力依赖、仍含子项或 Registry 定义缺失的能力也不会被猜测删除。
 
-本包依赖 core 与轻量 assets 协议，并将 React 保持为 peer dependency；不依赖 editor、
-asset-browser 或 property-panel。
+`ComposeRegistryEntityRenderer`、`ComposeRegistryComponentInspector` 和
+`ComposeRegistryRendererInspector` 隔离宿主异常。未知 Renderer 或 Component 显示可访问降级，
+Entity 仍可选择、移动和删除。
+
+资源型 Preset 可通过 `assetDrop` 声明 MIME 接受规则和异步 seed factory。Registry 依赖
+`core` 与轻量 `assets` 协议，React 保持 peer dependency；不依赖 editor、asset-browser 或
+property-panel。

@@ -1,2 +1,5 @@
-export { DEFAULT_COMPOSE_IMAGE_DEFINITION } from './definition'
-export { createImageDefinition } from './definition'
+export {
+  DEFAULT_COMPOSE_IMAGE_PRESET,
+  DEFAULT_COMPOSE_IMAGE_RENDERER,
+  createImageMaterial,
+} from './definition'

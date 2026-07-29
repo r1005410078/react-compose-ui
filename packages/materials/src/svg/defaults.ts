@@ -1,4 +1,4 @@
-import type { JsonObject, NodeStyle } from '@compose-ui/core'
+import type { ComposeAppearance, JsonObject } from '@compose-ui/core'
 
 export const DEFAULT_SVG_SIZE = Object.freeze({ width: 320, height: 180 })
 export const DEFAULT_SVG_PROPS: JsonObject = Object.freeze({
@@ -10,7 +10,7 @@ export const DEFAULT_SVG_PROPS: JsonObject = Object.freeze({
   overrideStroke: false,
   strokeColor: '#ffffff',
 })
-export const DEFAULT_SVG_STYLE: NodeStyle = Object.freeze({
+export const DEFAULT_SVG_APPEARANCE: ComposeAppearance = Object.freeze({
   backgroundColor: 'transparent',
   borderColor: 'transparent',
   borderWidth: 0,

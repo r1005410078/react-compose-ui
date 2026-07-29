@@ -37,6 +37,7 @@ export function useSyncExternalStoreWithSelector<Snapshot, Selection>(
 
     const memoizedSelector = (nextSnapshot: Snapshot): Selection => {
       if (!hasMemo) {
+        // eslint-disable-next-line react-hooks/immutability -- 与 React 官方 shim 相同，闭包只缓存本次 useMemo 生命周期内的 snapshot。
         hasMemo = true
         memoizedSnapshot = nextSnapshot
         const nextSelection = selector(nextSnapshot)

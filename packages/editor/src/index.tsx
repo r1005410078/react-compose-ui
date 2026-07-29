@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 库公共入口必须同时导出 React 组件、控制 Hook 和偏好 factory。 */
 /**
  * 提供可嵌入 React 宿主的 Compose UI 编辑器工作区。
  *
@@ -11,14 +12,12 @@ export {
   type ComposeEditorProps,
   type ComposeEditorSlots,
 } from './compose-editor'
-// eslint-disable-next-line react-refresh/only-export-components -- 公共入口同时导出 Hook 与工厂。
 export {
   useComposeEditorController,
   type ComposeEditorController,
   type ComposeEditorTransactionEvent,
   type UseComposeEditorControllerOptions,
 } from './controller'
-// eslint-disable-next-line react-refresh/only-export-components -- 偏好工厂是纯函数。
 export { createDefaultComposeEditorPreferences } from './preferences'
 export type {
   ComposeEditorKeybinding,

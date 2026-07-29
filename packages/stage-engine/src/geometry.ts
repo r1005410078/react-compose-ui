@@ -1,4 +1,9 @@
-import type { ComposeDocument, NodeTransform } from '@compose-ui/core'
+import {
+  getComposeHierarchy,
+  getComposeTransform,
+  type ComposeDocument,
+  type ComposeTransform,
+} from '@compose-ui/core'
 
 /**
  * 二维坐标。
@@ -42,6 +47,15 @@ export interface StageMatrix {
   readonly d: number
   readonly e: number
   readonly f: number
+}
+
+/** Stage 几何算法使用的扁平 Transform 投影；不进入 ComposeDocument。 @public */
+export interface StageTransform {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+  readonly rotation: number
 }
 
 /**
@@ -172,7 +186,7 @@ function rotation(degrees: number): StageMatrix {
  *
  * @public
  */
-export function matrixFromTransform(transform: NodeTransform): StageMatrix {
+export function matrixFromTransform(transform: StageTransform): StageMatrix {
   const centerX = transform.width / 2
   const centerY = transform.height / 2
   return multiplyMatrices(
@@ -194,7 +208,7 @@ export function decomposeMatrix(
   matrix: StageMatrix,
   width: number,
   height: number,
-): NodeTransform {
+): StageTransform {
   const rotationRadians = Math.atan2(matrix.b, matrix.a)
   const rotation = rotationRadians * 180 / Math.PI
   const cosine = Math.cos(rotationRadians)
@@ -251,14 +265,14 @@ export function rectMappingMatrix(from: StageRect, to: StageRect): StageMatrix {
 }
 
 /**
- * 返回文档节点的直接父节点 ID；Frame 返回 null。
+ * 返回 Entity 的直接父 Entity ID；根 Entity 返回 null。
  *
  * @public
  */
-export function getNodeParentId(document: ComposeDocument, nodeId: string): string | null {
-  if (document.rootIds.includes(nodeId)) return null
-  for (const node of Object.values(document.nodes)) {
-    if (node.kind !== 'component' && node.childIds.includes(nodeId)) return node.id
+export function getEntityParentId(document: ComposeDocument, entityId: string): string | null {
+  if (document.rootIds.includes(entityId)) return null
+  for (const entity of Object.values(document.entities)) {
+    if (getComposeHierarchy(entity)?.childIds.includes(entityId)) return entity.id
   }
   return null
 }
@@ -268,17 +282,17 @@ export function getNodeParentId(document: ComposeDocument, nodeId: string): stri
  *
  * @public
  */
-export function getNodeWorldMatrix(
+export function getEntityWorldMatrix(
   document: ComposeDocument,
-  nodeId: string,
+  entityId: string,
 ): StageMatrix {
-  const node = document.nodes[nodeId]
-  if (!node) throw new Error(`Unknown node ${nodeId}`)
-  const local = matrixFromTransform(node.transform)
-  const parentId = getNodeParentId(document, nodeId)
+  const entity = document.entities[entityId]
+  if (!entity) throw new Error(`Unknown Entity ${entityId}`)
+  const local = matrixFromTransform(toStageTransform(getComposeTransform(entity)))
+  const parentId = getEntityParentId(document, entityId)
   return parentId === null
     ? local
-    : multiplyMatrices(getNodeWorldMatrix(document, parentId), local)
+    : multiplyMatrices(getEntityWorldMatrix(document, parentId), local)
 }
 
 /**
@@ -286,15 +300,16 @@ export function getNodeWorldMatrix(
  *
  * @public
  */
-export function getNodeWorldBounds(document: ComposeDocument, nodeId: string): StageRect {
-  const node = document.nodes[nodeId]
-  if (!node) throw new Error(`Unknown node ${nodeId}`)
-  const matrix = getNodeWorldMatrix(document, nodeId)
+export function getEntityWorldBounds(document: ComposeDocument, entityId: string): StageRect {
+  const entity = document.entities[entityId]
+  if (!entity) throw new Error(`Unknown Entity ${entityId}`)
+  const transform = getComposeTransform(entity)
+  const matrix = getEntityWorldMatrix(document, entityId)
   const points = [
     applyMatrix(matrix, { x: 0, y: 0 }),
-    applyMatrix(matrix, { x: node.transform.width, y: 0 }),
-    applyMatrix(matrix, { x: node.transform.width, y: node.transform.height }),
-    applyMatrix(matrix, { x: 0, y: node.transform.height }),
+    applyMatrix(matrix, { x: transform.size.width, y: 0 }),
+    applyMatrix(matrix, { x: transform.size.width, y: transform.size.height }),
+    applyMatrix(matrix, { x: 0, y: transform.size.height }),
   ]
   const xs = points.map((point) => point.x)
   const ys = points.map((point) => point.y)
@@ -305,6 +320,26 @@ export function getNodeWorldBounds(document: ComposeDocument, nodeId: string): S
     y,
     width: Math.max(...xs) - x,
     height: Math.max(...ys) - y,
+  }
+}
+
+/** 将持久化 ECS Transform 投影为 Stage 几何值。 @public */
+export function toStageTransform(transform: ComposeTransform): StageTransform {
+  return {
+    x: transform.position.x,
+    y: transform.position.y,
+    width: transform.size.width,
+    height: transform.size.height,
+    rotation: transform.rotation,
+  }
+}
+
+/** 将 Stage 几何值转回持久化 ECS Transform。 @public */
+export function toComposeTransform(transform: StageTransform): ComposeTransform {
+  return {
+    position: { x: transform.x, y: transform.y },
+    size: { width: transform.width, height: transform.height },
+    rotation: transform.rotation,
   }
 }
 

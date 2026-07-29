@@ -17,8 +17,8 @@ import '@compose-ui/command-panel/styles.css'
     fields: [{ name: 'name', label: '名称', type: 'string', required: true }],
     createCommand: ({ name }) => ({
       id: crypto.randomUUID(),
-      type: 'node.rename',
-      payload: { nodeId: 'heading', name },
+      type: 'entity.name.set',
+      payload: { entityId: 'heading', name },
       meta: { label: '重命名', source: 'command-panel', targetIds: ['heading'] },
     }),
   }]}

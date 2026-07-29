@@ -5,7 +5,11 @@
  */
 import './styles.css'
 
-export { ComposePropertyPanel } from './property-panel'
+export {
+  ComposePropertyPanel,
+  ComposePropertyPanelRoot,
+  ComposePropertyPanelSection,
+} from './property-panel'
 // eslint-disable-next-line react-refresh/only-export-components -- 公开纯绑定解析函数与组件共用包入口。
 export { resolveComposePropertyBindings } from './property-panel'
 export { PROPERTY_PANEL_BASE_EDITOR_IDS as COMPOSE_PROPERTY_PANEL_BASE_EDITOR_IDS } from './semantic-editors'
@@ -39,5 +43,7 @@ export type {
   ComposePropertyPanelRendererProps,
   ComposePropertyPanelRenderer,
   ComposePropertyPanelProps,
+  ComposePropertyPanelRootProps,
+  ComposePropertyPanelSectionProps,
 } from './property-panel'
 export type { PropertyPanelBaseEditorId as ComposePropertyPanelBaseEditorId } from './semantic-editors'

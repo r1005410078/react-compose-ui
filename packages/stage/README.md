@@ -1,45 +1,13 @@
 # @compose-ui/stage
 
-DOM Scene Layer 与屏幕坐标 SVG/DOM Overlay 组合的无限编辑 Stage。
+DOM Scene Layer 与屏幕坐标 Overlay 组合的无限编辑 Stage。
 
-- 固定 24px 顶部/左侧标尺与 10px 右侧/底部可访问滚动条不参与世界缩放。
-- 自适应细网格和主网格从 `document.canvas` 读取 X/Y step、offset 与主线间隔；投影间距达到
-  2 CSS px 时显示每条配置格线，更密时只按二次幂抽稀为原网格子集，且不改变实际吸附刻度。
-- 红色 X 轴、绿色 Y 轴标记世界 `(0,0)`；标尺随 viewport 显示正负坐标和实时选择 AABB 尺寸。
-- `document.output` 在网格之上绘制透明可命中的 1 屏幕像素边框；未选中时四边使用统一
-  主题中性色，选中 Canvas 时统一使用强调色，避免与独立的红色 X 轴、绿色 Y 轴混淆；
-  世界 `(0,0)` 在连续坐标轴之上显示精确复刻 Godot
-  `EditorPosition` 的 16×16 双填充前景标记。通过可选
-  `outputSelected`/`onOutputSelect` 可把输出区域接入宿主 Canvas Inspector，且不会伪装成节点。
-- DOM Scene 渲染根级或嵌套 Frame 与 registry React 组件；SVG Overlay 渲染 marquee、
-  八向缩放/旋转手柄、全局辅助线与 6 屏幕像素智能吸附线。
-- move 与八向 resize 按“辅助线/节点智能吸附优先，网格回退”工作；Cmd/Ctrl 可临时关闭全部
-  吸附。
-- 可从顶部或左侧标尺拖出辅助线，从交叉角一次创建双轴辅助线；拖回对应标尺删除。
-- Pointer/键盘事件由 Stage 归一化后发送到 `@compose-ui/stage-engine`；引擎手势仅维护
-  preview snapshot，pointerup 最多返回一个 `node.transform.set`、canvas 命令或原子 batch。
-- 滚动范围包含可见节点、世界原点和当前视口，在 Stage 会话内单调扩展；滚动只更新受控
-  viewport，不进入文档历史。
-- `ComposeComponentPalette` 与 `ComposeStage` 通过实例级 `StageInteractionController` 共享内部手势和
-  Pointer/键盘外部拖入会话。
-- `ComposeStageFramePreset` 让 Palette 在 definitions 之前显示 Frame；拖入最深合法 Frame，未命中时
-  创建为隐式 Canvas 根节点。
-- Asset Browser 可通过同一 controller 发送 `assets` descriptor。Stage 使用 `assetResolver`
-  并发解析资源、调用 registry asset factory，按最多四列布局成功项并以一个原子 batch 创建；
-  目标 Frame 失效时回退 Canvas 根，部分失败不会污染 batch。
-- Frame 与 Component 使用 core `resolveNodeStyle`；Frame 由 `clipContent` 决定内容溢出，
-  resize 只改变 Frame 自身边界，不递归缩放后代。
-- 主题与语言从 `@compose-ui/ui-context` 读取。内建标尺、滚动条与覆盖层 ARIA 会翻译，
-  registry label 与 renderer 内容保持宿主原文。
-- `shortcuts` 可覆盖临时平移、V/H 工具、F/Shift+F 适配、缩放、吸附、复制、分组和删除；
-  动作空数组表示禁用。画布右键菜单会用相同的当前配置显示动作键位；空数组不显示提示，已禁用的
-  菜单动作仍可保留其配置键位。输入控件、contenteditable 和 IME composing 不触发 Stage 导航键。
+Stage 只消费 `ComposeDocument v4` 与 `ComposeEntityRegistry`。Scene 渲染查询拥有 `Transform`
+且包含 `Renderer` 或 `Hierarchy` 的 Entity；同一 Entity 可以先渲染 Renderer 内容，再渲染
+Hierarchy 子项。`Appearance`、`Clip`、`Visibility` 与 `Lock` 分别由对应查询处理。
 
 ```tsx
-import {
-  ComposeComponentPalette,
-  ComposeStage,
-} from '@compose-ui/stage'
+import { ComposeComponentPalette, ComposeStage } from '@compose-ui/stage'
 import { createStageInteractionController } from '@compose-ui/stage-engine'
 import '@compose-ui/stage/styles.css'
 
@@ -48,7 +16,6 @@ const interactionController = createStageInteractionController()
 <>
   <ComposeComponentPalette
     registry={registry}
-    framePresets={framePresets}
     interactionController={interactionController}
   />
   <ComposeStage
@@ -65,22 +32,32 @@ const interactionController = createStageInteractionController()
     }}
     selectedIds={selectedIds}
     onSelectedIdsChange={setSelectedIds}
-    outputSelected={inspectionTarget === 'output'}
-    onOutputSelect={() => setInspectionTarget('output')}
-    onSurfaceSizeChange={setSurfaceSize}
     interactionController={interactionController}
-    framePresets={framePresets}
   />
 </>
 ```
 
-`onSurfaceSizeChange` 是可选回调，返回扣除标尺和滚动条后的真实 surface 尺寸，适合宿主实现
-fit Frame/selection。适配 Frame 从当前选择或最近 Frame 祖先派生，不保存 active Frame 状态。
-标尺、网格吸附、滚动范围、矩阵与坐标函数、SceneIndex、controller，
-以及 `createGroupCommand`、`createUngroupCommand`、`createReparentCommand`、
-`createDuplicateCommand` 只从 `@compose-ui/stage-engine` 导出；Stage 不提供旧路径或兼容
-facade。一个 controller 同时只能连接一个 Stage surface，多个编辑器实例应各自创建 controller。
+`ComposeComponentPalette` 统一消费 Entity Presets，不再有独立 Container/Frame 分支。Palette、
+Asset Browser 与 Stage 通过同一实例级 `StageInteractionController` 共享拖入会话；Stage 根据
+目标 Entity 是否拥有 `Hierarchy` 选择最深合法父级。
 
-省略 `ComposeStage.interactionController` 时，ComposeStage 会创建并销毁私有 controller；由于 Palette 必须
-与目标 Stage 共享外部拖入会话，`ComposeComponentPalette.interactionController` 是必填属性。Editor
-组合场景下建议使用 `useComposeEditorController`，它会负责 controller 的单实例所有权与释放。
+Move/Resize/Rotate 查询 `Transform + Visibility + Lock + TransformConstraints`。缺少约束时保持
+全部可编辑，最小尺寸为 `1×1`；约束可分别禁止移动、旋转，或将 Resize 限制为：
+
+- `free`：八向手柄。
+- `preserve-aspect`：仅四角并保持宽高比。
+- `horizontal`：仅 E/W。
+- `vertical`：仅 N/S。
+- `none`：不显示 Resize 手柄。
+
+多选、吸附、矩阵换算、Pointer Capture 和临时 Preview Transform 保持 Stage 会话语义，
+pointerup 最多提交一个 `entity.transform.set` 或原子 batch。Container Resize 只改变自身边界，
+后代局部 Transform 不变；Core 会再次验证锁定和约束，防止命令绕过 UI。
+
+固定标尺、滚动条、输出边界、网格、辅助线和右键菜单继续由 Stage 提供。快捷键可覆盖适配选择/
+Container、缩放、工具、吸附、复制、分组和删除；空数组表示禁用。输入框、contenteditable 和
+IME composing 保留原生键盘与右键行为。
+
+`onSurfaceSizeChange` 返回扣除标尺和滚动条后的真实 surface 尺寸，适合宿主适配 Container 或
+选择。几何、SceneIndex、命令规划与 interaction controller 从 `@compose-ui/stage-engine` 导出；
+多个编辑器实例必须各自创建 controller。

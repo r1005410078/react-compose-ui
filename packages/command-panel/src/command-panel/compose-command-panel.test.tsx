@@ -39,30 +39,49 @@ afterEach(cleanup)
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
-    rootIds: ['frame'],
-    nodes: {
-      frame: {
-        id: 'frame',
-        kind: 'frame',
-        name: 'Frame',
-        visible: true,
-        locked: false,
-        transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0 },
-        childIds: ['a'],
-        clipContent: true,
+    rootIds: ['container'],
+    entities: {
+      container: {
+        id: 'container',
+        name: 'Container',
+        components: {
+          Composition: {
+            presetId: 'container',
+            baseComponentKeys: ['Transform', 'Visibility', 'Lock', 'Hierarchy', 'Clip'],
+            capabilityIds: [],
+          },
+          Transform: {
+            position: { x: 0, y: 0 },
+            size: { width: 1920, height: 1080 },
+            rotation: 0,
+          },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Hierarchy: { childIds: ['a'] },
+          Clip: { enabled: true },
+        },
       },
       a: {
         id: 'a',
-        kind: 'component',
         name: 'A',
-        visible: true,
-        locked: false,
-        transform: { x: 10, y: 20, width: 100, height: 50, rotation: 0 },
-        componentType: 'text',
-        props: { text: 'A' },
+        components: {
+          Composition: {
+            presetId: 'text',
+            baseComponentKeys: ['Transform', 'Visibility', 'Lock', 'Renderer'],
+            capabilityIds: [],
+          },
+          Transform: {
+            position: { x: 10, y: 20 },
+            size: { width: 100, height: 50 },
+            rotation: 0,
+          },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Renderer: { type: 'text', props: { text: 'A' } },
+        },
       },
     },
   }
@@ -80,7 +99,7 @@ function runtime() {
           status: 'patches',
           patches: [{
             op: 'set',
-            path: ['nodes', 'a', 'name'],
+            path: ['entities', 'a', 'name'],
             value: command.payload.name,
           }],
         },
@@ -165,10 +184,10 @@ describe('ComposeCommandPanel', () => {
     expect(screen.getAllByText('test')).toHaveLength(2)
     expect(screen.getByText('a')).toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'Forward patches' })).toHaveTextContent(
-      /nodes.*a.*name/,
+      /entities.*a.*name/,
     )
     expect(screen.getByRole('list', { name: 'Inverse patches' })).toHaveTextContent(
-      /nodes.*a.*name/,
+      /entities.*a.*name/,
     )
   })
 
@@ -183,7 +202,7 @@ describe('ComposeCommandPanel', () => {
         type: 'fixture.rename',
         execute: (_document, command) => ({
           status: 'patches',
-          patches: [{ op: 'set', path: ['nodes', 'a', 'name'], value: command.payload.name }],
+          patches: [{ op: 'set', path: ['entities', 'a', 'name'], value: command.payload.name }],
         }),
       }],
     })
@@ -244,7 +263,7 @@ describe('ComposeCommandPanel', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '执行重命名' }))
 
-    expect(controller.document.nodes.a.name).toBe('Preset')
+    expect(controller.document.entities.a?.name).toBe('Preset')
   })
 
   it('OpenSpec: command-panel / 命令预设表单 / 阻止无效预设输入', () => {
@@ -314,7 +333,7 @@ describe('ComposeCommandPanel', () => {
     expect(details).toHaveFocus()
     fireEvent.click(details)
     expect(details).toHaveAttribute('aria-expanded', 'true')
-    expect(controller.document.nodes.a.name).toBe('Keyboard')
+    expect(controller.document.entities.a?.name).toBe('Keyboard')
   })
 
   it('OpenSpec: command-panel / 右键菜单 / 不展示并不存在的快捷键', () => {

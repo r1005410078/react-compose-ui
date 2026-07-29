@@ -33,7 +33,7 @@ const publicVisualExports = [
   editor.ComposeEditor,
   preview.ComposePreview,
   assetBrowser.ComposeAssetBrowser,
-  materials.DEFAULT_COMPOSE_RECTANGLE_DEFINITION,
+  materials.DEFAULT_COMPOSE_RECTANGLE_PRESET,
 ] as const
 
 void publicVisualExports
@@ -66,3 +66,16 @@ type _LegacyEditorLocale = editor.ComposeEditorLocale
 type _ForwardedAssetProvider = assetBrowser.ComposeAssetProvider
 // @ts-expect-error 默认物料常量已采用 DEFAULT_COMPOSE_* 命名。
 type _LegacyDefaultMaterialDefinition = materials.DEFAULT_RECTANGLE_DEFINITION
+// @ts-expect-error v4 Registry 只公开 Entity 组合协议。
+type _LegacyComponentRegistry = typeof import('@compose-ui/component-registry').ComposeComponentRegistry
+// @ts-expect-error Stage 不再导出独立 Frame Preset。
+type _LegacyFramePreset = stage.ComposeStageFramePreset
+
+void (undefined as unknown as _LegacyTree)
+void (undefined as unknown as _LegacyStage)
+void (undefined as unknown as _LegacyPreview)
+void (undefined as unknown as _LegacyEditorLocale)
+void (undefined as unknown as _ForwardedAssetProvider)
+void (undefined as unknown as _LegacyDefaultMaterialDefinition)
+void (undefined as unknown as _LegacyComponentRegistry)
+void (undefined as unknown as _LegacyFramePreset)

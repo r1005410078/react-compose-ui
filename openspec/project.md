@@ -53,16 +53,18 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/command-panel` 是订阅 core TransactionRuntime 的独立 React 调试台，只接受宿主
   声明的结构化命令预设，可依赖 components、ui-context，不依赖 editor、history、scene-tree、
   property-panel 或 operation-log。
-- `@compose-ui/component-registry` 是实例级宿主组件注册协议，依赖 core 与 assets，以 React 为 peer，
-  不依赖 editor 或 property-panel。
+- `@compose-ui/component-registry` 是实例级 Entity Registry，统一 Renderer、Component
+  Definition、Entity Preset 与 Capability，依赖 core 与 assets，以 React 为 peer，不依赖
+  editor 或 property-panel。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
   外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、stage-engine、
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
-- `@compose-ui/materials` 提供 Frame、Rectangle、Text、Image、SVG 的实例级基础物料组合，
-  依赖 core、assets、component-registry、components、stage、property-panel、ui-context、DOMPurify 与
-  Valibot，不依赖 editor 或 asset-browser。
+- `@compose-ui/materials` 提供 Container、Rectangle、Text、Image、SVG Entity Presets、
+  Renderer、Component Definitions 与 Capabilities，依赖 core、assets、component-registry、
+  components、property-panel、ui-context、DOMPurify 与 Valibot，不依赖 stage、editor 或
+  asset-browser。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage、
   stage-engine 与独立面板包。
 - `@compose-ui/components` 是共享的无业务 Tree 等 React 交互组件包，可依赖 `ui-context`；
@@ -177,13 +179,17 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ## Domain Context
 
 - 目标用户需要在客户现场快速调整数据大屏，编辑器必须能嵌入现有 React 宿主。
-- 当前仓库验证仅支持 v3 的版本化 JSON 文档、隐式 Canvas 根、统一可嵌套 Frame 容器、同步
-  命令事务、组件注册、Godot 风格无限 Stage、controller 默认工作区、文档/Frame Preview、
-  事务/会话历史和 Rectangle/Text/Image/SVG/ECharts 纵向流程。
+- 当前仓库只支持 `ComposeDocument v4`：隐式 Canvas 根、统一 ECS Entity/Component 组合、
+  `Hierarchy` 容器、`Renderer` 内容、同步命令事务、Entity Registry、Godot 风格无限 Stage、
+  聚合 Inspector、controller 默认工作区、文档/Container Preview、事务/会话历史和
+  Container/Rectangle/Text/Image/SVG/ECharts 纵向流程。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
   surface 尺寸和动态滚动范围是会话状态。`document.output` 定义固定原点输出边界；Preview
-  接受 v3 但忽略 canvas 编辑元数据。output 默认透明；Stage 输出边界可作为独立 Canvas
-  Inspector 会话目标，但不进入节点选择或 SceneTree。
+  接受 v4 并忽略 canvas 编辑元数据。output 默认透明；Stage 输出边界可作为独立 Canvas
+  Inspector 会话目标，但不进入 Entity 选择或 SceneTree。
+- 每个场景 Entity 必须拥有 `Composition`、`Transform`、`Visibility`、`Lock`，并至少拥有
+  `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法
+  Component 保留并由 Registry 边界降级。
 - 数据源协议与持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
 - 示例中的临时状态、面板 ID 和 Dockview 对象都不是编辑器领域模型或公共协议。
 

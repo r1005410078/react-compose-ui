@@ -1,4 +1,4 @@
-import type { ComposeComponentRendererProps } from '@compose-ui/component-registry'
+import type { ComposeRendererProps } from '@compose-ui/component-registry'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { readAssetReference, useResolvedAsset } from '../material-inspector-kit/assets'
@@ -8,9 +8,9 @@ const fits = new Set(['contain', 'cover', 'fill', 'none', 'scale-down'])
 /** Materials 内置 Image renderer。 @internal */
 export function ImageRenderer({
   assetResolver,
-  node,
+  entity,
   props,
-}: ComposeComponentRendererProps) {
+}: ComposeRendererProps) {
   const reference = readAssetReference(props.asset)
   const resolved = useResolvedAsset(reference, assetResolver)
   const [resolvedUrl, setResolvedUrl] = useState<{
@@ -38,7 +38,7 @@ export function ImageRenderer({
   if (!currentUrl) {
     return (
       <div
-        aria-label={`资源不可用 ${node.name}`}
+        aria-label={`资源不可用 ${entity.name}`}
         className="compose-material compose-material--asset-missing"
         role="status"
       >
@@ -46,7 +46,7 @@ export function ImageRenderer({
       </div>
     )
   }
-  const alt = typeof props.alt === 'string' ? props.alt : node.name
+  const alt = typeof props.alt === 'string' ? props.alt : entity.name
   const fit = (
     typeof props.fit === 'string' && fits.has(props.fit) ? props.fit : 'contain'
   ) as CSSProperties['objectFit']

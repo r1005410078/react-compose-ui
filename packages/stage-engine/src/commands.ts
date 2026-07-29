@@ -1,58 +1,53 @@
-import type {
-  ComposeDocument,
-  ComposeFrameNode,
-  ComposeNode,
-  EditorCommand,
-  JsonObject,
-  JsonValue,
-  NodeTransform,
+import {
+  BUILTIN_COMMAND_TYPES,
+  getComposeHierarchy,
+  getComposeTransform,
+  type ComposeDocument,
+  type ComposeEntity,
+  type ComposeTransform,
+  type EditorCommand,
+  type JsonObject,
+  type JsonValue,
 } from '@compose-ui/core'
 import {
   decomposeMatrix,
-  getNodeParentId,
-  getNodeWorldBounds,
-  getNodeWorldMatrix,
+  getEntityParentId,
+  getEntityWorldBounds,
+  getEntityWorldMatrix,
   invertMatrix,
   multiplyMatrices,
+  toComposeTransform,
   translationMatrix,
   unionRects,
+  type StageTransform,
 } from './geometry'
-import { describeNodeTargets } from './transaction-labels'
+import { describeEntityTargets } from './transaction-labels'
 
 function transformUnderParent(
   document: ComposeDocument,
-  worldMatrix: ReturnType<typeof getNodeWorldMatrix>,
+  worldMatrix: ReturnType<typeof getEntityWorldMatrix>,
   parentId: string | null,
   width: number,
   height: number,
-): NodeTransform {
-  const parentWorld = parentId ? getNodeWorldMatrix(document, parentId) : null
+): ComposeTransform {
+  const parentWorld = parentId ? getEntityWorldMatrix(document, parentId) : null
   const local = parentWorld
     ? multiplyMatrices(invertMatrix(parentWorld), worldMatrix)
     : worldMatrix
-  return decomposeMatrix(local, width, height)
+  return toComposeTransform(decomposeMatrix(local, width, height))
 }
 
-/**
- * 创建保持后代世界几何不变的 node.group 命令。
- *
- * @param document - 当前正式文档。
- * @param nodeIds - 按选择顺序排列的待分组节点。
- * @param frameId - 新 Frame 稳定 ID。
- * @param commandId - 命令稳定 ID。
- * @returns 交给同一 TransactionRuntime 的结构化命令。
- * @public
- */
+/** 创建保持后代世界几何不变的 entity.group 命令。 @public */
 export function createGroupCommand(
   document: ComposeDocument,
-  nodeIds: readonly string[],
-  frameId: string,
-  commandId = `group:${frameId}`,
+  entityIds: readonly string[],
+  containerId: string,
+  commandId = `group:${containerId}`,
 ): EditorCommand {
-  const bounds = unionRects(nodeIds
-    .filter((id) => Boolean(document.nodes[id]))
-    .map((id) => getNodeWorldBounds(document, id)))
-  const parentId = nodeIds[0] ? getNodeParentId(document, nodeIds[0]) : null
+  const bounds = unionRects(entityIds
+    .filter((id) => Boolean(document.entities[id]))
+    .map((id) => getEntityWorldBounds(document, id)))
+  const parentId = entityIds[0] ? getEntityParentId(document, entityIds[0]) : null
   const safeBounds = bounds ?? { x: 0, y: 0, width: 1, height: 1 }
   const groupWorld = translationMatrix(safeBounds.x, safeBounds.y)
   const groupTransform = transformUnderParent(
@@ -62,142 +57,150 @@ export function createGroupCommand(
     safeBounds.width,
     safeBounds.height,
   )
-  const frame: ComposeFrameNode = {
-    id: frameId,
-    kind: 'frame',
-    name: 'Frame',
-    visible: true,
-    locked: false,
-    transform: groupTransform,
-    clipContent: false,
-    style: {
-      backgroundColor: 'transparent',
-      borderColor: 'transparent',
-      borderWidth: 0,
-      borderRadius: 0,
-      opacity: 1,
-      shadow: null,
+  const container: ComposeEntity = {
+    id: containerId,
+    name: 'Container',
+    components: {
+      Composition: {
+        presetId: null,
+        baseComponentKeys: [
+          'Transform',
+          'Visibility',
+          'Lock',
+          'Hierarchy',
+          'Clip',
+          'Appearance',
+        ],
+        capabilityIds: [],
+      },
+      Transform: groupTransform,
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Hierarchy: { childIds: [...entityIds] },
+      Clip: { enabled: false },
+      Appearance: {
+        backgroundColor: 'transparent',
+        borderColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 0,
+        opacity: 1,
+        shadow: null,
+      },
     },
-    childIds: [...nodeIds],
   }
   const childTransforms: Record<string, JsonValue> = {}
-  for (const nodeId of nodeIds) {
-    const node = document.nodes[nodeId]
-    if (!node) continue
-    childTransforms[nodeId] = decomposeMatrix(
-      multiplyMatrices(invertMatrix(groupWorld), getNodeWorldMatrix(document, nodeId)),
-      node.transform.width,
-      node.transform.height,
+  for (const entityId of entityIds) {
+    const entity = document.entities[entityId]
+    if (!entity) continue
+    const transform = getComposeTransform(entity)
+    childTransforms[entityId] = toComposeTransform(decomposeMatrix(
+      multiplyMatrices(
+        invertMatrix(groupWorld),
+        getEntityWorldMatrix(document, entityId),
+      ),
+      transform.size.width,
+      transform.size.height,
+    )) as unknown as JsonValue
+  }
+  return {
+    id: commandId,
+    type: BUILTIN_COMMAND_TYPES.groupEntity,
+    payload: {
+      container: container as unknown as JsonValue,
+      entityIds,
+      childTransforms,
+    },
+    meta: {
+      label: `Group ${describeEntityTargets(document, entityIds)}`,
+      source: 'stage',
+      targetIds: entityIds,
+    },
+  }
+}
+
+/** 创建保持后代世界几何不变的 entity.ungroup 命令。 @public */
+export function createUngroupCommand(
+  document: ComposeDocument,
+  containerId: string,
+  commandId = `ungroup:${containerId}`,
+): EditorCommand {
+  const container = document.entities[containerId]
+  const hierarchy = container && getComposeHierarchy(container)
+  const parentId = getEntityParentId(document, containerId)
+  const childTransforms: Record<string, JsonValue> = {}
+  for (const childId of hierarchy?.childIds ?? []) {
+    const child = document.entities[childId]
+    if (!child) continue
+    const transform = getComposeTransform(child)
+    childTransforms[childId] = transformUnderParent(
+      document,
+      getEntityWorldMatrix(document, childId),
+      parentId,
+      transform.size.width,
+      transform.size.height,
     ) as unknown as JsonValue
   }
   return {
     id: commandId,
-    type: 'node.group',
-    payload: {
-      frame: frame as unknown as JsonValue,
-      nodeIds,
-      childTransforms,
-    },
+    type: BUILTIN_COMMAND_TYPES.ungroupEntity,
+    payload: { containerId, childTransforms },
     meta: {
-      label: `Group ${describeNodeTargets(document, nodeIds)}`,
+      label: `Ungroup ${container?.name ?? 'Container'}`,
       source: 'stage',
-      targetIds: nodeIds,
+      targetIds: [containerId],
     },
   }
 }
 
-/**
- * 创建保持后代世界几何不变的 node.ungroup 命令。
- *
- * @public
- */
-export function createUngroupCommand(
-  document: ComposeDocument,
-  frameId: string,
-  commandId = `ungroup:${frameId}`,
-): EditorCommand {
-  const frame = document.nodes[frameId]
-  const parentId = getNodeParentId(document, frameId)
-  const childTransforms: Record<string, JsonValue> = {}
-  if (frame?.kind === 'frame') {
-    for (const childId of frame.childIds) {
-      const child = document.nodes[childId]
-      if (!child) continue
-      childTransforms[childId] = transformUnderParent(
-        document,
-        getNodeWorldMatrix(document, childId),
-        parentId,
-        child.transform.width,
-        child.transform.height,
-      ) as unknown as JsonValue
-    }
-  }
-  return {
-    id: commandId,
-    type: 'node.ungroup',
-    payload: { frameId, childTransforms },
-    meta: {
-      label: `Ungroup ${frame?.name ?? 'Frame'}`,
-      source: 'stage',
-      targetIds: [frameId],
-    },
-  }
-}
-
-/**
- * 创建原子 reparent batch，并把每个目标的世界矩阵分解到新父级。
- *
- * @public
- */
+/** 创建原子 reparent batch，并把每个目标的世界矩阵分解到新父级。 @public */
 export function createReparentCommand(
   document: ComposeDocument,
-  nodeIds: readonly string[],
+  entityIds: readonly string[],
   parentId: string | null,
   index: number,
-  commandId = `reparent:${nodeIds.join(',')}`,
+  commandId = `reparent:${entityIds.join(',')}`,
 ): EditorCommand {
-  const updates = nodeIds.map((nodeId) => {
-    const node = document.nodes[nodeId]
+  const updates = entityIds.map((entityId) => {
+    const entity = document.entities[entityId]
+    const transform = entity && getComposeTransform(entity)
     return {
-      nodeId,
-      transform: node
+      entityId,
+      transform: transform
         ? transformUnderParent(
             document,
-            getNodeWorldMatrix(document, nodeId),
+            getEntityWorldMatrix(document, entityId),
             parentId,
-            node.transform.width,
-            node.transform.height,
+            transform.size.width,
+            transform.size.height,
           )
-        : { x: 0, y: 0, width: 1, height: 1, rotation: 0 },
+        : {
+            position: { x: 0, y: 0 },
+            size: { width: 1, height: 1 },
+            rotation: 0,
+          },
     }
   })
+  const commands: EditorCommand[] = [
+    {
+      id: `${commandId}:move`,
+      type: BUILTIN_COMMAND_TYPES.moveEntity,
+      payload: { entityIds, parentId, index },
+    },
+    {
+      id: `${commandId}:transform`,
+      type: BUILTIN_COMMAND_TYPES.setTransform,
+      payload: { operation: 'set', updates },
+    },
+  ]
   return {
     id: commandId,
-    type: 'transaction.batch',
-    payload: {
-      commands: [
-        {
-          id: `${commandId}:move`,
-          type: 'node.move',
-          payload: { nodeIds, parentId, index },
-        },
-        {
-          id: `${commandId}:transform`,
-          type: 'node.transform.set',
-          payload: {
-            updates: updates.map(({ nodeId, transform }) => ({
-              nodeId,
-              transform: { ...transform },
-            })),
-          },
-        },
-      ],
-    },
+    type: BUILTIN_COMMAND_TYPES.batch,
+    payload: { commands: commands as unknown as JsonValue },
     meta: {
-      label: `Move ${describeNodeTargets(document, nodeIds)}`
-        + ` to ${parentId ? document.nodes[parentId]?.name ?? 'Frame' : 'Canvas'}`,
+      label: `Move ${describeEntityTargets(document, entityIds)}`
+        + ` to ${parentId ? document.entities[parentId]?.name ?? 'Container' : 'Canvas'}`,
       source: 'stage',
-      targetIds: nodeIds,
+      targetIds: entityIds,
     },
   }
 }
@@ -205,75 +208,75 @@ export function createReparentCommand(
 function subtreeIds(document: ComposeDocument, rootId: string) {
   const result: string[] = []
   const visit = (id: string) => {
-    const node = document.nodes[id]
-    if (!node) return
+    const entity = document.entities[id]
+    if (!entity) return
     result.push(id)
-    if (node.kind !== 'component') node.childIds.forEach(visit)
+    getComposeHierarchy(entity)?.childIds.forEach(visit)
   }
   visit(rootId)
   return result
 }
 
-/**
- * 为一个节点子树创建 node.duplicate 命令。
- *
- * @public
- */
+/** 为一个 Entity 子树创建 entity.duplicate 命令。 @public */
 export function createDuplicateCommand(
   document: ComposeDocument,
   sourceId: string,
   idFactory: () => string,
   commandId = `duplicate:${sourceId}`,
 ): { readonly command: EditorCommand; readonly rootId: string } | null {
-  const source = document.nodes[sourceId]
+  const source = document.entities[sourceId]
   if (!source) return null
   const ids = subtreeIds(document, sourceId)
   const remap = new Map(ids.map((id) => [id, idFactory()]))
-  const nodes: Record<string, JsonValue> = {}
+  const entities: Record<string, JsonValue> = {}
   for (const id of ids) {
-    const node = document.nodes[id]
+    const entity = document.entities[id]
     const cloneId = remap.get(id)
-    if (!node || !cloneId) continue
-    let clone: ComposeNode
-    if (node.kind === 'component') {
-      clone = {
-        ...node,
-        id: cloneId,
-        name: `${node.name} 副本`,
-        transform: id === sourceId
-          ? { ...node.transform, x: node.transform.x + 10, y: node.transform.y + 10 }
-          : { ...node.transform },
-        props: structuredClone(node.props),
-      }
+    if (!entity || !cloneId) continue
+    const clone = structuredClone(entity) as ComposeEntity
+    const transform = getComposeTransform(clone)
+    const hierarchy = getComposeHierarchy(clone)
+    const nextTransform: ComposeTransform = id === sourceId
+      ? {
+          ...transform,
+          position: {
+            x: transform.position.x + 10,
+            y: transform.position.y + 10,
+          },
+        }
+      : transform
+    const next: ComposeEntity = {
+      ...clone,
+      id: cloneId,
+      name: `${clone.name} 副本`,
+      components: {
+        ...clone.components,
+        Transform: nextTransform,
+        ...(hierarchy
+          ? {
+              Hierarchy: {
+                childIds: hierarchy.childIds.map((childId) =>
+                  remap.get(childId) ?? childId),
+              },
+            }
+          : {}),
+      },
     }
-    else {
-      clone = {
-        ...node,
-        id: cloneId,
-        name: `${node.name} 副本`,
-        transform: id === sourceId
-          ? { ...node.transform, x: node.transform.x + 10, y: node.transform.y + 10 }
-          : { ...node.transform },
-        childIds: node.childIds.map((childId) => remap.get(childId) ?? childId),
-      }
-    }
-    nodes[cloneId] = clone as unknown as JsonValue
+    entities[cloneId] = next as unknown as JsonValue
   }
   const rootId = remap.get(sourceId)
   if (!rootId) return null
-  const parentId = getNodeParentId(document, sourceId)
+  const parentId = getEntityParentId(document, sourceId)
   const siblings = parentId
-    ? (document.nodes[parentId]?.kind === 'component'
-        ? []
-        : document.nodes[parentId]?.childIds ?? [])
+    ? getComposeHierarchy(document.entities[parentId]!)?.childIds ?? []
     : document.rootIds
   return {
     rootId,
     command: {
       id: commandId,
-      type: 'node.duplicate',
+      type: BUILTIN_COMMAND_TYPES.duplicateEntity,
       payload: {
-        nodes: nodes as unknown as JsonObject,
+        entities: entities as unknown as JsonObject,
         rootIds: [rootId],
         parentId,
         index: Math.max(0, siblings.indexOf(sourceId) + 1),
@@ -285,4 +288,12 @@ export function createDuplicateCommand(
       },
     },
   }
+}
+
+/** 将 Stage 几何更新转换为 Core Transform update。 @internal */
+export function composeTransformUpdate(
+  entityId: string,
+  transform: StageTransform,
+): JsonObject {
+  return { entityId, transform: toComposeTransform(transform) }
 }

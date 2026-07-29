@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposeComponentRegistry } from '@compose-ui/component-registry'
+import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type {
   CommandDispatchResult,
   ComposeDocument,
@@ -10,7 +10,6 @@ import type {
   StageInteractionController,
   StageViewport,
 } from '@compose-ui/stage-engine'
-import type { ComposeStageFramePreset } from './frame-preset'
 
 /**
  * Stage 的受控工具模式。
@@ -47,7 +46,7 @@ export type ComposeStageShortcutAction =
   | 'stage.selectTool'
   | 'stage.panTool'
   | 'stage.fitSelection'
-  | 'stage.fitFrame'
+  | 'stage.fitContainer'
   | 'stage.zoomReset'
   | 'stage.zoomIn'
   | 'stage.zoomOut'
@@ -81,7 +80,7 @@ export type ComposeStageDispatch = (command: EditorCommand) => CommandDispatchRe
  */
 export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   readonly document: ComposeDocument
-  readonly registry: ComposeComponentRegistry
+  readonly registry: ComposeEntityRegistry
   /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
   readonly dispatch: ComposeStageDispatch
@@ -101,15 +100,13 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   /**
    * surface 可视尺寸变化回调。
    *
-   * @remarks 标尺和滚动条不计入尺寸；可用于适配 Frame 或选择。
+   * @remarks 标尺和滚动条不计入尺寸；可用于适配 Container 或选择。
    */
   readonly onSurfaceSizeChange?: (
     size: { readonly width: number; readonly height: number },
   ) => void
   /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */
   readonly interactionController?: StageInteractionController
-  /** external Frame descriptor 的 preset resolver。 */
-  readonly framePresets?: readonly ComposeStageFramePreset[]
-  /** 节点与命令 ID factory。默认使用 crypto.randomUUID 或时间回退。 */
+  /** Entity 与命令 ID factory。默认使用 crypto.randomUUID 或时间回退。 */
   readonly idFactory?: () => string
 }

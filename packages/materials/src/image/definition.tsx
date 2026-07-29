@@ -1,14 +1,21 @@
-import type { ComposeComponentDefinition } from '@compose-ui/component-registry'
-import { cloneProps, cloneStyle } from '../material-inspector-kit/default-values'
+import type {
+  ComposeEntityPreset,
+  ComposeRendererDefinition,
+} from '@compose-ui/component-registry'
 import { measureRasterAsset } from '../material-inspector-kit/assets'
-import type { ComposeBasicMaterialComponentOptions } from '../types'
+import type { ComposeBasicMaterialOptions } from '../types'
+import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
+  createDefaultInspectorId,
+  createImageRendererInspector,
+  type InspectorIdFactory,
+} from '../material-inspector-kit/renderer-inspectors'
+import {
+  DEFAULT_IMAGE_APPEARANCE,
   DEFAULT_IMAGE_PROPS,
   DEFAULT_IMAGE_SIZE,
-  DEFAULT_IMAGE_STYLE,
 } from './defaults'
 import { ImageRenderer } from './renderer'
-import { createImageInspector } from './inspector'
 
 const rasterTypes = new Set([
   'image/png',
@@ -21,43 +28,54 @@ const rasterTypes = new Set([
   'image/vnd.microsoft.icon',
 ])
 
-/** 创建 Image definition。 @internal */
-export function createImageDefinition(
-  options: ComposeBasicMaterialComponentOptions = {},
-  idFactory: () => string = () => crypto.randomUUID(),
-): ComposeComponentDefinition {
-  const defaultSize = options.defaultSize ?? DEFAULT_IMAGE_SIZE
-  const defaultProps = cloneProps(DEFAULT_IMAGE_PROPS, options.defaultProps)
-  const defaultStyle = cloneStyle(DEFAULT_IMAGE_STYLE, options.defaultStyle)
+/** 创建 Image Renderer 与资源型 Entity Preset。 @internal */
+export function createImageMaterial(
+  options: ComposeBasicMaterialOptions = {},
+  idFactory: InspectorIdFactory = createDefaultInspectorId,
+): { renderer: ComposeRendererDefinition; preset: ComposeEntityPreset } {
+  const size = options.defaultSize ?? DEFAULT_IMAGE_SIZE
+  const props = mergeJson(DEFAULT_IMAGE_PROPS, options.defaultProps)
+  const appearance = mergeAppearance(DEFAULT_IMAGE_APPEARANCE, options.defaultAppearance)
   return {
-    type: 'image',
-    label: options.label ?? 'Image',
-    defaultName: options.name ?? 'Image',
-    icon: <span aria-hidden="true">▧</span>,
-    paletteHidden: true,
-    defaultSize: { ...defaultSize },
-    createDefaultProps: () => cloneProps(defaultProps),
-    createDefaultStyle: () => cloneStyle(defaultStyle),
-    renderer: ImageRenderer,
-    inspector: createImageInspector(idFactory),
-    assetDrop: {
-      accepts: ({ mediaType }) => rasterTypes.has(mediaType.toLowerCase()),
-      async createSeed({ reference, resolved, name }) {
-        const size = await measureRasterAsset(resolved.blob)
-        return {
-          name,
-          props: {
-            asset: reference,
-            alt: name,
-            fit: 'contain',
-          },
-          style: cloneStyle(defaultStyle),
-          ...size,
-        }
+    renderer: {
+      type: 'image',
+      label: options.label ?? 'Image',
+      renderer: ImageRenderer,
+      inspector: createImageRendererInspector(idFactory),
+    },
+    preset: {
+      id: 'image',
+      label: options.label ?? 'Image',
+      defaultName: options.name ?? 'Image',
+      icon: <span aria-hidden="true">▧</span>,
+      paletteHidden: true,
+      createComponents: () => rendererPresetComponents({
+        type: 'image',
+        props,
+        size,
+        appearance,
+      }),
+      assetDrop: {
+        accepts: ({ mediaType }) => rasterTypes.has(mediaType.toLowerCase()),
+        async createSeed({ reference, resolved, name }) {
+          const measured = await measureRasterAsset(resolved.blob)
+          return {
+            name,
+            components: rendererPresetComponents({
+              type: 'image',
+              props: { asset: reference, alt: name, fit: 'contain' },
+              size: measured,
+              appearance,
+            }),
+          }
+        },
       },
     },
   }
 }
 
-/** 默认 Image definition。 @public */
-export const DEFAULT_COMPOSE_IMAGE_DEFINITION = createImageDefinition()
+const image = createImageMaterial()
+/** 默认 Image Renderer。 @public */
+export const DEFAULT_COMPOSE_IMAGE_RENDERER = image.renderer
+/** 默认 Image Entity Preset。 @public */
+export const DEFAULT_COMPOSE_IMAGE_PRESET = image.preset

@@ -121,7 +121,8 @@
   }
 
   .property-panel__toolbar {
-    position: relative;
+    position: sticky;
+    top: 0;
     z-index: 6;
     display: grid;
     min-height: var(--pp-toolbar-height);

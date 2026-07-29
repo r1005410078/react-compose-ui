@@ -8,15 +8,15 @@ import {
 } from '../index'
 
 function RecordStoryEntry() {
-  const log = useComposeOperationLog()
+  const { record } = useComposeOperationLog()
   useEffect(() => {
-    void log.record({
-      action: 'node.move',
+    void record({
+      action: 'entity.move',
       category: 'scene',
       summary: 'Move Story card',
       targets: [{ componentId: 'story-card', componentLabel: 'Story card' }],
     })
-  }, [log])
+  }, [record])
   return <ComposeOperationLogPanel style={{ height: 360, width: 560 }} />
 }
 

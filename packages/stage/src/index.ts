@@ -8,7 +8,6 @@ import './styles.css'
 
 export { ComposeStage } from './stage-surface'
 export { ComposeComponentPalette, type ComposeComponentPaletteProps } from './component-palette'
-export { type ComposeStageFramePreset } from './frame-preset'
 export type {
   ComposeStageDispatch,
   ComposeStageKeybinding,

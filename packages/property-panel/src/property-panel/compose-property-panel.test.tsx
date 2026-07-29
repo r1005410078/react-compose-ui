@@ -3,13 +3,110 @@ import * as v from 'valibot'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
-import { ComposePropertyPanel, resolveComposePropertyBindings } from '../index'
+import {
+  ComposePropertyPanel,
+  ComposePropertyPanelRoot,
+  ComposePropertyPanelSection,
+  resolveComposePropertyBindings,
+} from '../index'
 import type { ComposePropertyPanelBinding, ComposePropertyPanelRenderer } from '../index'
 import * as propertyPanelModule from '../index'
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+})
+
+describe('OpenSpec: property-panel / 单面板多属性分组', () => {
+  it('共享唯一工具栏并让每个 Section 独立提交', () => {
+    const identityChange = vi.fn()
+    const appearanceChange = vi.fn()
+    render(
+      <ComposePropertyPanelRoot aria-label="Entity properties">
+        <ComposePropertyPanelSection title="基础">
+          <ComposePropertyPanel
+            schema={v.object({ name: v.pipe(v.string(), v.title('名称')) })}
+            value={{ name: 'Container' }}
+            onValueChange={identityChange}
+          />
+        </ComposePropertyPanelSection>
+        <ComposePropertyPanelSection title="外观">
+          <ComposePropertyPanel
+            schema={v.object({
+              color: v.pipe(v.string(), v.title('背景颜色')),
+            })}
+            value={{ color: '#ffffff' }}
+            onValueChange={appearanceChange}
+          />
+        </ComposePropertyPanelSection>
+      </ComposePropertyPanelRoot>,
+    )
+
+    expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: '筛选属性' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: '属性面板设置' })).toHaveLength(1)
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '基础' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: '外观' })).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.change(screen.getByLabelText('名称'), { target: { value: 'Card' } })
+    expect(identityChange).toHaveBeenCalledTimes(1)
+    expect(appearanceChange).not.toHaveBeenCalled()
+  })
+
+  it('跨 Section 搜索并在清空后恢复折叠状态', () => {
+    render(
+      <ComposePropertyPanelRoot>
+        <ComposePropertyPanelSection title="基础">
+          <ComposePropertyPanel
+            schema={v.object({ name: v.pipe(v.string(), v.title('名称')) })}
+            value={{ name: 'Container' }}
+          />
+        </ComposePropertyPanelSection>
+        <ComposePropertyPanelSection title="外观">
+          <ComposePropertyPanel
+            schema={v.object({ color: v.pipe(v.string(), v.title('背景颜色')) })}
+            value={{ color: '#ffffff' }}
+          />
+        </ComposePropertyPanelSection>
+      </ComposePropertyPanelRoot>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
+    expect(screen.queryByLabelText('背景颜色')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
+      target: { value: '背景颜色' },
+    })
+    expect(screen.queryByRole('button', { name: '基础' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '外观' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByLabelText('背景颜色')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
+      target: { value: '' },
+    })
+    expect(screen.getByRole('button', { name: '外观' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByLabelText('背景颜色')).not.toBeInTheDocument()
+  })
+
+  it('为自定义 Section 内容保留统一分组，并支持独立只读状态', () => {
+    render(
+      <ComposePropertyPanelRoot>
+        <ComposePropertyPanelSection title="宿主扩展">
+          <button type="button">打开扩展编辑器</button>
+        </ComposePropertyPanelSection>
+        <ComposePropertyPanelSection title="只读状态">
+          <ComposePropertyPanel
+            readOnly
+            schema={v.object({ enabled: v.pipe(v.boolean(), v.title('启用')) })}
+            value={{ enabled: true }}
+          />
+        </ComposePropertyPanelSection>
+      </ComposePropertyPanelRoot>,
+    )
+
+    expect(screen.getByRole('button', { name: '宿主扩展' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '打开扩展编辑器' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: '启用' })).toBeDisabled()
+  })
 })
 
 describe('OpenSpec: property-panel / 属性面板共享 UI 环境', () => {

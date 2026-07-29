@@ -16,9 +16,9 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
-export const FrameTarget: Story = {
-  args: { target: { kind: 'frame', frameId: 'story-frame' } },
+export const ContainerTarget: Story = {
+  args: { target: { kind: 'container', entityId: 'story-container' } },
 }
 export const Error: Story = {
-  args: { target: { kind: 'frame', frameId: 'missing-frame' } },
+  args: { target: { kind: 'container', entityId: 'missing-container' } },
 }

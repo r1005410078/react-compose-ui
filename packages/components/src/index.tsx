@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 库公共入口必须同时导出 React 组件、纯格式化函数和 Tree 模型。 */
 /**
  * 提供可被场景树、资源浏览器和宿主工具复用的受控 React 基础组件。
  *
@@ -85,8 +86,6 @@ export type {
   ComposeKeybinding,
 } from './context-menu'
 export { ComposeTree } from './tree'
-// 公共入口同时导出组件与纯 Tree 模型工具，因此只针对工具导出豁免 Fast Refresh。
-// eslint-disable-next-line react-refresh/only-export-components
 export {
   createComposeTreeIndex,
   createComposeTreeMove,

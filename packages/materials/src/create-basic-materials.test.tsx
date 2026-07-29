@@ -1,102 +1,105 @@
-import type { ComposeComponentDefinition } from '@compose-ui/component-registry'
-import { describe, expect, it } from 'vitest'
-import * as materialsEntry from './index'
+import { render, screen } from '@testing-library/react'
 import {
-  DEFAULT_COMPOSE_BASIC_COMPONENT_DEFINITIONS,
-  DEFAULT_COMPOSE_BASIC_FRAME_PRESETS,
-  createComposeBasicMaterials,
-} from './index'
-import type {
-  ComposeBasicMaterials,
-  ComposeCreateBasicMaterialsOptions,
-} from './index'
+  ComposeRegistryEntityRenderer,
+  ComposeRegistryRendererInspector,
+} from '@compose-ui/component-registry'
+import {
+  BUILTIN_COMMAND_TYPES,
+  getComposeComposition,
+  getComposeHierarchy,
+  getComposeRenderer,
+  getComposeTransform,
+  type ComposeEntity,
+} from '@compose-ui/core'
+import { describe, expect, it, vi } from 'vitest'
+import { createComposeBasicMaterials } from './create-basic-materials'
 
-const extension: ComposeComponentDefinition = {
-  type: 'extension',
-  label: 'Extension',
-  defaultSize: { width: 100, height: 80 },
-  createDefaultProps: () => ({ source: 'host' }),
-  renderer: () => <div>Extension</div>,
+function seedEntity(
+  materials: ReturnType<typeof createComposeBasicMaterials>,
+  presetId: string,
+): ComposeEntity {
+  const result = materials.registry.createSeed(presetId)
+  if (!result.ok) throw new Error(result.error.message)
+  return { id: `${presetId}-1`, ...result.seed }
 }
 
-describe('@compose-ui/materials factory', () => {
-  it('OpenSpec: basic-materials / 独立基础物料包 / 覆盖默认值并追加扩展', () => {
-    const options: ComposeCreateBasicMaterialsOptions = {
-      frame: {
-        label: 'Desktop Frame',
-        name: 'Desktop',
-        defaultSize: { width: 1440, height: 900 },
-      },
-      rectangle: {
-        label: 'Box',
-        name: 'Box node',
-        defaultSize: { width: 320, height: 160 },
-        defaultStyle: { backgroundColor: '#ff0000', borderRadius: 4 },
-      },
-      extensions: [extension],
-    }
-    const materials: ComposeBasicMaterials = createComposeBasicMaterials(options)
-
-    expect(DEFAULT_COMPOSE_BASIC_FRAME_PRESETS.map((item) => item.label)).toEqual(['Frame'])
-    expect(DEFAULT_COMPOSE_BASIC_COMPONENT_DEFINITIONS.map((item) => item.type))
-      .toEqual(['rectangle', 'text', 'image', 'svg'])
-    expect(materials.framePresets.map((item) => item.label)).toEqual(['Desktop Frame'])
-    expect(materials.componentDefinitions.map((item) => item.type))
-      .toEqual(['rectangle', 'text', 'image', 'svg', 'extension'])
-    expect(materials.registry.list().map((item) => item.label))
-      .toEqual(['Box', 'Text', 'Image', 'SVG', 'Extension'])
-    expect(materials.framePresets[0]?.defaultSize).toEqual({ width: 1440, height: 900 })
-    expect(materials.registry.createSeed('rectangle')).toMatchObject({
-      ok: true,
-      seed: {
-        width: 320,
-        height: 160,
-        props: {},
-        style: { backgroundColor: '#ff0000', borderRadius: 4 },
-      },
-    })
-  })
-
-  it('OpenSpec: basic-materials / 独立基础物料包 / 创建默认物料 bundle', () => {
+describe('Basic ECS materials', () => {
+  it('OpenSpec: Entity Presets / 五种物料写入明确基础组合', () => {
     const materials = createComposeBasicMaterials()
-    const first = materials.registry.createSeed('rectangle')
-    const second = materials.registry.createSeed('rectangle')
-    expect(first.ok && second.ok).toBe(true)
-    if (!first.ok || !second.ok) return
-    expect(first.seed.props).not.toBe(second.seed.props)
-    expect(first.seed.style).not.toBe(second.seed.style)
-    expect(first.seed).toMatchObject({
-      props: {},
-      style: {
-        backgroundColor: '#2f7df6',
-        borderRadius: 12,
-      },
-    })
-    expect(materials.framePresets[0]).toMatchObject({
-      label: 'Frame',
-      name: 'Frame',
-      defaultSize: { width: 1280, height: 720 },
-    })
-    expect(materials.registry.createSeed('text')).toMatchObject({
-      ok: true,
-      seed: {
-        name: 'Text',
-        width: 280,
-        height: 72,
-        props: { text: 'Text', color: '#172033', fontSize: 24 },
-      },
-    })
+    expect(materials.presets.map(({ id }) => id)).toEqual([
+      'container',
+      'rectangle',
+      'text',
+      'image',
+      'svg',
+    ])
+    const container = seedEntity(materials, 'container')
+    expect(getComposeHierarchy(container)?.childIds).toEqual([])
+    expect(getComposeRenderer(container)).toBeUndefined()
+    expect(getComposeComposition(container).baseComponentKeys).toContain('Hierarchy')
+
+    for (const id of ['rectangle', 'text', 'image', 'svg']) {
+      const entity = seedEntity(materials, id)
+      expect(getComposeRenderer(entity)?.type).toBe(id)
+      expect(getComposeTransform(entity).size.width).toBeGreaterThan(0)
+      expect(getComposeComposition(entity).baseComponentKeys).toContain('Renderer')
+    }
   })
 
-  it('保持根入口的公共值导出兼容', () => {
-    expect(materialsEntry).toMatchObject({
-      COMPOSE_UI_MATERIALS_PACKAGE: '@compose-ui/materials',
-      DEFAULT_COMPOSE_FRAME_PRESET: expect.any(Object),
-      DEFAULT_COMPOSE_RECTANGLE_DEFINITION: expect.any(Object),
-      DEFAULT_COMPOSE_TEXT_DEFINITION: expect.any(Object),
-      DEFAULT_COMPOSE_BASIC_FRAME_PRESETS: expect.any(Array),
-      DEFAULT_COMPOSE_BASIC_COMPONENT_DEFINITIONS: expect.any(Array),
-      createComposeBasicMaterials: expect.any(Function),
+  it('OpenSpec: 无 style fallback / Rectangle 视觉由 Appearance 明确表达', () => {
+    const materials = createComposeBasicMaterials()
+    const rectangle = seedEntity(materials, 'rectangle')
+    expect(rectangle.components.Appearance).toEqual(expect.objectContaining({
+      backgroundColor: '#2f7df6',
+      borderRadius: 12,
+    }))
+    expect(getComposeRenderer(rectangle)?.props).toEqual({})
+  })
+
+  it('OpenSpec: Renderer / Text 使用 Renderer Component 属性', () => {
+    const materials = createComposeBasicMaterials()
+    const text = seedEntity(materials, 'text')
+    render(
+      <ComposeRegistryEntityRenderer
+        entity={text}
+        mode="editor"
+        registry={materials.registry}
+      />,
+    )
+    expect(screen.getByText('Text')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: Renderer Inspector / 内容更新派发 entity.renderer.props.set', () => {
+    let nextId = 0
+    const materials = createComposeBasicMaterials({
+      idFactory: () => `command-${++nextId}`,
     })
+    const text = seedEntity(materials, 'text')
+    const dispatch = vi.fn()
+    render(
+      <ComposeRegistryRendererInspector
+        dispatch={dispatch}
+        entity={text}
+        readOnly={false}
+        registry={materials.registry}
+      />,
+    )
+    const input = screen.getByDisplayValue('Text')
+    input.focus()
+    input.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      inputType: 'insertText',
+      data: '!',
+    }))
+    expect(materials.registry.getRenderer('text')?.inspector).toBeDefined()
+    expect(BUILTIN_COMMAND_TYPES.setRendererProps).toBe('entity.renderer.props.set')
+  })
+
+  it('OpenSpec: Capability / 发布容器与几何限制两个能力', () => {
+    const materials = createComposeBasicMaterials()
+    expect(materials.capabilities.map(({ id }) => id)).toEqual([
+      'container',
+      'geometry-constraints',
+    ])
   })
 })

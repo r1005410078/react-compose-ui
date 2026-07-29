@@ -6,7 +6,15 @@
  *
  * @packageDocumentation
  */
-import { useEffect, useRef, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import type {
   ComponentType,
   CSSProperties,
@@ -21,7 +29,7 @@ import {
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
-import { FilterIcon, SearchIcon, SettingsIcon } from '../icons'
+import { ChevronIcon, FilterIcon, SearchIcon, SettingsIcon } from '../icons'
 import { remapPropertyBindings } from '../property-bindings'
 // eslint-disable-next-line react-refresh/only-export-components -- 公共入口必须同时导出纯绑定解析函数。
 export { resolvePropertyBindings } from '../property-bindings'
@@ -416,6 +424,337 @@ export interface ComposePropertyPanelProps<TSchema extends v.GenericSchema>
   ) => void
 }
 
+interface PropertyPanelRootView {
+  readonly actionWidth: number
+  readonly filter: PropertyPanelFilter
+  readonly query: string
+  readonly showAdvanced: boolean
+  readonly showDescriptions: boolean
+}
+
+interface PropertyPanelSectionView {
+  readonly onVisibilityChange: (visible: boolean | undefined) => void
+  readonly title: string
+}
+
+const PropertyPanelRootContext = createContext<PropertyPanelRootView | null>(null)
+const PropertyPanelSectionContext = createContext<PropertyPanelSectionView | null>(null)
+
+/** 组合多个独立属性 Section 的共享面板根属性。 */
+export interface ComposePropertyPanelRootProps
+  extends HTMLAttributes<HTMLDivElement> {
+  /** Root 内的独立属性 Sections。 */
+  children: ReactNode
+  /** 可选的显式面板头部。 */
+  header?: PropertyPanelHeader
+}
+
+/** 一个独立 Schema 属性区的分组属性。 */
+export interface ComposePropertyPanelSectionProps {
+  /** 返回 ComposePropertyPanel 或 Registry Inspector 的分组内容。 */
+  children: ReactNode
+  /** 分组显示名称，同时参与全局搜索。 */
+  title: string
+  /** 初次挂载时是否展开。 @defaultValue true */
+  defaultExpanded?: boolean
+}
+
+/**
+ * 为多个独立属性 Section 提供唯一工具栏与共享列宽。
+ *
+ * @public
+ */
+export function ComposePropertyPanelRoot({
+  children,
+  header,
+  className,
+  style,
+  ...htmlProps
+}: ComposePropertyPanelRootProps) {
+  const i18n = useComposeI18nContext()
+  const theme = useComposeThemeContext()
+  const messages = usePropertyPanelMessages()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [drag, setDrag] = useState<{
+    kind: 'label' | 'action'
+    startX: number
+    labelWidth: number
+    actionWidth: number
+  } | null>(null)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<PropertyPanelFilter>('all')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showDescriptions, setShowDescriptions] = useState(false)
+  const [labelWidth, setLabelWidth] = useState(160)
+  const [actionWidth, setActionWidth] = useState(36)
+  const [availableWidth, setAvailableWidth] = useState(
+    typeof style?.width === 'number' ? style.width : 365,
+  )
+  const resizeLabel = (candidate: number) => {
+    setLabelWidth(clamp(candidate, 88, Math.max(88, availableWidth - actionWidth - 120)))
+  }
+  const resizeAction = (candidate: number) => {
+    setActionWidth(clamp(candidate, 32, Math.min(96, Math.max(32, availableWidth - labelWidth - 120))))
+  }
+  const startResize = (kind: 'label' | 'action') => (event: PointerEvent<HTMLDivElement>) => {
+    setDrag({
+      kind,
+      startX: event.clientX,
+      labelWidth,
+      actionWidth,
+    })
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+  const moveResize = (event: PointerEvent<HTMLDivElement>) => {
+    if (!drag) return
+    if (drag.kind === 'label') resizeLabel(drag.labelWidth + event.clientX - drag.startX)
+    else resizeAction(drag.actionWidth + drag.startX - event.clientX)
+  }
+  const stopResize = (event: PointerEvent<HTMLDivElement>) => {
+    setDrag(null)
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+  const keyboardResize = (kind: 'label' | 'action') => (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const step = event.shiftKey ? 24 : 8
+    if (kind === 'label') resizeLabel(labelWidth + (event.key === 'ArrowRight' ? step : -step))
+    else resizeAction(actionWidth + (event.key === 'ArrowLeft' ? step : -step))
+  }
+
+  useEffect(() => {
+    const element = rootRef.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (!width) return
+      setAvailableWidth(width)
+      const nextAction = clamp(actionWidth, 32, Math.min(96, Math.max(32, width - 88 - 120)))
+      setActionWidth(nextAction)
+      setLabelWidth(clamp(labelWidth, 88, Math.max(88, width - nextAction - 120)))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [actionWidth, labelWidth])
+
+  const panelStyle = {
+    ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
+    ...style,
+    '--pp-label-width': `${labelWidth}px`,
+    '--pp-action-width': `${actionWidth}px`,
+  } as CSSProperties
+  const rootClassName = ['property-panel', className].filter(Boolean).join(' ')
+  const view: PropertyPanelRootView = {
+    actionWidth,
+    filter,
+    query,
+    showAdvanced,
+    showDescriptions,
+  }
+
+  return (
+    <div
+      {...htmlProps}
+      aria-label={htmlProps['aria-label'] ?? messages.region}
+      className={rootClassName}
+      data-compose-ui="property-panel"
+      data-compose-theme={theme?.resolvedTheme}
+      lang={i18n?.locale ?? 'zh-CN'}
+      ref={rootRef}
+      role="region"
+      style={panelStyle}
+    >
+      {header ? (
+        <div className="property-panel__header">
+          {header.icon}
+          <div>
+            <strong>{header.title}</strong>
+            {header.subtitle ? <span>{header.subtitle}</span> : null}
+          </div>
+        </div>
+      ) : null}
+      <div className="property-panel__toolbar">
+        <label className="property-panel__search">
+          <SearchIcon />
+          <input
+            aria-label={messages.search}
+            placeholder={messages.searchPlaceholder}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <div className="property-panel__menu-anchor">
+          <button
+            aria-expanded={filterOpen}
+            aria-label={messages.filter}
+            type="button"
+            onClick={() => {
+              setFilterOpen((current) => !current)
+              setSettingsOpen(false)
+            }}
+          ><FilterIcon /></button>
+          {filterOpen ? (
+            <div aria-label={messages.filterMenu} className="property-panel__menu" role="menu">
+              {([
+                ['all', messages.all],
+                ['modified', messages.modified],
+                ['errors', messages.errors],
+              ] as const).map(([id, label]) => (
+                <button
+                  aria-checked={filter === id}
+                  key={id}
+                  role="menuitemradio"
+                  type="button"
+                  onClick={() => {
+                    setFilter(id)
+                    setFilterOpen(false)
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="property-panel__menu-anchor">
+          <button
+            aria-expanded={settingsOpen}
+            aria-label={messages.settings}
+            type="button"
+            onClick={() => {
+              setSettingsOpen((current) => !current)
+              setFilterOpen(false)
+            }}
+          ><SettingsIcon /></button>
+          {settingsOpen ? (
+            <div aria-label={messages.settings} className="property-panel__menu" role="menu">
+              <button
+                aria-checked={showAdvanced}
+                role="menuitemcheckbox"
+                type="button"
+                onClick={() => {
+                  setShowAdvanced((current) => !current)
+                  setSettingsOpen(false)
+                }}
+              >{messages.showAdvanced}</button>
+              <button
+                aria-checked={showDescriptions}
+                role="menuitemcheckbox"
+                type="button"
+                onClick={() => {
+                  setShowDescriptions((current) => !current)
+                  setSettingsOpen(false)
+                }}
+              >{messages.showDescriptions}</button>
+              <button
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  setLabelWidth(160)
+                  setActionWidth(36)
+                  setSettingsOpen(false)
+                }}
+              >{messages.resetColumns}</button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <PropertyPanelRootContext.Provider value={view}>
+        {children}
+      </PropertyPanelRootContext.Provider>
+      <div
+        aria-label={messages.resizeLabel}
+        aria-orientation="vertical"
+        aria-valuemax={Math.max(88, availableWidth - actionWidth - 120)}
+        aria-valuemin={88}
+        aria-valuenow={labelWidth}
+        className="property-panel__separator property-panel__separator--label"
+        role="separator"
+        tabIndex={0}
+        onKeyDown={keyboardResize('label')}
+        onPointerDown={startResize('label')}
+        onPointerMove={moveResize}
+        onPointerUp={stopResize}
+      ><span aria-hidden="true" className="property-panel__resize-handle">＝</span></div>
+      <div
+        aria-label={messages.resizeAction}
+        aria-orientation="vertical"
+        aria-valuemax={Math.min(96, Math.max(32, availableWidth - labelWidth - 120))}
+        aria-valuemin={32}
+        aria-valuenow={actionWidth}
+        className="property-panel__separator property-panel__separator--action"
+        role="separator"
+        tabIndex={0}
+        onKeyDown={keyboardResize('action')}
+        onPointerDown={startResize('action')}
+        onPointerMove={moveResize}
+        onPointerUp={stopResize}
+      />
+    </div>
+  )
+}
+
+/**
+ * 在共享 Property Panel Root 中声明一个可折叠属性分组。
+ *
+ * @public
+ */
+export function ComposePropertyPanelSection({
+  children,
+  title,
+  defaultExpanded = true,
+}: ComposePropertyPanelSectionProps) {
+  const root = useContext(PropertyPanelRootContext)
+  const [expanded, setExpanded] = useState(defaultExpanded)
+  const [embeddedVisibility, setEmbeddedVisibility] = useState<boolean>()
+  const onVisibilityChange = useCallback((visible: boolean | undefined) => {
+    setEmbeddedVisibility(visible)
+  }, [])
+  const context = useMemo<PropertyPanelSectionView>(() => ({
+    onVisibilityChange,
+    title,
+  }), [onVisibilityChange, title])
+  if (!root) {
+    return (
+      <PropertyPanelSectionContext.Provider value={context}>
+        {children}
+      </PropertyPanelSectionContext.Provider>
+    )
+  }
+  const query = root.query.trim().toLocaleLowerCase()
+  const titleMatches = title.toLocaleLowerCase().includes(query)
+  const visible = embeddedVisibility ?? (!query || titleMatches)
+  const visibleExpanded = query ? true : expanded
+  return (
+    <section
+      className="property-panel__group"
+      data-property-depth="0"
+      hidden={!visible}
+      style={{ '--pp-group-depth': 0 } as CSSProperties}
+    >
+      <div className="property-panel__group-header">
+        <button
+          aria-expanded={visibleExpanded}
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <ChevronIcon expanded={visibleExpanded} />
+          {title}
+        </button>
+        <div className="property-panel__actions" />
+      </div>
+      {visibleExpanded ? (
+        <div className="property-panel__group-content">
+          <PropertyPanelSectionContext.Provider value={context}>
+            {children}
+          </PropertyPanelSectionContext.Provider>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 /**
  * 渲染由同步 Valibot Schema 驱动的受控属性面板。
  *
@@ -424,6 +763,95 @@ export interface ComposePropertyPanelProps<TSchema extends v.GenericSchema>
  * @public
  */
 export function ComposePropertyPanel<TSchema extends v.GenericSchema>({
+  ...props
+}: ComposePropertyPanelProps<TSchema>) {
+  const root = useContext(PropertyPanelRootContext)
+  const section = useContext(PropertyPanelSectionContext)
+  if (root && section) {
+    return <EmbeddedComposePropertyPanel {...props} root={root} section={section} />
+  }
+  return <StandaloneComposePropertyPanel {...props} />
+}
+
+function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
+  schema,
+  value,
+  defaultValue,
+  renderers,
+  binding,
+  readOnly = false,
+  onValueChange,
+  root,
+  section,
+}: ComposePropertyPanelProps<TSchema> & {
+  readonly root: PropertyPanelRootView
+  readonly section: PropertyPanelSectionView
+}) {
+  const messages = usePropertyPanelMessages()
+  const effectiveRenderers = mergePropertyPanelRenderers(renderers)
+  const asyncSchema = (schema as unknown as { async?: boolean }).async === true
+  const validation = asyncSchema ? null : v.safeParse(schema, value)
+  const issues = validation && !validation.success ? validation.issues : []
+  const hasValidDefault = defaultValue !== undefined
+    && !asyncSchema
+    && v.safeParse(schema, defaultValue).success
+  const commit = (
+    path: PropertyPath,
+    nextFieldValue: unknown,
+    reason: PropertyPanelChangeReason,
+    options?: TreeCommitOptions,
+  ) => {
+    const previousValue = options && 'previousValue' in options
+      ? options.previousValue
+      : getValueAtPath(value, path)
+    const nextValue = setValueAtPath(value, path, nextFieldValue) as v.InferInput<TSchema>
+    const result = v.safeParse(schema, nextValue)
+    if (!result.success) return false
+    onValueChange?.(nextValue, {
+      path: options?.eventPath ?? path,
+      previousValue,
+      value: nextFieldValue,
+      reason,
+      output: result.output,
+    })
+    if (binding && options?.bindingMutation) {
+      const nextBindings = remapPropertyBindings(binding.value, options.bindingMutation)
+      if (nextBindings !== binding.value) {
+        binding.onChange(nextBindings, {
+          reason: 'remap',
+          target: { path: options.bindingMutation.path, targetId: 'value' },
+        })
+      }
+    }
+    return true
+  }
+
+  if (asyncSchema) return <p role="alert">{messages.asyncUnsupported}</p>
+  return (
+    <PropertyTree
+      actionWidth={root.actionWidth}
+      binding={binding}
+      commit={commit}
+      defaultValue={defaultValue}
+      filter={root.filter}
+      hasDefaultValue={hasValidDefault}
+      issues={issues}
+      query={root.query}
+      readOnly={readOnly}
+      renderers={effectiveRenderers}
+      schema={schema}
+      section={{
+        onVisibilityChange: section.onVisibilityChange,
+        title: section.title,
+      }}
+      showAdvanced={root.showAdvanced}
+      showDescriptions={root.showDescriptions}
+      value={value}
+    />
+  )
+}
+
+function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   schema,
   value,
   defaultValue,

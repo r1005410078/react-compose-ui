@@ -155,11 +155,11 @@
   box-sizing: border-box;
 }
 
-.compose-stage__node.is-frame {
+.compose-stage__node.is-container {
   color: #172033;
 }
 
-.compose-stage__node.is-component {
+.compose-stage__node.is-renderer {
   overflow: hidden;
 }
 

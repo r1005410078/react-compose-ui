@@ -1,240 +1,190 @@
 /**
- * JSON 中允许的标量。
+ * ComposeDocument v4 的严格 JSON 与 ECS Entity/Component 公共协议。
  *
- * @public
+ * @packageDocumentation
  */
-export type JsonPrimitive = null | boolean | number | string
 
-/**
- * 可被 ComposeDocument、命令和 Patch 安全持久化的 JSON 值。
- *
- * @public
- */
-export type JsonValue =
-  | JsonPrimitive
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue }
+/** 严格 JSON 标量。 @public */
+export type JsonPrimitive = string | number | boolean | null
 
-/**
- * 以字符串键组织的 JSON 对象。
- *
- * @public
- */
+/** 严格 JSON 数组。 @public */
+export type JsonArray = readonly JsonValue[]
+
+/** 严格 JSON 对象。 @public */
 export interface JsonObject {
   readonly [key: string]: JsonValue
 }
 
-/**
- * 节点相对直接父节点的二维几何。
- *
- * @remarks
- * 无限 Stage 允许负坐标。宽高必须为有限正数，所有节点都允许有限 rotation。
- *
- * @public
- */
-export interface NodeTransform {
-  /** 相对父节点左上角的水平坐标。 */
+/** 可被文档、命令和 Patch 安全持久化的 JSON 值。 @public */
+export type JsonValue = JsonPrimitive | JsonArray | JsonObject
+
+/** 二维位置。 @public */
+export interface ComposePosition extends JsonObject {
   readonly x: number
-  /** 相对父节点左上角的垂直坐标。 */
   readonly y: number
-  /** 节点自身坐标系中的宽度。 */
+}
+
+/** 二维尺寸。 @public */
+export interface ComposeSize extends JsonObject {
   readonly width: number
-  /** 节点自身坐标系中的高度。 */
   readonly height: number
-  /** 顺时针旋转角度，单位为度。 */
+}
+
+/** Entity 的局部二维几何 Component。 @public */
+export interface ComposeTransform extends JsonObject {
+  readonly position: ComposePosition
+  readonly size: ComposeSize
   readonly rotation: number
 }
 
-/**
- * 单层节点阴影。
- *
- * @public
- */
-export interface NodeShadow {
-  /** CSS 颜色字符串；core 只要求非空，不解释具体颜色语法。 */
+/** Resize 约束模式。 @public */
+export type ComposeResizeMode =
+  | 'free'
+  | 'preserve-aspect'
+  | 'horizontal'
+  | 'vertical'
+  | 'none'
+
+/** Stage 几何编辑规则；缺失时使用自由变换默认值。 @public */
+export interface ComposeTransformConstraints extends JsonObject {
+  readonly movable: boolean
+  readonly resize: ComposeResizeMode
+  readonly rotatable: boolean
+  readonly minSize: ComposeSize
+  readonly maxSize: ComposeSize | null
+}
+
+/** Preset 基础组合和已附加能力的持久化 Authoring 数据。 @public */
+export interface ComposeComposition extends JsonObject {
+  readonly presetId: string | null
+  readonly baseComponentKeys: readonly string[]
+  readonly capabilityIds: readonly string[]
+}
+
+/** Entity 可见状态。 @public */
+export interface ComposeVisibility extends JsonObject {
+  readonly visible: boolean
+}
+
+/** Entity 编辑锁定状态。 @public */
+export interface ComposeLock extends JsonObject {
+  readonly locked: boolean
+}
+
+/** 唯一父子关系来源。 @public */
+export interface ComposeHierarchy extends JsonObject {
+  readonly childIds: readonly string[]
+}
+
+/** 后代裁剪状态。 @public */
+export interface ComposeClip extends JsonObject {
+  readonly enabled: boolean
+}
+
+/** 单个结构化阴影。 @public */
+export interface ComposeShadow extends JsonObject {
   readonly color: string
-  /** 水平偏移，单位为世界像素。 */
   readonly offsetX: number
-  /** 垂直偏移，单位为世界像素。 */
   readonly offsetY: number
-  /** 模糊半径，必须为非负有限值。 */
   readonly blur: number
-  /** 扩展半径，可以为有限负值。 */
   readonly spread: number
 }
 
-/**
- * 节点可持久化的部分视觉样式。
- *
- * @remarks
- * 字段缺失时由 `resolveNodeStyle` 按节点 kind 补齐；`shadow: null` 表示明确关闭阴影。
- *
- * @public
- */
-export interface NodeStyle {
+/** Entity 可选的部分外观数据。 @public */
+export type ComposeAppearance = JsonObject & {
   readonly backgroundColor?: string
   readonly borderColor?: string
   readonly borderWidth?: number
   readonly borderRadius?: number
   readonly opacity?: number
-  readonly shadow?: NodeShadow | null
+  readonly shadow?: ComposeShadow | null
 }
 
-/**
- * 渲染端使用的完整节点视觉样式。
- *
- * @public
- */
-export interface ResolvedNodeStyle {
+/** 渲染端使用的完整稳定外观。 @public */
+export interface ResolvedComposeAppearance {
   readonly backgroundColor: string
   readonly borderColor: string
   readonly borderWidth: number
   readonly borderRadius: number
   readonly opacity: number
-  readonly shadow: NodeShadow | null
+  readonly shadow: ComposeShadow | null
 }
 
-/**
- * 所有 ComposeDocument 节点共享的字段。
- *
- * @public
- */
-export interface ComposeNodeBase {
-  /** 文档内稳定且唯一的节点 ID。 */
-  readonly id: string
-  /** 面向编辑器用户的节点名称。 */
-  readonly name: string
-  /** 节点及其后代是否可见。 */
-  readonly visible: boolean
-  /** 节点是否禁止结构和几何编辑。 */
-  readonly locked: boolean
-  /** 相对直接父节点的二维几何。 */
-  readonly transform: NodeTransform
-  /** 可选通用视觉样式；缺失时按节点 kind 使用稳定默认值。 */
-  readonly style?: NodeStyle
-}
-
-/**
- * 可嵌套、可旋转并可选择裁剪后代内容的统一容器节点。
- *
- * @public
- */
-export interface ComposeFrameNode extends ComposeNodeBase {
-  readonly kind: 'frame'
-  /** 按场景顺序排列的直接子节点 ID。 */
-  readonly childIds: readonly string[]
-  /** 是否裁剪超出 Frame 本地边界的后代内容。 */
-  readonly clipContent: boolean
-}
-
-/**
- * 由宿主运行时注册表负责渲染的组件节点。
- *
- * @public
- */
-export interface ComposeComponentNode extends ComposeNodeBase {
-  readonly kind: 'component'
-  /** 解析宿主 ComposeComponentDefinition 的稳定类型。 */
-  readonly componentType: string
-  /** 严格 JSON 可序列化的组件属性。 */
+/** 宿主 Renderer 类型与 JSON 属性。 @public */
+export interface ComposeRenderer extends JsonObject {
+  readonly type: string
   readonly props: JsonObject
 }
 
-/**
- * ComposeDocument 支持的节点联合。
- *
- * @public
- */
-export type ComposeNode =
-  | ComposeFrameNode
-  | ComposeComponentNode
+/** ComposeDocument v4 内建 Component Key。 @public */
+export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
+  composition: 'Composition',
+  transform: 'Transform',
+  transformConstraints: 'TransformConstraints',
+  visibility: 'Visibility',
+  lock: 'Lock',
+  hierarchy: 'Hierarchy',
+  clip: 'Clip',
+  appearance: 'Appearance',
+  renderer: 'Renderer',
+} as const
 
-/**
- * 一条全局世界坐标辅助线。
- *
- * @public
- */
-export interface ComposeCanvasGuide {
-  /** 文档内稳定且唯一的辅助线 ID。 */
+/** ComposeDocument v4 内建 Component Key 联合。 @public */
+export type ComposeBuiltinComponentKey =
+  typeof COMPOSE_BUILTIN_COMPONENT_KEYS[keyof typeof COMPOSE_BUILTIN_COMPONENT_KEYS]
+
+/** 完全由 Components 组合的场景 Entity。 @public */
+export interface ComposeEntity {
+  /** 文档内稳定且唯一的 Entity ID。 */
   readonly id: string
-  /** `x` 表示垂直辅助线，`y` 表示水平辅助线。 */
+  /** 面向编辑器用户的 Entity 名称。 */
+  readonly name: string
+  /** PascalCase Key 到严格 JsonObject 的 Component 映射。 */
+  readonly components: Readonly<Record<string, JsonObject>>
+}
+
+/** 一条全局世界坐标辅助线。 @public */
+export interface ComposeCanvasGuide {
+  readonly id: string
   readonly axis: 'x' | 'y'
-  /** 辅助线所在的世界坐标。 */
   readonly position: number
 }
 
-/**
- * 编辑器画布的持久化设置。
- *
- * @remarks
- * 这些设置参与事务历史；viewport、选择、工具和滚动范围仍属于会话状态。
- *
- * @public
- */
+/** 编辑器画布的持久化设置。 @public */
 export interface ComposeCanvasSettings {
-  /** 网格渲染与基础刻度吸附设置。 */
   readonly grid: {
-    /** 水平方向刻度，单位为世界像素。 */
     readonly stepX: number
-    /** 垂直方向刻度，单位为世界像素。 */
     readonly stepY: number
-    /** 水平方向网格世界坐标偏移。 */
     readonly offsetX: number
-    /** 垂直方向网格世界坐标偏移。 */
     readonly offsetY: number
-    /** 每隔多少细网格绘制一条主线。 */
     readonly primaryLineEvery: number
-    /** 是否启用基础网格吸附。 */
     readonly snapEnabled: boolean
   }
-  /** 节点与辅助线智能吸附开关。 */
   readonly smartSnap: {
-    /** 是否吸附到其他节点的边缘和中心。 */
     readonly nodes: boolean
-    /** 是否吸附到全局辅助线。 */
     readonly guides: boolean
   }
-  /** 对所有 Frame 生效的全局世界坐标辅助线。 */
   readonly guides: readonly ComposeCanvasGuide[]
 }
 
-/**
- * 文档发布与 Preview 使用的固定原点输出设置。
- *
- * @public
- */
+/** 文档发布与 Preview 使用的固定原点输出设置。 @public */
 export interface ComposeOutputSettings {
-  /** 输出宽度，必须为有限正数。 */
   readonly width: number
-  /** 输出高度，必须为有限正数。 */
   readonly height: number
-  /** 输出背景色；core 只要求非空，不解释颜色语法。 */
   readonly backgroundColor: string
 }
 
-/**
- * 编辑器、Stage 与 Preview 共享的 v3 正式文档。
- *
- * @public
- */
+/** 编辑器、Stage 与 Preview 共享的 v4 ECS 文档。 @public */
 export interface ComposeDocument {
-  /** 当前且唯一支持的文档协议版本。 @defaultValue 3 */
-  readonly schemaVersion: 3
-  /** Stage 使用、Preview 忽略的持久化画布元数据。 */
+  /** 当前且唯一支持的文档协议版本。 @defaultValue 4 */
+  readonly schemaVersion: 4
   readonly canvas: ComposeCanvasSettings
-  /** 固定在世界原点的发布与 Preview 输出设置。 */
   readonly output: ComposeOutputSettings
-  /** 按世界场景顺序排列的隐式 Canvas 直接子节点 ID。 */
   readonly rootIds: readonly string[]
-  /** 以稳定 ID 规范化保存的全部节点。 */
-  readonly nodes: Readonly<Record<string, ComposeNode>>
+  readonly entities: Readonly<Record<string, ComposeEntity>>
 }
 
-/**
- * 文档校验问题的稳定机器码。
- *
- * @public
- */
+/** 文档校验问题稳定机器码。 @public */
 export type DocumentValidationIssueCode =
   | 'json.unsupported'
   | 'json.non-finite-number'
@@ -246,7 +196,7 @@ export type DocumentValidationIssueCode =
   | 'document.missing-child'
   | 'document.multiple-parents'
   | 'document.cycle'
-  | 'document.orphan-node'
+  | 'document.orphan-entity'
   | 'output.invalid'
   | 'output.invalid-size'
   | 'output.invalid-background'
@@ -256,33 +206,28 @@ export type DocumentValidationIssueCode =
   | 'canvas.invalid-primary-interval'
   | 'canvas.invalid-guide'
   | 'canvas.duplicate-guide'
-  | 'node.invalid'
-  | 'node.id-mismatch'
-  | 'node.invalid-field'
-  | 'transform.non-finite'
+  | 'entity.invalid'
+  | 'entity.id-mismatch'
+  | 'entity.invalid-field'
+  | 'component.invalid-key'
+  | 'component.invalid-value'
+  | 'component.missing'
+  | 'component.invalid-combination'
+  | 'composition.invalid'
+  | 'transform.invalid'
   | 'transform.invalid-size'
-  | 'style.invalid'
-  | 'component.empty-type'
+  | 'transform-constraints.invalid'
+  | 'appearance.invalid'
+  | 'renderer.invalid'
 
-/**
- * 一个可定位的文档校验问题。
- *
- * @public
- */
+/** 一个可定位的文档校验问题。 @public */
 export interface DocumentValidationIssue {
-  /** 供程序判断的稳定错误码。 */
   readonly code: DocumentValidationIssueCode
-  /** 从文档根开始定位问题的字符串/数组索引路径。 */
   readonly path: readonly (string | number)[]
-  /** 面向开发者的简短错误说明。 */
   readonly message: string
 }
 
-/**
- * 文档校验的判别结果。
- *
- * @public
- */
+/** 文档校验判别结果。 @public */
 export type DocumentValidationResult =
   | { readonly valid: true; readonly document: ComposeDocument }
   | { readonly valid: false; readonly issues: readonly DocumentValidationIssue[] }

@@ -1,12 +1,16 @@
 import { Component, type ReactNode } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposeComponentInspectorProps, ComposeComponentRegistry } from '../registry/types'
-import type { ComposeComponentNode } from '@compose-ui/core'
+import {
+  getComposeRenderer,
+  type ComposeEntity,
+  type EditorCommand,
+} from '@compose-ui/core'
+import type { ComposeEntityRegistry } from '../registry/types'
 
 interface BoundaryProps {
   readonly children: ReactNode
-  readonly type: string
-  readonly area: 'renderer' | 'inspector'
+  readonly identity: string
+  readonly area: 'renderer' | 'component-inspector' | 'renderer-inspector'
 }
 
 interface BoundaryState {
@@ -20,16 +24,24 @@ class DefinitionErrorBoundary extends Component<BoundaryProps, BoundaryState> {
     return { failed: true }
   }
 
+  componentDidUpdate(previous: BoundaryProps) {
+    if (previous.identity !== this.props.identity && this.state.failed) {
+      this.setState({ failed: false })
+    }
+  }
+
   componentDidCatch() {
-    // React 负责报告宿主错误；边界只保证一个 definition 不会卸载完整消费方。
+    // React 负责报告宿主错误；边界只保证一个 Registry 扩展不会卸载完整消费方。
   }
 
   render() {
     if (this.state.failed) {
-      const label = this.props.area === 'renderer' ? '组件渲染失败' : '属性检查器失败'
+      const label = this.props.area === 'renderer'
+        ? '组件渲染失败'
+        : '属性检查器失败'
       return (
-        <div aria-label={`${label} ${this.props.type}`} role="status">
-          {label}：{this.props.type}
+        <div aria-label={`${label} ${this.props.identity}`} role="status">
+          {label}：{this.props.identity}
         </div>
       )
     }
@@ -37,83 +49,112 @@ class DefinitionErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 }
 
-/**
- * 解析并隔离渲染一个已注册或未知 Component 节点。
- *
- * @public
- */
-export function ComposeRegistryComponent({
+/** 解析并隔离 Entity 的可选 Renderer；纯容器返回 null。 @public */
+export function ComposeRegistryEntityRenderer({
   registry,
-  node,
+  entity,
   mode,
   assetResolver,
 }: {
-  /** 当前消费方的实例级注册表。 */
-  readonly registry: ComposeComponentRegistry
-  /** 要渲染的文档节点。 */
-  readonly node: ComposeComponentNode
-  /** editor 或 preview 渲染模式。 */
+  readonly registry: ComposeEntityRegistry
+  readonly entity: ComposeEntity
   readonly mode: 'editor' | 'preview'
-  /** 资源型 renderer 使用的可选解析器。 */
   readonly assetResolver?: ComposeAssetResolver
 }) {
-  const definition = registry.get(node.componentType)
+  const renderer = getComposeRenderer(entity)
+  if (!renderer) return null
+  const definition = registry.getRenderer(renderer.type)
   if (!definition) {
     return (
-      <div aria-label={`未知组件类型 ${node.componentType}`} role="status">
-        未知组件：{node.componentType}
+      <div aria-label={`未知 Renderer ${renderer.type}`} role="status">
+        未知组件：{renderer.type}
       </div>
     )
   }
   const Renderer = definition.renderer
   return (
-    <DefinitionErrorBoundary area="renderer" type={node.componentType}>
+    <DefinitionErrorBoundary area="renderer" identity={renderer.type}>
       <Renderer
         assetResolver={assetResolver}
+        entity={entity}
         mode={mode}
-        node={node}
-        props={node.props}
+        props={renderer.props}
+        renderer={renderer}
       />
     </DefinitionErrorBoundary>
   )
 }
 
-/**
- * 解析并隔离一个 definition 的可选 Inspector renderer。
- *
- * @public
- */
-export function ComposeRegistryInspector({
+/** 解析并隔离一个 ECS Component 的可选 Inspector。 @public */
+export function ComposeRegistryComponentInspector({
   registry,
-  node,
+  entity,
+  componentKey,
   dispatch,
+  readOnly,
 }: {
-  /** 当前消费方的实例级注册表。 */
-  readonly registry: ComposeComponentRegistry
-  /** 当前选中的文档 Component。 */
-  readonly node: ComposeComponentNode
-  /** 统一 TransactionRuntime 命令派发函数。 */
-  readonly dispatch: ComposeComponentInspectorProps['dispatch']
+  readonly registry: ComposeEntityRegistry
+  readonly entity: ComposeEntity
+  readonly componentKey: string
+  readonly dispatch: (command: EditorCommand) => unknown
+  readonly readOnly: boolean
 }) {
-  const definition = registry.get(node.componentType)
-  if (!definition) {
+  const value = entity.components[componentKey]
+  const definition = registry.getComponent(componentKey)
+  if (!value || !definition) {
     return (
-      <div aria-label={`未知组件属性 ${node.componentType}`} role="status">
-        未知组件：{node.componentType}
+      <div aria-label={`未知能力 ${componentKey}`} role="status">
+        未知能力：{componentKey}
       </div>
     )
   }
-  if (!definition.inspector) {
-    return (
-      <div aria-label={`组件没有属性检查器 ${node.componentType}`} role="status">
-        该组件没有属性检查器
-      </div>
-    )
-  }
+  if (!definition.inspector) return null
   const Inspector = definition.inspector
   return (
-    <DefinitionErrorBoundary area="inspector" type={node.componentType}>
-      <Inspector dispatch={dispatch} node={node} />
+    <DefinitionErrorBoundary area="component-inspector" identity={componentKey}>
+      <Inspector
+        componentKey={componentKey}
+        dispatch={dispatch}
+        entity={entity}
+        readOnly={readOnly}
+        value={value}
+      />
+    </DefinitionErrorBoundary>
+  )
+}
+
+/** 解析并隔离 Entity Renderer 的可选内容 Inspector。 @public */
+export function ComposeRegistryRendererInspector({
+  registry,
+  entity,
+  dispatch,
+  readOnly,
+}: {
+  readonly registry: ComposeEntityRegistry
+  readonly entity: ComposeEntity
+  readonly dispatch: (command: EditorCommand) => unknown
+  readonly readOnly: boolean
+}) {
+  const renderer = getComposeRenderer(entity)
+  if (!renderer) return null
+  const definition = registry.getRenderer(renderer.type)
+  if (!definition) {
+    return (
+      <div aria-label={`未知 Renderer 属性 ${renderer.type}`} role="status">
+        未知组件：{renderer.type}
+      </div>
+    )
+  }
+  if (!definition.inspector) return null
+  const Inspector = definition.inspector
+  return (
+    <DefinitionErrorBoundary area="renderer-inspector" identity={renderer.type}>
+      <Inspector
+        dispatch={dispatch}
+        entity={entity}
+        readOnly={readOnly}
+        renderer={renderer}
+      />
     </DefinitionErrorBoundary>
   )
 }

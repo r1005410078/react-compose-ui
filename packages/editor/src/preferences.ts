@@ -12,7 +12,7 @@ export type ComposeEditorShortcutAction =
   | 'stage.selectTool'
   | 'stage.panTool'
   | 'stage.fitSelection'
-  | 'stage.fitFrame'
+  | 'stage.fitContainer'
   | 'stage.zoomReset'
   | 'stage.zoomIn'
   | 'stage.zoomOut'
@@ -70,7 +70,7 @@ export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'stage.selectTool',
   'stage.panTool',
   'stage.fitSelection',
-  'stage.fitFrame',
+  'stage.fitContainer',
   'stage.zoomReset',
   'stage.zoomIn',
   'stage.zoomOut',
@@ -92,7 +92,7 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
   'stage.selectTool': 'stage',
   'stage.panTool': 'stage',
   'stage.fitSelection': 'stage',
-  'stage.fitFrame': 'stage',
+  'stage.fitContainer': 'stage',
   'stage.zoomReset': 'stage',
   'stage.zoomIn': 'stage',
   'stage.zoomOut': 'stage',
@@ -122,7 +122,7 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
       'stage.selectTool': [{ code: 'KeyV' }],
       'stage.panTool': [{ code: 'KeyH' }],
       'stage.fitSelection': [{ code: 'KeyF' }],
-      'stage.fitFrame': [{ code: 'KeyF', shift: true }],
+      'stage.fitContainer': [{ code: 'KeyF', shift: true }],
       'stage.zoomReset': [{ code: 'Digit0', primary: true }],
       'stage.zoomIn': [{ code: 'Equal', primary: true }],
       'stage.zoomOut': [{ code: 'Minus', primary: true }],

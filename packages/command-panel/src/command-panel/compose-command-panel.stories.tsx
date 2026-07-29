@@ -8,7 +8,7 @@ const renameHandler: CommandHandler = {
   type: 'storybook.rename',
   execute: (_document, command) => ({
     status: 'patches',
-    patches: [{ op: 'set', path: ['nodes', 'story-card', 'name'], value: command.payload.name }],
+    patches: [{ op: 'set', path: ['entities', 'story-card', 'name'], value: command.payload.name }],
   }),
 }
 

@@ -13,6 +13,7 @@ import type {
   ContextMenuSubmenuTriggerProps as BaseSubmenuTriggerProps,
 } from '@base-ui/react/context-menu'
 import type { SeparatorProps as BaseSeparatorProps } from '@base-ui/react/separator'
+/* eslint-disable react-refresh/only-export-components -- ContextMenu 的组件和配套受控 Hook 共用同一私有状态协议。 */
 import {
   createComposeThemeStyle,
   useComposeI18nContext,

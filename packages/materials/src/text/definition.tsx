@@ -1,40 +1,53 @@
-import type { ComposeComponentDefinition } from '@compose-ui/component-registry'
-import { cloneProps, cloneStyle } from '../material-inspector-kit/default-values'
+import type {
+  ComposeEntityPreset,
+  ComposeRendererDefinition,
+} from '@compose-ui/component-registry'
+import type { ComposeBasicMaterialOptions } from '../types'
+import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
   createDefaultInspectorId,
+  createTextRendererInspector,
   type InspectorIdFactory,
-} from '../material-inspector-kit/inspector/dispatch-update'
-import type { ComposeBasicMaterialComponentOptions } from '../types'
-import { DEFAULT_TEXT_PROPS, DEFAULT_TEXT_SIZE, DEFAULT_TEXT_STYLE } from './defaults'
-import { createTextInspector } from './inspector'
+} from '../material-inspector-kit/renderer-inspectors'
+import {
+  DEFAULT_TEXT_APPEARANCE,
+  DEFAULT_TEXT_PROPS,
+  DEFAULT_TEXT_SIZE,
+} from './defaults'
 import { TextRenderer } from './renderer'
 
-/** 根据实例配置创建 Text definition。 @internal */
-export function createTextDefinition(
-  options: ComposeBasicMaterialComponentOptions = {},
+/** 创建 Text Renderer 与 Entity Preset。 @internal */
+export function createTextMaterial(
+  options: ComposeBasicMaterialOptions = {},
   idFactory: InspectorIdFactory = createDefaultInspectorId,
-): ComposeComponentDefinition {
-  const name = options.name ?? 'Text'
-  const defaultSize = options.defaultSize ?? DEFAULT_TEXT_SIZE
-  const defaultProps = cloneProps(DEFAULT_TEXT_PROPS, options.defaultProps)
-  const defaultStyle = cloneStyle(DEFAULT_TEXT_STYLE, options.defaultStyle)
+): { renderer: ComposeRendererDefinition; preset: ComposeEntityPreset } {
+  const size = options.defaultSize ?? DEFAULT_TEXT_SIZE
+  const props = mergeJson(DEFAULT_TEXT_PROPS, options.defaultProps)
+  const appearance = mergeAppearance(DEFAULT_TEXT_APPEARANCE, options.defaultAppearance)
   return {
-    type: 'text',
-    label: options.label ?? 'Text',
-    defaultName: name,
-    icon: <span aria-hidden="true">T</span>,
-    defaultSize: { ...defaultSize },
-    createDefaultProps: () => cloneProps(defaultProps),
-    createDefaultStyle: () => cloneStyle(defaultStyle),
-    renderer: TextRenderer,
-    inspector: createTextInspector({
-      name,
-      size: defaultSize,
-      props: defaultProps,
-      style: defaultStyle,
-    }, idFactory),
+    renderer: {
+      type: 'text',
+      label: options.label ?? 'Text',
+      renderer: TextRenderer,
+      inspector: createTextRendererInspector(idFactory),
+    },
+    preset: {
+      id: 'text',
+      label: options.label ?? 'Text',
+      defaultName: options.name ?? 'Text',
+      icon: <span aria-hidden="true">T</span>,
+      createComponents: () => rendererPresetComponents({
+        type: 'text',
+        props,
+        size,
+        appearance,
+      }),
+    },
   }
 }
 
-/** 默认 Text definition；不会创建模块级 registry。 @public */
-export const DEFAULT_COMPOSE_TEXT_DEFINITION = createTextDefinition()
+const text = createTextMaterial()
+/** 默认 Text Renderer。 @public */
+export const DEFAULT_COMPOSE_TEXT_RENDERER = text.renderer
+/** 默认 Text Entity Preset。 @public */
+export const DEFAULT_COMPOSE_TEXT_PRESET = text.preset

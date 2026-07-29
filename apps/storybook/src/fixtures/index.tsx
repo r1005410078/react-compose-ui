@@ -1,5 +1,6 @@
-import { createComposeComponentRegistry } from '@compose-ui/component-registry'
-import type { ComposeComponentRendererProps } from '@compose-ui/component-registry'
+/* eslint-disable react-refresh/only-export-components -- Storybook workspace 需要从单一夹具入口共享 Renderer、Registry 和 factory。 */
+import { createComposeEntityRegistry } from '@compose-ui/component-registry'
+import type { ComposeRendererProps } from '@compose-ui/component-registry'
 import type { ComposeAssetProvider } from '@compose-ui/assets'
 import {
   createDefaultCanvasSettings,
@@ -8,7 +9,7 @@ import {
 } from '@compose-ui/core'
 
 /** Storybook 共享的、无外部副作用的 Component renderer。 */
-export function StoryCardRenderer({ props }: ComposeComponentRendererProps) {
+export function StoryCardRenderer({ props }: ComposeRendererProps) {
   const label = typeof props.label === 'string' ? props.label : 'Compose card'
   return (
     <div
@@ -29,45 +30,167 @@ export function StoryCardRenderer({ props }: ComposeComponentRendererProps) {
 }
 
 /** Storybook 所有编辑/预览故事共用的稳定 registry。 */
-export const storyRegistry = createComposeComponentRegistry([
-  {
+export const storyRegistry = createComposeEntityRegistry({
+  renderers: [{
     type: 'story.card',
     label: 'Story card',
-    defaultName: 'Story card',
-    defaultSize: { width: 240, height: 120 },
-    createDefaultProps: () => ({ label: 'Compose card' }),
     renderer: StoryCardRenderer,
-  },
-])
+  }],
+  components: [
+    {
+      key: 'Composition',
+      label: 'Composition',
+      hidden: true,
+      createDefault: () => ({ presetId: null, baseComponentKeys: [], capabilityIds: [] }),
+    },
+    {
+      key: 'Transform',
+      label: 'Transform',
+      order: 10,
+      createDefault: () => ({
+        position: { x: 0, y: 0 },
+        size: { width: 100, height: 100 },
+        rotation: 0,
+      }),
+    },
+    {
+      key: 'Visibility',
+      label: 'Visibility',
+      order: 20,
+      createDefault: () => ({ visible: true }),
+    },
+    {
+      key: 'Lock',
+      label: 'Lock',
+      order: 30,
+      createDefault: () => ({ locked: false }),
+    },
+    {
+      key: 'Appearance',
+      label: 'Appearance',
+      order: 40,
+      createDefault: () => ({ backgroundColor: 'transparent' }),
+    },
+    {
+      key: 'Hierarchy',
+      label: 'Container',
+      order: 50,
+      createDefault: () => ({ childIds: [] }),
+    },
+    {
+      key: 'Clip',
+      label: 'Clip',
+      order: 60,
+      createDefault: () => ({ enabled: true }),
+    },
+    {
+      key: 'Renderer',
+      label: 'Content',
+      hidden: true,
+      order: 80,
+      createDefault: () => ({ type: 'unknown', props: {} }),
+    },
+  ],
+  presets: [
+    {
+      id: 'story.container',
+      label: 'Story container',
+      createComponents: () => ({
+        Transform: {
+          position: { x: 0, y: 0 },
+          size: { width: 560, height: 360 },
+          rotation: 0,
+        },
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Hierarchy: { childIds: [] },
+        Clip: { enabled: true },
+        Appearance: { backgroundColor: '#ffffff' },
+      }),
+    },
+    {
+      id: 'story.card',
+      label: 'Story card',
+      createComponents: () => ({
+        Transform: {
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 120 },
+          rotation: 0,
+        },
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Appearance: { backgroundColor: 'transparent' },
+        Renderer: { type: 'story.card', props: { label: 'Compose card' } },
+      }),
+    },
+  ],
+})
 
 /** 返回新的文档对象，避免每个 Story 或 play function 相互污染。 */
 export function createStoryDocument(): ComposeDocument {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
-    rootIds: ['story-frame'],
-    nodes: {
-      'story-frame': {
-        id: 'story-frame',
-        kind: 'frame',
-        name: 'Story frame',
-        visible: true,
-        locked: false,
-        transform: { x: 80, y: 72, width: 560, height: 360, rotation: 0 },
-        style: { backgroundColor: '#ffffff', borderColor: '#94a3b8', borderWidth: 1 },
-        childIds: ['story-card'],
-        clipContent: true,
+    rootIds: ['story-container'],
+    entities: {
+      'story-container': {
+        id: 'story-container',
+        name: 'Story container',
+        components: {
+          Composition: {
+            presetId: 'story.container',
+            baseComponentKeys: [
+              'Transform',
+              'Visibility',
+              'Lock',
+              'Hierarchy',
+              'Clip',
+              'Appearance',
+            ],
+            capabilityIds: [],
+          },
+          Transform: {
+            position: { x: 80, y: 72 },
+            size: { width: 560, height: 360 },
+            rotation: 0,
+          },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Appearance: {
+            backgroundColor: '#ffffff',
+            borderColor: '#94a3b8',
+            borderWidth: 1,
+          },
+          Hierarchy: { childIds: ['story-card'] },
+          Clip: { enabled: true },
+        },
       },
       'story-card': {
         id: 'story-card',
-        kind: 'component',
         name: 'Story card',
-        visible: true,
-        locked: false,
-        transform: { x: 48, y: 48, width: 240, height: 120, rotation: 0 },
-        componentType: 'story.card',
-        props: { label: 'Compose card' },
+        components: {
+          Composition: {
+            presetId: 'story.card',
+            baseComponentKeys: [
+              'Transform',
+              'Visibility',
+              'Lock',
+              'Appearance',
+              'Renderer',
+            ],
+            capabilityIds: [],
+          },
+          Transform: {
+            position: { x: 48, y: 48 },
+            size: { width: 240, height: 120 },
+            rotation: 0,
+          },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Appearance: { backgroundColor: 'transparent' },
+          Renderer: { type: 'story.card', props: { label: 'Compose card' } },
+        },
       },
     },
   }

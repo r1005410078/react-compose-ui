@@ -18,6 +18,8 @@ interface StageOverlayProps {
     Record<ResizeHandle, readonly [number, number]>
   > | null
   readonly editableSelection: boolean
+  readonly resizeHandles: readonly ResizeHandle[]
+  readonly rotatable: boolean
   readonly marqueeScreen: StageRect | null
   readonly snapGuides: readonly StageGuide[]
   readonly onInteraction: (
@@ -34,6 +36,8 @@ export function StageOverlay({
   screenBounds,
   handlePoints,
   editableSelection,
+  resizeHandles,
+  rotatable,
   marqueeScreen,
   snapGuides,
   onInteraction,
@@ -88,6 +92,7 @@ export function StageOverlay({
       {editableSelection && handlePoints ? (
         <>
           {(Object.entries(handlePoints) as [ResizeHandle, readonly [number, number]][])
+            .filter(([handle]) => resizeHandles.includes(handle))
             .map(([handle, [x, y]]) => (
               <rect
                 className="compose-stage__handle"
@@ -103,14 +108,16 @@ export function StageOverlay({
                 )}
               />
             ))}
-          <circle
-            className="compose-stage__handle compose-stage__rotation"
-            cx={handlePoints.n[0]}
-            cy={handlePoints.n[1] - 24}
-            data-testid="stage-rotation-handle"
-            r="5"
-            onPointerDown={(event) => onInteraction({ kind: 'rotate' }, event)}
-          />
+          {rotatable ? (
+            <circle
+              className="compose-stage__handle compose-stage__rotation"
+              cx={handlePoints.n[0]}
+              cy={handlePoints.n[1] - 24}
+              data-testid="stage-rotation-handle"
+              r="5"
+              onPointerDown={(event) => onInteraction({ kind: 'rotate' }, event)}
+            />
+          ) : null}
         </>
       ) : null}
       {marqueeScreen ? (

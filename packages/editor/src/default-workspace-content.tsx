@@ -32,14 +32,14 @@ type DefaultStageToolbarProps = {
     smartEnabled: boolean,
     label: string,
   ) => void
-  readonly createFrame: () => void
+  readonly createContainer: () => void
   readonly dispatch: NonNullable<ComposeStageProps['dispatch']>
   readonly document: ComposeDocument
-  readonly fitFrame: () => void
+  readonly fitContainer: () => void
   readonly fitSelection: () => void
   readonly nextId: () => string
   readonly selectedIds: readonly string[]
-  readonly selectedFrameId: string | null
+  readonly selectedContainerId: string | null
   readonly setCanvasSettingsOpen: Dispatch<SetStateAction<boolean>>
   readonly setTool: (tool: ComposeStageTool) => void
   readonly setViewport: Dispatch<SetStateAction<StageViewport>>
@@ -52,14 +52,14 @@ type DefaultStageToolbarProps = {
 export function DefaultStageToolbar({
   canvasSettingsOpen,
   configureCanvas,
-  createFrame,
+  createContainer,
   dispatch,
   document,
-  fitFrame,
+  fitContainer,
   fitSelection,
   nextId,
   selectedIds,
-  selectedFrameId,
+  selectedContainerId,
   setCanvasSettingsOpen,
   setTool,
   setViewport,
@@ -100,15 +100,15 @@ export function DefaultStageToolbar({
         </button>
       </div>
       <span aria-hidden="true" className="compose-editor__toolbar-divider" />
-      <div aria-label={messages.frameTools} className="compose-editor__toolbar-group" role="group">
-        <button {...titled(messages.createFrame)} type="button" onClick={createFrame}>
+      <div aria-label={messages.containerTools} className="compose-editor__toolbar-group" role="group">
+        <button {...titled(messages.createContainer)} type="button" onClick={createContainer}>
           <StageToolbarIcon name="create-frame" />
         </button>
         <button
-          {...titled(messages.fitFrame)}
-          disabled={!surfaceSize || !selectedFrameId}
+          {...titled(messages.fitContainer)}
+          disabled={!surfaceSize || !selectedContainerId}
           type="button"
-          onClick={fitFrame}
+          onClick={fitContainer}
         >
           <StageToolbarIcon name="fit-frame" />
         </button>

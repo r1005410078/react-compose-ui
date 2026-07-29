@@ -61,6 +61,32 @@ function Inspector() {
 tuple/rest、record、union 和 variant，并识别 optional、nullable、nullish 包装器。候选完整值通过
 Schema 校验后才会回调；无效文本或数字保留为字段本地草稿。
 
+## 单面板、多 Schema 分组
+
+需要把 ECS Component 或其他独立数据源放进同一个 Inspector 时，使用 Root 与 Section
+共享一套搜索、筛选、显示设置和列宽；每个 `ComposePropertyPanel` 仍单独校验和提交：
+
+```tsx
+import {
+  ComposePropertyPanel,
+  ComposePropertyPanelRoot,
+  ComposePropertyPanelSection,
+} from '@compose-ui/property-panel'
+
+<ComposePropertyPanelRoot aria-label="Entity 属性">
+  <ComposePropertyPanelSection title="变换">
+    <ComposePropertyPanel schema={transformSchema} value={transform} onValueChange={setTransform} />
+  </ComposePropertyPanelSection>
+  <ComposePropertyPanelSection title="外观">
+    <ComposePropertyPanel schema={appearanceSchema} value={appearance} onValueChange={setAppearance} />
+  </ComposePropertyPanelSection>
+</ComposePropertyPanelRoot>
+```
+
+Section 默认展开并可折叠。搜索会匹配分组名、字段名、路径与说明，只临时展开命中组；清空后恢复
+用户原来的折叠状态。Root 外的独立 `ComposePropertyPanel` 行为不变。Registry Inspector 放在
+Section 内时无需修改现有实现；其中的 Property Panel 会自动进入嵌入模式。
+
 ## 展示 metadata
 
 使用 `v.title` 和 `v.description` 提供名称与说明。其余展示配置放在 metadata 的

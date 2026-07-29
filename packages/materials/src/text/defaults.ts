@@ -1,10 +1,10 @@
-import type { JsonObject, NodeStyle } from '@compose-ui/core'
+import type { ComposeAppearance, JsonObject } from '@compose-ui/core'
 
 /** Text 内置尺寸。 @internal */
 export const DEFAULT_TEXT_SIZE = Object.freeze({ width: 280, height: 72 })
 
 /** Text 内置节点样式。 @internal */
-export const DEFAULT_TEXT_STYLE: NodeStyle = Object.freeze({
+export const DEFAULT_TEXT_APPEARANCE: ComposeAppearance = Object.freeze({
   backgroundColor: 'transparent',
   borderColor: 'transparent',
   borderWidth: 0,

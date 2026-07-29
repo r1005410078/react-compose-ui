@@ -1,19 +1,23 @@
 /**
- * 提供可独立嵌入的完整文档或指定 Frame 预览。
+ * 提供可独立嵌入的完整文档或指定 Container 预览。
  *
  * @packageDocumentation
  */
 
-import { ComposeRegistryComponent } from '@compose-ui/component-registry'
+import { ComposeRegistryEntityRenderer } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
   COMPOSE_UI_CORE_PACKAGE,
-  resolveNodeStyle,
+  getComposeClip,
+  getComposeHierarchy,
+  getComposeTransform,
+  getComposeVisibility,
+  resolveComposeAppearance,
 } from '@compose-ui/core'
-import type { ComposeComponentRegistry } from '@compose-ui/component-registry'
+import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type {
   ComposeDocument,
-  ComposeNode,
+  ComposeEntity,
 } from '@compose-ui/core'
 import type { CSSProperties, HTMLAttributes } from 'react'
 
@@ -25,11 +29,11 @@ import type { CSSProperties, HTMLAttributes } from 'react'
 export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
   /** 文档模式的正式 JSON 文档。 */
   readonly document: ComposeDocument
-  /** Stage 与 Preview 共享的实例级组件注册表。 */
-  readonly registry: ComposeComponentRegistry
-  /** 资源型组件解析稳定引用时使用的运行时端口。 */
+  /** Stage 与 Preview 共享的实例级 Entity 注册表。 */
+  readonly registry: ComposeEntityRegistry
+  /** 资源型 Renderer 解析稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
-  /** 输出完整文档或某个根级/嵌套 Frame；省略时输出完整文档。 */
+  /** 输出完整文档或某个根级/嵌套 Container；省略时输出完整文档。 */
   readonly target?: ComposePreviewTarget
 }
 
@@ -40,10 +44,12 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
  */
 export type ComposePreviewTarget =
   | { readonly kind: 'document' }
-  | { readonly kind: 'frame'; readonly frameId: string }
+  | { readonly kind: 'container'; readonly entityId: string }
 
-function visualStyle(node: ComposeNode): CSSProperties {
-  const visual = resolveNodeStyle(node)
+function visualStyle(entity: ComposeEntity): CSSProperties {
+  const visual = resolveComposeAppearance(entity)
+  const hierarchy = getComposeHierarchy(entity)
+  const clip = getComposeClip(entity)
   const shadows: string[] = []
   if (visual.borderWidth > 0) {
     shadows.push(`inset 0 0 0 ${visual.borderWidth}px ${visual.borderColor}`)
@@ -59,56 +65,57 @@ function visualStyle(node: ComposeNode): CSSProperties {
     borderRadius: visual.borderRadius,
     opacity: visual.opacity,
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
-    overflow: node.kind === 'frame' && !node.clipContent ? 'visible' : 'hidden',
+    overflow: hierarchy
+      ? (clip?.enabled ? 'hidden' : 'visible')
+      : 'hidden',
   }
 }
 
-function nodeStyle(node: ComposeNode): CSSProperties {
+function entityStyle(entity: ComposeEntity): CSSProperties {
+  const transform = getComposeTransform(entity)
   return {
-    ...visualStyle(node),
+    ...visualStyle(entity),
     position: 'absolute' as const,
-    left: node.transform.x,
-    top: node.transform.y,
-    width: node.transform.width,
-    height: node.transform.height,
-    transform: `rotate(${node.transform.rotation}deg)`,
+    left: transform.position.x,
+    top: transform.position.y,
+    width: transform.size.width,
+    height: transform.size.height,
+    transform: `rotate(${transform.rotation}deg)`,
     transformOrigin: 'center',
   }
 }
 
-function PreviewNode({
+function PreviewEntity({
   assetResolver,
   document,
   registry,
-  nodeId,
+  entityId,
 }: {
   assetResolver?: ComposeAssetResolver
   document: ComposeDocument
-  registry: ComposeComponentRegistry
-  nodeId: string
+  registry: ComposeEntityRegistry
+  entityId: string
 }) {
-  const node = document.nodes[nodeId]
-  if (!node?.visible) return null
+  const entity = document.entities[entityId]
+  if (!entity || !getComposeVisibility(entity).visible) return null
+  const hierarchy = getComposeHierarchy(entity)
   return (
-    <div data-testid={`compose-preview-node-${node.id}`} style={nodeStyle(node)}>
-      {node.kind === 'component'
-        ? (
-            <ComposeRegistryComponent
-              assetResolver={assetResolver}
-              mode="preview"
-              node={node}
-              registry={registry}
-            />
-          )
-        : node.childIds.map((childId) => (
-            <PreviewNode
-              assetResolver={assetResolver}
-              document={document}
-              key={childId}
-              nodeId={childId}
-              registry={registry}
-            />
-          ))}
+    <div data-testid={`compose-preview-entity-${entity.id}`} style={entityStyle(entity)}>
+      <ComposeRegistryEntityRenderer
+        assetResolver={assetResolver}
+        entity={entity}
+        mode="preview"
+        registry={registry}
+      />
+      {hierarchy?.childIds.map((childId) => (
+        <PreviewEntity
+          assetResolver={assetResolver}
+          document={document}
+          entityId={childId}
+          key={childId}
+          registry={registry}
+        />
+      ))}
     </div>
   )
 }
@@ -137,48 +144,59 @@ export function ComposePreview({
           backgroundColor: document.output.backgroundColor,
         }}
       >
-        {document.rootIds.map((nodeId) => (
-          <PreviewNode
+        {document.rootIds.map((entityId) => (
+          <PreviewEntity
             assetResolver={assetResolver}
             document={document}
-            key={nodeId}
-            nodeId={nodeId}
+            entityId={entityId}
+            key={entityId}
             registry={registry}
           />
         ))}
       </div>
     )
     : (() => {
-    const frame = document.nodes[target.frameId]
-    return frame?.kind === 'frame' ? (
-      <div
-        data-testid="compose-preview-frame"
-        style={{
-          ...visualStyle(frame),
-          position: 'relative',
-          width: frame.transform.width,
-          height: frame.transform.height,
-          overflow: 'hidden',
-        }}
-      >
-        {frame.visible
-          ? frame.childIds.map((childId) => (
-              <PreviewNode
-                assetResolver={assetResolver}
-                document={document}
-                key={childId}
-                nodeId={childId}
-                registry={registry}
-              />
-            ))
-          : null}
-      </div>
-    ) : (
-      <div role="alert">
-        Preview Frame {target.frameId} 不存在或不是 Frame
-      </div>
-    )
-  })()
+        const entity = document.entities[target.entityId]
+        const hierarchy = entity ? getComposeHierarchy(entity) : undefined
+        const transform = entity ? getComposeTransform(entity) : undefined
+        return entity && hierarchy && transform ? (
+          <div
+            data-testid="compose-preview-container"
+            style={{
+              ...visualStyle(entity),
+              position: 'relative',
+              width: transform.size.width,
+              height: transform.size.height,
+            }}
+          >
+            {getComposeVisibility(entity).visible
+              ? (
+                  <>
+                    <ComposeRegistryEntityRenderer
+                      assetResolver={assetResolver}
+                      entity={entity}
+                      mode="preview"
+                      registry={registry}
+                    />
+                    {hierarchy.childIds.map((childId) => (
+                      <PreviewEntity
+                        assetResolver={assetResolver}
+                        document={document}
+                        entityId={childId}
+                        key={childId}
+                        registry={registry}
+                      />
+                    ))}
+                  </>
+                )
+              : null}
+          </div>
+        ) : (
+          <div role="alert">
+            Preview Container {target.entityId} 不存在或不是 Container
+          </div>
+        )
+      })()
 
   return (
     <section

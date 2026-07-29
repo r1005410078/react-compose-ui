@@ -2,15 +2,8 @@
 
 React Compose UI 的 React/DOM 无关领域内核。
 
-它提供：
-
-- `schemaVersion: 3` 的规范化 JSON `ComposeDocument`、输出/画布设置与结构校验；
-- `set`、`insert`、`remove`、`move` 原子可逆 Patch；
-- 可注册同步 handler 的 `TransactionRuntime`；
-- undo、redo、navigate、750ms `mergeKey` 合并、100 条默认历史和 `reset`；
-- 隐式 Canvas 根、统一 Frame 容器、Component 叶节点及其结构、样式、变换与原子 batch 命令。
-- `canvas.configure` 与 `canvas.guide.create/move/delete` 画布命令及精确 inverse Patch。
-- `output.configure`、Frame 裁剪以及以透明 Frame 实现的组合/解除组合命令。
+当前公共文档协议只支持 `ComposeDocument v4`。场景项统一为 `ComposeEntity`，能力由 PascalCase
+Component Key 组合，不再存在 Frame/Component 联合类型或节点继承结构。
 
 ```ts
 import {
@@ -21,27 +14,22 @@ import {
   type ComposeDocument,
 } from '@compose-ui/core'
 
-const result = validateComposeDocument(candidate)
-if (!result.valid) {
-  console.error(result.issues)
-}
-
-const runtime = createTransactionRuntime({
-  document: candidate as ComposeDocument,
-})
-
-const emptyDocument: ComposeDocument = {
-  schemaVersion: 3,
+const document: ComposeDocument = {
+  schemaVersion: 4,
   canvas: createDefaultCanvasSettings(),
   output: createDefaultOutputSettings(),
   rootIds: [],
-  nodes: {},
+  entities: {},
 }
 
-const dispatched = runtime.dispatch({
+const validation = validateComposeDocument(document)
+if (!validation.valid) console.error(validation.issues)
+
+const runtime = createTransactionRuntime({ document })
+runtime.dispatch({
   id: crypto.randomUUID(),
-  type: 'node.rename',
-  payload: { nodeId: 'heading', name: '季度销售额' },
+  type: 'entity.name.set',
+  payload: { entityId: 'heading', name: '季度销售额' },
   meta: {
     label: '重命名标题',
     source: 'scene-tree',
@@ -50,18 +38,28 @@ const dispatched = runtime.dispatch({
 })
 ```
 
-`dispatch` 同步返回 `committed | noop | rejected`。只有 committed 改变文档并进入 History；
-持久化、审计和网络调用应订阅 `subscribeEvents` 后在 runtime 外执行。订阅者失败不会回滚已经
-提交的事务。
+每个场景 Entity 必须拥有 `Composition`、`Transform`、`Visibility`、`Lock`，并至少拥有
+`Renderer` 或 `Hierarchy`。`Renderer + Hierarchy` 是合法组合：一个可渲染 Entity 也可以容纳
+子项。`Hierarchy.childIds` 是唯一父子事实来源，`rootIds` 保存顶层顺序；Core 校验完整可达、
+单父级和无循环。
 
-文档只保存 JSON 数据，不保存 React renderer、DOM 引用、Inspector 或注册表实例。选择、
-场景树展开、工具模式和 Stage 视口属于宿主会话状态。`canvas.grid`、`canvas.smartSnap` 与全局
-世界坐标 `canvas.guides` 是文档数据，会随事务进入 undo/redo 和宿主审计边界。
-`parentId: null` 表示不写入 `nodes`、不可变换的隐式 Canvas；`rootIds` 可同时包含 Frame 和
-Component，Frame 可递归包含 Frame/Component，Component 始终是叶节点。默认 output 为
-固定世界原点的 `1280×720` 透明区域；Stage 可以把其边界作为独立检查目标，但它不会进入
-`selectedIds`、ComposeSceneTree 或节点命令。
+内建 Component 包括：
 
-`ComposeNodeBase.style` 是兼容旧文档的可选部分对象。`resolveNodeStyle(node)` 按节点 kind 补齐
-背景、边框、圆角、透明度和单层结构化 shadow；`node.style.set/reset` 支持路径更新、锁定拒绝、
-noop、undo/redo 和 `transaction.batch`。
+- `Composition`：Preset、基础 Component Key 与 Capability 归属。
+- `Transform`、`TransformConstraints`：位置、尺寸、旋转及移动/Resize/旋转约束。
+- `Visibility`、`Lock`：编辑和渲染状态。
+- `Hierarchy`、`Clip`：容器结构和裁剪；`Clip` 必须依附 `Hierarchy`。
+- `Appearance`：背景、边框、圆角、透明度和阴影。
+- `Renderer`：宿主 Renderer type 与严格 JSON props。
+
+未知但合法的 PascalCase Component 会被原样保留。Core 不依赖 Registry；缺失的 Renderer 或
+能力定义由上层降级展示，不导致文档被拒绝。
+
+内建 `entity.*` 命令覆盖 Entity 创建、删除、复制、重命名、层级移动、Component 增删更新，
+以及 Transform、Visibility、Lock、Appearance 和 Renderer props 的类型化修改。
+Transform 命令带 `move | resize | rotate | set` 操作语义，Core 会同时验证锁定状态和
+`TransformConstraints`，不能绕过 Stage 限制。
+
+所有已提交命令继续生成可逆 Patch 并进入统一 History。选择、展开、工具、Stage viewport 和
+临时 Preview Transform 属于会话状态；`canvas`、`output`、Entity 和 Component 数据属于文档。
+v3 文档会被明确拒绝，本包不提供迁移器、兼容类型或双运行路径。

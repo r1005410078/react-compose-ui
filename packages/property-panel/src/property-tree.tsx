@@ -81,6 +81,10 @@ interface PropertyTreeProps extends TreeSharedProps {
   query: string
   showAdvanced: boolean
   showDescriptions: boolean
+  section?: {
+    title: string
+    onVisibilityChange: (visible: boolean | undefined) => void
+  }
 }
 
 interface PropertyNodeProps extends TreeSharedProps {
@@ -157,6 +161,7 @@ export function PropertyTree({
   query,
   showAdvanced,
   showDescriptions,
+  section,
   readOnly,
   renderers = [],
   commit,
@@ -183,6 +188,37 @@ export function PropertyTree({
     setActiveBinding(undefined)
     queueMicrotask(() => anchor?.focus())
   }
+  const view: PropertyTreeView = {
+    defaultValue,
+    hasDefaultValue,
+    filter,
+    issues,
+    bindingIssues: bindingResult.issues,
+    boundTargets: bindingResult.targets,
+    query,
+    showAdvanced,
+    showDescriptions,
+    recordValue: messages.recordValue,
+  }
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const sectionTitleMatches = Boolean(
+    section
+    && normalizedQuery
+    && section.title.toLocaleLowerCase().includes(normalizedQuery),
+  )
+  const sectionView = sectionTitleMatches ? { ...view, query: '' } : view
+  const sectionVisible = !section || matchesNode(
+    schema,
+    value,
+    hasDefaultValue ? defaultValue : undefined,
+    [],
+    section.title,
+    view,
+  )
+  useEffect(() => {
+    if (!section) return
+    section.onVisibilityChange(sectionVisible)
+  }, [section, sectionVisible])
   return (
     <RendererContext.Provider value={renderers}>
       <ActionWidthContext.Provider value={actionWidth}>
@@ -194,28 +230,34 @@ export function PropertyTree({
           openTarget: (target, anchor) => setActiveBinding({ target, anchor }),
           closePicker,
         }}>
-          <ViewContext.Provider value={{
-            defaultValue,
-            hasDefaultValue,
-            filter,
-            issues,
-            bindingIssues: bindingResult.issues,
-            boundTargets: bindingResult.targets,
-            query,
-            showAdvanced,
-            showDescriptions,
-            recordValue: messages.recordValue,
-          }}>
-            <div className="property-panel__fields">
-              <ObjectChildren
-                commit={commit}
-                path={[]}
-                readOnly={readOnly}
-                renderers={renderers}
-                schema={schema}
-                value={value}
-              />
-            </div>
+          <ViewContext.Provider value={sectionView}>
+            {section ? (
+              <TreeDepthContext.Provider value={1}>
+                {sectionVisible ? (
+                  <ObjectChildren
+                    commit={commit}
+                    path={[]}
+                    readOnly={readOnly}
+                    renderers={renderers}
+                    schema={schema}
+                    value={value}
+                  />
+                ) : null}
+              </TreeDepthContext.Provider>
+            ) : (
+              <div className="property-panel__fields">
+                {sectionVisible ? (
+                    <ObjectChildren
+                      commit={commit}
+                      path={[]}
+                      readOnly={readOnly}
+                      renderers={renderers}
+                      schema={schema}
+                      value={value}
+                    />
+                ) : null}
+              </div>
+            )}
             <BindingPicker />
           </ViewContext.Provider>
         </BindingContext.Provider>

@@ -1,4 +1,4 @@
-import type { ComposeComponentRendererProps } from '@compose-ui/component-registry'
+import type { ComposeRendererProps } from '@compose-ui/component-registry'
 import { useEffect, useState } from 'react'
 import { readAssetReference, useResolvedAsset } from '../material-inspector-kit/assets'
 import { sanitizeSvg } from './sanitize'
@@ -6,9 +6,9 @@ import { sanitizeSvg } from './sanitize'
 /** Materials 内置安全 SVG renderer。 @internal */
 export function SvgRenderer({
   assetResolver,
-  node,
+  entity,
   props,
-}: ComposeComponentRendererProps) {
+}: ComposeRendererProps) {
   const reference = readAssetReference(props.asset)
   const resolved = useResolvedAsset(reference, assetResolver)
   const [rendered, setRendered] = useState<{
@@ -61,7 +61,7 @@ export function SvgRenderer({
   if (!markup) {
     return (
       <div
-        aria-label={`资源不可用 ${node.name}`}
+        aria-label={`资源不可用 ${entity.name}`}
         className="compose-material compose-material--asset-missing"
         role="status"
       >
@@ -69,7 +69,7 @@ export function SvgRenderer({
       </div>
     )
   }
-  const alt = typeof props.alt === 'string' ? props.alt : node.name
+  const alt = typeof props.alt === 'string' ? props.alt : entity.name
   const fit = props.fit === 'cover' ? 'xMidYMid slice' : props.fit === 'fill' ? 'none' : 'xMidYMid meet'
   const fitted = markup.replace('<svg ', `<svg preserveAspectRatio="${fit}" `)
   return (

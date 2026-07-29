@@ -23,9 +23,9 @@ export {
 export {
   applyMatrix,
   decomposeMatrix,
-  getNodeParentId,
-  getNodeWorldBounds,
-  getNodeWorldMatrix,
+  getEntityParentId,
+  getEntityWorldBounds,
+  getEntityWorldMatrix,
   invertMatrix,
   matrixFromTransform,
   multiplyMatrices,
@@ -35,6 +35,8 @@ export {
   rotationMatrixAround,
   screenToWorld,
   snapTranslation,
+  toComposeTransform,
+  toStageTransform,
   translationMatrix,
   unionRects,
   worldToScreen,
@@ -44,6 +46,7 @@ export {
   type StageMatrix,
   type StagePoint,
   type StageRect,
+  type StageTransform,
   type StageViewport,
 } from './geometry'
 export {
@@ -66,8 +69,8 @@ export {
   type StagePreviewGuide,
 } from './interaction-controller'
 export {
-  describeNodeCreation,
-  describeNodeTargets,
+  describeEntityCreation,
+  describeEntityTargets,
   describeTransform,
 } from './transaction-labels'
 

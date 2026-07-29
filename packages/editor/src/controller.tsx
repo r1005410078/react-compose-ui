@@ -1,5 +1,4 @@
 import { ComposeCommandPanel } from '@compose-ui/command-panel'
-import { ComposeRegistryInspector } from '@compose-ui/component-registry'
 import {
   ComposeComponentPalette,
   ComposeStage,
@@ -7,12 +6,27 @@ import {
 import {
   createDuplicateCommand,
   createReparentCommand,
-  createStageSceneIndex,
   createStageInteractionController,
-  getNodeParentId,
-  getNodeWorldBounds,
+  createStageSceneIndex,
+  getEntityParentId,
+  getEntityWorldBounds,
   unionRects,
 } from '@compose-ui/stage-engine'
+import {
+  BUILTIN_COMMAND_TYPES,
+  getComposeComposition,
+  getComposeHierarchy,
+  getComposeLock,
+  getComposeVisibility,
+  type CommandDispatchResult,
+  type ComposeDocument,
+  type ComposeEntity,
+  type ComposeTransform,
+  type EditorCommand,
+  type EditorTransaction,
+  type JsonValue,
+  type TransactionRuntime,
+} from '@compose-ui/core'
 import {
   useCallback,
   useEffect,
@@ -21,24 +35,9 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import type { ComponentType, ReactNode } from 'react'
-import type {
-  ComposeCommandPreset,
-} from '@compose-ui/command-panel'
-import type {
-  ComposeComponentRegistry,
-  ComposeNodeInspectorProps,
-} from '@compose-ui/component-registry'
-import type {
-  CommandDispatchResult,
-  ComposeDocument,
-  ComposeFrameNode,
-  ComposeNode,
-  EditorCommand,
-  EditorTransaction,
-  JsonValue,
-  TransactionRuntime,
-} from '@compose-ui/core'
+import type { ReactNode } from 'react'
+import type { ComposeCommandPreset } from '@compose-ui/command-panel'
+import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
 import type {
   ComposeSceneTreeNode,
@@ -46,7 +45,6 @@ import type {
   ComposeSceneTreeProps,
 } from '@compose-ui/scene-tree'
 import type {
-  ComposeStageFramePreset,
   ComposeStageProps,
   ComposeStageTool,
 } from '@compose-ui/stage'
@@ -59,8 +57,9 @@ import {
   DefaultStageToolbar,
 } from './default-workspace-content'
 import { CanvasInspector } from './canvas-inspector'
+import { EntityInspector } from './entity-inspector'
 
-type InspectionTarget = 'nodes' | 'output' | null
+type InspectionTarget = 'entities' | 'output' | null
 
 function defaultIdFactory() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -81,47 +80,47 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
   }, [controller])
 }
 
-function sceneNode(
+function sceneEntity(
   document: ComposeDocument,
-  registry: ComposeComponentRegistry,
-  node: ComposeNode,
+  registry: ComposeEntityRegistry,
+  entity: ComposeEntity,
 ): ComposeSceneTreeNode {
-  const common = {
-    id: node.id,
-    label: node.name,
-    visible: node.visible,
-    locked: node.locked,
-    canHaveChildren: node.kind !== 'component',
-    canRename: !node.locked,
-    canDelete: !node.locked,
-    canMove: !node.locked,
+  const hierarchy = getComposeHierarchy(entity)
+  const locked = getComposeLock(entity).locked
+  const composition = getComposeComposition(entity)
+  return {
+    id: entity.id,
+    label: entity.name,
+    visible: getComposeVisibility(entity).visible,
+    locked,
+    icon: composition.presetId
+      ? registry.getPreset(composition.presetId)?.icon
+      : undefined,
+    canHaveChildren: hierarchy !== undefined,
+    canRename: !locked,
+    canDelete: !locked,
+    canMove: !locked,
     canToggleVisibility: true,
     canToggleLocked: true,
-  }
-  if (node.kind === 'component') {
-    return {
-      ...common,
-      icon: registry.get(node.componentType)?.icon,
-      canHaveChildren: false,
-    }
-  }
-  return {
-    ...common,
-    children: node.childIds
-      .map((id) => document.nodes[id])
-      .filter((child): child is ComposeNode => child !== undefined)
-      .map((child) => sceneNode(document, registry, child)),
+    ...(hierarchy
+      ? {
+          children: hierarchy.childIds
+            .map((id) => document.entities[id])
+            .filter((child): child is ComposeEntity => child !== undefined)
+            .map((child) => sceneEntity(document, registry, child)),
+        }
+      : {}),
   }
 }
 
-function deriveSceneNodes(
+function deriveSceneEntities(
   document: ComposeDocument,
-  registry: ComposeComponentRegistry,
+  registry: ComposeEntityRegistry,
 ): readonly ComposeSceneTreeNode[] {
   return document.rootIds
-    .map((id) => document.nodes[id])
-    .filter((node): node is ComposeNode => node !== undefined)
-    .map((node) => sceneNode(document, registry, node))
+    .map((id) => document.entities[id])
+    .filter((entity): entity is ComposeEntity => entity !== undefined)
+    .map((entity) => sceneEntity(document, registry, entity))
 }
 
 function unique(values: readonly string[]) {
@@ -129,19 +128,22 @@ function unique(values: readonly string[]) {
 }
 
 function validSelection(document: ComposeDocument, ids: readonly string[]) {
-  return unique(ids).filter((id) => Boolean(document.nodes[id]?.visible))
+  return unique(ids).filter((id) => {
+    const entity = document.entities[id]
+    return entity ? getComposeVisibility(entity).visible : false
+  })
 }
 
 function validExpanded(document: ComposeDocument, ids: readonly string[]) {
   return unique(ids).filter((id) => {
-    const node = document.nodes[id]
-    return node?.kind === 'frame'
+    const entity = document.entities[id]
+    return entity ? getComposeHierarchy(entity) !== undefined : false
   })
 }
 
-function describeNodeTargets(document: ComposeDocument, nodeIds: readonly string[]) {
-  if (nodeIds.length === 1) return document.nodes[nodeIds[0]!]?.name ?? 'node'
-  return `${nodeIds.length} nodes`
+function describeEntityTargets(document: ComposeDocument, entityIds: readonly string[]) {
+  if (entityIds.length === 1) return document.entities[entityIds[0]!]?.name ?? 'entity'
+  return `${entityIds.length} entities`
 }
 
 /**
@@ -158,7 +160,7 @@ export interface ComposeEditorTransactionEvent {
   readonly transactionIds: readonly string[]
   /** committed 使用原命令来源，历史导航固定为 `history`。 */
   readonly source: string
-  /** committed 或被导航事务涉及的节点 ID 去重集合。 */
+  /** committed 或被导航事务涉及的 Entity ID 去重集合。 */
   readonly targets: readonly string[]
 }
 
@@ -170,14 +172,8 @@ export interface ComposeEditorTransactionEvent {
 export interface UseComposeEditorControllerOptions {
   /** 所有编辑入口共享的正式文档与历史运行时。 */
   readonly runtime: TransactionRuntime
-  /** Palette、Stage、Inspector 共用的实例级组件注册表。 */
-  readonly registry: ComposeComponentRegistry
-  /** 显示在组件 definitions 之前的根级 Frame 预设。 */
-  readonly framePresets?: readonly ComposeStageFramePreset[]
-  /** Frame 单选时使用的公共容器 Inspector。 */
-  readonly containerInspector?: ComponentType<
-    ComposeNodeInspectorProps<ComposeFrameNode>
-  >
+  /** Palette、Stage、Inspector 共用的实例级 Entity 注册表。 */
+  readonly registry: ComposeEntityRegistry
   /** 初始选择；不会写入文档历史。 */
   readonly initialSelection?: readonly string[]
   /** 初始场景树展开项；不会写入文档历史。 */
@@ -192,7 +188,7 @@ export interface UseComposeEditorControllerOptions {
   readonly onTransaction?: (
     event: ComposeEditorTransactionEvent,
   ) => void | Promise<void>
-  /** controller 创建节点和命令时使用的稳定 ID factory。 */
+  /** controller 创建 Entity 和命令时使用的稳定 ID factory。 */
   readonly idFactory?: () => string
 }
 
@@ -206,8 +202,8 @@ export interface ComposeEditorController {
   readonly document: ComposeDocument
   /** controller 使用的事务运行时，同时驱动默认 ComposeHistoryPanel。 */
   readonly runtime: TransactionRuntime
-  /** controller 使用的组件注册表。 */
-  readonly registry: ComposeComponentRegistry
+  /** controller 使用的 Entity 注册表。 */
+  readonly registry: ComposeEntityRegistry
   /** 结构兼容 `ComposeHistoryNavigationController` 的事务历史。 */
   readonly history: ComposeHistoryNavigationController
   /** 当前有效且可见的选择。 */
@@ -234,11 +230,11 @@ export interface ComposeEditorController {
   readonly sceneTreeProps: ComposeSceneTreeProps
   /** 默认 Stage 的完整受控属性。 */
   readonly stageProps: ComposeStageProps
-  /** 默认 Component Library 内容。 */
+  /** 默认 Entity Preset Library 内容。 */
   readonly componentLibraryPanel: ReactNode
   /** 默认中央 Stage 内容。 */
   readonly stage: ReactNode
-  /** 默认 definition Inspector 内容。 */
+  /** 默认聚合 Entity Inspector 内容。 */
   readonly inspectorPanel: ReactNode
   /** 默认 ComposeCommandPanel 内容。 */
   readonly commandPanel: ReactNode
@@ -260,6 +256,21 @@ function invokeObserver(
   }
 }
 
+function entityFromSeed(
+  id: string,
+  seed: { readonly name: string; readonly components: ComposeEntity['components'] },
+  transform: ComposeTransform,
+): ComposeEntity {
+  return {
+    id,
+    name: seed.name,
+    components: {
+      ...seed.components,
+      Transform: transform,
+    },
+  }
+}
+
 /**
  * 把 runtime、registry 与编辑器会话状态组合成默认工作区 controller。
  *
@@ -273,8 +284,6 @@ function invokeObserver(
 export function useComposeEditorController({
   runtime,
   registry,
-  framePresets = [],
-  containerInspector: ContainerInspector,
   initialSelection = [],
   initialExpandedIds = [],
   initialViewport = { x: 80, y: 64, zoom: 1 },
@@ -283,16 +292,12 @@ export function useComposeEditorController({
   onTransaction,
   idFactory = defaultIdFactory,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
-  const snapshot = useSyncExternalStore(
-    runtime.subscribe,
-    runtime.getState,
-    runtime.getState,
-  )
+  const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const document = snapshot.document
   const [selectedIds, setSelectedIdsState] = useState<readonly string[]>(() =>
     validSelection(document, initialSelection))
   const [inspectionTarget, setInspectionTarget] = useState<InspectionTarget>(() =>
-    validSelection(document, initialSelection).length > 0 ? 'nodes' : null)
+    validSelection(document, initialSelection).length > 0 ? 'entities' : null)
   const [expandedIds, setExpandedIdsState] = useState<readonly string[]>(() =>
     validExpanded(document, initialExpandedIds))
   const [viewport, setViewport] = useState<StageViewport>(initialViewport)
@@ -357,13 +362,13 @@ export function useComposeEditorController({
   const setSelectedIds = useCallback((ids: readonly string[]) => {
     const next = unique(ids)
     setSelectedIdsState(next)
-    setInspectionTarget(next.length > 0 ? 'nodes' : null)
+    setInspectionTarget(next.length > 0 ? 'entities' : null)
   }, [])
   const selectOutput = useCallback(() => {
     setSelectedIdsState([])
     setInspectionTarget('output')
   }, [])
-  const resolvedInspectionTarget = inspectionTarget === 'nodes'
+  const resolvedInspectionTarget = inspectionTarget === 'entities'
     && selectedIds.length === 0
     ? null
     : inspectionTarget
@@ -377,92 +382,88 @@ export function useComposeEditorController({
   const nextId = useCallback(() => idFactoryRef.current(), [])
 
   const onSceneOperation = useCallback((operation: ComposeSceneTreeOperation) => {
-    let command: EditorCommand | null = null
+    let editorCommand: EditorCommand | null = null
     let nextSelection: readonly string[] | null = null
     if (operation.type === 'create') {
-      const nodeId = nextId()
+      const created = registry.createSeed('container')
+      if (!created.ok) return
+      const entityId = nextId()
       const rootOffset = 80 + document.rootIds.length * 40
-      command = {
+      const initial = created.seed.components.Transform as ComposeTransform
+      const transform: ComposeTransform = {
+        ...initial,
+        position: operation.parentId === null
+          ? { x: rootOffset, y: rootOffset }
+          : { x: 0, y: 0 },
+        size: operation.parentId === null
+          ? initial.size
+          : { width: 320, height: 180 },
+      }
+      const entity = entityFromSeed(entityId, created.seed, transform)
+      editorCommand = {
         id: nextId(),
-        type: 'node.create',
+        type: BUILTIN_COMMAND_TYPES.createEntity,
         payload: {
-          node: {
-            id: nodeId,
-            kind: 'frame',
-            name: 'Frame',
-            visible: true,
-            locked: false,
-            transform: operation.parentId === null
-              ? {
-                  x: rootOffset,
-                  y: rootOffset,
-                  width: 1280,
-                  height: 720,
-                  rotation: 0,
-                }
-              : { x: 0, y: 0, width: 320, height: 180, rotation: 0 },
-            childIds: [],
-            clipContent: true,
-          },
+          entity: entity as unknown as JsonValue,
           parentId: operation.parentId,
           index: operation.index,
         },
         meta: {
           label: operation.parentId === null
-            ? `Create Frame · 1280 × 720 at (${rootOffset}, ${rootOffset})`
-            : 'Create Frame · 320 × 180 at (0, 0)',
+            ? `Create Container · ${transform.size.width} × ${transform.size.height}`
+            : 'Create Container · 320 × 180',
           source: 'scene-tree',
-          targetIds: [nodeId],
+          targetIds: [entityId],
         },
       }
-      nextSelection = [nodeId]
+      nextSelection = [entityId]
     }
     else if (operation.type === 'rename') {
-      command = {
+      const previousName = document.entities[operation.nodeId]?.name ?? 'entity'
+      editorCommand = {
         id: nextId(),
-        type: 'node.rename',
-        payload: { nodeId: operation.nodeId, name: operation.label },
+        type: BUILTIN_COMMAND_TYPES.renameEntity,
+        payload: { entityId: operation.nodeId, name: operation.label },
         meta: {
-          label: `Rename ${document.nodes[operation.nodeId]?.name ?? 'node'}`
-            + ` · “${document.nodes[operation.nodeId]?.name ?? ''}” → “${operation.label}”`,
+          label: `Rename ${previousName} · “${previousName}” → “${operation.label}”`,
           source: 'scene-tree',
           targetIds: [operation.nodeId],
         },
       }
     }
     else if (operation.type === 'delete') {
-      command = {
+      editorCommand = {
         id: nextId(),
-        type: 'node.delete',
-        payload: { nodeIds: operation.nodeIds },
+        type: BUILTIN_COMMAND_TYPES.deleteEntity,
+        payload: { entityIds: operation.nodeIds },
         meta: {
-          label: `Delete ${describeNodeTargets(document, operation.nodeIds)}`,
+          label: `Delete ${describeEntityTargets(document, operation.nodeIds)}`,
           source: 'scene-tree',
           targetIds: operation.nodeIds,
         },
       }
     }
     else if (operation.type === 'set-visibility') {
-      command = {
+      editorCommand = {
         id: nextId(),
-        type: 'node.set-visibility',
-        payload: { nodeIds: operation.nodeIds, visible: operation.visible },
+        type: BUILTIN_COMMAND_TYPES.setVisibility,
+        payload: { entityIds: operation.nodeIds, visible: operation.visible },
         meta: {
           label: `${operation.visible ? 'Show' : 'Hide'} `
-            + describeNodeTargets(document, operation.nodeIds),
+            + describeEntityTargets(document, operation.nodeIds),
           source: 'scene-tree',
           targetIds: operation.nodeIds,
         },
       }
     }
     else if (operation.type === 'set-locked') {
-      command = {
+      editorCommand = {
         id: nextId(),
-        type: 'node.set-locked',
-        payload: { nodeIds: operation.nodeIds, locked: operation.locked },
+        type: BUILTIN_COMMAND_TYPES.setLock,
+        payload: { entityIds: operation.nodeIds, locked: operation.locked },
         meta: {
           label: `${operation.locked ? 'Lock' : 'Unlock'} `
-            + describeNodeTargets(document, operation.nodeIds),
+            + describeEntityTargets(document, operation.nodeIds),
           source: 'scene-tree',
           targetIds: operation.nodeIds,
         },
@@ -470,9 +471,9 @@ export function useComposeEditorController({
     }
     else if (operation.type === 'move') {
       const crossesParent = operation.nodeIds.some(
-        (id) => getNodeParentId(document, id) !== operation.parentId,
+        (id) => getEntityParentId(document, id) !== operation.parentId,
       )
-      command = crossesParent
+      editorCommand = crossesParent
         ? createReparentCommand(
             document,
             operation.nodeIds,
@@ -482,14 +483,14 @@ export function useComposeEditorController({
           )
         : {
             id: nextId(),
-            type: 'node.move',
+            type: BUILTIN_COMMAND_TYPES.moveEntity,
             payload: {
-              nodeIds: operation.nodeIds,
+              entityIds: operation.nodeIds,
               parentId: operation.parentId,
               index: operation.index,
             },
             meta: {
-              label: `Reorder ${describeNodeTargets(document, operation.nodeIds)}`
+              label: `Reorder ${describeEntityTargets(document, operation.nodeIds)}`
                 + ` · position ${operation.index + 1}`,
               source: 'scene-tree',
               targetIds: operation.nodeIds,
@@ -500,16 +501,16 @@ export function useComposeEditorController({
       const duplicates = operation.sourceNodeIds
         .map((id) => createDuplicateCommand(document, id, nextId, nextId()))
         .filter((item): item is NonNullable<typeof item> => item !== null)
-      if (duplicates.length === 1) command = duplicates[0]!.command
+      if (duplicates.length === 1) editorCommand = duplicates[0]!.command
       else if (duplicates.length > 1) {
-        command = {
+        editorCommand = {
           id: nextId(),
-          type: 'transaction.batch',
+          type: BUILTIN_COMMAND_TYPES.batch,
           payload: {
             commands: duplicates.map((item) => item.command) as unknown as JsonValue,
           },
           meta: {
-            label: `Duplicate ${describeNodeTargets(document, operation.sourceNodeIds)}`,
+            label: `Duplicate ${describeEntityTargets(document, operation.sourceNodeIds)}`,
             source: 'scene-tree',
             targetIds: operation.sourceNodeIds,
           },
@@ -517,13 +518,13 @@ export function useComposeEditorController({
       }
       nextSelection = duplicates.map((item) => item.rootId)
     }
-    if (!command) return
-    const result = runtime.dispatch(command)
+    if (!editorCommand) return
+    const result = runtime.dispatch(editorCommand)
     if (result.status === 'committed' && nextSelection) setSelectedIds(nextSelection)
-  }, [document, nextId, runtime, setSelectedIds])
+  }, [document, nextId, registry, runtime, setSelectedIds])
 
   const sceneTreeProps = useMemo<ComposeSceneTreeProps>(() => ({
-    nodes: deriveSceneNodes(document, registry),
+    nodes: deriveSceneEntities(document, registry),
     selectedIds,
     expandedIds,
     onSelectionChange: setSelectedIds,
@@ -553,7 +554,6 @@ export function useComposeEditorController({
     onOutputSelect: selectOutput,
     onSurfaceSizeChange: setSurfaceSize,
     interactionController,
-    framePresets,
     idFactory: nextId,
   }), [
     document,
@@ -565,13 +565,11 @@ export function useComposeEditorController({
     resolvedInspectionTarget,
     setSelectedIds,
     selectOutput,
-    setSurfaceSize,
     interactionController,
-    framePresets,
     nextId,
   ])
 
-  const createFrame = useCallback(() => {
+  const createContainer = useCallback(() => {
     onSceneOperation({
       type: 'create',
       parentId: null,
@@ -582,8 +580,8 @@ export function useComposeEditorController({
     if (!surfaceSize) return
     const bounds = unionRects(
       ids
-        .filter((id) => document.nodes[id] !== undefined)
-        .map((id) => getNodeWorldBounds(document, id)),
+        .filter((id) => document.entities[id] !== undefined)
+        .map((id) => getEntityWorldBounds(document, id)),
     )
     if (!bounds) return
     const { width, height } = surfaceSize
@@ -597,23 +595,25 @@ export function useComposeEditorController({
       zoom,
     })
   }, [document, surfaceSize])
-  const fitFrame = useCallback(() => {
-    const index = createStageSceneIndex(document)
-    const frameId = selectedIds.length === 1
-      && document.nodes[selectedIds[0]!]?.kind === 'frame'
+  const sceneIndex = useMemo(() => createStageSceneIndex(document), [document])
+  const fitContainer = useCallback(() => {
+    const selectedContainerId = selectedIds.length === 1
+      && document.entities[selectedIds[0]!]
+      && getComposeHierarchy(document.entities[selectedIds[0]!]!)
       ? selectedIds[0]!
-      : index.commonFrameForSelection(selectedIds)
-    if (frameId) fitBounds([frameId])
-  }, [document, fitBounds, selectedIds])
+      : sceneIndex.commonContainerForSelection(selectedIds)
+    if (selectedContainerId) fitBounds([selectedContainerId])
+  }, [document.entities, fitBounds, sceneIndex, selectedIds])
   const fitSelection = useCallback(() => fitBounds(selectedIds), [fitBounds, selectedIds])
 
-  const selectedNode = selectedIds.length === 1
-    ? document.nodes[selectedIds[0]!]
+  const selectedEntity = selectedIds.length === 1
+    ? document.entities[selectedIds[0]!]
     : undefined
-  const selectedFrameId = selectedIds.length === 1
-    && selectedNode?.kind === 'frame'
-    ? selectedNode.id
-    : createStageSceneIndex(document).commonFrameForSelection(selectedIds)
+  const selectedContainerId = selectedIds.length === 1
+    && selectedEntity
+    && getComposeHierarchy(selectedEntity)
+    ? selectedEntity.id
+    : sceneIndex.commonContainerForSelection(selectedIds)
   const smartSnapEnabled = document.canvas.smartSnap.nodes
     || document.canvas.smartSnap.guides
   const configureCanvas = (
@@ -622,7 +622,7 @@ export function useComposeEditorController({
     label: string,
   ) => dispatch({
     id: nextId(),
-    type: 'canvas.configure',
+    type: BUILTIN_COMMAND_TYPES.configureCanvas,
     payload: {
       grid: {
         ...document.canvas.grid,
@@ -633,10 +633,7 @@ export function useComposeEditorController({
         guides: smartEnabled,
       },
     },
-    meta: {
-      label,
-      source: 'stage-toolbar',
-    },
+    meta: { label, source: 'stage-toolbar' },
   })
 
   return {
@@ -659,7 +656,6 @@ export function useComposeEditorController({
     componentLibraryPanel: (
       <ComposeComponentPalette
         interactionController={interactionController}
-        framePresets={framePresets}
         registry={registry}
       />
     ),
@@ -675,14 +671,14 @@ export function useComposeEditorController({
         document={document}
         idFactory={nextId}
       />
-    ) : selectedNode?.kind === 'component' ? (
-      <ComposeRegistryInspector
+    ) : selectedEntity ? (
+      <EntityInspector
         dispatch={dispatch}
-        node={selectedNode}
+        document={document}
+        entity={selectedEntity}
+        idFactory={nextId}
         registry={registry}
       />
-    ) : selectedNode && ContainerInspector ? (
-      <ContainerInspector dispatch={dispatch} node={selectedNode} />
     ) : (
       <DefaultEmptyInspector />
     ),
@@ -693,14 +689,14 @@ export function useComposeEditorController({
       <DefaultStageToolbar
         canvasSettingsOpen={canvasSettingsOpen}
         configureCanvas={configureCanvas}
-        createFrame={createFrame}
+        createContainer={createContainer}
         dispatch={dispatch}
         document={document}
-        fitFrame={fitFrame}
+        fitContainer={fitContainer}
         fitSelection={fitSelection}
         nextId={nextId}
+        selectedContainerId={selectedContainerId}
         selectedIds={selectedIds}
-        selectedFrameId={selectedFrameId}
         setCanvasSettingsOpen={setCanvasSettingsOpen}
         setTool={setTool}
         setViewport={setViewport}

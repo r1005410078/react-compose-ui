@@ -1,4 +1,4 @@
-import type { JsonObject, NodeStyle } from '@compose-ui/core'
+import type { ComposeAppearance, JsonObject } from '@compose-ui/core'
 
 export const DEFAULT_IMAGE_SIZE = Object.freeze({ width: 320, height: 180 })
 export const DEFAULT_IMAGE_PROPS: JsonObject = Object.freeze({
@@ -6,7 +6,7 @@ export const DEFAULT_IMAGE_PROPS: JsonObject = Object.freeze({
   alt: '',
   fit: 'contain',
 })
-export const DEFAULT_IMAGE_STYLE: NodeStyle = Object.freeze({
+export const DEFAULT_IMAGE_APPEARANCE: ComposeAppearance = Object.freeze({
   backgroundColor: 'transparent',
   borderColor: 'transparent',
   borderWidth: 0,

@@ -1,8 +1,15 @@
-import type { ComposeDocument } from '@compose-ui/core'
+import {
+  getComposeClip,
+  getComposeHierarchy,
+  getComposeLock,
+  getComposeTransform,
+  getComposeVisibility,
+  type ComposeDocument,
+} from '@compose-ui/core'
 import {
   applyMatrix,
-  getNodeWorldBounds,
-  getNodeWorldMatrix,
+  getEntityWorldBounds,
+  getEntityWorldMatrix,
   invertMatrix,
   type StageGuide,
   type StageMatrix,
@@ -17,25 +24,25 @@ import {
 export interface StageSceneIndex {
   /** 索引对应的文档引用。 */
   readonly document: ComposeDocument
-  /** 按文档树顺序返回全部节点 ID。 */
+  /** 按文档树顺序返回全部 Entity ID。 */
   readonly order: readonly string[]
-  /** 查询节点直接父级；根节点返回 null。 */
-  getParentId(nodeId: string): string | null
-  /** 查询节点完整世界矩阵；缺失节点返回 null。 */
-  getWorldMatrix(nodeId: string): StageMatrix | null
-  /** 查询节点世界轴对齐边界；缺失节点返回 null。 */
-  getWorldBounds(nodeId: string): StageRect | null
-  /** 查询节点及全部祖先共同决定的有效可见性。 */
-  isVisible(nodeId: string): boolean
+  /** 查询 Entity 直接父级；根 Entity 返回 null。 */
+  getParentId(entityId: string): string | null
+  /** 查询 Entity 完整世界矩阵；缺失 Entity 返回 null。 */
+  getWorldMatrix(entityId: string): StageMatrix | null
+  /** 查询 Entity 世界轴对齐边界；缺失 Entity 返回 null。 */
+  getWorldBounds(entityId: string): StageRect | null
+  /** 查询 Entity 及全部祖先共同决定的有效可见性。 */
+  isVisible(entityId: string): boolean
   /** 移除其祖先也在输入集合中的后代选择。 */
-  topLevelSelection(nodeIds: readonly string[]): readonly string[]
-  /** 查询节点自身或最近 Frame 祖先。 */
-  closestFrameForNode(nodeId: string): string | null
-  /** 查询全部节点共享的最近可用 Frame；没有共同 Frame 时返回 null。 */
-  commonFrameForSelection(nodeIds: readonly string[]): string | null
-  /** 按 paint order 查询包含世界点的最深可用 Frame。 */
-  frameAtPoint(point: { readonly x: number; readonly y: number }): string | null
-  /** 为选区建立节点与文档辅助线吸附候选。 */
+  topLevelSelection(entityIds: readonly string[]): readonly string[]
+  /** 查询 Entity 自身或最近 Container 祖先。 */
+  closestContainerForEntity(entityId: string): string | null
+  /** 查询全部 Entity 共享的最近可用 Container。 */
+  commonContainerForSelection(entityIds: readonly string[]): string | null
+  /** 按 paint order 查询包含世界点的最深可用 Container。 */
+  containerAtPoint(point: { readonly x: number; readonly y: number }): string | null
+  /** 为选区建立 Entity 与文档辅助线吸附候选。 */
   snapCandidates(excludedIds: readonly string[]): readonly StageGuide[]
 }
 
@@ -59,105 +66,109 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
   const visibility = new Map<string, boolean>()
 
   const visit = (
-    nodeId: string,
+    entityId: string,
     parentId: string | null,
     parentVisible: boolean,
   ) => {
-    const node = document.nodes[nodeId]
-    if (!node || parents.has(nodeId)) return
-    parents.set(nodeId, parentId)
-    const visible = parentVisible && node.visible
-    visibility.set(nodeId, visible)
-    order.push(nodeId)
-    matrices.set(nodeId, getNodeWorldMatrix(document, nodeId))
-    bounds.set(nodeId, getNodeWorldBounds(document, nodeId))
-    if (node.kind !== 'component') {
-      node.childIds.forEach((childId) => visit(childId, nodeId, visible))
-    }
+    const entity = document.entities[entityId]
+    if (!entity || parents.has(entityId)) return
+    parents.set(entityId, parentId)
+    const visible = parentVisible && getComposeVisibility(entity).visible
+    visibility.set(entityId, visible)
+    order.push(entityId)
+    matrices.set(entityId, getEntityWorldMatrix(document, entityId))
+    bounds.set(entityId, getEntityWorldBounds(document, entityId))
+    getComposeHierarchy(entity)?.childIds.forEach((childId) =>
+      visit(childId, entityId, visible))
   }
-  document.rootIds.forEach((nodeId) => visit(nodeId, null, true))
+  document.rootIds.forEach((entityId) => visit(entityId, null, true))
 
   const index: StageSceneIndex = {
     document,
     order,
-    getParentId: (nodeId) => parents.get(nodeId) ?? null,
-    getWorldMatrix: (nodeId) => matrices.get(nodeId) ?? null,
-    getWorldBounds: (nodeId) => bounds.get(nodeId) ?? null,
-    isVisible: (nodeId) => visibility.get(nodeId) ?? false,
-    topLevelSelection(nodeIds) {
-      const selected = new Set(nodeIds)
-      return nodeIds.filter((nodeId) => {
-        let parentId = parents.get(nodeId) ?? null
+    getParentId: (entityId) => parents.get(entityId) ?? null,
+    getWorldMatrix: (entityId) => matrices.get(entityId) ?? null,
+    getWorldBounds: (entityId) => bounds.get(entityId) ?? null,
+    isVisible: (entityId) => visibility.get(entityId) ?? false,
+    topLevelSelection(entityIds) {
+      const selected = new Set(entityIds)
+      return entityIds.filter((entityId) => {
+        let parentId = parents.get(entityId) ?? null
         while (parentId) {
           if (selected.has(parentId)) return false
           parentId = parents.get(parentId) ?? null
         }
-        return document.nodes[nodeId] !== undefined
+        return document.entities[entityId] !== undefined
       })
     },
-    closestFrameForNode(nodeId) {
-      let current: string | null = nodeId
+    closestContainerForEntity(entityId) {
+      let current: string | null = entityId
       while (current) {
-        const node = document.nodes[current]
-        if (node?.kind === 'frame') return current
+        const entity = document.entities[current]
+        if (entity && getComposeHierarchy(entity)) return current
         current = parents.get(current) ?? null
       }
       return null
     },
-    commonFrameForSelection(nodeIds) {
-      const validIds = nodeIds.filter((id) => document.nodes[id] !== undefined)
+    commonContainerForSelection(entityIds) {
+      const validIds = entityIds.filter((id) => document.entities[id] !== undefined)
       if (validIds.length === 0) return null
-      const frameChain = (nodeId: string) => {
+      const containerChain = (entityId: string) => {
         const result: string[] = []
-        let current: string | null = nodeId
+        let current: string | null = entityId
         while (current) {
-          const node = document.nodes[current]
-          if (node?.kind === 'frame' && !node.locked) result.push(current)
+          const entity = document.entities[current]
+          if (entity && getComposeHierarchy(entity) && !getComposeLock(entity).locked) {
+            result.push(current)
+          }
           current = parents.get(current) ?? null
         }
         return result
       }
-      const chains = validIds.map(frameChain)
-      return chains[0]?.find((frameId) =>
-        chains.every((chain) => chain.includes(frameId))) ?? null
+      const chains = validIds.map(containerChain)
+      return chains[0]?.find((containerId) =>
+        chains.every((chain) => chain.includes(containerId))) ?? null
     },
-    frameAtPoint(point) {
-      const contains = (frameId: string) => {
-        const frame = document.nodes[frameId]
-        const matrix = matrices.get(frameId)
-        if (!frame || frame.kind !== 'frame' || !matrix) return false
+    containerAtPoint(point) {
+      const contains = (containerId: string) => {
+        const entity = document.entities[containerId]
+        const matrix = matrices.get(containerId)
+        if (!entity || !getComposeHierarchy(entity) || !matrix) return false
+        const transform = getComposeTransform(entity)
         const local = applyMatrix(invertMatrix(matrix), point)
         return local.x >= 0
-          && local.x <= frame.transform.width
+          && local.x <= transform.size.width
           && local.y >= 0
-          && local.y <= frame.transform.height
+          && local.y <= transform.size.height
       }
-      const isExposed = (frameId: string) => {
-        let current = parents.get(frameId) ?? null
+      const isExposed = (containerId: string) => {
+        let current = parents.get(containerId) ?? null
         while (current) {
-          const ancestor = document.nodes[current]
-          if (ancestor?.kind === 'frame' && ancestor.clipContent && !contains(current)) {
+          const ancestor = document.entities[current]
+          if (ancestor && getComposeClip(ancestor)?.enabled && !contains(current)) {
             return false
           }
           current = parents.get(current) ?? null
         }
         return true
       }
-      return [...order].reverse().find((nodeId) => {
-        const node = document.nodes[nodeId]
-        return node?.kind === 'frame'
-          && !node.locked
-          && visibility.get(nodeId)
-          && contains(nodeId)
-          && isExposed(nodeId)
+      return [...order].reverse().find((entityId) => {
+        const entity = document.entities[entityId]
+        return entity
+          && getComposeHierarchy(entity)
+          && !getComposeLock(entity).locked
+          && visibility.get(entityId)
+          && contains(entityId)
+          && isExposed(entityId)
       }) ?? null
     },
     snapCandidates(excludedIds) {
       const excluded = new Set(excludedIds)
-      const excludeDescendants = (nodeId: string) => {
-        const node = document.nodes[nodeId]
-        if (!node || node.kind === 'component') return
-        node.childIds.forEach((childId) => {
+      const excludeDescendants = (entityId: string) => {
+        const entity = document.entities[entityId]
+        const hierarchy = entity && getComposeHierarchy(entity)
+        if (!hierarchy) return
+        hierarchy.childIds.forEach((childId) => {
           excluded.add(childId)
           excludeDescendants(childId)
         })
@@ -173,11 +184,16 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
         { axis: 'y', value: rect.y + rect.height, source: 'node' },
       )
       if (document.canvas.smartSnap.nodes) {
-        order.forEach((nodeId) => {
-          const node = document.nodes[nodeId]
-          const nodeBounds = bounds.get(nodeId)
-          if (node && visibility.get(nodeId) && nodeBounds && !excluded.has(nodeId)) {
-            addRect(nodeBounds)
+        order.forEach((entityId) => {
+          const entity = document.entities[entityId]
+          const entityBounds = bounds.get(entityId)
+          if (
+            entity
+            && visibility.get(entityId)
+            && entityBounds
+            && !excluded.has(entityId)
+          ) {
+            addRect(entityBounds)
           }
         })
       }

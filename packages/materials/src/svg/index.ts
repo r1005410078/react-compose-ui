@@ -1,2 +1,5 @@
-export { DEFAULT_COMPOSE_SVG_DEFINITION } from './definition'
-export { createSvgDefinition } from './definition'
+export {
+  DEFAULT_COMPOSE_SVG_PRESET,
+  DEFAULT_COMPOSE_SVG_RENDERER,
+  createSvgMaterial,
+} from './definition'

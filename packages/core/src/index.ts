@@ -8,15 +8,35 @@
  * @packageDocumentation
  */
 
-export { validateComposeDocument } from './document'
+export {
+  isValidComposeTransform,
+  isValidComposeTransformConstraints,
+  validateComposeDocument,
+} from './document'
 export { createDefaultCanvasSettings } from './canvas-settings'
 export { createDefaultOutputSettings } from './output-settings'
 export {
-  DEFAULT_NODE_SHADOW,
-  DEFAULT_NODE_STYLES,
-  resolveNodeStyle,
-  validateNodeStyle,
-} from './node-style'
+  DEFAULT_COMPOSE_APPEARANCE,
+  DEFAULT_COMPOSE_SHADOW,
+  resolveComposeAppearance,
+} from './appearance'
+export {
+  getComposeAppearance,
+  getComposeClip,
+  getComposeComponent,
+  getComposeComposition,
+  getComposeHierarchy,
+  getComposeLock,
+  getComposeRenderer,
+  getComposeTransform,
+  getComposeTransformConstraints,
+  getComposeVisibility,
+  isComposeComponentKey,
+  isComposeContainerEntity,
+  isComposeEntityLocked,
+  isComposeEntityVisible,
+  resolveComposeTransformConstraints,
+} from './entity'
 export { applyDocumentPatches } from './patches'
 export { createTransactionRuntime } from './runtime'
 export {
@@ -47,29 +67,35 @@ export type {
   TransactionRuntimeState,
 } from './command-types'
 export type {
+  ComposeAppearance,
+  ComposeBuiltinComponentKey,
   ComposeCanvasGuide,
   ComposeCanvasSettings,
-  ComposeComponentNode,
+  ComposeClip,
+  ComposeComposition,
   ComposeDocument,
-  ComposeFrameNode,
-  ComposeNode,
-  ComposeNodeBase,
+  ComposeEntity,
+  ComposeHierarchy,
+  ComposeLock,
   ComposeOutputSettings,
+  ComposePosition,
+  ComposeRenderer,
+  ComposeResizeMode,
+  ComposeShadow,
+  ComposeSize,
+  ComposeTransform,
+  ComposeTransformConstraints,
+  ComposeVisibility,
   DocumentValidationIssue,
   DocumentValidationIssueCode,
   DocumentValidationResult,
+  JsonArray,
   JsonObject,
   JsonPrimitive,
   JsonValue,
-  NodeShadow,
-  NodeStyle,
-  NodeTransform,
-  ResolvedNodeStyle,
+  ResolvedComposeAppearance,
 } from './document-types'
-export type {
-  NodeStyleValidationIssue,
-  NodeStyleValidationResult,
-} from './node-style'
+export { COMPOSE_BUILTIN_COMPONENT_KEYS } from './document-types'
 
 /** `@compose-ui/core` 的稳定包标识。 @public */
 export const COMPOSE_UI_CORE_PACKAGE = '@compose-ui/core' as const

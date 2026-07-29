@@ -1,27 +1,35 @@
 /**
- * 提供实例级宿主 React 组件注册协议。
+ * 提供实例级 Entity Renderer、Component、Preset 与 Capability 注册协议。
  *
  * @packageDocumentation
  */
 
-export { createComposeComponentRegistry } from './registry'
+export { createComposeEntityRegistry } from './registry'
 export {
-  ComposeRegistryComponent,
-  ComposeRegistryInspector,
+  ComposeRegistryComponentInspector,
+  ComposeRegistryEntityRenderer,
+  ComposeRegistryRendererInspector,
 } from './registry-renderers'
 export {
-  ComposeComponentRegistryError,
-  type ComposeComponentDefaultSize,
-  type ComposeComponentAssetDropDefinition,
-  type ComposeComponentAssetDropInput,
+  ComposeEntityRegistryError,
+  type ComposeCapabilityAvailability,
+  type ComposeCapabilityDefinition,
+  type ComposeCapabilityIssue,
+  type ComposeCapabilityPlanResult,
   type ComposeComponentDefinition,
   type ComposeComponentInspectorProps,
-  type ComposeNodeInspectorProps,
-  type ComposeComponentRegistry,
-  type ComposeComponentRendererProps,
-  type ComposeComponentSeed,
-  type ComposeComponentSeedError,
-  type ComposeComponentSeedResult,
+  type ComposeEntityAssetDropDefinition,
+  type ComposeEntityAssetDropInput,
+  type ComposeEntityInspectorContext,
+  type ComposeEntityPreset,
+  type ComposeEntityRegistry,
+  type ComposeEntityRegistryOptions,
+  type ComposeEntitySeed,
+  type ComposeEntitySeedError,
+  type ComposeEntitySeedResult,
+  type ComposeRendererDefinition,
+  type ComposeRendererInspectorProps,
+  type ComposeRendererProps,
 } from './registry'
 
 /** `@compose-ui/component-registry` 的稳定包标识。 @public */

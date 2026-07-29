@@ -1,5 +1,7 @@
 export {
   ComposePropertyPanel,
+  ComposePropertyPanelRoot,
+  ComposePropertyPanelSection,
   resolvePropertyBindings as resolveComposePropertyBindings,
 } from './compose-property-panel'
 export type {
@@ -32,4 +34,6 @@ export type {
   PropertyPanelRendererProps as ComposePropertyPanelRendererProps,
   PropertyPanelRenderer as ComposePropertyPanelRenderer,
   ComposePropertyPanelProps,
+  ComposePropertyPanelRootProps,
+  ComposePropertyPanelSectionProps,
 } from './compose-property-panel'

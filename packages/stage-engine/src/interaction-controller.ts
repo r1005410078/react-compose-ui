@@ -2,7 +2,12 @@ import type {
   ComposeDocument,
   EditorCommand,
   JsonValue,
-  NodeTransform,
+} from '@compose-ui/core'
+import {
+  BUILTIN_COMMAND_TYPES,
+  getComposeLock,
+  getComposeTransform,
+  resolveComposeTransformConstraints,
 } from '@compose-ui/core'
 import {
   createStageSceneIndex,
@@ -20,6 +25,7 @@ import type {
   StageMatrix,
   StagePoint,
   StageRect,
+  StageTransform,
   StageViewport,
 } from './geometry'
 import {
@@ -34,6 +40,7 @@ import {
   rotationMatrixAround,
   screenToWorld,
   snapTranslation,
+  toComposeTransform,
   translationMatrix,
   unionRects,
 } from './geometry'
@@ -68,15 +75,14 @@ export interface StageExternalAssetItem {
 
 /** Palette 或 Asset Browser 交给引擎的无 React descriptor。 @public */
 export type StageExternalDragItem =
-  | { readonly kind: 'component'; readonly componentType: string }
-  | { readonly kind: 'frame'; readonly presetId: string }
+  | { readonly kind: 'preset'; readonly presetId: string }
   | { readonly kind: 'assets'; readonly items: readonly StageExternalAssetItem[] }
 
 /** Pointer 命中的 Stage 语义目标。 @public */
 export type StageInteractionHit =
   | { readonly kind: 'surface' }
   | { readonly kind: 'output' }
-  | { readonly kind: 'node'; readonly nodeId: string }
+  | { readonly kind: 'entity'; readonly entityId: string }
   | { readonly kind: 'resize'; readonly handle: ResizeHandle }
   | { readonly kind: 'rotate' }
   | { readonly kind: 'ruler'; readonly axis: 'x' | 'y' }
@@ -142,7 +148,7 @@ export interface StageInteractionSnapshot {
   /** 当前互斥交互 phase。 */
   readonly phase: StageInteractionPhase
   /** 尚未提交的节点局部 transform。 */
-  readonly previewTransforms: Readonly<Record<string, NodeTransform>>
+  readonly previewTransforms: Readonly<Record<string, StageTransform>>
   /** 框选中的世界矩形。 */
   readonly marquee: StageRect | null
   /** 当前智能吸附反馈线。 */
@@ -254,7 +260,7 @@ type Gesture =
       readonly ids: readonly string[]
       readonly startWorld: StagePoint
       readonly bounds: StageRect
-      transforms: Readonly<Record<string, NodeTransform>>
+      transforms: Readonly<Record<string, StageTransform>>
     }
   | {
       readonly type: 'resize'
@@ -264,7 +270,7 @@ type Gesture =
       readonly handle: ResizeHandle
       readonly startWorld: StagePoint
       readonly bounds: StageRect
-      transforms: Readonly<Record<string, NodeTransform>>
+      transforms: Readonly<Record<string, StageTransform>>
     }
   | {
       readonly type: 'rotate'
@@ -273,7 +279,7 @@ type Gesture =
       readonly ids: readonly string[]
       readonly startWorld: StagePoint
       readonly bounds: StageRect
-      transforms: Readonly<Record<string, NodeTransform>>
+      transforms: Readonly<Record<string, StageTransform>>
     }
   | {
       readonly type: 'guide-create'
@@ -339,14 +345,14 @@ function matrixBounds(matrix: StageMatrix, width: number, height: number): Stage
 function previewSelectionBounds(
   index: StageSceneIndex,
   ids: readonly string[],
-  transforms: Readonly<Record<string, NodeTransform>>,
+  transforms: Readonly<Record<string, StageTransform>>,
 ) {
   return unionRects(index.topLevelSelection(ids)
     .filter((id) => index.isVisible(id))
     .map((id) => {
-      const node = index.document.nodes[id]
+      const entity = index.document.entities[id]
       const preview = transforms[id]
-      if (!node || !preview) return index.getWorldBounds(id)
+      if (!entity || !preview) return index.getWorldBounds(id)
       const parentId = index.getParentId(id)
       const parentWorld = parentId ? index.getWorldMatrix(parentId) : null
       const world = parentWorld
@@ -374,12 +380,12 @@ function sameIds(left: readonly string[], right: readonly string[]) {
 
 function targetTransform(
   index: StageSceneIndex,
-  nodeId: string,
+  entityId: string,
   targetWorld: StageMatrix,
   width: number,
   height: number,
 ) {
-  const parentId = index.getParentId(nodeId)
+  const parentId = index.getParentId(entityId)
   const parentWorld = parentId ? index.getWorldMatrix(parentId) : null
   const local = parentWorld
     ? multiplyMatrices(invertMatrix(parentWorld), targetWorld)
@@ -393,18 +399,60 @@ function transformedSelection(
   worldTransform: StageMatrix,
   resize?: { readonly scaleX: number; readonly scaleY: number },
 ) {
-  const updates: Record<string, NodeTransform> = {}
+  const updates: Record<string, StageTransform> = {}
   ids.forEach((id) => {
-    const node = index.document.nodes[id]
-    const nodeWorld = index.getWorldMatrix(id)
-    if (!node || !nodeWorld) return
-    updates[id] = targetTransform(
+    const entity = index.document.entities[id]
+    const entityWorld = index.getWorldMatrix(id)
+    if (!entity || !entityWorld) return
+    const transform = getComposeTransform(entity)
+    const candidate = targetTransform(
       index,
       id,
-      multiplyMatrices(worldTransform, nodeWorld),
-      node.transform.width * (resize?.scaleX ?? 1),
-      node.transform.height * (resize?.scaleY ?? 1),
+      multiplyMatrices(worldTransform, entityWorld),
+      transform.size.width * (resize?.scaleX ?? 1),
+      transform.size.height * (resize?.scaleY ?? 1),
     )
+    if (!resize) {
+      updates[id] = candidate
+      return
+    }
+    const constraints = resolveComposeTransformConstraints(entity)
+    const maximum = constraints.maxSize
+    const clamp = (value: number, minimum: number, max: number | undefined) =>
+      Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(minimum, value))
+    if (constraints.resize === 'preserve-aspect') {
+      const widthScale = candidate.width / transform.size.width
+      const heightScale = candidate.height / transform.size.height
+      let scale = Math.abs(widthScale - 1) >= Math.abs(heightScale - 1)
+        ? widthScale
+        : heightScale
+      const minScale = Math.max(
+        constraints.minSize.width / transform.size.width,
+        constraints.minSize.height / transform.size.height,
+      )
+      const maxScale = maximum
+        ? Math.min(
+            maximum.width / transform.size.width,
+            maximum.height / transform.size.height,
+          )
+        : Number.POSITIVE_INFINITY
+      scale = Math.min(maxScale, Math.max(minScale, scale))
+      updates[id] = {
+        ...candidate,
+        width: transform.size.width * scale,
+        height: transform.size.height * scale,
+      }
+      return
+    }
+    updates[id] = {
+      ...candidate,
+      width: constraints.resize === 'vertical'
+        ? transform.size.width
+        : clamp(candidate.width, constraints.minSize.width, maximum?.width),
+      height: constraints.resize === 'horizontal'
+        ? transform.size.height
+        : clamp(candidate.height, constraints.minSize.height, maximum?.height),
+    }
   })
   return updates
 }
@@ -629,11 +677,17 @@ export function createStageInteractionController(): StageInteractionController {
         zoom: gesture.viewport.zoom,
         disabled: modifiers.command,
       })
+      const preserveAspect = gesture.ids.some((id) => {
+        const entity = context!.document.entities[id]
+        return entity
+          ? resolveComposeTransformConstraints(entity).resize === 'preserve-aspect'
+          : false
+      })
       const nextBounds = resizeBounds(
         gesture.bounds,
         gesture.handle,
         snapped.point,
-        modifiers,
+        { ...modifiers, shift: modifiers.shift || preserveAspect },
       )
       gesture.transforms = transformedResizeSelection(
         index,
@@ -699,8 +753,19 @@ export function createStageInteractionController(): StageInteractionController {
     ) => {
       const editableIds = index!.topLevelSelection(ids)
         .filter((id) => {
-          const node = context!.document.nodes[id]
-          return index!.isVisible(id) && !node?.locked
+          const entity = context!.document.entities[id]
+          if (!entity || !index!.isVisible(id) || getComposeLock(entity).locked) return false
+          const constraints = resolveComposeTransformConstraints(entity)
+          if (type === 'move') return constraints.movable
+          if (type === 'rotate') return constraints.rotatable
+          if (constraints.resize === 'none') return false
+          if (!handle) return true
+          if (constraints.resize === 'horizontal') return handle === 'e' || handle === 'w'
+          if (constraints.resize === 'vertical') return handle === 'n' || handle === 's'
+          if (constraints.resize === 'preserve-aspect') {
+            return handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw'
+          }
+          return true
         })
       const bounds = selectionBounds(index!, editableIds)
       if (!bounds || editableIds.length === 0) return false
@@ -748,19 +813,19 @@ export function createStageInteractionController(): StageInteractionController {
       return true
     }
 
-    if (event.hit.kind === 'node') {
-      const node = context.document.nodes[event.hit.nodeId]
-      if (!node) return
-      const selected = context.selectedIds.filter((id) => context!.document.nodes[id])
+    if (event.hit.kind === 'entity') {
+      const entity = context.document.entities[event.hit.entityId]
+      if (!entity) return
+      const selected = context.selectedIds.filter((id) => context!.document.entities[id])
       const nextSelection = event.modifiers.shift
-        ? selected.includes(node.id)
-          ? selected.filter((id) => id !== node.id)
-          : [...selected, node.id]
-        : selected.includes(node.id) ? selected : [node.id]
+        ? selected.includes(entity.id)
+          ? selected.filter((id) => id !== entity.id)
+          : [...selected, entity.id]
+        : selected.includes(entity.id) ? selected : [entity.id]
       effects.push(
         { type: 'selection.change', selectedIds: nextSelection },
       )
-      if (!node.locked) startTransform('move', nextSelection)
+      if (!getComposeLock(entity).locked) startTransform('move', nextSelection)
       apply(effects)
       return
     }
@@ -868,14 +933,13 @@ export function createStageInteractionController(): StageInteractionController {
       const selectedIds = area.width < 1 && area.height < 1
         ? []
         : index.order.filter((id) => {
-            const node = context!.document.nodes[id]
+            const entity = context!.document.entities[id]
             const bounds = index!.getWorldBounds(id)
             return Boolean(
-              node
+              entity
               && bounds
-              && node.kind !== 'frame'
               && index!.isVisible(id)
-              && !node.locked
+              && !getComposeLock(entity).locked
               && intersects(area, bounds),
             )
           })
@@ -941,21 +1005,25 @@ export function createStageInteractionController(): StageInteractionController {
       || finished.type === 'resize'
       || finished.type === 'rotate'
     ) {
-      const updates = Object.entries(finished.transforms).map(([nodeId, transform]) => ({
-        nodeId,
-        transform: { ...transform },
+      const stageUpdates = Object.entries(finished.transforms).map(([entityId, transform]) => ({
+        entityId,
+        transform,
       }))
-      if (updates.length > 0) {
+      if (stageUpdates.length > 0) {
+        const updates = stageUpdates.map(({ entityId, transform }) => ({
+          entityId,
+          transform: toComposeTransform(transform),
+        }))
         effects.push({
           type: 'command.dispatch',
           command: {
             id: context.idFactory(),
-            type: 'node.transform.set',
-            payload: { updates },
+            type: BUILTIN_COMMAND_TYPES.setTransform,
+            payload: { operation: finished.type, updates },
             meta: {
               label: describeTransform(
                 context.document,
-                updates,
+                stageUpdates,
                 finished.type,
               ),
               source: 'stage',
@@ -977,7 +1045,7 @@ export function createStageInteractionController(): StageInteractionController {
     clientPoint: StagePoint | null,
   ) => {
     if (!context || !index || !surface) return
-    const selectionParentId = index.commonFrameForSelection(context.selectedIds)
+    const selectionParentId = index.commonContainerForSelection(context.selectedIds)
     const selectionParentBounds = selectionParentId
       ? index.getWorldBounds(selectionParentId)
       : null
@@ -997,7 +1065,7 @@ export function createStageInteractionController(): StageInteractionController {
     if (!surfacePoint) return
     const world = worldPoint(surfacePoint)
     const parentId = clientPoint
-      ? index.frameAtPoint(world)
+      ? index.containerAtPoint(world)
       : selectionParentId
     apply([{
       type: 'external.drop',

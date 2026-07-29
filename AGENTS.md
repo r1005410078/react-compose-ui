@@ -32,15 +32,16 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 
 - 当前仓库已经完成 Bun monorepo、包构建、测试、CI 和发布基座。
 - `app/` 提供集成示例和最小 E2E 操作演示，不是正式编辑器产品。
-- 当前正式文档协议为仅支持 v3 的隐式 Canvas 根、统一 Frame 容器与 Component 叶节点；
-  数据源协议和持久化接口仍未确定。
+- 当前正式文档协议只支持 `ComposeDocument v4`：隐式 Canvas 根、统一 ECS Entity/Component
+  组合、`Hierarchy` 容器与 `Renderer` 内容；v3 不兼容，数据源协议和持久化接口仍未确定。
 - 不要把示例应用中的临时状态或演示交互当成稳定公共 API。
 
 ## 架构边界
 
 - `@compose-ui/ui-context` 是跨包共享的 React 主题与国际化 Context，只依赖 React peer；
   第一方 React chrome 包可以依赖它，但必须在构建中外置，避免产生多份 Context 实例。
-- `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载 v3 文档模型、命令及通用逻辑。
+- `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载 v4 Entity/Component 文档模型、命令及
+  通用逻辑。
 - `@compose-ui/assets` 是无 React、无 DOM 的资源 Provider、稳定引用与运行时 Resolver 协议包；
   不得依赖资源浏览 UI、编辑器、文档历史或组件注册表。
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`。
@@ -65,9 +66,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   或 `operation-log`。
 - `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`、`assets` 和
   `component-registry`，不得依赖 `editor` 或 `stage`。
-- `@compose-ui/materials` 是 Frame、Rectangle、Text、Image、SVG 的独立基础物料包，可以依赖
-  `core`、`assets`、`component-registry`、`components`、`stage`、`property-panel`、`ui-context`、DOMPurify
-  和 Valibot，不得依赖 `editor` 或 `asset-browser`。
+- `@compose-ui/materials` 是 Container、Rectangle、Text、Image、SVG Entity Presets、
+  Renderer、Component Definitions 与 Capabilities 的独立基础物料包，可以依赖 `core`、
+  `assets`、`component-registry`、`components`、`property-panel`、`ui-context`、DOMPurify 和
+  Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。

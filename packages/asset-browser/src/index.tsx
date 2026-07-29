@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 库公共入口必须同时导出 React 组件和无 React 的 Provider factory。 */
 /**
  * 提供受控资源浏览、文件预览、脚本编辑和浏览器本地目录 Provider。
  *
@@ -23,8 +24,6 @@ export type {
   ComposeAssetPreviewHandle,
   ComposeAssetPreviewProps,
 } from './asset-preview'
-// 公共入口同时导出组件与 Provider factory，因此只针对该 factory 导出豁免 Fast Refresh。
-// eslint-disable-next-line react-refresh/only-export-components
 export {
   createFileSystemAssetProvider as createComposeFileSystemAssetProvider,
   isFileSystemAssetProviderSupported as isComposeFileSystemAssetProviderSupported,

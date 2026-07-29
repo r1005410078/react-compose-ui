@@ -1,5 +1,4 @@
 @import '@compose-ui/components/styles.css';
-@import './frame/styles.css';
 @import './rectangle/styles.css';
 @import './text/styles.css';
 @import './image/styles.css';

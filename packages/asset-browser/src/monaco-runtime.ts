@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference -- Vite 的 Monaco ESM 子路径需要本地 ambient module 声明。
 /// <reference path="./monaco-editor.d.ts" />
 
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'

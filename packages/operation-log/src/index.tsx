@@ -1,16 +1,14 @@
+/* eslint-disable react-refresh/only-export-components -- 库公共入口必须同时导出面板、Provider、Hook 和无 React 的 store factory。 */
 /**
  * 提供带 IndexedDB 持久化的本地操作审计日志和紧凑 React 查看面板。
  *
  * @packageDocumentation
  */
-// eslint-disable-next-line react-refresh/only-export-components -- 包公共入口需要同时导出纯快照函数。
 export { createComposeOperationLogSnapshot } from './snapshot'
-// eslint-disable-next-line react-refresh/only-export-components -- 包公共入口需要同时导出 store 工厂。
 export {
   createComposeIndexedDbOperationLogStore,
   createComposeMemoryOperationLogStore,
 } from './stores'
-// eslint-disable-next-line react-refresh/only-export-components -- Provider 与配套 Hook 共同构成公共 React API。
 export {
   ComposeOperationLogProvider,
   useComposeOperationLog,

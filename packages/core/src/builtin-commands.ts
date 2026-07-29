@@ -1,22 +1,24 @@
-import type {
-  ComposeCanvasGuide,
-  ComposeCanvasSettings,
-  ComposeDocument,
-  ComposeFrameNode,
-  ComposeNode,
-  ComposeOutputSettings,
-  JsonObject,
-  JsonValue,
-  NodeShadow,
-  NodeStyle,
-  NodeTransform,
+import {
+  COMPOSE_BUILTIN_COMPONENT_KEYS,
+  type ComposeCanvasGuide,
+  type ComposeCanvasSettings,
+  type ComposeDocument,
+  type ComposeEntity,
+  type ComposeOutputSettings,
+  type ComposeTransform,
+  type JsonObject,
+  type JsonValue,
 } from './document-types'
 import {
-  DEFAULT_NODE_SHADOW,
-  DEFAULT_NODE_STYLES,
-  resolveNodeStyle,
-  validateNodeStyle,
-} from './node-style'
+  getComposeComposition,
+  getComposeHierarchy,
+  getComposeLock,
+  getComposeTransform,
+  isComposeComponentKey,
+  resolveComposeTransformConstraints,
+} from './entity'
+import { isValidComposeTransform } from './document'
+import { jsonEqual } from './patches'
 import type {
   CommandHandler,
   CommandHandlerResult,
@@ -25,44 +27,42 @@ import type {
   EditorCommand,
 } from './command-types'
 
-/**
- * core 首版内置命令的稳定 type。
- *
- * @public
- */
+/** ComposeDocument v4 内置命令 type。 @public */
 export const BUILTIN_COMMAND_TYPES = {
   configureCanvas: 'canvas.configure',
   configureOutput: 'output.configure',
   createCanvasGuide: 'canvas.guide.create',
   moveCanvasGuide: 'canvas.guide.move',
   deleteCanvasGuide: 'canvas.guide.delete',
-  createNode: 'node.create',
-  deleteNode: 'node.delete',
-  duplicateNode: 'node.duplicate',
-  moveNode: 'node.move',
-  renameNode: 'node.rename',
-  setVisibility: 'node.set-visibility',
-  setLocked: 'node.set-locked',
-  setProps: 'node.props.set',
-  resetProps: 'node.props.reset',
-  setStyle: 'node.style.set',
-  resetStyle: 'node.style.reset',
-  setTransform: 'node.transform.set',
-  setFrameClipContent: 'frame.clip-content.set',
-  groupNode: 'node.group',
-  ungroupNode: 'node.ungroup',
+  createEntity: 'entity.create',
+  deleteEntity: 'entity.delete',
+  duplicateEntity: 'entity.duplicate',
+  moveEntity: 'entity.move',
+  renameEntity: 'entity.name.set',
+  setVisibility: 'entity.visibility.set',
+  setLock: 'entity.lock.set',
+  addComponent: 'entity.component.add',
+  updateComponent: 'entity.component.update',
+  removeComponent: 'entity.component.remove',
+  setRendererProps: 'entity.renderer.props.set',
+  setAppearance: 'entity.appearance.set',
+  setTransform: 'entity.transform.set',
+  setClip: 'entity.clip.set',
+  groupEntity: 'entity.group',
+  ungroupEntity: 'entity.ungroup',
   batch: 'transaction.batch',
 } as const
 
-type Location = { parentId: string | null; index: number }
 type UnknownRecord = Record<string, unknown>
+type Location = { readonly parentId: string | null; readonly index: number }
+type TransformOperation = 'move' | 'resize' | 'rotate' | 'set'
 
 function isRecord(value: unknown): value is UnknownRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function issue(code: string, message: string): CommandHandlerResult {
-  return { status: 'rejected', issues: [{ code, message }] }
+function issue(code: string, message: string, path?: readonly (string | number)[]): CommandHandlerResult {
+  return { status: 'rejected', issues: [{ code, message, ...(path ? { path } : {}) }] }
 }
 
 function patches(value: readonly DocumentPatch[]): CommandHandlerResult {
@@ -81,35 +81,23 @@ function asStringArray(value: unknown): readonly string[] | null {
     : null
 }
 
-function asPath(value: unknown): readonly (string | number)[] | null {
-  return Array.isArray(value)
-    && value.every((item) => typeof item === 'string' || Number.isInteger(item))
-    ? value as readonly (string | number)[]
-    : null
-}
-
 function asIndex(value: unknown, fallback: number): number | null {
   if (value === undefined) return fallback
   return typeof value === 'number' && Number.isInteger(value) ? value : null
 }
 
-function asNode(value: unknown): ComposeNode | null {
-  if (!isRecord(value) || typeof value.id !== 'string') return null
-  if (value.kind !== 'frame' && value.kind !== 'component') return null
-  return value as unknown as ComposeNode
-}
-
-function asTransform(value: unknown): NodeTransform | null {
-  if (!isRecord(value)) return null
-  const fields = ['x', 'y', 'width', 'height', 'rotation'] as const
-  if (!fields.every((field) => typeof value[field] === 'number')) return null
-  return value as unknown as NodeTransform
+function asEntity(value: unknown): ComposeEntity | null {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.name === 'string'
+    && isRecord(value.components)
+    ? value as unknown as ComposeEntity
+    : null
 }
 
 function asCanvasSettings(value: unknown): Omit<ComposeCanvasSettings, 'guides'> | null {
-  if (!isRecord(value)) return null
+  if (!isRecord(value) || !isRecord(value.grid) || !isRecord(value.smartSnap)) return null
   const { grid, smartSnap } = value
-  if (!isRecord(grid) || !isRecord(smartSnap)) return null
   if (
     typeof grid.stepX !== 'number'
     || !Number.isFinite(grid.stepX)
@@ -127,9 +115,7 @@ function asCanvasSettings(value: unknown): Omit<ComposeCanvasSettings, 'guides'>
     || typeof grid.snapEnabled !== 'boolean'
     || typeof smartSnap.nodes !== 'boolean'
     || typeof smartSnap.guides !== 'boolean'
-  ) {
-    return null
-  }
+  ) return null
   return {
     grid: {
       stepX: grid.stepX,
@@ -139,10 +125,7 @@ function asCanvasSettings(value: unknown): Omit<ComposeCanvasSettings, 'guides'>
       primaryLineEvery: grid.primaryLineEvery,
       snapEnabled: grid.snapEnabled,
     },
-    smartSnap: {
-      nodes: smartSnap.nodes,
-      guides: smartSnap.guides,
-    },
+    smartSnap: { nodes: smartSnap.nodes, guides: smartSnap.guides },
   }
 }
 
@@ -154,14 +137,8 @@ function asCanvasGuide(value: unknown): ComposeCanvasGuide | null {
     || (value.axis !== 'x' && value.axis !== 'y')
     || typeof value.position !== 'number'
     || !Number.isFinite(value.position)
-  ) {
-    return null
-  }
-  return {
-    id: value.id,
-    axis: value.axis,
-    position: value.position,
-  }
+  ) return null
+  return { id: value.id, axis: value.axis, position: value.position }
 }
 
 function asOutputSettings(value: unknown): ComposeOutputSettings | null {
@@ -175,9 +152,7 @@ function asOutputSettings(value: unknown): ComposeOutputSettings | null {
     || value.height <= 0
     || typeof value.backgroundColor !== 'string'
     || value.backgroundColor.trim().length === 0
-  ) {
-    return null
-  }
+  ) return null
   return {
     width: value.width,
     height: value.height,
@@ -191,9 +166,7 @@ function configureOutputHandler(): CommandHandler {
     execute(document, command) {
       const output = asOutputSettings(command.payload)
       if (!output) return issue('output.invalid-settings', 'output.configure 参数无效')
-      if (sameValue(document.output, output)) {
-        return { status: 'noop', reason: '输出设置没有变化' }
-      }
+      if (jsonEqual(document.output, output)) return { status: 'noop', reason: '输出设置没有变化' }
       return patches([{
         op: 'set',
         path: ['output'],
@@ -210,11 +183,9 @@ function configureCanvasHandler(): CommandHandler {
       const settings = asCanvasSettings(command.payload)
       if (!settings) return issue('canvas.invalid-settings', 'canvas.configure 参数无效')
       if (
-        sameValue(document.canvas.grid, settings.grid)
-        && sameValue(document.canvas.smartSnap, settings.smartSnap)
-      ) {
-        return { status: 'noop', reason: '画布设置没有变化' }
-      }
+        jsonEqual(document.canvas.grid, settings.grid)
+        && jsonEqual(document.canvas.smartSnap, settings.smartSnap)
+      ) return { status: 'noop', reason: '画布设置没有变化' }
       return patches([
         {
           op: 'set',
@@ -235,17 +206,26 @@ function createCanvasGuideHandler(): CommandHandler {
   return {
     type: BUILTIN_COMMAND_TYPES.createCanvasGuide,
     execute(document, command) {
-      const guide = asCanvasGuide(valueAt(command.payload, 'guide'))
-      if (!guide) return issue('canvas.invalid-guide', 'canvas.guide.create 参数无效')
-      if (document.canvas.guides.some(({ id }) => id === guide.id)) {
-        return issue('canvas.duplicate-guide', `辅助线 ${guide.id} 已存在`)
+      const guidesValue = valueAt(command.payload, 'guides')
+      const values = guidesValue === undefined ? [valueAt(command.payload, 'guide')] : guidesValue
+      if (!Array.isArray(values) || values.length === 0) {
+        return issue('canvas.invalid-guide', 'canvas.guide.create 参数无效')
       }
-      return patches([{
-        op: 'insert',
+      const guides = values.map(asCanvasGuide)
+      if (guides.some((guide) => !guide)) {
+        return issue('canvas.invalid-guide', 'canvas.guide.create 包含非法 guide')
+      }
+      const known = new Set(document.canvas.guides.map(({ id }) => id))
+      for (const guide of guides as ComposeCanvasGuide[]) {
+        if (known.has(guide.id)) return issue('canvas.duplicate-guide', `Guide ${guide.id} 已存在`)
+        known.add(guide.id)
+      }
+      return patches((guides as ComposeCanvasGuide[]).map((guide, offset) => ({
+        op: 'insert' as const,
         path: ['canvas', 'guides'],
-        index: document.canvas.guides.length,
+        index: document.canvas.guides.length + offset,
         value: guide as unknown as JsonValue,
-      }])
+      })))
     },
   }
 }
@@ -255,20 +235,18 @@ function canvasGuideHandler(type: string): CommandHandler {
     type,
     execute(document, command) {
       const guideId = valueAt(command.payload, 'guideId')
-      if (typeof guideId !== 'string' || guideId.length === 0) {
-        return issue('canvas.invalid-guide', '辅助线 ID 无效')
-      }
+      if (typeof guideId !== 'string') return issue('canvas.invalid-guide', 'guideId 无效')
       const index = document.canvas.guides.findIndex(({ id }) => id === guideId)
-      if (index < 0) return issue('canvas.guide-missing', `辅助线 ${guideId} 不存在`)
+      if (index < 0) return issue('canvas.guide-missing', `Guide ${guideId} 不存在`)
       if (type === BUILTIN_COMMAND_TYPES.deleteCanvasGuide) {
         return patches([{ op: 'remove', path: ['canvas', 'guides', index] }])
       }
       const position = valueAt(command.payload, 'position')
       if (typeof position !== 'number' || !Number.isFinite(position)) {
-        return issue('canvas.invalid-guide', '辅助线 position 必须是有限数字')
+        return issue('canvas.invalid-guide', 'Guide position 必须是有限数')
       }
       if (document.canvas.guides[index]?.position === position) {
-        return { status: 'noop', reason: '辅助线位置没有变化' }
+        return { status: 'noop', reason: 'Guide 位置没有变化' }
       }
       return patches([{
         op: 'set',
@@ -279,248 +257,256 @@ function canvasGuideHandler(type: string): CommandHandler {
   }
 }
 
-function childIds(document: ComposeDocument, parentId: string | null): readonly string[] | null {
+function children(document: ComposeDocument, parentId: string | null): readonly string[] | null {
   if (parentId === null) return document.rootIds
-  const parent = document.nodes[parentId]
-  return parent && parent.kind !== 'component' ? parent.childIds : null
+  const entity = document.entities[parentId]
+  return entity ? getComposeHierarchy(entity)?.childIds ?? null : null
 }
 
 function childPath(parentId: string | null): readonly (string | number)[] {
-  return parentId === null ? ['rootIds'] : ['nodes', parentId, 'childIds']
+  return parentId === null
+    ? ['rootIds']
+    : ['entities', parentId, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy, 'childIds']
 }
 
 function buildLocations(document: ComposeDocument) {
-  const locations = new Map<string, Location>()
-  document.rootIds.forEach((id, index) => locations.set(id, { parentId: null, index }))
-  for (const node of Object.values(document.nodes)) {
-    if (node.kind === 'component') continue
-    node.childIds.forEach((id, index) => locations.set(id, { parentId: node.id, index }))
+  const result = new Map<string, Location>()
+  const visit = (ids: readonly string[], parentId: string | null) => {
+    ids.forEach((id, index) => {
+      result.set(id, { parentId, index })
+      const hierarchy = getComposeHierarchy(document.entities[id]!)
+      if (hierarchy) visit(hierarchy.childIds, id)
+    })
   }
-  return locations
+  visit(document.rootIds, null)
+  return result
 }
 
 function collectSubtree(document: ComposeDocument, rootId: string) {
-  const ids: string[] = []
+  const result: string[] = []
   const stack = [rootId]
   while (stack.length > 0) {
-    const id = stack.pop()
-    if (!id || ids.includes(id)) continue
-    ids.push(id)
-    const node = document.nodes[id]
-    if (node && node.kind !== 'component') stack.push(...[...node.childIds].reverse())
+    const id = stack.pop()!
+    if (result.includes(id)) continue
+    result.push(id)
+    const hierarchy = document.entities[id] && getComposeHierarchy(document.entities[id]!)
+    if (hierarchy) stack.push(...hierarchy.childIds)
   }
-  return ids
+  return result
 }
 
 function documentOrder(document: ComposeDocument) {
-  const ids: string[] = []
-  const stack = [...document.rootIds].reverse()
-  while (stack.length > 0) {
-    const id = stack.pop()
-    if (!id) continue
-    ids.push(id)
-    const node = document.nodes[id]
-    if (node && node.kind !== 'component') stack.push(...[...node.childIds].reverse())
-  }
-  return ids
+  const ordered: string[] = []
+  const visit = (ids: readonly string[]) => ids.forEach((id) => {
+    ordered.push(id)
+    const hierarchy = document.entities[id] && getComposeHierarchy(document.entities[id]!)
+    if (hierarchy) visit(hierarchy.childIds)
+  })
+  visit(document.rootIds)
+  return ordered
 }
 
 function normalizeRoots(document: ComposeDocument, requested: readonly string[]) {
-  const requestedSet = new Set(requested)
-  const descendants = new Set<string>()
-  for (const id of requested) {
-    for (const descendant of collectSubtree(document, id).slice(1)) descendants.add(descendant)
-  }
-  return documentOrder(document).filter((id) => requestedSet.has(id) && !descendants.has(id))
+  const unique = [...new Set(requested)].filter((id) => document.entities[id])
+  const selected = new Set(unique)
+  const locations = buildLocations(document)
+  return documentOrder(document).filter((id) => {
+    if (!selected.has(id)) return false
+    let parentId = locations.get(id)?.parentId ?? null
+    while (parentId) {
+      if (selected.has(parentId)) return false
+      parentId = locations.get(parentId)?.parentId ?? null
+    }
+    return true
+  })
 }
 
 function validateTargets(
   document: ComposeDocument,
-  nodeIds: readonly string[],
-  options: { allowLocked?: boolean } = {},
-): CommandIssue[] {
+  ids: readonly string[],
+  options: { readonly allowLocked?: boolean } = {},
+): readonly CommandIssue[] {
   const issues: CommandIssue[] = []
-  for (const nodeId of nodeIds) {
-    const node = document.nodes[nodeId]
-    if (!node) issues.push({ code: 'node.missing', message: `节点 ${nodeId} 不存在` })
-    else if (node.locked && !options.allowLocked) {
-      issues.push({ code: 'node.locked', message: `节点 ${nodeId} 已锁定` })
+  const seen = new Set<string>()
+  ids.forEach((id) => {
+    const entity = document.entities[id]
+    if (!entity) issues.push({ code: 'entity.missing', message: `Entity ${id} 不存在` })
+    else if (seen.has(id)) issues.push({ code: 'entity.duplicate-target', message: `Entity ${id} 重复` })
+    else if (!options.allowLocked && getComposeLock(entity).locked) {
+      issues.push({ code: 'entity.locked', message: `Entity ${id} 已锁定` })
     }
-  }
+    seen.add(id)
+  })
   return issues
 }
 
-function createNodeHandler(): CommandHandler {
+function createEntityHandler(): CommandHandler {
   return {
-    type: BUILTIN_COMMAND_TYPES.createNode,
+    type: BUILTIN_COMMAND_TYPES.createEntity,
     execute(document, command) {
-      const node = asNode(valueAt(command.payload, 'node'))
+      const entity = asEntity(valueAt(command.payload, 'entity'))
       const parentValue = valueAt(command.payload, 'parentId')
       const parentId = parentValue === null || typeof parentValue === 'string'
         ? parentValue
         : undefined
-      if (!node) return issue('node.invalid', 'node.create 需要 Frame 或 Component')
-      if (node.kind === 'frame' && typeof node.clipContent !== 'boolean') {
-        return issue('node.invalid', 'Frame clipContent 必须是 boolean')
-      }
-      if (parentId === undefined) return issue('node.invalid-parent', 'parentId 必须是 Frame ID 或 null')
-      if (document.nodes[node.id]) return issue('node.duplicate-id', `节点 ${node.id} 已存在`)
-      const target = childIds(document, parentId)
-      if (!target) return issue('node.invalid-parent', `父节点 ${String(parentId)} 无效`)
-      if (parentId !== null && document.nodes[parentId]?.locked) {
-        return issue('node.locked', `父节点 ${parentId} 已锁定`)
+      if (!entity || parentId === undefined) return issue('entity.invalid', 'entity.create 参数无效')
+      if (document.entities[entity.id]) return issue('entity.duplicate-id', `Entity ${entity.id} 已存在`)
+      const target = children(document, parentId)
+      if (!target) return issue('entity.invalid-parent', '目标父 Entity 必须拥有 Hierarchy')
+      if (parentId !== null && getComposeLock(document.entities[parentId]!).locked) {
+        return issue('entity.locked', `父 Entity ${parentId} 已锁定`)
       }
       const index = asIndex(valueAt(command.payload, 'index'), target.length)
       if (index === null || index < 0 || index > target.length) {
-        return issue('node.invalid-index', '节点插入位置无效')
+        return issue('entity.invalid-index', '创建索引无效')
       }
       return patches([
         {
           op: 'set',
-          path: ['nodes', node.id],
-          value: node as unknown as JsonValue,
+          path: ['entities', entity.id],
+          value: entity as unknown as JsonValue,
         },
         {
           op: 'insert',
           path: childPath(parentId),
           index,
-          value: node.id,
+          value: entity.id,
         },
       ])
     },
   }
 }
 
-function deleteNodeHandler(): CommandHandler {
+function deleteEntityHandler(): CommandHandler {
   return {
-    type: BUILTIN_COMMAND_TYPES.deleteNode,
+    type: BUILTIN_COMMAND_TYPES.deleteEntity,
     execute(document, command) {
-      const requested = asStringArray(valueAt(command.payload, 'nodeIds'))
-      if (!requested || requested.length === 0) return issue('node.invalid-targets', 'nodeIds 不能为空')
+      const requested = asStringArray(valueAt(command.payload, 'entityIds'))
+      if (!requested?.length) return issue('entity.invalid-targets', 'entity.delete 目标不能为空')
       const roots = normalizeRoots(document, requested)
-      const allIds = roots.flatMap((id) => collectSubtree(document, id))
-      const targetIssues = validateTargets(document, allIds)
-      if (targetIssues.length > 0) return { status: 'rejected', issues: targetIssues }
+      const targetIssues = validateTargets(document, roots)
+      if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
       const locations = buildLocations(document)
       const byParent = new Map<string | null, number[]>()
-      for (const rootId of roots) {
-        const location = locations.get(rootId)
-        if (!location) return issue('node.missing', `节点 ${rootId} 没有场景位置`)
+      roots.forEach((id) => {
+        const location = locations.get(id)!
         const indexes = byParent.get(location.parentId) ?? []
         indexes.push(location.index)
         byParent.set(location.parentId, indexes)
-      }
+      })
       const result: DocumentPatch[] = []
-      for (const [parentId, indexes] of byParent) {
-        for (const index of [...indexes].sort((a, b) => b - a)) {
-          result.push({ op: 'remove', path: [...childPath(parentId), index] })
-        }
-      }
-      for (const nodeId of [...allIds].reverse()) {
-        result.push({ op: 'remove', path: ['nodes', nodeId] })
-      }
+      byParent.forEach((indexes, parentId) => {
+        indexes.sort((a, b) => b - a).forEach((index) =>
+          result.push({ op: 'remove', path: [...childPath(parentId), index] }))
+      })
+      const deleting = new Set(roots.flatMap((id) => collectSubtree(document, id)))
+      documentOrder(document).reverse().forEach((id) => {
+        if (deleting.has(id)) result.push({ op: 'remove', path: ['entities', id] })
+      })
       return patches(result)
     },
   }
 }
 
-function moveNodeHandler(): CommandHandler {
+function moveEntityHandler(): CommandHandler {
   return {
-    type: BUILTIN_COMMAND_TYPES.moveNode,
+    type: BUILTIN_COMMAND_TYPES.moveEntity,
     execute(document, command) {
-      const requested = asStringArray(valueAt(command.payload, 'nodeIds'))
+      const requested = asStringArray(valueAt(command.payload, 'entityIds'))
       const parentValue = valueAt(command.payload, 'parentId')
-      const parentId = parentValue === null || typeof parentValue === 'string' ? parentValue : undefined
-      if (!requested || requested.length === 0 || parentId === undefined) {
-        return issue('node.invalid-targets', 'node.move 参数无效')
+      const parentId = parentValue === null || typeof parentValue === 'string'
+        ? parentValue
+        : undefined
+      if (!requested?.length || parentId === undefined) {
+        return issue('entity.invalid-targets', 'entity.move 参数无效')
       }
       const moving = normalizeRoots(document, requested)
       const targetIssues = validateTargets(document, moving)
-      if (targetIssues.length > 0) return { status: 'rejected', issues: targetIssues }
+      if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
       if (parentId !== null) {
-        const parent = document.nodes[parentId]
-        if (!parent || parent.kind === 'component') return issue('node.invalid-parent', `父节点 ${parentId} 无效`)
-        if (parent.locked) return issue('node.locked', `父节点 ${parentId} 已锁定`)
+        const parent = document.entities[parentId]
+        if (!parent || !getComposeHierarchy(parent)) {
+          return issue('entity.invalid-parent', `父 Entity ${parentId} 无效`)
+        }
+        if (getComposeLock(parent).locked) return issue('entity.locked', `父 Entity ${parentId} 已锁定`)
         if (moving.some((id) => collectSubtree(document, id).includes(parentId))) {
-          return issue('node.cycle', '不能把节点移动到自身后代')
+          return issue('entity.cycle', '不能把 Entity 移动到自身后代')
         }
       }
-      const targetChildren = childIds(document, parentId)
-      if (!targetChildren) return issue('node.invalid-parent', '目标父节点无效')
+      const targetChildren = children(document, parentId)
+      if (!targetChildren) return issue('entity.invalid-parent', '目标父 Entity 无效')
       const requestedIndex = asIndex(valueAt(command.payload, 'index'), targetChildren.length)
       if (requestedIndex === null || requestedIndex < 0 || requestedIndex > targetChildren.length) {
-        return issue('node.invalid-index', '移动目标索引无效')
+        return issue('entity.invalid-index', '移动目标索引无效')
       }
-
       const locations = buildLocations(document)
       const byParent = new Map<string | null, number[]>()
-      for (const nodeId of moving) {
-        const location = locations.get(nodeId)
-        if (!location) return issue('node.missing', `节点 ${nodeId} 没有场景位置`)
+      moving.forEach((id) => {
+        const location = locations.get(id)!
         const indexes = byParent.get(location.parentId) ?? []
         indexes.push(location.index)
         byParent.set(location.parentId, indexes)
-      }
+      })
       const removedBefore = moving.filter((id) => {
         const location = locations.get(id)
         return location?.parentId === parentId && location.index < requestedIndex
       }).length
       const result: DocumentPatch[] = []
-      for (const [sourceParentId, indexes] of byParent) {
-        for (const index of [...indexes].sort((a, b) => b - a)) {
-          result.push({ op: 'remove', path: [...childPath(sourceParentId), index] })
-        }
-      }
-      const remainingLength = targetChildren.length
-        - (byParent.get(parentId)?.length ?? 0)
+      byParent.forEach((indexes, sourceParentId) => {
+        [...indexes].sort((a, b) => b - a).forEach((index) =>
+          result.push({ op: 'remove', path: [...childPath(sourceParentId), index] }))
+      })
+      const remainingLength = targetChildren.length - (byParent.get(parentId)?.length ?? 0)
       const targetIndex = Math.min(
         Math.max(0, requestedIndex - removedBefore),
         remainingLength,
       )
-      moving.forEach((nodeId, offset) => result.push({
+      moving.forEach((id, offset) => result.push({
         op: 'insert',
         path: childPath(parentId),
         index: targetIndex + offset,
-        value: nodeId,
+        value: id,
       }))
       return patches(result)
     },
   }
 }
 
-function duplicateNodeHandler(): CommandHandler {
+function duplicateEntityHandler(): CommandHandler {
   return {
-    type: BUILTIN_COMMAND_TYPES.duplicateNode,
+    type: BUILTIN_COMMAND_TYPES.duplicateEntity,
     execute(document, command) {
-      const nodeValues = valueAt(command.payload, 'nodes')
+      const values = valueAt(command.payload, 'entities')
       const rootIds = asStringArray(valueAt(command.payload, 'rootIds'))
       const parentValue = valueAt(command.payload, 'parentId')
-      const parentId = parentValue === null || typeof parentValue === 'string' ? parentValue : undefined
-      if (!isRecord(nodeValues) || !rootIds || rootIds.length === 0 || parentId === undefined) {
-        return issue('node.invalid-duplicate', 'node.duplicate 参数无效')
+      const parentId = parentValue === null || typeof parentValue === 'string'
+        ? parentValue
+        : undefined
+      if (!isRecord(values) || !rootIds?.length || parentId === undefined) {
+        return issue('entity.invalid-duplicate', 'entity.duplicate 参数无效')
       }
-      const entries = Object.entries(nodeValues)
-      if (entries.length === 0) return issue('node.invalid-duplicate', '复制节点不能为空')
+      const entries = Object.entries(values)
       for (const [id, value] of entries) {
-        const node = asNode(value)
-        if (!node || node.id !== id) return issue('node.invalid-duplicate', `复制节点 ${id} 无效`)
-        if (document.nodes[id]) return issue('node.duplicate-id', `节点 ${id} 已存在`)
+        const entity = asEntity(value)
+        if (!entity || entity.id !== id) return issue('entity.invalid-duplicate', `Entity ${id} 无效`)
+        if (document.entities[id]) return issue('entity.duplicate-id', `Entity ${id} 已存在`)
       }
-      const roots = rootIds.map((id) => asNode(nodeValues[id]))
-      if (roots.some((node) => !node)) return issue('node.invalid-duplicate', '复制 rootIds 不完整')
-      const target = childIds(document, parentId)
-      if (!target) return issue('node.invalid-parent', '复制目标父节点无效')
-      if (parentId !== null && document.nodes[parentId]?.locked) {
-        return issue('node.locked', `父节点 ${parentId} 已锁定`)
+      if (rootIds.some((id) => !asEntity(values[id]))) {
+        return issue('entity.invalid-duplicate', '复制 rootIds 不完整')
+      }
+      const target = children(document, parentId)
+      if (!target) return issue('entity.invalid-parent', '复制目标父 Entity 无效')
+      if (parentId !== null && getComposeLock(document.entities[parentId]!).locked) {
+        return issue('entity.locked', `父 Entity ${parentId} 已锁定`)
       }
       const index = asIndex(valueAt(command.payload, 'index'), target.length)
       if (index === null || index < 0 || index > target.length) {
-        return issue('node.invalid-index', '复制目标索引无效')
+        return issue('entity.invalid-index', '复制目标索引无效')
       }
-      const result: DocumentPatch[] = entries.map(([id, node]) => ({
+      const result: DocumentPatch[] = entries.map(([id, entity]) => ({
         op: 'set',
-        path: ['nodes', id],
-        value: node as JsonValue,
+        path: ['entities', id],
+        value: entity as JsonValue,
       }))
       rootIds.forEach((id, offset) => result.push({
         op: 'insert',
@@ -533,279 +519,337 @@ function duplicateNodeHandler(): CommandHandler {
   }
 }
 
-function simpleNodeHandler(
+function renameEntityHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.renameEntity,
+    execute(document, command) {
+      const entityId = valueAt(command.payload, 'entityId')
+      const name = valueAt(command.payload, 'name')
+      if (typeof entityId !== 'string' || !nonEmptyString(name)) {
+        return issue('entity.invalid-value', 'Entity 名称参数无效')
+      }
+      const entity = document.entities[entityId]
+      if (!entity) return issue('entity.missing', `Entity ${entityId} 不存在`)
+      if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${entityId} 已锁定`)
+      if (entity.name === name) return { status: 'noop', reason: 'Entity 名称没有变化' }
+      return patches([{ op: 'set', path: ['entities', entityId, 'name'], value: name }])
+    },
+  }
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function booleanComponentHandler(
   type: string,
-  field: 'name' | 'visible' | 'locked',
+  componentKey: 'Visibility' | 'Lock' | 'Clip',
+  field: 'visible' | 'locked' | 'enabled',
 ): CommandHandler {
   return {
     type,
     execute(document, command) {
-      const ids = field === 'name'
-        ? [valueAt(command.payload, 'nodeId')].filter((id): id is string => typeof id === 'string')
-        : asStringArray(valueAt(command.payload, 'nodeIds'))
-      if (!ids || ids.length === 0) return issue('node.invalid-targets', '命令目标不能为空')
-      const targetIssues = validateTargets(document, ids, { allowLocked: field === 'locked' })
-      if (targetIssues.length > 0) return { status: 'rejected', issues: targetIssues }
-      const nextValue = valueAt(command.payload, field)
-      if (
-        (field === 'name' && (typeof nextValue !== 'string' || nextValue.trim().length === 0))
-        || (field !== 'name' && typeof nextValue !== 'boolean')
-      ) {
-        return issue('node.invalid-value', `${field} 值无效`)
+      const ids = asStringArray(valueAt(command.payload, 'entityIds'))
+      const value = valueAt(command.payload, field)
+      if (!ids?.length || typeof value !== 'boolean') {
+        return issue('entity.invalid-value', `${field} 命令参数无效`)
       }
-      return patches(ids.map((id) => ({
+      const targetIssues = validateTargets(document, ids, {
+        allowLocked: componentKey === 'Lock',
+      })
+      if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
+      for (const id of ids) {
+        if (!document.entities[id]!.components[componentKey]) {
+          return issue('component.missing', `Entity ${id} 缺少 ${componentKey}`)
+        }
+      }
+      const changes = ids.filter((id) =>
+        document.entities[id]!.components[componentKey]?.[field] !== value)
+      return patches(changes.map((id) => ({
         op: 'set',
-        path: ['nodes', id, field],
-        value: nextValue as JsonValue,
+        path: ['entities', id, 'components', componentKey, field],
+        value,
       })))
     },
   }
 }
 
-function propsHandler(type: string): CommandHandler {
+function componentHandler(type: string): CommandHandler {
   return {
     type,
     execute(document, command) {
-      const nodeId = valueAt(command.payload, 'nodeId')
-      const path = asPath(valueAt(command.payload, 'path'))
-      if (typeof nodeId !== 'string' || !path) return issue('node.invalid-targets', '属性命令参数无效')
-      const node = document.nodes[nodeId]
-      if (!node || node.kind !== 'component') return issue('node.invalid-kind', '属性目标必须是 Component')
-      if (node.locked) return issue('node.locked', `节点 ${nodeId} 已锁定`)
-      const value = valueAt(command.payload, 'value') as JsonValue
-      return patches([{
-        op: 'set',
-        path: ['nodes', nodeId, 'props', ...path],
-        value,
-      }])
-    },
-  }
-}
-
-const styleFields = new Set([
-  'backgroundColor',
-  'borderColor',
-  'borderWidth',
-  'borderRadius',
-  'opacity',
-  'shadow',
-])
-const shadowFields = new Set(['color', 'offsetX', 'offsetY', 'blur', 'spread'])
-
-function stylePath(value: unknown): readonly string[] | null {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) return null
-  if (value.length === 0) return []
-  if (value.length === 1 && styleFields.has(value[0]!)) return value
-  if (value.length === 2 && value[0] === 'shadow' && shadowFields.has(value[1]!)) return value
-  return null
-}
-
-function sameValue(left: unknown, right: unknown) {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
-function setStyleValue(
-  current: ReturnType<typeof resolveNodeStyle>,
-  path: readonly string[],
-  value: unknown,
-): NodeStyle | null {
-  if (path.length === 0) return isRecord(value) ? value as NodeStyle : null
-  const next: Record<string, unknown> = {
-    ...current,
-    shadow: current.shadow ? { ...current.shadow } : null,
-  }
-  if (path.length === 1) {
-    next[path[0]!] = value
-  }
-  else {
-    const shadow: Record<string, unknown> = {
-      ...(current.shadow ?? DEFAULT_NODE_SHADOW),
-    }
-    shadow[path[1]!] = value
-    next.shadow = shadow
-  }
-  return next as NodeStyle
-}
-
-function resetStyleValue(
-  current: ReturnType<typeof resolveNodeStyle>,
-  kind: ComposeNode['kind'],
-  path: readonly string[],
-): NodeStyle {
-  const defaults = DEFAULT_NODE_STYLES[kind]
-  const next: Record<string, unknown> = {
-    ...current,
-    shadow: current.shadow ? { ...current.shadow } : null,
-  }
-  if (path.length === 1) {
-    next[path[0]!] = defaults[path[0] as keyof typeof defaults]
-  }
-  else {
-    const shadow: Record<string, unknown> = {
-      ...(current.shadow ?? DEFAULT_NODE_SHADOW),
-    }
-    shadow[path[1]!] = DEFAULT_NODE_SHADOW[path[1] as keyof NodeShadow]
-    next.shadow = shadow
-  }
-  return next as NodeStyle
-}
-
-function styleHandler(type: string): CommandHandler {
-  return {
-    type,
-    execute(document, command) {
-      const nodeId = valueAt(command.payload, 'nodeId')
-      const pathValue = valueAt(command.payload, 'path')
-      if (typeof nodeId !== 'string') return issue('node.invalid-targets', '样式命令目标无效')
-      const path = stylePath(pathValue)
-      if (!path) return issue('style.invalid-path', '样式命令 path 无效')
-      const node = document.nodes[nodeId]
-      if (!node) return issue('node.missing', `节点 ${nodeId} 不存在`)
-      if (node.locked) return issue('node.locked', `节点 ${nodeId} 已锁定`)
-
-      if (type === BUILTIN_COMMAND_TYPES.resetStyle && path.length === 0) {
-        return node.style === undefined
-          ? { status: 'noop', reason: '节点未保存自定义样式' }
-          : patches([{ op: 'remove', path: ['nodes', nodeId, 'style'] }])
+      const entityId = valueAt(command.payload, 'entityId')
+      const key = valueAt(command.payload, 'key')
+      if (typeof entityId !== 'string' || typeof key !== 'string' || !isComposeComponentKey(key)) {
+        return issue('component.invalid', 'Component 命令参数无效')
       }
-
-      const current = resolveNodeStyle(node)
-      const candidate = type === BUILTIN_COMMAND_TYPES.resetStyle
-        ? resetStyleValue(current, node.kind, path)
-        : setStyleValue(current, path, valueAt(command.payload, 'value'))
-      if (!candidate) return issue('style.invalid', '候选 style 必须是对象')
-      const validation = validateNodeStyle(candidate)
-      if (!validation.valid) {
-        return {
-          status: 'rejected',
-          issues: validation.issues.map((item) => ({
-            code: item.code,
-            path: ['style', ...item.path],
-            message: item.message,
-          })),
+      const entity = document.entities[entityId]
+      if (!entity) return issue('entity.missing', `Entity ${entityId} 不存在`)
+      if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${entityId} 已锁定`)
+      const current = entity.components[key]
+      if (type === BUILTIN_COMMAND_TYPES.removeComponent) {
+        if (!current) return { status: 'noop', reason: `Component ${key} 不存在` }
+        const composition = getComposeComposition(entity)
+        if (
+          key === COMPOSE_BUILTIN_COMPONENT_KEYS.composition
+          || composition.baseComponentKeys.includes(key)
+        ) {
+          return issue('component.protected', `基础 Component ${key} 不可移除`)
         }
+        const hierarchy = key === COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy
+          ? getComposeHierarchy(entity)
+          : undefined
+        if (hierarchy?.childIds.length) {
+          return issue('component.has-children', '含子项的 Hierarchy 不可移除')
+        }
+        return patches([{ op: 'remove', path: ['entities', entityId, 'components', key] }])
       }
-      const resolvedCandidate = resolveNodeStyle({ kind: node.kind, style: validation.style })
-      if (sameValue(current, resolvedCandidate)) {
-        return { status: 'noop', reason: '样式命令没有产生可见修改' }
+      const value = valueAt(command.payload, 'value')
+      if (!isRecord(value)) return issue('component.invalid-value', 'Component value 必须是 JsonObject')
+      if (type === BUILTIN_COMMAND_TYPES.addComponent && current) {
+        return issue('component.exists', `Component ${key} 已存在`)
       }
+      if (type === BUILTIN_COMMAND_TYPES.updateComponent && !current) {
+        return issue('component.missing', `Component ${key} 不存在`)
+      }
+      if (jsonEqual(current, value)) return { status: 'noop', reason: 'Component 没有变化' }
       return patches([{
         op: 'set',
-        path: ['nodes', nodeId, 'style'],
-        value: validation.style as unknown as JsonValue,
+        path: ['entities', entityId, 'components', key],
+        value: value as JsonValue,
       }])
     },
   }
+}
+
+function rendererPropsHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.setRendererProps,
+    execute(document, command) {
+      const entityId = valueAt(command.payload, 'entityId')
+      const props = valueAt(command.payload, 'props')
+      if (typeof entityId !== 'string' || !isRecord(props)) {
+        return issue('renderer.invalid-props', 'Renderer props 参数无效')
+      }
+      const entity = document.entities[entityId]
+      if (!entity) return issue('entity.missing', `Entity ${entityId} 不存在`)
+      if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${entityId} 已锁定`)
+      const renderer = entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.renderer]
+      if (!renderer) return issue('renderer.missing', `Entity ${entityId} 缺少 Renderer`)
+      if (jsonEqual(renderer.props, props)) return { status: 'noop', reason: 'Renderer props 没有变化' }
+      return patches([{
+        op: 'set',
+        path: [
+          'entities',
+          entityId,
+          'components',
+          COMPOSE_BUILTIN_COMPONENT_KEYS.renderer,
+          'props',
+        ],
+        value: props as JsonValue,
+      }])
+    },
+  }
+}
+
+function appearanceHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.setAppearance,
+    execute(document, command) {
+      const entityId = valueAt(command.payload, 'entityId')
+      const appearance = valueAt(command.payload, 'appearance')
+      if (typeof entityId !== 'string' || !isRecord(appearance)) {
+        return issue('appearance.invalid', 'Appearance 参数无效')
+      }
+      const entity = document.entities[entityId]
+      if (!entity) return issue('entity.missing', `Entity ${entityId} 不存在`)
+      if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${entityId} 已锁定`)
+      if (jsonEqual(entity.components.Appearance, appearance)) {
+        return { status: 'noop', reason: 'Appearance 没有变化' }
+      }
+      return patches([{
+        op: 'set',
+        path: ['entities', entityId, 'components', 'Appearance'],
+        value: appearance as JsonValue,
+      }])
+    },
+  }
+}
+
+function samePosition(left: ComposeTransform, right: ComposeTransform) {
+  return left.position.x === right.position.x && left.position.y === right.position.y
+}
+
+function sameSize(left: ComposeTransform, right: ComposeTransform) {
+  return left.size.width === right.size.width && left.size.height === right.size.height
+}
+
+function withinConstraints(entity: ComposeEntity, transform: ComposeTransform) {
+  const constraints = resolveComposeTransformConstraints(entity)
+  const { width, height } = transform.size
+  return width >= constraints.minSize.width
+    && height >= constraints.minSize.height
+    && (
+      constraints.maxSize === null
+      || (
+        width <= constraints.maxSize.width
+        && height <= constraints.maxSize.height
+      )
+    )
+}
+
+function validatesOperation(
+  entity: ComposeEntity,
+  next: ComposeTransform,
+  operation: TransformOperation,
+): string | null {
+  const current = getComposeTransform(entity)
+  const constraints = resolveComposeTransformConstraints(entity)
+  if (!withinConstraints(entity, next)) return 'Transform 尺寸超出约束'
+  const positionChanged = !samePosition(current, next)
+  const sizeChanged = !sameSize(current, next)
+  const rotationChanged = current.rotation !== next.rotation
+  const resizeViolation = () => {
+    if (!sizeChanged) return null
+    if (constraints.resize === 'none') return 'Entity 禁止修改 size'
+    if (constraints.resize === 'horizontal' && next.size.height !== current.size.height) {
+      return 'horizontal Resize 不得修改高度'
+    }
+    if (constraints.resize === 'vertical' && next.size.width !== current.size.width) {
+      return 'vertical Resize 不得修改宽度'
+    }
+    if (constraints.resize === 'preserve-aspect') {
+      const previousRatio = current.size.width / current.size.height
+      const nextRatio = next.size.width / next.size.height
+      if (Math.abs(previousRatio - nextRatio) > 0.000_001) return 'Resize 必须保持宽高比'
+    }
+    return null
+  }
+  if (operation === 'move') {
+    if (!constraints.movable) return 'Entity 禁止移动'
+    if (sizeChanged || rotationChanged) return 'move 只能修改 position'
+  }
+  else if (operation === 'resize') {
+    if (rotationChanged) return 'resize 不得修改 rotation'
+    const violation = resizeViolation()
+    if (violation) return violation
+  }
+  else if (operation === 'rotate') {
+    if (!constraints.rotatable) return 'Entity 禁止旋转'
+    if (sizeChanged) return 'rotate 不得修改 size'
+  }
+  else {
+    if (positionChanged && !constraints.movable) return 'Entity 禁止修改 position'
+    const violation = resizeViolation()
+    if (violation) return violation
+    if (rotationChanged && !constraints.rotatable) return 'Entity 禁止修改 rotation'
+  }
+  return null
 }
 
 function transformHandler(): CommandHandler {
   return {
     type: BUILTIN_COMMAND_TYPES.setTransform,
     execute(document, command) {
+      const operation = valueAt(command.payload, 'operation')
       const updates = valueAt(command.payload, 'updates')
-      if (!Array.isArray(updates) || updates.length === 0) {
-        return issue('node.invalid-transform', 'transform updates 不能为空')
-      }
+      if (
+        !['move', 'resize', 'rotate', 'set'].includes(operation as string)
+        || !Array.isArray(updates)
+        || updates.length === 0
+      ) return issue('transform.invalid', 'Transform 命令参数无效')
       const result: DocumentPatch[] = []
       for (const update of updates) {
-        if (!isRecord(update) || typeof update.nodeId !== 'string') {
-          return issue('node.invalid-transform', 'transform update 参数无效')
+        if (!isRecord(update) || typeof update.entityId !== 'string') {
+          return issue('transform.invalid', 'Transform update 参数无效')
         }
-        const node = document.nodes[update.nodeId]
-        if (!node) return issue('node.missing', `节点 ${update.nodeId} 不存在`)
-        if (node.locked) return issue('node.locked', `节点 ${update.nodeId} 已锁定`)
-        const transform = asTransform(update.transform)
-        if (!transform) return issue('node.invalid-transform', `节点 ${update.nodeId} transform 无效`)
-        result.push({
-          op: 'set',
-          path: ['nodes', update.nodeId, 'transform'],
-          value: transform as unknown as JsonValue,
-        })
+        const entity = document.entities[update.entityId]
+        if (!entity) return issue('entity.missing', `Entity ${update.entityId} 不存在`)
+        if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${update.entityId} 已锁定`)
+        if (!isValidComposeTransform(update.transform)) {
+          return issue('transform.invalid', `Entity ${update.entityId} Transform 无效`)
+        }
+        const violation = validatesOperation(
+          entity,
+          update.transform,
+          operation as TransformOperation,
+        )
+        if (violation) return issue('transform.constraint', violation)
+        if (!jsonEqual(getComposeTransform(entity), update.transform)) {
+          result.push({
+            op: 'set',
+            path: ['entities', update.entityId, 'components', 'Transform'],
+            value: update.transform as unknown as JsonValue,
+          })
+        }
       }
       return patches(result)
     },
   }
 }
 
-function frameClipContentHandler(): CommandHandler {
-  return {
-    type: BUILTIN_COMMAND_TYPES.setFrameClipContent,
-    execute(document, command) {
-      const frameId = valueAt(command.payload, 'frameId')
-      const clipContent = valueAt(command.payload, 'clipContent')
-      if (typeof frameId !== 'string' || typeof clipContent !== 'boolean') {
-        return issue('frame.invalid-clip', 'frame.clip-content.set 参数无效')
-      }
-      const frame = document.nodes[frameId]
-      if (!frame || frame.kind !== 'frame') {
-        return issue('frame.invalid', `Frame ${frameId} 不存在`)
-      }
-      if (frame.locked) return issue('node.locked', `节点 ${frameId} 已锁定`)
-      if (frame.clipContent === clipContent) {
-        return { status: 'noop', reason: 'Frame 裁剪设置没有变化' }
-      }
-      return patches([{
-        op: 'set',
-        path: ['nodes', frameId, 'clipContent'],
-        value: clipContent,
-      }])
-    },
-  }
-}
-
 function groupHandler(): CommandHandler {
   return {
-    type: BUILTIN_COMMAND_TYPES.groupNode,
+    type: BUILTIN_COMMAND_TYPES.groupEntity,
     execute(document, command) {
-      const frameValue = asNode(valueAt(command.payload, 'frame'))
-      const requested = asStringArray(valueAt(command.payload, 'nodeIds'))
+      const container = asEntity(valueAt(command.payload, 'container'))
+      const requested = asStringArray(valueAt(command.payload, 'entityIds'))
       const transformValues = valueAt(command.payload, 'childTransforms')
       if (
-        !frameValue
-        || frameValue.kind !== 'frame'
+        !container
+        || !getComposeHierarchy(container)
         || !requested
         || requested.length < 2
         || !isRecord(transformValues)
-      ) {
-        return issue('node.invalid-group', 'node.group 参数无效')
+      ) return issue('entity.invalid-group', 'entity.group 参数无效')
+      if (document.entities[container.id]) {
+        return issue('entity.duplicate-id', `Entity ${container.id} 已存在`)
       }
-      if (document.nodes[frameValue.id]) return issue('node.duplicate-id', `节点 ${frameValue.id} 已存在`)
-      const nodes = normalizeRoots(document, requested)
-      if (nodes.length !== requested.length) {
-        return issue('node.invalid-targets', '组合目标必须是顶层选择')
+      const roots = normalizeRoots(document, requested)
+      if (roots.length !== requested.length) {
+        return issue('entity.invalid-targets', '组合目标必须是顶层选择')
       }
-      const targetIssues = validateTargets(document, nodes)
-      if (targetIssues.length > 0) return { status: 'rejected', issues: targetIssues }
+      const targetIssues = validateTargets(document, roots)
+      if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
       const locations = buildLocations(document)
-      const first = locations.get(nodes[0])
-      if (!first) return issue('node.invalid-parent', '组合目标没有场景位置')
-      if (nodes.some((id) => locations.get(id)?.parentId !== first.parentId)) {
-        return issue('node.invalid-parent', '待组合节点必须具有同一直接父节点')
+      const first = locations.get(roots[0]!)
+      if (!first || roots.some((id) => locations.get(id)?.parentId !== first.parentId)) {
+        return issue('entity.invalid-parent', '待组合 Entity 必须具有同一直接父级')
       }
-      const parent = first.parentId ? document.nodes[first.parentId] : undefined
-      if (parent?.locked) return issue('node.locked', `父节点 ${first.parentId} 已锁定`)
-      const indexes = nodes.map((id) => locations.get(id)?.index ?? -1)
+      if (first.parentId !== null && getComposeLock(document.entities[first.parentId]!).locked) {
+        return issue('entity.locked', `父 Entity ${first.parentId} 已锁定`)
+      }
+      const indexes = roots.map((id) => locations.get(id)!.index)
+      const hierarchy = getComposeHierarchy(container)!
+      const grouped: ComposeEntity = {
+        ...container,
+        components: {
+          ...container.components,
+          Hierarchy: { ...hierarchy, childIds: roots },
+        },
+      }
       const result: DocumentPatch[] = [...indexes]
         .sort((a, b) => b - a)
         .map((index) => ({ op: 'remove', path: [...childPath(first.parentId), index] }))
-      const frame: ComposeFrameNode = { ...frameValue, childIds: nodes }
       result.push({
         op: 'set',
-        path: ['nodes', frame.id],
-        value: frame as unknown as JsonValue,
+        path: ['entities', grouped.id],
+        value: grouped as unknown as JsonValue,
       })
       result.push({
         op: 'insert',
         path: childPath(first.parentId),
         index: Math.min(...indexes),
-        value: frame.id,
+        value: grouped.id,
       })
-      for (const nodeId of nodes) {
-        const transform = asTransform(transformValues[nodeId])
-        if (!transform) return issue('node.invalid-transform', `节点 ${nodeId} 缺少局部 transform`)
+      for (const entityId of roots) {
+        const transform = transformValues[entityId]
+        if (!isValidComposeTransform(transform)) {
+          return issue('transform.invalid', `Entity ${entityId} 缺少局部 Transform`)
+        }
         result.push({
           op: 'set',
-          path: ['nodes', nodeId, 'transform'],
+          path: ['entities', entityId, 'components', 'Transform'],
           value: transform as unknown as JsonValue,
         })
       }
@@ -816,55 +860,54 @@ function groupHandler(): CommandHandler {
 
 function ungroupHandler(): CommandHandler {
   return {
-    type: BUILTIN_COMMAND_TYPES.ungroupNode,
+    type: BUILTIN_COMMAND_TYPES.ungroupEntity,
     execute(document, command) {
-      const frameId = valueAt(command.payload, 'frameId')
+      const containerId = valueAt(command.payload, 'containerId')
       const transformValues = valueAt(command.payload, 'childTransforms')
-      if (typeof frameId !== 'string' || !isRecord(transformValues)) {
-        return issue('node.invalid-ungroup', 'node.ungroup 参数无效')
+      if (typeof containerId !== 'string' || !isRecord(transformValues)) {
+        return issue('entity.invalid-ungroup', 'entity.ungroup 参数无效')
       }
-      const frame = document.nodes[frameId]
-      if (!frame || frame.kind !== 'frame') return issue('frame.invalid', `Frame ${frameId} 不存在`)
-      if (frame.locked) return issue('node.locked', `Frame ${frameId} 已锁定`)
-      if (frame.childIds.length === 0) return issue('frame.empty', `Frame ${frameId} 没有孩子`)
-      const targetIssues = validateTargets(document, frame.childIds)
-      if (targetIssues.length > 0) return { status: 'rejected', issues: targetIssues }
-      const location = buildLocations(document).get(frameId)
-      if (!location) return issue('node.invalid-parent', 'Frame 父节点无效')
-      if (location.parentId !== null && document.nodes[location.parentId]?.locked) {
-        return issue('node.locked', `父节点 ${location.parentId} 已锁定`)
-      }
+      const container = document.entities[containerId]
+      const hierarchy = container && getComposeHierarchy(container)
+      if (!container || !hierarchy) return issue('entity.invalid-container', `Container ${containerId} 不存在`)
+      if (getComposeLock(container).locked) return issue('entity.locked', `Container ${containerId} 已锁定`)
+      if (!hierarchy.childIds.length) return issue('entity.empty-container', 'Container 没有子项')
+      const targetIssues = validateTargets(document, hierarchy.childIds)
+      if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
+      const location = buildLocations(document).get(containerId)
+      if (!location) return issue('entity.invalid-parent', 'Container 父级无效')
+      if (
+        location.parentId !== null
+        && getComposeLock(document.entities[location.parentId]!).locked
+      ) return issue('entity.locked', `父 Entity ${location.parentId} 已锁定`)
       const result: DocumentPatch[] = [{
         op: 'remove',
         path: [...childPath(location.parentId), location.index],
       }]
-      frame.childIds.forEach((nodeId, offset) => result.push({
+      hierarchy.childIds.forEach((entityId, offset) => result.push({
         op: 'insert',
         path: childPath(location.parentId),
         index: location.index + offset,
-        value: nodeId,
+        value: entityId,
       }))
-      for (const nodeId of frame.childIds) {
-        const transform = asTransform(transformValues[nodeId])
-        if (!transform) return issue('node.invalid-transform', `节点 ${nodeId} 缺少父级 transform`)
+      for (const entityId of hierarchy.childIds) {
+        const transform = transformValues[entityId]
+        if (!isValidComposeTransform(transform)) {
+          return issue('transform.invalid', `Entity ${entityId} 缺少父级 Transform`)
+        }
         result.push({
           op: 'set',
-          path: ['nodes', nodeId, 'transform'],
+          path: ['entities', entityId, 'components', 'Transform'],
           value: transform as unknown as JsonValue,
         })
       }
-      result.push({ op: 'remove', path: ['nodes', frameId] })
+      result.push({ op: 'remove', path: ['entities', containerId] })
       return patches(result)
     },
   }
 }
 
-/**
- * 创建 ComposeDocument v3 内置命令处理器。
- *
- * @returns 每次调用都返回没有可变共享状态的新 handler 列表。
- * @public
- */
+/** 创建 ComposeDocument v4 内置命令处理器。 @public */
 export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
   return [
     configureCanvasHandler(),
@@ -872,24 +915,26 @@ export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
     createCanvasGuideHandler(),
     canvasGuideHandler(BUILTIN_COMMAND_TYPES.moveCanvasGuide),
     canvasGuideHandler(BUILTIN_COMMAND_TYPES.deleteCanvasGuide),
-    createNodeHandler(),
-    deleteNodeHandler(),
-    duplicateNodeHandler(),
-    moveNodeHandler(),
-    simpleNodeHandler(BUILTIN_COMMAND_TYPES.renameNode, 'name'),
-    simpleNodeHandler(BUILTIN_COMMAND_TYPES.setVisibility, 'visible'),
-    simpleNodeHandler(BUILTIN_COMMAND_TYPES.setLocked, 'locked'),
-    propsHandler(BUILTIN_COMMAND_TYPES.setProps),
-    propsHandler(BUILTIN_COMMAND_TYPES.resetProps),
-    styleHandler(BUILTIN_COMMAND_TYPES.setStyle),
-    styleHandler(BUILTIN_COMMAND_TYPES.resetStyle),
+    createEntityHandler(),
+    deleteEntityHandler(),
+    duplicateEntityHandler(),
+    moveEntityHandler(),
+    renameEntityHandler(),
+    booleanComponentHandler(BUILTIN_COMMAND_TYPES.setVisibility, 'Visibility', 'visible'),
+    booleanComponentHandler(BUILTIN_COMMAND_TYPES.setLock, 'Lock', 'locked'),
+    booleanComponentHandler(BUILTIN_COMMAND_TYPES.setClip, 'Clip', 'enabled'),
+    componentHandler(BUILTIN_COMMAND_TYPES.addComponent),
+    componentHandler(BUILTIN_COMMAND_TYPES.updateComponent),
+    componentHandler(BUILTIN_COMMAND_TYPES.removeComponent),
+    rendererPropsHandler(),
+    appearanceHandler(),
     transformHandler(),
-    frameClipContentHandler(),
     groupHandler(),
     ungroupHandler(),
   ]
 }
 
+/** 解析不允许嵌套的 transaction.batch 子命令。 @public */
 export function asBatchCommands(command: EditorCommand): readonly EditorCommand[] | CommandIssue {
   const value = valueAt(command.payload, 'commands')
   if (!Array.isArray(value)) {
@@ -902,9 +947,7 @@ export function asBatchCommands(command: EditorCommand): readonly EditorCommand[
       || typeof item.id !== 'string'
       || typeof item.type !== 'string'
       || !isRecord(item.payload)
-    ) {
-      return { code: 'batch.invalid-command', message: 'batch 子命令结构无效' }
-    }
+    ) return { code: 'batch.invalid-command', message: 'batch 子命令结构无效' }
     if (item.type === BUILTIN_COMMAND_TYPES.batch) {
       return { code: 'batch.nested', message: 'transaction.batch 不允许嵌套' }
     }

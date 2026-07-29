@@ -314,7 +314,7 @@ export function ComposeEditor({
       succeeded: 1,
       failed: 0,
     })
-  }, [assets?.browser])
+  }, [assets?.browser, updateAssetDocument])
   const openAssetDocument = useCallback((entry: ComposeAssetEntry) => {
     const provider = assets?.browser?.provider
     if (!provider || entry.kind !== 'file') return
@@ -502,7 +502,7 @@ export function ComposeEditor({
       sceneTree,
       controller,
       resolvedHistory,
-      assets?.browser,
+      assets,
       assetDocuments,
       handleAssetOpen,
       handleDefaultAssetMutation,

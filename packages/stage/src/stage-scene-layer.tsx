@@ -1,16 +1,27 @@
-import { ComposeRegistryComponent } from '@compose-ui/component-registry'
+import { ComposeRegistryEntityRenderer } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import { resolveNodeStyle } from '@compose-ui/core'
-import type { ComposeComponentRegistry } from '@compose-ui/component-registry'
-import type { ComposeDocument, ComposeNode } from '@compose-ui/core'
+import {
+  getComposeClip,
+  getComposeHierarchy,
+  getComposeLock,
+  getComposeTransform,
+  getComposeVisibility,
+  resolveComposeAppearance,
+  type ComposeDocument,
+  type ComposeEntity,
+} from '@compose-ui/core'
+import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { StageViewport } from '@compose-ui/stage-engine'
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
 } from 'react'
 
-function nodeStyle(node: ComposeNode): CSSProperties {
-  const visual = resolveNodeStyle(node)
+function entityStyle(entity: ComposeEntity): CSSProperties {
+  const transform = getComposeTransform(entity)
+  const visual = resolveComposeAppearance(entity.components.Appearance)
+  const hierarchy = getComposeHierarchy(entity)
+  const clip = getComposeClip(entity)
   const shadows: string[] = []
   if (visual.borderWidth > 0) {
     shadows.push(`inset 0 0 0 ${visual.borderWidth}px ${visual.borderColor}`)
@@ -22,27 +33,29 @@ function nodeStyle(node: ComposeNode): CSSProperties {
     )
   }
   return {
-    left: node.transform.x,
-    top: node.transform.y,
-    width: node.transform.width,
-    height: node.transform.height,
-    transform: `rotate(${node.transform.rotation}deg)`,
+    left: transform.position.x,
+    top: transform.position.y,
+    width: transform.size.width,
+    height: transform.size.height,
+    transform: `rotate(${transform.rotation}deg)`,
     transformOrigin: 'center',
     backgroundColor: visual.backgroundColor,
     borderRadius: visual.borderRadius,
     opacity: visual.opacity,
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
-    overflow: node.kind === 'frame' && !node.clipContent ? 'visible' : 'hidden',
+    overflow: hierarchy
+      ? (clip?.enabled ? 'hidden' : 'visible')
+      : 'hidden',
   }
 }
 
 interface StageSceneLayerProps {
   readonly document: ComposeDocument
-  readonly registry: ComposeComponentRegistry
+  readonly registry: ComposeEntityRegistry
   readonly assetResolver?: ComposeAssetResolver
   readonly viewport: StageViewport
-  readonly onNodePointerDown: (
-    node: ComposeNode,
+  readonly onEntityPointerDown: (
+    entity: ComposeEntity,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => void
 }
@@ -53,30 +66,31 @@ export function StageSceneLayer({
   registry,
   assetResolver,
   viewport,
-  onNodePointerDown,
+  onEntityPointerDown,
 }: StageSceneLayerProps) {
-  const renderNode = (nodeId: string) => {
-    const node = document.nodes[nodeId]
-    if (!node?.visible) return null
+  const renderEntity = (entityId: string) => {
+    const entity = document.entities[entityId]
+    if (!entity || !getComposeVisibility(entity).visible) return null
+    const hierarchy = getComposeHierarchy(entity)
+    const locked = getComposeLock(entity).locked
     return (
       <div
-        className={`compose-stage__node is-${node.kind}${node.locked ? ' is-locked' : ''}`}
-        data-node-id={node.id}
-        data-testid={node.kind === 'frame' ? 'stage-frame' : `stage-node-${node.id}`}
-        key={node.id}
-        style={nodeStyle(node)}
-        onPointerDown={(event) => onNodePointerDown(node, event)}
+        className={`compose-stage__node${hierarchy ? ' is-container' : ' is-renderer'}${
+          locked ? ' is-locked' : ''
+        }`}
+        data-entity-id={entity.id}
+        data-testid={hierarchy ? 'stage-container' : `stage-entity-${entity.id}`}
+        key={entity.id}
+        style={entityStyle(entity)}
+        onPointerDown={(event) => onEntityPointerDown(entity, event)}
       >
-        {node.kind === 'component'
-          ? (
-              <ComposeRegistryComponent
-                assetResolver={assetResolver}
-                mode="editor"
-                node={node}
-                registry={registry}
-              />
-            )
-          : node.childIds.map(renderNode)}
+        <ComposeRegistryEntityRenderer
+          assetResolver={assetResolver}
+          entity={entity}
+          mode="editor"
+          registry={registry}
+        />
+        {hierarchy?.childIds.map(renderEntity)}
       </div>
     )
   }
@@ -89,7 +103,7 @@ export function StageSceneLayer({
         transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
       }}
     >
-      {document.rootIds.map(renderNode)}
+      {document.rootIds.map(renderEntity)}
     </div>
   )
 }
