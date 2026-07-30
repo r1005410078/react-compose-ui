@@ -586,6 +586,17 @@ export function ComposeEditor({
     pageStore,
   ])
 
+  /**
+   * 页面文件可拖入 Canvas。
+   *
+   * @remarks
+   * 这是拖拽写出稳定引用载荷的前提；属性面板的 node 字段据此接收页面。
+   */
+  const canDragPageToCanvas = useCallback(
+    (entry: ComposeAssetEntry) => pages !== undefined && isComposePageFileName(entry.name),
+    [pages],
+  )
+
   /** 首页标记；资源浏览器不认识页面，标记内容由这里提供。 */
   const renderEntryBadge = useCallback((context: ComposeAssetEntryRenderContext) => {
     if (homePageKey === null || context.entry.assetKey !== homePageKey) return null
@@ -679,6 +690,9 @@ export function ComposeEditor({
           ? (
               <ComposeAssetBrowser
                 {...assets.browser}
+                canDragEntryToCanvas={
+                  assets.browser.canDragEntryToCanvas ?? canDragPageToCanvas
+                }
                 contextMenuItems={hostContextMenuItems}
                 renderEntryBadge={assets.browser.renderEntryBadge ?? renderEntryBadge}
                 onAssetOpen={handleAssetOpen}
@@ -712,6 +726,7 @@ export function ComposeEditor({
       stageHostPanelId,
       handleAssetOpen,
       handleDefaultAssetMutation,
+      canDragPageToCanvas,
       hostContextMenuItems,
       renderEntryBadge,
       resolvedAssetResolver,

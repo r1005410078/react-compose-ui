@@ -43,6 +43,8 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComposeEditorActivePage } from '@compose-ui/editor'
+import { useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
+import { createComposePageStore } from '@compose-ui/pages'
 import * as v from 'valibot'
 import { createDemoAssetProvider } from './demo-asset-provider'
 
@@ -318,19 +320,35 @@ export function StageDemoWorkspace() {
         : undefined,
     }).then(() => undefined)
   }, [operationLog, runtime])
+  const [assetProvider] = useState(createDemoAssetProvider)
+  /**
+   * 宿主同时拥有页面 Store 与 controller。
+   *
+   * @remarks
+   * node 属性的候选来自页面目录，而 controller 由宿主创建，因此 Store 也放在宿主侧，
+   * 再通过 pages.store 交给 Editor 复用同一份缓存。
+   */
+  const [pageStore] = useState(() => createComposePageStore({ provider: assetProvider }))
+  const pageCatalog = useComposePageCatalog(pageStore)
+  const nodeEditPort = useNodeEditorPort({
+    catalog: pageCatalog,
+    providerId: assetProvider.id,
+  })
   const controller = useComposeEditorController({
     runtime,
     registry,
     idFactory,
+    nodeEditPort,
     onTransaction: recordTransaction,
   })
-  const [assetProvider] = useState(createDemoAssetProvider)
   const assetResolver = useMemo(
     () => createComposeAssetResolver(assetProvider),
     [assetProvider],
   )
-  // 配置对象必须保持稳定引用：Editor 会据此派生页面 Store。
-  const pagesConfig = useMemo(() => ({ onActiveSessionChange: setActivePage }), [])
+  const pagesConfig = useMemo(
+    () => ({ store: pageStore, onActiveSessionChange: setActivePage }),
+    [pageStore],
+  )
   const selectedContainerId = controller.selectedIds.length === 1
     && controller.document.entities[controller.selectedIds[0]!]
     && getComposeHierarchy(controller.document.entities[controller.selectedIds[0]!]!)

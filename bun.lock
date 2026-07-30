@@ -46,6 +46,7 @@
         "@compose-ui/editor": "workspace:*",
         "@compose-ui/materials": "workspace:*",
         "@compose-ui/operation-log": "workspace:*",
+        "@compose-ui/pages": "workspace:*",
         "@compose-ui/preview": "workspace:*",
         "@compose-ui/property-panel": "workspace:*",
         "@compose-ui/ui-context": "workspace:*",

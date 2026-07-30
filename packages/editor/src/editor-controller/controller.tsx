@@ -32,7 +32,11 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import type { ComposeCommandPreset } from '@compose-ui/command-panel'
-import type { ComposeEntityRegistry, ComposePaintEditPort } from '@compose-ui/component-registry'
+import type {
+  ComposeEntityRegistry,
+  ComposeNodeEditPort,
+  ComposePaintEditPort,
+} from '@compose-ui/component-registry'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
 import type {
   ComposeSceneTreeNode,
@@ -193,6 +197,14 @@ export interface UseComposeEditorControllerOptions {
   ) => void | Promise<void>
   /** controller 创建 Entity 和命令时使用的稳定 ID factory。 */
   readonly idFactory?: () => string
+  /**
+   * 节点引用属性的候选来源。
+   *
+   * @remarks
+   * 由宿主从页面 Store 派生（见 `useComposePageCatalog` 与 `useNodeEditorPort`）；未提供时
+   * node 字段呈现无候选状态但仍可清空。
+   */
+  readonly nodeEditPort?: ComposeNodeEditPort
 }
 
 /**
@@ -280,6 +292,7 @@ export function useComposeEditorController({
   containerPresetId = 'container',
   onTransaction,
   idFactory = defaultIdFactory,
+  nodeEditPort,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
   const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const document = snapshot.document
@@ -578,6 +591,7 @@ export function useComposeEditorController({
       idFactory={nextId}
       // 按 Entity 重挂载：能力移除确认等局部会话状态不得跨选中目标残留。
       key={selectedEntity.id}
+      nodeEditPort={nodeEditPort}
       paintEditPort={paintEditPort}
       registry={registry}
     />

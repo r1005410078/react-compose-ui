@@ -1,7 +1,8 @@
 import { ComposeAssetError, type ComposeAssetEntry, type ComposeAssetProvider } from '@compose-ui/assets'
 import { composePageDisplayName, createTransactionRuntime } from '@compose-ui/core'
 import { createComposePageStore, type ComposePageCatalog, type ComposePageStore } from '@compose-ui/pages'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useComposePageCatalog } from './use-page-catalog'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ComposePageDocumentSession } from '../workspace-layout/workspace-context'
 import type { ComposeEditorActivePage, ComposeEditorPagesConfig } from './page-workspace-types'
 
@@ -62,14 +63,7 @@ export function usePageWorkspace({
     return provider ? createComposePageStore({ provider }) : undefined
   }, [hostStore, pagesEnabled, provider])
 
-  // Store 变化时上一份目录立即失效；把 store 一起存入 state 使派生值无需额外 Effect 清理。
-  const [catalogState, setCatalogState] = useState<{
-    readonly store: ComposePageStore
-    readonly catalog: ComposePageCatalog
-  } | null>(null)
-  const catalog = catalogState !== null && catalogState.store === store
-    ? catalogState.catalog
-    : undefined
+  const catalog = useComposePageCatalog(store)
   const sessionsRef = useRef(sessions)
 
   useEffect(() => {
@@ -77,29 +71,7 @@ export function usePageWorkspace({
   }, [sessions])
 
   const refreshCatalog = useCallback(() => {
-    if (!store) return
-    store.invalidate()
-  }, [store])
-
-  useEffect(() => {
-    if (!store) return
-    let disposed = false
-    const load = () => {
-      void store.listPages().then((next) => {
-        if (!disposed) setCatalogState({ store, catalog: next })
-      }).catch(() => {
-        // 目录列举失败不阻断编辑器；页面菜单项会因为目录为空而无候选。
-        if (!disposed) setCatalogState(null)
-      })
-    }
-    load()
-    const unsubscribe = store.subscribe((event) => {
-      if (event.type === 'catalog-changed' || event.type === 'manifest-changed') load()
-    })
-    return () => {
-      disposed = true
-      unsubscribe()
-    }
+    store?.invalidate()
   }, [store])
 
   const openPage = useCallback(async (entry: ComposeAssetEntry): Promise<OpenPageResult> => {

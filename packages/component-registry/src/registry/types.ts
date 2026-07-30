@@ -39,6 +39,35 @@ export interface ComposeRendererProps {
   readonly assetResolver?: ComposeAssetResolver
 }
 
+/**
+ * 节点引用属性 editor 与宿主节点目录之间的桥接。
+ *
+ * @remarks
+ * Registry 只负责透传，不解释候选值的领域含义，因此不会因此依赖 `property-panel` 或
+ * `editor`。结构与 `ComposePropertyPanelNodeEditorPort` 兼容，物料可直接传给属性面板。
+ * @public
+ */
+export interface ComposeNodeEditPort {
+  /** 宿主接受的拖拽媒体类型。 */
+  readonly dragMediaTypes: readonly string[]
+  /** 当前可选候选。 */
+  readonly candidates: readonly {
+    readonly id: string
+    readonly label: string
+    readonly description?: string
+    readonly value: unknown
+  }[]
+  /** 把命中的媒体类型与其文本载荷解析为候选；无法识别时返回 null。 */
+  parseDrop: (data: Readonly<Record<string, string>>) => {
+    readonly id: string
+    readonly label: string
+    readonly description?: string
+    readonly value: unknown
+  } | null
+  /** 把已保存的值渲染为人类可读标签。 */
+  resolveLabel: (value: unknown) => string
+}
+
 /** Registry Inspector 共享的命令派发上下文。 @public */
 export interface ComposeEntityInspectorContext {
   /** 当前只读 Entity。 */
@@ -49,6 +78,8 @@ export interface ComposeEntityInspectorContext {
   readonly readOnly: boolean
   /** 可选的 Editor Paint 编辑桥接；Registry 与物料包不依赖 Stage。 */
   readonly paintEditPort?: ComposePaintEditPort
+  /** 可选的节点目录桥接；物料把它交给属性面板的 node editor。 */
+  readonly nodeEditPort?: ComposeNodeEditPort
 }
 
 /** Renderer 内容 Inspector 的上下文。 @public */
