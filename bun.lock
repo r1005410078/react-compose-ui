@@ -220,6 +220,14 @@
         "react-dom": "^18.3.0 || ^19.0.0",
       },
     },
+    "packages/pages": {
+      "name": "@compose-ui/pages",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/assets": "workspace:*",
+        "@compose-ui/core": "workspace:*",
+      },
+    },
     "packages/preview": {
       "name": "@compose-ui/preview",
       "version": "0.1.0",
@@ -430,6 +438,8 @@
     "@compose-ui/materials": ["@compose-ui/materials@workspace:packages/materials"],
 
     "@compose-ui/operation-log": ["@compose-ui/operation-log@workspace:packages/operation-log"],
+
+    "@compose-ui/pages": ["@compose-ui/pages@workspace:packages/pages"],
 
     "@compose-ui/preview": ["@compose-ui/preview@workspace:packages/preview"],
 

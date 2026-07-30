@@ -1,0 +1,290 @@
+import {
+  ComposeAssetError,
+  type ComposeAssetProvider,
+} from '@compose-ui/assets'
+import {
+  createEmptyComposePageDocument,
+  serializeComposePageDocument,
+} from '@compose-ui/core'
+import { describe, expect, it, vi } from 'vitest'
+import { createComposePageStore } from './page-store'
+import { createFakeAssetProvider } from './test-fixtures'
+
+const pageText = () => serializeComposePageDocument(createEmptyComposePageDocument())
+
+/**
+ * 一份含单个最小合法 Entity 的页面文档。
+ *
+ * @remarks
+ * Store 的写入路径会重新解析文档，因此测试夹具必须能通过 `validateComposeDocument`：
+ * Entity 至少需要 Composition、Transform、Visibility、Lock，并拥有 Renderer 或 Hierarchy。
+ */
+const pageWithEntity = (entityId: string) => ({
+  ...createEmptyComposePageDocument(),
+  rootIds: [entityId],
+  entities: {
+    [entityId]: {
+      id: entityId,
+      name: entityId,
+      components: {
+        Composition: { presetId: null, baseComponentKeys: [], capabilityIds: [] },
+        Transform: { position: { x: 0, y: 0 }, size: { width: 10, height: 10 }, rotation: 0 },
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Hierarchy: { childIds: [] },
+      },
+    },
+  },
+})
+
+const defaultFiles = () => ({
+  'Pages/Home.page.json': pageText(),
+  'Pages/Detail.page.json': pageText(),
+  'Pages/nested/Deep.page.json': pageText(),
+  'Images/logo.svg': '<svg />',
+  'script.ts': 'export const a = 1',
+})
+
+describe('OpenSpec: pages / 页面目录列举', () => {
+  it('递归列举且只保留页面文件', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const catalog = await store.listPages()
+    expect(catalog.pages.map((page) => page.pageKey)).toEqual([
+      'Pages/Detail.page.json',
+      'Pages/Home.page.json',
+      'Pages/nested/Deep.page.json',
+    ])
+    expect(catalog.pages[0]?.displayName).toBe('Detail')
+    expect(catalog.pages[0]?.entryId).toBe('Pages/Detail.page.json')
+  })
+
+  it('跳过缺少 assetKey 的页面文件', async () => {
+    const fake = createFakeAssetProvider({ files: { 'A.page.json': pageText() } })
+    const provider: ComposeAssetProvider = {
+      ...fake.provider,
+      async list(listInput) {
+        const entries = await fake.provider.list(listInput)
+        return entries.map((entry) => ({ ...entry, assetKey: undefined }))
+      },
+    }
+    const store = createComposePageStore({ provider })
+    expect((await store.listPages()).pages).toEqual([])
+  })
+
+  it('合并同一时刻的重复列举为一轮 Provider 列举', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const [first, second] = await Promise.all([store.listPages(), store.listPages()])
+    expect(first).toBe(second)
+    const afterFirst = fake.calls.list
+    await store.listPages()
+    // 第二轮命中缓存，不再访问 Provider。
+    expect(fake.calls.list).toBe(afterFirst)
+  })
+
+  it('已中止的信号使列举以取消结束', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const controller = new AbortController()
+    controller.abort()
+    await expect(store.listPages(controller.signal)).rejects.toThrow(ComposeAssetError)
+  })
+})
+
+describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
+  it('读取页面并在重复读取时命中缓存', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const snapshot = await store.readPage('Pages/Home.page.json')
+    expect(snapshot.document.schemaVersion).toBe(5)
+    const reads = fake.calls.read
+    await store.readPage('Pages/Home.page.json')
+    expect(fake.calls.read).toBe(reads)
+  })
+
+  it('合并同一页面的并发读取', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const [a, b] = await Promise.all([
+      store.readPage('Pages/Home.page.json'),
+      store.readPage('Pages/Home.page.json'),
+    ])
+    expect(a).toBe(b)
+  })
+
+  it('页面不存在时抛出 not-found', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    await expect(store.readPage('Pages/Missing.page.json')).rejects.toMatchObject({
+      code: 'not-found',
+    })
+  })
+
+  it('页面内容不合法时抛出而不返回半个文档', async () => {
+    const fake = createFakeAssetProvider({ files: { 'A.page.json': '{ broken' } })
+    const store = createComposePageStore({ provider: fake.provider })
+    await expect(store.readPage('A.page.json')).rejects.toMatchObject({ code: 'io' })
+  })
+
+  it('写入成功后持久化并更新缓存', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const snapshot = await store.readPage('Pages/Home.page.json')
+    await store.writePage('Pages/Home.page.json', pageWithEntity('a'), snapshot.revision)
+    expect(fake.getFile('Pages/Home.page.json')).toContain('"rootIds"')
+    store.invalidate('Pages/Home.page.json')
+    expect((await store.readPage('Pages/Home.page.json')).document.rootIds).toEqual(['a'])
+  })
+
+  it('期望 revision 过期时抛出 conflict 且不修改文件', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const before = fake.getFile('Pages/Home.page.json')
+    await expect(store.writePage(
+      'Pages/Home.page.json',
+      createEmptyComposePageDocument(),
+      'stale-revision',
+    )).rejects.toMatchObject({ code: 'conflict' })
+    expect(fake.getFile('Pages/Home.page.json')).toBe(before)
+  })
+
+  it('强制覆盖在收到冲突后写入成功', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles(), conflictOnce: true })
+    const store = createComposePageStore({ provider: fake.provider })
+    await expect(store.writePage(
+      'Pages/Home.page.json',
+      createEmptyComposePageDocument(),
+      '1',
+    )).rejects.toMatchObject({ code: 'conflict' })
+    const written = await store.writePage(
+      'Pages/Home.page.json',
+      pageWithEntity('forced'),
+      '1',
+      true,
+    )
+    expect(written.pageKey).toBe('Pages/Home.page.json')
+    expect(fake.getFile('Pages/Home.page.json')).toContain('forced')
+  })
+
+  it('Provider 不支持写入时抛出 unsupported', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles(), omit: ['writeFile'] })
+    const store = createComposePageStore({ provider: fake.provider })
+    await expect(store.writePage(
+      'Pages/Home.page.json',
+      createEmptyComposePageDocument(),
+    )).rejects.toMatchObject({ code: 'unsupported' })
+  })
+
+  it('创建页面写入空白文档并进入目录', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    await store.listPages()
+    const created = await store.createPage({ parentId: 'Pages', fileName: 'New.page.json' })
+    expect(created.pageKey).toBe('Pages/New.page.json')
+    const catalog = await store.listPages()
+    expect(catalog.pages.map((page) => page.pageKey)).toContain('Pages/New.page.json')
+    expect((await store.readPage('Pages/New.page.json')).document.rootIds).toEqual([])
+  })
+
+  it('外部变更通知失效缓存并广播', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    await store.readPage('Pages/Home.page.json')
+    const listener = vi.fn()
+    const unsubscribe = store.subscribe(listener)
+    fake.setFile('Pages/Home.page.json', serializeComposePageDocument(pageWithEntity('external')))
+    fake.notify()
+    expect(listener).toHaveBeenCalledWith({ type: 'page-changed', pageKey: 'Pages/Home.page.json' })
+    expect((await store.readPage('Pages/Home.page.json')).document.rootIds).toEqual(['external'])
+    unsubscribe()
+    fake.notify()
+    expect(listener).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('OpenSpec: pages / 首页设置与能力门禁', () => {
+  it('清单缺失时不写入且首页为 null', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    expect((await store.listPages()).homePageKey).toBeNull()
+    expect(fake.getFile('app.json')).toBeUndefined()
+  })
+
+  it('首次设首页惰性创建清单', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const manifest = await store.setHomePage('Pages/Home.page.json')
+    expect(manifest.homePageKey).toBe('Pages/Home.page.json')
+    expect(fake.getFile('app.json')).toContain('Pages/Home.page.json')
+    expect((await store.listPages()).homePageKey).toBe('Pages/Home.page.json')
+  })
+
+  it('清单已存在时改写首页并保留未知字段', async () => {
+    const fake = createFakeAssetProvider({
+      files: {
+        ...defaultFiles(),
+        'app.json': '{"schemaVersion":1,"homePageKey":"Pages/Home.page.json","theme":"dark"}',
+      },
+    })
+    const store = createComposePageStore({ provider: fake.provider })
+    await store.setHomePage('Pages/Detail.page.json')
+    const written = fake.getFile('app.json') ?? ''
+    expect(written).toContain('Pages/Detail.page.json')
+    expect(written).toContain('"theme": "dark"')
+  })
+
+  it('清单写入冲突时重读并重试一次', async () => {
+    const fake = createFakeAssetProvider({
+      files: { ...defaultFiles(), 'app.json': '{"schemaVersion":1,"homePageKey":null}' },
+      conflictOnce: true,
+    })
+    const store = createComposePageStore({ provider: fake.provider })
+    const manifest = await store.setHomePage('Pages/Home.page.json')
+    expect(manifest.homePageKey).toBe('Pages/Home.page.json')
+    expect(fake.calls.write).toBe(2)
+  })
+
+  it('设首页幂等时不产生写入', async () => {
+    const fake = createFakeAssetProvider({
+      files: { ...defaultFiles(), 'app.json': '{"schemaVersion":1,"homePageKey":"Pages/Home.page.json"}' },
+    })
+    const store = createComposePageStore({ provider: fake.provider })
+    await store.setHomePage('Pages/Home.page.json')
+    expect(fake.calls.write).toBe(0)
+  })
+
+  it('清单损坏时降级为无首页并暴露 issue', async () => {
+    const fake = createFakeAssetProvider({
+      files: { ...defaultFiles(), 'app.json': '{ broken' },
+    })
+    const store = createComposePageStore({ provider: fake.provider })
+    const catalog = await store.listPages()
+    expect(catalog.homePageKey).toBeNull()
+    expect(catalog.manifestIssues.map((issue) => issue.code)).toEqual(['invalid-json'])
+  })
+
+  it('首页 key 悬空时报告缺失但不改写清单', async () => {
+    const fake = createFakeAssetProvider({
+      files: { ...defaultFiles(), 'app.json': '{"schemaVersion":1,"homePageKey":"Pages/Gone.page.json"}' },
+    })
+    const store = createComposePageStore({ provider: fake.provider })
+    const catalog = await store.listPages()
+    expect(catalog.homePageKey).toBe('Pages/Gone.page.json')
+    expect(catalog.homePageMissing).toBe(true)
+    expect(fake.getFile('app.json')).toContain('Pages/Gone.page.json')
+  })
+
+  it('只读 Provider 报告首页不可设置但仍可读取既有首页', async () => {
+    const fake = createFakeAssetProvider({
+      files: { ...defaultFiles(), 'app.json': '{"schemaVersion":1,"homePageKey":"Pages/Home.page.json"}' },
+      omit: ['writeFile', 'createFile'],
+    })
+    const store = createComposePageStore({ provider: fake.provider })
+    expect(store.canWriteManifest()).toBe(false)
+    expect((await store.listPages()).homePageKey).toBe('Pages/Home.page.json')
+    await expect(store.setHomePage('Pages/Detail.page.json')).rejects.toMatchObject({
+      code: 'unsupported',
+    })
+  })
+})

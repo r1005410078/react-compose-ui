@@ -25,3 +25,14 @@ export {
   resolveComposePageNestState,
 } from './page-graph'
 export type { ResolveComposePageNestStateInput } from './page-graph'
+export {
+  createEmptyComposeAppManifest,
+  parseComposeAppManifest,
+  serializeComposeAppManifest,
+  setComposeAppManifestHomePage,
+} from './page-manifest'
+export type {
+  ComposeAppManifestIssue,
+  ComposeAppManifestIssueCode,
+  ComposeAppManifestParseResult,
+} from './page-manifest'
