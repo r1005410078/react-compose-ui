@@ -28,8 +28,9 @@
   `workspace-tab.tsx`：`ComposePageDocumentSession`、`pageDocument` 面板 id 与组件、脏点与关闭按钮
 - [x] 1.13 活动页面运行时交回宿主（`pages.onActiveSessionChange`）—— 原计划的
   `active-page-controller.tsx` 未采用，见 design.md 决策 3
-- [x] 1.14 `compose-editor.tsx`：`pages` 配置、`handleAssetOpen` 分流、
-  `activeController = pageController ?? props.controller` 构建工作区插槽
+- [x] 1.14 `compose-editor.tsx`：`pages` 配置、`handleAssetOpen` 分流、页面面板与保存冲突对话框；
+  工作区跟随活动页面由宿主换 runtime 实现（见 design.md 决策 3），并新增
+  `stageHostPanelId` 保证 Stage 只有一个宿主面板（决策 4）
 - [x] 1.15 `packages/editor/src/pages/page-context-menu.tsx`：创建页面项 + `editor-i18n.ts` 文案
 - [x] 1.16 `app/src/demo-asset-provider.ts` 增 `Pages/` 目录与页面 `mediaType`；
   `app/src/StageDemo.tsx` 接线 `pages`
@@ -49,7 +50,7 @@
   清单写冲突重读重试一次；补测试
 - [x] 2.3 `asset-browser`：`renderEntryBadge` prop，文件树行与目录网格块双处渲染
 - [x] 2.4 `asset-browser` 测试：标记在树与网格双处渲染、返回空结果时不产生额外元素、
-  标记不参与命中测试
+  标记留在无障碍树中（命中测试由 `pointer-events: none` 排除，不能用 `aria-hidden`）
 - [x] 2.5 `packages/editor/src/pages/page-badges.tsx`：`HomePageBadge`（`role="img"` + i18n 可读名）
 - [x] 2.6 `page-context-menu.tsx`：设为首页项（只读 Provider 与已是首页时禁用）
 - [x] 2.7 `use-page-workspace.ts`：`handleDefaultAssetMutation` 的清单对账（删除首页置空、
@@ -78,7 +79,9 @@
   `controller.test.tsx` 断言选择/视口/检视目标被重置
 - [x] 4.2 i18n 完整性：`editor-i18n.ts` 页面相关文案齐备，无硬编码可翻译文案
 - [x] 4.3 a11y 复核：首页标记、宿主菜单项的 role / 可读名 / 键盘 / 焦点恢复
-- [ ] 4.4 文档同步：`AGENTS.md`（`@compose-ui/pages` 边界）、`openspec/project.md`、`README.md`
-- [ ] 4.5 配置同步：根 `package.json` 的 `pack:dry-run` 追加 `packages/pages`、`.changeset/` 变更集
-- [ ] 4.6 全量验证：`bun run lint`（含 `check:architecture`）、`bun run typecheck`、`bun run test`、
+- [x] 4.4 文档同步：`AGENTS.md`（`@compose-ui/pages` 边界）、`openspec/project.md`、`README.md`
+- [x] 4.5 配置同步：根 `package.json` 的 `pack:dry-run` 追加 `packages/pages`、`.changeset/` 变更集
+- [x] 4.6 全量验证：`bun run lint`（含 `check:architecture`）、`bun run typecheck`、`bun run test`、
   `bun run build`、`bun run test:e2e`
+  —— e2e 18 passed / 2 failed；这 2 项（`批量拖入 Image 与 SVG`、`使用完整示例完成 Stage 纵向流程`）
+  已用基线提交 9335323 的源码复现同样失败，与本变更无关，留给对应负责人处理
