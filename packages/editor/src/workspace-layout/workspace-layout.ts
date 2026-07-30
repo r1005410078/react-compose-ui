@@ -28,9 +28,11 @@ export const WORKSPACE_COMPONENT_IDS = {
   command: 'command',
   assetBrowser: 'assetBrowser',
   assetDocument: 'assetDocument',
+  pageDocument: 'pageDocument',
 } as const
 
 const ASSET_DOCUMENT_PANEL_PREFIX = 'compose-asset-document:'
+const PAGE_DOCUMENT_PANEL_PREFIX = 'compose-page-document:'
 
 /** 从 Provider 与稳定资源 key 派生当前 Editor 实例中的资源标签 ID。 @internal */
 export function createAssetDocumentPanelId(providerId: string, assetIdentity: string) {
@@ -40,6 +42,27 @@ export function createAssetDocumentPanelId(providerId: string, assetIdentity: st
 /** 判断 Dockview panel 是否为 Editor 临时资源文档。 @internal */
 export function isAssetDocumentPanelId(panelId: string) {
   return panelId.startsWith(ASSET_DOCUMENT_PANEL_PREFIX)
+}
+
+/**
+ * 从 Provider 与页面稳定 key 派生页面标签 ID。
+ *
+ * @remarks
+ * 与资源文档使用不同前缀，因此同一页面文件可同时以页面标签与资源标签打开而不互相覆盖。
+ * @internal
+ */
+export function createPageDocumentPanelId(providerId: string, pageKey: string) {
+  return `${PAGE_DOCUMENT_PANEL_PREFIX}${encodeURIComponent(providerId)}:${encodeURIComponent(pageKey)}`
+}
+
+/** 判断 Dockview panel 是否为页面文档。 @internal */
+export function isPageDocumentPanelId(panelId: string) {
+  return panelId.startsWith(PAGE_DOCUMENT_PANEL_PREFIX)
+}
+
+/** 判断 Dockview panel 是否为可关闭的文档标签（资源或页面）。 @internal */
+export function isWorkspaceDocumentPanelId(panelId: string) {
+  return isAssetDocumentPanelId(panelId) || isPageDocumentPanelId(panelId)
 }
 
 export const WORKSPACE_SIZES = {

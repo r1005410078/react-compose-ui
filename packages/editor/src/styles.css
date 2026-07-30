@@ -730,3 +730,37 @@
   background: var(--compose-surface-raised);
   color: var(--compose-text-muted);
 }
+
+/* 页面文档面板与工作区画布共用同一 Stage，因此这里只负责铺满容器。 */
+.compose-editor__page-document {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+/* 标签上的未保存指示点；与关闭按钮并排，不参与命中测试。 */
+.compose-editor__document-dirty {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+  pointer-events: none;
+}
+
+.compose-editor__page-notice {
+  display: flex;
+  position: absolute;
+  z-index: 5;
+  right: 16px;
+  bottom: 16px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--compose-color-border);
+  border-radius: 6px;
+  background: var(--compose-color-surface);
+  color: var(--compose-color-foreground);
+  font-size: 12px;
+}

@@ -369,8 +369,9 @@ afterEach(cleanup)
 
 describe('useComposeEditorController', () => {
   it('Stage 与 Palette 共享同一 interaction controller 并在卸载时释放', async () => {
+    const editorRuntime = runtime()
     const hook = renderHook(() => useComposeEditorController({
-      runtime: runtime(),
+      runtime: editorRuntime,
       registry,
     }))
     const controller = hook.result.current.interactionController
@@ -385,8 +386,9 @@ describe('useComposeEditorController', () => {
   })
 
   it('场景树由 Hierarchy 构建并使用 Preset 图标', () => {
+    const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
-      runtime: runtime(),
+      runtime: editorRuntime,
       registry,
     }))
 
@@ -686,15 +688,46 @@ describe('useComposeEditorController', () => {
   })
 
   it('选择 Canvas 输出时展示 Canvas Inspector 并清空 Entity 选择', () => {
+    // runtime 必须在渲染之间保持稳定：换 runtime 表示换文档，会重置全部会话状态。
+    const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
       initialSelection: ['title'],
-      runtime: runtime(),
+      runtime: editorRuntime,
       registry,
     }))
 
     act(() => result.current.stageProps.onOutputSelect?.())
     expect(result.current.selectedIds).toEqual([])
     expect(result.current.stageProps.outputSelected).toBe(true)
+  })
+
+  it('OpenSpec: editor-workspace-layout / 工作区跟随活动页面 / 换 runtime 重置会话状态', () => {
+    const first = runtime()
+    const second = runtime()
+    const { result, rerender } = renderHook(
+      ({ transactionRuntime }: { transactionRuntime: TransactionRuntime }) =>
+        useComposeEditorController({
+          initialSelection: ['title'],
+          initialExpandedIds: ['dashboard'],
+          runtime: transactionRuntime,
+          registry,
+        }),
+      { initialProps: { transactionRuntime: first } },
+    )
+
+    act(() => result.current.setViewport({ x: 500, y: 500, zoom: 2 }))
+    act(() => result.current.stageProps.onOutputSelect?.())
+    expect(result.current.viewport.x).toBe(500)
+    expect(result.current.stageProps.outputSelected).toBe(true)
+
+    // 换 runtime 表示换文档：选择、检视目标、展开集合与视口都不得残留。
+    rerender({ transactionRuntime: second })
+
+    expect(result.current.runtime).toBe(second)
+    expect(result.current.selectedIds).toEqual([])
+    expect(result.current.expandedIds).toEqual([])
+    expect(result.current.stageProps.outputSelected).toBe(false)
+    expect(result.current.viewport).toEqual({ x: 80, y: 64, zoom: 1 })
   })
 
   it('切换选中 Entity 时重置能力移除确认对话框', () => {

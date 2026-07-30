@@ -304,6 +304,26 @@ export function useComposeEditorController({
   const transactionById = useRef(new Map<string, EditorTransaction>())
   const observerRef = useRef(onTransaction)
   const idFactoryRef = useRef(idFactory)
+  const [observedRuntime, setObservedRuntime] = useState(runtime)
+
+  // 会话状态是文档作用域的：选择、检视目标、展开集合与视口都以实体 ID 或该文档的坐标表达。
+  // 宿主换用另一个 runtime（例如切换到另一个页面）时必须立即重置，否则会残留指向上一份
+  // 文档的选择与视口。这里用「prop 变化时在渲染期调整 state」的标准模式，而不是 Effect，
+  // 避免先用陈旧会话状态渲染一帧。
+  if (runtime !== observedRuntime) {
+    setObservedRuntime(runtime)
+    const nextDocument = runtime.getState().document
+    setSelectedIdsState(validSelection(nextDocument, []))
+    setInspectionTarget(null)
+    setExpandedIdsState(validExpanded(nextDocument, []))
+    setViewport(initialViewport)
+    setPaintEditing(null)
+    setPaintSampling(null)
+    // 进行中的手势属于上一份文档，必须取消而不是让它落到新文档的实体上；
+    // Pointer 与外部拖入是两条独立的进行中状态，各自都要终止。
+    interactionController.send({ type: 'pointer.cancel' })
+    interactionController.send({ type: 'external.cancel' })
+  }
 
   useEffect(() => {
     observerRef.current = onTransaction

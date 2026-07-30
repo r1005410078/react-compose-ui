@@ -5,7 +5,7 @@ import type {
 import type { PointerEventHandler } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import {
-  isAssetDocumentPanelId,
+  isWorkspaceDocumentPanelId,
   WORKSPACE_GROUP_IDS,
   WORKSPACE_PANEL_IDS,
 } from './workspace-layout'
@@ -92,7 +92,7 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
     i18n?.formatMessage,
   )
   const messages = editorMessages.workspace
-  const { requestAssetDocumentClose } = useWorkspaceContent()
+  const { documents, requestDocumentClose } = useWorkspaceContent()
   const titles: Record<string, string> = {
     [WORKSPACE_PANEL_IDS.scene]: messages.sceneGraph,
     [WORKSPACE_PANEL_IDS.componentLibrary]: messages.componentLibrary,
@@ -105,7 +105,8 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
     'compose-history-panel': messages.history,
   }
   const title = titles[props.api.id] ?? props.api.title
-  const isAssetDocument = isAssetDocumentPanelId(props.api.id)
+  const isDocumentTab = isWorkspaceDocumentPanelId(props.api.id)
+  const session = documents.get(props.api.id)
   const icon =
     props.api.id === WORKSPACE_PANEL_IDS.scene ? (
       <SceneGraphIcon />
@@ -131,7 +132,7 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
     )
   }
 
-  if (isAssetDocument) {
+  if (isDocumentTab) {
     return (
       <div
         className="compose-editor__text-tab compose-editor__asset-document-tab"
@@ -142,13 +143,20 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
         title={title}
       >
         <span>{title}</span>
+        {session?.dirty === true ? (
+          <span
+            aria-label={editorMessages.pages.dirtyIndicator}
+            className="compose-editor__document-dirty"
+            role="img"
+          />
+        ) : null}
         <button
           aria-label={editorMessages.closeAsset(title)}
           className="compose-editor__asset-document-close"
           type="button"
           onClick={(event) => {
             event.stopPropagation()
-            requestAssetDocumentClose(props.api.id)
+            requestDocumentClose(props.api.id)
           }}
           onPointerDown={(event) => event.stopPropagation()}
         >

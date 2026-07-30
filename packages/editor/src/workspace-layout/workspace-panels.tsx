@@ -296,26 +296,27 @@ export function AssetBrowserPanel() {
 /** 渲染中央 Canvas Group 中的临时资源文档。 @internal */
 export function AssetDocumentPanel(props: IDockviewPanelProps) {
   const {
-    assetDocuments,
-    registerAssetDocumentSave,
-    setAssetDocumentDirty,
+    documents,
+    registerDocumentSave,
+    setDocumentDirty,
     setAssetDocumentSaved,
   } = useWorkspaceContent()
   const panelId = props.api?.id
-  const session = panelId ? assetDocuments.get(panelId) : undefined
+  const candidate = panelId ? documents.get(panelId) : undefined
+  const session = candidate?.kind === 'asset' ? candidate : undefined
   const previewRef = useRef<ComposeAssetPreviewHandle>(null)
   const handleDirtyChange = useCallback((dirty: boolean) => {
-    if (panelId) setAssetDocumentDirty(panelId, dirty)
-  }, [panelId, setAssetDocumentDirty])
+    if (panelId) setDocumentDirty(panelId, dirty)
+  }, [panelId, setDocumentDirty])
   const handleSaved = useCallback((entry: ComposeAssetEntry) => {
     if (panelId) setAssetDocumentSaved(panelId, entry)
   }, [panelId, setAssetDocumentSaved])
 
   useEffect(() => {
     if (!panelId) return
-    registerAssetDocumentSave(panelId, () => previewRef.current?.save() ?? Promise.resolve(false))
-    return () => registerAssetDocumentSave(panelId, null)
-  }, [panelId, registerAssetDocumentSave])
+    registerDocumentSave(panelId, () => previewRef.current?.save() ?? Promise.resolve(false))
+    return () => registerDocumentSave(panelId, null)
+  }, [panelId, registerDocumentSave])
 
   if (!panelId || !session) return null
 
@@ -332,6 +333,34 @@ export function AssetDocumentPanel(props: IDockviewPanelProps) {
         onDirtyChange={handleDirtyChange}
         onSaved={handleSaved}
       />
+    </div>
+  )
+}
+
+/**
+ * 渲染中央 Canvas Group 中的页面文档。
+ *
+ * @remarks
+ * 页面的编辑表面是共享的工作区画布 —— 活动页面由宿主换 controller 的 runtime 体现，因此本
+ * 面板自身只负责注册保存入口与呈现当前页面的标识，不重复渲染一份 Stage。
+ * @internal
+ */
+export function PageDocumentPanel(props: IDockviewPanelProps) {
+  const { documents, children } = useWorkspaceContent()
+  const panelId = props.api?.id
+  const candidate = panelId ? documents.get(panelId) : undefined
+  const session = candidate?.kind === 'page' ? candidate : undefined
+  const active = props.api?.isActive ?? false
+
+  if (!panelId || !session) return null
+
+  return (
+    <div
+      className="compose-editor__page-document"
+      data-page-key={session.pageKey}
+      data-workspace-panel="page-document"
+    >
+      {active ? children : null}
     </div>
   )
 }
