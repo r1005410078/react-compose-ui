@@ -11,6 +11,8 @@
 import './styles.css'
 
 export { ComposeAssetBrowser } from './asset-browser'
+export { COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE } from './asset-browser-types'
+export { parseComposeAssetReferenceDragData } from './asset-drag-payload'
 export {
   ComposeAssetPreview,
 } from './asset-preview'
@@ -18,6 +20,7 @@ export type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragEvent,
   ComposeAssetCanvasDragItem,
+  ComposeAssetReferenceDragPayload,
   ComposeAssetContextMenuContext,
   ComposeAssetContextMenuItem,
   ComposeAssetEntryRenderContext,

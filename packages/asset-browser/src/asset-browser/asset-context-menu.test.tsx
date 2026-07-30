@@ -1,6 +1,7 @@
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import {
   cleanup,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -8,7 +9,11 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ComposeAssetBrowser } from '../index'
+import {
+  COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE,
+  ComposeAssetBrowser,
+  parseComposeAssetReferenceDragData,
+} from '../index'
 import type { ComposeAssetContextMenuItem } from '../index'
 
 const root: ComposeAssetEntry = { id: 'root', parentId: null, name: 'Assets', kind: 'folder' }
@@ -253,5 +258,116 @@ describe('OpenSpec: asset-browser / 条目标记插槽', () => {
     )
     await getTreeRow(/logo\.svg/)
     expect(document.querySelector('.asset-browser__entry-badge')).toBeNull()
+  })
+})
+
+describe('OpenSpec: asset-browser / 资源 Canvas 拖拽意图', () => {
+  const referenceCapableProvider = () => createProvider({
+    referenceScope: 'persistent',
+    capabilities: {
+      createFile: true,
+      createFolder: true,
+      rename: true,
+      move: true,
+      delete: true,
+      write: true,
+      reference: true,
+    },
+    resolveAsset: vi.fn(async () => ({
+      blob: new Blob(['{}']),
+      revision: '1',
+      mediaType: 'application/json',
+    })),
+  })
+
+  /** 在条目上触发 dragstart 并捕获写入的拖拽数据。 */
+  function startDragOnTreeRow(row: HTMLElement) {
+    const written = new Map<string, string>()
+    const dragStart = createEvent.dragStart(row)
+    Object.defineProperties(dragStart, {
+      clientX: { value: 10 },
+      clientY: { value: 20 },
+      dataTransfer: {
+        value: {
+          effectAllowed: 'uninitialized',
+          setData: (type: string, value: string) => { written.set(type, value) },
+        },
+      },
+    })
+    fireEvent(row, dragStart)
+    return written
+  }
+
+  it('宿主放宽白名单后非图片文件也可拖入 Canvas', async () => {
+    const onCanvasDrag = vi.fn()
+    render(
+      <ComposeAssetBrowser
+        canDragEntryToCanvas={(entry) => entry.name.endsWith('.page.json')}
+        provider={referenceCapableProvider()}
+        onCanvasDrag={onCanvasDrag}
+      />,
+    )
+    const pagesRow = await getTreeRow(/Pages/)
+    fireEvent.click(pagesRow)
+    // 文件树默认不展开子目录。
+    fireEvent.keyDown(pagesRow, { key: 'ArrowRight' })
+    const pageRow = await getTreeRow(/Home\.page\.json/)
+    fireEvent.click(pageRow)
+
+    startDragOnTreeRow(pageRow)
+
+    expect(onCanvasDrag).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'start',
+      items: [expect.objectContaining({
+        name: 'Home.page.json',
+        mediaType: 'application/json',
+        reference: expect.objectContaining({ assetKey: 'Pages/Home.page.json' }),
+      })],
+    }))
+  })
+
+  it('未被宿主接受的文件仍被排除', async () => {
+    const onCanvasDrag = vi.fn()
+    render(
+      <ComposeAssetBrowser
+        canDragEntryToCanvas={(entry) => entry.name.endsWith('.page.json')}
+        provider={referenceCapableProvider()}
+        onCanvasDrag={onCanvasDrag}
+      />,
+    )
+    const logoRow = await getTreeRow(/logo\.svg/)
+    fireEvent.click(logoRow)
+
+    startDragOnTreeRow(logoRow)
+
+    expect(onCanvasDrag).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'start' }))
+  })
+
+  it('稳定引用载荷在条目不可移动时同样写入', async () => {
+    render(
+      <ComposeAssetBrowser
+        canDragEntryToCanvas={() => true}
+        provider={referenceCapableProvider()}
+      />,
+    )
+    // 资源根的直接子项 parentId 不为空但 logo 可移动；这里用不可移动的条目覆盖该分支。
+    const logoRow = await getTreeRow(/logo\.svg/)
+    fireEvent.click(logoRow)
+
+    const written = startDragOnTreeRow(logoRow)
+
+    const payload = written.get(COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE)
+    expect(payload).toBeDefined()
+    const items = parseComposeAssetReferenceDragData(payload ?? '')
+    expect(items).toHaveLength(1)
+    expect(items[0]?.reference.assetKey).toBe('logo-key')
+    // 两个载荷相互独立：内部移动 ID 仍然只包含可移动条目。
+    expect(written.get('application/x-compose-asset-ids')).toBe('logo')
+  })
+
+  it('解析非法或版本不受支持的载荷时返回空结果', () => {
+    expect(parseComposeAssetReferenceDragData('not json')).toEqual([])
+    expect(parseComposeAssetReferenceDragData('{"version":2,"items":[]}')).toEqual([])
+    expect(parseComposeAssetReferenceDragData('{"version":1,"items":[{"name":1}]}')).toEqual([])
   })
 })

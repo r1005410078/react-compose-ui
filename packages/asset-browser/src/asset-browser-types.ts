@@ -6,11 +6,28 @@ import type {
   ComposeAssetProvider,
 } from '@compose-ui/assets'
 
+/**
+ * 稳定资源引用拖拽载荷的媒体类型。
+ *
+ * @remarks
+ * 与内部移动使用的条目 ID 载荷不同：只要产出可拖拽条目就一定写入，且内容是跨重命名与移动
+ * 稳定的引用，因此可被属性面板等宿主直接消费。
+ * @public
+ */
+export const COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE
+  = 'application/x-compose-asset-reference+json'
+
 /** 一项可写入 Canvas 的资源拖拽描述。 @public */
 export interface ComposeAssetCanvasDragItem {
   readonly reference: ComposeAssetReference
   readonly name: string
   readonly mediaType: string
+}
+
+/** 稳定引用拖拽载荷的结构。 @public */
+export interface ComposeAssetReferenceDragPayload {
+  readonly version: 1
+  readonly items: readonly ComposeAssetCanvasDragItem[]
 }
 
 /** 不暴露 React DragEvent 的 Canvas 拖拽生命周期。 @public */
@@ -140,6 +157,15 @@ export interface ComposeAssetBrowserProps
   ) => boolean | Promise<boolean>
   /** 兼容图片向 Canvas 拖入时发出的普通数据事件。 */
   readonly onCanvasDrag?: (event: ComposeAssetCanvasDragEvent) => void
+  /**
+   * 放宽或收紧「可拖入 Canvas」的内建图片白名单。
+   *
+   * @remarks
+   * 仅对已满足 `provider.capabilities.reference`、`provider.resolveAsset`、`kind === 'file'`
+   * 且存在 `assetKey` 的条目调用。返回 true 时媒体类型取 `entry.mediaType`，缺失时按
+   * `application/octet-stream` 处理。省略该回调时保持仅受支持图片可拖。
+   */
+  readonly canDragEntryToCanvas?: (entry: ComposeAssetEntry) => boolean
   /** 追加到内建菜单项之后的宿主上下文菜单项。 */
   readonly contextMenuItems?: readonly ComposeAssetContextMenuItem[]
   /**

@@ -25,9 +25,13 @@ import type {
   DragEvent as ReactDragEvent,
   PointerEvent as ReactPointerEvent,
 } from 'react'
+import {
+  COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE,
+} from '../asset-browser-types'
 import type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragItem,
+  ComposeAssetReferenceDragPayload,
   ComposeAssetContextMenuContext,
   ComposeAssetEntryRenderContext,
   ComposeAssetNamePromptRequest,
@@ -158,6 +162,7 @@ export function ComposeAssetBrowser({
   onAssetOpen,
   onBeforeAssetMutation,
   onCanvasDrag,
+  canDragEntryToCanvas,
   contextMenuItems,
   renderEntryBadge,
   allowLocalDirectory = true,
@@ -492,14 +497,19 @@ export function ComposeAssetBrowser({
   }, [provider, source.entriesById])
 
   const canvasItemFor = useCallback((entry: ComposeAssetEntry) => {
-    const mediaType = canvasImageMediaType(entry)
     if (
       !provider?.capabilities.reference
       || !provider.resolveAsset
       || entry.kind !== 'file'
       || !entry.assetKey
-      || !mediaType
     ) return null
+    // 宿主判定优先；未提供时保持仅受支持图片可拖的内建白名单。
+    const mediaType = canDragEntryToCanvas === undefined
+      ? canvasImageMediaType(entry)
+      : canDragEntryToCanvas(entry)
+        ? entry.mediaType ?? 'application/octet-stream'
+        : undefined
+    if (!mediaType) return null
     return {
       reference: {
         providerId: provider.id,
@@ -509,7 +519,7 @@ export function ComposeAssetBrowser({
       name: entry.name,
       mediaType,
     } satisfies ComposeAssetCanvasDragItem
-  }, [provider])
+  }, [canDragEntryToCanvas, provider])
 
   const startNativeDrag = useCallback((
     event: ReactDragEvent<HTMLElement>,
@@ -535,6 +545,13 @@ export function ComposeAssetBrowser({
       ? moveIds.length > 0 ? 'copyMove' : 'copy'
       : 'move'
     event.dataTransfer.setData('application/x-compose-asset-ids', moveIds.join('\n'))
+    // 引用载荷与移动 ID 载荷相互独立：条目不可移动时前者仍然写入，宿主据此获得稳定引用。
+    if (items.length > 0) {
+      event.dataTransfer.setData(
+        COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE,
+        JSON.stringify({ version: 1, items } satisfies ComposeAssetReferenceDragPayload),
+      )
+    }
     const point = { x: event.clientX, y: event.clientY }
     canvasDragRef.current = {
       lastPoint: point,
