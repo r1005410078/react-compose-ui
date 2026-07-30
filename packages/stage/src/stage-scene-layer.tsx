@@ -1,4 +1,5 @@
 import {
+  ComposeEntityBorderLayer,
   ComposeEntityPaintLayer,
   ComposeRegistryEntityRenderer,
   composeEntitySceneStyle,
@@ -54,8 +55,9 @@ export function StageSceneLayer({
         onPointerDown={(event) => onEntityPointerDown(entity, event)}
       >
         <ComposeEntityPaintLayer
+          assetResolver={assetResolver}
           entity={entity}
-          interactive
+          interactive={Boolean(hierarchy)}
           paint={paintPreview?.entityId === entity.id ? paintPreview.paint : undefined}
         />
         <ComposeRegistryEntityRenderer
@@ -65,6 +67,7 @@ export function StageSceneLayer({
           registry={registry}
         />
         {hierarchy?.childIds.map(renderEntity)}
+        <ComposeEntityBorderLayer entity={entity} />
       </div>
     )
   }

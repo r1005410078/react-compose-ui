@@ -234,7 +234,8 @@ describe('ComposePreview', () => {
       borderRadius: '10px',
       opacity: '0.95',
     })
-    expect(container.style.boxShadow).toContain('inset 0 0 0 2px #92400e')
+    expect(container.lastElementChild).toHaveAttribute('data-compose-entity-border')
+    expect(container.lastElementChild).toHaveStyle({ border: '2px solid #92400e' })
     expect(container.style.boxShadow).toContain('1px 3px 5px 0px #000000')
   })
 

@@ -145,14 +145,28 @@ function conicGradientStops(stops: readonly { readonly color: string; readonly p
 
 /** 输出 Paint 位于命中 rect 之下，只负责视觉呈现，不能参与 Entity 编辑会话。 */
 function StageOutputPaint({
+  assetResolver,
   paint,
   screenBounds,
 }: {
+  readonly assetResolver?: ComposeAssetResolver
   readonly paint: ComposePaint
   readonly screenBounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 }) {
   const descriptor = describeComposePaint(paint)
   const gradientId = `compose-output-paint-${useId().replace(/:/g, '')}`
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (paint.kind !== 'image' || !assetResolver) return undefined
+    const controller = new AbortController()
+    let url: string | null = null
+    void assetResolver.resolve({ reference: paint.asset as ComposeAssetReference, signal: controller.signal }).then((asset) => {
+      if (controller.signal.aborted) return
+      url = URL.createObjectURL(asset.blob)
+      setImageUrl(url)
+    }).catch(() => { if (!controller.signal.aborted) setImageUrl(null) })
+    return () => { controller.abort(); if (url) URL.revokeObjectURL(url) }
+  }, [assetResolver, paint])
   const common = {
     'aria-hidden': true,
     'data-compose-output-paint': descriptor.kind,
@@ -164,6 +178,14 @@ function StageOutputPaint({
     y: screenBounds.y,
   }
   if (descriptor.kind === 'solid') return <rect {...common} fill={descriptor.color} />
+  if (descriptor.kind === 'image') {
+    return <foreignObject {...common}>
+      <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+        {imageUrl ? <img alt="" src={imageUrl} style={{ display: 'block', width: '100%', height: '100%', objectFit: descriptor.fit === 'stretch' ? 'fill' : descriptor.fit, opacity: descriptor.opacity }} /> : null}
+        {descriptor.overlay ? <div style={{ position: 'absolute', inset: 0, background: descriptor.overlay.color, opacity: descriptor.overlay.opacity }} /> : null}
+      </div>
+    </foreignObject>
+  }
   if (descriptor.kind === 'angular-gradient') {
     return (
       <foreignObject {...common}>
@@ -1654,7 +1676,7 @@ export function ComposeStage({
           style={createVisualGridStyle(document.canvas.grid, viewport)}
         />
         <svg aria-hidden="true" className="compose-stage__world-overlay">
-          <StageOutputPaint paint={document.output.backgroundPaint} screenBounds={outputScreenBounds} />
+          <StageOutputPaint assetResolver={assetResolver} paint={document.output.backgroundPaint} screenBounds={outputScreenBounds} />
           <rect
             className={`compose-stage__output-boundary${outputSelected ? ' is-selected' : ''}`}
             data-testid="stage-output-boundary"

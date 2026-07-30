@@ -56,4 +56,23 @@ describe('OpenSpec: compose-document / Paint v5', () => {
     expect(paint).not.toBeNull()
     if (paint) expect(evaluateComposePaintAtLocalPoint(paint, { x: 0.5, y: 0.5 })).toBe('#808080')
   })
+
+  it('规范化图片 Paint，且拒绝临时 URL 与非法图片设置', () => {
+    const image = normalizeComposePaint({
+      kind: 'image',
+      asset: { providerId: 'library', assetKey: 'hero', scope: 'persistent' },
+      fit: 'cover',
+      opacity: 0.8,
+      overlay: { color: '#8B5CF6', opacity: 0.4 },
+    })
+    expect(image).toEqual({
+      kind: 'image',
+      asset: { providerId: 'library', assetKey: 'hero', scope: 'persistent' },
+      fit: 'cover',
+      opacity: 0.8,
+      overlay: { color: '#8b5cf6', opacity: 0.4 },
+    })
+    expect(isValidComposePaint(image)).toBe(true)
+    expect(normalizeComposePaint({ kind: 'image', asset: { url: 'blob:unsafe' } })).toBeNull()
+  })
 })

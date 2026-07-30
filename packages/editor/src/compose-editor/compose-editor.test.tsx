@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
+import { ComposePaintPicker } from '@compose-ui/components'
 import {
   ComposeUIProvider,
   useComposeI18nContext,
@@ -389,6 +390,299 @@ describe('ComposeEditor', () => {
     expect(screen.getByText('Controller command')).toBeInTheDocument()
     expect(screen.getByText('Controller toolbar')).toBeInTheDocument()
     expect(screen.getByLabelText('历史记录')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: redesign-color-image-picker / Editor 图片资源端口 / 注入默认 Inspector', () => {
+    const onValueChange = vi.fn()
+    const controllerHistory = createHistoryController()
+    const controller = {
+      runtime: controllerHistory,
+      history: controllerHistory,
+      sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
+      componentLibraryPanel: null,
+      stage: null,
+      inspectorPanel: (
+        <ComposePaintPicker
+          label="背景填充"
+          value={{ kind: 'solid', color: '#111827' }}
+          onValueChange={onValueChange}
+        />
+      ),
+      commandPanel: null,
+      stageToolbar: null,
+    } as unknown as ComposeEditorController
+
+    render(
+      <ComposeEditor
+        assets={{
+          paintImageLibrary: {
+            recent: [{
+              asset: {
+                providerId: 'memory',
+                assetKey: 'nebula',
+                scope: 'persistent',
+              },
+              label: '星云',
+              previewUrl: 'https://example.test/nebula.png',
+            }],
+          },
+        }}
+        controller={controller}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
+    fireEvent.click(screen.getByRole('button', { name: '图片' }))
+    fireEvent.click(screen.getByRole('button', { name: '星云' }))
+    expect(onValueChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      kind: 'image',
+      asset: {
+        providerId: 'memory',
+        assetKey: 'nebula',
+        scope: 'persistent',
+      },
+    }))
+  })
+
+  it('OpenSpec: redesign-color-image-picker / Editor 图片资源自动适配 / 从 Provider 注入默认 Inspector', async () => {
+    const onValueChange = vi.fn()
+    const createObjectURL = vi.fn(() => 'blob:nebula')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    const provider = {
+      id: 'memory',
+      label: 'Memory assets',
+      root: { id: 'root', parentId: null, name: 'Assets', kind: 'folder' as const },
+      capabilities: {
+        createFile: true,
+        createFolder: false,
+        rename: false,
+        move: false,
+        delete: false,
+        write: false,
+        reference: true,
+      },
+      referenceScope: 'persistent' as const,
+      list: vi.fn(async ({ folderId }: { folderId: string }) => folderId === 'root'
+        ? [{ id: 'images', parentId: 'root', name: 'Images', kind: 'folder' as const }]
+        : [{
+            id: 'nebula-file',
+            parentId: 'images',
+            name: 'nebula.png',
+            kind: 'file' as const,
+            mediaType: 'image/png',
+            assetKey: 'nebula',
+          }]),
+      read: vi.fn(),
+      resolveAsset: vi.fn(async () => ({
+        blob: new Blob(['png'], { type: 'image/png' }),
+        revision: '1',
+        mediaType: 'image/png',
+      })),
+      createFile: vi.fn(),
+    }
+    const controller = {
+      runtime: createHistoryController(),
+      history: createHistoryController(),
+      sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
+      componentLibraryPanel: null,
+      stage: null,
+      inspectorPanel: (
+        <ComposePaintPicker
+          label="背景填充"
+          value={{ kind: 'solid', color: '#111827' }}
+          onValueChange={onValueChange}
+        />
+      ),
+      commandPanel: null,
+      stageToolbar: null,
+    } as unknown as ComposeEditorController
+
+    const { unmount } = render(
+      <ComposeEditor
+        assets={{ browser: { provider } }}
+        controller={controller}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
+    fireEvent.click(screen.getByRole('button', { name: '图片' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'nebula.png' })).toBeVisible())
+    fireEvent.click(screen.getByRole('button', { name: 'nebula.png' }))
+    expect(onValueChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      kind: 'image',
+      asset: {
+        providerId: 'memory',
+        assetKey: 'nebula',
+        scope: 'persistent',
+      },
+    }))
+    unmount()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:nebula')
+  })
+
+  it('OpenSpec: redesign-color-image-picker / 上传图片到配置目录 / 使用唯一名称并选择稳定引用', async () => {
+    const onValueChange = vi.fn()
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn((blob: Blob) => `blob:${blob.type || 'unknown'}`),
+      revokeObjectURL: vi.fn(),
+    })
+    const createFile = vi.fn(async ({ parentId, name }: {
+      parentId: string
+      name: string
+      content: Blob
+    }) => ({
+      id: 'uploaded',
+      parentId,
+      name,
+      kind: 'file' as const,
+      mediaType: 'image/png',
+      assetKey: 'uploaded-key',
+    }))
+    const provider = {
+      id: 'memory',
+      label: 'Memory assets',
+      root: { id: 'root', parentId: null, name: 'Assets', kind: 'folder' as const },
+      capabilities: {
+        createFile: true,
+        createFolder: false,
+        rename: false,
+        move: false,
+        delete: false,
+        write: false,
+        reference: true,
+      },
+      referenceScope: 'persistent' as const,
+      list: vi.fn(async ({ folderId }: { folderId: string }) => folderId === 'uploads'
+        ? [{
+            id: 'existing',
+            parentId: 'uploads',
+            name: 'hero.png',
+            kind: 'file' as const,
+            mediaType: 'image/png',
+            assetKey: 'existing-key',
+          }]
+        : []),
+      read: vi.fn(),
+      resolveAsset: vi.fn(async () => ({
+        blob: new Blob(['png'], { type: 'image/png' }),
+        revision: '1',
+        mediaType: 'image/png',
+      })),
+      createFile,
+    }
+    const controller = {
+      runtime: createHistoryController(),
+      history: createHistoryController(),
+      sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
+      componentLibraryPanel: null,
+      stage: null,
+      inspectorPanel: (
+        <ComposePaintPicker
+          label="背景填充"
+          value={{ kind: 'solid', color: '#111827' }}
+          onValueChange={onValueChange}
+        />
+      ),
+      commandPanel: null,
+      stageToolbar: null,
+    } as unknown as ComposeEditorController
+
+    render(
+      <ComposeEditor
+        assets={{
+          browser: { provider },
+          paintImageUploadParentId: 'uploads',
+        }}
+        controller={controller}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
+    fireEvent.click(screen.getByRole('button', { name: '图片' }))
+    const file = new File(['png'], 'hero.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('上传图片'), {
+      target: { files: [file] },
+    })
+    await waitFor(() => expect(createFile).toHaveBeenCalledWith({
+      parentId: 'uploads',
+      name: 'hero-2.png',
+      content: file,
+    }))
+    expect(onValueChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      kind: 'image',
+      asset: {
+        providerId: 'memory',
+        assetKey: 'uploaded-key',
+        scope: 'persistent',
+      },
+    }))
+  })
+
+  it('OpenSpec: redesign-color-image-picker / 显式图片适配器覆盖自动适配 / 不扫描 Provider', () => {
+    const onValueChange = vi.fn()
+    const list = vi.fn(async () => [])
+    const provider = {
+      id: 'memory',
+      label: 'Memory assets',
+      root: { id: 'root', parentId: null, name: 'Assets', kind: 'folder' as const },
+      capabilities: {
+        createFile: false,
+        createFolder: false,
+        rename: false,
+        move: false,
+        delete: false,
+        write: false,
+        reference: true,
+      },
+      list,
+      read: vi.fn(),
+      resolveAsset: vi.fn(),
+    }
+    const controller = {
+      runtime: createHistoryController(),
+      history: createHistoryController(),
+      sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
+      componentLibraryPanel: null,
+      stage: null,
+      inspectorPanel: (
+        <ComposePaintPicker
+          label="背景填充"
+          value={{ kind: 'solid', color: '#111827' }}
+          onValueChange={onValueChange}
+        />
+      ),
+      commandPanel: null,
+      stageToolbar: null,
+    } as unknown as ComposeEditorController
+
+    render(
+      <ComposeEditor
+        assets={{
+          browser: { provider },
+          paintImageLibrary: {
+            recent: [{
+              asset: {
+                providerId: 'explicit',
+                assetKey: 'configured',
+                scope: 'persistent',
+              },
+              label: '显式图片',
+              previewUrl: 'https://example.test/configured.png',
+            }],
+          },
+        }}
+        controller={controller}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
+    fireEvent.click(screen.getByRole('button', { name: '图片' }))
+    fireEvent.click(screen.getByRole('button', { name: '显式图片' }))
+    expect(list).not.toHaveBeenCalled()
+    expect(onValueChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      asset: expect.objectContaining({ providerId: 'explicit' }),
+    }))
   })
 
   it('keeps explicit children ahead of a controller default Stage', () => {

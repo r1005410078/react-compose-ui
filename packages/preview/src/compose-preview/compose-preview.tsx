@@ -5,6 +5,7 @@
  */
 
 import {
+  ComposeEntityBorderLayer,
   ComposeEntityPaintLayer,
   ComposePaintLayer,
   ComposeRegistryEntityRenderer,
@@ -73,7 +74,7 @@ function PreviewEntity({
   const hierarchy = getComposeHierarchy(entity)
   return (
     <div data-testid={`compose-preview-entity-${entity.id}`} style={entityStyle(entity)}>
-      <ComposeEntityPaintLayer entity={entity} />
+      <ComposeEntityPaintLayer assetResolver={assetResolver} entity={entity} />
       <ComposeRegistryEntityRenderer
         assetResolver={assetResolver}
         entity={entity}
@@ -89,6 +90,7 @@ function PreviewEntity({
           registry={registry}
         />
       ))}
+      <ComposeEntityBorderLayer entity={entity} />
     </div>
   )
 }
@@ -116,7 +118,7 @@ export function ComposePreview({
           overflow: 'hidden',
         }}
       >
-        <ComposePaintLayer paint={document.output.backgroundPaint} testId="compose-preview-output-paint" />
+        <ComposePaintLayer assetResolver={assetResolver} paint={document.output.backgroundPaint} testId="compose-preview-output-paint" />
         {document.rootIds.map((entityId) => (
           <PreviewEntity
             assetResolver={assetResolver}
@@ -145,7 +147,7 @@ export function ComposePreview({
             {getComposeVisibility(entity).visible
               ? (
                   <>
-                    <ComposeEntityPaintLayer entity={entity} />
+                    <ComposeEntityPaintLayer assetResolver={assetResolver} entity={entity} />
                     <ComposeRegistryEntityRenderer
                       assetResolver={assetResolver}
                       entity={entity}
@@ -161,6 +163,7 @@ export function ComposePreview({
                         registry={registry}
                       />
                     ))}
+                    <ComposeEntityBorderLayer entity={entity} />
                   </>
                 )
               : null}

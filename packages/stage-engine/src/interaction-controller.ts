@@ -446,7 +446,7 @@ function paintHandlesFor(
   entityId: string,
   paint: ComposePaint,
 ): readonly StagePaintHandle[] {
-  if (paint.kind === 'solid') return []
+  if (paint.kind === 'solid' || paint.kind === 'image') return []
   const entity = index.document.entities[entityId]
   const matrix = index.getWorldMatrix(entityId)
   if (!entity || !matrix) return []
@@ -506,7 +506,7 @@ function updatePaintFromPointer(
   stopId: string | undefined,
   local: { readonly x: number; readonly y: number },
 ): ComposePaint {
-  if (paint.kind === 'solid') return paint
+  if (paint.kind === 'solid' || paint.kind === 'image') return paint
   if (paint.kind === 'linear-gradient') {
     if (handle === 'linear-start') return { ...paint, start: local }
     if (handle === 'linear-end') return { ...paint, end: local }

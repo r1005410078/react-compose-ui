@@ -17,7 +17,9 @@ import {
   ComposeDialogViewport,
   ComposeButton,
   ComposeColorHistoryProvider,
+  ComposePaintImageLibraryProvider,
 } from '@compose-ui/components'
+import type { ComposePaintImageLibrary } from '@compose-ui/components'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeHistoryShortcuts } from '@compose-ui/history'
@@ -84,6 +86,7 @@ import {
   normalizeComposeEditorPreferences,
 } from '../editor-preferences'
 import type { ComposeEditorPreferences } from '../editor-preferences'
+import { useProviderPaintImageLibrary } from './paint-image-library'
 import '../styles.css'
 
 /** 编辑器内各个可替换工作区区域。未提供的区域保持默认面板或可访问占位。 */
@@ -105,6 +108,10 @@ export interface ComposeEditorAssets {
   readonly browser?: ComposeAssetBrowserProps
   /** 显式资源 resolver 优先于由 browser Provider 派生的 resolver。 */
   readonly resolver?: ComposeAssetResolver
+  /** 注入默认 Canvas/Appearance Inspector 图片页的资源、上传与选择端口。 */
+  readonly paintImageLibrary?: ComposePaintImageLibrary
+  /** 自动图片上传使用的父目录；省略时写入 Provider 根目录。 */
+  readonly paintImageUploadParentId?: string
 }
 
 /**
@@ -170,6 +177,18 @@ function addDefaultElementProps(
   return isValidElement(node) && typeof node.type !== 'string'
     ? cloneElement(node, props)
     : node
+}
+
+function providePaintImageLibrary(
+  node: ReactNode,
+  imageLibrary: ComposePaintImageLibrary | undefined,
+) {
+  if (node == null) return node
+  return (
+    <ComposePaintImageLibraryProvider value={imageLibrary}>
+      {node}
+    </ComposePaintImageLibraryProvider>
+  )
 }
 
 type EditorRootProps = HTMLAttributes<HTMLElement>
@@ -242,6 +261,12 @@ export function ComposeEditor({
     ) return undefined
     return createComposeAssetResolver(provider)
   }, [assets?.browser?.provider, assets?.resolver])
+  const providerPaintImageLibrary = useProviderPaintImageLibrary({
+    enabled: assets?.paintImageLibrary === undefined,
+    provider: assets?.browser?.provider,
+    uploadParentId: assets?.paintImageUploadParentId,
+  })
+  const resolvedPaintImageLibrary = assets?.paintImageLibrary ?? providerPaintImageLibrary
   const [assetDocuments, setAssetDocuments] = useState<ReadonlyMap<string, ComposeAssetDocumentSession>>(
     () => new Map(),
   )
@@ -465,9 +490,12 @@ export function ComposeEditor({
             onToolChange: controller?.setTool,
             shortcuts: resolvedPreferences.shortcuts,
           }),
-      inspectorPanel: slots?.inspector !== undefined
-        ? slots.inspector
-        : controller?.inspectorPanel,
+      inspectorPanel: providePaintImageLibrary(
+        slots?.inspector !== undefined
+          ? slots.inspector
+          : controller?.inspectorPanel,
+        resolvedPaintImageLibrary,
+      ),
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
         ? slots.command
@@ -508,6 +536,7 @@ export function ComposeEditor({
       handleAssetOpen,
       handleDefaultAssetMutation,
       resolvedAssetResolver,
+      resolvedPaintImageLibrary,
       handleAssetCanvasDrag,
       registerAssetDocumentSave,
       requestAssetDocumentClose,

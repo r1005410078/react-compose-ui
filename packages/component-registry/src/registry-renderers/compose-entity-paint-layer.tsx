@@ -4,7 +4,8 @@ import {
   type ComposeEntity,
   type ComposePaint,
 } from '@compose-ui/core'
-import { useId } from 'react'
+import type { ComposeAssetReference, ComposeAssetResolver } from '@compose-ui/assets'
+import { useEffect, useId, useState } from 'react'
 import type { CSSProperties } from 'react'
 
 function stopsMarkup(stops: readonly { readonly color: string; readonly position: number }[]) {
@@ -32,6 +33,8 @@ export interface ComposeEntityPaintLayerProps {
    * 仍可用于选择和拖动。Preview 保持 `false`，避免渲染层承载交互语义。
    */
   readonly interactive?: boolean
+  /** 图片 Paint 解析稳定引用时使用的运行时端口。 */
+  readonly assetResolver?: ComposeAssetResolver
 }
 
 /** 独立结构化 Paint 图层的输入。 @public */
@@ -42,6 +45,27 @@ export interface ComposePaintLayerProps {
   readonly interactive?: boolean
   /** 供宿主测试输出背景等非 Entity 图层使用的稳定标记。 */
   readonly testId?: string
+  /** 图片 Paint 解析稳定引用时使用的运行时端口。 */
+  readonly assetResolver?: ComposeAssetResolver
+}
+
+function usePaintImageUrl(
+  resolver: ComposeAssetResolver | undefined,
+  paint: ComposePaint,
+) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (paint.kind !== 'image' || !resolver) return undefined
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+    void resolver.resolve({ reference: paint.asset as ComposeAssetReference, signal: controller.signal }).then((asset) => {
+      if (controller.signal.aborted) return
+      objectUrl = URL.createObjectURL(asset.blob)
+      setUrl(objectUrl)
+    }).catch(() => { if (!controller.signal.aborted) setUrl(null) })
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [paint, resolver])
+  return url
 }
 
 /**
@@ -52,6 +76,7 @@ export interface ComposePaintLayerProps {
 export function ComposePaintLayer({
   interactive = false,
   paint,
+  assetResolver,
   testId,
 }: ComposePaintLayerProps) {
   const descriptor = describeComposePaint(paint)
@@ -62,9 +87,16 @@ export function ComposePaintLayer({
     pointerEvents: interactive ? 'auto' : 'none',
     borderRadius: 'inherit',
   }
+  const imageUrl = usePaintImageUrl(assetResolver, paint)
 
   if (descriptor.kind === 'solid') {
     return <div aria-hidden="true" data-compose-paint="solid" data-testid={testId} style={{ ...style, background: descriptor.color }} />
+  }
+  if (descriptor.kind === 'image') {
+    return <div aria-hidden="true" data-compose-paint="image" data-testid={testId} style={style}>
+      {imageUrl ? <img alt="" src={imageUrl} style={{ width: '100%', height: '100%', display: 'block', objectFit: descriptor.fit === 'stretch' ? 'fill' : descriptor.fit, opacity: descriptor.opacity }} /> : null}
+      {descriptor.overlay ? <div style={{ position: 'absolute', inset: 0, background: descriptor.overlay.color, opacity: descriptor.overlay.opacity }} /> : null}
+    </div>
   }
   if (descriptor.kind === 'angular-gradient') {
     return (
@@ -124,8 +156,9 @@ export function ComposeEntityPaintLayer({
   entity,
   paint,
   interactive = false,
+  assetResolver,
 }: ComposeEntityPaintLayerProps) {
   const resolvedPaint = paint ?? resolveComposeAppearance(entity).backgroundPaint
   // 透明 Container 只有编辑 Stage 需要补足 Pointer 命中；Preview 始终保持不可交互。
-  return <ComposePaintLayer interactive={interactive} paint={resolvedPaint} />
+  return <ComposePaintLayer assetResolver={assetResolver} interactive={interactive} paint={resolvedPaint} />
 }

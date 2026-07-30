@@ -22,6 +22,7 @@ export type ComposePaint =
   | ComposeLinearGradientPaint
   | ComposeRadialGradientPaint
   | ComposeAngularGradientPaint
+  | ComposeImagePaint
 
 /** 单色填充。 @public */
 export interface ComposeSolidPaint extends JsonObject {
@@ -54,6 +55,31 @@ export interface ComposeAngularGradientPaint extends JsonObject {
   readonly stops: readonly ComposeGradientStop[]
 }
 
+/** 图片 Paint 写入文档时使用的稳定资源引用。 @public */
+export interface ComposePaintImageAsset extends JsonObject {
+  readonly providerId: string
+  readonly assetKey: string
+  readonly scope: 'persistent' | 'session'
+}
+
+/** 图片背景的显示模式。 @public */
+export type ComposeImageFit = 'cover' | 'contain' | 'stretch'
+
+/** 图片上的可选纯色叠加层。 @public */
+export interface ComposeImagePaintOverlay extends JsonObject {
+  readonly color: ComposeColor
+  readonly opacity: number
+}
+
+/** 通过稳定资源引用渲染的图片填充。 @public */
+export interface ComposeImagePaint extends JsonObject {
+  readonly kind: 'image'
+  readonly asset: ComposePaintImageAsset
+  readonly fit: ComposeImageFit
+  readonly opacity: number
+  readonly overlay: ComposeImagePaintOverlay | null
+}
+
 /** 所有 Entity 缺失 Appearance 或 backgroundPaint 时的稳定解析值。 @public */
 export const DEFAULT_COMPOSE_BACKGROUND_PAINT: ComposeSolidPaint = {
   kind: 'solid',
@@ -81,6 +107,13 @@ export type ComposePaintRenderDescriptor =
       readonly center: ComposePaintPoint
       readonly angle: number
       readonly stops: readonly ComposeGradientStop[]
+    }
+  | {
+      readonly kind: 'image'
+      readonly asset: ComposePaintImageAsset
+      readonly fit: ComposeImageFit
+      readonly opacity: number
+      readonly overlay: ComposeImagePaintOverlay | null
     }
 
 type Rgba = {
@@ -192,6 +225,23 @@ function normalizeStops(value: unknown): readonly ComposeGradientStop[] | null {
   return stops.sort((left, right) => left.position - right.position || left.id.localeCompare(right.id))
 }
 
+function normalizeImageAsset(value: unknown): ComposePaintImageAsset | null {
+  if (!isRecord(value)
+    || !sameKeys(value, ['providerId', 'assetKey', 'scope'])
+    || typeof value.providerId !== 'string' || value.providerId.trim().length === 0
+    || typeof value.assetKey !== 'string' || value.assetKey.trim().length === 0
+    || (value.scope !== 'persistent' && value.scope !== 'session')) return null
+  return { providerId: value.providerId, assetKey: value.assetKey, scope: value.scope }
+}
+
+function normalizeImageOverlay(value: unknown): ComposeImagePaintOverlay | null | undefined {
+  if (value === null) return null
+  if (!isRecord(value) || !sameKeys(value, ['color', 'opacity'])) return undefined
+  const color = normalizeComposeColor(value.color)
+  if (!color || !finite(value.opacity) || value.opacity < 0 || value.opacity > 1) return undefined
+  return { color, opacity: value.opacity }
+}
+
 /** 将支持的 CSS HEX/transparent 输入规范化为文档颜色。 @public */
 export function normalizeComposeColor(value: unknown): ComposeColor | null {
   if (typeof value !== 'string') return null
@@ -216,6 +266,13 @@ export function normalizeComposePaint(value: unknown): ComposePaint | null {
   if (value.kind === 'solid') {
     const color = normalizeComposeColor(value.color)
     return color ? { kind: 'solid', color } : null
+  }
+  if (value.kind === 'image') {
+    const asset = normalizeImageAsset(value.asset)
+    const overlay = normalizeImageOverlay(value.overlay)
+    if (!asset || overlay === undefined || !finite(value.opacity) || value.opacity < 0 || value.opacity > 1
+      || (value.fit !== 'cover' && value.fit !== 'contain' && value.fit !== 'stretch')) return null
+    return { kind: 'image', asset, fit: value.fit, opacity: value.opacity, overlay }
   }
   const stops = normalizeStops(value.stops)
   if (!stops) return null
@@ -246,6 +303,13 @@ export function isValidComposePaint(value: unknown): value is ComposePaint {
   if (value.kind === 'solid') {
     return sameKeys(value, ['kind', 'color']) && isComposeColor(value.color)
   }
+  if (value.kind === 'image') {
+    return sameKeys(value, ['kind', 'asset', 'fit', 'opacity', 'overlay'])
+      && normalizeImageAsset(value.asset) !== null
+      && (value.fit === 'cover' || value.fit === 'contain' || value.fit === 'stretch')
+      && finite(value.opacity) && value.opacity >= 0 && value.opacity <= 1
+      && normalizeImageOverlay(value.overlay) !== undefined
+  }
   if (value.kind === 'linear-gradient') {
     return sameKeys(value, ['kind', 'start', 'end', 'stops'])
       && isCanonicalPoint(value.start)
@@ -275,6 +339,8 @@ export function isValidComposePaint(value: unknown): value is ComposePaint {
 export function describeComposePaint(paint: ComposePaint): ComposePaintRenderDescriptor {
   return paint.kind === 'solid'
     ? { kind: 'solid', color: paint.color }
+    : paint.kind === 'image'
+      ? { kind: 'image', asset: paint.asset, fit: paint.fit, opacity: paint.opacity, overlay: paint.overlay }
     : paint.kind === 'linear-gradient'
       ? { kind: paint.kind, start: paint.start, end: paint.end, stops: paint.stops }
       : paint.kind === 'radial-gradient'
@@ -314,6 +380,8 @@ export function evaluateComposePaintAtLocalPoint(
   point: ComposePaintPoint,
 ): ComposeColor {
   if (paint.kind === 'solid') return paint.color
+  // 图片像素必须由异步 Resolver 取得；纯函数采样只给渐变色标提供确定性回退。
+  if (paint.kind === 'image') return paint.overlay?.color ?? 'transparent'
   const position = paint.kind === 'linear-gradient' ? (() => {
     const x = paint.end.x - paint.start.x
     const y = paint.end.y - paint.start.y

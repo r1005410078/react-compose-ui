@@ -6,6 +6,7 @@ import {
   ComposeRegistryComponentInspector,
   ComposeRegistryEntityRenderer,
 } from './compose-registry-renderers'
+import { ComposeEntityBorderLayer } from './compose-entity-border-layer'
 import { ComposeEntityPaintLayer } from './compose-entity-paint-layer'
 
 function entity(rendererType = 'text'): ComposeEntity {
@@ -112,6 +113,29 @@ describe('Entity Registry React boundaries', () => {
     expect(container.querySelector('[data-compose-paint="solid"]')).toHaveStyle({
       pointerEvents: 'auto',
     })
+  })
+
+  it('OpenSpec: 共享渲染语义 / 边框由独立顶层覆盖层渲染', () => {
+    const bordered: ComposeEntity = {
+      ...entity(),
+      components: {
+        ...entity().components,
+        Appearance: {
+          backgroundPaint: { kind: 'solid', color: '#2463eb' },
+          borderColor: '#ef4444',
+          borderWidth: 9,
+          borderRadius: 12,
+        },
+      },
+    }
+    const { container } = render(<ComposeEntityBorderLayer entity={bordered} />)
+    const border = container.querySelector<HTMLElement>('[data-compose-entity-border]')
+
+    expect(border).not.toBeNull()
+    expect(border?.style.border).toBe('9px solid rgb(239, 68, 68)')
+    expect(border?.style.borderRadius).toBe('inherit')
+    expect(border?.style.boxSizing).toBe('border-box')
+    expect(border?.style.pointerEvents).toBe('none')
   })
 
   it('OpenSpec: Renderer 隔离 / 数据修复后错误边界自动恢复', () => {

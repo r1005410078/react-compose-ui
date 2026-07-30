@@ -21,7 +21,7 @@ function entity(components: Readonly<Record<string, JsonObject>>): ComposeEntity
 }
 
 describe('composeEntityVisualStyle', () => {
-  it('OpenSpec: 共享渲染语义 / 边框与阴影合成 boxShadow，裁剪决定 overflow', () => {
+  it('OpenSpec: 共享渲染语义 / 边框覆盖层与阴影独立渲染，裁剪决定 overflow', () => {
     const styled = composeEntityVisualStyle(entity({
       Appearance: {
         backgroundPaint: { kind: 'solid', color: '#102030' },
@@ -37,7 +37,9 @@ describe('composeEntityVisualStyle', () => {
     expect(styled.backgroundColor).toBe('#102030')
     expect(styled.borderRadius).toBe(8)
     expect(styled.opacity).toBe(0.5)
-    expect(styled.boxShadow).toBe('inset 0 0 0 2px #405060, 1px 2px 3px 4px #00000040')
+    expect(styled.isolation).toBe('isolate')
+    expect(styled.outline).toBeUndefined()
+    expect(styled.boxShadow).toBe('1px 2px 3px 4px #00000040')
     expect(styled.overflow).toBe('hidden')
 
     const plain = composeEntityVisualStyle(entity({}))

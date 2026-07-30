@@ -5,6 +5,10 @@ export {
   ComposeRegistryRendererInspector,
 } from './compose-registry-renderers'
 export {
+  ComposeEntityBorderLayer,
+  type ComposeEntityBorderLayerProps,
+} from './compose-entity-border-layer'
+export {
   ComposeEntityPaintLayer,
   ComposePaintLayer,
   type ComposePaintLayerProps,

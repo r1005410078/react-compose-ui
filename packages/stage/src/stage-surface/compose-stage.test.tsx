@@ -182,6 +182,25 @@ describe('ComposeStage ECS', () => {
     )
   })
 
+  it('OpenSpec: 共享渲染语义 / 边框覆盖层位于图片 Paint 与 Renderer 之后', () => {
+    const bordered = {
+      ...entity('bordered'),
+      components: {
+        ...entity('bordered').components,
+        Appearance: {
+          backgroundPaint: { kind: 'solid' as const, color: '#2463eb' },
+          borderColor: '#ef4444',
+          borderWidth: 9,
+          borderRadius: 12,
+        },
+      },
+    }
+    renderStage(document([bordered]))
+
+    const node = screen.getByTestId('stage-entity-bordered')
+    expect(node.lastElementChild).toHaveAttribute('data-compose-entity-border')
+  })
+
   it.each([
     ['horizontal', ['e', 'w']],
     ['vertical', ['n', 's']],

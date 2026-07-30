@@ -31,6 +31,9 @@ describe('CanvasInspector', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: '输出背景' }))
+    expect(screen.getByRole('button', { name: '纯色' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '线性' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '渐变' }))
     expect(screen.getByRole('button', { name: '线性' })).toBeInTheDocument()
   })
 })

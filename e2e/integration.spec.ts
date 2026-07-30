@@ -265,8 +265,77 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   const canvasPaint = inspector.getByRole('button', { name: '输出背景', exact: true })
   await canvasPaint.click()
   const canvasPaintPicker = page.getByRole('dialog', { name: '输出背景', exact: true })
-  await expect(canvasPaintPicker.getByRole('textbox')).toHaveCount(0)
+  const expectCompactPaintPicker = async () => {
+    expect(await canvasPaintPicker.evaluate((element) => ({
+      overflowX: getComputedStyle(element).overflowX,
+      overflowY: getComputedStyle(element).overflowY,
+      scrollableX: element.scrollWidth > element.clientWidth,
+      scrollableY: element.scrollHeight > element.clientHeight,
+    }))).toEqual({
+      overflowX: 'visible',
+      overflowY: 'visible',
+      scrollableX: false,
+      scrollableY: false,
+    })
+  }
+  const expectPaintCardsContained = async () => {
+    expect(await canvasPaintPicker.locator('.compose-paint-picker__card').evaluateAll((cards) =>
+      cards
+        .filter((card) => card.scrollWidth > card.clientWidth)
+        .map((card) => card.scrollWidth - card.clientWidth),
+    )).toEqual([])
+  }
+  await expect(canvasPaintPicker.getByRole('textbox')).toHaveCount(2)
+  await expect(canvasPaintPicker.getByText('颜色与图片', { exact: true })).toHaveCount(0)
   await expect(canvasPaintPicker.getByRole('button', { name: '纯色', exact: true })).toBeVisible()
+  await expect(canvasPaintPicker.getByRole('button', { name: '渐变', exact: true })).toBeVisible()
+  await expect(canvasPaintPicker.getByRole('button', { name: '图片', exact: true })).toBeVisible()
+  await expectCompactPaintPicker()
+  await canvasPaintPicker.getByRole('button', { name: '图片', exact: true }).click()
+  await expect(canvasPaintPicker.getByRole('button', { name: 'compose-grid.svg' })).toBeVisible()
+  await canvasPaintPicker.getByRole('button', { name: 'compose-grid.svg' }).click()
+  await expect(stage.getByTestId('stage-output-paint'))
+    .toHaveAttribute('data-compose-output-paint', 'image')
+  await expect(canvasPaintPicker.getByRole('checkbox', { name: '叠加颜色' })).toBeChecked()
+  await canvasPaintPicker.getByRole('button', { name: '适应', exact: true }).click()
+  await expect(canvasPaintPicker.getByRole('button', { name: '适应', exact: true }))
+    .toHaveAttribute('aria-pressed', 'true')
+  await canvasPaintPicker.getByRole('slider', { name: '不透明度', exact: true }).fill('72')
+  await expect(canvasPaintPicker.getByRole('slider', { name: '不透明度', exact: true })).toHaveValue('72')
+  await expectCompactPaintPicker()
+  await expectPaintCardsContained()
+  await expect(editor).toHaveScreenshot('stage-workspace-canvas-image-picker.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await canvasPaintPicker.getByRole('button', { name: '选择图片', exact: true }).click()
+  await expect(canvasPaintPicker.getByRole('heading', { name: '图片资源' })).toBeVisible()
+  await expect(canvasPaintPicker.getByRole('button', { name: 'dashboard.bmp' })).toBeVisible()
+  await expectCompactPaintPicker()
+  await expect(editor).toHaveScreenshot('stage-workspace-canvas-image-library.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await canvasPaintPicker.getByRole('button', { name: 'dashboard.bmp' }).click()
+  await expect(canvasPaintPicker.getByRole('button', { name: '适应', exact: true }))
+    .toHaveAttribute('aria-pressed', 'true')
+  await expect(canvasPaintPicker.getByRole('slider', { name: '不透明度', exact: true })).toHaveValue('72')
+
+  await canvasPaintPicker.getByLabel('上传图片').setInputFiles({
+    name: 'uploaded.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#8b5cf6"/></svg>'),
+  })
+  await expect(stage.getByTestId('stage-output-paint'))
+    .toHaveAttribute('data-compose-output-paint', 'image')
+  await expectCompactPaintPicker()
+
+  await canvasPaintPicker.getByRole('button', { name: '渐变', exact: true }).click()
+  await expectCompactPaintPicker()
+  await expectPaintCardsContained()
   await expect(canvasPaintPicker.getByRole('button', { name: '线性', exact: true })).toBeVisible()
   await expect(canvasPaintPicker.getByRole('button', { name: '径向', exact: true })).toBeVisible()
   await expect(canvasPaintPicker.getByRole('button', { name: '角向', exact: true })).toBeVisible()
@@ -279,6 +348,54 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+
+  const addStop = canvasPaintPicker.getByRole('button', { name: /添加色标/ })
+  await addStop.click()
+  await addStop.click()
+  const stopTrack = canvasPaintPicker.getByLabel('渐变色标轨道')
+  await expect(stopTrack.getByRole('button', { name: '25%' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(stopTrack.getByRole('button')).toHaveCount(4)
+
+  const directionDial = canvasPaintPicker.getByRole('slider', { name: '方向角度' })
+  const directionBox = await directionDial.boundingBox()
+  expect(directionBox).not.toBeNull()
+  await page.mouse.move(
+    directionBox!.x + directionBox!.width - 1,
+    directionBox!.y + directionBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    directionBox!.x + directionBox!.width / 2,
+    directionBox!.y + directionBox!.height - 1,
+    { steps: 4 },
+  )
+  await page.mouse.up()
+  await expect(canvasPaintPicker.getByRole('spinbutton', { name: '角度' })).toHaveValue('90')
+
+  await canvasPaintPicker.getByRole('button', { name: '径向', exact: true }).click()
+  await expect(stage.getByTestId('stage-output-paint'))
+    .toHaveAttribute('data-compose-output-paint', 'radial-gradient')
+  await expect(canvasPaintPicker.getByRole('slider', { name: '方向角度' })).toHaveCount(0)
+  await canvasPaintPicker.getByRole('spinbutton', { name: '中心 X' }).fill('65')
+  await canvasPaintPicker.getByRole('spinbutton', { name: '垂直半径' }).fill('35')
+  await expect(canvasPaintPicker.getByRole('spinbutton', { name: '中心 X' })).toHaveValue('65')
+  await expect(canvasPaintPicker.getByRole('spinbutton', { name: '垂直半径' })).toHaveValue('35')
+  await expectCompactPaintPicker()
+  await expectPaintCardsContained()
+
+  await canvasPaintPicker.getByRole('button', { name: '角向', exact: true }).click()
+  await expect(stage.getByTestId('stage-output-paint'))
+    .toHaveAttribute('data-compose-output-paint', 'angular-gradient')
+  await canvasPaintPicker.getByRole('spinbutton', { name: '角度' }).fill('135')
+  await expect(canvasPaintPicker.getByRole('slider', { name: '方向角度' }))
+    .toHaveAttribute('aria-valuenow', '135')
+  await canvasPaintPicker.getByText('高级设置', { exact: true }).click()
+  await canvasPaintPicker.getByRole('spinbutton', { name: '中心 X' }).fill('40')
+  await expect(canvasPaintPicker.getByRole('slider', { name: '角向中心' }))
+    .toHaveAttribute('aria-valuetext', '40%, 50%')
+  await expectCompactPaintPicker()
+  await expectPaintCardsContained()
+
   await canvasPaintPicker.press('Escape')
   await expect(canvasPaint).toBeFocused()
   await commonOutputSize.selectOption('1920x1080')
@@ -338,12 +455,13 @@ test('OpenSpec: components / Paint Picker / 色盘与透明度滑动在真实指
   await expect(picker).toBeVisible()
 
   const alpha = picker.getByRole('slider', { name: '纯色不透明度', exact: true })
+  await alpha.scrollIntoViewIfNeeded()
   const alphaBox = await alpha.boundingBox()
   expect(alphaBox).not.toBeNull()
   await expect(alpha).toHaveValue('100')
-  await page.mouse.move(alphaBox!.x + alphaBox!.width / 2, alphaBox!.y + alphaBox!.height * 0.9)
+  await page.mouse.move(alphaBox!.x + alphaBox!.width * 0.9, alphaBox!.y + alphaBox!.height / 2)
   await page.mouse.down()
-  await page.mouse.move(alphaBox!.x + alphaBox!.width / 2, alphaBox!.y + alphaBox!.height * 0.3, { steps: 4 })
+  await page.mouse.move(alphaBox!.x + alphaBox!.width * 0.3, alphaBox!.y + alphaBox!.height / 2, { steps: 4 })
   await page.mouse.up()
   await expect(alpha).not.toHaveValue('100')
   await expect(picker).toBeVisible()
@@ -418,7 +536,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await groupBackground.click()
   const colorPicker = page.getByRole('dialog', { name: '背景填充', exact: true })
   await expect(colorPicker).toBeVisible()
-  await expect(colorPicker.getByRole('textbox')).toHaveCount(0)
+  await expect(colorPicker.getByRole('textbox')).toHaveCount(2)
   await colorPicker.getByRole('group', { name: '纯色色盘', exact: true })
     .press('ArrowRight')
   await expect(group).toHaveCSS('background-color', 'rgb(0, 0, 0)')
@@ -426,6 +544,8 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(group).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await stage.press('Control+Shift+z')
   await expect(group).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+  await colorPicker.press('Escape')
+  await expect(colorPicker).not.toBeVisible()
 
   await stage.locator('.compose-stage__node.is-renderer').filter({
     hasText: 'Text',
@@ -595,6 +715,7 @@ test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交�
   await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
   await editor.getByRole('button', { name: '背景填充', exact: true }).click()
   const picker = page.getByRole('dialog', { name: '背景填充', exact: true })
+  await picker.getByRole('button', { name: '渐变', exact: true }).click()
   await picker.getByRole('button', { name: '线性', exact: true }).click()
   await expect(stage.getByTestId('stage-paint-handles')).toBeVisible()
   await expect(stage.getByTestId('stage-paint-linear-start')).toBeVisible()

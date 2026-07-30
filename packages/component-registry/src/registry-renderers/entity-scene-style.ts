@@ -11,9 +11,9 @@ import type { CSSProperties } from 'react'
  * Stage 与 Preview 共享的 Entity 外观样式（不含 Transform 几何）。
  *
  * @remarks
- * 边框以 inset box-shadow 实现，避免 border 参与盒模型改变内容尺寸；Container 的
- * overflow 由 Clip 控制，非 Container 恒为 hidden。两个消费方必须使用同一实现，
- * 保证编辑所见与预览输出一致。
+ * 边框由独立顶层覆盖层渲染，因此 Entity 壳使用 `isolation` 把覆盖层限制在自身 stacking
+ * context 内，避免高层级边框越过相邻 Entity。Container 的 overflow 由 Clip 控制，
+ * 非 Container 恒为 hidden。两个消费方必须使用同一实现，保证编辑所见与预览输出一致。
  *
  * @public
  */
@@ -25,9 +25,6 @@ export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
   const hierarchy = getComposeHierarchy(entity)
   const clip = getComposeClip(entity)
   const shadows: string[] = []
-  if (visual.borderWidth > 0) {
-    shadows.push(`inset 0 0 0 ${visual.borderWidth}px ${visual.borderColor}`)
-  }
   if (visual.shadow) {
     shadows.push(
       `${visual.shadow.offsetX}px ${visual.shadow.offsetY}px ${visual.shadow.blur}px `
@@ -40,6 +37,7 @@ export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
     backgroundColor,
     borderRadius: visual.borderRadius,
     opacity: visual.opacity,
+    isolation: 'isolate',
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
     overflow: hierarchy
       ? (clip?.enabled ? 'hidden' : 'visible')

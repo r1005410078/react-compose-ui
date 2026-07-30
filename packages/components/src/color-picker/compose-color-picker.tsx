@@ -269,6 +269,9 @@ export function ComposeColorPicker({
   }
   const triggerStyle = transparent ? undefined : { backgroundColor: parsed.color }
   const planeStyle = { '--compose-color-picker-hue': String(parsed.hsv.hue) } as CSSProperties
+  const displayHex = parsed.color === 'transparent' ? '#000000' : parsed.color.slice(0, 7)
+  const rgbaChannels = [1, 3, 5].map((start) => Number.parseInt(displayHex.slice(start, start + 2), 16))
+  const rgbaText = `${rgbaChannels.join(', ')}, ${Math.round(parsed.alpha * 100)}%`
 
   const content = (
     <div className={`compose-color-picker__content${embedded ? ' compose-color-picker__content--embedded' : ''}`}>
@@ -293,13 +296,22 @@ export function ComposeColorPicker({
         </div>
         <div className="compose-color-picker__sliders">
           <input aria-label={messages.hue(label)} className="compose-color-picker__hue" max="359" min="0" type="range" value={parsed.hsv.hue} onChange={(event) => emit({ ...parsed.hsv, hue: Number(event.target.value) }, parsed.alpha)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />
-          <input aria-label={messages.alpha(label)} className="compose-color-picker__alpha" max="100" min="0" type="range" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />
+          {embedded ? <label className="compose-color-picker__alpha-row"><span>{messages.alpha(label).replace(label, '')}</span><span><input aria-label={messages.alpha(label)} className="compose-color-picker__alpha" max="100" min="0" type="range" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} /><output>{Math.round(parsed.alpha * 100)}%</output></span></label>
+            : <input aria-label={messages.alpha(label)} className="compose-color-picker__alpha" max="100" min="0" type="range" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />}
         </div>
       </div>
-      <div className="compose-color-picker__actions">
+      {embedded ? <div className="compose-color-picker__embedded-values">
+        <span aria-hidden="true" className="compose-color-picker__value-swatch" style={triggerStyle} />
+        <label>{messages.hex}<input aria-label={messages.hex} key={displayHex} defaultValue={displayHex.toUpperCase()} onBlur={(event) => {
+          const normalized = normalizeComposeColor(event.target.value)
+          if (normalized) emitColor(parsed.alpha < 1 ? composeColorFromHsv(parseComposeEditableColor(normalized).hsv, parsed.alpha) : normalized)
+        }} /></label>
+        <label>RGBA<input aria-label="RGBA" readOnly value={rgbaText} /></label>
         <button aria-label={messages.eyedropper} className="compose-color-picker__eyedropper" type="button" onClick={() => { void startEyedropper() }}>⌖</button>
-        {allowTransparent ? <button aria-pressed={transparent} className="compose-color-picker__transparent" type="button" onClick={() => emitColor('transparent')}><span aria-hidden="true" className="compose-color-picker__transparent-swatch" />{messages.transparent}</button> : null}
-      </div>
+      </div> : <div className="compose-color-picker__actions">
+          <button aria-label={messages.eyedropper} className="compose-color-picker__eyedropper" type="button" onClick={() => { void startEyedropper() }}>⌖</button>
+          {allowTransparent ? <button aria-pressed={transparent} className="compose-color-picker__transparent" type="button" onClick={() => emitColor('transparent')}><span aria-hidden="true" className="compose-color-picker__transparent-swatch" />{messages.transparent}</button> : null}
+        </div>}
       <ColorRow colors={recentColors} label={messages.recent} onSelect={emitColor} />
       <ColorRow colors={COMPOSE_COMMON_COLORS} label={messages.common} onSelect={emitColor} />
       <details className="compose-color-picker__exact">
@@ -322,7 +334,7 @@ export function ComposeColorPicker({
   if (embedded) return content
 
   return (
-    <PopoverPrimitive.Root modal="trap-focus" open={open} onOpenChange={handleOpenChange}>
+    <PopoverPrimitive.Root modal={false} open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger
         ref={triggerRef}
         aria-label={messages.select(label)}

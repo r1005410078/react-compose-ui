@@ -7,6 +7,7 @@
 export { createComposeEntityRegistry } from './registry'
 export {
   ComposeRegistryComponentInspector,
+  ComposeEntityBorderLayer,
   ComposeEntityPaintLayer,
   ComposePaintLayer,
   ComposeRegistryEntityRenderer,
@@ -14,7 +15,10 @@ export {
   composeEntitySceneStyle,
   composeEntityVisualStyle,
 } from './registry-renderers'
-export type { ComposePaintLayerProps } from './registry-renderers'
+export type {
+  ComposeEntityBorderLayerProps,
+  ComposePaintLayerProps,
+} from './registry-renderers'
 export {
   ComposeEntityRegistryError,
   type ComposeCapabilityAvailability,

@@ -14,12 +14,16 @@ export type { ComposeButtonProps } from './button'
 export {
   ComposeColorHistoryProvider,
   ComposeColorPicker,
+  ComposePaintImageLibraryProvider,
   ComposePaintPicker,
   useComposeColorHistory,
 } from './color-picker'
 export type {
   ComposeColorHistoryProviderProps,
   ComposeColorPickerProps,
+  ComposePaintImageLibrary,
+  ComposePaintImageLibraryProviderProps,
+  ComposePaintImageOption,
   ComposePaintPickerProps,
 } from './color-picker'
 export { ComposeConfirmDialog } from './confirm-dialog'
