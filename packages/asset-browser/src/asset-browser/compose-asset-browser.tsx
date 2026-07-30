@@ -194,7 +194,8 @@ export function ComposeAssetBrowser({
   const namePrompt = useAssetNamePrompt()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const contextMenu = useComposeContextMenu<string>()
+  // payload 为 null 表示在空白区域右键：此时没有命中条目，新建操作落在当前目录。
+  const contextMenu = useComposeContextMenu<string | null>()
   const [draggedIds, setDraggedIds] = useState<readonly string[]>([])
   const canvasDragRef = useRef<{
     lastPoint: { x: number; y: number }
@@ -702,7 +703,15 @@ export function ComposeAssetBrowser({
         </div>
       ) : null}
       <div className="asset-browser__body">
-        <aside className="asset-browser__tree-pane" style={{ width: sidebarWidth }}>
+        <aside
+          className="asset-browser__tree-pane"
+          style={{ width: sidebarWidth }}
+          onContextMenu={(event) => {
+            // 树行会 stopPropagation，因此这里只会收到文件树空白区域的右键。
+            event.preventDefault()
+            contextMenu.openAt(event, null)
+          }}
+        >
           {source.root ? (
             <ComposeTree
               adapter={assetTreeAdapter}
@@ -799,7 +808,15 @@ export function ComposeAssetBrowser({
             if (splitterRef.current?.pointerId === event.pointerId) splitterRef.current = null
           }}
         />
-        <main className="asset-browser__content">
+        <main
+          className="asset-browser__content"
+          onContextMenu={(event) => {
+            // 条目行与卡片都会 stopPropagation，因此这里只会收到空白区域的右键。
+            event.preventDefault()
+            suppressGridClickUntilRef.current = performance.now() + 400
+            contextMenu.openAt(event, null)
+          }}
+        >
           <div aria-label={folder?.name} className="asset-browser__grid" role="grid">
               {source.loading.has(folder?.id ?? '') ? (
                 <div role="row">

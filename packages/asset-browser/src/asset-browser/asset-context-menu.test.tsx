@@ -371,3 +371,68 @@ describe('OpenSpec: asset-browser / 资源 Canvas 拖拽意图', () => {
     expect(parseComposeAssetReferenceDragData('{"version":1,"items":[{"name":1}]}')).toEqual([])
   })
 })
+
+describe('OpenSpec: asset-browser / 空白区域右键菜单', () => {
+  /** 在目录网格的空白区域触发右键。 */
+  function openMenuOnBlankArea() {
+    const content = document.querySelector('.asset-browser__content')
+    if (!content) throw new Error('asset browser content area is missing')
+    fireEvent.contextMenu(content, { clientX: 200, clientY: 200 })
+    return screen.getByRole('menu')
+  }
+
+  it('目录网格空白区域可以打开菜单', async () => {
+    render(<ComposeAssetBrowser provider={createProvider()} />)
+    await getTreeRow(/logo\.svg/)
+
+    const menu = openMenuOnBlankArea()
+
+    expect(within(menu).getByRole('menuitem', { name: '新建文件' })).toBeEnabled()
+    expect(within(menu).getByRole('menuitem', { name: '新建目录' })).toBeEnabled()
+  })
+
+  it('空白区域右键时重命名与删除禁用', async () => {
+    render(<ComposeAssetBrowser provider={createProvider()} />)
+    // 先选中一个条目，验证空白右键不会把菜单指向该选择。
+    fireEvent.click(await getTreeRow(/logo\.svg/))
+
+    const menu = openMenuOnBlankArea()
+
+    expect(within(menu).getByRole('menuitem', { name: '重命名F2' }))
+      .toHaveAttribute('aria-disabled', 'true')
+    expect(within(menu).getByRole('menuitem', { name: '删除Delete' }))
+      .toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('宿主项在空白区域得到不含命中条目的上下文', async () => {
+    const onSelect = vi.fn()
+    render(
+      <ComposeAssetBrowser
+        contextMenuItems={[{ id: 'host.blank', label: '检查', onSelect }]}
+        provider={createProvider()}
+      />,
+    )
+    await getTreeRow(/logo\.svg/)
+
+    const menu = openMenuOnBlankArea()
+    fireEvent.click(within(menu).getByRole('menuitem', { name: '检查' }))
+
+    await waitFor(() => { expect(onSelect).toHaveBeenCalledTimes(1) })
+    const context = onSelect.mock.calls[0][0]
+    expect(context.entry).toBeUndefined()
+    // 新建仍落在当前目录：资源根表达为 null。
+    expect(context.parentId).toBeNull()
+  })
+
+  it('文件树空白区域同样可以打开菜单', async () => {
+    render(<ComposeAssetBrowser provider={createProvider()} />)
+    await getTreeRow(/logo\.svg/)
+
+    const pane = document.querySelector('.asset-browser__tree-pane')
+    if (!pane) throw new Error('tree pane is missing')
+    fireEvent.contextMenu(pane, { clientX: 40, clientY: 300 })
+
+    expect(within(screen.getByRole('menu')).getByRole('menuitem', { name: '新建文件' }))
+      .toBeEnabled()
+  })
+})

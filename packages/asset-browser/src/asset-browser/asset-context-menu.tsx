@@ -41,7 +41,7 @@ export function AssetContextMenu({
   onRename,
 }: {
   readonly capabilities: AssetContextMenuCapabilities
-  readonly contextMenu: ComposeContextMenuController<string>
+  readonly contextMenu: ComposeContextMenuController<string | null>
   /** 宿主项求值使用的上下文；无宿主项时可为 undefined。 */
   readonly hostContext?: ComposeAssetContextMenuContext
   readonly hostItems?: readonly ComposeAssetContextMenuItem[]
@@ -51,6 +51,8 @@ export function AssetContextMenu({
   readonly onDelete: () => void
   readonly onRename: () => void
 }) {
+  // 空白区域右键没有命中条目：新建仍落在当前目录，重命名与删除则没有明确目标。
+  const onBlankArea = contextMenu.payload === null
   const visibleHostItems = hostContext && hostItems
     ? hostItems.filter((item) => item.isVisible?.(hostContext) !== false)
     : []
@@ -66,11 +68,11 @@ export function AssetContextMenu({
           onClick={onCreateFolder}
         >{messages.newFolder}</ComposeContextMenuItem>
         <ComposeContextMenuItem
-          disabled={!capabilities.canRename}
+          disabled={onBlankArea || !capabilities.canRename}
           onClick={onRename}
         >{messages.rename}<ComposeContextMenuShortcut>F2</ComposeContextMenuShortcut></ComposeContextMenuItem>
         <ComposeContextMenuItem
-          disabled={!capabilities.canDelete}
+          disabled={onBlankArea || !capabilities.canDelete}
           variant="destructive"
           onClick={onDelete}
         >{messages.delete}<ComposeContextMenuShortcut>Delete</ComposeContextMenuShortcut></ComposeContextMenuItem>
