@@ -804,12 +804,22 @@
   opacity: .45;
 }
 
-/* 页面条目图标；与普通文件图标同尺寸但带内容行，强调它是一份文档。 */
+/* 页面条目图标：外框加内部组装块，表达「由组件组装成的一屏」。 */
 .compose-editor__page-entry-icon {
-  width: 15px;
-  height: 15px;
   color: var(--compose-accent);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.2;
+  stroke-width: 1.4;
+}
+
+/* 文件树行按行高取小尺寸。 */
+.compose-editor__page-entry-icon--tree {
+  width: 15px;
+  height: 15px;
+}
+
+/* 目录网格的缩略图区域为 88px，图标需要相应放大才看得清。 */
+.compose-editor__page-entry-icon--grid {
+  width: 48px;
+  height: 48px;
 }

@@ -174,6 +174,15 @@ export interface ComposeAssetBrowserProps
    * 宿主据此按数据结构（例如媒体类型）区分条目种类，而不是按文件名。
    */
   readonly renderEntryIcon?: (context: ComposeAssetEntryRenderContext) => ReactNode
+  /**
+   * 覆盖条目显示名称。
+   *
+   * @remarks
+   * 文件树行与目录网格块都会调用。返回 undefined 或 null 时使用条目原始名称。宿主据此按
+   * 数据结构决定展示名（例如页面隐藏其存储后缀），而资源浏览器仍以原始名称作为 title
+   * 与可读名的基础。
+   */
+  readonly renderEntryLabel?: (context: ComposeAssetEntryRenderContext) => ReactNode
   /** 追加到内建菜单项之后的宿主上下文菜单项。 */
   readonly contextMenuItems?: readonly ComposeAssetContextMenuItem[]
   /**

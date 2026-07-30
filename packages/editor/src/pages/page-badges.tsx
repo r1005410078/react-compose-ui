@@ -19,21 +19,41 @@ export function HomePageBadge({ label }: { readonly label: string }) {
  * 页面条目图标。
  *
  * @remarks
- * 与普通文件图标区分：页面是一份可编辑的文档，而不是任意资源。判定依据是 Provider 上报的
- * 媒体类型，因此重命名不会让它退回普通文件图标。
+ * 页面的语义是「由若干组件组装成的一屏」，因此用外框加内部若干组装块表达，而不是普通文档
+ * 图标。判定依据是 Provider 上报的媒体类型，因此重命名不会让它退回普通文件图标。
+ *
+ * `surface` 决定尺寸：目录网格的缩略图区域远大于文件树行，同一个 15px 图标在网格里会小到
+ * 看不清。
  * @internal
  */
-export function PageEntryIcon({ label }: { readonly label: string }) {
+export function PageEntryIcon({
+  label,
+  surface,
+}: {
+  readonly label: string
+  readonly surface: 'tree' | 'grid'
+}) {
   return (
     <svg
       aria-label={label}
-      className="compose-editor__page-entry-icon"
+      className={`compose-editor__page-entry-icon compose-editor__page-entry-icon--${surface}`}
       role="img"
-      viewBox="0 0 16 16"
+      viewBox="0 0 24 24"
     >
-      <path d="M3 1.75h7l3 3v9.5H3z" fill="none" stroke="currentColor" />
-      <path d="M10 1.75v3h3" fill="none" stroke="currentColor" />
-      <path d="M5 7.5h6M5 10h4" fill="none" stroke="currentColor" opacity=".75" />
+      {/* 外框：一屏的边界 */}
+      <rect
+        height="18"
+        rx="2.5"
+        stroke="currentColor"
+        width="18"
+        x="3"
+        y="3"
+        fill="none"
+      />
+      {/* 内部组装块：左上大块、右上小块、底部通栏 */}
+      <rect fill="currentColor" height="6" opacity=".9" rx="1" width="7" x="6" y="6" />
+      <rect fill="currentColor" height="6" opacity=".55" rx="1" width="5" x="14" y="6" />
+      <rect fill="currentColor" height="4" opacity=".75" rx="1" width="13" x="6" y="14" />
     </svg>
   )
 }

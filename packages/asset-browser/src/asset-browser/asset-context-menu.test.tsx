@@ -457,3 +457,33 @@ describe('OpenSpec: asset-browser / 条目图标插槽', () => {
     expect(screen.queryAllByTestId('icon-tree')).toHaveLength(1)
   })
 })
+
+describe('OpenSpec: asset-browser / 条目名称插槽', () => {
+  it('宿主可覆盖显示名，原始名称仍作为 title 保留', async () => {
+    render(
+      <ComposeAssetBrowser
+        provider={createProvider()}
+        renderEntryLabel={({ entry }) => entry.name.endsWith('.page.json')
+          ? entry.name.replace('.page.json', '')
+          : null}
+      />,
+    )
+    const pagesRow = await getTreeRow(/Pages/)
+    fireEvent.click(pagesRow)
+    fireEvent.keyDown(pagesRow, { key: 'ArrowRight' })
+
+    // 网格块显示覆盖后的名称，title 仍是原始名称，因此可读名与 title 分别取自两处。
+    const label = await waitFor(() => {
+      const found = document.querySelector('[title="Home.page.json"]')
+      if (!found) throw new Error('page entry label is missing')
+      return found
+    })
+    expect(label).toHaveTextContent('Home')
+    expect(label.textContent).not.toContain('.page.json')
+  })
+
+  it('返回空结果时使用条目原始名称', async () => {
+    render(<ComposeAssetBrowser provider={createProvider()} renderEntryLabel={() => null} />)
+    expect(await getTreeRow(/logo\.svg/)).toBeTruthy()
+  })
+})

@@ -3,7 +3,11 @@
  *
  * @packageDocumentation
  */
-import { COMPOSE_UI_CORE_PACKAGE, isComposePageMediaType } from '@compose-ui/core'
+import {
+  COMPOSE_UI_CORE_PACKAGE,
+  composePageDisplayName,
+  isComposePageMediaType,
+} from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import {
   ComposeDialog,
@@ -613,8 +617,19 @@ export function ComposeEditor({
    */
   const renderEntryIcon = useCallback((context: ComposeAssetEntryRenderContext) => {
     if (pages === undefined || !isComposePageMediaType(context.entry.mediaType)) return null
-    return <PageEntryIcon label={editorMessages.pages.pageEntry} />
+    return <PageEntryIcon label={editorMessages.pages.pageEntry} surface={context.surface} />
   }, [editorMessages.pages.pageEntry, pages])
+
+  /**
+   * 页面条目显示名。
+   *
+   * @remarks
+   * `.page.json` 是存储侧的命名约定，不该出现在界面上；条目的 title 与可读名仍用原始名称。
+   */
+  const renderEntryLabel = useCallback((context: ComposeAssetEntryRenderContext) => {
+    if (pages === undefined || !isComposePageMediaType(context.entry.mediaType)) return null
+    return composePageDisplayName(context.entry.name)
+  }, [pages])
 
   /** 首页标记；资源浏览器不认识页面，标记内容由这里提供。 */
   const renderEntryBadge = useCallback((context: ComposeAssetEntryRenderContext) => {
@@ -715,6 +730,7 @@ export function ComposeEditor({
                 contextMenuItems={hostContextMenuItems}
                 renderEntryBadge={assets.browser.renderEntryBadge ?? renderEntryBadge}
                 renderEntryIcon={assets.browser.renderEntryIcon ?? renderEntryIcon}
+                renderEntryLabel={assets.browser.renderEntryLabel ?? renderEntryLabel}
                 onAssetOpen={handleAssetOpen}
                 onBeforeAssetMutation={handleDefaultAssetMutation}
                 onCanvasDrag={handleAssetCanvasDrag}
@@ -753,6 +769,7 @@ export function ComposeEditor({
       hostContextMenuItems,
       renderEntryBadge,
       renderEntryIcon,
+      renderEntryLabel,
       resolvedAssetResolver,
       handleAssetCanvasDrag,
       registerDocumentSave,

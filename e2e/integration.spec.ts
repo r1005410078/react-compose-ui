@@ -1263,13 +1263,13 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 创建、编辑�
   await rootGrid.getByRole('gridcell', { name: /^Pages/ }).dblclick()
   const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
   await expect(pagesGrid).toBeVisible()
-  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
   const menu = page.getByRole('menu')
   await menu.getByRole('menuitem', { name: '创建页面' }).click()
   const nameDialog = page.getByRole('dialog')
   await nameDialog.getByLabel('名称').fill('Detail')
   await nameDialog.getByRole('button', { name: '创建' }).click()
-  await expect(pagesGrid.getByRole('gridcell', { name: /Detail.page.json/ })).toBeVisible()
+  await expect(pagesGrid.getByRole('gridcell', { name: 'Detail' })).toBeVisible()
 
   // 2) 创建后随即以页面标签打开
   const detailTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
@@ -1289,7 +1289,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 创建、编辑�
   await expect(detailTab).toHaveCount(0)
 
   // 5) 重开该页面时看到已持久化的实体
-  await pagesGrid.getByRole('gridcell', { name: /Detail.page.json/ }).dblclick()
+  await pagesGrid.getByRole('gridcell', { name: 'Detail' }).dblclick()
   await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
   const sceneTree = editor.locator('[data-workspace-panel="scene-graph"]')
   await expect(sceneTree).toContainText('Container')
@@ -1311,40 +1311,40 @@ test('OpenSpec: editor-workspace-layout / 首页标记 / 设为首页并在树�
   const pagesRow = tree.getByRole('row', { name: 'Pages' })
   await pagesRow.click()
   await pagesRow.press('ArrowRight')
-  await expect(tree.getByRole('row', { name: /Home.page.json/ })).toBeVisible()
+  await expect(tree.getByRole('row', { name: 'Home' })).toBeVisible()
 
   // 初始没有首页
   await expect(assets.getByRole('img', { name: '首页' })).toHaveCount(0)
 
-  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: '设为首页' }).click()
 
   // 树行与网格块双处渲染标记
-  await expect(tree.getByRole('row', { name: /Home.page.json/ })
+  await expect(tree.getByRole('row', { name: 'Home' })
     .getByRole('img', { name: '首页' })).toBeVisible()
-  await expect(pagesGrid.getByRole('gridcell', { name: /Home.page.json/ })
+  await expect(pagesGrid.getByRole('gridcell', { name: 'Home' })
     .getByRole('img', { name: '首页' })).toBeVisible()
 
   // 已是首页时该项禁用
-  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
   await expect(page.getByRole('menu').getByRole('menuitem', { name: '设为首页' }))
     .toHaveAttribute('aria-disabled', 'true')
   await page.keyboard.press('Escape')
 
   // 第二个页面接管首页标记
-  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: '创建页面' }).click()
   const nameDialog = page.getByRole('dialog')
   await nameDialog.getByLabel('名称').fill('Second')
   await nameDialog.getByRole('button', { name: '创建' }).click()
-  await expect(pagesGrid.getByRole('gridcell', { name: /Second.page.json/ })).toBeVisible()
+  await expect(pagesGrid.getByRole('gridcell', { name: 'Second' })).toBeVisible()
 
-  await pagesGrid.getByRole('gridcell', { name: /Second.page.json/ }).click({ button: 'right' })
+  await pagesGrid.getByRole('gridcell', { name: 'Second' }).click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: '设为首页' }).click()
 
-  await expect(pagesGrid.getByRole('gridcell', { name: /Second.page.json/ })
+  await expect(pagesGrid.getByRole('gridcell', { name: 'Second' })
     .getByRole('img', { name: '首页' })).toBeVisible()
-  await expect(pagesGrid.getByRole('gridcell', { name: /Home.page.json/ })
+  await expect(pagesGrid.getByRole('gridcell', { name: 'Home' })
     .getByRole('img', { name: '首页' })).toHaveCount(0)
 })
 
@@ -1359,7 +1359,7 @@ test('OpenSpec: editor-workspace-layout / 只读页面 JSON / Monaco 只读且�
   const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
   await expect(pagesGrid).toBeVisible()
 
-  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: '打开组件 JSON 配置' }).click()
 
   const jsonDocument = editor.locator('[data-workspace-panel="asset-document"][data-readonly="true"]')
@@ -1392,7 +1392,7 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
   await assets.getByRole('grid', { name: 'Demo Assets' })
     .getByRole('gridcell', { name: /^Pages/ }).dblclick()
   const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
-  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).dblclick()
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).dblclick()
   await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
   await editor.getByRole('button', { name: '创建容器' }).click()
   const homeTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
@@ -1430,7 +1430,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板与�
   await assets.getByRole('grid', { name: 'Demo Assets' })
     .getByRole('gridcell', { name: /^Pages/ }).dblclick()
   await assets.getByRole('grid', { name: 'Pages' })
-    .getByRole('gridcell', { name: /Home.page.json/ }).dblclick()
+    .getByRole('gridcell', { name: 'Home' }).dblclick()
 
   const pagePanel = editor.locator('[data-workspace-panel="page-document"]')
   await expect(pagePanel).toBeVisible()
@@ -1455,7 +1455,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 切换其他面�
   await assets.getByRole('grid', { name: 'Demo Assets' })
     .getByRole('gridcell', { name: /^Pages/ }).dblclick()
   await assets.getByRole('grid', { name: 'Pages' })
-    .getByRole('gridcell', { name: /Home.page.json/ }).dblclick()
+    .getByRole('gridcell', { name: 'Home' }).dblclick()
 
   const pagePanel = editor.locator('[data-workspace-panel="page-document"]')
   await expect(pagePanel.locator('.compose-stage')).toHaveCount(1)
@@ -1482,7 +1482,7 @@ test('OpenSpec: editor-workspace-layout / 页面保存 / 快捷键与按钮可�
   await assets.getByRole('grid', { name: 'Demo Assets' })
     .getByRole('gridcell', { name: /^Pages/ }).dblclick()
   await assets.getByRole('grid', { name: 'Pages' })
-    .getByRole('gridcell', { name: /Home.page.json/ }).dblclick()
+    .getByRole('gridcell', { name: 'Home' }).dblclick()
 
   const tab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
   const dirty = tab.getByRole('img', { name: '有未保存改动' })

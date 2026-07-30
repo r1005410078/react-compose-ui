@@ -165,6 +165,7 @@ export function ComposeAssetBrowser({
   canDragEntryToCanvas,
   contextMenuItems,
   renderEntryIcon,
+  renderEntryLabel,
   renderEntryBadge,
   allowLocalDirectory = true,
   emptyState,
@@ -270,6 +271,12 @@ export function ComposeAssetBrowser({
     const unique = [...new Set(ids.filter(Boolean))]
     source.invalidate(unique)
   }, [source])
+
+  /** 渲染条目显示名；宿主未覆盖或返回空结果时使用原始名称。 */
+  const renderLabelFor = (context: ComposeAssetEntryRenderContext) => {
+    const label = renderEntryLabel?.(context)
+    return label === undefined || label === null ? context.entry.name : label
+  }
 
   /** 渲染条目主图标；宿主未覆盖或返回空结果时回退到内建目录/文件图标。 */
   const renderIconFor = (context: ComposeAssetEntryRenderContext) => {
@@ -738,7 +745,12 @@ export function ComposeAssetBrowser({
               })}
               renderLabel={(context) => (
                 <>
-                  {context.item.name}
+                  {renderLabelFor({
+                    entry: context.item,
+                    surface: 'tree',
+                    selected: context.selected,
+                    expanded: context.expanded,
+                  })}
                   {renderBadge({
                     entry: context.item,
                     surface: 'tree',
@@ -901,7 +913,12 @@ export function ComposeAssetBrowser({
                     provider={provider}
                   />
                   <span title={entry.name}>
-                    {entry.name}
+                    {renderLabelFor({
+                      entry,
+                      surface: 'grid',
+                      selected: selectedIds.includes(entry.id),
+                      expanded: false,
+                    })}
                     {renderBadge({
                       entry,
                       surface: 'grid',
