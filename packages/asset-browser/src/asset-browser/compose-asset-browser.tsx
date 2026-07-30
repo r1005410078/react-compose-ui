@@ -527,12 +527,12 @@ export function ComposeAssetBrowser({
       || entry.kind !== 'file'
       || !entry.assetKey
     ) return null
-    // 宿主判定优先；未提供时保持仅受支持图片可拖的内建白名单。
-    const mediaType = canDragEntryToCanvas === undefined
-      ? canvasImageMediaType(entry)
-      : canDragEntryToCanvas(entry)
+    // 宿主判定只放宽内建白名单，不替换它：否则宿主一旦只接受某种领域文件，受支持图片就
+    // 再也拖不进画布。
+    const mediaType = canvasImageMediaType(entry)
+      ?? (canDragEntryToCanvas?.(entry) === true
         ? entry.mediaType ?? 'application/octet-stream'
-        : undefined
+        : undefined)
     if (!mediaType) return null
     return {
       reference: {

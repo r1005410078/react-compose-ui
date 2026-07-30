@@ -173,12 +173,13 @@ export interface ComposeAssetBrowserProps
   /** 兼容图片向 Canvas 拖入时发出的普通数据事件。 */
   readonly onCanvasDrag?: (event: ComposeAssetCanvasDragEvent) => void
   /**
-   * 放宽或收紧「可拖入 Canvas」的内建图片白名单。
+   * 放宽「可拖入 Canvas」的内建图片白名单。
    *
    * @remarks
+   * 只做放宽，不替换：内建白名单已接受的受支持图片始终可拖，该回调只用于额外接受别的条目。
    * 仅对已满足 `provider.capabilities.reference`、`provider.resolveAsset`、`kind === 'file'`
-   * 且存在 `assetKey` 的条目调用。返回 true 时媒体类型取 `entry.mediaType`，缺失时按
-   * `application/octet-stream` 处理。省略该回调时保持仅受支持图片可拖。
+   * 且存在 `assetKey`、且不在内建白名单内的条目调用。返回 true 时媒体类型取
+   * `entry.mediaType`，缺失时按 `application/octet-stream` 处理。
    */
   readonly canDragEntryToCanvas?: (entry: ComposeAssetEntry) => boolean
   /**

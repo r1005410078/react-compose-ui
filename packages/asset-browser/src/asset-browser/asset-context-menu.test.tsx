@@ -27,6 +27,15 @@ const home: ComposeAssetEntry = {
   revision: '1',
   assetKey: 'Pages/Home.page.json',
 }
+const script: ComposeAssetEntry = {
+  id: 'script',
+  parentId: 'root',
+  name: 'dashboard.ts',
+  kind: 'file',
+  mediaType: 'text/typescript',
+  revision: '1',
+  assetKey: 'script-key',
+}
 const logo: ComposeAssetEntry = {
   id: 'logo',
   parentId: 'root',
@@ -51,7 +60,7 @@ function createProvider(overrides: Partial<ComposeAssetProvider> = {}): ComposeA
       write: true,
     },
     list: vi.fn(async ({ folderId }) => {
-      if (folderId === 'root') return [pages, logo]
+      if (folderId === 'root') return [pages, logo, script]
       if (folderId === 'pages') return [home]
       return []
     }),
@@ -326,7 +335,7 @@ describe('OpenSpec: asset-browser / 资源 Canvas 拖拽意图', () => {
     }))
   })
 
-  it('未被宿主接受的文件仍被排除', async () => {
+  it('宿主判定只放宽白名单：内建接受的图片始终可拖', async () => {
     const onCanvasDrag = vi.fn()
     render(
       <ComposeAssetBrowser
@@ -339,6 +348,27 @@ describe('OpenSpec: asset-browser / 资源 Canvas 拖拽意图', () => {
     fireEvent.click(logoRow)
 
     startDragOnTreeRow(logoRow)
+
+    // 宿主只接受页面，但 SVG 属于内建白名单，不能因此被排除。
+    expect(onCanvasDrag).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'start',
+      items: [expect.objectContaining({ name: 'logo.svg' })],
+    }))
+  })
+
+  it('既不在内建白名单又未被宿主接受的文件被排除', async () => {
+    const onCanvasDrag = vi.fn()
+    render(
+      <ComposeAssetBrowser
+        canDragEntryToCanvas={(entry) => entry.name.endsWith('.page.json')}
+        provider={referenceCapableProvider()}
+        onCanvasDrag={onCanvasDrag}
+      />,
+    )
+    const scriptRow = await getTreeRow(/dashboard\.ts/)
+    fireEvent.click(scriptRow)
+
+    startDragOnTreeRow(scriptRow)
 
     expect(onCanvasDrag).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'start' }))
   })
