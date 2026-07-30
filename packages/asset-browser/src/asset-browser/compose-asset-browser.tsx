@@ -164,6 +164,7 @@ export function ComposeAssetBrowser({
   onCanvasDrag,
   canDragEntryToCanvas,
   contextMenuItems,
+  renderEntryIcon,
   renderEntryBadge,
   allowLocalDirectory = true,
   emptyState,
@@ -269,6 +270,13 @@ export function ComposeAssetBrowser({
     const unique = [...new Set(ids.filter(Boolean))]
     source.invalidate(unique)
   }, [source])
+
+  /** 渲染条目主图标；宿主未覆盖或返回空结果时回退到内建目录/文件图标。 */
+  const renderIconFor = (context: ComposeAssetEntryRenderContext) => {
+    const icon = renderEntryIcon?.(context)
+    if (icon !== undefined && icon !== null) return icon
+    return context.entry.kind === 'folder' ? <FolderIcon /> : <FileIcon />
+  }
 
   /**
    * 渲染宿主标记。
@@ -722,7 +730,12 @@ export function ComposeAssetBrowser({
               items={[source.root]}
               selectionMode="multiple"
               selectedIds={selectedIds}
-              renderIcon={(context) => context.item.kind === 'folder' ? <FolderIcon /> : <FileIcon />}
+              renderIcon={(context) => renderIconFor({
+                entry: context.item,
+                surface: 'tree',
+                selected: context.selected,
+                expanded: context.expanded,
+              })}
               renderLabel={(context) => (
                 <>
                   {context.item.name}
@@ -877,7 +890,16 @@ export function ComposeAssetBrowser({
                     contextMenu.openAt(event, entry.id)
                   }}
                 >
-                  <AssetThumbnail entry={entry} provider={provider} />
+                  <AssetThumbnail
+                    entry={entry}
+                    fallback={renderEntryIcon?.({
+                      entry,
+                      surface: 'grid',
+                      selected: selectedIds.includes(entry.id),
+                      expanded: false,
+                    })}
+                    provider={provider}
+                  />
                   <span title={entry.name}>
                     {entry.name}
                     {renderBadge({

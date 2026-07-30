@@ -2,7 +2,7 @@ import { createDefaultCanvasSettings } from '../canvas-settings'
 import type { ComposeDocument, DocumentValidationIssue } from '../document-types'
 import { validateComposeDocument } from '../document'
 import { createDefaultOutputSettings } from '../output-settings'
-import { COMPOSE_PAGE_FILE_SUFFIX } from './page-types'
+import { COMPOSE_PAGE_FILE_SUFFIX, COMPOSE_PAGE_MEDIA_TYPE } from './page-types'
 
 /** 页面文档解析的判别结果。 @public */
 export type ComposePageParseResult =
@@ -10,11 +10,27 @@ export type ComposePageParseResult =
   | { readonly ok: false; readonly issues: readonly DocumentValidationIssue[] }
 
 /**
- * 判断资源名称是否为页面文件。
+ * 判断媒体类型是否为页面。
  *
  * @remarks
- * 只看名称后缀，因此无需读取文件内容即可在资源树上分流。纯后缀（名称恰好等于后缀）不算页面，
- * 否则会产生显示名为空的页面。
+ * 这是页面身份的唯一判据：文件名由用户随时可改，把 `Home.page.json` 改成 `Home.json`
+ * 不应让它不再是页面。媒体类型由 Asset Provider 上报，属于数据结构而不是命名约定。
+ *
+ * Provider 有责任为页面文件上报该媒体类型；把存储侧的命名约定翻译成协议元数据是适配层的
+ * 职责，消费方一律只看这里的判定结果。
+ * @public
+ */
+export function isComposePageMediaType(mediaType: string | undefined): boolean {
+  return mediaType?.toLowerCase() === COMPOSE_PAGE_MEDIA_TYPE
+}
+
+/**
+ * 判断名称是否符合页面文件的命名约定。
+ *
+ * @remarks
+ * 仅供**创建与规范化名称**使用，以及供 Provider 把存储命名翻译成媒体类型。
+ * 判断一个条目是否为页面必须用 {@link isComposePageMediaType}，不要用名称。
+ * 纯后缀（名称恰好等于后缀）不算页面，否则会产生显示名为空的页面。
  * @public
  */
 export function isComposePageFileName(name: string): boolean {

@@ -56,14 +56,28 @@ export function isFileSystemAssetProviderSupported() {
  * @throws `ComposeAssetError` 当浏览器不支持或用户拒绝权限。
  * @public
  */
-export async function openFileSystemAssetProvider(): Promise<ComposeAssetProvider> {
+/** File System Access 适配器的可选行为。 @public */
+export interface FileSystemAssetProviderOptions {
+  /**
+   * 由文件名与浏览器推断的类型决定上报的媒体类型。
+   *
+   * @remarks
+   * 需要在真实文件系统上支持页面等领域类型时必须提供：浏览器对 `.page.json` 只会报
+   * `application/json`。省略时直接沿用浏览器推断结果。
+   */
+  readonly resolveMediaType?: (name: string, fileType: string) => string | undefined
+}
+
+export async function openFileSystemAssetProvider(
+  options: FileSystemAssetProviderOptions = {},
+): Promise<ComposeAssetProvider> {
   if (!isFileSystemAssetProviderSupported()) {
     throw new ComposeAssetError('unsupported', 'File System Access API is not supported')
   }
   try {
     const directory = await (window as unknown as WindowWithDirectoryPicker)
       .showDirectoryPicker({ mode: 'readwrite' })
-    return createFileSystemAssetProvider(directory)
+    return createFileSystemAssetProvider(directory, options)
   } catch (error) {
     throw normalizeComposeAssetError(error)
   }
@@ -79,7 +93,17 @@ export async function openFileSystemAssetProvider(): Promise<ComposeAssetProvide
  */
 export function createFileSystemAssetProvider(
   directoryHandle: FileSystemDirectoryHandle,
+  options: FileSystemAssetProviderOptions = {},
 ): ComposeAssetProvider {
+  /**
+   * 把存储侧的命名约定翻译成协议媒体类型。
+   *
+   * @remarks
+   * 浏览器只按扩展名推断 `File.type`，对 `.json` 一律报 `application/json`，无法表达
+   * 「这是一个页面」这类领域媒体类型。而本包不得依赖 `core`，因此该映射由宿主注入。
+   */
+  const resolveMediaType = options.resolveMediaType
+    ?? ((_name: string, fileType: string) => fileType || undefined)
   const providerId = `filesystem:${directoryHandle.name}`
   const rootId = `${providerId}:/`
   const handles = new Map<string, StoredHandle>([
@@ -142,7 +166,7 @@ export function createFileSystemAssetProvider(
       parentId,
       name: handle.name,
       kind: 'file',
-      mediaType: file.type || undefined,
+      mediaType: resolveMediaType(handle.name, file.type),
       size: file.size,
       modifiedAt: file.lastModified,
       revision: revisionOf(file),
@@ -202,7 +226,7 @@ export function createFileSystemAssetProvider(
         return {
           blob: file,
           revision: revisionOf(file),
-          mediaType: file.type || 'application/octet-stream',
+          mediaType: resolveMediaType(handle.name, file.type) ?? 'application/octet-stream',
         }
       } catch (error) {
         throw normalizeComposeAssetError(error)

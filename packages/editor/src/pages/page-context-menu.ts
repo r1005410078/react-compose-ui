@@ -1,6 +1,6 @@
 import type { ComposeAssetContextMenuItem } from '@compose-ui/asset-browser'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
-import { composePageFileName, isComposePageFileName } from '@compose-ui/core'
+import { composePageFileName, isComposePageMediaType } from '@compose-ui/core'
 import type { ComposePageDescriptor, ComposePageStore } from '@compose-ui/pages'
 import type { EditorMessages } from '../editor-i18n'
 
@@ -77,7 +77,7 @@ export function createPageContextMenuItems({
       label: messages.pages.setAsHomePage,
       // 只对页面文件出现：资源浏览器不认识页面，可见性判定只能在这里做。
       isVisible: (context) => context.entry !== undefined
-        && isComposePageFileName(context.entry.name),
+        && isComposePageMediaType(context.entry.mediaType),
       isDisabled: (context) => !store.canWriteManifest()
         || context.entry?.assetKey === undefined
         || context.entry.assetKey === homePageKey,
@@ -92,7 +92,7 @@ export function createPageContextMenuItems({
       id: PAGE_CONTEXT_MENU_ITEM_IDS.openJson,
       label: messages.pages.openJsonConfig,
       isVisible: (context) => context.entry !== undefined
-        && isComposePageFileName(context.entry.name),
+        && isComposePageMediaType(context.entry.mediaType),
       isDisabled: (context) => context.entry?.assetKey === undefined,
       onSelect: (context) => {
         if (context.entry) onOpenPageJson(context.entry)
@@ -101,7 +101,7 @@ export function createPageContextMenuItems({
   ]
 }
 
-/** 判断资源条目是否为页面文件。 @internal */
-export function isPageEntry(name: string) {
-  return isComposePageFileName(name)
+/** 判断资源条目是否为页面。 @internal */
+export function isPageEntry(entry: { readonly mediaType?: string }) {
+  return isComposePageMediaType(entry.mediaType)
 }

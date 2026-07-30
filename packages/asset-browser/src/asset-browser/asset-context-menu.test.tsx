@@ -436,3 +436,24 @@ describe('OpenSpec: asset-browser / 空白区域右键菜单', () => {
       .toBeEnabled()
   })
 })
+
+describe('OpenSpec: asset-browser / 条目图标插槽', () => {
+  it('宿主图标在文件树与目录网格双处生效，返回空结果时回退内建图标', async () => {
+    render(
+      <ComposeAssetBrowser
+        provider={createProvider()}
+        renderEntryIcon={({ entry, surface }) => entry.mediaType === 'application/json'
+          ? <span data-testid={`icon-${surface}`}>P</span>
+          : null}
+      />,
+    )
+    const pagesRow = await getTreeRow(/Pages/)
+    fireEvent.click(pagesRow)
+    fireEvent.keyDown(pagesRow, { key: 'ArrowRight' })
+
+    await waitFor(() => { expect(screen.getByTestId('icon-tree')).toBeInTheDocument() })
+    expect(screen.getByTestId('icon-grid')).toBeInTheDocument()
+    // 非页面条目回退到内建图标，不渲染宿主图标。
+    expect(screen.queryAllByTestId('icon-tree')).toHaveLength(1)
+  })
+})

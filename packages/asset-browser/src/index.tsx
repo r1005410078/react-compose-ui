@@ -31,6 +31,7 @@ export type {
   ComposeAssetPreviewHandle,
   ComposeAssetPreviewProps,
 } from './asset-preview'
+export type { FileSystemAssetProviderOptions as ComposeFileSystemAssetProviderOptions } from './file-system-provider'
 export {
   createFileSystemAssetProvider as createComposeFileSystemAssetProvider,
   isFileSystemAssetProviderSupported as isComposeFileSystemAssetProviderSupported,

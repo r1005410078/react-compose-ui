@@ -1,6 +1,6 @@
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import { ComposeAssetError, normalizeComposeAssetError } from '@compose-ui/assets'
-import { composePageDisplayName, isComposePageFileName } from '@compose-ui/core'
+import { composePageDisplayName, isComposePageMediaType } from '@compose-ui/core'
 
 /** 目录中一个页面的稳定描述。 @public */
 export interface ComposePageDescriptor {
@@ -65,7 +65,8 @@ export async function listComposePageDescriptors(input: {
         pending.push(entry.id)
         return
       }
-      if (!isComposePageFileName(entry.name) || !entry.assetKey) return
+      // 身份判据是 Provider 上报的媒体类型，不是文件名。
+      if (!isComposePageMediaType(entry.mediaType) || !entry.assetKey) return
       descriptors.push({
         pageKey: entry.assetKey,
         entryId: entry.id,

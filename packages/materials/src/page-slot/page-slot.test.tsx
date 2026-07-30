@@ -186,12 +186,14 @@ describe('OpenSpec: basic-materials / 页面拖入画布创建 Page Slot', () =>
     return found
   }
 
-  it('按媒体类型或名称后缀接受页面文件，拒绝其他文件', () => {
+  it('只按媒体类型接受页面，与文件名无关', () => {
     const accepts = preset().assetDrop?.accepts
     expect(accepts).toBeDefined()
     expect(accepts?.({ mediaType: COMPOSE_PAGE_MEDIA_TYPE, name: 'Home.page.json' })).toBe(true)
-    // Provider 未上报媒体类型时回退到名称后缀。
-    expect(accepts?.({ mediaType: 'application/json', name: 'Home.page.json' })).toBe(true)
+    // 文件名带后缀但媒体类型不是页面：拒绝。身份判据只有媒体类型。
+    expect(accepts?.({ mediaType: 'application/json', name: 'Home.page.json' })).toBe(false)
+    // 反之，媒体类型是页面而文件名不带后缀：接受。
+    expect(accepts?.({ mediaType: COMPOSE_PAGE_MEDIA_TYPE, name: 'Home.json' })).toBe(true)
     expect(accepts?.({ mediaType: 'image/svg+xml', name: 'logo.svg' })).toBe(false)
   })
 

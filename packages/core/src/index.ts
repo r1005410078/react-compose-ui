@@ -128,6 +128,7 @@ export {
   createEmptyComposeAppManifest,
   createEmptyComposePageDocument,
   isComposePageFileName,
+  isComposePageMediaType,
   parseComposeAppManifest,
   parseComposePageDocument,
   readComposePageReference,

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { COMPOSE_PAGE_MEDIA_TYPE } from './page-types'
 import {
   composePageDisplayName,
   composePageFileName,
   createEmptyComposePageDocument,
   isComposePageFileName,
+  isComposePageMediaType,
   parseComposePageDocument,
   serializeComposePageDocument,
 } from './page-file'
@@ -13,6 +15,17 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     expect(isComposePageFileName('Home.page.json')).toBe(true)
     expect(composePageDisplayName('Home.page.json')).toBe('Home')
     expect(composePageFileName('Home')).toBe('Home.page.json')
+  })
+
+  it('页面身份只由媒体类型决定，与文件名无关', () => {
+    expect(isComposePageMediaType(COMPOSE_PAGE_MEDIA_TYPE)).toBe(true)
+    // 大小写不敏感：媒体类型的比较按小写进行。
+    expect(isComposePageMediaType(COMPOSE_PAGE_MEDIA_TYPE.toUpperCase())).toBe(true)
+    expect(isComposePageMediaType('application/json')).toBe(false)
+    expect(isComposePageMediaType(undefined)).toBe(false)
+    // 名称助手只服务于创建与规范化，不表达身份。
+    expect(isComposePageFileName('Home.page.json')).toBe(true)
+    expect(isComposePageMediaType('application/json')).toBe(false)
   })
 
   it('把已带后缀的输入视为同一文件名，并裁剪空白', () => {

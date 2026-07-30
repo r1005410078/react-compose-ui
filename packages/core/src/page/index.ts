@@ -15,6 +15,7 @@ export {
   composePageFileName,
   createEmptyComposePageDocument,
   isComposePageFileName,
+  isComposePageMediaType,
   parseComposePageDocument,
   serializeComposePageDocument,
 } from './page-file'

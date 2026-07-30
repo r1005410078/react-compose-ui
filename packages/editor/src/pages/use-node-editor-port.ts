@@ -3,7 +3,7 @@ import {
   parseComposeAssetReferenceDragData,
 } from '@compose-ui/asset-browser'
 import type { ComposeNodeEditPort } from '@compose-ui/component-registry'
-import { isComposePageFileName, readComposePageReference } from '@compose-ui/core'
+import { isComposePageMediaType, readComposePageReference } from '@compose-ui/core'
 import type { ComposePageCatalog, ComposePageDescriptor } from '@compose-ui/pages'
 import { useMemo } from 'react'
 
@@ -61,7 +61,7 @@ export function useNodeEditorPort({
         const referenceText = data[COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE]
         if (referenceText !== undefined) {
           const item = parseComposeAssetReferenceDragData(referenceText)
-            .find((candidate) => isComposePageFileName(candidate.name)
+            .find((candidate) => isComposePageMediaType(candidate.mediaType)
               && candidate.reference.providerId === providerId)
           const descriptor = item ? byKey.get(item.reference.assetKey) : undefined
           if (descriptor) return candidateOf(descriptor)

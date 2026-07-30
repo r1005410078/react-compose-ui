@@ -803,3 +803,13 @@
   cursor: not-allowed;
   opacity: .45;
 }
+
+/* 页面条目图标；与普通文件图标同尺寸但带内容行，强调它是一份文档。 */
+.compose-editor__page-entry-icon {
+  width: 15px;
+  height: 15px;
+  color: var(--compose-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+}

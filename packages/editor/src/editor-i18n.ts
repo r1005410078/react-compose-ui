@@ -92,6 +92,7 @@ const messages = {
       readOnlySuffix: '（只读）',
       homePageMissing: '首页指向的页面不存在',
       savePage: '保存页面',
+      pageEntry: '页面',
     },
     canvasSettings: {
       label: '画布网格与吸附设置',
@@ -208,6 +209,7 @@ const messages = {
       readOnlySuffix: ' (read-only)',
       homePageMissing: 'The home page no longer exists',
       savePage: 'Save page',
+      pageEntry: 'Page',
     },
     canvasSettings: {
       label: 'Canvas grid and snapping settings',
@@ -383,6 +385,7 @@ export function getEditorMessages(
       readOnlySuffix: format('pages.readOnlySuffix', current.pages.readOnlySuffix),
       homePageMissing: format('pages.homePageMissing', current.pages.homePageMissing),
       savePage: format('pages.savePage', current.pages.savePage),
+      pageEntry: format('pages.pageEntry', current.pages.pageEntry),
     },
     canvasSettings: {
       label: format('canvasSettings.label', current.canvasSettings.label),

@@ -3,7 +3,7 @@
  *
  * @packageDocumentation
  */
-import { COMPOSE_UI_CORE_PACKAGE, isComposePageFileName } from '@compose-ui/core'
+import { COMPOSE_UI_CORE_PACKAGE, isComposePageMediaType } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import {
   ComposeDialog,
@@ -83,7 +83,7 @@ import {
 } from '../workspace-layout'
 import type { ComposePageDescriptor } from '@compose-ui/pages'
 import { getEditorMessages } from '../editor-i18n'
-import { createPageContextMenuItems, HomePageBadge } from '../pages'
+import { createPageContextMenuItems, HomePageBadge, PageEntryIcon } from '../pages'
 import { usePageWorkspace } from '../pages'
 import type { ComposeEditorPagesConfig } from '../pages'
 import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-layout'
@@ -521,7 +521,7 @@ export function ComposeEditor({
   const handleAssetOpen = useCallback((entry: ComposeAssetEntry) => {
     assets?.browser?.onAssetOpen?.(entry)
     // 页面文件走页面标签；其余文件仍走既有的资源文档标签。
-    if (pages !== undefined && entry.kind === 'file' && isComposePageFileName(entry.name)) {
+    if (pages !== undefined && entry.kind === 'file' && isComposePageMediaType(entry.mediaType)) {
       void openPageDocument(entry)
       return
     }
@@ -604,9 +604,17 @@ export function ComposeEditor({
    * 这是拖拽写出稳定引用载荷的前提；属性面板的 node 字段据此接收页面。
    */
   const canDragPageToCanvas = useCallback(
-    (entry: ComposeAssetEntry) => pages !== undefined && isComposePageFileName(entry.name),
+    (entry: ComposeAssetEntry) => pages !== undefined && isComposePageMediaType(entry.mediaType),
     [pages],
   )
+
+  /**
+   * 页面条目图标；资源浏览器不认识页面，图标由这里按媒体类型提供。
+   */
+  const renderEntryIcon = useCallback((context: ComposeAssetEntryRenderContext) => {
+    if (pages === undefined || !isComposePageMediaType(context.entry.mediaType)) return null
+    return <PageEntryIcon label={editorMessages.pages.pageEntry} />
+  }, [editorMessages.pages.pageEntry, pages])
 
   /** 首页标记；资源浏览器不认识页面，标记内容由这里提供。 */
   const renderEntryBadge = useCallback((context: ComposeAssetEntryRenderContext) => {
@@ -706,6 +714,7 @@ export function ComposeEditor({
                 }
                 contextMenuItems={hostContextMenuItems}
                 renderEntryBadge={assets.browser.renderEntryBadge ?? renderEntryBadge}
+                renderEntryIcon={assets.browser.renderEntryIcon ?? renderEntryIcon}
                 onAssetOpen={handleAssetOpen}
                 onBeforeAssetMutation={handleDefaultAssetMutation}
                 onCanvasDrag={handleAssetCanvasDrag}
@@ -743,6 +752,7 @@ export function ComposeEditor({
       canDragPageToCanvas,
       hostContextMenuItems,
       renderEntryBadge,
+      renderEntryIcon,
       resolvedAssetResolver,
       handleAssetCanvasDrag,
       registerDocumentSave,

@@ -2,10 +2,18 @@
 
 ### Requirement: 页面文件约定
 
-页面 MUST 以一份未经扩展的 `ComposeDocument v5` 持久化为名称以 `.page.json` 结尾的资源文件，
-`ComposeDocument.schemaVersion` MUST 保持 5。`core` MUST 导出页面文件后缀常量、页面媒体类型
-常量、文件名与显示名的双向转换，以及页面文档的解析与序列化。解析 MUST 拒绝非 v5 或结构不合法的
-内容并返回可判别的 issue，MUST NOT 抛出未归一化的异常。
+页面 MUST 以一份未经扩展的 `ComposeDocument v5` 持久化为资源文件，`ComposeDocument.schemaVersion`
+MUST 保持 5。页面身份 MUST 由 Asset Provider 上报的页面媒体类型判定，MUST NOT 由文件名判定 ——
+文件名由用户随时可改，重命名不应改变一个条目是否为页面。`core` MUST 导出该媒体类型判定、
+页面文件命名约定助手（仅供创建与规范化名称，以及供 Provider 把存储命名翻译成媒体类型）、
+文件名与显示名的双向转换，以及页面文档的解析与序列化。解析 MUST 拒绝非 v5 或结构不合法的内容
+并返回可判别的 issue，MUST NOT 抛出未归一化的异常。
+
+#### Scenario: 身份只由媒体类型决定
+
+- **WHEN** 条目的媒体类型为页面媒体类型
+- **THEN** 判定为页面，无论其文件名是否带页面后缀
+- **AND** 媒体类型不是页面时判定为非页面，即使文件名带页面后缀
 
 #### Scenario: 识别页面文件并取显示名
 

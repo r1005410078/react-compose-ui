@@ -4,6 +4,7 @@ import type {
   ComposeAssetProvider,
 } from '@compose-ui/assets'
 import { ComposeAssetError } from '@compose-ui/assets'
+import { COMPOSE_PAGE_MEDIA_TYPE, isComposePageFileName } from '@compose-ui/core'
 
 /** 测试用 Provider 的可观测调用计数。 @internal */
 export interface FakeProviderCalls {
@@ -77,14 +78,19 @@ export function createFakeAssetProvider(input?: {
     return index === -1 ? ROOT_ID : path.slice(0, index)
   }
 
-  const fileEntry = (path: string): ComposeAssetEntry => ({
-    id: path,
-    parentId: parentOf(path),
-    name: path.slice(path.lastIndexOf('/') + 1),
-    kind: 'file',
-    assetKey: path,
-    revision: String(files.get(path)?.revision ?? 1),
-  })
+  const fileEntry = (path: string): ComposeAssetEntry => {
+    const name = path.slice(path.lastIndexOf('/') + 1)
+    return {
+      id: path,
+      parentId: parentOf(path),
+      name,
+      kind: 'file',
+      // 页面身份由媒体类型表达；这个内存 Provider 按命名约定翻译，与真实适配层一致。
+      mediaType: isComposePageFileName(name) ? COMPOSE_PAGE_MEDIA_TYPE : undefined,
+      assetKey: path,
+      revision: String(files.get(path)?.revision ?? 1),
+    }
+  }
 
   const provider: ComposeAssetProvider = {
     id: 'fake',

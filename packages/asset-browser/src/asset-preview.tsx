@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import type { HTMLAttributes } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import {
   ComposeButton,
   ComposeDialog,
@@ -221,9 +221,11 @@ export const ComposeAssetPreview = forwardRef<
 interface AssetThumbnailProps {
   readonly entry: ComposeAssetEntry
   readonly provider: ComposeAssetProvider
+  /** 宿主提供的缩略图内容；优先于内建的目录图标与扩展名占位。 */
+  readonly fallback?: ReactNode
 }
 
-export function AssetThumbnail({ entry, provider }: AssetThumbnailProps) {
+export function AssetThumbnail({ entry, fallback, provider }: AssetThumbnailProps) {
   const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined')
   const [element, setElement] = useState<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -238,12 +240,14 @@ export function AssetThumbnail({ entry, provider }: AssetThumbnailProps) {
   const url = useBlobUrl(state.status === 'ready' ? state.data?.blob : undefined)
   return (
     <div ref={setElement} aria-hidden="true" className="asset-browser__thumbnail">
-      {url ? <img alt="" loading="lazy" src={url} /> : entry.kind === 'folder' ? (
+      {url ? <img alt="" loading="lazy" src={url} /> : fallback !== undefined && fallback !== null
+        ? fallback
+        : entry.kind === 'folder' ? (
         <svg viewBox="0 0 48 40">
           <path d="M3 8h17l5 6h20v22H3z" fill="currentColor" opacity=".85" />
           <path d="M3 14h42" fill="none" stroke="currentColor" opacity=".45" />
         </svg>
-      ) : <span>{extensionOf(entry.name).toUpperCase() || 'FILE'}</span>}
+        ) : <span>{extensionOf(entry.name).toUpperCase() || 'FILE'}</span>}
     </div>
   )
 }

@@ -166,6 +166,14 @@ export interface ComposeAssetBrowserProps
    * `application/octet-stream` 处理。省略该回调时保持仅受支持图片可拖。
    */
   readonly canDragEntryToCanvas?: (entry: ComposeAssetEntry) => boolean
+  /**
+   * 覆盖条目主图标。
+   *
+   * @remarks
+   * 文件树行与目录网格块都会调用。返回 undefined 或 null 时回退到内建目录与文件图标；
+   * 宿主据此按数据结构（例如媒体类型）区分条目种类，而不是按文件名。
+   */
+  readonly renderEntryIcon?: (context: ComposeAssetEntryRenderContext) => ReactNode
   /** 追加到内建菜单项之后的宿主上下文菜单项。 */
   readonly contextMenuItems?: readonly ComposeAssetContextMenuItem[]
   /**
