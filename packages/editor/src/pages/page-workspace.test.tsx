@@ -519,6 +519,31 @@ describe('OpenSpec: editor-workspace-layout / 首页标记与清单对账', () =
       .queryByRole('img', { name: '首页' })).not.toBeInTheDocument()
   })
 
+  it('首页 key 悬空时不渲染标记但给出非阻断提示', async () => {
+    const provider = createProvider({
+      list: vi.fn(async ({ folderId }) => folderId === 'root'
+        ? [pageEntry, scriptEntry, manifestEntry]
+        : []),
+      read: vi.fn(async ({ fileId }) => ({
+        blob: new Blob([fileId === 'app.json'
+          ? '{"schemaVersion":1,"homePageKey":"Pages/Gone.page.json"}'
+          : pageText]),
+        revision: '1',
+      })),
+    })
+    renderEditor(provider)
+
+    // role="status" 在工作区里不唯一（面板占位也用它），限定到页面通知本身。
+    await waitFor(() => {
+      expect(document.querySelector('.compose-editor__page-notice'))
+        .toHaveTextContent('首页指向的页面不存在')
+    })
+    expect(within(screen.getByTestId('badge-host-tree'))
+      .queryByRole('img', { name: '首页' })).not.toBeInTheDocument()
+    // 悬空只提示，不改写清单。
+    expect(provider.writeFile).not.toHaveBeenCalled()
+  })
+
   it('本编辑器内删除首页页面时清空清单指向', async () => {
     const provider = createProvider({
       list: vi.fn(async ({ folderId }) => folderId === 'root'

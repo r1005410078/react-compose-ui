@@ -417,6 +417,16 @@ export function ComposeEditor({
   const pageStore = pageWorkspace.store
   const pageProvider = assets?.browser?.provider
   const homePageKey = pageWorkspace.catalog?.homePageKey ?? null
+  /**
+   * 首页 key 悬空的非阻断提示。
+   *
+   * @remarks
+   * 派生而不是写入 state：这是一个持续存在的条件，只要清单仍指向不存在的页面就应当一直
+   * 提示，而不是被用户关掉一次就消失。
+   */
+  const homePageMissingNotice = pageWorkspace.catalog?.homePageMissing === true
+    ? editorMessages.pages.homePageMissing
+    : null
   const onHomePageChange = pages?.onHomePageChange
   const handleHomePageChange = useCallback((nextKey: string | null) => {
     pageWorkspace.refreshCatalog()
@@ -930,16 +940,18 @@ export function ComposeEditor({
               </ComposeDialogPortal>
             </ComposeDialog>
           ) : null}
-          {pageNotice === null ? null : (
+          {pageNotice === null && homePageMissingNotice === null ? null : (
             <div className="compose-editor__page-notice" role="status">
-              <span>{pageNotice}</span>
-              <ComposeButton
-                type="button"
-                variant="ghost"
-                onClick={() => setPageNotice(null)}
-              >
-                {editorMessages.close}
-              </ComposeButton>
+              <span>{pageNotice ?? homePageMissingNotice}</span>
+              {pageNotice === null ? null : (
+                <ComposeButton
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setPageNotice(null)}
+                >
+                  {editorMessages.close}
+                </ComposeButton>
+              )}
             </div>
           )}
         </WorkspaceContentContext.Provider>
