@@ -1,0 +1,417 @@
+import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
+import { ComposeAssetError } from '@compose-ui/assets'
+import {
+  BUILTIN_COMMAND_TYPES,
+  COMPOSE_PAGE_MEDIA_TYPE,
+  createEmptyComposePageDocument,
+  serializeComposePageDocument,
+} from '@compose-ui/core'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const initializeWorkspaceMock = vi.hoisted(() => vi.fn())
+
+/**
+ * 记录已创建面板并支持切换活动面板的 Dockview 替身。
+ *
+ * @remarks
+ * 页面工作区的行为完全依赖面板 ID 与活动面板事件，因此替身必须把 `api.id` 传给面板组件，
+ * 并能触发 `onDidActivePanelChange`。
+ */
+const dockviewMock = vi.hoisted(() => {
+  interface FakePanel {
+    id: string
+    component: string
+    title: string
+    api: {
+      id: string
+      title: string
+      isActive: boolean
+      close: ReturnType<typeof vi.fn>
+      setActive: () => void
+      setTitle: ReturnType<typeof vi.fn>
+    }
+  }
+  const panels = new Map<string, FakePanel>()
+  const activeListeners = new Set<(change: { panel: FakePanel | undefined }) => void>()
+  let activeId: string | null = null
+  const setActive = (id: string) => {
+    activeId = id
+    panels.forEach((panel) => { panel.api.isActive = panel.id === id })
+    activeListeners.forEach((listener) => { listener({ panel: panels.get(id) }) })
+  }
+  return {
+    panels,
+    reset() {
+      panels.clear()
+      activeListeners.clear()
+      activeId = null
+    },
+    activate: setActive,
+    get activeId() { return activeId },
+    api: {
+      addPanel: vi.fn((options: { id: string; component: string; title: string }) => {
+        const panel: FakePanel = {
+          id: options.id,
+          component: options.component,
+          title: options.title,
+          api: {
+            id: options.id,
+            title: options.title,
+            isActive: false,
+            close: vi.fn(() => { panels.delete(options.id) }),
+            setActive: () => setActive(options.id),
+            setTitle: vi.fn(),
+          },
+        }
+        panels.set(options.id, panel)
+        setActive(options.id)
+        return panel
+      }),
+      getPanel: vi.fn((id: string) => panels.get(id)),
+      onDidActivePanelChange: (listener: (change: { panel: FakePanel | undefined }) => void) => {
+        activeListeners.add(listener)
+        return { dispose: () => activeListeners.delete(listener) }
+      },
+    },
+  }
+})
+
+vi.mock('../workspace-layout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../workspace-layout')>()
+  return { ...actual, initializeWorkspace: initializeWorkspaceMock }
+})
+
+vi.mock('dockview-react', async () => {
+  const React = await import('react')
+  return {
+    themeAbyss: { name: 'abyss', className: 'dockview-theme-abyss' },
+    DockviewDefaultTab: () => null,
+    DockviewReact: ({ className, components, tabComponents, onReady }: {
+      className?: string
+      components: Record<string, React.FunctionComponent<{ api?: unknown }>>
+      tabComponents?: Record<string, React.FunctionComponent<{ api?: unknown }>>
+      onReady: (event: { api: unknown }) => void
+    }) => {
+      const nested = className === 'compose-editor__scene-history-dockview'
+      const [, force] = React.useState(0)
+      React.useEffect(() => {
+        if (nested) return
+        onReady({ api: dockviewMock.api })
+        // 面板集合的变化不经过 React，测试里靠订阅活动面板变化触发重渲染。
+        const subscription = dockviewMock.api.onDidActivePanelChange(() => { force((n) => n + 1) })
+        return () => { subscription.dispose() }
+      }, [nested, onReady])
+      if (nested) return React.createElement('div', { 'data-testid': 'scene-history-dockview' })
+      const Tab = tabComponents?.workspaceTab
+      return React.createElement(
+        'div',
+        { 'data-testid': 'dockview' },
+        // initializeWorkspace 被 mock，因此基础面板不会进入面板表；固定面板（资源浏览器等）
+        // 无条件渲染一次，动态面板另外按其 api 渲染。
+        Object.entries(components).map(([name, Component]) =>
+          React.createElement(Component, { key: `static-${name}` })),
+        [...dockviewMock.panels.values()].map((panel) => React.createElement(
+          'div',
+          { key: panel.id, 'data-panel-id': panel.id },
+          Tab ? React.createElement(Tab, { api: panel.api }) : null,
+          React.createElement(
+            components[panel.component] ?? (() => null),
+            { api: panel.api },
+          ),
+        )),
+      )
+    },
+  }
+})
+
+vi.mock('@compose-ui/asset-browser', async () => {
+  const React = await import('react')
+  return {
+    // 双击与右键行为由 asset-browser 自己的测试覆盖；这里只暴露宿主回调入口。
+    ComposeAssetBrowser: ({ contextMenuItems, onAssetOpen }: {
+      contextMenuItems?: readonly {
+        id: string
+        label: string
+        isDisabled?: (context: unknown) => boolean
+        onSelect: (context: unknown) => void | Promise<void>
+      }[]
+      onAssetOpen?: (entry: ComposeAssetEntry) => void
+    }) => React.createElement(
+      'div',
+      { 'data-testid': 'asset-browser' },
+      React.createElement('button', {
+        type: 'button',
+        onClick: () => onAssetOpen?.(pageEntry),
+      }, 'open-page'),
+      React.createElement('button', {
+        type: 'button',
+        onClick: () => onAssetOpen?.(scriptEntry),
+      }, 'open-script'),
+      (contextMenuItems ?? []).map((item) => React.createElement('button', {
+        key: item.id,
+        type: 'button',
+        disabled: item.isDisabled?.(menuContext) === true,
+        onClick: () => { void item.onSelect(menuContext) },
+      }, item.label)),
+    ),
+    ComposeAssetPreview: () => React.createElement('div', { 'data-testid': 'asset-preview' }),
+  }
+})
+
+const { ComposeEditor } = await import('../compose-editor')
+
+const pageText = serializeComposePageDocument(createEmptyComposePageDocument())
+
+const root: ComposeAssetEntry = { id: 'root', parentId: null, name: 'Assets', kind: 'folder' }
+const pageEntry: ComposeAssetEntry = {
+  id: 'home',
+  parentId: 'root',
+  name: 'Home.page.json',
+  kind: 'file',
+  mediaType: COMPOSE_PAGE_MEDIA_TYPE,
+  revision: '1',
+  assetKey: 'Home.page.json',
+}
+const scriptEntry: ComposeAssetEntry = {
+  id: 'script',
+  parentId: 'root',
+  name: 'dashboard.ts',
+  kind: 'file',
+  mediaType: 'text/typescript',
+  revision: '1',
+  assetKey: 'dashboard.ts',
+}
+const menuContext = {
+  entry: pageEntry,
+  entries: [pageEntry],
+  parentId: null,
+  promptName: async () => 'Detail',
+  refresh: () => undefined,
+}
+
+function createProvider(overrides: Partial<ComposeAssetProvider> = {}): ComposeAssetProvider {
+  const files = new Map<string, string>([['Home.page.json', pageText]])
+  return {
+    id: 'memory',
+    label: 'Assets',
+    root,
+    capabilities: {
+      createFile: true,
+      createFolder: true,
+      rename: true,
+      move: true,
+      delete: true,
+      write: true,
+      reference: true,
+    },
+    list: vi.fn(async ({ folderId }) => folderId === 'root' ? [pageEntry, scriptEntry] : []),
+    read: vi.fn(async ({ fileId }) => ({
+      blob: new Blob([files.get(fileId === 'home' ? 'Home.page.json' : fileId) ?? '{}']),
+      revision: '1',
+    })),
+    createFile: vi.fn(async ({ parentId, name }) => ({
+      id: `created-${name}`,
+      parentId,
+      name,
+      kind: 'file' as const,
+      assetKey: name,
+      revision: '1',
+    })),
+    writeFile: vi.fn(async ({ fileId }) => ({ ...pageEntry, id: fileId, revision: '2' })),
+    ...overrides,
+  }
+}
+
+function renderEditor(provider: ComposeAssetProvider, onActiveSessionChange = vi.fn()) {
+  render(
+    <ComposeEditor
+      assets={{ browser: { provider } }}
+      pages={{ onActiveSessionChange }}
+    />,
+  )
+  return { onActiveSessionChange }
+}
+
+/** 取最近一次活动页面回调的参数；本包 lib target 不含 Array.prototype.at。 */
+function lastSession(spy: ReturnType<typeof vi.fn>) {
+  const calls = spy.mock.calls
+  return calls.length === 0 ? undefined : calls[calls.length - 1]?.[0]
+}
+
+function pageDocumentPanels() {
+  return [...dockviewMock.panels.values()].filter((panel) => panel.component === 'pageDocument')
+}
+
+beforeEach(() => {
+  dockviewMock.reset()
+  dockviewMock.api.addPanel.mockClear()
+})
+
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+})
+
+describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事务运行时', () => {
+  it('页面文件打开为页面标签而不是资源标签', async () => {
+    renderEditor(createProvider())
+
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    expect(pageDocumentPanels()[0]?.title).toBe('Home')
+    expect([...dockviewMock.panels.values()].some((p) => p.component === 'assetDocument'))
+      .toBe(false)
+  })
+
+  it('非页面文件仍打开为资源标签', async () => {
+    renderEditor(createProvider())
+
+    fireEvent.click(screen.getByRole('button', { name: 'open-script' }))
+
+    await waitFor(() => {
+      expect([...dockviewMock.panels.values()].some((p) => p.component === 'assetDocument'))
+        .toBe(true)
+    })
+    expect(pageDocumentPanels()).toHaveLength(0)
+  })
+
+  it('重复打开同一页面激活既有标签而不新建运行时', async () => {
+    const { onActiveSessionChange } = renderEditor(createProvider())
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const firstRuntime = lastSession(onActiveSessionChange)?.runtime
+
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const latestRuntime = lastSession(onActiveSessionChange)?.runtime
+    expect(latestRuntime).toBe(firstRuntime)
+  })
+
+  it('活动页面的运行时回传给宿主', async () => {
+    const { onActiveSessionChange } = renderEditor(createProvider())
+
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+
+    await waitFor(() => {
+      expect(onActiveSessionChange).toHaveBeenCalledWith(expect.objectContaining({
+        pageKey: 'Home.page.json',
+        displayName: 'Home',
+      }))
+    })
+    const session = lastSession(onActiveSessionChange)
+    expect(session?.runtime.document.schemaVersion).toBe(5)
+  })
+})
+
+describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () => {
+  it('派发事务后标签出现未保存指示，保存后消失', async () => {
+    const provider = createProvider()
+    const { onActiveSessionChange } = renderEditor(provider)
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const session = lastSession(onActiveSessionChange)
+
+    act(() => session.runtime.dispatch({
+      id: 'configure',
+      type: BUILTIN_COMMAND_TYPES.configureOutput,
+      payload: { width: 800, height: 600, backgroundColor: 'transparent' },
+    }))
+
+    const dirty = await screen.findByRole('img', { name: '有未保存改动' })
+    expect(dirty).toBeInTheDocument()
+
+    const panelId = pageDocumentPanels()[0]!.id
+    fireEvent.click(screen.getByRole('button', { name: '关闭页面 Home' }))
+    // 关闭会先弹确认；这里改为直接走保存路径验证脏状态清除。
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('img', { name: '有未保存改动' })).not.toBeInTheDocument()
+    })
+    expect(provider.writeFile).toHaveBeenCalled()
+    expect(dockviewMock.panels.has(panelId)).toBe(false)
+  })
+
+  it('写入冲突时呈现覆盖确认，覆盖后写入成功', async () => {
+    let conflicted = false
+    const provider = createProvider({
+      writeFile: vi.fn(async ({ force }) => {
+        if (!force && !conflicted) {
+          conflicted = true
+          throw new ComposeAssetError('conflict', 'revision changed')
+        }
+        return { ...pageEntry, revision: '3' }
+      }),
+    })
+    const { onActiveSessionChange } = renderEditor(provider)
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const session = lastSession(onActiveSessionChange)
+    act(() => session.runtime.dispatch({
+      id: 'configure',
+      type: BUILTIN_COMMAND_TYPES.configureOutput,
+      payload: { width: 800, height: 600, backgroundColor: 'transparent' },
+    }))
+    await screen.findByRole('img', { name: '有未保存改动' })
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭页面 Home' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(await screen.findByText('页面已被外部修改')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '覆盖保存' }))
+
+    await waitFor(() => {
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ force: true }))
+    })
+  })
+
+  it('关闭存在未保存改动的页面标签时呈现关闭确认', async () => {
+    const { onActiveSessionChange } = renderEditor(createProvider())
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const session = lastSession(onActiveSessionChange)
+    act(() => session.runtime.dispatch({
+      id: 'configure',
+      type: BUILTIN_COMMAND_TYPES.configureOutput,
+      payload: { width: 800, height: 600, backgroundColor: 'transparent' },
+    }))
+    await screen.findByRole('img', { name: '有未保存改动' })
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭页面 Home' }))
+
+    expect(await screen.findByText('页面尚未保存')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+  })
+})
+
+describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
+  it('创建页面写入规范化文件名并随即打开该页面', async () => {
+    const provider = createProvider()
+    renderEditor(provider)
+
+    fireEvent.click(await screen.findByRole('button', { name: '创建页面' }))
+
+    await waitFor(() => {
+      expect(provider.createFile).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Detail.page.json',
+      }))
+    })
+    await waitFor(() => {
+      expect(pageDocumentPanels().some((panel) => panel.title === 'Detail')).toBe(true)
+    })
+  })
+
+  it('Provider 缺少创建能力时创建页面项禁用', async () => {
+    const provider = createProvider()
+    renderEditor({
+      ...provider,
+      capabilities: { ...provider.capabilities, createFile: false },
+    })
+
+    expect(await screen.findByRole('button', { name: '创建页面' })).toBeDisabled()
+  })
+})

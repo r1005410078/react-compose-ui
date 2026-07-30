@@ -2,6 +2,11 @@ import {
   ComposeAssetError,
   validateAssetName,
 } from '@compose-ui/assets'
+import {
+  COMPOSE_PAGE_MEDIA_TYPE,
+  createEmptyComposePageDocument,
+  serializeComposePageDocument,
+} from '@compose-ui/core'
 import type {
   ComposeAssetEntry,
   ComposeAssetProvider,
@@ -45,6 +50,8 @@ function createDemoBitmap() {
   }
   return new Blob([bytes], { type: 'image/bmp' })
 }
+
+const demoHomePageText = serializeComposePageDocument(createEmptyComposePageDocument())
 
 /**
  * 示例应用的实例级内存 Provider，只用于展示资源协议，不属于公共持久化实现。
@@ -111,6 +118,28 @@ export function createDemoAssetProvider(): ComposeAssetProvider {
       content: new Blob([
         "export const dashboard = {\n  title: 'Operations overview',\n  refreshInterval: 30,\n  theme: 'dark',\n}\n",
       ], { type: 'text/typescript' }),
+    }],
+    ['demo-pages', {
+      entry: {
+        id: 'demo-pages',
+        parentId: root.id,
+        name: 'Pages',
+        kind: 'folder',
+      },
+    }],
+    ['demo-home-page', {
+      entry: {
+        id: 'demo-home-page',
+        parentId: 'demo-pages',
+        name: 'Home.page.json',
+        kind: 'file',
+        // 页面文件必须上报页面媒体类型，宿主据此在不读内容的前提下识别页面。
+        mediaType: COMPOSE_PAGE_MEDIA_TYPE,
+        size: demoHomePageText.length,
+        revision: revision(revisionNumber),
+        assetKey: 'demo-home-page',
+      },
+      content: new Blob([demoHomePageText], { type: COMPOSE_PAGE_MEDIA_TYPE }),
     }],
     ['readme', {
       entry: {

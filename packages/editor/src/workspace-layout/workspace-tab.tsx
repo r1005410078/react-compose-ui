@@ -5,6 +5,7 @@ import type {
 import type { PointerEventHandler } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import {
+  isPageDocumentPanelId,
   isWorkspaceDocumentPanelId,
   WORKSPACE_GROUP_IDS,
   WORKSPACE_PANEL_IDS,
@@ -107,6 +108,9 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
   const title = titles[props.api.id] ?? props.api.title
   const isDocumentTab = isWorkspaceDocumentPanelId(props.api.id)
   const session = documents.get(props.api.id)
+  const closeLabel = isPageDocumentPanelId(props.api.id)
+    ? editorMessages.pages.closePage(title)
+    : editorMessages.closeAsset(title)
   const icon =
     props.api.id === WORKSPACE_PANEL_IDS.scene ? (
       <SceneGraphIcon />
@@ -151,7 +155,7 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
           />
         ) : null}
         <button
-          aria-label={editorMessages.closeAsset(title)}
+          aria-label={closeLabel}
           className="compose-editor__asset-document-close"
           type="button"
           onClick={(event) => {

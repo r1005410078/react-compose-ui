@@ -774,9 +774,17 @@ export function ComposeEditor({
                 <ComposeDialogViewport>
                   <ComposeDialogContent>
                     <ComposeDialogHeader>
-                      <ComposeDialogTitle>{editorMessages.unsavedAssetTitle}</ComposeDialogTitle>
+                      <ComposeDialogTitle>
+                        {pendingAssetDocument.kind === 'page'
+                          ? editorMessages.pages.unsavedPageTitle
+                          : editorMessages.unsavedAssetTitle}
+                      </ComposeDialogTitle>
                       <ComposeDialogDescription>
-                        {editorMessages.unsavedAssetQuestion(pendingAssetDocument.entry.name)}
+                        {editorMessages.unsavedAssetQuestion(
+                          pendingAssetDocument.kind === 'page'
+                            ? pendingAssetDocument.displayName
+                            : pendingAssetDocument.entry.name,
+                        )}
                       </ComposeDialogDescription>
                     </ComposeDialogHeader>
                     <ComposeDialogFooter>
