@@ -77,7 +77,9 @@ import {
   localizeWorkspace,
   WORKSPACE_GROUP_IDS,
   WORKSPACE_COMPONENT_IDS,
+  WORKSPACE_PANEL_IDS,
 } from '../workspace-layout'
+import type { ComposePageDescriptor } from '@compose-ui/pages'
 import { getEditorMessages } from '../editor-i18n'
 import { createPageContextMenuItems } from '../pages'
 import { usePageWorkspace } from '../pages'
@@ -389,6 +391,16 @@ export function ComposeEditor({
     })
     return map
   }, [documents])
+  /**
+   * 活动页面标签是 Stage 的宿主，否则回落到固定画布面板。
+   *
+   * @remarks
+   * Stage 只能有一份：interaction controller 的 surface 是独占的。
+   */
+  const stageHostPanelId = activeDocumentPanelId !== null
+    && pageSessions.has(activeDocumentPanelId)
+    ? activeDocumentPanelId
+    : WORKSPACE_PANEL_IDS.canvas
   const pageWorkspace = usePageWorkspace({
     activePanelId: activeDocumentPanelId,
     config: pages,
@@ -514,14 +526,14 @@ export function ComposeEditor({
       interactionController.send({ type: 'external.cancel' })
     }
   }, [assets?.browser, controller?.interactionController])
-  const handlePageCreated = useCallback((pageKey: string, entryId: string) => {
-    // 创建结果只带回 key 与 entry id，这里补出打开页面所需的最小条目。
+  const handlePageCreated = useCallback((descriptor: ComposePageDescriptor) => {
     void openPageDocument({
-      id: entryId,
-      parentId: null,
-      name: pageKey.slice(pageKey.lastIndexOf('/') + 1),
+      id: descriptor.entryId,
+      parentId: descriptor.parentId,
+      name: descriptor.fileName,
       kind: 'file',
-      assetKey: pageKey,
+      assetKey: descriptor.pageKey,
+      revision: descriptor.revision,
     })
   }, [openPageDocument])
   const pageStore = pageWorkspace.store
@@ -629,6 +641,7 @@ export function ComposeEditor({
             )
           : undefined,
       documents,
+      stageHostPanelId,
       registerDocumentSave,
       setDocumentDirty,
       setAssetDocumentSaved,
@@ -649,6 +662,7 @@ export function ComposeEditor({
       resolvedHistory,
       assets,
       documents,
+      stageHostPanelId,
       handleAssetOpen,
       handleDefaultAssetMutation,
       hostContextMenuItems,

@@ -19,6 +19,15 @@ export interface WorkspaceContent {
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
   assetBrowserPanel?: ReactNode
+  /**
+   * 唯一允许渲染 Stage 的面板 ID。
+   *
+   * @remarks
+   * Stage 持有 interaction controller 的独占 surface，同时渲染两份会抛
+   * 「already has a connected surface」。Dockview 会保留同组内非活动面板的挂载，因此不能
+   * 依赖「只有活动面板才渲染」，必须由这里显式指定单一宿主。
+   */
+  stageHostPanelId: string
   /** 当前打开的文档会话，按 Dockview panel ID 索引。 */
   documents: ReadonlyMap<string, ComposeWorkspaceDocumentSession>
   registerDocumentSave: (

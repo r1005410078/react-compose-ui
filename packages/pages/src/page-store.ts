@@ -4,6 +4,7 @@ import type { ComposeAppManifest, ComposeAppManifestIssue, ComposeDocument, Json
 import {
   COMPOSE_APP_MANIFEST_FILE_NAME,
   COMPOSE_PAGE_MEDIA_TYPE,
+  composePageDisplayName,
   createEmptyComposeAppManifest,
   createEmptyComposePageDocument,
   parseComposeAppManifest,
@@ -330,7 +331,7 @@ export function createComposePageStore(input: {
         pageKey: entry.assetKey,
         entryId: entry.id,
         fileName: entry.name,
-        displayName: createInput.fileName,
+        displayName: composePageDisplayName(entry.name),
         parentId: entry.parentId,
         revision: entry.revision,
         modifiedAt: entry.modifiedAt,

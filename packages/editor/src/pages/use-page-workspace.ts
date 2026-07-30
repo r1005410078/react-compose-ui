@@ -52,11 +52,15 @@ export function usePageWorkspace({
     update: (current: ComposePageDocumentSession) => ComposePageDocumentSession,
   ) => void
 }): PageWorkspaceHandle {
+  // 只按「是否启用页面」、宿主 Store 与 Provider 三者派生：config 常常是行内对象字面量，
+  // 若把它整个作为依赖，每次渲染都会重建 Store 并丢掉文档缓存与订阅。
+  const pagesEnabled = config !== undefined
+  const hostStore = config?.store
   const store = useMemo(() => {
-    if (config === undefined) return undefined
-    if (config.store) return config.store
+    if (!pagesEnabled) return undefined
+    if (hostStore) return hostStore
     return provider ? createComposePageStore({ provider }) : undefined
-  }, [config, provider])
+  }, [hostStore, pagesEnabled, provider])
 
   // Store 变化时上一份目录立即失效；把 store 一起存入 state 使派生值无需额外 Effect 清理。
   const [catalogState, setCatalogState] = useState<{

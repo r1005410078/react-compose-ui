@@ -12,6 +12,7 @@ import type {
   IDockviewPanelProps,
 } from 'dockview-react'
 import { useWorkspaceContent } from './workspace-context'
+import { WORKSPACE_PANEL_IDS } from './workspace-layout'
 import { WorkspaceTab } from './workspace-tab'
 import { getEditorMessages } from '../editor-i18n'
 
@@ -221,9 +222,10 @@ export function ComponentLibraryPanel() {
 }
 
 export function CanvasPanel() {
-  const { stageToolbar, children } = useWorkspaceContent()
+  const { stageToolbar, children, stageHostPanelId } = useWorkspaceContent()
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
+  const hostsStage = stageHostPanelId === WORKSPACE_PANEL_IDS.canvas
 
   return (
     <div
@@ -233,7 +235,7 @@ export function CanvasPanel() {
       <div className="compose-editor__canvas-toolbar">
         {stageToolbar ?? <Placeholder>{messages.workspace.stageToolbarEmpty}</Placeholder>}
       </div>
-      <div className="compose-editor__canvas-content">{children}</div>
+      <div className="compose-editor__canvas-content">{hostsStage ? children : null}</div>
     </div>
   )
 }
@@ -346,11 +348,12 @@ export function AssetDocumentPanel(props: IDockviewPanelProps) {
  * @internal
  */
 export function PageDocumentPanel(props: IDockviewPanelProps) {
-  const { documents, children } = useWorkspaceContent()
+  const { documents, children, stageHostPanelId, stageToolbar } = useWorkspaceContent()
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
   const panelId = props.api?.id
   const candidate = panelId ? documents.get(panelId) : undefined
   const session = candidate?.kind === 'page' ? candidate : undefined
-  const active = props.api?.isActive ?? false
 
   if (!panelId || !session) return null
 
@@ -360,7 +363,12 @@ export function PageDocumentPanel(props: IDockviewPanelProps) {
       data-page-key={session.pageKey}
       data-workspace-panel="page-document"
     >
-      {active ? children : null}
+      <div className="compose-editor__canvas-toolbar">
+        {stageToolbar ?? <Placeholder>{messages.workspace.stageToolbarEmpty}</Placeholder>}
+      </div>
+      <div className="compose-editor__canvas-content">
+        {stageHostPanelId === panelId ? children : null}
+      </div>
     </div>
   )
 }

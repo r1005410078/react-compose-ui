@@ -1249,3 +1249,48 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
     pointerId: 41,
   })
 })
+
+test('OpenSpec: editor-workspace-layout / 页面文档标签 / 创建、编辑、保存并重开页面', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  const rootGrid = assets.getByRole('grid', { name: 'Demo Assets' })
+  await expect(rootGrid).toBeVisible()
+
+  // 1) 右键创建页面
+  await rootGrid.getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await expect(pagesGrid).toBeVisible()
+  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  const menu = page.getByRole('menu')
+  await menu.getByRole('menuitem', { name: '创建页面' }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Detail')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+  await expect(pagesGrid.getByRole('gridcell', { name: /Detail.page.json/ })).toBeVisible()
+
+  // 2) 创建后随即以页面标签打开
+  const detailTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
+  await expect(detailTab).toHaveCount(1)
+  await expect(detailTab).toContainText('Detail')
+
+  // 3) 在画布上创建一个容器，页面标签出现未保存指示
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  const dirty = detailTab.getByRole('img', { name: '有未保存改动' })
+  await expect(dirty).toBeVisible()
+
+  // 4) 保存后未保存指示消失
+  await detailTab.getByRole('button', { name: /^关闭页面/ }).click()
+  const unsaved = page.getByRole('dialog', { name: '页面尚未保存' })
+  await expect(unsaved).toBeVisible()
+  await unsaved.getByRole('button', { name: '保存' }).click()
+  await expect(detailTab).toHaveCount(0)
+
+  // 5) 重开该页面时看到已持久化的实体
+  await pagesGrid.getByRole('gridcell', { name: /Detail.page.json/ }).dblclick()
+  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
+  const sceneTree = editor.locator('[data-workspace-panel="scene-graph"]')
+  await expect(sceneTree).toContainText('Container')
+})

@@ -1,7 +1,7 @@
 import type { ComposeAssetContextMenuItem } from '@compose-ui/asset-browser'
 import type { ComposeAssetProvider } from '@compose-ui/assets'
 import { composePageFileName, isComposePageFileName } from '@compose-ui/core'
-import type { ComposePageStore } from '@compose-ui/pages'
+import type { ComposePageDescriptor, ComposePageStore } from '@compose-ui/pages'
 import type { EditorMessages } from '../editor-i18n'
 
 /** 页面上下文菜单项的稳定 ID。 @internal */
@@ -24,8 +24,14 @@ export function createPageContextMenuItems({
   store,
 }: {
   readonly messages: EditorMessages
-  /** 页面创建成功后由调用方打开该页面。 */
-  readonly onPageCreated: (pageKey: string, entryId: string) => void
+  /**
+   * 页面创建成功后由调用方打开该页面。
+   *
+   * @remarks
+   * 传整个描述符而不是只传 key：页面的稳定 key 不一定是路径（内存 Provider 常用 UUID），
+   * 无法由它反推出文件名与显示名。
+   */
+  readonly onPageCreated: (descriptor: ComposePageDescriptor) => void
   readonly provider: ComposeAssetProvider | undefined
   readonly store: ComposePageStore | undefined
 }): readonly ComposeAssetContextMenuItem[] {
@@ -52,7 +58,7 @@ export function createPageContextMenuItems({
           fileName: composePageFileName(name),
         })
         context.refresh()
-        onPageCreated(created.pageKey, created.entryId)
+        onPageCreated(created)
       },
     },
   ]

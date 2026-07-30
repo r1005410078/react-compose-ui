@@ -329,6 +329,8 @@ export function StageDemoWorkspace() {
     () => createComposeAssetResolver(assetProvider),
     [assetProvider],
   )
+  // 配置对象必须保持稳定引用：Editor 会据此派生页面 Store。
+  const pagesConfig = useMemo(() => ({ onActiveSessionChange: setActivePage }), [])
   const selectedContainerId = controller.selectedIds.length === 1
     && controller.document.entities[controller.selectedIds[0]!]
     && getComposeHierarchy(controller.document.entities[controller.selectedIds[0]!]!)
@@ -344,7 +346,7 @@ export function StageDemoWorkspace() {
           resolver: assetResolver,
         }}
         controller={controller}
-        pages={{ onActiveSessionChange: setActivePage }}
+        pages={pagesConfig}
         slots={{
           stageToolbar: (
             <>
