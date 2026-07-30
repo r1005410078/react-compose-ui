@@ -1,4 +1,5 @@
 import {
+  composeEntitySceneStyle,
   ComposeEntityPaintLayer,
   ComposeRegistryEntityRenderer,
 } from '@compose-ui/component-registry'
@@ -7,6 +8,7 @@ import type {
   ComposeRendererProps,
 } from '@compose-ui/component-registry'
 import {
+  getComposeHierarchy,
   getComposeVisibility,
   readComposePageReference,
   resolveComposePageNestState,
@@ -177,6 +179,14 @@ export function PageSlotRenderer({
   )
 }
 
+/**
+ * 渲染被引用页面中的一个实体及其子树。
+ *
+ * @remarks
+ * 结构与 Preview 的实体渲染保持一致：外层 div 承载实体的绝对定位与几何，内部依次是 Paint
+ * 层、Renderer 内容与 `Hierarchy` 子节点。缺少定位包装时所有实体会堆在原点且没有尺寸，
+ * 缺少递归时容器内容会整体丢失。
+ */
 function NestedEntity({
   document,
   entityId,
@@ -192,8 +202,12 @@ function NestedEntity({
 }) {
   const entity: ComposeEntity | undefined = document.entities[entityId]
   if (!entity || !getComposeVisibility(entity).visible) return null
+  const hierarchy = getComposeHierarchy(entity)
   return (
-    <>
+    <div
+      data-page-slot-entity-id={entity.id}
+      style={{ ...composeEntitySceneStyle(entity), position: 'absolute' }}
+    >
       <ComposeEntityPaintLayer entity={entity} />
       <ComposeRegistryEntityRenderer
         entity={entity}
@@ -201,6 +215,16 @@ function NestedEntity({
         pageDocumentPort={pageDocumentPort}
         registry={registry}
       />
-    </>
+      {hierarchy?.childIds.map((childId) => (
+        <NestedEntity
+          key={childId}
+          document={document}
+          entityId={childId}
+          mode={mode}
+          pageDocumentPort={pageDocumentPort}
+          registry={registry}
+        />
+      ))}
+    </div>
   )
 }

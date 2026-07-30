@@ -48,6 +48,25 @@ function outerDocument(): ComposeDocument {
   } as ComposeDocument
 }
 
+/**
+ * 被引用页面的文档，含两个根实体，其中一个是带子节点的容器。
+ *
+ * @remarks
+ * 用于锁定两处曾经缺失的行为：多个根实体必须各自按几何定位（否则会堆在原点且无尺寸，
+ * 表现为只看到第一个），容器必须递归渲染 Hierarchy 子节点。
+ */
+function nestedTreeDocument(): ComposeDocument {
+  return {
+    ...createEmptyComposePageDocument(),
+    rootIds: ['first', 'group'],
+    entities: {
+      first: entity('first', { Renderer: { type: 'rectangle', props: {} } }),
+      group: entity('group', { Hierarchy: { childIds: ['child'] } }),
+      child: entity('child', { Renderer: { type: 'rectangle', props: {} } }),
+    },
+  } as ComposeDocument
+}
+
 /** 被引用页面的文档，含一个可见的矩形实体。 */
 function nestedDocument(): ComposeDocument {
   return {
@@ -238,5 +257,54 @@ describe('OpenSpec: basic-materials / 页面拖入画布创建 Page Slot', () =>
     const transform = seed?.components.Transform as { size: { width: number; height: number } }
     expect(transform.size.width).toBeGreaterThan(0)
     expect(transform.size.height).toBeGreaterThan(0)
+  })
+})
+
+describe('OpenSpec: basic-materials / Page Slot 递归渲染被引用页面', () => {
+  it('多个根实体都渲染，并各自带绝对定位与几何', async () => {
+    const load = vi.fn(async () => nestedTreeDocument())
+    renderSlot({ loader: { load } })
+
+    await screen.findByTestId('compose-page-slot-content')
+    const first = document.querySelector('[data-page-slot-entity-id="first"]')
+    const group = document.querySelector('[data-page-slot-entity-id="group"]')
+    expect(first).not.toBeNull()
+    expect(group).not.toBeNull()
+    // 定位包装缺失时所有实体会堆在原点且没有尺寸，表现为只看到第一个。
+    expect(first).toHaveStyle({ position: 'absolute' })
+    expect((first as HTMLElement).style.width).not.toBe('')
+  })
+
+  it('容器递归渲染 Hierarchy 子节点', async () => {
+    const load = vi.fn(async () => nestedTreeDocument())
+    renderSlot({ loader: { load } })
+
+    await screen.findByTestId('compose-page-slot-content')
+    const group = document.querySelector('[data-page-slot-entity-id="group"]')
+    expect(group?.querySelector('[data-page-slot-entity-id="child"]')).not.toBeNull()
+  })
+
+  it('不可见实体及其子树不渲染', async () => {
+    const load = vi.fn(async () => {
+      const base = nestedTreeDocument()
+      return {
+        ...base,
+        entities: {
+          ...base.entities,
+          group: {
+            ...base.entities.group!,
+            components: {
+              ...base.entities.group!.components,
+              Visibility: { visible: false },
+            },
+          },
+        },
+      } as ComposeDocument
+    })
+    renderSlot({ loader: { load } })
+
+    await screen.findByTestId('compose-page-slot-content')
+    expect(document.querySelector('[data-page-slot-entity-id="group"]')).toBeNull()
+    expect(document.querySelector('[data-page-slot-entity-id="child"]')).toBeNull()
   })
 })

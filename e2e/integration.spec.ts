@@ -1511,3 +1511,42 @@ test('OpenSpec: editor-workspace-layout / 页面保存 / 快捷键与按钮可�
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(tab).toHaveCount(0)
 })
+
+test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完全一致', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+
+  // 在 Home 页面里放三个实体：容器、矩形、文本
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  await assets.getByRole('grid', { name: 'Pages' })
+    .getByRole('gridcell', { name: 'Home' }).dblclick()
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await editor.getByRole('button', { name: 'Rectangle' }).click()
+  await editor.getByRole('button', { name: 'Text' }).click()
+
+  const tab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
+  await page.keyboard.press('Control+S')
+  await expect(tab.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+  await tab.getByRole('button', { name: /^关闭页面/ }).click()
+
+  // 根文档里放一个 Page Slot 指向该页面（组件库此时仍是打开状态）
+  await editor.getByRole('button', { name: 'Page Slot' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByTestId('semantic-editor-node').getByRole('combobox').click()
+  await inspector.getByRole('option', { name: 'Home' }).click()
+
+  // 嵌套内容必须逐个实体渲染并各自定位；缺少定位包装或递归时数量会少于 3
+  await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
+  await expect(stage.locator('[data-page-slot-entity-id]')).toHaveCount(3)
+
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const previewDoc = page.getByTestId('compose-preview-document')
+  await expect(previewDoc).toBeVisible()
+  // 与画布逐个实体一致：两端共用同一个 page-slot 渲染实现
+  await expect(previewDoc.locator('[data-page-slot-entity-id]')).toHaveCount(3)
+})
