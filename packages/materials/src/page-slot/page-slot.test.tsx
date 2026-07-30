@@ -3,7 +3,12 @@ import type {
   ComposePageDocumentLoader,
   ComposePageReference,
 } from '@compose-ui/core'
-import { COMPOSE_PAGE_NEST_DEPTH_LIMIT, createEmptyComposePageDocument } from '@compose-ui/core'
+import {
+  COMPOSE_PAGE_MEDIA_TYPE,
+  COMPOSE_PAGE_NEST_DEPTH_LIMIT,
+  createEmptyComposePageDocument,
+  serializeComposePageDocument,
+} from '@compose-ui/core'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposeBasicMaterials } from '../create-basic-materials'
@@ -170,5 +175,66 @@ describe('OpenSpec: basic-materials / Page Slot 加载状态与嵌套护栏', ()
     cleanup()
     renderSlot({ loader: undefined })
     expect(screen.getByTestId('compose-page-slot-placeholder')).toBeInTheDocument()
+  })
+})
+
+describe('OpenSpec: basic-materials / 页面拖入画布创建 Page Slot', () => {
+  const preset = () => {
+    const materials = createComposeBasicMaterials()
+    const found = materials.presets.find((item) => item.id === 'page-slot')
+    if (!found) throw new Error('page-slot preset is missing')
+    return found
+  }
+
+  it('按媒体类型或名称后缀接受页面文件，拒绝其他文件', () => {
+    const accepts = preset().assetDrop?.accepts
+    expect(accepts).toBeDefined()
+    expect(accepts?.({ mediaType: COMPOSE_PAGE_MEDIA_TYPE, name: 'Home.page.json' })).toBe(true)
+    // Provider 未上报媒体类型时回退到名称后缀。
+    expect(accepts?.({ mediaType: 'application/json', name: 'Home.page.json' })).toBe(true)
+    expect(accepts?.({ mediaType: 'image/svg+xml', name: 'logo.svg' })).toBe(false)
+  })
+
+  it('创建的实体携带页面引用并采用被引用页面的输出尺寸', async () => {
+    const nested = nestedDocument()
+    const seed = await preset().assetDrop?.createSeed({
+      reference: { providerId: 'memory', assetKey: 'Pages/Home.page.json', scope: 'persistent' },
+      resolved: {
+        blob: new Blob([serializeComposePageDocument(nested)]),
+        revision: '1',
+        mediaType: COMPOSE_PAGE_MEDIA_TYPE,
+      },
+      name: 'Home.page.json',
+    })
+
+    const renderer = seed?.components.Renderer as { type: string; props: { page: unknown } }
+    expect(renderer.type).toBe('page-slot')
+    expect(renderer.props.page).toEqual({
+      kind: 'page',
+      providerId: 'memory',
+      assetKey: 'Pages/Home.page.json',
+      scope: 'persistent',
+    })
+    const transform = seed?.components.Transform as { size: { width: number; height: number } }
+    expect(transform.size).toEqual({
+      width: nested.output.width,
+      height: nested.output.height,
+    })
+  })
+
+  it('页面内容不可解析时回退到默认尺寸', async () => {
+    const seed = await preset().assetDrop?.createSeed({
+      reference: { providerId: 'memory', assetKey: 'Pages/Broken.page.json', scope: 'persistent' },
+      resolved: {
+        blob: new Blob(['{ broken']),
+        revision: '1',
+        mediaType: COMPOSE_PAGE_MEDIA_TYPE,
+      },
+      name: 'Broken.page.json',
+    })
+
+    const transform = seed?.components.Transform as { size: { width: number; height: number } }
+    expect(transform.size.width).toBeGreaterThan(0)
+    expect(transform.size.height).toBeGreaterThan(0)
   })
 })
