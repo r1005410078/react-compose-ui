@@ -24,7 +24,7 @@ function seedEntity(
 }
 
 describe('Basic ECS materials', () => {
-  it('OpenSpec: Entity Presets / 五种物料写入明确基础组合', () => {
+  it('OpenSpec: Entity Presets / 六种物料写入明确基础组合', () => {
     const materials = createComposeBasicMaterials()
     expect(materials.presets.map(({ id }) => id)).toEqual([
       'container',
@@ -32,6 +32,7 @@ describe('Basic ECS materials', () => {
       'text',
       'image',
       'svg',
+      'page-slot',
     ])
     const container = seedEntity(materials, 'container')
     expect(getComposeHierarchy(container)?.childIds).toEqual([])

@@ -7,6 +7,7 @@ import type {
 import type {
   ComposeDocument,
   ComposeEntity,
+  ComposePageDocumentLoader,
   ComposeRenderer,
   EditorCommand,
   JsonObject,
@@ -37,6 +38,21 @@ export interface ComposeRendererProps {
   readonly mode: 'editor' | 'preview'
   /** 资源型 Renderer 使用的可选运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
+  /**
+   * 页面型 Renderer 使用的可选文档加载端口。
+   *
+   * @remarks
+   * 类型来自 `@compose-ui/core`，Registry 只负责透传，不实现加载，因此 Stage 与 Preview
+   * 接受该端口时不会依赖任何页面实现包。
+   */
+  readonly pageDocumentPort?: ComposePageDocumentLoader
+  /**
+   * 当前实例的 Entity Registry。
+   *
+   * @remarks
+   * 只有需要递归渲染其他 Entity 的 Renderer（如页面槽位）才会用到；普通物料可以忽略。
+   */
+  readonly registry: ComposeEntityRegistry
 }
 
 /**

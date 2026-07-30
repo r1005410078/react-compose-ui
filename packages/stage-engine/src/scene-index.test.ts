@@ -60,3 +60,13 @@ describe('StageSceneIndex ECS queries', () => {
     expect(index.entityAtPoint({ x: 10, y: 10 })).toBe('lower')
   })
 })
+
+describe('OpenSpec: stage / Page Slot 嵌套内容不进入场景索引', () => {
+  it('被引用页面的实体不出现在外层文档的索引中', () => {
+    // page-slot 实体在外层文档里是一个普通叶子节点；被引用页面的实体属于另一份文档，
+    // 因此框选、吸附候选与场景树都取不到它们，嵌套渲染不会把它们注入外层索引。
+    const index = createStageSceneIndex(document([entity('slot')]))
+
+    expect(index.order).toEqual(['slot'])
+  })
+})

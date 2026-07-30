@@ -7,6 +7,7 @@ import {
   type JsonObject,
 } from '@compose-ui/core'
 import type { ComposeRendererInspectorProps } from '@compose-ui/component-registry'
+import { composeNodePropertySchema } from './node'
 
 /** Inspector 命令 ID factory。 @internal */
 export type InspectorIdFactory = () => string
@@ -79,6 +80,39 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
           context,
           // setRendererProps 是整体替换语义；schema 之外的宿主 props 必须原样保留。
           { ...context.renderer.props, ...next },
+          idFactory,
+        )}
+      />
+    )
+  }
+}
+
+/**
+ * 创建 Page Slot Renderer 内容 Inspector。
+ *
+ * @remarks
+ * `page` 使用 node 基础 editor；候选与拖入解析由宿主经 `nodeEditPort` 注入，物料不理解
+ * 页面目录本身。
+ * @internal
+ */
+export function createPageSlotRendererInspector(idFactory: InspectorIdFactory) {
+  return function PageSlotRendererInspector(context: ComposeRendererInspectorProps) {
+    const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
+    const schema = v.object({
+      page: composeNodePropertySchema({ title: title(zh, 'Page', '页面') }),
+    })
+    const value = { page: (context.renderer.props.page ?? null) as never }
+    return (
+      <ComposePropertyPanel
+        aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
+        nodeEditor={context.nodeEditPort}
+        readOnly={context.readOnly}
+        schema={schema}
+        value={value}
+        onValueChange={(next) => dispatchProps(
+          context,
+          // setRendererProps 是整体替换语义；schema 之外的宿主 props 必须原样保留。
+          { ...context.renderer.props, ...next } as JsonObject,
           idFactory,
         )}
       />

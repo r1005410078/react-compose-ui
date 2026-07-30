@@ -35,6 +35,10 @@ export {
   DEFAULT_COMPOSE_SVG_PRESET,
   DEFAULT_COMPOSE_SVG_RENDERER,
 } from './svg'
+export {
+  DEFAULT_COMPOSE_PAGE_SLOT_PRESET,
+  DEFAULT_COMPOSE_PAGE_SLOT_RENDERER,
+} from './page-slot'
 export type {
   ComposeBasicContainerOptions,
   ComposeBasicMaterialOptions,

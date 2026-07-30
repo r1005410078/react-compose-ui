@@ -6,6 +6,7 @@ import {
   type EditorCommand,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '../registry/types'
+import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import type { ComposeNodeEditPort, ComposePaintEditPort } from '../registry/types'
 
 interface BoundaryProps {
@@ -64,11 +65,13 @@ export function ComposeRegistryEntityRenderer({
   entity,
   mode,
   assetResolver,
+  pageDocumentPort,
 }: {
   readonly registry: ComposeEntityRegistry
   readonly entity: ComposeEntity
   readonly mode: 'editor' | 'preview'
   readonly assetResolver?: ComposeAssetResolver
+  readonly pageDocumentPort?: ComposePageDocumentLoader
 }) {
   const renderer = getComposeRenderer(entity)
   if (!renderer) return null
@@ -87,7 +90,9 @@ export function ComposeRegistryEntityRenderer({
         assetResolver={assetResolver}
         entity={entity}
         mode={mode}
+        pageDocumentPort={pageDocumentPort}
         props={renderer.props}
+        registry={registry}
         renderer={renderer}
       />
     </DefinitionErrorBoundary>

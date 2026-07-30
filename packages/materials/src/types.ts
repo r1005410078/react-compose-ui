@@ -40,6 +40,8 @@ export interface ComposeCreateBasicMaterialsOptions {
     readonly presets?: readonly ComposeEntityPreset[]
     readonly capabilities?: readonly ComposeCapabilityDefinition[]
   }
+  /** Page Slot 物料选项。 */
+  readonly pageSlot?: ComposeBasicMaterialOptions
   /** Inspector 命令 ID factory。 */
   readonly idFactory?: () => string
 }

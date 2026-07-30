@@ -416,6 +416,7 @@ export function ComposeStage({
   document,
   registry,
   assetResolver,
+  pageLoader,
   dispatch,
   viewport,
   onViewportChange,
@@ -1671,6 +1672,7 @@ export function ComposeStage({
         <StageSceneLayer
           assetResolver={assetResolver}
           document={previewDocument}
+          pageLoader={pageLoader}
           paintPreview={interaction.paintPreview}
           registry={registry}
           viewport={viewport}
