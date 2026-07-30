@@ -1,19 +1,5 @@
 import {
-  ComposeButton,
   ComposeConfirmDialog,
-  ComposeContextMenu,
-  ComposeContextMenuContent,
-  ComposeContextMenuItem,
-  ComposeContextMenuShortcut,
-  ComposeDialog,
-  ComposeDialogBackdrop,
-  ComposeDialogContent,
-  ComposeDialogFooter,
-  ComposeDialogHeader,
-  ComposeDialogPortal,
-  ComposeDialogTitle,
-  ComposeDialogViewport,
-  ComposeInput,
   ComposeTree,
   useComposeContextMenu,
 } from '@compose-ui/components'
@@ -23,6 +9,9 @@ import {
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
+import { AssetContextMenu } from './asset-context-menu'
+import { AssetNamePromptDialog } from './asset-name-prompt'
+import { useAssetNamePrompt } from './use-name-prompt'
 import {
   useCallback,
   useEffect,
@@ -51,7 +40,6 @@ import {
   AssetThumbnail,
 } from '../asset-preview'
 import { getAssetBrowserMessages } from '../asset-browser-i18n'
-import type { AssetBrowserMessages } from '../asset-browser-i18n'
 import type {
   ComposeAssetEntry,
   ComposeAssetOperationEvent,
@@ -76,11 +64,6 @@ const assetTreeAdapter: ComposeTreeItemAdapter<AssetTreeEntry> = {
     && entry.parentId !== null
     && entry.capabilities?.move !== false,
 }
-
-type NameDialog = {
-  readonly mode: 'file' | 'folder' | 'rename'
-  readonly initialValue: string
-} | null
 
 function eventOf(
   type: ComposeAssetOperationEvent['type'],
@@ -151,56 +134,6 @@ function ToolbarIcon({ name }: { readonly name: 'new-file' | 'new-folder' | 'imp
   )
 }
 
-interface NameDialogProps {
-  readonly dialog: NonNullable<NameDialog>
-  readonly messages: AssetBrowserMessages
-  readonly onClose: () => void
-  readonly onSubmit: (value: string) => void
-}
-
-function AssetNameDialog({ dialog, messages, onClose, onSubmit }: NameDialogProps) {
-  const [value, setValue] = useState(dialog.initialValue)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const title = dialog.mode === 'folder'
-    ? messages.newFolder
-    : dialog.mode === 'file'
-      ? messages.newFile
-      : messages.rename
-  return (
-    <ComposeDialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <ComposeDialogPortal>
-        <ComposeDialogBackdrop />
-        <ComposeDialogViewport>
-          <ComposeDialogContent
-            initialFocus={inputRef}
-          >
-            <form className="cu:grid cu:gap-5" onSubmit={(event) => {
-              event.preventDefault()
-              onSubmit(value)
-            }}>
-              <ComposeDialogHeader>
-                <ComposeDialogTitle>{title}</ComposeDialogTitle>
-              </ComposeDialogHeader>
-              <label className="cu:grid cu:gap-2 cu:text-sm cu:font-medium cu:text-foreground">
-                <span>{messages.name}</span>
-                <ComposeInput
-                  ref={inputRef}
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                />
-              </label>
-              <ComposeDialogFooter>
-                <ComposeButton type="button" variant="outline" onClick={onClose}>{messages.cancel}</ComposeButton>
-                <ComposeButton type="submit">{dialog.mode === 'rename' ? messages.rename : messages.create}</ComposeButton>
-              </ComposeDialogFooter>
-            </form>
-          </ComposeDialogContent>
-        </ComposeDialogViewport>
-      </ComposeDialogPortal>
-    </ComposeDialog>
-  )
-}
-
 /**
  * 渲染双栏资源管理、目录网格、安全文件预览和按需 Monaco 脚本编辑器。
  *
@@ -248,7 +181,7 @@ export function ComposeAssetBrowser({
   const loadFolder = source.loadFolder
   const [query, setQuery] = useState('')
   const [sidebarWidth, setSidebarWidth] = useState(280)
-  const [nameDialog, setNameDialog] = useState<NameDialog>(null)
+  const namePrompt = useAssetNamePrompt()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const contextMenu = useComposeContextMenu<string>()
@@ -326,14 +259,41 @@ export function ComposeAssetBrowser({
     source.invalidate(unique)
   }, [source])
 
-  const submitName = useCallback(async (name: string) => {
-    if (!provider || !nameDialog) return
+  /**
+   * 执行一次命名提交。
+   *
+   * @remarks
+   * 成功时关闭对话框并清除提示；失败时保留对话框，使用户能就地修正名称重试。
+   * `mutate` 返回 false 表示操作被宿主否决，此时同样保留对话框。
+   */
+  const runNamedMutation = useCallback(async (mutate: () => Promise<boolean>) => {
     try {
-      if (nameDialog.mode === 'folder' && folder && provider.createFolder) {
+      if (!await mutate()) return
+      namePrompt.close()
+      setNotice(null)
+    } catch (error) {
+      setNotice(messages.error(normalizeComposeAssetError(error).message))
+    }
+  }, [messages, namePrompt])
+
+  const promptCreateFolder = useCallback(() => {
+    namePrompt.open(
+      { title: messages.newFolder, initialValue: 'New Folder', confirmLabel: messages.create },
+      (name) => void runNamedMutation(async () => {
+        if (!folder || !provider?.createFolder) return true
         const created = await provider.createFolder({ parentId: folder.id, name })
         refreshFolders([folder.id])
         report(eventOf('create', [created.id]))
-      } else if (nameDialog.mode === 'file' && folder && provider.createFile) {
+        return true
+      }),
+    )
+  }, [folder, messages, namePrompt, provider, refreshFolders, report, runNamedMutation])
+
+  const promptCreateFile = useCallback(() => {
+    namePrompt.open(
+      { title: messages.newFile, initialValue: 'untitled.ts', confirmLabel: messages.create },
+      (name) => void runNamedMutation(async () => {
+        if (!folder || !provider?.createFile) return true
         const created = await provider.createFile({
           parentId: folder.id,
           name,
@@ -342,28 +302,43 @@ export function ComposeAssetBrowser({
         refreshFolders([folder.id])
         requestSelection([created.id])
         report(eventOf('create', [created.id]))
-      } else if (nameDialog.mode === 'rename' && selectedEntry && provider.renameEntry) {
-        if (!await allowMutation('rename', [selectedEntry])) return
-        const renamed = await provider.renameEntry({ entryId: selectedEntry.id, name })
-        refreshFolders([selectedEntry.parentId ?? provider.root.id])
-        requestSelection([renamed.id])
-        report(eventOf('rename', [renamed.id]))
-      }
-      setNameDialog(null)
-      setNotice(null)
-    } catch (error) {
-      setNotice(messages.error(normalizeComposeAssetError(error).message))
-    }
+        return true
+      }),
+    )
   }, [
-    allowMutation,
     folder,
     messages,
-    nameDialog,
+    namePrompt,
     provider,
     refreshFolders,
     report,
     requestSelection,
-    selectedEntry,
+    runNamedMutation,
+  ])
+
+  const promptRename = useCallback((entry: ComposeAssetEntry) => {
+    namePrompt.open(
+      { title: messages.rename, initialValue: entry.name, confirmLabel: messages.rename },
+      (name) => void runNamedMutation(async () => {
+        if (!provider?.renameEntry) return true
+        // 宿主否决重命名时保留对话框，与内建新建路径的「守卫不满足即关闭」不同。
+        if (!await allowMutation('rename', [entry])) return false
+        const renamed = await provider.renameEntry({ entryId: entry.id, name })
+        refreshFolders([entry.parentId ?? provider.root.id])
+        requestSelection([renamed.id])
+        report(eventOf('rename', [renamed.id]))
+        return true
+      }),
+    )
+  }, [
+    allowMutation,
+    messages,
+    namePrompt,
+    provider,
+    refreshFolders,
+    report,
+    requestSelection,
+    runNamedMutation,
   ])
 
   const importAssetFiles = useCallback(async (files: readonly File[]) => {
@@ -605,7 +580,7 @@ export function ComposeAssetBrowser({
           requestDelete()
         } else if (event.key === 'F2' && canRename && selectedEntry) {
           event.preventDefault()
-          setNameDialog({ mode: 'rename', initialValue: selectedEntry.name })
+          promptRename(selectedEntry)
         }
       }}
       onDragOver={(event) => {
@@ -620,11 +595,11 @@ export function ComposeAssetBrowser({
       <header className="asset-browser__toolbar">
         <strong title={provider.label}>{provider.label}</strong>
         <div className="asset-browser__toolbar-actions">
-          <button aria-label={messages.newFile} disabled={!canCreateFile} title={messages.newFile} type="button" onClick={() => setNameDialog({ mode: 'file', initialValue: 'untitled.ts' })}><ToolbarIcon name="new-file" /></button>
-          <button aria-label={messages.newFolder} disabled={!canCreateFolder} title={messages.newFolder} type="button" onClick={() => setNameDialog({ mode: 'folder', initialValue: 'New Folder' })}><ToolbarIcon name="new-folder" /></button>
+          <button aria-label={messages.newFile} disabled={!canCreateFile} title={messages.newFile} type="button" onClick={promptCreateFile}><ToolbarIcon name="new-file" /></button>
+          <button aria-label={messages.newFolder} disabled={!canCreateFolder} title={messages.newFolder} type="button" onClick={promptCreateFolder}><ToolbarIcon name="new-folder" /></button>
           <button aria-label={messages.import} disabled={!canCreateFile} title={messages.import} type="button" onClick={() => importRef.current?.click()}><ToolbarIcon name="import" /></button>
           <button aria-label={messages.refresh} title={messages.refresh} type="button" onClick={() => folder && source.loadFolder(folder.id, true)}><ToolbarIcon name="refresh" /></button>
-          <button aria-label={messages.rename} disabled={!canRename} title={messages.rename} type="button" onClick={() => selectedEntry && setNameDialog({ mode: 'rename', initialValue: selectedEntry.name })}><ToolbarIcon name="rename" /></button>
+          <button aria-label={messages.rename} disabled={!canRename} title={messages.rename} type="button" onClick={() => selectedEntry && promptRename(selectedEntry)}><ToolbarIcon name="rename" /></button>
           <button aria-label={messages.delete} disabled={!canDelete} title={messages.delete} type="button" onClick={requestDelete}><ToolbarIcon name="delete" /></button>
         </div>
         <input ref={importRef} hidden multiple type="file" onChange={(event) => void importFiles(event)} />
@@ -803,12 +778,12 @@ export function ComposeAssetBrowser({
           </div>
         </main>
       </div>
-      {nameDialog ? (
-        <AssetNameDialog
-          dialog={nameDialog}
+      {namePrompt.state ? (
+        <AssetNamePromptDialog
           messages={messages}
-          onClose={() => setNameDialog(null)}
-          onSubmit={(value) => void submitName(value)}
+          request={namePrompt.state.request}
+          onClose={namePrompt.close}
+          onSubmit={namePrompt.state.onSubmit}
         />
       ) : null}
       {deleteOpen ? (
@@ -823,30 +798,18 @@ export function ComposeAssetBrowser({
           onOpenChange={setDeleteOpen}
         />
       ) : null}
-      <ComposeContextMenu {...contextMenu.rootProps}>
-        <ComposeContextMenuContent aria-label={messages.assets}>
-          <ComposeContextMenuItem
-            disabled={!canCreateFile}
-            onClick={() => setNameDialog({ mode: 'file', initialValue: 'untitled.ts' })}
-          >{messages.newFile}</ComposeContextMenuItem>
-          <ComposeContextMenuItem
-            disabled={!canCreateFolder}
-            onClick={() => setNameDialog({ mode: 'folder', initialValue: 'New Folder' })}
-          >{messages.newFolder}</ComposeContextMenuItem>
-          <ComposeContextMenuItem
-            disabled={!canRename}
-            onClick={() => {
-              const entry = contextMenu.payload ? source.entriesById.get(contextMenu.payload) : undefined
-              if (entry) setNameDialog({ mode: 'rename', initialValue: entry.name })
-            }}
-          >{messages.rename}<ComposeContextMenuShortcut>F2</ComposeContextMenuShortcut></ComposeContextMenuItem>
-          <ComposeContextMenuItem
-            disabled={!canDelete}
-            variant="destructive"
-            onClick={requestDelete}
-          >{messages.delete}<ComposeContextMenuShortcut>Delete</ComposeContextMenuShortcut></ComposeContextMenuItem>
-        </ComposeContextMenuContent>
-      </ComposeContextMenu>
+      <AssetContextMenu
+        capabilities={{ canCreateFile, canCreateFolder, canRename, canDelete }}
+        contextMenu={contextMenu}
+        messages={messages}
+        onCreateFile={promptCreateFile}
+        onCreateFolder={promptCreateFolder}
+        onDelete={requestDelete}
+        onRename={() => {
+          const entry = contextMenu.payload ? source.entriesById.get(contextMenu.payload) : undefined
+          if (entry) promptRename(entry)
+        }}
+      />
     </div>
   )
 }
