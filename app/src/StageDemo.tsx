@@ -44,7 +44,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComposeEditorActivePage } from '@compose-ui/editor'
 import { useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
-import { createComposePageStore } from '@compose-ui/pages'
+import { createComposePageDocumentLoader, createComposePageStore } from '@compose-ui/pages'
 import * as v from 'valibot'
 import { createDemoAssetProvider } from './demo-asset-provider'
 
@@ -330,6 +330,7 @@ export function StageDemoWorkspace() {
    */
   const [pageStore] = useState(() => createComposePageStore({ provider: assetProvider }))
   const pageCatalog = useComposePageCatalog(pageStore)
+  const pageLoader = useMemo(() => createComposePageDocumentLoader(pageStore), [pageStore])
   const nodeEditPort = useNodeEditorPort({
     catalog: pageCatalog,
     providerId: assetProvider.id,
@@ -339,6 +340,7 @@ export function StageDemoWorkspace() {
     registry,
     idFactory,
     nodeEditPort,
+    pageLoader,
     onTransaction: recordTransaction,
   })
   const assetResolver = useMemo(
@@ -401,6 +403,7 @@ export function StageDemoWorkspace() {
             <ComposePreview
               assetResolver={assetResolver}
               document={controller.document}
+              pageLoader={pageLoader}
               registry={registry}
               target={previewMode === 'container' && selectedContainerId
                 ? { kind: 'container', entityId: selectedContainerId }

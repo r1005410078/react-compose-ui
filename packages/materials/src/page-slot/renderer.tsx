@@ -152,8 +152,15 @@ export function PageSlotRenderer({
       <div
         className="compose-material compose-material--page-slot"
         data-testid="compose-page-slot-content"
-        // 编辑态嵌套内容不参与命中测试：选择与框选必须落在 Page Slot 实体本身。
-        style={mode === 'editor' ? { pointerEvents: 'none' } : undefined}
+        style={{
+          // 尺寸内联给定而不依赖样式表加载顺序：嵌套实体是绝对定位的，容器一旦塌陷成
+          // 零高度，用户就什么都看不到。
+          position: 'absolute',
+          inset: 0,
+          overflow: 'hidden',
+          // 编辑态嵌套内容不参与命中测试：选择与框选必须落在 Page Slot 实体本身。
+          ...(mode === 'editor' ? { pointerEvents: 'none' as const } : {}),
+        }}
       >
         {state.document.rootIds.map((rootId) => (
           <NestedEntity

@@ -10,6 +10,7 @@
 
 export { listComposePageDescriptors } from './page-catalog'
 export type { ComposePageDescriptor } from './page-catalog'
+export { createComposePageDocumentLoader } from './page-document-loader'
 export { createComposePageStore } from './page-store'
 export type {
   ComposePageCatalog,

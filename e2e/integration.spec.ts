@@ -1380,3 +1380,44 @@ test('OpenSpec: editor-workspace-layout / 只读页面 JSON / Monaco 只读且�
   await expect(jsonDocument).toHaveCount(0)
   await expect(page.getByRole('dialog')).toHaveCount(0)
 })
+
+test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与预览中渲染', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+
+  // 1) 先在 Home 页面里放一个矩形，作为嵌套渲染的可见证据
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).dblclick()
+  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  const homeTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
+  await homeTab.getByRole('button', { name: /^关闭页面/ }).click()
+  await page.getByRole('dialog', { name: '页面尚未保存' })
+    .getByRole('button', { name: '保存' }).click()
+  await expect(homeTab).toHaveCount(0)
+
+  // 2) 在根文档里创建一个 Page Slot 实体
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await editor.getByRole('button', { name: 'Page Slot' }).click()
+  await expect(stage.getByTestId('compose-page-slot-placeholder')).toBeVisible()
+
+  // 3) 属性面板的 node 字段选中 Home 页面
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  const nodeField = inspector.getByTestId('semantic-editor-node')
+  await expect(nodeField).toBeVisible()
+  await nodeField.getByRole('combobox').click()
+  await inspector.getByRole('option', { name: 'Home' }).click()
+
+  // 4) 画布上实时渲染被引用页面的内容
+  await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
+
+  // 5) 预览中同样渲染
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const preview = page.getByRole('dialog').or(page.getByTestId('compose-preview-document'))
+  await expect(preview.getByTestId('compose-page-slot-content').first()).toBeVisible()
+})

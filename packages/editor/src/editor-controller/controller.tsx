@@ -18,6 +18,7 @@ import {
   type CommandDispatchResult,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposePageDocumentLoader,
   type EditorCommand,
   type EditorTransaction,
   type TransactionRuntime,
@@ -205,6 +206,14 @@ export interface UseComposeEditorControllerOptions {
    * node 字段呈现无候选状态但仍可清空。
    */
   readonly nodeEditPort?: ComposeNodeEditPort
+  /**
+   * 页面型物料使用的文档加载端口。
+   *
+   * @remarks
+   * 由宿主从页面 Store 派生（`createComposePageDocumentLoader`）；未提供时画布上的页面槽位
+   * 呈现占位状态。
+   */
+  readonly pageLoader?: ComposePageDocumentLoader
 }
 
 /**
@@ -293,6 +302,7 @@ export function useComposeEditorController({
   onTransaction,
   idFactory = defaultIdFactory,
   nodeEditPort,
+  pageLoader,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
   const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const document = snapshot.document
@@ -476,6 +486,7 @@ export function useComposeEditorController({
   const stageProps = useMemo<ComposeStageProps>(() => ({
     document,
     registry,
+    pageLoader,
     dispatch,
     viewport,
     onViewportChange: setViewport,
@@ -494,6 +505,7 @@ export function useComposeEditorController({
   }), [
     document,
     registry,
+    pageLoader,
     dispatch,
     viewport,
     tool,
