@@ -264,12 +264,18 @@ export function ComposeAssetBrowser({
     source.invalidate(unique)
   }, [source])
 
-  /** 渲染宿主标记；标记不参与命中测试，因此统一裹在 aria-hidden 容器里。 */
+  /**
+   * 渲染宿主标记。
+   *
+   * @remarks
+   * 容器只用 `pointer-events: none` 排除命中测试，不加 `aria-hidden` —— 标记承载「首页」这类
+   * 语义，必须留在无障碍树里并成为条目可读名称的一部分。
+   */
   const renderBadge = (context: ComposeAssetEntryRenderContext) => {
     const badge = renderEntryBadge?.(context)
     return badge === undefined || badge === null
       ? null
-      : <span aria-hidden="true" className="asset-browser__entry-badge">{badge}</span>
+      : <span className="asset-browser__entry-badge">{badge}</span>
   }
 
   /**

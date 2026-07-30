@@ -7,6 +7,7 @@ import type { EditorMessages } from '../editor-i18n'
 /** 页面上下文菜单项的稳定 ID。 @internal */
 export const PAGE_CONTEXT_MENU_ITEM_IDS = {
   createPage: 'compose.page.create',
+  setHomePage: 'compose.page.set-home',
 } as const
 
 /**
@@ -18,12 +19,18 @@ export const PAGE_CONTEXT_MENU_ITEM_IDS = {
  * @internal
  */
 export function createPageContextMenuItems({
+  homePageKey,
   messages,
+  onHomePageChange,
   onPageCreated,
   provider,
   store,
 }: {
+  /** 当前首页的稳定 key；未设置时为 null。 */
+  readonly homePageKey: string | null
   readonly messages: EditorMessages
+  /** 首页改写成功后通知宿主。 */
+  readonly onHomePageChange: (pageKey: string | null) => void
   /**
    * 页面创建成功后由调用方打开该页面。
    *
@@ -59,6 +66,22 @@ export function createPageContextMenuItems({
         })
         context.refresh()
         onPageCreated(created)
+      },
+    },
+    {
+      id: PAGE_CONTEXT_MENU_ITEM_IDS.setHomePage,
+      label: messages.pages.setAsHomePage,
+      // 只对页面文件出现：资源浏览器不认识页面，可见性判定只能在这里做。
+      isVisible: (context) => context.entry !== undefined
+        && isComposePageFileName(context.entry.name),
+      isDisabled: (context) => !store.canWriteManifest()
+        || context.entry?.assetKey === undefined
+        || context.entry.assetKey === homePageKey,
+      onSelect: async (context) => {
+        const pageKey = context.entry?.assetKey
+        if (pageKey === undefined) return
+        const manifest = await store.setHomePage(pageKey)
+        onHomePageChange(manifest.homePageKey)
       },
     },
   ]

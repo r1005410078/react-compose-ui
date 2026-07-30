@@ -6,7 +6,7 @@ import {
   createEmptyComposePageDocument,
   serializeComposePageDocument,
 } from '@compose-ui/core'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const initializeWorkspaceMock = vi.hoisted(() => vi.fn())
@@ -129,17 +129,35 @@ vi.mock('@compose-ui/asset-browser', async () => {
   const React = await import('react')
   return {
     // 双击与右键行为由 asset-browser 自己的测试覆盖；这里只暴露宿主回调入口。
-    ComposeAssetBrowser: ({ contextMenuItems, onAssetOpen }: {
+    ComposeAssetBrowser: ({ contextMenuItems, onAssetOpen, onBeforeAssetMutation, renderEntryBadge }: {
       contextMenuItems?: readonly {
         id: string
         label: string
+        isVisible?: (context: unknown) => boolean
         isDisabled?: (context: unknown) => boolean
         onSelect: (context: unknown) => void | Promise<void>
       }[]
       onAssetOpen?: (entry: ComposeAssetEntry) => void
+      onBeforeAssetMutation?: (mutation: unknown) => boolean | Promise<boolean>
+      renderEntryBadge?: (context: {
+        entry: ComposeAssetEntry
+        surface: 'tree' | 'grid'
+        selected: boolean
+        expanded: boolean
+      }) => React.ReactNode
     }) => React.createElement(
       'div',
       { 'data-testid': 'asset-browser' },
+      // 标记插槽在树与网格双处调用；这里各调一次以覆盖两个表面。
+      (['tree', 'grid'] as const).map((surface) => React.createElement(
+        'div',
+        { key: surface, 'data-testid': `badge-host-${surface}` },
+        renderEntryBadge?.({ entry: pageEntry, surface, selected: false, expanded: false }),
+      )),
+      React.createElement('button', {
+        type: 'button',
+        onClick: () => { void onBeforeAssetMutation?.({ type: 'delete', entries: [pageEntry] }) },
+      }, 'delete-page'),
       React.createElement('button', {
         type: 'button',
         onClick: () => onAssetOpen?.(pageEntry),
@@ -148,12 +166,14 @@ vi.mock('@compose-ui/asset-browser', async () => {
         type: 'button',
         onClick: () => onAssetOpen?.(scriptEntry),
       }, 'open-script'),
-      (contextMenuItems ?? []).map((item) => React.createElement('button', {
-        key: item.id,
-        type: 'button',
-        disabled: item.isDisabled?.(menuContext) === true,
-        onClick: () => { void item.onSelect(menuContext) },
-      }, item.label)),
+      (contextMenuItems ?? [])
+        .filter((item) => item.isVisible?.(menuContext) !== false)
+        .map((item) => React.createElement('button', {
+          key: item.id,
+          type: 'button',
+          disabled: item.isDisabled?.(menuContext) === true,
+          onClick: () => { void item.onSelect(menuContext) },
+        }, item.label)),
     ),
     ComposeAssetPreview: () => React.createElement('div', { 'data-testid': 'asset-preview' }),
   }
@@ -181,6 +201,15 @@ const scriptEntry: ComposeAssetEntry = {
   mediaType: 'text/typescript',
   revision: '1',
   assetKey: 'dashboard.ts',
+}
+const manifestEntry: ComposeAssetEntry = {
+  id: 'app.json',
+  parentId: 'root',
+  name: 'app.json',
+  kind: 'file',
+  mediaType: 'application/json',
+  revision: '1',
+  assetKey: 'app.json',
 }
 const menuContext = {
   entry: pageEntry,
@@ -413,5 +442,109 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
     })
 
     expect(await screen.findByRole('button', { name: '创建页面' })).toBeDisabled()
+  })
+})
+
+describe('OpenSpec: editor-workspace-layout / 首页标记与清单对账', () => {
+  it('设为首页后标记在树与网格双处渲染', async () => {
+    const provider = createProvider()
+    renderEditor(provider)
+
+    fireEvent.click(await screen.findByRole('button', { name: '设为首页' }))
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('badge-host-tree'))
+        .getByRole('img', { name: '首页' })).toBeInTheDocument()
+    })
+    expect(within(screen.getByTestId('badge-host-grid'))
+      .getByRole('img', { name: '首页' })).toBeInTheDocument()
+    expect(provider.createFile).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'app.json',
+    }))
+  })
+
+  it('已是首页时设为首页项禁用', async () => {
+    renderEditor(createProvider({
+      list: vi.fn(async ({ folderId }) => folderId === 'root'
+        ? [pageEntry, scriptEntry, manifestEntry]
+        : []),
+      read: vi.fn(async ({ fileId }) => ({
+        blob: new Blob([fileId === 'app.json'
+          ? '{"schemaVersion":1,"homePageKey":"Home.page.json"}'
+          : pageText]),
+        revision: '1',
+      })),
+    }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '设为首页' })).toBeDisabled()
+    })
+  })
+
+  it('清单不可写时设为首页项禁用但标记仍渲染', async () => {
+    const provider = createProvider({
+      list: vi.fn(async ({ folderId }) => folderId === 'root'
+        ? [pageEntry, scriptEntry, manifestEntry]
+        : []),
+      read: vi.fn(async ({ fileId }) => ({
+        blob: new Blob([fileId === 'app.json'
+          ? '{"schemaVersion":1,"homePageKey":"Home.page.json"}'
+          : pageText]),
+        revision: '1',
+      })),
+    })
+    delete (provider as { writeFile?: unknown }).writeFile
+    renderEditor(provider)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '设为首页' })).toBeDisabled()
+    })
+    expect(within(screen.getByTestId('badge-host-tree'))
+      .getByRole('img', { name: '首页' })).toBeInTheDocument()
+  })
+
+  it('清单损坏时降级为无首页且不渲染标记', async () => {
+    renderEditor(createProvider({
+      list: vi.fn(async ({ folderId }) => folderId === 'root'
+        ? [pageEntry, scriptEntry, manifestEntry]
+        : []),
+      read: vi.fn(async ({ fileId }) => ({
+        blob: new Blob([fileId === 'app.json' ? '{ broken' : pageText]),
+        revision: '1',
+      })),
+    }))
+
+    await waitFor(() => { expect(screen.getByTestId('badge-host-tree')).toBeInTheDocument() })
+    expect(within(screen.getByTestId('badge-host-tree'))
+      .queryByRole('img', { name: '首页' })).not.toBeInTheDocument()
+  })
+
+  it('本编辑器内删除首页页面时清空清单指向', async () => {
+    const provider = createProvider({
+      list: vi.fn(async ({ folderId }) => folderId === 'root'
+        ? [pageEntry, scriptEntry, manifestEntry]
+        : []),
+      read: vi.fn(async ({ fileId }) => ({
+        blob: new Blob([fileId === 'app.json'
+          ? '{"schemaVersion":1,"homePageKey":"Home.page.json"}'
+          : pageText]),
+        revision: '1',
+      })),
+    })
+    renderEditor(provider)
+    await waitFor(() => {
+      expect(within(screen.getByTestId('badge-host-tree'))
+        .getByRole('img', { name: '首页' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'delete-page' }))
+
+    await waitFor(() => {
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({
+        fileId: 'app.json',
+      }))
+    })
+    const written = (provider.writeFile as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+    expect(await (written.content as Blob).text()).toContain('"homePageKey": null')
   })
 })

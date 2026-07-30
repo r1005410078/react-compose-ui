@@ -50,13 +50,13 @@
 - [x] 2.3 `asset-browser`：`renderEntryBadge` prop，文件树行与目录网格块双处渲染
 - [x] 2.4 `asset-browser` 测试：标记在树与网格双处渲染、返回空结果时不产生额外元素、
   标记不参与命中测试
-- [ ] 2.5 `packages/editor/src/pages/page-badges.tsx`：`HomePageBadge`（`role="img"` + i18n 可读名）
-- [ ] 2.6 `page-context-menu.tsx`：设为首页项（只读 Provider 与已是首页时禁用）
-- [ ] 2.7 `use-page-workspace.ts`：`handleDefaultAssetMutation` 的清单对账（删除首页置空、
+- [x] 2.5 `packages/editor/src/pages/page-badges.tsx`：`HomePageBadge`（`role="img"` + i18n 可读名）
+- [x] 2.6 `page-context-menu.tsx`：设为首页项（只读 Provider 与已是首页时禁用）
+- [x] 2.7 `use-page-workspace.ts`：`handleDefaultAssetMutation` 的清单对账（删除首页置空、
   重命名首页改写 key）、悬空 key 非阻断提示
-- [ ] 2.8 测试：设为首页后双处出现标记、首页转移、删除首页清空清单、只读 Provider 置灰、
+- [x] 2.8 测试：设为首页后双处出现标记、首页转移、删除首页清空清单、只读 Provider 置灰、
   清单损坏与悬空 key 的降级
-- [ ] 2.9 Playwright：设为首页 → 双处标记 → 重载保持 → 第二个页面接管标记
+- [x] 2.9 Playwright：设为首页 → 双处标记 → 重载保持 → 第二个页面接管标记
 
 ## 3. P3 只读 JSON 查看
 

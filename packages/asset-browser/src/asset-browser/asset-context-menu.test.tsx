@@ -225,7 +225,7 @@ describe('OpenSpec: asset-browser / 宿主上下文菜单项扩展', () => {
 })
 
 describe('OpenSpec: asset-browser / 条目标记插槽', () => {
-  it('文件树行与目录网格块都渲染标记，且标记不参与命中测试', async () => {
+  it('文件树行与目录网格块都渲染标记，且标记留在无障碍树中', async () => {
     render(
       <ComposeAssetBrowser
         provider={createProvider()}
@@ -241,8 +241,10 @@ describe('OpenSpec: asset-browser / 条目标记插槽', () => {
       expect(screen.getByTestId('badge-tree')).toBeInTheDocument()
     })
     expect(screen.getByTestId('badge-grid')).toBeInTheDocument()
-    expect(screen.getByTestId('badge-tree').closest('[aria-hidden="true"]')).not.toBeNull()
-    expect(screen.getByTestId('badge-grid').closest('[aria-hidden="true"]')).not.toBeNull()
+    // 命中测试由 pointer-events: none 排除；标记本身必须可被读出，因此不能 aria-hidden。
+    expect(screen.getByTestId('badge-tree').closest('[aria-hidden="true"]')).toBeNull()
+    expect(screen.getByTestId('badge-tree').closest('.asset-browser__entry-badge')).not.toBeNull()
+    expect(screen.getByTestId('badge-grid').closest('.asset-browser__entry-badge')).not.toBeNull()
   })
 
   it('返回空结果时不产生额外元素', async () => {

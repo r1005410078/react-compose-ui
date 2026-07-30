@@ -764,3 +764,10 @@
   color: var(--compose-color-foreground);
   font-size: 12px;
 }
+
+/* 首页标记；颜色跟随强调色，尺寸由 asset-browser 的标记容器约束。 */
+.compose-editor__home-page-badge {
+  width: 12px;
+  height: 12px;
+  color: var(--compose-accent);
+}

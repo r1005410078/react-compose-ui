@@ -49,6 +49,7 @@ import type { ComposeSceneTreeProps } from '@compose-ui/scene-tree'
 import type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragEvent,
+  ComposeAssetEntryRenderContext,
   ComposeAssetMutation,
 } from '@compose-ui/asset-browser'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
@@ -81,7 +82,7 @@ import {
 } from '../workspace-layout'
 import type { ComposePageDescriptor } from '@compose-ui/pages'
 import { getEditorMessages } from '../editor-i18n'
-import { createPageContextMenuItems } from '../pages'
+import { createPageContextMenuItems, HomePageBadge } from '../pages'
 import { usePageWorkspace } from '../pages'
 import type { ComposeEditorPagesConfig } from '../pages'
 import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-layout'
@@ -408,6 +409,14 @@ export function ComposeEditor({
     sessions: pageSessions,
     updateSession: updatePageDocument,
   })
+  const pageStore = pageWorkspace.store
+  const pageProvider = assets?.browser?.provider
+  const homePageKey = pageWorkspace.catalog?.homePageKey ?? null
+  const onHomePageChange = pages?.onHomePageChange
+  const handleHomePageChange = useCallback((nextKey: string | null) => {
+    pageWorkspace.refreshCatalog()
+    onHomePageChange?.(nextKey)
+  }, [onHomePageChange, pageWorkspace])
   const openPageDocument = useCallback(async (entry: ComposeAssetEntry) => {
     const provider = assets?.browser?.provider
     if (!provider || !entry.assetKey) return
@@ -477,8 +486,22 @@ export function ComposeEditor({
     for (const panelId of panelIds) {
       if (!await requestDocumentClose(panelId)) return false
     }
+    // 首页对账：只处理经由本编辑器发生的删除与重命名。外部变更下 key 悬空只提示不改写，
+    // 因为一次列举失败或临时移动文件都不应销毁用户的首页设置。
+    if (pageStore && homePageKey !== null && mutation.type === 'delete') {
+      const removesHome = mutation.entries.some((entry) => entry.assetKey === homePageKey)
+      if (removesHome) {
+        try {
+          const manifest = await pageStore.setHomePage(null)
+          handleHomePageChange(manifest.homePageKey)
+        }
+        catch {
+          // 清单不可写时保留原设置；界面会因页面消失而不再渲染标记。
+        }
+      }
+    }
     return true
-  }, [assets?.browser, requestDocumentClose])
+  }, [assets?.browser, handleHomePageChange, homePageKey, pageStore, requestDocumentClose])
   const handleAssetOpen = useCallback((entry: ComposeAssetEntry) => {
     assets?.browser?.onAssetOpen?.(entry)
     // 页面文件走页面标签；其余文件仍走既有的资源文档标签。
@@ -536,15 +559,28 @@ export function ComposeEditor({
       revision: descriptor.revision,
     })
   }, [openPageDocument])
-  const pageStore = pageWorkspace.store
-  const pageProvider = assets?.browser?.provider
   // eslint-disable-next-line react-hooks/refs -- onPageCreated 只在用户选中菜单项后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调传下去」。
   const pageContextMenuItems = useMemo(() => createPageContextMenuItems({
+    homePageKey,
     messages: editorMessages,
+    onHomePageChange: handleHomePageChange,
+    onPageCreated: handlePageCreated,
     provider: pageProvider,
     store: pageStore,
-    onPageCreated: handlePageCreated,
-  }), [editorMessages, handlePageCreated, pageProvider, pageStore])
+  }), [
+    editorMessages,
+    handleHomePageChange,
+    handlePageCreated,
+    homePageKey,
+    pageProvider,
+    pageStore,
+  ])
+
+  /** 首页标记；资源浏览器不认识页面，标记内容由这里提供。 */
+  const renderEntryBadge = useCallback((context: ComposeAssetEntryRenderContext) => {
+    if (homePageKey === null || context.entry.assetKey !== homePageKey) return null
+    return <HomePageBadge label={editorMessages.pages.homePageBadge} />
+  }, [editorMessages.pages.homePageBadge, homePageKey])
 
   const hostContextMenuItems = useMemo(() => {
     const hostItems = assets?.browser?.contextMenuItems ?? []
@@ -634,6 +670,7 @@ export function ComposeEditor({
               <ComposeAssetBrowser
                 {...assets.browser}
                 contextMenuItems={hostContextMenuItems}
+                renderEntryBadge={assets.browser.renderEntryBadge ?? renderEntryBadge}
                 onAssetOpen={handleAssetOpen}
                 onBeforeAssetMutation={handleDefaultAssetMutation}
                 onCanvasDrag={handleAssetCanvasDrag}
@@ -666,6 +703,7 @@ export function ComposeEditor({
       handleAssetOpen,
       handleDefaultAssetMutation,
       hostContextMenuItems,
+      renderEntryBadge,
       resolvedAssetResolver,
       handleAssetCanvasDrag,
       registerDocumentSave,

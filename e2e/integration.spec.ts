@@ -1294,3 +1294,56 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 创建、编辑�
   const sceneTree = editor.locator('[data-workspace-panel="scene-graph"]')
   await expect(sceneTree).toContainText('Container')
 })
+
+test('OpenSpec: editor-workspace-layout / 首页标记 / 设为首页并在树与网格双处标记', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await expect(pagesGrid).toBeVisible()
+
+  // 文件树默认不展开子目录；标记要在树与网格双处断言，先展开 Pages 节点。
+  const tree = assets.getByRole('treegrid')
+  const pagesRow = tree.getByRole('row', { name: 'Pages' })
+  await pagesRow.click()
+  await pagesRow.press('ArrowRight')
+  await expect(tree.getByRole('row', { name: /Home.page.json/ })).toBeVisible()
+
+  // 初始没有首页
+  await expect(assets.getByRole('img', { name: '首页' })).toHaveCount(0)
+
+  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '设为首页' }).click()
+
+  // 树行与网格块双处渲染标记
+  await expect(tree.getByRole('row', { name: /Home.page.json/ })
+    .getByRole('img', { name: '首页' })).toBeVisible()
+  await expect(pagesGrid.getByRole('gridcell', { name: /Home.page.json/ })
+    .getByRole('img', { name: '首页' })).toBeVisible()
+
+  // 已是首页时该项禁用
+  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await expect(page.getByRole('menu').getByRole('menuitem', { name: '设为首页' }))
+    .toHaveAttribute('aria-disabled', 'true')
+  await page.keyboard.press('Escape')
+
+  // 第二个页面接管首页标记
+  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建页面' }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Second')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+  await expect(pagesGrid.getByRole('gridcell', { name: /Second.page.json/ })).toBeVisible()
+
+  await pagesGrid.getByRole('gridcell', { name: /Second.page.json/ }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '设为首页' }).click()
+
+  await expect(pagesGrid.getByRole('gridcell', { name: /Second.page.json/ })
+    .getByRole('img', { name: '首页' })).toBeVisible()
+  await expect(pagesGrid.getByRole('gridcell', { name: /Home.page.json/ })
+    .getByRole('img', { name: '首页' })).toHaveCount(0)
+})
