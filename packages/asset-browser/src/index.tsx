@@ -18,6 +18,10 @@ export type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragEvent,
   ComposeAssetCanvasDragItem,
+  ComposeAssetContextMenuContext,
+  ComposeAssetContextMenuItem,
+  ComposeAssetEntryRenderContext,
+  ComposeAssetNamePromptRequest,
   ComposeAssetMutation,
 } from './asset-browser-types'
 export type {

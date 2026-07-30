@@ -28,6 +28,9 @@ import type {
 import type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragItem,
+  ComposeAssetContextMenuContext,
+  ComposeAssetEntryRenderContext,
+  ComposeAssetNamePromptRequest,
 } from '../asset-browser-types'
 import {
   canvasImageMediaType,
@@ -155,6 +158,8 @@ export function ComposeAssetBrowser({
   onAssetOpen,
   onBeforeAssetMutation,
   onCanvasDrag,
+  contextMenuItems,
+  renderEntryBadge,
   allowLocalDirectory = true,
   emptyState,
   className,
@@ -258,6 +263,58 @@ export function ComposeAssetBrowser({
     const unique = [...new Set(ids.filter(Boolean))]
     source.invalidate(unique)
   }, [source])
+
+  /** 渲染宿主标记；标记不参与命中测试，因此统一裹在 aria-hidden 容器里。 */
+  const renderBadge = (context: ComposeAssetEntryRenderContext) => {
+    const badge = renderEntryBadge?.(context)
+    return badge === undefined || badge === null
+      ? null
+      : <span aria-hidden="true" className="asset-browser__entry-badge">{badge}</span>
+  }
+
+  /**
+   * 宿主菜单项求值与执行使用的上下文。
+   *
+   * @remarks
+   * 命中条目取自菜单打开时记录的 payload；`parentId` 对目录取其自身，对文件取其父目录，
+   * 使宿主的「新建」落在用户直觉上的位置。
+   */
+  const hostMenuContext = useMemo<ComposeAssetContextMenuContext | undefined>(() => {
+    if (!contextMenuItems || contextMenuItems.length === 0) return undefined
+    const entry = contextMenu.payload
+      ? source.entriesById.get(contextMenu.payload)
+      : undefined
+    const entries = entry && !selectedIds.includes(entry.id)
+      ? [entry]
+      : selectedEntries.length > 0 ? selectedEntries : entry ? [entry] : []
+    const parentId = entry
+      ? entry.kind === 'folder' ? entry.id : entry.parentId
+      : folder?.id ?? null
+    return {
+      entry,
+      entries,
+      parentId: parentId === provider?.root.id ? null : parentId,
+      promptName: async (request: ComposeAssetNamePromptRequest) => namePrompt.promptName({
+        title: request.title,
+        initialValue: request.initialValue,
+        confirmLabel: request.confirmLabel ?? messages.create,
+      }),
+      refresh: (target) => {
+        refreshFolders([target ?? parentId ?? provider?.root.id ?? ''])
+      },
+    }
+  }, [
+    contextMenu.payload,
+    contextMenuItems,
+    folder?.id,
+    messages,
+    namePrompt,
+    provider?.root.id,
+    refreshFolders,
+    selectedEntries,
+    selectedIds,
+    source.entriesById,
+  ])
 
   /**
    * 执行一次命名提交。
@@ -634,7 +691,17 @@ export function ComposeAssetBrowser({
               selectionMode="multiple"
               selectedIds={selectedIds}
               renderIcon={(context) => context.item.kind === 'folder' ? <FolderIcon /> : <FileIcon />}
-              renderLabel={(context) => context.item.name}
+              renderLabel={(context) => (
+                <>
+                  {context.item.name}
+                  {renderBadge({
+                    entry: context.item,
+                    surface: 'tree',
+                    selected: context.selected,
+                    expanded: context.expanded,
+                  })}
+                </>
+              )}
               onActivate={(entry) => {
                 if (entry.kind === 'folder') {
                   void source.loadFolder(entry.id)
@@ -771,7 +838,15 @@ export function ComposeAssetBrowser({
                   }}
                 >
                   <AssetThumbnail entry={entry} provider={provider} />
-                  <span title={entry.name}>{entry.name}</span>
+                  <span title={entry.name}>
+                    {entry.name}
+                    {renderBadge({
+                      entry,
+                      surface: 'grid',
+                      selected: selectedIds.includes(entry.id),
+                      expanded: false,
+                    })}
+                  </span>
                 </button>
                 </div>
               ))}
@@ -801,6 +876,8 @@ export function ComposeAssetBrowser({
       <AssetContextMenu
         capabilities={{ canCreateFile, canCreateFolder, canRename, canDelete }}
         contextMenu={contextMenu}
+        hostContext={hostMenuContext}
+        hostItems={contextMenuItems}
         messages={messages}
         onCreateFile={promptCreateFile}
         onCreateFolder={promptCreateFolder}
