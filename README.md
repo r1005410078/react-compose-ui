@@ -145,9 +145,34 @@ Inspector 按 Registry 顺序聚合当前 Entity 的 Component 属性区。顶�
 产品术语扩展 Entity；锁定后只有 Lock 可编辑。Preview 使用与 Stage 相同的 Transform、
 Appearance、Hierarchy、Clip 和 Renderer 语义，但不包含编辑 chrome。
 
+## 页面系统
+
+页面就是一份未经扩展的 `ComposeDocument v5`，以 `.page.json` 后缀持久化在 Asset Provider 中；
+首页由资源根的 `app.json` 唯一表达。`@compose-ui/pages` 提供无 React、无 DOM 的页面目录、
+文档 Store 与清单读写，编辑器与独立预览运行时共用同一实例。
+
+```tsx
+const [activePage, setActivePage] = useState<ComposeEditorActivePage | null>(null)
+// 工作区跟随活动页面：宿主拥有 controller，因此由宿主换 runtime。
+const controller = useComposeEditorController({
+  runtime: activePage?.runtime ?? rootRuntime,
+  registry,
+})
+
+<ComposeEditor
+  assets={{ browser: { provider } }}
+  controller={controller}
+  pages={pagesConfig}
+/>
+```
+
+`pages` 与 `runtime` 必须保持稳定引用：前者决定页面 Store 的派生，后者变化会被当作换文档
+并重置选择与视口。资源面板据此出现「创建页面」「设为首页」「打开组件 JSON 配置」三项右键操作，
+双击页面文件以独立标签打开，每个页面拥有自己的事务运行时与撤销历史。
+
 ## 包边界
 
-- Headless：`core`、`assets`、`stage-engine`，不依赖 React/DOM。
+- Headless：`core`、`assets`、`pages`、`stage-engine`，不依赖 React/DOM。
 - Shared UI/Protocol：`ui-context`、`components`、`component-registry`。
 - Domain Widgets：`stage`、`scene-tree`、`asset-browser`、`history`、`property-panel`、
   `operation-log`、`command-panel`、`materials`。
@@ -178,9 +203,11 @@ bun run test:e2e
 
 ## 当前边界
 
-本轮只完成单文档内 Entity/Component 组合重构。页面系统、复用 Instance、Interaction、
-Animation、结构变体、数据源和正式持久化仍需独立 OpenSpec。未来页面可以持有一个
-`ComposeDocument v5`，无需再次改变节点能力模型。
+页面系统已交付第一阶段：页面作为文档存在，可创建、编辑、保存、指定首页、只读查看其 JSON。
+把页面当作属性值装进组件（`node` 属性 editor 与画布内嵌套渲染）由后续变更
+`add-page-node-property` 承担。
+
+复用 Instance、Interaction、Animation、结构变体、数据源和正式持久化仍需独立 OpenSpec。
 
 ## License
 

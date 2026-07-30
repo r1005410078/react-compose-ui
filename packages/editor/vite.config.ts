@@ -32,6 +32,7 @@ export default defineConfig({
         '@compose-ui/command-panel',
         '@compose-ui/component-registry',
         '@compose-ui/history',
+        '@compose-ui/pages',
         '@compose-ui/property-panel',
         '@compose-ui/scene-tree',
         '@compose-ui/stage',

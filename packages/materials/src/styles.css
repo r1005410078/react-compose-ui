@@ -14,3 +14,24 @@
   height: 100%;
   font-family: var(--compose-material-font-family);
 }
+
+/* Page Slot：嵌套页面内容按被引用页面的实体绝对定位，槽位本身裁剪溢出。 */
+.compose-material--page-slot {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.compose-material--page-slot-status {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  color: var(--compose-text-muted, #8893a2);
+  font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+  text-align: center;
+}

@@ -60,6 +60,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `core`、`editor`、`scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
 - `@compose-ui/component-registry` 是实例级宿主组件注册协议，可以依赖 `core` 和 `assets`，以 React 为
   peer dependency，不得依赖 `editor` 或 `property-panel`。
+- `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面文档 Store 包，只能依赖
+  `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
   包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
@@ -82,7 +84,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`stage-engine`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`stage-engine`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、
@@ -193,6 +195,24 @@ src/tree/
 - Bug 修复、文档、测试及非破坏性配置变更可以直接实施，但仍须保持范围最小。
 - 新增能力时优先完成一条可运行的纵向流程，再扩展抽象和组件种类。
 - 不要提前实现尚未由规范确定的编辑器领域模型。
+
+## Worktree 工作目录
+
+需要在独立分支上工作时，一律使用 git worktree，并且只放在仓库根目录的 `.worktree/` 下，
+不得在主检出内直接切换分支，也不得把 worktree 建在仓库之外的同级目录：
+
+```bash
+git worktree add .worktree/<change-id> -b <branch>
+```
+
+- 目录名使用对应的 OpenSpec change ID（例如 `.worktree/add-page-system`），一个变更一个目录。
+- `.worktree/` 已被 `.gitignore` 忽略，因此嵌套在仓库内不会污染主检出的工作区状态。
+- 主检出保留给 `main` 与正在进行的未提交改动。禁止把其他分支的改动提交进主检出，也禁止把主
+  检出里与当前任务无关的改动一并提交。
+- worktree 只包含 Git 跟踪的文件，**不含 `node_modules`**。执行构建、测试或类型检查前必须先在
+  该目录运行 `bun install`。
+- 用完通过 `git worktree remove .worktree/<change-id>` 清理，禁止直接 `rm -rf`；确有残留时再运行
+  `git worktree prune`。
 
 ## 验证要求
 

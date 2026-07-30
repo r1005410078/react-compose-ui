@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import type { HTMLAttributes } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import {
   ComposeButton,
   ComposeDialog,
@@ -55,6 +55,15 @@ export interface ComposeAssetPreviewProps
   extends Omit<HTMLAttributes<HTMLDivElement>, 'onError'> {
   readonly entry: ComposeAssetEntry
   readonly provider: ComposeAssetProvider
+  /**
+   * 只读模式。
+   *
+   * @remarks
+   * 只影响脚本分支：为 true 时禁止输入与写入、不上报 dirty，`save()` 空转成功。
+   * 图片与未知文件分支的呈现不受影响。
+   * @defaultValue false
+   */
+  readonly readOnly?: boolean
   /** 脚本 dirty 状态变更。 */
   readonly onDirtyChange?: (dirty: boolean) => void
   /** Provider 成功写入后返回最新条目。 */
@@ -77,6 +86,7 @@ export const ComposeAssetPreview = forwardRef<
   onDirtyChange = () => undefined,
   onSaved = () => undefined,
   provider,
+  readOnly = false,
   className,
   ...htmlProps
 }, ref) {
@@ -92,8 +102,9 @@ export const ComposeAssetPreview = forwardRef<
   const blobUrl = useBlobUrl(state.status === 'ready' ? state.data?.blob : undefined)
 
   useImperativeHandle(ref, () => ({
-    save: async () => scriptRef.current?.save() ?? true,
-  }), [])
+    // 只读预览没有可保存的草稿；空转返回成功，使宿主的关闭确认不会因此卡住。
+    save: async () => readOnly ? true : scriptRef.current?.save() ?? true,
+  }), [readOnly])
 
   if (state.status === 'loading' || state.status === 'idle') {
     return <div {...htmlProps} className={['asset-browser__status', className].filter(Boolean).join(' ')}>{messages.loading}</div>
@@ -117,6 +128,7 @@ export const ComposeAssetPreview = forwardRef<
           entry={entry}
           loadingLabel={messages.loading}
           providerId={provider.id}
+          readOnly={readOnly}
           revision={state.data.revision}
           theme={theme?.resolvedTheme ?? 'dark'}
           onDirtyChange={onDirtyChange}
@@ -209,9 +221,11 @@ export const ComposeAssetPreview = forwardRef<
 interface AssetThumbnailProps {
   readonly entry: ComposeAssetEntry
   readonly provider: ComposeAssetProvider
+  /** 宿主提供的缩略图内容；优先于内建的目录图标与扩展名占位。 */
+  readonly fallback?: ReactNode
 }
 
-export function AssetThumbnail({ entry, provider }: AssetThumbnailProps) {
+export function AssetThumbnail({ entry, fallback, provider }: AssetThumbnailProps) {
   const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined')
   const [element, setElement] = useState<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -226,12 +240,14 @@ export function AssetThumbnail({ entry, provider }: AssetThumbnailProps) {
   const url = useBlobUrl(state.status === 'ready' ? state.data?.blob : undefined)
   return (
     <div ref={setElement} aria-hidden="true" className="asset-browser__thumbnail">
-      {url ? <img alt="" loading="lazy" src={url} /> : entry.kind === 'folder' ? (
+      {url ? <img alt="" loading="lazy" src={url} /> : fallback !== undefined && fallback !== null
+        ? fallback
+        : entry.kind === 'folder' ? (
         <svg viewBox="0 0 48 40">
           <path d="M3 8h17l5 6h20v22H3z" fill="currentColor" opacity=".85" />
           <path d="M3 14h42" fill="none" stroke="currentColor" opacity=".45" />
         </svg>
-      ) : <span>{extensionOf(entry.name).toUpperCase() || 'FILE'}</span>}
+        ) : <span>{extensionOf(entry.name).toUpperCase() || 'FILE'}</span>}
     </div>
   )
 }

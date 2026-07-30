@@ -730,3 +730,96 @@
   background: var(--compose-surface-raised);
   color: var(--compose-text-muted);
 }
+
+/*
+ * 页面文档面板与固定画布面板共用同一套工具栏与内容区结构，因此必须使用相同的
+ * flex 列布局：.compose-editor__canvas-content 依赖 flex-1 撑开，放进 grid 容器会塌陷。
+ */
+.compose-editor__page-document {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--compose-panel-bg);
+}
+
+/* 标签上的未保存指示点；与关闭按钮并排，不参与命中测试。 */
+.compose-editor__document-dirty {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+  pointer-events: none;
+}
+
+.compose-editor__page-notice {
+  display: flex;
+  position: absolute;
+  z-index: 5;
+  right: 16px;
+  bottom: 16px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--compose-color-border);
+  border-radius: 6px;
+  background: var(--compose-color-surface);
+  color: var(--compose-color-foreground);
+  font-size: 12px;
+}
+
+/* 首页标记；颜色跟随强调色，尺寸由 asset-browser 的标记容器约束。 */
+.compose-editor__home-page-badge {
+  width: 12px;
+  height: 12px;
+  color: var(--compose-accent);
+}
+
+/* 页面标签的显式保存按钮；与工具栏其余按钮同高但带文字。 */
+.compose-editor__page-save {
+  margin-inline-start: auto;
+  margin-inline-end: 8px;
+  padding: 0 10px;
+  min-height: 28px;
+  border: 1px solid var(--compose-border);
+  border-radius: 5px;
+  background: var(--compose-surface-control);
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.compose-editor__page-save:hover:not(:disabled) {
+  border-color: var(--compose-border-strong);
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__page-save:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+/* 页面条目图标：外框加内部组装块，表达「由组件组装成的一屏」。 */
+.compose-editor__page-entry-icon {
+  color: var(--compose-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+/* 文件树行按行高取小尺寸。 */
+.compose-editor__page-entry-icon--tree {
+  width: 15px;
+  height: 15px;
+}
+
+/* 目录网格的缩略图区域为 88px，图标需要相应放大才看得清。 */
+.compose-editor__page-entry-icon--grid {
+  width: 48px;
+  height: 48px;
+}

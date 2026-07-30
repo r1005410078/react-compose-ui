@@ -6,6 +6,7 @@ export {
 } from './compose-property-panel'
 export {
   useComposePropertyPanelColorEditorPort,
+  useComposePropertyPanelNodeEditorPort,
   useComposePropertyPanelPaintEditorPort,
 } from './editor-ports'
 export type {
@@ -43,5 +44,7 @@ export type {
 } from './compose-property-panel'
 export type {
   ComposePropertyPanelColorEditorPort,
+  ComposePropertyPanelNodeCandidate,
+  ComposePropertyPanelNodeEditorPort,
   ComposePropertyPanelPaintEditorPort,
 } from './editor-ports'

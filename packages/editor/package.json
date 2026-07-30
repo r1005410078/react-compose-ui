@@ -2,8 +2,12 @@
   "name": "@compose-ui/editor",
   "version": "0.1.0",
   "type": "module",
-  "sideEffects": ["**/*.css"],
-  "files": ["dist"],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,10 +33,11 @@
     "@compose-ui/asset-browser": "workspace:*",
     "@compose-ui/assets": "workspace:*",
     "@compose-ui/command-panel": "workspace:*",
-    "@compose-ui/components": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
+    "@compose-ui/components": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/history": "workspace:*",
+    "@compose-ui/pages": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/scene-tree": "workspace:*",
     "@compose-ui/stage": "workspace:*",

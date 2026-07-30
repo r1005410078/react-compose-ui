@@ -13,6 +13,7 @@ import {
   composeEntityVisualStyle,
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
+import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import {
   COMPOSE_UI_CORE_PACKAGE,
   getComposeHierarchy,
@@ -38,6 +39,13 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
   readonly registry: ComposeEntityRegistry
   /** 资源型 Renderer 解析稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
+  /**
+   * 页面型物料使用的文档加载端口。
+   *
+   * @remarks
+   * Preview 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
+   */
+  readonly pageLoader?: ComposePageDocumentLoader
   /** 输出完整文档或某个根级/嵌套 Container；省略时输出完整文档。 */
   readonly target?: ComposePreviewTarget
 }
@@ -60,11 +68,13 @@ function entityStyle(entity: ComposeEntity): CSSProperties {
 
 function PreviewEntity({
   assetResolver,
+  pageLoader,
   document,
   registry,
   entityId,
 }: {
   assetResolver?: ComposeAssetResolver
+  pageLoader?: ComposePageDocumentLoader
   document: ComposeDocument
   registry: ComposeEntityRegistry
   entityId: string
@@ -79,11 +89,13 @@ function PreviewEntity({
         assetResolver={assetResolver}
         entity={entity}
         mode="preview"
+        pageDocumentPort={pageLoader}
         registry={registry}
       />
       {hierarchy?.childIds.map((childId) => (
         <PreviewEntity
           assetResolver={assetResolver}
+          pageLoader={pageLoader}
           document={document}
           entityId={childId}
           key={childId}
@@ -104,6 +116,7 @@ export function ComposePreview({
   document,
   registry,
   assetResolver,
+  pageLoader,
   target = { kind: 'document' },
   ...props
 }: ComposePreviewProps) {
@@ -123,6 +136,7 @@ export function ComposePreview({
           <PreviewEntity
             assetResolver={assetResolver}
             document={document}
+            pageLoader={pageLoader}
             entityId={entityId}
             key={entityId}
             registry={registry}
@@ -152,12 +166,14 @@ export function ComposePreview({
                       assetResolver={assetResolver}
                       entity={entity}
                       mode="preview"
+                      pageDocumentPort={pageLoader}
                       registry={registry}
                     />
                     {hierarchy.childIds.map((childId) => (
                       <PreviewEntity
                         assetResolver={assetResolver}
                         document={document}
+                        pageLoader={pageLoader}
                         entityId={childId}
                         key={childId}
                         registry={registry}

@@ -12,6 +12,7 @@ export {
   type ComposeEntityAssetDropInput,
   type ComposeEntityInspectorContext,
   type ComposeEntityPreset,
+  type ComposeNodeEditPort,
   type ComposePaintEditPort,
   type ComposeEntityRegistry,
   type ComposeEntityRegistryOptions,

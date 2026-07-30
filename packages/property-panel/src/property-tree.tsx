@@ -734,7 +734,8 @@ function PropertyNode({
     || !matchesNode(schema, value, baseline, path, label, view)
   ) return null
 
-  if (supportsPresence && missing) {
+  // renderer 声明接管空值时不短路：页面引用等 editor 需要在未设置时仍能选择或接受拖入。
+  if (supportsPresence && missing && renderer?.rendersEmptyState !== true) {
     return (
       <PropertyRow label={label} nodeActions={actions} path={path}>
         <span className="property-panel__empty">未设置</span>

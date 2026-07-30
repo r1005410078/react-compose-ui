@@ -17,6 +17,7 @@ import {
   DEFAULT_COMPOSE_TEXT_PRESET,
   DEFAULT_COMPOSE_TEXT_RENDERER,
 } from './text'
+import { createPageSlotMaterial } from './page-slot'
 import {
   createImageMaterial,
   DEFAULT_COMPOSE_IMAGE_PRESET,
@@ -59,11 +60,13 @@ export function createComposeBasicMaterials(
   const text = createTextMaterial(options.text, idFactory)
   const image = createImageMaterial(options.image, idFactory)
   const svg = createSvgMaterial(options.svg, idFactory)
+  const pageSlot = createPageSlotMaterial(options.pageSlot, idFactory)
   const rendererDefinitions = Object.freeze([
     rectangle.renderer,
     text.renderer,
     image.renderer,
     svg.renderer,
+    pageSlot.renderer,
     ...(options.extensions?.renderers ?? []),
   ])
   const componentDefinitions = Object.freeze([
@@ -76,6 +79,7 @@ export function createComposeBasicMaterials(
     text.preset,
     image.preset,
     svg.preset,
+    pageSlot.preset,
     ...(options.extensions?.presets ?? []),
   ])
   const capabilities = Object.freeze([

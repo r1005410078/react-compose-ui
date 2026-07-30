@@ -12,6 +12,7 @@ import type {
   IDockviewPanelProps,
 } from 'dockview-react'
 import { useWorkspaceContent } from './workspace-context'
+import { WORKSPACE_PANEL_IDS } from './workspace-layout'
 import { WorkspaceTab } from './workspace-tab'
 import { getEditorMessages } from '../editor-i18n'
 
@@ -221,9 +222,10 @@ export function ComponentLibraryPanel() {
 }
 
 export function CanvasPanel() {
-  const { stageToolbar, children } = useWorkspaceContent()
+  const { stageToolbar, children, stageHostPanelId } = useWorkspaceContent()
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
+  const hostsStage = stageHostPanelId === WORKSPACE_PANEL_IDS.canvas
 
   return (
     <div
@@ -233,7 +235,7 @@ export function CanvasPanel() {
       <div className="compose-editor__canvas-toolbar">
         {stageToolbar ?? <Placeholder>{messages.workspace.stageToolbarEmpty}</Placeholder>}
       </div>
-      <div className="compose-editor__canvas-content">{children}</div>
+      <div className="compose-editor__canvas-content">{hostsStage ? children : null}</div>
     </div>
   )
 }
@@ -296,26 +298,27 @@ export function AssetBrowserPanel() {
 /** 渲染中央 Canvas Group 中的临时资源文档。 @internal */
 export function AssetDocumentPanel(props: IDockviewPanelProps) {
   const {
-    assetDocuments,
-    registerAssetDocumentSave,
-    setAssetDocumentDirty,
+    documents,
+    registerDocumentSave,
+    setDocumentDirty,
     setAssetDocumentSaved,
   } = useWorkspaceContent()
   const panelId = props.api?.id
-  const session = panelId ? assetDocuments.get(panelId) : undefined
+  const candidate = panelId ? documents.get(panelId) : undefined
+  const session = candidate?.kind === 'asset' ? candidate : undefined
   const previewRef = useRef<ComposeAssetPreviewHandle>(null)
   const handleDirtyChange = useCallback((dirty: boolean) => {
-    if (panelId) setAssetDocumentDirty(panelId, dirty)
-  }, [panelId, setAssetDocumentDirty])
+    if (panelId) setDocumentDirty(panelId, dirty)
+  }, [panelId, setDocumentDirty])
   const handleSaved = useCallback((entry: ComposeAssetEntry) => {
     if (panelId) setAssetDocumentSaved(panelId, entry)
   }, [panelId, setAssetDocumentSaved])
 
   useEffect(() => {
-    if (!panelId) return
-    registerAssetDocumentSave(panelId, () => previewRef.current?.save() ?? Promise.resolve(false))
-    return () => registerAssetDocumentSave(panelId, null)
-  }, [panelId, registerAssetDocumentSave])
+    if (!panelId || session?.readOnly === true) return
+    registerDocumentSave(panelId, () => previewRef.current?.save() ?? Promise.resolve(false))
+    return () => registerDocumentSave(panelId, null)
+  }, [panelId, registerDocumentSave, session?.readOnly])
 
   if (!panelId || !session) return null
 
@@ -323,15 +326,67 @@ export function AssetDocumentPanel(props: IDockviewPanelProps) {
     <div
       className="compose-editor__asset-document"
       data-asset-entry-id={session.entry.id}
+      data-readonly={session.readOnly ? 'true' : undefined}
       data-workspace-panel="asset-document"
     >
       <ComposeAssetPreview
         ref={previewRef}
         entry={session.entry}
         provider={session.provider}
+        readOnly={session.readOnly}
         onDirtyChange={handleDirtyChange}
         onSaved={handleSaved}
       />
+    </div>
+  )
+}
+
+/**
+ * 渲染中央 Canvas Group 中的页面文档。
+ *
+ * @remarks
+ * 页面的编辑表面是共享的工作区画布 —— 活动页面由宿主换 controller 的 runtime 体现，因此本
+ * 面板自身只负责注册保存入口与呈现当前页面的标识，不重复渲染一份 Stage。
+ * @internal
+ */
+export function PageDocumentPanel(props: IDockviewPanelProps) {
+  const {
+    documents,
+    children,
+    saveDocument,
+    stageHostPanelId,
+    stageToolbar,
+  } = useWorkspaceContent()
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
+  const panelId = props.api?.id
+  const candidate = panelId ? documents.get(panelId) : undefined
+  const session = candidate?.kind === 'page' ? candidate : undefined
+
+  if (!panelId || !session) return null
+
+  return (
+    <div
+      className="compose-editor__page-document"
+      data-page-key={session.pageKey}
+      data-workspace-panel="page-document"
+    >
+      <div className="compose-editor__canvas-toolbar">
+        {stageToolbar ?? <Placeholder>{messages.workspace.stageToolbarEmpty}</Placeholder>}
+        {/* 页面没有 Monaco 那样的内建保存入口，这里提供显式按钮；快捷键同为 Cmd/Ctrl+S。 */}
+        <button
+          className="compose-editor__page-save"
+          disabled={!session.dirty}
+          title={messages.pages.savePage}
+          type="button"
+          onClick={() => { saveDocument(panelId) }}
+        >
+          {messages.pages.savePage}
+        </button>
+      </div>
+      <div className="compose-editor__canvas-content">
+        {stageHostPanelId === panelId ? children : null}
+      </div>
     </div>
   )
 }

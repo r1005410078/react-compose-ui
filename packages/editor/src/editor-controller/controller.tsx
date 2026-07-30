@@ -18,6 +18,7 @@ import {
   type CommandDispatchResult,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposePageDocumentLoader,
   type EditorCommand,
   type EditorTransaction,
   type TransactionRuntime,
@@ -32,7 +33,11 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import type { ComposeCommandPreset } from '@compose-ui/command-panel'
-import type { ComposeEntityRegistry, ComposePaintEditPort } from '@compose-ui/component-registry'
+import type {
+  ComposeEntityRegistry,
+  ComposeNodeEditPort,
+  ComposePaintEditPort,
+} from '@compose-ui/component-registry'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
 import type {
   ComposeSceneTreeNode,
@@ -193,6 +198,22 @@ export interface UseComposeEditorControllerOptions {
   ) => void | Promise<void>
   /** controller 创建 Entity 和命令时使用的稳定 ID factory。 */
   readonly idFactory?: () => string
+  /**
+   * 节点引用属性的候选来源。
+   *
+   * @remarks
+   * 由宿主从页面 Store 派生（见 `useComposePageCatalog` 与 `useNodeEditorPort`）；未提供时
+   * node 字段呈现无候选状态但仍可清空。
+   */
+  readonly nodeEditPort?: ComposeNodeEditPort
+  /**
+   * 页面型物料使用的文档加载端口。
+   *
+   * @remarks
+   * 由宿主从页面 Store 派生（`createComposePageDocumentLoader`）；未提供时画布上的页面槽位
+   * 呈现占位状态。
+   */
+  readonly pageLoader?: ComposePageDocumentLoader
 }
 
 /**
@@ -280,6 +301,8 @@ export function useComposeEditorController({
   containerPresetId = 'container',
   onTransaction,
   idFactory = defaultIdFactory,
+  nodeEditPort,
+  pageLoader,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
   const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const document = snapshot.document
@@ -304,6 +327,26 @@ export function useComposeEditorController({
   const transactionById = useRef(new Map<string, EditorTransaction>())
   const observerRef = useRef(onTransaction)
   const idFactoryRef = useRef(idFactory)
+  const [observedRuntime, setObservedRuntime] = useState(runtime)
+
+  // 会话状态是文档作用域的：选择、检视目标、展开集合与视口都以实体 ID 或该文档的坐标表达。
+  // 宿主换用另一个 runtime（例如切换到另一个页面）时必须立即重置，否则会残留指向上一份
+  // 文档的选择与视口。这里用「prop 变化时在渲染期调整 state」的标准模式，而不是 Effect，
+  // 避免先用陈旧会话状态渲染一帧。
+  if (runtime !== observedRuntime) {
+    setObservedRuntime(runtime)
+    const nextDocument = runtime.getState().document
+    setSelectedIdsState(validSelection(nextDocument, []))
+    setInspectionTarget(null)
+    setExpandedIdsState(validExpanded(nextDocument, []))
+    setViewport(initialViewport)
+    setPaintEditing(null)
+    setPaintSampling(null)
+    // 进行中的手势属于上一份文档，必须取消而不是让它落到新文档的实体上；
+    // Pointer 与外部拖入是两条独立的进行中状态，各自都要终止。
+    interactionController.send({ type: 'pointer.cancel' })
+    interactionController.send({ type: 'external.cancel' })
+  }
 
   useEffect(() => {
     observerRef.current = onTransaction
@@ -443,6 +486,7 @@ export function useComposeEditorController({
   const stageProps = useMemo<ComposeStageProps>(() => ({
     document,
     registry,
+    pageLoader,
     dispatch,
     viewport,
     onViewportChange: setViewport,
@@ -461,6 +505,7 @@ export function useComposeEditorController({
   }), [
     document,
     registry,
+    pageLoader,
     dispatch,
     viewport,
     tool,
@@ -558,6 +603,7 @@ export function useComposeEditorController({
       idFactory={nextId}
       // 按 Entity 重挂载：能力移除确认等局部会话状态不得跨选中目标残留。
       key={selectedEntity.id}
+      nodeEditPort={nodeEditPort}
       paintEditPort={paintEditPort}
       registry={registry}
     />

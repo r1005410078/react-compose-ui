@@ -95,4 +95,45 @@ describe('script editor', () => {
     expect(monacoFixture.editor.dispose).toHaveBeenCalled()
     expect(monacoFixture.model.dispose).toHaveBeenCalled()
   })
+
+  it('OpenSpec: asset-browser / 只读资源预览 / 只读脚本编辑器', async () => {
+    const onDirtyChange = vi.fn()
+    const onSave = vi.fn(async () => true)
+    const handle = { current: null as { save(): Promise<boolean> } | null }
+    render(
+      <ScriptEditor
+        ref={(value) => { handle.current = value }}
+        content={new Blob(['{"schemaVersion":5}'])}
+        entry={{
+          id: 'Pages/Home.page.json',
+          parentId: 'Pages',
+          name: 'Home.page.json',
+          kind: 'file',
+        }}
+        loadingLabel="Loading editor"
+        providerId="memory"
+        readOnly
+        revision="r1"
+        theme="dark"
+        onDirtyChange={onDirtyChange}
+        onSave={onSave}
+      />,
+    )
+    await waitFor(() => { expect(monacoFixture.createEditor).toHaveBeenCalled() })
+
+    // Monaco 以只读创建，并且一并关闭 contenteditable。
+    // createEditor 的 mock 签名未声明参数，取调用实参需要先放宽为数组。
+    const createOptions = (monacoFixture.createEditor.mock.calls as unknown as unknown[][])[0]?.[1]
+    expect(createOptions).toMatchObject({ readOnly: true, domReadOnly: true })
+    // 不注册保存快捷键，也不订阅内容变更。
+    expect(monacoFixture.editor.addCommand).not.toHaveBeenCalled()
+    expect(monacoFixture.model.onDidChangeContent).not.toHaveBeenCalled()
+
+    act(() => monacoFixture.setValue('tampered'))
+    expect(onDirtyChange).not.toHaveBeenCalledWith(true)
+
+    // 保存入口空转成功且不写入 Provider。
+    await expect(handle.current?.save()).resolves.toBe(true)
+    expect(onSave).not.toHaveBeenCalled()
+  })
 })

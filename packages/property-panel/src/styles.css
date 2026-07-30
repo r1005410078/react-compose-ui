@@ -1022,3 +1022,75 @@
 .property-panel[data-compose-theme='light'] .property-panel__binding-options button:hover {
   background: var(--compose-surface-hover);
 }
+
+/* node editor：combobox trigger + 弹层候选列表；容器同时是属性面板中唯一的拖放目标。 */
+.property-panel__semantic--node {
+  display: grid;
+  gap: 4px;
+}
+
+.property-panel__semantic--node[data-drop-active="true"] .property-panel__node-trigger {
+  border-color: var(--property-accent);
+  box-shadow: inset 0 0 0 1px var(--property-accent);
+}
+
+.property-panel__node-trigger {
+  width: 100%;
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.property-panel__node-trigger[data-empty="true"] {
+  color: var(--property-text-muted);
+}
+
+.property-panel__node-clear {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  padding: 0 4px;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+}
+
+.property-panel__node-popover {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 2px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--property-border);
+  border-radius: 4px;
+  background: var(--property-surface-raised);
+}
+
+.property-panel__node-listbox {
+  max-height: 200px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.property-panel__node-option {
+  display: grid;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: start;
+}
+
+.property-panel__node-option[aria-selected="true"] {
+  background: var(--property-surface-selected);
+}
+
+.property-panel__node-empty {
+  padding: 4px;
+  color: var(--property-text-muted);
+}

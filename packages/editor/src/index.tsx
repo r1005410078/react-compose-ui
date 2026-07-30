@@ -18,6 +18,11 @@ export {
   type ComposeEditorTransactionEvent,
   type UseComposeEditorControllerOptions,
 } from './editor-controller'
+export { useComposePageCatalog, useNodeEditorPort } from './pages'
+export type {
+  ComposeEditorActivePage,
+  ComposeEditorPagesConfig,
+} from './pages'
 export { createDefaultComposeEditorPreferences } from './editor-preferences'
 export type {
   ComposeEditorKeybinding,

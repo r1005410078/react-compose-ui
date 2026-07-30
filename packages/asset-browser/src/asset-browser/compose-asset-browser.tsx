@@ -1,19 +1,5 @@
 import {
-  ComposeButton,
   ComposeConfirmDialog,
-  ComposeContextMenu,
-  ComposeContextMenuContent,
-  ComposeContextMenuItem,
-  ComposeContextMenuShortcut,
-  ComposeDialog,
-  ComposeDialogBackdrop,
-  ComposeDialogContent,
-  ComposeDialogFooter,
-  ComposeDialogHeader,
-  ComposeDialogPortal,
-  ComposeDialogTitle,
-  ComposeDialogViewport,
-  ComposeInput,
   ComposeTree,
   useComposeContextMenu,
 } from '@compose-ui/components'
@@ -23,6 +9,9 @@ import {
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
+import { AssetContextMenu } from './asset-context-menu'
+import { AssetNamePromptDialog } from './asset-name-prompt'
+import { useAssetNamePrompt } from './use-name-prompt'
 import {
   useCallback,
   useEffect,
@@ -36,9 +25,16 @@ import type {
   DragEvent as ReactDragEvent,
   PointerEvent as ReactPointerEvent,
 } from 'react'
+import {
+  COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE,
+} from '../asset-browser-types'
 import type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragItem,
+  ComposeAssetReferenceDragPayload,
+  ComposeAssetContextMenuContext,
+  ComposeAssetEntryRenderContext,
+  ComposeAssetNamePromptRequest,
 } from '../asset-browser-types'
 import {
   canvasImageMediaType,
@@ -51,7 +47,6 @@ import {
   AssetThumbnail,
 } from '../asset-preview'
 import { getAssetBrowserMessages } from '../asset-browser-i18n'
-import type { AssetBrowserMessages } from '../asset-browser-i18n'
 import type {
   ComposeAssetEntry,
   ComposeAssetOperationEvent,
@@ -76,11 +71,6 @@ const assetTreeAdapter: ComposeTreeItemAdapter<AssetTreeEntry> = {
     && entry.parentId !== null
     && entry.capabilities?.move !== false,
 }
-
-type NameDialog = {
-  readonly mode: 'file' | 'folder' | 'rename'
-  readonly initialValue: string
-} | null
 
 function eventOf(
   type: ComposeAssetOperationEvent['type'],
@@ -151,56 +141,6 @@ function ToolbarIcon({ name }: { readonly name: 'new-file' | 'new-folder' | 'imp
   )
 }
 
-interface NameDialogProps {
-  readonly dialog: NonNullable<NameDialog>
-  readonly messages: AssetBrowserMessages
-  readonly onClose: () => void
-  readonly onSubmit: (value: string) => void
-}
-
-function AssetNameDialog({ dialog, messages, onClose, onSubmit }: NameDialogProps) {
-  const [value, setValue] = useState(dialog.initialValue)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const title = dialog.mode === 'folder'
-    ? messages.newFolder
-    : dialog.mode === 'file'
-      ? messages.newFile
-      : messages.rename
-  return (
-    <ComposeDialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <ComposeDialogPortal>
-        <ComposeDialogBackdrop />
-        <ComposeDialogViewport>
-          <ComposeDialogContent
-            initialFocus={inputRef}
-          >
-            <form className="cu:grid cu:gap-5" onSubmit={(event) => {
-              event.preventDefault()
-              onSubmit(value)
-            }}>
-              <ComposeDialogHeader>
-                <ComposeDialogTitle>{title}</ComposeDialogTitle>
-              </ComposeDialogHeader>
-              <label className="cu:grid cu:gap-2 cu:text-sm cu:font-medium cu:text-foreground">
-                <span>{messages.name}</span>
-                <ComposeInput
-                  ref={inputRef}
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                />
-              </label>
-              <ComposeDialogFooter>
-                <ComposeButton type="button" variant="outline" onClick={onClose}>{messages.cancel}</ComposeButton>
-                <ComposeButton type="submit">{dialog.mode === 'rename' ? messages.rename : messages.create}</ComposeButton>
-              </ComposeDialogFooter>
-            </form>
-          </ComposeDialogContent>
-        </ComposeDialogViewport>
-      </ComposeDialogPortal>
-    </ComposeDialog>
-  )
-}
-
 /**
  * 渲染双栏资源管理、目录网格、安全文件预览和按需 Monaco 脚本编辑器。
  *
@@ -222,6 +162,12 @@ export function ComposeAssetBrowser({
   onAssetOpen,
   onBeforeAssetMutation,
   onCanvasDrag,
+  canDragEntryToCanvas,
+  contextMenuItems,
+  entryNaming,
+  renderEntryIcon,
+  renderEntryLabel,
+  renderEntryBadge,
   allowLocalDirectory = true,
   emptyState,
   className,
@@ -248,10 +194,11 @@ export function ComposeAssetBrowser({
   const loadFolder = source.loadFolder
   const [query, setQuery] = useState('')
   const [sidebarWidth, setSidebarWidth] = useState(280)
-  const [nameDialog, setNameDialog] = useState<NameDialog>(null)
+  const namePrompt = useAssetNamePrompt()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const contextMenu = useComposeContextMenu<string>()
+  // payload 为 null 表示在空白区域右键：此时没有命中条目，新建操作落在当前目录。
+  const contextMenu = useComposeContextMenu<string | null>()
   const [draggedIds, setDraggedIds] = useState<readonly string[]>([])
   const canvasDragRef = useRef<{
     lastPoint: { x: number; y: number }
@@ -326,14 +273,112 @@ export function ComposeAssetBrowser({
     source.invalidate(unique)
   }, [source])
 
-  const submitName = useCallback(async (name: string) => {
-    if (!provider || !nameDialog) return
+  /** 渲染条目显示名；宿主未覆盖或返回空结果时使用原始名称。 */
+  const renderLabelFor = (context: ComposeAssetEntryRenderContext) => {
+    const label = renderEntryLabel?.(context)
+    return label === undefined || label === null ? context.entry.name : label
+  }
+
+  /** 渲染条目主图标；宿主未覆盖或返回空结果时回退到内建目录/文件图标。 */
+  const renderIconFor = (context: ComposeAssetEntryRenderContext) => {
+    const icon = renderEntryIcon?.(context)
+    if (icon !== undefined && icon !== null) return icon
+    return context.entry.kind === 'folder' ? <FolderIcon /> : <FileIcon />
+  }
+
+  /**
+   * 渲染宿主标记。
+   *
+   * @remarks
+   * 容器只用 `pointer-events: none` 排除命中测试，不加 `aria-hidden` —— 标记承载「首页」这类
+   * 语义，必须留在无障碍树里并成为条目可读名称的一部分。
+   */
+  const renderBadge = (context: ComposeAssetEntryRenderContext) => {
+    const badge = renderEntryBadge?.(context)
+    return badge === undefined || badge === null
+      ? null
+      : <span className="asset-browser__entry-badge">{badge}</span>
+  }
+
+  /**
+   * 宿主菜单项求值与执行使用的上下文。
+   *
+   * @remarks
+   * 命中条目取自菜单打开时记录的 payload；`parentId` 对目录取其自身，对文件取其父目录，
+   * 使宿主的「新建」落在用户直觉上的位置。
+   */
+  const hostMenuContext = useMemo<ComposeAssetContextMenuContext | undefined>(() => {
+    if (!contextMenuItems || contextMenuItems.length === 0) return undefined
+    const entry = contextMenu.payload
+      ? source.entriesById.get(contextMenu.payload)
+      : undefined
+    const entries = entry && !selectedIds.includes(entry.id)
+      ? [entry]
+      : selectedEntries.length > 0 ? selectedEntries : entry ? [entry] : []
+    const parentId = entry
+      ? entry.kind === 'folder' ? entry.id : entry.parentId
+      : folder?.id ?? null
+    return {
+      entry,
+      entries,
+      parentId: parentId === provider?.root.id ? null : parentId,
+      promptName: async (request: ComposeAssetNamePromptRequest) => namePrompt.promptName({
+        title: request.title,
+        initialValue: request.initialValue,
+        confirmLabel: request.confirmLabel ?? messages.create,
+      }),
+      refresh: (target) => {
+        refreshFolders([target ?? parentId ?? provider?.root.id ?? ''])
+      },
+    }
+  }, [
+    contextMenu.payload,
+    contextMenuItems,
+    folder?.id,
+    messages,
+    namePrompt,
+    provider?.root.id,
+    refreshFolders,
+    selectedEntries,
+    selectedIds,
+    source.entriesById,
+  ])
+
+  /**
+   * 执行一次命名提交。
+   *
+   * @remarks
+   * 成功时关闭对话框并清除提示；失败时保留对话框，使用户能就地修正名称重试。
+   * `mutate` 返回 false 表示操作被宿主否决，此时同样保留对话框。
+   */
+  const runNamedMutation = useCallback(async (mutate: () => Promise<boolean>) => {
     try {
-      if (nameDialog.mode === 'folder' && folder && provider.createFolder) {
+      if (!await mutate()) return
+      namePrompt.close()
+      setNotice(null)
+    } catch (error) {
+      setNotice(messages.error(normalizeComposeAssetError(error).message))
+    }
+  }, [messages, namePrompt])
+
+  const promptCreateFolder = useCallback(() => {
+    namePrompt.open(
+      { title: messages.newFolder, initialValue: 'New Folder', confirmLabel: messages.create },
+      (name) => void runNamedMutation(async () => {
+        if (!folder || !provider?.createFolder) return true
         const created = await provider.createFolder({ parentId: folder.id, name })
         refreshFolders([folder.id])
         report(eventOf('create', [created.id]))
-      } else if (nameDialog.mode === 'file' && folder && provider.createFile) {
+        return true
+      }),
+    )
+  }, [folder, messages, namePrompt, provider, refreshFolders, report, runNamedMutation])
+
+  const promptCreateFile = useCallback(() => {
+    namePrompt.open(
+      { title: messages.newFile, initialValue: 'untitled.ts', confirmLabel: messages.create },
+      (name) => void runNamedMutation(async () => {
+        if (!folder || !provider?.createFile) return true
         const created = await provider.createFile({
           parentId: folder.id,
           name,
@@ -342,28 +387,50 @@ export function ComposeAssetBrowser({
         refreshFolders([folder.id])
         requestSelection([created.id])
         report(eventOf('create', [created.id]))
-      } else if (nameDialog.mode === 'rename' && selectedEntry && provider.renameEntry) {
-        if (!await allowMutation('rename', [selectedEntry])) return
-        const renamed = await provider.renameEntry({ entryId: selectedEntry.id, name })
-        refreshFolders([selectedEntry.parentId ?? provider.root.id])
-        requestSelection([renamed.id])
-        report(eventOf('rename', [renamed.id]))
-      }
-      setNameDialog(null)
-      setNotice(null)
-    } catch (error) {
-      setNotice(messages.error(normalizeComposeAssetError(error).message))
-    }
+        return true
+      }),
+    )
   }, [
-    allowMutation,
     folder,
     messages,
-    nameDialog,
+    namePrompt,
     provider,
     refreshFolders,
     report,
     requestSelection,
-    selectedEntry,
+    runNamedMutation,
+  ])
+
+  const promptRename = useCallback((entry: ComposeAssetEntry) => {
+    namePrompt.open(
+      {
+        title: messages.rename,
+        // 宿主的命名约定（如页面后缀）不进入输入框。
+        initialValue: entryNaming?.toEditableName?.(entry) ?? entry.name,
+        confirmLabel: messages.rename,
+      },
+      (editableName) => void runNamedMutation(async () => {
+        if (!provider?.renameEntry) return true
+        // 宿主否决重命名时保留对话框，与内建新建路径的「守卫不满足即关闭」不同。
+        if (!await allowMutation('rename', [entry])) return false
+        const name = entryNaming?.toStoredName?.(entry, editableName) ?? editableName
+        const renamed = await provider.renameEntry({ entryId: entry.id, name })
+        refreshFolders([entry.parentId ?? provider.root.id])
+        requestSelection([renamed.id])
+        report(eventOf('rename', [renamed.id]))
+        return true
+      }),
+    )
+  }, [
+    allowMutation,
+    entryNaming,
+    messages,
+    namePrompt,
+    provider,
+    refreshFolders,
+    report,
+    requestSelection,
+    runNamedMutation,
   ])
 
   const importAssetFiles = useCallback(async (files: readonly File[]) => {
@@ -454,14 +521,19 @@ export function ComposeAssetBrowser({
   }, [provider, source.entriesById])
 
   const canvasItemFor = useCallback((entry: ComposeAssetEntry) => {
-    const mediaType = canvasImageMediaType(entry)
     if (
       !provider?.capabilities.reference
       || !provider.resolveAsset
       || entry.kind !== 'file'
       || !entry.assetKey
-      || !mediaType
     ) return null
+    // 宿主判定优先；未提供时保持仅受支持图片可拖的内建白名单。
+    const mediaType = canDragEntryToCanvas === undefined
+      ? canvasImageMediaType(entry)
+      : canDragEntryToCanvas(entry)
+        ? entry.mediaType ?? 'application/octet-stream'
+        : undefined
+    if (!mediaType) return null
     return {
       reference: {
         providerId: provider.id,
@@ -471,7 +543,7 @@ export function ComposeAssetBrowser({
       name: entry.name,
       mediaType,
     } satisfies ComposeAssetCanvasDragItem
-  }, [provider])
+  }, [canDragEntryToCanvas, provider])
 
   const startNativeDrag = useCallback((
     event: ReactDragEvent<HTMLElement>,
@@ -497,6 +569,13 @@ export function ComposeAssetBrowser({
       ? moveIds.length > 0 ? 'copyMove' : 'copy'
       : 'move'
     event.dataTransfer.setData('application/x-compose-asset-ids', moveIds.join('\n'))
+    // 引用载荷与移动 ID 载荷相互独立：条目不可移动时前者仍然写入，宿主据此获得稳定引用。
+    if (items.length > 0) {
+      event.dataTransfer.setData(
+        COMPOSE_ASSET_REFERENCE_DRAG_MEDIA_TYPE,
+        JSON.stringify({ version: 1, items } satisfies ComposeAssetReferenceDragPayload),
+      )
+    }
     const point = { x: event.clientX, y: event.clientY }
     canvasDragRef.current = {
       lastPoint: point,
@@ -605,7 +684,7 @@ export function ComposeAssetBrowser({
           requestDelete()
         } else if (event.key === 'F2' && canRename && selectedEntry) {
           event.preventDefault()
-          setNameDialog({ mode: 'rename', initialValue: selectedEntry.name })
+          promptRename(selectedEntry)
         }
       }}
       onDragOver={(event) => {
@@ -620,11 +699,11 @@ export function ComposeAssetBrowser({
       <header className="asset-browser__toolbar">
         <strong title={provider.label}>{provider.label}</strong>
         <div className="asset-browser__toolbar-actions">
-          <button aria-label={messages.newFile} disabled={!canCreateFile} title={messages.newFile} type="button" onClick={() => setNameDialog({ mode: 'file', initialValue: 'untitled.ts' })}><ToolbarIcon name="new-file" /></button>
-          <button aria-label={messages.newFolder} disabled={!canCreateFolder} title={messages.newFolder} type="button" onClick={() => setNameDialog({ mode: 'folder', initialValue: 'New Folder' })}><ToolbarIcon name="new-folder" /></button>
+          <button aria-label={messages.newFile} disabled={!canCreateFile} title={messages.newFile} type="button" onClick={promptCreateFile}><ToolbarIcon name="new-file" /></button>
+          <button aria-label={messages.newFolder} disabled={!canCreateFolder} title={messages.newFolder} type="button" onClick={promptCreateFolder}><ToolbarIcon name="new-folder" /></button>
           <button aria-label={messages.import} disabled={!canCreateFile} title={messages.import} type="button" onClick={() => importRef.current?.click()}><ToolbarIcon name="import" /></button>
           <button aria-label={messages.refresh} title={messages.refresh} type="button" onClick={() => folder && source.loadFolder(folder.id, true)}><ToolbarIcon name="refresh" /></button>
-          <button aria-label={messages.rename} disabled={!canRename} title={messages.rename} type="button" onClick={() => selectedEntry && setNameDialog({ mode: 'rename', initialValue: selectedEntry.name })}><ToolbarIcon name="rename" /></button>
+          <button aria-label={messages.rename} disabled={!canRename} title={messages.rename} type="button" onClick={() => selectedEntry && promptRename(selectedEntry)}><ToolbarIcon name="rename" /></button>
           <button aria-label={messages.delete} disabled={!canDelete} title={messages.delete} type="button" onClick={requestDelete}><ToolbarIcon name="delete" /></button>
         </div>
         <input ref={importRef} hidden multiple type="file" onChange={(event) => void importFiles(event)} />
@@ -647,7 +726,15 @@ export function ComposeAssetBrowser({
         </div>
       ) : null}
       <div className="asset-browser__body">
-        <aside className="asset-browser__tree-pane" style={{ width: sidebarWidth }}>
+        <aside
+          className="asset-browser__tree-pane"
+          style={{ width: sidebarWidth }}
+          onContextMenu={(event) => {
+            // 树行会 stopPropagation，因此这里只会收到文件树空白区域的右键。
+            event.preventDefault()
+            contextMenu.openAt(event, null)
+          }}
+        >
           {source.root ? (
             <ComposeTree
               adapter={assetTreeAdapter}
@@ -658,8 +745,28 @@ export function ComposeAssetBrowser({
               items={[source.root]}
               selectionMode="multiple"
               selectedIds={selectedIds}
-              renderIcon={(context) => context.item.kind === 'folder' ? <FolderIcon /> : <FileIcon />}
-              renderLabel={(context) => context.item.name}
+              renderIcon={(context) => renderIconFor({
+                entry: context.item,
+                surface: 'tree',
+                selected: context.selected,
+                expanded: context.expanded,
+              })}
+              renderLabel={(context) => (
+                <>
+                  {renderLabelFor({
+                    entry: context.item,
+                    surface: 'tree',
+                    selected: context.selected,
+                    expanded: context.expanded,
+                  })}
+                  {renderBadge({
+                    entry: context.item,
+                    surface: 'tree',
+                    selected: context.selected,
+                    expanded: context.expanded,
+                  })}
+                </>
+              )}
               onActivate={(entry) => {
                 if (entry.kind === 'folder') {
                   void source.loadFolder(entry.id)
@@ -734,7 +841,15 @@ export function ComposeAssetBrowser({
             if (splitterRef.current?.pointerId === event.pointerId) splitterRef.current = null
           }}
         />
-        <main className="asset-browser__content">
+        <main
+          className="asset-browser__content"
+          onContextMenu={(event) => {
+            // 条目行与卡片都会 stopPropagation，因此这里只会收到空白区域的右键。
+            event.preventDefault()
+            suppressGridClickUntilRef.current = performance.now() + 400
+            contextMenu.openAt(event, null)
+          }}
+        >
           <div aria-label={folder?.name} className="asset-browser__grid" role="grid">
               {source.loading.has(folder?.id ?? '') ? (
                 <div role="row">
@@ -795,20 +910,42 @@ export function ComposeAssetBrowser({
                     contextMenu.openAt(event, entry.id)
                   }}
                 >
-                  <AssetThumbnail entry={entry} provider={provider} />
-                  <span title={entry.name}>{entry.name}</span>
+                  <AssetThumbnail
+                    entry={entry}
+                    fallback={renderEntryIcon?.({
+                      entry,
+                      surface: 'grid',
+                      selected: selectedIds.includes(entry.id),
+                      expanded: false,
+                    })}
+                    provider={provider}
+                  />
+                  <span title={entry.name}>
+                    {renderLabelFor({
+                      entry,
+                      surface: 'grid',
+                      selected: selectedIds.includes(entry.id),
+                      expanded: false,
+                    })}
+                    {renderBadge({
+                      entry,
+                      surface: 'grid',
+                      selected: selectedIds.includes(entry.id),
+                      expanded: false,
+                    })}
+                  </span>
                 </button>
                 </div>
               ))}
           </div>
         </main>
       </div>
-      {nameDialog ? (
-        <AssetNameDialog
-          dialog={nameDialog}
+      {namePrompt.state ? (
+        <AssetNamePromptDialog
           messages={messages}
-          onClose={() => setNameDialog(null)}
-          onSubmit={(value) => void submitName(value)}
+          request={namePrompt.state.request}
+          onClose={namePrompt.close}
+          onSubmit={namePrompt.state.onSubmit}
         />
       ) : null}
       {deleteOpen ? (
@@ -823,30 +960,20 @@ export function ComposeAssetBrowser({
           onOpenChange={setDeleteOpen}
         />
       ) : null}
-      <ComposeContextMenu {...contextMenu.rootProps}>
-        <ComposeContextMenuContent aria-label={messages.assets}>
-          <ComposeContextMenuItem
-            disabled={!canCreateFile}
-            onClick={() => setNameDialog({ mode: 'file', initialValue: 'untitled.ts' })}
-          >{messages.newFile}</ComposeContextMenuItem>
-          <ComposeContextMenuItem
-            disabled={!canCreateFolder}
-            onClick={() => setNameDialog({ mode: 'folder', initialValue: 'New Folder' })}
-          >{messages.newFolder}</ComposeContextMenuItem>
-          <ComposeContextMenuItem
-            disabled={!canRename}
-            onClick={() => {
-              const entry = contextMenu.payload ? source.entriesById.get(contextMenu.payload) : undefined
-              if (entry) setNameDialog({ mode: 'rename', initialValue: entry.name })
-            }}
-          >{messages.rename}<ComposeContextMenuShortcut>F2</ComposeContextMenuShortcut></ComposeContextMenuItem>
-          <ComposeContextMenuItem
-            disabled={!canDelete}
-            variant="destructive"
-            onClick={requestDelete}
-          >{messages.delete}<ComposeContextMenuShortcut>Delete</ComposeContextMenuShortcut></ComposeContextMenuItem>
-        </ComposeContextMenuContent>
-      </ComposeContextMenu>
+      <AssetContextMenu
+        capabilities={{ canCreateFile, canCreateFolder, canRename, canDelete }}
+        contextMenu={contextMenu}
+        hostContext={hostMenuContext}
+        hostItems={contextMenuItems}
+        messages={messages}
+        onCreateFile={promptCreateFile}
+        onCreateFolder={promptCreateFolder}
+        onDelete={requestDelete}
+        onRename={() => {
+          const entry = contextMenu.payload ? source.entriesById.get(contextMenu.payload) : undefined
+          if (entry) promptRename(entry)
+        }}
+      />
     </div>
   )
 }

@@ -116,9 +116,14 @@ metadata 只保存稳定数据，不能放 React 组件或函数。
 ## 内建语义类型
 
 所有实例默认具备以下稳定 editor ID：`vector2`、`size`、`angle`、`opacity`、
-`corner-radius`、`stroke-width`、`visibility`、`color`、`paint`、`alignment`、`map`。可从包入口导入
+`corner-radius`、`stroke-width`、`visibility`、`color`、`paint`、`alignment`、`map`、`node`。可从包入口导入
 `COMPOSE_PROPERTY_PANEL_BASE_EDITOR_IDS` 获取同一不可变列表；实例 `renderers` 使用相同 ID 时，
 宿主 renderer 优先，其他内建 editor 仍继续可用。
+
+`node` 用于指向宿主节点的引用属性：它呈现可筛选的候选列表、清空入口与拖放目标，是面板中唯一的
+拖放目标。候选来源、拖拽媒体类型、载荷解析与标签解析全部由 `nodeEditor` 端口注入，因此面板
+不理解候选值的领域含义。该 editor 声明 `rendersEmptyState`，空值时仍渲染选择入口而不是
+「未设置」占位。
 
 Vector2 使用 X/Y，Size 使用 W/H；两者都保留在同一条属性行中（左侧名称、右侧并排子输入）。
 启用变量绑定后，它们分别暴露稳定的 `x`/`y` 和 `width`/`height` 子目标。Size 可以把常见尺寸

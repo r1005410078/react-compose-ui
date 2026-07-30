@@ -42,6 +42,9 @@ import {
 } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ComposeEditorActivePage } from '@compose-ui/editor'
+import { useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
+import { createComposePageDocumentLoader, createComposePageStore } from '@compose-ui/pages'
 import * as v from 'valibot'
 import { createDemoAssetProvider } from './demo-asset-provider'
 
@@ -249,16 +252,34 @@ function targetPath(event: ComposeEditorTransactionEvent, targetId: string) {
 
 export function StageDemoWorkspace() {
   const operationLog = useComposeOperationLog()
-  const [runtime] = useState(() => createTransactionRuntime({
+  const [rootRuntime] = useState(() => createTransactionRuntime({
     document: emptyDocument,
     initialLabel: 'Initial state',
   }))
+  /**
+   * 当前活动页面；由 Editor 的页面工作区回传。
+   *
+   * @remarks
+   * 宿主拥有 controller，因此「工作区跟随活动页面」由这里换 runtime 实现。没有页面打开时
+   * 回落到 rootRuntime，与未启用页面系统时的行为一致。
+   */
+  const [activePage, setActivePage] = useState<ComposeEditorActivePage | null>(null)
+  const runtime = activePage?.runtime ?? rootRuntime
   const previousDocument = useRef(runtime.document)
+  const observedRuntime = useRef(runtime)
   const lastRecordedCommitId = useRef<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewMode, setPreviewMode] = useState<'document' | 'container'>('document')
   const nextId = useRef(0)
   const idFactory = useCallback(() => `stage-demo-${nextId.current++}`, [])
+  useEffect(() => {
+    // 换 runtime 表示换文档：操作日志的 diff 基线必须跟着换，否则切页面后的第一笔
+    // 事务会与上一份文档做比较。
+    if (observedRuntime.current !== runtime) {
+      observedRuntime.current = runtime
+      previousDocument.current = runtime.document
+    }
+  }, [runtime])
   const recordTransaction = useCallback((event: ComposeEditorTransactionEvent) => {
     const beforeDocument = previousDocument.current
     const afterDocument = runtime.document
@@ -299,16 +320,36 @@ export function StageDemoWorkspace() {
         : undefined,
     }).then(() => undefined)
   }, [operationLog, runtime])
+  const [assetProvider] = useState(createDemoAssetProvider)
+  /**
+   * 宿主同时拥有页面 Store 与 controller。
+   *
+   * @remarks
+   * node 属性的候选来自页面目录，而 controller 由宿主创建，因此 Store 也放在宿主侧，
+   * 再通过 pages.store 交给 Editor 复用同一份缓存。
+   */
+  const [pageStore] = useState(() => createComposePageStore({ provider: assetProvider }))
+  const pageCatalog = useComposePageCatalog(pageStore)
+  const pageLoader = useMemo(() => createComposePageDocumentLoader(pageStore), [pageStore])
+  const nodeEditPort = useNodeEditorPort({
+    catalog: pageCatalog,
+    providerId: assetProvider.id,
+  })
   const controller = useComposeEditorController({
     runtime,
     registry,
     idFactory,
+    nodeEditPort,
+    pageLoader,
     onTransaction: recordTransaction,
   })
-  const [assetProvider] = useState(createDemoAssetProvider)
   const assetResolver = useMemo(
     () => createComposeAssetResolver(assetProvider),
     [assetProvider],
+  )
+  const pagesConfig = useMemo(
+    () => ({ store: pageStore, onActiveSessionChange: setActivePage }),
+    [pageStore],
   )
   const selectedContainerId = controller.selectedIds.length === 1
     && controller.document.entities[controller.selectedIds[0]!]
@@ -325,6 +366,7 @@ export function StageDemoWorkspace() {
           resolver: assetResolver,
         }}
         controller={controller}
+        pages={pagesConfig}
         slots={{
           stageToolbar: (
             <>
@@ -361,6 +403,7 @@ export function StageDemoWorkspace() {
             <ComposePreview
               assetResolver={assetResolver}
               document={controller.document}
+              pageLoader={pageLoader}
               registry={registry}
               target={previewMode === 'container' && selectedContainerId
                 ? { kind: 'container', entityId: selectedContainerId }

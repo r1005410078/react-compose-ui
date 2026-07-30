@@ -3,7 +3,12 @@
  *
  * @packageDocumentation
  */
-import { COMPOSE_UI_CORE_PACKAGE } from '@compose-ui/core'
+import {
+  COMPOSE_UI_CORE_PACKAGE,
+  composePageDisplayName,
+  composePageFileName,
+  isComposePageMediaType,
+} from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import {
   ComposeDialog,
@@ -51,17 +56,23 @@ import type { ComposeSceneTreeProps } from '@compose-ui/scene-tree'
 import type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragEvent,
+  ComposeAssetEntryNaming,
+  ComposeAssetEntryRenderContext,
   ComposeAssetMutation,
 } from '@compose-ui/asset-browser'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
   WorkspaceContentContext,
 } from '../workspace-layout'
-import type { ComposeAssetDocumentSession } from '../workspace-layout'
+import type {
+  ComposePageDocumentSession,
+  ComposeWorkspaceDocumentSession,
+} from '../workspace-layout'
 import {
   AssetBrowserPanel,
   AssetDocumentPanel,
   CanvasPanel,
+  PageDocumentPanel,
   ComposeCommandPanel,
   ComponentLibraryPanel,
   InspectorPanel,
@@ -70,12 +81,19 @@ import {
 } from '../workspace-layout'
 import {
   createAssetDocumentPanelId,
+  createPageDocumentPanelId,
+  isWorkspaceDocumentPanelId,
   initializeWorkspace,
   localizeWorkspace,
   WORKSPACE_GROUP_IDS,
   WORKSPACE_COMPONENT_IDS,
+  WORKSPACE_PANEL_IDS,
 } from '../workspace-layout'
+import type { ComposePageDescriptor } from '@compose-ui/pages'
 import { getEditorMessages } from '../editor-i18n'
+import { createPageContextMenuItems, HomePageBadge, PageEntryIcon } from '../pages'
+import { usePageWorkspace } from '../pages'
+import type { ComposeEditorPagesConfig } from '../pages'
 import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-layout'
 import type { ComposeEditorController } from '../editor-controller'
 import { SettingsDialog } from '../editor-preferences'
@@ -136,6 +154,14 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
   slots?: ComposeEditorSlots
   /** 默认资源浏览器与资源渲染的编辑器范围配置。 */
   assets?: ComposeEditorAssets
+  /**
+   * 页面系统集成；省略时编辑器不提供页面能力。
+   *
+   * @remarks
+   * 提供后资源面板出现页面相关的右键操作，双击页面文件以独立标签打开。宿主必须实现
+   * `onActiveSessionChange` 并据此切换 controller 的 runtime，否则工作区不会跟随活动页面。
+   */
+  pages?: ComposeEditorPagesConfig
 }
 
 const workspaceComponents = {
@@ -147,6 +173,7 @@ const workspaceComponents = {
   [WORKSPACE_COMPONENT_IDS.command]: ComposeCommandPanel,
   [WORKSPACE_COMPONENT_IDS.assetBrowser]: AssetBrowserPanel,
   [WORKSPACE_COMPONENT_IDS.assetDocument]: AssetDocumentPanel,
+  [WORKSPACE_COMPONENT_IDS.pageDocument]: PageDocumentPanel,
 } satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
 
 const workspaceTabComponents = { workspaceTab: WorkspaceTab }
@@ -228,6 +255,7 @@ export function ComposeEditor({
   history,
   slots,
   assets,
+  pages,
   preferences,
   defaultPreferences,
   onPreferencesChange,
@@ -251,6 +279,16 @@ export function ComposeEditor({
     () => normalizeComposeEditorPreferences(preferences ?? uncontrolledPreferences),
     [preferences, uncontrolledPreferences],
   )
+  const editorMessages = useMemo(
+    () => getEditorMessages(resolvedPreferences.locale, hostI18n?.formatMessage),
+    [hostI18n?.formatMessage, resolvedPreferences.locale],
+  )
+  /** 当前活动的 Dockview 面板 ID；页面工作区据此判定活动页面。 */
+  const [activeDocumentPanelId, setActiveDocumentPanelId] = useState<string | null>(null)
+  /** 页面读取或保存失败的非阻断提示。 */
+  const [pageNotice, setPageNotice] = useState<string | null>(null)
+  /** 等待用户确认强制覆盖的页面面板 ID。 */
+  const [pendingPageConflict, setPendingPageConflict] = useState<string | null>(null)
   const resolvedHistory = history ?? controller?.history
   const resolvedAssetResolver = useMemo(() => {
     if (assets?.resolver) return assets.resolver
@@ -267,49 +305,55 @@ export function ComposeEditor({
     uploadParentId: assets?.paintImageUploadParentId,
   })
   const resolvedPaintImageLibrary = assets?.paintImageLibrary ?? providerPaintImageLibrary
-  const [assetDocuments, setAssetDocuments] = useState<ReadonlyMap<string, ComposeAssetDocumentSession>>(
+  const [documents, setDocuments] = useState<ReadonlyMap<string, ComposeWorkspaceDocumentSession>>(
     () => new Map(),
   )
-  const assetDocumentsRef = useRef(assetDocuments)
+  const documentsRef = useRef(documents)
   const [pendingAssetDocumentClose, setPendingAssetDocumentClose] = useState<
     PendingAssetDocumentClose | null
   >(null)
   const pendingAssetDocumentCloseRef = useRef<PendingAssetDocumentClose | null>(null)
-  const replaceAssetDocuments = useCallback((next: ReadonlyMap<string, ComposeAssetDocumentSession>) => {
-    assetDocumentsRef.current = next
-    setAssetDocuments(next)
+  const replaceDocuments = useCallback((next: ReadonlyMap<string, ComposeWorkspaceDocumentSession>) => {
+    documentsRef.current = next
+    setDocuments(next)
   }, [])
-  const updateAssetDocument = useCallback((
+  const updateDocument = useCallback((
     panelId: string,
-    update: (current: ComposeAssetDocumentSession) => ComposeAssetDocumentSession,
+    update: (current: ComposeWorkspaceDocumentSession) => ComposeWorkspaceDocumentSession,
   ) => {
-    const current = assetDocumentsRef.current.get(panelId)
+    const current = documentsRef.current.get(panelId)
     if (!current) return
-    const next = new Map(assetDocumentsRef.current)
+    const next = new Map(documentsRef.current)
     next.set(panelId, update(current))
-    replaceAssetDocuments(next)
-  }, [replaceAssetDocuments])
-  const closeAssetDocumentImmediately = useCallback((panelId: string) => {
+    replaceDocuments(next)
+  }, [replaceDocuments])
+  const updatePageDocument = useCallback((
+    panelId: string,
+    update: (current: ComposePageDocumentSession) => ComposePageDocumentSession,
+  ) => {
+    updateDocument(panelId, (current) => current.kind === 'page' ? update(current) : current)
+  }, [updateDocument])
+  const closeDocumentImmediately = useCallback((panelId: string) => {
     const panel = initializedApi.current?.getPanel(panelId)
     panel?.api.close?.()
-    if (!assetDocumentsRef.current.has(panelId)) return
-    const next = new Map(assetDocumentsRef.current)
+    if (!documentsRef.current.has(panelId)) return
+    const next = new Map(documentsRef.current)
     next.delete(panelId)
-    replaceAssetDocuments(next)
-  }, [replaceAssetDocuments])
+    replaceDocuments(next)
+  }, [replaceDocuments])
   const settleAssetDocumentClose = useCallback((allowed: boolean) => {
     const pending = pendingAssetDocumentCloseRef.current
     if (!pending) return
     pendingAssetDocumentCloseRef.current = null
     setPendingAssetDocumentClose(null)
-    if (allowed) closeAssetDocumentImmediately(pending.panelId)
+    if (allowed) closeDocumentImmediately(pending.panelId)
     pending.resolve(allowed)
-  }, [closeAssetDocumentImmediately])
-  const requestAssetDocumentClose = useCallback((panelId: string) => {
-    const session = assetDocumentsRef.current.get(panelId)
+  }, [closeDocumentImmediately])
+  const requestDocumentClose = useCallback((panelId: string) => {
+    const session = documentsRef.current.get(panelId)
     if (!session) return Promise.resolve(true)
     if (!session.dirty) {
-      closeAssetDocumentImmediately(panelId)
+      closeDocumentImmediately(panelId)
       return Promise.resolve(true)
     }
     if (pendingAssetDocumentCloseRef.current) return Promise.resolve(false)
@@ -318,66 +362,168 @@ export function ComposeEditor({
       pendingAssetDocumentCloseRef.current = pending
       setPendingAssetDocumentClose(pending)
     })
-  }, [closeAssetDocumentImmediately])
+  }, [closeDocumentImmediately])
   const saveAndClosePendingAssetDocument = useCallback(async () => {
     const pending = pendingAssetDocumentCloseRef.current
     if (!pending) return
-    const saved = await assetDocumentsRef.current.get(pending.panelId)?.save?.() ?? false
+    const saved = await documentsRef.current.get(pending.panelId)?.save?.() ?? false
     settleAssetDocumentClose(saved)
   }, [settleAssetDocumentClose])
-  const registerAssetDocumentSave = useCallback((
+  const registerDocumentSave = useCallback((
     panelId: string,
     save: (() => Promise<boolean>) | null,
-  ) => updateAssetDocument(panelId, (current) => ({ ...current, save })), [updateAssetDocument])
-  const setAssetDocumentDirty = useCallback((panelId: string, dirty: boolean) => {
-    updateAssetDocument(panelId, (current) => current.dirty === dirty ? current : { ...current, dirty })
-  }, [updateAssetDocument])
+  ) => updateDocument(panelId, (current) => ({ ...current, save })), [updateDocument])
+  const setDocumentDirty = useCallback((panelId: string, dirty: boolean) => {
+    updateDocument(panelId, (current) => current.dirty === dirty ? current : { ...current, dirty })
+  }, [updateDocument])
   const setAssetDocumentSaved = useCallback((panelId: string, entry: ComposeAssetEntry) => {
-    updateAssetDocument(panelId, (current) => ({ ...current, dirty: false, entry }))
+    updateDocument(panelId, (current) => ({ ...current, dirty: false, entry }))
     assets?.browser?.onOperation?.({
       type: 'write',
       entryIds: [entry.id],
       succeeded: 1,
       failed: 0,
     })
-  }, [assets?.browser, updateAssetDocument])
-  const openAssetDocument = useCallback((entry: ComposeAssetEntry) => {
+  }, [assets?.browser, updateDocument])
+  const openAssetDocument = useCallback((
+    entry: ComposeAssetEntry,
+    options?: { readonly readOnly?: boolean },
+  ) => {
     const provider = assets?.browser?.provider
     if (!provider || entry.kind !== 'file') return
-    const panelId = createAssetDocumentPanelId(provider.id, entry.assetKey ?? entry.id)
+    const readOnly = options?.readOnly === true
+    const panelId = createAssetDocumentPanelId(provider.id, entry.assetKey ?? entry.id, { readOnly })
     const existing = initializedApi.current?.getPanel(panelId)
     if (existing) {
       existing.api.setActive()
       return
     }
-    const next = new Map(assetDocumentsRef.current)
+    const next = new Map(documentsRef.current)
     next.set(panelId, {
+      kind: 'asset',
       entry,
       panelId,
       provider,
+      readOnly,
       dirty: false,
       save: null,
     })
-    replaceAssetDocuments(next)
+    replaceDocuments(next)
     initializedApi.current?.addPanel({
       id: panelId,
       component: WORKSPACE_COMPONENT_IDS.assetDocument,
       tabComponent: 'workspaceTab',
-      title: entry.name,
+      title: readOnly ? `${entry.name}${editorMessages.pages.readOnlySuffix}` : entry.name,
       renderer: 'always',
       position: {
         direction: 'within',
         referenceGroup: WORKSPACE_GROUP_IDS.canvas,
       },
     })
-  }, [assets?.browser?.provider, replaceAssetDocuments])
+  }, [assets?.browser?.provider, editorMessages.pages.readOnlySuffix, replaceDocuments])
+
+  const pageSessions = useMemo(() => {
+    const map = new Map<string, ComposePageDocumentSession>()
+    documents.forEach((session, panelId) => {
+      if (session.kind === 'page') map.set(panelId, session)
+    })
+    return map
+  }, [documents])
+  /**
+   * 活动页面标签是 Stage 的宿主，否则回落到固定画布面板。
+   *
+   * @remarks
+   * Stage 只能有一份：interaction controller 的 surface 是独占的。
+   */
+  const stageHostPanelId = activeDocumentPanelId !== null
+    && pageSessions.has(activeDocumentPanelId)
+    ? activeDocumentPanelId
+    : WORKSPACE_PANEL_IDS.canvas
+  const pageWorkspace = usePageWorkspace({
+    activePanelId: activeDocumentPanelId,
+    config: pages,
+    provider: assets?.browser?.provider,
+    sessions: pageSessions,
+    updateSession: updatePageDocument,
+  })
+  const pageStore = pageWorkspace.store
+  const pageProvider = assets?.browser?.provider
+  const homePageKey = pageWorkspace.catalog?.homePageKey ?? null
+  /**
+   * 首页 key 悬空的非阻断提示。
+   *
+   * @remarks
+   * 派生而不是写入 state：这是一个持续存在的条件，只要清单仍指向不存在的页面就应当一直
+   * 提示，而不是被用户关掉一次就消失。
+   */
+  const homePageMissingNotice = pageWorkspace.catalog?.homePageMissing === true
+    ? editorMessages.pages.homePageMissing
+    : null
+  const onHomePageChange = pages?.onHomePageChange
+  const handleHomePageChange = useCallback((nextKey: string | null) => {
+    pageWorkspace.refreshCatalog()
+    onHomePageChange?.(nextKey)
+  }, [onHomePageChange, pageWorkspace])
+  const openPageDocument = useCallback(async (entry: ComposeAssetEntry) => {
+    const provider = assets?.browser?.provider
+    if (!provider || !entry.assetKey) return
+    const panelId = createPageDocumentPanelId(provider.id, entry.assetKey)
+    const existing = initializedApi.current?.getPanel(panelId)
+    if (existing) {
+      existing.api.setActive()
+      return
+    }
+    const result = await pageWorkspace.openPage(entry)
+    if (!result.ok) {
+      setPageNotice(result.error.message)
+      return
+    }
+    const next = new Map(documentsRef.current)
+    next.set(panelId, { ...result.session, panelId })
+    replaceDocuments(next)
+    initializedApi.current?.addPanel({
+      id: panelId,
+      component: WORKSPACE_COMPONENT_IDS.pageDocument,
+      tabComponent: 'workspaceTab',
+      title: result.session.displayName,
+      // 与资源文档不同，页面面板不使用 always renderer：页面共享工作区画布，同组内只有
+      // 活动标签渲染 Stage，避免出现两个 Stage 实例。
+      position: {
+        direction: 'within',
+        referenceGroup: WORKSPACE_GROUP_IDS.canvas,
+      },
+    })
+  }, [assets?.browser?.provider, pageWorkspace, replaceDocuments])
+
+  const savePageDocument = useCallback(async (panelId: string, force?: boolean) => {
+    const outcome = await pageWorkspace.savePage(panelId, force)
+    if (outcome === 'conflict') {
+      setPendingPageConflict(panelId)
+      return false
+    }
+    if (outcome === 'failed') {
+      setPageNotice(editorMessages.pages.saveFailed)
+      return false
+    }
+    const session = documentsRef.current.get(panelId)
+    if (session) {
+      assets?.browser?.onOperation?.({
+        type: 'write',
+        entryIds: [session.entry.id],
+        succeeded: 1,
+        failed: 0,
+      })
+    }
+    return true
+  }, [assets?.browser, editorMessages.pages.saveFailed, pageWorkspace])
+
   const handleDefaultAssetMutation = useCallback(async (mutation: ComposeAssetMutation) => {
     const hostDecision = assets?.browser?.onBeforeAssetMutation
     if (hostDecision && await hostDecision(mutation) === false) return false
     const providerId = assets?.browser?.provider?.id
     const affectedIds = new Set(mutation.entries.map((entry) => entry.id))
     const affectedKeys = new Set(mutation.entries.flatMap((entry) => entry.assetKey ? [entry.assetKey] : []))
-    const panelIds = [...assetDocumentsRef.current.values()]
+    const panelIds = [...documentsRef.current.values()]
       .filter((session) => (
         session.provider.id === providerId
         && (affectedIds.has(session.entry.id)
@@ -385,14 +531,33 @@ export function ComposeEditor({
       ))
       .map((session) => session.panelId)
     for (const panelId of panelIds) {
-      if (!await requestAssetDocumentClose(panelId)) return false
+      if (!await requestDocumentClose(panelId)) return false
+    }
+    // 首页对账：只处理经由本编辑器发生的删除与重命名。外部变更下 key 悬空只提示不改写，
+    // 因为一次列举失败或临时移动文件都不应销毁用户的首页设置。
+    if (pageStore && homePageKey !== null && mutation.type === 'delete') {
+      const removesHome = mutation.entries.some((entry) => entry.assetKey === homePageKey)
+      if (removesHome) {
+        try {
+          const manifest = await pageStore.setHomePage(null)
+          handleHomePageChange(manifest.homePageKey)
+        }
+        catch {
+          // 清单不可写时保留原设置；界面会因页面消失而不再渲染标记。
+        }
+      }
     }
     return true
-  }, [assets?.browser, requestAssetDocumentClose])
+  }, [assets?.browser, handleHomePageChange, homePageKey, pageStore, requestDocumentClose])
   const handleAssetOpen = useCallback((entry: ComposeAssetEntry) => {
     assets?.browser?.onAssetOpen?.(entry)
+    // 页面文件走页面标签；其余文件仍走既有的资源文档标签。
+    if (pages !== undefined && entry.kind === 'file' && isComposePageMediaType(entry.mediaType)) {
+      void openPageDocument(entry)
+      return
+    }
     openAssetDocument(entry)
-  }, [assets?.browser, openAssetDocument])
+  }, [assets?.browser, openAssetDocument, openPageDocument, pages])
   const handleAssetCanvasDrag = useCallback((
     event: ComposeAssetCanvasDragEvent,
   ) => {
@@ -431,6 +596,106 @@ export function ComposeEditor({
       interactionController.send({ type: 'external.cancel' })
     }
   }, [assets?.browser, controller?.interactionController])
+  const handleOpenPageJson = useCallback((entry: ComposeAssetEntry) => {
+    openAssetDocument(entry, { readOnly: true })
+  }, [openAssetDocument])
+  const handlePageCreated = useCallback((descriptor: ComposePageDescriptor) => {
+    void openPageDocument({
+      id: descriptor.entryId,
+      parentId: descriptor.parentId,
+      name: descriptor.fileName,
+      kind: 'file',
+      assetKey: descriptor.pageKey,
+      revision: descriptor.revision,
+    })
+  }, [openPageDocument])
+  // eslint-disable-next-line react-hooks/refs -- onPageCreated 只在用户选中菜单项后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调传下去」。
+  const pageContextMenuItems = useMemo(() => createPageContextMenuItems({
+    homePageKey,
+    messages: editorMessages,
+    onHomePageChange: handleHomePageChange,
+    onOpenPageJson: handleOpenPageJson,
+    onPageCreated: handlePageCreated,
+    provider: pageProvider,
+    store: pageStore,
+  }), [
+    editorMessages,
+    handleHomePageChange,
+    handleOpenPageJson,
+    handlePageCreated,
+    homePageKey,
+    pageProvider,
+    pageStore,
+  ])
+
+  /**
+   * 页面文件可拖入 Canvas。
+   *
+   * @remarks
+   * 这是拖拽写出稳定引用载荷的前提；属性面板的 node 字段据此接收页面。
+   */
+  const canDragPageToCanvas = useCallback(
+    (entry: ComposeAssetEntry) => pages !== undefined && isComposePageMediaType(entry.mediaType),
+    [pages],
+  )
+
+  /**
+   * 页面条目图标；资源浏览器不认识页面，图标由这里按媒体类型提供。
+   */
+  const renderEntryIcon = useCallback((context: ComposeAssetEntryRenderContext) => {
+    if (pages === undefined || !isComposePageMediaType(context.entry.mediaType)) return null
+    return <PageEntryIcon label={editorMessages.pages.pageEntry} surface={context.surface} />
+  }, [editorMessages.pages.pageEntry, pages])
+
+  /**
+   * 页面条目显示名。
+   *
+   * @remarks
+   * `.page.json` 是存储侧的命名约定，不该出现在界面上；条目的 title 与可读名仍用原始名称。
+   */
+  const renderEntryLabel = useCallback((context: ComposeAssetEntryRenderContext) => {
+    if (pages === undefined || !isComposePageMediaType(context.entry.mediaType)) return null
+    return composePageDisplayName(context.entry.name)
+  }, [pages])
+
+  /**
+   * 页面重命名的名称转换。
+   *
+   * @remarks
+   * 输入框里只出现显示名；提交时按页面命名约定还原存储名，因此用户无需（也不该）手写
+   * `.page.json`。非页面条目保持原样。
+   */
+  const entryNaming = useMemo<ComposeAssetEntryNaming>(() => ({
+    toEditableName: (entry) => pages !== undefined && isComposePageMediaType(entry.mediaType)
+      ? composePageDisplayName(entry.name)
+      : entry.name,
+    toStoredName: (entry, editableName) =>
+      pages !== undefined && isComposePageMediaType(entry.mediaType)
+        ? composePageFileName(editableName)
+        : editableName,
+  }), [pages])
+
+  /** 首页标记；资源浏览器不认识页面，标记内容由这里提供。 */
+  const renderEntryBadge = useCallback((context: ComposeAssetEntryRenderContext) => {
+    if (homePageKey === null || context.entry.assetKey !== homePageKey) return null
+    return <HomePageBadge label={editorMessages.pages.homePageBadge} />
+  }, [editorMessages.pages.homePageBadge, homePageKey])
+
+  const hostContextMenuItems = useMemo(() => {
+    const hostItems = assets?.browser?.contextMenuItems ?? []
+    return pageContextMenuItems.length === 0
+      ? hostItems
+      : [...hostItems, ...pageContextMenuItems]
+  }, [assets?.browser?.contextMenuItems, pageContextMenuItems])
+
+  // 页面面板自身没有保存入口：保存由这里按面板 ID 注册，交给页面 Store 写入。
+  useEffect(() => {
+    pageSessions.forEach((session) => {
+      if (session.save !== null) return
+      registerDocumentSave(session.panelId, () => savePageDocument(session.panelId))
+    })
+  }, [pageSessions, registerDocumentSave, savePageDocument])
+
   const closeSettings = useCallback(() => {
     restoreSettingsFocusRef.current = true
     setSettingsOpen(false)
@@ -506,18 +771,30 @@ export function ComposeEditor({
           ? (
               <ComposeAssetBrowser
                 {...assets.browser}
+                canDragEntryToCanvas={
+                  assets.browser.canDragEntryToCanvas ?? canDragPageToCanvas
+                }
+                contextMenuItems={hostContextMenuItems}
+                entryNaming={assets.browser.entryNaming ?? entryNaming}
+                renderEntryBadge={assets.browser.renderEntryBadge ?? renderEntryBadge}
+                renderEntryIcon={assets.browser.renderEntryIcon ?? renderEntryIcon}
+                renderEntryLabel={assets.browser.renderEntryLabel ?? renderEntryLabel}
                 onAssetOpen={handleAssetOpen}
                 onBeforeAssetMutation={handleDefaultAssetMutation}
                 onCanvasDrag={handleAssetCanvasDrag}
               />
             )
           : undefined,
-      assetDocuments,
-      registerAssetDocumentSave,
-      setAssetDocumentDirty,
+      documents,
+      stageHostPanelId,
+      registerDocumentSave,
+      setDocumentDirty,
       setAssetDocumentSaved,
-      requestAssetDocumentClose: (panelId: string) => {
-        void requestAssetDocumentClose(panelId)
+      requestDocumentClose: (panelId: string) => {
+        void requestDocumentClose(panelId)
+      },
+      saveDocument: (panelId: string) => {
+        void savePageDocument(panelId)
       },
       settingsOpen,
       settingsPanelId,
@@ -532,15 +809,23 @@ export function ComposeEditor({
       controller,
       resolvedHistory,
       assets,
-      assetDocuments,
+      documents,
+      stageHostPanelId,
       handleAssetOpen,
       handleDefaultAssetMutation,
+      canDragPageToCanvas,
+      entryNaming,
+      hostContextMenuItems,
+      renderEntryBadge,
+      renderEntryIcon,
+      renderEntryLabel,
       resolvedAssetResolver,
       resolvedPaintImageLibrary,
       handleAssetCanvasDrag,
-      registerAssetDocumentSave,
-      requestAssetDocumentClose,
-      setAssetDocumentDirty,
+      registerDocumentSave,
+      requestDocumentClose,
+      savePageDocument,
+      setDocumentDirty,
       setAssetDocumentSaved,
       resolvedPreferences.shortcuts,
       settingsOpen,
@@ -566,6 +851,15 @@ export function ComposeEditor({
       hostI18n?.formatMessage,
     )
     initializedApi.current = event.api
+    // 活动页面由中央 Canvas Group 内的活动面板决定。Dockview 的活动面板是全局的：点击
+    // 组件库、资源面板等其他组的面板同样会触发该事件，若据此推导 Stage 宿主，页面标签会
+    // 立刻失去宿主身份而让画布整体消失。因此只接受画布组内的面板 ID。
+    event.api.onDidActivePanelChange?.((change) => {
+      const panelId = change.panel?.id
+      if (panelId === undefined) return
+      if (!isWorkspaceDocumentPanelId(panelId) && panelId !== WORKSPACE_PANEL_IDS.canvas) return
+      setActiveDocumentPanelId(panelId)
+    })
   }, [hostI18n?.formatMessage, resolvedPreferences.locale])
 
   useEffect(() => {
@@ -578,12 +872,20 @@ export function ComposeEditor({
     }
   }, [hostI18n?.formatMessage, resolvedPreferences.locale])
 
-  const assetDocumentMessages = getEditorMessages(
-    resolvedPreferences.locale,
-    hostI18n?.formatMessage,
-  )
   const pendingAssetDocument = pendingAssetDocumentClose
-    ? assetDocuments.get(pendingAssetDocumentClose.panelId)
+    ? documents.get(pendingAssetDocumentClose.panelId)
+    : undefined
+  /**
+   * 当前活动页面会话；没有页面处于活动状态时为 undefined。
+   *
+   * @remarks
+   * 保存快捷键据此判断保存目标：页面标签没有 Monaco 那样的内建保存入口。
+   */
+  const activePageSession = activeDocumentPanelId !== null
+    ? pageSessions.get(activeDocumentPanelId)
+    : undefined
+  const pendingPageConflictSession = pendingPageConflict
+    ? pageSessions.get(pendingPageConflict)
     : undefined
   const rootClassName = ['compose-editor', className].filter(Boolean).join(' ')
 
@@ -615,6 +917,19 @@ export function ComposeEditor({
           ) {
             event.preventDefault()
             toggleSettings()
+          }
+          // 页面标签没有 Monaco 那样的内建保存入口；这里提供编辑器范围的保存快捷键。
+          if (
+            !event.defaultPrevented
+            && activePageSession !== undefined
+            && !event.nativeEvent.isComposing
+            && !isEditableKeyboardTarget(event.target)
+            && (event.metaKey || event.ctrlKey)
+            && event.key.toLowerCase() === 's'
+          ) {
+            event.preventDefault()
+            void savePageDocument(activePageSession.panelId)
+            return
           }
           if (resolvedHistory && !event.defaultPrevented) handleHistoryShortcut(event)
         }}
@@ -655,9 +970,17 @@ export function ComposeEditor({
                 <ComposeDialogViewport>
                   <ComposeDialogContent>
                     <ComposeDialogHeader>
-                      <ComposeDialogTitle>{assetDocumentMessages.unsavedAssetTitle}</ComposeDialogTitle>
+                      <ComposeDialogTitle>
+                        {pendingAssetDocument.kind === 'page'
+                          ? editorMessages.pages.unsavedPageTitle
+                          : editorMessages.unsavedAssetTitle}
+                      </ComposeDialogTitle>
                       <ComposeDialogDescription>
-                        {assetDocumentMessages.unsavedAssetQuestion(pendingAssetDocument.entry.name)}
+                        {editorMessages.unsavedAssetQuestion(
+                          pendingAssetDocument.kind === 'page'
+                            ? pendingAssetDocument.displayName
+                            : pendingAssetDocument.entry.name,
+                        )}
                       </ComposeDialogDescription>
                     </ComposeDialogHeader>
                     <ComposeDialogFooter>
@@ -666,17 +989,17 @@ export function ComposeEditor({
                         variant="outline"
                         onClick={() => settleAssetDocumentClose(false)}
                       >
-                        {assetDocumentMessages.canvasSettings.cancel}
+                        {editorMessages.canvasSettings.cancel}
                       </ComposeButton>
                       <ComposeButton
                         type="button"
                         variant="destructive"
                         onClick={() => settleAssetDocumentClose(true)}
                       >
-                        {assetDocumentMessages.discard}
+                        {editorMessages.discard}
                       </ComposeButton>
                       <ComposeButton type="button" onClick={() => void saveAndClosePendingAssetDocument()}>
-                        {assetDocumentMessages.save}
+                        {editorMessages.save}
                       </ComposeButton>
                     </ComposeDialogFooter>
                   </ComposeDialogContent>
@@ -684,6 +1007,62 @@ export function ComposeEditor({
               </ComposeDialogPortal>
             </ComposeDialog>
           ) : null}
+          {pendingPageConflictSession ? (
+            <ComposeDialog
+              open
+              onOpenChange={(open) => {
+                if (!open) setPendingPageConflict(null)
+              }}
+            >
+              <ComposeDialogPortal>
+                <ComposeDialogBackdrop />
+                <ComposeDialogViewport>
+                  <ComposeDialogContent>
+                    <ComposeDialogHeader>
+                      <ComposeDialogTitle>{editorMessages.pages.conflictTitle}</ComposeDialogTitle>
+                      <ComposeDialogDescription>
+                        {editorMessages.pages.conflictQuestion(pendingPageConflictSession.displayName)}
+                      </ComposeDialogDescription>
+                    </ComposeDialogHeader>
+                    <ComposeDialogFooter>
+                      <ComposeButton
+                        type="button"
+                        variant="outline"
+                        onClick={() => setPendingPageConflict(null)}
+                      >
+                        {editorMessages.canvasSettings.cancel}
+                      </ComposeButton>
+                      <ComposeButton
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          const panelId = pendingPageConflictSession.panelId
+                          setPendingPageConflict(null)
+                          void savePageDocument(panelId, true)
+                        }}
+                      >
+                        {editorMessages.pages.overwrite}
+                      </ComposeButton>
+                    </ComposeDialogFooter>
+                  </ComposeDialogContent>
+                </ComposeDialogViewport>
+              </ComposeDialogPortal>
+            </ComposeDialog>
+          ) : null}
+          {pageNotice === null && homePageMissingNotice === null ? null : (
+            <div className="compose-editor__page-notice" role="status">
+              <span>{pageNotice ?? homePageMissingNotice}</span>
+              {pageNotice === null ? null : (
+                <ComposeButton
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setPageNotice(null)}
+                >
+                  {editorMessages.close}
+                </ComposeButton>
+              )}
+            </div>
+          )}
         </WorkspaceContentContext.Provider>
       </EditorRoot>
       </ComposeColorHistoryProvider>

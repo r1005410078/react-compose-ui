@@ -17,6 +17,7 @@ export {
   DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS,
   DEFAULT_COMPOSE_COMPONENT_DEFINITIONS,
 } from './builtin-components'
+export { composeNodePropertySchema } from './material-inspector-kit/node'
 export { DEFAULT_COMPOSE_CONTAINER_PRESET } from './container'
 export {
   DEFAULT_COMPOSE_RECTANGLE_PRESET,
@@ -34,6 +35,10 @@ export {
   DEFAULT_COMPOSE_SVG_PRESET,
   DEFAULT_COMPOSE_SVG_RENDERER,
 } from './svg'
+export {
+  DEFAULT_COMPOSE_PAGE_SLOT_PRESET,
+  DEFAULT_COMPOSE_PAGE_SLOT_RENDERER,
+} from './page-slot'
 export type {
   ComposeBasicContainerOptions,
   ComposeBasicMaterialOptions,

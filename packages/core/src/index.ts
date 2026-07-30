@@ -121,6 +121,37 @@ export type {
   ResolvedComposeAppearance,
 } from './document-types'
 export { COMPOSE_BUILTIN_COMPONENT_KEYS } from './document-types'
+export {
+  COMPOSE_APP_MANIFEST_FILE_NAME,
+  COMPOSE_APP_MANIFEST_SCHEMA_VERSION,
+  COMPOSE_PAGE_FILE_SUFFIX,
+  COMPOSE_PAGE_MEDIA_TYPE,
+  COMPOSE_PAGE_NEST_DEPTH_LIMIT,
+  composePageDisplayName,
+  composePageFileName,
+  createEmptyComposeAppManifest,
+  createEmptyComposePageDocument,
+  isComposePageFileName,
+  isComposePageMediaType,
+  parseComposeAppManifest,
+  parseComposePageDocument,
+  readComposePageReference,
+  resolveComposePageNestState,
+  serializeComposeAppManifest,
+  serializeComposePageDocument,
+  setComposeAppManifestHomePage,
+} from './page'
+export type {
+  ComposeAppManifest,
+  ComposeAppManifestIssue,
+  ComposeAppManifestIssueCode,
+  ComposeAppManifestParseResult,
+  ComposePageDocumentLoader,
+  ComposePageNestState,
+  ComposePageParseResult,
+  ComposePageReference,
+  ResolveComposePageNestStateInput,
+} from './page'
 
 /** `@compose-ui/core` 的稳定包标识。 @public */
 export const COMPOSE_UI_CORE_PACKAGE = '@compose-ui/core' as const

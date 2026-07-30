@@ -6,7 +6,8 @@ import {
   type EditorCommand,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '../registry/types'
-import type { ComposePaintEditPort } from '../registry/types'
+import type { ComposePageDocumentLoader } from '@compose-ui/core'
+import type { ComposeNodeEditPort, ComposePaintEditPort } from '../registry/types'
 
 interface BoundaryProps {
   readonly children: ReactNode
@@ -64,11 +65,13 @@ export function ComposeRegistryEntityRenderer({
   entity,
   mode,
   assetResolver,
+  pageDocumentPort,
 }: {
   readonly registry: ComposeEntityRegistry
   readonly entity: ComposeEntity
   readonly mode: 'editor' | 'preview'
   readonly assetResolver?: ComposeAssetResolver
+  readonly pageDocumentPort?: ComposePageDocumentLoader
 }) {
   const renderer = getComposeRenderer(entity)
   if (!renderer) return null
@@ -87,7 +90,9 @@ export function ComposeRegistryEntityRenderer({
         assetResolver={assetResolver}
         entity={entity}
         mode={mode}
+        pageDocumentPort={pageDocumentPort}
         props={renderer.props}
+        registry={registry}
         renderer={renderer}
       />
     </DefinitionErrorBoundary>
@@ -100,6 +105,7 @@ export function ComposeRegistryComponentInspector({
   entity,
   componentKey,
   dispatch,
+  nodeEditPort,
   paintEditPort,
   readOnly,
 }: {
@@ -108,6 +114,7 @@ export function ComposeRegistryComponentInspector({
   readonly componentKey: string
   readonly dispatch: (command: EditorCommand) => unknown
   readonly readOnly: boolean
+  readonly nodeEditPort?: ComposeNodeEditPort
   readonly paintEditPort?: ComposePaintEditPort
 }) {
   const value = entity.components[componentKey]
@@ -130,6 +137,7 @@ export function ComposeRegistryComponentInspector({
         dispatch={dispatch}
         entity={entity}
         readOnly={readOnly}
+        nodeEditPort={nodeEditPort}
         paintEditPort={paintEditPort}
         value={value}
       />
@@ -142,6 +150,7 @@ export function ComposeRegistryRendererInspector({
   registry,
   entity,
   dispatch,
+  nodeEditPort,
   paintEditPort,
   readOnly,
 }: {
@@ -149,6 +158,7 @@ export function ComposeRegistryRendererInspector({
   readonly entity: ComposeEntity
   readonly dispatch: (command: EditorCommand) => unknown
   readonly readOnly: boolean
+  readonly nodeEditPort?: ComposeNodeEditPort
   readonly paintEditPort?: ComposePaintEditPort
 }) {
   const renderer = getComposeRenderer(entity)
@@ -173,6 +183,7 @@ export function ComposeRegistryRendererInspector({
         dispatch={dispatch}
         entity={entity}
         readOnly={readOnly}
+        nodeEditPort={nodeEditPort}
         paintEditPort={paintEditPort}
         renderer={renderer}
       />

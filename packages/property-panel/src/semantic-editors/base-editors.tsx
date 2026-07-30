@@ -14,6 +14,7 @@ import type {
   PropertyPanelRendererProps,
 } from '../property-panel/compose-property-panel'
 import { createInitialValue, getObjectEntries, inspectSchema } from '../schema-model'
+import { NodeEditor } from './node-editor'
 
 /** 第一方内建语义 editor 的稳定 ID。 */
 export const PROPERTY_PANEL_BASE_EDITOR_IDS = [
@@ -28,6 +29,7 @@ export const PROPERTY_PANEL_BASE_EDITOR_IDS = [
   'paint',
   'alignment',
   'map',
+  'node',
 ] as const
 
 /** 第一方内建语义 editor ID。 */
@@ -545,6 +547,11 @@ function withSingleValueBinding(
 
 /** 内建语义 renderer 定义；数组和成员均不可变。 */
 export const PROPERTY_PANEL_BASE_RENDERERS: readonly PropertyPanelRenderer[] = [
+  {
+    ...withSingleValueBinding('node', NodeEditor),
+    // node editor 在未设置时仍需渲染选择入口与拖放目标。
+    rendersEmptyState: true,
+  },
   {
     id: 'vector2',
     component: Vector2Editor,
