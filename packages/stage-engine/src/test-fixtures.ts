@@ -92,7 +92,7 @@ export function document(
       smartSnap: { nodes: true, guides: true },
       guides: [],
     },
-    output: { width: 1280, height: 720, backgroundColor: '#111827' },
+    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: '#111827' } },
     rootIds,
     entities: Object.fromEntries(entities.map((item) => [item.id, item])),
   }

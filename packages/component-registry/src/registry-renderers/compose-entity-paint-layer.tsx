@@ -34,6 +34,82 @@ export interface ComposeEntityPaintLayerProps {
   readonly interactive?: boolean
 }
 
+/** 独立结构化 Paint 图层的输入。 @public */
+export interface ComposePaintLayerProps {
+  /** 要渲染的规范 Paint。 */
+  readonly paint: ComposePaint
+  /** 是否接收 Pointer 事件。 @defaultValue false */
+  readonly interactive?: boolean
+  /** 供宿主测试输出背景等非 Entity 图层使用的稳定标记。 */
+  readonly testId?: string
+}
+
+/**
+ * 渲染一个不依赖 Entity 外观的结构化 Paint 图层。
+ *
+ * @public
+ */
+export function ComposePaintLayer({
+  interactive = false,
+  paint,
+  testId,
+}: ComposePaintLayerProps) {
+  const descriptor = describeComposePaint(paint)
+  const gradientId = `compose-paint-${useId().replace(/:/g, '')}`
+  const style: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: interactive ? 'auto' : 'none',
+    borderRadius: 'inherit',
+  }
+
+  if (descriptor.kind === 'solid') {
+    return <div aria-hidden="true" data-compose-paint="solid" data-testid={testId} style={{ ...style, background: descriptor.color }} />
+  }
+  if (descriptor.kind === 'angular-gradient') {
+    return (
+      <div
+        aria-hidden="true"
+        data-compose-paint="angular-gradient"
+        data-testid={testId}
+        style={{
+          ...style,
+          background: `conic-gradient(from ${descriptor.angle}deg at ${descriptor.center.x * 100}% ${descriptor.center.y * 100}%, ${conicStops(descriptor.stops)})`,
+        }}
+      />
+    )
+  }
+  if (descriptor.kind === 'linear-gradient') {
+    return (
+      <svg aria-hidden="true" data-compose-paint="linear-gradient" data-testid={testId} preserveAspectRatio="none" style={style} viewBox="0 0 1 1">
+        <defs>
+          <linearGradient id={gradientId} x1={descriptor.start.x} x2={descriptor.end.x} y1={descriptor.start.y} y2={descriptor.end.y}>
+            {stopsMarkup(descriptor.stops)}
+          </linearGradient>
+        </defs>
+        <rect fill={`url(#${gradientId})`} height="1" width="1" x="0" y="0" />
+      </svg>
+    )
+  }
+  const { center, radiusX, radiusY, stops } = descriptor
+  return (
+    <svg aria-hidden="true" data-compose-paint="radial-gradient" data-testid={testId} preserveAspectRatio="none" style={style} viewBox="0 0 1 1">
+      <defs>
+        <radialGradient
+          cx={center.x}
+          cy={center.y}
+          gradientTransform={`translate(${center.x} ${center.y}) scale(${radiusX} ${radiusY}) translate(${-center.x} ${-center.y})`}
+          id={gradientId}
+          r="1"
+        >
+          {stopsMarkup(stops)}
+        </radialGradient>
+      </defs>
+      <rect fill={`url(#${gradientId})`} height="1" width="1" x="0" y="0" />
+    </svg>
+  )
+}
+
 /**
  * 渲染 Entity 的结构化 Paint 背景层。
  *
@@ -50,58 +126,6 @@ export function ComposeEntityPaintLayer({
   interactive = false,
 }: ComposeEntityPaintLayerProps) {
   const resolvedPaint = paint ?? resolveComposeAppearance(entity).backgroundPaint
-  const descriptor = describeComposePaint(resolvedPaint)
-  const gradientId = `compose-paint-${useId().replace(/:/g, '')}`
-  const style: CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    // 透明容器没有浏览器命中区域；仅编辑 Stage 需要此层补足空白组合区域的 Pointer 命中。
-    pointerEvents: interactive ? 'auto' : 'none',
-    borderRadius: 'inherit',
-  }
-
-  if (descriptor.kind === 'solid') {
-    return <div aria-hidden="true" data-compose-paint="solid" style={{ ...style, background: descriptor.color }} />
-  }
-  if (descriptor.kind === 'angular-gradient') {
-    return (
-      <div
-        aria-hidden="true"
-        data-compose-paint="angular-gradient"
-        style={{
-          ...style,
-          background: `conic-gradient(from ${descriptor.angle}deg at ${descriptor.center.x * 100}% ${descriptor.center.y * 100}%, ${conicStops(descriptor.stops)})`,
-        }}
-      />
-    )
-  }
-  if (descriptor.kind === 'linear-gradient') {
-    return (
-      <svg aria-hidden="true" data-compose-paint="linear-gradient" preserveAspectRatio="none" style={style} viewBox="0 0 1 1">
-        <defs>
-          <linearGradient id={gradientId} x1={descriptor.start.x} x2={descriptor.end.x} y1={descriptor.start.y} y2={descriptor.end.y}>
-            {stopsMarkup(descriptor.stops)}
-          </linearGradient>
-        </defs>
-        <rect fill={`url(#${gradientId})`} height="1" width="1" x="0" y="0" />
-      </svg>
-    )
-  }
-  const { center, radiusX, radiusY, stops } = descriptor
-  return (
-    <svg aria-hidden="true" data-compose-paint="radial-gradient" preserveAspectRatio="none" style={style} viewBox="0 0 1 1">
-      <defs>
-        <radialGradient
-          cx={center.x}
-          cy={center.y}
-          gradientTransform={`translate(${center.x} ${center.y}) scale(${radiusX} ${radiusY}) translate(${-center.x} ${-center.y})`}
-          id={gradientId}
-          r="1"
-        >
-          {stopsMarkup(stops)}
-        </radialGradient>
-      </defs>
-      <rect fill={`url(#${gradientId})`} height="1" width="1" x="0" y="0" />
-    </svg>
-  )
+  // 透明 Container 只有编辑 Stage 需要补足 Pointer 命中；Preview 始终保持不可交互。
+  return <ComposePaintLayer interactive={interactive} paint={resolvedPaint} />
 }

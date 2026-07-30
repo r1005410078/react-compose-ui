@@ -173,7 +173,7 @@ export interface ComposeCanvasSettings {
 export interface ComposeOutputSettings {
   readonly width: number
   readonly height: number
-  readonly backgroundColor: ComposeColor
+  readonly backgroundPaint: ComposePaint
 }
 
 /** 编辑器、Stage 与 Preview 共享的 v5 ECS 文档。 @public */

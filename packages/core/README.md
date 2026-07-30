@@ -43,6 +43,10 @@ runtime.dispatch({
 子项。`Hierarchy.childIds` 是唯一父子事实来源，`rootIds` 保存顶层顺序；Core 校验完整可达、
 单父级和无循环。
 
+`output.backgroundPaint` 是输出画布的结构化背景，支持 `solid`、`linear-gradient`、
+`radial-gradient` 与 `angular-gradient`。`output.backgroundColor` 已不属于 v5 协议：文档校验和
+`output.configure` 都会拒绝它，不提供兼容别名或自动迁移。
+
 内建 Component 包括：
 
 - `Composition`：Preset、基础 Component Key 与 Capability 归属。

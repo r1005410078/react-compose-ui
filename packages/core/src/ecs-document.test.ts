@@ -16,7 +16,7 @@ function rectangleDocument() {
       smartSnap: { nodes: true, guides: true },
       guides: [],
     },
-    output: { width: 1280, height: 720, backgroundColor: 'transparent' },
+    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: 'transparent' } },
     rootIds: ['rectangle-1'],
     entities: {
       'rectangle-1': {
@@ -78,5 +78,32 @@ describe('ComposeDocument v5 ECS', () => {
     components.Hierarchy = { childIds: [] }
     components.Clip = { enabled: true }
     expect(validateComposeDocument(input).valid).toBe(true)
+  })
+
+  it('OpenSpec: compose-document / 固定原点输出设置 / 校验结构化输出背景', () => {
+    const gradientOutput = {
+      ...rectangleDocument(),
+      output: {
+        width: 1280,
+        height: 720,
+        backgroundPaint: {
+          kind: 'linear-gradient',
+          start: { x: 0, y: 0.5 },
+          end: { x: 1, y: 0.5 },
+          stops: [
+            { id: 'start', position: 0, color: '#0cdeab' },
+            { id: 'end', position: 1, color: '#06785c' },
+          ],
+        },
+      },
+    }
+
+    const legacyOutput = {
+      ...rectangleDocument(),
+      output: { width: 1280, height: 720, backgroundColor: 'transparent' },
+    }
+
+    expect(validateComposeDocument(gradientOutput).valid).toBe(true)
+    expect(validateComposeDocument(legacyOutput).valid).toBe(false)
   })
 })

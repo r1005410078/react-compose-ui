@@ -101,18 +101,19 @@ function validateOutput(
     addIssue(issues, 'output.invalid', path, 'output 必须是对象')
     return
   }
+  rejectUnknownFields(value, ['width', 'height', 'backgroundPaint'], path, issues, 'output.invalid')
   if (!positive(value.width)) {
     addIssue(issues, 'output.invalid-size', [...path, 'width'], '输出宽度必须是有限正数')
   }
   if (!positive(value.height)) {
     addIssue(issues, 'output.invalid-size', [...path, 'height'], '输出高度必须是有限正数')
   }
-  if (!isComposeColor(value.backgroundColor)) {
+  if (!isValidComposePaint(value.backgroundPaint)) {
     addIssue(
       issues,
       'output.invalid-background',
-      [...path, 'backgroundColor'],
-      '输出背景色必须是规范 ComposeColor',
+      [...path, 'backgroundPaint'],
+      '输出背景必须是规范 ComposePaint',
     )
   }
 }

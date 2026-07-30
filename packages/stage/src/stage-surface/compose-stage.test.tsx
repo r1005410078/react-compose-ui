@@ -84,7 +84,7 @@ function document(
       smartSnap: { nodes: true, guides: true },
       guides: [],
     },
-    output: { width: 1280, height: 720, backgroundColor: '#111827' },
+    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: '#111827' } },
     rootIds,
     entities: Object.fromEntries(entities.map((item) => [item.id, item])),
   }
@@ -143,6 +143,27 @@ function renderStage(
 
 describe('ComposeStage ECS', () => {
   afterEach(cleanup)
+
+  it('OpenSpec: stage / Stage 输出背景 Paint / 编辑渐变输出背景', () => {
+    const value = document()
+    renderStage({
+      ...value,
+      output: {
+        ...value.output,
+        backgroundPaint: {
+          kind: 'linear-gradient',
+          start: { x: 0, y: 0.5 },
+          end: { x: 1, y: 0.5 },
+          stops: [
+            { id: 'start', position: 0, color: '#0cdeab' },
+            { id: 'end', position: 1, color: '#06785c' },
+          ],
+        },
+      },
+    })
+
+    expect(screen.getByTestId('stage-output-paint')).toHaveAttribute('data-compose-output-paint', 'linear-gradient')
+  })
 
   it('OpenSpec: Renderer + Hierarchy / 先渲染自身 Renderer 再渲染子项', () => {
     const child = entity('child')

@@ -261,20 +261,26 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await expect(outputSizeKey).toHaveValue('preset')
   await expect(commonOutputSize).toHaveValue('1280x720')
   await expect(inspector.getByTestId('semantic-editor-size')).toHaveCount(0)
-  await expect(inspector.getByTestId('semantic-editor-color')).toBeVisible()
-  const canvasColor = inspector.getByRole('button', { name: '选择输出背景颜色', exact: true })
-  await canvasColor.click()
-  const canvasColorPicker = page.getByRole('dialog', { name: '输出背景颜色', exact: true })
-  await expect(canvasColorPicker.getByRole('textbox')).toHaveCount(0)
-  await expect(canvasColorPicker.getByLabel('输出背景色盘')).toBeVisible()
-  await expect(canvasColorPicker.getByLabel('输出背景色相')).toBeVisible()
+  await expect(inspector.getByTestId('semantic-editor-paint')).toBeVisible()
+  const canvasPaint = inspector.getByRole('button', { name: '输出背景', exact: true })
+  await canvasPaint.click()
+  const canvasPaintPicker = page.getByRole('dialog', { name: '输出背景', exact: true })
+  await expect(canvasPaintPicker.getByRole('textbox')).toHaveCount(0)
+  await expect(canvasPaintPicker.getByRole('button', { name: '纯色', exact: true })).toBeVisible()
+  await expect(canvasPaintPicker.getByRole('button', { name: '线性', exact: true })).toBeVisible()
+  await expect(canvasPaintPicker.getByRole('button', { name: '径向', exact: true })).toBeVisible()
+  await expect(canvasPaintPicker.getByRole('button', { name: '角向', exact: true })).toBeVisible()
+  await canvasPaintPicker.getByRole('button', { name: '线性', exact: true }).click()
+  await expect(canvasPaintPicker.getByLabel('渐变色标轨道')).toBeVisible()
+  await expect(stage.getByTestId('stage-output-paint'))
+    .toHaveAttribute('data-compose-output-paint', 'linear-gradient')
   await expect(editor).toHaveScreenshot('stage-workspace-canvas-color-picker.png', {
     animations: 'disabled',
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
-  await canvasColorPicker.press('Escape')
-  await expect(canvasColor).toBeFocused()
+  await canvasPaintPicker.press('Escape')
+  await expect(canvasPaint).toBeFocused()
   await commonOutputSize.selectOption('1920x1080')
   await expect(outputSizeKey).toHaveValue('preset')
   await expect(commonOutputSize).toHaveValue('1920x1080')
@@ -305,7 +311,7 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await expect(customHeight).toHaveValue('1080')
 })
 
-test('OpenSpec: components / Color Picker / 色盘与透明度滑动在真实指针拖动后保持打开', async ({ page }) => {
+test('OpenSpec: components / Paint Picker / 色盘与透明度滑动在真实指针拖动后保持打开', async ({ page }) => {
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
@@ -316,10 +322,10 @@ test('OpenSpec: components / Color Picker / 色盘与透明度滑动在真实指
   await page.mouse.click(outputBox!.x + 40, outputBox!.y + 40)
 
   const inspector = editor.getByRole('region', { name: '画布属性' })
-  const trigger = inspector.getByRole('button', { name: '选择输出背景颜色', exact: true })
+  const trigger = inspector.getByRole('button', { name: '输出背景', exact: true })
   await trigger.click()
-  const picker = page.getByRole('dialog', { name: '输出背景颜色', exact: true })
-  const plane = picker.getByLabel('输出背景色盘', { exact: true })
+  const picker = page.getByRole('dialog', { name: '输出背景', exact: true })
+  const plane = picker.getByLabel('纯色色盘', { exact: true })
   const planeBox = await plane.boundingBox()
   const history = editor.locator('[data-compose-ui="history"] li')
   const historyBefore = await history.count()
@@ -331,7 +337,7 @@ test('OpenSpec: components / Color Picker / 色盘与透明度滑动在真实指
   await page.mouse.up()
   await expect(picker).toBeVisible()
 
-  const alpha = picker.getByRole('slider', { name: '输出背景不透明度', exact: true })
+  const alpha = picker.getByRole('slider', { name: '纯色不透明度', exact: true })
   const alphaBox = await alpha.boundingBox()
   expect(alphaBox).not.toBeNull()
   await expect(alpha).toHaveValue('100')
@@ -408,12 +414,12 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(group).toHaveCount(1)
   const groupId = await group.getAttribute('data-entity-id')
   expect(groupId).not.toBeNull()
-  const groupBackground = editor.getByRole('button', { name: '选择背景颜色', exact: true })
+  const groupBackground = editor.getByRole('button', { name: '背景填充', exact: true })
   await groupBackground.click()
-  const colorPicker = page.getByRole('dialog', { name: '背景颜色', exact: true })
+  const colorPicker = page.getByRole('dialog', { name: '背景填充', exact: true })
   await expect(colorPicker).toBeVisible()
   await expect(colorPicker.getByRole('textbox')).toHaveCount(0)
-  await colorPicker.getByRole('group', { name: '背景颜色色盘', exact: true })
+  await colorPicker.getByRole('group', { name: '纯色色盘', exact: true })
     .press('ArrowRight')
   await expect(group).toHaveCSS('background-color', 'rgb(0, 0, 0)')
   await stage.press('Control+z')
@@ -599,9 +605,27 @@ test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交�
   const historyBeforeDrag = await history.count()
   const endBox = await end.boundingBox()
   expect(endBox).not.toBeNull()
-  await page.mouse.move(endBox!.x + endBox!.width / 2, endBox!.y + endBox!.height / 2)
+  const start = { x: endBox!.x + endBox!.width / 2, y: endBox!.y + endBox!.height / 2 }
+  expect(await page.evaluate(({ x, y }) => {
+    const target = document.elementFromPoint(x, y)
+    return target?.outerHTML
+  }, start)).toContain('stage-paint-linear-end')
+  await page.mouse.move(start.x, start.y)
   await page.mouse.down()
-  await page.mouse.move(endBox!.x - 48, endBox!.y + 32, { steps: 4 })
+  await expect(picker).toBeVisible()
+  await expect.poll(() => stage.evaluate((element) => element.hasPointerCapture(1))).toBe(true)
+  const target = { x: endBox!.x - 48, y: endBox!.y + 32 }
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+  await expect(picker).toBeVisible()
+  await expect.poll(async () => {
+    const current = await end.boundingBox()
+    return current
+      ? Math.max(
+          Math.abs(current.x + current.width / 2 - target.x),
+          Math.abs(current.y + current.height / 2 - target.y),
+        )
+      : Number.POSITIVE_INFINITY
+  }).toBeLessThanOrEqual(1.5)
   await page.mouse.up()
   await expect(history).toHaveCount(historyBeforeDrag + 1)
 

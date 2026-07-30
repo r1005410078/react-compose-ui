@@ -105,6 +105,8 @@ export interface ComposeColorPickerProps {
   readonly onEyedropperFallback?: () => void
   /** Popover 可见性变化；Paint 编辑端口可据此锁定/释放画布手柄。 */
   readonly onOpenChange?: (open: boolean) => void
+  /** @internal 供同包 Paint Picker 在其 Popover 内嵌入色彩编辑控件。 */
+  readonly embedded?: boolean
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -127,6 +129,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export function ComposeColorPicker({
   allowTransparent = true,
   disabled = false,
+  embedded = false,
   label,
   onEyedropperFallback,
   onOpenChange,
@@ -234,7 +237,7 @@ export function ComposeColorPicker({
     }
   }, [emitColor, locked, onEyedropperFallback])
   useEffect(() => {
-    if (!open) return undefined
+    if (!embedded && !open) return undefined
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== 'i' || event.metaKey || event.ctrlKey || event.altKey || isEditableTarget(event.target)) return
       event.preventDefault()
@@ -242,7 +245,11 @@ export function ComposeColorPicker({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [open, startEyedropper])
+  }, [embedded, open, startEyedropper])
+  useEffect(() => () => {
+    // 嵌入 Paint Picker 时没有自身的 Popover 关闭事件；随父面板卸载再记录本次会话颜色。
+    if (embedded && emittedColor.current) record(emittedColor.current)
+  }, [embedded, record])
   useEffect(() => {
     // 受控值确认本地最终采样后再清草稿，避免拖动中的 thumb 被慢一拍的文档回传拉回。
     if (!pointerDrag.current && dragPreviewColor !== null && normalizeComposeColor(value) === dragPreviewColor) {
@@ -263,6 +270,57 @@ export function ComposeColorPicker({
   const triggerStyle = transparent ? undefined : { backgroundColor: parsed.color }
   const planeStyle = { '--compose-color-picker-hue': String(parsed.hsv.hue) } as CSSProperties
 
+  const content = (
+    <div className={`compose-color-picker__content${embedded ? ' compose-color-picker__content--embedded' : ''}`}>
+      <div className="compose-color-picker__controls">
+        <div
+          aria-label={messages.plane(label)}
+          className="compose-color-picker__plane"
+          role="group"
+          style={planeStyle}
+          tabIndex={0}
+          onKeyDown={updatePlaneByKey}
+          onPointerDown={(event) => {
+            startPointerDrag(event)
+            updatePlane(event)
+          }}
+          onPointerMove={(event) => { if (event.buttons !== 0) updatePlane(event) }}
+          onPointerUp={finishPointerDrag}
+          onPointerCancel={finishPointerDrag}
+          onLostPointerCapture={finishPointerDrag}
+        >
+          <span aria-hidden="true" className="compose-color-picker__plane-thumb" style={{ left: `${parsed.hsv.saturation}%`, top: `${100 - parsed.hsv.value}%` }} />
+        </div>
+        <div className="compose-color-picker__sliders">
+          <input aria-label={messages.hue(label)} className="compose-color-picker__hue" max="359" min="0" type="range" value={parsed.hsv.hue} onChange={(event) => emit({ ...parsed.hsv, hue: Number(event.target.value) }, parsed.alpha)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />
+          <input aria-label={messages.alpha(label)} className="compose-color-picker__alpha" max="100" min="0" type="range" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />
+        </div>
+      </div>
+      <div className="compose-color-picker__actions">
+        <button aria-label={messages.eyedropper} className="compose-color-picker__eyedropper" type="button" onClick={() => { void startEyedropper() }}>⌖</button>
+        {allowTransparent ? <button aria-pressed={transparent} className="compose-color-picker__transparent" type="button" onClick={() => emitColor('transparent')}><span aria-hidden="true" className="compose-color-picker__transparent-swatch" />{messages.transparent}</button> : null}
+      </div>
+      <ColorRow colors={recentColors} label={messages.recent} onSelect={emitColor} />
+      <ColorRow colors={COMPOSE_COMMON_COLORS} label={messages.common} onSelect={emitColor} />
+      <details className="compose-color-picker__exact">
+        <summary>{messages.exact}</summary>
+        <label>
+          {messages.hex}
+          <input aria-label={messages.hex} defaultValue={parsed.color === 'transparent' ? '#000000' : parsed.color.slice(0, 7)} onBlur={(event) => {
+            const normalized = normalizeComposeColor(event.target.value)
+            if (normalized) emitColor(parsed.alpha < 1 ? composeColorFromHsv(parseComposeEditableColor(normalized).hsv, parsed.alpha) : normalized)
+          }} />
+        </label>
+        <label>
+          {messages.alpha(label)}
+          <input aria-label={`${messages.alpha(label)} 精确输入`} max="100" min="0" type="number" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} />
+        </label>
+      </details>
+    </div>
+  )
+
+  if (embedded) return content
+
   return (
     <PopoverPrimitive.Root modal="trap-focus" open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger
@@ -278,52 +336,7 @@ export function ComposeColorPicker({
       </PopoverPrimitive.Trigger>
       {!locked ? (
         <ColorPickerPopoverContent label={messages.dialog(label)}>
-          <div className="compose-color-picker__content">
-            <div className="compose-color-picker__controls">
-              <div
-                aria-label={messages.plane(label)}
-                className="compose-color-picker__plane"
-                role="group"
-                style={planeStyle}
-                tabIndex={0}
-                onKeyDown={updatePlaneByKey}
-                onPointerDown={(event) => {
-                  startPointerDrag(event)
-                  updatePlane(event)
-                }}
-                onPointerMove={(event) => { if (event.buttons !== 0) updatePlane(event) }}
-                onPointerUp={finishPointerDrag}
-                onPointerCancel={finishPointerDrag}
-                onLostPointerCapture={finishPointerDrag}
-              >
-                <span aria-hidden="true" className="compose-color-picker__plane-thumb" style={{ left: `${parsed.hsv.saturation}%`, top: `${100 - parsed.hsv.value}%` }} />
-              </div>
-              <div className="compose-color-picker__sliders">
-                <input aria-label={messages.hue(label)} className="compose-color-picker__hue" max="359" min="0" type="range" value={parsed.hsv.hue} onChange={(event) => emit({ ...parsed.hsv, hue: Number(event.target.value) }, parsed.alpha)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />
-                <input aria-label={messages.alpha(label)} className="compose-color-picker__alpha" max="100" min="0" type="range" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />
-              </div>
-            </div>
-            <div className="compose-color-picker__actions">
-              <button aria-label={messages.eyedropper} className="compose-color-picker__eyedropper" type="button" onClick={() => { void startEyedropper() }}>⌖</button>
-              {allowTransparent ? <button aria-pressed={transparent} className="compose-color-picker__transparent" type="button" onClick={() => emitColor('transparent')}><span aria-hidden="true" className="compose-color-picker__transparent-swatch" />{messages.transparent}</button> : null}
-            </div>
-            <ColorRow colors={recentColors} label={messages.recent} onSelect={emitColor} />
-            <ColorRow colors={COMPOSE_COMMON_COLORS} label={messages.common} onSelect={emitColor} />
-            <details className="compose-color-picker__exact">
-              <summary>{messages.exact}</summary>
-              <label>
-                {messages.hex}
-                <input aria-label={messages.hex} defaultValue={parsed.color === 'transparent' ? '#000000' : parsed.color.slice(0, 7)} onBlur={(event) => {
-                  const normalized = normalizeComposeColor(event.target.value)
-                  if (normalized) emitColor(parsed.alpha < 1 ? composeColorFromHsv(parseComposeEditableColor(normalized).hsv, parsed.alpha) : normalized)
-                }} />
-              </label>
-              <label>
-                {messages.alpha(label)}
-                <input aria-label={`${messages.alpha(label)} 精确输入`} max="100" min="0" type="number" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} />
-              </label>
-            </details>
-          </div>
+          {content}
         </ColorPickerPopoverContent>
       ) : null}
     </PopoverPrimitive.Root>

@@ -6,6 +6,7 @@
 
 import {
   ComposeEntityPaintLayer,
+  ComposePaintLayer,
   ComposeRegistryEntityRenderer,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
@@ -113,9 +114,9 @@ export function ComposePreview({
           width: document.output.width,
           height: document.output.height,
           overflow: 'hidden',
-          backgroundColor: document.output.backgroundColor,
         }}
       >
+        <ComposePaintLayer paint={document.output.backgroundPaint} testId="compose-preview-output-paint" />
         {document.rootIds.map((entityId) => (
           <PreviewEntity
             assetResolver={assetResolver}

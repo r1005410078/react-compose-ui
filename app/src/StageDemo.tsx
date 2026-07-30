@@ -112,7 +112,7 @@ function ChartRenderer({ props }: ComposeRendererProps) {
     const chart = initECharts(element)
     chart.setOption({
       animation: false,
-      backgroundColor: 'transparent',
+      backgroundPaint: { kind: 'solid', color: 'transparent' },
       grid: { left: 38, right: 16, top: 48, bottom: 28 },
       title: { text: title, left: 12, textStyle: { color: '#dce8fa', fontSize: 14 } },
       xAxis: {

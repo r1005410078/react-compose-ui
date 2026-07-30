@@ -114,7 +114,7 @@ function document(): ComposeDocument {
       ...createDefaultOutputSettings(),
       width: 1440,
       height: 900,
-      backgroundColor: '#eef2ff',
+      backgroundPaint: { kind: 'solid', color: '#eef2ff' },
     },
     rootIds: ['desktop', 'mobile'],
     entities,
@@ -277,8 +277,8 @@ describe('ComposePreview', () => {
       width: '1440px',
       height: '900px',
       overflow: 'hidden',
-      backgroundColor: '#eef2ff',
     })
+    expect(screen.getByTestId('compose-preview-output-paint')).toHaveAttribute('data-compose-paint', 'solid')
     expect(screen.getByTestId('compose-preview-entity-desktop')).toHaveStyle({
       left: '-500px',
       top: '200px',
@@ -286,5 +286,31 @@ describe('ComposePreview', () => {
     expect(screen.getByText('preview:Mobile text')).toBeInTheDocument()
     expect(screen.queryByTestId('stage-ruler-x')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Stage 编辑覆盖层')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: compose-preview / Preview 输出背景 Paint / 预览渐变输出背景', () => {
+    const value = document()
+    render(
+      <ComposePreview
+        document={{
+          ...value,
+          output: {
+            ...value.output,
+            backgroundPaint: {
+              kind: 'angular-gradient',
+              center: { x: 0.5, y: 0.5 },
+              angle: 45,
+              stops: [
+                { id: 'start', position: 0, color: '#0cdeab' },
+                { id: 'end', position: 1, color: '#06785c' },
+              ],
+            },
+          },
+        }}
+        registry={registry()}
+      />,
+    )
+
+    expect(screen.getByTestId('compose-preview-output-paint')).toHaveAttribute('data-compose-paint', 'angular-gradient')
   })
 })

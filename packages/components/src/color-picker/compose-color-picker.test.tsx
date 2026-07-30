@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ComposePaint } from '@compose-ui/core'
 import { ComposeI18nProvider, ComposeThemeProvider } from '@compose-ui/ui-context'
 import { ComposeColorHistoryProvider, ComposeColorPicker, ComposePaintPicker } from '../index'
 
@@ -183,6 +184,25 @@ describe('OpenSpec: components / 共享 Color Picker', () => {
       kind: 'linear-gradient',
       stops: expect.arrayContaining([expect.objectContaining({ color: 'transparent', position: 1 })]),
     }))
+  })
+
+  it('Paint Picker 将纯色与渐变色标编辑合并在同一张色彩面板内', () => {
+    function ControlledPaintPicker() {
+      const [value, setValue] = useState<ComposePaint>({ kind: 'solid', color: '#336699' })
+      return <ComposePaintPicker label="背景填充" value={value} onValueChange={setValue} />
+    }
+
+    render(<ControlledPaintPicker />)
+    fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
+
+    expect(screen.getAllByRole('dialog', { name: '背景填充' })).toHaveLength(1)
+    expect(screen.getByLabelText('纯色色盘')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '选择纯色颜色' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '线性' }))
+    expect(screen.getByLabelText('渐变色标轨道')).toBeInTheDocument()
+    expect(screen.getByLabelText('0%色盘')).toBeInTheDocument()
+    expect(screen.getAllByRole('dialog', { name: '背景填充' })).toHaveLength(1)
   })
 
   it('Paint Picker 在画布外部 pointer press 时保持打开，Escape 仍明确关闭', async () => {

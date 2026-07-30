@@ -8,11 +8,13 @@ export { createComposeEntityRegistry } from './registry'
 export {
   ComposeRegistryComponentInspector,
   ComposeEntityPaintLayer,
+  ComposePaintLayer,
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
 } from './registry-renderers'
+export type { ComposePaintLayerProps } from './registry-renderers'
 export {
   ComposeEntityRegistryError,
   type ComposeCapabilityAvailability,

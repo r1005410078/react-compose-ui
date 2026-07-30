@@ -103,8 +103,8 @@ function PaintPopover({ children, label }: { readonly children: ReactNode; reado
   const theme = useComposeThemeContext()
   return (
     <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Positioner align="end" className="cu:isolate cu:z-[20000]" collisionPadding={8} side="bottom" sideOffset={4}>
-        <PopoverPrimitive.Popup aria-label={label} className={cn('cu:w-[min(400px,calc(100vw-24px))] cu:rounded-lg cu:border cu:border-border cu:bg-popover cu:p-3 cu:shadow-xl cu:outline-none')} data-compose-theme={theme?.resolvedTheme} data-compose-ui="paint-picker" role="dialog" style={theme ? createComposeThemeStyle(theme.tokens) as CSSProperties : undefined}>
+      <PopoverPrimitive.Positioner align="end" className="cu:isolate cu:z-[20000]" collisionPadding={8} side="bottom" sideOffset={6}>
+        <PopoverPrimitive.Popup aria-label={label} className={cn('cu:w-[min(320px,calc(100vw-24px))] cu:rounded-xl cu:border cu:border-border cu:bg-popover cu:p-3 cu:shadow-xl cu:outline-none')} data-compose-theme={theme?.resolvedTheme} data-compose-ui="paint-picker" role="dialog" style={theme ? createComposeThemeStyle(theme.tokens) as CSSProperties : undefined}>
           {children}
         </PopoverPrimitive.Popup>
       </PopoverPrimitive.Positioner>
@@ -230,7 +230,7 @@ export function ComposePaintPicker({
     ['angular-gradient', text.angular],
   ], [text.angular, text.linear, text.radial, text.solid])
   return (
-    <PopoverPrimitive.Root modal="trap-focus" open={open} onOpenChange={handleOpenChange}>
+      <PopoverPrimitive.Root modal="trap-focus" open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger aria-label={title} className="compose-color-picker__trigger compose-paint-picker__trigger" disabled={locked} type="button">
         <span aria-hidden="true" className="compose-color-picker__swatch" style={paintStyle(value)} />
       </PopoverPrimitive.Trigger>
@@ -258,7 +258,7 @@ export function ComposePaintPicker({
                 ))}
               </div>
             ) : null}
-            <ComposeColorPicker label={value.kind === 'solid' ? text.solid : `${Math.round((selectedStop?.position ?? 0) * 100)}%`} value={activeColor} onEyedropperFallback={onEyedropperFallback} onValueChange={updateCurrentStop} />
+            <ComposeColorPicker embedded label={value.kind === 'solid' ? text.solid : `${Math.round((selectedStop?.position ?? 0) * 100)}%`} value={activeColor} onEyedropperFallback={onEyedropperFallback} onValueChange={updateCurrentStop} />
             {value.kind !== 'solid' ? (
               <details className="compose-paint-picker__exact">
                 <summary>{text.exact}</summary>

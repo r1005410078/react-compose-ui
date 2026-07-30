@@ -25,6 +25,35 @@ function dispatch(
 }
 
 describe('ComposeDocument v5 built-in commands', () => {
+  it('OpenSpec: command-transaction / 输出 Paint 配置事务 / 提交并撤销输出渐变', () => {
+    const runtime = createTransactionRuntime({ document: documentFixture() })
+    const backgroundPaint = {
+      kind: 'linear-gradient' as const,
+      start: { x: 0, y: 0.5 },
+      end: { x: 1, y: 0.5 },
+      stops: [
+        { id: 'start', position: 0, color: '#0cdeab' as const },
+        { id: 'end', position: 1, color: '#06785c' as const },
+      ],
+    }
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.configureOutput, {
+      width: 1440,
+      height: 900,
+      backgroundPaint,
+    }).status).toBe('committed')
+    expect(runtime.document.output).toEqual({ width: 1440, height: 900, backgroundPaint })
+    runtime.undo()
+    expect(runtime.document.output).toEqual(documentFixture().output)
+    runtime.redo()
+    expect(runtime.document.output).toEqual({ width: 1440, height: 900, backgroundPaint })
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.configureOutput, {
+      width: 1440,
+      height: 900,
+      backgroundColor: '#0cdeab',
+    }).status).toBe('rejected')
+  })
+
   it('OpenSpec: command-transaction / Entity 与 Component 内置命令 / 原子修改 Component', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
     expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.addComponent, {

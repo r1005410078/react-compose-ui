@@ -80,6 +80,12 @@ interface ComposeEntity {
   readonly name: string
   readonly components: Readonly<Record<string, JsonObject>>
 }
+
+interface ComposeOutputSettings {
+  readonly width: number
+  readonly height: number
+  readonly backgroundPaint: ComposePaint
+}
 ```
 
 Component Key 强制 PascalCase，字段保持 camelCase。每个场景 Entity 必须拥有
@@ -89,6 +95,12 @@ Component Key 强制 PascalCase，字段保持 camelCase。每个场景 Entity �
 `Hierarchy.childIds` 是唯一父子事实来源，`rootIds` 保存顶层顺序。`Composition` 记录 Preset
 基础项和已附加 Capability，使能力增删可以可靠保护基础数据。未知合法 Component 会被保留并
 降级展示。v3 文档会被拒绝；没有迁移器、兼容别名或双运行路径。
+
+输出背景使用结构化 `ComposePaint`：`solid`、`linear-gradient`、`radial-gradient` 和
+`angular-gradient` 都是同一字段的合法值。v5 的旧 `output.backgroundColor` 已移除，输入文档和
+`output.configure` 命令必须传入 `backgroundPaint`。Editor 的 Canvas Inspector 会在同一个紧凑
+Paint 面板中切换 Solid 与各类 Gradient；Stage/Preview 会渲染该输出背景，但不把它当作可编辑的
+Entity。
 
 ## Registry、Preset 与能力
 

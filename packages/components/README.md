@@ -38,6 +38,8 @@ Angular gradient；Solid 切换为渐变时会创建“当前颜色 → 透明�
 `EyeDropper`，不可用时通过 `onEyedropperFallback` 让宿主进入画布图层取色。`ComposeColorHistoryProvider`
 默认只保留当前 React 会话的 16 条 MRU，不会读写 localStorage 或任何文档状态。
 
+Paint 类型、色标轨道与内嵌色盘共用一个紧凑 Popover；切换 Solid/Gradient 不会打开第二层颜色面板。
+
 ```tsx
 import { ComposeColorHistoryProvider, ComposePaintPicker } from '@compose-ui/components'
 

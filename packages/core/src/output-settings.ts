@@ -10,6 +10,6 @@ export function createDefaultOutputSettings(): ComposeOutputSettings {
   return {
     width: 1280,
     height: 720,
-    backgroundColor: 'transparent',
+    backgroundPaint: { kind: 'solid', color: 'transparent' },
   }
 }

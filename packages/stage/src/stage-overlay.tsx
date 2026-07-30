@@ -56,6 +56,9 @@ export function StageOverlay({
   const radialY = paintPoint('radial-radius-y')
   const angularCenter = paintPoint('angular-center')
   const angularArm = paintPoint('angular-arm')
+  // 0%/100% 色标会与线性端点重叠；先绘制色标，确保端点仍可拖动整条渐变轴。
+  const visualPaintHandles = [...paintHandles].sort((left, right) =>
+    Number(!left.kind.endsWith('stop')) - Number(!right.kind.endsWith('stop')))
   return (
     <svg
       aria-label={label}
@@ -155,7 +158,7 @@ export function StageOverlay({
             const arm = worldToScreen(angularArm, viewport)
             return <line className="compose-stage__paint-axis" x1={center.x} x2={arm.x} y1={center.y} y2={arm.y} />
           })() : null}
-          {paintHandles.map((handle) => {
+          {visualPaintHandles.map((handle) => {
             const point = worldToScreen(handle.point, viewport)
             const stop = handle.kind.endsWith('stop')
             return stop ? (

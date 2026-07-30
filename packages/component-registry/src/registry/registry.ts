@@ -181,7 +181,7 @@ function validatePresetSeed(preset: ComposeEntityPreset, components: Record<stri
       smartSnap: { nodes: true, guides: true },
       guides: [],
     },
-    output: { width: 1280, height: 720, backgroundColor: '#111827' },
+    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: '#111827' } },
     rootIds: [entity.id],
     entities: { [entity.id]: entity },
   })

@@ -4,6 +4,7 @@ import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type {
   CommandDispatchResult,
   ComposeDocument,
+  ComposePaint,
   EditorCommand,
 } from '@compose-ui/core'
 import * as v from 'valibot'
@@ -45,7 +46,7 @@ type CanvasOutputSize =
 
 type CanvasInspectorValue = {
   readonly outputSize: CanvasOutputSize
-  readonly backgroundColor: string
+  readonly backgroundPaint: ComposePaint
 }
 
 function findOutputPreset(width: number, height: number) {
@@ -92,12 +93,10 @@ function createCanvasOutputSchema(messages: ReturnType<typeof getEditorMessages>
         order: 0,
       } }),
     ),
-    backgroundColor: v.pipe(
-      v.string(),
-      v.trim(),
-      v.minLength(1, messages.invalidBackground),
+    backgroundPaint: v.pipe(
+      v.unknown(),
       v.title(messages.background),
-      v.metadata({ propertyPanel: { editor: 'color', order: 1 } }),
+      v.metadata({ propertyPanel: { editor: 'paint', order: 1 } }),
     ),
   })
 }
@@ -141,7 +140,7 @@ export function CanvasInspector({
           key: 'custom',
           value: { width: document.output.width, height: document.output.height },
         },
-      backgroundColor: document.output.backgroundColor,
+      backgroundPaint: document.output.backgroundPaint,
     }),
     [document.output, documentPreset, outputSizeKey],
   )
@@ -174,7 +173,7 @@ export function CanvasInspector({
               payload: {
                 width: preset.width,
                 height: preset.height,
-                backgroundColor: document.output.backgroundColor,
+                backgroundPaint: document.output.backgroundPaint,
               },
               meta: { label: messages.configureTransaction, source: 'inspector' },
             })
@@ -191,7 +190,7 @@ export function CanvasInspector({
             payload: {
               width: dimensions.width,
               height: dimensions.height,
-              backgroundColor: document.output.backgroundColor,
+              backgroundPaint: document.output.backgroundPaint,
             },
             meta: { label: messages.configureTransaction, source: 'inspector' },
           })
@@ -203,11 +202,11 @@ export function CanvasInspector({
           payload: {
             width: document.output.width,
             height: document.output.height,
-            backgroundColor: next.backgroundColor,
+            backgroundPaint: next.backgroundPaint,
           },
           meta: {
             // 色盘拖动仅在松手提交，但连续点选/滑杆仍可能短窗合并；同字段共享 mergeKey。
-            mergeKey: 'inspector:output:background-color',
+            mergeKey: 'inspector:output:background-paint',
             label: messages.configureTransaction,
             source: 'inspector',
           },

@@ -4,7 +4,11 @@ export {
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
 } from './compose-registry-renderers'
-export { ComposeEntityPaintLayer } from './compose-entity-paint-layer'
+export {
+  ComposeEntityPaintLayer,
+  ComposePaintLayer,
+  type ComposePaintLayerProps,
+} from './compose-entity-paint-layer'
 export {
   composeEntitySceneStyle,
   composeEntityVisualStyle,

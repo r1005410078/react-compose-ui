@@ -146,18 +146,20 @@ function asCanvasGuide(value: unknown): ComposeCanvasGuide | null {
 function asOutputSettings(value: unknown): ComposeOutputSettings | null {
   if (
     !isRecord(value)
+    || Object.keys(value).length !== 3
+    || !Object.keys(value).every((key) => key === 'width' || key === 'height' || key === 'backgroundPaint')
     || typeof value.width !== 'number'
     || !Number.isFinite(value.width)
     || value.width <= 0
     || typeof value.height !== 'number'
     || !Number.isFinite(value.height)
     || value.height <= 0
-    || !isComposeColor(value.backgroundColor)
+    || !isValidComposePaint(value.backgroundPaint)
   ) return null
   return {
     width: value.width,
     height: value.height,
-    backgroundColor: value.backgroundColor,
+    backgroundPaint: value.backgroundPaint,
   }
 }
 

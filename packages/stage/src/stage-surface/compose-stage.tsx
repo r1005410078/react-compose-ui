@@ -43,6 +43,7 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  describeComposePaint,
   getComposeHierarchy,
   getComposeLock,
   getComposeTransform,
@@ -50,6 +51,7 @@ import {
   resolveComposeTransformConstraints,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposePaint,
   type EditorCommand,
   type JsonValue,
 } from '@compose-ui/core'
@@ -131,6 +133,78 @@ interface PendingPointerSample {
 function defaultId() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
   return `stage-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function gradientStops(stops: readonly { readonly id: string; readonly color: string; readonly position: number }[]) {
+  return stops.map((stop) => <stop key={stop.id} offset={`${stop.position * 100}%`} stopColor={stop.color} />)
+}
+
+function conicGradientStops(stops: readonly { readonly color: string; readonly position: number }[]) {
+  return stops.map((stop) => `${stop.color} ${stop.position * 100}%`).join(', ')
+}
+
+/** 输出 Paint 位于命中 rect 之下，只负责视觉呈现，不能参与 Entity 编辑会话。 */
+function StageOutputPaint({
+  paint,
+  screenBounds,
+}: {
+  readonly paint: ComposePaint
+  readonly screenBounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+}) {
+  const descriptor = describeComposePaint(paint)
+  const gradientId = `compose-output-paint-${useId().replace(/:/g, '')}`
+  const common = {
+    'aria-hidden': true,
+    'data-compose-output-paint': descriptor.kind,
+    'data-testid': 'stage-output-paint',
+    height: screenBounds.height,
+    pointerEvents: 'none' as const,
+    width: screenBounds.width,
+    x: screenBounds.x,
+    y: screenBounds.y,
+  }
+  if (descriptor.kind === 'solid') return <rect {...common} fill={descriptor.color} />
+  if (descriptor.kind === 'angular-gradient') {
+    return (
+      <foreignObject {...common}>
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            background: `conic-gradient(from ${descriptor.angle}deg at ${descriptor.center.x * 100}% ${descriptor.center.y * 100}%, ${conicGradientStops(descriptor.stops)})`,
+          }}
+        />
+      </foreignObject>
+    )
+  }
+  if (descriptor.kind === 'linear-gradient') {
+    return (
+      <>
+        <defs>
+          <linearGradient id={gradientId} x1={descriptor.start.x} x2={descriptor.end.x} y1={descriptor.start.y} y2={descriptor.end.y}>
+            {gradientStops(descriptor.stops)}
+          </linearGradient>
+        </defs>
+        <rect {...common} fill={`url(#${gradientId})`} />
+      </>
+    )
+  }
+  return (
+    <>
+      <defs>
+        <radialGradient
+          cx={descriptor.center.x}
+          cy={descriptor.center.y}
+          gradientTransform={`translate(${descriptor.center.x} ${descriptor.center.y}) scale(${descriptor.radiusX} ${descriptor.radiusY}) translate(${-descriptor.center.x} ${-descriptor.center.y})`}
+          id={gradientId}
+          r="1"
+        >
+          {gradientStops(descriptor.stops)}
+        </radialGradient>
+      </defs>
+      <rect {...common} fill={`url(#${gradientId})`} />
+    </>
+  )
 }
 
 function useFinalControllerDisposal(controller: StageInteractionController) {
@@ -1580,10 +1654,11 @@ export function ComposeStage({
           style={createVisualGridStyle(document.canvas.grid, viewport)}
         />
         <svg aria-hidden="true" className="compose-stage__world-overlay">
+          <StageOutputPaint paint={document.output.backgroundPaint} screenBounds={outputScreenBounds} />
           <rect
             className={`compose-stage__output-boundary${outputSelected ? ' is-selected' : ''}`}
             data-testid="stage-output-boundary"
-            fill={document.output.backgroundColor}
+            fill="transparent"
             height={outputScreenBounds.height}
             width={outputScreenBounds.width}
             x={outputScreenBounds.x}
