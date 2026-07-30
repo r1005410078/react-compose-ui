@@ -52,20 +52,39 @@ AGENTS.md「架构边界」需新增一条：
 **替代方案：教 `asset-browser` 认识页面。** 被否决 —— 需要 import `core`（边界禁止），且把文档
 语义塞进一个明确以「不含文档语义」为非目标的 Widget。
 
-### 决策 3：按页面 key 化 controller，并修掉 runtime-swap 的既有缺陷
+### 决策 3：会话与运行时归 Editor，活动 runtime 交回宿主
 
-`useComposeEditorController` 的会话状态（`selectedIds`、`inspectionTarget`、`expandedIds`、
-`viewport`、`tool`、`paintEditing`、`paintSampling`、`interactionController`）全部用 `useState`
-初始化器建立，换 `runtime` prop 时**不会**重置，会残留指向上一份文档的选择与视口。两件事都做：
+Editor 拥有页面会话表与每个已打开页面的 `TransactionRuntime`，并通过
+`pages.onActiveSessionChange` 把活动页面的运行时交回宿主；宿主据此切换传给
+`useComposeEditorController` 的 `runtime`。因为运行时存活在会话表中，**每个页面的 undo 历史在
+切标签后保留**（仅 selection/viewport 随文档重置）。
 
-1. 修掉该缺陷：`runtime` 变化时以「prop 变化时在渲染期调整 state」模式重置会话状态并重建
-   `interactionController`。这本身就是一个应当修复的 bug，与页面无关。
-2. 页面不依赖 swap：`ComposeEditor` 渲染唯一的
-   `<ActivePageController key={activePageKey} runtime={session.runtime} />`。重挂载得到真正干净的
-   会话状态，且不产生动态 hook 数量；`TransactionRuntime` 存活在会话 Map 中，因此**每个页面的
-   undo 历史在切标签后保留**。
+**替代方案：Editor 内部按 pageKey key 化第二个 controller。** 被否决 ——
+`useComposeEditorController` 是宿主拥有的 prop，Editor 私自再造一个 controller 就出现两个事实
+来源；而且要拿到子组件里的 hook 结果，必须把 `compose-editor.tsx` 的渲染树倒置成
+children-as-function，改动面远大于收益。
 
-### 决策 4：首页事实来源是资源根 `app.json`
+这一选择使下面的缺陷修复成为**必需项**而不是可选优化：`useComposeEditorController` 的会话状态
+（`selectedIds`、`inspectionTarget`、`expandedIds`、`viewport`、`paintEditing`、`paintSampling`）
+全部用 `useState` 初始化器建立，换 `runtime` prop 时**不会**重置，会残留指向上一份文档的选择与
+视口。以「prop 变化时在渲染期调整 state」的标准模式重置，并同时取消进行中的 Pointer 与外部
+拖入手势（两条独立的进行中状态）。
+
+副作用：`runtime` prop 必须保持稳定引用。在渲染函数里新建 `TransactionRuntime` 本来就是误用
+（每次渲染丢失全部历史），修复后会直接表现为无限重渲染而不是静默错误。
+
+### 决策 4：Stage 只能有一个宿主面板
+
+`WorkspaceContent.stageHostPanelId` 显式指定唯一允许渲染 Stage 的面板：活动页面标签优先，
+否则回落到固定画布面板。
+
+原因是实测发现的：Dockview **会保留同组内非活动面板的挂载**，因此不能依赖「只有活动面板才
+渲染」。一旦画布面板与页面面板同时渲染 Stage，第二次 `connectSurface` 就会抛
+「already has a connected surface」并让整个 React 树崩溃 —— 表现为资源网格变空、标签消失，
+而不是一个局部错误。这个问题只在真实 Dockview 下出现，测试替身按「只渲染活动面板」实现时
+无法复现。
+
+### 决策 5：首页事实来源是资源根 `app.json`
 
 `{ schemaVersion: 1, homePageKey: string | null }`。写在清单而不是各页面自带 `isHome`，因为后者
 设首页需同时写两个文件，且存在「多首页 / 无首页」的不一致状态需要修复逻辑。
@@ -77,8 +96,10 @@ AGENTS.md「架构边界」需新增一条：
   文件」→ 在 P1 内先以独立的纯重构提交抽出 `asset-context-menu.tsx` 与 `use-name-prompt.ts`，
   再往干净的接缝上加插槽。
 - **新包开销**（build/dts/turbo/changeset/architecture 脚本/AGENTS.md 修订）→ 保持「小而依赖极少」。
-- **active-page controller 重挂载**会在切标签时重置 selection/viewport → 接受并记 TODO；替代方案
-  （把会话状态按 pageKey 提升到 editor）是更大的 controller 重构。
+- **换 runtime 会重置 selection/viewport** → 接受并记 TODO；替代方案（把会话状态按 pageKey 提升
+  到 editor）是更大的 controller 重构。
+- **`pages` 配置与 `runtime` prop 必须保持稳定引用** → Editor 侧只按「是否启用」、宿主 Store 与
+  Provider 派生页面 Store，避免行内对象字面量导致 Store 反复重建；宿主侧在文档与 README 中说明。
 - **双写者的乐观并发**（页面标签 + 只读 JSON 标签 + 外部编辑）→ `expectedRevision` + 显式覆盖
   确认；Store 必须在 `provider.subscribe` 事件上失效缓存，否则陈旧 `baseRevision` 会造成假冲突。
 
@@ -91,3 +112,5 @@ AGENTS.md「架构边界」需新增一条：
 ## 待解决问题
 
 - 切标签时 selection/viewport 重置是否需要在后续变更中改为按页面保留（决策 3 的已知限制）。
+- 页面标签与固定画布面板长期是否应合并为同一个「编辑表面」概念，从而不再需要
+  `stageHostPanelId` 这样的协调字段（决策 4 的权衡）。

@@ -56,6 +56,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/component-registry` 是实例级 Entity Registry，统一 Renderer、Component
   Definition、Entity Preset 与 Capability，依赖 core 与 assets，以 React 为 peer，不依赖
   editor 或 property-panel。
+- `@compose-ui/pages` 是无 React、无 DOM 的页面目录、页面文档 Store 与 `app.json` 应用清单读写包，
+  只依赖 `core` 与 `assets`；编辑器与独立预览运行时共用同一 Store，因此页面加载不依赖 `editor`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
   外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档

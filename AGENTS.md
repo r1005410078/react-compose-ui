@@ -60,6 +60,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `core`、`editor`、`scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
 - `@compose-ui/component-registry` 是实例级宿主组件注册协议，可以依赖 `core` 和 `assets`，以 React 为
   peer dependency，不得依赖 `editor` 或 `property-panel`。
+- `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面文档 Store 包，只能依赖
+  `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
   包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
@@ -82,7 +84,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`stage-engine`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`stage-engine`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、
