@@ -22,6 +22,7 @@ export type {
   ComposeAssetCanvasDragItem,
   ComposeAssetReferenceDragPayload,
   ComposeAssetContextMenuContext,
+  ComposeAssetEntryNaming,
   ComposeAssetContextMenuItem,
   ComposeAssetEntryRenderContext,
   ComposeAssetNamePromptRequest,

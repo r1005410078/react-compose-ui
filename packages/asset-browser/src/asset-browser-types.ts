@@ -115,6 +115,21 @@ export interface ComposeAssetContextMenuItem {
   readonly onSelect: (context: ComposeAssetContextMenuContext) => void | Promise<void>
 }
 
+/**
+ * 条目名称在编辑与存储之间的双向转换。
+ *
+ * @remarks
+ * 某些条目的存储名称带有宿主的命名约定（例如页面的 `.page.json`），这类约定不应出现在
+ * 重命名输入框里。资源浏览器不理解这些约定，因此由宿主提供转换。
+ * @public
+ */
+export interface ComposeAssetEntryNaming {
+  /** 重命名对话框的初始值；省略时使用条目原始名称。 */
+  readonly toEditableName?: (entry: ComposeAssetEntry) => string
+  /** 把用户输入还原为存储名称；省略时直接使用输入。 */
+  readonly toStoredName?: (entry: ComposeAssetEntry, editableName: string) => string
+}
+
 /** 条目在文件树或目录网格中渲染时的规范化上下文。 @public */
 export interface ComposeAssetEntryRenderContext {
   readonly entry: ComposeAssetEntry
@@ -183,6 +198,8 @@ export interface ComposeAssetBrowserProps
    * 与可读名的基础。
    */
   readonly renderEntryLabel?: (context: ComposeAssetEntryRenderContext) => ReactNode
+  /** 条目名称在重命名输入与存储之间的转换。 */
+  readonly entryNaming?: ComposeAssetEntryNaming
   /** 追加到内建菜单项之后的宿主上下文菜单项。 */
   readonly contextMenuItems?: readonly ComposeAssetContextMenuItem[]
   /**

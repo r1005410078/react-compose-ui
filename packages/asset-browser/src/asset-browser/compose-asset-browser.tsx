@@ -164,6 +164,7 @@ export function ComposeAssetBrowser({
   onCanvasDrag,
   canDragEntryToCanvas,
   contextMenuItems,
+  entryNaming,
   renderEntryIcon,
   renderEntryLabel,
   renderEntryBadge,
@@ -402,11 +403,17 @@ export function ComposeAssetBrowser({
 
   const promptRename = useCallback((entry: ComposeAssetEntry) => {
     namePrompt.open(
-      { title: messages.rename, initialValue: entry.name, confirmLabel: messages.rename },
-      (name) => void runNamedMutation(async () => {
+      {
+        title: messages.rename,
+        // 宿主的命名约定（如页面后缀）不进入输入框。
+        initialValue: entryNaming?.toEditableName?.(entry) ?? entry.name,
+        confirmLabel: messages.rename,
+      },
+      (editableName) => void runNamedMutation(async () => {
         if (!provider?.renameEntry) return true
         // 宿主否决重命名时保留对话框，与内建新建路径的「守卫不满足即关闭」不同。
         if (!await allowMutation('rename', [entry])) return false
+        const name = entryNaming?.toStoredName?.(entry, editableName) ?? editableName
         const renamed = await provider.renameEntry({ entryId: entry.id, name })
         refreshFolders([entry.parentId ?? provider.root.id])
         requestSelection([renamed.id])
@@ -416,6 +423,7 @@ export function ComposeAssetBrowser({
     )
   }, [
     allowMutation,
+    entryNaming,
     messages,
     namePrompt,
     provider,

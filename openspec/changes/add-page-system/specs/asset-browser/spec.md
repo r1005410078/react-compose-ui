@@ -65,6 +65,23 @@ Asset Browser MUST 允许宿主覆盖条目显示名称。该插槽 MUST 同时�
 - **WHEN** 宿主未提供名称插槽或对该条目返回空结果
 - **THEN** 显示条目的原始名称
 
+### Requirement: 条目名称转换
+
+Asset Browser MUST 允许宿主提供条目名称在重命名输入与存储之间的双向转换。重命名对话框的初始值
+MUST 取宿主给出的可编辑名称，提交时 MUST 先由宿主还原为存储名称再调用 Provider。未提供转换时
+MUST 直接使用条目原始名称与用户输入。
+
+#### Scenario: 命名约定不进入输入框
+
+- **WHEN** 宿主为某条目提供可编辑名称与存储名称的转换，用户对其执行重命名
+- **THEN** 输入框的初始值为可编辑名称，不含宿主的命名约定
+- **AND** 提交后 Provider 收到由宿主还原的存储名称
+
+#### Scenario: 未提供转换
+
+- **WHEN** 宿主未提供名称转换
+- **THEN** 输入框初始值为条目原始名称，提交后 Provider 收到用户输入原文
+
 ### Requirement: File System 适配器的媒体类型映射
 
 File System Access 适配器 MUST 允许宿主注入由文件名与浏览器推断类型决定上报媒体类型的回调。

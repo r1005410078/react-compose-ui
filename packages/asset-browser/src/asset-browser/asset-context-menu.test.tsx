@@ -487,3 +487,56 @@ describe('OpenSpec: asset-browser / 条目名称插槽', () => {
     expect(await getTreeRow(/logo\.svg/)).toBeTruthy()
   })
 })
+
+describe('OpenSpec: asset-browser / 条目名称转换', () => {
+  it('重命名输入框只出现可编辑名，提交时还原存储名', async () => {
+    const provider = createProvider({
+      renameEntry: vi.fn(async ({ entryId, name }) => ({
+        ...home,
+        id: entryId,
+        name,
+      })),
+    })
+    render(
+      <ComposeAssetBrowser
+        entryNaming={{
+          toEditableName: (entry) => entry.name.replace('.page.json', ''),
+          toStoredName: (_entry, editable) => `${editable}.page.json`,
+        }}
+        provider={provider}
+      />,
+    )
+    const pagesRow = await getTreeRow(/Pages/)
+    fireEvent.click(pagesRow)
+    fireEvent.keyDown(pagesRow, { key: 'ArrowRight' })
+    const pageRow = await getTreeRow(/Home/)
+    fireEvent.click(pageRow)
+
+    fireEvent.keyDown(pageRow, { key: 'F2' })
+
+    const input = await screen.findByLabelText('名称')
+    // 输入框里没有存储后缀
+    expect(input).toHaveValue('Home')
+    fireEvent.change(input, { target: { value: 'Landing' } })
+    fireEvent.click(screen.getByRole('button', { name: '重命名' }))
+
+    await waitFor(() => {
+      expect(provider.renameEntry).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Landing.page.json',
+      }))
+    })
+  })
+
+  it('未提供转换时重命名使用原始名称', async () => {
+    const provider = createProvider({
+      renameEntry: vi.fn(async ({ entryId, name }) => ({ ...logo, id: entryId, name })),
+    })
+    render(<ComposeAssetBrowser provider={provider} />)
+    const row = await getTreeRow(/logo\.svg/)
+    fireEvent.click(row)
+
+    fireEvent.keyDown(row, { key: 'F2' })
+
+    expect(await screen.findByLabelText('名称')).toHaveValue('logo.svg')
+  })
+})

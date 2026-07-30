@@ -6,6 +6,7 @@
 import {
   COMPOSE_UI_CORE_PACKAGE,
   composePageDisplayName,
+  composePageFileName,
   isComposePageMediaType,
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
@@ -53,6 +54,7 @@ import type { ComposeSceneTreeProps } from '@compose-ui/scene-tree'
 import type {
   ComposeAssetBrowserProps,
   ComposeAssetCanvasDragEvent,
+  ComposeAssetEntryNaming,
   ComposeAssetEntryRenderContext,
   ComposeAssetMutation,
 } from '@compose-ui/asset-browser'
@@ -631,6 +633,23 @@ export function ComposeEditor({
     return composePageDisplayName(context.entry.name)
   }, [pages])
 
+  /**
+   * 页面重命名的名称转换。
+   *
+   * @remarks
+   * 输入框里只出现显示名；提交时按页面命名约定还原存储名，因此用户无需（也不该）手写
+   * `.page.json`。非页面条目保持原样。
+   */
+  const entryNaming = useMemo<ComposeAssetEntryNaming>(() => ({
+    toEditableName: (entry) => pages !== undefined && isComposePageMediaType(entry.mediaType)
+      ? composePageDisplayName(entry.name)
+      : entry.name,
+    toStoredName: (entry, editableName) =>
+      pages !== undefined && isComposePageMediaType(entry.mediaType)
+        ? composePageFileName(editableName)
+        : editableName,
+  }), [pages])
+
   /** 首页标记；资源浏览器不认识页面，标记内容由这里提供。 */
   const renderEntryBadge = useCallback((context: ComposeAssetEntryRenderContext) => {
     if (homePageKey === null || context.entry.assetKey !== homePageKey) return null
@@ -728,6 +747,7 @@ export function ComposeEditor({
                   assets.browser.canDragEntryToCanvas ?? canDragPageToCanvas
                 }
                 contextMenuItems={hostContextMenuItems}
+                entryNaming={assets.browser.entryNaming ?? entryNaming}
                 renderEntryBadge={assets.browser.renderEntryBadge ?? renderEntryBadge}
                 renderEntryIcon={assets.browser.renderEntryIcon ?? renderEntryIcon}
                 renderEntryLabel={assets.browser.renderEntryLabel ?? renderEntryLabel}
@@ -766,6 +786,7 @@ export function ComposeEditor({
       handleAssetOpen,
       handleDefaultAssetMutation,
       canDragPageToCanvas,
+      entryNaming,
       hostContextMenuItems,
       renderEntryBadge,
       renderEntryIcon,
