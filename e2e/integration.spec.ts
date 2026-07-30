@@ -1421,3 +1421,28 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
   const preview = page.getByRole('dialog').or(page.getByTestId('compose-preview-document'))
   await expect(preview.getByTestId('compose-page-slot-content').first()).toBeVisible()
 })
+
+test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板与固定画布布局一致', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  await assets.getByRole('grid', { name: 'Pages' })
+    .getByRole('gridcell', { name: /Home.page.json/ }).dblclick()
+
+  const pagePanel = editor.locator('[data-workspace-panel="page-document"]')
+  await expect(pagePanel).toBeVisible()
+  const pageContent = await pagePanel.locator('.compose-editor__canvas-content').boundingBox()
+  const pageStage = await pagePanel.locator('.compose-stage').boundingBox()
+
+  await editor.locator('[data-workspace-tab="compose-canvas"]').click()
+  const canvasPanel = editor.locator('[data-workspace-panel="canvas"]')
+  const canvasContent = await canvasPanel.locator('.compose-editor__canvas-content').boundingBox()
+
+  // 内容区依赖 flex-1 撑开；页面面板若用 grid 布局会塌陷成零高度并在工具栏下留出空隙。
+  expect(pageContent?.height).toBeGreaterThan(100)
+  expect(Math.round(pageContent?.height ?? 0)).toBe(Math.round(canvasContent?.height ?? -1))
+  expect(Math.round(pageStage?.height ?? 0)).toBe(Math.round(pageContent?.height ?? -1))
+})
