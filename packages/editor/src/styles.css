@@ -778,3 +778,28 @@
   height: 12px;
   color: var(--compose-accent);
 }
+
+/* 页面标签的显式保存按钮；与工具栏其余按钮同高但带文字。 */
+.compose-editor__page-save {
+  margin-inline-start: auto;
+  margin-inline-end: 8px;
+  padding: 0 10px;
+  min-height: 28px;
+  border: 1px solid var(--compose-border);
+  border-radius: 5px;
+  background: var(--compose-surface-control);
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.compose-editor__page-save:hover:not(:disabled) {
+  border-color: var(--compose-border-strong);
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__page-save:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}

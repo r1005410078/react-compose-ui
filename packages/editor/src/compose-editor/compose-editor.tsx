@@ -720,6 +720,9 @@ export function ComposeEditor({
       requestDocumentClose: (panelId: string) => {
         void requestDocumentClose(panelId)
       },
+      saveDocument: (panelId: string) => {
+        void savePageDocument(panelId)
+      },
       settingsOpen,
       settingsPanelId,
       setSettingsButton: (element: HTMLButtonElement | null) => {
@@ -744,6 +747,7 @@ export function ComposeEditor({
       handleAssetCanvasDrag,
       registerDocumentSave,
       requestDocumentClose,
+      savePageDocument,
       setDocumentDirty,
       setAssetDocumentSaved,
       resolvedPreferences.shortcuts,
@@ -794,6 +798,15 @@ export function ComposeEditor({
   const pendingAssetDocument = pendingAssetDocumentClose
     ? documents.get(pendingAssetDocumentClose.panelId)
     : undefined
+  /**
+   * 当前活动页面会话；没有页面处于活动状态时为 undefined。
+   *
+   * @remarks
+   * 保存快捷键据此判断保存目标：页面标签没有 Monaco 那样的内建保存入口。
+   */
+  const activePageSession = activeDocumentPanelId !== null
+    ? pageSessions.get(activeDocumentPanelId)
+    : undefined
   const pendingPageConflictSession = pendingPageConflict
     ? pageSessions.get(pendingPageConflict)
     : undefined
@@ -827,6 +840,19 @@ export function ComposeEditor({
           ) {
             event.preventDefault()
             toggleSettings()
+          }
+          // 页面标签没有 Monaco 那样的内建保存入口；这里提供编辑器范围的保存快捷键。
+          if (
+            !event.defaultPrevented
+            && activePageSession !== undefined
+            && !event.nativeEvent.isComposing
+            && !isEditableKeyboardTarget(event.target)
+            && (event.metaKey || event.ctrlKey)
+            && event.key.toLowerCase() === 's'
+          ) {
+            event.preventDefault()
+            void savePageDocument(activePageSession.panelId)
+            return
           }
           if (resolvedHistory && !event.defaultPrevented) handleHistoryShortcut(event)
         }}

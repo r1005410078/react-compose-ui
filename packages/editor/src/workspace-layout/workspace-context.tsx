@@ -37,6 +37,8 @@ export interface WorkspaceContent {
   setDocumentDirty: (panelId: string, dirty: boolean) => void
   setAssetDocumentSaved: (panelId: string, entry: ComposeAssetEntry) => void
   requestDocumentClose: (panelId: string) => void
+  /** 保存指定文档；页面标签据此提供显式保存入口。 */
+  saveDocument: (panelId: string) => void
   settingsOpen: boolean
   settingsPanelId: string
   setSettingsButton: (element: HTMLButtonElement | null) => void

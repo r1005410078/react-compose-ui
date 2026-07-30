@@ -1473,3 +1473,41 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 切换其他面�
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   await expect(pagePanel.locator('.compose-stage')).toHaveCount(1)
 })
+
+test('OpenSpec: editor-workspace-layout / 页面保存 / 快捷键与按钮可在不关闭标签时保存', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  await assets.getByRole('grid', { name: 'Pages' })
+    .getByRole('gridcell', { name: /Home.page.json/ }).dblclick()
+
+  const tab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
+  const dirty = tab.getByRole('img', { name: '有未保存改动' })
+  const pagePanel = editor.locator('[data-workspace-panel="page-document"]')
+
+  // 无改动时保存按钮禁用
+  await expect(pagePanel.getByRole('button', { name: '保存页面' })).toBeDisabled()
+
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  await expect(dirty).toBeVisible()
+  await expect(pagePanel.getByRole('button', { name: '保存页面' })).toBeEnabled()
+
+  // 显式按钮保存：不关闭标签也能落盘
+  await pagePanel.getByRole('button', { name: '保存页面' }).click()
+  await expect(dirty).toHaveCount(0)
+
+  // 快捷键保存
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await editor.getByRole('button', { name: 'Rectangle' }).click()
+  await expect(dirty).toBeVisible()
+  await page.keyboard.press('Control+S')
+  await expect(dirty).toHaveCount(0)
+
+  // 两次保存都已落盘，因此关闭标签不再触发未保存确认。
+  await tab.getByRole('button', { name: /^关闭页面/ }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(tab).toHaveCount(0)
+})

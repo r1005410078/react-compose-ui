@@ -350,7 +350,13 @@ export function AssetDocumentPanel(props: IDockviewPanelProps) {
  * @internal
  */
 export function PageDocumentPanel(props: IDockviewPanelProps) {
-  const { documents, children, stageHostPanelId, stageToolbar } = useWorkspaceContent()
+  const {
+    documents,
+    children,
+    saveDocument,
+    stageHostPanelId,
+    stageToolbar,
+  } = useWorkspaceContent()
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
   const panelId = props.api?.id
@@ -367,6 +373,16 @@ export function PageDocumentPanel(props: IDockviewPanelProps) {
     >
       <div className="compose-editor__canvas-toolbar">
         {stageToolbar ?? <Placeholder>{messages.workspace.stageToolbarEmpty}</Placeholder>}
+        {/* 页面没有 Monaco 那样的内建保存入口，这里提供显式按钮；快捷键同为 Cmd/Ctrl+S。 */}
+        <button
+          className="compose-editor__page-save"
+          disabled={!session.dirty}
+          title={messages.pages.savePage}
+          type="button"
+          onClick={() => { saveDocument(panelId) }}
+        >
+          {messages.pages.savePage}
+        </button>
       </div>
       <div className="compose-editor__canvas-content">
         {stageHostPanelId === panelId ? children : null}

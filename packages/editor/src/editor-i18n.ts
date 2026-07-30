@@ -91,6 +91,7 @@ const messages = {
       dirtyIndicator: '有未保存改动',
       readOnlySuffix: '（只读）',
       homePageMissing: '首页指向的页面不存在',
+      savePage: '保存页面',
     },
     canvasSettings: {
       label: '画布网格与吸附设置',
@@ -206,6 +207,7 @@ const messages = {
       dirtyIndicator: 'Has unsaved changes',
       readOnlySuffix: ' (read-only)',
       homePageMissing: 'The home page no longer exists',
+      savePage: 'Save page',
     },
     canvasSettings: {
       label: 'Canvas grid and snapping settings',
@@ -380,6 +382,7 @@ export function getEditorMessages(
       dirtyIndicator: format('pages.dirtyIndicator', current.pages.dirtyIndicator),
       readOnlySuffix: format('pages.readOnlySuffix', current.pages.readOnlySuffix),
       homePageMissing: format('pages.homePageMissing', current.pages.homePageMissing),
+      savePage: format('pages.savePage', current.pages.savePage),
     },
     canvasSettings: {
       label: format('canvasSettings.label', current.canvasSettings.label),
