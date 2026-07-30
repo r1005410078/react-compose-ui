@@ -34,9 +34,20 @@ export const WORKSPACE_COMPONENT_IDS = {
 const ASSET_DOCUMENT_PANEL_PREFIX = 'compose-asset-document:'
 const PAGE_DOCUMENT_PANEL_PREFIX = 'compose-page-document:'
 
-/** 从 Provider 与稳定资源 key 派生当前 Editor 实例中的资源标签 ID。 @internal */
-export function createAssetDocumentPanelId(providerId: string, assetIdentity: string) {
-  return `${ASSET_DOCUMENT_PANEL_PREFIX}${encodeURIComponent(providerId)}:${encodeURIComponent(assetIdentity)}`
+/**
+ * 从 Provider 与稳定资源 key 派生当前 Editor 实例中的资源标签 ID。
+ *
+ * @remarks
+ * 只读标签追加 `:readonly` 后缀，使同一文件可以同时以可编辑标签与只读标签打开而不互相覆盖。
+ * @internal
+ */
+export function createAssetDocumentPanelId(
+  providerId: string,
+  assetIdentity: string,
+  options?: { readonly readOnly?: boolean },
+) {
+  const base = `${ASSET_DOCUMENT_PANEL_PREFIX}${encodeURIComponent(providerId)}:${encodeURIComponent(assetIdentity)}`
+  return options?.readOnly === true ? `${base}:readonly` : base
 }
 
 /** 判断 Dockview panel 是否为 Editor 临时资源文档。 @internal */

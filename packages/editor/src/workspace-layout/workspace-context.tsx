@@ -55,6 +55,8 @@ interface ComposeDocumentSessionBase {
 /** Editor 实例内的临时资源文档会话；不写入 Dockview 布局或 ComposeDocument。 @internal */
 export interface ComposeAssetDocumentSession extends ComposeDocumentSessionBase {
   readonly kind: 'asset'
+  /** 只读标签：不注册保存、不显示未保存指示、关闭时不需要确认。 */
+  readonly readOnly: boolean
 }
 
 /**

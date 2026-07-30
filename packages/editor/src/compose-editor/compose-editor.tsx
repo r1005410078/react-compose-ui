@@ -353,10 +353,14 @@ export function ComposeEditor({
       failed: 0,
     })
   }, [assets?.browser, updateDocument])
-  const openAssetDocument = useCallback((entry: ComposeAssetEntry) => {
+  const openAssetDocument = useCallback((
+    entry: ComposeAssetEntry,
+    options?: { readonly readOnly?: boolean },
+  ) => {
     const provider = assets?.browser?.provider
     if (!provider || entry.kind !== 'file') return
-    const panelId = createAssetDocumentPanelId(provider.id, entry.assetKey ?? entry.id)
+    const readOnly = options?.readOnly === true
+    const panelId = createAssetDocumentPanelId(provider.id, entry.assetKey ?? entry.id, { readOnly })
     const existing = initializedApi.current?.getPanel(panelId)
     if (existing) {
       existing.api.setActive()
@@ -368,6 +372,7 @@ export function ComposeEditor({
       entry,
       panelId,
       provider,
+      readOnly,
       dirty: false,
       save: null,
     })
@@ -376,14 +381,14 @@ export function ComposeEditor({
       id: panelId,
       component: WORKSPACE_COMPONENT_IDS.assetDocument,
       tabComponent: 'workspaceTab',
-      title: entry.name,
+      title: readOnly ? `${entry.name}${editorMessages.pages.readOnlySuffix}` : entry.name,
       renderer: 'always',
       position: {
         direction: 'within',
         referenceGroup: WORKSPACE_GROUP_IDS.canvas,
       },
     })
-  }, [assets?.browser?.provider, replaceDocuments])
+  }, [assets?.browser?.provider, editorMessages.pages.readOnlySuffix, replaceDocuments])
 
   const pageSessions = useMemo(() => {
     const map = new Map<string, ComposePageDocumentSession>()
@@ -549,6 +554,9 @@ export function ComposeEditor({
       interactionController.send({ type: 'external.cancel' })
     }
   }, [assets?.browser, controller?.interactionController])
+  const handleOpenPageJson = useCallback((entry: ComposeAssetEntry) => {
+    openAssetDocument(entry, { readOnly: true })
+  }, [openAssetDocument])
   const handlePageCreated = useCallback((descriptor: ComposePageDescriptor) => {
     void openPageDocument({
       id: descriptor.entryId,
@@ -564,12 +572,14 @@ export function ComposeEditor({
     homePageKey,
     messages: editorMessages,
     onHomePageChange: handleHomePageChange,
+    onOpenPageJson: handleOpenPageJson,
     onPageCreated: handlePageCreated,
     provider: pageProvider,
     store: pageStore,
   }), [
     editorMessages,
     handleHomePageChange,
+    handleOpenPageJson,
     handlePageCreated,
     homePageKey,
     pageProvider,

@@ -548,3 +548,36 @@ describe('OpenSpec: editor-workspace-layout / 首页标记与清单对账', () =
     expect(await (written.content as Blob).text()).toContain('"homePageKey": null')
   })
 })
+
+describe('OpenSpec: editor-workspace-layout / 只读页面 JSON 标签', () => {
+  it('打开组件 JSON 配置以只读资源标签呈现，且与页面标签并存', async () => {
+    renderEditor(createProvider())
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+
+    fireEvent.click(await screen.findByRole('button', { name: '打开组件 JSON 配置' }))
+
+    await waitFor(() => {
+      expect([...dockviewMock.panels.values()]
+        .filter((panel) => panel.component === 'assetDocument')).toHaveLength(1)
+    })
+    // 前缀不同，因此同一页面的两个标签互不覆盖。
+    expect(pageDocumentPanels()).toHaveLength(1)
+    const readOnlyPanel = [...dockviewMock.panels.values()]
+      .find((panel) => panel.component === 'assetDocument')
+    expect(readOnlyPanel?.id).toContain(':readonly')
+    expect(readOnlyPanel?.title).toBe('Home.page.json（只读）')
+  })
+
+  it('只读标签不显示未保存指示', async () => {
+    renderEditor(createProvider())
+
+    fireEvent.click(await screen.findByRole('button', { name: '打开组件 JSON 配置' }))
+
+    await waitFor(() => {
+      expect([...dockviewMock.panels.values()]
+        .some((panel) => panel.component === 'assetDocument')).toBe(true)
+    })
+    expect(screen.queryByRole('img', { name: '有未保存改动' })).not.toBeInTheDocument()
+  })
+})

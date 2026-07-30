@@ -1,5 +1,5 @@
 import type { ComposeAssetContextMenuItem } from '@compose-ui/asset-browser'
-import type { ComposeAssetProvider } from '@compose-ui/assets'
+import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import { composePageFileName, isComposePageFileName } from '@compose-ui/core'
 import type { ComposePageDescriptor, ComposePageStore } from '@compose-ui/pages'
 import type { EditorMessages } from '../editor-i18n'
@@ -8,6 +8,7 @@ import type { EditorMessages } from '../editor-i18n'
 export const PAGE_CONTEXT_MENU_ITEM_IDS = {
   createPage: 'compose.page.create',
   setHomePage: 'compose.page.set-home',
+  openJson: 'compose.page.open-json',
 } as const
 
 /**
@@ -22,6 +23,7 @@ export function createPageContextMenuItems({
   homePageKey,
   messages,
   onHomePageChange,
+  onOpenPageJson,
   onPageCreated,
   provider,
   store,
@@ -39,6 +41,8 @@ export function createPageContextMenuItems({
    * 无法由它反推出文件名与显示名。
    */
   readonly onPageCreated: (descriptor: ComposePageDescriptor) => void
+  /** 以只读方式查看页面的原始 JSON。 */
+  readonly onOpenPageJson: (entry: ComposeAssetEntry) => void
   readonly provider: ComposeAssetProvider | undefined
   readonly store: ComposePageStore | undefined
 }): readonly ComposeAssetContextMenuItem[] {
@@ -82,6 +86,16 @@ export function createPageContextMenuItems({
         if (pageKey === undefined) return
         const manifest = await store.setHomePage(pageKey)
         onHomePageChange(manifest.homePageKey)
+      },
+    },
+    {
+      id: PAGE_CONTEXT_MENU_ITEM_IDS.openJson,
+      label: messages.pages.openJsonConfig,
+      isVisible: (context) => context.entry !== undefined
+        && isComposePageFileName(context.entry.name),
+      isDisabled: (context) => context.entry?.assetKey === undefined,
+      onSelect: (context) => {
+        if (context.entry) onOpenPageJson(context.entry)
       },
     },
   ]

@@ -1347,3 +1347,36 @@ test('OpenSpec: editor-workspace-layout / 首页标记 / 设为首页并在树�
   await expect(pagesGrid.getByRole('gridcell', { name: /Home.page.json/ })
     .getByRole('img', { name: '首页' })).toHaveCount(0)
 })
+
+test('OpenSpec: editor-workspace-layout / 只读页面 JSON / Monaco 只读且无保存', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await expect(pagesGrid).toBeVisible()
+
+  await pagesGrid.getByRole('gridcell', { name: /Home.page.json/ }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '打开组件 JSON 配置' }).click()
+
+  const jsonDocument = editor.locator('[data-workspace-panel="asset-document"][data-readonly="true"]')
+  await expect(jsonDocument.locator('.monaco-editor')).toBeVisible()
+  await expect(jsonDocument.locator('.view-lines')).toContainText('"schemaVersion"')
+
+  // 输入不改变内容，也不产生未保存指示
+  const monacoInput = jsonDocument.getByRole('textbox', { name: 'Editor content' })
+  await monacoInput.focus()
+  await page.keyboard.type('tampered')
+  await expect(jsonDocument.locator('.view-lines')).not.toContainText('tampered')
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+
+  // Cmd/Ctrl+S 不触发保存；关闭时不需要确认
+  await page.keyboard.press('Control+S')
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+  await editor.getByRole('button', { name: /关闭资源 Home.page.json/ }).click()
+  await expect(jsonDocument).toHaveCount(0)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})

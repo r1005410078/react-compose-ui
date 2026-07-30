@@ -60,24 +60,24 @@
 
 ## 3. P3 只读 JSON 查看
 
-- [ ] 3.1 `script-editor.tsx`：`readOnly` prop（Monaco `readOnly` + `domReadOnly`、不注册保存
+- [x] 3.1 `script-editor.tsx`：`readOnly` prop（Monaco `readOnly` + `domReadOnly`、不注册保存
   快捷键、不上报 dirty、`save()` 空转返回 true）
-- [ ] 3.2 `asset-preview.tsx`：`readOnly` prop 透传，`ComposeAssetPreviewHandle.save()` 空转
-- [ ] 3.3 `workspace-context.tsx`：`ComposeAssetDocumentSession.readOnly`；
+- [x] 3.2 `asset-preview.tsx`：`readOnly` prop 透传，`ComposeAssetPreviewHandle.save()` 空转
+- [x] 3.3 `workspace-context.tsx`：`ComposeAssetDocumentSession.readOnly`；
   `createAssetDocumentPanelId` 增 `readOnly` 选项与 `:readonly` 后缀
-- [ ] 3.4 `workspace-panels.tsx`：只读时不注册保存、不显示脏点、标题加本地化只读后缀
-- [ ] 3.5 `compose-editor.tsx`：`openAssetDocument(entry, { readOnly })`；
+- [x] 3.4 `workspace-panels.tsx`：只读时不注册保存、不显示脏点、标题加本地化只读后缀
+- [x] 3.5 `compose-editor.tsx`：`openAssetDocument(entry, { readOnly })`；
   `page-context-menu.tsx` 增打开组件 JSON 配置项
-- [ ] 3.6 测试：只读下禁写、不上报 dirty、`save()` 空转；同一页面可与页面标签并存
-- [ ] 3.7 Playwright：右键打开组件 JSON 配置 → Monaco 只读、无脏点、无保存
+- [x] 3.6 测试：只读下禁写、不上报 dirty、`save()` 空转；同一页面可与页面标签并存
+- [x] 3.7 Playwright：右键打开组件 JSON 配置 → Monaco 只读、无脏点、无保存
 
 ## 4. 收口
 
 - [x] 4.1 `editor-controller/controller.tsx`：`runtime` 变化时重置会话状态并重建
   `interactionController`（附中文注释说明会话状态是文档作用域），
   `controller.test.tsx` 断言选择/视口/检视目标被重置
-- [ ] 4.2 i18n 完整性：`editor-i18n.ts` 页面相关文案齐备，无硬编码可翻译文案
-- [ ] 4.3 a11y 复核：首页标记、宿主菜单项的 role / 可读名 / 键盘 / 焦点恢复
+- [x] 4.2 i18n 完整性：`editor-i18n.ts` 页面相关文案齐备，无硬编码可翻译文案
+- [x] 4.3 a11y 复核：首页标记、宿主菜单项的 role / 可读名 / 键盘 / 焦点恢复
 - [ ] 4.4 文档同步：`AGENTS.md`（`@compose-ui/pages` 边界）、`openspec/project.md`、`README.md`
 - [ ] 4.5 配置同步：根 `package.json` 的 `pack:dry-run` 追加 `packages/pages`、`.changeset/` 变更集
 - [ ] 4.6 全量验证：`bun run lint`（含 `check:architecture`）、`bun run typecheck`、`bun run test`、

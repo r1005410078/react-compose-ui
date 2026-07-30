@@ -315,10 +315,10 @@ export function AssetDocumentPanel(props: IDockviewPanelProps) {
   }, [panelId, setAssetDocumentSaved])
 
   useEffect(() => {
-    if (!panelId) return
+    if (!panelId || session?.readOnly === true) return
     registerDocumentSave(panelId, () => previewRef.current?.save() ?? Promise.resolve(false))
     return () => registerDocumentSave(panelId, null)
-  }, [panelId, registerDocumentSave])
+  }, [panelId, registerDocumentSave, session?.readOnly])
 
   if (!panelId || !session) return null
 
@@ -326,12 +326,14 @@ export function AssetDocumentPanel(props: IDockviewPanelProps) {
     <div
       className="compose-editor__asset-document"
       data-asset-entry-id={session.entry.id}
+      data-readonly={session.readOnly ? 'true' : undefined}
       data-workspace-panel="asset-document"
     >
       <ComposeAssetPreview
         ref={previewRef}
         entry={session.entry}
         provider={session.provider}
+        readOnly={session.readOnly}
         onDirtyChange={handleDirtyChange}
         onSaved={handleSaved}
       />
