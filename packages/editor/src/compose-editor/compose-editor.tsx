@@ -74,6 +74,7 @@ import {
 import {
   createAssetDocumentPanelId,
   createPageDocumentPanelId,
+  isWorkspaceDocumentPanelId,
   initializeWorkspace,
   localizeWorkspace,
   WORKSPACE_GROUP_IDS,
@@ -769,9 +770,14 @@ export function ComposeEditor({
       hostI18n?.formatMessage,
     )
     initializedApi.current = event.api
-    // 活动页面由 Dockview 的活动面板决定；宿主据此换 controller 的 runtime。
+    // 活动页面由中央 Canvas Group 内的活动面板决定。Dockview 的活动面板是全局的：点击
+    // 组件库、资源面板等其他组的面板同样会触发该事件，若据此推导 Stage 宿主，页面标签会
+    // 立刻失去宿主身份而让画布整体消失。因此只接受画布组内的面板 ID。
     event.api.onDidActivePanelChange?.((change) => {
-      setActiveDocumentPanelId(change.panel?.id ?? null)
+      const panelId = change.panel?.id
+      if (panelId === undefined) return
+      if (!isWorkspaceDocumentPanelId(panelId) && panelId !== WORKSPACE_PANEL_IDS.canvas) return
+      setActiveDocumentPanelId(panelId)
     })
   }, [hostI18n?.formatMessage, resolvedPreferences.locale])
 

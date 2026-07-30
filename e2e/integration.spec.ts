@@ -1446,3 +1446,30 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板与�
   expect(Math.round(pageContent?.height ?? 0)).toBe(Math.round(canvasContent?.height ?? -1))
   expect(Math.round(pageStage?.height ?? 0)).toBe(Math.round(pageContent?.height ?? -1))
 })
+
+test('OpenSpec: editor-workspace-layout / 页面文档标签 / 切换其他面板不会让画布消失', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  await assets.getByRole('grid', { name: 'Pages' })
+    .getByRole('gridcell', { name: /Home.page.json/ }).dblclick()
+
+  const pagePanel = editor.locator('[data-workspace-panel="page-document"]')
+  await expect(pagePanel.locator('.compose-stage')).toHaveCount(1)
+
+  // Dockview 的活动面板是全局的：点击其他组的面板不得让页面标签失去 Stage 宿主身份。
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  await expect(pagePanel.locator('.compose-stage')).toHaveCount(1)
+
+  // 工作区仍跟随该页面：从组件库创建的实体写进页面运行时并标脏。
+  await editor.getByRole('button', { name: 'Rectangle' }).click()
+  const pageTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
+  await expect(pageTab.getByRole('img', { name: '有未保存改动' })).toBeVisible()
+
+  // 切回资源面板后画布依然在。
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  await expect(pagePanel.locator('.compose-stage')).toHaveCount(1)
+})
