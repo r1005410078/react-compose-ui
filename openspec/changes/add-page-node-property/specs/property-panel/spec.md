@@ -30,6 +30,22 @@ Provider 或编辑器工作流类型。
 - **THEN** 选择、清空与拖入均不产生受控变更
 - **AND** 字段仍显示当前有效值
 
+### Requirement: Renderer 接管空值状态
+
+自定义 renderer MUST 能声明由自身呈现空值状态。声明后，面板对可选或可空字段取空值时
+MUST NOT 短路为「未设置」行，而 MUST 调用该 renderer；未声明的 renderer 行为保持不变。
+
+#### Scenario: 空值时仍渲染 renderer
+
+- **WHEN** 字段可空、当前值为空，且匹配到的 renderer 声明接管空值状态
+- **THEN** 面板渲染该 renderer 而不是「未设置」占位
+- **AND** 该字段的存在性操作仍然可用
+
+#### Scenario: 未声明时保持默认
+
+- **WHEN** 匹配到的 renderer 未声明接管空值状态
+- **THEN** 空值字段仍呈现「未设置」占位
+
 ### Requirement: node Editor 宿主端口
 
 属性面板 MUST 通过实例级宿主端口为 node editor 提供候选集合、可读标签解析、可接受的拖拽媒体类型
