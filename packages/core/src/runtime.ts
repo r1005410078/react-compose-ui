@@ -9,6 +9,8 @@ import type {
   CommandDispatchResult,
   CommandHandler,
   CommandIssue,
+  DocumentPatch,
+  DocumentPath,
   EditorCommand,
   EditorTransaction,
   TransactionHistoryEntry,
@@ -36,6 +38,45 @@ function normalizeLimit(value: number | undefined, fallback: number) {
 
 function commandIssue(code: string, message: string): CommandIssue {
   return { code, message }
+}
+
+function pathKey(path: DocumentPath): string {
+  return path.map((segment) => `${typeof segment}:${String(segment)}`).join('/')
+}
+
+/**
+ * 合并同一 mergeKey 下的连续事务 Patch。
+ *
+ * 色盘拖动等高频“同路径反复 set”场景下，中间帧的 set 对最终文档无贡献；
+ * 保留最新 forward set 与最早 inverse，避免 undo 链随拖动帧数线性膨胀。
+ */
+function coalesceTransactionPatches(
+  previousForward: readonly DocumentPatch[],
+  previousInverse: readonly DocumentPatch[],
+  nextForward: readonly DocumentPatch[],
+  nextInverse: readonly DocumentPatch[],
+): { readonly forward: readonly DocumentPatch[]; readonly inverse: readonly DocumentPatch[] } {
+  const allForward = [...previousForward, ...nextForward]
+  const allInverse = [...nextInverse, ...previousInverse]
+  const onlySets = allForward.every((patch) => patch.op === 'set')
+    && allInverse.every((patch) => patch.op === 'set')
+  if (!onlySets || allForward.length === 0) {
+    return { forward: allForward, inverse: allInverse }
+  }
+
+  const forwardByPath = new Map<string, DocumentPatch>()
+  for (const patch of allForward) {
+    if (patch.op === 'set') forwardByPath.set(pathKey(patch.path), patch)
+  }
+  // allInverse 为 [...nextInverse, ...previousInverse]；同路径最后一次 set 才是窗口起点旧值。
+  const inverseByPath = new Map<string, DocumentPatch>()
+  for (const patch of allInverse) {
+    if (patch.op === 'set') inverseByPath.set(pathKey(patch.path), patch)
+  }
+  return {
+    forward: [...forwardByPath.values()],
+    inverse: [...inverseByPath.values()],
+  }
 }
 
 function safeNotify<T>(listeners: ReadonlySet<(value: T) => void>, value: T) {
@@ -326,12 +367,18 @@ export function createTransactionRuntime(
       )
       let transaction = newTransaction
       if (coalesced && previous) {
+        const patches = coalesceTransactionPatches(
+          previous.forward,
+          previous.inverse,
+          newTransaction.forward,
+          newTransaction.inverse,
+        )
         transaction = {
           ...newTransaction,
           id: previous.id,
           beforeRevision: previous.beforeRevision,
-          forward: [...previous.forward, ...newTransaction.forward],
-          inverse: [...newTransaction.inverse, ...previous.inverse],
+          forward: patches.forward,
+          inverse: patches.inverse,
         }
         timeline[timeline.length - 1] = { transaction }
       }

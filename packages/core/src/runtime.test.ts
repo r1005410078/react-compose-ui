@@ -56,4 +56,61 @@ describe('TransactionRuntime v5', () => {
     expect(runtime.dispatch(rename('missing', '')).status).toBe('rejected')
     expect(runtime.entries).toHaveLength(1)
   })
+
+  it('相同 mergeKey 的连续 set 事务折叠为单条 forward/inverse', () => {
+    let now = 1_000
+    const runtime = createTransactionRuntime({
+      document: documentFixture(),
+      clock: () => now,
+      mergeWindowMs: 750,
+    })
+    const appearance = (color: string) => ({
+      id: `cmd-${color}`,
+      type: BUILTIN_COMMAND_TYPES.setAppearance,
+      payload: {
+        entityId: 'rectangle',
+        appearance: {
+          backgroundPaint: { kind: 'solid', color },
+          borderColor: 'transparent',
+          borderWidth: 0,
+          borderRadius: 0,
+          opacity: 1,
+        },
+      },
+      meta: {
+        label: '修改外观',
+        source: 'test',
+        targetIds: ['rectangle'],
+        mergeKey: 'inspector:rectangle:entity.appearance.set',
+      },
+    })
+
+    expect(runtime.dispatch(appearance('#111111')).status).toBe('committed')
+    now += 10
+    expect(runtime.dispatch(appearance('#222222')).status).toBe('committed')
+    now += 10
+    const third = runtime.dispatch(appearance('#333333'))
+    expect(third.status).toBe('committed')
+    if (third.status !== 'committed') throw new Error('expected committed')
+    expect(third.coalesced).toBe(true)
+    expect(runtime.entries).toHaveLength(2)
+    expect(third.transaction.forward).toHaveLength(1)
+    expect(third.transaction.inverse).toHaveLength(1)
+    expect(third.transaction.forward[0]).toMatchObject({
+      op: 'set',
+      path: ['entities', 'rectangle', 'components', 'Appearance'],
+    })
+    const forward = third.transaction.forward[0]
+    expect(forward?.op).toBe('set')
+    if (forward?.op !== 'set') throw new Error('expected set patch')
+    expect(
+      (forward.value as { backgroundPaint: { color: string } }).backgroundPaint.color,
+    ).toBe('#333333')
+    runtime.undo()
+    expect(
+      (runtime.document.entities.rectangle?.components.Appearance as {
+        backgroundPaint: { color: string }
+      } | undefined)?.backgroundPaint.color,
+    ).not.toBe('#333333')
+  })
 })

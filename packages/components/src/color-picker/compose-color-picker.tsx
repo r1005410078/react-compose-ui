@@ -19,6 +19,7 @@ import {
   composeColorFromHsv,
   composeColorWithAlpha,
   parseComposeEditableColor,
+  type ComposeEditableColor,
   type ComposeHsvColor,
 } from './color-model'
 import { useComposeColorHistory } from './use-compose-color-history'
@@ -115,10 +116,11 @@ function isEditableTarget(target: EventTarget | null): boolean {
  * 基于 Shadcn Popover 组合的 Figma 风格纯色选择器。
  *
  * @remarks
- * 指针拖动会在动画帧中合并 `onValueChange`，并在松手时同步提交最后一个采样点；这样既保留
- * 舞台实时预览，又不会把原生高频 pointermove 直接放大为文档、历史和审计的高频更新。颜色
- * MRU 只在 Popover 关闭时记录，因此连续拖动不会污染历史。原生 EyeDropper 始终由用户手势
- * 启动，浏览器拒绝或不支持时交给宿主图层取色。
+ * 指针拖动时色盘/滑杆只用本地 `dragPreviewColor` 即时回显，不向父级派发 `onValueChange`。
+ * Editor 中每次颜色变更都会走完整文档事务、Stage 与属性树重绘；拖动中每帧提交会直接造成
+ * 色盘拖选卡顿。松手时同步 flush 最终采样点，保证受控值、舞台与历史一致。颜色 MRU 只在
+ * Popover 关闭时记录。原生 EyeDropper 始终由用户手势启动，浏览器拒绝或不支持时交给宿主
+ * 图层取色。
  *
  * @public
  */
@@ -138,69 +140,70 @@ export function ComposeColorPicker({
   const [dragPreviewColor, setDragPreviewColor] = useState<ComposeColor | null>(null)
   const emittedColor = useRef<ComposeColor | null>(null)
   const pendingColor = useRef<ComposeColor | null>(null)
-  const animationFrame = useRef<number | null>(null)
   const pointerDrag = useRef(false)
+  const dragSample = useRef<ComposeEditableColor | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const parsed = parseComposeEditableColor(dragPreviewColor ?? value)
   const locked = disabled || readOnly
   const fallback = normalizeComposeColor(value) === null
   const transparent = parsed.color === 'transparent'
   const flushPointerColor = useCallback(() => {
-    if (animationFrame.current !== null) {
-      globalThis.cancelAnimationFrame(animationFrame.current)
-      animationFrame.current = null
-    }
     const next = pendingColor.current
     pendingColor.current = null
     if (next) onValueChange?.(next)
   }, [onValueChange])
-  const emitColor = useCallback((next: ComposeColor) => {
+  const emitColor = useCallback((next: ComposeColor, sample?: ComposeEditableColor) => {
     if (locked) return
     emittedColor.current = next
     if (!pointerDrag.current) {
       onValueChange?.(next)
       return
     }
-    // 父组件往往要把颜色写入完整 ComposeDocument；保留本地采样值可让控制柄不等待
-    // React/事务 round-trip，同时每帧至多派发一次正式受控更新。
-    setDragPreviewColor(next)
+    // 同步写入采样 ref，使连续 pointermove 在 React 重绘前仍能读到最新 HSV。
+    if (sample) dragSample.current = sample
+    else dragSample.current = parseComposeEditableColor(next)
+    // 拖动中只更新本地草稿与 pending；文档事务延后到松手，避免 Editor 全树每帧提交。
+    setDragPreviewColor((current) => (current === next ? current : next))
     pendingColor.current = next
-    if (animationFrame.current !== null) return
-    animationFrame.current = globalThis.requestAnimationFrame(() => {
-      animationFrame.current = null
-      const pending = pendingColor.current
-      pendingColor.current = null
-      if (pending) onValueChange?.(pending)
-    })
   }, [locked, onValueChange])
   const emit = useCallback((next: ComposeHsvColor, alpha: number) => {
     if (locked) return
-    emitColor(composeColorFromHsv(next, alpha))
+    const color = composeColorFromHsv(next, alpha)
+    emitColor(color, { color, hsv: next, alpha })
   }, [emitColor, locked])
   const emitAlpha = useCallback((alpha: number) => {
     if (locked) return
-    emitColor(composeColorWithAlpha(parsed.color, alpha))
-  }, [emitColor, locked, parsed.color])
+    const sample = dragSample.current ?? parsed
+    const color = composeColorWithAlpha(sample.color, alpha)
+    emitColor(color, {
+      color,
+      hsv: sample.hsv,
+      alpha: Math.min(1, Math.max(0, alpha)),
+    })
+  }, [emitColor, locked, parsed])
   const startPointerDrag = useCallback((event: PointerEvent<HTMLElement>) => {
     if (locked) return
     pointerDrag.current = true
+    dragSample.current = parseComposeEditableColor(dragPreviewColor ?? value)
     event.currentTarget.setPointerCapture?.(event.pointerId)
-  }, [locked])
+  }, [dragPreviewColor, locked, value])
   const finishPointerDrag = useCallback(() => {
     if (!pointerDrag.current) return
     pointerDrag.current = false
+    dragSample.current = null
     flushPointerColor()
   }, [flushPointerColor])
   const updatePlane = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (locked) return
     const bounds = event.currentTarget.getBoundingClientRect()
     if (bounds.width === 0 || bounds.height === 0) return
+    const sample = dragSample.current ?? parsed
     emit({
-      ...parsed.hsv,
+      ...sample.hsv,
       saturation: Math.round(clampComposeColor(((event.clientX - bounds.left) / bounds.width) * 100)),
       value: Math.round(100 - clampComposeColor(((event.clientY - bounds.top) / bounds.height) * 100)),
-    }, parsed.alpha === 0 ? 1 : parsed.alpha)
-  }, [emit, locked, parsed.alpha, parsed.hsv])
+    }, sample.alpha === 0 ? 1 : sample.alpha)
+  }, [emit, locked, parsed])
   const updatePlaneByKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? 10 : 1
     const next = event.key === 'ArrowRight' ? { ...parsed.hsv, saturation: clampComposeColor(parsed.hsv.saturation + step) }
@@ -246,9 +249,6 @@ export function ComposeColorPicker({
       setDragPreviewColor(null)
     }
   }, [dragPreviewColor, value])
-  useEffect(() => () => {
-    if (animationFrame.current !== null) globalThis.cancelAnimationFrame(animationFrame.current)
-  }, [])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) finishPointerDrag()

@@ -206,7 +206,7 @@ export function CanvasInspector({
             backgroundColor: next.backgroundColor,
           },
           meta: {
-            // 色盘拖动会逐帧同步输出预览；同一次连续拖动必须只占用一条撤销/重做历史。
+            // 色盘拖动仅在松手提交，但连续点选/滑杆仍可能短窗合并；同字段共享 mergeKey。
             mergeKey: 'inspector:output:background-color',
             label: messages.configureTransaction,
             source: 'inspector',

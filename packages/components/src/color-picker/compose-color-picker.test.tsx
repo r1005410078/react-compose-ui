@@ -115,43 +115,32 @@ describe('OpenSpec: components / 共享 Color Picker', () => {
     })
   })
 
-  it('指针拖动按动画帧合并受控更新，并在松手时同步提交最终颜色', () => {
+  it('指针拖动只本地预览，松手时同步提交最终颜色', () => {
     const onValueChange = vi.fn()
-    const requestAnimationFrame = vi.fn(() => 1)
-    const cancelAnimationFrame = vi.fn()
-    vi.stubGlobal('requestAnimationFrame', requestAnimationFrame)
-    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame)
-    try {
-      render(<ComposeColorPicker label="背景" value="#336699" onValueChange={onValueChange} />)
-      fireEvent.click(screen.getByRole('button', { name: '选择背景颜色' }))
-      const plane = screen.getByLabelText('背景色盘')
-      vi.spyOn(plane, 'getBoundingClientRect').mockReturnValue({
-        bottom: 100,
-        height: 100,
-        left: 0,
-        right: 100,
-        top: 0,
-        width: 100,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      })
+    render(<ComposeColorPicker label="背景" value="#336699" onValueChange={onValueChange} />)
+    fireEvent.click(screen.getByRole('button', { name: '选择背景颜色' }))
+    const plane = screen.getByLabelText('背景色盘')
+    vi.spyOn(plane, 'getBoundingClientRect').mockReturnValue({
+      bottom: 100,
+      height: 100,
+      left: 0,
+      right: 100,
+      top: 0,
+      width: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
 
-      fireEvent.pointerDown(plane, { clientX: 10, clientY: 10, pointerId: 1 })
-      fireEvent.pointerMove(plane, { buttons: 1, clientX: 40, clientY: 40, pointerId: 1 })
-      fireEvent.pointerMove(plane, { buttons: 1, clientX: 80, clientY: 80, pointerId: 1 })
+    fireEvent.pointerDown(plane, { clientX: 10, clientY: 10, pointerId: 1 })
+    fireEvent.pointerMove(plane, { buttons: 1, clientX: 40, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(plane, { buttons: 1, clientX: 80, clientY: 80, pointerId: 1 })
 
-      expect(onValueChange).not.toHaveBeenCalled()
-      expect(requestAnimationFrame).toHaveBeenCalled()
+    expect(onValueChange).not.toHaveBeenCalled()
 
-      fireEvent.pointerUp(plane, { pointerId: 1 })
-      expect(cancelAnimationFrame).toHaveBeenCalled()
-      expect(onValueChange).toHaveBeenCalledTimes(1)
-      expect(onValueChange).toHaveBeenLastCalledWith(expect.stringMatching(/^#[0-9a-f]{6}$/))
-    }
-    finally {
-      vi.unstubAllGlobals()
-    }
+    fireEvent.pointerUp(plane, { pointerId: 1 })
+    expect(onValueChange).toHaveBeenCalledTimes(1)
+    expect(onValueChange).toHaveBeenLastCalledWith(expect.stringMatching(/^#[0-9a-f]{6}$/))
   })
 
   it('在安全上下文优先调用原生 EyeDropper，并把采样结果规范化为 ComposeColor', async () => {
