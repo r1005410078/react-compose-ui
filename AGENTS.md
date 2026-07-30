@@ -194,6 +194,24 @@ src/tree/
 - 新增能力时优先完成一条可运行的纵向流程，再扩展抽象和组件种类。
 - 不要提前实现尚未由规范确定的编辑器领域模型。
 
+## Worktree 工作目录
+
+需要在独立分支上工作时，一律使用 git worktree，并且只放在仓库根目录的 `.worktree/` 下，
+不得在主检出内直接切换分支，也不得把 worktree 建在仓库之外的同级目录：
+
+```bash
+git worktree add .worktree/<change-id> -b <branch>
+```
+
+- 目录名使用对应的 OpenSpec change ID（例如 `.worktree/add-page-system`），一个变更一个目录。
+- `.worktree/` 已被 `.gitignore` 忽略，因此嵌套在仓库内不会污染主检出的工作区状态。
+- 主检出保留给 `main` 与正在进行的未提交改动。禁止把其他分支的改动提交进主检出，也禁止把主
+  检出里与当前任务无关的改动一并提交。
+- worktree 只包含 Git 跟踪的文件，**不含 `node_modules`**。执行构建、测试或类型检查前必须先在
+  该目录运行 `bun install`。
+- 用完通过 `git worktree remove .worktree/<change-id>` 清理，禁止直接 `rm -rf`；确有残留时再运行
+  `git worktree prune`。
+
 ## 验证要求
 
 提交前至少运行：
