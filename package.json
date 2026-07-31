@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev --concurrency=20",
+    "dev": "turbo run dev --concurrency=100",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "lint": "bun run check:architecture && eslint . --max-warnings 0",
