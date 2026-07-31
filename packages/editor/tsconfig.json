@@ -10,6 +10,7 @@
       "@compose-ui/components": ["../components/src/index.tsx"],
       "@compose-ui/core": ["../core/src/index.ts"],
       "@compose-ui/history": ["../history/src/index.tsx"],
+      "@compose-ui/pages": ["../pages/src/index.ts"],
       "@compose-ui/materials": ["../materials/src/index.ts"],
       "@compose-ui/operation-log": ["../operation-log/src/index.tsx"],
       "@compose-ui/preview": ["../preview/src/index.tsx"],
