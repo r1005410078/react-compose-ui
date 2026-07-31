@@ -111,7 +111,7 @@ export function serializeComposePageDocument(document: ComposeDocument): string 
  */
 export function createEmptyComposePageDocument(): ComposeDocument {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds: [],

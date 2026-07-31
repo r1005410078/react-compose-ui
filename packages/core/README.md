@@ -2,7 +2,7 @@
 
 React Compose UI 的 React/DOM 无关领域内核。
 
-当前公共文档协议只支持 `ComposeDocument v5`。场景项统一为 `ComposeEntity`，能力由 PascalCase
+当前公共文档协议只支持 `ComposeDocument v6`。场景项统一为 `ComposeEntity`，能力由 PascalCase
 Component Key 组合，不再存在 Frame/Component 联合类型或节点继承结构。
 
 ```ts
@@ -15,7 +15,7 @@ import {
 } from '@compose-ui/core'
 
 const document: ComposeDocument = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   canvas: createDefaultCanvasSettings(),
   output: createDefaultOutputSettings(),
   rootIds: [],
@@ -38,24 +38,26 @@ runtime.dispatch({
 })
 ```
 
-每个场景 Entity 必须拥有 `Composition`、`Transform`、`Visibility`、`Lock`，并至少拥有
+每个场景 Entity 必须拥有 `Composition`、`Transform`、`LayoutItem`、`Visibility`、`Lock`，并至少拥有
 `Renderer` 或 `Hierarchy`。`Renderer + Hierarchy` 是合法组合：一个可渲染 Entity 也可以容纳
 子项。`Hierarchy.childIds` 是唯一父子事实来源，`rootIds` 保存顶层顺序；Core 校验完整可达、
 单父级和无循环。
 
 容器可以额外保存只与 `Hierarchy` 组合的 `Layout`。当前 `ComposeLayout` 只支持 Flex 容器
 属性，并提供 `createDefaultComposeFlexLayout()`、`getComposeLayout()` 与
-`isValidComposeLayout()`。`gap` 是有限非负数；缺少 `Layout` 的既有 v5 文档仍然合法。
-当前 Stage 与 Preview 暂不解释该 Component，保存值只用于 Authoring 属性面板及其内部预览。
+`isValidComposeLayout()`。Layout 使用四边 padding、rowGap/columnGap、direction、wrap 与显式对齐值；
+`Hierarchy.childIds` 是唯一 Flow 顺序来源。
 
 `output.backgroundPaint` 是输出画布的结构化背景，支持 `solid`、`linear-gradient`、
-`radial-gradient` 与 `angular-gradient`。`output.backgroundColor` 已不属于 v5 协议：文档校验和
+`radial-gradient` 与 `angular-gradient`。`output.backgroundColor` 已不属于 v6 协议：文档校验和
 `output.configure` 都会拒绝它，不提供兼容别名或自动迁移。
 
 内建 Component 包括：
 
 - `Composition`：Preset、基础 Component Key 与 Capability 归属。
-- `Transform`、`TransformConstraints`：位置、尺寸、旋转及移动/Resize/旋转约束。
+- `Transform`：只保存布局后的 rotation。
+- `LayoutItem`：保存 positioning、offset、Fixed/Fill/Hug、min/max、margin 与 alignSelf。
+- `GeometryConstraints`：保存移动、Resize 与旋转编辑权限。
 - `Visibility`、`Lock`：编辑和渲染状态。
 - `Hierarchy`、`Layout`、`Clip`：容器结构、可选 Flex Authoring 数据和裁剪；`Layout`、
   `Clip` 都必须依附 `Hierarchy`。
@@ -68,8 +70,9 @@ runtime.dispatch({
 内建 `entity.*` 命令覆盖 Entity 创建、删除、复制、重命名、层级移动、Component 增删更新，
 以及 Transform、Visibility、Lock、Appearance 和 Renderer props 的类型化修改。
 Transform 命令带 `move | resize | rotate | set` 操作语义，Core 会同时验证锁定状态和
-`TransformConstraints`，不能绕过 Stage 限制。
+`GeometryConstraints`，不能绕过 Stage 限制。
 
 所有已提交命令继续生成可逆 Patch 并进入统一 History。选择、展开、工具、Stage viewport 和
 临时 Preview Transform 属于会话状态；`canvas`、`output`、Entity 和 Component 数据属于文档。
-v3 文档会被明确拒绝，本包不提供迁移器、兼容类型或双运行路径。
+v5 文档会被明确拒绝；`migrateComposeDocumentV5ToV6()` 提供不修改输入的显式单向迁移，
+本包不提供兼容类型、v6→v5 或双运行路径。

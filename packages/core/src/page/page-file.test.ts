@@ -41,10 +41,10 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     expect(composePageDisplayName('logo.svg')).toBe('logo.svg')
   })
 
-  it('创建的空白页面文档是 v5、无实体且每次独立', () => {
+  it('创建的空白页面文档是 v6、无实体且每次独立', () => {
     const first = createEmptyComposePageDocument()
     const second = createEmptyComposePageDocument()
-    expect(first.schemaVersion).toBe(5)
+    expect(first.schemaVersion).toBe(6)
     expect(first.rootIds).toEqual([])
     expect(first.entities).toEqual({})
     expect(first.output.width).toBeGreaterThan(0)

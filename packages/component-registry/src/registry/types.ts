@@ -7,6 +7,7 @@ import type {
 import type {
   ComposeDocument,
   ComposeEntity,
+  ComposeLayoutSnapshot,
   ComposePageDocumentLoader,
   ComposeRenderer,
   EditorCommand,
@@ -92,6 +93,10 @@ export interface ComposeEntityInspectorContext {
   readonly dispatch: (command: EditorCommand) => unknown
   /** 锁定或宿主只读状态。 */
   readonly readOnly: boolean
+  /** Inspector 所属的正式文档；需要判断父子布局语义时使用。 */
+  readonly document?: ComposeDocument
+  /** 当前正式布局结果；只读计算值和 Flow→Absolute 烘焙必须使用它。 */
+  readonly layoutSnapshot?: ComposeLayoutSnapshot
   /** 可选的 Editor Paint 编辑桥接；Registry 与物料包不依赖 Stage。 */
   readonly paintEditPort?: ComposePaintEditPort
   /** 可选的节点目录桥接；物料把它交给属性面板的 node editor。 */

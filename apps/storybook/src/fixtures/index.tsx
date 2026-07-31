@@ -4,6 +4,7 @@ import type { ComposeRendererProps } from '@compose-ui/component-registry'
 import type { ComposeAssetProvider } from '@compose-ui/assets'
 import {
   createDefaultCanvasSettings,
+  createDefaultComposeLayoutItem,
   createDefaultOutputSettings,
   type ComposeDocument,
 } from '@compose-ui/core'
@@ -47,11 +48,13 @@ export const storyRegistry = createComposeEntityRegistry({
       key: 'Transform',
       label: 'Transform',
       order: 10,
-      createDefault: () => ({
-        position: { x: 0, y: 0 },
-        size: { width: 100, height: 100 },
-        rotation: 0,
-      }),
+      createDefault: () => ({ rotation: 0 }),
+    },
+    {
+      key: 'LayoutItem',
+      label: 'Layout item',
+      order: 12,
+      createDefault: createDefaultComposeLayoutItem,
     },
     {
       key: 'Visibility',
@@ -96,11 +99,8 @@ export const storyRegistry = createComposeEntityRegistry({
       id: 'story.container',
       label: 'Story container',
       createComponents: () => ({
-        Transform: {
-          position: { x: 0, y: 0 },
-          size: { width: 560, height: 360 },
-          rotation: 0,
-        },
+        Transform: { rotation: 0 },
+        LayoutItem: createDefaultComposeLayoutItem(560, 360),
         Visibility: { visible: true },
         Lock: { locked: false },
         Hierarchy: { childIds: [] },
@@ -112,11 +112,8 @@ export const storyRegistry = createComposeEntityRegistry({
       id: 'story.card',
       label: 'Story card',
       createComponents: () => ({
-        Transform: {
-          position: { x: 0, y: 0 },
-          size: { width: 240, height: 120 },
-          rotation: 0,
-        },
+        Transform: { rotation: 0 },
+        LayoutItem: createDefaultComposeLayoutItem(240, 120),
         Visibility: { visible: true },
         Lock: { locked: false },
         Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
@@ -129,7 +126,7 @@ export const storyRegistry = createComposeEntityRegistry({
 /** 返回新的文档对象，避免每个 Story 或 play function 相互污染。 */
 export function createStoryDocument(): ComposeDocument {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds: ['story-container'],
@@ -142,6 +139,7 @@ export function createStoryDocument(): ComposeDocument {
             presetId: 'story.container',
             baseComponentKeys: [
               'Transform',
+              'LayoutItem',
               'Visibility',
               'Lock',
               'Hierarchy',
@@ -150,11 +148,8 @@ export function createStoryDocument(): ComposeDocument {
             ],
             capabilityIds: [],
           },
-          Transform: {
-            position: { x: 80, y: 72 },
-            size: { width: 560, height: 360 },
-            rotation: 0,
-          },
+          Transform: { rotation: 0 },
+          LayoutItem: createDefaultComposeLayoutItem(560, 360, { x: 80, y: 72 }),
           Visibility: { visible: true },
           Lock: { locked: false },
           Appearance: {
@@ -174,6 +169,7 @@ export function createStoryDocument(): ComposeDocument {
             presetId: 'story.card',
             baseComponentKeys: [
               'Transform',
+              'LayoutItem',
               'Visibility',
               'Lock',
               'Appearance',
@@ -181,11 +177,8 @@ export function createStoryDocument(): ComposeDocument {
             ],
             capabilityIds: [],
           },
-          Transform: {
-            position: { x: 48, y: 48 },
-            size: { width: 240, height: 120 },
-            rotation: 0,
-          },
+          Transform: { rotation: 0 },
+          LayoutItem: createDefaultComposeLayoutItem(240, 120, { x: 48, y: 48 }),
           Visibility: { visible: true },
           Lock: { locked: false },
           Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },

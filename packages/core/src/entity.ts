@@ -5,11 +5,13 @@ import {
   type ComposeComposition,
   type ComposeEntity,
   type ComposeHierarchy,
+  type ComposeGeometryConstraints,
+  type ComposeLayoutItem,
   type ComposeLock,
   type ComposeLayout,
   type ComposeRenderer,
+  type ComposeSpatialTransform,
   type ComposeTransform,
-  type ComposeTransformConstraints,
   type ComposeVisibility,
   type JsonObject,
 } from './document-types'
@@ -39,13 +41,28 @@ export function getComposeTransform(entity: ComposeEntity): ComposeTransform {
   return entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.transform] as ComposeTransform
 }
 
-/** 读取可选 TransformConstraints。 @public */
-export function getComposeTransformConstraints(
+/** 把持久化 LayoutItem box 与 Transform rotation 合成为 Stage 编辑值。 @public */
+export function getComposeSpatialTransform(entity: ComposeEntity): ComposeSpatialTransform {
+  const item = getComposeLayoutItem(entity)
+  return {
+    position: item.offset,
+    size: { width: item.width.value, height: item.height.value },
+    rotation: getComposeTransform(entity).rotation,
+  }
+}
+
+/** 读取 Entity 的 LayoutItem。 @public */
+export function getComposeLayoutItem(entity: ComposeEntity): ComposeLayoutItem {
+  return entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem] as ComposeLayoutItem
+}
+
+/** 读取可选 GeometryConstraints。 @public */
+export function getComposeGeometryConstraints(
   entity: ComposeEntity,
-): ComposeTransformConstraints | undefined {
+): ComposeGeometryConstraints | undefined {
   return entity.components[
-    COMPOSE_BUILTIN_COMPONENT_KEYS.transformConstraints
-  ] as ComposeTransformConstraints | undefined
+    COMPOSE_BUILTIN_COMPONENT_KEYS.geometryConstraints
+  ] as ComposeGeometryConstraints | undefined
 }
 
 /** 读取 Entity 的 Visibility。 @public */
@@ -106,15 +123,13 @@ export function isComposeContainerEntity(entity: ComposeEntity): boolean {
   return getComposeHierarchy(entity) !== undefined
 }
 
-/** 缺失 TransformConstraints 时使用的自由变换默认值。 @public */
-export function resolveComposeTransformConstraints(
+/** 缺失 GeometryConstraints 时使用的自由变换默认值。 @public */
+export function resolveComposeGeometryConstraints(
   entity: ComposeEntity,
-): ComposeTransformConstraints {
-  return getComposeTransformConstraints(entity) ?? {
+): ComposeGeometryConstraints {
+  return getComposeGeometryConstraints(entity) ?? {
     movable: true,
     resize: 'free',
     rotatable: true,
-    minSize: { width: 1, height: 1 },
-    maxSize: null,
   }
 }

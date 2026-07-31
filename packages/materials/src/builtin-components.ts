@@ -4,7 +4,10 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   createDefaultComposeFlexLayout,
+  createDefaultComposeLayoutItem,
   isValidComposeLayout,
+  isValidComposeLayoutItem,
+  isValidComposeGeometryConstraints,
 } from '@compose-ui/core'
 import {
   createLayoutInspector,
@@ -15,6 +18,7 @@ import {
   createConstraintsInspector,
   createHierarchyInspector,
   createLockInspector,
+  createLayoutItemInspector,
   createTransformInspector,
   createVisibilityInspector,
 } from './material-inspector-kit/component-inspectors'
@@ -54,11 +58,17 @@ export function createComposeBuiltinComponentDefinitions(
       label: '变换',
       order: 10,
       createDefault: () => ({
-        position: { x: 0, y: 0 },
-        size: { width: 100, height: 100 },
         rotation: 0,
       }),
       inspector: createTransformInspector(idFactory),
+    },
+    {
+      key: 'LayoutItem',
+      label: '布局项',
+      order: 12,
+      createDefault: createDefaultComposeLayoutItem,
+      validate: isValidComposeLayoutItem,
+      inspector: createLayoutItemInspector(idFactory),
     },
     {
       key: 'Visibility',
@@ -111,16 +121,15 @@ export function createComposeBuiltinComponentDefinitions(
       createDefault: () => ({ enabled: true }),
     },
     {
-      key: 'TransformConstraints',
+      key: 'GeometryConstraints',
       label: '几何限制',
       order: 70,
       createDefault: () => ({
         movable: true,
         resize: 'free',
         rotatable: true,
-        minSize: { width: 1, height: 1 },
-        maxSize: null,
       }),
+      validate: isValidComposeGeometryConstraints,
       inspector: createConstraintsInspector(idFactory),
     },
     {
@@ -155,12 +164,10 @@ export const DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS: readonly ComposeCapabilityD
       label: '几何限制',
       description: '限制移动、旋转与 Resize 行为',
       createComponents: () => ({
-        TransformConstraints: {
+        GeometryConstraints: {
           movable: true,
           resize: 'free',
           rotatable: true,
-          minSize: { width: 1, height: 1 },
-          maxSize: null,
         },
       }),
     },

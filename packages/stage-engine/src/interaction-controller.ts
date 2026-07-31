@@ -1,18 +1,20 @@
 import type {
   ComposePaint,
   ComposeDocument,
+  ComposeLayoutSnapshot,
   EditorCommand,
   JsonValue,
 } from '@compose-ui/core'
 import {
   BUILTIN_COMMAND_TYPES,
   getComposeLock,
+  getComposeLayoutItem,
   getComposeAppearance,
   getComposeRenderer,
   evaluateComposePaintAtLocalPoint,
-  getComposeTransform,
+  getComposeSpatialTransform,
   resolveComposeAppearance,
-  resolveComposeTransformConstraints,
+  resolveComposeGeometryConstraints,
 } from '@compose-ui/core'
 import {
   createStageSceneIndex,
@@ -146,6 +148,8 @@ export interface StagePaintHandle {
 export interface StageInteractionContext {
   /** 最新正式文档引用；内部手势据此检测并发文档变化。 */
   readonly document: ComposeDocument
+  /** 与 document 同一求解周期的布局快照。 */
+  readonly layoutSnapshot: ComposeLayoutSnapshot
   /** 最新受控 viewport。 */
   readonly viewport: StageViewport
   /** 不含标尺和滚动条的 surface CSS 像素尺寸。 */
@@ -450,7 +454,7 @@ function paintHandlesFor(
   const entity = index.document.entities[entityId]
   const matrix = index.getWorldMatrix(entityId)
   if (!entity || !matrix) return []
-  const transform = getComposeTransform(entity)
+  const transform = getComposeSpatialTransform(entity)
   const world = (point: { readonly x: number; readonly y: number }) =>
     localPaintPointToWorld(matrix, transform, point)
   if (paint.kind === 'linear-gradient') {
@@ -495,7 +499,7 @@ function paintAtLocalPoint(
   const entity = index.document.entities[entityId]
   const matrix = index.getWorldMatrix(entityId)
   if (!entity || !matrix) return null
-  const transform = getComposeTransform(entity)
+  const transform = getComposeSpatialTransform(entity)
   const local = applyMatrix(invertMatrix(matrix), worldPoint)
   return { x: local.x / transform.size.width, y: local.y / transform.size.height }
 }
@@ -616,7 +620,7 @@ function transformedSelection(
     const entity = index.document.entities[id]
     const entityWorld = index.getWorldMatrix(id)
     if (!entity || !entityWorld) return
-    const transform = getComposeTransform(entity)
+    const transform = getComposeSpatialTransform(entity)
     const candidate = targetTransform(
       index,
       id,
@@ -628,8 +632,16 @@ function transformedSelection(
       updates[id] = candidate
       return
     }
-    const constraints = resolveComposeTransformConstraints(entity)
-    const maximum = constraints.maxSize
+    const constraints = resolveComposeGeometryConstraints(entity)
+    const layoutItem = getComposeLayoutItem(entity)
+    const minimum = {
+      width: layoutItem.width.min ?? 0,
+      height: layoutItem.height.min ?? 0,
+    }
+    const maximum = {
+      width: layoutItem.width.max ?? undefined,
+      height: layoutItem.height.max ?? undefined,
+    }
     const clamp = (value: number, minimum: number, max: number | undefined) =>
       Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(minimum, value))
     if (constraints.resize === 'preserve-aspect') {
@@ -639,13 +651,13 @@ function transformedSelection(
         ? widthScale
         : heightScale
       const minScale = Math.max(
-        constraints.minSize.width / transform.size.width,
-        constraints.minSize.height / transform.size.height,
+        minimum.width / transform.size.width,
+        minimum.height / transform.size.height,
       )
-      const maxScale = maximum
+      const maxScale = maximum.width !== undefined || maximum.height !== undefined
         ? Math.min(
-            maximum.width / transform.size.width,
-            maximum.height / transform.size.height,
+            (maximum.width ?? Number.POSITIVE_INFINITY) / transform.size.width,
+            (maximum.height ?? Number.POSITIVE_INFINITY) / transform.size.height,
           )
         : Number.POSITIVE_INFINITY
       scale = Math.min(maxScale, Math.max(minScale, scale))
@@ -660,10 +672,10 @@ function transformedSelection(
       ...candidate,
       width: constraints.resize === 'vertical'
         ? transform.size.width
-        : clamp(candidate.width, constraints.minSize.width, maximum?.width),
+        : clamp(candidate.width, minimum.width, maximum.width),
       height: constraints.resize === 'horizontal'
         ? transform.size.height
-        : clamp(candidate.height, constraints.minSize.height, maximum?.height),
+        : clamp(candidate.height, minimum.height, maximum.height),
     }
   })
   return updates
@@ -730,7 +742,7 @@ export function createStageInteractionController(): StageInteractionController {
       return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
     }
     const matrix = currentIndex.getWorldMatrix(sampledEntityId)
-    const transform = getComposeTransform(sampled)
+    const transform = getComposeSpatialTransform(sampled)
     if (!matrix) return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
     const local = applyMatrix(invertMatrix(matrix), world)
     const point = { x: local.x / transform.size.width, y: local.y / transform.size.height }
@@ -962,7 +974,7 @@ export function createStageInteractionController(): StageInteractionController {
       const preserveAspect = gesture.ids.some((id) => {
         const entity = context!.document.entities[id]
         return entity
-          ? resolveComposeTransformConstraints(entity).resize === 'preserve-aspect'
+          ? resolveComposeGeometryConstraints(entity).resize === 'preserve-aspect'
           : false
       })
       const nextBounds = resizeBounds(
@@ -1100,7 +1112,7 @@ export function createStageInteractionController(): StageInteractionController {
         .filter((id) => {
           const entity = context!.document.entities[id]
           if (!entity || !index!.isVisible(id) || getComposeLock(entity).locked) return false
-          const constraints = resolveComposeTransformConstraints(entity)
+          const constraints = resolveComposeGeometryConstraints(entity)
           if (type === 'move') return constraints.movable
           if (type === 'rotate') return constraints.rotatable
           if (constraints.resize === 'none') return false
@@ -1492,7 +1504,7 @@ export function createStageInteractionController(): StageInteractionController {
     },
     updateContext(nextContext) {
       if (disposed) return
-      const nextIndex = createStageSceneIndex(nextContext.document)
+      const nextIndex = createStageSceneIndex(nextContext.document, nextContext.layoutSnapshot)
       const gestureIds = gesture
         && (
           gesture.type === 'move'
@@ -1503,6 +1515,7 @@ export function createStageInteractionController(): StageInteractionController {
         : null
       const paintGestureId = gesture?.type === 'paint' ? gesture.entityId : null
       const documentChanged = context?.document !== nextContext.document
+        || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
       const paintEditingChanged = !samePaintEditing(context?.paintEditing, nextContext.paintEditing)
       const paintSamplingChanged = !samePaintSampling(context?.paintSampling, nextContext.paintSampling)
       const incompatible = Boolean(
@@ -1510,6 +1523,7 @@ export function createStageInteractionController(): StageInteractionController {
         && context
         && (
           context.document !== nextContext.document
+          || context.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
           || context.tool !== nextContext.tool
           || (
             gestureIds

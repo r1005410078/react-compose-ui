@@ -1,10 +1,11 @@
 import {
   BUILTIN_COMMAND_TYPES,
   getComposeHierarchy,
-  getComposeTransform,
+  getComposeSpatialTransform,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposeTransform,
+  type ComposeLayoutSnapshot,
+  type ComposeSpatialTransform,
   type EditorCommand,
   type JsonObject,
   type JsonValue,
@@ -25,12 +26,15 @@ import { describeEntityTargets } from './transaction-labels'
 
 function transformUnderParent(
   document: ComposeDocument,
+  layoutSnapshot: ComposeLayoutSnapshot,
   worldMatrix: ReturnType<typeof getEntityWorldMatrix>,
   parentId: string | null,
   width: number,
   height: number,
-): ComposeTransform {
-  const parentWorld = parentId ? getEntityWorldMatrix(document, parentId) : null
+): ComposeSpatialTransform {
+  const parentWorld = parentId
+    ? getEntityWorldMatrix(document, layoutSnapshot, parentId)
+    : null
   const local = parentWorld
     ? multiplyMatrices(invertMatrix(parentWorld), worldMatrix)
     : worldMatrix
@@ -40,18 +44,20 @@ function transformUnderParent(
 /** 创建保持后代世界几何不变的 entity.group 命令。 @public */
 export function createGroupCommand(
   document: ComposeDocument,
+  layoutSnapshot: ComposeLayoutSnapshot,
   entityIds: readonly string[],
   containerId: string,
   commandId = `group:${containerId}`,
 ): EditorCommand {
   const bounds = unionRects(entityIds
     .filter((id) => Boolean(document.entities[id]))
-    .map((id) => getEntityWorldBounds(document, id)))
+    .map((id) => getEntityWorldBounds(document, layoutSnapshot, id)))
   const parentId = entityIds[0] ? getEntityParentId(document, entityIds[0]) : null
   const safeBounds = bounds ?? { x: 0, y: 0, width: 1, height: 1 }
   const groupWorld = translationMatrix(safeBounds.x, safeBounds.y)
   const groupTransform = transformUnderParent(
     document,
+    layoutSnapshot,
     groupWorld,
     parentId,
     safeBounds.width,
@@ -65,6 +71,7 @@ export function createGroupCommand(
         presetId: null,
         baseComponentKeys: [
           'Transform',
+          'LayoutItem',
           'Visibility',
           'Lock',
           'Hierarchy',
@@ -73,7 +80,15 @@ export function createGroupCommand(
         ],
         capabilityIds: [],
       },
-      Transform: groupTransform,
+      Transform: { rotation: groupTransform.rotation },
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: groupTransform.position,
+        width: { mode: 'fixed', value: groupTransform.size.width, min: 1, max: null },
+        height: { mode: 'fixed', value: groupTransform.size.height, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
       Visibility: { visible: true },
       Lock: { locked: false },
       Hierarchy: { childIds: [...entityIds] },
@@ -92,11 +107,11 @@ export function createGroupCommand(
   for (const entityId of entityIds) {
     const entity = document.entities[entityId]
     if (!entity) continue
-    const transform = getComposeTransform(entity)
+    const transform = getComposeSpatialTransform(entity)
     childTransforms[entityId] = toComposeTransform(decomposeMatrix(
       multiplyMatrices(
         invertMatrix(groupWorld),
-        getEntityWorldMatrix(document, entityId),
+        getEntityWorldMatrix(document, layoutSnapshot, entityId),
       ),
       transform.size.width,
       transform.size.height,
@@ -121,6 +136,7 @@ export function createGroupCommand(
 /** 创建保持后代世界几何不变的 entity.ungroup 命令。 @public */
 export function createUngroupCommand(
   document: ComposeDocument,
+  layoutSnapshot: ComposeLayoutSnapshot,
   containerId: string,
   commandId = `ungroup:${containerId}`,
 ): EditorCommand {
@@ -131,10 +147,11 @@ export function createUngroupCommand(
   for (const childId of hierarchy?.childIds ?? []) {
     const child = document.entities[childId]
     if (!child) continue
-    const transform = getComposeTransform(child)
+    const transform = getComposeSpatialTransform(child)
     childTransforms[childId] = transformUnderParent(
       document,
-      getEntityWorldMatrix(document, childId),
+      layoutSnapshot,
+      getEntityWorldMatrix(document, layoutSnapshot, childId),
       parentId,
       transform.size.width,
       transform.size.height,
@@ -155,6 +172,7 @@ export function createUngroupCommand(
 /** 创建原子 reparent batch，并把每个目标的世界矩阵分解到新父级。 @public */
 export function createReparentCommand(
   document: ComposeDocument,
+  layoutSnapshot: ComposeLayoutSnapshot,
   entityIds: readonly string[],
   parentId: string | null,
   index: number,
@@ -162,13 +180,14 @@ export function createReparentCommand(
 ): EditorCommand {
   const updates = entityIds.map((entityId) => {
     const entity = document.entities[entityId]
-    const transform = entity && getComposeTransform(entity)
+    const transform = entity && getComposeSpatialTransform(entity)
     return {
       entityId,
       transform: transform
         ? transformUnderParent(
             document,
-            getEntityWorldMatrix(document, entityId),
+            layoutSnapshot,
+            getEntityWorldMatrix(document, layoutSnapshot, entityId),
             parentId,
             transform.size.width,
             transform.size.height,
@@ -234,9 +253,9 @@ export function createDuplicateCommand(
     const cloneId = remap.get(id)
     if (!entity || !cloneId) continue
     const clone = structuredClone(entity) as ComposeEntity
-    const transform = getComposeTransform(clone)
+    const transform = getComposeSpatialTransform(clone)
     const hierarchy = getComposeHierarchy(clone)
-    const nextTransform: ComposeTransform = id === sourceId
+    const nextTransform: ComposeSpatialTransform = id === sourceId
       ? {
           ...transform,
           position: {
@@ -251,7 +270,19 @@ export function createDuplicateCommand(
       name: `${clone.name} 副本`,
       components: {
         ...clone.components,
-        Transform: nextTransform,
+        Transform: { rotation: nextTransform.rotation },
+        LayoutItem: {
+          ...clone.components.LayoutItem,
+          offset: nextTransform.position,
+          width: {
+            ...(clone.components.LayoutItem?.width as JsonObject),
+            value: nextTransform.size.width,
+          },
+          height: {
+            ...(clone.components.LayoutItem?.height as JsonObject),
+            value: nextTransform.size.height,
+          },
+        },
         ...(hierarchy
           ? {
               Hierarchy: {

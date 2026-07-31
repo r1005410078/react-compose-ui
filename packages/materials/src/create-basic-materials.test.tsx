@@ -11,8 +11,8 @@ import {
   getComposeComposition,
   getComposeHierarchy,
   getComposeLayout,
+  getComposeLayoutItem,
   getComposeRenderer,
-  getComposeTransform,
   type ComposeEntity,
   type ComposeDocument,
 } from '@compose-ui/core'
@@ -32,7 +32,8 @@ describe('Basic ECS materials', () => {
   it('OpenSpec: Flex Layout Inspector / 布局分组紧跟变换分组', () => {
     const materials = createComposeBasicMaterials()
     const orderedKeys = materials.registry.listComponents().map(({ key }) => key)
-    expect(orderedKeys.indexOf('Layout')).toBe(orderedKeys.indexOf('Transform') + 1)
+    expect(orderedKeys.slice(orderedKeys.indexOf('Transform'), orderedKeys.indexOf('Layout') + 1))
+      .toEqual(['Transform', 'LayoutItem', 'Layout'])
   })
 
   it('OpenSpec: Entity Presets / 六种物料写入明确基础组合', () => {
@@ -51,10 +52,12 @@ describe('Basic ECS materials', () => {
       type: 'flex',
       flexDirection: 'row',
       flexWrap: 'nowrap',
-      alignContent: 'normal',
-      justifyContent: 'normal',
-      alignItems: 'normal',
-      gap: 0,
+      alignContent: 'stretch',
+      justifyContent: 'flex-start',
+      alignItems: 'stretch',
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
     })
     expect(getComposeRenderer(container)).toBeUndefined()
     expect(getComposeComposition(container).baseComponentKeys).toContain('Hierarchy')
@@ -63,7 +66,7 @@ describe('Basic ECS materials', () => {
     for (const id of ['rectangle', 'text', 'image', 'svg']) {
       const entity = seedEntity(materials, id)
       expect(getComposeRenderer(entity)?.type).toBe(id)
-      expect(getComposeTransform(entity).size.width).toBeGreaterThan(0)
+      expect(getComposeLayoutItem(entity).width.value).toBeGreaterThan(0)
       expect(getComposeComposition(entity).baseComponentKeys).toContain('Renderer')
     }
   })
@@ -129,10 +132,12 @@ describe('Basic ECS materials', () => {
         type: 'flex',
         flexDirection: 'row',
         flexWrap: 'nowrap',
-        alignContent: 'normal',
-        justifyContent: 'normal',
-        alignItems: 'normal',
-        gap: 0,
+        alignContent: 'stretch',
+        justifyContent: 'flex-start',
+        alignItems: 'stretch',
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        rowGap: 0,
+        columnGap: 0,
       },
     })
   })
@@ -153,7 +158,7 @@ describe('Basic ECS materials', () => {
       },
     }
     const document: ComposeDocument = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       canvas: createDefaultCanvasSettings(),
       output: createDefaultOutputSettings(),
       rootIds: [legacyContainer.id],

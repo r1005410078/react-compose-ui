@@ -3,15 +3,20 @@ import {
   type ComposeAppearance,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeGeometryConstraints,
+  type ComposeSpatialTransform,
+  type ComposeLayoutItem,
   type ComposeTransform,
-  type ComposeTransformConstraints,
   type DocumentValidationIssue,
   type DocumentValidationIssueCode,
   type DocumentValidationResult,
   type JsonObject,
 } from './document-types'
 import { isComposeComponentKey } from './entity'
-import { collectComposeLayoutValidationIssues } from './layout'
+import {
+  collectComposeLayoutItemValidationIssues,
+  collectComposeLayoutValidationIssues,
+} from './layout'
 import { isComposeColor, isValidComposePaint } from './paint'
 
 type Path = readonly (string | number)[]
@@ -198,63 +203,19 @@ function validateCanvas(
   })
 }
 
-function validateSize(
-  value: unknown,
-  path: Path,
-  issues: DocumentValidationIssue[],
-  code: DocumentValidationIssueCode,
-) {
-  if (!isRecord(value)) {
-    addIssue(issues, code, path, 'Size 必须是对象')
-    return false
-  }
-  rejectUnknownFields(value, ['width', 'height'], path, issues, code)
-  let valid = true
-  for (const key of ['width', 'height'] as const) {
-    if (!positive(value[key])) {
-      addIssue(issues, code, [...path, key], `${key} 必须是有限正数`)
-      valid = false
-    }
-  }
-  return valid
-}
-
 function validateTransform(
   value: JsonObject,
   path: Path,
   issues: DocumentValidationIssue[],
 ) {
   if (!isRecord(value)) return
-  rejectUnknownFields(value, ['position', 'size', 'rotation'], path, issues, 'transform.invalid')
-  if (!isRecord(value.position)) {
-    addIssue(issues, 'transform.invalid', [...path, 'position'], 'position 必须是对象')
-  }
-  else {
-    rejectUnknownFields(
-      value.position,
-      ['x', 'y'],
-      [...path, 'position'],
-      issues,
-      'transform.invalid',
-    )
-    for (const key of ['x', 'y'] as const) {
-      if (!finite(value.position[key])) {
-        addIssue(
-          issues,
-          'transform.invalid',
-          [...path, 'position', key],
-          `${key} 必须是有限数`,
-        )
-      }
-    }
-  }
-  validateSize(value.size, [...path, 'size'], issues, 'transform.invalid-size')
+  rejectUnknownFields(value, ['rotation'], path, issues, 'transform.invalid')
   if (!finite(value.rotation)) {
     addIssue(issues, 'transform.invalid', [...path, 'rotation'], 'rotation 必须是有限数')
   }
 }
 
-function validateTransformConstraints(
+function validateGeometryConstraints(
   value: JsonObject,
   path: Path,
   issues: DocumentValidationIssue[],
@@ -262,15 +223,15 @@ function validateTransformConstraints(
   if (!isRecord(value)) return
   rejectUnknownFields(
     value,
-    ['movable', 'resize', 'rotatable', 'minSize', 'maxSize'],
+    ['movable', 'resize', 'rotatable'],
     path,
     issues,
-    'transform-constraints.invalid',
+    'geometry-constraints.invalid',
   )
   if (typeof value.movable !== 'boolean') {
     addIssue(
       issues,
-      'transform-constraints.invalid',
+      'geometry-constraints.invalid',
       [...path, 'movable'],
       'movable 必须是 boolean',
     )
@@ -278,7 +239,7 @@ function validateTransformConstraints(
   if (typeof value.rotatable !== 'boolean') {
     addIssue(
       issues,
-      'transform-constraints.invalid',
+      'geometry-constraints.invalid',
       [...path, 'rotatable'],
       'rotatable 必须是 boolean',
     )
@@ -287,41 +248,9 @@ function validateTransformConstraints(
   if (typeof value.resize !== 'string' || !resizeModes.has(value.resize)) {
     addIssue(
       issues,
-      'transform-constraints.invalid',
+      'geometry-constraints.invalid',
       [...path, 'resize'],
       'resize 模式无效',
-    )
-  }
-  const minValid = validateSize(
-    value.minSize,
-    [...path, 'minSize'],
-    issues,
-    'transform-constraints.invalid',
-  )
-  let maxValid = true
-  if (value.maxSize !== null) {
-    maxValid = validateSize(
-      value.maxSize,
-      [...path, 'maxSize'],
-      issues,
-      'transform-constraints.invalid',
-    )
-  }
-  if (
-    minValid
-    && maxValid
-    && isRecord(value.minSize)
-    && isRecord(value.maxSize)
-    && (
-      (value.maxSize.width as number) < (value.minSize.width as number)
-      || (value.maxSize.height as number) < (value.minSize.height as number)
-    )
-  ) {
-    addIssue(
-      issues,
-      'transform-constraints.invalid',
-      [...path, 'maxSize'],
-      'maxSize 不得小于 minSize',
     )
   }
 }
@@ -548,6 +477,7 @@ function validateEntity(
   }
   const hasComposition = requireComponent(COMPOSE_BUILTIN_COMPONENT_KEYS.composition)
   const hasTransform = requireComponent(COMPOSE_BUILTIN_COMPONENT_KEYS.transform)
+  const hasLayoutItem = requireComponent(COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem)
   const hasVisibility = requireComponent(COMPOSE_BUILTIN_COMPONENT_KEYS.visibility)
   const hasLock = requireComponent(COMPOSE_BUILTIN_COMPONENT_KEYS.lock)
   const hasHierarchy = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy])
@@ -592,6 +522,18 @@ function validateEntity(
       [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.transform],
       issues,
     )
+  }
+  if (hasLayoutItem) {
+    const layoutItemPath = [
+      ...path,
+      'components',
+      COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem,
+    ] as const
+    collectComposeLayoutItemValidationIssues(
+      components[COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem],
+    ).forEach((issue) => {
+      addIssue(issues, 'layout-item.invalid', [...layoutItemPath, ...issue.path], issue.message)
+    })
   }
   if (hasVisibility) {
     validateBooleanComponent(
@@ -642,11 +584,19 @@ function validateEntity(
       issues,
     )
   }
-  const constraints = components[COMPOSE_BUILTIN_COMPONENT_KEYS.transformConstraints]
+  if (components.TransformConstraints !== undefined) {
+    addIssue(
+      issues,
+      'component.invalid-combination',
+      [...path, 'components', 'TransformConstraints'],
+      'v6 不支持 TransformConstraints，请迁移为 GeometryConstraints',
+    )
+  }
+  const constraints = components[COMPOSE_BUILTIN_COMPONENT_KEYS.geometryConstraints]
   if (isRecord(constraints)) {
-    validateTransformConstraints(
+    validateGeometryConstraints(
       constraints,
-      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.transformConstraints],
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.geometryConstraints],
       issues,
     )
   }
@@ -749,9 +699,47 @@ function validateTopology(
       addIssue(issues, 'document.orphan-entity', ['entities', id], `Entity ${id} 不可达`)
     }
   })
+  Object.entries(entities).forEach(([id, entity]) => {
+    const parentId = parentById.get(id)
+    const item = entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem] as ComposeLayoutItem | undefined
+    if (!item) return
+    const parent = parentId === null || parentId === undefined ? undefined : entities[parentId]
+    const parentHasLayout = Boolean(parent?.components[COMPOSE_BUILTIN_COMPONENT_KEYS.layout])
+    const itemPath = ['entities', id, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem] as const
+    if (item.positioning === 'flow' && !parentHasLayout) {
+      addIssue(
+        issues,
+        'layout-item.invalid',
+        [...itemPath, 'positioning'],
+        'Flow 只允许位于 Layout parent 下',
+      )
+    }
+    for (const axis of ['width', 'height'] as const) {
+      if (item[axis]?.mode === 'fill' && (item.positioning !== 'flow' || !parentHasLayout)) {
+        addIssue(
+          issues,
+          'layout-item.invalid',
+          [...itemPath, axis, 'mode'],
+          'Fill 只允许用于 Layout parent 下的 Flow 子项',
+        )
+      }
+      if (
+        item[axis]?.mode === 'hug'
+        && entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy]
+        && !entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.layout]
+      ) {
+        addIssue(
+          issues,
+          'layout-item.invalid',
+          [...itemPath, axis, 'mode'],
+          'Free Hierarchy Entity 不能通过 Absolute 子项 Hug',
+        )
+      }
+    }
+  })
 }
 
-/** 校验未知输入是否满足 ComposeDocument v5 ECS 协议。 @public */
+/** 校验未知输入是否满足 ComposeDocument v6 ECS 协议。 @public */
 export function validateComposeDocument(input: unknown): DocumentValidationResult {
   if (!isRecord(input)) {
     return {
@@ -761,12 +749,12 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
   }
   const issues: DocumentValidationIssue[] = []
   validateJson(input, [], issues)
-  if (input.schemaVersion !== 5) {
+  if (input.schemaVersion !== 6) {
     addIssue(
       issues,
       'document.unsupported-version',
       ['schemaVersion'],
-      '只支持 ComposeDocument schemaVersion 5',
+      '只支持 ComposeDocument schemaVersion 6',
     )
   }
   validateCanvas(input.canvas, issues)
@@ -795,12 +783,24 @@ export function isValidComposeTransform(value: unknown): value is ComposeTransfo
   return issues.length === 0
 }
 
-/** 供命令和 Registry 校验单个 TransformConstraints 候选。 @public */
-export function isValidComposeTransformConstraints(
+/** 供编辑命令校验由 LayoutItem 与 Transform 合成的完整空间变换。 @public */
+export function isValidComposeSpatialTransform(value: unknown): value is ComposeSpatialTransform {
+  if (!isRecord(value) || !isRecord(value.position) || !isRecord(value.size)) return false
+  return finite(value.position.x)
+    && finite(value.position.y)
+    && finite(value.size.width)
+    && value.size.width >= 0
+    && finite(value.size.height)
+    && value.size.height >= 0
+    && finite(value.rotation)
+}
+
+/** 供命令和 Registry 校验单个 GeometryConstraints 候选。 @public */
+export function isValidComposeGeometryConstraints(
   value: unknown,
-): value is ComposeTransformConstraints {
+): value is ComposeGeometryConstraints {
   const issues: DocumentValidationIssue[] = []
   if (!isRecord(value)) return false
-  validateTransformConstraints(value as unknown as JsonObject, [], issues)
+  validateGeometryConstraints(value as unknown as JsonObject, [], issues)
   return issues.length === 0
 }

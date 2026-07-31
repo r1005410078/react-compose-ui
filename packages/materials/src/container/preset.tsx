@@ -19,10 +19,14 @@ export function createContainerPreset(
     defaultName: options.name ?? 'Container',
     icon: <span aria-hidden="true">▣</span>,
     createComponents: () => ({
-      Transform: {
-        position: { x: 0, y: 0 },
-        size: { ...size },
-        rotation: 0,
+      Transform: { rotation: 0 },
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'fixed', value: size.width, min: 1, max: null },
+        height: { mode: 'fixed', value: size.height, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
       },
       Visibility: { visible: true },
       Lock: { locked: false },

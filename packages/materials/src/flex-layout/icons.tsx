@@ -151,7 +151,6 @@ function AlignContentPaths({ value }: { readonly value: ComposeAlignContent }) {
         <path d="M14 3.5h4V2H2v1.5h4v3h8v-3ZM2 18h16v-1.5h-4v-3H6v3H2V18Z" />
       </>
     )
-    case 'normal':
     case 'stretch': return (
       <path d="M2 3.5h4V9h8V3.5h4V2H2v1.5ZM2 18h16v-1.5h-4V11H6v5.5H2V18Z" />
     )
@@ -183,7 +182,6 @@ function JustifyContentPaths({ value }: { readonly value: ComposeJustifyContent 
         <path d="M13 6h3v8h-3V6ZM4 6h3v8H4V6Z" />
       </>
     )
-    case 'normal':
     case 'flex-start': return (
       <>
         <path clipRule="evenodd" d="M2 2v16h1.5V2H2Z" fillRule="evenodd" />
@@ -240,7 +238,6 @@ function AlignItemsPaths({ value }: { readonly value: ComposeAlignItems }) {
     case 'flex-end': return (
       <path d="M2 16.5h16V18H2v-1.5ZM6 15V4h3v11H6ZM11 8v7h3V8h-3Z" />
     )
-    case 'normal':
     case 'stretch': return (
       <path d="M18 16.5H2V18h16v-1.5ZM18 2H2v1.5h16V2ZM6 15V5h3v10H6ZM11 5v10h3V5h-3Z" />
     )

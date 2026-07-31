@@ -2,7 +2,8 @@ import {
   getComposeHierarchy,
   getComposeTransform,
   type ComposeDocument,
-  type ComposeTransform,
+  type ComposeLayoutSnapshot,
+  type ComposeSpatialTransform,
 } from '@compose-ui/core'
 
 /**
@@ -284,15 +285,24 @@ export function getEntityParentId(document: ComposeDocument, entityId: string): 
  */
 export function getEntityWorldMatrix(
   document: ComposeDocument,
+  snapshot: ComposeLayoutSnapshot,
   entityId: string,
 ): StageMatrix {
   const entity = document.entities[entityId]
   if (!entity) throw new Error(`Unknown Entity ${entityId}`)
-  const local = matrixFromTransform(toStageTransform(getComposeTransform(entity)))
+  const box = snapshot.boxes[entityId]
+  if (!box) throw new Error(`Layout snapshot ${snapshot.revision} has no box for Entity ${entityId}`)
+  const local = matrixFromTransform({
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    rotation: getComposeTransform(entity).rotation,
+  })
   const parentId = getEntityParentId(document, entityId)
   return parentId === null
     ? local
-    : multiplyMatrices(getEntityWorldMatrix(document, parentId), local)
+    : multiplyMatrices(getEntityWorldMatrix(document, snapshot, parentId), local)
 }
 
 /**
@@ -300,16 +310,21 @@ export function getEntityWorldMatrix(
  *
  * @public
  */
-export function getEntityWorldBounds(document: ComposeDocument, entityId: string): StageRect {
+export function getEntityWorldBounds(
+  document: ComposeDocument,
+  snapshot: ComposeLayoutSnapshot,
+  entityId: string,
+): StageRect {
   const entity = document.entities[entityId]
   if (!entity) throw new Error(`Unknown Entity ${entityId}`)
-  const transform = getComposeTransform(entity)
-  const matrix = getEntityWorldMatrix(document, entityId)
+  const box = snapshot.boxes[entityId]
+  if (!box) throw new Error(`Layout snapshot ${snapshot.revision} has no box for Entity ${entityId}`)
+  const matrix = getEntityWorldMatrix(document, snapshot, entityId)
   const points = [
     applyMatrix(matrix, { x: 0, y: 0 }),
-    applyMatrix(matrix, { x: transform.size.width, y: 0 }),
-    applyMatrix(matrix, { x: transform.size.width, y: transform.size.height }),
-    applyMatrix(matrix, { x: 0, y: transform.size.height }),
+    applyMatrix(matrix, { x: box.width, y: 0 }),
+    applyMatrix(matrix, { x: box.width, y: box.height }),
+    applyMatrix(matrix, { x: 0, y: box.height }),
   ]
   const xs = points.map((point) => point.x)
   const ys = points.map((point) => point.y)
@@ -324,7 +339,7 @@ export function getEntityWorldBounds(document: ComposeDocument, entityId: string
 }
 
 /** 将持久化 ECS Transform 投影为 Stage 几何值。 @public */
-export function toStageTransform(transform: ComposeTransform): StageTransform {
+export function toStageTransform(transform: ComposeSpatialTransform): StageTransform {
   return {
     x: transform.position.x,
     y: transform.position.y,
@@ -335,7 +350,7 @@ export function toStageTransform(transform: ComposeTransform): StageTransform {
 }
 
 /** 将 Stage 几何值转回持久化 ECS Transform。 @public */
-export function toComposeTransform(transform: StageTransform): ComposeTransform {
+export function toComposeTransform(transform: StageTransform): ComposeSpatialTransform {
   return {
     position: { x: transform.x, y: transform.y },
     size: { width: transform.width, height: transform.height },

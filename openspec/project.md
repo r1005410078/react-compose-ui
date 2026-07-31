@@ -27,7 +27,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ### Architecture Patterns
 
 - 第一方代码采用单向五层结构：无 React/DOM 的 Headless Domain/Protocol（core、assets、
-  stage-engine）→ Shared UI Foundation（ui-context、component-registry、components）→
+  layout-engine、stage-engine）→ Shared UI Foundation（ui-context、component-registry、components）→
   Domain Components/Widgets → Composition/Entry（editor、preview）→ Application（app）。
   高层可以依赖低层，低层不得反向依赖高层；下列包级约束优先于此通用分类。
 - React 包内部采用 Feature-first 目录。每个共享公共组件拥有独立功能目录，并将实现、类型、
@@ -60,6 +60,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   只依赖 `core` 与 `assets`；编辑器与独立预览运行时共用同一 Store，因此页面加载不依赖 `editor`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
   外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
+- `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解器，只向外发布 core 的
+  LayoutSnapshot 和测量端口协议，Yoga/WASM 实现不得泄漏到公共 API。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、stage-engine、
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
@@ -181,15 +183,16 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ## Domain Context
 
 - 目标用户需要在客户现场快速调整数据大屏，编辑器必须能嵌入现有 React 宿主。
-- 当前仓库只支持 `ComposeDocument v5`：隐式 Canvas 根、统一 ECS Entity/Component 组合、
+- 当前仓库只支持 `ComposeDocument v6`：隐式自由 Canvas 根、统一 ECS Entity/Component 组合、
+  `Transform` rotation、`LayoutItem` Fixed/Fill/Hug 与 `Hierarchy + Layout` Auto Layout、
   `Hierarchy` 容器、`Renderer` 内容、同步命令事务、Entity Registry、Godot 风格无限 Stage、
   聚合 Inspector、controller 默认工作区、文档/Container Preview、事务/会话历史和
   Container/Rectangle/Text/Image/SVG/ECharts 纵向流程。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
   surface 尺寸和动态滚动范围是会话状态。`document.output` 定义固定原点输出边界；Preview
-  接受 v5 并忽略 canvas 编辑元数据。output 默认透明；Stage 输出边界可作为独立 Canvas
+  接受 v6 并忽略 canvas 编辑元数据。v5 只允许显式单向迁移；output 默认透明；Stage 输出边界可作为独立 Canvas
   Inspector 会话目标，但不进入 Entity 选择或 SceneTree。
-- 每个场景 Entity 必须拥有 `Composition`、`Transform`、`Visibility`、`Lock`，并至少拥有
+- 每个场景 Entity 必须拥有 `Composition`、`Transform`、`LayoutItem`、`Visibility`、`Lock`，并至少拥有
   `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法
   Component 保留并由 Registry 边界降级。
 - 数据源协议与持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
@@ -207,7 +210,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 ## External Dependencies
 
-- npm 包：React、ReactDOM、Dockview、Tailwind CSS、Shadcn、Base UI、TanStack React Virtual、Monaco Editor、Valibot、Vite、
+- npm 包：React、ReactDOM、Yoga Layout、Dockview、Tailwind CSS、Shadcn、Base UI、TanStack React Virtual、Monaco Editor、Valibot、Vite、
   Vitest、Testing Library、Playwright、Turbo；示例应用单独使用 ECharts，属性面板公共包不依赖
   ECharts。
 - 浏览器运行时：操作日志包默认使用 IndexedDB，失败时降级为进程内存；不依赖服务器数据库。

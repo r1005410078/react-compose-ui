@@ -32,8 +32,9 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 
 - 当前仓库已经完成 Bun monorepo、包构建、测试、CI 和发布基座。
 - `app/` 提供集成示例和最小 E2E 操作演示，不是正式编辑器产品。
-- 当前正式文档协议只支持 `ComposeDocument v5`：隐式 Canvas 根、统一 ECS Entity/Component
-  组合、`Hierarchy` 容器、`Renderer` 内容与结构化 `Appearance.backgroundPaint`；v4 不兼容，
+- 当前正式文档协议只支持 `ComposeDocument v6`：隐式自由 Canvas 根、统一 ECS Entity/Component
+  组合、`LayoutItem`、`Hierarchy + Layout` Auto Layout 容器、`Renderer` 内容与结构化
+  `Appearance.backgroundPaint`；v5 只能显式单向迁移，
   数据源协议和持久化接口仍未确定。
 - 不要把示例应用中的临时状态或演示交互当成稳定公共 API。
 
@@ -41,7 +42,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 
 - `@compose-ui/ui-context` 是跨包共享的 React 主题与国际化 Context，只依赖 React peer；
   第一方 React chrome 包可以依赖它，但必须在构建中外置，避免产生多份 Context 实例。
-- `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载 v5 Entity/Component 文档模型、命令及
+- `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载 v6 Entity/Component 文档模型、布局快照协议、命令及
   通用逻辑。
 - `@compose-ui/assets` 是无 React、无 DOM 的资源 Provider、稳定引用与运行时 Resolver 协议包；
   不得依赖资源浏览 UI、编辑器、文档历史或组件注册表。
@@ -64,6 +65,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
   包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
+- `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解包，只能依赖 `core` 与
+  `yoga-layout`；Yoga 类型、Node 与 WASM 指针不得进入公共 API。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。
@@ -84,7 +87,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`stage-engine`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`layout-engine`、`stage-engine`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、

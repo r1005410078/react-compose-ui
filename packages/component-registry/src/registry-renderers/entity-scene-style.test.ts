@@ -67,7 +67,13 @@ describe('composeEntityVisualStyle', () => {
 
 describe('composeEntitySceneStyle', () => {
   it('OpenSpec: 共享渲染语义 / Transform 映射为几何与旋转样式', () => {
-    const styled = composeEntitySceneStyle(entity({}))
+    const styled = composeEntitySceneStyle(entity({}), {
+      x: 12,
+      y: 34,
+      width: 200,
+      height: 100,
+      positioning: 'absolute',
+    })
     expect(styled).toMatchObject({
       left: 12,
       top: 34,

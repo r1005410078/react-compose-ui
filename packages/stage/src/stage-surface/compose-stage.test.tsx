@@ -6,8 +6,10 @@ import {
 import {
   BUILTIN_COMMAND_TYPES,
   createTransactionRuntime,
+  getComposeLayoutItem,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposeStage } from './compose-stage'
@@ -30,17 +32,24 @@ function entity(
         presetId: null,
         baseComponentKeys: [
           'Transform',
+          'LayoutItem',
           'Visibility',
           'Lock',
           ...(hierarchy ? ['Hierarchy', 'Clip'] : ['Renderer']),
-          ...(options.resize ? ['TransformConstraints'] : []),
+          ...(options.resize ? ['GeometryConstraints'] : []),
         ],
         capabilityIds: [],
       },
       Transform: {
-        position: { x: 20, y: 30 },
-        size: { width: 100, height: 50 },
         rotation: 0,
+      },
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: { x: 20, y: 30 },
+        width: { mode: 'fixed', value: 100, min: 1, max: null },
+        height: { mode: 'fixed', value: 50, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
       },
       Visibility: { visible: true },
       Lock: { locked: false },
@@ -53,12 +62,10 @@ function entity(
         : { Renderer: { type: 'test', props: { text: id } } }),
       ...(options.resize
         ? {
-            TransformConstraints: {
+            GeometryConstraints: {
               movable: true,
               resize: options.resize,
               rotatable: options.rotatable ?? true,
-              minSize: { width: 1, height: 1 },
-              maxSize: null,
             },
           }
         : {}),
@@ -71,7 +78,7 @@ function document(
   rootIds: readonly string[] = entities.map(({ id }) => id),
 ): ComposeDocument {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: {
       grid: {
         stepX: 8,
@@ -95,9 +102,15 @@ const preset: ComposeEntityPreset = {
   label: '矩形',
   createComponents: () => ({
     Transform: {
-      position: { x: 0, y: 0 },
-      size: { width: 100, height: 50 },
       rotation: 0,
+    },
+    LayoutItem: {
+      positioning: 'absolute',
+      offset: { x: 0, y: 0 },
+      width: { mode: 'fixed', value: 100, min: 1, max: null },
+      height: { mode: 'fixed', value: 50, min: 1, max: null },
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      alignSelf: 'auto',
     },
     Visibility: { visible: true },
     Lock: { locked: false },
@@ -115,6 +128,23 @@ const registry = createComposeEntityRegistry({
   presets: [preset],
 })
 
+function layoutSnapshot(value: ComposeDocument): ComposeLayoutSnapshot {
+  return {
+    revision: 1,
+    boxes: Object.fromEntries(Object.values(value.entities).map((item) => {
+      const layoutItem = getComposeLayoutItem(item)
+      return [item.id, {
+        x: layoutItem.offset.x,
+        y: layoutItem.offset.y,
+        width: layoutItem.width.value,
+        height: layoutItem.height.value,
+        positioning: layoutItem.positioning,
+      }]
+    })),
+    diagnostics: [],
+  }
+}
+
 function renderStage(
   value: ComposeDocument,
   options: { selectedIds?: readonly string[]; paintEditing?: { readonly entityId: string } } = {},
@@ -129,6 +159,7 @@ function renderStage(
     <ComposeStage
       dispatch={dispatch}
       document={value}
+      layoutSnapshot={layoutSnapshot(value)}
       onSelectedIdsChange={vi.fn()}
       onViewportChange={vi.fn()}
       registry={registry}
@@ -203,7 +234,9 @@ describe('ComposeStage ECS', () => {
           alignContent: 'center',
           justifyContent: 'space-between',
           alignItems: 'flex-end',
-          gap: 24,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 24,
+          columnGap: 24,
         },
       },
     }

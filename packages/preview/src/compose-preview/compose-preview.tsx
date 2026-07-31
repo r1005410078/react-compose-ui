@@ -17,15 +17,17 @@ import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import {
   COMPOSE_UI_CORE_PACKAGE,
   getComposeHierarchy,
-  getComposeTransform,
   getComposeVisibility,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type {
   ComposeDocument,
   ComposeEntity,
+  ComposeLayoutSnapshot,
+  ComposeResolvedLayoutBox,
 } from '@compose-ui/core'
 import type { CSSProperties, HTMLAttributes } from 'react'
+import { useComposePreviewLayout } from './use-layout-runtime'
 
 /**
  * ComposePreview 属性。
@@ -35,6 +37,8 @@ import type { CSSProperties, HTMLAttributes } from 'react'
 export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
   /** 文档模式的正式 JSON 文档。 */
   readonly document: ComposeDocument
+  /** 宿主可注入已求解快照；省略时 Preview 创建并拥有独立 LayoutRuntime。 */
+  readonly layoutSnapshot?: ComposeLayoutSnapshot
   /** Stage 与 Preview 共享的实例级 Entity 注册表。 */
   readonly registry: ComposeEntityRegistry
   /** 资源型 Renderer 解析稳定引用时使用的运行时端口。 */
@@ -59,9 +63,9 @@ export type ComposePreviewTarget =
   | { readonly kind: 'document' }
   | { readonly kind: 'container'; readonly entityId: string }
 
-function entityStyle(entity: ComposeEntity): CSSProperties {
+function entityStyle(entity: ComposeEntity, box: ComposeResolvedLayoutBox): CSSProperties {
   return {
-    ...composeEntitySceneStyle(entity),
+    ...composeEntitySceneStyle(entity, box),
     position: 'absolute' as const,
   }
 }
@@ -70,20 +74,24 @@ function PreviewEntity({
   assetResolver,
   pageLoader,
   document,
+  layoutSnapshot,
   registry,
   entityId,
 }: {
   assetResolver?: ComposeAssetResolver
   pageLoader?: ComposePageDocumentLoader
   document: ComposeDocument
+  layoutSnapshot: ComposeLayoutSnapshot
   registry: ComposeEntityRegistry
   entityId: string
 }) {
   const entity = document.entities[entityId]
   if (!entity || !getComposeVisibility(entity).visible) return null
   const hierarchy = getComposeHierarchy(entity)
+  const box = layoutSnapshot.boxes[entityId]
+  if (!box) return null
   return (
-    <div data-testid={`compose-preview-entity-${entity.id}`} style={entityStyle(entity)}>
+    <div data-testid={`compose-preview-entity-${entity.id}`} style={entityStyle(entity, box)}>
       <ComposeEntityPaintLayer assetResolver={assetResolver} entity={entity} />
       <ComposeRegistryEntityRenderer
         assetResolver={assetResolver}
@@ -97,6 +105,7 @@ function PreviewEntity({
           assetResolver={assetResolver}
           pageLoader={pageLoader}
           document={document}
+          layoutSnapshot={layoutSnapshot}
           entityId={childId}
           key={childId}
           registry={registry}
@@ -112,14 +121,15 @@ function PreviewEntity({
  *
  * @public
  */
-export function ComposePreview({
+function ComposePreviewReady({
   document,
+  layoutSnapshot,
   registry,
   assetResolver,
   pageLoader,
   target = { kind: 'document' },
   ...props
-}: ComposePreviewProps) {
+}: ComposePreviewProps & { readonly layoutSnapshot: ComposeLayoutSnapshot }) {
   const content = target.kind === 'document'
     ? (
       <div
@@ -136,6 +146,7 @@ export function ComposePreview({
           <PreviewEntity
             assetResolver={assetResolver}
             document={document}
+            layoutSnapshot={layoutSnapshot}
             pageLoader={pageLoader}
             entityId={entityId}
             key={entityId}
@@ -147,15 +158,15 @@ export function ComposePreview({
     : (() => {
         const entity = document.entities[target.entityId]
         const hierarchy = entity ? getComposeHierarchy(entity) : undefined
-        const transform = entity ? getComposeTransform(entity) : undefined
-        return entity && hierarchy && transform ? (
+        const box = entity ? layoutSnapshot.boxes[entity.id] : undefined
+        return entity && hierarchy && box ? (
           <div
             data-testid="compose-preview-container"
             style={{
               ...composeEntityVisualStyle(entity),
               position: 'relative',
-              width: transform.size.width,
-              height: transform.size.height,
+              width: box.width,
+              height: box.height,
             }}
           >
             {getComposeVisibility(entity).visible
@@ -173,6 +184,7 @@ export function ComposePreview({
                       <PreviewEntity
                         assetResolver={assetResolver}
                         document={document}
+                        layoutSnapshot={layoutSnapshot}
                         pageLoader={pageLoader}
                         entityId={childId}
                         key={childId}
@@ -201,4 +213,30 @@ export function ComposePreview({
       {content}
     </section>
   )
+}
+
+function ManagedComposePreview(props: ComposePreviewProps) {
+  const state = useComposePreviewLayout(props.document)
+  if (state.status === 'loading') {
+    return (
+      <section aria-busy="true" aria-label={props['aria-label'] ?? 'Compose preview'} role="status">
+        正在加载自动布局引擎…
+      </section>
+    )
+  }
+  if (state.status === 'error') {
+    return (
+      <section aria-label={props['aria-label'] ?? 'Compose preview'} role="alert">
+        自动布局加载失败：{state.error.message}
+      </section>
+    )
+  }
+  return <ComposePreviewReady {...props} layoutSnapshot={state.snapshot} />
+}
+
+/** 用普通 DOM 预览 ComposeDocument v6 输出。 @public */
+export function ComposePreview(props: ComposePreviewProps) {
+  return props.layoutSnapshot
+    ? <ComposePreviewReady {...props} layoutSnapshot={props.layoutSnapshot} />
+    : <ManagedComposePreview {...props} />
 }

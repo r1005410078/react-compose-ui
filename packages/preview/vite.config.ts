@@ -24,6 +24,7 @@ export default defineConfig({
         '@compose-ui/assets',
         '@compose-ui/component-registry',
         '@compose-ui/core',
+        '@compose-ui/layout-engine',
         'react',
         'react-dom',
         'react/jsx-runtime',

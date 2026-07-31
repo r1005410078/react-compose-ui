@@ -6,7 +6,11 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  createDefaultCanvasSettings,
   createDefaultComposeFlexLayout,
+  createDefaultComposeLayoutItem,
+  createDefaultOutputSettings,
+  type ComposeDocument,
   type ComposeEntity,
   type EditorCommand,
   type JsonObject,
@@ -22,14 +26,11 @@ function entity(components: Readonly<Record<string, JsonObject>> = {}): ComposeE
     components: {
       Composition: {
         presetId: null,
-        baseComponentKeys: ['Transform', 'Visibility', 'Lock'],
+        baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock'],
         capabilityIds: [],
       },
-      Transform: {
-        position: { x: 10, y: 20 },
-        size: { width: 180, height: 40 },
-        rotation: 0,
-      },
+      Transform: { rotation: 0 },
+      LayoutItem: createDefaultComposeLayoutItem(180, 40, { x: 10, y: 20 }),
       Visibility: { visible: true },
       Lock: { locked: false },
       ...components,
@@ -62,14 +63,14 @@ afterEach(cleanup)
 describe('内建 Component inspectors', () => {
   it('OpenSpec: 基础物料 / 内建 Component 定义自带 Inspector', () => {
     const definitions = createComposeBuiltinComponentDefinitions(() => 'id')
-    for (const key of ['Transform', 'Visibility', 'Lock', 'Appearance', 'Hierarchy', 'Layout', 'TransformConstraints']) {
+    for (const key of ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Appearance', 'Hierarchy', 'Layout', 'GeometryConstraints']) {
       expect(definitions.find((item) => item.key === key)?.inspector, key).toBeDefined()
     }
     expect(definitions.find((item) => item.key === 'Composition')?.hidden).toBe(true)
     expect(definitions.find((item) => item.key === 'Renderer')?.hidden).toBe(true)
   })
 
-  it('OpenSpec: 基础物料 / Transform Inspector 派发 setTransform 并跟随外部值', () => {
+  it('OpenSpec: layout-runtime-v6 / Transform Inspector 只编辑旋转并跟随外部值', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('Transform')
     const target = entity()
@@ -82,11 +83,11 @@ describe('内建 Component inspectors', () => {
         value={target.components.Transform!}
       />,
     )
-    const x = screen.getByRole('spinbutton', { name: '位置 X' })
-    expect(x).toHaveValue(10)
+    const rotation = screen.getByRole('spinbutton', { name: '旋转' })
+    expect(rotation).toHaveValue(0)
 
-    fireEvent.change(x, { target: { value: '42' } })
-    fireEvent.blur(x)
+    fireEvent.change(rotation, { target: { value: '42' } })
+    fireEvent.blur(rotation)
     const command = dispatch.mock.lastCall?.[0] as EditorCommand
     expect(command.type).toBe(BUILTIN_COMMAND_TYPES.setTransform)
     expect(command.meta?.mergeKey).toBe(`inspector:entity-a:${BUILTIN_COMMAND_TYPES.setTransform}`)
@@ -94,16 +95,16 @@ describe('内建 Component inspectors', () => {
       operation: 'set',
       updates: [{
         entityId: 'entity-a',
-        transform: expect.objectContaining({ position: { x: 42, y: 20 } }),
+        transform: expect.objectContaining({
+          position: { x: 10, y: 20 },
+          size: { width: 180, height: 40 },
+          rotation: 42,
+        }),
       }],
     })
 
     const moved = entity({
-      Transform: {
-        position: { x: 99, y: 20 },
-        size: { width: 180, height: 40 },
-        rotation: 0,
-      },
+      Transform: { rotation: 99 },
     })
     rerender(
       <Inspector
@@ -114,7 +115,58 @@ describe('内建 Component inspectors', () => {
         value={moved.components.Transform!}
       />,
     )
-    expect(screen.getByRole('spinbutton', { name: '位置 X' })).toHaveValue(99)
+    expect(screen.getByRole('spinbutton', { name: '旋转' })).toHaveValue(99)
+  })
+
+  it('OpenSpec: layout-runtime-v6 / Flow 转 Absolute 时从 Snapshot 烘焙 offset', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const child = entity({
+      LayoutItem: {
+        ...createDefaultComposeLayoutItem(80, 40),
+        positioning: 'flow',
+        offset: { x: 7, y: 8 },
+      },
+    })
+    const parent = { ...entity({
+      Hierarchy: { childIds: [child.id] },
+      Layout: createDefaultComposeFlexLayout(),
+    }), id: 'parent', name: 'Parent' }
+    const document: ComposeDocument = {
+      schemaVersion: 6,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [parent.id],
+      entities: { [parent.id]: parent, [child.id]: child },
+    }
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        document={document}
+        entity={child}
+        layoutSnapshot={{
+          revision: 3,
+          boxes: {
+            [child.id]: { x: 30, y: 40, width: 80, height: 40, positioning: 'flow' },
+          },
+          diagnostics: [],
+        }}
+        readOnly={false}
+        value={child.components.LayoutItem!}
+      />,
+    )
+
+    fireEvent.change(screen.getByRole('combobox', { name: '定位' }), {
+      target: { value: 'absolute' },
+    })
+    const command = dispatch.mock.lastCall?.[0] as EditorCommand
+    expect(command.payload).toMatchObject({
+      entityId: child.id,
+      key: 'LayoutItem',
+      value: { positioning: 'absolute', offset: { x: 30, y: 40 } },
+    })
+    expect(screen.getByRole('spinbutton', { name: '计算宽度' })).toHaveValue(80)
   })
 
   it('OpenSpec: 基础物料 / Lock Inspector 在 readOnly 上下文仍可解除锁定', () => {
@@ -185,14 +237,21 @@ describe('内建 Component inspectors', () => {
     ))).toEqual([
       'flex-direction',
       'flex-wrap',
-      'gap',
+      'row-gap',
+      'column-gap',
+      'padding',
+      'padding',
+      'padding',
+      'padding',
       'align-content',
       'justify-content',
       'align-items',
     ])
     expect(screen.getByText('flex-direction')).toBeInTheDocument()
     expect(screen.getByText('flex-wrap')).toBeInTheDocument()
-    expect(screen.getByText('gap')).toBeInTheDocument()
+    expect(screen.getByText('row-gap')).toBeInTheDocument()
+    expect(screen.getByText('column-gap')).toBeInTheDocument()
+    expect(screen.getAllByText('padding')).toHaveLength(4)
     expect(screen.getByText('align-content')).toBeInTheDocument()
     expect(screen.getByText('justify-content')).toBeInTheDocument()
     expect(screen.getByText('align-items')).toBeInTheDocument()
@@ -209,9 +268,8 @@ describe('内建 Component inspectors', () => {
     expect(within(multiLine).getAllByRole('radio')).toHaveLength(6)
     expect(within(multiLine).getAllByRole('radio').map((item) => item.getAttribute('aria-label')))
       .toEqual(['居中', '起始', '末端', '环绕', '两端', '拉伸'])
-    expect(within(multiLine).getAllByRole('radio').every((item) => (
-      item.getAttribute('aria-checked') === 'false'
-    ))).toBe(true)
+    expect(within(multiLine).getByRole('radio', { name: '拉伸' }))
+      .toHaveAttribute('aria-checked', 'true')
     const mainAxis = within(panel).getByRole('radiogroup', { name: '主轴' })
     expect(within(mainAxis).getAllByRole('radio').map((item) => item.getAttribute('aria-label')))
       .toEqual(['居中', '起始', '末端', '两端', '环绕', '均匀'])
@@ -219,18 +277,20 @@ describe('内建 Component inspectors', () => {
     expect(within(crossAxis).getAllByRole('radio').map((item) => item.getAttribute('aria-label')))
       .toEqual(['居中', '起始', '末端', '拉伸', '基线'])
 
-    const gap = within(panel).getByRole('spinbutton', { name: '间距' })
-    expect(gap).toHaveValue(0)
+    const rowGap = within(panel).getByRole('spinbutton', { name: '行间距' })
+    const columnGap = within(panel).getByRole('spinbutton', { name: '列间距' })
+    expect(rowGap).toHaveValue(0)
+    expect(columnGap).toHaveValue(0)
     expect(screen.queryByText('px')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /绑定|变量/ })).not.toBeInTheDocument()
 
     const preview = screen.getByTestId('flex-layout-preview')
     expect(preview.querySelectorAll('[data-flex-preview-node]')).toHaveLength(3)
     expect(within(preview).getByText('Flex 容器')).toBeInTheDocument()
-    expect(within(preview).getByText('row · nowrap · gap 0')).toBeInTheDocument()
+    expect(within(preview).getByText('row · nowrap · 0/0')).toBeInTheDocument()
     expect(within(preview).getByText('主轴')).toBeInTheDocument()
     expect(within(preview).getByText('交叉轴')).toBeInTheDocument()
-    expect(preview).toHaveAttribute('data-align-items', 'normal')
+    expect(preview).toHaveAttribute('data-align-items', 'stretch')
     expect(screen.getByText('实时预览')).toBeInTheDocument()
   })
 
@@ -265,16 +325,16 @@ describe('内建 Component inspectors', () => {
     })
 
     dispatch.mockClear()
-    const gap = screen.getByRole('spinbutton', { name: '间距' })
-    fireEvent.change(gap, { target: { value: '-1' } })
-    fireEvent.blur(gap)
+    const rowGap = screen.getByRole('spinbutton', { name: '行间距' })
+    fireEvent.change(rowGap, { target: { value: '-1' } })
+    fireEvent.blur(rowGap)
     expect(dispatch).not.toHaveBeenCalled()
 
-    fireEvent.change(gap, { target: { value: '12' } })
-    fireEvent.blur(gap)
+    fireEvent.change(rowGap, { target: { value: '12' } })
+    fireEvent.blur(rowGap)
     expect(dispatch).toHaveBeenCalledOnce()
 
-    const verticalLayout = { ...layout, flexDirection: 'column' as const, gap: 12 }
+    const verticalLayout = { ...layout, flexDirection: 'column' as const, rowGap: 12 }
     const verticalContainer = entity({
       Hierarchy: { childIds: [] },
       Layout: verticalLayout,
@@ -289,7 +349,7 @@ describe('内建 Component inspectors', () => {
       />,
     )
     expect(screen.getByRole('radio', { name: '纵向' })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('spinbutton', { name: '间距' })).toHaveValue(12)
+    expect(screen.getByRole('spinbutton', { name: '行间距' })).toHaveValue(12)
 
     rerender(
       <Inspector
@@ -300,7 +360,7 @@ describe('内建 Component inspectors', () => {
         value={container.components.Layout!}
       />,
     )
-    expect(screen.getByRole('spinbutton', { name: '间距' })).toHaveValue(0)
+    expect(screen.getByRole('spinbutton', { name: '行间距' })).toHaveValue(0)
 
     rerender(
       <Inspector
@@ -312,7 +372,7 @@ describe('内建 Component inspectors', () => {
       />,
     )
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
-    expect(screen.getByRole('spinbutton', { name: '间距' })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: '行间距' })).toBeDisabled()
   })
 
   it('OpenSpec: basic-materials / Flex 布局 Component 与紧凑 Inspector / 显示状态并重置完整布局', () => {
@@ -336,7 +396,7 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByText('display: flex')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重置布局' })).toBeDisabled()
 
-    const changed = { ...defaults, flexDirection: 'column' as const, gap: 12 }
+    const changed = { ...defaults, flexDirection: 'column' as const, rowGap: 12 }
     const changedContainer = entity({
       Hierarchy: { childIds: [] },
       Layout: changed,
@@ -373,7 +433,47 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByRole('button', { name: '重置布局' })).toBeDisabled()
   })
 
-  it('OpenSpec: basic-materials / Flex 布局 Component 与紧凑 Inspector / 再次点击对齐选项恢复 normal', () => {
+  it('OpenSpec: layout-runtime-v6 / 直接子项通过一个 batch 转为 Flow', () => {
+    const dispatch = vi.fn()
+    const HeaderActions = inspectorHeaderActionsOf('Layout')
+    const child = entity()
+    const container = { ...entity({
+      Hierarchy: { childIds: [child.id] },
+      Layout: createDefaultComposeFlexLayout(),
+    }), id: 'parent', name: 'Parent' }
+    const document: ComposeDocument = {
+      schemaVersion: 6,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [container.id],
+      entities: { [container.id]: container, [child.id]: child },
+    }
+    render(
+      <HeaderActions
+        componentKey="Layout"
+        dispatch={dispatch}
+        document={document}
+        entity={container}
+        readOnly={false}
+        value={container.components.Layout!}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '将直接子项转换为自动布局' }))
+    const command = dispatch.mock.lastCall?.[0] as EditorCommand
+    expect(command.type).toBe(BUILTIN_COMMAND_TYPES.batch)
+    expect(command.payload.commands).toEqual([
+      expect.objectContaining({
+        type: BUILTIN_COMMAND_TYPES.updateComponent,
+        payload: expect.objectContaining({
+          entityId: child.id,
+          value: expect.objectContaining({ positioning: 'flow' }),
+        }),
+      }),
+    ])
+  })
+
+  it('OpenSpec: layout-runtime-v6 / Flex 对齐保持显式值而不恢复 normal', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('Layout')
     const layout = {
@@ -409,7 +509,7 @@ describe('内建 Component inspectors', () => {
       expect(command.payload).toEqual({
         entityId: 'entity-a',
         key: 'Layout',
-        value: { ...layout, [field]: 'normal' },
+        value: { ...layout, [field]: layout[field] },
       })
     }
   })
@@ -434,12 +534,13 @@ describe('内建 Component inspectors', () => {
     )
 
     expect(screen.getByRole('radiogroup', { name: 'Direction' })).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton', { name: 'Gap' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Row gap' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Column gap' })).toBeInTheDocument()
     const preview = screen.getByTestId('flex-layout-preview')
     expect(within(preview).getByText('Main axis')).toBeInTheDocument()
     expect(within(preview).getByText('Cross axis')).toBeInTheDocument()
     expect(screen.queryByText('方向')).not.toBeInTheDocument()
-    expect(screen.queryByText('间距')).not.toBeInTheDocument()
+    expect(screen.queryByText('行间距')).not.toBeInTheDocument()
   })
 
   it('OpenSpec: 基础物料 / Appearance Inspector 保留未编辑的 shadow 数据', () => {

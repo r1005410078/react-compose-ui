@@ -7,7 +7,10 @@ import type {
 import * as v from 'valibot'
 import {
   BUILTIN_COMMAND_TYPES,
+  createComposeBatchCommand,
   createDefaultComposeFlexLayout,
+  getComposeHierarchy,
+  getComposeLayoutItem,
   type ComposeEntity,
   type ComposeFlexLayout,
   type EditorCommand,
@@ -29,7 +32,7 @@ type FlexOptionEditorId =
   | 'justify-content'
   | 'align-items'
 
-type FlexFieldEditorId = FlexOptionEditorId | 'gap'
+type FlexFieldEditorId = FlexOptionEditorId | 'row-gap' | 'column-gap' | 'padding'
 
 const FlexDirectionIconContext = createContext<ComposeFlexLayout['flexDirection']>('row')
 
@@ -82,7 +85,9 @@ const FLEX_CSS_NAMES: Readonly<Record<FlexFieldEditorId, string>> = {
   'align-content': 'align-content',
   'justify-content': 'justify-content',
   'align-items': 'align-items',
-  gap: 'gap',
+  'row-gap': 'row-gap',
+  'column-gap': 'column-gap',
+  padding: 'padding',
 }
 
 function useZh(): boolean {
@@ -104,7 +109,12 @@ function sameLayout(left: ComposeFlexLayout, right: ComposeFlexLayout): boolean 
     && left.alignContent === right.alignContent
     && left.justifyContent === right.justifyContent
     && left.alignItems === right.alignItems
-    && left.gap === right.gap
+    && left.rowGap === right.rowGap
+    && left.columnGap === right.columnGap
+    && left.padding.top === right.padding.top
+    && left.padding.right === right.padding.right
+    && left.padding.bottom === right.padding.bottom
+    && left.padding.left === right.padding.left
 }
 
 function createLayoutCommand(
@@ -162,9 +172,6 @@ function FlexOptionEditor({
   if (!isFlexOptionEditorId(editor)) return null
   const options = FLEX_OPTIONS[editor]
   const selectedIndex = options.findIndex((option) => option.value === value)
-  const canClear = editor === 'align-content'
-    || editor === 'justify-content'
-    || editor === 'align-items'
   const move = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex: number | undefined
     if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
@@ -206,9 +213,7 @@ function FlexOptionEditor({
           tabIndex={(selectedIndex < 0 ? index === 0 : selectedIndex === index) ? 0 : -1}
           title={zh ? option.zh : option.en}
           type="button"
-          onClick={() => commit(
-            canClear && option.value === value ? 'normal' : option.value,
-          )}
+          onClick={() => commit(option.value)}
           onKeyDown={(event) => move(event, index)}
         >
           <FlexLayoutIcon
@@ -226,6 +231,7 @@ function FlexOptionEditor({
 function FlexGapEditor({
   commit,
   label,
+  metadata,
   readOnly,
   value,
 }: ComposePropertyPanelRendererProps) {
@@ -259,7 +265,7 @@ function FlexGapEditor({
   return (
     <div
       className="flex-layout-inspector__gap"
-      data-flex-layout-field="gap"
+      data-flex-layout-field={String(metadata.editor)}
     >
       <input
         aria-invalid={current.invalid || undefined}
@@ -310,12 +316,12 @@ const FLEX_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
     labelComponent: FlexFieldLabel,
     layout: 'full-width' as const,
   })),
-  {
-    id: 'gap',
+  ...(['row-gap', 'column-gap', 'padding'] as const).map((id) => ({
+    id,
     component: FlexGapEditor,
     labelComponent: FlexFieldLabel,
-    layout: 'full-width',
-  },
+    layout: 'full-width' as const,
+  })),
 ]
 
 // eslint-disable-next-line react-refresh/only-export-components -- 图标只供当前 Inspector 标题栏使用。
@@ -332,14 +338,53 @@ function ResetLayoutIcon() {
 export function createLayoutInspectorHeaderActions(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeComponentInspectorProps> {
-  return function LayoutInspectorHeaderActions({ entity, dispatch, readOnly, value }) {
+  return function LayoutInspectorHeaderActions({ document, entity, dispatch, readOnly, value }) {
     const zh = useZh()
     const layout = value as ComposeFlexLayout
     const defaults = createDefaultComposeFlexLayout()
     const disabled = readOnly || sameLayout(layout, defaults)
+    const childIds = getComposeHierarchy(entity)?.childIds ?? []
+    const absoluteChildren = document
+      ? childIds.filter((id) => {
+          const child = document.entities[id]
+          return child && getComposeLayoutItem(child).positioning === 'absolute'
+        })
+      : []
     return (
       <div className="flex-layout-inspector__header-actions">
         <code>display: flex</code>
+        <button
+          aria-label={zh ? '将直接子项转换为自动布局' : 'Convert direct children to auto layout'}
+          disabled={readOnly || absoluteChildren.length === 0}
+          type="button"
+          onClick={() => {
+            if (!document || absoluteChildren.length === 0) return
+            dispatch(createComposeBatchCommand({
+              id: idFactory(),
+              commands: absoluteChildren.map((childId) => {
+                const child = document.entities[childId]!
+                return {
+                  id: idFactory(),
+                  type: BUILTIN_COMMAND_TYPES.updateComponent,
+                  payload: {
+                    entityId: childId,
+                    key: 'LayoutItem',
+                    value: { ...getComposeLayoutItem(child), positioning: 'flow' },
+                  },
+                }
+              }),
+              meta: {
+                label: zh
+                  ? `将 ${entity.name} 子项转换为自动布局`
+                  : `Convert ${entity.name} children to auto layout`,
+                source: 'inspector',
+                targetIds: absoluteChildren,
+              },
+            }))
+          }}
+        >
+          {zh ? '自动布局' : 'Auto layout'}
+        </button>
         <button
           aria-label={zh ? '重置布局' : 'Reset layout'}
           disabled={disabled}
@@ -374,7 +419,10 @@ function FlexLayoutPreview({
     display: 'flex',
     flexDirection: layout.flexDirection,
     flexWrap: layout.flexWrap,
-    gap: `${layout.gap}px`,
+    rowGap: `${layout.rowGap}px`,
+    columnGap: `${layout.columnGap}px`,
+    padding: `${layout.padding.top}px ${layout.padding.right}px `
+      + `${layout.padding.bottom}px ${layout.padding.left}px`,
     justifyContent: layout.justifyContent,
   }
   return (
@@ -388,7 +436,9 @@ function FlexLayoutPreview({
       >
         <header>
           <span>{zh ? 'Flex 容器' : 'Flex container'}</span>
-          <code>{layout.flexDirection} · {layout.flexWrap} · gap {layout.gap}</code>
+          <code>
+            {layout.flexDirection} · {layout.flexWrap} · {layout.rowGap}/{layout.columnGap}
+          </code>
         </header>
         <div className="flex-layout-inspector__preview-canvas">
           <div
@@ -448,15 +498,36 @@ export function createLayoutInspector(
         v.title(zh ? '换行' : 'Wrap'),
         v.metadata({ propertyPanel: { editor: 'flex-wrap' } }),
       ),
-      gap: v.pipe(
+      rowGap: v.pipe(
         v.number(),
         v.minValue(0),
-        v.title(zh ? '间距' : 'Gap'),
-        v.metadata({ propertyPanel: { editor: 'gap' } }),
+        v.title(zh ? '行间距' : 'Row gap'),
+        v.metadata({ propertyPanel: { editor: 'row-gap' } }),
+      ),
+      columnGap: v.pipe(
+        v.number(),
+        v.minValue(0),
+        v.title(zh ? '列间距' : 'Column gap'),
+        v.metadata({ propertyPanel: { editor: 'column-gap' } }),
+      ),
+      paddingTop: v.pipe(
+        v.number(), v.minValue(0), v.title(zh ? '上内边距' : 'Padding top'),
+        v.metadata({ propertyPanel: { editor: 'padding' } }),
+      ),
+      paddingRight: v.pipe(
+        v.number(), v.minValue(0), v.title(zh ? '右内边距' : 'Padding right'),
+        v.metadata({ propertyPanel: { editor: 'padding' } }),
+      ),
+      paddingBottom: v.pipe(
+        v.number(), v.minValue(0), v.title(zh ? '下内边距' : 'Padding bottom'),
+        v.metadata({ propertyPanel: { editor: 'padding' } }),
+      ),
+      paddingLeft: v.pipe(
+        v.number(), v.minValue(0), v.title(zh ? '左内边距' : 'Padding left'),
+        v.metadata({ propertyPanel: { editor: 'padding' } }),
       ),
       alignContent: v.pipe(
         v.picklist([
-          'normal',
           'flex-start',
           'center',
           'flex-end',
@@ -469,7 +540,6 @@ export function createLayoutInspector(
       ),
       justifyContent: v.pipe(
         v.picklist([
-          'normal',
           'flex-start',
           'center',
           'flex-end',
@@ -481,7 +551,7 @@ export function createLayoutInspector(
         v.metadata({ propertyPanel: { editor: 'justify-content' } }),
       ),
       alignItems: v.pipe(
-        v.picklist(['normal', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
+        v.picklist(['flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
         v.title(zh ? '交叉轴' : 'Cross axis'),
         v.metadata({ propertyPanel: { editor: 'align-items' } }),
       ),
@@ -497,13 +567,40 @@ export function createLayoutInspector(
             readOnly={readOnly}
             renderers={FLEX_RENDERERS}
             schema={schema}
-            value={layout}
+            value={{
+              flexDirection: layout.flexDirection,
+              flexWrap: layout.flexWrap,
+              rowGap: layout.rowGap,
+              columnGap: layout.columnGap,
+              paddingTop: layout.padding.top,
+              paddingRight: layout.padding.right,
+              paddingBottom: layout.padding.bottom,
+              paddingLeft: layout.padding.left,
+              alignContent: layout.alignContent,
+              justifyContent: layout.justifyContent,
+              alignItems: layout.alignItems,
+            }}
             onValueChange={(next) => {
               if (readOnly) return
               dispatch(createLayoutCommand(
                 idFactory,
                 entity,
-                { type: 'flex', ...next },
+                {
+                  type: 'flex',
+                  flexDirection: next.flexDirection,
+                  flexWrap: next.flexWrap,
+                  rowGap: next.rowGap,
+                  columnGap: next.columnGap,
+                  padding: {
+                    top: next.paddingTop,
+                    right: next.paddingRight,
+                    bottom: next.paddingBottom,
+                    left: next.paddingLeft,
+                  },
+                  alignContent: next.alignContent,
+                  justifyContent: next.justifyContent,
+                  alignItems: next.alignItems,
+                },
                 zh,
               ))
             }}

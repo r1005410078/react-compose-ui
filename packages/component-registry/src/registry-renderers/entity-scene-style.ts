@@ -4,6 +4,7 @@ import {
   getComposeTransform,
   resolveComposeAppearance,
   type ComposeEntity,
+  type ComposeResolvedLayoutBox,
 } from '@compose-ui/core'
 import type { CSSProperties } from 'react'
 
@@ -50,17 +51,20 @@ export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
  *
  * @public
  */
-export function composeEntitySceneStyle(entity: ComposeEntity): CSSProperties {
+export function composeEntitySceneStyle(
+  entity: ComposeEntity,
+  box: ComposeResolvedLayoutBox,
+): CSSProperties {
   const transform = getComposeTransform(entity)
   return {
     ...composeEntityVisualStyle(entity),
     // 共享外观层需要 relative 作为 Paint Layer 的 containing block；Stage Scene 的节点
     // 则必须脱离文档流，否则同级 Entity 会随前一个节点的高度向下排布。
     position: 'absolute',
-    left: transform.position.x,
-    top: transform.position.y,
-    width: transform.size.width,
-    height: transform.size.height,
+    left: box.x,
+    top: box.y,
+    width: box.width,
+    height: box.height,
     transform: `rotate(${transform.rotation}deg)`,
     transformOrigin: 'center',
   }

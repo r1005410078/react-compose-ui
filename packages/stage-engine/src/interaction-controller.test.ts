@@ -4,7 +4,7 @@ import {
   createStageInteractionController,
   type StageInteractionEffect,
 } from './interaction-controller'
-import { document, entity } from './test-fixtures'
+import { document, entity, layoutSnapshot } from './test-fixtures'
 
 const modifiers = { shift: false, alt: false, command: false }
 
@@ -18,6 +18,7 @@ function setup(value = document()) {
   let nextId = 0
   controller.updateContext({
     document: value,
+    layoutSnapshot: layoutSnapshot(value),
     viewport: { x: 0, y: 0, zoom: 1 },
     surfaceSize: { width: 800, height: 600 },
     tool: 'select',
@@ -126,6 +127,7 @@ describe('StageInteractionController ECS systems', () => {
     const { controller, effects } = setup(value)
     controller.updateContext({
       document: value,
+      layoutSnapshot: layoutSnapshot(value),
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
       tool: 'select',
@@ -189,10 +191,18 @@ describe('StageInteractionController ECS systems', () => {
       paintEditing: { entityId: 'a' },
       idFactory: () => 'paint-id',
     }
-    controller.updateContext({ ...context, document: solid })
+    controller.updateContext({
+      ...context,
+      document: solid,
+      layoutSnapshot: layoutSnapshot(solid),
+    })
     expect(controller.getSnapshot().paintHandles).toEqual([])
 
-    controller.updateContext({ ...context, document: gradient })
+    controller.updateContext({
+      ...context,
+      document: gradient,
+      layoutSnapshot: layoutSnapshot(gradient, 2),
+    })
     expect(controller.getSnapshot().paintHandles).toHaveLength(4)
   })
 
@@ -225,6 +235,7 @@ describe('StageInteractionController ECS systems', () => {
     const { controller, effects } = setup(value)
     controller.updateContext({
       document: value,
+      layoutSnapshot: layoutSnapshot(value),
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
       tool: 'select',
@@ -271,6 +282,7 @@ describe('StageInteractionController ECS systems', () => {
     const { controller, effects } = setup(value)
     controller.updateContext({
       document: value,
+      layoutSnapshot: layoutSnapshot(value),
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
       tool: 'select',

@@ -4,26 +4,47 @@ import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
+  getComposeLayoutItem,
+  getComposeSpatialTransform,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposeTransform,
+  type ComposeLayoutSnapshot,
+  type ComposeSpatialTransform,
 } from '@compose-ui/core'
 import type { ComposeSceneTreeOperation } from '@compose-ui/scene-tree'
 import { planSceneOperation, type SceneOperationContext } from './scene-operations'
 
-function transform(x: number, y: number, width: number, height: number): ComposeTransform {
+function transform(x: number, y: number, width: number, height: number): ComposeSpatialTransform {
   return { position: { x, y }, size: { width, height }, rotation: 0 }
+}
+
+function layoutItem(value: ComposeSpatialTransform) {
+  return {
+    positioning: 'absolute' as const,
+    offset: value.position,
+    width: { mode: 'fixed' as const, value: value.size.width, min: 1, max: null },
+    height: { mode: 'fixed' as const, value: value.size.height, min: 1, max: null },
+    margin: { top: 0, right: 0, bottom: 0, left: 0 },
+    alignSelf: 'auto' as const,
+  }
 }
 
 function entity(
   id: string,
   components: ComposeEntity['components'],
 ): ComposeEntity {
+  const spatial = components.Transform && 'position' in components.Transform
+    ? components.Transform as unknown as ComposeSpatialTransform
+    : transform(0, 0, 100, 100)
+  const remaining = Object.fromEntries(
+    Object.entries(components).filter(([key]) => key !== 'Transform'),
+  )
   const base = {
-    Transform: transform(0, 0, 100, 100),
+    Transform: { rotation: spatial.rotation },
+    LayoutItem: layoutItem(spatial),
     Visibility: { visible: true },
     Lock: { locked: false },
-    ...components,
+    ...remaining,
   }
   return {
     id,
@@ -37,7 +58,7 @@ function entity(
 
 function documentFixture(): ComposeDocument {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds: ['dashboard'],
@@ -60,7 +81,8 @@ const registry = createComposeEntityRegistry({
     id: 'container',
     label: 'Container',
     createComponents: () => ({
-      Transform: transform(0, 0, 1280, 720),
+      Transform: { rotation: 0 },
+      LayoutItem: layoutItem(transform(0, 0, 1280, 720)),
       Visibility: { visible: true },
       Lock: { locked: false },
       Hierarchy: { childIds: [] },
@@ -69,10 +91,28 @@ const registry = createComposeEntityRegistry({
   }],
 })
 
+function snapshot(value: ComposeDocument): ComposeLayoutSnapshot {
+  return {
+    revision: 1,
+    boxes: Object.fromEntries(Object.values(value.entities).map((item) => {
+      const layout = getComposeLayoutItem(item)
+      return [item.id, {
+        x: layout.offset.x,
+        y: layout.offset.y,
+        width: layout.width.value,
+        height: layout.height.value,
+        positioning: layout.positioning,
+      }]
+    })),
+    diagnostics: [],
+  }
+}
+
 function context(overrides: Partial<SceneOperationContext> = {}): SceneOperationContext {
   let index = 0
   return {
     document: documentFixture(),
+    layoutSnapshot: snapshot(documentFixture()),
     registry,
     containerPresetId: 'container',
     nextId: () => `id-${index++}`,
@@ -116,18 +156,18 @@ describe('planSceneOperation', () => {
     const root = plannedCommand({ type: 'create', parentId: null, index: 0 })
     const rootEntity = root.command.payload.entity as unknown as ComposeEntity
     // 文档已有 1 个根级 Entity：80 + 1 × 40。
-    expect((rootEntity.components.Transform as ComposeTransform).position)
+    expect(getComposeSpatialTransform(rootEntity).position)
       .toEqual({ x: 120, y: 120 })
-    expect((rootEntity.components.Transform as ComposeTransform).size)
+    expect(getComposeSpatialTransform(rootEntity).size)
       .toEqual({ width: 1280, height: 720 })
     expect(root.command.meta?.label).toBe('Create Container · 1280 × 720')
     expect(root.nextSelection).toEqual([rootEntity.id])
 
     const nested = plannedCommand({ type: 'create', parentId: 'dashboard', index: 0 })
     const nestedEntity = nested.command.payload.entity as unknown as ComposeEntity
-    expect((nestedEntity.components.Transform as ComposeTransform).position)
+    expect(getComposeSpatialTransform(nestedEntity).position)
       .toEqual({ x: 0, y: 0 })
-    expect((nestedEntity.components.Transform as ComposeTransform).size)
+    expect(getComposeSpatialTransform(nestedEntity).size)
       .toEqual({ width: 320, height: 180 })
     expect(nested.command.meta?.label).toBe('Create Container · 320 × 180')
   })

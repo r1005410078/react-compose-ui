@@ -5,6 +5,7 @@ import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type {
   CommandDispatchResult,
   ComposeDocument,
+  ComposeLayoutSnapshot,
   EditorCommand,
 } from '@compose-ui/core'
 import type {
@@ -83,6 +84,10 @@ export type ComposeStageDispatch = (command: EditorCommand) => CommandDispatchRe
  */
 export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   readonly document: ComposeDocument
+  /** 与 document 对应的布局结果；加载期间省略并显示禁用态。 */
+  readonly layoutSnapshot?: ComposeLayoutSnapshot
+  /** Layout Runtime 失败时显示的可读错误。 */
+  readonly layoutError?: string
   readonly registry: ComposeEntityRegistry
   /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver

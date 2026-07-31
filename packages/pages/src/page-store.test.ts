@@ -4,6 +4,7 @@ import {
 } from '@compose-ui/assets'
 import {
   createEmptyComposePageDocument,
+  createDefaultComposeLayoutItem,
   serializeComposePageDocument,
 } from '@compose-ui/core'
 import { describe, expect, it, vi } from 'vitest'
@@ -28,7 +29,8 @@ const pageWithEntity = (entityId: string) => ({
       name: entityId,
       components: {
         Composition: { presetId: null, baseComponentKeys: [], capabilityIds: [] },
-        Transform: { position: { x: 0, y: 0 }, size: { width: 10, height: 10 }, rotation: 0 },
+        Transform: { rotation: 0 },
+        LayoutItem: createDefaultComposeLayoutItem(10, 10),
         Visibility: { visible: true },
         Lock: { locked: false },
         Hierarchy: { childIds: [] },
@@ -97,7 +99,7 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })
     const store = createComposePageStore({ provider: fake.provider })
     const snapshot = await store.readPage('Pages/Home.page.json')
-    expect(snapshot.document.schemaVersion).toBe(5)
+    expect(snapshot.document.schemaVersion).toBe(6)
     const reads = fake.calls.read
     await store.readPage('Pages/Home.page.json')
     expect(fake.calls.read).toBe(reads)

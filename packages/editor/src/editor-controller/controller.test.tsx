@@ -21,10 +21,11 @@ import {
   createTransactionRuntime,
   getComposeHierarchy,
   getComposeLock,
-  getComposeTransform,
+  getComposeSpatialTransform,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposeTransform,
+  type ComposeLayoutItem,
+  type ComposeSpatialTransform,
   type TransactionRuntime,
 } from '@compose-ui/core'
 import { useComposeEditorController } from './controller'
@@ -34,11 +35,22 @@ function transform(
   y: number,
   width: number,
   height: number,
-): ComposeTransform {
+): ComposeSpatialTransform {
   return {
     position: { x, y },
     size: { width, height },
     rotation: 0,
+  }
+}
+
+function layoutItem(value: ComposeSpatialTransform): ComposeLayoutItem {
+  return {
+    positioning: 'absolute',
+    offset: value.position,
+    width: { mode: 'fixed', value: value.size.width, min: 1, max: null },
+    height: { mode: 'fixed', value: value.size.height, min: 1, max: null },
+    margin: { top: 0, right: 0, bottom: 0, left: 0 },
+    alignSelf: 'auto',
   }
 }
 
@@ -48,11 +60,18 @@ function entity(
   name = id,
   presetId: string | null = null,
 ): ComposeEntity {
+  const spatial = components.Transform && 'position' in components.Transform
+    ? components.Transform as unknown as ComposeSpatialTransform
+    : transform(0, 0, 100, 100)
+  const remaining = Object.fromEntries(
+    Object.entries(components).filter(([key]) => key !== 'Transform'),
+  )
   const base = {
-    Transform: transform(0, 0, 100, 100),
+    Transform: { rotation: spatial.rotation },
+    LayoutItem: layoutItem(spatial),
     Visibility: { visible: true },
     Lock: { locked: false },
-    ...components,
+    ...remaining,
   }
   return {
     id,
@@ -70,7 +89,7 @@ function entity(
 
 function documentFixture(): ComposeDocument {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds: ['dashboard'],
@@ -107,7 +126,7 @@ function TestTransformInspector({ value }: ComposeComponentInspectorProps) {
     <ComposePropertyPanel
       aria-label="变换属性"
       schema={testTransformSchema}
-      value={{ position: (value as ComposeTransform).position }}
+      value={{ position: (value as ComposeLayoutItem).offset }}
     />
   )
 }
@@ -203,10 +222,10 @@ const componentDefinitions = [
     createDefault: () => ({ presetId: null, baseComponentKeys: [], capabilityIds: [] }),
   },
   {
-    key: 'Transform',
+    key: 'LayoutItem',
     label: '变换',
     order: 10,
-    createDefault: () => transform(0, 0, 100, 100),
+    createDefault: () => layoutItem(transform(0, 0, 100, 100)),
     inspector: TestTransformInspector,
   },
   {
@@ -244,15 +263,13 @@ const componentDefinitions = [
     createDefault: () => ({ enabled: true }),
   },
   {
-    key: 'TransformConstraints',
+    key: 'GeometryConstraints',
     label: '几何限制',
     order: 70,
     createDefault: () => ({
       movable: true,
       resize: 'free',
       rotatable: true,
-      minSize: { width: 1, height: 1 },
-      maxSize: null,
     }),
   },
   {
@@ -290,7 +307,8 @@ const registry = createComposeEntityRegistry({
       id: 'container',
       label: 'Container',
       createComponents: () => ({
-        Transform: transform(0, 0, 1280, 720),
+        Transform: { rotation: 0 },
+        LayoutItem: layoutItem(transform(0, 0, 1280, 720)),
         Visibility: { visible: true },
         Lock: { locked: false },
         Hierarchy: { childIds: [] },
@@ -302,7 +320,8 @@ const registry = createComposeEntityRegistry({
       id: 'text',
       label: 'Text',
       createComponents: () => ({
-        Transform: transform(0, 0, 180, 40),
+        Transform: { rotation: 0 },
+        LayoutItem: layoutItem(transform(0, 0, 180, 40)),
         Visibility: { visible: true },
         Lock: { locked: false },
         Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
@@ -323,12 +342,10 @@ const registry = createComposeEntityRegistry({
       id: 'geometry-constraints',
       label: '几何限制',
       createComponents: () => ({
-        TransformConstraints: {
+        GeometryConstraints: {
           movable: true,
           resize: 'free',
           rotatable: true,
-          minSize: { width: 1, height: 1 },
-          maxSize: null,
         },
       }),
     },
@@ -404,7 +421,7 @@ describe('useComposeEditorController', () => {
     })
   })
 
-  it('场景树创建操作从 Container Preset 创建 v5 Entity', () => {
+  it('场景树创建操作从 Container Preset 创建 v6 Entity', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
       idFactory: ids(),
@@ -422,7 +439,7 @@ describe('useComposeEditorController', () => {
       .find((candidate) => candidate.id.startsWith('editor-id-'))
     expect(created).toBeDefined()
     expect(getComposeHierarchy(created!)).toEqual({ childIds: [] })
-    expect(getComposeTransform(created!).size).toEqual({ width: 1280, height: 720 })
+    expect(getComposeSpatialTransform(created!).size).toEqual({ width: 1280, height: 720 })
     expect(result.current.selectedIds).toEqual([created!.id])
   })
 
@@ -473,13 +490,15 @@ describe('useComposeEditorController', () => {
     expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds).toEqual([])
   })
 
-  it('场景树移动操作跨父级 reparent 并在同父级内重排序', () => {
+  it('场景树移动操作跨父级 reparent 并在同父级内重排序', async () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
       idFactory: ids(),
       runtime: editorRuntime,
       registry,
     }))
+
+    await waitFor(() => expect(result.current.stageProps.layoutSnapshot).toBeDefined())
 
     act(() => result.current.sceneTreeProps.onOperation?.({
       type: 'move',
@@ -491,7 +510,7 @@ describe('useComposeEditorController', () => {
     expect(editorRuntime.document.rootIds).toEqual(['title', 'dashboard'])
     expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds).toEqual([])
     // reparent 保持世界坐标：title 原本在 dashboard(40,30) 内偏移 (10,10)。
-    expect(getComposeTransform(editorRuntime.document.entities.title!).position)
+    expect(getComposeSpatialTransform(editorRuntime.document.entities.title!).position)
       .toEqual({ x: 50, y: 40 })
 
     act(() => result.current.sceneTreeProps.onOperation?.({

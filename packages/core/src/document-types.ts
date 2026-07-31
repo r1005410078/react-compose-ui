@@ -1,5 +1,5 @@
 /**
- * ComposeDocument v5 的严格 JSON 与 ECS Entity/Component 公共协议。
+ * ComposeDocument v6 的严格 JSON、ECS Entity/Component 与派生布局公共协议。
  *
  * @packageDocumentation
  */
@@ -32,8 +32,13 @@ export interface ComposeSize extends JsonObject {
   readonly height: number
 }
 
-/** Entity 的局部二维几何 Component。 @public */
+/** Entity 在布局盒之后应用的二维变换 Component。 @public */
 export interface ComposeTransform extends JsonObject {
+  readonly rotation: number
+}
+
+/** 编辑命令与 Stage 适配使用的完整局部盒变换；不是持久化 Component。 @public */
+export interface ComposeSpatialTransform extends JsonObject {
   readonly position: ComposePosition
   readonly size: ComposeSize
   readonly rotation: number
@@ -47,13 +52,39 @@ export type ComposeResizeMode =
   | 'vertical'
   | 'none'
 
-/** Stage 几何编辑规则；缺失时使用自由变换默认值。 @public */
-export interface ComposeTransformConstraints extends JsonObject {
+/** Stage 几何编辑规则；尺寸上下限由 LayoutItem 保存。 @public */
+export interface ComposeGeometryConstraints extends JsonObject {
   readonly movable: boolean
   readonly resize: ComposeResizeMode
   readonly rotatable: boolean
-  readonly minSize: ComposeSize
-  readonly maxSize: ComposeSize | null
+}
+
+/** 四条物理边的连续逻辑像素值。 @public */
+export interface ComposeEdges extends JsonObject {
+  readonly top: number
+  readonly right: number
+  readonly bottom: number
+  readonly left: number
+}
+
+/** Figma 式单轴尺寸意图。 @public */
+export interface ComposeAxisSizing extends JsonObject {
+  readonly mode: 'fixed' | 'fill' | 'hug'
+  /** Fixed 值；在 Fill/Hug 下作为切换或测量失败的 fallback。 */
+  readonly value: number
+  readonly min: number | null
+  readonly max: number | null
+}
+
+/** Entity 相对 parent 的布局参与方式与盒模型意图。 @public */
+export interface ComposeLayoutItem extends JsonObject {
+  readonly positioning: 'flow' | 'absolute'
+  /** Absolute 坐标；Flow 时保留但不参与求解。 */
+  readonly offset: ComposePosition
+  readonly width: ComposeAxisSizing
+  readonly height: ComposeAxisSizing
+  readonly margin: ComposeEdges
+  readonly alignSelf: 'auto' | 'flex-start' | 'center' | 'flex-end' | 'stretch' | 'baseline'
 }
 
 /** Preset 基础组合和已附加能力的持久化 Authoring 数据。 @public */
@@ -90,7 +121,6 @@ export type ComposeFlexWrap = 'nowrap' | 'wrap' | 'wrap-reverse'
 
 /** Flex 容器的多行对齐方式。 @public */
 export type ComposeAlignContent =
-  | 'normal'
   | 'flex-start'
   | 'center'
   | 'flex-end'
@@ -100,7 +130,6 @@ export type ComposeAlignContent =
 
 /** Flex 容器的主轴对齐方式。 @public */
 export type ComposeJustifyContent =
-  | 'normal'
   | 'flex-start'
   | 'center'
   | 'flex-end'
@@ -110,7 +139,6 @@ export type ComposeJustifyContent =
 
 /** Flex 容器的交叉轴对齐方式。 @public */
 export type ComposeAlignItems =
-  | 'normal'
   | 'flex-start'
   | 'center'
   | 'flex-end'
@@ -121,7 +149,7 @@ export type ComposeAlignItems =
  * 容器可选的 Flex 布局 Authoring 数据。
  *
  * @remarks
- * `gap` 是无单位的有限非负数；未来渲染实现会把它解释为 CSS 像素。
+ * 所有数值都是连续逻辑像素；Runtime 会映射为 Yoga point。
  *
  * @public
  */
@@ -132,7 +160,9 @@ export interface ComposeFlexLayout extends JsonObject {
   readonly alignContent: ComposeAlignContent
   readonly justifyContent: ComposeJustifyContent
   readonly alignItems: ComposeAlignItems
-  readonly gap: number
+  readonly padding: ComposeEdges
+  readonly rowGap: number
+  readonly columnGap: number
 }
 
 /** 容器可选的布局数据；当前仅支持 Flex。 @public */
@@ -178,11 +208,12 @@ export interface ComposeRenderer extends JsonObject {
   readonly props: JsonObject
 }
 
-/** ComposeDocument v5 内建 Component Key。 @public */
+/** ComposeDocument v6 内建 Component Key。 @public */
 export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   composition: 'Composition',
   transform: 'Transform',
-  transformConstraints: 'TransformConstraints',
+  layoutItem: 'LayoutItem',
+  geometryConstraints: 'GeometryConstraints',
   visibility: 'Visibility',
   lock: 'Lock',
   hierarchy: 'Hierarchy',
@@ -192,7 +223,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   renderer: 'Renderer',
 } as const
 
-/** ComposeDocument v5 内建 Component Key 联合。 @public */
+/** ComposeDocument v6 内建 Component Key 联合。 @public */
 export type ComposeBuiltinComponentKey =
   typeof COMPOSE_BUILTIN_COMPONENT_KEYS[keyof typeof COMPOSE_BUILTIN_COMPONENT_KEYS]
 
@@ -237,10 +268,10 @@ export interface ComposeOutputSettings {
   readonly backgroundPaint: ComposePaint
 }
 
-/** 编辑器、Stage 与 Preview 共享的 v5 ECS 文档。 @public */
+/** 编辑器、Stage 与 Preview 共享的 v6 ECS 文档。 @public */
 export interface ComposeDocument {
-  /** 当前且唯一支持的文档协议版本。 @defaultValue 5 */
-  readonly schemaVersion: 5
+  /** 当前且唯一支持的文档协议版本。 @defaultValue 6 */
+  readonly schemaVersion: 6
   readonly canvas: ComposeCanvasSettings
   readonly output: ComposeOutputSettings
   readonly rootIds: readonly string[]
@@ -279,7 +310,8 @@ export type DocumentValidationIssueCode =
   | 'composition.invalid'
   | 'transform.invalid'
   | 'transform.invalid-size'
-  | 'transform-constraints.invalid'
+  | 'layout-item.invalid'
+  | 'geometry-constraints.invalid'
   | 'layout.invalid'
   | 'appearance.invalid'
   | 'appearance.invalid-paint'
@@ -296,3 +328,50 @@ export interface DocumentValidationIssue {
 export type DocumentValidationResult =
   | { readonly valid: true; readonly document: ComposeDocument }
   | { readonly valid: false; readonly issues: readonly DocumentValidationIssue[] }
+
+/** Runtime 为一个 Entity 解析出的 parent-local border box。 @public */
+export interface ComposeResolvedLayoutBox {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+  readonly positioning: ComposeLayoutItem['positioning']
+}
+
+/** Layout Runtime 不阻断渲染的稳定诊断。 @public */
+export interface ComposeLayoutDiagnostic {
+  readonly code: string
+  readonly entityId: string
+  readonly axis?: 'width' | 'height'
+  readonly message: string
+}
+
+/** 一次完整布局求解的不可变结果。 @public */
+export interface ComposeLayoutSnapshot {
+  readonly revision: number
+  readonly boxes: Readonly<Record<string, ComposeResolvedLayoutBox>>
+  readonly diagnostics: readonly ComposeLayoutDiagnostic[]
+}
+
+/** Yoga Measure Function 对单轴施加的约束。 @public */
+export type ComposeMeasureConstraint =
+  | { readonly mode: 'undefined' }
+  | { readonly mode: 'exactly' | 'at-most'; readonly value: number }
+
+/** Renderer 内容测量的同步结果。 @public */
+export interface ComposeMeasuredSize {
+  readonly width: number
+  readonly height: number
+  readonly baseline?: number
+}
+
+/** Layout Engine 消费的无框架同步测量端口。 @public */
+export interface ComposeLayoutMeasurementPort {
+  readonly revision: number
+  measure(input: {
+    readonly entity: ComposeEntity
+    readonly width: ComposeMeasureConstraint
+    readonly height: ComposeMeasureConstraint
+  }): ComposeMeasuredSize | null
+  subscribe(listener: (entityIds?: readonly string[]) => void): () => void
+}

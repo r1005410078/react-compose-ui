@@ -2,9 +2,9 @@ import {
   getComposeClip,
   getComposeHierarchy,
   getComposeLock,
-  getComposeTransform,
   getComposeVisibility,
   type ComposeDocument,
+  type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import {
   applyMatrix,
@@ -24,6 +24,8 @@ import {
 export interface StageSceneIndex {
   /** 索引对应的文档引用。 */
   readonly document: ComposeDocument
+  /** 索引对应的布局快照；revision 参与缓存身份。 */
+  readonly layoutSnapshot: ComposeLayoutSnapshot
   /** 按文档树顺序返回全部 Entity ID。 */
   readonly order: readonly string[]
   /** 查询 Entity 直接父级；根 Entity 返回 null。 */
@@ -48,7 +50,7 @@ export interface StageSceneIndex {
   snapCandidates(excludedIds: readonly string[]): readonly StageGuide[]
 }
 
-const cache = new WeakMap<ComposeDocument, StageSceneIndex>()
+const cache = new WeakMap<ComposeLayoutSnapshot, WeakMap<ComposeDocument, StageSceneIndex>>()
 
 /**
  * 为不可变文档创建或复用空间索引。
@@ -57,8 +59,16 @@ const cache = new WeakMap<ComposeDocument, StageSceneIndex>()
  * @returns 与该文档引用绑定的空间索引。
  * @public
  */
-export function createStageSceneIndex(document: ComposeDocument): StageSceneIndex {
-  const cached = cache.get(document)
+export function createStageSceneIndex(
+  document: ComposeDocument,
+  layoutSnapshot: ComposeLayoutSnapshot,
+): StageSceneIndex {
+  let documentCache = cache.get(layoutSnapshot)
+  if (!documentCache) {
+    documentCache = new WeakMap()
+    cache.set(layoutSnapshot, documentCache)
+  }
+  const cached = documentCache.get(document)
   if (cached) return cached
 
   const parents = new Map<string, string | null>()
@@ -78,8 +88,8 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
     const visible = parentVisible && getComposeVisibility(entity).visible
     visibility.set(entityId, visible)
     order.push(entityId)
-    matrices.set(entityId, getEntityWorldMatrix(document, entityId))
-    bounds.set(entityId, getEntityWorldBounds(document, entityId))
+    matrices.set(entityId, getEntityWorldMatrix(document, layoutSnapshot, entityId))
+    bounds.set(entityId, getEntityWorldBounds(document, layoutSnapshot, entityId))
     getComposeHierarchy(entity)?.childIds.forEach((childId) =>
       visit(childId, entityId, visible))
   }
@@ -87,6 +97,7 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
 
   const index: StageSceneIndex = {
     document,
+    layoutSnapshot,
     order,
     getParentId: (entityId) => parents.get(entityId) ?? null,
     getWorldMatrix: (entityId) => matrices.get(entityId) ?? null,
@@ -136,12 +147,13 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
         const entity = document.entities[entityId]
         const matrix = matrices.get(entityId)
         if (!entity || !getComposeHierarchy(entity) || !matrix) return false
-        const transform = getComposeTransform(entity)
+        const box = layoutSnapshot.boxes[entityId]
+        if (!box) return false
         const local = applyMatrix(invertMatrix(matrix), point)
         return local.x >= 0
-          && local.x <= transform.size.width
+          && local.x <= box.width
           && local.y >= 0
-          && local.y <= transform.size.height
+          && local.y <= box.height
       }
       const isExposed = (entityId: string) => {
         let current = parents.get(entityId) ?? null
@@ -169,12 +181,13 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
         const entity = document.entities[entityId]
         const matrix = matrices.get(entityId)
         if (!entity || !matrix) return false
-        const transform = getComposeTransform(entity)
+        const box = layoutSnapshot.boxes[entityId]
+        if (!box) return false
         const local = applyMatrix(invertMatrix(matrix), point)
         return local.x >= 0
-          && local.x <= transform.size.width
+          && local.x <= box.width
           && local.y >= 0
-          && local.y <= transform.size.height
+          && local.y <= box.height
       }
       const isExposed = (entityId: string) => {
         let current = parents.get(entityId) ?? null
@@ -234,6 +247,6 @@ export function createStageSceneIndex(document: ComposeDocument): StageSceneInde
       return candidates
     },
   }
-  cache.set(document, index)
+  documentCache.set(document, index)
   return index
 }

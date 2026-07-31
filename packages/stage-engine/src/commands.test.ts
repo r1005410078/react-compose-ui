@@ -2,7 +2,7 @@ import {
   BUILTIN_COMMAND_TYPES,
   createTransactionRuntime,
   getComposeHierarchy,
-  getComposeTransform,
+  getComposeSpatialTransform,
 } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import {
@@ -11,7 +11,7 @@ import {
   createReparentCommand,
   createUngroupCommand,
 } from './commands'
-import { document, entity } from './test-fixtures'
+import { document, entity, layoutSnapshot } from './test-fixtures'
 
 describe('Stage ECS commands', () => {
   it('OpenSpec: Entity 分组 / 创建可渲染无关的 Container 组合并保持世界位置', () => {
@@ -22,20 +22,29 @@ describe('Stage ECS commands', () => {
     const runtime = createTransactionRuntime({
       document: value,
     })
-    const result = runtime.dispatch(createGroupCommand(value, ['a', 'b'], 'container'))
+    const result = runtime.dispatch(createGroupCommand(
+      value,
+      layoutSnapshot(value),
+      ['a', 'b'],
+      'container',
+    ))
     expect(result.status).toBe('committed')
     const current = runtime.getState().document
     expect(current.rootIds).toEqual(['container'])
     expect(getComposeHierarchy(current.entities.container!)?.childIds).toEqual(['a', 'b'])
-    expect(getComposeTransform(current.entities.container!)).toEqual({
+    expect(getComposeSpatialTransform(current.entities.container!)).toEqual({
       position: { x: 20, y: 30 },
       size: { width: 230, height: 80 },
       rotation: 0,
     })
-    expect(getComposeTransform(current.entities.a!).position).toEqual({ x: 0, y: 0 })
-    expect(getComposeTransform(current.entities.b!).position).toEqual({ x: 130, y: 30 })
+    expect(getComposeSpatialTransform(current.entities.a!).position).toEqual({ x: 0, y: 0 })
+    expect(getComposeSpatialTransform(current.entities.b!).position).toEqual({ x: 130, y: 30 })
 
-    const ungroup = runtime.dispatch(createUngroupCommand(current, 'container'))
+    const ungroup = runtime.dispatch(createUngroupCommand(
+      current,
+      layoutSnapshot(current, 2),
+      'container',
+    ))
     expect(ungroup.status).toBe('committed')
     expect(runtime.getState().document.rootIds).toEqual(['a', 'b'])
   })
@@ -50,7 +59,13 @@ describe('Stage ECS commands', () => {
       childIds: [],
     })
     const value = document([child, container], ['child', 'container'])
-    const command = createReparentCommand(value, ['child'], 'container', 0)
+    const command = createReparentCommand(
+      value,
+      layoutSnapshot(value),
+      ['child'],
+      'container',
+      0,
+    )
     expect(command.type).toBe(BUILTIN_COMMAND_TYPES.batch)
     const runtime = createTransactionRuntime({
       document: value,
@@ -58,7 +73,7 @@ describe('Stage ECS commands', () => {
     expect(runtime.dispatch(command).status).toBe('committed')
     const current = runtime.getState().document
     expect(getComposeHierarchy(current.entities.container!)?.childIds).toEqual(['child'])
-    expect(getComposeTransform(current.entities.child!).position).toEqual({ x: 200, y: 70 })
+    expect(getComposeSpatialTransform(current.entities.child!).position).toEqual({ x: 200, y: 70 })
   })
 
   it('OpenSpec: Entity duplicate / 深复制 Components 并重映射 Hierarchy', () => {

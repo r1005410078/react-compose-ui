@@ -32,12 +32,12 @@ export function EditorPage() {
 ```
 
 必须导入 `@compose-ui/editor/styles.css` 并提供非零高度。Controller 拥有一个实例级
-`StageInteractionController`，从 runtime 的当前 `ComposeDocument v5` 派生 Scene Tree、
+`StageInteractionController` 与文档会话级 Layout Runtime，从当前 `ComposeDocument v6` 派生 Scene Tree、
 Palette、Stage、History、Inspector 和 Command Panel，并把所有编辑入口接到同一事务时间线。
 
 Scene Tree 根据 `rootIds` 和 `Hierarchy.childIds` 生成。Palette 只显示 Registry Presets。
 默认 Inspector 只创建一个 Property Panel，并按 Registry 顺序聚合 Identity、Transform、
-Visibility、Lock、Appearance、Hierarchy/Clip、TransformConstraints 与 Renderer 内容分组。
+LayoutItem、Visibility、Lock、Appearance、Hierarchy/Clip、GeometryConstraints 与 Renderer 内容分组。
 所有分组共享搜索、筛选、显示设置和列宽，默认展开且可折叠；Hierarchy 与 Clip 合并为“容器”，
 未知 Component/Renderer 使用同一分组样式降级展示。
 

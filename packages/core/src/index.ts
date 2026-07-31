@@ -9,12 +9,17 @@
  */
 
 export {
+  createComposeEdges,
+  createDefaultComposeLayoutItem,
   createDefaultComposeFlexLayout,
+  createFixedComposeAxisSizing,
+  isValidComposeLayoutItem,
   isValidComposeLayout,
 } from './layout'
 export {
   isValidComposeTransform,
-  isValidComposeTransformConstraints,
+  isValidComposeSpatialTransform,
+  isValidComposeGeometryConstraints,
   validateComposeDocument,
 } from './document'
 export { createDefaultCanvasSettings } from './canvas-settings'
@@ -53,21 +58,25 @@ export {
   getComposeClip,
   getComposeComponent,
   getComposeComposition,
+  getComposeGeometryConstraints,
   getComposeHierarchy,
+  getComposeLayoutItem,
   getComposeLock,
   getComposeLayout,
   getComposeRenderer,
+  getComposeSpatialTransform,
   getComposeTransform,
-  getComposeTransformConstraints,
   getComposeVisibility,
   isComposeComponentKey,
   isComposeContainerEntity,
   isComposeEntityLocked,
   isComposeEntityVisible,
-  resolveComposeTransformConstraints,
+  resolveComposeGeometryConstraints,
 } from './entity'
 export { applyDocumentPatches } from './patches'
 export { createTransactionRuntime } from './runtime'
+export { migrateComposeDocumentV5ToV6 } from './migration'
+export type { ComposeDocumentMigrationResult } from './migration'
 export {
   BUILTIN_COMMAND_TYPES,
   createBuiltinCommandHandlers,
@@ -98,24 +107,34 @@ export type {
 } from './command-types'
 export type {
   ComposeAppearance,
+  ComposeAxisSizing,
   ComposeBuiltinComponentKey,
   ComposeCanvasGuide,
   ComposeCanvasSettings,
   ComposeClip,
   ComposeComposition,
   ComposeDocument,
+  ComposeEdges,
   ComposeEntity,
+  ComposeGeometryConstraints,
   ComposeHierarchy,
   ComposeLayout,
+  ComposeLayoutDiagnostic,
+  ComposeLayoutItem,
+  ComposeLayoutMeasurementPort,
+  ComposeLayoutSnapshot,
   ComposeLock,
+  ComposeMeasureConstraint,
+  ComposeMeasuredSize,
   ComposeOutputSettings,
   ComposePosition,
   ComposeRenderer,
+  ComposeResolvedLayoutBox,
   ComposeResizeMode,
   ComposeShadow,
   ComposeSize,
+  ComposeSpatialTransform,
   ComposeTransform,
-  ComposeTransformConstraints,
   ComposeVisibility,
   ComposeAlignContent,
   ComposeAlignItems,

@@ -8,7 +8,7 @@ import { CanvasInspector } from './canvas-inspector'
 
 function documentFixture(): ComposeDocument {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: createDefaultCanvasSettings(),
     output: {
       width: 1280,

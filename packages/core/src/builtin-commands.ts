@@ -5,19 +5,20 @@ import {
   type ComposeDocument,
   type ComposeEntity,
   type ComposeOutputSettings,
-  type ComposeTransform,
+  type ComposeSpatialTransform,
   type JsonObject,
   type JsonValue,
 } from './document-types'
 import {
   getComposeComposition,
+  getComposeLayoutItem,
   getComposeHierarchy,
   getComposeLock,
-  getComposeTransform,
+  getComposeSpatialTransform,
   isComposeComponentKey,
-  resolveComposeTransformConstraints,
+  resolveComposeGeometryConstraints,
 } from './entity'
-import { isValidComposeTransform } from './document'
+import { isValidComposeSpatialTransform } from './document'
 import { isComposeColor, isValidComposePaint } from './paint'
 import { jsonEqual } from './patches'
 import type {
@@ -29,7 +30,7 @@ import type {
   EditorCommandMeta,
 } from './command-types'
 
-/** ComposeDocument v5 内置命令 type。 @public */
+/** ComposeDocument v6 内置命令 type。 @public */
 export const BUILTIN_COMMAND_TYPES = {
   configureCanvas: 'canvas.configure',
   configureOutput: 'output.configure',
@@ -686,35 +687,30 @@ function appearanceHandler(): CommandHandler {
   }
 }
 
-function samePosition(left: ComposeTransform, right: ComposeTransform) {
+function samePosition(left: ComposeSpatialTransform, right: ComposeSpatialTransform) {
   return left.position.x === right.position.x && left.position.y === right.position.y
 }
 
-function sameSize(left: ComposeTransform, right: ComposeTransform) {
+function sameSize(left: ComposeSpatialTransform, right: ComposeSpatialTransform) {
   return left.size.width === right.size.width && left.size.height === right.size.height
 }
 
-function withinConstraints(entity: ComposeEntity, transform: ComposeTransform) {
-  const constraints = resolveComposeTransformConstraints(entity)
+function withinConstraints(entity: ComposeEntity, transform: ComposeSpatialTransform) {
+  const item = getComposeLayoutItem(entity)
   const { width, height } = transform.size
-  return width >= constraints.minSize.width
-    && height >= constraints.minSize.height
-    && (
-      constraints.maxSize === null
-      || (
-        width <= constraints.maxSize.width
-        && height <= constraints.maxSize.height
-      )
-    )
+  return (item.width.min === null || width >= item.width.min)
+    && (item.height.min === null || height >= item.height.min)
+    && (item.width.max === null || width <= item.width.max)
+    && (item.height.max === null || height <= item.height.max)
 }
 
 function validatesOperation(
   entity: ComposeEntity,
-  next: ComposeTransform,
+  next: ComposeSpatialTransform,
   operation: TransformOperation,
 ): string | null {
-  const current = getComposeTransform(entity)
-  const constraints = resolveComposeTransformConstraints(entity)
+  const current = getComposeSpatialTransform(entity)
+  const constraints = resolveComposeGeometryConstraints(entity)
   if (!withinConstraints(entity, next)) return 'Transform 尺寸超出约束'
   const positionChanged = !samePosition(current, next)
   const sizeChanged = !sameSize(current, next)
@@ -757,6 +753,34 @@ function validatesOperation(
   return null
 }
 
+function appendSpatialTransformPatches(
+  result: DocumentPatch[],
+  entity: ComposeEntity,
+  next: ComposeSpatialTransform,
+) {
+  const current = getComposeSpatialTransform(entity)
+  const item = getComposeLayoutItem(entity)
+  if (!samePosition(current, next) || !sameSize(current, next)) {
+    result.push({
+      op: 'set',
+      path: ['entities', entity.id, 'components', 'LayoutItem'],
+      value: {
+        ...item,
+        offset: next.position,
+        width: { ...item.width, value: next.size.width },
+        height: { ...item.height, value: next.size.height },
+      },
+    })
+  }
+  if (current.rotation !== next.rotation) {
+    result.push({
+      op: 'set',
+      path: ['entities', entity.id, 'components', 'Transform', 'rotation'],
+      value: next.rotation,
+    })
+  }
+}
+
 function transformHandler(): CommandHandler {
   return {
     type: BUILTIN_COMMAND_TYPES.setTransform,
@@ -776,7 +800,7 @@ function transformHandler(): CommandHandler {
         const entity = document.entities[update.entityId]
         if (!entity) return issue('entity.missing', `Entity ${update.entityId} 不存在`)
         if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${update.entityId} 已锁定`)
-        if (!isValidComposeTransform(update.transform)) {
+        if (!isValidComposeSpatialTransform(update.transform)) {
           return issue('transform.invalid', `Entity ${update.entityId} Transform 无效`)
         }
         const violation = validatesOperation(
@@ -785,13 +809,7 @@ function transformHandler(): CommandHandler {
           operation as TransformOperation,
         )
         if (violation) return issue('transform.constraint', violation)
-        if (!jsonEqual(getComposeTransform(entity), update.transform)) {
-          result.push({
-            op: 'set',
-            path: ['entities', update.entityId, 'components', 'Transform'],
-            value: update.transform as unknown as JsonValue,
-          })
-        }
+        appendSpatialTransformPatches(result, entity, update.transform)
       }
       return patches(result)
     },
@@ -854,14 +872,10 @@ function groupHandler(): CommandHandler {
       })
       for (const entityId of roots) {
         const transform = transformValues[entityId]
-        if (!isValidComposeTransform(transform)) {
+        if (!isValidComposeSpatialTransform(transform)) {
           return issue('transform.invalid', `Entity ${entityId} 缺少局部 Transform`)
         }
-        result.push({
-          op: 'set',
-          path: ['entities', entityId, 'components', 'Transform'],
-          value: transform as unknown as JsonValue,
-        })
+        appendSpatialTransformPatches(result, document.entities[entityId]!, transform)
       }
       return patches(result)
     },
@@ -902,14 +916,10 @@ function ungroupHandler(): CommandHandler {
       }))
       for (const entityId of hierarchy.childIds) {
         const transform = transformValues[entityId]
-        if (!isValidComposeTransform(transform)) {
+        if (!isValidComposeSpatialTransform(transform)) {
           return issue('transform.invalid', `Entity ${entityId} 缺少父级 Transform`)
         }
-        result.push({
-          op: 'set',
-          path: ['entities', entityId, 'components', 'Transform'],
-          value: transform as unknown as JsonValue,
-        })
+        appendSpatialTransformPatches(result, document.entities[entityId]!, transform)
       }
       result.push({ op: 'remove', path: ['entities', containerId] })
       return patches(result)
@@ -917,7 +927,7 @@ function ungroupHandler(): CommandHandler {
   }
 }
 
-/** 创建 ComposeDocument v5 内置命令处理器。 @public */
+/** 创建 ComposeDocument v6 内置命令处理器。 @public */
 export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
   return [
     configureCanvasHandler(),

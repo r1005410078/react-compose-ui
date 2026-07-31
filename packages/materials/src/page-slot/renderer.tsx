@@ -14,7 +14,16 @@ import {
   resolveComposePageNestState,
 } from '@compose-ui/core'
 import type { ComposeDocument, ComposeEntity } from '@compose-ui/core'
-import { useCallback, useEffect, useState } from 'react'
+import type { ComposeLayoutSnapshot } from '@compose-ui/core'
+import { createComposeLayoutRuntime } from '@compose-ui/layout-engine'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { ComposePageSlotNestProvider } from './nest-context'
 import { useComposePageSlotNest } from './nest-state'
 
@@ -144,6 +153,47 @@ export function PageSlotRenderer({
     return <Placeholder testId="compose-page-slot-empty">页面暂无内容</Placeholder>
   }
 
+  return <ResolvedPageContent
+    document={state.document}
+    mode={mode}
+    pageDocumentPort={pageDocumentPort}
+    pageKey={pageKey}
+    registry={registry}
+  />
+}
+
+function ResolvedPageContent({
+  document,
+  mode,
+  pageDocumentPort,
+  pageKey,
+  registry,
+}: {
+  readonly document: ComposeDocument
+  readonly mode: 'editor' | 'preview'
+  readonly pageDocumentPort: ComposeRendererProps['pageDocumentPort']
+  readonly pageKey: string | undefined
+  readonly registry: ComposeEntityRegistry
+}) {
+  const nest = useComposePageSlotNest()
+  const [runtime] = useState(() => createComposeLayoutRuntime({ document }))
+  const layoutState = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
+  const generation = useRef(0)
+  useLayoutEffect(() => runtime.updateDocument(document), [document, runtime])
+  useEffect(() => {
+    generation.current += 1
+    const mounted = generation.current
+    return () => queueMicrotask(() => {
+      if (generation.current === mounted) runtime.dispose()
+    })
+  }, [runtime])
+  if (layoutState.status === 'loading') {
+    return <Placeholder testId="compose-page-slot-layout-loading">载入页面布局…</Placeholder>
+  }
+  if (layoutState.status === 'error') {
+    return <Alert testId="compose-page-slot-layout-error">页面布局失败</Alert>
+  }
+
   return (
     <ComposePageSlotNestProvider
       ancestorPageKeys={pageKey === undefined
@@ -164,10 +214,11 @@ export function PageSlotRenderer({
           ...(mode === 'editor' ? { pointerEvents: 'none' as const } : {}),
         }}
       >
-        {state.document.rootIds.map((rootId) => (
+        {document.rootIds.map((rootId) => (
           <NestedEntity
             key={rootId}
-            document={state.document}
+            document={document}
+            layoutSnapshot={layoutState.snapshot}
             entityId={rootId}
             mode={mode}
             pageDocumentPort={pageDocumentPort}
@@ -189,12 +240,14 @@ export function PageSlotRenderer({
  */
 function NestedEntity({
   document,
+  layoutSnapshot,
   entityId,
   mode,
   pageDocumentPort,
   registry,
 }: {
   readonly document: ComposeDocument
+  readonly layoutSnapshot: ComposeLayoutSnapshot
   readonly entityId: string
   readonly mode: 'editor' | 'preview'
   readonly pageDocumentPort: ComposeRendererProps['pageDocumentPort']
@@ -203,10 +256,12 @@ function NestedEntity({
   const entity: ComposeEntity | undefined = document.entities[entityId]
   if (!entity || !getComposeVisibility(entity).visible) return null
   const hierarchy = getComposeHierarchy(entity)
+  const box = layoutSnapshot.boxes[entityId]
+  if (!box) return null
   return (
     <div
       data-page-slot-entity-id={entity.id}
-      style={{ ...composeEntitySceneStyle(entity), position: 'absolute' }}
+      style={{ ...composeEntitySceneStyle(entity, box), position: 'absolute' }}
     >
       <ComposeEntityPaintLayer entity={entity} />
       <ComposeRegistryEntityRenderer
@@ -219,6 +274,7 @@ function NestedEntity({
         <NestedEntity
           key={childId}
           document={document}
+          layoutSnapshot={layoutSnapshot}
           entityId={childId}
           mode={mode}
           pageDocumentPort={pageDocumentPort}

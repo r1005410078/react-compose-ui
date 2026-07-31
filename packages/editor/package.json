@@ -37,6 +37,7 @@
     "@compose-ui/components": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/history": "workspace:*",
+    "@compose-ui/layout-engine": "workspace:*",
     "@compose-ui/pages": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/scene-tree": "workspace:*",

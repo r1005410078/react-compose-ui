@@ -7,6 +7,7 @@ import type {
 import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
+  createDefaultComposeLayoutItem,
   createDefaultOutputSettings,
   createTransactionRuntime,
   getComposeHierarchy,
@@ -60,7 +61,7 @@ function PreviewIcon() {
 }
 
 const emptyDocument: ComposeDocument = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   canvas: createDefaultCanvasSettings(),
   output: createDefaultOutputSettings(),
   rootIds: [],
@@ -177,11 +178,8 @@ const echartsPreset = {
   defaultName: 'ECharts Chart',
   icon: <span aria-hidden="true">▥</span>,
   createComponents: () => ({
-    Transform: {
-      position: { x: 0, y: 0 },
-      size: { width: 420, height: 260 },
-      rotation: 0,
-    },
+    Transform: { rotation: 0 },
+    LayoutItem: createDefaultComposeLayoutItem(420, 260),
     Visibility: { visible: true },
     Lock: { locked: false },
     Appearance: {

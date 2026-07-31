@@ -15,14 +15,16 @@ describe('Compose Flex Layout', () => {
       type: 'flex',
       flexDirection: 'row',
       flexWrap: 'nowrap',
-      alignContent: 'normal',
-      justifyContent: 'normal',
-      alignItems: 'normal',
-      gap: 0,
+      alignContent: 'stretch',
+      justifyContent: 'flex-start',
+      alignItems: 'stretch',
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
     })
     expect(second).toEqual(first)
     expect(second).not.toBe(first)
     expect(isValid(first)).toBe(true)
-    expect(isValid({ ...first, gap: -1 })).toBe(false)
+    expect(isValid({ ...first, rowGap: -1 })).toBe(false)
   })
 })

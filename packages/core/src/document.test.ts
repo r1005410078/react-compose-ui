@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { validateComposeDocument } from './document'
 import { containerEntity, documentFixture, rendererEntity, transform } from './test-fixtures'
 
-describe('ComposeDocument v5 validation', () => {
-  it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v5 并拒绝 v4', () => {
+describe('ComposeDocument v6 validation', () => {
+  it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v6 并拒绝旧版本', () => {
     expect(validateComposeDocument(documentFixture()).valid).toBe(true)
     expect(validateComposeDocument({
       ...documentFixture(),
-      schemaVersion: 4,
+      schemaVersion: 5,
       nodes: {},
     }).valid).toBe(false)
   })
@@ -62,12 +62,10 @@ describe('ComposeDocument v5 validation', () => {
       }> }>
     }
     input.entities.rectangle!.components.Composition!.capabilityIds.push('geometry-constraints')
-    ;(input.entities.rectangle!.components as Record<string, unknown>).TransformConstraints = {
+    ;(input.entities.rectangle!.components as Record<string, unknown>).GeometryConstraints = {
       movable: true,
       resize: 'free',
       rotatable: true,
-      minSize: { width: 1, height: 1 },
-      maxSize: null,
     }
     expect(validateComposeDocument(input).valid).toBe(true)
   })
@@ -75,12 +73,10 @@ describe('ComposeDocument v5 validation', () => {
   it('OpenSpec: compose-document / Transform 与几何限制 / 保存独立几何限制', () => {
     const entity = rendererEntity('limited', {
       components: {
-        TransformConstraints: {
+        GeometryConstraints: {
           movable: true,
           resize: 'horizontal',
           rotatable: false,
-          minSize: { width: 20, height: 10 },
-          maxSize: { width: 500, height: 300 },
         },
       },
     })
@@ -91,12 +87,13 @@ describe('ComposeDocument v5 validation', () => {
     const entity = rendererEntity('limited', {
       transform: transform(0, 0, 20, 20),
       components: {
-        TransformConstraints: {
-          movable: true,
-          resize: 'free',
-          rotatable: true,
-          minSize: { width: 100, height: 100 },
-          maxSize: { width: 50, height: 50 },
+        LayoutItem: {
+          positioning: 'absolute',
+          offset: { x: 0, y: 0 },
+          width: { mode: 'fixed', value: 20, min: 100, max: 50 },
+          height: { mode: 'fixed', value: 20, min: 100, max: 50 },
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          alignSelf: 'auto',
         },
       },
     })
@@ -136,7 +133,9 @@ describe('ComposeDocument v5 validation', () => {
       alignContent: 'space-between',
       justifyContent: 'space-evenly',
       alignItems: 'baseline',
-      gap: 12.5,
+      padding: { top: 1, right: 2, bottom: 3, left: 4 },
+      rowGap: 12.5,
+      columnGap: 6,
     }
     expect(validateComposeDocument(documentFixture({ layout: entity }))).toEqual({
       valid: true,
@@ -150,20 +149,24 @@ describe('ComposeDocument v5 validation', () => {
       type: 'flex',
       flexDirection: 'diagonal',
       flexWrap: 'nowrap',
-      alignContent: 'normal',
-      justifyContent: 'normal',
-      alignItems: 'normal',
-      gap: 0,
+      alignContent: 'stretch',
+      justifyContent: 'flex-start',
+      alignItems: 'stretch',
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
     }
     const invalidGap = containerEntity('invalid-gap')
     ;(invalidGap.components as Record<string, unknown>).Layout = {
       type: 'flex',
       flexDirection: 'row',
       flexWrap: 'nowrap',
-      alignContent: 'normal',
-      justifyContent: 'normal',
-      alignItems: 'normal',
-      gap: -1,
+      alignContent: 'stretch',
+      justifyContent: 'flex-start',
+      alignItems: 'stretch',
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: -1,
+      columnGap: 0,
     }
     const withoutHierarchy = rendererEntity('without-hierarchy', {
       components: {
@@ -171,10 +174,12 @@ describe('ComposeDocument v5 validation', () => {
           type: 'flex',
           flexDirection: 'row',
           flexWrap: 'nowrap',
-          alignContent: 'normal',
-          justifyContent: 'normal',
-          alignItems: 'normal',
-          gap: 0,
+          alignContent: 'stretch',
+          justifyContent: 'flex-start',
+          alignItems: 'stretch',
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
         },
       },
     })

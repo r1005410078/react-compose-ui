@@ -1,5 +1,5 @@
 import {
-  getComposeTransform,
+  getComposeSpatialTransform,
   type ComposeDocument,
   type ComposeEntity,
 } from '@compose-ui/core'
@@ -41,7 +41,7 @@ export function describeTransform(
   const target = describeEntityTargets(document, updates.map(({ entityId }) => entityId))
   const first = updates[0]
   const current = first && document.entities[first.entityId]
-  const before = current && getComposeTransform(current)
+  const before = current && getComposeSpatialTransform(current)
   if (!first || !before) return `${verb} ${target}`
 
   if (updates.length > 1) {
@@ -70,7 +70,7 @@ export function describeTransform(
 
 /** 为 Entity 创建记录生成尺寸和落点摘要。 @internal */
 export function describeEntityCreation(entity: ComposeEntity) {
-  const transform = getComposeTransform(entity)
+  const transform = getComposeSpatialTransform(entity)
   return `Create ${entity.name} · ${formatNumber(transform.size.width)}`
     + ` × ${formatNumber(transform.size.height)} at `
     + `(${formatNumber(transform.position.x)}, ${formatNumber(transform.position.y)})`

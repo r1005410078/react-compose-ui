@@ -5,13 +5,16 @@ import {
   getComposeAppearance,
   getComposeClip,
   getComposeHierarchy,
+  getComposeLayout,
+  getComposeSpatialTransform,
   resolveComposeAppearance,
   type ComposeAppearance,
   type ComposeColor,
   type ComposeEntity,
+  type ComposeGeometryConstraints,
+  type ComposeLayoutItem,
   type ComposePaint,
   type ComposeTransform,
-  type ComposeTransformConstraints,
   type EditorCommand,
   type JsonObject,
   type JsonValue,
@@ -53,19 +56,6 @@ export function createTransformInspector(
   return function TransformInspector({ entity, dispatch, readOnly, value }) {
     const zh = useZh()
     const schema = useMemo(() => v.object({
-      position: v.pipe(
-        v.object({ x: v.number(), y: v.number() }),
-        v.title(zh ? '位置' : 'Position'),
-        v.metadata({ propertyPanel: { editor: 'vector2' } }),
-      ),
-      size: v.pipe(
-        v.object({
-          width: v.pipe(v.number(), v.minValue(0.000_001)),
-          height: v.pipe(v.number(), v.minValue(0.000_001)),
-        }),
-        v.title(zh ? '尺寸' : 'Size'),
-        v.metadata({ propertyPanel: { editor: 'size' } }),
-      ),
       rotation: v.pipe(
         v.number(),
         v.title(zh ? '旋转' : 'Rotation'),
@@ -78,16 +68,132 @@ export function createTransformInspector(
         readOnly={readOnly}
         schema={schema}
         value={value as ComposeTransform}
-        onValueChange={(next) => dispatch(command(
-          idFactory,
-          entity,
-          BUILTIN_COMMAND_TYPES.setTransform,
-          {
-            operation: 'set',
-            updates: [{ entityId: entity.id, transform: next }] as unknown as JsonValue,
-          },
-          zh ? `修改 ${entity.name} 变换` : `Update ${entity.name} transform`,
-        ))}
+        onValueChange={(next) => {
+          const current = getComposeSpatialTransform(entity)
+          dispatch(command(
+            idFactory,
+            entity,
+            BUILTIN_COMMAND_TYPES.setTransform,
+            {
+              operation: 'set',
+              updates: [{
+                entityId: entity.id,
+                transform: { ...current, rotation: next.rotation },
+              }] as unknown as JsonValue,
+            },
+            zh ? `修改 ${entity.name} 变换` : `Update ${entity.name} transform`,
+          ))
+        }}
+      />
+    )
+  }
+}
+
+/** 创建 LayoutItem Component Inspector。 @internal */
+export function createLayoutItemInspector(
+  idFactory: InspectorIdFactory,
+): ComponentType<ComposeComponentInspectorProps> {
+  return function LayoutItemInspector({
+    document,
+    entity,
+    dispatch,
+    layoutSnapshot,
+    readOnly,
+    value,
+  }) {
+    const zh = useZh()
+    const item = value as ComposeLayoutItem
+    const schema = useMemo(() => v.object({
+      positioning: v.pipe(
+        v.picklist(['flow', 'absolute']),
+        v.title(zh ? '定位' : 'Positioning'),
+      ),
+      offset: v.pipe(
+        v.object({ x: v.number(), y: v.number() }),
+        v.title(zh ? '偏移' : 'Offset'),
+        v.metadata({ propertyPanel: { editor: 'vector2' } }),
+      ),
+      widthMode: v.pipe(
+        v.picklist(['fixed', 'fill', 'hug']),
+        v.title(zh ? '宽度模式' : 'Width mode'),
+      ),
+      widthValue: v.pipe(v.number(), v.minValue(0), v.title(zh ? '宽度' : 'Width')),
+      heightMode: v.pipe(
+        v.picklist(['fixed', 'fill', 'hug']),
+        v.title(zh ? '高度模式' : 'Height mode'),
+      ),
+      heightValue: v.pipe(v.number(), v.minValue(0), v.title(zh ? '高度' : 'Height')),
+      computedWidth: v.pipe(
+        v.number(),
+        v.title(zh ? '计算宽度' : 'Computed width'),
+        v.metadata({ propertyPanel: { readOnly: true } }),
+      ),
+      computedHeight: v.pipe(
+        v.number(),
+        v.title(zh ? '计算高度' : 'Computed height'),
+        v.metadata({ propertyPanel: { readOnly: true } }),
+      ),
+      marginTop: v.pipe(v.number(), v.title(zh ? '上外边距' : 'Margin top')),
+      marginRight: v.pipe(v.number(), v.title(zh ? '右外边距' : 'Margin right')),
+      marginBottom: v.pipe(v.number(), v.title(zh ? '下外边距' : 'Margin bottom')),
+      marginLeft: v.pipe(v.number(), v.title(zh ? '左外边距' : 'Margin left')),
+      alignSelf: v.pipe(
+        v.picklist(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
+        v.title(zh ? '自身对齐' : 'Align self'),
+      ),
+    }), [zh])
+    return (
+      <ComposePropertyPanel
+        aria-label={zh ? '布局项属性' : 'Layout item properties'}
+        readOnly={readOnly}
+        schema={schema}
+        value={{
+          positioning: item.positioning,
+          offset: item.offset,
+          widthMode: item.width.mode,
+          widthValue: item.width.value,
+          heightMode: item.height.mode,
+          heightValue: item.height.value,
+          computedWidth: layoutSnapshot?.boxes[entity.id]?.width ?? item.width.value,
+          computedHeight: layoutSnapshot?.boxes[entity.id]?.height ?? item.height.value,
+          marginTop: item.margin.top,
+          marginRight: item.margin.right,
+          marginBottom: item.margin.bottom,
+          marginLeft: item.margin.left,
+          alignSelf: item.alignSelf,
+        }}
+        onValueChange={(next) => {
+          const parent = document && Object.values(document.entities).find((candidate) =>
+            getComposeHierarchy(candidate)?.childIds.includes(entity.id))
+          if (next.positioning === 'flow' && (!parent || !getComposeLayout(parent))) return
+          const bakedBox = item.positioning === 'flow' && next.positioning === 'absolute'
+            ? layoutSnapshot?.boxes[entity.id]
+            : undefined
+          dispatch(command(
+            idFactory,
+            entity,
+            BUILTIN_COMMAND_TYPES.updateComponent,
+            {
+              entityId: entity.id,
+              key: 'LayoutItem',
+              value: {
+                ...item,
+                positioning: next.positioning,
+                offset: bakedBox ? { x: bakedBox.x, y: bakedBox.y } : next.offset,
+                width: { ...item.width, mode: next.widthMode, value: next.widthValue },
+                height: { ...item.height, mode: next.heightMode, value: next.heightValue },
+                margin: {
+                  top: next.marginTop,
+                  right: next.marginRight,
+                  bottom: next.marginBottom,
+                  left: next.marginLeft,
+                },
+                alignSelf: next.alignSelf,
+              },
+            },
+            zh ? `修改 ${entity.name} 布局项` : `Update ${entity.name} layout item`,
+          ))
+        }}
       />
     )
   }
@@ -299,13 +405,13 @@ export function createHierarchyInspector(
   }
 }
 
-/** 创建 TransformConstraints Component Inspector。 @internal */
+/** 创建 GeometryConstraints Component Inspector。 @internal */
 export function createConstraintsInspector(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeComponentInspectorProps> {
   return function ConstraintsInspector({ entity, dispatch, readOnly, value }) {
     const zh = useZh()
-    const constraints = value as ComposeTransformConstraints
+    const constraints = value as ComposeGeometryConstraints
     const schema = useMemo(() => v.object({
       movable: v.pipe(v.boolean(), v.title(zh ? '允许移动' : 'Movable')),
       resize: v.pipe(
@@ -328,14 +434,6 @@ export function createConstraintsInspector(
             } } }),
       ),
       rotatable: v.pipe(v.boolean(), v.title(zh ? '允许旋转' : 'Rotatable')),
-      minSize: v.pipe(
-        v.object({
-          width: v.pipe(v.number(), v.minValue(0.000_001)),
-          height: v.pipe(v.number(), v.minValue(0.000_001)),
-        }),
-        v.title(zh ? '最小尺寸' : 'Minimum size'),
-        v.metadata({ propertyPanel: { editor: 'size' } }),
-      ),
     }), [zh])
     return (
       <ComposePropertyPanel
@@ -346,16 +444,14 @@ export function createConstraintsInspector(
           movable: constraints.movable,
           resize: constraints.resize,
           rotatable: constraints.rotatable,
-          minSize: constraints.minSize,
         }}
         onValueChange={(next) => {
-          // maxSize 不在本 schema 中，整体更新时必须保留原值。
-          const nextValue: ComposeTransformConstraints = { ...constraints, ...next }
+          const nextValue: ComposeGeometryConstraints = { ...constraints, ...next }
           dispatch(command(
             idFactory,
             entity,
             BUILTIN_COMMAND_TYPES.updateComponent,
-            { entityId: entity.id, key: 'TransformConstraints', value: nextValue },
+            { entityId: entity.id, key: 'GeometryConstraints', value: nextValue },
             zh ? `修改 ${entity.name} 几何限制` : `Update ${entity.name} constraints`,
           ))
         }}

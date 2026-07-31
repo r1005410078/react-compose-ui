@@ -6,9 +6,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposeComponentPalette } from './compose-component-palette'
 
 const transform = {
-  position: { x: 0, y: 0 },
-  size: { width: 100, height: 50 },
   rotation: 0,
+}
+
+const layoutItem = {
+  positioning: 'absolute' as const,
+  offset: { x: 0, y: 0 },
+  width: { mode: 'fixed' as const, value: 100, min: 1, max: null },
+  height: { mode: 'fixed' as const, value: 50, min: 1, max: null },
+  margin: { top: 0, right: 0, bottom: 0, left: 0 },
+  alignSelf: 'auto' as const,
 }
 
 const registry = createComposeEntityRegistry({
@@ -18,6 +25,7 @@ const registry = createComposeEntityRegistry({
       label: '容器',
       createComponents: () => ({
         Transform: transform,
+        LayoutItem: layoutItem,
         Visibility: { visible: true },
         Lock: { locked: false },
         Hierarchy: { childIds: [] },
@@ -30,6 +38,7 @@ const registry = createComposeEntityRegistry({
       label: '矩形',
       createComponents: () => ({
         Transform: transform,
+        LayoutItem: layoutItem,
         Visibility: { visible: true },
         Lock: { locked: false },
         Appearance: { backgroundPaint: { kind: 'solid', color: '#2463eb' } },
@@ -40,7 +49,7 @@ const registry = createComposeEntityRegistry({
 })
 
 const document: ComposeDocument = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   canvas: {
     grid: {
       stepX: 8,
@@ -70,6 +79,7 @@ describe('ComposeComponentPalette ECS Presets', () => {
     })
     controller.updateContext({
       document,
+      layoutSnapshot: { revision: 1, boxes: {}, diagnostics: [] },
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
       tool: 'select',

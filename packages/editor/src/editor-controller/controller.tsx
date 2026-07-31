@@ -61,6 +61,7 @@ import {
 } from '../inspector'
 import { DefaultStageToolbar } from '../stage-toolbar'
 import { planSceneOperation } from './scene-operations'
+import { useComposeEditorLayout } from './use-layout-runtime'
 
 type InspectionTarget = 'entities' | 'output' | null
 
@@ -306,6 +307,7 @@ export function useComposeEditorController({
 }: UseComposeEditorControllerOptions): ComposeEditorController {
   const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const document = snapshot.document
+  const layoutState = useComposeEditorLayout(document)
   const [selectedIds, setSelectedIdsState] = useState<readonly string[]>(() =>
     validSelection(document, initialSelection))
   const [inspectionTarget, setInspectionTarget] = useState<InspectionTarget>(() =>
@@ -450,6 +452,7 @@ export function useComposeEditorController({
   const onSceneOperation = useCallback((operation: ComposeSceneTreeOperation) => {
     const result = planSceneOperation(operation, {
       document,
+      layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : null,
       registry,
       containerPresetId,
       nextId,
@@ -464,7 +467,7 @@ export function useComposeEditorController({
     if (dispatched.status === 'committed' && result.plan.nextSelection) {
       setSelectedIds(result.plan.nextSelection)
     }
-  }, [containerPresetId, document, nextId, registry, runtime, setSelectedIds])
+  }, [containerPresetId, document, layoutState, nextId, registry, runtime, setSelectedIds])
 
   const sceneTreeProps = useMemo<ComposeSceneTreeProps>(() => ({
     nodes: deriveSceneEntities(document, registry),
@@ -485,6 +488,8 @@ export function useComposeEditorController({
 
   const stageProps = useMemo<ComposeStageProps>(() => ({
     document,
+    layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : undefined,
+    layoutError: layoutState.status === 'error' ? layoutState.error.message : undefined,
     registry,
     pageLoader,
     dispatch,
@@ -504,6 +509,7 @@ export function useComposeEditorController({
     idFactory: nextId,
   }), [
     document,
+    layoutState,
     registry,
     pageLoader,
     dispatch,
@@ -527,11 +533,11 @@ export function useComposeEditorController({
     })
   }, [document.rootIds.length, onSceneOperation])
   const fitBounds = useCallback((ids: readonly string[]) => {
-    if (!surfaceSize) return
+    if (!surfaceSize || layoutState.status !== 'ready') return
     const bounds = unionRects(
       ids
         .filter((id) => document.entities[id] !== undefined)
-        .map((id) => getEntityWorldBounds(document, id)),
+        .map((id) => getEntityWorldBounds(document, layoutState.snapshot, id)),
     )
     if (!bounds) return
     const { width, height } = surfaceSize
@@ -544,14 +550,19 @@ export function useComposeEditorController({
       y: height / 2 - (bounds.y + bounds.height / 2) * zoom,
       zoom,
     })
-  }, [document, surfaceSize])
-  const sceneIndex = useMemo(() => createStageSceneIndex(document), [document])
+  }, [document, layoutState, surfaceSize])
+  const sceneIndex = useMemo(
+    () => layoutState.status === 'ready'
+      ? createStageSceneIndex(document, layoutState.snapshot)
+      : null,
+    [document, layoutState],
+  )
   const fitContainer = useCallback(() => {
     const selectedContainerId = selectedIds.length === 1
       && document.entities[selectedIds[0]!]
       && getComposeHierarchy(document.entities[selectedIds[0]!]!)
       ? selectedIds[0]!
-      : sceneIndex.commonContainerForSelection(selectedIds)
+      : sceneIndex?.commonContainerForSelection(selectedIds)
     if (selectedContainerId) fitBounds([selectedContainerId])
   }, [document.entities, fitBounds, sceneIndex, selectedIds])
   const fitSelection = useCallback(() => fitBounds(selectedIds), [fitBounds, selectedIds])
@@ -563,7 +574,7 @@ export function useComposeEditorController({
     && selectedEntity
     && getComposeHierarchy(selectedEntity)
     ? selectedEntity.id
-    : sceneIndex.commonContainerForSelection(selectedIds)
+    : sceneIndex?.commonContainerForSelection(selectedIds)
   const smartSnapEnabled = document.canvas.smartSnap.nodes
     || document.canvas.smartSnap.guides
   const configureCanvas = (
@@ -601,6 +612,7 @@ export function useComposeEditorController({
       document={document}
       entity={selectedEntity}
       idFactory={nextId}
+      layoutSnapshot={layoutState.status === 'ready' ? layoutState.snapshot : undefined}
       // 按 Entity 重挂载：能力移除确认等局部会话状态不得跨选中目标残留。
       key={selectedEntity.id}
       nodeEditPort={nodeEditPort}
@@ -649,7 +661,7 @@ export function useComposeEditorController({
         fitContainer={fitContainer}
         fitSelection={fitSelection}
         nextId={nextId}
-        selectedContainerId={selectedContainerId}
+        selectedContainerId={selectedContainerId ?? null}
         selectedIds={selectedIds}
         setCanvasSettingsOpen={setCanvasSettingsOpen}
         setTool={setTool}

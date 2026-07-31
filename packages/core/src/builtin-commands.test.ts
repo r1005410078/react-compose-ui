@@ -3,6 +3,7 @@ import {
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
   createTransactionRuntime,
+  getComposeSpatialTransform,
   type ComposeEntity,
   type EditorCommand,
   type JsonObject,
@@ -24,7 +25,7 @@ function dispatch(
   return runtime.dispatch(command)
 }
 
-describe('ComposeDocument v5 built-in commands', () => {
+describe('ComposeDocument v6 built-in commands', () => {
   it('OpenSpec: command-transaction / 输出 Paint 配置事务 / 提交并撤销输出渐变', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
     const backgroundPaint = {
@@ -58,20 +59,18 @@ describe('ComposeDocument v5 built-in commands', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
     expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.addComponent, {
       entityId: 'rectangle',
-      key: 'TransformConstraints',
+      key: 'GeometryConstraints',
       value: {
         movable: true,
         resize: 'free',
         rotatable: true,
-        minSize: { width: 1, height: 1 },
-        maxSize: null,
       },
     }).status).toBe('committed')
-    expect(runtime.document.entities.rectangle?.components.TransformConstraints).toBeDefined()
+    expect(runtime.document.entities.rectangle?.components.GeometryConstraints).toBeDefined()
     runtime.undo()
-    expect(runtime.document.entities.rectangle?.components.TransformConstraints).toBeUndefined()
+    expect(runtime.document.entities.rectangle?.components.GeometryConstraints).toBeUndefined()
     runtime.redo()
-    expect(runtime.document.entities.rectangle?.components.TransformConstraints).toBeDefined()
+    expect(runtime.document.entities.rectangle?.components.GeometryConstraints).toBeDefined()
   })
 
   it('OpenSpec: command-transaction / Entity 与 Component 内置命令 / 保护基础 Component', () => {
@@ -89,12 +88,10 @@ describe('ComposeDocument v5 built-in commands', () => {
   it('OpenSpec: command-transaction / 受约束 Transform 命令 / 拒绝绕过几何限制', () => {
     const limited = rendererEntity('limited', {
       components: {
-        TransformConstraints: {
+        GeometryConstraints: {
           movable: false,
           resize: 'none',
           rotatable: false,
-          minSize: { width: 1, height: 1 },
-          maxSize: null,
         },
       },
     })
@@ -103,7 +100,7 @@ describe('ComposeDocument v5 built-in commands', () => {
       operation: 'move',
       updates: [{ entityId: 'limited', transform: transform(10, 0) }],
     }).status).toBe('rejected')
-    expect(runtime.document.entities.limited?.components.Transform).toEqual(transform())
+    expect(getComposeSpatialTransform(runtime.document.entities.limited!)).toEqual(transform())
   })
 
   it('OpenSpec: command-transaction / 受约束 Transform 命令 / 提交合法多选变换', () => {
@@ -121,8 +118,8 @@ describe('ComposeDocument v5 built-in commands', () => {
     }).status).toBe('committed')
     expect(runtime.entries).toHaveLength(2)
     runtime.undo()
-    expect(runtime.document.entities.first?.components.Transform).toEqual(transform())
-    expect(runtime.document.entities.second?.components.Transform).toEqual(transform(100, 0))
+    expect(getComposeSpatialTransform(runtime.document.entities.first!)).toEqual(transform())
+    expect(getComposeSpatialTransform(runtime.document.entities.second!)).toEqual(transform(100, 0))
   })
 
   it.each([
@@ -144,12 +141,10 @@ describe('ComposeDocument v5 built-in commands', () => {
   }) => {
     const limited = rendererEntity('limited', {
       components: {
-        TransformConstraints: {
+        GeometryConstraints: {
           movable: true,
           resize,
           rotatable: true,
-          minSize: { width: 1, height: 1 },
-          maxSize: null,
         },
       },
     })
@@ -158,7 +153,7 @@ describe('ComposeDocument v5 built-in commands', () => {
       operation: 'set',
       updates: [{ entityId: 'limited', transform: next }],
     }).status).toBe('rejected')
-    expect(runtime.document.entities.limited?.components.Transform).toEqual(transform())
+    expect(getComposeSpatialTransform(runtime.document.entities.limited!)).toEqual(transform())
   })
 
   it('OpenSpec: command-transaction / 能力原子事务 / 添加多 Component 能力', () => {

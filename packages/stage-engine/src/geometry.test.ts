@@ -8,7 +8,7 @@ import {
   toComposeTransform,
   toStageTransform,
 } from './geometry'
-import { document, entity } from './test-fixtures'
+import { document, entity, layoutSnapshot } from './test-fixtures'
 
 describe('Stage ECS geometry', () => {
   it('OpenSpec: Transform System / 在 Hierarchy 中组合局部矩阵', () => {
@@ -22,8 +22,9 @@ describe('Stage ECS geometry', () => {
     })
     const value = document([container, child], ['container'])
     expect(getEntityParentId(value, 'child')).toBe('container')
-    expect(getEntityWorldMatrix(value, 'child')).toMatchObject({ e: 110, f: 70 })
-    expect(getEntityWorldBounds(value, 'child')).toEqual({
+    const snapshot = layoutSnapshot(value)
+    expect(getEntityWorldMatrix(value, snapshot, 'child')).toMatchObject({ e: 110, f: 70 })
+    expect(getEntityWorldBounds(value, snapshot, 'child')).toEqual({
       x: 110,
       y: 70,
       width: 40,

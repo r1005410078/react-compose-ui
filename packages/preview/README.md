@@ -1,6 +1,6 @@
 # @compose-ui/preview
 
-独立的 `ComposeDocument v5` 预览入口。Preview 复用 `ComposeEntityRegistry` Renderer，并自行
+独立的 `ComposeDocument v6` 预览入口。Preview 复用 `ComposeEntityRegistry` Renderer，并自行
 建立普通 DOM Entity 树，不依赖 editor 或 stage。
 
 ```tsx
@@ -23,6 +23,8 @@ import { ComposePreview } from '@compose-ui/preview'
 target 可指向根级或嵌套的 `Hierarchy` Entity。一个 Entity 若同时拥有 `Renderer` 和
 `Hierarchy`，Preview 会先渲染自身内容，再渲染子项；`Clip.enabled` 决定容器溢出行为。
 
-Preview 使用与 Stage 相同的 `Transform`、`Appearance`、`Visibility` 与层级语义，不渲染网格、
+Preview 默认创建文档级 Layout Runtime，也允许宿主注入 `layoutSnapshot`。加载期间呈现
+`aria-busy`，失败时不回退旧 Transform。Preview 使用与 Stage 相同的 Snapshot、rotation、
+`Appearance`、`Visibility` 与层级语义，不渲染网格、
 标尺、选区或手柄。未知 Renderer 显示 Registry 的可访问占位；资源 Renderer 通过可选
 `assetResolver` 解析稳定引用。

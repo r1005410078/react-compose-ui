@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import {
   createDefaultCanvasSettings,
+  createDefaultComposeLayoutItem,
   createDefaultOutputSettings,
   createTransactionRuntime,
   type CommandHandler,
@@ -39,7 +40,7 @@ afterEach(cleanup)
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: createDefaultCanvasSettings(),
     output: createDefaultOutputSettings(),
     rootIds: ['container'],
@@ -50,14 +51,11 @@ function fixture(): ComposeDocument {
         components: {
           Composition: {
             presetId: 'container',
-            baseComponentKeys: ['Transform', 'Visibility', 'Lock', 'Hierarchy', 'Clip'],
+            baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Hierarchy', 'Clip'],
             capabilityIds: [],
           },
-          Transform: {
-            position: { x: 0, y: 0 },
-            size: { width: 1920, height: 1080 },
-            rotation: 0,
-          },
+          Transform: { rotation: 0 },
+          LayoutItem: createDefaultComposeLayoutItem(1920, 1080),
           Visibility: { visible: true },
           Lock: { locked: false },
           Hierarchy: { childIds: ['a'] },
@@ -70,14 +68,11 @@ function fixture(): ComposeDocument {
         components: {
           Composition: {
             presetId: 'text',
-            baseComponentKeys: ['Transform', 'Visibility', 'Lock', 'Renderer'],
+            baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Renderer'],
             capabilityIds: [],
           },
-          Transform: {
-            position: { x: 10, y: 20 },
-            size: { width: 100, height: 50 },
-            rotation: 0,
-          },
+          Transform: { rotation: 0 },
+          LayoutItem: createDefaultComposeLayoutItem(100, 50, { x: 10, y: 20 }),
           Visibility: { visible: true },
           Lock: { locked: false },
           Renderer: { type: 'text', props: { text: 'A' } },

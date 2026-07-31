@@ -3,7 +3,7 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [
-    ["@compose-ui/core", "@compose-ui/editor", "@compose-ui/preview"]
+    ["@compose-ui/core", "@compose-ui/layout-engine", "@compose-ui/editor", "@compose-ui/preview"]
   ],
   "linked": [],
   "access": "public",

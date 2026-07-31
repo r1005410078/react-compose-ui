@@ -6,6 +6,7 @@ import type {
 import {
   COMPOSE_PAGE_MEDIA_TYPE,
   COMPOSE_PAGE_NEST_DEPTH_LIMIT,
+  createDefaultComposeLayoutItem,
   createEmptyComposePageDocument,
   serializeComposePageDocument,
 } from '@compose-ui/core'
@@ -27,7 +28,8 @@ function entity(id: string, components: Record<string, unknown>) {
     name: id,
     components: {
       Composition: { presetId: null, baseComponentKeys: [], capabilityIds: [] },
-      Transform: { position: { x: 0, y: 0 }, size: { width: 100, height: 80 }, rotation: 0 },
+      Transform: { rotation: 0 },
+      LayoutItem: createDefaultComposeLayoutItem(100, 80),
       Visibility: { visible: true },
       Lock: { locked: false },
       ...components,
@@ -236,8 +238,11 @@ describe('OpenSpec: basic-materials / 页面拖入画布创建 Page Slot', () =>
       assetKey: 'Pages/Home.page.json',
       scope: 'persistent',
     })
-    const transform = seed?.components.Transform as { size: { width: number; height: number } }
-    expect(transform.size).toEqual({
+    const layoutItem = seed?.components.LayoutItem as {
+      width: { value: number }
+      height: { value: number }
+    }
+    expect({ width: layoutItem.width.value, height: layoutItem.height.value }).toEqual({
       width: nested.output.width,
       height: nested.output.height,
     })
@@ -254,9 +259,12 @@ describe('OpenSpec: basic-materials / 页面拖入画布创建 Page Slot', () =>
       name: 'Broken.page.json',
     })
 
-    const transform = seed?.components.Transform as { size: { width: number; height: number } }
-    expect(transform.size.width).toBeGreaterThan(0)
-    expect(transform.size.height).toBeGreaterThan(0)
+    const layoutItem = seed?.components.LayoutItem as {
+      width: { value: number }
+      height: { value: number }
+    }
+    expect(layoutItem.width.value).toBeGreaterThan(0)
+    expect(layoutItem.height.value).toBeGreaterThan(0)
   })
 })
 

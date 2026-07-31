@@ -331,7 +331,7 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
       }))
     })
     const session = lastSession(onActiveSessionChange)
-    expect(session?.runtime.document.schemaVersion).toBe(5)
+    expect(session?.runtime.document.schemaVersion).toBe(6)
   })
 })
 

@@ -3,7 +3,7 @@ import { validateComposeDocument } from './document'
 
 function rectangleDocument() {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: {
       grid: {
         stepX: 8,
@@ -27,6 +27,7 @@ function rectangleDocument() {
             presetId: 'rectangle',
             baseComponentKeys: [
               'Transform',
+              'LayoutItem',
               'Visibility',
               'Lock',
               'Appearance',
@@ -35,9 +36,15 @@ function rectangleDocument() {
             capabilityIds: [],
           },
           Transform: {
-            position: { x: 100, y: 80 },
-            size: { width: 320, height: 180 },
             rotation: 0,
+          },
+          LayoutItem: {
+            positioning: 'absolute',
+            offset: { x: 100, y: 80 },
+            width: { mode: 'fixed', value: 320, min: 1, max: null },
+            height: { mode: 'fixed', value: 180, min: 1, max: null },
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            alignSelf: 'auto',
           },
           Visibility: { visible: true },
           Lock: { locked: false },
@@ -50,11 +57,11 @@ function rectangleDocument() {
   }
 }
 
-describe('ComposeDocument v5 ECS', () => {
-  it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v5 并拒绝 v4', () => {
+describe('ComposeDocument v6 ECS', () => {
+  it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v6 并拒绝 v5', () => {
     expect(validateComposeDocument(rectangleDocument()).valid).toBe(true)
     expect(validateComposeDocument({
-      schemaVersion: 4,
+      schemaVersion: 5,
       canvas: rectangleDocument().canvas,
       output: rectangleDocument().output,
       rootIds: [],

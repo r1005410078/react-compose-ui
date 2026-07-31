@@ -2,7 +2,9 @@ import { Component, type ReactNode } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
   getComposeRenderer,
+  type ComposeDocument,
   type ComposeEntity,
+  type ComposeLayoutSnapshot,
   type EditorCommand,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '../registry/types'
@@ -109,6 +111,8 @@ export function ComposeRegistryComponentInspector({
   entity,
   componentKey,
   dispatch,
+  document,
+  layoutSnapshot,
   nodeEditPort,
   paintEditPort,
   readOnly,
@@ -117,6 +121,8 @@ export function ComposeRegistryComponentInspector({
   readonly entity: ComposeEntity
   readonly componentKey: string
   readonly dispatch: (command: EditorCommand) => unknown
+  readonly document?: ComposeDocument
+  readonly layoutSnapshot?: ComposeLayoutSnapshot
   readonly readOnly: boolean
   readonly nodeEditPort?: ComposeNodeEditPort
   readonly paintEditPort?: ComposePaintEditPort
@@ -139,7 +145,9 @@ export function ComposeRegistryComponentInspector({
       <Inspector
         componentKey={componentKey}
         dispatch={dispatch}
+        document={document}
         entity={entity}
+        layoutSnapshot={layoutSnapshot}
         readOnly={readOnly}
         nodeEditPort={nodeEditPort}
         paintEditPort={paintEditPort}
@@ -155,6 +163,8 @@ export function ComposeRegistryComponentInspectorHeaderActions({
   entity,
   componentKey,
   dispatch,
+  document,
+  layoutSnapshot,
   nodeEditPort,
   paintEditPort,
   readOnly,
@@ -163,6 +173,8 @@ export function ComposeRegistryComponentInspectorHeaderActions({
   readonly entity: ComposeEntity
   readonly componentKey: string
   readonly dispatch: (command: EditorCommand) => unknown
+  readonly document?: ComposeDocument
+  readonly layoutSnapshot?: ComposeLayoutSnapshot
   readonly readOnly: boolean
   readonly nodeEditPort?: ComposeNodeEditPort
   readonly paintEditPort?: ComposePaintEditPort
@@ -180,7 +192,9 @@ export function ComposeRegistryComponentInspectorHeaderActions({
       <HeaderActions
         componentKey={componentKey}
         dispatch={dispatch}
+        document={document}
         entity={entity}
+        layoutSnapshot={layoutSnapshot}
         readOnly={readOnly}
         nodeEditPort={nodeEditPort}
         paintEditPort={paintEditPort}
@@ -195,6 +209,8 @@ export function ComposeRegistryRendererInspector({
   registry,
   entity,
   dispatch,
+  document,
+  layoutSnapshot,
   nodeEditPort,
   paintEditPort,
   readOnly,
@@ -202,6 +218,8 @@ export function ComposeRegistryRendererInspector({
   readonly registry: ComposeEntityRegistry
   readonly entity: ComposeEntity
   readonly dispatch: (command: EditorCommand) => unknown
+  readonly document?: ComposeDocument
+  readonly layoutSnapshot?: ComposeLayoutSnapshot
   readonly readOnly: boolean
   readonly nodeEditPort?: ComposeNodeEditPort
   readonly paintEditPort?: ComposePaintEditPort
@@ -226,7 +244,9 @@ export function ComposeRegistryRendererInspector({
     >
       <Inspector
         dispatch={dispatch}
+        document={document}
         entity={entity}
+        layoutSnapshot={layoutSnapshot}
         readOnly={readOnly}
         nodeEditPort={nodeEditPort}
         paintEditPort={paintEditPort}

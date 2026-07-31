@@ -6,9 +6,12 @@ import {
 import {
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
+  getComposeLayoutItem,
+  getComposeSpatialTransform,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposeTransform,
+  type ComposeLayoutSnapshot,
+  type ComposeSpatialTransform,
   type EditorCommand,
   type JsonValue,
 } from '@compose-ui/core'
@@ -32,6 +35,8 @@ const NESTED_CONTAINER_SIZE = { width: 320, height: 180 } as const
 export interface SceneOperationContext {
   /** 规划开始时的完整文档快照。 */
   readonly document: ComposeDocument
+  /** 跨父级操作冻结使用的布局结果；加载期间为 null。 */
+  readonly layoutSnapshot: ComposeLayoutSnapshot | null
   /** 提供 Entity Preset 的实例级注册表。 */
   readonly registry: ComposeEntityRegistry
   /** 创建容器使用的 Entity Preset ID。 */
@@ -108,14 +113,26 @@ export function describeEntityTargets(
 function entityFromSeed(
   id: string,
   seed: ComposeEntitySeed,
-  transform: ComposeTransform,
+  transform: ComposeSpatialTransform,
 ): ComposeEntity {
   return {
     id,
     name: seed.name,
     components: {
       ...seed.components,
-      Transform: transform,
+      Transform: { rotation: transform.rotation },
+      LayoutItem: {
+        ...getComposeLayoutItem({ id: '__seed__', ...seed }),
+        offset: transform.position,
+        width: {
+          ...getComposeLayoutItem({ id: '__seed__', ...seed }).width,
+          value: transform.size.width,
+        },
+        height: {
+          ...getComposeLayoutItem({ id: '__seed__', ...seed }).height,
+          value: transform.size.height,
+        },
+      },
     },
   }
 }
@@ -133,10 +150,10 @@ function planCreate(
   }
   const isRoot = operation.parentId === null
   const entityId = context.nextId()
-  const initial = created.seed.components.Transform as ComposeTransform
+  const initial = getComposeSpatialTransform({ id: '__seed__', ...created.seed })
   // 根级新建沿对角线依次错开，避免多个容器完全重叠；子级从父容器原点开始。
   const rootOffset = 80 + context.document.rootIds.length * 40
-  const transform: ComposeTransform = {
+  const transform: ComposeSpatialTransform = {
     ...initial,
     position: isRoot ? { x: rootOffset, y: rootOffset } : { x: 0, y: 0 },
     size: isRoot ? initial.size : { ...NESTED_CONTAINER_SIZE },
@@ -223,8 +240,12 @@ function planMove(
     (id) => getEntityParentId(context.document, id) !== operation.parentId,
   )
   if (crossesParent) {
+    if (!context.layoutSnapshot) {
+      return { status: 'unavailable', reason: '自动布局仍在加载，暂时不能跨容器移动' }
+    }
     return planned(createReparentCommand(
       context.document,
+      context.layoutSnapshot,
       operation.nodeIds,
       operation.parentId,
       operation.index,

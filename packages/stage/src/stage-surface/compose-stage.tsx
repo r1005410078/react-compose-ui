@@ -46,11 +46,13 @@ import {
   describeComposePaint,
   getComposeHierarchy,
   getComposeLock,
-  getComposeTransform,
+  getComposeLayoutItem,
+  getComposeSpatialTransform,
   getComposeVisibility,
-  resolveComposeTransformConstraints,
+  resolveComposeGeometryConstraints,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeLayoutSnapshot,
   type ComposePaint,
   type EditorCommand,
   type JsonValue,
@@ -324,7 +326,13 @@ function transformDocument(document: ComposeDocument, transforms: TransformMap):
         ...entity,
         components: {
           ...entity.components,
-          Transform: toComposeTransform(transform),
+          Transform: { rotation: transform.rotation },
+          LayoutItem: {
+            ...getComposeLayoutItem(entity),
+            offset: { x: transform.x, y: transform.y },
+            width: { ...getComposeLayoutItem(entity).width, value: transform.width },
+            height: { ...getComposeLayoutItem(entity).height, value: transform.height },
+          },
         },
       }
     }
@@ -332,8 +340,29 @@ function transformDocument(document: ComposeDocument, transforms: TransformMap):
   return { ...document, entities }
 }
 
+function transformLayoutSnapshot(
+  snapshot: ComposeLayoutSnapshot,
+  transforms: TransformMap,
+): ComposeLayoutSnapshot {
+  if (Object.keys(transforms).length === 0) return snapshot
+  const boxes = { ...snapshot.boxes }
+  Object.entries(transforms).forEach(([entityId, transform]) => {
+    const box = boxes[entityId]
+    if (!box) return
+    boxes[entityId] = {
+      ...box,
+      x: transform.x,
+      y: transform.y,
+      width: transform.width,
+      height: transform.height,
+    }
+  })
+  return { ...snapshot, boxes }
+}
+
 function bootstrapSelectionBounds(
   document: ComposeDocument,
+  layoutSnapshot: ComposeLayoutSnapshot,
   ids: readonly string[],
 ) {
   return unionRects(ids
@@ -341,7 +370,7 @@ function bootstrapSelectionBounds(
       const entity = document.entities[id]
       return entity ? getComposeVisibility(entity).visible : false
     })
-    .map((id) => getEntityWorldBounds(document, id)))
+    .map((id) => getEntityWorldBounds(document, layoutSnapshot, id)))
 }
 
 interface ResolvedAssetSeed {
@@ -382,7 +411,7 @@ function assetSeedCenters(
   let previousRowHeight = 0
   rows.forEach((row, rowIndex) => {
     const rowHeight = Math.max(...row.map(({ seed }) =>
-      getComposeTransform({ id: '__seed__', ...seed }).size.height))
+      getComposeSpatialTransform({ id: '__seed__', ...seed }).size.height))
     if (rowIndex > 0) {
       rowCenterY += previousRowHeight / 2 + gap + rowHeight / 2
     }
@@ -392,10 +421,10 @@ function assetSeedCenters(
       if (columnIndex > 0) {
         centerX += previousWidth / 2
           + gap
-          + getComposeTransform({ id: '__seed__', ...seed }).size.width / 2
+          + getComposeSpatialTransform({ id: '__seed__', ...seed }).size.width / 2
       }
       points.push({ x: centerX, y: rowCenterY })
-      previousWidth = getComposeTransform({ id: '__seed__', ...seed }).size.width
+      previousWidth = getComposeSpatialTransform({ id: '__seed__', ...seed }).size.width
     })
     previousRowHeight = rowHeight
   })
@@ -407,15 +436,16 @@ function entityFromSeed(
   id: string,
   center: StagePoint,
 ): ComposeEntity {
-  const transform = getComposeTransform({ id: '__seed__', ...seed })
+  const transform = getComposeSpatialTransform({ id: '__seed__', ...seed })
   return {
     id,
     name: seed.name,
     components: {
       ...structuredClone(seed.components),
-      Transform: {
-        ...transform,
-        position: {
+      Transform: { rotation: transform.rotation },
+      LayoutItem: {
+        ...getComposeLayoutItem({ id: '__seed__', ...seed }),
+        offset: {
           x: center.x - transform.size.width / 2,
           y: center.y - transform.size.height / 2,
         },
@@ -503,13 +533,30 @@ function isStageShortcutMatch(
     && event.altKey === Boolean(binding.alt)
 }
 
-/**
- * 渲染受控 DOM/SVG 无限 Stage。
- *
- * @public
- */
-export function ComposeStage({
+/** 渲染受控 DOM/SVG 无限 Stage，并显式呈现 Layout Runtime 加载或失败状态。 @public */
+export function ComposeStage(props: ComposeStageProps) {
+  if (!props.layoutSnapshot) {
+    return (
+      <div
+        aria-busy={props.layoutError ? undefined : true}
+        className={props.className}
+        data-compose-ui="stage"
+        role={props.layoutError ? 'alert' : 'status'}
+      >
+        {props.layoutError ?? '正在加载自动布局引擎…'}
+      </div>
+    )
+  }
+  return <ComposeStageReady {...props} layoutSnapshot={props.layoutSnapshot} />
+}
+
+type ComposeStageReadyProps = ComposeStageProps & {
+  readonly layoutSnapshot: ComposeLayoutSnapshot
+}
+
+function ComposeStageReady({
   document,
+  layoutSnapshot,
   registry,
   assetResolver,
   pageLoader,
@@ -540,7 +587,7 @@ export function ComposeStage({
   onLostPointerCapture,
   onWheel,
   ...props
-}: ComposeStageProps) {
+}: ComposeStageReadyProps) {
   const i18n = useComposeI18nContext()
   const theme = useComposeThemeContext()
   const resolvedLocale = i18n?.locale ?? 'zh-CN'
@@ -589,13 +636,17 @@ export function ComposeStage({
     () => transformDocument(document, previewTransforms),
     [document, previewTransforms],
   )
+  const previewLayoutSnapshot = useMemo(
+    () => transformLayoutSnapshot(layoutSnapshot, previewTransforms),
+    [layoutSnapshot, previewTransforms],
+  )
   const normalizedSelection = useMemo(
     () => selectedIds.filter((id) => Boolean(document.entities[id])),
     [document, selectedIds],
   )
   // 首帧可能先于 effect 中的 context 注入；之后（含 gesture preview）以 engine snapshot 为准。
   const bounds = interaction.selectionBounds
-    ?? bootstrapSelectionBounds(previewDocument, normalizedSelection)
+    ?? bootstrapSelectionBounds(previewDocument, previewLayoutSnapshot, normalizedSelection)
   const editableSelection = normalizedSelection.length > 0
     && normalizedSelection.every((id) => {
       const entity = document.entities[id]
@@ -605,7 +656,7 @@ export function ComposeStage({
     })
   const selectionConstraints = normalizedSelection.flatMap((id) => {
     const entity = document.entities[id]
-    return entity ? [resolveComposeTransformConstraints(entity)] : []
+    return entity ? [resolveComposeGeometryConstraints(entity)] : []
   })
   const allResizeHandles = [
     'n',
@@ -642,6 +693,7 @@ export function ComposeStage({
     && Boolean(getComposeHierarchy(document.entities[contextEditableIds[0]!]!)?.childIds.length)
   const latestRef = useRef({
     document,
+    layoutSnapshot,
     registry,
     assetResolver,
     dispatch,
@@ -655,6 +707,7 @@ export function ComposeStage({
   useLayoutEffect(() => {
     latestRef.current = {
       document,
+      layoutSnapshot,
       registry,
       assetResolver,
       dispatch,
@@ -996,7 +1049,11 @@ export function ComposeStage({
         ? target
         : undefined
       const inverseParent = parent
-        ? invertMatrix(getEntityWorldMatrix(current.document, parent.id))
+        ? invertMatrix(getEntityWorldMatrix(
+            current.document,
+            current.layoutSnapshot,
+            parent.id,
+          ))
         : null
       const offsets = assetSeedCenters(successful)
       const entities = successful.map(({ seed }, index): ComposeEntity => {
@@ -1118,7 +1175,11 @@ export function ComposeStage({
           : undefined
         const localCenter = validParent
           ? applyMatrix(
-              invertMatrix(getEntityWorldMatrix(current.document, validParent.id)),
+              invertMatrix(getEntityWorldMatrix(
+                current.document,
+                current.layoutSnapshot,
+                validParent.id,
+              )),
               effect.worldPoint,
             )
           : effect.worldPoint
@@ -1146,6 +1207,7 @@ export function ComposeStage({
   useLayoutEffect(() => {
     controller.updateContext({
       document,
+      layoutSnapshot,
       viewport,
       surfaceSize,
       tool,
@@ -1163,6 +1225,7 @@ export function ComposeStage({
   }, [
     controller,
     document,
+    layoutSnapshot,
     idFactory,
     messages.createGuide,
     messages.createGuides,
@@ -1322,7 +1385,11 @@ export function ComposeStage({
     },
     ...Object.values(previewDocument.entities)
       .filter((entity) => getComposeVisibility(entity).visible)
-      .map((entity) => getEntityWorldBounds(previewDocument, entity.id)),
+      .map((entity) => getEntityWorldBounds(
+        previewDocument,
+        previewLayoutSnapshot,
+        entity.id,
+      )),
   ])
   const activeScrollRange = interaction.scrollRange
     ?? expandScrollRange(null, bootstrapContentBounds, visibleWorld)
@@ -1375,7 +1442,7 @@ export function ComposeStage({
       return
     }
     if (actionMatches('stage.fitContainer')) {
-      const index = createStageSceneIndex(document)
+      const index = createStageSceneIndex(document, layoutSnapshot)
       const selectedContainerId = normalizedSelection.length === 1
         && getComposeHierarchy(document.entities[normalizedSelection[0]!]!)
         ? normalizedSelection[0]!
@@ -1385,7 +1452,7 @@ export function ComposeStage({
         : undefined
       fitViewport(
         container && getComposeHierarchy(container)
-          ? getEntityWorldBounds(document, container.id)
+          ? getEntityWorldBounds(document, layoutSnapshot, container.id)
           : null,
       )
       event.preventDefault()
@@ -1470,14 +1537,25 @@ export function ComposeStage({
       if (actionMatches('edit.ungroup') && editableIds.length === 1) {
         const container = document.entities[editableIds[0]!]
         const hierarchy = container && getComposeHierarchy(container)
-        const result = dispatch(createUngroupCommand(document, editableIds[0]!, idFactory()))
+        const result = dispatch(createUngroupCommand(
+          document,
+          layoutSnapshot,
+          editableIds[0]!,
+          idFactory(),
+        ))
         if (result.status === 'committed' && hierarchy) {
           onSelectedIdsChange(hierarchy.childIds)
         }
       }
       else {
         const groupId = idFactory()
-        const result = dispatch(createGroupCommand(document, editableIds, groupId, idFactory()))
+        const result = dispatch(createGroupCommand(
+          document,
+          layoutSnapshot,
+          editableIds,
+          groupId,
+          idFactory(),
+        ))
         if (result.status === 'committed') onSelectedIdsChange([groupId])
       }
       event.preventDefault()
@@ -1506,12 +1584,12 @@ export function ComposeStage({
     const direction = directions[event.key]
     if (direction) {
       const movableIds = editableIds.filter((id) =>
-        resolveComposeTransformConstraints(document.entities[id]!).movable)
+        resolveComposeGeometryConstraints(document.entities[id]!).movable)
       if (movableIds.length === 0) return
       const distance = event.shiftKey ? 10 : 1
       const stageUpdates = movableIds.map((entityId) => {
         const entity = document.entities[entityId]!
-        const transform = toStageTransform(getComposeTransform(entity))
+        const transform = toStageTransform(getComposeSpatialTransform(entity))
         return {
           entityId,
           transform: {
@@ -1769,6 +1847,7 @@ export function ComposeStage({
         <StageSceneLayer
           assetResolver={assetResolver}
           document={previewDocument}
+          layoutSnapshot={previewLayoutSnapshot}
           pageLoader={pageLoader}
           paintPreview={interaction.paintPreview}
           registry={registry}
@@ -1828,7 +1907,13 @@ export function ComposeStage({
             }}>创建副本{contextMenuShortcut('edit.duplicate')}</ComposeContextMenuItem>
             <ComposeContextMenuItem disabled={!canGroup} onClick={() => {
               const groupId = idFactory()
-              if (dispatch(createGroupCommand(document, contextEditableIds, groupId, idFactory())).status === 'committed') onSelectedIdsChange([groupId])
+              if (dispatch(createGroupCommand(
+                document,
+                layoutSnapshot,
+                contextEditableIds,
+                groupId,
+                idFactory(),
+              )).status === 'committed') onSelectedIdsChange([groupId])
             }}>编组{contextMenuShortcut('edit.group')}</ComposeContextMenuItem>
             <ComposeContextMenuItem disabled={!canUngroup} onClick={() => {
               const container = document.entities[contextEditableIds[0]!]
@@ -1836,6 +1921,7 @@ export function ComposeStage({
               if (
                 dispatch(createUngroupCommand(
                   document,
+                  layoutSnapshot,
                   contextEditableIds[0]!,
                   idFactory(),
                 )).status === 'committed'

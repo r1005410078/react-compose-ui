@@ -13,6 +13,7 @@ import {
   type ComposeDocument,
   type ComposeEntity,
   type ComposePaint,
+  type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { StageViewport } from '@compose-ui/stage-engine'
@@ -20,6 +21,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 
 interface StageSceneLayerProps {
   readonly document: ComposeDocument
+  readonly layoutSnapshot: ComposeLayoutSnapshot
   readonly registry: ComposeEntityRegistry
   readonly assetResolver?: ComposeAssetResolver
   /** 页面型物料使用的文档加载端口；类型来自 core，Stage 不实现加载。 */
@@ -35,6 +37,7 @@ interface StageSceneLayerProps {
 /** 只负责把 preview document 映射成可交互 DOM Scene。 */
 export function StageSceneLayer({
   document,
+  layoutSnapshot,
   registry,
   assetResolver,
   pageLoader,
@@ -46,6 +49,8 @@ export function StageSceneLayer({
     const entity = document.entities[entityId]
     if (!entity || !getComposeVisibility(entity).visible) return null
     const hierarchy = getComposeHierarchy(entity)
+    const box = layoutSnapshot.boxes[entityId]
+    if (!box) return null
     const locked = getComposeLock(entity).locked
     return (
       <div
@@ -55,7 +60,7 @@ export function StageSceneLayer({
         data-entity-id={entity.id}
         data-testid={hierarchy ? 'stage-container' : `stage-entity-${entity.id}`}
         key={entity.id}
-        style={composeEntitySceneStyle(entity)}
+        style={composeEntitySceneStyle(entity, box)}
         onPointerDown={(event) => onEntityPointerDown(entity, event)}
       >
         <ComposeEntityPaintLayer

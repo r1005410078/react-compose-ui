@@ -17,6 +17,7 @@ import {
   getComposeRenderer,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeLayoutSnapshot,
   type EditorCommand,
   type JsonObject,
 } from '@compose-ui/core'
@@ -30,6 +31,7 @@ import { useComposeI18nContext } from '@compose-ui/ui-context'
 interface EntityInspectorProps {
   readonly document: ComposeDocument
   readonly entity: ComposeEntity
+  readonly layoutSnapshot?: ComposeLayoutSnapshot
   readonly registry: ComposeEntityRegistry
   readonly dispatch: (command: EditorCommand) => unknown
   readonly idFactory: () => string
@@ -125,6 +127,7 @@ function UnknownInspector({
 export function EntityInspector({
   document,
   entity,
+  layoutSnapshot,
   registry,
   dispatch,
   idFactory,
@@ -241,7 +244,9 @@ export function EntityInspector({
                 <ComposeRegistryComponentInspectorHeaderActions
                   componentKey={definition.key}
                   dispatch={dispatch}
+                  document={document}
                   entity={entity}
+                  layoutSnapshot={layoutSnapshot}
                   readOnly={locked}
                   nodeEditPort={nodeEditPort}
                   paintEditPort={paintEditPort}
@@ -254,7 +259,9 @@ export function EntityInspector({
               <ComposeRegistryComponentInspector
                 componentKey={definition.key}
                 dispatch={dispatch}
+                document={document}
                 entity={entity}
+                layoutSnapshot={layoutSnapshot}
                 readOnly={locked}
                 nodeEditPort={nodeEditPort}
                 paintEditPort={paintEditPort}
@@ -281,7 +288,9 @@ export function EntityInspector({
             {rendererDefinition ? (
               <ComposeRegistryRendererInspector
                 dispatch={dispatch}
+                document={document}
                 entity={entity}
+                layoutSnapshot={layoutSnapshot}
                 readOnly={locked}
                 nodeEditPort={nodeEditPort}
                 paintEditPort={paintEditPort}

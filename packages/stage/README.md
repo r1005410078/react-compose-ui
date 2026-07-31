@@ -2,7 +2,7 @@
 
 DOM Scene Layer 与屏幕坐标 Overlay 组合的无限编辑 Stage。
 
-Stage 只消费 `ComposeDocument v5` 与 `ComposeEntityRegistry`。Scene 渲染查询拥有 `Transform`
+Stage 消费 `ComposeDocument v6`、正式 `ComposeLayoutSnapshot` 与 `ComposeEntityRegistry`。Scene 渲染查询拥有 `LayoutItem + Transform`
 且包含 `Renderer` 或 `Hierarchy` 的 Entity；同一 Entity 可以先渲染 Renderer 内容，再渲染
 Hierarchy 子项。`Appearance`、`Clip`、`Visibility` 与 `Lock` 分别由对应查询处理。
 
@@ -20,6 +20,7 @@ const interactionController = createStageInteractionController()
   />
   <ComposeStage
     document={runtime.document}
+    layoutSnapshot={layoutSnapshot}
     registry={registry}
     assetResolver={assetResolver}
     dispatch={runtime.dispatch}
@@ -41,7 +42,10 @@ const interactionController = createStageInteractionController()
 Asset Browser 与 Stage 通过同一实例级 `StageInteractionController` 共享拖入会话；Stage 根据
 目标 Entity 是否拥有 `Hierarchy` 选择最深合法父级。
 
-Move/Resize/Rotate 查询 `Transform + Visibility + Lock + TransformConstraints`。缺少约束时保持
+Layout Runtime 加载期间 Stage 呈现 `aria-busy` 并禁用编辑，失败时显示明确错误。Scene DOM 始终
+按 Snapshot box 绝对定位；rotation 只进入最终 world matrix/AABB。
+
+Move/Resize/Rotate 查询 `LayoutItem + Transform + Visibility + Lock + GeometryConstraints`。缺少约束时保持
 全部可编辑，最小尺寸为 `1×1`；约束可分别禁止移动、旋转，或将 Resize 限制为：
 
 - `free`：八向手柄。

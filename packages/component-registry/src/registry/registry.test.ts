@@ -13,9 +13,16 @@ import type {
 } from './types'
 
 const transform = {
-  position: { x: 0, y: 0 },
-  size: { width: 100, height: 50 },
   rotation: 0,
+}
+
+const layoutItem = {
+  positioning: 'absolute',
+  offset: { x: 0, y: 0 },
+  width: { mode: 'fixed', value: 100, min: 1, max: null },
+  height: { mode: 'fixed', value: 50, min: 1, max: null },
+  margin: { top: 0, right: 0, bottom: 0, left: 0 },
+  alignSelf: 'auto',
 }
 
 function component(key: string): ComposeComponentDefinition {
@@ -23,13 +30,11 @@ function component(key: string): ComposeComponentDefinition {
     key,
     label: key,
     createDefault: (): JsonObject => {
-      if (key === 'TransformConstraints') {
+      if (key === 'GeometryConstraints') {
         return {
           movable: true,
           resize: 'free',
           rotatable: true,
-          minSize: { width: 1, height: 1 },
-          maxSize: null,
         }
       }
       return {}
@@ -43,6 +48,7 @@ function preset(id = 'rectangle'): ComposeEntityPreset {
     label: '矩形',
     createComponents: () => ({
       Transform: transform,
+      LayoutItem: layoutItem,
       Visibility: { visible: true },
       Lock: { locked: false },
       Appearance: { backgroundPaint: { kind: 'solid', color: '#2463eb' } },
@@ -73,7 +79,7 @@ function capability(
 
 function document(entity: ComposeEntity): ComposeDocument {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: {
       grid: {
         stepX: 8,
@@ -110,7 +116,14 @@ describe('ComposeEntityRegistry', () => {
     if (!first.ok || !second.ok) return
     expect(first.seed.components.Composition).toEqual({
       presetId: 'rectangle',
-      baseComponentKeys: ['Transform', 'Visibility', 'Lock', 'Appearance', 'Renderer'],
+      baseComponentKeys: [
+        'Transform',
+        'LayoutItem',
+        'Visibility',
+        'Lock',
+        'Appearance',
+        'Renderer',
+      ],
       capabilityIds: [],
     })
     expect(first.seed.components).not.toBe(second.seed.components)

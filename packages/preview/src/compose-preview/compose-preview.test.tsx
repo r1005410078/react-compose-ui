@@ -4,10 +4,12 @@ import {
   createDefaultOutputSettings,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ComposePreview } from '../index'
+import type { ComponentProps } from 'react'
+import { ComposePreview as ComposePreviewBase } from '../index'
 
 afterEach(cleanup)
 
@@ -16,6 +18,13 @@ function entity(
   components: ComposeEntity['components'],
   name = id,
 ): ComposeEntity {
+  const sourceTransform = components.Transform as {
+    position?: { x: number; y: number }
+    size?: { width: number; height: number }
+    rotation?: number
+  } | undefined
+  const position = sourceTransform?.position ?? { x: 0, y: 0 }
+  const size = sourceTransform?.size ?? { width: 100, height: 100 }
   return {
     id,
     name,
@@ -25,14 +34,18 @@ function entity(
         baseComponentKeys: Object.keys(components),
         capabilityIds: [],
       },
-      Transform: {
-        position: { x: 0, y: 0 },
-        size: { width: 100, height: 100 },
-        rotation: 0,
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: position,
+        width: { mode: 'fixed', value: size.width, min: 1, max: null },
+        height: { mode: 'fixed', value: size.height, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
       },
       Visibility: { visible: true },
       Lock: { locked: false },
       ...components,
+      Transform: { rotation: sourceTransform?.rotation ?? 0 },
     },
   }
 }
@@ -108,7 +121,7 @@ function document(): ComposeDocument {
     }, 'Mobile Text'),
   }
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: createDefaultCanvasSettings(),
     output: {
       ...createDefaultOutputSettings(),
@@ -119,6 +132,32 @@ function document(): ComposeDocument {
     rootIds: ['desktop', 'mobile'],
     entities,
   }
+}
+
+function snapshot(value: ComposeDocument): ComposeLayoutSnapshot {
+  return {
+    revision: 1,
+    boxes: Object.fromEntries(Object.values(value.entities).map((item) => {
+      const layoutItem = item.components.LayoutItem as unknown as {
+        positioning: 'absolute' | 'flow'
+        offset: { x: number; y: number }
+        width: { value: number }
+        height: { value: number }
+      }
+      return [item.id, {
+        x: layoutItem.offset.x,
+        y: layoutItem.offset.y,
+        width: layoutItem.width.value,
+        height: layoutItem.height.value,
+        positioning: layoutItem.positioning,
+      }]
+    })),
+    diagnostics: [],
+  }
+}
+
+function ComposePreview(props: ComponentProps<typeof ComposePreviewBase>) {
+  return <ComposePreviewBase {...props} layoutSnapshot={snapshot(props.document)} />
 }
 
 function registry() {
@@ -245,7 +284,9 @@ describe('ComposePreview', () => {
               alignContent: 'center',
               justifyContent: 'space-between',
               alignItems: 'flex-end',
-              gap: 24,
+              padding: { top: 0, right: 0, bottom: 0, left: 0 },
+              rowGap: 24,
+              columnGap: 24,
             },
           },
         },

@@ -12,14 +12,15 @@ import {
 
 const viewport: StageViewport = { x: 0, y: 0, zoom: 1 }
 const controller = createStageInteractionController()
-const index = createStageSceneIndex(document)
+const index = createStageSceneIndex(document, layoutSnapshot)
 ```
 
-SceneIndex 从 `Transform`、`Hierarchy`、`Visibility`、`Lock` 和 `Clip` 派生世界几何、父级、
+SceneIndex 从正式 `ComposeLayoutSnapshot`、Transform rotation、`Hierarchy`、`Visibility`、`Lock`
+和 `Clip` 派生世界几何、父级、
 裁剪命中与选择边界，不读取 Registry。外部拖入查找最深的 `Hierarchy` Entity，未命中时返回
 `parentId: null`。Container Resize 只修改自身 Transform，后代局部 Transform 不变。
 
-Move/Resize/Rotate 的命令规划会查询 `TransformConstraints`，并生成带对应操作语义的
+Move/Resize/Rotate 的命令规划会查询 `GeometryConstraints`，并生成带对应操作语义的
 `entity.transform.set`。多选、吸附、group/ungroup、reparent 和 duplicate 继续保持单事务与
 可逆 Patch 边界。
 

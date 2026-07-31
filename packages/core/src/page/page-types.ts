@@ -2,7 +2,7 @@
  * 页面文件约定、应用清单与页面引用的公共协议。
  *
  * @remarks
- * 页面就是一份未经扩展的 `ComposeDocument v5`，以名称后缀区分，因此本模块不改变
+ * 页面就是一份未经扩展的 `ComposeDocument v6`，以名称后缀区分，因此本模块不改变
  * `ComposeDocument` 的形状，也不引入多文档协议。
  *
  * @packageDocumentation

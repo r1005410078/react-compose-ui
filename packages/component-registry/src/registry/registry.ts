@@ -168,7 +168,7 @@ function validatePresetSeed(preset: ComposeEntityPreset, components: Record<stri
     },
   }
   const result = validateComposeDocument({
-    schemaVersion: 5,
+    schemaVersion: 6,
     canvas: {
       grid: {
         stepX: 8,
