@@ -1,9 +1,13 @@
 import {
   BUILTIN_COMMAND_TYPES,
   getComposeHierarchy,
+  getComposeLayout,
+  getComposeLayoutItem,
   getComposeSpatialTransform,
+  resolveComposeAppearance,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeLayoutItem,
   type ComposeLayoutSnapshot,
   type ComposeSpatialTransform,
   type EditorCommand,
@@ -23,6 +27,49 @@ import {
   type StageTransform,
 } from './geometry'
 import { describeEntityTargets } from './transaction-labels'
+
+/** 结构命令的稳定可用性结果。 @public */
+export type ComposeStructureCommandAvailability =
+  | { readonly available: true }
+  | { readonly available: false; readonly reason: string }
+
+const FLOW_GROUP_REASON = '自动布局 Flow 子项不能参与 Group；请先转为 Absolute'
+const FLOW_UNGROUP_REASON = '自动布局 Flow 子项不能参与 Ungroup；请先转为 Absolute'
+
+/** 判断当前选择是否允许 Group。 @public */
+export function getGroupCommandAvailability(
+  document: ComposeDocument,
+  entityIds: readonly string[],
+): ComposeStructureCommandAvailability {
+  return entityIds.some((id) => {
+    const entity = document.entities[id]
+    return entity && getComposeLayoutItem(entity).positioning === 'flow'
+  })
+    ? { available: false, reason: FLOW_GROUP_REASON }
+    : { available: true }
+}
+
+/** 判断 Container 及其直接子项是否允许 Ungroup。 @public */
+export function getUngroupCommandAvailability(
+  document: ComposeDocument,
+  containerId: string,
+): ComposeStructureCommandAvailability {
+  const container = document.entities[containerId]
+  const hierarchy = container && getComposeHierarchy(container)
+  const containsFlow = Boolean(
+    container
+    && (
+      getComposeLayoutItem(container).positioning === 'flow'
+      || hierarchy?.childIds.some((id) => {
+        const child = document.entities[id]
+        return child && getComposeLayoutItem(child).positioning === 'flow'
+      })
+    ),
+  )
+  return containsFlow
+    ? { available: false, reason: FLOW_UNGROUP_REASON }
+    : { available: true }
+}
 
 function transformUnderParent(
   document: ComposeDocument,
@@ -107,14 +154,15 @@ export function createGroupCommand(
   for (const entityId of entityIds) {
     const entity = document.entities[entityId]
     if (!entity) continue
-    const transform = getComposeSpatialTransform(entity)
+    const box = layoutSnapshot.boxes[entityId]
+    if (!box) continue
     childTransforms[entityId] = toComposeTransform(decomposeMatrix(
       multiplyMatrices(
         invertMatrix(groupWorld),
         getEntityWorldMatrix(document, layoutSnapshot, entityId),
       ),
-      transform.size.width,
-      transform.size.height,
+      box.width,
+      box.height,
     )) as unknown as JsonValue
   }
   return {
@@ -146,15 +194,15 @@ export function createUngroupCommand(
   const childTransforms: Record<string, JsonValue> = {}
   for (const childId of hierarchy?.childIds ?? []) {
     const child = document.entities[childId]
-    if (!child) continue
-    const transform = getComposeSpatialTransform(child)
+    const box = layoutSnapshot.boxes[childId]
+    if (!child || !box) continue
     childTransforms[childId] = transformUnderParent(
       document,
       layoutSnapshot,
       getEntityWorldMatrix(document, layoutSnapshot, childId),
       parentId,
-      transform.size.width,
-      transform.size.height,
+      box.width,
+      box.height,
     ) as unknown as JsonValue
   }
   return {
@@ -178,39 +226,81 @@ export function createReparentCommand(
   index: number,
   commandId = `reparent:${entityIds.join(',')}`,
 ): EditorCommand {
+  const targetManagesFlow = Boolean(
+    parentId && document.entities[parentId] && getComposeLayout(document.entities[parentId]!),
+  )
+  const targetBorder = parentId && document.entities[parentId]
+    ? resolveComposeAppearance(document.entities[parentId]!).borderWidth
+    : 0
   const updates = entityIds.map((entityId) => {
     const entity = document.entities[entityId]
-    const transform = entity && getComposeSpatialTransform(entity)
+    const box = layoutSnapshot.boxes[entityId]
+    const transform = entity && box
+      ? transformUnderParent(
+          document,
+          layoutSnapshot,
+          getEntityWorldMatrix(document, layoutSnapshot, entityId),
+          parentId,
+          box.width,
+          box.height,
+        )
+      : {
+          position: { x: 0, y: 0 },
+          size: { width: 1, height: 1 },
+          rotation: 0,
+        }
+    const currentItem = entity ? getComposeLayoutItem(entity) : null
+    const item: ComposeLayoutItem | null = currentItem
+      ? targetManagesFlow
+        ? { ...currentItem, positioning: 'flow' }
+        : {
+            ...currentItem,
+            positioning: 'absolute',
+            offset: {
+              x: transform.position.x - targetBorder,
+              y: transform.position.y - targetBorder,
+            },
+            width: currentItem.width.mode === 'fill'
+              ? { ...currentItem.width, mode: 'fixed', value: transform.size.width }
+              : currentItem.width,
+            height: currentItem.height.mode === 'fill'
+              ? { ...currentItem.height, mode: 'fixed', value: transform.size.height }
+              : currentItem.height,
+          }
+      : null
     return {
       entityId,
-      transform: transform
-        ? transformUnderParent(
-            document,
-            layoutSnapshot,
-            getEntityWorldMatrix(document, layoutSnapshot, entityId),
-            parentId,
-            transform.size.width,
-            transform.size.height,
-          )
-        : {
-            position: { x: 0, y: 0 },
-            size: { width: 1, height: 1 },
-            rotation: 0,
-          },
+      transform,
+      item,
     }
   })
-  const commands: EditorCommand[] = [
-    {
-      id: `${commandId}:move`,
-      type: BUILTIN_COMMAND_TYPES.moveEntity,
-      payload: { entityIds, parentId, index },
-    },
-    {
-      id: `${commandId}:transform`,
-      type: BUILTIN_COMMAND_TYPES.setTransform,
-      payload: { operation: 'set', updates },
-    },
-  ]
+  const moveCommand: EditorCommand = {
+    id: `${commandId}:move`,
+    type: BUILTIN_COMMAND_TYPES.moveEntity,
+    payload: { entityIds, parentId, index },
+  }
+  const componentCommands: EditorCommand[] = updates.flatMap(({ entityId, transform, item }) => item
+    ? [
+        {
+          id: `${commandId}:${entityId}:layout-item`,
+          type: BUILTIN_COMMAND_TYPES.updateComponent,
+          payload: { entityId, key: 'LayoutItem', value: item },
+        },
+        {
+          id: `${commandId}:${entityId}:transform`,
+          type: BUILTIN_COMMAND_TYPES.updateComponent,
+          payload: {
+            entityId,
+            key: 'Transform',
+            value: { rotation: transform.rotation },
+          },
+        },
+      ]
+    : [])
+  // batch 会逐子命令严格校验：移出 Layout 时须先转 Absolute，移入时则先建立目标父子关系。
+  const commands = targetManagesFlow
+    ? [moveCommand, ...componentCommands]
+    : [...componentCommands, moveCommand]
   return {
     id: commandId,
     type: BUILTIN_COMMAND_TYPES.batch,
@@ -253,9 +343,10 @@ export function createDuplicateCommand(
     const cloneId = remap.get(id)
     if (!entity || !cloneId) continue
     const clone = structuredClone(entity) as ComposeEntity
+    const item = getComposeLayoutItem(clone)
     const transform = getComposeSpatialTransform(clone)
     const hierarchy = getComposeHierarchy(clone)
-    const nextTransform: ComposeSpatialTransform = id === sourceId
+    const nextTransform: ComposeSpatialTransform = id === sourceId && item.positioning === 'absolute'
       ? {
           ...transform,
           position: {

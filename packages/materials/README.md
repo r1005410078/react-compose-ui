@@ -43,8 +43,10 @@ SVG 内容先经 DOMPurify 白名单净化。包不依赖 editor、stage 或 ass
 Layout 属性区紧跟变换分组，以两行三列卡片提供方向、换行、间距、多行、主轴与交叉轴控件；
 中文标题下显示对应 CSS 属性名。枚举按钮使用统一大小的浏览器语义图标，并随当前方向旋转主轴、
 交叉轴和换行示意。标题栏提供 `display: flex` 状态和整体重置，末尾实时预览显示当前摘要、三个
-编号节点与主轴/交叉轴。该预览是当前阶段唯一应用 Flex 的地方；Stage 和独立 Preview 仍按子项
-`Transform` 绝对定位。
+编号节点与主轴/交叉轴。该预览仅用于解释属性；正式 Stage 和 Preview 都消费 Layout Runtime 的
+Snapshot，并始终以绝对定位 DOM 呈现，不再运行第二套 CSS Flex。LayoutItem Inspector 提供
+Flow/Absolute、Fixed/Fill/Hug、fallback、margin、alignSelf 与计算尺寸；Fill 只在 Layout parent 的
+Flow 子项上可选，Flow 转 Absolute 时会从当前 Snapshot 烘焙 offset 和 Fill 尺寸。
 
 所有第一方物料的 `Appearance.backgroundPaint` 都使用结构化 Compose Paint。Appearance Inspector 通过
 共享 `paint` editor 打开背景填充；在 Editor 中，它会连接 Stage 的渐变控制柄和图层取色 session，而

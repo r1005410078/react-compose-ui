@@ -18,5 +18,5 @@ export function useComposePreviewLayout(document: ComposeDocument): ComposeLayou
       if (generation.current === mounted) runtime.dispose()
     })
   }, [runtime])
-  return state
+  return state.document === document ? state : { status: 'loading', document }
 }

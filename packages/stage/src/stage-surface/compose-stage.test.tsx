@@ -6,6 +6,7 @@ import {
 import {
   BUILTIN_COMMAND_TYPES,
   createTransactionRuntime,
+  getComposeComposition,
   getComposeLayoutItem,
   type ComposeDocument,
   type ComposeEntity,
@@ -145,9 +146,56 @@ function layoutSnapshot(value: ComposeDocument): ComposeLayoutSnapshot {
   }
 }
 
+function autoLayoutContainer(id: string, childIds: readonly string[]): ComposeEntity {
+  const base = entity(id, { childIds })
+  return {
+    ...base,
+    components: {
+      ...base.components,
+      Composition: {
+        ...base.components.Composition,
+        baseComponentKeys: [...getComposeComposition(base).baseComponentKeys, 'Layout'],
+      },
+      Layout: {
+        type: 'flex',
+        flexDirection: 'row',
+        flexWrap: 'nowrap',
+        alignContent: 'stretch',
+        justifyContent: 'flex-start',
+        alignItems: 'stretch',
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        rowGap: 0,
+        columnGap: 0,
+      },
+    },
+  }
+}
+
+function flowEntity(id: string, fillWidth = false): ComposeEntity {
+  const base = entity(id)
+  return {
+    ...base,
+    components: {
+      ...base.components,
+      LayoutItem: {
+        ...base.components.LayoutItem,
+        positioning: 'flow',
+        width: {
+          ...(base.components.LayoutItem?.width as object),
+          mode: fillWidth ? 'fill' : 'fixed',
+        },
+      },
+    },
+  }
+}
+
 function renderStage(
   value: ComposeDocument,
-  options: { selectedIds?: readonly string[]; paintEditing?: { readonly entityId: string } } = {},
+  options: {
+    selectedIds?: readonly string[]
+    paintEditing?: { readonly entityId: string }
+    snapshot?: ComposeLayoutSnapshot
+  } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
   const dispatchSpy = vi.fn()
@@ -159,7 +207,7 @@ function renderStage(
     <ComposeStage
       dispatch={dispatch}
       document={value}
-      layoutSnapshot={layoutSnapshot(value)}
+      layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
       onSelectedIdsChange={vi.fn()}
       onViewportChange={vi.fn()}
       registry={registry}
@@ -301,6 +349,66 @@ describe('ComposeStage ECS', () => {
         }],
       },
     }))
+  })
+
+  it('OpenSpec: auto-layout-interactions / Flow nudge / 用 Snapshot 转 Absolute 并烘焙 Fill', () => {
+    const child = flowEntity('a', true)
+    const parent = autoLayoutContainer('parent', ['a'])
+    const value = document([parent, child], ['parent'])
+    const snapshot: ComposeLayoutSnapshot = {
+      revision: 2,
+      boxes: {
+        parent: { x: 20, y: 30, width: 400, height: 200, positioning: 'absolute' },
+        a: { x: 12, y: 16, width: 260, height: 50, positioning: 'flow' },
+      },
+      diagnostics: [],
+    }
+    const { dispatch, runtime } = renderStage(value, { selectedIds: ['a'], snapshot })
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'ArrowRight' })
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: BUILTIN_COMMAND_TYPES.setTransform,
+      payload: {
+        operation: 'move',
+        updates: [{
+          entityId: 'a',
+          transform: {
+            position: { x: 13, y: 16 },
+            size: { width: 260, height: 50 },
+            rotation: 0,
+          },
+        }],
+      },
+    }))
+    expect(getComposeLayoutItem(runtime.document.entities.a!)).toMatchObject({
+      positioning: 'absolute',
+      offset: { x: 13, y: 16 },
+      width: { mode: 'fixed', value: 260 },
+    })
+  })
+
+  it('OpenSpec: auto-layout-interactions / Flow Group / 菜单与快捷键共享禁用原因', () => {
+    const first = flowEntity('first')
+    const second = flowEntity('second')
+    const parent = autoLayoutContainer('parent', ['first', 'second'])
+    const value = document([parent, first, second], ['parent'])
+    const { dispatch } = renderStage(value, { selectedIds: ['first', 'second'] })
+    const application = screen.getByRole('application')
+    fireEvent.contextMenu(screen.getByTestId('stage-entity-first'), {
+      clientX: 40,
+      clientY: 50,
+    })
+    const group = screen.getByRole('menuitem', { name: /^编组/ })
+    expect(group).toHaveAttribute(
+      'title',
+      '自动布局 Flow 子项不能参与 Group；请先转为 Absolute',
+    )
+    expect(group).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.keyDown(application, {
+      code: 'KeyG',
+      key: 'g',
+      ctrlKey: true,
+    })
+    expect(dispatch).not.toHaveBeenCalled()
   })
 
   it('OpenSpec: Context menu / Entity 删除使用新命令并显示快捷键', () => {

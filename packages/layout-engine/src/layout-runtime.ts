@@ -21,9 +21,13 @@ import { loadYoga, type Config, type Node, type Yoga } from 'yoga-layout/load'
 
 /** Layout Runtime 当前可观察状态。 @public */
 export type ComposeLayoutRuntimeState =
-  | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly snapshot: ComposeLayoutSnapshot }
-  | { readonly status: 'error'; readonly error: Error }
+  | { readonly status: 'loading'; readonly document: ComposeDocument }
+  | {
+      readonly status: 'ready'
+      readonly document: ComposeDocument
+      readonly snapshot: ComposeLayoutSnapshot
+    }
+  | { readonly status: 'error'; readonly document: ComposeDocument; readonly error: Error }
 
 /** 创建 Layout Runtime 的输入。 @public */
 export interface ComposeLayoutRuntimeOptions {
@@ -106,7 +110,7 @@ function setAxisBounds(node: Node, axis: 'width' | 'height', sizing: ComposeAxis
 }
 
 class YogaLayoutRuntime implements ComposeLayoutRuntime {
-  private state: ComposeLayoutRuntimeState = { status: 'loading' }
+  private state: ComposeLayoutRuntimeState
   private readonly listeners = new Set<() => void>()
   private document: ComposeDocument
   private measurementPort: ComposeLayoutMeasurementPort | undefined
@@ -120,6 +124,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
 
   constructor(options: ComposeLayoutRuntimeOptions) {
     this.document = options.document
+    this.state = { status: 'loading', document: options.document }
     this.setMeasurementPort(options.measurementPort)
     void this.initialize()
   }
@@ -128,9 +133,10 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   readonly getState = () => this.state
 
   updateDocument(document: ComposeDocument) {
-    if (this.disposed) return
+    if (this.disposed || this.document === document) return
     this.document = document
     if (this.yoga) this.solve()
+    else this.state = { status: 'loading', document }
   }
 
   setMeasurementPort(port: ComposeLayoutMeasurementPort | undefined) {
@@ -176,6 +182,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       if (this.disposed) return
       this.state = {
         status: 'error',
+        document: this.document,
         error: cause instanceof Error ? cause : new Error(String(cause)),
       }
       this.emit()
@@ -205,17 +212,48 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     while (node.getChildCount() > 0) node.removeChild(node.getChild(0))
   }
 
-  private reconcileNodes() {
-    const entityIds = new Set(Object.keys(this.document.entities))
-    this.nodes.forEach((node, entityId) => {
-      this.detachChildren(node)
-      if (!entityIds.has(entityId)) {
-        node.free()
-        this.nodes.delete(entityId)
-      }
+  private clearEntityStyle(node: Node) {
+    const yoga = this.yoga!
+    node.unsetMeasureFunc()
+    node.setWidth(undefined)
+    node.setHeight(undefined)
+    node.setMinWidth(undefined)
+    node.setMinHeight(undefined)
+    node.setMaxWidth(undefined)
+    node.setMaxHeight(undefined)
+    node.setFlexGrow(0)
+    node.setFlexShrink(1)
+    node.setFlexBasis('auto')
+    node.setPositionType(yoga.POSITION_TYPE_RELATIVE)
+    node.setAlignSelf(yoga.ALIGN_AUTO)
+    node.setFlexDirection(yoga.FLEX_DIRECTION_ROW)
+    node.setFlexWrap(yoga.WRAP_NO_WRAP)
+    node.setAlignContent(yoga.ALIGN_STRETCH)
+    node.setJustifyContent(yoga.JUSTIFY_FLEX_START)
+    node.setAlignItems(yoga.ALIGN_STRETCH)
+    for (const edge of [yoga.EDGE_TOP, yoga.EDGE_RIGHT, yoga.EDGE_BOTTOM, yoga.EDGE_LEFT]) {
+      node.setPosition(edge, undefined)
+      node.setMargin(edge, 0)
+      node.setPadding(edge, 0)
+      node.setBorder(edge, 0)
+    }
+    node.setGap(yoga.GUTTER_ROW, 0)
+    node.setGap(yoga.GUTTER_COLUMN, 0)
+  }
+
+  private syncTree(
+    desiredChildren: ReadonlyMap<Node, readonly Node[]>,
+  ) {
+    const changedParents = [...desiredChildren].filter(([parent, desired]) => (
+      parent.getChildCount() !== desired.length
+      || desired.some((child, index) => parent.getChild(index) !== child)
+    ))
+    // 先统一解绑所有变化父级，再插入目标顺序；跨父级移动时不会把仍有 owner 的 Node
+    // 插入新父级，也不会触发 Yoga reset() 在增量树上的已知卡死路径。
+    changedParents.forEach(([parent]) => this.detachChildren(parent))
+    changedParents.forEach(([parent, desired]) => {
+      desired.forEach((child, index) => parent.insertChild(child, index))
     })
-    this.detachChildren(this.root!)
-    entityIds.forEach((entityId) => this.nodeFor(entityId).reset())
   }
 
   private applyAxis(
@@ -249,6 +287,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   ) {
     const yoga = this.yoga!
     const node = this.nodeFor(entity.id)
+    this.clearEntityStyle(node)
     const item = getComposeLayoutItem(entity)
     const parentLayout = parent && getComposeLayout(parent)
     const isFlow = item.positioning === 'flow' && parentLayout !== undefined
@@ -276,7 +315,9 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     }
 
     const appearance = resolveComposeAppearance(entity)
-    node.setBorder(yoga.EDGE_ALL, appearance.borderWidth)
+    for (const edge of [yoga.EDGE_TOP, yoga.EDGE_RIGHT, yoga.EDGE_BOTTOM, yoga.EDGE_LEFT]) {
+      node.setBorder(edge, appearance.borderWidth)
+    }
     const layout = getComposeLayout(entity)
     if (layout) {
       node.setFlexDirection(direction(yoga, layout.flexDirection))
@@ -318,15 +359,19 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     }
   }
 
-  private buildTree(entityId: string, parent: ComposeEntity | undefined, diagnostics: ComposeLayoutDiagnostic[]) {
+  private prepareTree(
+    entityId: string,
+    parent: ComposeEntity | undefined,
+    diagnostics: ComposeLayoutDiagnostic[],
+    desiredChildren: Map<Node, readonly Node[]>,
+  ): Node {
     const entity = this.document.entities[entityId]!
     const node = this.nodeFor(entityId)
     this.applyEntityStyle(entity, parent, diagnostics)
     const hierarchy = getComposeHierarchy(entity)
-    hierarchy?.childIds.forEach((childId, index) => {
-      const child = this.buildTree(childId, entity, diagnostics)
-      node.insertChild(child, index)
-    })
+    const children = (hierarchy?.childIds ?? []).map((childId) =>
+      this.prepareTree(childId, entity, diagnostics, desiredChildren))
+    desiredChildren.set(node, children)
     return node
   }
 
@@ -335,13 +380,22 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     try {
       const yoga = this.yoga
       const diagnostics: ComposeLayoutDiagnostic[] = []
-      this.reconcileNodes()
-      this.root.reset()
       this.root.setWidth(this.document.output.width)
       this.root.setHeight(this.document.output.height)
       this.root.setFlexDirection(yoga.FLEX_DIRECTION_ROW)
-      this.document.rootIds.forEach((entityId, index) => {
-        this.root!.insertChild(this.buildTree(entityId, undefined, diagnostics), index)
+      const desiredChildren = new Map<Node, readonly Node[]>()
+      const rootChildren = this.document.rootIds.map((entityId) =>
+        this.prepareTree(entityId, undefined, diagnostics, desiredChildren))
+      const currentIds = new Set(Object.keys(this.document.entities))
+      this.nodes.forEach((node, entityId) => {
+        if (!currentIds.has(entityId)) desiredChildren.set(node, [])
+      })
+      desiredChildren.set(this.root, rootChildren)
+      this.syncTree(desiredChildren)
+      this.nodes.forEach((node, entityId) => {
+        if (currentIds.has(entityId)) return
+        node.free()
+        this.nodes.delete(entityId)
       })
       this.root.calculateLayout(
         this.document.output.width,
@@ -361,6 +415,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       })
       this.state = {
         status: 'ready',
+        document: this.document,
         snapshot: Object.freeze({
           revision: ++this.revision,
           boxes: Object.freeze(boxes),
@@ -372,6 +427,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     catch (cause) {
       this.state = {
         status: 'error',
+        document: this.document,
         error: cause instanceof Error ? cause : new Error(String(cause)),
       }
       this.emit()

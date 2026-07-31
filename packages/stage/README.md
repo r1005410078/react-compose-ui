@@ -58,6 +58,10 @@ Move/Resize/Rotate 查询 `LayoutItem + Transform + Visibility + Lock + Geometry
 pointerup 最多提交一个 `entity.transform.set` 或原子 batch。Container Resize 只改变自身边界，
 后代局部 Transform 不变；Core 会再次验证锁定和约束，防止命令绕过 UI。
 
+Stage 拖动或方向键移动 Flow 的含义固定为“转 Absolute 后移动”，不会隐式重排；Fill 轴会使用
+开始 Snapshot 的求解尺寸转为 Fixed。Resize Fill 只固定被调整轴，Rotation 保持 Flow。包含 Flow
+目标时 Group/Ungroup 菜单与快捷键共同禁用，Delete、Lock 和 Visibility 不受影响。
+
 固定标尺、滚动条、输出边界、网格、辅助线和右键菜单继续由 Stage 提供。快捷键可覆盖适配选择/
 Container、缩放、工具、吸附、复制、分组和删除；空数组表示禁用。输入框、contenteditable 和
 IME composing 保留原生键盘与右键行为。

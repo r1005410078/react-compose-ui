@@ -103,6 +103,9 @@ export function createLayoutItemInspector(
   }) {
     const zh = useZh()
     const item = value as ComposeLayoutItem
+    const parent = document && Object.values(document.entities).find((candidate) =>
+      getComposeHierarchy(candidate)?.childIds.includes(entity.id))
+    const fillAllowed = item.positioning === 'flow' && Boolean(parent && getComposeLayout(parent))
     const schema = useMemo(() => v.object({
       positioning: v.pipe(
         v.picklist(['flow', 'absolute']),
@@ -114,12 +117,12 @@ export function createLayoutItemInspector(
         v.metadata({ propertyPanel: { editor: 'vector2' } }),
       ),
       widthMode: v.pipe(
-        v.picklist(['fixed', 'fill', 'hug']),
+        v.picklist(fillAllowed ? ['fixed', 'fill', 'hug'] : ['fixed', 'hug']),
         v.title(zh ? '宽度模式' : 'Width mode'),
       ),
       widthValue: v.pipe(v.number(), v.minValue(0), v.title(zh ? '宽度' : 'Width')),
       heightMode: v.pipe(
-        v.picklist(['fixed', 'fill', 'hug']),
+        v.picklist(fillAllowed ? ['fixed', 'fill', 'hug'] : ['fixed', 'hug']),
         v.title(zh ? '高度模式' : 'Height mode'),
       ),
       heightValue: v.pipe(v.number(), v.minValue(0), v.title(zh ? '高度' : 'Height')),
@@ -141,7 +144,7 @@ export function createLayoutItemInspector(
         v.picklist(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
         v.title(zh ? '自身对齐' : 'Align self'),
       ),
-    }), [zh])
+    }), [fillAllowed, zh])
     return (
       <ComposePropertyPanel
         aria-label={zh ? '布局项属性' : 'Layout item properties'}
@@ -163,12 +166,17 @@ export function createLayoutItemInspector(
           alignSelf: item.alignSelf,
         }}
         onValueChange={(next) => {
-          const parent = document && Object.values(document.entities).find((candidate) =>
-            getComposeHierarchy(candidate)?.childIds.includes(entity.id))
           if (next.positioning === 'flow' && (!parent || !getComposeLayout(parent))) return
           const bakedBox = item.positioning === 'flow' && next.positioning === 'absolute'
             ? layoutSnapshot?.boxes[entity.id]
             : undefined
+          const parentBorder = parent ? resolveComposeAppearance(parent).borderWidth : 0
+          const widthMode = next.positioning === 'absolute' && next.widthMode === 'fill'
+            ? 'fixed'
+            : next.widthMode
+          const heightMode = next.positioning === 'absolute' && next.heightMode === 'fill'
+            ? 'fixed'
+            : next.heightMode
           dispatch(command(
             idFactory,
             entity,
@@ -179,9 +187,23 @@ export function createLayoutItemInspector(
               value: {
                 ...item,
                 positioning: next.positioning,
-                offset: bakedBox ? { x: bakedBox.x, y: bakedBox.y } : next.offset,
-                width: { ...item.width, mode: next.widthMode, value: next.widthValue },
-                height: { ...item.height, mode: next.heightMode, value: next.heightValue },
+                offset: bakedBox
+                  ? { x: bakedBox.x - parentBorder, y: bakedBox.y - parentBorder }
+                  : next.offset,
+                width: {
+                  ...item.width,
+                  mode: widthMode,
+                  value: bakedBox && item.width.mode === 'fill'
+                    ? bakedBox.width
+                    : next.widthValue,
+                },
+                height: {
+                  ...item.height,
+                  mode: heightMode,
+                  value: bakedBox && item.height.mode === 'fill'
+                    ? bakedBox.height
+                    : next.heightValue,
+                },
                 margin: {
                   top: next.marginTop,
                   right: next.marginRight,

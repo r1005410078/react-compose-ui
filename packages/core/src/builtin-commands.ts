@@ -733,7 +733,14 @@ function validatesOperation(
   }
   if (operation === 'move') {
     if (!constraints.movable) return 'Entity 禁止移动'
-    if (sizeChanged || rotationChanged) return 'move 只能修改 position'
+    const item = getComposeLayoutItem(entity)
+    const widthMayBake = item.positioning === 'flow' && item.width.mode === 'fill'
+    const heightMayBake = item.positioning === 'flow' && item.height.mode === 'fill'
+    if (
+      rotationChanged
+      || (next.size.width !== current.size.width && !widthMayBake)
+      || (next.size.height !== current.size.height && !heightMayBake)
+    ) return 'move 只能修改 position，Flow 的 Fill 轴除外'
   }
   else if (operation === 'resize') {
     if (rotationChanged) return 'resize 不得修改 rotation'
@@ -757,18 +764,34 @@ function appendSpatialTransformPatches(
   result: DocumentPatch[],
   entity: ComposeEntity,
   next: ComposeSpatialTransform,
+  operation: TransformOperation = 'set',
 ) {
   const current = getComposeSpatialTransform(entity)
   const item = getComposeLayoutItem(entity)
   if (!samePosition(current, next) || !sameSize(current, next)) {
+    const movingFlowItem = operation === 'move' && item.positioning === 'flow'
+    const resizing = operation === 'resize' || operation === 'set'
     result.push({
       op: 'set',
       path: ['entities', entity.id, 'components', 'LayoutItem'],
       value: {
         ...item,
         offset: next.position,
-        width: { ...item.width, value: next.size.width },
-        height: { ...item.height, value: next.size.height },
+        positioning: movingFlowItem ? 'absolute' : item.positioning,
+        width: {
+          ...item.width,
+          ...((resizing && current.size.width !== next.size.width)
+            || (movingFlowItem && item.width.mode === 'fill')
+            ? { mode: 'fixed', value: next.size.width }
+            : {}),
+        },
+        height: {
+          ...item.height,
+          ...((resizing && current.size.height !== next.size.height)
+            || (movingFlowItem && item.height.mode === 'fill')
+            ? { mode: 'fixed', value: next.size.height }
+            : {}),
+        },
       },
     })
   }
@@ -809,7 +832,12 @@ function transformHandler(): CommandHandler {
           operation as TransformOperation,
         )
         if (violation) return issue('transform.constraint', violation)
-        appendSpatialTransformPatches(result, entity, update.transform)
+        appendSpatialTransformPatches(
+          result,
+          entity,
+          update.transform,
+          operation as TransformOperation,
+        )
       }
       return patches(result)
     },
@@ -839,6 +867,9 @@ function groupHandler(): CommandHandler {
       }
       const targetIssues = validateTargets(document, roots)
       if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
+      if (roots.some((id) => getComposeLayoutItem(document.entities[id]!).positioning === 'flow')) {
+        return issue('entity.flow-group-disabled', '自动布局 Flow 子项不能参与 Group')
+      }
       const locations = buildLocations(document)
       const first = locations.get(roots[0]!)
       if (!first || roots.some((id) => locations.get(id)?.parentId !== first.parentId)) {
@@ -896,6 +927,12 @@ function ungroupHandler(): CommandHandler {
       if (!container || !hierarchy) return issue('entity.invalid-container', `Container ${containerId} 不存在`)
       if (getComposeLock(container).locked) return issue('entity.locked', `Container ${containerId} 已锁定`)
       if (!hierarchy.childIds.length) return issue('entity.empty-container', 'Container 没有子项')
+      if (
+        getComposeLayoutItem(container).positioning === 'flow'
+        || hierarchy.childIds.some((id) => getComposeLayoutItem(document.entities[id]!).positioning === 'flow')
+      ) {
+        return issue('entity.flow-ungroup-disabled', '自动布局 Flow 子项不能参与 Ungroup')
+      }
       const targetIssues = validateTargets(document, hierarchy.childIds)
       if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
       const location = buildLocations(document).get(containerId)

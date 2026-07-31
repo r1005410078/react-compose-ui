@@ -20,3 +20,7 @@ runtime.dispose()
 
 Runtime 固定使用 Web defaults、LTR 与 `pointScaleFactor: 0`。Snapshot 和测量诊断是运行时状态，
 不会写入 ComposeDocument、History 或 Operation Log。宿主必须在会话结束时调用 `dispose()`。
+
+Flow 子项的 Fixed 主轴明确使用 `shrink: 0`；Fill 主轴映射为 `grow: 1 / basis: 0 / shrink: 1`，
+Fill 交叉轴映射为 stretch。Absolute、根级和自由父级不接受 Fill，这些组合会在 Core 校验阶段
+被拒绝。

@@ -3,6 +3,8 @@ import {
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
   createTransactionRuntime,
+  getComposeComposition,
+  getComposeLayoutItem,
   getComposeSpatialTransform,
   type ComposeEntity,
   type EditorCommand,
@@ -120,6 +122,108 @@ describe('ComposeDocument v6 built-in commands', () => {
     runtime.undo()
     expect(getComposeSpatialTransform(runtime.document.entities.first!)).toEqual(transform())
     expect(getComposeSpatialTransform(runtime.document.entities.second!)).toEqual(transform(100, 0))
+  })
+
+  it('OpenSpec: auto-layout-interactions / Flow 移动 / 原子转 Absolute 并烘焙 Fill 尺寸', () => {
+    const flow = rendererEntity('flow', {
+      layoutItem: {
+        positioning: 'flow',
+        offset: { x: 7, y: 9 },
+        width: { mode: 'fill', value: 80, min: 1, max: null },
+        height: { mode: 'fixed', value: 50, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+    })
+    const parentBase = containerEntity('parent', ['flow'])
+    const parent = {
+      ...parentBase,
+      components: {
+        ...parentBase.components,
+        Composition: {
+          ...parentBase.components.Composition,
+          baseComponentKeys: [...getComposeComposition(parentBase).baseComponentKeys, 'Layout'],
+        },
+        Layout: {
+          type: 'flex' as const,
+          flexDirection: 'row' as const,
+          flexWrap: 'nowrap' as const,
+          alignContent: 'stretch' as const,
+          justifyContent: 'flex-start' as const,
+          alignItems: 'stretch' as const,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
+        },
+      },
+    }
+    const runtime = createTransactionRuntime({
+      document: documentFixture({ parent, flow }, ['parent']),
+    })
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.setTransform, {
+      operation: 'move',
+      updates: [{ entityId: 'flow', transform: transform(30, 40, 240, 50) }],
+    }).status).toBe('committed')
+    expect(getComposeLayoutItem(runtime.document.entities.flow!)).toMatchObject({
+      positioning: 'absolute',
+      offset: { x: 30, y: 40 },
+      width: { mode: 'fixed', value: 240 },
+      height: { mode: 'fixed', value: 50 },
+    })
+    expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('OpenSpec: auto-layout-interactions / Fill Resize / 只把变更轴转换为 Fixed', () => {
+    const flow = rendererEntity('flow', {
+      layoutItem: {
+        positioning: 'flow',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'fill', value: 80, min: 1, max: null },
+        height: { mode: 'fill', value: 50, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+    })
+    const parentBase = containerEntity('parent', ['flow'])
+    const parent = {
+      ...parentBase,
+      components: {
+        ...parentBase.components,
+        Composition: {
+          ...parentBase.components.Composition,
+          baseComponentKeys: [...getComposeComposition(parentBase).baseComponentKeys, 'Layout'],
+        },
+        Layout: {
+          type: 'flex' as const,
+          flexDirection: 'row' as const,
+          flexWrap: 'nowrap' as const,
+          alignContent: 'stretch' as const,
+          justifyContent: 'flex-start' as const,
+          alignItems: 'stretch' as const,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
+        },
+      },
+    }
+    const runtime = createTransactionRuntime({
+      document: documentFixture({ parent, flow }, ['parent']),
+    })
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.setTransform, {
+      operation: 'resize',
+      updates: [{ entityId: 'flow', transform: transform(0, 0, 180, 50) }],
+    }).status).toBe('committed')
+    expect(getComposeLayoutItem(runtime.document.entities.flow!)).toMatchObject({
+      positioning: 'flow',
+      width: { mode: 'fixed', value: 180 },
+      height: { mode: 'fill', value: 50 },
+    })
+    const beforeRotation = getComposeLayoutItem(runtime.document.entities.flow!)
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.setTransform, {
+      operation: 'rotate',
+      updates: [{ entityId: 'flow', transform: transform(0, 0, 180, 50, 45) }],
+    }).status).toBe('committed')
+    expect(getComposeLayoutItem(runtime.document.entities.flow!)).toEqual(beforeRotation)
   })
 
   it.each([

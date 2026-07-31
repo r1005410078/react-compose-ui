@@ -12,7 +12,7 @@ import {
   getComposeAppearance,
   getComposeRenderer,
   evaluateComposePaintAtLocalPoint,
-  getComposeSpatialTransform,
+  getComposeTransform,
   resolveComposeAppearance,
   resolveComposeGeometryConstraints,
 } from '@compose-ui/core'
@@ -434,14 +434,28 @@ function matrixBounds(matrix: StageMatrix, width: number, height: number): Stage
   }
 }
 
+/** 手势必须冻结 pointerdown 对应 Snapshot 的已求解 box，不能回读 LayoutItem fallback。 */
+function resolvedSpatialTransform(index: StageSceneIndex, entityId: string): StageTransform | null {
+  const entity = index.document.entities[entityId]
+  const box = index.layoutSnapshot.boxes[entityId]
+  if (!entity || !box) return null
+  return {
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    rotation: getComposeTransform(entity).rotation,
+  }
+}
+
 function localPaintPointToWorld(
   matrix: StageMatrix,
-  transform: { readonly size: { readonly width: number; readonly height: number } },
+  transform: { readonly width: number; readonly height: number },
   point: { readonly x: number; readonly y: number },
 ): StagePoint {
   return applyMatrix(matrix, {
-    x: point.x * transform.size.width,
-    y: point.y * transform.size.height,
+    x: point.x * transform.width,
+    y: point.y * transform.height,
   })
 }
 
@@ -454,7 +468,8 @@ function paintHandlesFor(
   const entity = index.document.entities[entityId]
   const matrix = index.getWorldMatrix(entityId)
   if (!entity || !matrix) return []
-  const transform = getComposeSpatialTransform(entity)
+  const transform = resolvedSpatialTransform(index, entityId)
+  if (!transform) return []
   const world = (point: { readonly x: number; readonly y: number }) =>
     localPaintPointToWorld(matrix, transform, point)
   if (paint.kind === 'linear-gradient') {
@@ -499,9 +514,10 @@ function paintAtLocalPoint(
   const entity = index.document.entities[entityId]
   const matrix = index.getWorldMatrix(entityId)
   if (!entity || !matrix) return null
-  const transform = getComposeSpatialTransform(entity)
+  const transform = resolvedSpatialTransform(index, entityId)
+  if (!transform) return null
   const local = applyMatrix(invertMatrix(matrix), worldPoint)
-  return { x: local.x / transform.size.width, y: local.y / transform.size.height }
+  return { x: local.x / transform.width, y: local.y / transform.height }
 }
 
 function updatePaintFromPointer(
@@ -620,13 +636,14 @@ function transformedSelection(
     const entity = index.document.entities[id]
     const entityWorld = index.getWorldMatrix(id)
     if (!entity || !entityWorld) return
-    const transform = getComposeSpatialTransform(entity)
+    const transform = resolvedSpatialTransform(index, id)
+    if (!transform) return
     const candidate = targetTransform(
       index,
       id,
       multiplyMatrices(worldTransform, entityWorld),
-      transform.size.width * (resize?.scaleX ?? 1),
-      transform.size.height * (resize?.scaleY ?? 1),
+      transform.width * (resize?.scaleX ?? 1),
+      transform.height * (resize?.scaleY ?? 1),
     )
     if (!resize) {
       updates[id] = candidate
@@ -645,36 +662,36 @@ function transformedSelection(
     const clamp = (value: number, minimum: number, max: number | undefined) =>
       Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(minimum, value))
     if (constraints.resize === 'preserve-aspect') {
-      const widthScale = candidate.width / transform.size.width
-      const heightScale = candidate.height / transform.size.height
+      const widthScale = candidate.width / transform.width
+      const heightScale = candidate.height / transform.height
       let scale = Math.abs(widthScale - 1) >= Math.abs(heightScale - 1)
         ? widthScale
         : heightScale
       const minScale = Math.max(
-        minimum.width / transform.size.width,
-        minimum.height / transform.size.height,
+        minimum.width / transform.width,
+        minimum.height / transform.height,
       )
       const maxScale = maximum.width !== undefined || maximum.height !== undefined
         ? Math.min(
-            (maximum.width ?? Number.POSITIVE_INFINITY) / transform.size.width,
-            (maximum.height ?? Number.POSITIVE_INFINITY) / transform.size.height,
+            (maximum.width ?? Number.POSITIVE_INFINITY) / transform.width,
+            (maximum.height ?? Number.POSITIVE_INFINITY) / transform.height,
           )
         : Number.POSITIVE_INFINITY
       scale = Math.min(maxScale, Math.max(minScale, scale))
       updates[id] = {
         ...candidate,
-        width: transform.size.width * scale,
-        height: transform.size.height * scale,
+        width: transform.width * scale,
+        height: transform.height * scale,
       }
       return
     }
     updates[id] = {
       ...candidate,
       width: constraints.resize === 'vertical'
-        ? transform.size.width
+        ? transform.width
         : clamp(candidate.width, minimum.width, maximum.width),
       height: constraints.resize === 'horizontal'
-        ? transform.size.height
+        ? transform.height
         : clamp(candidate.height, minimum.height, maximum.height),
     }
   })
@@ -742,10 +759,11 @@ export function createStageInteractionController(): StageInteractionController {
       return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
     }
     const matrix = currentIndex.getWorldMatrix(sampledEntityId)
-    const transform = getComposeSpatialTransform(sampled)
+    const transform = resolvedSpatialTransform(currentIndex, sampledEntityId)
     if (!matrix) return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
+    if (!transform) return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
     const local = applyMatrix(invertMatrix(matrix), world)
-    const point = { x: local.x / transform.size.width, y: local.y / transform.size.height }
+    const point = { x: local.x / transform.width, y: local.y / transform.height }
     const color = evaluateComposePaintAtLocalPoint(explicitPaint, point)
     return {
       preview: { target, point: world, sampledEntityId, color, status: 'ready' },
@@ -1419,10 +1437,70 @@ export function createStageInteractionController(): StageInteractionController {
         transform,
       }))
       if (stageUpdates.length > 0) {
-        const updates = stageUpdates.map(({ entityId, transform }) => ({
-          entityId,
-          transform: toComposeTransform(transform),
-        }))
+        const updates = stageUpdates.map(({ entityId, transform }) => {
+          const next = toComposeTransform(transform)
+          const entity = context!.document.entities[entityId]
+          const item = entity ? getComposeLayoutItem(entity) : null
+          const persistedAbsolutePosition = () => {
+            const initialBox = context!.layoutSnapshot.boxes[entityId]
+            const parentId = index?.getParentId(entityId)
+            const parent = parentId ? context!.document.entities[parentId] : undefined
+            const borderInset = parent ? resolveComposeAppearance(parent).borderWidth : 0
+            const inset = item?.positioning === 'absolute' && initialBox
+              ? {
+                  x: initialBox.x - item.offset.x,
+                  y: initialBox.y - item.offset.y,
+                }
+              : { x: borderInset, y: borderInset }
+            return {
+              x: next.position.x - inset.x,
+              y: next.position.y - inset.y,
+            }
+          }
+          // move 的几何来自冻结 Snapshot；非 Fill 轴仍保留持久 fallback，避免把
+          // Yoga clamp 后的尺寸误记成一次 Resize。Fill 转 Absolute 时才烘焙求解尺寸。
+          if (!item) return { entityId, transform: next }
+          if (finished.type === 'move') {
+            return {
+              entityId,
+              transform: {
+                ...next,
+                position: persistedAbsolutePosition(),
+                size: {
+                  width: item.width.mode === 'fill' ? next.size.width : item.width.value,
+                  height: item.height.mode === 'fill' ? next.size.height : item.height.value,
+                },
+              },
+            }
+          }
+          if (finished.type === 'resize') {
+            const changesWidth = finished.handle.includes('e') || finished.handle.includes('w')
+            const changesHeight = finished.handle.includes('n') || finished.handle.includes('s')
+            return {
+              entityId,
+              transform: {
+                ...next,
+                position: item.positioning === 'flow'
+                  ? item.offset
+                  : persistedAbsolutePosition(),
+                size: {
+                  width: changesWidth ? next.size.width : item.width.value,
+                  height: changesHeight ? next.size.height : item.height.value,
+                },
+              },
+            }
+          }
+          return {
+            entityId,
+            transform: {
+              ...next,
+              position: item.positioning === 'flow'
+                ? item.offset
+                : persistedAbsolutePosition(),
+              size: { width: item.width.value, height: item.height.value },
+            },
+          }
+        })
         effects.push({
           type: 'command.dispatch',
           command: {

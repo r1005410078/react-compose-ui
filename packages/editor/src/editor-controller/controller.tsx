@@ -305,9 +305,10 @@ export function useComposeEditorController({
   nodeEditPort,
   pageLoader,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
+  // Layout 订阅先于文档订阅建立，保证同一次事务的 document/Snapshot 成对发布。
+  const layoutState = useComposeEditorLayout(runtime)
   const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const document = snapshot.document
-  const layoutState = useComposeEditorLayout(document)
   const [selectedIds, setSelectedIdsState] = useState<readonly string[]>(() =>
     validSelection(document, initialSelection))
   const [inspectionTarget, setInspectionTarget] = useState<InspectionTarget>(() =>

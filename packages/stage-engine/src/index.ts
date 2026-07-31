@@ -9,6 +9,9 @@ export {
   createGroupCommand,
   createReparentCommand,
   createUngroupCommand,
+  getGroupCommandAvailability,
+  getUngroupCommandAvailability,
+  type ComposeStructureCommandAvailability,
 } from './commands'
 export {
   createRulerTicks,

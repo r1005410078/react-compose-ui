@@ -178,6 +178,9 @@ function ResolvedPageContent({
   const nest = useComposePageSlotNest()
   const [runtime] = useState(() => createComposeLayoutRuntime({ document }))
   const layoutState = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
+  const currentLayoutState = layoutState.document === document
+    ? layoutState
+    : { status: 'loading' as const, document }
   const generation = useRef(0)
   useLayoutEffect(() => runtime.updateDocument(document), [document, runtime])
   useEffect(() => {
@@ -187,10 +190,10 @@ function ResolvedPageContent({
       if (generation.current === mounted) runtime.dispose()
     })
   }, [runtime])
-  if (layoutState.status === 'loading') {
+  if (currentLayoutState.status === 'loading') {
     return <Placeholder testId="compose-page-slot-layout-loading">载入页面布局…</Placeholder>
   }
-  if (layoutState.status === 'error') {
+  if (currentLayoutState.status === 'error') {
     return <Alert testId="compose-page-slot-layout-error">页面布局失败</Alert>
   }
 
@@ -218,7 +221,7 @@ function ResolvedPageContent({
           <NestedEntity
             key={rootId}
             document={document}
-            layoutSnapshot={layoutState.snapshot}
+            layoutSnapshot={currentLayoutState.snapshot}
             entityId={rootId}
             mode={mode}
             pageDocumentPort={pageDocumentPort}

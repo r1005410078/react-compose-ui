@@ -8,7 +8,11 @@ import { document, entity, layoutSnapshot } from './test-fixtures'
 
 const modifiers = { shift: false, alt: false, command: false }
 
-function setup(value = document()) {
+function setup(
+  value = document(),
+  snapshot = layoutSnapshot(value),
+  selectedIds: readonly string[] = ['a'],
+) {
   const effects: StageInteractionEffect[] = []
   const controller = createStageInteractionController()
   controller.connectSurface({
@@ -18,11 +22,11 @@ function setup(value = document()) {
   let nextId = 0
   controller.updateContext({
     document: value,
-    layoutSnapshot: layoutSnapshot(value),
+    layoutSnapshot: snapshot,
     viewport: { x: 0, y: 0, zoom: 1 },
     surfaceSize: { width: 800, height: 600 },
     tool: 'select',
-    selectedIds: ['a'],
+    selectedIds,
     idFactory: () => `id-${++nextId}`,
   })
   return { controller, effects }
@@ -57,6 +61,213 @@ describe('StageInteractionController ECS systems', () => {
             transform: {
               position: { x: 24, y: 32 },
               size: { width: 100, height: 50 },
+            },
+          }],
+        },
+      },
+    })
+  })
+
+  it('OpenSpec: auto-layout-interactions / Flow 拖动 / 使用冻结 Snapshot 并烘焙 Fill 尺寸', () => {
+    const flowBase = entity('a')
+    const flow = {
+      ...flowBase,
+      components: {
+        ...flowBase.components,
+        LayoutItem: {
+          ...flowBase.components.LayoutItem,
+          positioning: 'flow' as const,
+          width: {
+            ...(flowBase.components.LayoutItem?.width as object),
+            mode: 'fill' as const,
+          },
+        },
+      },
+    }
+    const parentBase = entity('parent', { childIds: ['a'], width: 400, height: 200 })
+    const parent = {
+      ...parentBase,
+      components: {
+        ...parentBase.components,
+        Layout: {
+          type: 'flex' as const,
+          flexDirection: 'row' as const,
+          flexWrap: 'nowrap' as const,
+          alignContent: 'stretch' as const,
+          justifyContent: 'flex-start' as const,
+          alignItems: 'stretch' as const,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
+        },
+      },
+    }
+    const value = document([parent, flow], ['parent'])
+    const snapshot = {
+      ...layoutSnapshot(value),
+      boxes: {
+        parent: { x: 0, y: 0, width: 400, height: 200, positioning: 'absolute' as const },
+        a: { x: 12, y: 16, width: 260, height: 50, positioning: 'flow' as const },
+      },
+    }
+    const { controller, effects } = setup(value, snapshot)
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 20, y: 20 },
+      hit: { kind: 'entity', entityId: 'a' }, modifiers,
+    })
+    controller.send({
+      type: 'pointer.up', pointerId: 1, point: { x: 50, y: 60 }, modifiers,
+    })
+    expect(effects.find((effect) => effect.type === 'command.dispatch')).toMatchObject({
+      command: {
+        payload: {
+          operation: 'move',
+          updates: [{
+            entityId: 'a',
+            transform: { size: { width: 260, height: 50 } },
+          }],
+        },
+      },
+    })
+  })
+
+  it('OpenSpec: auto-layout-interactions / 混合多选移动 / Flow 与 Absolute 共用一次提交', () => {
+    const flowBase = entity('flow')
+    const flow = {
+      ...flowBase,
+      components: {
+        ...flowBase.components,
+        LayoutItem: {
+          ...flowBase.components.LayoutItem,
+          positioning: 'flow' as const,
+        },
+      },
+    }
+    const absolute = entity('absolute', { x: 180, y: 80 })
+    const parentBase = entity('parent', { childIds: ['flow', 'absolute'], width: 400, height: 200 })
+    const parent = {
+      ...parentBase,
+      components: {
+        ...parentBase.components,
+        Layout: {
+          type: 'flex' as const,
+          flexDirection: 'row' as const,
+          flexWrap: 'nowrap' as const,
+          alignContent: 'stretch' as const,
+          justifyContent: 'flex-start' as const,
+          alignItems: 'stretch' as const,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
+        },
+      },
+    }
+    const value = document([parent, flow, absolute], ['parent'])
+    const snapshot = {
+      ...layoutSnapshot(value),
+      boxes: {
+        parent: { x: 0, y: 0, width: 400, height: 200, positioning: 'absolute' as const },
+        flow: { x: 10, y: 12, width: 100, height: 50, positioning: 'flow' as const },
+        absolute: { x: 180, y: 80, width: 100, height: 50, positioning: 'absolute' as const },
+      },
+    }
+    const { controller, effects } = setup(value, snapshot, ['flow', 'absolute'])
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 20, y: 20 },
+      hit: { kind: 'entity', entityId: 'flow' }, modifiers,
+    })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 40, y: 50 }, modifiers })
+
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: {
+        payload: {
+          operation: 'move',
+          updates: [
+            { entityId: 'flow', transform: { position: { x: 32, y: 41 } } },
+            { entityId: 'absolute', transform: { position: { x: 202, y: 109 } } },
+          ],
+        },
+      },
+    })
+  })
+
+  it('OpenSpec: auto-layout-interactions / 手势取消 / 清除预览且零事务', () => {
+    const { controller, effects } = setup()
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'a' }, modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 40, y: 40 }, modifiers })
+    expect(controller.getSnapshot().previewTransforms.a).toBeDefined()
+    controller.send({ type: 'pointer.cancel', pointerId: 1 })
+    expect(controller.getSnapshot().previewTransforms).toEqual({})
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toEqual([])
+  })
+
+  it('OpenSpec: auto-layout-interactions / Fill Resize / 只提交活动轴并保留 Flow offset', () => {
+    const flowBase = entity('a')
+    const flow = {
+      ...flowBase,
+      components: {
+        ...flowBase.components,
+        LayoutItem: {
+          ...flowBase.components.LayoutItem,
+          positioning: 'flow' as const,
+          offset: { x: 7, y: 9 },
+          width: {
+            ...(flowBase.components.LayoutItem?.width as object),
+            mode: 'fill' as const,
+          },
+          height: {
+            ...(flowBase.components.LayoutItem?.height as object),
+            mode: 'fill' as const,
+          },
+        },
+      },
+    }
+    const parentBase = entity('parent', { childIds: ['a'], width: 400, height: 200 })
+    const parent = {
+      ...parentBase,
+      components: {
+        ...parentBase.components,
+        Layout: {
+          type: 'flex' as const,
+          flexDirection: 'row' as const,
+          flexWrap: 'nowrap' as const,
+          alignContent: 'stretch' as const,
+          justifyContent: 'flex-start' as const,
+          alignItems: 'stretch' as const,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
+        },
+      },
+    }
+    const value = document([parent, flow], ['parent'])
+    const snapshot = {
+      ...layoutSnapshot(value),
+      boxes: {
+        parent: { x: 0, y: 0, width: 400, height: 200, positioning: 'absolute' as const },
+        a: { x: 12, y: 16, width: 260, height: 160, positioning: 'flow' as const },
+      },
+    }
+    const { controller, effects } = setup(value, snapshot)
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 272, y: 96 },
+      hit: { kind: 'resize', handle: 'e' }, modifiers,
+    })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 300, y: 96 }, modifiers })
+    expect(effects.find((effect) => effect.type === 'command.dispatch')).toMatchObject({
+      command: {
+        payload: {
+          operation: 'resize',
+          updates: [{
+            entityId: 'a',
+            transform: {
+              position: { x: 7, y: 9 },
+              size: { height: 50 },
             },
           }],
         },

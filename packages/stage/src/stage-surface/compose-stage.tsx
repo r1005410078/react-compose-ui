@@ -48,7 +48,9 @@ import {
   getComposeLock,
   getComposeLayoutItem,
   getComposeSpatialTransform,
+  getComposeTransform,
   getComposeVisibility,
+  resolveComposeAppearance,
   resolveComposeGeometryConstraints,
   type ComposeDocument,
   type ComposeEntity,
@@ -67,6 +69,8 @@ import {
   createDuplicateCommand,
   createGroupCommand,
   createUngroupCommand,
+  getGroupCommandAvailability,
+  getUngroupCommandAvailability,
   applyMatrix,
   getEntityWorldBounds,
   getEntityWorldMatrix,
@@ -77,7 +81,6 @@ import {
   zoomViewportAt,
   getEntityParentId,
   toComposeTransform,
-  toStageTransform,
   type ResizeHandle,
   type StagePoint,
   type StageRect,
@@ -547,10 +550,12 @@ export function ComposeStage(props: ComposeStageProps) {
       </div>
     )
   }
-  return <ComposeStageReady {...props} layoutSnapshot={props.layoutSnapshot} />
+  const { layoutError: _layoutError, layoutSnapshot, ...readyProps } = props
+  void _layoutError
+  return <ComposeStageReady {...readyProps} layoutSnapshot={layoutSnapshot} />
 }
 
-type ComposeStageReadyProps = ComposeStageProps & {
+type ComposeStageReadyProps = Omit<ComposeStageProps, 'layoutError' | 'layoutSnapshot'> & {
   readonly layoutSnapshot: ComposeLayoutSnapshot
 }
 
@@ -685,11 +690,17 @@ function ComposeStageReady({
     const entity = document.entities[id]
     return entity && !getComposeLock(entity).locked
   })
-  const canGroup = contextEditableIds.length >= 2
+  const groupAvailability = getGroupCommandAvailability(document, contextEditableIds)
+  const ungroupAvailability = contextEditableIds.length === 1
+    ? getUngroupCommandAvailability(document, contextEditableIds[0]!)
+    : { available: true as const }
+  const canGroup = groupAvailability.available
+    && contextEditableIds.length >= 2
     && contextEditableIds.every((id) =>
       getEntityParentId(document, id)
       === getEntityParentId(document, contextEditableIds[0]!))
-  const canUngroup = contextEditableIds.length === 1
+  const canUngroup = ungroupAvailability.available
+    && contextEditableIds.length === 1
     && Boolean(getComposeHierarchy(document.entities[contextEditableIds[0]!]!)?.childIds.length)
   const latestRef = useRef({
     document,
@@ -1534,7 +1545,11 @@ function ComposeStageReady({
       return
     }
     if (actionMatches('edit.group') || actionMatches('edit.ungroup')) {
-      if (actionMatches('edit.ungroup') && editableIds.length === 1) {
+      const wantsUngroup = actionMatches('edit.ungroup')
+      const groupAllowed = getGroupCommandAvailability(document, editableIds).available
+      const ungroupAllowed = editableIds.length === 1
+        && getUngroupCommandAvailability(document, editableIds[0]!).available
+      if (wantsUngroup && editableIds.length === 1 && ungroupAllowed) {
         const container = document.entities[editableIds[0]!]
         const hierarchy = container && getComposeHierarchy(container)
         const result = dispatch(createUngroupCommand(
@@ -1547,7 +1562,7 @@ function ComposeStageReady({
           onSelectedIdsChange(hierarchy.childIds)
         }
       }
-      else {
+      else if (!wantsUngroup && editableIds.length >= 2 && groupAllowed) {
         const groupId = idFactory()
         const result = dispatch(createGroupCommand(
           document,
@@ -1589,7 +1604,14 @@ function ComposeStageReady({
       const distance = event.shiftKey ? 10 : 1
       const stageUpdates = movableIds.map((entityId) => {
         const entity = document.entities[entityId]!
-        const transform = toStageTransform(getComposeSpatialTransform(entity))
+        const box = layoutSnapshot.boxes[entityId]!
+        const transform: StageTransform = {
+          x: box.x,
+          y: box.y,
+          width: box.width,
+          height: box.height,
+          rotation: getComposeTransform(entity).rotation,
+        }
         return {
           entityId,
           transform: {
@@ -1599,10 +1621,32 @@ function ComposeStageReady({
           },
         }
       })
-      const updates = stageUpdates.map(({ entityId, transform }) => ({
-        entityId,
-        transform: toComposeTransform(transform),
-      }))
+      const updates = stageUpdates.map(({ entityId, transform }) => {
+        const entity = document.entities[entityId]!
+        const item = getComposeLayoutItem(entity)
+        const box = layoutSnapshot.boxes[entityId]!
+        const parentId = getEntityParentId(document, entityId)
+        const parent = parentId ? document.entities[parentId] : undefined
+        const borderInset = parent ? resolveComposeAppearance(parent).borderWidth : 0
+        const inset = item.positioning === 'absolute'
+          ? { x: box.x - item.offset.x, y: box.y - item.offset.y }
+          : { x: borderInset, y: borderInset }
+        const next = toComposeTransform(transform)
+        return {
+          entityId,
+          transform: {
+            ...next,
+            position: {
+              x: next.position.x - inset.x,
+              y: next.position.y - inset.y,
+            },
+            size: {
+              width: item.width.mode === 'fill' ? next.size.width : item.width.value,
+              height: item.height.mode === 'fill' ? next.size.height : item.height.value,
+            },
+          },
+        }
+      })
       dispatch({
         id: idFactory(),
         type: BUILTIN_COMMAND_TYPES.setTransform,
@@ -1905,7 +1949,10 @@ function ComposeStageReady({
               const duplicate = id ? createDuplicateCommand(document, id, idFactory, idFactory()) : null
               if (duplicate && dispatch(duplicate.command).status === 'committed') onSelectedIdsChange([duplicate.rootId])
             }}>创建副本{contextMenuShortcut('edit.duplicate')}</ComposeContextMenuItem>
-            <ComposeContextMenuItem disabled={!canGroup} onClick={() => {
+            <ComposeContextMenuItem
+              disabled={!canGroup}
+              title={!groupAvailability.available ? groupAvailability.reason : undefined}
+              onClick={() => {
               const groupId = idFactory()
               if (dispatch(createGroupCommand(
                 document,
@@ -1914,8 +1961,12 @@ function ComposeStageReady({
                 groupId,
                 idFactory(),
               )).status === 'committed') onSelectedIdsChange([groupId])
-            }}>编组{contextMenuShortcut('edit.group')}</ComposeContextMenuItem>
-            <ComposeContextMenuItem disabled={!canUngroup} onClick={() => {
+              }}
+            >编组{contextMenuShortcut('edit.group')}</ComposeContextMenuItem>
+            <ComposeContextMenuItem
+              disabled={!canUngroup}
+              title={!ungroupAvailability.available ? ungroupAvailability.reason : undefined}
+              onClick={() => {
               const container = document.entities[contextEditableIds[0]!]
               const hierarchy = container && getComposeHierarchy(container)
               if (
@@ -1927,7 +1978,8 @@ function ComposeStageReady({
                 )).status === 'committed'
                 && hierarchy
               ) onSelectedIdsChange(hierarchy.childIds)
-            }}>取消编组{contextMenuShortcut('edit.ungroup')}</ComposeContextMenuItem>
+              }}
+            >取消编组{contextMenuShortcut('edit.ungroup')}</ComposeContextMenuItem>
             <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: BUILTIN_COMMAND_TYPES.deleteEntity, payload: { entityIds: contextEditableIds }, meta: { label: `Delete ${describeEntityTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除{contextMenuShortcut('edit.delete')}</ComposeContextMenuItem>
             <ComposeContextMenuSeparator />
           </> : null}

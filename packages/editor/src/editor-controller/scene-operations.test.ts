@@ -183,7 +183,11 @@ describe('planSceneOperation', () => {
     expect(reparent.command.type).toBe(BUILTIN_COMMAND_TYPES.batch)
     expect((reparent.command.payload.commands as unknown as { type: string }[]).map(
       (child) => child.type,
-    )).toEqual([BUILTIN_COMMAND_TYPES.moveEntity, BUILTIN_COMMAND_TYPES.setTransform])
+    )).toEqual([
+      BUILTIN_COMMAND_TYPES.updateComponent,
+      BUILTIN_COMMAND_TYPES.updateComponent,
+      BUILTIN_COMMAND_TYPES.moveEntity,
+    ])
 
     const reorder = plannedCommand({
       type: 'move',

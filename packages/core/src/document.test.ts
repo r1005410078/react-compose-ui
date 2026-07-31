@@ -1,6 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import { validateComposeDocument } from './document'
+import { getComposeComposition } from './entity'
 import { containerEntity, documentFixture, rendererEntity, transform } from './test-fixtures'
+
+function autoLayoutContainer(id: string, childIds: readonly string[]) {
+  const base = containerEntity(id, childIds)
+  return {
+    ...base,
+    components: {
+      ...base.components,
+      Composition: {
+        ...base.components.Composition,
+        baseComponentKeys: [...getComposeComposition(base).baseComponentKeys, 'Layout'],
+      },
+      Layout: {
+        type: 'flex' as const,
+        flexDirection: 'row' as const,
+        flexWrap: 'nowrap' as const,
+        alignContent: 'stretch' as const,
+        justifyContent: 'flex-start' as const,
+        alignItems: 'stretch' as const,
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        rowGap: 0,
+        columnGap: 0,
+      },
+    },
+  }
+}
 
 describe('ComposeDocument v6 validation', () => {
   it('OpenSpec: compose-document / 版本化 ECS JSON 文档 / 接受 v6 并拒绝旧版本', () => {
@@ -99,6 +125,44 @@ describe('ComposeDocument v6 validation', () => {
     })
     const result = validateComposeDocument(documentFixture({ limited: entity }))
     expect(result.valid).toBe(false)
+  })
+
+  it('OpenSpec: auto-layout-interactions / Fill 参与条件 / 接受 Layout parent 下的 Flow', () => {
+    const child = rendererEntity('child', {
+      layoutItem: {
+        positioning: 'flow',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'fill', value: 100, min: 0, max: null },
+        height: { mode: 'fill', value: 50, min: 0, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+    })
+    const parent = autoLayoutContainer('parent', ['child'])
+    expect(validateComposeDocument(
+      documentFixture({ parent, child }, ['parent']),
+    ).valid).toBe(true)
+  })
+
+  it('OpenSpec: auto-layout-interactions / Fill 参与条件 / 精确拒绝 Absolute axis', () => {
+    const child = rendererEntity('child', {
+      layoutItem: {
+        positioning: 'absolute',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'fill', value: 100, min: 0, max: null },
+        height: { mode: 'fixed', value: 50, min: 0, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+    })
+    const result = validateComposeDocument(documentFixture({ child }))
+    expect(result.valid).toBe(false)
+    if (!result.valid) {
+      expect(result.issues).toContainEqual(expect.objectContaining({
+        code: 'layout-item.invalid',
+        path: ['entities', 'child', 'components', 'LayoutItem', 'width', 'mode'],
+      }))
+    }
   })
 
   it('OpenSpec: compose-document / ECS 层级拓扑 / 使用 Renderer 与 Hierarchy 组合树', () => {

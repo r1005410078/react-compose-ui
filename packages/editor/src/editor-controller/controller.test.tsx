@@ -30,6 +30,49 @@ import {
 } from '@compose-ui/core'
 import { useComposeEditorController } from './controller'
 
+// Controller 契约测试使用确定性 fake；Yoga/WASM 数值与异步加载由 layout-engine 集成测试覆盖。
+vi.mock('@compose-ui/layout-engine', () => ({
+  createComposeLayoutRuntime: ({ document: initialDocument }: { document: ComposeDocument }) => {
+    let revision = 0
+    let current = initialDocument
+    const listeners = new Set<() => void>()
+    const solve = () => ({
+      status: 'ready' as const,
+      document: current,
+      snapshot: {
+        revision: ++revision,
+        boxes: Object.fromEntries(Object.values(current.entities).map((item) => {
+          const layoutItem = item.components.LayoutItem as unknown as ComposeLayoutItem
+          return [item.id, {
+            x: layoutItem.offset.x,
+            y: layoutItem.offset.y,
+            width: layoutItem.width.value,
+            height: layoutItem.height.value,
+            positioning: layoutItem.positioning,
+          }]
+        })),
+        diagnostics: [],
+      },
+    })
+    let state = solve()
+    return {
+      getState: () => state,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+      updateDocument: (document: ComposeDocument) => {
+        if (document === current) return
+        current = document
+        state = solve()
+        listeners.forEach((listener) => listener())
+      },
+      setMeasurementPort: () => undefined,
+      dispose: () => listeners.clear(),
+    }
+  },
+}))
+
 function transform(
   x: number,
   y: number,
@@ -490,7 +533,7 @@ describe('useComposeEditorController', () => {
     expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds).toEqual([])
   })
 
-  it('场景树移动操作跨父级 reparent 并在同父级内重排序', async () => {
+  it('场景树移动操作跨父级 reparent 并在同父级内重排序', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
       idFactory: ids(),
@@ -498,7 +541,7 @@ describe('useComposeEditorController', () => {
       registry,
     }))
 
-    await waitFor(() => expect(result.current.stageProps.layoutSnapshot).toBeDefined())
+    expect(result.current.stageProps.layoutSnapshot).toBeDefined()
 
     act(() => result.current.sceneTreeProps.onOperation?.({
       type: 'move',

@@ -24,6 +24,11 @@ Move/Resize/Rotate 的命令规划会查询 `GeometryConstraints`，并生成带
 `entity.transform.set`。多选、吸附、group/ungroup、reparent 和 duplicate 继续保持单事务与
 可逆 Patch 边界。
 
+手势开始时会冻结 Layout Snapshot。移动 Flow 会以已求解 box 预览，并在松手时原子转换为
+Absolute；其中 Fill 轴会烘焙为 Fixed。Resize Fill 只转换实际改变的轴，Rotation 不改变 Flow
+或 sizing。Scene Tree reparent 移入 Layout 自动 Flow，移出自由父级烘焙 Absolute；同父级排序
+只更新 `Hierarchy.childIds`。Flow 目标的 Group/Ungroup 通过公共 availability API 返回稳定禁用原因。
+
 Paint 编辑也在 controller 内作为独立、无 DOM session 运行。`paintEditing` 只在单选 Entity 的
 Inspector 打开 `backgroundPaint` 时产生 Linear/Radial/Angular 的世界坐标控制柄；拖动只更新 snapshot
 preview，`pointerup` 才提交一次 `entity.appearance.set`。`paintSampling` 按 SceneIndex 的可见 z-order 与

@@ -169,6 +169,59 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByRole('spinbutton', { name: '计算宽度' })).toHaveValue(80)
   })
 
+  it('OpenSpec: auto-layout-interactions / Inspector Fill / Flow 转 Absolute 同时烘焙 Fixed', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const child = entity({
+      LayoutItem: {
+        ...createDefaultComposeLayoutItem(80, 40),
+        positioning: 'flow',
+        width: { mode: 'fill', value: 80, min: null, max: null },
+      },
+    })
+    const parent = { ...entity({
+      Hierarchy: { childIds: [child.id] },
+      Layout: createDefaultComposeFlexLayout(),
+    }), id: 'parent', name: 'Parent' }
+    const document: ComposeDocument = {
+      schemaVersion: 6,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [parent.id],
+      entities: { [parent.id]: parent, [child.id]: child },
+    }
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        document={document}
+        entity={child}
+        layoutSnapshot={{
+          revision: 4,
+          boxes: {
+            [child.id]: { x: 30, y: 40, width: 240, height: 40, positioning: 'flow' },
+          },
+          diagnostics: [],
+        }}
+        readOnly={false}
+        value={child.components.LayoutItem!}
+      />,
+    )
+
+    expect(screen.getAllByRole('option', { name: 'fill' })).toHaveLength(2)
+    fireEvent.change(screen.getByRole('combobox', { name: '定位' }), {
+      target: { value: 'absolute' },
+    })
+    const command = dispatch.mock.lastCall?.[0] as EditorCommand
+    expect(command.payload).toMatchObject({
+      value: {
+        positioning: 'absolute',
+        offset: { x: 30, y: 40 },
+        width: { mode: 'fixed', value: 240 },
+      },
+    })
+  })
+
   it('OpenSpec: 基础物料 / Lock Inspector 在 readOnly 上下文仍可解除锁定', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('Lock')
