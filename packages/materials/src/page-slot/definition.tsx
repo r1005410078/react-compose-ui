@@ -11,6 +11,7 @@ import {
   createPageSlotRendererInspector,
 } from '../material-inspector-kit/renderer-inspectors'
 import { PageSlotRenderer } from './renderer'
+import { PAGE_SLOT_RENDERER_MEASUREMENT } from './measurement'
 
 /** 创建 Page Slot Renderer 与 Entity Preset。 @internal */
 export function createPageSlotMaterial(
@@ -29,6 +30,7 @@ export function createPageSlotMaterial(
       label: options.label ?? 'Page Slot',
       renderer: PageSlotRenderer,
       inspector: createPageSlotRendererInspector(idFactory),
+      measurement: PAGE_SLOT_RENDERER_MEASUREMENT,
     },
     preset: {
       id: 'page-slot',

@@ -38,6 +38,9 @@ Palette、Stage、History、Inspector 和 Command Panel，并把所有编辑入�
 Scene Tree 根据 `rootIds` 和 `Hierarchy.childIds` 生成。Palette 只显示 Registry Presets。
 Scene Tree 移入带 Layout 的父级会自动转 Flow，跨 Layout 保持 Flow 与目标 insertion index，移出到
 自由父级时使用当前 Snapshot 烘焙 Absolute；同一 Layout 内排序只改变 `Hierarchy.childIds`。
+Controller 拥有文档会话级 Layout Runtime；Stage surface 挂载时用 registry、asset resolver 与 page
+loader 创建 measurement adapter，卸载时 detach。测量 revision 只更新 Snapshot，不进入事务、历史
+或操作日志。
 默认 Inspector 只创建一个 Property Panel，并按 Registry 顺序聚合 Identity、Transform、
 LayoutItem、Visibility、Lock、Appearance、Hierarchy/Clip、GeometryConstraints 与 Renderer 内容分组。
 所有分组共享搜索、筛选、显示设置和列宽，默认展开且可折叠；Hierarchy 与 Clip 合并为“容器”，

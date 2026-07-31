@@ -15,6 +15,7 @@ import {
   DEFAULT_TEXT_SIZE,
 } from './defaults'
 import { TextRenderer } from './renderer'
+import { TEXT_RENDERER_MEASUREMENT } from './measurement'
 
 /** 创建 Text Renderer 与 Entity Preset。 @internal */
 export function createTextMaterial(
@@ -30,6 +31,7 @@ export function createTextMaterial(
       label: options.label ?? 'Text',
       renderer: TextRenderer,
       inspector: createTextRendererInspector(idFactory),
+      measurement: TEXT_RENDERER_MEASUREMENT,
     },
     preset: {
       id: 'text',

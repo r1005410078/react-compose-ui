@@ -725,14 +725,22 @@ function validateTopology(
       }
       if (
         item[axis]?.mode === 'hug'
-        && entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy]
-        && !entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.layout]
+        && (
+          (
+            entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy]
+            && !entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.layout]
+          )
+          || (
+            !entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy]
+            && !entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.renderer]
+          )
+        )
       ) {
         addIssue(
           issues,
           'layout-item.invalid',
           [...itemPath, axis, 'mode'],
-          'Free Hierarchy Entity 不能通过 Absolute 子项 Hug',
+          'Hug 只允许用于 Renderer leaf 或带 Layout 的 Hierarchy Entity',
         )
       }
     }

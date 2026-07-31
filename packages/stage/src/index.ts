@@ -11,6 +11,7 @@ export { ComposeComponentPalette, type ComposeComponentPaletteProps } from './co
 export type {
   ComposeStageDispatch,
   ComposeStageKeybinding,
+  ComposeStageLayoutRuntime,
   ComposeStageProps,
   ComposeStageShortcutAction,
   ComposeStageShortcuts,

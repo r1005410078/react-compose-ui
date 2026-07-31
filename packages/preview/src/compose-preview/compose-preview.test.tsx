@@ -6,9 +6,10 @@ import {
   type ComposeEntity,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
+import type { ComposeLayoutRuntime } from '@compose-ui/layout-engine'
 import { ComposePreview as ComposePreviewBase } from '../index'
 
 afterEach(cleanup)
@@ -178,6 +179,70 @@ function registry() {
 }
 
 describe('ComposePreview', () => {
+  it('OpenSpec: hug-content-layout / Preview 独立解析 Hug / 异步 Runtime 使用 Registry measurement', async () => {
+    const base = document()
+    const text = base.entities.text!
+    const value: ComposeDocument = {
+      ...base,
+      rootIds: ['text'],
+      entities: {
+        text: {
+          ...text,
+          components: {
+            ...text.components,
+            LayoutItem: {
+              ...(text.components.LayoutItem as object),
+              positioning: 'absolute',
+              width: { mode: 'hug', value: 120, min: null, max: null },
+              height: { mode: 'hug', value: 50, min: null, max: null },
+            },
+          },
+        },
+      },
+    }
+    const measuredRegistry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'text',
+        label: '文本',
+        renderer: ({ props }) => <span>{String(props.text)}</span>,
+        measurement: { measure: () => ({ width: 60, height: 24, baseline: 18 }) },
+      }],
+    })
+    render(<ComposePreviewBase document={value} registry={measuredRegistry} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('compose-preview-entity-text')).toHaveStyle({
+        width: '62px',
+        height: '26px',
+      })
+    })
+    expect(screen.queryByTestId('compose-preview-layout-diagnostics')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: hug-content-layout / Preview 独立测量 / 注入 Runtime 时挂接 adapter 但不释放宿主 Runtime', () => {
+    const value = document()
+    const setMeasurementPort = vi.fn()
+    const dispose = vi.fn()
+    const layoutState = { status: 'ready' as const, document: value, snapshot: snapshot(value) }
+    const runtime: ComposeLayoutRuntime = {
+      getState: () => layoutState,
+      updateDocument: vi.fn(),
+      setMeasurementPort,
+      subscribe: () => () => undefined,
+      dispose,
+    }
+    const view = render(
+      <ComposePreviewBase document={value} layoutRuntime={runtime} registry={registry()} />,
+    )
+
+    expect(setMeasurementPort).toHaveBeenCalledWith(expect.objectContaining({
+      measure: expect.any(Function),
+    }))
+    view.unmount()
+    expect(setMeasurementPort).toHaveBeenLastCalledWith(undefined)
+    expect(dispose).not.toHaveBeenCalled()
+  })
+
   it('OpenSpec: replace-nodes-with-ecs-entities / Renderer 与 Hierarchy 可组合', () => {
     render(
       <ComposePreview

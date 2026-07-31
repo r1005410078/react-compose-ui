@@ -6,6 +6,7 @@ import {
   getComposeClip,
   getComposeHierarchy,
   getComposeLayout,
+  getComposeRenderer,
   getComposeSpatialTransform,
   resolveComposeAppearance,
   type ComposeAppearance,
@@ -106,7 +107,13 @@ export function createLayoutItemInspector(
     const parent = document && Object.values(document.entities).find((candidate) =>
       getComposeHierarchy(candidate)?.childIds.includes(entity.id))
     const fillAllowed = item.positioning === 'flow' && Boolean(parent && getComposeLayout(parent))
-    const schema = useMemo(() => v.object({
+    const hierarchy = getComposeHierarchy(entity)
+    const hugAllowed = hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
+    const schema = useMemo(() => {
+      const sizingModes = fillAllowed
+        ? (hugAllowed ? ['fixed', 'fill', 'hug'] as const : ['fixed', 'fill'] as const)
+        : (hugAllowed ? ['fixed', 'hug'] as const : ['fixed'] as const)
+      return v.object({
       positioning: v.pipe(
         v.picklist(['flow', 'absolute']),
         v.title(zh ? '定位' : 'Positioning'),
@@ -117,12 +124,12 @@ export function createLayoutItemInspector(
         v.metadata({ propertyPanel: { editor: 'vector2' } }),
       ),
       widthMode: v.pipe(
-        v.picklist(fillAllowed ? ['fixed', 'fill', 'hug'] : ['fixed', 'hug']),
+        v.picklist(sizingModes),
         v.title(zh ? '宽度模式' : 'Width mode'),
       ),
       widthValue: v.pipe(v.number(), v.minValue(0), v.title(zh ? '宽度' : 'Width')),
       heightMode: v.pipe(
-        v.picklist(fillAllowed ? ['fixed', 'fill', 'hug'] : ['fixed', 'hug']),
+        v.picklist(sizingModes),
         v.title(zh ? '高度模式' : 'Height mode'),
       ),
       heightValue: v.pipe(v.number(), v.minValue(0), v.title(zh ? '高度' : 'Height')),
@@ -144,7 +151,8 @@ export function createLayoutItemInspector(
         v.picklist(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
         v.title(zh ? '自身对齐' : 'Align self'),
       ),
-    }), [fillAllowed, zh])
+      })
+    }, [fillAllowed, hugAllowed, zh])
     return (
       <ComposePropertyPanel
         aria-label={zh ? '布局项属性' : 'Layout item properties'}
@@ -167,6 +175,7 @@ export function createLayoutItemInspector(
         }}
         onValueChange={(next) => {
           if (next.positioning === 'flow' && (!parent || !getComposeLayout(parent))) return
+          if (!hugAllowed && (next.widthMode === 'hug' || next.heightMode === 'hug')) return
           const bakedBox = item.positioning === 'flow' && next.positioning === 'absolute'
             ? layoutSnapshot?.boxes[entity.id]
             : undefined

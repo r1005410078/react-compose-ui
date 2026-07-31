@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposePageDocumentLoader } from '@compose-ui/core'
+import type { ComposeLayoutMeasurementPort, ComposePageDocumentLoader } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type {
   CommandDispatchResult,
@@ -77,6 +77,11 @@ export type ComposeStageShortcuts = Readonly<
  */
 export type ComposeStageDispatch = (command: EditorCommand) => CommandDispatchResult
 
+/** Stage 挂接 Renderer measurement 时需要的最小 Layout Runtime 边界。 @public */
+export interface ComposeStageLayoutRuntime {
+  setMeasurementPort(port: ComposeLayoutMeasurementPort | undefined): void
+}
+
 /**
  * 受控无限 Stage 属性。
  *
@@ -88,6 +93,8 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly layoutSnapshot?: ComposeLayoutSnapshot
   /** Layout Runtime 失败时显示的可读错误。 */
   readonly layoutError?: string
+  /** Controller 拥有的同会话 Runtime；Stage 用它挂接并卸载 Registry measurement adapter。 */
+  readonly layoutRuntime?: ComposeStageLayoutRuntime
   readonly registry: ComposeEntityRegistry
   /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver

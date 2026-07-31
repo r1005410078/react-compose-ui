@@ -48,6 +48,12 @@ Snapshot，并始终以绝对定位 DOM 呈现，不再运行第二套 CSS Flex�
 Flow/Absolute、Fixed/Fill/Hug、fallback、margin、alignSelf 与计算尺寸；Fill 只在 Layout parent 的
 Flow 子项上可选，Flow 转 Absolute 时会从当前 Snapshot 烘焙 offset 和 Fill 尺寸。
 
+Text、Image、SVG 与 Page Slot Renderer 同时提供 Hug measurement definition。Text 使用与可见
+Renderer 相同的 typography 在隔离离屏 host 中测量，并订阅 `document.fonts`；Image 使用 resolved
+asset natural size；SVG 读取 width/height 或 viewBox；Page Slot 使用目标 v6 页面 output。后三者
+按稳定引用订阅 revision，准备中或失败时由 Runtime 使用 LayoutItem fallback。Rectangle 等没有
+intrinsic size 的物料不伪造测量结果，会发布明确 fallback diagnostic。
+
 所有第一方物料的 `Appearance.backgroundPaint` 都使用结构化 Compose Paint。Appearance Inspector 通过
 共享 `paint` editor 打开背景填充；在 Editor 中，它会连接 Stage 的渐变控制柄和图层取色 session，而
 materials 本身仍只依赖 Registry 的 `ComposePaintEditPort`，不反向依赖 Editor 或 Stage。

@@ -53,9 +53,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/command-panel` 是订阅 core TransactionRuntime 的独立 React 调试台，只接受宿主
   声明的结构化命令预设，可依赖 components、ui-context，不依赖 editor、history、scene-tree、
   property-panel 或 operation-log。
-- `@compose-ui/component-registry` 是实例级 Entity Registry，统一 Renderer、Component
-  Definition、Entity Preset 与 Capability，依赖 core 与 assets，以 React 为 peer，不依赖
-  editor 或 property-panel。
+- `@compose-ui/component-registry` 是实例级 Entity Registry 与 Renderer measurement adapter，统一
+  Renderer、Component Definition、Entity Preset 与 Capability，依赖 core 与 assets，以 React 为
+  peer，不依赖 editor 或 property-panel；测量禁止读取 Scene Entity DOM。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面目录、页面文档 Store 与 `app.json` 应用清单读写包，
   只依赖 `core` 与 `assets`；编辑器与独立预览运行时共用同一 Store，因此页面加载不依赖 `editor`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
@@ -65,10 +65,12 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、stage-engine、
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
+- `@compose-ui/preview` 依赖 core、assets、component-registry 与 layout-engine，拥有默认 Layout
+  Runtime/measurement adapter，也可挂接宿主 Runtime；不得依赖 editor 或 stage。
 - `@compose-ui/materials` 提供 Container、Rectangle、Text、Image、SVG Entity Presets、
   Renderer、Component Definitions 与 Capabilities，依赖 core、assets、component-registry、
-  components、property-panel、ui-context、DOMPurify 与 Valibot，不依赖 stage、editor 或
-  asset-browser。
+  components、layout-engine、property-panel、ui-context、DOMPurify 与 Valibot，不依赖 stage、
+  editor 或 asset-browser；layout-engine 只服务 Page Slot 嵌套文档 Runtime。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage、
   stage-engine 与独立面板包。
 - `@compose-ui/components` 是共享的无业务 Tree 等 React 交互组件包，可依赖 `ui-context`；
@@ -188,6 +190,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   `Hierarchy` 容器、`Renderer` 内容、同步命令事务、Entity Registry、Godot 风格无限 Stage、
   聚合 Inspector、controller 默认工作区、文档/Container Preview、事务/会话历史和
   Container/Rectangle/Text/Image/SVG/ECharts 纵向流程。
+- Hug container 由 Flow children、padding、gap 与 border 决定；Hug leaf 通过 Registry measurement
+  definition 同步读取缓存，并以可选 prepare/subscribe 处理字体、资源和页面 revision。测量缓存、
+  diagnostics 与 Yoga 树只增加 LayoutSnapshot revision，不属于文档、事务或历史。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
   surface 尺寸和动态滚动范围是会话状态。`document.output` 定义固定原点输出边界；Preview
   接受 v6 并忽略 canvas 编辑元数据。v5 只允许显式单向迁移；output 默认透明；Stage 输出边界可作为独立 Canvas

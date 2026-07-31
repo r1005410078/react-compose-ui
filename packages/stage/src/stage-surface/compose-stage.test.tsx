@@ -223,6 +223,31 @@ function renderStage(
 describe('ComposeStage ECS', () => {
   afterEach(cleanup)
 
+  it('OpenSpec: hug-content-layout / Stage measurement attachment / 挂接并卸载同会话端口', () => {
+    const value = document()
+    const setMeasurementPort = vi.fn()
+    const view = render(
+      <ComposeStage
+        dispatch={vi.fn()}
+        document={value}
+        layoutRuntime={{ setMeasurementPort }}
+        layoutSnapshot={layoutSnapshot(value)}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+        registry={registry}
+        selectedIds={[]}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+      />,
+    )
+
+    expect(setMeasurementPort).toHaveBeenCalledWith(expect.objectContaining({
+      measure: expect.any(Function),
+    }))
+    view.unmount()
+    expect(setMeasurementPort).toHaveBeenLastCalledWith(undefined)
+  })
+
   it('OpenSpec: stage / Stage 输出背景 Paint / 编辑渐变输出背景', () => {
     const value = document()
     renderStage({

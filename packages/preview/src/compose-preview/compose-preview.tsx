@@ -27,6 +27,7 @@ import type {
   ComposeResolvedLayoutBox,
 } from '@compose-ui/core'
 import type { CSSProperties, HTMLAttributes } from 'react'
+import type { ComposeLayoutRuntime } from '@compose-ui/layout-engine'
 import { useComposePreviewLayout } from './use-layout-runtime'
 
 /**
@@ -39,6 +40,8 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
   readonly document: ComposeDocument
   /** 宿主可注入已求解快照；省略时 Preview 创建并拥有独立 LayoutRuntime。 */
   readonly layoutSnapshot?: ComposeLayoutSnapshot
+  /** 宿主拥有的 Layout Runtime；Preview 挂接 measurement 但不会在卸载时释放它。 */
+  readonly layoutRuntime?: ComposeLayoutRuntime
   /** Stage 与 Preview 共享的实例级 Entity 注册表。 */
   readonly registry: ComposeEntityRegistry
   /** 资源型 Renderer 解析稳定引用时使用的运行时端口。 */
@@ -123,6 +126,7 @@ function PreviewEntity({
  */
 function ComposePreviewReady({
   document,
+  layoutRuntime: _layoutRuntime,
   layoutSnapshot,
   registry,
   assetResolver,
@@ -130,6 +134,7 @@ function ComposePreviewReady({
   target = { kind: 'document' },
   ...props
 }: ComposePreviewProps & { readonly layoutSnapshot: ComposeLayoutSnapshot }) {
+  void _layoutRuntime
   const content = target.kind === 'document'
     ? (
       <div
@@ -210,13 +215,34 @@ function ComposePreviewReady({
       data-compose-core={COMPOSE_UI_CORE_PACKAGE}
       data-compose-ui="preview"
     >
+      {layoutSnapshot.diagnostics.length > 0 ? (
+        <span
+          data-testid="compose-preview-layout-diagnostics"
+          role="status"
+          style={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            overflow: 'hidden',
+            clipPath: 'inset(50%)',
+          }}
+        >
+          {layoutSnapshot.diagnostics.map(({ message }) => message).join('；')}
+        </span>
+      ) : null}
       {content}
     </section>
   )
 }
 
 function ManagedComposePreview(props: ComposePreviewProps) {
-  const state = useComposePreviewLayout(props.document)
+  const state = useComposePreviewLayout(
+    props.document,
+    props.registry,
+    props.assetResolver,
+    props.pageLoader,
+    props.layoutRuntime,
+  )
   if (state.status === 'loading') {
     return (
       <section aria-busy="true" aria-label={props['aria-label'] ?? 'Compose preview'} role="status">

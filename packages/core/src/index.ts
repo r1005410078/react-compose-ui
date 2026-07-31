@@ -120,6 +120,7 @@ export type {
   ComposeHierarchy,
   ComposeLayout,
   ComposeLayoutDiagnostic,
+  ComposeLayoutMeasurementDiagnostic,
   ComposeLayoutItem,
   ComposeLayoutMeasurementPort,
   ComposeLayoutSnapshot,

@@ -296,11 +296,41 @@ function validateCapabilityGraph(
 export function createComposeEntityRegistry(
   options: ComposeEntityRegistryOptions = {},
 ): ComposeEntityRegistry {
+  const rendererDefinitions = (options.renderers ?? []).map((definition) => ({
+    ...definition,
+    ...(definition.measurement
+      ? { measurement: Object.freeze({ ...definition.measurement }) }
+      : {}),
+  }))
   const renderers = normalizeDefinitions(
     'renderer',
-    options.renderers ?? [],
+    rendererDefinitions,
     ({ type }) => type,
-    () => undefined,
+    (definition, index) => {
+      const measurement = definition.measurement
+      if (!measurement) return
+      if (typeof measurement.measure !== 'function') {
+        throw new ComposeEntityRegistryError(
+          'renderer',
+          index,
+          `${definition.type} measurement.measure 必须是函数`,
+        )
+      }
+      if (measurement.prepare !== undefined && typeof measurement.prepare !== 'function') {
+        throw new ComposeEntityRegistryError(
+          'renderer',
+          index,
+          `${definition.type} measurement.prepare 必须是函数`,
+        )
+      }
+      if (measurement.subscribe !== undefined && typeof measurement.subscribe !== 'function') {
+        throw new ComposeEntityRegistryError(
+          'renderer',
+          index,
+          `${definition.type} measurement.subscribe 必须是函数`,
+        )
+      }
+    },
   )
   const components = normalizeDefinitions(
     'component',

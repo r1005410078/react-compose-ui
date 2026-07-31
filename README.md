@@ -133,6 +133,10 @@ Component Key、基础项移除和带子项容器移除都会被阻止。Registr
 `Transform` 只持久化 rotation；`LayoutItem` 保存 Absolute/Flow、Fixed/Fill/Hug、offset、margin
 和 min/max。`@compose-ui/layout-engine` 使用 Yoga 异步求解，Stage 与 Preview 始终按同一
 `ComposeLayoutSnapshot` 绝对定位 DOM，不再以 CSS Flex 或旧 Transform 作为第二布局路径。
+Hug 容器由 Flow 子项、padding、gap 与 border 决定；Hug 叶子通过 Registry 的同步
+`measurement.measure` 和可选异步 `prepare` 获取内容尺寸。Text 使用隔离离屏 host，Image、SVG
+与 Page Slot 分别订阅资源 revision、SVG intrinsic box 与页面 output。准备中或失败时使用
+`LayoutItem.value` 并发布 Snapshot diagnostic，资源恢复只增加 Snapshot revision，不进入文档事务。
 
 ## Stage、Inspector 与 Preview
 
@@ -149,6 +153,10 @@ Inspector 按 Registry 顺序聚合当前 Entity 的 Component 属性区。顶�
 产品术语扩展 Entity；Component Definition 可以为分组标题栏提供可选状态和操作；锁定后只有
 Lock 可编辑。Preview 使用与 Stage 相同的 LayoutSnapshot、Transform rotation、Appearance、Hierarchy、Clip 和 Renderer
 语义，但不包含编辑 chrome。
+
+宿主 Renderer 可以在 definition 上声明 `measurement`。`createComposeRendererMeasurementAdapter()`
+负责缓存、AbortController、资源/页面订阅、迟到结果丢弃和精确 Entity 失效；完成使用后必须
+`dispose()`。Preview 默认自行管理 adapter，也可以注入宿主拥有的 Layout Runtime。
 
 ## 页面系统
 

@@ -16,6 +16,7 @@ import {
   DEFAULT_IMAGE_SIZE,
 } from './defaults'
 import { ImageRenderer } from './renderer'
+import { IMAGE_RENDERER_MEASUREMENT } from './measurement'
 
 const rasterTypes = new Set([
   'image/png',
@@ -42,6 +43,7 @@ export function createImageMaterial(
       label: options.label ?? 'Image',
       renderer: ImageRenderer,
       inspector: createImageRendererInspector(idFactory),
+      measurement: IMAGE_RENDERER_MEASUREMENT,
     },
     preset: {
       id: 'image',

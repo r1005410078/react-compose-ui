@@ -16,6 +16,7 @@ import {
   DEFAULT_SVG_SIZE,
 } from './defaults'
 import { SvgRenderer } from './renderer'
+import { SVG_RENDERER_MEASUREMENT } from './measurement'
 
 /** 创建 SVG Renderer 与资源型 Entity Preset。 @internal */
 export function createSvgMaterial(
@@ -31,6 +32,7 @@ export function createSvgMaterial(
       label: options.label ?? 'SVG',
       renderer: SvgRenderer,
       inspector: createSvgRendererInspector(idFactory),
+      measurement: SVG_RENDERER_MEASUREMENT,
     },
     preset: {
       id: 'svg',

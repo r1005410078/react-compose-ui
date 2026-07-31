@@ -8,6 +8,8 @@ import type {
   ComposeDocument,
   ComposeEntity,
   ComposeLayoutSnapshot,
+  ComposeMeasureConstraint,
+  ComposeMeasuredSize,
   ComposePageDocumentLoader,
   ComposeRenderer,
   EditorCommand,
@@ -127,6 +129,54 @@ export interface ComposeRendererDefinition {
   readonly renderer: ComponentType<ComposeRendererProps>
   /** 可选 Renderer 内容 Inspector。 */
   readonly inspector?: ComponentType<ComposeRendererInspectorProps>
+  /** 可选的内容固有尺寸定义；不得读取 Stage 或 Preview 的 Scene Entity DOM。 */
+  readonly measurement?: ComposeRendererMeasurementDefinition
+}
+
+/** Renderer 同步测量获得的稳定输入。 @public */
+export interface ComposeRendererMeasureInput {
+  readonly entity: ComposeEntity
+  readonly renderer: ComposeRenderer
+  readonly props: JsonObject
+  readonly width: ComposeMeasureConstraint
+  readonly height: ComposeMeasureConstraint
+  /** `prepare` 完成后的不透明缓存；没有 prepare 时为 undefined。 */
+  readonly prepared: unknown
+}
+
+/** Renderer 异步准备获得的运行时端口。 @public */
+export interface ComposeRendererPrepareInput {
+  readonly entity: ComposeEntity
+  readonly renderer: ComposeRenderer
+  readonly props: JsonObject
+  readonly assetResolver?: ComposeAssetResolver
+  readonly pageDocumentPort?: ComposePageDocumentLoader
+  readonly signal: AbortSignal
+}
+
+/** Renderer 外部事实变化订阅输入。 @public */
+export interface ComposeRendererMeasurementSubscriptionInput {
+  readonly entity: ComposeEntity
+  readonly renderer: ComposeRenderer
+  readonly props: JsonObject
+  readonly assetResolver?: ComposeAssetResolver
+  readonly pageDocumentPort?: ComposePageDocumentLoader
+  readonly invalidate: () => void
+}
+
+/**
+ * Renderer 的 Hug 内容测量定义。
+ *
+ * @remarks
+ * `measure` 必须同步；资源与页面等异步事实由 `prepare` 写入 adapter 缓存。抛错、非法尺寸和
+ * 迟到的 prepare 结果都会被 adapter 隔离，不会中断其他 Entity 的布局。
+ *
+ * @public
+ */
+export interface ComposeRendererMeasurementDefinition {
+  measure(input: ComposeRendererMeasureInput): ComposeMeasuredSize | null
+  prepare?(input: ComposeRendererPrepareInput): Promise<unknown> | unknown
+  subscribe?(input: ComposeRendererMeasurementSubscriptionInput): () => void
 }
 
 /** 一个可校验并展示的 ECS Component 定义。 @public */

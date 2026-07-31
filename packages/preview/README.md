@@ -23,8 +23,10 @@ import { ComposePreview } from '@compose-ui/preview'
 target 可指向根级或嵌套的 `Hierarchy` Entity。一个 Entity 若同时拥有 `Renderer` 和
 `Hierarchy`，Preview 会先渲染自身内容，再渲染子项；`Clip.enabled` 决定容器溢出行为。
 
-Preview 默认创建文档级 Layout Runtime，也允许宿主注入 `layoutSnapshot`。加载期间呈现
+Preview 默认创建文档级 Layout Runtime，也允许宿主注入 `layoutRuntime` 或已求解
+`layoutSnapshot`。Managed Runtime 会挂接 Registry measurement adapter，并在卸载时取消异步 prepare、
+资源/页面订阅和离屏测量环境；宿主 Runtime 只会被 detach，不会被 Preview 释放。加载期间呈现
 `aria-busy`，失败时不回退旧 Transform。Preview 使用与 Stage 相同的 Snapshot、rotation、
 `Appearance`、`Visibility` 与层级语义，不渲染网格、
 标尺、选区或手柄。未知 Renderer 显示 Registry 的可访问占位；资源 Renderer 通过可选
-`assetResolver` 解析稳定引用。
+`assetResolver` 解析稳定引用。Hug fallback diagnostic 通过可访问 `role=status` 发布。

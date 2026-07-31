@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { validateComposeDocument } from './document'
-import { getComposeComposition } from './entity'
+import { getComposeComposition, getComposeLayoutItem } from './entity'
 import { containerEntity, documentFixture, rendererEntity, transform } from './test-fixtures'
 
 function autoLayoutContainer(id: string, childIds: readonly string[]) {
@@ -161,6 +161,50 @@ describe('ComposeDocument v6 validation', () => {
       expect(result.issues).toContainEqual(expect.objectContaining({
         code: 'layout-item.invalid',
         path: ['entities', 'child', 'components', 'LayoutItem', 'width', 'mode'],
+      }))
+    }
+  })
+
+  it('OpenSpec: hug-content-layout / Hug 内容来源 / 接受 Renderer leaf 与 Auto Layout container', () => {
+    const leaf = rendererEntity('leaf', {
+      layoutItem: {
+        positioning: 'flow',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'hug', value: 80, min: 20, max: 200 },
+        height: { mode: 'hug', value: 30, min: null, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+    })
+    const parentBase = autoLayoutContainer('parent', ['leaf'])
+    const parent = {
+      ...parentBase,
+      components: {
+        ...parentBase.components,
+        LayoutItem: {
+          ...getComposeLayoutItem(parentBase),
+          width: { mode: 'hug' as const, value: 120, min: 40, max: 300 },
+          height: { mode: 'hug' as const, value: 80, min: 40, max: 300 },
+        },
+      },
+    }
+
+    expect(validateComposeDocument(
+      documentFixture({ parent, leaf }, ['parent']),
+    ).valid).toBe(true)
+  })
+
+  it('OpenSpec: hug-content-layout / Hug 内容来源 / 精确拒绝 free container', () => {
+    const free = containerEntity('free', [])
+    const input = structuredClone(documentFixture({ free })) as ReturnType<typeof documentFixture>
+    ;(input.entities.free!.components.LayoutItem as { width: { mode: string } }).width.mode = 'hug'
+
+    const result = validateComposeDocument(input)
+    expect(result.valid).toBe(false)
+    if (!result.valid) {
+      expect(result.issues).toContainEqual(expect.objectContaining({
+        code: 'layout-item.invalid',
+        path: ['entities', 'free', 'components', 'LayoutItem', 'width', 'mode'],
       }))
     }
   })

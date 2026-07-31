@@ -1,7 +1,9 @@
 import {
+  createComposeRendererMeasurementAdapter,
   composeEntitySceneStyle,
   ComposeEntityPaintLayer,
   ComposeRegistryEntityRenderer,
+  type ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import type {
   ComposeEntityRegistry,
@@ -20,6 +22,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -68,6 +71,7 @@ function Alert({ children, testId }: {
  * @internal
  */
 export function PageSlotRenderer({
+  assetResolver,
   mode,
   pageDocumentPort,
   props,
@@ -154,6 +158,7 @@ export function PageSlotRenderer({
   }
 
   return <ResolvedPageContent
+    assetResolver={assetResolver}
     document={state.document}
     mode={mode}
     pageDocumentPort={pageDocumentPort}
@@ -163,12 +168,14 @@ export function PageSlotRenderer({
 }
 
 function ResolvedPageContent({
+  assetResolver,
   document,
   mode,
   pageDocumentPort,
   pageKey,
   registry,
 }: {
+  readonly assetResolver: ComposeRendererProps['assetResolver']
   readonly document: ComposeDocument
   readonly mode: 'editor' | 'preview'
   readonly pageDocumentPort: ComposeRendererProps['pageDocumentPort']
@@ -177,12 +184,23 @@ function ResolvedPageContent({
 }) {
   const nest = useComposePageSlotNest()
   const [runtime] = useState(() => createComposeLayoutRuntime({ document }))
+  const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
+    registry,
+    assetResolver,
+    pageDocumentPort,
+  }), [assetResolver, pageDocumentPort, registry])
   const layoutState = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const currentLayoutState = layoutState.document === document
     ? layoutState
     : { status: 'loading' as const, document }
   const generation = useRef(0)
-  useLayoutEffect(() => runtime.updateDocument(document), [document, runtime])
+  const adapterGenerations = useRef(new WeakMap<ComposeRendererMeasurementAdapter, number>())
+  useLayoutEffect(() => {
+    adapter.updateDocument(document)
+    runtime.setMeasurementPort(adapter)
+    runtime.updateDocument(document)
+    return () => runtime.setMeasurementPort(undefined)
+  }, [adapter, document, runtime])
   useEffect(() => {
     generation.current += 1
     const mounted = generation.current
@@ -190,6 +208,16 @@ function ResolvedPageContent({
       if (generation.current === mounted) runtime.dispose()
     })
   }, [runtime])
+  useEffect(() => {
+    const generations = adapterGenerations.current
+    const mounted = (generations.get(adapter) ?? 0) + 1
+    generations.set(adapter, mounted)
+    return () => queueMicrotask(() => {
+      if (generations.get(adapter) !== mounted) return
+      adapter.dispose()
+      generations.delete(adapter)
+    })
+  }, [adapter])
   if (currentLayoutState.status === 'loading') {
     return <Placeholder testId="compose-page-slot-layout-loading">载入页面布局…</Placeholder>
   }
@@ -219,6 +247,7 @@ function ResolvedPageContent({
       >
         {document.rootIds.map((rootId) => (
           <NestedEntity
+            assetResolver={assetResolver}
             key={rootId}
             document={document}
             layoutSnapshot={currentLayoutState.snapshot}
@@ -242,6 +271,7 @@ function ResolvedPageContent({
  * 缺少递归时容器内容会整体丢失。
  */
 function NestedEntity({
+  assetResolver,
   document,
   layoutSnapshot,
   entityId,
@@ -249,6 +279,7 @@ function NestedEntity({
   pageDocumentPort,
   registry,
 }: {
+  readonly assetResolver: ComposeRendererProps['assetResolver']
   readonly document: ComposeDocument
   readonly layoutSnapshot: ComposeLayoutSnapshot
   readonly entityId: string
@@ -266,8 +297,9 @@ function NestedEntity({
       data-page-slot-entity-id={entity.id}
       style={{ ...composeEntitySceneStyle(entity, box), position: 'absolute' }}
     >
-      <ComposeEntityPaintLayer entity={entity} />
+      <ComposeEntityPaintLayer assetResolver={assetResolver} entity={entity} />
       <ComposeRegistryEntityRenderer
+        assetResolver={assetResolver}
         entity={entity}
         mode={mode}
         pageDocumentPort={pageDocumentPort}
@@ -275,6 +307,7 @@ function NestedEntity({
       />
       {hierarchy?.childIds.map((childId) => (
         <NestedEntity
+          assetResolver={assetResolver}
           key={childId}
           document={document}
           layoutSnapshot={layoutSnapshot}

@@ -120,14 +120,27 @@ export async function measureRasterAsset(blob: Blob) {
 
 /** 从 SVG width/height 或 viewBox 读取固有尺寸。 @internal */
 export function measureSvgAsset(source: string) {
+  try {
+    const intrinsic = readSvgIntrinsicSize(source)
+    return constrainAssetSize(intrinsic.width, intrinsic.height)
+  }
+  catch {
+    return { width: 320, height: 180 }
+  }
+}
+
+/** 从 SVG width/height 或 viewBox 读取未经缩放的固有尺寸。 @internal */
+export function readSvgIntrinsicSize(source: string) {
   const document = new DOMParser().parseFromString(source, 'image/svg+xml')
   const root = document.documentElement
   const width = Number.parseFloat(root.getAttribute('width') ?? '')
   const height = Number.parseFloat(root.getAttribute('height') ?? '')
   if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
-    return constrainAssetSize(width, height)
+    return { width, height }
   }
   const viewBox = root.getAttribute('viewBox')?.trim().split(/[\s,]+/u).map(Number)
-  if (viewBox?.length === 4) return constrainAssetSize(viewBox[2] ?? 0, viewBox[3] ?? 0)
-  return { width: 320, height: 180 }
+  const viewBoxWidth = viewBox?.length === 4 ? viewBox[2] ?? 0 : 0
+  const viewBoxHeight = viewBox?.length === 4 ? viewBox[3] ?? 0 : 0
+  if (viewBoxWidth > 0 && viewBoxHeight > 0) return { width: viewBoxWidth, height: viewBoxHeight }
+  throw new Error('SVG 缺少有效的 width/height 或 viewBox')
 }

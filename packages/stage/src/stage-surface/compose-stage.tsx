@@ -38,8 +38,12 @@ import type {
   ComposeAssetResolver,
   ComposeResolvedAsset,
 } from '@compose-ui/assets'
+import {
+  createComposeRendererMeasurementAdapter,
+  type ComposeEntitySeed,
+} from '@compose-ui/component-registry'
 import type {
-  ComposeEntitySeed,
+  ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
@@ -538,6 +542,7 @@ function isStageShortcutMatch(
 
 /** 渲染受控 DOM/SVG 无限 Stage，并显式呈现 Layout Runtime 加载或失败状态。 @public */
 export function ComposeStage(props: ComposeStageProps) {
+  useComposeStageMeasurement(props)
   if (!props.layoutSnapshot) {
     return (
       <div
@@ -550,13 +555,54 @@ export function ComposeStage(props: ComposeStageProps) {
       </div>
     )
   }
-  const { layoutError: _layoutError, layoutSnapshot, ...readyProps } = props
+  const {
+    layoutError: _layoutError,
+    layoutRuntime: _layoutRuntime,
+    layoutSnapshot,
+    ...readyProps
+  } = props
   void _layoutError
+  void _layoutRuntime
   return <ComposeStageReady {...readyProps} layoutSnapshot={layoutSnapshot} />
 }
 
-type ComposeStageReadyProps = Omit<ComposeStageProps, 'layoutError' | 'layoutSnapshot'> & {
+type ComposeStageReadyProps = Omit<
+  ComposeStageProps,
+  'layoutError' | 'layoutRuntime' | 'layoutSnapshot'
+> & {
   readonly layoutSnapshot: ComposeLayoutSnapshot
+}
+
+function useComposeStageMeasurement({
+  assetResolver,
+  document,
+  layoutRuntime,
+  pageLoader,
+  registry,
+}: ComposeStageProps) {
+  const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
+    registry,
+    assetResolver,
+    pageDocumentPort: pageLoader,
+  }), [assetResolver, pageLoader, registry])
+  const disposalGenerations = useRef(new WeakMap<ComposeRendererMeasurementAdapter, number>())
+
+  useLayoutEffect(() => adapter.updateDocument(document), [adapter, document])
+  useLayoutEffect(() => {
+    if (!layoutRuntime) return
+    layoutRuntime.setMeasurementPort(adapter)
+    return () => layoutRuntime.setMeasurementPort(undefined)
+  }, [adapter, layoutRuntime])
+  useEffect(() => {
+    const generations = disposalGenerations.current
+    const generation = (generations.get(adapter) ?? 0) + 1
+    generations.set(adapter, generation)
+    return () => queueMicrotask(() => {
+      if (generations.get(adapter) !== generation) return
+      adapter.dispose()
+      generations.delete(adapter)
+    })
+  }, [adapter])
 }
 
 function ComposeStageReady({
@@ -1763,6 +1809,21 @@ function ComposeStageReady({
       }}
       onWheel={onWheel}
     >
+      {layoutSnapshot.diagnostics.length > 0 ? (
+        <span
+          data-testid="stage-layout-diagnostics"
+          role="status"
+          style={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            overflow: 'hidden',
+            clipPath: 'inset(50%)',
+          }}
+        >
+          {layoutSnapshot.diagnostics.map(({ message }) => message).join('；')}
+        </span>
+      ) : null}
       <StageRulers
         bounds={bounds}
         horizontalTicks={horizontalTicks}

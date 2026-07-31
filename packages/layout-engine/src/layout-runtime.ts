@@ -13,11 +13,12 @@ import {
   type ComposeFlexWrap,
   type ComposeJustifyContent,
   type ComposeLayoutDiagnostic,
+  type ComposeLayoutMeasurementDiagnostic,
   type ComposeLayoutMeasurementPort,
   type ComposeLayoutSnapshot,
   type ComposeMeasureConstraint,
 } from '@compose-ui/core'
-import { loadYoga, type Config, type Node, type Yoga } from 'yoga-layout/load'
+import type { Config, Node, Yoga } from 'yoga-layout/load'
 
 /** Layout Runtime 当前可观察状态。 @public */
 export type ComposeLayoutRuntimeState =
@@ -46,8 +47,10 @@ export interface ComposeLayoutRuntime {
 
 let yogaModulePromise: Promise<Yoga> | undefined
 
+type ComposeYogaLoader = () => Promise<Yoga>
+
 function loadYogaSingleton(): Promise<Yoga> {
-  yogaModulePromise ??= loadYoga()
+  yogaModulePromise ??= import('yoga-layout/load').then(({ loadYoga }) => loadYoga())
   return yogaModulePromise
 }
 
@@ -119,10 +122,18 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   private config: Config | undefined
   private root: Node | undefined
   private readonly nodes = new Map<string, Node>()
+  private readonly measuredEntityIds = new Set<string>()
+  private readonly measurementDiagnostics = new Map<
+    string,
+    ComposeLayoutMeasurementDiagnostic
+  >()
   private revision = 0
   private disposed = false
 
-  constructor(options: ComposeLayoutRuntimeOptions) {
+  constructor(
+    options: ComposeLayoutRuntimeOptions,
+    private readonly loadYoga: ComposeYogaLoader = loadYogaSingleton,
+  ) {
     this.document = options.document
     this.state = { status: 'loading', document: options.document }
     this.setMeasurementPort(options.measurementPort)
@@ -143,10 +154,10 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     if (this.disposed || this.measurementPort === port) return
     this.measurementUnsubscribe?.()
     this.measurementPort = port
-    this.measurementUnsubscribe = port?.subscribe(() => {
-      if (this.yoga && !this.disposed) this.solve()
+    this.measurementUnsubscribe = port?.subscribe((entityIds) => {
+      if (this.yoga && !this.disposed) this.invalidateMeasurements(entityIds)
     })
-    if (this.yoga) this.solve()
+    if (this.yoga) this.invalidateMeasurements()
   }
 
   readonly subscribe = (listener: () => void) => {
@@ -169,7 +180,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
 
   private async initialize() {
     try {
-      const yoga = await loadYogaSingleton()
+      const yoga = await this.loadYoga()
       if (this.disposed) return
       this.yoga = yoga
       this.config = yoga.Config.create()
@@ -192,6 +203,8 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   private releaseYogaObjects() {
     this.nodes.forEach((node) => node.free())
     this.nodes.clear()
+    this.measuredEntityIds.clear()
+    this.measurementDiagnostics.clear()
     this.root?.free()
     this.root = undefined
     this.config?.free()
@@ -267,9 +280,14 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     const setSize = axis === 'width'
       ? (value: number | undefined) => node.setWidth(value)
       : (value: number | undefined) => node.setHeight(value)
-    if (sizing.mode === 'fixed' || !isFlow) {
+    if (sizing.mode === 'fixed') {
       setSize(sizing.value)
       if (isMainAxis) node.setFlexShrink(0)
+      return
+    }
+    if (sizing.mode === 'fill' && !isFlow) {
+      // 严格 v6 validator 会拒绝该组合；Runtime 仍用 fallback 保持异常输入可诊断。
+      setSize(sizing.value)
       return
     }
     setSize(undefined)
@@ -283,11 +301,11 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   private applyEntityStyle(
     entity: ComposeEntity,
     parent: ComposeEntity | undefined,
-    diagnostics: ComposeLayoutDiagnostic[],
   ) {
     const yoga = this.yoga!
     const node = this.nodeFor(entity.id)
     this.clearEntityStyle(node)
+    this.measuredEntityIds.delete(entity.id)
     const item = getComposeLayoutItem(entity)
     const parentLayout = parent && getComposeLayout(parent)
     const isFlow = item.positioning === 'flow' && parentLayout !== undefined
@@ -312,6 +330,14 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     }
     if (isFlow && item.height.mode === 'fill' && rowMainAxis) {
       node.setAlignSelf(yoga.ALIGN_STRETCH)
+    }
+    if (
+      isFlow
+      && item.alignSelf === 'auto'
+      && ((rowMainAxis && item.height.mode === 'hug')
+        || (!rowMainAxis && item.width.mode === 'hug'))
+    ) {
+      node.setAlignSelf(yoga.ALIGN_FLEX_START)
     }
 
     const appearance = resolveComposeAppearance(entity)
@@ -338,6 +364,9 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       && !(layout && hierarchy)
       && (item.width.mode === 'hug' || item.height.mode === 'hug')
     if (usesIntrinsicMeasurement) {
+      this.measuredEntityIds.add(entity.id)
+      const fallbackWidth = Math.max(0, item.width.value - appearance.borderWidth * 2)
+      const fallbackHeight = Math.max(0, item.height.value - appearance.borderWidth * 2)
       node.setMeasureFunc((width, widthMode, height, heightMode) => {
         const measured = this.measurementPort?.measure({
           entity,
@@ -345,32 +374,32 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
           height: measureConstraint(yoga, heightMode, height),
         })
         if (!measured) {
-          diagnostics.push({
-            code: 'measurement.fallback',
-            entityId: entity.id,
+          this.measurementDiagnostics.set(entity.id, this.measurementPort?.getDiagnostic?.(entity.id) ?? {
+            code: 'measurement.unregistered',
             message: 'Renderer 测量不可用，使用 LayoutItem fallback 尺寸',
           })
         }
+        else this.measurementDiagnostics.delete(entity.id)
         return {
-          width: item.width.mode === 'hug' ? measured?.width ?? item.width.value : item.width.value,
-          height: item.height.mode === 'hug' ? measured?.height ?? item.height.value : item.height.value,
+          width: item.width.mode === 'hug' ? measured?.width ?? fallbackWidth : fallbackWidth,
+          height: item.height.mode === 'hug' ? measured?.height ?? fallbackHeight : fallbackHeight,
         }
       })
     }
+    else this.measurementDiagnostics.delete(entity.id)
   }
 
   private prepareTree(
     entityId: string,
     parent: ComposeEntity | undefined,
-    diagnostics: ComposeLayoutDiagnostic[],
     desiredChildren: Map<Node, readonly Node[]>,
   ): Node {
     const entity = this.document.entities[entityId]!
     const node = this.nodeFor(entityId)
-    this.applyEntityStyle(entity, parent, diagnostics)
+    this.applyEntityStyle(entity, parent)
     const hierarchy = getComposeHierarchy(entity)
     const children = (hierarchy?.childIds ?? []).map((childId) =>
-      this.prepareTree(childId, entity, diagnostics, desiredChildren))
+      this.prepareTree(childId, entity, desiredChildren))
     desiredChildren.set(node, children)
     return node
   }
@@ -379,13 +408,12 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     if (!this.yoga || !this.root || !this.config || this.disposed) return
     try {
       const yoga = this.yoga
-      const diagnostics: ComposeLayoutDiagnostic[] = []
       this.root.setWidth(this.document.output.width)
       this.root.setHeight(this.document.output.height)
       this.root.setFlexDirection(yoga.FLEX_DIRECTION_ROW)
       const desiredChildren = new Map<Node, readonly Node[]>()
       const rootChildren = this.document.rootIds.map((entityId) =>
-        this.prepareTree(entityId, undefined, diagnostics, desiredChildren))
+        this.prepareTree(entityId, undefined, desiredChildren))
       const currentIds = new Set(Object.keys(this.document.entities))
       this.nodes.forEach((node, entityId) => {
         if (!currentIds.has(entityId)) desiredChildren.set(node, [])
@@ -396,11 +424,42 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
         if (currentIds.has(entityId)) return
         node.free()
         this.nodes.delete(entityId)
+        this.measuredEntityIds.delete(entityId)
+        this.measurementDiagnostics.delete(entityId)
       })
+      this.calculateAndPublish()
+    }
+    catch (cause) {
+      this.state = {
+        status: 'error',
+        document: this.document,
+        error: cause instanceof Error ? cause : new Error(String(cause)),
+      }
+      this.emit()
+    }
+  }
+
+  private invalidateMeasurements(entityIds?: readonly string[]) {
+    if (!this.yoga || this.disposed) return
+    const targets = entityIds ?? [...this.measuredEntityIds]
+    let dirty = false
+    targets.forEach((entityId) => {
+      if (!this.measuredEntityIds.has(entityId)) return
+      const node = this.nodes.get(entityId)
+      if (!node) return
+      node.markDirty()
+      dirty = true
+    })
+    if (dirty) this.calculateAndPublish()
+  }
+
+  private calculateAndPublish() {
+    if (!this.yoga || !this.root || this.disposed) return
+    try {
       this.root.calculateLayout(
         this.document.output.width,
         this.document.output.height,
-        yoga.DIRECTION_LTR,
+        this.yoga.DIRECTION_LTR,
       )
       const boxes: Record<string, ComposeLayoutSnapshot['boxes'][string]> = {}
       this.nodes.forEach((node, entityId) => {
@@ -412,6 +471,21 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
           height: node.getComputedHeight(),
           positioning: item.positioning,
         })
+      })
+      const diagnostics: ComposeLayoutDiagnostic[] = []
+      this.measurementDiagnostics.forEach((measurement, entityId) => {
+        const entity = this.document.entities[entityId]
+        if (!entity) return
+        const item = getComposeLayoutItem(entity)
+        for (const axis of ['width', 'height'] as const) {
+          if (item[axis].mode !== 'hug') continue
+          diagnostics.push({
+            code: measurement.code,
+            entityId,
+            axis,
+            message: measurement.message,
+          })
+        }
       })
       this.state = {
         status: 'ready',
@@ -440,6 +514,20 @@ export function createComposeLayoutRuntime(
   options: ComposeLayoutRuntimeOptions,
 ): ComposeLayoutRuntime {
   return new YogaLayoutRuntime(options)
+}
+
+/**
+ * 以可控 backend loader 创建 Runtime，仅用于验证加载与释放边界。
+ *
+ * @remarks
+ * 函数不从包入口导出，且 loader 只接受 `unknown`，避免 Yoga 类型进入公共 API。
+ * @internal
+ */
+export function createComposeLayoutRuntimeWithBackendForTesting(
+  options: ComposeLayoutRuntimeOptions,
+  loadBackend: () => Promise<unknown>,
+): ComposeLayoutRuntime {
+  return new YogaLayoutRuntime(options, async () => await loadBackend() as Yoga)
 }
 
 /** 一次性解析文档布局，并在完成后释放 Yoga 对象。 @public */

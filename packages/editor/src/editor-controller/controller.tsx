@@ -306,7 +306,8 @@ export function useComposeEditorController({
   pageLoader,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
   // Layout 订阅先于文档订阅建立，保证同一次事务的 document/Snapshot 成对发布。
-  const layoutState = useComposeEditorLayout(runtime)
+  const layoutSession = useComposeEditorLayout(runtime)
+  const layoutState = layoutSession.state
   const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const document = snapshot.document
   const [selectedIds, setSelectedIdsState] = useState<readonly string[]>(() =>
@@ -491,6 +492,7 @@ export function useComposeEditorController({
     document,
     layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : undefined,
     layoutError: layoutState.status === 'error' ? layoutState.error.message : undefined,
+    layoutRuntime: layoutSession.runtime,
     registry,
     pageLoader,
     dispatch,
@@ -511,6 +513,7 @@ export function useComposeEditorController({
   }), [
     document,
     layoutState,
+    layoutSession.runtime,
     registry,
     pageLoader,
     dispatch,

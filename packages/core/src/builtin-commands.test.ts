@@ -226,6 +226,35 @@ describe('ComposeDocument v6 built-in commands', () => {
     expect(getComposeLayoutItem(runtime.document.entities.flow!)).toEqual(beforeRotation)
   })
 
+  it('OpenSpec: hug-content-layout / Hug Resize / 只把直接调整轴转为 Fixed 且 Undo 恢复', () => {
+    const leaf = rendererEntity('leaf', {
+      layoutItem: {
+        positioning: 'absolute',
+        offset: { x: 10, y: 20 },
+        width: { mode: 'hug', value: 100, min: 1, max: null },
+        height: { mode: 'hug', value: 40, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+    })
+    const runtime = createTransactionRuntime({ document: documentFixture({ leaf }) })
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.setTransform, {
+      operation: 'resize',
+      updates: [{ entityId: 'leaf', transform: transform(10, 20, 180, 40) }],
+    }).status).toBe('committed')
+    expect(getComposeLayoutItem(runtime.document.entities.leaf!)).toMatchObject({
+      width: { mode: 'fixed', value: 180 },
+      height: { mode: 'hug', value: 40 },
+    })
+
+    runtime.undo()
+    expect(getComposeLayoutItem(runtime.document.entities.leaf!)).toMatchObject({
+      width: { mode: 'hug', value: 100 },
+      height: { mode: 'hug', value: 40 },
+    })
+  })
+
   it.each([
     {
       resize: 'horizontal' as const,

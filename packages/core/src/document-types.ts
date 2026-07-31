@@ -365,6 +365,17 @@ export interface ComposeMeasuredSize {
   readonly baseline?: number
 }
 
+/** Renderer 测量端口为 fallback 提供的可恢复原因。 @public */
+export interface ComposeLayoutMeasurementDiagnostic {
+  readonly code:
+    | 'measurement.unregistered'
+    | 'measurement.preparing'
+    | 'measurement.prepare-failed'
+    | 'measurement.failed'
+    | 'measurement.invalid'
+  readonly message: string
+}
+
 /** Layout Engine 消费的无框架同步测量端口。 @public */
 export interface ComposeLayoutMeasurementPort {
   readonly revision: number
@@ -373,5 +384,12 @@ export interface ComposeLayoutMeasurementPort {
     readonly width: ComposeMeasureConstraint
     readonly height: ComposeMeasureConstraint
   }): ComposeMeasuredSize | null
+  /** 最近一次同步读取失败的稳定原因；省略时 Runtime 使用通用 fallback 诊断。 */
+  getDiagnostic?(entityId: string): ComposeLayoutMeasurementDiagnostic | undefined
+  /**
+   * 订阅测量缓存变化。
+   *
+   * @param listener - Entity ID 集合表示精确失效；省略表示全部测量节点失效。
+   */
   subscribe(listener: (entityIds?: readonly string[]) => void): () => void
 }

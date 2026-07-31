@@ -8,7 +8,10 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 /** Editor 会话拥有的 LayoutRuntime React 适配。 */
 export function useComposeEditorLayout(
   documentRuntime: TransactionRuntime,
-): ComposeLayoutRuntimeState {
+): {
+  readonly state: ComposeLayoutRuntimeState
+  readonly runtime: ReturnType<typeof createComposeLayoutRuntime>
+} {
   const [runtime] = useState(() => createComposeLayoutRuntime({
     document: documentRuntime.document,
   }))
@@ -31,7 +34,10 @@ export function useComposeEditorLayout(
   }, [runtime])
   // 页面切换会直接替换 TransactionRuntime prop，此时订阅 effect 尚未运行；这一帧
   // 必须显示 loading，不能把旧页面 Snapshot 与新页面 document 交给严格 SceneIndex。
-  return state.document === documentRuntime.document
-    ? state
-    : { status: 'loading', document: documentRuntime.document }
+  return {
+    runtime,
+    state: state.document === documentRuntime.document
+      ? state
+      : { status: 'loading', document: documentRuntime.document },
+  }
 }

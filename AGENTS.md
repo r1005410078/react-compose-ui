@@ -59,8 +59,9 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `scene-tree`；`editor` 只通过 `inspectorPanel` 插槽集成它。
 - `@compose-ui/history` 是独立的 React 会话快照历史与受控面板，可依赖 `components` 和 `ui-context`，不得依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
-- `@compose-ui/component-registry` 是实例级宿主组件注册协议，可以依赖 `core` 和 `assets`，以 React 为
-  peer dependency，不得依赖 `editor` 或 `property-panel`。
+- `@compose-ui/component-registry` 是实例级宿主组件注册与 Renderer measurement adapter，可以依赖
+  `core` 和 `assets`，以 React 为 peer dependency，不得依赖 `editor` 或 `property-panel`；adapter
+  只能测量隔离内容，禁止读取 Stage/Preview Scene Entity DOM。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面文档 Store 包，只能依赖
   `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
@@ -70,12 +71,13 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。
-- `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`、`assets` 和
-  `component-registry`，不得依赖 `editor` 或 `stage`。
+- `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`、`assets`、
+  `component-registry` 和 `layout-engine`，不得依赖 `editor` 或 `stage`。
 - `@compose-ui/materials` 是 Container、Rectangle、Text、Image、SVG Entity Presets、
   Renderer、Component Definitions 与 Capabilities 的独立基础物料包，可以依赖 `core`、
-  `assets`、`component-registry`、`components`、`property-panel`、`ui-context`、DOMPurify 和
-  Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`。
+  `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`ui-context`、
+  DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`；`layout-engine` 只用于
+  Page Slot 的独立嵌套文档 Runtime。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。

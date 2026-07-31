@@ -21,6 +21,11 @@ export type {
   ComposePaintLayerProps,
 } from './registry-renderers'
 export {
+  createComposeRendererMeasurementAdapter,
+  type ComposeRendererMeasurementAdapter,
+  type ComposeRendererMeasurementAdapterOptions,
+} from './renderer-measurement'
+export {
   ComposeEntityRegistryError,
   type ComposeCapabilityAvailability,
   type ComposeCapabilityDefinition,
@@ -40,6 +45,10 @@ export {
   type ComposeEntitySeedError,
   type ComposeEntitySeedResult,
   type ComposeRendererDefinition,
+  type ComposeRendererMeasurementDefinition,
+  type ComposeRendererMeasurementSubscriptionInput,
+  type ComposeRendererMeasureInput,
+  type ComposeRendererPrepareInput,
   type ComposeRendererInspectorProps,
   type ComposeRendererProps,
 } from './registry'

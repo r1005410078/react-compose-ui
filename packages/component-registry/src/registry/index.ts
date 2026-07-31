@@ -20,6 +20,10 @@ export {
   type ComposeEntitySeedError,
   type ComposeEntitySeedResult,
   type ComposeRendererDefinition,
+  type ComposeRendererMeasurementDefinition,
+  type ComposeRendererMeasurementSubscriptionInput,
+  type ComposeRendererMeasureInput,
+  type ComposeRendererPrepareInput,
   type ComposeRendererInspectorProps,
   type ComposeRendererProps,
 } from './types'

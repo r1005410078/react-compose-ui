@@ -159,8 +159,22 @@ test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG �
   await expect(stage.getByTestId('compose-material-svg')).toBeVisible()
   await expect(stage.getByTestId('compose-material-image')).toBeVisible()
 
+  await stage.getByTestId('compose-material-image').click()
+  const imageInspector = editor.getByRole('region', { name: 'dashboard.bmp 属性', exact: true })
+  await imageInspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
+  await imageInspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
+
   await stage.getByTestId('compose-material-svg').click()
   const inspector = editor.getByRole('region', { name: 'compose-grid.svg 属性', exact: true })
+  await inspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
+  await inspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
+  await expect(editor).toHaveScreenshot('auto-layout-asset-hug.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
   await inspector.getByRole('checkbox', { name: '覆盖填充' }).check()
   await expect(stage.getByTestId('compose-material-svg').locator('rect').last())
     .toHaveAttribute('fill', '#ffffff')
@@ -916,6 +930,57 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+})
+
+test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Preview 一致', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+
+  const container = stage.getByTestId('stage-container')
+  const initialContainerBox = await container.boundingBox()
+  expect(initialContainerBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Text' }), {
+    x: initialContainerBox!.x + 160,
+    y: initialContainerBox!.y + 120,
+  })
+  await container.click({ position: { x: 8, y: 8 } })
+  const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await containerInspector.getByRole('button', {
+    name: '将直接子项转换为自动布局',
+  }).click()
+
+  const textNode = container.locator(':scope > .compose-stage__node.is-renderer').first()
+  await textNode.click()
+  const textInspector = editor.getByRole('region', { name: 'Text 属性', exact: true })
+  await textInspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
+  await textInspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await expect.poll(async () => (await textNode.boundingBox())?.width ?? 1000).toBeLessThan(160)
+  await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
+
+  await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
+  await editor.getByRole('row', { name: /Container/ }).click()
+  await containerInspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
+  await containerInspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await expect.poll(async () => (await container.boundingBox())?.width ?? 1000).toBeLessThan(180)
+  const stageTextBox = await stage.getByText('Text', { exact: true }).boundingBox()
+  expect(stageTextBox).not.toBeNull()
+
+  await expect(editor).toHaveScreenshot('auto-layout-hug-content.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const preview = page.getByTestId('compose-preview-document')
+  const previewTextBox = await preview.getByText('Text', { exact: true }).boundingBox()
+  expect(previewTextBox).not.toBeNull()
+  expect(previewTextBox!.width).toBeCloseTo(stageTextBox!.width, 0)
+  expect(previewTextBox!.height).toBeCloseTo(stageTextBox!.height, 0)
 })
 
 test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交画布控制柄编辑', async ({ page }) => {
@@ -1785,6 +1850,9 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
 
   // 4) 画布上实时渲染被引用页面的内容
   await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
+  await inspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
+  await inspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
 
   // 5) 预览中同样渲染
   await editor.getByRole('button', { name: '打开预览' }).click()
