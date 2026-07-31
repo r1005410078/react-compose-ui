@@ -140,6 +140,13 @@ export interface ComposeComponentDefinition {
   readonly validate?: (value: JsonObject) => boolean | string
   /** 可选 Component Inspector。 */
   readonly inspector?: ComponentType<ComposeComponentInspectorProps>
+  /**
+   * 可选 Inspector 分组标题栏内容。
+   *
+   * @remarks
+   * 获得与正文 Inspector 相同的受控上下文，由宿主放入分组标题右侧。
+   */
+  readonly inspectorHeaderActions?: ComponentType<ComposeComponentInspectorProps>
 }
 
 /** Asset Browser drop 交给 Preset 的已解析资源。 @public */

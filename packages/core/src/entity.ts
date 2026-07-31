@@ -6,6 +6,7 @@ import {
   type ComposeEntity,
   type ComposeHierarchy,
   type ComposeLock,
+  type ComposeLayout,
   type ComposeRenderer,
   type ComposeTransform,
   type ComposeTransformConstraints,
@@ -62,6 +63,13 @@ export function getComposeHierarchy(entity: ComposeEntity): ComposeHierarchy | u
   return entity.components[
     COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy
   ] as ComposeHierarchy | undefined
+}
+
+/** 读取可选 Layout。 @public */
+export function getComposeLayout(entity: ComposeEntity): ComposeLayout | undefined {
+  return entity.components[
+    COMPOSE_BUILTIN_COMPONENT_KEYS.layout
+  ] as ComposeLayout | undefined
 }
 
 /** 读取可选 Clip。 @public */

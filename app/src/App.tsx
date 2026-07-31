@@ -1,5 +1,6 @@
 import { ComposeOperationLogProvider } from '@compose-ui/operation-log'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
+import '@compose-ui/materials/styles.css'
 import '@compose-ui/operation-log/styles.css'
 import '@compose-ui/property-panel/styles.css'
 import './App.css'

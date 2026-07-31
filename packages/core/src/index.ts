@@ -9,6 +9,10 @@
  */
 
 export {
+  createDefaultComposeFlexLayout,
+  isValidComposeLayout,
+} from './layout'
+export {
   isValidComposeTransform,
   isValidComposeTransformConstraints,
   validateComposeDocument,
@@ -51,6 +55,7 @@ export {
   getComposeComposition,
   getComposeHierarchy,
   getComposeLock,
+  getComposeLayout,
   getComposeRenderer,
   getComposeTransform,
   getComposeTransformConstraints,
@@ -101,6 +106,7 @@ export type {
   ComposeDocument,
   ComposeEntity,
   ComposeHierarchy,
+  ComposeLayout,
   ComposeLock,
   ComposeOutputSettings,
   ComposePosition,
@@ -111,6 +117,12 @@ export type {
   ComposeTransform,
   ComposeTransformConstraints,
   ComposeVisibility,
+  ComposeAlignContent,
+  ComposeAlignItems,
+  ComposeFlexDirection,
+  ComposeFlexLayout,
+  ComposeFlexWrap,
+  ComposeJustifyContent,
   DocumentValidationIssue,
   DocumentValidationIssueCode,
   DocumentValidationResult,

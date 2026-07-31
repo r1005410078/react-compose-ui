@@ -11,6 +11,7 @@ import {
   type JsonObject,
 } from './document-types'
 import { isComposeComponentKey } from './entity'
+import { collectComposeLayoutValidationIssues } from './layout'
 import { isComposeColor, isValidComposePaint } from './paint'
 
 type Path = readonly (string | number)[]
@@ -551,6 +552,7 @@ function validateEntity(
   const hasLock = requireComponent(COMPOSE_BUILTIN_COMPONENT_KEYS.lock)
   const hasHierarchy = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy])
   const hasRenderer = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.renderer])
+  const hasLayout = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.layout])
   const hasClip = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.clip])
   if (!hasHierarchy && !hasRenderer) {
     addIssue(
@@ -566,6 +568,14 @@ function validateEntity(
       'component.invalid-combination',
       [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.clip],
       'Clip 必须与 Hierarchy 组合',
+    )
+  }
+  if (hasLayout && !hasHierarchy) {
+    addIssue(
+      issues,
+      'component.invalid-combination',
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.layout],
+      'Layout 必须与 Hierarchy 组合',
     )
   }
   if (hasComposition) {
@@ -611,6 +621,18 @@ function validateEntity(
         'childIds 必须是非空字符串数组',
       )
     }
+  }
+  if (hasLayout) {
+    const layoutPath = [
+      ...path,
+      'components',
+      COMPOSE_BUILTIN_COMPONENT_KEYS.layout,
+    ] as const
+    collectComposeLayoutValidationIssues(
+      components[COMPOSE_BUILTIN_COMPONENT_KEYS.layout],
+    ).forEach((issue) => {
+      addIssue(issues, 'layout.invalid', [...layoutPath, ...issue.path], issue.message)
+    })
   }
   if (hasClip) {
     validateBooleanComponent(

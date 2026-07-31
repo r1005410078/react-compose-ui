@@ -18,6 +18,30 @@ afterEach(() => {
 })
 
 describe('OpenSpec: property-panel / 单面板多属性分组', () => {
+  it('OpenSpec: property-panel / Property Panel Section 标题栏扩展 / 在分组标题栏显示宿主操作', () => {
+    const reset = vi.fn()
+    render(
+      <ComposePropertyPanelRoot>
+        <ComposePropertyPanelSection
+          actions={<button type="button" onClick={reset}>重置布局</button>}
+          title="布局"
+        >
+          <ComposePropertyPanel
+            schema={v.object({ gap: v.pipe(v.number(), v.title('间距')) })}
+            value={{ gap: 0 }}
+          />
+        </ComposePropertyPanelSection>
+      </ComposePropertyPanelRoot>,
+    )
+
+    const sectionButton = screen.getByRole('button', { name: '布局' })
+    const action = screen.getByRole('button', { name: '重置布局' })
+    expect(sectionButton).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(action)
+    expect(reset).toHaveBeenCalledTimes(1)
+    expect(sectionButton).toHaveAttribute('aria-expanded', 'true')
+  })
+
   it('共享唯一工具栏并让每个 Section 独立提交', () => {
     const identityChange = vi.fn()
     const appearanceChange = vi.fn()

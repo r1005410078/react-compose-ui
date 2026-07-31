@@ -182,6 +182,41 @@ describe('ComposeStage ECS', () => {
     )
   })
 
+  it('OpenSpec: basic-materials / Stage 暂时忽略 Layout 并保留子项 Transform', () => {
+    const child = entity('child')
+    const baseContainer = entity('container', { childIds: ['child'] })
+    const container: ComposeEntity = {
+      ...baseContainer,
+      components: {
+        ...baseContainer.components,
+        Composition: {
+          ...baseContainer.components.Composition!,
+          baseComponentKeys: [
+            ...(baseContainer.components.Composition!.baseComponentKeys as readonly string[]),
+            'Layout',
+          ],
+        },
+        Layout: {
+          type: 'flex',
+          flexDirection: 'column',
+          flexWrap: 'wrap',
+          alignContent: 'center',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          gap: 24,
+        },
+      },
+    }
+    renderStage(document([container, child], ['container']))
+
+    expect(screen.getByTestId('stage-container').style.display).toBe('')
+    expect(screen.getByTestId('stage-entity-child')).toHaveStyle({
+      position: 'absolute',
+      left: '20px',
+      top: '30px',
+    })
+  })
+
   it('OpenSpec: 共享渲染语义 / 边框覆盖层位于图片 Paint 与 Renderer 之后', () => {
     const bordered = {
       ...entity('bordered'),

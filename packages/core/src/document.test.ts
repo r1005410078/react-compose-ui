@@ -126,4 +126,79 @@ describe('ComposeDocument v5 validation', () => {
       }))
     }
   })
+
+  it('OpenSpec: compose-document / 可选 Flex Layout Component / 保存合法 Flex 布局', () => {
+    const entity = containerEntity('layout')
+    ;(entity.components as Record<string, unknown>).Layout = {
+      type: 'flex',
+      flexDirection: 'column-reverse',
+      flexWrap: 'wrap-reverse',
+      alignContent: 'space-between',
+      justifyContent: 'space-evenly',
+      alignItems: 'baseline',
+      gap: 12.5,
+    }
+    expect(validateComposeDocument(documentFixture({ layout: entity }))).toEqual({
+      valid: true,
+      document: documentFixture({ layout: entity }),
+    })
+  })
+
+  it('OpenSpec: compose-document / 可选 Flex Layout Component / 拒绝非法 Layout', () => {
+    const invalidEnum = containerEntity('invalid-enum')
+    ;(invalidEnum.components as Record<string, unknown>).Layout = {
+      type: 'flex',
+      flexDirection: 'diagonal',
+      flexWrap: 'nowrap',
+      alignContent: 'normal',
+      justifyContent: 'normal',
+      alignItems: 'normal',
+      gap: 0,
+    }
+    const invalidGap = containerEntity('invalid-gap')
+    ;(invalidGap.components as Record<string, unknown>).Layout = {
+      type: 'flex',
+      flexDirection: 'row',
+      flexWrap: 'nowrap',
+      alignContent: 'normal',
+      justifyContent: 'normal',
+      alignItems: 'normal',
+      gap: -1,
+    }
+    const withoutHierarchy = rendererEntity('without-hierarchy', {
+      components: {
+        Layout: {
+          type: 'flex',
+          flexDirection: 'row',
+          flexWrap: 'nowrap',
+          alignContent: 'normal',
+          justifyContent: 'normal',
+          alignItems: 'normal',
+          gap: 0,
+        },
+      },
+    })
+    for (const [id, entity] of [
+      ['invalid-enum', invalidEnum],
+      ['invalid-gap', invalidGap],
+      ['without-hierarchy', withoutHierarchy],
+    ] as const) {
+      const result = validateComposeDocument(documentFixture({ [id]: entity }))
+      expect(result.valid).toBe(false)
+      if (!result.valid) {
+        expect(result.issues).toContainEqual(expect.objectContaining({
+          code: id === 'without-hierarchy'
+            ? 'component.invalid-combination'
+            : 'layout.invalid',
+          path: expect.arrayContaining(['entities', id, 'components', 'Layout']),
+        }))
+      }
+    }
+  })
+
+  it('OpenSpec: compose-document / 可选 Flex Layout Component / 兼容缺少 Layout 的旧文档', () => {
+    const legacy = containerEntity('legacy')
+    expect(legacy.components.Layout).toBeUndefined()
+    expect(validateComposeDocument(documentFixture({ legacy })).valid).toBe(true)
+  })
 })

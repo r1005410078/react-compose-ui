@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import * as v from 'valibot'
 import {
   ComposeRegistryComponentInspector,
+  ComposeRegistryComponentInspectorHeaderActions,
   ComposeRegistryRendererInspector,
   type ComposeEntityRegistry,
   type ComposeNodeEditPort,
@@ -235,7 +236,21 @@ export function EntityInspector({
             && definition.inspector !== undefined
             && entity.components[definition.key] !== undefined)
           .map((definition) => (
-            <ComposePropertyPanelSection key={definition.key} title={definition.label}>
+            <ComposePropertyPanelSection
+              actions={definition.inspectorHeaderActions ? (
+                <ComposeRegistryComponentInspectorHeaderActions
+                  componentKey={definition.key}
+                  dispatch={dispatch}
+                  entity={entity}
+                  readOnly={locked}
+                  nodeEditPort={nodeEditPort}
+                  paintEditPort={paintEditPort}
+                  registry={registry}
+                />
+              ) : undefined}
+              key={definition.key}
+              title={definition.label}
+            >
               <ComposeRegistryComponentInspector
                 componentKey={definition.key}
                 dispatch={dispatch}

@@ -3,6 +3,7 @@
 @import './text/styles.css';
 @import './image/styles.css';
 @import './svg/styles.css';
+@import './flex-layout/styles.css';
 
 :root {
   --compose-material-font-family: Inter, ui-sans-serif, system-ui, sans-serif;

@@ -127,8 +127,9 @@ Component Key、基础项移除和带子项容器移除都会被阻止。Registr
 不会使文档失效。
 
 `@compose-ui/materials` 提供 Container、Rectangle、Text、Image、SVG Presets。Container 是
-`Hierarchy + Clip` 的基础组合；普通物料是 `Appearance + Renderer`，也可以通过“容器”能力
-获得子项。“几何限制”能力添加 `TransformConstraints`。
+`Hierarchy + Layout + Clip` 的基础组合；普通物料是 `Appearance + Renderer`，也可以通过“容器”
+能力获得子项和 Flex Authoring 属性。“几何限制”能力添加 `TransformConstraints`。当前 Layout
+只在 Inspector 内部三节点预览生效，Stage 与独立 Preview 仍按子项 `Transform` 定位。
 
 ## Stage、Inspector 与 Preview
 
@@ -142,8 +143,9 @@ Resize 模式支持 `free`、`preserve-aspect`、`horizontal`、`vertical`、`no
 同步变化。Pointer 移动期间只维护临时 Preview Transform，松手后最多提交一个正式事务。
 
 Inspector 按 Registry 顺序聚合当前 Entity 的 Component 属性区。顶部“添加能力”让用户以
-产品术语扩展 Entity；锁定后只有 Lock 可编辑。Preview 使用与 Stage 相同的 Transform、
-Appearance、Hierarchy、Clip 和 Renderer 语义，但不包含编辑 chrome。
+产品术语扩展 Entity；Component Definition 可以为分组标题栏提供可选状态和操作；锁定后只有
+Lock 可编辑。Preview 使用与 Stage 相同的 Transform、Appearance、Hierarchy、Clip 和 Renderer
+语义，但不包含编辑 chrome。
 
 ## 页面系统
 

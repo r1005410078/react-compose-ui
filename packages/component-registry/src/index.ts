@@ -7,6 +7,7 @@
 export { createComposeEntityRegistry } from './registry'
 export {
   ComposeRegistryComponentInspector,
+  ComposeRegistryComponentInspectorHeaderActions,
   ComposeEntityBorderLayer,
   ComposeEntityPaintLayer,
   ComposePaintLayer,

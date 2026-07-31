@@ -477,6 +477,8 @@ export interface ComposePropertyPanelRootProps
 export interface ComposePropertyPanelSectionProps {
   /** 返回 ComposePropertyPanel 或 Registry Inspector 的分组内容。 */
   children: ReactNode
+  /** 显示在折叠标题右侧的可选宿主状态或操作。 */
+  actions?: ReactNode
   /** 分组显示名称，同时参与全局搜索。 */
   title: string
   /** 初次挂载时是否展开。 @defaultValue true */
@@ -725,6 +727,7 @@ export function ComposePropertyPanelRoot({
  * @public
  */
 export function ComposePropertyPanelSection({
+  actions,
   children,
   title,
   defaultExpanded = true,
@@ -757,7 +760,10 @@ export function ComposePropertyPanelSection({
       hidden={!visible}
       style={{ '--pp-group-depth': 0 } as CSSProperties}
     >
-      <div className="property-panel__group-header">
+      <div
+        className="property-panel__group-header"
+        data-has-actions={actions ? 'true' : undefined}
+      >
         <button
           aria-expanded={visibleExpanded}
           type="button"
@@ -766,7 +772,9 @@ export function ComposePropertyPanelSection({
           <ChevronIcon expanded={visibleExpanded} />
           {title}
         </button>
-        <div className="property-panel__actions" />
+        {actions ? (
+          <div className="property-panel__section-actions">{actions}</div>
+        ) : <div className="property-panel__actions" />}
       </div>
       {visibleExpanded ? (
         <div className="property-panel__group-content">

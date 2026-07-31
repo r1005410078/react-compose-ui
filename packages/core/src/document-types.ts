@@ -78,6 +78,66 @@ export interface ComposeHierarchy extends JsonObject {
   readonly childIds: readonly string[]
 }
 
+/** Flex 容器的主轴方向。 @public */
+export type ComposeFlexDirection =
+  | 'row'
+  | 'row-reverse'
+  | 'column'
+  | 'column-reverse'
+
+/** Flex 容器的换行方式。 @public */
+export type ComposeFlexWrap = 'nowrap' | 'wrap' | 'wrap-reverse'
+
+/** Flex 容器的多行对齐方式。 @public */
+export type ComposeAlignContent =
+  | 'normal'
+  | 'flex-start'
+  | 'center'
+  | 'flex-end'
+  | 'space-between'
+  | 'space-around'
+  | 'stretch'
+
+/** Flex 容器的主轴对齐方式。 @public */
+export type ComposeJustifyContent =
+  | 'normal'
+  | 'flex-start'
+  | 'center'
+  | 'flex-end'
+  | 'space-between'
+  | 'space-around'
+  | 'space-evenly'
+
+/** Flex 容器的交叉轴对齐方式。 @public */
+export type ComposeAlignItems =
+  | 'normal'
+  | 'flex-start'
+  | 'center'
+  | 'flex-end'
+  | 'stretch'
+  | 'baseline'
+
+/**
+ * 容器可选的 Flex 布局 Authoring 数据。
+ *
+ * @remarks
+ * `gap` 是无单位的有限非负数；未来渲染实现会把它解释为 CSS 像素。
+ *
+ * @public
+ */
+export interface ComposeFlexLayout extends JsonObject {
+  readonly type: 'flex'
+  readonly flexDirection: ComposeFlexDirection
+  readonly flexWrap: ComposeFlexWrap
+  readonly alignContent: ComposeAlignContent
+  readonly justifyContent: ComposeJustifyContent
+  readonly alignItems: ComposeAlignItems
+  readonly gap: number
+}
+
+/** 容器可选的布局数据；当前仅支持 Flex。 @public */
+export type ComposeLayout = ComposeFlexLayout
+
 /** 后代裁剪状态。 @public */
 export interface ComposeClip extends JsonObject {
   readonly enabled: boolean
@@ -126,6 +186,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   visibility: 'Visibility',
   lock: 'Lock',
   hierarchy: 'Hierarchy',
+  layout: 'Layout',
   clip: 'Clip',
   appearance: 'Appearance',
   renderer: 'Renderer',
@@ -219,6 +280,7 @@ export type DocumentValidationIssueCode =
   | 'transform.invalid'
   | 'transform.invalid-size'
   | 'transform-constraints.invalid'
+  | 'layout.invalid'
   | 'appearance.invalid'
   | 'appearance.invalid-paint'
   | 'renderer.invalid'

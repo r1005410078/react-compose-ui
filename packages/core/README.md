@@ -43,6 +43,11 @@ runtime.dispatch({
 子项。`Hierarchy.childIds` 是唯一父子事实来源，`rootIds` 保存顶层顺序；Core 校验完整可达、
 单父级和无循环。
 
+容器可以额外保存只与 `Hierarchy` 组合的 `Layout`。当前 `ComposeLayout` 只支持 Flex 容器
+属性，并提供 `createDefaultComposeFlexLayout()`、`getComposeLayout()` 与
+`isValidComposeLayout()`。`gap` 是有限非负数；缺少 `Layout` 的既有 v5 文档仍然合法。
+当前 Stage 与 Preview 暂不解释该 Component，保存值只用于 Authoring 属性面板及其内部预览。
+
 `output.backgroundPaint` 是输出画布的结构化背景，支持 `solid`、`linear-gradient`、
 `radial-gradient` 与 `angular-gradient`。`output.backgroundColor` 已不属于 v5 协议：文档校验和
 `output.configure` 都会拒绝它，不提供兼容别名或自动迁移。
@@ -52,7 +57,8 @@ runtime.dispatch({
 - `Composition`：Preset、基础 Component Key 与 Capability 归属。
 - `Transform`、`TransformConstraints`：位置、尺寸、旋转及移动/Resize/旋转约束。
 - `Visibility`、`Lock`：编辑和渲染状态。
-- `Hierarchy`、`Clip`：容器结构和裁剪；`Clip` 必须依附 `Hierarchy`。
+- `Hierarchy`、`Layout`、`Clip`：容器结构、可选 Flex Authoring 数据和裁剪；`Layout`、
+  `Clip` 都必须依附 `Hierarchy`。
 - `Appearance`：背景、边框、圆角、透明度和阴影。
 - `Renderer`：宿主 Renderer type 与严格 JSON props。
 

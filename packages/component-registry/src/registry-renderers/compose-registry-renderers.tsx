@@ -12,7 +12,11 @@ import type { ComposeNodeEditPort, ComposePaintEditPort } from '../registry/type
 interface BoundaryProps {
   readonly children: ReactNode
   readonly identity: string
-  readonly area: 'renderer' | 'component-inspector' | 'renderer-inspector'
+  readonly area:
+    | 'renderer'
+    | 'component-inspector'
+    | 'component-inspector-header-actions'
+    | 'renderer-inspector'
   /** 定义输入数据；引用变化说明用户可能已修复数据，边界应重试渲染。 */
   readonly resetSignal: unknown
 }
@@ -133,6 +137,47 @@ export function ComposeRegistryComponentInspector({
   return (
     <DefinitionErrorBoundary area="component-inspector" identity={componentKey} resetSignal={value}>
       <Inspector
+        componentKey={componentKey}
+        dispatch={dispatch}
+        entity={entity}
+        readOnly={readOnly}
+        nodeEditPort={nodeEditPort}
+        paintEditPort={paintEditPort}
+        value={value}
+      />
+    </DefinitionErrorBoundary>
+  )
+}
+
+/** 解析并隔离一个 ECS Component 的可选 Inspector 标题栏内容。 @public */
+export function ComposeRegistryComponentInspectorHeaderActions({
+  registry,
+  entity,
+  componentKey,
+  dispatch,
+  nodeEditPort,
+  paintEditPort,
+  readOnly,
+}: {
+  readonly registry: ComposeEntityRegistry
+  readonly entity: ComposeEntity
+  readonly componentKey: string
+  readonly dispatch: (command: EditorCommand) => unknown
+  readonly readOnly: boolean
+  readonly nodeEditPort?: ComposeNodeEditPort
+  readonly paintEditPort?: ComposePaintEditPort
+}) {
+  const value = entity.components[componentKey]
+  const definition = registry.getComponent(componentKey)
+  if (!value || !definition?.inspectorHeaderActions) return null
+  const HeaderActions = definition.inspectorHeaderActions
+  return (
+    <DefinitionErrorBoundary
+      area="component-inspector-header-actions"
+      identity={componentKey}
+      resetSignal={value}
+    >
+      <HeaderActions
         componentKey={componentKey}
         dispatch={dispatch}
         entity={entity}

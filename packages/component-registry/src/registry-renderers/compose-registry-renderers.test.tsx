@@ -1,7 +1,13 @@
 import { cleanup, render, screen } from '@testing-library/react'
+import type { ComponentType } from 'react'
 import type { ComposeEntity } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposeEntityRegistry } from '../registry'
+import type {
+  ComposeComponentInspectorProps,
+  ComposeEntityRegistry,
+} from '../registry'
+import * as registryRenderers from './compose-registry-renderers'
 import {
   ComposeRegistryComponentInspector,
   ComposeRegistryEntityRenderer,
@@ -34,6 +40,60 @@ function entity(rendererType = 'text'): ComposeEntity {
 afterEach(cleanup)
 
 describe('Entity Registry React boundaries', () => {
+  it('OpenSpec: component-registry / Component Inspector 标题栏 actions / 解析 Component 标题栏 actions', () => {
+    const HeaderActionsAdapter = (
+      registryRenderers as unknown as {
+        readonly ComposeRegistryComponentInspectorHeaderActions?: ComponentType<{
+          readonly componentKey: string
+          readonly dispatch: ComposeComponentInspectorProps['dispatch']
+          readonly entity: ComposeEntity
+          readonly readOnly: boolean
+          readonly registry: ComposeEntityRegistry
+        }>
+      }
+    ).ComposeRegistryComponentInspectorHeaderActions
+    expect(HeaderActionsAdapter).toBeDefined()
+    if (!HeaderActionsAdapter) return
+
+    const actions = vi.fn(({ componentKey, readOnly, value }: ComposeComponentInspectorProps) => (
+      <button disabled={readOnly} type="button">
+        {componentKey}:{String(value.enabled)}
+      </button>
+    ))
+    const registry = createComposeEntityRegistry({
+      components: [{
+        key: 'HostLayout',
+        label: '宿主布局',
+        createDefault: () => ({ enabled: true }),
+        inspectorHeaderActions: actions,
+      }],
+    })
+    const target = {
+      ...entity(),
+      components: {
+        ...entity().components,
+        HostLayout: { enabled: true },
+      },
+    }
+    render(
+      <HeaderActionsAdapter
+        componentKey="HostLayout"
+        dispatch={vi.fn()}
+        entity={target}
+        readOnly
+        registry={registry}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'HostLayout:true' })).toBeDisabled()
+    expect(actions).toHaveBeenCalledWith(expect.objectContaining({
+      componentKey: 'HostLayout',
+      entity: expect.objectContaining({ id: 'entity-a' }),
+      readOnly: true,
+      value: { enabled: true },
+    }), undefined)
+  })
+
   it('OpenSpec: Renderer 查询 / Stage 与 Preview 共享 Entity Renderer', () => {
     const renderer = vi.fn(({ props, mode }) => (
       <span>{mode}:{String(props.text)}</span>

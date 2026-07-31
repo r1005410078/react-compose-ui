@@ -3,6 +3,14 @@ import type {
   ComposeComponentDefinition,
 } from '@compose-ui/component-registry'
 import {
+  createDefaultComposeFlexLayout,
+  isValidComposeLayout,
+} from '@compose-ui/core'
+import {
+  createLayoutInspector,
+  createLayoutInspectorHeaderActions,
+} from './flex-layout'
+import {
   createAppearanceInspector,
   createConstraintsInspector,
   createHierarchyInspector,
@@ -20,8 +28,8 @@ import {
  *
  * @remarks
  * Editor 通过 Registry 的 `ComposeComponentDefinition.inspector` 协议聚合全部
- * Component 分组；内建 Component 的编辑 UI 与宿主扩展走同一条路径。Clip 的开关
- * 由 Hierarchy（容器）Inspector 呈现，因此 Clip 自身不携带 Inspector。
+ * Component 分组；内建 Component 的编辑 UI 与宿主扩展走同一条路径。Layout 拥有独立
+ * Flex Inspector；Clip 的开关由 Hierarchy（容器）Inspector 呈现，因此 Clip 自身不携带 Inspector。
  *
  * @param idFactory - Inspector 派发命令使用的稳定 ID factory。
  * @public
@@ -88,6 +96,15 @@ export function createComposeBuiltinComponentDefinitions(
       inspector: createHierarchyInspector(idFactory),
     },
     {
+      key: 'Layout',
+      label: '布局',
+      order: 15,
+      createDefault: createDefaultComposeFlexLayout,
+      validate: isValidComposeLayout,
+      inspector: createLayoutInspector(idFactory),
+      inspectorHeaderActions: createLayoutInspectorHeaderActions(idFactory),
+    },
+    {
       key: 'Clip',
       label: '裁剪',
       order: 60,
@@ -129,6 +146,7 @@ export const DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS: readonly ComposeCapabilityD
       description: '允许当前组件容纳并裁剪子项',
       createComponents: () => ({
         Hierarchy: { childIds: [] },
+        Layout: createDefaultComposeFlexLayout(),
         Clip: { enabled: true },
       }),
     },

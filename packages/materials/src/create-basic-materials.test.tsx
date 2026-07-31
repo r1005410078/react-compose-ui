@@ -5,11 +5,16 @@ import {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  createDefaultCanvasSettings,
+  createDefaultOutputSettings,
+  createTransactionRuntime,
   getComposeComposition,
   getComposeHierarchy,
+  getComposeLayout,
   getComposeRenderer,
   getComposeTransform,
   type ComposeEntity,
+  type ComposeDocument,
 } from '@compose-ui/core'
 import { describe, expect, it, vi } from 'vitest'
 import { createComposeBasicMaterials } from './create-basic-materials'
@@ -24,6 +29,12 @@ function seedEntity(
 }
 
 describe('Basic ECS materials', () => {
+  it('OpenSpec: Flex Layout Inspector / 布局分组紧跟变换分组', () => {
+    const materials = createComposeBasicMaterials()
+    const orderedKeys = materials.registry.listComponents().map(({ key }) => key)
+    expect(orderedKeys.indexOf('Layout')).toBe(orderedKeys.indexOf('Transform') + 1)
+  })
+
   it('OpenSpec: Entity Presets / 六种物料写入明确基础组合', () => {
     const materials = createComposeBasicMaterials()
     expect(materials.presets.map(({ id }) => id)).toEqual([
@@ -36,8 +47,18 @@ describe('Basic ECS materials', () => {
     ])
     const container = seedEntity(materials, 'container')
     expect(getComposeHierarchy(container)?.childIds).toEqual([])
+    expect(getComposeLayout(container)).toEqual({
+      type: 'flex',
+      flexDirection: 'row',
+      flexWrap: 'nowrap',
+      alignContent: 'normal',
+      justifyContent: 'normal',
+      alignItems: 'normal',
+      gap: 0,
+    })
     expect(getComposeRenderer(container)).toBeUndefined()
     expect(getComposeComposition(container).baseComponentKeys).toContain('Hierarchy')
+    expect(getComposeComposition(container).baseComponentKeys).toContain('Layout')
 
     for (const id of ['rectangle', 'text', 'image', 'svg']) {
       const entity = seedEntity(materials, id)
@@ -102,5 +123,58 @@ describe('Basic ECS materials', () => {
       'container',
       'geometry-constraints',
     ])
+    expect(materials.capabilities[0]?.createComponents()).toMatchObject({
+      Hierarchy: { childIds: [] },
+      Layout: {
+        type: 'flex',
+        flexDirection: 'row',
+        flexWrap: 'nowrap',
+        alignContent: 'normal',
+        justifyContent: 'normal',
+        alignItems: 'normal',
+        gap: 0,
+      },
+    })
+  })
+
+  it('OpenSpec: basic-materials / 旧容器能力缺少 Layout 时仍可原子移除', () => {
+    const materials = createComposeBasicMaterials()
+    const base = seedEntity(materials, 'rectangle')
+    const legacyContainer: ComposeEntity = {
+      ...base,
+      components: {
+        ...base.components,
+        Composition: {
+          ...base.components.Composition!,
+          capabilityIds: ['container'],
+        },
+        Hierarchy: { childIds: [] },
+        Clip: { enabled: true },
+      },
+    }
+    const document: ComposeDocument = {
+      schemaVersion: 5,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [legacyContainer.id],
+      entities: { [legacyContainer.id]: legacyContainer },
+    }
+    let commandIndex = 0
+    const plan = materials.registry.planRemoveCapability(
+      document,
+      legacyContainer.id,
+      'container',
+      () => `remove-${commandIndex++}`,
+    )
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+
+    const runtime = createTransactionRuntime({ document })
+    expect(runtime.dispatch(plan.command).status).toBe('committed')
+    expect(runtime.document.entities[legacyContainer.id]?.components.Hierarchy).toBeUndefined()
+    expect(runtime.document.entities[legacyContainer.id]?.components.Layout).toBeUndefined()
+    expect(runtime.document.entities[legacyContainer.id]?.components.Clip).toBeUndefined()
+    expect(runtime.document.entities[legacyContainer.id]?.components.Composition?.capabilityIds)
+      .toEqual([])
   })
 })

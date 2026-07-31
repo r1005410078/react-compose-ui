@@ -45,9 +45,13 @@ Capability 是用户可添加的一组 Component。Registry 校验依赖无环�
 归属不重叠；添加能力会自动补齐依赖并规划为单个 `transaction.batch`。基础 Component 不可移除，
 被其他能力依赖、仍含子项或 Registry 定义缺失的能力也不会被猜测删除。
 
-`ComposeRegistryEntityRenderer`、`ComposeRegistryComponentInspector` 和
-`ComposeRegistryRendererInspector` 隔离宿主异常。未知 Renderer 或 Component 显示可访问降级，
-Entity 仍可选择、移动和删除。
+Component Definition 可以通过 `inspectorHeaderActions` 声明 Inspector 分组标题栏状态或操作；
+`ComposeRegistryComponentInspectorHeaderActions` 会透传与正文 Inspector 相同的实体、值、命令
+派发和只读上下文。
+
+`ComposeRegistryEntityRenderer`、`ComposeRegistryComponentInspector`、
+`ComposeRegistryComponentInspectorHeaderActions` 和 `ComposeRegistryRendererInspector` 隔离
+宿主异常。未知 Renderer 或 Component 显示可访问降级，Entity 仍可选择、移动和删除。
 
 资源型 Preset 可通过 `assetDrop` 声明 MIME 接受规则和异步 seed factory。Registry 依赖
 `core` 与轻量 `assets` 协议，React 保持 peer dependency；不依赖 editor、asset-browser 或

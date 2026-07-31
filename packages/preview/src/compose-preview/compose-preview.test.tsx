@@ -220,6 +220,53 @@ describe('ComposePreview', () => {
     expect(screen.queryByText('Mobile text')).not.toBeInTheDocument()
   })
 
+  it('OpenSpec: basic-materials / Preview 暂时忽略 Layout 并保留子项 Transform', () => {
+    const value = document()
+    const desktop = value.entities.desktop!
+    const layoutDocument: ComposeDocument = {
+      ...value,
+      entities: {
+        ...value.entities,
+        desktop: {
+          ...desktop,
+          components: {
+            ...desktop.components,
+            Composition: {
+              ...desktop.components.Composition!,
+              baseComponentKeys: [
+                ...(desktop.components.Composition!.baseComponentKeys as readonly string[]),
+                'Layout',
+              ],
+            },
+            Layout: {
+              type: 'flex',
+              flexDirection: 'column',
+              flexWrap: 'wrap',
+              alignContent: 'center',
+              justifyContent: 'space-between',
+              alignItems: 'flex-end',
+              gap: 24,
+            },
+          },
+        },
+      },
+    }
+    render(
+      <ComposePreview
+        document={layoutDocument}
+        registry={registry()}
+        target={{ kind: 'container', entityId: 'desktop' }}
+      />,
+    )
+
+    expect(screen.getByTestId('compose-preview-container').style.display).toBe('')
+    expect(screen.getByTestId('compose-preview-entity-group')).toHaveStyle({
+      position: 'absolute',
+      left: '100px',
+      top: '80px',
+    })
+  })
+
   it('按 Appearance 与 Clip 渲染外观', () => {
     render(
       <ComposePreview

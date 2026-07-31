@@ -700,6 +700,156 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   expect(toolbarBox!.y).toBeCloseTo(inspectorBox!.y, 0)
 })
 
+test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生效', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.getByRole('button', { name: '创建容器' }).click()
+
+  const container = stage.getByTestId('stage-container')
+  const stageStyleBefore = await container.evaluate((element) => ({
+    display: getComputedStyle(element).display,
+    left: getComputedStyle(element).left,
+    top: getComputedStyle(element).top,
+  }))
+  const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  const propertyRoot = inspector.getByRole('region', { name: 'Container 属性字段' })
+  const layoutHeader = propertyRoot.getByRole('button', { name: '布局', exact: true })
+  const layoutSection = layoutHeader.locator('..').locator('..')
+  const topLevelTitles = await propertyRoot.locator(
+    ':scope > .property-panel__group > .property-panel__group-header > button',
+  ).allTextContents()
+  expect(topLevelTitles.indexOf('布局')).toBe(topLevelTitles.indexOf('变换') + 1)
+  await expect(layoutSection.getByText('display: flex', { exact: true })).toBeVisible()
+  const resetLayout = layoutSection.getByRole('button', { name: '重置布局' })
+  await expect(resetLayout).toBeDisabled()
+
+  const direction = layoutSection.getByRole('radiogroup', { name: '方向' })
+  const wrapping = layoutSection.getByRole('radiogroup', { name: '换行' })
+  const content = layoutSection.getByRole('radiogroup', { name: '多行' })
+  const mainAxis = layoutSection.getByRole('radiogroup', { name: '主轴' })
+  const crossAxis = layoutSection.getByRole('radiogroup', { name: '交叉轴' })
+  await expect(direction.getByRole('radio')).toHaveCount(4)
+  await expect(wrapping.getByRole('radio')).toHaveCount(3)
+  await expect(content.getByRole('radio')).toHaveCount(6)
+  await expect(mainAxis.getByRole('radio')).toHaveCount(6)
+  await expect(crossAxis.getByRole('radio')).toHaveCount(5)
+  await expect(content.getByRole('radio', { checked: true })).toHaveCount(0)
+  const iconSizes = await layoutSection.locator('.flex-layout-inspector__option svg').evaluateAll(
+    (icons) => icons.map((icon) => {
+      const box = icon.getBoundingClientRect()
+      return `${box.width}x${box.height}`
+    }),
+  )
+  expect(new Set(iconSizes)).toEqual(new Set(['18x18']))
+  const firstContentOption = await content.getByRole('radio').nth(0).boundingBox()
+  const fourthContentOption = await content.getByRole('radio').nth(3).boundingBox()
+  expect(firstContentOption).not.toBeNull()
+  expect(fourthContentOption).not.toBeNull()
+  expect(fourthContentOption!.y).toBeGreaterThan(firstContentOption!.y)
+  const firstCrossOption = await crossAxis.getByRole('radio').nth(0).boundingBox()
+  const fourthCrossOption = await crossAxis.getByRole('radio').nth(3).boundingBox()
+  expect(firstCrossOption).not.toBeNull()
+  expect(fourthCrossOption).not.toBeNull()
+  expect(fourthCrossOption!.y).toBeGreaterThan(firstCrossOption!.y)
+
+  const gap = layoutSection.getByRole('spinbutton', { name: '间距' })
+  const gapRow = layoutSection.locator('[data-property-path="gap"]')
+  await expect(gapRow).not.toContainText('px')
+  await expect(gapRow.getByRole('button')).toHaveCount(0)
+  const directionBox = await direction.boundingBox()
+  const wrappingBox = await wrapping.boundingBox()
+  const gapBox = await gap.boundingBox()
+  const contentBox = await content.boundingBox()
+  expect(directionBox).not.toBeNull()
+  expect(wrappingBox).not.toBeNull()
+  expect(gapBox).not.toBeNull()
+  expect(contentBox).not.toBeNull()
+  expect(wrappingBox!.x).toBeGreaterThan(directionBox!.x)
+  expect(gapBox!.x).toBeGreaterThan(wrappingBox!.x)
+  expect(contentBox!.y).toBeGreaterThan(directionBox!.y)
+
+  const preview = layoutSection.getByTestId('flex-layout-preview')
+  const previewNodes = preview.locator('[data-flex-preview-node]')
+  await expect(previewNodes).toHaveCount(3)
+  await expect(preview.getByText('Flex 容器', { exact: true })).toBeVisible()
+  await expect(preview.getByText('row · nowrap · gap 0', { exact: true })).toBeVisible()
+  await expect(preview.getByText('主轴', { exact: true })).toBeVisible()
+  await expect(preview.getByText('交叉轴', { exact: true })).toBeVisible()
+  const defaultPreviewNode = await previewNodes.first().boundingBox()
+  expect(defaultPreviewNode).not.toBeNull()
+  expect(defaultPreviewNode!.height).toBe(32)
+  await expect(layoutSection).toHaveScreenshot('flex-layout-inspector.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
+  const crossStartNode = await previewNodes.first().boundingBox()
+  await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
+  await expect(crossAxis.getByRole('radio', { checked: true })).toHaveCount(0)
+  await expect(preview).toHaveAttribute('data-align-items', 'normal')
+  await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
+  await crossAxis.getByRole('radio', { name: '末端', exact: true }).click()
+  const crossEndNode = await previewNodes.first().boundingBox()
+  await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
+  const crossStretchNode = await previewNodes.first().boundingBox()
+  expect(crossStartNode).not.toBeNull()
+  expect(crossEndNode).not.toBeNull()
+  expect(crossStretchNode).not.toBeNull()
+  expect(crossEndNode!.y).toBeGreaterThan(crossStartNode!.y)
+  expect(crossStretchNode!.height).toBeGreaterThan(crossStartNode!.height)
+  await expect(preview).toHaveAttribute('data-align-items', 'stretch')
+
+  await gap.fill('12')
+  await gap.press('Tab')
+  await direction.getByRole('radio', { name: '纵向', exact: true }).click()
+
+  await expect(preview.locator('.flex-layout-inspector__preview-surface'))
+    .toHaveCSS('flex-direction', 'column')
+  await expect(preview.locator('.flex-layout-inspector__preview-surface'))
+    .toHaveCSS('gap', '12px')
+  await expect(preview.getByText('column · nowrap · gap 12', { exact: true })).toBeVisible()
+  await expect(resetLayout).toBeEnabled()
+
+  await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
+  const columnCrossStartNode = await previewNodes.first().boundingBox()
+  await crossAxis.getByRole('radio', { name: '末端', exact: true }).click()
+  const columnCrossEndNode = await previewNodes.first().boundingBox()
+  await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
+  const columnCrossStretchNode = await previewNodes.first().boundingBox()
+  expect(columnCrossStartNode).not.toBeNull()
+  expect(columnCrossEndNode).not.toBeNull()
+  expect(columnCrossStretchNode).not.toBeNull()
+  expect(columnCrossEndNode!.x).toBeGreaterThan(columnCrossStartNode!.x)
+  expect(columnCrossStretchNode!.width).toBeGreaterThan(columnCrossStartNode!.width)
+
+  const previewBox = await preview.boundingBox()
+  const previewNodeBoxes = await Promise.all([
+    previewNodes.nth(0).boundingBox(),
+    previewNodes.nth(1).boundingBox(),
+    previewNodes.nth(2).boundingBox(),
+  ])
+  expect(previewBox).not.toBeNull()
+  expect(previewNodeBoxes.every(Boolean)).toBe(true)
+  for (const nodeBox of previewNodeBoxes) {
+    expect(nodeBox!.y).toBeGreaterThanOrEqual(previewBox!.y)
+    expect(nodeBox!.y + nodeBox!.height).toBeLessThanOrEqual(previewBox!.y + previewBox!.height)
+  }
+
+  await resetLayout.click()
+  await expect(direction.getByRole('radio', { name: '横向', exact: true })).toBeChecked()
+  await expect(gap).toHaveValue('0')
+  await expect(resetLayout).toBeDisabled()
+  expect(await container.evaluate((element) => ({
+    display: getComputedStyle(element).display,
+    left: getComputedStyle(element).left,
+    top: getComputedStyle(element).top,
+  }))).toEqual(stageStyleBefore)
+})
+
 test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交画布控制柄编辑', async ({ page }) => {
   await page.goto('/')
 

@@ -74,7 +74,10 @@ import {
 } from '@compose-ui/property-panel'
 
 <ComposePropertyPanelRoot aria-label="Entity 属性">
-  <ComposePropertyPanelSection title="变换">
+  <ComposePropertyPanelSection
+    actions={<button type="button" onClick={resetTransform}>重置变换</button>}
+    title="变换"
+  >
     <ComposePropertyPanel schema={transformSchema} value={transform} onValueChange={setTransform} />
   </ComposePropertyPanelSection>
   <ComposePropertyPanelSection title="外观">
@@ -83,9 +86,10 @@ import {
 </ComposePropertyPanelRoot>
 ```
 
-Section 默认展开并可折叠。搜索会匹配分组名、字段名、路径与说明，只临时展开命中组；清空后恢复
-用户原来的折叠状态。Root 外的独立 `ComposePropertyPanel` 行为不变。Registry Inspector 放在
-Section 内时无需修改现有实现；其中的 Property Panel 会自动进入嵌入模式。
+Section 默认展开并可折叠；可选 `actions` 会显示在同一标题栏右侧，点击其中的操作不会折叠分组。
+搜索会匹配分组名、字段名、路径与说明，只临时展开命中组；清空后恢复用户原来的折叠状态。Root
+外的独立 `ComposePropertyPanel` 行为不变。Registry Inspector 放在 Section 内时无需修改现有实现；
+其中的 Property Panel 会自动进入嵌入模式。
 
 ## 展示 metadata
 
