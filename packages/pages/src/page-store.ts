@@ -74,7 +74,8 @@ export interface ComposePageStore {
    * 读取页面文档。
    *
    * @remarks
-   * 命中缓存时不访问 Provider；同一页面的并发读取会被合并。
+   * 命中缓存时不访问 Provider；同一页面的并发读取会被合并。每个调用者的取消相互隔离，
+   * 只有最后一个消费者离开时才会中止共享的 Provider 请求。
    * @throws {@link @compose-ui/assets#ComposeAssetError} 页面不存在或内容不合法时抛出。
    */
   readPage(pageKey: string, signal?: AbortSignal): Promise<ComposePageSnapshot>
@@ -114,9 +115,20 @@ interface ManifestState {
   readonly entry: ComposeAssetEntry | null
 }
 
+interface PageReadRequest {
+  readonly controller: AbortController
+  readonly promise: Promise<ComposePageSnapshot>
+  consumers: number
+  settled: boolean
+}
+
+function createCancellationError(signal?: AbortSignal): ComposeAssetError {
+  return new ComposeAssetError('io', '操作已取消', { cause: signal?.reason })
+}
+
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted === true) {
-    throw new ComposeAssetError('io', '操作已取消', { cause: signal.reason })
+    throw createCancellationError(signal)
   }
 }
 
@@ -138,8 +150,42 @@ export function createComposePageStore(input: {
   let catalogInFlight: Promise<ComposePageCatalog> | null = null
   let manifestCache: ManifestState | null = null
   const pageCache = new Map<string, ComposePageSnapshot>()
-  const pageInFlight = new Map<string, Promise<ComposePageSnapshot>>()
+  const pageInFlight = new Map<string, PageReadRequest>()
   let manifestIssues: readonly ComposeAppManifestIssue[] = []
+
+  const releasePageReadConsumer = (request: PageReadRequest) => {
+    request.consumers -= 1
+    if (request.consumers !== 0 || request.settled) return
+    // StrictMode 会同步执行 cleanup → setup。延迟一个 microtask 再中止，使紧随其后的
+    // 重挂载能够接管同一底层读取，同时在真正无人消费时仍释放 Provider 请求。
+    queueMicrotask(() => {
+      if (request.consumers === 0 && !request.settled) request.controller.abort()
+    })
+  }
+
+  const consumePageRead = (
+    request: PageReadRequest,
+    signal?: AbortSignal,
+  ): Promise<ComposePageSnapshot> => {
+    throwIfAborted(signal)
+    request.consumers += 1
+    return new Promise((resolve, reject) => {
+      let completed = false
+      const finish = (callback: () => void) => {
+        if (completed) return
+        completed = true
+        signal?.removeEventListener('abort', onAbort)
+        releasePageReadConsumer(request)
+        callback()
+      }
+      const onAbort = () => finish(() => reject(createCancellationError(signal)))
+      signal?.addEventListener('abort', onAbort, { once: true })
+      request.promise.then(
+        (snapshot) => finish(() => resolve(snapshot)),
+        (cause: unknown) => finish(() => reject(cause)),
+      )
+    })
+  }
 
   const emit = (event: ComposePageStoreEvent) => {
     listeners.forEach((listener) => { listener(event) })
@@ -233,41 +279,60 @@ export function createComposePageStore(input: {
     listPages,
 
     async readPage(pageKey, signal) {
+      throwIfAborted(signal)
       const cached = pageCache.get(pageKey)
       if (cached) return cached
-      const inFlight = pageInFlight.get(pageKey)
-      if (inFlight) return inFlight
-      const request = (async () => {
-        const descriptor = await findDescriptor(pageKey, signal)
-        throwIfAborted(signal)
-        let text: string
-        let revision: string
-        try {
-          const read = await provider.read({ fileId: descriptor.entryId, signal })
-          text = await read.blob.text()
-          revision = read.revision
-        }
-        catch (error) {
-          throw normalizeComposeAssetError(error)
-        }
-        const parsed = parseComposePageDocument(text)
-        if (!parsed.ok) {
-          throw new ComposeAssetError(
-            'io',
-            `页面内容不合法：${parsed.issues[0]?.message ?? '未知原因'}`,
-          )
-        }
-        const snapshot: ComposePageSnapshot = { document: parsed.document, revision }
-        pageCache.set(pageKey, snapshot)
-        return snapshot
-      })()
-      pageInFlight.set(pageKey, request)
-      try {
-        return await request
+      let request = pageInFlight.get(pageKey)
+      if (request?.controller.signal.aborted) {
+        // 底层请求已因最后一个消费者离开而中止；后续消费者必须创建新请求，不能接管
+        // 一个注定失败但尚未完成 rejection 清理的 Promise。
+        if (pageInFlight.get(pageKey) === request) pageInFlight.delete(pageKey)
+        request = undefined
       }
-      finally {
-        pageInFlight.delete(pageKey)
+      if (!request) {
+        const controller = new AbortController()
+        const promise = (async () => {
+          const descriptor = await findDescriptor(pageKey, controller.signal)
+          throwIfAborted(controller.signal)
+          let text: string
+          let revision: string
+          try {
+            const read = await provider.read({
+              fileId: descriptor.entryId,
+              signal: controller.signal,
+            })
+            text = await read.blob.text()
+            revision = read.revision
+          }
+          catch (error) {
+            throw normalizeComposeAssetError(error)
+          }
+          const parsed = parseComposePageDocument(text)
+          if (!parsed.ok) {
+            throw new ComposeAssetError(
+              'io',
+              `页面内容不合法：${parsed.issues[0]?.message ?? '未知原因'}`,
+            )
+          }
+          const snapshot: ComposePageSnapshot = { document: parsed.document, revision }
+          pageCache.set(pageKey, snapshot)
+          return snapshot
+        })()
+        const startedRequest: PageReadRequest = {
+          controller,
+          promise,
+          consumers: 0,
+          settled: false,
+        }
+        request = startedRequest
+        pageInFlight.set(pageKey, startedRequest)
+        const finishRequest = () => {
+          startedRequest.settled = true
+          if (pageInFlight.get(pageKey) === startedRequest) pageInFlight.delete(pageKey)
+        }
+        void promise.then(finishRequest, finishRequest)
       }
+      return consumePageRead(request, signal)
     },
 
     async writePage(pageKey, document, expectedRevision, force) {

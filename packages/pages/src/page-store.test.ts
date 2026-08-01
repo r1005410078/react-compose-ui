@@ -115,6 +115,40 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     expect(a).toBe(b)
   })
 
+  it('取消一个并发消费者不会中止同页面的其他消费者', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    let finishRead: (() => void) | undefined
+    const provider: ComposeAssetProvider = {
+      ...fake.provider,
+      read(input) {
+        return new Promise((resolve, reject) => {
+          input.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'))
+          }, { once: true })
+          finishRead = () => { void fake.provider.read(input).then(resolve, reject) }
+        })
+      },
+    }
+    const store = createComposePageStore({ provider })
+    // 预热目录缓存，确保本场景只验证页面正文读取的取消隔离。
+    await store.listPages()
+    const firstController = new AbortController()
+    const first = store.readPage('Pages/Home.page.json', firstController.signal)
+
+    await vi.waitFor(() => { expect(finishRead).toBeDefined() })
+    const firstCancelled = expect(first).rejects.toMatchObject({ code: 'io' })
+    firstController.abort()
+    // StrictMode 的 cleanup → setup 发生在同一轮调用栈：新消费者会在延迟中止底层请求的
+    // microtask 前接管原请求。
+    const secondController = new AbortController()
+    const second = store.readPage('Pages/Home.page.json', secondController.signal)
+
+    await firstCancelled
+    finishRead?.()
+    await expect(second).resolves.toMatchObject({ document: { schemaVersion: 6 } })
+    expect(fake.calls.read).toBe(1)
+  })
+
   it('页面不存在时抛出 not-found', async () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })
     const store = createComposePageStore({ provider: fake.provider })

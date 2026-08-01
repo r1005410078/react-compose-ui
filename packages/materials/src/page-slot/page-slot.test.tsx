@@ -10,7 +10,7 @@ import {
   createEmptyComposePageDocument,
   serializeComposePageDocument,
 } from '@compose-ui/core'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposeBasicMaterials } from '../create-basic-materials'
 import { ComposePageSlotNestProvider } from './nest-context'
@@ -87,6 +87,7 @@ function renderSlot(options: {
   readonly mode?: 'editor' | 'preview'
   readonly ancestors?: readonly string[]
   readonly page?: unknown
+  readonly onPointerDown?: () => void
 } = {}) {
   const materials = createComposeBasicMaterials()
   const definition = materials.rendererDefinitions
@@ -94,19 +95,21 @@ function renderSlot(options: {
   if (!definition) throw new Error('page-slot renderer definition is missing')
   const Renderer = definition.renderer
   render(
-    <ComposePageSlotNestProvider
-      ancestorPageKeys={options.ancestors ?? []}
-      depth={options.ancestors?.length ?? 0}
-    >
-      <Renderer
-        entity={outerDocument().entities.slot!}
-        mode={options.mode ?? 'preview'}
-        pageDocumentPort={options.loader}
-        props={{ page: (options.page === undefined ? reference : options.page) as never }}
-        registry={materials.registry}
-        renderer={{ type: 'page-slot', props: {} }}
-      />
-    </ComposePageSlotNestProvider>,
+    <div onPointerDown={options.onPointerDown}>
+      <ComposePageSlotNestProvider
+        ancestorPageKeys={options.ancestors ?? []}
+        depth={options.ancestors?.length ?? 0}
+      >
+        <Renderer
+          entity={outerDocument().entities.slot!}
+          mode={options.mode ?? 'preview'}
+          pageDocumentPort={options.loader}
+          props={{ page: (options.page === undefined ? reference : options.page) as never }}
+          registry={materials.registry}
+          renderer={{ type: 'page-slot', props: {} }}
+        />
+      </ComposePageSlotNestProvider>
+    </div>,
   )
   return { materials }
 }
@@ -159,6 +162,21 @@ describe('OpenSpec: basic-materials / Page Slot 加载状态与嵌套护栏', ()
     screen.getByRole('button', { name: '重试' }).click()
 
     await waitFor(() => { expect(load).toHaveBeenCalledTimes(2) })
+  })
+
+  it('重试按钮阻止 pointerdown 冒泡后仍能重新加载', async () => {
+    const onPointerDown = vi.fn()
+    const load = vi.fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce(nestedDocument())
+    renderSlot({ loader: { load }, onPointerDown })
+
+    const retry = await screen.findByRole('button', { name: '重试' })
+    fireEvent.pointerDown(retry)
+    expect(onPointerDown).not.toHaveBeenCalled()
+    fireEvent.click(retry)
+
+    expect(await screen.findByTestId('compose-page-slot-content')).toBeInTheDocument()
   })
 
   it('目标页面为空时呈现空状态', async () => {

@@ -149,7 +149,13 @@ export function PageSlotRenderer({
         role="alert"
       >
         <span>{state.message}</span>
-        <button type="button" onClick={retry}>重试</button>
+        <button
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={retry}
+        >
+          重试
+        </button>
       </div>
     )
   }

@@ -1860,6 +1860,15 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
   await expect(preview.getByTestId('compose-page-slot-content').first()).toBeVisible()
 })
 
+test('回归：Page Slot / A → B → Home 冷加载不会被 StrictMode 取消', async ({ page }) => {
+  await page.goto('/?deep-page-slot')
+  const preview = page.getByTestId('compose-preview-document')
+  await expect(page.getByTestId('deep-page-slot-demo')).toBeVisible()
+  await expect(preview.getByTestId('compose-page-slot-content')).toHaveCount(3)
+  await expect(preview.getByTestId('compose-page-slot-error')).toHaveCount(0)
+  await expect(preview.locator('[data-page-slot-entity-id]')).toHaveCount(4)
+})
+
 test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板与固定画布布局一致', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

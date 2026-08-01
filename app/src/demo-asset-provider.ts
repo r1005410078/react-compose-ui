@@ -11,10 +11,17 @@ import type {
   ComposeAssetEntry,
   ComposeAssetProvider,
 } from '@compose-ui/assets'
+import type { ComposeDocument } from '@compose-ui/core'
 
 interface MemoryAsset {
   entry: ComposeAssetEntry
   content?: Blob
+}
+
+interface DemoPageSeed {
+  readonly id: string
+  readonly name: string
+  readonly document: ComposeDocument
 }
 
 const root: ComposeAssetEntry = {
@@ -56,7 +63,9 @@ const demoHomePageText = serializeComposePageDocument(createEmptyComposePageDocu
 /**
  * 示例应用的实例级内存 Provider，只用于展示资源协议，不属于公共持久化实现。
  */
-export function createDemoAssetProvider(): ComposeAssetProvider {
+export function createDemoAssetProvider(options: {
+  readonly pages?: readonly DemoPageSeed[]
+} = {}): ComposeAssetProvider {
   let revisionNumber = 1
   const listeners = new Set<() => void>()
   const assets = new Map<string, MemoryAsset>([
@@ -155,6 +164,23 @@ export function createDemoAssetProvider(): ComposeAssetProvider {
       content: new Blob(['# Demo assets\n\nFiles are stored by an in-memory ComposeAssetProvider.\n']),
     }],
   ])
+
+  options.pages?.forEach((page) => {
+    const text = serializeComposePageDocument(page.document)
+    assets.set(page.id, {
+      entry: {
+        id: page.id,
+        parentId: 'demo-pages',
+        name: page.name,
+        kind: 'file',
+        mediaType: COMPOSE_PAGE_MEDIA_TYPE,
+        size: text.length,
+        revision: revision(revisionNumber),
+        assetKey: page.id,
+      },
+      content: new Blob([text], { type: COMPOSE_PAGE_MEDIA_TYPE }),
+    })
+  })
 
   const notify = () => {
     for (const listener of listeners) listener()
