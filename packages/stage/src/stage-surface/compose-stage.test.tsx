@@ -475,4 +475,81 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId('stage-paint-linear-end')).toBeInTheDocument()
     expect(screen.queryByTestId('stage-resize-se')).not.toBeInTheDocument()
   })
+
+  it('平移视口只更新场景变换，不重渲 Entity 渲染器', () => {
+    const renderCounts = new Map<string, number>()
+    const countingRegistry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'test',
+        label: '测试',
+        renderer: ({ props }) => {
+          const text = String(props.text)
+          renderCounts.set(text, (renderCounts.get(text) ?? 0) + 1)
+          return <span>{text}</span>
+        },
+      }],
+      presets: [preset],
+    })
+    const value = document([entity('a'), entity('b')])
+    const snapshot = layoutSnapshot(value)
+    const stage = (viewport: { x: number; y: number; zoom: number }) => (
+      <ComposeStage
+        dispatch={vi.fn()}
+        document={value}
+        layoutSnapshot={snapshot}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+        registry={countingRegistry}
+        selectedIds={[]}
+        tool="select"
+        viewport={viewport}
+      />
+    )
+    const view = render(stage({ x: 0, y: 0, zoom: 1 }))
+    const beforePan = new Map(renderCounts)
+    expect(beforePan.size).toBe(2)
+
+    view.rerender(stage({ x: 120, y: 80, zoom: 1 }))
+
+    expect(screen.getByTestId('stage-scene-layer')).toHaveStyle({
+      transform: 'translate(120px, 80px) scale(1)',
+    })
+    expect(Object.fromEntries(renderCounts)).toEqual(Object.fromEntries(beforePan))
+  })
+
+  it('平移视口不再遍历全部 Entity 计算内容边界', () => {
+    // 用 Proxy 观察真实文档的整表枚举次数：内容边界只在引擎尚未给出滚动范围时才需要，
+    // 平移帧不应为此重新遍历全场景。
+    let enumerations = 0
+    const value = document([entity('a'), entity('b')])
+    const probed: ComposeDocument = {
+      ...value,
+      entities: new Proxy(value.entities, {
+        ownKeys(target) {
+          enumerations += 1
+          return Reflect.ownKeys(target)
+        },
+      }),
+    }
+    const snapshot = layoutSnapshot(value)
+    const stage = (viewport: { x: number; y: number; zoom: number }) => (
+      <ComposeStage
+        dispatch={vi.fn()}
+        document={probed}
+        layoutSnapshot={snapshot}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+        registry={registry}
+        selectedIds={[]}
+        tool="select"
+        viewport={viewport}
+      />
+    )
+    const view = render(stage({ x: 0, y: 0, zoom: 1 }))
+    const beforePan = enumerations
+
+    view.rerender(stage({ x: 120, y: 80, zoom: 1 }))
+
+    expect(enumerations).toBe(beforePan)
+  })
 })

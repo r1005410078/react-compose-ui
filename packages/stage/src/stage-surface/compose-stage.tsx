@@ -1433,7 +1433,9 @@ function ComposeStageReady({
     width: visibleWidth,
     height: visibleHeight,
   }
-  const bootstrapContentBounds = unionRects([
+  // 内容边界要遍历全部 Entity 计算世界包围盒，但只在引擎尚未发布滚动范围的首帧才会用到。
+  // 必须惰性求值：否则每个平移帧都会为一个立刻被丢弃的结果做一次全场景遍历。
+  const bootstrapContentBounds = () => unionRects([
     {
       x: 0,
       y: 0,
@@ -1449,7 +1451,7 @@ function ComposeStageReady({
       )),
   ])
   const activeScrollRange = interaction.scrollRange
-    ?? expandScrollRange(null, bootstrapContentBounds, visibleWorld)
+    ?? expandScrollRange(null, bootstrapContentBounds(), visibleWorld)
   const scrollAxes = viewportToScrollAxes(viewport, surfaceSize, activeScrollRange)
 
   const keyboardCommand = (event: ReactKeyboardEvent<HTMLDivElement>) => {

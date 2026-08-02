@@ -28,6 +28,7 @@ import {
   type ComposeSpatialTransform,
   type TransactionRuntime,
 } from '@compose-ui/core'
+import { cloneElement, useEffect, type ReactElement } from 'react'
 import { useComposeEditorController } from './controller'
 
 // Controller 契约测试使用确定性 fake；Yoga/WASM 数值与异步加载由 layout-engine 集成测试覆盖。
@@ -164,7 +165,14 @@ const testTransformSchema = v.object({
   ),
 })
 
+// Inspector 子树的真实渲染次数探针：只有 Inspector 真的重渲时才会增加。
+// 在 effect 里累加，避免渲染期产生副作用。
+const renderProbe = { inspector: 0 }
+
 function TestTransformInspector({ value }: ComposeComponentInspectorProps) {
+  useEffect(() => {
+    renderProbe.inspector += 1
+  })
   return (
     <ComposePropertyPanel
       aria-label="变换属性"
@@ -872,5 +880,64 @@ describe('useComposeEditorController', () => {
       source: 'test',
       targets: ['title'],
     }))
+  })
+
+  it('OpenSpec: refactor-editor-viewport-render-scope / 视口更新的渲染范围 / 平移不重渲无关面板', () => {
+    const editorRuntime = runtime()
+    const handle: { current: ReturnType<typeof useComposeEditorController> | null } = {
+      current: null,
+    }
+
+    function Workspace() {
+      const controller = useComposeEditorController({
+        idFactory: ids(),
+        initialSelection: ['title'],
+        registry,
+        runtime: editorRuntime,
+      })
+      useEffect(() => {
+        handle.current = controller
+      })
+      return (
+        <>
+          {controller.stage}
+          {controller.inspectorPanel}
+        </>
+      )
+    }
+
+    render(<Workspace />)
+    // Registry inspector 的渲染次数代表 Inspector 子树真的重渲了；场景树属性引用稳定则
+    // 说明记忆化的场景树面板可以 bail out。
+    const controller = handle.current!
+    const inspectorBefore = renderProbe.inspector
+    const sceneTreePropsBefore = controller.sceneTreeProps
+
+    act(() => controller.setViewport({ x: 240, y: 160, zoom: 2 }))
+
+    expect(controller.viewport).toEqual({ x: 240, y: 160, zoom: 2 })
+    expect(renderProbe.inspector).toBe(inspectorBefore)
+    expect(controller.sceneTreeProps).toBe(sceneTreePropsBefore)
+  })
+
+  it('controller.stage 透传宿主克隆注入的 Stage 属性', () => {
+    // ComposeEditor 用 cloneElement 往 controller.stage 上注入 assetResolver、shortcuts 与
+    // onToolChange。stage 节点若不透传这些属性，资源解析与自定义快捷键都会静默失效。
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      registry,
+      runtime: editorRuntime,
+    }))
+
+    render(cloneElement(result.current.stage as ReactElement<Record<string, unknown>>, {
+      shortcuts: { 'stage.temporaryPan': [{ code: 'KeyP' }] },
+    }))
+    const stage = screen.getByRole('application', { name: 'Stage' })
+    expect(stage).toHaveAttribute('data-interaction-cursor', 'default')
+
+    fireEvent.keyDown(stage, { code: 'KeyP', key: 'p' })
+
+    expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
   })
 })

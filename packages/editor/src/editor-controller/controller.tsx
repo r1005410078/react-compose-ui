@@ -1,8 +1,5 @@
 import { ComposeCommandPanel } from '@compose-ui/command-panel'
-import {
-  ComposeComponentPalette,
-  ComposeStage,
-} from '@compose-ui/stage'
+import { ComposeComponentPalette } from '@compose-ui/stage'
 import {
   createStageInteractionController,
   createStageSceneIndex,
@@ -59,8 +56,12 @@ import {
   DefaultEmptyInspector,
   EntityInspector,
 } from '../inspector'
-import { DefaultStageToolbar } from '../stage-toolbar'
 import { planSceneOperation } from './scene-operations'
+import {
+  ViewportBoundStage,
+  ViewportBoundStageToolbar,
+} from './viewport-bound-panels'
+import { createViewportStore } from './viewport-store'
 import { useComposeEditorLayout } from './use-layout-runtime'
 
 type InspectionTarget = 'entities' | 'output' | null
@@ -235,8 +236,21 @@ export interface ComposeEditorController {
   readonly selectedIds: readonly string[]
   /** 当前有效容器展开项。 */
   readonly expandedIds: readonly string[]
-  /** 当前 Stage 视口会话状态。 */
+  /**
+   * 当前 Stage 视口会话状态。
+   *
+   * @remarks
+   * 读取始终返回最新快照，但视口是外部状态源：读取它的组件不会因为平移或缩放自动重渲。
+   * 需要跟随视口变化重渲的宿主请使用 `useComposeStageViewport`。
+   */
   readonly viewport: StageViewport
+  /**
+   * 订阅视口变化。
+   *
+   * @param listener - 视口快照变化后的回调。
+   * @returns 取消订阅函数。
+   */
+  readonly subscribeViewport: (listener: () => void) => () => void
   /** 当前选择或平移工具。 */
   readonly tool: ComposeStageTool
   /** 当前实例 Palette 与 Stage 共享的无 UI 交互控制器。 */
@@ -282,6 +296,28 @@ function invokeObserver(
 }
 
 /**
+ * 订阅 controller 的 Stage 视口。
+ *
+ * @remarks
+ * 视口是编辑器会话状态中变化最频繁的一项：一次平移手势每帧都会更新它。为了让平移不牵动
+ * 场景树、Inspector 等无关面板，它被存放在外部状态源里，只有订阅方会随之重渲。默认工作区的
+ * Stage 与工具栏已经内建订阅；只有自己渲染 `ComposeStage` 或要显示缩放读数的宿主需要这个 Hook。
+ *
+ * @param controller - `useComposeEditorController` 返回的 controller。
+ * @returns 当前视口快照，并在视口变化时触发重渲。
+ * @example
+ * ```tsx
+ * const viewport = useComposeStageViewport(controller)
+ * return <ComposeStage {...controller.stageProps} viewport={viewport} />
+ * ```
+ * @public
+ */
+export function useComposeStageViewport(controller: ComposeEditorController): StageViewport {
+  const getSnapshot = useCallback(() => controller.viewport, [controller])
+  return useSyncExternalStore(controller.subscribeViewport, getSnapshot, getSnapshot)
+}
+
+/**
  * 把 runtime、registry 与编辑器会话状态组合成默认工作区 controller。
  *
  * @remarks
@@ -316,7 +352,8 @@ export function useComposeEditorController({
     validSelection(document, initialSelection).length > 0 ? 'entities' : null)
   const [expandedIds, setExpandedIdsState] = useState<readonly string[]>(() =>
     validExpanded(document, initialExpandedIds))
-  const [viewport, setViewport] = useState<StageViewport>(initialViewport)
+  const [viewportStore] = useState(() => createViewportStore(initialViewport))
+  const setViewport = viewportStore.setViewport
   const [tool, setTool] = useState<ComposeStageTool>(initialTool)
   const [surfaceSize, setSurfaceSize] = useState<{
     readonly width: number
@@ -343,6 +380,8 @@ export function useComposeEditorController({
     setSelectedIdsState(validSelection(nextDocument, []))
     setInspectionTarget(null)
     setExpandedIdsState(validExpanded(nextDocument, []))
+    // 视口在外部状态源里，这里是渲染期写外部 store。该分支对同一个 runtime 只会写入同一个
+    // initialViewport，重复执行（StrictMode 重放）结果一致，且订阅方随后就会读到新快照。
     setViewport(initialViewport)
     setPaintEditing(null)
     setPaintSampling(null)
@@ -496,7 +535,11 @@ export function useComposeEditorController({
     registry,
     pageLoader,
     dispatch,
-    viewport,
+    // 视口不参与 memo 依赖：它是外部状态源，读取时取当前快照，订阅由渲染 Stage 的组件负责。
+    // 宿主如果自己渲染 ComposeStage，需要用 useComposeStageViewport 订阅才能随平移重渲。
+    get viewport() {
+      return viewportStore.getSnapshot()
+    },
     onViewportChange: setViewport,
     tool,
     onToolChange: setTool,
@@ -517,7 +560,8 @@ export function useComposeEditorController({
     registry,
     pageLoader,
     dispatch,
-    viewport,
+    viewportStore,
+    setViewport,
     tool,
     selectedIds,
     resolvedInspectionTarget,
@@ -554,7 +598,7 @@ export function useComposeEditorController({
       y: height / 2 - (bounds.y + bounds.height / 2) * zoom,
       zoom,
     })
-  }, [document, layoutState, surfaceSize])
+  }, [document, layoutState, setViewport, surfaceSize])
   const sceneIndex = useMemo(
     () => layoutState.status === 'ready'
       ? createStageSceneIndex(document, layoutState.snapshot)
@@ -634,7 +678,11 @@ export function useComposeEditorController({
     history: runtime,
     selectedIds,
     expandedIds,
-    viewport,
+    // 读取取当前快照，不把视口带回渲染依赖；订阅由 useComposeStageViewport 提供。
+    get viewport() {
+      return viewportStore.getSnapshot()
+    },
+    subscribeViewport: viewportStore.subscribe,
     tool,
     interactionController,
     setSelectedIds,
@@ -650,13 +698,13 @@ export function useComposeEditorController({
         registry={registry}
       />
     ),
-    stage: <ComposeStage {...stageProps} />,
+    stage: <ViewportBoundStage stageProps={stageProps} store={viewportStore} />,
     inspectorPanel,
     commandPanel: (
       <ComposeCommandPanel presets={commandPresets} runtime={runtime} />
     ),
     stageToolbar: (
-      <DefaultStageToolbar
+      <ViewportBoundStageToolbar
         canvasSettingsOpen={canvasSettingsOpen}
         configureCanvas={configureCanvas}
         createContainer={createContainer}
@@ -671,9 +719,9 @@ export function useComposeEditorController({
         setTool={setTool}
         setViewport={setViewport}
         smartSnapEnabled={smartSnapEnabled}
+        store={viewportStore}
         surfaceSize={surfaceSize}
         tool={tool}
-        viewport={viewport}
       />
     ),
   }
