@@ -107,3 +107,23 @@ OperationLog 默认 React 面板 MUST 消费共享 Theme/I18n Context，使用�
 - **WHEN** 宿主覆盖一个 operationLog 命名空间消息
 - **THEN** 对应面板 chrome 使用覆盖值
 - **AND** controller 查询、选择和持久化行为不变
+
+### Requirement: Compose-prefixed Operation Log API
+The operation log package MUST expose compose-prefixed provider, hook and panel contracts from its root.
+
+#### Scenario: Operation log viewing
+- **WHEN** a consumer renders the vNext operation log panel
+- **THEN** snapshot details, empty state, theme and localized chrome retain their current behaviour
+
+### Requirement: 操作日志右键菜单
+
+操作日志 MUST 为条目和空白区域提供详情、筛选、复制及确认清空菜单。
+
+#### Scenario: 确认清空当前 scope
+- **WHEN** 用户确认清空操作日志
+- **THEN** 当前 scope 记录被清空且其他 scope 不受影响
+
+#### Scenario: 不显示不存在的日志快捷键
+- **WHEN** 用户打开操作日志右键菜单
+- **THEN** 菜单不显示快捷键后缀，因为日志操作没有对应的键盘动作
+

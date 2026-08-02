@@ -53,27 +53,19 @@ MUST 使用稳定文档 ID，并 MUST 忽略 hidden 节点和完全位于其他 
 
 ### Requirement: 直接移动缩放与旋转
 
-Stage MUST 为可编辑选择提供移动、八向 resize 和 rotation handle。单选与多选 MUST 使用世界几何
-计算结果，再转换为各自父节点局部 transform；move 与 resize MUST 使用统一吸附引擎，一次完成
-的手势 MUST 只派发一个 transform 命令或 batch。
+Stage MUST 在拖动或方向键移动 Flow 时把它转换为 Absolute 后移动，不得在 Stage 重排 Flow。Resize
+Fill axis MUST 转为 Fixed；Rotation MUST 保持 Flow 与 sizing。全部操作 MUST 使用开始 Snapshot 并
+维持现有 preview/cancel/一次提交保证。
 
-#### Scenario: 移动单选或多选
+#### Scenario: 拖动 Flow 转为 Absolute
+- **WHEN** 用户在 Stage 拖动一个或多个 Flow Entity 并正常松手
+- **THEN** preview 保持开始世界几何并跟随指针，提交后目标为 Absolute final offset
+- **AND** Hierarchy.childIds 顺序不因 Stage 拖动改变
 
-- **WHEN** 用户拖动一个未锁定选择或共同包围框
-- **THEN** 所有目标在 Pointer 预览中保持相对位置并应用启用的吸附
-- **AND** pointerup 只提交一次包含最终局部 transform 的事务
-
-#### Scenario: 八向缩放并吸附活动边
-
-- **WHEN** 用户拖动任一 resize handle
-- **THEN** 活动边或角参与智能和网格吸附，且尺寸不会跨过最小正尺寸
-- **AND** Shift 保持初始宽高比，Alt 从中心对称缩放
-
-#### Scenario: 旋转选择
-
-- **WHEN** 用户拖动 rotation handle
-- **THEN** 选择围绕共同中心旋转
-- **AND** Shift 把角度量化到 15°，pointerup 提交一次最终事务
+#### Scenario: Flow 结构操作禁用
+- **WHEN** 当前 Group/Ungroup 目标包含 Flow Entity
+- **THEN** 菜单和快捷键使用相同 availability 禁用该操作并提供可读原因
+- **AND** Delete、Lock、Visibility 与 Rotation 仍按各自能力执行
 
 ### Requirement: 屏幕距离吸附
 
@@ -272,17 +264,12 @@ en-US；宿主 renderer 和 registry label MUST 保持原文。
 - **AND** Frame 名称、registry label 与组件业务内容不被翻译
 
 ### Requirement: Stage 包导出边界
+The Stage package MUST export `ComposeStage`, compose-prefixed supporting types and `ComposeComponentPalette` from
+its root while keeping coordinate, snapping and command planning in stage-engine.
 
-`@compose-ui/stage` MUST NOT 重导出坐标、矩阵、画布几何、空间命令、SceneIndex 或 interaction
-controller，也 MUST NOT 提供 `StageDragController`、`dragController` prop 或兼容 facade。
-消费者 MUST 从 `@compose-ui/stage-engine` 导入 headless API，并使用
-`interactionController` 连接 Stage 与 Palette。
-
-#### Scenario: 使用新的破坏性导入边界
-
-- **WHEN** 消费者升级 Stage 与 Editor 的 major 版本
-- **THEN** UI 组件和 StageFramePreset 继续从 stage 包导入
-- **AND** 几何、命令与 controller 只从 stage-engine 包导入
+#### Scenario: Stage structure refactor
+- **WHEN** the Stage implementation is reorganized
+- **THEN** its user-visible grid, rulers, overlays, pointer behaviour, ARIA and stable test IDs remain unchanged
 
 ### Requirement: 异步资源节点创建
 
@@ -398,4 +385,89 @@ ungroup、delete 和视图操作状态，不得读取旧 kind。
 
 - **WHEN** 单选含子项的可编辑 Hierarchy Entity
 - **THEN** 菜单启用取消编组并保留现有快捷键提示
+
+### Requirement: Stage 右键操作菜单
+
+Stage MUST 在节点和空白画布使用共享右键菜单呈现编辑、视图、工具和吸附操作。
+
+#### Scenario: 右键未选节点
+- **WHEN** 用户右键未选中的可见节点
+- **THEN** Stage 先请求单选该节点并显示适用编辑操作
+
+#### Scenario: 右键菜单显示当前 Stage 键位
+- **WHEN** Stage 打开节点、视图、工具或吸附菜单
+- **THEN** 每个实际配置的动作在菜单末尾显示当前 `shortcuts` 的全部键位
+- **AND** 自定义配置立即生效，空数组隐藏提示，禁用菜单项仍保留已配置的提示
+
+### Requirement: Paint SVG Overlay 与采样适配
+
+ComposeStage MUST 仅根据 Engine snapshot 渲染线性、径向、角向的可访问 SVG 控制柄和 sample hover。控制柄仅在单选实体的背景 Paint editor 打开时显示；React adapter 负责 pointer capture、native client 坐标和 effect 应用，不得实现 Paint 几何。
+
+#### Scenario: 退出 Paint 编辑
+
+- **WHEN** Popover 关闭、选择变更、Escape、blur、pointercancel 或 document 变更
+- **THEN** Stage 清除 Paint overlay 与 preview
+- **AND** 非正常结束不产生事务
+
+### Requirement: Stage 输出背景 Paint
+
+ComposeStage MUST 在固定输出边界渲染 `output.backgroundPaint` 的共享 Paint 描述，并让输出背景保持
+不可交互、不可选中和不参与 Entity Paint edit/sample session。
+
+#### Scenario: 编辑渐变输出背景
+
+- **WHEN** Canvas Inspector 提交合法的输出 Gradient Paint
+- **THEN** Stage 在下一文档快照显示对应输出渐变
+- **AND** 现有 Entity 选择、移动、命中测试和渐变控制柄目标保持不变
+
+### Requirement: Stage 页面文档加载注入
+
+Stage MUST 接受可选的页面文档加载端口并将其注入 Registry 渲染上下文，使引用了页面的实体能在编辑
+画布上实时渲染其内容。Stage MUST NOT 自行实现页面加载或嵌套渲染逻辑，也 MUST NOT 因此依赖
+`preview`、`editor` 或页面 Store 实现包。未注入端口时画布 MUST 正常渲染且相关实体呈现占位状态。
+
+#### Scenario: 注入后实时渲染
+
+- **WHEN** 宿主向 Stage 注入页面文档加载端口，画布上存在引用页面的实体
+- **THEN** 该实体在编辑画布上渲染被引用页面的内容
+- **AND** 渲染结果与预览一致
+
+#### Scenario: 未注入端口
+
+- **WHEN** 宿主未注入页面文档加载端口
+- **THEN** 画布正常渲染
+- **AND** 引用页面的实体呈现可访问的占位状态
+
+#### Scenario: 嵌套内容不干扰选择
+
+- **WHEN** 用户在渲染了嵌套页面内容的实体区域内点击或框选
+- **THEN** 命中与选择结果为该实体本身
+- **AND** 嵌套内容不产生额外的可选目标
+
+### Requirement: Layout Runtime 状态界面
+
+Stage MUST 接受可选 Layout Runtime；缺省时创建实例。loading 时 MUST 暴露 aria-busy 并禁止场景
+交互，error 时 MUST 显示可访问错误，ready 时才挂载 Entity Scene。
+
+#### Scenario: 异步进入 ready
+- **WHEN** Stage 挂载后 Yoga loader 尚未完成再成功完成
+- **THEN** 先显示布局加载态且不允许选择或变换
+- **AND** ready 后使用当前文档的首个 Snapshot 一次性显示正确场景
+
+### Requirement: 平移帧的场景渲染范围
+
+平移与缩放 MUST 只更新 DOM Scene 根节点的变换，MUST NOT 重建 Entity 内容子树。只在 viewport
+变化时，Stage MUST NOT 遍历全部 Entity 重新计算世界包围盒。
+
+#### Scenario: 平移只更新场景变换
+
+- **WHEN** 只有 viewport 发生变化
+- **THEN** 场景根节点的 transform 更新为新的平移与缩放
+- **AND** Entity 渲染器不重新渲染
+
+#### Scenario: 内容边界惰性求值
+
+- **WHEN** Engine 已经发布滚动范围，用户继续平移
+- **THEN** Stage 不再为兜底内容边界遍历全部 Entity
+- **AND** 滚动条位置与范围与之前保持一致
 

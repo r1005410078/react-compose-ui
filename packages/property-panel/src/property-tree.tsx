@@ -245,7 +245,7 @@ export function PropertyTree({
                 ) : null}
               </TreeDepthContext.Provider>
             ) : (
-              <div className="property-panel__fields">
+              <div className="property-panel__fields" data-property-part="fields">
                 {sectionVisible ? (
                     <ObjectChildren
                       commit={commit}
@@ -303,7 +303,7 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
 
   return (
     <>
-    <div className="property-panel__actions" ref={rootRef}>
+    <div className="property-panel__actions" data-property-part="actions" ref={rootRef}>
       {direct.map((action) => (
         <Fragment key={action.id}>
           {action.control ?? (
@@ -777,6 +777,7 @@ function PropertyNode({
       return (
         <div
           className="property-panel__field property-panel__field--full-width"
+          data-property-part="field"
           data-property-depth={depth}
           data-property-layout={layout}
           data-property-nested={depth > 1 ? 'true' : undefined}
@@ -785,16 +786,18 @@ function PropertyNode({
         >
           <span
             className={`property-panel__label${LabelRenderer ? ' property-panel__label--interactive' : ''}`}
+            data-property-part="label"
             id={rendererLabelId}
           >{labelElement}</span>
           <RowActionRail actions={actions} label={label} />
           <div
             aria-labelledby={rendererLabelId}
             className="property-panel__editor property-panel__editor--full-width"
+            data-property-part="editor"
             data-property-renderer-content=""
             role="group"
           >
-            <div className="property-panel__control property-panel__control--full-width">
+            <div className="property-panel__control property-panel__control--full-width" data-property-part="control">
               {rendererElement}
             </div>
           </div>
@@ -805,16 +808,20 @@ function PropertyNode({
       <div
         className="property-panel__field"
         data-property-depth={depth}
+        data-property-part="field"
         data-property-layout={layout}
         data-property-nested={depth > 1 ? 'true' : undefined}
         data-property-path={path.join('.')}
         style={createFieldIndentStyle(depth)}
       >
-        <span className={`property-panel__label${LabelRenderer ? ' property-panel__label--interactive' : ''}`}>
+        <span
+          className={`property-panel__label${LabelRenderer ? ' property-panel__label--interactive' : ''}`}
+          data-property-part="label"
+        >
           {labelElement}
         </span>
-        <div className="property-panel__editor">
-          <div className="property-panel__control">
+        <div className="property-panel__editor" data-property-part="editor">
+          <div className="property-panel__control" data-property-part="control">
             {rendererElement}
           </div>
         </div>
@@ -1109,7 +1116,7 @@ function ObjectChildren({
       <GroupShell key={`section-${group.section}`} label={group.section} nodeActions={[]}>
         {group.entries.map(renderEntry)}
       </GroupShell>
-    ) : <div className="property-panel__ungrouped" key={`field-${index}`}>{group.entries.map(renderEntry)}</div>
+    ) : <div className="property-panel__ungrouped" data-property-part="ungrouped" key={`field-${index}`}>{group.entries.map(renderEntry)}</div>
   ))
 }
 
@@ -1477,12 +1484,13 @@ function PropertyRow({
     <div
       className="property-panel__field"
       data-property-depth={depth}
+      data-property-part="field"
       data-property-nested={depth > 1 ? 'true' : undefined}
       data-property-path={path.join('.')}
       style={createFieldIndentStyle(depth)}
     >
-      <span className="property-panel__label">{label}</span>
-      <div className="property-panel__editor">{children}</div>
+      <span className="property-panel__label" data-property-part="label">{label}</span>
+      <div className="property-panel__editor" data-property-part="editor">{children}</div>
       <RowActionRail actions={nodeActions} label={label} />
     </div>
   )
@@ -1638,18 +1646,19 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
     <div
       className="property-panel__field"
       data-property-depth={depth}
+      data-property-part="field"
       data-property-nested={depth > 1 ? 'true' : undefined}
       data-property-path={path.join('.')}
       style={createFieldIndentStyle(depth)}
     >
-      <label htmlFor={id}>
+      <label data-property-part="label" htmlFor={id}>
         <span>{label}</span>
         {showDescriptions && info.description
           ? <small className="property-panel__description">{info.description}</small>
           : null}
       </label>
-      <div className="property-panel__editor">
-        <div className="property-panel__control">
+      <div className="property-panel__editor" data-property-part="editor">
+        <div className="property-panel__control" data-property-part="control">
           {bindingTarget ? (
             <div className="property-panel__binding-target">
               <div className="property-panel__binding-control">

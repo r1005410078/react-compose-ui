@@ -4,20 +4,12 @@
 TBD - created by archiving change add-scene-tree-component. Update Purpose after archive.
 ## Requirements
 ### Requirement: 独立受控场景树包
+The scene tree package MUST export `ComposeSceneTree` and compose-prefixed contracts, compose the shared
+`ComposeTree`, and no longer accept an explicit locale prop.
 
-系统 MUST 提供独立的 `@compose-ui/scene-tree` React 包，导出 `SceneTree`、
-`SceneTreeProps`、`SceneTreeNode` 和 `SceneTreeOperation`。包 MUST NOT 依赖
-`@compose-ui/core` 或 `@compose-ui/editor`，且不得拥有或持久化宿主的节点状态。
-
-#### Scenario: 独立渲染场景树
-- **WHEN** 宿主向 `SceneTree` 提供节点、选择和展开状态
-- **THEN** 组件按照受控状态渲染树
-- **AND** 状态变化通过回调和操作意图返回给宿主
-
-#### Scenario: 独立加载样式
-- **WHEN** 宿主导入 `@compose-ui/scene-tree/styles.css`
-- **THEN** 场景树显示作用域限定的深色样式和细窄滚动条
-- **AND** 样式不重置宿主的全局元素样式
+#### Scenario: Scene tree after vNext import
+- **WHEN** a consumer uses the vNext scene tree
+- **THEN** selection, move commands, keyboard navigation, visibility and locking retain their current behaviour
 
 ### Requirement: 大规模虚拟化树
 
@@ -207,30 +199,14 @@ Hook MUST 只保存实例内剪贴板，MUST NOT 修改节点、生成 ID、克�
 ### Requirement: 场景树命令菜单与快捷键
 
 系统 MUST 用场景树命令 controller 驱动节点及空白区上下文菜单和键盘快捷键，并呈现命令
-可用状态。
+可用状态。菜单 MUST 为复制、剪切和删除显示其实际键位；“粘贴为子节点”“粘贴为兄弟节点”和
+“粘贴到根级”不得显示 `Cmd/Ctrl+V`，因为键盘行为只会执行建议粘贴，而不是这些精确目标动作。
 
 #### Scenario: 打开节点命令菜单
 - **WHEN** 用户右键已选节点或未选节点
 - **THEN** 已选节点保留多选，未选节点先请求单选
 - **AND** 菜单按新增子节点、新增兄弟节点、复制、剪切、粘贴为子节点、粘贴为兄弟节点、删除顺序分组显示
-- **AND** 不可执行项保持可见但禁用，删除使用危险操作视觉
-
-#### Scenario: 打开空白区命令菜单
-- **WHEN** 用户在树空白区打开上下文菜单
-- **THEN** 菜单只显示新增根节点和粘贴到根级
-
-#### Scenario: 使用命令菜单键盘导航
-- **WHEN** 菜单打开且用户按 ArrowUp、ArrowDown、Home、End、Escape 或点击菜单外部
-- **THEN** 焦点在可用菜单项间循环或跳转，Escape 与外部点击关闭菜单
-
-#### Scenario: 使用场景树命令快捷键
-- **WHEN** 树行聚焦且用户按 Ctrl/Cmd+C、Ctrl/Cmd+X、Ctrl/Cmd+V 或 Delete
-- **THEN** 组件分别执行复制、剪切、建议粘贴或删除命令
-- **AND** 搜索框与重命名输入框不会拦截这些文本编辑快捷键
-
-#### Scenario: 外部与菜单共享命令状态
-- **WHEN** 宿主创建 controller 并通过 `commands` 传入 `SceneTree`
-- **THEN** 外部调用和内置菜单观察并使用同一份剪贴板
+- **AND** 复制、剪切和删除在菜单末尾显示实际键位，粘贴目标不显示快捷键
 
 ### Requirement: 默认编辑器复制节点
 

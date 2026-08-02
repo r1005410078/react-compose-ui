@@ -157,20 +157,13 @@ ungroup，并为 Canvas 或 Frame 目标创建保持世界几何的 reparent/dup
 
 ### Requirement: Entity 与 Component 内置命令
 
-Core MUST 提供 Entity 创建、删除、复制、重命名、层级移动以及 Component 添加、移除和更新命令。
-旧 `node.*` 与 `frame.*` 命令 MUST 被移除。成功命令 MUST 生成 entities/Components 路径的可逆
-Patch，并继续形成唯一正式事务。
+Appearance 更新命令 MUST 校验 v5 ComposePaint，并以 Patch 正确保留其它 Appearance 字段。对背景 Paint 的连续预览只允许在 pointer up 提交一个事务；undo/redo 必须完整恢复几何和 stop。
 
-#### Scenario: 原子修改 Component
+#### Scenario: 提交并撤销渐变手柄变更
 
-- **WHEN** 宿主添加、更新或移除一个允许修改的 Component
-- **THEN** 运行时提交一个可撤销事务并更新对应 Entity
-- **AND** undo/redo 精确恢复 Component 与 Composition
-
-#### Scenario: 保护基础 Component
-
-- **WHEN** 命令尝试移除 Composition 或 Composition.baseComponentKeys 中的 Component
-- **THEN** 命令被拒绝且文档与历史不变
+- **WHEN** 用户完成一次 Paint 手柄拖动
+- **THEN** Runtime 只记录一个可逆 Appearance 事务
+- **AND** undo/redo 分别恢复拖动前和拖动后的完整 Paint
 
 ### Requirement: 受约束 Transform 命令
 
@@ -211,4 +204,30 @@ core MUST 提供 createComposeBatchCommand，从类型化子命令数组构造 t
 
 - **WHEN** 调用方传入子命令数组与 meta
 - **THEN** 返回的命令经 dispatch 后原子应用全部子命令
+
+### Requirement: 输出 Paint 配置事务
+
+`output.configure` MUST 校验完整的 v5 `ComposeOutputSettings`，并在宽高或 `backgroundPaint` 任一变化时保存
+一个可逆 output Patch。命令不得接受 `backgroundColor` 或只更新 Paint 的局部字段。
+
+#### Scenario: 提交并撤销输出渐变
+
+- **WHEN** 用户在 Canvas Inspector 把输出背景从 Solid 改为 Linear、Radial 或 Angular Paint
+- **THEN** Runtime 记录一个完整且可逆的 `output.configure` 事务
+- **AND** undo/redo 分别恢复变化前后的完整输出尺寸和 Paint
+
+### Requirement: 布局意图命令原子性
+
+系统 MUST 以结构化命令更新 LayoutItem positioning、axis sizing 与 offset。一次用户 move、nudge、
+resize 或 reparent MUST 最多提交一个 command 或 batch，并 MUST 生成完整 inverse。
+
+#### Scenario: Flow move 原子转换 Absolute
+- **WHEN** 用户完成一次包含 Flow 与 Absolute 目标的 Stage move
+- **THEN** 一个事务把 Flow 目标切为 Absolute、烘焙开始 box 并写入最终 offset
+- **AND** Undo 一次恢复全部目标的 positioning、offset 和原父级几何意图
+
+#### Scenario: Resize Fill 转为 Fixed
+- **WHEN** 用户直接调整一个 Fill axis 的最终尺寸
+- **THEN** 同一事务把该 axis mode 改为 Fixed 并写入最终 value
+- **AND** 未调整轴与 Flow 排序保持不变
 

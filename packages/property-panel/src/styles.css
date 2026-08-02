@@ -1,3 +1,7 @@
+/*
+ * 本文件里的 `property-panel__*` 类名是实现细节。包外样式必须改用 `data-property-part`
+ * 与 `data-property-*` 字段属性定位结构，见 src/index.tsx 的 packageDocumentation。
+ */
 @import '@compose-ui/components/styles.css';
 @import 'tailwindcss/theme.css' layer(theme) prefix(pp);
 @import 'tailwindcss/utilities.css' layer(utilities) prefix(pp);

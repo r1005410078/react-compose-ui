@@ -342,6 +342,42 @@ describe('内建 Component inspectors', () => {
     })
   })
 
+  it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / 尺寸 0 视为非法输入不产生事务', () => {
+    // Core 要求 AxisSizing.value 为有限正数；0 若被放行会派发出必然被拒的命令，
+    // 文档不变而输入框继续显示 0。
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const target = entity({
+      Renderer: { type: 'rectangle', props: {} },
+      LayoutItem: createDefaultComposeLayoutItem(180, 40, { x: 10, y: 20 }),
+    })
+    const document: ComposeDocument = {
+      schemaVersion: 6,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [target.id],
+      entities: { [target.id]: target },
+    }
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        document={document}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    const widthInput = screen.getByRole('combobox', { name: '尺寸宽度' })
+    fireEvent.focus(widthInput)
+    fireEvent.change(widthInput, { target: { value: '0' } })
+    fireEvent.blur(widthInput)
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(widthInput).toHaveValue('180')
+  })
+
   it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / 外边距展开并以 top 重新联动', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('LayoutItem')

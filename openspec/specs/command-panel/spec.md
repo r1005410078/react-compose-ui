@@ -102,3 +102,23 @@ Command Panel MUST 展示并重放 v4 Entity、Component、Transform 和 Capabil
 - **THEN** Command Panel 显示一个包含 Component 与 Composition 修改的 committed batch
 - **AND** 重放仍产生新 command ID 且遵守当前文档校验
 
+### Requirement: Compose-prefixed Command Panel API
+The command panel package MUST expose a compose-prefixed panel and contracts while keeping command validation and
+runtime dispatch semantics unchanged.
+
+#### Scenario: Submit a preset
+- **WHEN** a user submits a valid command preset in the vNext panel
+- **THEN** exactly the same structured command is sent to the dispatch boundary
+
+### Requirement: 命令事件右键菜单
+
+CommandPanel MUST 为会话事件提供详情、复制、确认重放和确认清空菜单。
+
+#### Scenario: 确认重放命令
+- **WHEN** 用户确认重放一条命令事件
+- **THEN** 面板以新 command ID、command-panel-replay 来源且无 mergeKey 派发命令
+
+#### Scenario: 不显示不存在的命令快捷键
+- **WHEN** 用户打开命令事件或空白区域右键菜单
+- **THEN** 菜单不显示快捷键后缀，因为命令面板没有对应的键盘动作
+

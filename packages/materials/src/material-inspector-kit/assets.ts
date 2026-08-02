@@ -95,7 +95,7 @@ export function useResolvedAsset(
 }
 
 /** 把固有尺寸限制到最长边 512，且不放大小图。 @internal */
-export function constrainAssetSize(width: number, height: number) {
+function constrainAssetSize(width: number, height: number) {
   if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
     return { width: 320, height: 180 }
   }

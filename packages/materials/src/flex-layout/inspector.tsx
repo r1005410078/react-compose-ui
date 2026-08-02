@@ -1,10 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import type {
-  ComponentType,
-  CSSProperties,
-  KeyboardEvent,
-  ReactNode,
-} from 'react'
+import { useMemo } from 'react'
+import type { ComponentType } from 'react'
 import * as v from 'valibot'
 import {
   BUILTIN_COMMAND_TYPES,
@@ -18,119 +13,20 @@ import type {
   ComposeComponentInspectorProps,
   ComposeMissingComponentInspectorProps,
 } from '@compose-ui/component-registry'
-import {
-  ComposePropertyPanel,
-  type ComposePropertyPanelRenderer,
-  type ComposePropertyPanelRendererProps,
-} from '@compose-ui/property-panel'
-import { useComposeI18nContext } from '@compose-ui/ui-context'
-import { InspectorEdgesEditor } from '../material-inspector-kit/edge-editor'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import { isInspectorEdgesValue } from '../material-inspector-kit/edge-model'
 import type { InspectorIdFactory } from '../material-inspector-kit/renderer-inspectors'
-import { FlexLayoutIcon } from './icons'
+import { useZh } from '../material-inspector-kit/use-zh'
+import { flexOptionValues, sameLayout } from './flex-options'
+import { FlexDirectionIconContext } from './flex-direction-context'
+import { FLEX_RENDERERS } from './flex-renderers'
+import { ResetLayoutIcon } from './icons'
+import { LayoutActionMenu } from './layout-action-menu'
+import { FlexLayoutPreview } from './layout-preview'
 import {
   planEnableComposeAutoLayout,
   planRemoveComposeAutoLayout,
 } from './layout-mode-commands'
-
-type FlexOptionEditorId =
-  | 'flex-direction'
-  | 'flex-wrap'
-  | 'align-content'
-  | 'justify-content'
-  | 'align-items'
-
-type FlexFieldEditorId = FlexOptionEditorId | 'gap' | 'padding'
-
-const FlexDirectionIconContext = createContext<ComposeFlexLayout['flexDirection']>('row')
-
-interface FlexOption {
-  readonly value: string
-  readonly zh: string
-  readonly en: string
-}
-
-const FLEX_OPTIONS: Readonly<Record<FlexOptionEditorId, readonly FlexOption[]>> = {
-  'flex-direction': [
-    { value: 'row', zh: '横向', en: 'Row' },
-    { value: 'column', zh: '纵向', en: 'Column' },
-    { value: 'row-reverse', zh: '反向横向', en: 'Row reverse' },
-    { value: 'column-reverse', zh: '反向纵向', en: 'Column reverse' },
-  ],
-  'flex-wrap': [
-    { value: 'nowrap', zh: '不换行', en: 'No wrap' },
-    { value: 'wrap', zh: '换行', en: 'Wrap' },
-    { value: 'wrap-reverse', zh: '反向换行', en: 'Wrap reverse' },
-  ],
-  'align-content': [
-    { value: 'flex-start', zh: '起始', en: 'Start' },
-    { value: 'center', zh: '居中', en: 'Center' },
-    { value: 'flex-end', zh: '末端', en: 'End' },
-    { value: 'space-between', zh: '两端', en: 'Space between' },
-    { value: 'space-around', zh: '环绕', en: 'Space around' },
-    { value: 'stretch', zh: '拉伸', en: 'Stretch' },
-  ],
-  'justify-content': [
-    { value: 'flex-start', zh: '起始', en: 'Start' },
-    { value: 'center', zh: '居中', en: 'Center' },
-    { value: 'flex-end', zh: '末端', en: 'End' },
-    { value: 'space-between', zh: '两端', en: 'Space between' },
-    { value: 'space-around', zh: '环绕', en: 'Space around' },
-    { value: 'space-evenly', zh: '均匀', en: 'Space evenly' },
-  ],
-  'align-items': [
-    { value: 'flex-start', zh: '起始', en: 'Start' },
-    { value: 'center', zh: '居中', en: 'Center' },
-    { value: 'flex-end', zh: '末端', en: 'End' },
-    { value: 'stretch', zh: '拉伸', en: 'Stretch' },
-    { value: 'baseline', zh: '基线', en: 'Baseline' },
-  ],
-}
-
-const FLEX_INITIAL_VALUES: Readonly<Record<FlexOptionEditorId, string>> = {
-  'flex-direction': 'row',
-  'flex-wrap': 'nowrap',
-  'align-content': 'stretch',
-  'justify-content': 'flex-start',
-  'align-items': 'stretch',
-}
-
-const FLEX_CSS_NAMES: Readonly<Record<FlexFieldEditorId, string>> = {
-  'flex-direction': 'flex-direction',
-  'flex-wrap': 'flex-wrap',
-  'align-content': 'align-content',
-  'justify-content': 'justify-content',
-  'align-items': 'align-items',
-  gap: 'gap',
-  padding: 'padding',
-}
-
-function useZh(): boolean {
-  return (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
-}
-
-function isFlexFieldEditorId(value: unknown): value is FlexFieldEditorId {
-  return typeof value === 'string' && value in FLEX_CSS_NAMES
-}
-
-function isFlexOptionEditorId(value: unknown): value is FlexOptionEditorId {
-  return typeof value === 'string' && value in FLEX_OPTIONS
-}
-
-function sameLayout(left: ComposeFlexLayout, right: ComposeFlexLayout): boolean {
-  return left.type === right.type
-    && left.flexDirection === right.flexDirection
-    && left.flexWrap === right.flexWrap
-    && left.alignContent === right.alignContent
-    && left.justifyContent === right.justifyContent
-    && left.alignItems === right.alignItems
-    && left.rowGap === right.rowGap
-    && left.columnGap === right.columnGap
-    && left.padding.top === right.padding.top
-    && left.padding.right === right.padding.right
-    && left.padding.bottom === right.padding.bottom
-    && left.padding.left === right.padding.left
-}
 
 function createLayoutCommand(
   idFactory: InspectorIdFactory,
@@ -158,327 +54,7 @@ function createLayoutCommand(
   }
 }
 
-// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer，不作为模块 API 导出。
-function FlexFieldLabel({
-  label,
-  metadata,
-}: ComposePropertyPanelRendererProps) {
-  if (!isFlexFieldEditorId(metadata.editor)) return label
-  return (
-    <span className="flex-layout-inspector__field-label">
-      <span>
-        {label}
-        {metadata.editor === 'align-content' ? (
-          <small title="仅在换行产生多行时生效">ⓘ</small>
-        ) : null}
-      </span>
-      <code>{FLEX_CSS_NAMES[metadata.editor]}</code>
-    </span>
-  )
-}
 
-// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer，不作为模块 API 导出。
-function FlexOptionEditor({
-  commit,
-  label,
-  metadata,
-  readOnly,
-  value,
-}: ComposePropertyPanelRendererProps) {
-  const zh = useZh()
-  const flexDirection = useContext(FlexDirectionIconContext)
-  const editor = metadata.editor
-  const buttons = useRef<(HTMLButtonElement | null)[]>([])
-  if (!isFlexOptionEditorId(editor)) return null
-  const options = FLEX_OPTIONS[editor]
-  const selectedIndex = options.findIndex((option) => option.value === value)
-  const selectOption = (nextValue: string, resetSelected = false) => {
-    if (nextValue !== value) {
-      commit(nextValue)
-      return
-    }
-    const initialValue = FLEX_INITIAL_VALUES[editor]
-    if (resetSelected && nextValue !== initialValue) commit(initialValue)
-  }
-  const move = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let nextIndex: number | undefined
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      nextIndex = (index + 1) % options.length
-    }
-    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      nextIndex = (index - 1 + options.length) % options.length
-    }
-    else if (event.key === 'Home') {
-      nextIndex = 0
-    }
-    else if (event.key === 'End') {
-      nextIndex = options.length - 1
-    }
-    if (nextIndex === undefined) return
-    event.preventDefault()
-    buttons.current[nextIndex]?.focus()
-    selectOption(options[nextIndex]!.value)
-  }
-  return (
-    <div
-      aria-label={label}
-      className="flex-layout-inspector__options"
-      data-flex-layout-field={editor}
-      data-option-count={options.length}
-      role="radiogroup"
-    >
-      {options.map((option, index) => (
-        <button
-          aria-checked={option.value === value}
-          aria-label={zh ? option.zh : option.en}
-          className="flex-layout-inspector__option"
-          data-initial-value={option.value === FLEX_INITIAL_VALUES[editor] ? '' : undefined}
-          disabled={readOnly}
-          key={option.value}
-          ref={(node) => {
-            buttons.current[index] = node
-          }}
-          role="radio"
-          tabIndex={(selectedIndex < 0 ? index === 0 : selectedIndex === index) ? 0 : -1}
-          title={zh ? option.zh : option.en}
-          type="button"
-          onClick={() => selectOption(option.value, true)}
-          onKeyDown={(event) => move(event, index)}
-        >
-          <FlexLayoutIcon
-            editor={editor}
-            flexDirection={flexDirection}
-            value={option.value}
-          />
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer，不作为模块 API 导出。
-function FlexGapEditor({
-  commit,
-  label,
-  readOnly,
-  value,
-}: ComposePropertyPanelRendererProps) {
-  const zh = useZh()
-  const gap = value as { readonly rowGap: number; readonly columnGap: number }
-  const signature = `${gap.rowGap}:${gap.columnGap}`
-  const equal = gap.rowGap === gap.columnGap
-  const [state, setState] = useState({ source: signature, split: !equal })
-  const current = state.source === signature ? state : { source: signature, split: !equal }
-  const update = (axis: 'rowGap' | 'columnGap', raw: string) => {
-    const candidate = Number(raw)
-    if (!Number.isFinite(candidate) || candidate < 0) return
-    commit({ ...gap, [axis]: candidate }, 'input')
-  }
-
-  return (
-    <div
-      className="flex-layout-inspector__gap"
-      data-flex-layout-field="gap"
-    >
-      {current.split ? (
-        <div className="flex-layout-inspector__gap-axes">
-          <input
-            aria-label={zh ? '行间距' : 'Row gap'}
-            disabled={readOnly}
-            min="0"
-            step="any"
-            type="number"
-            value={gap.rowGap}
-            onChange={(event) => update('rowGap', event.target.value)}
-          />
-          <input
-            aria-label={zh ? '列间距' : 'Column gap'}
-            disabled={readOnly}
-            min="0"
-            step="any"
-            type="number"
-            value={gap.columnGap}
-            onChange={(event) => update('columnGap', event.target.value)}
-          />
-        </div>
-      ) : (
-        <input
-          aria-label={label}
-          disabled={readOnly}
-          min="0"
-          step="any"
-          type="number"
-          value={gap.rowGap}
-          onChange={(event) => {
-            const candidate = Number(event.target.value)
-            if (!Number.isFinite(candidate) || candidate < 0) return
-            commit({ rowGap: candidate, columnGap: candidate }, 'input')
-          }}
-        />
-      )}
-      <button
-        aria-label={current.split
-          ? (zh ? '重新联动项间距' : 'Relink item gap')
-          : (zh ? '拆分项间距' : 'Split item gap')}
-        disabled={readOnly}
-        type="button"
-        onClick={() => {
-          if (current.split) {
-            commit({ rowGap: gap.rowGap, columnGap: gap.rowGap })
-            setState({ source: `${gap.rowGap}:${gap.rowGap}`, split: false })
-          }
-          else {
-            setState({ source: signature, split: true })
-          }
-        }}
-      >
-        ↕
-      </button>
-    </div>
-  )
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer，不作为模块 API 导出。
-function FlexPaddingEditor({
-  commit,
-  label,
-  readOnly,
-  value,
-}: ComposePropertyPanelRendererProps) {
-  const zh = useZh()
-  return (
-    <div data-flex-layout-field="padding">
-      <InspectorEdgesEditor
-        collapseLabel={zh ? '收起并联动内边距' : 'Collapse and link padding edges'}
-        expandLabel={zh ? '展开内边距' : 'Expand padding'}
-        label={label}
-        min={0}
-        readOnly={readOnly}
-        value={value as ComposeEdges}
-        onCommit={(next) => commit(next, 'commit')}
-      />
-    </div>
-  )
-}
-
-const FLEX_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
-  ...([
-    'flex-direction',
-    'flex-wrap',
-    'align-content',
-    'justify-content',
-    'align-items',
-  ] as const).map((id) => ({
-    id,
-    component: FlexOptionEditor,
-    labelComponent: FlexFieldLabel,
-    layout: 'full-width' as const,
-  })),
-  {
-    id: 'gap',
-    component: FlexGapEditor,
-    labelComponent: FlexFieldLabel,
-    layout: 'full-width' as const,
-  },
-  {
-    id: 'padding',
-    component: FlexPaddingEditor,
-    labelComponent: FlexFieldLabel,
-    layout: 'full-width' as const,
-  },
-]
-
-// eslint-disable-next-line react-refresh/only-export-components -- 图标只供当前 Inspector 标题栏使用。
-function ResetLayoutIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20">
-      <path d="M4.5 7.2A6 6 0 1 1 4.2 13" />
-      <path d="M4.5 3.8v3.8h3.8" />
-    </svg>
-  )
-}
-
-interface LayoutActionMenuItem {
-  readonly content: ReactNode
-  readonly disabled?: boolean
-  readonly label: string
-  readonly onSelect: () => void
-  readonly title?: string
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- 菜单只服务于当前 Inspector 的两种标题栏入口。
-function LayoutActionMenu({
-  disabled = false,
-  items,
-  menuLabel,
-  trigger,
-  triggerLabel,
-}: {
-  readonly disabled?: boolean
-  readonly items: readonly LayoutActionMenuItem[]
-  readonly menuLabel: string
-  readonly trigger: ReactNode
-  readonly triggerLabel: string
-}) {
-  const [open, setOpen] = useState(false)
-  const firstItem = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
-    if (open) firstItem.current?.focus()
-  }, [open])
-  return (
-    <div
-      className="flex-layout-inspector__menu"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape') return
-        event.preventDefault()
-        setOpen(false)
-      }}
-    >
-      <button
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={triggerLabel}
-        disabled={disabled}
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown') {
-            event.preventDefault()
-            setOpen(true)
-          }
-        }}
-      >
-        {trigger}
-      </button>
-      {open ? (
-        <div aria-label={menuLabel} className="flex-layout-inspector__menu-popup" role="menu">
-          {items.map((item, index) => (
-            <button
-              aria-label={item.label}
-              disabled={item.disabled}
-              key={item.label}
-              ref={index === 0 ? firstItem : undefined}
-              role="menuitem"
-              title={item.title}
-              type="button"
-              onClick={() => {
-                item.onSelect()
-                setOpen(false)
-              }}
-            >
-              {item.content}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-/** 创建缺失 Layout 时的显式添加入口。 @internal */
 export function createLayoutMissingInspectorActions(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeMissingComponentInspectorProps> {
@@ -632,104 +208,6 @@ export function createLayoutInspectorHeaderActions(
   }
 }
 
-// eslint-disable-next-line react-refresh/only-export-components -- 预览只由 Inspector factory 返回的组件使用，不作为模块 API 导出。
-function FlexLayoutPreview({
-  layout,
-  zh,
-}: {
-  readonly layout: ComposeFlexLayout
-  readonly zh: boolean
-}) {
-  const isColumn = layout.flexDirection.startsWith('column')
-  const previewStyle: CSSProperties = {
-    alignContent: layout.alignContent,
-    alignItems: layout.alignItems,
-    display: 'flex',
-    flexDirection: layout.flexDirection,
-    flexWrap: layout.flexWrap,
-    rowGap: `${layout.rowGap}px`,
-    columnGap: `${layout.columnGap}px`,
-    padding: `${layout.padding.top}px ${layout.padding.right}px `
-      + `${layout.padding.bottom}px ${layout.padding.left}px`,
-    justifyContent: layout.justifyContent,
-  }
-  const gapStatus = layout.rowGap === layout.columnGap
-    ? String(layout.rowGap)
-    : `${layout.rowGap}/${layout.columnGap}`
-  return (
-    <section className="flex-layout-inspector__preview-block">
-      <h3>{zh ? '实时预览' : 'Live preview'}</h3>
-      <div
-        className="flex-layout-inspector__preview"
-        data-align-items={layout.alignItems}
-        data-flex-direction={layout.flexDirection}
-        data-testid="flex-layout-preview"
-      >
-        <header>
-          <span>{zh ? 'Flex 容器' : 'Flex container'}</span>
-          <code>
-            {layout.flexDirection} · {layout.flexWrap} · gap {gapStatus}
-          </code>
-        </header>
-        <div
-          className="flex-layout-inspector__preview-diagram"
-        >
-          <PreviewAxis
-            label={zh ? '主轴' : 'Main axis'}
-            orientation={isColumn ? 'vertical' : 'horizontal'}
-            testId="flex-preview-main-axis"
-          />
-          <PreviewAxis
-            label={zh ? '交叉轴' : 'Cross axis'}
-            orientation={isColumn ? 'horizontal' : 'vertical'}
-            testId="flex-preview-cross-axis"
-          />
-          <div
-            aria-hidden="true"
-            className="flex-layout-inspector__preview-surface"
-            data-wrap-preview={layout.flexWrap !== 'nowrap'}
-            style={previewStyle}
-          >
-            {[1, 2, 3].map((index) => (
-              <span data-flex-preview-node="" key={index}>{index}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- 轴向标识只由当前 Inspector 的内部预览使用。
-function PreviewAxis({
-  label,
-  orientation,
-  testId,
-}: {
-  readonly label: string
-  readonly orientation: 'horizontal' | 'vertical'
-  readonly testId: string
-}) {
-  return (
-    <div
-      className={`flex-layout-inspector__preview-axis is-${orientation}`}
-      data-testid={testId}
-    >
-      {orientation === 'horizontal' ? (
-        <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 100 8">
-          <path d="M2 4h96M2 4l4-3M2 4l4 3M98 4l-4-3M98 4l-4 3" />
-        </svg>
-      ) : (
-        <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 8 100">
-          <path d="M4 2v96M4 2L1 6M4 2l3 4M4 98l-3-4M4 98l3-4" />
-        </svg>
-      )}
-      <span>{label}</span>
-    </div>
-  )
-}
-
-/** 创建 Layout Component 的紧凑 Flex Inspector。 @internal */
 export function createLayoutInspector(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeComponentInspectorProps> {
@@ -738,12 +216,12 @@ export function createLayoutInspector(
     const layout = value as ComposeFlexLayout
     const schema = useMemo(() => v.object({
       flexDirection: v.pipe(
-        v.picklist(['row', 'row-reverse', 'column', 'column-reverse']),
+        v.picklist(flexOptionValues('flex-direction')),
         v.title(zh ? '方向' : 'Direction'),
         v.metadata({ propertyPanel: { editor: 'flex-direction' } }),
       ),
       flexWrap: v.pipe(
-        v.picklist(['nowrap', 'wrap', 'wrap-reverse']),
+        v.picklist(flexOptionValues('flex-wrap')),
         v.title(zh ? '换行' : 'Wrap'),
         v.metadata({ propertyPanel: { editor: 'flex-wrap' } }),
       ),
@@ -756,31 +234,17 @@ export function createLayoutInspector(
         v.metadata({ propertyPanel: { editor: 'gap' } }),
       ),
       alignContent: v.pipe(
-        v.picklist([
-          'flex-start',
-          'center',
-          'flex-end',
-          'space-between',
-          'space-around',
-          'stretch',
-        ]),
+        v.picklist(flexOptionValues('align-content')),
         v.title(zh ? '多行' : 'Content'),
         v.metadata({ propertyPanel: { editor: 'align-content' } }),
       ),
       justifyContent: v.pipe(
-        v.picklist([
-          'flex-start',
-          'center',
-          'flex-end',
-          'space-between',
-          'space-around',
-          'space-evenly',
-        ]),
+        v.picklist(flexOptionValues('justify-content')),
         v.title(zh ? '主轴' : 'Main axis'),
         v.metadata({ propertyPanel: { editor: 'justify-content' } }),
       ),
       alignItems: v.pipe(
-        v.picklist(['flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
+        v.picklist(flexOptionValues('align-items')),
         v.title(zh ? '交叉轴' : 'Cross axis'),
         v.metadata({ propertyPanel: { editor: 'align-items' } }),
       ),

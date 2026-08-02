@@ -608,7 +608,7 @@ export function ComposePropertyPanelRoot({
           </div>
         </div>
       ) : null}
-      <div className="property-panel__toolbar">
+      <div className="property-panel__toolbar" data-property-part="toolbar">
         <label className="property-panel__search">
           <SearchIcon />
           <input
@@ -703,6 +703,7 @@ export function ComposePropertyPanelRoot({
         aria-valuemin={88}
         aria-valuenow={labelWidth}
         className="property-panel__separator property-panel__separator--label"
+        data-property-part="separator"
         role="separator"
         tabIndex={0}
         onKeyDown={keyboardResize('label')}
@@ -717,6 +718,7 @@ export function ComposePropertyPanelRoot({
         aria-valuemin={32}
         aria-valuenow={actionWidth}
         className="property-panel__separator property-panel__separator--action"
+        data-property-part="separator"
         role="separator"
         tabIndex={0}
         onKeyDown={keyboardResize('action')}
@@ -805,7 +807,7 @@ export function ComposePropertyPanelSection({
         )}
         {actions ? (
           <div className="property-panel__section-actions">{actions}</div>
-        ) : <div className="property-panel__actions" />}
+        ) : <div className="property-panel__actions" data-property-part="actions" />}
       </div>
       {!actionOnly && visibleExpanded ? (
         <div className="property-panel__group-content">
@@ -1087,7 +1089,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
           </div>
         </div>
       ) : null}
-      <div className="property-panel__toolbar">
+      <div className="property-panel__toolbar" data-property-part="toolbar">
         <label className="property-panel__search">
           <SearchIcon />
           <input
@@ -1199,6 +1201,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
         aria-valuemin={88}
         aria-valuenow={labelWidth}
         className="property-panel__separator property-panel__separator--label"
+        data-property-part="separator"
         role="separator"
         tabIndex={0}
         onKeyDown={keyboardResize('label')}
@@ -1213,6 +1216,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
         aria-valuemin={32}
         aria-valuenow={actionWidth}
         className="property-panel__separator property-panel__separator--action"
+        data-property-part="separator"
         role="separator"
         tabIndex={0}
         onKeyDown={keyboardResize('action')}

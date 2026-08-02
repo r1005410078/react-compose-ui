@@ -4,22 +4,12 @@
 TBD - created by archiving change add-editor-preferences-shortcuts. Update Purpose after archive.
 ## Requirements
 ### Requirement: 共享 UI Context 包
+The UI Context package MUST expose only compose-prefixed providers, hooks and types, and first-party UI MUST use
+that Context rather than per-component locale compatibility props.
 
-系统 MUST 提供独立 `@compose-ui/ui-context` React 包，公开 Dark/Light/System 主题、zh-CN/en-US
-语言、Theme/I18n Provider、组合 Provider 和读取 Hook。该包 MUST 不依赖 editor、core 或任一
-工作区组件，且不得拥有文档、历史或持久化状态。
-
-#### Scenario: 组合共享 UI 环境
-
-- **WHEN** 宿主通过 ComposeUIProvider 包裹 Editor 或独立第一方组件
-- **THEN** 子树读取相同 theme、resolvedTheme、tokens、locale 与消息格式化器
-- **AND** Context 变化不产生 ComposeDocument、History 或 Operation Log 修改
-
-#### Scenario: 独立组件保持兼容
-
-- **WHEN** 第一方组件在无 Provider 环境挂载，或显式提供旧 locale 属性
-- **THEN** 无 Provider 时使用该组件既有默认语言与深色外观
-- **AND** 显式 locale 优先于 Context，宿主无需同步迁移
+#### Scenario: Context-only localization
+- **WHEN** an independently rendered first-party component needs a locale
+- **THEN** it resolves language through `ComposeI18nProvider` or its inherited default and has no locale prop
 
 ### Requirement: 可嵌套主题环境
 
@@ -56,3 +46,4 @@ MUST 使用调用包提供的内建 fallback。
 - **WHEN** 内层 I18nProvider 修改 locale 并覆盖父级已有或新增 message ID
 - **THEN** locale 使用内层值且同名消息使用内层模板
 - **AND** 未覆盖的父级消息继续可用
+
