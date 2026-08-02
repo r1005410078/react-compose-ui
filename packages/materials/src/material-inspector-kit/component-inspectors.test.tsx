@@ -313,8 +313,11 @@ describe('内建 Component inspectors', () => {
     )
 
     for (const path of ['transform', 'size', 'margin']) {
-      expect(document.querySelector(`[data-property-path="${path}"]`))
-        .toHaveAttribute('data-property-layout', 'inline')
+      const field = document.querySelector(`[data-property-path="${path}"]`)
+      expect(field).toHaveAttribute('data-property-layout', 'inline')
+      expect(field).toHaveClass('property-panel__field')
+      expect(field).not.toHaveClass('property-panel__field--full-width')
+      expect(field?.querySelector(':scope > .property-panel__actions')).toBeInTheDocument()
     }
     expect(screen.queryByRole('group', { name: '变换' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: '尺寸' })).not.toBeInTheDocument()

@@ -2,25 +2,13 @@
   min-width: 0;
 }
 
-.layout-item-inspector .property-panel__fields {
-  display: grid;
-  min-width: 0;
-}
-
 .layout-item-inspector .property-panel__field[data-property-layout="inline"] {
   min-height: 38px;
-  border-top: 0;
-  background: rgb(17 18 18 / 42%);
-}
-
-.layout-item-inspector .property-panel__field[data-property-layout="inline"] > .property-panel__actions {
-  display: none;
 }
 
 .layout-item-inspector .property-panel__field[data-property-layout="inline"] > .property-panel__editor {
-  grid-column: 2 / -1;
   min-width: 0;
-  padding: 5px 7px;
+  padding-block: 5px;
 }
 
 .layout-item-inspector .property-panel__field[data-property-layout="inline"] .property-panel__control {
@@ -38,7 +26,7 @@
 }
 
 .layout-item-inspector__transform {
-  grid-template-columns: minmax(0, 1fr) minmax(78px, 0.62fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(58px, 0.65fr);
 }
 
 .layout-item-inspector__position,
@@ -96,13 +84,13 @@
 
 .layout-item-inspector__number:has(> span) > input {
   padding-right: 3px;
-  padding-left: 15px;
+  padding-left: 12px;
 }
 
 .layout-item-inspector__axis-sizing {
   display: grid;
   min-width: 0;
-  grid-template-columns: 9px minmax(32px, 1fr) minmax(42px, auto);
+  grid-template-columns: 9px minmax(0, 1fr) 38px;
   align-items: center;
 }
 
@@ -113,13 +101,14 @@
 
 .layout-item-inspector__axis-sizing > input {
   width: 100%;
-  padding: 2px;
+  padding: 2px 1px;
+  font-size: 10px;
 }
 
 .layout-item-inspector__axis-sizing > select {
   width: 100%;
-  padding: 2px 3px;
-  font-size: 10px;
+  padding: 2px 1px;
+  font-size: 9px;
 }
 
 .layout-item-inspector__edges--linked {

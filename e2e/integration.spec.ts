@@ -967,6 +967,22 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   expect(marginField).not.toBeNull()
   expect(sizeField!.y).toBeGreaterThan(transformField!.y)
   expect(marginField!.y).toBeGreaterThan(sizeField!.y)
+  const basicRowStyles = await childInspector.evaluate((element) => (
+    ['transform', 'size', 'margin'].map((path) => {
+      const field = element.querySelector<HTMLElement>(`[data-property-path="${path}"]`)
+      const actions = field?.querySelector<HTMLElement>(':scope > .property-panel__actions')
+      return {
+        actionDisplay: actions ? getComputedStyle(actions).display : null,
+        borderTopWidth: field ? getComputedStyle(field).borderTopWidth : null,
+        gridColumnCount: field ? getComputedStyle(field).gridTemplateColumns.split(' ').length : 0,
+      }
+    })
+  ))
+  expect(basicRowStyles).toEqual([
+    { actionDisplay: 'flex', borderTopWidth: '1px', gridColumnCount: 3 },
+    { actionDisplay: 'flex', borderTopWidth: '1px', gridColumnCount: 3 },
+    { actionDisplay: 'flex', borderTopWidth: '1px', gridColumnCount: 3 },
+  ])
   const basicLabelStarts = await childInspector.evaluate((element) => (
     ['name', 'transform', 'size', 'margin'].map((path) => {
       const field = element.querySelector(`[data-property-path="${path}"]`)
