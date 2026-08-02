@@ -14,6 +14,7 @@ export {
 } from './compose-editor'
 export {
   useComposeEditorController,
+  useComposeStageViewport,
   type ComposeEditorController,
   type ComposeEditorTransactionEvent,
   type UseComposeEditorControllerOptions,
