@@ -282,3 +282,13 @@ export function FlexLayoutIcon({ editor, flexDirection, value }: FlexLayoutIconP
       return <AlignItemsIcon direction={flexDirection} value={value as ComposeAlignItems} />
   }
 }
+
+/** 布局分组标题栏的重置图标。 @internal */
+export function ResetLayoutIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20">
+      <path d="M4.5 7.2A6 6 0 1 1 4.2 13" />
+      <path d="M4.5 3.8v3.8h3.8" />
+    </svg>
+  )
+}

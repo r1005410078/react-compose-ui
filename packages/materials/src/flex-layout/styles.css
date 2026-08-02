@@ -235,18 +235,15 @@
   gap: 12px 8px;
 }
 
-.flex-layout-inspector > .property-panel__ungrouped,
 .flex-layout-inspector > .property-panel .property-panel__ungrouped {
   min-width: 0;
 }
 
-.flex-layout-inspector > .property-panel__ungrouped:has(> [data-property-path="padding"]),
 .flex-layout-inspector > .property-panel
   .property-panel__ungrouped:has(> [data-property-path="padding"]) {
   grid-column: 1 / -1;
 }
 
-.flex-layout-inspector > .property-panel__ungrouped:empty,
 .flex-layout-inspector > .property-panel .property-panel__ungrouped:empty {
   display: none;
 }

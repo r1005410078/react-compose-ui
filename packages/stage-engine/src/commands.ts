@@ -24,7 +24,6 @@ import {
   toComposeTransform,
   translationMatrix,
   unionRects,
-  type StageTransform,
 } from './geometry'
 import { describeEntityTargets } from './transaction-labels'
 
@@ -410,12 +409,4 @@ export function createDuplicateCommand(
       },
     },
   }
-}
-
-/** 将 Stage 几何更新转换为 Core Transform update。 @internal */
-export function composeTransformUpdate(
-  entityId: string,
-  transform: StageTransform,
-): JsonObject {
-  return { entityId, transform: toComposeTransform(transform) }
 }

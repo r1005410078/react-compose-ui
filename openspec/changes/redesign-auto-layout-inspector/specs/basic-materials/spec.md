@@ -1,3 +1,16 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: Flex 布局 Component 与紧凑 Inspector`
+- TO: `### Requirement: 紧凑 Auto Layout Inspector`
+
+## REMOVED Requirements
+
+### Requirement: Layout Inspector 轻量预览
+
+**Reason**: Layout Runtime 上线后 Stage 与独立 Preview 会按 Layout 真实排布，该需求
+「预览只属于 Inspector、Stage 与 Preview 必须忽略 Layout」的约束不再成立。预览行为并入
+「紧凑 Auto Layout Inspector」的 wrap 预览 Scenario。
+
 ## ADDED Requirements
 
 ### Requirement: Auto Layout 按需启用
@@ -49,6 +62,8 @@ Layout 的 Inspector MUST 提供“布局 +”菜单；菜单当前 MUST 只包�
 - **WHEN** 旧 v6 Entity 的 Composition.baseComponentKeys 仍包含 Layout 且用户主动移除布局
 - **THEN** 同一事务先解除 Layout 的基础归属再移除 Component
 - **AND** 加载旧文档本身不会修改任何 JSON
+
+## MODIFIED Requirements
 
 ### Requirement: 紧凑 Auto Layout Inspector
 

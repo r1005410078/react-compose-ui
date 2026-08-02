@@ -26,7 +26,6 @@ import {
   type ComposePropertyPanelRenderer,
   type ComposePropertyPanelRendererProps,
 } from '@compose-ui/property-panel'
-import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComponentType } from 'react'
 import type { ComposeComponentInspectorProps } from '@compose-ui/component-registry'
 import {
@@ -34,6 +33,7 @@ import {
   InspectorNumberDraftInput,
 } from './edge-editor'
 import { isInspectorEdgesValue } from './edge-model'
+import { useZh } from './use-zh'
 import type { InspectorIdFactory } from './renderer-inspectors'
 
 function command(
@@ -54,10 +54,6 @@ function command(
       mergeKey: `inspector:${entity.id}:${type}`,
     },
   }
-}
-
-function useZh(): boolean {
-  return (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
 }
 
 interface BasicGeometryInspectorView {
@@ -214,7 +210,9 @@ function AxisSizingControl({
       return
     }
     const candidate = Number(text)
-    if (text !== '' && Number.isFinite(candidate) && candidate >= 0) {
+    // Core 要求 AxisSizing.value 为有限正数：0 会让命令在校验期被拒，
+    // 表现为「输入框显示新值但文档没变」，因此这里按非法输入回滚草稿。
+    if (text !== '' && Number.isFinite(candidate) && candidate > 0) {
       onCommit({ ...sizing, mode: 'fixed', value: candidate })
       setDraft({ external, text: String(candidate), dirty: false })
       setOpen(false)
@@ -418,8 +416,12 @@ export function createLayoutItemInspector(
   }) {
     const zh = useZh()
     const item = value as ComposeLayoutItem
-    const parent = document && Object.values(document.entities).find((candidate) =>
-      getComposeHierarchy(candidate)?.childIds.includes(entity.id))
+    // 找父级需要扫描整张 entities 表；文档不变时结果也不变，因此按文档引用缓存，
+    // 避免每次 Inspector 渲染都在大文档上做一次全表扫描。
+    const parent = useMemo(() => (document
+      ? Object.values(document.entities).find((candidate) =>
+          getComposeHierarchy(candidate)?.childIds.includes(entity.id))
+      : undefined), [document, entity.id])
     const fillAllowed = item.positioning === 'flow' && Boolean(parent && getComposeLayout(parent))
     const hierarchy = getComposeHierarchy(entity)
     const hugAllowed = hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
@@ -441,8 +443,8 @@ export function createLayoutItemInspector(
           const allowedModes: readonly ComposeAxisSizing['mode'][] = sizingModes
           return allowedModes.includes(candidate.width.mode)
             && allowedModes.includes(candidate.height.mode)
-            && candidate.width.value >= 0
-            && candidate.height.value >= 0
+            && candidate.width.value > 0
+            && candidate.height.value > 0
         }), v.title(zh ? '尺寸' : 'Size'), v.metadata({
           propertyPanel: { editor: 'basic-geometry-size' },
         })),
