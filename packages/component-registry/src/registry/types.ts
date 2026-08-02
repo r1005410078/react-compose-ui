@@ -119,6 +119,20 @@ export interface ComposeComponentInspectorProps extends ComposeEntityInspectorCo
   readonly value: JsonObject
 }
 
+/** Entity 缺少一个可选 Component 时，其 Inspector 入口获得的上下文。 @public */
+export interface ComposeMissingComponentInspectorProps extends ComposeEntityInspectorContext {
+  /** 当前尚未附加的 Component Key。 */
+  readonly componentKey: string
+}
+
+/** 缺失 Component 在 Inspector 中的可选添加入口。 @public */
+export interface ComposeMissingComponentInspectorDefinition {
+  /** 判断当前 Entity 是否应展示添加入口。 */
+  readonly isVisible: (entity: ComposeEntity) => boolean
+  /** 渲染标题栏操作；具体添加语义由 Component 定义拥有。 */
+  readonly actions: ComponentType<ComposeMissingComponentInspectorProps>
+}
+
 /** 一个可由 Stage 与 Preview 共同解析的 Renderer 定义。 @public */
 export interface ComposeRendererDefinition {
   /** `Renderer.type` 使用的唯一非空标识。 */
@@ -195,6 +209,13 @@ export interface ComposeComponentDefinition {
   readonly validate?: (value: JsonObject) => boolean | string
   /** 可选 Component Inspector。 */
   readonly inspector?: ComponentType<ComposeComponentInspectorProps>
+  /**
+   * Entity 尚无此 Component 时显示的可选 Inspector 入口。
+   *
+   * @remarks
+   * Registry 只提供受控上下文与错误隔离，不推断 Component 的添加条件或命令语义。
+   */
+  readonly missingInspector?: ComposeMissingComponentInspectorDefinition
   /**
    * 可选 Inspector 分组标题栏内容。
    *

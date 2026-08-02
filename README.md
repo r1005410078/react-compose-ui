@@ -127,9 +127,12 @@ const registry = createComposeEntityRegistry({
 Component Key、基础项移除和带子项容器移除都会被阻止。Registry 缺失时，未知 Renderer/能力
 不会使文档失效。
 
-`@compose-ui/materials` 提供 Container、Rectangle、Text、Image、SVG Presets。Container 是
-`Hierarchy + Layout + Clip` 的基础组合；普通物料是 `Appearance + Renderer`，也可以通过“容器”
-能力获得子项和 Flex Auto Layout 属性。“几何限制”能力添加 `GeometryConstraints`。
+`@compose-ui/materials` 提供 Container、Rectangle、Text、Image、SVG Presets。Container 默认是
+`Hierarchy + Clip` 的自由容器；只有用户在 Inspector 的“布局 +”菜单中显式选择 Auto Layout
+后才附加 `Layout`，并在同一事务中把全部直接子项转为 Flow。移除 Auto Layout 时，当前
+`ComposeLayoutSnapshot` 会把 Flow 子项和 Hug/Fill 尺寸烘焙回稳定的 Absolute/Fixed 几何。
+普通物料是 `Appearance + Renderer`，也可以通过“容器”能力获得子项；“几何限制”能力添加
+`GeometryConstraints`。
 `Transform` 只持久化 rotation；`LayoutItem` 保存 Absolute/Flow、Fixed/Fill/Hug、offset、margin
 和 min/max。`@compose-ui/layout-engine` 使用 Yoga 异步求解，Stage 与 Preview 始终按同一
 `ComposeLayoutSnapshot` 绝对定位 DOM，不再以 CSS Flex 或旧 Transform 作为第二布局路径。

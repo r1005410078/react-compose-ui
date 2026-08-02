@@ -476,9 +476,15 @@ export interface ComposePropertyPanelRootProps
 /** 一个独立 Schema 属性区的分组属性。 */
 export interface ComposePropertyPanelSectionProps {
   /** 返回 ComposePropertyPanel 或 Registry Inspector 的分组内容。 */
-  children: ReactNode
+  children?: ReactNode
   /** 显示在折叠标题右侧的可选宿主状态或操作。 */
   actions?: ReactNode
+  /**
+   * 只渲染不可折叠标题与 actions，不创建空正文。
+   *
+   * @defaultValue false
+   */
+  actionOnly?: boolean
   /** 分组显示名称，同时参与全局搜索。 */
   title: string
   /** 初次挂载时是否展开。 @defaultValue true */
@@ -727,6 +733,7 @@ export function ComposePropertyPanelRoot({
  * @public
  */
 export function ComposePropertyPanelSection({
+  actionOnly = false,
   actions,
   children,
   title,
@@ -764,19 +771,23 @@ export function ComposePropertyPanelSection({
         className="property-panel__group-header"
         data-has-actions={actions ? 'true' : undefined}
       >
-        <button
-          aria-expanded={visibleExpanded}
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-        >
-          <ChevronIcon expanded={visibleExpanded} />
-          {title}
-        </button>
+        {actionOnly ? (
+          <span className="property-panel__group-title">{title}</span>
+        ) : (
+          <button
+            aria-expanded={visibleExpanded}
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <ChevronIcon expanded={visibleExpanded} />
+            {title}
+          </button>
+        )}
         {actions ? (
           <div className="property-panel__section-actions">{actions}</div>
         ) : <div className="property-panel__actions" />}
       </div>
-      {visibleExpanded ? (
+      {!actionOnly && visibleExpanded ? (
         <div className="property-panel__group-content">
           <PropertyPanelSectionContext.Provider value={context}>
             {children}

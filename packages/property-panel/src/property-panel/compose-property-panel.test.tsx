@@ -18,6 +18,26 @@ afterEach(() => {
 })
 
 describe('OpenSpec: property-panel / 单面板多属性分组', () => {
+  it('OpenSpec: property-panel / 无正文属性分组 / 显示 action-only 分组', () => {
+    render(
+      <ComposePropertyPanelRoot>
+        <ComposePropertyPanelSection
+          actionOnly
+          actions={<button aria-label="添加布局" type="button">+</button>}
+          title="布局"
+        />
+      </ComposePropertyPanelRoot>,
+    )
+
+    const title = screen.getByText('布局')
+    const section = title.closest('section')
+    expect(section).not.toBeNull()
+    expect(screen.getByRole('button', { name: '添加布局' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '布局' })).not.toBeInTheDocument()
+    expect(section?.querySelector('[aria-expanded]')).toBeNull()
+    expect(section?.querySelector('.property-panel__group-content')).toBeNull()
+  })
+
   it('OpenSpec: property-panel / Property Panel Section 标题栏扩展 / 在分组标题栏显示宿主操作', () => {
     const reset = vi.fn()
     render(

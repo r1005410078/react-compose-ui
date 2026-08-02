@@ -2,6 +2,7 @@
 export {
   ComposeRegistryComponentInspector,
   ComposeRegistryComponentInspectorHeaderActions,
+  ComposeRegistryMissingComponentInspectorHeaderActions,
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
 } from './compose-registry-renderers'

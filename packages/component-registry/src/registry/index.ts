@@ -11,6 +11,8 @@ export {
   type ComposeEntityAssetDropDefinition,
   type ComposeEntityAssetDropInput,
   type ComposeEntityInspectorContext,
+  type ComposeMissingComponentInspectorDefinition,
+  type ComposeMissingComponentInspectorProps,
   type ComposeEntityPreset,
   type ComposeNodeEditPort,
   type ComposePaintEditPort,

@@ -13,6 +13,17 @@ async function pointerDrop(page: Page, source: Locator, target: { x: number; y: 
   await page.mouse.up()
 }
 
+async function enableAutoLayout(inspector: Locator) {
+  await inspector.getByRole('button', { name: '添加布局' }).click()
+  await inspector.getByRole('menuitem', { name: 'Auto Layout display: flex' }).click()
+}
+
+async function selectAxisSizing(inspector: Locator, axis: '宽度' | '高度', mode: '固定' | '填充' | '适应') {
+  await inspector.getByRole('radiogroup', { name: `${axis}模式` })
+    .getByRole('radio', { name: mode })
+    .click()
+}
+
 test('OpenSpec: editor-workspace-layout / 完整示例入口 / 根路径直接展示 Stage 编排工作区', async ({ page }) => {
   await page.goto('/')
 
@@ -161,14 +172,14 @@ test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG �
 
   await stage.getByTestId('compose-material-image').click()
   const imageInspector = editor.getByRole('region', { name: 'dashboard.bmp 属性', exact: true })
-  await imageInspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
-  await imageInspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await selectAxisSizing(imageInspector, '宽度', '适应')
+  await selectAxisSizing(imageInspector, '高度', '适应')
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
 
   await stage.getByTestId('compose-material-svg').click()
   const inspector = editor.getByRole('region', { name: 'compose-grid.svg 属性', exact: true })
-  await inspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
-  await inspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await selectAxisSizing(inspector, '宽度', '适应')
+  await selectAxisSizing(inspector, '高度', '适应')
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
   await expect(editor).toHaveScreenshot('auto-layout-asset-hug.png', {
     animations: 'disabled',
@@ -714,6 +725,29 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   expect(toolbarBox!.y).toBeCloseTo(inspectorBox!.y, 0)
 })
 
+test('OpenSpec: 自动布局显式启用 / 自由 Container 添加、移除并可撤销重做', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+
+  await expect(inspector.getByRole('button', { name: '添加布局' })).toBeVisible()
+  await enableAutoLayout(inspector)
+  await expect(inspector.getByRole('button', { name: '布局', exact: true })).toBeVisible()
+  await inspector.getByRole('button', { name: '更多布局操作' }).click()
+  const remove = inspector.getByRole('menuitem', { name: '移除自动布局' })
+  await expect(remove).toBeEnabled()
+  await remove.click()
+  await expect(inspector.getByRole('button', { name: '添加布局' })).toBeVisible()
+
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect(inspector.getByRole('button', { name: '布局', exact: true })).toBeVisible()
+  await stage.press('Control+Shift+z')
+  await expect(inspector.getByRole('button', { name: '添加布局' })).toBeVisible()
+})
+
 test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生效', async ({ page }) => {
   await page.goto('/')
 
@@ -729,6 +763,7 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   }))
   const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   const propertyRoot = inspector.getByRole('region', { name: 'Container 属性字段' })
+  await enableAutoLayout(inspector)
   const layoutHeader = propertyRoot.getByRole('button', { name: '布局', exact: true })
   const layoutSection = layoutHeader.locator('..').locator('..')
   const topLevelTitles = await propertyRoot.locator(
@@ -736,7 +771,7 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   ).allTextContents()
   expect(topLevelTitles.indexOf('布局项')).toBe(topLevelTitles.indexOf('变换') + 1)
   expect(topLevelTitles.indexOf('布局')).toBe(topLevelTitles.indexOf('布局项') + 1)
-  await expect(layoutSection.getByText('display: flex', { exact: true })).toBeVisible()
+  await expect(layoutSection.getByText('Auto Layout', { exact: true })).toBeVisible()
   const resetLayout = layoutSection.getByRole('button', { name: '重置布局' })
   await expect(resetLayout).toBeDisabled()
 
@@ -762,40 +797,38 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   const fourthContentOption = await content.getByRole('radio').nth(3).boundingBox()
   expect(firstContentOption).not.toBeNull()
   expect(fourthContentOption).not.toBeNull()
-  expect(fourthContentOption!.y).toBeGreaterThan(firstContentOption!.y)
+  expect(fourthContentOption!.y).toBeCloseTo(firstContentOption!.y, 0)
   const firstCrossOption = await crossAxis.getByRole('radio').nth(0).boundingBox()
   const fourthCrossOption = await crossAxis.getByRole('radio').nth(3).boundingBox()
   expect(firstCrossOption).not.toBeNull()
   expect(fourthCrossOption).not.toBeNull()
-  expect(fourthCrossOption!.y).toBeGreaterThan(firstCrossOption!.y)
+  expect(fourthCrossOption!.y).toBeCloseTo(firstCrossOption!.y, 0)
 
-  const rowGap = layoutSection.getByRole('spinbutton', { name: '行间距' })
-  const columnGap = layoutSection.getByRole('spinbutton', { name: '列间距' })
-  const rowGapRow = layoutSection.locator('[data-property-path="rowGap"]')
-  await expect(rowGapRow).not.toContainText('px')
-  await expect(rowGapRow.getByRole('button')).toHaveCount(0)
+  const gap = layoutSection.getByRole('spinbutton', { name: '项间距' })
+  const gapRow = layoutSection.locator('[data-property-path="gap"]')
+  await expect(gapRow).not.toContainText('px')
+  await expect(gapRow.getByRole('button', { name: '拆分项间距' })).toBeVisible()
   const directionBox = await direction.boundingBox()
   const wrappingBox = await wrapping.boundingBox()
-  const gapBox = await rowGap.boundingBox()
+  const gapBox = await gap.boundingBox()
   const contentBox = await content.boundingBox()
   expect(directionBox).not.toBeNull()
   expect(wrappingBox).not.toBeNull()
   expect(gapBox).not.toBeNull()
   expect(contentBox).not.toBeNull()
   expect(wrappingBox!.x).toBeGreaterThan(directionBox!.x)
-  expect(gapBox!.x).toBeGreaterThan(wrappingBox!.x)
-  expect(contentBox!.y).toBeGreaterThan(directionBox!.y)
+  expect(gapBox!.y).toBeGreaterThan(directionBox!.y)
+  expect(contentBox!.x).toBeGreaterThan(gapBox!.x)
 
   const preview = layoutSection.getByTestId('flex-layout-preview')
   const previewNodes = preview.locator('[data-flex-preview-node]')
-  await expect(previewNodes).toHaveCount(3)
+  await expect(previewNodes).toHaveCount(5)
   await expect(preview.getByText('Flex 容器', { exact: true })).toBeVisible()
-  await expect(preview.getByText('row · nowrap · 0/0', { exact: true })).toBeVisible()
-  await expect(preview.getByText('主轴', { exact: true })).toBeVisible()
-  await expect(preview.getByText('交叉轴', { exact: true })).toBeVisible()
+  await expect(preview.getByText('row · nowrap · gap 0', { exact: true })).toBeVisible()
+  await expect(preview.getByRole('button', { name: '解除内边距联动' })).toBeVisible()
   const defaultPreviewNode = await previewNodes.first().boundingBox()
   expect(defaultPreviewNode).not.toBeNull()
-  expect(defaultPreviewNode!.height).toBe(72)
+  expect(defaultPreviewNode!.height).toBeGreaterThan(20)
   await expect(layoutSection).toHaveScreenshot('flex-layout-inspector.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -818,8 +851,8 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   expect(crossStretchNode!.height).toBeGreaterThan(crossStartNode!.height)
   await expect(preview).toHaveAttribute('data-align-items', 'stretch')
 
-  await rowGap.fill('12')
-  await rowGap.press('Tab')
+  await gap.fill('12')
+  await gap.press('Tab')
   await direction.getByRole('radio', { name: '纵向', exact: true }).click()
 
   await expect(preview.locator('.flex-layout-inspector__preview-surface'))
@@ -827,8 +860,8 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   await expect(preview.locator('.flex-layout-inspector__preview-surface'))
     .toHaveCSS('row-gap', '12px')
   await expect(preview.locator('.flex-layout-inspector__preview-surface'))
-    .toHaveCSS('column-gap', '0px')
-  await expect(preview.getByText('column · nowrap · 12/0', { exact: true })).toBeVisible()
+    .toHaveCSS('column-gap', '12px')
+  await expect(preview.getByText('column · nowrap · gap 12', { exact: true })).toBeVisible()
   await expect(resetLayout).toBeEnabled()
 
   await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
@@ -858,8 +891,7 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
 
   await resetLayout.click()
   await expect(direction.getByRole('radio', { name: '横向', exact: true })).toBeChecked()
-  await expect(rowGap).toHaveValue('0')
-  await expect(columnGap).toHaveValue('0')
+  await expect(gap).toHaveValue('0')
   await expect(resetLayout).toBeDisabled()
   expect(await container.evaluate((element) => ({
     display: getComputedStyle(element).display,
@@ -890,9 +922,7 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
 
   await container.click({ position: { x: 8, y: 8 } })
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
-  await containerInspector.getByRole('button', {
-    name: '将直接子项转换为自动布局',
-  }).click()
+  await enableAutoLayout(containerInspector)
 
   const children = container.locator(':scope > .compose-stage__node.is-renderer')
   await expect(children).toHaveCount(2)
@@ -905,11 +935,11 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
 
   await children.nth(0).click()
   const childInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
-  const positioning = childInspector.getByRole('combobox', { name: '定位' })
-  const widthMode = childInspector.getByRole('combobox', { name: '宽度模式' })
-  await expect(positioning).toHaveValue('flow')
-  await widthMode.selectOption('fill')
-  await expect(widthMode).toHaveValue('fill')
+  const positioning = childInspector.getByRole('radiogroup', { name: '定位' })
+  const widthMode = childInspector.getByRole('radiogroup', { name: '宽度模式' })
+  await expect(positioning.getByRole('radio', { name: 'Flow' })).toBeChecked()
+  await widthMode.getByRole('radio', { name: '填充' }).click()
+  await expect(widthMode.getByRole('radio', { name: '填充' })).toBeChecked()
 
   const fillBox = await children.nth(0).boundingBox()
   expect(fillBox).not.toBeNull()
@@ -917,8 +947,8 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   await stage.focus()
   await stage.press('ArrowRight')
 
-  await expect(positioning).toHaveValue('absolute')
-  await expect(widthMode).toHaveValue('fixed')
+  await expect(positioning.getByRole('radio', { name: 'Absolute' })).toBeChecked()
+  await expect(widthMode.getByRole('radio', { name: '固定' })).toBeChecked()
   const absoluteBox = await children.nth(0).boundingBox()
   expect(absoluteBox).not.toBeNull()
   expect(absoluteBox!.x).toBeGreaterThan(fillBox!.x)
@@ -949,22 +979,20 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
   })
   await container.click({ position: { x: 8, y: 8 } })
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
-  await containerInspector.getByRole('button', {
-    name: '将直接子项转换为自动布局',
-  }).click()
+  await enableAutoLayout(containerInspector)
 
   const textNode = container.locator(':scope > .compose-stage__node.is-renderer').first()
   await textNode.click()
   const textInspector = editor.getByRole('region', { name: 'Text 属性', exact: true })
-  await textInspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
-  await textInspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await selectAxisSizing(textInspector, '宽度', '适应')
+  await selectAxisSizing(textInspector, '高度', '适应')
   await expect.poll(async () => (await textNode.boundingBox())?.width ?? 1000).toBeLessThan(160)
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
 
   await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
   await editor.getByRole('row', { name: /Container/ }).click()
-  await containerInspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
-  await containerInspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await selectAxisSizing(containerInspector, '宽度', '适应')
+  await selectAxisSizing(containerInspector, '高度', '适应')
   await expect.poll(async () => (await container.boundingBox())?.width ?? 1000).toBeLessThan(180)
   const stageTextBox = await stage.getByText('Text', { exact: true }).boundingBox()
   expect(stageTextBox).not.toBeNull()
@@ -1850,8 +1878,8 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
 
   // 4) 画布上实时渲染被引用页面的内容
   await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
-  await inspector.getByRole('combobox', { name: '宽度模式' }).selectOption('hug')
-  await inspector.getByRole('combobox', { name: '高度模式' }).selectOption('hug')
+  await selectAxisSizing(inspector, '宽度', '适应')
+  await selectAxisSizing(inspector, '高度', '适应')
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
 
   // 5) 预览中同样渲染

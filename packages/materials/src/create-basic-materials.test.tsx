@@ -48,20 +48,10 @@ describe('Basic ECS materials', () => {
     ])
     const container = seedEntity(materials, 'container')
     expect(getComposeHierarchy(container)?.childIds).toEqual([])
-    expect(getComposeLayout(container)).toEqual({
-      type: 'flex',
-      flexDirection: 'row',
-      flexWrap: 'nowrap',
-      alignContent: 'stretch',
-      justifyContent: 'flex-start',
-      alignItems: 'stretch',
-      padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      rowGap: 0,
-      columnGap: 0,
-    })
+    expect(getComposeLayout(container)).toBeUndefined()
     expect(getComposeRenderer(container)).toBeUndefined()
     expect(getComposeComposition(container).baseComponentKeys).toContain('Hierarchy')
-    expect(getComposeComposition(container).baseComponentKeys).toContain('Layout')
+    expect(getComposeComposition(container).baseComponentKeys).not.toContain('Layout')
 
     for (const id of ['rectangle', 'text', 'image', 'svg']) {
       const entity = seedEntity(materials, id)
@@ -126,19 +116,9 @@ describe('Basic ECS materials', () => {
       'container',
       'geometry-constraints',
     ])
-    expect(materials.capabilities[0]?.createComponents()).toMatchObject({
+    expect(materials.capabilities[0]?.createComponents()).toEqual({
       Hierarchy: { childIds: [] },
-      Layout: {
-        type: 'flex',
-        flexDirection: 'row',
-        flexWrap: 'nowrap',
-        alignContent: 'stretch',
-        justifyContent: 'flex-start',
-        alignItems: 'stretch',
-        padding: { top: 0, right: 0, bottom: 0, left: 0 },
-        rowGap: 0,
-        columnGap: 0,
-      },
+      Clip: { enabled: true },
     })
   })
 

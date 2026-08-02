@@ -12,6 +12,7 @@ import {
 import {
   createLayoutInspector,
   createLayoutInspectorHeaderActions,
+  createLayoutMissingInspectorActions,
 } from './flex-layout'
 import {
   createAppearanceInspector,
@@ -113,6 +114,10 @@ export function createComposeBuiltinComponentDefinitions(
       validate: isValidComposeLayout,
       inspector: createLayoutInspector(idFactory),
       inspectorHeaderActions: createLayoutInspectorHeaderActions(idFactory),
+      missingInspector: {
+        isVisible: (entity) => entity.components.Hierarchy !== undefined,
+        actions: createLayoutMissingInspectorActions(idFactory),
+      },
     },
     {
       key: 'Clip',
@@ -155,7 +160,6 @@ export const DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS: readonly ComposeCapabilityD
       description: '允许当前组件容纳并裁剪子项',
       createComponents: () => ({
         Hierarchy: { childIds: [] },
-        Layout: createDefaultComposeFlexLayout(),
         Clip: { enabled: true },
       }),
     },

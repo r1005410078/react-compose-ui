@@ -3,6 +3,7 @@ import * as v from 'valibot'
 import {
   ComposeRegistryComponentInspector,
   ComposeRegistryComponentInspectorHeaderActions,
+  ComposeRegistryMissingComponentInspectorHeaderActions,
   ComposeRegistryRendererInspector,
   type ComposeEntityRegistry,
   type ComposeNodeEditPort,
@@ -233,12 +234,34 @@ export function EntityInspector({
             zh={zh}
           />
         </ComposePropertyPanelSection>
-        {registry.listComponents()
-          .filter((definition) =>
-            !definition.hidden
-            && definition.inspector !== undefined
-            && entity.components[definition.key] !== undefined)
-          .map((definition) => (
+        {registry.listComponents().map((definition) => {
+          if (definition.hidden) return null
+          const componentExists = entity.components[definition.key] !== undefined
+          if (!componentExists) {
+            if (!definition.missingInspector?.isVisible(entity)) return null
+            return (
+              <ComposePropertyPanelSection
+                actionOnly
+                actions={(
+                  <ComposeRegistryMissingComponentInspectorHeaderActions
+                    componentKey={definition.key}
+                    dispatch={dispatch}
+                    document={document}
+                    entity={entity}
+                    layoutSnapshot={layoutSnapshot}
+                    readOnly={locked}
+                    nodeEditPort={nodeEditPort}
+                    paintEditPort={paintEditPort}
+                    registry={registry}
+                  />
+                )}
+                key={definition.key}
+                title={definition.label}
+              />
+            )
+          }
+          if (!definition.inspector) return null
+          return (
             <ComposePropertyPanelSection
               actions={definition.inspectorHeaderActions ? (
                 <ComposeRegistryComponentInspectorHeaderActions
@@ -268,7 +291,8 @@ export function EntityInspector({
                 registry={registry}
               />
             </ComposePropertyPanelSection>
-          ))}
+          )
+        })}
 
         {Object.keys(entity.components)
           .filter((key) => !BUILTIN_COMPONENT_KEYS.has(key) && !registry.getComponent(key))

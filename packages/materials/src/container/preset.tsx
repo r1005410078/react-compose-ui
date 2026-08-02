@@ -1,5 +1,4 @@
 import type { ComposeEntityPreset } from '@compose-ui/component-registry'
-import { createDefaultComposeFlexLayout } from '@compose-ui/core'
 import type { ComposeBasicContainerOptions } from '../types'
 import { mergeAppearance } from '../material-preset'
 import { DEFAULT_CONTAINER_APPEARANCE, DEFAULT_CONTAINER_SIZE } from './defaults'
@@ -31,7 +30,6 @@ export function createContainerPreset(
       Visibility: { visible: true },
       Lock: { locked: false },
       Hierarchy: { childIds: [] },
-      Layout: createDefaultComposeFlexLayout(),
       Clip: { enabled: options.defaultClip ?? true },
       Appearance: structuredClone(appearance),
     }),

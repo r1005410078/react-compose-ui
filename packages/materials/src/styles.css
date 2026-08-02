@@ -4,6 +4,7 @@
 @import './image/styles.css';
 @import './svg/styles.css';
 @import './flex-layout/styles.css';
+@import './material-inspector-kit/styles.css';
 
 :root {
   --compose-material-font-family: Inter, ui-sans-serif, system-ui, sans-serif;

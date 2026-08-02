@@ -10,6 +10,7 @@ import type {
 import * as registryRenderers from './compose-registry-renderers'
 import {
   ComposeRegistryComponentInspector,
+  ComposeRegistryMissingComponentInspectorHeaderActions,
   ComposeRegistryEntityRenderer,
 } from './compose-registry-renderers'
 import { ComposeEntityBorderLayer } from './compose-entity-border-layer'
@@ -40,6 +41,40 @@ function entity(rendererType = 'text'): ComposeEntity {
 afterEach(cleanup)
 
 describe('Entity Registry React boundaries', () => {
+  it('OpenSpec: component-registry / 缺失 Component Inspector 协议 / 缺失入口继承只读上下文', () => {
+    const actions = vi.fn(({ componentKey, readOnly }) => (
+      <button disabled={readOnly} type="button">添加 {componentKey}</button>
+    ))
+    const registry = createComposeEntityRegistry({
+      components: [{
+        key: 'HostLayout',
+        label: '宿主布局',
+        createDefault: () => ({ enabled: true }),
+        missingInspector: {
+          isVisible: () => true,
+          actions,
+        },
+      }],
+    })
+
+    render(
+      <ComposeRegistryMissingComponentInspectorHeaderActions
+        componentKey="HostLayout"
+        dispatch={vi.fn()}
+        entity={entity()}
+        readOnly
+        registry={registry}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '添加 HostLayout' })).toBeDisabled()
+    expect(actions).toHaveBeenCalledWith(expect.objectContaining({
+      componentKey: 'HostLayout',
+      entity: expect.objectContaining({ id: 'entity-a' }),
+      readOnly: true,
+    }), undefined)
+  })
+
   it('OpenSpec: component-registry / Component Inspector 标题栏 actions / 解析 Component 标题栏 actions', () => {
     const HeaderActionsAdapter = (
       registryRenderers as unknown as {

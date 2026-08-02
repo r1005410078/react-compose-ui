@@ -8,6 +8,7 @@ export { createComposeEntityRegistry } from './registry'
 export {
   ComposeRegistryComponentInspector,
   ComposeRegistryComponentInspectorHeaderActions,
+  ComposeRegistryMissingComponentInspectorHeaderActions,
   ComposeEntityBorderLayer,
   ComposeEntityPaintLayer,
   ComposePaintLayer,
@@ -36,6 +37,8 @@ export {
   type ComposeEntityAssetDropDefinition,
   type ComposeEntityAssetDropInput,
   type ComposeEntityInspectorContext,
+  type ComposeMissingComponentInspectorDefinition,
+  type ComposeMissingComponentInspectorProps,
   type ComposeEntityPreset,
   type ComposeNodeEditPort,
   type ComposePaintEditPort,

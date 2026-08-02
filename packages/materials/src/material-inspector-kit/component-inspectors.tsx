@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { createContext, useContext, useMemo, useRef, useState } from 'react'
 import * as v from 'valibot'
 import {
   BUILTIN_COMMAND_TYPES,
@@ -10,7 +10,9 @@ import {
   getComposeSpatialTransform,
   resolveComposeAppearance,
   type ComposeAppearance,
+  type ComposeAxisSizing,
   type ComposeColor,
+  type ComposeEdges,
   type ComposeEntity,
   type ComposeGeometryConstraints,
   type ComposeLayoutItem,
@@ -20,7 +22,11 @@ import {
   type JsonObject,
   type JsonValue,
 } from '@compose-ui/core'
-import { ComposePropertyPanel } from '@compose-ui/property-panel'
+import {
+  ComposePropertyPanel,
+  type ComposePropertyPanelRenderer,
+  type ComposePropertyPanelRendererProps,
+} from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComponentType } from 'react'
 import type { ComposeComponentInspectorProps } from '@compose-ui/component-registry'
@@ -49,6 +55,231 @@ function command(
 function useZh(): boolean {
   return (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
 }
+
+interface LayoutItemInspectorView {
+  readonly computedHeight: number
+  readonly computedWidth: number
+  readonly fillAllowed: boolean
+  readonly hugAllowed: boolean
+  readonly zh: boolean
+}
+
+const LayoutItemInspectorContext = createContext<LayoutItemInspectorView>({
+  computedHeight: 0,
+  computedWidth: 0,
+  fillAllowed: false,
+  hugAllowed: false,
+  zh: true,
+})
+
+const LAYOUT_ITEM_CSS_NAMES: Readonly<Record<string, string>> = {
+  'layout-item-position': 'position',
+  'layout-item-offset': 'inset',
+  'layout-item-width': 'width',
+  'layout-item-height': 'height',
+  'layout-item-margin': 'margin',
+  'layout-item-align-self': 'align-self',
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function LayoutItemFieldLabel({ label, metadata }: ComposePropertyPanelRendererProps) {
+  const cssName = typeof metadata.editor === 'string'
+    ? LAYOUT_ITEM_CSS_NAMES[metadata.editor]
+    : undefined
+  return (
+    <span className="layout-item-inspector__field-label">
+      <span>{label}</span>
+      {cssName ? <code>{cssName}</code> : null}
+    </span>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function LayoutPositionEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
+  const zh = useZh()
+  const buttons = useRef<(HTMLButtonElement | null)[]>([])
+  const options = [
+    { value: 'flow', label: 'Flow' },
+    { value: 'absolute', label: 'Absolute' },
+  ] as const
+  const selectedIndex = options.findIndex((option) => option.value === value)
+  return (
+    <div aria-label={label} className="layout-item-inspector__segments" role="radiogroup">
+      {options.map((option, index) => (
+        <button
+          aria-checked={option.value === value}
+          aria-label={option.label}
+          disabled={readOnly}
+          key={option.value}
+          ref={(node) => {
+            buttons.current[index] = node
+          }}
+          role="radio"
+          tabIndex={selectedIndex === index ? 0 : -1}
+          type="button"
+          onClick={() => commit(option.value)}
+          onKeyDown={(event) => {
+            const step = event.key === 'ArrowRight' || event.key === 'ArrowDown'
+              ? 1
+              : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
+            if (!step) return
+            event.preventDefault()
+            const next = (index + step + options.length) % options.length
+            buttons.current[next]?.focus()
+            commit(options[next]!.value)
+          }}
+        >
+          {option.label === 'Flow' ? 'Flow' : (zh ? '绝对' : 'Absolute')}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function LayoutAxisSizingEditor({
+  commit,
+  label,
+  metadata,
+  readOnly,
+  value,
+}: ComposePropertyPanelRendererProps) {
+  const view = useContext(LayoutItemInspectorContext)
+  const sizing = value as ComposeAxisSizing
+  const width = metadata.editor === 'layout-item-width'
+  const computed = width ? view.computedWidth : view.computedHeight
+  const modes = [
+    { value: 'fixed', label: view.zh ? '固定' : 'Fixed' },
+    ...(view.fillAllowed ? [{ value: 'fill', label: view.zh ? '填充' : 'Fill' }] : []),
+    ...(view.hugAllowed ? [{ value: 'hug', label: view.zh ? '适应' : 'Hug' }] : []),
+  ]
+  return (
+    <div className="layout-item-inspector__axis-sizing">
+      <div aria-label={`${label}${view.zh ? '模式' : ' mode'}`} role="radiogroup">
+        {modes.map((mode) => (
+          <button
+            aria-checked={sizing.mode === mode.value}
+            aria-label={mode.label}
+            disabled={readOnly}
+            key={mode.value}
+            role="radio"
+            type="button"
+            onClick={() => commit({ ...sizing, mode: mode.value })}
+          >
+            {mode.label}
+          </button>
+        ))}
+      </div>
+      <input
+        aria-label={sizing.mode === 'fixed'
+          ? label
+          : `${view.zh ? '计算' : 'Computed '}${label}`}
+        disabled={readOnly && sizing.mode === 'fixed'}
+        min="0"
+        readOnly={sizing.mode !== 'fixed'}
+        step="any"
+        type="number"
+        value={sizing.mode === 'fixed' ? sizing.value : computed}
+        onChange={(event) => {
+          if (sizing.mode !== 'fixed') return
+          const candidate = Number(event.target.value)
+          if (Number.isFinite(candidate) && candidate >= 0) {
+            commit({ ...sizing, value: candidate }, 'input')
+          }
+        }}
+      />
+    </div>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function LayoutMarginEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
+  const zh = useZh()
+  const margin = value as ComposeEdges
+  const linked = margin.top === margin.right
+    && margin.top === margin.bottom
+    && margin.top === margin.left
+  const [expanded, setExpanded] = useState(!linked)
+  const showEdges = expanded || !linked
+  const update = (edge: keyof ComposeEdges, raw: string) => {
+    const candidate = Number(raw)
+    if (Number.isFinite(candidate)) commit({ ...margin, [edge]: candidate }, 'input')
+  }
+  if (!showEdges) {
+    return (
+      <div className="layout-item-inspector__edges layout-item-inspector__edges--linked">
+        <input
+          aria-label={label}
+          disabled={readOnly}
+          step="any"
+          type="number"
+          value={margin.top}
+          onChange={(event) => {
+            const candidate = Number(event.target.value)
+            if (!Number.isFinite(candidate)) return
+            commit({ top: candidate, right: candidate, bottom: candidate, left: candidate }, 'input')
+          }}
+        />
+        <button
+          aria-label={zh ? '展开外边距' : 'Expand margin edges'}
+          disabled={readOnly}
+          type="button"
+          onClick={() => setExpanded(true)}
+        >
+          ⛶
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="layout-item-inspector__edges layout-item-inspector__edges--expanded">
+      {(['top', 'right', 'bottom', 'left'] as const).map((edge) => (
+        <label key={edge}>
+          <span>{({ top: 'T', right: 'R', bottom: 'B', left: 'L' })[edge]}</span>
+          <input
+            aria-label={`${label} ${edge}`}
+            disabled={readOnly}
+            step="any"
+            type="number"
+            value={margin[edge]}
+            onChange={(event) => update(edge, event.target.value)}
+          />
+        </label>
+      ))}
+      <button
+        aria-label={zh ? '收起并联动外边距' : 'Collapse and link margin edges'}
+        disabled={readOnly}
+        type="button"
+        onClick={() => {
+          commit({ top: margin.top, right: margin.top, bottom: margin.top, left: margin.top })
+          setExpanded(false)
+        }}
+      >
+        ↔
+      </button>
+    </div>
+  )
+}
+
+const LAYOUT_ITEM_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
+  {
+    id: 'layout-item-position',
+    component: LayoutPositionEditor,
+    labelComponent: LayoutItemFieldLabel,
+  },
+  ...(['layout-item-width', 'layout-item-height'] as const).map((id) => ({
+    id,
+    component: LayoutAxisSizingEditor,
+    labelComponent: LayoutItemFieldLabel,
+    layout: 'full-width' as const,
+  })),
+  {
+    id: 'layout-item-margin',
+    component: LayoutMarginEditor,
+    labelComponent: LayoutItemFieldLabel,
+    layout: 'full-width',
+  },
+]
 
 /** 创建 Transform Component Inspector。 @internal */
 export function createTransformInspector(
@@ -109,6 +340,7 @@ export function createLayoutItemInspector(
     const fillAllowed = item.positioning === 'flow' && Boolean(parent && getComposeLayout(parent))
     const hierarchy = getComposeHierarchy(entity)
     const hugAllowed = hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
+    const box = layoutSnapshot?.boxes[entity.id]
     const schema = useMemo(() => {
       const sizingModes = fillAllowed
         ? (hugAllowed ? ['fixed', 'fill', 'hug'] as const : ['fixed', 'fill'] as const)
@@ -117,75 +349,81 @@ export function createLayoutItemInspector(
       positioning: v.pipe(
         v.picklist(['flow', 'absolute']),
         v.title(zh ? '定位' : 'Positioning'),
+        v.metadata({ propertyPanel: { editor: 'layout-item-position' } }),
       ),
       offset: v.pipe(
         v.object({ x: v.number(), y: v.number() }),
         v.title(zh ? '偏移' : 'Offset'),
-        v.metadata({ propertyPanel: { editor: 'vector2' } }),
+        v.metadata({ propertyPanel: {
+          editor: 'vector2',
+          hidden: item.positioning !== 'absolute',
+        } }),
       ),
-      widthMode: v.pipe(
-        v.picklist(sizingModes),
-        v.title(zh ? '宽度模式' : 'Width mode'),
+      width: v.pipe(
+        v.object({
+          mode: v.picklist(sizingModes),
+          value: v.pipe(v.number(), v.minValue(0)),
+          min: v.nullable(v.number()),
+          max: v.nullable(v.number()),
+        }),
+        v.title(zh ? '宽度' : 'Width'),
+        v.metadata({ propertyPanel: { editor: 'layout-item-width' } }),
       ),
-      widthValue: v.pipe(v.number(), v.minValue(0), v.title(zh ? '宽度' : 'Width')),
-      heightMode: v.pipe(
-        v.picklist(sizingModes),
-        v.title(zh ? '高度模式' : 'Height mode'),
+      height: v.pipe(
+        v.object({
+          mode: v.picklist(sizingModes),
+          value: v.pipe(v.number(), v.minValue(0)),
+          min: v.nullable(v.number()),
+          max: v.nullable(v.number()),
+        }),
+        v.title(zh ? '高度' : 'Height'),
+        v.metadata({ propertyPanel: { editor: 'layout-item-height' } }),
       ),
-      heightValue: v.pipe(v.number(), v.minValue(0), v.title(zh ? '高度' : 'Height')),
-      computedWidth: v.pipe(
-        v.number(),
-        v.title(zh ? '计算宽度' : 'Computed width'),
-        v.metadata({ propertyPanel: { readOnly: true } }),
+      margin: v.pipe(
+        v.object({
+          top: v.number(),
+          right: v.number(),
+          bottom: v.number(),
+          left: v.number(),
+        }),
+        v.title(zh ? '外边距' : 'Margin'),
+        v.metadata({ propertyPanel: { editor: 'layout-item-margin' } }),
       ),
-      computedHeight: v.pipe(
-        v.number(),
-        v.title(zh ? '计算高度' : 'Computed height'),
-        v.metadata({ propertyPanel: { readOnly: true } }),
-      ),
-      marginTop: v.pipe(v.number(), v.title(zh ? '上外边距' : 'Margin top')),
-      marginRight: v.pipe(v.number(), v.title(zh ? '右外边距' : 'Margin right')),
-      marginBottom: v.pipe(v.number(), v.title(zh ? '下外边距' : 'Margin bottom')),
-      marginLeft: v.pipe(v.number(), v.title(zh ? '左外边距' : 'Margin left')),
       alignSelf: v.pipe(
         v.picklist(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
         v.title(zh ? '自身对齐' : 'Align self'),
+        v.metadata({ propertyPanel: { hidden: item.positioning !== 'flow' } }),
       ),
       })
-    }, [fillAllowed, hugAllowed, zh])
+    }, [fillAllowed, hugAllowed, item.positioning, zh])
     return (
-      <ComposePropertyPanel
-        aria-label={zh ? '布局项属性' : 'Layout item properties'}
-        readOnly={readOnly}
-        schema={schema}
-        value={{
-          positioning: item.positioning,
-          offset: item.offset,
-          widthMode: item.width.mode,
-          widthValue: item.width.value,
-          heightMode: item.height.mode,
-          heightValue: item.height.value,
-          computedWidth: layoutSnapshot?.boxes[entity.id]?.width ?? item.width.value,
-          computedHeight: layoutSnapshot?.boxes[entity.id]?.height ?? item.height.value,
-          marginTop: item.margin.top,
-          marginRight: item.margin.right,
-          marginBottom: item.margin.bottom,
-          marginLeft: item.margin.left,
-          alignSelf: item.alignSelf,
-        }}
-        onValueChange={(next) => {
+      <LayoutItemInspectorContext.Provider value={{
+        computedHeight: box?.height ?? item.height.value,
+        computedWidth: box?.width ?? item.width.value,
+        fillAllowed,
+        hugAllowed,
+        zh,
+      }}>
+        <ComposePropertyPanel
+          aria-label={zh ? '布局项属性' : 'Layout item properties'}
+          className="layout-item-inspector"
+          readOnly={readOnly}
+          renderers={LAYOUT_ITEM_RENDERERS}
+          schema={schema}
+          value={item}
+          onValueChange={(next) => {
           if (next.positioning === 'flow' && (!parent || !getComposeLayout(parent))) return
-          if (!hugAllowed && (next.widthMode === 'hug' || next.heightMode === 'hug')) return
+          if (!hugAllowed && (next.width.mode === 'hug' || next.height.mode === 'hug')) return
           const bakedBox = item.positioning === 'flow' && next.positioning === 'absolute'
             ? layoutSnapshot?.boxes[entity.id]
             : undefined
           const parentBorder = parent ? resolveComposeAppearance(parent).borderWidth : 0
-          const widthMode = next.positioning === 'absolute' && next.widthMode === 'fill'
+          const widthMode = next.positioning === 'absolute' && next.width.mode === 'fill'
             ? 'fixed'
-            : next.widthMode
-          const heightMode = next.positioning === 'absolute' && next.heightMode === 'fill'
+            : next.width.mode
+          const heightMode = next.positioning === 'absolute' && next.height.mode === 'fill'
             ? 'fixed'
-            : next.heightMode
+            : next.height.mode
           dispatch(command(
             idFactory,
             entity,
@@ -200,32 +438,28 @@ export function createLayoutItemInspector(
                   ? { x: bakedBox.x - parentBorder, y: bakedBox.y - parentBorder }
                   : next.offset,
                 width: {
-                  ...item.width,
+                  ...next.width,
                   mode: widthMode,
                   value: bakedBox && item.width.mode === 'fill'
                     ? bakedBox.width
-                    : next.widthValue,
+                    : next.width.value,
                 },
                 height: {
-                  ...item.height,
+                  ...next.height,
                   mode: heightMode,
                   value: bakedBox && item.height.mode === 'fill'
                     ? bakedBox.height
-                    : next.heightValue,
+                    : next.height.value,
                 },
-                margin: {
-                  top: next.marginTop,
-                  right: next.marginRight,
-                  bottom: next.marginBottom,
-                  left: next.marginLeft,
-                },
+                margin: next.margin,
                 alignSelf: next.alignSelf,
               },
             },
             zh ? `修改 ${entity.name} 布局项` : `Update ${entity.name} layout item`,
           ))
-        }}
-      />
+          }}
+        />
+      </LayoutItemInspectorContext.Provider>
     )
   }
 }

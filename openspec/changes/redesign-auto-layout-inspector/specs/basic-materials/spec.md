@@ -1,0 +1,85 @@
+## ADDED Requirements
+
+### Requirement: Auto Layout 按需启用
+
+新建 Container 与“容器”能力 MUST 默认创建自由 Hierarchy 而不创建 Layout。拥有 Hierarchy 且缺少
+Layout 的 Inspector MUST 提供“布局 +”菜单；菜单当前 MUST 只包含 Auto Layout，不得显示 Grid。
+
+#### Scenario: 创建默认自由 Container
+
+- **WHEN** Registry 从 Container Preset 创建 Entity，或给 Renderer 添加“容器”能力
+- **THEN** Entity 拥有 Hierarchy 与 Clip 但不拥有 Layout
+- **AND** 直接子项只能使用 Absolute
+
+#### Scenario: 添加 Auto Layout
+
+- **WHEN** 用户从“布局 +”菜单选择 Auto Layout
+- **THEN** 系统在一个事务中添加默认 Flex Layout 并按 childIds 将全部直接子项转为 Flow
+- **AND** 子项顺序、尺寸意图、margin、alignSelf 与旧 offset 保持不变
+
+#### Scenario: 锁定目标阻止添加
+
+- **WHEN** 容器或任一需要转为 Flow 的直接子项已锁定
+- **THEN** Auto Layout 添加入口禁用并提供可读原因
+- **AND** 文档、历史与 Operation Log 均不变化
+
+#### Scenario: 移除 Auto Layout 保持视觉
+
+- **WHEN** 用户移除一个 Snapshot 完整的 Auto Layout
+- **THEN** 直接 Flow 子项按当前 local box 烘焙为 Absolute，Fill 轴转为 Fixed
+- **AND** 容器自身 Hug 轴转为 Fixed，Absolute 子项与嵌套 Layout 保持不变
+- **AND** 整个操作只提交一个事务
+
+#### Scenario: 无可靠 Snapshot 时禁止移除
+
+- **WHEN** LayoutSnapshot 未就绪或缺少容器或 Flow 子项的必要 box
+- **THEN** 移除入口禁用并说明需要等待布局计算
+- **AND** 系统不使用旧 offset 或 fallback 尺寸降级
+
+#### Scenario: 旧基础 Layout 主动解除归属
+
+- **WHEN** 旧 v6 Entity 的 Composition.baseComponentKeys 仍包含 Layout 且用户主动移除布局
+- **THEN** 同一事务先解除 Layout 的基础归属再移除 Component
+- **AND** 加载旧文档本身不会修改任何 JSON
+
+### Requirement: 紧凑 Auto Layout Inspector
+
+Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，并在约 400px Inspector 中以三行 Flex 控件和
+紧凑盒模型预览编辑布局。中文标题 MUST 显示对应 CSS 属性名，图标数量、语义顺序、键盘与 ARIA
+MUST 与浏览器 Flex 控件一致。
+
+#### Scenario: 按定位和尺寸模式显示字段
+
+- **WHEN** LayoutItem 在 Absolute/Flow 或 Fixed/Fill/Hug 之间切换
+- **THEN** Absolute 只显示有效 offset 且隐藏 alignSelf，Flow 执行相反规则
+- **AND** Fixed 显示可编辑 value，Fill/Hug 只显示 Snapshot 计算值
+
+#### Scenario: 编辑统一或分轴 gap
+
+- **WHEN** rowGap 与 columnGap 相等或用户选择分轴编辑
+- **THEN** Inspector 分别显示单值 gap 或 row-gap/column-gap
+- **AND** 单值提交同步两轴，重新合并时以 rowGap 统一两轴且只提交一次事务
+
+#### Scenario: align-content 始终可配置
+
+- **WHEN** flex-wrap 为 nowrap
+- **THEN** align-content 仍显示完整六项并可提前配置
+- **AND** Inspector 提示该属性仅在产生多行时影响结果
+
+#### Scenario: 在盒模型中编辑 padding
+
+- **WHEN** 用户联动或分别修改预览中的四边 padding
+- **THEN** Layout.padding 通过一次提交更新且上方不存在重复 padding 字段
+- **AND** 四值相等时默认联动，重新联动时以 top 统一四边
+
+#### Scenario: wrap 预览展示多行对齐
+
+- **WHEN** 用户选择 wrap 或 wrap-reverse 并修改 align-content
+- **THEN** 预览生成至少两行模拟子项并实时展示对应多行对齐
+- **AND** Stage、Preview 和正式 LayoutSnapshot 不读取该 Inspector DOM
+
+#### Scenario: 窄侧栏保持完整可操作
+
+- **WHEN** Inspector 内容宽度约为 365px
+- **THEN** direction/wrap、gap/align-content、justify-content/align-items 三行均无横向溢出
+- **AND** 盒模型输入、菜单、焦点环和英文文案保持可达与可读

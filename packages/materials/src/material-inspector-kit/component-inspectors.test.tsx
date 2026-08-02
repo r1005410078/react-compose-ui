@@ -3,6 +3,7 @@ import type { ComponentType } from 'react'
 import type {
   ComposeComponentDefinition,
   ComposeComponentInspectorProps,
+  ComposeMissingComponentInspectorProps,
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
@@ -58,9 +59,56 @@ function inspectorHeaderActionsOf(key: string) {
   return definition.inspectorHeaderActions
 }
 
+function missingInspectorActionsOf(key: string) {
+  const definitions = createComposeBuiltinComponentDefinitions(() => 'missing-layout-command')
+  const definition = definitions.find((item) => item.key === key) as
+    | (ComposeComponentDefinition & {
+      readonly missingInspector?: {
+        readonly actions: ComponentType<ComposeMissingComponentInspectorProps>
+      }
+    })
+    | undefined
+  if (!definition?.missingInspector) throw new Error(`${key} 缺少 missingInspector`)
+  return definition.missingInspector.actions
+}
+
 afterEach(cleanup)
 
 describe('内建 Component inspectors', () => {
+  it('OpenSpec: 自动布局显式启用 / 布局加号只提供 Auto Layout 菜单项', () => {
+    const dispatch = vi.fn()
+    const Actions = missingInspectorActionsOf('Layout')
+    const container = entity({ Hierarchy: { childIds: [] } })
+    const document: ComposeDocument = {
+      schemaVersion: 6,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [container.id],
+      entities: { [container.id]: container },
+    }
+    render(
+      <Actions
+        componentKey="Layout"
+        dispatch={dispatch}
+        document={document}
+        entity={container}
+        readOnly={false}
+      />,
+    )
+
+    const trigger = screen.getByRole('button', { name: '添加布局' })
+    expect(trigger).toHaveTextContent('+')
+    fireEvent.click(trigger)
+    const menu = screen.getByRole('menu', { name: '布局类型' })
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1)
+    expect(within(menu).getByRole('menuitem', { name: 'Auto Layout display: flex' }))
+      .toBeInTheDocument()
+    expect(screen.queryByText(/Grid/)).not.toBeInTheDocument()
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Auto Layout display: flex' }))
+    expect((dispatch.mock.lastCall?.[0] as EditorCommand).type).toBe(BUILTIN_COMMAND_TYPES.batch)
+  })
+
   it('OpenSpec: 基础物料 / 内建 Component 定义自带 Inspector', () => {
     const definitions = createComposeBuiltinComponentDefinitions(() => 'id')
     for (const key of ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Appearance', 'Hierarchy', 'Layout', 'GeometryConstraints']) {
@@ -157,16 +205,15 @@ describe('内建 Component inspectors', () => {
       />,
     )
 
-    fireEvent.change(screen.getByRole('combobox', { name: '定位' }), {
-      target: { value: 'absolute' },
-    })
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: '定位' }))
+      .getByRole('radio', { name: 'Absolute' }))
     const command = dispatch.mock.lastCall?.[0] as EditorCommand
     expect(command.payload).toMatchObject({
       entityId: child.id,
       key: 'LayoutItem',
       value: { positioning: 'absolute', offset: { x: 30, y: 40 } },
     })
-    expect(screen.getByRole('spinbutton', { name: '计算宽度' })).toHaveValue(80)
+    expect(screen.getByRole('spinbutton', { name: '宽度' })).toHaveValue(80)
   })
 
   it('OpenSpec: auto-layout-interactions / Inspector Fill / Flow 转 Absolute 同时烘焙 Fixed', () => {
@@ -208,10 +255,11 @@ describe('内建 Component inspectors', () => {
       />,
     )
 
-    expect(screen.getAllByRole('option', { name: 'fill' })).toHaveLength(2)
-    fireEvent.change(screen.getByRole('combobox', { name: '定位' }), {
-      target: { value: 'absolute' },
-    })
+    expect(screen.getAllByRole('radio', { name: '填充' })).toHaveLength(2)
+    expect(screen.getByRole('spinbutton', { name: '计算宽度' })).toHaveValue(240)
+    expect(screen.getByRole('spinbutton', { name: '计算宽度' })).toHaveAttribute('readonly')
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: '定位' }))
+      .getByRole('radio', { name: 'Absolute' }))
     const command = dispatch.mock.lastCall?.[0] as EditorCommand
     expect(command.payload).toMatchObject({
       value: {
@@ -220,6 +268,57 @@ describe('内建 Component inspectors', () => {
         width: { mode: 'fixed', value: 240 },
       },
     })
+  })
+
+  it('OpenSpec: LayoutItem 条件化 Inspector / Absolute 与 Flow 只显示有意义的字段', () => {
+    const Inspector = inspectorOf('LayoutItem')
+    const absolute = entity()
+    const { rerender } = render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={absolute}
+        readOnly={false}
+        value={absolute.components.LayoutItem!}
+      />,
+    )
+    const absolutePanel = screen.getByRole('region', { name: '布局项属性' })
+    expect(absolutePanel.querySelector('[data-property-path="offset"]')).toBeInTheDocument()
+    expect(absolutePanel.querySelector('[data-property-path="alignSelf"]')).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: '填充' })).not.toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: '外边距' })).toHaveValue(0)
+    expect(screen.getByRole('button', { name: '展开外边距' })).toBeInTheDocument()
+    expect(screen.getByText('width')).toBeInTheDocument()
+    expect(screen.getByText('height')).toBeInTheDocument()
+    expect(screen.getByText('margin')).toBeInTheDocument()
+
+    const child = entity({
+      LayoutItem: { ...createDefaultComposeLayoutItem(), positioning: 'flow' },
+    })
+    const parent = { ...entity({
+      Hierarchy: { childIds: [child.id] },
+      Layout: createDefaultComposeFlexLayout(),
+    }), id: 'parent' }
+    rerender(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        document={{
+          schemaVersion: 6,
+          canvas: createDefaultCanvasSettings(),
+          output: createDefaultOutputSettings(),
+          rootIds: [parent.id],
+          entities: { [parent.id]: parent, [child.id]: child },
+        }}
+        entity={child}
+        readOnly={false}
+        value={child.components.LayoutItem!}
+      />,
+    )
+    const flowPanel = screen.getByRole('region', { name: '布局项属性' })
+    expect(flowPanel.querySelector('[data-property-path="offset"]')).not.toBeInTheDocument()
+    expect(flowPanel.querySelector('[data-property-path="alignSelf"]')).toBeInTheDocument()
+    expect(screen.getAllByRole('radio', { name: '填充' })).toHaveLength(2)
   })
 
   it('OpenSpec: 基础物料 / Lock Inspector 在 readOnly 上下文仍可解除锁定', () => {
@@ -290,21 +389,14 @@ describe('内建 Component inspectors', () => {
     ))).toEqual([
       'flex-direction',
       'flex-wrap',
-      'row-gap',
-      'column-gap',
-      'padding',
-      'padding',
-      'padding',
-      'padding',
+      'gap',
       'align-content',
       'justify-content',
       'align-items',
     ])
     expect(screen.getByText('flex-direction')).toBeInTheDocument()
     expect(screen.getByText('flex-wrap')).toBeInTheDocument()
-    expect(screen.getByText('row-gap')).toBeInTheDocument()
-    expect(screen.getByText('column-gap')).toBeInTheDocument()
-    expect(screen.getAllByText('padding')).toHaveLength(4)
+    expect(screen.getByText('gap')).toBeInTheDocument()
     expect(screen.getByText('align-content')).toBeInTheDocument()
     expect(screen.getByText('justify-content')).toBeInTheDocument()
     expect(screen.getByText('align-items')).toBeInTheDocument()
@@ -320,29 +412,29 @@ describe('内建 Component inspectors', () => {
     const multiLine = within(panel).getByRole('radiogroup', { name: '多行' })
     expect(within(multiLine).getAllByRole('radio')).toHaveLength(6)
     expect(within(multiLine).getAllByRole('radio').map((item) => item.getAttribute('aria-label')))
-      .toEqual(['居中', '起始', '末端', '环绕', '两端', '拉伸'])
+      .toEqual(['起始', '居中', '末端', '两端', '环绕', '拉伸'])
     expect(within(multiLine).getByRole('radio', { name: '拉伸' }))
       .toHaveAttribute('aria-checked', 'true')
     const mainAxis = within(panel).getByRole('radiogroup', { name: '主轴' })
     expect(within(mainAxis).getAllByRole('radio').map((item) => item.getAttribute('aria-label')))
-      .toEqual(['居中', '起始', '末端', '两端', '环绕', '均匀'])
+      .toEqual(['起始', '居中', '末端', '两端', '环绕', '均匀'])
     const crossAxis = within(panel).getByRole('radiogroup', { name: '交叉轴' })
     expect(within(crossAxis).getAllByRole('radio').map((item) => item.getAttribute('aria-label')))
-      .toEqual(['居中', '起始', '末端', '拉伸', '基线'])
+      .toEqual(['起始', '居中', '末端', '拉伸', '基线'])
 
-    const rowGap = within(panel).getByRole('spinbutton', { name: '行间距' })
-    const columnGap = within(panel).getByRole('spinbutton', { name: '列间距' })
-    expect(rowGap).toHaveValue(0)
-    expect(columnGap).toHaveValue(0)
+    expect(within(panel).getByRole('spinbutton', { name: '项间距' })).toHaveValue(0)
+    expect(within(panel).queryByRole('spinbutton', { name: '行间距' })).not.toBeInTheDocument()
+    expect(screen.getByTitle('仅在换行产生多行时生效')).toBeInTheDocument()
     expect(screen.queryByText('px')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /绑定|变量/ })).not.toBeInTheDocument()
 
     const preview = screen.getByTestId('flex-layout-preview')
-    expect(preview.querySelectorAll('[data-flex-preview-node]')).toHaveLength(3)
+    expect(preview.querySelectorAll('[data-flex-preview-node]')).toHaveLength(5)
     expect(within(preview).getByText('Flex 容器')).toBeInTheDocument()
-    expect(within(preview).getByText('row · nowrap · 0/0')).toBeInTheDocument()
-    expect(within(preview).getByText('主轴')).toBeInTheDocument()
-    expect(within(preview).getByText('交叉轴')).toBeInTheDocument()
+    expect(within(preview).getByText('row · nowrap · gap 0')).toBeInTheDocument()
+    expect(within(preview).getAllByRole('spinbutton')).toHaveLength(4)
+    expect(within(preview).getByRole('button', { name: '解除内边距联动' }))
+      .toHaveAttribute('aria-pressed', 'true')
     expect(preview).toHaveAttribute('data-align-items', 'stretch')
     expect(screen.getByText('实时预览')).toBeInTheDocument()
   })
@@ -378,13 +470,13 @@ describe('内建 Component inspectors', () => {
     })
 
     dispatch.mockClear()
-    const rowGap = screen.getByRole('spinbutton', { name: '行间距' })
-    fireEvent.change(rowGap, { target: { value: '-1' } })
-    fireEvent.blur(rowGap)
+    const gap = screen.getByRole('spinbutton', { name: '项间距' })
+    fireEvent.change(gap, { target: { value: '-1' } })
+    fireEvent.blur(gap)
     expect(dispatch).not.toHaveBeenCalled()
 
-    fireEvent.change(rowGap, { target: { value: '12' } })
-    fireEvent.blur(rowGap)
+    fireEvent.change(gap, { target: { value: '12' } })
+    fireEvent.blur(gap)
     expect(dispatch).toHaveBeenCalledOnce()
 
     const verticalLayout = { ...layout, flexDirection: 'column' as const, rowGap: 12 }
@@ -402,6 +494,7 @@ describe('内建 Component inspectors', () => {
       />,
     )
     expect(screen.getByRole('radio', { name: '纵向' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: '重新联动项间距' })).toBeInTheDocument()
     expect(screen.getByRole('spinbutton', { name: '行间距' })).toHaveValue(12)
 
     rerender(
@@ -413,7 +506,7 @@ describe('内建 Component inspectors', () => {
         value={container.components.Layout!}
       />,
     )
-    expect(screen.getByRole('spinbutton', { name: '行间距' })).toHaveValue(0)
+    expect(screen.getByRole('spinbutton', { name: '项间距' })).toHaveValue(0)
 
     rerender(
       <Inspector
@@ -426,6 +519,61 @@ describe('内建 Component inspectors', () => {
     )
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: '行间距' })).toBeDisabled()
+  })
+
+  it('OpenSpec: gap 与盒模型预览 / 分轴间距和四边 padding 联动', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('Layout')
+    const layout = createDefaultComposeFlexLayout()
+    const container = entity({ Hierarchy: { childIds: [] }, Layout: layout })
+    const { rerender } = render(
+      <Inspector
+        componentKey="Layout"
+        dispatch={dispatch}
+        entity={container}
+        readOnly={false}
+        value={container.components.Layout!}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '拆分项间距' }))
+    expect(screen.getByRole('spinbutton', { name: '行间距' })).toHaveValue(0)
+    expect(screen.getByRole('spinbutton', { name: '列间距' })).toHaveValue(0)
+
+    dispatch.mockClear()
+    fireEvent.change(screen.getByRole('spinbutton', { name: '上内边距' }), {
+      target: { value: '16' },
+    })
+    expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
+      value: { padding: { top: 16, right: 16, bottom: 16, left: 16 } },
+    })
+
+    const unequal = {
+      ...layout,
+      rowGap: 12,
+      columnGap: 4,
+      padding: { top: 8, right: 16, bottom: 24, left: 32 },
+    }
+    const unequalContainer = entity({ Hierarchy: { childIds: [] }, Layout: unequal })
+    rerender(
+      <Inspector
+        componentKey="Layout"
+        dispatch={dispatch}
+        entity={unequalContainer}
+        readOnly={false}
+        value={unequalContainer.components.Layout!}
+      />,
+    )
+    expect(screen.getByRole('button', { name: '重新联动项间距' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '联动内边距' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    dispatch.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '联动内边距' }))
+    expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
+      value: { padding: { top: 8, right: 8, bottom: 8, left: 8 } },
+    })
   })
 
   it('OpenSpec: basic-materials / Flex 布局 Component 与紧凑 Inspector / 显示状态并重置完整布局', () => {
@@ -446,8 +594,12 @@ describe('内建 Component inspectors', () => {
       />,
     )
 
-    expect(screen.getByText('display: flex')).toBeInTheDocument()
+    expect(screen.getByText('Auto Layout')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重置布局' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '更多布局操作' })).toHaveAttribute(
+      'aria-haspopup',
+      'menu',
+    )
 
     const changed = { ...defaults, flexDirection: 'column' as const, rowGap: 12 }
     const changedContainer = entity({
@@ -486,10 +638,12 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByRole('button', { name: '重置布局' })).toBeDisabled()
   })
 
-  it('OpenSpec: layout-runtime-v6 / 直接子项通过一个 batch 转为 Flow', () => {
+  it('OpenSpec: 移除 Auto Layout 的视觉保持 / 标题栏菜单派发单个烘焙 batch', () => {
     const dispatch = vi.fn()
     const HeaderActions = inspectorHeaderActionsOf('Layout')
-    const child = entity()
+    const child = entity({
+      LayoutItem: { ...createDefaultComposeLayoutItem(), positioning: 'flow' },
+    })
     const container = { ...entity({
       Hierarchy: { childIds: [child.id] },
       Layout: createDefaultComposeFlexLayout(),
@@ -507,23 +661,36 @@ describe('内建 Component inspectors', () => {
         dispatch={dispatch}
         document={document}
         entity={container}
+        layoutSnapshot={{
+          revision: 2,
+          boxes: {
+            [container.id]: { x: 0, y: 0, width: 180, height: 40, positioning: 'absolute' },
+            [child.id]: { x: 12, y: 8, width: 100, height: 100, positioning: 'flow' },
+          },
+          diagnostics: [],
+        }}
         readOnly={false}
         value={container.components.Layout!}
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '将直接子项转换为自动布局' }))
+    fireEvent.click(screen.getByRole('button', { name: '更多布局操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '移除自动布局' }))
     const command = dispatch.mock.lastCall?.[0] as EditorCommand
     expect(command.type).toBe(BUILTIN_COMMAND_TYPES.batch)
-    expect(command.payload.commands).toEqual([
+    expect(command.payload.commands).toEqual(expect.arrayContaining([
       expect.objectContaining({
         type: BUILTIN_COMMAND_TYPES.updateComponent,
         payload: expect.objectContaining({
           entityId: child.id,
-          value: expect.objectContaining({ positioning: 'flow' }),
+          value: expect.objectContaining({ positioning: 'absolute' }),
         }),
       }),
-    ])
+      expect.objectContaining({
+        type: BUILTIN_COMMAND_TYPES.removeComponent,
+        payload: { entityId: container.id, key: 'Layout' },
+      }),
+    ]))
   })
 
   it('OpenSpec: layout-runtime-v6 / Flex 对齐保持显式值而不恢复 normal', () => {
@@ -587,13 +754,11 @@ describe('内建 Component inspectors', () => {
     )
 
     expect(screen.getByRole('radiogroup', { name: 'Direction' })).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton', { name: 'Row gap' })).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton', { name: 'Column gap' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Item gap' })).toBeInTheDocument()
     const preview = screen.getByTestId('flex-layout-preview')
-    expect(within(preview).getByText('Main axis')).toBeInTheDocument()
-    expect(within(preview).getByText('Cross axis')).toBeInTheDocument()
+    expect(within(preview).getByRole('button', { name: 'Unlink padding' })).toBeInTheDocument()
     expect(screen.queryByText('方向')).not.toBeInTheDocument()
-    expect(screen.queryByText('行间距')).not.toBeInTheDocument()
+    expect(screen.queryByText('项间距')).not.toBeInTheDocument()
   })
 
   it('OpenSpec: 基础物料 / Appearance Inspector 保留未编辑的 shadow 数据', () => {

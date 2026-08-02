@@ -293,7 +293,8 @@
     background: #1b1c1c;
   }
 
-  .property-panel__group-header > button {
+  .property-panel__group-header > button,
+  .property-panel__group-title {
     display: flex;
     min-width: 0;
     align-items: center;
@@ -311,6 +312,10 @@
     text-shadow: none;
   }
 
+  .property-panel__group-title {
+    cursor: default;
+  }
+
   .property-panel__group-header > button > svg {
     width: 9px;
     height: 9px;
@@ -319,7 +324,8 @@
     stroke-width: 2;
   }
 
-  .property-panel__group .property-panel__group .property-panel__group-header > button {
+  .property-panel__group .property-panel__group .property-panel__group-header > button,
+  .property-panel__group .property-panel__group .property-panel__group-title {
     color: #b8b9b9;
     font-size: 12px;
     font-weight: 470;
