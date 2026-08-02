@@ -29,27 +29,25 @@ axis MUST 为 `x|y`，position MUST 为有限数。
 
 ### Requirement: 固定原点输出设置
 
-ComposeDocument MUST 保存正有限 width/height 与非空 backgroundColor 的 output，并导出默认
-`1280×720`、`transparent` 的 `createDefaultOutputSettings()`。输出原点 MUST 固定为世界
-`(0,0)`；backgroundColor MUST 继续允许宿主配置其他非空 CSS 颜色字符串。
+ComposeDocument MUST 保存正有限 width/height 与合法 `backgroundPaint: ComposePaint` 的 output，并导出默认
+`1280×720`、透明 Solid Paint 的 `createDefaultOutputSettings()`。输出原点 MUST 固定为世界 `(0,0)`；
+`output.backgroundColor` MUST 在 v5 中被拒绝，系统不得提供双字段或自动迁移。
 
-#### Scenario: 校验输出设置
+#### Scenario: 校验结构化输出背景
 
-- **WHEN** 宿主创建默认输出或提供合法自定义尺寸和背景
+- **WHEN** 宿主创建默认输出，或提供含合法 Solid、Linear、Radial 或 Angular Paint 的自定义输出
 - **THEN** 文档校验通过且值可 JSON 往返
-- **AND** 非正、非有限尺寸或空背景被拒绝
+- **AND** 非正、非有限尺寸、非法 Paint 或 `backgroundColor` 旧字段被拒绝
 
 ### Requirement: 版本化 ECS JSON 文档
 
-系统 MUST 在 `@compose-ui/core` 提供仅支持 `schemaVersion: 4` 的 ComposeDocument、严格 JSON
-类型和无 React/DOM 的校验器。文档 MUST 保存 output、canvas、稳定 rootIds 与规范化 entities；
-v3、旧 Node kind 和未知版本 MUST 被拒绝且不得自动迁移。
+ComposeDocument v6 LayoutItem width/height MUST 接受 `fixed | fill | hug`。Hug MUST 允许用于 Renderer
+leaf 或拥有 Layout 的 Hierarchy Entity；缺少 Layout 的 free Hierarchy Entity MUST NOT 使用 Hug。
 
-#### Scenario: 接受 v4 并拒绝 v3
-
-- **WHEN** 宿主分别校验合法 v4 Entity 文档和 v3 Node 文档
-- **THEN** 只有 v4 文档有效
-- **AND** 失败结果包含稳定版本或字段问题
+#### Scenario: 校验 Hug 内容来源
+- **WHEN** Renderer leaf、root Auto Layout container 或嵌套 Auto Layout container 使用 Hug axis
+- **THEN** 文档通过校验并保留 fallback value/min/max
+- **AND** free Hierarchy Entity 的 Hug 被返回到精确 axis path 的 issue 拒绝
 
 ### Requirement: 统一 Entity 与 PascalCase Components
 
@@ -140,4 +138,121 @@ baseComponentKeys MUST 指向 Entity 当前存在的 Components，Composition �
 - **WHEN** Entity 由 Preset 创建并添加能力
 - **THEN** Composition 保留基础 Component Keys 和能力 ID
 - **AND** JSON 往返不依赖运行时 Registry
+
+### Requirement: 图片背景 Paint
+
+ComposeDocument MUST 允许 `backgroundPaint` 使用带稳定资源引用的 `image` Paint。图片 Paint MUST 保存显示模式、图片透明度和可选颜色叠加，且不得保存 Blob URL 或临时 File 数据。
+
+#### Scenario: 保存图片背景
+
+- **WHEN** 宿主为 Picker 提供一个可引用的图片资源
+- **THEN** 文档保存其稳定引用和规范化图片设置
+- **AND** 原有 Solid 与 Gradient Paint 继续有效
+
+### Requirement: 页面文件约定
+
+页面 MUST 以一份未经扩展的 `ComposeDocument v5` 持久化为资源文件，`ComposeDocument.schemaVersion`
+MUST 保持 5。页面身份 MUST 由 Asset Provider 上报的页面媒体类型判定，MUST NOT 由文件名判定 ——
+文件名由用户随时可改，重命名不应改变一个条目是否为页面。`core` MUST 导出该媒体类型判定、
+页面文件命名约定助手（仅供创建与规范化名称，以及供 Provider 把存储命名翻译成媒体类型）、
+文件名与显示名的双向转换，以及页面文档的解析与序列化。解析 MUST 拒绝非 v5 或结构不合法的内容
+并返回可判别的 issue，MUST NOT 抛出未归一化的异常。
+
+#### Scenario: 身份只由媒体类型决定
+
+- **WHEN** 条目的媒体类型为页面媒体类型
+- **THEN** 判定为页面，无论其文件名是否带页面后缀
+- **AND** 媒体类型不是页面时判定为非页面，即使文件名带页面后缀
+
+#### Scenario: 识别页面文件并取显示名
+
+- **WHEN** 传入名称 `Home.page.json`
+- **THEN** 判定为页面文件且显示名为 `Home`
+- **AND** 由显示名 `Home` 反向生成的文件名等于 `Home.page.json`
+
+#### Scenario: 拒绝非页面文件
+
+- **WHEN** 传入名称 `Home.json` 或 `page.json.txt`
+- **THEN** 判定为非页面文件
+- **AND** 不产生副作用
+
+#### Scenario: 解析非法页面内容
+
+- **WHEN** 页面文件内容不是合法 JSON，或 `schemaVersion` 不等于 5
+- **THEN** 解析返回描述原因的 issue
+- **AND** 不返回文档
+
+#### Scenario: 创建空白页面文档
+
+- **WHEN** 请求创建一份空白页面文档
+- **THEN** 得到 `schemaVersion` 为 5、`rootIds` 为空、带默认画布设置与默认输出设置的文档
+
+### Requirement: 应用清单与首页指向
+
+`core` MUST 定义资源根应用清单 `app.json`，其形状为 `{ schemaVersion: 1, homePageKey: string | null }`，
+并 MUST 提供宽容解析与序列化。解析 MUST 在内容缺失、非法 JSON、结构不符或版本不支持时降级为
+`homePageKey` 为 null 并返回可判别的 issue。序列化 MUST 原样写回解析时保留的未知顶层字段。
+首页 MUST 由该清单唯一表达，页面文档自身 MUST NOT 携带首页标记。
+
+#### Scenario: 清单缺失
+
+- **WHEN** 资源根不存在 `app.json`
+- **THEN** 解析结果的 `homePageKey` 为 null
+- **AND** 不产生任何写入
+
+#### Scenario: 清单损坏
+
+- **WHEN** `app.json` 内容不是合法 JSON、结构不符或 `schemaVersion` 不受支持
+- **THEN** 解析结果的 `homePageKey` 为 null 并附带对应 issue
+- **AND** 既有文件内容不被覆盖
+
+#### Scenario: 设首页保留宿主字段
+
+- **WHEN** `app.json` 含有清单 Schema 之外的顶层字段，且首页被改写
+- **THEN** 序列化结果包含新的 `homePageKey`
+- **AND** 原有未知顶层字段被原样保留
+
+### Requirement: 页面引用值与嵌套护栏
+
+`core` MUST 定义页面引用值，其为可嵌入 `JsonObject` 的扁平字符串映射，包含 `kind` 为 `'page'`、
+`providerId`、`assetKey` 与 `scope`。`core` MUST 提供从任意值读取页面引用的判别函数，以及基于
+祖先页面链与深度上限判定嵌套状态的纯函数，结果 MUST 区分正常、循环引用与超出深度上限。
+
+#### Scenario: 读取页面引用
+
+- **WHEN** 传入含 `kind` 为 `'page'` 且字段完整的值
+- **THEN** 返回该页面引用
+- **AND** 传入 null、非对象或字段缺失的值时返回空结果
+
+#### Scenario: 检出循环引用
+
+- **WHEN** 待渲染页面的 key 已存在于祖先页面链中
+- **THEN** 嵌套状态判定为循环引用
+
+#### Scenario: 检出超出深度上限
+
+- **WHEN** 当前嵌套深度已达到深度上限
+- **THEN** 嵌套状态判定为超出深度上限
+- **AND** 深度小于上限且无循环时判定为正常
+
+### Requirement: 可选 Flex Layout Component
+
+Layout MUST 只与 Hierarchy 组合，并保存明确的 Flex direction、wrap、alignContent、
+justifyContent、alignItems、四边 padding、rowGap 与 columnGap。Flow LayoutItem MUST 仅位于直接拥有
+Layout 的 parent 下；根级或 free parent 的子项 MUST 为 Absolute。
+
+#### Scenario: 校验 Flow 与 Absolute 位置模式
+- **WHEN** Layout parent 包含 Fixed Flow 与 Absolute 子项
+- **THEN** 文档通过校验且 Hierarchy.childIds 决定 Flow 顺序
+- **AND** 根级 Flow、free parent 下 Flow 或非法数值被拒绝
+
+### Requirement: 显式 v5 到 v6 迁移
+
+Core MUST 发布纯函数迁移器，先严格验证 v5，再返回经过 v6 validator 的新文档或可定位 issues。
+迁移 MUST 不修改输入、保留未知合法 Component，并把所有既有子项转为 Absolute 以保持视觉。
+
+#### Scenario: 迁移合法 v5 文档
+- **WHEN** 宿主向迁移器传入带嵌套 Transform、Layout、constraints 和未知 Component 的合法 v5
+- **THEN** 返回 rotation-only Transform、Fixed LayoutItem、GeometryConstraints 和 v6 Layout
+- **AND** 原输入、世界视觉、Hierarchy 顺序与未知数据保持不变
 

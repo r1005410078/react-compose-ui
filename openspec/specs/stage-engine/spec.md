@@ -5,15 +5,13 @@ TBD - created by archiving change extract-stage-interaction-engine. Update Purpo
 ## Requirements
 ### Requirement: 无 React 的 Stage Engine 包
 
-系统 MUST 提供只依赖 `@compose-ui/core` 的 `@compose-ui/stage-engine` 公共包。包 MUST NOT
-依赖 React、ReactDOM、DOM 类型、CSS、component-registry 或 ui-context，并 MUST 导出坐标、
-矩阵、场景索引、吸附、滚动映射、空间命令与交互 controller 公共 API。
+Stage Engine MUST 继续只依赖 `@compose-ui/core`，并 MUST 接受 core 定义的 Layout Snapshot 协议而
+不得依赖 layout-engine 或 Yoga。
 
-#### Scenario: 独立构建 Stage Engine
-
-- **WHEN** 消费者在没有 React 或 DOM 的 TypeScript 环境导入 stage-engine
-- **THEN** 可以计算文档世界几何、创建空间命令并驱动交互 controller
-- **AND** 构建产物与 package manifest 不包含第一方 UI 包或 React 运行时
+#### Scenario: 独立消费已解析布局
+- **WHEN** 非 DOM 消费者提供 v6 document 与合法 Snapshot
+- **THEN** 可以计算世界几何、吸附与空间命令
+- **AND** 构建产物不包含 Yoga、WASM、React 或 DOM 类型
 
 ### Requirement: Headless 交互 Controller
 
@@ -35,34 +33,14 @@ controller MUST 同时只允许一个 surface 连接。
 
 ### Requirement: 手势预览与原子提交
 
-内部变换 session MUST 捕获开始文档与世界几何，Pointer 更新 MUST 只发布 preview。
-pointerup MUST 使用最终点冻结最多一个命令或 batch，并在清理 preview 和释放 capture 之前
-提交该 effect。cancel、真实 lost capture、失焦或不兼容 document/tool/selection context 更新
-MUST 清理预览且不提交文档；surface 尺寸重测 MUST NOT 取消活动 move、resize 或 rotate。
+StageInteractionController MUST 在 session 开始冻结 Layout Snapshot。Flow move preview MUST 使用
+resolved box 转为 Absolute 后应用位移；Fill resize preview MUST 把活动 axis 视为 Fixed。Cancel
+MUST 丢弃全部布局意图 preview，pointerup MUST 请求最多一个命令或 batch。
 
-#### Scenario: 高频更新后单次提交
-
-- **WHEN** move、resize 或 rotate session 收到多次 Pointer 更新后结束
-- **THEN** 每次更新只改变 snapshot 中的局部 preview transform
-- **AND** 结束时只产生一个包含最终结果的 dispatch effect
-
-#### Scenario: 取消或文档并发变化
-
-- **WHEN** 活动内部手势被取消，或 context document 在提交前变化
-- **THEN** phase 返回 idle 并清除 preview、snap guide 与 pointer 状态
+#### Scenario: 混合选择移动并取消
+- **WHEN** Flow 与 Absolute 混合选择开始移动后收到 Escape
+- **THEN** preview 中的 positioning 与 offset 全部清除并恢复原 Snapshot
 - **AND** surface 不收到 dispatch effect
-
-#### Scenario: 最终点与 effect 顺序
-
-- **WHEN** move、resize 或 rotate 没有中间 move，直接以新的最终点 pointerup
-- **THEN** dispatch effect 包含该最终点计算出的 transform
-- **AND** command dispatch 先于 idle preview 清理和 pointer release
-
-#### Scenario: 活动期间重测 surface
-
-- **WHEN** 活动 move、resize 或 rotate 的 surface 尺寸发生变化
-- **THEN** session 继续使用开始时的 viewport 与 adapter 冻结的 surface 原点计算最终几何
-- **AND** 不因纯测量变化取消或丢失正常 pointerup
 
 ### Requirement: 输出区域检查命中
 
@@ -99,24 +77,24 @@ SceneIndex 解析 drop 世界点和最深合法 Frame。
 
 ### Requirement: ECS SceneIndex
 
-Stage Engine MUST 从 ComposeDocument v4 entities 建立 parent、世界矩阵、可见性、锁定、容器和
-TransformConstraints 索引，不得依赖旧节点 kind。
+Stage Engine MUST 从 ComposeDocument v6 与 ready ComposeLayoutSnapshot 建立 parent、世界矩阵、
+可见性、锁定、容器、裁剪与 GeometryConstraints 索引。全部世界几何 MUST 使用 Snapshot box 加
+Transform rotation，缓存 MUST 同时区分 document 与 snapshot revision。
 
-#### Scenario: 索引可渲染容器
-
-- **WHEN** Entity 同时包含 Renderer 和 Hierarchy
-- **THEN** SceneIndex 保留其世界几何、子项顺序与容器命中能力
+#### Scenario: Snapshot 改变使空间索引失效
+- **WHEN** 文档引用不变但 Layout Snapshot revision 与子项 box 改变
+- **THEN** SceneIndex 返回新的世界矩阵、bounds、命中与裁剪结果
+- **AND** 不读取旧 Transform position/size
 
 ### Requirement: ECS 结构命令
 
-Stage Engine MUST 使用 Hierarchy 实现 nullable reparent、group 和 ungroup。Container Resize
-MUST 只更新所选 Entity 自身 Transform，后代局部 Transform 保持不变。
+Reparent 与 Duplicate MUST 接受开始 Layout Snapshot，并按目标 parent Layout 决定 positioning、offset
+与 Fill 转换；Group/Ungroup MUST 为 Flow 目标返回稳定不可用原因。
 
-#### Scenario: 创建和取消容器结构
-
-- **WHEN** 用户 group 或 ungroup Entity
-- **THEN** 命令创建或移除具有 Hierarchy 的 Container Entity
-- **AND** 全部目标保持世界几何
+#### Scenario: Scene Tree 跨布局移动
+- **WHEN** 节点从 free parent 移入 Layout、在 Layout 间移动或移出到 free parent
+- **THEN** 分别得到 Flow、保持 Flow、或烘焙 Absolute 的确定 LayoutItem
+- **AND** 一个 Undo 恢复 parent、index 与全部原 authoring 值
 
 ### Requirement: ECS 外部拖入
 
@@ -144,4 +122,24 @@ Move、Resize 与 Rotate MUST 查询 Transform、Visibility、Lock 和 Transform
 
 - **WHEN** Entity 不可见、锁定或禁止目标变换
 - **THEN** Engine 不开始对应手势且不产生命令 effect
+
+### Requirement: 无 DOM Paint 编辑与图层采样会话
+
+StageInteractionController MUST 通过普通数据 context、event、snapshot 和 effect 支持 Paint edit 与 sample；不得导入 React、DOM、Registry 或 Renderer。编辑仅限当前单选 target，pointer move 只产生 preview，pointer up 最多产生一个命令；取消和不兼容 context 更新不提交。
+
+#### Scenario: 拖动旋转 Entity 的渐变 stop
+
+- **WHEN** 用户拖动旋转或嵌套 Entity 的渐变控制柄
+- **THEN** Engine 以逆世界矩阵换算局部 Paint 坐标并发布 preview
+- **AND** pointer up 只提交一次完整 Paint
+
+### Requirement: 基于图层的安全降级取色
+
+Engine MUST 命中最深、最上层、可见且未被裁剪排除的 Entity。普通采样返回点击局部点的 Solid/Gradient 颜色；Alt/Option 采样返回完整 backgroundPaint。无可求值 Paint 的 Entity 不得产生文档命令。
+
+#### Scenario: 采样被裁剪层与完整 Paint
+
+- **WHEN** 用户在 Stage sample mode 点击被裁剪排除的层，或 Alt 点击可见 Gradient layer
+- **THEN** 前者不会被采样，后者返回完整结构化 Paint
+- **AND** 选择、viewport 和普通移动手势不改变
 

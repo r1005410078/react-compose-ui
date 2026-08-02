@@ -278,13 +278,14 @@ surface、border、text、hover、selected、focus 和 scrollbar 使用这些 to
 ### Requirement: 隐式 Canvas Inspector
 
 Editor MUST 把 output inspection 作为不进入文档的会话目标，并在右侧 Properties 面板显示输出
-宽度、高度和背景。节点选择、SceneTree 选择与输出检查 MUST 互斥；Canvas 不得出现在 SceneTree
-或 selectedIds。
+宽度、高度和结构化背景 Paint。节点选择、SceneTree 选择与输出检查 MUST 互斥；Canvas 不得出现在
+SceneTree 或 selectedIds。Canvas 背景 MUST 使用既有 `paint` 属性编辑器，但不得连接实体的渐变画布
+控制柄或图层取色会话。
 
-#### Scenario: 点击输出并编辑属性
+#### Scenario: 点击输出并编辑背景 Paint
 
-- **WHEN** 用户点击 Stage 输出区域并修改合法宽高或背景
-- **THEN** 右侧显示 Canvas Inspector，且每次确认只提交一个可逆 output.configure 事务
+- **WHEN** 用户点击 Stage 输出区域，并把背景从 Solid 改为任一合法 Gradient
+- **THEN** 右侧显示 Canvas Inspector，且每次确认只提交一个可逆 `output.configure` 事务
 - **AND** Undo/Redo 更新 Inspector 值并保持 output inspection 激活
 
 #### Scenario: 使用常见桌面尺寸
@@ -338,15 +339,14 @@ assetResolver 或默认 Provider resolver 注入 Stage；显式 resolver 优先�
 
 ### Requirement: 默认 ECS 工作区同步
 
-默认 Editor MUST 使用同一 ComposeDocument v4 与 ComposeEntityRegistry 驱动 Scene Tree、Palette、
-Stage、Inspector、History、Command Panel 和 Preview 集成。选择、命令和撤销后所有区域 MUST
-读取相同 Entity 快照。
+默认 Controller MUST 使用当前 Layout Snapshot 规划 Scene Tree move。移入 Layout MUST 自动 Flow，
+跨 Layout MUST 保持 Flow 与 insertion index，移出到 free parent MUST 烘焙 Absolute；同父级 Flow
+排序 MUST 只修改 Hierarchy 顺序。
 
-#### Scenario: 编辑 Entity 并跨面板同步
-
-- **WHEN** 用户通过 Stage、Scene Tree 或 Inspector 修改同一 Entity
-- **THEN** 所有面板显示相同 name、Components、层级和选择
-- **AND** undo/redo 同步恢复全部区域
+#### Scenario: 使用场景树排序 Flow
+- **WHEN** 用户在同一 Layout parent 内拖动一个或多个 Flow 场景树项
+- **THEN** Controller 提交一次确定性 reorder 并保持所有 LayoutItem 不变
+- **AND** Stage 与 Inspector 使用新 Snapshot 立即显示新顺序
 
 ### Requirement: ECS 聚合 Entity Inspector
 
@@ -437,4 +437,226 @@ MUST 输出可定位的警告而不是静默失败。
 
 - **WHEN** Registry 中不存在 containerPresetId 指向的 Preset 且用户触发创建
 - **THEN** 不产生事务并输出包含该 Preset ID 的警告
+
+### Requirement: VNext Editor composition API
+ComposeEditor MUST replace flat panel, toolbar and children overrides with compose-prefixed `slots`, scene tree,
+history and assets configuration; it MUST not retain legacy aliases.
+
+#### Scenario: Slot overrides default workspace content
+- **WHEN** a consumer provides an editor slot
+- **THEN** that slot replaces only its matching default workspace content and the rest of the workspace remains intact
+
+### Requirement: Canvas Map 输出尺寸与背景 Inspector
+
+隐式 Canvas Inspector MUST 将输出尺寸显示为 Map 属性：左侧 Key 只能选择“常见尺寸”或“自定义尺寸”；右侧 Value 在“常见尺寸”时显示六个桌面分辨率，在“自定义尺寸”时显示紧凑 Size W/H。输出背景 MUST 显示为 Color 属性。Key 是 Inspector 本地瞬时状态，不得写入 ComposeDocument。
+
+#### Scenario: 在 Canvas Map 的常见尺寸 Value 选择分辨率
+- **WHEN** 用户将左列 Key 选择为“常见尺寸”，并在右侧 Value 选择 1280×720、1366×768、1440×900、1920×1080、2560×1440 或 3840×2160
+- **THEN** Canvas 输出 W/H 同步为该分辨率且不显示自定义 W/H 属性
+- **AND** 系统只提交一次可逆 `output.configure` 事务
+
+#### Scenario: 选择并编辑自定义 Canvas Size
+- **WHEN** 用户将左列 Key 选择为“自定义尺寸”
+- **THEN** 同一 property row 的右侧 Value 显示当前输出 W/H
+- **AND** 系统不派发 `output.configure` 或创建无意义事务
+- **WHEN** 用户提交合法自定义 W/H
+- **THEN** 系统只提交一次可逆 `output.configure` 事务，尺寸匹配常见分辨率时 Key 自动回到“常见尺寸”，否则保持“自定义尺寸”
+- **AND** 无效草稿不改写输出；Undo/Redo 或宿主外部 W/H 更新后，Inspector 依据当前尺寸重新选择 Key/Value 并保持 output inspection 激活
+
+#### Scenario: 编辑 Canvas Color
+- **WHEN** 用户通过 Color Picker 选择输出背景颜色
+- **THEN** Color 行不显示 CSS 字符串，并以一次可逆 `output.configure` 事务提交有效颜色
+
+### Requirement: Editor 协调 Paint 编辑会话
+
+ComposeEditor MUST 在每个实例内协调 Inspector Paint edit port、Stage 受控 paint target 和 Color History Provider。编辑 Popover 在 Stage canvas interaction 期间保持 pinned；退出 target 后恢复常规 Popover dismissal 和焦点。
+
+#### Scenario: Inspector 与画布同步编辑
+
+- **WHEN** 用户打开单个 Entity 的背景 Paint editor
+- **THEN** Editor 激活对应 Stage Paint target 和实例级会话颜色历史
+- **AND** 不改变 ComposeDocument、Selection 或 History，直到正式编辑提交
+
+### Requirement: 资源面板页面操作
+
+Editor MUST 通过 Asset Browser 的宿主上下文菜单插槽提供创建页面、设为首页与以只读方式查看页面
+JSON 三项操作，且这三项 MUST 只在页面文件（设为首页与查看 JSON）或恒定（创建页面）出现。
+Provider 缺少相应能力时对应项 MUST 渲染为禁用；已是首页的页面其设为首页项 MUST 禁用。创建页面
+MUST 复用 Asset Browser 的命名对话框、规范化页面文件后缀、写入空白页面文档，并在创建成功后
+刷新目录并打开该页面。
+
+#### Scenario: 右键创建页面
+
+- **WHEN** 用户在资源面板目录上右键并选择创建页面，输入名称后确认
+- **THEN** 该目录下生成对应的页面文件并在树与网格中可见
+- **AND** 该页面随即以页面标签打开
+
+#### Scenario: 缺少写入能力时禁用
+
+- **WHEN** Provider 不具备创建文件或写入能力
+- **THEN** 创建页面项渲染为禁用
+- **AND** 不发起任何写入
+
+#### Scenario: 非页面文件不显示页面项
+
+- **WHEN** 用户在图片或脚本文件上右键
+- **THEN** 设为首页与查看页面 JSON 两项不出现
+
+### Requirement: 页面文档标签与按页面事务运行时
+
+Editor MUST 在双击页面文件时以独立的页面标签打开该页面，并 MUST 为每个已打开页面维护独立的事务
+运行时。已打开的页面再次被打开 MUST 激活既有标签而不重复创建运行时。页面标签 MUST 复用既有资源
+文档标签的关闭与脏状态提示机制。同一页面文件 MUST 允许同时以页面标签与只读 JSON 标签打开。
+
+#### Scenario: 双击打开页面标签
+
+- **WHEN** 用户双击一个页面文件
+- **THEN** 打开页面标签且其文档内容为该页面
+- **AND** 该页面拥有独立的事务运行时与撤销历史
+
+#### Scenario: 重复打开激活既有标签
+
+- **WHEN** 用户双击一个已打开的页面
+- **THEN** 既有页面标签被激活
+- **AND** 不新建运行时且不丢失未保存改动
+
+#### Scenario: 页面与只读 JSON 并存
+
+- **WHEN** 同一页面既以页面标签打开，又以只读 JSON 方式打开
+- **THEN** 两个标签同时存在且互不覆盖
+- **AND** 只读标签不显示脏状态提示
+
+### Requirement: 工作区跟随活动页面
+
+Editor MUST 使画布、场景树、Inspector 与历史面板跟随当前活动页面标签。切换活动页面 MUST 使这些
+面板呈现该页面的文档与撤销历史，且 MUST NOT 残留上一页面的选择或视口。无页面打开时工作区
+MUST 回退到宿主注入的控制器。
+
+#### Scenario: 切换活动页面
+
+- **WHEN** 用户在两个已打开页面标签之间切换
+- **THEN** 画布、场景树、Inspector 与历史面板均切换到该页面
+- **AND** 每个页面各自的撤销历史保持可用
+
+#### Scenario: 切换不残留会话状态
+
+- **WHEN** 在一个页面中选中若干实体后切换到另一页面
+- **THEN** 新页面的选择为空且视口为该页面的初始视口
+- **AND** 检视目标不指向已不存在的实体
+
+#### Scenario: 无页面打开
+
+- **WHEN** 没有任何页面标签打开
+- **THEN** 工作区使用宿主注入的控制器
+- **AND** 既有单文档宿主行为不变
+
+### Requirement: 页面保存与写入冲突
+
+Editor MUST 以最近一次成功读写得到的 revision 作为期望 revision 保存页面。保存成功 MUST 清除脏
+状态并更新期望 revision。Provider 报告写入冲突时 Editor MUST 呈现确认对话框，提供强制覆盖与取消
+两个选项，且 MUST NOT 在用户未确认时覆盖远端内容。关闭存在未保存改动的页面标签 MUST 复用既有的
+关闭确认流程。
+
+#### Scenario: 保存清除脏状态
+
+- **WHEN** 用户修改页面后保存成功
+- **THEN** 该标签的脏状态提示消失
+- **AND** 重新打开该页面可见已持久化的改动
+
+#### Scenario: 不关闭标签也能保存
+
+- **WHEN** 页面存在未保存改动，用户按下保存快捷键或点击页面面板的保存入口
+- **THEN** 页面被写入且脏状态清除
+- **AND** 标签保持打开
+- **AND** 无未保存改动时保存入口渲染为禁用
+
+#### Scenario: 写入冲突确认
+
+- **WHEN** 页面在外部被改写后用户在编辑器内保存
+- **THEN** 呈现提供强制覆盖与取消的确认对话框
+- **AND** 选择取消时远端内容保持不变
+
+#### Scenario: 关闭未保存页面
+
+- **WHEN** 用户关闭存在未保存改动的页面标签
+- **THEN** 呈现关闭确认
+- **AND** 取消时标签保持打开且改动保留
+
+### Requirement: 页面条目的图标与名称
+
+Editor MUST 为页面条目提供区别于普通文件的图标，图标 MUST 表达「由组件组装成的一屏」而不是
+通用文档，且 MUST 按所在表面选择合适尺寸。Editor MUST 以去掉存储后缀的显示名呈现页面名称。
+两者的判定依据 MUST 是 Provider 上报的媒体类型，因此重命名 MUST NOT 使其退回普通文件呈现。
+
+#### Scenario: 页面使用专属图标与显示名
+
+- **WHEN** 资源面板中存在页面条目
+- **THEN** 该条目使用页面图标，且目录网格中的图标尺寸大于文件树行中的图标
+- **AND** 显示名不包含页面文件的存储后缀
+
+#### Scenario: 重命名页面不需要输入存储后缀
+
+- **WHEN** 用户重命名一个页面
+- **THEN** 输入框中只出现去掉存储后缀的显示名
+- **AND** 提交后该条目仍是页面：保留页面图标与页面专属操作
+
+#### Scenario: 非页面条目不受影响
+
+- **WHEN** 条目的媒体类型不是页面
+- **THEN** 该条目使用内建图标与原始名称
+
+### Requirement: 首页标记与清单对账
+
+Editor MUST 通过 Asset Browser 的标记插槽在文件树与目录网格中为首页页面渲染可访问的首页标记，
+且标记 MUST 具有图形语义与可读名称。当首页页面经由本编辑器被删除时 Editor MUST 清空清单中的
+首页指向；经由本编辑器被重命名时 MUST 将首页指向改写为新的稳定 key。首页 key 悬空时
+Editor MUST NOT 自动改写清单，而 MUST 以非阻断方式提示。
+
+#### Scenario: 设为首页后标记出现
+
+- **WHEN** 用户对某页面选择设为首页
+- **THEN** 文件树与目录网格都为该页面渲染首页标记
+- **AND** 重新加载后该标记仍指向同一页面
+
+#### Scenario: 首页转移
+
+- **WHEN** 用户对另一页面选择设为首页
+- **THEN** 标记转移到新页面
+- **AND** 原页面不再显示标记
+
+#### Scenario: 删除首页页面
+
+- **WHEN** 用户在本编辑器内删除当前首页页面
+- **THEN** 清单中的首页指向被清空
+- **AND** 界面不再显示首页标记
+
+#### Scenario: 首页 key 悬空
+
+- **WHEN** 清单指向的页面已在外部被删除
+- **THEN** 不渲染首页标记并给出非阻断提示
+- **AND** 清单不被自动改写
+
+### Requirement: 视口更新的渲染范围
+
+Controller MUST 把 viewport 作为可订阅的会话状态持有，使 viewport 更新只重渲订阅了 viewport 的
+组件。与 viewport 无关的工作区面板 MUST NOT 因为纯 viewport 更新而重渲。`controller.viewport`
+读取 MUST 返回当前快照，`setViewport` 的签名与受控 Stage 契约 MUST 保持不变。
+
+#### Scenario: 平移不重渲无关面板
+
+- **WHEN** 用户平移画布，只有 viewport 发生变化
+- **THEN** 场景树、Inspector 与命令面板不重新渲染
+- **AND** Stage 与工具栏读取到新的 viewport 快照
+
+#### Scenario: 宿主读取视口
+
+- **WHEN** 宿主读取 `controller.viewport`
+- **THEN** 返回当前 viewport 快照
+- **AND** 需要跟随 viewport 变化重渲的宿主通过订阅入口获得通知
+
+#### Scenario: 切换文档重置视口
+
+- **WHEN** 宿主换用另一个 runtime
+- **THEN** viewport 重置为初始值
+- **AND** 订阅方收到重置后的快照
 

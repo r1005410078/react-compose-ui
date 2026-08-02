@@ -63,14 +63,13 @@ Visibility、Lock、Appearance、Renderer。
 
 ### Requirement: 语义 Component Inspector
 
-Materials Inspector MUST 通过 Registry 的 Component/Renderer 区编辑 Transform、Visibility、
-Lock、Appearance 和 Renderer props，并派发 v4 类型化命令。
+基础材料 MUST 以 v5 Appearance.backgroundPaint 表达背景，默认值为明确的 Solid Paint。Appearance Inspector MUST 将背景作为 Paint editor，边框和 Renderer 文本/SVG 颜色继续使用 Solid Color editor，并把 Paint edit port 传给背景字段。
 
-#### Scenario: 原子更新 Renderer 内容
+#### Scenario: 从 Inspector 创建渐变背景
 
-- **WHEN** 用户修改文字、图片引用或 SVG 样式
-- **THEN** 只更新目标 Renderer/Appearance Component
-- **AND** 一次 Inspector 提交形成一个事务
+- **WHEN** 用户编辑单个基础材料的背景并选择渐变
+- **THEN** Materials 只更新该 Entity 的 Appearance.backgroundPaint
+- **AND** 不向边框、文字、SVG 或 Shadow 写入 Gradient
 
 ### Requirement: 保持基础物料视觉与数据
 
@@ -113,4 +112,308 @@ MUST 在 readOnly 上下文中仍可解除锁定；Clip 的开关由 Hierarchy I
 
 - **WHEN** Text Renderer props 含 schema 之外的宿主字段且用户修改文本
 - **THEN** 派发的 props 同时包含新文本与原有宿主字段
+
+### Requirement: Feature-local basic materials
+Basic materials MUST retain a separate feature directory for each material and a purpose-named shared inspector kit;
+their public factories and definitions MUST use compose-prefixed names.
+
+#### Scenario: Render material definition
+- **WHEN** a host registers a vNext basic material definition
+- **THEN** Frame, Rectangle, Text, Image and SVG rendering and inspector behaviour remain unchanged
+
+### Requirement: 基础物料使用共享语义 Inspector
+
+Frame、Rectangle、Text、Image 和 SVG 的 Inspector MUST 使用 `@compose-ui/property-panel` 的语义 editor：position 使用 Vector2，size 使用 Size，rotation 使用 Angle，适用颜色使用来自 `@compose-ui/components` 的共享 Color Picker，透明度、边框宽度和圆角使用对应数值 editor，阴影偏移使用 Vector2。Materials MUST 直接依赖并加载 `@compose-ui/components` 样式。五种物料 MUST 显示 Visibility 并以既有 `node.set-visibility` 命令提交。Alignment 只作为可用的基础 editor，不得因此新增文档字段。
+
+#### Scenario: 编辑物料复合几何与样式
+- **WHEN** 用户在任一基础物料 Inspector 修改语义 position、size、rotation 或适用样式字段
+- **THEN** Inspector 适配为与此前相同的 transform、style 或 props command payload
+- **AND** 所有相关变化继续使用单次原子 batch、既有事务标签和完整 Schema 校验
+
+#### Scenario: 切换物料可见性
+- **WHEN** 用户在 Frame、Rectangle、Text、Image 或 SVG Inspector 修改 Visibility
+- **THEN** 系统派发既有 `node.set-visibility` 命令
+- **AND** 该节点的现有 props、style 和 transform 不被改变
+
+#### Scenario: 保留 Rectangle 兼容样式
+- **WHEN** 旧 Rectangle 节点只在 style 中保留背景、边框或阴影等表现字段
+- **THEN** 语义 Inspector 读取并更新这些既有 style 值
+- **AND** 不会把兼容 style 字段迁移为新的 document props
+
+### Requirement: 节点引用属性 Schema 工厂
+
+基础物料包 MUST 导出用于声明节点引用属性的同步 Schema 工厂，其产出的 Schema MUST 允许空值、
+MUST 校验页面引用的完整形状，并 MUST 通过 metadata 指定 `node` 基础 editor。该工厂 MUST NOT 要求
+`core` 依赖 Schema 库。
+
+#### Scenario: 声明节点引用属性
+
+- **WHEN** 物料以该工厂声明一个节点引用属性并渲染 Inspector
+- **THEN** 该字段使用 node 基础 editor
+- **AND** 空值与完整页面引用都通过校验，字段缺失或类型错误的引用不通过校验
+
+### Requirement: Page Slot 基础物料
+
+基础物料包 MUST 提供 Page Slot 物料，其含唯一的节点引用属性用于指向一个页面。Page Slot
+MUST 通过渲染上下文的页面文档加载端口加载被引用页面，并 MUST 递归渲染该页面的根实体。
+Page Slot MUST 在编辑模式下使嵌套内容整体不参与命中测试。未设置引用或未注入加载端口时
+MUST 呈现可访问的占位状态。
+
+#### Scenario: 渲染被引用页面
+
+- **WHEN** Page Slot 的引用指向一个含内容的页面且加载端口已注入
+- **THEN** 该页面的每个根实体都在 Page Slot 内渲染，并各自按其几何绝对定位
+- **AND** 容器实体递归渲染其 `Hierarchy` 子节点
+- **AND** 不可见实体及其子树不渲染
+- **AND** 预览与编辑画布中呈现的实体逐个一致
+
+#### Scenario: 编辑态不抢命中测试
+
+- **WHEN** Page Slot 在编辑模式下渲染嵌套内容，用户在其区域内按下指针
+- **THEN** 命中的是 Page Slot 实体本身
+- **AND** 嵌套内容不接收指针事件
+
+#### Scenario: 未设置引用
+
+- **WHEN** Page Slot 的引用为空，或未注入加载端口
+- **THEN** 呈现可访问的占位状态
+- **AND** 不发起任何加载
+
+### Requirement: Page Slot 加载状态与嵌套护栏
+
+Page Slot MUST 覆盖加载中、加载失败、目标页面为空与加载成功四种状态，加载失败 MUST 提供重试入口
+并以警示语义呈现。Page Slot MUST 依据祖先页面链与深度上限阻断循环引用与超出深度的嵌套，被阻断时
+MUST 以警示语义呈现且 MUST NOT 发起加载。引用变化或组件卸载后的迟到结果 MUST 被丢弃。
+
+#### Scenario: 加载中与加载成功
+
+- **WHEN** Page Slot 开始加载被引用页面
+- **THEN** 先呈现具备忙碌语义的加载状态
+- **AND** 加载完成后替换为页面内容
+
+#### Scenario: 加载失败可重试
+
+- **WHEN** 页面文档加载失败
+- **THEN** 以警示语义呈现失败状态并提供重试入口
+- **AND** 重试重新发起加载
+
+#### Scenario: 目标页面为空
+
+- **WHEN** 被引用页面不含任何根实体
+- **THEN** 呈现可访问的空状态
+
+#### Scenario: 阻断循环引用
+
+- **WHEN** Page Slot 直接或间接引用了祖先链中已存在的页面
+- **THEN** 以警示语义呈现循环引用状态
+- **AND** 不发起加载且不进入无限递归
+
+#### Scenario: 阻断超出深度
+
+- **WHEN** 嵌套深度达到深度上限
+- **THEN** 以警示语义呈现超出深度状态
+- **AND** 不再向下加载
+
+#### Scenario: 丢弃迟到结果
+
+- **WHEN** 组件在加载完成前卸载，或引用在加载期间变化
+- **THEN** 迟到结果被丢弃
+- **AND** 不产生卸载后的状态更新
+
+### Requirement: 页面拖入画布创建 Page Slot
+
+基础物料包 MUST 允许把页面文件从资源面板拖入画布以创建 Page Slot 实体。创建的实体 MUST 携带指向
+该页面的引用；能够读取被引用页面的输出尺寸时 MUST 以该尺寸作为初始尺寸，否则 MUST 使用默认尺寸。
+非页面文件 MUST NOT 被 Page Slot 接受。
+
+#### Scenario: 拖入页面创建实体
+
+- **WHEN** 用户把一个页面文件拖入画布空白处并放置
+- **THEN** 创建一个引用该页面的 Page Slot 实体
+- **AND** 其初始尺寸取被引用页面的输出尺寸
+
+#### Scenario: 拒绝非页面文件
+
+- **WHEN** 拖入的文件不是页面文件
+- **THEN** Page Slot 不接受该拖入
+- **AND** 既有的图片等物料拖入行为不受影响
+
+### Requirement: Container 物料与容器能力
+
+Container Preset 与容器能力 MUST 为 v6 创建 Hierarchy、Layout、Clip、LayoutItem、rotation-only
+Transform 和 Appearance。Layout Inspector MUST 编辑明确 Flex 值、padding 与双轴 gap；LayoutItem
+Inspector MUST 编辑 Fixed sizing、Flow/Absolute、offset、margin 与 alignSelf。
+
+#### Scenario: 把既有子项转换为 Flow
+- **WHEN** 用户在 Layout Inspector 对含 Absolute 直接子项的 Container 执行转换
+- **THEN** 一个 batch 按 Hierarchy 顺序把全部直接子项设为 Flow
+- **AND** Undo 一次恢复全部原 LayoutItem，后代和未知 Component 不变
+
+### Requirement: 内建 Text 物料
+
+Text Renderer MUST 提供与其可见样式一致的 Hug measurement，支持 Explicit/AtMost/Undefined 约束、
+换行、font readiness 与 baseline，且 MUST 使用隔离测量 host 而不是 Scene Entity DOM。
+
+#### Scenario: 字体完成后更新 Text Hug
+- **WHEN** Text 首次用 fallback 字体测量后目标字体完成加载
+- **THEN** measurement revision 使 Text 与其 Auto Layout 祖先重新布局
+- **AND** 不产生文档事务或读取 Stage/Preview Entity DOM
+
+### Requirement: Image、SVG 与 Page Slot 物料
+
+Image、SVG 与 Page Slot MUST 分别使用 resolved asset natural size、SVG intrinsic box 与目标页面 output
+size 作为 Hug measurement，并在各自 subscription revision 变化时失效。
+
+#### Scenario: 异步资源驱动 Hug
+- **WHEN** Hug Image、SVG 或 Page Slot 的资源从 loading 变为 ready 或发布新 revision
+- **THEN** 首帧使用 LayoutItem fallback，ready 后使用新的 intrinsic size 重排
+- **AND** 失败状态保持 fallback 与可访问占位，不修改文档
+
+### Requirement: 紧凑 Auto Layout Inspector
+
+Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity、Transform 与 LayoutItem 作为
+单列“基础”分组呈现，并在约 400px Inspector 中以三行 Flex 控件和紧凑盒模型预览编辑布局。
+基础分组 MUST 不显示 CSS 副标题；Auto Layout 分组的图标数量、语义顺序、键盘与 ARIA MUST 与
+浏览器 Flex 控件一致。
+
+#### Scenario: 按定位和尺寸模式显示字段
+
+- **WHEN** LayoutItem 在 Absolute/Flow 或 Fixed/Fill/Hug 之间切换
+- **THEN** Inspector 不显示 Flow/Absolute 定位模式，Absolute 显示位置且隐藏自身对齐，Flow 执行相反规则
+- **AND** 名称、位置或自身对齐、旋转、尺寸、外边距各占一行并位于同一基础分组
+- **AND** Absolute 的位置行显示 X/Y，Flow 在对应行显示自身对齐，旋转始终使用独立 Angle 属性行
+- **AND** 尺寸行并排显示 W/H，Fixed 只显示可编辑数字，Fill/Hug 分别显示英文 `Fill`/`Hug`
+- **AND** 基础分组不显示 position、width、height、inset、margin 或 align-self 等 CSS 副标题
+
+#### Scenario: 编辑宽高智能输入
+
+- **WHEN** 用户聚焦尺寸字段、输入合法数字或英文 Fill/Hug，或从建议列表选择模式
+- **THEN** 数字输入原子写入 Fixed，英文模式输入或建议选择原子写入对应模式
+- **AND** 每个轴只显示 W/H 前缀与一个输入框，不常驻显示 Fixed 文案、尾部 select 或模式箭头
+- **AND** 聚焦时出现的建议列表只包含当前上下文允许的 `Fill`/`Hug`，中文界面也不得翻译这些模式名
+- **AND** 模式文本匹配大小写不敏感，最终显示规范化为 `Fill`/`Hug`
+- **AND** 空白、非法输入或 Escape 不产生事务，Enter 与失焦只提交一次有效值
+
+#### Scenario: 编辑独立位置与角度属性
+
+- **WHEN** 用户编辑 Absolute 的位置、Flow 的自身对齐，或独立旋转属性
+- **THEN** Inspector 分别通过现有 LayoutItem 或 Transform 命令更新对应 Component
+- **AND** Absolute 位置使用独立 Position 自定义类型、Flow 自身对齐使用独立 picklist、旋转使用内建 angle 语义类型
+- **AND** Materials 不把 position、alignSelf 与 rotation 包含在同一个自定义值中
+- **AND** 数值草稿只在 Enter 或失焦时提交，Escape、空白与非法值不产生事务
+
+#### Scenario: 展开和联动外边距
+
+- **WHEN** 四边外边距相等或用户展开、分别编辑并重新联动四边
+- **THEN** 相等值默认显示单值和展开按钮，非等值保持 T/R/B/L 展开状态
+- **AND** 重新联动以 top 统一四边且只提交一次事务
+
+#### Scenario: 编辑统一或分轴 gap
+
+- **WHEN** rowGap 与 columnGap 相等或用户选择分轴编辑
+- **THEN** Inspector 分别显示单值 gap 或 row-gap/column-gap
+- **AND** 单值提交同步两轴，重新合并时以 rowGap 统一两轴且只提交一次事务
+
+#### Scenario: align-content 始终可配置
+
+- **WHEN** flex-wrap 为 nowrap
+- **THEN** align-content 仍显示完整六项并可提前配置
+- **AND** Inspector 提示该属性仅在产生多行时影响结果
+
+#### Scenario: 再次点击已选 Flex 选项恢复默认
+
+- **WHEN** 用户再次点击 direction、wrap、align-content、justify-content 或 align-items 中当前已选的非默认选项
+- **THEN** Inspector 将该属性恢复为 ComposeDocument 支持的显式 CSS 初始等价值
+- **AND** 分别使用 row、nowrap、stretch、flex-start 与 stretch，不写入空值或 normal
+- **AND** 当前已是显式默认项时再次点击保持幂等且默认项继续显示为选中
+- **AND** 显式默认项使用中性弱选中样式，非默认选择才使用强调蓝色
+
+#### Scenario: 在独立属性中编辑 padding
+
+- **WHEN** 用户在独立内边距属性中编辑单值，或展开后分别修改四边 padding
+- **THEN** Layout.padding 通过一次提交更新，且单值、四边展开与联动交互均与基础外边距相同
+- **AND** 内边距字段使用与其他 Auto Layout 属性一致的上下结构，显示“内边距”和 `padding` CSS 副标题
+- **AND** 四值相等时默认显示单值和展开按钮，非等值保持 T/R/B/L 展开，重新联动时以 top 统一四边
+- **AND** 实时预览不包含 padding 输入框、联动按钮或其他可编辑控件
+
+#### Scenario: wrap 预览展示多行对齐
+
+- **WHEN** 用户选择 wrap 或 wrap-reverse 并修改 align-content
+- **THEN** 预览以三个模拟子项生成至少两行并实时展示对应多行对齐
+- **AND** 预览显式显示随 flex-direction 改变的主轴和交叉轴指示
+- **AND** Stage、Preview 和正式 LayoutSnapshot 不读取该 Inspector DOM
+- **AND** 三个模拟子项使用无渐变、低对比的扁平样式，与可操作的蓝色选中控件保持清晰层级
+
+#### Scenario: 窄侧栏保持完整可操作
+
+- **WHEN** Inspector 内容宽度约为 365px
+- **THEN** direction/wrap、gap/align-content、justify-content/align-items 三行均无横向溢出
+- **AND** 两列使用紧凑间距，不产生无用途的中央空白带
+- **AND** 基础分组的位置/自身对齐、独立旋转、智能尺寸输入、展开外边距、独立内边距、建议列表、焦点环和英文文案保持可达与可读
+
+### Requirement: Auto Layout 按需启用
+
+新建 Container 与“容器”能力 MUST 默认创建自由 Hierarchy 而不创建 Layout。拥有 Hierarchy 且缺少
+Layout 的 Inspector MUST 提供“布局 +”菜单；菜单当前 MUST 只包含 Auto Layout，不得显示 Grid。
+
+#### Scenario: 创建默认自由 Container
+
+- **WHEN** Registry 从 Container Preset 创建 Entity，或给 Renderer 添加“容器”能力
+- **THEN** Entity 拥有 Hierarchy 与 Clip 但不拥有 Layout
+- **AND** 直接子项只能使用 Absolute
+
+#### Scenario: 添加 Auto Layout
+
+- **WHEN** 用户从“布局 +”菜单选择 Auto Layout
+- **THEN** 系统在一个事务中添加默认 Flex Layout 并按 childIds 将全部直接子项转为 Flow
+- **AND** 子项顺序、尺寸意图、margin、alignSelf 与旧 offset 保持不变
+
+#### Scenario: 展开未启用布局引导
+
+- **WHEN** 拥有 Hierarchy 且缺少 Layout 的 Entity 展开“布局”分组
+- **THEN** Inspector 紧凑显示 Auto Layout 图示、“使用自动布局”、用途说明、“添加自动布局”操作
+  和“添加后可随时移除”辅助文案
+- **AND** 标题栏加号继续打开布局类型菜单，正文添加操作直接启用 Auto Layout
+- **AND** 两个入口使用同一原子添加规划，锁定或缺少文档时均保持禁用
+
+#### Scenario: 锁定目标阻止添加
+
+- **WHEN** 容器或任一需要转为 Flow 的直接子项已锁定
+- **THEN** Auto Layout 添加入口禁用并提供可读原因
+- **AND** 文档、历史与 Operation Log 均不变化
+
+#### Scenario: 移除 Auto Layout 保持视觉
+
+- **WHEN** 用户移除一个 Snapshot 完整的 Auto Layout
+- **THEN** 直接 Flow 子项按当前 local box 烘焙为 Absolute，Fill 轴转为 Fixed
+- **AND** 容器自身 Hug 轴转为 Fixed，Absolute 子项与嵌套 Layout 保持不变
+- **AND** 整个操作只提交一个事务
+
+#### Scenario: 无可靠 Snapshot 时禁止移除
+
+- **WHEN** LayoutSnapshot 未就绪或缺少容器或 Flow 子项的必要 box
+- **THEN** 移除入口禁用并说明需要等待布局计算
+- **AND** 系统不使用旧 offset 或 fallback 尺寸降级
+
+#### Scenario: 旧基础 Layout 主动解除归属
+
+- **WHEN** 旧 v6 Entity 的 Composition.baseComponentKeys 仍包含 Layout 且用户主动移除布局
+- **THEN** 同一事务先解除 Layout 的基础归属再移除 Component
+- **AND** 加载旧文档本身不会修改任何 JSON
+
+### Requirement: 物料样式不依赖属性面板内部类名
+
+基础物料的 Inspector 样式 MUST NOT 引用 `property-panel__` 前缀的内部类名，MUST 改用
+`data-property-part` 与 `data-property-*` 字段属性定位属性面板结构。
+
+#### Scenario: Auto Layout Inspector 重排属性面板
+
+- **WHEN** Auto Layout Inspector 把属性面板重排为两列紧凑网格并去掉字段外壳
+- **THEN** 相关选择器只使用受支持的 data 属性
+- **AND** Inspector 的视觉结果与迁移前保持一致
+
+#### Scenario: 护栏阻止再次引入内部类名
+
+- **WHEN** 有人在 materials 样式表里写下 `property-panel__` 前缀选择器
+- **THEN** materials 的样式契约测试失败并指出应改用 `data-property-part`
 

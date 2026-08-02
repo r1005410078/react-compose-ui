@@ -376,3 +376,228 @@ Property Panel MUST 提供 Root 与 Section 组合 API，使多个独立同步 S
 - **THEN** 面板保持现有工具栏、Region、校验和提交行为
 - **AND** 同一组件在 Section 上下文内只渲染共享面板中的字段树
 
+### Requirement: Feature-local Property Panel implementation
+The Property Panel MUST separate schema model, recursive groups, fields, bindings and view parts into feature-local
+modules without changing Schema validation or binding semantics.
+
+#### Scenario: Property mutation after decomposition
+- **WHEN** a user edits a nested or bound property
+- **THEN** the panel emits the same validated change result and preserves keyboard and focus behaviour
+
+### Requirement: 内建语义属性编辑器
+
+`@compose-ui/property-panel` MUST 内建并公开稳定 editor ID `vector2`、`size`、`angle`、`opacity`、`corner-radius`、`stroke-width`、`visibility`、`color`、`alignment`、`map`。面板 MUST 自动将这些 editor 与 metadata 匹配；实例级 renderer 使用相同 ID 时 MUST 优先于内建 renderer，且 registry 不得使用模块级可变状态。Renderer props MUST 提供字段显示名，以便维持可访问名称与本地化文案。
+
+#### Scenario: 自动使用内建 editor
+- **WHEN** 同步 Valibot Schema 的字段 metadata 指定一个内建 editor ID
+- **THEN** 属性面板使用对应的语义编辑器，并继续通过统一完整 Schema 校验提交受控候选值
+- **AND** 只读、无效草稿、重置、键盘焦点和现有变量绑定行为保持有效
+
+#### Scenario: 宿主覆盖内建 editor
+- **WHEN** 实例传入与内建 editor ID 相同的 renderer
+- **THEN** 该实例使用宿主 renderer 而不是内建 renderer
+- **AND** 其他内建 editor 继续对该实例自动可用
+
+#### Scenario: 复合值分别绑定
+- **WHEN** 已启用绑定的 Vector2 或 Size editor 显示可编辑的复合值
+- **THEN** Vector2 暴露稳定的 X/Y 子目标，Size 暴露稳定的 W/H 子目标
+- **AND** 每个未绑定子目标仍可独立编辑其字面值
+
+#### Scenario: UE4 式紧凑复合值布局
+- **WHEN** 属性面板显示 Vector2 或没有 Size preset 的 Size editor
+- **THEN** 字段名称留在左侧属性列，X/Y 或 W/H 留在右侧同一 property row
+- **AND** editor 不得为了复合值创建全宽的第二行
+
+### Requirement: 单键分支 Map
+
+Map editor MUST 只接受 `v.variant('key', [...])`，每个分支 MUST 精确为 `{ key: v.literal(string), value: schema }`。Key MUST 渲染在属性左列，Value MUST 在同一 property row 的右列复用其分支 Schema 对应的内建或实例 renderer。动态键集合 MUST 继续使用既有 `record`，不得被 Map 改写。
+
+#### Scenario: 选择 Map Key 并复用分支 Value
+- **WHEN** Map 的 Key 从一个有效分支切换到另一个有效分支
+- **THEN** 面板使用 `mapValueDefaults` 或分支 Schema 初值构造完整、通过校验的候选值
+- **AND** 左列显示当前 Key，右列显示该分支 Value editor，且不创建嵌套 property row
+
+#### Scenario: Map 的只读、覆盖与错误契约
+- **WHEN** Map 只读、宿主按 `map` ID 覆盖 renderer，或 Schema 不符合 Map 契约
+- **THEN** Key 和 Value 分别遵守只读或宿主覆盖行为
+- **AND** 不符合契约时显示错误且不允许错误写入
+
+### Requirement: Size 预设与 Color Picker
+
+Property panel metadata MUST 支持为 Size editor 声明预设 ID、宽度和高度。Size schema 包含 preset picklist 时，editor MUST 在同一个属性内容区显示 preset 与 W/H。Color editor MUST 使用共享 `ComposeColorPicker`，属性行和弹层不得显示 CSS 颜色字符串；既有非 HEX CSS 色在用户未修改时仍必须保持原值。
+
+#### Scenario: 选择并退出 Size 预设
+- **WHEN** 用户在一个 Size 属性中选择有效预设
+- **THEN** preset、宽度和高度在一次有效提交中同步更新
+- **WHEN** 用户手动编辑宽度或高度且组合不再匹配预设
+- **THEN** preset 变为 schema 所允许的 custom 值
+
+#### Scenario: 通过 Picker 兼容非 HEX CSS Color
+- **WHEN** Color 属性当前值为 `transparent`、`rgb()` 或 `hsl()` 文本
+- **THEN** 属性行只显示 Color Picker 色块，且原值在用户未修改时不被重写
+- **AND** Picker 从安全 fallback 色开始，用户重新选择颜色后才提交小写 HEX 或 `transparent`
+
+### Requirement: Paint 语义属性编辑器
+
+Property Panel MUST 提供独立于字符串 color editor 的 `paint` editor。Paint editor 只接受结构化 ComposePaint，并在绑定、只读或无效 Schema 时禁止修改。普通 color editor 保持 Solid Alpha 语义。
+
+#### Scenario: 编辑背景 Paint
+
+- **WHEN** 背景字段声明 `propertyPanel.editor: 'paint'`
+- **THEN** 面板使用 ComposePaintPicker 并通过既有受控路径提交结构化值
+- **AND** 其它颜色字段不得显示 Gradient 控件
+
+### Requirement: node 基础属性 Editor
+
+属性面板 MUST 提供稳定 editor ID 为 `node` 的基础 editor，用于编辑指向宿主节点的引用值。该 editor
+MUST 呈现当前值的人类可读标签、提供可筛选的候选列表以供选择，并 MUST 提供清空入口。提交
+MUST 先通过字段 Schema 校验再走统一受控变更回调。该 editor MUST NOT 依赖 ComposeDocument、资源
+Provider 或编辑器工作流类型。
+
+#### Scenario: 从候选列表选择
+
+- **WHEN** 用户打开 node editor 的候选列表并选中一个候选
+- **THEN** 面板以该候选值发出一次受控变更
+- **AND** 字段显示该候选的可读标签
+
+#### Scenario: 清空引用
+
+- **WHEN** 用户对已有引用的 node 字段执行清空
+- **THEN** 面板以空值发出一次受控变更
+- **AND** 字段显示未设置状态
+
+#### Scenario: 未知引用值
+
+- **WHEN** 字段值指向宿主已无法解析的节点
+- **THEN** 字段显示可辨识的占位标签
+- **AND** 该值不被自动改写或清空
+
+#### Scenario: 只读与绑定
+- **WHEN** 字段处于只读状态，或该字段已启用变量绑定
+- **THEN** 选择、清空与拖入均不产生受控变更
+- **AND** 字段仍显示当前有效值
+
+### Requirement: Renderer 接管空值状态
+
+自定义 renderer MUST 能声明由自身呈现空值状态。声明后，面板对可选或可空字段取空值时
+MUST NOT 短路为「未设置」行，而 MUST 调用该 renderer；未声明的 renderer 行为保持不变。
+
+#### Scenario: 空值时仍渲染 renderer
+
+- **WHEN** 字段可空、当前值为空，且匹配到的 renderer 声明接管空值状态
+- **THEN** 面板渲染该 renderer 而不是「未设置」占位
+- **AND** 该字段的存在性操作仍然可用
+
+#### Scenario: 未声明时保持默认
+
+- **WHEN** 匹配到的 renderer 未声明接管空值状态
+- **THEN** 空值字段仍呈现「未设置」占位
+
+### Requirement: node Editor 宿主端口
+
+属性面板 MUST 通过实例级宿主端口为 node editor 提供候选集合、可读标签解析、可接受的拖拽媒体类型
+列表，以及把拖拽载荷解析为候选的入口。端口 MUST NOT 要求面板理解候选值的领域含义，面板
+MUST NOT 使用模块级可变状态保存端口。未注入端口时 node 字段 MUST 呈现无候选的可访问状态且仍可清空。
+
+#### Scenario: 端口提供候选与标签
+
+- **WHEN** 宿主注入端口并给出候选集合与标签解析
+- **THEN** 候选列表按端口内容呈现
+- **AND** 已保存值的标签由端口解析得到
+
+#### Scenario: 未注入端口
+
+- **WHEN** 字段使用 node editor 但宿主未注入端口
+- **THEN** 字段呈现无候选的可访问状态
+- **AND** 已有值仍可被清空
+
+### Requirement: node Editor 拖入赋值
+
+node editor MUST 作为拖放目标接受宿主声明的拖拽媒体类型。仅当拖拽数据的类型与宿主声明的类型
+存在交集时，editor MUST 接受该拖拽并给出可见的放置反馈；否则 MUST NOT 阻止默认行为。放置时
+editor MUST 把命中的媒体类型与其文本载荷交由宿主端口解析，解析成功且通过 Schema 校验后
+MUST 以「拖入」为原因发出一次受控变更。解析失败 MUST NOT 产生变更。
+
+#### Scenario: 接受宿主声明的拖拽
+
+- **WHEN** 拖拽携带宿主声明的媒体类型并落在 node 字段上
+- **THEN** 字段在悬停期间显示放置反馈
+- **AND** 放置后以拖入为原因发出一次受控变更
+
+#### Scenario: 拒绝无关拖拽
+
+- **WHEN** 拖拽只携带宿主未声明的媒体类型
+- **THEN** 字段不显示放置反馈且不阻止默认行为
+- **AND** 放置不产生受控变更
+
+#### Scenario: 载荷无法解析
+
+- **WHEN** 放置的载荷类型匹配但宿主端口无法解析出候选
+- **THEN** 不产生受控变更
+- **AND** 字段保持原值
+
+### Requirement: Property Panel Section 标题栏扩展
+
+ComposePropertyPanelSection MUST 接受可选的标题栏 actions 内容，并在不改变折叠按钮、搜索可见性和
+无 actions 分组布局的前提下，将其显示在标题栏右侧。
+
+#### Scenario: 在分组标题栏显示宿主操作
+
+- **WHEN** 宿主为一个 Property Panel Section 提供 actions
+- **THEN** actions 显示在同一分组标题栏右侧
+- **AND** 操作 actions 不会触发分组折叠
+- **AND** 未提供 actions 的既有分组继续使用原有标题栏布局
+
+### Requirement: 无正文属性分组
+
+ComposePropertyPanelSection MUST 支持不可折叠且没有正文的 action-only 模式，用于在稳定分组顺序中
+呈现按需添加入口。该模式 MUST 保留标题、搜索语义和右侧操作，但不得渲染空内容区或折叠按钮。
+
+#### Scenario: 显示 action-only 分组
+
+- **WHEN** 宿主声明一个无正文的不可折叠 Section
+- **THEN** 面板显示普通一级标题与右侧操作
+- **AND** 不显示 chevron、`aria-expanded` 或空正文容器
+
+#### Scenario: 搜索 action-only 分组
+
+- **WHEN** 查询匹配或不匹配 action-only Section 标题
+- **THEN** 分组按现有根级搜索规则显示或隐藏
+- **AND** 搜索不会创建正文或改变分组状态
+
+### Requirement: 多嵌入 Inspector 的 Section 可见性
+
+ComposePropertyPanelSection MUST 独立收集每个嵌入 ComposePropertyPanel 的搜索可见性，并在任一子面板
+匹配时保持 Section 可见。子面板卸载 MUST 清理其注册，不能让后一次报告覆盖其他子面板状态。
+
+#### Scenario: 搜索合并后的基础分组
+
+- **WHEN** 同一 Section 内的 Identity 与复合几何 Inspector 中任一字段匹配查询
+- **THEN** Section 显示并在搜索期间展开，且只渲染匹配字段
+- **AND** 其他嵌入 Inspector 的不匹配结果不会隐藏整个 Section
+
+#### Scenario: 清理嵌入 Inspector 可见性
+
+- **WHEN** 一个嵌入 Inspector 因 Entity 或 Component 切换而卸载
+- **THEN** Section 删除对应可见性记录
+- **AND** 后续搜索只由仍挂载的 Inspector 决定
+
+### Requirement: 结构 Part 样式契约
+
+属性面板 MUST 为结构容器输出稳定的 `data-property-part` 属性，取值覆盖 `toolbar`、`separator`、
+`fields`、`ungrouped`、`field`、`label`、`editor`、`actions` 与 `control`。该属性 MUST 作为公开样式
+契约维护：内部 BEM 类名 MUST NOT 被当作外部可依赖的选择器，消费方 MUST 只通过 `data-property-part`
+与既有 `data-property-*` 字段属性定位结构。
+
+#### Scenario: 领域包重排字段外壳
+
+- **WHEN** 领域包需要把属性面板重排为多列网格、隐藏工具栏或去掉字段外壳
+- **THEN** 该包只使用 `data-property-part` 与 `data-property-path` 定位结构
+- **AND** 不需要引用任何 `property-panel__` 前缀类名
+
+#### Scenario: 内部类名重构不破坏消费方
+
+- **WHEN** property-panel 调整内部 BEM 类名或容器嵌套层级
+- **THEN** `data-property-part` 取值与所在元素保持不变
+- **AND** 依赖该契约的领域样式继续生效
+
