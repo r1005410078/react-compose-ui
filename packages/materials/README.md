@@ -42,8 +42,9 @@ SVG 内容先经 DOMPurify 白名单净化。包不依赖 editor、stage 或 ass
 
 Layout 属性区紧跟变换分组，以两行三列卡片提供方向、换行、间距、多行、主轴与交叉轴控件；
 中文标题下显示对应 CSS 属性名。枚举按钮使用统一大小的浏览器语义图标，并随当前方向旋转主轴、
-交叉轴和换行示意。标题栏提供 `display: flex` 状态和整体重置，末尾实时预览显示当前摘要、三个
-编号节点与主轴/交叉轴。该预览仅用于解释属性；正式 Stage 和 Preview 都消费 Layout Runtime 的
+交叉轴和换行示意。padding 以独立“内边距”属性编辑，并与基础外边距共享单值及 T/R/B/L 展开
+交互。标题栏提供 `display: flex` 状态和整体重置，末尾只读实时预览显示当前摘要、编号节点与
+主轴/交叉轴，不再包含 padding 输入。该预览仅用于解释属性；正式 Stage 和 Preview 都消费 Layout Runtime 的
 Snapshot，并始终以绝对定位 DOM 呈现，不再运行第二套 CSS Flex。LayoutItem 提供
 合并进“基础”的复合几何 Inspector：Absolute 的 X/Y 使用 Materials Position 自定义类型，Flow 显示
 独立 alignSelf 字段，旋转使用独立 Angle 类型；W/H 以单一智能输入同行编辑：数字隐式表达

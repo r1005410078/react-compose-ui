@@ -159,7 +159,7 @@
 }
 
 .layout-item-inspector__edges--expanded {
-  grid-template-columns: repeat(4, minmax(36px, 1fr)) 28px;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 28px;
 }
 
 .layout-item-inspector__edges > button {

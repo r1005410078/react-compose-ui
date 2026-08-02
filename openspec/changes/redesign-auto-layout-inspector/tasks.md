@@ -127,3 +127,17 @@
   - Visual: 更新 Basic Flow/Absolute、margin 展开与 Fill 交互黄金图，新增 `basic-inspector-size-suggestions.png`；人工确认静止态无尾部选择器，聚焦浮层完整显示 Fill/Hug，365px Inspector 无裁切和横向溢出。
   - Regression: Materials 目标 17 项、全包 51 项、全仓 37 个测试任务，以及 `bun run lint`、`bun run typecheck`、`bun run build`、`bun run pack:dry-run` 全部通过。
   - E2E/Validation: Chromium 30/30 通过；`openspec validate redesign-auto-layout-inspector --strict` 通过，PostHog 遥测网络失败不影响校验退出码。
+
+## 8. 内边距与实时预览拆分
+
+- [x] 8.1 修订 proposal、design 与增量规范，明确 padding 复用外边距交互、实时预览只读，并通过严格 OpenSpec 校验。
+  - Validation: proposal、design 与 `basic-materials` 增量规范已同步；`openspec validate redesign-auto-layout-inspector --strict` 通过，PostHog 遥测网络失败不影响校验退出码。
+- [x] 8.2 Red：覆盖独立内边距单值/展开/联动、预览零编辑控件以及中英文语义。
+  - Red command: `bun run --cwd packages/materials test -- component-inspectors.test.tsx`。
+  - Red result: 17 项目标测试中 4 项按预期失败；旧版 padding 仍嵌入实时预览，缺少独立属性行，且预览保留输入和联动按钮。
+- [x] 8.3 Green/Refactor：抽取 Materials 内部通用四边编辑器，供 LayoutItem margin 与 Layout padding 复用；精简实时预览 DOM 和样式。
+  - Green result: Materials 目标 17 项与全包 51 项测试通过；margin/padding 复用单值折叠、T/R/B/L 展开与联动收起语义，实时预览不再包含输入或按钮。
+  - Review: 365px Inspector 中 margin 与 padding 的标签列、编辑列尺寸一致，四边展开无横向溢出。
+- [x] 8.4 更新 README、Changeset、365px 黄金图并人工审阅；运行目标测试、`lint`、`typecheck`、`test`、`build`、`test:e2e`、`pack:dry-run` 与严格 OpenSpec 校验。
+  - Docs/Visual: 根 README、Materials README 与 Changeset 已同步；更新折叠态黄金图并新增 `flex-layout-padding-expanded.png`，同时审阅 Hug 完整工作区受影响截图。
+  - Regression: `bun run lint`、`bun run typecheck`、`bun run test`（37 个任务）、`bun run build`（20 个任务）、`bun run test:e2e`（Chromium 30/30）和 `bun run pack:dry-run` 全部通过。

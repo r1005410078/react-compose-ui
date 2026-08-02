@@ -838,12 +838,17 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   expect(gapBox!.y).toBeGreaterThan(directionBox!.y)
   expect(contentBox!.x).toBeGreaterThan(gapBox!.x)
 
+  const padding = layoutSection.getByRole('spinbutton', { name: '内边距' })
+  const expandPadding = layoutSection.getByRole('button', { name: '展开内边距' })
+  await expect(padding).toHaveValue('0')
+  await expect(expandPadding).toBeVisible()
+
   const preview = layoutSection.getByTestId('flex-layout-preview')
   const previewNodes = preview.locator('[data-flex-preview-node]')
   await expect(previewNodes).toHaveCount(5)
   await expect(preview.getByText('Flex 容器', { exact: true })).toBeVisible()
   await expect(preview.getByText('row · nowrap · gap 0', { exact: true })).toBeVisible()
-  await expect(preview.getByRole('button', { name: '解除内边距联动' })).toBeVisible()
+  await expect(preview.locator('input, button')).toHaveCount(0)
   const defaultPreviewNode = await previewNodes.first().boundingBox()
   expect(defaultPreviewNode).not.toBeNull()
   expect(defaultPreviewNode!.height).toBeGreaterThan(20)
@@ -852,6 +857,18 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+
+  await expandPadding.click()
+  await expect(layoutSection.getByRole('spinbutton', { name: '内边距 top' })).toHaveValue('0')
+  await expect(layoutSection.getByRole('spinbutton', { name: '内边距 right' })).toHaveValue('0')
+  await expect(layoutSection.getByRole('spinbutton', { name: '内边距 bottom' })).toHaveValue('0')
+  await expect(layoutSection.getByRole('spinbutton', { name: '内边距 left' })).toHaveValue('0')
+  await expect(layoutSection).toHaveScreenshot('flex-layout-padding-expanded.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await layoutSection.getByRole('button', { name: '收起并联动内边距' }).click()
 
   await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
   const crossStartNode = await previewNodes.first().boundingBox()

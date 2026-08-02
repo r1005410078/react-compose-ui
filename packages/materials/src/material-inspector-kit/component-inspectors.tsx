@@ -29,6 +29,11 @@ import {
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComponentType } from 'react'
 import type { ComposeComponentInspectorProps } from '@compose-ui/component-registry'
+import {
+  InspectorEdgesEditor,
+  InspectorNumberDraftInput,
+} from './edge-editor'
+import { isInspectorEdgesValue } from './edge-model'
 import type { InspectorIdFactory } from './renderer-inspectors'
 
 function command(
@@ -113,82 +118,20 @@ function isBasicPositionValue(value: unknown): value is BasicPositionValue {
   return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y)
 }
 
-function isComposeEdgesValue(value: unknown): value is ComposeEdges {
-  return isRecord(value)
-    && isFiniteNumber(value.top)
-    && isFiniteNumber(value.right)
-    && isFiniteNumber(value.bottom)
-    && isFiniteNumber(value.left)
-}
-
-interface NumberDraftInputProps {
-  readonly label: string
-  readonly prefix?: string
-  readonly min?: number
-  readonly readOnly: boolean
-  readonly value: number
-  readonly onCommit: (value: number) => void
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- 仅作为领域 Inspector 内部数值编辑器。
-function NumberDraftInput({
-  label,
-  min,
-  onCommit,
-  prefix,
-  readOnly,
-  value,
-}: NumberDraftInputProps) {
-  const [draft, setDraft] = useState({ external: value, text: String(value), dirty: false })
-  const current = Object.is(draft.external, value)
-    ? draft
-    : { external: value, text: String(value), dirty: false }
-  const reset = () => setDraft({ external: value, text: String(value), dirty: false })
-  const submit = () => {
-    if (!current.dirty || current.text.trim() === '') return
-    const candidate = Number(current.text)
-    if (!Number.isFinite(candidate) || (min !== undefined && candidate < min)) return
-    onCommit(candidate)
-    setDraft({ external: value, text: String(candidate), dirty: false })
-  }
-  return (
-    <label className="layout-item-inspector__number">
-      {prefix ? <span aria-hidden="true">{prefix}</span> : null}
-      <input
-        aria-label={label}
-        disabled={readOnly}
-        min={min}
-        step="any"
-        type="number"
-        value={current.text}
-        onBlur={submit}
-        onChange={(event) => setDraft({ external: value, text: event.target.value, dirty: true })}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') submit()
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            reset()
-          }
-        }}
-      />
-    </label>
-  )
-}
-
 // eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
 function BasicPositionEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
   const zh = useZh()
   const position = value as unknown as BasicPositionValue
   return (
     <div className="layout-item-inspector__position">
-      <NumberDraftInput
+      <InspectorNumberDraftInput
         label={zh ? '位置 X' : 'Position X'}
         prefix="X"
         readOnly={readOnly}
         value={position.x}
         onCommit={(x) => commit({ ...position, x }, 'commit')}
       />
-      <NumberDraftInput
+      <InspectorNumberDraftInput
         label={zh ? '位置 Y' : 'Position Y'}
         prefix="Y"
         readOnly={readOnly}
@@ -431,60 +374,15 @@ function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRender
 function BasicMarginEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
   const zh = useZh()
   const margin = value as ComposeEdges
-  const linked = margin.top === margin.right
-    && margin.top === margin.bottom
-    && margin.top === margin.left
-  const [expanded, setExpanded] = useState(!linked)
-  const showEdges = expanded || !linked
-  if (!showEdges) {
-    return (
-      <div className="layout-item-inspector__edges layout-item-inspector__edges--linked">
-        <NumberDraftInput
-          label={label}
-          readOnly={readOnly}
-          value={margin.top}
-          onCommit={(candidate) => commit({
-            top: candidate,
-            right: candidate,
-            bottom: candidate,
-            left: candidate,
-          }, 'commit')}
-        />
-        <button
-          aria-label={zh ? '展开外边距' : 'Expand margin edges'}
-          disabled={readOnly}
-          type="button"
-          onClick={() => setExpanded(true)}
-        >
-          ⛶
-        </button>
-      </div>
-    )
-  }
   return (
-    <div className="layout-item-inspector__edges layout-item-inspector__edges--expanded">
-      {(['top', 'right', 'bottom', 'left'] as const).map((edge) => (
-        <NumberDraftInput
-          key={edge}
-          label={`${label} ${edge}`}
-          prefix={({ top: 'T', right: 'R', bottom: 'B', left: 'L' })[edge]}
-          readOnly={readOnly}
-          value={margin[edge]}
-          onCommit={(candidate) => commit({ ...margin, [edge]: candidate }, 'commit')}
-        />
-      ))}
-      <button
-        aria-label={zh ? '收起并联动外边距' : 'Collapse and link margin edges'}
-        disabled={readOnly}
-        type="button"
-        onClick={() => {
-          commit({ top: margin.top, right: margin.top, bottom: margin.top, left: margin.top })
-          setExpanded(false)
-        }}
-      >
-        ↔
-      </button>
-    </div>
+    <InspectorEdgesEditor
+      collapseLabel={zh ? '收起并联动外边距' : 'Collapse and link margin edges'}
+      expandLabel={zh ? '展开外边距' : 'Expand margin edges'}
+      label={label}
+      readOnly={readOnly}
+      value={margin}
+      onCommit={(next) => commit(next, 'commit')}
+    />
   )
 }
 
@@ -548,7 +446,7 @@ export function createLayoutItemInspector(
         }), v.title(zh ? '尺寸' : 'Size'), v.metadata({
           propertyPanel: { editor: 'basic-geometry-size' },
         })),
-        margin: v.pipe(v.custom<ComposeEdges>(isComposeEdgesValue),
+        margin: v.pipe(v.custom<ComposeEdges>(isInspectorEdgesValue),
           v.title(zh ? '外边距' : 'Margin'), v.metadata({
           propertyPanel: { editor: 'basic-geometry-margin' },
         })),

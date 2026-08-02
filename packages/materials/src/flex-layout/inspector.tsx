@@ -9,6 +9,7 @@ import * as v from 'valibot'
 import {
   BUILTIN_COMMAND_TYPES,
   createDefaultComposeFlexLayout,
+  type ComposeEdges,
   type ComposeEntity,
   type ComposeFlexLayout,
   type EditorCommand,
@@ -23,6 +24,8 @@ import {
   type ComposePropertyPanelRendererProps,
 } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import { InspectorEdgesEditor } from '../material-inspector-kit/edge-editor'
+import { isInspectorEdgesValue } from '../material-inspector-kit/edge-model'
 import type { InspectorIdFactory } from '../material-inspector-kit/renderer-inspectors'
 import { FlexLayoutIcon } from './icons'
 import {
@@ -37,7 +40,7 @@ type FlexOptionEditorId =
   | 'justify-content'
   | 'align-items'
 
-type FlexFieldEditorId = FlexOptionEditorId | 'gap'
+type FlexFieldEditorId = FlexOptionEditorId | 'gap' | 'padding'
 
 const FlexDirectionIconContext = createContext<ComposeFlexLayout['flexDirection']>('row')
 
@@ -91,6 +94,7 @@ const FLEX_CSS_NAMES: Readonly<Record<FlexFieldEditorId, string>> = {
   'justify-content': 'justify-content',
   'align-items': 'align-items',
   gap: 'gap',
+  padding: 'padding',
 }
 
 function useZh(): boolean {
@@ -317,6 +321,29 @@ function FlexGapEditor({
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer，不作为模块 API 导出。
+function FlexPaddingEditor({
+  commit,
+  label,
+  readOnly,
+  value,
+}: ComposePropertyPanelRendererProps) {
+  const zh = useZh()
+  return (
+    <div data-flex-layout-field="padding">
+      <InspectorEdgesEditor
+        collapseLabel={zh ? '收起并联动内边距' : 'Collapse and link padding edges'}
+        expandLabel={zh ? '展开内边距' : 'Expand padding'}
+        label={label}
+        min={0}
+        readOnly={readOnly}
+        value={value as ComposeEdges}
+        onCommit={(next) => commit(next, 'commit')}
+      />
+    </div>
+  )
+}
+
 const FLEX_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
   ...([
     'flex-direction',
@@ -335,6 +362,12 @@ const FLEX_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
     component: FlexGapEditor,
     labelComponent: FlexFieldLabel,
     layout: 'full-width' as const,
+  },
+  {
+    id: 'padding',
+    component: FlexPaddingEditor,
+    labelComponent: FlexFieldLabel,
+    layout: 'inline' as const,
   },
 ]
 
@@ -521,26 +554,11 @@ export function createLayoutInspectorHeaderActions(
 // eslint-disable-next-line react-refresh/only-export-components -- 预览只由 Inspector factory 返回的组件使用，不作为模块 API 导出。
 function FlexLayoutPreview({
   layout,
-  onChange,
-  readOnly,
   zh,
 }: {
   readonly layout: ComposeFlexLayout
-  readonly onChange: (layout: ComposeFlexLayout) => void
-  readonly readOnly: boolean
   readonly zh: boolean
 }) {
-  const paddingSignature = Object.values(layout.padding).join(':')
-  const equalPadding = layout.padding.top === layout.padding.right
-    && layout.padding.top === layout.padding.bottom
-    && layout.padding.top === layout.padding.left
-  const [linkState, setLinkState] = useState({
-    source: paddingSignature,
-    linked: equalPadding,
-  })
-  const currentLink = linkState.source === paddingSignature
-    ? linkState
-    : { source: paddingSignature, linked: equalPadding }
   const previewStyle: CSSProperties = {
     alignContent: layout.alignContent,
     alignItems: layout.alignItems,
@@ -552,17 +570,6 @@ function FlexLayoutPreview({
     padding: `${layout.padding.top}px ${layout.padding.right}px `
       + `${layout.padding.bottom}px ${layout.padding.left}px`,
     justifyContent: layout.justifyContent,
-  }
-  const paddingLabels = zh
-    ? { top: '上内边距', right: '右内边距', bottom: '下内边距', left: '左内边距' }
-    : { top: 'Padding top', right: 'Padding right', bottom: 'Padding bottom', left: 'Padding left' }
-  const updatePadding = (edge: keyof ComposeFlexLayout['padding'], raw: string) => {
-    const candidate = Number(raw)
-    if (!Number.isFinite(candidate) || candidate < 0) return
-    const padding = currentLink.linked
-      ? { top: candidate, right: candidate, bottom: candidate, left: candidate }
-      : { ...layout.padding, [edge]: candidate }
-    onChange({ ...layout, padding })
   }
   const gapStatus = layout.rowGap === layout.columnGap
     ? String(layout.rowGap)
@@ -583,52 +590,14 @@ function FlexLayoutPreview({
           </code>
         </header>
         <div
-          className="flex-layout-inspector__box-model"
-          data-padding-linked={currentLink.linked}
+          aria-hidden="true"
+          className="flex-layout-inspector__preview-surface"
+          data-wrap-preview={layout.flexWrap !== 'nowrap'}
+          style={previewStyle}
         >
-          {(['top', 'right', 'bottom', 'left'] as const).map((edge) => (
-            <input
-              aria-label={paddingLabels[edge]}
-              data-padding-edge={edge}
-              disabled={readOnly}
-              key={edge}
-              min="0"
-              step="any"
-              type="number"
-              value={layout.padding[edge]}
-              onChange={(event) => updatePadding(edge, event.target.value)}
-            />
+          {[1, 2, 3, 4, 5].map((index) => (
+            <span data-flex-preview-node="" key={index}>{index}</span>
           ))}
-          <button
-            aria-label={currentLink.linked
-              ? (zh ? '解除内边距联动' : 'Unlink padding')
-              : (zh ? '联动内边距' : 'Link padding')}
-            aria-pressed={currentLink.linked}
-            disabled={readOnly}
-            type="button"
-            onClick={() => {
-              if (currentLink.linked) {
-                setLinkState({ source: paddingSignature, linked: false })
-                return
-              }
-              const value = layout.padding.top
-              const padding = { top: value, right: value, bottom: value, left: value }
-              setLinkState({ source: `${value}:${value}:${value}:${value}`, linked: true })
-              onChange({ ...layout, padding })
-            }}
-          >
-            {currentLink.linked ? '🔗' : '⛓'}
-          </button>
-          <div
-            aria-hidden="true"
-            className="flex-layout-inspector__preview-surface"
-            data-wrap-preview={layout.flexWrap !== 'nowrap'}
-            style={previewStyle}
-          >
-            {[1, 2, 3, 4, 5].map((index) => (
-              <span data-flex-preview-node="" key={index}>{index}</span>
-            ))}
-          </div>
         </div>
       </div>
     </section>
@@ -690,6 +659,15 @@ export function createLayoutInspector(
         v.title(zh ? '交叉轴' : 'Cross axis'),
         v.metadata({ propertyPanel: { editor: 'align-items' } }),
       ),
+      padding: v.pipe(
+        v.custom<ComposeEdges>((candidate) => isInspectorEdgesValue(candidate)
+          && candidate.top >= 0
+          && candidate.right >= 0
+          && candidate.bottom >= 0
+          && candidate.left >= 0),
+        v.title(zh ? '内边距' : 'Padding'),
+        v.metadata({ propertyPanel: { editor: 'padding' } }),
+      ),
     }), [zh])
     return (
       <div
@@ -709,6 +687,7 @@ export function createLayoutInspector(
               alignContent: layout.alignContent,
               justifyContent: layout.justifyContent,
               alignItems: layout.alignItems,
+              padding: layout.padding,
             }}
             onValueChange={(next) => {
               if (readOnly) return
@@ -721,7 +700,7 @@ export function createLayoutInspector(
                   flexWrap: next.flexWrap,
                   rowGap: next.gap.rowGap,
                   columnGap: next.gap.columnGap,
-                  padding: layout.padding,
+                  padding: next.padding,
                   alignContent: next.alignContent,
                   justifyContent: next.justifyContent,
                   alignItems: next.alignItems,
@@ -733,11 +712,7 @@ export function createLayoutInspector(
         </FlexDirectionIconContext.Provider>
         <FlexLayoutPreview
           layout={layout}
-          readOnly={readOnly}
           zh={zh}
-          onChange={(next) => {
-            if (!readOnly) dispatch(createLayoutCommand(idFactory, entity, next, zh))
-          }}
         />
       </div>
     )

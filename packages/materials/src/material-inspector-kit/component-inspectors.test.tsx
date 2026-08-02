@@ -438,6 +438,7 @@ describe('内建 Component inspectors', () => {
       'align-content',
       'justify-content',
       'align-items',
+      'padding',
     ])
     expect(screen.getByText('flex-direction')).toBeInTheDocument()
     expect(screen.getByText('flex-wrap')).toBeInTheDocument()
@@ -445,6 +446,7 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByText('align-content')).toBeInTheDocument()
     expect(screen.getByText('justify-content')).toBeInTheDocument()
     expect(screen.getByText('align-items')).toBeInTheDocument()
+    expect(screen.getByText('padding')).toBeInTheDocument()
 
     const direction = within(panel).getByRole('radiogroup', { name: '方向' })
     expect(within(direction).getAllByRole('radio')).toHaveLength(4)
@@ -473,13 +475,17 @@ describe('内建 Component inspectors', () => {
     expect(screen.queryByText('px')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /绑定|变量/ })).not.toBeInTheDocument()
 
+    expect(within(panel).getByRole('spinbutton', { name: '内边距' })).toHaveValue(0)
+    expect(within(panel).getByRole('button', { name: '展开内边距' })).toBeInTheDocument()
+    expect(panel.querySelector('[data-property-path="padding"]'))
+      .toHaveAttribute('data-property-layout', 'inline')
+
     const preview = screen.getByTestId('flex-layout-preview')
     expect(preview.querySelectorAll('[data-flex-preview-node]')).toHaveLength(5)
     expect(within(preview).getByText('Flex 容器')).toBeInTheDocument()
     expect(within(preview).getByText('row · nowrap · gap 0')).toBeInTheDocument()
-    expect(within(preview).getAllByRole('spinbutton')).toHaveLength(4)
-    expect(within(preview).getByRole('button', { name: '解除内边距联动' }))
-      .toHaveAttribute('aria-pressed', 'true')
+    expect(within(preview).queryByRole('spinbutton')).not.toBeInTheDocument()
+    expect(within(preview).queryByRole('button')).not.toBeInTheDocument()
     expect(preview).toHaveAttribute('data-align-items', 'stretch')
     expect(screen.getByText('实时预览')).toBeInTheDocument()
   })
@@ -564,9 +570,10 @@ describe('内建 Component inspectors', () => {
     )
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: '行间距' })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: '内边距' })).toBeDisabled()
   })
 
-  it('OpenSpec: gap 与盒模型预览 / 分轴间距和四边 padding 联动', () => {
+  it('OpenSpec: gap 与独立内边距 / 分轴间距和四边 padding 联动', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('Layout')
     const layout = createDefaultComposeFlexLayout()
@@ -586,9 +593,11 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByRole('spinbutton', { name: '列间距' })).toHaveValue(0)
 
     dispatch.mockClear()
-    fireEvent.change(screen.getByRole('spinbutton', { name: '上内边距' }), {
+    fireEvent.change(screen.getByRole('spinbutton', { name: '内边距' }), {
       target: { value: '16' },
     })
+    expect(dispatch).not.toHaveBeenCalled()
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '内边距' }))
     expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
       value: { padding: { top: 16, right: 16, bottom: 16, left: 16 } },
     })
@@ -610,12 +619,11 @@ describe('内建 Component inspectors', () => {
       />,
     )
     expect(screen.getByRole('button', { name: '重新联动项间距' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '联动内边距' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
+    expect(screen.getByRole('spinbutton', { name: '内边距 top' })).toHaveValue(8)
+    expect(screen.getByRole('spinbutton', { name: '内边距 right' })).toHaveValue(16)
+    expect(screen.getByRole('button', { name: '收起并联动内边距' })).toBeInTheDocument()
     dispatch.mockClear()
-    fireEvent.click(screen.getByRole('button', { name: '联动内边距' }))
+    fireEvent.click(screen.getByRole('button', { name: '收起并联动内边距' }))
     expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
       value: { padding: { top: 8, right: 8, bottom: 8, left: 8 } },
     })
@@ -800,8 +808,11 @@ describe('内建 Component inspectors', () => {
 
     expect(screen.getByRole('radiogroup', { name: 'Direction' })).toBeInTheDocument()
     expect(screen.getByRole('spinbutton', { name: 'Item gap' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Padding' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Expand padding' })).toBeInTheDocument()
     const preview = screen.getByTestId('flex-layout-preview')
-    expect(within(preview).getByRole('button', { name: 'Unlink padding' })).toBeInTheDocument()
+    expect(within(preview).queryByRole('spinbutton')).not.toBeInTheDocument()
+    expect(within(preview).queryByRole('button')).not.toBeInTheDocument()
     expect(screen.queryByText('方向')).not.toBeInTheDocument()
     expect(screen.queryByText('项间距')).not.toBeInTheDocument()
   })

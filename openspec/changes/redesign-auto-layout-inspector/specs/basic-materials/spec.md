@@ -93,11 +93,12 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 - **THEN** align-content 仍显示完整六项并可提前配置
 - **AND** Inspector 提示该属性仅在产生多行时影响结果
 
-#### Scenario: 在盒模型中编辑 padding
+#### Scenario: 在独立属性中编辑 padding
 
-- **WHEN** 用户联动或分别修改预览中的四边 padding
-- **THEN** Layout.padding 通过一次提交更新且上方不存在重复 padding 字段
-- **AND** 四值相等时默认联动，重新联动时以 top 统一四边
+- **WHEN** 用户在独立内边距属性中编辑单值，或展开后分别修改四边 padding
+- **THEN** Layout.padding 通过一次提交更新，且属性名列、编辑列与交互均与基础外边距相同
+- **AND** 四值相等时默认显示单值和展开按钮，非等值保持 T/R/B/L 展开，重新联动时以 top 统一四边
+- **AND** 实时预览不包含 padding 输入框、联动按钮或其他可编辑控件
 
 #### Scenario: wrap 预览展示多行对齐
 
@@ -109,4 +110,4 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 
 - **WHEN** Inspector 内容宽度约为 365px
 - **THEN** direction/wrap、gap/align-content、justify-content/align-items 三行均无横向溢出
-- **AND** 基础分组的位置/自身对齐、独立旋转、智能尺寸输入、展开外边距及盒模型输入、建议列表、焦点环和英文文案保持可达与可读
+- **AND** 基础分组的位置/自身对齐、独立旋转、智能尺寸输入、展开外边距、独立内边距、建议列表、焦点环和英文文案保持可达与可读

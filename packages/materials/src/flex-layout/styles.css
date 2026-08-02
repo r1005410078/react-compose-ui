@@ -140,7 +140,16 @@
 
 .flex-layout-inspector > .property-panel__ungrouped,
 .flex-layout-inspector > .property-panel .property-panel__ungrouped {
+  display: grid;
   min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.flex-layout-inspector > .property-panel__ungrouped:has(> [data-property-path="padding"]),
+.flex-layout-inspector > .property-panel
+  .property-panel__ungrouped:has(> [data-property-path="padding"]) {
+  grid-column: 1 / -1;
 }
 
 .flex-layout-inspector > .property-panel__ungrouped:empty,
@@ -159,6 +168,43 @@
 
 .flex-layout-inspector .property-panel__ungrouped > .property-panel__field:hover {
   background: transparent;
+}
+
+.flex-layout-inspector .property-panel__ungrouped > .property-panel__field[data-property-path="padding"] {
+  display: grid;
+  width: calc(100% + 28px);
+  min-height: var(--pp-row-height);
+  grid-column: 1 / -1;
+  grid-template-columns: var(--pp-label-width) minmax(0, 1fr) var(--pp-action-width);
+  align-items: stretch;
+  margin-right: -14px;
+  margin-left: -14px;
+  border-top: 1px solid var(--pp-border-soft);
+  border-bottom: 1px solid var(--pp-border-soft);
+  background: rgb(17 18 18 / 52%);
+}
+
+.flex-layout-inspector .property-panel__ungrouped
+  > .property-panel__field[data-property-path="padding"]
+  > .property-panel__label {
+  min-height: var(--pp-row-height);
+  padding: 3px 8px 3px var(--pp-field-indent, 16px);
+  border-right: 1px solid var(--pp-border);
+}
+
+.flex-layout-inspector .property-panel__ungrouped
+  > .property-panel__field[data-property-path="padding"]
+  > .property-panel__editor {
+  width: auto;
+  min-height: var(--pp-row-height);
+  padding: 1px 6px 2px;
+  border: 0;
+}
+
+.flex-layout-inspector .property-panel__ungrouped
+  > .property-panel__field[data-property-path="padding"]
+  > .property-panel__actions {
+  display: flex;
 }
 
 .flex-layout-inspector .property-panel__ungrouped > .property-panel__field > .property-panel__label {
@@ -307,6 +353,11 @@
   background: #202121;
 }
 
+.flex-layout-inspector [data-flex-layout-field="padding"] {
+  width: 100%;
+  min-width: 0;
+}
+
 .flex-layout-inspector__preview-block {
   min-width: 0;
   grid-column: 1 / -1;
@@ -348,81 +399,19 @@
   white-space: nowrap;
 }
 
-.flex-layout-inspector__box-model {
-  position: relative;
-  height: 132px;
-  border: 1px dashed #2c9bff;
-  border-radius: 3px;
-  background: rgb(44 132 246 / 8%);
-}
-
-.flex-layout-inspector__box-model > input {
-  position: absolute;
-  z-index: 3;
-  width: 42px;
-  height: 22px;
-  padding: 1px 4px;
-  border: 1px solid #4b5155;
-  border-radius: 3px;
-  outline: 0;
-  color: #d9e8f7;
-  background: #16191b;
-  font-size: 10px;
-  text-align: center;
-}
-
-.flex-layout-inspector__box-model > input[data-padding-edge="top"] {
-  top: 5px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.flex-layout-inspector__box-model > input[data-padding-edge="right"] {
-  top: 50%;
-  right: 5px;
-  transform: translateY(-50%);
-}
-
-.flex-layout-inspector__box-model > input[data-padding-edge="bottom"] {
-  bottom: 5px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.flex-layout-inspector__box-model > input[data-padding-edge="left"] {
-  top: 50%;
-  left: 5px;
-  transform: translateY(-50%);
-}
-
-.flex-layout-inspector__box-model > button {
-  position: absolute;
-  z-index: 4;
-  top: 5px;
-  right: 5px;
-  display: grid;
-  width: 24px;
-  height: 22px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
-  color: #5ba6ff;
-  background: transparent;
-  cursor: pointer;
-  font-size: 11px;
-}
-
 .flex-layout-inspector__preview-surface {
-  position: absolute;
-  inset: 33px 55px;
   display: flex;
+  width: 100%;
+  height: 84px;
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
-  border: 1px solid #495158;
-  background: #171a1d;
+  border: 1px dashed #2c9bff;
+  border-radius: 3px;
+  background:
+    linear-gradient(rgb(44 132 246 / 7%), rgb(44 132 246 / 7%)),
+    #15191d;
 }
 
 .flex-layout-inspector__preview-surface > span {
@@ -466,7 +455,7 @@
     height: 24px;
   }
 
-  .flex-layout-inspector__box-model {
-    height: 122px;
+  .flex-layout-inspector__preview-surface {
+    height: 78px;
   }
 }

@@ -52,7 +52,11 @@ Editor 当前只渲染 Entity 已拥有的 Component Inspector，Property Panel 
   可见作为整体可见条件，卸载时清理注册。
 - Flex 控件三行排列：direction/wrap、gap/align-content、justify-content/align-items。
 - gap 相等时使用单值入口；分轴后编辑 rowGap/columnGap。重新合并时以 rowGap 统一两轴。
-- padding 只在盒模型预览编辑。四值相等时默认联动；重新联动以 top 统一四边。
+- padding 从实时预览中拆出，作为横跨两列的独立“内边距 / padding”属性行；属性名列、编辑列
+  与基础外边距对齐，并复用同一套单值、T/R/B/L 展开和重新联动交互。四值相等时默认折叠，
+  重新联动以 top 统一四边。
+- 实时预览只读展示当前 direction、wrap、gap、padding 与对齐结果，不包含输入框、联动按钮或
+  其他文档编辑入口，也不作为 Stage、Preview 或 LayoutSnapshot 的几何来源。
 - wrap 预览保证形成多行，使 align-content 的变化可观察。
 
 ### 共享角度选择器

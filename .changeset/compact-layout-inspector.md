@@ -13,3 +13,4 @@ into a compact basic geometry Inspector, aggregate embedded search visibility, a
 angle input with a normalized dial and shortcut values. Expose position/alignment, rotation, and
 size as distinct property types, and expose each axis as one editable combobox: numeric values imply
 Fixed while focus reveals English Fill/Hug suggestions that can also be typed directly.
+Move padding into a separate edge editor shared with margin, and keep the Flex live preview read-only.
