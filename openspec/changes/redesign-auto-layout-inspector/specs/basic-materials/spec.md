@@ -53,6 +53,8 @@ MUST 与浏览器 Flex 控件一致。
 - **WHEN** LayoutItem 在 Absolute/Flow 或 Fixed/Fill/Hug 之间切换
 - **THEN** Absolute 只显示有效 offset 且隐藏 alignSelf，Flow 执行相反规则
 - **AND** Fixed 显示可编辑 value，Fill/Hug 只显示 Snapshot 计算值
+- **AND** 定位、宽度、高度在同一行，margin 与 align-self 在下一行
+- **AND** `Flow`、`Absolute` 保留英文领域术语，中文字段名继续附带 CSS 属性名
 
 #### Scenario: 编辑统一或分轴 gap
 

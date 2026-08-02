@@ -256,8 +256,8 @@ describe('内建 Component inspectors', () => {
     )
 
     expect(screen.getAllByRole('radio', { name: '填充' })).toHaveLength(2)
-    expect(screen.getByRole('spinbutton', { name: '计算宽度' })).toHaveValue(240)
-    expect(screen.getByRole('spinbutton', { name: '计算宽度' })).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('计算宽度')).toHaveTextContent('计算值 240 px')
+    expect(screen.queryByRole('spinbutton', { name: '计算宽度' })).not.toBeInTheDocument()
     fireEvent.click(within(screen.getByRole('radiogroup', { name: '定位' }))
       .getByRole('radio', { name: 'Absolute' }))
     const command = dispatch.mock.lastCall?.[0] as EditorCommand
@@ -288,6 +288,8 @@ describe('内建 Component inspectors', () => {
     expect(screen.queryByRole('radio', { name: '填充' })).not.toBeInTheDocument()
     expect(screen.getByRole('spinbutton', { name: '外边距' })).toHaveValue(0)
     expect(screen.getByRole('button', { name: '展开外边距' })).toBeInTheDocument()
+    expect(screen.getByText('Absolute')).toBeInTheDocument()
+    expect(screen.queryByText('绝对')).not.toBeInTheDocument()
     expect(screen.getByText('width')).toBeInTheDocument()
     expect(screen.getByText('height')).toBeInTheDocument()
     expect(screen.getByText('margin')).toBeInTheDocument()
@@ -319,6 +321,7 @@ describe('内建 Component inspectors', () => {
     expect(flowPanel.querySelector('[data-property-path="offset"]')).not.toBeInTheDocument()
     expect(flowPanel.querySelector('[data-property-path="alignSelf"]')).toBeInTheDocument()
     expect(screen.getAllByRole('radio', { name: '填充' })).toHaveLength(2)
+    expect(screen.getByRole('option', { name: '自动' })).toHaveValue('auto')
   })
 
   it('OpenSpec: 基础物料 / Lock Inspector 在 readOnly 上下文仍可解除锁定', () => {

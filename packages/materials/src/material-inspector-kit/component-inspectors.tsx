@@ -96,7 +96,6 @@ function LayoutItemFieldLabel({ label, metadata }: ComposePropertyPanelRendererP
 
 // eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
 function LayoutPositionEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
-  const zh = useZh()
   const buttons = useRef<(HTMLButtonElement | null)[]>([])
   const options = [
     { value: 'flow', label: 'Flow' },
@@ -129,8 +128,34 @@ function LayoutPositionEditor({ commit, label, readOnly, value }: ComposePropert
             commit(options[next]!.value)
           }}
         >
-          {option.label === 'Flow' ? 'Flow' : (zh ? '绝对' : 'Absolute')}
+          {option.label}
         </button>
+      ))}
+    </div>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function LayoutOffsetEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
+  const offset = value as { readonly x: number; readonly y: number }
+  const update = (axis: 'x' | 'y', raw: string) => {
+    const candidate = Number(raw)
+    if (Number.isFinite(candidate)) commit({ ...offset, [axis]: candidate }, 'input')
+  }
+  return (
+    <div className="layout-item-inspector__offset">
+      {(['x', 'y'] as const).map((axis) => (
+        <label key={axis}>
+          <span>{axis.toUpperCase()}</span>
+          <input
+            aria-label={`${label} ${axis.toUpperCase()}`}
+            disabled={readOnly}
+            step="any"
+            type="number"
+            value={offset[axis]}
+            onChange={(event) => update(axis, event.target.value)}
+          />
+        </label>
       ))}
     </div>
   )
@@ -153,6 +178,8 @@ function LayoutAxisSizingEditor({
     ...(view.fillAllowed ? [{ value: 'fill', label: view.zh ? '填充' : 'Fill' }] : []),
     ...(view.hugAllowed ? [{ value: 'hug', label: view.zh ? '适应' : 'Hug' }] : []),
   ]
+  const computedLabel = `${view.zh ? '计算' : 'Computed '}${label}`
+  const computedValue = Math.round(computed * 100) / 100
   return (
     <div className="layout-item-inspector__axis-sizing">
       <div aria-label={`${label}${view.zh ? '模式' : ' mode'}`} role="radiogroup">
@@ -170,25 +197,57 @@ function LayoutAxisSizingEditor({
           </button>
         ))}
       </div>
-      <input
-        aria-label={sizing.mode === 'fixed'
-          ? label
-          : `${view.zh ? '计算' : 'Computed '}${label}`}
-        disabled={readOnly && sizing.mode === 'fixed'}
-        min="0"
-        readOnly={sizing.mode !== 'fixed'}
-        step="any"
-        type="number"
-        value={sizing.mode === 'fixed' ? sizing.value : computed}
-        onChange={(event) => {
-          if (sizing.mode !== 'fixed') return
-          const candidate = Number(event.target.value)
-          if (Number.isFinite(candidate) && candidate >= 0) {
-            commit({ ...sizing, value: candidate }, 'input')
-          }
-        }}
-      />
+      {sizing.mode === 'fixed' ? (
+        <input
+          aria-label={label}
+          disabled={readOnly}
+          min="0"
+          step="any"
+          type="number"
+          value={sizing.value}
+          onChange={(event) => {
+            const candidate = Number(event.target.value)
+            if (Number.isFinite(candidate) && candidate >= 0) {
+              commit({ ...sizing, value: candidate }, 'input')
+            }
+          }}
+        />
+      ) : (
+        <output aria-label={computedLabel} className="layout-item-inspector__computed">
+          <span>{view.zh ? '计算值' : 'Computed'}</span>
+          {' '}
+          <strong>{computedValue}</strong>
+          {' '}
+          <span>px</span>
+        </output>
+      )}
     </div>
+  )
+}
+
+const ALIGN_SELF_OPTIONS = [
+  { value: 'auto', zh: '自动', en: 'Auto' },
+  { value: 'flex-start', zh: '起始', en: 'Start' },
+  { value: 'center', zh: '居中', en: 'Center' },
+  { value: 'flex-end', zh: '末端', en: 'End' },
+  { value: 'stretch', zh: '拉伸', en: 'Stretch' },
+  { value: 'baseline', zh: '基线', en: 'Baseline' },
+] as const
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function LayoutAlignSelfEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
+  const zh = useZh()
+  return (
+    <select
+      aria-label={label}
+      disabled={readOnly}
+      value={String(value)}
+      onChange={(event) => commit(event.target.value, 'input')}
+    >
+      {ALIGN_SELF_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>{zh ? option.zh : option.en}</option>
+      ))}
+    </select>
   )
 }
 
@@ -266,6 +325,13 @@ const LAYOUT_ITEM_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
     id: 'layout-item-position',
     component: LayoutPositionEditor,
     labelComponent: LayoutItemFieldLabel,
+    layout: 'full-width',
+  },
+  {
+    id: 'layout-item-offset',
+    component: LayoutOffsetEditor,
+    labelComponent: LayoutItemFieldLabel,
+    layout: 'full-width',
   },
   ...(['layout-item-width', 'layout-item-height'] as const).map((id) => ({
     id,
@@ -276,6 +342,12 @@ const LAYOUT_ITEM_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
   {
     id: 'layout-item-margin',
     component: LayoutMarginEditor,
+    labelComponent: LayoutItemFieldLabel,
+    layout: 'full-width',
+  },
+  {
+    id: 'layout-item-align-self',
+    component: LayoutAlignSelfEditor,
     labelComponent: LayoutItemFieldLabel,
     layout: 'full-width',
   },
@@ -355,7 +427,7 @@ export function createLayoutItemInspector(
         v.object({ x: v.number(), y: v.number() }),
         v.title(zh ? '偏移' : 'Offset'),
         v.metadata({ propertyPanel: {
-          editor: 'vector2',
+          editor: 'layout-item-offset',
           hidden: item.positioning !== 'absolute',
         } }),
       ),
@@ -392,7 +464,10 @@ export function createLayoutItemInspector(
       alignSelf: v.pipe(
         v.picklist(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
         v.title(zh ? '自身对齐' : 'Align self'),
-        v.metadata({ propertyPanel: { hidden: item.positioning !== 'flow' } }),
+        v.metadata({ propertyPanel: {
+          editor: 'layout-item-align-self',
+          hidden: item.positioning !== 'flow',
+        } }),
       ),
       })
     }, [fillAllowed, hugAllowed, item.positioning, zh])
@@ -404,61 +479,62 @@ export function createLayoutItemInspector(
         hugAllowed,
         zh,
       }}>
-        <ComposePropertyPanel
-          aria-label={zh ? '布局项属性' : 'Layout item properties'}
-          className="layout-item-inspector"
-          readOnly={readOnly}
-          renderers={LAYOUT_ITEM_RENDERERS}
-          schema={schema}
-          value={item}
-          onValueChange={(next) => {
-          if (next.positioning === 'flow' && (!parent || !getComposeLayout(parent))) return
-          if (!hugAllowed && (next.width.mode === 'hug' || next.height.mode === 'hug')) return
-          const bakedBox = item.positioning === 'flow' && next.positioning === 'absolute'
-            ? layoutSnapshot?.boxes[entity.id]
-            : undefined
-          const parentBorder = parent ? resolveComposeAppearance(parent).borderWidth : 0
-          const widthMode = next.positioning === 'absolute' && next.width.mode === 'fill'
-            ? 'fixed'
-            : next.width.mode
-          const heightMode = next.positioning === 'absolute' && next.height.mode === 'fill'
-            ? 'fixed'
-            : next.height.mode
-          dispatch(command(
-            idFactory,
-            entity,
-            BUILTIN_COMMAND_TYPES.updateComponent,
-            {
-              entityId: entity.id,
-              key: 'LayoutItem',
-              value: {
-                ...item,
-                positioning: next.positioning,
-                offset: bakedBox
-                  ? { x: bakedBox.x - parentBorder, y: bakedBox.y - parentBorder }
-                  : next.offset,
-                width: {
-                  ...next.width,
-                  mode: widthMode,
-                  value: bakedBox && item.width.mode === 'fill'
-                    ? bakedBox.width
-                    : next.width.value,
+        <div className="layout-item-inspector">
+          <ComposePropertyPanel
+            aria-label={zh ? '布局项属性' : 'Layout item properties'}
+            readOnly={readOnly}
+            renderers={LAYOUT_ITEM_RENDERERS}
+            schema={schema}
+            value={item}
+            onValueChange={(next) => {
+              if (next.positioning === 'flow' && (!parent || !getComposeLayout(parent))) return
+              if (!hugAllowed && (next.width.mode === 'hug' || next.height.mode === 'hug')) return
+              const bakedBox = item.positioning === 'flow' && next.positioning === 'absolute'
+                ? layoutSnapshot?.boxes[entity.id]
+                : undefined
+              const parentBorder = parent ? resolveComposeAppearance(parent).borderWidth : 0
+              const widthMode = next.positioning === 'absolute' && next.width.mode === 'fill'
+                ? 'fixed'
+                : next.width.mode
+              const heightMode = next.positioning === 'absolute' && next.height.mode === 'fill'
+                ? 'fixed'
+                : next.height.mode
+              dispatch(command(
+                idFactory,
+                entity,
+                BUILTIN_COMMAND_TYPES.updateComponent,
+                {
+                  entityId: entity.id,
+                  key: 'LayoutItem',
+                  value: {
+                    ...item,
+                    positioning: next.positioning,
+                    offset: bakedBox
+                      ? { x: bakedBox.x - parentBorder, y: bakedBox.y - parentBorder }
+                      : next.offset,
+                    width: {
+                      ...next.width,
+                      mode: widthMode,
+                      value: bakedBox && item.width.mode === 'fill'
+                        ? bakedBox.width
+                        : next.width.value,
+                    },
+                    height: {
+                      ...next.height,
+                      mode: heightMode,
+                      value: bakedBox && item.height.mode === 'fill'
+                        ? bakedBox.height
+                        : next.height.value,
+                    },
+                    margin: next.margin,
+                    alignSelf: next.alignSelf,
+                  },
                 },
-                height: {
-                  ...next.height,
-                  mode: heightMode,
-                  value: bakedBox && item.height.mode === 'fill'
-                    ? bakedBox.height
-                    : next.height.value,
-                },
-                margin: next.margin,
-                alignSelf: next.alignSelf,
-              },
-            },
-            zh ? `修改 ${entity.name} 布局项` : `Update ${entity.name} layout item`,
-          ))
-          }}
-        />
+                zh ? `修改 ${entity.name} 布局项` : `Update ${entity.name} layout item`,
+              ))
+            }}
+          />
+        </div>
       </LayoutItemInspectorContext.Provider>
     )
   }

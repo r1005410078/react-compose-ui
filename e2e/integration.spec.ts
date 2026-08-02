@@ -938,8 +938,32 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   const positioning = childInspector.getByRole('radiogroup', { name: '定位' })
   const widthMode = childInspector.getByRole('radiogroup', { name: '宽度模式' })
   await expect(positioning.getByRole('radio', { name: 'Flow' })).toBeChecked()
+  await expect(positioning.getByRole('radio', { name: 'Absolute' })).toHaveText('Absolute')
+  const positioningField = await childInspector.locator('[data-property-path="positioning"]').boundingBox()
+  const widthField = await childInspector.locator('[data-property-path="width"]').boundingBox()
+  const heightField = await childInspector.locator('[data-property-path="height"]').boundingBox()
+  const marginField = await childInspector.locator('[data-property-path="margin"]').boundingBox()
+  const alignSelfField = await childInspector.locator('[data-property-path="alignSelf"]').boundingBox()
+  expect(positioningField).not.toBeNull()
+  expect(widthField).not.toBeNull()
+  expect(heightField).not.toBeNull()
+  expect(marginField).not.toBeNull()
+  expect(alignSelfField).not.toBeNull()
+  expect(widthField!.y).toBeCloseTo(positioningField!.y, 0)
+  expect(heightField!.y).toBeCloseTo(positioningField!.y, 0)
+  expect(alignSelfField!.y).toBeCloseTo(marginField!.y, 0)
+  expect(marginField!.y).toBeGreaterThan(positioningField!.y)
   await widthMode.getByRole('radio', { name: '填充' }).click()
   await expect(widthMode.getByRole('radio', { name: '填充' })).toBeChecked()
+  await expect(childInspector.getByLabel('计算宽度')).toContainText('计算值')
+  const layoutItemSection = childInspector.getByRole('button', { name: '布局项', exact: true })
+    .locator('..')
+    .locator('..')
+  await expect(layoutItemSection).toHaveScreenshot('layout-item-inspector-flow-fill.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
 
   const fillBox = await children.nth(0).boundingBox()
   expect(fillBox).not.toBeNull()

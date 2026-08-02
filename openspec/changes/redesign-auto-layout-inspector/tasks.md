@@ -50,3 +50,7 @@
 - [x] 4.4 运行相关测试及 `lint`、`typecheck`、`test`、`build`、`test:e2e`、`pack:dry-run`。
   - Regression: `bun run lint`、`bun run typecheck`、`bun run test`、`bun run build`、`bun run test:e2e`（30 passed）和 `bun run pack:dry-run` 全部通过。
 - [x] 4.5 在各任务下记录 Red/Green/Regression 证据并完成严格 OpenSpec 校验。
+- [x] 4.6 还原 LayoutItem 设计稿：三列首行、文本计算值、`Flow/Absolute` 原文和 align-self 本地化选项。
+  - Red: Component Inspector 测试确认计算值仍是只读输入且 `Absolute` 被错误翻译；E2E 确认嵌入式 LayoutItem 未形成设计稿中的两行网格。
+  - Green: 自定义 positioning、offset、axis sizing 与 align-self renderer，并让 LayoutItem 在窄 Inspector 中保持三列首行和两列次行；布局项覆盖面板列宽拖拽线，保证最右侧模式可点击。
+  - Regression: Materials 51 项测试、全仓 37 个测试任务、30 条 E2E、`lint`、`typecheck` 与 `build` 通过，并新增 `layout-item-inspector-flow-fill.png` 黄金图。
