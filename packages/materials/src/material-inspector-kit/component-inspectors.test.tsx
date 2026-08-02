@@ -183,6 +183,7 @@ describe('内建 Component inspectors', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('LayoutItem')
     const child = entity({
+      Renderer: { type: 'rectangle', props: {} },
       LayoutItem: {
         ...createDefaultComposeLayoutItem(80, 40),
         positioning: 'flow',
@@ -229,33 +230,54 @@ describe('内建 Component inspectors', () => {
     expect(alignSelfRow?.querySelector(':scope > label')).toHaveTextContent('自身对齐')
     expect(globalThis.document.querySelector('[data-property-path="rotation"] [data-semantic-editor="angle"]'))
       .toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: '尺寸宽度' })).toHaveValue('填充')
-    expect(screen.getByRole('textbox', { name: '尺寸高度' })).toHaveValue('40')
-    expect(screen.getByRole('combobox', { name: '宽度模式' })).toHaveValue('fill')
-    expect(screen.getByRole('combobox', { name: '高度模式' })).toHaveValue('fixed')
+    const widthInput = screen.getByRole('combobox', { name: '尺寸宽度' })
+    const heightInput = screen.getByRole('combobox', { name: '尺寸高度' })
+    expect(widthInput).toHaveValue('Fill')
+    expect(heightInput).toHaveValue('40')
+    expect(screen.queryByRole('combobox', { name: '宽度模式' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '高度模式' })).not.toBeInTheDocument()
+    expect(screen.queryByText('固定')).not.toBeInTheDocument()
     const widthSizing = screen.getByRole('group', { name: '宽度尺寸' })
     const heightSizing = screen.getByRole('group', { name: '高度尺寸' })
-    expect(within(widthSizing).getByRole('textbox', { name: '尺寸宽度' })).toBeInTheDocument()
-    expect(within(widthSizing).getByRole('combobox', { name: '宽度模式' })).toBeInTheDocument()
-    expect(within(heightSizing).getByRole('textbox', { name: '尺寸高度' })).toBeInTheDocument()
-    expect(within(heightSizing).getByRole('combobox', { name: '高度模式' })).toBeInTheDocument()
+    expect(within(widthSizing).getByRole('combobox', { name: '尺寸宽度' }))
+      .toBeInTheDocument()
+    expect(within(heightSizing).getByRole('combobox', { name: '尺寸高度' }))
+      .toBeInTheDocument()
 
-    fireEvent.change(screen.getByRole('combobox', { name: '宽度模式' }), {
-      target: { value: 'fixed' },
-    })
+    fireEvent.focus(widthInput)
+    const suggestions = screen.getByRole('listbox', { name: '宽度尺寸选项' })
+    expect(within(suggestions).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['Fill', 'Hug'])
+    expect(within(suggestions).queryByText('Fixed')).not.toBeInTheDocument()
+    expect(within(suggestions).queryByText('填充')).not.toBeInTheDocument()
+
+    fireEvent.mouseDown(within(suggestions).getByRole('option', { name: 'Hug' }))
     expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
-      value: { width: { mode: 'fixed', value: 240 } },
+      value: { width: { mode: 'hug', value: 80 } },
     })
 
     dispatch.mockClear()
-    fireEvent.change(screen.getByRole('textbox', { name: '尺寸宽度' }), {
-      target: { value: '320' },
+    fireEvent.change(widthInput, { target: { value: 'fIlL' } })
+    fireEvent.keyDown(widthInput, { key: 'Enter' })
+    expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
+      value: { width: { mode: 'fill', value: 80 } },
     })
+
+    dispatch.mockClear()
+    fireEvent.change(widthInput, { target: { value: '320' } })
     expect(dispatch).not.toHaveBeenCalled()
-    fireEvent.blur(screen.getByRole('textbox', { name: '尺寸宽度' }))
+    fireEvent.blur(widthInput)
     expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
       value: { width: { mode: 'fixed', value: 320 } },
     })
+
+    dispatch.mockClear()
+    fireEvent.focus(heightInput)
+    expect(screen.getByRole('listbox', { name: '高度尺寸选项' })).toBeInTheDocument()
+    fireEvent.change(heightInput, { target: { value: 'unknown' } })
+    fireEvent.blur(heightInput)
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(heightInput).toHaveValue('40')
 
     dispatch.mockClear()
     fireEvent.change(screen.getByRole('combobox', { name: '自身对齐' }), {

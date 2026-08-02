@@ -46,9 +46,9 @@ Layout 属性区紧跟变换分组，以两行三列卡片提供方向、换行�
 编号节点与主轴/交叉轴。该预览仅用于解释属性；正式 Stage 和 Preview 都消费 Layout Runtime 的
 Snapshot，并始终以绝对定位 DOM 呈现，不再运行第二套 CSS Flex。LayoutItem 提供
 合并进“基础”的复合几何 Inspector：Absolute 的 X/Y 使用 Materials Position 自定义类型，Flow 显示
-独立 alignSelf 字段，旋转使用独立 Angle 类型；W/H 以数值和尾部模式菜单融合的控件同行编辑
-Fixed/Fill/Hug，margin 默认联动并可展开 T/R/B/L。Fill/Hug 切回 Fixed
-优先使用当前 Snapshot 尺寸；Flow/Absolute 由 Scene Tree 与 Stage 交互维护，不在基础区手动切换。
+独立 alignSelf 字段，旋转使用独立 Angle 类型；W/H 以单一智能输入同行编辑：数字隐式表达
+Fixed，聚焦后出现当前上下文合法的英文 `Fill`/`Hug` 建议，也可直接键入模式。margin 默认联动
+并可展开 T/R/B/L；Flow/Absolute 由 Scene Tree 与 Stage 交互维护，不在基础区手动切换。
 
 Text、Image、SVG 与 Page Slot Renderer 同时提供 Hug measurement definition。Text 使用与可见
 Renderer 相同的 typography 在隔离离屏 host 中测量，并订阅 `document.fonts`；Image 使用 resolved

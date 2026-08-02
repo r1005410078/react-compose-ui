@@ -203,43 +203,82 @@ function BasicPositionEditor({ commit, readOnly, value }: ComposePropertyPanelRe
 function AxisSizingControl({
   axis,
   computed,
-  modes,
   onCommit,
   readOnly,
   sizing,
+  suggestions,
   zh,
 }: {
   readonly axis: 'width' | 'height'
   readonly computed: number
-  readonly modes: readonly { readonly value: ComposeAxisSizing['mode']; readonly label: string }[]
   readonly onCommit: (sizing: ComposeAxisSizing) => void
   readonly readOnly: boolean
   readonly sizing: ComposeAxisSizing
+  readonly suggestions: readonly {
+    readonly value: Extract<ComposeAxisSizing['mode'], 'fill' | 'hug'>
+    readonly label: 'Fill' | 'Hug'
+  }[]
   readonly zh: boolean
 }) {
   const computedId = useId()
+  const listboxId = useId()
   const external = `${sizing.mode}:${sizing.value}`
-  const modeLabel = modes.find((mode) => mode.value === sizing.mode)?.label ?? sizing.mode
+  const displayValue = sizing.mode === 'fixed'
+    ? String(sizing.value)
+    : (sizing.mode === 'fill' ? 'Fill' : 'Hug')
   const [draft, setDraft] = useState({
     external,
-    text: sizing.mode === 'fixed' ? String(sizing.value) : modeLabel,
+    text: displayValue,
     dirty: false,
   })
+  const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const current = draft.external === external
     ? draft
-    : { external, text: sizing.mode === 'fixed' ? String(sizing.value) : modeLabel, dirty: false }
+    : { external, text: displayValue, dirty: false }
   const dimensionLabel = axis === 'width'
     ? (zh ? '尺寸宽度' : 'Size width')
     : (zh ? '尺寸高度' : 'Size height')
   const sizingLabel = axis === 'width'
     ? (zh ? '宽度尺寸' : 'Width sizing')
     : (zh ? '高度尺寸' : 'Height sizing')
+  const suggestionsLabel = axis === 'width'
+    ? (zh ? '宽度尺寸选项' : 'Width sizing options')
+    : (zh ? '高度尺寸选项' : 'Height sizing options')
+  const reset = () => {
+    setDraft({ external, text: displayValue, dirty: false })
+    setOpen(false)
+    setActiveIndex(-1)
+  }
+  const commitMode = (suggestion: (typeof suggestions)[number]) => {
+    onCommit({ ...sizing, mode: suggestion.value })
+    setDraft({ external, text: suggestion.label, dirty: false })
+    setOpen(false)
+    setActiveIndex(-1)
+  }
   const submit = () => {
-    if (!current.dirty || current.text.trim() === '') return
-    const candidate = Number(current.text)
-    if (!Number.isFinite(candidate) || candidate < 0) return
-    onCommit({ ...sizing, mode: 'fixed', value: candidate })
-    setDraft({ external, text: String(candidate), dirty: false })
+    if (!current.dirty) {
+      setOpen(false)
+      setActiveIndex(-1)
+      return
+    }
+    const text = current.text.trim()
+    const suggestion = suggestions.find((candidate) => (
+      candidate.label.toLowerCase() === text.toLowerCase()
+    ))
+    if (suggestion) {
+      commitMode(suggestion)
+      return
+    }
+    const candidate = Number(text)
+    if (text !== '' && Number.isFinite(candidate) && candidate >= 0) {
+      onCommit({ ...sizing, mode: 'fixed', value: candidate })
+      setDraft({ external, text: String(candidate), dirty: false })
+      setOpen(false)
+      setActiveIndex(-1)
+      return
+    }
+    reset()
   }
   return (
     <div
@@ -250,40 +289,83 @@ function AxisSizingControl({
     >
       <span aria-hidden="true">{axis === 'width' ? 'W' : 'H'}</span>
       <input
+        aria-activedescendant={open && activeIndex >= 0
+          ? `${listboxId}-option-${activeIndex}`
+          : undefined}
+        aria-autocomplete="list"
+        aria-controls={listboxId}
         aria-describedby={computedId}
+        aria-expanded={open}
+        aria-haspopup="listbox"
         aria-label={dimensionLabel}
+        autoComplete="off"
         disabled={readOnly}
-        inputMode="decimal"
+        inputMode="text"
+        role="combobox"
+        spellCheck={false}
         type="text"
         value={current.text}
-        onBlur={submit}
-        onChange={(event) => setDraft({ external, text: event.target.value, dirty: true })}
-        onFocus={(event) => event.currentTarget.select()}
+        onBlur={() => submit()}
+        onChange={(event) => {
+          setDraft({ external, text: event.target.value, dirty: true })
+          setOpen(suggestions.length > 0)
+          setActiveIndex(-1)
+        }}
+        onFocus={(event) => {
+          event.currentTarget.select()
+          setOpen(suggestions.length > 0)
+          setActiveIndex(-1)
+        }}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') submit()
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            if (suggestions.length === 0) return
+            event.preventDefault()
+            const direction = event.key === 'ArrowDown' ? 1 : -1
+            setOpen(true)
+            setActiveIndex((index) => {
+              if (index < 0) return direction > 0 ? 0 : suggestions.length - 1
+              return (index + direction + suggestions.length) % suggestions.length
+            })
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            const suggestion = open && activeIndex >= 0 ? suggestions[activeIndex] : undefined
+            if (suggestion) commitMode(suggestion)
+            else submit()
+          }
           if (event.key === 'Escape') {
             event.preventDefault()
-            setDraft({
-              external,
-              text: sizing.mode === 'fixed' ? String(sizing.value) : modeLabel,
-              dirty: false,
-            })
+            reset()
           }
         }}
       />
-      <select
-        aria-label={axis === 'width'
-          ? (zh ? '宽度模式' : 'Width mode')
-          : (zh ? '高度模式' : 'Height mode')}
-        disabled={readOnly}
-        value={sizing.mode}
-        onChange={(event) => {
-          const mode = event.target.value as ComposeAxisSizing['mode']
-          onCommit({ ...sizing, mode, value: mode === 'fixed' ? computed : sizing.value })
-        }}
-      >
-        {modes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
-      </select>
+      {open ? (
+        <div
+          aria-label={suggestionsLabel}
+          className="layout-item-inspector__axis-suggestions"
+          id={listboxId}
+          role="listbox"
+        >
+          {suggestions.map((suggestion, index) => (
+            <button
+              aria-selected={suggestion.value === sizing.mode}
+              className="layout-item-inspector__axis-suggestion"
+              data-active={activeIndex === index ? '' : undefined}
+              id={`${listboxId}-option-${index}`}
+              key={suggestion.value}
+              role="option"
+              tabIndex={-1}
+              type="button"
+              onMouseDown={(event) => {
+                event.preventDefault()
+                commitMode(suggestion)
+              }}
+            >
+              {suggestion.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <span className="layout-item-inspector__sr-only" id={computedId}>
         {zh ? '计算尺寸' : 'Computed size'} {Math.round(computed * 100) / 100} px
       </span>
@@ -313,13 +395,12 @@ const ALIGN_SELF_VALUES = ALIGN_SELF_OPTIONS.map((option) => option.value) as [
 function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
   const view = useContext(BasicGeometryInspectorContext)
   const size = value as unknown as BasicSizeValue
-  const modes = [
-    { value: 'fixed' as const, label: view.zh ? '固定' : 'Fixed' },
+  const suggestions = [
     ...(view.fillAllowed
-      ? [{ value: 'fill' as const, label: view.zh ? '填充' : 'Fill' }]
+      ? [{ value: 'fill' as const, label: 'Fill' as const }]
       : []),
     ...(view.hugAllowed
-      ? [{ value: 'hug' as const, label: view.zh ? '适应' : 'Hug' }]
+      ? [{ value: 'hug' as const, label: 'Hug' as const }]
       : []),
   ]
   return (
@@ -327,18 +408,18 @@ function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRender
       <AxisSizingControl
         axis="width"
         computed={view.computedWidth}
-        modes={modes}
         readOnly={readOnly}
         sizing={size.width}
+        suggestions={suggestions}
         zh={view.zh}
         onCommit={(width) => commit({ ...size, width }, 'commit')}
       />
       <AxisSizingControl
         axis="height"
         computed={view.computedHeight}
-        modes={modes}
         readOnly={readOnly}
         sizing={size.height}
+        suggestions={suggestions}
         zh={view.zh}
         onCommit={(height) => commit({ ...size, height }, 'commit')}
       />

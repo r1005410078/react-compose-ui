@@ -18,9 +18,10 @@ async function enableAutoLayout(inspector: Locator) {
   await inspector.getByRole('menuitem', { name: 'Auto Layout display: flex' }).click()
 }
 
-async function selectAxisSizing(inspector: Locator, axis: '宽度' | '高度', mode: '固定' | '填充' | '适应') {
-  await inspector.getByRole('combobox', { name: `${axis}模式` })
-    .selectOption({ label: mode })
+async function selectAxisSizing(inspector: Locator, axis: '宽度' | '高度', mode: 'Fill' | 'Hug') {
+  const input = inspector.getByRole('combobox', { name: `尺寸${axis}` })
+  await input.fill(mode)
+  await input.press('Enter')
 }
 
 async function expandInspectorSection(inspector: Locator, name: string) {
@@ -178,14 +179,14 @@ test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG �
 
   await stage.getByTestId('compose-material-image').click()
   const imageInspector = editor.getByRole('region', { name: 'dashboard.bmp 属性', exact: true })
-  await selectAxisSizing(imageInspector, '宽度', '适应')
-  await selectAxisSizing(imageInspector, '高度', '适应')
+  await selectAxisSizing(imageInspector, '宽度', 'Hug')
+  await selectAxisSizing(imageInspector, '高度', 'Hug')
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
 
   await stage.getByTestId('compose-material-svg').click()
   const inspector = editor.getByRole('region', { name: 'compose-grid.svg 属性', exact: true })
-  await selectAxisSizing(inspector, '宽度', '适应')
-  await selectAxisSizing(inspector, '高度', '适应')
+  await selectAxisSizing(inspector, '宽度', 'Hug')
+  await selectAxisSizing(inspector, '高度', 'Hug')
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
   const positionXMetrics = await inspector.getByRole('spinbutton', { name: '位置 X' })
     .evaluate((input) => ({ clientWidth: input.clientWidth, scrollWidth: input.scrollWidth }))
@@ -955,7 +956,7 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   const basicSection = childInspector.getByRole('button', { name: '基础', exact: true })
     .locator('..')
     .locator('..')
-  const widthMode = childInspector.getByRole('combobox', { name: '宽度模式' })
+  const widthSizing = childInspector.getByRole('combobox', { name: '尺寸宽度' })
   await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toHaveValue('auto')
   await expect(childInspector.getByRole('spinbutton', { name: '位置 X' })).toHaveCount(0)
   await expect(childInspector.getByRole('spinbutton', { name: '旋转' })).toHaveValue('0')
@@ -998,9 +999,19 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   expect(await childInspector.locator('[data-property-path="size"] input').evaluateAll((inputs) => (
     inputs.every((input) => input.scrollWidth <= input.clientWidth)
   ))).toBe(true)
-  await widthMode.selectOption('fill')
-  await expect(widthMode).toHaveValue('fill')
-  await expect(childInspector.getByRole('textbox', { name: '尺寸宽度' })).toHaveValue('填充')
+  await widthSizing.click()
+  const widthSuggestions = childInspector.getByRole('listbox', { name: '宽度尺寸选项' })
+  await expect(widthSuggestions.getByRole('option')).toHaveText(['Fill', 'Hug'])
+  await expect(childInspector.getByRole('combobox', { name: '宽度模式' })).toHaveCount(0)
+  await expect(widthSuggestions.getByText(/填充|适应|固定/)).toHaveCount(0)
+  await expect(childInspector).toHaveScreenshot('basic-inspector-size-suggestions.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await widthSizing.fill('Fill')
+  await widthSizing.press('Enter')
+  await expect(widthSizing).toHaveValue('Fill')
   await expect(basicSection).toHaveScreenshot('basic-inspector-flow-fill.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -1016,7 +1027,7 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
 
   await expect(childInspector.getByRole('spinbutton', { name: '位置 X' })).toBeVisible()
   await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toHaveCount(0)
-  await expect(widthMode).toHaveValue('fixed')
+  await expect.poll(async () => Number.isFinite(Number(await widthSizing.inputValue()))).toBe(true)
   const absoluteBox = await children.nth(0).boundingBox()
   expect(absoluteBox).not.toBeNull()
   expect(absoluteBox!.x).toBeGreaterThan(fillBox!.x)
@@ -1073,15 +1084,15 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
   const textNode = container.locator(':scope > .compose-stage__node.is-renderer').first()
   await textNode.click()
   const textInspector = editor.getByRole('region', { name: 'Text 属性', exact: true })
-  await selectAxisSizing(textInspector, '宽度', '适应')
-  await selectAxisSizing(textInspector, '高度', '适应')
+  await selectAxisSizing(textInspector, '宽度', 'Hug')
+  await selectAxisSizing(textInspector, '高度', 'Hug')
   await expect.poll(async () => (await textNode.boundingBox())?.width ?? 1000).toBeLessThan(160)
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
 
   await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
   await editor.getByRole('row', { name: /Container/ }).click()
-  await selectAxisSizing(containerInspector, '宽度', '适应')
-  await selectAxisSizing(containerInspector, '高度', '适应')
+  await selectAxisSizing(containerInspector, '宽度', 'Hug')
+  await selectAxisSizing(containerInspector, '高度', 'Hug')
   await expect.poll(async () => (await container.boundingBox())?.width ?? 1000).toBeLessThan(180)
   const stageTextBox = await stage.getByText('Text', { exact: true }).boundingBox()
   expect(stageTextBox).not.toBeNull()
@@ -1278,7 +1289,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   await page.mouse.up()
   expectedHistoryCount += 1
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
-  const widthField = editor.getByRole('textbox', { name: '尺寸宽度', exact: true })
+  const widthField = editor.getByRole('combobox', { name: '尺寸宽度', exact: true })
   await expect.poll(async () => Number(await widthField.inputValue()) % 8).toBe(0)
 })
 
@@ -1520,7 +1531,7 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
     { steps: 5 },
   )
   await page.mouse.up()
-  const widthField = editor.getByRole('textbox', { name: '尺寸宽度', exact: true })
+  const widthField = editor.getByRole('combobox', { name: '尺寸宽度', exact: true })
   await expect.poll(async () => {
     const width = Number(await widthField.inputValue())
     return Math.abs(width - Math.round(width / 16) * 16)
@@ -1970,8 +1981,8 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
 
   // 4) 画布上实时渲染被引用页面的内容
   await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
-  await selectAxisSizing(inspector, '宽度', '适应')
-  await selectAxisSizing(inspector, '高度', '适应')
+  await selectAxisSizing(inspector, '宽度', 'Hug')
+  await selectAxisSizing(inspector, '高度', 'Hug')
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
 
   // 5) 预览中同样渲染

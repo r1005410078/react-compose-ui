@@ -39,10 +39,12 @@ Editor 当前只渲染 Entity 已拥有的 Component Inspector，Property Panel 
   使用独立 picklist 属性。旋转是独立 number 属性并显式使用内建 `angle` 语义类型。Materials 不再
   把位置、对齐和角度塞入同一自定义值，也不再直接渲染 Angle Picker；各自 Editor 负责输入与
   可访问性，变更仍由复合 Inspector 映射为既有 LayoutItem/Transform command。
-- 尺寸行把 W/H 并排显示，每轴使用单一 compound control：W/H 前缀、值区和尾部模式触发器
-  位于同一个边框、背景和焦点范围内，不再呈现相互分离的 input 与 select。Fixed 显示数字；
-  Fill/Hug 显示本地化模式名。直接输入数字会转为 Fixed；从 Fill/Hug 选择 Fixed 时优先烘焙
-  Snapshot 计算尺寸，缺失时使用 fallback。菜单只列出当前上下文合法的模式。
+- 尺寸行把 W/H 并排显示，每轴只呈现一个带 W/H 前缀的 editable combobox，不再常驻渲染尾部
+  select、模式名称或箭头。数字本身表达 Fixed；Fill/Hug 始终使用英文 `Fill`/`Hug` 显示，中文
+  locale 也不翻译。字段聚焦时在其下方打开建议列表，只列出当前上下文合法的 `Fill`/`Hug`；
+  用户既可选择建议，也可大小写不敏感地直接输入英文模式。输入数字会转为 Fixed；从 Fill/Hug
+  输入数字时优先使用该数字，不再需要单独选择 Fixed。Snapshot 计算尺寸仍用于可访问说明和
+  其他既有模式转换路径，持久化 value 继续作为稳定 fallback。
 - 外边距四值相等时显示单值和展开按钮；展开后在同一属性行显示 T/R/B/L，重新联动时以 top
   统一四边。所有数值输入保留本地草稿，Enter/失焦提交，Escape 或非法草稿零提交。
 - 基础分组不显示 CSS 副标题或独立计算尺寸行；Auto Layout 分组继续显示 CSS 属性名。
@@ -66,8 +68,9 @@ Editor 当前只渲染 Entity 已拥有的 Component Inspector，Property Panel 
 
 - Figma 把 rotation 作为独立字段，而不是 X/Y 的组成部分；本方案对应拆成独立 `angle` 属性行。
   参考：[Adjust alignment, rotation, position, and dimensions](https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-rotation-position-and-dimensions)。
-- Figma 的 W/H 是主尺寸字段，轴向 sizing behavior 通过相邻菜单选择；输入数值会把该轴自动切到
-  Fixed。本方案保留该交互，但把值区和菜单触发器收进同一个复合输入外壳，以适配 365px Inspector。
+- Figma 的 W/H 是主尺寸字段，输入数值会把该轴自动切到 Fixed。本方案进一步采用旧版紧凑字段
+  的输入体验：静止时只保留主输入，聚焦后才显示 `Fill`/`Hug` 建议，不常驻暴露模式触发器，
+  以适配 365px Inspector。
   参考：[Guide to auto layout](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)。
 - Figma 的数值字段还支持 scrub、算式以及在尺寸菜单中设置 min/max。本轮只复用字段拆分、融合菜单
   和“输入数字转 Fixed”语义；scrub、算式与 min/max UI 保持非目标。

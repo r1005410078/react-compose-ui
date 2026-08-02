@@ -15,7 +15,8 @@ Container 当前默认携带 Layout，用户无法先创建自由容器再明确
 - 增加 Registry Inspector 基础分组与默认展开协议，把 Identity 与跨 Transform/LayoutItem 的复合
   几何 Inspector 合并为单列“基础”分组，并让同一 Section 中的多个 Inspector 共享正确的搜索可见性。
 - 隐藏定位模式，把位置/自身对齐、旋转、尺寸拆成各自独立的属性类型和标准属性行；旋转复用
-  Property Panel 内建 Angle Editor，尺寸则以 W/H 两个“数值 + 尾部模式菜单”的融合控件呈现。
+  Property Panel 内建 Angle Editor，尺寸则以 W/H 两个可输入数字或英文 `Fill`/`Hug` 的单一
+  combobox 呈现，不常驻显示尾部模式选项。
 - 保留可展开四边的紧凑外边距入口；基础分组不再显示 CSS 副标题。
 - 在共享 Components 层发布通用角度选择器，为基础 Angle Editor 与 Materials 旋转入口提供同一套
   数字输入、转盘、快捷角、键盘和焦点语义。

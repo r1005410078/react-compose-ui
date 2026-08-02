@@ -11,4 +11,5 @@ support atomic layout enable/remove commands, and replace the layout controls wi
 conditional sizing, unified gap, and an editable box-model preview. Merge Transform and LayoutItem
 into a compact basic geometry Inspector, aggregate embedded search visibility, and add a reusable
 angle input with a normalized dial and shortcut values. Expose position/alignment, rotation, and
-size as distinct property types, and fuse each axis value with its trailing Fixed/Fill/Hug selector.
+size as distinct property types, and expose each axis as one editable combobox: numeric values imply
+Fixed while focus reveals English Fill/Hug suggestions that can also be typed directly.

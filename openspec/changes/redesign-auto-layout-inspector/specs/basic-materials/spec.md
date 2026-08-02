@@ -55,15 +55,16 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 - **THEN** Inspector 不显示 Flow/Absolute 定位模式，Absolute 显示位置且隐藏自身对齐，Flow 执行相反规则
 - **AND** 名称、位置或自身对齐、旋转、尺寸、外边距各占一行并位于同一基础分组
 - **AND** Absolute 的位置行显示 X/Y，Flow 在对应行显示自身对齐，旋转始终使用独立 Angle 属性行
-- **AND** 尺寸行并排显示 W/H，Fixed 显示可编辑数字，Fill/Hug 分别显示本地化模式名
+- **AND** 尺寸行并排显示 W/H，Fixed 只显示可编辑数字，Fill/Hug 分别显示英文 `Fill`/`Hug`
 - **AND** 基础分组不显示 position、width、height、inset、margin 或 align-self 等 CSS 副标题
 
-#### Scenario: 编辑宽高组合输入
+#### Scenario: 编辑宽高智能输入
 
-- **WHEN** 用户输入合法数字、选择 Fill/Hug，或从 Fill/Hug 选择 Fixed
-- **THEN** 数字输入原子写入 Fixed，模式菜单只列出当前上下文允许的选项
-- **AND** 每个轴的前缀、值区和尾部模式触发器共用一个复合输入外壳，不显示分离的 input 与 select 边框
-- **AND** 切回 Fixed 优先采用 Snapshot 计算尺寸，Snapshot 缺失时使用持久化 fallback
+- **WHEN** 用户聚焦尺寸字段、输入合法数字或英文 Fill/Hug，或从建议列表选择模式
+- **THEN** 数字输入原子写入 Fixed，英文模式输入或建议选择原子写入对应模式
+- **AND** 每个轴只显示 W/H 前缀与一个输入框，不常驻显示 Fixed 文案、尾部 select 或模式箭头
+- **AND** 聚焦时出现的建议列表只包含当前上下文允许的 `Fill`/`Hug`，中文界面也不得翻译这些模式名
+- **AND** 模式文本匹配大小写不敏感，最终显示规范化为 `Fill`/`Hug`
 - **AND** 空白、非法输入或 Escape 不产生事务，Enter 与失焦只提交一次有效值
 
 #### Scenario: 编辑独立位置与角度属性
@@ -108,4 +109,4 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 
 - **WHEN** Inspector 内容宽度约为 365px
 - **THEN** direction/wrap、gap/align-content、justify-content/align-items 三行均无横向溢出
-- **AND** 基础分组的位置/自身对齐、独立旋转、融合尺寸、展开外边距及盒模型输入、菜单、焦点环和英文文案保持可达与可读
+- **AND** 基础分组的位置/自身对齐、独立旋转、智能尺寸输入、展开外边距及盒模型输入、建议列表、焦点环和英文文案保持可达与可读

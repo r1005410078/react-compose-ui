@@ -110,3 +110,20 @@
   - Regression: Materials 51 项测试、全仓 37 个测试任务、`bun run lint`、`bun run typecheck`、`bun run build` 与 `bun run pack:dry-run` 全部通过。
   - E2E: Chromium 30/30 通过；除五张 Basic/Fill 目标黄金图外，仅更新 SVG Inspector 与 Hug 完整工作区中确由基础属性拆行产生的差异。
   - Validation: `openspec validate redesign-auto-layout-inspector --strict` 通过；PostHog 遥测网络失败不影响本地严格校验与退出码。
+
+## 7. Size 智能输入精简
+
+- [x] 7.1 修订 proposal、design 与增量规范，明确 Fixed 由数字隐式表达、模式使用英文智能输入，并通过严格 OpenSpec 校验。
+  - Validation: `openspec validate redesign-auto-layout-inspector --strict` 通过；PostHog 遥测网络失败不影响本地校验与退出码。
+- [x] 7.2 Red：覆盖静止态无尾部 select/Fixed 文案、聚焦显示合法英文建议、直接输入 Fill/Hug 与数字转 Fixed。
+  - Red command: `bun run --cwd packages/materials test -- component-inspectors.test.tsx`。
+  - Red result: 17 项中目标 Scenario 失败；当前尺寸值仍是普通 textbox，且继续渲染中文 Fixed/Fill/Hug 尾部 select，找不到目标 combobox 与聚焦建议列表。
+  - Red reason: `AxisSizingControl` 尚未把模式解析、建议选择和数值提交合并到单一输入。
+- [x] 7.3 Green/Refactor：以单一可编辑 combobox 替换 AxisSizing 尾部 select，补齐键盘、焦点、只读和非法草稿语义。
+  - Green command/result: Materials 目标 17 项与全包 51 项测试通过；聚焦显示英文建议、点击建议、大小写不敏感键入模式、数字转 Fixed 与非法失焦恢复均通过。
+  - Regression command/result: Materials `lint` 与 `typecheck` 通过；既有 Position、Angle、margin、Snapshot fallback 和单事务边界保持通过。
+- [x] 7.4 更新 README/Changeset、365px 黄金图并人工审阅；运行目标测试、`lint`、`typecheck`、`test`、`build`、`test:e2e`、`pack:dry-run` 与严格 OpenSpec 校验。
+  - Docs: 根 README、Materials README 与 Changeset 已同步“数字即 Fixed、聚焦选择或直接输入英文 Fill/Hug”的智能输入语义。
+  - Visual: 更新 Basic Flow/Absolute、margin 展开与 Fill 交互黄金图，新增 `basic-inspector-size-suggestions.png`；人工确认静止态无尾部选择器，聚焦浮层完整显示 Fill/Hug，365px Inspector 无裁切和横向溢出。
+  - Regression: Materials 目标 17 项、全包 51 项、全仓 37 个测试任务，以及 `bun run lint`、`bun run typecheck`、`bun run build`、`bun run pack:dry-run` 全部通过。
+  - E2E/Validation: Chromium 30/30 通过；`openspec validate redesign-auto-layout-inspector --strict` 通过，PostHog 遥测网络失败不影响校验退出码。
