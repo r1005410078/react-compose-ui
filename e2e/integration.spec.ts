@@ -959,16 +959,19 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toHaveValue('auto')
   await expect(childInspector.getByRole('spinbutton', { name: '位置 X' })).toHaveCount(0)
   await expect(childInspector.getByRole('spinbutton', { name: '旋转' })).toHaveValue('0')
-  const transformField = await childInspector.locator('[data-property-path="transform"]').boundingBox()
+  const alignSelfField = await childInspector.locator('[data-property-path="alignSelf"]').boundingBox()
+  const rotationField = await childInspector.locator('[data-property-path="rotation"]').boundingBox()
   const sizeField = await childInspector.locator('[data-property-path="size"]').boundingBox()
   const marginField = await childInspector.locator('[data-property-path="margin"]').boundingBox()
-  expect(transformField).not.toBeNull()
+  expect(alignSelfField).not.toBeNull()
+  expect(rotationField).not.toBeNull()
   expect(sizeField).not.toBeNull()
   expect(marginField).not.toBeNull()
-  expect(sizeField!.y).toBeGreaterThan(transformField!.y)
+  expect(rotationField!.y).toBeGreaterThan(alignSelfField!.y)
+  expect(sizeField!.y).toBeGreaterThan(rotationField!.y)
   expect(marginField!.y).toBeGreaterThan(sizeField!.y)
   const basicRowStyles = await childInspector.evaluate((element) => (
-    ['transform', 'size', 'margin'].map((path) => {
+    ['alignSelf', 'rotation', 'size', 'margin'].map((path) => {
       const field = element.querySelector<HTMLElement>(`[data-property-path="${path}"]`)
       const actions = field?.querySelector<HTMLElement>(':scope > .property-panel__actions')
       return {
@@ -982,9 +985,10 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
     { actionDisplay: 'flex', borderTopWidth: '1px', gridColumnCount: 3 },
     { actionDisplay: 'flex', borderTopWidth: '1px', gridColumnCount: 3 },
     { actionDisplay: 'flex', borderTopWidth: '1px', gridColumnCount: 3 },
+    { actionDisplay: 'flex', borderTopWidth: '1px', gridColumnCount: 3 },
   ])
   const basicLabelStarts = await childInspector.evaluate((element) => (
-    ['name', 'transform', 'size', 'margin'].map((path) => {
+    ['name', 'alignSelf', 'rotation', 'size', 'margin'].map((path) => {
       const field = element.querySelector(`[data-property-path="${path}"]`)
       const label = field?.querySelector(':scope > .property-panel__label, :scope > label')
       return label?.getBoundingClientRect().x ?? null

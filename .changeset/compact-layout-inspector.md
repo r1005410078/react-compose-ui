@@ -10,4 +10,5 @@ Make Auto Layout opt-in for free containers, add generic missing-component Inspe
 support atomic layout enable/remove commands, and replace the layout controls with compact
 conditional sizing, unified gap, and an editable box-model preview. Merge Transform and LayoutItem
 into a compact basic geometry Inspector, aggregate embedded search visibility, and add a reusable
-angle input with a normalized dial and shortcut values.
+angle input with a normalized dial and shortcut values. Expose position/alignment, rotation, and
+size as distinct property types, and fuse each axis value with its trailing Fixed/Fill/Hug selector.

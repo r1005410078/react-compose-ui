@@ -154,8 +154,9 @@ Resize 模式支持 `free`、`preserve-aspect`、`horizontal`、`vertical`、`no
 
 Inspector 按 Registry 顺序聚合当前 Entity 的 Component 属性区。Definition 可用
 `inspectorGroup: 'basic'` 把领域字段合并到“基础”，也可指定独立分组的默认展开状态。
-内建基础区按“名称、变换、尺寸、外边距”紧凑组合 Transform 与 LayoutItem：Absolute
-显示 X/Y，Flow 显示自身对齐，两者共用角度转盘；W/H 分别编辑 Fixed/Fill/Hug，
+内建基础区按“名称、位置/自身对齐、旋转、尺寸、外边距”紧凑组合 Transform 与 LayoutItem：
+Absolute 的 X/Y 使用独立 Position 类型，Flow 显示独立自身对齐字段，旋转复用 Angle 类型；尺寸的
+W/H 分别以融合的数值与模式控件编辑 Fixed/Fill/Hug，
 外边距可按 T/R/B/L 展开。顶部“添加能力”用产品术语扩展 Entity；锁定后只有 Lock
 可编辑。Preview 使用与 Stage 相同的 LayoutSnapshot、Transform rotation、Appearance、Hierarchy、
 Clip 和 Renderer 语义，但不包含编辑 chrome。

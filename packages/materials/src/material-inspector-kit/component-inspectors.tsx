@@ -21,7 +21,6 @@ import {
   type JsonObject,
   type JsonValue,
 } from '@compose-ui/core'
-import { ComposeAnglePicker } from '@compose-ui/components'
 import {
   ComposePropertyPanel,
   type ComposePropertyPanelRenderer,
@@ -72,17 +71,22 @@ const BasicGeometryInspectorContext = createContext<BasicGeometryInspectorView>(
   zh: true,
 })
 
-interface BasicTransformValue {
-  readonly positioning: ComposeLayoutItem['positioning']
-  readonly x: number
-  readonly y: number
-  readonly rotation: number
-  readonly alignSelf: ComposeLayoutItem['alignSelf']
-}
-
 interface BasicSizeValue {
   readonly width: ComposeAxisSizing
   readonly height: ComposeAxisSizing
+}
+
+interface BasicPositionValue {
+  readonly x: number
+  readonly y: number
+}
+
+interface BasicGeometryValue {
+  readonly position?: { readonly x: number; readonly y: number }
+  readonly alignSelf?: ComposeLayoutItem['alignSelf']
+  readonly rotation: number
+  readonly size: BasicSizeValue
+  readonly margin: ComposeEdges
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -91,20 +95,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
-}
-
-function isBasicTransformValue(value: unknown): value is BasicTransformValue {
-  if (!isRecord(value)) return false
-  return (value.positioning === 'flow' || value.positioning === 'absolute')
-    && isFiniteNumber(value.x)
-    && isFiniteNumber(value.y)
-    && isFiniteNumber(value.rotation)
-    && (value.alignSelf === 'auto'
-      || value.alignSelf === 'flex-start'
-      || value.alignSelf === 'center'
-      || value.alignSelf === 'flex-end'
-      || value.alignSelf === 'stretch'
-      || value.alignSelf === 'baseline')
 }
 
 function isAxisSizing(value: unknown): value is ComposeAxisSizing {
@@ -117,6 +107,10 @@ function isAxisSizing(value: unknown): value is ComposeAxisSizing {
 
 function isBasicSizeValue(value: unknown): value is BasicSizeValue {
   return isRecord(value) && isAxisSizing(value.width) && isAxisSizing(value.height)
+}
+
+function isBasicPositionValue(value: unknown): value is BasicPositionValue {
+  return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y)
 }
 
 function isComposeEdgesValue(value: unknown): value is ComposeEdges {
@@ -182,45 +176,24 @@ function NumberDraftInput({
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
-function BasicTransformEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
+function BasicPositionEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
   const zh = useZh()
-  const transform = value as unknown as BasicTransformValue
+  const position = value as unknown as BasicPositionValue
   return (
-    <div className="layout-item-inspector__transform">
-      {transform.positioning === 'absolute' ? (
-        <div className="layout-item-inspector__position">
-          <NumberDraftInput
-            label={zh ? '位置 X' : 'Position X'}
-            prefix="X"
-            readOnly={readOnly}
-            value={transform.x}
-            onCommit={(x) => commit({ ...transform, x }, 'commit')}
-          />
-          <NumberDraftInput
-            label={zh ? '位置 Y' : 'Position Y'}
-            prefix="Y"
-            readOnly={readOnly}
-            value={transform.y}
-            onCommit={(y) => commit({ ...transform, y }, 'commit')}
-          />
-        </div>
-      ) : (
-        <select
-          aria-label={zh ? '自身对齐' : 'Align self'}
-          disabled={readOnly}
-          value={transform.alignSelf}
-          onChange={(event) => commit({ ...transform, alignSelf: event.target.value }, 'commit')}
-        >
-          {ALIGN_SELF_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{zh ? option.zh : option.en}</option>
-          ))}
-        </select>
-      )}
-      <ComposeAnglePicker
-        label={zh ? '旋转' : 'Rotation'}
+    <div className="layout-item-inspector__position">
+      <NumberDraftInput
+        label={zh ? '位置 X' : 'Position X'}
+        prefix="X"
         readOnly={readOnly}
-        value={transform.rotation}
-        onValueCommit={(rotation) => commit({ ...transform, rotation }, 'commit')}
+        value={position.x}
+        onCommit={(x) => commit({ ...position, x }, 'commit')}
+      />
+      <NumberDraftInput
+        label={zh ? '位置 Y' : 'Position Y'}
+        prefix="Y"
+        readOnly={readOnly}
+        value={position.y}
+        onCommit={(y) => commit({ ...position, y }, 'commit')}
       />
     </div>
   )
@@ -258,6 +231,9 @@ function AxisSizingControl({
   const dimensionLabel = axis === 'width'
     ? (zh ? '尺寸宽度' : 'Size width')
     : (zh ? '尺寸高度' : 'Size height')
+  const sizingLabel = axis === 'width'
+    ? (zh ? '宽度尺寸' : 'Width sizing')
+    : (zh ? '高度尺寸' : 'Height sizing')
   const submit = () => {
     if (!current.dirty || current.text.trim() === '') return
     const candidate = Number(current.text)
@@ -266,7 +242,12 @@ function AxisSizingControl({
     setDraft({ external, text: String(candidate), dirty: false })
   }
   return (
-    <div className="layout-item-inspector__axis-sizing">
+    <div
+      aria-label={sizingLabel}
+      className="layout-item-inspector__axis-sizing"
+      data-sizing-mode={sizing.mode}
+      role="group"
+    >
       <span aria-hidden="true">{axis === 'width' ? 'W' : 'H'}</span>
       <input
         aria-describedby={computedId}
@@ -318,6 +299,15 @@ const ALIGN_SELF_OPTIONS = [
   { value: 'stretch', zh: '拉伸', en: 'Stretch' },
   { value: 'baseline', zh: '基线', en: 'Baseline' },
 ] as const
+
+const ALIGN_SELF_VALUES = ALIGN_SELF_OPTIONS.map((option) => option.value) as [
+  'auto',
+  'flex-start',
+  'center',
+  'flex-end',
+  'stretch',
+  'baseline',
+]
 
 // eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
 function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
@@ -419,8 +409,8 @@ function BasicMarginEditor({ commit, label, readOnly, value }: ComposePropertyPa
 
 const BASIC_GEOMETRY_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
   {
-    id: 'basic-geometry-transform',
-    component: BasicTransformEditor,
+    id: 'basic-geometry-position',
+    component: BasicPositionEditor,
     layout: 'inline',
   },
   {
@@ -456,15 +446,17 @@ export function createLayoutItemInspector(
     const hugAllowed = hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
     const box = layoutSnapshot?.boxes[entity.id]
     const transform = getComposeSpatialTransform(entity)
-    const schema = useMemo(() => {
+    const schema = useMemo<v.GenericSchema<BasicGeometryValue>>(() => {
       const sizingModes = fillAllowed
         ? (hugAllowed ? ['fixed', 'fill', 'hug'] as const : ['fixed', 'fill'] as const)
         : (hugAllowed ? ['fixed', 'hug'] as const : ['fixed'] as const)
-      return v.object({
-        transform: v.pipe(v.custom<BasicTransformValue>(isBasicTransformValue),
-          v.title(zh ? '变换' : 'Transform'), v.metadata({
-          propertyPanel: { editor: 'basic-geometry-transform' },
-        })),
+      const sharedFields = {
+        rotation: v.pipe(
+          v.number(),
+          v.finite(zh ? '旋转必须是有限数字' : 'Rotation must be finite'),
+          v.title(zh ? '旋转' : 'Rotation'),
+          v.metadata({ propertyPanel: { editor: 'angle' } }),
+        ),
         size: v.pipe(v.custom<BasicSizeValue>((candidate) => {
           if (!isBasicSizeValue(candidate)) return false
           const allowedModes: readonly ComposeAxisSizing['mode'][] = sizingModes
@@ -479,16 +471,35 @@ export function createLayoutItemInspector(
           v.title(zh ? '外边距' : 'Margin'), v.metadata({
           propertyPanel: { editor: 'basic-geometry-margin' },
         })),
-      })
-    }, [fillAllowed, hugAllowed, zh])
-    const viewValue = {
-      transform: {
-        positioning: item.positioning,
-        x: item.offset.x,
-        y: item.offset.y,
-        rotation: transform.rotation,
-        alignSelf: item.alignSelf,
-      },
+      }
+      if (item.positioning === 'absolute') {
+        return v.object({
+          position: v.pipe(v.custom<BasicPositionValue>(isBasicPositionValue),
+            v.title(zh ? '位置' : 'Position'), v.metadata({
+            propertyPanel: { editor: 'basic-geometry-position' },
+          })),
+          ...sharedFields,
+        }) as unknown as v.GenericSchema<BasicGeometryValue>
+      }
+      return v.object({
+        alignSelf: v.pipe(v.picklist(ALIGN_SELF_VALUES),
+          v.title(zh ? '自身对齐' : 'Align self'), v.metadata({
+          propertyPanel: {
+            optionLabels: Object.fromEntries(ALIGN_SELF_OPTIONS.map((option) => [
+              option.value,
+              zh ? option.zh : option.en,
+            ])),
+          },
+        })),
+        ...sharedFields,
+      }) as unknown as v.GenericSchema<BasicGeometryValue>
+    }, [fillAllowed, hugAllowed, item.positioning, zh])
+    const placementValue = item.positioning === 'absolute'
+      ? { position: { x: item.offset.x, y: item.offset.y } }
+      : { alignSelf: item.alignSelf }
+    const viewValue: BasicGeometryValue = {
+      ...placementValue,
+      rotation: transform.rotation,
       size: { width: item.width, height: item.height },
       margin: item.margin,
     }
@@ -516,28 +527,31 @@ export function createLayoutItemInspector(
             value={viewValue}
             onValueChange={(next, change) => {
               const field = change.path[0]
-              if (field === 'transform') {
-                if (next.transform.rotation !== transform.rotation) {
-                  dispatch(command(
-                    idFactory,
-                    entity,
-                    BUILTIN_COMMAND_TYPES.setTransform,
-                    {
-                      operation: 'set',
-                      updates: [{
-                        entityId: entity.id,
-                        transform: { ...transform, rotation: next.transform.rotation },
-                      }] as unknown as JsonValue,
-                    },
-                    zh ? `修改 ${entity.name} 变换` : `Update ${entity.name} transform`,
-                  ))
-                  return
-                }
+              if (field === 'position' && next.position) {
                 updateLayoutItem({
                   ...item,
-                  offset: { x: next.transform.x, y: next.transform.y },
-                  alignSelf: next.transform.alignSelf,
+                  offset: next.position,
                 })
+                return
+              }
+              if (field === 'alignSelf' && next.alignSelf) {
+                updateLayoutItem({ ...item, alignSelf: next.alignSelf })
+                return
+              }
+              if (field === 'rotation') {
+                dispatch(command(
+                  idFactory,
+                  entity,
+                  BUILTIN_COMMAND_TYPES.setTransform,
+                  {
+                    operation: 'set',
+                    updates: [{
+                      entityId: entity.id,
+                      transform: { ...transform, rotation: next.rotation },
+                    }] as unknown as JsonValue,
+                  },
+                  zh ? `修改 ${entity.name} 变换` : `Update ${entity.name} transform`,
+                ))
                 return
               }
               if (field === 'size') {
@@ -559,7 +573,7 @@ export function createLayoutItemInspector(
 
 /*
  * 以下 Component Inspectors 仍各自拥有一个 Component；复合几何 Inspector 是唯一跨 Component
- * 的例外，因为位置/尺寸来自 LayoutItem，而旋转必须继续写入 Transform。
+ * 的例外，因为位置/尺寸来自 LayoutItem，而独立 Angle 属性必须继续写入 Transform。
  */
 
 /** 创建 Visibility Component Inspector。 @internal */

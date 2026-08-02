@@ -53,8 +53,8 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 
 - **WHEN** LayoutItem 在 Absolute/Flow 或 Fixed/Fill/Hug 之间切换
 - **THEN** Inspector 不显示 Flow/Absolute 定位模式，Absolute 显示位置且隐藏自身对齐，Flow 执行相反规则
-- **AND** 名称、变换、尺寸、外边距各占一行并位于同一基础分组
-- **AND** Absolute 的变换行显示 X/Y/旋转，Flow 的变换行显示自身对齐/旋转
+- **AND** 名称、位置或自身对齐、旋转、尺寸、外边距各占一行并位于同一基础分组
+- **AND** Absolute 的位置行显示 X/Y，Flow 在对应行显示自身对齐，旋转始终使用独立 Angle 属性行
 - **AND** 尺寸行并排显示 W/H，Fixed 显示可编辑数字，Fill/Hug 分别显示本地化模式名
 - **AND** 基础分组不显示 position、width、height、inset、margin 或 align-self 等 CSS 副标题
 
@@ -62,13 +62,16 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 
 - **WHEN** 用户输入合法数字、选择 Fill/Hug，或从 Fill/Hug 选择 Fixed
 - **THEN** 数字输入原子写入 Fixed，模式菜单只列出当前上下文允许的选项
+- **AND** 每个轴的前缀、值区和尾部模式触发器共用一个复合输入外壳，不显示分离的 input 与 select 边框
 - **AND** 切回 Fixed 优先采用 Snapshot 计算尺寸，Snapshot 缺失时使用持久化 fallback
 - **AND** 空白、非法输入或 Escape 不产生事务，Enter 与失焦只提交一次有效值
 
-#### Scenario: 编辑复合变换
+#### Scenario: 编辑独立位置与角度属性
 
-- **WHEN** 用户编辑 Absolute 的 X/Y、Flow 的自身对齐，或任一节点的旋转
+- **WHEN** 用户编辑 Absolute 的位置、Flow 的自身对齐，或独立旋转属性
 - **THEN** Inspector 分别通过现有 LayoutItem 或 Transform 命令更新对应 Component
+- **AND** Absolute 位置使用独立 Position 自定义类型、Flow 自身对齐使用独立 picklist、旋转使用内建 angle 语义类型
+- **AND** Materials 不把 position、alignSelf 与 rotation 包含在同一个自定义值中
 - **AND** 数值草稿只在 Enter 或失焦时提交，Escape、空白与非法值不产生事务
 
 #### Scenario: 展开和联动外边距
@@ -105,4 +108,4 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 
 - **WHEN** Inspector 内容宽度约为 365px
 - **THEN** direction/wrap、gap/align-content、justify-content/align-items 三行均无横向溢出
-- **AND** 基础分组的变换、尺寸、展开外边距及盒模型输入、菜单、焦点环和英文文案保持可达与可读
+- **AND** 基础分组的位置/自身对齐、独立旋转、融合尺寸、展开外边距及盒模型输入、菜单、焦点环和英文文案保持可达与可读

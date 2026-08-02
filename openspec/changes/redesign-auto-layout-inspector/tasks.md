@@ -86,3 +86,27 @@
 - [x] 5.9 运行相关测试及 `lint`、`typecheck`、`test`、`build`、`test:e2e`、`pack:dry-run` 并记录证据。
   - Validation: `openspec validate redesign-auto-layout-inspector --strict`、`bun run lint`、`bun run typecheck`、`bun run test`、`bun run build`、`bun run test:e2e` 和 `bun run pack:dry-run` 全部通过。
   - E2E result: Chromium 30/30 通过，包含 Basic Absolute/Flow、Auto Layout、Hug/Fill、Page Slot 深嵌套与 Stage/Preview 回归。
+
+## 6. 独立 Angle 属性与融合 Size 输入
+
+- [x] 6.1 调研 Figma 公开文档，修订 proposal、design 与增量规范并通过严格 OpenSpec 校验。
+  - Research: Figma 将 rotation 作为独立字段；W/H 作为主尺寸字段，通过相邻菜单选择 Fixed/Hug/Fill，直接输入数值自动转为 Fixed。
+  - Validation: `openspec validate redesign-auto-layout-inspector --strict` 通过；PostHog 遥测网络失败不影响校验结果与退出码。
+- [x] 6.2 Red：为位置/自身对齐、旋转和尺寸各自独立的 Schema 字段建立失败测试。
+  - Expected red: 当前 `BasicTransformValue` 仍把 positioning、X/Y、alignSelf 与 rotation 放入同一自定义字段。
+  - Red result: 目标测试 17 项中 3 项按预期失败；缺少独立 `position`/`rotation` 字段与 Angle renderer。
+- [x] 6.3 Red：为 W/H 的融合输入外壳、尾部模式菜单、合法模式与键盘/焦点语义建立失败测试。
+  - Expected red: 当前 AxisSizingControl 仍渲染具有独立边框的 input 与原生 select。
+  - Red result: 目标测试找不到 W/H 融合 group，确认值输入和模式选项尚未形成一个复合控件。
+- [x] 6.4 Green/Refactor：把 Absolute 位置接到独立 Position 自定义类型、Flow 自身对齐接到独立 picklist、rotation 接到内建 `angle`，并按字段路径分派既有命令。
+  - Green result: Materials 17 项目标测试通过；每个可见属性均拥有独立标准属性行和语义类型。
+- [x] 6.5 Green/Refactor：实现 AxisSizing compound control，使值区与模式触发器共享边框、焦点和禁用/只读状态；保留输入数字转 Fixed 与 Snapshot fallback。
+  - Green result: W/H 分别暴露可访问 compound group；目标测试与 Materials typecheck 通过。
+- [x] 6.6 更新 365px Absolute/Flow、Angle 弹层和 Fixed/Fill/Hug 黄金图并人工检查标签对齐、菜单可达性与无横向溢出。
+  - E2E: 更新 Basic Flow/Absolute、margin 展开、Angle 弹层与完整 Fill 交互五张黄金图；目标 Playwright 场景通过。
+  - Review: 名称、位置/自身对齐、旋转、尺寸和外边距共享标签列；Fill/Hug 不重复显示模式名，Fixed 保留数值与尾部模式；365px 无横向溢出。
+- [x] 6.7 更新 README/Changeset，并运行目标测试、`lint`、`typecheck`、`test`、`build`、`test:e2e`、`pack:dry-run` 与严格 OpenSpec 校验，记录 Red/Green/Regression 证据。
+  - Docs: 根 README、Materials README 与 Changeset 已同步独立 Position/Align Self、Angle 和融合 AxisSizing 控件语义。
+  - Regression: Materials 51 项测试、全仓 37 个测试任务、`bun run lint`、`bun run typecheck`、`bun run build` 与 `bun run pack:dry-run` 全部通过。
+  - E2E: Chromium 30/30 通过；除五张 Basic/Fill 目标黄金图外，仅更新 SVG Inspector 与 Hug 完整工作区中确由基础属性拆行产生的差异。
+  - Validation: `openspec validate redesign-auto-layout-inspector --strict` 通过；PostHog 遥测网络失败不影响本地严格校验与退出码。

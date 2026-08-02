@@ -121,7 +121,7 @@ describe('内建 Component inspectors', () => {
     expect(definitions.find((item) => item.key === 'Renderer')?.hidden).toBe(true)
   })
 
-  it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / Absolute 复合变换分别提交位置与旋转', () => {
+  it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / Absolute 位置与 Angle 属性分别提交', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('LayoutItem')
     const target = entity()
@@ -139,6 +139,10 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByRole('spinbutton', { name: '位置 X' })).toHaveValue(10)
     expect(screen.getByRole('spinbutton', { name: '位置 Y' })).toHaveValue(20)
     expect(screen.getByRole('spinbutton', { name: '旋转' })).toHaveValue(0)
+    expect(document.querySelector('[data-property-path="position"] .layout-item-inspector__position'))
+      .toBeInTheDocument()
+    expect(document.querySelector('[data-property-path="rotation"] [data-semantic-editor="angle"]'))
+      .toBeInTheDocument()
     expect(screen.queryByText('position')).not.toBeInTheDocument()
     expect(screen.queryByText('width')).not.toBeInTheDocument()
     expect(screen.queryByText('height')).not.toBeInTheDocument()
@@ -175,7 +179,7 @@ describe('内建 Component inspectors', () => {
     })
   })
 
-  it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / Flow 显示自身对齐与复合尺寸', () => {
+  it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / Flow 显示自身对齐与融合尺寸', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('LayoutItem')
     const child = entity({
@@ -218,10 +222,23 @@ describe('内建 Component inspectors', () => {
     expect(screen.queryByRole('spinbutton', { name: '位置 X' })).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '自身对齐' })).toHaveValue('auto')
     expect(screen.getByRole('spinbutton', { name: '旋转' })).toHaveValue(0)
+    expect(globalThis.document.querySelector('[data-property-path="position"]')).not.toBeInTheDocument()
+    const alignSelfRow = screen.getByRole('combobox', { name: '自身对齐' })
+      .closest('.property-panel__field')
+    expect(alignSelfRow).toHaveAttribute('data-property-path', 'alignSelf')
+    expect(alignSelfRow?.querySelector(':scope > label')).toHaveTextContent('自身对齐')
+    expect(globalThis.document.querySelector('[data-property-path="rotation"] [data-semantic-editor="angle"]'))
+      .toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '尺寸宽度' })).toHaveValue('填充')
     expect(screen.getByRole('textbox', { name: '尺寸高度' })).toHaveValue('40')
     expect(screen.getByRole('combobox', { name: '宽度模式' })).toHaveValue('fill')
     expect(screen.getByRole('combobox', { name: '高度模式' })).toHaveValue('fixed')
+    const widthSizing = screen.getByRole('group', { name: '宽度尺寸' })
+    const heightSizing = screen.getByRole('group', { name: '高度尺寸' })
+    expect(within(widthSizing).getByRole('textbox', { name: '尺寸宽度' })).toBeInTheDocument()
+    expect(within(widthSizing).getByRole('combobox', { name: '宽度模式' })).toBeInTheDocument()
+    expect(within(heightSizing).getByRole('textbox', { name: '尺寸高度' })).toBeInTheDocument()
+    expect(within(heightSizing).getByRole('combobox', { name: '高度模式' })).toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('combobox', { name: '宽度模式' }), {
       target: { value: 'fixed' },
@@ -299,7 +316,7 @@ describe('内建 Component inspectors', () => {
     })
   })
 
-  it('基础复合几何字段使用标准单行自定义类型并共享标签列', () => {
+  it('基础位置、Angle、Size 与 Margin 使用各自标准属性行并共享标签列', () => {
     const Inspector = inspectorOf('LayoutItem')
     const target = entity()
     render(
@@ -312,14 +329,17 @@ describe('内建 Component inspectors', () => {
       />,
     )
 
-    for (const path of ['transform', 'size', 'margin']) {
+    for (const path of ['position', 'rotation', 'size', 'margin']) {
       const field = document.querySelector(`[data-property-path="${path}"]`)
       expect(field).toHaveAttribute('data-property-layout', 'inline')
       expect(field).toHaveClass('property-panel__field')
       expect(field).not.toHaveClass('property-panel__field--full-width')
       expect(field?.querySelector(':scope > .property-panel__actions')).toBeInTheDocument()
     }
-    expect(screen.queryByRole('group', { name: '变换' })).not.toBeInTheDocument()
+    expect(document.querySelector('[data-property-path="position"] .property-panel__label'))
+      .toHaveTextContent('位置')
+    expect(document.querySelector('[data-property-path="rotation"] .property-panel__label'))
+      .toHaveTextContent('旋转')
     expect(screen.queryByRole('group', { name: '尺寸' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: '外边距' })).not.toBeInTheDocument()
   })
