@@ -224,31 +224,31 @@
   background: transparent;
 }
 
-.flex-layout-inspector > .property-panel .property-panel__toolbar,
-.flex-layout-inspector > .property-panel .property-panel__separator {
+.flex-layout-inspector > .property-panel [data-property-part="toolbar"],
+.flex-layout-inspector > .property-panel [data-property-part="separator"] {
   display: none;
 }
 
-.flex-layout-inspector > .property-panel .property-panel__fields {
+.flex-layout-inspector > .property-panel [data-property-part="fields"] {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 8px;
 }
 
-.flex-layout-inspector > .property-panel .property-panel__ungrouped {
+.flex-layout-inspector > .property-panel [data-property-part="ungrouped"] {
   min-width: 0;
 }
 
 .flex-layout-inspector > .property-panel
-  .property-panel__ungrouped:has(> [data-property-path="padding"]) {
+  [data-property-part="ungrouped"]:has(> [data-property-path="padding"]) {
   grid-column: 1 / -1;
 }
 
-.flex-layout-inspector > .property-panel .property-panel__ungrouped:empty {
+.flex-layout-inspector > .property-panel [data-property-part="ungrouped"]:empty {
   display: none;
 }
 
-.flex-layout-inspector .property-panel__ungrouped > .property-panel__field {
+.flex-layout-inspector [data-property-part="ungrouped"] > [data-property-part="field"] {
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -257,11 +257,11 @@
   background: transparent;
 }
 
-.flex-layout-inspector .property-panel__ungrouped > .property-panel__field:hover {
+.flex-layout-inspector [data-property-part="ungrouped"] > [data-property-part="field"]:hover {
   background: transparent;
 }
 
-.flex-layout-inspector .property-panel__ungrouped > .property-panel__field > .property-panel__label {
+.flex-layout-inspector [data-property-part="ungrouped"] > [data-property-part="field"] > [data-property-part="label"] {
   min-height: 28px;
   padding: 0;
   border: 0;
@@ -269,11 +269,11 @@
   white-space: normal;
 }
 
-.flex-layout-inspector .property-panel__ungrouped > .property-panel__field > .property-panel__actions {
+.flex-layout-inspector [data-property-part="ungrouped"] > [data-property-part="field"] > [data-property-part="actions"] {
   display: none;
 }
 
-.flex-layout-inspector .property-panel__ungrouped > .property-panel__field > .property-panel__editor {
+.flex-layout-inspector [data-property-part="ungrouped"] > [data-property-part="field"] > [data-property-part="editor"] {
   width: 100%;
   min-height: 0;
   padding: 5px 0 0;
@@ -281,7 +281,7 @@
   background: transparent;
 }
 
-.flex-layout-inspector .property-panel__control {
+.flex-layout-inspector [data-property-part="control"] {
   width: 100%;
   max-width: none;
   margin: 0;

@@ -1762,3 +1762,39 @@ describe('OpenSpec: property-panel / 结构操作维护绑定地址 / 数组和 
     ], expect.objectContaining({ reason: 'remap' }))
   })
 })
+
+describe('OpenSpec: property-panel / 结构 Part 样式契约', () => {
+  it('结构容器输出稳定的 data-property-part', () => {
+    // 领域包需要重排属性面板外壳时只能依赖这套契约，不得选中内部 BEM 类名。
+    const schema = v.object({
+      width: v.pipe(v.number(), v.title('宽度')),
+    })
+    const { container } = render(
+      <ComposePropertyPanel
+        aria-label="契约面板"
+        schema={schema}
+        value={{ width: 10 }}
+        onValueChange={() => undefined}
+      />,
+    )
+
+    const parts = [...container.querySelectorAll('[data-property-part]')]
+      .map((node) => node.getAttribute('data-property-part'))
+    for (const part of ['toolbar', 'separator', 'fields', 'ungrouped', 'field', 'label', 'editor', 'control']) {
+      expect(parts, part).toContain(part)
+    }
+    // 每个 part 都长在原来的 BEM 元素上，迁移选择器时特异性与命中范围不变。
+    expect(container.querySelector('.property-panel__fields'))
+      .toHaveAttribute('data-property-part', 'fields')
+    expect(container.querySelector('.property-panel__ungrouped'))
+      .toHaveAttribute('data-property-part', 'ungrouped')
+    expect(container.querySelector('.property-panel__field'))
+      .toHaveAttribute('data-property-part', 'field')
+    expect(container.querySelector('.property-panel__editor'))
+      .toHaveAttribute('data-property-part', 'editor')
+    expect(container.querySelector('.property-panel__control'))
+      .toHaveAttribute('data-property-part', 'control')
+    expect(container.querySelector('.property-panel__toolbar'))
+      .toHaveAttribute('data-property-part', 'toolbar')
+  })
+})

@@ -2,16 +2,16 @@
   min-width: 0;
 }
 
-.layout-item-inspector .property-panel__field[data-property-layout="inline"] {
+.layout-item-inspector [data-property-part="field"][data-property-layout="inline"] {
   min-height: var(--pp-row-height, 26px);
 }
 
-.layout-item-inspector .property-panel__field[data-property-layout="inline"] > .property-panel__editor {
+.layout-item-inspector [data-property-part="field"][data-property-layout="inline"] > [data-property-part="editor"] {
   min-width: 0;
   padding-block: 1px 2px;
 }
 
-.layout-item-inspector .property-panel__field[data-property-layout="inline"] .property-panel__control {
+.layout-item-inspector [data-property-part="field"][data-property-layout="inline"] [data-property-part="control"] {
   width: 100%;
   max-width: none;
 }
