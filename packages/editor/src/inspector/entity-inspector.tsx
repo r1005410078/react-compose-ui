@@ -3,6 +3,7 @@ import * as v from 'valibot'
 import {
   ComposeRegistryComponentInspector,
   ComposeRegistryComponentInspectorHeaderActions,
+  ComposeRegistryMissingComponentInspector,
   ComposeRegistryMissingComponentInspectorHeaderActions,
   ComposeRegistryRendererInspector,
   type ComposeEntityRegistry,
@@ -172,8 +173,11 @@ export function EntityInspector({
     >
       <header className="compose-editor__entity-inspector-header">
         <strong>{entity.name}</strong>
-        <label>
-          <span>{zh ? '添加能力' : 'Add capability'}</span>
+        <label
+          className="compose-editor__entity-inspector-add-capability"
+          title={zh ? '添加能力' : 'Add capability'}
+        >
+          <span aria-hidden="true">＋</span>
           <select
             aria-label={zh ? '添加能力' : 'Add capability'}
             disabled={locked}
@@ -260,9 +264,10 @@ export function EntityInspector({
           const componentExists = entity.components[definition.key] !== undefined
           if (!componentExists) {
             if (!definition.missingInspector?.isVisible(entity)) return null
+            const hasContent = Boolean(definition.missingInspector.content)
             return (
               <ComposePropertyPanelSection
-                actionOnly
+                actionOnly={!hasContent}
                 actions={(
                   <ComposeRegistryMissingComponentInspectorHeaderActions
                     componentKey={definition.key}
@@ -276,9 +281,24 @@ export function EntityInspector({
                     registry={registry}
                   />
                 )}
+                defaultExpanded={definition.inspectorDefaultExpanded ?? false}
                 key={definition.key}
                 title={definition.label}
-              />
+              >
+                {hasContent ? (
+                  <ComposeRegistryMissingComponentInspector
+                    componentKey={definition.key}
+                    dispatch={dispatch}
+                    document={document}
+                    entity={entity}
+                    layoutSnapshot={layoutSnapshot}
+                    readOnly={locked}
+                    nodeEditPort={nodeEditPort}
+                    paintEditPort={paintEditPort}
+                    registry={registry}
+                  />
+                ) : null}
+              </ComposePropertyPanelSection>
             )
           }
           if (!definition.inspector) return null

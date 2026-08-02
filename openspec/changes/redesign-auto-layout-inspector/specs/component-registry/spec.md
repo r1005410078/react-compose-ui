@@ -2,15 +2,22 @@
 
 ### Requirement: 缺失 Component Inspector 协议
 
-Component Definition MUST 能够声明 Component 缺失时的 Inspector 标题栏操作与可见条件。Editor
-MUST 按 Registry 顺序组合该协议，不得硬编码具体 Component Key；锁定、文档、LayoutSnapshot 与
-dispatch MUST 使用和普通 Component Inspector 相同的上下文。
+Component Definition MUST 能够声明 Component 缺失时的 Inspector 标题栏操作、可选引导正文与
+可见条件。Editor MUST 按 Registry 顺序组合该协议，不得硬编码具体 Component Key；锁定、文档、
+LayoutSnapshot 与 dispatch MUST 使用和普通 Component Inspector 相同的上下文。没有引导正文的
+定义 MUST 继续呈现 action-only 分组；拥有引导正文的定义 MUST 呈现可折叠分组。
 
 #### Scenario: Hierarchy 缺少 Layout 时显示入口
 
 - **WHEN** Materials 的 Layout Definition 检查拥有 Hierarchy 但缺少 Layout 的 Entity
-- **THEN** Inspector 在 Layout 的 Registry 顺序位置显示“布局”操作行
+- **THEN** Inspector 在 Layout 的 Registry 顺序位置显示可折叠“布局”分组、标题操作与引导正文
 - **AND** 非 Hierarchy Entity 与已经拥有 Layout 的 Entity 不显示重复入口
+
+#### Scenario: 宿主缺失入口保持 action-only
+
+- **WHEN** 宿主 Component 的 missing Inspector 只声明标题栏操作而没有引导正文
+- **THEN** Editor 继续显示不可折叠且无正文的 action-only 分组
+- **AND** 不渲染空正文或伪造宿主领域文案
 
 #### Scenario: 缺失入口继承只读上下文
 

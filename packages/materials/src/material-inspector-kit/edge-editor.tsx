@@ -105,7 +105,9 @@ export function InspectorEdgesEditor({
           type="button"
           onClick={() => setExpanded(true)}
         >
-          ⛶
+          <svg aria-hidden="true" viewBox="0 0 20 20">
+            <path d="M8 4H4v4M12 4h4v4M16 12v4h-4M8 16H4v-4" />
+          </svg>
         </button>
       </div>
     )
@@ -132,7 +134,9 @@ export function InspectorEdgesEditor({
           setExpanded(false)
         }}
       >
-        ↔
+        <svg aria-hidden="true" viewBox="0 0 20 20">
+          <path d="M8 4v4H4M12 4v4h4M16 12h-4v4M4 12h4v4" />
+        </svg>
       </button>
     </div>
   )

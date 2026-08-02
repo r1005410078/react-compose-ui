@@ -254,6 +254,57 @@ export function ComposeRegistryMissingComponentInspectorHeaderActions({
   )
 }
 
+/** 解析并隔离一个尚未附加 ECS Component 的 Inspector 引导正文。 @public */
+export function ComposeRegistryMissingComponentInspector({
+  registry,
+  entity,
+  componentKey,
+  dispatch,
+  document,
+  layoutSnapshot,
+  nodeEditPort,
+  paintEditPort,
+  readOnly,
+}: {
+  readonly registry: ComposeEntityRegistry
+  readonly entity: ComposeEntity
+  readonly componentKey: string
+  readonly dispatch: (command: EditorCommand) => unknown
+  readonly document?: ComposeDocument
+  readonly layoutSnapshot?: ComposeLayoutSnapshot
+  readonly readOnly: boolean
+  readonly nodeEditPort?: ComposeNodeEditPort
+  readonly paintEditPort?: ComposePaintEditPort
+}) {
+  const definition = registry.getComponent(componentKey)
+  const missingInspector = definition?.missingInspector
+  if (
+    entity.components[componentKey] !== undefined
+    || !missingInspector
+    || !missingInspector.content
+    || !missingInspector.isVisible(entity)
+  ) return null
+  const Content = missingInspector.content
+  return (
+    <DefinitionErrorBoundary
+      area="component-inspector"
+      identity={componentKey}
+      resetSignal={entity.components}
+    >
+      <Content
+        componentKey={componentKey}
+        dispatch={dispatch}
+        document={document}
+        entity={entity}
+        layoutSnapshot={layoutSnapshot}
+        readOnly={readOnly}
+        nodeEditPort={nodeEditPort}
+        paintEditPort={paintEditPort}
+      />
+    </DefinitionErrorBoundary>
+  )
+}
+
 /** 解析并隔离 Entity Renderer 的可选内容 Inspector。 @public */
 export function ComposeRegistryRendererInspector({
   registry,

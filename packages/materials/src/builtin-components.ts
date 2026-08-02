@@ -13,6 +13,7 @@ import {
   createLayoutInspector,
   createLayoutInspectorHeaderActions,
   createLayoutMissingInspectorActions,
+  createLayoutMissingInspectorContent,
 } from './flex-layout'
 import {
   createAppearanceInspector,
@@ -117,6 +118,7 @@ export function createComposeBuiltinComponentDefinitions(
       missingInspector: {
         isVisible: (entity) => entity.components.Hierarchy !== undefined,
         actions: createLayoutMissingInspectorActions(idFactory),
+        content: createLayoutMissingInspectorContent(idFactory),
       },
     },
     {

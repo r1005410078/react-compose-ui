@@ -17,6 +17,14 @@ Layout 的 Inspector MUST 提供“布局 +”菜单；菜单当前 MUST 只包�
 - **THEN** 系统在一个事务中添加默认 Flex Layout 并按 childIds 将全部直接子项转为 Flow
 - **AND** 子项顺序、尺寸意图、margin、alignSelf 与旧 offset 保持不变
 
+#### Scenario: 展开未启用布局引导
+
+- **WHEN** 拥有 Hierarchy 且缺少 Layout 的 Entity 展开“布局”分组
+- **THEN** Inspector 紧凑显示 Auto Layout 图示、“使用自动布局”、用途说明、“添加自动布局”操作
+  和“添加后可随时移除”辅助文案
+- **AND** 标题栏加号继续打开布局类型菜单，正文添加操作直接启用 Auto Layout
+- **AND** 两个入口使用同一原子添加规划，锁定或缺少文档时均保持禁用
+
 #### Scenario: 锁定目标阻止添加
 
 - **WHEN** 容器或任一需要转为 Flow 的直接子项已锁定
@@ -93,21 +101,33 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 - **THEN** align-content 仍显示完整六项并可提前配置
 - **AND** Inspector 提示该属性仅在产生多行时影响结果
 
+#### Scenario: 再次点击已选 Flex 选项恢复默认
+
+- **WHEN** 用户再次点击 direction、wrap、align-content、justify-content 或 align-items 中当前已选的非默认选项
+- **THEN** Inspector 将该属性恢复为 ComposeDocument 支持的显式 CSS 初始等价值
+- **AND** 分别使用 row、nowrap、stretch、flex-start 与 stretch，不写入空值或 normal
+- **AND** 当前已是显式默认项时再次点击保持幂等且默认项继续显示为选中
+- **AND** 显式默认项使用中性弱选中样式，非默认选择才使用强调蓝色
+
 #### Scenario: 在独立属性中编辑 padding
 
 - **WHEN** 用户在独立内边距属性中编辑单值，或展开后分别修改四边 padding
-- **THEN** Layout.padding 通过一次提交更新，且属性名列、编辑列与交互均与基础外边距相同
+- **THEN** Layout.padding 通过一次提交更新，且单值、四边展开与联动交互均与基础外边距相同
+- **AND** 内边距字段使用与其他 Auto Layout 属性一致的上下结构，显示“内边距”和 `padding` CSS 副标题
 - **AND** 四值相等时默认显示单值和展开按钮，非等值保持 T/R/B/L 展开，重新联动时以 top 统一四边
 - **AND** 实时预览不包含 padding 输入框、联动按钮或其他可编辑控件
 
 #### Scenario: wrap 预览展示多行对齐
 
 - **WHEN** 用户选择 wrap 或 wrap-reverse 并修改 align-content
-- **THEN** 预览生成至少两行模拟子项并实时展示对应多行对齐
+- **THEN** 预览以三个模拟子项生成至少两行并实时展示对应多行对齐
+- **AND** 预览显式显示随 flex-direction 改变的主轴和交叉轴指示
 - **AND** Stage、Preview 和正式 LayoutSnapshot 不读取该 Inspector DOM
+- **AND** 三个模拟子项使用无渐变、低对比的扁平样式，与可操作的蓝色选中控件保持清晰层级
 
 #### Scenario: 窄侧栏保持完整可操作
 
 - **WHEN** Inspector 内容宽度约为 365px
 - **THEN** direction/wrap、gap/align-content、justify-content/align-items 三行均无横向溢出
+- **AND** 两列使用紧凑间距，不产生无用途的中央空白带
 - **AND** 基础分组的位置/自身对齐、独立旋转、智能尺寸输入、展开外边距、独立内边距、建议列表、焦点环和英文文案保持可达与可读

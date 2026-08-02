@@ -6,6 +6,7 @@ import { createComposeEntityRegistry } from '../registry'
 import type {
   ComposeComponentInspectorProps,
   ComposeEntityRegistry,
+  ComposeMissingComponentInspectorProps,
 } from '../registry'
 import * as registryRenderers from './compose-registry-renderers'
 import {
@@ -41,6 +42,53 @@ function entity(rendererType = 'text'): ComposeEntity {
 afterEach(cleanup)
 
 describe('Entity Registry React boundaries', () => {
+  it('OpenSpec: component-registry / 缺失 Component Inspector 协议 / Hierarchy 缺少 Layout 时显示入口', () => {
+    const MissingInspector = (
+      registryRenderers as unknown as {
+        readonly ComposeRegistryMissingComponentInspector?: ComponentType<{
+          readonly componentKey: string
+          readonly dispatch: ComposeMissingComponentInspectorProps['dispatch']
+          readonly entity: ComposeEntity
+          readonly readOnly: boolean
+          readonly registry: ComposeEntityRegistry
+        }>
+      }
+    ).ComposeRegistryMissingComponentInspector
+    expect(MissingInspector).toBeDefined()
+    if (!MissingInspector) return
+    const content = vi.fn(({ componentKey, readOnly }: ComposeMissingComponentInspectorProps) => (
+      <button disabled={readOnly} type="button">配置 {componentKey}</button>
+    ))
+    const registry = createComposeEntityRegistry({
+      components: [{
+        key: 'HostLayout',
+        label: '宿主布局',
+        createDefault: () => ({ enabled: true }),
+        missingInspector: {
+          isVisible: () => true,
+          actions: () => null,
+          content,
+        },
+      }],
+    })
+
+    render(
+      <MissingInspector
+        componentKey="HostLayout"
+        dispatch={vi.fn()}
+        entity={entity()}
+        readOnly
+        registry={registry}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '配置 HostLayout' })).toBeDisabled()
+    expect(content).toHaveBeenCalledWith(expect.objectContaining({
+      componentKey: 'HostLayout',
+      readOnly: true,
+    }), undefined)
+  })
+
   it('OpenSpec: component-registry / 缺失 Component Inspector 协议 / 缺失入口继承只读上下文', () => {
     const actions = vi.fn(({ componentKey, readOnly }) => (
       <button disabled={readOnly} type="button">添加 {componentKey}</button>

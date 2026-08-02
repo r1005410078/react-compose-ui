@@ -87,6 +87,14 @@ const FLEX_OPTIONS: Readonly<Record<FlexOptionEditorId, readonly FlexOption[]>> 
   ],
 }
 
+const FLEX_INITIAL_VALUES: Readonly<Record<FlexOptionEditorId, string>> = {
+  'flex-direction': 'row',
+  'flex-wrap': 'nowrap',
+  'align-content': 'stretch',
+  'justify-content': 'flex-start',
+  'align-items': 'stretch',
+}
+
 const FLEX_CSS_NAMES: Readonly<Record<FlexFieldEditorId, string>> = {
   'flex-direction': 'flex-direction',
   'flex-wrap': 'flex-wrap',
@@ -184,6 +192,14 @@ function FlexOptionEditor({
   if (!isFlexOptionEditorId(editor)) return null
   const options = FLEX_OPTIONS[editor]
   const selectedIndex = options.findIndex((option) => option.value === value)
+  const selectOption = (nextValue: string, resetSelected = false) => {
+    if (nextValue !== value) {
+      commit(nextValue)
+      return
+    }
+    const initialValue = FLEX_INITIAL_VALUES[editor]
+    if (resetSelected && nextValue !== initialValue) commit(initialValue)
+  }
   const move = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex: number | undefined
     if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
@@ -201,7 +217,7 @@ function FlexOptionEditor({
     if (nextIndex === undefined) return
     event.preventDefault()
     buttons.current[nextIndex]?.focus()
-    commit(options[nextIndex]!.value)
+    selectOption(options[nextIndex]!.value)
   }
   return (
     <div
@@ -216,6 +232,7 @@ function FlexOptionEditor({
           aria-checked={option.value === value}
           aria-label={zh ? option.zh : option.en}
           className="flex-layout-inspector__option"
+          data-initial-value={option.value === FLEX_INITIAL_VALUES[editor] ? '' : undefined}
           disabled={readOnly}
           key={option.value}
           ref={(node) => {
@@ -225,7 +242,7 @@ function FlexOptionEditor({
           tabIndex={(selectedIndex < 0 ? index === 0 : selectedIndex === index) ? 0 : -1}
           title={zh ? option.zh : option.en}
           type="button"
-          onClick={() => commit(option.value)}
+          onClick={() => selectOption(option.value, true)}
           onKeyDown={(event) => move(event, index)}
         >
           <FlexLayoutIcon
@@ -367,7 +384,7 @@ const FLEX_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
     id: 'padding',
     component: FlexPaddingEditor,
     labelComponent: FlexFieldLabel,
-    layout: 'inline' as const,
+    layout: 'full-width' as const,
   },
 ]
 
@@ -467,11 +484,16 @@ export function createLayoutMissingInspectorActions(
 ): ComponentType<ComposeMissingComponentInspectorProps> {
   return function LayoutMissingInspectorActions({ document, entity, dispatch, readOnly }) {
     const zh = useZh()
+    const availability = document && !readOnly
+      ? planEnableComposeAutoLayout(document, entity.id, () => 'layout-availability-probe')
+      : null
     return (
       <LayoutActionMenu
         disabled={readOnly || !document}
         items={[{
           label: 'Auto Layout display: flex',
+          disabled: !availability?.ok,
+          title: availability && !availability.ok ? availability.issue.message : undefined,
           content: (
             <>
               <span>Auto Layout</span>
@@ -488,6 +510,65 @@ export function createLayoutMissingInspectorActions(
         trigger="+"
         triggerLabel={zh ? '添加布局' : 'Add layout'}
       />
+    )
+  }
+}
+
+/** 创建缺失 Layout 时的可折叠引导正文。 @internal */
+export function createLayoutMissingInspectorContent(
+  idFactory: InspectorIdFactory,
+): ComponentType<ComposeMissingComponentInspectorProps> {
+  return function LayoutMissingInspectorContent({ document, entity, dispatch, readOnly }) {
+    const zh = useZh()
+    const availability = document && !readOnly
+      ? planEnableComposeAutoLayout(document, entity.id, () => 'layout-availability-probe')
+      : null
+    const disabled = !availability?.ok
+    const disabledReason = readOnly
+      ? (zh ? '锁定容器不能启用自动布局' : 'Locked containers cannot enable Auto Layout')
+      : !document
+        ? (zh ? '文档尚未就绪' : 'Document is not ready')
+        : availability && !availability.ok ? availability.issue.message : undefined
+    return (
+      <div className="flex-layout-inspector__empty-guide">
+        <svg
+          aria-hidden="true"
+          className="flex-layout-inspector__empty-icon"
+          fill="none"
+          viewBox="0 0 72 44"
+        >
+          <path d="M7 10h58M7 10l6-5M7 10l6 5M65 10l-6-5M65 10l-6 5" />
+          <rect height="15" rx="1" width="16" x="8" y="23" />
+          <rect height="15" rx="1" width="16" x="28" y="23" />
+          <rect height="15" rx="1" width="16" x="48" y="23" />
+          <path d="M3 30.5h5M64 30.5h5M3 30.5l3-3M3 30.5l3 3M69 30.5l-3-3M69 30.5l-3 3" />
+        </svg>
+        <div className="flex-layout-inspector__empty-copy">
+          <strong>{zh ? '使用自动布局' : 'Use Auto Layout'}</strong>
+          <p>
+            {zh
+              ? '自动排列子项，并统一控制方向、间距、换行与对齐。'
+              : 'Arrange children and control direction, gap, wrapping, and alignment.'}
+          </p>
+          <div className="flex-layout-inspector__empty-actions">
+            <button
+              aria-label={zh ? '添加自动布局' : 'Add Auto Layout'}
+              disabled={disabled}
+              title={disabledReason}
+              type="button"
+              onClick={() => {
+                if (!document || disabled) return
+                const plan = planEnableComposeAutoLayout(document, entity.id, idFactory)
+                if (plan.ok) dispatch(plan.command)
+              }}
+            >
+              <span aria-hidden="true">＋</span>
+              {zh ? '添加自动布局' : 'Add Auto Layout'}
+            </button>
+            <span>{zh ? '添加后可随时移除' : 'Remove it at any time'}</span>
+          </div>
+        </div>
+      </div>
     )
   }
 }
@@ -559,6 +640,7 @@ function FlexLayoutPreview({
   readonly layout: ComposeFlexLayout
   readonly zh: boolean
 }) {
+  const isColumn = layout.flexDirection.startsWith('column')
   const previewStyle: CSSProperties = {
     alignContent: layout.alignContent,
     alignItems: layout.alignItems,
@@ -590,21 +672,64 @@ function FlexLayoutPreview({
           </code>
         </header>
         <div
-          aria-hidden="true"
-          className="flex-layout-inspector__preview-surface"
-          data-wrap-preview={layout.flexWrap !== 'nowrap'}
-          style={previewStyle}
+          className="flex-layout-inspector__preview-diagram"
         >
-          {[1, 2, 3, 4, 5].map((index) => (
-            <span data-flex-preview-node="" key={index}>{index}</span>
-          ))}
+          <PreviewAxis
+            label={zh ? '主轴' : 'Main axis'}
+            orientation={isColumn ? 'vertical' : 'horizontal'}
+            testId="flex-preview-main-axis"
+          />
+          <PreviewAxis
+            label={zh ? '交叉轴' : 'Cross axis'}
+            orientation={isColumn ? 'horizontal' : 'vertical'}
+            testId="flex-preview-cross-axis"
+          />
+          <div
+            aria-hidden="true"
+            className="flex-layout-inspector__preview-surface"
+            data-wrap-preview={layout.flexWrap !== 'nowrap'}
+            style={previewStyle}
+          >
+            {[1, 2, 3].map((index) => (
+              <span data-flex-preview-node="" key={index}>{index}</span>
+            ))}
+          </div>
         </div>
       </div>
     </section>
   )
 }
 
-/** 创建 Layout Component 的设计稿三列 Flex Inspector。 @internal */
+// eslint-disable-next-line react-refresh/only-export-components -- 轴向标识只由当前 Inspector 的内部预览使用。
+function PreviewAxis({
+  label,
+  orientation,
+  testId,
+}: {
+  readonly label: string
+  readonly orientation: 'horizontal' | 'vertical'
+  readonly testId: string
+}) {
+  return (
+    <div
+      className={`flex-layout-inspector__preview-axis is-${orientation}`}
+      data-testid={testId}
+    >
+      {orientation === 'horizontal' ? (
+        <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 100 8">
+          <path d="M2 4h96M2 4l4-3M2 4l4 3M98 4l-4-3M98 4l-4 3" />
+        </svg>
+      ) : (
+        <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 8 100">
+          <path d="M4 2v96M4 2L1 6M4 2l3 4M4 98l-3-4M4 98l3-4" />
+        </svg>
+      )}
+      <span>{label}</span>
+    </div>
+  )
+}
+
+/** 创建 Layout Component 的紧凑 Flex Inspector。 @internal */
 export function createLayoutInspector(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeComponentInspectorProps> {

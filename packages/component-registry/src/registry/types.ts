@@ -131,6 +131,14 @@ export interface ComposeMissingComponentInspectorDefinition {
   readonly isVisible: (entity: ComposeEntity) => boolean
   /** 渲染标题栏操作；具体添加语义由 Component 定义拥有。 */
   readonly actions: ComponentType<ComposeMissingComponentInspectorProps>
+  /**
+   * 可选的缺失状态引导正文。
+   *
+   * @remarks
+   * 未声明时 Editor 继续使用无正文的 action-only 分组；声明后使用可折叠分组，并向正文透传
+   * 与标题操作相同的只读文档上下文。
+   */
+  readonly content?: ComponentType<ComposeMissingComponentInspectorProps>
 }
 
 /** 一个可由 Stage 与 Preview 共同解析的 Renderer 定义。 @public */

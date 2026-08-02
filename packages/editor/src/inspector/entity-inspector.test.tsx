@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import {
@@ -52,7 +52,7 @@ const document: ComposeDocument = {
 afterEach(cleanup)
 
 describe('EntityInspector missing Component sections', () => {
-  it('OpenSpec: 自动布局显式启用 / 缺少 Layout 时显示 action-only 布局分组', () => {
+  it('OpenSpec: component-registry / 缺失 Component Inspector 协议 / 宿主缺失入口保持 action-only', () => {
     const registry = createComposeEntityRegistry({
       components: [{
         key: 'Layout',
@@ -78,8 +78,47 @@ describe('EntityInspector missing Component sections', () => {
     )
 
     expect(screen.getByRole('button', { name: '添加布局' })).toBeInTheDocument()
+    const addCapability = screen.getByRole('combobox', { name: '添加能力' })
+    expect(addCapability.parentElement).toHaveClass(
+      'compose-editor__entity-inspector-add-capability',
+    )
+    expect(addCapability.parentElement).toHaveTextContent('＋')
     expect(screen.getByText('布局').closest('.property-panel__group')).not.toHaveClass('property-panel__group-content')
     expect(screen.queryByRole('button', { name: '布局' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: component-registry / 缺失 Component Inspector 协议 / Hierarchy 缺少 Layout 时显示入口', () => {
+    const registry = createComposeEntityRegistry({
+      components: [{
+        key: 'Layout',
+        label: '布局',
+        inspectorDefaultExpanded: true,
+        createDefault: () => ({ type: 'flex' }),
+        missingInspector: {
+          isVisible: (candidate) => candidate.components.Hierarchy !== undefined,
+          actions: () => <button aria-label="添加布局" type="button">+</button>,
+          content: () => <div>使用自动布局</div>,
+        },
+      }],
+    })
+
+    render(
+      <EntityInspector
+        dispatch={vi.fn()}
+        document={document}
+        entity={entity}
+        idFactory={() => 'command-1'}
+        registry={registry}
+      />,
+    )
+
+    const sectionButton = screen.getByRole('button', { name: '布局' })
+    expect(sectionButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('使用自动布局')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '添加布局' })).toBeInTheDocument()
+    fireEvent.click(sectionButton)
+    expect(screen.queryByText('使用自动布局')).not.toBeInTheDocument()
+    expect(sectionButton).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('OpenSpec: component-registry / Component Inspector 分组与默认展开协议 / 合并基础并应用默认展开状态', () => {

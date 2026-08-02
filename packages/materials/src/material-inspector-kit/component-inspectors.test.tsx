@@ -13,6 +13,7 @@ import {
   createDefaultOutputSettings,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeFlexLayout,
   type EditorCommand,
   type JsonObject,
 } from '@compose-ui/core'
@@ -72,9 +73,62 @@ function missingInspectorActionsOf(key: string) {
   return definition.missingInspector.actions
 }
 
+function missingInspectorContentOf(key: string) {
+  const definitions = createComposeBuiltinComponentDefinitions(() => 'missing-layout-command')
+  const definition = definitions.find((item) => item.key === key) as
+    | (ComposeComponentDefinition & {
+      readonly missingInspector?: {
+        readonly content?: ComponentType<ComposeMissingComponentInspectorProps>
+      }
+    })
+    | undefined
+  if (!definition?.missingInspector?.content) throw new Error(`${key} 缺少 missingInspector content`)
+  return definition.missingInspector.content
+}
+
 afterEach(cleanup)
 
 describe('内建 Component inspectors', () => {
+  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 展开未启用布局引导', () => {
+    const dispatch = vi.fn()
+    const Content = missingInspectorContentOf('Layout')
+    const container = entity({ Hierarchy: { childIds: [] } })
+    const document: ComposeDocument = {
+      schemaVersion: 6,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [container.id],
+      entities: { [container.id]: container },
+    }
+    const view = render(
+      <Content
+        componentKey="Layout"
+        dispatch={dispatch}
+        document={document}
+        entity={container}
+        readOnly={false}
+      />,
+    )
+
+    expect(screen.getByText('使用自动布局')).toBeInTheDocument()
+    expect(screen.getByText('自动排列子项，并统一控制方向、间距、换行与对齐。'))
+      .toBeInTheDocument()
+    expect(screen.getByText('添加后可随时移除')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '添加自动布局' }))
+    expect((dispatch.mock.lastCall?.[0] as EditorCommand).type).toBe(BUILTIN_COMMAND_TYPES.batch)
+
+    view.rerender(
+      <Content
+        componentKey="Layout"
+        dispatch={dispatch}
+        document={document}
+        entity={container}
+        readOnly
+      />,
+    )
+    expect(screen.getByRole('button', { name: '添加自动布局' })).toBeDisabled()
+  })
+
   it('OpenSpec: 自动布局显式启用 / 布局加号只提供 Auto Layout 菜单项', () => {
     const dispatch = vi.fn()
     const Actions = missingInspectorActionsOf('Layout')
@@ -446,7 +500,7 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByText('align-content')).toBeInTheDocument()
     expect(screen.getByText('justify-content')).toBeInTheDocument()
     expect(screen.getByText('align-items')).toBeInTheDocument()
-    expect(screen.getByText('padding')).toBeInTheDocument()
+    expect(panel.querySelector('[data-property-path="padding"] code')).toHaveTextContent('padding')
 
     const direction = within(panel).getByRole('radiogroup', { name: '方向' })
     expect(within(direction).getAllByRole('radio')).toHaveLength(4)
@@ -456,6 +510,8 @@ describe('内建 Component inspectors', () => {
       'aria-checked',
       'true',
     )
+    expect(within(direction).getByRole('radio', { name: '横向' }))
+      .toHaveAttribute('data-initial-value')
     const multiLine = within(panel).getByRole('radiogroup', { name: '多行' })
     expect(within(multiLine).getAllByRole('radio')).toHaveLength(6)
     expect(within(multiLine).getAllByRole('radio').map((item) => item.getAttribute('aria-label')))
@@ -478,12 +534,14 @@ describe('内建 Component inspectors', () => {
     expect(within(panel).getByRole('spinbutton', { name: '内边距' })).toHaveValue(0)
     expect(within(panel).getByRole('button', { name: '展开内边距' })).toBeInTheDocument()
     expect(panel.querySelector('[data-property-path="padding"]'))
-      .toHaveAttribute('data-property-layout', 'inline')
+      .toHaveAttribute('data-property-layout', 'full-width')
 
     const preview = screen.getByTestId('flex-layout-preview')
-    expect(preview.querySelectorAll('[data-flex-preview-node]')).toHaveLength(5)
+    expect(preview.querySelectorAll('[data-flex-preview-node]')).toHaveLength(3)
     expect(within(preview).getByText('Flex 容器')).toBeInTheDocument()
     expect(within(preview).getByText('row · nowrap · gap 0')).toBeInTheDocument()
+    expect(within(preview).getByTestId('flex-preview-main-axis')).toHaveTextContent('主轴')
+    expect(within(preview).getByTestId('flex-preview-cross-axis')).toHaveTextContent('交叉轴')
     expect(within(preview).queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(within(preview).queryByRole('button')).not.toBeInTheDocument()
     expect(preview).toHaveAttribute('data-align-items', 'stretch')
@@ -571,6 +629,93 @@ describe('内建 Component inspectors', () => {
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: '行间距' })).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: '内边距' })).toBeDisabled()
+  })
+
+  it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / 再次点击已选 Flex 选项恢复显式默认值', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('Layout')
+    const defaults = createDefaultComposeFlexLayout()
+    const { rerender } = render(
+      <Inspector
+        componentKey="Layout"
+        dispatch={dispatch}
+        entity={entity({ Hierarchy: { childIds: [] }, Layout: defaults })}
+        readOnly={false}
+        value={defaults}
+      />,
+    )
+
+    const resetSelected = (
+      layout: ComposeFlexLayout,
+      groupName: string,
+      selectedName: string,
+      expectedValue: Partial<ComposeFlexLayout>,
+    ) => {
+      const container = entity({ Hierarchy: { childIds: [] }, Layout: layout })
+      rerender(
+        <Inspector
+          componentKey="Layout"
+          dispatch={dispatch}
+          entity={container}
+          readOnly={false}
+          value={layout}
+        />,
+      )
+      dispatch.mockClear()
+      fireEvent.click(within(screen.getByRole('radiogroup', { name: groupName }))
+        .getByRole('radio', { name: selectedName }))
+      expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
+        value: expectedValue,
+      })
+    }
+
+    resetSelected(
+      { ...defaults, flexDirection: 'column' },
+      '方向',
+      '纵向',
+      { flexDirection: 'row' },
+    )
+    resetSelected(
+      { ...defaults, flexWrap: 'wrap' },
+      '换行',
+      '换行',
+      { flexWrap: 'nowrap' },
+    )
+    resetSelected(
+      { ...defaults, alignContent: 'center' },
+      '多行',
+      '居中',
+      { alignContent: 'stretch' },
+    )
+    resetSelected(
+      { ...defaults, justifyContent: 'center' },
+      '主轴',
+      '居中',
+      { justifyContent: 'flex-start' },
+    )
+    resetSelected(
+      { ...defaults, alignItems: 'center' },
+      '交叉轴',
+      '居中',
+      { alignItems: 'stretch' },
+    )
+
+    const defaultContainer = entity({ Hierarchy: { childIds: [] }, Layout: defaults })
+    rerender(
+      <Inspector
+        componentKey="Layout"
+        dispatch={dispatch}
+        entity={defaultContainer}
+        readOnly={false}
+        value={defaults}
+      />,
+    )
+    dispatch.mockClear()
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: '方向' }))
+      .getByRole('radio', { name: '横向' }))
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(within(screen.getByRole('radiogroup', { name: '方向' }))
+      .getByRole('radio', { name: '横向' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('OpenSpec: gap 与独立内边距 / 分轴间距和四边 padding 联动', () => {
@@ -770,11 +915,11 @@ describe('内建 Component inspectors', () => {
     )
 
     const cases = [
-      ['多行', '居中', 'alignContent'],
-      ['主轴', '末端', 'justifyContent'],
-      ['交叉轴', '拉伸', 'alignItems'],
+      ['多行', '起始', 'alignContent', 'flex-start'],
+      ['主轴', '居中', 'justifyContent', 'center'],
+      ['交叉轴', '居中', 'alignItems', 'center'],
     ] as const
-    for (const [groupName, optionName, field] of cases) {
+    for (const [groupName, optionName, field, expected] of cases) {
       dispatch.mockClear()
       fireEvent.click(within(screen.getByRole('radiogroup', { name: groupName }))
         .getByRole('radio', { name: optionName }))
@@ -782,7 +927,7 @@ describe('内建 Component inspectors', () => {
       expect(command.payload).toEqual({
         entityId: 'entity-a',
         key: 'Layout',
-        value: { ...layout, [field]: layout[field] },
+        value: { ...layout, [field]: expected },
       })
     }
   })

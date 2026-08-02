@@ -749,7 +749,24 @@ test('OpenSpec: 自动布局显式启用 / 自由 Container 添加、移除并�
   await editor.getByRole('button', { name: '创建容器' }).click()
   const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
 
+  const emptyLayoutHeader = inspector.getByRole('button', { name: '布局', exact: true })
+  const emptyLayoutSection = emptyLayoutHeader.locator('..').locator('..')
+  await expect(emptyLayoutHeader).toHaveAttribute('aria-expanded', 'true')
   await expect(inspector.getByRole('button', { name: '添加布局' })).toBeVisible()
+  await expect(emptyLayoutSection.getByText('使用自动布局', { exact: true })).toBeVisible()
+  await expect(emptyLayoutSection.getByText(
+    '自动排列子项，并统一控制方向、间距、换行与对齐。',
+    { exact: true },
+  )).toBeVisible()
+  await expect(emptyLayoutSection.getByRole('button', { name: '添加自动布局' })).toBeVisible()
+  await expect(emptyLayoutSection).toHaveScreenshot('empty-auto-layout-guide.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await emptyLayoutHeader.click()
+  await expect(emptyLayoutSection.getByRole('button', { name: '添加自动布局' })).toBeHidden()
+  await emptyLayoutHeader.click()
   await enableAutoLayout(inspector)
   await expect(inspector.getByRole('button', { name: '布局', exact: true })).toBeVisible()
   await inspector.getByRole('button', { name: '更多布局操作' }).click()
@@ -835,23 +852,47 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   expect(gapBox).not.toBeNull()
   expect(contentBox).not.toBeNull()
   expect(wrappingBox!.x).toBeGreaterThan(directionBox!.x)
+  expect(wrappingBox!.x - (directionBox!.x + directionBox!.width)).toBeLessThanOrEqual(10)
   expect(gapBox!.y).toBeGreaterThan(directionBox!.y)
   expect(contentBox!.x).toBeGreaterThan(gapBox!.x)
+  expect(directionBox!.width).toBeGreaterThan(140)
+  expect(contentBox!.width).toBeGreaterThan(140)
 
   const padding = layoutSection.getByRole('spinbutton', { name: '内边距' })
   const expandPadding = layoutSection.getByRole('button', { name: '展开内边距' })
+  const paddingRow = layoutSection.locator('[data-property-path="padding"]')
   await expect(padding).toHaveValue('0')
   await expect(expandPadding).toBeVisible()
+  await expect(paddingRow.locator('code')).toHaveText('padding')
+  const paddingLabelBox = await paddingRow.locator('.property-panel__label').boundingBox()
+  const paddingEditorBox = await paddingRow.locator('.property-panel__editor').boundingBox()
+  expect(paddingLabelBox).not.toBeNull()
+  expect(paddingEditorBox).not.toBeNull()
+  expect(paddingEditorBox!.y).toBeGreaterThan(paddingLabelBox!.y)
 
   const preview = layoutSection.getByTestId('flex-layout-preview')
   const previewNodes = preview.locator('[data-flex-preview-node]')
-  await expect(previewNodes).toHaveCount(5)
+  await expect(previewNodes).toHaveCount(3)
   await expect(preview.getByText('Flex 容器', { exact: true })).toBeVisible()
   await expect(preview.getByText('row · nowrap · gap 0', { exact: true })).toBeVisible()
+  const previewMainAxis = preview.getByTestId('flex-preview-main-axis')
+  const previewCrossAxis = preview.getByTestId('flex-preview-cross-axis')
+  await expect(previewMainAxis).toHaveText('主轴')
+  await expect(previewMainAxis).toHaveClass(/is-horizontal/)
+  await expect(previewCrossAxis).toHaveText('交叉轴')
+  await expect(previewCrossAxis).toHaveClass(/is-vertical/)
   await expect(preview.locator('input, button')).toHaveCount(0)
   const defaultPreviewNode = await previewNodes.first().boundingBox()
   expect(defaultPreviewNode).not.toBeNull()
   expect(defaultPreviewNode!.height).toBeGreaterThan(20)
+  const defaultPreviewNodeStyle = await previewNodes.first().evaluate((element) => ({
+    backgroundColor: getComputedStyle(element).backgroundColor,
+    backgroundImage: getComputedStyle(element).backgroundImage,
+  }))
+  expect(defaultPreviewNodeStyle).toEqual({
+    backgroundColor: 'rgb(36, 51, 66)',
+    backgroundImage: 'none',
+  })
   await expect(layoutSection).toHaveScreenshot('flex-layout-inspector.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -873,8 +914,8 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
   const crossStartNode = await previewNodes.first().boundingBox()
   await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
-  await expect(crossAxis.getByRole('radio', { name: '起始', checked: true })).toBeVisible()
-  await expect(preview).toHaveAttribute('data-align-items', 'flex-start')
+  await expect(crossAxis.getByRole('radio', { name: '拉伸', checked: true })).toBeVisible()
+  await expect(preview).toHaveAttribute('data-align-items', 'stretch')
   await crossAxis.getByRole('radio', { name: '末端', exact: true }).click()
   const crossEndNode = await previewNodes.first().boundingBox()
   await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
@@ -897,6 +938,8 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   await expect(preview.locator('.flex-layout-inspector__preview-surface'))
     .toHaveCSS('column-gap', '12px')
   await expect(preview.getByText('column · nowrap · gap 12', { exact: true })).toBeVisible()
+  await expect(previewMainAxis).toHaveClass(/is-vertical/)
+  await expect(previewCrossAxis).toHaveClass(/is-horizontal/)
   await expect(resetLayout).toBeEnabled()
 
   await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()

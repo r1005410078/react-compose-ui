@@ -141,3 +141,51 @@
 - [x] 8.4 更新 README、Changeset、365px 黄金图并人工审阅；运行目标测试、`lint`、`typecheck`、`test`、`build`、`test:e2e`、`pack:dry-run` 与严格 OpenSpec 校验。
   - Docs/Visual: 根 README、Materials README 与 Changeset 已同步；更新折叠态黄金图并新增 `flex-layout-padding-expanded.png`，同时审阅 Hug 完整工作区受影响截图。
   - Regression: `bun run lint`、`bun run typecheck`、`bun run test`（37 个任务）、`bun run build`（20 个任务）、`bun run test:e2e`（Chromium 30/30）和 `bun run pack:dry-run` 全部通过。
+
+## 9. Flex 分栏回归修复
+
+- [x] 9.1 Red：补充内边距无 CSS 副标题断言，并在真实 365px Inspector 中记录 Flex 控件宽度。
+  - Red: Materials 目标 17 项中 1 项按预期失败；浏览器测得 direction/align-content 控件仅宽 71px，按钮分别被压缩至 15.5px/9.3px。
+- [x] 9.2 Green/Refactor：移除根容器与字段容器的重复两列网格，恢复三行两列布局，并让内边距使用纯文本标签。
+  - Green: Materials 目标 17 项通过；浏览器测得每个 Flex 控件恢复为 156px，direction 按钮 36.75px、align-content 按钮 23.5px，内边距标签仅为“内边距”。
+- [x] 9.3 更新受影响黄金图并运行完整验证。
+  - Visual: 已审阅 Flex 折叠内边距、四边展开与 Hug 内容三张受影响黄金图，图标组无重叠，内边距不显示 CSS 副标题。
+  - Regression: Materials 51/51、根测试 37/37、Chromium E2E 30/30 通过；`lint`、`typecheck`、`build`、`pack:dry-run` 与严格 OpenSpec 校验全部通过。
+
+## 10. 最终紧凑布局与轴向预览
+
+- [x] 10.1 修订 proposal、design 与 `basic-materials` 增量规范，锁定紧凑列间距、padding 上下结构、三个预览节点及主轴/交叉轴指示。
+- [x] 10.2 Red：补充 padding CSS 副标题、上下结构、三节点、双轴标识与窄列间距的自动化断言，并记录当前失败证据。
+  - Red command: `bun run --cwd packages/materials test -- component-inspectors.test.tsx`；17 项中 1 项按预期因缺少 `padding` 副标题失败。
+  - Red command: `bunx playwright test -g "Flex Layout 紧凑属性"`；浏览器测得双列间距为 14px，超过最终稿锁定的 10px 上限并按预期失败；后续三节点与双轴断言尚未执行到。
+- [x] 10.3 Green/Refactor：调整 Flex Inspector DOM 与样式，保持 wrap、对齐和四边编辑语义。
+  - Green command/result: Materials 目标测试 17/17 通过；目标 Chromium E2E 1/1 通过，实测双列间距 8px，padding 为 full-width 上下结构，预览仅含三个节点且 row/column 会交换主轴与交叉轴方向。
+  - Visual: 已审阅折叠与四边展开黄金图；控件无重叠，padding 编辑器及三节点轴向预览均无横向溢出。
+- [x] 10.4 更新 README、Changeset 与受影响黄金图；运行目标测试、完整 E2E、质量门禁和严格 OpenSpec 校验。
+  - Docs/Visual: README、Changeset、折叠/展开 Auto Layout 黄金图及 Hug 工作区黄金图已同步并人工审阅。
+  - Regression: Materials 51/51、根测试 37/37、Storybook 43/43、Chromium E2E 30/30 通过；`lint`、`typecheck`、`build`、`pack:dry-run` 与严格 OpenSpec 校验全部通过。
+
+## 11. 空布局可折叠引导
+
+- [x] 11.1 根据批准效果图修订 missing Inspector 协议、设计决策与 Auto Layout 场景。
+- [x] 11.2 Red：覆盖可选 missing 正文、空布局默认展开/收起、引导文案与双入口同一添加语义。
+  - Red command: 分别运行 Component Registry、Editor Entity Inspector 与 Materials Component Inspector 目标测试。
+  - Red result: 三个目标 Scenario 各失败 1 项；Registry 缺少正文 adapter，Editor 仍渲染 action-only，Materials 定义没有引导 content。
+  - Red reason: 现有 `missingInspector` 只允许标题栏 actions，无法向通用可折叠 Section 提供正文。
+- [x] 11.3 Green/Refactor：实现 Registry 正文适配、Editor 通用聚合与 Materials 空布局引导。
+  - Green: Component Registry 9/9、Editor Inspector 3/3、Materials 目标 19/19 通过；缺失 Layout 默认展开紧凑引导，标题栏菜单与正文按钮复用同一命令规划。
+- [x] 11.4 更新目标 E2E/黄金图并运行相关测试、lint、typecheck 与严格 OpenSpec 校验。
+  - Visual/E2E: 新增 `empty-auto-layout-guide.png`，覆盖默认展开、收起、重新展开与添加；完整 Chromium E2E 30/30 通过。
+  - Regression: 根 lint、typecheck、build 通过；根测试除沙箱端口限制外 36/37 任务通过，Storybook 在允许本地端口后单独 43/43 通过；严格 OpenSpec 校验通过。
+
+## 12. Flex 选项取消与预览视觉降噪
+
+- [x] 12.1 修订设计与增量规范，锁定“再次点击已选项恢复显式默认值”和低对比扁平预览节点。
+- [x] 12.2 Red：覆盖五组 Flex 选项的恢复默认映射与默认项幂等语义。
+  - Red: Materials 目标 19 项中新增 Scenario 按预期失败；再次点击已选“纵向”仍提交 `column`，没有恢复 `row`。
+- [x] 12.3 Green/Refactor：实现统一恢复默认交互，并降低三个模拟节点、预览边界和轴向标识的视觉权重。
+  - Green: direction/wrap/align-content/justify-content/align-items 分别恢复 `row`/`nowrap`/`stretch`/`flex-start`/`stretch`；默认项幂等且使用中性弱选中，非默认项继续使用强调蓝。
+  - Visual: 三个模拟节点移除渐变，改用低对比蓝灰填充；预览虚线边界和双轴标识同步降噪。
+- [x] 12.4 更新目标黄金图并运行 Materials 测试、lint、typecheck 与严格 OpenSpec 校验。
+  - Regression: Materials 53/53、Storybook 43/43、完整 Chromium E2E 30/30 通过；根 lint、typecheck、build 及其余测试任务通过。
+  - Visual: 更新 Flex 折叠/展开、Hug/Fill 与基础 Inspector 受影响黄金图，并人工确认无渐变节点、紧凑行高和默认弱选中状态。

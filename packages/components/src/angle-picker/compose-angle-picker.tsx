@@ -186,10 +186,13 @@ export function ComposeAnglePicker({
           aria-label={messages.trigger}
           className="compose-angle-picker__trigger"
           disabled={locked}
+          title={messages.trigger}
           type="button"
         >
           <svg aria-hidden="true" viewBox="0 0 20 20">
-            <path d="M15.7 6.2A6.5 6.5 0 1 0 16.3 13M15.7 6.2V2.9M15.7 6.2h-3.3" />
+            <path d="M3 15a7 7 0 0 1 14 0H3Z" />
+            <path d="m10 15 4-4.8M6 13.2l-1.3-.7M10 11V9M14 13.2l1.3-.7" />
+            <circle cx="10" cy="15" r="0.8" />
           </svg>
         </PopoverPrimitive.Trigger>
       </div>

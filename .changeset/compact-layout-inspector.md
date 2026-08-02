@@ -13,4 +13,8 @@ into a compact basic geometry Inspector, aggregate embedded search visibility, a
 angle input with a normalized dial and shortcut values. Expose position/alignment, rotation, and
 size as distinct property types, and expose each axis as one editable combobox: numeric values imply
 Fixed while focus reveals English Fill/Hug suggestions that can also be typed directly.
-Move padding into a separate edge editor shared with margin, and keep the Flex live preview read-only.
+Move padding into a separate edge editor shared with margin, present it with the same vertical
+label/CSS/editor structure as other Auto Layout fields, preserve the compact three-row Flex grid,
+and reduce the read-only preview to three nodes with explicit main/cross-axis guidance.
+Add a compact expandable empty-layout guide, let a repeated non-default Flex choice restore its
+explicit CSS initial-equivalent value, and flatten the preview nodes with lower visual contrast.

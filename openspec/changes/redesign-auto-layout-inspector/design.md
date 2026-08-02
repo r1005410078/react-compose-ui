@@ -13,10 +13,12 @@ Editor 当前只渲染 Entity 已拥有的 Component Inspector，Property Panel 
 
 ### 缺失 Component 入口
 
-- `ComposeComponentDefinition.missingInspector` 声明缺失 Component 时的可见条件和标题栏操作。
-- Editor 按 Registry 顺序组合协议，不识别 Layout；Property Panel 提供不可折叠且无正文的
-  action-only Section。
+- `ComposeComponentDefinition.missingInspector` 声明缺失 Component 时的可见条件、标题栏操作
+  和可选引导正文。Editor 按 Registry 顺序组合协议，不识别 Layout；没有正文时仍使用 Property
+  Panel 的 action-only Section，有正文时使用普通可折叠 Section。
 - Layout 的缺失入口只对拥有 Hierarchy 的 Entity 可见。`+` 始终打开菜单，当前仅含 Auto Layout。
+- Layout 的缺失引导复用同一无 React 命令规划：标题栏加号打开类型菜单，正文按钮直接添加当前
+  唯一的 Auto Layout；锁定或缺少文档时两个入口同时禁用。
 
 ### 添加与移除
 
@@ -51,13 +53,18 @@ Editor 当前只渲染 Entity 已拥有的 Component Inspector，Property Panel 
 - 同一 Property Panel Section 中的多个嵌入式 Inspector 分别注册搜索可见性，Section 以任一子项
   可见作为整体可见条件，卸载时清理注册。
 - Flex 控件三行排列：direction/wrap、gap/align-content、justify-content/align-items。
+- Flex 选项仍使用单选组表达文档中的必选枚举；再次点击当前非默认选项时恢复该属性的显式
+  CSS 初始等价值，而不是产生空选或写入 `normal`。默认项再次点击保持幂等，并用中性弱选中
+  样式表达默认状态；只有非默认值使用强调蓝色。
 - gap 相等时使用单值入口；分轴后编辑 rowGap/columnGap。重新合并时以 rowGap 统一两轴。
-- padding 从实时预览中拆出，作为横跨两列的独立“内边距 / padding”属性行；属性名列、编辑列
-  与基础外边距对齐，并复用同一套单值、T/R/B/L 展开和重新联动交互。四值相等时默认折叠，
-  重新联动以 top 统一四边。
+- padding 从实时预览中拆出，作为横跨两列的独立 Auto Layout 字段；字段使用与方向、gap 和对齐
+  相同的上下结构，依次显示“内边距”、`padding` CSS 副标题和编辑器，并复用基础外边距的单值、
+  T/R/B/L 展开和重新联动交互。四值相等时默认折叠，重新联动以 top 统一四边。
 - 实时预览只读展示当前 direction、wrap、gap、padding 与对齐结果，不包含输入框、联动按钮或
-  其他文档编辑入口，也不作为 Stage、Preview 或 LayoutSnapshot 的几何来源。
-- wrap 预览保证形成多行，使 align-content 的变化可观察。
+  其他文档编辑入口，也不作为 Stage、Preview 或 LayoutSnapshot 的几何来源。预览固定显示三个
+  模拟子项，并显式标记随 direction 改变的主轴和交叉轴；模拟子项使用低对比扁平样式，避免与
+  蓝色选中控件形成相同的操作层级。
+- 两列控件使用紧凑列间距；wrap 预览以三个子项保证形成多行，使 align-content 的变化可观察。
 
 ### 共享角度选择器
 
