@@ -276,6 +276,20 @@ describe('OpenSpec: property-panel / 基础 editor 的只读与重置', () => {
       expect.objectContaining({ path: ['opacity'], reason: 'reset' }),
     )
   })
+
+  it('OpenSpec: components / 通用角度快捷选择器 / Property Panel Angle Editor 复用快捷设置', () => {
+    const schema = v.object({
+      rotation: v.pipe(
+        v.number(),
+        v.title('旋转'),
+        v.metadata({ propertyPanel: { editor: 'angle' } }),
+      ),
+    })
+    render(<ComposePropertyPanel schema={schema} value={{ rotation: 0 }} />)
+
+    expect(screen.getByRole('spinbutton', { name: '旋转' })).toHaveValue(0)
+    expect(screen.getByRole('button', { name: '快捷设置旋转' })).toBeInTheDocument()
+  })
 })
 
 describe('OpenSpec: property-panel / Color editor 可访问名称', () => {

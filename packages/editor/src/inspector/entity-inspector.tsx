@@ -141,6 +141,13 @@ export function EntityInspector({
   const rendererDefinition = renderer
     ? registry.getRenderer(renderer.type)
     : undefined
+  const componentDefinitions = registry.listComponents()
+  const basicDefinitions = componentDefinitions.filter((definition) => (
+    !definition.hidden
+    && definition.inspectorGroup === 'basic'
+    && definition.inspector
+    && entity.components[definition.key] !== undefined
+  ))
   const composition = getComposeComposition(entity)
   const availability = registry.listCapabilityAvailability(entity)
   const [pendingRemoval, setPendingRemoval] = useState<string | null>(null)
@@ -225,7 +232,7 @@ export function EntityInspector({
       <ComposePropertyPanelRoot
         aria-label={zh ? `${entity.name} 属性字段` : `${entity.name} property fields`}
       >
-        <ComposePropertyPanelSection title={zh ? '基础' : 'Identity'}>
+        <ComposePropertyPanelSection defaultExpanded title={zh ? '基础' : 'Identity'}>
           <IdentityInspector
             dispatch={dispatch}
             entity={entity}
@@ -233,8 +240,22 @@ export function EntityInspector({
             readOnly={locked}
             zh={zh}
           />
+          {basicDefinitions.map((definition) => (
+            <ComposeRegistryComponentInspector
+              componentKey={definition.key}
+              dispatch={dispatch}
+              document={document}
+              entity={entity}
+              key={definition.key}
+              layoutSnapshot={layoutSnapshot}
+              readOnly={locked}
+              nodeEditPort={nodeEditPort}
+              paintEditPort={paintEditPort}
+              registry={registry}
+            />
+          ))}
         </ComposePropertyPanelSection>
-        {registry.listComponents().map((definition) => {
+        {componentDefinitions.map((definition) => {
           if (definition.hidden) return null
           const componentExists = entity.components[definition.key] !== undefined
           if (!componentExists) {
@@ -261,6 +282,7 @@ export function EntityInspector({
             )
           }
           if (!definition.inspector) return null
+          if (definition.inspectorGroup === 'basic') return null
           return (
             <ComposePropertyPanelSection
               actions={definition.inspectorHeaderActions ? (
@@ -276,6 +298,7 @@ export function EntityInspector({
                   registry={registry}
                 />
               ) : undefined}
+              defaultExpanded={definition.inspectorDefaultExpanded ?? false}
               key={definition.key}
               title={definition.label}
             >
@@ -297,7 +320,7 @@ export function EntityInspector({
         {Object.keys(entity.components)
           .filter((key) => !BUILTIN_COMPONENT_KEYS.has(key) && !registry.getComponent(key))
           .map((key) => (
-            <ComposePropertyPanelSection key={key} title={key}>
+            <ComposePropertyPanelSection defaultExpanded={false} key={key} title={key}>
               <UnknownInspector
                 label={zh ? '未知 Component' : 'Unknown component'}
                 message={zh ? `未知 Component：${key}` : `Unknown component: ${key}`}
@@ -307,6 +330,7 @@ export function EntityInspector({
 
         {renderer && (!rendererDefinition || rendererDefinition.inspector) ? (
           <ComposePropertyPanelSection
+            defaultExpanded={rendererDefinition?.inspectorDefaultExpanded ?? false}
             title={registry.getComponent('Renderer')?.label ?? (zh ? '内容' : 'Content')}
           >
             {rendererDefinition ? (

@@ -268,6 +268,7 @@ const componentDefinitions = [
     key: 'LayoutItem',
     label: '变换',
     order: 10,
+    inspectorGroup: 'basic',
     createDefault: () => layoutItem(transform(0, 0, 100, 100)),
     inspector: TestTransformInspector,
   },
@@ -606,6 +607,7 @@ describe('useComposeEditorController', () => {
     const editorRuntime = runtime()
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
+    fireEvent.click(screen.getByRole('button', { name: '内容' }))
     fireEvent.click(screen.getByRole('button', { name: '修改内容' }))
     expect(editorRuntime.document.entities.title?.components.Renderer).toEqual({
       type: 'text',
@@ -645,7 +647,7 @@ describe('useComposeEditorController', () => {
 
     expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
     expect(screen.getByRole('button', { name: '基础' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '变换' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '变换' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '可见性' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '锁定' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '内容' })).toBeInTheDocument()
@@ -654,7 +656,7 @@ describe('useComposeEditorController', () => {
     const titles = [...root.querySelectorAll(
       ':scope > .property-panel__group > .property-panel__group-header > button',
     )].map((button) => button.textContent?.trim())
-    expect(titles).toEqual(['基础', '变换', '可见性', '锁定', '外观', '内容'])
+    expect(titles).toEqual(['基础', '可见性', '锁定', '外观', '内容'])
 
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
       target: { value: '背景填充' },
@@ -673,6 +675,7 @@ describe('useComposeEditorController', () => {
     }))
     render(<>{result.current.inspectorPanel}</>)
 
+    fireEvent.click(screen.getByRole('button', { name: '外观' }))
     fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
     expect(result.current.stageProps.paintEditing).toEqual({ entityId: 'title' })
   })
@@ -693,6 +696,7 @@ describe('useComposeEditorController', () => {
     expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
     expect(screen.getByRole('button', { name: '容器' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '裁剪' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '容器' }))
     expect(screen.getByRole('spinbutton', { name: '子项数量' })).toHaveValue(0)
   })
 
@@ -711,6 +715,7 @@ describe('useComposeEditorController', () => {
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
     expect(screen.getByRole('button', { name: 'HostState' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'HostState' }))
     expect(screen.getByLabelText('未知 Component')).toHaveValue('未知 Component：HostState')
     expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
   })
@@ -742,7 +747,9 @@ describe('useComposeEditorController', () => {
     })
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
+    fireEvent.click(screen.getByRole('button', { name: '内容' }))
     expect(screen.getByRole('button', { name: '修改内容' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '锁定' }))
     const lock = screen.getByRole('checkbox', { name: '锁定' })
     expect(lock).not.toBeDisabled()
     fireEvent.click(lock)

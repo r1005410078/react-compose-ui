@@ -19,9 +19,15 @@ async function enableAutoLayout(inspector: Locator) {
 }
 
 async function selectAxisSizing(inspector: Locator, axis: '宽度' | '高度', mode: '固定' | '填充' | '适应') {
-  await inspector.getByRole('radiogroup', { name: `${axis}模式` })
-    .getByRole('radio', { name: mode })
-    .click()
+  await inspector.getByRole('combobox', { name: `${axis}模式` })
+    .selectOption({ label: mode })
+}
+
+async function expandInspectorSection(inspector: Locator, name: string) {
+  const trigger = inspector.getByRole('button', { name, exact: true })
+  if (await trigger.getAttribute('aria-expanded') === 'false') {
+    await trigger.click()
+  }
 }
 
 test('OpenSpec: editor-workspace-layout / 完整示例入口 / 根路径直接展示 Stage 编排工作区', async ({ page }) => {
@@ -186,6 +192,7 @@ test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG �
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+  await expandInspectorSection(inspector, '内容')
   await inspector.getByRole('checkbox', { name: '覆盖填充' }).check()
   await expect(stage.getByTestId('compose-material-svg').locator('rect').last())
     .toHaveAttribute('fill', '#ffffff')
@@ -557,7 +564,9 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(group).toHaveCount(1)
   const groupId = await group.getAttribute('data-entity-id')
   expect(groupId).not.toBeNull()
-  const groupBackground = editor.getByRole('button', { name: '背景填充', exact: true })
+  const groupInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await expandInspectorSection(groupInspector, '外观')
+  const groupBackground = groupInspector.getByRole('button', { name: '背景填充', exact: true })
   await groupBackground.click()
   const colorPicker = page.getByRole('dialog', { name: '背景填充', exact: true })
   await expect(colorPicker).toBeVisible()
@@ -575,7 +584,9 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await stage.locator('.compose-stage__node.is-renderer').filter({
     hasText: 'Text',
   }).click()
-  const property = editor.getByRole('textbox', { name: '文本', exact: true })
+  const textInspector = editor.getByRole('region', { name: 'Text 属性', exact: true })
+  await expandInspectorSection(textInspector, '内容')
+  const property = textInspector.getByRole('textbox', { name: '文本', exact: true })
   await property.fill('统一事务舞台')
   await expect(stage.getByText('统一事务舞台')).toBeVisible()
   await property.press('Control+z')
@@ -666,7 +677,7 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   await expect(propertyRoot.getByRole('searchbox', { name: '搜索属性' })).toHaveCount(1)
 
   const appearance = propertyRoot.getByRole('button', { name: '外观' })
-  await appearance.click()
+  await expect(appearance).toHaveAttribute('aria-expanded', 'false')
   await expect(propertyRoot.getByRole('button', { name: '背景填充' })).toHaveCount(0)
   await propertyRoot.getByRole('searchbox', { name: '搜索属性' }).fill('背景填充')
   await expect(appearance).toHaveAttribute('aria-expanded', 'true')
@@ -679,6 +690,7 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   await capability.selectOption('geometry-constraints')
   const constraints = propertyRoot.getByRole('button', { name: '几何限制' })
   await expect(constraints).toBeVisible()
+  await expandInspectorSection(inspector, '几何限制')
   await propertyRoot.getByRole('combobox', { name: 'Resize 模式' })
     .selectOption('horizontal')
   await expect(stage.getByTestId('stage-resize-e')).toBeVisible()
@@ -700,6 +712,7 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   await expect(composed).toHaveClass(/is-container/)
   await expect(composed.getByTestId('compose-material-rectangle')).toBeVisible()
   await expect(propertyRoot.getByRole('button', { name: '容器' })).toBeVisible()
+  await expandInspectorSection(inspector, '容器')
   await expect(propertyRoot.getByRole('spinbutton', { name: '子项数量' })).toHaveValue('0')
   await expect(propertyRoot.getByRole('searchbox', { name: '搜索属性' })).toHaveCount(1)
 
@@ -769,8 +782,9 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   const topLevelTitles = await propertyRoot.locator(
     ':scope > .property-panel__group > .property-panel__group-header > button',
   ).allTextContents()
-  expect(topLevelTitles.indexOf('布局项')).toBe(topLevelTitles.indexOf('变换') + 1)
-  expect(topLevelTitles.indexOf('布局')).toBe(topLevelTitles.indexOf('布局项') + 1)
+  expect(topLevelTitles).not.toContain('变换')
+  expect(topLevelTitles).not.toContain('布局项')
+  expect(topLevelTitles.indexOf('布局')).toBe(topLevelTitles.indexOf('基础') + 1)
   await expect(layoutSection.getByText('Auto Layout', { exact: true })).toBeVisible()
   const resetLayout = layoutSection.getByRole('button', { name: '重置布局' })
   await expect(resetLayout).toBeDisabled()
@@ -935,35 +949,30 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
 
   await children.nth(0).click()
   const childInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
-  const positioning = childInspector.getByRole('radiogroup', { name: '定位' })
-  const widthMode = childInspector.getByRole('radiogroup', { name: '宽度模式' })
-  await expect(positioning.getByRole('radio', { name: 'Flow' })).toBeChecked()
-  await expect(positioning.getByRole('radio', { name: 'Absolute' })).toHaveText('Absolute')
-  const positioningField = await childInspector.locator('[data-property-path="positioning"]').boundingBox()
-  const widthField = await childInspector.locator('[data-property-path="width"]').boundingBox()
-  const heightField = await childInspector.locator('[data-property-path="height"]').boundingBox()
+  const basicSection = childInspector.getByRole('button', { name: '基础', exact: true })
+    .locator('..')
+    .locator('..')
+  const widthMode = childInspector.getByRole('combobox', { name: '宽度模式' })
+  await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toHaveValue('auto')
+  await expect(childInspector.getByRole('spinbutton', { name: '位置 X' })).toHaveCount(0)
+  await expect(childInspector.getByRole('spinbutton', { name: '旋转' })).toHaveValue('0')
+  const transformField = await childInspector.locator('[data-property-path="transform"]').boundingBox()
+  const sizeField = await childInspector.locator('[data-property-path="size"]').boundingBox()
   const marginField = await childInspector.locator('[data-property-path="margin"]').boundingBox()
-  const alignSelfField = await childInspector.locator('[data-property-path="alignSelf"]').boundingBox()
-  expect(positioningField).not.toBeNull()
-  expect(widthField).not.toBeNull()
-  expect(heightField).not.toBeNull()
+  expect(transformField).not.toBeNull()
+  expect(sizeField).not.toBeNull()
   expect(marginField).not.toBeNull()
-  expect(alignSelfField).not.toBeNull()
-  expect(widthField!.y).toBeCloseTo(positioningField!.y, 0)
-  expect(heightField!.y).toBeCloseTo(positioningField!.y, 0)
-  expect(alignSelfField!.y).toBeCloseTo(marginField!.y, 0)
-  expect(marginField!.y).toBeGreaterThan(positioningField!.y)
-  await widthMode.getByRole('radio', { name: '填充' }).click()
-  await expect(widthMode.getByRole('radio', { name: '填充' })).toBeChecked()
-  await expect(childInspector.getByLabel('计算宽度')).toContainText('计算值')
-  const layoutItemSection = childInspector.getByRole('button', { name: '布局项', exact: true })
-    .locator('..')
-    .locator('..')
-  await expect(layoutItemSection).toHaveScreenshot('layout-item-inspector-flow-fill.png', {
+  expect(sizeField!.y).toBeGreaterThan(transformField!.y)
+  expect(marginField!.y).toBeGreaterThan(sizeField!.y)
+  await widthMode.selectOption('fill')
+  await expect(widthMode).toHaveValue('fill')
+  await expect(childInspector.getByRole('textbox', { name: '尺寸宽度' })).toHaveValue('填充')
+  await expect(basicSection).toHaveScreenshot('basic-inspector-flow-fill.png', {
     animations: 'disabled',
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+  expect(await basicSection.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
 
   const fillBox = await children.nth(0).boundingBox()
   expect(fillBox).not.toBeNull()
@@ -971,13 +980,35 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   await stage.focus()
   await stage.press('ArrowRight')
 
-  await expect(positioning.getByRole('radio', { name: 'Absolute' })).toBeChecked()
-  await expect(widthMode.getByRole('radio', { name: '固定' })).toBeChecked()
+  await expect(childInspector.getByRole('spinbutton', { name: '位置 X' })).toBeVisible()
+  await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toHaveCount(0)
+  await expect(widthMode).toHaveValue('fixed')
   const absoluteBox = await children.nth(0).boundingBox()
   expect(absoluteBox).not.toBeNull()
   expect(absoluteBox!.x).toBeGreaterThan(fillBox!.x)
   expect(absoluteBox!.x - fillBox!.x).toBeLessThanOrEqual(3)
   expect(absoluteBox!.width).toBeCloseTo(fillBox!.width, 0)
+
+  await expect(basicSection).toHaveScreenshot('basic-inspector-absolute-fixed.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await childInspector.getByRole('button', { name: '展开外边距' }).click()
+  await expect(basicSection).toHaveScreenshot('basic-inspector-margin-expanded.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  expect(await basicSection.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await childInspector.getByRole('button', { name: '快捷设置旋转' }).click()
+  const anglePopup = page.getByRole('dialog', { name: '旋转快捷设置' })
+  await expect(anglePopup).toHaveScreenshot('basic-inspector-rotation-popup.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await page.keyboard.press('Escape')
 
   await expect(editor).toHaveScreenshot('auto-layout-fill-interactions.png', {
     animations: 'disabled',
@@ -1048,7 +1079,9 @@ test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交�
   // 历史列表只在 Scene Graph Dock 激活时挂载。先切换再打开 Paint
   // 编辑器，避免 Dockview 激活操作触发 Popover 的失焦关闭。
   await editor.locator('[data-workspace-tab="compose-scene-graph"]').click()
-  await editor.getByRole('button', { name: '背景填充', exact: true }).click()
+  const rectangleInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  await expandInspectorSection(rectangleInspector, '外观')
+  await rectangleInspector.getByRole('button', { name: '背景填充', exact: true }).click()
   const picker = page.getByRole('dialog', { name: '背景填充', exact: true })
   await picker.getByRole('button', { name: '渐变', exact: true }).click()
   await picker.getByRole('button', { name: '线性', exact: true }).click()
@@ -1192,7 +1225,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   await page.mouse.up()
   expectedHistoryCount += 1
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
-  const xField = editor.getByRole('spinbutton', { name: '偏移 X', exact: true })
+  const xField = editor.getByRole('spinbutton', { name: '位置 X', exact: true })
   await expect.poll(async () => Number(await xField.inputValue()) % 8).toBe(0)
 
   const resize = stage.getByTestId('stage-resize-se')
@@ -1211,7 +1244,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   await page.mouse.up()
   expectedHistoryCount += 1
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
-  const widthField = editor.getByRole('spinbutton', { name: '宽度', exact: true })
+  const widthField = editor.getByRole('textbox', { name: '尺寸宽度', exact: true })
   await expect.poll(async () => Number(await widthField.inputValue()) % 8).toBe(0)
 })
 
@@ -1432,7 +1465,7 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
     { steps: 5 },
   )
   await page.mouse.up()
-  const xField = editor.getByRole('spinbutton', { name: '偏移 X', exact: true })
+  const xField = editor.getByRole('spinbutton', { name: '位置 X', exact: true })
   // Yoga absolute inset 以父容器 border 内沿为原点；默认 Container border 为 1px。
   await expect.poll(async () => {
     const resolvedX = Number(await xField.inputValue()) + 1
@@ -1453,7 +1486,7 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
     { steps: 5 },
   )
   await page.mouse.up()
-  const widthField = editor.getByRole('spinbutton', { name: '宽度', exact: true })
+  const widthField = editor.getByRole('textbox', { name: '尺寸宽度', exact: true })
   await expect.poll(async () => {
     const width = Number(await widthField.inputValue())
     return Math.abs(width - Math.round(width / 16) * 16)
@@ -1895,6 +1928,7 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
 
   // 3) 属性面板的 node 字段选中 Home 页面
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await expandInspectorSection(inspector, '内容')
   const nodeField = inspector.getByTestId('semantic-editor-node')
   await expect(nodeField).toBeVisible()
   await nodeField.getByRole('combobox').click()
@@ -2036,6 +2070,7 @@ test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完�
   // 根文档里放一个 Page Slot 指向该页面（组件库此时仍是打开状态）
   await editor.getByRole('button', { name: 'Page Slot' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await expandInspectorSection(inspector, '内容')
   await inspector.getByTestId('semantic-editor-node').getByRole('combobox').click()
   await inspector.getByRole('option', { name: 'Home' }).click()
 

@@ -89,7 +89,8 @@ import {
 Section 默认展开并可折叠；可选 `actions` 会显示在同一标题栏右侧，点击其中的操作不会折叠分组。
 搜索会匹配分组名、字段名、路径与说明，只临时展开命中组；清空后恢复用户原来的折叠状态。Root
 外的独立 `ComposePropertyPanel` 行为不变。Registry Inspector 放在 Section 内时无需修改现有实现；
-其中的 Property Panel 会自动进入嵌入模式。
+其中的 Property Panel 会自动进入嵌入模式。同一 Section 可嵌入多个面板，搜索可见性按实例
+聚合：任一嵌入面板命中即保留并展开整个 Section，实例卸载时会注销自己的可见性记录。
 
 ## 展示 metadata
 

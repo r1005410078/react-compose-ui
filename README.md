@@ -152,10 +152,13 @@ Stage Engine 通过 Component 查询决定系统能力：
 Resize 模式支持 `free`、`preserve-aspect`、`horizontal`、`vertical`、`none`；手柄会与约束
 同步变化。Pointer 移动期间只维护临时 Preview Transform，松手后最多提交一个正式事务。
 
-Inspector 按 Registry 顺序聚合当前 Entity 的 Component 属性区。顶部“添加能力”让用户以
-产品术语扩展 Entity；Component Definition 可以为分组标题栏提供可选状态和操作；锁定后只有
-Lock 可编辑。Preview 使用与 Stage 相同的 LayoutSnapshot、Transform rotation、Appearance、Hierarchy、Clip 和 Renderer
-语义，但不包含编辑 chrome。
+Inspector 按 Registry 顺序聚合当前 Entity 的 Component 属性区。Definition 可用
+`inspectorGroup: 'basic'` 把领域字段合并到“基础”，也可指定独立分组的默认展开状态。
+内建基础区按“名称、变换、尺寸、外边距”紧凑组合 Transform 与 LayoutItem：Absolute
+显示 X/Y，Flow 显示自身对齐，两者共用角度转盘；W/H 分别编辑 Fixed/Fill/Hug，
+外边距可按 T/R/B/L 展开。顶部“添加能力”用产品术语扩展 Entity；锁定后只有 Lock
+可编辑。Preview 使用与 Stage 相同的 LayoutSnapshot、Transform rotation、Appearance、Hierarchy、
+Clip 和 Renderer 语义，但不包含编辑 chrome。
 
 宿主 Renderer 可以在 definition 上声明 `measurement`。`createComposeRendererMeasurementAdapter()`
 负责缓存、AbortController、资源/页面订阅、迟到结果丢弃和精确 Entity 失效；完成使用后必须

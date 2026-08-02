@@ -1,11 +1,13 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
+import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import {
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
   type ComposeDocument,
   type ComposeEntity,
 } from '@compose-ui/core'
+import * as v from 'valibot'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EntityInspector } from './entity-inspector'
 
@@ -78,5 +80,95 @@ describe('EntityInspector missing Component sections', () => {
     expect(screen.getByRole('button', { name: '添加布局' })).toBeInTheDocument()
     expect(screen.getByText('布局').closest('.property-panel__group')).not.toHaveClass('property-panel__group-content')
     expect(screen.queryByRole('button', { name: '布局' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: component-registry / Component Inspector 分组与默认展开协议 / 合并基础并应用默认展开状态', () => {
+    const groupedEntity: ComposeEntity = {
+      ...entity,
+      components: {
+        ...entity.components,
+        HostGeometry: { rotation: 0 },
+        HostLayout: { gap: 8 },
+        HostState: { enabled: true },
+        Renderer: { type: 'host-card', props: { title: 'Card' } },
+      },
+    }
+    const groupedDocument: ComposeDocument = {
+      ...document,
+      entities: { [groupedEntity.id]: groupedEntity },
+    }
+    const registry = createComposeEntityRegistry({
+      components: [
+        {
+          key: 'HostGeometry',
+          label: '几何',
+          order: 10,
+          inspectorGroup: 'basic',
+          createDefault: () => ({ rotation: 0 }),
+          inspector: ({ value }) => (
+            <ComposePropertyPanel
+              schema={v.object({ rotation: v.pipe(v.number(), v.title('旋转')) })}
+              value={{ rotation: Number(value.rotation) }}
+            />
+          ),
+        },
+        {
+          key: 'HostLayout',
+          label: '布局',
+          order: 20,
+          inspectorDefaultExpanded: true,
+          createDefault: () => ({ gap: 0 }),
+          inspector: ({ value }) => (
+            <ComposePropertyPanel
+              schema={v.object({ gap: v.pipe(v.number(), v.title('间距')) })}
+              value={{ gap: Number(value.gap) }}
+            />
+          ),
+        },
+        {
+          key: 'HostState',
+          label: '状态',
+          order: 30,
+          createDefault: () => ({ enabled: true }),
+          inspector: ({ value }) => (
+            <ComposePropertyPanel
+              schema={v.object({ enabled: v.pipe(v.boolean(), v.title('启用')) })}
+              value={{ enabled: Boolean(value.enabled) }}
+            />
+          ),
+        },
+      ],
+      renderers: [{
+        type: 'host-card',
+        label: '内容',
+        renderer: () => null,
+        inspector: ({ renderer }) => (
+          <ComposePropertyPanel
+            schema={v.object({ title: v.pipe(v.string(), v.title('标题')) })}
+            value={{ title: String(renderer.props.title) }}
+          />
+        ),
+      }],
+    })
+
+    render(
+      <EntityInspector
+        dispatch={vi.fn()}
+        document={groupedDocument}
+        entity={groupedEntity}
+        idFactory={() => 'command-1'}
+        registry={registry}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '基础' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByLabelText('名称')).toBeInTheDocument()
+    expect(screen.getByLabelText('旋转')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '几何' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '布局' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: '状态' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: '内容' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByLabelText('启用')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('标题')).not.toBeInTheDocument()
   })
 })

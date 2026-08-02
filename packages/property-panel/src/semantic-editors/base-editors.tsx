@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import type { ComponentProps, KeyboardEvent } from 'react'
 import * as v from 'valibot'
-import { ComposeColorPicker, ComposePaintPicker } from '@compose-ui/components'
+import { ComposeAnglePicker, ComposeColorPicker, ComposePaintPicker } from '@compose-ui/components'
 import {
   useComposePropertyPanelColorEditorPort,
   useComposePropertyPanelPaintEditorPort,
@@ -331,6 +331,29 @@ function SingleNumberEditor(props: PropertyPanelRendererProps) {
   )
 }
 
+function AngleEditor(props: PropertyPanelRendererProps) {
+  const target = props.binding?.getTarget('value')
+  const bound = Boolean(target?.binding)
+  const effectiveValue = target?.effectiveValue ?? props.value
+  return (
+    <div className="property-panel__semantic" data-semantic-editor="angle">
+      <div className="property-panel__binding-target">
+        <div className="property-panel__binding-control">
+          <ComposeAnglePicker
+            label={props.label}
+            readOnly={props.readOnly || bound}
+            value={typeof effectiveValue === 'number' ? effectiveValue : 0}
+            onValueCommit={(nextValue) => {
+              if (!bound) props.commit(nextValue, 'commit')
+            }}
+          />
+        </div>
+        {props.binding?.renderTrigger('value')}
+      </div>
+    </div>
+  )
+}
+
 function VisibilityEditor(props: PropertyPanelRendererProps) {
   const bindingTarget = props.binding?.getTarget('value')
   const bound = Boolean(bindingTarget?.binding)
@@ -562,7 +585,7 @@ export const PROPERTY_PANEL_BASE_RENDERERS: readonly PropertyPanelRenderer[] = [
     component: SizeEditor,
     bindingTargets: ({ schema }) => vectorBindingTargets(['width', 'height'], schema),
   },
-  withSingleValueBinding('angle', SingleNumberEditor),
+  withSingleValueBinding('angle', AngleEditor),
   withSingleValueBinding('opacity', SingleNumberEditor),
   withSingleValueBinding('corner-radius', SingleNumberEditor),
   withSingleValueBinding('stroke-width', SingleNumberEditor),

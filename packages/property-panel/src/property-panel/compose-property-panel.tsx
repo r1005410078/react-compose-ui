@@ -457,7 +457,8 @@ interface PropertyPanelRootView {
 }
 
 interface PropertyPanelSectionView {
-  readonly onVisibilityChange: (visible: boolean | undefined) => void
+  readonly onVisibilityChange: (source: symbol, visible: boolean | undefined) => void
+  readonly unregisterVisibility: (source: symbol) => void
   readonly title: string
 }
 
@@ -741,14 +742,30 @@ export function ComposePropertyPanelSection({
 }: ComposePropertyPanelSectionProps) {
   const root = useContext(PropertyPanelRootContext)
   const [expanded, setExpanded] = useState(defaultExpanded)
-  const [embeddedVisibility, setEmbeddedVisibility] = useState<boolean>()
-  const onVisibilityChange = useCallback((visible: boolean | undefined) => {
-    setEmbeddedVisibility(visible)
+  const [embeddedVisibilities, setEmbeddedVisibilities] = useState<
+    ReadonlyMap<symbol, boolean | undefined>
+  >(() => new Map())
+  const onVisibilityChange = useCallback((source: symbol, visible: boolean | undefined) => {
+    setEmbeddedVisibilities((current) => {
+      if (current.get(source) === visible && current.has(source)) return current
+      const next = new Map(current)
+      next.set(source, visible)
+      return next
+    })
+  }, [])
+  const unregisterVisibility = useCallback((source: symbol) => {
+    setEmbeddedVisibilities((current) => {
+      if (!current.has(source)) return current
+      const next = new Map(current)
+      next.delete(source)
+      return next
+    })
   }, [])
   const context = useMemo<PropertyPanelSectionView>(() => ({
     onVisibilityChange,
+    unregisterVisibility,
     title,
-  }), [onVisibilityChange, title])
+  }), [onVisibilityChange, title, unregisterVisibility])
   if (!root) {
     return (
       <PropertyPanelSectionContext.Provider value={context}>
@@ -758,6 +775,9 @@ export function ComposePropertyPanelSection({
   }
   const query = root.query.trim().toLocaleLowerCase()
   const titleMatches = title.toLocaleLowerCase().includes(query)
+  const embeddedVisibility = embeddedVisibilities.size === 0
+    ? undefined
+    : [...embeddedVisibilities.values()].some((item) => item === true)
   const visible = embeddedVisibility ?? (!query || titleMatches)
   const visibleExpanded = query ? true : expanded
   return (
@@ -845,6 +865,10 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
   void _colorEditor
   void _nodeEditor
   const messages = usePropertyPanelMessages()
+  const visibilitySource = useRef(Symbol('compose-property-panel'))
+  useEffect(() => () => {
+    section.unregisterVisibility(visibilitySource.current)
+  }, [section])
   const effectiveRenderers = mergePropertyPanelRenderers(renderers)
   const asyncSchema = (schema as unknown as { async?: boolean }).async === true
   const validation = asyncSchema ? null : v.safeParse(schema, value)
@@ -898,7 +922,9 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
       renderers={effectiveRenderers}
       schema={schema}
       section={{
-        onVisibilityChange: section.onVisibilityChange,
+        onVisibilityChange: (visible) => {
+          section.onVisibilityChange(visibilitySource.current, visible)
+        },
         title: section.title,
       }}
       showAdvanced={root.showAdvanced}

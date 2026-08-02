@@ -131,6 +131,61 @@ describe('OpenSpec: property-panel / 单面板多属性分组', () => {
     expect(screen.queryByLabelText('背景颜色')).not.toBeInTheDocument()
   })
 
+  it('OpenSpec: property-panel / 多嵌入 Inspector 的 Section 可见性 / 搜索合并后的基础分组', () => {
+    render(
+      <ComposePropertyPanelRoot>
+        <ComposePropertyPanelSection title="基础">
+          <ComposePropertyPanel
+            schema={v.object({ name: v.pipe(v.string(), v.title('名称')) })}
+            value={{ name: 'Rectangle' }}
+          />
+          <ComposePropertyPanel
+            schema={v.object({ rotation: v.pipe(v.number(), v.title('旋转')) })}
+            value={{ rotation: 0 }}
+          />
+        </ComposePropertyPanelSection>
+      </ComposePropertyPanelRoot>,
+    )
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
+      target: { value: '名称' },
+    })
+
+    expect(screen.getByRole('button', { name: '基础' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByLabelText('名称')).toBeInTheDocument()
+    expect(screen.queryByLabelText('旋转')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: property-panel / 多嵌入 Inspector 的 Section 可见性 / 清理嵌入 Inspector 可见性', () => {
+    function Fixture({ geometry }: { readonly geometry: boolean }) {
+      return (
+        <ComposePropertyPanelRoot>
+          <ComposePropertyPanelSection title="基础">
+            <ComposePropertyPanel
+              schema={v.object({ name: v.pipe(v.string(), v.title('名称')) })}
+              value={{ name: 'Rectangle' }}
+            />
+            {geometry ? (
+              <ComposePropertyPanel
+                schema={v.object({ rotation: v.pipe(v.number(), v.title('旋转')) })}
+                value={{ rotation: 0 }}
+              />
+            ) : null}
+          </ComposePropertyPanelSection>
+        </ComposePropertyPanelRoot>
+      )
+    }
+    const view = render(<Fixture geometry />)
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
+      target: { value: '旋转' },
+    })
+    expect(screen.getByRole('button', { name: '基础' })).toBeInTheDocument()
+
+    view.rerender(<Fixture geometry={false} />)
+
+    expect(screen.queryByRole('button', { name: '基础' })).not.toBeInTheDocument()
+  })
+
   it('为自定义 Section 内容保留统一分组，并支持独立只读状态', () => {
     render(
       <ComposePropertyPanelRoot>

@@ -12,12 +12,18 @@ Container 当前默认携带 Layout，用户无法先创建自由容器再明确
 - 选择“自动布局”时原子添加 Flex Layout 并把直接子项转为 Flow；移除时按 Snapshot 烘焙为
   Absolute，保持当前视觉。
 - 增加 Registry 缺失 Component Inspector 协议和 Property Panel action-only 分组。
-- 精简 LayoutItem 字段，重排 Flex 控件，并把 padding 编辑合并进紧凑盒模型实时预览。
+- 增加 Registry Inspector 基础分组与默认展开协议，把 Identity 与跨 Transform/LayoutItem 的复合
+  几何 Inspector 合并为单列“基础”分组，并让同一 Section 中的多个 Inspector 共享正确的搜索可见性。
+- 隐藏定位模式，把位置/自身对齐与旋转合并为“变换”行，把宽高合并为“尺寸”行，并保留可展开
+  四边的紧凑外边距入口；基础分组不再显示 CSS 副标题。
+- 在共享 Components 层发布通用角度选择器，为基础 Angle Editor 与 Materials 旋转入口提供同一套
+  数字输入、转盘、快捷角、键盘和焦点语义。
+- 重排 Flex 控件，并把 padding 编辑合并进紧凑盒模型实时预览。
 - Grid 不进入本次 UI、文档协议、运行时或测试。
 
 ## 影响
 
-- 受影响规范：`basic-materials`、`component-registry`、`property-panel`
+- 受影响规范：`basic-materials`、`component-registry`、`components`、`property-panel`
 - 受影响代码：Materials Container/Flex Inspector、Registry Inspector 协议、Editor Inspector 聚合、
   Property Panel Section、相关 E2E 与黄金图
 - 兼容性：ComposeDocument v6 Schema 不变；已有 Layout 不在加载时自动修改

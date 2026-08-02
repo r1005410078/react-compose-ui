@@ -20,7 +20,6 @@ import {
   createHierarchyInspector,
   createLockInspector,
   createLayoutItemInspector,
-  createTransformInspector,
   createVisibilityInspector,
 } from './material-inspector-kit/component-inspectors'
 import {
@@ -61,7 +60,6 @@ export function createComposeBuiltinComponentDefinitions(
       createDefault: () => ({
         rotation: 0,
       }),
-      inspector: createTransformInspector(idFactory),
     },
     {
       key: 'LayoutItem',
@@ -69,6 +67,7 @@ export function createComposeBuiltinComponentDefinitions(
       order: 12,
       createDefault: createDefaultComposeLayoutItem,
       validate: isValidComposeLayoutItem,
+      inspectorGroup: 'basic',
       inspector: createLayoutItemInspector(idFactory),
     },
     {
@@ -112,6 +111,7 @@ export function createComposeBuiltinComponentDefinitions(
       order: 15,
       createDefault: createDefaultComposeFlexLayout,
       validate: isValidComposeLayout,
+      inspectorDefaultExpanded: true,
       inspector: createLayoutInspector(idFactory),
       inspectorHeaderActions: createLayoutInspectorHeaderActions(idFactory),
       missingInspector: {

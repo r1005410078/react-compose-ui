@@ -44,17 +44,38 @@ Layout 的 Inspector MUST 提供“布局 +”菜单；菜单当前 MUST 只包�
 
 ### Requirement: 紧凑 Auto Layout Inspector
 
-Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，并在约 400px Inspector 中以三行 Flex 控件和
-紧凑盒模型预览编辑布局。中文标题 MUST 显示对应 CSS 属性名，图标数量、语义顺序、键盘与 ARIA
-MUST 与浏览器 Flex 控件一致。
+Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity、Transform 与 LayoutItem 作为
+单列“基础”分组呈现，并在约 400px Inspector 中以三行 Flex 控件和紧凑盒模型预览编辑布局。
+基础分组 MUST 不显示 CSS 副标题；Auto Layout 分组的图标数量、语义顺序、键盘与 ARIA MUST 与
+浏览器 Flex 控件一致。
 
 #### Scenario: 按定位和尺寸模式显示字段
 
 - **WHEN** LayoutItem 在 Absolute/Flow 或 Fixed/Fill/Hug 之间切换
-- **THEN** Absolute 只显示有效 offset 且隐藏 alignSelf，Flow 执行相反规则
-- **AND** Fixed 显示可编辑 value，Fill/Hug 只显示 Snapshot 计算值
-- **AND** 定位、宽度、高度在同一行，margin 与 align-self 在下一行
-- **AND** `Flow`、`Absolute` 保留英文领域术语，中文字段名继续附带 CSS 属性名
+- **THEN** Inspector 不显示 Flow/Absolute 定位模式，Absolute 显示位置且隐藏自身对齐，Flow 执行相反规则
+- **AND** 名称、变换、尺寸、外边距各占一行并位于同一基础分组
+- **AND** Absolute 的变换行显示 X/Y/旋转，Flow 的变换行显示自身对齐/旋转
+- **AND** 尺寸行并排显示 W/H，Fixed 显示可编辑数字，Fill/Hug 分别显示本地化模式名
+- **AND** 基础分组不显示 position、width、height、inset、margin 或 align-self 等 CSS 副标题
+
+#### Scenario: 编辑宽高组合输入
+
+- **WHEN** 用户输入合法数字、选择 Fill/Hug，或从 Fill/Hug 选择 Fixed
+- **THEN** 数字输入原子写入 Fixed，模式菜单只列出当前上下文允许的选项
+- **AND** 切回 Fixed 优先采用 Snapshot 计算尺寸，Snapshot 缺失时使用持久化 fallback
+- **AND** 空白、非法输入或 Escape 不产生事务，Enter 与失焦只提交一次有效值
+
+#### Scenario: 编辑复合变换
+
+- **WHEN** 用户编辑 Absolute 的 X/Y、Flow 的自身对齐，或任一节点的旋转
+- **THEN** Inspector 分别通过现有 LayoutItem 或 Transform 命令更新对应 Component
+- **AND** 数值草稿只在 Enter 或失焦时提交，Escape、空白与非法值不产生事务
+
+#### Scenario: 展开和联动外边距
+
+- **WHEN** 四边外边距相等或用户展开、分别编辑并重新联动四边
+- **THEN** 相等值默认显示单值和展开按钮，非等值保持 T/R/B/L 展开状态
+- **AND** 重新联动以 top 统一四边且只提交一次事务
 
 #### Scenario: 编辑统一或分轴 gap
 
@@ -84,4 +105,4 @@ MUST 与浏览器 Flex 控件一致。
 
 - **WHEN** Inspector 内容宽度约为 365px
 - **THEN** direction/wrap、gap/align-content、justify-content/align-items 三行均无横向溢出
-- **AND** 盒模型输入、菜单、焦点环和英文文案保持可达与可读
+- **AND** 基础分组的变换、尺寸、展开外边距及盒模型输入、菜单、焦点环和英文文案保持可达与可读

@@ -50,7 +50,39 @@
 - [x] 4.4 运行相关测试及 `lint`、`typecheck`、`test`、`build`、`test:e2e`、`pack:dry-run`。
   - Regression: `bun run lint`、`bun run typecheck`、`bun run test`、`bun run build`、`bun run test:e2e`（30 passed）和 `bun run pack:dry-run` 全部通过。
 - [x] 4.5 在各任务下记录 Red/Green/Regression 证据并完成严格 OpenSpec 校验。
-- [x] 4.6 还原 LayoutItem 设计稿：三列首行、文本计算值、`Flow/Absolute` 原文和 align-self 本地化选项。
+- [x] 4.6 实现 LayoutItem 历史中间稿（后由 5.x 复合几何 Inspector 整体取代）。
   - Red: Component Inspector 测试确认计算值仍是只读输入且 `Absolute` 被错误翻译；E2E 确认嵌入式 LayoutItem 未形成设计稿中的两行网格。
   - Green: 自定义 positioning、offset、axis sizing 与 align-self renderer，并让 LayoutItem 在窄 Inspector 中保持三列首行和两列次行；布局项覆盖面板列宽拖拽线，保证最右侧模式可点击。
-  - Regression: Materials 51 项测试、全仓 37 个测试任务、30 条 E2E、`lint`、`typecheck` 与 `build` 通过，并新增 `layout-item-inspector-flow-fill.png` 黄金图。
+  - Regression: Materials 51 项测试、全仓 37 个测试任务、30 条 E2E、`lint`、`typecheck` 与 `build` 通过；该中间稿黄金图已在 5.8 替换。
+
+## 5. 基础 Inspector 复合几何编辑器
+
+- [x] 5.1 替换旧版单列草稿，补充 Components 角度选择器规范并通过严格 OpenSpec 校验。
+  - Validation: `openspec validate redesign-auto-layout-inspector --strict` 通过；PostHog 遥测网络失败不影响本地校验与退出码。
+- [x] 5.2 Red：为 Registry 基础分组、默认展开和多嵌入 Inspector 搜索建立失败测试并记录证据。
+  - Red command: 在 `packages/property-panel` 与 `packages/editor` 分别运行目标 Vitest 文件。
+  - Red result: 多嵌入 Section 的后一次不可见报告覆盖名称命中；Editor 仍创建独立“几何”分组且普通分组默认展开，目标测试按预期失败。
+  - Red reason: Section 只有单个 `embeddedVisibility`，Registry 尚无基础分组与默认展开元数据。
+- [x] 5.3 Green/Refactor：实现 Registry 元数据、Editor 分组聚合和 Property Panel 可见性注册并记录回归。
+  - Green command/result: Property Panel 56 项与 Editor Inspector 2 项目标测试全部通过。
+  - Regression: 既有 action-only、跨 Section 搜索、折叠恢复及缺失 Layout 入口测试保持通过。
+- [x] 5.4 Red：为通用角度选择器的任意输入、转盘单提交、快捷角、键盘、取消与焦点恢复建立失败测试。
+  - Red command: `packages/components` 运行新增 Angle Picker 目标测试。
+  - Red result/reason: 三个 Scenario 均因公共 `ComposeAnglePicker` 尚不存在而按预期失败。
+- [x] 5.5 Green/Refactor：实现共享角度选择器并让基础 Angle Editor 复用，记录相关回归。
+  - Green command/result: Components Angle Picker 3 个 Scenario 与 Property Panel 11 项语义 Editor 测试全部通过。
+  - Regression: Components 构建成功；任意角度输入、归一化转盘、单次 pointerup、快捷角、键盘、取消及焦点恢复均通过。
+- [x] 5.6 Red：为 Absolute/Flow 复合变换、W/H 尺寸输入、Snapshot fallback 和可展开外边距建立失败测试。
+  - Red command: `packages/materials` 运行 Component Inspector 目标测试。
+  - Red result: 4 个新增/修改场景按预期失败；Transform 仍独立，定位控件与 CSS 副标题仍存在，Flow 无旋转复合行，外边距仍在 change 时立即提交。
+  - Red reason: Materials 仍使用旧三列 LayoutItem renderer，尚未建立跨 Transform/LayoutItem 的复合视图模型。
+- [x] 5.7 Green/Refactor：实现跨 Transform/LayoutItem 的复合几何 Inspector 与窄侧栏样式，记录相关回归。
+  - Green command/result: Materials Component Inspector 16 项测试通过；Absolute 显示 X/Y/旋转，Flow 显示 align-self/旋转，W/H 共用尺寸行。
+  - Regression: Fill/Hug 数字转 Fixed、Snapshot/fallback、外边距展开/联动收起、单次事务与锁定/只读边界均通过。
+- [x] 5.8 更新 E2E、黄金图、README、公共 TSDoc 与 Changeset。
+  - E2E: 新增 `basic-inspector-absolute-fixed.png`、`basic-inspector-flow-fill.png`、`basic-inspector-margin-expanded.png` 和 `basic-inspector-rotation-popup.png`，删除旧三列 LayoutItem 黄金图。
+  - Review: 人工检查 365px 基础分组、旋转弹层、外边距展开与 Auto Layout 实时预览，无水平溢出或遮挡。
+  - Docs: 根 README、Components/Registry/Materials/Property Panel/Editor README、公共 TSDoc 与 Changeset 已同步。
+- [x] 5.9 运行相关测试及 `lint`、`typecheck`、`test`、`build`、`test:e2e`、`pack:dry-run` 并记录证据。
+  - Validation: `openspec validate redesign-auto-layout-inspector --strict`、`bun run lint`、`bun run typecheck`、`bun run test`、`bun run build`、`bun run test:e2e` 和 `bun run pack:dry-run` 全部通过。
+  - E2E result: Chromium 30/30 通过，包含 Basic Absolute/Flow、Auto Layout、Hug/Fill、Page Slot 深嵌套与 Stage/Preview 回归。

@@ -44,9 +44,10 @@ Layout 属性区紧跟变换分组，以两行三列卡片提供方向、换行�
 中文标题下显示对应 CSS 属性名。枚举按钮使用统一大小的浏览器语义图标，并随当前方向旋转主轴、
 交叉轴和换行示意。标题栏提供 `display: flex` 状态和整体重置，末尾实时预览显示当前摘要、三个
 编号节点与主轴/交叉轴。该预览仅用于解释属性；正式 Stage 和 Preview 都消费 Layout Runtime 的
-Snapshot，并始终以绝对定位 DOM 呈现，不再运行第二套 CSS Flex。LayoutItem Inspector 提供
-Flow/Absolute、Fixed/Fill/Hug、fallback、margin、alignSelf 与计算尺寸；Fill 只在 Layout parent 的
-Flow 子项上可选，Flow 转 Absolute 时会从当前 Snapshot 烘焙 offset 和 Fill 尺寸。
+Snapshot，并始终以绝对定位 DOM 呈现，不再运行第二套 CSS Flex。LayoutItem 提供
+合并进“基础”的复合几何 Inspector：Absolute 显示 X/Y/旋转，Flow 显示 alignSelf/旋转，
+W/H 同行编辑 Fixed/Fill/Hug，margin 默认联动并可展开 T/R/B/L。Fill/Hug 切回 Fixed
+优先使用当前 Snapshot 尺寸；Flow/Absolute 由 Scene Tree 与 Stage 交互维护，不在基础区手动切换。
 
 Text、Image、SVG 与 Page Slot Renderer 同时提供 Hug measurement definition。Text 使用与可见
 Renderer 相同的 typography 在隔离离屏 host 中测量，并订阅 `document.fonts`；Image 使用 resolved

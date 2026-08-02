@@ -143,6 +143,12 @@ export interface ComposeRendererDefinition {
   readonly renderer: ComponentType<ComposeRendererProps>
   /** 可选 Renderer 内容 Inspector。 */
   readonly inspector?: ComponentType<ComposeRendererInspectorProps>
+  /**
+   * Renderer Inspector 分组初次挂载时是否展开。
+   *
+   * @defaultValue false
+   */
+  readonly inspectorDefaultExpanded?: boolean
   /** 可选的内容固有尺寸定义；不得读取 Stage 或 Preview 的 Scene Entity DOM。 */
   readonly measurement?: ComposeRendererMeasurementDefinition
 }
@@ -209,6 +215,19 @@ export interface ComposeComponentDefinition {
   readonly validate?: (value: JsonObject) => boolean | string
   /** 可选 Component Inspector。 */
   readonly inspector?: ComponentType<ComposeComponentInspectorProps>
+  /**
+   * 把当前 Inspector 合并进宿主的基础属性分组。
+   *
+   * @remarks
+   * 该元数据只影响 Inspector 组合，不改变 Component 数据、顺序或命令语义。
+   */
+  readonly inspectorGroup?: 'basic'
+  /**
+   * 独立 Inspector 分组初次挂载时是否展开；合并进基础分组时由基础分组统一决定。
+   *
+   * @defaultValue false
+   */
+  readonly inspectorDefaultExpanded?: boolean
   /**
    * Entity 尚无此 Component 时显示的可选 Inspector 入口。
    *

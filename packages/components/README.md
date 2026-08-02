@@ -19,6 +19,14 @@ import '@compose-ui/components/styles.css'
 `ComposeButton` 与 `ComposeInput` 会直接跟随 `ComposeThemeProvider` 的 Dark/Light 与 token override。
 样式仅输出带 `cu:` 前缀的 utility，并且不注入 Preflight 或 Shadcn 的默认全局主题。
 
+`ComposeAnglePicker` 是无文档语义的受控角度编辑器：紧凑状态保留任意有限角度，
+快捷弹层提供 0–359° 转盘、精确值与 0°/90°/180°/270° 预设。转盘拖动仅在
+pointerup 提交一次，Escape 取消并恢复入口焦点。
+
+```tsx
+<ComposeAnglePicker value={rotation} onValueCommit={setRotation} />
+```
+
 `ComposeColorPicker` 是受控的纯色 Pattern，基于包内 Shadcn CLI 生成的 Base UI Popover 源码组合
 色盘、色相/透明度滑条、透明色、Recent、Common 与可折叠的精确 HEX/Alpha 输入。选择会提交规范的
 `#rrggbb`、`#rrggbbaa` 或 `transparent`；无法精确编辑的既有 CSS 色值仍会作为色块预览，直到用户主动修改。

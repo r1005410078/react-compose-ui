@@ -59,7 +59,8 @@ Capability 是用户可添加的一组 Component。Registry 校验依赖无环�
 
 Component Definition 可以通过 `inspectorHeaderActions` 声明 Inspector 分组标题栏状态或操作；
 `ComposeRegistryComponentInspectorHeaderActions` 会透传与正文 Inspector 相同的实体、值、命令
-派发和只读上下文。
+派发和只读上下文。`inspectorGroup: 'basic'` 使领域 Inspector 合并进宿主基础分组；
+Component 与 Renderer 的 `inspectorDefaultExpanded` 显式决定独立分组的初始展开状态。
 
 `ComposeRegistryEntityRenderer`、`ComposeRegistryComponentInspector`、
 `ComposeRegistryComponentInspectorHeaderActions` 和 `ComposeRegistryRendererInspector` 隔离

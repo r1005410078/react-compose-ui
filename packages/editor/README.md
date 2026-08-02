@@ -41,10 +41,11 @@ Scene Tree 移入带 Layout 的父级会自动转 Flow，跨 Layout 保持 Flow 
 Controller 拥有文档会话级 Layout Runtime；Stage surface 挂载时用 registry、asset resolver 与 page
 loader 创建 measurement adapter，卸载时 detach。测量 revision 只更新 Snapshot，不进入事务、历史
 或操作日志。
-默认 Inspector 只创建一个 Property Panel，并按 Registry 顺序聚合 Identity、Transform、
-LayoutItem、Visibility、Lock、Appearance、Hierarchy/Clip、GeometryConstraints 与 Renderer 内容分组。
-所有分组共享搜索、筛选、显示设置和列宽，默认展开且可折叠；Hierarchy 与 Clip 合并为“容器”，
-未知 Component/Renderer 使用同一分组样式降级展示。
+默认 Inspector 只创建一个 Property Panel，并按 Registry 元数据聚合。Identity 与标记为
+`inspectorGroup: 'basic'` 的领域 Inspector 共用“基础”；Layout 默认展开，Visibility、Lock、
+Appearance、Hierarchy/Clip、GeometryConstraints 与 Renderer 内容等其他分组默认折叠。
+所有分组共享搜索、筛选、显示设置和列宽；Hierarchy 与 Clip 合并为“容器”，未知
+Component/Renderer 使用同一分组样式降级展示。
 
 Inspector 顶部“添加能力”使用 Registry 的依赖和冲突规划，已附加能力可以经确认框移除。锁定
 Entity 时只有 Lock 保持可编辑，以便解锁；其他 Component、Renderer 内容和能力操作只读。

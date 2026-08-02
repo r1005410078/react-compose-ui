@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useId, useMemo, useState } from 'react'
 import * as v from 'valibot'
 import {
   BUILTIN_COMMAND_TYPES,
@@ -17,11 +17,11 @@ import {
   type ComposeGeometryConstraints,
   type ComposeLayoutItem,
   type ComposePaint,
-  type ComposeTransform,
   type EditorCommand,
   type JsonObject,
   type JsonValue,
 } from '@compose-ui/core'
+import { ComposeAnglePicker } from '@compose-ui/components'
 import {
   ComposePropertyPanel,
   type ComposePropertyPanelRenderer,
@@ -56,7 +56,7 @@ function useZh(): boolean {
   return (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
 }
 
-interface LayoutItemInspectorView {
+interface BasicGeometryInspectorView {
   readonly computedHeight: number
   readonly computedWidth: number
   readonly fillAllowed: boolean
@@ -64,7 +64,7 @@ interface LayoutItemInspectorView {
   readonly zh: boolean
 }
 
-const LayoutItemInspectorContext = createContext<LayoutItemInspectorView>({
+const BasicGeometryInspectorContext = createContext<BasicGeometryInspectorView>({
   computedHeight: 0,
   computedWidth: 0,
   fillAllowed: false,
@@ -72,155 +72,198 @@ const LayoutItemInspectorContext = createContext<LayoutItemInspectorView>({
   zh: true,
 })
 
-const LAYOUT_ITEM_CSS_NAMES: Readonly<Record<string, string>> = {
-  'layout-item-position': 'position',
-  'layout-item-offset': 'inset',
-  'layout-item-width': 'width',
-  'layout-item-height': 'height',
-  'layout-item-margin': 'margin',
-  'layout-item-align-self': 'align-self',
+interface BasicTransformValue {
+  readonly positioning: ComposeLayoutItem['positioning']
+  readonly x: number
+  readonly y: number
+  readonly rotation: number
+  readonly alignSelf: ComposeLayoutItem['alignSelf']
 }
 
-// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
-function LayoutItemFieldLabel({ label, metadata }: ComposePropertyPanelRendererProps) {
-  const cssName = typeof metadata.editor === 'string'
-    ? LAYOUT_ITEM_CSS_NAMES[metadata.editor]
-    : undefined
-  return (
-    <span className="layout-item-inspector__field-label">
-      <span>{label}</span>
-      {cssName ? <code>{cssName}</code> : null}
-    </span>
-  )
+interface BasicSizeValue {
+  readonly width: ComposeAxisSizing
+  readonly height: ComposeAxisSizing
 }
 
-// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
-function LayoutPositionEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
-  const buttons = useRef<(HTMLButtonElement | null)[]>([])
-  const options = [
-    { value: 'flow', label: 'Flow' },
-    { value: 'absolute', label: 'Absolute' },
-  ] as const
-  const selectedIndex = options.findIndex((option) => option.value === value)
-  return (
-    <div aria-label={label} className="layout-item-inspector__segments" role="radiogroup">
-      {options.map((option, index) => (
-        <button
-          aria-checked={option.value === value}
-          aria-label={option.label}
-          disabled={readOnly}
-          key={option.value}
-          ref={(node) => {
-            buttons.current[index] = node
-          }}
-          role="radio"
-          tabIndex={selectedIndex === index ? 0 : -1}
-          type="button"
-          onClick={() => commit(option.value)}
-          onKeyDown={(event) => {
-            const step = event.key === 'ArrowRight' || event.key === 'ArrowDown'
-              ? 1
-              : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
-            if (!step) return
-            event.preventDefault()
-            const next = (index + step + options.length) % options.length
-            buttons.current[next]?.focus()
-            commit(options[next]!.value)
-          }}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  )
+interface NumberDraftInputProps {
+  readonly label: string
+  readonly prefix?: string
+  readonly min?: number
+  readonly readOnly: boolean
+  readonly value: number
+  readonly onCommit: (value: number) => void
 }
 
-// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
-function LayoutOffsetEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
-  const offset = value as { readonly x: number; readonly y: number }
-  const update = (axis: 'x' | 'y', raw: string) => {
-    const candidate = Number(raw)
-    if (Number.isFinite(candidate)) commit({ ...offset, [axis]: candidate }, 'input')
-  }
-  return (
-    <div className="layout-item-inspector__offset">
-      {(['x', 'y'] as const).map((axis) => (
-        <label key={axis}>
-          <span>{axis.toUpperCase()}</span>
-          <input
-            aria-label={`${label} ${axis.toUpperCase()}`}
-            disabled={readOnly}
-            step="any"
-            type="number"
-            value={offset[axis]}
-            onChange={(event) => update(axis, event.target.value)}
-          />
-        </label>
-      ))}
-    </div>
-  )
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
-function LayoutAxisSizingEditor({
-  commit,
+// eslint-disable-next-line react-refresh/only-export-components -- 仅作为领域 Inspector 内部数值编辑器。
+function NumberDraftInput({
   label,
-  metadata,
+  min,
+  onCommit,
+  prefix,
   readOnly,
   value,
-}: ComposePropertyPanelRendererProps) {
-  const view = useContext(LayoutItemInspectorContext)
-  const sizing = value as ComposeAxisSizing
-  const width = metadata.editor === 'layout-item-width'
-  const computed = width ? view.computedWidth : view.computedHeight
-  const modes = [
-    { value: 'fixed', label: view.zh ? '固定' : 'Fixed' },
-    ...(view.fillAllowed ? [{ value: 'fill', label: view.zh ? '填充' : 'Fill' }] : []),
-    ...(view.hugAllowed ? [{ value: 'hug', label: view.zh ? '适应' : 'Hug' }] : []),
-  ]
-  const computedLabel = `${view.zh ? '计算' : 'Computed '}${label}`
-  const computedValue = Math.round(computed * 100) / 100
+}: NumberDraftInputProps) {
+  const [draft, setDraft] = useState({ external: value, text: String(value), dirty: false })
+  const current = Object.is(draft.external, value)
+    ? draft
+    : { external: value, text: String(value), dirty: false }
+  const reset = () => setDraft({ external: value, text: String(value), dirty: false })
+  const submit = () => {
+    if (!current.dirty || current.text.trim() === '') return
+    const candidate = Number(current.text)
+    if (!Number.isFinite(candidate) || (min !== undefined && candidate < min)) return
+    onCommit(candidate)
+    setDraft({ external: value, text: String(candidate), dirty: false })
+  }
+  return (
+    <label className="layout-item-inspector__number">
+      {prefix ? <span aria-hidden="true">{prefix}</span> : null}
+      <input
+        aria-label={label}
+        disabled={readOnly}
+        min={min}
+        step="any"
+        type="number"
+        value={current.text}
+        onBlur={submit}
+        onChange={(event) => setDraft({ external: value, text: event.target.value, dirty: true })}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') submit()
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            reset()
+          }
+        }}
+      />
+    </label>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function BasicTransformEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
+  const zh = useZh()
+  const transform = value as unknown as BasicTransformValue
+  return (
+    <div className="layout-item-inspector__transform">
+      {transform.positioning === 'absolute' ? (
+        <div className="layout-item-inspector__position">
+          <NumberDraftInput
+            label={zh ? '位置 X' : 'Position X'}
+            prefix="X"
+            readOnly={readOnly}
+            value={transform.x}
+            onCommit={(x) => commit({ ...transform, x }, 'commit')}
+          />
+          <NumberDraftInput
+            label={zh ? '位置 Y' : 'Position Y'}
+            prefix="Y"
+            readOnly={readOnly}
+            value={transform.y}
+            onCommit={(y) => commit({ ...transform, y }, 'commit')}
+          />
+        </div>
+      ) : (
+        <select
+          aria-label={zh ? '自身对齐' : 'Align self'}
+          disabled={readOnly}
+          value={transform.alignSelf}
+          onChange={(event) => commit({ ...transform, alignSelf: event.target.value }, 'commit')}
+        >
+          {ALIGN_SELF_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{zh ? option.zh : option.en}</option>
+          ))}
+        </select>
+      )}
+      <ComposeAnglePicker
+        label={zh ? '旋转' : 'Rotation'}
+        readOnly={readOnly}
+        value={transform.rotation}
+        onValueCommit={(rotation) => commit({ ...transform, rotation }, 'commit')}
+      />
+    </div>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 仅作为领域 Inspector 内部尺寸编辑器。
+function AxisSizingControl({
+  axis,
+  computed,
+  modes,
+  onCommit,
+  readOnly,
+  sizing,
+  zh,
+}: {
+  readonly axis: 'width' | 'height'
+  readonly computed: number
+  readonly modes: readonly { readonly value: ComposeAxisSizing['mode']; readonly label: string }[]
+  readonly onCommit: (sizing: ComposeAxisSizing) => void
+  readonly readOnly: boolean
+  readonly sizing: ComposeAxisSizing
+  readonly zh: boolean
+}) {
+  const computedId = useId()
+  const external = `${sizing.mode}:${sizing.value}`
+  const modeLabel = modes.find((mode) => mode.value === sizing.mode)?.label ?? sizing.mode
+  const [draft, setDraft] = useState({
+    external,
+    text: sizing.mode === 'fixed' ? String(sizing.value) : modeLabel,
+    dirty: false,
+  })
+  const current = draft.external === external
+    ? draft
+    : { external, text: sizing.mode === 'fixed' ? String(sizing.value) : modeLabel, dirty: false }
+  const dimensionLabel = axis === 'width'
+    ? (zh ? '尺寸宽度' : 'Size width')
+    : (zh ? '尺寸高度' : 'Size height')
+  const submit = () => {
+    if (!current.dirty || current.text.trim() === '') return
+    const candidate = Number(current.text)
+    if (!Number.isFinite(candidate) || candidate < 0) return
+    onCommit({ ...sizing, mode: 'fixed', value: candidate })
+    setDraft({ external, text: String(candidate), dirty: false })
+  }
   return (
     <div className="layout-item-inspector__axis-sizing">
-      <div aria-label={`${label}${view.zh ? '模式' : ' mode'}`} role="radiogroup">
-        {modes.map((mode) => (
-          <button
-            aria-checked={sizing.mode === mode.value}
-            aria-label={mode.label}
-            disabled={readOnly}
-            key={mode.value}
-            role="radio"
-            type="button"
-            onClick={() => commit({ ...sizing, mode: mode.value })}
-          >
-            {mode.label}
-          </button>
-        ))}
-      </div>
-      {sizing.mode === 'fixed' ? (
-        <input
-          aria-label={label}
-          disabled={readOnly}
-          min="0"
-          step="any"
-          type="number"
-          value={sizing.value}
-          onChange={(event) => {
-            const candidate = Number(event.target.value)
-            if (Number.isFinite(candidate) && candidate >= 0) {
-              commit({ ...sizing, value: candidate }, 'input')
-            }
-          }}
-        />
-      ) : (
-        <output aria-label={computedLabel} className="layout-item-inspector__computed">
-          <span>{view.zh ? '计算值' : 'Computed'}</span>
-          {' '}
-          <strong>{computedValue}</strong>
-          {' '}
-          <span>px</span>
-        </output>
-      )}
+      <span aria-hidden="true">{axis === 'width' ? 'W' : 'H'}</span>
+      <input
+        aria-describedby={computedId}
+        aria-label={dimensionLabel}
+        disabled={readOnly}
+        inputMode="decimal"
+        type="text"
+        value={current.text}
+        onBlur={submit}
+        onChange={(event) => setDraft({ external, text: event.target.value, dirty: true })}
+        onFocus={(event) => event.currentTarget.select()}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') submit()
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            setDraft({
+              external,
+              text: sizing.mode === 'fixed' ? String(sizing.value) : modeLabel,
+              dirty: false,
+            })
+          }
+        }}
+      />
+      <select
+        aria-label={axis === 'width'
+          ? (zh ? '宽度模式' : 'Width mode')
+          : (zh ? '高度模式' : 'Height mode')}
+        disabled={readOnly}
+        value={sizing.mode}
+        onChange={(event) => {
+          const mode = event.target.value as ComposeAxisSizing['mode']
+          onCommit({ ...sizing, mode, value: mode === 'fixed' ? computed : sizing.value })
+        }}
+      >
+        {modes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
+      </select>
+      <span className="layout-item-inspector__sr-only" id={computedId}>
+        {zh ? '计算尺寸' : 'Computed size'} {Math.round(computed * 100) / 100} px
+      </span>
     </div>
   )
 }
@@ -235,24 +278,44 @@ const ALIGN_SELF_OPTIONS = [
 ] as const
 
 // eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
-function LayoutAlignSelfEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
-  const zh = useZh()
+function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
+  const view = useContext(BasicGeometryInspectorContext)
+  const size = value as unknown as BasicSizeValue
+  const modes = [
+    { value: 'fixed' as const, label: view.zh ? '固定' : 'Fixed' },
+    ...(view.fillAllowed
+      ? [{ value: 'fill' as const, label: view.zh ? '填充' : 'Fill' }]
+      : []),
+    ...(view.hugAllowed
+      ? [{ value: 'hug' as const, label: view.zh ? '适应' : 'Hug' }]
+      : []),
+  ]
   return (
-    <select
-      aria-label={label}
-      disabled={readOnly}
-      value={String(value)}
-      onChange={(event) => commit(event.target.value, 'input')}
-    >
-      {ALIGN_SELF_OPTIONS.map((option) => (
-        <option key={option.value} value={option.value}>{zh ? option.zh : option.en}</option>
-      ))}
-    </select>
+    <div className="layout-item-inspector__size">
+      <AxisSizingControl
+        axis="width"
+        computed={view.computedWidth}
+        modes={modes}
+        readOnly={readOnly}
+        sizing={size.width}
+        zh={view.zh}
+        onCommit={(width) => commit({ ...size, width }, 'commit')}
+      />
+      <AxisSizingControl
+        axis="height"
+        computed={view.computedHeight}
+        modes={modes}
+        readOnly={readOnly}
+        sizing={size.height}
+        zh={view.zh}
+        onCommit={(height) => commit({ ...size, height }, 'commit')}
+      />
+    </div>
   )
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
-function LayoutMarginEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
+function BasicMarginEditor({ commit, label, readOnly, value }: ComposePropertyPanelRendererProps) {
   const zh = useZh()
   const margin = value as ComposeEdges
   const linked = margin.top === margin.right
@@ -260,24 +323,19 @@ function LayoutMarginEditor({ commit, label, readOnly, value }: ComposePropertyP
     && margin.top === margin.left
   const [expanded, setExpanded] = useState(!linked)
   const showEdges = expanded || !linked
-  const update = (edge: keyof ComposeEdges, raw: string) => {
-    const candidate = Number(raw)
-    if (Number.isFinite(candidate)) commit({ ...margin, [edge]: candidate }, 'input')
-  }
   if (!showEdges) {
     return (
       <div className="layout-item-inspector__edges layout-item-inspector__edges--linked">
-        <input
-          aria-label={label}
-          disabled={readOnly}
-          step="any"
-          type="number"
+        <NumberDraftInput
+          label={label}
+          readOnly={readOnly}
           value={margin.top}
-          onChange={(event) => {
-            const candidate = Number(event.target.value)
-            if (!Number.isFinite(candidate)) return
-            commit({ top: candidate, right: candidate, bottom: candidate, left: candidate }, 'input')
-          }}
+          onCommit={(candidate) => commit({
+            top: candidate,
+            right: candidate,
+            bottom: candidate,
+            left: candidate,
+          }, 'commit')}
         />
         <button
           aria-label={zh ? '展开外边距' : 'Expand margin edges'}
@@ -293,17 +351,14 @@ function LayoutMarginEditor({ commit, label, readOnly, value }: ComposePropertyP
   return (
     <div className="layout-item-inspector__edges layout-item-inspector__edges--expanded">
       {(['top', 'right', 'bottom', 'left'] as const).map((edge) => (
-        <label key={edge}>
-          <span>{({ top: 'T', right: 'R', bottom: 'B', left: 'L' })[edge]}</span>
-          <input
-            aria-label={`${label} ${edge}`}
-            disabled={readOnly}
-            step="any"
-            type="number"
-            value={margin[edge]}
-            onChange={(event) => update(edge, event.target.value)}
-          />
-        </label>
+        <NumberDraftInput
+          key={edge}
+          label={`${label} ${edge}`}
+          prefix={({ top: 'T', right: 'R', bottom: 'B', left: 'L' })[edge]}
+          readOnly={readOnly}
+          value={margin[edge]}
+          onCommit={(candidate) => commit({ ...margin, [edge]: candidate }, 'commit')}
+        />
       ))}
       <button
         aria-label={zh ? '收起并联动外边距' : 'Collapse and link margin edges'}
@@ -320,78 +375,23 @@ function LayoutMarginEditor({ commit, label, readOnly, value }: ComposePropertyP
   )
 }
 
-const LAYOUT_ITEM_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
+const BASIC_GEOMETRY_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
   {
-    id: 'layout-item-position',
-    component: LayoutPositionEditor,
-    labelComponent: LayoutItemFieldLabel,
+    id: 'basic-geometry-transform',
+    component: BasicTransformEditor,
     layout: 'full-width',
   },
   {
-    id: 'layout-item-offset',
-    component: LayoutOffsetEditor,
-    labelComponent: LayoutItemFieldLabel,
-    layout: 'full-width',
-  },
-  ...(['layout-item-width', 'layout-item-height'] as const).map((id) => ({
-    id,
-    component: LayoutAxisSizingEditor,
-    labelComponent: LayoutItemFieldLabel,
-    layout: 'full-width' as const,
-  })),
-  {
-    id: 'layout-item-margin',
-    component: LayoutMarginEditor,
-    labelComponent: LayoutItemFieldLabel,
+    id: 'basic-geometry-size',
+    component: BasicSizeEditor,
     layout: 'full-width',
   },
   {
-    id: 'layout-item-align-self',
-    component: LayoutAlignSelfEditor,
-    labelComponent: LayoutItemFieldLabel,
+    id: 'basic-geometry-margin',
+    component: BasicMarginEditor,
     layout: 'full-width',
   },
 ]
-
-/** 创建 Transform Component Inspector。 @internal */
-export function createTransformInspector(
-  idFactory: InspectorIdFactory,
-): ComponentType<ComposeComponentInspectorProps> {
-  return function TransformInspector({ entity, dispatch, readOnly, value }) {
-    const zh = useZh()
-    const schema = useMemo(() => v.object({
-      rotation: v.pipe(
-        v.number(),
-        v.title(zh ? '旋转' : 'Rotation'),
-        v.metadata({ propertyPanel: { editor: 'angle' } }),
-      ),
-    }), [zh])
-    return (
-      <ComposePropertyPanel
-        aria-label={zh ? '变换属性' : 'Transform properties'}
-        readOnly={readOnly}
-        schema={schema}
-        value={value as ComposeTransform}
-        onValueChange={(next) => {
-          const current = getComposeSpatialTransform(entity)
-          dispatch(command(
-            idFactory,
-            entity,
-            BUILTIN_COMMAND_TYPES.setTransform,
-            {
-              operation: 'set',
-              updates: [{
-                entityId: entity.id,
-                transform: { ...current, rotation: next.rotation },
-              }] as unknown as JsonValue,
-            },
-            zh ? `修改 ${entity.name} 变换` : `Update ${entity.name} transform`,
-          ))
-        }}
-      />
-    )
-  }
-}
 
 /** 创建 LayoutItem Component Inspector。 @internal */
 export function createLayoutItemInspector(
@@ -413,132 +413,127 @@ export function createLayoutItemInspector(
     const hierarchy = getComposeHierarchy(entity)
     const hugAllowed = hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
     const box = layoutSnapshot?.boxes[entity.id]
+    const transform = getComposeSpatialTransform(entity)
     const schema = useMemo(() => {
       const sizingModes = fillAllowed
         ? (hugAllowed ? ['fixed', 'fill', 'hug'] as const : ['fixed', 'fill'] as const)
         : (hugAllowed ? ['fixed', 'hug'] as const : ['fixed'] as const)
       return v.object({
-      positioning: v.pipe(
-        v.picklist(['flow', 'absolute']),
-        v.title(zh ? '定位' : 'Positioning'),
-        v.metadata({ propertyPanel: { editor: 'layout-item-position' } }),
-      ),
-      offset: v.pipe(
-        v.object({ x: v.number(), y: v.number() }),
-        v.title(zh ? '偏移' : 'Offset'),
-        v.metadata({ propertyPanel: {
-          editor: 'layout-item-offset',
-          hidden: item.positioning !== 'absolute',
-        } }),
-      ),
-      width: v.pipe(
-        v.object({
-          mode: v.picklist(sizingModes),
-          value: v.pipe(v.number(), v.minValue(0)),
-          min: v.nullable(v.number()),
-          max: v.nullable(v.number()),
-        }),
-        v.title(zh ? '宽度' : 'Width'),
-        v.metadata({ propertyPanel: { editor: 'layout-item-width' } }),
-      ),
-      height: v.pipe(
-        v.object({
-          mode: v.picklist(sizingModes),
-          value: v.pipe(v.number(), v.minValue(0)),
-          min: v.nullable(v.number()),
-          max: v.nullable(v.number()),
-        }),
-        v.title(zh ? '高度' : 'Height'),
-        v.metadata({ propertyPanel: { editor: 'layout-item-height' } }),
-      ),
-      margin: v.pipe(
-        v.object({
+        transform: v.pipe(v.object({
+          positioning: v.picklist(['flow', 'absolute']),
+          x: v.number(),
+          y: v.number(),
+          rotation: v.number(),
+          alignSelf: v.picklist(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
+        }), v.title(zh ? '变换' : 'Transform'), v.metadata({
+          propertyPanel: { editor: 'basic-geometry-transform' },
+        })),
+        size: v.pipe(v.object({
+          width: v.object({
+            mode: v.picklist(sizingModes),
+            value: v.pipe(v.number(), v.minValue(0)),
+            min: v.nullable(v.number()),
+            max: v.nullable(v.number()),
+          }),
+          height: v.object({
+            mode: v.picklist(sizingModes),
+            value: v.pipe(v.number(), v.minValue(0)),
+            min: v.nullable(v.number()),
+            max: v.nullable(v.number()),
+          }),
+        }), v.title(zh ? '尺寸' : 'Size'), v.metadata({
+          propertyPanel: { editor: 'basic-geometry-size' },
+        })),
+        margin: v.pipe(v.object({
           top: v.number(),
           right: v.number(),
           bottom: v.number(),
           left: v.number(),
-        }),
-        v.title(zh ? '外边距' : 'Margin'),
-        v.metadata({ propertyPanel: { editor: 'layout-item-margin' } }),
-      ),
-      alignSelf: v.pipe(
-        v.picklist(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
-        v.title(zh ? '自身对齐' : 'Align self'),
-        v.metadata({ propertyPanel: {
-          editor: 'layout-item-align-self',
-          hidden: item.positioning !== 'flow',
-        } }),
-      ),
+        }), v.title(zh ? '外边距' : 'Margin'), v.metadata({
+          propertyPanel: { editor: 'basic-geometry-margin' },
+        })),
       })
-    }, [fillAllowed, hugAllowed, item.positioning, zh])
+    }, [fillAllowed, hugAllowed, zh])
+    const viewValue = {
+      transform: {
+        positioning: item.positioning,
+        x: item.offset.x,
+        y: item.offset.y,
+        rotation: transform.rotation,
+        alignSelf: item.alignSelf,
+      },
+      size: { width: item.width, height: item.height },
+      margin: item.margin,
+    }
+    const updateLayoutItem = (nextItem: ComposeLayoutItem) => dispatch(command(
+      idFactory,
+      entity,
+      BUILTIN_COMMAND_TYPES.updateComponent,
+      { entityId: entity.id, key: 'LayoutItem', value: nextItem as unknown as JsonValue },
+      zh ? `修改 ${entity.name} 布局项` : `Update ${entity.name} layout item`,
+    ))
     return (
-      <LayoutItemInspectorContext.Provider value={{
+      <BasicGeometryInspectorContext.Provider value={{
         computedHeight: box?.height ?? item.height.value,
         computedWidth: box?.width ?? item.width.value,
         fillAllowed,
         hugAllowed,
         zh,
       }}>
-        <div className="layout-item-inspector">
+        <div className="layout-item-inspector layout-item-inspector--basic">
           <ComposePropertyPanel
-            aria-label={zh ? '布局项属性' : 'Layout item properties'}
+            aria-label={zh ? '基础几何属性' : 'Basic geometry properties'}
             readOnly={readOnly}
-            renderers={LAYOUT_ITEM_RENDERERS}
+            renderers={BASIC_GEOMETRY_RENDERERS}
             schema={schema}
-            value={item}
-            onValueChange={(next) => {
-              if (next.positioning === 'flow' && (!parent || !getComposeLayout(parent))) return
-              if (!hugAllowed && (next.width.mode === 'hug' || next.height.mode === 'hug')) return
-              const bakedBox = item.positioning === 'flow' && next.positioning === 'absolute'
-                ? layoutSnapshot?.boxes[entity.id]
-                : undefined
-              const parentBorder = parent ? resolveComposeAppearance(parent).borderWidth : 0
-              const widthMode = next.positioning === 'absolute' && next.width.mode === 'fill'
-                ? 'fixed'
-                : next.width.mode
-              const heightMode = next.positioning === 'absolute' && next.height.mode === 'fill'
-                ? 'fixed'
-                : next.height.mode
-              dispatch(command(
-                idFactory,
-                entity,
-                BUILTIN_COMMAND_TYPES.updateComponent,
-                {
-                  entityId: entity.id,
-                  key: 'LayoutItem',
-                  value: {
-                    ...item,
-                    positioning: next.positioning,
-                    offset: bakedBox
-                      ? { x: bakedBox.x - parentBorder, y: bakedBox.y - parentBorder }
-                      : next.offset,
-                    width: {
-                      ...next.width,
-                      mode: widthMode,
-                      value: bakedBox && item.width.mode === 'fill'
-                        ? bakedBox.width
-                        : next.width.value,
+            value={viewValue}
+            onValueChange={(next, change) => {
+              const field = change.path[0]
+              if (field === 'transform') {
+                if (next.transform.rotation !== transform.rotation) {
+                  dispatch(command(
+                    idFactory,
+                    entity,
+                    BUILTIN_COMMAND_TYPES.setTransform,
+                    {
+                      operation: 'set',
+                      updates: [{
+                        entityId: entity.id,
+                        transform: { ...transform, rotation: next.transform.rotation },
+                      }] as unknown as JsonValue,
                     },
-                    height: {
-                      ...next.height,
-                      mode: heightMode,
-                      value: bakedBox && item.height.mode === 'fill'
-                        ? bakedBox.height
-                        : next.height.value,
-                    },
-                    margin: next.margin,
-                    alignSelf: next.alignSelf,
-                  },
-                },
-                zh ? `修改 ${entity.name} 布局项` : `Update ${entity.name} layout item`,
-              ))
+                    zh ? `修改 ${entity.name} 变换` : `Update ${entity.name} transform`,
+                  ))
+                  return
+                }
+                updateLayoutItem({
+                  ...item,
+                  offset: { x: next.transform.x, y: next.transform.y },
+                  alignSelf: next.transform.alignSelf,
+                })
+                return
+              }
+              if (field === 'size') {
+                const width = next.size.width
+                const height = next.size.height
+                if ((!fillAllowed && (width.mode === 'fill' || height.mode === 'fill'))
+                  || (!hugAllowed && (width.mode === 'hug' || height.mode === 'hug'))) return
+                updateLayoutItem({ ...item, width, height })
+                return
+              }
+              if (field === 'margin') updateLayoutItem({ ...item, margin: next.margin })
             }}
           />
         </div>
-      </LayoutItemInspectorContext.Provider>
+      </BasicGeometryInspectorContext.Provider>
     )
   }
 }
+
+/*
+ * 以下 Component Inspectors 仍各自拥有一个 Component；复合几何 Inspector 是唯一跨 Component
+ * 的例外，因为位置/尺寸来自 LayoutItem，而旋转必须继续写入 Transform。
+ */
 
 /** 创建 Visibility Component Inspector。 @internal */
 export function createVisibilityInspector(
