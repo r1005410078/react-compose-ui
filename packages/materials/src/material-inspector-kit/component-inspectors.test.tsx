@@ -299,6 +299,28 @@ describe('内建 Component inspectors', () => {
     })
   })
 
+  it('基础复合几何字段使用标准单行自定义类型并共享标签列', () => {
+    const Inspector = inspectorOf('LayoutItem')
+    const target = entity()
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    for (const path of ['transform', 'size', 'margin']) {
+      expect(document.querySelector(`[data-property-path="${path}"]`))
+        .toHaveAttribute('data-property-layout', 'inline')
+    }
+    expect(screen.queryByRole('group', { name: '变换' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: '尺寸' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: '外边距' })).not.toBeInTheDocument()
+  })
+
   it('OpenSpec: 基础物料 / Lock Inspector 在 readOnly 上下文仍可解除锁定', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('Lock')

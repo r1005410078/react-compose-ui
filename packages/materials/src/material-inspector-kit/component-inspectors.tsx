@@ -85,6 +85,48 @@ interface BasicSizeValue {
   readonly height: ComposeAxisSizing
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isBasicTransformValue(value: unknown): value is BasicTransformValue {
+  if (!isRecord(value)) return false
+  return (value.positioning === 'flow' || value.positioning === 'absolute')
+    && isFiniteNumber(value.x)
+    && isFiniteNumber(value.y)
+    && isFiniteNumber(value.rotation)
+    && (value.alignSelf === 'auto'
+      || value.alignSelf === 'flex-start'
+      || value.alignSelf === 'center'
+      || value.alignSelf === 'flex-end'
+      || value.alignSelf === 'stretch'
+      || value.alignSelf === 'baseline')
+}
+
+function isAxisSizing(value: unknown): value is ComposeAxisSizing {
+  if (!isRecord(value)) return false
+  return (value.mode === 'fixed' || value.mode === 'fill' || value.mode === 'hug')
+    && isFiniteNumber(value.value)
+    && (value.min === null || isFiniteNumber(value.min))
+    && (value.max === null || isFiniteNumber(value.max))
+}
+
+function isBasicSizeValue(value: unknown): value is BasicSizeValue {
+  return isRecord(value) && isAxisSizing(value.width) && isAxisSizing(value.height)
+}
+
+function isComposeEdgesValue(value: unknown): value is ComposeEdges {
+  return isRecord(value)
+    && isFiniteNumber(value.top)
+    && isFiniteNumber(value.right)
+    && isFiniteNumber(value.bottom)
+    && isFiniteNumber(value.left)
+}
+
 interface NumberDraftInputProps {
   readonly label: string
   readonly prefix?: string
@@ -379,17 +421,17 @@ const BASIC_GEOMETRY_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
   {
     id: 'basic-geometry-transform',
     component: BasicTransformEditor,
-    layout: 'full-width',
+    layout: 'inline',
   },
   {
     id: 'basic-geometry-size',
     component: BasicSizeEditor,
-    layout: 'full-width',
+    layout: 'inline',
   },
   {
     id: 'basic-geometry-margin',
     component: BasicMarginEditor,
-    layout: 'full-width',
+    layout: 'inline',
   },
 ]
 
@@ -419,37 +461,22 @@ export function createLayoutItemInspector(
         ? (hugAllowed ? ['fixed', 'fill', 'hug'] as const : ['fixed', 'fill'] as const)
         : (hugAllowed ? ['fixed', 'hug'] as const : ['fixed'] as const)
       return v.object({
-        transform: v.pipe(v.object({
-          positioning: v.picklist(['flow', 'absolute']),
-          x: v.number(),
-          y: v.number(),
-          rotation: v.number(),
-          alignSelf: v.picklist(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']),
-        }), v.title(zh ? '变换' : 'Transform'), v.metadata({
+        transform: v.pipe(v.custom<BasicTransformValue>(isBasicTransformValue),
+          v.title(zh ? '变换' : 'Transform'), v.metadata({
           propertyPanel: { editor: 'basic-geometry-transform' },
         })),
-        size: v.pipe(v.object({
-          width: v.object({
-            mode: v.picklist(sizingModes),
-            value: v.pipe(v.number(), v.minValue(0)),
-            min: v.nullable(v.number()),
-            max: v.nullable(v.number()),
-          }),
-          height: v.object({
-            mode: v.picklist(sizingModes),
-            value: v.pipe(v.number(), v.minValue(0)),
-            min: v.nullable(v.number()),
-            max: v.nullable(v.number()),
-          }),
+        size: v.pipe(v.custom<BasicSizeValue>((candidate) => {
+          if (!isBasicSizeValue(candidate)) return false
+          const allowedModes: readonly ComposeAxisSizing['mode'][] = sizingModes
+          return allowedModes.includes(candidate.width.mode)
+            && allowedModes.includes(candidate.height.mode)
+            && candidate.width.value >= 0
+            && candidate.height.value >= 0
         }), v.title(zh ? '尺寸' : 'Size'), v.metadata({
           propertyPanel: { editor: 'basic-geometry-size' },
         })),
-        margin: v.pipe(v.object({
-          top: v.number(),
-          right: v.number(),
-          bottom: v.number(),
-          left: v.number(),
-        }), v.title(zh ? '外边距' : 'Margin'), v.metadata({
+        margin: v.pipe(v.custom<ComposeEdges>(isComposeEdgesValue),
+          v.title(zh ? '外边距' : 'Margin'), v.metadata({
           propertyPanel: { editor: 'basic-geometry-margin' },
         })),
       })

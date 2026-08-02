@@ -187,6 +187,9 @@ test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG �
   await selectAxisSizing(inspector, '宽度', '适应')
   await selectAxisSizing(inspector, '高度', '适应')
   await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
+  const positionXMetrics = await inspector.getByRole('spinbutton', { name: '位置 X' })
+    .evaluate((input) => ({ clientWidth: input.clientWidth, scrollWidth: input.scrollWidth }))
+  expect(positionXMetrics.scrollWidth).toBeLessThanOrEqual(positionXMetrics.clientWidth)
   await expect(editor).toHaveScreenshot('auto-layout-asset-hug.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -964,6 +967,17 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   expect(marginField).not.toBeNull()
   expect(sizeField!.y).toBeGreaterThan(transformField!.y)
   expect(marginField!.y).toBeGreaterThan(sizeField!.y)
+  const basicLabelStarts = await childInspector.evaluate((element) => (
+    ['name', 'transform', 'size', 'margin'].map((path) => {
+      const field = element.querySelector(`[data-property-path="${path}"]`)
+      const label = field?.querySelector(':scope > .property-panel__label, :scope > label')
+      return label?.getBoundingClientRect().x ?? null
+    })
+  ))
+  expect(basicLabelStarts.every((start) => start === basicLabelStarts[0])).toBe(true)
+  expect(await childInspector.locator('[data-property-path="size"] input').evaluateAll((inputs) => (
+    inputs.every((input) => input.scrollWidth <= input.clientWidth)
+  ))).toBe(true)
   await widthMode.selectOption('fill')
   await expect(widthMode).toHaveValue('fill')
   await expect(childInspector.getByRole('textbox', { name: '尺寸宽度' })).toHaveValue('填充')
