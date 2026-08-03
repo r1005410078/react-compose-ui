@@ -31,7 +31,7 @@ import {
 } from '@compose-ui/operation-log'
 import type { ComposeOperationLogCategory, ComposeOperationLogRecordInput } from '@compose-ui/operation-log'
 import { ComposePropertyPanel } from '@compose-ui/property-panel'
-import { ComposePreview } from '@compose-ui/preview'
+import { ComposePreviewDialog } from '@compose-ui/preview'
 import { BarChart } from 'echarts/charts'
 import {
   GridComponent,
@@ -267,7 +267,6 @@ export function StageDemoWorkspace() {
   const observedRuntime = useRef(runtime)
   const lastRecordedCommitId = useRef<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
-  const [previewMode, setPreviewMode] = useState<'document' | 'container'>('document')
   const nextId = useRef(0)
   const idFactory = useCallback(() => `stage-demo-${nextId.current++}`, [])
   useEffect(() => {
@@ -374,10 +373,7 @@ export function StageDemoWorkspace() {
                 aria-label="打开预览"
                 title="打开预览"
                 type="button"
-                onClick={() => {
-                  setPreviewMode('document')
-                  setPreviewOpen(true)
-                }}
+                onClick={() => setPreviewOpen(true)}
               >
                 <PreviewIcon />
               </button>
@@ -386,30 +382,27 @@ export function StageDemoWorkspace() {
           transactionLog: <ComposeOperationLogPanel />,
         }}
       />
-      {previewOpen ? (
-        <div aria-label="文档预览对话框" className="stage-demo__preview-backdrop" role="dialog">
-          <div className="stage-demo__preview-shell">
-            <button type="button" onClick={() => setPreviewOpen(false)}>关闭预览</button>
-            <button type="button" onClick={() => setPreviewMode('document')}>文档</button>
-            <button
-              disabled={!selectedContainerId}
-              type="button"
-              onClick={() => setPreviewMode('container')}
-            >
-              选中容器
-            </button>
-            <ComposePreview
-              assetResolver={assetResolver}
-              document={controller.document}
-              pageLoader={pageLoader}
-              registry={registry}
-              target={previewMode === 'container' && selectedContainerId
-                ? { kind: 'container', entityId: selectedContainerId }
-                : { kind: 'document' }}
-            />
-          </div>
-        </div>
-      ) : null}
+      <ComposePreviewDialog
+        assetResolver={assetResolver}
+        containerId={selectedContainerId}
+        dialogLabel="文档预览对话框"
+        document={controller.document}
+        messages={{
+          title: '预览',
+          document: '文档',
+          selectedContainer: '选中容器',
+          target: '预览范围',
+          scale: '预览缩放',
+          enterFullscreen: '全屏预览',
+          exitFullscreen: '退出全屏预览',
+          close: '关闭预览',
+          closeHint: '按 Esc 关闭预览',
+        }}
+        open={previewOpen}
+        pageLoader={pageLoader}
+        registry={registry}
+        onOpenChange={setPreviewOpen}
+      />
     </>
   )
 }

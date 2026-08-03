@@ -10,9 +10,6 @@
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-}
-
-.stage-demo__chart {
   background: #152033;
 }
 
@@ -33,37 +30,6 @@
 
 .stage-demo__preview-button:disabled {
   opacity: 0.45;
-}
-
-.stage-demo__preview-backdrop {
-  position: fixed;
-  z-index: 10000;
-  display: grid;
-  inset: 0;
-  place-items: center;
-  background: rgb(3 6 10 / 78%);
-}
-
-.stage-demo__preview-shell {
-  display: grid;
-  max-width: calc(100vw - 80px);
-  max-height: calc(100vh - 80px);
-  gap: 10px;
-  padding: 12px;
-  overflow: auto;
-  border: 1px solid #46546a;
-  border-radius: 6px;
-  background: #111821;
-  box-shadow: 0 24px 80px rgb(0 0 0 / 58%);
-}
-
-.stage-demo__preview-shell > button {
-  justify-self: end;
-}
-
-.stage-demo__preview-shell [data-compose-ui='preview'] {
-  overflow: auto;
-  background: white;
 }
 
 button,

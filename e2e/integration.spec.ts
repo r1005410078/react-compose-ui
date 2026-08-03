@@ -624,6 +624,11 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   const preview = page.getByRole('dialog', { name: '文档预览对话框' })
   const previewRegion = preview.getByRole('region', { name: 'Compose preview' })
   await expect(previewRegion).toBeVisible()
+  await expect(preview).toHaveScreenshot('preview-dialog.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
   const previewGroup = preview.getByTestId(`compose-preview-entity-${groupId}`)
   await expect(previewGroup).toBeVisible()

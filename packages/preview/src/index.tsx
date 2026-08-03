@@ -8,3 +8,8 @@ export {
   type ComposePreviewProps,
   type ComposePreviewTarget,
 } from './compose-preview'
+export {
+  ComposePreviewDialog,
+  type ComposePreviewDialogMessages,
+  type ComposePreviewDialogProps,
+} from './preview-dialog'

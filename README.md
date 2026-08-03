@@ -62,6 +62,9 @@ export function ComposePage() {
 宿主必须导入 `@compose-ui/editor/styles.css` 并给编辑器确定的非零高度。Dockview 是 editor 的
 内部实现；面板对象、布局 JSON、选择、viewport 和临时交互状态都不会写入文档。
 
+使用 `ComposePreviewDialog` 时，宿主还必须导入 `@compose-ui/preview/styles.css`；Dialog 以受控
+`open`/`onOpenChange` 组合 `ComposePreview`，可选 `containerId` 用于在完整文档与指定容器之间切换。
+
 viewport 是编辑器会话状态里变化最频繁的一项：一次平移手势每帧都会更新它。为了让平移不牵动
 场景树与 Inspector，它存放在外部状态源中——`controller.viewport` 读取始终返回最新快照，但读取
 它的组件不会因平移自动重渲。默认工作区的画布与工具栏已内建订阅；自己渲染 `ComposeStage` 或
