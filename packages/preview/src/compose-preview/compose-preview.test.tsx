@@ -392,6 +392,102 @@ describe('ComposePreview', () => {
     expect(container.style.boxShadow).toContain('1px 3px 5px 0px #000000')
   })
 
+  it('OpenSpec: Preview 原生 Container 滚动 / 映射分轴 overflow 且重挂载不保存位置', () => {
+    const value = document()
+    const desktop = value.entities.desktop!
+    const scrolling: ComposeDocument = {
+      ...value,
+      entities: {
+        ...value.entities,
+        desktop: {
+          ...desktop,
+          components: {
+            ...desktop.components,
+            Clip: { enabled: true, horizontal: 'clip', vertical: 'scroll' },
+          },
+        },
+      },
+    }
+    const view = render(
+      <ComposePreview
+        document={scrolling}
+        registry={registry()}
+        target={{ kind: 'container', entityId: 'desktop' }}
+      />,
+    )
+    const container = screen.getByTestId('compose-preview-container')
+    expect(container).toHaveStyle({ overflowX: 'hidden', overflowY: 'auto' })
+    container.scrollTop = 42
+    view.unmount()
+    render(
+      <ComposePreview
+        document={scrolling}
+        registry={registry()}
+        target={{ kind: 'container', entityId: 'desktop' }}
+      />,
+    )
+    expect(screen.getByTestId('compose-preview-container').scrollTop).toBe(0)
+  })
+
+  it('滚动内容尺寸包含 Auto Layout 的底部和右侧内边距', () => {
+    const value = document()
+    const desktop = value.entities.desktop!
+    const group = value.entities.group!
+    const padded: ComposeDocument = {
+      ...value,
+      entities: {
+        ...value.entities,
+        desktop: {
+          ...desktop,
+          components: {
+            ...desktop.components,
+            LayoutItem: {
+              ...desktop.components.LayoutItem!,
+              height: { mode: 'fixed', value: 200, min: 1, max: null },
+            },
+            Layout: {
+              type: 'flex',
+              flexDirection: 'column',
+              flexWrap: 'nowrap',
+              alignContent: 'stretch',
+              justifyContent: 'flex-start',
+              alignItems: 'stretch',
+              padding: { top: 40, right: 40, bottom: 40, left: 40 },
+              rowGap: 0,
+              columnGap: 0,
+            },
+            Clip: { enabled: true, horizontal: 'clip', vertical: 'scroll' },
+          },
+        },
+        group: {
+          ...group,
+          components: {
+            ...group.components,
+            LayoutItem: {
+              ...group.components.LayoutItem!,
+              offset: { x: 100, y: 80 },
+              width: { mode: 'fixed', value: 700, min: 1, max: null },
+              height: { mode: 'fixed', value: 200, min: 1, max: null },
+            },
+          },
+        },
+      },
+    }
+
+    render(
+      <ComposePreview
+        document={padded}
+        registry={registry()}
+        target={{ kind: 'container', entityId: 'desktop' }}
+      />,
+    )
+
+    expect(screen.getByTestId('compose-preview-content-extent-desktop')).toHaveStyle({
+      width: '842px',
+      height: '322px',
+    })
+  })
+
   it('未知 Renderer 降级且不影响其他 Entity', () => {
     render(
       <ComposePreview

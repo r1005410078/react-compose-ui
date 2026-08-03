@@ -5,6 +5,7 @@ import {
   type ComposeDocument,
   type ComposeEntity,
   type ComposeOutputSettings,
+  type ComposeOverflowMode,
   type ComposeSpatialTransform,
   type JsonObject,
   type JsonValue,
@@ -14,6 +15,7 @@ import {
   getComposeLayoutItem,
   getComposeHierarchy,
   getComposeLock,
+  normalizeComposeOverflow,
   getComposeSpatialTransform,
   isComposeComponentKey,
   resolveComposeGeometryConstraints,
@@ -51,6 +53,7 @@ export const BUILTIN_COMMAND_TYPES = {
   setAppearance: 'entity.appearance.set',
   setTransform: 'entity.transform.set',
   setClip: 'entity.clip.set',
+  configureClip: 'entity.clip.configure',
   groupEntity: 'entity.group',
   ungroupEntity: 'entity.ungroup',
   batch: 'transaction.batch',
@@ -578,6 +581,44 @@ function booleanComponentHandler(
   }
 }
 
+function configureClipHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.configureClip,
+    execute(document, command) {
+      const ids = asStringArray(valueAt(command.payload, 'entityIds'))
+      const horizontal = valueAt(command.payload, 'horizontal')
+      const vertical = valueAt(command.payload, 'vertical')
+      const modes = new Set<unknown>(['visible', 'clip', 'scroll'])
+      if (!ids?.length || !modes.has(horizontal) || !modes.has(vertical)) {
+        return issue('entity.invalid-value', 'Clip 分轴命令参数无效')
+      }
+      const targetIssues = validateTargets(document, ids, { allowLocked: false })
+      if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
+      for (const id of ids) {
+        if (!document.entities[id]!.components.Clip) {
+          return issue('component.missing', `Entity ${id} 缺少 Clip`)
+        }
+      }
+      const normalized = normalizeComposeOverflow(
+        horizontal as ComposeOverflowMode,
+        vertical as ComposeOverflowMode,
+      )
+      const value = {
+        enabled: normalized.horizontal !== 'visible' || normalized.vertical !== 'visible',
+        horizontal: normalized.horizontal,
+        vertical: normalized.vertical,
+      }
+      const changes = ids.filter((id) =>
+        !jsonEqual(document.entities[id]!.components.Clip, value))
+      return patches(changes.map((id) => ({
+        op: 'set',
+        path: ['entities', id, 'components', 'Clip'],
+        value,
+      })))
+    },
+  }
+}
+
 function componentHandler(type: string): CommandHandler {
   return {
     type,
@@ -980,6 +1021,7 @@ export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
     booleanComponentHandler(BUILTIN_COMMAND_TYPES.setVisibility, 'Visibility', 'visible'),
     booleanComponentHandler(BUILTIN_COMMAND_TYPES.setLock, 'Lock', 'locked'),
     booleanComponentHandler(BUILTIN_COMMAND_TYPES.setClip, 'Clip', 'enabled'),
+    configureClipHandler(),
     componentHandler(BUILTIN_COMMAND_TYPES.addComponent),
     componentHandler(BUILTIN_COMMAND_TYPES.updateComponent),
     componentHandler(BUILTIN_COMMAND_TYPES.removeComponent),

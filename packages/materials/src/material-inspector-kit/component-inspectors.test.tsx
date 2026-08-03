@@ -477,7 +477,7 @@ describe('内建 Component inspectors', () => {
     expect(command.payload).toEqual({ entityIds: ['entity-a'], locked: false })
   })
 
-  it('OpenSpec: 基础物料 / Hierarchy Inspector 展示子项数量并切换 Clip', () => {
+  it('OpenSpec: 容器分轴溢出 Inspector / 展示子项数量并配置纵向滚动', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('Hierarchy')
     const container = entity({
@@ -494,10 +494,16 @@ describe('内建 Component inspectors', () => {
       />,
     )
     expect(screen.getByRole('spinbutton', { name: '子项数量' })).toHaveValue(2)
-    fireEvent.click(screen.getByRole('checkbox', { name: '裁剪内容' }))
+    fireEvent.change(screen.getByRole('combobox', { name: '纵向溢出' }), {
+      target: { value: 'scroll' },
+    })
     const command = dispatch.mock.lastCall?.[0] as EditorCommand
-    expect(command.type).toBe(BUILTIN_COMMAND_TYPES.setClip)
-    expect(command.payload).toEqual({ entityIds: ['entity-a'], enabled: false })
+    expect(command.type).toBe(BUILTIN_COMMAND_TYPES.configureClip)
+    expect(command.payload).toEqual({
+      entityIds: ['entity-a'],
+      horizontal: 'clip',
+      vertical: 'scroll',
+    })
   })
 
   it('OpenSpec: basic-materials / Flex 布局 Component 与紧凑 Inspector / 显示实际面板密度的 Flex 属性', () => {

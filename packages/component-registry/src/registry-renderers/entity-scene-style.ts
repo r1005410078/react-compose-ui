@@ -9,22 +9,20 @@ import {
 import type { CSSProperties } from 'react'
 
 /**
- * Stage 与 Preview 共享的 Entity 外观样式（不含 Transform 几何）。
+ * Stage 与 Preview 共享的 Entity appearance 样式（不含 Transform 几何与 overflow）。
  *
  * @remarks
  * 边框由独立顶层覆盖层渲染，因此 Entity 壳使用 `isolation` 把覆盖层限制在自身 stacking
- * context 内，避免高层级边框越过相邻 Entity。Container 的 overflow 由 Clip 控制，
- * 非 Container 恒为 hidden。两个消费方必须使用同一实现，保证编辑所见与预览输出一致。
+ * context 内，避免高层级边框越过相邻 Entity。overflow 是 Stage 与 Preview 各自的运行时
+ * 行为，不属于共享 appearance。
  *
  * @public
  */
-export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
+export function composeEntityAppearanceStyle(entity: ComposeEntity): CSSProperties {
   const visual = resolveComposeAppearance(entity)
   const backgroundColor = visual.backgroundPaint.kind === 'solid'
     ? visual.backgroundPaint.color
     : 'transparent'
-  const hierarchy = getComposeHierarchy(entity)
-  const clip = getComposeClip(entity)
   const shadows: string[] = []
   if (visual.shadow) {
     shadows.push(
@@ -40,6 +38,22 @@ export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
     opacity: visual.opacity,
     isolation: 'isolate',
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
+  }
+}
+
+/**
+ * 组合共享 appearance 与旧版静态 overflow 的兼容入口。
+ *
+ * @remarks
+ * 新的 Stage 与 Preview 消费方应使用 `composeEntityAppearanceStyle` 并自行应用运行时 overflow。
+ *
+ * @public
+ */
+export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
+  const hierarchy = getComposeHierarchy(entity)
+  const clip = getComposeClip(entity)
+  return {
+    ...composeEntityAppearanceStyle(entity),
     overflow: hierarchy
       ? (clip?.enabled ? 'hidden' : 'visible')
       : 'hidden',
@@ -57,7 +71,7 @@ export function composeEntitySceneStyle(
 ): CSSProperties {
   const transform = getComposeTransform(entity)
   return {
-    ...composeEntityVisualStyle(entity),
+    ...composeEntityAppearanceStyle(entity),
     // 共享外观层需要 relative 作为 Paint Layer 的 containing block；Stage Scene 的节点
     // 则必须脱离文档流，否则同级 Entity 会随前一个节点的高度向下排布。
     position: 'absolute',

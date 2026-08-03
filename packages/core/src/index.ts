@@ -71,7 +71,9 @@ export {
   isComposeContainerEntity,
   isComposeEntityLocked,
   isComposeEntityVisible,
+  normalizeComposeOverflow,
   resolveComposeGeometryConstraints,
+  resolveComposeOverflow,
 } from './entity'
 export { applyDocumentPatches } from './patches'
 export { createTransactionRuntime } from './runtime'
@@ -128,9 +130,11 @@ export type {
   ComposeMeasureConstraint,
   ComposeMeasuredSize,
   ComposeOutputSettings,
+  ComposeOverflowMode,
   ComposePosition,
   ComposeRenderer,
   ComposeResolvedLayoutBox,
+  ComposeResolvedOverflow,
   ComposeResizeMode,
   ComposeShadow,
   ComposeSize,

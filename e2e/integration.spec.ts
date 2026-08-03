@@ -569,6 +569,11 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   const groupId = await group.getAttribute('data-entity-id')
   expect(groupId).not.toBeNull()
   const groupInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await expandInspectorSection(groupInspector, '容器')
+  await groupInspector.getByRole('combobox', { name: '纵向溢出', exact: true })
+    .selectOption('scroll')
+  await expect(group.getByTestId('stage-overflow-indicator-y')).toBeVisible()
+  await expect(group.getByTestId('stage-overflow-indicator-x')).toHaveCount(0)
   await expandInspectorSection(groupInspector, '外观')
   const groupBackground = groupInspector.getByRole('button', { name: '背景填充', exact: true })
   await groupBackground.click()
@@ -597,6 +602,9 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(property).toHaveValue('Text')
   await property.press('Control+Shift+z')
   await expect(property).toHaveValue('统一事务舞台')
+  for (let index = 0; index < 12; index += 1) {
+    await stage.press('Shift+ArrowDown')
+  }
 
   await editor.getByText('命令', { exact: true }).click()
   const commandPanel = editor.getByRole('region', { name: '命令调试台' })
@@ -613,7 +621,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   ).toBeVisible()
   await expect(log.getByRole('button', { name: /Undo · Update Text/ })).toBeVisible()
   await expect(log.getByText(/Reject .* outside a Container/)).toHaveCount(0)
-  await log.getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).click()
+  await log.getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).last().click()
   const operationDetail = log.getByRole('region', { name: '操作详情' })
   await expect(operationDetail).toContainText('之前')
   await expect(operationDetail).toContainText('之后')
@@ -632,6 +640,13 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
   const previewGroup = preview.getByTestId(`compose-preview-entity-${groupId}`)
   await expect(previewGroup).toBeVisible()
+  await expect(previewGroup).toHaveCSS('overflow-y', 'auto')
+  expect(await previewGroup.evaluate((element) => element.scrollHeight - element.clientHeight))
+    .toBeGreaterThan(0)
+  await previewGroup.evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+  })
+  await expect.poll(() => previewGroup.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
   await expect(previewGroup).toHaveCSS('background-color', 'rgb(0, 0, 0)')
   await expect(previewRegion).toHaveScreenshot('document-preview.png', {
     animations: 'disabled',
@@ -646,6 +661,66 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+})
+
+test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边距', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  const container = stage.getByTestId('stage-container')
+  await editor.locator('[data-workspace-tab="compose-component-library"]').click()
+  const containerBox = await container.boundingBox()
+  expect(containerBox).not.toBeNull()
+  for (let index = 0; index < 5; index += 1) {
+    await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+      x: containerBox!.x + containerBox!.width / 2,
+      y: containerBox!.y + containerBox!.height / 2,
+    })
+  }
+  await container.click({ position: { x: 8, y: 8 } })
+  const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await enableAutoLayout(inspector)
+  const layoutHeader = inspector.getByRole('button', { name: '布局', exact: true })
+  const layoutSection = layoutHeader.locator('..').locator('..')
+  await layoutSection.getByRole('radiogroup', { name: '方向' })
+    .getByRole('radio', { name: '纵向', exact: true })
+    .click()
+  const padding = layoutSection.getByRole('spinbutton', { name: '内边距' })
+  await padding.fill('40')
+  await padding.blur()
+  await expandInspectorSection(inspector, '容器')
+  await inspector.getByRole('combobox', { name: '纵向溢出', exact: true })
+    .selectOption('scroll')
+  await expect(container.getByTestId('stage-overflow-indicator-y')).toBeVisible()
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const dialog = page.getByRole('dialog', { name: '文档预览对话框' })
+  await dialog.getByRole('combobox', { name: '预览缩放' }).selectOption('1')
+  await dialog.getByRole('button', { name: '选中容器' }).click()
+  const preview = dialog.getByTestId('compose-preview-container')
+  await expect(preview).toHaveCSS('overflow-y', 'auto')
+
+  const metrics = await preview.evaluate((element) => {
+    const children = Array.from(element.querySelectorAll<HTMLElement>(
+      ':scope > [data-testid^="compose-preview-entity-"]',
+    ))
+    const lastChildBottom = Math.max(...children.map((child) => child.offsetTop + child.offsetHeight))
+    element.scrollTop = element.scrollHeight
+    const border = element.querySelector<HTMLElement>(':scope > [data-compose-entity-border]')
+    const extent = element.querySelector<HTMLElement>(':scope > [data-testid^="compose-preview-content-extent-"]')
+    const borderWidth = border ? Number.parseFloat(border.style.borderWidth) : 0
+    return {
+      childBottoms: children.map((child) => child.offsetTop + child.offsetHeight),
+      clientHeight: element.clientHeight,
+      extentHeight: extent?.offsetHeight ?? 0,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+      endPadding: element.clientHeight - (lastChildBottom - element.scrollTop) - borderWidth,
+    }
+  })
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight)
+  expect(metrics.endPadding).toBeCloseTo(40, 0)
 })
 
 test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染 ECharts Canvas', async ({ page }) => {
@@ -1169,6 +1244,9 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
   })
 
   await editor.getByRole('button', { name: '打开预览' }).click()
+  await page.getByRole('dialog', { name: '文档预览对话框' })
+    .getByRole('combobox', { name: '预览缩放' })
+    .selectOption('1')
   const preview = page.getByTestId('compose-preview-document')
   const previewTextBox = await preview.getByText('Text', { exact: true }).boundingBox()
   expect(previewTextBox).not.toBeNull()

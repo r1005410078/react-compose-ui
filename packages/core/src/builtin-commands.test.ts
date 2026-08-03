@@ -5,6 +5,7 @@ import {
   createTransactionRuntime,
   getComposeComposition,
   getComposeLayoutItem,
+  resolveComposeOverflow,
   getComposeSpatialTransform,
   type ComposeEntity,
   type EditorCommand,
@@ -28,6 +29,34 @@ function dispatch(
 }
 
 describe('ComposeDocument v6 built-in commands', () => {
+  it('OpenSpec: Container 分轴溢出协议 / 规范化混合滚动策略并支持撤销重做', () => {
+    const container = containerEntity('container')
+    const runtime = createTransactionRuntime({ document: documentFixture({ container }) })
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.configureClip, {
+      entityIds: ['container'],
+      horizontal: 'visible',
+      vertical: 'scroll',
+    }).status).toBe('committed')
+    expect(runtime.document.entities.container?.components.Clip).toEqual({
+      enabled: true,
+      horizontal: 'clip',
+      vertical: 'scroll',
+    })
+    expect(resolveComposeOverflow(runtime.document.entities.container!)).toEqual({
+      horizontal: 'clip',
+      vertical: 'scroll',
+    })
+    runtime.undo()
+    expect(runtime.document.entities.container?.components.Clip).toEqual({ enabled: true })
+    runtime.redo()
+    expect(runtime.document.entities.container?.components.Clip).toEqual({
+      enabled: true,
+      horizontal: 'clip',
+      vertical: 'scroll',
+    })
+  })
+
   it('OpenSpec: command-transaction / 输出 Paint 配置事务 / 提交并撤销输出渐变', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
     const backgroundPaint = {

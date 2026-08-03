@@ -9,15 +9,19 @@ import {
   ComposeEntityPaintLayer,
   ComposePaintLayer,
   ComposeRegistryEntityRenderer,
+  composeEntityAppearanceStyle,
   composeEntitySceneStyle,
-  composeEntityVisualStyle,
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import {
   COMPOSE_UI_CORE_PACKAGE,
   getComposeHierarchy,
+  getComposeLayout,
+  getComposeLayoutItem,
   getComposeVisibility,
+  resolveComposeAppearance,
+  resolveComposeOverflow,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type {
@@ -69,8 +73,79 @@ export type ComposePreviewTarget =
 function entityStyle(entity: ComposeEntity, box: ComposeResolvedLayoutBox): CSSProperties {
   return {
     ...composeEntitySceneStyle(entity, box),
+    ...previewOverflowStyle(entity),
     position: 'absolute' as const,
   }
+}
+
+function previewOverflowStyle(entity: ComposeEntity): CSSProperties {
+  if (!getComposeHierarchy(entity)) return { overflow: 'hidden' }
+  const overflow = resolveComposeOverflow(entity)
+  const cssValue = (value: typeof overflow.horizontal) => value === 'scroll'
+    ? 'auto'
+    : value === 'clip' ? 'hidden' : 'visible'
+  if (overflow.horizontal === overflow.vertical) {
+    return { overflow: cssValue(overflow.horizontal) }
+  }
+  return {
+    overflowX: cssValue(overflow.horizontal),
+    overflowY: cssValue(overflow.vertical),
+  }
+}
+
+function previewContentExtentStyle(
+  entity: ComposeEntity,
+  document: ComposeDocument,
+  layoutSnapshot: ComposeLayoutSnapshot,
+  box: ComposeResolvedLayoutBox,
+): CSSProperties {
+  const hierarchy = getComposeHierarchy(entity)
+  const layout = getComposeLayout(entity)
+  const borderWidth = resolveComposeAppearance(entity).borderWidth
+  let width = box.width
+  let height = box.height
+  hierarchy?.childIds.forEach((childId) => {
+    const child = document.entities[childId]
+    const childBox = layoutSnapshot.boxes[childId]
+    if (!child || !childBox) return
+    const margin = getComposeLayoutItem(child).margin
+    width = Math.max(
+      width,
+      childBox.x + childBox.width + margin.right + (layout?.padding.right ?? 0) + borderWidth,
+    )
+    height = Math.max(
+      height,
+      childBox.y + childBox.height + margin.bottom + (layout?.padding.bottom ?? 0) + borderWidth,
+    )
+  })
+  return {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width,
+    height,
+    pointerEvents: 'none',
+  }
+}
+
+function PreviewContentExtent({
+  box,
+  document,
+  entity,
+  layoutSnapshot,
+}: {
+  readonly box: ComposeResolvedLayoutBox
+  readonly document: ComposeDocument
+  readonly entity: ComposeEntity
+  readonly layoutSnapshot: ComposeLayoutSnapshot
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      data-testid={`compose-preview-content-extent-${entity.id}`}
+      style={previewContentExtentStyle(entity, document, layoutSnapshot, box)}
+    />
+  )
 }
 
 function PreviewEntity({
@@ -114,6 +189,14 @@ function PreviewEntity({
           registry={registry}
         />
       ))}
+      {hierarchy ? (
+        <PreviewContentExtent
+          box={box}
+          document={document}
+          entity={entity}
+          layoutSnapshot={layoutSnapshot}
+        />
+      ) : null}
       <ComposeEntityBorderLayer entity={entity} />
     </div>
   )
@@ -168,7 +251,8 @@ function ComposePreviewReady({
           <div
             data-testid="compose-preview-container"
             style={{
-              ...composeEntityVisualStyle(entity),
+              ...composeEntityAppearanceStyle(entity),
+              ...previewOverflowStyle(entity),
               position: 'relative',
               width: box.width,
               height: box.height,
@@ -196,6 +280,12 @@ function ComposePreviewReady({
                         registry={registry}
                       />
                     ))}
+                    <PreviewContentExtent
+                      box={box}
+                      document={document}
+                      entity={entity}
+                      layoutSnapshot={layoutSnapshot}
+                    />
                     <ComposeEntityBorderLayer entity={entity} />
                   </>
                 )

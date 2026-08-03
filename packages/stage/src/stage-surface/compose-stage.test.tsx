@@ -20,6 +20,7 @@ function entity(
   id: string,
   options: {
     childIds?: readonly string[]
+    overflow?: { readonly horizontal: 'visible' | 'clip' | 'scroll'; readonly vertical: 'visible' | 'clip' | 'scroll' }
     resize?: 'free' | 'preserve-aspect' | 'horizontal' | 'vertical' | 'none'
     rotatable?: boolean
   } = {},
@@ -58,7 +59,9 @@ function entity(
       ...(hierarchy
         ? {
             Hierarchy: { childIds: [...(options.childIds ?? [])] },
-            Clip: { enabled: true },
+            Clip: options.overflow
+              ? { enabled: true, ...options.overflow }
+              : { enabled: true },
           }
         : { Renderer: { type: 'test', props: { text: id } } }),
       ...(options.resize
@@ -284,6 +287,21 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId('stage-container')).toContainElement(
       screen.getByTestId('stage-entity-child'),
     )
+  })
+
+  it('OpenSpec: Stage 滚动配置提示 / 显示不可交互的纵向提示', () => {
+    const container = entity('container', {
+      childIds: [],
+      overflow: { horizontal: 'clip', vertical: 'scroll' },
+    })
+    const { runtime } = renderStage(document([container], ['container']))
+
+    expect(screen.queryByTestId('stage-overflow-indicator-x')).not.toBeInTheDocument()
+    const indicator = screen.getByTestId('stage-overflow-indicator-y')
+    expect(indicator.parentElement).toHaveAttribute('aria-hidden', 'true')
+    expect(getComputedStyle(indicator.parentElement!)).toHaveProperty('pointer-events', 'none')
+    fireEvent.wheel(screen.getByTestId('stage-container'), { deltaY: 120 })
+    expect(runtime.document).toEqual(document([container], ['container']))
   })
 
   it('OpenSpec: basic-materials / Stage 暂时忽略 Layout 并保留子项 Transform', () => {

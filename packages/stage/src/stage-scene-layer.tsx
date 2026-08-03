@@ -10,6 +10,7 @@ import {
   getComposeHierarchy,
   getComposeLock,
   getComposeVisibility,
+  resolveComposeOverflow,
   type ComposeDocument,
   type ComposeEntity,
   type ComposePaint,
@@ -23,6 +24,34 @@ import {
   useRef,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+
+function StageOverflowIndicator({
+  horizontal,
+  vertical,
+}: {
+  readonly horizontal: boolean
+  readonly vertical: boolean
+}) {
+  if (!horizontal && !vertical) return null
+  return (
+    <div
+      aria-hidden="true"
+      className="compose-stage__overflow-indicators"
+      style={{ pointerEvents: 'none' }}
+    >
+      {horizontal ? (
+        <span className="compose-stage__overflow-indicator is-horizontal" data-testid="stage-overflow-indicator-x">
+          <span />
+        </span>
+      ) : null}
+      {vertical ? (
+        <span className="compose-stage__overflow-indicator is-vertical" data-testid="stage-overflow-indicator-y">
+          <span />
+        </span>
+      ) : null}
+    </div>
+  )
+}
 
 interface StageSceneLayerProps {
   readonly document: ComposeDocument
@@ -67,6 +96,11 @@ export function StageSceneLayer({
       const box = layoutSnapshot.boxes[entityId]
       if (!box) return null
       const locked = getComposeLock(entity).locked
+      const overflow = resolveComposeOverflow(entity)
+      const staticOverflow = hierarchy ? {
+        overflowX: overflow.horizontal === 'visible' ? 'visible' as const : 'hidden' as const,
+        overflowY: overflow.vertical === 'visible' ? 'visible' as const : 'hidden' as const,
+      } : { overflow: 'hidden' as const }
       return (
         <div
           className={`compose-stage__node${hierarchy ? ' is-container' : ' is-renderer'}${
@@ -75,7 +109,7 @@ export function StageSceneLayer({
           data-entity-id={entity.id}
           data-testid={hierarchy ? 'stage-container' : `stage-entity-${entity.id}`}
           key={entity.id}
-          style={composeEntitySceneStyle(entity, box)}
+          style={{ ...composeEntitySceneStyle(entity, box), ...staticOverflow }}
           onPointerDown={(event) => pointerDownRef.current(entity, event)}
         >
           <ComposeEntityPaintLayer
@@ -92,6 +126,12 @@ export function StageSceneLayer({
             registry={registry}
           />
           {hierarchy?.childIds.map(renderEntity)}
+          {hierarchy ? (
+            <StageOverflowIndicator
+              horizontal={overflow.horizontal === 'scroll'}
+              vertical={overflow.vertical === 'scroll'}
+            />
+          ) : null}
           <ComposeEntityBorderLayer entity={entity} />
         </div>
       )

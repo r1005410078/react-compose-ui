@@ -168,9 +168,29 @@ export interface ComposeFlexLayout extends JsonObject {
 /** 容器可选的布局数据；当前仅支持 Flex。 @public */
 export type ComposeLayout = ComposeFlexLayout
 
-/** 后代裁剪状态。 @public */
-export interface ComposeClip extends JsonObject {
+/** Container 单轴的溢出行为。 @public */
+export type ComposeOverflowMode = 'visible' | 'clip' | 'scroll'
+
+/** Container 解析后的完整分轴溢出行为。 @public */
+export interface ComposeResolvedOverflow {
+  /** 横向溢出行为。 */
+  readonly horizontal: ComposeOverflowMode
+  /** 纵向溢出行为。 */
+  readonly vertical: ComposeOverflowMode
+}
+
+/**
+ * 后代裁剪与滚动状态。
+ *
+ * @remarks
+ * `horizontal` 与 `vertical` 必须同时提供或同时省略。省略时保留旧版 `enabled` 语义。
+ *
+ * @public
+ */
+export type ComposeClip = JsonObject & {
   readonly enabled: boolean
+  readonly horizontal?: ComposeOverflowMode
+  readonly vertical?: ComposeOverflowMode
 }
 
 /** 单个结构化阴影。 @public */

@@ -8,6 +8,7 @@ import {
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
   createTransactionRuntime,
+  getComposeClip,
   getComposeComposition,
   getComposeHierarchy,
   getComposeLayout,
@@ -48,6 +49,11 @@ describe('Basic ECS materials', () => {
     ])
     const container = seedEntity(materials, 'container')
     expect(getComposeHierarchy(container)?.childIds).toEqual([])
+    expect(getComposeClip(container)).toEqual({
+      enabled: true,
+      horizontal: 'clip',
+      vertical: 'clip',
+    })
     expect(getComposeLayout(container)).toBeUndefined()
     expect(getComposeRenderer(container)).toBeUndefined()
     expect(getComposeComposition(container).baseComponentKeys).toContain('Hierarchy')
@@ -118,7 +124,7 @@ describe('Basic ECS materials', () => {
     ])
     expect(materials.capabilities[0]?.createComponents()).toEqual({
       Hierarchy: { childIds: [] },
-      Clip: { enabled: true },
+      Clip: { enabled: true, horizontal: 'clip', vertical: 'clip' },
     })
   })
 

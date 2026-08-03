@@ -17,6 +17,7 @@ export {
   type ComposePaintLayerProps,
 } from './compose-entity-paint-layer'
 export {
+  composeEntityAppearanceStyle,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
 } from './entity-scene-style'

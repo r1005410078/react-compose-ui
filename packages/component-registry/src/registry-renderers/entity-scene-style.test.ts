@@ -1,6 +1,10 @@
 import type { ComposeEntity, JsonObject } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
-import { composeEntitySceneStyle, composeEntityVisualStyle } from './entity-scene-style'
+import {
+  composeEntityAppearanceStyle,
+  composeEntitySceneStyle,
+  composeEntityVisualStyle,
+} from './entity-scene-style'
 
 function entity(components: Readonly<Record<string, JsonObject>>): ComposeEntity {
   return {
@@ -21,6 +25,16 @@ function entity(components: Readonly<Record<string, JsonObject>>): ComposeEntity
 }
 
 describe('composeEntityVisualStyle', () => {
+  it('OpenSpec: 共享外观与 overflow 行为解耦 / appearance 入口不决定 overflow', () => {
+    const styled = composeEntityAppearanceStyle(entity({
+      Hierarchy: { childIds: [] },
+      Clip: { enabled: true, horizontal: 'scroll', vertical: 'clip' },
+    }))
+    expect(styled.overflow).toBeUndefined()
+    expect(styled.overflowX).toBeUndefined()
+    expect(styled.overflowY).toBeUndefined()
+  })
+
   it('OpenSpec: 共享渲染语义 / 边框覆盖层与阴影独立渲染，裁剪决定 overflow', () => {
     const styled = composeEntityVisualStyle(entity({
       Appearance: {
@@ -82,7 +96,7 @@ describe('composeEntitySceneStyle', () => {
       position: 'absolute',
       transform: 'rotate(45deg)',
       transformOrigin: 'center',
-      overflow: 'hidden',
     })
+    expect(styled.overflow).toBeUndefined()
   })
 })

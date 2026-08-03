@@ -125,7 +125,7 @@ export function createComposeBuiltinComponentDefinitions(
       key: 'Clip',
       label: '裁剪',
       order: 60,
-      createDefault: () => ({ enabled: true }),
+      createDefault: () => ({ enabled: true, horizontal: 'clip', vertical: 'clip' }),
     },
     {
       key: 'GeometryConstraints',
@@ -162,7 +162,7 @@ export const DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS: readonly ComposeCapabilityD
       description: '允许当前组件容纳并裁剪子项',
       createComponents: () => ({
         Hierarchy: { childIds: [] },
-        Clip: { enabled: true },
+        Clip: { enabled: true, horizontal: 'clip', vertical: 'clip' },
       }),
     },
     {

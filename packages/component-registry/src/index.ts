@@ -15,6 +15,7 @@ export {
   ComposePaintLayer,
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
+  composeEntityAppearanceStyle,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
 } from './registry-renderers'

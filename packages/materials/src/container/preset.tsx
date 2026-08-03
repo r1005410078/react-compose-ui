@@ -30,7 +30,9 @@ export function createContainerPreset(
       Visibility: { visible: true },
       Lock: { locked: false },
       Hierarchy: { childIds: [] },
-      Clip: { enabled: options.defaultClip ?? true },
+      Clip: options.defaultClip === false
+        ? { enabled: false, horizontal: 'visible', vertical: 'visible' }
+        : { enabled: true, horizontal: 'clip', vertical: 'clip' },
       Appearance: structuredClone(appearance),
     }),
   }

@@ -155,7 +155,9 @@ Stage Engine 通过 Component 查询决定系统能力：
 
 - Move/Resize/Rotate 查询 `LayoutItem + Transform + Visibility + Lock + GeometryConstraints`。
 - Render 查询 Snapshot 以及 `Renderer` 或 `Hierarchy`。
-- Hierarchy、Clip、Appearance 由独立查询解析。
+- Hierarchy、Clip、Appearance 由独立查询解析。Clip 保留旧版 `enabled` 开关并支持可选的
+  `horizontal`/`vertical` 分轴 `visible | clip | scroll` 策略：Stage 仅显示不可交互的滚动提示，
+  Preview 使用浏览器原生滚动，滚动位置不会进入文档或撤销历史。
 
 Resize 模式支持 `free`、`preserve-aspect`、`horizontal`、`vertical`、`none`；手柄会与约束
 同步变化。Pointer 移动期间只维护临时 Preview Transform，松手后最多提交一个正式事务。

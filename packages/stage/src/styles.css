@@ -167,6 +167,57 @@
   cursor: not-allowed;
 }
 
+.compose-stage__overflow-indicators {
+  position: absolute;
+  z-index: 2147483645;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.compose-stage__overflow-indicator {
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 30%);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 16%);
+}
+
+.compose-stage__overflow-indicator > span {
+  position: absolute;
+  display: block;
+  border-radius: inherit;
+  background: rgb(148 163 184 / 88%);
+}
+
+.compose-stage__overflow-indicator.is-horizontal {
+  right: 4px;
+  bottom: 3px;
+  left: 4px;
+  height: 5px;
+}
+
+.compose-stage__overflow-indicator.is-horizontal > span {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+}
+
+.compose-stage__overflow-indicator.is-vertical {
+  top: 4px;
+  right: 3px;
+  bottom: 4px;
+  width: 5px;
+}
+
+.compose-stage__overflow-indicator.is-vertical > span {
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 40%;
+}
+
 .compose-stage__overlay {
   z-index: 3;
   width: 100%;

@@ -9,7 +9,9 @@ import {
   type ComposeLayoutItem,
   type ComposeLock,
   type ComposeLayout,
+  type ComposeOverflowMode,
   type ComposeRenderer,
+  type ComposeResolvedOverflow,
   type ComposeSpatialTransform,
   type ComposeTransform,
   type ComposeVisibility,
@@ -92,6 +94,42 @@ export function getComposeLayout(entity: ComposeEntity): ComposeLayout | undefin
 /** 读取可选 Clip。 @public */
 export function getComposeClip(entity: ComposeEntity): ComposeClip | undefined {
   return entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.clip] as ComposeClip | undefined
+}
+
+/**
+ * 把旧版 Clip 开关与新版分轴字段解析为完整溢出语义。
+ *
+ * @public
+ */
+export function resolveComposeOverflow(entity: ComposeEntity): ComposeResolvedOverflow {
+  const clip = getComposeClip(entity)
+  if (!clip?.enabled) return { horizontal: 'visible', vertical: 'visible' }
+  return {
+    horizontal: clip.horizontal ?? 'clip',
+    vertical: clip.vertical ?? 'clip',
+  }
+}
+
+/**
+ * 规范化浏览器无法原样表达的滚动轴组合。
+ *
+ * @remarks
+ * 当一个轴滚动时，CSS 会把另一轴的 visible 计算为 auto；领域协议改为 clip，避免配置与
+ * 实际输出不一致。
+ *
+ * @public
+ */
+export function normalizeComposeOverflow(
+  horizontal: ComposeOverflowMode,
+  vertical: ComposeOverflowMode,
+): ComposeResolvedOverflow {
+  if (horizontal === 'scroll' && vertical === 'visible') {
+    return { horizontal, vertical: 'clip' }
+  }
+  if (vertical === 'scroll' && horizontal === 'visible') {
+    return { horizontal: 'clip', vertical }
+  }
+  return { horizontal, vertical }
 }
 
 /** 读取可选 Appearance。 @public */

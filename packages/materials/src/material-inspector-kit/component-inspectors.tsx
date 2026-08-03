@@ -9,6 +9,7 @@ import {
   getComposeRenderer,
   getComposeSpatialTransform,
   resolveComposeAppearance,
+  resolveComposeOverflow,
   type ComposeAppearance,
   type ComposeAxisSizing,
   type ComposeColor,
@@ -705,7 +706,9 @@ export function createAppearanceInspector(
   }
 }
 
-/** 创建 Hierarchy（容器）Component Inspector；同时呈现 Clip 开关。 @internal */
+const OVERFLOW_VALUES = ['visible', 'clip', 'scroll'] as const
+
+/** 创建 Hierarchy（容器）Component Inspector；同时呈现分轴溢出设置。 @internal */
 export function createHierarchyInspector(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeComponentInspectorProps> {
@@ -713,6 +716,7 @@ export function createHierarchyInspector(
     const zh = useZh()
     const hierarchy = getComposeHierarchy(entity)
     const clip = getComposeClip(entity)
+    const overflow = resolveComposeOverflow(entity)
     const childCountSchema = useMemo(() => v.object({
       childCount: v.pipe(
         v.number(),
@@ -726,7 +730,24 @@ export function createHierarchyInspector(
         v.title(zh ? '子项数量' : 'Child count'),
         v.metadata({ propertyPanel: { readOnly: true } }),
       ),
-      clip: v.pipe(v.boolean(), v.title(zh ? '裁剪内容' : 'Clip content')),
+      horizontal: v.pipe(
+        v.picklist(OVERFLOW_VALUES),
+        v.title(zh ? '横向溢出' : 'Horizontal overflow'),
+        v.metadata({ propertyPanel: { optionLabels: {
+          visible: zh ? '可见' : 'Visible',
+          clip: zh ? '裁剪' : 'Clip',
+          scroll: zh ? '滚动' : 'Scroll',
+        } } }),
+      ),
+      vertical: v.pipe(
+        v.picklist(OVERFLOW_VALUES),
+        v.title(zh ? '纵向溢出' : 'Vertical overflow'),
+        v.metadata({ propertyPanel: { optionLabels: {
+          visible: zh ? '可见' : 'Visible',
+          clip: zh ? '裁剪' : 'Clip',
+          scroll: zh ? '滚动' : 'Scroll',
+        } } }),
+      ),
     }), [zh])
     if (!hierarchy) return null
     if (!clip) {
@@ -746,16 +767,21 @@ export function createHierarchyInspector(
         schema={schema}
         value={{
           childCount: hierarchy.childIds.length,
-          clip: clip.enabled,
+          horizontal: overflow.horizontal,
+          vertical: overflow.vertical,
         }}
         onValueChange={(next) => {
           if (readOnly) return
           dispatch(command(
             idFactory,
             entity,
-            BUILTIN_COMMAND_TYPES.setClip,
-            { entityIds: [entity.id], enabled: next.clip },
-            zh ? `修改 ${entity.name} 裁剪` : `Update ${entity.name} clipping`,
+            BUILTIN_COMMAND_TYPES.configureClip,
+            {
+              entityIds: [entity.id],
+              horizontal: next.horizontal,
+              vertical: next.vertical,
+            },
+            zh ? `修改 ${entity.name} 溢出` : `Update ${entity.name} overflow`,
           ))
         }}
       />

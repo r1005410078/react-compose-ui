@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { validateComposeDocument } from './document'
+import { resolveComposeOverflow } from './entity'
 
 function rectangleDocument() {
   return {
@@ -84,6 +85,29 @@ describe('ComposeDocument v6 ECS', () => {
     const components = input.entities['rectangle-1']!.components as Record<string, unknown>
     components.Hierarchy = { childIds: [] }
     components.Clip = { enabled: true }
+    expect(validateComposeDocument(input).valid).toBe(true)
+  })
+
+  it('OpenSpec: Container 分轴溢出协议 / 读取旧 Clip 文档', () => {
+    const input = structuredClone(rectangleDocument())
+    const entity = input.entities['rectangle-1']!
+    const components = entity.components as Record<string, unknown>
+    components.Hierarchy = { childIds: [] }
+    components.Clip = { enabled: true }
+    expect(resolveComposeOverflow(entity)).toEqual({ horizontal: 'clip', vertical: 'clip' })
+    components.Clip = { enabled: false }
+    expect(resolveComposeOverflow(entity)).toEqual({ horizontal: 'visible', vertical: 'visible' })
+  })
+
+  it('拒绝缺少配对轴或 scroll 与 visible 混合的 Clip', () => {
+    const input = structuredClone(rectangleDocument())
+    const components = input.entities['rectangle-1']!.components as Record<string, unknown>
+    components.Hierarchy = { childIds: [] }
+    components.Clip = { enabled: true, horizontal: 'scroll' }
+    expect(validateComposeDocument(input).valid).toBe(false)
+    components.Clip = { enabled: true, horizontal: 'scroll', vertical: 'visible' }
+    expect(validateComposeDocument(input).valid).toBe(false)
+    components.Clip = { enabled: true, horizontal: 'scroll', vertical: 'clip' }
     expect(validateComposeDocument(input).valid).toBe(true)
   })
 

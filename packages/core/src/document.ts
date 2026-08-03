@@ -428,6 +428,63 @@ function validateBooleanComponent(
   }
 }
 
+function validateClip(
+  value: JsonObject,
+  path: Path,
+  issues: DocumentValidationIssue[],
+) {
+  rejectUnknownFields(
+    value,
+    ['enabled', 'horizontal', 'vertical'],
+    path,
+    issues,
+    'component.invalid-value',
+  )
+  if (typeof value.enabled !== 'boolean') {
+    addIssue(issues, 'component.invalid-value', [...path, 'enabled'], 'enabled 必须是 boolean')
+  }
+  const horizontalPresent = value.horizontal !== undefined
+  const verticalPresent = value.vertical !== undefined
+  if (horizontalPresent !== verticalPresent) {
+    addIssue(
+      issues,
+      'component.invalid-value',
+      path,
+      'horizontal 与 vertical 必须同时提供',
+    )
+    return
+  }
+  if (!horizontalPresent) return
+  const modes = new Set(['visible', 'clip', 'scroll'])
+  if (!modes.has(String(value.horizontal))) {
+    addIssue(
+      issues,
+      'component.invalid-value',
+      [...path, 'horizontal'],
+      'horizontal 必须是 visible、clip 或 scroll',
+    )
+  }
+  if (!modes.has(String(value.vertical))) {
+    addIssue(
+      issues,
+      'component.invalid-value',
+      [...path, 'vertical'],
+      'vertical 必须是 visible、clip 或 scroll',
+    )
+  }
+  if (
+    (value.horizontal === 'scroll' && value.vertical === 'visible')
+    || (value.vertical === 'scroll' && value.horizontal === 'visible')
+  ) {
+    addIssue(
+      issues,
+      'component.invalid-value',
+      path,
+      'scroll 不能与另一轴的 visible 组合',
+    )
+  }
+}
+
 function validateEntity(
   entityKey: string,
   value: unknown,
@@ -577,9 +634,8 @@ function validateEntity(
     })
   }
   if (hasClip) {
-    validateBooleanComponent(
+    validateClip(
       components[COMPOSE_BUILTIN_COMPONENT_KEYS.clip]!,
-      'enabled',
       [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.clip],
       issues,
     )
