@@ -8,9 +8,15 @@ import {
   type ComposeLayoutSnapshot,
   type EditorCommand,
 } from '@compose-ui/core'
-import { createComposeEditorActions } from './action-catalog'
+import {
+  createComposeEditorActionHandlers,
+  createComposeEditorActions,
+} from './action-catalog'
 import { createDefaultComposeEditorPreferences } from '../editor-preferences/preferences'
-import type { ComposeEditorActionContext } from './action-catalog'
+import type {
+  ComposeEditorActionContext,
+  ComposeEditorActionHandlerContext,
+} from './action-catalog'
 
 function entity(id: string) {
   return {
@@ -174,5 +180,56 @@ describe('createComposeEditorActions', () => {
     // 面板本身会拦截不可用动作，但目录也不得在被直接调用时产生副作用。
     actions.find((action) => action.id === 'edit.delete')?.run()
     expect(dispatch).not.toHaveBeenCalled()
+  })
+})
+
+describe('createComposeEditorActionHandlers', () => {
+  /**
+   * 执行层只需要上下文的一个子集；完整上下文结构上满足它，多余字段不会被读取。
+   * 这正是「执行不依赖界面语言」的形态化表达。
+   */
+  function handlerContext(
+    overrides: Partial<ComposeEditorActionContext> = {},
+  ): ComposeEditorActionHandlerContext {
+    return context(overrides)
+  }
+
+  it('OpenSpec: editor-preferences / 动作执行与呈现分层 / 执行层不依赖界面语言', () => {
+    const handlers = createComposeEditorActionHandlers(handlerContext())
+
+    // 不可用状态用稳定标识表达，而不是本地化文案。
+    expect(handlers['edit.group'].disabled).toBe('needsTwoEntities')
+    expect(handlers['edit.delete'].disabled).toBe('noSelection')
+    expect(handlers['history.undo'].disabled).toBe('nothingToUndo')
+    expect(handlers['stage.zoomIn'].disabled).toBeUndefined()
+  })
+
+  it('OpenSpec: editor-preferences / 动作执行与呈现分层 / 呈现层复用执行层结论', () => {
+    const shared = handlerContext({ selectedIds: ['a', 'b'] })
+    const handlers = createComposeEditorActionHandlers(shared)
+    const actions = createComposeEditorActions(context({ selectedIds: ['a', 'b'] }))
+
+    const group = actions.find((action) => action.id === 'edit.group')
+    expect(handlers['edit.group'].disabled).toBeUndefined()
+    expect(group?.disabledReason).toBeUndefined()
+
+    const single = createComposeEditorActionHandlers(handlerContext({ selectedIds: ['a'] }))
+    expect(single['edit.group'].disabled).toBe('needsTwoEntities')
+  })
+
+  it('OpenSpec: editor-preferences / 动作执行与呈现分层 / 不可用动作不执行副作用', () => {
+    const dispatch = dispatchSpy('noop')
+    const handlers = createComposeEditorActionHandlers(handlerContext({ dispatch }))
+
+    handlers['edit.delete'].run()
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命令面板共用执行', () => {
+    const zoomBy = vi.fn()
+    const handlers = createComposeEditorActionHandlers(handlerContext({ zoomBy }))
+
+    handlers['stage.zoomIn'].run()
+    expect(zoomBy).toHaveBeenCalledWith(1.2)
   })
 })

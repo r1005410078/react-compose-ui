@@ -1,4 +1,6 @@
 import { CommandPanelWithActions } from './command-panel-actions'
+import { createComposeEditorActionHandlers } from './action-catalog'
+import type { ComposeEditorActionHandlerContext } from './action-catalog'
 import { ComposeComponentPalette } from '@compose-ui/stage'
 import {
   createStageInteractionController,
@@ -24,6 +26,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -43,6 +46,7 @@ import type {
   ComposeSceneTreeProps,
 } from '@compose-ui/scene-tree'
 import type {
+  ComposeStageDelegatableAction,
   ComposeStageProps,
   ComposeStageTool,
 } from '@compose-ui/stage'
@@ -528,6 +532,19 @@ export function useComposeEditorController({
     onSceneOperation,
   ])
 
+  // 动作上下文依赖后面才定义的 fit/zoom 回调，而 stageProps 必须先构建。用 ref 转发可以避免
+  // 为了顺序重排整段控制器；回调只在 commit 之后的键盘事件里被读取，因此在 layout effect 中更新。
+  const actionContextRef = useRef<ComposeEditorActionHandlerContext | null>(null)
+  const runShortcutAction = useCallback((action: ComposeStageDelegatableAction) => {
+    const context = actionContextRef.current
+    if (!context) return false
+    // 执行层在按键时才构建：既避开渲染期读取 ref，也保证拿到的是最新选区与文档。
+    const handler = createComposeEditorActionHandlers(context)[action]
+    // 不可用动作也算已接管：此时执行层是空操作，回退到 Stage 内建实现反而会产生不一致行为。
+    handler.run()
+    return true
+  }, [])
+
   const stageProps = useMemo<ComposeStageProps>(() => ({
     document,
     layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : undefined,
@@ -544,6 +561,7 @@ export function useComposeEditorController({
     onViewportChange: setViewport,
     tool,
     onToolChange: setTool,
+    onShortcutAction: runShortcutAction,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
     outputSelected: resolvedInspectionTarget === 'output',
@@ -572,6 +590,7 @@ export function useComposeEditorController({
     nextId,
     activePaintEditing,
     activePaintSampling,
+    runShortcutAction,
   ])
 
   const createContainer = useCallback(() => {
@@ -638,7 +657,7 @@ export function useComposeEditorController({
     : sceneIndex?.commonContainerForSelection(selectedIds)
   const smartSnapEnabled = document.canvas.smartSnap.nodes
     || document.canvas.smartSnap.guides
-  const configureCanvas = (
+  const configureCanvas = useCallback((
     gridSnapEnabled: boolean,
     smartEnabled: boolean,
     label: string,
@@ -656,8 +675,56 @@ export function useComposeEditorController({
       },
     },
     meta: { label, source: 'stage-toolbar' },
-  })
+  }), [dispatch, document.canvas.grid, nextId])
 
+  // 命令面板与 Stage 快捷键共用同一份上下文，同一个动作从哪个入口触发结果都一致。
+  const actionContext = useMemo<ComposeEditorActionHandlerContext>(() => ({
+    canRedo: snapshot.canRedo,
+    canUndo: snapshot.canUndo,
+    dispatch,
+    document,
+    fitContainer,
+    fitSelection,
+    idFactory: nextId,
+    layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : null,
+    redo: runtime.redo,
+    selectedIds,
+    setSelectedIds,
+    setTool,
+    toggleGridSnap: () => configureCanvas(
+      !document.canvas.grid.snapEnabled,
+      smartSnapEnabled,
+      'Toggle grid snap',
+    ),
+    toggleSmartSnap: () => configureCanvas(
+      document.canvas.grid.snapEnabled,
+      !smartSnapEnabled,
+      'Toggle smart snap',
+    ),
+    undo: runtime.undo,
+    zoomBy: zoomByFactor,
+    zoomReset,
+  }), [
+    dispatch,
+    document,
+    fitContainer,
+    fitSelection,
+    layoutState,
+    nextId,
+    runtime,
+    selectedIds,
+    setSelectedIds,
+    setTool,
+    configureCanvas,
+    smartSnapEnabled,
+    snapshot.canRedo,
+    snapshot.canUndo,
+    zoomByFactor,
+    zoomReset,
+  ])
+  useLayoutEffect(() => {
+    actionContextRef.current = actionContext
+  }, [actionContext])
   // Inspector 目标只有画布输出、单选 Entity 和空态三种；三者互斥且由会话状态决定。
   const inspectorPanel = resolvedInspectionTarget === 'output' ? (
     // 输出配置会在色盘拖动的每个采样点更新。不能以输出值作为 key，
@@ -715,33 +782,7 @@ export function useComposeEditorController({
     inspectorPanel,
     commandPanel: (
       <CommandPanelWithActions
-        actionContext={{
-          canRedo: snapshot.canRedo,
-          canUndo: snapshot.canUndo,
-          dispatch,
-          document,
-          fitContainer,
-          fitSelection,
-          idFactory: nextId,
-          layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : null,
-          redo: runtime.redo,
-          selectedIds,
-          setSelectedIds,
-          setTool,
-          toggleGridSnap: () => configureCanvas(
-            !document.canvas.grid.snapEnabled,
-            smartSnapEnabled,
-            'Toggle grid snap',
-          ),
-          toggleSmartSnap: () => configureCanvas(
-            document.canvas.grid.snapEnabled,
-            !smartSnapEnabled,
-            'Toggle smart snap',
-          ),
-          undo: runtime.undo,
-          zoomBy: zoomByFactor,
-          zoomReset,
-        }}
+        actionContext={actionContext}
         presets={commandPresets}
         runtime={runtime}
       />

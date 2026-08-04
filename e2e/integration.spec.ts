@@ -2362,3 +2362,45 @@ test('OpenSpec: command-panel / 命令动作检索与执行 / 从命令面板执
   await expect(nodes).toHaveCount(0)
   await expect(events).toHaveCount(2)
 })
+
+test('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命令面板结果一致', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+    .toHaveCount(1)
+
+  // 必须先展开命令面板：它会压缩 Stage 的可视尺寸，而适配结果依赖该尺寸。
+  // 若在展开前后各测一次，比较的就不是同一个输入。
+  await editor.locator('[data-workspace-tab="compose-command"]').click()
+  const commandPanel = editor.getByRole('region', { name: '命令调试台' })
+  const search = commandPanel.getByRole('combobox', { name: '检索命令' })
+  await expect(search).toBeVisible()
+
+  const originY = stage.locator('[data-testid="stage-origin-y"]')
+  const originX = stage.locator('[data-testid="stage-origin-x"]')
+  const viewportSignature = async () => [
+    await originY.getAttribute('x1'),
+    await originX.getAttribute('y1'),
+  ].join('|')
+
+  // 键盘路径：新建的 Rectangle 仍处于选中状态，直接按适配选择键位。
+  await stage.press('f')
+  const afterKeyboard = await viewportSignature()
+
+  // 先把视口挪开，确保第二次适配是真的重新计算而不是原地不动。
+  await stage.press('Control+Equal')
+  await expect.poll(viewportSignature).not.toBe(afterKeyboard)
+
+  // 命令面板路径：同一个动作。
+  await search.fill('适配选择')
+  await commandPanel.getByRole('option', { name: /适配选择/ }).click()
+
+  // 两条路径必须落到同一个视口；此前键盘用 0.85 系数、工具栏用 128px 边距，结果不同。
+  await expect.poll(viewportSignature).toBe(afterKeyboard)
+})

@@ -308,6 +308,8 @@ const actionReasons = {
     nothingToUndo: '没有可撤销的操作',
     nothingToRedo: '没有可重做的操作',
     layoutPending: '自动布局仍在加载',
+    flowGroup: '自动布局 Flow 子项不能参与编组；请先转为 Absolute',
+    flowUngroup: '自动布局 Flow 子项不能参与解组；请先转为 Absolute',
   },
   'en-US': {
     noSelection: 'Select an object first',
@@ -316,6 +318,8 @@ const actionReasons = {
     nothingToUndo: 'Nothing to undo',
     nothingToRedo: 'Nothing to redo',
     layoutPending: 'Auto layout is still loading',
+    flowGroup: 'Auto layout flow children cannot be grouped; convert them to absolute first',
+    flowUngroup: 'Auto layout flow children cannot be ungrouped; convert them to absolute first',
   },
 } as const
 
@@ -335,6 +339,8 @@ export interface EditorActionReasons {
   readonly nothingToUndo: string
   readonly nothingToRedo: string
   readonly layoutPending: string
+  readonly flowGroup: string
+  readonly flowUngroup: string
 }
 
 /**
@@ -378,6 +384,8 @@ export function getEditorActionReasons(
     nothingToUndo: formatMessage('editor.actionReason.nothingToUndo', current.nothingToUndo),
     nothingToRedo: formatMessage('editor.actionReason.nothingToRedo', current.nothingToRedo),
     layoutPending: formatMessage('editor.actionReason.layoutPending', current.layoutPending),
+    flowGroup: formatMessage('editor.actionReason.flowGroup', current.flowGroup),
+    flowUngroup: formatMessage('editor.actionReason.flowUngroup', current.flowUngroup),
   }
 }
 
