@@ -2302,3 +2302,63 @@ test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完�
   // 与画布逐个实体一致：两端共用同一个 page-slot 渲染实现
   await expect(previewDoc.locator('[data-page-slot-entity-id]')).toHaveCount(3)
 })
+
+test('OpenSpec: command-panel / 命令动作检索与执行 / 从命令面板执行文档与视口动作', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  await editor.locator('[data-workspace-tab="compose-command"]').click()
+  const commandPanel = editor.getByRole('region', { name: '命令调试台' })
+  const search = commandPanel.getByRole('combobox', { name: '检索命令' })
+
+  // 空查询保持调试台形态：结果区不渲染。
+  await expect(commandPanel.getByRole('listbox')).toHaveCount(0)
+
+  // `/` 列出全部动作并按作用域分组。
+  await search.fill('/')
+  await expect(commandPanel.getByRole('listbox')).toBeVisible()
+  await expect(commandPanel.getByRole('group', { name: '舞台' })).toBeVisible()
+  await expect(commandPanel.getByRole('group', { name: '历史' })).toBeVisible()
+
+  // 首屏没有选区，删除必须不可用并说明原因，而不是静默失败。
+  await search.fill('删除')
+  const deleteOption = commandPanel.getByRole('option', { name: /删除/ })
+  await expect(deleteOption).toHaveAttribute('aria-disabled', 'true')
+  await expect(deleteOption).toContainText('请先选中对象')
+
+  // 事务证据取自命令面板自己的事件流水：每条被派发的命令产生一条，未派发则没有。
+  // 历史面板与组件库共用一个 dock 分组，来回切标签会互相隐藏，因此不在此处使用它；
+  // 「历史条目数」的直接断言由 command-panel-actions 的单元测试对 runtime 完成。
+  const events = commandPanel.locator('.command-panel__events > li')
+  await expect(commandPanel.getByText('暂无命令事件')).toBeVisible()
+
+  // 视口动作：改变缩放，且不产生任何命令事件。
+  const originBefore = await stage.locator('[data-testid="stage-origin-y"]').getAttribute('x1')
+  await search.fill('放大')
+  await commandPanel.getByRole('option', { name: /放大/ }).click()
+  await expect(search).toHaveValue('')
+  await expect
+    .poll(async () => stage.locator('[data-testid="stage-origin-y"]').getAttribute('x1'))
+    .not.toBe(originBefore)
+  // 关键契约：缩放没有派发命令，撤销栈不被污染。
+  await expect(events).toHaveCount(0)
+
+  // 新建 Rectangle 会自动选中它；这一步本身派发一条命令。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(nodes).toHaveCount(1)
+  await expect(events).toHaveCount(1)
+
+  // 文档动作：从命令面板删除，节点消失并新增一条事件。
+  await search.fill('删除')
+  const enabledDelete = commandPanel.getByRole('option', { name: /删除/ })
+  await expect(enabledDelete).not.toHaveAttribute('aria-disabled', 'true')
+  await enabledDelete.click()
+
+  await expect(nodes).toHaveCount(0)
+  await expect(events).toHaveCount(2)
+})

@@ -20,6 +20,7 @@ import type {
   JsonValue,
   TransactionRuntimeEvent,
 } from '@compose-ui/core'
+import { CommandSearch } from './command-search'
 import type {
   ComposeCommandPanelProps,
   ComposeCommandPreset,
@@ -52,6 +53,10 @@ const commandMessages = {
     finite: (label: string) => `${label}必须是有限数字`,
     candidate: (label: string) => `${label}不属于有效候选`,
     json: (label: string) => `${label}必须是有效 JSON`,
+    searchLabel: '检索命令',
+    searchPlaceholder: '输入 / 查看全部命令',
+    searchEmpty: '没有匹配的命令',
+    searchUngrouped: '其他',
   },
   'en-US': {
     region: 'Command debugger',
@@ -78,6 +83,10 @@ const commandMessages = {
     finite: (label: string) => `${label} must be a finite number`,
     candidate: (label: string) => `${label} is not a valid option`,
     json: (label: string) => `${label} must be valid JSON`,
+    searchLabel: 'Search commands',
+    searchPlaceholder: 'Type / to list every command',
+    searchEmpty: 'No matching command',
+    searchUngrouped: 'Other',
   },
 } as const
 
@@ -136,6 +145,10 @@ function getCommandMessages(
       label,
     ),
     json: (label: string) => withLabel('commandPanel.json', messages.json(label), label),
+    searchLabel: format('commandPanel.searchLabel', messages.searchLabel),
+    searchPlaceholder: format('commandPanel.searchPlaceholder', messages.searchPlaceholder),
+    searchEmpty: format('commandPanel.searchEmpty', messages.searchEmpty),
+    searchUngrouped: format('commandPanel.searchUngrouped', messages.searchUngrouped),
   } as CommandMessages
 }
 
@@ -386,6 +399,7 @@ function FieldEditor({
  */
 export function ComposeCommandPanel({
   runtime,
+  actions = [],
   presets = [],
   eventLimit = 100,
   className,
@@ -511,6 +525,7 @@ export function ComposeCommandPanel({
         contextMenu.openAt(event, null)
       }}
     >
+      {actions.length > 0 ? <CommandSearch actions={actions} messages={t} /> : null}
       {presets.length > 0 ? (
         <form className="command-panel__form" onSubmit={submit}>
           {presets.length > 1 ? (

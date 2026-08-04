@@ -1,10 +1,11 @@
-import { ComposeCommandPanel } from '@compose-ui/command-panel'
+import { CommandPanelWithActions } from './command-panel-actions'
 import { ComposeComponentPalette } from '@compose-ui/stage'
 import {
   createStageInteractionController,
   createStageSceneIndex,
   getEntityWorldBounds,
   unionRects,
+  zoomViewportAt,
 } from '@compose-ui/stage-engine'
 import {
   BUILTIN_COMMAND_TYPES,
@@ -614,6 +615,18 @@ export function useComposeEditorController({
     if (selectedContainerId) fitBounds([selectedContainerId])
   }, [document.entities, fitBounds, sceneIndex, selectedIds])
   const fitSelection = useCallback(() => fitBounds(selectedIds), [fitBounds, selectedIds])
+  // 命令目录只需要「按倍率缩放」这一个入口；视口数学留在控制器，与工具栏和键盘保持同一实现。
+  const zoomByFactor = useCallback((factor: number) => {
+    if (!surfaceSize) return
+    const center = { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }
+    const current = viewportStore.getSnapshot()
+    setViewport(zoomViewportAt(current, center, current.zoom * factor))
+  }, [setViewport, surfaceSize, viewportStore])
+  const zoomReset = useCallback(() => {
+    if (!surfaceSize) return
+    const center = { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }
+    setViewport(zoomViewportAt(viewportStore.getSnapshot(), center, 1))
+  }, [setViewport, surfaceSize, viewportStore])
 
   const selectedEntity = selectedIds.length === 1
     ? document.entities[selectedIds[0]!]
@@ -701,7 +714,37 @@ export function useComposeEditorController({
     stage: <ViewportBoundStage stageProps={stageProps} store={viewportStore} />,
     inspectorPanel,
     commandPanel: (
-      <ComposeCommandPanel presets={commandPresets} runtime={runtime} />
+      <CommandPanelWithActions
+        actionContext={{
+          canRedo: snapshot.canRedo,
+          canUndo: snapshot.canUndo,
+          dispatch,
+          document,
+          fitContainer,
+          fitSelection,
+          idFactory: nextId,
+          layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : null,
+          redo: runtime.redo,
+          selectedIds,
+          setSelectedIds,
+          setTool,
+          toggleGridSnap: () => configureCanvas(
+            !document.canvas.grid.snapEnabled,
+            smartSnapEnabled,
+            'Toggle grid snap',
+          ),
+          toggleSmartSnap: () => configureCanvas(
+            document.canvas.grid.snapEnabled,
+            !smartSnapEnabled,
+            'Toggle smart snap',
+          ),
+          undo: runtime.undo,
+          zoomBy: zoomByFactor,
+          zoomReset,
+        }}
+        presets={commandPresets}
+        runtime={runtime}
+      />
     ),
     stageToolbar: (
       <ViewportBoundStageToolbar

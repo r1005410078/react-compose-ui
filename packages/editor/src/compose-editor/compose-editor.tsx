@@ -762,7 +762,10 @@ export function ComposeEditor({
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
         ? slots.command
-        : controller?.commandPanel,
+        : addDefaultElementProps(controller?.commandPanel, {
+            onOpenSettings: toggleSettings,
+            shortcuts: resolvedPreferences.shortcuts,
+          }),
       assetBrowserPanel: slots?.assetBrowser !== undefined
         ? slots.assetBrowser
         : assets?.browser
