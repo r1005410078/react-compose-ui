@@ -444,7 +444,8 @@
   box-sizing: border-box;
   min-width: 0;
   color: #d8dde6;
-  background: #181a1f;
+  /* 与 Scene Graph 内层 Dock 的空白区共用面板基色，避免内容高度外露分段。 */
+  background: var(--compose-panel-bg, #111419);
   font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
 }
 
