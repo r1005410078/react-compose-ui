@@ -36,17 +36,6 @@ function InspectorIcon() {
   )
 }
 
-function ComponentLibraryIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <rect height="7" rx="1" width="7" x="3" y="3" />
-      <rect height="7" rx="1" width="7" x="14" y="3" />
-      <rect height="7" rx="1" width="7" x="3" y="14" />
-      <path d="M14 17.5h7M17.5 14v7" />
-    </svg>
-  )
-}
-
 function SettingsIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -96,13 +85,13 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
   const { documents, requestDocumentClose } = useWorkspaceContent()
   const titles: Record<string, string> = {
     [WORKSPACE_PANEL_IDS.scene]: messages.sceneGraph,
-    [WORKSPACE_PANEL_IDS.componentLibrary]: messages.componentLibrary,
     [WORKSPACE_PANEL_IDS.canvas]: messages.canvas,
     [WORKSPACE_PANEL_IDS.inspector]: messages.inspector,
     [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
     [WORKSPACE_PANEL_IDS.command]: messages.command,
     [WORKSPACE_PANEL_IDS.assetBrowser]: messages.assets,
     'compose-scene-content-panel': messages.sceneGraph,
+    'compose-component-library-panel': messages.componentLibrary,
     'compose-history-panel': messages.history,
   }
   const title = titles[props.api.id] ?? props.api.title
@@ -114,8 +103,6 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
   const icon =
     props.api.id === WORKSPACE_PANEL_IDS.scene ? (
       <SceneGraphIcon />
-    ) : props.api.id === WORKSPACE_PANEL_IDS.componentLibrary ? (
-      <ComponentLibraryIcon />
     ) : props.api.id === WORKSPACE_PANEL_IDS.inspector ? (
       <InspectorIcon />
     ) : null

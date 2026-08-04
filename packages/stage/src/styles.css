@@ -67,11 +67,6 @@
   color: var(--compose-text);
 }
 
-.component-palette[data-compose-theme='light'] button {
-  border-color: var(--compose-border);
-  background: var(--compose-surface-control);
-}
-
 .compose-stage:focus-visible {
   box-shadow: inset 0 0 0 2px var(--compose-focus, #4d9cff);
 }
@@ -453,41 +448,156 @@
   font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
 }
 
-.component-palette ul {
-  display: grid;
-  gap: 6px;
-  margin: 0;
+.component-palette__category {
   padding: 8px;
+}
+
+.component-palette__category-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  color: var(--compose-text, #d8dde6);
+  background: transparent;
+  cursor: pointer;
+  font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+
+.component-palette__category-chevron {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  color: var(--compose-text-muted, #8e98a8);
+  transition: transform 120ms ease;
+}
+
+.component-palette__category-chevron svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.component-palette__category-trigger[aria-expanded='false'] .component-palette__category-chevron {
+  transform: rotate(-90deg);
+}
+
+.component-palette__grid {
+  display: grid;
+  grid-auto-rows: 76px;
+  /* 保留相等的 Tile 尺寸；窄面板时由 Grid 自动将剩余 Tile 排到下一行。 */
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
   list-style: none;
 }
 
-.component-palette button {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 9px;
-  border: 1px solid #30343b;
-  border-radius: 4px;
-  color: inherit;
-  background: #22262d;
-  cursor: grab;
-  font: inherit;
+.component-palette__grid > li {
+  min-width: 0;
 }
 
-.component-palette button:focus-visible {
+.component-palette__tile {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: inherit;
+  background: transparent;
+  cursor: grab;
+  font: inherit;
+  flex-direction: column;
+}
+
+.component-palette__tile:hover {
+  border-color: color-mix(in srgb, var(--compose-border, #30343b) 82%, transparent);
+  background: var(--compose-surface-hover, #292e36);
+}
+
+.component-palette__tile:active {
+  cursor: grabbing;
+  background: var(--compose-surface-selected, #1b395f);
+}
+
+.component-palette__category-trigger:focus-visible,
+.component-palette__tile:focus-visible {
   outline: 1px solid #4d9cff;
   outline-offset: 1px;
+}
+
+.component-palette__tile-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--compose-text-subtle, #aeb7c4);
+}
+
+.component-palette__tile-icon-svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.component-palette__tile-label {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--compose-text-subtle, #aeb7c4);
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .component-palette__drag-preview {
   position: fixed;
   z-index: 10000;
-  top: 12px;
-  left: 12px;
-  padding: 6px 10px;
-  border: 1px solid #4d9cff;
+  display: inline-flex;
+  min-width: 104px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px dashed #4d9cff;
   border-radius: 4px;
-  background: #172b49;
+  color: var(--compose-text, #d8dde6);
+  background: color-mix(in srgb, var(--compose-surface-raised, #20252d) 88%, #4d9cff);
+  box-shadow: 0 5px 14px rgb(0 0 0 / 20%);
+  font-size: 12px;
+  opacity: 0.9;
   pointer-events: none;
+}
+
+.component-palette__drag-preview-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  color: #77b3ff;
+}
+
+.component-palette__drag-preview-icon .component-palette__tile-icon-svg {
+  width: 20px;
+  height: 20px;
 }

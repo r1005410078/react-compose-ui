@@ -11,7 +11,6 @@ export const WORKSPACE_GROUP_IDS = {
 
 export const WORKSPACE_PANEL_IDS = {
   scene: 'compose-scene-graph',
-  componentLibrary: 'compose-component-library',
   canvas: 'compose-canvas',
   inspector: 'compose-inspector',
   transactionLog: 'compose-transaction-log',
@@ -21,7 +20,6 @@ export const WORKSPACE_PANEL_IDS = {
 
 export const WORKSPACE_COMPONENT_IDS = {
   scene: 'sceneGraph',
-  componentLibrary: 'componentLibrary',
   canvas: 'canvas',
   inspector: 'inspector',
   transactionLog: 'transactionLog',
@@ -92,7 +90,6 @@ export function localizeWorkspace(
   const messages = getEditorMessages(locale, formatMessage).workspace
   const titles = {
     [WORKSPACE_PANEL_IDS.scene]: messages.sceneGraph,
-    [WORKSPACE_PANEL_IDS.componentLibrary]: messages.componentLibrary,
     [WORKSPACE_PANEL_IDS.canvas]: messages.canvas,
     [WORKSPACE_PANEL_IDS.inspector]: messages.inspector,
     [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
@@ -149,16 +146,6 @@ export function initializeWorkspace(
     })
   }
 
-  if (!api.getPanel(WORKSPACE_PANEL_IDS.componentLibrary)) {
-    api.addPanel({
-      id: WORKSPACE_PANEL_IDS.componentLibrary,
-      component: WORKSPACE_COMPONENT_IDS.componentLibrary,
-      tabComponent: TAB_COMPONENT,
-      title: messages.componentLibrary,
-      inactive: true,
-      position: { referenceGroup: sceneGroup.id },
-    })
-  }
   scenePanel.api.setActive()
 
   const inspectorGroup =
@@ -184,16 +171,18 @@ export function initializeWorkspace(
     api.addEdgeGroup('bottom', {
       id: WORKSPACE_GROUP_IDS.bottom,
       ...WORKSPACE_SIZES.bottom,
+      collapsed: true,
     })
   bottomGroup.locked = 'no-drop-target'
 
-  let transactionLog = api.getPanel(WORKSPACE_PANEL_IDS.transactionLog)
-  if (!transactionLog) {
-    transactionLog = api.addPanel({
-      id: WORKSPACE_PANEL_IDS.transactionLog,
-      component: WORKSPACE_COMPONENT_IDS.transactionLog,
+  // 首次插入的资源标签即为默认活动项；后续标签保持非活动，以固定底部工具组的可见顺序。
+  let assetBrowser = api.getPanel(WORKSPACE_PANEL_IDS.assetBrowser)
+  if (!assetBrowser) {
+    assetBrowser = api.addPanel({
+      id: WORKSPACE_PANEL_IDS.assetBrowser,
+      component: WORKSPACE_COMPONENT_IDS.assetBrowser,
       tabComponent: TAB_COMPONENT,
-      title: messages.transactionLog,
+      title: messages.assets,
       position: { referenceGroup: bottomGroup.id },
     })
   }
@@ -209,17 +198,17 @@ export function initializeWorkspace(
     })
   }
 
-  if (!api.getPanel(WORKSPACE_PANEL_IDS.assetBrowser)) {
+  if (!api.getPanel(WORKSPACE_PANEL_IDS.transactionLog)) {
     api.addPanel({
-      id: WORKSPACE_PANEL_IDS.assetBrowser,
-      component: WORKSPACE_COMPONENT_IDS.assetBrowser,
+      id: WORKSPACE_PANEL_IDS.transactionLog,
+      component: WORKSPACE_COMPONENT_IDS.transactionLog,
       tabComponent: TAB_COMPONENT,
-      title: messages.assets,
+      title: messages.transactionLog,
       inactive: true,
       position: { referenceGroup: bottomGroup.id },
     })
   }
 
-  transactionLog.api.setActive()
+  assetBrowser.api.setActive()
   localizeWorkspace(api, locale, formatMessage)
 }

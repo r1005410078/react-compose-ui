@@ -17,19 +17,21 @@ import { WorkspaceTab } from './workspace-tab'
 import { getEditorMessages } from '../editor-i18n'
 
 const SCENE_MIN_HEIGHT = 160
-const HISTORY_MIN_HEIGHT = 120
-const DEFAULT_SCENE_HISTORY_HEIGHT = 480
-const SCENE_HISTORY_TAB_COMPONENT = 'workspaceTab'
-const SCENE_HISTORY_GROUP_IDS = {
+const TOOLS_MIN_HEIGHT = 120
+const DEFAULT_SCENE_TOOLS_HEIGHT = 480
+const SCENE_TOOLS_TAB_COMPONENT = 'workspaceTab'
+const SCENE_TOOLS_GROUP_IDS = {
   scene: 'compose-scene-content-group',
-  history: 'compose-history-group',
+  tools: 'compose-scene-tools-group',
 } as const
-const SCENE_HISTORY_PANEL_IDS = {
+const SCENE_TOOLS_PANEL_IDS = {
   scene: 'compose-scene-content-panel',
+  componentLibrary: 'compose-component-library-panel',
   history: 'compose-history-panel',
 } as const
-const SCENE_HISTORY_COMPONENT_IDS = {
+const SCENE_TOOLS_COMPONENT_IDS = {
   scene: 'sceneContent',
+  componentLibrary: 'componentLibraryContent',
   history: 'historyContent',
 } as const
 
@@ -61,106 +63,142 @@ function HistoryContentPanel() {
   )
 }
 
-const sceneHistoryComponents = {
-  [SCENE_HISTORY_COMPONENT_IDS.scene]: SceneContentPanel,
-  [SCENE_HISTORY_COMPONENT_IDS.history]: HistoryContentPanel,
+const sceneToolsComponents = {
+  [SCENE_TOOLS_COMPONENT_IDS.scene]: SceneContentPanel,
+  [SCENE_TOOLS_COMPONENT_IDS.componentLibrary]: ComponentLibraryPanel,
+  [SCENE_TOOLS_COMPONENT_IDS.history]: HistoryContentPanel,
 } satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
-const sceneHistoryTabComponents = {
-  [SCENE_HISTORY_TAB_COMPONENT]: WorkspaceTab,
+const sceneToolsTabComponents = {
+  [SCENE_TOOLS_TAB_COMPONENT]: WorkspaceTab,
 }
 
-function localizeSceneHistoryWorkspace(
+function localizeSceneToolsWorkspace(
   api: DockviewApi,
   locale: ComposeLocale,
   formatMessage?: ComposeI18nContextValue['formatMessage'],
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
-  const scenePanel = api.getPanel(SCENE_HISTORY_PANEL_IDS.scene)
-  const historyPanel = api.getPanel(SCENE_HISTORY_PANEL_IDS.history)
+  const scenePanel = api.getPanel(SCENE_TOOLS_PANEL_IDS.scene)
+  const componentLibraryPanel = api.getPanel(SCENE_TOOLS_PANEL_IDS.componentLibrary)
+  const historyPanel = api.getPanel(SCENE_TOOLS_PANEL_IDS.history)
   if (typeof scenePanel?.api.setTitle === 'function') {
     scenePanel.api.setTitle(messages.sceneGraph)
+  }
+  if (typeof componentLibraryPanel?.api.setTitle === 'function') {
+    componentLibraryPanel.api.setTitle(messages.componentLibrary)
   }
   if (typeof historyPanel?.api.setTitle === 'function') {
     historyPanel.api.setTitle(messages.history)
   }
 }
 
-function initializeSceneHistoryWorkspace(
+function initializeSceneToolsWorkspace(
   api: DockviewApi,
   locale: ComposeLocale,
+  historyEnabled: boolean,
   formatMessage?: ComposeI18nContextValue['formatMessage'],
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
-  const availableHeight = api.height > 0 ? api.height : DEFAULT_SCENE_HISTORY_HEIGHT
-  const historyInitialHeight = Math.min(
-    Math.max(HISTORY_MIN_HEIGHT, Math.round(availableHeight * 0.4)),
-    Math.max(HISTORY_MIN_HEIGHT, availableHeight - SCENE_MIN_HEIGHT),
+  const availableHeight = api.height > 0 ? api.height : DEFAULT_SCENE_TOOLS_HEIGHT
+  const toolsInitialHeight = Math.min(
+    Math.max(TOOLS_MIN_HEIGHT, Math.round(availableHeight * 0.4)),
+    Math.max(TOOLS_MIN_HEIGHT, availableHeight - SCENE_MIN_HEIGHT),
   )
-  const sceneGroup = api.getGroup(SCENE_HISTORY_GROUP_IDS.scene) ?? api.addGroup({
+  const sceneGroup = api.getGroup(SCENE_TOOLS_GROUP_IDS.scene) ?? api.addGroup({
     constraints: { minimumHeight: SCENE_MIN_HEIGHT },
     direction: 'right',
-    id: SCENE_HISTORY_GROUP_IDS.scene,
+    id: SCENE_TOOLS_GROUP_IDS.scene,
   })
   sceneGroup.locked = 'no-drop-target'
-  const historyGroup = api.getGroup(SCENE_HISTORY_GROUP_IDS.history) ?? api.addGroup({
-    constraints: { minimumHeight: HISTORY_MIN_HEIGHT },
+  const toolsGroup = api.getGroup(SCENE_TOOLS_GROUP_IDS.tools) ?? api.addGroup({
+    constraints: { minimumHeight: TOOLS_MIN_HEIGHT },
     direction: 'below',
-    id: SCENE_HISTORY_GROUP_IDS.history,
-    initialHeight: historyInitialHeight,
+    id: SCENE_TOOLS_GROUP_IDS.tools,
+    initialHeight: toolsInitialHeight,
     referenceGroup: sceneGroup.id,
   })
-  historyGroup.locked = 'no-drop-target'
+  toolsGroup.locked = 'no-drop-target'
 
-  let scenePanel = api.getPanel(SCENE_HISTORY_PANEL_IDS.scene)
+  const scenePanel = api.getPanel(SCENE_TOOLS_PANEL_IDS.scene)
   if (!scenePanel) {
-    scenePanel = api.addPanel({
-      component: SCENE_HISTORY_COMPONENT_IDS.scene,
-      id: SCENE_HISTORY_PANEL_IDS.scene,
+    api.addPanel({
+      component: SCENE_TOOLS_COMPONENT_IDS.scene,
+      id: SCENE_TOOLS_PANEL_IDS.scene,
       minimumHeight: SCENE_MIN_HEIGHT,
       position: { referenceGroup: sceneGroup.id },
-      tabComponent: SCENE_HISTORY_TAB_COMPONENT,
+      tabComponent: SCENE_TOOLS_TAB_COMPONENT,
       title: messages.sceneGraph,
     })
   }
 
-  if (!api.getPanel(SCENE_HISTORY_PANEL_IDS.history)) {
-    api.addPanel({
-      component: SCENE_HISTORY_COMPONENT_IDS.history,
-      id: SCENE_HISTORY_PANEL_IDS.history,
-      initialHeight: historyInitialHeight,
-      minimumHeight: HISTORY_MIN_HEIGHT,
-      position: { referenceGroup: historyGroup.id },
-      tabComponent: SCENE_HISTORY_TAB_COMPONENT,
-      title: messages.history,
+  let componentLibraryPanel = api.getPanel(SCENE_TOOLS_PANEL_IDS.componentLibrary)
+  if (!componentLibraryPanel) {
+    componentLibraryPanel = api.addPanel({
+      component: SCENE_TOOLS_COMPONENT_IDS.componentLibrary,
+      id: SCENE_TOOLS_PANEL_IDS.componentLibrary,
+      initialHeight: toolsInitialHeight,
+      minimumHeight: TOOLS_MIN_HEIGHT,
+      position: { referenceGroup: toolsGroup.id },
+      tabComponent: SCENE_TOOLS_TAB_COMPONENT,
+      title: messages.componentLibrary,
     })
+    componentLibraryPanel.api.setActive()
   }
 
-  scenePanel.api.setActive()
-  localizeSceneHistoryWorkspace(api, locale, formatMessage)
+  if (historyEnabled && !api.getPanel(SCENE_TOOLS_PANEL_IDS.history)) {
+    api.addPanel({
+      component: SCENE_TOOLS_COMPONENT_IDS.history,
+      id: SCENE_TOOLS_PANEL_IDS.history,
+      initialHeight: toolsInitialHeight,
+      minimumHeight: TOOLS_MIN_HEIGHT,
+      position: { referenceGroup: toolsGroup.id },
+      tabComponent: SCENE_TOOLS_TAB_COMPONENT,
+      title: messages.history,
+      inactive: true,
+    })
+  }
+  else if (!historyEnabled) {
+    api.getPanel(SCENE_TOOLS_PANEL_IDS.history)?.api.close()
+  }
+
+  localizeSceneToolsWorkspace(api, locale, formatMessage)
 }
 
-function SceneHistoryDockview() {
+function SceneToolsDockview() {
   const i18n = useComposeI18nContext()
+  const { history, historyPanel } = useWorkspaceContent()
   const locale = i18n?.locale ?? 'zh-CN'
+  const historyEnabled = history !== undefined || historyPanel !== undefined
   const initializedApi = useRef<DockviewApi | null>(null)
+  const initializedHistoryEnabled = useRef<boolean | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const messages = getEditorMessages(locale, i18n?.formatMessage).workspace
   const sceneContentLabel = locale === 'zh-CN' ? '场景图内容' : 'Scene Graph content'
   const handleReady = useCallback((event: DockviewReadyEvent) => {
     if (initializedApi.current === event.api) return
-    initializeSceneHistoryWorkspace(event.api, locale, i18n?.formatMessage)
+    initializeSceneToolsWorkspace(event.api, locale, historyEnabled, i18n?.formatMessage)
     initializedApi.current = event.api
-  }, [i18n?.formatMessage, locale])
+    initializedHistoryEnabled.current = historyEnabled
+  }, [historyEnabled, i18n?.formatMessage, locale])
 
   useEffect(() => {
-    if (initializedApi.current) {
-      localizeSceneHistoryWorkspace(
+    if (initializedApi.current && initializedHistoryEnabled.current !== historyEnabled) {
+      initializeSceneToolsWorkspace(
+        initializedApi.current,
+        locale,
+        historyEnabled,
+        i18n?.formatMessage,
+      )
+      initializedHistoryEnabled.current = historyEnabled
+    }
+    else if (initializedApi.current) {
+      localizeSceneToolsWorkspace(
         initializedApi.current,
         locale,
         i18n?.formatMessage,
       )
     }
-  }, [i18n?.formatMessage, locale])
+  }, [historyEnabled, i18n?.formatMessage, locale])
 
   useEffect(() => {
     // 外层 Edge Group 与内层 split Dockview 都有 Scene Graph 标签。视觉上保留两处原始标题，
@@ -178,11 +216,11 @@ function SceneHistoryDockview() {
     <div className="compose-editor__scene-history-dockview-host" ref={rootRef}>
       <DockviewReact
         className="compose-editor__scene-history-dockview"
-        components={sceneHistoryComponents}
+        components={sceneToolsComponents}
         disableDnd
         disableFloatingGroups
         onReady={handleReady}
-        tabComponents={sceneHistoryTabComponents}
+        tabComponents={sceneToolsTabComponents}
         theme={themeAbyss}
       />
     </div>
@@ -198,12 +236,9 @@ function Placeholder({ children }: { children: string }) {
 }
 
 export function SceneGraphPanel() {
-  const { sceneGraphPanel, history, historyPanel } = useWorkspaceContent()
-  const historyEnabled = history !== undefined || historyPanel !== undefined
-
   return (
     <div className="compose-editor__panel" data-workspace-panel="scene-graph">
-      {historyEnabled ? <SceneHistoryDockview /> : sceneGraphPanel}
+      <SceneToolsDockview />
     </div>
   )
 }

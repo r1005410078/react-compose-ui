@@ -20,7 +20,10 @@ const translations = {
     deleteGuide: '删除辅助线',
     toggleGridSnap: '切换网格吸附',
     toggleSmartSnap: '切换智能吸附',
-    library: '组件库',
+    library: '基础组件',
+    libraryContent: '基础组件内容',
+    basicCategory: (count: number) => `基础 (${count})`,
+    basicCategoryItems: '基础组件',
     add: (label: string) => `添加 ${label}`,
   },
   'en-US': {
@@ -36,7 +39,10 @@ const translations = {
     deleteGuide: 'Delete guide',
     toggleGridSnap: 'Toggle grid snap',
     toggleSmartSnap: 'Toggle smart snap',
-    library: 'Component Library',
+    library: 'Components',
+    libraryContent: 'Component content',
+    basicCategory: (count: number) => `Basic (${count})`,
+    basicCategoryItems: 'Basic components',
     add: (label: string) => `Add ${label}`,
   },
 } as const
@@ -66,6 +72,16 @@ export function getStageMessages(
     toggleGridSnap: formatMessage('stage.toggleGridSnap', messages.toggleGridSnap),
     toggleSmartSnap: formatMessage('stage.toggleSmartSnap', messages.toggleSmartSnap),
     library: formatMessage('stage.library', messages.library),
+    libraryContent: formatMessage('stage.libraryContent', messages.libraryContent),
+    basicCategory: (count: number) => formatMessage(
+      'stage.basicCategory',
+      messages.basicCategory(count),
+      { count },
+    ),
+    basicCategoryItems: formatMessage(
+      'stage.basicCategoryItems',
+      messages.basicCategoryItems,
+    ),
     add: (label: string) => formatMessage(
       'stage.add',
       messages.add(label),

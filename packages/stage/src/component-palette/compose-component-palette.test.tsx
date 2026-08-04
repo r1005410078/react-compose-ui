@@ -103,4 +103,100 @@ describe('ComposeComponentPalette ECS Presets', () => {
       }),
     ])
   })
+
+  it('OpenSpec: stage / 基础组件分类九宫格 / 展示基础组件网格', () => {
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: vi.fn(),
+    })
+    controller.updateContext({
+      document,
+      layoutSnapshot: { revision: 1, boxes: {}, diagnostics: [] },
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'select',
+      selectedIds: [],
+      idFactory: () => 'id',
+    })
+    render(
+      <ComposeComponentPalette
+        interactionController={controller}
+        registry={registry}
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: '基础组件内容' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '基础 (2)' }))
+      .toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('list', { name: '基础组件' }))
+      .toHaveClass('component-palette__grid')
+    for (const tile of screen.getAllByRole('button', { name: /添加/ })) {
+      expect(tile).toHaveClass('component-palette__tile')
+      expect(tile.querySelector('.component-palette__tile-icon-svg')).toBeInTheDocument()
+    }
+  })
+
+  it('OpenSpec: stage / 基础组件分类九宫格 / 折叠基础组件分类', () => {
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: vi.fn(),
+    })
+    controller.updateContext({
+      document,
+      layoutSnapshot: { revision: 1, boxes: {}, diagnostics: [] },
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'select',
+      selectedIds: [],
+      idFactory: () => 'id',
+    })
+    render(
+      <ComposeComponentPalette
+        interactionController={controller}
+        registry={registry}
+      />,
+    )
+
+    const category = screen.getByRole('button', { name: '基础 (2)' })
+    fireEvent.click(category)
+    expect(category).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('list', { name: '基础组件' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 基础组件分类九宫格 / 拖动预览跟随指针', () => {
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: vi.fn(),
+    })
+    controller.updateContext({
+      document,
+      layoutSnapshot: { revision: 1, boxes: {}, diagnostics: [] },
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'select',
+      selectedIds: [],
+      idFactory: () => 'id',
+    })
+    render(
+      <ComposeComponentPalette
+        interactionController={controller}
+        registry={registry}
+      />,
+    )
+
+    const containerTile = screen.getByRole('button', { name: '添加 容器' })
+    fireEvent.pointerDown(containerTile, { clientX: 40, clientY: 60, pointerId: 1 })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    fireEvent.pointerMove(window, { clientX: 120, clientY: 160, pointerId: 1 })
+    const preview = screen.getByRole('status')
+    expect(preview).toHaveTextContent('容器')
+    expect(preview).toHaveStyle({ left: '132px', top: '172px' })
+
+    fireEvent.pointerUp(window, { clientX: 120, clientY: 160, pointerId: 1 })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
 })

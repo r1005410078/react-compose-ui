@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type {
   CSSProperties,
   HTMLAttributes,
@@ -23,6 +23,52 @@ export interface ComposeComponentPaletteProps extends HTMLAttributes<HTMLDivElem
   readonly interactionController: StageInteractionController
 }
 
+function PalettePresetIcon({ presetId }: { readonly presetId: string }) {
+  const normalizedId = presetId.toLowerCase()
+  if (normalizedId === 'container') {
+    return (
+      <svg className="component-palette__tile-icon-svg" viewBox="0 0 24 24">
+        <rect height="16" rx="2" width="16" x="4" y="4" />
+        <path d="M8 8h8v8H8z" />
+      </svg>
+    )
+  }
+  if (normalizedId === 'rectangle') {
+    return (
+      <svg className="component-palette__tile-icon-svg" viewBox="0 0 24 24">
+        <rect height="12" rx="1.5" width="18" x="3" y="6" />
+      </svg>
+    )
+  }
+  if (normalizedId === 'text') {
+    return (
+      <svg className="component-palette__tile-icon-svg" viewBox="0 0 24 24">
+        <path d="M5 5h14M12 5v14M8.5 19h7" />
+      </svg>
+    )
+  }
+  if (normalizedId.includes('page') || normalizedId.includes('slot')) {
+    return (
+      <svg className="component-palette__tile-icon-svg" viewBox="0 0 24 24">
+        <path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6" />
+      </svg>
+    )
+  }
+  if (normalizedId.includes('chart') || normalizedId.includes('echart')) {
+    return (
+      <svg className="component-palette__tile-icon-svg" viewBox="0 0 24 24">
+        <path d="M4 20V4M4 20h16M8 17v-5M12 17V7M16 17v-8" />
+      </svg>
+    )
+  }
+  return (
+    <svg className="component-palette__tile-icon-svg" viewBox="0 0 24 24">
+      <rect height="14" rx="2" width="16" x="4" y="5" />
+      <path d="M8 9h8M8 13h5" />
+    </svg>
+  )
+}
+
 /** 按 Registry 顺序显示可拖入或键盘新增的 Entity Presets。 @public */
 export function ComposeComponentPalette({
   registry,
@@ -43,6 +89,10 @@ export function ComposeComponentPalette({
   const cleanupRef = useRef<(() => void) | null>(null)
   const suppressClickRef = useRef(false)
   const resetClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [basicExpanded, setBasicExpanded] = useState(true)
+  const [isDragging, setIsDragging] = useState(false)
+  const visiblePresets = registry.listPresets().filter((preset) => !preset.paletteHidden)
+  const basicCategoryId = 'compose-component-palette-basic'
 
   useEffect(() => () => {
     cleanupRef.current?.()
@@ -55,15 +105,18 @@ export function ComposeComponentPalette({
   ) => {
     cleanupRef.current?.()
     suppressClickRef.current = false
+    setIsDragging(false)
     if (resetClickTimerRef.current !== null) clearTimeout(resetClickTimerRef.current)
     const startPoint = { x: event.clientX, y: event.clientY }
     let dragged = false
     interactionController.send({ type: 'external.begin', item, clientPoint: startPoint })
     const move = (pointerEvent: PointerEvent) => {
-      dragged ||= Math.hypot(
+      const crossedThreshold = Math.hypot(
         pointerEvent.clientX - startPoint.x,
         pointerEvent.clientY - startPoint.y,
       ) >= 4
+      if (!dragged && crossedThreshold) setIsDragging(true)
+      dragged ||= crossedThreshold
       interactionController.send({
         type: 'external.move',
         clientPoint: { x: pointerEvent.clientX, y: pointerEvent.clientY },
@@ -81,6 +134,7 @@ export function ComposeComponentPalette({
         pointerEvent.clientX - startPoint.x,
         pointerEvent.clientY - startPoint.y,
       ) >= 4
+      setIsDragging(false)
       if (dragged) {
         suppressClickRef.current = true
         interactionController.send({
@@ -97,6 +151,7 @@ export function ComposeComponentPalette({
     const cancel = () => {
       cleanup()
       suppressClickRef.current = false
+      setIsDragging(false)
       interactionController.send({ type: 'external.cancel' })
     }
     window.addEventListener('pointermove', move)
@@ -113,11 +168,15 @@ export function ComposeComponentPalette({
     }
     return registry.getPreset(item.presetId)?.label ?? item.presetId
   })()
+  const previewPoint = isDragging ? state.external?.clientPoint : null
+  const previewPresetId = state.external?.item.kind === 'preset'
+    ? state.external.item.presetId
+    : 'asset'
 
   return (
     <div
       {...props}
-      aria-label={props['aria-label'] ?? messages.library}
+      aria-label={props['aria-label'] ?? messages.libraryContent}
       className={['component-palette', className].filter(Boolean).join(' ')}
       data-compose-theme={theme?.resolvedTheme}
       lang={resolvedLocale}
@@ -127,40 +186,73 @@ export function ComposeComponentPalette({
         ...style,
       } as CSSProperties}
     >
-      <ul>
-        {registry.listPresets().filter((preset) => !preset.paletteHidden).map((preset) => (
-          <li key={preset.id}>
-            <button
-              aria-label={messages.add(preset.label)}
-              type="button"
-              onClick={() => {
-                if (suppressClickRef.current) {
-                  suppressClickRef.current = false
-                  if (resetClickTimerRef.current !== null) {
-                    clearTimeout(resetClickTimerRef.current)
-                    resetClickTimerRef.current = null
-                  }
-                  return
-                }
-                interactionController.send({
-                  type: 'external.add',
-                  item: { kind: 'preset', presetId: preset.id },
-                })
-              }}
-              onPointerDown={(event) => start({
-                kind: 'preset',
-                presetId: preset.id,
-              }, event)}
-            >
-              {preset.icon}
-              <span>{preset.label}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {state.external ? (
-        <div className="component-palette__drag-preview" role="status">
-          {externalLabel}
+      <section className="component-palette__category">
+        <button
+          aria-controls={basicCategoryId}
+          aria-expanded={basicExpanded}
+          className="component-palette__category-trigger"
+          type="button"
+          onClick={() => setBasicExpanded((expanded) => !expanded)}
+        >
+          <span aria-hidden="true" className="component-palette__category-chevron">
+            <svg viewBox="0 0 12 12"><path d="m2.5 4.5 3.5 3 3.5-3" /></svg>
+          </span>
+          <span>{messages.basicCategory(visiblePresets.length)}</span>
+        </button>
+        {basicExpanded ? (
+          <ul
+            aria-label={messages.basicCategoryItems}
+            className="component-palette__grid"
+            id={basicCategoryId}
+          >
+            {visiblePresets.map((preset) => (
+              <li key={preset.id}>
+                <button
+                  aria-label={messages.add(preset.label)}
+                  className="component-palette__tile"
+                  type="button"
+                  onClick={() => {
+                    if (suppressClickRef.current) {
+                      suppressClickRef.current = false
+                      if (resetClickTimerRef.current !== null) {
+                        clearTimeout(resetClickTimerRef.current)
+                        resetClickTimerRef.current = null
+                      }
+                      return
+                    }
+                    interactionController.send({
+                      type: 'external.add',
+                      item: { kind: 'preset', presetId: preset.id },
+                    })
+                  }}
+                  onPointerDown={(event) => start({
+                    kind: 'preset',
+                    presetId: preset.id,
+                  }, event)}
+                >
+                  <span aria-hidden="true" className="component-palette__tile-icon">
+                    <PalettePresetIcon presetId={preset.id} />
+                  </span>
+                  <span className="component-palette__tile-label">{preset.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+      {previewPoint ? (
+        <div
+          className="component-palette__drag-preview"
+          role="status"
+          style={{
+            left: `${previewPoint.x + 12}px`,
+            top: `${previewPoint.y + 12}px`,
+          }}
+        >
+          <span aria-hidden="true" className="component-palette__drag-preview-icon">
+            <PalettePresetIcon presetId={previewPresetId} />
+          </span>
+          <span>{externalLabel}</span>
         </div>
       ) : null}
     </div>

@@ -25,19 +25,36 @@ const workspaceDockviewMock = vi.hoisted(() => {
     panels,
   }
 })
-const sceneHistoryDockviewMock = vi.hoisted(() => ({
-  height: 480,
-  addGroup: vi.fn((options: { id: string }) => ({
-    id: options.id,
-    locked: undefined as string | undefined,
-  })),
-  addPanel: vi.fn((options: { id: string }) => ({
-    id: options.id,
-    api: { setActive: vi.fn() },
-  })),
-  getGroup: vi.fn(() => undefined),
-  getPanel: vi.fn(() => undefined),
-}))
+const sceneHistoryDockviewMock = vi.hoisted(() => {
+  const groups = new Map<string, { id: string; locked?: string }>()
+  const panels = new Map<string, {
+    id: string
+    api: { close: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> }
+  }>()
+  return {
+    height: 480,
+    addGroup: vi.fn((options: { id: string }) => {
+      const group = { id: options.id, locked: undefined as string | undefined }
+      groups.set(options.id, group)
+      return group
+    }),
+    addPanel: vi.fn((options: { id: string }) => {
+      const panel = {
+        id: options.id,
+        api: {
+          close: vi.fn(() => panels.delete(options.id)),
+          setActive: vi.fn(),
+        },
+      }
+      panels.set(options.id, panel)
+      return panel
+    }),
+    getGroup: vi.fn((id: string) => groups.get(id)),
+    getPanel: vi.fn((id: string) => panels.get(id)),
+    groups,
+    panels,
+  }
+})
 
 vi.mock('../workspace-layout', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../workspace-layout')>()
@@ -190,6 +207,8 @@ afterEach(() => {
   workspaceDockviewMock.addPanel.mockClear()
   workspaceDockviewMock.getPanel.mockClear()
   workspaceDockviewMock.panels.clear()
+  sceneHistoryDockviewMock.groups.clear()
+  sceneHistoryDockviewMock.panels.clear()
   Object.values(sceneHistoryDockviewMock).forEach((member) => {
     if (typeof member === 'function' && 'mockClear' in member) member.mockClear()
   })
@@ -722,7 +741,7 @@ describe('ComposeEditor', () => {
     expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
   })
 
-  it('OpenSpec: editor-workspace-layout / 可选场景历史分栏 / 使用默认历史面板', () => {
+  it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 使用默认历史面板', () => {
     const history = createHistoryController()
     render(<ComposeEditor history={history} />)
 
@@ -733,10 +752,16 @@ describe('ComposeEditor', () => {
       .not.toBeInTheDocument()
     expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: 'compose-component-library-panel',
+        position: { referenceGroup: 'compose-scene-tools-group' },
+      }),
+    )
+    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
         id: 'compose-history-panel',
         initialHeight: 192,
         minimumHeight: 120,
-        position: { referenceGroup: 'compose-history-group' },
+        position: { referenceGroup: 'compose-scene-tools-group' },
       }),
     )
 
@@ -745,7 +770,7 @@ describe('ComposeEditor', () => {
     expect(history.navigate).toHaveBeenCalledWith('beginning')
   })
 
-  it('OpenSpec: editor-workspace-layout / 可选场景历史分栏 / 覆盖历史面板', () => {
+  it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 覆盖历史面板', () => {
     const history = createHistoryController()
     const { rerender } = render(
       <ComposeEditor history={history} slots={{ history: <div>自定义历史</div> }} />,
@@ -761,13 +786,28 @@ describe('ComposeEditor', () => {
     expect(screen.getByTestId('scene-history-dockview')).toBeInTheDocument()
   })
 
-  it('OpenSpec: editor-workspace-layout / 可选场景历史分栏 / 不启用历史', () => {
+  it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 不启用历史', () => {
     render(<ComposeEditor />)
 
-    expect(screen.queryByRole('separator', { name: '调整场景树与历史记录高度' }))
-      .not.toBeInTheDocument()
+    expect(screen.getByTestId('scene-history-dockview')).toBeInTheDocument()
+    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'compose-component-library-panel' }),
+    )
+    expect(sceneHistoryDockviewMock.addPanel).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'compose-history-panel' }),
+    )
     expect(screen.queryByLabelText('历史记录')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('scene-history-dockview')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 不启用历史：动态移除 History', () => {
+    const history = createHistoryController()
+    const { rerender } = render(<ComposeEditor history={history} />)
+    const historyPanel = sceneHistoryDockviewMock.getPanel('compose-history-panel')
+
+    rerender(<ComposeEditor />)
+
+    expect(historyPanel?.api.close).toHaveBeenCalledTimes(1)
+    expect(sceneHistoryDockviewMock.getPanel('compose-history-panel')).toBeUndefined()
   })
 
   it('runs history shortcuts from editor inputs while preserving the controlled panel override', () => {
@@ -789,7 +829,7 @@ describe('ComposeEditor', () => {
     expect(history.redo).toHaveBeenCalledTimes(1)
   })
 
-  it('OpenSpec: editor-workspace-layout / Dockview 场景历史布局 / 调整历史高度', () => {
+  it('OpenSpec: editor-workspace-layout / Dockview 场景工具布局 / 调整下方工具高度', () => {
     render(<ComposeEditor history={createHistoryController()} />)
     expect(sceneHistoryDockviewMock.addGroup).toHaveBeenCalledWith({
       direction: 'right',
@@ -799,7 +839,7 @@ describe('ComposeEditor', () => {
     expect(sceneHistoryDockviewMock.addGroup).toHaveBeenCalledWith({
       constraints: { minimumHeight: 120 },
       direction: 'below',
-      id: 'compose-history-group',
+      id: 'compose-scene-tools-group',
       initialHeight: 192,
       referenceGroup: 'compose-scene-content-group',
     })
@@ -810,10 +850,12 @@ describe('ComposeEditor', () => {
       }),
     )
     expect(sceneHistoryDockviewMock.addGroup).toHaveBeenCalledTimes(2)
-    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledTimes(2)
+    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledTimes(3)
+    expect(sceneHistoryDockviewMock.getPanel('compose-component-library-panel')?.api.setActive)
+      .toHaveBeenCalledTimes(1)
   })
 
-  it('OpenSpec: editor-workspace-layout / Dockview 场景历史布局 / 编辑器内容更新', () => {
+  it('OpenSpec: editor-workspace-layout / Dockview 场景工具布局 / 编辑器内容更新', () => {
     const firstHistory = createHistoryController()
     const { rerender } = render(
       <ComposeEditor history={firstHistory} slots={{ inspector: '第一版属性' }} />,
@@ -833,7 +875,7 @@ describe('ComposeEditor', () => {
     expect(screen.getByRole('button', { name: '最新动作' })).toBeInTheDocument()
     expect(screen.getByText('第二版属性')).toBeInTheDocument()
     expect(screen.getByTestId('scene-history-dockview')).toBe(nestedDockview)
-    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledTimes(2)
+    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledTimes(3)
     expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
   })
 
@@ -843,7 +885,7 @@ describe('ComposeEditor', () => {
     expect(screen.getByTestId('default-scene-tree')).toBeEmptyDOMElement()
     expect(screen.getAllByRole('status')).toHaveLength(6)
     expect(screen.getByText('舞台工具栏')).toBeInTheDocument()
-    expect(screen.getByText('组件库内容')).toBeInTheDocument()
+    expect(screen.getByText('基础组件内容')).toBeInTheDocument()
     expect(screen.getByText('连接资源 Provider 以浏览文件')).toBeInTheDocument()
     expect(screen.getByText('组件属性内容')).toBeInTheDocument()
     expect(screen.getByText('事务日志内容')).toBeInTheDocument()

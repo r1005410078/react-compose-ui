@@ -74,7 +74,6 @@ import {
   CanvasPanel,
   PageDocumentPanel,
   ComposeCommandPanel,
-  ComponentLibraryPanel,
   InspectorPanel,
   SceneGraphPanel,
   TransactionLogPanel,
@@ -166,7 +165,6 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
 
 const workspaceComponents = {
   [WORKSPACE_COMPONENT_IDS.scene]: SceneGraphPanel,
-  [WORKSPACE_COMPONENT_IDS.componentLibrary]: ComponentLibraryPanel,
   [WORKSPACE_COMPONENT_IDS.canvas]: CanvasPanel,
   [WORKSPACE_COMPONENT_IDS.inspector]: InspectorPanel,
   [WORKSPACE_COMPONENT_IDS.transactionLog]: TransactionLogPanel,

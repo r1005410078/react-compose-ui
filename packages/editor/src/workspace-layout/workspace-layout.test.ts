@@ -71,14 +71,15 @@ describe('initializeWorkspace', () => {
     expect(spies.addEdgeGroup).toHaveBeenNthCalledWith(3, 'bottom', {
       id: WORKSPACE_GROUP_IDS.bottom,
       ...WORKSPACE_SIZES.bottom,
+      collapsed: true,
     })
-    expect(spies.addPanel).toHaveBeenCalledTimes(7)
+    expect(spies.addPanel).toHaveBeenCalledTimes(6)
     expect(panels.get(WORKSPACE_PANEL_IDS.scene)?.api.setActive)
       .toHaveBeenCalledTimes(1)
     expect(edgeGroups.get('bottom')).toEqual(
       expect.objectContaining({ id: WORKSPACE_GROUP_IDS.bottom }),
     )
-    expect(panels.get(WORKSPACE_PANEL_IDS.transactionLog)?.api.setActive)
+    expect(panels.get(WORKSPACE_PANEL_IDS.assetBrowser)?.api.setActive)
       .toHaveBeenCalledTimes(1)
   })
 
@@ -90,16 +91,11 @@ describe('initializeWorkspace', () => {
     const sceneOptions = spies.addPanel.mock.calls.find(
       ([options]) => options.id === WORKSPACE_PANEL_IDS.scene,
     )?.[0]
-    const libraryOptions = spies.addPanel.mock.calls.find(
-      ([options]) => options.id === WORKSPACE_PANEL_IDS.componentLibrary,
-    )?.[0]
-
     expect(sceneOptions).toEqual(expect.objectContaining({
       position: { referenceGroup: WORKSPACE_GROUP_IDS.scene },
     }))
-    expect(libraryOptions).toEqual(expect.objectContaining({
-      inactive: true,
-      position: { referenceGroup: WORKSPACE_GROUP_IDS.scene },
+    expect(spies.addPanel).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: 'compose-component-library',
     }))
   })
 
@@ -107,7 +103,7 @@ describe('initializeWorkspace', () => {
     expect(WORKSPACE_SIZES.inspector).toEqual({ initialSize: 400, minimumSize: 300 })
   })
 
-  it('OpenSpec: editor-workspace-layout / 资源面板标签 / 将三个底部面板放入一组并保持日志活动', () => {
+  it('OpenSpec: editor-workspace-layout / 资源面板标签 / 将三个底部面板按资源、命令、日志放入默认收起的一组', () => {
     const { api, spies } = createWorkspaceApi()
 
     initializeWorkspace(api)
@@ -124,6 +120,7 @@ describe('initializeWorkspace', () => {
 
     expect(transactionOptions).toEqual(
       expect.objectContaining({
+        inactive: true,
         position: { referenceGroup: WORKSPACE_GROUP_IDS.bottom },
       }),
     )
@@ -135,10 +132,17 @@ describe('initializeWorkspace', () => {
     )
     expect(assetOptions).toEqual(
       expect.objectContaining({
-        inactive: true,
         position: { referenceGroup: WORKSPACE_GROUP_IDS.bottom },
       }),
     )
+    expect(spies.addPanel.mock.calls.map(([options]) => options.id)).toEqual([
+      WORKSPACE_PANEL_IDS.canvas,
+      WORKSPACE_PANEL_IDS.scene,
+      WORKSPACE_PANEL_IDS.inspector,
+      WORKSPACE_PANEL_IDS.assetBrowser,
+      WORKSPACE_PANEL_IDS.command,
+      WORKSPACE_PANEL_IDS.transactionLog,
+    ])
   })
 
   it('is idempotent when initialization is replayed', () => {
@@ -149,6 +153,6 @@ describe('initializeWorkspace', () => {
 
     expect(spies.addGroup).toHaveBeenCalledTimes(1)
     expect(spies.addEdgeGroup).toHaveBeenCalledTimes(3)
-    expect(spies.addPanel).toHaveBeenCalledTimes(7)
+    expect(spies.addPanel).toHaveBeenCalledTimes(6)
   })
 })
