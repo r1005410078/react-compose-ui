@@ -1,8 +1,10 @@
 {
   "name": "@compose-ui/component-registry",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
