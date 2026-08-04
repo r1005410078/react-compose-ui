@@ -62,6 +62,20 @@ export type ComposeStageShortcutAction =
   | 'edit.delete'
 
 /**
+ * 可由宿主接管的 Stage 动作。
+ *
+ * @remarks
+ * 临时平移是按住不放的手势，其按下与松开必须由 Stage 的手势生命周期成对处理，
+ * 因此不在可接管范围内。
+ *
+ * @public
+ */
+export type ComposeStageDelegatableAction = Exclude<
+  ComposeStageShortcutAction,
+  'stage.temporaryPan'
+>
+
+/**
  * Stage 动作到一个或多个单次键位的覆盖配置。
  *
  * @public
@@ -113,6 +127,17 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly onToolChange?: (tool: ComposeStageTool) => void
   /** 覆盖 Stage 默认动作键位；动作空数组表示禁用。 */
   readonly shortcuts?: ComposeStageShortcuts
+  /**
+   * 由宿主接管可配置动作的执行。
+   *
+   * @remarks
+   * 命中动作时 Stage 先调用该回调。返回 `true` 表示宿主已执行，Stage 阻止默认行为并停止
+   * 内建处理；返回 `false` 或未提供该属性时 Stage 走内建实现。宿主可据此让键盘、工具栏与
+   * 命令面板共用同一份动作实现，避免同一动作出现多套行为。
+   *
+   * 临时平移、Escape 取消与方向键微调不参与接管。
+   */
+  readonly onShortcutAction?: (action: ComposeStageDelegatableAction) => boolean
   readonly selectedIds: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   /** 隐式 Canvas 输出区域当前是否为 Inspector 目标。 */

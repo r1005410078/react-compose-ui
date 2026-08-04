@@ -8,6 +8,8 @@ import './styles.css'
 
 export { ComposeCommandPanel } from './command-panel'
 export type {
+  ComposeCommandAction,
+  ComposeCommandActionGroup,
   ComposeCommandPanelProps,
   ComposeCommandPreset,
   ComposeCommandPresetField,

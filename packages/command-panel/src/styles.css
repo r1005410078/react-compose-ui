@@ -22,9 +22,66 @@
 }
 
 .command-panel__form,
+.command-panel__search,
 .command-panel__event {
   border-bottom: 1px solid var(--command-panel-border);
   padding: 8px;
+}
+
+.command-panel__search-input {
+  width: 100%;
+  padding: 4px 6px;
+}
+
+.command-panel__search-empty {
+  margin: 6px 0 0;
+  color: var(--command-panel-muted);
+}
+
+.command-panel__results {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  /* 结果区自身滚动，避免长列表把事件日志推出可视区域。 */
+  max-height: 240px;
+  overflow: auto;
+}
+
+.command-panel__result-category {
+  display: block;
+  padding: 4px 6px 2px;
+  color: var(--command-panel-muted);
+  font-size: 11px;
+}
+
+.command-panel__result {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.command-panel__result[aria-selected='true'] {
+  background: color-mix(in srgb, var(--command-panel-accent) 22%, transparent);
+}
+
+.command-panel__result[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.command-panel__result-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.command-panel__result-reason,
+.command-panel__result-shortcut {
+  flex: 0 0 auto;
+  color: var(--command-panel-muted);
+  font-size: 11px;
 }
 
 .command-panel__field {

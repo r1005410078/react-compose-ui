@@ -96,6 +96,7 @@ import {
 import type {
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
+  ComposeStageDelegatableAction,
   ComposeStageProps,
 } from '../types'
 import { StageScrollbar } from '../scrollbar'
@@ -485,6 +486,14 @@ const STAGE_SHORTCUT_ACTIONS = [
   'edit.delete',
 ] as const satisfies readonly ComposeStageShortcutAction[]
 
+/**
+ * 可交给宿主接管的动作。
+ *
+ * 临时平移按下后要等松开才结束，接管方无法表达这段生命周期，因此排除在外。
+ */
+const DELEGATABLE_STAGE_ACTIONS = STAGE_SHORTCUT_ACTIONS
+  .filter((action) => action !== 'stage.temporaryPan') as readonly ComposeStageDelegatableAction[]
+
 const DEFAULT_STAGE_SHORTCUTS: Readonly<
   Record<ComposeStageShortcutAction, readonly ComposeStageKeybinding[]>
 > = {
@@ -616,6 +625,7 @@ function ComposeStageReady({
   onViewportChange,
   tool,
   onToolChange,
+  onShortcutAction,
   shortcuts,
   selectedIds,
   onSelectedIdsChange,
@@ -1469,6 +1479,15 @@ function ComposeStageReady({
     if (event.key === 'Escape') {
       cancelGesture()
       return
+    }
+    // 宿主可以用统一的动作实现接管可配置动作，避免键盘、工具栏与命令面板各有一套行为。
+    // 必须排在内建分支之前，且只在宿主确认接管时才短路，未接管时行为与不传该属性一致。
+    if (onShortcutAction) {
+      const delegated = DELEGATABLE_STAGE_ACTIONS.find(actionMatches)
+      if (delegated !== undefined && onShortcutAction(delegated)) {
+        event.preventDefault()
+        return
+      }
     }
     if (actionMatches('stage.selectTool')) {
       onToolChange?.('select')

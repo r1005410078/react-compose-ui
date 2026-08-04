@@ -14,6 +14,7 @@ export type {
   ComposeStageLayoutRuntime,
   ComposeStageProps,
   ComposeStageShortcutAction,
+  ComposeStageDelegatableAction,
   ComposeStageShortcuts,
   ComposeStageTool,
 } from './types'

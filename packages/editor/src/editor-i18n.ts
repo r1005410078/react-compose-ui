@@ -1,5 +1,8 @@
 import type { ComposeLocale } from '@compose-ui/ui-context'
-import type { ComposeEditorShortcutAction } from './editor-preferences'
+import type {
+  ComposeEditorShortcutAction,
+  ComposeEditorShortcutScope,
+} from './editor-preferences'
 
 type FormatMessage = (
   id: string,
@@ -286,6 +289,104 @@ const actionLabels: Record<
     'history.undo': 'Undo',
     'history.redo': 'Redo',
   },
+}
+
+const actionCategories: Record<
+  ComposeLocale,
+  Record<ComposeEditorShortcutScope, string>
+> = {
+  'zh-CN': { editor: '编辑器', stage: '舞台', history: '历史' },
+  'en-US': { editor: 'Editor', stage: 'Stage', history: 'History' },
+}
+
+/** 命令目录中动作不可用的原因；措辞需说明「缺什么」而非只说「不可用」。 */
+const actionReasons = {
+  'zh-CN': {
+    noSelection: '请先选中对象',
+    needsTwoEntities: '请至少选中两个对象',
+    needsOneContainer: '请选中单个容器',
+    nothingToUndo: '没有可撤销的操作',
+    nothingToRedo: '没有可重做的操作',
+    layoutPending: '自动布局仍在加载',
+    flowGroup: '自动布局 Flow 子项不能参与编组；请先转为 Absolute',
+    flowUngroup: '自动布局 Flow 子项不能参与解组；请先转为 Absolute',
+  },
+  'en-US': {
+    noSelection: 'Select an object first',
+    needsTwoEntities: 'Select at least two objects',
+    needsOneContainer: 'Select a single container',
+    nothingToUndo: 'Nothing to undo',
+    nothingToRedo: 'Nothing to redo',
+    layoutPending: 'Auto layout is still loading',
+    flowGroup: 'Auto layout flow children cannot be grouped; convert them to absolute first',
+    flowUngroup: 'Auto layout flow children cannot be ungrouped; convert them to absolute first',
+  },
+} as const
+
+/**
+ * 动作目录不可用原因的解析结果。
+ *
+ * @remarks
+ * 显式声明为 string 而非从 `as const` 推导：宿主可以通过 formatMessage 覆盖任意文案，
+ * 沿用字面量联合会让覆盖结果不可赋值。
+ *
+ * @internal
+ */
+export interface EditorActionReasons {
+  readonly noSelection: string
+  readonly needsTwoEntities: string
+  readonly needsOneContainer: string
+  readonly nothingToUndo: string
+  readonly nothingToRedo: string
+  readonly layoutPending: string
+  readonly flowGroup: string
+  readonly flowUngroup: string
+}
+
+/**
+ * 解析命令目录使用的动作分组名称。
+ *
+ * @param locale - 当前界面语言。
+ * @param scope - 动作作用域。
+ * @param formatMessage - 宿主覆盖文案的可选钩子。
+ * @returns 该作用域的本地化分组名。
+ */
+export function getEditorActionCategory(
+  locale: ComposeLocale,
+  scope: ComposeEditorShortcutScope,
+  formatMessage: FormatMessage = (_id, fallback) => fallback,
+) {
+  return formatMessage(`editor.actionCategory.${scope}`, actionCategories[locale][scope])
+}
+
+/**
+ * 解析命令目录使用的不可用原因文案。
+ *
+ * @param locale - 当前界面语言。
+ * @param formatMessage - 宿主覆盖文案的可选钩子。
+ * @returns 该语言下的全部原因文案。
+ */
+export function getEditorActionReasons(
+  locale: ComposeLocale,
+  formatMessage: FormatMessage = (_id, fallback) => fallback,
+): EditorActionReasons {
+  const current = actionReasons[locale]
+  return {
+    noSelection: formatMessage('editor.actionReason.noSelection', current.noSelection),
+    needsTwoEntities: formatMessage(
+      'editor.actionReason.needsTwoEntities',
+      current.needsTwoEntities,
+    ),
+    needsOneContainer: formatMessage(
+      'editor.actionReason.needsOneContainer',
+      current.needsOneContainer,
+    ),
+    nothingToUndo: formatMessage('editor.actionReason.nothingToUndo', current.nothingToUndo),
+    nothingToRedo: formatMessage('editor.actionReason.nothingToRedo', current.nothingToRedo),
+    layoutPending: formatMessage('editor.actionReason.layoutPending', current.layoutPending),
+    flowGroup: formatMessage('editor.actionReason.flowGroup', current.flowGroup),
+    flowUngroup: formatMessage('editor.actionReason.flowUngroup', current.flowUngroup),
+  }
 }
 
 /** 编辑器内建文案的解析结果。 @internal */
