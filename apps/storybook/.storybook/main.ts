@@ -1,17 +1,28 @@
 import type { StorybookConfig } from '@storybook/react-vite'
 import { fileURLToPath } from 'node:url'
-import { resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join, resolve } from 'node:path'
 
 const configDirectory = fileURLToPath(new URL('.', import.meta.url))
+const require = createRequire(import.meta.url)
+
+/**
+ * bunfig.toml 使用 `linker = "isolated"`，addon 不会被提升到根 node_modules，
+ * Storybook 按裸包名查找时可能落空。解析到包自身的真实目录可以让 addon 与
+ * framework 在隔离布局下稳定命中。
+ */
+function getAbsolutePath(packageName: string): string {
+  return dirname(require.resolve(join(packageName, 'package.json')))
+}
 
 const config: StorybookConfig = {
   stories: ['../../../packages/*/src/**/*.stories.@(ts|tsx)'],
   addons: [
-    '@storybook/addon-a11y',
-    '@storybook/addon-vitest',
+    getAbsolutePath('@storybook/addon-a11y'),
+    getAbsolutePath('@storybook/addon-vitest'),
   ],
   framework: {
-    name: '@storybook/react-vite',
+    name: getAbsolutePath('@storybook/react-vite'),
     options: {},
   },
   async viteFinal(config) {
@@ -32,7 +43,6 @@ const config: StorybookConfig = {
       },
     }
   },
-  docs: { autodocs: false },
 }
 
 export default config
