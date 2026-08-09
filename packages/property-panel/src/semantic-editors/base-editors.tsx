@@ -7,6 +7,7 @@ import {
   useComposePropertyPanelColorEditorPort,
   useComposePropertyPanelPaintEditorPort,
 } from '../property-panel/editor-ports'
+import { ComposePropertyPanelBoundValue } from '../bound-value'
 import type {
   PropertyPanelRenderer,
   PropertyPanelRendererBindingController,
@@ -184,30 +185,28 @@ function SemanticNumberInput({
     }
   }
   const constraints = fieldSchema ? inspectSchema(fieldSchema).constraints : {}
+  if (target?.binding) return <ComposePropertyPanelBoundValue target={target} />
   return (
-    <div className="property-panel__binding-target">
-      <div className="property-panel__binding-control">
-        <input
-          aria-invalid={error ? 'true' : undefined}
-          aria-label={label}
-          disabled={readOnly && !bound}
-          max={constraints.max?.toString()}
-          min={constraints.min?.toString()}
-          readOnly={bound || readOnly}
-          step={constraints.step?.toString()}
-          type="number"
-          value={text}
-          onBlur={submit}
-          onChange={(event) => {
-            if (!bound) {
-              setDraft({ source: effectiveValue, text: event.target.value, error: undefined })
-            }
-          }}
-          onKeyDown={onKeyDown}
-        />
-        {error ? <span role="alert">{error}</span> : null}
-      </div>
-      {binding?.renderTrigger(targetId)}
+    <div className="property-panel__semantic-control">
+      <input
+        aria-invalid={error ? 'true' : undefined}
+        aria-label={label}
+        disabled={readOnly && !bound}
+        max={constraints.max?.toString()}
+        min={constraints.min?.toString()}
+        readOnly={bound || readOnly}
+        step={constraints.step?.toString()}
+        type="number"
+        value={text}
+        onBlur={submit}
+        onChange={(event) => {
+          if (!bound) {
+            setDraft({ source: effectiveValue, text: event.target.value, error: undefined })
+          }
+        }}
+        onKeyDown={onKeyDown}
+      />
+      {error ? <span role="alert">{error}</span> : null}
     </div>
   )
 }
@@ -335,21 +334,17 @@ function AngleEditor(props: PropertyPanelRendererProps) {
   const target = props.binding?.getTarget('value')
   const bound = Boolean(target?.binding)
   const effectiveValue = target?.effectiveValue ?? props.value
+  if (target?.binding) return <ComposePropertyPanelBoundValue target={target} />
   return (
     <div className="property-panel__semantic" data-semantic-editor="angle">
-      <div className="property-panel__binding-target">
-        <div className="property-panel__binding-control">
-          <ComposeAnglePicker
-            label={props.label}
-            readOnly={props.readOnly || bound}
-            value={typeof effectiveValue === 'number' ? effectiveValue : 0}
-            onValueCommit={(nextValue) => {
-              if (!bound) props.commit(nextValue, 'commit')
-            }}
-          />
-        </div>
-        {props.binding?.renderTrigger('value')}
-      </div>
+      <ComposeAnglePicker
+        label={props.label}
+        readOnly={props.readOnly || bound}
+        value={typeof effectiveValue === 'number' ? effectiveValue : 0}
+        onValueCommit={(nextValue) => {
+          if (!bound) props.commit(nextValue, 'commit')
+        }}
+      />
     </div>
   )
 }
@@ -358,20 +353,16 @@ function VisibilityEditor(props: PropertyPanelRendererProps) {
   const bindingTarget = props.binding?.getTarget('value')
   const bound = Boolean(bindingTarget?.binding)
   const value = Boolean(bindingTarget?.effectiveValue ?? props.value)
+  if (bindingTarget?.binding) return <ComposePropertyPanelBoundValue target={bindingTarget} />
   return (
-    <div className="property-panel__binding-target">
-      <div className="property-panel__binding-control">
-        <input
-          aria-label={props.label}
-          aria-readonly={bound ? 'true' : undefined}
-          checked={value}
-          disabled={props.readOnly || bound}
-          type="checkbox"
-          onChange={(event) => props.commit(event.target.checked, 'input')}
-        />
-      </div>
-      {props.binding?.renderTrigger('value')}
-    </div>
+    <input
+      aria-label={props.label}
+      aria-readonly={bound ? 'true' : undefined}
+      checked={value}
+      disabled={props.readOnly || bound}
+      type="checkbox"
+      onChange={(event) => props.commit(event.target.checked, 'input')}
+    />
   )
 }
 
@@ -391,24 +382,20 @@ function ColorEditor(props: PropertyPanelRendererProps) {
       ? '完整属性值不符合 Schema'
       : result.issues[0]?.message)
   }
+  if (bindingTarget?.binding) return <ComposePropertyPanelBoundValue target={bindingTarget} />
   return (
     <div
       className="property-panel__semantic property-panel__semantic--color"
       data-color-fallback={fallback ? 'true' : 'false'}
       data-testid="semantic-editor-color"
     >
-      <div className="property-panel__binding-target">
-        <div className="property-panel__binding-control">
-          <ComposeColorPicker
-            label={props.label}
-            readOnly={props.readOnly || bound}
-            value={value}
-            onEyedropperFallback={colorEditor?.onEyedropperFallback}
-            onValueChange={updateColor}
-          />
-        </div>
-        {props.binding?.renderTrigger('value')}
-      </div>
+      <ComposeColorPicker
+        label={props.label}
+        readOnly={props.readOnly || bound}
+        value={value}
+        onEyedropperFallback={colorEditor?.onEyedropperFallback}
+        onValueChange={updateColor}
+      />
       {error ? <span role="alert">{error}</span> : null}
     </div>
   )
@@ -429,21 +416,17 @@ function PaintEditor(props: PropertyPanelRendererProps) {
       ? '完整属性值不符合 Schema'
       : result.issues[0]?.message)
   }
+  if (bindingTarget?.binding) return <ComposePropertyPanelBoundValue target={bindingTarget} />
   return (
     <div className="property-panel__semantic property-panel__semantic--paint" data-testid="semantic-editor-paint">
-      <div className="property-panel__binding-target">
-        <div className="property-panel__binding-control">
-          <ComposePaintPicker
-            label={props.label}
-            readOnly={props.readOnly || bound}
-            value={value}
-            onEyedropperFallback={paintEditor?.onEyedropperFallback}
-            onOpenChange={paintEditor?.onOpenChange}
-            onValueChange={updatePaint}
-          />
-        </div>
-        {props.binding?.renderTrigger('value')}
-      </div>
+      <ComposePaintPicker
+        label={props.label}
+        readOnly={props.readOnly || bound}
+        value={value}
+        onEyedropperFallback={paintEditor?.onEyedropperFallback}
+        onOpenChange={paintEditor?.onOpenChange}
+        onValueChange={updatePaint}
+      />
       {error ? <span role="alert">{error}</span> : null}
     </div>
   )
@@ -454,26 +437,22 @@ function AlignmentEditor(props: PropertyPanelRendererProps) {
   const bindingTarget = props.binding?.getTarget('value')
   const bound = Boolean(bindingTarget?.binding)
   const value = bindingTarget?.effectiveValue ?? props.value
+  if (bindingTarget?.binding) return <ComposePropertyPanelBoundValue target={bindingTarget} />
   return (
-    <div className="property-panel__binding-target">
-      <div className="property-panel__binding-control">
-        <select
-          aria-label={props.label}
-          aria-readonly={bound ? 'true' : undefined}
-          disabled={props.readOnly && !bound}
-          value={String(value ?? '')}
-          onChange={(event) => {
-            if (!bound) props.commit(event.target.value, 'input')
-          }}
-        >
-          {options.map((option) => {
-            const key = String(option)
-            return <option key={key} value={key}>{props.metadata.optionLabels?.[key] ?? key}</option>
-          })}
-        </select>
-      </div>
-      {props.binding?.renderTrigger('value')}
-    </div>
+    <select
+      aria-label={props.label}
+      aria-readonly={bound ? 'true' : undefined}
+      disabled={props.readOnly && !bound}
+      value={String(value ?? '')}
+      onChange={(event) => {
+        if (!bound) props.commit(event.target.value, 'input')
+      }}
+    >
+      {options.map((option) => {
+        const key = String(option)
+        return <option key={key} value={key}>{props.metadata.optionLabels?.[key] ?? key}</option>
+      })}
+    </select>
   )
 }
 

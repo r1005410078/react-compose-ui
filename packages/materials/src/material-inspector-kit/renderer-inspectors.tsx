@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import {
   ComposePropertyPanel,
+  ComposePropertyPanelBoundValue,
   type ComposePropertyPanelBindingConfig,
   type ComposePropertyPanelRenderer,
 } from '@compose-ui/property-panel'
@@ -101,24 +102,20 @@ const TEXT_CONTENT_RENDERER: ComposePropertyPanelRenderer = {
     const target = binding?.getTarget('value')
     const bound = Boolean(target?.binding)
     const effectiveValue = target?.effectiveValue ?? value
+    if (target?.binding) return <ComposePropertyPanelBoundValue target={target} />
     return (
-      <div className="property-panel__binding-target">
-        <div className="property-panel__binding-control">
-          <input
-            aria-label={label}
-            disabled={readOnly && !bound}
-            readOnly={readOnly || bound}
-            type="text"
-            value={typeof effectiveValue === 'string' || typeof effectiveValue === 'number'
-              ? String(effectiveValue)
-              : ''}
-            onChange={(event) => {
-              if (!readOnly && !bound) commit(event.target.value, 'input')
-            }}
-          />
-        </div>
-        {binding?.renderTrigger('value')}
-      </div>
+      <input
+        aria-label={label}
+        disabled={readOnly && !bound}
+        readOnly={readOnly || bound}
+        type="text"
+        value={typeof effectiveValue === 'string' || typeof effectiveValue === 'number'
+          ? String(effectiveValue)
+          : ''}
+        onChange={(event) => {
+          if (!readOnly && !bound) commit(event.target.value, 'input')
+        }}
+      />
     )
   },
 }

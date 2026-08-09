@@ -14,6 +14,8 @@ import './styles.css'
 
 export { ComposePropertyPanelBindingTargetRow } from './binding-target-row'
 export type { ComposePropertyPanelBindingTargetRowProps } from './binding-target-row'
+export { ComposePropertyPanelBoundValue } from './bound-value'
+export type { ComposePropertyPanelBoundValueProps } from './bound-value'
 
 export {
   ComposePropertyPanel,

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import * as v from 'valibot'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -30,6 +30,7 @@ const semanticSchema = v.object({
     v.title('尺寸'),
     v.metadata({
       propertyPanel: {
+        binding: { enabled: true },
         editor: 'size',
         sizePresets: [
           { value: 'hd', width: 1280, height: 720 },
@@ -100,8 +101,21 @@ describe('OpenSpec: property-panel / 内建语义属性编辑器', () => {
     )
 
     expect(screen.getByTestId('semantic-editor-vector2')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '绑定 X' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '绑定 Y' })).toBeInTheDocument()
+    const bindingEntry = screen.getByRole('button', { name: '绑定 位置' })
+    expect(bindingEntry.closest('[data-property-part="actions"]')).not.toBeNull()
+    fireEvent.click(bindingEntry)
+    const positionTargets = screen.getByRole('menu', { name: '位置绑定目标' })
+    expect(within(positionTargets).getByRole('menuitem', { name: '绑定 X' })).toBeInTheDocument()
+    expect(within(positionTargets).getByRole('menuitem', { name: '绑定 Y' })).toBeInTheDocument()
+    fireEvent.keyDown(positionTargets, { key: 'Escape' })
+    const sizeEntry = screen.getByRole('button', { name: '绑定 尺寸' })
+    expect(sizeEntry.closest('[data-property-part="actions"]')).not.toBeNull()
+    fireEvent.click(sizeEntry)
+    const sizeTargets = screen.getByRole('menu', { name: '尺寸绑定目标' })
+    expect(within(sizeTargets).getByRole('menuitem', { name: '绑定 W' })).toBeInTheDocument()
+    expect(within(sizeTargets).getByRole('menuitem', { name: '绑定 H' })).toBeInTheDocument()
+    expect(screen.getByTestId('semantic-editor-vector2').querySelector('.property-panel__binding-target'))
+      .toBeNull()
     expect(screen.getByTestId('semantic-editor-vector2').closest('.property-panel__field'))
       .toHaveAttribute('data-property-layout', 'inline')
     expect(screen.getByTestId('semantic-editor-size').closest('.property-panel__field'))
@@ -109,6 +123,40 @@ describe('OpenSpec: property-panel / 内建语义属性编辑器', () => {
     expect(COMPOSE_PROPERTY_PANEL_BASE_EDITOR_IDS).toEqual([
       'vector2', 'size', 'angle', 'opacity', 'corner-radius', 'stroke-width', 'visibility', 'color', 'paint', 'alignment', 'map', 'node',
     ])
+  })
+
+  it('OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / 复合数值输入分别绑定', () => {
+    function Harness() {
+      const [bindings, setBindings] = useState<readonly {
+        target: { path: readonly (string | number)[]; targetId: string }
+        variableId: string
+      }[]>([])
+      return (
+        <ComposePropertyPanel
+          binding={{
+            value: bindings,
+            variables: [{ id: 'page.x', label: '页面 X', scope: 'page', value: 99 }],
+            onChange: setBindings,
+          }}
+          schema={semanticSchema}
+          value={semanticValue}
+        />
+      )
+    }
+    render(<Harness />)
+
+    fireEvent.click(screen.getByRole('button', { name: '绑定 位置' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '绑定 X' }))
+    fireEvent.click(screen.getByRole('button', { name: /页面 X/u }))
+
+    expect(screen.queryByLabelText('位置 X')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /更换绑定 X.*页面 X/u })).toBeInTheDocument()
+    expect(screen.getByLabelText('位置 Y')).toHaveValue(24)
+    const entry = screen.getByRole('button', { name: '绑定 位置' })
+    expect(entry).toHaveAttribute('data-binding-state', 'bound')
+    fireEvent.click(entry)
+    expect(screen.getByRole('menuitem', { name: '解绑 X' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: '绑定 Y' })).toBeInTheDocument()
   })
 
   it('OpenSpec: property-panel / 内建语义属性编辑器 / 宿主覆盖内建 editor', () => {

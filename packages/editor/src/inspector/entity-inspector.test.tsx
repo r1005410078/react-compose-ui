@@ -322,8 +322,9 @@ describe('EntityInspector missing Component sections', () => {
     expect(screen.queryByRole('button', { name: '内容' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '主要' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByLabelText('标题')).toHaveAttribute('readonly')
-    expect(screen.getByRole('button', { name: /更换绑定\s*标题/u })).toBeEnabled()
+    expect(screen.queryByLabelText('标题')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '更换绑定 标题：title' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '解绑 标题' })).toBeEnabled()
     expect(screen.queryByRole('group', { name: 'On click' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '高级' }))
     expect(screen.getByRole('group', { name: 'On click' })).toBeInTheDocument()
@@ -345,7 +346,8 @@ describe('EntityInspector missing Component sections', () => {
         scriptScope={scope}
       />,
     )
-    expect(screen.getByRole('button', { name: /更换绑定\s*标题/u })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '更换绑定 标题：title' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '解绑 标题' })).toBeDisabled()
     expect(within(screen.getByRole('group', { name: 'On click' })).getByRole('button'))
       .toBeDisabled()
 

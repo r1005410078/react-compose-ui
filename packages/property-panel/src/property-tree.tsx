@@ -1,4 +1,4 @@
-import { createContext, Fragment, useContext, useEffect, useId, useRef, useState } from 'react'
+import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import * as v from 'valibot'
 import {
@@ -34,12 +34,18 @@ import {
 } from './property-bindings'
 import type { PropertyBindingMutation } from './property-bindings'
 import {
+  planPropertyActionRail,
+  resolvePropertyBindingEntryState,
+} from './binding-entry-model'
+import type { PropertyBindingEntryState } from './binding-entry-model'
+import {
   createInitialValue,
   getObjectEntries,
   getValueAtPath,
   inspectSchema,
 } from './schema-model'
 import { usePropertyPanelMessages } from './property-panel-i18n'
+import { ComposePropertyPanelBoundValue } from './bound-value'
 
 type RuntimeSchema = v.GenericSchema & {
   entries?: Readonly<Record<string, v.GenericSchema>>
@@ -130,12 +136,14 @@ interface PropertyBindingView {
   activeTarget?: PropertyPanelRendererBindingTargetState
   activeAnchor?: HTMLElement
   openTarget: (target: PropertyPanelRendererBindingTargetState, anchor?: HTMLElement) => void
+  unbindTarget: (target: PropertyPanelRendererBindingTargetState) => void
   closePicker: () => void
   readOnly: boolean
 }
 const BindingContext = createContext<PropertyBindingView>({
   resolvedTargets: new Map(),
   openTarget: () => undefined,
+  unbindTarget: () => undefined,
   closePicker: () => undefined,
   readOnly: false,
 })
@@ -231,6 +239,15 @@ export function PropertyTree({
           activeTarget: activeBinding?.target,
           activeAnchor: activeBinding?.anchor,
           openTarget: (target, anchor) => setActiveBinding({ target, anchor }),
+          unbindTarget: (target) => {
+            if (target.readOnly || !binding) return
+            binding.onChange(
+              binding.value.filter((item) => (
+                createBindingAddressKey(item.target) !== createBindingAddressKey(target.address)
+              )),
+              { reason: 'unbind', target: target.address },
+            )
+          },
           closePicker,
           readOnly,
         }}>
@@ -270,48 +287,164 @@ export function PropertyTree({
   )
 }
 
-function RowActionRail({ actions, label }: { actions: readonly RowAction[]; label: string }) {
+function RowActionRail({
+  actions,
+  bindingTargets = [],
+  label,
+}: {
+  actions: readonly RowAction[]
+  bindingTargets?: readonly PropertyPanelRendererBindingTargetState[]
+  label: string
+}) {
   const messages = usePropertyPanelMessages()
   const actionWidth = useContext(ActionWidthContext)
+  const bindingView = useContext(BindingContext)
   const rootRef = useRef<HTMLDivElement>(null)
   const overflowButtonRef = useRef<HTMLButtonElement>(null)
-  const [menuMode, setMenuMode] = useState<'overflow' | null>(null)
+  const bindingButtonRef = useRef<HTMLButtonElement>(null)
+  const [menuMode, setMenuMode] = useState<'overflow' | 'bindings' | 'combined' | null>(null)
   const contextMenu = useComposeContextMenu<readonly RowAction[]>()
-  const ordered = [...actions].sort((left, right) => (
+  const ordered = useMemo(() => [...actions].sort((left, right) => (
     left.priority - right.priority
     || Number(Boolean(left.disabled)) - Number(Boolean(right.disabled))
-  ))
-  const widthSlots = Math.max(1, Math.min(3, Math.floor((actionWidth - 6) / 27)))
-  // 复合字段把字段级绑定固定显示在分组标题；这类受控入口不能被折叠进“更多”菜单。
-  const slots = actions.some((action) => action.control)
-    ? Math.max(widthSlots, Math.min(3, actions.length))
-    : widthSlots
-  const hasOverflow = ordered.length > slots
-  const direct = hasOverflow ? ordered.slice(0, Math.max(0, slots - 1)) : ordered
-  const hidden = hasOverflow ? ordered.slice(Math.max(0, slots - 1)) : []
-  const menuActions = hidden
+  )), [actions])
+  const plan = planPropertyActionRail({
+    actionWidth,
+    actions: ordered,
+    targets: bindingTargets.map((target) => ({
+      id: target.address.targetId,
+      state: getBindingTargetEntryState(target),
+    })),
+  })
+  const direct = plan.directActionIds
+    .map((id) => ordered.find((action) => action.id === id))
+    .filter((action): action is RowAction => action !== undefined)
+  const menuActions = plan.overflowActionIds
+    .map((id) => ordered.find((action) => action.id === id))
+    .filter((action): action is RowAction => action !== undefined)
+  const bindingState = plan.bindingState
+  const directTarget = bindingTargets.length === 1 ? bindingTargets[0] : undefined
+  const bindingContextActions: readonly RowAction[] = useMemo(() => bindingTargets.map((target) => ({
+    id: `binding:${target.address.targetId}`,
+    label: target.binding ? messages.unbindBinding(target.label) : messages.bind(target.label),
+    priority: 5,
+    disabled: target.readOnly,
+    icon: target.binding ? <UnbindIcon /> : <BindingIcon />,
+    onSelect: () => {
+      if (target.binding) {
+        bindingView.unbindTarget(target)
+        return
+      }
+      bindingView.openTarget(
+        target,
+        bindingButtonRef.current ?? rootRef.current?.querySelector('button') ?? undefined,
+      )
+    },
+  })), [bindingTargets, bindingView, messages])
+  const contextActions = useMemo(
+    () => [...bindingContextActions, ...ordered],
+    [bindingContextActions, ordered],
+  )
 
   useEffect(() => {
     const row = rootRef.current?.closest('.property-panel__field, .property-panel__group-header')
-    if (!row || ordered.length === 0) return
+    if (!row || contextActions.length === 0) return
     const openContextMenu = (event: Event) => {
       if (!(event instanceof MouseEvent)) return
-      contextMenu.openAt(event, ordered)
+      contextMenu.openAt(event, contextActions)
     }
     row.addEventListener('contextmenu', openContextMenu)
     return () => row.removeEventListener('contextmenu', openContextMenu)
-  }, [contextMenu, ordered])
+  }, [contextActions, contextMenu])
+
+  const focusMenuAnchor = () => {
+    if (menuMode === 'overflow') overflowButtonRef.current?.focus()
+    else bindingButtonRef.current?.focus()
+  }
 
   const selectAction = (action: RowAction) => {
     if (action.disabled) return
     action.onSelect()
     setMenuMode(null)
-    overflowButtonRef.current?.focus()
+    focusMenuAnchor()
   }
+
+  const selectTarget = (target: PropertyPanelRendererBindingTargetState) => {
+    setMenuMode(null)
+    bindingView.openTarget(target, bindingButtonRef.current ?? undefined)
+  }
+
+  const renderBindingEntry = () => {
+    if (plan.bindingEntry === 'none' || !bindingState) return null
+    if (plan.bindingEntry === 'direct' && directTarget && !directTarget.binding && bindingView.config?.renderTrigger) {
+      const Trigger = bindingView.config.renderTrigger
+      return (
+        <span
+          className="property-panel__binding-entry"
+          data-binding-state={bindingState}
+          data-binding-visibility={bindingState === 'literal' ? 'contextual' : 'persistent'}
+        >
+          <Trigger target={directTarget} />
+        </span>
+      )
+    }
+    const opensMenu = plan.bindingEntry !== 'direct'
+    const ariaLabel = plan.bindingEntry === 'combined'
+      ? messages.moreActions(label)
+      : plan.bindingEntry === 'direct' && directTarget?.binding
+        ? messages.unbindBinding(directTarget.label)
+        : messages.bind(label)
+    const invalidTarget = bindingTargets.find((target) => getBindingTargetEntryState(target) === 'invalid')
+    const title = invalidTarget
+      ? messages.issue(invalidTarget.status as PropertyPanelBindingIssue['code'])
+      : plan.bindingEntry === 'direct' && directTarget
+        ? getBindingTargetTitle(directTarget, messages.unknownVariable, messages.bind(directTarget.label))
+        : ariaLabel
+    const bindingDescription = bindingTargets
+      .filter((target) => target.binding)
+      .map((target) => getBindingTargetTitle(target, messages.unknownVariable, target.label))
+      .join('；') || undefined
+    return (
+      <button
+        aria-description={bindingDescription}
+        aria-expanded={opensMenu ? menuMode === 'bindings' || menuMode === 'combined' : undefined}
+        aria-haspopup={opensMenu ? 'menu' : undefined}
+        aria-invalid={bindingState === 'invalid' ? 'true' : undefined}
+        aria-label={ariaLabel}
+        className="property-panel__binding-entry"
+        data-binding-entry={plan.bindingEntry}
+        data-binding-state={bindingState}
+        data-binding-visibility={bindingState === 'literal' ? 'contextual' : 'persistent'}
+        disabled={plan.bindingEntry === 'direct' && directTarget?.readOnly}
+        ref={bindingButtonRef}
+        title={title}
+        type="button"
+        onClick={(event) => {
+          if (plan.bindingEntry === 'direct' && directTarget) {
+            if (directTarget.binding) {
+              bindingView.unbindTarget(directTarget)
+              return
+            }
+            bindingView.openTarget(directTarget, event.currentTarget)
+            return
+          }
+          const nextMode = plan.bindingEntry === 'combined' ? 'combined' : 'bindings'
+          setMenuMode((current) => current === nextMode ? null : nextMode)
+        }}
+      >
+        {plan.bindingEntry === 'direct' && directTarget?.binding ? <UnbindIcon /> : <BindingIcon />}
+        {opensMenu ? <span aria-hidden="true" className="property-panel__binding-entry-more">⋯</span> : null}
+      </button>
+    )
+  }
+
+  const showsBindingTargets = menuMode === 'bindings' || menuMode === 'combined'
+  const showsMenuActions = menuMode === 'overflow' || menuMode === 'combined'
 
   return (
     <>
     <div className="property-panel__actions" data-property-part="actions" ref={rootRef}>
+      {renderBindingEntry()}
       {direct.map((action) => (
         <Fragment key={action.id}>
           {action.control ?? (
@@ -325,7 +458,7 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
           )}
         </Fragment>
       ))}
-      {hasOverflow ? (
+      {menuActions.length > 0 && plan.bindingEntry !== 'combined' ? (
         <button
           aria-expanded={menuMode === 'overflow'}
           aria-haspopup="menu"
@@ -336,18 +469,51 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
           onClick={() => setMenuMode((current) => current ? null : 'overflow')}
         ><MoreIcon /></button>
       ) : null}
-      {menuMode === 'overflow' ? (
+      {menuMode ? (
         <div
-          aria-label={messages.actions(label)}
+          aria-label={showsBindingTargets && !showsMenuActions
+            ? messages.bindingTargets(label)
+            : messages.actions(label)}
           className="property-panel__overflow-menu"
           role="menu"
           onKeyDown={(event) => {
             if (event.key !== 'Escape') return
             setMenuMode(null)
-            overflowButtonRef.current?.focus()
+            focusMenuAnchor()
           }}
         >
-          {menuActions.map((action) => (
+          {showsBindingTargets ? bindingTargets.map((target) => {
+            const state = getBindingTargetEntryState(target)
+            return (
+              <button
+                aria-label={target.binding
+                  ? messages.unbindBinding(target.label)
+                  : messages.bind(target.label)}
+                aria-invalid={state === 'invalid' ? 'true' : undefined}
+                data-binding-state={state}
+                disabled={target.readOnly}
+                key={target.address.targetId}
+                role="menuitem"
+                title={getBindingTargetTitle(target, messages.unknownVariable, messages.bind(target.label))}
+                type="button"
+                onClick={() => {
+                  if (target.binding) {
+                    bindingView.unbindTarget(target)
+                    setMenuMode(null)
+                    bindingButtonRef.current?.focus()
+                    return
+                  }
+                  selectTarget(target)
+                }}
+              >
+                {target.binding ? <UnbindIcon /> : <BindingIcon />}<span>{target.label}</span>
+                {target.binding ? (
+                  <output>{target.variable?.label ?? target.binding.variableId}</output>
+                ) : null}
+              </button>
+            )
+          }) : null}
+          {showsMenuActions ? menuActions.map((action) => (
             <button
               disabled={action.disabled}
               key={action.id}
@@ -357,7 +523,7 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
             >
               {action.icon}<span>{action.label}</span>
             </button>
-          ))}
+          )) : null}
         </div>
       ) : null}
     </div>
@@ -376,6 +542,32 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
       </ComposeContextMenu>
     </>
   )
+}
+
+function getBindingTargetEntryState(
+  target: PropertyPanelRendererBindingTargetState,
+): PropertyBindingEntryState {
+  if (target.status !== 'literal' && target.status !== 'resolved') return 'invalid'
+  return target.binding ? 'bound' : 'literal'
+}
+
+function getBindingTargetsEntryState(
+  targets: readonly PropertyPanelRendererBindingTargetState[] | undefined,
+): PropertyBindingEntryState | undefined {
+  return resolvePropertyBindingEntryState((targets ?? []).map((target) => ({
+    id: target.address.targetId,
+    state: getBindingTargetEntryState(target),
+  })))
+}
+
+function getBindingTargetTitle(
+  target: PropertyPanelRendererBindingTargetState,
+  unknownVariable: string,
+  literalTitle: string,
+): string {
+  if (!target.binding) return literalTitle
+  const variableLabel = target.variable?.label ?? target.binding.variableId ?? unknownVariable
+  return `${variableLabel} · ${formatBindingPreview(target.effectiveValue)}`
 }
 
 function MoreIcon() {
@@ -461,51 +653,7 @@ function useRendererBindingController(
   return {
     targets,
     getTarget: (targetId) => targets.find((target) => target.address.targetId === targetId),
-    renderTrigger: (targetId) => {
-      const target = targets.find((candidate) => candidate.address.targetId === targetId)
-      return target ? <BindingTrigger key={targetId} target={target} /> : null
-    },
   }
-}
-
-function BindingTrigger({ target }: { target: PropertyPanelRendererBindingTargetState }) {
-  const messages = usePropertyPanelMessages()
-  const view = useContext(BindingContext)
-  if (!view.config) return null
-  const Trigger = view.config.renderTrigger
-  const bound = Boolean(target.binding)
-  const invalid = target.status !== 'literal' && target.status !== 'resolved'
-  const variableLabel = target.variable?.label ?? target.binding?.variableId
-  const title = bound
-    ? `${variableLabel ?? messages.unknownVariable} · ${formatBindingPreview(target.effectiveValue)}`
-    : messages.bind(target.label)
-  const state = invalid ? 'invalid' : bound ? 'bound' : 'literal'
-  return (
-    <span
-      className="property-panel__binding-slot"
-      data-binding-state={state}
-    >
-      {Trigger ? <Trigger target={target} /> : (
-        <button
-          aria-description={bound ? title : undefined}
-          aria-label={bound
-            ? messages.replaceBinding(target.label)
-            : messages.bind(target.label)}
-          aria-invalid={invalid ? 'true' : undefined}
-          className={`property-panel__binding-trigger${bound ? ' property-panel__binding-trigger--bound' : ''}${invalid ? ' property-panel__binding-trigger--invalid' : ''}`}
-          disabled={target.readOnly}
-          title={target.status !== 'literal' && target.status !== 'resolved'
-            ? messages.issue(target.status)
-            : title}
-          type="button"
-          onClick={(event) => view.openTarget(target, event.currentTarget)}
-        >
-          <BindingIcon />
-          {bound ? <span>{variableLabel}</span> : null}
-        </button>
-      )}
-    </span>
-  )
 }
 
 function BindingPicker() {
@@ -641,6 +789,14 @@ function BindingIcon() {
   )
 }
 
+function UnbindIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 20 20">
+      <path d="M7.8 6.1 6.2 4.5a3 3 0 0 0-4.2 4.2l2.2 2.2a3 3 0 0 0 4.2 0l1.3-1.3M12.2 13.9l1.6 1.6a3 3 0 0 0 4.2-4.2l-2.2-2.2a3 3 0 0 0-4.2 0l-1.3 1.3M4 16 16 4" />
+    </svg>
+  )
+}
+
 function formatBindingPreview(value: unknown): string {
   if (typeof value === 'string') return value
   if (typeof value === 'bigint') return value.toString()
@@ -745,15 +901,11 @@ function PropertyNode({
         )
       },
     } : null
-  const bindingAction: RowAction | null = structuralField && structuralBindingTarget ? {
-    id: 'binding',
-    label: messages.bind(label),
-    priority: 5,
-    control: <BindingTrigger target={structuralBindingTarget} />,
-    onSelect: structuralBindingTarget.openPicker,
-  } : null
-  const actions = [bindingAction, presenceAction, resetAction, ...(nodeActions ?? [])]
+  const actions = [presenceAction, resetAction, ...(nodeActions ?? [])]
     .filter((action): action is RowAction => action !== null)
+  const structuralBindingTargets = structuralField && structuralBindingTarget
+    ? [structuralBindingTarget]
+    : []
   const rendererBindingDescriptors = renderer && hostWholeFieldEnabled
     ? [{
         id: 'value',
@@ -786,7 +938,12 @@ function PropertyNode({
   // renderer 声明接管空值时不短路：页面引用等 editor 需要在未设置时仍能选择或接受拖入。
   if (supportsPresence && missing && renderer?.rendersEmptyState !== true) {
     return (
-      <PropertyRow label={label} nodeActions={actions} path={path}>
+      <PropertyRow
+        bindingTargets={rendererBinding?.targets ?? structuralBindingTargets}
+        label={label}
+        nodeActions={actions}
+        path={path}
+      >
         <span className="property-panel__empty">未设置</span>
       </PropertyRow>
     )
@@ -826,6 +983,7 @@ function PropertyNode({
       return (
         <div
           className="property-panel__field property-panel__field--full-width"
+          data-binding-state={getBindingTargetsEntryState(rendererBinding?.targets)}
           data-property-part="field"
           data-property-depth={depth}
           data-property-layout={layout}
@@ -838,7 +996,7 @@ function PropertyNode({
             data-property-part="label"
             id={rendererLabelId}
           >{labelElement}</span>
-          <RowActionRail actions={actions} label={label} />
+          <RowActionRail actions={actions} bindingTargets={rendererBinding?.targets} label={label} />
           <div
             aria-labelledby={rendererLabelId}
             className="property-panel__editor property-panel__editor--full-width"
@@ -856,6 +1014,7 @@ function PropertyNode({
     return (
       <div
         className="property-panel__field"
+        data-binding-state={getBindingTargetsEntryState(rendererBinding?.targets)}
         data-property-depth={depth}
         data-property-part="field"
         data-property-layout={layout}
@@ -874,7 +1033,7 @@ function PropertyNode({
             {rendererElement}
           </div>
         </div>
-        <RowActionRail actions={actions} label={label} />
+        <RowActionRail actions={actions} bindingTargets={rendererBinding?.targets} label={label} />
       </div>
     )
   }
@@ -882,6 +1041,7 @@ function PropertyNode({
   if (OBJECT_TYPES.has(info.type)) {
     return (
       <ObjectGroup
+        bindingTargets={structuralBindingTargets}
         commit={commit}
         label={label}
         nodeActions={actions}
@@ -897,6 +1057,7 @@ function PropertyNode({
   if (info.type === 'array') {
     return (
       <ArrayGroup
+        bindingTargets={structuralBindingTargets}
         commit={commit}
         label={label}
         nodeActions={actions}
@@ -912,6 +1073,7 @@ function PropertyNode({
   if (TUPLE_TYPES.has(info.type)) {
     return (
       <TupleGroup
+        bindingTargets={structuralBindingTargets}
         commit={commit}
         label={label}
         nodeActions={actions}
@@ -927,6 +1089,7 @@ function PropertyNode({
   if (info.type === 'record') {
     return (
       <RecordGroup
+        bindingTargets={structuralBindingTargets}
         commit={commit}
         label={label}
         nodeActions={actions}
@@ -942,6 +1105,7 @@ function PropertyNode({
   if (info.type === 'union' || info.type === 'variant') {
     return (
       <UnionGroup
+        bindingTargets={structuralBindingTargets}
         commit={commit}
         label={label}
         nodeActions={actions}
@@ -1072,15 +1236,18 @@ function InlinePropertyControl({
 
 interface GroupProps extends PropertyNodeProps {
   nodeActions: readonly RowAction[]
+  bindingTargets?: readonly PropertyPanelRendererBindingTargetState[]
   initiallyExpanded?: boolean
 }
 
 function GroupShell({
+  bindingTargets = [],
   children,
   label,
   nodeActions,
   initiallyExpanded = true,
 }: {
+  bindingTargets?: readonly PropertyPanelRendererBindingTargetState[]
   children: ReactNode
   label: string
   nodeActions: readonly RowAction[]
@@ -1098,6 +1265,7 @@ function GroupShell({
     >
       <div
         className="property-panel__group-header"
+        data-binding-state={getBindingTargetsEntryState(bindingTargets)}
         data-has-actions={nodeActions.some((action) => action.control) ? 'true' : undefined}
       >
         <button
@@ -1108,7 +1276,7 @@ function GroupShell({
           <ChevronIcon expanded={visibleExpanded} />
           {label}
         </button>
-        <RowActionRail actions={nodeActions} label={label} />
+        <RowActionRail actions={nodeActions} bindingTargets={bindingTargets} label={label} />
       </div>
       {visibleExpanded ? (
         <TreeDepthContext.Provider value={depth + 1}>
@@ -1173,6 +1341,7 @@ function ObjectChildren({
 }
 
 function ObjectGroup({
+  bindingTargets,
   schema,
   value,
   label,
@@ -1184,6 +1353,7 @@ function ObjectGroup({
 }: GroupProps) {
   return (
     <GroupShell
+      bindingTargets={bindingTargets}
       initiallyExpanded={initiallyExpanded}
       label={label}
       nodeActions={nodeActions}
@@ -1200,6 +1370,7 @@ function ObjectGroup({
 }
 
 function ArrayGroup({
+  bindingTargets,
   schema,
   value,
   label,
@@ -1220,6 +1391,7 @@ function ArrayGroup({
   }
   return (
     <GroupShell
+      bindingTargets={bindingTargets}
       initiallyExpanded={initiallyExpanded}
       label={label}
       nodeActions={[{
@@ -1293,6 +1465,7 @@ function ArrayGroup({
 }
 
 function TupleGroup({
+  bindingTargets,
   schema,
   value,
   label,
@@ -1311,6 +1484,7 @@ function TupleGroup({
   const canAdd = Boolean(restSchema && v.safeParse(restSchema, createInitialValue(restSchema)).success)
   return (
     <GroupShell
+      bindingTargets={bindingTargets}
       initiallyExpanded={initiallyExpanded}
       label={label}
       nodeActions={[
@@ -1358,6 +1532,7 @@ function TupleGroup({
 }
 
 function RecordGroup({
+  bindingTargets,
   schema,
   value,
   label,
@@ -1384,6 +1559,7 @@ function RecordGroup({
   )
   return (
     <GroupShell
+      bindingTargets={bindingTargets}
       initiallyExpanded={initiallyExpanded}
       label={label}
       nodeActions={[{
@@ -1452,6 +1628,7 @@ function RecordGroup({
 }
 
 function UnionGroup({
+  bindingTargets,
   schema,
   value,
   label,
@@ -1470,7 +1647,12 @@ function UnionGroup({
   const activeIndex = Math.max(0, options.findIndex((option) => v.safeParse(option, value).success))
   const activeSchema = options[activeIndex]
   return (
-    <GroupShell initiallyExpanded={initiallyExpanded} label={label} nodeActions={nodeActions}>
+    <GroupShell
+      bindingTargets={bindingTargets}
+      initiallyExpanded={initiallyExpanded}
+      label={label}
+      nodeActions={nodeActions}
+    >
       <PropertyRow label={messages.unionBranch(label)} nodeActions={[]} path={[...path, '$branch']}>
         <select
           aria-label={messages.unionBranch(label)}
@@ -1521,11 +1703,13 @@ function UnionGroup({
 }
 
 function PropertyRow({
+  bindingTargets = [],
   children,
   label,
   nodeActions,
   path,
 }: {
+  bindingTargets?: readonly PropertyPanelRendererBindingTargetState[]
   children: ReactNode
   label: string
   nodeActions: readonly RowAction[]
@@ -1535,6 +1719,7 @@ function PropertyRow({
   return (
     <div
       className="property-panel__field"
+      data-binding-state={getBindingTargetsEntryState(bindingTargets)}
       data-property-depth={depth}
       data-property-part="field"
       data-property-nested={depth > 1 ? 'true' : undefined}
@@ -1543,7 +1728,7 @@ function PropertyRow({
     >
       <span className="property-panel__label" data-property-part="label">{label}</span>
       <div className="property-panel__editor" data-property-part="editor">{children}</div>
-      <RowActionRail actions={nodeActions} label={label} />
+      <RowActionRail actions={nodeActions} bindingTargets={bindingTargets} label={label} />
     </div>
   )
 }
@@ -1694,16 +1879,19 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
     editor = <span role="status">{label}（{info.type}）暂不支持</span>
   }
 
+  if (bound && bindingTarget) editor = <ComposePropertyPanelBoundValue target={bindingTarget} />
+
   return (
     <div
       className="property-panel__field"
+      data-binding-state={getBindingTargetsEntryState(bindingTarget ? [bindingTarget] : [])}
       data-property-depth={depth}
       data-property-part="field"
       data-property-nested={depth > 1 ? 'true' : undefined}
       data-property-path={path.join('.')}
       style={createFieldIndentStyle(depth)}
     >
-      <label data-property-part="label" htmlFor={id}>
+      <label data-property-part="label" htmlFor={bound ? undefined : id}>
         <span>{label}</span>
         {showDescriptions && info.description
           ? <small className="property-panel__description">{info.description}</small>
@@ -1711,28 +1899,18 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
       </label>
       <div className="property-panel__editor" data-property-part="editor">
         <div className="property-panel__control" data-property-part="control">
-          {bindingTarget ? (
-            <div className="property-panel__binding-target">
-              <div className="property-panel__binding-control">
-                {editor}
-                {info.metadata.unit
-                  ? <span className="property-panel__unit">{info.metadata.unit}</span>
-                  : null}
-              </div>
-              <BindingTrigger target={bindingTarget} />
-            </div>
-          ) : (
-            <>
-              {editor}
-              {info.metadata.unit
-                ? <span className="property-panel__unit">{info.metadata.unit}</span>
-                : null}
-            </>
-          )}
+          {editor}
+          {!bound && info.metadata.unit
+            ? <span className="property-panel__unit">{info.metadata.unit}</span>
+            : null}
         </div>
         {activeError ? <span role="alert">{activeError}</span> : null}
       </div>
-      <RowActionRail actions={nodeActions} label={label} />
+      <RowActionRail
+        actions={nodeActions}
+        bindingTargets={bindingTarget ? [bindingTarget] : []}
+        label={label}
+      />
     </div>
   )
 }

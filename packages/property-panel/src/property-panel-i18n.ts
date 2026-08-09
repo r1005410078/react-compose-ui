@@ -19,9 +19,12 @@ const translations = {
     resizeAction: '调整操作列宽',
     moreActions: (label: string) => `更多 ${label} 操作`,
     actions: (label: string) => `${label} 操作`,
+    bindingTargets: (label: string) => `${label}绑定目标`,
     unknownVariable: '未知变量',
     bind: (label: string) => `绑定 ${label}`,
     replaceBinding: (label: string) => `更换绑定 ${label}`,
+    changeBinding: (label: string, variable: string) => `更换绑定 ${label}：${variable}`,
+    unbindBinding: (label: string) => `解绑 ${label}`,
     closeVariablePicker: '关闭变量选择器',
     searchVariables: '搜索变量',
     pageVariables: '页面变量',
@@ -63,9 +66,12 @@ const translations = {
     resizeAction: 'Resize action column',
     moreActions: (label: string) => `More ${label} actions`,
     actions: (label: string) => `${label} actions`,
+    bindingTargets: (label: string) => `${label} binding targets`,
     unknownVariable: 'Unknown variable',
     bind: (label: string) => `Bind ${label}`,
     replaceBinding: (label: string) => `Change binding for ${label}`,
+    changeBinding: (label: string, variable: string) => `Change ${label} binding: ${variable}`,
+    unbindBinding: (label: string) => `Unbind ${label}`,
     closeVariablePicker: 'Close variable picker',
     searchVariables: 'Search variables',
     pageVariables: 'Page variables',
@@ -94,8 +100,10 @@ const translations = {
 type DynamicKey =
   | 'moreActions'
   | 'actions'
+  | 'bindingTargets'
   | 'bind'
   | 'replaceBinding'
+  | 'unbindBinding'
   | 'presence'
   | 'reset'
   | 'add'
@@ -129,9 +137,16 @@ export function usePropertyPanelMessages() {
     resizeAction: format('resizeAction', current.resizeAction),
     moreActions: (label: string) => dynamic('moreActions', label),
     actions: (label: string) => dynamic('actions', label),
+    bindingTargets: (label: string) => dynamic('bindingTargets', label),
     unknownVariable: format('unknownVariable', current.unknownVariable),
     bind: (label: string) => dynamic('bind', label),
     replaceBinding: (label: string) => dynamic('replaceBinding', label),
+    changeBinding: (label: string, variable: string) => format(
+      'changeBinding',
+      current.changeBinding(label, variable),
+      { label, variable },
+    ),
+    unbindBinding: (label: string) => dynamic('unbindBinding', label),
     closeVariablePicker: format('closeVariablePicker', current.closeVariablePicker),
     searchVariables: format('searchVariables', current.searchVariables),
     pageVariables: format('pageVariables', current.pageVariables),

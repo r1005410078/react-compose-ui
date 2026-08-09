@@ -963,9 +963,9 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
     render(<ComposePropertyPanel schema={panelSchema} style={{ width: 500 }} value={panelValue} />)
 
     expect(screen.getByRole('separator', { name: '调整属性名列宽' }))
-      .toHaveAttribute('aria-valuenow', '124')
+      .toHaveAttribute('aria-valuenow', '88')
     expect(screen.getByRole('separator', { name: '调整操作列宽' }))
-      .toHaveAttribute('aria-valuenow', '36')
+      .toHaveAttribute('aria-valuenow', '72')
   })
 })
 
@@ -1004,8 +1004,7 @@ describe('OpenSpec: property-panel / 搜索筛选与默认值重置 / 重置属�
     )
 
     expect(screen.queryByRole('button', { name: '重置 列表 2' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '更多 列表 操作' }))
-    expect(screen.getByRole('menuitem', { name: '重置 列表' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重置 列表' })).toBeVisible()
   })
 })
 
@@ -1017,17 +1016,17 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 键盘调整分�
     const labelSeparator = screen.getByRole('separator', { name: '调整属性名列宽' })
     const actionSeparator = screen.getByRole('separator', { name: '调整操作列宽' })
     expect(labelSeparator).toHaveAttribute('aria-valuenow', '160')
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '36')
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '76')
 
     fireEvent.keyDown(labelSeparator, { key: 'ArrowRight' })
     fireEvent.keyDown(actionSeparator, { key: 'ArrowLeft', shiftKey: true })
     expect(labelSeparator).toHaveAttribute('aria-valuenow', '168')
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '60')
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '96')
 
     fireEvent.click(screen.getByRole('button', { name: '属性面板设置' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '恢复默认列宽' }))
     expect(labelSeparator).toHaveAttribute('aria-valuenow', '160')
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '36')
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '76')
   })
 })
 
@@ -1045,7 +1044,7 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
     fireEvent.pointerDown(actionSeparator, { clientX: 464, pointerId: 2 })
     fireEvent.pointerMove(actionSeparator, { clientX: 444, pointerId: 2 })
     fireEvent.pointerUp(actionSeparator, { pointerId: 2 })
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '56')
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '96')
   })
 })
 
@@ -1180,22 +1179,15 @@ describe('OpenSpec: property-panel / 嵌套与集合属性编辑 / 切换联合�
   })
 })
 
-describe('OpenSpec: property-panel / 自适应属性操作轨道 / 窄操作列容纳多个操作', () => {
-  it('默认 36px 下把数组项的移动和删除操作收纳到同一溢出菜单', () => {
+describe('OpenSpec: property-panel / 自适应属性操作轨道 / 默认三图标操作列容纳绑定与重置', () => {
+  it('默认三图标操作列直接显示数组项的移动和删除操作', () => {
     const schema = v.object({ items: v.pipe(v.array(v.string()), v.title('列表')) })
     render(<ComposePropertyPanel schema={schema} value={{ items: ['alpha', 'beta'] }} />)
 
-    const overflow = screen.getByRole('button', { name: '更多 列表 1 操作' })
-    expect(overflow).toBeVisible()
-    expect(screen.queryByRole('button', { name: '上移 列表 1' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '下移 列表 1' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '删除 列表 1' })).not.toBeInTheDocument()
-
-    fireEvent.click(overflow)
-    const menu = screen.getByRole('menu', { name: '列表 1 操作' })
-    expect(within(menu).getByRole('menuitem', { name: '上移 列表 1' })).toBeDisabled()
-    expect(within(menu).getByRole('menuitem', { name: '下移 列表 1' })).toBeEnabled()
-    expect(within(menu).getByRole('menuitem', { name: '删除 列表 1' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '上移 列表 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '下移 列表 1' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '删除 列表 1' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '更多 列表 1 操作' })).not.toBeInTheDocument()
   })
 })
 
@@ -1207,8 +1199,8 @@ describe('OpenSpec: property-panel / 自适应属性操作轨道 / 扩大操作�
 
     expect(separator).toHaveAttribute('aria-valuemin', '32')
     expect(separator).toHaveAttribute('aria-valuemax', '96')
-    fireEvent.keyDown(separator, { key: 'ArrowLeft', shiftKey: true })
-    expect(separator).toHaveAttribute('aria-valuenow', '60')
+    fireEvent.keyDown(separator, { key: 'ArrowRight', shiftKey: true })
+    expect(separator).toHaveAttribute('aria-valuenow', '52')
     fireEvent.keyDown(separator, { key: 'ArrowLeft', shiftKey: true })
     fireEvent.keyDown(separator, { key: 'ArrowLeft', shiftKey: true })
     expect(separator).toHaveAttribute('aria-valuenow', '96')
@@ -1229,6 +1221,34 @@ describe('OpenSpec: property-panel / 自适应属性操作轨道 / 通过行上�
     const menu = screen.getByRole('menu', { name: '列表 1 操作' })
     expect(menu).toHaveAttribute('data-compose-ui', 'context-menu')
     expect(within(menu).getByRole('menuitem', { name: '删除 列表 1' })).toBeInTheDocument()
+  })
+
+  it('右键可绑定属性行显示绑定目标并可打开选择器', () => {
+    const schema = v.object({
+      title: v.pipe(
+        v.string(),
+        v.title('标题'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+    })
+    render(
+      <ComposePropertyPanel
+        binding={{
+          value: [],
+          variables: [{ id: 'page.title', label: '页面标题', scope: 'page', value: 'Hello' }],
+          onChange: vi.fn(),
+        }}
+        schema={schema}
+        value={{ title: 'Literal' }}
+      />,
+    )
+    const row = screen.getByLabelText('标题').closest('[data-property-path="title"]')
+    expect(row).not.toBeNull()
+
+    fireEvent.contextMenu(row!)
+    const menu = screen.getByRole('menu', { name: '标题 操作' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: '绑定 标题' }))
+    expect(screen.getByRole('button', { name: /页面标题/u })).toBeInTheDocument()
   })
 })
 
@@ -1332,10 +1352,15 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
       />,
     )
 
-    expect(screen.getByRole('button', { name: '绑定 不透明度' })).toBeInTheDocument()
+    const trigger = screen.getByRole('button', { name: '绑定 不透明度' })
+    expect(trigger).toHaveAttribute('data-binding-visibility', 'contextual')
+    expect(trigger.closest('[data-property-part="actions"]')).not.toBeNull()
+    fireEvent.focus(screen.getByLabelText('不透明度'))
+    expect(screen.getByLabelText('不透明度').closest('[data-property-part="field"]'))
+      .toHaveAttribute('data-binding-state', 'literal')
   })
 
-  it('OpenSpec: property-panel / 受控属性变量绑定 / 绑定入口不遮挡原控件', () => {
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 绑定入口不占用编辑区', () => {
     const schema = v.object({
       opacity: v.pipe(
         v.number(),
@@ -1361,22 +1386,22 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
       />,
     )
 
-    const input = screen.getByLabelText('不透明度')
-    const trigger = screen.getByRole('button', { name: '更换绑定 不透明度' })
-    const slot = trigger.closest<HTMLElement>('.property-panel__binding-slot')
-    const target = trigger.closest<HTMLElement>('.property-panel__binding-target')
+    const value = screen.getByRole('button', { name: /更换绑定 不透明度.*页面中的超长不透明度变量/u })
+    const trigger = screen.getByRole('button', { name: '解绑 不透明度' })
+    const row = value.closest<HTMLElement>('[data-property-part="field"]')
 
-    expect(input).toHaveValue(0.6)
-    expect(input).toHaveAttribute('readonly')
-    expect(slot).toHaveAttribute('data-binding-state', 'bound')
-    expect(slot).toHaveTextContent('页面中的超长不透明度变量')
-    expect(target).toContainElement(input)
-    expect(target).toContainElement(slot)
-    expect(input.closest('.property-panel__binding-control')?.nextElementSibling).toBe(slot)
+    expect(screen.queryByLabelText('不透明度')).not.toBeInTheDocument()
+    expect(value).toHaveTextContent('页面中的超长不透明度变量')
+    expect(row).toHaveAttribute('data-binding-state', 'bound')
+    expect(trigger.closest('[data-property-part="actions"]')).not.toBeNull()
+    expect(trigger).toHaveAttribute('data-binding-state', 'bound')
+    expect(trigger).toHaveAttribute('data-binding-visibility', 'persistent')
+    expect(row?.querySelector('.property-panel__binding-slot')).toBeNull()
+    expect(row?.querySelector('.property-panel__binding-target')).toBeNull()
     expect(screen.getByLabelText('标题').closest('.property-panel__binding-target')).toBeNull()
   })
 
-  it('把宿主自定义 trigger 包裹在统一绑定槽位内', () => {
+  it('把宿主自定义 trigger 放入统一操作列且不创建编辑区槽位', () => {
     const schema = v.object({
       title: v.pipe(
         v.string(),
@@ -1400,13 +1425,39 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     )
 
     const trigger = screen.getByRole('button', { name: '自定义绑定 标题' })
-    expect(trigger.closest('.property-panel__binding-slot')).toHaveAttribute(
-      'data-binding-state',
-      'literal',
+    expect(trigger.closest('[data-property-part="actions"]')).not.toBeNull()
+    expect(trigger.closest('.property-panel__binding-slot')).toBeNull()
+    expect(screen.getByLabelText('标题').closest('.property-panel__binding-target')).toBeNull()
+  })
+
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 已绑定和错误入口常显', () => {
+    const schema = v.object({
+      title: v.pipe(
+        v.string(),
+        v.title('标题'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+    })
+    render(
+      <ComposePropertyPanel
+        binding={{
+          value: [{ target: { path: ['title'], targetId: 'value' }, variableId: 'missing.title' }],
+          variables: [],
+          onChange: vi.fn(),
+        }}
+        schema={schema}
+        value={{ title: 'Literal' }}
+      />,
     )
-    expect(trigger.closest('.property-panel__binding-target')).toContainElement(
-      screen.getByLabelText('标题'),
-    )
+
+    const value = screen.getByRole('button', { name: /更换绑定 标题.*missing.title/u })
+    const row = value.closest('[data-property-part="field"]')
+    const trigger = screen.getByRole('button', { name: '解绑 标题' })
+    expect(row).toHaveAttribute('data-binding-state', 'invalid')
+    expect(screen.queryByLabelText('标题')).not.toBeInTheDocument()
+    expect(trigger).toHaveAttribute('aria-invalid', 'true')
+    expect(trigger).toHaveAttribute('data-binding-state', 'invalid')
+    expect(trigger).toHaveAttribute('data-binding-visibility', 'persistent')
   })
 
   it('只应用通过目标和完整根 Schema 的变量并逐目标回退字面值', () => {
@@ -1508,14 +1559,14 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     expect(screen.queryByText('全局透明度')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /页面不透明度/ }))
 
-    expect(screen.getByLabelText('不透明度')).toHaveValue(0.6)
-    expect(screen.getByLabelText('不透明度')).toHaveAttribute('readonly')
-    fireEvent.change(screen.getByLabelText('不透明度'), { target: { value: '0.2' } })
-    expect(onValueChange).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: '更换绑定 不透明度' }))
-    fireEvent.click(screen.getByRole('button', { name: '解绑' }))
+    const boundValue = screen.getByRole('button', { name: /更换绑定 不透明度.*页面不透明度/u })
+    expect(screen.queryByLabelText('不透明度')).not.toBeInTheDocument()
+    fireEvent.click(boundValue)
+    expect(screen.getByRole('dialog', { name: '绑定 不透明度' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '关闭变量选择器' }))
+    fireEvent.click(screen.getByRole('button', { name: '解绑 不透明度' }))
     expect(screen.getByLabelText('不透明度')).toHaveValue(1)
+    expect(onValueChange).not.toHaveBeenCalled()
   })
 
   it('把绑定计入修改和错误筛选，并在 reset 时同时删除绑定', () => {
@@ -1542,12 +1593,14 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
 
     fireEvent.click(screen.getByRole('button', { name: '筛选属性' }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: '有错误' }))
-    expect(screen.getByLabelText('不透明度')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /更换绑定 不透明度.*missing/u })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '筛选属性' }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: '已修改' }))
-    expect(screen.getByLabelText('不透明度')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /更换绑定 不透明度.*missing/u })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '重置 不透明度' }))
+    const reset = screen.getByRole('button', { name: '重置 不透明度' })
+    expect(reset.closest('[data-property-part="actions"]')).not.toBeNull()
+    fireEvent.click(reset)
     expect(onBindingChange).toHaveBeenCalledWith([], {
       reason: 'reset',
       target: { path: ['opacity'], targetId: 'value' },
@@ -1625,7 +1678,7 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     })
   })
 
-  it('为显式启用的自定义 renderer 子目标提供绑定槽位', () => {
+  it('OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / Renderer 无需放置绑定入口', () => {
     const pointSchema = v.custom<{ x: number; y: number }>((value) => (
       Boolean(value && typeof value === 'object' && 'x' in value && 'y' in value)
     ))
@@ -1639,10 +1692,7 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     const renderer: ComposePropertyPanelRenderer = {
       id: 'point',
       component: ({ binding }) => (
-        <div>
-          {binding?.renderTrigger('x')}
-          {binding?.renderTrigger('y')}
-        </div>
+        <output>{binding?.targets.map((target) => target.address.targetId).join(',')}</output>
       ),
       bindingTargets: () => [
         {
@@ -1666,10 +1716,15 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
       />,
     )
 
-    expect(screen.getByRole('button', { name: '绑定 X' }))
-      .toHaveClass('property-panel__binding-trigger')
-    expect(screen.getByRole('button', { name: '绑定 Y' }).closest('.property-panel__binding-slot'))
-      .toHaveAttribute('data-binding-state', 'literal')
+    expect(screen.getByText('x,y')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '绑定 X' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '绑定 Y' })).not.toBeInTheDocument()
+    const aggregate = screen.getByRole('button', { name: '绑定 位置' })
+    expect(aggregate.closest('[data-property-part="actions"]')).not.toBeNull()
+    fireEvent.click(aggregate)
+    const targetMenu = screen.getByRole('menu', { name: '位置绑定目标' })
+    expect(within(targetMenu).getAllByRole('menuitem').map((button) => button.textContent))
+      .toEqual(['X', 'Y'])
   })
 
   it('变量快照更新只刷新 effective value，不发出字面值提交', () => {
@@ -1701,9 +1756,10 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     }
     render(<Harness />)
 
-    expect(screen.getByLabelText('不透明度')).toHaveValue(0.6)
+    const value = screen.getByRole('button', { name: '更换绑定 不透明度：透明度' })
+    expect(value).toHaveTextContent('0.6')
     fireEvent.click(screen.getByRole('button', { name: '更新变量' }))
-    expect(screen.getByLabelText('不透明度')).toHaveValue(0.3)
+    expect(value).toHaveTextContent('0.3')
     expect(onValueChange).not.toHaveBeenCalled()
   })
 
@@ -1728,11 +1784,9 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
       />,
     )
 
-    const input = screen.getByLabelText('标题')
-    expect(input).toHaveValue('Bound')
-    expect(input).not.toBeDisabled()
-    expect(input).toHaveAttribute('readonly')
-    expect(screen.getByRole('button', { name: '更换绑定 标题' })).toBeDisabled()
+    expect(screen.queryByLabelText('标题')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '更换绑定 标题：页面标题' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '解绑 标题' })).toBeDisabled()
   })
 })
 

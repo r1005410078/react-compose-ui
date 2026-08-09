@@ -194,14 +194,6 @@ export interface PropertyPanelRendererBindingController {
   targets: readonly PropertyPanelRendererBindingTargetState[]
   /** 按稳定 ID 查询目标。 */
   getTarget: (targetId: string) => PropertyPanelRendererBindingTargetState | undefined
-  /**
-   * 渲染与内置字段一致的完整绑定槽位。
-   *
-   * @remarks
-   * 把返回节点放在对应逻辑控件之后，并让二者共同位于
-   * `.property-panel__binding-target` 中；槽位负责常驻占位、响应式收缩和 trigger 状态显示。
-   */
-  renderTrigger: (targetId: string) => ReactNode
 }
 
 /** 自定义绑定入口获得的属性。 */
@@ -254,7 +246,12 @@ export interface PropertyPanelBindingConfig {
   canBind?: (target: PropertyPanelBindingTarget, variable: PropertyPanelVariable) => boolean
   /** 在 Schema metadata 之外授权完整字段目标；未提供时继续使用显式 opt-in。 */
   isTargetEnabled?: (target: PropertyPanelBindingTargetAuthorization) => boolean
-  /** 覆盖默认绑定入口。 */
+  /**
+   * 覆盖直接单目标的默认绑定入口。
+   *
+   * @remarks 仅在 target 未绑定时生效；已绑定 target 使用内建解绑入口，变量标识承担换绑。
+   * 多目标或与普通动作竞争时，面板仍使用内建聚合入口保证操作列容量与键盘语义。
+   */
   renderTrigger?: PropertyPanelBindingTriggerRenderer
   /** 覆盖默认变量选择器。 */
   renderPicker?: PropertyPanelBindingPickerRenderer
@@ -533,7 +530,7 @@ export function ComposePropertyPanelRoot({
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
   const [labelWidth, setLabelWidth] = useState(160)
-  const [actionWidth, setActionWidth] = useState(36)
+  const [actionWidth, setActionWidth] = useState(76)
   const [availableWidth, setAvailableWidth] = useState(
     typeof style?.width === 'number' ? style.width : 365,
   )
@@ -697,7 +694,7 @@ export function ComposePropertyPanelRoot({
                 type="button"
                 onClick={() => {
                   setLabelWidth(160)
-                  setActionWidth(36)
+                  setActionWidth(76)
                   setSettingsOpen(false)
                 }}
               >{messages.resetColumns}</button>
@@ -985,7 +982,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
   const [labelWidth, setLabelWidth] = useState(160)
-  const [actionWidth, setActionWidth] = useState(36)
+  const [actionWidth, setActionWidth] = useState(76)
   const [availableWidth, setAvailableWidth] = useState(
     typeof style?.width === 'number' ? style.width : 365,
   )
@@ -1178,7 +1175,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
                 type="button"
                 onClick={() => {
                   setLabelWidth(160)
-                  setActionWidth(36)
+                  setActionWidth(76)
                   setSettingsOpen(false)
                 }}
               >{messages.resetColumns}</button>

@@ -644,9 +644,27 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(textInspector.getByRole('textbox', { name: '字重' })).toBeVisible()
   await expect(textInspector.getByRole('spinbutton', { name: '字间距' })).toBeVisible()
   await expect(textInspector.getByRole('spinbutton', { name: '行高' })).toBeVisible()
+  // OpenSpec: property-panel / 受控属性变量绑定 / 绑定入口不占用编辑区
   for (const label of ['字号', '字体', '字重', '字间距', '行高']) {
-    await expect(textInspector.getByRole('button', { name: new RegExp(`绑定\\s*${label}`, 'u') }))
-      .toBeVisible()
+    const trigger = textInspector.getByRole('button', { name: new RegExp(`绑定\\s*${label}`, 'u') })
+    const field = trigger.locator('..').locator('..')
+    await expect(trigger).toHaveCSS('opacity', '0')
+    await expect(field.locator('.property-panel__binding-slot')).toHaveCount(0)
+    const geometry = await field.evaluate((element) => {
+      const control = element.querySelector<HTMLElement>('[data-property-part="control"]')
+      const input = control?.querySelector<HTMLElement>('input, select')
+      if (!control || !input) return null
+      return {
+        controlWidth: control.getBoundingClientRect().width,
+        inputWidth: input.getBoundingClientRect().width,
+      }
+    })
+    expect(geometry).not.toBeNull()
+    expect(Math.abs(geometry!.controlWidth - geometry!.inputWidth)).toBeLessThanOrEqual(1)
+    await field.hover()
+    await expect(trigger).toHaveCSS('opacity', '1')
+    await textInspector.getByLabel(label, { exact: true }).focus()
+    await expect(trigger).toHaveCSS('opacity', '1')
   }
   for (let index = 0; index < 12; index += 1) {
     await stage.press('Shift+ArrowDown')
@@ -660,7 +678,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   const log = editor.getByRole('region', { name: '操作日志' })
   await expect(log.getByRole('button', { name: /Create Container/ })).toBeVisible()
   await expect(
-    log.getByRole('button', { name: /^属性 Update Text Text/ }),
+    log.getByRole('button', { name: /^属性 Update Text Text/ }).first(),
   ).toBeVisible()
   await expect(
     log.getByRole('button', { name: /^属性 修改 Container 外观 Container/ }),
@@ -789,7 +807,14 @@ test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染
   await expect(chart.locator('canvas')).toBeVisible()
   const inspector = editor.getByRole('region', { name: 'ECharts Chart 属性', exact: true })
   await inspector.getByRole('button', { name: '图表' }).click()
-  await expect(inspector.getByRole('button', { name: '绑定 数据' })).toBeVisible()
+  // OpenSpec: property-panel / 自适应属性操作轨道 / 默认三图标操作列容纳绑定与重置
+  const dataActions = inspector.getByRole('button', { name: '绑定 数据' })
+  const dataHeader = dataActions.locator('..').locator('..')
+  await expect(dataActions).toHaveCSS('opacity', '0')
+  await dataHeader.hover()
+  await expect(dataActions).toHaveCSS('opacity', '1')
+  await dataActions.click()
+  await expect(inspector.getByRole('dialog', { name: '绑定 数据' })).toBeVisible()
   await expect(inspector.getByRole('button', { name: '高级' })).toHaveCount(0)
 })
 

@@ -121,7 +121,7 @@ describe('Text Renderer Inspector', () => {
     })
   })
 
-  it('OpenSpec: component-registry / Inspector 内联字段绑定 / 字段控件显示最终值且保留绑定入口', () => {
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼容变量', () => {
     const Inspector = createTextRendererInspector(() => 'command-id')
     const target = entity({
       Renderer: {
@@ -195,9 +195,9 @@ describe('Text Renderer Inspector', () => {
       />,
     )
 
-    expect(screen.getByRole('textbox', { name: '文本' })).toHaveValue('12')
-    expect(screen.getByRole('textbox', { name: '文本' })).toHaveAttribute('readonly')
-    expect(screen.getByRole('button', { name: /更换绑定\s*文本/u })).toBeEnabled()
+    expect(screen.queryByRole('textbox', { name: '文本' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /更换绑定 文本.*Count/u })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '解绑 文本' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '选择文字颜色' })).toBeEnabled()
     expect(screen.getByRole('button', { name: /绑定\s*文字颜色/u })).toBeEnabled()
     expect(screen.getByRole('textbox', { name: '字体' })).toHaveValue('Inter')

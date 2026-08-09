@@ -4,6 +4,7 @@ import * as v from 'valibot'
 import type { ComposePropertyPanelNodeCandidate } from '../property-panel/editor-ports'
 import { useComposePropertyPanelNodeEditorPort } from '../property-panel/editor-ports'
 import type { PropertyPanelRendererProps } from '../property-panel/compose-property-panel'
+import { ComposePropertyPanelBoundValue } from '../bound-value'
 
 function isEmptyValue(value: unknown): boolean {
   return value === null || value === undefined
@@ -142,6 +143,8 @@ export function NodeEditor(props: PropertyPanelRendererProps) {
     ? '未设置'
     : port?.resolveLabel(effectiveValue) ?? '未知引用'
 
+  if (bindingTarget?.binding) return <ComposePropertyPanelBoundValue target={bindingTarget} />
+
   return (
     <div
       className="property-panel__semantic property-panel__semantic--node"
@@ -151,86 +154,83 @@ export function NodeEditor(props: PropertyPanelRendererProps) {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <div className="property-panel__binding-target">
-        <div className="property-panel__binding-control">
+      <div className="property-panel__semantic-control">
+        <button
+          ref={triggerRef}
+          aria-controls={open ? listboxId : undefined}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          className="property-panel__node-trigger"
+          data-empty={empty ? 'true' : undefined}
+          disabled={disabled}
+          role="combobox"
+          type="button"
+          onClick={() => {
+            setOpen((current) => {
+              // 每次打开都从空筛选与第一项开始，避免上次的输入残留。
+              if (!current) {
+                setQuery('')
+                setActiveIndex(0)
+              }
+              return !current
+            })
+          }}
+          onKeyDown={handleTriggerKeyDown}
+        >
+          {triggerLabel}
+        </button>
+        {empty || disabled ? null : (
           <button
-            ref={triggerRef}
-            aria-controls={open ? listboxId : undefined}
-            aria-expanded={open}
-            aria-haspopup="listbox"
-            className="property-panel__node-trigger"
-            data-empty={empty ? 'true' : undefined}
-            disabled={disabled}
-            role="combobox"
+            aria-label={`清除${props.label}`}
+            className="property-panel__node-clear"
             type="button"
-            onClick={() => {
-              setOpen((current) => {
-                // 每次打开都从空筛选与第一项开始，避免上次的输入残留。
-                if (!current) {
-                  setQuery('')
-                  setActiveIndex(0)
-                }
-                return !current
-              })
-            }}
-            onKeyDown={handleTriggerKeyDown}
+            onClick={clearValue}
           >
-            {triggerLabel}
+            ×
           </button>
-          {empty || disabled ? null : (
-            <button
-              aria-label={`清除${props.label}`}
-              className="property-panel__node-clear"
-              type="button"
-              onClick={clearValue}
+        )}
+        {open ? (
+          <div className="property-panel__node-popover" onKeyDown={handleListKeyDown}>
+            <input
+              aria-label={`筛选${props.label}`}
+              autoFocus
+              className="property-panel__node-filter"
+              type="search"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setActiveIndex(0)
+              }}
+            />
+            <ul
+              aria-label={props.label}
+              className="property-panel__node-listbox"
+              id={listboxId}
+              role="listbox"
             >
-              ×
-            </button>
-          )}
-          {open ? (
-            <div className="property-panel__node-popover" onKeyDown={handleListKeyDown}>
-              <input
-                aria-label={`筛选${props.label}`}
-                autoFocus
-                className="property-panel__node-filter"
-                type="search"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value)
-                  setActiveIndex(0)
-                }}
-              />
-              <ul
-                aria-label={props.label}
-                className="property-panel__node-listbox"
-                id={listboxId}
-                role="listbox"
-              >
-                {filtered.length === 0 ? (
-                  <li className="property-panel__node-empty" role="presentation">
-                    无可用候选
-                  </li>
-                ) : filtered.map((candidate, index) => (
-                  <li key={candidate.id}>
-                    <button
-                      aria-selected={index === activeIndex}
-                      className="property-panel__node-option"
-                      role="option"
-                      type="button"
-                      onClick={() => { selectCandidate(candidate) }}
-                    >
-                      {candidate.label}
-                      {candidate.description === undefined
-                        ? null
-                        : <small>{candidate.description}</small>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-        {props.binding?.renderTrigger('value')}
+              {filtered.length === 0 ? (
+                <li className="property-panel__node-empty" role="presentation">
+                  无可用候选
+                </li>
+              ) : filtered.map((candidate, index) => (
+                <li key={candidate.id}>
+                  <button
+                    aria-selected={index === activeIndex}
+                    className="property-panel__node-option"
+                    role="option"
+                    type="button"
+                    onClick={() => { selectCandidate(candidate) }}
+                  >
+                    {candidate.label}
+                    {candidate.description === undefined
+                      ? null
+                      : <small>{candidate.description}</small>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
       {error ? <span role="alert">{error}</span> : null}
     </div>

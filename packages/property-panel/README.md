@@ -282,8 +282,8 @@ const effective = resolvePropertyBindings({
 
 显式启用的内置叶子使用固定 target ID `value`。变量选择器会按目标 Schema、`semanticScope` 和
 `canBind` 过滤候选，再按页面/全局作用域分组；未声明的目标即使出现在外部 bindings 中也不会生效，
-并以 `unknown-target` issue 报告。变量缺失或失效时只回退该目标的字面值。已绑定输入保持可聚焦和
-只读；解绑继续使用原字面值，reset 同时删除绑定并恢复 `defaultValue`。数组移动/删除、record 改键/
+并以 `unknown-target` issue 报告。变量缺失或失效时只回退该目标的字面值。已绑定输入由可聚焦的变量标识
+替换；解绑继续使用原字面值，reset 同时删除绑定并恢复 `defaultValue`。数组移动/删除、record 改键/
 删除和 union 切换由面板同步维护绑定地址。
 
 自定义类型同样默认不可绑定。字段 Schema 必须声明 `binding.enabled: true`，renderer 还要通过稳定
@@ -313,23 +313,27 @@ const chartRangeRenderer = {
 
 function ChartRangeEditor({ value, commit, binding }) {
   const x = binding?.getTarget('x')
-  return <div className="property-panel__binding-target">
-    <div className="property-panel__binding-control">
-      <input
-        readOnly={Boolean(x?.binding)}
-        value={x?.effectiveValue ?? value.x}
-        onChange={(event) => commit({ ...value, x: Number(event.target.value) })}
-      />
-    </div>
-    {binding?.renderTrigger('x')}
-  </div>
+  if (x?.binding) return <ComposePropertyPanelBoundValue target={x} />
+  return <input
+    value={x?.effectiveValue ?? value.x}
+    onChange={(event) => commit({ ...value, x: Number(event.target.value) })}
+  />
 }
 ```
 
-`renderTrigger()` 返回已经带 `.property-panel__binding-slot` 的完整 accessory slot。renderer 只需把
-控件主体与 slot 依次放入 `.property-panel__binding-target`；原输入、单位、色块或选择箭头应留在
-`.property-panel__binding-control` 内。显式启用的目标始终显示 UE4 风格紧凑链条按钮；完整变量名和
-解析状态通过 tooltip、ARIA description 与变量选择器提供，目标过窄时槽位会进一步收缩。
+renderer 只负责声明 `bindingTargets`，并通过 `binding.targets` 或 `binding.getTarget()` 读取有效值、
+只读状态与 issue；Property Panel 会按 descriptor 顺序在统一操作列中生成入口，不再要求 renderer
+调用 `renderTrigger()` 或预留 binding slot。已绑定 target 应使用 `ComposePropertyPanelBoundValue` 替换原
+控件：它显示变量名称与有效值预览，点击可换绑；单目标操作列图标则变为解绑。未绑定入口只在字段
+hover/focus 时出现，已绑定或失效入口常显；Vector2、Size 和其他多目标 renderer 使用一个聚合入口，在菜单中
+独立解绑每个目标。默认 76px 操作列容纳三个 22px 图标；超过容量时，最后一个可见槽位变为“更多”图标。
+完整变量名和解析状态通过变量标识、tooltip、ARIA description 与选择器提供。
+
+迁移已有自定义 renderer 时，删除 `binding.renderTrigger(targetId)` 及
+`.property-panel__binding-target`、`.property-panel__binding-control`、`.property-panel__binding-slot`
+布局包装；保留 `binding.getTarget(targetId)` 读取即可。`PropertyPanelRendererBindingController` 已移除
+`renderTrigger()`。宿主配置级 `PropertyPanelBindingConfig.renderTrigger` 仍可覆盖直接单目标入口；
+多目标或动作竞争场景由面板使用内建聚合入口。
 
 ECharts 等依赖仍由宿主 renderer 持有；本包只处理 target 描述、选择器、受控 bindings 和解析。
 
@@ -343,7 +347,7 @@ description、option label 和自定义 renderer 内容始终由宿主控制，�
 - 搜索匹配 title、key、完整路径和 description。
 - 筛选支持全部、相对 `defaultValue` 已修改、以及有 Schema issue 的属性。
 - 设置菜单可以显示高级属性、字段说明，并恢复列宽。
-- 两条可聚焦分隔线分别调整属性名列和操作列；默认宽度为 160px/36px，方向键移动 8px，
+- 两条可聚焦分隔线分别调整属性名列和操作列；默认宽度为 160px/76px，方向键移动 8px，
   Shift 加方向键移动 24px。操作列限制在 32–96px、最多三槽；空间不足时使用溢出菜单，行右键
   菜单始终通过共享 `ComposeContextMenu` 提供全部操作；三点溢出仍是普通点击菜单。常规编辑控件在最大
   234px 的右对齐轨道中显示，窄面板会自动收缩。
@@ -372,7 +376,6 @@ ComposePropertyPanel 专用变量：
   --pp-row-height: 26px;
   --pp-control-height: 22px;
   --pp-tree-indent: 14px;
-  --pp-binding-slot-width: 36px;
 }
 ```
 
