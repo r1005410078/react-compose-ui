@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ComposePropertyPanel } from '@compose-ui/property-panel'
+import type { ReactNode } from 'react'
+import {
+  ComposePropertyPanel,
+  type ComposePropertyPanelRenderer,
+  type ComposePropertyPanelRendererProps,
+} from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type {
   CommandDispatchResult,
@@ -14,6 +19,8 @@ type CanvasInspectorProps = {
   readonly document: ComposeDocument
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   readonly idFactory: () => string
+  /** 活动页面的 setup 属性内容；省略时 Canvas 保持纯文档输出属性。 */
+  readonly pageScriptInspector?: ReactNode
 }
 
 const OUTPUT_PRESET_VALUES = [
@@ -47,13 +54,17 @@ type CanvasOutputSize =
 type CanvasInspectorValue = {
   readonly outputSize: CanvasOutputSize
   readonly backgroundPaint: ComposePaint
+  readonly pageScript: ReactNode
 }
 
 function findOutputPreset(width: number, height: number) {
   return OUTPUT_PRESETS.find((candidate) => candidate.width === width && candidate.height === height)
 }
 
-function createCanvasOutputSchema(messages: ReturnType<typeof getEditorMessages>['canvasInspector']) {
+function createCanvasOutputSchema(
+  messages: ReturnType<typeof getEditorMessages>['canvasInspector'],
+  showPageScript: boolean,
+) {
   return v.object({
     outputSize: v.pipe(
       v.variant('key', [
@@ -98,14 +109,35 @@ function createCanvasOutputSchema(messages: ReturnType<typeof getEditorMessages>
       v.title(messages.background),
       v.metadata({ propertyPanel: { editor: 'paint', order: 1 } }),
     ),
+    pageScript: v.pipe(
+      v.unknown(),
+      v.title(messages.pageScript),
+      v.metadata({ propertyPanel: {
+        editor: 'page-script',
+        hidden: !showPageScript,
+        layout: 'full-width',
+        order: 2,
+      } }),
+    ),
   })
 }
+
+function PageScriptRenderer({ value }: ComposePropertyPanelRendererProps) {
+  return value as ReactNode
+}
+
+const CANVAS_INSPECTOR_RENDERERS: readonly ComposePropertyPanelRenderer[] = [{
+  id: 'page-script',
+  component: PageScriptRenderer,
+  layout: 'full-width',
+}]
 
 /** Editor 内部的隐式 Canvas 输出属性编辑器。 */
 export function CanvasInspector({
   document,
   dispatch,
   idFactory,
+  pageScriptInspector,
 }: CanvasInspectorProps) {
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(
@@ -131,7 +163,10 @@ export function CanvasInspector({
     if (dimensionsChanged) setOutputSizeKey(documentPreset ? 'preset' : 'custom')
   }, [document.output.height, document.output.width, documentPreset])
 
-  const schema = useMemo(() => createCanvasOutputSchema(messages), [messages])
+  const schema = useMemo(
+    () => createCanvasOutputSchema(messages, pageScriptInspector !== undefined),
+    [messages, pageScriptInspector],
+  )
   const value = useMemo(
     (): CanvasInspectorValue => ({
       outputSize: outputSizeKey === 'preset'
@@ -141,8 +176,9 @@ export function CanvasInspector({
           value: { width: document.output.width, height: document.output.height },
         },
       backgroundPaint: document.output.backgroundPaint,
+      pageScript: pageScriptInspector ?? null,
     }),
-    [document.output, documentPreset, outputSizeKey],
+    [document.output, documentPreset, outputSizeKey, pageScriptInspector],
   )
 
   return (
@@ -151,10 +187,12 @@ export function CanvasInspector({
       className="compose-editor__canvas-inspector"
       defaultValue={value}
       header={{ title: messages.title }}
+      renderers={CANVAS_INSPECTOR_RENDERERS}
       schema={schema}
       value={value}
       onValueChange={(_nextValue, change) => {
         const next = change.output as CanvasInspectorValue
+        if (change.path[0] === 'pageScript') return
         if (change.path[0] === 'outputSize') {
           const nextOutputSize = next.outputSize
           if (nextOutputSize.key !== value.outputSize.key) {

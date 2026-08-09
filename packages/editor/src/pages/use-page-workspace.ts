@@ -35,6 +35,8 @@ export interface PageWorkspaceHandle {
     pageKey: string,
     reference: ComposePageSetupReference | null,
   ) => Promise<void>
+  /** 重新执行当前页面已关联的 setup，并用新作用域替换旧实例。 */
+  readonly reloadPageSetupScript: (pageKey: string) => Promise<void>
   readonly refreshCatalog: () => void
 }
 
@@ -84,6 +86,7 @@ export function usePageWorkspace({
   const catalog = useComposePageCatalog(store)
   const sessionsRef = useRef(sessions)
   const ownedScopesRef = useRef(new Set<ComposePageScriptScope>())
+  const reloadControllersRef = useRef(new Map<string, AbortController>())
   const defaultScriptLoader = useMemo(() => assetResolver
     ? createComposeJavaScriptModuleLoader({ assetResolver })
     : undefined, [assetResolver])
@@ -107,54 +110,63 @@ export function usePageWorkspace({
   }, [sessions])
 
   useEffect(() => () => {
+    reloadControllersRef.current.forEach((controller) => { controller.abort() })
+    reloadControllersRef.current.clear()
     ownedScopesRef.current.forEach((scope) => { scope.dispose() })
     ownedScopesRef.current.clear()
   }, [])
 
+  const reloadPageSetupScript = useCallback(async (pageKey: string) => {
+    const session = [...sessionsRef.current.values()].find((item) => item.pageKey === pageKey)
+    const reference = session?.page.setupScript
+    if (!session || !reference || !scriptLoader) {
+      throw new ComposeAssetError('unsupported', '当前页面脚本不可重新加载')
+    }
+
+    reloadControllersRef.current.get(session.panelId)?.abort()
+    const controller = new AbortController()
+    reloadControllersRef.current.set(session.panelId, controller)
+    const loaded = await loadComposePageScriptScope({
+      reference,
+      loader: scriptLoader,
+      signal: controller.signal,
+    })
+    if (reloadControllersRef.current.get(session.panelId) === controller) {
+      reloadControllersRef.current.delete(session.panelId)
+    }
+    if (controller.signal.aborted) {
+      loaded.scope.dispose()
+      return
+    }
+
+    const current = sessionsRef.current.get(session.panelId)
+    const currentReference = current?.page.setupScript
+    if (!currentReference
+      || currentReference.providerId !== reference.providerId
+      || currentReference.assetKey !== reference.assetKey
+      || currentReference.scope !== reference.scope) {
+      loaded.scope.dispose()
+      return
+    }
+    ownedScopesRef.current.add(loaded.scope)
+    updateSession(session.panelId, (item) => ({ ...item, scriptScope: loaded.scope }))
+  }, [scriptLoader, updateSession])
+
   useEffect(() => {
     if (!assetResolver?.subscribe || !scriptLoader) return undefined
-    const controllers = new Map<string, AbortController>()
-    const reload = (session: ComposePageDocumentSession) => {
-      const reference = session.page.setupScript
-      if (!reference) return
-      controllers.get(session.panelId)?.abort()
-      const controller = new AbortController()
-      controllers.set(session.panelId, controller)
-      void loadComposePageScriptScope({
-        reference,
-        loader: scriptLoader,
-        signal: controller.signal,
-      }).then((loaded) => {
-        if (controllers.get(session.panelId) === controller) {
-          controllers.delete(session.panelId)
-        }
-        if (controller.signal.aborted) {
-          loaded.scope.dispose()
-          return
-        }
-        const current = sessionsRef.current.get(session.panelId)
-        if (current?.page.setupScript?.assetKey !== reference.assetKey) {
-          loaded.scope.dispose()
-          return
-        }
-        ownedScopesRef.current.add(loaded.scope)
-        updateSession(session.panelId, (item) => ({ ...item, scriptScope: loaded.scope }))
-      })
-    }
     const unsubscribes = [...sessionsRef.current.values()].flatMap((session) => {
       const reference = session.page.setupScript
       return reference
         ? [assetResolver.subscribe!(reference, () => {
             const current = sessionsRef.current.get(session.panelId)
-            if (current) reload(current)
+            if (current) void reloadPageSetupScript(current.pageKey)
           })]
         : []
     })
     return () => {
-      controllers.forEach((controller) => { controller.abort() })
       unsubscribes.forEach((unsubscribe) => { unsubscribe() })
     }
-  }, [assetResolver, scriptLoader, setupSubscriptionKey, updateSession])
+  }, [assetResolver, reloadPageSetupScript, scriptLoader, setupSubscriptionKey])
 
   const refreshCatalog = useCallback(() => {
     store?.invalidate()
@@ -255,6 +267,9 @@ export function usePageWorkspace({
     const written = await store.setPageSetupScript(pageKey, reference, expectedRevision)
     if (!session) return
 
+    reloadControllersRef.current.get(session.panelId)?.abort()
+    reloadControllersRef.current.delete(session.panelId)
+
     let scriptScope: ComposePageScriptScope | undefined
     if (reference && scriptLoader) {
       const loaded = await loadComposePageScriptScope({ reference, loader: scriptLoader })
@@ -298,5 +313,13 @@ export function usePageWorkspace({
     onActiveSessionChange?.(activePage)
   }, [activePage, onActiveSessionChange])
 
-  return { store, catalog, openPage, savePage, setPageSetupScript, refreshCatalog }
+  return {
+    store,
+    catalog,
+    openPage,
+    savePage,
+    setPageSetupScript,
+    reloadPageSetupScript,
+    refreshCatalog,
+  }
 }

@@ -276,6 +276,10 @@ export function ComposeEditor({
   const generatedSettingsId = useId()
   const settingsPanelId = `compose-editor-settings-${generatedSettingsId.replace(/:/g, '')}`
   const initializedApi = useRef<DockviewReadyEvent['api'] | null>(null)
+  /** Dockview 已提供中央组；页面目录先返回时必须等到这里才能插入首页标签。 */
+  const [workspaceReady, setWorkspaceReady] = useState(false)
+  /** 已自动尝试过的首页 key；用户关闭标签或目录刷新都不应强制再次打开。 */
+  const startupHomePageKeysRef = useRef(new Set<string>())
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null)
   const restoreSettingsFocusRef = useRef(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -455,7 +459,7 @@ export function ComposeEditor({
     return map
   }, [documents])
   /**
-   * 活动页面标签是 Stage 的宿主，否则回落到固定画布面板。
+   * 活动页面标签是 Stage 的宿主；只有未启用页面系统的宿主才回落到固定画布面板。
    *
    * @remarks
    * Stage 只能有一份：interaction controller 的 surface 是独占的。
@@ -463,7 +467,7 @@ export function ComposeEditor({
   const stageHostPanelId = activeDocumentPanelId !== null
     && pageSessions.has(activeDocumentPanelId)
     ? activeDocumentPanelId
-    : WORKSPACE_PANEL_IDS.canvas
+    : pages === undefined ? WORKSPACE_PANEL_IDS.canvas : ''
   const pageWorkspace = usePageWorkspace({
     activePanelId: activeDocumentPanelId,
     assetResolver: resolvedAssetResolver,
@@ -523,6 +527,43 @@ export function ComposeEditor({
       },
     })
   }, [assets?.browser?.provider, pageWorkspace, replaceDocuments])
+
+  // 新页面 Store 代表一个新的工作区实例；此前 Provider 的一次性打开记录不能沿用。
+  useEffect(() => {
+    startupHomePageKeysRef.current.clear()
+  }, [pageStore])
+
+  useEffect(() => {
+    const catalog = pageWorkspace.catalog
+    if (
+      pages === undefined
+      || !workspaceReady
+      || !catalog
+      || catalog.homePageMissing
+      || catalog.homePageKey === null
+      || startupHomePageKeysRef.current.has(catalog.homePageKey)
+    ) return
+
+    const homePage = catalog.pages.find((page) => page.pageKey === catalog.homePageKey)
+    if (!homePage) return
+
+    let disposed = false
+    // 目录订阅的 effect 只负责协调外部目录状态；推迟到微任务后再进入会更新会话 state 的
+    // 打开流程，避免同一 effect commit 内出现级联渲染。
+    queueMicrotask(() => {
+      if (disposed || startupHomePageKeysRef.current.has(homePage.pageKey)) return
+      startupHomePageKeysRef.current.add(homePage.pageKey)
+      void openPageDocument({
+        id: homePage.entryId,
+        parentId: homePage.parentId,
+        name: homePage.fileName,
+        kind: 'file',
+        assetKey: homePage.pageKey,
+        revision: homePage.revision,
+      })
+    })
+    return () => { disposed = true }
+  }, [openPageDocument, pageWorkspace.catalog, pages, workspaceReady])
 
   const savePageDocument = useCallback(async (panelId: string, force?: boolean) => {
     const outcome = await pageWorkspace.savePage(panelId, force)
@@ -637,6 +678,8 @@ export function ComposeEditor({
     pageKey: string,
     reference: ComposePageSetupReference | null,
   ) => pageWorkspace.setPageSetupScript(pageKey, reference), [pageWorkspace])
+  const handlePageSetupReload = useCallback((pageKey: string) =>
+    pageWorkspace.reloadPageSetupScript(pageKey), [pageWorkspace])
   const handlePageCreated = useCallback((descriptor: ComposePageDescriptor) => {
     void openPageDocument({
       id: descriptor.entryId,
@@ -770,6 +813,50 @@ export function ComposeEditor({
     }
   }, [settingsOpen])
 
+  const pageScriptInspector = useMemo(() => {
+    if (!activePageSession || !pageProvider) return undefined
+    return (
+      <PageScriptScopePanel
+        key={`${pageProvider.id}:${activePageSession.pageKey}`}
+        onError={setPageNotice}
+        onOpen={handleOpenPageSetup}
+        onReload={() => handlePageSetupReload(activePageSession.pageKey)}
+        onSetupChange={(reference) => handlePageSetupChanged(
+          activePageSession.pageKey,
+          reference,
+        )}
+        pageName={activePageSession.displayName}
+        pageParentId={activePageSession.entry.parentId ?? pageProvider.root.id}
+        provider={pageProvider}
+        reference={activePageSession.page.setupScript}
+        scope={activePageSession.scriptScope}
+      />
+    )
+  }, [
+    activePageSession,
+    handleOpenPageSetup,
+    handlePageSetupReload,
+    handlePageSetupChanged,
+    pageProvider,
+  ])
+
+  const resolvedInspectorPanel = useMemo(() => {
+    if (slots?.inspector === undefined && controller?.inspectorPanel === undefined) {
+      return undefined
+    }
+    return providePaintImageLibrary(
+      slots?.inspector !== undefined
+        ? slots.inspector
+        : addDefaultElementProps(controller?.inspectorPanel, { pageScriptInspector }),
+      resolvedPaintImageLibrary,
+    )
+  }, [
+    controller?.inspectorPanel,
+    pageScriptInspector,
+    resolvedPaintImageLibrary,
+    slots,
+  ])
+
   const content = useMemo(
     () => ({
       sceneGraphPanel: slots?.sceneGraph !== undefined
@@ -800,21 +887,7 @@ export function ComposeEditor({
           scriptScope: activePageSession?.scriptScope,
           shortcuts: resolvedPreferences.shortcuts,
         }),
-      inspectorPanel: activePageSession
-        || slots?.inspector !== undefined
-        || controller?.inspectorPanel !== undefined
-        ? providePaintImageLibrary(
-          <>
-            {activePageSession ? (
-              <PageScriptScopePanel scope={activePageSession.scriptScope} />
-            ) : null}
-            {slots?.inspector !== undefined
-              ? slots.inspector
-              : controller?.inspectorPanel}
-          </>,
-          resolvedPaintImageLibrary,
-        )
-        : undefined,
+      inspectorPanel: resolvedInspectorPanel,
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
         ? slots.command
@@ -879,7 +952,7 @@ export function ComposeEditor({
       resolvedAssetResolver,
       activePageSession,
       pages?.scriptModuleLoader,
-      resolvedPaintImageLibrary,
+      resolvedInspectorPanel,
       handleAssetCanvasDrag,
       registerDocumentSave,
       requestDocumentClose,
@@ -908,18 +981,23 @@ export function ComposeEditor({
       event.api,
       resolvedPreferences.locale,
       hostI18n?.formatMessage,
+      { includeCanvas: pages === undefined },
     )
     initializedApi.current = event.api
+    setWorkspaceReady(true)
     // 活动页面由中央 Canvas Group 内的活动面板决定。Dockview 的活动面板是全局的：点击
     // 组件库、资源面板等其他组的面板同样会触发该事件，若据此推导 Stage 宿主，页面标签会
     // 立刻失去宿主身份而让画布整体消失。因此只接受画布组内的面板 ID。
     event.api.onDidActivePanelChange?.((change) => {
       const panelId = change.panel?.id
       if (panelId === undefined) return
-      if (!isWorkspaceDocumentPanelId(panelId) && panelId !== WORKSPACE_PANEL_IDS.canvas) return
+      if (
+        !isWorkspaceDocumentPanelId(panelId)
+        && !(pages === undefined && panelId === WORKSPACE_PANEL_IDS.canvas)
+      ) return
       setActiveDocumentPanelId(panelId)
     })
-  }, [hostI18n?.formatMessage, resolvedPreferences.locale])
+  }, [hostI18n?.formatMessage, pages, resolvedPreferences.locale])
 
   useEffect(() => {
     if (initializedApi.current) {

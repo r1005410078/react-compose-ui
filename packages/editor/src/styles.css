@@ -877,23 +877,354 @@
   width: 48px;
   height: 48px;
 }
-.compose-editor__page-script-scope {
-  border-bottom: 1px solid var(--compose-border);
-  padding: 10px 12px;
+
+/* 页面脚本横跨 Canvas Inspector 全栏，内部自行承载标题、状态、菜单与紧凑成员表。 */
+.compose-editor__canvas-inspector [data-property-path="pageScript"] {
+  display: block;
+  min-height: 0;
 }
 
-.compose-editor__page-script-scope h3,
-.compose-editor__page-script-scope p {
-  margin: 0 0 8px;
+.compose-editor__canvas-inspector [data-property-path="pageScript"] > [data-property-part="label"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.compose-editor__page-script-scope dl,
-.compose-editor__page-script-scope dl > div {
+.compose-editor__canvas-inspector [data-property-path="pageScript"] > [data-property-part="editor"] {
+  min-height: 0;
+  align-items: stretch;
+  padding: 6px 8px 8px;
+  border-top: 0;
+  background: transparent;
+}
+
+.compose-editor__canvas-inspector [data-property-path="pageScript"] [data-property-part="control"] {
+  width: 100%;
+  max-width: none;
+  align-items: stretch;
+}
+
+.compose-editor__page-script-property {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--compose-border);
+  border-radius: 4px;
+  color: var(--compose-text);
+  background: color-mix(in srgb, var(--compose-panel-bg) 90%, black);
+}
+
+.compose-editor__page-script-header {
   display: grid;
-  gap: 6px;
-  margin: 0;
+  min-height: 34px;
+  grid-template-columns: minmax(0, 1fr) auto 26px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
 }
 
-.compose-editor__page-script-scope dl > div {
-  grid-template-columns: minmax(72px, 1fr) 2fr;
+.compose-editor__page-script-property[data-state="unbound"] .compose-editor__page-script-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.compose-editor__page-script-toggle,
+.compose-editor__page-script-more,
+.compose-editor__page-script-reload {
+  display: inline-flex;
+  min-width: 0;
+  height: 26px;
+  align-items: center;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--compose-text);
+  background: transparent;
+}
+
+.compose-editor__page-script-toggle {
+  justify-self: start;
+  gap: 5px;
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 580;
+}
+
+.compose-editor__page-script-toggle:hover,
+.compose-editor__page-script-toggle:focus-visible,
+.compose-editor__page-script-more:hover,
+.compose-editor__page-script-more:focus-visible,
+.compose-editor__page-script-reload:hover,
+.compose-editor__page-script-reload:focus-visible {
+  color: var(--compose-text-strong);
+  outline: 0;
+  background: var(--compose-surface-hover);
+}
+
+.compose-editor__page-script-toggle > svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  transition: transform 120ms ease;
+}
+
+.compose-editor__page-script-property[data-expanded="false"] .compose-editor__page-script-toggle > svg {
+  transform: rotate(-90deg);
+}
+
+.compose-editor__page-script-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--compose-text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.compose-editor__page-script-status > span {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--compose-text-muted);
+}
+
+.compose-editor__page-script-more {
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+}
+
+.compose-editor__page-script-more > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.compose-editor__page-script-more:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.compose-editor__page-script-reload {
+  gap: 4px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  color: var(--compose-text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.compose-editor__page-script-reload > svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.compose-editor__page-script-reload[data-loading="true"] > svg {
+  animation: compose-editor-page-script-reload 700ms linear infinite;
+}
+
+.compose-editor__page-script-reload:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@keyframes compose-editor-page-script-reload {
+  to { transform: rotate(360deg); }
+}
+
+.compose-editor__page-script-body {
+  display: grid;
+  gap: 5px;
+  padding: 5px;
+  border-top: 1px solid var(--compose-border);
+}
+
+.compose-editor__page-script-controls {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.compose-editor__page-script-property[data-state="unbound"] .compose-editor__page-script-controls {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.compose-editor__page-script-controls > select {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 1px 7px;
+  border: 1px solid var(--compose-border-strong);
+  border-radius: 3px;
+  outline: 0;
+  overflow: hidden;
+  color: var(--compose-text-strong);
+  background: var(--compose-surface-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-editor__page-script-controls > select:focus {
+  border-color: var(--compose-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--compose-accent) 30%, transparent);
+}
+
+.compose-editor__page-script-controls > select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.compose-editor__page-script-create {
+  display: inline-flex;
+  min-width: 0;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--compose-accent) 65%, var(--compose-border));
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--compose-text-strong);
+  background: color-mix(in srgb, var(--compose-accent) 24%, var(--compose-surface-control));
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.compose-editor__page-script-create > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.compose-editor__page-script-create:hover,
+.compose-editor__page-script-create:focus-visible {
+  background: color-mix(in srgb, var(--compose-accent) 34%, var(--compose-surface-control));
+}
+
+.compose-editor__page-script-create:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.compose-editor__page-script-members {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--compose-border);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--compose-panel-bg) 88%, black);
+}
+
+.compose-editor__page-script-members-header {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 0 7px;
+  color: var(--compose-text-muted);
+  background: color-mix(in srgb, var(--compose-panel-bg) 74%, var(--compose-surface-control));
+  font-size: 10px;
+}
+
+.compose-editor__page-script-members-header > span:last-child {
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  padding: 0 4px;
+  border: 1px solid var(--compose-border-strong);
+  border-radius: 8px;
+  color: var(--compose-text);
+  font-size: 9px;
+}
+
+.compose-editor__page-script-members > ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compose-editor__page-script-members > ul > li {
+  display: grid;
+  min-height: 28px;
+  grid-template-columns: 18px minmax(42px, 1fr) minmax(20px, auto);
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  border-top: 1px solid var(--compose-border);
+  font-size: 10px;
+}
+
+.compose-editor__page-script-members > ul > li > strong,
+.compose-editor__page-script-members > ul > li > output {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-editor__page-script-members > ul > li > strong {
+  color: var(--compose-text-strong);
+  font-weight: 580;
+}
+
+.compose-editor__page-script-members > ul > li > output {
+  justify-self: end;
+  color: var(--compose-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.compose-editor__page-script-kind {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.compose-editor__page-script-kind--value {
+  color: color-mix(in srgb, var(--compose-accent) 70%, white);
+  background: color-mix(in srgb, var(--compose-accent) 18%, transparent);
+}
+
+.compose-editor__page-script-kind--method {
+  color: #67d6b4;
+  background: rgb(74 190 155 / 14%);
+}
+
+.compose-editor__page-script-empty,
+.compose-editor__page-script-diagnostic {
+  margin: 0;
+  padding: 6px 7px;
+  border-top: 1px solid var(--compose-border);
+  color: var(--compose-text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.compose-editor__page-script-diagnostic {
+  color: var(--compose-danger);
 }

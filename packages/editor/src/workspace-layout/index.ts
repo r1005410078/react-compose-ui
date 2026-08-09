@@ -12,6 +12,7 @@ export {
   WORKSPACE_GROUP_IDS,
   WORKSPACE_PANEL_IDS,
   WORKSPACE_SIZES,
+  type InitializeWorkspaceOptions,
   createAssetDocumentPanelId,
   initializeWorkspace,
   createPageDocumentPanelId,

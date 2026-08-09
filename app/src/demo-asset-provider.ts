@@ -5,8 +5,10 @@ import {
 import {
   COMPOSE_PAGE_MEDIA_TYPE,
   createDefaultComposeLayoutItem,
+  createEmptyComposeAppManifest,
   createEmptyComposePageDocument,
   createEmptyComposePageFile,
+  serializeComposeAppManifest,
   serializeComposePageFile,
 } from '@compose-ui/core'
 import type {
@@ -99,6 +101,11 @@ const demoCounterDocument: ComposeDocument = {
   },
 }
 const demoHomePageText = serializeComposePageFile(createEmptyComposePageFile())
+const demoAppManifestText = serializeComposeAppManifest({
+  ...createEmptyComposeAppManifest(),
+  // 示例工作区需要一个确定首页，Home 不能只是孤立的页面资源。
+  homePageKey: 'demo-home-page',
+})
 const demoCounterPageText = serializeComposePageFile({
   ...createEmptyComposePageFile(),
   document: demoCounterDocument,
@@ -184,6 +191,19 @@ export function createDemoAssetProvider(options: {
         name: 'Pages',
         kind: 'folder',
       },
+    }],
+    ['demo-app-manifest', {
+      entry: {
+        id: 'demo-app-manifest',
+        parentId: root.id,
+        name: 'app.json',
+        kind: 'file',
+        mediaType: 'application/json',
+        size: demoAppManifestText.length,
+        revision: revision(revisionNumber),
+        assetKey: 'demo-app-manifest',
+      },
+      content: new Blob([demoAppManifestText], { type: 'application/json' }),
     }],
     ['demo-home-page', {
       entry: {

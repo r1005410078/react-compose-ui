@@ -20,7 +20,8 @@ export const PAGE_CONTEXT_MENU_ITEM_IDS = {
   unlinkSetup: 'compose.page.setup.unlink',
 } as const
 
-const DEFAULT_SETUP_SCRIPT = `export function setup(ctx) {
+/** 新页面脚本与 Inspector 快捷创建共用的自包含模板。 @internal */
+export const DEFAULT_PAGE_SETUP_SCRIPT = `export function setup(ctx) {
   const num = ctx.state(0)
 
   const onAdd = () => {
@@ -141,7 +142,7 @@ export function createPageContextMenuItems({
           created = await provider.createFile({
             parentId: page.parentId ?? provider.root.id,
             name: `${composePageDisplayName(page.name)}.setup.js`,
-            content: new Blob([DEFAULT_SETUP_SCRIPT], { type: 'text/javascript' }),
+            content: new Blob([DEFAULT_PAGE_SETUP_SCRIPT], { type: 'text/javascript' }),
           })
           if (!created.assetKey) throw new Error('创建的脚本缺少稳定 assetKey')
           await onPageSetupChanged(page.assetKey, {

@@ -13,6 +13,7 @@ import type {
 } from '@compose-ui/script-runtime'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ComposeEditorController } from '../editor-controller'
 
 const initializeWorkspaceMock = vi.hoisted(() => vi.fn())
 const assetPreviewPropsMock = vi.hoisted(() => vi.fn())
@@ -193,6 +194,7 @@ vi.mock('@compose-ui/asset-browser', async () => {
 })
 
 const { ComposeEditor } = await import('../compose-editor')
+const { CanvasInspector } = await import('../inspector')
 
 const pageText = serializeComposePageFile(createEmptyComposePageFile())
 
@@ -487,6 +489,60 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
 })
 
 describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
+  it('OpenSpec: editor-workspace-layout / 页面脚本作为 Canvas Inspector 属性 / 页面与 Inspector 目标切换', async () => {
+    const provider = createProvider({
+      list: vi.fn(async ({ folderId }) => folderId === 'root'
+        ? [pageEntry, scriptEntry, setupScriptEntry]
+        : []),
+    })
+    const onActiveSessionChange = vi.fn()
+    const controller = {
+      sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
+      componentLibraryPanel: null,
+      stage: null,
+      inspectorPanel: (
+        <CanvasInspector
+          dispatch={vi.fn()}
+          document={createEmptyComposePageFile().document}
+          idFactory={() => 'page-script-inspector'}
+        />
+      ),
+      commandPanel: null,
+      stageToolbar: null,
+    } as unknown as ComposeEditorController
+
+    render(
+      <ComposeEditor
+        assets={{ browser: { provider } }}
+        controller={controller}
+        pages={{ onActiveSessionChange }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+
+    const inspector = await screen.findByRole('region', { name: '画布属性' })
+    const pageScriptSelect = within(inspector).getByRole('combobox', { name: '选择页面脚本' })
+    await waitFor(() => { expect(pageScriptSelect).toBeEnabled() })
+    expect(within(inspector).getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
+
+    fireEvent.change(pageScriptSelect, {
+      target: { value: 'Counter.setup.js' },
+    })
+    await waitFor(() => { expect(provider.writeFile).toHaveBeenCalled() })
+    await waitFor(() => {
+      expect(lastSession(onActiveSessionChange)?.page.setupScript).toEqual({
+        providerId: 'memory',
+        assetKey: 'Counter.setup.js',
+        scope: 'persistent',
+      })
+    })
+    fireEvent.click(within(inspector).getByRole('button', { name: '更多页面脚本操作' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '解除页面脚本' }))
+    await waitFor(() => {
+      expect(lastSession(onActiveSessionChange)?.page.setupScript).toBeNull()
+    })
+  })
+
   it('创建页面写入规范化文件名并随即打开该页面', async () => {
     const provider = createProvider()
     renderEditor(provider)
@@ -540,7 +596,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
     })
   })
 
-  it('OpenSpec: page-script-runtime / setup revision 重载 / 资源面板更新不取消页面重载', async () => {
+  it('OpenSpec: page-script-runtime / setup 重载 / 手动重载与资源 revision 更新共用页面重载路径', async () => {
     const listeners = new Set<() => void>()
     const scriptedPageText = serializeComposePageFile({
       ...createEmptyComposePageFile(),
@@ -562,7 +618,10 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
         if (loadCount === 1) {
           return Promise.resolve({ module: { setup: setupWithValue(0) }, revision: '1' })
         }
-        return new Promise<ComposeLoadedScriptModule>((resolve) => { resolveReload = resolve })
+        if (loadCount === 2) {
+          return new Promise<ComposeLoadedScriptModule>((resolve) => { resolveReload = resolve })
+        }
+        return Promise.resolve({ module: { setup: setupWithValue(20) }, revision: '3' })
       }),
     }
     const provider = createProvider({
@@ -581,9 +640,24 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       },
     })
     const onActiveSessionChange = vi.fn()
+    const controller = {
+      sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
+      componentLibraryPanel: null,
+      stage: null,
+      inspectorPanel: (
+        <CanvasInspector
+          dispatch={vi.fn()}
+          document={createEmptyComposePageFile().document}
+          idFactory={() => 'page-script-reload'}
+        />
+      ),
+      commandPanel: null,
+      stageToolbar: null,
+    } as unknown as ComposeEditorController
     render(
       <ComposeEditor
         assets={{ browser: { provider } }}
+        controller={controller}
         pages={{ onActiveSessionChange, scriptModuleLoader }}
       />,
     )
@@ -594,7 +668,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       expect(listeners.size).toBeGreaterThan(0)
     })
 
-    act(() => { listeners.forEach((listener) => { listener() }) })
+    fireEvent.click(await screen.findByRole('button', { name: '重新加载脚本' }))
     await waitFor(() => { expect(scriptModuleLoader.load).toHaveBeenCalledTimes(2) })
     fireEvent.click(screen.getByRole('button', { name: 'open-script' }))
     await waitFor(() => {
@@ -611,10 +685,41 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       expect(lastSession(onActiveSessionChange)?.scriptScope?.getExport('count'))
         .toMatchObject({ value: 10 })
     })
+
+    act(() => { listeners.forEach((listener) => { listener() }) })
+    await waitFor(() => {
+      expect(scriptModuleLoader.load).toHaveBeenCalledTimes(3)
+      expect(lastSession(onActiveSessionChange)?.scriptScope?.getExport('count'))
+        .toMatchObject({ value: 20 })
+    })
   })
 })
 
 describe('OpenSpec: editor-workspace-layout / 首页标记与清单对账', () => {
+  it('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 页面模式不显示根画布并自动激活首页', async () => {
+    renderEditor(createProvider({
+      list: vi.fn(async ({ folderId }) => folderId === 'root'
+        ? [pageEntry, scriptEntry, manifestEntry]
+        : []),
+      read: vi.fn(async ({ fileId }) => ({
+        blob: new Blob([fileId === 'app.json'
+          ? '{"schemaVersion":1,"homePageKey":"Home.page.json"}'
+          : pageText]),
+        revision: '1',
+      })),
+    }))
+
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    expect(pageDocumentPanels()[0]).toMatchObject({ title: 'Home' })
+    expect(dockviewMock.activeId).toBe(pageDocumentPanels()[0]?.id)
+    expect(initializeWorkspaceMock).toHaveBeenCalledWith(
+      dockviewMock.api,
+      'zh-CN',
+      undefined,
+      { includeCanvas: false },
+    )
+  })
+
   it('设为首页后标记在树与网格双处渲染', async () => {
     const provider = createProvider()
     renderEditor(provider)

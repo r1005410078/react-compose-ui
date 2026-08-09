@@ -82,6 +82,16 @@ export const WORKSPACE_SIZES = {
 
 const TAB_COMPONENT = 'workspaceTab'
 
+/**
+ * 固定工作区的初始化选项。
+ *
+ * @internal 页面模式会自行把页面文档加入中央组，因此不应再插入一个无资源归属的 Canvas 标签。
+ */
+export interface InitializeWorkspaceOptions {
+  /** 是否创建单文档模式的固定 Canvas。 @defaultValue true */
+  readonly includeCanvas?: boolean
+}
+
 export function localizeWorkspace(
   api: DockviewApi,
   locale: ComposeLocale,
@@ -107,8 +117,10 @@ export function initializeWorkspace(
   api: DockviewApi,
   locale: ComposeLocale = 'zh-CN',
   formatMessage?: ComposeI18nContextValue['formatMessage'],
+  options?: InitializeWorkspaceOptions,
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
+  const includeCanvas = options?.includeCanvas ?? true
   if (!api.getGroup(WORKSPACE_GROUP_IDS.canvas)) {
     api.addGroup({
       direction: 'right',
@@ -117,7 +129,7 @@ export function initializeWorkspace(
     })
   }
 
-  if (!api.getPanel(WORKSPACE_PANEL_IDS.canvas)) {
+  if (includeCanvas && !api.getPanel(WORKSPACE_PANEL_IDS.canvas)) {
     api.addPanel({
       id: WORKSPACE_PANEL_IDS.canvas,
       component: WORKSPACE_COMPONENT_IDS.canvas,

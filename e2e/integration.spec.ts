@@ -31,7 +31,7 @@ async function expandInspectorSection(inspector: Locator, name: string) {
   }
 }
 
-test('OpenSpec: editor-workspace-layout / 完整示例入口 / 根路径直接展示 Stage 编排工作区', async ({ page }) => {
+test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路径直接展示 Home 页面工作区', async ({ page }) => {
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
@@ -58,18 +58,23 @@ test('OpenSpec: editor-workspace-layout / 完整示例入口 / 根路径直接�
   const left = page.getByTestId('dv-edge-group-compose-scene-edge')
   const right = page.getByTestId('dv-edge-group-compose-inspector-edge')
   const bottom = page.getByTestId('dv-edge-group-compose-bottom-edge')
-  const canvas = page.locator('[data-workspace-panel="canvas"]')
+  const homeDocument = page.locator(
+    '[data-workspace-panel="page-document"][data-page-key="demo-home-page"]',
+  )
   const leftBox = await left.boundingBox()
   const rightBox = await right.boundingBox()
   const bottomBox = await bottom.boundingBox()
-  const canvasBox = await canvas.boundingBox()
+  const homeDocumentBox = await homeDocument.boundingBox()
   expect(leftBox).not.toBeNull()
   expect(rightBox).not.toBeNull()
   expect(bottomBox).not.toBeNull()
-  expect(canvasBox).not.toBeNull()
-  expect(leftBox!.x).toBeLessThan(canvasBox!.x)
-  expect(rightBox!.x).toBeGreaterThanOrEqual(canvasBox!.x + canvasBox!.width)
-  expect(bottomBox!.y).toBeGreaterThan(canvasBox!.y)
+  expect(homeDocumentBox).not.toBeNull()
+  await expect(editor.locator('[data-workspace-panel="canvas"]')).toHaveCount(0)
+  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')
+    .filter({ hasText: 'Home' })).toBeVisible()
+  expect(leftBox!.x).toBeLessThan(homeDocumentBox!.x)
+  expect(rightBox!.x).toBeGreaterThanOrEqual(homeDocumentBox!.x + homeDocumentBox!.width)
+  expect(bottomBox!.y).toBeGreaterThan(homeDocumentBox!.y)
   expect(bottomBox!.height).toBeLessThan(80)
   expect(await bottom.locator('[data-workspace-tab]').evaluateAll(
     (tabs) => tabs.map((tab) => tab.getAttribute('data-workspace-tab')),
@@ -2011,6 +2016,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 创建、编辑�
 
   // 2) 创建后随即以页面标签打开
   const detailTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
+    .filter({ hasText: 'Detail' })
   await expect(detailTab).toHaveCount(1)
   await expect(detailTab).toContainText('Detail')
 
@@ -2028,7 +2034,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 创建、编辑�
 
   // 5) 重开该页面时看到已持久化的实体
   await pagesGrid.getByRole('gridcell', { name: 'Detail' }).dblclick()
-  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
+  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(2)
   const sceneTree = editor.locator('[data-workspace-panel="scene-graph"]')
   await expect(sceneTree).toContainText('Container')
 })
@@ -2051,13 +2057,7 @@ test('OpenSpec: editor-workspace-layout / 首页标记 / 设为首页并在树�
   await pagesRow.press('ArrowRight')
   await expect(tree.getByRole('row', { name: 'Home' })).toBeVisible()
 
-  // 初始没有首页
-  await expect(assets.getByRole('img', { name: '首页' })).toHaveCount(0)
-
-  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
-  await page.getByRole('menu').getByRole('menuitem', { name: '设为首页' }).click()
-
-  // 树行与网格块双处渲染标记
+  // 示例清单在初始化时已经把 Home 指定为首页。
   await expect(tree.getByRole('row', { name: 'Home' })
     .getByRole('img', { name: '首页' })).toBeVisible()
   await expect(pagesGrid.getByRole('gridcell', { name: 'Home' })
@@ -2101,7 +2101,23 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await expect(pageTab).toBeVisible()
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
-  await expect(editor.getByRole('region', { name: '页面脚本作用域' })).toContainText('onAdd')
+  await stage.getByTestId('stage-output-boundary').click({ position: { x: 8, y: 8 } })
+  const canvasInspector = editor.getByRole('region', { name: '画布属性' })
+  const pageScriptProperty = canvasInspector.locator('[data-property-path="pageScript"]')
+  await expect(canvasInspector.getByRole('searchbox', { name: '搜索属性' })).toHaveCount(1)
+  await expect(canvasInspector.getByRole('combobox', { name: '选择页面脚本' }))
+    .toHaveValue('demo-home-setup')
+  await expect(pageScriptProperty.getByRole('list', { name: '页面脚本返回成员' }))
+    .toContainText('onAdd')
+  await expect(pageScriptProperty.getByRole('button', { name: '重新加载脚本' })).toBeVisible()
+  await expect(pageScriptProperty).toHaveScreenshot('page-script-canvas-property.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await pageScriptProperty.getByRole('button', { name: '重新加载脚本' }).click()
+  await expect(pageScriptProperty.getByRole('list', { name: '页面脚本返回成员' }))
+    .toContainText('0')
 
   await editor.getByRole('button', { name: '打开预览' }).click()
   const preview = page.getByRole('dialog', { name: '文档预览对话框' })
@@ -2111,8 +2127,9 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
   await preview.getByRole('button', { name: '关闭预览' }).click()
 
-  await pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true }).click({ button: 'right' })
-  await page.getByRole('menu').getByRole('menuitem', { name: '打开页面脚本' }).click()
+  await pageScriptProperty.getByRole('button', { name: '更多页面脚本操作' }).click()
+  await page.getByRole('menu', { name: '页面脚本操作' })
+    .getByRole('menuitem', { name: '打开页面脚本' }).click()
   const scriptDocument = editor.locator(
     '[data-workspace-panel="asset-document"][data-asset-entry-id="demo-home-setup"]',
   )
@@ -2134,7 +2151,9 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await page.keyboard.press('Control+S')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
   await pageTab.click()
-  await expect(editor.getByRole('region', { name: '页面脚本作用域' })).toContainText('10')
+  await stage.getByTestId('stage-output-boundary').click({ position: { x: 8, y: 8 } })
+  await expect(pageScriptProperty.getByRole('list', { name: '页面脚本返回成员' }))
+    .toContainText('10')
   await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
 
   // 新 revision 注册 cleanup；切换页面保留非活动实例，下一次脚本重载才 dispose 旧 scope。
@@ -2157,7 +2176,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
       .__composeCounterDisposed = false
   })
 
-  await pagesGrid.getByRole('gridcell', { name: 'Home', exact: true }).dblclick()
+  await pagesGrid.getByRole('gridcell', { name: /^Home/ }).dblclick()
   await expect.poll(() => page.evaluate(() => (
     globalThis as typeof globalThis & { __composeCounterDisposed?: boolean }
   ).__composeCounterDisposed)).toBe(false)
@@ -2176,7 +2195,8 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await page.keyboard.press('Control+S')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
   await pageTab.click()
-  await expect(editor.getByRole('region', { name: '页面脚本作用域' }))
+  await stage.getByTestId('stage-output-boundary').click({ position: { x: 8, y: 8 } })
+  await expect(pageScriptProperty)
     .toContainText('页面脚本导入失败')
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
   await expect.poll(() => page.evaluate(() => (
@@ -2305,12 +2325,12 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
   await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
   await editor.getByRole('button', { name: '创建容器' }).click()
   const homeTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
-  await homeTab.getByRole('button', { name: /^关闭页面/ }).click()
-  await page.getByRole('dialog', { name: '页面尚未保存' })
-    .getByRole('button', { name: '保存' }).click()
-  await expect(homeTab).toHaveCount(0)
+  await page.keyboard.press('Control+S')
+  await expect(homeTab.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
 
-  // 2) 在根文档里创建一个 Page Slot 实体
+  // 2) 在 Counter 页面里创建一个 Page Slot 实体，引用已保存的 Home 页面。
+  await pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
+  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(2)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: 'Page Slot' }).click()
   await expect(stage.getByTestId('compose-page-slot-placeholder')).toBeVisible()
@@ -2344,7 +2364,7 @@ test('回归：Page Slot / A → B → Home 冷加载不会被 StrictMode 取消
   await expect(preview.locator('[data-page-slot-entity-id]')).toHaveCount(4)
 })
 
-test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板与固定画布布局一致', async ({ page }) => {
+test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板占据中央文档区且不回退固定画布', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
@@ -2352,21 +2372,19 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板与�
   await assets.getByRole('grid', { name: 'Demo Assets' })
     .getByRole('gridcell', { name: /^Pages/ }).click()
   await assets.getByRole('grid', { name: 'Pages' })
-    .getByRole('gridcell', { name: 'Home' }).dblclick()
+    .getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
 
-  const pagePanel = editor.locator('[data-workspace-panel="page-document"]')
+  const pagePanel = editor.locator(
+    '[data-workspace-panel="page-document"][data-page-key="demo-counter-page"]',
+  )
   await expect(pagePanel).toBeVisible()
   const pageContent = await pagePanel.locator('.compose-editor__canvas-content').boundingBox()
   const pageStage = await pagePanel.locator('.compose-stage').boundingBox()
 
-  await editor.locator('[data-workspace-tab="compose-canvas"]').click()
-  const canvasPanel = editor.locator('[data-workspace-panel="canvas"]')
-  const canvasContent = await canvasPanel.locator('.compose-editor__canvas-content').boundingBox()
-
   // 内容区依赖 flex-1 撑开；页面面板若用 grid 布局会塌陷成零高度并在工具栏下留出空隙。
   expect(pageContent?.height).toBeGreaterThan(100)
-  expect(Math.round(pageContent?.height ?? 0)).toBe(Math.round(canvasContent?.height ?? -1))
   expect(Math.round(pageStage?.height ?? 0)).toBe(Math.round(pageContent?.height ?? -1))
+  await expect(editor.locator('[data-workspace-panel="canvas"]')).toHaveCount(0)
 })
 
 test('OpenSpec: editor-workspace-layout / 页面文档标签 / 切换其他面板不会让画布消失', async ({ page }) => {
@@ -2454,9 +2472,11 @@ test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完�
   const tab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
   await page.keyboard.press('Control+S')
   await expect(tab.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
-  await tab.getByRole('button', { name: /^关闭页面/ }).click()
 
-  // 根文档里放一个 Page Slot 指向该页面（组件库此时仍是打开状态）
+  // Counter 页面里放一个 Page Slot 指向 Home（组件库仍是打开状态）。
+  await assets.getByRole('grid', { name: 'Pages' })
+    .getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: 'Page Slot' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await expandInspectorSection(inspector, '内容')

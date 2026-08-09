@@ -83,6 +83,20 @@ describe('initializeWorkspace', () => {
       .toHaveBeenCalledTimes(1)
   })
 
+  it('OpenSpec: editor-workspace-layout / 页面模式不显示根画布 / 保留中央组但不创建固定 Canvas', () => {
+    const { api, spies, panels } = createWorkspaceApi()
+
+    initializeWorkspace(api, 'zh-CN', undefined, { includeCanvas: false })
+
+    expect(spies.addGroup).toHaveBeenCalledWith(
+      expect.objectContaining({ id: WORKSPACE_GROUP_IDS.canvas }),
+    )
+    expect(panels.has(WORKSPACE_PANEL_IDS.canvas)).toBe(false)
+    expect(spies.addPanel).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: WORKSPACE_PANEL_IDS.canvas,
+    }))
+  })
+
   it('OpenSpec: editor-workspace-layout / 边缘工具区 / 检查默认边缘组', () => {
     const { api, spies } = createWorkspaceApi()
 

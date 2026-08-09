@@ -64,9 +64,12 @@ History 和右键菜单都显示当前实例实际生效的键位。偏好默认
 默认 Dockview 布局禁止面板关闭、浮动与任意拖拽。宿主可以通过 `slots` 覆盖领域区域；Editor
 不依赖 operation-log，也不会把 Dockview 类型或示例应用状态暴露为公共 API。
 
-启用 `pages` 后，页面标签保存完整 `ComposePageFile` 聚合并保留 setup 引用。资源菜单可创建、打开、
-更换或解除 `.setup.js`；Inspector 展示页面返回成员/诊断，并依据 Renderer Prop Contract 将绑定写入
-可撤销的 `Bindings` Component。宿主切换 controller 时应同时传入 `activePage.runtime` 与
+启用 `pages` 后，页面标签保存完整 `ComposePageFile` 聚合并保留 setup 引用。Canvas Inspector 将
+“页面脚本”作为输出尺寸、背景旁的全宽可折叠属性：可以从页面同目录选择 `.setup.js`、按页面名
+快捷创建，并从更多菜单打开或解除当前关联；标题栏可手动重新加载当前脚本，紧凑成员表显示 Runtime 返回成员、
+实时值与诊断。资源菜单保留等价入口；
+Provider 缺少创建或写入能力时只禁用对应操作。Renderer Prop Contract 绑定仍写入可撤销的
+`Bindings` Component。宿主切换 controller 时应同时传入 `activePage.runtime` 与
 `activePage.scriptScope`。脚本是受信任同 Realm JavaScript，不是沙箱，也不编译 TypeScript。
 
 页面能力启用时，通过页面菜单打开或文件名匹配 `*.setup.js` 的资源会话会启用隐藏类型层。用户仍编辑
