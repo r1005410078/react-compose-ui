@@ -9,7 +9,11 @@ import {
   ComposePropertyPanelSection,
   resolveComposePropertyBindings,
 } from '../index'
-import type { ComposePropertyPanelBinding, ComposePropertyPanelRenderer } from '../index'
+import type {
+  ComposePropertyPanelBinding,
+  ComposePropertyPanelBindingConfig,
+  ComposePropertyPanelRenderer,
+} from '../index'
 import * as propertyPanelModule from '../index'
 
 afterEach(() => {
@@ -1586,6 +1590,39 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     })
 
     expect(result.value).toEqual({ position: { x: 12, y: 2 } })
+  })
+
+  it('OpenSpec: property-panel / 宿主授权顶层字段 / 复合字段显示绑定入口并过滤候选', () => {
+    const schema = v.object({ values: v.pipe(v.array(v.number()), v.title('数据')) })
+    const onBindingChange = vi.fn()
+    render(
+      <ComposePropertyPanel
+        binding={{
+          value: [],
+          variables: [
+            { id: 'values', label: '页面数据', scope: 'page', value: [12, 18] },
+            { id: 'title', label: '页面标题', scope: 'page', value: '运行标题' },
+          ],
+          isTargetEnabled: (target) => (
+            target.address.path.length === 1 && target.address.path[0] === 'values'
+          ),
+          onChange: onBindingChange,
+        } satisfies ComposePropertyPanelBindingConfig}
+        schema={schema}
+        value={{ values: [1, 2] }}
+      />,
+    )
+    const trigger = screen.getByRole('button', { name: '绑定 数据' })
+    expect(trigger).toBeEnabled()
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('button', { name: /页面标题/u })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /页面数据/u }))
+    expect(onBindingChange).toHaveBeenCalledWith([
+      { target: { path: ['values'], targetId: 'value' }, variableId: 'values' },
+    ], {
+      reason: 'bind',
+      target: { path: ['values'], targetId: 'value' },
+    })
   })
 
   it('为显式启用的自定义 renderer 子目标提供绑定槽位', () => {

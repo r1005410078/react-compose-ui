@@ -1,7 +1,9 @@
 import type {
   ComposeEntityPreset,
+  ComposeRendererPropContract,
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
+import * as v from 'valibot'
 import { measureSvgAsset } from '../material-inspector-kit/assets'
 import type { ComposeBasicMaterialOptions } from '../types'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
@@ -17,6 +19,24 @@ import {
 } from './defaults'
 import { SvgRenderer } from './renderer'
 import { SVG_RENDERER_MEASUREMENT } from './measurement'
+import { SVG_RENDERER_PROP_SCHEMAS } from './props'
+
+function valueContract(
+  name: keyof typeof SVG_RENDERER_PROP_SCHEMAS,
+  label: string,
+  affectsMeasurement: boolean,
+): ComposeRendererPropContract {
+  return {
+    name,
+    kind: 'value',
+    label,
+    category: 'svg',
+    affectsMeasurement,
+    validate: (value) => v.safeParse(SVG_RENDERER_PROP_SCHEMAS[name], value).success
+      ? true
+      : `${label} 与 SVG Prop Contract 不兼容`,
+  }
+}
 
 /** 创建 SVG Renderer 与资源型 Entity Preset。 @internal */
 export function createSvgMaterial(
@@ -31,6 +51,24 @@ export function createSvgMaterial(
       type: 'svg',
       label: options.label ?? 'SVG',
       renderer: SvgRenderer,
+      propContracts: [
+        valueContract('asset', 'Asset', true),
+        valueContract('alt', 'Alternative text', false),
+        valueContract('fit', 'Fit', false),
+        valueContract('overrideFill', 'Override fill', false),
+        valueContract('fillColor', 'Fill color', false),
+        valueContract('overrideStroke', 'Override stroke', false),
+        valueContract('strokeColor', 'Stroke color', false),
+      ],
+      propCategories: [{ id: 'svg', label: 'SVG' }],
+      inspectorPropNames: [
+        'alt',
+        'fit',
+        'overrideFill',
+        'fillColor',
+        'overrideStroke',
+        'strokeColor',
+      ],
       inspector: createSvgRendererInspector(idFactory),
       measurement: SVG_RENDERER_MEASUREMENT,
     },

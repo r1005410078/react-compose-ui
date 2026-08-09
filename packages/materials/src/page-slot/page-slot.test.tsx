@@ -353,11 +353,21 @@ describe('OpenSpec: page-script-runtime / Page Slot setup 实例', () => {
       entities: {
         count: entity('count', {
           Renderer: { type: 'text', props: { text: 'fallback' } },
-          Bindings: { version: 1, props: { text: { scope: 'page', exportName: 'num' } } },
+          Bindings: {
+            version: 1,
+            rendererProps: {
+              fields: { text: { scope: 'page', exportName: 'num' } },
+            },
+          },
         }),
         add: entity('add', {
           Renderer: { type: 'test-button', props: { label: 'Add' } },
-          Bindings: { version: 1, props: { onClick: { scope: 'page', exportName: 'onAdd' } } },
+          Bindings: {
+            version: 1,
+            rendererProps: {
+              fields: { onClick: { scope: 'page', exportName: 'onAdd' } },
+            },
+          },
         }),
       },
     } as ComposeDocument

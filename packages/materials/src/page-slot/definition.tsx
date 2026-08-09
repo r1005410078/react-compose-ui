@@ -2,6 +2,7 @@ import type {
   ComposeEntityPreset,
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
+import * as v from 'valibot'
 import { isComposePageMediaType, parseComposePageFile } from '@compose-ui/core'
 import type { ComposeBasicMaterialOptions } from '../types'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
@@ -10,8 +11,11 @@ import {
   createDefaultInspectorId,
   createPageSlotRendererInspector,
 } from '../material-inspector-kit/renderer-inspectors'
+import { composeNodePropertySchema } from '../material-inspector-kit/node'
 import { PageSlotRenderer } from './renderer'
 import { PAGE_SLOT_RENDERER_MEASUREMENT } from './measurement'
+
+const PAGE_PROP_SCHEMA = composeNodePropertySchema()
 
 /** 创建 Page Slot Renderer 与 Entity Preset。 @internal */
 export function createPageSlotMaterial(
@@ -29,6 +33,17 @@ export function createPageSlotMaterial(
       type: 'page-slot',
       label: options.label ?? 'Page Slot',
       renderer: PageSlotRenderer,
+      propContracts: [{
+        name: 'page',
+        kind: 'value',
+        label: 'Page',
+        category: 'page',
+        validate: (value) => v.safeParse(PAGE_PROP_SCHEMA, value).success
+          ? true
+          : 'Page 与 Page Slot Prop Contract 不兼容',
+      }],
+      propCategories: [{ id: 'page', label: '页面' }],
+      inspectorPropNames: ['page'],
       inspector: createPageSlotRendererInspector(idFactory),
       measurement: PAGE_SLOT_RENDERER_MEASUREMENT,
     },

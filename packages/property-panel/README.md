@@ -246,6 +246,10 @@ const schema = v.object({
 })
 ```
 
+需要把外部 Props Contract 映射到已有 Inspector 时，宿主可用 `binding.isTargetEnabled` 额外授权
+第一层完整字段目标，而无需修改默认显式 opt-in 规则；数组、对象等复合字段会在分组标题显示入口。
+无字面 editor 的目标可使用 `ComposePropertyPanelBindingTargetRow`，它支持候选 validator。
+
 ```tsx
 import { ComposePropertyPanel, resolvePropertyBindings } from '@compose-ui/property-panel'
 
@@ -369,7 +373,6 @@ ComposePropertyPanel 专用变量：
   --pp-control-height: 22px;
   --pp-tree-indent: 14px;
   --pp-binding-slot-width: 36px;
-  --pp-binding-slot-compact-width: 20px;
 }
 ```
 

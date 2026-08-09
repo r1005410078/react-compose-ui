@@ -202,8 +202,11 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - 每个场景 Entity 必须拥有 `Composition`、`Transform`、`LayoutItem`、`Visibility`、`Lock`，并至少拥有
   `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法
   Component 保留并由 Registry 边界降级。
-- 页面文件包装 `ComposeDocument` 与零或一个 setup 稳定引用；`Bindings` 只保存页面返回名称，运行
-  State、Computed 与 Function 不进入文档、Patch 或历史。默认执行模型只适用于受信任脚本。
+- 页面文件包装 `ComposeDocument` 与零或一个 setup 稳定引用；`Bindings.rendererProps.fields` 保存
+  顶层字段的页面返回名称，解析以 authored Props 为基础并逐字段覆盖。运行 State、
+  Computed 与 Function 不进入文档、Patch 或历史；Renderer `propContracts` 是唯一可绑定边界，
+  `propCategories` 决定 Inspector 分类，未分类 Prop 进入“高级”且空分组不显示。默认执行模型只适用于
+  受信任脚本。
 - 数据源协议与正式发布持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
 - 示例中的临时状态、面板 ID 和 Dockview 对象都不是编辑器领域模型或公共协议。
 

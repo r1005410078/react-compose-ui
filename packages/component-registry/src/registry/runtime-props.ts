@@ -14,6 +14,7 @@ import type {
 /** 一次纯 Renderer 绑定解析结果。 @public */
 export interface ComposeRendererRuntimePropsResult {
   readonly props: ComposeRuntimeProps
+  readonly baseProps: ComposeRuntimeProps
   readonly authoredProps: JsonObject
   readonly diagnostics: readonly ComposeRendererBindingDiagnostic[]
 }
@@ -40,16 +41,19 @@ export function resolveComposeRendererRuntimeProps(input: {
 }): ComposeRendererRuntimePropsResult {
   const renderer = getComposeRenderer(input.entity)
   const authoredProps = renderer?.props ?? {}
-  const props: Record<string, unknown> = { ...authoredProps }
   const diagnostics: ComposeRendererBindingDiagnostic[] = []
   const bindings = getComposeBindings(input.entity)
-  if (!bindings) return { props, authoredProps, diagnostics }
   const contracts = new Map((input.definition.propContracts ?? []).map((item) => [item.name, item]))
+  const baseProps: Record<string, unknown> = { ...authoredProps }
+  if (!bindings) return { props: baseProps, baseProps, authoredProps, diagnostics }
 
-  Object.entries(bindings.props).forEach(([propName, reference]) => {
+  const props: Record<string, unknown> = { ...baseProps }
+
+  Object.entries(bindings.rendererProps.fields).forEach(([propName, reference]) => {
     const contract = contracts.get(propName)
     const base = {
       entityId: input.entity.id,
+      target: { kind: 'field', propName } as const,
       propName,
       exportName: reference.exportName,
     }
@@ -63,7 +67,7 @@ export function resolveComposeRendererRuntimeProps(input: {
     }
     const exported = input.scope?.getExport(reference.exportName)
     if (!exported) {
-      if (contract.kind === 'method') props[propName] = undefined
+      if (contract.kind === 'method' && !(propName in props)) props[propName] = undefined
       diagnostics.push(diagnostic({
         ...base,
         code: 'binding.missing-export',
@@ -72,7 +76,7 @@ export function resolveComposeRendererRuntimeProps(input: {
       return
     }
     if (exported.kind !== contract.kind) {
-      if (contract.kind === 'method') props[propName] = undefined
+      if (contract.kind === 'method' && !(propName in props)) props[propName] = undefined
       diagnostics.push(diagnostic({
         ...base,
         code: 'binding.kind-mismatch',
@@ -111,5 +115,5 @@ export function resolveComposeRendererRuntimeProps(input: {
     props[propName] = exported.value
   })
 
-  return { props, authoredProps, diagnostics }
+  return { props, baseProps, authoredProps, diagnostics }
 }

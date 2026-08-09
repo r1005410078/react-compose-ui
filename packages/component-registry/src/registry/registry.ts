@@ -301,6 +301,12 @@ export function createComposeEntityRegistry(
     ...(definition.propContracts
       ? { propContracts: Object.freeze(definition.propContracts.map((item) => Object.freeze({ ...item }))) }
       : {}),
+    ...(definition.propCategories
+      ? { propCategories: Object.freeze(definition.propCategories.map((item) => Object.freeze({ ...item }))) }
+      : {}),
+    ...(definition.inspectorPropNames
+      ? { inspectorPropNames: Object.freeze([...definition.inspectorPropNames]) }
+      : {}),
     ...(definition.measurement
       ? { measurement: Object.freeze({ ...definition.measurement }) }
       : {}),
@@ -310,6 +316,27 @@ export function createComposeEntityRegistry(
     rendererDefinitions,
     ({ type }) => type,
     (definition, index) => {
+      const categoryIds = new Set<string>()
+      for (const category of definition.propCategories ?? []) {
+        if (category.id.trim().length === 0) {
+          throw new ComposeEntityRegistryError('renderer', index, 'Renderer Prop 分类 ID 不能为空')
+        }
+        if (categoryIds.has(category.id)) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Prop 分类 ${category.id} 重复`,
+          )
+        }
+        if (category.label.trim().length === 0) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Prop 分类 ${category.id} label 不能为空`,
+          )
+        }
+        categoryIds.add(category.id)
+      }
       const propNames = new Set<string>()
       for (const contract of definition.propContracts ?? []) {
         if (contract.name.trim().length === 0) {
@@ -330,6 +357,13 @@ export function createComposeEntityRegistry(
             `Renderer Prop ${contract.name} label 不能为空`,
           )
         }
+        if (contract.category !== undefined && !categoryIds.has(contract.category)) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Prop ${contract.name} 引用了未知分类 ${contract.category}`,
+          )
+        }
         if (contract.kind === 'value' && typeof contract.validate !== 'function') {
           throw new ComposeEntityRegistryError(
             'renderer',
@@ -342,6 +376,39 @@ export function createComposeEntityRegistry(
             'renderer',
             index,
             `Renderer Prop ${contract.name} 只支持 event-handler`,
+          )
+        }
+      }
+      const inspectorPropNames = new Set<string>()
+      for (const propName of definition.inspectorPropNames ?? []) {
+        if (inspectorPropNames.has(propName)) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Inspector Prop ${propName} 重复`,
+          )
+        }
+        inspectorPropNames.add(propName)
+        const contract = definition.propContracts?.find((item) => item.name === propName)
+        if (!contract) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Inspector Prop ${propName} 缺少 Contract`,
+          )
+        }
+        if (contract.kind !== 'value') {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Inspector Prop ${propName} 必须是 value Contract`,
+          )
+        }
+        if (!definition.inspector) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Inspector Prop ${propName} 必须提供 Inspector`,
           )
         }
       }

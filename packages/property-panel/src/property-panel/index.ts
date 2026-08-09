@@ -20,6 +20,7 @@ export type {
   PropertyPanelVariable as ComposePropertyPanelVariable,
   PropertyPanelBinding as ComposePropertyPanelBinding,
   PropertyPanelBindingTarget as ComposePropertyPanelBindingTarget,
+  PropertyPanelBindingTargetAuthorization as ComposePropertyPanelBindingTargetAuthorization,
   PropertyPanelResolvedBindingTarget as ComposePropertyPanelResolvedBindingTarget,
   PropertyPanelBindingIssue as ComposePropertyPanelBindingIssue,
   PropertyPanelRendererBindingTargetDescriptor as ComposePropertyPanelRendererBindingTargetDescriptor,

@@ -1,6 +1,8 @@
 /** Entity Registry 领域协议与工厂的功能入口。 */
 export { createComposeEntityRegistry } from './registry'
-export { resolveComposeRendererRuntimeProps } from './runtime-props'
+export {
+  resolveComposeRendererRuntimeProps,
+} from './runtime-props'
 export type { ComposeRendererRuntimePropsResult } from './runtime-props'
 export {
   ComposeEntityRegistryError,
@@ -25,12 +27,16 @@ export {
   type ComposeEntitySeedResult,
   type ComposeRendererDefinition,
   type ComposeRendererBindingDiagnostic,
+  type ComposeRendererPropCategory,
   type ComposeRendererPropContract,
   type ComposeRendererMeasurementDefinition,
   type ComposeRendererMeasurementSubscriptionInput,
   type ComposeRendererMeasureInput,
   type ComposeRendererPrepareInput,
   type ComposeRendererInspectorProps,
+  type ComposeRendererInspectorBindingPort,
+  type ComposeRendererInspectorBindingState,
+  type ComposeRendererInspectorBindingVariable,
   type ComposeRendererProps,
   type ComposeRuntimeProps,
 } from './types'

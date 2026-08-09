@@ -138,16 +138,18 @@ describe('ComposeDocument v6 ECS', () => {
     expect(validateComposeDocument(legacyOutput).valid).toBe(false)
   })
 
-  it('OpenSpec: compose-document / Renderer Props 绑定 Component / 保存顶层页面引用', () => {
+  it('OpenSpec: compose-document / Renderer Props 绑定 Component / 保存顶层字段绑定', () => {
     const input = structuredClone(rectangleDocument())
     const entity = input.entities['rectangle-1']!
     const components = entity.components as Record<string, unknown>
     components.Bindings = {
       version: 1,
-      props: {
-        text: { scope: 'page', exportName: 'num' },
-        onClick: { scope: 'page', exportName: 'onAdd' },
-        unknownFutureProp: { scope: 'page', exportName: 'futureValue' },
+      rendererProps: {
+        fields: {
+          text: { scope: 'page', exportName: 'num' },
+          onClick: { scope: 'page', exportName: 'onAdd' },
+          unknownFutureProp: { scope: 'page', exportName: 'futureValue' },
+        },
       },
     }
 
@@ -165,7 +167,10 @@ describe('ComposeDocument v6 ECS', () => {
     const withoutRendererComponents = withoutRenderer.entities['rectangle-1']!.components as Record<string, unknown>
     delete withoutRendererComponents.Renderer
     withoutRendererComponents.Hierarchy = { childIds: [] }
-    withoutRendererComponents.Bindings = { version: 1, props: {} }
+    withoutRendererComponents.Bindings = {
+      version: 1,
+      rendererProps: { fields: { text: { scope: 'page', exportName: 'num' } } },
+    }
     cases.push({
       input: withoutRenderer,
       path: ['entities', 'rectangle-1', 'components', 'Bindings'],
@@ -175,9 +180,11 @@ describe('ComposeDocument v6 ECS', () => {
     const malformedComponents = malformed.entities['rectangle-1']!.components as Record<string, unknown>
     malformedComponents.Bindings = {
       version: 2,
-      props: {
-        '': { scope: 'page', exportName: 'num' },
-        onClick: { scope: 'global', exportName: '' },
+      rendererProps: {
+        fields: {
+          '': { scope: 'page', exportName: 'num' },
+          onClick: { scope: 'global', exportName: '' },
+        },
       },
     }
     cases.push({
@@ -194,6 +201,43 @@ describe('ComposeDocument v6 ECS', () => {
           path: testCase.path,
         }))
       }
+    }
+  })
+
+  it('OpenSpec: compose-document / Renderer Props 绑定 Component / 拒绝已撤回的整个 Props 字段', () => {
+    const input = structuredClone(rectangleDocument())
+    const components = input.entities['rectangle-1']!.components as Record<string, unknown>
+    components.Bindings = {
+      version: 1,
+      rendererProps: {
+        object: { scope: 'page', exportName: 'textProps' },
+        fields: { text: { scope: 'page', exportName: 'num' } },
+      },
+    }
+    const result = validateComposeDocument(input)
+    expect(result.valid).toBe(false)
+    if (!result.valid) {
+      expect(result.issues).toContainEqual(expect.objectContaining({
+        code: 'bindings.invalid',
+        path: ['entities', 'rectangle-1', 'components', 'Bindings', 'rendererProps', 'object'],
+      }))
+    }
+  })
+
+  it('OpenSpec: compose-document / Renderer Props 绑定 Component / 拒绝空 Bindings', () => {
+    const input = structuredClone(rectangleDocument())
+    const components = input.entities['rectangle-1']!.components as Record<string, unknown>
+    components.Bindings = {
+      version: 1,
+      rendererProps: { fields: {} },
+    }
+    const result = validateComposeDocument(input)
+    expect(result.valid).toBe(false)
+    if (!result.valid) {
+      expect(result.issues).toContainEqual(expect.objectContaining({
+        code: 'bindings.invalid',
+        path: ['entities', 'rectangle-1', 'components', 'Bindings', 'rendererProps'],
+      }))
     }
   })
 })

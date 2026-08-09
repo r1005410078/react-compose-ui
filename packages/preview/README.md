@@ -34,4 +34,5 @@ Preview 默认创建文档级 Layout Runtime，也允许宿主注入 `layoutRunt
 `assetResolver` 解析稳定引用。Hug fallback diagnostic 通过可访问 `role=status` 发布。
 
 提供 `page` 时，每个 Preview 实例独立加载并调用一次 setup；点击 method Prop 会调用页面方法，
-State/Computed 更新只刷新引用对应返回名的 Renderer。卸载或脚本 revision 更新会释放旧作用域。
+字段 State/Computed 更新只刷新引用对应返回名的 Renderer。method 的同步异常和 Promise
+rejection 由当前页面脚本作用域隔离报告；卸载或脚本 revision 更新会释放旧作用域与全部订阅。

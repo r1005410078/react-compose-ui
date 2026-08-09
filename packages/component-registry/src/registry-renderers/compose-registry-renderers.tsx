@@ -12,7 +12,12 @@ import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose
 import { resolveComposeRendererRuntimeProps } from '../registry/runtime-props'
 import type { ComposeEntityRegistry } from '../registry/types'
 import type { ComposePageDocumentLoader } from '@compose-ui/core'
-import type { ComposeNodeEditPort, ComposePaintEditPort } from '../registry/types'
+import type {
+  ComposeNodeEditPort,
+  ComposePaintEditPort,
+  ComposeRendererInspectorBindingPort,
+  ComposeRendererPropCategory,
+} from '../registry/types'
 
 interface BoundaryProps {
   readonly children: ReactNode
@@ -91,8 +96,9 @@ export function ComposeRegistryEntityRenderer({
   const bindings = getComposeBindings(entity)
   useEffect(() => {
     if (!scriptScope || !bindings) return undefined
+    const references = Object.values(bindings.rendererProps.fields)
     const unsubscribers = [...new Set(
-      Object.values(bindings.props).map(({ exportName }) => exportName),
+      references.map(({ exportName }) => exportName),
     )].map((exportName) => scriptScope.subscribeExport(exportName, refreshBindings))
     return () => { unsubscribers.forEach((unsubscribe) => { unsubscribe() }) }
   }, [bindings, scriptScope])
@@ -331,7 +337,7 @@ export function ComposeRegistryMissingComponentInspector({
   )
 }
 
-/** 解析并隔离 Entity Renderer 的可选内容 Inspector。 @public */
+/** 解析并隔离 Entity Renderer 的可选 Props Inspector。 @public */
 export function ComposeRegistryRendererInspector({
   registry,
   entity,
@@ -341,6 +347,9 @@ export function ComposeRegistryRendererInspector({
   nodeEditPort,
   paintEditPort,
   readOnly,
+  scriptScope,
+  propsBinding,
+  propCategory,
 }: {
   readonly registry: ComposeEntityRegistry
   readonly entity: ComposeEntity
@@ -348,6 +357,9 @@ export function ComposeRegistryRendererInspector({
   readonly document?: ComposeDocument
   readonly layoutSnapshot?: ComposeLayoutSnapshot
   readonly readOnly: boolean
+  readonly scriptScope?: ComposePageScriptScope
+  readonly propsBinding?: ComposeRendererInspectorBindingPort
+  readonly propCategory?: ComposeRendererPropCategory
   readonly nodeEditPort?: ComposeNodeEditPort
   readonly paintEditPort?: ComposePaintEditPort
 }) {
@@ -363,6 +375,12 @@ export function ComposeRegistryRendererInspector({
   }
   if (!definition.inspector) return null
   const Inspector = definition.inspector
+  const resolved = resolveComposeRendererRuntimeProps({
+    entity,
+    definition,
+    scope: scriptScope,
+    methodMode: 'noop',
+  })
   return (
     <DefinitionErrorBoundary
       area="renderer-inspector"
@@ -377,6 +395,10 @@ export function ComposeRegistryRendererInspector({
         readOnly={readOnly}
         nodeEditPort={nodeEditPort}
         paintEditPort={paintEditPort}
+        propCategory={propCategory}
+        authoredProps={resolved.authoredProps}
+        props={resolved.props}
+        propsBinding={propsBinding}
         renderer={renderer}
       />
     </DefinitionErrorBoundary>

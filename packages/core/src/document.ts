@@ -416,47 +416,69 @@ function validateBindings(
   issues: DocumentValidationIssue[],
 ) {
   if (!isRecord(value)) return
-  rejectUnknownFields(value, ['version', 'props'], path, issues, 'bindings.invalid')
+  rejectUnknownFields(value, ['version', 'rendererProps'], path, issues, 'bindings.invalid')
   if (value.version !== 1) {
     addIssue(issues, 'bindings.invalid', [...path, 'version'], 'Bindings version 必须为 1')
   }
-  if (!isRecord(value.props)) {
-    addIssue(issues, 'bindings.invalid', [...path, 'props'], 'Bindings props 必须是对象')
+  if (!isRecord(value.rendererProps)) {
+    addIssue(
+      issues,
+      'bindings.invalid',
+      [...path, 'rendererProps'],
+      'Bindings rendererProps 必须是对象',
+    )
     return
   }
-  Object.entries(value.props).forEach(([propName, reference]) => {
-    const referencePath = [...path, 'props', propName] as const
+  const rendererPropsPath = [...path, 'rendererProps'] as const
+  rejectUnknownFields(
+    value.rendererProps,
+    ['fields'],
+    rendererPropsPath,
+    issues,
+    'bindings.invalid',
+  )
+  if (!isRecord(value.rendererProps.fields)) {
+    addIssue(
+      issues,
+      'bindings.invalid',
+      [...rendererPropsPath, 'fields'],
+      'Bindings rendererProps.fields 必须是对象',
+    )
+    return
+  }
+  if (Object.keys(value.rendererProps.fields).length === 0) {
+    addIssue(issues, 'bindings.invalid', rendererPropsPath, 'Bindings 不得为空')
+  }
+  Object.entries(value.rendererProps.fields).forEach(([propName, reference]) => {
+    const referencePath = [...rendererPropsPath, 'fields', propName] as const
     if (!nonEmpty(propName)) {
       addIssue(issues, 'bindings.invalid', referencePath, 'Renderer Prop 名称必须是非空字符串')
     }
-    if (!isRecord(reference)) {
-      addIssue(issues, 'bindings.invalid', referencePath, '绑定引用必须是对象')
-      return
-    }
-    rejectUnknownFields(
-      reference,
-      ['scope', 'exportName'],
-      referencePath,
+    validateBindingReference(reference, referencePath, issues)
+  })
+}
+
+function validateBindingReference(
+  reference: unknown,
+  path: Path,
+  issues: DocumentValidationIssue[],
+) {
+  if (!isRecord(reference)) {
+    addIssue(issues, 'bindings.invalid', path, '绑定引用必须是对象')
+    return
+  }
+  rejectUnknownFields(reference, ['scope', 'exportName'], path, issues, 'bindings.invalid')
+  if (reference.scope !== 'page') {
+    addIssue(issues, 'bindings.invalid', [...path, 'scope'], '绑定 scope 必须为 page')
+  }
+  if (!nonEmpty(reference.exportName)) {
+    addIssue(
       issues,
       'bindings.invalid',
+      [...path, 'exportName'],
+      '绑定 exportName 必须是非空字符串',
     )
-    if (reference.scope !== 'page') {
-      addIssue(
-        issues,
-        'bindings.invalid',
-        [...referencePath, 'scope'],
-        '绑定 scope 必须为 page',
-      )
-    }
-    if (!nonEmpty(reference.exportName)) {
-      addIssue(
-        issues,
-        'bindings.invalid',
-        [...referencePath, 'exportName'],
-        '绑定 exportName 必须是非空字符串',
-      )
-    }
-  })
+  }
 }
 
 function validateBooleanComponent(

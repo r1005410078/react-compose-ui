@@ -78,7 +78,9 @@ const demoCounterDocument: ComposeDocument = {
         Renderer: { type: 'text', props: { text: 0, color: '#dce8fa', fontSize: 42 } },
         Bindings: {
           version: 1,
-          props: { text: { scope: 'page', exportName: 'num' } },
+          rendererProps: {
+            fields: { text: { scope: 'page', exportName: 'num' } },
+          },
         },
       },
     },
@@ -94,7 +96,12 @@ const demoCounterDocument: ComposeDocument = {
         Renderer: { type: 'action-button', props: { label: 'Add' } },
         Bindings: {
           version: 1,
-          props: { onClick: { scope: 'page', exportName: 'onAdd' } },
+          rendererProps: {
+            fields: {
+              label: { scope: 'page', exportName: 'buttonLabel' },
+              onClick: { scope: 'page', exportName: 'onAdd' },
+            },
+          },
         },
       },
     },
@@ -245,7 +252,8 @@ export function createDemoAssetProvider(options: {
       content: new Blob([`export function setup(ctx) {
   const num = ctx.state(0)
   const onAdd = () => { num.value += 1 }
-  return { num, onAdd }
+  const buttonLabel = ctx.computed(() => num.value === 0 ? 'Add' : \`Add \${num.value}\`)
+  return { num, onAdd, buttonLabel }
 }
 `], { type: 'text/javascript' }),
     }],

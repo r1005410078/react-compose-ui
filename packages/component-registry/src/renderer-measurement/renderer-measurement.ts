@@ -244,7 +244,7 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
         contract.name,
         contract,
       ]))
-      entry.scopeUnsubscribers = Object.entries(bindings.props).flatMap(([propName, reference]) => {
+      const fieldSubscriptions = Object.entries(bindings.rendererProps.fields).flatMap(([propName, reference]) => {
         const contract = contracts.get(propName)
         if (contract?.kind !== 'value' || contract.affectsMeasurement === false) return []
         return [this.options.scriptScope!.subscribeExport(
@@ -252,6 +252,7 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
           () => this.invalidateEntry(entry),
         )]
       })
+      entry.scopeUnsubscribers = fieldSubscriptions
     }
     return entry
   }

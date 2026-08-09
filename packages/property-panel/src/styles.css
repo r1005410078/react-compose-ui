@@ -24,7 +24,6 @@
     --pp-control-height: 22px;
     --pp-tree-indent: 14px;
     --pp-binding-slot-width: 36px;
-    --pp-binding-slot-compact-width: 20px;
     --pp-border: var(--compose-border, #303131);
     --pp-border-strong: var(--compose-border-strong, #3a3b3b);
     --pp-border-soft: var(--compose-border, #242525);
@@ -731,7 +730,7 @@
 
   @container pp-binding-target (max-width: 128px) {
     .property-panel__binding-slot {
-      width: var(--pp-binding-slot-compact-width);
+      width: 20px;
     }
 
     .property-panel__binding-trigger {

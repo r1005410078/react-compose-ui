@@ -106,6 +106,14 @@ export interface PropertyPanelBindingTarget {
   semanticScope?: string
 }
 
+/** 宿主判断一个 Schema 字段是否额外开放完整字段绑定时获得的上下文。 */
+export interface PropertyPanelBindingTargetAuthorization {
+  readonly address: PropertyPanelBindingAddress
+  readonly label: string
+  readonly schema: v.GenericSchema
+  readonly metadata: PropertyPanelMetadata
+}
+
 /** 纯绑定解析得到的单个目标状态。 */
 export interface PropertyPanelResolvedBindingTarget extends PropertyPanelBindingTarget {
   /** 当前保存的绑定。 */
@@ -244,6 +252,8 @@ export interface PropertyPanelBindingConfig {
   ) => void
   /** 对已通过 Schema 与语义范围的变量执行宿主级授权。 */
   canBind?: (target: PropertyPanelBindingTarget, variable: PropertyPanelVariable) => boolean
+  /** 在 Schema metadata 之外授权完整字段目标；未提供时继续使用显式 opt-in。 */
+  isTargetEnabled?: (target: PropertyPanelBindingTargetAuthorization) => boolean
   /** 覆盖默认绑定入口。 */
   renderTrigger?: PropertyPanelBindingTriggerRenderer
   /** 覆盖默认变量选择器。 */

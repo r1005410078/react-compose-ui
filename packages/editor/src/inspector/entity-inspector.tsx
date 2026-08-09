@@ -30,7 +30,10 @@ import {
 } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
-import { RendererBindingsInspector } from './renderer-bindings-inspector'
+import {
+  RendererBindingOnlyRows,
+} from './renderer-bindings-inspector'
+import { useRendererInspectorBindingPort } from './renderer-inspector-binding-port'
 
 interface EntityInspectorProps {
   readonly document: ComposeDocument
@@ -147,6 +150,31 @@ export function EntityInspector({
   const rendererDefinition = renderer
     ? registry.getRenderer(renderer.type)
     : undefined
+  const propsBinding = useRendererInspectorBindingPort({
+    definition: rendererDefinition,
+    dispatch,
+    entity,
+    idFactory,
+    scope: scriptScope,
+  })
+  const rendererInlineProps = new Set(rendererDefinition?.inspectorPropNames ?? [])
+  const rendererCategories = rendererDefinition?.propCategories ?? []
+  const rendererAdvancedContracts = rendererDefinition?.propContracts?.filter(
+    (contract) => contract.category === undefined,
+  ) ?? []
+  const rendererAdvancedHasInspector = Boolean(
+    rendererDefinition?.inspector
+    && (
+      rendererCategories.length === 0
+      || rendererAdvancedContracts.some((contract) => rendererInlineProps.has(contract.name))
+    ),
+  )
+  const rendererAdvancedHasBindingRows = rendererAdvancedContracts.some(
+    (contract) => !rendererInlineProps.has(contract.name),
+  )
+  const rendererAdvancedHasContent = !rendererDefinition
+    || rendererAdvancedHasInspector
+    || rendererAdvancedHasBindingRows
   const componentDefinitions = registry.listComponents()
   const basicDefinitions = componentDefinitions.filter((definition) => (
     !definition.hidden
@@ -353,22 +381,73 @@ export function EntityInspector({
             </ComposePropertyPanelSection>
           ))}
 
-        {renderer && (!rendererDefinition || rendererDefinition.inspector) ? (
+        {rendererDefinition?.propCategories?.map((category) => {
+          const categoryContracts = rendererDefinition.propContracts?.filter(
+            (contract) => contract.category === category.id,
+          ) ?? []
+          if (categoryContracts.length === 0) return null
+          return (
+            <ComposePropertyPanelSection
+              defaultExpanded={category.inspectorDefaultExpanded ?? false}
+              key={`renderer-category:${category.id}`}
+              title={category.label}
+            >
+              {rendererDefinition.inspector ? (
+                <ComposeRegistryRendererInspector
+                  dispatch={dispatch}
+                  document={document}
+                  entity={entity}
+                  layoutSnapshot={layoutSnapshot}
+                  readOnly={locked}
+                  nodeEditPort={nodeEditPort}
+                  paintEditPort={paintEditPort}
+                  propCategory={category}
+                  propsBinding={propsBinding}
+                  registry={registry}
+                  scriptScope={scriptScope}
+                />
+              ) : null}
+              {propsBinding ? (
+                <RendererBindingOnlyRows
+                  categoryId={category.id}
+                  definition={rendererDefinition}
+                  port={propsBinding}
+                  readOnly={locked}
+                />
+              ) : null}
+            </ComposePropertyPanelSection>
+          )
+        })}
+
+        {renderer && rendererAdvancedHasContent ? (
           <ComposePropertyPanelSection
             defaultExpanded={rendererDefinition?.inspectorDefaultExpanded ?? false}
-            title={registry.getComponent('Renderer')?.label ?? (zh ? '内容' : 'Content')}
+            title={zh ? '高级' : 'Advanced'}
           >
             {rendererDefinition ? (
-              <ComposeRegistryRendererInspector
-                dispatch={dispatch}
-                document={document}
-                entity={entity}
-                layoutSnapshot={layoutSnapshot}
-                readOnly={locked}
-                nodeEditPort={nodeEditPort}
-                paintEditPort={paintEditPort}
-                registry={registry}
-              />
+              <>
+                {rendererAdvancedHasInspector ? (
+                  <ComposeRegistryRendererInspector
+                    dispatch={dispatch}
+                    document={document}
+                    entity={entity}
+                    layoutSnapshot={layoutSnapshot}
+                    readOnly={locked}
+                    nodeEditPort={nodeEditPort}
+                    paintEditPort={paintEditPort}
+                    propsBinding={propsBinding}
+                    registry={registry}
+                    scriptScope={scriptScope}
+                  />
+                ) : null}
+                {propsBinding ? (
+                  <RendererBindingOnlyRows
+                    definition={rendererDefinition}
+                    port={propsBinding}
+                    readOnly={locked}
+                  />
+                ) : null}
+              </>
             ) : (
               <UnknownInspector
                 label={zh ? '未知 Renderer' : 'Unknown Renderer'}
@@ -377,21 +456,6 @@ export function EntityInspector({
                   : `Unknown renderer: ${renderer.type}`}
               />
             )}
-          </ComposePropertyPanelSection>
-        ) : null}
-        {renderer && rendererDefinition?.propContracts?.length ? (
-          <ComposePropertyPanelSection
-            defaultExpanded
-            title={zh ? '数据绑定' : 'Bindings'}
-          >
-            <RendererBindingsInspector
-              definition={rendererDefinition}
-              dispatch={dispatch}
-              entity={entity}
-              idFactory={idFactory}
-              readOnly={locked}
-              scope={scriptScope}
-            />
           </ComposePropertyPanelSection>
         ) : null}
       </ComposePropertyPanelRoot>

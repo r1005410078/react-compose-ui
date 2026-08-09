@@ -77,8 +77,13 @@ Component 与 Renderer 的 `inspectorDefaultExpanded` 显式决定独立分组�
 property-panel。
 
 Renderer 文档中的 `Renderer.props` 是严格 JSON authored props；Renderer 实际收到的 `props` 是
-绑定解析后的 runtime props，并单独收到 `authoredProps`。Definition 只有显式声明 value/method
-`propContracts` 后才开放脚本绑定；失败的 value 回退字面值，失败的 method 为 `undefined`。
+绑定解析后的 runtime props，并单独收到 `authoredProps`。Definition 的完整 value/method
+`propContracts` 是唯一可绑定边界；未知 authored Prop 继续保留但不会自动开放绑定。解析以 authored
+Props 为基础并逐字段应用有效绑定；单字段失败只回退同名 authored 值。`inspectorPropNames` 只能
+列出 value Contract，表示自定义 Inspector 会把这些字段的绑定入口内联到字面 editor；其余 Contract
+由 Editor 显示 binding-only 行。Definition 使用 `propCategories` 声明 Props 分类，Contract 以
+`category` 归属分类；Registry 校验分类唯一且引用有效。未分类 Contract 由 Editor 放入隐式「高级」，
+自定义 Inspector 通过 `propCategory` 获知当前分类。method 在 Editor 为 no-op，在 Preview 安全调用。
 
 Renderer 可声明同步 `measurement.measure`、可选异步 `prepare` 和外部 revision `subscribe`。
 `createComposeRendererMeasurementAdapter()` 把 Registry、asset resolver 与 page loader 组合为 Core

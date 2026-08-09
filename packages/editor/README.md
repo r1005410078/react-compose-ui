@@ -43,12 +43,13 @@ loader 创建 measurement adapter，卸载时 detach。测量 revision 只更新
 或操作日志。
 默认 Inspector 只创建一个 Property Panel，并按 Registry 元数据聚合。Identity 与标记为
 `inspectorGroup: 'basic'` 的领域 Inspector 共用“基础”；Layout 默认展开，Visibility、Lock、
-Appearance、Hierarchy/Clip、GeometryConstraints 与 Renderer 内容等其他分组默认折叠。
+Appearance、Hierarchy/Clip、GeometryConstraints 与 Renderer 声明的 Props 分类等其他分组按各自
+元数据决定初始展开状态；未分类 Renderer Props 进入“高级”。
 所有分组共享搜索、筛选、显示设置和列宽；Hierarchy 与 Clip 合并为“容器”，未知
 Component/Renderer 使用同一分组样式降级展示。
 
 Inspector 顶部“添加能力”使用 Registry 的依赖和冲突规划，已附加能力可以经确认框移除。锁定
-Entity 时只有 Lock 保持可编辑，以便解锁；其他 Component、Renderer 内容和能力操作只读。
+Entity 时只有 Lock 保持可编辑，以便解锁；其他 Component、Renderer Props 和能力操作只读。
 
 Canvas 输出仍是独立检查目标，不进入 Entity 选择或 Scene Tree。它保留单行 Map 输出尺寸和共享
 Color Picker。选择、展开、viewport、工具、检查目标和临时能力菜单状态都属于 Editor 会话，
@@ -69,7 +70,11 @@ History 和右键菜单都显示当前实例实际生效的键位。偏好默认
 快捷创建，并从更多菜单打开或解除当前关联；标题栏可手动重新加载当前脚本，紧凑成员表显示 Runtime 返回成员、
 实时值与诊断。资源菜单保留等价入口；
 Provider 缺少创建或写入能力时只禁用对应操作。Renderer Prop Contract 绑定仍写入可撤销的
-`Bindings` Component。宿主切换 controller 时应同时传入 `activePage.runtime` 与
+`Bindings` Component，并合并进 Renderer Definition 声明的 Props 分类：自定义 Inspector 通过无
+Property Panel 依赖的端口内联第一层 value 字段入口，method 或无字面 editor 的 Contract 在所属分类
+显示 binding-only 行。未分类 Contract 与旧 Inspector 位于“高级”，没有未分类内容时不显示该分组；
+不再存在通用“内容”或独立“数据绑定”分组。Entity 锁定时全部绑定操作禁用。宿主切换 controller
+时应同时传入 `activePage.runtime` 与
 `activePage.scriptScope`。脚本是受信任同 Realm JavaScript，不是沙箱，也不编译 TypeScript。
 
 页面能力启用时，通过页面菜单打开或文件名匹配 `*.setup.js` 的资源会话会启用隐藏类型层。用户仍编辑

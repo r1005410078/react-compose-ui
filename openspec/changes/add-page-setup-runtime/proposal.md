@@ -18,13 +18,14 @@ React 组件一样，把页面视觉结构留在画布中，同时用一段脚�
   `ctx.effect()` 运行每页一个可选的 `setup(ctx)` 模块，并提供订阅、诊断和确定的释放语义。
 - 首期把脚本定义为受信任的同 Realm JavaScript：State/Computed 以 `.value` 读写，返回的 Function
   可以直接绑定事件型 React callback；不把函数写入文档、Patch、历史或持久化文件。
-- 在 `ComposeDocument v6` 中增加可选 `Bindings` Component，只保存顶层 Renderer Prop 到
-  `{ scope: 'page', exportName }` 的引用。绑定不保存脚本 assetKey，因此更换页面 setup 文件时可以按
-  相同返回名称继续解析。
+- 在 `ComposeDocument v6` 中增加可选 `Bindings` Component，保存顶层 Renderer Prop 到
+  `{ scope: 'page', exportName }` 的引用。绑定不保存脚本 assetKey，因此更换页面
+  setup 文件时可以按相同返回名称继续解析。
 - **BREAKING**：Renderer Definition 增加实例级 Prop Contract，区分可绑定的 value prop 与
   event-handler method prop；Renderer 接收解析后的 runtime props 和独立的 authored JSON props。
-- 扩展属性面板绑定 UI，使没有 JSON 字面编辑器的方法 Prop 也能显示、选择、解绑和报告错误；值 Prop
-  继续以目标 Valibot Schema 为类型权威。
+- 把绑定入口合并进 Renderer 自己声明的 Props 分类：全部声明的顶层 Prop 默认可绑定，值 Prop 在原字段
+  旁显示，没有 JSON 字面编辑器的方法 Prop 使用同分类独立行；未分类 Prop 进入「高级」，没有未分类
+  内容时不显示该分组；不再提供含义模糊的「内容」或重复的「数据绑定」分类。
 - Page Store、Editor、Stage、Preview 与 Page Slot 共同采用页面聚合加载协议：每个页面渲染实例拥有
   独立 setup 状态，值变化精确刷新依赖 Entity，可能影响 Hug 的值变化使对应测量失效，卸载时清理
   Effect、订阅与迟到异步结果。

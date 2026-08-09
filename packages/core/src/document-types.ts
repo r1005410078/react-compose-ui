@@ -234,10 +234,16 @@ export interface ComposePageExportReference extends JsonObject {
   readonly exportName: string
 }
 
-/** Renderer 顶层 Prop 到页面返回成员的持久化绑定。 @public */
+/** Renderer 顶层字段的持久化绑定。 @public */
+export interface ComposeRendererPropsBindings extends JsonObject {
+  /** 顶层 Prop 到页面返回成员的映射。 */
+  readonly fields: Readonly<Record<string, ComposePageExportReference>>
+}
+
+/** Renderer Props 到页面返回成员的持久化绑定。 @public */
 export interface ComposeBindings extends JsonObject {
   readonly version: 1
-  readonly props: Readonly<Record<string, ComposePageExportReference>>
+  readonly rendererProps: ComposeRendererPropsBindings
 }
 
 /** ComposeDocument v6 内建 Component Key。 @public */

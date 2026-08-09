@@ -4,6 +4,7 @@ import type {
   PropertyPanelBindingAddress,
   PropertyPanelBindingIssue,
   PropertyPanelBindingTarget,
+  PropertyPanelBindingTargetAuthorization,
   PropertyPanelRenderer,
   PropertyPanelRendererBindingTargetDescriptor,
   PropertyPanelResolvedBindingTarget,
@@ -36,6 +37,8 @@ export interface ResolvePropertyBindingsOptions<TSchema extends v.GenericSchema>
   renderers?: readonly PropertyPanelRenderer[]
   /** 可选的宿主级绑定授权。 */
   canBind?: (target: PropertyPanelBindingTarget, variable: PropertyPanelVariable) => boolean
+  /** 在 metadata 之外授权完整字段目标。 */
+  isTargetEnabled?: (target: PropertyPanelBindingTargetAuthorization) => boolean
 }
 
 /** 应用变量绑定后的完整解析结果。 */
@@ -89,6 +92,7 @@ export function resolvePropertyBindings<TSchema extends v.GenericSchema>(
       options.value,
       binding.target,
       mergePropertyPanelRenderers(options.renderers),
+      options.isTargetEnabled,
     )
     if (!descriptor) {
       pushFailure('unknown-target', '绑定目标已不存在', binding, undefined, undefined)
@@ -262,6 +266,7 @@ function resolveTargetDescriptor(
   rootValue: unknown,
   address: PropertyPanelBindingAddress,
   renderers: readonly PropertyPanelRenderer[],
+  isTargetEnabled?: (target: PropertyPanelBindingTargetAuthorization) => boolean,
 ): ResolvedTargetDescriptor | undefined {
   const fieldSchema = getSchemaAtPath(rootSchema, rootValue, address.path)
   if (!fieldSchema) return undefined
@@ -270,6 +275,12 @@ function resolveTargetDescriptor(
   const renderer = info.metadata.editor
     ? renderers.find((candidate) => candidate.id === info.metadata.editor)
     : renderers.find((candidate) => candidate.matches?.(info.base, info.metadata))
+  const hostEnabled = address.targetId === 'value' && isTargetEnabled?.({
+    address,
+    label: info.title ?? humanizePath(address.path),
+    schema: fieldSchema,
+    metadata: info.metadata,
+  }) === true
   const descriptors = info.metadata.binding?.enabled === true
     ? renderer?.bindingTargets?.({
         path: address.path,
@@ -294,9 +305,11 @@ function resolveTargetDescriptor(
   }
   if (
     address.targetId !== 'value'
-    || renderer
-    || info.metadata.binding?.enabled !== true
-    || !isBindableBuiltIn(info.type)
+    || (!hostEnabled && (
+      Boolean(renderer)
+      || info.metadata.binding?.enabled !== true
+      || !isBindableBuiltIn(info.type)
+    ))
   ) return undefined
   return {
     target: {

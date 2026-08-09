@@ -1,6 +1,13 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { createComposeEntityRegistry } from '@compose-ui/component-registry'
-import { ComposePropertyPanel } from '@compose-ui/property-panel'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  createComposeEntityRegistry,
+  type ComposeRendererInspectorProps,
+} from '@compose-ui/component-registry'
+import {
+  ComposePropertyPanel,
+  type ComposePropertyPanelBindingConfig,
+} from '@compose-ui/property-panel'
+import { createComposePageScriptScope } from '@compose-ui/script-runtime'
 import {
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
@@ -206,8 +213,180 @@ describe('EntityInspector missing Component sections', () => {
     expect(screen.queryByRole('button', { name: '几何' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '布局' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('button', { name: '状态' })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByRole('button', { name: '内容' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: '内容' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('启用')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('标题')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / Renderer Props 分类 / 显式分类与默认高级分组', () => {
+    const boundEntity: ComposeEntity = {
+      ...entity,
+      components: {
+        ...entity.components,
+        Renderer: { type: 'host-card', props: { title: 'Authored' } },
+        Bindings: {
+          version: 1,
+          rendererProps: {
+            fields: { title: { scope: 'page', exportName: 'title' } },
+          },
+        },
+      },
+    }
+    const boundDocument: ComposeDocument = {
+      ...document,
+      entities: { [boundEntity.id]: boundEntity },
+    }
+    const scope = createComposePageScriptScope(() => ({
+      title: 'Field title',
+      onClick: () => undefined,
+    }))
+    const HostInspector = ({
+      authoredProps,
+      propCategory,
+      propsBinding,
+      readOnly,
+    }: ComposeRendererInspectorProps) => {
+      if (propCategory?.id !== 'primary') return null
+      const binding = propsBinding ? {
+        value: propsBinding.fields.title?.exportName
+          ? [{
+              target: { path: ['title'], targetId: 'value' },
+              variableId: propsBinding.fields.title.exportName,
+            }]
+          : [],
+        variables: propsBinding.variables.map((variable) => ({
+          ...variable,
+          scope: 'page' as const,
+        })),
+        isTargetEnabled: ({ address }) => address.path[0] === 'title',
+        onChange: (next, change) => {
+          const selected = next.find((item) => (
+            item.target.path[0] === change.target.path[0]
+          ))
+          propsBinding.setField('title', selected?.variableId ?? null)
+        },
+      } satisfies ComposePropertyPanelBindingConfig : undefined
+      return (
+        <ComposePropertyPanel
+          binding={binding}
+          readOnly={readOnly}
+          schema={v.object({ title: v.pipe(v.string(), v.title('标题')) })}
+          value={{
+            title: typeof propsBinding?.baseProps.title === 'string'
+              ? propsBinding.baseProps.title
+              : String(authoredProps.title ?? ''),
+          }}
+        />
+      )
+    }
+    const registry = createComposeEntityRegistry({
+      components: [{
+        key: 'Renderer',
+        label: '内容',
+        hidden: true,
+        createDefault: () => ({ type: 'host-card', props: {} }),
+      }],
+      renderers: [{
+        type: 'host-card',
+        label: 'Host card',
+        renderer: () => null,
+        inspector: HostInspector,
+        inspectorPropNames: ['title'],
+        propCategories: [{ id: 'primary', label: '主要', inspectorDefaultExpanded: true }],
+        propContracts: [
+          {
+            name: 'title',
+            kind: 'value',
+            label: 'Title',
+            category: 'primary',
+            validate: (value) => typeof value === 'string' ? true : 'Title must be a string',
+          },
+          { name: 'onClick', kind: 'method', label: 'On click', role: 'event-handler' },
+        ],
+      }],
+    })
+
+    const view = render(
+      <EntityInspector
+        dispatch={vi.fn()}
+        document={boundDocument}
+        entity={boundEntity}
+        idFactory={() => 'command-1'}
+        registry={registry}
+        scriptScope={scope}
+      />,
+    )
+
+    expect(screen.queryByText('数据绑定')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '内容' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '主要' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByLabelText('标题')).toHaveAttribute('readonly')
+    expect(screen.getByRole('button', { name: /更换绑定\s*标题/u })).toBeEnabled()
+    expect(screen.queryByRole('group', { name: 'On click' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '高级' }))
+    expect(screen.getByRole('group', { name: 'On click' })).toBeInTheDocument()
+
+    const lockedEntity: ComposeEntity = {
+      ...boundEntity,
+      components: {
+        ...boundEntity.components,
+        Lock: { locked: true },
+      },
+    }
+    view.rerender(
+      <EntityInspector
+        dispatch={vi.fn()}
+        document={{ ...boundDocument, entities: { [lockedEntity.id]: lockedEntity } }}
+        entity={lockedEntity}
+        idFactory={() => 'command-2'}
+        registry={registry}
+        scriptScope={scope}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /更换绑定\s*标题/u })).toBeDisabled()
+    expect(within(screen.getByRole('group', { name: 'On click' })).getByRole('button'))
+      .toBeDisabled()
+
+    scope.dispose()
+  })
+
+  it('OpenSpec: editor-workspace-layout / Renderer Props 分类 / 没有未分类内容时隐藏高级分组', () => {
+    const categorizedEntity: ComposeEntity = {
+      ...entity,
+      components: {
+        ...entity.components,
+        Renderer: { type: 'categorized', props: { title: 'Chart' } },
+      },
+    }
+    const registry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'categorized',
+        label: 'Categorized',
+        renderer: () => null,
+        propCategories: [{ id: 'chart', label: '图表' }],
+        propContracts: [{
+          name: 'title',
+          kind: 'value',
+          label: 'Title',
+          category: 'chart',
+          validate: (value) => typeof value === 'string' || 'string required',
+        }],
+      }],
+    })
+
+    render(
+      <EntityInspector
+        dispatch={vi.fn()}
+        document={{ ...document, entities: { [categorizedEntity.id]: categorizedEntity } }}
+        entity={categorizedEntity}
+        idFactory={() => 'command-1'}
+        registry={registry}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '图表' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '高级' })).not.toBeInTheDocument()
   })
 })

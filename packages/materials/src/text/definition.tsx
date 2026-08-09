@@ -1,7 +1,9 @@
 import type {
   ComposeEntityPreset,
+  ComposeRendererPropContract,
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
+import * as v from 'valibot'
 import type { ComposeBasicMaterialOptions } from '../types'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
@@ -16,6 +18,25 @@ import {
 } from './defaults'
 import { TextRenderer } from './renderer'
 import { TEXT_RENDERER_MEASUREMENT } from './measurement'
+import { TEXT_RENDERER_PROP_SCHEMAS } from './props'
+
+function valueContract(
+  name: keyof typeof TEXT_RENDERER_PROP_SCHEMAS,
+  label: string,
+  category: 'text' | 'typography',
+  affectsMeasurement = true,
+): ComposeRendererPropContract {
+  return {
+    name,
+    kind: 'value',
+    label,
+    category,
+    affectsMeasurement,
+    validate: (value) => v.safeParse(TEXT_RENDERER_PROP_SCHEMAS[name], value).success
+      ? true
+      : `${label} 与 Text Prop Contract 不兼容`,
+  }
+}
 
 /** 创建 Text Renderer 与 Entity Preset。 @internal */
 export function createTextMaterial(
@@ -30,14 +51,28 @@ export function createTextMaterial(
       type: 'text',
       label: options.label ?? 'Text',
       renderer: TextRenderer,
-      propContracts: [{
-        name: 'text',
-        kind: 'value',
-        label: 'Text',
-        validate: (value) => typeof value === 'string' || typeof value === 'number'
-          ? true
-          : 'Text 只接受 string 或 number',
-      }],
+      propContracts: [
+        valueContract('text', 'Text', 'text'),
+        valueContract('color', 'Text color', 'text', false),
+        valueContract('fontSize', 'Font size', 'typography'),
+        valueContract('fontFamily', 'Font family', 'typography'),
+        valueContract('fontWeight', 'Font weight', 'typography'),
+        valueContract('letterSpacing', 'Letter spacing', 'typography'),
+        valueContract('lineHeight', 'Line height', 'typography'),
+      ],
+      propCategories: [
+        { id: 'text', label: '文本' },
+        { id: 'typography', label: '排版' },
+      ],
+      inspectorPropNames: [
+        'text',
+        'color',
+        'fontSize',
+        'fontFamily',
+        'fontWeight',
+        'letterSpacing',
+        'lineHeight',
+      ],
       inspector: createTextRendererInspector(idFactory),
       measurement: TEXT_RENDERER_MEASUREMENT,
     },

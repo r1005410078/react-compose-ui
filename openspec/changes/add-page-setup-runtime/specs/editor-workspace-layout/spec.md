@@ -42,6 +42,37 @@ Renderer Prop Contract 显式允许时提供绑定。绑定、换绑与解绑 MU
 - **THEN** Editor dispose 旧 scope、显示新初始 State 并重新解析既有 Bindings
 - **AND** 缺失返回成员显示错误但不会自动提交删除绑定的事务
 
+### Requirement: Renderer Props 分类与绑定合并
+
+Renderer 的全部公开顶层 Prop Contract MUST 按 Definition 声明的 Props 分类提供绑定入口。没有声明
+分类的 Contract 与没有分类元数据的旧 Renderer Inspector MUST 进入 Editor 提供的「高级」分类；Editor
+MUST NOT 再增加通用「内容」分类。由自定义 Inspector 呈现的 value Prop MUST 保留原类型控件并在字段
+旁显示入口；绑定能力 MUST NOT 把已有或可由其 Schema 表达的字面 editor 降级为 binding-only。只有
+method 或确实没有字面 editor 的 value Prop 才使用所属分类的 binding-only 行。只有存在未分类内容时
+才显示「高级」，Editor MUST NOT 再显示独立「数据绑定」分组。
+
+#### Scenario: 按定义分类显示 Props
+
+- **WHEN** Renderer 声明「文本」与「排版」分类，并把各 value/method Contract 归入对应分类
+- **THEN** Editor 直接显示「文本」与「排版」，每个 Contract 在所属分类以字段入口或 binding-only 行出现
+- **AND** Inspector 中没有通用「内容」或独立「数据绑定」分组，且每个 Contract 只有一个绑定入口
+
+#### Scenario: 未分类 Props 默认进入高级
+
+- **WHEN** Renderer 的一个 Contract 没有 category，或旧 Renderer Inspector 没有声明 propCategories
+- **THEN** Editor 把对应字段或 Inspector 放入「高级」分类
+
+#### Scenario: 没有未分类内容时隐藏高级
+
+- **WHEN** Renderer 的全部 Contract 均已归入显式分类，且没有旧 Inspector 或未知 Renderer 内容
+- **THEN** Editor 不渲染「高级」分组
+
+#### Scenario: Text 字体属性保留类型控件
+
+- **WHEN** Text Renderer 声明 fontSize、fontFamily、fontWeight、letterSpacing 与 lineHeight Contract
+- **THEN** 每个属性继续显示与 Schema 类型匹配的字面控件，并在同一行显示字段绑定入口
+- **AND** 这些属性不得显示为独立的 binding-only 行
+
 ### Requirement: 页面标签拥有 Script Runtime 生命周期
 
 每个已打开页面标签 MUST 在其页面聚合数据之外维护独立 Script Runtime 会话。切换标签 MUST 保留非活动

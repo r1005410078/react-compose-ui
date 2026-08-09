@@ -63,7 +63,8 @@ runtime.dispatch({
   `Clip` 都必须依附 `Hierarchy`。
 - `Appearance`：背景、边框、圆角、透明度和阴影。
 - `Renderer`：宿主 Renderer type 与严格 JSON props。
-- `Bindings`：顶层 Renderer Prop 到 `{ scope: 'page', exportName }` 的稳定引用。
+- `Bindings`：`rendererProps.fields` 保存顶层字段引用；引用只包含
+  `{ scope: 'page', exportName }`。空绑定 Component 非法且应由命令删除。
 
 未知但合法的 PascalCase Component 会被原样保留。Core 不依赖 Registry；缺失的 Renderer 或
 能力定义由上层降级展示，不导致文档被拒绝。

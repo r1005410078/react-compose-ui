@@ -116,7 +116,7 @@ Entity。
 
 `ComposeEntityRegistry` 统一注册四类定义：
 
-- Renderer：Stage/Preview 内容和可选内容 Inspector。
+- Renderer：Stage/Preview 渲染实现和可选 Props Inspector。
 - Component Definition：默认值、校验、顺序和可选属性区。
 - Entity Preset：Palette 项及初始 Component 组合。
 - Capability：用户可添加的一组 Component、依赖和冲突。
@@ -192,17 +192,23 @@ setup 是受信任的同 Realm、自包含 JavaScript ESM，不经过编译，�
 ```js
 export function setup(ctx) {
   const num = ctx.state(0)
+  const onAdd = () => { num.value += 1 }
+  const buttonLabel = ctx.computed(() => `Add ${num.value}`)
   ctx.effect(() => {
     const timer = setTimeout(() => { num.value += 100 }, 2_000)
     return () => clearTimeout(timer)
   })
-  return { num, onAdd: () => { num.value += 1 } }
+  return { num, onAdd, buttonLabel }
 }
 ```
 
 State/Computed 通过 `.value` 工作；返回 Function 只能绑定声明为 event-handler 的 method Prop。
 `Renderer.props` 仍是持久化的 authored JSON，React Renderer 收到的 runtime `props` 可以包含
-运行值与 Function，序列化或发出编辑命令时必须使用 `authoredProps`。
+运行值与 Function，序列化或发出编辑命令时必须使用 `authoredProps`。Renderer Definition 的
+`propContracts` 是唯一可绑定边界：Renderer 以 `propCategories` 声明属性分类，各分类的第一层字段旁
+可绑定单个返回成员；未分类字段进入“高级”，没有未分类内容时不显示该分组。解析以 authored Props
+为基础，再逐字段应用有效绑定；字段失败回退同名 authored 值且永不改写 authored Props。Editor 将
+method 包装为 no-op，Preview 才安全调用并把同步异常与 Promise rejection 报告到页面脚本作用域。
 
 ```tsx
 const [activePage, setActivePage] = useState<ComposeEditorActivePage | null>(null)

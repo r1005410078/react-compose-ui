@@ -571,12 +571,25 @@ describe('ComposePreview', () => {
   it('OpenSpec: compose-preview / Preview 页面 setup 运行 / 点击方法更新绑定值且实例隔离', async () => {
     const text = entity('count', {
       Renderer: { type: 'counter-text', props: { text: 'fallback' } },
-      Bindings: { version: 1, props: { text: { scope: 'page', exportName: 'num' } } },
+      Bindings: {
+        version: 1,
+        rendererProps: {
+          fields: { text: { scope: 'page', exportName: 'num' } },
+        },
+      },
     })
     const button = entity('add', {
       Transform: { position: { x: 0, y: 120 }, size: { width: 100, height: 40 }, rotation: 0 },
       Renderer: { type: 'counter-button', props: { label: 'Add' } },
-      Bindings: { version: 1, props: { onClick: { scope: 'page', exportName: 'onAdd' } } },
+      Bindings: {
+        version: 1,
+        rendererProps: {
+          fields: {
+            label: { scope: 'page', exportName: 'buttonLabel' },
+            onClick: { scope: 'page', exportName: 'onAdd' },
+          },
+        },
+      },
     })
     const value: ComposeDocument = {
       ...document(),
@@ -598,7 +611,9 @@ describe('ComposePreview', () => {
         module: {
           setup: (ctx: import('@compose-ui/script-runtime').ComposePageScriptContext) => {
             const num = ctx.state(0)
-            return { num, onAdd: () => { num.value += 1 } }
+            const onAdd = () => { num.value += 1 }
+            const buttonLabel = ctx.computed(() => num.value === 0 ? 'Add' : `Add ${num.value}`)
+            return { num, onAdd, buttonLabel }
           },
         },
       }),
@@ -629,12 +644,21 @@ describe('ComposePreview', () => {
               {String(props.label)}
             </button>
           ),
-          propContracts: [{
-            name: 'onClick',
-            kind: 'method',
-            label: 'Click',
-            role: 'event-handler',
-          }],
+          propContracts: [
+            {
+              name: 'label',
+              kind: 'value',
+              label: 'Label',
+              affectsMeasurement: false,
+              validate: (candidate) => typeof candidate === 'string' || 'string required',
+            },
+            {
+              name: 'onClick',
+              kind: 'method',
+              label: 'Click',
+              role: 'event-handler',
+            },
+          ],
         },
       ],
     })
@@ -656,6 +680,8 @@ describe('ComposePreview', () => {
     await waitFor(() => {
       expect(screen.getAllByText('1')).toHaveLength(1)
       expect(screen.getAllByText('0')).toHaveLength(1)
+      expect(screen.getAllByRole('button', { name: 'Add 1' })).toHaveLength(1)
+      expect(screen.getAllByRole('button', { name: 'Add' })).toHaveLength(1)
     })
   })
 })

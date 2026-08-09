@@ -36,12 +36,12 @@ describe('OpenSpec: editor-workspace-layout / 文档绑定事务', () => {
     const runtime = createTransactionRuntime({ document })
     const bind = createRendererBindingCommand({
       entity: runtime.document.entities.button!,
-      propName: 'onClick',
+      target: { kind: 'field', propName: 'onClick' },
       exportName: 'onAdd',
       idFactory: () => 'bind',
     })
     expect(bind && runtime.dispatch(bind).status).toBe('committed')
-    expect(getComposeBindings(runtime.document.entities.button!)?.props.onClick).toEqual({
+    expect(getComposeBindings(runtime.document.entities.button!)?.rendererProps.fields.onClick).toEqual({
       scope: 'page',
       exportName: 'onAdd',
     })
@@ -51,6 +51,35 @@ describe('OpenSpec: editor-workspace-layout / 文档绑定事务', () => {
     expect(getComposeBindings(runtime.document.entities.button!)).toBeUndefined()
     expect(runtime.document.entities.button?.components.Renderer?.props).toEqual({ label: 'Add' })
     runtime.redo()
-    expect(getComposeBindings(runtime.document.entities.button!)?.props.onClick.exportName).toBe('onAdd')
+    expect(getComposeBindings(runtime.document.entities.button!)
+      ?.rendererProps.fields.onClick.exportName).toBe('onAdd')
+  })
+
+  it('OpenSpec: editor-workspace-layout / Props 绑定与属性分类合并 / 多字段独立撤销', () => {
+    const runtime = createTransactionRuntime({ document })
+    const clickBinding = createRendererBindingCommand({
+      entity: runtime.document.entities.button!,
+      target: { kind: 'field', propName: 'onClick' },
+      exportName: 'onAdd',
+      idFactory: () => 'bind-click',
+    })
+    expect(clickBinding && runtime.dispatch(clickBinding).status).toBe('committed')
+    const fieldBinding = createRendererBindingCommand({
+      entity: runtime.document.entities.button!,
+      target: { kind: 'field', propName: 'label' },
+      exportName: 'label',
+      idFactory: () => 'bind-field',
+    })
+    expect(fieldBinding && runtime.dispatch(fieldBinding).status).toBe('committed')
+    expect(getComposeBindings(runtime.document.entities.button!)?.rendererProps).toEqual({
+      fields: {
+        onClick: { scope: 'page', exportName: 'onAdd' },
+        label: { scope: 'page', exportName: 'label' },
+      },
+    })
+    runtime.undo()
+    expect(getComposeBindings(runtime.document.entities.button!)?.rendererProps).toEqual({
+      fields: { onClick: { scope: 'page', exportName: 'onAdd' } },
+    })
   })
 })

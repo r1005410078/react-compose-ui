@@ -98,3 +98,29 @@
 - [x] 6.3 运行 `openspec validate add-page-setup-runtime --strict`、受影响包测试、`bun run lint`、`bun run typecheck`、`bun run test`、`bun run build`、`bun run test:e2e` 与 `git diff --check`，并把实际结果记录到本文件。
   - 结果：OpenSpec strict validate 通过；受影响包定向测试全部通过；lint 通过；typecheck 40/40；test 39/39；build 21/21；E2E 34/34；`git diff --check` 通过。
   - 备注：OpenSpec 已返回 `Change 'add-page-setup-runtime' is valid`；随后的 PostHog telemetry 因沙箱无网络无法上报，不影响验证结果与退出码 0。
+
+## 7. Props 绑定收敛
+
+- [x] 7.1 协议与解析行为循环：以 Core/Registry 测试覆盖 `rendererProps.fields` 形状、空绑定拒绝、字段覆盖、严格回退和方法包装，再实现协议与 resolver。
+  - Red command/result/reason：Core ECS/Bindings 与 Registry runtime props 定向测试在旧 `{ version: 1, props }` 草案和字段直接覆盖 authored Props 的实现上失败。
+  - Green command/result：Core 定向测试通过 `rendererProps.fields` JSON 往返、严格 issue path、空绑定拒绝和命令删除；Registry 通过字段 fallback 与 Editor/Preview method 包装。
+  - Refactor：解析收敛为 authored Props 基础值加逐字段覆盖；已撤回的 `rendererProps.object` 被严格视为未知字段。
+- [x] 7.2 订阅与测量行为循环：覆盖字段 State/Computed 精确刷新、测量失效，再迁移 Stage、Preview、Page Slot 与 measurement adapter。
+  - Green command/result：Stage、Preview、Component Registry measurement 定向测试通过字段响应式更新、method 安全边界、精确测量失效和卸载订阅清理。
+  - Regression command/result：完整 Playwright 中 Stage 保持 method no-op，Preview 安全执行字段 `onClick` 并驱动 value 更新；Page Slot 与既有测量回归通过。
+- [x] 7.3 Property Panel 行为循环：覆盖宿主授权顶层完整字段、复合字段标题入口和 binding-only 候选 validator，再实现公共受控 API 与无障碍交互。
+  - Red command/result/reason：数组类型的 ECharts `values` 已被宿主授权，但 Property Panel 只在标量字段调用绑定目标 Hook，因此标题没有可见绑定操作。
+  - Green command/result：数组、对象等复合字段在分组标题固定显示字段级绑定入口，候选按完整字段 Schema 过滤；通用面板默认显式 opt-in 规则不变。
+- [x] 7.4 Editor Inspector 行为循环：覆盖 Renderer Props 显式分类、非空“高级”、字段内联、fallback 行、锁定和 Undo/Redo，再实现 binding port 与文档命令。
+  - Red command/result/reason：分类测试证明 Editor 曾硬编码“内容”，且在所有 Contract 已分类时仍渲染空“高级”。
+  - Green command/result：Editor 直接渲染 Definition 声明的分类，未分类 Contract 与旧 Inspector 进入“高级”；没有未分类内容时隐藏该分组，不再出现通用“内容”、独立“数据绑定”或“绑定整个 Props”。
+  - Refactor：自定义 Inspector 只经 Property Panel 无关的 binding port 消费变量快照、authored/base/resolved Props、当前分类与变更操作；绑定事务保持 `Renderer.props` 引用和值不变。
+- [x] 7.5 Materials 与示例行为循环：补齐第一方和示例 Renderer 的公开 Prop Contract、共享 validator/Schema 来源及字段绑定 E2E。
+  - Red command/result/reason：Prop Contract 完整性与 Inspector 测试最初发现 Text、Image、SVG、Page Slot、Action Button 和 ECharts 的公开顶层 Props 未全部声明，示例仍只有字段绑定。
+  - Green command/result：第一方 Inspector 从 feature-local Schema/validator 构造编辑与绑定校验，示例 setup 分别返回 value 与 `onClick` 成员并逐字段绑定。
+  - Regression correction：Text 显式拆为“文本/排版”，Image、SVG、Page Slot 与示例 Renderer 声明各自分类；fontSize、fontFamily、fontWeight、letterSpacing、lineHeight 均保留 Schema 类型控件并在同一行追加绑定入口。测试同时证明 Inspector 只渲染当前分类、编辑单字段不会把其他显示默认值写入 authored Props，浏览器核对确认行高默认值稳定显示为 `28.8 px`。
+  - E2E command/result：`bunx playwright test e2e/integration.spec.ts -g "页面计数器纵向流程"`，1/1 通过 value/method 字段绑定、脚本 revision、错误 fallback 与 cleanup；Counter 页面种子只写入 `rendererProps.fields`，不再因已撤回的 `object` 字段而无法打开。
+  - ECharts correction：`values` 数组使用完整字段 Schema 校验，并在“图表”分类的“数据”标题直接显示绑定入口；浏览器回归同时证明该 Renderer 不渲染空“高级”。
+- [x] 7.6 同步 README、包文档与项目上下文，运行 OpenSpec strict validate、定向测试、lint、typecheck、全量 test、build、E2E 和 diff check，并记录实际结果。
+  - 文档：根 README、Core、Component Registry、Editor、Property Panel、Materials、Stage、Preview README、OpenSpec proposal/design/spec 与 `openspec/project.md` 已同步。
+  - 门禁：OpenSpec strict validate 通过；受影响包定向/全包测试通过；`bun run lint` 通过；`bun run typecheck` 40/40；`bunx turbo run test --concurrency=1` 39/39（含 44 个 Chromium Storybook 用例；串行运行避开无关 Monaco 固定超时的资源争用）；`bun run build` 21/21；`bun run test:e2e` 35/35；Counter 与 ECharts 字段绑定回归通过，Text 分类与类型控件浏览器回归 1/1，页面脚本与 SVG 分类视觉黄金图已核对并更新。

@@ -19,7 +19,9 @@ const definition: ComposeRendererDefinition = {
   ],
 }
 
-function entity(bindings: Record<string, { scope: 'page'; exportName: string }>): ComposeEntity {
+function entity(input: {
+  fields?: Record<string, { scope: 'page'; exportName: string }>
+}): ComposeEntity {
   return {
     id: 'counter-1',
     name: 'Counter',
@@ -37,7 +39,10 @@ function entity(bindings: Record<string, { scope: 'page'; exportName: string }>)
       Visibility: { visible: true },
       Lock: { locked: false },
       Renderer: { type: 'counter', props: { text: 7, tone: 'blue' } },
-      Bindings: { version: 1, props: bindings },
+      Bindings: {
+        version: 1,
+        rendererProps: { fields: input.fields ?? {} },
+      },
     },
   }
 }
@@ -46,9 +51,10 @@ describe('OpenSpec: component-registry / Authored 与 Runtime Props 分离', () 
   it('值覆盖字面 Prop，方法注入 wrapper 且 authored Props 不变', () => {
     const method = vi.fn()
     const scope = createComposePageScriptScope(() => ({ text: 12, onAdd: method }))
-    const target = entity({
+    const target = entity({ fields: {
       text: { scope: 'page', exportName: 'text' },
       onClick: { scope: 'page', exportName: 'onAdd' },
+    },
     })
 
     const result = resolveComposeRendererRuntimeProps({
@@ -74,11 +80,11 @@ describe('OpenSpec: component-registry / Authored 与 Runtime Props 分离', () 
     }
     const scope = createComposePageScriptScope(() => ({ text: 'wrong', onAdd: 3 }))
     const result = resolveComposeRendererRuntimeProps({
-      entity: entity({
+      entity: entity({ fields: {
         text: { scope: 'page', exportName: 'text' },
         onClick: { scope: 'page', exportName: 'onAdd' },
         future: { scope: 'page', exportName: 'missing' },
-      }),
+      } }),
       definition: throwingDefinition,
       scope,
       methodMode: 'invoke',
@@ -95,7 +101,7 @@ describe('OpenSpec: component-registry / Authored 与 Runtime Props 分离', () 
     const method = vi.fn()
     const scope = createComposePageScriptScope(() => ({ onAdd: method }))
     const result = resolveComposeRendererRuntimeProps({
-      entity: entity({ onClick: { scope: 'page', exportName: 'onAdd' } }),
+      entity: entity({ fields: { onClick: { scope: 'page', exportName: 'onAdd' } } }),
       definition,
       scope,
       methodMode: 'noop',
@@ -104,5 +110,48 @@ describe('OpenSpec: component-registry / Authored 与 Runtime Props 分离', () 
     const onClick = result.props.onClick as (() => void)
     onClick()
     expect(method).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: component-registry / Authored 与 Runtime Props 分离 / 字段事件方法按模式包装', async () => {
+    const method = vi.fn(() => Promise.reject(new Error('rejected')))
+    const scope = createComposePageScriptScope(() => ({ onAdd: method }))
+    const preview = resolveComposeRendererRuntimeProps({
+      entity: entity({ fields: { onClick: { scope: 'page', exportName: 'onAdd' } } }),
+      definition,
+      scope,
+      methodMode: 'invoke',
+    })
+    const onClick = preview.props.onClick as (value: string) => void
+    onClick('event')
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(method).toHaveBeenCalledWith('event')
+    expect(scope.getSnapshot().diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'script.method-rejected', exportName: 'onAdd' }),
+    ]))
+
+    method.mockClear()
+    const editor = resolveComposeRendererRuntimeProps({
+      entity: entity({ fields: { onClick: { scope: 'page', exportName: 'onAdd' } } }),
+      definition,
+      scope,
+      methodMode: 'noop',
+    })
+    ;(editor.props.onClick as () => void)()
+    expect(method).not.toHaveBeenCalled()
+
+    const throwingScope = createComposePageScriptScope(() => ({
+      onAdd: () => { throw new Error('threw') },
+    }))
+    const throwing = resolveComposeRendererRuntimeProps({
+      entity: entity({ fields: { onClick: { scope: 'page', exportName: 'onAdd' } } }),
+      definition,
+      scope: throwingScope,
+      methodMode: 'invoke',
+    })
+    ;(throwing.props.onClick as () => void)()
+    expect(throwingScope.getSnapshot().diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'script.method-threw', exportName: 'onAdd' }),
+    ]))
   })
 })

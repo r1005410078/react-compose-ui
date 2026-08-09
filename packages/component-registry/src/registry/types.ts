@@ -66,12 +66,48 @@ export interface ComposeRendererProps {
 /** 传给宿主 React Renderer 的运行时 Props。 @public */
 export type ComposeRuntimeProps = Readonly<Record<string, unknown>>
 
+/** Renderer Inspector 可用的页面绑定变量快照。 @public */
+export interface ComposeRendererInspectorBindingVariable {
+  readonly id: string
+  readonly label: string
+  readonly kind: 'value' | 'method'
+  readonly value: unknown
+}
+
+/** Renderer Inspector 中一个已保存绑定的状态。 @public */
+export interface ComposeRendererInspectorBindingState {
+  readonly exportName: string | null
+  readonly error?: string
+}
+
+/** Editor 向自定义 Renderer Inspector 注入的无 Property Panel 依赖绑定端口。 @public */
+export interface ComposeRendererInspectorBindingPort {
+  readonly variables: readonly ComposeRendererInspectorBindingVariable[]
+  readonly fields: Readonly<Record<string, ComposeRendererInspectorBindingState>>
+  readonly inspectorPropNames: readonly string[]
+  readonly baseProps: ComposeRuntimeProps
+  readonly props: ComposeRuntimeProps
+  readonly setField: (propName: string, exportName: string | null) => void
+}
+
+/** Renderer Props 在 Entity Inspector 中使用的显式展示分类。 @public */
+export interface ComposeRendererPropCategory {
+  /** Definition 内唯一且稳定的分类 ID；用于 Contract 归属，不写入文档。 */
+  readonly id: string
+  /** Inspector 中的用户可读分类名称。 */
+  readonly label: string
+  /** 分类初次挂载时是否展开。 @defaultValue false */
+  readonly inspectorDefaultExpanded?: boolean
+}
+
 /** Renderer 可绑定顶层 Prop 的显式运行时契约。 @public */
 export type ComposeRendererPropContract =
   | {
       readonly name: string
       readonly kind: 'value'
       readonly label: string
+      /** 所属显式分类；省略时 Editor 把 Prop 放入隐式“高级”分类。 */
+      readonly category?: string
       readonly validate: (value: unknown) => true | string
       /** @defaultValue true */
       readonly affectsMeasurement?: boolean
@@ -80,6 +116,8 @@ export type ComposeRendererPropContract =
       readonly name: string
       readonly kind: 'method'
       readonly label: string
+      /** 所属显式分类；省略时 Editor 把 Prop 放入隐式“高级”分类。 */
+      readonly category?: string
       readonly role: 'event-handler'
     }
 
@@ -92,6 +130,7 @@ export interface ComposeRendererBindingDiagnostic {
     | 'binding.validation-failed'
     | 'binding.validator-threw'
   readonly entityId: string
+  readonly target: { readonly kind: 'field'; readonly propName: string }
   readonly propName: string
   readonly exportName: string
   readonly message: string
@@ -145,10 +184,18 @@ export interface ComposeEntityInspectorContext {
   readonly nodeEditPort?: ComposeNodeEditPort
 }
 
-/** Renderer 内容 Inspector 的上下文。 @public */
+/** Renderer Props Inspector 的上下文。 @public */
 export interface ComposeRendererInspectorProps extends ComposeEntityInspectorContext {
   /** 当前 Renderer Component。 */
   readonly renderer: ComposeRenderer
+  /** 应用页面绑定后的实际 Props。 */
+  readonly props: ComposeRuntimeProps
+  /** 未被绑定覆盖的严格 JSON Props。 */
+  readonly authoredProps: JsonObject
+  /** 当前由 Editor 请求渲染的显式 Prop 分类；省略时表示隐式“高级”分类。 */
+  readonly propCategory?: ComposeRendererPropCategory
+  /** Editor 注入的可选 Renderer Props 绑定端口。 */
+  readonly propsBinding?: ComposeRendererInspectorBindingPort
 }
 
 /** 单个 ECS Component Inspector 的上下文。 @public */
@@ -191,10 +238,14 @@ export interface ComposeRendererDefinition {
   readonly renderer: ComponentType<ComposeRendererProps>
   /** 可绑定顶层 React Props；省略时 Renderer 只使用 authored Props。 */
   readonly propContracts?: readonly ComposeRendererPropContract[]
-  /** 可选 Renderer 内容 Inspector。 */
+  /** Props 的显式 Inspector 分类；未归类 Contract 默认进入隐式“高级”分类。 */
+  readonly propCategories?: readonly ComposeRendererPropCategory[]
+  /** 由自定义 Inspector 在原字段旁呈现绑定入口的 value Prop 名称。 */
+  readonly inspectorPropNames?: readonly string[]
+  /** 可选 Renderer Props Inspector；声明分类后按 `propCategory` 分次渲染。 */
   readonly inspector?: ComponentType<ComposeRendererInspectorProps>
   /**
-   * Renderer Inspector 分组初次挂载时是否展开。
+   * 未声明 Props 分类时，隐式“高级”分组初次挂载是否展开。
    *
    * @defaultValue false
    */

@@ -13,6 +13,8 @@ export interface ComposePropertyPanelBindingTargetRowProps {
   readonly readOnly?: boolean
   /** 已绑定成员缺失或不兼容时的可访问错误。 */
   readonly error?: string
+  /** 在 kind 过滤之后执行的宿主候选校验。 */
+  readonly validateVariable?: (variable: PropertyPanelVariable) => boolean
 }
 
 /**
@@ -30,6 +32,7 @@ export function ComposePropertyPanelBindingTargetRow({
   onChange,
   readOnly = false,
   error,
+  validateVariable,
 }: ComposePropertyPanelBindingTargetRowProps) {
   const messages = usePropertyPanelMessages()
   const [open, setOpen] = useState(false)
@@ -38,17 +41,19 @@ export function ComposePropertyPanelBindingTargetRow({
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const candidates = useMemo(() => variables.filter((variable) => (
     (variable.kind ?? 'value') === kind
+    && (validateVariable?.(variable) ?? true)
     && (!normalizedQuery || [variable.label, variable.id, variable.description]
       .filter(Boolean)
       .join(' ')
       .toLocaleLowerCase()
       .includes(normalizedQuery))
-  )), [kind, normalizedQuery, variables])
+  )), [kind, normalizedQuery, validateVariable, variables])
 
   return (
     <div
       aria-label={label}
       className="property-panel__binding-only-row"
+      data-binding-layout="row"
       data-binding-state={error ? 'invalid' : value ? 'bound' : 'literal'}
       role="group"
     >

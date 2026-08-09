@@ -131,11 +131,13 @@ interface PropertyBindingView {
   activeAnchor?: HTMLElement
   openTarget: (target: PropertyPanelRendererBindingTargetState, anchor?: HTMLElement) => void
   closePicker: () => void
+  readOnly: boolean
 }
 const BindingContext = createContext<PropertyBindingView>({
   resolvedTargets: new Map(),
   openTarget: () => undefined,
   closePicker: () => undefined,
+  readOnly: false,
 })
 const ViewContext = createContext<PropertyTreeView>({
   hasDefaultValue: false,
@@ -178,6 +180,7 @@ export function PropertyTree({
     variables: binding.variables,
     renderers,
     canBind: binding.canBind,
+    isTargetEnabled: binding.isTargetEnabled,
   }) : { targets: [], issues: [] }
   const resolvedTargets = new Map(bindingResult.targets.map((target) => [
     createBindingAddressKey(target.address),
@@ -229,6 +232,7 @@ export function PropertyTree({
           activeAnchor: activeBinding?.anchor,
           openTarget: (target, anchor) => setActiveBinding({ target, anchor }),
           closePicker,
+          readOnly,
         }}>
           <ViewContext.Provider value={sectionView}>
             {section ? (
@@ -277,7 +281,11 @@ function RowActionRail({ actions, label }: { actions: readonly RowAction[]; labe
     left.priority - right.priority
     || Number(Boolean(left.disabled)) - Number(Boolean(right.disabled))
   ))
-  const slots = Math.max(1, Math.min(3, Math.floor((actionWidth - 6) / 27)))
+  const widthSlots = Math.max(1, Math.min(3, Math.floor((actionWidth - 6) / 27)))
+  // 复合字段把字段级绑定固定显示在分组标题；这类受控入口不能被折叠进“更多”菜单。
+  const slots = actions.some((action) => action.control)
+    ? Math.max(widthSlots, Math.min(3, actions.length))
+    : widthSlots
   const hasOverflow = ordered.length > slots
   const direct = hasOverflow ? ordered.slice(0, Math.max(0, slots - 1)) : ordered
   const hidden = hasOverflow ? ordered.slice(Math.max(0, slots - 1)) : []
@@ -411,21 +419,28 @@ function useBuiltInBindingTarget(
   path: PropertyPath,
   label: string,
   literalValue: unknown,
-  readOnly: boolean,
 ): PropertyPanelRendererBindingTargetState | undefined {
   const view = useContext(BindingContext)
   const info = inspectSchema(schema)
+  const hostEnabled = view.config?.isTargetEnabled?.({
+    address: { path, targetId: 'value' },
+    label,
+    schema,
+    metadata: info.metadata,
+  }) === true
   if (
     !view.config
-    || info.metadata.binding?.enabled !== true
-    || !['string', 'number', 'bigint', 'boolean', 'date', 'picklist', 'enum'].includes(info.type)
+    || (!hostEnabled && (
+      info.metadata.binding?.enabled !== true
+      || !['string', 'number', 'bigint', 'boolean', 'date', 'picklist', 'enum'].includes(info.type)
+    ))
   ) return undefined
   return createBindingTargetState({
     address: { path, targetId: 'value' },
     label,
     schema,
     semanticScope: info.metadata.binding?.semanticScope,
-  }, literalValue, readOnly, view)
+  }, literalValue, view.readOnly || info.metadata.readOnly === true, view)
 }
 
 function useRendererBindingController(
@@ -663,6 +678,25 @@ function PropertyNode({
   const renderer = info.metadata.editor
     ? renderers.find((candidate) => candidate.id === info.metadata.editor)
     : renderers.find((candidate) => candidate.matches?.(info.base, info.metadata))
+  const hostWholeFieldEnabled = bindingView.config?.isTargetEnabled?.({
+    address: { path, targetId: 'value' },
+    label,
+    schema,
+    metadata: info.metadata,
+  }) === true
+  const structuralBindingTarget = useBuiltInBindingTarget(schema, path, label, value)
+  const structuralField = !renderer && (
+    OBJECT_TYPES.has(info.type)
+    || info.type === 'array'
+    || TUPLE_TYPES.has(info.type)
+    || info.type === 'record'
+    || info.type === 'union'
+    || info.type === 'variant'
+  )
+  const structuralBound = structuralField && Boolean(structuralBindingTarget?.binding)
+  const structuralValue = structuralField
+    ? structuralBindingTarget?.effectiveValue ?? value
+    : value
   const missing = value === undefined || value === null
   const supportsPresence = info.optional || info.nullable
   const togglePresence = (present: boolean) => {
@@ -711,21 +745,36 @@ function PropertyNode({
         )
       },
     } : null
-  const actions = [presenceAction, resetAction, ...(nodeActions ?? [])]
+  const bindingAction: RowAction | null = structuralField && structuralBindingTarget ? {
+    id: 'binding',
+    label: messages.bind(label),
+    priority: 5,
+    control: <BindingTrigger target={structuralBindingTarget} />,
+    onSelect: structuralBindingTarget.openPicker,
+  } : null
+  const actions = [bindingAction, presenceAction, resetAction, ...(nodeActions ?? [])]
     .filter((action): action is RowAction => action !== null)
-  const rendererBindingDescriptors = renderer && info.metadata.binding?.enabled === true
-    ? renderer.bindingTargets?.({
+  const rendererBindingDescriptors = renderer && hostWholeFieldEnabled
+    ? [{
+        id: 'value',
+        label,
+        schema,
+        getValue: (candidate: unknown) => candidate,
+        setValue: (_candidate: unknown, targetValue: unknown) => targetValue,
+      }]
+    : renderer && info.metadata.binding?.enabled === true
+      ? renderer.bindingTargets?.({
         path,
         schema,
         metadata: info.metadata,
         value,
       }) ?? []
-    : []
+      : []
   const rendererBinding = useRendererBindingController(
     rendererBindingDescriptors,
     path,
     value,
-    readOnly,
+    bindingView.readOnly || info.metadata.readOnly === true,
     info.metadata.binding?.semanticScope,
   )
   if (
@@ -837,10 +886,10 @@ function PropertyNode({
         label={label}
         nodeActions={actions}
         path={path}
-        readOnly={readOnly}
+        readOnly={readOnly || structuralBound}
         schema={info.base}
         initiallyExpanded={info.metadata.collapsed !== true}
-        value={value}
+        value={structuralValue}
       />
     )
   }
@@ -852,10 +901,10 @@ function PropertyNode({
         label={label}
         nodeActions={actions}
         path={path}
-        readOnly={readOnly}
+        readOnly={readOnly || structuralBound}
         schema={info.base}
         initiallyExpanded={info.metadata.collapsed !== true}
-        value={value}
+        value={structuralValue}
       />
     )
   }
@@ -867,10 +916,10 @@ function PropertyNode({
         label={label}
         nodeActions={actions}
         path={path}
-        readOnly={readOnly}
+        readOnly={readOnly || structuralBound}
         schema={info.base}
         initiallyExpanded={info.metadata.collapsed !== true}
-        value={value}
+        value={structuralValue}
       />
     )
   }
@@ -882,10 +931,10 @@ function PropertyNode({
         label={label}
         nodeActions={actions}
         path={path}
-        readOnly={readOnly}
+        readOnly={readOnly || structuralBound}
         schema={info.base}
         initiallyExpanded={info.metadata.collapsed !== true}
-        value={value}
+        value={structuralValue}
       />
     )
   }
@@ -897,10 +946,10 @@ function PropertyNode({
         label={label}
         nodeActions={actions}
         path={path}
-        readOnly={readOnly}
+        readOnly={readOnly || structuralBound}
         schema={info.base}
         initiallyExpanded={info.metadata.collapsed !== true}
-        value={value}
+        value={structuralValue}
       />
     )
   }
@@ -1047,7 +1096,10 @@ function GroupShell({
       data-property-depth={depth}
       style={createGroupIndentStyle(depth)}
     >
-      <div className="property-panel__group-header">
+      <div
+        className="property-panel__group-header"
+        data-has-actions={nodeActions.some((action) => action.control) ? 'true' : undefined}
+      >
         <button
           aria-expanded={visibleExpanded}
           type="button"
@@ -1502,7 +1554,7 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
   const depth = useContext(TreeDepthContext)
   const id = `property-${path.map(String).join('-')}`
   const runtime = info.base as RuntimeSchema
-  const bindingTarget = useBuiltInBindingTarget(schema, path, label, value, readOnly)
+  const bindingTarget = useBuiltInBindingTarget(schema, path, label, value)
   const bound = Boolean(bindingTarget?.binding)
   const displayValue = bindingTarget?.effectiveValue ?? value
   const [draft, setDraft] = useState<{ source: unknown; text: string; error?: string }>({

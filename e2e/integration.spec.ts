@@ -211,7 +211,7 @@ test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG �
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
-  await expandInspectorSection(inspector, '内容')
+  await expandInspectorSection(inspector, 'SVG')
   await inspector.getByRole('checkbox', { name: '覆盖填充' }).check()
   await expect(stage.getByTestId('compose-material-svg').locator('rect').last())
     .toHaveAttribute('fill', '#ffffff')
@@ -629,7 +629,8 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     hasText: 'Text',
   }).click()
   const textInspector = editor.getByRole('region', { name: 'Text 属性', exact: true })
-  await expandInspectorSection(textInspector, '内容')
+  await expandInspectorSection(textInspector, '文本')
+  await expect(textInspector.getByRole('button', { name: '内容' })).toHaveCount(0)
   const property = textInspector.getByRole('textbox', { name: '文本', exact: true })
   await property.fill('统一事务舞台')
   await expect(stage.getByText('统一事务舞台')).toBeVisible()
@@ -637,6 +638,16 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(property).toHaveValue('Text')
   await property.press('Control+Shift+z')
   await expect(property).toHaveValue('统一事务舞台')
+  await expandInspectorSection(textInspector, '排版')
+  await expect(textInspector.getByRole('spinbutton', { name: '字号' })).toBeVisible()
+  await expect(textInspector.getByRole('textbox', { name: '字体' })).toBeVisible()
+  await expect(textInspector.getByRole('textbox', { name: '字重' })).toBeVisible()
+  await expect(textInspector.getByRole('spinbutton', { name: '字间距' })).toBeVisible()
+  await expect(textInspector.getByRole('spinbutton', { name: '行高' })).toBeVisible()
+  for (const label of ['字号', '字体', '字重', '字间距', '行高']) {
+    await expect(textInspector.getByRole('button', { name: new RegExp(`绑定\\s*${label}`, 'u') }))
+      .toBeVisible()
+  }
   for (let index = 0; index < 12; index += 1) {
     await stage.press('Shift+ArrowDown')
   }
@@ -776,6 +787,10 @@ test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染
   const chart = stage.getByRole('img', { name: 'Quarterly data' })
   await expect(chart).toBeVisible()
   await expect(chart.locator('canvas')).toBeVisible()
+  const inspector = editor.getByRole('region', { name: 'ECharts Chart 属性', exact: true })
+  await inspector.getByRole('button', { name: '图表' }).click()
+  await expect(inspector.getByRole('button', { name: '绑定 数据' })).toBeVisible()
+  await expect(inspector.getByRole('button', { name: '高级' })).toHaveCount(0)
 })
 
 test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并由几何限制改变 Stage 手柄', async ({ page }) => {
@@ -2101,6 +2116,8 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await expect(pageTab).toBeVisible()
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
+  await stage.getByRole('button', { name: 'Add' }).click()
+  await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
   await stage.getByTestId('stage-output-boundary').click({ position: { x: 8, y: 8 } })
   const canvasInspector = editor.getByRole('region', { name: '画布属性' })
   const pageScriptProperty = canvasInspector.locator('[data-property-path="pageScript"]')
@@ -2124,6 +2141,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await expect(preview.getByTestId('compose-material-text')).toHaveText('0')
   await preview.getByRole('button', { name: 'Add' }).click()
   await expect(preview.getByTestId('compose-material-text')).toHaveText('1')
+  await expect(preview.getByRole('button', { name: 'Add 1' })).toBeVisible()
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
   await preview.getByRole('button', { name: '关闭预览' }).click()
 
@@ -2151,6 +2169,8 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await page.keyboard.press('Control+S')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
   await pageTab.click()
+  await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
+  await expect(stage.getByRole('button', { name: 'Add' })).toBeVisible()
   await stage.getByTestId('stage-output-boundary').click({ position: { x: 8, y: 8 } })
   await expect(pageScriptProperty.getByRole('list', { name: '页面脚本返回成员' }))
     .toContainText('10')
@@ -2337,7 +2357,7 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
 
   // 3) 属性面板的 node 字段选中 Home 页面
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  await expandInspectorSection(inspector, '内容')
+  await expandInspectorSection(inspector, '页面')
   const nodeField = inspector.getByTestId('semantic-editor-node')
   await expect(nodeField).toBeVisible()
   await nodeField.getByRole('combobox').click()
@@ -2479,7 +2499,7 @@ test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完�
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: 'Page Slot' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  await expandInspectorSection(inspector, '内容')
+  await expandInspectorSection(inspector, '页面')
   await inspector.getByTestId('semantic-editor-node').getByRole('combobox').click()
   await inspector.getByRole('option', { name: 'Home' }).click()
 

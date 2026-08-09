@@ -58,4 +58,21 @@ describe('OpenSpec: property-panel / 无字面值方法绑定目标', () => {
     expect(screen.getByRole('button', { name: 'missingMethod' })).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('返回成员不存在')
   })
+
+  it('OpenSpec: property-panel / binding-only 候选校验 / 过滤不兼容的 value 候选', () => {
+    const onChange = vi.fn()
+    render(
+      <ComposePropertyPanelBindingTargetRow
+        kind="value"
+        label="数据"
+        onChange={onChange}
+        validateVariable={(variable) => variable.id === 'num'}
+        value={null}
+        variables={variables}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /绑定\s*数据/u }))
+    expect(screen.getByRole('button', { name: 'Number' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+  })
 })

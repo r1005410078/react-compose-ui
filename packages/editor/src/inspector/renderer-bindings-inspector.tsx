@@ -1,83 +1,54 @@
-import { useSyncExternalStore } from 'react'
-import {
-  resolveComposeRendererRuntimeProps,
-  type ComposeRendererDefinition,
+import type {
+  ComposeRendererDefinition,
+  ComposeRendererInspectorBindingPort,
 } from '@compose-ui/component-registry'
 import {
-  getComposeBindings,
-  type ComposeEntity,
-  type EditorCommand,
-} from '@compose-ui/core'
-import { ComposePropertyPanelBindingTargetRow } from '@compose-ui/property-panel'
-import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
-import { createRendererBindingCommand } from './renderer-binding-command'
+  ComposePropertyPanelBindingTargetRow,
+  type ComposePropertyPanelVariable,
+} from '@compose-ui/property-panel'
 
-const EMPTY_SCOPE_SNAPSHOT = { exports: [], diagnostics: [], disposed: false } as const
-const subscribeEmptyScope = () => () => undefined
-const getEmptyScopeSnapshot = () => EMPTY_SCOPE_SNAPSHOT
+function toPropertyPanelVariables(
+  variables: ComposeRendererInspectorBindingPort['variables'],
+): readonly ComposePropertyPanelVariable[] {
+  return variables.map((item) => ({ ...item, scope: 'page' as const }))
+}
 
-/** Registry Prop Contract 与页面返回作用域的 Editor 聚合。 @internal */
-export function RendererBindingsInspector({
+/** 自定义 Inspector 未内联呈现的 Contract fallback 行。 @internal */
+export function RendererBindingOnlyRows({
+  categoryId,
   definition,
-  dispatch,
-  entity,
-  idFactory,
+  port,
   readOnly,
-  scope,
 }: {
+  readonly categoryId?: string
   readonly definition: ComposeRendererDefinition
-  readonly dispatch: (command: EditorCommand) => unknown
-  readonly entity: ComposeEntity
-  readonly idFactory: () => string
+  readonly port: ComposeRendererInspectorBindingPort
   readonly readOnly: boolean
-  readonly scope?: ComposePageScriptScope
 }) {
-  const snapshot = useSyncExternalStore(
-    scope?.subscribe ?? subscribeEmptyScope,
-    scope?.getSnapshot ?? getEmptyScopeSnapshot,
-    scope?.getSnapshot ?? getEmptyScopeSnapshot,
-  )
-  const bindings = getComposeBindings(entity)
-  const variables = snapshot.exports.map((item) => ({
-    id: item.name,
-    label: item.name,
-    scope: 'page' as const,
-    kind: item.kind,
-    value: item.kind === 'value' ? item.value : item.method,
-  }))
-  const resolved = resolveComposeRendererRuntimeProps({
-    entity,
-    definition,
-    scope,
-    methodMode: 'noop',
-  })
-
-  return (
-    <div className="compose-editor__renderer-bindings">
-      {definition.propContracts?.map((contract) => {
-        const current = bindings?.props[contract.name]?.exportName ?? null
-        const error = resolved.diagnostics.find((item) => item.propName === contract.name)?.message
-        return (
-          <ComposePropertyPanelBindingTargetRow
-            error={error}
-            key={contract.name}
-            kind={contract.kind}
-            label={contract.label}
-            readOnly={readOnly}
-            value={current}
-            variables={variables}
-            onChange={(exportName) => {
-              const command = createRendererBindingCommand({
-                entity,
-                propName: contract.name,
-                exportName,
-                idFactory,
-              })
-              if (command) dispatch(command)
-            }}
-          />
-        )
-      })}
-    </div>
-  )
+  const inline = new Set(definition.inspectorPropNames ?? [])
+  const variables = toPropertyPanelVariables(port.variables)
+  return definition.propContracts?.filter((contract) => (
+    contract.category === categoryId && !inline.has(contract.name)
+  )).map((contract) => (
+    <ComposePropertyPanelBindingTargetRow
+      error={port.fields[contract.name]?.error}
+      key={contract.name}
+      kind={contract.kind}
+      label={contract.label}
+      readOnly={readOnly}
+      validateVariable={contract.kind === 'value'
+        ? (variable) => {
+            try {
+              return contract.validate(variable.value) === true
+            }
+            catch {
+              return false
+            }
+          }
+        : undefined}
+      value={port.fields[contract.name]?.exportName ?? null}
+      variables={variables}
+      onChange={(exportName) => { port.setField(contract.name, exportName) }}
+    />
+  )) ?? null
 }

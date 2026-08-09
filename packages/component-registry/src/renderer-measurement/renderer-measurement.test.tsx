@@ -181,10 +181,12 @@ describe('OpenSpec: component-registry / Renderer measurement adapter', () => {
         ...base.components,
         Bindings: {
           version: 1,
-          props: {
-            text: { scope: 'page', exportName: 'text' },
-            decoration: { scope: 'page', exportName: 'decoration' },
-            onClick: { scope: 'page', exportName: 'onClick' },
+          rendererProps: {
+            fields: {
+              text: { scope: 'page', exportName: 'text' },
+              decoration: { scope: 'page', exportName: 'decoration' },
+              onClick: { scope: 'page', exportName: 'onClick' },
+            },
           },
         },
       },
@@ -203,4 +205,5 @@ describe('OpenSpec: component-registry / Renderer measurement adapter', () => {
     expect(adapter.measure({ entity: bound, ...constraints })).toMatchObject({ width: 190 })
     adapter.dispose()
   })
+
 })

@@ -72,4 +72,6 @@ IME composing 保留原生键盘与右键行为。
 多个编辑器实例必须各自创建 controller。
 
 注入页面 `scriptScope` 后，Stage 会实时解析 value 绑定；method Prop 在普通编辑模式下使用 no-op，
-不会因为选择或拖拽误执行页面业务方法。作用域创建、脚本加载与释放不属于 Stage。
+不会因为选择或拖拽误执行页面业务方法。字段 State/Computed 更新会重渲对应 Renderer，并按对应
+Contract 的 `affectsMeasurement` 精确决定是否使 measurement/layout 失效。作用域创建、脚本加载与
+释放不属于 Stage。

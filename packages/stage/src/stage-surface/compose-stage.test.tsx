@@ -269,9 +269,11 @@ describe('ComposeStage ECS', () => {
         ...target.components,
         Bindings: {
           version: 1,
-          props: {
-            text: { scope: 'page', exportName: 'count' },
-            onClick: { scope: 'page', exportName: 'onAdd' },
+          rendererProps: {
+            fields: {
+              text: { scope: 'page', exportName: 'count' },
+              onClick: { scope: 'page', exportName: 'onAdd' },
+            },
           },
         },
       },

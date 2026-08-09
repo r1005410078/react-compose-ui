@@ -4,14 +4,30 @@
 
 Renderer Definition MUST 能够以实例级 Prop Contract 声明顶层可绑定 Prop。value contract MUST 提供
 稳定名称、显示名、纯同步 validator 与可选 measurement 影响标记；method contract MUST 声明
-`event-handler` 角色。Registry MUST 保持无 Valibot 依赖，隔离 validator 异常，并让未声明 Contract 的
-既有 Renderer 继续使用字面 Props 且不出现正式绑定入口。
+`event-handler` 角色。全部已声明 Contract MUST 默认可绑定。Definition MAY 声明唯一、非空的 Props 分类，
+Contract MAY 引用一个已声明分类；Registry MUST 拒绝无效分类和未知分类引用，未引用分类的 Contract 由
+Editor 消费为隐式「高级」。Definition MAY 声明由自定义 Inspector 内联呈现的 value Prop 名称，Registry
+MUST 校验这些名称存在、属于 value Contract 且 Inspector 存在；Editor 请求分类内容时 MUST 把当前分类
+透传给 Inspector。Registry MUST 保持无 Valibot 依赖，隔离 validator 异常，并让未声明 Contract 的既有
+Renderer 继续使用字面 Props 且不出现正式绑定入口。
 
 #### Scenario: 注册值与事件方法 Props
 
 - **WHEN** Renderer Definition 声明 number value Prop 和 event-handler method Prop
 - **THEN** Registry 按稳定 Prop 名称返回两类 Contract
 - **AND** Definition、Contract 与 validator 保持实例隔离
+
+#### Scenario: 校验 Inspector 内联 Prop
+
+- **WHEN** Renderer 把一个 method、未知名称或没有 Inspector 的 value Prop 声明为 Inspector 内联字段
+- **THEN** Registry 拒绝该 Definition 并报告稳定错误
+- **AND** 合法但未内联的 Contract 继续由消费方显示 binding-only 入口
+
+#### Scenario: 校验 Props 分类归属
+
+- **WHEN** Renderer 声明重复或空分类，或 Prop Contract 引用未声明分类
+- **THEN** Registry 拒绝该 Definition 并报告稳定错误
+- **AND** 省略 category 的合法 Contract 保持未分类，由 Editor 放入「高级」
 
 #### Scenario: 旧 Renderer 没有 Prop Contract
 

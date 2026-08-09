@@ -154,6 +154,105 @@ describe('ComposeEntityRegistry', () => {
     })).toThrow(/Prop.*不能为空/u)
   })
 
+  it('OpenSpec: component-registry / Renderer Prop Contract / 校验 Inspector 内联 Prop', () => {
+    const valueContract = {
+      name: 'count', kind: 'value' as const, label: '数值', validate: () => true as const,
+    }
+    const methodContract = {
+      name: 'onAdd', kind: 'method' as const, label: '增加', role: 'event-handler' as const,
+    }
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'counter', label: '计数器', renderer: () => null,
+        inspector: () => null,
+        inspectorPropNames: ['onAdd'],
+        propContracts: [valueContract, methodContract],
+      }],
+    })).toThrow(/onAdd.*value/u)
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'counter', label: '计数器', renderer: () => null,
+        inspector: () => null,
+        inspectorPropNames: ['missing'],
+        propContracts: [valueContract],
+      }],
+    })).toThrow(/missing.*Contract/u)
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'counter', label: '计数器', renderer: () => null,
+        inspectorPropNames: ['count'],
+        propContracts: [valueContract],
+      }],
+    })).toThrow(/Inspector/u)
+  })
+
+  it('OpenSpec: component-registry / Renderer Props 分类 / 校验分类定义与 Contract 归属', () => {
+    const registry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'text',
+        label: 'Text',
+        renderer: () => null,
+        propCategories: [
+          { id: 'content', label: '文本' },
+          { id: 'typography', label: '排版', inspectorDefaultExpanded: true },
+        ],
+        propContracts: [{
+          name: 'fontSize',
+          kind: 'value',
+          label: '字号',
+          category: 'typography',
+          validate: () => true,
+        }],
+      }],
+    })
+
+    expect(registry.getRenderer('text')?.propCategories).toEqual([
+      { id: 'content', label: '文本' },
+      { id: 'typography', label: '排版', inspectorDefaultExpanded: true },
+    ])
+    expect(registry.listRendererPropContracts('text')[0]).toMatchObject({
+      name: 'fontSize',
+      category: 'typography',
+    })
+
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'bad',
+        label: 'Bad',
+        renderer: () => null,
+        propCategories: [{ id: 'base', label: '基础' }],
+        propContracts: [{
+          name: 'value',
+          kind: 'value',
+          label: '值',
+          category: 'missing',
+          validate: () => true,
+        }],
+      }],
+    })).toThrow(/分类.*missing/u)
+
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'duplicate-category',
+        label: 'Duplicate category',
+        renderer: () => null,
+        propCategories: [
+          { id: 'base', label: '基础' },
+          { id: 'base', label: '重复基础' },
+        ],
+      }],
+    })).toThrow(/分类.*base.*重复/u)
+
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'empty-category',
+        label: 'Empty category',
+        renderer: () => null,
+        propCategories: [{ id: '', label: '空' }],
+      }],
+    })).toThrow(/分类 ID.*不能为空/u)
+  })
+
   it('OpenSpec: Preset 创建 / 自动注入 Composition 并隔离默认值', () => {
     const registry = createComposeEntityRegistry({ presets: [preset()] })
     const first = registry.createSeed('rectangle')

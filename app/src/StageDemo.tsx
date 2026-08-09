@@ -30,7 +30,10 @@ import {
   useComposeOperationLog,
 } from '@compose-ui/operation-log'
 import type { ComposeOperationLogCategory, ComposeOperationLogRecordInput } from '@compose-ui/operation-log'
-import { ComposePropertyPanel } from '@compose-ui/property-panel'
+import {
+  ComposePropertyPanel,
+  type ComposePropertyPanelBindingConfig,
+} from '@compose-ui/property-panel'
 import { ComposePreviewDialog } from '@compose-ui/preview'
 import { BarChart } from 'echarts/charts'
 import {
@@ -161,6 +164,7 @@ const actionButtonRenderer = {
       name: 'label',
       kind: 'value',
       label: 'Label',
+      category: 'button',
       validate: (value: unknown) => typeof value === 'string' ? true : 'Label must be a string',
       affectsMeasurement: false,
     },
@@ -168,22 +172,56 @@ const actionButtonRenderer = {
       name: 'onClick',
       kind: 'method',
       label: 'On click',
+      category: 'button',
       role: 'event-handler',
     },
   ],
+  propCategories: [{ id: 'button', label: '按钮' }],
 } satisfies ComposeRendererDefinition
 
-function ChartInspector({ entity, renderer, dispatch, readOnly }: ComposeRendererInspectorProps) {
-  const values = Array.isArray(renderer.props.values)
-    ? renderer.props.values.filter((item): item is number => typeof item === 'number')
+function ChartInspector({
+  authoredProps,
+  entity,
+  dispatch,
+  propsBinding,
+  readOnly,
+}: ComposeRendererInspectorProps) {
+  const props = propsBinding?.baseProps ?? authoredProps
+  const values = Array.isArray(props.values)
+    ? props.values.filter((item): item is number => typeof item === 'number')
     : [18, 28, 22, 36]
   const value = {
-    title: typeof renderer.props.title === 'string' ? renderer.props.title : '季度数据',
+    title: typeof props.title === 'string' ? props.title : '季度数据',
     values,
   }
+  const binding = propsBinding ? {
+    value: ['title', 'values'].flatMap((propName) => {
+      const exportName = propsBinding.fields[propName]?.exportName
+      return exportName ? [{
+        target: { path: [propName], targetId: 'value' },
+        variableId: exportName,
+      }] : []
+    }),
+    variables: propsBinding.variables.map((variable) => ({
+      ...variable,
+      scope: 'page' as const,
+    })),
+    isTargetEnabled: ({ address }) => (
+      address.targetId === 'value'
+      && address.path.length === 1
+      && (address.path[0] === 'title' || address.path[0] === 'values')
+    ),
+    onChange: (next, change) => {
+      const propName = change.target.path[0]
+      if (propName !== 'title' && propName !== 'values') return
+      const selected = next.find((item) => item.target.path[0] === propName)
+      propsBinding.setField(propName, selected?.variableId ?? null)
+    },
+  } satisfies ComposePropertyPanelBindingConfig : undefined
   return (
     <ComposePropertyPanel
       aria-label="ECharts 图表属性"
+      binding={binding}
       defaultValue={{ title: '季度数据', values: [18, 28, 22, 36] }}
       readOnly={readOnly}
       schema={chartSchema}
@@ -191,8 +229,8 @@ function ChartInspector({ entity, renderer, dispatch, readOnly }: ComposeRendere
       onValueChange={(next) =>
         setAllProps(
           entity,
-          renderer.props,
-          next,
+          authoredProps,
+          { ...authoredProps, ...next },
           dispatch,
           `inspector:${entity.id}`,
         )}
@@ -204,6 +242,30 @@ const echartsRenderer = {
   type: 'echarts-bar',
   label: 'ECharts Chart',
   renderer: ChartRenderer,
+  propContracts: [
+    {
+      name: 'title',
+      kind: 'value',
+      label: 'Title',
+      category: 'chart',
+      affectsMeasurement: false,
+      validate: (value: unknown) => v.safeParse(chartSchema.entries.title, value).success
+        ? true
+        : 'Title must be a string',
+    },
+    {
+      name: 'values',
+      kind: 'value',
+      label: 'Values',
+      category: 'chart',
+      affectsMeasurement: false,
+      validate: (value: unknown) => v.safeParse(chartSchema.entries.values, value).success
+        ? true
+        : 'Values must be an array of numbers',
+    },
+  ],
+  propCategories: [{ id: 'chart', label: '图表' }],
+  inspectorPropNames: ['title', 'values'],
   inspector: ChartInspector,
 } satisfies ComposeRendererDefinition
 

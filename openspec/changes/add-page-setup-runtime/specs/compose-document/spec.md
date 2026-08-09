@@ -2,10 +2,11 @@
 
 ### Requirement: Renderer Props 绑定 Component
 
-ComposeDocument v6 MUST 支持可选内建 `Bindings` Component，其 `version` MUST 为 1，`props` MUST 是
-顶层 Renderer Prop 名称到 `{ scope: 'page', exportName: string }` 的映射。Bindings MUST 只保存严格 JSON
-引用，不得保存脚本当前值、State、Computed 或 Function。Core MUST 校验引用形状但 MUST NOT 依赖运行时
-Registry 判断 Prop 是否存在。
+ComposeDocument v6 MUST 支持可选内建 `Bindings` Component，其 `version` MUST 为 1，`rendererProps`
+MUST 包含顶层 Prop 名称到引用的 `fields` 映射。引用 MUST 为
+`{ scope: 'page', exportName: string }`。Bindings MUST 只保存严格 JSON 引用，不得保存脚本当前值、State、
+Computed 或 Function。Core MUST 校验引用形状但 MUST NOT 依赖运行时 Registry 判断 Prop 是否存在；
+字段均未绑定时 MUST 拒绝空 Component。
 
 #### Scenario: 保存页面返回成员绑定
 
@@ -21,7 +22,7 @@ Registry 判断 Prop 是否存在。
 
 #### Scenario: 拒绝非法 Bindings
 
-- **WHEN** Bindings 出现在没有 Renderer 的 Entity，或 version、scope、Prop 名称、exportName 的形状非法
+- **WHEN** Bindings 出现在没有 Renderer 的 Entity，绑定集合为空，或 version、scope、Prop 名称、exportName 的形状非法
 - **THEN** ComposeDocument 校验返回精确路径的稳定 issue
 - **AND** 不返回部分有效文档
 

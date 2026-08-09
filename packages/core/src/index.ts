@@ -133,6 +133,7 @@ export type {
   ComposeMeasuredSize,
   ComposeOutputSettings,
   ComposePageExportReference,
+  ComposeRendererPropsBindings,
   ComposeOverflowMode,
   ComposePosition,
   ComposeRenderer,

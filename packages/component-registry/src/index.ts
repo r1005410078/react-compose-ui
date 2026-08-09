@@ -5,7 +5,9 @@
  */
 
 export { createComposeEntityRegistry } from './registry'
-export { resolveComposeRendererRuntimeProps } from './registry'
+export {
+  resolveComposeRendererRuntimeProps,
+} from './registry'
 export {
   ComposeRegistryComponentInspector,
   ComposeRegistryComponentInspectorHeaderActions,
@@ -52,6 +54,7 @@ export {
   type ComposeEntitySeedResult,
   type ComposeRendererDefinition,
   type ComposeRendererBindingDiagnostic,
+  type ComposeRendererPropCategory,
   type ComposeRendererPropContract,
   type ComposeRendererRuntimePropsResult,
   type ComposeRendererMeasurementDefinition,
@@ -59,6 +62,9 @@ export {
   type ComposeRendererMeasureInput,
   type ComposeRendererPrepareInput,
   type ComposeRendererInspectorProps,
+  type ComposeRendererInspectorBindingPort,
+  type ComposeRendererInspectorBindingState,
+  type ComposeRendererInspectorBindingVariable,
   type ComposeRendererProps,
   type ComposeRuntimeProps,
 } from './registry'

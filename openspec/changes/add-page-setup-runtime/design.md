@@ -145,20 +145,25 @@ interface ComposeRendererProps {
 字段通常无需行为修改，但需要接受更宽的类型；需要发出编辑命令、显示字面值或序列化时必须读取
 `authoredProps`/`renderer.props`。
 
-### 6. `Bindings` Component 只保存顶层 Renderer Prop 引用
+### 6. `Bindings` Component 保存顶层 Renderer Props 引用
 
 首期在 Entity 上使用可选内建 `Bindings` Component：
 
 ```ts
 interface ComposeBindings extends JsonObject {
   readonly version: 1
-  readonly props: Readonly<Record<string, ComposePageExportReference>>
+  readonly rendererProps: {
+    readonly fields: Readonly<Record<string, ComposePageExportReference>>
+  }
 }
 ```
 
-每个 key 对应一个顶层 Renderer Prop。Entity 必须同时拥有 Renderer；Core 只校验 JSON 形状、作用域与
-非空名称，不依赖运行时 Registry，因此未知 Renderer/Prop 绑定仍会被保留。Registry 在解析阶段判断目标
-是否存在和兼容。
+`fields` 的每个 key 对应一个顶层 Renderer Prop。Entity 必须同时
+拥有 Renderer；Core 只校验 JSON 形状、作用域、非空名称和非空绑定集合，不依赖运行时 Registry，因此
+未知 Renderer/Prop 绑定仍会被保留。Registry 在解析阶段判断目标是否存在和兼容。
+
+解析先以 authored Props 为 fallback，随后 `fields` 中的有效绑定逐项覆盖；字段失败时保留 authored
+基础值。方法按 Contract 包装，Editor 使用 no-op，Preview 隔离同步异常与 Promise rejection 后调用。
 
 首期不把现有 Property Panel 的嵌套 path/renderer sub-target 持久化为此 Component。它们可以继续作为
 宿主受控能力存在；后续若要统一，必须另行定义稳定的嵌套 Prop Contract 与迁移。
@@ -170,14 +175,18 @@ React/TypeScript Props 类型在运行时已被擦除，因此 Renderer Definiti
 ```ts
 type ComposeRendererPropContract =
   | {
+      readonly name: string
       readonly kind: 'value'
       readonly label: string
+      readonly category?: string
       readonly validate: (value: unknown) => true | string
       readonly affectsMeasurement?: boolean
     }
   | {
+      readonly name: string
       readonly kind: 'method'
       readonly label: string
+      readonly category?: string
       readonly role: 'event-handler'
     }
 ```
@@ -186,15 +195,28 @@ Registry 不依赖 Valibot；Materials 可以用同一 Valibot Schema 构造 Ins
 必须通过目标 validate；method export 只能进入 method contract。旧 Renderer 未声明 contract 时继续
 使用 authored props，但没有正式脚本绑定入口。
 
-值绑定成功后覆盖同名 authored prop；缺失、错误或不兼容时回退 authored prop。方法绑定成功时注入
-捕获同步异常和 Promise rejection 的 wrapper；缺失或错误时该 Prop 为 undefined。方法返回值被忽略，
-Renderer Contract 要求它只在用户事件后调用。
+字段绑定成功后覆盖同名 authored 值；缺失、错误或不兼容时保留 authored 基础值。方法绑定成功时
+注入捕获同步异常和 Promise rejection 的 wrapper；上一层没有同名方法时，失败字段表现为 undefined。
+方法返回值被忽略，Renderer Contract 要求它只在用户事件后调用。
 
-### 8. 属性面板显示值与方法目标
+### 8. 属性面板按 Renderer Props 分类组合绑定
 
-现有 Schema 字段仍由 Valibot 决定类型、约束和语义 editor。Property Panel 增加可独立渲染的受控
-binding-only target row，供没有 JSON 字面输入的方法 Prop 使用。默认选择器按 `value`/`method` kind
-过滤：值目标再执行目标 Schema/Contract 校验，方法目标只显示 method export。
+Renderer Definition 通过 `propCategories` 声明稳定分类 ID、显示名与默认展开状态，Prop Contract 通过
+可选 `category` 归属分类；没有声明分类的 Contract 统一进入 Editor 提供的隐式「高级」分类。Editor
+直接显示 Renderer 声明的分类，不再凭空增加含义模糊的「内容」分类。只有确有未分类 Contract、未分类
+旧 Inspector 或未知 Renderer 时才显示「高级」，不得渲染空分组。
+
+现有 Schema 字段仍由 Valibot 决定类型、约束和语义 editor。Renderer Definition 的所有 Prop Contract
+默认可绑定；凡是已经存在字面 editor，或可由 feature-local Schema 正常表达字面编辑的 value Prop，
+自定义 Inspector MUST 保留类型控件并在同一行追加绑定入口，不能因为开放绑定而降级成 binding-only row。
+只有 method 或确实没有字面 editor 的 value Contract 才由 Editor 在其所属分类显示 binding-only row。
+Editor 把当前分类透传给自定义 Inspector，使 Inspector 只渲染该分类的 Schema 字段；没有显式分类的旧
+Renderer Inspector 兼容显示在「高级」。Property Panel 允许 Renderer 宿主授权顶层完整字段目标而
+不改变独立宿主的默认显式 opt-in 语义；数组、对象等复合字段也必须在分组标题显示字段级绑定入口。
+不再创建独立「数据绑定」分组。
+
+默认选择器按 `value`/`method` kind 过滤：值目标再执行目标 Schema/Contract 校验，方法目标只显示 method
+export。字段绑定和字面 Props 的显示始终使用同一解析结果。
 
 绑定、换绑、解绑写入 Entity 的 Bindings Component，并通过正式文档事务进入 undo/redo；脚本 State
 变化只更新 runtime snapshot，不触发 `onValueChange`、文档事务或操作历史。

@@ -35,3 +35,32 @@ Property Panel MUST 提供可独立组合的受控 binding-only target row，使
 - **WHEN** 已绑定 Function 从页面返回作用域消失，或面板进入只读状态
 - **THEN** 行显示可访问错误和现有 exportName
 - **AND** 只读时不能换绑或解绑，错误也不会自动删除文档引用
+
+### Requirement: 宿主授权顶层字段
+
+Property Panel MUST 允许宿主在不修改 Schema metadata 的情况下授权顶层完整字段绑定目标，且 MUST
+保持未提供授权时的既有显式 opt-in 行为。标量字段 MUST 在类型控件旁显示入口；数组、对象等复合字段
+MUST 在对应分组标题显示入口。
+
+#### Scenario: Renderer 授权顶层 Props
+
+- **WHEN** Renderer Inspector 授权一个未声明 binding metadata 的第一层 Schema 字段
+- **THEN** 字段以固定 `value` target 显示绑定入口并按字段 Schema 过滤候选
+- **AND** 未授权字段与独立 Property Panel 的默认行为保持不变
+
+#### Scenario: Renderer 授权复合 Props
+
+- **WHEN** Renderer Inspector 授权一个数组或对象类型的第一层 Schema 字段
+- **THEN** 字段分组标题显示固定 `value` target，并按完整字段 Schema 过滤候选
+- **AND** 绑定成功后显示有效字段值并禁止该字段的字面结构编辑
+
+### Requirement: Binding-only 候选校验
+
+Binding-only target MUST 支持宿主候选 validator。validator MUST 在候选列表中排除当前
+值不兼容的变量；已经保存但变为非法的绑定 MUST 继续显示原名称、错误和解绑能力。
+
+#### Scenario: 过滤字段候选
+
+- **WHEN** binding-only value 目标同时收到兼容与不兼容的 value export 以及 method export
+- **THEN** 选择器只显示通过宿主 validator 的 value export
+- **AND** 入口保持可访问名称、搜索、换绑、解绑和焦点恢复

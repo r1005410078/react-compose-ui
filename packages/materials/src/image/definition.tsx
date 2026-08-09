@@ -1,7 +1,9 @@
 import type {
   ComposeEntityPreset,
+  ComposeRendererPropContract,
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
+import * as v from 'valibot'
 import { measureRasterAsset } from '../material-inspector-kit/assets'
 import type { ComposeBasicMaterialOptions } from '../types'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
@@ -17,6 +19,24 @@ import {
 } from './defaults'
 import { ImageRenderer } from './renderer'
 import { IMAGE_RENDERER_MEASUREMENT } from './measurement'
+import { IMAGE_RENDERER_PROP_SCHEMAS } from './props'
+
+function valueContract(
+  name: keyof typeof IMAGE_RENDERER_PROP_SCHEMAS,
+  label: string,
+  affectsMeasurement: boolean,
+): ComposeRendererPropContract {
+  return {
+    name,
+    kind: 'value',
+    label,
+    category: 'image',
+    affectsMeasurement,
+    validate: (value) => v.safeParse(IMAGE_RENDERER_PROP_SCHEMAS[name], value).success
+      ? true
+      : `${label} 与 Image Prop Contract 不兼容`,
+  }
+}
 
 const rasterTypes = new Set([
   'image/png',
@@ -42,6 +62,13 @@ export function createImageMaterial(
       type: 'image',
       label: options.label ?? 'Image',
       renderer: ImageRenderer,
+      propContracts: [
+        valueContract('asset', 'Asset', true),
+        valueContract('alt', 'Alternative text', false),
+        valueContract('fit', 'Fit', false),
+      ],
+      propCategories: [{ id: 'image', label: '图片' }],
+      inspectorPropNames: ['alt', 'fit'],
       inspector: createImageRendererInspector(idFactory),
       measurement: IMAGE_RENDERER_MEASUREMENT,
     },

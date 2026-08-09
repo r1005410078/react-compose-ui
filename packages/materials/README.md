@@ -36,9 +36,11 @@ Renderer props 只保存物料内容；通用位置、尺寸、可见性、锁�
 子项；有子项时不能移除。“几何限制”能力添加 `TransformConstraints`。Container Preset 自带的
 Hierarchy/Layout/Clip 属于基础组合，始终不可移除。
 
-Inspector 由 Editor 按 Registry 顺序聚合。Text、Image 和 SVG 只提供 Renderer 内容属性区；
-颜色继续复用 Property Panel 的 `Color` Renderer 与共享 Color Picker。Image 使用稳定资源引用，
-SVG 内容先经 DOMPurify 白名单净化。包不依赖 editor、stage 或 asset-browser。
+Inspector 由 Editor 按 Registry 顺序聚合。Renderer Definition 显式声明 Props 分类：Text 使用
+“文本”和“排版”，Image、SVG 与 Page Slot 分别使用自己的同名分类；未分类 Prop 才进入 Editor 的
+“高级”。所有可编辑 value Prop 保留 Schema 类型控件并在同一行追加绑定入口。颜色继续复用 Property
+Panel 的 `Color` Renderer 与共享 Color Picker。Image 使用稳定资源引用，SVG 内容先经 DOMPurify
+白名单净化。包不依赖 editor、stage 或 asset-browser。
 
 Layout 属性区紧跟变换分组，以两行三列卡片提供方向、换行、间距、多行、主轴与交叉轴控件；
 中文标题下显示对应 CSS 属性名。枚举按钮使用统一大小的浏览器语义图标，并随当前方向旋转主轴、
@@ -59,8 +61,12 @@ asset natural size；SVG 读取 width/height 或 viewBox；Page Slot 使用目�
 按稳定引用订阅 revision，准备中或失败时由 Runtime 使用 LayoutItem fallback。Rectangle 等没有
 intrinsic size 的物料不伪造测量结果，会发布明确 fallback diagnostic。
 
-Text 的 `text` Prop 声明了 value Contract，可接收 setup 返回的 string/number。Page Slot 加载完整
-页面聚合，并为每个 Slot 独立创建 setup scope；同一页面出现两次也不会共享 State。嵌套卸载、引用或
+Text 的 text/color/fontSize/fontFamily/fontWeight/letterSpacing/lineHeight，Image 与 SVG 的全部资源和
+显示 Props，以及 Page Slot 的 page 都声明完整顶层 value Contract。Text 的全部 value Props 及其他
+已有 Inspector 字段从同一 feature-local Schema 构造类型控件与绑定校验，并在原字段行内显示绑定入口；
+只有 method 或确实没有字面 editor 的公开字段才在所属 Props 分类显示 binding-only 入口；
+Text.text 可接收 setup 返回的 string/number。Page Slot 加载完整页面聚合，并为每个 Slot 独立创建
+setup scope；同一页面出现两次也不会共享 State。嵌套卸载、引用或
 脚本 revision 变化会释放旧 scope，循环与深度护栏继续在加载前阻断。
 
 所有第一方物料的 `Appearance.backgroundPaint` 都使用结构化 Compose Paint。Appearance Inspector 通过

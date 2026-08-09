@@ -615,7 +615,7 @@ describe('useComposeEditorController', () => {
     const editorRuntime = runtime()
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '内容' }))
+    fireEvent.click(screen.getByRole('button', { name: '高级' }))
     fireEvent.click(screen.getByRole('button', { name: '修改内容' }))
     expect(editorRuntime.document.entities.title?.components.Renderer).toEqual({
       type: 'text',
@@ -658,13 +658,13 @@ describe('useComposeEditorController', () => {
     expect(screen.queryByRole('button', { name: '变换' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '可见性' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '锁定' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '内容' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '高级' })).toBeInTheDocument()
 
     const root = screen.getByRole('region', { name: 'Title 属性字段' })
     const titles = [...root.querySelectorAll(
       ':scope > .property-panel__group > .property-panel__group-header > button',
     )].map((button) => button.textContent?.trim())
-    expect(titles).toEqual(['基础', '可见性', '锁定', '外观', '内容'])
+    expect(titles).toEqual(['基础', '可见性', '锁定', '外观', '高级'])
 
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
       target: { value: '背景填充' },
@@ -746,7 +746,7 @@ describe('useComposeEditorController', () => {
     expect(editorRuntime.document.entities.title?.components.Composition?.capabilityIds).toEqual([])
   })
 
-  it('锁定 Entity 时内容只读但 Lock 仍可解除', () => {
+  it('锁定 Entity 时 Renderer Props 只读但 Lock 仍可解除', () => {
     const editorRuntime = runtime()
     editorRuntime.dispatch({
       id: 'lock-title',
@@ -755,7 +755,7 @@ describe('useComposeEditorController', () => {
     })
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '内容' }))
+    fireEvent.click(screen.getByRole('button', { name: '高级' }))
     expect(screen.getByRole('button', { name: '修改内容' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: '锁定' }))
     const lock = screen.getByRole('checkbox', { name: '锁定' })
