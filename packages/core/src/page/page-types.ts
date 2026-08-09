@@ -2,13 +2,13 @@
  * 页面文件约定、应用清单与页面引用的公共协议。
  *
  * @remarks
- * 页面就是一份未经扩展的 `ComposeDocument v6`，以名称后缀区分，因此本模块不改变
- * `ComposeDocument` 的形状，也不引入多文档协议。
+ * 页面文件以版本化聚合包装 `ComposeDocument v6` 与可选 setup 脚本引用；视觉模板本身仍保持
+ * 独立、严格 JSON，不承载脚本运行值。
  *
  * @packageDocumentation
  */
 
-import type { ComposeDocument, JsonObject } from '../document-types'
+import type { ComposeDocument, DocumentValidationIssueCode, JsonObject } from '../document-types'
 
 /** 页面文件的名称后缀。 @public */
 export const COMPOSE_PAGE_FILE_SUFFIX = '.page.json' as const
@@ -27,6 +27,40 @@ export const COMPOSE_APP_MANIFEST_FILE_NAME = 'app.json' as const
 
 /** 当前支持的应用清单版本。 @public */
 export const COMPOSE_APP_MANIFEST_SCHEMA_VERSION = 1 as const
+
+/** 当前页面聚合文件版本。 @public */
+export const COMPOSE_PAGE_SCHEMA_VERSION = 1 as const
+
+/** 页面 setup 脚本的稳定资源引用。 @public */
+export interface ComposePageSetupReference extends JsonObject {
+  readonly [key: string]: string
+  readonly providerId: string
+  readonly assetKey: string
+  readonly scope: 'persistent' | 'session'
+}
+
+/** 页面视觉模板与可选 setup 脚本引用的版本化聚合文件。 @public */
+export interface ComposePageFile {
+  readonly kind: 'compose-page'
+  readonly pageSchemaVersion: typeof COMPOSE_PAGE_SCHEMA_VERSION
+  readonly document: ComposeDocument
+  readonly setupScript: ComposePageSetupReference | null
+}
+
+/** 页面文件解析问题的稳定机器码。 @public */
+export type ComposePageFileIssueCode =
+  | 'page.invalid-json'
+  | 'page.invalid-shape'
+  | 'page.unsupported-version'
+  | 'page.invalid-setup-reference'
+  | DocumentValidationIssueCode
+
+/** 页面文件中一个可定位的问题。 @public */
+export interface ComposePageFileIssue {
+  readonly code: ComposePageFileIssueCode
+  readonly path: readonly (string | number)[]
+  readonly message: string
+}
 
 /**
  * 资源根应用清单。
@@ -69,21 +103,21 @@ export interface ComposePageReference extends JsonObject {
 export type ComposePageNestState = 'ok' | 'cycle' | 'depth-exceeded'
 
 /**
- * 按页面引用加载页面文档的宿主端口。
+ * 按页面引用加载页面聚合的宿主端口。
  *
  * @remarks
  * 这里只声明协议：`core` 不实现加载，`@compose-ui/pages` 提供由页面 Store 派生的默认实现。
  * 由于本类型是纯协议，Stage 与 Preview 接受该端口时不会因此依赖任何实现包。
  * @public
  */
-export interface ComposePageDocumentLoader {
+export interface ComposePageLoader {
   /**
-   * 加载被引用页面的文档。
+   * 加载被引用页面的聚合文件。
    *
    * @param signal - 调用方取消加载的信号；实现必须在取消后停止工作并拒绝该 Promise。
    * @throws 页面不存在、无权限或内容不合法时抛出错误，调用方负责呈现失败状态。
    */
-  load(reference: ComposePageReference, signal?: AbortSignal): Promise<ComposeDocument>
+  load(reference: ComposePageReference, signal?: AbortSignal): Promise<ComposePageFile>
   /**
    * 订阅被引用页面的变更。
    *
@@ -91,3 +125,6 @@ export interface ComposePageDocumentLoader {
    */
   subscribe?(reference: ComposePageReference, listener: () => void): () => void
 }
+
+/** @deprecated 使用返回聚合页面的 {@link ComposePageLoader}。 @public */
+export type ComposePageDocumentLoader = ComposePageLoader

@@ -2,6 +2,7 @@ import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeLayoutMeasurementPort, ComposePageDocumentLoader } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
+import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import type {
   CommandDispatchResult,
   ComposeDocument,
@@ -119,6 +120,10 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * Stage 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
    */
   readonly pageLoader?: ComposePageDocumentLoader
+  /** 当前页面实例的 setup 返回作用域；Stage 只消费，不加载脚本。 */
+  readonly scriptScope?: ComposePageScriptScope
+  /** 透传给嵌套 Page Slot 的模块 Loader。 */
+  readonly scriptModuleLoader?: ComposeScriptModuleLoader
   readonly dispatch: ComposeStageDispatch
   readonly viewport: StageViewport
   readonly onViewportChange: (viewport: StageViewport) => void

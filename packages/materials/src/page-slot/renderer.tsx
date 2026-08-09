@@ -15,9 +15,14 @@ import {
   readComposePageReference,
   resolveComposePageNestState,
 } from '@compose-ui/core'
-import type { ComposeDocument, ComposeEntity } from '@compose-ui/core'
+import type { ComposeDocument, ComposeEntity, ComposePageFile } from '@compose-ui/core'
 import type { ComposeLayoutSnapshot } from '@compose-ui/core'
 import { createComposeLayoutRuntime } from '@compose-ui/layout-engine'
+import {
+  createComposeJavaScriptModuleLoader,
+  loadComposePageScriptScope,
+  type ComposePageScriptScope,
+} from '@compose-ui/script-runtime'
 import {
   useCallback,
   useEffect,
@@ -33,7 +38,7 @@ import { useComposePageSlotNest } from './nest-state'
 type LoadState =
   | { readonly status: 'loading' }
   | { readonly status: 'error'; readonly message: string }
-  | { readonly status: 'ready'; readonly document: ComposeDocument }
+  | { readonly status: 'ready'; readonly page: ComposePageFile }
 
 function Placeholder({ children, testId }: {
   readonly children: string
@@ -76,6 +81,7 @@ export function PageSlotRenderer({
   pageDocumentPort,
   props,
   registry,
+  scriptModuleLoader,
 }: ComposeRendererProps) {
   const nest = useComposePageSlotNest()
   const reference = readComposePageReference(props.page)
@@ -98,9 +104,9 @@ export function PageSlotRenderer({
     let disposed = false
     const load = () => {
       setState({ status: 'loading' })
-      pageDocumentPort.load(reference, controller.signal).then((document) => {
+      pageDocumentPort.load(reference, controller.signal).then((page) => {
         // 引用变化或组件卸载后的迟到结果必须丢弃，否则会渲染上一个引用的内容。
-        if (!disposed) setState({ status: 'ready', document })
+        if (!disposed) setState({ status: 'ready', page })
       }).catch((error: unknown) => {
         if (disposed) return
         setState({
@@ -159,42 +165,48 @@ export function PageSlotRenderer({
       </div>
     )
   }
-  if (state.document.rootIds.length === 0) {
+  if (state.page.document.rootIds.length === 0) {
     return <Placeholder testId="compose-page-slot-empty">页面暂无内容</Placeholder>
   }
 
   return <ResolvedPageContent
     assetResolver={assetResolver}
-    document={state.document}
+    page={state.page}
     mode={mode}
     pageDocumentPort={pageDocumentPort}
     pageKey={pageKey}
     registry={registry}
+    scriptModuleLoader={scriptModuleLoader}
   />
 }
 
 function ResolvedPageContent({
   assetResolver,
-  document,
+  page,
   mode,
   pageDocumentPort,
   pageKey,
   registry,
+  scriptModuleLoader,
 }: {
   readonly assetResolver: ComposeRendererProps['assetResolver']
-  readonly document: ComposeDocument
+  readonly page: ComposePageFile
   readonly mode: 'editor' | 'preview'
   readonly pageDocumentPort: ComposeRendererProps['pageDocumentPort']
   readonly pageKey: string | undefined
   readonly registry: ComposeEntityRegistry
+  readonly scriptModuleLoader: ComposeRendererProps['scriptModuleLoader']
 }) {
+  const document = page.document
   const nest = useComposePageSlotNest()
+  const scriptScope = useNestedPageScriptScope(page, assetResolver, scriptModuleLoader)
   const [runtime] = useState(() => createComposeLayoutRuntime({ document }))
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
     registry,
     assetResolver,
     pageDocumentPort,
-  }), [assetResolver, pageDocumentPort, registry])
+    scriptScope,
+  }), [assetResolver, pageDocumentPort, registry, scriptScope])
   const layoutState = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const currentLayoutState = layoutState.document === document
     ? layoutState
@@ -261,6 +273,8 @@ function ResolvedPageContent({
             mode={mode}
             pageDocumentPort={pageDocumentPort}
             registry={registry}
+            scriptModuleLoader={scriptModuleLoader}
+            scriptScope={scriptScope}
           />
         ))}
       </div>
@@ -284,6 +298,8 @@ function NestedEntity({
   mode,
   pageDocumentPort,
   registry,
+  scriptModuleLoader,
+  scriptScope,
 }: {
   readonly assetResolver: ComposeRendererProps['assetResolver']
   readonly document: ComposeDocument
@@ -292,6 +308,8 @@ function NestedEntity({
   readonly mode: 'editor' | 'preview'
   readonly pageDocumentPort: ComposeRendererProps['pageDocumentPort']
   readonly registry: ComposeEntityRegistry
+  readonly scriptModuleLoader: ComposeRendererProps['scriptModuleLoader']
+  readonly scriptScope: ComposePageScriptScope | undefined
 }) {
   const entity: ComposeEntity | undefined = document.entities[entityId]
   if (!entity || !getComposeVisibility(entity).visible) return null
@@ -310,6 +328,8 @@ function NestedEntity({
         mode={mode}
         pageDocumentPort={pageDocumentPort}
         registry={registry}
+        scriptModuleLoader={scriptModuleLoader}
+        scriptScope={scriptScope}
       />
       {hierarchy?.childIds.map((childId) => (
         <NestedEntity
@@ -321,8 +341,64 @@ function NestedEntity({
           mode={mode}
           pageDocumentPort={pageDocumentPort}
           registry={registry}
+          scriptModuleLoader={scriptModuleLoader}
+          scriptScope={scriptScope}
         />
       ))}
     </div>
   )
+}
+
+function useNestedPageScriptScope(
+  page: ComposePageFile,
+  assetResolver: ComposeRendererProps['assetResolver'],
+  providedLoader: ComposeRendererProps['scriptModuleLoader'],
+): ComposePageScriptScope | undefined {
+  const [loadedScope, setLoadedScope] = useState<{
+    readonly key: string
+    readonly scope: ComposePageScriptScope
+  }>()
+  const [reloadToken, setReloadToken] = useState(0)
+  const defaultLoader = useMemo(() => assetResolver
+    ? createComposeJavaScriptModuleLoader({ assetResolver })
+    : undefined, [assetResolver])
+  const loader = providedLoader ?? defaultLoader
+  const setupKey = page.setupScript
+    ? `${page.setupScript.providerId}:${page.setupScript.assetKey}:${page.setupScript.scope}`
+    : null
+  const loadKey = setupKey === null ? null : `${setupKey}:${reloadToken}`
+
+  useEffect(() => {
+    if (!page.setupScript) return undefined
+    return assetResolver?.subscribe?.(page.setupScript, () => {
+      setReloadToken((current) => current + 1)
+    })
+  }, [assetResolver, setupKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!page.setupScript || !loader || loadKey === null) return undefined
+    const controller = new AbortController()
+    let disposed = false
+    let loadedScope: ComposePageScriptScope | undefined
+    void loadComposePageScriptScope({
+      reference: page.setupScript,
+      loader,
+      signal: controller.signal,
+    }).then((loaded) => {
+      if (disposed) {
+        loaded.scope.dispose()
+        return
+      }
+      loadedScope = loaded.scope
+      setLoadedScope({ key: loadKey, scope: loaded.scope })
+    })
+    return () => {
+      disposed = true
+      controller.abort()
+      loadedScope?.dispose()
+    }
+    // setupKey 是稳定引用的完整身份；文档变化不应让 setup 重跑。
+  }, [loader, loadKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return loadedScope?.key === loadKey ? loadedScope.scope : undefined
 }

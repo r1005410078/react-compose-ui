@@ -1998,12 +1998,12 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 创建、编辑�
   await expect(rootGrid).toBeVisible()
 
   // 1) 右键创建页面
-  await rootGrid.getByRole('gridcell', { name: /^Pages/ }).dblclick()
+  await rootGrid.getByRole('gridcell', { name: /^Pages/ }).click()
   const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
   await expect(pagesGrid).toBeVisible()
   await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
   const menu = page.getByRole('menu')
-  await menu.getByRole('menuitem', { name: '创建页面' }).click()
+  await menu.getByRole('menuitem', { name: '创建页面', exact: true }).click()
   const nameDialog = page.getByRole('dialog')
   await nameDialog.getByLabel('名称').fill('Detail')
   await nameDialog.getByRole('button', { name: '创建' }).click()
@@ -2040,7 +2040,7 @@ test('OpenSpec: editor-workspace-layout / 首页标记 / 设为首页并在树�
 
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+    .getByRole('gridcell', { name: /^Pages/ }).click()
   const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
   await expect(pagesGrid).toBeVisible()
 
@@ -2071,7 +2071,7 @@ test('OpenSpec: editor-workspace-layout / 首页标记 / 设为首页并在树�
 
   // 第二个页面接管首页标记
   await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
-  await page.getByRole('menu').getByRole('menuitem', { name: '创建页面' }).click()
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建页面', exact: true }).click()
   const nameDialog = page.getByRole('dialog')
   await nameDialog.getByLabel('名称').fill('Second')
   await nameDialog.getByRole('button', { name: '创建' }).click()
@@ -2086,6 +2086,177 @@ test('OpenSpec: editor-workspace-layout / 首页标记 / 设为首页并在树�
     .getByRole('img', { name: '首页' })).toHaveCount(0)
 })
 
+test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Preview 与脚本重载', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
+
+  const pageTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
+    .filter({ hasText: 'Counter' })
+  await expect(pageTab).toBeVisible()
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
+  await expect(editor.getByRole('region', { name: '页面脚本作用域' })).toContainText('onAdd')
+
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const preview = page.getByRole('dialog', { name: '文档预览对话框' })
+  await expect(preview.getByTestId('compose-material-text')).toHaveText('0')
+  await preview.getByRole('button', { name: 'Add' }).click()
+  await expect(preview.getByTestId('compose-material-text')).toHaveText('1')
+  await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
+  await preview.getByRole('button', { name: '关闭预览' }).click()
+
+  await pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '打开页面脚本' }).click()
+  const scriptDocument = editor.locator(
+    '[data-workspace-panel="asset-document"][data-asset-entry-id="demo-home-setup"]',
+  )
+  const scriptTab = editor.locator(
+    '[data-workspace-tab="compose-asset-document:demo-memory:demo-home-setup"]',
+  )
+  const scriptInput = scriptDocument.getByRole('textbox', { name: 'Editor content' })
+  await expect(scriptDocument.locator('.monaco-editor')).toBeVisible()
+  await scriptInput.focus()
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('End')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.insertText('10')
+  await expect(scriptDocument.locator('.view-lines')).toContainText('ctx.state(10)')
+  await expect(scriptDocument.locator('.view-lines')).not.toContainText('ctx.state(0)')
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(1)
+  await page.keyboard.press('Control+S')
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+  await pageTab.click()
+  await expect(editor.getByRole('region', { name: '页面脚本作用域' })).toContainText('10')
+  await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
+
+  // 新 revision 注册 cleanup；切换页面保留非活动实例，下一次脚本重载才 dispose 旧 scope。
+  await scriptTab.click()
+  await scriptInput.focus()
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.insertText(
+    '  ctx.effect(() => () => { globalThis.__composeCounterDisposed = true })',
+  )
+  await expect(scriptDocument.locator('.view-lines')).toContainText('__composeCounterDisposed')
+  await page.keyboard.press('Control+S')
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+  await pageTab.click()
+  await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
+  await page.evaluate(() => {
+    (globalThis as typeof globalThis & { __composeCounterDisposed?: boolean })
+      .__composeCounterDisposed = false
+  })
+
+  await pagesGrid.getByRole('gridcell', { name: 'Home', exact: true }).dblclick()
+  await expect.poll(() => page.evaluate(() => (
+    globalThis as typeof globalThis & { __composeCounterDisposed?: boolean }
+  ).__composeCounterDisposed)).toBe(false)
+  await pageTab.click()
+  await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
+
+  // 制造新 revision 的语法错误：旧 scope cleanup 被执行，绑定回退到 authored Props。
+  await scriptTab.click()
+  await scriptInput.focus()
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('End')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.insertText(')')
+  await page.keyboard.press('Control+S')
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+  await pageTab.click()
+  await expect(editor.getByRole('region', { name: '页面脚本作用域' }))
+    .toContainText('页面脚本导入失败')
+  await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
+  await expect.poll(() => page.evaluate(() => (
+    globalThis as typeof globalThis & { __composeCounterDisposed?: boolean }
+  ).__composeCounterDisposed)).toBe(true)
+
+  await pageTab.getByRole('button', { name: '关闭页面 Counter' }).click()
+  await expect(pageTab).toHaveCount(0)
+})
+
+test('OpenSpec: editor-workspace-layout / 页面 Setup JavaScript 智能编辑 / 着色、提示与保存隔离', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  const counter = pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true })
+
+  await counter.click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '打开页面脚本' }).click()
+  let scriptDocument = editor.locator(
+    '[data-workspace-panel="asset-document"][data-asset-entry-id="demo-home-setup"]',
+  )
+  const scriptInput = scriptDocument.getByRole('textbox', { name: 'Editor content' })
+  await expect(scriptDocument.locator('.monaco-editor')).toBeVisible()
+
+  await expect.poll(async () => scriptDocument.locator('.view-lines span[class*="mtk"]')
+    .evaluateAll((tokens) => new Set(tokens.map((token) => token.className)).size))
+    .toBeGreaterThan(1)
+  await expect(scriptDocument.locator('.view-lines')).not.toContainText('ComposeState<number>')
+
+  await scriptInput.focus()
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('  ctx.')
+  const suggestWidget = page.locator('.suggest-widget.visible')
+  await expect(suggestWidget).toBeVisible()
+  await expect(suggestWidget).toContainText('state')
+  await expect(suggestWidget).toContainText('computed')
+  await expect(suggestWidget).toContainText('effect')
+  const suggestDetails = page.locator('.suggest-details')
+  if (!await suggestDetails.isVisible()) await page.keyboard.press('Control+Space')
+  await expect(suggestDetails).toBeVisible()
+  await expect(suggestDetails).toContainText('示例')
+  const exampleCode = suggestDetails.locator('.monaco-tokenized-source')
+  await expect(exampleCode).toBeVisible()
+  await expect.poll(async () => exampleCode.locator('span[class*="mtk"]')
+    .evaluateAll((tokens) => new Set(tokens.map((token) => token.className)).size))
+    .toBeGreaterThan(1)
+  await page.keyboard.press('Escape')
+
+  const invalidTypeSource = `export function setup(ctx) {
+  const num = ctx.state(0)
+  num.value = 'wrong'
+  const onAdd = () => { num.value += 1 }
+  return { num, onAdd }
+}
+`
+  await page.keyboard.press('Control+A')
+  await page.keyboard.insertText(invalidTypeSource)
+  await expect(scriptDocument.locator('.squiggly-error')).not.toHaveCount(0)
+  await page.keyboard.press('Control+S')
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+
+  await editor.getByRole('button', { name: '关闭资源 Counter.setup.js' }).click()
+  await expect(scriptDocument).toHaveCount(0)
+  await counter.click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '打开页面脚本' }).click()
+  scriptDocument = editor.locator(
+    '[data-workspace-panel="asset-document"][data-asset-entry-id="demo-home-setup"]',
+  )
+  await expect(scriptDocument.locator('.view-lines')).toContainText("num.value = 'wrong'")
+  await expect(scriptDocument.locator('.view-lines')).not.toContainText('@ts-check')
+  await expect(scriptDocument.locator('.view-lines')).not.toContainText('ComposePageScriptContext')
+})
+
 test('OpenSpec: editor-workspace-layout / 只读页面 JSON / Monaco 只读且无保存', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
@@ -2093,7 +2264,7 @@ test('OpenSpec: editor-workspace-layout / 只读页面 JSON / Monaco 只读且�
 
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+    .getByRole('gridcell', { name: /^Pages/ }).click()
   const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
   await expect(pagesGrid).toBeVisible()
 
@@ -2128,7 +2299,7 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+    .getByRole('gridcell', { name: /^Pages/ }).click()
   const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
   await pagesGrid.getByRole('gridcell', { name: 'Home' }).dblclick()
   await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
@@ -2179,7 +2350,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板与�
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+    .getByRole('gridcell', { name: /^Pages/ }).click()
   await assets.getByRole('grid', { name: 'Pages' })
     .getByRole('gridcell', { name: 'Home' }).dblclick()
 
@@ -2204,7 +2375,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 切换其他面�
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+    .getByRole('gridcell', { name: /^Pages/ }).click()
   await assets.getByRole('grid', { name: 'Pages' })
     .getByRole('gridcell', { name: 'Home' }).dblclick()
 
@@ -2231,7 +2402,7 @@ test('OpenSpec: editor-workspace-layout / 页面保存 / 快捷键与按钮可�
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+    .getByRole('gridcell', { name: /^Pages/ }).click()
   await assets.getByRole('grid', { name: 'Pages' })
     .getByRole('gridcell', { name: 'Home' }).dblclick()
 
@@ -2272,7 +2443,7 @@ test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完�
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).dblclick()
+    .getByRole('gridcell', { name: /^Pages/ }).click()
   await assets.getByRole('grid', { name: 'Pages' })
     .getByRole('gridcell', { name: 'Home' }).dblclick()
   await editor.getByRole('button', { name: '创建容器' }).click()

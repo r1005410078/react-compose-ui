@@ -5,8 +5,8 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 
 项目把重复的页面编码工作逐步转化为可视化编排、属性配置、预览和保存发布流程。当前仍处于
 基础能力验证阶段：已经具备 ECS 化 JSON 文档、同步命令事务、Entity Registry、无限 Stage、
-基础物料、聚合 Inspector、Scene Tree、History、Command/Operation Log、资源浏览和只读 Preview；
-页面、交互、动画、变体、数据绑定与持久化协议尚未实现。
+基础物料、聚合 Inspector、Scene Tree、History、Command/Operation Log、资源浏览、页面系统、
+setup 脚本 Props 绑定和只读 Preview；动画、变体、数据源与正式发布持久化仍未实现。
 
 ## 环境与安装
 
@@ -17,7 +17,8 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 
 ```bash
 bun add @compose-ui/core @compose-ui/assets @compose-ui/layout-engine @compose-ui/stage-engine \
-  @compose-ui/ui-context @compose-ui/components @compose-ui/component-registry \
+  @compose-ui/ui-context @compose-ui/components @compose-ui/script-runtime \
+  @compose-ui/component-registry \
   @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/preview
 ```
 
@@ -181,9 +182,27 @@ Clip 和 Renderer 语义，但不包含编辑 chrome。
 
 ## 页面系统
 
-页面就是一份未经扩展的 `ComposeDocument v6`，以 `.page.json` 后缀持久化在 Asset Provider 中；
-首页由资源根的 `app.json` 唯一表达。`@compose-ui/pages` 提供无 React、无 DOM 的页面目录、
-文档 Store 与清单读写，编辑器与独立预览运行时共用同一实例。
+页面文件是 `{ kind, pageSchemaVersion, document, setupScript }` 聚合，以 `.page.json` 后缀持久化；
+`document` 是画布对 JSX/template 的可视化表达，`setupScript` 是零或一个稳定资源引用。首页仍由
+资源根的 `app.json` 唯一表达。旧裸 v6 页面必须显式调用 `migrateLegacyComposePageFile()` 迁移。
+`@compose-ui/pages` 提供无 React、无 DOM 的聚合 Store 与 Loader。
+
+setup 是受信任的同 Realm、自包含 JavaScript ESM，不经过编译，也不是安全沙箱：
+
+```js
+export function setup(ctx) {
+  const num = ctx.state(0)
+  ctx.effect(() => {
+    const timer = setTimeout(() => { num.value += 100 }, 2_000)
+    return () => clearTimeout(timer)
+  })
+  return { num, onAdd: () => { num.value += 1 } }
+}
+```
+
+State/Computed 通过 `.value` 工作；返回 Function 只能绑定声明为 event-handler 的 method Prop。
+`Renderer.props` 仍是持久化的 authored JSON，React Renderer 收到的 runtime `props` 可以包含
+运行值与 Function，序列化或发出编辑命令时必须使用 `authoredProps`。
 
 ```tsx
 const [activePage, setActivePage] = useState<ComposeEditorActivePage | null>(null)
@@ -191,6 +210,7 @@ const [activePage, setActivePage] = useState<ComposeEditorActivePage | null>(nul
 const controller = useComposeEditorController({
   runtime: activePage?.runtime ?? rootRuntime,
   registry,
+  scriptScope: activePage?.scriptScope,
 })
 
 <ComposeEditor
@@ -201,12 +221,12 @@ const controller = useComposeEditorController({
 ```
 
 `pages` 与 `runtime` 必须保持稳定引用：前者决定页面 Store 的派生，后者变化会被当作换文档
-并重置选择与视口。资源面板据此出现「创建页面」「设为首页」「打开组件 JSON 配置」三项右键操作，
+并重置选择与视口。资源面板据此提供页面创建、首页、JSON 与 setup 脚本关联操作，
 双击页面文件以独立标签打开，每个页面拥有自己的事务运行时与撤销历史。
 
 ## 包边界
 
-- Headless：`core`、`assets`、`pages`、`layout-engine`、`stage-engine`，不依赖 React/DOM。
+- Headless：`core`、`assets`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`，不依赖 React/DOM。
 - Shared UI/Protocol：`ui-context`、`components`、`component-registry`。
 - Domain Widgets：`stage`、`scene-tree`、`asset-browser`、`history`、`property-panel`、
   `operation-log`、`command-panel`、`materials`。
@@ -237,9 +257,9 @@ bun run test:e2e
 
 ## 当前边界
 
-页面系统已交付第一阶段：页面作为文档存在，可创建、编辑、保存、指定首页、只读查看其 JSON。
-把页面当作属性值装进组件（`node` 属性 editor 与画布内嵌套渲染）由后续变更
-`add-page-node-property` 承担。
+页面聚合、Page Slot、setup 脚本、页面作用域 value/method Props 绑定已交付。首期只支持页面
+作用域、每页一个自包含 JavaScript setup，不支持 TypeScript 编译、模块图、不可信代码隔离、
+应用级状态、动态 Entity 树、列表/条件模板、双向绑定或 HMR 状态保留。
 
 复用 Instance、Interaction、Animation、结构变体、数据源和正式持久化仍需独立 OpenSpec。
 

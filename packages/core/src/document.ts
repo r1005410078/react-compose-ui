@@ -410,6 +410,55 @@ function validateRenderer(
   }
 }
 
+function validateBindings(
+  value: JsonObject,
+  path: Path,
+  issues: DocumentValidationIssue[],
+) {
+  if (!isRecord(value)) return
+  rejectUnknownFields(value, ['version', 'props'], path, issues, 'bindings.invalid')
+  if (value.version !== 1) {
+    addIssue(issues, 'bindings.invalid', [...path, 'version'], 'Bindings version 必须为 1')
+  }
+  if (!isRecord(value.props)) {
+    addIssue(issues, 'bindings.invalid', [...path, 'props'], 'Bindings props 必须是对象')
+    return
+  }
+  Object.entries(value.props).forEach(([propName, reference]) => {
+    const referencePath = [...path, 'props', propName] as const
+    if (!nonEmpty(propName)) {
+      addIssue(issues, 'bindings.invalid', referencePath, 'Renderer Prop 名称必须是非空字符串')
+    }
+    if (!isRecord(reference)) {
+      addIssue(issues, 'bindings.invalid', referencePath, '绑定引用必须是对象')
+      return
+    }
+    rejectUnknownFields(
+      reference,
+      ['scope', 'exportName'],
+      referencePath,
+      issues,
+      'bindings.invalid',
+    )
+    if (reference.scope !== 'page') {
+      addIssue(
+        issues,
+        'bindings.invalid',
+        [...referencePath, 'scope'],
+        '绑定 scope 必须为 page',
+      )
+    }
+    if (!nonEmpty(reference.exportName)) {
+      addIssue(
+        issues,
+        'bindings.invalid',
+        [...referencePath, 'exportName'],
+        '绑定 exportName 必须是非空字符串',
+      )
+    }
+  })
+}
+
 function validateBooleanComponent(
   value: JsonObject,
   field: 'visible' | 'locked' | 'enabled',
@@ -539,6 +588,7 @@ function validateEntity(
   const hasLock = requireComponent(COMPOSE_BUILTIN_COMPONENT_KEYS.lock)
   const hasHierarchy = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy])
   const hasRenderer = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.renderer])
+  const hasBindings = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.bindings])
   const hasLayout = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.layout])
   const hasClip = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.clip])
   if (!hasHierarchy && !hasRenderer) {
@@ -547,6 +597,14 @@ function validateEntity(
       'component.invalid-combination',
       [...path, 'components'],
       'Entity 必须拥有 Renderer 或 Hierarchy',
+    )
+  }
+  if (hasBindings && !hasRenderer) {
+    addIssue(
+      issues,
+      'bindings.invalid',
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.bindings],
+      'Bindings 必须与 Renderer 组合',
     )
   }
   if (hasClip && !hasHierarchy) {
@@ -668,6 +726,13 @@ function validateEntity(
     validateRenderer(
       components[COMPOSE_BUILTIN_COMPONENT_KEYS.renderer]!,
       [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.renderer],
+      issues,
+    )
+  }
+  if (hasBindings) {
+    validateBindings(
+      components[COMPOSE_BUILTIN_COMPONENT_KEYS.bindings]!,
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.bindings],
       issues,
     )
   }

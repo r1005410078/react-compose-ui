@@ -1,6 +1,17 @@
-import { ComposeAssetError, type ComposeAssetEntry, type ComposeAssetProvider } from '@compose-ui/assets'
+import {
+  ComposeAssetError,
+  type ComposeAssetEntry,
+  type ComposeAssetProvider,
+  type ComposeAssetResolver,
+} from '@compose-ui/assets'
 import { composePageDisplayName, createTransactionRuntime } from '@compose-ui/core'
+import type { ComposePageSetupReference } from '@compose-ui/core'
 import { createComposePageStore, type ComposePageCatalog, type ComposePageStore } from '@compose-ui/pages'
+import {
+  createComposeJavaScriptModuleLoader,
+  loadComposePageScriptScope,
+  type ComposePageScriptScope,
+} from '@compose-ui/script-runtime'
 import { useComposePageCatalog } from './use-page-catalog'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ComposePageDocumentSession } from '../workspace-layout/workspace-context'
@@ -19,6 +30,11 @@ export interface PageWorkspaceHandle {
   readonly openPage: (entry: ComposeAssetEntry) => Promise<OpenPageResult>
   /** 保存页面；冲突时返回 `conflict` 让调用方决定是否强制覆盖。 */
   readonly savePage: (panelId: string, force?: boolean) => Promise<'saved' | 'conflict' | 'failed'>
+  /** 原子更换/解除 setup，并同步已打开页面会话与作用域。 */
+  readonly setPageSetupScript: (
+    pageKey: string,
+    reference: ComposePageSetupReference | null,
+  ) => Promise<void>
   readonly refreshCatalog: () => void
 }
 
@@ -41,12 +57,14 @@ export function usePageWorkspace({
   activePanelId,
   config,
   provider,
+  assetResolver,
   sessions,
   updateSession,
 }: {
   readonly activePanelId: string | null
   readonly config: ComposeEditorPagesConfig | undefined
   readonly provider: ComposeAssetProvider | undefined
+  readonly assetResolver: ComposeAssetResolver | undefined
   readonly sessions: ReadonlyMap<string, ComposePageDocumentSession>
   readonly updateSession: (
     panelId: string,
@@ -65,10 +83,78 @@ export function usePageWorkspace({
 
   const catalog = useComposePageCatalog(store)
   const sessionsRef = useRef(sessions)
+  const ownedScopesRef = useRef(new Set<ComposePageScriptScope>())
+  const defaultScriptLoader = useMemo(() => assetResolver
+    ? createComposeJavaScriptModuleLoader({ assetResolver })
+    : undefined, [assetResolver])
+  const scriptLoader = config?.scriptModuleLoader ?? defaultScriptLoader
+  const setupSubscriptionKey = [...sessions.values()].flatMap((session) => {
+    const reference = session.page.setupScript
+    return reference
+      ? [`${session.panelId}\u0000${reference.providerId}\u0000${reference.assetKey}\u0000${reference.scope}`]
+      : []
+  }).join('\u0001')
 
   useEffect(() => {
     sessionsRef.current = sessions
+    const liveScopes = new Set([...sessions.values()].flatMap((session) =>
+      session.scriptScope ? [session.scriptScope] : []))
+    ownedScopesRef.current.forEach((scope) => {
+      if (liveScopes.has(scope)) return
+      scope.dispose()
+      ownedScopesRef.current.delete(scope)
+    })
   }, [sessions])
+
+  useEffect(() => () => {
+    ownedScopesRef.current.forEach((scope) => { scope.dispose() })
+    ownedScopesRef.current.clear()
+  }, [])
+
+  useEffect(() => {
+    if (!assetResolver?.subscribe || !scriptLoader) return undefined
+    const controllers = new Map<string, AbortController>()
+    const reload = (session: ComposePageDocumentSession) => {
+      const reference = session.page.setupScript
+      if (!reference) return
+      controllers.get(session.panelId)?.abort()
+      const controller = new AbortController()
+      controllers.set(session.panelId, controller)
+      void loadComposePageScriptScope({
+        reference,
+        loader: scriptLoader,
+        signal: controller.signal,
+      }).then((loaded) => {
+        if (controllers.get(session.panelId) === controller) {
+          controllers.delete(session.panelId)
+        }
+        if (controller.signal.aborted) {
+          loaded.scope.dispose()
+          return
+        }
+        const current = sessionsRef.current.get(session.panelId)
+        if (current?.page.setupScript?.assetKey !== reference.assetKey) {
+          loaded.scope.dispose()
+          return
+        }
+        ownedScopesRef.current.add(loaded.scope)
+        updateSession(session.panelId, (item) => ({ ...item, scriptScope: loaded.scope }))
+      })
+    }
+    const unsubscribes = [...sessionsRef.current.values()].flatMap((session) => {
+      const reference = session.page.setupScript
+      return reference
+        ? [assetResolver.subscribe!(reference, () => {
+            const current = sessionsRef.current.get(session.panelId)
+            if (current) reload(current)
+          })]
+        : []
+    })
+    return () => {
+      controllers.forEach((controller) => { controller.abort() })
+      unsubscribes.forEach((unsubscribe) => { unsubscribe() })
+    }
+  }, [assetResolver, scriptLoader, setupSubscriptionKey, updateSession])
 
   const refreshCatalog = useCallback(() => {
     store?.invalidate()
@@ -88,9 +174,18 @@ export function usePageWorkspace({
       const snapshot = await store.readPage(pageKey)
       const displayName = composePageDisplayName(entry.name)
       const runtime = createTransactionRuntime({
-        document: snapshot.document,
+        document: snapshot.page.document,
         initialLabel: displayName,
       })
+      let scriptScope: ComposePageScriptScope | undefined
+      if (snapshot.page.setupScript && scriptLoader) {
+        const loaded = await loadComposePageScriptScope({
+          reference: snapshot.page.setupScript,
+          loader: scriptLoader,
+        })
+        scriptScope = loaded.scope
+        ownedScopesRef.current.add(scriptScope)
+      }
       const session: ComposePageDocumentSession = {
         kind: 'page',
         panelId: '',
@@ -98,7 +193,9 @@ export function usePageWorkspace({
         entry,
         pageKey,
         displayName,
+        page: snapshot.page,
         runtime,
+        scriptScope,
         baseRevision: snapshot.revision,
         savedRevisionId: runtime.revision,
         dirty: false,
@@ -114,7 +211,7 @@ export function usePageWorkspace({
           : new ComposeAssetError('io', '页面读取失败', { cause: error }),
       }
     }
-  }, [provider, store])
+  }, [provider, scriptLoader, store])
 
   const savePage = useCallback(async (
     panelId: string,
@@ -126,12 +223,13 @@ export function usePageWorkspace({
     try {
       const written = await store.writePage(
         session.pageKey,
-        session.runtime.document,
+        { ...session.page, document: session.runtime.document },
         session.baseRevision,
         force,
       )
       updateSession(panelId, (current) => ({
         ...current,
+        page: written.page,
         baseRevision: written.revision,
         // 以发起写入时的 runtime revision 为基线：写入期间用户可能又改了一笔，
         // 那笔改动应当仍然被视为未保存。
@@ -145,6 +243,31 @@ export function usePageWorkspace({
       return 'failed'
     }
   }, [store, updateSession])
+
+  const setPageSetupScript = useCallback(async (
+    pageKey: string,
+    reference: ComposePageSetupReference | null,
+  ) => {
+    if (!store) throw new ComposeAssetError('unsupported', '页面 Store 不可用')
+    const session = [...sessionsRef.current.values()].find((item) => item.pageKey === pageKey)
+    const base = session ?? await store.readPage(pageKey)
+    const expectedRevision = 'baseRevision' in base ? base.baseRevision : base.revision
+    const written = await store.setPageSetupScript(pageKey, reference, expectedRevision)
+    if (!session) return
+
+    let scriptScope: ComposePageScriptScope | undefined
+    if (reference && scriptLoader) {
+      const loaded = await loadComposePageScriptScope({ reference, loader: scriptLoader })
+      scriptScope = loaded.scope
+      ownedScopesRef.current.add(scriptScope)
+    }
+    updateSession(session.panelId, (current) => ({
+      ...current,
+      page: written.page,
+      baseRevision: written.revision,
+      scriptScope,
+    }))
+  }, [scriptLoader, store, updateSession])
 
   // 页面会话的脏状态由其运行时 revision 与保存基线的差异决定。
   useEffect(() => {
@@ -166,6 +289,8 @@ export function usePageWorkspace({
         pageKey: activeSession.pageKey,
         displayName: activeSession.displayName,
         runtime: activeSession.runtime,
+        page: activeSession.page,
+        scriptScope: activeSession.scriptScope,
       }
     : null, [activeSession])
 
@@ -173,5 +298,5 @@ export function usePageWorkspace({
     onActiveSessionChange?.(activePage)
   }, [activePage, onActiveSessionChange])
 
-  return { store, catalog, openPage, savePage, refreshCatalog }
+  return { store, catalog, openPage, savePage, setPageSetupScript, refreshCatalog }
 }

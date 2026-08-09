@@ -2,12 +2,74 @@ import { createDefaultCanvasSettings } from '../canvas-settings'
 import type { ComposeDocument, DocumentValidationIssue } from '../document-types'
 import { validateComposeDocument } from '../document'
 import { createDefaultOutputSettings } from '../output-settings'
-import { COMPOSE_PAGE_FILE_SUFFIX, COMPOSE_PAGE_MEDIA_TYPE } from './page-types'
+import {
+  COMPOSE_PAGE_FILE_SUFFIX,
+  COMPOSE_PAGE_MEDIA_TYPE,
+  COMPOSE_PAGE_SCHEMA_VERSION,
+  type ComposePageFile,
+  type ComposePageFileIssue,
+} from './page-types'
 
 /** 页面文档解析的判别结果。 @public */
 export type ComposePageParseResult =
-  | { readonly ok: true; readonly document: ComposeDocument }
-  | { readonly ok: false; readonly issues: readonly DocumentValidationIssue[] }
+  | { readonly ok: true; readonly page: ComposePageFile }
+  | { readonly ok: false; readonly issues: readonly ComposePageFileIssue[] }
+
+/** 旧裸文档显式迁移的判别结果。 @public */
+export type ComposePageMigrationResult = ComposePageParseResult
+
+type UnknownRecord = Record<string, unknown>
+
+function isRecord(value: unknown): value is UnknownRecord {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function validateSetupReference(
+  value: unknown,
+  issues: ComposePageFileIssue[],
+): void {
+  const path = ['setupScript'] as const
+  if (!isRecord(value)) {
+    issues.push({
+      code: 'page.invalid-setup-reference',
+      path,
+      message: 'setupScript 必须是稳定资源引用或 null',
+    })
+    return
+  }
+  const allowed = new Set(['providerId', 'assetKey', 'scope'])
+  Object.keys(value).forEach((key) => {
+    if (!allowed.has(key)) {
+      issues.push({
+        code: 'page.invalid-setup-reference',
+        path: [...path, key],
+        message: `setupScript 包含未知字段 ${key}`,
+      })
+    }
+  })
+  for (const key of ['providerId', 'assetKey'] as const) {
+    if (!isNonEmptyString(value[key])) {
+      issues.push({
+        code: 'page.invalid-setup-reference',
+        path: [...path, key],
+        message: `${key} 必须是非空字符串`,
+      })
+    }
+  }
+  if (value.scope !== 'persistent' && value.scope !== 'session') {
+    issues.push({
+      code: 'page.invalid-setup-reference',
+      path: [...path, 'scope'],
+      message: 'scope 必须为 persistent 或 session',
+    })
+  }
+}
 
 /**
  * 判断媒体类型是否为页面。
@@ -71,7 +133,7 @@ export function composePageFileName(displayName: string): string {
  * 文档结构校验直接复用 {@link validateComposeDocument}，因此 v5 之外的版本会被拒绝。
  * @public
  */
-export function parseComposePageDocument(text: string): ComposePageParseResult {
+export function parseComposePageFile(text: string): ComposePageParseResult {
   let parsed: unknown
   try {
     parsed = JSON.parse(text) as unknown
@@ -80,16 +142,48 @@ export function parseComposePageDocument(text: string): ComposePageParseResult {
     return {
       ok: false,
       issues: [{
-        code: 'document.invalid',
+        code: 'page.invalid-json',
         path: [],
         message: `页面文件不是合法 JSON：${error instanceof Error ? error.message : String(error)}`,
       }],
     }
   }
-  const validation = validateComposeDocument(parsed)
-  return validation.valid
-    ? { ok: true, document: validation.document }
-    : { ok: false, issues: validation.issues }
+  if (!isRecord(parsed)) {
+    return {
+      ok: false,
+      issues: [{ code: 'page.invalid-shape', path: [], message: '页面文件必须是对象' }],
+    }
+  }
+  const issues: ComposePageFileIssue[] = []
+  const allowed = new Set(['kind', 'pageSchemaVersion', 'document', 'setupScript'])
+  Object.keys(parsed).forEach((key) => {
+    if (!allowed.has(key)) {
+      issues.push({ code: 'page.invalid-shape', path: [key], message: `页面包含未知字段 ${key}` })
+    }
+  })
+  if (parsed.kind !== 'compose-page') {
+    issues.push({
+      code: 'page.invalid-shape',
+      path: ['kind'],
+      message: '页面 kind 必须为 compose-page',
+    })
+  }
+  if (parsed.pageSchemaVersion !== COMPOSE_PAGE_SCHEMA_VERSION) {
+    issues.push({
+      code: 'page.unsupported-version',
+      path: ['pageSchemaVersion'],
+      message: `不支持页面版本 ${String(parsed.pageSchemaVersion)}`,
+    })
+  }
+  const documentValidation = validateComposeDocument(parsed.document)
+  if (!documentValidation.valid) {
+    documentValidation.issues.forEach((issue) => {
+      issues.push({ ...issue, path: ['document', ...issue.path] })
+    })
+  }
+  if (parsed.setupScript !== null) validateSetupReference(parsed.setupScript, issues)
+  if (issues.length > 0 || !documentValidation.valid) return { ok: false, issues }
+  return { ok: true, page: parsed as unknown as ComposePageFile }
 }
 
 /**
@@ -99,8 +193,8 @@ export function parseComposePageDocument(text: string): ComposePageParseResult {
  * 使用两空格缩进并以换行结尾，使页面文件在只读 JSON 查看与外部 diff 中可读。
  * @public
  */
-export function serializeComposePageDocument(document: ComposeDocument): string {
-  return `${JSON.stringify(document, null, 2)}\n`
+export function serializeComposePageFile(page: ComposePageFile): string {
+  return `${JSON.stringify(page, null, 2)}\n`
 }
 
 /**
@@ -117,4 +211,65 @@ export function createEmptyComposePageDocument(): ComposeDocument {
     rootIds: [],
     entities: {},
   }
+}
+
+/** 创建一份未关联 setup 的空白页面聚合文件。 @public */
+export function createEmptyComposePageFile(): ComposePageFile {
+  return {
+    kind: 'compose-page',
+    pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
+    document: createEmptyComposePageDocument(),
+    setupScript: null,
+  }
+}
+
+/**
+ * 把旧裸 ComposeDocument v6 显式迁移为页面聚合文件。
+ *
+ * @remarks
+ * 正常页面解析不会隐式调用本函数，避免运行时长期兼容两种页面格式。
+ * @public
+ */
+export function migrateLegacyComposePageFile(document: unknown): ComposePageMigrationResult {
+  const validation = validateComposeDocument(document)
+  return validation.valid
+    ? {
+        ok: true,
+        page: {
+          kind: 'compose-page',
+          pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
+          document: validation.document,
+          setupScript: null,
+        },
+      }
+    : { ok: false, issues: validation.issues }
+}
+
+/** @deprecated 仅用于显式处理旧裸文档；页面运行路径请使用 {@link parseComposePageFile}。 */
+export function parseComposePageDocument(text: string):
+  | { readonly ok: true; readonly document: ComposeDocument }
+  | { readonly ok: false; readonly issues: readonly DocumentValidationIssue[] } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text) as unknown
+  }
+  catch (error) {
+    return {
+      ok: false,
+      issues: [{
+        code: 'document.invalid',
+        path: [],
+        message: `页面文档不是合法 JSON：${error instanceof Error ? error.message : String(error)}`,
+      }],
+    }
+  }
+  const validation = validateComposeDocument(parsed)
+  return validation.valid
+    ? { ok: true, document: validation.document }
+    : { ok: false, issues: validation.issues }
+}
+
+/** @deprecated 仅用于导出旧裸文档；页面写入请使用 {@link serializeComposePageFile}。 */
+export function serializeComposePageDocument(document: ComposeDocument): string {
+  return `${JSON.stringify(document, null, 2)}\n`
 }

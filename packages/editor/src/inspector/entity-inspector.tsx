@@ -29,6 +29,8 @@ import {
   ComposePropertyPanelSection,
 } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
+import { RendererBindingsInspector } from './renderer-bindings-inspector'
 
 interface EntityInspectorProps {
   readonly document: ComposeDocument
@@ -40,6 +42,8 @@ interface EntityInspectorProps {
   readonly paintEditPort?: ComposePaintEditPort
   /** 节点引用属性的候选来源；未注入时 node 字段呈现无候选状态。 */
   readonly nodeEditPort?: ComposeNodeEditPort
+  /** 当前页面实例的 setup 返回作用域。 */
+  readonly scriptScope?: ComposePageScriptScope
 }
 
 // 内建 Component 由 Registry 定义的 inspector 呈现；缺失定义时也不进入“未知”分组，
@@ -135,6 +139,7 @@ export function EntityInspector({
   idFactory,
   nodeEditPort,
   paintEditPort,
+  scriptScope,
 }: EntityInspectorProps) {
   const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
   const locked = getComposeLock(entity).locked
@@ -372,6 +377,21 @@ export function EntityInspector({
                   : `Unknown renderer: ${renderer.type}`}
               />
             )}
+          </ComposePropertyPanelSection>
+        ) : null}
+        {renderer && rendererDefinition?.propContracts?.length ? (
+          <ComposePropertyPanelSection
+            defaultExpanded
+            title={zh ? '数据绑定' : 'Bindings'}
+          >
+            <RendererBindingsInspector
+              definition={rendererDefinition}
+              dispatch={dispatch}
+              entity={entity}
+              idFactory={idFactory}
+              readOnly={locked}
+              scope={scriptScope}
+            />
           </ComposePropertyPanelSection>
         ) : null}
       </ComposePropertyPanelRoot>

@@ -3,15 +3,15 @@ import {
   type ComposeAssetProvider,
 } from '@compose-ui/assets'
 import {
-  createEmptyComposePageDocument,
+  createEmptyComposePageFile,
   createDefaultComposeLayoutItem,
-  serializeComposePageDocument,
+  serializeComposePageFile,
 } from '@compose-ui/core'
 import { describe, expect, it, vi } from 'vitest'
 import { createComposePageStore } from './page-store'
 import { createFakeAssetProvider } from './test-fixtures'
 
-const pageText = () => serializeComposePageDocument(createEmptyComposePageDocument())
+const pageText = () => serializeComposePageFile(createEmptyComposePageFile())
 
 /**
  * 一份含单个最小合法 Entity 的页面文档。
@@ -21,7 +21,7 @@ const pageText = () => serializeComposePageDocument(createEmptyComposePageDocume
  * Entity 至少需要 Composition、Transform、Visibility、Lock，并拥有 Renderer 或 Hierarchy。
  */
 const pageWithEntity = (entityId: string) => ({
-  ...createEmptyComposePageDocument(),
+  ...createEmptyComposePageFile().document,
   rootIds: [entityId],
   entities: {
     [entityId]: {
@@ -99,7 +99,8 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })
     const store = createComposePageStore({ provider: fake.provider })
     const snapshot = await store.readPage('Pages/Home.page.json')
-    expect(snapshot.document.schemaVersion).toBe(6)
+    expect(snapshot.page.document.schemaVersion).toBe(6)
+    expect(snapshot.page.setupScript).toBeNull()
     const reads = fake.calls.read
     await store.readPage('Pages/Home.page.json')
     expect(fake.calls.read).toBe(reads)
@@ -145,7 +146,7 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
 
     await firstCancelled
     finishRead?.()
-    await expect(second).resolves.toMatchObject({ document: { schemaVersion: 6 } })
+    await expect(second).resolves.toMatchObject({ page: { document: { schemaVersion: 6 } } })
     expect(fake.calls.read).toBe(1)
   })
 
@@ -167,19 +168,19 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })
     const store = createComposePageStore({ provider: fake.provider })
     const snapshot = await store.readPage('Pages/Home.page.json')
-    await store.writePage('Pages/Home.page.json', pageWithEntity('a'), snapshot.revision)
+    await store.writePageDocument('Pages/Home.page.json', pageWithEntity('a'), snapshot.revision)
     expect(fake.getFile('Pages/Home.page.json')).toContain('"rootIds"')
     store.invalidate('Pages/Home.page.json')
-    expect((await store.readPage('Pages/Home.page.json')).document.rootIds).toEqual(['a'])
+    expect((await store.readPage('Pages/Home.page.json')).page.document.rootIds).toEqual(['a'])
   })
 
   it('期望 revision 过期时抛出 conflict 且不修改文件', async () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })
     const store = createComposePageStore({ provider: fake.provider })
     const before = fake.getFile('Pages/Home.page.json')
-    await expect(store.writePage(
+    await expect(store.writePageDocument(
       'Pages/Home.page.json',
-      createEmptyComposePageDocument(),
+      createEmptyComposePageFile().document,
       'stale-revision',
     )).rejects.toMatchObject({ code: 'conflict' })
     expect(fake.getFile('Pages/Home.page.json')).toBe(before)
@@ -190,16 +191,16 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     const store = createComposePageStore({ provider: fake.provider })
     await expect(store.writePage(
       'Pages/Home.page.json',
-      createEmptyComposePageDocument(),
+      createEmptyComposePageFile(),
       '1',
     )).rejects.toMatchObject({ code: 'conflict' })
     const written = await store.writePage(
       'Pages/Home.page.json',
-      pageWithEntity('forced'),
+      { ...createEmptyComposePageFile(), document: pageWithEntity('forced') },
       '1',
       true,
     )
-    expect(written.pageKey).toBe('Pages/Home.page.json')
+    expect(written.page.document.rootIds).toEqual(['forced'])
     expect(fake.getFile('Pages/Home.page.json')).toContain('forced')
   })
 
@@ -208,7 +209,7 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     const store = createComposePageStore({ provider: fake.provider })
     await expect(store.writePage(
       'Pages/Home.page.json',
-      createEmptyComposePageDocument(),
+      createEmptyComposePageFile(),
     )).rejects.toMatchObject({ code: 'unsupported' })
   })
 
@@ -220,7 +221,7 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     expect(created.pageKey).toBe('Pages/New.page.json')
     const catalog = await store.listPages()
     expect(catalog.pages.map((page) => page.pageKey)).toContain('Pages/New.page.json')
-    expect((await store.readPage('Pages/New.page.json')).document.rootIds).toEqual([])
+    expect((await store.readPage('Pages/New.page.json')).page.document.rootIds).toEqual([])
   })
 
   it('外部变更通知失效缓存并广播', async () => {
@@ -229,13 +230,65 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     await store.readPage('Pages/Home.page.json')
     const listener = vi.fn()
     const unsubscribe = store.subscribe(listener)
-    fake.setFile('Pages/Home.page.json', serializeComposePageDocument(pageWithEntity('external')))
+    fake.setFile('Pages/Home.page.json', serializeComposePageFile({
+      ...createEmptyComposePageFile(),
+      document: pageWithEntity('external'),
+    }))
     fake.notify()
     expect(listener).toHaveBeenCalledWith({ type: 'page-changed', pageKey: 'Pages/Home.page.json' })
-    expect((await store.readPage('Pages/Home.page.json')).document.rootIds).toEqual(['external'])
+    expect((await store.readPage('Pages/Home.page.json')).page.document.rootIds).toEqual(['external'])
     unsubscribe()
     fake.notify()
     expect(listener).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('OpenSpec: pages / 页面 setup 关联写入', () => {
+  it('关联、保存文档与解除 setup 时保持页面聚合字段', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const first = await store.readPage('Pages/Home.page.json')
+    const setupScript = {
+      providerId: fake.provider.id,
+      assetKey: 'scripts/Home.setup.js',
+      scope: 'persistent' as const,
+    }
+
+    const linked = await store.setPageSetupScript(
+      'Pages/Home.page.json',
+      setupScript,
+      first.revision,
+    )
+    expect(linked.page.setupScript).toEqual(setupScript)
+
+    const saved = await store.writePageDocument(
+      'Pages/Home.page.json',
+      pageWithEntity('keeps-setup'),
+      linked.revision,
+    )
+    expect(saved.page.setupScript).toEqual(setupScript)
+    expect(saved.page.document.rootIds).toEqual(['keeps-setup'])
+
+    const unlinked = await store.setPageSetupScript(
+      'Pages/Home.page.json',
+      null,
+      saved.revision,
+    )
+    expect(unlinked.page.setupScript).toBeNull()
+    expect(unlinked.page.document.rootIds).toEqual(['keeps-setup'])
+    expect(fake.getFile('scripts/Home.setup.js')).toBeUndefined()
+  })
+
+  it('setup 关联使用页面 revision 做乐观并发', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const before = fake.getFile('Pages/Home.page.json')
+    await expect(store.setPageSetupScript(
+      'Pages/Home.page.json',
+      { providerId: fake.provider.id, assetKey: 'Home.setup.js', scope: 'persistent' },
+      'stale-revision',
+    )).rejects.toMatchObject({ code: 'conflict' })
+    expect(fake.getFile('Pages/Home.page.json')).toBe(before)
   })
 })
 

@@ -34,6 +34,12 @@ import { ComposeAssetPreview } from '@compose-ui/asset-browser'
 预览卸载时会取消迟到读取、回收 Blob URL，并释放 Monaco editor/model 与 ResizeObserver。其 ref 暴露
 `save(): Promise<boolean>`，供宿主在关闭 dirty 文档前确认保存结果。
 
+宿主可通过 `ComposeAssetPreview.scriptIntelligence` 为特定 JavaScript 会话提供
+`ComposeScriptIntelligenceProfile`。Profile 只使用字符串和 UTF-16 offset 描述隐藏插入与额外 `.d.ts`
+声明，不暴露 Monaco 类型。Asset Browser 会保留一份只用于分析的 JavaScript shadow model，将补全、
+悬浮、调用参数与 diagnostics 映射回可见源码，但不显示类型 Inlay Hint；dirty 比较和 Provider 写入
+始终只使用可见 model。类型错误不会阻止保存，卸载会同时清理 shadow model、marker、provider 与额外声明。
+
 Provider、Entry、错误和批处理类型只由轻量 `@compose-ui/assets` 定义；本包不转导资源协议。
 当 Provider 同时提供引用 capability、稳定 `assetKey` 和 `resolveAsset` 时，树和目录网格中的
 SVG/位图可通过 `onCanvasDrag` 发出普通数据生命周期；脚本、目录和未知二进制不会进入该拖拽。

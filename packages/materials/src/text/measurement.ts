@@ -24,7 +24,9 @@ function textStyle(props: Readonly<Record<string, unknown>>) {
 export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
   measure({ props, width, height }) {
     if (typeof document === 'undefined' || !document.body) return null
-    const content = typeof props.text === 'string' ? props.text : 'Text'
+    const content = typeof props.text === 'string' || typeof props.text === 'number'
+      ? String(props.text)
+      : 'Text'
     const typography = textStyle(props)
     const host = document.createElement('span')
     host.dataset.composeMeasurementHost = 'text'

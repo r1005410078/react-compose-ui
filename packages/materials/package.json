@@ -32,6 +32,7 @@
     "@compose-ui/core": "workspace:*",
     "@compose-ui/layout-engine": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
+    "@compose-ui/script-runtime": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
     "dompurify": "^3.2.6",
     "valibot": "^1.4.0"

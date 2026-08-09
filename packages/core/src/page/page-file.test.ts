@@ -3,11 +3,12 @@ import { COMPOSE_PAGE_MEDIA_TYPE } from './page-types'
 import {
   composePageDisplayName,
   composePageFileName,
-  createEmptyComposePageDocument,
+  createEmptyComposePageFile,
   isComposePageFileName,
   isComposePageMediaType,
-  parseComposePageDocument,
-  serializeComposePageDocument,
+  migrateLegacyComposePageFile,
+  parseComposePageFile,
+  serializeComposePageFile,
 } from './page-file'
 
 describe('OpenSpec: compose-document / 页面文件约定', () => {
@@ -41,40 +42,97 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     expect(composePageDisplayName('logo.svg')).toBe('logo.svg')
   })
 
-  it('创建的空白页面文档是 v6、无实体且每次独立', () => {
-    const first = createEmptyComposePageDocument()
-    const second = createEmptyComposePageDocument()
-    expect(first.schemaVersion).toBe(6)
-    expect(first.rootIds).toEqual([])
-    expect(first.entities).toEqual({})
-    expect(first.output.width).toBeGreaterThan(0)
-    expect(first.canvas).not.toBe(second.canvas)
+  it('OpenSpec: compose-document / 页面文件约定 / 创建空白页面包装', () => {
+    const first = createEmptyComposePageFile()
+    const second = createEmptyComposePageFile()
+    expect(first).toMatchObject({
+      kind: 'compose-page',
+      pageSchemaVersion: 1,
+      setupScript: null,
+      document: { schemaVersion: 6, rootIds: [], entities: {} },
+    })
+    expect(first.document.output.width).toBeGreaterThan(0)
+    expect(first.document.canvas).not.toBe(second.document.canvas)
   })
 
-  it('往返序列化保持页面文档等价', () => {
-    const document = createEmptyComposePageDocument()
-    const result = parseComposePageDocument(serializeComposePageDocument(document))
+  it('OpenSpec: compose-document / 页面文件约定 / 往返聚合页面与 setup 引用', () => {
+    const empty = createEmptyComposePageFile()
+    const page = {
+      ...empty,
+      setupScript: {
+        providerId: 'project',
+        assetKey: 'scripts/Home.setup.js',
+        scope: 'persistent' as const,
+      },
+    }
+    const result = parseComposePageFile(serializeComposePageFile(page))
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.document).toEqual(document)
+    if (result.ok) expect(result.page).toEqual(page)
   })
 
-  it('解析非法 JSON 返回 issue 而不抛异常', () => {
-    const result = parseComposePageDocument('{ not json')
+  it('OpenSpec: compose-document / 页面文件约定 / 非法 JSON 返回页面 issue', () => {
+    const result = parseComposePageFile('{ not json')
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.issues).not.toHaveLength(0)
-      expect(result.issues[0]?.code).toBe('document.invalid')
+      expect(result.issues[0]?.code).toBe('page.invalid-json')
     }
   })
 
-  it('解析非 v5 文档返回版本 issue', () => {
-    const document = createEmptyComposePageDocument()
-    const text = JSON.stringify({ ...document, schemaVersion: 4 })
-    const result = parseComposePageDocument(text)
+  it('OpenSpec: compose-document / 页面文件约定 / 拒绝版本、document 与 setup 引用错误', () => {
+    const page = createEmptyComposePageFile()
+    const unsupported = parseComposePageFile(JSON.stringify({ ...page, pageSchemaVersion: 2 }))
+    expect(unsupported.ok).toBe(false)
+    if (!unsupported.ok) {
+      expect(unsupported.issues).toContainEqual(expect.objectContaining({
+        code: 'page.unsupported-version',
+        path: ['pageSchemaVersion'],
+      }))
+    }
+
+    const invalidDocument = parseComposePageFile(JSON.stringify({
+      ...page,
+      document: { ...page.document, schemaVersion: 4 },
+    }))
+    expect(invalidDocument.ok).toBe(false)
+    if (!invalidDocument.ok) {
+      expect(invalidDocument.issues).toContainEqual(expect.objectContaining({
+        code: 'document.unsupported-version',
+        path: ['document', 'schemaVersion'],
+      }))
+    }
+
+    const invalidSetup = parseComposePageFile(JSON.stringify({
+      ...page,
+      setupScript: { providerId: '', assetKey: 'a.ts', scope: 'project' },
+    }))
+    expect(invalidSetup.ok).toBe(false)
+    if (!invalidSetup.ok) {
+      expect(invalidSetup.issues.map((issue) => issue.code))
+        .toContain('page.invalid-setup-reference')
+    }
+  })
+
+  it('OpenSpec: compose-document / 页面文件约定 / 普通解析不接受旧裸文档', () => {
+    const result = parseComposePageFile(JSON.stringify(createEmptyComposePageFile().document))
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.issues.map((issue) => issue.code))
-        .toContain('document.unsupported-version')
+        .toContain('page.invalid-shape')
+    }
+  })
+
+  it('OpenSpec: compose-document / 页面文件约定 / 显式迁移旧裸 v6 页面', () => {
+    const document = createEmptyComposePageFile().document
+    const result = migrateLegacyComposePageFile(document)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.page).toEqual({
+        kind: 'compose-page',
+        pageSchemaVersion: 1,
+        document,
+        setupScript: null,
+      })
     }
   })
 })

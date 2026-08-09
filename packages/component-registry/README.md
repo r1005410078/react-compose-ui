@@ -17,6 +17,12 @@ const registry = createComposeEntityRegistry({
         value={Number(props.value)}
       />
     ),
+    propContracts: [{
+      name: 'value',
+      kind: 'value',
+      label: '指标值',
+      validate: (value) => typeof value === 'number' || '必须是 number',
+    }],
     measurement: {
       async prepare({ signal }) {
         return loadMetricMetadata(signal)
@@ -69,6 +75,10 @@ Component 与 Renderer 的 `inspectorDefaultExpanded` 显式决定独立分组�
 资源型 Preset 可通过 `assetDrop` 声明 MIME 接受规则和异步 seed factory。Registry 依赖
 `core` 与轻量 `assets` 协议，React 保持 peer dependency；不依赖 editor、asset-browser 或
 property-panel。
+
+Renderer 文档中的 `Renderer.props` 是严格 JSON authored props；Renderer 实际收到的 `props` 是
+绑定解析后的 runtime props，并单独收到 `authoredProps`。Definition 只有显式声明 value/method
+`propContracts` 后才开放脚本绑定；失败的 value 回退字面值，失败的 method 为 `undefined`。
 
 Renderer 可声明同步 `measurement.measure`、可选异步 `prepare` 和外部 revision `subscribe`。
 `createComposeRendererMeasurementAdapter()` 把 Registry、asset resolver 与 page loader 组合为 Core

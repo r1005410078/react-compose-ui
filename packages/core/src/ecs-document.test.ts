@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { validateComposeDocument } from './document'
-import { resolveComposeOverflow } from './entity'
+import { getComposeBindings, resolveComposeOverflow } from './entity'
 
 function rectangleDocument() {
   return {
@@ -136,5 +136,64 @@ describe('ComposeDocument v6 ECS', () => {
 
     expect(validateComposeDocument(gradientOutput).valid).toBe(true)
     expect(validateComposeDocument(legacyOutput).valid).toBe(false)
+  })
+
+  it('OpenSpec: compose-document / Renderer Props 绑定 Component / 保存顶层页面引用', () => {
+    const input = structuredClone(rectangleDocument())
+    const entity = input.entities['rectangle-1']!
+    const components = entity.components as Record<string, unknown>
+    components.Bindings = {
+      version: 1,
+      props: {
+        text: { scope: 'page', exportName: 'num' },
+        onClick: { scope: 'page', exportName: 'onAdd' },
+        unknownFutureProp: { scope: 'page', exportName: 'futureValue' },
+      },
+    }
+
+    const result = validateComposeDocument(JSON.parse(JSON.stringify(input)))
+    expect(result.valid).toBe(true)
+    if (result.valid) {
+      expect(getComposeBindings(result.document.entities['rectangle-1']!)).toEqual(components.Bindings)
+    }
+  })
+
+  it('OpenSpec: compose-document / Renderer Props 绑定 Component / 拒绝非法形状与组合', () => {
+    const cases: Array<{ input: ReturnType<typeof rectangleDocument>; path: readonly (string | number)[] }> = []
+
+    const withoutRenderer = structuredClone(rectangleDocument())
+    const withoutRendererComponents = withoutRenderer.entities['rectangle-1']!.components as Record<string, unknown>
+    delete withoutRendererComponents.Renderer
+    withoutRendererComponents.Hierarchy = { childIds: [] }
+    withoutRendererComponents.Bindings = { version: 1, props: {} }
+    cases.push({
+      input: withoutRenderer,
+      path: ['entities', 'rectangle-1', 'components', 'Bindings'],
+    })
+
+    const malformed = structuredClone(rectangleDocument())
+    const malformedComponents = malformed.entities['rectangle-1']!.components as Record<string, unknown>
+    malformedComponents.Bindings = {
+      version: 2,
+      props: {
+        '': { scope: 'page', exportName: 'num' },
+        onClick: { scope: 'global', exportName: '' },
+      },
+    }
+    cases.push({
+      input: malformed,
+      path: ['entities', 'rectangle-1', 'components', 'Bindings', 'version'],
+    })
+
+    for (const testCase of cases) {
+      const result = validateComposeDocument(testCase.input)
+      expect(result.valid).toBe(false)
+      if (!result.valid) {
+        expect(result.issues).toContainEqual(expect.objectContaining({
+          code: 'bindings.invalid',
+          path: testCase.path,
+        }))
+      }
+    }
   })
 })

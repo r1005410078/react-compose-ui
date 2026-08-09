@@ -41,6 +41,7 @@
     "@compose-ui/pages": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/scene-tree": "workspace:*",
+    "@compose-ui/script-runtime": "workspace:*",
     "@compose-ui/stage": "workspace:*",
     "@compose-ui/stage-engine": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",

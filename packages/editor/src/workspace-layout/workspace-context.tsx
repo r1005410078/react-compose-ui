@@ -1,7 +1,9 @@
 import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
-import type { TransactionRuntime } from '@compose-ui/core'
+import type { ComposeScriptIntelligenceProfile } from '@compose-ui/asset-browser'
+import type { ComposePageFile, TransactionRuntime } from '@compose-ui/core'
+import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import type {
   ComposeHistoryNavigationController,
   ComposeHistoryShortcuts,
@@ -59,6 +61,8 @@ export interface ComposeAssetDocumentSession extends ComposeDocumentSessionBase 
   readonly kind: 'asset'
   /** 只读标签：不注册保存、不显示未保存指示、关闭时不需要确认。 */
   readonly readOnly: boolean
+  /** 由 Editor 为特定脚本会话选择的隐藏类型分析 Profile。 */
+  readonly scriptIntelligence?: ComposeScriptIntelligenceProfile
 }
 
 /**
@@ -75,7 +79,11 @@ export interface ComposePageDocumentSession extends ComposeDocumentSessionBase {
   readonly pageKey: string
   /** 去掉页面后缀的用户可见名称。 */
   readonly displayName: string
+  /** 最近一次成功读取或写入的完整页面聚合。 */
+  readonly page: ComposePageFile
   readonly runtime: TransactionRuntime
+  /** 当前页面标签独占的 setup 作用域。 */
+  readonly scriptScope?: ComposePageScriptScope
   /** 最近一次成功读写得到的 Provider revision，用于乐观并发。 */
   readonly baseRevision: string | undefined
   /** 与运行时 revision 比较以判定脏状态的基线。 */

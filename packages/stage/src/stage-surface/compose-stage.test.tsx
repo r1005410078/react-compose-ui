@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   createComposeEntityRegistry,
   type ComposeEntityPreset,
@@ -13,6 +13,7 @@ import {
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
 import { ComposeStage } from './compose-stage'
 import type { ComposeStageDispatch } from '../types'
 
@@ -198,6 +199,8 @@ function renderStage(
     selectedIds?: readonly string[]
     paintEditing?: { readonly entityId: string }
     snapshot?: ComposeLayoutSnapshot
+    scope?: import('@compose-ui/script-runtime').ComposePageScriptScope
+    registry?: ReturnType<typeof createComposeEntityRegistry>
   } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
@@ -213,7 +216,8 @@ function renderStage(
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
       onSelectedIdsChange={vi.fn()}
       onViewportChange={vi.fn()}
-      registry={registry}
+      registry={options.registry ?? registry}
+      scriptScope={options.scope}
       paintEditing={options.paintEditing}
       selectedIds={options.selectedIds ?? []}
       tool="select"
@@ -225,6 +229,62 @@ function renderStage(
 
 describe('ComposeStage ECS', () => {
   afterEach(cleanup)
+
+  it('OpenSpec: stage / Stage 页面 setup 值预览 / 响应式值刷新且方法为 no-op', async () => {
+    let count!: ComposeState<number>
+    const onAdd = vi.fn(() => { count.value += 1 })
+    const scope = createComposePageScriptScope((ctx) => {
+      count = ctx.state(0)
+      return { count, onAdd }
+    })
+    const boundRegistry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'test',
+        label: '测试',
+        renderer: ({ props }) => (
+          <button
+            type="button"
+            onClick={typeof props.onClick === 'function'
+              ? props.onClick as () => void
+              : undefined}
+          >
+            {String(props.text)}
+          </button>
+        ),
+        propContracts: [
+          {
+            name: 'text',
+            kind: 'value',
+            label: '文本',
+            validate: (value) => typeof value === 'number' || 'number required',
+          },
+          { name: 'onClick', kind: 'method', label: '点击', role: 'event-handler' },
+        ],
+      }],
+    })
+    const target = entity('bound')
+    const value = document([{
+      ...target,
+      components: {
+        ...target.components,
+        Bindings: {
+          version: 1,
+          props: {
+            text: { scope: 'page', exportName: 'count' },
+            onClick: { scope: 'page', exportName: 'onAdd' },
+          },
+        },
+      },
+    }])
+    renderStage(value, { registry: boundRegistry, scope })
+
+    expect(screen.getByRole('button', { name: '0' })).toBeInTheDocument()
+    count.value = 5
+    await waitFor(() => { expect(screen.getByRole('button', { name: '5' })).toBeInTheDocument() })
+    fireEvent.click(screen.getByRole('button', { name: '5' }))
+    expect(onAdd).not.toHaveBeenCalled()
+    expect(count.value).toBe(5)
+  })
 
   it('OpenSpec: hug-content-layout / Stage measurement attachment / 挂接并卸载同会话端口', () => {
     const value = document()

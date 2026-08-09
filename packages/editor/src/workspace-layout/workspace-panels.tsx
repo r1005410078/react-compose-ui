@@ -369,6 +369,7 @@ export function AssetDocumentPanel(props: IDockviewPanelProps) {
         entry={session.entry}
         provider={session.provider}
         readOnly={session.readOnly}
+        scriptIntelligence={session.scriptIntelligence}
         onDirtyChange={handleDirtyChange}
         onSaved={handleSaved}
       />

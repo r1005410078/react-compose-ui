@@ -1,6 +1,7 @@
 import {
   COMPOSE_BUILTIN_COMPONENT_KEYS,
   type ComposeAppearance,
+  type ComposeBindings,
   type ComposeClip,
   type ComposeComposition,
   type ComposeEntity,
@@ -144,6 +145,13 @@ export function getComposeRenderer(entity: ComposeEntity): ComposeRenderer | und
   return entity.components[
     COMPOSE_BUILTIN_COMPONENT_KEYS.renderer
   ] as ComposeRenderer | undefined
+}
+
+/** 读取可选 Renderer Prop 绑定。 @public */
+export function getComposeBindings(entity: ComposeEntity): ComposeBindings | undefined {
+  return entity.components[
+    COMPOSE_BUILTIN_COMPONENT_KEYS.bindings
+  ] as ComposeBindings | undefined
 }
 
 /** Entity 是否可见。 @public */

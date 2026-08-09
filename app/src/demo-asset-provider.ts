@@ -4,8 +4,10 @@ import {
 } from '@compose-ui/assets'
 import {
   COMPOSE_PAGE_MEDIA_TYPE,
+  createDefaultComposeLayoutItem,
   createEmptyComposePageDocument,
-  serializeComposePageDocument,
+  createEmptyComposePageFile,
+  serializeComposePageFile,
 } from '@compose-ui/core'
 import type {
   ComposeAssetEntry,
@@ -58,7 +60,54 @@ function createDemoBitmap() {
   return new Blob([bytes], { type: 'image/bmp' })
 }
 
-const demoHomePageText = serializeComposePageDocument(createEmptyComposePageDocument())
+const demoCounterDocument: ComposeDocument = {
+  ...createEmptyComposePageDocument(),
+  rootIds: ['demo-counter-value', 'demo-counter-button'],
+  entities: {
+    'demo-counter-value': {
+      id: 'demo-counter-value',
+      name: 'Counter value',
+      components: {
+        Composition: { presetId: 'text', baseComponentKeys: [], capabilityIds: [] },
+        Transform: { rotation: 0 },
+        LayoutItem: createDefaultComposeLayoutItem(280, 72, { x: 80, y: 80 }),
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Renderer: { type: 'text', props: { text: 0, color: '#dce8fa', fontSize: 42 } },
+        Bindings: {
+          version: 1,
+          props: { text: { scope: 'page', exportName: 'num' } },
+        },
+      },
+    },
+    'demo-counter-button': {
+      id: 'demo-counter-button',
+      name: 'Add button',
+      components: {
+        Composition: { presetId: 'action-button', baseComponentKeys: [], capabilityIds: [] },
+        Transform: { rotation: 0 },
+        LayoutItem: createDefaultComposeLayoutItem(160, 52, { x: 80, y: 180 }),
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Renderer: { type: 'action-button', props: { label: 'Add' } },
+        Bindings: {
+          version: 1,
+          props: { onClick: { scope: 'page', exportName: 'onAdd' } },
+        },
+      },
+    },
+  },
+}
+const demoHomePageText = serializeComposePageFile(createEmptyComposePageFile())
+const demoCounterPageText = serializeComposePageFile({
+  ...createEmptyComposePageFile(),
+  document: demoCounterDocument,
+  setupScript: {
+    providerId: 'demo-memory',
+    assetKey: 'demo-home-setup',
+    scope: 'persistent',
+  },
+})
 
 /**
  * 示例应用的实例级内存 Provider，只用于展示资源协议，不属于公共持久化实现。
@@ -150,6 +199,36 @@ export function createDemoAssetProvider(options: {
       },
       content: new Blob([demoHomePageText], { type: COMPOSE_PAGE_MEDIA_TYPE }),
     }],
+    ['demo-counter-page', {
+      entry: {
+        id: 'demo-counter-page',
+        parentId: 'demo-pages',
+        name: 'Counter.page.json',
+        kind: 'file',
+        mediaType: COMPOSE_PAGE_MEDIA_TYPE,
+        size: demoCounterPageText.length,
+        revision: revision(revisionNumber),
+        assetKey: 'demo-counter-page',
+      },
+      content: new Blob([demoCounterPageText], { type: COMPOSE_PAGE_MEDIA_TYPE }),
+    }],
+    ['demo-home-setup', {
+      entry: {
+        id: 'demo-home-setup',
+        parentId: 'demo-pages',
+        name: 'Counter.setup.js',
+        kind: 'file',
+        mediaType: 'text/javascript',
+        revision: revision(revisionNumber),
+        assetKey: 'demo-home-setup',
+      },
+      content: new Blob([`export function setup(ctx) {
+  const num = ctx.state(0)
+  const onAdd = () => { num.value += 1 }
+  return { num, onAdd }
+}
+`], { type: 'text/javascript' }),
+    }],
     ['readme', {
       entry: {
         id: 'readme',
@@ -166,7 +245,7 @@ export function createDemoAssetProvider(options: {
   ])
 
   options.pages?.forEach((page) => {
-    const text = serializeComposePageDocument(page.document)
+    const text = serializeComposePageFile({ ...createEmptyComposePageFile(), document: page.document })
     assets.set(page.id, {
       entry: {
         id: page.id,

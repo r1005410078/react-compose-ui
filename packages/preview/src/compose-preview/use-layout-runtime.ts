@@ -10,6 +10,7 @@ import {
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeDocument, ComposePageDocumentLoader } from '@compose-ui/core'
+import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import {
   useEffect,
   useLayoutEffect,
@@ -25,6 +26,7 @@ export function useComposePreviewLayout(
   assetResolver?: ComposeAssetResolver,
   pageDocumentPort?: ComposePageDocumentLoader,
   externalRuntime?: ComposeLayoutRuntime,
+  scriptScope?: ComposePageScriptScope,
 ): ComposeLayoutRuntimeState {
   const [ownedRuntime] = useState(() => createComposeLayoutRuntime({ document }))
   const runtime = externalRuntime ?? ownedRuntime
@@ -32,7 +34,8 @@ export function useComposePreviewLayout(
     registry,
     assetResolver,
     pageDocumentPort,
-  }), [assetResolver, pageDocumentPort, registry])
+    scriptScope,
+  }), [assetResolver, pageDocumentPort, registry, scriptScope])
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const generation = useRef(0)
   const adapterGenerations = useRef(new WeakMap<ComposeRendererMeasurementAdapter, number>())

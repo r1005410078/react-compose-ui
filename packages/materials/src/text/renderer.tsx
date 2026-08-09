@@ -19,7 +19,7 @@ export function TextRenderer({ props }: ComposeRendererProps) {
         lineHeight: typeof props.lineHeight === 'number' ? `${props.lineHeight}px` : undefined,
       }}
     >
-      {typeof props.text === 'string' ? props.text : 'Text'}
+      {typeof props.text === 'string' || typeof props.text === 'number' ? props.text : 'Text'}
     </div>
   )
 }

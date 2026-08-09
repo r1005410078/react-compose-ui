@@ -106,6 +106,54 @@ function entityFromSeed(
 }
 
 describe('ComposeEntityRegistry', () => {
+  it('OpenSpec: component-registry / Renderer Prop Contract / 注册值与事件方法 Props', () => {
+    const validate = (value: unknown) => typeof value === 'number' || '必须是 number'
+    const registry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'counter',
+        label: '计数器',
+        renderer: () => null,
+        propContracts: [
+          { name: 'count', kind: 'value', label: '数值', validate },
+          { name: 'onAdd', kind: 'method', label: '增加', role: 'event-handler' },
+        ],
+      }],
+    })
+
+    expect(registry.listRendererPropContracts('counter')).toEqual([
+      expect.objectContaining({ name: 'count', kind: 'value', validate }),
+      expect.objectContaining({ name: 'onAdd', kind: 'method', role: 'event-handler' }),
+    ])
+    expect(registry.listRendererPropContracts('missing')).toEqual([])
+  })
+
+  it('OpenSpec: component-registry / Renderer Prop Contract / 拒绝重复和非法定义', () => {
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'counter',
+        label: '计数器',
+        renderer: () => null,
+        propContracts: [
+          { name: 'count', kind: 'value', label: '数值', validate: () => true },
+          { name: 'count', kind: 'method', label: '增加', role: 'event-handler' },
+        ],
+      }],
+    })).toThrow(/count.*重复/u)
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'counter',
+        label: '计数器',
+        renderer: () => null,
+        propContracts: [{
+          name: '',
+          kind: 'value',
+          label: '数值',
+          validate: () => true,
+        }],
+      }],
+    })).toThrow(/Prop.*不能为空/u)
+  })
+
   it('OpenSpec: Preset 创建 / 自动注入 Composition 并隔离默认值', () => {
     const registry = createComposeEntityRegistry({ presets: [preset()] })
     const first = registry.createSeed('rectangle')

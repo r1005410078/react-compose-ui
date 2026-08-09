@@ -99,7 +99,8 @@ export function resolvePropertyBindings<TSchema extends v.GenericSchema>(
       pushFailure('missing-variable', '绑定变量已不存在', binding, descriptor, undefined)
       continue
     }
-    if (!matchesSemanticScope(descriptor.target, variable)
+    if ((variable.kind ?? 'value') !== 'value'
+      || !matchesSemanticScope(descriptor.target, variable)
       || options.canBind?.(descriptor.target, variable) === false
       || !v.safeParse(descriptor.target.schema, variable.value).success) {
       pushFailure('invalid-variable', '变量值与绑定目标不兼容', binding, descriptor, variable)
@@ -168,7 +169,8 @@ export function canBindPropertyVariable(
   variable: PropertyPanelVariable,
   canBind?: (target: PropertyPanelBindingTarget, variable: PropertyPanelVariable) => boolean,
 ): boolean {
-  return matchesSemanticScope(target, variable)
+  return (variable.kind ?? 'value') === 'value'
+    && matchesSemanticScope(target, variable)
     && v.safeParse(target.schema, variable.value).success
     && canBind?.(target, variable) !== false
 }

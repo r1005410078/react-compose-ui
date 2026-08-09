@@ -1,6 +1,7 @@
 import type { ComposeEntity } from '@compose-ui/core'
 import { describe, expect, it, vi } from 'vitest'
 import { createComposeEntityRegistry } from '../registry'
+import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
 import { createComposeRendererMeasurementAdapter } from './renderer-measurement'
 
 function Renderer() {
@@ -136,6 +137,70 @@ describe('OpenSpec: component-registry / Renderer measurement adapter', () => {
     fail = false
     expect(adapter.measure({ entity: entity('changed'), ...constraints })).toBeNull()
     expect(adapter.getDiagnostic?.('text-1')?.code).toBe('measurement.invalid')
+    adapter.dispose()
+  })
+
+  it('OpenSpec: component-registry / 响应式 Prop 测量失效 / 只使受影响 Entity 失效', async () => {
+    let text!: ComposeState<string>
+    let decoration!: ComposeState<string>
+    const scope = createComposePageScriptScope((ctx) => {
+      text = ctx.state('short')
+      decoration = ctx.state('plain')
+      return { text, decoration, onClick: () => undefined }
+    })
+    const registry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'host-text',
+        label: 'Host text',
+        renderer: Renderer,
+        propContracts: [
+          {
+            name: 'text',
+            kind: 'value',
+            label: 'Text',
+            validate: (value) => typeof value === 'string' || 'string required',
+          },
+          {
+            name: 'decoration',
+            kind: 'value',
+            label: 'Decoration',
+            affectsMeasurement: false,
+            validate: (value) => typeof value === 'string' || 'string required',
+          },
+          { name: 'onClick', kind: 'method', label: 'Click', role: 'event-handler' },
+        ],
+        measurement: {
+          measure: ({ props }) => ({ width: String(props.text).length * 10, height: 20 }),
+        },
+      }],
+    })
+    const base = entity()
+    const bound: ComposeEntity = {
+      ...base,
+      components: {
+        ...base.components,
+        Bindings: {
+          version: 1,
+          props: {
+            text: { scope: 'page', exportName: 'text' },
+            decoration: { scope: 'page', exportName: 'decoration' },
+            onClick: { scope: 'page', exportName: 'onClick' },
+          },
+        },
+      },
+    }
+    const adapter = createComposeRendererMeasurementAdapter({ registry, scriptScope: scope })
+    const listener = vi.fn()
+    adapter.subscribe(listener)
+
+    expect(adapter.measure({ entity: bound, ...constraints })).toMatchObject({ width: 50 })
+    decoration.value = 'outlined'
+    await Promise.resolve()
+    expect(listener).not.toHaveBeenCalled()
+    text.value = 'a much longer value'
+    await Promise.resolve()
+    expect(listener).toHaveBeenCalledWith(['text-1'])
+    expect(adapter.measure({ entity: bound, ...constraints })).toMatchObject({ width: 190 })
     adapter.dispose()
   })
 })

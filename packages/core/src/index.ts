@@ -55,6 +55,7 @@ export type {
 } from './paint'
 export {
   getComposeAppearance,
+  getComposeBindings,
   getComposeClip,
   getComposeComponent,
   getComposeComposition,
@@ -109,6 +110,7 @@ export type {
 } from './command-types'
 export type {
   ComposeAppearance,
+  ComposeBindings,
   ComposeAxisSizing,
   ComposeBuiltinComponentKey,
   ComposeCanvasGuide,
@@ -130,6 +132,7 @@ export type {
   ComposeMeasureConstraint,
   ComposeMeasuredSize,
   ComposeOutputSettings,
+  ComposePageExportReference,
   ComposeOverflowMode,
   ComposePosition,
   ComposeRenderer,
@@ -162,19 +165,24 @@ export {
   COMPOSE_APP_MANIFEST_SCHEMA_VERSION,
   COMPOSE_PAGE_FILE_SUFFIX,
   COMPOSE_PAGE_MEDIA_TYPE,
+  COMPOSE_PAGE_SCHEMA_VERSION,
   COMPOSE_PAGE_NEST_DEPTH_LIMIT,
   composePageDisplayName,
   composePageFileName,
   createEmptyComposeAppManifest,
   createEmptyComposePageDocument,
+  createEmptyComposePageFile,
   isComposePageFileName,
   isComposePageMediaType,
+  migrateLegacyComposePageFile,
   parseComposeAppManifest,
+  parseComposePageFile,
   parseComposePageDocument,
   readComposePageReference,
   resolveComposePageNestState,
   serializeComposeAppManifest,
   serializeComposePageDocument,
+  serializeComposePageFile,
   setComposeAppManifestHomePage,
 } from './page'
 export type {
@@ -183,9 +191,15 @@ export type {
   ComposeAppManifestIssueCode,
   ComposeAppManifestParseResult,
   ComposePageDocumentLoader,
+  ComposePageFile,
+  ComposePageFileIssue,
+  ComposePageFileIssueCode,
+  ComposePageLoader,
+  ComposePageMigrationResult,
   ComposePageNestState,
   ComposePageParseResult,
   ComposePageReference,
+  ComposePageSetupReference,
   ResolveComposePageNestStateInput,
 } from './page'
 

@@ -29,6 +29,7 @@ export default defineConfig({
         '@compose-ui/core',
         '@compose-ui/layout-engine',
         '@compose-ui/property-panel',
+        '@compose-ui/script-runtime',
         // Context 必须由宿主共享同一实例，不能内联进材料包。
         '@compose-ui/ui-context',
         'dompurify',

@@ -588,12 +588,14 @@ function useComposeStageMeasurement({
   layoutRuntime,
   pageLoader,
   registry,
+  scriptScope,
 }: ComposeStageProps) {
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
     registry,
     assetResolver,
     pageDocumentPort: pageLoader,
-  }), [assetResolver, pageLoader, registry])
+    scriptScope,
+  }), [assetResolver, pageLoader, registry, scriptScope])
   const disposalGenerations = useRef(new WeakMap<ComposeRendererMeasurementAdapter, number>())
 
   useLayoutEffect(() => adapter.updateDocument(document), [adapter, document])
@@ -620,6 +622,8 @@ function ComposeStageReady({
   registry,
   assetResolver,
   pageLoader,
+  scriptScope,
+  scriptModuleLoader,
   dispatch,
   viewport,
   onViewportChange,
@@ -1977,6 +1981,8 @@ function ComposeStageReady({
           pageLoader={pageLoader}
           paintPreview={interaction.paintPreview}
           registry={registry}
+          scriptModuleLoader={scriptModuleLoader}
+          scriptScope={scriptScope}
           viewport={viewport}
           onEntityPointerDown={beginEntity}
         />

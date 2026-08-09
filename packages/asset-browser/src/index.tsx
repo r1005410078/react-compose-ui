@@ -32,6 +32,10 @@ export type {
   ComposeAssetPreviewHandle,
   ComposeAssetPreviewProps,
 } from './asset-preview'
+export type {
+  ComposeScriptIntelligenceProfile,
+  ComposeVirtualTextInsertion,
+} from './script-intelligence'
 export type { FileSystemAssetProviderOptions as ComposeFileSystemAssetProviderOptions } from './file-system-provider'
 export {
   createFileSystemAssetProvider as createComposeFileSystemAssetProvider,

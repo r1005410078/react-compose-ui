@@ -228,6 +228,18 @@ export interface ComposeRenderer extends JsonObject {
   readonly props: JsonObject
 }
 
+/** 页面 setup 返回成员的稳定引用。 @public */
+export interface ComposePageExportReference extends JsonObject {
+  readonly scope: 'page'
+  readonly exportName: string
+}
+
+/** Renderer 顶层 Prop 到页面返回成员的持久化绑定。 @public */
+export interface ComposeBindings extends JsonObject {
+  readonly version: 1
+  readonly props: Readonly<Record<string, ComposePageExportReference>>
+}
+
 /** ComposeDocument v6 内建 Component Key。 @public */
 export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   composition: 'Composition',
@@ -241,6 +253,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   clip: 'Clip',
   appearance: 'Appearance',
   renderer: 'Renderer',
+  bindings: 'Bindings',
 } as const
 
 /** ComposeDocument v6 内建 Component Key 联合。 @public */
@@ -336,6 +349,7 @@ export type DocumentValidationIssueCode =
   | 'appearance.invalid'
   | 'appearance.invalid-paint'
   | 'renderer.invalid'
+  | 'bindings.invalid'
 
 /** 一个可定位的文档校验问题。 @public */
 export interface DocumentValidationIssue {

@@ -74,6 +74,7 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
       entity: baseEntity,
       renderer: renderer('text', { text: 'long text', fontSize: 20 }),
       props: { text: 'long text', fontSize: 20 },
+      authoredProps: { text: 'long text', fontSize: 20 },
       prepared: undefined,
       width: { mode: 'at-most', value: 120 },
       height: undefinedConstraint,
@@ -100,6 +101,7 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
       entity: baseEntity,
       renderer: imageRenderer,
       props: imageRenderer.props,
+      authoredProps: imageRenderer.props,
       assetResolver: { resolve },
       signal: new AbortController().signal,
     })
@@ -109,6 +111,7 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
       entity: baseEntity,
       renderer: imageRenderer,
       props: imageRenderer.props,
+      authoredProps: imageRenderer.props,
       prepared,
       width: { mode: 'at-most', value: 320 },
       height: undefinedConstraint,
@@ -125,6 +128,7 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
       entity: baseEntity,
       renderer: svgRenderer,
       props: svgRenderer.props,
+      authoredProps: svgRenderer.props,
       assetResolver: {
         resolve: async () => ({
           blob: new Blob(['<svg viewBox="0 0 200 80"></svg>']),
@@ -151,13 +155,14 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
       return () => undefined
     })
     const pageDocumentPort = {
-      load: vi.fn(async () => ({ output: { width: 1280, height: 720 } }) as never),
+      load: vi.fn(async () => ({ document: { output: { width: 1280, height: 720 } } }) as never),
       subscribe,
     }
     const pagePrepared = await page.prepare?.({
       entity: baseEntity,
       renderer: pageRenderer,
       props: pageRenderer.props,
+      authoredProps: pageRenderer.props,
       pageDocumentPort,
       signal: new AbortController().signal,
     })
@@ -165,6 +170,7 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
       entity: baseEntity,
       renderer: pageRenderer,
       props: pageRenderer.props,
+      authoredProps: pageRenderer.props,
       pageDocumentPort,
       invalidate,
     })

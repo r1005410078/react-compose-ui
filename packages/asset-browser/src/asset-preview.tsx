@@ -35,6 +35,7 @@ import {
 } from './asset-file-utils'
 import { useAssetRead } from './use-asset-read'
 import { getAssetBrowserMessages } from './asset-browser-i18n'
+import type { ComposeScriptIntelligenceProfile } from './script-intelligence'
 
 function useBlobUrl(blob: Blob | undefined) {
   const url = useMemo(() => blob ? URL.createObjectURL(blob) : null, [blob])
@@ -64,6 +65,8 @@ export interface ComposeAssetPreviewProps
    * @defaultValue false
    */
   readonly readOnly?: boolean
+  /** 为当前脚本资源启用宿主定义的隐藏类型分析。 */
+  readonly scriptIntelligence?: ComposeScriptIntelligenceProfile
   /** 脚本 dirty 状态变更。 */
   readonly onDirtyChange?: (dirty: boolean) => void
   /** Provider 成功写入后返回最新条目。 */
@@ -87,6 +90,7 @@ export const ComposeAssetPreview = forwardRef<
   onSaved = () => undefined,
   provider,
   readOnly = false,
+  scriptIntelligence,
   className,
   ...htmlProps
 }, ref) {
@@ -130,6 +134,7 @@ export const ComposeAssetPreview = forwardRef<
           providerId={provider.id}
           readOnly={readOnly}
           revision={state.data.revision}
+          scriptIntelligence={scriptIntelligence}
           theme={theme?.resolvedTheme ?? 'dark'}
           onDirtyChange={onDirtyChange}
           onSave={async (content, expectedRevision, force = false) => {

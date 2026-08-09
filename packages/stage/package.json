@@ -30,6 +30,7 @@
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/components": "workspace:*",
     "@compose-ui/core": "workspace:*",
+    "@compose-ui/script-runtime": "workspace:*",
     "@compose-ui/stage-engine": "workspace:*",
     "@compose-ui/ui-context": "workspace:*"
   },

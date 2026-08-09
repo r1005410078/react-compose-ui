@@ -3,13 +3,19 @@ import { ComposeAssetError } from '@compose-ui/assets'
 import {
   BUILTIN_COMMAND_TYPES,
   COMPOSE_PAGE_MEDIA_TYPE,
-  createEmptyComposePageDocument,
-  serializeComposePageDocument,
+  createEmptyComposePageFile,
+  serializeComposePageFile,
 } from '@compose-ui/core'
+import type {
+  ComposeLoadedScriptModule,
+  ComposePageSetup,
+  ComposeScriptModuleLoader,
+} from '@compose-ui/script-runtime'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const initializeWorkspaceMock = vi.hoisted(() => vi.fn())
+const assetPreviewPropsMock = vi.hoisted(() => vi.fn())
 
 /**
  * 记录已创建面板并支持切换活动面板的 Dockview 替身。
@@ -166,6 +172,10 @@ vi.mock('@compose-ui/asset-browser', async () => {
         type: 'button',
         onClick: () => onAssetOpen?.(scriptEntry),
       }, 'open-script'),
+      React.createElement('button', {
+        type: 'button',
+        onClick: () => onAssetOpen?.(setupScriptEntry),
+      }, 'open-setup'),
       (contextMenuItems ?? [])
         .filter((item) => item.isVisible?.(menuContext) !== false)
         .map((item) => React.createElement('button', {
@@ -175,13 +185,16 @@ vi.mock('@compose-ui/asset-browser', async () => {
           onClick: () => { void item.onSelect(menuContext) },
         }, item.label)),
     ),
-    ComposeAssetPreview: () => React.createElement('div', { 'data-testid': 'asset-preview' }),
+    ComposeAssetPreview: (props: unknown) => {
+      assetPreviewPropsMock(props)
+      return React.createElement('div', { 'data-testid': 'asset-preview' })
+    },
   }
 })
 
 const { ComposeEditor } = await import('../compose-editor')
 
-const pageText = serializeComposePageDocument(createEmptyComposePageDocument())
+const pageText = serializeComposePageFile(createEmptyComposePageFile())
 
 const root: ComposeAssetEntry = { id: 'root', parentId: null, name: 'Assets', kind: 'folder' }
 const pageEntry: ComposeAssetEntry = {
@@ -201,6 +214,15 @@ const scriptEntry: ComposeAssetEntry = {
   mediaType: 'text/typescript',
   revision: '1',
   assetKey: 'dashboard.ts',
+}
+const setupScriptEntry: ComposeAssetEntry = {
+  id: 'setup-script',
+  parentId: 'root',
+  name: 'Counter.setup.js',
+  kind: 'file',
+  mediaType: 'text/javascript',
+  revision: '1',
+  assetKey: 'Counter.setup.js',
 }
 const manifestEntry: ComposeAssetEntry = {
   id: 'app.json',
@@ -304,6 +326,41 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
         .toBe(true)
     })
     expect(pageDocumentPanels()).toHaveLength(0)
+  })
+
+  it('页面能力启用时只为 *.setup.js 资源会话注入 Setup Profile', async () => {
+    renderEditor(createProvider())
+
+    fireEvent.click(screen.getByRole('button', { name: 'open-script' }))
+    await waitFor(() => {
+      expect(assetPreviewPropsMock).toHaveBeenCalledWith(expect.objectContaining({
+        entry: expect.objectContaining({ name: 'dashboard.ts' }),
+        scriptIntelligence: undefined,
+      }))
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'open-setup' }))
+    await waitFor(() => {
+      expect(assetPreviewPropsMock).toHaveBeenCalledWith(expect.objectContaining({
+        entry: expect.objectContaining({ name: 'Counter.setup.js' }),
+        scriptIntelligence: expect.objectContaining({ id: 'compose-page-setup' }),
+      }))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'open-setup' }))
+    expect([...dockviewMock.panels.values()]
+      .filter(({ title }) => title === 'Counter.setup.js')).toHaveLength(1)
+  })
+
+  it('页面能力未启用时 setup 文件保持普通 JavaScript 会话', async () => {
+    render(<ComposeEditor assets={{ browser: { provider: createProvider() } }} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'open-setup' }))
+    await waitFor(() => {
+      expect(assetPreviewPropsMock).toHaveBeenCalledWith(expect.objectContaining({
+        entry: expect.objectContaining({ name: 'Counter.setup.js' }),
+        scriptIntelligence: undefined,
+      }))
+    })
   })
 
   it('重复打开同一页面激活既有标签而不新建运行时', async () => {
@@ -454,6 +511,106 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
     })
 
     expect(await screen.findByRole('button', { name: '创建页面' })).toBeDisabled()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 页面 setup 资源流程 / 创建并解除 setup 引用', async () => {
+    const provider = createProvider()
+    const { onActiveSessionChange } = renderEditor(provider)
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+
+    fireEvent.click(screen.getByRole('button', { name: '创建页面脚本' }))
+
+    await waitFor(() => {
+      expect(provider.createFile).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Home.setup.js',
+      }))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => {
+      expect(lastSession(onActiveSessionChange)?.page.setupScript).toEqual(expect.objectContaining({
+        providerId: 'memory',
+        assetKey: 'Home.setup.js',
+      }))
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '解除页面脚本' }))
+    await waitFor(() => {
+      expect(lastSession(onActiveSessionChange)?.page.setupScript).toBeNull()
+    })
+  })
+
+  it('OpenSpec: page-script-runtime / setup revision 重载 / 资源面板更新不取消页面重载', async () => {
+    const listeners = new Set<() => void>()
+    const scriptedPageText = serializeComposePageFile({
+      ...createEmptyComposePageFile(),
+      setupScript: {
+        providerId: 'memory',
+        assetKey: 'dashboard.ts',
+        scope: 'persistent',
+      },
+    })
+    const setupWithValue = (value: number): ComposePageSetup => (ctx) => {
+      const count = ctx.state(value)
+      return { count }
+    }
+    let resolveReload: ((loaded: ComposeLoadedScriptModule) => void) | undefined
+    let loadCount = 0
+    const scriptModuleLoader: ComposeScriptModuleLoader = {
+      load: vi.fn((): Promise<ComposeLoadedScriptModule> => {
+        loadCount += 1
+        if (loadCount === 1) {
+          return Promise.resolve({ module: { setup: setupWithValue(0) }, revision: '1' })
+        }
+        return new Promise<ComposeLoadedScriptModule>((resolve) => { resolveReload = resolve })
+      }),
+    }
+    const provider = createProvider({
+      read: vi.fn(async ({ fileId }) => ({
+        blob: new Blob([fileId === 'home' ? scriptedPageText : 'export {}']),
+        revision: '1',
+      })),
+      resolveAsset: vi.fn(async () => ({
+        blob: new Blob(['export {}']),
+        mediaType: 'text/javascript',
+        revision: '1',
+      })),
+      subscribe(listener) {
+        listeners.add(listener)
+        return () => { listeners.delete(listener) }
+      },
+    })
+    const onActiveSessionChange = vi.fn()
+    render(
+      <ComposeEditor
+        assets={{ browser: { provider } }}
+        pages={{ onActiveSessionChange, scriptModuleLoader }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => {
+      expect(lastSession(onActiveSessionChange)?.scriptScope?.getExport('count'))
+        .toMatchObject({ value: 0 })
+      expect(listeners.size).toBeGreaterThan(0)
+    })
+
+    act(() => { listeners.forEach((listener) => { listener() }) })
+    await waitFor(() => { expect(scriptModuleLoader.load).toHaveBeenCalledTimes(2) })
+    fireEvent.click(screen.getByRole('button', { name: 'open-script' }))
+    await waitFor(() => {
+      expect([...dockviewMock.panels.values()].some((panel) => panel.component === 'assetDocument'))
+        .toBe(true)
+    })
+    await act(async () => {
+      resolveReload?.({ module: { setup: setupWithValue(10) }, revision: '2' })
+      await Promise.resolve()
+    })
+    dockviewMock.activate(pageDocumentPanels()[0]!.id)
+
+    await waitFor(() => {
+      expect(lastSession(onActiveSessionChange)?.scriptScope?.getExport('count'))
+        .toMatchObject({ value: 10 })
+    })
   })
 })
 

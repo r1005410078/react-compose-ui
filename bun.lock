@@ -125,6 +125,7 @@
       "dependencies": {
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/core": "workspace:*",
+        "@compose-ui/script-runtime": "workspace:*",
       },
       "peerDependencies": {
         "react": "^18.3.0 || ^19.0.0",
@@ -170,6 +171,7 @@
         "@compose-ui/pages": "workspace:*",
         "@compose-ui/property-panel": "workspace:*",
         "@compose-ui/scene-tree": "workspace:*",
+        "@compose-ui/script-runtime": "workspace:*",
         "@compose-ui/stage": "workspace:*",
         "@compose-ui/stage-engine": "workspace:*",
         "@compose-ui/ui-context": "workspace:*",
@@ -211,6 +213,7 @@
         "@compose-ui/core": "workspace:*",
         "@compose-ui/layout-engine": "workspace:*",
         "@compose-ui/property-panel": "workspace:*",
+        "@compose-ui/script-runtime": "workspace:*",
         "@compose-ui/ui-context": "workspace:*",
         "dompurify": "^3.2.6",
         "valibot": "^1.4.0",
@@ -248,6 +251,7 @@
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/core": "workspace:*",
         "@compose-ui/layout-engine": "workspace:*",
+        "@compose-ui/script-runtime": "workspace:*",
       },
       "peerDependencies": {
         "react": "^18.3.0 || ^19.0.0",
@@ -283,6 +287,14 @@
         "react-dom": "^18.3.0 || ^19.0.0",
       },
     },
+    "packages/script-runtime": {
+      "name": "@compose-ui/script-runtime",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/assets": "workspace:*",
+        "@compose-ui/core": "workspace:*",
+      },
+    },
     "packages/stage": {
       "name": "@compose-ui/stage",
       "version": "0.1.0",
@@ -291,6 +303,7 @@
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/components": "workspace:*",
         "@compose-ui/core": "workspace:*",
+        "@compose-ui/script-runtime": "workspace:*",
         "@compose-ui/stage-engine": "workspace:*",
         "@compose-ui/ui-context": "workspace:*",
       },
@@ -461,6 +474,8 @@
     "@compose-ui/property-panel": ["@compose-ui/property-panel@workspace:packages/property-panel"],
 
     "@compose-ui/scene-tree": ["@compose-ui/scene-tree@workspace:packages/scene-tree"],
+
+    "@compose-ui/script-runtime": ["@compose-ui/script-runtime@workspace:packages/script-runtime"],
 
     "@compose-ui/stage": ["@compose-ui/stage@workspace:packages/stage"],
 

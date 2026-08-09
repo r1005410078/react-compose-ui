@@ -298,6 +298,9 @@ export function createComposeEntityRegistry(
 ): ComposeEntityRegistry {
   const rendererDefinitions = (options.renderers ?? []).map((definition) => ({
     ...definition,
+    ...(definition.propContracts
+      ? { propContracts: Object.freeze(definition.propContracts.map((item) => Object.freeze({ ...item }))) }
+      : {}),
     ...(definition.measurement
       ? { measurement: Object.freeze({ ...definition.measurement }) }
       : {}),
@@ -307,6 +310,41 @@ export function createComposeEntityRegistry(
     rendererDefinitions,
     ({ type }) => type,
     (definition, index) => {
+      const propNames = new Set<string>()
+      for (const contract of definition.propContracts ?? []) {
+        if (contract.name.trim().length === 0) {
+          throw new ComposeEntityRegistryError('renderer', index, 'Renderer Prop 名称不能为空')
+        }
+        if (propNames.has(contract.name)) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Prop ${contract.name} 重复`,
+          )
+        }
+        propNames.add(contract.name)
+        if (contract.label.trim().length === 0) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Prop ${contract.name} label 不能为空`,
+          )
+        }
+        if (contract.kind === 'value' && typeof contract.validate !== 'function') {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Prop ${contract.name} validate 必须是函数`,
+          )
+        }
+        if (contract.kind === 'method' && contract.role !== 'event-handler') {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer Prop ${contract.name} 只支持 event-handler`,
+          )
+        }
+      }
       const measurement = definition.measurement
       if (!measurement) return
       if (typeof measurement.measure !== 'function') {
@@ -591,6 +629,7 @@ export function createComposeEntityRegistry(
   return Object.freeze({
     getRenderer: (type: string) => renderers.byId.get(type),
     listRenderers: () => renderers.ordered,
+    listRendererPropContracts: (type: string) => renderers.byId.get(type)?.propContracts ?? [],
     getComponent: (key: string) => components.byId.get(key),
     listComponents: () => [...components.ordered].sort((left, right) =>
       (left.order ?? 0) - (right.order ?? 0)),

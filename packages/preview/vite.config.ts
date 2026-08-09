@@ -25,6 +25,7 @@ export default defineConfig({
         '@compose-ui/component-registry',
         '@compose-ui/core',
         '@compose-ui/layout-engine',
+        '@compose-ui/script-runtime',
         'react',
         'react-dom',
         'react/jsx-runtime',

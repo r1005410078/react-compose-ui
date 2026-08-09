@@ -63,9 +63,13 @@ runtime.dispatch({
   `Clip` 都必须依附 `Hierarchy`。
 - `Appearance`：背景、边框、圆角、透明度和阴影。
 - `Renderer`：宿主 Renderer type 与严格 JSON props。
+- `Bindings`：顶层 Renderer Prop 到 `{ scope: 'page', exportName }` 的稳定引用。
 
 未知但合法的 PascalCase Component 会被原样保留。Core 不依赖 Registry；缺失的 Renderer 或
 能力定义由上层降级展示，不导致文档被拒绝。
+
+页面资源使用 `ComposePageFile` 聚合 `document` 与可选 `setupScript`。正常解析只接受包装格式；
+旧裸 v6 文档通过 `migrateLegacyComposePageFile()` 显式迁移，不维持双格式运行路径。
 
 内建 `entity.*` 命令覆盖 Entity 创建、删除、复制、重命名、层级移动、Component 增删更新，
 以及 Transform、Visibility、Lock、Appearance 和 Renderer props 的类型化修改。

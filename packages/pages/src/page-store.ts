@@ -1,16 +1,23 @@
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import { ComposeAssetError, normalizeComposeAssetError } from '@compose-ui/assets'
-import type { ComposeAppManifest, ComposeAppManifestIssue, ComposeDocument, JsonObject } from '@compose-ui/core'
+import type {
+  ComposeAppManifest,
+  ComposeAppManifestIssue,
+  ComposeDocument,
+  ComposePageFile,
+  ComposePageSetupReference,
+  JsonObject,
+} from '@compose-ui/core'
 import {
   COMPOSE_APP_MANIFEST_FILE_NAME,
   COMPOSE_PAGE_MEDIA_TYPE,
   composePageDisplayName,
   createEmptyComposeAppManifest,
-  createEmptyComposePageDocument,
+  createEmptyComposePageFile,
   parseComposeAppManifest,
-  parseComposePageDocument,
+  parseComposePageFile,
   serializeComposeAppManifest,
-  serializeComposePageDocument,
+  serializeComposePageFile,
   setComposeAppManifestHomePage,
 } from '@compose-ui/core'
 import type { ComposePageDescriptor } from './page-catalog'
@@ -31,9 +38,9 @@ export interface ComposePageCatalog {
   readonly manifestIssues: readonly ComposeAppManifestIssue[]
 }
 
-/** 一次读取得到的页面文档与其 Provider revision。 @public */
+/** 一次读取得到的页面聚合文件与其 Provider revision。 @public */
 export interface ComposePageSnapshot {
-  readonly document: ComposeDocument
+  readonly page: ComposePageFile
   readonly revision: string
 }
 
@@ -50,6 +57,8 @@ export interface CreateComposePageInput {
   /** 含页面后缀的文件名，调用方负责先用 `composePageFileName` 规范化。 */
   readonly fileName: string
   /** @defaultValue 空白页面文档 */
+  readonly page?: ComposePageFile
+  /** @deprecated 使用 `page` 提供完整聚合页面。 */
   readonly document?: ComposeDocument
   readonly signal?: AbortSignal
 }
@@ -80,7 +89,7 @@ export interface ComposePageStore {
    */
   readPage(pageKey: string, signal?: AbortSignal): Promise<ComposePageSnapshot>
   /**
-   * 写入页面文档。
+   * 写入完整页面聚合文件。
    *
    * @param expectedRevision - 期望的 Provider revision，用于乐观并发；省略时按空串处理。
    * @param force - 忽略 revision 冲突强制覆盖。
@@ -88,10 +97,24 @@ export interface ComposePageStore {
    */
   writePage(
     pageKey: string,
+    page: ComposePageFile,
+    expectedRevision?: string,
+    force?: boolean,
+  ): Promise<ComposePageSnapshot>
+  /** 替换内部文档并保留当前 setupScript 引用。 */
+  writePageDocument(
+    pageKey: string,
     document: ComposeDocument,
     expectedRevision?: string,
     force?: boolean,
-  ): Promise<ComposePageDescriptor>
+  ): Promise<ComposePageSnapshot>
+  /** 原子关联、更换或解除页面 setup 脚本。 */
+  setPageSetupScript(
+    pageKey: string,
+    setupScript: ComposePageSetupReference | null,
+    expectedRevision?: string,
+    force?: boolean,
+  ): Promise<ComposePageSnapshot>
   createPage(input: CreateComposePageInput): Promise<ComposePageDescriptor>
   readManifest(signal?: AbortSignal): Promise<ComposeAppManifest>
   /**
@@ -307,14 +330,14 @@ export function createComposePageStore(input: {
           catch (error) {
             throw normalizeComposeAssetError(error)
           }
-          const parsed = parseComposePageDocument(text)
+          const parsed = parseComposePageFile(text)
           if (!parsed.ok) {
             throw new ComposeAssetError(
               'io',
               `页面内容不合法：${parsed.issues[0]?.message ?? '未知原因'}`,
             )
           }
-          const snapshot: ComposePageSnapshot = { document: parsed.document, revision }
+          const snapshot: ComposePageSnapshot = { page: parsed.page, revision }
           pageCache.set(pageKey, snapshot)
           return snapshot
         })()
@@ -335,7 +358,7 @@ export function createComposePageStore(input: {
       return consumePageRead(request, signal)
     },
 
-    async writePage(pageKey, document, expectedRevision, force) {
+    async writePage(pageKey, page, expectedRevision, force) {
       const writeFile = provider.writeFile
       if (!writeFile || provider.capabilities.write === false) {
         throw new ComposeAssetError('unsupported', '当前 Provider 不支持写入页面')
@@ -346,7 +369,7 @@ export function createComposePageStore(input: {
         entry = await writeFile.call(provider, {
           fileId: descriptor.entryId,
           content: new Blob(
-            [serializeComposePageDocument(document)],
+            [serializeComposePageFile(page)],
             { type: COMPOSE_PAGE_MEDIA_TYPE },
           ),
           expectedRevision: expectedRevision ?? '',
@@ -356,10 +379,31 @@ export function createComposePageStore(input: {
       catch (error) {
         throw normalizeComposeAssetError(error)
       }
-      pageCache.set(pageKey, { document, revision: entry.revision ?? '' })
+      const snapshot: ComposePageSnapshot = { page, revision: entry.revision ?? '' }
+      pageCache.set(pageKey, snapshot)
       catalogCache = null
       emit({ type: 'page-changed', pageKey })
-      return { ...descriptor, revision: entry.revision, modifiedAt: entry.modifiedAt }
+      return snapshot
+    },
+
+    async writePageDocument(pageKey, document, expectedRevision, force) {
+      const current = await this.readPage(pageKey)
+      return this.writePage(
+        pageKey,
+        { ...current.page, document },
+        expectedRevision ?? current.revision,
+        force,
+      )
+    },
+
+    async setPageSetupScript(pageKey, setupScript, expectedRevision, force) {
+      const current = await this.readPage(pageKey)
+      return this.writePage(
+        pageKey,
+        { ...current.page, setupScript },
+        expectedRevision ?? current.revision,
+        force,
+      )
     },
 
     async createPage(createInput) {
@@ -367,14 +411,16 @@ export function createComposePageStore(input: {
       if (!createFile || provider.capabilities.createFile === false) {
         throw new ComposeAssetError('unsupported', '当前 Provider 不支持创建页面')
       }
-      const document = createInput.document ?? createEmptyComposePageDocument()
+      const page = createInput.page ?? (createInput.document
+        ? { ...createEmptyComposePageFile(), document: createInput.document }
+        : createEmptyComposePageFile())
       let entry: ComposeAssetEntry
       try {
         entry = await createFile.call(provider, {
           parentId: createInput.parentId ?? provider.root.id,
           name: createInput.fileName,
           content: new Blob(
-            [serializeComposePageDocument(document)],
+            [serializeComposePageFile(page)],
             { type: COMPOSE_PAGE_MEDIA_TYPE },
           ),
           signal: createInput.signal,
@@ -390,7 +436,7 @@ export function createComposePageStore(input: {
         )
       }
       catalogCache = null
-      pageCache.set(entry.assetKey, { document, revision: entry.revision ?? '' })
+      pageCache.set(entry.assetKey, { page, revision: entry.revision ?? '' })
       emit({ type: 'catalog-changed' })
       return {
         pageKey: entry.assetKey,

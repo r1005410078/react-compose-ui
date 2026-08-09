@@ -1,5 +1,6 @@
-import type { TransactionRuntime } from '@compose-ui/core'
+import type { ComposePageFile, TransactionRuntime } from '@compose-ui/core'
 import type { ComposePageStore } from '@compose-ui/pages'
+import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 
 /** 当前活动页面的最小对外描述。 @public */
 export interface ComposeEditorActivePage {
@@ -16,6 +17,10 @@ export interface ComposeEditorActivePage {
    * 标签后仍然保留。
    */
   readonly runtime: TransactionRuntime
+  /** 页面文件聚合；宿主可据此组合独立 Preview。 */
+  readonly page: ComposePageFile
+  /** 当前页面标签独占的 setup 返回作用域。 */
+  readonly scriptScope?: ComposePageScriptScope
 }
 
 /** Editor 的页面系统集成配置。 @public */
@@ -27,6 +32,8 @@ export interface ComposeEditorPagesConfig {
    * 宿主自行创建 Store 时可与独立 Preview 共用同一实例，从而共享页面文档缓存。
    */
   readonly store?: ComposePageStore
+  /** 页面 setup 使用的可替换模块 Loader；省略时由资源 Resolver 创建默认 JavaScript Loader。 */
+  readonly scriptModuleLoader?: ComposeScriptModuleLoader
   /**
    * 活动页面变更回调。
    *

@@ -1,4 +1,4 @@
-import type { ComposeDocument, ComposePageDocumentLoader, ComposePageReference } from '@compose-ui/core'
+import type { ComposePageLoader, ComposePageReference } from '@compose-ui/core'
 import type { ComposePageStore } from './page-store'
 
 /**
@@ -9,18 +9,18 @@ import type { ComposePageStore } from './page-store'
  * 重复加载命中 Store 缓存，因此同一页面被多个槽位引用时只会读取一次。
  * @public
  */
-export function createComposePageDocumentLoader(
+export function createComposePageLoader(
   store: ComposePageStore,
-): ComposePageDocumentLoader {
+): ComposePageLoader {
   const belongsToStore = (reference: ComposePageReference) =>
     reference.providerId === store.providerId
 
   return {
-    async load(reference, signal): Promise<ComposeDocument> {
+    async load(reference, signal) {
       if (!belongsToStore(reference)) {
         throw new Error(`页面引用不属于当前 Provider：${reference.providerId}`)
       }
-      return (await store.readPage(reference.assetKey, signal)).document
+      return (await store.readPage(reference.assetKey, signal)).page
     },
     subscribe(reference, listener) {
       if (!belongsToStore(reference)) return () => undefined
@@ -31,3 +31,6 @@ export function createComposePageDocumentLoader(
     },
   }
 }
+
+/** @deprecated 使用 {@link createComposePageLoader}。 @public */
+export const createComposePageDocumentLoader = createComposePageLoader

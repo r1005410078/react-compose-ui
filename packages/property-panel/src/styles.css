@@ -1116,3 +1116,17 @@
   padding: 4px;
   color: var(--property-text-muted);
 }
+
+.property-panel__binding-only-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px;
+}
+
+.property-panel__binding-only-row > [role='alert'] {
+  grid-column: 1 / -1;
+  color: var(--property-danger, #ef4444);
+}

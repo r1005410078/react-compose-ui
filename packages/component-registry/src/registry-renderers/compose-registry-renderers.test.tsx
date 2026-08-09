@@ -194,6 +194,7 @@ describe('Entity Registry React boundaries', () => {
     expect(screen.getByText('preview:Hello')).toBeInTheDocument()
     expect(renderer).toHaveBeenCalledWith(expect.objectContaining({
       entity: expect.objectContaining({ id: 'entity-a' }),
+      authoredProps: { text: 'Hello' },
       renderer: { type: 'text', props: { text: 'Hello' } },
     }), undefined)
   })

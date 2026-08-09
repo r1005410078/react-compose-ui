@@ -40,6 +40,7 @@ import type {
   ComposePaintEditPort,
 } from '@compose-ui/component-registry'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
+import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import type {
   ComposeSceneTreeNode,
   ComposeSceneTreeOperation,
@@ -221,6 +222,8 @@ export interface UseComposeEditorControllerOptions {
    * 呈现占位状态。
    */
   readonly pageLoader?: ComposePageDocumentLoader
+  /** 当前页面实例的 setup 返回作用域；用于 Stage value 绑定与 Inspector 候选。 */
+  readonly scriptScope?: ComposePageScriptScope
 }
 
 /**
@@ -345,6 +348,7 @@ export function useComposeEditorController({
   idFactory = defaultIdFactory,
   nodeEditPort,
   pageLoader,
+  scriptScope,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
   // Layout 订阅先于文档订阅建立，保证同一次事务的 document/Snapshot 成对发布。
   const layoutSession = useComposeEditorLayout(runtime)
@@ -552,6 +556,7 @@ export function useComposeEditorController({
     layoutRuntime: layoutSession.runtime,
     registry,
     pageLoader,
+    scriptScope,
     dispatch,
     // 视口不参与 memo 依赖：它是外部状态源，读取时取当前快照，订阅由渲染 Stage 的组件负责。
     // 宿主如果自己渲染 ComposeStage，需要用 useComposeStageViewport 订阅才能随平移重渲。
@@ -578,6 +583,7 @@ export function useComposeEditorController({
     layoutSession.runtime,
     registry,
     pageLoader,
+    scriptScope,
     dispatch,
     viewportStore,
     setViewport,
@@ -746,6 +752,7 @@ export function useComposeEditorController({
       nodeEditPort={nodeEditPort}
       paintEditPort={paintEditPort}
       registry={registry}
+      scriptScope={scriptScope}
     />
   ) : (
     <DefaultEmptyInspector />

@@ -7,6 +7,7 @@ import {
 } from 'react'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { getAssetScriptLanguage } from './script-language'
+import type { ComposeScriptIntelligenceProfile } from './script-intelligence'
 
 interface ScriptEditorProps {
   readonly content: Blob
@@ -21,6 +22,8 @@ interface ScriptEditorProps {
    * @defaultValue false
    */
   readonly readOnly?: boolean
+  /** 可选的隐藏 JavaScript 类型分析配置。 */
+  readonly scriptIntelligence?: ComposeScriptIntelligenceProfile
   readonly onDirtyChange: (dirty: boolean) => void
   readonly onSave: (
     content: string,
@@ -43,6 +46,7 @@ export const ScriptEditor = forwardRef<ComposeScriptEditorHandle, ScriptEditorPr
   revision,
   loadingLabel,
   readOnly = false,
+  scriptIntelligence,
   theme,
 }: ScriptEditorProps, ref) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -78,11 +82,26 @@ export const ScriptEditor = forwardRef<ComposeScriptEditorHandle, ScriptEditorPr
         `compose-asset://${encodeURIComponent(providerId)}/${encodeURIComponent(entry.id)}`,
       )
       monaco.editor.getModel(uri)?.dispose()
-      const model = monaco.editor.createModel(text, getAssetScriptLanguage(entry.name), uri)
+      if (scriptIntelligence) runtime.prepareComposeIntelligentJavaScript()
+      const model = monaco.editor.createModel(
+        text,
+        scriptIntelligence
+          ? runtime.COMPOSE_INTELLIGENT_JAVASCRIPT_LANGUAGE
+          : getAssetScriptLanguage(entry.name),
+        uri,
+      )
+      const intelligenceSession = scriptIntelligence
+        ? runtime.createComposeScriptIntelligenceSession({
+            model,
+            profile: scriptIntelligence,
+          })
+        : null
       const editor = monaco.editor.create(host, {
         model,
         automaticLayout: false,
         minimap: { enabled: false },
+        // 类型继续由 shadow model 推导，但不以内联文字挤占用户源码空间。
+        inlayHints: { enabled: 'off' },
         // domReadOnly 一并关闭 contenteditable，使宿主无法绕过 Monaco 的只读检查直接输入。
         readOnly: readOnlyRef.current,
         domReadOnly: readOnlyRef.current,
@@ -120,6 +139,7 @@ export const ScriptEditor = forwardRef<ComposeScriptEditorHandle, ScriptEditorPr
       cleanup = () => {
         observer?.disconnect()
         change?.dispose()
+        intelligenceSession?.dispose()
         editor.dispose()
         model.dispose()
         executeSaveRef.current = null
@@ -131,7 +151,7 @@ export const ScriptEditor = forwardRef<ComposeScriptEditorHandle, ScriptEditorPr
       disposed = true
       cleanup()
     }
-  }, [content, entry.id, entry.name, onDirtyChange, providerId])
+  }, [content, entry.id, entry.name, onDirtyChange, providerId, scriptIntelligence])
 
   useEffect(() => {
     setThemeRef.current?.(theme)

@@ -45,7 +45,15 @@ const DEFAULT_MESSAGES: ComposePreviewDialogMessages = {
 
 /** ComposePreviewDialog 属性。 @public */
 export interface ComposePreviewDialogProps extends Pick<ComposePreviewProps,
-  'assetResolver' | 'document' | 'layoutRuntime' | 'layoutSnapshot' | 'pageLoader' | 'registry'> {
+  | 'assetResolver'
+  | 'document'
+  | 'layoutRuntime'
+  | 'layoutSnapshot'
+  | 'page'
+  | 'pageLoader'
+  | 'registry'
+  | 'scriptModuleLoader'
+  | 'scriptScope'> {
   /** 是否显示对话框；状态完全由宿主控制。 */
   readonly open: boolean
   /** 用户请求打开或关闭对话框时调用。 */
@@ -97,6 +105,7 @@ export function ComposePreviewDialog({
   containerId,
   dialogLabel,
   document: composeDocument,
+  page,
   layoutRuntime,
   layoutSnapshot,
   messages: messageOverrides,
@@ -104,6 +113,8 @@ export function ComposePreviewDialog({
   open,
   pageLoader,
   registry,
+  scriptModuleLoader,
+  scriptScope,
 }: ComposePreviewDialogProps) {
   const messages = { ...DEFAULT_MESSAGES, ...messageOverrides }
   const titleId = useId()
@@ -230,10 +241,13 @@ export function ComposePreviewDialog({
             <ComposePreview
               assetResolver={assetResolver}
               document={composeDocument}
+              page={page}
               layoutRuntime={layoutRuntime}
               layoutSnapshot={layoutSnapshot}
               pageLoader={pageLoader}
               registry={registry}
+              scriptModuleLoader={scriptModuleLoader}
+              scriptScope={scriptScope}
               target={previewTarget}
             />
           </div>

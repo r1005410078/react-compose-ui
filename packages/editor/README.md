@@ -63,3 +63,14 @@ History 和右键菜单都显示当前实例实际生效的键位。偏好默认
 
 默认 Dockview 布局禁止面板关闭、浮动与任意拖拽。宿主可以通过 `slots` 覆盖领域区域；Editor
 不依赖 operation-log，也不会把 Dockview 类型或示例应用状态暴露为公共 API。
+
+启用 `pages` 后，页面标签保存完整 `ComposePageFile` 聚合并保留 setup 引用。资源菜单可创建、打开、
+更换或解除 `.setup.js`；Inspector 展示页面返回成员/诊断，并依据 Renderer Prop Contract 将绑定写入
+可撤销的 `Bindings` Component。宿主切换 controller 时应同时传入 `activePage.runtime` 与
+`activePage.scriptScope`。脚本是受信任同 Realm JavaScript，不是沙箱，也不编译 TypeScript。
+
+页面能力启用时，通过页面菜单打开或文件名匹配 `*.setup.js` 的资源会话会启用隐藏类型层。用户仍编辑
+原始 JavaScript：Editor 只在 Asset Browser 的 shadow model 中加入 `@ts-check`、Runtime `.d.ts` 与
+setup 参数类型，因此 `ctx.`、State/Computed `.value` 和返回对象可以获得 Monaco 提示。标准导出支持
+`export function setup(ctx)`、箭头函数和函数表达式三种形式；无法识别时给出非阻断提示并保留普通
+JavaScript 编辑。语法或类型 marker 不参与保存判断，Provider 永远不会收到隐藏声明。

@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from 'react'
+import type { ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import type {
   ComposeAssetReference,
   ComposeAssetResolver,
@@ -35,8 +36,10 @@ export interface ComposeRendererProps {
   readonly entity: ComposeEntity
   /** 已通过 Core 校验的 Renderer Component。 */
   readonly renderer: ComposeRenderer
-  /** Renderer Component 中的严格 JSON 属性。 */
-  readonly props: JsonObject
+  /** 应用页面绑定后的实际 React Props，可包含 Function。 */
+  readonly props: ComposeRuntimeProps
+  /** Renderer Component 中未经绑定覆盖的严格 JSON 属性。 */
+  readonly authoredProps: JsonObject
   /** 编辑 Stage 与只读 Preview 的渲染语义。 */
   readonly mode: 'editor' | 'preview'
   /** 资源型 Renderer 使用的可选运行时端口。 */
@@ -49,6 +52,8 @@ export interface ComposeRendererProps {
    * 接受该端口时不会依赖任何页面实现包。
    */
   readonly pageDocumentPort?: ComposePageDocumentLoader
+  /** 页面 setup 模块的可替换加载端口；Page Slot 为每个嵌套实例单独使用。 */
+  readonly scriptModuleLoader?: ComposeScriptModuleLoader
   /**
    * 当前实例的 Entity Registry。
    *
@@ -56,6 +61,41 @@ export interface ComposeRendererProps {
    * 只有需要递归渲染其他 Entity 的 Renderer（如页面槽位）才会用到；普通物料可以忽略。
    */
   readonly registry: ComposeEntityRegistry
+}
+
+/** 传给宿主 React Renderer 的运行时 Props。 @public */
+export type ComposeRuntimeProps = Readonly<Record<string, unknown>>
+
+/** Renderer 可绑定顶层 Prop 的显式运行时契约。 @public */
+export type ComposeRendererPropContract =
+  | {
+      readonly name: string
+      readonly kind: 'value'
+      readonly label: string
+      readonly validate: (value: unknown) => true | string
+      /** @defaultValue true */
+      readonly affectsMeasurement?: boolean
+    }
+  | {
+      readonly name: string
+      readonly kind: 'method'
+      readonly label: string
+      readonly role: 'event-handler'
+    }
+
+/** 单个绑定解析失败的非阻断诊断。 @public */
+export interface ComposeRendererBindingDiagnostic {
+  readonly code:
+    | 'binding.unknown-prop'
+    | 'binding.missing-export'
+    | 'binding.kind-mismatch'
+    | 'binding.validation-failed'
+    | 'binding.validator-threw'
+  readonly entityId: string
+  readonly propName: string
+  readonly exportName: string
+  readonly message: string
+  readonly cause?: unknown
 }
 
 /**
@@ -149,6 +189,8 @@ export interface ComposeRendererDefinition {
   readonly label: string
   /** Stage 与 Preview 共享的宿主 React Renderer。 */
   readonly renderer: ComponentType<ComposeRendererProps>
+  /** 可绑定顶层 React Props；省略时 Renderer 只使用 authored Props。 */
+  readonly propContracts?: readonly ComposeRendererPropContract[]
   /** 可选 Renderer 内容 Inspector。 */
   readonly inspector?: ComponentType<ComposeRendererInspectorProps>
   /**
@@ -165,7 +207,8 @@ export interface ComposeRendererDefinition {
 export interface ComposeRendererMeasureInput {
   readonly entity: ComposeEntity
   readonly renderer: ComposeRenderer
-  readonly props: JsonObject
+  readonly props: ComposeRuntimeProps
+  readonly authoredProps: JsonObject
   readonly width: ComposeMeasureConstraint
   readonly height: ComposeMeasureConstraint
   /** `prepare` 完成后的不透明缓存；没有 prepare 时为 undefined。 */
@@ -176,7 +219,8 @@ export interface ComposeRendererMeasureInput {
 export interface ComposeRendererPrepareInput {
   readonly entity: ComposeEntity
   readonly renderer: ComposeRenderer
-  readonly props: JsonObject
+  readonly props: ComposeRuntimeProps
+  readonly authoredProps: JsonObject
   readonly assetResolver?: ComposeAssetResolver
   readonly pageDocumentPort?: ComposePageDocumentLoader
   readonly signal: AbortSignal
@@ -186,7 +230,8 @@ export interface ComposeRendererPrepareInput {
 export interface ComposeRendererMeasurementSubscriptionInput {
   readonly entity: ComposeEntity
   readonly renderer: ComposeRenderer
-  readonly props: JsonObject
+  readonly props: ComposeRuntimeProps
+  readonly authoredProps: JsonObject
   readonly assetResolver?: ComposeAssetResolver
   readonly pageDocumentPort?: ComposePageDocumentLoader
   readonly invalidate: () => void
@@ -398,6 +443,8 @@ export interface ComposeEntityRegistry {
   getRenderer(type: string): ComposeRendererDefinition | undefined
   /** 按注册顺序列出 Renderer 定义。 */
   listRenderers(): readonly ComposeRendererDefinition[]
+  /** 按声明顺序列出一个 Renderer 的显式 Prop Contract。 */
+  listRendererPropContracts(type: string): readonly ComposeRendererPropContract[]
   /** 按 PascalCase Component Key 查找定义。 */
   getComponent(key: string): ComposeComponentDefinition | undefined
   /** 按 order 和注册顺序列出 Component 定义。 */

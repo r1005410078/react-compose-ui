@@ -78,6 +78,8 @@ export interface PropertyPanelVariable {
   scope: 'page' | 'global'
   /** 当前解析值；改变它只会更新 effective value。 */
   value: unknown
+  /** 返回成员类别；省略时为兼容旧宿主按 value 处理。 */
+  kind?: 'value' | 'method'
   /** 变量选择器中的可选补充说明。 */
   description?: string
   /** 变量允许匹配的可选业务语义范围。 */

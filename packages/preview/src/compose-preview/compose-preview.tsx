@@ -13,7 +13,7 @@ import {
   composeEntitySceneStyle,
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposePageDocumentLoader } from '@compose-ui/core'
+import type { ComposePageDocumentLoader, ComposePageFile } from '@compose-ui/core'
 import {
   COMPOSE_UI_CORE_PACKAGE,
   getComposeHierarchy,
@@ -32,6 +32,13 @@ import type {
 } from '@compose-ui/core'
 import type { CSSProperties, HTMLAttributes } from 'react'
 import type { ComposeLayoutRuntime } from '@compose-ui/layout-engine'
+import {
+  createComposeJavaScriptModuleLoader,
+  loadComposePageScriptScope,
+  type ComposePageScriptScope,
+  type ComposeScriptModuleLoader,
+} from '@compose-ui/script-runtime'
+import { useEffect, useMemo, useState } from 'react'
 import { useComposePreviewLayout } from './use-layout-runtime'
 
 /**
@@ -41,7 +48,9 @@ import { useComposePreviewLayout } from './use-layout-runtime'
  */
 export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
   /** 文档模式的正式 JSON 文档。 */
-  readonly document: ComposeDocument
+  readonly document?: ComposeDocument
+  /** 聚合页面模式；提供后 Preview 为该实例加载并运行 setup。 */
+  readonly page?: ComposePageFile
   /** 宿主可注入已求解快照；省略时 Preview 创建并拥有独立 LayoutRuntime。 */
   readonly layoutSnapshot?: ComposeLayoutSnapshot
   /** 宿主拥有的 Layout Runtime；Preview 挂接 measurement 但不会在卸载时释放它。 */
@@ -57,6 +66,10 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
    * Preview 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
    */
   readonly pageLoader?: ComposePageDocumentLoader
+  /** 已由宿主创建的页面作用域；独立 document 模式也可显式注入。 */
+  readonly scriptScope?: ComposePageScriptScope
+  /** 页面及嵌套 Page Slot 使用的可替换脚本模块 Loader。 */
+  readonly scriptModuleLoader?: ComposeScriptModuleLoader
   /** 输出完整文档或某个根级/嵌套 Container；省略时输出完整文档。 */
   readonly target?: ComposePreviewTarget
 }
@@ -155,6 +168,8 @@ function PreviewEntity({
   layoutSnapshot,
   registry,
   entityId,
+  scriptScope,
+  scriptModuleLoader,
 }: {
   assetResolver?: ComposeAssetResolver
   pageLoader?: ComposePageDocumentLoader
@@ -162,6 +177,8 @@ function PreviewEntity({
   layoutSnapshot: ComposeLayoutSnapshot
   registry: ComposeEntityRegistry
   entityId: string
+  scriptScope?: ComposePageScriptScope
+  scriptModuleLoader?: ComposeScriptModuleLoader
 }) {
   const entity = document.entities[entityId]
   if (!entity || !getComposeVisibility(entity).visible) return null
@@ -177,6 +194,8 @@ function PreviewEntity({
         mode="preview"
         pageDocumentPort={pageLoader}
         registry={registry}
+        scriptModuleLoader={scriptModuleLoader}
+        scriptScope={scriptScope}
       />
       {hierarchy?.childIds.map((childId) => (
         <PreviewEntity
@@ -187,6 +206,8 @@ function PreviewEntity({
           entityId={childId}
           key={childId}
           registry={registry}
+          scriptModuleLoader={scriptModuleLoader}
+          scriptScope={scriptScope}
         />
       ))}
       {hierarchy ? (
@@ -214,10 +235,17 @@ function ComposePreviewReady({
   registry,
   assetResolver,
   pageLoader,
+  page: _page,
+  scriptScope,
+  scriptModuleLoader,
   target = { kind: 'document' },
   ...props
-}: ComposePreviewProps & { readonly layoutSnapshot: ComposeLayoutSnapshot }) {
+}: ComposePreviewProps & {
+  readonly document: ComposeDocument
+  readonly layoutSnapshot: ComposeLayoutSnapshot
+}) {
   void _layoutRuntime
+  void _page
   const content = target.kind === 'document'
     ? (
       <div
@@ -239,6 +267,8 @@ function ComposePreviewReady({
             entityId={entityId}
             key={entityId}
             registry={registry}
+            scriptModuleLoader={scriptModuleLoader}
+            scriptScope={scriptScope}
           />
         ))}
       </div>
@@ -268,6 +298,8 @@ function ComposePreviewReady({
                       mode="preview"
                       pageDocumentPort={pageLoader}
                       registry={registry}
+                      scriptModuleLoader={scriptModuleLoader}
+                      scriptScope={scriptScope}
                     />
                     {hierarchy.childIds.map((childId) => (
                       <PreviewEntity
@@ -278,6 +310,8 @@ function ComposePreviewReady({
                         entityId={childId}
                         key={childId}
                         registry={registry}
+                        scriptModuleLoader={scriptModuleLoader}
+                        scriptScope={scriptScope}
                       />
                     ))}
                     <PreviewContentExtent
@@ -325,13 +359,14 @@ function ComposePreviewReady({
   )
 }
 
-function ManagedComposePreview(props: ComposePreviewProps) {
+function ManagedComposePreview(props: ComposePreviewProps & { readonly document: ComposeDocument }) {
   const state = useComposePreviewLayout(
     props.document,
     props.registry,
     props.assetResolver,
     props.pageLoader,
     props.layoutRuntime,
+    props.scriptScope,
   )
   if (state.status === 'loading') {
     return (
@@ -352,7 +387,71 @@ function ManagedComposePreview(props: ComposePreviewProps) {
 
 /** 用普通 DOM 预览 ComposeDocument v6 输出。 @public */
 export function ComposePreview(props: ComposePreviewProps) {
-  return props.layoutSnapshot
-    ? <ComposePreviewReady {...props} layoutSnapshot={props.layoutSnapshot} />
-    : <ManagedComposePreview {...props} />
+  const ownedScope = useComposePreviewPageScope(
+    props.page,
+    props.assetResolver,
+    props.scriptModuleLoader,
+  )
+  const document = props.document ?? props.page?.document
+  if (!document) return <section role="alert">Preview 缺少 ComposeDocument 或页面</section>
+  const resolvedProps = {
+    ...props,
+    document,
+    scriptScope: props.scriptScope ?? ownedScope,
+  }
+  return resolvedProps.layoutSnapshot
+    ? <ComposePreviewReady {...resolvedProps} layoutSnapshot={resolvedProps.layoutSnapshot} />
+    : <ManagedComposePreview {...resolvedProps} />
+}
+
+function useComposePreviewPageScope(
+  page: ComposePageFile | undefined,
+  assetResolver: ComposeAssetResolver | undefined,
+  providedLoader: ComposeScriptModuleLoader | undefined,
+): ComposePageScriptScope | undefined {
+  const [loadedScope, setLoadedScope] = useState<{
+    readonly key: string
+    readonly scope: ComposePageScriptScope
+  }>()
+  const [reloadToken, setReloadToken] = useState(0)
+  const defaultLoader = useMemo(() => assetResolver
+    ? createComposeJavaScriptModuleLoader({ assetResolver })
+    : undefined, [assetResolver])
+  const loader = providedLoader ?? defaultLoader
+  const setupKey = page?.setupScript
+    ? `${page.setupScript.providerId}:${page.setupScript.assetKey}:${page.setupScript.scope}`
+    : null
+  const loadKey = setupKey === null ? null : `${setupKey}:${reloadToken}`
+
+  useEffect(() => {
+    if (!page?.setupScript) return undefined
+    return assetResolver?.subscribe?.(page.setupScript, () => {
+      setReloadToken((current) => current + 1)
+    })
+  }, [assetResolver, setupKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!page?.setupScript || !loader || loadKey === null) return undefined
+    const controller = new AbortController()
+    let disposed = false
+    let loadedScope: ComposePageScriptScope | undefined
+    void loadComposePageScriptScope({
+      reference: page.setupScript,
+      loader,
+      signal: controller.signal,
+    }).then((loaded) => {
+      if (disposed) {
+        loaded.scope.dispose()
+        return
+      }
+      loadedScope = loaded.scope
+      setLoadedScope({ key: loadKey, scope: loaded.scope })
+    })
+    return () => {
+      disposed = true
+      controller.abort()
+      loadedScope?.dispose()
+    }
+  }, [loader, loadKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  return loadedScope?.key === loadKey ? loadedScope.scope : undefined
 }

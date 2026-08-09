@@ -1,6 +1,7 @@
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
   getComposeRenderer,
+  getComposeBindings,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutMeasurementDiagnostic,
@@ -9,6 +10,8 @@ import {
   type ComposePageDocumentLoader,
   type JsonValue,
 } from '@compose-ui/core'
+import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
+import { resolveComposeRendererRuntimeProps } from '../registry/runtime-props'
 import type {
   ComposeEntityRegistry,
   ComposeRendererDefinition,
@@ -20,6 +23,7 @@ export interface ComposeRendererMeasurementAdapterOptions {
   readonly registry: ComposeEntityRegistry
   readonly assetResolver?: ComposeAssetResolver
   readonly pageDocumentPort?: ComposePageDocumentLoader
+  readonly scriptScope?: ComposePageScriptScope
 }
 
 /** Registry measurement 到 Core Layout port 的可释放适配器。 @public */
@@ -41,6 +45,7 @@ type MeasurementEntry = {
   status: 'idle' | 'preparing' | 'ready' | 'failed'
   controller?: AbortController
   unsubscribe?: () => void
+  scopeUnsubscribers?: readonly (() => void)[]
 }
 
 function stableJson(value: JsonValue): string {
@@ -114,10 +119,17 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
     if (entry.status === 'failed') return null
 
     try {
+      const resolved = resolveComposeRendererRuntimeProps({
+        entity: input.entity,
+        definition,
+        scope: this.options.scriptScope,
+        methodMode: 'noop',
+      })
       const measured = measurement.measure({
         entity: input.entity,
         renderer,
-        props: renderer.props,
+        props: resolved.props,
+        authoredProps: resolved.authoredProps,
         width: input.width,
         height: input.height,
         prepared: entry.prepared,
@@ -202,11 +214,18 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
     this.entries.set(entity.id, entry)
     if (measurement.subscribe) {
       const renderer = getComposeRenderer(entity)!
+      const resolved = resolveComposeRendererRuntimeProps({
+        entity,
+        definition,
+        scope: this.options.scriptScope,
+        methodMode: 'noop',
+      })
       try {
         entry.unsubscribe = measurement.subscribe({
           entity,
           renderer,
-          props: renderer.props,
+          props: resolved.props,
+          authoredProps: resolved.authoredProps,
           assetResolver: this.options.assetResolver,
           pageDocumentPort: this.options.pageDocumentPort,
           invalidate: () => this.invalidateEntry(entry),
@@ -219,6 +238,21 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
         ))
       }
     }
+    const bindings = getComposeBindings(entity)
+    if (bindings && this.options.scriptScope) {
+      const contracts = new Map((definition.propContracts ?? []).map((contract) => [
+        contract.name,
+        contract,
+      ]))
+      entry.scopeUnsubscribers = Object.entries(bindings.props).flatMap(([propName, reference]) => {
+        const contract = contracts.get(propName)
+        if (contract?.kind !== 'value' || contract.affectsMeasurement === false) return []
+        return [this.options.scriptScope!.subscribeExport(
+          reference.exportName,
+          () => this.invalidateEntry(entry),
+        )]
+      })
+    }
     return entry
   }
 
@@ -229,10 +263,17 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
     entry.controller = controller
     entry.status = 'preparing'
     const generation = entry.generation
+    const resolved = resolveComposeRendererRuntimeProps({
+      entity: entry.entity,
+      definition: entry.definition,
+      scope: this.options.scriptScope,
+      methodMode: 'noop',
+    })
     void Promise.resolve().then(() => prepare({
       entity: entry.entity,
       renderer,
-      props: renderer.props,
+      props: resolved.props,
+      authoredProps: resolved.authoredProps,
       assetResolver: this.options.assetResolver,
       pageDocumentPort: this.options.pageDocumentPort,
       signal: controller.signal,
@@ -274,6 +315,7 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
   private releaseEntry(entry: MeasurementEntry) {
     entry.controller?.abort()
     entry.unsubscribe?.()
+    entry.scopeUnsubscribers?.forEach((unsubscribe) => { unsubscribe() })
   }
 
   private emit(entityIds?: readonly string[]) {

@@ -1,12 +1,15 @@
-import { Component, type ReactNode } from 'react'
+import { Component, type ReactNode, useEffect, useReducer } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
+  getComposeBindings,
   getComposeRenderer,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
   type EditorCommand,
 } from '@compose-ui/core'
+import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
+import { resolveComposeRendererRuntimeProps } from '../registry/runtime-props'
 import type { ComposeEntityRegistry } from '../registry/types'
 import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import type { ComposeNodeEditPort, ComposePaintEditPort } from '../registry/types'
@@ -72,13 +75,28 @@ export function ComposeRegistryEntityRenderer({
   mode,
   assetResolver,
   pageDocumentPort,
+  scriptScope,
+  scriptModuleLoader,
 }: {
   readonly registry: ComposeEntityRegistry
   readonly entity: ComposeEntity
   readonly mode: 'editor' | 'preview'
   readonly assetResolver?: ComposeAssetResolver
   readonly pageDocumentPort?: ComposePageDocumentLoader
+  /** 当前页面渲染实例的可选 setup 返回作用域。 */
+  readonly scriptScope?: ComposePageScriptScope
+  readonly scriptModuleLoader?: ComposeScriptModuleLoader
 }) {
+  const [, refreshBindings] = useReducer((revision: number) => revision + 1, 0)
+  const bindings = getComposeBindings(entity)
+  useEffect(() => {
+    if (!scriptScope || !bindings) return undefined
+    const unsubscribers = [...new Set(
+      Object.values(bindings.props).map(({ exportName }) => exportName),
+    )].map((exportName) => scriptScope.subscribeExport(exportName, refreshBindings))
+    return () => { unsubscribers.forEach((unsubscribe) => { unsubscribe() }) }
+  }, [bindings, scriptScope])
+
   const renderer = getComposeRenderer(entity)
   if (!renderer) return null
   const definition = registry.getRenderer(renderer.type)
@@ -90,16 +108,24 @@ export function ComposeRegistryEntityRenderer({
     )
   }
   const Renderer = definition.renderer
+  const resolved = resolveComposeRendererRuntimeProps({
+    entity,
+    definition,
+    scope: scriptScope,
+    methodMode: mode === 'editor' ? 'noop' : 'invoke',
+  })
   return (
     <DefinitionErrorBoundary area="renderer" identity={renderer.type} resetSignal={renderer}>
       <Renderer
         assetResolver={assetResolver}
+        authoredProps={resolved.authoredProps}
         entity={entity}
         mode={mode}
         pageDocumentPort={pageDocumentPort}
-        props={renderer.props}
+        props={resolved.props}
         registry={registry}
         renderer={renderer}
+        scriptModuleLoader={scriptModuleLoader}
       />
     </DefinitionErrorBoundary>
   )

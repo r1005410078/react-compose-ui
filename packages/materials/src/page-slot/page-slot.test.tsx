@@ -1,6 +1,7 @@
 import type {
   ComposeDocument,
-  ComposePageDocumentLoader,
+  ComposePageFile,
+  ComposePageLoader,
   ComposePageReference,
 } from '@compose-ui/core'
 import {
@@ -8,9 +9,11 @@ import {
   COMPOSE_PAGE_NEST_DEPTH_LIMIT,
   createDefaultComposeLayoutItem,
   createEmptyComposePageDocument,
-  serializeComposePageDocument,
+  createEmptyComposePageFile,
+  serializeComposePageFile,
 } from '@compose-ui/core'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposeBasicMaterials } from '../create-basic-materials'
 import { ComposePageSlotNestProvider } from './nest-context'
@@ -82,12 +85,17 @@ function nestedDocument(): ComposeDocument {
   } as ComposeDocument
 }
 
+function page(document: ComposeDocument): ComposePageFile {
+  return { ...createEmptyComposePageFile(), document }
+}
+
 function renderSlot(options: {
-  readonly loader?: ComposePageDocumentLoader
+  readonly loader?: ComposePageLoader
   readonly mode?: 'editor' | 'preview'
   readonly ancestors?: readonly string[]
   readonly page?: unknown
   readonly onPointerDown?: () => void
+  readonly scriptModuleLoader?: ComposeScriptModuleLoader
 } = {}) {
   const materials = createComposeBasicMaterials()
   const definition = materials.rendererDefinitions
@@ -101,12 +109,14 @@ function renderSlot(options: {
         depth={options.ancestors?.length ?? 0}
       >
         <Renderer
+          authoredProps={{ page: (options.page === undefined ? reference : options.page) as never }}
           entity={outerDocument().entities.slot!}
           mode={options.mode ?? 'preview'}
           pageDocumentPort={options.loader}
           props={{ page: (options.page === undefined ? reference : options.page) as never }}
           registry={materials.registry}
           renderer={{ type: 'page-slot', props: {} }}
+          scriptModuleLoader={options.scriptModuleLoader}
         />
       </ComposePageSlotNestProvider>
     </div>,
@@ -118,7 +128,7 @@ afterEach(cleanup)
 
 describe('OpenSpec: basic-materials / Page Slot 编辑态不抢命中测试', () => {
   it('编辑模式下嵌套内容整体不接收指针事件', async () => {
-    const load = vi.fn(async () => nestedDocument())
+    const load = vi.fn(async () => page(nestedDocument()))
     renderSlot({ loader: { load }, mode: 'editor' })
 
     const nested = await screen.findByTestId('compose-page-slot-content')
@@ -126,7 +136,7 @@ describe('OpenSpec: basic-materials / Page Slot 编辑态不抢命中测试', ()
   })
 
   it('预览模式下嵌套内容正常接收指针事件', async () => {
-    const load = vi.fn(async () => nestedDocument())
+    const load = vi.fn(async () => page(nestedDocument()))
     renderSlot({ loader: { load }, mode: 'preview' })
 
     const nested = await screen.findByTestId('compose-page-slot-content')
@@ -136,13 +146,13 @@ describe('OpenSpec: basic-materials / Page Slot 编辑态不抢命中测试', ()
 
 describe('OpenSpec: basic-materials / Page Slot 加载状态与嵌套护栏', () => {
   it('加载中先呈现忙碌状态，完成后替换为页面内容', async () => {
-    let resolveLoad: ((document: ComposeDocument) => void) | undefined
-    const load = vi.fn(() => new Promise<ComposeDocument>((resolve) => { resolveLoad = resolve }))
+    let resolveLoad: ((page: ComposePageFile) => void) | undefined
+    const load = vi.fn(() => new Promise<ComposePageFile>((resolve) => { resolveLoad = resolve }))
     renderSlot({ loader: { load } })
 
     expect(screen.getByTestId('compose-page-slot-loading')).toHaveAttribute('aria-busy', 'true')
 
-    resolveLoad?.(nestedDocument())
+    resolveLoad?.(page(nestedDocument()))
 
     await waitFor(() => {
       expect(screen.getByTestId('compose-page-slot-content')).toBeInTheDocument()
@@ -153,7 +163,7 @@ describe('OpenSpec: basic-materials / Page Slot 加载状态与嵌套护栏', ()
   it('加载失败以警示语义呈现并可重试', async () => {
     const load = vi.fn()
       .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValueOnce(nestedDocument())
+      .mockResolvedValueOnce(page(nestedDocument()))
     renderSlot({ loader: { load } })
 
     const alert = await screen.findByRole('alert')
@@ -168,7 +178,7 @@ describe('OpenSpec: basic-materials / Page Slot 加载状态与嵌套护栏', ()
     const onPointerDown = vi.fn()
     const load = vi.fn()
       .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValueOnce(nestedDocument())
+      .mockResolvedValueOnce(page(nestedDocument()))
     renderSlot({ loader: { load }, onPointerDown })
 
     const retry = await screen.findByRole('button', { name: '重试' })
@@ -180,7 +190,7 @@ describe('OpenSpec: basic-materials / Page Slot 加载状态与嵌套护栏', ()
   })
 
   it('目标页面为空时呈现空状态', async () => {
-    const load = vi.fn(async () => createEmptyComposePageDocument())
+    const load = vi.fn(async () => createEmptyComposePageFile())
     renderSlot({ loader: { load } })
 
     expect(await screen.findByTestId('compose-page-slot-empty')).toBeInTheDocument()
@@ -241,7 +251,7 @@ describe('OpenSpec: basic-materials / 页面拖入画布创建 Page Slot', () =>
     const seed = await preset().assetDrop?.createSeed({
       reference: { providerId: 'memory', assetKey: 'Pages/Home.page.json', scope: 'persistent' },
       resolved: {
-        blob: new Blob([serializeComposePageDocument(nested)]),
+        blob: new Blob([serializeComposePageFile(page(nested))]),
         revision: '1',
         mediaType: COMPOSE_PAGE_MEDIA_TYPE,
       },
@@ -288,7 +298,7 @@ describe('OpenSpec: basic-materials / 页面拖入画布创建 Page Slot', () =>
 
 describe('OpenSpec: basic-materials / Page Slot 递归渲染被引用页面', () => {
   it('多个根实体都渲染，并各自带绝对定位与几何', async () => {
-    const load = vi.fn(async () => nestedTreeDocument())
+    const load = vi.fn(async () => page(nestedTreeDocument()))
     renderSlot({ loader: { load } })
 
     await screen.findByTestId('compose-page-slot-content')
@@ -302,7 +312,7 @@ describe('OpenSpec: basic-materials / Page Slot 递归渲染被引用页面', ()
   })
 
   it('容器递归渲染 Hierarchy 子节点', async () => {
-    const load = vi.fn(async () => nestedTreeDocument())
+    const load = vi.fn(async () => page(nestedTreeDocument()))
     renderSlot({ loader: { load } })
 
     await screen.findByTestId('compose-page-slot-content')
@@ -313,7 +323,7 @@ describe('OpenSpec: basic-materials / Page Slot 递归渲染被引用页面', ()
   it('不可见实体及其子树不渲染', async () => {
     const load = vi.fn(async () => {
       const base = nestedTreeDocument()
-      return {
+      return page({
         ...base,
         entities: {
           ...base.entities,
@@ -325,12 +335,97 @@ describe('OpenSpec: basic-materials / Page Slot 递归渲染被引用页面', ()
             },
           },
         },
-      } as ComposeDocument
+      } as ComposeDocument)
     })
     renderSlot({ loader: { load } })
 
     await screen.findByTestId('compose-page-slot-content')
     expect(document.querySelector('[data-page-slot-entity-id="group"]')).toBeNull()
     expect(document.querySelector('[data-page-slot-entity-id="child"]')).toBeNull()
+  })
+})
+
+describe('OpenSpec: page-script-runtime / Page Slot setup 实例', () => {
+  it('同一页面的两个 Slot 拥有独立 State', async () => {
+    const countingDocument: ComposeDocument = {
+      ...createEmptyComposePageDocument(),
+      rootIds: ['count', 'add'],
+      entities: {
+        count: entity('count', {
+          Renderer: { type: 'text', props: { text: 'fallback' } },
+          Bindings: { version: 1, props: { text: { scope: 'page', exportName: 'num' } } },
+        }),
+        add: entity('add', {
+          Renderer: { type: 'test-button', props: { label: 'Add' } },
+          Bindings: { version: 1, props: { onClick: { scope: 'page', exportName: 'onAdd' } } },
+        }),
+      },
+    } as ComposeDocument
+    const nestedPage: ComposePageFile = {
+      ...page(countingDocument),
+      setupScript: {
+        providerId: 'memory',
+        assetKey: 'Counter.setup.js',
+        scope: 'persistent',
+      },
+    }
+    const scriptModuleLoader: ComposeScriptModuleLoader = {
+      load: async () => ({
+        revision: '1',
+        module: {
+          setup: (ctx: import('@compose-ui/script-runtime').ComposePageScriptContext) => {
+            const num = ctx.state(0)
+            return { num, onAdd: () => { num.value += 1 } }
+          },
+        },
+      }),
+    }
+    const materials = createComposeBasicMaterials({
+      extensions: {
+        renderers: [{
+          type: 'test-button',
+          label: 'Button',
+          renderer: ({ props }) => (
+            <button
+              type="button"
+              onClick={typeof props.onClick === 'function'
+                ? props.onClick as () => void
+                : undefined}
+            >
+              {String(props.label)}
+            </button>
+          ),
+          propContracts: [{
+            name: 'onClick',
+            kind: 'method',
+            label: 'Click',
+            role: 'event-handler',
+          }],
+        }],
+      },
+    })
+    const definition = materials.registry.getRenderer('page-slot')!
+    const Slot = definition.renderer
+    const slotProps = {
+      authoredProps: { page: reference },
+      entity: outerDocument().entities.slot!,
+      mode: 'preview' as const,
+      pageDocumentPort: { load: async () => nestedPage },
+      props: { page: reference },
+      registry: materials.registry,
+      renderer: { type: 'page-slot', props: {} },
+      scriptModuleLoader,
+    }
+    render(<><Slot {...slotProps} /><Slot {...slotProps} /></>)
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('compose-material-text').map((item) => item.textContent))
+        .toEqual(['0', '0'])
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]!)
+    await waitFor(() => {
+      expect(screen.getAllByTestId('compose-material-text').map((item) => item.textContent))
+        .toEqual(['1', '0'])
+    })
   })
 })

@@ -118,6 +118,9 @@ v.metadata({
 
 metadata 只保存稳定数据，不能放 React 组件或函数。
 
+没有 JSON 字面编辑器的事件 Prop 可使用 `ComposePropertyPanelBindingTargetRow`。它是 binding-only
+受控行，按 `value | method` 过滤变量并只返回变量 ID；文档事务、Bindings 与脚本作用域仍由宿主拥有。
+
 ## 内建语义类型
 
 所有实例默认具备以下稳定 editor ID：`vector2`、`size`、`angle`、`opacity`、

@@ -25,6 +25,7 @@ export default defineConfig({
         '@compose-ui/assets',
         '@compose-ui/component-registry',
         '@compose-ui/core',
+        '@compose-ui/script-runtime',
         '@compose-ui/stage-engine',
         // Context 必须由宿主共享同一实例，不能内联进 Stage bundle。
         '@compose-ui/ui-context',

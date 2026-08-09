@@ -877,3 +877,23 @@
   width: 48px;
   height: 48px;
 }
+.compose-editor__page-script-scope {
+  border-bottom: 1px solid var(--compose-border);
+  padding: 10px 12px;
+}
+
+.compose-editor__page-script-scope h3,
+.compose-editor__page-script-scope p {
+  margin: 0 0 8px;
+}
+
+.compose-editor__page-script-scope dl,
+.compose-editor__page-script-scope dl > div {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.compose-editor__page-script-scope dl > div {
+  grid-template-columns: minmax(72px, 1fr) 2fr;
+}

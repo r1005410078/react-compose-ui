@@ -18,6 +18,36 @@ afterEach(() => {
 })
 
 describe('OpenSpec: property-panel / 单面板多属性分组', () => {
+  it('OpenSpec: property-panel / 值与方法绑定源分类 / 普通字段拒绝 method 并兼容旧 value', () => {
+    const schema = v.object({
+      count: v.pipe(v.number(), v.metadata({
+        propertyPanel: { binding: { enabled: true } },
+      })),
+    })
+    const methodResult = resolveComposePropertyBindings({
+      schema,
+      value: { count: 1 },
+      bindings: [{ target: { path: ['count'], targetId: 'value' }, variableId: 'method' }],
+      variables: [{
+        id: 'method',
+        label: 'Method-shaped number',
+        scope: 'page',
+        kind: 'method',
+        value: 9,
+      }],
+    })
+    expect(methodResult.value.count).toBe(1)
+    expect(methodResult.issues).toContainEqual(expect.objectContaining({ code: 'invalid-variable' }))
+
+    const legacyResult = resolveComposePropertyBindings({
+      schema,
+      value: { count: 1 },
+      bindings: [{ target: { path: ['count'], targetId: 'value' }, variableId: 'legacy' }],
+      variables: [{ id: 'legacy', label: 'Legacy value', scope: 'page', value: 9 }],
+    })
+    expect(legacyResult.value.count).toBe(9)
+  })
+
   it('OpenSpec: property-panel / 无正文属性分组 / 显示 action-only 分组', () => {
     render(
       <ComposePropertyPanelRoot>

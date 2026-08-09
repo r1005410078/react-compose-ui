@@ -4,6 +4,8 @@ export {
   ComposePropertyPanelSection,
   resolvePropertyBindings as resolveComposePropertyBindings,
 } from './compose-property-panel'
+export { ComposePropertyPanelBindingTargetRow } from '../binding-target-row'
+export type { ComposePropertyPanelBindingTargetRowProps } from '../binding-target-row'
 export {
   useComposePropertyPanelColorEditorPort,
   useComposePropertyPanelNodeEditorPort,

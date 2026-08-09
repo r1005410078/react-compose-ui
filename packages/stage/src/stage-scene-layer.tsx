@@ -17,6 +17,7 @@ import {
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
+import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import type { StageViewport } from '@compose-ui/stage-engine'
 import {
   useLayoutEffect,
@@ -60,6 +61,8 @@ interface StageSceneLayerProps {
   readonly assetResolver?: ComposeAssetResolver
   /** 页面型物料使用的文档加载端口；类型来自 core，Stage 不实现加载。 */
   readonly pageLoader?: ComposePageDocumentLoader
+  readonly scriptScope?: ComposePageScriptScope
+  readonly scriptModuleLoader?: ComposeScriptModuleLoader
   readonly viewport: StageViewport
   readonly paintPreview?: { readonly entityId: string; readonly paint: ComposePaint } | null
   readonly onEntityPointerDown: (
@@ -75,6 +78,8 @@ export function StageSceneLayer({
   registry,
   assetResolver,
   pageLoader,
+  scriptScope,
+  scriptModuleLoader,
   viewport,
   paintPreview,
   onEntityPointerDown,
@@ -124,6 +129,8 @@ export function StageSceneLayer({
             entity={entity}
             mode="editor"
             registry={registry}
+            scriptModuleLoader={scriptModuleLoader}
+            scriptScope={scriptScope}
           />
           {hierarchy?.childIds.map(renderEntity)}
           {hierarchy ? (
@@ -137,7 +144,16 @@ export function StageSceneLayer({
       )
     }
     return document.rootIds.map(renderEntity)
-  }, [assetResolver, document, layoutSnapshot, pageLoader, paintPreview, registry])
+  }, [
+    assetResolver,
+    document,
+    layoutSnapshot,
+    pageLoader,
+    paintPreview,
+    registry,
+    scriptModuleLoader,
+    scriptScope,
+  ])
 
   return (
     <div

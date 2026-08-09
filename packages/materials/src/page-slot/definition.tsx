@@ -2,7 +2,7 @@ import type {
   ComposeEntityPreset,
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
-import { isComposePageMediaType, parseComposePageDocument } from '@compose-ui/core'
+import { isComposePageMediaType, parseComposePageFile } from '@compose-ui/core'
 import type { ComposeBasicMaterialOptions } from '../types'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import { DEFAULT_PAGE_SLOT_APPEARANCE, DEFAULT_PAGE_SLOT_SIZE } from './defaults'
@@ -48,9 +48,9 @@ export function createPageSlotMaterial(
         accepts: ({ mediaType }) => isComposePageMediaType(mediaType),
         async createSeed({ reference, resolved, name }) {
           // 能读出被引用页面的输出尺寸时按它建槽位，否则用默认尺寸。
-          const parsed = parseComposePageDocument(await resolved.blob.text())
+          const parsed = parseComposePageFile(await resolved.blob.text())
           const measured = parsed.ok
-            ? { width: parsed.document.output.width, height: parsed.document.output.height }
+            ? { width: parsed.page.document.output.width, height: parsed.page.document.output.height }
             : size
           return {
             name,

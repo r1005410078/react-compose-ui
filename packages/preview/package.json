@@ -29,7 +29,8 @@
     "@compose-ui/assets": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/core": "workspace:*",
-    "@compose-ui/layout-engine": "workspace:*"
+    "@compose-ui/layout-engine": "workspace:*",
+    "@compose-ui/script-runtime": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.3.0 || ^19.0.0",

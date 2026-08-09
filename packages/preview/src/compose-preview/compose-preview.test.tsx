@@ -2,14 +2,16 @@ import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
   createDefaultOutputSettings,
+  createEmptyComposePageFile,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import type { ComposeLayoutRuntime } from '@compose-ui/layout-engine'
+import type { ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import { ComposePreview as ComposePreviewBase } from '../index'
 
 afterEach(cleanup)
@@ -158,7 +160,9 @@ function snapshot(value: ComposeDocument): ComposeLayoutSnapshot {
 }
 
 function ComposePreview(props: ComponentProps<typeof ComposePreviewBase>) {
-  return <ComposePreviewBase {...props} layoutSnapshot={snapshot(props.document)} />
+  const source = props.document ?? props.page?.document
+  if (!source) throw new Error('test preview requires a document or page')
+  return <ComposePreviewBase {...props} layoutSnapshot={snapshot(source)} />
 }
 
 function registry() {
@@ -562,5 +566,96 @@ describe('ComposePreview', () => {
     )
 
     expect(screen.getByTestId('compose-preview-output-paint')).toHaveAttribute('data-compose-paint', 'angular-gradient')
+  })
+
+  it('OpenSpec: compose-preview / Preview 页面 setup 运行 / 点击方法更新绑定值且实例隔离', async () => {
+    const text = entity('count', {
+      Renderer: { type: 'counter-text', props: { text: 'fallback' } },
+      Bindings: { version: 1, props: { text: { scope: 'page', exportName: 'num' } } },
+    })
+    const button = entity('add', {
+      Transform: { position: { x: 0, y: 120 }, size: { width: 100, height: 40 }, rotation: 0 },
+      Renderer: { type: 'counter-button', props: { label: 'Add' } },
+      Bindings: { version: 1, props: { onClick: { scope: 'page', exportName: 'onAdd' } } },
+    })
+    const value: ComposeDocument = {
+      ...document(),
+      rootIds: ['count', 'add'],
+      entities: { count: text, add: button },
+    }
+    const page = {
+      ...createEmptyComposePageFile(),
+      document: value,
+      setupScript: {
+        providerId: 'memory',
+        assetKey: 'counter.setup.js',
+        scope: 'persistent' as const,
+      },
+    }
+    const loader: ComposeScriptModuleLoader = {
+      load: async () => ({
+        revision: '1',
+        module: {
+          setup: (ctx: import('@compose-ui/script-runtime').ComposePageScriptContext) => {
+            const num = ctx.state(0)
+            return { num, onAdd: () => { num.value += 1 } }
+          },
+        },
+      }),
+    }
+    const boundRegistry = createComposeEntityRegistry({
+      renderers: [
+        {
+          type: 'counter-text',
+          label: 'Counter text',
+          renderer: ({ props }) => <output>{String(props.text)}</output>,
+          propContracts: [{
+            name: 'text',
+            kind: 'value',
+            label: 'Text',
+            validate: (candidate) => typeof candidate === 'number' || 'number required',
+          }],
+        },
+        {
+          type: 'counter-button',
+          label: 'Counter button',
+          renderer: ({ props }) => (
+            <button
+              type="button"
+              onClick={typeof props.onClick === 'function'
+                ? props.onClick as () => void
+                : undefined}
+            >
+              {String(props.label)}
+            </button>
+          ),
+          propContracts: [{
+            name: 'onClick',
+            kind: 'method',
+            label: 'Click',
+            role: 'event-handler',
+          }],
+        },
+      ],
+    })
+
+    render(
+      <div>
+        <ComposePreview page={page} registry={boundRegistry} scriptModuleLoader={loader} />
+        <ComposePreview page={page} registry={boundRegistry} scriptModuleLoader={loader} />
+      </div>,
+    )
+    await waitFor(() => {
+      expect(screen.getAllByText('0')).toHaveLength(2)
+    })
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]!)
+      // State 更新经 runtime microtask scheduler 刷新，再由 Renderer 订阅触发 React 更新。
+      await Promise.resolve()
+    })
+    await waitFor(() => {
+      expect(screen.getAllByText('1')).toHaveLength(1)
+      expect(screen.getAllByText('0')).toHaveLength(1)
+    })
   })
 })

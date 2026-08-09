@@ -138,6 +138,41 @@ function ChartRenderer({ props }: ComposeRendererProps) {
   return <div aria-label={title} className="stage-demo__chart" ref={root} role="img" />
 }
 
+function ActionButtonRenderer({ props }: ComposeRendererProps) {
+  return (
+    <button
+      className="stage-demo__action-button"
+      type="button"
+      onClick={typeof props.onClick === 'function'
+        ? props.onClick as () => void
+        : undefined}
+    >
+      {typeof props.label === 'string' ? props.label : 'Action'}
+    </button>
+  )
+}
+
+const actionButtonRenderer = {
+  type: 'action-button',
+  label: 'Action Button',
+  renderer: ActionButtonRenderer,
+  propContracts: [
+    {
+      name: 'label',
+      kind: 'value',
+      label: 'Label',
+      validate: (value: unknown) => typeof value === 'string' ? true : 'Label must be a string',
+      affectsMeasurement: false,
+    },
+    {
+      name: 'onClick',
+      kind: 'method',
+      label: 'On click',
+      role: 'event-handler',
+    },
+  ],
+} satisfies ComposeRendererDefinition
+
 function ChartInspector({ entity, renderer, dispatch, readOnly }: ComposeRendererInspectorProps) {
   const values = Array.isArray(renderer.props.values)
     ? renderer.props.values.filter((item): item is number => typeof item === 'number')
@@ -202,7 +237,7 @@ const echartsPreset = {
 
 const basicMaterials = createComposeBasicMaterials({
   extensions: {
-    renderers: [echartsRenderer],
+    renderers: [echartsRenderer, actionButtonRenderer],
     presets: [echartsPreset],
   },
 })
@@ -338,6 +373,7 @@ export function StageDemoWorkspace() {
     idFactory,
     nodeEditPort,
     pageLoader,
+    scriptScope: activePage?.scriptScope,
     onTransaction: recordTransaction,
   })
   const assetResolver = useMemo(
@@ -387,6 +423,7 @@ export function StageDemoWorkspace() {
         containerId={selectedContainerId}
         dialogLabel="文档预览对话框"
         document={controller.document}
+        page={activePage?.page}
         messages={{
           title: '预览',
           document: '文档',

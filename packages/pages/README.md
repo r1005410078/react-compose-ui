@@ -1,8 +1,7 @@
 # @compose-ui/pages
 
-React 与 DOM 无关的页面目录、页面文档 Store 与应用清单读写。页面就是一份未经扩展的
-`ComposeDocument v6`，以 `.page.json` 名称后缀持久化在 Asset Provider 中；首页由资源根的
-`app.json` 唯一表达。
+React 与 DOM 无关的页面目录、页面聚合 Store 与应用清单读写。页面文件包装
+`ComposeDocument v6` 与可选 `setupScript` 稳定引用；首页由资源根的 `app.json` 唯一表达。
 
 编辑器与独立预览运行时共用同一 Store，因此页面加载不依赖 `@compose-ui/editor`。
 
@@ -13,8 +12,9 @@ const store = createComposePageStore({ provider })
 
 const { pages, homePageKey, homePageMissing, manifestIssues } = await store.listPages()
 
-const { document, revision } = await store.readPage(pages[0].pageKey)
-await store.writePage(pages[0].pageKey, nextDocument, revision)
+const { page, revision } = await store.readPage(pages[0].pageKey)
+await store.writePage(pages[0].pageKey, { ...page, document: nextDocument }, revision)
+await store.setPageSetupScript(pages[0].pageKey, setupReference, revision)
 
 if (store.canWriteManifest()) await store.setHomePage(pages[0].pageKey)
 ```

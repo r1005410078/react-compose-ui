@@ -7,8 +7,8 @@ export const PAGE_SLOT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinitio
   async prepare({ props, pageDocumentPort, signal }) {
     const reference = readComposePageReference(props.page)
     if (!reference || !pageDocumentPort) throw new Error('Page Slot 文档加载器不可用')
-    const document = await pageDocumentPort.load(reference, signal)
-    return { width: document.output.width, height: document.output.height }
+    const page = await pageDocumentPort.load(reference, signal)
+    return { width: page.document.output.width, height: page.document.output.height }
   },
   measure({ prepared, width, height }) {
     const size = prepared as { readonly width: number; readonly height: number } | undefined

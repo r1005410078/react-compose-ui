@@ -5,6 +5,7 @@
  */
 
 export { createComposeEntityRegistry } from './registry'
+export { resolveComposeRendererRuntimeProps } from './registry'
 export {
   ComposeRegistryComponentInspector,
   ComposeRegistryComponentInspectorHeaderActions,
@@ -50,12 +51,16 @@ export {
   type ComposeEntitySeedError,
   type ComposeEntitySeedResult,
   type ComposeRendererDefinition,
+  type ComposeRendererBindingDiagnostic,
+  type ComposeRendererPropContract,
+  type ComposeRendererRuntimePropsResult,
   type ComposeRendererMeasurementDefinition,
   type ComposeRendererMeasurementSubscriptionInput,
   type ComposeRendererMeasureInput,
   type ComposeRendererPrepareInput,
   type ComposeRendererInspectorProps,
   type ComposeRendererProps,
+  type ComposeRuntimeProps,
 } from './registry'
 
 /** `@compose-ui/component-registry` 的稳定包标识。 @public */

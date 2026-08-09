@@ -30,6 +30,14 @@ export function createTextMaterial(
       type: 'text',
       label: options.label ?? 'Text',
       renderer: TextRenderer,
+      propContracts: [{
+        name: 'text',
+        kind: 'value',
+        label: 'Text',
+        validate: (value) => typeof value === 'string' || typeof value === 'number'
+          ? true
+          : 'Text 只接受 string 或 number',
+      }],
       inspector: createTextRendererInspector(idFactory),
       measurement: TEXT_RENDERER_MEASUREMENT,
     },

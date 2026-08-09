@@ -12,6 +12,8 @@ import { ComposePreview } from '@compose-ui/preview'
   assetResolver={assetResolver}
 />
 
+<ComposePreview page={pageFile} registry={registry} assetResolver={assetResolver} />
+
 <ComposePreview
   document={runtime.document}
   registry={registry}
@@ -30,3 +32,6 @@ Preview 默认创建文档级 Layout Runtime，也允许宿主注入 `layoutRunt
 `Appearance`、`Visibility` 与层级语义，不渲染网格、
 标尺、选区或手柄。未知 Renderer 显示 Registry 的可访问占位；资源 Renderer 通过可选
 `assetResolver` 解析稳定引用。Hug fallback diagnostic 通过可访问 `role=status` 发布。
+
+提供 `page` 时，每个 Preview 实例独立加载并调用一次 setup；点击 method Prop 会调用页面方法，
+State/Computed 更新只刷新引用对应返回名的 Renderer。卸载或脚本 revision 更新会释放旧作用域。

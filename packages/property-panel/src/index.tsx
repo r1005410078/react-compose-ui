@@ -12,6 +12,9 @@
  */
 import './styles.css'
 
+export { ComposePropertyPanelBindingTargetRow } from './binding-target-row'
+export type { ComposePropertyPanelBindingTargetRowProps } from './binding-target-row'
+
 export {
   ComposePropertyPanel,
   ComposePropertyPanelRoot,

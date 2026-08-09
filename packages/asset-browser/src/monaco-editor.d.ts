@@ -3,6 +3,8 @@ declare module 'monaco-editor/esm/vs/editor/editor.api' {
 }
 
 declare module 'monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution'
+declare module 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution'
+declare module 'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution'
 declare module 'monaco-editor/esm/vs/language/css/monaco.contribution'
 declare module 'monaco-editor/esm/vs/language/html/monaco.contribution'
 declare module 'monaco-editor/esm/vs/language/json/monaco.contribution'

@@ -26,8 +26,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 
 ### Architecture Patterns
 
-- 第一方代码采用单向五层结构：无 React/DOM 的 Headless Domain/Protocol（core、assets、
-  layout-engine、stage-engine）→ Shared UI Foundation（ui-context、component-registry、components）→
+- 第一方代码采用单向五层结构：无 React/DOM 的 Headless Domain/Protocol（core、assets、pages、
+  script-runtime、layout-engine、stage-engine）→ Shared UI Foundation（ui-context、component-registry、components）→
   Domain Components/Widgets → Composition/Entry（editor、preview）→ Application（app）。
   高层可以依赖低层，低层不得反向依赖高层；下列包级约束优先于此通用分类。
 - React 包内部采用 Feature-first 目录。每个共享公共组件拥有独立功能目录，并将实现、类型、
@@ -50,26 +50,28 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   事务历史及通用逻辑。
 - `@compose-ui/assets` 保持与 React、DOM 和 ComposeDocument 无关，承载资源 Provider、稳定
   `assetKey` 引用与运行时 Resolver 协议。
+- `@compose-ui/script-runtime` 保持与 React、DOM 和 Editor 无关，承载页面 setup Signal、实例作用域
+  与受信任自包含 JavaScript ESM Loader；它不是安全沙箱，也不编译 TypeScript。
 - `@compose-ui/command-panel` 是订阅 core TransactionRuntime 的独立 React 调试台，只接受宿主
   声明的结构化命令预设，可依赖 components、ui-context，不依赖 editor、history、scene-tree、
   property-panel 或 operation-log。
 - `@compose-ui/component-registry` 是实例级 Entity Registry 与 Renderer measurement adapter，统一
-  Renderer、Component Definition、Entity Preset 与 Capability，依赖 core 与 assets，以 React 为
+  Renderer、Component Definition、Entity Preset 与 Capability，依赖 core、assets 与 script-runtime，以 React 为
   peer，不依赖 editor 或 property-panel；测量禁止读取 Scene Entity DOM。
-- `@compose-ui/pages` 是无 React、无 DOM 的页面目录、页面文档 Store 与 `app.json` 应用清单读写包，
+- `@compose-ui/pages` 是无 React、无 DOM 的页面目录、页面聚合 Store 与 `app.json` 应用清单读写包，
   只依赖 `core` 与 `assets`；编辑器与独立预览运行时共用同一 Store，因此页面加载不依赖 `editor`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
   外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解器，只向外发布 core 的
   LayoutSnapshot 和测量端口协议，Yoga/WASM 实现不得泄漏到公共 API。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
-  网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、stage-engine、
+  网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、script-runtime、stage-engine、
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
-- `@compose-ui/preview` 依赖 core、assets、component-registry 与 layout-engine，拥有默认 Layout
+- `@compose-ui/preview` 依赖 core、assets、component-registry、script-runtime 与 layout-engine，拥有默认 Layout
   Runtime/measurement adapter，也可挂接宿主 Runtime；不得依赖 editor 或 stage。
 - `@compose-ui/materials` 提供 Container、Rectangle、Text、Image、SVG Entity Presets、
   Renderer、Component Definitions 与 Capabilities，依赖 core、assets、component-registry、
-  components、layout-engine、property-panel、ui-context、DOMPurify 与 Valibot，不依赖 stage、
+  components、layout-engine、property-panel、script-runtime、ui-context、DOMPurify 与 Valibot，不依赖 stage、
   editor 或 asset-browser；layout-engine 只服务 Page Slot 嵌套文档 Runtime。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage、
   stage-engine 与独立面板包。
@@ -189,7 +191,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   `Transform` rotation、`LayoutItem` Fixed/Fill/Hug 与 `Hierarchy + Layout` Auto Layout、
   `Hierarchy` 容器、`Renderer` 内容、同步命令事务、Entity Registry、Godot 风格无限 Stage、
   聚合 Inspector、controller 默认工作区、文档/Container Preview、事务/会话历史和
-  Container/Rectangle/Text/Image/SVG/ECharts 纵向流程。
+  Container/Rectangle/Text/Image/SVG/ECharts、页面聚合与 setup Props 绑定纵向流程。
 - Hug container 由 Flow children、padding、gap 与 border 决定；Hug leaf 通过 Registry measurement
   definition 同步读取缓存，并以可选 prepare/subscribe 处理字体、资源和页面 revision。测量缓存、
   diagnostics 与 Yoga 树只增加 LayoutSnapshot revision，不属于文档、事务或历史。
@@ -200,7 +202,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - 每个场景 Entity 必须拥有 `Composition`、`Transform`、`LayoutItem`、`Visibility`、`Lock`，并至少拥有
   `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法
   Component 保留并由 Registry 边界降级。
-- 数据源协议与持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
+- 页面文件包装 `ComposeDocument` 与零或一个 setup 稳定引用；`Bindings` 只保存页面返回名称，运行
+  State、Computed 与 Function 不进入文档、Patch 或历史。默认执行模型只适用于受信任脚本。
+- 数据源协议与正式发布持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
 - 示例中的临时状态、面板 ID 和 Dockview 对象都不是编辑器领域模型或公共协议。
 
 ## Important Constraints

@@ -23,6 +23,7 @@ const interactionController = createStageInteractionController()
     layoutSnapshot={layoutSnapshot}
     registry={registry}
     assetResolver={assetResolver}
+    scriptScope={pageScope}
     dispatch={runtime.dispatch}
     viewport={viewport}
     onViewportChange={setViewport}
@@ -69,3 +70,6 @@ IME composing 保留原生键盘与右键行为。
 `onSurfaceSizeChange` 返回扣除标尺和滚动条后的真实 surface 尺寸，适合宿主适配 Container 或
 选择。几何、SceneIndex、命令规划与 interaction controller 从 `@compose-ui/stage-engine` 导出；
 多个编辑器实例必须各自创建 controller。
+
+注入页面 `scriptScope` 后，Stage 会实时解析 value 绑定；method Prop 在普通编辑模式下使用 no-op，
+不会因为选择或拖拽误执行页面业务方法。作用域创建、脚本加载与释放不属于 Stage。

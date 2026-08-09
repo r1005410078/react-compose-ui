@@ -25,6 +25,7 @@ import {
   ComposePaintImageLibraryProvider,
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
+import type { ComposePageSetupReference } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeHistoryShortcuts } from '@compose-ui/history'
@@ -90,9 +91,18 @@ import {
 } from '../workspace-layout'
 import type { ComposePageDescriptor } from '@compose-ui/pages'
 import { getEditorMessages } from '../editor-i18n'
-import { createPageContextMenuItems, HomePageBadge, PageEntryIcon } from '../pages'
+import {
+  createPageContextMenuItems,
+  HomePageBadge,
+  PageEntryIcon,
+  PageScriptScopePanel,
+} from '../pages'
 import { usePageWorkspace } from '../pages'
 import type { ComposeEditorPagesConfig } from '../pages'
+import {
+  COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE,
+  isComposePageSetupScriptName,
+} from '../pages/page-script-intelligence'
 import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-layout'
 import type { ComposeEditorController } from '../editor-controller'
 import { SettingsDialog } from '../editor-preferences'
@@ -385,14 +395,25 @@ export function ComposeEditor({
   }, [assets?.browser, updateDocument])
   const openAssetDocument = useCallback((
     entry: ComposeAssetEntry,
-    options?: { readonly readOnly?: boolean },
+    options?: {
+      readonly readOnly?: boolean
+      readonly setupScript?: boolean
+    },
   ) => {
     const provider = assets?.browser?.provider
     if (!provider || entry.kind !== 'file') return
     const readOnly = options?.readOnly === true
+    const scriptIntelligence = options?.setupScript === true
+      ? COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE
+      : undefined
     const panelId = createAssetDocumentPanelId(provider.id, entry.assetKey ?? entry.id, { readOnly })
     const existing = initializedApi.current?.getPanel(panelId)
     if (existing) {
+      if (scriptIntelligence) {
+        updateDocument(panelId, (current) => current.kind === 'asset'
+          ? { ...current, scriptIntelligence }
+          : current)
+      }
       existing.api.setActive()
       return
     }
@@ -403,6 +424,7 @@ export function ComposeEditor({
       panelId,
       provider,
       readOnly,
+      scriptIntelligence,
       dirty: false,
       save: null,
     })
@@ -418,7 +440,12 @@ export function ComposeEditor({
         referenceGroup: WORKSPACE_GROUP_IDS.canvas,
       },
     })
-  }, [assets?.browser?.provider, editorMessages.pages.readOnlySuffix, replaceDocuments])
+  }, [
+    assets?.browser?.provider,
+    editorMessages.pages.readOnlySuffix,
+    replaceDocuments,
+    updateDocument,
+  ])
 
   const pageSessions = useMemo(() => {
     const map = new Map<string, ComposePageDocumentSession>()
@@ -439,12 +466,16 @@ export function ComposeEditor({
     : WORKSPACE_PANEL_IDS.canvas
   const pageWorkspace = usePageWorkspace({
     activePanelId: activeDocumentPanelId,
+    assetResolver: resolvedAssetResolver,
     config: pages,
     provider: assets?.browser?.provider,
     sessions: pageSessions,
     updateSession: updatePageDocument,
   })
   const pageStore = pageWorkspace.store
+  const activePageSession = activeDocumentPanelId
+    ? pageSessions.get(activeDocumentPanelId)
+    : undefined
   const pageProvider = assets?.browser?.provider
   const homePageKey = pageWorkspace.catalog?.homePageKey ?? null
   /**
@@ -554,7 +585,9 @@ export function ComposeEditor({
       void openPageDocument(entry)
       return
     }
-    openAssetDocument(entry)
+    openAssetDocument(entry, {
+      setupScript: pages !== undefined && isComposePageSetupScriptName(entry.name),
+    })
   }, [assets?.browser, openAssetDocument, openPageDocument, pages])
   const handleAssetCanvasDrag = useCallback((
     event: ComposeAssetCanvasDragEvent,
@@ -597,6 +630,13 @@ export function ComposeEditor({
   const handleOpenPageJson = useCallback((entry: ComposeAssetEntry) => {
     openAssetDocument(entry, { readOnly: true })
   }, [openAssetDocument])
+  const handleOpenPageSetup = useCallback((entry: ComposeAssetEntry) => {
+    openAssetDocument(entry, { setupScript: true })
+  }, [openAssetDocument])
+  const handlePageSetupChanged = useCallback((
+    pageKey: string,
+    reference: ComposePageSetupReference | null,
+  ) => pageWorkspace.setPageSetupScript(pageKey, reference), [pageWorkspace])
   const handlePageCreated = useCallback((descriptor: ComposePageDescriptor) => {
     void openPageDocument({
       id: descriptor.entryId,
@@ -613,14 +653,19 @@ export function ComposeEditor({
     messages: editorMessages,
     onHomePageChange: handleHomePageChange,
     onOpenPageJson: handleOpenPageJson,
+    onOpenPageSetup: handleOpenPageSetup,
     onPageCreated: handlePageCreated,
+    onPageSetupChanged: handlePageSetupChanged,
+    onPageSetupError: setPageNotice,
     provider: pageProvider,
     store: pageStore,
   }), [
     editorMessages,
     handleHomePageChange,
     handleOpenPageJson,
+    handleOpenPageSetup,
     handlePageCreated,
+    handlePageSetupChanged,
     homePageKey,
     pageProvider,
     pageStore,
@@ -749,16 +794,27 @@ export function ComposeEditor({
       children: slots?.stage !== undefined
         ? slots.stage
         : addDefaultElementProps(controller?.stage ?? 'Compose Editor', {
-            assetResolver: resolvedAssetResolver,
-            onToolChange: controller?.setTool,
-            shortcuts: resolvedPreferences.shortcuts,
-          }),
-      inspectorPanel: providePaintImageLibrary(
-        slots?.inspector !== undefined
-          ? slots.inspector
-          : controller?.inspectorPanel,
-        resolvedPaintImageLibrary,
-      ),
+          assetResolver: resolvedAssetResolver,
+          onToolChange: controller?.setTool,
+          scriptModuleLoader: pages?.scriptModuleLoader,
+          scriptScope: activePageSession?.scriptScope,
+          shortcuts: resolvedPreferences.shortcuts,
+        }),
+      inspectorPanel: activePageSession
+        || slots?.inspector !== undefined
+        || controller?.inspectorPanel !== undefined
+        ? providePaintImageLibrary(
+          <>
+            {activePageSession ? (
+              <PageScriptScopePanel scope={activePageSession.scriptScope} />
+            ) : null}
+            {slots?.inspector !== undefined
+              ? slots.inspector
+              : controller?.inspectorPanel}
+          </>,
+          resolvedPaintImageLibrary,
+        )
+        : undefined,
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
         ? slots.command
@@ -821,6 +877,8 @@ export function ComposeEditor({
       renderEntryIcon,
       renderEntryLabel,
       resolvedAssetResolver,
+      activePageSession,
+      pages?.scriptModuleLoader,
       resolvedPaintImageLibrary,
       handleAssetCanvasDrag,
       registerDocumentSave,
@@ -875,15 +933,6 @@ export function ComposeEditor({
 
   const pendingAssetDocument = pendingAssetDocumentClose
     ? documents.get(pendingAssetDocumentClose.panelId)
-    : undefined
-  /**
-   * 当前活动页面会话；没有页面处于活动状态时为 undefined。
-   *
-   * @remarks
-   * 保存快捷键据此判断保存目标：页面标签没有 Monaco 那样的内建保存入口。
-   */
-  const activePageSession = activeDocumentPanelId !== null
-    ? pageSessions.get(activeDocumentPanelId)
     : undefined
   const pendingPageConflictSession = pendingPageConflict
     ? pageSessions.get(pendingPageConflict)

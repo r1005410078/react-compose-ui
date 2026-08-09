@@ -46,7 +46,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   通用逻辑。
 - `@compose-ui/assets` 是无 React、无 DOM 的资源 Provider、稳定引用与运行时 Resolver 协议包；
   不得依赖资源浏览 UI、编辑器、文档历史或组件注册表。
-- `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`。
+- `@compose-ui/script-runtime` 是无 React、无 DOM 的页面 setup Signal、作用域与受信任 JavaScript
+  Loader 包，只能依赖 `core` 与 `assets`；不得依赖 Registry、Stage、Preview、Editor 或 UI 包。
+- `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`、`assets`、`pages`、
+  `script-runtime` 与既有领域组件，通过公开协议组合页面脚本工作流。
 - `@compose-ui/components` 是跨第一方包复用的 React 交互组件层，可依赖 `ui-context`，
   不包含场景、资源 Provider、文档命令或持久化语义。
 - `@compose-ui/scene-tree` 是独立受控 React 树组件，可依赖 `components` 和 `ui-context`，
@@ -60,22 +63,22 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 - `@compose-ui/history` 是独立的 React 会话快照历史与受控面板，可依赖 `components` 和 `ui-context`，不得依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
 - `@compose-ui/component-registry` 是实例级宿主组件注册与 Renderer measurement adapter，可以依赖
-  `core` 和 `assets`，以 React 为 peer dependency，不得依赖 `editor` 或 `property-panel`；adapter
+  `core`、`assets` 和 `script-runtime`，以 React 为 peer dependency，不得依赖 `editor` 或 `property-panel`；adapter
   只能测量隔离内容，禁止读取 Stage/Preview Scene Entity DOM。
-- `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面文档 Store 包，只能依赖
+- `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面聚合 Store 包，只能依赖
   `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
   包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解包，只能依赖 `core` 与
   `yoga-layout`；Yoga 类型、Node 与 WASM 指针不得进入公共 API。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
-  `assets`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
+  `assets`、`script-runtime`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。
 - `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`、`assets`、
-  `component-registry` 和 `layout-engine`，不得依赖 `editor` 或 `stage`。
+  `component-registry`、`script-runtime` 和 `layout-engine`，不得依赖 `editor` 或 `stage`。
 - `@compose-ui/materials` 是 Container、Rectangle、Text、Image、SVG Entity Presets、
   Renderer、Component Definitions 与 Capabilities 的独立基础物料包，可以依赖 `core`、
-  `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`ui-context`、
+  `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`script-runtime`、`ui-context`、
   DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`；`layout-engine` 只用于
   Page Slot 的独立嵌套文档 Runtime。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
@@ -89,7 +92,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`layout-engine`、`stage-engine`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、

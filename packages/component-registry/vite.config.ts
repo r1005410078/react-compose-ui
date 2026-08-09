@@ -23,6 +23,7 @@ export default defineConfig({
       external: [
         '@compose-ui/assets',
         '@compose-ui/core',
+        '@compose-ui/script-runtime',
         'react',
         'react-dom',
         'react/jsx-runtime',

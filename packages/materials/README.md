@@ -59,6 +59,10 @@ asset natural size；SVG 读取 width/height 或 viewBox；Page Slot 使用目�
 按稳定引用订阅 revision，准备中或失败时由 Runtime 使用 LayoutItem fallback。Rectangle 等没有
 intrinsic size 的物料不伪造测量结果，会发布明确 fallback diagnostic。
 
+Text 的 `text` Prop 声明了 value Contract，可接收 setup 返回的 string/number。Page Slot 加载完整
+页面聚合，并为每个 Slot 独立创建 setup scope；同一页面出现两次也不会共享 State。嵌套卸载、引用或
+脚本 revision 变化会释放旧 scope，循环与深度护栏继续在加载前阻断。
+
 所有第一方物料的 `Appearance.backgroundPaint` 都使用结构化 Compose Paint。Appearance Inspector 通过
 共享 `paint` editor 打开背景填充；在 Editor 中，它会连接 Stage 的渐变控制柄和图层取色 session，而
 materials 本身仍只依赖 Registry 的 `ComposePaintEditPort`，不反向依赖 Editor 或 Stage。
