@@ -39,6 +39,31 @@ describe('CanvasInspector', () => {
     expect(screen.getByRole('button', { name: '线性' })).toBeInTheDocument()
   })
 
+  it('OpenSpec: editor-workspace-layout / Canvas Map 输出尺寸与背景 Inspector / 重置输出背景', () => {
+    const dispatch = vi.fn()
+    render(
+      <CanvasInspector
+        dispatch={dispatch}
+        document={documentFixture()}
+        idFactory={() => 'canvas-output-reset'}
+      />,
+    )
+
+    // 输出尺寸没有实例无关的默认值，只有背景可重置。
+    expect(screen.queryByRole('button', { name: '重置 输出尺寸' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重置 输出背景' }))
+
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(dispatch.mock.lastCall?.[0]).toMatchObject({
+      type: 'output.configure',
+      payload: {
+        width: 1280,
+        height: 720,
+        backgroundPaint: { kind: 'solid', color: 'transparent' },
+      },
+    })
+  })
+
   it('OpenSpec: editor-workspace-layout / 页面脚本作为 Canvas Inspector 属性 / 页面与 Inspector 目标切换', () => {
     render(
       <CanvasInspector

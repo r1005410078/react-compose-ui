@@ -7,6 +7,7 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  DEFAULT_COMPOSE_APPEARANCE,
   createDefaultCanvasSettings,
   createDefaultComposeFlexLayout,
   createDefaultComposeLayoutItem,
@@ -1033,6 +1034,66 @@ describe('内建 Component inspectors', () => {
         opacity: 0.5,
         shadow: { color: '#00000040', offsetX: 0, offsetY: 4, blur: 12, spread: 0 },
       }),
+    })
+  })
+
+  it('OpenSpec: basic-materials / 内建 Inspector 提供重置基线 / 修改背景填充后出现重置', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('Appearance')
+    const painted = entity({
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#2563eb' }, opacity: 0.5 },
+    })
+    render(
+      <Inspector
+        componentKey="Appearance"
+        dispatch={dispatch}
+        entity={painted}
+        readOnly={false}
+        value={painted.components.Appearance!}
+      />,
+    )
+
+    // 边框宽度等于默认值，不应出现重置；背景填充与透明度偏离默认值，必须可重置。
+    expect(screen.queryByRole('button', { name: '重置 边框宽度' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重置 背景填充' }))
+
+    const command = dispatch.mock.lastCall?.[0] as EditorCommand
+    expect(command.type).toBe(BUILTIN_COMMAND_TYPES.setAppearance)
+    expect(command.payload).toMatchObject({
+      entityId: 'entity-a',
+      appearance: expect.objectContaining({
+        backgroundPaint: DEFAULT_COMPOSE_APPEARANCE.backgroundPaint,
+        opacity: 0.5,
+      }),
+    })
+  })
+
+  it('OpenSpec: basic-materials / 内建 Inspector 提供重置基线 / 位置与尺寸不参与重置', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const moved = entity({
+      Transform: { rotation: 30 },
+      LayoutItem: createDefaultComposeLayoutItem(180, 40, { x: 120, y: 240 }),
+    })
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        entity={moved}
+        readOnly={false}
+        value={moved.components.LayoutItem!}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: '重置 位置' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重置 尺寸' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重置 旋转' }))
+
+    const command = dispatch.mock.lastCall?.[0] as EditorCommand
+    expect(command.type).toBe(BUILTIN_COMMAND_TYPES.setTransform)
+    expect(command.payload).toMatchObject({
+      operation: 'set',
+      updates: [{ entityId: 'entity-a', transform: expect.objectContaining({ rotation: 0 }) }],
     })
   })
 

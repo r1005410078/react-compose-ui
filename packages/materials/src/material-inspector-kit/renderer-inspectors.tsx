@@ -13,8 +13,15 @@ import {
   type JsonValue,
 } from '@compose-ui/core'
 import type { ComposeRendererInspectorProps } from '@compose-ui/component-registry'
+import { DEFAULT_IMAGE_PROPS } from '../image/defaults'
 import { IMAGE_RENDERER_PROP_SCHEMAS } from '../image/props'
+import { DEFAULT_SVG_PROPS } from '../svg/defaults'
 import { SVG_RENDERER_PROP_SCHEMAS } from '../svg/props'
+import {
+  DEFAULT_TEXT_PROPS,
+  DEFAULT_TEXT_TYPOGRAPHY_PROPS,
+  defaultTextLineHeight,
+} from '../text/defaults'
 import { TEXT_RENDERER_PROP_SCHEMAS } from '../text/props'
 import { composeNodePropertySchema } from './node'
 
@@ -176,28 +183,45 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
           ])
         : fullSchema
     const props = inspectorBaseProps(context)
-    const fontSize = typeof props.fontSize === 'number' ? props.fontSize : 24
+    const defaultFontSize = DEFAULT_TEXT_PROPS.fontSize as number
+    const fontSize = typeof props.fontSize === 'number' ? props.fontSize : defaultFontSize
     const value = {
       text: typeof props.text === 'string' || typeof props.text === 'number'
         ? props.text
-        : 'Text',
+        : DEFAULT_TEXT_PROPS.text as string,
       color: typeof props.color === 'string'
         ? props.color
-        : '#172033',
+        : DEFAULT_TEXT_PROPS.color as string,
       fontSize,
-      fontFamily: typeof props.fontFamily === 'string' ? props.fontFamily : 'sans-serif',
+      fontFamily: typeof props.fontFamily === 'string'
+        ? props.fontFamily
+        : DEFAULT_TEXT_TYPOGRAPHY_PROPS.fontFamily,
       fontWeight: typeof props.fontWeight === 'string' || typeof props.fontWeight === 'number'
         ? props.fontWeight
-        : 400,
-      letterSpacing: typeof props.letterSpacing === 'number' ? props.letterSpacing : 0,
+        : DEFAULT_TEXT_TYPOGRAPHY_PROPS.fontWeight,
+      letterSpacing: typeof props.letterSpacing === 'number'
+        ? props.letterSpacing
+        : DEFAULT_TEXT_TYPOGRAPHY_PROPS.letterSpacing,
       lineHeight: typeof props.lineHeight === 'number'
         ? props.lineHeight
-        : Math.round(fontSize * 120) / 100,
+        : defaultTextLineHeight(fontSize),
+    }
+    /*
+     * 行高的默认值依赖字号，因此基线用默认字号推导，而不是当前字号：基线必须与
+     * Definition 默认 props 完全一致，才能让重置回到新建 Text 的排版。
+     */
+    const defaultValue = {
+      text: DEFAULT_TEXT_PROPS.text as string,
+      color: DEFAULT_TEXT_PROPS.color as string,
+      fontSize: defaultFontSize,
+      ...DEFAULT_TEXT_TYPOGRAPHY_PROPS,
+      lineHeight: defaultTextLineHeight(defaultFontSize),
     }
     return (
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
         binding={createPropsBinding(context, visiblePropNames)}
+        defaultValue={defaultValue}
         readOnly={context.readOnly}
         renderers={[TEXT_CONTENT_RENDERER]}
         schema={schema}
@@ -239,6 +263,7 @@ export function createPageSlotRendererInspector(idFactory: InspectorIdFactory) {
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
         binding={createPropsBinding(context)}
+        defaultValue={{ page: null as never }}
         nodeEditor={context.nodeEditPort}
         readOnly={context.readOnly}
         schema={schema}
@@ -276,13 +301,18 @@ export function createImageRendererInspector(idFactory: InspectorIdFactory) {
       fit: (
         typeof props.fit === 'string'
           ? props.fit
-          : 'contain'
+          : DEFAULT_IMAGE_PROPS.fit
       ) as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down',
+    }
+    const defaultValue = {
+      alt: DEFAULT_IMAGE_PROPS.alt as string,
+      fit: DEFAULT_IMAGE_PROPS.fit as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down',
     }
     return (
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
         binding={createPropsBinding(context)}
+        defaultValue={defaultValue}
         readOnly={context.readOnly}
         schema={schema}
         value={value}
@@ -334,14 +364,27 @@ export function createSvgRendererInspector(idFactory: InspectorIdFactory) {
       fit: (props.fit === 'cover' || props.fit === 'fill' ? props.fit : 'contain') as
         'contain' | 'cover' | 'fill',
       overrideFill: props.overrideFill === true,
-      fillColor: typeof props.fillColor === 'string' ? props.fillColor : '#ffffff',
+      fillColor: typeof props.fillColor === 'string'
+        ? props.fillColor
+        : DEFAULT_SVG_PROPS.fillColor as string,
       overrideStroke: props.overrideStroke === true,
-      strokeColor: typeof props.strokeColor === 'string' ? props.strokeColor : '#ffffff',
+      strokeColor: typeof props.strokeColor === 'string'
+        ? props.strokeColor
+        : DEFAULT_SVG_PROPS.strokeColor as string,
+    }
+    const defaultValue = {
+      alt: DEFAULT_SVG_PROPS.alt as string,
+      fit: DEFAULT_SVG_PROPS.fit as 'contain' | 'cover' | 'fill',
+      overrideFill: DEFAULT_SVG_PROPS.overrideFill as boolean,
+      fillColor: DEFAULT_SVG_PROPS.fillColor as string,
+      overrideStroke: DEFAULT_SVG_PROPS.overrideStroke as boolean,
+      strokeColor: DEFAULT_SVG_PROPS.strokeColor as string,
     }
     return (
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
         binding={createPropsBinding(context)}
+        defaultValue={defaultValue}
         readOnly={context.readOnly}
         schema={schema}
         value={value}

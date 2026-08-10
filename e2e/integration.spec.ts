@@ -845,14 +845,14 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
 
   const appearance = propertyRoot.getByRole('button', { name: '外观' })
   await expect(appearance).toHaveAttribute('aria-expanded', 'false')
-  await expect(propertyRoot.getByRole('button', { name: '背景填充' })).toHaveCount(0)
+  await expect(propertyRoot.getByRole('button', { name: '背景填充', exact: true })).toHaveCount(0)
   await propertyRoot.getByRole('searchbox', { name: '搜索属性' }).fill('背景填充')
   await expect(appearance).toHaveAttribute('aria-expanded', 'true')
-  await expect(propertyRoot.getByRole('button', { name: '背景填充' })).toBeVisible()
+  await expect(propertyRoot.getByRole('button', { name: '背景填充', exact: true })).toBeVisible()
   await expect(propertyRoot.getByRole('button', { name: '变换' })).toHaveCount(0)
   await propertyRoot.getByRole('searchbox', { name: '搜索属性' }).fill('')
   await expect(appearance).toHaveAttribute('aria-expanded', 'false')
-  await expect(propertyRoot.getByRole('button', { name: '背景填充' })).toHaveCount(0)
+  await expect(propertyRoot.getByRole('button', { name: '背景填充', exact: true })).toHaveCount(0)
 
   await capability.selectOption('geometry-constraints')
   const constraints = propertyRoot.getByRole('button', { name: '几何限制' })

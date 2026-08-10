@@ -6,6 +6,7 @@ import {
   type ComposePropertyPanelRendererProps,
 } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import { createDefaultOutputSettings } from '@compose-ui/core'
 import type {
   CommandDispatchResult,
   ComposeDocument,
@@ -181,11 +182,25 @@ export function CanvasInspector({
     [document.output, documentPreset, outputSizeKey, pageScriptInspector],
   )
 
+  /*
+   * 重置基线只覆盖有确定默认值的输出背景。输出尺寸由页面自身决定、pageScript 是宿主注入的
+   * 渲染内容，两者都没有可恢复的默认值，因此基线沿用当前值，Property Panel 深度比较后不会
+   * 为它们生成重置动作；整个 defaultValue 仍必须通过 schema 校验，否则背景也会失去重置。
+   */
+  const defaultValue = useMemo(
+    (): CanvasInspectorValue => ({
+      outputSize: value.outputSize,
+      backgroundPaint: createDefaultOutputSettings().backgroundPaint,
+      pageScript: value.pageScript,
+    }),
+    [value],
+  )
+
   return (
     <ComposePropertyPanel
       aria-label={messages.label}
       className="compose-editor__canvas-inspector"
-      defaultValue={value}
+      defaultValue={defaultValue}
       header={{ title: messages.title }}
       renderers={CANVAS_INSPECTOR_RENDERERS}
       schema={schema}

@@ -2,6 +2,8 @@ import { createContext, useContext, useId, useMemo, useState } from 'react'
 import * as v from 'valibot'
 import {
   BUILTIN_COMMAND_TYPES,
+  DEFAULT_COMPOSE_APPEARANCE,
+  createDefaultComposeLayoutItem,
   getComposeAppearance,
   getComposeClip,
   getComposeHierarchy,
@@ -29,6 +31,13 @@ import {
 } from '@compose-ui/property-panel'
 import type { ComponentType } from 'react'
 import type { ComposeComponentInspectorProps } from '@compose-ui/component-registry'
+import {
+  DEFAULT_COMPOSE_CLIP,
+  DEFAULT_COMPOSE_GEOMETRY_CONSTRAINTS,
+  DEFAULT_COMPOSE_LOCK,
+  DEFAULT_COMPOSE_TRANSFORM,
+  DEFAULT_COMPOSE_VISIBILITY,
+} from '../builtin-component-defaults'
 import {
   InspectorEdgesEditor,
   InspectorNumberDraftInput,
@@ -485,6 +494,19 @@ export function createLayoutItemInspector(
       size: { width: item.width, height: item.height },
       margin: item.margin,
     }
+    /*
+     * 重置基线只覆盖有实例无关默认值的字段。位置与尺寸由摆放和内容决定，没有可恢复的
+     * 默认值，因此基线直接复用当前值：Property Panel 深度比较后不会给它们生成重置动作，
+     * 同时整个 defaultValue 仍能通过本 Inspector 的 schema 校验（校验失败会禁用全部重置）。
+     */
+    const defaultValue = useMemo<BasicGeometryValue>(() => ({
+      ...(item.positioning === 'absolute'
+        ? { position: { x: item.offset.x, y: item.offset.y } }
+        : { alignSelf: createDefaultComposeLayoutItem().alignSelf }),
+      rotation: DEFAULT_COMPOSE_TRANSFORM.rotation,
+      size: { width: item.width, height: item.height },
+      margin: createDefaultComposeLayoutItem().margin,
+    }), [item.offset.x, item.offset.y, item.positioning, item.width, item.height])
     const updateLayoutItem = (nextItem: ComposeLayoutItem) => dispatch(command(
       idFactory,
       entity,
@@ -503,6 +525,7 @@ export function createLayoutItemInspector(
         <div className="layout-item-inspector layout-item-inspector--basic">
           <ComposePropertyPanel
             aria-label={zh ? '基础几何属性' : 'Basic geometry properties'}
+            defaultValue={defaultValue}
             readOnly={readOnly}
             renderers={BASIC_GEOMETRY_RENDERERS}
             schema={schema}
@@ -570,6 +593,7 @@ export function createVisibilityInspector(
     return (
       <ComposePropertyPanel
         aria-label={zh ? '状态属性' : 'State properties'}
+        defaultValue={DEFAULT_COMPOSE_VISIBILITY}
         readOnly={readOnly}
         schema={schema}
         value={{ visible: value.visible === true }}
@@ -602,6 +626,7 @@ export function createLockInspector(
     return (
       <ComposePropertyPanel
         aria-label={zh ? '锁定属性' : 'Lock properties'}
+        defaultValue={DEFAULT_COMPOSE_LOCK}
         schema={schema}
         value={{ locked: value.locked === true }}
         onValueChange={(next) => dispatch(command(
@@ -616,6 +641,18 @@ export function createLockInspector(
       />
     )
   }
+}
+
+/*
+ * Appearance Inspector 的 schema 只覆盖五个字段，shadow 由独立入口编辑，因此重置基线显式
+ * 取这五个字段，避免把 shadow 带进 defaultValue 影响深度比较。
+ */
+const APPEARANCE_INSPECTOR_DEFAULT_VALUE = {
+  backgroundPaint: DEFAULT_COMPOSE_APPEARANCE.backgroundPaint,
+  borderColor: DEFAULT_COMPOSE_APPEARANCE.borderColor,
+  borderWidth: DEFAULT_COMPOSE_APPEARANCE.borderWidth,
+  borderRadius: DEFAULT_COMPOSE_APPEARANCE.borderRadius,
+  opacity: DEFAULT_COMPOSE_APPEARANCE.opacity,
 }
 
 /** 创建 Appearance Component Inspector。 @internal */
@@ -659,6 +696,7 @@ export function createAppearanceInspector(
     return (
       <ComposePropertyPanel
         aria-label={zh ? '外观属性' : 'Appearance properties'}
+        defaultValue={APPEARANCE_INSPECTOR_DEFAULT_VALUE}
         readOnly={readOnly}
         colorEditor={{
           onEyedropperFallback: () => paintEditPort?.sample({
@@ -763,6 +801,12 @@ export function createHierarchyInspector(
     return (
       <ComposePropertyPanel
         aria-label={zh ? '容器属性' : 'Container properties'}
+        // childCount 是只读派生值，没有可恢复的默认值，基线跟随当前值以避免出现禁用的重置动作。
+        defaultValue={{
+          childCount: hierarchy.childIds.length,
+          horizontal: DEFAULT_COMPOSE_CLIP.horizontal,
+          vertical: DEFAULT_COMPOSE_CLIP.vertical,
+        }}
         readOnly={readOnly}
         schema={schema}
         value={{
@@ -822,6 +866,7 @@ export function createConstraintsInspector(
     return (
       <ComposePropertyPanel
         aria-label={zh ? '几何限制属性' : 'Geometry constraints'}
+        defaultValue={DEFAULT_COMPOSE_GEOMETRY_CONSTRAINTS}
         readOnly={readOnly}
         schema={schema}
         value={{

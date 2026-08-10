@@ -3,12 +3,20 @@ import type {
   ComposeComponentDefinition,
 } from '@compose-ui/component-registry'
 import {
+  DEFAULT_COMPOSE_APPEARANCE,
   createDefaultComposeFlexLayout,
   createDefaultComposeLayoutItem,
   isValidComposeLayout,
   isValidComposeLayoutItem,
   isValidComposeGeometryConstraints,
 } from '@compose-ui/core'
+import {
+  DEFAULT_COMPOSE_CLIP,
+  DEFAULT_COMPOSE_GEOMETRY_CONSTRAINTS,
+  DEFAULT_COMPOSE_LOCK,
+  DEFAULT_COMPOSE_TRANSFORM,
+  DEFAULT_COMPOSE_VISIBILITY,
+} from './builtin-component-defaults'
 import {
   createLayoutInspector,
   createLayoutInspectorHeaderActions,
@@ -58,9 +66,7 @@ export function createComposeBuiltinComponentDefinitions(
       key: 'Transform',
       label: '变换',
       order: 10,
-      createDefault: () => ({
-        rotation: 0,
-      }),
+      createDefault: () => ({ ...DEFAULT_COMPOSE_TRANSFORM }),
     },
     {
       key: 'LayoutItem',
@@ -75,27 +81,24 @@ export function createComposeBuiltinComponentDefinitions(
       key: 'Visibility',
       label: '可见性',
       order: 20,
-      createDefault: () => ({ visible: true }),
+      createDefault: () => ({ ...DEFAULT_COMPOSE_VISIBILITY }),
       inspector: createVisibilityInspector(idFactory),
     },
     {
       key: 'Lock',
       label: '锁定',
       order: 30,
-      createDefault: () => ({ locked: false }),
+      createDefault: () => ({ ...DEFAULT_COMPOSE_LOCK }),
       inspector: createLockInspector(idFactory),
     },
     {
       key: 'Appearance',
       label: '外观',
       order: 40,
+      // backgroundPaint 是对象，必须一并复制，createDefault 不得返回共享引用。
       createDefault: () => ({
-        backgroundPaint: { kind: 'solid', color: 'transparent' },
-        borderColor: 'transparent',
-        borderWidth: 0,
-        borderRadius: 0,
-        opacity: 1,
-        shadow: null,
+        ...DEFAULT_COMPOSE_APPEARANCE,
+        backgroundPaint: { ...DEFAULT_COMPOSE_APPEARANCE.backgroundPaint },
       }),
       inspector: createAppearanceInspector(idFactory),
     },
@@ -125,17 +128,13 @@ export function createComposeBuiltinComponentDefinitions(
       key: 'Clip',
       label: '裁剪',
       order: 60,
-      createDefault: () => ({ enabled: true, horizontal: 'clip', vertical: 'clip' }),
+      createDefault: () => ({ ...DEFAULT_COMPOSE_CLIP }),
     },
     {
       key: 'GeometryConstraints',
       label: '几何限制',
       order: 70,
-      createDefault: () => ({
-        movable: true,
-        resize: 'free',
-        rotatable: true,
-      }),
+      createDefault: () => ({ ...DEFAULT_COMPOSE_GEOMETRY_CONSTRAINTS }),
       validate: isValidComposeGeometryConstraints,
       inspector: createConstraintsInspector(idFactory),
     },

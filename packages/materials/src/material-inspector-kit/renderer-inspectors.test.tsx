@@ -8,6 +8,18 @@ import type { ComposeRendererInspectorBindingPort } from '@compose-ui/component-
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTextRendererInspector } from './renderer-inspectors'
 
+/*
+ * 属性行的操作列默认只有一个直接槽位。属性同时拥有绑定入口和重置动作时，两者都会收进
+ * “更多”聚合菜单，因此断言必须同时接受直接按钮和菜单项两种呈现。
+ */
+function propertyAction(ownerLabel: string, actionLabel: string | RegExp): HTMLElement {
+  const direct = screen.queryByRole('button', { name: actionLabel })
+  if (direct) return direct
+  fireEvent.click(screen.getByRole('button', { name: `更多 ${ownerLabel} 操作` }))
+  const item = screen.getByRole('menuitem', { name: actionLabel })
+  return item
+}
+
 function entity(components: Readonly<Record<string, JsonObject>> = {}): ComposeEntity {
   return {
     id: 'entity-a',
@@ -197,16 +209,16 @@ describe('Text Renderer Inspector', () => {
 
     expect(screen.queryByRole('textbox', { name: '文本' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /更换绑定 文本.*Count/u })).toBeEnabled()
-    expect(screen.getByRole('button', { name: '解绑 文本' })).toBeEnabled()
+    expect(propertyAction('文本', '解绑 文本')).toBeEnabled()
     expect(screen.getByRole('button', { name: '选择文字颜色' })).toBeEnabled()
     expect(screen.getByRole('button', { name: /绑定\s*文字颜色/u })).toBeEnabled()
     expect(screen.getByRole('textbox', { name: '字体' })).toHaveValue('Inter')
     expect(screen.getByRole('textbox', { name: '字重' })).toHaveValue('600')
     expect(screen.getByRole('spinbutton', { name: '字间距' })).toHaveValue(1)
     expect(screen.getByRole('spinbutton', { name: '行高' })).toHaveValue(32)
-    expect(screen.getByRole('button', { name: /绑定\s*字体/u })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /绑定\s*字重/u })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /绑定\s*字间距/u })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /绑定\s*行高/u })).toBeEnabled()
+    expect(propertyAction('字体', /绑定\s*字体/u)).toBeEnabled()
+    expect(propertyAction('字重', /绑定\s*字重/u)).toBeEnabled()
+    expect(propertyAction('字间距', /绑定\s*字间距/u)).toBeEnabled()
+    expect(propertyAction('行高', /绑定\s*行高/u)).toBeEnabled()
   })
 })
