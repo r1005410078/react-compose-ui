@@ -125,7 +125,8 @@ describe('OpenSpec: property-panel / 内建语义属性编辑器', () => {
     ])
   })
 
-  it('OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / 复合数值输入分别绑定', () => {
+  // OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / 复合数值输入分别绑定
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 多子目标只替换已绑定控件', () => {
     function Harness() {
       const [bindings, setBindings] = useState<readonly {
         target: { path: readonly (string | number)[]; targetId: string }

@@ -326,14 +326,16 @@ renderer 只负责声明 `bindingTargets`，并通过 `binding.targets` 或 `bin
 调用 `renderTrigger()` 或预留 binding slot。已绑定 target 应使用 `ComposePropertyPanelBoundValue` 替换原
 控件：它显示变量名称与有效值预览，点击可换绑；单目标操作列图标则变为解绑。未绑定入口只在字段
 hover/focus 时出现，已绑定或失效入口常显；Vector2、Size 和其他多目标 renderer 使用一个聚合入口，在菜单中
-独立解绑每个目标。默认 76px 操作列容纳三个 22px 图标；超过容量时，最后一个可见槽位变为“更多”图标。
+独立解绑每个目标。默认 76px 操作列容纳三个 22px 图标：binding 优先，其后依次为存在性/新增、重置、删除
+和移动；超过容量时，最后一个可见槽位变为“更多”图标。仅当操作列只有一个槽位且 binding 与普通操作竞争
+时，该入口才合并列出 binding target 和普通操作。
 完整变量名和解析状态通过变量标识、tooltip、ARIA description 与选择器提供。
 
 迁移已有自定义 renderer 时，删除 `binding.renderTrigger(targetId)` 及
 `.property-panel__binding-target`、`.property-panel__binding-control`、`.property-panel__binding-slot`
 布局包装；保留 `binding.getTarget(targetId)` 读取即可。`PropertyPanelRendererBindingController` 已移除
 `renderTrigger()`。宿主配置级 `PropertyPanelBindingConfig.renderTrigger` 仍可覆盖直接单目标入口；
-多目标或动作竞争场景由面板使用内建聚合入口。
+多 target 使用内建目标聚合入口；只有单槽操作列中的动作竞争会改为内建组合聚合入口。
 
 ECharts 等依赖仍由宿主 renderer 持有；本包只处理 target 描述、选择器、受控 bindings 和解析。
 
@@ -347,7 +349,8 @@ description、option label 和自定义 renderer 内容始终由宿主控制，�
 - 搜索匹配 title、key、完整路径和 description。
 - 筛选支持全部、相对 `defaultValue` 已修改、以及有 Schema issue 的属性。
 - 设置菜单可以显示高级属性、字段说明，并恢复列宽。
-- 两条可聚焦分隔线分别调整属性名列和操作列；默认宽度为 160px/76px，方向键移动 8px，
+- 两条可聚焦分隔线分别调整属性名列和操作列；默认宽度为 120px/76px。在约 365px 的内容区，编辑列
+  保留约 169px，优先容纳内容与并列输入；方向键移动 8px，
   Shift 加方向键移动 24px。操作列限制在 32–96px、最多三槽；空间不足时使用溢出菜单，行右键
   菜单始终通过共享 `ComposeContextMenu` 提供全部操作；三点溢出仍是普通点击菜单。常规编辑控件在最大
   234px 的右对齐轨道中显示，窄面板会自动收缩。

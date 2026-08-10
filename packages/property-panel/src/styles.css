@@ -12,7 +12,7 @@
 
 @layer components {
   .property-panel {
-    --pp-label-width: 160px;
+    --pp-label-width: 120px;
     --pp-action-width: 76px;
     --pp-control-width: 234px;
     --pp-font-size: 12px;

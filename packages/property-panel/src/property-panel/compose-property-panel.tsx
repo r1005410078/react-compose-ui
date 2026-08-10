@@ -54,6 +54,15 @@ import {
 import type { PropertyPanelFilter, TreeCommitOptions } from '../property-tree'
 import '../styles.css'
 
+/** 默认三列布局优先保障编辑器空间；34px 操作列仍可容纳1个紧凑入口。 */
+const DEFAULT_LABEL_WIDTH = 120
+const DEFAULT_ACTION_WIDTH = 34
+const DEFAULT_PANEL_WIDTH = 365
+const MIN_LABEL_WIDTH = 88
+const MIN_ACTION_WIDTH = 32
+const MAX_ACTION_WIDTH = 96
+const MIN_EDITOR_WIDTH = 120
+
 /** 属性在受控值中的稳定路径。 */
 export type PropertyPath = readonly (string | number)[]
 
@@ -529,16 +538,16 @@ export function ComposePropertyPanelRoot({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
-  const [labelWidth, setLabelWidth] = useState(160)
-  const [actionWidth, setActionWidth] = useState(76)
+  const [labelWidth, setLabelWidth] = useState(DEFAULT_LABEL_WIDTH)
+  const [actionWidth, setActionWidth] = useState(DEFAULT_ACTION_WIDTH)
   const [availableWidth, setAvailableWidth] = useState(
-    typeof style?.width === 'number' ? style.width : 365,
+    typeof style?.width === 'number' ? style.width : DEFAULT_PANEL_WIDTH,
   )
   const resizeLabel = (candidate: number) => {
-    setLabelWidth(clamp(candidate, 88, Math.max(88, availableWidth - actionWidth - 120)))
+    setLabelWidth(clamp(candidate, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, availableWidth - actionWidth - MIN_EDITOR_WIDTH)))
   }
   const resizeAction = (candidate: number) => {
-    setActionWidth(clamp(candidate, 32, Math.min(96, Math.max(32, availableWidth - labelWidth - 120))))
+    setActionWidth(clamp(candidate, MIN_ACTION_WIDTH, Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, availableWidth - labelWidth - MIN_EDITOR_WIDTH))))
   }
   const startResize = (kind: 'label' | 'action') => (event: PointerEvent<HTMLDivElement>) => {
     setDrag({
@@ -573,9 +582,9 @@ export function ComposePropertyPanelRoot({
       const width = entries[0]?.contentRect.width
       if (!width) return
       setAvailableWidth(width)
-      const nextAction = clamp(actionWidth, 32, Math.min(96, Math.max(32, width - 88 - 120)))
+      const nextAction = clamp(actionWidth, MIN_ACTION_WIDTH, Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, width - MIN_LABEL_WIDTH - MIN_EDITOR_WIDTH)))
       setActionWidth(nextAction)
-      setLabelWidth(clamp(labelWidth, 88, Math.max(88, width - nextAction - 120)))
+      setLabelWidth(clamp(labelWidth, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, width - nextAction - MIN_EDITOR_WIDTH)))
     })
     observer.observe(element)
     return () => observer.disconnect()
@@ -693,8 +702,8 @@ export function ComposePropertyPanelRoot({
                 role="menuitem"
                 type="button"
                 onClick={() => {
-                  setLabelWidth(160)
-                  setActionWidth(76)
+                  setLabelWidth(DEFAULT_LABEL_WIDTH)
+                  setActionWidth(DEFAULT_ACTION_WIDTH)
                   setSettingsOpen(false)
                 }}
               >{messages.resetColumns}</button>
@@ -708,8 +717,8 @@ export function ComposePropertyPanelRoot({
       <div
         aria-label={messages.resizeLabel}
         aria-orientation="vertical"
-        aria-valuemax={Math.max(88, availableWidth - actionWidth - 120)}
-        aria-valuemin={88}
+        aria-valuemax={Math.max(MIN_LABEL_WIDTH, availableWidth - actionWidth - MIN_EDITOR_WIDTH)}
+        aria-valuemin={MIN_LABEL_WIDTH}
         aria-valuenow={labelWidth}
         className="property-panel__separator property-panel__separator--label"
         data-property-part="separator"
@@ -723,8 +732,8 @@ export function ComposePropertyPanelRoot({
       <div
         aria-label={messages.resizeAction}
         aria-orientation="vertical"
-        aria-valuemax={Math.min(96, Math.max(32, availableWidth - labelWidth - 120))}
-        aria-valuemin={32}
+        aria-valuemax={Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, availableWidth - labelWidth - MIN_EDITOR_WIDTH))}
+        aria-valuemin={MIN_ACTION_WIDTH}
         aria-valuenow={actionWidth}
         className="property-panel__separator property-panel__separator--action"
         data-property-part="separator"
@@ -981,10 +990,10 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
-  const [labelWidth, setLabelWidth] = useState(160)
-  const [actionWidth, setActionWidth] = useState(76)
+  const [labelWidth, setLabelWidth] = useState(DEFAULT_LABEL_WIDTH)
+  const [actionWidth, setActionWidth] = useState(DEFAULT_ACTION_WIDTH)
   const [availableWidth, setAvailableWidth] = useState(
-    typeof style?.width === 'number' ? style.width : 365,
+    typeof style?.width === 'number' ? style.width : DEFAULT_PANEL_WIDTH,
   )
   const rootClassName = ['property-panel', className].filter(Boolean).join(' ')
   const asyncSchema = (schema as unknown as { async?: boolean }).async === true
@@ -1001,10 +1010,10 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   } as CSSProperties
 
   const resizeLabel = (candidate: number) => {
-    setLabelWidth(clamp(candidate, 88, Math.max(88, availableWidth - actionWidth - 120)))
+    setLabelWidth(clamp(candidate, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, availableWidth - actionWidth - MIN_EDITOR_WIDTH)))
   }
   const resizeAction = (candidate: number) => {
-    setActionWidth(clamp(candidate, 32, Math.min(96, Math.max(32, availableWidth - labelWidth - 120))))
+    setActionWidth(clamp(candidate, MIN_ACTION_WIDTH, Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, availableWidth - labelWidth - MIN_EDITOR_WIDTH))))
   }
   const startResize = (kind: 'label' | 'action') => (event: PointerEvent<HTMLDivElement>) => {
     setDrag({
@@ -1039,9 +1048,9 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
       const width = entries[0]?.contentRect.width
       if (!width) return
       setAvailableWidth(width)
-      const nextAction = clamp(actionWidth, 32, Math.min(96, Math.max(32, width - 88 - 120)))
+      const nextAction = clamp(actionWidth, MIN_ACTION_WIDTH, Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, width - MIN_LABEL_WIDTH - MIN_EDITOR_WIDTH)))
       setActionWidth(nextAction)
-      setLabelWidth(clamp(labelWidth, 88, Math.max(88, width - nextAction - 120)))
+      setLabelWidth(clamp(labelWidth, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, width - nextAction - MIN_EDITOR_WIDTH)))
     })
     observer.observe(element)
     return () => observer.disconnect()
@@ -1174,8 +1183,8 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
                 role="menuitem"
                 type="button"
                 onClick={() => {
-                  setLabelWidth(160)
-                  setActionWidth(76)
+                  setLabelWidth(DEFAULT_LABEL_WIDTH)
+                  setActionWidth(DEFAULT_ACTION_WIDTH)
                   setSettingsOpen(false)
                 }}
               >{messages.resetColumns}</button>
@@ -1206,8 +1215,8 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
       <div
         aria-label={messages.resizeLabel}
         aria-orientation="vertical"
-        aria-valuemax={Math.max(88, availableWidth - actionWidth - 120)}
-        aria-valuemin={88}
+        aria-valuemax={Math.max(MIN_LABEL_WIDTH, availableWidth - actionWidth - MIN_EDITOR_WIDTH)}
+        aria-valuemin={MIN_LABEL_WIDTH}
         aria-valuenow={labelWidth}
         className="property-panel__separator property-panel__separator--label"
         data-property-part="separator"
@@ -1221,8 +1230,8 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
       <div
         aria-label={messages.resizeAction}
         aria-orientation="vertical"
-        aria-valuemax={Math.min(96, Math.max(32, availableWidth - labelWidth - 120))}
-        aria-valuemin={32}
+        aria-valuemax={Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, availableWidth - labelWidth - MIN_EDITOR_WIDTH))}
+        aria-valuemin={MIN_ACTION_WIDTH}
         aria-valuenow={actionWidth}
         className="property-panel__separator property-panel__separator--action"
         data-property-part="separator"

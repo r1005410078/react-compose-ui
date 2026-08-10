@@ -1009,23 +1009,24 @@ describe('OpenSpec: property-panel / 搜索筛选与默认值重置 / 重置属�
 })
 
 describe('OpenSpec: property-panel / 双分隔线三列布局 / 键盘调整分隔线', () => {
+  // OpenSpec: property-panel / 双分隔线三列布局 / 默认布局优先编辑列
   // OpenSpec: property-panel / 双分隔线三列布局 / 恢复默认列宽
-  it('分别调整两条分隔线并从设置菜单恢复默认宽度', () => {
-    render(<ComposePropertyPanel schema={panelSchema} style={{ width: 500 }} value={panelValue} />)
+  it('默认优先给编辑列分配空间，并可调整和恢复两条分隔线', () => {
+    render(<ComposePropertyPanel schema={panelSchema} style={{ width: 365 }} value={panelValue} />)
 
     const labelSeparator = screen.getByRole('separator', { name: '调整属性名列宽' })
     const actionSeparator = screen.getByRole('separator', { name: '调整操作列宽' })
-    expect(labelSeparator).toHaveAttribute('aria-valuenow', '160')
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '120')
     expect(actionSeparator).toHaveAttribute('aria-valuenow', '76')
 
     fireEvent.keyDown(labelSeparator, { key: 'ArrowRight' })
     fireEvent.keyDown(actionSeparator, { key: 'ArrowLeft', shiftKey: true })
-    expect(labelSeparator).toHaveAttribute('aria-valuenow', '168')
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '128')
     expect(actionSeparator).toHaveAttribute('aria-valuenow', '96')
 
     fireEvent.click(screen.getByRole('button', { name: '属性面板设置' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '恢复默认列宽' }))
-    expect(labelSeparator).toHaveAttribute('aria-valuenow', '160')
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '120')
     expect(actionSeparator).toHaveAttribute('aria-valuenow', '76')
   })
 })
@@ -1039,7 +1040,7 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
     fireEvent.pointerDown(labelSeparator, { clientX: 128, pointerId: 1 })
     fireEvent.pointerMove(labelSeparator, { clientX: 168, pointerId: 1 })
     fireEvent.pointerUp(labelSeparator, { pointerId: 1 })
-    expect(labelSeparator).toHaveAttribute('aria-valuenow', '200')
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '160')
 
     fireEvent.pointerDown(actionSeparator, { clientX: 464, pointerId: 2 })
     fireEvent.pointerMove(actionSeparator, { clientX: 444, pointerId: 2 })
@@ -1191,7 +1192,7 @@ describe('OpenSpec: property-panel / 自适应属性操作轨道 / 默认三图�
   })
 })
 
-describe('OpenSpec: property-panel / 自适应属性操作轨道 / 扩大操作列逐步显示操作', () => {
+describe('OpenSpec: property-panel / 自适应属性操作轨道 / 缩窄或扩大操作列逐步收纳操作', () => {
   it('把操作列限制在 32 至 96px 并通过键盘逐步增加可见槽位', () => {
     const schema = v.object({ items: v.pipe(v.array(v.string()), v.title('列表')) })
     render(<ComposePropertyPanel schema={schema} style={{ width: 500 }} value={{ items: ['alpha', 'beta'] }} />)
@@ -1460,7 +1461,7 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     expect(trigger).toHaveAttribute('data-binding-visibility', 'persistent')
   })
 
-  it('只应用通过目标和完整根 Schema 的变量并逐目标回退字面值', () => {
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 变量解析失败时安全回退', () => {
     const schema = v.object({
       opacity: v.pipe(
         v.number(),
@@ -1494,6 +1495,8 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     expect(literal).toEqual({ opacity: 1, title: 'Literal' })
   })
 
+  // OpenSpec: property-panel / 受控属性变量绑定 / 搜索分组变量候选
+  // OpenSpec: property-panel / 受控属性变量绑定 / 解绑与恢复默认值
   it('筛选兼容变量并在绑定、只读预览和解绑之间保持字面值', () => {
     const schema = v.object({
       opacity: v.pipe(
@@ -1569,6 +1572,7 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     expect(onValueChange).not.toHaveBeenCalled()
   })
 
+  // OpenSpec: property-panel / 受控属性变量绑定 / 解绑与恢复默认值
   it('把绑定计入修改和错误筛选，并在 reset 时同时删除绑定', () => {
     const schema = v.object({
       opacity: v.pipe(
@@ -1763,7 +1767,7 @@ describe('OpenSpec: property-panel / 受控属性变量绑定 / 绑定类型兼�
     expect(onValueChange).not.toHaveBeenCalled()
   })
 
-  it('只读面板中的已绑定输入仍可聚焦，但不能修改绑定或字面值', () => {
+  it('OpenSpec: property-panel / 受控属性变量绑定 / 只读面板显示绑定状态', () => {
     const schema = v.object({
       title: v.pipe(
         v.string(),

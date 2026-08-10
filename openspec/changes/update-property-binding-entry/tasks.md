@@ -4,12 +4,13 @@
   - Validation command/result：`openspec validate update-property-binding-entry --strict` 通过；活动中的
     `add-page-setup-runtime` 只增加 binding source/宿主授权/binding-only 需求，不修改本变更涉及的入口布局。
 - [x] 1.2 为每个新增或修改 Scenario 建立 `OpenSpec: property-panel / ... / ...` 测试映射。
-  - 操作轨道三个 Scenario：`binding-entry-model.test.ts`、`compose-property-panel.test.tsx` 的同名
-    `OpenSpec` suites，以及 ECharts Chromium 流程。
-  - 单目标显隐、常显状态与 renderer 自动入口：`compose-property-panel.test.tsx` 的同名 cases；候选过滤、
-    解绑/reset、安全回退和只读状态继续映射在同一受控绑定 suite。
-  - 复合数值输入：`semantic-editors.test.tsx` 的“复合数值输入分别绑定”；ECharts 映射与真实 Canvas 联动
-    继续由 `integration.spec.ts` 的“完整示例 renderer”流程覆盖。
+  - 操作轨道四个 Scenario 分别由 `binding-entry-model.test.ts` 的三个同名 cases 与
+    `compose-property-panel.test.tsx` 的同名上下文菜单 suite 覆盖。
+  - 内置字段授权、兼容变量、编辑区零 slot、persistent 状态、多子目标变量标识、搜索、解绑/reset、安全回退和
+    只读状态均由 `compose-property-panel.test.tsx` 的精确 `OpenSpec` case 或紧邻注释映射。
+  - 复合数值与 renderer 自动入口由 `semantic-editors.test.tsx`、
+    `compose-property-panel.test.tsx` 的精确 `OpenSpec` case 覆盖；ECharts title/data 的独立选择器入口与真实
+    Canvas 联动由 `integration.spec.ts` 的紧邻 `OpenSpec` 注释覆盖。
 
 ## 2. 操作轨道绑定规划（Red → Green → Refactor）
 
@@ -119,3 +120,31 @@
     （40/40）、`bun run test`（39/39，含 Storybook 44）、`bun run build`（21/21）和
     `bun run test:e2e`（35/35）均通过；`openspec validate update-property-binding-entry --strict` 和
     `git diff --check` 通过（OpenSpec 的遥测网络 flush 警告不影响校验结果）。
+
+## 8. 审阅收口
+
+- [x] 8.1 明确多 target 菜单、单槽组合菜单与三槽普通操作的边界，并写出可观察的直接操作优先级。
+  - Docs result：proposal、design、增量 spec 与 Property Panel README 一致说明：多 target 使用目标菜单，只有
+    单槽且与普通操作竞争时使用组合菜单；直接槽位固定为 binding、存在性/新增、重置、删除、移动的顺序。
+- [x] 8.2 为所有修改后的 Scenario 补充精确的 `OpenSpec` 测试标题或紧邻映射，并让 ECharts Scenario 与示例的
+  title/data 两个实际字段保持一致。
+  - Regression command/result：`bun run --cwd packages/property-panel test -- src/binding-entry-model.test.ts
+    src/property-panel/compose-property-panel.test.tsx src/semantic-editors/semantic-editors.test.tsx`，3 个文件、78 个
+    用例通过；`bunx playwright test --grep "在 Stage 中渲染 ECharts Canvas"`，目标 Chromium 流程通过。
+- [x] 8.3 重新运行变更校验与空白检查。
+  - Validation command/result：`openspec validate update-property-binding-entry --strict`、`git diff --check` 通过。
+
+## 9. 编辑列优先的默认比例（Red → Green → Refactor）
+
+- [x] 9.1 Red：把常见 365px Inspector 的默认属性名列断言改为 120px，保留 76px 三图标操作列，并记录旧
+  160px 默认值的失败证据。
+  - Red command/result/reason：`bun run --cwd packages/property-panel test -- src/property-panel/compose-property-panel.test.tsx -t
+    "默认优先给编辑列分配空间"`；1 个用例按目标失败，separator 的 `aria-valuenow` 为 `160` 而非预期 `120`，
+    证明旧默认值挤压了中间编辑列。
+- [x] 9.2 Green：将 Root 与独立 Panel 的默认/恢复属性名列宽统一为 120px，并将 CSS fallback 同步为该值。
+  - Green command/result：`bun run --cwd packages/property-panel test -- src/property-panel/compose-property-panel.test.tsx -t
+    "默认优先给编辑列分配空间|拖动时分别更新属性名列和操作列|宿主收窄时重新 clamp"`，3/3 通过；365px
+    内容区默认分配为 120px / 169px / 76px。
+- [x] 9.3 Refactor：提取共享的列宽/最小宽度常量，并同步 README、proposal、design 和三列布局增量规范。
+  - Refactor result：默认、恢复、ResizeObserver 与 ARIA 边界使用同一组常量；三图标操作轨道保持 76px，
+    中间编辑列获得默认优先级。
