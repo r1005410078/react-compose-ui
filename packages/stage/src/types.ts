@@ -11,6 +11,7 @@ import type {
 } from '@compose-ui/core'
 import type {
   StageInteractionController,
+  StageInteractionTool,
   StagePaintEditing,
   StagePaintSampling,
   StageViewport,
@@ -21,7 +22,7 @@ import type {
  *
  * @public
  */
-export type ComposeStageTool = 'select' | 'pan'
+export type ComposeStageTool = StageInteractionTool
 
 /**
  * Stage 可配置的单次键位。
@@ -49,7 +50,16 @@ export interface ComposeStageKeybinding {
 export type ComposeStageShortcutAction =
   | 'stage.temporaryPan'
   | 'stage.selectTool'
+  | 'stage.moveTool'
+  | 'stage.scaleTool'
+  | 'stage.rotateTool'
   | 'stage.panTool'
+  | 'stage.drawContainerTool'
+  | 'stage.drawRectangleTool'
+  | 'stage.drawLineTool'
+  | 'stage.drawArrowTool'
+  | 'stage.drawCircleTool'
+  | 'stage.drawTextTool'
   | 'stage.fitSelection'
   | 'stage.fitContainer'
   | 'stage.zoomReset'
@@ -127,6 +137,8 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly dispatch: ComposeStageDispatch
   readonly viewport: StageViewport
   readonly onViewportChange: (viewport: StageViewport) => void
+  /** 是否显示会话级网格；不会修改文档中的网格吸附设置。 @defaultValue true */
+  readonly gridVisible?: boolean
   readonly tool: ComposeStageTool
   /** 请求切换选择或平移工具；省略时对应快捷键不改变工具。 */
   readonly onToolChange?: (tool: ComposeStageTool) => void

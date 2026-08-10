@@ -28,6 +28,13 @@ import {
   DEFAULT_COMPOSE_SVG_PRESET,
   DEFAULT_COMPOSE_SVG_RENDERER,
 } from './svg'
+import {
+  createShapeMaterial,
+  DEFAULT_COMPOSE_ARROW_PRESET,
+  DEFAULT_COMPOSE_CIRCLE_PRESET,
+  DEFAULT_COMPOSE_LINE_PRESET,
+  DEFAULT_COMPOSE_SHAPE_RENDERER,
+} from './shape'
 import type { ComposeBasicMaterials, ComposeCreateBasicMaterialsOptions } from './types'
 
 /** `@compose-ui/materials` 的稳定包标识。 @public */
@@ -39,6 +46,7 @@ export const DEFAULT_COMPOSE_BASIC_RENDERERS = Object.freeze([
   DEFAULT_COMPOSE_TEXT_RENDERER,
   DEFAULT_COMPOSE_IMAGE_RENDERER,
   DEFAULT_COMPOSE_SVG_RENDERER,
+  DEFAULT_COMPOSE_SHAPE_RENDERER,
 ])
 
 /** 默认 Entity Presets。 @public */
@@ -48,6 +56,9 @@ export const DEFAULT_COMPOSE_BASIC_PRESETS = Object.freeze([
   DEFAULT_COMPOSE_TEXT_PRESET,
   DEFAULT_COMPOSE_IMAGE_PRESET,
   DEFAULT_COMPOSE_SVG_PRESET,
+  DEFAULT_COMPOSE_LINE_PRESET,
+  DEFAULT_COMPOSE_ARROW_PRESET,
+  DEFAULT_COMPOSE_CIRCLE_PRESET,
 ])
 
 /** 为一个编辑器实例创建基础 ECS 物料和 Entity Registry。 @public */
@@ -60,12 +71,14 @@ export function createComposeBasicMaterials(
   const text = createTextMaterial(options.text, idFactory)
   const image = createImageMaterial(options.image, idFactory)
   const svg = createSvgMaterial(options.svg, idFactory)
+  const shape = createShapeMaterial(options.shape, idFactory)
   const pageSlot = createPageSlotMaterial(options.pageSlot, idFactory)
   const rendererDefinitions = Object.freeze([
     rectangle.renderer,
     text.renderer,
     image.renderer,
     svg.renderer,
+    shape.renderer,
     pageSlot.renderer,
     ...(options.extensions?.renderers ?? []),
   ])
@@ -80,6 +93,7 @@ export function createComposeBasicMaterials(
     image.preset,
     svg.preset,
     pageSlot.preset,
+    ...shape.presets,
     ...(options.extensions?.presets ?? []),
   ])
   const capabilities = Object.freeze([

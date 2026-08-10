@@ -59,12 +59,36 @@ export type StageInteractionPhase =
   | 'marquee'
   | 'move'
   | 'resize'
+  | 'segment-resize'
   | 'rotate'
+  | 'draw'
   | 'guide-create'
   | 'guide-move'
   | 'paint-edit'
   | 'paint-sample'
   | 'external'
+
+/** Stage 的受控工具模式；不包含 React 或 DOM 类型。 @public */
+export type StageInteractionTool =
+  | 'select'
+  | 'move'
+  | 'scale'
+  | 'rotate'
+  | 'pan'
+  | 'draw-container'
+  | 'draw-rectangle'
+  | 'draw-line'
+  | 'draw-arrow'
+  | 'draw-circle'
+  | 'draw-text'
+
+/** 当前绘制手势的瞬时世界坐标预览。 @public */
+export interface StageDrawingPreview {
+  readonly tool: Extract<StageInteractionTool, `draw-${string}`>
+  readonly bounds: StageRect
+  readonly start: StagePoint
+  readonly end: StagePoint
+}
 
 /** 不依赖 KeyboardEvent 的交互修饰键。 @public */
 export interface StageInteractionModifiers {
@@ -93,7 +117,16 @@ export type StageInteractionHit =
   | { readonly kind: 'output' }
   | { readonly kind: 'entity'; readonly entityId: string }
   | { readonly kind: 'resize'; readonly handle: ResizeHandle }
+  | {
+      /** 由 surface 从任意两点图形推导的端点；Engine 不依赖 Renderer 或物料类型。 */
+      readonly kind: 'segment-endpoint'
+      readonly entityId: string
+      readonly endpoint: 'start' | 'end'
+      readonly start: StagePoint
+      readonly end: StagePoint
+    }
   | { readonly kind: 'rotate' }
+  | { readonly kind: 'move-axis'; readonly axis: 'x' | 'y' }
   | { readonly kind: 'ruler'; readonly axis: 'x' | 'y' }
   | { readonly kind: 'ruler-corner' }
   | { readonly kind: 'guide'; readonly guideId: string }
@@ -144,6 +177,13 @@ export interface StagePaintHandle {
   readonly stopId?: string
 }
 
+/** 任意两点图形在端点拖拽过程中的世界坐标预览。 @public */
+export interface StageSegmentPreview {
+  readonly entityId: string
+  readonly start: StagePoint
+  readonly end: StagePoint
+}
+
 /** Stage surface 最新受控上下文。 @public */
 export interface StageInteractionContext {
   /** 最新正式文档引用；内部手势据此检测并发文档变化。 */
@@ -155,7 +195,7 @@ export interface StageInteractionContext {
   /** 不含标尺和滚动条的 surface CSS 像素尺寸。 */
   readonly surfaceSize: { readonly width: number; readonly height: number }
   /** 当前持久工具；临时平移由独立事件控制。 */
-  readonly tool: 'select' | 'pan'
+  readonly tool: StageInteractionTool
   /** 最新受控选择，按宿主顺序排列。 */
   readonly selectedIds: readonly string[]
   /** Inspector 打开的单 Entity 背景填充编辑；缺失时不渲染也不接收 Paint 控制柄。 */
@@ -182,6 +222,21 @@ export type StageInteractionEffect =
   | { readonly type: 'output.select' }
   | { readonly type: 'paint.sample.complete' }
   | { readonly type: 'command.dispatch'; readonly command: EditorCommand }
+  | {
+      readonly type: 'drawing.commit'
+      readonly tool: Extract<StageInteractionTool, `draw-${string}`>
+      readonly bounds: StageRect
+      readonly start: StagePoint
+      readonly end: StagePoint
+      readonly parentId: string | null
+    }
+  | {
+      /** Engine 只回传两端世界坐标，surface 决定如何持久化其图形语义。 */
+      readonly type: 'segment.commit'
+      readonly entityId: string
+      readonly start: StagePoint
+      readonly end: StagePoint
+    }
   | {
       readonly type: 'external.drop'
       readonly item: StageExternalDragItem
@@ -232,6 +287,10 @@ export interface StageInteractionSnapshot {
     readonly item: StageExternalDragItem
     readonly clientPoint: StagePoint | null
   } | null
+  /** 绘制工具在 pointerup 前的世界坐标预览。 */
+  readonly drawing: StageDrawingPreview | null
+  /** 两点图形端点拖动的世界坐标预览。 */
+  readonly segmentPreview: StageSegmentPreview | null
   /** 临时平移键是否仍被按住。 */
   readonly temporaryPan: boolean
   /** 当前选区（包含 transform preview）的世界轴对齐边界。 */
@@ -307,6 +366,8 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   paintHandles: [],
   paintSample: null,
   external: null,
+  drawing: null,
+  segmentPreview: null,
   temporaryPan: false,
   selectionBounds: null,
   scrollRange: null,
@@ -335,6 +396,7 @@ type Gesture =
       readonly ids: readonly string[]
       readonly startWorld: StagePoint
       readonly bounds: StageRect
+      readonly axis?: 'x' | 'y'
       transforms: Readonly<Record<string, StageTransform>>
     }
   | {
@@ -346,6 +408,15 @@ type Gesture =
       readonly startWorld: StagePoint
       readonly bounds: StageRect
       transforms: Readonly<Record<string, StageTransform>>
+    }
+  | {
+      readonly type: 'segment-resize'
+      readonly pointerId: number
+      readonly viewport: StageViewport
+      readonly entityId: string
+      readonly endpoint: 'start' | 'end'
+      start: StagePoint
+      end: StagePoint
     }
   | {
       readonly type: 'rotate'
@@ -389,6 +460,16 @@ type Gesture =
       position: number
       point: StagePoint
     }
+  | {
+      readonly type: 'draw'
+      readonly pointerId: number
+      readonly viewport: StageViewport
+      readonly tool: Extract<StageInteractionTool, `draw-${string}`>
+      readonly startWorld: StagePoint
+      currentWorld: StagePoint
+      drawingStartWorld: StagePoint
+      drawingEndWorld: StagePoint
+    }
 
 function rectFromPoints(first: StagePoint, second: StagePoint): StageRect {
   const x = Math.min(first.x, second.x)
@@ -399,6 +480,51 @@ function rectFromPoints(first: StagePoint, second: StagePoint): StageRect {
     width: Math.abs(first.x - second.x),
     height: Math.abs(first.y - second.y),
   }
+}
+
+interface DrawingPoints {
+  readonly start: StagePoint
+  readonly end: StagePoint
+}
+
+/**
+ * Shift 约束时，鼠标必须始终落在正在绘制图形的角点上。若只调整 end，视觉上的角点会偏离
+ * 指针；这里保持 end 为真实指针位置，并把较短轴的起点外扩为等长边。
+ */
+function constrainSquareDrawingPoints(start: StagePoint, end: StagePoint): DrawingPoints {
+  const deltaX = end.x - start.x
+  const deltaY = end.y - start.y
+  const side = Math.max(Math.abs(deltaX), Math.abs(deltaY))
+  const directionX = deltaX === 0 ? (deltaY < 0 ? -1 : 1) : Math.sign(deltaX)
+  const directionY = deltaY === 0 ? (deltaX < 0 ? -1 : 1) : Math.sign(deltaY)
+
+  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+    return {
+      start: { x: start.x, y: end.y - directionY * side },
+      end,
+    }
+  }
+  return {
+    start: { x: end.x - directionX * side, y: start.y },
+    end,
+  }
+}
+
+function constrainedDrawingPoints(
+  tool: Extract<StageInteractionTool, `draw-${string}`>,
+  start: StagePoint,
+  end: StagePoint,
+  modifiers: StageInteractionModifiers,
+) : DrawingPoints {
+  return modifiers.shift && (tool === 'draw-rectangle' || tool === 'draw-circle')
+    ? constrainSquareDrawingPoints(start, end)
+    : { start, end }
+}
+
+function isDrawingTool(
+  tool: StageInteractionTool,
+): tool is Extract<StageInteractionTool, `draw-${string}`> {
+  return tool.startsWith('draw-')
 }
 
 function intersects(first: StageRect, second: StageRect) {
@@ -774,7 +900,9 @@ export function createStageInteractionController(): StageInteractionController {
   }
 
   const enrich = (next: StageInteractionSnapshot): StageInteractionSnapshot => {
-    const selected = context && index
+    const selected = next.segmentPreview
+      ? rectFromPoints(next.segmentPreview.start, next.segmentPreview.end)
+      : context && index
       ? previewSelectionBounds(
           index,
           context.selectedIds,
@@ -817,10 +945,12 @@ export function createStageInteractionController(): StageInteractionController {
       ? 'grabbing'
       : next.phase === 'move'
         ? 'move'
-        : next.phase === 'resize'
+        : next.phase === 'resize' || next.phase === 'segment-resize'
           ? 'resize'
-          : next.phase === 'rotate'
+      : next.phase === 'rotate'
             ? 'rotate'
+            : next.phase === 'draw'
+              ? 'crosshair'
             : next.phase === 'marquee'
               || next.phase === 'guide-create'
               || next.phase === 'guide-move'
@@ -831,6 +961,8 @@ export function createStageInteractionController(): StageInteractionController {
                 ? 'copy'
                 : next.temporaryPan || context?.tool === 'pan'
                   ? 'grab'
+                  : isDrawingTool(context?.tool ?? 'select')
+                    ? 'crosshair'
                   : 'default'
     return {
       ...next,
@@ -891,6 +1023,52 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
+    if (gesture.type === 'draw') {
+      const drawing = constrainedDrawingPoints(
+        gesture.tool,
+        gesture.startWorld,
+        world,
+        modifiers,
+      )
+      gesture.currentWorld = world
+      gesture.drawingStartWorld = drawing.start
+      gesture.drawingEndWorld = drawing.end
+      publish({
+        ...snapshot,
+        phase: 'draw',
+        drawing: {
+          tool: gesture.tool,
+          bounds: rectFromPoints(drawing.start, drawing.end),
+          start: drawing.start,
+          end: drawing.end,
+        },
+      })
+      return
+    }
+    if (gesture.type === 'segment-resize') {
+      const snapped = snapResizePoint({
+        point: world,
+        // 两点图形的端点可以沿两个轴自由移动；使用角手柄复用既有 smart/grid snap 规则。
+        handle: 'se',
+        candidates: index.snapCandidates([gesture.entityId]),
+        canvas: context.document.canvas,
+        zoom: gesture.viewport.zoom,
+        disabled: modifiers.command,
+      })
+      if (gesture.endpoint === 'start') gesture.start = snapped.point
+      else gesture.end = snapped.point
+      publish({
+        ...snapshot,
+        phase: 'segment-resize',
+        segmentPreview: {
+          entityId: gesture.entityId,
+          start: gesture.start,
+          end: gesture.end,
+        },
+        snapGuides: snapped.guides,
+      })
+      return
+    }
     if (gesture.type === 'guide-create') {
       gesture.point = point
       gesture.guides = gesture.guides.map((guide) => ({
@@ -944,10 +1122,15 @@ export function createStageInteractionController(): StageInteractionController {
       return
     }
     if (gesture.type === 'move') {
-      const delta = {
+      const rawDelta = {
         x: world.x - gesture.startWorld.x,
         y: world.y - gesture.startWorld.y,
       }
+      const delta = gesture.axis === 'x'
+        ? { x: rawDelta.x, y: 0 }
+        : gesture.axis === 'y'
+          ? { x: 0, y: rawDelta.y }
+          : rawDelta
       if (Math.hypot(delta.x, delta.y) * gesture.viewport.zoom < 2) {
         gesture.transforms = {}
         publish({ ...snapshot, phase: 'move', previewTransforms: {}, snapGuides: [] })
@@ -1121,10 +1304,77 @@ export function createStageInteractionController(): StageInteractionController {
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
     }
+    if (event.hit.kind === 'segment-endpoint') {
+      const entity = context.document.entities[event.hit.entityId]
+      const selected = index.topLevelSelection(context.selectedIds)
+      const constraints = entity ? resolveComposeGeometryConstraints(entity) : null
+      if (
+        !entity
+        || selected.length !== 1
+        || selected[0] !== event.hit.entityId
+        || !index.isVisible(entity.id)
+        || getComposeLock(entity).locked
+        || constraints?.resize === 'none'
+        || (context.tool !== 'select' && context.tool !== 'scale')
+      ) return
+      gesture = {
+        type: 'segment-resize',
+        pointerId: event.pointerId,
+        viewport: context.viewport,
+        entityId: entity.id,
+        endpoint: event.hit.endpoint,
+        start: event.hit.start,
+        end: event.hit.end,
+      }
+      publish({
+        ...initialSnapshot(snapshot.temporaryPan),
+        phase: 'segment-resize',
+        segmentPreview: {
+          entityId: entity.id,
+          start: event.hit.start,
+          end: event.hit.end,
+        },
+      })
+      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
+      return
+    }
+    if (
+      isDrawingTool(context.tool)
+      && (
+        event.hit.kind === 'surface'
+        || event.hit.kind === 'output'
+        || event.hit.kind === 'entity'
+      )
+    ) {
+      const startWorld = worldPoint(event.point, context.viewport)
+      gesture = {
+        type: 'draw',
+        pointerId: event.pointerId,
+        viewport: context.viewport,
+        tool: context.tool,
+        startWorld,
+        currentWorld: startWorld,
+        drawingStartWorld: startWorld,
+        drawingEndWorld: startWorld,
+      }
+      publish({
+        ...initialSnapshot(snapshot.temporaryPan),
+        phase: 'draw',
+        drawing: {
+          tool: context.tool,
+          bounds: rectFromPoints(startWorld, startWorld),
+          start: startWorld,
+          end: startWorld,
+        },
+      })
+      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
+      return
+    }
     const startTransform = (
       type: 'move' | 'resize' | 'rotate',
       ids: readonly string[],
       handle?: ResizeHandle,
+      axis?: 'x' | 'y',
     ) => {
       const editableIds = index!.topLevelSelection(ids)
         .filter((id) => {
@@ -1154,6 +1404,7 @@ export function createStageInteractionController(): StageInteractionController {
           ids: editableIds,
           startWorld,
           bounds,
+          axis,
           transforms: {},
         }
       }
@@ -1188,6 +1439,13 @@ export function createStageInteractionController(): StageInteractionController {
       return true
     }
 
+    if (event.hit.kind === 'move-axis') {
+      if (context.tool === 'move') {
+        if (startTransform('move', context.selectedIds, undefined, event.hit.axis)) apply(effects)
+      }
+      return
+    }
+
     if (event.hit.kind === 'entity') {
       const entity = context.document.entities[event.hit.entityId]
       if (!entity) return
@@ -1200,16 +1458,22 @@ export function createStageInteractionController(): StageInteractionController {
       effects.push(
         { type: 'selection.change', selectedIds: nextSelection },
       )
-      if (!getComposeLock(entity).locked) startTransform('move', nextSelection)
+      if (
+        !getComposeLock(entity).locked
+        && (context.tool === 'select' || context.tool === 'move')
+      ) startTransform('move', nextSelection)
       apply(effects)
       return
     }
     if (event.hit.kind === 'resize') {
-      if (startTransform('resize', context.selectedIds, event.hit.handle)) apply(effects)
+      if (
+        (context.tool === 'select' || context.tool === 'scale')
+        && startTransform('resize', context.selectedIds, event.hit.handle)
+      ) apply(effects)
       return
     }
     if (event.hit.kind === 'rotate') {
-      if (startTransform('rotate', context.selectedIds)) apply(effects)
+      if (context.tool === 'rotate' && startTransform('rotate', context.selectedIds)) apply(effects)
       return
     }
     if (
@@ -1303,7 +1567,35 @@ export function createStageInteractionController(): StageInteractionController {
     const pointerId = finished.pointerId
     gesture = null
     const effects: StageInteractionEffect[] = []
-    if (finished.type === 'marquee') {
+    if (finished.type === 'draw') {
+      const bounds = rectFromPoints(finished.drawingStartWorld, finished.drawingEndWorld)
+      const canCreate = finished.tool === 'draw-text'
+        || bounds.width >= 1
+        || bounds.height >= 1
+      if (canCreate) {
+        const center = {
+          x: bounds.x + bounds.width / 2,
+          y: bounds.y + bounds.height / 2,
+        }
+        effects.push({
+          type: 'drawing.commit',
+          tool: finished.tool,
+          bounds,
+          start: finished.drawingStartWorld,
+          end: finished.drawingEndWorld,
+          parentId: index.containerAtPoint(center),
+        })
+      }
+    }
+    else if (finished.type === 'segment-resize') {
+      effects.push({
+        type: 'segment.commit',
+        entityId: finished.entityId,
+        start: finished.start,
+        end: finished.end,
+      })
+    }
+    else if (finished.type === 'marquee') {
       const area = rectFromPoints(finished.startWorld, finished.currentWorld)
       const selectedIds = area.width < 1 && area.height < 1
         ? []
@@ -1592,6 +1884,7 @@ export function createStageInteractionController(): StageInteractionController {
         ? gesture.ids
         : null
       const paintGestureId = gesture?.type === 'paint' ? gesture.entityId : null
+      const segmentGestureId = gesture?.type === 'segment-resize' ? gesture.entityId : null
       const documentChanged = context?.document !== nextContext.document
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
       const paintEditingChanged = !samePaintEditing(context?.paintEditing, nextContext.paintEditing)
@@ -1614,6 +1907,10 @@ export function createStageInteractionController(): StageInteractionController {
             nextContext.selectedIds.length !== 1
             || nextContext.selectedIds[0] !== paintGestureId
             || nextContext.paintEditing?.entityId !== paintGestureId
+          ))
+          || (segmentGestureId !== null && (
+            nextContext.selectedIds.length !== 1
+            || nextContext.selectedIds[0] !== segmentGestureId
           ))
           || (gesture?.type === 'paint-sample' && !samePaintSampling(
             gesture.target,

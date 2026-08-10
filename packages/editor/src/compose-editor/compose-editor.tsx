@@ -877,7 +877,9 @@ export function ComposeEditor({
       },
       stageToolbar: slots?.stageToolbar !== undefined
         ? slots.stageToolbar
-        : controller?.stageToolbar,
+        : addDefaultElementProps(controller?.stageToolbar, {
+            shortcuts: resolvedPreferences.shortcuts,
+          }),
       children: slots?.stage !== undefined
         ? slots.stage
         : addDefaultElementProps(controller?.stage ?? 'Compose Editor', {

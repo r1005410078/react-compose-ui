@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
 import { ComposeStage } from './compose-stage'
 import type { ComposeStageDispatch } from '../types'
+import { StageOverlay } from '../stage-overlay'
 
 function entity(
   id: string,
@@ -129,9 +130,32 @@ const registry = createComposeEntityRegistry({
     type: 'test',
     label: '测试',
     renderer: ({ props }) => <span>{String(props.text)}</span>,
+  }, {
+    type: 'shape',
+    label: '线条',
+    renderer: () => null,
   }],
   presets: [preset],
 })
+
+function lineEntity(id = 'line', kind: 'line' | 'arrow' = 'line'): ComposeEntity {
+  const base = entity(id)
+  return {
+    ...base,
+    components: {
+      ...base.components,
+      Renderer: {
+        type: 'shape',
+        props: {
+          kind,
+          direction: { x: 1, y: 1 },
+          stroke: '#d8e2f1',
+          strokeWidth: 2,
+        },
+      },
+    },
+  }
+}
 
 function layoutSnapshot(value: ComposeDocument): ComposeLayoutSnapshot {
   return {
@@ -196,11 +220,13 @@ function flowEntity(id: string, fillWidth = false): ComposeEntity {
 function renderStage(
   value: ComposeDocument,
   options: {
+    gridVisible?: boolean
     selectedIds?: readonly string[]
     paintEditing?: { readonly entityId: string }
     snapshot?: ComposeLayoutSnapshot
     scope?: import('@compose-ui/script-runtime').ComposePageScriptScope
     registry?: ReturnType<typeof createComposeEntityRegistry>
+    tool?: import('../types').ComposeStageTool
   } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
@@ -213,6 +239,7 @@ function renderStage(
     <ComposeStage
       dispatch={dispatch}
       document={value}
+      gridVisible={options.gridVisible}
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
       onSelectedIdsChange={vi.fn()}
       onViewportChange={vi.fn()}
@@ -220,7 +247,7 @@ function renderStage(
       scriptScope={options.scope}
       paintEditing={options.paintEditing}
       selectedIds={options.selectedIds ?? []}
-      tool="select"
+      tool={options.tool ?? 'select'}
       viewport={{ x: 0, y: 0, zoom: 1 }}
     />,
   )
@@ -229,6 +256,78 @@ function renderStage(
 
 describe('ComposeStage ECS', () => {
   afterEach(cleanup)
+
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 仅移动工具显示轴向 gizmo，网格可独立隐藏', () => {
+    const value = document()
+    renderStage(value, { gridVisible: false, selectedIds: ['a'], tool: 'move' })
+
+    expect(screen.getByTestId('stage-move-gizmo')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-move-axis-x')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-move-axis-y')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-grid')).toHaveStyle({ display: 'none' })
+  })
+
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 选择工具保留四角控制点且不显示移动 gizmo', () => {
+    renderStage(document(), { selectedIds: ['a'], tool: 'select' })
+
+    expect(screen.queryByTestId('stage-move-gizmo')).not.toBeInTheDocument()
+    expect(screen.getByTestId('stage-resize-ne')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-resize-sw')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-resize-nw')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-resize-e')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 线段端点选择 / Line 与 Arrow 单选仅显示首尾控制点而不显示矩形框', () => {
+    renderStage(document([lineEntity()]), { selectedIds: ['line'], tool: 'select' })
+
+    expect(screen.getByTestId('stage-line-selection')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-line-selection-start')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-line-selection-end')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-line-selection-dimensions')).toHaveTextContent('× 0')
+    expect(screen.queryByTestId('stage-selection-bounds')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-resize-nw')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-resize-ne')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 绘制工具 / 空闲即为十字光标，并以实际形状预览替代框选虚线', () => {
+    renderStage(document(), { selectedIds: ['a'], tool: 'draw-circle' })
+
+    expect(screen.getByRole('application', { name: 'Stage' })).toHaveAttribute(
+      'data-interaction-cursor',
+      'crosshair',
+    )
+    expect(screen.queryByTestId('stage-selection-bounds')).not.toBeInTheDocument()
+
+    const preview = render(
+      <StageOverlay
+        canvasGuides={[]}
+        drawing={{
+          tool: 'draw-arrow',
+          bounds: { x: 16, y: 20, width: 80, height: 40 },
+          start: { x: 16, y: 20 },
+          end: { x: 96, y: 60 },
+        }}
+        editableSelection={false}
+        handlePoints={null}
+        label="Editing overlay"
+        marqueeScreen={null}
+        paintHandles={[]}
+        paintSample={null}
+        resizeHandles={[]}
+        rotatable={false}
+        screenBounds={null}
+        snapGuides={[]}
+        tool="draw-arrow"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        visibleResizeHandles={[]}
+        onInteraction={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('stage-drawing-preview')).toHaveAttribute('data-drawing-tool', 'draw-arrow')
+    expect(preview.container.querySelector('.compose-stage__drawing-preview path')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-marquee')).not.toBeInTheDocument()
+  })
 
   it('OpenSpec: stage / Stage 页面 setup 值预览 / 响应式值刷新且方法为 no-op', async () => {
     let count!: ComposeState<number>
@@ -423,17 +522,20 @@ describe('ComposeStage ECS', () => {
   })
 
   it.each([
-    ['horizontal', ['e', 'w']],
-    ['vertical', ['n', 's']],
-    ['preserve-aspect', ['ne', 'se', 'sw', 'nw']],
-    ['none', []],
-  ] as const)('OpenSpec: Resize handles / %s 只显示允许手柄', (mode, handles) => {
+    ['horizontal', [], ['e', 'w']],
+    ['vertical', [], ['n', 's']],
+    ['preserve-aspect', ['ne', 'se', 'sw', 'nw'], []],
+    ['none', [], []],
+  ] as const)('OpenSpec: 受控工具模式与专属选区反馈 / %s 使用四角视觉与边缘命中', (mode, visualHandles, edgeHandles) => {
     renderStage(document([entity('a', { resize: mode })]), { selectedIds: ['a'] })
     const all = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
     all.forEach((handle) => {
       const query = screen.queryByTestId(`stage-resize-${handle}`)
-      if ((handles as readonly string[]).includes(handle)) expect(query).toBeInTheDocument()
+      if ((visualHandles as readonly string[]).includes(handle)) expect(query).toBeInTheDocument()
       else expect(query).not.toBeInTheDocument()
+      const edge = screen.queryByTestId(`stage-resize-edge-${handle}`)
+      if ((edgeHandles as readonly string[]).includes(handle)) expect(edge).toBeInTheDocument()
+      else expect(edge).not.toBeInTheDocument()
     })
   })
 

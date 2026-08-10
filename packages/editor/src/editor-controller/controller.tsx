@@ -65,12 +65,20 @@ import {
 import { planSceneOperation } from './scene-operations'
 import {
   ViewportBoundStage,
-  ViewportBoundStageToolbar,
 } from './viewport-bound-panels'
+import { DefaultStageToolbar } from '../stage-toolbar'
 import { createViewportStore } from './viewport-store'
 import { useComposeEditorLayout } from './use-layout-runtime'
 
 type InspectionTarget = 'entities' | 'output' | null
+type ShapeDrawingTool = 'draw-rectangle' | 'draw-line' | 'draw-arrow' | 'draw-circle'
+
+function isShapeDrawingTool(tool: ComposeStageTool): tool is ShapeDrawingTool {
+  return tool === 'draw-rectangle'
+    || tool === 'draw-line'
+    || tool === 'draw-arrow'
+    || tool === 'draw-circle'
+}
 
 function defaultIdFactory() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -363,12 +371,26 @@ export function useComposeEditorController({
     validExpanded(document, initialExpandedIds))
   const [viewportStore] = useState(() => createViewportStore(initialViewport))
   const setViewport = viewportStore.setViewport
-  const [tool, setTool] = useState<ComposeStageTool>(initialTool)
+  const [tool, setToolState] = useState<ComposeStageTool>(initialTool)
+  const [lastShapeTool, setLastShapeTool] = useState<ShapeDrawingTool>(
+    () => isShapeDrawingTool(initialTool) ? initialTool : 'draw-rectangle',
+  )
+  const setTool = useCallback((nextTool: ComposeStageTool) => {
+    if (isShapeDrawingTool(nextTool)) setLastShapeTool(nextTool)
+    setToolState(nextTool)
+  }, [])
   const [surfaceSize, setSurfaceSize] = useState<{
     readonly width: number
     readonly height: number
   } | null>(null)
   const [canvasSettingsOpen, setCanvasSettingsOpen] = useState(false)
+  // 网格显示是 Stage 会话偏好；只影响视觉，不进入文档与撤销历史。
+  const [gridVisible, setGridVisible] = useState(true)
+  const [snapRestore, setSnapRestore] = useState({
+    grid: document.canvas.grid.snapEnabled,
+    nodes: document.canvas.smartSnap.nodes,
+    guides: document.canvas.smartSnap.guides,
+  })
   // Paint 编辑与图层取色都是 Editor 会话状态：它们只协调 Inspector 和 Stage，
   // 不进入 ComposeDocument、事务历史或 operation log。
   const [paintEditing, setPaintEditing] = useState<StagePaintEditing | null>(null)
@@ -394,6 +416,12 @@ export function useComposeEditorController({
     setViewport(initialViewport)
     setPaintEditing(null)
     setPaintSampling(null)
+    setGridVisible(true)
+    setSnapRestore({
+      grid: nextDocument.canvas.grid.snapEnabled,
+      nodes: nextDocument.canvas.smartSnap.nodes,
+      guides: nextDocument.canvas.smartSnap.guides,
+    })
     // 进行中的手势属于上一份文档，必须取消而不是让它落到新文档的实体上；
     // Pointer 与外部拖入是两条独立的进行中状态，各自都要终止。
     interactionController.send({ type: 'pointer.cancel' })
@@ -564,6 +592,7 @@ export function useComposeEditorController({
       return viewportStore.getSnapshot()
     },
     onViewportChange: setViewport,
+    gridVisible,
     tool,
     onToolChange: setTool,
     onShortcutAction: runShortcutAction,
@@ -587,7 +616,9 @@ export function useComposeEditorController({
     dispatch,
     viewportStore,
     setViewport,
+    gridVisible,
     tool,
+    setTool,
     selectedIds,
     resolvedInspectionTarget,
     setSelectedIds,
@@ -599,13 +630,6 @@ export function useComposeEditorController({
     runShortcutAction,
   ])
 
-  const createContainer = useCallback(() => {
-    onSceneOperation({
-      type: 'create',
-      parentId: null,
-      index: document.rootIds.length,
-    })
-  }, [document.rootIds.length, onSceneOperation])
   const fitBounds = useCallback((ids: readonly string[]) => {
     if (!surfaceSize || layoutState.status !== 'ready') return
     const bounds = unionRects(
@@ -656,11 +680,6 @@ export function useComposeEditorController({
   const selectedEntity = selectedIds.length === 1
     ? document.entities[selectedIds[0]!]
     : undefined
-  const selectedContainerId = selectedIds.length === 1
-    && selectedEntity
-    && getComposeHierarchy(selectedEntity)
-    ? selectedEntity.id
-    : sceneIndex?.commonContainerForSelection(selectedIds)
   const smartSnapEnabled = document.canvas.smartSnap.nodes
     || document.canvas.smartSnap.guides
   const configureCanvas = useCallback((
@@ -682,6 +701,42 @@ export function useComposeEditorController({
     },
     meta: { label, source: 'stage-toolbar' },
   }), [dispatch, document.canvas.grid, nextId])
+  const setGridSize = useCallback((size: number) => {
+    dispatch({
+      id: nextId(),
+      type: BUILTIN_COMMAND_TYPES.configureCanvas,
+      payload: {
+        grid: {
+          ...document.canvas.grid,
+          stepX: size,
+          stepY: size,
+        },
+        smartSnap: document.canvas.smartSnap,
+      },
+      meta: { label: `Set grid size ${size}`, source: 'stage-toolbar' },
+    })
+  }, [dispatch, document.canvas, nextId])
+  const toggleSnap = useCallback(() => {
+    const current = {
+      grid: document.canvas.grid.snapEnabled,
+      nodes: document.canvas.smartSnap.nodes,
+      guides: document.canvas.smartSnap.guides,
+    }
+    const active = current.grid || current.nodes || current.guides
+    if (active) setSnapRestore(current)
+    const next = active
+      ? { grid: false, nodes: false, guides: false }
+      : snapRestore
+    dispatch({
+      id: nextId(),
+      type: BUILTIN_COMMAND_TYPES.configureCanvas,
+      payload: {
+        grid: { ...document.canvas.grid, snapEnabled: next.grid },
+        smartSnap: { nodes: next.nodes, guides: next.guides },
+      },
+      meta: { label: active ? 'Disable canvas snapping' : 'Restore canvas snapping', source: 'stage-toolbar' },
+    })
+  }, [dispatch, document.canvas, nextId, snapRestore])
 
   // 命令面板与 Stage 快捷键共用同一份上下文，同一个动作从哪个入口触发结果都一致。
   const actionContext = useMemo<ComposeEditorActionHandlerContext>(() => ({
@@ -785,7 +840,13 @@ export function useComposeEditorController({
         registry={registry}
       />
     ),
-    stage: <ViewportBoundStage stageProps={stageProps} store={viewportStore} />,
+    stage: (
+      <ViewportBoundStage
+        stageProps={stageProps}
+        store={viewportStore}
+        surfaceSize={surfaceSize}
+      />
+    ),
     inspectorPanel,
     commandPanel: (
       <CommandPanelWithActions
@@ -795,23 +856,18 @@ export function useComposeEditorController({
       />
     ),
     stageToolbar: (
-      <ViewportBoundStageToolbar
+      <DefaultStageToolbar
         canvasSettingsOpen={canvasSettingsOpen}
-        configureCanvas={configureCanvas}
-        createContainer={createContainer}
         dispatch={dispatch}
         document={document}
-        fitContainer={fitContainer}
-        fitSelection={fitSelection}
+        gridVisible={gridVisible}
         nextId={nextId}
-        selectedContainerId={selectedContainerId ?? null}
-        selectedIds={selectedIds}
         setCanvasSettingsOpen={setCanvasSettingsOpen}
+        setGridSize={setGridSize}
+        setGridVisible={setGridVisible}
+        lastShapeTool={lastShapeTool}
         setTool={setTool}
-        setViewport={setViewport}
-        smartSnapEnabled={smartSnapEnabled}
-        store={viewportStore}
-        surfaceSize={surfaceSize}
+        toggleSnap={toggleSnap}
         tool={tool}
       />
     ),

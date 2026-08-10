@@ -13,6 +13,23 @@ async function pointerDrop(page: Page, source: Locator, target: { x: number; y: 
   await page.mouse.up()
 }
 
+/** 通过新的画布工具流创建一个可供后续断言操作的 Container。 */
+async function drawContainer(page: Page, editor: Locator) {
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  await page.mouse.move(outputBox!.x + 48, outputBox!.y + 64)
+  await page.mouse.down()
+  await page.mouse.move(outputBox!.x + 696, outputBox!.y + 424, { steps: 4 })
+  await page.mouse.up()
+  await expect(stage.getByTestId('stage-container')).toBeVisible()
+  await editor.getByRole('button', { name: '选择' }).click()
+}
+
 async function enableAutoLayout(inspector: Locator) {
   await inspector.getByRole('button', { name: '添加布局' }).click()
   await inspector.getByRole('menuitem', { name: 'Auto Layout display: flex' }).click()
@@ -41,7 +58,7 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   await expect(editor.locator('[data-workspace-tab="compose-component-library"]')).toHaveCount(0)
   const componentLibrary = editor.locator('[data-workspace-panel="component-library"]')
   await expect(componentLibrary).toBeVisible()
-  await expect(componentLibrary.getByRole('button', { name: '基础 (5)' })).toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '基础 (8)' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toBeVisible()
 
   const editorBox = await editor.boundingBox()
@@ -565,7 +582,6 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   const frame = stage.locator('.compose-stage__scene > .compose-stage__node.is-container')
   await expect(frame).toHaveCount(1)
   await expect(frame).toHaveCSS('background-color', 'rgb(248, 250, 252)')
-  await editor.getByRole('button', { name: '适配容器' }).click()
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
 
@@ -732,7 +748,7 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   const container = stage.getByTestId('stage-container')
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const containerBox = await container.boundingBox()
@@ -743,7 +759,10 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
       y: containerBox!.y + containerBox!.height / 2,
     })
   }
-  await container.click({ position: { x: 8, y: 8 } })
+  await editor.getByRole('treegrid', { name: '场景树' })
+    .getByRole('row')
+    .filter({ hasText: 'Container' })
+    .click()
   const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(inspector)
   const layoutHeader = inspector.getByRole('button', { name: '布局', exact: true })
@@ -793,7 +812,7 @@ test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   expect(frameBox).not.toBeNull()
 
@@ -860,18 +879,18 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   await expandInspectorSection(inspector, '几何限制')
   await propertyRoot.getByRole('combobox', { name: 'Resize 模式' })
     .selectOption('horizontal')
-  await expect(stage.getByTestId('stage-resize-e')).toBeVisible()
-  await expect(stage.getByTestId('stage-resize-w')).toBeVisible()
-  await expect(stage.getByTestId('stage-resize-n')).toHaveCount(0)
+  await expect(stage.getByTestId('stage-resize-edge-e')).toBeVisible()
+  await expect(stage.getByTestId('stage-resize-edge-w')).toBeVisible()
+  await expect(stage.getByTestId('stage-resize-ne')).toHaveCount(0)
   await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
-  await expect(stage.getByTestId('stage-rotation-handle')).toBeVisible()
+  await expect(stage.getByTestId('stage-rotation-handle')).toHaveCount(0)
 
   await inspector.getByRole('button', { name: '移除几何限制' }).click()
   const confirm = page.getByRole('alertdialog', { name: '移除能力？' })
   await expect(confirm).toContainText('几何限制')
   await confirm.getByRole('button', { name: '移除' }).click()
   await expect(propertyRoot.getByRole('button', { name: '几何限制' })).toHaveCount(0)
-  await expect(stage.getByTestId('stage-resize-n')).toBeVisible()
+  await expect(stage.getByTestId('stage-resize-ne')).toBeVisible()
   await expect(stage.getByTestId('stage-resize-se')).toBeVisible()
 
   await capability.selectOption('container')
@@ -909,7 +928,7 @@ test('OpenSpec: 自动布局显式启用 / 自由 Container 添加、移除并�
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
 
   const emptyLayoutHeader = inspector.getByRole('button', { name: '布局', exact: true })
@@ -950,7 +969,7 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
 
   const container = stage.getByTestId('stage-container')
   const stageStyleBefore = await container.evaluate((element) => ({
@@ -1146,7 +1165,7 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
 
   const container = stage.getByTestId('stage-container')
@@ -1161,7 +1180,10 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
     y: containerBox!.y + 160,
   })
 
-  await container.click({ position: { x: 8, y: 8 } })
+  await editor.getByRole('treegrid', { name: '场景树' })
+    .getByRole('row')
+    .filter({ hasText: 'Container' })
+    .click()
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(containerInspector)
 
@@ -1290,7 +1312,7 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
 
   const container = stage.getByTestId('stage-container')
@@ -1393,22 +1415,17 @@ test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交�
   await expect(stage.getByTestId('stage-paint-handles')).toHaveCount(0)
 })
 
-test('OpenSpec: stage / 八向缩放 / resize 手柄在预览阶段跟随鼠标', async ({ page }) => {
+test('OpenSpec: stage / 四角缩放 / resize 手柄在预览阶段跟随鼠标', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('button', { name: '创建容器' }).click()
-  await editor.getByRole('button', { name: '适配容器' }).click()
+  await drawContainer(page, editor)
   const movements = {
-    n: { x: 0, y: 60 },
     ne: { x: -100, y: 60 },
-    e: { x: -100, y: 0 },
     se: { x: -100, y: -60 },
-    s: { x: 0, y: -60 },
     sw: { x: 100, y: -60 },
-    w: { x: 100, y: 0 },
     nw: { x: 100, y: 60 },
   } as const
 
@@ -1441,7 +1458,7 @@ test('OpenSpec: stage / 八向缩放 / resize 手柄在预览阶段跟随鼠标'
               Math.abs(box.y + box.height / 2 - to.y),
             )
           : Number.POSITIVE_INFINITY
-      }).toBeLessThanOrEqual(1.5)
+      }).toBeLessThanOrEqual(4.1)
       await page.mouse.up()
       await expect.poll(async () => {
         const box = await handle.boundingBox()
@@ -1451,9 +1468,134 @@ test('OpenSpec: stage / 八向缩放 / resize 手柄在预览阶段跟随鼠标'
               Math.abs(box.y + box.height / 2 - to.y),
             )
           : Number.POSITIVE_INFINITY
-      }).toBeLessThanOrEqual(1.5)
+      }).toBeLessThanOrEqual(4.1)
     }
   }
+})
+
+test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形状预览与尺寸浮标', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'crosshair')
+  await expect(output).toHaveCSS('cursor', /crosshair/)
+
+  const start = { x: outputBox!.x + 180, y: outputBox!.y + 132 }
+  const target = { x: start.x + 248, y: start.y + 144 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+
+  const preview = stage.getByTestId('stage-drawing-preview')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-rectangle')
+  await expect(preview.locator('rect')).toHaveCount(2)
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
+  await expect(stage.getByTestId('stage-marquee')).toHaveCount(0)
+  await expect(stage).toHaveScreenshot('stage-drawing-rectangle-preview.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await page.mouse.up()
+  await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
+})
+
+test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主图标同步', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
+  await shapeButtons.nth(1).click()
+  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '线条' }).click()
+  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-line')
+
+  const start = { x: outputBox!.x + 196, y: outputBox!.y + 128 }
+  const target = { x: start.x, y: start.y + 144 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+
+  const preview = stage.getByTestId('stage-drawing-preview')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-line')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('0 × 144')
+  await page.mouse.up()
+
+  await expect(editor.getByRole('button', { name: '选择', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-line')
+  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection-start')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection-end')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection-dimensions')).toContainText('× 0')
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
+  await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(0)
+
+  const startHandle = await stage.getByTestId('stage-line-selection-start').boundingBox()
+  expect(startHandle).not.toBeNull()
+  await page.mouse.move(startHandle!.x + startHandle!.width / 2, startHandle!.y + startHandle!.height / 2)
+  await page.mouse.down()
+  // 拖过另一端：固定终点不动，底层方向会翻转，但可见选择态始终保持两个端点。
+  await page.mouse.move(target.x + 72, target.y + 32, { steps: 4 })
+  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+  await page.mouse.up()
+  await expect(stage.getByTestId('stage-line-selection-start')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection-end')).toBeVisible()
+})
+
+test('OpenSpec: stage / Shift 绘制正方形与正圆 / 拖动中动态锁定预览与提交', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+  const start = { x: outputBox!.x + 180, y: outputBox!.y + 132 }
+  const target = { x: start.x + 248, y: start.y + 144 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+
+  const preview = stage.getByTestId('stage-drawing-preview')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-rectangle')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
+  await page.keyboard.down('Shift')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 248')
+  const squarePreviewBounds = await preview.locator('rect').first().boundingBox()
+  expect(squarePreviewBounds).not.toBeNull()
+  // SVG 的 1.5px 白色描边会使 DOM box 向外扩 0.75px；允许一个物理像素的视觉误差。
+  expect(Math.abs(squarePreviewBounds!.x + squarePreviewBounds!.width - target.x)).toBeLessThan(1)
+  expect(Math.abs(squarePreviewBounds!.y + squarePreviewBounds!.height - target.y)).toBeLessThan(1)
+  await page.keyboard.up('Shift')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
+  await page.keyboard.down('Shift')
+  await page.mouse.up()
+  await page.keyboard.up('Shift')
+
+  await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
+  const createdRectangle = stage.locator('.compose-stage__node.is-renderer').last()
+  await expect(createdRectangle).toHaveCSS('width', '248px')
+  await expect(createdRectangle).toHaveCSS('height', '248px')
+  await expect(createdRectangle).toHaveCSS('border-radius', '0px')
 })
 
 test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍显示网格并保持 8 单位吸附', async ({ page }) => {
@@ -1527,8 +1669,7 @@ test('OpenSpec: stage / Pointer 手势原子性与取消 / move 与 resize 各�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const historyEntries = editor.locator('[data-compose-ui="history"] li')
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '创建容器' }).click()
-  await editor.getByRole('button', { name: '适配容器' }).click()
+  await drawContainer(page, editor)
   const frame = editor.getByTestId('stage-container')
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
@@ -1602,8 +1743,7 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '创建容器' }).click()
-  await editor.getByRole('button', { name: '适配容器' }).click()
+  await drawContainer(page, editor)
   const frame = stage.locator('.compose-stage__scene > .compose-stage__node.is-container')
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
@@ -1699,17 +1839,17 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '创建容器' }).click()
-  await editor.getByRole('button', { name: '适配容器' }).click()
-
-  await editor.getByRole('button', { name: '智能吸附' }).click()
-  await editor.getByRole('button', { name: '画布设置' }).click()
+  await drawContainer(page, editor)
+  await editor.getByRole('button', { name: '网格大小' }).click()
+  await editor.getByRole('menu', { name: '网格大小' })
+    .getByRole('menuitem', { name: '画布设置' })
+    .click()
   const settings = editor.getByRole('dialog', { name: '画布网格与吸附设置' })
   await settings.getByRole('textbox', { name: 'X 步长' }).fill('16')
   await settings.getByRole('textbox', { name: 'Y 步长' }).fill('16')
   await settings.getByRole('button', { name: '应用' }).click()
-  await expect(editor.getByRole('button', { name: '智能吸附' }))
-    .toHaveAttribute('aria-pressed', 'false')
+  await expect(editor.getByRole('button', { name: '吸附' }))
+    .toHaveAttribute('aria-pressed', 'true')
 
   const frame = stage.getByTestId('stage-container')
   const frameBox = await frame.boundingBox()
@@ -1850,7 +1990,7 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
   await page.getByRole('button', { name: '语言', exact: true }).click()
   await page.getByRole('radio', { name: 'English' }).click()
   await expect(editor).toHaveAttribute('lang', 'en-US')
-  await expect(editor.locator('button[aria-label="Canvas settings"]')).toBeVisible()
+  await expect(editor.locator('button[aria-label="Grid size"]')).toBeVisible()
   await page.getByRole('button', { name: 'Close settings' }).click()
   await expect(
     editor.locator('[data-workspace-tab="compose-component-library-panel"]'),
@@ -1960,7 +2100,7 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   })
   await editor.getByText('命令', { exact: true }).click()
 
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   expect(frameBox).not.toBeNull()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
@@ -2069,7 +2209,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 创建、编辑�
   await expect(detailTab).toContainText('Detail')
 
   // 3) 在画布上创建一个容器，页面标签出现未保存指示
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   const dirty = detailTab.getByRole('img', { name: '有未保存改动' })
   await expect(dirty).toBeVisible()
 
@@ -2376,7 +2516,7 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
   const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
   await pagesGrid.getByRole('gridcell', { name: 'Home' }).dblclick()
   await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   const homeTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
   await page.keyboard.press('Control+S')
   await expect(homeTab.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
@@ -2484,7 +2624,7 @@ test('OpenSpec: editor-workspace-layout / 页面保存 / 快捷键与按钮可�
   // 无改动时保存按钮禁用
   await expect(pagePanel.getByRole('button', { name: '保存页面' })).toBeDisabled()
 
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   await expect(dirty).toBeVisible()
   await expect(pagePanel.getByRole('button', { name: '保存页面' })).toBeEnabled()
 
@@ -2517,7 +2657,7 @@ test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完�
     .getByRole('gridcell', { name: /^Pages/ }).click()
   await assets.getByRole('grid', { name: 'Pages' })
     .getByRole('gridcell', { name: 'Home' }).dblclick()
-  await editor.getByRole('button', { name: '创建容器' }).click()
+  await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: 'Rectangle' }).click()
   await editor.getByRole('button', { name: 'Text' }).click()

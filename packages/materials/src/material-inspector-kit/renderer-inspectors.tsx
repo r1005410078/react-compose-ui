@@ -22,6 +22,7 @@ import {
   DEFAULT_TEXT_TYPOGRAPHY_PROPS,
   defaultTextLineHeight,
 } from '../text/defaults'
+import { SHAPE_RENDERER_PROP_SCHEMAS } from '../shape/props'
 import { TEXT_RENDERER_PROP_SCHEMAS } from '../text/props'
 import { composeNodePropertySchema } from './node'
 
@@ -237,6 +238,91 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
             { ...context.authoredProps, [propName]: change.value as JsonValue },
             idFactory,
           )
+        }}
+      />
+    )
+  }
+}
+
+/** 创建 Line / Arrow Renderer Props Inspector。 @internal */
+export function createShapeRendererInspector(idFactory: InspectorIdFactory) {
+  return function ShapeRendererInspector(context: ComposeRendererInspectorProps) {
+    const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
+    const props = inspectorBaseProps(context)
+    const circle = props.kind === 'circle'
+    const fullSchema = v.object({
+      stroke: v.pipe(
+        SHAPE_RENDERER_PROP_SCHEMAS.stroke,
+        v.title(title(zh, 'Stroke', '线条颜色')),
+        v.metadata({ propertyPanel: { editor: 'color' } }),
+      ),
+      strokeWidth: v.pipe(
+        SHAPE_RENDERER_PROP_SCHEMAS.strokeWidth,
+        v.title(title(zh, 'Stroke width', '线条粗细')),
+        v.metadata({ propertyPanel: { unit: 'px' } }),
+      ),
+      strokeLinecap: v.pipe(
+        SHAPE_RENDERER_PROP_SCHEMAS.strokeLinecap,
+        v.title(title(zh, 'Line cap', '端点形状')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { butt: '平头', round: '圆头', square: '方头' }
+          : { butt: 'Butt', round: 'Round', square: 'Square' } } }),
+      ),
+      strokeDasharray: v.pipe(
+        SHAPE_RENDERER_PROP_SCHEMAS.strokeDasharray,
+        v.title(title(zh, 'Line style', '线条样式')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { none: '实线', '8 4': '虚线', '1 4': '点线' }
+          : { none: 'Solid', '8 4': 'Dashed', '1 4': 'Dotted' } } }),
+      ),
+      markerStart: v.pipe(
+        SHAPE_RENDERER_PROP_SCHEMAS.markerStart,
+        v.title(title(zh, 'Start arrow', '起点箭头')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { none: '无', arrow: '箭头' }
+          : { none: 'None', arrow: 'Arrow' } } }),
+      ),
+      markerEnd: v.pipe(
+        SHAPE_RENDERER_PROP_SCHEMAS.markerEnd,
+        v.title(title(zh, 'End arrow', '终点箭头')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { none: '无', arrow: '箭头' }
+          : { none: 'None', arrow: 'Arrow' } } }),
+      ),
+    })
+    const schema = circle
+      ? v.pick(fullSchema, ['stroke', 'strokeWidth'])
+      : fullSchema
+    const value = {
+      stroke: typeof props.stroke === 'string' ? props.stroke : '#d8e2f1',
+      strokeWidth: typeof props.strokeWidth === 'number' && props.strokeWidth >= 0
+        ? props.strokeWidth
+        : 2,
+      strokeLinecap: props.strokeLinecap === 'round' || props.strokeLinecap === 'square'
+        ? props.strokeLinecap
+        : 'butt' as const,
+      strokeDasharray: props.strokeDasharray === '8 4' || props.strokeDasharray === '1 4'
+        ? props.strokeDasharray
+        : 'none' as const,
+      markerStart: props.markerStart === 'arrow' ? 'arrow' as const : 'none' as const,
+      markerEnd: props.markerEnd === 'arrow' || (props.kind === 'arrow' && props.markerEnd === undefined)
+        ? 'arrow' as const
+        : 'none' as const,
+    }
+    return (
+      <ComposePropertyPanel
+        aria-label={title(zh, `${context.entity.name} line`, `${context.entity.name} 线条`)}
+        binding={createPropsBinding(context)}
+        readOnly={context.readOnly}
+        schema={schema}
+        value={value}
+        onValueChange={(next, change) => {
+          const propName = change.path[0]
+          if (change.path.length !== 1 || typeof propName !== 'string' || !(propName in next)) return
+          dispatchProps(context, {
+            ...context.authoredProps,
+            [propName]: change.value as JsonValue,
+          }, idFactory)
         }}
       />
     )

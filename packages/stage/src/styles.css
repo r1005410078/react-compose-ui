@@ -82,6 +82,13 @@
   background: var(--compose-surface-sunken, #25282d);
 }
 
+/* 绘制工具拥有完整的 Canvas 命中权；即使悬停在既有图层或 output 上，也不能退回选择光标。 */
+.compose-stage[data-interaction-cursor='crosshair'] .compose-stage__surface,
+.compose-stage[data-interaction-cursor='crosshair'] .compose-stage__surface * {
+  /* 使用平台原生十字星，保持与 Figma 等设计工具一致的指针语义。 */
+  cursor: crosshair !important;
+}
+
 .compose-stage__grid,
 .compose-stage__world-overlay,
 .compose-stage__scene,
@@ -228,6 +235,36 @@
   stroke-width: 1;
 }
 
+.compose-stage__line-selection-axis {
+  fill: none;
+  pointer-events: none;
+  stroke: #0d99ff;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.compose-stage__line-selection-handle {
+  fill: #f8fbff;
+  pointer-events: all;
+  stroke: #0d99ff;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  cursor: crosshair;
+}
+
+.compose-stage__line-selection-dimensions {
+  pointer-events: none;
+}
+
+.compose-stage__line-selection-dimensions rect {
+  fill: #0d99ff;
+}
+
+.compose-stage__line-selection-dimensions text {
+  fill: #fff;
+  font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
 .compose-stage__marquee {
   stroke-dasharray: 4 3;
 }
@@ -237,6 +274,100 @@
   stroke: #3687ff;
   stroke-width: 1;
   pointer-events: all;
+}
+
+.compose-stage__handle--ne,
+.compose-stage__handle--sw {
+  cursor: nesw-resize;
+}
+
+.compose-stage__handle--nw,
+.compose-stage__handle--se {
+  cursor: nwse-resize;
+}
+
+.compose-stage__resize-hit {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.compose-stage__resize-hit--n,
+.compose-stage__resize-hit--s {
+  cursor: ns-resize;
+}
+
+.compose-stage__resize-hit--e,
+.compose-stage__resize-hit--w {
+  cursor: ew-resize;
+}
+
+.compose-stage__move-gizmo-origin,
+.compose-stage__move-gizmo-axis {
+  fill: none;
+  pointer-events: all;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.compose-stage__move-gizmo-origin {
+  stroke: var(--compose-text, #f8fbff);
+}
+
+.compose-stage__move-gizmo-axis--x {
+  cursor: ew-resize;
+  stroke: #ff6262;
+}
+
+.compose-stage__move-gizmo-axis--y {
+  cursor: ns-resize;
+  stroke: #9be147;
+}
+
+.compose-stage__drawing-preview {
+  pointer-events: none;
+}
+
+.compose-stage__drawing-preview rect,
+.compose-stage__drawing-preview ellipse {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.compose-stage__drawing-preview.is-container rect {
+  stroke-dasharray: 6 4;
+}
+
+.compose-stage__drawing-preview line,
+.compose-stage__drawing-preview path {
+  fill: #fff;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.compose-stage__drawing-preview.is-text rect {
+  stroke-dasharray: 4 3;
+}
+
+.compose-stage__drawing-preview.is-text text {
+  fill: #fff;
+  font: 14px/1 sans-serif;
+}
+
+.compose-stage__drawing-preview-caret {
+  stroke-width: 1 !important;
+}
+
+.compose-stage__drawing-preview .compose-stage__drawing-dimensions rect {
+  fill: #0d99ff;
+  stroke: none;
+}
+
+.compose-stage__drawing-dimensions text {
+  fill: #fff;
+  font: 500 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 .compose-stage__rotation {

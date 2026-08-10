@@ -64,7 +64,7 @@ const snapshot: ComposeLayoutSnapshot = {
 
 function renderStage(options: {
   onShortcutAction?: (action: string) => boolean
-  onToolChange?: (tool: 'select' | 'pan') => void
+  onToolChange?: (tool: import('../types').ComposeStageTool) => void
 } = {}) {
   const value = fixture()
   const runtime = createTransactionRuntime({ document: value })

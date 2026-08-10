@@ -1,5 +1,5 @@
 /**
- * 提供 Container、Rectangle、Text、Image 与 SVG 的 ECS Entity Presets。
+ * 提供 Container、Rectangle、Text、Image、SVG 与绘图 Shape 的 ECS Entity Presets。
  *
  * @packageDocumentation
  */
@@ -36,6 +36,12 @@ export {
   DEFAULT_COMPOSE_SVG_RENDERER,
 } from './svg'
 export {
+  DEFAULT_COMPOSE_ARROW_PRESET,
+  DEFAULT_COMPOSE_CIRCLE_PRESET,
+  DEFAULT_COMPOSE_LINE_PRESET,
+  DEFAULT_COMPOSE_SHAPE_RENDERER,
+} from './shape'
+export {
   DEFAULT_COMPOSE_PAGE_SLOT_PRESET,
   DEFAULT_COMPOSE_PAGE_SLOT_RENDERER,
 } from './page-slot'
@@ -44,4 +50,5 @@ export type {
   ComposeBasicMaterialOptions,
   ComposeBasicMaterials,
   ComposeCreateBasicMaterialsOptions,
+  ComposeShapeMaterialOptions,
 } from './types'

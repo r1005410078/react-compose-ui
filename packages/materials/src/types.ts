@@ -26,6 +26,13 @@ export interface ComposeBasicContainerOptions {
   readonly defaultClip?: boolean
 }
 
+/** Shape 绘图 Preset 的覆盖项。 @public */
+export interface ComposeShapeMaterialOptions {
+  readonly line?: ComposeBasicMaterialOptions
+  readonly arrow?: ComposeBasicMaterialOptions
+  readonly circle?: ComposeBasicMaterialOptions
+}
+
 /** `createComposeBasicMaterials` 配置。 @public */
 export interface ComposeCreateBasicMaterialsOptions {
   readonly container?: ComposeBasicContainerOptions
@@ -33,6 +40,8 @@ export interface ComposeCreateBasicMaterialsOptions {
   readonly text?: ComposeBasicMaterialOptions
   readonly image?: ComposeBasicMaterialOptions
   readonly svg?: ComposeBasicMaterialOptions
+  /** Line、Arrow、Circle 绘图物料选项。 */
+  readonly shape?: ComposeShapeMaterialOptions
   /** 按分类追加的宿主 Registry 定义。 */
   readonly extensions?: {
     readonly renderers?: readonly ComposeRendererDefinition[]

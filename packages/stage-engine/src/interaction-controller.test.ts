@@ -68,6 +68,218 @@ describe('StageInteractionController ECS systems', () => {
     })
   })
 
+  it('OpenSpec: 受控工具模式与专属选区反馈 / move 轴 gizmo 只改变对应坐标', () => {
+    const { controller } = setup()
+    controller.updateContext({
+      document: document(),
+      layoutSnapshot: layoutSnapshot(document()),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'move' as never,
+      selectedIds: ['a'],
+      idFactory: () => 'move-axis-id',
+    })
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'move-axis', axis: 'x' } as never,
+      modifiers,
+    })
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 42, y: 55 },
+      modifiers,
+    })
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'move',
+      previewTransforms: {
+        a: expect.objectContaining({ x: 32, y: 0 }),
+      },
+    })
+  })
+
+  it('OpenSpec: Headless 绘制会话 / draw tool 只在松手请求绘制提交', () => {
+    const { controller, effects } = setup()
+    controller.updateContext({
+      document: document(),
+      layoutSnapshot: layoutSnapshot(document()),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'draw-rectangle' as never,
+      selectedIds: [],
+      idFactory: () => 'draw-id',
+    })
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'idle',
+      cursor: 'crosshair',
+      drawing: null,
+      marquee: null,
+    })
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 12, y: 16 },
+      hit: { kind: 'surface' },
+      modifiers,
+    })
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 52, y: 46 },
+      modifiers,
+    })
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'draw',
+      drawing: { tool: 'draw-rectangle', bounds: { x: 12, y: 16, width: 40, height: 30 } },
+      marquee: null,
+    })
+
+    controller.send({
+      type: 'pointer.up',
+      pointerId: 1,
+      point: { x: 52, y: 46 },
+      modifiers,
+    })
+    expect(effects).toContainEqual(expect.objectContaining({
+      type: 'drawing.commit',
+      tool: 'draw-rectangle',
+      bounds: { x: 12, y: 16, width: 40, height: 30 },
+    }))
+  })
+
+  it('OpenSpec: 线段端点选择 / 端点预览只在松手请求一次提交，并允许越过固定端', () => {
+    const { controller, effects } = setup()
+    const unrestricted = { ...modifiers, command: true }
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 100, y: 50 },
+      hit: {
+        kind: 'segment-endpoint',
+        entityId: 'a',
+        endpoint: 'start',
+        start: { x: 0, y: 0 },
+        end: { x: 100, y: 50 },
+      },
+      modifiers: unrestricted,
+    })
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'segment-resize',
+      segmentPreview: {
+        entityId: 'a',
+        start: { x: 0, y: 0 },
+        end: { x: 100, y: 50 },
+      },
+    })
+
+    controller.send({
+      type: 'pointer.move', pointerId: 1, point: { x: 140, y: 72 }, modifiers: unrestricted,
+    })
+    expect(controller.getSnapshot()).toMatchObject({
+      segmentPreview: {
+        entityId: 'a',
+        start: { x: 140, y: 72 },
+        end: { x: 100, y: 50 },
+      },
+    })
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toHaveLength(0)
+
+    controller.send({
+      type: 'pointer.up', pointerId: 1, point: { x: 140, y: 72 }, modifiers: unrestricted,
+    })
+    expect(effects.filter((effect) => effect.type === 'segment.commit')).toEqual([
+      {
+        type: 'segment.commit',
+        entityId: 'a',
+        start: { x: 140, y: 72 },
+        end: { x: 100, y: 50 },
+      },
+    ])
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toHaveLength(0)
+    expect(controller.getSnapshot().segmentPreview).toBeNull()
+  })
+
+  it('OpenSpec: 线段端点选择 / 取消端点拖拽不会请求提交', () => {
+    const { controller, effects } = setup()
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 0, y: 0 },
+      hit: {
+        kind: 'segment-endpoint',
+        entityId: 'a',
+        endpoint: 'end',
+        start: { x: 0, y: 0 },
+        end: { x: 100, y: 50 },
+      },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.cancel', pointerId: 1 })
+
+    expect(controller.getSnapshot().segmentPreview).toBeNull()
+    expect(effects.some((effect) => effect.type === 'segment.commit')).toBe(false)
+  })
+
+  it('OpenSpec: Headless 绘制会话 / Shift 锁定正方形且指针保持在绘制终点', () => {
+    const { controller, effects } = setup()
+    controller.updateContext({
+      document: document(),
+      layoutSnapshot: layoutSnapshot(document()),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'draw-circle' as never,
+      selectedIds: [],
+      idFactory: () => 'draw-square-id',
+    })
+    const shiftedModifiers = { ...modifiers, shift: true }
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 12, y: 16 },
+      hit: { kind: 'surface' },
+      modifiers: shiftedModifiers,
+    })
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 52, y: 46 },
+      modifiers: shiftedModifiers,
+    })
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'draw',
+      drawing: {
+        tool: 'draw-circle',
+        bounds: { x: 12, y: 6, width: 40, height: 40 },
+        end: { x: 52, y: 46 },
+      },
+    })
+
+    controller.send({
+      type: 'pointer.up',
+      pointerId: 1,
+      point: { x: 52, y: 46 },
+      modifiers: shiftedModifiers,
+    })
+    expect(effects).toContainEqual(expect.objectContaining({
+      type: 'drawing.commit',
+      tool: 'draw-circle',
+      bounds: { x: 12, y: 6, width: 40, height: 40 },
+      end: { x: 52, y: 46 },
+    }))
+  })
+
   it('OpenSpec: auto-layout-interactions / Flow 拖动 / 使用冻结 Snapshot 并烘焙 Fill 尺寸', () => {
     const flowBase = entity('a')
     const flow = {

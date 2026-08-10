@@ -3,8 +3,11 @@ import type {
   ResizeHandle,
   StageGuide,
   StageInteractionHit,
+  StageInteractionTool,
+  StageDrawingPreview,
   StagePaintHandle,
   StagePaintSamplePreview,
+  StagePoint,
   StagePreviewGuide,
   StageRect,
   StageViewport,
@@ -16,12 +19,21 @@ interface StageOverlayProps {
   readonly viewport: StageViewport
   readonly canvasGuides: readonly StagePreviewGuide[]
   readonly screenBounds: StageRect | null
+  /** 单选两点图形的精确世界端点；存在时替代通用矩形选区。 */
+  readonly lineSelection?: {
+    readonly entityId: string
+    readonly start: StagePoint
+    readonly end: StagePoint
+  } | null
   readonly handlePoints: Readonly<
     Record<ResizeHandle, readonly [number, number]>
   > | null
   readonly editableSelection: boolean
   readonly resizeHandles: readonly ResizeHandle[]
+  readonly visibleResizeHandles: readonly ResizeHandle[]
   readonly rotatable: boolean
+  readonly tool: StageInteractionTool
+  readonly drawing: StageDrawingPreview | null
   readonly marqueeScreen: StageRect | null
   readonly snapGuides: readonly StageGuide[]
   readonly paintHandles: readonly StagePaintHandle[]
@@ -32,16 +44,57 @@ interface StageOverlayProps {
   ) => void
 }
 
+function lineDimensionLabel(start: StagePoint, end: StagePoint) {
+  const length = Math.hypot(end.x - start.x, end.y - start.y)
+  const rounded = Math.round(length * 100) / 100
+  return `${rounded} × 0`
+}
+
+function lineLabelPosition(start: StagePoint, end: StagePoint) {
+  const deltaX = end.x - start.x
+  const deltaY = end.y - start.y
+  const length = Math.hypot(deltaX, deltaY)
+  let normal = length < 1
+    ? { x: 0, y: 1 }
+    : { x: -deltaY / length, y: deltaX / length }
+  if (normal.y < 0) normal = { x: -normal.x, y: -normal.y }
+  let angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI
+  if (angle > 90 || angle < -90) angle += 180
+  return {
+    angle,
+    x: (start.x + end.x) / 2 + normal.x * 17,
+    y: (start.y + end.y) / 2 + normal.y * 17,
+  }
+}
+
+function arrowHeadPath(start: { readonly x: number; readonly y: number }, end: { readonly x: number; readonly y: number }) {
+  const deltaX = end.x - start.x
+  const deltaY = end.y - start.y
+  const length = Math.hypot(deltaX, deltaY)
+  if (length < 1) return null
+  const directionX = deltaX / length
+  const directionY = deltaY / length
+  const perpendicularX = -directionY
+  const perpendicularY = directionX
+  const baseX = end.x - directionX * 10
+  const baseY = end.y - directionY * 10
+  return `M${end.x} ${end.y}L${baseX + perpendicularX * 5} ${baseY + perpendicularY * 5}L${baseX - perpendicularX * 5} ${baseY - perpendicularY * 5}Z`
+}
+
 /** 渲染 engine snapshot 的 SVG 编辑覆盖层，不持有手势状态。 */
 export function StageOverlay({
   label,
   viewport,
   canvasGuides,
   screenBounds,
+  lineSelection = null,
   handlePoints,
   editableSelection,
   resizeHandles,
+  visibleResizeHandles,
   rotatable,
+  tool,
+  drawing,
   marqueeScreen,
   paintHandles,
   paintSample,
@@ -59,6 +112,53 @@ export function StageOverlay({
   // 0%/100% 色标会与线性端点重叠；先绘制色标，确保端点仍可拖动整条渐变轴。
   const visualPaintHandles = [...paintHandles].sort((left, right) =>
     Number(!left.kind.endsWith('stop')) - Number(!right.kind.endsWith('stop')))
+  const drawingScreen = drawing
+    ? {
+        ...worldToScreen(drawing.bounds, viewport),
+        width: drawing.bounds.width * viewport.zoom,
+        height: drawing.bounds.height * viewport.zoom,
+      }
+    : null
+  const drawingToolActive = tool.startsWith('draw-')
+  const lineSelectionActive = Boolean(lineSelection) && !drawingToolActive
+  const lineStartScreen = lineSelection ? worldToScreen(lineSelection.start, viewport) : null
+  const lineEndScreen = lineSelection ? worldToScreen(lineSelection.end, viewport) : null
+  const lineDimension = lineSelection && lineStartScreen && lineEndScreen
+    ? lineDimensionLabel(lineSelection.start, lineSelection.end)
+    : null
+  const lineDimensionWidth = lineDimension
+    ? Math.max(56, lineDimension.length * 7 + 16)
+    : 0
+  const lineDimensionPosition = lineStartScreen && lineEndScreen
+    ? lineLabelPosition(lineStartScreen, lineEndScreen)
+    : null
+  const lineRotationPoint = lineStartScreen && lineEndScreen
+    ? lineLabelPosition(lineStartScreen, lineEndScreen)
+    : null
+  const drawingStart = drawing ? worldToScreen(drawing.start, viewport) : null
+  const drawingEnd = drawing ? worldToScreen(drawing.end, viewport) : null
+  const drawingPreviewBounds = drawing?.tool === 'draw-text'
+    && drawingScreen
+    && drawingScreen.width < 1
+    && drawingScreen.height < 1
+    ? { ...drawingScreen, width: 180 * viewport.zoom, height: 42 * viewport.zoom }
+    : drawingScreen
+  const drawingDimensionLabel = drawing && drawingPreviewBounds
+    ? drawing.tool === 'draw-line' || drawing.tool === 'draw-arrow'
+      // 线条的真实几何来自两个端点，而不是落盘时为 LayoutItem 保留的最小 1px 尺寸。
+      ? `${Math.round(Math.abs(drawing.end.x - drawing.start.x))} × ${Math.round(Math.abs(drawing.end.y - drawing.start.y))}`
+      : `${Math.round(drawingPreviewBounds.width / viewport.zoom)} × ${Math.round(drawingPreviewBounds.height / viewport.zoom)}`
+    : null
+  const drawingDimensionWidth = drawingDimensionLabel
+    ? Math.max(56, drawingDimensionLabel.length * 7 + 16)
+    : 0
+  const resizeVisible = tool === 'select' || tool === 'scale'
+  const edgeHitRegions = screenBounds && resizeVisible && !lineSelectionActive ? [
+    { handle: 'n' as const, x: screenBounds.x + 8, y: screenBounds.y - 4, width: Math.max(0, screenBounds.width - 16), height: 8 },
+    { handle: 's' as const, x: screenBounds.x + 8, y: screenBounds.y + screenBounds.height - 4, width: Math.max(0, screenBounds.width - 16), height: 8 },
+    { handle: 'w' as const, x: screenBounds.x - 4, y: screenBounds.y + 8, width: 8, height: Math.max(0, screenBounds.height - 16) },
+    { handle: 'e' as const, x: screenBounds.x + screenBounds.width - 4, y: screenBounds.y + 8, width: 8, height: Math.max(0, screenBounds.height - 16) },
+  ].filter(({ handle }) => resizeHandles.includes(handle)) : []
   return (
     <svg
       aria-label={label}
@@ -96,7 +196,71 @@ export function StageOverlay({
           )}
         />
       ))}
-      {screenBounds ? (
+      {lineSelectionActive && lineSelection && lineStartScreen && lineEndScreen ? (
+        <g className="compose-stage__line-selection" data-testid="stage-line-selection">
+          <line
+            className="compose-stage__line-selection-axis"
+            x1={lineStartScreen.x}
+            x2={lineEndScreen.x}
+            y1={lineStartScreen.y}
+            y2={lineEndScreen.y}
+          />
+          {resizeVisible && editableSelection ? (
+            <>
+              <rect
+                className="compose-stage__line-selection-handle"
+                data-testid="stage-line-selection-start"
+                height="8"
+                width="8"
+                x={lineStartScreen.x - 4}
+                y={lineStartScreen.y - 4}
+                onPointerDown={(event) => onInteraction({
+                  kind: 'segment-endpoint',
+                  entityId: lineSelection.entityId,
+                  endpoint: 'start',
+                  start: lineSelection.start,
+                  end: lineSelection.end,
+                }, event)}
+              />
+              <rect
+                className="compose-stage__line-selection-handle"
+                data-testid="stage-line-selection-end"
+                height="8"
+                width="8"
+                x={lineEndScreen.x - 4}
+                y={lineEndScreen.y - 4}
+                onPointerDown={(event) => onInteraction({
+                  kind: 'segment-endpoint',
+                  entityId: lineSelection.entityId,
+                  endpoint: 'end',
+                  start: lineSelection.start,
+                  end: lineSelection.end,
+                }, event)}
+              />
+            </>
+          ) : null}
+          {lineDimension && lineDimensionPosition ? (
+            <g
+              className="compose-stage__line-selection-dimensions"
+              data-testid="stage-line-selection-dimensions"
+              transform={`translate(${lineDimensionPosition.x} ${lineDimensionPosition.y}) rotate(${lineDimensionPosition.angle})`}
+            >
+              <rect height="22" rx="4" width={lineDimensionWidth} x={-lineDimensionWidth / 2} y="-11" />
+              <text dominantBaseline="middle" textAnchor="middle" x="0" y="0">{lineDimension}</text>
+            </g>
+          ) : null}
+          {rotatable && tool === 'rotate' && lineRotationPoint ? (
+            <circle
+              className="compose-stage__handle compose-stage__rotation"
+              cx={lineRotationPoint.x}
+              cy={lineRotationPoint.y + 18}
+              data-testid="stage-rotation-handle"
+              r="5"
+              onPointerDown={(event) => onInteraction({ kind: 'rotate' }, event)}
+            />
+          ) : null}
+        </g>
+      ) : screenBounds && !drawingToolActive ? (
         <rect
           className="compose-stage__selection"
           data-testid="stage-selection-bounds"
@@ -106,13 +270,22 @@ export function StageOverlay({
           y={screenBounds.y}
         />
       ) : null}
-      {editableSelection && handlePoints && paintHandles.length === 0 ? (
+      {editableSelection && handlePoints && paintHandles.length === 0 && !lineSelectionActive ? (
         <>
-          {(Object.entries(handlePoints) as [ResizeHandle, readonly [number, number]][])
-            .filter(([handle]) => resizeHandles.includes(handle))
+          {resizeVisible ? edgeHitRegions.map(({ handle, ...rect }) => (
+            <rect
+              {...rect}
+              className={`compose-stage__resize-hit compose-stage__resize-hit--${handle}`}
+              data-testid={`stage-resize-edge-${handle}`}
+              key={`edge:${handle}`}
+              onPointerDown={(event) => onInteraction({ kind: 'resize', handle }, event)}
+            />
+          )) : null}
+          {resizeVisible ? (Object.entries(handlePoints) as [ResizeHandle, readonly [number, number]][])
+            .filter(([handle]) => visibleResizeHandles.includes(handle))
             .map(([handle, [x, y]]) => (
               <rect
-                className="compose-stage__handle"
+                className={`compose-stage__handle compose-stage__handle--${handle}`}
                 data-testid={`stage-resize-${handle}`}
                 height="8"
                 key={handle}
@@ -124,8 +297,8 @@ export function StageOverlay({
                   event,
                 )}
               />
-            ))}
-          {rotatable ? (
+            )) : null}
+          {rotatable && tool === 'rotate' ? (
             <circle
               className="compose-stage__handle compose-stage__rotation"
               cx={handlePoints.n[0]}
@@ -136,6 +309,27 @@ export function StageOverlay({
             />
           ) : null}
         </>
+      ) : null}
+      {editableSelection && screenBounds && tool === 'move' ? (
+        <g
+          className="compose-stage__move-gizmo"
+          data-testid="stage-move-gizmo"
+          transform={`translate(${screenBounds.x} ${screenBounds.y})`}
+        >
+          <path className="compose-stage__move-gizmo-origin" d="M-4 0h8M0-4v8" />
+          <path
+            className="compose-stage__move-gizmo-axis compose-stage__move-gizmo-axis--x"
+            d="M4 0H68m0 0-9-6m9 6-9 6"
+            data-testid="stage-move-axis-x"
+            onPointerDown={(event) => onInteraction({ kind: 'move-axis', axis: 'x' }, event)}
+          />
+          <path
+            className="compose-stage__move-gizmo-axis compose-stage__move-gizmo-axis--y"
+            d="M0 4v64m0 0-6-9m6 9 6-9"
+            data-testid="stage-move-axis-y"
+            onPointerDown={(event) => onInteraction({ kind: 'move-axis', axis: 'y' }, event)}
+          />
+        </g>
       ) : null}
       {paintHandles.length > 0 ? (
         <g className="compose-stage__paint-handles" data-testid="stage-paint-handles">
@@ -209,6 +403,62 @@ export function StageOverlay({
           x={marqueeScreen.x}
           y={marqueeScreen.y}
         />
+      ) : null}
+      {drawing && drawingPreviewBounds && drawingStart && drawingEnd ? (
+        <g
+          className={`compose-stage__drawing-preview is-${drawing.tool.replace('draw-', '')}`}
+          data-drawing-tool={drawing.tool}
+          data-testid="stage-drawing-preview"
+        >
+          {drawing.tool === 'draw-circle' ? (
+            <ellipse
+              cx={drawingPreviewBounds.x + drawingPreviewBounds.width / 2}
+              cy={drawingPreviewBounds.y + drawingPreviewBounds.height / 2}
+              rx={drawingPreviewBounds.width / 2}
+              ry={drawingPreviewBounds.height / 2}
+            />
+          ) : drawing.tool === 'draw-line' || drawing.tool === 'draw-arrow' ? (
+            <>
+              <line x1={drawingStart.x} x2={drawingEnd.x} y1={drawingStart.y} y2={drawingEnd.y} />
+              {drawing.tool === 'draw-arrow' ? (
+                <path d={arrowHeadPath(drawingStart, drawingEnd) ?? undefined} />
+              ) : null}
+            </>
+          ) : drawing.tool === 'draw-text' ? (
+            <>
+              <rect
+                height={drawingPreviewBounds.height}
+                width={drawingPreviewBounds.width}
+                x={drawingPreviewBounds.x}
+                y={drawingPreviewBounds.y}
+              />
+              <text x={drawingPreviewBounds.x + 8} y={drawingPreviewBounds.y + 25}>Text</text>
+              <line
+                className="compose-stage__drawing-preview-caret"
+                x1={drawingPreviewBounds.x + 5}
+                x2={drawingPreviewBounds.x + 5}
+                y1={drawingPreviewBounds.y + 10}
+                y2={drawingPreviewBounds.y + 32}
+              />
+            </>
+          ) : (
+            <rect
+              height={drawingPreviewBounds.height}
+              width={drawingPreviewBounds.width}
+              x={drawingPreviewBounds.x}
+              y={drawingPreviewBounds.y}
+            />
+          )}
+          {drawingDimensionLabel ? (
+            <g
+              className="compose-stage__drawing-dimensions"
+              transform={`translate(${drawingPreviewBounds.x + drawingPreviewBounds.width / 2} ${drawingPreviewBounds.y + drawingPreviewBounds.height + 8})`}
+            >
+              <rect height="22" rx="3" width={drawingDimensionWidth} x={-drawingDimensionWidth / 2} y="0" />
+              <text textAnchor="middle" x="0" y="15">{drawingDimensionLabel}</text>
+            </g>
+          ) : null}
+        </g>
       ) : null}
       {snapGuides.map((guide) => guide.axis === 'x' ? (
         <line

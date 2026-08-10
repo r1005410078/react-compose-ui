@@ -10,7 +10,16 @@ export type ComposeEditorShortcutAction =
   | 'editor.settings'
   | 'stage.temporaryPan'
   | 'stage.selectTool'
+  | 'stage.moveTool'
+  | 'stage.scaleTool'
+  | 'stage.rotateTool'
   | 'stage.panTool'
+  | 'stage.drawContainerTool'
+  | 'stage.drawRectangleTool'
+  | 'stage.drawLineTool'
+  | 'stage.drawArrowTool'
+  | 'stage.drawCircleTool'
+  | 'stage.drawTextTool'
   | 'stage.fitSelection'
   | 'stage.fitContainer'
   | 'stage.zoomReset'
@@ -68,7 +77,16 @@ export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'editor.settings',
   'stage.temporaryPan',
   'stage.selectTool',
+  'stage.moveTool',
+  'stage.scaleTool',
+  'stage.rotateTool',
   'stage.panTool',
+  'stage.drawContainerTool',
+  'stage.drawRectangleTool',
+  'stage.drawLineTool',
+  'stage.drawArrowTool',
+  'stage.drawCircleTool',
+  'stage.drawTextTool',
   'stage.fitSelection',
   'stage.fitContainer',
   'stage.zoomReset',
@@ -90,7 +108,16 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
   'editor.settings': 'editor',
   'stage.temporaryPan': 'stage',
   'stage.selectTool': 'stage',
+  'stage.moveTool': 'stage',
+  'stage.scaleTool': 'stage',
+  'stage.rotateTool': 'stage',
   'stage.panTool': 'stage',
+  'stage.drawContainerTool': 'stage',
+  'stage.drawRectangleTool': 'stage',
+  'stage.drawLineTool': 'stage',
+  'stage.drawArrowTool': 'stage',
+  'stage.drawCircleTool': 'stage',
+  'stage.drawTextTool': 'stage',
   'stage.fitSelection': 'stage',
   'stage.fitContainer': 'stage',
   'stage.zoomReset': 'stage',
@@ -120,7 +147,16 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
       'editor.settings': [{ code: 'Comma', primary: true }],
       'stage.temporaryPan': [{ code: 'Space' }],
       'stage.selectTool': [{ code: 'KeyV' }],
+      'stage.moveTool': [{ code: 'KeyM' }],
+      'stage.scaleTool': [{ code: 'KeyS' }],
+      'stage.rotateTool': [{ code: 'KeyR', shift: true }],
       'stage.panTool': [{ code: 'KeyH' }],
+      'stage.drawContainerTool': [{ code: 'KeyC' }],
+      'stage.drawRectangleTool': [{ code: 'KeyR' }],
+      'stage.drawLineTool': [{ code: 'KeyL' }],
+      'stage.drawArrowTool': [{ code: 'KeyL', shift: true }],
+      'stage.drawCircleTool': [{ code: 'KeyO' }],
+      'stage.drawTextTool': [{ code: 'KeyT' }],
       'stage.fitSelection': [{ code: 'KeyF' }],
       'stage.fitContainer': [{ code: 'KeyF', shift: true }],
       'stage.zoomReset': [{ code: 'Digit0', primary: true }],

@@ -94,57 +94,55 @@
 }
 
 .compose-editor__toolbar-group {
-  @apply ct:flex ct:items-center ct:gap-1;
+  @apply ct:flex ct:items-center ct:gap-0.5;
 }
 
-.compose-editor__canvas-tools {
-  @apply ct:relative;
+.compose-editor__toolbar-menu-anchor {
+  @apply ct:relative ct:flex ct:items-center;
 }
 
-.compose-editor__stage-toolbar button,
+.compose-editor__toolbar-group > button,
+.compose-editor__toolbar-menu-anchor > button,
 .compose-editor__canvas-toolbar > button {
-  @apply ct:grid ct:size-9 ct:shrink-0 ct:cursor-pointer ct:place-items-center ct:rounded-[5px] ct:border ct:p-0;
-  border-color: var(--compose-border);
-  background: var(--compose-surface-control);
+  @apply ct:grid ct:size-8 ct:shrink-0 ct:cursor-pointer ct:place-items-center ct:rounded-[4px] ct:border ct:border-transparent ct:p-0;
+  background: transparent;
   color: var(--compose-text-subtle);
-  box-shadow:
-    inset 0 1px rgb(255 255 255 / 3%),
-    0 1px 2px rgb(0 0 0 / 18%);
   transition:
     border-color 120ms ease,
     background-color 120ms ease,
     color 120ms ease;
 }
 
-.compose-editor__stage-toolbar button:hover:not(:disabled),
+.compose-editor__toolbar-group > button:hover:not(:disabled),
+.compose-editor__toolbar-menu-anchor > button:hover:not(:disabled),
 .compose-editor__canvas-toolbar > button:hover:not(:disabled) {
-  border-color: var(--compose-border-strong);
   background: var(--compose-surface-hover);
   color: var(--compose-text-strong);
 }
 
-.compose-editor__stage-toolbar button[aria-pressed='true'] {
-  border-color: var(--compose-accent);
+.compose-editor__toolbar-group > button[aria-pressed='true'],
+.compose-editor__toolbar-menu-anchor > button[aria-pressed='true'] {
+  border-color: transparent;
   background: var(--compose-surface-selected);
   color: var(--compose-text-strong);
-  box-shadow:
-    inset 0 0 0 1px rgb(77 156 255 / 16%),
-    0 0 0 1px rgb(19 77 145 / 22%);
 }
 
-.compose-editor__stage-toolbar button:disabled,
+.compose-editor__toolbar-group > button:disabled,
+.compose-editor__toolbar-menu-anchor > button:disabled,
 .compose-editor__canvas-toolbar > button:disabled {
   @apply ct:cursor-not-allowed ct:opacity-45;
 }
 
-.compose-editor__stage-toolbar button:focus-visible,
+.compose-editor__toolbar-group > button:focus-visible,
+.compose-editor__toolbar-menu-anchor > button:focus-visible,
 .compose-editor__canvas-toolbar > button:focus-visible {
   @apply ct:outline-none ct:ring-2 ct:ring-offset-1;
   --tw-ring-color: var(--compose-focus);
   --tw-ring-offset-color: var(--compose-surface-raised);
 }
 
-.compose-editor__stage-toolbar button svg,
+.compose-editor__toolbar-group > button svg,
+.compose-editor__toolbar-menu-anchor > button svg,
 .compose-editor__canvas-toolbar > button svg {
   width: 20px;
   height: 20px;
@@ -156,13 +154,137 @@
 }
 
 .compose-editor__toolbar-divider {
-  @apply ct:h-6 ct:w-px ct:shrink-0;
+  @apply ct:h-6 ct:w-px ct:shrink-0 ct:mx-1;
   background: var(--compose-border);
 }
 
-.compose-editor__zoom-value {
-  @apply ct:min-w-12 ct:text-center ct:text-xs ct:font-medium ct:tabular-nums;
+.compose-editor__toolbar-menu-trigger {
+  width: 16px !important;
+  margin-left: -2px;
+}
+
+.compose-editor__toolbar-menu-trigger svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.compose-editor__toolbar-menu {
+  @apply ct:absolute ct:top-[calc(100%+5px)] ct:left-0 ct:z-50 ct:min-w-36 ct:rounded-lg ct:border ct:p-1;
+  border-color: var(--compose-border);
+  background: var(--compose-surface-raised);
+  box-shadow: 0 10px 28px var(--compose-shadow), inset 0 1px rgb(255 255 255 / 3%);
+}
+
+.compose-editor__toolbar-menu button {
+  @apply ct:flex ct:h-8 ct:w-full ct:items-center ct:gap-2 ct:rounded-md ct:px-2 ct:text-left ct:text-xs;
+  border: 0;
+  background: transparent;
   color: var(--compose-text-subtle);
+  font-weight: 500;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.compose-editor__toolbar-menu button:hover,
+.compose-editor__toolbar-menu button[aria-pressed='true'] {
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__toolbar-menu button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--compose-focus);
+}
+
+.compose-editor__toolbar-menu button svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.compose-editor__toolbar-menu kbd {
+  margin-left: auto;
+  min-width: 16px;
+  padding: 1px 4px;
+  border: 1px solid var(--compose-border);
+  border-radius: 3px;
+  background: var(--compose-surface-sunken);
+  color: var(--compose-text-muted);
+  font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.compose-editor__stage-viewport-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.compose-editor__canvas-viewport-controls {
+  position: absolute;
+  z-index: 20;
+  top: 36px;
+  left: 34px;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  gap: 3px;
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__canvas-viewport-controls button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  cursor: pointer;
+  color: var(--compose-text-subtle);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  place-items: center;
+}
+
+.compose-editor__canvas-viewport-controls button:hover:not(:disabled) {
+  color: var(--compose-text-strong);
+  background: var(--compose-surface-hover);
+}
+
+.compose-editor__canvas-viewport-controls button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--compose-focus);
+}
+
+.compose-editor__canvas-viewport-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.compose-editor__canvas-viewport-controls svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.compose-editor__canvas-zoom-value {
+  min-width: 62px;
+  padding: 0 4px;
+  color: var(--compose-text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .compose-editor__canvas-settings {

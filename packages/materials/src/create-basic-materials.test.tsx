@@ -37,7 +37,7 @@ describe('Basic ECS materials', () => {
       .toEqual(['Transform', 'LayoutItem', 'Layout'])
   })
 
-  it('OpenSpec: Entity Presets / 六种物料写入明确基础组合', () => {
+  it('OpenSpec: Entity Presets / 基础与绘图物料写入明确基础组合', () => {
     const materials = createComposeBasicMaterials()
     expect(materials.presets.map(({ id }) => id)).toEqual([
       'container',
@@ -46,6 +46,9 @@ describe('Basic ECS materials', () => {
       'image',
       'svg',
       'page-slot',
+      'line',
+      'arrow',
+      'circle',
     ])
     const container = seedEntity(materials, 'container')
     expect(getComposeHierarchy(container)?.childIds).toEqual([])
@@ -59,12 +62,64 @@ describe('Basic ECS materials', () => {
     expect(getComposeComposition(container).baseComponentKeys).toContain('Hierarchy')
     expect(getComposeComposition(container).baseComponentKeys).not.toContain('Layout')
 
-    for (const id of ['rectangle', 'text', 'image', 'svg']) {
+    for (const id of ['rectangle', 'text', 'image', 'svg', 'line', 'arrow', 'circle']) {
       const entity = seedEntity(materials, id)
-      expect(getComposeRenderer(entity)?.type).toBe(id)
+      expect(getComposeRenderer(entity)?.type).toBe(
+        ['line', 'arrow', 'circle'].includes(id) ? 'shape' : id,
+      )
       expect(getComposeLayoutItem(entity).width.value).toBeGreaterThan(0)
       expect(getComposeComposition(entity).baseComponentKeys).toContain('Renderer')
     }
+  })
+
+  it('OpenSpec: Shape materials / 绘图物料使用同一 SVG renderer 保留形状语义', () => {
+    const materials = createComposeBasicMaterials()
+    const line = seedEntity(materials, 'line')
+    const arrow = seedEntity(materials, 'arrow')
+    render(
+      <ComposeRegistryEntityRenderer
+        entity={arrow}
+        mode="editor"
+        registry={materials.registry}
+      />,
+    )
+    expect(screen.getByTestId('compose-material-shape-arrow')).toBeInTheDocument()
+    expect(getComposeRenderer(arrow)?.props).toEqual(expect.objectContaining({
+      kind: 'arrow',
+      direction: { x: 1, y: 1 },
+      markerStart: 'none',
+      markerEnd: 'arrow',
+      strokeDasharray: 'none',
+      strokeLinecap: 'butt',
+    }))
+    expect(getComposeRenderer(line)?.props).toEqual(expect.objectContaining({
+      kind: 'line',
+      markerStart: 'none',
+      markerEnd: 'none',
+    }))
+    expect(materials.registry.getRenderer('shape')?.inspector).toBeDefined()
+  })
+
+  it('OpenSpec: Shape materials / Inspector 暴露常用线条与首尾箭头属性', () => {
+    const materials = createComposeBasicMaterials({ idFactory: () => 'shape-command' })
+    const line = seedEntity(materials, 'line')
+    const dispatch = vi.fn()
+    render(
+      <ComposeRegistryRendererInspector
+        dispatch={dispatch}
+        entity={line}
+        propCategory={{ id: 'shape', label: '线条' }}
+        readOnly={false}
+        registry={materials.registry}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '选择线条颜色' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: '线条粗细' })).toHaveValue(2)
+    expect(screen.getByRole('combobox', { name: '端点形状' })).toHaveValue('butt')
+    expect(screen.getByRole('combobox', { name: '线条样式' })).toHaveValue('none')
+    expect(screen.getByRole('combobox', { name: '起点箭头' })).toHaveValue('none')
+    expect(screen.getByRole('combobox', { name: '终点箭头' })).toHaveValue('none')
   })
 
   it('OpenSpec: 无 style fallback / Rectangle 视觉由 Appearance 明确表达', () => {

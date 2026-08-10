@@ -190,7 +190,16 @@ export function createComposeEditorActionHandlers(
 
   return {
     'stage.selectTool': handler(undefined, () => { context.setTool('select') }),
+    'stage.moveTool': handler(undefined, () => { context.setTool('move') }),
+    'stage.scaleTool': handler(undefined, () => { context.setTool('scale') }),
+    'stage.rotateTool': handler(undefined, () => { context.setTool('rotate') }),
     'stage.panTool': handler(undefined, () => { context.setTool('pan') }),
+    'stage.drawContainerTool': handler(undefined, () => { context.setTool('draw-container') }),
+    'stage.drawRectangleTool': handler(undefined, () => { context.setTool('draw-rectangle') }),
+    'stage.drawLineTool': handler(undefined, () => { context.setTool('draw-line') }),
+    'stage.drawArrowTool': handler(undefined, () => { context.setTool('draw-arrow') }),
+    'stage.drawCircleTool': handler(undefined, () => { context.setTool('draw-circle') }),
+    'stage.drawTextTool': handler(undefined, () => { context.setTool('draw-text') }),
     'stage.zoomIn': handler(undefined, () => { context.zoomBy(1.2) }),
     'stage.zoomOut': handler(undefined, () => { context.zoomBy(1 / 1.2) }),
     'stage.zoomReset': handler(undefined, () => { context.zoomReset() }),
@@ -276,7 +285,16 @@ export function createComposeEditorActionHandlers(
 /** 目录呈现顺序；与执行层解耦，改动顺序不影响行为。 */
 const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'stage.selectTool',
+  'stage.moveTool',
+  'stage.scaleTool',
+  'stage.rotateTool',
   'stage.panTool',
+  'stage.drawContainerTool',
+  'stage.drawRectangleTool',
+  'stage.drawLineTool',
+  'stage.drawArrowTool',
+  'stage.drawCircleTool',
+  'stage.drawTextTool',
   'stage.zoomIn',
   'stage.zoomOut',
   'stage.zoomReset',

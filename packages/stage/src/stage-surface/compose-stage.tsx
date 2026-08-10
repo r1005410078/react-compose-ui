@@ -51,6 +51,7 @@ import {
   getComposeHierarchy,
   getComposeLock,
   getComposeLayoutItem,
+  getComposeRenderer,
   getComposeSpatialTransform,
   getComposeTransform,
   getComposeVisibility,
@@ -88,9 +89,11 @@ import {
   type ResizeHandle,
   type StagePoint,
   type StageRect,
+  type StageSegmentPreview,
   type StageInteractionEffect,
   type StageInteractionHit,
   type StageInteractionController,
+  type StageInteractionTool,
   type StageTransform,
 } from '@compose-ui/stage-engine'
 import type {
@@ -112,6 +115,8 @@ import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
 
 type TransformMap = Readonly<Record<string, StageTransform>>
+type ShapeAxis = -1 | 0 | 1
+type ShapeDirection = { readonly x: ShapeAxis; readonly y: ShapeAxis }
 type Modifiers = { shift: boolean; alt: boolean; command: boolean }
 type PointerSessionStatus = 'active' | 'finishing' | 'ended'
 
@@ -128,6 +133,8 @@ interface ActivePointerSession {
   readonly pointerId: number
   readonly generation: number
   readonly surfaceRect: FrozenSurfaceRect
+  lastPoint: StagePoint
+  lastModifiers: Modifiers
   buttons: number
   status: PointerSessionStatus
   captureOwned: boolean
@@ -324,28 +331,160 @@ function modifiers(event: {
   }
 }
 
-function transformDocument(document: ComposeDocument, transforms: TransformMap): ComposeDocument {
-  if (Object.keys(transforms).length === 0) return document
+function transformDocument(
+  document: ComposeDocument,
+  transforms: TransformMap,
+  directions: Readonly<Record<string, ShapeDirection>> = {},
+): ComposeDocument {
+  if (Object.keys(transforms).length === 0 && Object.keys(directions).length === 0) return document
   const entities = { ...document.entities }
-  for (const [id, transform] of Object.entries(transforms)) {
+  const ids = new Set([...Object.keys(transforms), ...Object.keys(directions)])
+  for (const id of ids) {
     const entity = entities[id]
     if (entity) {
+      const transform = transforms[id]
+      const direction = directions[id]
+      const renderer = getComposeRenderer(entity)
       entities[id] = {
         ...entity,
         components: {
           ...entity.components,
-          Transform: { rotation: transform.rotation },
-          LayoutItem: {
-            ...getComposeLayoutItem(entity),
-            offset: { x: transform.x, y: transform.y },
-            width: { ...getComposeLayoutItem(entity).width, value: transform.width },
-            height: { ...getComposeLayoutItem(entity).height, value: transform.height },
-          },
+          ...(transform
+            ? {
+                Transform: { rotation: transform.rotation },
+                LayoutItem: {
+                  ...getComposeLayoutItem(entity),
+                  offset: { x: transform.x, y: transform.y },
+                  width: { ...getComposeLayoutItem(entity).width, value: transform.width },
+                  height: { ...getComposeLayoutItem(entity).height, value: transform.height },
+                },
+              }
+            : {}),
+          ...(direction && renderer?.type === 'shape'
+            ? {
+                Renderer: {
+                  ...renderer,
+                  props: {
+                    ...renderer.props,
+                    direction: direction as unknown as JsonValue,
+                  },
+                },
+              }
+            : {}),
         },
       }
     }
   }
   return { ...document, entities }
+}
+
+function directionAxis(delta: number): ShapeAxis {
+  if (Math.abs(delta) < 0.000_001) return 0
+  return delta < 0 ? -1 : 1
+}
+
+function shapeDirection(value: unknown): ShapeDirection {
+  if (!value || typeof value !== 'object') return { x: 1, y: 1 }
+  const candidate = value as { readonly x?: unknown; readonly y?: unknown }
+  return {
+    x: candidate.x === -1 || candidate.x === 0 ? candidate.x : 1,
+    y: candidate.y === -1 || candidate.y === 0 ? candidate.y : 1,
+  }
+}
+
+function localLineEndpoint(
+  axis: ShapeAxis,
+  size: number,
+  endpoint: 'start' | 'end',
+) {
+  if (axis === 0) return size / 2
+  if (endpoint === 'start') return axis < 0 ? size : 0
+  return axis < 0 ? 0 : size
+}
+
+function rotatePoint(point: StagePoint, center: StagePoint, degrees: number): StagePoint {
+  const radians = degrees * Math.PI / 180
+  const cosine = Math.cos(radians)
+  const sine = Math.sin(radians)
+  const x = point.x - center.x
+  const y = point.y - center.y
+  return {
+    x: center.x + x * cosine - y * sine,
+    y: center.y + x * sine + y * cosine,
+  }
+}
+
+interface ShapeSegmentGeometry {
+  readonly entityId: string
+  readonly start: StagePoint
+  readonly end: StagePoint
+}
+
+interface ShapeSegmentTransform {
+  readonly direction: ShapeDirection
+  readonly transform: StageTransform
+}
+
+function lineSegmentForEntity(
+  document: ComposeDocument,
+  snapshot: ComposeLayoutSnapshot,
+  entityId: string,
+): ShapeSegmentGeometry | null {
+  const entity = document.entities[entityId]
+  const renderer = entity ? getComposeRenderer(entity) : null
+  const box = snapshot.boxes[entityId]
+  if (
+    !entity
+    || !renderer
+    || renderer.type !== 'shape'
+    || !box
+    || (renderer.props.kind !== 'line' && renderer.props.kind !== 'arrow')
+  ) return null
+  const direction = shapeDirection(renderer.props.direction)
+  const matrix = getEntityWorldMatrix(document, snapshot, entityId)
+  const endpoint = (kind: 'start' | 'end') => applyMatrix(matrix, {
+    x: localLineEndpoint(direction.x, box.width, kind),
+    y: localLineEndpoint(direction.y, box.height, kind),
+  })
+  return { entityId, start: endpoint('start'), end: endpoint('end') }
+}
+
+function lineSegmentTransform(
+  document: ComposeDocument,
+  snapshot: ComposeLayoutSnapshot,
+  preview: StageSegmentPreview,
+): ShapeSegmentTransform | null {
+  const entity = document.entities[preview.entityId]
+  const renderer = entity ? getComposeRenderer(entity) : null
+  if (!entity || !renderer || renderer.type !== 'shape') return null
+  const parentId = getEntityParentId(document, preview.entityId)
+  const inverseParent = parentId
+    ? invertMatrix(getEntityWorldMatrix(document, snapshot, parentId))
+    : null
+  const start = inverseParent ? applyMatrix(inverseParent, preview.start) : preview.start
+  const end = inverseParent ? applyMatrix(inverseParent, preview.end) : preview.end
+  const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+  const rotation = getComposeTransform(entity).rotation
+  // Line 的几何由未旋转的 box + direction 表达；先逆转 Entity 自身旋转，再维持其 rotation。
+  const localStart = rotation === 0 ? start : rotatePoint(start, center, -rotation)
+  const localEnd = rotation === 0 ? end : rotatePoint(end, center, -rotation)
+  const direction = {
+    x: directionAxis(localEnd.x - localStart.x),
+    y: directionAxis(localEnd.y - localStart.y),
+  } satisfies ShapeDirection
+  const rawWidth = Math.abs(localEnd.x - localStart.x)
+  const rawHeight = Math.abs(localEnd.y - localStart.y)
+  return {
+    direction,
+    transform: {
+      // SVG 的零轴在最小 1px box 的中心绘制，使端点仍落在真实坐标而非产生 1px 斜线。
+      x: direction.x === 0 ? localStart.x - 0.5 : Math.min(localStart.x, localEnd.x),
+      y: direction.y === 0 ? localStart.y - 0.5 : Math.min(localStart.y, localEnd.y),
+      width: Math.max(1, rawWidth),
+      height: Math.max(1, rawHeight),
+      rotation,
+    },
+  }
 }
 
 function transformLayoutSnapshot(
@@ -462,6 +601,80 @@ function entityFromSeed(
   }
 }
 
+function boundsInParentSpace(
+  bounds: StageRect,
+  inverseParent: ReturnType<typeof invertMatrix> | null,
+): StageRect {
+  if (!inverseParent) return bounds
+  const points = [
+    applyMatrix(inverseParent, { x: bounds.x, y: bounds.y }),
+    applyMatrix(inverseParent, { x: bounds.x + bounds.width, y: bounds.y }),
+    applyMatrix(inverseParent, { x: bounds.x, y: bounds.y + bounds.height }),
+    applyMatrix(inverseParent, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }),
+  ]
+  const xs = points.map(({ x }) => x)
+  const ys = points.map(({ y }) => y)
+  return {
+    x: Math.min(...xs),
+    y: Math.min(...ys),
+    width: Math.max(...xs) - Math.min(...xs),
+    height: Math.max(...ys) - Math.min(...ys),
+  }
+}
+
+function entityFromDrawingSeed(
+  seed: ComposeEntitySeed,
+  id: string,
+  bounds: StageRect,
+  direction?: ShapeDirection,
+): ComposeEntity {
+  const seeded = entityFromSeed(seed, id, {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  })
+  const item = getComposeLayoutItem(seeded)
+  const renderer = seeded.components.Renderer
+  return {
+    ...seeded,
+    components: {
+      ...seeded.components,
+      LayoutItem: {
+        ...item,
+        positioning: 'absolute',
+        offset: {
+          x: direction?.x === 0 ? bounds.x - 0.5 : bounds.x,
+          y: direction?.y === 0 ? bounds.y - 0.5 : bounds.y,
+        },
+        width: { ...item.width, mode: 'fixed', value: Math.max(1, bounds.width) },
+        height: { ...item.height, mode: 'fixed', value: Math.max(1, bounds.height) },
+      },
+      ...(renderer && direction
+        ? {
+            Renderer: {
+              ...renderer,
+              props: {
+                ...(renderer.props as Record<string, JsonValue>),
+                direction: direction as unknown as JsonValue,
+              },
+            },
+          }
+        : {}),
+    },
+  }
+}
+
+function presetForDrawingTool(tool: Extract<StageInteractionTool, `draw-${string}`>) {
+  const presets = {
+    'draw-container': 'container',
+    'draw-rectangle': 'rectangle',
+    'draw-line': 'line',
+    'draw-arrow': 'arrow',
+    'draw-circle': 'circle',
+    'draw-text': 'text',
+  } as const
+  return presets[tool]
+}
+
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
   if (target.closest('input, textarea, select')) return true
@@ -472,7 +685,16 @@ function isEditableTarget(target: EventTarget | null) {
 const STAGE_SHORTCUT_ACTIONS = [
   'stage.temporaryPan',
   'stage.selectTool',
+  'stage.moveTool',
+  'stage.scaleTool',
+  'stage.rotateTool',
   'stage.panTool',
+  'stage.drawContainerTool',
+  'stage.drawRectangleTool',
+  'stage.drawLineTool',
+  'stage.drawArrowTool',
+  'stage.drawCircleTool',
+  'stage.drawTextTool',
   'stage.fitSelection',
   'stage.fitContainer',
   'stage.zoomReset',
@@ -499,7 +721,16 @@ const DEFAULT_STAGE_SHORTCUTS: Readonly<
 > = {
   'stage.temporaryPan': [{ code: 'Space' }],
   'stage.selectTool': [{ code: 'KeyV' }],
+  'stage.moveTool': [{ code: 'KeyM' }],
+  'stage.scaleTool': [{ code: 'KeyS' }],
+  'stage.rotateTool': [{ code: 'KeyR', shift: true }],
   'stage.panTool': [{ code: 'KeyH' }],
+  'stage.drawContainerTool': [{ code: 'KeyC' }],
+  'stage.drawRectangleTool': [{ code: 'KeyR' }],
+  'stage.drawLineTool': [{ code: 'KeyL' }],
+  'stage.drawArrowTool': [{ code: 'KeyL', shift: true }],
+  'stage.drawCircleTool': [{ code: 'KeyO' }],
+  'stage.drawTextTool': [{ code: 'KeyT' }],
   'stage.fitSelection': [{ code: 'KeyF' }],
   'stage.fitContainer': [{ code: 'KeyF', shift: true }],
   'stage.zoomReset': [{ code: 'Digit0', primary: true }],
@@ -627,6 +858,7 @@ function ComposeStageReady({
   dispatch,
   viewport,
   onViewportChange,
+  gridVisible = true,
   tool,
   onToolChange,
   onShortcutAction,
@@ -667,6 +899,8 @@ function ComposeStageReady({
     readonly pointerId: number
     readonly buttons: number
     readonly surfaceRect: FrozenSurfaceRect
+    readonly point: StagePoint
+    readonly modifiers: Modifiers
   } | null>(null)
   const pendingRef = useRef<PendingPointerSample | null>(null)
   const frameRequestRef = useRef<number | null>(null)
@@ -679,7 +913,23 @@ function ComposeStageReady({
     controller.getSnapshot,
     controller.getSnapshot,
   )
-  const previewTransforms = interaction.previewTransforms
+  const segmentTransform = useMemo(
+    () => interaction.segmentPreview
+      ? lineSegmentTransform(document, layoutSnapshot, interaction.segmentPreview)
+      : null,
+    [document, interaction.segmentPreview, layoutSnapshot],
+  )
+  const previewTransforms = useMemo<TransformMap>(() => ({
+    ...interaction.previewTransforms,
+    ...(segmentTransform
+      ? { [interaction.segmentPreview!.entityId]: segmentTransform.transform }
+      : {}),
+  }), [interaction.previewTransforms, interaction.segmentPreview, segmentTransform])
+  const previewDirections = useMemo<Readonly<Record<string, ShapeDirection>>>(() => (
+    segmentTransform && interaction.segmentPreview
+      ? { [interaction.segmentPreview.entityId]: segmentTransform.direction }
+      : {}
+  ), [interaction.segmentPreview, segmentTransform])
   const marquee = interaction.marquee
   const snapGuides = interaction.snapGuides
   const guidePreview = interaction.guidePreview
@@ -698,8 +948,8 @@ function ComposeStageReady({
     [shortcuts],
   )
   const previewDocument = useMemo(
-    () => transformDocument(document, previewTransforms),
-    [document, previewTransforms],
+    () => transformDocument(document, previewTransforms, previewDirections),
+    [document, previewDirections, previewTransforms],
   )
   const previewLayoutSnapshot = useMemo(
     () => transformLayoutSnapshot(layoutSnapshot, previewTransforms),
@@ -708,6 +958,12 @@ function ComposeStageReady({
   const normalizedSelection = useMemo(
     () => selectedIds.filter((id) => Boolean(document.entities[id])),
     [document, selectedIds],
+  )
+  const lineSelection = useMemo(
+    () => normalizedSelection.length === 1
+      ? lineSegmentForEntity(previewDocument, previewLayoutSnapshot, normalizedSelection[0]!)
+      : null,
+    [normalizedSelection, previewDocument, previewLayoutSnapshot],
   )
   // 首帧可能先于 effect 中的 context 注入；之后（含 gesture preview）以 engine snapshot 为准。
   const bounds = interaction.selectionBounds
@@ -743,6 +999,8 @@ function ComposeStageReady({
       }
       return true
     }))
+  const visibleResizeHandles = resizeHandles.filter((handle) =>
+    handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw')
   const selectionRotatable = selectionConstraints.length > 0
     && selectionConstraints.every(({ rotatable }) => rotatable)
   const contextNodeId = contextMenu.payload
@@ -927,12 +1185,15 @@ function ComposeStageReady({
     session: ActivePointerSession,
     event: Pick<PointerEvent, 'clientX' | 'clientY' | 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>,
   ) => {
-    pendingRef.current = {
+    const sample: PendingPointerSample = {
       pointerId: session.pointerId,
       generation: session.generation,
       point: screenPointFromRect(event, session.surfaceRect),
       modifiers: modifiers(event),
     }
+    session.lastPoint = sample.point
+    session.lastModifiers = sample.modifiers
+    pendingRef.current = sample
     if (frameRequestRef.current !== null) return
     const generation = session.generation
     let ranSynchronously = false
@@ -947,6 +1208,36 @@ function ComposeStageReady({
     frameRequestRef.current = ranSynchronously ? null : request
   }, [sendPointerMove])
 
+  const refreshDrawingModifier = useCallback((
+    session: ActivePointerSession,
+    event: KeyboardEvent,
+  ) => {
+    if (
+      event.key !== 'Shift'
+      || session.status !== 'active'
+      || controller.getSnapshot().phase !== 'draw'
+    ) return
+    const sample: PendingPointerSample = {
+      pointerId: session.pointerId,
+      generation: session.generation,
+      point: session.lastPoint,
+      modifiers: {
+        shift: event.type === 'keydown',
+        alt: event.altKey,
+        command: event.ctrlKey || event.metaKey,
+      },
+    }
+    // 如果当前帧已有 pointermove，必须同步替换其中的修饰键，避免 rAF 将旧状态写回。
+    if (pendingRef.current?.generation === session.generation) pendingRef.current = sample
+    session.lastModifiers = sample.modifiers
+    controller.send({
+      type: 'pointer.move',
+      pointerId: sample.pointerId,
+      point: sample.point,
+      modifiers: sample.modifiers,
+    })
+  }, [controller])
+
   const finishPointerSession = useCallback((
     session: ActivePointerSession,
     event: Pick<PointerEvent, 'clientX' | 'clientY' | 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>,
@@ -958,11 +1249,17 @@ function ComposeStageReady({
     session.status = 'finishing'
     session.buttons = 0
     clearPending(session.generation)
+    // 某些浏览器会在 PointerEvent 的 pointerup 上遗漏已按住的修饰键；手势期间的
+    // window keydown/keyup 是可靠来源。keyup 已发生时 lastModifiers 会即时恢复为 false。
+    const releaseModifiers = modifiers(event)
     controller.send({
       type: 'pointer.up',
       pointerId: session.pointerId,
       point: screenPointFromRect(event, session.surfaceRect),
-      modifiers: modifiers(event),
+      modifiers: {
+        ...releaseModifiers,
+        shift: releaseModifiers.shift || session.lastModifiers.shift,
+      },
     })
     if (activePointerSessionRef.current?.generation === session.generation) {
       endPointerSession(session)
@@ -1013,18 +1310,27 @@ function ComposeStageReady({
       const current = currentSession(event)
       if (current) cancelPointerSession(current, true)
     }
+    const handleModifierChange = (event: KeyboardEvent) => {
+      const current = activePointerSessionRef.current
+      if (current?.generation === session.generation) refreshDrawingModifier(current, event)
+    }
     // capture phase 先于 React 根节点回调，避免宿主 stopPropagation 使内部路由漏掉最终点。
     window.addEventListener('pointermove', handleMove, true)
     window.addEventListener('pointerup', handleUp, true)
     window.addEventListener('pointercancel', handleCancel, true)
+    window.addEventListener('keydown', handleModifierChange, true)
+    window.addEventListener('keyup', handleModifierChange, true)
     pointerRouteCleanupRef.current = () => {
       window.removeEventListener('pointermove', handleMove, true)
       window.removeEventListener('pointerup', handleUp, true)
       window.removeEventListener('pointercancel', handleCancel, true)
+      window.removeEventListener('keydown', handleModifierChange, true)
+      window.removeEventListener('keyup', handleModifierChange, true)
     }
   }, [
     cancelPointerSession,
     finishPointerSession,
+    refreshDrawingModifier,
     scheduleUpdate,
     stopPointerRoute,
   ])
@@ -1037,6 +1343,10 @@ function ComposeStageReady({
       pointerId,
       generation: ++pointerGenerationRef.current,
       buttons: start?.pointerId === pointerId ? start.buttons : 1,
+      lastPoint: start?.pointerId === pointerId ? start.point : { x: 0, y: 0 },
+      lastModifiers: start?.pointerId === pointerId
+        ? start.modifiers
+        : { shift: false, alt: false, command: false },
       status: 'active',
       surfaceRect: start?.pointerId === pointerId
         ? start.surfaceRect
@@ -1191,6 +1501,148 @@ function ComposeStageReady({
     }
   }, [resolvedLocale])
 
+  const createDrawing = useCallback((
+    effect: Extract<StageInteractionEffect, { readonly type: 'drawing.commit' }>,
+  ) => {
+    const current = latestRef.current
+    const seedResult = current.registry.createSeed(presetForDrawingTool(effect.tool))
+    if (!seedResult.ok) return
+    const parentCandidate = effect.parentId
+      ? current.document.entities[effect.parentId]
+      : undefined
+    const parent = parentCandidate
+      && getComposeHierarchy(parentCandidate)
+      && !getComposeLock(parentCandidate).locked
+      && getComposeVisibility(parentCandidate).visible
+      ? parentCandidate
+      : undefined
+    const inverseParent = parent
+      ? invertMatrix(getEntityWorldMatrix(
+          current.document,
+          current.layoutSnapshot,
+          parent.id,
+        ))
+      : null
+    const localBounds = boundsInParentSpace(effect.bounds, inverseParent)
+    const seedSize = getComposeSpatialTransform({ id: '__seed__', ...seedResult.seed }).size
+    const bounds = effect.tool === 'draw-text'
+      && localBounds.width < 1
+      && localBounds.height < 1
+      ? { ...localBounds, width: seedSize.width, height: seedSize.height }
+      : localBounds
+    const entityId = current.idFactory()
+    const drawnEntity = entityFromDrawingSeed(
+      seedResult.seed,
+      entityId,
+      bounds,
+      effect.tool === 'draw-line' || effect.tool === 'draw-arrow'
+        ? {
+            x: directionAxis(effect.end.x - effect.start.x),
+            y: directionAxis(effect.end.y - effect.start.y),
+          }
+        : undefined,
+    )
+    // 组件库中的 Rectangle 可保留其圆角默认值；画布矩形工具遵循设计工具惯例，初始绘制为直角。
+    const entity = effect.tool === 'draw-rectangle'
+      ? {
+          ...drawnEntity,
+          components: {
+            ...drawnEntity.components,
+            Appearance: {
+              ...resolveComposeAppearance(drawnEntity),
+              borderRadius: 0,
+            },
+          },
+        }
+      : drawnEntity
+    const result = current.dispatch({
+      id: current.idFactory(),
+      type: BUILTIN_COMMAND_TYPES.createEntity,
+      payload: {
+        entity: entity as unknown as JsonValue,
+        parentId: parent?.id ?? null,
+      },
+      meta: {
+        label: describeEntityCreation(entity),
+        source: 'stage',
+        targetIds: [entity.id],
+      },
+    })
+    if (result.status === 'committed') {
+      current.onSelectedIdsChange([entity.id])
+      // 单次绘制结束即回到选择模式，避免下一次点击意外继续创建同类图形。
+      onToolChange?.('select')
+    }
+  }, [onToolChange])
+
+  const commitSegment = useCallback((
+    effect: Extract<StageInteractionEffect, { readonly type: 'segment.commit' }>,
+  ) => {
+    const current = latestRef.current
+    const entity = current.document.entities[effect.entityId]
+    const renderer = entity ? getComposeRenderer(entity) : null
+    const currentSegment = lineSegmentForEntity(
+      current.document,
+      current.layoutSnapshot,
+      effect.entityId,
+    )
+    const next = lineSegmentTransform(
+      current.document,
+      current.layoutSnapshot,
+      effect,
+    )
+    if (
+      !entity
+      || !renderer
+      || renderer.type !== 'shape'
+      || !currentSegment
+      || !next
+      || getComposeLock(entity).locked
+      || (
+        currentSegment.start.x === effect.start.x
+        && currentSegment.start.y === effect.start.y
+        && currentSegment.end.x === effect.end.x
+        && currentSegment.end.y === effect.end.y
+      )
+    ) return
+    current.dispatch({
+      id: current.idFactory(),
+      type: 'transaction.batch',
+      payload: {
+        commands: [
+          {
+            id: current.idFactory(),
+            type: BUILTIN_COMMAND_TYPES.setTransform,
+            payload: {
+              operation: 'resize',
+              updates: [{
+                entityId: entity.id,
+                transform: toComposeTransform(next.transform),
+              }],
+            },
+          },
+          {
+            id: current.idFactory(),
+            type: BUILTIN_COMMAND_TYPES.setRendererProps,
+            payload: {
+              entityId: entity.id,
+              props: {
+                ...renderer.props,
+                direction: next.direction,
+              },
+            },
+          },
+        ] as unknown as JsonValue,
+      },
+      meta: {
+        label: `Resize ${entity.name} endpoints`,
+        mergeKey: `stage:segment:${entity.id}`,
+        source: 'stage',
+        targetIds: [entity.id],
+      },
+    })
+  }, [])
+
   useEffect(() => controller.connectSurface({
     resolveClientPoint(point) {
       const surface = surfaceRef.current
@@ -1226,6 +1678,14 @@ function ComposeStageReady({
         }
         if (effect.type === 'command.dispatch') {
           current.dispatch(effect.command)
+          return
+        }
+        if (effect.type === 'segment.commit') {
+          commitSegment(effect)
+          return
+        }
+        if (effect.type === 'drawing.commit') {
+          createDrawing(effect)
           return
         }
         if (effect.item.kind === 'assets') {
@@ -1273,7 +1733,7 @@ function ComposeStageReady({
         }
       })
     },
-  }), [capturePointer, controller, createDroppedAssets, releasePointer])
+  }), [capturePointer, commitSegment, controller, createDrawing, createDroppedAssets, releasePointer])
 
   useLayoutEffect(() => {
     controller.updateContext({
@@ -1360,10 +1820,13 @@ function ComposeStageReady({
   ) => {
     const surface = surfaceRef.current
     if (!surface || activePointerSessionRef.current) return
+    const surfaceRect = frozenSurfaceRect(surface)
     const start = {
       pointerId: event.pointerId,
       buttons: pressedButtons(event.button, event.buttons),
-      surfaceRect: frozenSurfaceRect(surface),
+      surfaceRect,
+      point: screenPointFromRect(event, surfaceRect),
+      modifiers: modifiers(event),
     }
     pendingPointerStartRef.current = start
     try {
@@ -1371,9 +1834,9 @@ function ComposeStageReady({
         type: 'pointer.down',
         pointerId: event.pointerId,
         button: event.button,
-        point: screenPointFromRect(event, start.surfaceRect),
+        point: start.point,
         hit,
-        modifiers: modifiers(event),
+        modifiers: start.modifiers,
       })
     }
     finally {
@@ -1493,13 +1956,21 @@ function ComposeStageReady({
         return
       }
     }
-    if (actionMatches('stage.selectTool')) {
-      onToolChange?.('select')
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('stage.panTool')) {
-      onToolChange?.('pan')
+    const toolAction = ([
+      ['stage.selectTool', 'select'],
+      ['stage.moveTool', 'move'],
+      ['stage.scaleTool', 'scale'],
+      ['stage.rotateTool', 'rotate'],
+      ['stage.panTool', 'pan'],
+      ['stage.drawContainerTool', 'draw-container'],
+      ['stage.drawRectangleTool', 'draw-rectangle'],
+      ['stage.drawLineTool', 'draw-line'],
+      ['stage.drawArrowTool', 'draw-arrow'],
+      ['stage.drawCircleTool', 'draw-circle'],
+      ['stage.drawTextTool', 'draw-text'],
+    ] as const).find(([action]) => actionMatches(action))
+    if (toolAction) {
+      onToolChange?.(toolAction[1])
       event.preventDefault()
       return
     }
@@ -1882,7 +2353,9 @@ function ComposeStageReady({
           aria-hidden="true"
           className="compose-stage__grid"
           data-testid="stage-grid"
-          style={createVisualGridStyle(document.canvas.grid, viewport)}
+          style={gridVisible
+            ? createVisualGridStyle(document.canvas.grid, viewport)
+            : { display: 'none' }}
         />
         <svg aria-hidden="true" className="compose-stage__world-overlay">
           <StageOutputPaint assetResolver={assetResolver} paint={document.output.backgroundPaint} screenBounds={outputScreenBounds} />
@@ -1995,9 +2468,11 @@ function ComposeStageReady({
           : null}
         <StageOverlay
           canvasGuides={canvasGuides}
+          drawing={interaction.drawing}
           editableSelection={editableSelection}
           handlePoints={handlePoints}
           label={messages.editingOverlay}
+          lineSelection={lineSelection}
           marqueeScreen={marqueeScreen}
           paintHandles={interaction.paintHandles}
           paintSample={interaction.paintSample}
@@ -2005,6 +2480,8 @@ function ComposeStageReady({
           rotatable={selectionRotatable}
           screenBounds={screenBounds}
           snapGuides={snapGuides}
+          tool={tool}
+          visibleResizeHandles={visibleResizeHandles}
           viewport={viewport}
           onInteraction={(hit, event) => {
             event.stopPropagation()

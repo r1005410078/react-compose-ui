@@ -1,187 +1,305 @@
 import type { ComposeDocument } from '@compose-ui/core'
-import type {
-  ComposeStageProps,
-  ComposeStageTool,
-} from '@compose-ui/stage'
-import type { StageViewport } from '@compose-ui/stage-engine'
-import type {
-  Dispatch,
-  SetStateAction,
-} from 'react'
+import type { ComposeStageDispatch, ComposeStageTool } from '@compose-ui/stage'
+import { useRef, useState } from 'react'
+import type { Dispatch, KeyboardEvent, SetStateAction } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { getEditorMessages } from '../editor-i18n'
+import {
+  formatComposeEditorKeybinding,
+  type ComposeEditorPreferences,
+  type ComposeEditorShortcutAction,
+} from '../editor-preferences'
 import { CanvasSettingsPopover } from './canvas-settings-popover'
 import { StageToolbarIcon } from './stage-toolbar-icons'
 
 type DefaultStageToolbarProps = {
   readonly canvasSettingsOpen: boolean
-  readonly configureCanvas: (
-    gridSnapEnabled: boolean,
-    smartEnabled: boolean,
-    label: string,
-  ) => void
-  readonly createContainer: () => void
-  readonly dispatch: NonNullable<ComposeStageProps['dispatch']>
+  readonly dispatch: ComposeStageDispatch
   readonly document: ComposeDocument
-  readonly fitContainer: () => void
-  readonly fitSelection: () => void
+  readonly gridVisible: boolean
+  /** 最近一次选择的形状；主按钮在自动回到选择工具后仍用它表达下一次绘制内容。 */
+  readonly lastShapeTool: ShapeTool
   readonly nextId: () => string
-  readonly selectedIds: readonly string[]
-  readonly selectedContainerId: string | null
   readonly setCanvasSettingsOpen: Dispatch<SetStateAction<boolean>>
+  readonly setGridSize: (size: number) => void
+  readonly setGridVisible: Dispatch<SetStateAction<boolean>>
   readonly setTool: (tool: ComposeStageTool) => void
-  readonly setViewport: Dispatch<SetStateAction<StageViewport>>
-  readonly smartSnapEnabled: boolean
-  readonly surfaceSize: { readonly width: number; readonly height: number } | null
+  readonly shortcuts?: ComposeEditorPreferences['shortcuts']
+  readonly toggleSnap: () => void
   readonly tool: ComposeStageTool
-  readonly viewport: StageViewport
 }
 
-/** 默认舞台工具栏：交互工具、容器操作、吸附开关与缩放。 @internal */
+const SHAPE_TOOLS = [
+  ['draw-rectangle', 'rectangle', 'rectangle', 'stage.drawRectangleTool'],
+  ['draw-line', 'line', 'line', 'stage.drawLineTool'],
+  ['draw-arrow', 'arrow', 'arrow', 'stage.drawArrowTool'],
+  ['draw-circle', 'circle', 'circle', 'stage.drawCircleTool'],
+] as const
+
+type ShapeTool = (typeof SHAPE_TOOLS)[number][0]
+
+function shapeTool(tool: ComposeStageTool) {
+  return SHAPE_TOOLS.find(([candidate]) => candidate === tool)
+}
+
+function useToolbarMenu(id: string) {
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const focusFirstItem = () => window.requestAnimationFrame(() => {
+    menuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+  })
+  const close = () => {
+    setOpen(false)
+    window.requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+  const onTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    setOpen(true)
+    window.requestAnimationFrame(() => {
+      const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
+      buttons[event.key === 'ArrowUp' ? buttons.length - 1 : 0]?.focus()
+    })
+  }
+  const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      close()
+      return
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
+    const current = event.target instanceof HTMLButtonElement
+      ? buttons.indexOf(event.target)
+      : -1
+    const next = event.key === 'ArrowDown'
+      ? (current + 1 + buttons.length) % buttons.length
+      : (current - 1 + buttons.length) % buttons.length
+    buttons[next]?.focus()
+  }
+  return { close, focusFirstItem, id, menuRef, onMenuKeyDown, onTriggerKeyDown, open, setOpen, triggerRef }
+}
+
+/** 默认舞台工具栏：扁平 Godot 风格工具分组与绘图工具入口。 @internal */
 export function DefaultStageToolbar({
   canvasSettingsOpen,
-  configureCanvas,
-  createContainer,
   dispatch,
   document,
-  fitContainer,
-  fitSelection,
+  gridVisible,
+  lastShapeTool,
   nextId,
-  selectedIds,
-  selectedContainerId,
   setCanvasSettingsOpen,
+  setGridSize,
+  setGridVisible,
   setTool,
-  setViewport,
-  smartSnapEnabled,
-  surfaceSize,
+  shortcuts,
+  toggleSnap,
   tool,
-  viewport,
 }: DefaultStageToolbarProps) {
+  const {
+    close: closeGridMenu,
+    focusFirstItem: focusFirstGridItem,
+    id: gridMenuId,
+    menuRef: gridMenuRef,
+    onMenuKeyDown: onGridMenuKeyDown,
+    onTriggerKeyDown: onGridTriggerKeyDown,
+    open: gridMenuOpen,
+    setOpen: setGridMenuOpen,
+    triggerRef: gridMenuTriggerRef,
+  } = useToolbarMenu('compose-editor-grid-menu')
+  const {
+    close: closeShapeMenu,
+    focusFirstItem: focusFirstShapeItem,
+    id: shapeMenuId,
+    menuRef: shapeMenuRef,
+    onMenuKeyDown: onShapeMenuKeyDown,
+    onTriggerKeyDown: onShapeTriggerKeyDown,
+    open: shapeMenuOpen,
+    setOpen: setShapeMenuOpen,
+    triggerRef: shapeMenuTriggerRef,
+  } = useToolbarMenu('compose-editor-shape-menu')
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(
     i18n?.locale ?? 'zh-CN',
     i18n?.formatMessage,
   ).stageToolbar
-  const titled = (label: string) => ({ 'aria-label': label, title: label })
+  const shortcut = (action: ComposeEditorShortcutAction) => {
+    const binding = shortcuts?.[action]?.[0]
+    if (!binding) return undefined
+    return formatComposeEditorKeybinding(
+      binding,
+      typeof navigator === 'undefined' ? '' : navigator.platform,
+    )
+  }
+  const titled = (label: string, keybinding?: string) => ({
+    'aria-label': label,
+    title: keybinding ? `${label} (${keybinding})` : label,
+  })
+  const snapEnabled = document.canvas.grid.snapEnabled
+    || document.canvas.smartSnap.nodes
+    || document.canvas.smartSnap.guides
+  const selectedShape = shapeTool(tool)
+  const currentShape = Boolean(selectedShape)
+  const activeShape = selectedShape ?? shapeTool(lastShapeTool)!
 
   return (
     <div aria-label={messages.label} className="compose-editor__stage-toolbar" role="toolbar">
-      <div
-        aria-label={messages.interactionTools}
-        className="compose-editor__toolbar-group"
-        role="group"
-      >
-        <button
-          {...titled(messages.select)}
-          aria-pressed={tool === 'select'}
-          type="button"
-          onClick={() => setTool('select')}
-        >
+      <div aria-label={messages.interactionTools} className="compose-editor__toolbar-group" role="group">
+        <button {...titled(messages.select, shortcut('stage.selectTool'))} aria-pressed={tool === 'select'} type="button" onClick={() => setTool('select')}>
           <StageToolbarIcon name="select" />
         </button>
-        <button
-          {...titled(messages.pan)}
-          aria-pressed={tool === 'pan'}
-          type="button"
-          onClick={() => setTool('pan')}
-        >
+        <button {...titled(messages.move, shortcut('stage.moveTool'))} aria-pressed={tool === 'move'} type="button" onClick={() => setTool('move')}>
+          <StageToolbarIcon name="move" />
+        </button>
+        <button {...titled(messages.scale, shortcut('stage.scaleTool'))} aria-pressed={tool === 'scale'} type="button" onClick={() => setTool('scale')}>
+          <StageToolbarIcon name="scale" />
+        </button>
+        <button {...titled(messages.rotate, shortcut('stage.rotateTool'))} aria-pressed={tool === 'rotate'} type="button" onClick={() => setTool('rotate')}>
+          <StageToolbarIcon name="rotate" />
+        </button>
+        <button {...titled(messages.pan, shortcut('stage.panTool'))} aria-pressed={tool === 'pan'} type="button" onClick={() => setTool('pan')}>
           <StageToolbarIcon name="pan" />
         </button>
       </div>
-      <span aria-hidden="true" className="compose-editor__toolbar-divider" />
-      <div aria-label={messages.containerTools} className="compose-editor__toolbar-group" role="group">
-        <button {...titled(messages.createContainer)} type="button" onClick={createContainer}>
-          <StageToolbarIcon name="create-frame" />
-        </button>
-        <button
-          {...titled(messages.fitContainer)}
-          disabled={!surfaceSize || !selectedContainerId}
-          type="button"
-          onClick={fitContainer}
-        >
-          <StageToolbarIcon name="fit-frame" />
-        </button>
-        <button
-          {...titled(messages.fitSelection)}
-          disabled={!surfaceSize || selectedIds.length === 0}
-          type="button"
-          onClick={fitSelection}
-        >
-          <StageToolbarIcon name="fit-selection" />
-        </button>
-      </div>
-      <span aria-hidden="true" className="compose-editor__toolbar-divider" />
-      <div
-        aria-label={messages.snapTools}
-        className="compose-editor__toolbar-group compose-editor__canvas-tools"
-        role="group"
-      >
-        <button
-          {...titled(messages.gridSnap)}
-          aria-pressed={document.canvas.grid.snapEnabled}
-          type="button"
-          onClick={() => configureCanvas(
-            !document.canvas.grid.snapEnabled,
-            smartSnapEnabled,
-            messages.toggleSnapTransaction,
-          )}
-        >
-          <StageToolbarIcon name="grid-snap" />
-        </button>
-        <button
-          {...titled(messages.smartSnap)}
-          aria-pressed={smartSnapEnabled}
-          type="button"
-          onClick={() => configureCanvas(
-            document.canvas.grid.snapEnabled,
-            !smartSnapEnabled,
-            messages.toggleSnapTransaction,
-          )}
-        >
+      <div aria-label={messages.snapTools} className="compose-editor__toolbar-group" role="group">
+        <button {...titled(messages.snap)} aria-pressed={snapEnabled} type="button" onClick={toggleSnap}>
           <StageToolbarIcon name="smart-snap" />
         </button>
-        <button
-          {...titled(messages.canvasSettings)}
-          aria-expanded={canvasSettingsOpen}
-          aria-haspopup="dialog"
-          type="button"
-          onClick={() => setCanvasSettingsOpen((current) => !current)}
-        >
-          <StageToolbarIcon name="settings" />
-        </button>
-        {canvasSettingsOpen ? (
-          <CanvasSettingsPopover
-            dispatch={dispatch}
-            document={document}
-            idFactory={nextId}
-            onClose={() => setCanvasSettingsOpen(false)}
-          />
-        ) : null}
+        <div className="compose-editor__toolbar-menu-anchor">
+          <button {...titled(messages.grid)} aria-pressed={gridVisible} type="button" onClick={() => setGridVisible((visible) => !visible)}>
+            <StageToolbarIcon name="grid" />
+          </button>
+          <button
+            {...titled(messages.gridSize)}
+            aria-controls={gridMenuId}
+            aria-expanded={gridMenuOpen}
+            aria-haspopup="menu"
+            className="compose-editor__toolbar-menu-trigger"
+            ref={gridMenuTriggerRef}
+            type="button"
+            onClick={() => {
+              setGridMenuOpen((open) => !open)
+              focusFirstGridItem()
+            }}
+            onKeyDown={onGridTriggerKeyDown}
+          >
+            <StageToolbarIcon name="chevron-down" />
+          </button>
+          {gridMenuOpen ? (
+            <div
+              aria-label={messages.gridSize}
+              className="compose-editor__toolbar-menu"
+              id={gridMenuId}
+              ref={gridMenuRef}
+              role="menu"
+              onKeyDown={onGridMenuKeyDown}
+            >
+              {([4, 8, 16, 32] as const).map((size) => (
+                <button
+                  key={size}
+                  aria-pressed={document.canvas.grid.stepX === size && document.canvas.grid.stepY === size}
+                  role="menuitemradio"
+                  type="button"
+                  onClick={() => {
+                    setGridSize(size)
+                    closeGridMenu()
+                  }}
+                >
+                  {messages[`gridSize${size}` as const]}
+                </button>
+              ))}
+              <button
+                aria-expanded={canvasSettingsOpen}
+                aria-haspopup="dialog"
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  setCanvasSettingsOpen(true)
+                  closeGridMenu()
+                }}
+              >
+                {messages.canvasSettings}
+              </button>
+            </div>
+          ) : null}
+          {canvasSettingsOpen ? (
+            <CanvasSettingsPopover
+              dispatch={dispatch}
+              document={document}
+              idFactory={nextId}
+              onClose={() => setCanvasSettingsOpen(false)}
+            />
+          ) : null}
+        </div>
       </div>
       <span aria-hidden="true" className="compose-editor__toolbar-divider" />
-      <div aria-label={messages.zoomTools} className="compose-editor__toolbar-group" role="group">
+      <div aria-label={messages.containerTools} className="compose-editor__toolbar-group" role="group">
         <button
-          {...titled(messages.zoomOut)}
+          {...titled(messages.createContainer, shortcut('stage.drawContainerTool'))}
+          aria-pressed={tool === 'draw-container'}
           type="button"
-          onClick={() => setViewport((current) => ({
-            ...current,
-            zoom: Math.max(0.1, current.zoom / 1.2),
-          }))}
+          onClick={() => setTool('draw-container')}
         >
-          <StageToolbarIcon name="zoom-out" />
+          <StageToolbarIcon name="container" />
         </button>
-        <span aria-label={messages.zoomLevel} className="compose-editor__zoom-value">
-          {Math.round(viewport.zoom * 100)}%
-        </span>
-        <button
-          {...titled(messages.zoomIn)}
-          type="button"
-          onClick={() => setViewport((current) => ({
-            ...current,
-            zoom: Math.min(8, current.zoom * 1.2),
-          }))}
-        >
-          <StageToolbarIcon name="zoom-in" />
+        <div className="compose-editor__toolbar-menu-anchor">
+          <button
+            {...titled(messages.shape, shortcut('stage.drawRectangleTool'))}
+            aria-pressed={currentShape}
+            data-active-shape={activeShape[0]}
+            type="button"
+            onClick={() => setTool(activeShape[0])}
+          >
+            <StageToolbarIcon name={activeShape[2]} />
+          </button>
+          <button
+            {...titled(messages.shape)}
+            aria-controls={shapeMenuId}
+            aria-expanded={shapeMenuOpen}
+            aria-haspopup="menu"
+            className="compose-editor__toolbar-menu-trigger"
+            ref={shapeMenuTriggerRef}
+            type="button"
+            onClick={() => {
+              setShapeMenuOpen((open) => !open)
+              focusFirstShapeItem()
+            }}
+            onKeyDown={onShapeTriggerKeyDown}
+          >
+            <StageToolbarIcon name="chevron-down" />
+          </button>
+          {shapeMenuOpen ? (
+            <div
+              aria-label={messages.shape}
+              className="compose-editor__toolbar-menu"
+              id={shapeMenuId}
+              ref={shapeMenuRef}
+              role="menu"
+              onKeyDown={onShapeMenuKeyDown}
+            >
+              {SHAPE_TOOLS.map(([shapeTool, label, icon, action]) => (
+                <button
+                  key={shapeTool}
+                  aria-pressed={tool === shapeTool}
+                  role="menuitemradio"
+                  type="button"
+                  onClick={() => {
+                    setTool(shapeTool)
+                    closeShapeMenu()
+                  }}
+                >
+                  <StageToolbarIcon name={icon} />
+                  {messages[label]}
+                  {shortcut(action) ? <kbd>{shortcut(action)}</kbd> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <button {...titled(messages.text, shortcut('stage.drawTextTool'))} aria-pressed={tool === 'draw-text'} type="button" onClick={() => setTool('draw-text')}>
+          <StageToolbarIcon name="text" />
         </button>
       </div>
     </div>
