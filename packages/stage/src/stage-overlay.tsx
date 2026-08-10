@@ -141,7 +141,7 @@ export function StageOverlay({
     && drawingScreen
     && drawingScreen.width < 1
     && drawingScreen.height < 1
-    ? { ...drawingScreen, width: 180 * viewport.zoom, height: 42 * viewport.zoom }
+    ? { ...drawingScreen, width: 28 * viewport.zoom, height: 16 * viewport.zoom }
     : drawingScreen
   const drawingDimensionLabel = drawing && drawingPreviewBounds
     ? drawing.tool === 'draw-line' || drawing.tool === 'draw-arrow'

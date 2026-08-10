@@ -9,4 +9,8 @@ export const TEXT_RENDERER_PROP_SCHEMAS = Object.freeze({
   fontWeight: v.union([v.string(), v.number()]),
   letterSpacing: v.number(),
   lineHeight: v.pipe(v.number(), v.minValue(0)),
+  textAlign: v.picklist(['left', 'center', 'right', 'justify']),
+  verticalAlign: v.picklist(['top', 'middle', 'bottom']),
+  textCase: v.picklist(['original', 'uppercase', 'lowercase', 'capitalize', 'small-caps']),
+  textDecoration: v.picklist(['none', 'underline', 'line-through']),
 })

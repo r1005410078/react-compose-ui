@@ -3,6 +3,7 @@ import type {
   ComposeRendererPropContract,
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
+import type { ComposeAppearance, JsonObject } from '@compose-ui/core'
 import * as v from 'valibot'
 import type { ComposeBasicMaterialOptions } from '../types'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
@@ -38,6 +39,27 @@ function valueContract(
   }
 }
 
+function textPresetComponents(input: {
+  readonly props: JsonObject
+  readonly size: { readonly width: number; readonly height: number }
+  readonly appearance: ComposeAppearance
+}) {
+  const components = rendererPresetComponents({
+    type: 'text',
+    props: input.props,
+    size: input.size,
+    appearance: input.appearance,
+  })
+  return {
+    ...components,
+    LayoutItem: {
+      ...components.LayoutItem,
+      width: { ...components.LayoutItem.width, mode: 'hug' as const },
+      height: { ...components.LayoutItem.height, mode: 'hug' as const },
+    },
+  }
+}
+
 /** 创建 Text Renderer 与 Entity Preset。 @internal */
 export function createTextMaterial(
   options: ComposeBasicMaterialOptions = {},
@@ -59,6 +81,10 @@ export function createTextMaterial(
         valueContract('fontWeight', 'Font weight', 'typography'),
         valueContract('letterSpacing', 'Letter spacing', 'typography'),
         valueContract('lineHeight', 'Line height', 'typography'),
+        valueContract('textAlign', 'Text align', 'typography', false),
+        valueContract('verticalAlign', 'Vertical align', 'typography', false),
+        valueContract('textCase', 'Text case', 'typography'),
+        valueContract('textDecoration', 'Text decoration', 'typography', false),
       ],
       propCategories: [
         { id: 'text', label: '文本' },
@@ -72,6 +98,10 @@ export function createTextMaterial(
         'fontWeight',
         'letterSpacing',
         'lineHeight',
+        'textAlign',
+        'verticalAlign',
+        'textCase',
+        'textDecoration',
       ],
       inspector: createTextRendererInspector(idFactory),
       measurement: TEXT_RENDERER_MEASUREMENT,
@@ -81,8 +111,7 @@ export function createTextMaterial(
       label: options.label ?? 'Text',
       defaultName: options.name ?? 'Text',
       icon: <span aria-hidden="true">T</span>,
-      createComponents: () => rendererPresetComponents({
-        type: 'text',
+      createComponents: () => textPresetComponents({
         props,
         size,
         appearance,

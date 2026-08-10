@@ -1509,6 +1509,52 @@ test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形�
   await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
 })
 
+test('OpenSpec: stage / 直接绘制 Preset / 点击或拖拽绘制文字', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  const textTool = editor.getByRole('button', { name: '文字', exact: true })
+  await textTool.click()
+  const clickPoint = { x: outputBox!.x + 180, y: outputBox!.y + 132 }
+  await page.mouse.click(clickPoint.x, clickPoint.y)
+
+  await expect(editor.getByRole('button', { name: '选择', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  const defaultText = stage.getByTestId('compose-material-text')
+  await expect(defaultText).toHaveCSS('color', 'rgb(255, 255, 255)')
+  await expect(defaultText).toHaveCSS('font-size', '12px')
+  const defaultTextBox = await defaultText.boundingBox()
+  expect(defaultTextBox).not.toBeNull()
+  expect(defaultTextBox!.width).toBeLessThan(64)
+  expect(defaultTextBox!.height).toBeLessThanOrEqual(24)
+
+  await textTool.click()
+  const start = { x: outputBox!.x + 280, y: outputBox!.y + 172 }
+  const target = { x: start.x + 160, y: start.y + 48 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+  const preview = stage.getByTestId('stage-drawing-preview')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-text')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('160 × 48')
+  await expect(stage).toHaveScreenshot('stage-drawing-text-preview.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await page.mouse.up()
+
+  const fixedText = stage.locator('.compose-stage__node.is-renderer').last()
+  await expect(fixedText).toHaveCSS('width', '160px')
+  await expect(fixedText).toHaveCSS('height', '48px')
+})
+
 test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主图标同步', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')

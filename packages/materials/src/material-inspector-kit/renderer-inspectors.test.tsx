@@ -58,6 +58,10 @@ describe('Text Renderer Inspector', () => {
           fontWeight: 600,
           letterSpacing: 1,
           lineHeight: 32,
+          textAlign: 'center',
+          verticalAlign: 'middle',
+          textCase: 'uppercase',
+          textDecoration: 'underline',
         },
       },
     })
@@ -96,6 +100,10 @@ describe('Text Renderer Inspector', () => {
     expect(screen.getByRole('textbox', { name: '字重' })).toHaveValue('600')
     expect(screen.getByRole('spinbutton', { name: '字间距' })).toHaveValue(1)
     expect(screen.getByRole('spinbutton', { name: '行高' })).toHaveValue(32)
+    expect(screen.getByRole('combobox', { name: '水平对齐' })).toHaveValue('center')
+    expect(screen.getByRole('combobox', { name: '垂直对齐' })).toHaveValue('middle')
+    expect(screen.getByRole('combobox', { name: '大小写' })).toHaveValue('uppercase')
+    expect(screen.getByRole('combobox', { name: '文字装饰' })).toHaveValue('underline')
   })
 
   it('OpenSpec: 基础物料 / 编辑 Text 内容保留 schema 之外的 props', () => {

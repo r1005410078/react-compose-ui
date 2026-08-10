@@ -4,9 +4,17 @@ function numeric(value: unknown, fallback: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+function textTransform(value: unknown) {
+  return value === 'uppercase' || value === 'lowercase' || value === 'capitalize'
+    ? value
+    : 'none'
+}
+
 function textStyle(props: Readonly<Record<string, unknown>>) {
   const fontSize = numeric(props.fontSize, 24)
-  const lineHeight = numeric(props.lineHeight, fontSize * 1.2)
+  const lineHeight = typeof props.lineHeight === 'number' && Number.isFinite(props.lineHeight)
+    ? props.lineHeight
+    : null
   return {
     fontFamily: typeof props.fontFamily === 'string'
       ? props.fontFamily
@@ -17,6 +25,8 @@ function textStyle(props: Readonly<Record<string, unknown>>) {
       : '400',
     letterSpacing: numeric(props.letterSpacing, 0),
     lineHeight,
+    textTransform: textTransform(props.textCase),
+    fontVariantCaps: props.textCase === 'small-caps' ? 'small-caps' : 'normal',
   }
 }
 
@@ -49,7 +59,9 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
       fontSize: `${typography.fontSize}px`,
       fontWeight: typography.fontWeight,
       letterSpacing: `${typography.letterSpacing}px`,
-      lineHeight: `${typography.lineHeight}px`,
+      lineHeight: typography.lineHeight === null ? 'normal' : `${typography.lineHeight}px`,
+      textTransform: typography.textTransform,
+      fontVariantCaps: typography.fontVariantCaps,
     })
     if (width.mode === 'exactly') host.style.width = `${width.value}px`
     else if (width.mode === 'at-most') host.style.maxWidth = `${width.value}px`

@@ -166,11 +166,42 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
         v.title(title(zh, 'Line height', '行高')),
         v.metadata({ propertyPanel: { unit: 'px' } }),
       ),
+      textAlign: v.pipe(
+        TEXT_RENDERER_PROP_SCHEMAS.textAlign,
+        v.title(title(zh, 'Horizontal alignment', '水平对齐')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { left: '左', center: '居中', right: '右', justify: '两端对齐' }
+          : { left: 'Left', center: 'Center', right: 'Right', justify: 'Justify' } } }),
+      ),
+      verticalAlign: v.pipe(
+        TEXT_RENDERER_PROP_SCHEMAS.verticalAlign,
+        v.title(title(zh, 'Vertical alignment', '垂直对齐')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { top: '顶部', middle: '居中', bottom: '底部' }
+          : { top: 'Top', middle: 'Middle', bottom: 'Bottom' } } }),
+      ),
+      textCase: v.pipe(
+        TEXT_RENDERER_PROP_SCHEMAS.textCase,
+        v.title(title(zh, 'Text case', '大小写')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { original: '原样', uppercase: '大写', lowercase: '小写', capitalize: '首字母大写', 'small-caps': '小型大写' }
+          : { original: 'Original', uppercase: 'Uppercase', lowercase: 'Lowercase', capitalize: 'Capitalize', 'small-caps': 'Small caps' } } }),
+      ),
+      textDecoration: v.pipe(
+        TEXT_RENDERER_PROP_SCHEMAS.textDecoration,
+        v.title(title(zh, 'Text decoration', '文字装饰')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { none: '无', underline: '下划线', 'line-through': '删除线' }
+          : { none: 'None', underline: 'Underline', 'line-through': 'Strikethrough' } } }),
+      ),
     })
     const visiblePropNames = context.propCategory?.id === 'text'
       ? new Set(['text', 'color'])
       : context.propCategory?.id === 'typography'
-        ? new Set(['fontSize', 'fontFamily', 'fontWeight', 'letterSpacing', 'lineHeight'])
+        ? new Set([
+            'fontSize', 'fontFamily', 'fontWeight', 'letterSpacing', 'lineHeight',
+            'textAlign', 'verticalAlign', 'textCase', 'textDecoration',
+          ])
         : undefined
     const schema = context.propCategory?.id === 'text'
       ? v.pick(fullSchema, ['text', 'color'])
@@ -181,6 +212,10 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
             'fontWeight',
             'letterSpacing',
             'lineHeight',
+            'textAlign',
+            'verticalAlign',
+            'textCase',
+            'textDecoration',
           ])
         : fullSchema
     const props = inspectorBaseProps(context)
@@ -206,6 +241,22 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
       lineHeight: typeof props.lineHeight === 'number'
         ? props.lineHeight
         : defaultTextLineHeight(fontSize),
+      textAlign: props.textAlign === 'center' || props.textAlign === 'right' || props.textAlign === 'justify'
+        ? props.textAlign
+        : DEFAULT_TEXT_TYPOGRAPHY_PROPS.textAlign,
+      verticalAlign: props.verticalAlign === 'top' || props.verticalAlign === 'bottom'
+        ? props.verticalAlign
+        // 缺失字段的旧文档仍按当前 renderer 的居中行为展示。
+        : 'middle',
+      textCase: props.textCase === 'uppercase'
+        || props.textCase === 'lowercase'
+        || props.textCase === 'capitalize'
+        || props.textCase === 'small-caps'
+        ? props.textCase
+        : DEFAULT_TEXT_TYPOGRAPHY_PROPS.textCase,
+      textDecoration: props.textDecoration === 'underline' || props.textDecoration === 'line-through'
+        ? props.textDecoration
+        : DEFAULT_TEXT_TYPOGRAPHY_PROPS.textDecoration,
     }
     /*
      * 行高的默认值依赖字号，因此基线用默认字号推导，而不是当前字号：基线必须与

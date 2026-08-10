@@ -113,10 +113,14 @@ import {
 } from '@compose-ui/stage-engine'
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
+import {
+  entityFromDrawingSeed,
+  entityFromSeed,
+  type ShapeDirection,
+} from './drawing-entity'
 
 type TransformMap = Readonly<Record<string, StageTransform>>
 type ShapeAxis = -1 | 0 | 1
-type ShapeDirection = { readonly x: ShapeAxis; readonly y: ShapeAxis }
 type Modifiers = { shift: boolean; alt: boolean; command: boolean }
 type PointerSessionStatus = 'active' | 'finishing' | 'ended'
 
@@ -578,29 +582,6 @@ function assetSeedCenters(
   return points
 }
 
-function entityFromSeed(
-  seed: ComposeEntitySeed,
-  id: string,
-  center: StagePoint,
-): ComposeEntity {
-  const transform = getComposeSpatialTransform({ id: '__seed__', ...seed })
-  return {
-    id,
-    name: seed.name,
-    components: {
-      ...structuredClone(seed.components),
-      Transform: { rotation: transform.rotation },
-      LayoutItem: {
-        ...getComposeLayoutItem({ id: '__seed__', ...seed }),
-        offset: {
-          x: center.x - transform.size.width / 2,
-          y: center.y - transform.size.height / 2,
-        },
-      },
-    },
-  }
-}
-
 function boundsInParentSpace(
   bounds: StageRect,
   inverseParent: ReturnType<typeof invertMatrix> | null,
@@ -619,47 +600,6 @@ function boundsInParentSpace(
     y: Math.min(...ys),
     width: Math.max(...xs) - Math.min(...xs),
     height: Math.max(...ys) - Math.min(...ys),
-  }
-}
-
-function entityFromDrawingSeed(
-  seed: ComposeEntitySeed,
-  id: string,
-  bounds: StageRect,
-  direction?: ShapeDirection,
-): ComposeEntity {
-  const seeded = entityFromSeed(seed, id, {
-    x: bounds.x + bounds.width / 2,
-    y: bounds.y + bounds.height / 2,
-  })
-  const item = getComposeLayoutItem(seeded)
-  const renderer = seeded.components.Renderer
-  return {
-    ...seeded,
-    components: {
-      ...seeded.components,
-      LayoutItem: {
-        ...item,
-        positioning: 'absolute',
-        offset: {
-          x: direction?.x === 0 ? bounds.x - 0.5 : bounds.x,
-          y: direction?.y === 0 ? bounds.y - 0.5 : bounds.y,
-        },
-        width: { ...item.width, mode: 'fixed', value: Math.max(1, bounds.width) },
-        height: { ...item.height, mode: 'fixed', value: Math.max(1, bounds.height) },
-      },
-      ...(renderer && direction
-        ? {
-            Renderer: {
-              ...renderer,
-              props: {
-                ...(renderer.props as Record<string, JsonValue>),
-                direction: direction as unknown as JsonValue,
-              },
-            },
-          }
-        : {}),
-    },
   }
 }
 
@@ -1524,23 +1464,21 @@ function ComposeStageReady({
         ))
       : null
     const localBounds = boundsInParentSpace(effect.bounds, inverseParent)
-    const seedSize = getComposeSpatialTransform({ id: '__seed__', ...seedResult.seed }).size
-    const bounds = effect.tool === 'draw-text'
+    const textClick = effect.tool === 'draw-text'
       && localBounds.width < 1
       && localBounds.height < 1
-      ? { ...localBounds, width: seedSize.width, height: seedSize.height }
-      : localBounds
     const entityId = current.idFactory()
     const drawnEntity = entityFromDrawingSeed(
       seedResult.seed,
       entityId,
-      bounds,
+      localBounds,
       effect.tool === 'draw-line' || effect.tool === 'draw-arrow'
         ? {
             x: directionAxis(effect.end.x - effect.start.x),
             y: directionAxis(effect.end.y - effect.start.y),
           }
         : undefined,
+      textClick ? { preserveHugSizing: true } : undefined,
     )
     // 组件库中的 Rectangle 可保留其圆角默认值；画布矩形工具遵循设计工具惯例，初始绘制为直角。
     const entity = effect.tool === 'draw-rectangle'

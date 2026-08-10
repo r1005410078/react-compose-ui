@@ -85,6 +85,48 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
     rect.mockRestore()
   })
 
+  it('OpenSpec: basic-materials / Figma 基线的 Text 默认值与排版 / 编辑文字排版', () => {
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 30,
+      height: 16,
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 30,
+      bottom: 16,
+      left: 0,
+      toJSON: () => ({}),
+    })
+    const append = vi.spyOn(document.body, 'append')
+    const measured = definition('text').measure({
+      entity: baseEntity,
+      renderer: renderer('text', {
+        text: 'Text',
+        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        fontSize: 12,
+        textCase: 'uppercase',
+      }),
+      props: {
+        text: 'Text',
+        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        fontSize: 12,
+        textCase: 'uppercase',
+      },
+      authoredProps: {},
+      prepared: undefined,
+      width: undefinedConstraint,
+      height: undefinedConstraint,
+    })
+
+    expect(measured).toMatchObject({ width: 30, height: 16 })
+    expect(measured?.baseline).toBeCloseTo(9.6)
+    const host = append.mock.calls[0]?.[0] as HTMLElement
+    expect(host.style.textTransform).toBe('uppercase')
+    expect(host.style.fontSize).toBe('12px')
+    append.mockRestore()
+    rect.mockRestore()
+  })
+
   it('Image 使用 resolved revision 的自然尺寸并保持宽高比', async () => {
     const close = vi.fn()
     vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 640, height: 320, close })))

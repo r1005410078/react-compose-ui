@@ -30,6 +30,29 @@ function seedEntity(
 }
 
 describe('Basic ECS materials', () => {
+  it('OpenSpec: basic-materials / Figma 基线的 Text 默认值与排版 / 创建默认 Text', () => {
+    const materials = createComposeBasicMaterials()
+    const text = seedEntity(materials, 'text')
+
+    expect(getComposeRenderer(text)?.props).toEqual(expect.objectContaining({
+      text: 'Text',
+      color: '#ffffff',
+      fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+      fontSize: 12,
+      fontWeight: 400,
+      letterSpacing: 0,
+      textAlign: 'left',
+      verticalAlign: 'top',
+      textCase: 'original',
+      textDecoration: 'none',
+    }))
+    expect(getComposeRenderer(text)?.props).not.toHaveProperty('lineHeight')
+    expect(getComposeLayoutItem(text)).toMatchObject({
+      width: { mode: 'hug', value: 28 },
+      height: { mode: 'hug', value: 16 },
+    })
+  })
+
   it('OpenSpec: Flex Layout Inspector / 布局分组紧跟变换分组', () => {
     const materials = createComposeBasicMaterials()
     const orderedKeys = materials.registry.listComponents().map(({ key }) => key)

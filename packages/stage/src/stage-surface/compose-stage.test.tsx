@@ -15,6 +15,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
 import { ComposeStage } from './compose-stage'
+import { entityFromDrawingSeed } from './drawing-entity'
 import type { ComposeStageDispatch } from '../types'
 import { StageOverlay } from '../stage-overlay'
 
@@ -256,6 +257,52 @@ function renderStage(
 
 describe('ComposeStage ECS', () => {
   afterEach(cleanup)
+
+  it('OpenSpec: stage / 直接绘制 Preset / 点击或拖拽绘制文字', () => {
+    const textSeed: ComposeEntityPreset['createComponents'] extends () => infer Components
+      ? { readonly name: string; readonly components: Components }
+      : never = {
+      name: 'Text',
+      components: {
+        Transform: { rotation: 0 },
+        LayoutItem: {
+          positioning: 'absolute',
+          offset: { x: 0, y: 0 },
+          width: { mode: 'hug', value: 28, min: 1, max: null },
+          height: { mode: 'hug', value: 16, min: 1, max: null },
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          alignSelf: 'auto',
+        },
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
+        Renderer: { type: 'text', props: { text: 'Text' } },
+      },
+    }
+    const clicked = entityFromDrawingSeed(
+      textSeed,
+      'clicked-text',
+      { x: 40, y: 50, width: 0, height: 0 },
+      undefined,
+      { preserveHugSizing: true },
+    )
+    const dragged = entityFromDrawingSeed(
+      textSeed,
+      'dragged-text',
+      { x: 40, y: 50, width: 160, height: 48 },
+    )
+
+    expect(getComposeLayoutItem(clicked)).toMatchObject({
+      offset: { x: 40, y: 50 },
+      width: { mode: 'hug', value: 28 },
+      height: { mode: 'hug', value: 16 },
+    })
+    expect(getComposeLayoutItem(dragged)).toMatchObject({
+      offset: { x: 40, y: 50 },
+      width: { mode: 'fixed', value: 160 },
+      height: { mode: 'fixed', value: 48 },
+    })
+  })
 
   it('OpenSpec: 受控工具模式与专属选区反馈 / 仅移动工具显示轴向 gizmo，网格可独立隐藏', () => {
     const value = document()

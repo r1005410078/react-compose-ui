@@ -1,5 +1,5 @@
 :root {
-  --compose-material-text-color: #172033;
+  --compose-material-text-color: #ffffff;
   --compose-material-text-font-size: 24px;
 }
 
@@ -10,4 +10,8 @@
   font-size: var(--compose-material-text-font-size);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.compose-material--text-content {
+  width: 100%;
 }
