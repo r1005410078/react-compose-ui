@@ -52,11 +52,15 @@ export function ChevronIcon({ expanded, ...props }: IconProps & { expanded: bool
   )
 }
 
+/**
+ * 对齐 UE4 Details 面板的 Reset to Default 图标：逆时针回转箭头，270° 圆弧在左上留口，
+ * 实心三角箭头指向左侧表示“退回”，而不是通用 refresh 的整圈细线箭头。
+ */
 export function ResetIcon(props: IconProps) {
   return (
     <svg {...sharedProps} {...props}>
-      <path d="M4.2 8.4V4.2l3.2 2.5" />
-      <path d="M5.2 6.5A8 8 0 1 1 4 14" />
+      <path d="M12 5.5a6.5 6.5 0 1 1-6.5 6.5" />
+      <path d="M12 2.9 7.2 5.5 12 8.1Z" fill="currentColor" stroke="none" />
     </svg>
   )
 }

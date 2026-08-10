@@ -954,7 +954,7 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
     class ResizeObserverFixture {
       constructor(private readonly callback: ResizeObserverCallback) {}
       observe() {
-        this.callback([{ contentRect: { width: 280 } } as ResizeObserverEntry], this)
+        this.callback([{ contentRect: { width: 260 } } as ResizeObserverEntry], this)
       }
       disconnect() {}
       unobserve() {}
@@ -962,10 +962,11 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
     vi.stubGlobal('ResizeObserver', ResizeObserverFixture)
     render(<ComposePropertyPanel schema={panelSchema} style={{ width: 500 }} value={panelValue} />)
 
+    // 38px 操作列比旧的 76px 更窄，宿主要收到 260px 才会重新压缩属性名列。
     expect(screen.getByRole('separator', { name: '调整属性名列宽' }))
-      .toHaveAttribute('aria-valuenow', '88')
+      .toHaveAttribute('aria-valuenow', '102')
     expect(screen.getByRole('separator', { name: '调整操作列宽' }))
-      .toHaveAttribute('aria-valuenow', '72')
+      .toHaveAttribute('aria-valuenow', '38')
   })
 })
 
@@ -1017,17 +1018,17 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 键盘调整分�
     const labelSeparator = screen.getByRole('separator', { name: '调整属性名列宽' })
     const actionSeparator = screen.getByRole('separator', { name: '调整操作列宽' })
     expect(labelSeparator).toHaveAttribute('aria-valuenow', '120')
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '76')
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '38')
 
     fireEvent.keyDown(labelSeparator, { key: 'ArrowRight' })
     fireEvent.keyDown(actionSeparator, { key: 'ArrowLeft', shiftKey: true })
     expect(labelSeparator).toHaveAttribute('aria-valuenow', '128')
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '96')
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '62')
 
     fireEvent.click(screen.getByRole('button', { name: '属性面板设置' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '恢复默认列宽' }))
     expect(labelSeparator).toHaveAttribute('aria-valuenow', '120')
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '76')
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '38')
   })
 })
 
@@ -1045,7 +1046,7 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
     fireEvent.pointerDown(actionSeparator, { clientX: 464, pointerId: 2 })
     fireEvent.pointerMove(actionSeparator, { clientX: 444, pointerId: 2 })
     fireEvent.pointerUp(actionSeparator, { pointerId: 2 })
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '96')
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '58')
   })
 })
 
@@ -1180,15 +1181,43 @@ describe('OpenSpec: property-panel / 嵌套与集合属性编辑 / 切换联合�
   })
 })
 
-describe('OpenSpec: property-panel / 自适应属性操作轨道 / 默认三图标操作列容纳绑定与重置', () => {
-  it('默认三图标操作列直接显示数组项的移动和删除操作', () => {
+describe('OpenSpec: property-panel / 自适应属性操作轨道 / 默认双图标操作列容纳绑定与重置', () => {
+  it('默认双图标操作列直接显示第一项操作并把其余项收进更多', () => {
     const schema = v.object({ items: v.pipe(v.array(v.string()), v.title('列表')) })
     render(<ComposePropertyPanel schema={schema} value={{ items: ['alpha', 'beta'] }} />)
 
-    expect(screen.getByRole('button', { name: '上移 列表 1' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '下移 列表 1' })).toBeEnabled()
+    // 数组项有上移/下移/删除三个操作，默认两槽只直达一项，末槽固定为更多图标。
     expect(screen.getByRole('button', { name: '删除 列表 1' })).toBeEnabled()
-    expect(screen.queryByRole('button', { name: '更多 列表 1 操作' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '更多 列表 1 操作' }))
+    const menu = screen.getByRole('menu', { name: '列表 1 操作' })
+    expect(within(menu).getByRole('menuitem', { name: '上移 列表 1' })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: '下移 列表 1' })).toBeEnabled()
+  })
+
+  it('绑定入口与重置在默认两槽中同时直接可见', () => {
+    const schema = v.object({
+      title: v.pipe(
+        v.string(),
+        v.title('标题'),
+        v.metadata({ propertyPanel: { binding: { enabled: true } } }),
+      ),
+    })
+    render(
+      <ComposePropertyPanel
+        binding={{
+          value: [],
+          variables: [{ id: 'page.title', label: '页面标题', scope: 'page', value: 'Hello' }],
+          onChange: vi.fn(),
+        }}
+        defaultValue={{ title: '默认标题' }}
+        schema={schema}
+        value={{ title: 'Literal' }}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /绑定\s*标题/u })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '重置 标题' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '更多 标题 操作' })).not.toBeInTheDocument()
   })
 })
 
@@ -1200,11 +1229,13 @@ describe('OpenSpec: property-panel / 自适应属性操作轨道 / 缩窄或扩�
 
     expect(separator).toHaveAttribute('aria-valuemin', '32')
     expect(separator).toHaveAttribute('aria-valuemax', '96')
+    // 收窄到下限只剩一个槽位，三项操作全部进入更多菜单。
     fireEvent.keyDown(separator, { key: 'ArrowRight', shiftKey: true })
-    expect(separator).toHaveAttribute('aria-valuenow', '52')
+    expect(separator).toHaveAttribute('aria-valuenow', '32')
+    expect(screen.queryByRole('button', { name: '上移 列表 1' })).not.toBeInTheDocument()
     fireEvent.keyDown(separator, { key: 'ArrowLeft', shiftKey: true })
     fireEvent.keyDown(separator, { key: 'ArrowLeft', shiftKey: true })
-    expect(separator).toHaveAttribute('aria-valuenow', '96')
+    expect(separator).toHaveAttribute('aria-valuenow', '80')
     expect(screen.getByRole('button', { name: '下移 列表 1' })).toBeVisible()
     expect(screen.getByRole('button', { name: '删除 列表 1' })).toBeVisible()
     expect(screen.queryByRole('button', { name: '更多 列表 1 操作' })).not.toBeInTheDocument()

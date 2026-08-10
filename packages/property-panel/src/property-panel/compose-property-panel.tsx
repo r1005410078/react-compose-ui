@@ -54,9 +54,12 @@ import {
 import type { PropertyPanelFilter, TreeCommitOptions } from '../property-tree'
 import '../styles.css'
 
-/** 默认三列布局优先保障编辑器空间；34px 操作列仍可容纳1个紧凑入口。 */
+/**
+ * 默认三列布局优先保障编辑器空间；对齐 UE4 Details 面板的紧凑操作列，38px 用 16px 图标放下
+ * 2 个入口，使绑定入口与重置能同时直接可见，而不必退化为单槽聚合菜单。
+ */
 const DEFAULT_LABEL_WIDTH = 120
-const DEFAULT_ACTION_WIDTH = 34
+const DEFAULT_ACTION_WIDTH = 38
 const DEFAULT_PANEL_WIDTH = 365
 const MIN_LABEL_WIDTH = 88
 const MIN_ACTION_WIDTH = 32

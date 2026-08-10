@@ -46,8 +46,8 @@ export function planPropertyActionRail({
   readonly actions: readonly PropertyActionRailItem[]
   readonly targets: readonly PropertyBindingRailTarget[]
 }): PropertyActionRailPlan {
-  // 22px 图标、2px 间距和两侧 2px 内边距：76px 恰好容纳三个槽位。
-  const slots = Math.max(1, Math.min(3, Math.floor((actionWidth + 2) / 24)))
+  // 16px 图标、2px 间距和两侧 2px 内边距：38px 恰好容纳两个槽位，56px 容纳三个。
+  const slots = Math.max(1, Math.min(3, Math.floor((actionWidth - 2) / 18)))
   const ordered = [...actions].sort((left, right) => (
     left.priority - right.priority
     || Number(Boolean(left.disabled)) - Number(Boolean(right.disabled))

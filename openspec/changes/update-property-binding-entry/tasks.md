@@ -148,3 +148,18 @@
 - [x] 9.3 Refactor：提取共享的列宽/最小宽度常量，并同步 README、proposal、design 和三列布局增量规范。
   - Refactor result：默认、恢复、ResizeObserver 与 ARIA 边界使用同一组常量；三图标操作轨道保持 76px，
     中间编辑列获得默认优先级。
+
+## 10. 对齐 UE4 的紧凑操作列尺寸修订
+
+- [x] 10.1 评审反馈：22px 图标与 76px 默认操作列偏大，且 React 初始 state 仍停在 34px（=1 槽），
+      导致绑定入口与重置被迫合并为单槽聚合菜单。对齐 UE4 Details 面板改为默认放下两个图标。
+- [x] 10.2 图标与列宽改为 16px 按钮 / 12px 字形 / 38px 默认操作列；槽位换算改为
+      `floor((actionWidth - 2) / 18)`，38px 两槽、56px 三槽，上限仍为 3，列宽区间 32–96px 不变。
+      字形先后试过 12px、10px，10px 在 26px 行高里辨识度不足，最终定在 12px；按钮与列宽只按
+      两槽布局收窄一次。
+- [x] 10.3 更新受影响的列宽与槽位测试，并新增“绑定入口与重置在默认两槽中同时直接可见”。
+  - Result：`bun run --filter @compose-ui/property-panel test` 101/101 通过；更窄的操作列把空间还给
+    属性名列，clamp 测试的宿主宽度相应从 280px 收到 260px 才继续触发属性名列压缩。
+- [x] 10.4 同步 README、proposal、design 与增量规范中的三图标/76px 表述，并更新 4 张 Inspector 黄金图。
+  - Result：`bunx playwright test --update-snapshots` 后 `bun run test:e2e` 35/35 通过；365px 内容区
+    默认分配改为 120px / 207px / 38px。
