@@ -7,8 +7,8 @@
 `/Users/rongts/www/feat-add-linked-component-library-2026-08-03.bundle`，可用
 `git bundle unbundle` 或 `git fetch <bundle> feat/add-linked-component-library` 取回。
 
-保留在 main 的只有提案、设计与规范增量。`tasks.md` 中的勾选与 Red/Green 记录描述的是那条
-已删除分支上的执行结果，**不代表 main 当前状态**；重新实施时必须以当前 main 为基线重跑。
+保留在 main 的只有提案、设计与规范增量。`tasks.md` 的清单已全部重置为未完成，当时的
+Red/Green 记录移入该文件末尾的「历史执行记录」一节，仅供回溯，不代表 main 当前状态。
 分叉点 `4ea3c46` 之后 main 已前进 16 个提交，Editor Inspector、Scene Tree、组件库 dock 与
 命令面板均被重构，原实现无法直接套用。
 
