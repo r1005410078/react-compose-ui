@@ -32,6 +32,13 @@ interface StageOverlayProps {
   readonly resizeHandles: readonly ResizeHandle[]
   readonly visibleResizeHandles: readonly ResizeHandle[]
   readonly rotatable: boolean
+  /**
+   * 选区正处于画布内文字编辑会话。
+   *
+   * 此时不显示任何 Resize 或旋转手柄，只显示一个编辑边框以区别于普通选中态——编辑态下
+   * 拖拽的语义是选择文本。该抑制与 TransformConstraints 的抑制是两条独立规则，叠加生效。
+   */
+  readonly textEditing: boolean
   readonly tool: StageInteractionTool
   readonly drawing: StageDrawingPreview | null
   readonly marqueeScreen: StageRect | null
@@ -93,6 +100,7 @@ export function StageOverlay({
   resizeHandles,
   visibleResizeHandles,
   rotatable,
+  textEditing,
   tool,
   drawing,
   marqueeScreen,
@@ -152,7 +160,8 @@ export function StageOverlay({
   const drawingDimensionWidth = drawingDimensionLabel
     ? Math.max(56, drawingDimensionLabel.length * 7 + 16)
     : 0
-  const resizeVisible = tool === 'select' || tool === 'scale'
+  // 编辑态下手柄一律不显示；这与 TransformConstraints 的抑制叠加，不互相覆盖。
+  const resizeVisible = (tool === 'select' || tool === 'scale') && !textEditing
   const edgeHitRegions = screenBounds && resizeVisible && !lineSelectionActive ? [
     { handle: 'n' as const, x: screenBounds.x + 8, y: screenBounds.y - 4, width: Math.max(0, screenBounds.width - 16), height: 8 },
     { handle: 's' as const, x: screenBounds.x + 8, y: screenBounds.y + screenBounds.height - 4, width: Math.max(0, screenBounds.width - 16), height: 8 },
@@ -249,7 +258,7 @@ export function StageOverlay({
               <text dominantBaseline="middle" textAnchor="middle" x="0" y="0">{lineDimension}</text>
             </g>
           ) : null}
-          {rotatable && tool === 'rotate' && lineRotationPoint ? (
+          {rotatable && tool === 'rotate' && !textEditing && lineRotationPoint ? (
             <circle
               className="compose-stage__handle compose-stage__rotation"
               cx={lineRotationPoint.x}
@@ -262,8 +271,8 @@ export function StageOverlay({
         </g>
       ) : screenBounds && !drawingToolActive ? (
         <rect
-          className="compose-stage__selection"
-          data-testid="stage-selection-bounds"
+          className={`compose-stage__selection${textEditing ? ' is-text-editing' : ''}`}
+          data-testid={textEditing ? 'stage-text-editing-bounds' : 'stage-selection-bounds'}
           height={screenBounds.height}
           width={screenBounds.width}
           x={screenBounds.x}
@@ -298,7 +307,7 @@ export function StageOverlay({
                 )}
               />
             )) : null}
-          {rotatable && tool === 'rotate' ? (
+          {rotatable && tool === 'rotate' && !textEditing ? (
             <circle
               className="compose-stage__handle compose-stage__rotation"
               cx={handlePoints.n[0]}
@@ -310,7 +319,7 @@ export function StageOverlay({
           ) : null}
         </>
       ) : null}
-      {editableSelection && screenBounds && tool === 'move' ? (
+      {editableSelection && screenBounds && tool === 'move' && !textEditing ? (
         <g
           className="compose-stage__move-gizmo"
           data-testid="stage-move-gizmo"

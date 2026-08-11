@@ -65,6 +65,17 @@ interface StageSceneLayerProps {
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
   readonly viewport: StageViewport
   readonly paintPreview?: { readonly entityId: string; readonly paint: ComposePaint } | null
+  /** 正在画布内原地编辑文字的 Entity；只有它的 Renderer 收到编辑态。 */
+  readonly textEditingEntityId?: string | null
+  /**
+   * 进入编辑时 Entity 的 authored 纯文本，用于给编辑目标播种初始内容。
+   *
+   * 它不是实时值：编辑期间的文本由 DOM 持有，Renderer 不得在编辑中用它回写内容，
+   * 否则 Auto width 引起的重排会把用户刚敲的字覆盖掉。
+   */
+  readonly textEditingValue?: string | null
+  /** 报告编辑中的纯文本；Stage 据此更新运行时覆盖，不派发文档命令。 */
+  readonly onTextEditingChange?: (value: string) => void
   readonly onEntityPointerDown: (
     entity: ComposeEntity,
     event: ReactPointerEvent<HTMLDivElement>,
@@ -82,6 +93,9 @@ export function StageSceneLayer({
   scriptModuleLoader,
   viewport,
   paintPreview,
+  textEditingEntityId = null,
+  textEditingValue = null,
+  onTextEditingChange,
   onEntityPointerDown,
 }: StageSceneLayerProps) {
   // Stage 每次渲染都会重建 pointer 回调。用 ref 转发可让内容子树的记忆化只依赖场景事实，
@@ -90,6 +104,18 @@ export function StageSceneLayer({
   useLayoutEffect(() => {
     pointerDownRef.current = onEntityPointerDown
   }, [onEntityPointerDown])
+  // 编辑态只在会话进出时变化，因此可以直接进入 memo 依赖：编辑中的文本不经过这里，
+  // 它由编辑目标的 contentEditable DOM 自己持有，不会每敲一个字符就重建整棵场景。
+  const textEditing = useMemo(
+    () => textEditingEntityId === null || !onTextEditingChange
+      ? null
+      : {
+          entityId: textEditingEntityId,
+          value: textEditingValue ?? '',
+          onChange: onTextEditingChange,
+        },
+    [onTextEditingChange, textEditingEntityId, textEditingValue],
+  )
 
   // 平移与缩放只改变根节点 transform，场景内容本身不变。这里把内容子树与 viewport 解耦，
   // 否则每个平移帧都要为全部 Entity 重建 element 并做 fiber diff，大场景下直接掉帧。
@@ -131,6 +157,7 @@ export function StageSceneLayer({
             registry={registry}
             scriptModuleLoader={scriptModuleLoader}
             scriptScope={scriptScope}
+            textEditing={textEditing?.entityId === entity.id ? textEditing : undefined}
           />
           {hierarchy?.childIds.map(renderEntity)}
           {hierarchy ? (
@@ -153,6 +180,7 @@ export function StageSceneLayer({
     registry,
     scriptModuleLoader,
     scriptScope,
+    textEditing,
   ])
 
   return (

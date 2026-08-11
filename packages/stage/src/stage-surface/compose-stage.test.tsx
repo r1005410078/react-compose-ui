@@ -356,6 +356,7 @@ describe('ComposeStage ECS', () => {
           end: { x: 96, y: 60 },
         }}
         editableSelection={false}
+        textEditing={false}
         handlePoints={null}
         label="Editing overlay"
         marqueeScreen={null}
@@ -780,5 +781,120 @@ describe('ComposeStage ECS', () => {
     view.rerender(stage({ x: 120, y: 80, zoom: 1 }))
 
     expect(enumerations).toBe(beforePan)
+  })
+})
+
+describe('ComposeStage 画布内原地文字编辑', () => {
+  afterEach(cleanup)
+
+  const editableRegistry = createComposeEntityRegistry({
+    renderers: [{
+      type: 'test',
+      label: '测试',
+      editableTextPropName: 'text',
+      propContracts: [{ name: 'text', kind: 'value', label: '文本', validate: () => true }],
+      renderer: ({ props, textEditing }) => (
+        textEditing
+          ? (
+              <span
+                contentEditable
+                data-testid="editable-text"
+                suppressContentEditableWarning
+                onInput={(event) => textEditing.onChange(event.currentTarget.textContent ?? '')}
+              >
+                {String(props.text)}
+              </span>
+            )
+          : <span>{String(props.text)}</span>
+      ),
+    }, {
+      type: 'shape',
+      label: '线条',
+      renderer: () => null,
+    }],
+    presets: [preset],
+  })
+
+  function enterEditing(selectedIds: readonly string[] = ['a']) {
+    const rendered = renderStage(document(), { registry: editableRegistry, selectedIds })
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-a'), {
+      pointerId: 1,
+      button: 0,
+      detail: 2,
+      clientX: 30,
+      clientY: 40,
+    })
+    return rendered
+  }
+
+  it('OpenSpec: 按约束显示变换手柄 / 编辑态不显示变换手柄', () => {
+    enterEditing()
+
+    expect(screen.getByTestId('stage-text-editing-bounds')).toBeInTheDocument()
+    for (const handle of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']) {
+      expect(screen.queryByTestId(`stage-resize-${handle}`)).not.toBeInTheDocument()
+      expect(screen.queryByTestId(`stage-resize-edge-${handle}`)).not.toBeInTheDocument()
+    }
+    expect(screen.queryByTestId('stage-rotation-handle')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 画布内原地文字编辑 / 双击改写后提交为一条事务', () => {
+    const { dispatch } = enterEditing()
+    const editable = screen.getByTestId('editable-text')
+    editable.textContent = 'Hello world'
+    fireEvent.input(editable)
+    expect(dispatch).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'Escape' })
+
+    const commands = dispatch.mock.calls.map(([command]) => command)
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      type: BUILTIN_COMMAND_TYPES.setRendererProps,
+      payload: { entityId: 'a', props: { text: 'Hello world' } },
+    })
+  })
+
+  it('OpenSpec: 画布内原地文字编辑 / 焦点在编辑目标上时 Esc 仍能提交退出', () => {
+    const { dispatch } = enterEditing()
+    const editable = screen.getByTestId('editable-text')
+    editable.textContent = 'Hello world'
+    fireEvent.input(editable)
+
+    // 编辑目标本身是 contentEditable，键盘事件从它冒泡上来；Stage 不能把它当成
+    // 「宿主输入框」而跳过处理，否则会话再也退不出去。
+    fireEvent.keyDown(editable, { key: 'Escape', bubbles: true })
+
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('editable-text')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 画布内原地文字编辑 / 空内容退出时删除文字', () => {
+    const { dispatch } = enterEditing()
+    const editable = screen.getByTestId('editable-text')
+    editable.textContent = ''
+    fireEvent.input(editable)
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'Escape' })
+
+    const commands = dispatch.mock.calls.map(([command]) => command)
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      type: BUILTIN_COMMAND_TYPES.deleteEntity,
+      payload: { entityIds: ['a'] },
+    })
+  })
+
+  it('OpenSpec: 画布内原地文字编辑 / 内容未变化不产生事务', () => {
+    const { dispatch } = enterEditing()
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'Escape' })
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: 无 DOM 文字编辑会话 / 单选可编辑 Entity 时 Enter 进入编辑', () => {
+    renderStage(document(), { registry: editableRegistry, selectedIds: ['a'] })
+    expect(screen.queryByTestId('editable-text')).not.toBeInTheDocument()
+
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'Enter' })
+    expect(screen.getByTestId('editable-text')).toBeInTheDocument()
   })
 })

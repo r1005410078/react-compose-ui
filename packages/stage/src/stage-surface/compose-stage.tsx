@@ -43,6 +43,7 @@ import {
   type ComposeEntitySeed,
 } from '@compose-ui/component-registry'
 import type {
+  ComposeEntityRegistry,
   ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import {
@@ -90,6 +91,7 @@ import {
   type StagePoint,
   type StageRect,
   type StageSegmentPreview,
+  type StageDrawnEntity,
   type StageInteractionEffect,
   type StageInteractionHit,
   type StageInteractionController,
@@ -722,7 +724,7 @@ function isStageShortcutMatch(
 
 /** 渲染受控 DOM/SVG 无限 Stage，并显式呈现 Layout Runtime 加载或失败状态。 @public */
 export function ComposeStage(props: ComposeStageProps) {
-  useComposeStageMeasurement(props)
+  const measurementAdapter = useComposeStageMeasurement(props)
   if (!props.layoutSnapshot) {
     return (
       <div
@@ -743,7 +745,13 @@ export function ComposeStage(props: ComposeStageProps) {
   } = props
   void _layoutError
   void _layoutRuntime
-  return <ComposeStageReady {...readyProps} layoutSnapshot={layoutSnapshot} />
+  return (
+    <ComposeStageReady
+      {...readyProps}
+      layoutSnapshot={layoutSnapshot}
+      measurementAdapter={measurementAdapter}
+    />
+  )
 }
 
 type ComposeStageReadyProps = Omit<
@@ -751,6 +759,8 @@ type ComposeStageReadyProps = Omit<
   'layoutError' | 'layoutRuntime' | 'layoutSnapshot'
 > & {
   readonly layoutSnapshot: ComposeLayoutSnapshot
+  /** 原地编辑期间把编辑中的文本送进测量链路，使 Auto width 实时改宽。 */
+  readonly measurementAdapter: ComposeRendererMeasurementAdapter
 }
 
 function useComposeStageMeasurement({
@@ -785,11 +795,27 @@ function useComposeStageMeasurement({
       generations.delete(adapter)
     })
   }, [adapter])
+  return adapter
+}
+
+/** 读取 Entity 当前 authored 的可编辑纯文本；不可编辑或缺失时返回空串。 */
+function entityEditableText(
+  value: ComposeDocument,
+  registry: ComposeEntityRegistry,
+  entityId: string,
+) {
+  const entity = value.entities[entityId]
+  if (!entity) return ''
+  const propName = registry.getEditableTextPropName(entity)
+  if (propName === null) return ''
+  const current = getComposeRenderer(entity)?.props[propName]
+  return typeof current === 'string' ? current : String(current ?? '')
 }
 
 function ComposeStageReady({
   document,
   layoutSnapshot,
+  measurementAdapter,
   registry,
   assetResolver,
   pageLoader,
@@ -875,6 +901,16 @@ function ComposeStageReady({
   const snapGuides = interaction.snapGuides
   const guidePreview = interaction.guidePreview
   const [surfaceSize, setSurfaceSize] = useState({ width: 900, height: 600 })
+  // 会话本身进出很少，用 state 驱动渲染；编辑中的文本每次按键都变，只放在 ref 里——
+  // 放进 state 会让整棵 Scene 每敲一个字符重建，而文本本就由 contentEditable 的 DOM 拥有。
+  // ref 里的 `text` 为 null 表示「进入编辑后还没改过」，与「改成了空串」是两件事。
+  const [textEditing, setTextEditing] = useState<{ readonly entityId: string } | null>(null)
+  const textEditingRef = useRef<{
+    readonly entityId: string
+    text: string | null
+  } | null>(null)
+  // 宿主回灌给 Controller 的「本次绘制创建了谁」；Controller 按 entityId 去重。
+  const [lastDrawn, setLastDrawn] = useState<StageDrawnEntity | null>(null)
   const [assetDropStatus, setAssetDropStatus] = useState('')
   const contextMenu = useComposeContextMenu<string | null>()
   const pendingAssetDropsRef = useRef(new Set<AbortController>())
@@ -989,6 +1025,82 @@ function ComposeStageReady({
       idFactory,
     }
   })
+
+  const isTextEditable = useCallback((entityId: string) => {
+    const current = latestRef.current
+    const entity = current.document.entities[entityId]
+    if (!entity || getComposeLock(entity).locked) return false
+    return current.registry.getEditableTextPropName(entity) !== null
+  }, [])
+
+  const enterTextEditing = useCallback((entityId: string) => {
+    if (!isTextEditable(entityId)) return
+    textEditingRef.current = { entityId, text: null }
+    setTextEditing({ entityId })
+  }, [isTextEditable])
+
+  const changeTextEditing = useCallback((value: string) => {
+    const session = textEditingRef.current
+    if (!session) return
+    session.text = value
+    // 只更新运行时覆盖，不派发任何文档命令；覆盖让渲染与测量看到同一个值，
+    // Auto width 据此经既有 measurement 失效链路实时改宽。
+    measurementAdapter.setEditableTextOverride(session.entityId, value)
+  }, [measurementAdapter])
+
+  /**
+   * 结束会话并按内容收敛为最多一条事务。
+   *
+   * 编辑期间不产生任何事务——逐字符提交会让历史被单个单词撑满，`Ctrl+Z` 也退化成逐字符
+   * 回退。因此提交只发生在这里，且三种情况互斥：有变化写 Prop、为空删实体、无变化不发命令。
+   */
+  const exitTextEditing = useCallback(() => {
+    const session = textEditingRef.current
+    if (!session) return
+    textEditingRef.current = null
+    setTextEditing(null)
+    measurementAdapter.setEditableTextOverride(session.entityId, null)
+    // 焦点交还 surface，否则编辑元素卸载后焦点落到 body，后续快捷键全部失效。
+    surfaceRef.current?.focus()
+    const nextText = session.text
+    if (nextText === null) return
+    const current = latestRef.current
+    const entity = current.document.entities[session.entityId]
+    if (!entity) return
+    const propName = current.registry.getEditableTextPropName(entity)
+    if (propName === null) return
+    const renderer = getComposeRenderer(entity)
+    const previous = renderer?.props[propName]
+    if (nextText === (typeof previous === 'string' ? previous : String(previous ?? ''))) return
+    if (nextText.length === 0) {
+      // 空 Hug 文字会塌缩到接近零尺寸，既不可见也很难再在画布上选中，留着只会污染场景树。
+      // 删除是普通可撤销事务，Ctrl+Z 可恢复。
+      current.dispatch({
+        id: current.idFactory(),
+        type: BUILTIN_COMMAND_TYPES.deleteEntity,
+        payload: { entityIds: [session.entityId] },
+        meta: {
+          label: describeEntityTargets(current.document, [session.entityId]),
+          source: 'stage',
+          targetIds: [session.entityId],
+        },
+      })
+      return
+    }
+    current.dispatch({
+      id: current.idFactory(),
+      type: BUILTIN_COMMAND_TYPES.setRendererProps,
+      payload: {
+        entityId: session.entityId,
+        props: { ...renderer?.props, [propName]: nextText } as JsonValue,
+      },
+      meta: {
+        label: `Edit ${entity.name}`,
+        source: 'stage',
+        targetIds: [session.entityId],
+      },
+    })
+  }, [measurementAdapter])
 
   useEffect(() => {
     const root = rootRef.current
@@ -1509,6 +1621,9 @@ function ComposeStageReady({
     })
     if (result.status === 'committed') {
       current.onSelectedIdsChange([entity.id])
+      // Controller 发 drawing.commit 时并不铸 ID，拿不到新 Entity；回灌后它才能判断
+      // 「这次点击创建的是文字，应当立刻进入编辑」。按 entityId 去重由 Controller 负责。
+      setLastDrawn({ entityId: entity.id, tool: effect.tool })
       // 单次绘制结束即回到选择模式，避免下一次点击意外继续创建同类图形。
       onToolChange?.('select')
     }
@@ -1627,6 +1742,14 @@ function ComposeStageReady({
           createDrawing(effect)
           return
         }
+        if (effect.type === 'text-editing.enter') {
+          enterTextEditing(effect.entityId)
+          return
+        }
+        if (effect.type === 'text-editing.exit') {
+          exitTextEditing()
+          return
+        }
         if (effect.item.kind === 'assets') {
           void createDroppedAssets(effect)
           return
@@ -1672,7 +1795,16 @@ function ComposeStageReady({
         }
       })
     },
-  }), [capturePointer, commitSegment, controller, createDrawing, createDroppedAssets, releasePointer])
+  }), [
+    capturePointer,
+    commitSegment,
+    controller,
+    createDrawing,
+    createDroppedAssets,
+    enterTextEditing,
+    exitTextEditing,
+    releasePointer,
+  ])
 
   useLayoutEffect(() => {
     controller.updateContext({
@@ -1684,6 +1816,9 @@ function ComposeStageReady({
       selectedIds: normalizedSelection,
       paintEditing,
       paintSampling,
+      textEditing,
+      drawnEntity: lastDrawn,
+      isTextEditable,
       idFactory,
       labels: {
         createGuide: messages.createGuide,
@@ -1695,6 +1830,8 @@ function ComposeStageReady({
   }, [
     controller,
     document,
+    isTextEditable,
+    lastDrawn,
     layoutSnapshot,
     idFactory,
     messages.createGuide,
@@ -1705,6 +1842,7 @@ function ComposeStageReady({
     paintEditing,
     paintSampling,
     surfaceSize,
+    textEditing,
     tool,
     viewport,
   ])
@@ -1776,6 +1914,8 @@ function ComposeStageReady({
         point: start.point,
         hit,
         modifiers: start.modifiers,
+        // 浏览器已按平台的双击时间窗口累计 detail，Controller 不必自己计时。
+        clickCount: event.detail,
       })
     }
     finally {
@@ -1789,6 +1929,12 @@ function ComposeStageReady({
     event.stopPropagation()
     beginInteraction({ kind: 'entity', entityId: entity.id }, event)
   }
+
+  // 只播种 authored 值，不回传编辑中的文本：后者放在 ref 里，既避免每个字符重建整棵
+  // Scene，也避免 Auto width 重排引起的重渲染把用户刚敲的内容覆盖回旧值。
+  const textEditingValue = textEditing
+    ? entityEditableText(document, registry, textEditing.entityId)
+    : null
 
   const screenBounds = bounds
     ? {
@@ -1872,7 +2018,15 @@ function ComposeStageReady({
 
   const keyboardCommand = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     onKeyDown?.(event)
-    if (event.defaultPrevented || event.nativeEvent.isComposing || isEditableTarget(event.target)) return
+    if (event.defaultPrevented || event.nativeEvent.isComposing) return
+    // 必须排在 isEditableTarget 之前：编辑目标本身就是 contentEditable，焦点在它上面时
+    // 该守卫会把 Esc 一并吞掉，会话就再也退不出去。Enter 不在此列——编辑中它属于换行。
+    if (textEditingRef.current && event.key === 'Escape') {
+      controller.send({ type: 'key.down', key: 'Escape' })
+      event.preventDefault()
+      return
+    }
+    if (isEditableTarget(event.target)) return
     const actionMatches = (action: ComposeStageShortcutAction) =>
       resolvedShortcuts[action].some((binding) =>
         isStageShortcutMatch(event.nativeEvent, binding))
@@ -1884,6 +2038,10 @@ function ComposeStageReady({
     }
     if (event.key === 'Escape') {
       cancelGesture()
+      return
+    }
+    if (event.key === 'Enter') {
+      controller.send({ type: 'key.down', key: 'Enter' })
       return
     }
     // 宿主可以用统一的动作实现接管可配置动作，避免键盘、工具栏与命令面板各有一套行为。
@@ -2402,8 +2560,11 @@ function ComposeStageReady({
           registry={registry}
           scriptModuleLoader={scriptModuleLoader}
           scriptScope={scriptScope}
+          textEditingEntityId={textEditing?.entityId ?? null}
+          textEditingValue={textEditingValue}
           viewport={viewport}
           onEntityPointerDown={beginEntity}
+          onTextEditingChange={changeTextEditing}
         />
         {assetDropStatus
           ? (
@@ -2426,6 +2587,7 @@ function ComposeStageReady({
           rotatable={selectionRotatable}
           screenBounds={screenBounds}
           snapGuides={snapGuides}
+          textEditing={textEditing !== null}
           tool={tool}
           visibleResizeHandles={visibleResizeHandles}
           viewport={viewport}
