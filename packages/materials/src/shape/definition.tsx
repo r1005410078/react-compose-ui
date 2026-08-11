@@ -54,6 +54,8 @@ function shapePreset(
     label: options.label ?? fallbackLabel,
     defaultName: options.name ?? fallbackName,
     icon: <span aria-hidden="true">{icon}</span>,
+    // Stage 工具栏已提供 line/arrow/circle 绘制工具，Palette 不再重复同一个入口。
+    paletteHidden: true,
     createComponents: () => rendererPresetComponents({
       type: 'shape',
       props,

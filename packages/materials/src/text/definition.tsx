@@ -111,6 +111,8 @@ export function createTextMaterial(
       label: options.label ?? 'Text',
       defaultName: options.name ?? 'Text',
       icon: <span aria-hidden="true">T</span>,
+      // Stage 工具栏已提供文本绘制工具，Palette 不再重复同一个入口。
+      paletteHidden: true,
       createComponents: () => textPresetComponents({
         props,
         size,

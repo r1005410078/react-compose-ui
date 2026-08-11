@@ -30,6 +30,24 @@ async function drawContainer(page: Page, editor: Locator) {
   await editor.getByRole('button', { name: '选择' }).click()
 }
 
+/**
+ * 用工具栏文本工具在指定位置画一个 Text 实体。
+ *
+ * Text Preset 默认不在组件库 Palette 中（工具栏已提供入口），因此需要文本实体的用例
+ * 走工具栏绘制，而不是从 Palette 拖入。
+ */
+async function drawText(page: Page, editor: Locator, at: { x: number; y: number }) {
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const before = await stage.getByTestId('compose-material-text').count()
+  await editor.getByRole('button', { name: '文字' }).click()
+  await page.mouse.move(at.x, at.y)
+  await page.mouse.down()
+  await page.mouse.move(at.x + 120, at.y + 44, { steps: 6 })
+  await page.mouse.up()
+  await editor.getByRole('button', { name: '选择' }).click()
+  await expect(stage.getByTestId('compose-material-text')).toHaveCount(before + 1)
+}
+
 async function enableAutoLayout(inspector: Locator) {
   await inspector.getByRole('button', { name: '添加布局' }).click()
   await inspector.getByRole('menuitem', { name: 'Auto Layout display: flex' }).click()
@@ -58,8 +76,11 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   await expect(editor.locator('[data-workspace-tab="compose-component-library"]')).toHaveCount(0)
   const componentLibrary = editor.locator('[data-workspace-panel="component-library"]')
   await expect(componentLibrary).toBeVisible()
-  await expect(componentLibrary.getByRole('button', { name: '基础 (8)' })).toBeVisible()
-  await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toBeVisible()
+  // Palette 只保留没有专用创建入口的 Preset：Text/Line/Arrow/Circle 走工具栏绘制工具，
+  // Page Slot 走资源面板的页面拖入。
+  await expect(componentLibrary.getByRole('button', { name: '基础 (3)' })).toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '添加 Rectangle' })).toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toHaveCount(0)
 
   const editorBox = await editor.boundingBox()
   const viewport = page.viewportSize()
@@ -549,8 +570,9 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   ).toHaveAttribute('title', '基础组件')
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await expect(editor.getByRole('button').filter({ hasText: /Container|Rectangle|Text|ECharts/ }))
-    .toHaveCount(4)
+  // Text 已改由工具栏文字工具提供入口，不再出现在 Palette。
+  await expect(editor.getByRole('button').filter({ hasText: /Container|Rectangle|ECharts/ }))
+    .toHaveCount(3)
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
@@ -590,7 +612,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     x: frameBox!.x + frameBox!.width * 0.25,
     y: frameBox!.y + frameBox!.height * 0.35,
   })
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Text' }), {
+  await drawText(page, editor, {
     x: frameBox!.x + frameBox!.width * 0.7,
     y: frameBox!.y + frameBox!.height * 0.35,
   })
@@ -1319,7 +1341,7 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
   const container = stage.getByTestId('stage-container')
   const initialContainerBox = await container.boundingBox()
   expect(initialContainerBox).not.toBeNull()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Text' }), {
+  await drawText(page, editor, {
     x: initialContainerBox!.x + 160,
     y: initialContainerBox!.y + 120,
   })
@@ -2159,9 +2181,10 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
     x: frameBox!.x + 160,
     y: frameBox!.y + 180,
   })
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Text' }), {
-    x: frameBox!.x + 480,
-    y: frameBox!.y + 180,
+  // 这个用例改过视口缩放，固定像素偏移会落到容器外；按容器尺寸取比例才稳定。
+  await drawText(page, editor, {
+    x: frameBox!.x + frameBox!.width * 0.6,
+    y: frameBox!.y + frameBox!.height * 0.35,
   })
   const frame = stage.getByTestId('stage-container')
   const frameComponents = frame.locator(':scope > .compose-stage__node.is-renderer')
@@ -2573,20 +2596,20 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
   await page.keyboard.press('Control+S')
   await expect(homeTab.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
 
-  // 2) 在 Counter 页面里创建一个 Page Slot 实体，引用已保存的 Home 页面。
+  // 2) 在 Counter 页面里把 Home 页面拖进画布创建 Page Slot；Page Slot 没有 Palette 入口，
+  //    拖入资源才是它的正式创建路径，并且会顺带带上页面引用。
   await pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
   await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(2)
-  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: 'Page Slot' }).click()
-  await expect(stage.getByTestId('compose-page-slot-placeholder')).toBeVisible()
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).dragTo(stage, {
+    targetPosition: { x: 220, y: 160 },
+  })
 
-  // 3) 属性面板的 node 字段选中 Home 页面
+  // 3) 属性面板的 node 字段直接反映拖入时写入的引用
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await expandInspectorSection(inspector, '页面')
   const nodeField = inspector.getByTestId('semantic-editor-node')
   await expect(nodeField).toBeVisible()
-  await nodeField.getByRole('combobox').click()
-  await inspector.getByRole('option', { name: 'Home' }).click()
+  await expect(nodeField.getByRole('combobox')).toContainText('Home')
 
   // 4) 画布上实时渲染被引用页面的内容
   await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
@@ -2712,21 +2735,26 @@ test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完�
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: 'Rectangle' }).click()
-  await editor.getByRole('button', { name: 'Text' }).click()
+  const homeContainerBox = await stage.getByTestId('stage-container').boundingBox()
+  await drawText(page, editor, {
+    x: homeContainerBox!.x + 200,
+    y: homeContainerBox!.y + 120,
+  })
 
   const tab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
   await page.keyboard.press('Control+S')
   await expect(tab.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
 
-  // Counter 页面里放一个 Page Slot 指向 Home（组件库仍是打开状态）。
-  await assets.getByRole('grid', { name: 'Pages' })
-    .getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
-  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: 'Page Slot' }).click()
+  // Counter 页面里把 Home 拖进画布，得到一个指向 Home 的 Page Slot。
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).dragTo(stage, {
+    targetPosition: { x: 220, y: 160 },
+  })
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await expandInspectorSection(inspector, '页面')
-  await inspector.getByTestId('semantic-editor-node').getByRole('combobox').click()
-  await inspector.getByRole('option', { name: 'Home' }).click()
+  await expect(inspector.getByTestId('semantic-editor-node').getByRole('combobox'))
+    .toContainText('Home')
 
   // 嵌套内容必须逐个实体渲染并各自定位；缺少定位包装或递归时数量会少于 3
   await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()

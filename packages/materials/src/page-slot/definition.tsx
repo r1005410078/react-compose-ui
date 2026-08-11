@@ -52,6 +52,9 @@ export function createPageSlotMaterial(
       label: options.label ?? 'Page Slot',
       defaultName: options.name ?? 'Page Slot',
       icon: <span aria-hidden="true">▤</span>,
+      // Page Slot 的实际入口是从资源面板把页面文件拖入画布——那条路径会顺带带上页面引用
+      // 与目标 output 尺寸。Palette 里空手创建出的是一个未指向任何页面的占位，价值有限。
+      paletteHidden: true,
       createComponents: () => rendererPresetComponents({
         type: 'page-slot',
         props,

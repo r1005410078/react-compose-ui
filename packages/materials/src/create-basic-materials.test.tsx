@@ -60,6 +60,19 @@ describe('Basic ECS materials', () => {
       .toEqual(['Transform', 'LayoutItem', 'Layout'])
   })
 
+  it('OpenSpec: Entity Presets / 默认 Palette 不重复工具栏入口', () => {
+    const materials = createComposeBasicMaterials()
+    const paletteVisible = materials.presets
+      .filter((preset) => !preset.paletteHidden)
+      .map(({ id }) => id)
+    // 工具栏已有 text/line/arrow/circle 绘制工具，page-slot 的入口是资源面板拖入页面文件。
+    expect(paletteVisible).toEqual(['container', 'rectangle'])
+    // 隐藏只影响 Palette 呈现，Registry 仍然注册全部 Preset。
+    expect(materials.registry.getPreset('text')).toBeDefined()
+    expect(materials.registry.getPreset('page-slot')).toBeDefined()
+    expect(materials.registry.getPreset('circle')).toBeDefined()
+  })
+
   it('OpenSpec: Entity Presets / 基础与绘图物料写入明确基础组合', () => {
     const materials = createComposeBasicMaterials()
     expect(materials.presets.map(({ id }) => id)).toEqual([
