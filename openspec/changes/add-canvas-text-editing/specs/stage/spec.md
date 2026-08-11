@@ -83,11 +83,20 @@ horizontal 显示 E/W，vertical 显示 N/S，none 不显示 Resize；rotatable 
 处于画布内文字编辑会话时，Stage MUST NOT 为编辑目标显示任何 Resize 或旋转手柄，改为只显示单一
 编辑边框以区别于普通选中态。该抑制与 TransformConstraints 的抑制是两条独立规则，叠加生效。
 
+边缘命中区两端 MUST 只在存在可见角手柄时让出空间：让位是为了不压住角手柄，没有角手柄时继续让位
+会让十几像素高的选区把 E/W 命中区算成零高度，边根本抓不住。
+
 #### Scenario: 动态切换几何限制
 
 - **WHEN** Inspector 修改 TransformConstraints
 - **THEN** Stage 手柄和直接操作立即同步
 - **AND** 禁用但仍可选择的 Entity 保留选择框
+
+#### Scenario: 无角手柄时边缘命中区不再让位
+
+- **WHEN** 一个只允许水平缩放的选区高度只有十几像素
+- **THEN** E/W 边缘命中区占满选区高度，可以正常抓取
+- **AND** 存在角手柄的选区仍为角手柄让出两端空间
 
 #### Scenario: 编辑态不显示变换手柄
 

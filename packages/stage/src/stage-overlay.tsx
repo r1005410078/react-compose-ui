@@ -161,11 +161,14 @@ export function StageOverlay({
     : 0
   // 编辑态下手柄一律不显示；这与 TransformConstraints 的抑制叠加，不互相覆盖。
   const resizeVisible = (tool === 'select' || tool === 'scale') && !textEditing
+  // 边缘命中区两端各让出 8px 是为了不压住角手柄；没有角手柄时不必让位。否则像单行文字
+  // 这种只有十几像素高的选区，让位后 E/W 命中区高度会算成 0，边根本抓不住。
+  const edgeInset = visibleResizeHandles.length > 0 ? 8 : 0
   const edgeHitRegions = screenBounds && resizeVisible && !lineSelectionActive ? [
-    { handle: 'n' as const, x: screenBounds.x + 8, y: screenBounds.y - 4, width: Math.max(0, screenBounds.width - 16), height: 8 },
-    { handle: 's' as const, x: screenBounds.x + 8, y: screenBounds.y + screenBounds.height - 4, width: Math.max(0, screenBounds.width - 16), height: 8 },
-    { handle: 'w' as const, x: screenBounds.x - 4, y: screenBounds.y + 8, width: 8, height: Math.max(0, screenBounds.height - 16) },
-    { handle: 'e' as const, x: screenBounds.x + screenBounds.width - 4, y: screenBounds.y + 8, width: 8, height: Math.max(0, screenBounds.height - 16) },
+    { handle: 'n' as const, x: screenBounds.x + edgeInset, y: screenBounds.y - 4, width: Math.max(0, screenBounds.width - edgeInset * 2), height: 8 },
+    { handle: 's' as const, x: screenBounds.x + edgeInset, y: screenBounds.y + screenBounds.height - 4, width: Math.max(0, screenBounds.width - edgeInset * 2), height: 8 },
+    { handle: 'w' as const, x: screenBounds.x - 4, y: screenBounds.y + edgeInset, width: 8, height: Math.max(0, screenBounds.height - edgeInset * 2) },
+    { handle: 'e' as const, x: screenBounds.x + screenBounds.width - 4, y: screenBounds.y + edgeInset, width: 8, height: Math.max(0, screenBounds.height - edgeInset * 2) },
   ].filter(({ handle }) => resizeHandles.includes(handle)) : []
   return (
     <svg

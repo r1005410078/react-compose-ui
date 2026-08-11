@@ -192,6 +192,20 @@ describe('Basic ECS materials', () => {
     expect(materials.registry.getEditableTextPropName(rectangle)).toBeNull()
   })
 
+  it('OpenSpec: 内建 Text 物料 / 只允许水平缩放，高度始终由内容决定', () => {
+    const materials = createComposeBasicMaterials()
+    const text = seedEntity(materials, 'text')
+
+    // 高度必须留在 Hug：拖角手柄会把宽高一起钉成 Fixed，文字换行后长高就会被自己的框切掉。
+    // 限制为水平缩放后，只有 E/W 手柄，宽度定死而高度继续跟随内容。
+    expect(getComposeLayoutItem(text).height.mode).toBe('hug')
+    expect(text.components.GeometryConstraints).toMatchObject({
+      movable: true,
+      resize: 'horizontal',
+      rotatable: true,
+    })
+  })
+
   it('OpenSpec: 内建 Text 物料 / 编辑态原地渲染并保持排版一致', async () => {
     const materials = createComposeBasicMaterials()
     const text = seedEntity(materials, 'text')

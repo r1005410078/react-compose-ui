@@ -2968,6 +2968,47 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输�
   await expect(stage.getByTestId('compose-material-text')).not.toContainText('Hello canvas')
 })
 
+test('OpenSpec: stage / 画布内原地文字编辑 / 缩窄文字框时高度跟随内容而不裁剪', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await editor.getByRole('button', { name: '文字' }).click()
+  await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
+  await expect(stage.getByTestId('compose-material-text-editable')).toBeFocused()
+  await page.keyboard.type('Hello canvas world')
+  await page.keyboard.press('Escape')
+
+  const node = stage.locator('.compose-stage__node.is-renderer').last()
+  const before = (await node.boundingBox())!
+
+  // 文字只允许水平缩放：角手柄会把高度一起钉死，宽度变窄后换行长高就会被自己的框切掉。
+  await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
+  await expect(stage.getByTestId('stage-resize-e')).toHaveCount(0)
+  const edge = stage.getByTestId('stage-resize-edge-e')
+  await expect(edge).toBeVisible()
+  const edgeBox = (await edge.boundingBox())!
+  await page.mouse.move(edgeBox.x + edgeBox.width / 2, edgeBox.y + edgeBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(edgeBox.x - 70, edgeBox.y + edgeBox.height / 2, { steps: 6 })
+  await page.mouse.up()
+
+  const after = (await node.boundingBox())!
+  expect(after.width).toBeLessThan(before.width)
+  // 宽度定死后文字重新换行，框跟着长高，内容始终完整可见。
+  expect(after.height).toBeGreaterThan(before.height)
+  const overflow = await node.evaluate((el) => {
+    const span = el.querySelector('.compose-material--text-content')!
+    return span.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom
+  })
+  expect(overflow).toBeLessThanOrEqual(1)
+})
+
 test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后未输入即退出不留残余', async ({ page }) => {
   await page.goto('/')
 
