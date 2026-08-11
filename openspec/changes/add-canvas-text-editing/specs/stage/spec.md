@@ -11,7 +11,19 @@ Stage MUST 为声明了原地文字编辑契约的 Entity 提供画布内编辑�
 任何命令。
 
 Auto width（Hug）文字在输入过程中 MUST 通过既有 measurement 失效链路实时改变宽度，MUST NOT 引入
-第二条测量通道。
+第二条测量通道。由于编辑期间文档不变，Stage MUST 把编辑中的文本写入 Registry 的编辑中值覆盖通道，
+使渲染与测量看到同一个值；退出编辑时 MUST 清除覆盖，MUST NOT 让覆盖值残留到下一次会话之外。
+
+Stage 作为 Controller 的宿主，MUST 供给编辑会话所需的三项事实：把指针事件的连击计数归一化后随
+`pointer.down` 传入；向 Registry 查询后以 context 提供「某 Entity 是否可原地编辑」的判定；处理
+`drawing.commit` 创建实体后，以 context 回灌本次绘制实际创建的 Entity。提交时 Stage MUST 向 Registry
+查询该 Entity 的可编辑 prop 名称，MUST NOT 按物料类型硬编码 prop 名。
+
+#### Scenario: 编辑中文本经覆盖通道驱动渲染与测量
+
+- **WHEN** 用户在编辑会话中逐字键入
+- **THEN** Stage 只更新编辑中值覆盖，不派发任何文档命令
+- **AND** 退出会话后覆盖被清除，Entity 回到 authored props 的呈现
 
 #### Scenario: 点击创建后直接输入
 

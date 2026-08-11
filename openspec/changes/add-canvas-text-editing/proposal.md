@@ -17,9 +17,15 @@
 - Renderer Definition 新增可选的**原地文字编辑契约**：声明承载文本的 value prop 名称。Registry 校验
   该 prop 存在且为 value contract。Stage 只消费这个契约，不识别具体 Renderer 类型——`stage` 不依赖
   `materials`，不能靠 `type === 'text'` 硬编码。
+- Registry 新增按 Entity 的**编辑中值覆盖**通道，并让 Renderer 得知自身处于编辑态。编辑期间文档不变，
+  而 measurement 现在只从文档 Entity 解析 props，没有这条覆盖 Auto width 就不会实时变宽。覆盖同时
+  作用于运行时 props 与测量输入，并令 measurement revision 前进复用既有失效链路。
 - StageInteractionController 新增无 DOM 的**文字编辑会话**：`draw-text` 点击创建后自动进入编辑、
   select 工具双击已有可编辑 Entity 进入编辑、选中后 `Enter` 进入编辑；`Esc`、点击画布其他位置、
   选区变化都退出编辑。会话只发布 effect，不持有 DOM。
+- Controller 输入协议补三项事实：`pointer.down` 携带**连击计数**（现有事件没有任何双击信息）、context
+  提供**可编辑判定**入口、surface 在 `drawing.commit` 建完实体后**回灌新建 Entity**（ID 由 surface 铸，
+  Controller 拿不到）。三项都是普通数据，不引入新端口。
 - Stage 在编辑态改变覆盖层呈现：**不显示八向缩放手柄与旋转手柄**，改为单一编辑边框；编辑态期间
   屏蔽该 Entity 的移动、缩放、旋转手势与框选。
 - 文本提交为**一条可撤销事务**：退出编辑时若内容变化则发一次 `entity.renderer.props.set`；内容为空
