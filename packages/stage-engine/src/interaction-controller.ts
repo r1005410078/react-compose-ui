@@ -202,6 +202,18 @@ export interface StageInteractionContext {
   readonly paintEditing?: StagePaintEditing | null
   /** Inspector 请求的画布图层取色目标；存在时普通 Stage 命中被临时屏蔽。 */
   readonly paintSampling?: StagePaintSampling | null
+  /** 宿主持有的画布内文字编辑会话；存在时该 Entity 的空间手势被屏蔽。 */
+  readonly textEditing?: StageTextEditing | null
+  /**
+   * 判定一个 Entity 能否原地编辑文字；缺省时视为全部不可编辑。
+   *
+   * @remarks
+   * 可编辑性来自 Registry 的 Renderer 契约，而 stage-engine 不依赖 Registry，因此由宿主查询后
+   * 以判定入口传入。Controller 只消费判定结果，不感知 Renderer type 或 prop 名称。
+   */
+  readonly isTextEditable?: (entityId: string) => boolean
+  /** 宿主回灌的最近一次绘制创建结果；`draw-text` 的创建据此进入编辑。 */
+  readonly drawnEntity?: StageDrawnEntity | null
   /** 为命令、batch、guide 和结构节点创建稳定 ID。 */
   readonly idFactory: () => string
   /** 保留 React/i18n 层提供的命令标签。 */
@@ -244,6 +256,10 @@ export type StageInteractionEffect =
       readonly worldPoint: StagePoint
       readonly parentId: string | null
     }
+  /** 请求宿主开启文字编辑会话；宿主据此持有状态并作为 context 回传。 */
+  | { readonly type: 'text-editing.enter'; readonly entityId: string }
+  /** 请求宿主结束文字编辑会话并按内容收敛为最多一条事务。 */
+  | { readonly type: 'text-editing.exit' }
 
 /** surface 与 controller 之间唯一允许的命令式端口。 @public */
 export interface StageInteractionSurfacePort {
@@ -251,6 +267,37 @@ export interface StageInteractionSurfacePort {
   resolveClientPoint(point: StagePoint): StagePoint | null
   /** 同步应用 controller 生成的一批 effect。 */
   applyEffects(effects: readonly StageInteractionEffect[]): void
+}
+
+/**
+ * 宿主持有的画布内文字编辑会话。
+ *
+ * @remarks
+ * Controller 只判定会话的进入、退出与提交时机，不持有编辑中的文本——中间文本是宿主 DOM 层的
+ * 瞬时状态，逐字符进入状态机既无必要，也会把每次按键变成一次手势事件。
+ * @public
+ */
+export interface StageTextEditing {
+  /** 正在编辑的 Entity。 */
+  readonly entityId: string
+}
+
+/**
+ * 一次绘制提交实际创建的 Entity。
+ *
+ * @remarks
+ * Controller 发 `drawing.commit` 时并不创建实体，也不铸 ID：真正创建的是宿主。因此「点击创建
+ * 文字后立刻进入编辑」需要宿主把结果回灌，Controller 才知道该编辑谁。
+ *
+ * Controller 按 `entityId` 去重，同一次创建只进入一次编辑；宿主无需清理该字段，也无需保持
+ * 对象引用稳定。
+ * @public
+ */
+export interface StageDrawnEntity {
+  /** 本次绘制创建的 Entity。 */
+  readonly entityId: string
+  /** 创建它的绘制工具；只有 `draw-text` 会进入编辑。 */
+  readonly tool: Extract<StageInteractionTool, `draw-${string}`>
 }
 
 /** snapshot 中的临时文档辅助线。 @public */
@@ -330,6 +377,14 @@ export type StageInteractionEvent =
       readonly point: StagePoint
       readonly hit: StageInteractionHit
       readonly modifiers: StageInteractionModifiers
+      /**
+       * 连击计数；由宿主按平台惯例归一化后传入。
+       *
+       * @remarks
+       * 双击的时间窗口是平台约定，属于 DOM 层知识，Controller 不自行计时。
+       * @defaultValue 1
+       */
+      readonly clickCount?: number
     }
   | {
       readonly type: 'pointer.move'
@@ -344,6 +399,8 @@ export type StageInteractionEvent =
       readonly modifiers: StageInteractionModifiers
     }
   | { readonly type: 'pointer.cancel'; readonly pointerId?: number }
+  /** 与文字编辑会话相关的归一化按键；宿主只转发这两个键，不传原生事件。 */
+  | { readonly type: 'key.down'; readonly key: 'Escape' | 'Enter' }
   | { readonly type: 'temporary-pan.start' }
   | { readonly type: 'temporary-pan.end' }
   | { readonly type: 'external.begin'; readonly item: StageExternalDragItem; readonly clientPoint: StagePoint }
@@ -870,6 +927,12 @@ export function createStageInteractionController(): StageInteractionController {
   let gesture: Gesture | null = null
   let scrollRange: StageRect | null = null
   let disposed = false
+  // 已消费过的回灌 Entity；context 会因文档、选区、viewport 等无关原因反复更新，不去重会让
+  // 同一次创建重复触发进入编辑。
+  let consumedDrawnEntityId: string | null = null
+
+  const textEditable = (entityId: string) =>
+    Boolean(context?.isTextEditable?.(entityId))
 
   const samplePaintAt = (
     target: StagePaintSampling,
@@ -1263,6 +1326,22 @@ export function createStageInteractionController(): StageInteractionController {
   const begin = (event: Extract<StageInteractionEvent, { type: 'pointer.down' }>) => {
     if (!context || !index || !surface || event.button > 1) return
     const effects: StageInteractionEffect[] = []
+    const editing = context.textEditing
+    if (editing) {
+      // 编辑态下在目标自身上拖拽的语义是选择文本，不是移动实体；整条手势就此打住，
+      // 否则用户在文字上拖选会把实体拖走。
+      const onEditingTarget = event.hit.kind === 'entity'
+        && event.hit.entityId === editing.entityId
+      // 变换手柄始终作用于当前选区，而编辑态的选区就是编辑目标，因此一并屏蔽——
+      // Stage 在编辑态本就不渲染这些手柄，这里是协议层的兜底。
+      const onEditingHandle = event.hit.kind === 'resize'
+        || event.hit.kind === 'rotate'
+        || event.hit.kind === 'move-axis'
+        || (event.hit.kind === 'segment-endpoint' && event.hit.entityId === editing.entityId)
+      if (onEditingTarget || onEditingHandle) return
+      apply([{ type: 'text-editing.exit' }])
+      // 退出后本次按下继续按普通交互处理：点空白即取消选择，点别的实体即选中它。
+    }
     const startPan = context.tool === 'pan'
       || snapshot.temporaryPan
       || event.button === 1
@@ -1479,6 +1558,17 @@ export function createStageInteractionController(): StageInteractionController {
       effects.push(
         { type: 'selection.change', selectedIds: nextSelection },
       )
+      // 双击可编辑 Entity 进入原地编辑，且不开始移动手势。
+      if (
+        context.tool === 'select'
+        && (event.clickCount ?? 1) >= 2
+        && !getComposeLock(entity).locked
+        && textEditable(entity.id)
+      ) {
+        effects.push({ type: 'text-editing.enter', entityId: entity.id })
+        apply(effects)
+        return
+      }
       if (
         !getComposeLock(entity).locked
         && (context.tool === 'select' || context.tool === 'move')
@@ -1942,8 +2032,30 @@ export function createStageInteractionController(): StageInteractionController {
           ))
         ),
       )
+      // 会话的存续只看新 context：目标从文档中消失，或选区已经不再是该目标，都必须结束。
+      // 这两种情况来自撤销、删除、替换或外部选择变化，Controller 无法预先知道。
+      const editingTarget = nextContext.textEditing?.entityId
+      const textEditingEnded = editingTarget !== undefined
+        && (
+          !nextContext.document.entities[editingTarget]
+          || !nextContext.selectedIds.includes(editingTarget)
+        )
+      // 回灌只对 draw-text 生效，且同一个 Entity 只消费一次。
+      const drawn = nextContext.drawnEntity
+      const enterDrawnEditing = Boolean(
+        drawn
+        && drawn.tool === 'draw-text'
+        && drawn.entityId !== consumedDrawnEntityId
+        && nextContext.document.entities[drawn.entityId],
+      )
+
       context = nextContext
       index = nextIndex
+      if (textEditingEnded) apply([{ type: 'text-editing.exit' }])
+      if (enterDrawnEditing) {
+        consumedDrawnEntityId = drawn!.entityId
+        apply([{ type: 'text-editing.enter', entityId: drawn!.entityId }])
+      }
       if (incompatible) {
         reset()
         return
@@ -1965,6 +2077,25 @@ export function createStageInteractionController(): StageInteractionController {
     },
     send(event) {
       if (disposed) return
+      if (event.type === 'key.down') {
+        if (!context) return
+        if (event.key === 'Escape') {
+          if (context.textEditing) apply([{ type: 'text-editing.exit' }])
+          return
+        }
+        // Enter 只在「没有进行中的会话 + 恰好单选一个可编辑 Entity」时进入编辑；
+        // 多选时目标不唯一，进入哪个都是猜测。
+        const targetId = context.selectedIds.length === 1 ? context.selectedIds[0]! : null
+        if (
+          context.textEditing
+          || targetId === null
+          || !context.document.entities[targetId]
+          || getComposeLock(context.document.entities[targetId]!).locked
+          || !textEditable(targetId)
+        ) return
+        apply([{ type: 'text-editing.enter', entityId: targetId }])
+        return
+      }
       if (event.type === 'pointer.down') {
         begin(event)
         return

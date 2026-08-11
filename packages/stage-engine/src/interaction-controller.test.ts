@@ -823,3 +823,202 @@ describe('OpenSpec: stage / 可拖拽全局辅助线 / 拖回标尺删除辅助�
     expect(outside.cursor).not.toBe('guide-delete')
   })
 })
+
+describe('StageInteractionController 画布内文字编辑会话', () => {
+  const editableDocument = document([entity('a'), entity('b', { x: 300 })])
+
+  function textSetup(options: {
+    readonly tool?: 'select' | 'draw-text' | 'draw-rectangle'
+    readonly selectedIds?: readonly string[]
+    readonly textEditing?: { readonly entityId: string } | null
+    readonly editableIds?: readonly string[]
+    readonly drawnEntity?: {
+      readonly entityId: string
+      readonly tool: 'draw-text' | 'draw-rectangle'
+    } | null
+    readonly value?: ReturnType<typeof document>
+  } = {}) {
+    const effects: StageInteractionEffect[] = []
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: (next) => effects.push(...next),
+    })
+    const editableIds = options.editableIds ?? ['a', 'b']
+    const update = (patch: Parameters<typeof textSetup>[0] = {}) => {
+      const merged = { ...options, ...patch }
+      const value = merged.value ?? editableDocument
+      controller.updateContext({
+        document: value,
+        layoutSnapshot: layoutSnapshot(value),
+        viewport: { x: 0, y: 0, zoom: 1 },
+        surfaceSize: { width: 800, height: 600 },
+        tool: merged.tool ?? 'select',
+        selectedIds: merged.selectedIds ?? [],
+        textEditing: merged.textEditing ?? null,
+        drawnEntity: merged.drawnEntity ?? null,
+        isTextEditable: (entityId: string) => (merged.editableIds ?? editableIds).includes(entityId),
+        idFactory: () => 'text-edit-id',
+      })
+    }
+    update()
+    return { controller, effects, update }
+  }
+
+  it('OpenSpec: 文字编辑会话的输入协议 / 按连击计数区分单击与双击', () => {
+    const single = textSetup({ selectedIds: ['a'] })
+    single.controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'a' },
+      clickCount: 1,
+      modifiers,
+    })
+    expect(single.effects.some((effect) => effect.type === 'text-editing.enter')).toBe(false)
+    expect(single.controller.getSnapshot().phase).toBe('move')
+
+    const double = textSetup({ selectedIds: ['a'] })
+    double.controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'a' },
+      clickCount: 2,
+      modifiers,
+    })
+    expect(double.effects).toContainEqual({ type: 'text-editing.enter', entityId: 'a' })
+    // 双击进入编辑时不得同时开始移动手势，否则拖选文字会把实体拖走。
+    expect(double.controller.getSnapshot().phase).toBe('idle')
+  })
+
+  it('OpenSpec: 文字编辑会话的输入协议 / 可编辑判定只来自 context', () => {
+    const { controller, effects } = textSetup({ selectedIds: ['a'], editableIds: [] })
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'a' },
+      clickCount: 2,
+      modifiers,
+    })
+    controller.send({ type: 'key.down', key: 'Enter' })
+    expect(effects.some((effect) => effect.type === 'text-editing.enter')).toBe(false)
+  })
+
+  it('OpenSpec: 无 DOM 文字编辑会话 / 单选可编辑 Entity 时 Enter 进入编辑', () => {
+    const single = textSetup({ selectedIds: ['a'] })
+    single.controller.send({ type: 'key.down', key: 'Enter' })
+    expect(single.effects).toContainEqual({ type: 'text-editing.enter', entityId: 'a' })
+
+    const multi = textSetup({ selectedIds: ['a', 'b'] })
+    multi.controller.send({ type: 'key.down', key: 'Enter' })
+    expect(multi.effects.some((effect) => effect.type === 'text-editing.enter')).toBe(false)
+  })
+
+  it('OpenSpec: 文字编辑会话的输入协议 / 新建回灌只消费一次', () => {
+    const { effects, update } = textSetup({ tool: 'draw-text' })
+    update({ drawnEntity: { entityId: 'a', tool: 'draw-text' } })
+    expect(effects.filter((effect) => effect.type === 'text-editing.enter')).toEqual([
+      { type: 'text-editing.enter', entityId: 'a' },
+    ])
+
+    // context 因无关原因反复更新时不得重复进入。
+    update({ drawnEntity: { entityId: 'a', tool: 'draw-text' }, selectedIds: ['a'] })
+    update({ drawnEntity: { entityId: 'a', tool: 'draw-text' }, selectedIds: ['a'] })
+    expect(effects.filter((effect) => effect.type === 'text-editing.enter')).toHaveLength(1)
+  })
+
+  it('OpenSpec: 文字编辑会话的输入协议 / 其他绘制工具创建时不进入会话', () => {
+    const { effects, update } = textSetup({ tool: 'draw-rectangle' })
+    update({ drawnEntity: { entityId: 'a', tool: 'draw-rectangle' } })
+    expect(effects.some((effect) => effect.type === 'text-editing.enter')).toBe(false)
+  })
+
+  it('OpenSpec: 无 DOM 文字编辑会话 / 编辑期间屏蔽空间手势', () => {
+    const { controller, effects } = textSetup({
+      selectedIds: ['a'],
+      textEditing: { entityId: 'a' },
+    })
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'a' },
+      clickCount: 1,
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 60, y: 60 }, modifiers })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 60, y: 60 }, modifiers })
+
+    expect(controller.getSnapshot().phase).toBe('idle')
+    expect(controller.getSnapshot().marquee).toBeNull()
+    expect(effects.some((effect) => effect.type === 'command.dispatch')).toBe(false)
+  })
+
+  it('OpenSpec: 无 DOM 文字编辑会话 / 编辑期间变换手柄不产生空间手势', () => {
+    for (const hit of [
+      { kind: 'resize', handle: 'se' },
+      { kind: 'rotate' },
+      { kind: 'move-axis', axis: 'x' },
+    ] as const) {
+      const { controller, effects } = textSetup({
+        selectedIds: ['a'],
+        textEditing: { entityId: 'a' },
+      })
+      controller.send({
+        type: 'pointer.down',
+        pointerId: 1,
+        button: 0,
+        point: { x: 100, y: 50 },
+        hit,
+        clickCount: 1,
+        modifiers,
+      })
+      controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 160, y: 90 }, modifiers })
+      controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 160, y: 90 }, modifiers })
+
+      expect(controller.getSnapshot().phase).toBe('idle')
+      expect(effects.some((effect) => effect.type === 'command.dispatch')).toBe(false)
+      expect(effects.some((effect) => effect.type === 'text-editing.exit')).toBe(false)
+    }
+  })
+
+  it('OpenSpec: 无 DOM 文字编辑会话 / Esc 与目标外按下退出会话', () => {
+    const escape = textSetup({ selectedIds: ['a'], textEditing: { entityId: 'a' } })
+    escape.controller.send({ type: 'key.down', key: 'Escape' })
+    expect(escape.effects).toContainEqual({ type: 'text-editing.exit' })
+
+    const outside = textSetup({ selectedIds: ['a'], textEditing: { entityId: 'a' } })
+    outside.controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 310, y: 10 },
+      hit: { kind: 'entity', entityId: 'b' },
+      clickCount: 1,
+      modifiers,
+    })
+    expect(outside.effects).toContainEqual({ type: 'text-editing.exit' })
+  })
+
+  it('OpenSpec: 无 DOM 文字编辑会话 / 选区变化与目标消失结束会话', () => {
+    const selection = textSetup({ selectedIds: ['a'], textEditing: { entityId: 'a' } })
+    selection.update({ selectedIds: ['b'], textEditing: { entityId: 'a' } })
+    expect(selection.effects).toContainEqual({ type: 'text-editing.exit' })
+
+    const removed = textSetup({ selectedIds: ['a'], textEditing: { entityId: 'a' } })
+    removed.update({
+      textEditing: { entityId: 'a' },
+      value: document([entity('b', { x: 300 })]),
+    })
+    expect(removed.effects).toContainEqual({ type: 'text-editing.exit' })
+    expect(removed.effects.every((effect) => (
+      effect.type !== 'command.dispatch'
+    ))).toBe(true)
+  })
+})
