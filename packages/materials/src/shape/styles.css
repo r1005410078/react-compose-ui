@@ -2,3 +2,8 @@
   display: block;
   overflow: visible;
 }
+
+.compose-material--interactive-segment {
+  /* 命中只交给透明的加宽 stroke，避免整个 SVG 外接矩形都可点击。 */
+  pointer-events: none;
+}

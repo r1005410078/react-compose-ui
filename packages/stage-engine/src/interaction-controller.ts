@@ -493,6 +493,8 @@ type Gesture =
       readonly viewport: StageViewport
       readonly entityId: string
       readonly endpoint: 'start' | 'end'
+      /** 端点相对 pointerdown 的世界坐标偏移，避免放大命中区导致首次移动时跳点。 */
+      readonly grabOffset: StagePoint
       start: StagePoint
       end: StagePoint
     }
@@ -1147,8 +1149,12 @@ export function createStageInteractionController(): StageInteractionController {
       return
     }
     if (gesture.type === 'segment-resize') {
+      const draggedPoint = {
+        x: world.x + gesture.grabOffset.x,
+        y: world.y + gesture.grabOffset.y,
+      }
       const snapped = snapResizePoint({
-        point: world,
+        point: draggedPoint,
         // 两点图形的端点可以沿两个轴自由移动；使用角手柄复用既有 smart/grid snap 规则。
         handle: 'se',
         candidates: index.snapCandidates([gesture.entityId]),
@@ -1447,6 +1453,11 @@ export function createStageInteractionController(): StageInteractionController {
         viewport: context.viewport,
         entityId: entity.id,
         endpoint: event.hit.endpoint,
+        grabOffset: (() => {
+          const pointer = worldPoint(event.point, context.viewport)
+          const endpoint = event.hit.endpoint === 'start' ? event.hit.start : event.hit.end
+          return { x: endpoint.x - pointer.x, y: endpoint.y - pointer.y }
+        })(),
         start: event.hit.start,
         end: event.hit.end,
       }

@@ -161,7 +161,7 @@ describe('StageInteractionController ECS systems', () => {
       type: 'pointer.down',
       pointerId: 1,
       button: 0,
-      point: { x: 100, y: 50 },
+      point: { x: 0, y: 0 },
       hit: {
         kind: 'segment-endpoint',
         entityId: 'a',
@@ -205,6 +205,37 @@ describe('StageInteractionController ECS systems', () => {
     ])
     expect(effects.filter((effect) => effect.type === 'command.dispatch')).toHaveLength(0)
     expect(controller.getSnapshot().segmentPreview).toBeNull()
+  })
+
+  it('OpenSpec: 线段端点选择 / 从放大命中区边缘拖动时保留抓取偏移', () => {
+    const { controller } = setup()
+    const unrestricted = { ...modifiers, command: true }
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 8, y: 6 },
+      hit: {
+        kind: 'segment-endpoint',
+        entityId: 'a',
+        endpoint: 'start',
+        start: { x: 0, y: 0 },
+        end: { x: 100, y: 50 },
+      },
+      modifiers: unrestricted,
+    })
+
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 18, y: 16 },
+      modifiers: unrestricted,
+    })
+
+    expect(controller.getSnapshot().segmentPreview).toMatchObject({
+      start: { x: 10, y: 10 },
+      end: { x: 100, y: 50 },
+    })
   })
 
   it('OpenSpec: 线段端点选择 / 取消端点拖拽不会请求提交', () => {

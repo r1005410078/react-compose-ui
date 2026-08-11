@@ -9,6 +9,7 @@ import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import {
   getComposeHierarchy,
   getComposeLock,
+  getComposeRenderer,
   getComposeVisibility,
   resolveComposeOverflow,
   type ComposeDocument,
@@ -124,6 +125,9 @@ export function StageSceneLayer({
       const entity = document.entities[entityId]
       if (!entity || !getComposeVisibility(entity).visible) return null
       const hierarchy = getComposeHierarchy(entity)
+      const renderer = getComposeRenderer(entity)
+      const isSegment = renderer?.type === 'shape'
+        && (renderer.props.kind === 'line' || renderer.props.kind === 'arrow')
       const box = layoutSnapshot.boxes[entityId]
       if (!box) return null
       const locked = getComposeLock(entity).locked
@@ -136,7 +140,7 @@ export function StageSceneLayer({
         <div
           className={`compose-stage__node${hierarchy ? ' is-container' : ' is-renderer'}${
             locked ? ' is-locked' : ''
-          }`}
+          }${isSegment ? ' is-segment' : ''}`}
           data-entity-id={entity.id}
           data-testid={hierarchy ? 'stage-container' : `stage-entity-${entity.id}`}
           key={entity.id}

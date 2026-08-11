@@ -138,6 +138,78 @@ describe('Basic ECS materials', () => {
     expect(materials.registry.getRenderer('shape')?.inspector).toBeDefined()
   })
 
+  it('OpenSpec: Shape materials / 描边、线型与箭头不随非等比包围盒变形', () => {
+    const materials = createComposeBasicMaterials()
+    const arrow = seedEntity(materials, 'arrow')
+    const renderer = getComposeRenderer(arrow)!
+    const dashedArrow: ComposeEntity = {
+      ...arrow,
+      components: {
+        ...arrow.components,
+        Renderer: {
+          ...renderer,
+          props: {
+            ...renderer.props,
+            direction: { x: -1, y: 1 },
+            strokeDasharray: '8 4',
+            strokeWidth: 6,
+          },
+        },
+      },
+    }
+    const view = render(
+      <ComposeRegistryEntityRenderer
+        entity={dashedArrow}
+        mode="editor"
+        registry={materials.registry}
+      />,
+    )
+
+    const svg = screen.getByTestId('compose-material-shape-arrow')
+    const line = screen.getByTestId('compose-material-shape-stroke')
+    const hit = screen.getByTestId('compose-material-shape-hit')
+    const marker = svg.querySelector('marker')!
+    expect(svg).not.toHaveAttribute('viewBox')
+    expect(svg).not.toHaveAttribute('preserveAspectRatio')
+    expect(svg).toHaveClass('compose-material--interactive-segment')
+    expect(hit).toHaveAttribute('pointer-events', 'stroke')
+    expect(hit).toHaveAttribute('stroke', 'transparent')
+    expect(hit).toHaveAttribute('stroke-width', '12')
+    expect(line).toHaveAttribute('x1', '100%')
+    expect(line).toHaveAttribute('y1', '0%')
+    expect(line).toHaveAttribute('x2', '0%')
+    expect(line).toHaveAttribute('y2', '100%')
+    expect(line).toHaveAttribute('stroke-width', '6')
+    expect(line).toHaveAttribute('stroke-dasharray', '24 12')
+    expect(line).toHaveAttribute('stroke-linecap', 'butt')
+    expect(line.getAttribute('marker-end')).toMatch(/^url\(#compose-shape-arrow-/)
+    expect(marker).toHaveAttribute('markerUnits', 'strokeWidth')
+    expect(marker).toHaveAttribute('viewBox', '0 0 6 6')
+
+    view.rerender(
+      <ComposeRegistryEntityRenderer
+        entity={{
+          ...dashedArrow,
+          components: {
+            ...dashedArrow.components,
+            Renderer: {
+              ...renderer,
+              props: { ...renderer.props, strokeDasharray: '1 4' },
+            },
+          },
+        }}
+        mode="preview"
+        registry={materials.registry}
+      />,
+    )
+    const previewSvg = screen.getByTestId('compose-material-shape-arrow')
+    const dottedLine = screen.getByTestId('compose-material-shape-stroke')
+    expect(previewSvg).not.toHaveClass('compose-material--interactive-segment')
+    expect(screen.queryByTestId('compose-material-shape-hit')).not.toBeInTheDocument()
+    expect(dottedLine).toHaveAttribute('stroke-dasharray', '0 4')
+    expect(dottedLine).toHaveAttribute('stroke-linecap', 'round')
+  })
+
   it('OpenSpec: Shape materials / Inspector 暴露常用线条与首尾箭头属性', () => {
     const materials = createComposeBasicMaterials({ idFactory: () => 'shape-command' })
     const line = seedEntity(materials, 'line')

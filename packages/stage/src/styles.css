@@ -66,6 +66,18 @@
   background: var(--compose-surface-sunken, #25282d);
 }
 
+/* 待平移时覆盖 Canvas 内容；标尺仍保留自身的辅助线创建手势。 */
+.compose-stage[data-interaction-cursor='grab'] .compose-stage__surface,
+.compose-stage[data-interaction-cursor='grab'] .compose-stage__surface * {
+  cursor: grab !important;
+}
+
+/* Pointer capture 后可能拖过标尺或滚动条，活动平移必须在整个 Stage 内持续显示握手。 */
+.compose-stage[data-interaction-cursor='grabbing'],
+.compose-stage[data-interaction-cursor='grabbing'] * {
+  cursor: grabbing !important;
+}
+
 /* 绘制工具拥有完整的 Canvas 命中权；即使悬停在既有图层或 output 上，也不能退回选择光标。 */
 .compose-stage[data-interaction-cursor='crosshair'] .compose-stage__surface,
 .compose-stage[data-interaction-cursor='crosshair'] .compose-stage__surface * {
@@ -158,6 +170,12 @@
   overflow: hidden;
 }
 
+.compose-stage__node.is-segment {
+  /* Line/Arrow 的轴对齐外接矩形包含两个透明三角区，不能让它们拦截画布点击。 */
+  overflow: visible;
+  pointer-events: none;
+}
+
 .compose-stage__node.is-locked {
   cursor: not-allowed;
 }
@@ -241,13 +259,17 @@
   vector-effect: non-scaling-stroke;
 }
 
+.compose-stage__line-selection-hit {
+  fill: transparent;
+  pointer-events: all;
+}
+
 .compose-stage__line-selection-handle {
   fill: #f8fbff;
-  pointer-events: all;
+  pointer-events: none;
   stroke: #0d99ff;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
-  cursor: crosshair;
 }
 
 .compose-stage__line-selection-dimensions {

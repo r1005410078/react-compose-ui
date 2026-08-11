@@ -3,6 +3,7 @@ import type { ComposeRendererProps } from '@compose-ui/component-registry'
 type ShapeKind = 'line' | 'arrow' | 'circle'
 type ShapeAxis = -1 | 0 | 1
 type Marker = 'none' | 'arrow'
+type StrokeLinecap = 'butt' | 'round' | 'square'
 
 function shapeKind(value: unknown): ShapeKind {
   return value === 'arrow' || value === 'circle' ? value : 'line'
@@ -18,18 +19,40 @@ function direction(value: unknown): { readonly x: ShapeAxis; readonly y: ShapeAx
 }
 
 function endpoint(axis: ShapeAxis, edge: 'start' | 'end') {
-  if (axis === 0) return 0.5
-  if (edge === 'start') return axis < 0 ? 1 : 0
-  return axis < 0 ? 0 : 1
+  if (axis === 0) return '50%'
+  if (edge === 'start') return axis < 0 ? '100%' : '0%'
+  return axis < 0 ? '0%' : '100%'
 }
 
 function marker(value: unknown, fallback: Marker): Marker {
   return value === 'arrow' || value === 'none' ? value : fallback
 }
 
+function strokePattern(
+  value: unknown,
+  strokeWidth: number,
+  strokeLinecap: StrokeLinecap,
+): { readonly dasharray?: string; readonly linecap: StrokeLinecap } {
+  if (value === '8 4') {
+    return {
+      dasharray: `${strokeWidth * 4} ${strokeWidth * 2}`,
+      linecap: strokeLinecap,
+    }
+  }
+  if (value === '1 4') {
+    // 零长度 dash 配合 round cap 才是圆点；间距随线宽变化，避免粗线退化成密集短竖条。
+    return {
+      dasharray: `0 ${strokeWidth * 2}`,
+      linecap: 'round',
+    }
+  }
+  return { linecap: strokeLinecap }
+}
+
 /** Materials 内置 Line、Arrow 与 Circle 共用 SVG renderer。 @internal */
-export function ShapeRenderer({ entity, props }: ComposeRendererProps) {
+export function ShapeRenderer({ entity, mode, props }: ComposeRendererProps) {
   const kind = shapeKind(props.kind)
+  const isInteractiveSegment = mode === 'editor' && kind !== 'circle'
   const axis = direction(props.direction)
   const start = { x: endpoint(axis.x, 'start'), y: endpoint(axis.y, 'start') }
   const end = { x: endpoint(axis.x, 'end'), y: endpoint(axis.y, 'end') }
@@ -38,9 +61,7 @@ export function ShapeRenderer({ entity, props }: ComposeRendererProps) {
   const strokeLinecap = props.strokeLinecap === 'round' || props.strokeLinecap === 'square'
     ? props.strokeLinecap
     : 'butt'
-  const strokeDasharray = props.strokeDasharray === '8 4' || props.strokeDasharray === '1 4'
-    ? props.strokeDasharray
-    : undefined
+  const pattern = strokePattern(props.strokeDasharray, strokeWidth, strokeLinecap)
   const markerStart = marker(props.markerStart, 'none')
   // 旧 Arrow 文档没有 markerEnd，仍然以终点箭头渲染。
   const markerEnd = marker(props.markerEnd, kind === 'arrow' ? 'arrow' : 'none')
@@ -49,15 +70,15 @@ export function ShapeRenderer({ entity, props }: ComposeRendererProps) {
   return (
     <svg
       aria-label={kind === 'circle' ? 'Circle' : kind === 'arrow' ? 'Arrow' : 'Line'}
-      className="compose-material compose-material--shape"
+      className={`compose-material compose-material--shape${
+        isInteractiveSegment ? ' compose-material--interactive-segment' : ''
+      }`}
       data-testid={`compose-material-shape-${kind}`}
       fill="none"
-      preserveAspectRatio="none"
       role="img"
-      viewBox="0 0 1 1"
     >
       {kind === 'circle' ? (
-        <ellipse cx="0.5" cy="0.5" rx="0.5" ry="0.5" stroke={stroke} strokeWidth={strokeWidth / 100} />
+        <ellipse cx="50%" cy="50%" rx="50%" ry="50%" stroke={stroke} strokeWidth={strokeWidth} />
       ) : (
         <>
           {markerStart === 'arrow' || markerEnd === 'arrow' ? (
@@ -76,13 +97,28 @@ export function ShapeRenderer({ entity, props }: ComposeRendererProps) {
               </marker>
             </defs>
           ) : null}
+          {isInteractiveSegment ? (
+            <line
+              className="compose-material__segment-hit"
+              data-testid="compose-material-shape-hit"
+              pointerEvents="stroke"
+              stroke="transparent"
+              strokeLinecap="round"
+              strokeWidth={Math.max(12, strokeWidth * 2)}
+              x1={start.x}
+              x2={end.x}
+              y1={start.y}
+              y2={end.y}
+            />
+          ) : null}
           <line
+            data-testid="compose-material-shape-stroke"
             markerEnd={markerEnd === 'arrow' ? `url(#${markerId})` : undefined}
             markerStart={markerStart === 'arrow' ? `url(#${markerId})` : undefined}
             stroke={stroke}
-            strokeDasharray={strokeDasharray}
-            strokeLinecap={strokeLinecap}
-            strokeWidth={strokeWidth / 100}
+            strokeDasharray={pattern.dasharray}
+            strokeLinecap={pattern.linecap}
+            strokeWidth={strokeWidth}
             x1={start.x}
             x2={end.x}
             y1={start.y}

@@ -51,6 +51,22 @@ interface StageOverlayProps {
   ) => void
 }
 
+const LINE_ENDPOINT_HANDLE_SIZE = 8
+// 可见方块保持轻量，命中区独立放大，避免高分屏上必须像素级对准才能开始端点手势。
+const LINE_ENDPOINT_HIT_RADIUS = 10
+
+function lineAngle(start: StagePoint, end: StagePoint) {
+  return Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI
+}
+
+function lineEndpointCursor(start: StagePoint, end: StagePoint) {
+  const angle = ((lineAngle(start, end) % 180) + 180) % 180
+  if (angle < 22.5 || angle >= 157.5) return 'ew-resize'
+  if (angle < 67.5) return 'nwse-resize'
+  if (angle < 112.5) return 'ns-resize'
+  return 'nesw-resize'
+}
+
 function lineDimensionLabel(start: StagePoint, end: StagePoint) {
   const length = Math.hypot(end.x - start.x, end.y - start.y)
   const rounded = Math.round(length * 100) / 100
@@ -65,7 +81,7 @@ function lineLabelPosition(start: StagePoint, end: StagePoint) {
     ? { x: 0, y: 1 }
     : { x: -deltaY / length, y: deltaX / length }
   if (normal.y < 0) normal = { x: -normal.x, y: -normal.y }
-  let angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI
+  let angle = lineAngle(start, end)
   if (angle > 90 || angle < -90) angle += 180
   return {
     angle,
@@ -131,6 +147,12 @@ export function StageOverlay({
   const lineSelectionActive = Boolean(lineSelection) && !drawingToolActive
   const lineStartScreen = lineSelection ? worldToScreen(lineSelection.start, viewport) : null
   const lineEndScreen = lineSelection ? worldToScreen(lineSelection.end, viewport) : null
+  const lineSelectionAngle = lineStartScreen && lineEndScreen
+    ? lineAngle(lineStartScreen, lineEndScreen)
+    : 0
+  const lineSelectionCursor = lineStartScreen && lineEndScreen
+    ? lineEndpointCursor(lineStartScreen, lineEndScreen)
+    : 'default'
   const lineDimension = lineSelection && lineStartScreen && lineEndScreen
     ? lineDimensionLabel(lineSelection.start, lineSelection.end)
     : null
@@ -221,13 +243,13 @@ export function StageOverlay({
           />
           {resizeVisible && editableSelection ? (
             <>
-              <rect
-                className="compose-stage__line-selection-handle"
+              <circle
+                className="compose-stage__line-selection-hit"
                 data-testid="stage-line-selection-start"
-                height="8"
-                width="8"
-                x={lineStartScreen.x - 4}
-                y={lineStartScreen.y - 4}
+                cx={lineStartScreen.x}
+                cy={lineStartScreen.y}
+                r={LINE_ENDPOINT_HIT_RADIUS}
+                style={{ cursor: lineSelectionCursor }}
                 onPointerDown={(event) => onInteraction({
                   kind: 'segment-endpoint',
                   entityId: lineSelection.entityId,
@@ -238,11 +260,20 @@ export function StageOverlay({
               />
               <rect
                 className="compose-stage__line-selection-handle"
+                data-testid="stage-line-selection-start-handle"
+                height={LINE_ENDPOINT_HANDLE_SIZE}
+                transform={`rotate(${lineSelectionAngle} ${lineStartScreen.x} ${lineStartScreen.y})`}
+                width={LINE_ENDPOINT_HANDLE_SIZE}
+                x={lineStartScreen.x - LINE_ENDPOINT_HANDLE_SIZE / 2}
+                y={lineStartScreen.y - LINE_ENDPOINT_HANDLE_SIZE / 2}
+              />
+              <circle
+                className="compose-stage__line-selection-hit"
                 data-testid="stage-line-selection-end"
-                height="8"
-                width="8"
-                x={lineEndScreen.x - 4}
-                y={lineEndScreen.y - 4}
+                cx={lineEndScreen.x}
+                cy={lineEndScreen.y}
+                r={LINE_ENDPOINT_HIT_RADIUS}
+                style={{ cursor: lineSelectionCursor }}
                 onPointerDown={(event) => onInteraction({
                   kind: 'segment-endpoint',
                   entityId: lineSelection.entityId,
@@ -250,6 +281,15 @@ export function StageOverlay({
                   start: lineSelection.start,
                   end: lineSelection.end,
                 }, event)}
+              />
+              <rect
+                className="compose-stage__line-selection-handle"
+                data-testid="stage-line-selection-end-handle"
+                height={LINE_ENDPOINT_HANDLE_SIZE}
+                transform={`rotate(${lineSelectionAngle} ${lineEndScreen.x} ${lineEndScreen.y})`}
+                width={LINE_ENDPOINT_HANDLE_SIZE}
+                x={lineEndScreen.x - LINE_ENDPOINT_HANDLE_SIZE / 2}
+                y={lineEndScreen.y - LINE_ENDPOINT_HANDLE_SIZE / 2}
               />
             </>
           ) : null}

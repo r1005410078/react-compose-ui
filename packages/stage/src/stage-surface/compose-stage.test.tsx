@@ -341,14 +341,52 @@ describe('ComposeStage ECS', () => {
   it('OpenSpec: 线段端点选择 / Line 与 Arrow 单选仅显示首尾控制点而不显示矩形框', () => {
     renderStage(document([lineEntity()]), { selectedIds: ['line'], tool: 'select' })
 
+    expect(screen.getByTestId('stage-entity-line')).toHaveClass('is-segment')
     expect(screen.getByTestId('stage-line-selection')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-line-selection-start')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-line-selection-end')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-line-selection-start')).toHaveAttribute('r', '10')
+    expect(screen.getByTestId('stage-line-selection-end')).toHaveAttribute('r', '10')
+    expect(screen.getByTestId('stage-line-selection-start')).toHaveStyle({ cursor: 'nwse-resize' })
+    expect(screen.getByTestId('stage-line-selection-start-handle')).toHaveAttribute(
+      'transform',
+      expect.stringMatching(/^rotate\(26\.565/),
+    )
     expect(screen.getByTestId('stage-line-selection-dimensions')).toHaveTextContent('× 0')
     expect(screen.queryByTestId('stage-selection-bounds')).not.toBeInTheDocument()
     expect(screen.queryByTestId('stage-resize-nw')).not.toBeInTheDocument()
     expect(screen.queryByTestId('stage-resize-ne')).not.toBeInTheDocument()
   })
+
+  it.each(['start', 'end'] as const)(
+    'OpenSpec: 线段端点选择 / %s 端点命中后拖动并提交一次事务',
+    (endpoint) => {
+      const { dispatch } = renderStage(
+        document([lineEntity()]),
+        { selectedIds: ['line'], tool: 'select' },
+      )
+      const handle = screen.getByTestId(`stage-line-selection-${endpoint}`)
+
+      fireEvent.pointerDown(handle, {
+        pointerId: 1,
+        button: 0,
+        buttons: 1,
+        clientX: endpoint === 'start' ? 20 : 120,
+        clientY: endpoint === 'start' ? 30 : 80,
+      })
+      fireEvent.pointerUp(window, {
+        pointerId: 1,
+        button: 0,
+        buttons: 0,
+        clientX: endpoint === 'start' ? 44 : 144,
+        clientY: endpoint === 'start' ? 54 : 104,
+      })
+
+      expect(dispatch).toHaveBeenCalledTimes(1)
+      expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'transaction.batch',
+        meta: expect.objectContaining({ mergeKey: 'stage:segment:line' }),
+      }))
+    },
+  )
 
   it('OpenSpec: 绘制工具 / 空闲即为十字光标，并以实际形状预览替代框选虚线', () => {
     renderStage(document(), { selectedIds: ['a'], tool: 'draw-circle' })

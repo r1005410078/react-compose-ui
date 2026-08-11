@@ -1636,9 +1636,30 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
   await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
   await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(0)
 
-  const startHandle = await stage.getByTestId('stage-line-selection-start').boundingBox()
+  const startEndpoint = stage.getByTestId('stage-line-selection-start')
+  const startHandle = await startEndpoint.boundingBox()
   expect(startHandle).not.toBeNull()
-  await page.mouse.move(startHandle!.x + startHandle!.width / 2, startHandle!.y + startHandle!.height / 2)
+  await expect.poll(() => startEndpoint.evaluate((element) => getComputedStyle(element).cursor)).toBe('ns-resize')
+
+  // 命中圆比可见控制柄大；从圆的边缘抓取时，拖动应保持按下偏移而不是让端点跳到指针。
+  await editor.getByRole('button', { name: '吸附', exact: true }).click()
+  const edgeGrab = {
+    x: startHandle!.x + startHandle!.width - 2,
+    y: startHandle!.y + startHandle!.height / 2,
+  }
+  await page.mouse.move(edgeGrab.x, edgeGrab.y)
+  await page.mouse.down()
+  await page.mouse.move(edgeGrab.x + 24, edgeGrab.y + 32, { steps: 3 })
+  await page.mouse.up()
+  const movedStartHandle = await startEndpoint.boundingBox()
+  expect(movedStartHandle).not.toBeNull()
+  expect(movedStartHandle!.x).toBeCloseTo(startHandle!.x + 24, 0)
+  expect(movedStartHandle!.y).toBeCloseTo(startHandle!.y + 32, 0)
+
+  await page.mouse.move(
+    movedStartHandle!.x + movedStartHandle!.width / 2,
+    movedStartHandle!.y + movedStartHandle!.height / 2,
+  )
   await page.mouse.down()
   // 拖过另一端：固定终点不动，底层方向会翻转，但可见选择态始终保持两个端点。
   await page.mouse.move(target.x + 72, target.y + 32, { steps: 4 })
@@ -1646,6 +1667,87 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
   await page.mouse.up()
   await expect(stage.getByTestId('stage-line-selection-start')).toBeVisible()
   await expect(stage.getByTestId('stage-line-selection-end')).toBeVisible()
+})
+
+test('OpenSpec: stage / 线段命中 / 透明外接矩形不选中，线身仍可选中', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
+  await shapeButtons.nth(1).click()
+  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '线条' }).click()
+
+  const start = { x: outputBox!.x + 180, y: outputBox!.y + 420 }
+  const end = { x: start.x + 360, y: start.y - 240 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 4 })
+  await page.mouse.up()
+  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+
+  // 位于轴对齐外接矩形内部，但离实际线段很远；点击应落到画布并清除选择。
+  await page.mouse.click(end.x - 24, start.y - 24)
+  await expect(stage.getByTestId('stage-line-selection')).toHaveCount(0)
+
+  // 加宽的透明 stroke 仍给细线保留易用的点击命中带。
+  await page.mouse.click((start.x + end.x) / 2, (start.y + end.y) / 2)
+  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+})
+
+test('OpenSpec: stage / 画布平移手势 / 空闲张手且拖动时握手', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  const horizontalRuler = stage.getByTestId('stage-ruler-x')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  const rulerBox = await horizontalRuler.boundingBox()
+  expect(outputBox).not.toBeNull()
+  expect(rulerBox).not.toBeNull()
+  const point = { x: outputBox!.x + 320, y: outputBox!.y + 240 }
+
+  await editor.getByRole('button', { name: '平移', exact: true }).click()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
+  await expect(output).toHaveCSS('cursor', 'grab')
+
+  await page.mouse.move(point.x, point.y)
+  await page.mouse.down()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await expect(output).toHaveCSS('cursor', 'grabbing')
+  await page.mouse.move(point.x + 40, point.y + 24, { steps: 3 })
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await expect(output).toHaveCSS('cursor', 'grabbing')
+  // Pointer capture 期间即使拖过标尺，也不能跳回标尺自己的准星手势。
+  await page.mouse.move(point.x + 40, rulerBox!.y + rulerBox!.height / 2, { steps: 3 })
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await expect(horizontalRuler).toHaveCSS('cursor', 'grabbing')
+  await page.mouse.up()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
+  await expect(output).toHaveCSS('cursor', 'grab')
+
+  // 临时 Space 平移沿用同一组手势，松开后恢复选择工具的默认光标。
+  await editor.getByRole('button', { name: '选择', exact: true }).click()
+  await stage.focus()
+  await page.keyboard.down('Space')
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
+  await expect(output).toHaveCSS('cursor', 'grab')
+  await page.mouse.move(point.x + 40, point.y + 24)
+  await page.mouse.down()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await expect(output).toHaveCSS('cursor', 'grabbing')
+  await page.mouse.up()
+  await page.keyboard.up('Space')
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'default')
 })
 
 test('OpenSpec: stage / Shift 绘制正方形与正圆 / 拖动中动态锁定预览与提交', async ({ page }) => {
