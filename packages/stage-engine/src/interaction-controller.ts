@@ -2003,12 +2003,19 @@ export function createStageInteractionController(): StageInteractionController {
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
       const paintEditingChanged = !samePaintEditing(context?.paintEditing, nextContext.paintEditing)
       const paintSamplingChanged = !samePaintSampling(context?.paintSampling, nextContext.paintSampling)
+      // 绘制手势只由世界坐标定义，不引用任何 Entity，因此并发的文档/布局变化不该打断它。
+      // 退出文字编辑时删除空文字就会在同一次指针按下里改动文档，若一并重置，紧接着开始的
+      // 绘制会当场消失。工具切换仍然算不兼容。
+      const spatialGesture = gesture !== null && gesture.type !== 'draw'
       const incompatible = Boolean(
         gesture
         && context
         && (
-          context.document !== nextContext.document
-          || context.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
+          (spatialGesture && context.document !== nextContext.document)
+          || (
+            spatialGesture
+            && context.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
+          )
           || context.tool !== nextContext.tool
           || (
             gestureIds

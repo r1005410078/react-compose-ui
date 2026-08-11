@@ -1022,3 +1022,46 @@ describe('StageInteractionController 画布内文字编辑会话', () => {
     ))).toBe(true)
   })
 })
+
+describe('StageInteractionController 绘制手势与并发文档变化', () => {
+  it('OpenSpec: 直接绘制 Preset / 绘制中途的文档变化不打断手势', () => {
+    const value = document([entity('a'), entity('b', { x: 300 })])
+    const effects: StageInteractionEffect[] = []
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: (next) => effects.push(...next),
+    })
+    const update = (next = value) => {
+      controller.updateContext({
+        document: next,
+        layoutSnapshot: layoutSnapshot(next, next === value ? 1 : 2),
+        viewport: { x: 0, y: 0, zoom: 1 },
+        surfaceSize: { width: 800, height: 600 },
+        tool: 'draw-text',
+        selectedIds: [],
+        idFactory: () => 'draw-id',
+      })
+    }
+    update()
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'surface' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 90, y: 60 }, modifiers })
+    expect(controller.getSnapshot().phase).toBe('draw')
+
+    // 退出文字编辑时删除空文字会改动文档，而它和这次绘制发生在同一次指针按下里。
+    // 绘制手势只由世界坐标定义，不引用任何 Entity，因此不应被这类变化打断。
+    update(document([entity('b', { x: 300 })]))
+    expect(controller.getSnapshot().phase).toBe('draw')
+
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 90, y: 60 }, modifiers })
+    expect(effects.some((effect) => effect.type === 'drawing.commit')).toBe(true)
+  })
+})

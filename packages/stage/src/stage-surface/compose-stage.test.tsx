@@ -8,6 +8,7 @@ import {
   createTransactionRuntime,
   getComposeComposition,
   getComposeLayoutItem,
+  getComposeRenderer,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
@@ -302,6 +303,18 @@ describe('ComposeStage ECS', () => {
       width: { mode: 'fixed', value: 160 },
       height: { mode: 'fixed', value: 48 },
     })
+
+    // 点击创建的文字直接进入编辑，光标应当落在空内容上，而不是先删掉占位文案。
+    const emptied = entityFromDrawingSeed(
+      textSeed,
+      'clicked-empty-text',
+      { x: 40, y: 50, width: 0, height: 0 },
+      undefined,
+      { preserveHugSizing: true, emptyTextPropName: 'text' },
+    )
+    expect(getComposeRenderer(emptied)?.props).toMatchObject({ text: '' })
+    // 拖拽创建固定尺寸文字保持原样，不受影响。
+    expect(getComposeRenderer(dragged)?.props).toMatchObject({ text: 'Text' })
   })
 
   it('OpenSpec: 受控工具模式与专属选区反馈 / 仅移动工具显示轴向 gizmo，网格可独立隐藏', () => {
@@ -877,6 +890,47 @@ describe('ComposeStage 画布内原地文字编辑', () => {
     fireEvent.keyDown(screen.getByRole('application'), { key: 'Escape' })
 
     const commands = dispatch.mock.calls.map(([command]) => command)
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      type: BUILTIN_COMMAND_TYPES.deleteEntity,
+      payload: { entityIds: ['a'] },
+    })
+  })
+
+  it('OpenSpec: 画布内原地文字编辑 / 内容本就为空时退出即删除实体', () => {
+    const emptyDocument = document([{
+      ...entity('a'),
+      components: {
+        ...entity('a').components,
+        Renderer: { type: 'test', props: { text: '' } },
+      },
+    }])
+    const runtime = createTransactionRuntime({ document: emptyDocument })
+    const dispatchSpy = vi.fn()
+    const dispatch: ComposeStageDispatch = (command) => {
+      dispatchSpy(command)
+      return runtime.dispatch(command)
+    }
+    render(
+      <ComposeStage
+        dispatch={dispatch}
+        document={emptyDocument}
+        layoutSnapshot={layoutSnapshot(emptyDocument)}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+        registry={editableRegistry}
+        selectedIds={['a']}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+      />,
+    )
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'Enter' })
+    expect(screen.getByTestId('editable-text')).toBeInTheDocument()
+
+    // 一个字都没敲就退出：内容为空的规则优先于「未变化不产生事务」，
+    // 否则点击创建后立刻按 Esc 会在文档里留下一个看不见也选不中的空文字。
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'Escape' })
+    const commands = dispatchSpy.mock.calls.map(([command]) => command)
     expect(commands).toHaveLength(1)
     expect(commands[0]).toMatchObject({
       type: BUILTIN_COMMAND_TYPES.deleteEntity,

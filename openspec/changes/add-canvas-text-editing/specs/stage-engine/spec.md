@@ -70,3 +70,26 @@ context 反复回灌同一事实而重复进入会话，也 MUST NOT 对其他�
 - **WHEN** 宿主回灌一次 `draw-text` 绘制创建的 Entity，随后 context 因其他原因多次更新
 - **THEN** Controller 只发布一次进入编辑 effect
 - **AND** 以 `draw-rectangle` 等其他工具创建时不发布进入编辑 effect
+
+## MODIFIED Requirements
+
+### Requirement: 手势预览与原子提交
+
+StageInteractionController MUST 在 session 开始冻结 Layout Snapshot。Flow move preview MUST 使用
+resolved box 转为 Absolute 后应用位移；Fill resize preview MUST 把活动 axis 视为 Fixed。Cancel
+MUST 丢弃全部布局意图 preview，pointerup MUST 请求最多一个命令或 batch。
+
+并发的文档或布局变化 MUST 中止引用 Entity 的空间手势（移动、缩放、旋转、端点、Paint），
+但 MUST NOT 中止绘制手势——绘制只由世界坐标定义，不引用任何 Entity。退出文字编辑时删除空文字
+会在同一次指针按下里改动文档，若一并中止，紧接着开始的绘制会当场消失。工具切换仍然中止绘制。
+
+#### Scenario: 混合选择移动并取消
+- **WHEN** Flow 与 Absolute 混合选择开始移动后收到 Escape
+- **THEN** preview 中的 positioning 与 offset 全部清除并恢复原 Snapshot
+- **AND** surface 不收到 dispatch effect
+
+#### Scenario: 绘制中途的文档变化不打断手势
+
+- **WHEN** 绘制手势进行中，文档因删除其他 Entity 而变化
+- **THEN** 绘制手势保持进行，松手仍然请求一次 `drawing.commit`
+- **AND** 同样情况下的移动手势仍然被中止

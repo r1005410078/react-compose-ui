@@ -43,7 +43,16 @@ export function entityFromDrawingSeed(
   id: string,
   bounds: StageRect,
   direction?: ShapeDirection,
-  options?: { readonly preserveHugSizing?: boolean },
+  options?: {
+    readonly preserveHugSizing?: boolean
+    /**
+     * 需要清空的可原地编辑文本 Prop 名称。
+     *
+     * 点击创建的文字会立刻进入编辑，光标应当落在空内容上；留着 Preset 的占位文案会逼
+     * 用户先全选删除再打字。Prop 名由调用方从 Registry 查得，本模块不认识具体物料。
+     */
+    readonly emptyTextPropName?: string
+  },
 ): ComposeEntity {
   const seeded = entityFromSeed(seed, id, {
     x: bounds.x + bounds.width / 2,
@@ -73,13 +82,14 @@ export function entityFromDrawingSeed(
           value: options?.preserveHugSizing ? item.height.value : Math.max(1, bounds.height),
         },
       },
-      ...(renderer && direction
+      ...(renderer && (direction || options?.emptyTextPropName)
         ? {
             Renderer: {
               ...renderer,
               props: {
                 ...(renderer.props as Record<string, JsonValue>),
-                direction: direction as unknown as JsonValue,
+                ...(direction ? { direction: direction as unknown as JsonValue } : {}),
+                ...(options?.emptyTextPropName ? { [options.emptyTextPropName]: '' } : {}),
               },
             },
           }

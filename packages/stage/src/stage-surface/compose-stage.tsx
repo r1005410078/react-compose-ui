@@ -1077,8 +1077,6 @@ function ComposeStageReady({
     measurementAdapter.setEditableTextOverride(session.entityId, null)
     // 焦点交还 surface，否则编辑元素卸载后焦点落到 body，后续快捷键全部失效。
     surfaceRef.current?.focus()
-    const nextText = session.text
-    if (nextText === null) return
     const current = latestRef.current
     const entity = current.document.entities[session.entityId]
     if (!entity) return
@@ -1086,7 +1084,11 @@ function ComposeStageReady({
     if (propName === null) return
     const renderer = getComposeRenderer(entity)
     const previous = renderer?.props[propName]
-    if (nextText === (typeof previous === 'string' ? previous : String(previous ?? ''))) return
+    const previousText = typeof previous === 'string' ? previous : String(previous ?? '')
+    // session.text 为 null 表示一个字都没敲；此时当前内容就是文档里的 authored 值。
+    const nextText = session.text ?? previousText
+    // 「为空」优先于「未变化」：点击创建的文字本就是空的，用户没敲字就退出时若按
+    // 「未变化」放过，文档里会留下一个看不见也选不中的空文字。
     if (nextText.length === 0) {
       // 空 Hug 文字会塌缩到接近零尺寸，既不可见也很难再在画布上选中，留着只会污染场景树。
       // 删除是普通可撤销事务，Ctrl+Z 可恢复。
@@ -1102,6 +1104,7 @@ function ComposeStageReady({
       })
       return
     }
+    if (nextText === previousText) return
     current.dispatch({
       id: current.idFactory(),
       type: BUILTIN_COMMAND_TYPES.setRendererProps,
@@ -1606,7 +1609,18 @@ function ComposeStageReady({
             y: directionAxis(effect.end.y - effect.start.y),
           }
         : undefined,
-      textClick ? { preserveHugSizing: true } : undefined,
+      textClick
+        ? {
+            preserveHugSizing: true,
+            // 点击创建即刻进入编辑，占位文案会逼用户先全选删除；Prop 名从 Registry 查，
+            // Stage 不认识具体物料类型。
+            emptyTextPropName:
+              current.registry.getEditableTextPropName({
+                ...seedResult.seed,
+                id: entityId,
+              }) ?? undefined,
+          }
+        : undefined,
     )
     // 组件库中的 Rectangle 可保留其圆角默认值；画布矩形工具遵循设计工具惯例，初始绘制为直角。
     const entity = effect.tool === 'draw-rectangle'

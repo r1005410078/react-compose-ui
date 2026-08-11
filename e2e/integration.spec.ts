@@ -2925,9 +2925,12 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输�
   await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
   await expect(stage.getByTestId('stage-rotation-handle')).toHaveCount(0)
 
+  // 点击创建的文字是空的，直接打字即可，无需先清掉占位文案。
+  await expect(editable).toHaveText('')
+  await page.keyboard.type('H')
+  // 空内容量不出有意义的宽度，从第一个字符开始比。
   const seededWidth = (await editable.boundingBox())!.width
-  await page.keyboard.press('ControlOrMeta+a')
-  await page.keyboard.type('Hello canvas')
+  await page.keyboard.type('ello canvas')
   // Auto width 必须在输入过程中经既有 measurement 链路实时改宽。
   await expect
     .poll(async () => (await editable.boundingBox())!.width)
@@ -2944,6 +2947,29 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输�
   await stage.press('Control+z')
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
   await expect(stage.getByTestId('compose-material-text')).not.toContainText('Hello canvas')
+})
+
+test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后未输入即退出不留残余', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await editor.getByRole('button', { name: '文字' }).click()
+  await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
+  await expect(stage.getByTestId('compose-material-text-editable')).toHaveText('')
+
+  await page.keyboard.press('Escape')
+
+  // 空文字既不可见也很难再选中，留着只会污染场景树；创建那条事务仍可被撤销回退。
+  await expect(stage.getByTestId('compose-material-text')).toHaveCount(0)
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
 })
 
 test('OpenSpec: stage / 画布内原地文字编辑 / 双击改写后 Esc 提交并可撤销', async ({ page }) => {
