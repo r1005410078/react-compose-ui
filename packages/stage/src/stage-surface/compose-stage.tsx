@@ -855,6 +855,7 @@ function ComposeStageReady({
   onViewportChange,
   gridVisible = true,
   tool,
+  marqueeMode,
   onToolChange,
   onShortcutAction,
   shortcuts,
@@ -1900,6 +1901,7 @@ function ComposeStageReady({
       viewport,
       surfaceSize,
       tool,
+      marqueeMode,
       selectedIds: normalizedSelection,
       paintEditing,
       paintSampling,
@@ -1927,6 +1929,7 @@ function ComposeStageReady({
     messages.createGuides,
     messages.deleteGuide,
     messages.moveGuide,
+    marqueeMode,
     normalizedSelection,
     paintEditing,
     paintSampling,
@@ -2707,6 +2710,7 @@ function ComposeStageReady({
           handlePoints={handlePoints}
           label={messages.editingOverlay}
           lineSelection={lineSelection}
+          marqueeHitTest={interaction.marqueeHitTest}
           marqueeScreen={marqueeScreen}
           paintHandles={interaction.paintHandles}
           paintSample={interaction.paintSample}

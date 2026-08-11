@@ -20,9 +20,11 @@ function document() {
 function renderToolbar(
   tool: import('@compose-ui/stage').ComposeStageTool = 'select',
   lastShapeTool: 'draw-rectangle' | 'draw-line' | 'draw-arrow' | 'draw-circle' = 'draw-rectangle',
+  marqueeMode: import('@compose-ui/stage').ComposeStageMarqueeMode = 'intersect',
 ) {
   const setTool = vi.fn()
   const setGridSize = vi.fn()
+  const setMarqueeMode = vi.fn()
   const toggleSnap = vi.fn()
   render(
     <DefaultStageToolbar
@@ -31,17 +33,19 @@ function renderToolbar(
       document={document()}
       gridVisible
       lastShapeTool={lastShapeTool}
+      marqueeMode={marqueeMode}
       nextId={() => 'toolbar-id'}
       setCanvasSettingsOpen={vi.fn()}
       setGridSize={setGridSize}
       setGridVisible={vi.fn()}
+      setMarqueeMode={setMarqueeMode}
       setTool={setTool}
       shortcuts={createDefaultComposeEditorPreferences().shortcuts}
       toggleSnap={toggleSnap}
       tool={tool}
     />,
   )
-  return { setGridSize, setTool, toggleSnap }
+  return { setGridSize, setMarqueeMode, setTool, toggleSnap }
 }
 
 describe('DefaultStageToolbar', () => {
@@ -53,6 +57,57 @@ describe('DefaultStageToolbar', () => {
     for (const label of ['选择', '移动', '缩放', '旋转', '平移', '吸附', '显示网格', '创建容器', '文字']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
+    expect(screen.getByRole('button', { name: '框选' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 框选工具 / 主按钮切换到 marquee 工具', () => {
+    const { setMarqueeMode, setTool } = renderToolbar()
+
+    fireEvent.click(screen.getByRole('button', { name: '框选' }))
+
+    expect(setTool).toHaveBeenCalledWith('marquee')
+    expect(setMarqueeMode).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 框选模式菜单 / 切换模式不改变当前工具', () => {
+    const { setMarqueeMode, setTool } = renderToolbar()
+
+    fireEvent.click(screen.getByRole('button', { name: '框选模式' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '完全包含' }))
+
+    expect(setMarqueeMode).toHaveBeenCalledWith('contain')
+    expect(setTool).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu', { name: '框选模式' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 框选模式菜单 / 键盘导航与 Escape 归还焦点', async () => {
+    renderToolbar()
+    const trigger = screen.getByRole('button', { name: '框选模式' })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+
+    const menu = screen.getByRole('menu', { name: '框选模式' })
+    expect(menu).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('menuitemradio', { name: '相交选中' })).toHaveFocus())
+    fireEvent.keyDown(menu, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu', { name: '框选模式' })).not.toBeInTheDocument()
+    await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
+  it('OpenSpec: editor-workspace-layout / 框选主按钮 / 图标跟随当前模式且不展开菜单也可辨认', () => {
+    renderToolbar('marquee', 'draw-rectangle', 'directional')
+
+    const primary = screen.getByRole('button', { name: '框选' })
+    expect(primary).toHaveAttribute('data-active-marquee-mode', 'directional')
+    expect(primary).toHaveAttribute('aria-pressed', 'true')
+    // 方向决定图标独有的左右箭头基线。
+    expect(primary.querySelector('path[d="M4.5 19h15"]')).toBeInTheDocument()
+
+    cleanup()
+    renderToolbar('marquee', 'draw-rectangle', 'contain')
+    expect(screen.getByRole('button', { name: '框选' }))
+      .toHaveAttribute('data-active-marquee-mode', 'contain')
   })
 
   it('OpenSpec: editor-workspace-layout / 专属移动与绘图工具 / 入口切换受控工具状态', () => {

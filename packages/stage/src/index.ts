@@ -12,6 +12,7 @@ export type {
   ComposeStageDispatch,
   ComposeStageKeybinding,
   ComposeStageLayoutRuntime,
+  ComposeStageMarqueeMode,
   ComposeStageProps,
   ComposeStageShortcutAction,
   ComposeStageDelegatableAction,

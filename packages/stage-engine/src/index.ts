@@ -40,7 +40,9 @@ export {
   invertMatrix,
   matrixFromTransform,
   multiplyMatrices,
+  rectContains,
   rectMappingMatrix,
+  rectsIntersect,
   resizeBounds,
   rotationFromPointer,
   rotationMatrixAround,
@@ -60,6 +62,15 @@ export {
   type StageTransform,
   type StageViewport,
 } from './geometry'
+export {
+  DEFAULT_STAGE_MARQUEE_MODE,
+  resolveMarqueeHitTest,
+  resolveMarqueeSelection,
+  type StageMarqueeCombine,
+  type StageMarqueeDirection,
+  type StageMarqueeMode,
+  type StageMarqueeQuery,
+} from './marquee-selection'
 export {
   createStageSceneIndex,
   type StageSceneIndex,

@@ -17,6 +17,13 @@ import {
   resolveComposeGeometryConstraints,
 } from '@compose-ui/core'
 import {
+  resolveMarqueeHitTest,
+  resolveMarqueeSelection,
+  type StageMarqueeCombine,
+  type StageMarqueeDirection,
+  type StageMarqueeMode,
+} from './marquee-selection'
+import {
   createStageSceneIndex,
   type StageSceneIndex,
 } from './scene-index'
@@ -71,6 +78,7 @@ export type StageInteractionPhase =
 /** Stage 的受控工具模式；不包含 React 或 DOM 类型。 @public */
 export type StageInteractionTool =
   | 'select'
+  | 'marquee'
   | 'move'
   | 'scale'
   | 'rotate'
@@ -196,6 +204,12 @@ export interface StageInteractionContext {
   readonly surfaceSize: { readonly width: number; readonly height: number }
   /** 当前持久工具；临时平移由独立事件控制。 */
   readonly tool: StageInteractionTool
+  /**
+   * 框选命中判定模式；`select` 与 `marquee` 两个入口共用同一个值。
+   *
+   * @defaultValue 'intersect'
+   */
+  readonly marqueeMode?: StageMarqueeMode
   /** 最新受控选择，按宿主顺序排列。 */
   readonly selectedIds: readonly string[]
   /** Inspector 打开的单 Entity 背景填充编辑；缺失时不渲染也不接收 Paint 控制柄。 */
@@ -323,6 +337,14 @@ export interface StageInteractionSnapshot {
   readonly previewTransforms: Readonly<Record<string, StageTransform>>
   /** 框选中的世界矩形。 */
   readonly marquee: StageRect | null
+  /**
+   * 当前框选实际生效的判定；非框选 phase 为 null。
+   *
+   * @remarks
+   * `directional` 已在这里归约成 `intersect`/`contain`，Overlay 据此区分虚线与实线，
+   * 不需要自己再判断拖拽方向。
+   */
+  readonly marqueeHitTest: Exclude<StageMarqueeMode, 'directional'> | null
   /** 当前智能吸附反馈线。 */
   readonly snapGuides: readonly StageGuide[]
   /** 创建或移动中的文档辅助线 preview。 */
@@ -437,6 +459,7 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   phase: 'idle',
   previewTransforms: {},
   marquee: null,
+  marqueeHitTest: null,
   snapGuides: [],
   guidePreview: [],
   paintPreview: null,
@@ -465,6 +488,8 @@ type Gesture =
       readonly viewport: StageViewport
       readonly startWorld: StagePoint
       readonly origin: 'surface' | 'output'
+      /** 框选开始前的选区；Shift 加选与 Alt 减选以它为基准，不受拖拽过程影响。 */
+      readonly baseSelection: readonly string[]
       currentWorld: StagePoint
     }
   | {
@@ -610,11 +635,19 @@ function isDrawingTool(
   return tool.startsWith('draw-')
 }
 
-function intersects(first: StageRect, second: StageRect) {
-  return first.x <= second.x + second.width
-    && first.x + first.width >= second.x
-    && first.y <= second.y + second.height
-    && first.y + first.height >= second.y
+/** 归一化矩形丢失了拖拽方向，因此方向必须从手势起止点单独取。 */
+function marqueeDirection(
+  startWorld: StagePoint,
+  currentWorld: StagePoint,
+): StageMarqueeDirection {
+  return currentWorld.x >= startWorld.x ? 'ltr' : 'rtl'
+}
+
+/** 修饰键表达的是与既有选区的布尔组合，与判定模式正交。 */
+function marqueeCombine(modifiers: StageInteractionModifiers): StageMarqueeCombine {
+  if (modifiers.shift) return 'add'
+  if (modifiers.alt) return 'subtract'
+  return 'replace'
 }
 
 function selectionBounds(index: StageSceneIndex, ids: readonly string[]) {
@@ -1064,7 +1097,7 @@ export function createStageInteractionController(): StageInteractionController {
                 ? 'copy'
                 : next.temporaryPan || context?.tool === 'pan'
                   ? 'grab'
-                  : isDrawingTool(context?.tool ?? 'select')
+                  : isDrawingTool(context?.tool ?? 'select') || context?.tool === 'marquee'
                     ? 'crosshair'
                   : 'default'
     return {
@@ -1123,6 +1156,10 @@ export function createStageInteractionController(): StageInteractionController {
         ...snapshot,
         phase: 'marquee',
         marquee: rectFromPoints(gesture.startWorld, world),
+        marqueeHitTest: resolveMarqueeHitTest(
+          context?.marqueeMode,
+          marqueeDirection(gesture.startWorld, world),
+        ),
       })
       return
     }
@@ -1473,6 +1510,46 @@ export function createStageInteractionController(): StageInteractionController {
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
     }
+    const startMarquee = () => {
+      const viewport = context!.viewport
+      const startWorld = worldPoint(event.point, viewport)
+      const outputHit = event.hit.kind === 'output'
+      if (outputHit) {
+        effects.push(
+          { type: 'selection.change', selectedIds: [] },
+          { type: 'output.select' },
+        )
+      }
+      gesture = {
+        type: 'marquee',
+        pointerId: event.pointerId,
+        viewport,
+        startWorld,
+        origin: outputHit ? 'output' : 'surface',
+        baseSelection: context!.selectedIds,
+        currentWorld: startWorld,
+      }
+      publish({
+        ...initialSnapshot(snapshot.temporaryPan),
+        phase: 'marquee',
+        // 起点即终点，方向尚未确定；按下的一瞬间先按 ltr 归约，移动时会立即刷新。
+        marqueeHitTest: resolveMarqueeHitTest(context!.marqueeMode, 'ltr'),
+      })
+      apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
+    }
+    // marquee 工具压在节点上也起框，这是它与 select 唯一的行为差异——密集画布上用户否则
+    // 无处下手。命中判定与组合规则两者完全一致。
+    if (
+      context.tool === 'marquee'
+      && (
+        event.hit.kind === 'surface'
+        || event.hit.kind === 'output'
+        || event.hit.kind === 'entity'
+      )
+    ) {
+      startMarquee()
+      return
+    }
     if (
       isDrawingTool(context.tool)
       && (
@@ -1687,25 +1764,7 @@ export function createStageInteractionController(): StageInteractionController {
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
     }
-    const viewport = context.viewport
-    const startWorld = worldPoint(event.point, viewport)
-    const outputHit = event.hit.kind === 'output'
-    if (outputHit) {
-      effects.push(
-        { type: 'selection.change', selectedIds: [] },
-        { type: 'output.select' },
-      )
-    }
-    gesture = {
-      type: 'marquee',
-      pointerId: event.pointerId,
-      viewport,
-      startWorld,
-      origin: outputHit ? 'output' : 'surface',
-      currentWorld: startWorld,
-    }
-    publish({ ...initialSnapshot(snapshot.temporaryPan), phase: 'marquee' })
-    apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
+    startMarquee()
   }
 
   const finish = (
@@ -1746,20 +1805,16 @@ export function createStageInteractionController(): StageInteractionController {
       })
     }
     else if (finished.type === 'marquee') {
-      const area = rectFromPoints(finished.startWorld, finished.currentWorld)
-      const selectedIds = area.width < 1 && area.height < 1
-        ? []
-        : index.order.filter((id) => {
-            const entity = context!.document.entities[id]
-            const bounds = index!.getWorldBounds(id)
-            return Boolean(
-              entity
-              && bounds
-              && index!.isVisible(id)
-              && !getComposeLock(entity).locked
-              && intersects(area, bounds),
-            )
-          })
+      const selectedIds = resolveMarqueeSelection({
+        area: rectFromPoints(finished.startWorld, finished.currentWorld),
+        base: finished.baseSelection,
+        // 组合意图以释放时按住的修饰键为准，用户可以在拖拽途中改主意。
+        combine: marqueeCombine(event.modifiers),
+        direction: marqueeDirection(finished.startWorld, finished.currentWorld),
+        document: context.document,
+        index,
+        mode: context.marqueeMode,
+      })
       if (finished.origin !== 'output' || selectedIds.length > 0) {
         effects.push({ type: 'selection.change', selectedIds })
       }

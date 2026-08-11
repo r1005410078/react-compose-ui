@@ -49,6 +49,7 @@ import type {
 import type {
   ComposeStageDelegatableAction,
   ComposeStageProps,
+  ComposeStageMarqueeMode,
   ComposeStageTool,
 } from '@compose-ui/stage'
 import type {
@@ -375,6 +376,8 @@ export function useComposeEditorController({
   const [lastShapeTool, setLastShapeTool] = useState<ShapeDrawingTool>(
     () => isShapeDrawingTool(initialTool) ? initialTool : 'draw-rectangle',
   )
+  // 框选判定模式是会话偏好而非文档数据，事实来源留在编辑器，Stage 只接收受控值。
+  const [marqueeMode, setMarqueeMode] = useState<ComposeStageMarqueeMode>('intersect')
   const setTool = useCallback((nextTool: ComposeStageTool) => {
     if (isShapeDrawingTool(nextTool)) setLastShapeTool(nextTool)
     setToolState(nextTool)
@@ -594,6 +597,7 @@ export function useComposeEditorController({
     onViewportChange: setViewport,
     gridVisible,
     tool,
+    marqueeMode,
     onToolChange: setTool,
     onShortcutAction: runShortcutAction,
     selectedIds,
@@ -618,6 +622,7 @@ export function useComposeEditorController({
     setViewport,
     gridVisible,
     tool,
+    marqueeMode,
     setTool,
     selectedIds,
     resolvedInspectionTarget,
@@ -866,6 +871,8 @@ export function useComposeEditorController({
         setGridSize={setGridSize}
         setGridVisible={setGridVisible}
         lastShapeTool={lastShapeTool}
+        marqueeMode={marqueeMode}
+        setMarqueeMode={setMarqueeMode}
         setTool={setTool}
         toggleSnap={toggleSnap}
         tool={tool}

@@ -5,6 +5,7 @@ import type {
   StageInteractionHit,
   StageInteractionTool,
   StageDrawingPreview,
+  StageMarqueeMode,
   StagePaintHandle,
   StagePaintSamplePreview,
   StagePoint,
@@ -41,6 +42,8 @@ interface StageOverlayProps {
   readonly textEditing: boolean
   readonly tool: StageInteractionTool
   readonly drawing: StageDrawingPreview | null
+  /** 当前框选实际生效的判定；决定 marquee 边框是实线还是虚线。 */
+  readonly marqueeHitTest: Exclude<StageMarqueeMode, 'directional'> | null
   readonly marqueeScreen: StageRect | null
   readonly snapGuides: readonly StageGuide[]
   readonly paintHandles: readonly StagePaintHandle[]
@@ -119,6 +122,7 @@ export function StageOverlay({
   textEditing,
   tool,
   drawing,
+  marqueeHitTest,
   marqueeScreen,
   paintHandles,
   paintSample,
@@ -451,6 +455,7 @@ export function StageOverlay({
       {marqueeScreen ? (
         <rect
           className="compose-stage__marquee"
+          data-marquee-mode={marqueeHitTest ?? 'intersect'}
           data-testid="stage-marquee"
           height={marqueeScreen.height}
           width={marqueeScreen.width}

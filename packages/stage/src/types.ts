@@ -12,6 +12,7 @@ import type {
 import type {
   StageInteractionController,
   StageInteractionTool,
+  StageMarqueeMode,
   StagePaintEditing,
   StagePaintSampling,
   StageViewport,
@@ -23,6 +24,13 @@ import type {
  * @public
  */
 export type ComposeStageTool = StageInteractionTool
+
+/**
+ * Stage 的受控框选判定模式。
+ *
+ * @public
+ */
+export type ComposeStageMarqueeMode = StageMarqueeMode
 
 /**
  * Stage 可配置的单次键位。
@@ -146,6 +154,14 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly tool: ComposeStageTool
   /** 请求切换选择或平移工具；省略时对应快捷键不改变工具。 */
   readonly onToolChange?: (tool: ComposeStageTool) => void
+  /**
+   * 框选命中判定模式；`select` 与 `marquee` 两个入口共用同一个值。
+   *
+   * @remarks
+   * Stage 只消费该值，模式的事实来源由宿主持有——Stage 自身没有切换模式的 UI。
+   * @defaultValue 'intersect'
+   */
+  readonly marqueeMode?: ComposeStageMarqueeMode
   /** 覆盖 Stage 默认动作键位；动作空数组表示禁用。 */
   readonly shortcuts?: ComposeStageShortcuts
   /**

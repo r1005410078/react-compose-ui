@@ -10,6 +10,7 @@ export type ComposeEditorShortcutAction =
   | 'editor.settings'
   | 'stage.temporaryPan'
   | 'stage.selectTool'
+  | 'stage.marqueeTool'
   | 'stage.moveTool'
   | 'stage.scaleTool'
   | 'stage.rotateTool'
@@ -81,6 +82,7 @@ export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'editor.settings',
   'stage.temporaryPan',
   'stage.selectTool',
+  'stage.marqueeTool',
   'stage.moveTool',
   'stage.scaleTool',
   'stage.rotateTool',
@@ -116,6 +118,7 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
   'editor.settings': 'editor',
   'stage.temporaryPan': 'stage',
   'stage.selectTool': 'stage',
+  'stage.marqueeTool': 'stage',
   'stage.moveTool': 'stage',
   'stage.scaleTool': 'stage',
   'stage.rotateTool': 'stage',
@@ -159,6 +162,7 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
       'editor.settings': [{ code: 'Comma', primary: true }],
       'stage.temporaryPan': [{ code: 'Space' }],
       'stage.selectTool': [{ code: 'KeyV' }],
+      'stage.marqueeTool': [{ code: 'KeyB' }],
       'stage.moveTool': [{ code: 'KeyM' }],
       'stage.scaleTool': [{ code: 'KeyS' }],
       'stage.rotateTool': [{ code: 'KeyR', shift: true }],

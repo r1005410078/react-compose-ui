@@ -10,6 +10,9 @@ type StageToolbarIconName =
   | 'grid'
   | 'grid-snap'
   | 'line'
+  | 'marquee-contain'
+  | 'marquee-directional'
+  | 'marquee-intersect'
   | 'move'
   | 'pan'
   | 'rectangle'
@@ -85,6 +88,27 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
       </g>
     ),
     line: <path d="M4 19 20 5" />,
+    // 三个框选图标共用「外框 + 内部节点」的构图，外框虚实与 Overlay 的边框语义一致：
+    // 虚线表示碰到即选中，实线表示要完全框住。
+    'marquee-intersect': (
+      <>
+        <rect height="11" rx="1" strokeDasharray="3 2.5" width="11" x="3.5" y="3.5" />
+        <rect height="8" rx="1" width="8" x="10.5" y="10.5" />
+      </>
+    ),
+    'marquee-contain': (
+      <>
+        <rect height="17" rx="1" width="17" x="3.5" y="3.5" />
+        <rect height="8" rx="1" width="8" x="8" y="8" />
+      </>
+    ),
+    'marquee-directional': (
+      <>
+        <rect height="10" rx="1" width="17" x="3.5" y="3.5" />
+        <path d="M4.5 19h15" />
+        <path d="m7.5 16.5-3 2.5 3 2.5M16.5 16.5l3 2.5-3 2.5" />
+      </>
+    ),
     move: (
       <>
         <path d="M12 3v18M3 12h18" />

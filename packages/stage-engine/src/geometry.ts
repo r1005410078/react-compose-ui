@@ -372,6 +372,35 @@ export function unionRects(rects: readonly StageRect[]): StageRect | null {
   return { x, y, width: right - x, height: bottom - y }
 }
 
+/**
+ * 判断两个世界矩形是否相交。
+ *
+ * @remarks
+ * 边缘接触算相交。框选的「碰到即选中」预期下，用户把框正好拖到节点边上时应当选中，
+ * 因此这里不做开区间判定。
+ * @public
+ */
+export function rectsIntersect(first: StageRect, second: StageRect): boolean {
+  return first.x <= second.x + second.width
+    && first.x + first.width >= second.x
+    && first.y <= second.y + second.height
+    && first.y + first.height >= second.y
+}
+
+/**
+ * 判断 `inner` 是否完全落在 `outer` 内。
+ *
+ * @remarks
+ * 边缘重合算包含，与 {@link rectsIntersect} 的闭区间判定保持一致。
+ * @public
+ */
+export function rectContains(outer: StageRect, inner: StageRect): boolean {
+  return inner.x >= outer.x
+    && inner.y >= outer.y
+    && inner.x + inner.width <= outer.x + outer.width
+    && inner.y + inner.height <= outer.y + outer.height
+}
+
 function rectLines(rect: StageRect, delta: StagePoint, axis: 'x' | 'y') {
   return axis === 'x'
     ? [

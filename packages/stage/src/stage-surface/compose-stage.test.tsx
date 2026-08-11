@@ -229,10 +229,12 @@ function renderStage(
     scope?: import('@compose-ui/script-runtime').ComposePageScriptScope
     registry?: ReturnType<typeof createComposeEntityRegistry>
     tool?: import('../types').ComposeStageTool
+    marqueeMode?: import('../types').ComposeStageMarqueeMode
   } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
   const dispatchSpy = vi.fn()
+  const selectionSpy = vi.fn()
   const dispatch: ComposeStageDispatch = (command) => {
     dispatchSpy(command)
     return runtime.dispatch(command)
@@ -243,7 +245,8 @@ function renderStage(
       document={value}
       gridVisible={options.gridVisible}
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
-      onSelectedIdsChange={vi.fn()}
+      marqueeMode={options.marqueeMode}
+      onSelectedIdsChange={selectionSpy}
       onViewportChange={vi.fn()}
       registry={options.registry ?? registry}
       scriptScope={options.scope}
@@ -253,7 +256,7 @@ function renderStage(
       viewport={{ x: 0, y: 0, zoom: 1 }}
     />,
   )
-  return { dispatch: dispatchSpy, runtime }
+  return { dispatch: dispatchSpy, runtime, selection: selectionSpy }
 }
 
 describe('ComposeStage ECS', () => {
@@ -410,6 +413,7 @@ describe('ComposeStage ECS', () => {
         textEditing={false}
         handlePoints={null}
         label="Editing overlay"
+        marqueeHitTest={null}
         marqueeScreen={null}
         paintHandles={[]}
         paintSample={null}
@@ -1010,5 +1014,97 @@ describe('ComposeStage 画布内原地文字编辑', () => {
 
     fireEvent.keyDown(screen.getByRole('application'), { key: 'Enter' })
     expect(screen.getByTestId('editable-text')).toBeInTheDocument()
+  })
+})
+
+describe('ComposeStage 框选判定模式', () => {
+  afterEach(cleanup)
+
+  /** 夹具 Entity 占世界 20..120 x 30..80，zoom 为 1 时与屏幕坐标一致。 */
+  function dragMarquee(
+    from: { readonly x: number; readonly y: number },
+    to: { readonly x: number; readonly y: number },
+    target: HTMLElement,
+  ) {
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      button: 0,
+      clientX: from.x,
+      clientY: from.y,
+    })
+    // buttons 必须非 0，否则 Stage 会把这一下当作按键已松开而直接结束手势。
+    fireEvent.pointerMove(target, { pointerId: 1, buttons: 1, clientX: to.x, clientY: to.y })
+  }
+
+  function releaseMarquee(
+    to: { readonly x: number; readonly y: number },
+    target: HTMLElement,
+  ) {
+    fireEvent.pointerUp(target, { pointerId: 1, clientX: to.x, clientY: to.y })
+  }
+
+  /** pointermove 经过 rAF 合帧，marquee 的 Overlay 属性要等下一帧才可读。 */
+  async function marqueeHitTest() {
+    return await waitFor(
+      () => screen.getByTestId('stage-marquee').getAttribute('data-marquee-mode'),
+    )
+  }
+
+  it('OpenSpec: 选择与框选 / 包含模式排除只被压住一半的节点', () => {
+    const surface = () => screen.getByTestId('stage-surface')
+    const contained = renderStage(document(), { marqueeMode: 'contain' })
+    dragMarquee({ x: 0, y: 0 }, { x: 60, y: 100 }, surface())
+    releaseMarquee({ x: 60, y: 100 }, surface())
+    expect(contained.selection).toHaveBeenLastCalledWith([])
+
+    cleanup()
+    const intersected = renderStage(document(), { marqueeMode: 'intersect' })
+    dragMarquee({ x: 0, y: 0 }, { x: 60, y: 100 }, surface())
+    releaseMarquee({ x: 60, y: 100 }, surface())
+    expect(intersected.selection).toHaveBeenLastCalledWith(['a'])
+  })
+
+  it('OpenSpec: 选择与框选 / 包含模式选中被完整框住的节点', () => {
+    const surface = () => screen.getByTestId('stage-surface')
+    const { selection } = renderStage(document(), { marqueeMode: 'contain' })
+    dragMarquee({ x: 0, y: 0 }, { x: 200, y: 200 }, surface())
+    releaseMarquee({ x: 200, y: 200 }, surface())
+    expect(selection).toHaveBeenLastCalledWith(['a'])
+  })
+
+  it('OpenSpec: 选择与框选 / 使用框选工具从节点上起框', () => {
+    const { dispatch, selection } = renderStage(document(), { tool: 'marquee' })
+    const entity = screen.getByTestId('stage-entity-a')
+    dragMarquee({ x: 30, y: 40 }, { x: 200, y: 200 }, entity)
+    releaseMarquee({ x: 200, y: 200 }, entity)
+    // 起框而非移动：不得产生任何事务。
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(selection).toHaveBeenLastCalledWith(['a'])
+  })
+
+  it('OpenSpec: 选择与框选 / Overlay 区分判定模式', async () => {
+    const surface = () => screen.getByTestId('stage-surface')
+    for (const [marqueeMode, expected] of [
+      ['intersect', 'intersect'],
+      ['contain', 'contain'],
+    ] as const) {
+      renderStage(document(), { marqueeMode })
+      dragMarquee({ x: 0, y: 0 }, { x: 60, y: 100 }, surface())
+      expect(await marqueeHitTest()).toBe(expected)
+      releaseMarquee({ x: 60, y: 100 }, surface())
+      cleanup()
+    }
+
+    // 方向决定模式下同一个框按拖拽方向切换判定。
+    renderStage(document(), { marqueeMode: 'directional' })
+    dragMarquee({ x: 0, y: 0 }, { x: 60, y: 100 }, surface())
+    expect(await marqueeHitTest()).toBe('contain')
+    releaseMarquee({ x: 60, y: 100 }, surface())
+    cleanup()
+
+    renderStage(document(), { marqueeMode: 'directional' })
+    dragMarquee({ x: 60, y: 100 }, { x: 0, y: 0 }, surface())
+    expect(await marqueeHitTest()).toBe('intersect')
+    releaseMarquee({ x: 0, y: 0 }, surface())
   })
 })

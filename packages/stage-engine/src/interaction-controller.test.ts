@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createStageInteractionController,
   type StageInteractionEffect,
+  type StageInteractionTool,
 } from './interaction-controller'
+import type { StageMarqueeMode } from './marquee-selection'
 import { document, entity, layoutSnapshot } from './test-fixtures'
 
 const modifiers = { shift: false, alt: false, command: false }
@@ -1248,5 +1250,112 @@ describe('StageInteractionController 内容重排实体的缩放', () => {
         },
       },
     })
+  })
+})
+
+describe('框选工具与选区布尔组合', () => {
+  /** left 占 0..100，right 占 200..300，两者都高 50。 */
+  const marqueeDocument = document([
+    entity('left', { x: 0, y: 0, width: 100, height: 50 }),
+    entity('right', { x: 200, y: 0, width: 100, height: 50 }),
+  ])
+
+  function marqueeSetup(options: {
+    readonly marqueeMode?: StageMarqueeMode
+    readonly selectedIds?: readonly string[]
+    readonly tool?: StageInteractionTool
+  } = {}) {
+    const effects: StageInteractionEffect[] = []
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: (next) => effects.push(...next),
+    })
+    controller.updateContext({
+      document: marqueeDocument,
+      layoutSnapshot: layoutSnapshot(marqueeDocument),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: options.tool ?? 'select',
+      marqueeMode: options.marqueeMode,
+      selectedIds: options.selectedIds ?? [],
+      idFactory: () => 'marquee-id',
+    })
+    const drag = (
+      from: { readonly x: number; readonly y: number },
+      to: { readonly x: number; readonly y: number },
+      hit: { readonly kind: 'surface' } | { readonly kind: 'entity'; readonly entityId: string } = { kind: 'surface' },
+      release = modifiers,
+    ) => {
+      controller.send({ type: 'pointer.down', pointerId: 1, button: 0, point: from, hit, modifiers })
+      controller.send({ type: 'pointer.move', pointerId: 1, point: to, modifiers: release })
+      const duringDrag = controller.getSnapshot()
+      controller.send({ type: 'pointer.up', pointerId: 1, point: to, modifiers: release })
+      return duringDrag
+    }
+    const selection = () => {
+      const changes = effects.filter((effect) => effect.type === 'selection.change')
+      return changes[changes.length - 1]
+    }
+    return { controller, drag, effects, selection }
+  }
+
+  it('OpenSpec: 框选工具从节点上起框', () => {
+    const { controller, drag, effects, selection } = marqueeSetup({ tool: 'marquee' })
+    const duringDrag = drag({ x: 10, y: 10 }, { x: 280, y: 40 }, { kind: 'entity', entityId: 'left' })
+    expect(duringDrag.phase).toBe('marquee')
+    expect(controller.getSnapshot().phase).toBe('idle')
+    // 起框而非移动：不得产生任何 transform 命令。
+    expect(effects.some((effect) => effect.type === 'command.dispatch')).toBe(false)
+    expect(selection()).toMatchObject({ selectedIds: ['left', 'right'] })
+  })
+
+  it('OpenSpec: 选择工具保持空白起框', () => {
+    const { controller, drag } = marqueeSetup({ tool: 'select', selectedIds: ['left'] })
+    const duringDrag = drag({ x: 10, y: 10 }, { x: 40, y: 30 }, { kind: 'entity', entityId: 'left' })
+    expect(duringDrag.phase).toBe('move')
+    expect(controller.getSnapshot().phase).toBe('idle')
+  })
+
+  it('OpenSpec: 未传入模式时回退相交', () => {
+    const { drag, selection } = marqueeSetup()
+    drag({ x: -10, y: -10, }, { x: 50, y: 60 })
+    expect(selection()).toMatchObject({ selectedIds: ['left'] })
+  })
+
+  it('OpenSpec: 框选判定模式协议 / 包含模式排除部分重叠节点', () => {
+    const { drag, selection } = marqueeSetup({ marqueeMode: 'contain' })
+    drag({ x: -10, y: -10 }, { x: 50, y: 60 })
+    expect(selection()).toMatchObject({ selectedIds: [] })
+    drag({ x: -10, y: -10 }, { x: 120, y: 60 })
+    expect(selection()).toMatchObject({ selectedIds: ['left'] })
+  })
+
+  it('OpenSpec: 框选判定模式协议 / 方向决定模式按拖拽方向切换判定', () => {
+    const rightward = marqueeSetup({ marqueeMode: 'directional' })
+    const rightwardDrag = rightward.drag({ x: -10, y: -10 }, { x: 50, y: 60 })
+    expect(rightwardDrag.marqueeHitTest).toBe('contain')
+    expect(rightward.selection()).toMatchObject({ selectedIds: [] })
+
+    const leftward = marqueeSetup({ marqueeMode: 'directional' })
+    const leftwardDrag = leftward.drag({ x: 50, y: 60 }, { x: -10, y: -10 })
+    expect(leftwardDrag.marqueeHitTest).toBe('intersect')
+    expect(leftward.selection()).toMatchObject({ selectedIds: ['left'] })
+  })
+
+  it('OpenSpec: Shift 加选与 Alt 减选', () => {
+    const added = marqueeSetup({ selectedIds: ['right'] })
+    added.drag({ x: -10, y: -10 }, { x: 50, y: 60 }, { kind: 'surface' }, { ...modifiers, shift: true })
+    expect(added.selection()).toMatchObject({ selectedIds: ['right', 'left'] })
+
+    const subtracted = marqueeSetup({ selectedIds: ['left', 'right'] })
+    subtracted.drag({ x: -10, y: -10 }, { x: 50, y: 60 }, { kind: 'surface' }, { ...modifiers, alt: true })
+    expect(subtracted.selection()).toMatchObject({ selectedIds: ['right'] })
+  })
+
+  it('OpenSpec: 手势预览与原子提交 / 框选不产生文档事务', () => {
+    const { drag, effects } = marqueeSetup({ tool: 'marquee' })
+    drag({ x: -10, y: -10 }, { x: 400, y: 100 })
+    expect(effects.some((effect) => effect.type === 'command.dispatch')).toBe(false)
   })
 })

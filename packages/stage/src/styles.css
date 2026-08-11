@@ -285,7 +285,11 @@
   font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
-.compose-stage__marquee {
+/*
+ * 相交判定用虚线、包含判定用实线，沿用 CAD 的既有心智。方向决定模式下判定随拖拽方向切换，
+ * 这条边框是用户唯一能看出当前生效判定的反馈。
+ */
+.compose-stage__marquee[data-marquee-mode='intersect'] {
   stroke-dasharray: 4 3;
 }
 
