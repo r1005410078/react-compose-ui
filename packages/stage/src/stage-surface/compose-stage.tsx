@@ -798,6 +798,15 @@ function useComposeStageMeasurement({
   return adapter
 }
 
+/**
+ * 双击判定窗口与容差。
+ *
+ * Pointer Events 规范规定 `pointerdown` 的 `detail` 恒为 0，拿不到浏览器的连击计数，
+ * 只能自己归一化。500ms / 5px 取各平台双击判定的常见值。
+ */
+const DOUBLE_CLICK_INTERVAL_MS = 500
+const DOUBLE_CLICK_SLOP_PX = 5
+
 /** 读取 Entity 当前 authored 的可编辑纯文本；不可编辑或缺失时返回空串。 */
 function entityEditableText(
   value: ComposeDocument,
@@ -872,6 +881,12 @@ function ComposeStageReady({
   const pendingRef = useRef<PendingPointerSample | null>(null)
   const frameRequestRef = useRef<number | null>(null)
   const pointerRouteCleanupRef = useRef<(() => void) | null>(null)
+  const lastPointerDownRef = useRef<{
+    readonly time: number
+    readonly x: number
+    readonly y: number
+    readonly count: number
+  } | null>(null)
   const expectedLostCaptureRef = useRef(new Map<number, number[]>())
   const [privateController] = useState(createStageInteractionController)
   const controller = interactionController ?? privateController
@@ -1906,6 +1921,23 @@ function ComposeStageReady({
       modifiers: modifiers(event),
     }
     pendingPointerStartRef.current = start
+    // 归一化连击计数：`event.detail` 在 pointerdown 上恒为 0，测试用例可显式给出。
+    const now = event.timeStamp || Date.now()
+    const previous = lastPointerDownRef.current
+    const clickCount = event.detail > 0
+      ? event.detail
+      : previous
+        && now - previous.time <= DOUBLE_CLICK_INTERVAL_MS
+        && Math.abs(event.clientX - previous.x) <= DOUBLE_CLICK_SLOP_PX
+        && Math.abs(event.clientY - previous.y) <= DOUBLE_CLICK_SLOP_PX
+        ? previous.count + 1
+        : 1
+    lastPointerDownRef.current = {
+      time: now,
+      x: event.clientX,
+      y: event.clientY,
+      count: clickCount,
+    }
     try {
       controller.send({
         type: 'pointer.down',
@@ -1914,8 +1946,7 @@ function ComposeStageReady({
         point: start.point,
         hit,
         modifiers: start.modifiers,
-        // 浏览器已按平台的双击时间窗口累计 detail，Controller 不必自己计时。
-        clickCount: event.detail,
+        clickCount,
       })
     }
     finally {

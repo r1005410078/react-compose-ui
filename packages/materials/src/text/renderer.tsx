@@ -44,15 +44,27 @@ function TextEditable({
     const node = ref.current
     if (!node) return
     node.textContent = seed
-    node.focus()
-    // 光标落到文末，与主流设计工具进入编辑后的行为一致。
-    const selection = node.ownerDocument.defaultView?.getSelection()
-    if (!selection) return
-    const range = node.ownerDocument.createRange()
-    range.selectNodeContents(node)
-    range.collapse(false)
-    selection.removeAllRanges()
-    selection.addRange(range)
+    const view = node.ownerDocument.defaultView
+    // 双击进入时，本次 pointerdown 的浏览器默认动作会在 React 同步 commit 之后才把焦点
+    // 挪走；此处若立即 focus 会被它清掉，焦点落到 body，键盘输入全部丢失。推迟一帧，
+    // 让默认动作先跑完。
+    const focusNode = () => {
+      node.focus()
+      // 光标落到文末，与主流设计工具进入编辑后的行为一致。
+      const selection = view?.getSelection()
+      if (!selection) return
+      const range = node.ownerDocument.createRange()
+      range.selectNodeContents(node)
+      range.collapse(false)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+    if (!view?.requestAnimationFrame) {
+      focusNode()
+      return
+    }
+    const frame = view.requestAnimationFrame(focusNode)
+    return () => view.cancelAnimationFrame(frame)
     // 只在挂载时播种：seed 变化不应回写，否则会覆盖编辑中的内容。
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 见上方说明，seed 只作初值
   }, [])

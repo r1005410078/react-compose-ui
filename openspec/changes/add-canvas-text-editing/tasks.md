@@ -35,7 +35,7 @@
 - [x] 4.5 编辑目标原地可编辑渲染、获取焦点，退出后焦点交还 surface
 - [x] 4.6 输入只写编辑中值覆盖不派发命令，退出时清除覆盖
 - [x] 4.7 退出时向 Registry 查 prop 名，按「有变化 / 为空 / 无变化」收敛为最多一条事务
-- [ ] 4.8 验证 Auto width 在输入过程中经既有 measurement 链路实时改宽
+- [x] 4.8 验证 Auto width 在输入过程中经既有 measurement 链路实时改宽
 
 ## 5. Text 物料
 
@@ -45,13 +45,13 @@
 
 ## 6. 端到端
 
-- [ ] 6.1 e2e：点击创建 → 直接输入 → 点击别处提交 → 只增加一次事务
-- [ ] 6.2 e2e：双击改写 → `Esc` 提交 → 撤销一次回到原内容
-- [ ] 6.3 e2e：空内容退出删除实体且可撤销
-- [ ] 6.4 复核既有 e2e 中用 `drawText` 创建文字的用例是否需要跟随调整
+- [x] 6.1 e2e：点击创建 → 直接输入 → 点击别处提交 → 只增加一次事务
+- [x] 6.2 e2e：双击改写 → `Esc` 提交 → 撤销一次回到原内容
+- [x] 6.3 e2e：空内容退出删除实体且可撤销
+- [x] 6.4 复核既有 e2e 中用 `drawText` 创建文字的用例是否需要跟随调整
 
 ## 7. 验证
 
-- [ ] 7.1 `bun run lint && bun run typecheck && bun run test && bun run build`
-- [ ] 7.2 `bun run test:e2e`
-- [ ] 7.3 `openspec validate add-canvas-text-editing --strict`
+- [x] 7.1 `bun run lint && bun run typecheck && bun run test && bun run build`
+- [x] 7.2 `bun run test:e2e`
+- [x] 7.3 `openspec validate add-canvas-text-editing --strict`

@@ -1,4 +1,4 @@
-import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
@@ -192,7 +192,7 @@ describe('Basic ECS materials', () => {
     expect(materials.registry.getEditableTextPropName(rectangle)).toBeNull()
   })
 
-  it('OpenSpec: 内建 Text 物料 / 编辑态原地渲染并保持排版一致', () => {
+  it('OpenSpec: 内建 Text 物料 / 编辑态原地渲染并保持排版一致', async () => {
     const materials = createComposeBasicMaterials()
     const text = seedEntity(materials, 'text')
     const onChange = vi.fn()
@@ -218,7 +218,8 @@ describe('Basic ECS materials', () => {
     expect(view.getByTestId('compose-material-text').getAttribute('style')).toBe(idleStyle)
     expect(editable).toHaveAttribute('contenteditable', 'true')
     expect(editable.textContent).toBe('Text')
-    expect(editable).toHaveFocus()
+    // 聚焦推迟一帧，避开本次 pointerdown 默认动作对焦点的重置。
+    await waitFor(() => { expect(editable).toHaveFocus() })
   })
 
   it('OpenSpec: 内建 Text 物料 / 输入与粘贴只保留纯文本', () => {

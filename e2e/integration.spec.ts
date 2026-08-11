@@ -44,6 +44,9 @@ async function drawText(page: Page, editor: Locator, at: { x: number; y: number 
   await page.mouse.down()
   await page.mouse.move(at.x + 120, at.y + 44, { steps: 6 })
   await page.mouse.up()
+  // 绘制结束会立刻进入原地编辑；这些用例只需要实体存在，先按 Esc 退出。内容未改动，
+  // 因此退出不产生任何事务，后续的历史断言不受影响。
+  await page.keyboard.press('Escape')
   await editor.getByRole('button', { name: '选择' }).click()
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(before + 1)
 }
@@ -2899,4 +2902,100 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / Canvas 标尺对�
     clip: { x: stageBox!.x, y: stageBox!.y, width: 320, height: 220 },
     maxDiffPixelRatio: 0.01,
   })
+})
+
+test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输入并提交为一条事务', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  // 点击（而不是拖拽）创建 Auto width 文字，光标应当直接落进去。
+  await editor.getByRole('button', { name: '文字' }).click()
+  await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
+
+  const editable = stage.getByTestId('compose-material-text-editable')
+  await expect(editable).toBeFocused()
+  await expect(stage.getByTestId('stage-text-editing-bounds')).toBeVisible()
+  // 编辑态不显示八向与旋转手柄。
+  await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
+  await expect(stage.getByTestId('stage-rotation-handle')).toHaveCount(0)
+
+  const seededWidth = (await editable.boundingBox())!.width
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type('Hello canvas')
+  // Auto width 必须在输入过程中经既有 measurement 链路实时改宽。
+  await expect
+    .poll(async () => (await editable.boundingBox())!.width)
+    .toBeGreaterThan(seededWidth)
+
+  // output 是 1280×720 的世界尺寸，远大于 Stage 视口；点击必须落在两者的交集内，
+  // 否则事件根本不会送到 Stage。
+  await page.mouse.click(outputBox!.x + 420, outputBox!.y + 320)
+  await expect(stage.getByTestId('compose-material-text-editable')).toHaveCount(0)
+  await expect(stage.getByTestId('compose-material-text')).toContainText('Hello canvas')
+
+  // 创建是一条事务，文本提交是第二条；撤销一次只回退文本。
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
+  await expect(stage.getByTestId('compose-material-text')).not.toContainText('Hello canvas')
+})
+
+test('OpenSpec: stage / 画布内原地文字编辑 / 双击改写后 Esc 提交并可撤销', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await drawText(page, editor, { x: outputBox!.x + 200, y: outputBox!.y + 160 })
+  const text = stage.getByTestId('compose-material-text')
+  const original = (await text.textContent())!
+
+  await text.dblclick()
+  const editable = stage.getByTestId('compose-material-text-editable')
+  await expect(editable).toBeFocused()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type('改写后的文案')
+  await page.keyboard.press('Escape')
+
+  await expect(stage.getByTestId('compose-material-text-editable')).toHaveCount(0)
+  await expect(text).toContainText('改写后的文案')
+
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect(text).toContainText(original)
+})
+
+test('OpenSpec: stage / 画布内原地文字编辑 / 空内容退出删除实体且可撤销', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await drawText(page, editor, { x: outputBox!.x + 200, y: outputBox!.y + 160 })
+  await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
+
+  await stage.getByTestId('compose-material-text').dblclick()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.press('Delete')
+  await page.keyboard.press('Escape')
+
+  // 空 Hug 文字既不可见也很难再选中，退出时删除；删除是普通可撤销事务。
+  await expect(stage.getByTestId('compose-material-text')).toHaveCount(0)
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
 })
