@@ -433,23 +433,19 @@ export function StageOverlay({
               ) : null}
             </>
           ) : drawing.tool === 'draw-text' ? (
-            <>
-              <rect
-                height={drawingPreviewBounds.height}
-                width={drawingPreviewBounds.width}
-                x={drawingPreviewBounds.x}
-                y={drawingPreviewBounds.y}
-              />
-              {/* 预览里不画占位文案：点击创建出来的是空文字，直接进入编辑，
-                  提前显示 “Text” 等于承诺一段并不会存在的内容。只留光标。 */}
-              <line
-                className="compose-stage__drawing-preview-caret"
-                x1={drawingPreviewBounds.x + 5}
-                x2={drawingPreviewBounds.x + 5}
-                y1={drawingPreviewBounds.y + 10}
-                y2={drawingPreviewBounds.y + 32}
-              />
-            </>
+            /*
+             * 文字预览只画一根与行高等高的光标：文字只按点创建、尺寸由内容决定，
+             * 画一个框会暗示一块用户控制不了的区域；画占位文案则等于承诺一段并不会
+             * 存在的内容，松手即消失。光标落在按下点，正是文本将要开始的位置。
+             */
+            <line
+              className="compose-stage__drawing-preview-caret"
+              data-testid="stage-drawing-preview-caret"
+              x1={drawingPreviewBounds.x}
+              x2={drawingPreviewBounds.x}
+              y1={drawingPreviewBounds.y}
+              y2={drawingPreviewBounds.y + drawingPreviewBounds.height}
+            />
           ) : (
             <rect
               height={drawingPreviewBounds.height}

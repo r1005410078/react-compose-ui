@@ -1567,13 +1567,25 @@ test('OpenSpec: stage / 直接绘制 Preset / 文字工具只按点创建', asyn
   await page.mouse.move(target.x, target.y, { steps: 4 })
   const preview = stage.getByTestId('stage-drawing-preview')
   await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-text')
-  // 预览不得出现占位文案：创建出来的是空文字，提前显示 “Text” 会闪一下并不存在的内容。
+  // 占位文案不得出现在 Stage 的任何位置。范围必须是整个 Stage 而不是预览元素内部：
+  // 它曾经就画在预览框之外（y + 25，落在 16px 高的框下方），只查预览会漏掉。
   // 尺寸标签本身也是 SVG text，因此按内容精确匹配。
-  await expect(preview.getByText('Text', { exact: true })).toHaveCount(0)
-  // 文字只按点创建：既不标注尺寸，预览也不随拖拽变大。
+  await expect(stage.getByText('Text', { exact: true })).toHaveCount(0)
+  // 文字预览只有一根光标：不画框、不标尺寸，也不随拖拽变化。
+  const caret = preview.getByTestId('stage-drawing-preview-caret')
+  await expect(caret).toHaveCount(1)
+  await expect(preview.locator('rect')).toHaveCount(0)
   await expect(preview.locator('.compose-stage__drawing-dimensions')).toHaveCount(0)
-  const previewBox = await preview.boundingBox()
-  expect(previewBox!.width).toBeLessThan(64)
+  const caretGeometry = async () => caret.evaluate((node) => ({
+    x: node.getAttribute('x1'),
+    y1: node.getAttribute('y1'),
+    y2: node.getAttribute('y2'),
+  }))
+  const pressed = await caretGeometry()
+
+  await page.mouse.move(target.x + 120, target.y + 60, { steps: 4 })
+  await expect(stage.getByText('Text', { exact: true })).toHaveCount(0)
+  expect(await caretGeometry()).toEqual(pressed)
   await expect(stage).toHaveScreenshot('stage-drawing-text-preview.png', {
     animations: 'disabled',
     caret: 'hide',
