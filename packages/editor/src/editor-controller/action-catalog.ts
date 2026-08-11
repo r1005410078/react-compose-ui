@@ -2,9 +2,12 @@ import { BUILTIN_COMMAND_TYPES } from '@compose-ui/core'
 import {
   createDuplicateCommand,
   createGroupCommand,
+  createLayerOrderCommand,
   createUngroupCommand,
   getGroupCommandAvailability,
+  getLayerOrderCommandAvailability,
   getUngroupCommandAvailability,
+  type ComposeLayerOrderOperation,
 } from '@compose-ui/stage-engine'
 import { getComposeHierarchy, getComposeLock } from '@compose-ui/core'
 import type { ComposeCommandAction } from '@compose-ui/command-panel'
@@ -175,6 +178,18 @@ export function createComposeEditorActionHandlers(
   const selectionMissing: ComposeEditorActionDisabledKey | undefined = editable.length === 0
     ? 'noSelection'
     : undefined
+  const layerOrderDisabled = (
+    operation: ComposeLayerOrderOperation,
+  ): ComposeEditorActionDisabledKey | undefined => {
+    if (context.selectedIds.length === 0) return 'noSelection'
+    return getLayerOrderCommandAvailability(
+      document,
+      context.selectedIds,
+      operation,
+    ).available
+      ? undefined
+      : 'layerOrderBoundary'
+  }
 
   /** 包装 run：不可用时直接返回，保证目录被直接调用也不产生副作用。 */
   const handler = (
@@ -226,6 +241,42 @@ export function createComposeEditorActionHandlers(
       if (context.dispatch(duplicate.command).status === 'committed') {
         context.setSelectedIds([duplicate.rootId])
       }
+    }),
+    'edit.bringForward': handler(layerOrderDisabled('bring-forward'), () => {
+      const command = createLayerOrderCommand(
+        document,
+        context.selectedIds,
+        'bring-forward',
+        context.idFactory(),
+      )
+      if (command) context.dispatch(command)
+    }),
+    'edit.sendBackward': handler(layerOrderDisabled('send-backward'), () => {
+      const command = createLayerOrderCommand(
+        document,
+        context.selectedIds,
+        'send-backward',
+        context.idFactory(),
+      )
+      if (command) context.dispatch(command)
+    }),
+    'edit.bringToFront': handler(layerOrderDisabled('bring-to-front'), () => {
+      const command = createLayerOrderCommand(
+        document,
+        context.selectedIds,
+        'bring-to-front',
+        context.idFactory(),
+      )
+      if (command) context.dispatch(command)
+    }),
+    'edit.sendToBack': handler(layerOrderDisabled('send-to-back'), () => {
+      const command = createLayerOrderCommand(
+        document,
+        context.selectedIds,
+        'send-to-back',
+        context.idFactory(),
+      )
+      if (command) context.dispatch(command)
     }),
     'edit.group': handler(groupDisabled ?? geometryPending, () => {
       if (layoutSnapshot === null) return
@@ -303,6 +354,10 @@ const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'stage.toggleGridSnap',
   'stage.toggleSmartSnap',
   'edit.duplicate',
+  'edit.bringForward',
+  'edit.sendBackward',
+  'edit.bringToFront',
+  'edit.sendToBack',
   'edit.group',
   'edit.ungroup',
   'edit.delete',

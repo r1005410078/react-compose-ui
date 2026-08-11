@@ -10,6 +10,9 @@ describe('Compose context menu keybinding formatting', () => {
 
     expect(formatComposeKeybinding(binding, 'MacIntel')).toBe('⌘⇧=')
     expect(formatComposeKeybinding(binding, 'Win32')).toBe('Ctrl+Shift+=')
+    expect(formatComposeKeybinding({ code: 'BracketRight', primary: true }, 'MacIntel'))
+      .toBe('⌘]')
+    expect(formatComposeKeybinding({ code: 'BracketLeft' }, 'Win32')).toBe('[')
   })
 
   it('keeps every active alternative and hides an empty shortcut list', () => {

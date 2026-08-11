@@ -54,6 +54,28 @@ describe('editor preferences', () => {
     ])
   })
 
+  it('OpenSpec: editor-preferences / 可配置层级动作 / 规范化旧快捷键偏好', () => {
+    const defaults = createDefaultComposeEditorPreferences()
+    const legacyShortcuts = { ...defaults.shortcuts } as Record<string, unknown>
+    delete legacyShortcuts['edit.bringForward']
+    delete legacyShortcuts['edit.sendBackward']
+    delete legacyShortcuts['edit.bringToFront']
+    delete legacyShortcuts['edit.sendToBack']
+    const normalized = normalizeComposeEditorPreferences({
+      ...defaults,
+      shortcuts: legacyShortcuts as unknown as typeof defaults.shortcuts,
+    })
+
+    expect(normalized.shortcuts['edit.bringForward']).toEqual([{ code: 'BracketRight' }])
+    expect(normalized.shortcuts['edit.sendBackward']).toEqual([{ code: 'BracketLeft' }])
+    expect(normalized.shortcuts['edit.bringToFront']).toEqual([
+      { code: 'BracketRight', primary: true },
+    ])
+    expect(normalized.shortcuts['edit.sendToBack']).toEqual([
+      { code: 'BracketLeft', primary: true },
+    ])
+  })
+
   it('matches primary with Command or Control and requires exact modifiers', () => {
     const binding = { code: 'Comma', primary: true } as const
     expect(isComposeEditorKeybindingMatch({
@@ -105,6 +127,11 @@ describe('editor preferences', () => {
       'history.undo',
       { code: 'KeyV' },
     )).toBeNull()
+    expect(findComposeEditorShortcutConflict(
+      defaults.shortcuts,
+      'edit.sendBackward',
+      { code: 'BracketRight' },
+    )).toBe('edit.bringForward')
   })
 
   it('OpenSpec: editor-preferences / 快捷键输入隔离 / 文本编辑期间按导航键', () => {

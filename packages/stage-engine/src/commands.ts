@@ -3,6 +3,7 @@ import {
   getComposeHierarchy,
   getComposeLayout,
   getComposeLayoutItem,
+  getComposeLock,
   getComposeSpatialTransform,
   resolveComposeAppearance,
   type ComposeDocument,
@@ -31,6 +32,184 @@ import { describeEntityTargets } from './transaction-labels'
 export type ComposeStructureCommandAvailability =
   | { readonly available: true }
   | { readonly available: false; readonly reason: string }
+
+/** 同级节点绘制顺序操作；越靠后的 sibling 越位于前景。 @public */
+export type ComposeLayerOrderOperation =
+  | 'bring-forward'
+  | 'send-backward'
+  | 'bring-to-front'
+  | 'send-to-back'
+
+interface LayerOrderGroup {
+  readonly parentId: string | null
+  readonly siblings: readonly string[]
+  readonly selectedIds: readonly string[]
+}
+
+interface LayerOrderMove {
+  readonly entityIds: readonly string[]
+  readonly parentId: string | null
+  readonly index: number
+}
+
+const LAYER_ORDER_UNAVAILABLE_REASON = '选中节点已位于目标层级或不可移动'
+
+const LAYER_ORDER_LABELS: Readonly<Record<ComposeLayerOrderOperation, string>> = {
+  'bring-forward': 'Bring forward',
+  'send-backward': 'Send backward',
+  'bring-to-front': 'Bring to front',
+  'send-to-back': 'Send to back',
+}
+
+function collectLayerOrderGroups(
+  document: ComposeDocument,
+  entityIds: readonly string[],
+): readonly LayerOrderGroup[] {
+  const requested = new Set(entityIds)
+  const result: LayerOrderGroup[] = []
+  const visit = (
+    siblings: readonly string[],
+    parentId: string | null,
+    ancestorLocked: boolean,
+  ) => {
+    const parent = parentId === null ? null : document.entities[parentId]
+    const parentLocked = ancestorLocked || Boolean(parent && getComposeLock(parent).locked)
+    const selectedIds = parentLocked
+      ? []
+      : siblings.filter((id) => {
+          const entity = document.entities[id]
+          return requested.has(id) && entity !== undefined && !getComposeLock(entity).locked
+        })
+    if (selectedIds.length > 0) result.push({ parentId, siblings, selectedIds })
+    siblings.forEach((id) => {
+      const entity = document.entities[id]
+      const hierarchy = entity && getComposeHierarchy(entity)
+      if (hierarchy) {
+        visit(
+          hierarchy.childIds,
+          id,
+          parentLocked || getComposeLock(entity).locked,
+        )
+      }
+    })
+  }
+  visit(document.rootIds, null, false)
+  return result
+}
+
+function selectedBlocks(
+  siblings: readonly string[],
+  selectedIds: readonly string[],
+): readonly { readonly start: number; readonly end: number; readonly ids: readonly string[] }[] {
+  const selected = new Set(selectedIds)
+  const result: Array<{ start: number; end: number; ids: string[] }> = []
+  let current: { start: number; end: number; ids: string[] } | null = null
+  siblings.forEach((id, index) => {
+    if (!selected.has(id)) {
+      current = null
+      return
+    }
+    if (!current) {
+      current = { start: index, end: index, ids: [id] }
+      result.push(current)
+      return
+    }
+    current.end = index
+    current.ids.push(id)
+  })
+  return result
+}
+
+function layerOrderMoves(
+  group: LayerOrderGroup,
+  operation: ComposeLayerOrderOperation,
+): readonly LayerOrderMove[] {
+  const { parentId, selectedIds, siblings } = group
+  const selected = new Set(selectedIds)
+  if (operation === 'bring-to-front') {
+    const trailing = siblings.slice(siblings.length - selectedIds.length)
+    return trailing.every((id) => selected.has(id))
+      ? []
+      : [{ entityIds: selectedIds, parentId, index: siblings.length }]
+  }
+  if (operation === 'send-to-back') {
+    const leading = siblings.slice(0, selectedIds.length)
+    return leading.every((id) => selected.has(id))
+      ? []
+      : [{ entityIds: selectedIds, parentId, index: 0 }]
+  }
+  const blocks = selectedBlocks(siblings, selectedIds)
+  if (operation === 'bring-forward') {
+    return [...blocks].reverse().flatMap((block) => (
+      block.end < siblings.length - 1 && !selected.has(siblings[block.end + 1]!)
+        ? [{ entityIds: block.ids, parentId, index: block.end + 2 }]
+        : []
+    ))
+  }
+  return blocks.flatMap((block) => (
+    block.start > 0 && !selected.has(siblings[block.start - 1]!)
+      ? [{ entityIds: block.ids, parentId, index: block.start - 1 }]
+      : []
+  ))
+}
+
+function planLayerOrderMoves(
+  document: ComposeDocument,
+  entityIds: readonly string[],
+  operation: ComposeLayerOrderOperation,
+) {
+  return collectLayerOrderGroups(document, entityIds)
+    .flatMap((group) => layerOrderMoves(group, operation))
+}
+
+/** 判断当前选择能否继续执行指定同级层级操作。 @public */
+export function getLayerOrderCommandAvailability(
+  document: ComposeDocument,
+  entityIds: readonly string[],
+  operation: ComposeLayerOrderOperation,
+): ComposeStructureCommandAvailability {
+  return planLayerOrderMoves(document, entityIds, operation).length > 0
+    ? { available: true }
+    : { available: false, reason: LAYER_ORDER_UNAVAILABLE_REASON }
+}
+
+/**
+ * 创建只重排同级数组的原子层级命令。
+ *
+ * @returns 一个 `entity.move`、跨块/父级 batch，或在无变化时返回 `null`。
+ * @public
+ */
+export function createLayerOrderCommand(
+  document: ComposeDocument,
+  entityIds: readonly string[],
+  operation: ComposeLayerOrderOperation,
+  commandId = `layer-order:${operation}:${entityIds.join(',')}`,
+): EditorCommand | null {
+  const moves = planLayerOrderMoves(document, entityIds, operation)
+  if (moves.length === 0) return null
+  const movedIds = [...new Set(moves.flatMap(({ entityIds: ids }) => ids))]
+  const meta = {
+    label: `${LAYER_ORDER_LABELS[operation]} ${describeEntityTargets(document, movedIds)}`,
+    source: 'stage',
+    targetIds: movedIds,
+  } as const
+  const commands: EditorCommand[] = moves.map((move, index) => ({
+    id: `${commandId}:${index}`,
+    type: BUILTIN_COMMAND_TYPES.moveEntity,
+    payload: {
+      entityIds: [...move.entityIds],
+      parentId: move.parentId,
+      index: move.index,
+    },
+  }))
+  if (commands.length === 1) return { ...commands[0]!, id: commandId, meta }
+  return {
+    id: commandId,
+    type: BUILTIN_COMMAND_TYPES.batch,
+    payload: { commands: commands as unknown as JsonValue },
+    meta,
+  }
+}
 
 const FLOW_GROUP_REASON = '自动布局 Flow 子项不能参与 Group；请先转为 Absolute'
 const FLOW_UNGROUP_REASON = '自动布局 Flow 子项不能参与 Ungroup；请先转为 Absolute'

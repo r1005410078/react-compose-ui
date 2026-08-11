@@ -148,6 +148,32 @@ describe('createComposeEditorActions', () => {
     })
   })
 
+  it('OpenSpec: editor-preferences / 可配置层级动作 / 命令面板执行层级动作', () => {
+    const dispatch = dispatchSpy()
+    const actions = createComposeEditorActions(context({ dispatch, selectedIds: ['a'] }))
+    const bringForward = actions.find((action) => action.id === 'edit.bringForward')
+
+    expect(bringForward?.title).toBe('前移一层')
+    expect(bringForward?.disabledReason).toBeUndefined()
+    bringForward?.run()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'entity.move',
+      payload: { entityIds: ['a'], parentId: null, index: 2 },
+    }))
+
+    const boundary = createComposeEditorActions(context({ selectedIds: ['b'] }))
+      .find((action) => action.id === 'edit.bringForward')
+    expect(boundary?.disabledReason).toBe('选中对象已位于目标层级或不可移动')
+    const englishBoundary = createComposeEditorActions(context({
+      locale: 'en-US',
+      selectedIds: ['b'],
+    })).find((action) => action.id === 'edit.bringForward')
+    expect(englishBoundary?.title).toBe('Bring forward')
+    expect(englishBoundary?.disabledReason).toBe(
+      'Selected objects are already at the requested layer boundary or cannot be reordered',
+    )
+  })
+
   it('OpenSpec: editor-preferences / 编辑器动作目录 / 视口动作不进入历史', () => {
     const dispatch = dispatchSpy('noop')
     const zoomBy = vi.fn()

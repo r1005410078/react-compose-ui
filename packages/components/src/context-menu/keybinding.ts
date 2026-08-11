@@ -72,6 +72,8 @@ function isMacPlatform(platform: string) {
 function displayKey(code: string) {
   const names: Record<string, string> = {
     Backspace: 'Backspace',
+    BracketLeft: '[',
+    BracketRight: ']',
     Comma: ',',
     Delete: 'Delete',
     Digit0: '0',

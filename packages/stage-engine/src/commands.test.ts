@@ -5,9 +5,12 @@ import {
   getComposeHierarchy,
   getComposeLayoutItem,
   getComposeSpatialTransform,
+  type ComposeDocument,
   type ComposeEntity,
+  type EditorCommand,
 } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
+import * as commandApi from './commands'
 import {
   createDuplicateCommand,
   createGroupCommand,
@@ -59,6 +62,37 @@ function flowEntity(id: string, fillWidth = false): ComposeEntity {
       },
     },
   }
+}
+
+type LayerOrderOperation =
+  | 'bring-forward'
+  | 'send-backward'
+  | 'bring-to-front'
+  | 'send-to-back'
+
+interface LayerOrderApi {
+  readonly createLayerOrderCommand?: (
+    document: ComposeDocument,
+    entityIds: readonly string[],
+    operation: LayerOrderOperation,
+    commandId?: string,
+  ) => EditorCommand | null
+  readonly getLayerOrderCommandAvailability?: (
+    document: ComposeDocument,
+    entityIds: readonly string[],
+    operation: LayerOrderOperation,
+  ) => { readonly available: boolean; readonly reason?: string }
+}
+
+const layerOrderApi = commandApi as LayerOrderApi
+
+function createLayerOrderCommand(
+  value: ComposeDocument,
+  entityIds: readonly string[],
+  operation: LayerOrderOperation,
+) {
+  expect(layerOrderApi.createLayerOrderCommand).toBeTypeOf('function')
+  return layerOrderApi.createLayerOrderCommand!(value, entityIds, operation, 'layer-order')
 }
 
 describe('Stage ECS commands', () => {
@@ -241,5 +275,153 @@ describe('Stage ECS commands', () => {
       available: false,
       reason: '自动布局 Flow 子项不能参与 Ungroup；请先转为 Absolute',
     })
+  })
+
+  it.each([
+    ['bring-forward', ['a', 'c', 'b', 'e', 'd']],
+    ['send-backward', ['b', 'a', 'd', 'c', 'e']],
+    ['bring-to-front', ['a', 'c', 'e', 'b', 'd']],
+    ['send-to-back', ['b', 'd', 'a', 'c', 'e']],
+  ] as const)(
+    'OpenSpec: stage-engine / 同级节点层级命令规划 / 稳定调整多选层级 - %s',
+    (operation, expected) => {
+      const value = document(['a', 'b', 'c', 'd', 'e'].map((id) => entity(id)))
+      const runtime = createTransactionRuntime({ document: value })
+      const command = createLayerOrderCommand(value, ['b', 'd'], operation)
+
+      expect(command).not.toBeNull()
+      expect(runtime.dispatch(command!).status).toBe('committed')
+      expect(runtime.document.rootIds).toEqual(expected)
+    },
+  )
+
+  it('OpenSpec: stage-engine / 同级节点层级命令规划 / 稳定调整多选层级 - 连续块只跨一个邻居', () => {
+    const value = document(['a', 'b', 'c', 'd', 'e'].map((id) => entity(id)))
+    const runtime = createTransactionRuntime({ document: value })
+
+    expect(runtime.dispatch(createLayerOrderCommand(
+      value,
+      ['b', 'c'],
+      'bring-forward',
+    )!).status).toBe('committed')
+    expect(runtime.document.rootIds).toEqual(['a', 'd', 'b', 'c', 'e'])
+  })
+
+  it('OpenSpec: stage-engine / 同级节点层级命令规划 / 分父级原子重排', () => {
+    const first = entity('first', { childIds: ['a', 'b', 'c'] })
+    const second = entity('second', { childIds: ['d', 'e', 'f'] })
+    const value = document([
+      first,
+      second,
+      ...['a', 'b', 'c', 'd', 'e', 'f'].map((id) => entity(id)),
+    ], ['first', 'second'])
+    const runtime = createTransactionRuntime({ document: value })
+    const command = createLayerOrderCommand(value, ['b', 'e'], 'bring-to-front')
+
+    expect(command?.type).toBe(BUILTIN_COMMAND_TYPES.batch)
+    expect(runtime.dispatch(command!).status).toBe('committed')
+    expect(getComposeHierarchy(runtime.document.entities.first!)?.childIds)
+      .toEqual(['a', 'c', 'b'])
+    expect(getComposeHierarchy(runtime.document.entities.second!)?.childIds)
+      .toEqual(['d', 'f', 'e'])
+
+    runtime.undo()
+    expect(getComposeHierarchy(runtime.document.entities.first!)?.childIds)
+      .toEqual(['a', 'b', 'c'])
+    expect(getComposeHierarchy(runtime.document.entities.second!)?.childIds)
+      .toEqual(['d', 'e', 'f'])
+  })
+
+  it('OpenSpec: stage-engine / 同级节点层级命令规划 / 祖先与后代分别在直接父级重排', () => {
+    const parent = entity('parent', { childIds: ['a', 'b', 'c'] })
+    const value = document([
+      entity('before'),
+      parent,
+      entity('after'),
+      entity('a'),
+      entity('b'),
+      entity('c'),
+    ], ['before', 'parent', 'after'])
+    const runtime = createTransactionRuntime({ document: value })
+
+    expect(runtime.dispatch(createLayerOrderCommand(
+      value,
+      ['parent', 'a'],
+      'bring-forward',
+    )!).status).toBe('committed')
+    expect(runtime.document.rootIds).toEqual(['before', 'after', 'parent'])
+    expect(getComposeHierarchy(runtime.document.entities.parent!)?.childIds)
+      .toEqual(['b', 'a', 'c'])
+  })
+
+  it('OpenSpec: stage-engine / 同级节点层级命令规划 / 普通边界不产生空事务', () => {
+    const value = document([entity('a'), entity('b')])
+
+    expect(layerOrderApi.getLayerOrderCommandAvailability!(
+      value,
+      ['b'],
+      'bring-forward',
+    )).toEqual(expect.objectContaining({ available: false }))
+    expect(createLayerOrderCommand(value, ['b'], 'bring-forward')).toBeNull()
+  })
+
+  it('OpenSpec: stage-engine / 同级节点层级命令规划 / 跳过不可移动与边界目标', () => {
+    const lockedParent = entity('locked-parent', { childIds: ['child'], locked: true })
+    const value = document([
+      entity('a'),
+      entity('locked', { locked: true }),
+      lockedParent,
+      entity('child'),
+    ], ['a', 'locked', 'locked-parent'])
+    const runtime = createTransactionRuntime({ document: value })
+    const command = createLayerOrderCommand(
+      value,
+      ['a', 'locked', 'child'],
+      'bring-forward',
+    )
+
+    expect(runtime.dispatch(command!).status).toBe('committed')
+    expect(runtime.document.rootIds).toEqual(['locked', 'a', 'locked-parent'])
+    expect(getComposeHierarchy(runtime.document.entities['locked-parent']!)?.childIds)
+      .toEqual(['child'])
+
+    expect(layerOrderApi.getLayerOrderCommandAvailability).toBeTypeOf('function')
+    expect(layerOrderApi.getLayerOrderCommandAvailability!(
+      runtime.document,
+      ['locked-parent'],
+      'bring-to-front',
+    )).toEqual(expect.objectContaining({ available: false }))
+    expect(createLayerOrderCommand(
+      runtime.document,
+      ['locked-parent'],
+      'bring-to-front',
+    )).toBeNull()
+  })
+
+  it('OpenSpec: stage-engine / 同级节点层级命令规划 / 重排 Flow 子项', () => {
+    const a = flowEntity('a')
+    const b = flowEntity('b')
+    const c = flowEntity('c')
+    const parent = autoLayoutContainer('parent', ['a', 'b', 'c'])
+    const value = document([parent, a, b, c], ['parent'])
+    const before = structuredClone({
+      a: getComposeLayoutItem(a),
+      b: getComposeLayoutItem(b),
+      c: getComposeLayoutItem(c),
+    })
+    const runtime = createTransactionRuntime({ document: value })
+
+    expect(runtime.dispatch(createLayerOrderCommand(
+      value,
+      ['a'],
+      'bring-forward',
+    )!).status).toBe('committed')
+    expect(getComposeHierarchy(runtime.document.entities.parent!)?.childIds)
+      .toEqual(['b', 'a', 'c'])
+    expect({
+      a: getComposeLayoutItem(runtime.document.entities.a!),
+      b: getComposeLayoutItem(runtime.document.entities.b!),
+      c: getComposeLayoutItem(runtime.document.entities.c!),
+    }).toEqual(before)
   })
 })

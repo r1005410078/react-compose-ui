@@ -10,7 +10,7 @@ import {
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposeStage } from './compose-stage'
-import type { ComposeStageDispatch } from '../types'
+import type { ComposeStageDispatch, ComposeStageProps } from '../types'
 
 afterEach(cleanup)
 
@@ -65,6 +65,8 @@ const snapshot: ComposeLayoutSnapshot = {
 function renderStage(options: {
   onShortcutAction?: (action: string) => boolean
   onToolChange?: (tool: import('../types').ComposeStageTool) => void
+  selectedIds?: readonly string[]
+  shortcuts?: ComposeStageProps['shortcuts']
 } = {}) {
   const value = fixture()
   const runtime = createTransactionRuntime({ document: value })
@@ -83,7 +85,8 @@ function renderStage(options: {
       onToolChange={options.onToolChange}
       onViewportChange={vi.fn()}
       registry={registry}
-      selectedIds={['a', 'b']}
+      selectedIds={options.selectedIds ?? ['a', 'b']}
+      shortcuts={options.shortcuts}
       tool="select"
       viewport={{ x: 0, y: 0, zoom: 1 }}
     />,
@@ -146,5 +149,39 @@ describe('ComposeStage 快捷键接管', () => {
     expect(onShortcutAction).toHaveBeenCalledWith('stage.panTool')
     // 接管后 Stage 不再自行切换工具，避免与宿主重复执行。
     expect(onToolChange).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: stage / Stage 节点层级操作 / 使用 Figma 风格默认键位', () => {
+    const onShortcutAction = vi.fn(() => true)
+    const { dispatch, stage } = renderStage({ onShortcutAction, selectedIds: ['a'] })
+
+    fireEvent.keyDown(stage, { code: 'BracketRight', key: ']' })
+    expect(onShortcutAction).toHaveBeenCalledWith('edit.bringForward')
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: stage / Stage 节点层级操作 / 独立 Stage 使用共享层级命令', () => {
+    const { dispatch, stage } = renderStage({ selectedIds: ['a'] })
+
+    fireEvent.keyDown(stage, { code: 'BracketRight', key: ']' })
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'entity.move',
+      payload: { entityIds: ['a'], parentId: null, index: 2 },
+    }))
+  })
+
+  it('OpenSpec: stage / Stage 节点层级操作 / 使用用户重绑键位', () => {
+    const { dispatch, stage } = renderStage({
+      selectedIds: ['a'],
+      shortcuts: { 'edit.bringForward': [{ code: 'KeyP' }] },
+    })
+
+    fireEvent.keyDown(stage, { code: 'BracketRight', key: ']' })
+    expect(dispatch).not.toHaveBeenCalled()
+    fireEvent.keyDown(stage, { code: 'KeyP', key: 'p' })
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'entity.move',
+      payload: { entityIds: ['a'], parentId: null, index: 2 },
+    }))
   })
 })

@@ -5,12 +5,15 @@
  */
 
 export {
+  createLayerOrderCommand,
   createDuplicateCommand,
   createGroupCommand,
   createReparentCommand,
   createUngroupCommand,
   getGroupCommandAvailability,
+  getLayerOrderCommandAvailability,
   getUngroupCommandAvailability,
+  type ComposeLayerOrderOperation,
   type ComposeStructureCommandAvailability,
 } from './commands'
 export {

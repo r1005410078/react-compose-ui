@@ -732,6 +732,28 @@ describe('ComposeStage ECS', () => {
     }))
   })
 
+  it('OpenSpec: stage / Stage 节点层级操作 / 从画布菜单调整前景节点', () => {
+    const value = document([entity('a'), entity('b')], ['a', 'b'])
+    const { runtime } = renderStage(value, { selectedIds: ['a'] })
+
+    fireEvent.contextMenu(screen.getByTestId('stage-entity-a'), {
+      clientX: 40,
+      clientY: 50,
+    })
+
+    const layerOrder = screen.getByRole('menuitem', { name: /^层级/ })
+    fireEvent.keyDown(layerOrder, { code: 'ArrowRight', key: 'ArrowRight' })
+    const bringToFront = screen.getByRole('menuitem', { name: /置于顶层/ })
+    const sendToBack = screen.getByRole('menuitem', { name: /置于底层/ })
+
+    expect(bringToFront).toHaveTextContent(/(?:⌘|Ctrl\+)\]/)
+    expect(bringToFront).not.toHaveAttribute('aria-disabled', 'true')
+    expect(sendToBack).toHaveAttribute('aria-disabled', 'true')
+    expect(sendToBack).toHaveAttribute('title', '选中对象已位于目标层级或不可移动')
+    fireEvent.click(bringToFront)
+    expect(runtime.document.rootIds).toEqual(['b', 'a'])
+  })
+
   it('OpenSpec: stage-paint-tools / 打开单选背景填充时以 Paint 控制柄替换普通 resize 控制柄', () => {
     const painted: ComposeEntity = {
       ...entity('a'),

@@ -74,8 +74,10 @@ import {
   viewportToScrollAxes,
   createDuplicateCommand,
   createGroupCommand,
+  createLayerOrderCommand,
   createUngroupCommand,
   getGroupCommandAvailability,
+  getLayerOrderCommandAvailability,
   getUngroupCommandAvailability,
   applyMatrix,
   getEntityWorldBounds,
@@ -88,6 +90,7 @@ import {
   getEntityParentId,
   toComposeTransform,
   type ResizeHandle,
+  type ComposeLayerOrderOperation,
   type StagePoint,
   type StageRect,
   type StageSegmentPreview,
@@ -645,6 +648,10 @@ const STAGE_SHORTCUT_ACTIONS = [
   'stage.toggleGridSnap',
   'stage.toggleSmartSnap',
   'edit.duplicate',
+  'edit.bringForward',
+  'edit.sendBackward',
+  'edit.bringToFront',
+  'edit.sendToBack',
   'edit.group',
   'edit.ungroup',
   'edit.delete',
@@ -681,10 +688,21 @@ const DEFAULT_STAGE_SHORTCUTS: Readonly<
   'stage.toggleGridSnap': [{ code: 'KeyG', shift: true }],
   'stage.toggleSmartSnap': [{ code: 'KeyS', shift: true }],
   'edit.duplicate': [{ code: 'KeyD', primary: true }],
+  'edit.bringForward': [{ code: 'BracketRight' }],
+  'edit.sendBackward': [{ code: 'BracketLeft' }],
+  'edit.bringToFront': [{ code: 'BracketRight', primary: true }],
+  'edit.sendToBack': [{ code: 'BracketLeft', primary: true }],
   'edit.group': [{ code: 'KeyG', primary: true }],
   'edit.ungroup': [{ code: 'KeyG', primary: true, shift: true }],
   'edit.delete': [{ code: 'Delete' }, { code: 'Backspace' }],
 }
+
+const LAYER_ORDER_SHORTCUTS = [
+  ['edit.bringForward', 'bring-forward'],
+  ['edit.sendBackward', 'send-backward'],
+  ['edit.bringToFront', 'bring-to-front'],
+  ['edit.sendToBack', 'send-to-back'],
+] as const satisfies readonly (readonly [ComposeStageShortcutAction, ComposeLayerOrderOperation])[]
 
 function keyboardEventCode(event: {
   code: string
@@ -698,6 +716,8 @@ function keyboardEventCode(event: {
     ',': 'Comma',
     '=': 'Equal',
     '-': 'Minus',
+    '[': 'BracketLeft',
+    ']': 'BracketRight',
   }
   return codes[event.key] ?? event.key
 }
@@ -1000,6 +1020,38 @@ function ComposeStageReady({
     const entity = document.entities[id]
     return entity && !getComposeLock(entity).locked
   })
+  const unavailableLayerOrder = { available: false, reason: '' } as const
+  const layerOrderAvailability: Readonly<
+    Record<ComposeLayerOrderOperation, ReturnType<typeof getLayerOrderCommandAvailability>>
+  > = contextNodeId
+    ? {
+        'bring-forward': getLayerOrderCommandAvailability(
+          document,
+          contextEditableIds,
+          'bring-forward',
+        ),
+        'send-backward': getLayerOrderCommandAvailability(
+          document,
+          contextEditableIds,
+          'send-backward',
+        ),
+        'bring-to-front': getLayerOrderCommandAvailability(
+          document,
+          contextEditableIds,
+          'bring-to-front',
+        ),
+        'send-to-back': getLayerOrderCommandAvailability(
+          document,
+          contextEditableIds,
+          'send-to-back',
+        ),
+      }
+    : {
+        'bring-forward': unavailableLayerOrder,
+        'send-backward': unavailableLayerOrder,
+        'bring-to-front': unavailableLayerOrder,
+        'send-to-back': unavailableLayerOrder,
+      }
   const groupAvailability = getGroupCommandAvailability(document, contextEditableIds)
   const ungroupAvailability = contextEditableIds.length === 1
     ? getUngroupCommandAvailability(document, contextEditableIds[0]!)
@@ -2222,6 +2274,19 @@ function ComposeStageReady({
       return entity && !getComposeLock(entity).locked
     })
     if (editableIds.length === 0) return
+    const layerOrderAction = LAYER_ORDER_SHORTCUTS.find(([action]) =>
+      actionMatches(action))
+    if (layerOrderAction) {
+      const command = createLayerOrderCommand(
+        document,
+        editableIds,
+        layerOrderAction[1],
+        idFactory(),
+      )
+      if (command) dispatch(command)
+      event.preventDefault()
+      return
+    }
     if (actionMatches('edit.duplicate')) {
       const duplicate = createDuplicateCommand(
         document,
@@ -2357,6 +2422,15 @@ function ComposeStageReady({
   const contextMenuShortcut = (action: ComposeStageShortcutAction) => {
     const label = formatComposeKeybindings(resolvedShortcuts[action])
     return label ? <ComposeContextMenuShortcut>{label}</ComposeContextMenuShortcut> : null
+  }
+  const executeLayerOrder = (operation: ComposeLayerOrderOperation) => {
+    const command = createLayerOrderCommand(
+      document,
+      contextEditableIds,
+      operation,
+      idFactory(),
+    )
+    if (command) dispatch(command)
   }
 
   return (
@@ -2675,6 +2749,39 @@ function ComposeStageReady({
               const duplicate = id ? createDuplicateCommand(document, id, idFactory, idFactory()) : null
               if (duplicate && dispatch(duplicate.command).status === 'committed') onSelectedIdsChange([duplicate.rootId])
             }}>创建副本{contextMenuShortcut('edit.duplicate')}</ComposeContextMenuItem>
+            <ComposeContextMenuSub>
+              <ComposeContextMenuSubTrigger>{messages.layerOrder}</ComposeContextMenuSubTrigger>
+              <ComposeContextMenuSubContent aria-label={messages.layerOrder}>
+                <ComposeContextMenuItem
+                  disabled={!layerOrderAvailability['bring-to-front'].available}
+                  title={!layerOrderAvailability['bring-to-front'].available
+                    ? messages.layerOrderUnavailable
+                    : undefined}
+                  onClick={() => executeLayerOrder('bring-to-front')}
+                >{messages.bringToFront}{contextMenuShortcut('edit.bringToFront')}</ComposeContextMenuItem>
+                <ComposeContextMenuItem
+                  disabled={!layerOrderAvailability['bring-forward'].available}
+                  title={!layerOrderAvailability['bring-forward'].available
+                    ? messages.layerOrderUnavailable
+                    : undefined}
+                  onClick={() => executeLayerOrder('bring-forward')}
+                >{messages.bringForward}{contextMenuShortcut('edit.bringForward')}</ComposeContextMenuItem>
+                <ComposeContextMenuItem
+                  disabled={!layerOrderAvailability['send-backward'].available}
+                  title={!layerOrderAvailability['send-backward'].available
+                    ? messages.layerOrderUnavailable
+                    : undefined}
+                  onClick={() => executeLayerOrder('send-backward')}
+                >{messages.sendBackward}{contextMenuShortcut('edit.sendBackward')}</ComposeContextMenuItem>
+                <ComposeContextMenuItem
+                  disabled={!layerOrderAvailability['send-to-back'].available}
+                  title={!layerOrderAvailability['send-to-back'].available
+                    ? messages.layerOrderUnavailable
+                    : undefined}
+                  onClick={() => executeLayerOrder('send-to-back')}
+                >{messages.sendToBack}{contextMenuShortcut('edit.sendToBack')}</ComposeContextMenuItem>
+              </ComposeContextMenuSubContent>
+            </ComposeContextMenuSub>
             <ComposeContextMenuItem
               disabled={!canGroup}
               title={!groupAvailability.available ? groupAvailability.reason : undefined}

@@ -59,7 +59,8 @@ function renderPanel(
   overrides: Partial<Parameters<typeof CommandPanelWithActions>[0]['actionContext']> = {},
   locale?: 'en-US',
 ) {
-  const runtime = createTransactionRuntime({ document: fixture() })
+  const currentDocument = overrides.document ?? fixture()
+  const runtime = createTransactionRuntime({ document: currentDocument })
   const spies = {
     setTool: vi.fn(),
     zoomBy: vi.fn(),
@@ -71,7 +72,7 @@ function renderPanel(
         canRedo: runtime.getState().canRedo,
         canUndo: runtime.getState().canUndo,
         dispatch: runtime.dispatch,
-        document: runtime.getState().document,
+        document: currentDocument,
         fitContainer: () => {},
         fitSelection: () => {},
         idFactory: () => `id-${Math.random().toString(36).slice(2)}`,
@@ -130,6 +131,26 @@ describe('CommandPanelWithActions', () => {
 
     expect(runtime.getState().entries.length).toBe(before + 1)
     expect(runtime.getState().document.entities.a).toBeUndefined()
+  })
+
+  it('OpenSpec: editor-preferences / 可配置层级动作 / 命令面板执行层级动作', () => {
+    const value = fixture()
+    const second = {
+      ...value.entities.a!,
+      id: 'b',
+      name: 'Second',
+    }
+    const document = {
+      ...value,
+      rootIds: ['a', 'b'],
+      entities: { ...value.entities, b: second },
+    }
+    const { input, runtime } = renderPanel({ document, selectedIds: ['a'] })
+
+    fireEvent.change(input, { target: { value: '前移一层' } })
+    fireEvent.click(screen.getByRole('option', { name: /前移一层/ }))
+
+    expect(runtime.document.rootIds).toEqual(['b', 'a'])
   })
 
   it('OpenSpec: editor-preferences / 编辑器动作目录 / 不可用动作在面板中展示原因', () => {

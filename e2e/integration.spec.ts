@@ -1534,6 +1534,76 @@ test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形�
   await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
 })
 
+test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中与撤销保持一致', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+  const start = { x: outputBox!.x + 240, y: outputBox!.y + 180 }
+  const target = { x: start.x + 200, y: start.y + 120 }
+  const overlap = { x: start.x + 100, y: start.y + 60 }
+
+  for (let index = 0; index < 2; index += 1) {
+    await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(target.x, target.y, { steps: 4 })
+    await page.mouse.up()
+  }
+
+  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(nodes).toHaveCount(2)
+  const originalBackId = await nodes.nth(0).getAttribute('data-entity-id')
+  const originalFrontId = await nodes.nth(1).getAttribute('data-entity-id')
+  expect(originalBackId).not.toBeNull()
+  expect(originalFrontId).not.toBeNull()
+
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const tree = editor.getByRole('treegrid', { name: '场景树' })
+  const treeOrder = () => tree.locator('[data-scene-node-id]').evaluateAll((rows) =>
+    rows.map((row) => row.getAttribute('data-scene-node-id')))
+  await expect.poll(treeOrder).toEqual([originalBackId, originalFrontId])
+
+  await page.mouse.click(overlap.x, overlap.y)
+  await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+  await page.mouse.click(overlap.x, overlap.y, { button: 'right' })
+  const layerOrder = page.getByRole('menuitem', { name: /^层级/ })
+  await layerOrder.hover()
+  const sendToBack = page.getByRole('menuitem', { name: /置于底层/ })
+  await expect(sendToBack).toBeVisible()
+  await expect(page).toHaveScreenshot('stage-layer-order-menu.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await sendToBack.click()
+
+  await expect.poll(treeOrder).toEqual([originalFrontId, originalBackId])
+  await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+  await page.mouse.click(overlap.x, overlap.y)
+  await expect(tree.locator(`[data-scene-node-id="${originalBackId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+
+  await stage.press('Control+[')
+  await expect.poll(treeOrder).toEqual([originalBackId, originalFrontId])
+  await page.mouse.click(overlap.x, overlap.y)
+  await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+
+  await stage.press('Control+z')
+  await expect.poll(treeOrder).toEqual([originalFrontId, originalBackId])
+  await page.mouse.click(overlap.x, overlap.y)
+  await expect(tree.locator(`[data-scene-node-id="${originalBackId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+})
+
 test('OpenSpec: stage / 直接绘制 Preset / 文字工具只按点创建', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
