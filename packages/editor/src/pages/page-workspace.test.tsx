@@ -12,6 +12,7 @@ import type {
   ComposeScriptModuleLoader,
 } from '@compose-ui/script-runtime'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComposeEditorController } from '../editor-controller'
 
@@ -691,6 +692,50 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       expect(scriptModuleLoader.load).toHaveBeenCalledTimes(3)
       expect(lastSession(onActiveSessionChange)?.scriptScope?.getExport('count'))
         .toMatchObject({ value: 20 })
+    })
+  })
+
+  it('OpenSpec: page-script-runtime / setup 作用域生命周期 / StrictMode 重放挂载后打开页面仍持有作用域', async () => {
+    const scriptedPageText = serializeComposePageFile({
+      ...createEmptyComposePageFile(),
+      setupScript: {
+        providerId: 'memory',
+        assetKey: 'dashboard.ts',
+        scope: 'persistent',
+      },
+    })
+    const setup: ComposePageSetup = (ctx) => ({ count: ctx.state(7) })
+    const scriptModuleLoader: ComposeScriptModuleLoader = {
+      load: vi.fn(async (): Promise<ComposeLoadedScriptModule> => ({
+        module: { setup },
+        revision: '1',
+      })),
+    }
+    const provider = createProvider({
+      read: vi.fn(async ({ fileId }) => ({
+        blob: new Blob([fileId === 'home' ? scriptedPageText : 'export {}']),
+        revision: '1',
+      })),
+      resolveAsset: vi.fn(async () => ({
+        blob: new Blob(['export {}']),
+        mediaType: 'text/javascript',
+        revision: '1',
+      })),
+    })
+    const onActiveSessionChange = vi.fn()
+    render(
+      <StrictMode>
+        <ComposeEditor
+          assets={{ browser: { provider } }}
+          pages={{ onActiveSessionChange, scriptModuleLoader }}
+        />
+      </StrictMode>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+
+    await waitFor(() => {
+      expect(lastSession(onActiveSessionChange)?.scriptScope?.getExport('count'))
+        .toMatchObject({ value: 7 })
     })
   })
 })

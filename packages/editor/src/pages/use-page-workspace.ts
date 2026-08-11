@@ -110,12 +110,22 @@ export function usePageWorkspace({
   }, [sessions])
 
   const unmountedRef = useRef(false)
-  useEffect(() => () => {
-    unmountedRef.current = true
-    reloadControllersRef.current.forEach((controller) => { controller.abort() })
-    reloadControllersRef.current.clear()
-    ownedScopesRef.current.forEach((scope) => { scope.dispose() })
-    ownedScopesRef.current.clear()
+  useEffect(() => {
+    // StrictMode 会同步 cleanup 后重放 setup。必须在每次 setup 复位，否则重放留下的
+    // `true` 会让此后每个加载完成的作用域都被当成「卸载后到达」就地释放，页面永远拿不到
+    // 脚本作用域。
+    unmountedRef.current = false
+    // 两个集合实例由 useRef 一次性创建且永不重新赋值，因此在 setup 期取出的引用与
+    // cleanup 期读到的是同一个对象。
+    const reloadControllers = reloadControllersRef.current
+    const ownedScopes = ownedScopesRef.current
+    return () => {
+      unmountedRef.current = true
+      reloadControllers.forEach((controller) => { controller.abort() })
+      reloadControllers.clear()
+      ownedScopes.forEach((scope) => { scope.dispose() })
+      ownedScopes.clear()
+    }
   }, [])
 
   /**
