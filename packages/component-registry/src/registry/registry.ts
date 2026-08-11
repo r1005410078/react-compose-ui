@@ -4,6 +4,7 @@ import {
   getComposeComposition,
   getComposeHierarchy,
   getComposeLock,
+  getComposeRenderer,
   isComposeComponentKey,
   validateComposeDocument,
   type ComposeComposition,
@@ -412,6 +413,35 @@ export function createComposeEntityRegistry(
           )
         }
       }
+      // 契约只是一个 Prop 名，注册时就必须钉死它指向真实的 value Contract：Stage 在编辑
+      // 提交阶段直接按这个名字写 Prop，等到那时才发现名字是错的已经来不及了。
+      const editableTextPropName = definition.editableTextPropName
+      if (editableTextPropName !== undefined) {
+        if (editableTextPropName.trim().length === 0) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            'Renderer 可编辑文本 Prop 名称不能为空',
+          )
+        }
+        const contract = definition.propContracts
+          ?.find((item) => item.name === editableTextPropName)
+        if (!contract) {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer 可编辑文本 Prop ${editableTextPropName} 缺少 Contract`,
+          )
+        }
+        if (contract.kind !== 'value') {
+          throw new ComposeEntityRegistryError(
+            'renderer',
+            index,
+            `Renderer 可编辑文本 Prop ${editableTextPropName} 必须是 value Contract`,
+          )
+        }
+      }
+
       const measurement = definition.measurement
       if (!measurement) return
       if (typeof measurement.measure !== 'function') {
@@ -697,6 +727,11 @@ export function createComposeEntityRegistry(
     getRenderer: (type: string) => renderers.byId.get(type),
     listRenderers: () => renderers.ordered,
     listRendererPropContracts: (type: string) => renderers.byId.get(type)?.propContracts ?? [],
+    getEditableTextPropName: (entity: ComposeEntity) => {
+      const renderer = getComposeRenderer(entity)
+      if (!renderer) return null
+      return renderers.byId.get(renderer.type)?.editableTextPropName ?? null
+    },
     getComponent: (key: string) => components.byId.get(key),
     listComponents: () => [...components.ordered].sort((left, right) =>
       (left.order ?? 0) - (right.order ?? 0)),

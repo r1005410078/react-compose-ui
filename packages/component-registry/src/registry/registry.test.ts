@@ -105,6 +105,22 @@ function entityFromSeed(
   return { id: 'entity-a', ...result.seed }
 }
 
+/** 只带 Renderer 的最小 Entity；`type` 为 null 时连 Renderer 都不挂。 */
+function rendererEntity(type: string | null): ComposeEntity {
+  return {
+    id: `entity-${type ?? 'none'}`,
+    name: type ?? 'none',
+    components: {
+      Composition: { presetId: null, baseComponentKeys: [], capabilityIds: [] },
+      Transform: transform,
+      LayoutItem: layoutItem,
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      ...(type === null ? {} : { Renderer: { type, props: {} } }),
+    },
+  }
+}
+
 describe('ComposeEntityRegistry', () => {
   it('OpenSpec: component-registry / Renderer Prop Contract / 注册值与事件方法 Props', () => {
     const validate = (value: unknown) => typeof value === 'number' || '必须是 number'
@@ -184,6 +200,70 @@ describe('ComposeEntityRegistry', () => {
         propContracts: [valueContract],
       }],
     })).toThrow(/Inspector/u)
+  })
+
+  it('OpenSpec: component-registry / Renderer 原地文字编辑契约 / 声明并查询可编辑文本 Prop', () => {
+    const registry = createComposeEntityRegistry({
+      renderers: [
+        {
+          type: 'text',
+          label: 'Text',
+          renderer: () => null,
+          editableTextPropName: 'text',
+          propContracts: [{ name: 'text', kind: 'value', label: '文本', validate: () => true }],
+        },
+        { type: 'rectangle', label: '矩形', renderer: () => null },
+      ],
+    })
+
+    expect(registry.getEditableTextPropName(rendererEntity('text'))).toBe('text')
+    expect(registry.getEditableTextPropName(rendererEntity('rectangle'))).toBeNull()
+    expect(registry.getEditableTextPropName(rendererEntity('unregistered'))).toBeNull()
+    expect(registry.getEditableTextPropName(rendererEntity(null))).toBeNull()
+  })
+
+  it('OpenSpec: component-registry / Renderer 原地文字编辑契约 / 拒绝非法的编辑契约', () => {
+    const valueContract = {
+      name: 'text', kind: 'value' as const, label: '文本', validate: () => true as const,
+    }
+    const methodContract = {
+      name: 'onInput', kind: 'method' as const, label: '输入', role: 'event-handler' as const,
+    }
+
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'text', label: 'Text', renderer: () => null,
+        editableTextPropName: 'onInput',
+        propContracts: [valueContract, methodContract],
+      }],
+    })).toThrow(/onInput.*value/u)
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'text', label: 'Text', renderer: () => null,
+        editableTextPropName: 'missing',
+        propContracts: [valueContract],
+      }],
+    })).toThrow(/missing.*Contract/u)
+    expect(() => createComposeEntityRegistry({
+      renderers: [{
+        type: 'text', label: 'Text', renderer: () => null,
+        editableTextPropName: '  ',
+        propContracts: [valueContract],
+      }],
+    })).toThrow(/不能为空/u)
+
+    // 非法 Definition 被拒绝后，同批其他合法 Definition 仍可注册。
+    const registry = createComposeEntityRegistry({
+      renderers: [
+        {
+          type: 'text', label: 'Text', renderer: () => null,
+          editableTextPropName: 'text',
+          propContracts: [valueContract],
+        },
+        { type: 'rectangle', label: '矩形', renderer: () => null },
+      ],
+    })
+    expect(registry.listRenderers()).toHaveLength(2)
   })
 
   it('OpenSpec: component-registry / Renderer Props 分类 / 校验分类定义与 Contract 归属', () => {

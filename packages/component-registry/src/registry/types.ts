@@ -42,6 +42,13 @@ export interface ComposeRendererProps {
   readonly authoredProps: JsonObject
   /** 编辑 Stage 与只读 Preview 的渲染语义。 */
   readonly mode: 'editor' | 'preview'
+  /**
+   * 当前实例的画布内原地文字编辑态；不在编辑中时为 undefined。
+   *
+   * @remarks
+   * 只在 `mode` 为 `editor` 时可能出现——Preview 是只读渲染入口，不提供任何编辑能力。
+   */
+  readonly textEditing?: ComposeRendererTextEditing
   /** 资源型 Renderer 使用的可选运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
   /**
@@ -65,6 +72,28 @@ export interface ComposeRendererProps {
 
 /** 传给宿主 React Renderer 的运行时 Props。 @public */
 export type ComposeRuntimeProps = Readonly<Record<string, unknown>>
+
+/**
+ * Renderer 处于画布内原地文字编辑时收到的编辑态。
+ *
+ * @remarks
+ * 只有声明了 `editableTextPropName` 的 Renderer、且在 `editor` 模式下才会收到。收到它意味着
+ * 该实例应当以可编辑方式渲染那段文本，同时保持字号、字重、颜色、行高与对齐不变——编辑态与
+ * 最终呈现必须同源，否则宽度对不上，所见即所得在编辑瞬间就断了。
+ * @public
+ */
+export interface ComposeRendererTextEditing {
+  /** 编辑中的纯文本当前值；同时已覆盖进 `props` 中对应的可编辑 Prop。 */
+  readonly value: string
+  /**
+   * 报告用户输入的新纯文本。
+   *
+   * @remarks
+   * 宿主据此更新运行时覆盖，不产生文档事务——逐字符提交会让历史被单个单词撑满。Renderer
+   * MUST 只传纯文本，不得传 HTML 标记。提交时机由宿主掌握，Renderer 不得自行派发命令。
+   */
+  readonly onChange: (value: string) => void
+}
 
 /** Renderer Inspector 可用的页面绑定变量快照。 @public */
 export interface ComposeRendererInspectorBindingVariable {
@@ -242,6 +271,17 @@ export interface ComposeRendererDefinition {
   readonly propCategories?: readonly ComposeRendererPropCategory[]
   /** 由自定义 Inspector 在原字段旁呈现绑定入口的 value Prop 名称。 */
   readonly inspectorPropNames?: readonly string[]
+  /**
+   * 承载可原地编辑纯文本的 value Prop 名称；声明后该 Renderer 支持画布内文字编辑。
+   *
+   * @remarks
+   * 必须指向同一 Definition 中已声明的 value Contract，否则注册被拒绝。声明它是 Renderer
+   * 表达「我的这个 Prop 是一段可以在画布上直接改的纯文本」的唯一方式——Stage 不依赖物料包，
+   * 只能凭该声明判断可编辑性，不能按 Renderer type 硬编码。
+   *
+   * 契约只覆盖纯文本单 Prop，不表达富文本、区段样式或多 Prop 编辑。
+   */
+  readonly editableTextPropName?: string
   /** 可选 Renderer Props Inspector；声明分类后按 `propCategory` 分次渲染。 */
   readonly inspector?: ComponentType<ComposeRendererInspectorProps>
   /**
@@ -496,6 +536,15 @@ export interface ComposeEntityRegistry {
   listRenderers(): readonly ComposeRendererDefinition[]
   /** 按声明顺序列出一个 Renderer 的显式 Prop Contract。 */
   listRendererPropContracts(type: string): readonly ComposeRendererPropContract[]
+  /**
+   * 查出 Entity 可原地编辑的纯文本 Prop 名称；不可编辑时返回 null。
+   *
+   * @remarks
+   * 消费方只需 Entity 与 Registry 即可同时得到「是否可原地编辑」（是否为 null）与
+   * 「编辑哪个 Prop」（返回的名称），无需识别具体 Renderer type。Entity 没有 Renderer、
+   * Renderer 未注册或该 Definition 未声明契约时一律返回 null。
+   */
+  getEditableTextPropName(entity: ComposeEntity): string | null
   /** 按 PascalCase Component Key 查找定义。 */
   getComponent(key: string): ComposeComponentDefinition | undefined
   /** 按 order 和注册顺序列出 Component 定义。 */

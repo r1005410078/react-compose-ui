@@ -10,7 +10,7 @@ import {
 } from '@compose-ui/core'
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import { resolveComposeRendererRuntimeProps } from '../registry/runtime-props'
-import type { ComposeEntityRegistry } from '../registry/types'
+import type { ComposeEntityRegistry, ComposeRendererTextEditing } from '../registry/types'
 import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import type {
   ComposeNodeEditPort,
@@ -82,6 +82,7 @@ export function ComposeRegistryEntityRenderer({
   pageDocumentPort,
   scriptScope,
   scriptModuleLoader,
+  textEditing,
 }: {
   readonly registry: ComposeEntityRegistry
   readonly entity: ComposeEntity
@@ -91,6 +92,8 @@ export function ComposeRegistryEntityRenderer({
   /** 当前页面渲染实例的可选 setup 返回作用域。 */
   readonly scriptScope?: ComposePageScriptScope
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
+  /** 宿主请求的原地文字编辑态；只在编辑 Stage 传入。 */
+  readonly textEditing?: ComposeRendererTextEditing
 }) {
   const [, refreshBindings] = useReducer((revision: number) => revision + 1, 0)
   const bindings = getComposeBindings(entity)
@@ -120,6 +123,16 @@ export function ComposeRegistryEntityRenderer({
     scope: scriptScope,
     methodMode: mode === 'editor' ? 'noop' : 'invoke',
   })
+  // Preview 是只读渲染入口，不能继承编辑态；未声明契约的 Renderer 也无处安放编辑的文本。
+  const editablePropName = definition.editableTextPropName
+  const activeTextEditing = mode === 'editor' && editablePropName !== undefined
+    ? textEditing
+    : undefined
+  // 编辑中的值经 props 抵达 Renderer，物料照常渲染那个 Prop 即可与最终排版同源；
+  // authoredProps 保持文档原值，它的语义是「已经写进文档的值」。
+  const props = activeTextEditing
+    ? { ...resolved.props, [editablePropName!]: activeTextEditing.value }
+    : resolved.props
   return (
     <DefinitionErrorBoundary area="renderer" identity={renderer.type} resetSignal={renderer}>
       <Renderer
@@ -128,10 +141,11 @@ export function ComposeRegistryEntityRenderer({
         entity={entity}
         mode={mode}
         pageDocumentPort={pageDocumentPort}
-        props={resolved.props}
+        props={props}
         registry={registry}
         renderer={renderer}
         scriptModuleLoader={scriptModuleLoader}
+        textEditing={activeTextEditing}
       />
     </DefinitionErrorBoundary>
   )

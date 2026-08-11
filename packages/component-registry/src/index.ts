@@ -70,6 +70,7 @@ export {
   type ComposeRendererInspectorBindingState,
   type ComposeRendererInspectorBindingVariable,
   type ComposeRendererProps,
+  type ComposeRendererTextEditing,
   type ComposeRuntimeProps,
 } from './registry'
 

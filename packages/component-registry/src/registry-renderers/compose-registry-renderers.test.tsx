@@ -199,6 +199,67 @@ describe('Entity Registry React boundaries', () => {
     }), undefined)
   })
 
+  it('OpenSpec: 原地编辑的运行时值覆盖 / 编辑态覆盖 props 且只在 editor 模式出现', () => {
+    const renderer = vi.fn(({ props, textEditing }) => (
+      <span>{String(props.text)}:{textEditing ? 'editing' : 'idle'}</span>
+    ))
+    const registry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'text',
+        label: '文本',
+        renderer,
+        editableTextPropName: 'text',
+        propContracts: [{ name: 'text', kind: 'value', label: '文本', validate: () => true }],
+      }],
+    })
+    const onChange = vi.fn()
+    const textEditing = { value: 'Hello world', onChange }
+
+    const view = render(
+      <ComposeRegistryEntityRenderer
+        entity={entity()}
+        mode="editor"
+        registry={registry}
+        textEditing={textEditing}
+      />,
+    )
+    // 文档仍是 'Hello'：编辑中的值必须经 props 抵达 Renderer，排版才与最终呈现同源。
+    expect(screen.getByText('Hello world:editing')).toBeInTheDocument()
+    expect(renderer).toHaveBeenCalledWith(
+      expect.objectContaining({ authoredProps: { text: 'Hello' } }),
+      undefined,
+    )
+
+    view.rerender(
+      <ComposeRegistryEntityRenderer
+        entity={entity()}
+        mode="preview"
+        registry={registry}
+        textEditing={textEditing}
+      />,
+    )
+    expect(screen.getByText('Hello:idle')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: 原地编辑的运行时值覆盖 / 未声明契约的 Renderer 不接收编辑态', () => {
+    const renderer = vi.fn(({ props, textEditing }) => (
+      <span>{String(props.text)}:{textEditing ? 'editing' : 'idle'}</span>
+    ))
+    const registry = createComposeEntityRegistry({
+      renderers: [{ type: 'text', label: '文本', renderer }],
+    })
+
+    render(
+      <ComposeRegistryEntityRenderer
+        entity={entity()}
+        mode="editor"
+        registry={registry}
+        textEditing={{ value: 'Hello world', onChange: vi.fn() }}
+      />,
+    )
+    expect(screen.getByText('Hello:idle')).toBeInTheDocument()
+  })
+
   it('OpenSpec: 缺失 Registry 降级 / 保留未知 Renderer 和 Component', () => {
     const registry = createComposeEntityRegistry()
     const { rerender } = render(

@@ -206,4 +206,82 @@ describe('OpenSpec: component-registry / Renderer measurement adapter', () => {
     adapter.dispose()
   })
 
+  it('OpenSpec: 原地编辑的运行时值覆盖 / 覆盖值驱动渲染与测量', () => {
+    const measure = vi.fn(({ props }: { props: Readonly<Record<string, unknown>> }) => ({
+      width: String(props.text).length * 10,
+      height: 24,
+    }))
+    const registry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'host-text',
+        label: 'Host text',
+        renderer: Renderer,
+        editableTextPropName: 'text',
+        propContracts: [{ name: 'text', kind: 'value', label: '文本', validate: () => true }],
+        measurement: { measure },
+      }],
+    })
+    const adapter = createComposeRendererMeasurementAdapter({ registry })
+    const listener = vi.fn()
+    adapter.subscribe(listener)
+
+    expect(adapter.measure({ entity: entity(), ...constraints })).toMatchObject({ width: 50 })
+    const baseRevision = adapter.revision
+
+    adapter.setEditableTextOverride('text-1', 'Hello world')
+    expect(adapter.revision).toBeGreaterThan(baseRevision)
+    expect(listener).toHaveBeenCalledWith(['text-1'])
+    // 文档仍是 'Hello'；测量必须看到覆盖值，否则 Auto width 在输入过程中不会变宽。
+    expect(adapter.measure({ entity: entity(), ...constraints })).toMatchObject({ width: 110 })
+    expect(measure).toHaveBeenLastCalledWith(
+      expect.objectContaining({ props: expect.objectContaining({ text: 'Hello world' }) }),
+    )
+
+    adapter.dispose()
+  })
+
+  it('OpenSpec: 原地编辑的运行时值覆盖 / 清除覆盖回到 authored 值', () => {
+    const measure = vi.fn(({ props }: { props: Readonly<Record<string, unknown>> }) => ({
+      width: String(props.text).length * 10,
+      height: 24,
+    }))
+    const registry = createComposeEntityRegistry({
+      renderers: [{
+        type: 'host-text',
+        label: 'Host text',
+        renderer: Renderer,
+        editableTextPropName: 'text',
+        propContracts: [{ name: 'text', kind: 'value', label: '文本', validate: () => true }],
+        measurement: { measure },
+      }],
+    })
+    const adapter = createComposeRendererMeasurementAdapter({ registry })
+
+    adapter.setEditableTextOverride('text-1', 'Hello world')
+    expect(adapter.measure({ entity: entity(), ...constraints })).toMatchObject({ width: 110 })
+    const overriddenRevision = adapter.revision
+
+    adapter.setEditableTextOverride('text-1', null)
+    expect(adapter.revision).toBeGreaterThan(overriddenRevision)
+    expect(adapter.measure({ entity: entity(), ...constraints })).toMatchObject({ width: 50 })
+
+    adapter.dispose()
+  })
+
+  it('OpenSpec: 原地编辑的运行时值覆盖 / 未声明契约的 Renderer 不受覆盖影响', () => {
+    const measure = vi.fn(({ props }: { props: Readonly<Record<string, unknown>> }) => ({
+      width: String(props.text).length * 10,
+      height: 24,
+    }))
+    const registry = createComposeEntityRegistry({
+      renderers: [{ type: 'host-text', label: 'Host text', renderer: Renderer, measurement: { measure } }],
+    })
+    const adapter = createComposeRendererMeasurementAdapter({ registry })
+
+    adapter.setEditableTextOverride('text-1', 'Hello world')
+    expect(adapter.measure({ entity: entity(), ...constraints })).toMatchObject({ width: 50 })
+
+    adapter.dispose()
+  })
+
 })

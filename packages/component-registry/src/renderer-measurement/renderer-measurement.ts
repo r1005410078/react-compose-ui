@@ -30,6 +30,17 @@ export interface ComposeRendererMeasurementAdapterOptions {
 export interface ComposeRendererMeasurementAdapter extends ComposeLayoutMeasurementPort {
   /** 更新正式文档并取消已删除或输入已变化 Entity 的异步工作。 */
   updateDocument(document: ComposeDocument): void
+  /**
+   * 设置或清除一个 Entity 可编辑文本 Prop 的编辑中值覆盖；传 `null` 清除。
+   *
+   * @remarks
+   * 画布内原地编辑期间不产生文档事务，因此测量若只看文档就永远停在旧文本上，Auto width
+   * 不会跟随输入变宽。该覆盖把编辑中的值送进既有测量链路入口，链路本身不变。
+   *
+   * 只对声明了 `editableTextPropName` 的 Renderer 生效；设置、更新与清除都会让 revision
+   * 前进并使该 Entity 的缓存条目失效。覆盖是纯运行时状态，不写入文档与历史。
+   */
+  setEditableTextOverride(entityId: string, value: string | null): void
   /** 取消 prepare、外部订阅与全部 listener；可重复调用。 */
   dispose(): void
 }
@@ -82,6 +93,7 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
   private readonly listeners = new Set<(entityIds?: readonly string[]) => void>()
   private readonly entries = new Map<string, MeasurementEntry>()
   private readonly diagnostics = new Map<string, ComposeLayoutMeasurementDiagnostic>()
+  private readonly editableTextOverrides = new Map<string, string>()
   private nextGeneration = 0
   private currentRevision = 0
   private disposed = false
@@ -119,12 +131,7 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
     if (entry.status === 'failed') return null
 
     try {
-      const resolved = resolveComposeRendererRuntimeProps({
-        entity: input.entity,
-        definition,
-        scope: this.options.scriptScope,
-        methodMode: 'noop',
-      })
+      const resolved = this.resolveProps(input.entity, definition)
       const measured = measurement.measure({
         entity: input.entity,
         renderer,
@@ -175,13 +182,52 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
     })
   }
 
+  setEditableTextOverride(entityId: string, value: string | null) {
+    if (this.disposed) return
+    const current = this.editableTextOverrides.get(entityId)
+    if (value === null) {
+      if (current === undefined) return
+      this.editableTextOverrides.delete(entityId)
+    }
+    else {
+      if (current === value) return
+      this.editableTextOverrides.set(entityId, value)
+    }
+    // 有缓存条目时走 invalidateEntry：它同时丢弃 prepared 并 emit；没有条目时仍需 emit，
+    // 否则首次进入编辑（尚未测量过）的 Entity 不会触发重新求解。
+    const entry = this.entries.get(entityId)
+    if (entry) this.invalidateEntry(entry)
+    else this.emit([entityId])
+  }
+
   dispose() {
     if (this.disposed) return
     this.disposed = true
     this.entries.forEach((entry) => this.releaseEntry(entry))
     this.entries.clear()
     this.diagnostics.clear()
+    this.editableTextOverrides.clear()
     this.listeners.clear()
+  }
+
+  /**
+   * 解析运行时 props，并叠加编辑中值覆盖。
+   *
+   * 覆盖只作用于 `props`，不动 `authoredProps`：authoredProps 的语义是「文档里已写下的
+   * 值」，而编辑中的文本恰恰还没提交进文档，混进去会让依赖它的一方误以为文档已变。
+   */
+  private resolveProps(entity: ComposeEntity, definition: ComposeRendererDefinition) {
+    const resolved = resolveComposeRendererRuntimeProps({
+      entity,
+      definition,
+      scope: this.options.scriptScope,
+      methodMode: 'noop',
+    })
+    const propName = definition.editableTextPropName
+    if (propName === undefined) return resolved
+    const override = this.editableTextOverrides.get(entity.id)
+    if (override === undefined) return resolved
+    return { ...resolved, props: { ...resolved.props, [propName]: override } }
   }
 
   private entryFor(
@@ -214,12 +260,7 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
     this.entries.set(entity.id, entry)
     if (measurement.subscribe) {
       const renderer = getComposeRenderer(entity)!
-      const resolved = resolveComposeRendererRuntimeProps({
-        entity,
-        definition,
-        scope: this.options.scriptScope,
-        methodMode: 'noop',
-      })
+      const resolved = this.resolveProps(entity, definition)
       try {
         entry.unsubscribe = measurement.subscribe({
           entity,
@@ -264,12 +305,7 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
     entry.controller = controller
     entry.status = 'preparing'
     const generation = entry.generation
-    const resolved = resolveComposeRendererRuntimeProps({
-      entity: entry.entity,
-      definition: entry.definition,
-      scope: this.options.scriptScope,
-      methodMode: 'noop',
-    })
+    const resolved = this.resolveProps(entry.entity, entry.definition)
     void Promise.resolve().then(() => prepare({
       entity: entry.entity,
       renderer,

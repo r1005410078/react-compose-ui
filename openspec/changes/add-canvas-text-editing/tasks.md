@@ -2,17 +2,17 @@
 
 ## 1. Registry 编辑契约
 
-- [ ] 1.1 红测：Definition 把 method prop / 未知名称标记为可编辑文本时 Registry 拒绝
-- [ ] 1.2 `ComposeRendererDefinition` 增加可选原地文字编辑声明与校验
-- [ ] 1.3 暴露「按 Entity 查可编辑文本 prop」的查询入口并补 TSDoc
+- [x] 1.1 红测：Definition 把 method prop / 未知名称标记为可编辑文本时 Registry 拒绝
+- [x] 1.2 `ComposeRendererDefinition` 增加可选原地文字编辑声明与校验
+- [x] 1.3 暴露「按 Entity 查可编辑文本 prop」的查询入口并补 TSDoc
 
 ## 2. Registry 编辑中值覆盖
 
-- [ ] 2.1 红测：设置覆盖后 `measure` 收到覆盖值且 measurement revision 前进、缓存条目失效
-- [ ] 2.2 红测：清除覆盖后渲染与测量立即回到 authored props
-- [ ] 2.3 measurement adapter 支持按 Entity 设置/清除可编辑 prop 的运行时覆盖
-- [ ] 2.4 `ComposeRendererProps` 增加编辑态字段，且只在 `mode === 'editor'` 出现
-- [ ] 2.5 红测：`preview` 模式下不出现编辑态字段，文档与历史观察不到覆盖值
+- [x] 2.1 红测：设置覆盖后 `measure` 收到覆盖值且 measurement revision 前进、缓存条目失效
+- [x] 2.2 红测：清除覆盖后渲染与测量立即回到 authored props
+- [x] 2.3 measurement adapter 支持按 Entity 设置/清除可编辑 prop 的运行时覆盖
+- [x] 2.4 `ComposeRendererProps` 增加编辑态字段，且只在 `mode === 'editor'` 出现
+- [x] 2.5 红测：`preview` 模式下不出现编辑态字段，文档与历史观察不到覆盖值
 
 ## 3. Engine 文字编辑会话
 
