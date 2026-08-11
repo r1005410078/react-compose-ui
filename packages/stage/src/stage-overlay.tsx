@@ -145,13 +145,12 @@ export function StageOverlay({
     : null
   const drawingStart = drawing ? worldToScreen(drawing.start, viewport) : null
   const drawingEnd = drawing ? worldToScreen(drawing.end, viewport) : null
-  const drawingPreviewBounds = drawing?.tool === 'draw-text'
-    && drawingScreen
-    && drawingScreen.width < 1
-    && drawingScreen.height < 1
+  // 文字只按点创建，预览框恒为按下点上的一个光标位大小。
+  const drawingPreviewBounds = drawing?.tool === 'draw-text' && drawingScreen
     ? { ...drawingScreen, width: 28 * viewport.zoom, height: 16 * viewport.zoom }
     : drawingScreen
-  const drawingDimensionLabel = drawing && drawingPreviewBounds
+  // 文字不显示尺寸：它没有可拖出的尺寸，标注一个用户改不了的数字只会误导。
+  const drawingDimensionLabel = drawing && drawingPreviewBounds && drawing.tool !== 'draw-text'
     ? drawing.tool === 'draw-line' || drawing.tool === 'draw-arrow'
       // 线条的真实几何来自两个端点，而不是落盘时为 LayoutItem 保留的最小 1px 尺寸。
       ? `${Math.round(Math.abs(drawing.end.x - drawing.start.x))} × ${Math.round(Math.abs(drawing.end.y - drawing.start.y))}`

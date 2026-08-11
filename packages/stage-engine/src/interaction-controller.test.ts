@@ -1065,3 +1065,82 @@ describe('StageInteractionController 绘制手势与并发文档变化', () => {
     expect(effects.some((effect) => effect.type === 'drawing.commit')).toBe(true)
   })
 })
+
+describe('StageInteractionController 文字工具只按点创建', () => {
+  function drawTextSetup() {
+    const value = document()
+    const effects: StageInteractionEffect[] = []
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: (next) => effects.push(...next),
+    })
+    controller.updateContext({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'draw-text',
+      selectedIds: [],
+      idFactory: () => 'draw-text-id',
+    })
+    return { controller, effects }
+  }
+
+  it('OpenSpec: 直接绘制 Preset / 文字工具拖拽不改变尺寸', () => {
+    const { controller, effects } = drawTextSetup()
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 200, y: 160 },
+      hit: { kind: 'surface' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 360, y: 208 }, modifiers })
+
+    // 文字只按点创建：拖多远预览都停在按下点，不存在“拖出一个尺寸”的语义。
+    expect(controller.getSnapshot().drawing).toMatchObject({
+      tool: 'draw-text',
+      bounds: { x: 200, y: 160, width: 0, height: 0 },
+    })
+
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 360, y: 208 }, modifiers })
+    const commit = effects.find((effect) => effect.type === 'drawing.commit')
+    expect(commit).toMatchObject({
+      tool: 'draw-text',
+      bounds: { x: 200, y: 160, width: 0, height: 0 },
+    })
+  })
+
+  it('OpenSpec: 直接绘制 Preset / 其他绘制工具仍按拖拽尺寸创建', () => {
+    const value = document()
+    const effects: StageInteractionEffect[] = []
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: (next) => effects.push(...next),
+    })
+    controller.updateContext({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'draw-rectangle',
+      selectedIds: [],
+      idFactory: () => 'draw-rect-id',
+    })
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 200, y: 160 },
+      hit: { kind: 'surface' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 360, y: 208 }, modifiers })
+    expect(controller.getSnapshot().drawing).toMatchObject({
+      bounds: { x: 200, y: 160, width: 160, height: 48 },
+    })
+  })
+})

@@ -6,8 +6,8 @@ StageInteractionController MUST 以普通数据 context、event、snapshot 和 e
 不得导入 React、DOM、Registry 或 Renderer。会话 MUST NOT 持有文本内容——编辑期间的中间文本是宿主
 DOM 层的瞬时状态，Controller 只判定会话的进入、退出与提交时机。
 
-Controller MUST 在以下情形判定进入编辑：`draw-text` 工具以点击（拖拽距离小于阈值）创建文字之后；
-select 工具双击一个可原地编辑的 Entity；单选一个可原地编辑的 Entity 时按 `Enter`。Controller MUST 在
+Controller MUST 在以下情形判定进入编辑：`draw-text` 工具创建文字之后；select 工具双击一个可原地
+编辑的 Entity；单选一个可原地编辑的 Entity 时按 `Enter`。Controller MUST 在
 以下情形判定退出：`Esc`；在编辑目标之外按下指针；选区变化到其他 Entity；编辑目标从文档中消失。
 
 编辑会话存在期间，Controller MUST 屏蔽该 Entity 的移动、缩放、旋转手势与框选，使指针拖拽不再产生
@@ -15,9 +15,20 @@ select 工具双击一个可原地编辑的 Entity；单选一个可原地编辑
 
 #### Scenario: 绘制提交后进入编辑
 
-- **WHEN** 用户以 `draw-text` 工具在画布上点击而不拖拽，宿主随后回灌本次绘制创建的 Entity
+- **WHEN** 用户以 `draw-text` 工具在画布上按下松开，宿主随后回灌本次绘制创建的 Entity
 - **THEN** Controller 发布进入编辑会话的 effect，指向该新建 Entity
-- **AND** 拖拽创建固定尺寸文字同样进入编辑会话
+
+### Requirement: 文字工具只按点创建
+
+`draw-text` 的绘制终点 MUST 始终锁在按下点：文字不承载「拖出一个尺寸」的语义，拖多远都只在按下点
+创建一个 Auto width（Hug）文字。该约束 MUST 同时作用于绘制预览与提交 bounds，否则会出现拖动时长出
+一个框、松手又缩回去的跳变。其他绘制工具的拖拽尺寸语义 MUST NOT 受影响。
+
+#### Scenario: 文字工具拖拽不改变尺寸
+
+- **WHEN** 用户以 `draw-text` 工具按下后拖动一段距离再松手
+- **THEN** 预览与提交 bounds 都停在按下点，尺寸为零
+- **AND** 以 `draw-rectangle` 等工具做同样操作仍按拖拽尺寸创建
 
 #### Scenario: 双击已有文字进入编辑
 

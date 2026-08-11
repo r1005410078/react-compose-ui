@@ -586,6 +586,9 @@ function constrainedDrawingPoints(
   end: StagePoint,
   modifiers: StageInteractionModifiers,
 ) : DrawingPoints {
+  // 文字只按点创建：拖拽不承载“拖出一个尺寸”的语义，终点始终锁在按下点。预览与提交
+  // 都走这里，因此不会出现拖动时长出一个框、松手又缩回去的跳变。
+  if (tool === 'draw-text') return { start, end: start }
   return modifiers.shift && (tool === 'draw-rectangle' || tool === 'draw-circle')
     ? constrainSquareDrawingPoints(start, end)
     : { start, end }

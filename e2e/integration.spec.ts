@@ -31,21 +31,20 @@ async function drawContainer(page: Page, editor: Locator) {
 }
 
 /**
- * 用工具栏文本工具在指定位置画一个 Text 实体。
+ * 用工具栏文本工具在指定位置创建一个内容为 `Text` 的实体。
  *
  * Text Preset 默认不在组件库 Palette 中（工具栏已提供入口），因此需要文本实体的用例
- * 走工具栏绘制，而不是从 Palette 拖入。
+ * 走工具栏创建，而不是从 Palette 拖入。
  */
 async function drawText(page: Page, editor: Locator, at: { x: number; y: number }) {
   const stage = editor.getByRole('application', { name: 'Stage' })
   const before = await stage.getByTestId('compose-material-text').count()
   await editor.getByRole('button', { name: '文字' }).click()
-  await page.mouse.move(at.x, at.y)
-  await page.mouse.down()
-  await page.mouse.move(at.x + 120, at.y + 44, { steps: 6 })
-  await page.mouse.up()
-  // 绘制结束会立刻进入原地编辑；这些用例只需要实体存在，先按 Esc 退出。内容未改动，
-  // 因此退出不产生任何事务，后续的历史断言不受影响。
+  await page.mouse.click(at.x, at.y)
+  // 文字只按点创建，且以空内容进入编辑；空内容退出会被删除，所以这些用例先键入内容再提交。
+  // 聚焦推迟一帧以避开 pointerdown 默认动作，打字前先等焦点落定。
+  await expect(stage.getByTestId('compose-material-text-editable')).toBeFocused()
+  await page.keyboard.type('Text')
   await page.keyboard.press('Escape')
   await editor.getByRole('button', { name: '选择' }).click()
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(before + 1)
@@ -1535,7 +1534,7 @@ test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形�
   await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
 })
 
-test('OpenSpec: stage / 直接绘制 Preset / 点击或拖拽绘制文字', async ({ page }) => {
+test('OpenSpec: stage / 直接绘制 Preset / 文字工具只按点创建', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
 
@@ -1568,10 +1567,13 @@ test('OpenSpec: stage / 直接绘制 Preset / 点击或拖拽绘制文字', asyn
   await page.mouse.move(target.x, target.y, { steps: 4 })
   const preview = stage.getByTestId('stage-drawing-preview')
   await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-text')
-  // 预览不得出现占位文案：点击创建的是空文字，提前显示 “Text” 会闪一下并不存在的内容。
+  // 预览不得出现占位文案：创建出来的是空文字，提前显示 “Text” 会闪一下并不存在的内容。
   // 尺寸标签本身也是 SVG text，因此按内容精确匹配。
   await expect(preview.getByText('Text', { exact: true })).toHaveCount(0)
-  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('160 × 48')
+  // 文字只按点创建：既不标注尺寸，预览也不随拖拽变大。
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toHaveCount(0)
+  const previewBox = await preview.boundingBox()
+  expect(previewBox!.width).toBeLessThan(64)
   await expect(stage).toHaveScreenshot('stage-drawing-text-preview.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -1579,9 +1581,11 @@ test('OpenSpec: stage / 直接绘制 Preset / 点击或拖拽绘制文字', asyn
   })
   await page.mouse.up()
 
-  const fixedText = stage.locator('.compose-stage__node.is-renderer').last()
-  await expect(fixedText).toHaveCSS('width', '160px')
-  await expect(fixedText).toHaveCSS('height', '48px')
+  // 拖了 160×48 也只得到按下点上的 Auto width 文字，并直接进入编辑。
+  await expect(stage.getByTestId('compose-material-text-editable')).toHaveText('')
+  const created = stage.locator('.compose-stage__node.is-renderer').last()
+  const createdBox = await created.boundingBox()
+  expect(createdBox!.width).toBeLessThan(64)
 })
 
 test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主图标同步', async ({ page }) => {
