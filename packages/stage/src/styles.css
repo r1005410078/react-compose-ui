@@ -110,7 +110,7 @@
 
 .compose-stage__axis {
   vector-effect: non-scaling-stroke;
-  stroke-width: 1;
+  stroke-width: 0.5;
 }
 
 .compose-stage__output-boundary {
@@ -138,11 +138,11 @@
 }
 
 .compose-stage__axis.is-x {
-  stroke: rgb(245 51 82 / 75%);
+  stroke: rgb(216 91 216 / 75%);
 }
 
 .compose-stage__axis.is-y {
-  stroke: rgb(135 214 3 / 75%);
+  stroke: rgb(194 238 109 / 75%);
 }
 
 .compose-stage__scene {
@@ -471,17 +471,22 @@
 }
 
 .compose-stage__ruler line {
-  stroke: #76808d;
+  stroke: #87919e;
+  stroke-linecap: square;
+  stroke-opacity: 0.68;
   stroke-width: 1;
 }
 
 .compose-stage__ruler line.is-major {
-  stroke: #c0c7d0;
+  stroke: #c7ced7;
+  stroke-opacity: 0.94;
 }
 
 .compose-stage__ruler text {
-  fill: #b8c0ca;
-  font: inherit;
+  fill: #c0c7d1;
+  font: 600 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   pointer-events: none;
 }
 

@@ -2375,13 +2375,14 @@ function ComposeStageReady({
             <path
               d="M6 0v4.42A4 4 0 0 0 4.42 6H0v4h4.42A4 4 0 0 0 6 11.58V16h4v-4.42A4 4 0 0 0 11.58 10H16V6h-4.42A4 4 0 0 0 10 4.42V0Z"
               data-testid="stage-world-origin-silhouette"
-              fill="#fff"
-              fillOpacity="0.706"
+              fill="#20252d"
+              fillOpacity="0.9"
             />
             <path
               d="M7 1v3a4 4 0 0 1 2 0V1Zm1 4a3 3 0 0 0 0 6 3 3 0 0 0 0-6ZM1 7v2h3a4 4 0 0 1 0-2H1Zm11 0a4 4 0 0 1 0 2h3V7Zm-5 8h2v-3a4 4 0 0 1-2 0Z"
               data-testid="stage-world-origin-position"
-              fill="#ff5f5f"
+              fill="#a4acb7"
+              fillOpacity="0.88"
             />
           </g>
         </svg>

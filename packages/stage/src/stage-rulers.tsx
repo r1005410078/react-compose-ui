@@ -61,7 +61,7 @@ export function StageRulers({
               transform={`translate(${tick.screen} 0)`}
             >
               <line className={tick.major ? 'is-major' : ''} x1="0" x2="0" y1={tick.major ? 12 : 17} y2="24" />
-              {tick.label ? <text x="3" y="10">{tick.label}</text> : null}
+              {tick.label ? <text className="compose-stage__ruler-label" x="2" y="10">{tick.label}</text> : null}
             </g>
           ))}
           {screenBounds && bounds ? (
@@ -92,7 +92,7 @@ export function StageRulers({
             >
               <line className={tick.major ? 'is-major' : ''} x1={tick.major ? 12 : 17} x2="24" y1="0" y2="0" />
               {tick.label ? (
-                <text x="3" y="-3" transform="rotate(90)">
+                <text className="compose-stage__ruler-label" x="2" y="-2" transform="rotate(90)">
                   {tick.label}
                 </text>
               ) : null}
