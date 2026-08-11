@@ -15,6 +15,7 @@ import { useWorkspaceContent } from './workspace-context'
 import { WORKSPACE_PANEL_IDS } from './workspace-layout'
 import { WorkspaceTab } from './workspace-tab'
 import { getEditorMessages } from '../editor-i18n'
+import { StageToolbarIcon } from '../stage-toolbar/stage-toolbar-icons'
 
 const SCENE_MIN_HEIGHT = 160
 const TOOLS_MIN_HEIGHT = 120
@@ -411,13 +412,14 @@ export function PageDocumentPanel(props: IDockviewPanelProps) {
         {stageToolbar ?? <Placeholder>{messages.workspace.stageToolbarEmpty}</Placeholder>}
         {/* 页面没有 Monaco 那样的内建保存入口，这里提供显式按钮；快捷键同为 Cmd/Ctrl+S。 */}
         <button
+          aria-label={messages.pages.savePage}
           className="compose-editor__page-save"
           disabled={!session.dirty}
           title={messages.pages.savePage}
           type="button"
           onClick={() => { saveDocument(panelId) }}
         >
-          {messages.pages.savePage}
+          <StageToolbarIcon name="save" />
         </button>
       </div>
       <div className="compose-editor__canvas-content">

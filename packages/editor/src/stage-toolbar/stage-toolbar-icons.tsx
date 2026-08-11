@@ -14,6 +14,7 @@ type StageToolbarIconName =
   | 'pan'
   | 'rectangle'
   | 'rotate'
+  | 'save'
   | 'scale'
   | 'select'
   | 'settings'
@@ -103,6 +104,14 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
       <>
         <path d="M18.5 8.5A7.2 7.2 0 1 0 19 16" />
         <path d="M18.5 3.5v5h-5" />
+      </>
+    ),
+    // 软盘轮廓：右上角切角表示写入介质，内部上下两块分别是滑片与标签。
+    save: (
+      <>
+        <path d="M5 4h11l3 3v13H5z" />
+        <path d="M9 4v5h6V4" />
+        <path d="M8 20v-6h8v6" />
       </>
     ),
     scale: (
