@@ -30,6 +30,9 @@ function textStyle(props: Readonly<Record<string, unknown>>) {
   }
 }
 
+/** 空文字保留的光标宽度，使编辑边框可见且节点仍可命中。 @internal */
+const EMPTY_TEXT_CARET_WIDTH = 1
+
 /** Text Renderer 使用的隔离 DOM 内容测量。 @internal */
 export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
   measure({ props, width, height }) {
@@ -37,6 +40,9 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
     const content = typeof props.text === 'string' || typeof props.text === 'number'
       ? String(props.text)
       : 'Text'
+    // 点击创建的文字以空内容进入编辑。空串量出来是 0×0，会被判为无效尺寸，Hug 拿不到高度，
+    // 光标无处落脚。用零宽空格占位即可量到真实行高，宽度再补一个光标位。
+    const empty = content.length === 0
     const typography = textStyle(props)
     const host = document.createElement('span')
     host.dataset.composeMeasurementHost = 'text'
@@ -67,7 +73,7 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
     else if (width.mode === 'at-most') host.style.maxWidth = `${width.value}px`
     if (height.mode === 'exactly') host.style.height = `${height.value}px`
     else if (height.mode === 'at-most') host.style.maxHeight = `${height.value}px`
-    host.textContent = content
+    host.textContent = empty ? '\u200b' : content
     document.body.append(host)
     try {
       const rect = host.getBoundingClientRect()
@@ -81,9 +87,11 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
         : height.mode === 'at-most'
           ? Math.min(rect.height, height.value)
           : rect.height
-      if (measuredWidth <= 0 || measuredHeight <= 0) return null
+      // 空内容保留一个光标宽度：编辑边框才可见，空文字也仍能被指针命中。
+      const contentWidth = empty ? Math.max(measuredWidth, EMPTY_TEXT_CARET_WIDTH) : measuredWidth
+      if (contentWidth <= 0 || measuredHeight <= 0) return null
       return {
-        width: measuredWidth,
+        width: contentWidth,
         height: measuredHeight,
         baseline: Math.min(measuredHeight, typography.fontSize * 0.8),
       }

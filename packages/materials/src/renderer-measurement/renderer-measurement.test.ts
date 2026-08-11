@@ -85,6 +85,38 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
     rect.mockRestore()
   })
 
+  it('OpenSpec: 内建 Text 物料 / 空内容仍量出行高而不是无效尺寸', () => {
+    // 点击创建的文字以空内容进入编辑；若测量返回 null，Stage 会报「返回了无效内容尺寸」
+    // 并且 Hug 拿不到高度，光标无处落脚。
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 0,
+      height: 16,
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 0,
+      bottom: 16,
+      left: 0,
+      toJSON: () => ({}),
+    })
+    const measured = definition('text').measure({
+      entity: baseEntity,
+      renderer: renderer('text', { text: '', fontSize: 12 }),
+      props: { text: '', fontSize: 12 },
+      authoredProps: { text: '', fontSize: 12 },
+      prepared: undefined,
+      width: undefinedConstraint,
+      height: undefinedConstraint,
+    })
+
+    expect(measured).not.toBeNull()
+    expect(measured?.height).toBe(16)
+    // 留出光标宽度，编辑边框才可见、空文字也仍可被指针命中。
+    expect(measured?.width).toBeGreaterThan(0)
+    expect(document.querySelector('[data-compose-measurement-host]')).toBeNull()
+    rect.mockRestore()
+  })
+
   it('OpenSpec: basic-materials / Figma 基线的 Text 默认值与排版 / 编辑文字排版', () => {
     const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       width: 30,

@@ -441,7 +441,8 @@ export function StageOverlay({
                 x={drawingPreviewBounds.x}
                 y={drawingPreviewBounds.y}
               />
-              <text x={drawingPreviewBounds.x + 8} y={drawingPreviewBounds.y + 25}>Text</text>
+              {/* 预览里不画占位文案：点击创建出来的是空文字，直接进入编辑，
+                  提前显示 “Text” 等于承诺一段并不会存在的内容。只留光标。 */}
               <line
                 className="compose-stage__drawing-preview-caret"
                 x1={drawingPreviewBounds.x + 5}

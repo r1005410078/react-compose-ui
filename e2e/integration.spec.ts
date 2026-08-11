@@ -1568,6 +1568,9 @@ test('OpenSpec: stage / 直接绘制 Preset / 点击或拖拽绘制文字', asyn
   await page.mouse.move(target.x, target.y, { steps: 4 })
   const preview = stage.getByTestId('stage-drawing-preview')
   await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-text')
+  // 预览不得出现占位文案：点击创建的是空文字，提前显示 “Text” 会闪一下并不存在的内容。
+  // 尺寸标签本身也是 SVG text，因此按内容精确匹配。
+  await expect(preview.getByText('Text', { exact: true })).toHaveCount(0)
   await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('160 × 48')
   await expect(stage).toHaveScreenshot('stage-drawing-text-preview.png', {
     animations: 'disabled',
