@@ -1,4 +1,4 @@
-import type { ComposeEntity } from '@compose-ui/core'
+import type { ComposeEntity, JsonObject } from '@compose-ui/core'
 import { createComposePageScriptScope } from '@compose-ui/script-runtime'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveComposeRendererRuntimeProps } from './runtime-props'
@@ -21,6 +21,7 @@ const definition: ComposeRendererDefinition = {
 
 function entity(input: {
   fields?: Record<string, { scope: 'page'; exportName: string }>
+  props?: JsonObject
 }): ComposeEntity {
   return {
     id: 'counter-1',
@@ -38,7 +39,7 @@ function entity(input: {
       },
       Visibility: { visible: true },
       Lock: { locked: false },
-      Renderer: { type: 'counter', props: { text: 7, tone: 'blue' } },
+      Renderer: { type: 'counter', props: input.props ?? { text: 7, tone: 'blue' } },
       Bindings: {
         version: 1,
         rendererProps: { fields: input.fields ?? {} },
@@ -95,6 +96,36 @@ describe('OpenSpec: component-registry / Authored 与 Runtime Props 分离', () 
       'binding.kind-mismatch',
       'binding.unknown-prop',
     ])
+  })
+
+  it('方法绑定失败不回退同名 authored 字面值', () => {
+    // authored Props 是严格 JSON，同名值永远不是可调用 handler；回退会让宿主组件在事件触发时抛错。
+    const scope = createComposePageScriptScope(() => ({ onAdd: 3 }))
+    const authored = { text: 7, onClick: 'handleClick' }
+
+    const missing = resolveComposeRendererRuntimeProps({
+      entity: entity({
+        props: authored,
+        fields: { onClick: { scope: 'page', exportName: 'absent' } },
+      }),
+      definition,
+      scope,
+      methodMode: 'invoke',
+    })
+    expect(missing.props.onClick).toBeUndefined()
+    expect(missing.authoredProps).toEqual(authored)
+
+    const mismatched = resolveComposeRendererRuntimeProps({
+      entity: entity({
+        props: authored,
+        fields: { onClick: { scope: 'page', exportName: 'onAdd' } },
+      }),
+      definition,
+      scope,
+      methodMode: 'invoke',
+    })
+    expect(mismatched.props.onClick).toBeUndefined()
+    expect(mismatched.authoredProps).toEqual(authored)
   })
 
   it('Editor method wrapper 保留存在形状但不执行脚本', () => {

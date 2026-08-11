@@ -116,13 +116,30 @@ export function createComposeJavaScriptModuleLoader(
         )
       }
       finally {
+        // `import()` resolve 时模块已完成求值，因此可以立即释放 Blob URL。代价是模块
+        // 之后拿不回自己的 URL：内部的动态 `import()`、`import.meta.url` 和
+        // `new Worker(import.meta.url)` 都会失败，且错误不会指向这里。这是「自包含
+        // JavaScript」约束的具体含义，放宽它需要改为按实例持有并在 dispose 时释放。
         revokeObjectURL(moduleUrl)
       }
     },
   }
 }
 
-/** 加载 setup 模块并建立页面实例作用域。 @public */
+/**
+ * 加载 setup 模块并建立页面实例作用域。
+ *
+ * @remarks
+ * 本函数**永不 reject**：资源失败、模块导入失败和取消都会 resolve 出一个带对应
+ * diagnostic 的空作用域，让页面可以继续用文档字面 Props 渲染。
+ *
+ * 因此取消不会体现为异常——调用方必须在 resolve 后自行检查 `signal.aborted` 或自己的
+ * 卸载标记，并 dispose 这个迟到到达的作用域，否则它的 Effect 会继续运行。React 消费方
+ * 应改用 `@compose-ui/component-registry` 的 `useComposePageScriptScope`，它已经封装了
+ * 这套竞态处理。
+ *
+ * @public
+ */
 export async function loadComposePageScriptScope(input: {
   readonly reference: ComposePageSetupReference
   readonly loader: ComposeScriptModuleLoader

@@ -109,11 +109,26 @@ export function usePageWorkspace({
     })
   }, [sessions])
 
+  const unmountedRef = useRef(false)
   useEffect(() => () => {
+    unmountedRef.current = true
     reloadControllersRef.current.forEach((controller) => { controller.abort() })
     reloadControllersRef.current.clear()
     ownedScopesRef.current.forEach((scope) => { scope.dispose() })
     ownedScopesRef.current.clear()
+  }, [])
+
+  /**
+   * 接管一个新建作用域的所有权。卸载后到达的作用域必须就地释放：此时清理 Effect 已经
+   * 跑过，再放进 ownedScopesRef 就再也没有人会 dispose 它，它的 Effect 会一直运行。
+   */
+  const adoptScope = useCallback((scope: ComposePageScriptScope) => {
+    if (unmountedRef.current) {
+      scope.dispose()
+      return undefined
+    }
+    ownedScopesRef.current.add(scope)
+    return scope
   }, [])
 
   const reloadPageSetupScript = useCallback(async (pageKey: string) => {
@@ -148,9 +163,10 @@ export function usePageWorkspace({
       loaded.scope.dispose()
       return
     }
-    ownedScopesRef.current.add(loaded.scope)
-    updateSession(session.panelId, (item) => ({ ...item, scriptScope: loaded.scope }))
-  }, [scriptLoader, updateSession])
+    const adopted = adoptScope(loaded.scope)
+    if (!adopted) return
+    updateSession(session.panelId, (item) => ({ ...item, scriptScope: adopted }))
+  }, [adoptScope, scriptLoader, updateSession])
 
   useEffect(() => {
     if (!assetResolver?.subscribe || !scriptLoader) return undefined
@@ -195,8 +211,7 @@ export function usePageWorkspace({
           reference: snapshot.page.setupScript,
           loader: scriptLoader,
         })
-        scriptScope = loaded.scope
-        ownedScopesRef.current.add(scriptScope)
+        scriptScope = adoptScope(loaded.scope)
       }
       const session: ComposePageDocumentSession = {
         kind: 'page',
@@ -223,7 +238,7 @@ export function usePageWorkspace({
           : new ComposeAssetError('io', '页面读取失败', { cause: error }),
       }
     }
-  }, [provider, scriptLoader, store])
+  }, [adoptScope, provider, scriptLoader, store])
 
   const savePage = useCallback(async (
     panelId: string,
@@ -268,21 +283,36 @@ export function usePageWorkspace({
     if (!session) return
 
     reloadControllersRef.current.get(session.panelId)?.abort()
-    reloadControllersRef.current.delete(session.panelId)
+
+    // 与 reload 共用同一把取消闸门：连续更换脚本时，先发起的加载不能把自己的作用域
+    // 写回会话，也不能把它挂到实例上继续运行。
+    const controller = new AbortController()
+    reloadControllersRef.current.set(session.panelId, controller)
 
     let scriptScope: ComposePageScriptScope | undefined
     if (reference && scriptLoader) {
-      const loaded = await loadComposePageScriptScope({ reference, loader: scriptLoader })
-      scriptScope = loaded.scope
-      ownedScopesRef.current.add(scriptScope)
+      const loaded = await loadComposePageScriptScope({
+        reference,
+        loader: scriptLoader,
+        signal: controller.signal,
+      })
+      if (controller.signal.aborted) {
+        loaded.scope.dispose()
+        return
+      }
+      scriptScope = adoptScope(loaded.scope)
     }
+    if (reloadControllersRef.current.get(session.panelId) === controller) {
+      reloadControllersRef.current.delete(session.panelId)
+    }
+    else if (controller.signal.aborted) return
     updateSession(session.panelId, (current) => ({
       ...current,
       page: written.page,
       baseRevision: written.revision,
       scriptScope,
     }))
-  }, [scriptLoader, store, updateSession])
+  }, [adoptScope, scriptLoader, store, updateSession])
 
   // 页面会话的脏状态由其运行时 revision 与保存基线的差异决定。
   useEffect(() => {

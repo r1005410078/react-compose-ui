@@ -66,7 +66,7 @@ Computed 或 Function。Core MUST 校验引用形状但 MUST NOT 依赖运行时
 - **THEN** 得到 document 为原文档且 setupScript 为 null 的新页面包装
 - **AND** 普通页面解析器不会把旧裸格式静默当作新页面运行
 
-#### Scenario: 创建空白页面
+#### Scenario: 创建空白页面文档
 
 - **WHEN** 请求创建一份空白页面
 - **THEN** 得到 pageSchemaVersion 为 1、setupScript 为 null 的页面包装

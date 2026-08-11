@@ -19,6 +19,12 @@ export interface ComposeRendererRuntimePropsResult {
   readonly diagnostics: readonly ComposeRendererBindingDiagnostic[]
 }
 
+/**
+ * Editor 模式的 method wrapper。共用同一引用，避免每次解析都让绑定了事件的 Renderer
+ * 收到新函数身份而失效 memo。
+ */
+const NOOP_METHOD = () => undefined
+
 function diagnostic(
   input: Omit<ComposeRendererBindingDiagnostic, 'message'> & { readonly message: string },
 ): ComposeRendererBindingDiagnostic {
@@ -67,7 +73,9 @@ export function resolveComposeRendererRuntimeProps(input: {
     }
     const exported = input.scope?.getExport(reference.exportName)
     if (!exported) {
-      if (contract.kind === 'method' && !(propName in props)) props[propName] = undefined
+      // authored Props 是严格 JSON，同名值永远不是可调用 handler；回退它只会让宿主
+      // 组件在事件触发时抛错，因此 method 绑定失败一律置空。
+      if (contract.kind === 'method') props[propName] = undefined
       diagnostics.push(diagnostic({
         ...base,
         code: 'binding.missing-export',
@@ -76,7 +84,7 @@ export function resolveComposeRendererRuntimeProps(input: {
       return
     }
     if (exported.kind !== contract.kind) {
-      if (contract.kind === 'method' && !(propName in props)) props[propName] = undefined
+      if (contract.kind === 'method') props[propName] = undefined
       diagnostics.push(diagnostic({
         ...base,
         code: 'binding.kind-mismatch',
@@ -86,7 +94,7 @@ export function resolveComposeRendererRuntimeProps(input: {
     }
     if (contract.kind === 'method' && exported.kind === 'method') {
       props[propName] = input.methodMode === 'noop'
-        ? () => undefined
+        ? NOOP_METHOD
         : (...args: unknown[]) => { input.scope?.invokeMethod(reference.exportName, args) }
       return
     }

@@ -11,6 +11,7 @@ import {
   ComposeRegistryEntityRenderer,
   composeEntityAppearanceStyle,
   composeEntitySceneStyle,
+  useComposePageScriptScope,
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposePageDocumentLoader, ComposePageFile } from '@compose-ui/core'
@@ -32,13 +33,10 @@ import type {
 } from '@compose-ui/core'
 import type { CSSProperties, HTMLAttributes } from 'react'
 import type { ComposeLayoutRuntime } from '@compose-ui/layout-engine'
-import {
-  createComposeJavaScriptModuleLoader,
-  loadComposePageScriptScope,
-  type ComposePageScriptScope,
-  type ComposeScriptModuleLoader,
+import type {
+  ComposePageScriptScope,
+  ComposeScriptModuleLoader,
 } from '@compose-ui/script-runtime'
-import { useEffect, useMemo, useState } from 'react'
 import { useComposePreviewLayout } from './use-layout-runtime'
 
 /**
@@ -387,11 +385,11 @@ function ManagedComposePreview(props: ComposePreviewProps & { readonly document:
 
 /** 用普通 DOM 预览 ComposeDocument v6 输出。 @public */
 export function ComposePreview(props: ComposePreviewProps) {
-  const ownedScope = useComposePreviewPageScope(
-    props.page,
-    props.assetResolver,
-    props.scriptModuleLoader,
-  )
+  const ownedScope = useComposePageScriptScope({
+    page: props.page,
+    assetResolver: props.assetResolver,
+    scriptModuleLoader: props.scriptModuleLoader,
+  })
   const document = props.document ?? props.page?.document
   if (!document) return <section role="alert">Preview 缺少 ComposeDocument 或页面</section>
   const resolvedProps = {
@@ -404,54 +402,3 @@ export function ComposePreview(props: ComposePreviewProps) {
     : <ManagedComposePreview {...resolvedProps} />
 }
 
-function useComposePreviewPageScope(
-  page: ComposePageFile | undefined,
-  assetResolver: ComposeAssetResolver | undefined,
-  providedLoader: ComposeScriptModuleLoader | undefined,
-): ComposePageScriptScope | undefined {
-  const [loadedScope, setLoadedScope] = useState<{
-    readonly key: string
-    readonly scope: ComposePageScriptScope
-  }>()
-  const [reloadToken, setReloadToken] = useState(0)
-  const defaultLoader = useMemo(() => assetResolver
-    ? createComposeJavaScriptModuleLoader({ assetResolver })
-    : undefined, [assetResolver])
-  const loader = providedLoader ?? defaultLoader
-  const setupKey = page?.setupScript
-    ? `${page.setupScript.providerId}:${page.setupScript.assetKey}:${page.setupScript.scope}`
-    : null
-  const loadKey = setupKey === null ? null : `${setupKey}:${reloadToken}`
-
-  useEffect(() => {
-    if (!page?.setupScript) return undefined
-    return assetResolver?.subscribe?.(page.setupScript, () => {
-      setReloadToken((current) => current + 1)
-    })
-  }, [assetResolver, setupKey]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!page?.setupScript || !loader || loadKey === null) return undefined
-    const controller = new AbortController()
-    let disposed = false
-    let loadedScope: ComposePageScriptScope | undefined
-    void loadComposePageScriptScope({
-      reference: page.setupScript,
-      loader,
-      signal: controller.signal,
-    }).then((loaded) => {
-      if (disposed) {
-        loaded.scope.dispose()
-        return
-      }
-      loadedScope = loaded.scope
-      setLoadedScope({ key: loadKey, scope: loaded.scope })
-    })
-    return () => {
-      disposed = true
-      controller.abort()
-      loadedScope?.dispose()
-    }
-  }, [loader, loadKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  return loadedScope?.key === loadKey ? loadedScope.scope : undefined
-}

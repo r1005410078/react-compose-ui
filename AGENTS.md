@@ -62,9 +62,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `scene-tree`；`editor` 只通过 `inspectorPanel` 插槽集成它。
 - `@compose-ui/history` 是独立的 React 会话快照历史与受控面板，可依赖 `components` 和 `ui-context`，不得依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
-- `@compose-ui/component-registry` 是实例级宿主组件注册与 Renderer measurement adapter，可以依赖
-  `core`、`assets` 和 `script-runtime`，以 React 为 peer dependency，不得依赖 `editor` 或 `property-panel`；adapter
-  只能测量隔离内容，禁止读取 Stage/Preview Scene Entity DOM。
+- `@compose-ui/component-registry` 是实例级宿主组件注册、Renderer measurement adapter 与页面
+  setup 作用域加载 Hook，可以依赖 `core`、`assets` 和 `script-runtime`，以 React 为 peer dependency，
+  不得依赖 `editor` 或 `property-panel`；adapter 只能测量隔离内容，禁止读取 Stage/Preview Scene
+  Entity DOM。页面渲染入口不得各自复制脚本作用域的加载、热重载与 dispose 竞态逻辑。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面聚合 Store 包，只能依赖
   `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令

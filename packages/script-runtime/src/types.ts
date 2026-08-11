@@ -7,6 +7,7 @@ export type ComposeScriptDiagnosticCode =
   | 'script.effect-cleanup-threw'
   | 'script.effect-invalid-cleanup'
   | 'script.effect-cycle'
+  | 'script.context-after-setup'
   | 'script.computed-threw'
   | 'script.method-threw'
   | 'script.method-rejected'

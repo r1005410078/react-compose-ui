@@ -70,6 +70,9 @@ export function createComposePageScriptScope(
 
   const notify = () => {
     if (disposed || initializing) return
+    // 没有任何导出成员变化时不发布快照：脚本内部私有 State 的写入同样会触发一轮刷新，
+    // 但它对作用域消费者不可见，不应唤醒 Inspector、脚本面板等全部订阅者。
+    if (changedExports.size === 0) return
     snapshotCache = undefined
     const names = [...changedExports]
     changedExports.clear()
@@ -136,6 +139,8 @@ export function createComposePageScriptScope(
   if (!isPlainObject(returned)) {
     owner.dispose()
   }
+  // 导出跟踪 Effect 建立完毕后才密封：此后脚本再调用 ctx 原语只产生诊断。
+  owner.seal()
   initializing = false
   changedExports.clear()
 

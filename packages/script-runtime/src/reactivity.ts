@@ -46,6 +46,18 @@ function track(dependency: Dependency): void {
   activeObserver.dependencies.add(dependency)
 }
 
+/** 在不建立依赖关系的情况下求值，用于 setup 之外创建的降级 Computed。 */
+function untracked<T>(read: () => T): T {
+  const previous = activeObserver
+  activeObserver = null
+  try {
+    return read()
+  }
+  finally {
+    activeObserver = previous
+  }
+}
+
 /** 单个页面实例拥有的响应式 owner。 @internal */
 export class ComposeReactiveOwner {
   private readonly effects: EffectRecord[] = []
@@ -54,6 +66,7 @@ export class ComposeReactiveOwner {
   private flushScheduled = false
   private nextEffectId = 0
   private disposed = false
+  private sealed = false
 
   constructor(
     private readonly reportDiagnostic: (diagnostic: ComposeScriptDiagnostic) => void,
@@ -61,7 +74,30 @@ export class ComposeReactiveOwner {
     private readonly maxEffectRunsPerFlush: number,
   ) {}
 
+  /**
+   * 密封响应式 context。setup 返回后调用，之后新建的原语不再注册到本实例。
+   *
+   * @remarks
+   * 没有这道闸门时，在 Effect 内部创建 Computed/Effect 会让 `observers` 与 `effects`
+   * 只增不减，且旧 Effect 继续订阅依赖并执行，形成无界增长。
+   */
+  seal(): void {
+    this.sealed = true
+  }
+
+  private reportContextAfterSetup(api: 'state' | 'computed' | 'effect'): void {
+    this.reportDiagnostic({
+      code: 'script.context-after-setup',
+      message: `ctx.${api}() 只能在 setup 同步执行期间调用，本次调用不会注册到页面实例`,
+    })
+  }
+
   createState<T>(initial: T): ComposeState<T> {
+    if (this.sealed) {
+      this.reportContextAfterSetup('state')
+      // 降级为普通可读写 Cell：不跟踪依赖，也不参与调度。
+      return { value: initial } as InternalState<T>
+    }
     const dependency: Dependency = { observers: new Set() }
     let value = initial
     const scheduleObservers = () => {
@@ -83,9 +119,15 @@ export class ComposeReactiveOwner {
   }
 
   createComputed<T>(read: () => T): ComposeComputed<T> {
+    if (this.sealed) {
+      this.reportContextAfterSetup('computed')
+      // 降级为不跟踪依赖的惰性求值：保持 `.value` 可读，误用只表现为一条诊断。
+      return { get value() { return untracked(read) } } as InternalComputed<T>
+    }
     const dependency: Dependency = { observers: new Set() }
     let dirty = true
     let initialized = false
+    let errored = false
     let value: T
     const observer: ReactiveObserver = {
       dependencies: new Set(),
@@ -105,8 +147,10 @@ export class ComposeReactiveOwner {
       try {
         value = read()
         initialized = true
+        errored = false
       }
       catch (cause) {
+        errored = true
         this.reportDiagnostic({
           code: 'script.computed-threw',
           message: cause instanceof Error ? cause.message : 'Computed 执行失败',
@@ -115,6 +159,9 @@ export class ComposeReactiveOwner {
       }
       finally {
         activeObserver = previous
+        // 即使抛错也退出 dirty：`.value` 可能在一次渲染中被读多次，保持 dirty 会让
+        // 每次读取都重新抛错并重复发布同一条诊断。抛错点之前已跟踪到的依赖变化仍会
+        // 通过 schedule() 把 dirty 置回 true，从而获得重算机会。
         dirty = false
       }
     }
@@ -124,12 +171,19 @@ export class ComposeReactiveOwner {
       get value() {
         track(dependency)
         if (dirty) evaluate()
-        return initialized ? value : undefined as T
+        // 抛错时返回 undefined 而不是上一次的成功结果：陈旧值看起来正常，会让消费者
+        // 把失效数据当成有效数据继续使用。
+        if (errored || !initialized) return undefined as T
+        return value
       },
     } as InternalComputed<T>
   }
 
   createEffect(run: () => void | (() => void)): void {
+    if (this.sealed) {
+      this.reportContextAfterSetup('effect')
+      return
+    }
     const record: EffectRecord = {
       id: this.nextEffectId++,
       dependencies: new Set(),
@@ -200,6 +254,10 @@ export class ComposeReactiveOwner {
   private flush(): void {
     this.flushScheduled = false
     if (this.disposed) return
+    // 调度上限是「单轮刷新内的收敛保护」，不是对 Effect 的永久判决：上一轮被截断的
+    // Effect 在这一轮重新参与调度，因此一次合法的写入突发不会永久停用它，而真正的
+    // 死循环每轮仍会被截断并再次告警。
+    this.effects.forEach((effect) => { effect.paused = false })
     const runCounts = new Map<number, number>()
     while (this.pendingEffects.size > 0 && !this.disposed) {
       const batch = [...this.pendingEffects]
@@ -208,11 +266,11 @@ export class ComposeReactiveOwner {
         const runs = (runCounts.get(effect.id) ?? 0) + 1
         runCounts.set(effect.id, runs)
         if (runs > this.maxEffectRunsPerFlush) {
+          // 只暂停本轮；保留依赖订阅，否则复位后它再也不会被任何依赖唤醒。
           effect.paused = true
-          removeDependencies(effect)
           this.reportDiagnostic({
             code: 'script.effect-cycle',
-            message: `Effect 在一次刷新中执行超过 ${this.maxEffectRunsPerFlush} 次，已暂停`,
+            message: `Effect 在一次刷新中执行超过 ${this.maxEffectRunsPerFlush} 次，本轮刷新已中止`,
           })
           continue
         }

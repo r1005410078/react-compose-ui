@@ -27,6 +27,10 @@ export type {
   ComposePaintLayerProps,
 } from './registry-renderers'
 export {
+  useComposePageScriptScope,
+  type UseComposePageScriptScopeOptions,
+} from './page-script-scope'
+export {
   createComposeRendererMeasurementAdapter,
   type ComposeRendererMeasurementAdapter,
   type ComposeRendererMeasurementAdapterOptions,

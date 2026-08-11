@@ -60,13 +60,13 @@ Page Store MUST 以页面文件的 expected revision 原子改写可选 setupScr
 ComposeDocument，支持取消，并在底层页面文件变更时通知订阅者。Loader MUST NOT 执行 setup 脚本；
 执行由更高层页面 Runtime 组合。
 
-#### Scenario: 按引用加载聚合页面
+#### Scenario: 按引用加载
 
 - **WHEN** 以某页面引用调用 Loader
 - **THEN** 返回该页面的 document 与 setupScript 引用
 - **AND** 重复加载命中 Store 缓存且不执行脚本
 
-#### Scenario: 通知页面包装变更
+#### Scenario: 通知变更
 
 - **WHEN** 已订阅页面的 document 或 setupScript 引用在 Provider 侧发生变更
 - **THEN** 订阅者收到通知并在下次加载取得完整新包装

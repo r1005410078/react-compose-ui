@@ -20,7 +20,12 @@ interface ComposeComputed<T> {
   readonly value: T
 }
 
-/** 页面 setup 函数可使用的响应式工具集合。 */
+/**
+ * 页面 setup 函数可使用的响应式工具集合。
+ *
+ * 三个方法只能在 setup 同步执行期间调用。setup 返回后（例如在事件方法或 effect 内部）
+ * 再调用不会注册到页面实例，只会产生一条诊断并返回不参与响应式的降级对象。
+ */
 interface ComposePageScriptContext {
   /**
    * 创建可读写的响应式状态。传入 initial 时会自动推导 value 类型；不传时为 undefined。
@@ -53,6 +58,7 @@ interface ComposePageScriptContext {
   /**
    * 创建只读派生值。读取函数中访问的 state 与 computed 会被自动跟踪，
    * 依赖变化后在下次读取 value 时重新计算。
+   * 读取函数抛错时 value 为 undefined，依赖修复并重算成功后自动恢复。
    *
    * 示例：
    * \`\`\`javascript
