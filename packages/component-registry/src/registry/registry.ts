@@ -727,6 +727,11 @@ export function createComposeEntityRegistry(
     getRenderer: (type: string) => renderers.byId.get(type),
     listRenderers: () => renderers.ordered,
     listRendererPropContracts: (type: string) => renderers.byId.get(type)?.propContracts ?? [],
+    getContentReflowsWithWidth: (entity: ComposeEntity) => {
+      const renderer = getComposeRenderer(entity)
+      if (!renderer) return false
+      return renderers.byId.get(renderer.type)?.measurement?.heightDependsOnWidth === true
+    },
     getEditableTextPropName: (entity: ComposeEntity) => {
       const renderer = getComposeRenderer(entity)
       if (!renderer) return null

@@ -192,18 +192,17 @@ describe('Basic ECS materials', () => {
     expect(materials.registry.getEditableTextPropName(rectangle)).toBeNull()
   })
 
-  it('OpenSpec: 内建 Text 物料 / 只允许水平缩放，高度始终由内容决定', () => {
+  it('OpenSpec: 内建 Text 物料 / 声明内容高度随宽度重排', () => {
     const materials = createComposeBasicMaterials()
     const text = seedEntity(materials, 'text')
+    const rectangle = seedEntity(materials, 'rectangle')
 
-    // 高度必须留在 Hug：拖角手柄会把宽高一起钉成 Fixed，文字换行后长高就会被自己的框切掉。
-    // 限制为水平缩放后，只有 E/W 手柄，宽度定死而高度继续跟随内容。
+    // 文字换行：拖窄后行数增加、内容变高。声明它之后缩放不会把 Hug 高度钉成 Fixed，
+    // 长出来的部分也就不会被自己的框裁掉。八向手柄照常保留。
     expect(getComposeLayoutItem(text).height.mode).toBe('hug')
-    expect(text.components.GeometryConstraints).toMatchObject({
-      movable: true,
-      resize: 'horizontal',
-      rotatable: true,
-    })
+    expect(materials.registry.getContentReflowsWithWidth(text)).toBe(true)
+    expect(materials.registry.getContentReflowsWithWidth(rectangle)).toBe(false)
+    expect(text.components.GeometryConstraints).toBeUndefined()
   })
 
   it('OpenSpec: 内建 Text 物料 / 编辑态原地渲染并保持排版一致', async () => {

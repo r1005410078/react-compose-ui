@@ -35,6 +35,8 @@ const EMPTY_TEXT_CARET_WIDTH = 1
 
 /** Text Renderer 使用的隔离 DOM 内容测量。 @internal */
 export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
+  // 文字会换行：拖窄后行数增加、内容变高，因此缩放时不能把 Hug 高度钉成 Fixed。
+  heightDependsOnWidth: true,
   measure({ props, width, height }) {
     if (typeof document === 'undefined' || !document.body) return null
     const content = typeof props.text === 'string' || typeof props.text === 'number'

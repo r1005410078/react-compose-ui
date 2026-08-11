@@ -1041,6 +1041,12 @@ function ComposeStageReady({
     }
   })
 
+  const contentReflowsWithWidth = useCallback((entityId: string) => {
+    const current = latestRef.current
+    const entity = current.document.entities[entityId]
+    return entity ? current.registry.getContentReflowsWithWidth(entity) : false
+  }, [])
+
   const isTextEditable = useCallback((entityId: string) => {
     const current = latestRef.current
     const entity = current.document.entities[entityId]
@@ -1847,6 +1853,7 @@ function ComposeStageReady({
       paintSampling,
       textEditing,
       drawnEntity: lastDrawn,
+      contentReflowsWithWidth,
       isTextEditable,
       idFactory,
       labels: {
@@ -1857,6 +1864,7 @@ function ComposeStageReady({
       },
     })
   }, [
+    contentReflowsWithWidth,
     controller,
     document,
     isTextEditable,

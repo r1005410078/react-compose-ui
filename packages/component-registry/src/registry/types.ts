@@ -341,6 +341,15 @@ export interface ComposeRendererMeasurementDefinition {
   measure(input: ComposeRendererMeasureInput): ComposeMeasuredSize | null
   prepare?(input: ComposeRendererPrepareInput): Promise<unknown> | unknown
   subscribe?(input: ComposeRendererMeasurementSubscriptionInput): () => void
+  /**
+   * 内容高度是否随可用宽度重排，例如文字换行。
+   *
+   * @remarks
+   * 声明后，消费方在缩放这类 Entity 时不会把 Hug 高度钉成 Fixed：被拖窄后内容重新换行
+   * 会长高，若高度已被写死，长出来的部分会被自己的框裁掉。
+   * @defaultValue false
+   */
+  readonly heightDependsOnWidth?: boolean
 }
 
 /** 一个可校验并展示的 ECS Component 定义。 @public */
@@ -536,6 +545,14 @@ export interface ComposeEntityRegistry {
   listRenderers(): readonly ComposeRendererDefinition[]
   /** 按声明顺序列出一个 Renderer 的显式 Prop Contract。 */
   listRendererPropContracts(type: string): readonly ComposeRendererPropContract[]
+  /**
+   * 判断 Entity 的内容高度是否随可用宽度重排（例如文字换行）。
+   *
+   * @remarks
+   * 消费方据此决定缩放语义：这类内容被拖窄后会重新换行长高，若把高度一并钉成 Fixed，
+   * 长出来的部分会被自己的框裁掉。未声明的 Renderer 一律返回 false。
+   */
+  getContentReflowsWithWidth(entity: ComposeEntity): boolean
   /**
    * 查出 Entity 可原地编辑的纯文本 Prop 名称；不可编辑时返回 null。
    *

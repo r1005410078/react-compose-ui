@@ -57,14 +57,6 @@ function textPresetComponents(input: {
       width: { ...components.LayoutItem.width, mode: 'hug' as const },
       height: { ...components.LayoutItem.height, mode: 'hug' as const },
     },
-    // 文字的高度必须一直由内容决定：拖角手柄会把宽高一起钉成 Fixed，宽度变窄后文字重新
-    // 换行长高，却被钉死的高度切掉。限制为水平缩放后只剩 E/W 手柄——宽度定死、高度跟随
-    // 内容长高，也不会再出现一个「拖了却管不了高度」的角手柄。
-    GeometryConstraints: {
-      movable: true,
-      resize: 'horizontal' as const,
-      rotatable: true,
-    },
   }
 }
 

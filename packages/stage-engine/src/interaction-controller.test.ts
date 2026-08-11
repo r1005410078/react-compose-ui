@@ -1144,3 +1144,78 @@ describe('StageInteractionController 文字工具只按点创建', () => {
     })
   })
 })
+
+describe('StageInteractionController 内容重排实体的缩放', () => {
+  function hugHeightEntity(id: string) {
+    const base = entity(id)
+    const item = base.components.LayoutItem as Record<string, unknown>
+    return {
+      ...base,
+      components: {
+        ...base.components,
+        LayoutItem: {
+          ...item,
+          height: { ...(item.height as object), mode: 'hug' },
+        },
+      },
+    }
+  }
+
+  function resizeSetup(reflowing: boolean) {
+    const value = document([hugHeightEntity('a')])
+    const effects: StageInteractionEffect[] = []
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: (next) => effects.push(...next),
+    })
+    controller.updateContext({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'select',
+      selectedIds: ['a'],
+      contentReflowsWithWidth: () => reflowing,
+      idFactory: () => 'resize-id',
+    })
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 100, y: 50 },
+      hit: { kind: 'resize', handle: 'se' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 60, y: 30 }, modifiers })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 60, y: 30 }, modifiers })
+    const command = effects.find((effect) => effect.type === 'command.dispatch')
+    return { controller, command }
+  }
+
+  it('OpenSpec: 受约束变换 System / Hug 高度的重排内容缩放时不被钉成 Fixed', () => {
+    // 文字这类内容：宽度变窄后重新换行会长高。若缩放把高度一并写死，长出来的部分
+    // 会被自己的框裁掉。因此只钉宽度，高度留给内容决定。
+    const { command } = resizeSetup(true)
+    expect(command).toMatchObject({
+      command: {
+        payload: {
+          operation: 'resize',
+          updates: [{ entityId: 'a', transform: { size: { width: 64, height: 50 } } }],
+        },
+      },
+    })
+  })
+
+  it('OpenSpec: 受约束变换 System / 内容不随宽度重排时高度照常缩放', () => {
+    const { command } = resizeSetup(false)
+    expect(command).toMatchObject({
+      command: {
+        payload: {
+          operation: 'resize',
+          updates: [{ entityId: 'a', transform: { size: { width: 64, height: 32 } } }],
+        },
+      },
+    })
+  })
+})

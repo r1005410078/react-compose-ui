@@ -2987,15 +2987,16 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 缩窄文字框时高度�
   const node = stage.locator('.compose-stage__node.is-renderer').last()
   const before = (await node.boundingBox())!
 
-  // 文字只允许水平缩放：角手柄会把高度一起钉死，宽度变窄后换行长高就会被自己的框切掉。
-  await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
-  await expect(stage.getByTestId('stage-resize-e')).toHaveCount(0)
-  const edge = stage.getByTestId('stage-resize-edge-e')
-  await expect(edge).toBeVisible()
-  const edgeBox = (await edge.boundingBox())!
-  await page.mouse.move(edgeBox.x + edgeBox.width / 2, edgeBox.y + edgeBox.height / 2)
+  // 八向手柄照常保留；文字的特殊之处只在于高度不会被钉死。
+  for (const handle of ['ne', 'se', 'sw', 'nw']) {
+    await expect(stage.getByTestId(`stage-resize-${handle}`)).toBeVisible()
+  }
+  const handle = stage.getByTestId('stage-resize-se')
+  const handleBox = (await handle.boundingBox())!
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
   await page.mouse.down()
-  await page.mouse.move(edgeBox.x - 70, edgeBox.y + edgeBox.height / 2, { steps: 6 })
+  // 角手柄同时往左上拖：宽度收窄，高度本会被一起钉小。
+  await page.mouse.move(handleBox.x - 70, handleBox.y - 6, { steps: 6 })
   await page.mouse.up()
 
   const after = (await node.boundingBox())!

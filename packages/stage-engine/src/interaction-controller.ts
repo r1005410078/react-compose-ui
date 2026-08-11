@@ -214,6 +214,14 @@ export interface StageInteractionContext {
   readonly isTextEditable?: (entityId: string) => boolean
   /** 宿主回灌的最近一次绘制创建结果；`draw-text` 的创建据此进入编辑。 */
   readonly drawnEntity?: StageDrawnEntity | null
+  /**
+   * 判定一个 Entity 的内容高度是否随可用宽度重排（例如文字换行）；缺省时视为不重排。
+   *
+   * @remarks
+   * 该事实来自 Renderer 的 measurement 声明，而 stage-engine 不依赖 Registry，因此由宿主
+   * 查询后传入。缩放这类 Entity 时其 Hug 高度会被保留——见下方缩放规则。
+   */
+  readonly contentReflowsWithWidth?: (entityId: string) => boolean
   /** 为命令、batch、guide 和结构节点创建稳定 ID。 */
   readonly idFactory: () => string
   /** 保留 React/i18n 层提供的命令标签。 */
@@ -829,6 +837,7 @@ function transformedSelection(
   ids: readonly string[],
   worldTransform: StageMatrix,
   resize?: { readonly scaleX: number; readonly scaleY: number },
+  keepsHugHeight?: (entityId: string) => boolean,
 ) {
   const updates: Record<string, StageTransform> = {}
   ids.forEach((id) => {
@@ -884,14 +893,23 @@ function transformedSelection(
       }
       return
     }
+    // 内容随宽度重排的 Entity（文字换行）保留其 Hug 高度：拖窄后重新换行会长高，若把
+    // 高度一并写死，长出来的部分会被自己的框裁掉。
+    //
+    // 这里必须回 authored 的 `layoutItem.height.value` 而不是解析出的 `transform.height`：
+    // 文档层按 authored 值判断「高度变没变」，而 Hug 实体的 authored 值只是回退尺寸，
+    // 与测量出的实际高度并不相等——回解析值会被判成「改了高度」，照样钉成 Fixed。
+    const preserveHugHeight = layoutItem.height.mode === 'hug' && keepsHugHeight?.(id) === true
     updates[id] = {
       ...candidate,
       width: constraints.resize === 'vertical'
         ? transform.width
         : clamp(candidate.width, minimum.width, maximum.width),
-      height: constraints.resize === 'horizontal'
-        ? transform.height
-        : clamp(candidate.height, minimum.height, maximum.height),
+      height: preserveHugHeight
+        ? layoutItem.height.value
+        : constraints.resize === 'horizontal'
+          ? transform.height
+          : clamp(candidate.height, minimum.height, maximum.height),
     }
   })
   return updates
@@ -902,12 +920,14 @@ function transformedResizeSelection(
   ids: readonly string[],
   worldTransform: StageMatrix,
   resize: { readonly scaleX: number; readonly scaleY: number },
+  keepsHugHeight?: (entityId: string) => boolean,
 ) {
   return transformedSelection(
     index,
     index.topLevelSelection(ids),
     worldTransform,
     resize,
+    keepsHugHeight,
   )
 }
 
@@ -1279,6 +1299,7 @@ export function createStageInteractionController(): StageInteractionController {
           scaleX: nextBounds.width / gesture.bounds.width,
           scaleY: nextBounds.height / gesture.bounds.height,
         },
+        context?.contentReflowsWithWidth,
       )
       publish({
         ...snapshot,
