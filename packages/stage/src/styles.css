@@ -228,6 +228,11 @@
   stroke-width: 1;
 }
 
+/* 编辑态只留一条细边框：填充会盖住正在编辑的文字，也容易和普通选中态混淆。 */
+.compose-stage__selection.is-text-editing {
+  fill: none;
+}
+
 .compose-stage__line-selection-axis {
   fill: none;
   pointer-events: none;

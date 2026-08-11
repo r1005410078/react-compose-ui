@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import {
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
@@ -17,7 +17,7 @@ import {
   type ComposeEntity,
   type ComposeDocument,
 } from '@compose-ui/core'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposeBasicMaterials } from './create-basic-materials'
 
 function seedEntity(
@@ -30,6 +30,8 @@ function seedEntity(
 }
 
 describe('Basic ECS materials', () => {
+  afterEach(cleanup)
+
   it('OpenSpec: basic-materials / Figma 基线的 Text 默认值与排版 / 创建默认 Text', () => {
     const materials = createComposeBasicMaterials()
     const text = seedEntity(materials, 'text')
@@ -179,6 +181,73 @@ describe('Basic ECS materials', () => {
       />,
     )
     expect(screen.getByText('Text')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: 内建 Text 物料 / 声明 text 为可原地编辑文本', () => {
+    const materials = createComposeBasicMaterials()
+    const text = seedEntity(materials, 'text')
+    const rectangle = seedEntity(materials, 'rectangle')
+
+    expect(materials.registry.getEditableTextPropName(text)).toBe('text')
+    expect(materials.registry.getEditableTextPropName(rectangle)).toBeNull()
+  })
+
+  it('OpenSpec: 内建 Text 物料 / 编辑态原地渲染并保持排版一致', () => {
+    const materials = createComposeBasicMaterials()
+    const text = seedEntity(materials, 'text')
+    const onChange = vi.fn()
+    const view = render(
+      <ComposeRegistryEntityRenderer
+        entity={text}
+        mode="editor"
+        registry={materials.registry}
+      />,
+    )
+    const idleStyle = view.getByTestId('compose-material-text').getAttribute('style')
+
+    view.rerender(
+      <ComposeRegistryEntityRenderer
+        entity={text}
+        mode="editor"
+        registry={materials.registry}
+        textEditing={{ value: 'Text', onChange }}
+      />,
+    )
+    const editable = view.getByTestId('compose-material-text-editable')
+    // 编辑态与最终呈现必须同源：容器排版样式一字不差，否则退出编辑时视觉会跳变。
+    expect(view.getByTestId('compose-material-text').getAttribute('style')).toBe(idleStyle)
+    expect(editable).toHaveAttribute('contenteditable', 'true')
+    expect(editable.textContent).toBe('Text')
+    expect(editable).toHaveFocus()
+  })
+
+  it('OpenSpec: 内建 Text 物料 / 输入与粘贴只保留纯文本', () => {
+    const materials = createComposeBasicMaterials()
+    const text = seedEntity(materials, 'text')
+    const onChange = vi.fn()
+    const view = render(
+      <ComposeRegistryEntityRenderer
+        entity={text}
+        mode="editor"
+        registry={materials.registry}
+        textEditing={{ value: 'Text', onChange }}
+      />,
+    )
+    const editable = view.getByTestId('compose-material-text-editable')
+
+    editable.textContent = 'Hello'
+    fireEvent.input(editable)
+    expect(onChange).toHaveBeenLastCalledWith('Hello')
+
+    const clipboardData = {
+      getData: vi.fn((type: string) => type === 'text/plain' ? 'plain' : '<b>rich</b>'),
+    }
+    const paste = createEvent.paste(editable, { clipboardData })
+    fireEvent(editable, paste)
+    // 富文本必须在进入文档前就被剥掉：文档协议里 text 是纯文本单 Prop。
+    expect(paste.defaultPrevented).toBe(true)
+    expect(clipboardData.getData).toHaveBeenCalledWith('text/plain')
+    expect(editable.innerHTML).not.toContain('<b>')
   })
 
   it('OpenSpec: Renderer Inspector / 内容更新派发 entity.renderer.props.set', () => {

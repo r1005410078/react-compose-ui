@@ -73,6 +73,8 @@ export function createTextMaterial(
       type: 'text',
       label: options.label ?? 'Text',
       renderer: TextRenderer,
+      // 声明后 Stage 无需识别物料类型即可提供画布内编辑；stage 不依赖 materials。
+      editableTextPropName: 'text',
       propContracts: [
         valueContract('text', 'Text', 'text'),
         valueContract('color', 'Text color', 'text', false),

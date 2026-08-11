@@ -15,3 +15,8 @@
 .compose-material--text-content {
   width: 100%;
 }
+
+/* 编辑边框由 Stage overlay 统一绘制，浏览器默认焦点框会与它重叠。 */
+.compose-material--text-content[contenteditable='true'] {
+  outline: none;
+}

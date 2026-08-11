@@ -32,16 +32,16 @@
 - [x] 4.2 Overlay 按编辑会话抑制手柄，与 TransformConstraints 抑制叠加
 - [x] 4.3 Stage 持有会话状态并作为 context 回传 Controller
 - [x] 4.4 Stage 供给连击计数、可编辑判定与 `createDrawing` 后的新建 Entity 回灌
-- [ ] 4.5 编辑目标原地可编辑渲染、获取焦点，退出后焦点交还 surface
+- [x] 4.5 编辑目标原地可编辑渲染、获取焦点，退出后焦点交还 surface
 - [x] 4.6 输入只写编辑中值覆盖不派发命令，退出时清除覆盖
 - [x] 4.7 退出时向 Registry 查 prop 名，按「有变化 / 为空 / 无变化」收敛为最多一条事务
 - [ ] 4.8 验证 Auto width 在输入过程中经既有 measurement 链路实时改宽
 
 ## 5. Text 物料
 
-- [ ] 5.1 Text Definition 声明 `text` 为可原地编辑文本
-- [ ] 5.2 Text Renderer 支持编辑态原地渲染并保持排版一致
-- [ ] 5.3 粘贴与输入只保留纯文本，剥离 HTML 标记
+- [x] 5.1 Text Definition 声明 `text` 为可原地编辑文本
+- [x] 5.2 Text Renderer 支持编辑态原地渲染并保持排版一致
+- [x] 5.3 粘贴与输入只保留纯文本，剥离 HTML 标记
 
 ## 6. 端到端
 
