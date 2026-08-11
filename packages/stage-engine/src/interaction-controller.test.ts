@@ -723,3 +723,103 @@ describe('StageInteractionController ECS systems', () => {
     expect(effects).toContainEqual({ type: 'paint.sample.complete' })
   })
 })
+
+describe('OpenSpec: stage / 可拖拽全局辅助线 / 从标尺创建辅助线', () => {
+  function dragFromRuler(axis: 'x' | 'y', to: { x: number; y: number }) {
+    const { controller, effects } = setup()
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 0, y: 0 },
+      hit: { kind: 'ruler', axis },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: to, modifiers })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: to, modifiers })
+    return effects.filter((effect) => effect.type === 'command.dispatch')
+  }
+
+  it('顶部标尺拖出水平辅助线', () => {
+    const commands = dragFromRuler('x', { x: 120, y: 200 })
+
+    // axis 'y' 的辅助线以 world.y 定位并渲染为横线；顶部标尺必须拖出横线。
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: {
+        type: 'canvas.guide.create',
+        payload: { guide: { axis: 'y', position: 200 } },
+      },
+    })
+  })
+
+  it('左侧标尺拖出垂直辅助线', () => {
+    const commands = dragFromRuler('y', { x: 120, y: 200 })
+
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: {
+        type: 'canvas.guide.create',
+        payload: { guide: { axis: 'x', position: 120 } },
+      },
+    })
+  })
+
+  it('松手时仍停在标尺内则不创建辅助线', () => {
+    expect(dragFromRuler('x', { x: 120, y: -6 })).toHaveLength(0)
+    expect(dragFromRuler('y', { x: -6, y: 200 })).toHaveLength(0)
+  })
+})
+
+describe('OpenSpec: stage / 可拖拽全局辅助线 / 拖回标尺删除辅助线', () => {
+  function dragExistingGuide(
+    guide: { id: string; axis: 'x' | 'y'; position: number },
+    to: { x: number; y: number },
+  ) {
+    const value = document()
+    const withGuide = {
+      ...value,
+      canvas: { ...value.canvas, guides: [guide] },
+    }
+    const { controller, effects } = setup(withGuide, layoutSnapshot(withGuide))
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 100, y: 100 },
+      hit: { kind: 'guide', guideId: guide.id },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: to, modifiers })
+    const cursor = controller.getSnapshot().cursor
+    controller.send({ type: 'pointer.up', pointerId: 1, point: to, modifiers })
+    return {
+      cursor,
+      commands: effects.filter((effect) => effect.type === 'command.dispatch'),
+    }
+  }
+
+  it('水平辅助线拖回顶部标尺时删除', () => {
+    const { commands } = dragExistingGuide({ id: 'g1', axis: 'y', position: 80 }, { x: 120, y: -6 })
+
+    expect(commands[0]).toMatchObject({
+      command: { type: 'canvas.guide.delete', payload: { guideId: 'g1' } },
+    })
+  })
+
+  it('垂直辅助线拖回左侧标尺时删除', () => {
+    const { commands } = dragExistingGuide({ id: 'g1', axis: 'x', position: 80 }, { x: -6, y: 120 })
+
+    expect(commands[0]).toMatchObject({
+      command: { type: 'canvas.guide.delete', payload: { guideId: 'g1' } },
+    })
+  })
+
+  it('停留在标尺内时给出删除光标提示', () => {
+    const inside = dragExistingGuide({ id: 'g1', axis: 'y', position: 80 }, { x: 120, y: -6 })
+    const outside = dragExistingGuide({ id: 'g1', axis: 'y', position: 80 }, { x: 120, y: 200 })
+
+    expect(inside.cursor).toBe('guide-delete')
+    expect(outside.cursor).not.toBe('guide-delete')
+  })
+})

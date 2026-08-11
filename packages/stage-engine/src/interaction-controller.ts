@@ -307,6 +307,18 @@ export interface StageInteractionSnapshot {
     | 'resize'
     | 'rotate'
     | 'copy'
+    | 'guide-delete'
+  /** 辅助线手势当前停在所属标尺内，松手将删除该辅助线。 */
+  readonly guideDelete: boolean
+}
+
+/*
+ * 辅助线拖回“自己那条标尺”即视为删除：横线（axis 'y'）属于顶部标尺，落点 y 为负表示已经
+ * 退回标尺区域；竖线（axis 'x'）属于左侧标尺，看 x。surface 坐标以标尺内边缘为原点，因此
+ * 负值就等价于“在标尺里”。
+ */
+function isInsideOwningRuler(axis: 'x' | 'y', point: StagePoint): boolean {
+  return axis === 'y' ? point.y < 0 : point.x < 0
 }
 
 /** controller 接受的普通数据事件。 @public */
@@ -372,6 +384,7 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   selectionBounds: null,
   scrollRange: null,
   cursor: 'default',
+  guideDelete: false,
 }
 
 type Gesture =
@@ -941,7 +954,9 @@ export function createStageInteractionController(): StageInteractionController {
         ? next.paintPreview.paint
         : resolveComposeAppearance(paintEntity).backgroundPaint
       : null
-    const cursor = next.phase === 'pan'
+    const cursor = next.guideDelete
+      ? 'guide-delete'
+      : next.phase === 'pan'
       ? 'grabbing'
       : next.phase === 'move'
         ? 'move'
@@ -1084,7 +1099,12 @@ export function createStageInteractionController(): StageInteractionController {
           context!.document.canvas.grid.snapEnabled && !modifiers.command,
         ),
       }))
-      publish({ ...snapshot, phase: 'guide-create', guidePreview: gesture.guides })
+      publish({
+        ...snapshot,
+        phase: 'guide-create',
+        guidePreview: gesture.guides,
+        guideDelete: gesture.guides.every((guide) => isInsideOwningRuler(guide.axis, point)),
+      })
       return
     }
     if (gesture.type === 'paint-sample') {
@@ -1113,6 +1133,7 @@ export function createStageInteractionController(): StageInteractionController {
       publish({
         ...snapshot,
         phase: 'guide-move',
+        guideDelete: isInsideOwningRuler(gesture.axis, point),
         guidePreview: [{
           id: gesture.guideId,
           axis: gesture.axis,
@@ -1480,9 +1501,13 @@ export function createStageInteractionController(): StageInteractionController {
       event.hit.kind === 'ruler'
       || event.hit.kind === 'ruler-corner'
     ) {
+      /*
+       * 顶部（水平）标尺拖出的是横线，横线由 world.y 定位，因此 guide.axis 是 'y'；左侧标尺
+       * 同理拖出 axis 'x' 的竖线。标尺自身的 axis 与辅助线的 axis 互为反向，不能直接沿用。
+       */
       const axes: readonly ('x' | 'y')[] = event.hit.kind === 'ruler-corner'
         ? ['x', 'y']
-        : [event.hit.axis]
+        : [event.hit.axis === 'x' ? 'y' : 'x']
       const viewport = context.viewport
       const world = worldPoint(event.point, viewport)
       const guides = axes.map((axis) => ({
@@ -1642,7 +1667,8 @@ export function createStageInteractionController(): StageInteractionController {
       effects.push({ type: 'paint.sample.complete' })
     }
     else if (finished.type === 'guide-create') {
-      const created = finished.guides.filter((guide) => guide.axis === 'x'
+      // axis 'y' 的横线来自顶部标尺，落点仍在标尺内（y < 0）就放弃创建；竖线同理看 x。
+      const created = finished.guides.filter((guide) => guide.axis === 'y'
         ? finished.point.y >= 0
         : finished.point.x >= 0)
       if (created.length > 0) {
@@ -1674,9 +1700,7 @@ export function createStageInteractionController(): StageInteractionController {
       }
     }
     else if (finished.type === 'guide-move') {
-      const shouldDelete = finished.axis === 'x'
-        ? finished.point.y < 0
-        : finished.point.x < 0
+      const shouldDelete = isInsideOwningRuler(finished.axis, finished.point)
       effects.push({
         type: 'command.dispatch',
         command: {

@@ -35,16 +35,24 @@ describe('Godot-style low-zoom grid rendering', () => {
       zoom: 0.25,
     })
 
+    // screenOffset 按设备像素取整：与标尺共用同一规则，1.25 在 dpr 1 下落到整像素 1。
     expect(axis).toEqual({
       stride: 1,
       worldStep: 8,
       screenStep: 2,
-      screenOffset: 1.25,
+      screenOffset: 1,
     })
     for (const index of [-3, -1, 0, 2, 5]) {
       const worldLine = -3 + index * axis.worldStep
       expect((worldLine - -3) / 8).toBe(index * axis.stride)
     }
+  })
+
+  it('按设备像素比取整首线位置，使网格与标尺落到同一像素', () => {
+    const base = { step: 8, offset: -3, viewportOffset: -10, zoom: 0.25 }
+
+    expect(createVisibleGridAxis({ ...base, devicePixelRatio: 2 }).screenOffset).toBe(1.5)
+    expect(createVisibleGridAxis({ ...base, devicePixelRatio: 4 }).screenOffset).toBe(1.25)
   })
 
   it('calculates X/Y and primary/minor layers independently with primary lines on top', () => {

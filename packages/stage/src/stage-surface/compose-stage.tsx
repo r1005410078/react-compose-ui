@@ -104,7 +104,7 @@ import type {
 } from '../types'
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
-import { StageRulers } from '../stage-rulers'
+import { StageRulers, type StageRulersHandle } from '../stage-ruler'
 import { StageSceneLayer } from '../stage-scene-layer'
 import {
   describeEntityCreation,
@@ -833,6 +833,7 @@ function ComposeStageReady({
   const surfaceId = id ? `${id}-surface` : generatedSurfaceId
   const rootRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
+  const rulersRef = useRef<StageRulersHandle>(null)
   const activePointerSessionRef = useRef<ActivePointerSession | null>(null)
   const pointerGenerationRef = useRef(0)
   const pendingPointerStartRef = useRef<{
@@ -2236,8 +2237,12 @@ function ComposeStageReady({
         beginInteraction({ kind: 'surface' }, event)
       }}
       onPointerMove={(event) => {
+        // 指针位置是瞬时视图状态：走命令式接口直接重绘标尺，不进 React state，也不入文档。
+        const surface = surfaceRef.current
+        if (surface) rulersRef.current?.setCursor(screenPoint(event, surface))
         onPointerMove?.(event)
       }}
+      onPointerLeave={() => { rulersRef.current?.setCursor(null) }}
       onPointerUp={(event) => {
         onPointerUp?.(event)
       }}
@@ -2261,6 +2266,8 @@ function ComposeStageReady({
       <StageRulers
         bounds={bounds}
         horizontalTicks={horizontalTicks}
+        ref={rulersRef}
+        themeKey={theme?.resolvedTheme}
         labels={{
           origin: messages.rulerOrigin,
           horizontal: messages.horizontalRuler,

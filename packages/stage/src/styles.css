@@ -34,22 +34,6 @@
   color: var(--compose-text-subtle);
 }
 
-.compose-stage[data-compose-theme='light'] .compose-stage__ruler line {
-  stroke: var(--compose-text-muted);
-}
-
-.compose-stage[data-compose-theme='light'] .compose-stage__ruler line.is-major {
-  stroke: var(--compose-text);
-}
-
-.compose-stage[data-compose-theme='light'] .compose-stage__ruler text {
-  fill: var(--compose-text-subtle);
-}
-
-.compose-stage[data-compose-theme='light'] .compose-stage__ruler-selection text {
-  stroke: var(--compose-surface-raised);
-}
-
 .compose-stage[data-compose-theme='light'] .compose-stage__scrollbar-thumb {
   background: var(--compose-scrollbar);
 }
@@ -87,6 +71,15 @@
 .compose-stage[data-interaction-cursor='crosshair'] .compose-stage__surface * {
   /* 使用平台原生十字星，保持与 Figma 等设计工具一致的指针语义。 */
   cursor: crosshair !important;
+}
+
+/*
+ * 辅助线拖回标尺即删除。平台原生光标没有对应语义（no-drop 是禁止圆斜杠，含义是“不能放”），
+ * 因此用箭头右下角带红叉的自定义光标表达“松手会删除”。
+ */
+.compose-stage[data-interaction-cursor='guide-delete'],
+.compose-stage[data-interaction-cursor='guide-delete'] * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath d='M4 2.5 4 17.2 7.9 13.6 10.4 19.2 12.9 18.1 10.4 12.7 15.6 12.4Z' fill='%23fff' stroke='%23111' stroke-width='1.2' stroke-linejoin='round'/%3E%3Cpath d='M15.5 15.5 21.5 21.5M21.5 15.5 15.5 21.5' stroke='%23111' stroke-width='3.4' stroke-linecap='round'/%3E%3Cpath d='M15.5 15.5 21.5 21.5M21.5 15.5 15.5 21.5' stroke='%23ff6b6b' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 4 2, not-allowed !important;
 }
 
 .compose-stage__grid,
@@ -463,42 +456,27 @@
   cursor: ew-resize;
 }
 
-.compose-stage__ruler svg {
+.compose-stage__ruler-canvas {
   display: block;
   width: 100%;
   height: 100%;
-  overflow: hidden;
 }
 
-.compose-stage__ruler line {
-  stroke: #87919e;
-  stroke-linecap: square;
-  stroke-opacity: 0.68;
-  stroke-width: 1;
+/* Canvas 读取这些自定义属性上色，浅色主题只需覆盖变量，不必改绘制代码。 */
+.compose-stage__ruler {
+  --compose-stage-ruler-tick: rgb(135 145 158 / 68%);
+  --compose-stage-ruler-tick-major: rgb(199 206 215 / 94%);
+  --compose-stage-ruler-label: #c0c7d1;
+  --compose-stage-ruler-selection: #f29b64;
+  --compose-stage-ruler-selection-label: #ffd0b3;
+  --compose-stage-ruler-selection-shadow: #303338;
+  --compose-stage-ruler-cursor: rgb(104 169 255 / 90%);
 }
 
-.compose-stage__ruler line.is-major {
-  stroke: #c7ced7;
-  stroke-opacity: 0.94;
-}
-
-.compose-stage__ruler text {
-  fill: #c0c7d1;
-  font: 600 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  pointer-events: none;
-}
-
-.compose-stage__ruler-selection line {
-  stroke: #f29b64;
-}
-
-.compose-stage__ruler-selection text {
-  paint-order: stroke;
-  fill: #ffd0b3;
-  stroke: #303338;
-  stroke-width: 3px;
+.compose-stage[data-compose-theme='light'] .compose-stage__ruler {
+  --compose-stage-ruler-tick: var(--compose-text-muted);
+  --compose-stage-ruler-tick-major: var(--compose-text);
+  --compose-stage-ruler-label: var(--compose-text-subtle);
 }
 
 .compose-stage__scrollbar {

@@ -14,12 +14,17 @@ export {
   type ComposeStructureCommandAvailability,
 } from './commands'
 export {
+  createAxisLattice,
   createRulerTicks,
+  latticeLineBand,
+  latticeLinePosition,
   expandScrollRange,
   scrollAxisToViewport,
   snapResizePoint,
   snapValueToGrid,
   viewportToScrollAxes,
+  type StageAxisLattice,
+  type StageLatticeBand,
   type StageRulerTick,
   type StageScrollAxis,
 } from './canvas-geometry'

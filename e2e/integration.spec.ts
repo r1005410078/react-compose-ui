@@ -1950,18 +1950,27 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
     return Math.abs(width - Math.round(width / 16) * 16)
   }).toBeLessThan(0.001)
 
-  const originX = await stage.getByTestId('stage-origin-y').getAttribute('x1')
-  const originY = await stage.getByTestId('stage-origin-x').getAttribute('y1')
-  await expect(stage.getByTestId('stage-ruler-x')
-    .locator('[data-world-value="0"]')).toHaveAttribute(
-    'transform',
-    `translate(${originX} 0)`,
-  )
-  await expect(stage.getByTestId('stage-ruler-y')
-    .locator('[data-world-value="0"]')).toHaveAttribute(
-    'transform',
-    `translate(0 ${originY})`,
-  )
+  // 标尺已改为 Canvas，无法再按刻度节点断言。改为验证共享点阵：世界原点必须正好落在画布
+  // 网格线上；标尺与网格由同一 lattice 产出（见 stage-engine 单测），因此二者随之对齐。
+  const originX = Number(await stage.getByTestId('stage-origin-y').getAttribute('x1'))
+  const originY = Number(await stage.getByTestId('stage-origin-x').getAttribute('y1'))
+  const gridLattice = await stage.getByTestId('stage-grid').evaluate((element) => {
+    const computed = getComputedStyle(element)
+    const sizes = computed.backgroundSize.split(', ')
+    const positions = computed.backgroundPosition.split(', ')
+    return {
+      stepX: Number.parseFloat(sizes[2] ?? ''),
+      stepY: Number.parseFloat(sizes[3]?.split(' ')[1] ?? ''),
+      offsetX: Number.parseFloat(positions[2] ?? ''),
+      offsetY: Number.parseFloat(positions[3]?.split(' ')[1] ?? ''),
+    }
+  })
+  const distanceToLine = (position: number, offset: number, step: number) => {
+    const remainder = Math.abs(position - offset) % step
+    return Math.min(remainder, step - remainder)
+  }
+  expect(distanceToLine(originX, gridLattice.offsetX, gridLattice.stepX)).toBeLessThan(0.001)
+  expect(distanceToLine(originY, gridLattice.offsetY, gridLattice.stepY)).toBeLessThan(0.001)
 
   const ruler = stage.getByTestId('stage-ruler-x')
   const rulerBox = await ruler.boundingBox()
@@ -1989,16 +1998,12 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
   await horizontal.press('End')
   await expect(horizontal).not.toHaveAttribute('aria-valuenow', beforeScroll!)
   await horizontal.press('Home')
-  const negativeTicks = stage.getByTestId('stage-ruler-x').locator('[data-world-value^="-"]')
-  await expect.poll(() => negativeTicks.evaluateAll((ticks) => {
-    const ruler = ticks[0]?.closest('[data-testid="stage-ruler-x"]')
-    if (!ruler) return false
-    const rulerRect = ruler.getBoundingClientRect()
-    return ticks.some((tick) => {
-      const rect = tick.getBoundingClientRect()
-      return rect.right > rulerRect.left && rect.left < rulerRect.right
-    })
-  })).toBe(true)
+  // 回到 Home 后视口起点必须落到负世界坐标，即标尺重新覆盖负刻度区间。
+  // 虚拟滚动范围会单调扩展，因此只能断言符号而不能断言等于 aria-valuemin。
+  await expect.poll(async () => {
+    const now = await horizontal.getAttribute('aria-valuenow')
+    return now === null ? Number.NaN : Number(now)
+  }).toBeLessThan(0)
   await expect(editor).toHaveScreenshot('stage-workspace-negative-scroll.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -2834,4 +2839,36 @@ test('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命�
 
   // 两条路径必须落到同一个视口；此前键盘用 0.85 系数、工具栏用 128px 边距，结果不同。
   await expect.poll(viewportSignature).toBe(afterKeyboard)
+})
+
+test('OpenSpec: stage / 自适应网格标尺与世界原点 / Canvas 标尺对齐网格并显示选区与游标', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await stage.locator('.compose-stage__node.is-renderer').first().click()
+
+  const horizontal = stage.getByTestId('stage-ruler-x')
+  const vertical = stage.getByTestId('stage-ruler-y')
+  // 容器语义必须在迁移到 Canvas 后保持不变；刻度本身不再是 DOM。
+  await expect(horizontal).toHaveAttribute('aria-label', '水平标尺')
+  await expect(vertical).toHaveAttribute('aria-label', '垂直标尺')
+  await expect(horizontal.locator('canvas')).toHaveAttribute('aria-hidden', 'true')
+  await expect(horizontal.locator('[data-world-value]')).toHaveCount(0)
+
+  const surface = await stage.getByTestId('stage-surface').boundingBox()
+  expect(surface).not.toBeNull()
+  // 指针停在一个确定位置，让游标线进入黄金图。
+  await page.mouse.move(surface!.x + 180, surface!.y + 140)
+
+  const stageBox = await stage.boundingBox()
+  expect(stageBox).not.toBeNull()
+  await expect(page).toHaveScreenshot('stage-ruler-canvas.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    clip: { x: stageBox!.x, y: stageBox!.y, width: 320, height: 220 },
+    maxDiffPixelRatio: 0.01,
+  })
 })
