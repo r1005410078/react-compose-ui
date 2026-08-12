@@ -37,13 +37,13 @@
 
 ## 5. 端到端
 
-- [ ] 5.1 e2e：把节点拖进容器中心，验证 reparent 到该容器且获得默认 Flow/Absolute
-- [ ] 5.2 e2e：把节点拖过容器边缘但不深入，验证不 reparent
-- [ ] 5.3 e2e：nowrap 容器内拖动重排两个子级顺序，验证只改 Hierarchy 顺序
-- [ ] 5.4 e2e：把 nowrap 容器内的子级拖出容器，验证烘焙为 Absolute
+- [x] 5.1 e2e：把节点拖进容器中心，验证 reparent 到该容器且获得默认 Flow/Absolute
+- [x] 5.2 e2e：把节点拖过容器边缘但不深入，验证不 reparent
+- [x] 5.3 e2e：nowrap 容器内拖动重排两个子级顺序，验证只改 Hierarchy 顺序
+- [x] 5.4 e2e：把 nowrap 容器内的子级拖出容器，验证烘焙为 Absolute
 
 ## 6. 验证
 
-- [ ] 6.1 `bun run lint && bun run typecheck && bun run test && bun run build`
-- [ ] 6.2 `bun run test:e2e`
-- [ ] 6.3 `openspec validate add-stage-container-drop --strict`
+- [x] 6.1 `bun run lint && bun run typecheck && bun run test && bun run build`
+- [x] 6.2 `bun run test:e2e`
+- [x] 6.3 `openspec validate add-stage-container-drop --strict`

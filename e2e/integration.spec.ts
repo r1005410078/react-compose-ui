@@ -3258,3 +3258,128 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 空内容退出删除实�
   await stage.press('Control+z')
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
 })
+
+test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子级', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  // 1) 先画一个容器，再在容器外放一个矩形。
+  await drawContainer(page, editor)
+  const frameBox = await stage.getByTestId('stage-container').boundingBox()
+  expect(frameBox).not.toBeNull()
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const output = stage.getByTestId('stage-output-boundary')
+  const outputBox = await output.boundingBox()
+  // Stage 可视区约 600x600，而 output 是 1280x720：落点必须留在可视区内，
+  // 否则 pointer 事件打不到画布上。容器占 output 的 48..696 x 64..424，这里放它上方。
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: outputBox!.x + 200,
+    y: outputBox!.y + 20,
+  })
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(rectangle).toHaveCount(1)
+  await expect(sceneTree.getByRole('row', { name: /Rectangle/ })).toBeVisible()
+
+  // 2) 拖到容器中心：拖动过程中出现容器高亮。
+  const rectBox = await rectangle.boundingBox()
+  await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height / 2)
+  await page.mouse.down()
+  // 容器右半部分在可视区之外，取一个既深入容器又仍可见的点。
+  await page.mouse.move(outputBox!.x + 300, outputBox!.y + 250, { steps: 8 })
+  await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
+  await page.mouse.up()
+
+  // 3) 松手后矩形成为容器子级，不再是根层节点。
+  await expect(stage.getByTestId('stage-drop-container')).toHaveCount(0)
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+    .toHaveCount(0)
+  await expect(
+    stage.getByTestId('stage-container').locator(':scope > .compose-stage__node.is-renderer'),
+  ).toHaveCount(1)
+
+  // 4) 一次拖拽只产生一条可撤销事务。
+  await page.keyboard.press('Control+z')
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+    .toHaveCount(1)
+})
+
+test('OpenSpec: stage / 画布拖拽跨容器移动 / 贴边掠过不吸入', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+
+  await drawContainer(page, editor)
+  const frameBox = await stage.getByTestId('stage-container').boundingBox()
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: outputBox!.x + 200,
+    y: outputBox!.y + 20,
+  })
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rectBox = await rectangle.boundingBox()
+
+  // 只贴到容器左边缘内 4px，未达到判定留白。
+  await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(frameBox!.x + 4, frameBox!.y + frameBox!.height / 2, { steps: 8 })
+  await expect(stage.getByTestId('stage-drop-container')).toHaveCount(0)
+  await page.mouse.up()
+
+  // 仍是根层节点，只是坐标变了。
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+    .toHaveCount(1)
+})
+
+test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序不脱离布局', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+
+  // 1) 容器内放两个矩形，再启用 Auto Layout 把它们转成 Flow。
+  await drawContainer(page, editor)
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
+
+  const frame = stage.getByTestId('stage-container')
+  const children = frame.locator(':scope > .compose-stage__node.is-renderer')
+  await expect(children).toHaveCount(2)
+
+  await frame.click({ position: { x: 8, y: 8 } })
+  const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await enableAutoLayout(containerInspector)
+
+  // Flow 排队后按 childIds 顺序左右相邻，记下第一个的宽度用于识别顺序。
+  const firstBox = await children.nth(0).boundingBox()
+  const secondBox = await children.nth(1).boundingBox()
+  expect(firstBox!.x).toBeLessThan(secondBox!.x)
+
+  // 2) 把第一个拖到第二个右侧：过程中出现落点线。
+  await page.mouse.move(firstBox!.x + firstBox!.width / 2, firstBox!.y + firstBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    secondBox!.x + secondBox!.width - 4,
+    secondBox!.y + secondBox!.height / 2,
+    { steps: 8 },
+  )
+  // 垂直线的包围盒宽度为 0，Playwright 会判定为 hidden，因此断言存在而不是可见。
+  await expect(stage.getByTestId('stage-drop-line')).toHaveCount(1)
+  await page.mouse.up()
+  await expect(stage.getByTestId('stage-drop-line')).toHaveCount(0)
+
+  // 3) 仍是容器的两个 Flow 子级，只是顺序交换——没有脱离布局散落。
+  await expect(children).toHaveCount(2)
+  const afterFirst = await children.nth(0).boundingBox()
+  const afterSecond = await children.nth(1).boundingBox()
+  expect(afterFirst!.x).toBeLessThan(afterSecond!.x)
+  expect(Math.round(afterFirst!.y)).toBe(Math.round(firstBox!.y))
+
+  // 4) 一次撤销回到原顺序。
+  await page.keyboard.press('Control+z')
+  await expect(children).toHaveCount(2)
+})
