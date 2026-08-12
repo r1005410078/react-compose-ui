@@ -27,6 +27,70 @@
   line-height: 1.3;
 }
 
+/* 搜索工具带内的状态条（方案 B） */
+.compose-instance-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgb(251 191 36 / 28%);
+  border-radius: 6px;
+  color: #fcd34d;
+  font-size: 11.5px;
+  font-weight: 550;
+  background: rgb(251 191 36 / 10%);
+}
+
+.compose-instance-status--ok {
+  border-color: rgb(52 211 153 / 28%);
+  color: #6ee7b7;
+  background: rgb(52 211 153 / 10%);
+}
+
+.compose-instance-status__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgb(251 191 36 / 16%);
+}
+
+.compose-instance-status--ok .compose-instance-status__dot {
+  box-shadow: 0 0 0 3px rgb(52 211 153 / 16%);
+}
+
+.compose-instance-status__text {
+  min-width: 0;
+  flex: 1 1 auto;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-instance-status__dismiss {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--compose-text-muted, #8b95a5);
+  font-size: 14px;
+  line-height: 1;
+  background: transparent;
+  cursor: pointer;
+}
+
+.compose-instance-status__dismiss:hover {
+  color: var(--compose-text-strong, #e8ecf1);
+  background: rgb(255 255 255 / 6%);
+}
+
 .compose-instance-overrides__header {
   display: flex;
   align-items: center;

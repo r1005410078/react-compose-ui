@@ -92,8 +92,15 @@ interface EntityInspectorProps {
   readonly headerSubtitle?: ReactNode
   /** 标题行右侧、添加能力之前的操作区（实例工具栏）。仅 full chrome。 */
   readonly headerTrailing?: ReactNode
-  /** 标题栏与属性字段之间的横幅（覆盖列表、状态消息）。仅 full chrome。 */
+  /** 标题栏与属性字段之间的横幅（如本层覆盖列表）。仅 full chrome。 */
   readonly banner?: ReactNode
+  /**
+   * 搜索工具带上方的状态槽（实例更新反馈等）。
+   *
+   * @remarks
+   * 注入 ComposePropertyPanelRoot.statusSlot，与搜索同属 chrome band。
+   */
+  readonly statusSlot?: ReactNode
 }
 
 // 内建 Component 由 Registry 定义的 inspector 呈现；缺失定义时也不进入“未知”分组，
@@ -199,6 +206,7 @@ export function EntityInspector({
   headerSubtitle,
   headerTrailing,
   banner,
+  statusSlot,
 }: EntityInspectorProps) {
   const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
   const locked = getComposeLock(entity).locked
@@ -552,6 +560,7 @@ export function EntityInspector({
 
       <ComposePropertyPanelRoot
         aria-label={zh ? `${entity.name} 属性字段` : `${entity.name} property fields`}
+        statusSlot={statusSlot}
       >
         {sections}
       </ComposePropertyPanelRoot>

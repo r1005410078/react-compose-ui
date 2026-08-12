@@ -1309,11 +1309,12 @@ export function ComposeEditor({
           onCreateVariant={createVariantFromSelectedInstance}
           onUpdate={updateComponentInstance}
         >
-          {({ leading, subtitle, trailing, banner }) => providePaintImageLibrary(
+          {({ leading, subtitle, trailing, statusSlot, banner }) => providePaintImageLibrary(
             addDefaultElementProps(authoredBase, {
               headerLeading: leading,
               headerSubtitle: subtitle,
               headerTrailing: trailing,
+              statusSlot,
               banner,
             }),
             resolvedPaintImageLibrary,

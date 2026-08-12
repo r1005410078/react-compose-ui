@@ -41,7 +41,12 @@ export type ComposeInstanceInspectorChromeParts = {
   readonly subtitle: ReactNode
   /** 标题行右侧工具栏（检查更新、变体、Apply/Revert 全部）。 */
   readonly trailing: ReactNode
-  /** 标题与属性区之间：状态消息、覆盖列表、冲突确认。无内容时为 null。 */
+  /**
+   * 搜索工具带上方状态（更新反馈等），注入 PropertyPanel statusSlot。
+   * 无消息时为 null。
+   */
+  readonly statusSlot: ReactNode
+  /** 标题与属性区之间：本层覆盖列表 / 冲突确认。无内容时为 null。 */
   readonly banner: ReactNode
 }
 
@@ -246,6 +251,7 @@ function useInstanceOverridesModel({
     updating,
     updateConflict,
     message,
+    setMessage,
     revert,
     revertAll,
     update,
@@ -383,7 +389,8 @@ export function ComposeComponentInstanceOverridesPanel({
         leading: null,
         subtitle: null,
         trailing: null,
-        banner: invalid,
+        statusSlot: invalid,
+        banner: null,
       }) ?? invalid
     }
     return invalid
@@ -399,6 +406,10 @@ export function ComposeComponentInstanceOverridesPanel({
     revertAll,
     update,
   } = model
+
+  const dismissMessage = () => {
+    model.setMessage(null)
+  }
 
   const leading = (
     <span aria-hidden="true" className="compose-instance-overrides__badge">
@@ -425,11 +436,30 @@ export function ComposeComponentInstanceOverridesPanel({
     />
   )
 
-  const bannerInner = (
+  // 成功文案用 ok 色；失败/未提交类警告。
+  const statusTone = message !== null && /已更新|成功/.test(message) ? 'ok' : 'warn'
+  const statusSlot = message === null
+    ? null
+    : (
+        <div
+          className={`compose-instance-status compose-instance-status--${statusTone}`}
+          role="status"
+        >
+          <span aria-hidden="true" className="compose-instance-status__dot" />
+          <span className="compose-instance-status__text">{message}</span>
+          <button
+            aria-label="关闭状态"
+            className="compose-instance-status__dismiss"
+            type="button"
+            onClick={dismissMessage}
+          >
+            ×
+          </button>
+        </div>
+      )
+
+  const bannerParts = (
     <>
-      {message === null ? null : (
-        <p className="compose-instance-overrides__message" role="status">{message}</p>
-      )}
       {hasOverrides ? (
         <div className="compose-instance-overrides__body compose-instance-overrides__body--strip">
           <OverridesList
@@ -454,14 +484,13 @@ export function ComposeComponentInstanceOverridesPanel({
     </>
   )
 
-  const bannerHasContent = message !== null || hasOverrides || updateConflict !== null
-  const banner = bannerHasContent
+  const banner = hasOverrides || updateConflict
     ? (
         <div
           aria-label="组件实例覆盖"
           className="compose-instance-overrides compose-instance-overrides--banner"
         >
-          {bannerInner}
+          {bannerParts}
         </div>
       )
     : null
@@ -471,6 +500,7 @@ export function ComposeComponentInstanceOverridesPanel({
       leading,
       subtitle,
       trailing,
+      statusSlot,
       banner,
     }) ?? null
   }

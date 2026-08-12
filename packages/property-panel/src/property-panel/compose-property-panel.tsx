@@ -493,6 +493,13 @@ export interface ComposePropertyPanelRootProps
   children: ReactNode
   /** 可选的显式面板头部。 */
   header?: PropertyPanelHeader
+  /**
+   * 搜索工具带上方的状态槽（警告/成功反馈）。
+   *
+   * @remarks
+   * 与搜索同属 chrome band，避免在 Entity 标题与搜索之间再插一整条割裂灰条。
+   */
+  statusSlot?: ReactNode
 }
 
 /** 一个独立 Schema 属性区的分组属性。 */
@@ -521,6 +528,7 @@ export interface ComposePropertyPanelSectionProps {
 export function ComposePropertyPanelRoot({
   children,
   header,
+  statusSlot,
   className,
   style,
   ...htmlProps
@@ -629,89 +637,102 @@ export function ComposePropertyPanelRoot({
           </div>
         </div>
       ) : null}
-      <div className="property-panel__toolbar" data-property-part="toolbar">
-        <label className="property-panel__search">
-          <SearchIcon />
-          <input
-            aria-label={messages.search}
-            placeholder={messages.searchPlaceholder}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <div className="property-panel__menu-anchor">
-          <button
-            aria-expanded={filterOpen}
-            aria-label={messages.filter}
-            type="button"
-            onClick={() => {
-              setFilterOpen((current) => !current)
-              setSettingsOpen(false)
-            }}
-          ><FilterIcon /></button>
-          {filterOpen ? (
-            <div aria-label={messages.filterMenu} className="property-panel__menu" role="menu">
-              {([
-                ['all', messages.all],
-                ['modified', messages.modified],
-                ['errors', messages.errors],
-              ] as const).map(([id, label]) => (
+      <div
+        className={[
+          'property-panel__chrome',
+          statusSlot ? 'property-panel__chrome--with-status' : '',
+        ].filter(Boolean).join(' ')}
+        data-property-part="chrome"
+      >
+        {statusSlot ? (
+          <div className="property-panel__status" data-property-part="status">
+            {statusSlot}
+          </div>
+        ) : null}
+        <div className="property-panel__toolbar" data-property-part="toolbar">
+          <label className="property-panel__search">
+            <SearchIcon />
+            <input
+              aria-label={messages.search}
+              placeholder={messages.searchPlaceholder}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <div className="property-panel__menu-anchor">
+            <button
+              aria-expanded={filterOpen}
+              aria-label={messages.filter}
+              type="button"
+              onClick={() => {
+                setFilterOpen((current) => !current)
+                setSettingsOpen(false)
+              }}
+            ><FilterIcon /></button>
+            {filterOpen ? (
+              <div aria-label={messages.filterMenu} className="property-panel__menu" role="menu">
+                {([
+                  ['all', messages.all],
+                  ['modified', messages.modified],
+                  ['errors', messages.errors],
+                ] as const).map(([id, label]) => (
+                  <button
+                    aria-checked={filter === id}
+                    key={id}
+                    role="menuitemradio"
+                    type="button"
+                    onClick={() => {
+                      setFilter(id)
+                      setFilterOpen(false)
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <div className="property-panel__menu-anchor">
+            <button
+              aria-expanded={settingsOpen}
+              aria-label={messages.settings}
+              type="button"
+              onClick={() => {
+                setSettingsOpen((current) => !current)
+                setFilterOpen(false)
+              }}
+            ><SettingsIcon /></button>
+            {settingsOpen ? (
+              <div aria-label={messages.settings} className="property-panel__menu" role="menu">
                 <button
-                  aria-checked={filter === id}
-                  key={id}
-                  role="menuitemradio"
+                  aria-checked={showAdvanced}
+                  role="menuitemcheckbox"
                   type="button"
                   onClick={() => {
-                    setFilter(id)
-                    setFilterOpen(false)
+                    setShowAdvanced((current) => !current)
+                    setSettingsOpen(false)
                   }}
-                >{label}</button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div className="property-panel__menu-anchor">
-          <button
-            aria-expanded={settingsOpen}
-            aria-label={messages.settings}
-            type="button"
-            onClick={() => {
-              setSettingsOpen((current) => !current)
-              setFilterOpen(false)
-            }}
-          ><SettingsIcon /></button>
-          {settingsOpen ? (
-            <div aria-label={messages.settings} className="property-panel__menu" role="menu">
-              <button
-                aria-checked={showAdvanced}
-                role="menuitemcheckbox"
-                type="button"
-                onClick={() => {
-                  setShowAdvanced((current) => !current)
-                  setSettingsOpen(false)
-                }}
-              >{messages.showAdvanced}</button>
-              <button
-                aria-checked={showDescriptions}
-                role="menuitemcheckbox"
-                type="button"
-                onClick={() => {
-                  setShowDescriptions((current) => !current)
-                  setSettingsOpen(false)
-                }}
-              >{messages.showDescriptions}</button>
-              <button
-                role="menuitem"
-                type="button"
-                onClick={() => {
-                  setLabelWidth(DEFAULT_LABEL_WIDTH)
-                  setActionWidth(DEFAULT_ACTION_WIDTH)
-                  setSettingsOpen(false)
-                }}
-              >{messages.resetColumns}</button>
-            </div>
-          ) : null}
+                >{messages.showAdvanced}</button>
+                <button
+                  aria-checked={showDescriptions}
+                  role="menuitemcheckbox"
+                  type="button"
+                  onClick={() => {
+                    setShowDescriptions((current) => !current)
+                    setSettingsOpen(false)
+                  }}
+                >{messages.showDescriptions}</button>
+                <button
+                  role="menuitem"
+                  type="button"
+                  onClick={() => {
+                    setLabelWidth(DEFAULT_LABEL_WIDTH)
+                    setActionWidth(DEFAULT_ACTION_WIDTH)
+                    setSettingsOpen(false)
+                  }}
+                >{messages.resetColumns}</button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
       <PropertyPanelRootContext.Provider value={view}>
