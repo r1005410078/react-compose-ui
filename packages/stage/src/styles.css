@@ -747,3 +747,8 @@
   width: 20px;
   height: 20px;
 }
+
+/* 实例内部只读选中框：虚线以区别于可编辑的宿主选区，且不带任何手柄。 */
+.compose-stage__selection--instance-inner {
+  stroke-dasharray: 4 3;
+}

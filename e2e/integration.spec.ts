@@ -3527,4 +3527,11 @@ test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻�
     'aria-selected',
     'true',
   )
+
+  // 内部实体几何来自 DOM 测量，选中框必须贴合该实体且不带手柄。
+  const outline = stage.getByTestId('stage-instance-selection-bounds')
+  await expect(outline).toBeVisible()
+  await expect(outline).toHaveAttribute('width', String(box!.width))
+  await expect(outline).toHaveAttribute('height', String(box!.height))
+  await expect(stage.getByTestId('stage-resize-edge-nw')).toHaveCount(0)
 })

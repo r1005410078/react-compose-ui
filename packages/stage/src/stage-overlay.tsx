@@ -20,6 +20,14 @@ interface StageOverlayProps {
   readonly viewport: StageViewport
   readonly canvasGuides: readonly StagePreviewGuide[]
   readonly screenBounds: StageRect | null
+  /**
+   * 已下钻选中的实例内部实体矩形。
+   *
+   * @remarks
+   * 内部实体不属于宿主文档，几何来自 DOM 测量。只画只读边框、不带任何手柄：实例内部的
+   * 几何编辑要经由实例覆盖，尚未接线。
+   */
+  readonly instanceSelectionBounds?: StageRect | null
   /** 单选两点图形的精确世界端点；存在时替代通用矩形选区。 */
   readonly lineSelection?: {
     readonly entityId: string
@@ -113,6 +121,7 @@ export function StageOverlay({
   viewport,
   canvasGuides,
   screenBounds,
+  instanceSelectionBounds,
   lineSelection = null,
   handlePoints,
   editableSelection,
@@ -318,6 +327,15 @@ export function StageOverlay({
             />
           ) : null}
         </g>
+      ) : instanceSelectionBounds ? (
+        <rect
+          className="compose-stage__selection compose-stage__selection--instance-inner"
+          data-testid="stage-instance-selection-bounds"
+          height={instanceSelectionBounds.height}
+          width={instanceSelectionBounds.width}
+          x={instanceSelectionBounds.x}
+          y={instanceSelectionBounds.y}
+        />
       ) : screenBounds && !drawingToolActive ? (
         <rect
           className={`compose-stage__selection${textEditing ? ' is-text-editing' : ''}`}

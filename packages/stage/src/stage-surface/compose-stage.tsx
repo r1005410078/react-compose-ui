@@ -49,6 +49,7 @@ import type {
 import {
   BUILTIN_COMMAND_TYPES,
   describeComposePaint,
+  isComposeInstancePath,
   encodeComposeInstancePath,
   getComposeHierarchy,
   getComposeLock,
@@ -109,6 +110,7 @@ import type {
   ComposeStageProps,
 } from '../types'
 import { nextInstanceDrillDownTarget, resolveInstanceDrillDownPath } from './instance-drilldown'
+import { instanceSelectionScreenBounds } from './instance-selection-bounds'
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
@@ -916,6 +918,8 @@ function ComposeStageReady({
     readonly y: number
     readonly count: number
   } | null>(null)
+  /** 实例内部选中框的 surface 相对矩形；内部几何只在 DOM 上，必须测量而非计算。 */
+  const [instanceSelectionBounds, setInstanceSelectionBounds] = useState<StageRect | null>(null)
   /** 当前已下钻到的实例内部层级；见 beginEntity 中的说明。 */
   const drillContextRef = useRef<{
     readonly instanceId: string
@@ -985,6 +989,20 @@ function ComposeStageReady({
     () => selectedIds.filter((id) => Boolean(document.entities[id])),
     [document, selectedIds],
   )
+  // 内部实体几何由嵌套 Runtime 决定，宿主既无 LayoutItem 也无场景索引条目，只能在提交后测量。
+  // viewport 与 document 变化都会改变屏幕矩形，因此都要重新测量。
+  const instanceSelectionAddress = selectedIds.length === 1 && isComposeInstancePath(selectedIds[0]!)
+    ? selectedIds[0]!
+    : null
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current
+    if (!surface || instanceSelectionAddress === null) {
+      setInstanceSelectionBounds(null)
+      return
+    }
+    setInstanceSelectionBounds(instanceSelectionScreenBounds(surface, instanceSelectionAddress))
+  }, [instanceSelectionAddress, viewport, document, layoutSnapshot])
+
   const lineSelection = useMemo(
     () => normalizedSelection.length === 1
       ? lineSegmentForEntity(previewDocument, previewLayoutSnapshot, normalizedSelection[0]!)
@@ -2777,6 +2795,7 @@ function ComposeStageReady({
           paintSample={interaction.paintSample}
           resizeHandles={resizeHandles}
           rotatable={selectionRotatable}
+          instanceSelectionBounds={instanceSelectionBounds}
           screenBounds={screenBounds}
           snapGuides={snapGuides}
           textEditing={textEditing !== null}
