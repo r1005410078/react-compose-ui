@@ -7,9 +7,10 @@ import {
 import { describe, expect, it } from 'vitest'
 import type { ComposeComponentSnapshot, ComposeComponentStore } from '../component-store'
 import {
-  applyComposeInstancePropertyOverrides,
+  applyComposeInstanceOverrides,
   createComposeVariantAssetFromInstance,
   readComposeComponentInstance,
+  updateComposeComponentInstanceFromSource,
 } from './instance-operations'
 
 const reference = {
@@ -120,11 +121,11 @@ describe('component instance operations', () => {
   it('OpenSpec: editor-workspace-layout / Apply 和 Revert 覆盖 / 实例只能 Apply 公开属性', async () => {
     const source = base()
     const fixture = store(source)
-    const result = await applyComposeInstancePropertyOverrides({
+    const result = await applyComposeInstanceOverrides({
       store: fixture.api,
       entity: instance(source),
     })
-    expect(result.remainingPropertyOverrides).toEqual({})
+    expect(result.remainingOverrides.properties).toEqual({})
     const saved = fixture.get().asset
     expect(saved.kind === 'base'
       ? saved.document.entities.text?.components.Renderer
@@ -164,5 +165,128 @@ describe('实例覆盖读取', () => {
     expect(facts?.overrides.operations).toEqual([])
     // 标记让宿主知道该实体仍是旧形状，可在下次写入时落盘为分区形状。
     expect(facts?.migratedFromLegacy).toBe(true)
+  })
+})
+
+describe('实例结构覆盖 Apply', () => {
+  function structuralInstance(
+    asset: ComposeBaseComponentAsset,
+    properties: Record<string, string> = {},
+  ): ComposeEntity {
+    return {
+      id: 'instance',
+      name: 'Button',
+      components: {
+        Renderer: {
+          type: 'component-instance',
+          props: {
+            reference,
+            resolvedSnapshot: createComposeResolvedComponentSnapshot(asset, reference, '1'),
+            instanceOverrides: {
+              properties,
+              operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'text' }],
+            },
+          } as unknown as JsonObject,
+        },
+      },
+    }
+  }
+
+  it('结构操作 Apply 到 Base 后落进 Base 文档并从实例消费', async () => {
+    // 结构删除与指向被删实体的属性覆盖必然冲突，这里只验证结构 Apply 本身。
+    const asset = base()
+    const backing = store(asset)
+    const result = await applyComposeInstanceOverrides({
+      store: backing.api,
+      entity: structuralInstance(asset),
+    })
+
+    // Base 是文档型父源，结构操作由同一 Applier 落到文档。
+    const saved = backing.get().asset as ComposeBaseComponentAsset
+    expect(saved.document.entities.text).toBeUndefined()
+    expect(result.remainingOverrides.operations).toEqual([])
+    expect(result.remainingOverrides.properties).toEqual({})
+  })
+
+  it('只 Apply 选中的结构操作，其余保留在实例', async () => {
+    const asset = base()
+    const backing = store(asset)
+    const result = await applyComposeInstanceOverrides({
+      store: backing.api,
+      entity: structuralInstance(asset, { label: 'Danger' }),
+      // 只消费属性覆盖，结构操作留在本层。
+      propertyIds: ['label'],
+      operationIds: [],
+    })
+    expect(result.remainingOverrides.operations).toHaveLength(1)
+    expect(result.remainingOverrides.properties).toEqual({})
+  })
+})
+
+describe('来源更新时的结构操作冲突', () => {
+  it('锚点失效的结构操作被列为冲突而不是留到解析期报错', async () => {
+    const asset = base()
+    const backing = store(asset)
+    const entity: ComposeEntity = {
+      id: 'instance',
+      name: 'Button',
+      components: {
+        Renderer: {
+          type: 'component-instance',
+          props: {
+            reference,
+            resolvedSnapshot: createComposeResolvedComponentSnapshot(asset, reference, '1'),
+            instanceOverrides: {
+              properties: {},
+              // 目标实体在最新来源中已不存在。
+              operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'gone' }],
+            },
+          } as unknown as JsonObject,
+        },
+      },
+    }
+
+    const result = await updateComposeComponentInstanceFromSource({
+      store: backing.api,
+      entity,
+    })
+    expect(result.status).toBe('conflict')
+    if (result.status !== 'conflict') return
+    expect(result.operationIds).toEqual(['op-1'])
+  })
+
+  it('确认丢弃冲突后只保留仍然兼容的操作', async () => {
+    const asset = base()
+    const backing = store(asset)
+    const entity: ComposeEntity = {
+      id: 'instance',
+      name: 'Button',
+      components: {
+        Renderer: {
+          type: 'component-instance',
+          props: {
+            reference,
+            resolvedSnapshot: createComposeResolvedComponentSnapshot(asset, reference, '1'),
+            instanceOverrides: {
+              properties: {},
+              operations: [
+                { id: 'op-1', kind: 'remove-entity', entityId: 'gone' },
+                { id: 'op-2', kind: 'remove-entity', entityId: 'text' },
+              ],
+            },
+          } as unknown as JsonObject,
+        },
+      },
+    }
+
+    const result = await updateComposeComponentInstanceFromSource({
+      store: backing.api,
+      entity,
+      discardConflicts: true,
+    })
+    expect(result.status).toBe('updated')
+    if (result.status !== 'updated') return
+    expect(result.overrides.operations.map(({ id }) => id)).toEqual(['op-2'])
+    expect(result.discardedOperationIds).toEqual(['op-1'])
   })
 })

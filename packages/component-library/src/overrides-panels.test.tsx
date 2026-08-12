@@ -61,7 +61,10 @@ function componentSnapshot(): ComposeResolvedComponentSnapshot {
   }
 }
 
-function instanceEntity(propertyOverrides: Readonly<Record<string, string>> = {}): ComposeEntity {
+function instanceEntity(
+  properties: Readonly<Record<string, string>> = {},
+  operations: readonly { id: string; kind: string; entityId: string }[] = [],
+): ComposeEntity {
   const snapshot = componentSnapshot()
   return {
     id: 'instance',
@@ -93,7 +96,7 @@ function instanceEntity(propertyOverrides: Readonly<Record<string, string>> = {}
             scope: 'persistent',
           },
           resolvedSnapshot: snapshot,
-          propertyOverrides,
+          instanceOverrides: { properties, operations },
         } as unknown as JsonObject,
       },
     },
@@ -135,10 +138,16 @@ describe('Component property panels', () => {
       ? {
           status: 'updated' as const,
           snapshot: componentSnapshot(),
-          propertyOverrides: {},
+          overrides: { properties: {}, operations: [] },
           discardedPropertyIds: ['label'],
+          discardedOperationIds: [],
         }
-      : { status: 'conflict' as const, propertyIds: ['label'], messages: ['Label 已删除'] })
+      : {
+          status: 'conflict' as const,
+          propertyIds: ['label'],
+          operationIds: [],
+          messages: ['Label 已删除'],
+        })
     const view = render(
       <ComposeComponentInstanceOverridesPanel
         entity={instanceEntity()}
@@ -150,7 +159,7 @@ describe('Component property panels', () => {
     )
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), { target: { value: 'Changed' } })
-    expect(onChange).toHaveBeenCalledWith({ label: 'Changed' })
+    expect(onChange).toHaveBeenCalledWith({ properties: { label: 'Changed' }, operations: [] })
 
     view.rerender(
       <ComposeComponentInstanceOverridesPanel
@@ -167,12 +176,53 @@ describe('Component property panels', () => {
     fireEvent.click(screen.getByRole('button', { name: '创建变体…' }))
     expect(onApply).toHaveBeenNthCalledWith(1, ['label'])
     expect(onApply).toHaveBeenNthCalledWith(2)
-    expect(onChange).toHaveBeenLastCalledWith({})
+    expect(onChange).toHaveBeenLastCalledWith({ properties: {}, operations: [] })
     expect(onCreateVariant).toHaveBeenCalledOnce()
 
     fireEvent.click(screen.getByRole('button', { name: '检查更新' }))
     const confirm = await screen.findByRole('button', { name: '丢弃 1 项冲突并更新' })
     fireEvent.click(confirm)
     await waitFor(() => expect(onUpdate).toHaveBeenNthCalledWith(2, true))
+  })
+})
+
+describe('实例结构覆盖面板', () => {
+  it('只有结构覆盖时 Apply/Revert 仍可用，Revert 全部同时清空两个分区', () => {
+    const onChange = vi.fn()
+    const onApply = vi.fn()
+    render(
+      <ComposeComponentInstanceOverridesPanel
+        entity={instanceEntity({}, [{ id: 'op-1', kind: 'remove-entity', entityId: 'label' }])}
+        onApply={onApply}
+        onChange={onChange}
+        onCreateVariant={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    )
+
+    const applyAll = screen.getByRole('button', { name: 'Apply 全部实例覆盖' })
+    expect(applyAll).toBeEnabled()
+    const revertAll = screen.getByRole('button', { name: 'Revert 全部实例覆盖' })
+    expect(revertAll).toBeEnabled()
+
+    fireEvent.click(revertAll)
+    // Revert 全部必须清空结构分区，否则结构覆盖会永久留在实例上无法撤销。
+    expect(onChange).toHaveBeenCalledWith({ properties: {}, operations: [] })
+  })
+
+  it('结构覆盖数量可见', () => {
+    render(
+      <ComposeComponentInstanceOverridesPanel
+        entity={instanceEntity({}, [
+          { id: 'op-1', kind: 'remove-entity', entityId: 'label' },
+          { id: 'op-2', kind: 'set-field', entityId: 'label' },
+        ])}
+        onApply={vi.fn()}
+        onChange={vi.fn()}
+        onCreateVariant={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/结构覆盖 2 项/)).toBeInTheDocument()
   })
 })

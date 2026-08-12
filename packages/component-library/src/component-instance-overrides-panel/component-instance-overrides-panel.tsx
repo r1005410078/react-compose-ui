@@ -1,5 +1,5 @@
 import { ComposeButton, ComposeInput } from '@compose-ui/components'
-import type { ComposeEntity, JsonValue } from '@compose-ui/core'
+import type { ComposeComponentInstanceOverrides, ComposeEntity, JsonValue } from '@compose-ui/core'
 import { readComposeComponentInstance } from '../instance-operations'
 import type { ComposeComponentInstanceUpdateResult } from '../instance-operations'
 import { useState } from 'react'
@@ -8,7 +8,13 @@ import './styles.css'
 /** {@link ComposeComponentInstanceOverridesPanel} 属性。 @public */
 export interface ComposeComponentInstanceOverridesPanelProps {
   readonly entity: ComposeEntity
-  readonly onChange: (overrides: Readonly<Record<string, JsonValue>>) => void
+  /**
+   * 写回完整实例覆盖。
+   *
+   * @remarks
+   * 传完整对象而不是属性映射：属性与结构是两个分区，只回传属性会让结构覆盖被静默丢弃。
+   */
+  readonly onChange: (overrides: ComposeComponentInstanceOverrides) => void
   readonly onApply: (propertyIds?: readonly string[]) => void
   readonly onCreateVariant: () => void
   readonly onUpdate: (discardConflicts?: boolean) => Promise<ComposeComponentInstanceUpdateResult>
@@ -37,14 +43,20 @@ export function ComposeComponentInstanceOverridesPanel({
   const facts = readComposeComponentInstance(entity)
   if (!facts) return <p role="alert">组件实例快照无效</p>
   const change = (id: string, value: JsonValue) => {
-    onChange({ ...facts.overrides.properties, [id]: value })
+    onChange({
+      ...facts.overrides,
+      properties: { ...facts.overrides.properties, [id]: value },
+    })
   }
   const revert = (id: string) => {
     const next = { ...facts.overrides.properties }
     delete next[id]
-    onChange(next)
+    onChange({ ...facts.overrides, properties: next })
   }
   const overrideIds = Object.keys(facts.overrides.properties)
+  const operationCount = facts.overrides.operations.length
+  // Apply/Revert 作用于整层覆盖，只有结构覆盖时同样必须可用。
+  const hasOverrides = overrideIds.length > 0 || operationCount > 0
   const update = async (discardConflicts = false) => {
     setUpdating(true)
     try {
@@ -139,14 +151,17 @@ export function ComposeComponentInstanceOverridesPanel({
           })}
         </ul>
       )}
-      <ComposeButton disabled={overrideIds.length === 0} size="sm" onClick={() => onApply()}>
+      {operationCount === 0 ? null : (
+        <p className="compose-instance-overrides__structural">{`结构覆盖 ${operationCount} 项`}</p>
+      )}
+      <ComposeButton disabled={!hasOverrides} size="sm" onClick={() => onApply()}>
         Apply 全部实例覆盖
       </ComposeButton>
       <ComposeButton
-        disabled={overrideIds.length === 0}
+        disabled={!hasOverrides}
         size="sm"
         variant="outline"
-        onClick={() => onChange({})}
+        onClick={() => onChange({ properties: {}, operations: [] })}
       >Revert 全部实例覆盖</ComposeButton>
       {updateConflict ? (
         <ComposeButton disabled={updating} variant="destructive" onClick={() => void update(true)}>

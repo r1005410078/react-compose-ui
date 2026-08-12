@@ -128,24 +128,21 @@ export function createComposeVariantAssetFromInstance(input: {
   }
 }
 
-/** 实例属性 Apply 后由 Editor 在一个场景事务中写回的事实。 @public */
-export interface ComposeInstancePropertyApplyResult {
-  readonly source: ComposeComponentSnapshot
-  readonly snapshot: ComposeResolvedComponentSnapshot
-  readonly remainingPropertyOverrides: Readonly<Record<string, JsonValue>>
-}
-
 /** 组件实例显式更新的预览或可提交结果。 @public */
 export type ComposeComponentInstanceUpdateResult =
   | {
       readonly status: 'updated'
       readonly snapshot: ComposeResolvedComponentSnapshot
-      readonly propertyOverrides: Readonly<Record<string, JsonValue>>
+      /** 更新后仍然兼容、应写回实例的完整覆盖。 */
+      readonly overrides: ComposeComponentInstanceOverrides
       readonly discardedPropertyIds: readonly string[]
+      readonly discardedOperationIds: readonly string[]
     }
   | {
       readonly status: 'conflict'
       readonly propertyIds: readonly string[]
+      /** 锚点在最新父链中失效的结构操作。 */
+      readonly operationIds: readonly string[]
       readonly messages: readonly string[]
     }
 
@@ -166,6 +163,21 @@ export async function updateComposeComponentInstanceFromSource(input: {
   if (resolved.status === 'invalid') {
     throw new Error(resolved.issues.map(({ message }) => message).join('；'))
   }
+
+  // 结构操作先逐条在最新来源文档上试应用，锚点失效的直接列为冲突；不这样做的话失效操作
+  // 会留到渲染期才以「实例覆盖无效」的形式整体失败，用户无从知道是哪一条。
+  const compatibleOperations: ComposeComponentOverrideOperation[] = []
+  const conflictOperationIds: string[] = []
+  let structuralDocument = resolved.snapshot.document
+  for (const operation of facts.overrides.operations) {
+    const attempt = applyComposeComponentOverrides(structuralDocument, [operation])
+    if (attempt.ok) {
+      structuralDocument = attempt.document
+      compatibleOperations.push(operation)
+    }
+    else conflictOperationIds.push(operation.id)
+  }
+
   const definitions = new Map(resolved.snapshot.properties.map((definition) => [definition.id, definition]))
   const conflicts = Object.keys(facts.overrides.properties).filter((id) => !definitions.has(id))
   const operations: ComposeComponentOverrideOperation[] = []
@@ -181,56 +193,94 @@ export async function updateComposeComponentInstanceFromSource(input: {
       value: structuredClone(value),
     })
   }
-  const applied = applyComposeComponentOverrides(resolved.snapshot.document, operations)
+  // 属性覆盖作用在结构操作之后的文档上，与解析顺序一致。
+  const applied = applyComposeComponentOverrides(structuralDocument, operations)
   const operationConflicts = applied.ok
     ? []
     : applied.issues.flatMap(({ operationId }) => operationId
       ? [operationId.slice('instance-update:'.length)]
       : [])
   const conflictIds = [...new Set([...conflicts, ...operationConflicts])]
-  if (conflictIds.length > 0 && !input.discardConflicts) {
+  if ((conflictIds.length > 0 || conflictOperationIds.length > 0) && !input.discardConflicts) {
     return {
       status: 'conflict',
       propertyIds: conflictIds,
-      messages: conflictIds.map((id) => `公开属性 ${id} 已被来源删除或目标已变化`),
+      operationIds: conflictOperationIds,
+      messages: [
+        ...conflictIds.map((id) => `公开属性 ${id} 已被来源删除或目标已变化`),
+        ...conflictOperationIds.map((id) => `结构操作 ${id} 的目标在最新来源中已不存在`),
+      ],
     }
   }
   const discarded = new Set(conflictIds)
   return {
     status: 'updated',
     snapshot: resolved.snapshot,
-    propertyOverrides: Object.fromEntries(
-      Object.entries(facts.overrides.properties).filter(([id]) => !discarded.has(id)),
-    ),
+    overrides: {
+      properties: Object.fromEntries(
+        Object.entries(facts.overrides.properties).filter(([id]) => !discarded.has(id)),
+      ),
+      operations: compatibleOperations,
+    },
     discardedPropertyIds: conflictIds,
+    discardedOperationIds: conflictOperationIds,
   }
 }
 
+/** 实例覆盖 Apply 后由 Editor 在一个场景事务中写回的事实。 @public */
+export interface ComposeInstanceApplyResult {
+  readonly source: ComposeComponentSnapshot
+  readonly snapshot: ComposeResolvedComponentSnapshot
+  /** 未被本次 Apply 消费、仍留在实例层的覆盖。 */
+  readonly remainingOverrides: ComposeComponentInstanceOverrides
+}
+
 /**
- * 只把实例公开属性覆盖写入直接来源；不接受实例内部结构操作。
+ * 把实例的属性覆盖与结构操作写入直接来源。
  *
  * @remarks
+ * 结构操作与属性覆盖共用同一套操作代数，因此 Apply 到 Variant 父源时可以原样并入其操作
+ * 列表，不需要有损转换；父源是 Base 时由同一 Applier 落到 Base 文档。结构操作排在属性
+ * 覆盖之前，与解析顺序一致。
+ *
  * 资源写入先发生。调用方随后应以单个场景事务写回新快照并消费返回的覆盖；场景事务失败时
  * 不回滚已写资源，与 Variant Apply 的 partial-success 顺序一致。
  *
+ * @param input.propertyIds - 限定本次消费的属性 ID；省略表示全部
+ * @param input.operationIds - 限定本次消费的结构操作 ID；省略表示全部
+ *
  * @public
  */
-export async function applyComposeInstancePropertyOverrides(input: {
+export async function applyComposeInstanceOverrides(input: {
   readonly store: ComposeComponentStore
   readonly entity: ComposeEntity
   readonly propertyIds?: readonly string[]
+  readonly operationIds?: readonly string[]
   readonly signal?: AbortSignal
-}): Promise<ComposeInstancePropertyApplyResult> {
+}): Promise<ComposeInstanceApplyResult> {
   const facts = readComposeComponentInstance(input.entity)
   if (!facts) throw new Error('选择不是有效的关联组件实例')
   if (facts.reference.providerId !== input.store.providerId) {
     throw new Error('实例来源与 Component Store Provider 不一致')
   }
-  const operations = propertyOperations(
+  const selectedOperationIds = input.operationIds ? new Set(input.operationIds) : null
+  const structural = facts.overrides.operations.filter(
+    ({ id }) => !selectedOperationIds || selectedOperationIds.has(id),
+  )
+  const properties = propertyOperations(
     facts.snapshot,
     facts.overrides.properties,
     input.propertyIds,
   )
+  // 结构先于属性，与 resolveComposeInstanceOverrides 的解析顺序保持一致。
+  const operations = [...structural, ...properties]
+  if (operations.length === 0) {
+    return {
+      source: await input.store.readComponent(facts.reference.assetKey, input.signal),
+      snapshot: facts.snapshot,
+      remainingOverrides: facts.overrides,
+    }
+  }
   const source = await input.store.readComponent(facts.reference.assetKey, input.signal)
   let next: typeof source.asset
   if (source.asset.kind === 'base') {
@@ -274,12 +324,18 @@ export async function applyComposeInstancePropertyOverrides(input: {
   if (resolved.status === 'invalid') {
     throw new Error(resolved.issues.map(({ message }) => message).join('；'))
   }
-  const consumed = new Set(operations.map(({ id }) => id.slice('instance-apply:'.length)))
+  const consumedProperties = new Set(
+    properties.map(({ id }) => id.slice('instance-apply:'.length)),
+  )
+  const consumedOperations = new Set(structural.map(({ id }) => id))
   return {
     source: written,
     snapshot: resolved.snapshot,
-    remainingPropertyOverrides: Object.fromEntries(
-      Object.entries(facts.overrides.properties).filter(([id]) => !consumed.has(id)),
-    ),
+    remainingOverrides: {
+      properties: Object.fromEntries(
+        Object.entries(facts.overrides.properties).filter(([id]) => !consumedProperties.has(id)),
+      ),
+      operations: facts.overrides.operations.filter(({ id }) => !consumedOperations.has(id)),
+    },
   }
 }

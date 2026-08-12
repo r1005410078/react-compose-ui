@@ -10,6 +10,7 @@ import {
   composePageFileName,
   isComposeComponentMediaType,
   isComposePageMediaType,
+  type ComposeComponentInstanceOverrides,
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import {
@@ -29,7 +30,7 @@ import {
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
 import type { ComposePageSetupReference } from '@compose-ui/core'
-import type { ComposeEntity, JsonObject, JsonValue } from '@compose-ui/core'
+import type { ComposeEntity, JsonObject } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeHistoryShortcuts } from '@compose-ui/history'
@@ -74,7 +75,7 @@ import {
   ComposeBasePropertiesPanel,
   ComposeComponentInstanceOverridesPanel,
   ComposeVariantOverridesPanel,
-  applyComposeInstancePropertyOverrides,
+  applyComposeInstanceOverrides,
   createComposeVariantAsset,
   createComposeVariantAssetFromInstance,
   readComposeComponentInstance,
@@ -1105,21 +1106,7 @@ export function ComposeEditor({
     })
   }, [activeDocumentPanelId, updateComponentDocument])
 
-  /**
-   * 只替换属性分区并保留已有结构操作。
-   *
-   * @remarks
-   * 属性面板与来源更新都只产出属性映射；直接写整个 instanceOverrides 会静默丢弃结构覆盖。
-   */
-  const withInstanceProperties = useCallback((
-    entity: ComposeEntity,
-    properties: Readonly<Record<string, JsonValue>>,
-  ) => {
-    const facts = readComposeComponentInstance(entity)
-    return { properties, operations: facts?.overrides.operations ?? [] }
-  }, [])
-
-  const updateInstancePropertyOverrides = useCallback((overrides: Readonly<Record<string, JsonValue>>) => {
+  const updateInstanceOverrides = useCallback((overrides: ComposeComponentInstanceOverrides) => {
     if (!controller || !selectedComponentInstance) return
     const renderer = selectedComponentInstance.components.Renderer
     if (!renderer) return
@@ -1132,7 +1119,7 @@ export function ComposeEditor({
         entityId: selectedComponentInstance.id,
         props: {
           ...rendererPropsObject(renderer.props),
-          instanceOverrides: withInstanceProperties(selectedComponentInstance, overrides),
+          instanceOverrides: overrides,
         } as unknown as JsonObject,
       },
       meta: {
@@ -1142,13 +1129,14 @@ export function ComposeEditor({
         mergeKey: `instance:${selectedComponentInstance.id}:property-overrides`,
       },
     })
-  }, [controller, selectedComponentInstance, withInstanceProperties])
+  }, [controller, selectedComponentInstance])
 
   const applyInstancePropertyOverrides = useCallback(async (propertyIds?: readonly string[]) => {
     const store = componentWorkspace.store
     if (!controller || !store || !selectedComponentInstance) return
     try {
-      const result = await applyComposeInstancePropertyOverrides({
+      // 不限定 operationIds：Apply 全部实例覆盖时结构操作与属性覆盖一并写入父源。
+      const result = await applyComposeInstanceOverrides({
         store,
         entity: selectedComponentInstance,
         propertyIds,
@@ -1165,10 +1153,7 @@ export function ComposeEditor({
           props: {
             ...rendererPropsObject(renderer.props),
             resolvedSnapshot: result.snapshot,
-            instanceOverrides: withInstanceProperties(
-              selectedComponentInstance,
-              result.remainingPropertyOverrides,
-            ),
+            instanceOverrides: result.remainingOverrides,
           } as unknown as JsonObject,
         },
         meta: {
@@ -1184,7 +1169,7 @@ export function ComposeEditor({
     catch (error) {
       setComponentNotice(error instanceof Error ? error.message : String(error))
     }
-  }, [componentWorkspace.store, controller, selectedComponentInstance, withInstanceProperties])
+  }, [componentWorkspace.store, controller, selectedComponentInstance])
 
   const updateComponentInstance = useCallback(async (discardConflicts?: boolean) => {
     const store = componentWorkspace.store
@@ -1209,10 +1194,8 @@ export function ComposeEditor({
         props: {
           ...rendererPropsObject(renderer.props),
           resolvedSnapshot: result.snapshot,
-          instanceOverrides: withInstanceProperties(
-            selectedComponentInstance,
-            result.propertyOverrides,
-          ),
+          // 更新结果已含结构分区：兼容的结构操作保留、失效的按用户确认丢弃。
+          instanceOverrides: result.overrides,
         } as unknown as JsonObject,
       },
       meta: {
@@ -1223,7 +1206,7 @@ export function ComposeEditor({
     })
     if (dispatched.status !== 'committed') throw new Error('实例更新事务未提交')
     return result
-  }, [componentWorkspace.store, controller, selectedComponentInstance, withInstanceProperties])
+  }, [componentWorkspace.store, controller, selectedComponentInstance])
 
   const updateBaseProperties = useCallback((properties: Parameters<
     typeof ComposeBasePropertiesPanel
@@ -1283,7 +1266,7 @@ export function ComposeEditor({
         <ComposeComponentInstanceOverridesPanel
           entity={selectedComponentInstance}
           onApply={applySelectedInstanceOverrides}
-          onChange={updateInstancePropertyOverrides}
+          onChange={updateInstanceOverrides}
           onCreateVariant={createVariantFromSelectedInstance}
           onUpdate={updateComponentInstance}
         />
@@ -1304,7 +1287,7 @@ export function ComposeEditor({
     selectedComponentInstance,
     updateBaseProperties,
     updateComponentInstance,
-    updateInstancePropertyOverrides,
+    updateInstanceOverrides,
   ])
 
   const resolvedComponentLibraryPanel = slots?.componentLibrary !== undefined

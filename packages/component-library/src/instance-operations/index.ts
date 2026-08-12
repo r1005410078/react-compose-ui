@@ -1,9 +1,9 @@
 export {
-  applyComposeInstancePropertyOverrides,
+  applyComposeInstanceOverrides,
   createComposeVariantAssetFromInstance,
   readComposeComponentInstance,
   updateComposeComponentInstanceFromSource,
   type ComposeComponentInstanceFacts,
   type ComposeComponentInstanceUpdateResult,
-  type ComposeInstancePropertyApplyResult,
+  type ComposeInstanceApplyResult,
 } from './instance-operations'
