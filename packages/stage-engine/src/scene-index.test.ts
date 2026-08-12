@@ -24,6 +24,21 @@ describe('StageSceneIndex ECS queries', () => {
     expect(index.containerAtPoint({ x: 120, y: 80 })).toBe('container')
   })
 
+  it('OpenSpec: ECS SceneIndex / 容器命中排除自身与后代', () => {
+    // outer > middle > leaf 三层容器同原点重叠（offset 相对父级，故子级用 0）：
+    // 拖动 middle 时它自己和后代 leaf 都不能作为落点。
+    const leaf = entity('leaf', { width: 100, height: 60, childIds: [] })
+    const middle = entity('middle', { width: 200, height: 120, childIds: ['leaf'] })
+    const outer = entity('outer', { x: 100, y: 50, width: 300, height: 200, childIds: ['middle'] })
+    const index = indexFor(document([outer, middle, leaf], ['outer']))
+    const point = { x: 150, y: 80 }
+
+    expect(index.containerAtPoint(point)).toBe('leaf')
+    expect(index.containerAtPoint(point, ['middle'])).toBe('outer')
+    expect(index.containerAtPoint(point, [])).toBe('leaf')
+    expect(index.containerAtPoint(point, ['outer'])).toBeNull()
+  })
+
   it('OpenSpec: Visibility/Clip System / 祖先隐藏并排除裁剪外容器', () => {
     const child = entity('child')
     const hidden = entity('hidden', { childIds: ['child'], visible: false })

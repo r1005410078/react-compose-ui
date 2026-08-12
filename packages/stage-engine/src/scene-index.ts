@@ -42,8 +42,16 @@ export interface StageSceneIndex {
   closestContainerForEntity(entityId: string): string | null
   /** 查询全部 Entity 共享的最近可用 Container。 */
   commonContainerForSelection(entityIds: readonly string[]): string | null
-  /** 按 paint order 查询包含世界点的最深可用 Container。 */
-  containerAtPoint(point: { readonly x: number; readonly y: number }): string | null
+  /**
+   * 按 paint order 查询包含世界点的最深可用 Container。
+   *
+   * @param excludedIds - 不作为候选的 Entity；其**全部后代**同样被排除。画布拖拽
+   * reparent 用它排除拖动中的选区，避免把节点放进它自己或它的子孙。
+   */
+  containerAtPoint(
+    point: { readonly x: number; readonly y: number },
+    excludedIds?: readonly string[],
+  ): string | null
   /** 按 paint order 查询包含世界点且未被裁剪祖先遮蔽的最上层可见 Entity。 */
   entityAtPoint(point: { readonly x: number; readonly y: number }): string | null
   /** 为选区建立 Entity 与文档辅助线吸附候选。 */
@@ -142,7 +150,17 @@ export function createStageSceneIndex(
       return chains[0]?.find((containerId) =>
         chains.every((chain) => chain.includes(containerId))) ?? null
     },
-    containerAtPoint(point) {
+    containerAtPoint(point, excludedIds) {
+      const excluded = new Set(excludedIds ?? [])
+      const isExcluded = (entityId: string) => {
+        if (excluded.size === 0) return false
+        let current: string | null = entityId
+        while (current) {
+          if (excluded.has(current)) return true
+          current = parents.get(current) ?? null
+        }
+        return false
+      }
       const contains = (entityId: string) => {
         const entity = document.entities[entityId]
         const matrix = matrices.get(entityId)
@@ -172,6 +190,7 @@ export function createStageSceneIndex(
           && getComposeHierarchy(entity)
           && !getComposeLock(entity).locked
           && visibility.get(entityId)
+          && !isExcluded(entityId)
           && contains(entityId)
           && isExposed(entityId)
       }) ?? null

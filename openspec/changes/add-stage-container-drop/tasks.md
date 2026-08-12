@@ -2,8 +2,8 @@
 
 ## 1. SceneIndex 容器命中排除
 
-- [ ] 1.1 红测：`containerAtPoint` 传入排除集合时不返回集合内 Entity 及其后代
-- [ ] 1.2 `containerAtPoint` 增加可选排除参数，实现自身/后代过滤
+- [x] 1.1 红测：`containerAtPoint` 传入排除集合时不返回集合内 Entity 及其后代
+- [x] 1.2 `containerAtPoint` 增加可选排除参数，实现自身/后代过滤
 
 ## 2. 跨容器 reparent 会话
 
