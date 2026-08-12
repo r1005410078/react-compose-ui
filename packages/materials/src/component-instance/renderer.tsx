@@ -11,7 +11,6 @@ import {
   COMPOSE_COMPONENT_NEST_DEPTH_LIMIT,
   getComposeHierarchy,
   getComposeVisibility,
-  isComposeGroupEntity,
   migrateLegacyComposeInstanceOverrides,
   parseComposeInstanceOverrides,
   resolveComposeInstanceOverrides,
@@ -55,11 +54,10 @@ function readSnapshot(value: unknown): ComposeResolvedComponentSnapshot | null {
   if (!isRecord(value) || !isRecord(value.document)) return null
   const validation = validateComposeDocument(value.document)
   if (!validation.valid) return null
-  const rootId = validation.document.rootIds[0]
+  // 组件根允许是任意 Entity；只有「单根」是硬约束。
   if (
     validation.document.rootIds.length !== 1
-    || !rootId
-    || !isComposeGroupEntity(validation.document.entities[rootId]!)
+    || !validation.document.rootIds[0]
     || typeof value.componentId !== 'string'
     || (value.kind !== 'base' && value.kind !== 'variant')
     || typeof value.revision !== 'string'

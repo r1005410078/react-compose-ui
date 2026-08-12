@@ -1,7 +1,6 @@
 import { validateComposeDocument } from '../document'
 import type { ComposeDocument, ComposeEntity, JsonObject } from '../document-types'
 import { getComposeComposition } from '../entity'
-import { isComposeGroupEntity } from '../group'
 import type {
   ComposeComponentAssetIssue,
   ComposeComponentOverrideApplyResult,
@@ -181,12 +180,8 @@ export function applyComposeComponentOverrides(
     }))
     return { ok: false, issues }
   }
-  const rootId = validation.document.rootIds[0]
-  if (
-    validation.document.rootIds.length !== 1
-    || !rootId
-    || !isComposeGroupEntity(validation.document.entities[rootId]!)
-  ) {
+  // 单根是硬约束，根类型不是：见 component-file 中的同一说明。
+  if (validation.document.rootIds.length !== 1 || !validation.document.rootIds[0]) {
     return {
       ok: false,
       issues: [{

@@ -24,9 +24,14 @@
 
 ## 3. 组件根放宽
 
-- [ ] 3.1 [Red → Green → Refactor] Parser 与 Applier 的根约束从「单 Group 根」放宽为「单根」
-- [ ] 3.2 [Red → Green → Refactor] 提取器单选时复用已有节点作为组件根，多选仍生成 Group
-- [ ] 3.3 [Red → Green → Refactor] 两条路径的世界几何、旋转与 sibling 顺序回归
+- [x] 3.1 [Red → Green → Refactor] Parser 与 Applier 的根约束从「单 Group 根」放宽为「单根」
+  - Red: `bun run --cwd packages/core test -- component-root-relaxation`；2 failed（多根拒绝本就正确）。
+  - Green/Refactor: 3 passed。单根仍是硬约束——diff 与操作应用都依赖父子共享同一根 ID；materials renderer 的同一校验一并放宽。
+- [x] 3.2 [Red → Green → Refactor] 提取器单选时复用已有节点作为组件根，多选仍生成 Group
+  - Red: `bun run --cwd packages/stage-engine test -- component-extraction`；1 failed；单选 Container 仍被包进 unused-wrapper。
+  - Green/Refactor: 5 passed。reuseGroup 改为 reuseRoot，条件从「是 first-class Group」放宽为「单选」。
+- [x] 3.3 [Red → Green → Refactor] 两条路径的世界几何、旋转与 sibling 顺序回归
+  - Result: stage-engine 95 tests 通过，含复用路径根坐标归零断言；两条 e2e 因契约变化更新为嵌套两层容器，仍覆盖逐层下钻。
 
 ## 4. 实例几何跟随组件根
 

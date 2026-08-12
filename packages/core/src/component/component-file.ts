@@ -1,7 +1,6 @@
 import { validateComposeDocument } from '../document'
 import type { ComposeDocument, JsonObject, JsonValue } from '../document-types'
 import { isComposeComponentKey } from '../entity'
-import { isComposeGroupEntity } from '../group'
 import {
   COMPOSE_COMPONENT_FILE_SUFFIX,
   COMPOSE_COMPONENT_MEDIA_TYPE,
@@ -90,13 +89,10 @@ function validateComponentDocument(
     })
     return false
   }
-  const rootId = result.document.rootIds[0]
-  if (
-    result.document.rootIds.length !== 1
-    || !rootId
-    || !isComposeGroupEntity(result.document.entities[rootId]!)
-  ) {
-    issue(issues, 'component-asset.invalid-root', [...path, 'rootIds'], '组件文档必须只有一个 first-class Group 根')
+  // 单根是硬约束：diff 与操作应用都依赖父子两份文档共享同一根 ID，多根会让锚点失去参照。
+  // 根的类型不作限制，容器或任意 Entity 都可以作为组件根。
+  if (result.document.rootIds.length !== 1 || !result.document.rootIds[0]) {
+    issue(issues, 'component-asset.invalid-root', [...path, 'rootIds'], '组件文档必须只有一个根')
     return false
   }
   return true

@@ -3480,8 +3480,9 @@ test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻�
   await expect(stage).toBeVisible()
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
 
-  // 组件内部结构为 Group > Container > Rectangle，用于验证逐层下钻。
+  // 单选提取会复用被选中的容器作为组件根，因此内部再嵌一层容器才能验证逐层下钻。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Container' }).click()
   await editor.getByRole('button', { name: '添加 Container' }).click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
@@ -3558,6 +3559,7 @@ test('OpenSpec: component-library / 实例层结构覆盖 / 内部删除写入�
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Container' }).click()
   await editor.getByRole('button', { name: '添加 Container' }).click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()

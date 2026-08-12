@@ -5,7 +5,6 @@ import {
   getComposeHierarchy,
   getComposeLayoutItem,
   getComposeLock,
-  isComposeGroupEntity,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
@@ -194,8 +193,10 @@ export function createComponentExtractionPlan(input: {
     height: Math.max(1, bounds.height),
   }
   const outputWorld = translationMatrix(safeBounds.x, safeBounds.y)
-  const reuseGroup = roots.length === 1 && isComposeGroupEntity(input.document.entities[roots[0]!]!)
-  if (!reuseGroup && input.document.entities[input.groupId]) {
+  // 单选时直接复用被选中的节点作为组件根：追加包装层会在场景树里多出一级同名节点，
+  // 且组件根不再要求是 Group，任意 Entity 都可以承担。只有多选才需要 Group 归拢。
+  const reuseRoot = roots.length === 1
+  if (!reuseRoot && input.document.entities[input.groupId]) {
     return { status: 'unavailable', reason: 'group-id-conflict' }
   }
 
@@ -212,8 +213,8 @@ export function createComponentExtractionPlan(input: {
     entities[rootId] = withTransform(entities[rootId]!, transform)
   }
 
-  const componentRootId = reuseGroup ? roots[0]! : input.groupId
-  if (reuseGroup) {
+  const componentRootId = reuseRoot ? roots[0]! : input.groupId
+  if (reuseRoot) {
     entities[componentRootId] = { ...entities[componentRootId]!, name: input.name }
   }
   else {

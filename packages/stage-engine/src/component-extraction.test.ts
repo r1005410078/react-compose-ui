@@ -144,6 +144,30 @@ describe('OpenSpec: stage-engine / 场景选区组件抽取', () => {
     expect(result.componentDocument.entities).not.toHaveProperty('unused-wrapper')
   })
 
+  it('单选 Container 时复用它作为组件根，不追加包装层', () => {
+    const value = document([
+      entity('container', { x: 20, y: 30, width: 220, height: 50, childIds: ['a'] }),
+      entity('a'),
+    ], ['container'])
+    const result = createComponentExtractionPlan({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      selectedIds: ['container'],
+      groupId: 'unused-wrapper',
+      name: 'Card',
+    })
+
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    // 组件根就是被选中的 Container 本身，场景树里不会多出同名包装层。
+    expect(result.componentDocument.rootIds).toEqual(['container'])
+    expect(result.componentDocument.entities).not.toHaveProperty('unused-wrapper')
+    expect(isComposeGroupEntity(result.componentDocument.entities.container!)).toBe(false)
+    // 复用路径同样把根坐标归零到输出原点。
+    expect(getComposeLayoutItem(result.componentDocument.entities.container!).offset)
+      .toEqual({ x: 0, y: 0 })
+  })
+
   it('资源成功后用一个可撤销事务在最小 sibling index 原子替换选区', () => {
     const value = document([
       entity('before'),
