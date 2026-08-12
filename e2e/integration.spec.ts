@@ -3433,3 +3433,40 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 空内容退出删除实�
   await stage.press('Control+z')
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
 })
+
+test('创建组件重名时在对话框内提示并允许改名重试', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await expect(editor.getByRole('application', { name: 'Stage' })).toBeVisible()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  async function openCreateDialog() {
+    await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+    await editor.getByRole('button', { name: '添加 Container' }).click()
+    await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+    const row = sceneTree.getByRole('row').last()
+    await row.click()
+    await row.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: '创建组件…' }).click()
+    return page.getByRole('dialog', { name: '创建组件' })
+  }
+
+  const first = await openCreateDialog()
+  await first.getByLabel('组件名称').fill('Duplicate Card')
+  await first.getByRole('button', { name: '创建' }).click()
+  await expect(page.getByRole('dialog', { name: '创建组件' })).toHaveCount(0)
+
+  // 重名写入失败必须在对话框内可见，而不是只出现在被遮罩压暗的角落通知里。
+  const second = await openCreateDialog()
+  await second.getByLabel('组件名称').fill('Duplicate Card')
+  await second.getByRole('button', { name: '创建' }).click()
+  await expect(second.getByRole('alert')).toContainText('已存在')
+  await expect(second).toBeVisible()
+
+  // 改名后可直接重试成功。
+  await second.getByLabel('组件名称').fill('Renamed Card')
+  await second.getByRole('button', { name: '创建' }).click()
+  await expect(page.getByRole('dialog', { name: '创建组件' })).toHaveCount(0)
+})

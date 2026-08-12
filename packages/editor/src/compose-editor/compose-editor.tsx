@@ -301,6 +301,22 @@ function EditorRoot({
 }
 
 /**
+ * 把资源写入失败翻译成用户可行动的中文提示。
+ *
+ * @remarks
+ * Provider 由宿主实现，其 message 语言和措辞都不受编辑器控制，因此按稳定错误码翻译，
+ * 只有无法识别时才回退到原始 message。
+ */
+function describeCreateComponentError(error: Error): string {
+  const code = (error as { code?: unknown }).code
+  if (code === 'conflict') return '同名组件已存在，请换一个名称。'
+  if (code === 'unsupported') return '当前资源目录不支持创建组件文件。'
+  if (code === 'not-found') return '目标资源目录不存在。'
+  if (code === 'permission') return '没有写入该资源目录的权限。'
+  return error.message
+}
+
+/**
  * 渲染固定 Dockview 工作区及可选的场景树、历史、画布、属性和底部工具内容。
  *
  * @param props - 受控面板内容、可选历史控制器和标准 `section` 属性。
@@ -361,6 +377,7 @@ export function ComposeEditor({
     readonly sequence: number
   } | null>(null)
   const [createComponentName, setCreateComponentName] = useState('Component')
+  const [createComponentError, setCreateComponentError] = useState<string | null>(null)
   const [creatingComponent, setCreatingComponent] = useState(false)
   const [pendingVariantParent, setPendingVariantParent] = useState<ComposeComponentDescriptor | null>(null)
   const [pendingVariantInstance, setPendingVariantInstance] = useState<ComposeEntity | null>(null)
@@ -1454,15 +1471,23 @@ export function ComposeEditor({
     setCreatingComponent(false)
     if (result.status === 'committed') {
       setPendingCreateComponent(null)
+      setCreateComponentError(null)
       setComponentNotice(null)
       return
     }
     if (result.status === 'saved-not-instantiated') {
       setPendingCreateComponent(null)
+      setCreateComponentError(null)
       setComponentNotice(`资源已保存但未实例化：${result.reason}`)
       return
     }
-    setComponentNotice(result.status === 'unavailable' ? result.reason : result.error.message)
+    // 失败保持对话框打开：错误几乎总是可以靠改名重试解决，关闭对话框会丢掉用户已输入的名称。
+    // 通知条位于编辑器角落且被模态遮罩压暗，单靠它无法让用户察觉失败。
+    const reason = result.status === 'unavailable'
+      ? result.reason
+      : describeCreateComponentError(result.error)
+    setCreateComponentError(reason)
+    setComponentNotice(reason)
   }, [controller, createComponentName, pendingCreateComponent])
 
   const confirmCreateVariant = useCallback(async () => {
@@ -1639,17 +1664,28 @@ export function ComposeEditor({
                       autoFocus
                       disabled={creatingComponent}
                       value={createComponentName}
-                      onChange={(event) => setCreateComponentName(event.currentTarget.value)}
+                      onChange={(event) => {
+                        setCreateComponentName(event.currentTarget.value)
+                        setCreateComponentError(null)
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') void confirmCreateComponent()
                       }}
                     />
+                    {createComponentError === null ? null : (
+                      <p className="compose-editor__dialog-error" role="alert">
+                        {createComponentError}
+                      </p>
+                    )}
                     <ComposeDialogFooter>
                       <ComposeButton
                         type="button"
                         variant="outline"
                         disabled={creatingComponent}
-                        onClick={() => setPendingCreateComponent(null)}
+                        onClick={() => {
+                          setPendingCreateComponent(null)
+                          setCreateComponentError(null)
+                        }}
                       >
                         {editorMessages.canvasSettings.cancel}
                       </ComposeButton>

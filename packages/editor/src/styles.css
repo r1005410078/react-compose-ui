@@ -1365,3 +1365,11 @@
 .compose-editor__page-script-diagnostic {
   color: var(--compose-danger);
 }
+
+/* 对话框内的写入失败提示：与输入框同宽，紧贴输入以说明错误来源。 */
+.compose-editor__dialog-error {
+  margin: 0;
+  color: var(--compose-color-danger-text, #f87171);
+  font-size: 12px;
+  line-height: 1.5;
+}
