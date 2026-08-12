@@ -297,7 +297,8 @@ export function EntityInspector({
                   registry={registry}
                 />
               )}
-              defaultExpanded={definition.inspectorDefaultExpanded ?? false}
+              // 缺失入口（如未启用的布局）默认收起，避免空分组占满视野。
+              defaultExpanded={false}
               key={definition.key}
               title={definition.label}
             >
@@ -334,7 +335,8 @@ export function EntityInspector({
                 registry={registry}
               />
             ) : undefined}
-            defaultExpanded={definition.inspectorDefaultExpanded ?? false}
+            // 有内容的分组默认展开；定义可显式覆盖。
+            defaultExpanded={definition.inspectorDefaultExpanded ?? true}
             key={definition.key}
             title={definition.label}
           >
@@ -360,7 +362,7 @@ export function EntityInspector({
           && !(hiddenComponentKeys ?? []).includes(key)
         ))
         .map((key) => (
-          <ComposePropertyPanelSection defaultExpanded={false} key={key} title={key}>
+          <ComposePropertyPanelSection defaultExpanded key={key} title={key}>
             <UnknownInspector
               label={zh ? '未知 Component' : 'Unknown component'}
               message={zh ? `未知 Component：${key}` : `Unknown component: ${key}`}
@@ -375,7 +377,7 @@ export function EntityInspector({
         if (categoryContracts.length === 0) return null
         return (
           <ComposePropertyPanelSection
-            defaultExpanded={category.inspectorDefaultExpanded ?? false}
+            defaultExpanded={category.inspectorDefaultExpanded ?? true}
             key={`renderer-category:${category.id}`}
             title={category.label}
           >
@@ -408,7 +410,7 @@ export function EntityInspector({
 
       {renderer && rendererAdvancedHasContent ? (
         <ComposePropertyPanelSection
-          defaultExpanded={rendererDefinition?.inspectorDefaultExpanded ?? false}
+          defaultExpanded={rendererDefinition?.inspectorDefaultExpanded ?? true}
           title={zh ? '高级' : 'Advanced'}
         >
           {rendererDefinition ? (

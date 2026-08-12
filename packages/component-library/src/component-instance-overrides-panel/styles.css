@@ -1,35 +1,248 @@
 .compose-instance-overrides {
-  display: grid;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--compose-border, #323844);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 2%), transparent 40px),
+    var(--compose-panel-bg, #1e222a);
+  color: var(--compose-text, #e8ecf1);
 }
 
-.compose-instance-overrides > header,
-.compose-instance-overrides li {
+.compose-instance-overrides__header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 10px 6px 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 4%);
 }
 
-.compose-instance-overrides > header {
-  justify-content: space-between;
+.compose-instance-overrides__identity {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
 }
 
-.compose-instance-overrides ul {
+.compose-instance-overrides__badge {
   display: grid;
-  gap: 0.5rem;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 5px;
+  color: #93c5fd;
+  background: rgb(59 130 246 / 16%);
+}
+
+.compose-instance-overrides__badge svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.compose-instance-overrides__title {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.compose-instance-overrides__title > strong {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--compose-text-strong, #e8ecf1);
+}
+
+.compose-instance-overrides__status {
+  color: var(--compose-text-muted, #8b95a5);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compose-instance-overrides__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #fcd34d;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgb(251 191 36 / 12%);
+}
+
+.compose-instance-overrides__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.compose-instance-overrides__sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--compose-border, #323844);
+}
+
+/* 覆盖 Shadcn icon 按钮的默认尺寸与 hover，贴近设计稿工具栏。 */
+.compose-instance-overrides__icon-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 !important;
+  color: var(--compose-text-muted, #8b95a5) !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.compose-instance-overrides__icon-btn:hover:not(:disabled) {
+  color: var(--compose-text-strong, #e8ecf1) !important;
+  background: var(--compose-surface-hover, #2c323d) !important;
+}
+
+.compose-instance-overrides__icon-btn:disabled {
+  opacity: 0.35;
+}
+
+.compose-instance-overrides__icon-btn--accent:hover:not(:disabled) {
+  color: #93c5fd !important;
+  background: rgb(59 130 246 / 16%) !important;
+}
+
+.compose-instance-overrides__icon-btn--danger:hover:not(:disabled) {
+  color: #f87171 !important;
+  background: rgb(248 113 113 / 12%) !important;
+}
+
+.compose-instance-overrides__icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.compose-instance-overrides__message {
+  margin: 0;
+  padding: 6px 12px;
+  color: var(--compose-text-subtle, #a8b0bd);
+  font-size: 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 4%);
+}
+
+.compose-instance-overrides__body {
+  padding: 8px 10px 12px;
+}
+
+.compose-instance-overrides__list-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding: 0 2px;
+  color: var(--compose-text-muted, #8b95a5);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.compose-instance-overrides__list-label em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--compose-text-subtle, #a8b0bd);
+}
+
+.compose-instance-overrides__empty {
+  padding: 10px 8px;
+  border: 1px dashed var(--compose-border, #323844);
+  border-radius: 6px;
+  color: var(--compose-text-muted, #8b95a5);
+  font-size: 12px;
+  text-align: center;
+  background: rgb(0 0 0 / 18%);
+}
+
+.compose-instance-overrides__list {
+  display: grid;
   margin: 0;
   padding: 0;
   list-style: none;
+  border: 1px solid var(--compose-border, #323844);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--compose-surface-raised, #252a33);
 }
 
-.compose-instance-overrides li > label {
+.compose-instance-overrides__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 6px 6px 10px;
+  border-top: 1px solid rgb(255 255 255 / 4%);
+}
+
+.compose-instance-overrides__row:first-child {
+  border-top: 0;
+}
+
+.compose-instance-overrides__row:hover {
+  background: var(--compose-surface-hover, #2c323d);
+}
+
+.compose-instance-overrides__row-meta {
   display: grid;
   min-width: 0;
-  flex: 1;
-  gap: 0.25rem;
+  gap: 2px;
 }
 
-.compose-instance-overrides p {
-  margin: 0;
+.compose-instance-overrides__row-meta strong {
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--compose-text-strong, #e8ecf1);
+}
+
+.compose-instance-overrides__row-meta span {
+  color: var(--compose-text-muted, #8b95a5);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compose-instance-overrides__row-ops {
+  display: flex;
+  gap: 1px;
+}
+
+.compose-instance-overrides__hint {
+  margin: 8px 2px 0;
+  color: var(--compose-text-muted, #8b95a5);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.compose-instance-overrides__conflict {
+  padding: 0 10px 12px;
+}
+
+.compose-instance-overrides__conflict > button {
+  width: 100%;
 }

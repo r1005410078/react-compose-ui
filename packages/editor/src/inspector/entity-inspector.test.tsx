@@ -120,12 +120,13 @@ describe('EntityInspector missing Component sections', () => {
     )
 
     const sectionButton = screen.getByRole('button', { name: '布局' })
-    expect(sectionButton).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('使用自动布局')).toBeInTheDocument()
+    // 未附加 Layout 时默认收起；标题栏 actions 仍可点「添加」。
+    expect(sectionButton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('使用自动布局')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '添加布局' })).toBeInTheDocument()
     fireEvent.click(sectionButton)
-    expect(screen.queryByText('使用自动布局')).not.toBeInTheDocument()
-    expect(sectionButton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByText('使用自动布局')).toBeInTheDocument()
+    expect(sectionButton).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('OpenSpec: component-registry / Component Inspector 分组与默认展开协议 / 合并基础并应用默认展开状态', () => {
@@ -211,12 +212,14 @@ describe('EntityInspector missing Component sections', () => {
     expect(screen.getByLabelText('名称')).toBeInTheDocument()
     expect(screen.getByLabelText('旋转')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '几何' })).not.toBeInTheDocument()
+    // 有内容的分组默认展开（含未声明 inspectorDefaultExpanded 的「状态」与「高级」）。
     expect(screen.getByRole('button', { name: '布局' })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: '状态' })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: '状态' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.queryByRole('button', { name: '内容' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('启用')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('标题')).not.toBeInTheDocument()
+    // 展开后字段可见。
+    expect(screen.getByLabelText('启用')).toBeInTheDocument()
+    expect(screen.getByLabelText('标题')).toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / Renderer Props 分类 / 显式分类与默认高级分组', () => {
@@ -321,12 +324,11 @@ describe('EntityInspector missing Component sections', () => {
     expect(screen.queryByText('数据绑定')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '内容' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '主要' })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'false')
+    // 有内容的「高级」默认展开；标题在「主要」分类，不在高级里。
+    expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.queryByLabelText('标题')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '更换绑定 标题：title' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '解绑 标题' })).toBeEnabled()
-    expect(screen.queryByRole('group', { name: 'On click' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '高级' }))
     expect(screen.getByRole('group', { name: 'On click' })).toBeInTheDocument()
 
     const lockedEntity: ComposeEntity = {

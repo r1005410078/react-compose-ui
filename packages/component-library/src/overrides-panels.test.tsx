@@ -132,7 +132,7 @@ describe('Component property panels', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
     expect(onChange).toHaveBeenCalledWith({ operations: [] })
 
-    fireEvent.click(screen.getByRole('button', { name: '创建变体…' }))
+    fireEvent.click(screen.getByRole('button', { name: '创建变体' }))
     expect(onCreateVariant).toHaveBeenCalled()
 
     // 冲突先预览，确认后才丢弃。
@@ -140,6 +140,22 @@ describe('Component property panels', () => {
     await screen.findByText(/目标在最新来源中已不存在/)
     fireEvent.click(screen.getByRole('button', { name: /丢弃 1 项失效覆盖并更新/ }))
     await screen.findByText(/已更新，并丢弃 1 项失效覆盖/)
+  })
+
+  it('无覆盖时不展示通栏 Apply/Revert，头部批量操作禁用', () => {
+    render(
+      <ComposeComponentInstanceOverridesPanel
+        entity={instanceEntity([])}
+        onApply={vi.fn()}
+        onChange={vi.fn()}
+        onCreateVariant={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/尚无本层覆盖/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Apply 全部实例覆盖' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Revert 全部实例覆盖' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument()
   })
 })
 
@@ -179,6 +195,8 @@ describe('实例结构覆盖面板', () => {
         onUpdate={vi.fn()}
       />,
     )
+    expect(screen.getByText('2 项本层覆盖')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Revert' })).toHaveLength(2)
+    expect(screen.getAllByText('删除实体')).toHaveLength(2)
   })
 })
