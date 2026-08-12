@@ -378,10 +378,15 @@ export function ComposeComponentLibraryPanel({
                     ? (zh ? '主组件' : 'base component')
                     : (zh ? '变体' : 'variant')
                   return (
-                    <div className="compose-component-library__project-item" key={descriptor.assetKey}>
+                    <div
+                      className="compose-component-library__project-item"
+                      data-component-kind={descriptor.kind}
+                      key={descriptor.assetKey}
+                    >
                       <button
                         aria-label={`${zh ? '添加' : 'Add'}${zh ? kindLabel : ` ${kindLabel}`} ${descriptor.displayName}`}
                         className="compose-component-library__tile"
+                        data-component-kind={descriptor.kind}
                         onClick={(event) => { activateProject(event, item) }}
                         onDoubleClick={() => { openProject(descriptor) }}
                         onPointerDown={(event) => { pointerDown(event, item) }}
@@ -390,7 +395,8 @@ export function ComposeComponentLibraryPanel({
                         <span aria-hidden="true" className="compose-component-library__icon">
                           <ComposeComponentAssetIcon kind={descriptor.kind} />
                         </span>
-                        <span>{descriptor.displayName}</span>
+                        <span className="compose-component-library__name">{descriptor.displayName}</span>
+                        <span className="compose-component-library__meta">{kindLabel}</span>
                       </button>
                       {descriptor.kind === 'base' && onCreateVariantIntent ? (
                         <button
