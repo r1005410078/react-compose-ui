@@ -57,6 +57,10 @@
 
 ## 6. 集成与交付
 
-- [ ] 6.1 更新示例、README、AGENTS、project.md、包 README、公共 TSDoc 与 Changeset
-- [ ] 6.2 添加单选提取无冗余层级、实例 Resize、自动同步与冲突确认的 Playwright 场景
-- [ ] 6.3 运行 lint、typecheck、test、build、test:e2e、pack dry-run 与 strict OpenSpec 校验
+- [x] 6.1 更新示例、README、AGENTS、project.md、包 README、公共 TSDoc 与 Changeset
+  - Result: README、AGENTS、project.md、core/component-library/editor 包 README 与 Changeset 已同步；示例应用无需改动，四项行为都可在其中直接操作。
+- [x] 6.2 添加单选提取无冗余层级、实例 Resize、自动同步与冲突确认的 Playwright 场景
+  - Result: 新增「实例暴露组件根属性且可 Resize」（含单层结构与名称只出现一次）与「组件源保存后实例自动同步」。
+  - 未覆盖：自动同步的冲突确认分支只有单测，e2e 需要构造失效锚点的组件源改动，成本高于收益。
+- [x] 6.3 运行 lint、typecheck、test、build、test:e2e、pack dry-run 与 strict OpenSpec 校验
+  - Result: `bun run lint` 通过；`bun run typecheck` 42/42；`bun run test` 41/41；`bun run build` 22/22；`bunx playwright test` 55/55；`bun run pack:dry-run` 通过；`bunx openspec validate update-component-instance-contract --strict` Change valid。

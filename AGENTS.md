@@ -37,9 +37,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `Appearance.backgroundPaint`、first-class Group 与关联组件实例；项目组件/变体使用独立
   `Component Asset v1`，不改变页面文档版本；v5 只能显式单向迁移，
   数据源协议和持久化接口仍未确定。
-- 组件实例的覆盖是分区的 `instanceOverrides`（`properties` + `operations`），结构操作复用 Variant
-  的稳定操作代数。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址寻址，只存在于表示层：持久化
-  文档中实例仍是单个 Entity，Undo/Redo 作用在宿主实例的 Patch 上。
+- 组件实例的覆盖是 `instanceOverrides`，只含结构操作并复用 Variant 的稳定操作代数；暴露属性已删除。
+  组件文档只要求单根，根可以是容器或任意 Entity。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址
+  寻址，只存在于表示层：持久化文档中实例仍是单个 Entity，Undo/Redo 作用在宿主实例的 Patch 上。
+  实例的几何与容器属性跟随组件根，尺寸的唯一事实来源是根本身。
 - 不要把示例应用中的临时状态或演示交互当成稳定公共 API。
 
 ## 架构边界
