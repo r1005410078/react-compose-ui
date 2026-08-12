@@ -29,6 +29,12 @@ export function CanvasViewportControls({ store, surfaceSize }: CanvasViewportCon
       Math.max(0.1, Math.min(8, current.zoom * factor)),
     ))
   }
+  // 点击百分比以画布中心为锚点还原 100%，与命令面板 zoomReset 一致。
+  const resetZoom = () => {
+    if (!surfaceSize) return
+    const origin = { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }
+    store.setViewport((current) => zoomViewportAt(current, origin, 1))
+  }
 
   return (
     <div aria-label={messages.zoomTools} className="compose-editor__canvas-viewport-controls" role="group">
@@ -38,9 +44,15 @@ export function CanvasViewportControls({ store, surfaceSize }: CanvasViewportCon
       <button {...titled(messages.zoomOut)} disabled={!surfaceSize} type="button" onClick={() => zoom(1 / 1.2)}>
         <StageToolbarIcon name="zoom-out" />
       </button>
-      <span aria-label={messages.zoomLevel} className="compose-editor__canvas-zoom-value">
+      <button
+        {...titled(messages.resetZoom)}
+        className="compose-editor__canvas-zoom-value"
+        disabled={!surfaceSize}
+        type="button"
+        onClick={resetZoom}
+      >
         {Math.round(viewport.zoom * 100)}%
-      </span>
+      </button>
       <button {...titled(messages.zoomIn)} disabled={!surfaceSize} type="button" onClick={() => zoom(1.2)}>
         <StageToolbarIcon name="zoom-in" />
       </button>
