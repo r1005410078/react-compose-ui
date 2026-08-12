@@ -269,6 +269,64 @@ describe('Yoga Compose layout runtime', () => {
     expect(snapshot.boxes.second).toMatchObject({ x: 70, y: 12 })
   })
 
+  it('OpenSpec: layout-engine / Auto Layout 交叉轴拉伸继承 / stretch 父级拉伸 Hug 子级', async () => {
+    // 容器 300x200、border 2、padding 10 → 交叉轴内容区 200 - 2*2 - 2*10 = 176。
+    const container = entity('container', fixedItem(0, 0, 300, 200), ['child'])
+    const child = entity('child', {
+      ...fixedItem(0, 0, 50, 20, 'flow'),
+      height: { mode: 'hug', value: 20, min: null, max: null },
+    })
+    const snapshot = await resolveComposeDocumentLayout(
+      documentFixture({ container, child }),
+      { revision: 0, measure: () => ({ width: 50, height: 20 }), subscribe: () => () => undefined },
+    )
+
+    expect(container.components.Layout).toMatchObject({ alignItems: 'stretch' })
+    expect(snapshot.boxes.child).toMatchObject({ height: 176 })
+  })
+
+  it('OpenSpec: layout-engine / Auto Layout 交叉轴拉伸继承 / 子级显式 alignSelf 优先于父级', async () => {
+    const container = entity('container', fixedItem(0, 0, 300, 200), ['pinned', 'stretched'])
+    const pinned = entity('pinned', {
+      ...fixedItem(0, 0, 50, 20, 'flow'),
+      height: { mode: 'hug', value: 20, min: null, max: null },
+      alignSelf: 'flex-start',
+    })
+    const stretched = entity('stretched', {
+      ...fixedItem(0, 0, 50, 20, 'flow'),
+      height: { mode: 'hug', value: 20, min: null, max: null },
+    })
+    const snapshot = await resolveComposeDocumentLayout(
+      documentFixture({ container, pinned, stretched }),
+      { revision: 0, measure: () => ({ width: 50, height: 20 }), subscribe: () => () => undefined },
+    )
+
+    // 测量返回 content box，Snapshot 发布 border box：20 + 2*2 = 24。
+    expect(snapshot.boxes.pinned).toMatchObject({ height: 24 })
+    expect(snapshot.boxes.stretched).toMatchObject({ height: 176 })
+  })
+
+  it('OpenSpec: layout-engine / Auto Layout 交叉轴拉伸继承 / 非拉伸父级保持内容尺寸', async () => {
+    const base = entity('container', fixedItem(0, 0, 300, 200), ['child'])
+    const container = {
+      ...base,
+      components: {
+        ...base.components,
+        Layout: { ...base.components.Layout, alignItems: 'flex-start' as const },
+      },
+    }
+    const child = entity('child', {
+      ...fixedItem(0, 0, 50, 20, 'flow'),
+      height: { mode: 'hug', value: 20, min: null, max: null },
+    })
+    const snapshot = await resolveComposeDocumentLayout(
+      documentFixture({ container, child }),
+      { revision: 0, measure: () => ({ width: 50, height: 20 }), subscribe: () => () => undefined },
+    )
+
+    expect(snapshot.boxes.child).toMatchObject({ height: 24 })
+  })
+
   it('OpenSpec: hug-content-layout / Measurement fallback / 每个 Hug axis 使用稳定 value 与诊断', async () => {
     const leaf = entity('container', {
       ...fixedItem(0, 0, 90, 32),

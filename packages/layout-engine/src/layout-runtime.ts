@@ -331,14 +331,9 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     if (isFlow && item.height.mode === 'fill' && rowMainAxis) {
       node.setAlignSelf(yoga.ALIGN_STRETCH)
     }
-    if (
-      isFlow
-      && item.alignSelf === 'auto'
-      && ((rowMainAxis && item.height.mode === 'hug')
-        || (!rowMainAxis && item.width.mode === 'hug'))
-    ) {
-      node.setAlignSelf(yoga.ALIGN_FLEX_START)
-    }
+    // 交叉轴 Hug 不再强制 flex-start：Hug 在 Yoga 侧本就是未设置尺寸（auto），保留
+    // `alignSelf: auto` 才能按标准 Flexbox 语义继承父级 alignItems。子级要跳出父级拉伸
+    // 时显式设置自己的 alignSelf 即可。
 
     const appearance = resolveComposeAppearance(entity)
     for (const edge of [yoga.EDGE_TOP, yoga.EDGE_RIGHT, yoga.EDGE_BOTTOM, yoga.EDGE_LEFT]) {
