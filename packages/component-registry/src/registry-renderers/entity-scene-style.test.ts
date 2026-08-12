@@ -2,6 +2,7 @@ import type { ComposeEntity, JsonObject } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import {
   composeEntityAppearanceStyle,
+  composeEntityOverflowStyle,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
 } from './entity-scene-style'
@@ -76,6 +77,24 @@ describe('composeEntityVisualStyle', () => {
 
     const noClip = composeEntityVisualStyle(entity({ Hierarchy: { childIds: [] } }))
     expect(noClip.overflow).toBe('visible')
+  })
+})
+
+describe('composeEntityOverflowStyle', () => {
+  it('OpenSpec: 共享 Entity overflow 解析辅助 / 叶子 hidden、分轴 scroll→auto', () => {
+    expect(composeEntityOverflowStyle(entity({}))).toEqual({ overflow: 'hidden' })
+
+    const mixed = composeEntityOverflowStyle(entity({
+      Hierarchy: { childIds: [] },
+      Clip: { enabled: true, horizontal: 'scroll', vertical: 'clip' },
+    }))
+    expect(mixed).toEqual({ overflowX: 'auto', overflowY: 'hidden' })
+
+    const bothScroll = composeEntityOverflowStyle(entity({
+      Hierarchy: { childIds: [] },
+      Clip: { enabled: true, horizontal: 'scroll', vertical: 'scroll' },
+    }))
+    expect(bothScroll).toEqual({ overflow: 'auto' })
   })
 })
 

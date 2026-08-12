@@ -1,4 +1,5 @@
 import {
+  composeEntityOverflowStyle,
   composeEntitySceneStyle,
   ComposeEntityPaintLayer,
   ComposeRegistryEntityRenderer,
@@ -272,7 +273,11 @@ function NestedEntity({
   return (
     <div
       data-component-instance-entity-id={entity.id}
-      style={{ ...composeEntitySceneStyle(entity, box), position: 'absolute' }}
+      style={{
+        ...composeEntitySceneStyle(entity, box),
+        ...composeEntityOverflowStyle(entity),
+        position: 'absolute',
+      }}
     >
       <ComposeEntityPaintLayer assetResolver={assetResolver} entity={entity} />
       <ComposeRegistryEntityRenderer

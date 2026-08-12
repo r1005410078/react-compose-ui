@@ -3629,9 +3629,22 @@ test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件�
   await expect(inspector).toContainText('外观')
   await expect(inspector).toContainText('容器')
   await expect(inspector.getByLabel('名称')).toHaveCount(1)
+  // 合成表面：禁止双 EntityInspector / 双搜索栏。
+  await expect(inspector.locator('.compose-editor__entity-inspector')).toHaveCount(1)
+  await expect(inspector.getByRole('searchbox')).toHaveCount(1)
 
   // 根可缩放，实例继承该能力并显示手柄。
   await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(1)
+
+  // 嵌套矩形 Appearance 驱动填色与圆角，Material 不得盖默认蓝底。
+  const material = stage.getByTestId('compose-material-rectangle')
+  await expect(material).toBeVisible()
+  await expect(material).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  const nestedRect = material.locator(
+    'xpath=ancestor::*[@data-component-instance-entity-id][1]',
+  )
+  await expect(nestedRect).toHaveCSS('overflow', 'hidden')
+  await expect(nestedRect).toHaveCSS('border-radius', '12px')
 })
 
 test('OpenSpec: component-library / Apply、Revert 与显式更新 / 组件源保存后实例自动同步', async ({ page }) => {

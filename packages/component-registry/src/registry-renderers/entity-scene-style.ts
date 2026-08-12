@@ -1,8 +1,8 @@
 import {
-  getComposeClip,
   getComposeHierarchy,
   getComposeTransform,
   resolveComposeAppearance,
+  resolveComposeOverflow,
   type ComposeEntity,
   type ComposeResolvedLayoutBox,
 } from '@compose-ui/core'
@@ -42,21 +42,44 @@ export function composeEntityAppearanceStyle(entity: ComposeEntity): CSSProperti
 }
 
 /**
- * 组合共享 appearance 与旧版静态 overflow 的兼容入口。
+ * Stage、Preview 与 component-instance 嵌套路径共用的 overflow CSS。
  *
  * @remarks
- * 新的 Stage 与 Preview 消费方应使用 `composeEntityAppearanceStyle` 并自行应用运行时 overflow。
+ * 叶子 MUST 为 `hidden`，否则 borderRadius 无法裁剪 Paint/Material 子层。
+ * 容器按 `resolveComposeOverflow` 分轴映射：`scroll`→`auto`、`clip`→`hidden`、`visible` 保持。
+ *
+ * @public
+ */
+export function composeEntityOverflowStyle(entity: ComposeEntity): CSSProperties {
+  if (!getComposeHierarchy(entity)) return { overflow: 'hidden' }
+  const overflow = resolveComposeOverflow(entity)
+  const cssValue = (value: typeof overflow.horizontal): 'auto' | 'hidden' | 'visible' => {
+    if (value === 'scroll') return 'auto'
+    if (value === 'clip') return 'hidden'
+    return 'visible'
+  }
+  if (overflow.horizontal === overflow.vertical) {
+    return { overflow: cssValue(overflow.horizontal) }
+  }
+  return {
+    overflowX: cssValue(overflow.horizontal),
+    overflowY: cssValue(overflow.vertical),
+  }
+}
+
+/**
+ * 组合共享 appearance 与 overflow 的兼容入口。
+ *
+ * @remarks
+ * 新的 Stage 与 Preview 消费方可分别组合 `composeEntityAppearanceStyle` 与
+ * `composeEntityOverflowStyle`；本函数保留给仍使用单一 visual 入口的调用方。
  *
  * @public
  */
 export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
-  const hierarchy = getComposeHierarchy(entity)
-  const clip = getComposeClip(entity)
   return {
     ...composeEntityAppearanceStyle(entity),
-    overflow: hierarchy
-      ? (clip?.enabled ? 'hidden' : 'visible')
-      : 'hidden',
+    ...composeEntityOverflowStyle(entity),
   }
 }
 

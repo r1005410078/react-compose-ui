@@ -161,6 +161,69 @@ describe('OpenSpec: basic-materials / 关联组件实例物料', () => {
     expect(content).toHaveStyle({ pointerEvents: 'none' })
   })
 
+  it('嵌套实体应用 Appearance 圆角与 overflow，Material 不盖默认蓝底', async () => {
+    const materials = createComposeBasicMaterials()
+    const Renderer = materials.registry.getRenderer('component-instance')!.renderer
+    const base = componentDocument()
+    const rectangle = base.entities.rectangle!
+    // 模拟组件源里改过颜色与圆角的矩形。
+    const sourceDocument: ComposeDocument = {
+      ...base,
+      entities: {
+        ...base.entities,
+        rectangle: {
+          ...rectangle,
+          components: {
+            ...rectangle.components,
+            Appearance: {
+              backgroundPaint: { kind: 'solid', color: '#ef4444' },
+              borderColor: 'transparent',
+              borderWidth: 0,
+              borderRadius: 24,
+              opacity: 1,
+              shadow: null,
+            },
+          },
+        },
+      },
+    }
+    const props = {
+      reference,
+      resolvedSnapshot: {
+        componentId: 'card',
+        kind: 'base',
+        revision: '1',
+        document: sourceDocument,
+        appliedLineage: snapshot().appliedLineage,
+      },
+      instanceOverrides: { operations: [] },
+    } as unknown as JsonObject
+
+    render(<Renderer
+      authoredProps={props}
+      entity={{ id: 'instance', name: 'Card', components: {} } as ComposeEntity}
+      mode="preview"
+      props={props}
+      registry={materials.registry}
+      renderer={{ type: 'component-instance', props }}
+    />)
+
+    const node = await waitFor(() => {
+      const el = globalThis.document.querySelector('[data-component-instance-entity-id="rectangle"]')
+      if (!el) throw new Error('nested rectangle missing')
+      return el as HTMLElement
+    })
+    // 叶子 overflow:hidden 才能用 border-radius 裁剪内部层。
+    expect(node).toHaveStyle({
+      borderRadius: '24px',
+      backgroundColor: 'rgb(239, 68, 68)',
+      overflow: 'hidden',
+    })
+    const material = screen.getByTestId('compose-material-rectangle')
+    // Material 必须透明，否则会盖住 Appearance 并露出无圆角蓝块。
+    expect(getComputedStyle(material).backgroundColor).toMatch(/rgba?\(0,\s*0,\s*0,\s*0\)|transparent/)
+  })
+
   it('按 instanceOverrides 的结构操作渲染', async () => {
     const materials = createComposeBasicMaterials()
     const Renderer = materials.registry.getRenderer('component-instance')!.renderer

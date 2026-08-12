@@ -10,6 +10,7 @@ import {
   ComposePaintLayer,
   ComposeRegistryEntityRenderer,
   composeEntityAppearanceStyle,
+  composeEntityOverflowStyle,
   composeEntitySceneStyle,
   useComposePageScriptScope,
 } from '@compose-ui/component-registry'
@@ -22,7 +23,6 @@ import {
   getComposeLayoutItem,
   getComposeVisibility,
   resolveComposeAppearance,
-  resolveComposeOverflow,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type {
@@ -84,23 +84,8 @@ export type ComposePreviewTarget =
 function entityStyle(entity: ComposeEntity, box: ComposeResolvedLayoutBox): CSSProperties {
   return {
     ...composeEntitySceneStyle(entity, box),
-    ...previewOverflowStyle(entity),
+    ...composeEntityOverflowStyle(entity),
     position: 'absolute' as const,
-  }
-}
-
-function previewOverflowStyle(entity: ComposeEntity): CSSProperties {
-  if (!getComposeHierarchy(entity)) return { overflow: 'hidden' }
-  const overflow = resolveComposeOverflow(entity)
-  const cssValue = (value: typeof overflow.horizontal) => value === 'scroll'
-    ? 'auto'
-    : value === 'clip' ? 'hidden' : 'visible'
-  if (overflow.horizontal === overflow.vertical) {
-    return { overflow: cssValue(overflow.horizontal) }
-  }
-  return {
-    overflowX: cssValue(overflow.horizontal),
-    overflowY: cssValue(overflow.vertical),
   }
 }
 
@@ -280,7 +265,7 @@ function ComposePreviewReady({
             data-testid="compose-preview-container"
             style={{
               ...composeEntityAppearanceStyle(entity),
-              ...previewOverflowStyle(entity),
+              ...composeEntityOverflowStyle(entity),
               position: 'relative',
               width: box.width,
               height: box.height,

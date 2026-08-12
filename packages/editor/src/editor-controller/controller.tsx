@@ -1478,18 +1478,20 @@ export function useComposeEditorController({
   }, [document, runtime, selectedIds])
 
   /**
-   * 选中实例本身时，组件根属性的 Inspector。
+   * 选中实例本身时，组件根属性分组（无独立外壳）。
    *
    * @remarks
-   * 由 controller 产出而不是让宿主自行组装：registry 与 idFactory 都只在这里可用。
+   * 默认已并入 `inspectorPanel`；保留导出供自定义宿主在同一 PropertyPanel 内拼装。
+   * 根侧隐藏名称、位置与尺寸，避免与宿主实例字段重复且取值矛盾。
    */
   const instanceRootInspector = instanceRootSelection === null ? null : (
     <EntityInspector
+      chrome="sections"
       dispatch={instanceRootSelection.dispatch}
       document={instanceRootSelection.document}
       entity={instanceRootSelection.entity}
-      // 名称、位置与旋转由宿主实例提供，根侧隐藏以免同一属性出现两次且取值矛盾。
-      hiddenComponentKeys={['Transform', 'LayoutItem']}
+      // 名称/位置由宿主提供；可见性与锁定也以页面实例层为准，避免同一分组出现两次。
+      hiddenComponentKeys={['Transform', 'LayoutItem', 'Visibility', 'Lock']}
       hideIdentity
       idFactory={nextId}
       // 按实例重挂载：切换实例时局部会话状态不得残留。
@@ -1516,6 +1518,29 @@ export function useComposeEditorController({
       key={selectedIds[0]}
       registry={registry}
       renameDisabled
+    />
+  ) : selectedEntity && instanceRootSelection ? (
+    // 宿主身份/位置 + 组件根视觉属性合并为单一面板，避免两个搜索栏与重复标题。
+    <EntityInspector
+      dispatch={dispatch}
+      document={document}
+      entity={selectedEntity}
+      // 尺寸、外观、裁剪、Auto Layout 与容器结构以组件根为事实来源。
+      hiddenComponentKeys={[
+        'Appearance',
+        'Clip',
+        'GeometryConstraints',
+        'Hierarchy',
+        'Layout',
+      ]}
+      extraSections={instanceRootInspector}
+      idFactory={nextId}
+      key={selectedEntity.id}
+      layoutSnapshot={layoutState.status === 'ready' ? layoutState.snapshot : undefined}
+      nodeEditPort={nodeEditPort}
+      paintEditPort={paintEditPort}
+      registry={registry}
+      scriptScope={scriptScope}
     />
   ) : selectedEntity ? (
     <EntityInspector

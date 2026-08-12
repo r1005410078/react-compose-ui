@@ -391,4 +391,116 @@ describe('EntityInspector missing Component sections', () => {
     expect(screen.getByRole('button', { name: '图表' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '高级' })).not.toBeInTheDocument()
   })
+
+  it('chrome=sections 不渲染独立标题与搜索栏，可拼进宿主面板', () => {
+    const registry = createComposeEntityRegistry({
+      components: [{
+        key: 'Appearance',
+        label: '外观',
+        createDefault: () => ({ backgroundPaint: { kind: 'solid', color: '#fff' } }),
+        inspector: () => <div>appearance-fields</div>,
+      }],
+    })
+    const root: ComposeEntity = {
+      id: 'root',
+      name: 'Root Container',
+      components: {
+        Composition: entity.components.Composition!,
+        Transform: entity.components.Transform!,
+        LayoutItem: entity.components.LayoutItem!,
+        Visibility: entity.components.Visibility!,
+        Lock: entity.components.Lock!,
+        Hierarchy: entity.components.Hierarchy!,
+        Appearance: { backgroundPaint: { kind: 'solid', color: '#fff' } },
+      },
+    }
+
+    render(
+      <EntityInspector
+        chrome="sections"
+        dispatch={vi.fn()}
+        document={{
+          ...document,
+          rootIds: [root.id],
+          entities: { [root.id]: root },
+        }}
+        entity={root}
+        hideIdentity
+        hiddenComponentKeys={['Transform', 'LayoutItem']}
+        idFactory={() => 'command-1'}
+        registry={registry}
+      />,
+    )
+
+    expect(screen.queryByRole('region', { name: /属性/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '添加能力' })).not.toBeInTheDocument()
+    expect(screen.getByText('appearance-fields')).toBeInTheDocument()
+  })
+
+  it('extraSections 与宿主字段共用一个 PropertyPanelRoot', () => {
+    const registry = createComposeEntityRegistry({
+      components: [
+        {
+          key: 'LayoutItem',
+          label: '布局项',
+          inspectorGroup: 'basic',
+          createDefault: () => entity.components.LayoutItem,
+          inspector: () => <div>host-layout-item</div>,
+        },
+        {
+          key: 'Appearance',
+          label: '外观',
+          createDefault: () => ({ backgroundPaint: { kind: 'solid', color: '#fff' } }),
+          inspectorDefaultExpanded: true,
+          inspector: () => <div>root-appearance</div>,
+        },
+      ],
+    })
+    const root: ComposeEntity = {
+      id: 'c-root',
+      name: 'Root',
+      components: {
+        Composition: {
+          presetId: 'container',
+          baseComponentKeys: ['Appearance', 'Lock'],
+          capabilityIds: [],
+        },
+        Lock: { locked: false },
+        Appearance: { backgroundPaint: { kind: 'solid', color: '#00f' } },
+      },
+    }
+
+    const { container } = render(
+      <EntityInspector
+        dispatch={vi.fn()}
+        document={document}
+        entity={entity}
+        extraSections={(
+          <EntityInspector
+            chrome="sections"
+            dispatch={vi.fn()}
+            document={{
+              ...document,
+              rootIds: [root.id],
+              entities: { [root.id]: root },
+            }}
+            entity={root}
+            hideIdentity
+            idFactory={() => 'root-cmd'}
+            registry={registry}
+          />
+        )}
+        hiddenComponentKeys={['Appearance', 'Hierarchy', 'Layout']}
+        idFactory={() => 'host-cmd'}
+        registry={registry}
+      />,
+    )
+
+    // 单一 EntityInspector 外壳 + 一个 PropertyPanel 搜索栏，不叠第二份面板。
+    expect(container.querySelectorAll('.compose-editor__entity-inspector')).toHaveLength(1)
+    expect(screen.getAllByRole('searchbox')).toHaveLength(1)
+    expect(screen.getByText('host-layout-item')).toBeInTheDocument()
+    expect(screen.getByText('root-appearance')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('名称')).toHaveLength(1)
+  })
 })

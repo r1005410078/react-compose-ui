@@ -1296,12 +1296,11 @@ export function ComposeEditor({
       return entityInspector
     }
     if (!activeComponentSession && selectedComponentInstance && componentWorkspace.store) {
+      // 宿主 + 组件根已由 controller.inspectorPanel 合成单一 EntityInspector；
+      // 这里只追加实例覆盖面板，不再叠第二个属性面板外壳。
       return (
         <div className="compose-editor__component-inspector">
           {entityInspector}
-          {/* 实例的最外层就是组件根：把根的尺寸、外观、裁剪与 Auto Layout 一并暴露，
-              编辑经 instanceRootSelection 写入实例覆盖而不是宿主文档。 */}
-          {controller?.instanceRootInspector}
           <ComposeComponentInstanceOverridesPanel
             entity={selectedComponentInstance}
             onApply={applySelectedInstanceOverrides}
@@ -1315,7 +1314,6 @@ export function ComposeEditor({
     return entityInspector
   }, [
     controller?.inspectorPanel,
-    controller?.instanceRootInspector,
     activeComponentSession,
     applySelectedInstanceOverrides,
     componentWorkspace.store,

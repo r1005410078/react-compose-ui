@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import * as v from 'valibot'
 import {
   ComposeRegistryComponentInspector,
@@ -35,6 +35,14 @@ import {
 } from './renderer-bindings-inspector'
 import { useRendererInspectorBindingPort } from './renderer-inspector-binding-port'
 
+/**
+ * Inspector 外壳形态。
+ *
+ * - `full`：完整区域，含标题、能力条与独立 PropertyPanelRoot（默认）。
+ * - `sections`：只输出属性分组，供宿主拼进同一面板，避免组件实例出现两个搜索栏。
+ */
+export type EntityInspectorChrome = 'full' | 'sections'
+
 interface EntityInspectorProps {
   readonly document: ComposeDocument
   readonly entity: ComposeEntity
@@ -59,12 +67,25 @@ interface EntityInspectorProps {
    * 不渲染的 Component Inspector Key。
    *
    * @remarks
-   * 组件实例的最外层由两份 Inspector 拼成：宿主实体提供名称、位置与旋转，组件根提供布局、
-   * 外观与裁剪。隐藏根侧重复的 Key，避免同一属性出现两次且取值互相矛盾。
+   * 组件实例的最外层由宿主身份/位置与组件根视觉属性拼成。隐藏一侧的重复 Key，
+   * 避免同一属性出现两次且取值互相矛盾。
    */
   readonly hiddenComponentKeys?: readonly string[]
   /** 不渲染名称等身份字段。 */
   readonly hideIdentity?: boolean
+  /**
+   * 外壳形态。
+   *
+   * @defaultValue 'full'
+   */
+  readonly chrome?: EntityInspectorChrome
+  /**
+   * 拼在同一 PropertyPanelRoot 内的额外分组（例如组件根属性）。
+   *
+   * @remarks
+   * 仅 `chrome="full"` 时生效；用于把宿主与根合成一个属性面板。
+   */
+  readonly extraSections?: ReactNode
 }
 
 // 内建 Component 由 Registry 定义的 inspector 呈现；缺失定义时也不进入“未知”分组，
@@ -164,6 +185,8 @@ export function EntityInspector({
   hideIdentity,
   renameDisabled,
   scriptScope,
+  chrome = 'full',
+  extraSections,
 }: EntityInspectorProps) {
   const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
   const locked = getComposeLock(entity).locked
@@ -220,6 +243,214 @@ export function EntityInspector({
     const plan = registry.planRemoveCapability(document, entity.id, capabilityId, idFactory)
     if (plan.ok) dispatch(plan.command)
     setPendingRemoval(null)
+  }
+
+  const sections = (
+    <>
+      {hideIdentity === true && visibleBasicDefinitions.length === 0 ? null : (
+        <ComposePropertyPanelSection defaultExpanded title={zh ? '基础' : 'Identity'}>
+          {hideIdentity === true ? null : (
+            <IdentityInspector
+              dispatch={dispatch}
+              entity={entity}
+              idFactory={idFactory}
+              readOnly={locked || renameDisabled === true}
+              zh={zh}
+            />
+          )}
+          {visibleBasicDefinitions.map((definition) => (
+            <ComposeRegistryComponentInspector
+              componentKey={definition.key}
+              dispatch={dispatch}
+              document={document}
+              entity={entity}
+              key={definition.key}
+              layoutSnapshot={layoutSnapshot}
+              readOnly={locked}
+              nodeEditPort={nodeEditPort}
+              paintEditPort={paintEditPort}
+              registry={registry}
+            />
+          ))}
+        </ComposePropertyPanelSection>
+      )}
+      {componentDefinitions.map((definition) => {
+        if (definition.hidden) return null
+        if ((hiddenComponentKeys ?? []).includes(definition.key)) return null
+        const componentExists = entity.components[definition.key] !== undefined
+        if (!componentExists) {
+          if (!definition.missingInspector?.isVisible(entity)) return null
+          const hasContent = Boolean(definition.missingInspector.content)
+          return (
+            <ComposePropertyPanelSection
+              actionOnly={!hasContent}
+              actions={(
+                <ComposeRegistryMissingComponentInspectorHeaderActions
+                  componentKey={definition.key}
+                  dispatch={dispatch}
+                  document={document}
+                  entity={entity}
+                  layoutSnapshot={layoutSnapshot}
+                  readOnly={locked}
+                  nodeEditPort={nodeEditPort}
+                  paintEditPort={paintEditPort}
+                  registry={registry}
+                />
+              )}
+              defaultExpanded={definition.inspectorDefaultExpanded ?? false}
+              key={definition.key}
+              title={definition.label}
+            >
+              {hasContent ? (
+                <ComposeRegistryMissingComponentInspector
+                  componentKey={definition.key}
+                  dispatch={dispatch}
+                  document={document}
+                  entity={entity}
+                  layoutSnapshot={layoutSnapshot}
+                  readOnly={locked}
+                  nodeEditPort={nodeEditPort}
+                  paintEditPort={paintEditPort}
+                  registry={registry}
+                />
+              ) : null}
+            </ComposePropertyPanelSection>
+          )
+        }
+        if (!definition.inspector) return null
+        if (definition.inspectorGroup === 'basic') return null
+        return (
+          <ComposePropertyPanelSection
+            actions={definition.inspectorHeaderActions ? (
+              <ComposeRegistryComponentInspectorHeaderActions
+                componentKey={definition.key}
+                dispatch={dispatch}
+                document={document}
+                entity={entity}
+                layoutSnapshot={layoutSnapshot}
+                readOnly={locked}
+                nodeEditPort={nodeEditPort}
+                paintEditPort={paintEditPort}
+                registry={registry}
+              />
+            ) : undefined}
+            defaultExpanded={definition.inspectorDefaultExpanded ?? false}
+            key={definition.key}
+            title={definition.label}
+          >
+            <ComposeRegistryComponentInspector
+              componentKey={definition.key}
+              dispatch={dispatch}
+              document={document}
+              entity={entity}
+              layoutSnapshot={layoutSnapshot}
+              readOnly={locked}
+              nodeEditPort={nodeEditPort}
+              paintEditPort={paintEditPort}
+              registry={registry}
+            />
+          </ComposePropertyPanelSection>
+        )
+      })}
+
+      {Object.keys(entity.components)
+        .filter((key) => (
+          !BUILTIN_COMPONENT_KEYS.has(key)
+          && !registry.getComponent(key)
+          && !(hiddenComponentKeys ?? []).includes(key)
+        ))
+        .map((key) => (
+          <ComposePropertyPanelSection defaultExpanded={false} key={key} title={key}>
+            <UnknownInspector
+              label={zh ? '未知 Component' : 'Unknown component'}
+              message={zh ? `未知 Component：${key}` : `Unknown component: ${key}`}
+            />
+          </ComposePropertyPanelSection>
+        ))}
+
+      {rendererDefinition?.propCategories?.map((category) => {
+        const categoryContracts = rendererDefinition.propContracts?.filter(
+          (contract) => contract.category === category.id,
+        ) ?? []
+        if (categoryContracts.length === 0) return null
+        return (
+          <ComposePropertyPanelSection
+            defaultExpanded={category.inspectorDefaultExpanded ?? false}
+            key={`renderer-category:${category.id}`}
+            title={category.label}
+          >
+            {rendererDefinition.inspector ? (
+              <ComposeRegistryRendererInspector
+                dispatch={dispatch}
+                document={document}
+                entity={entity}
+                layoutSnapshot={layoutSnapshot}
+                readOnly={locked}
+                nodeEditPort={nodeEditPort}
+                paintEditPort={paintEditPort}
+                propCategory={category}
+                propsBinding={propsBinding}
+                registry={registry}
+                scriptScope={scriptScope}
+              />
+            ) : null}
+            {propsBinding ? (
+              <RendererBindingOnlyRows
+                categoryId={category.id}
+                definition={rendererDefinition}
+                port={propsBinding}
+                readOnly={locked}
+              />
+            ) : null}
+          </ComposePropertyPanelSection>
+        )
+      })}
+
+      {renderer && rendererAdvancedHasContent ? (
+        <ComposePropertyPanelSection
+          defaultExpanded={rendererDefinition?.inspectorDefaultExpanded ?? false}
+          title={zh ? '高级' : 'Advanced'}
+        >
+          {rendererDefinition ? (
+            <>
+              {rendererAdvancedHasInspector ? (
+                <ComposeRegistryRendererInspector
+                  dispatch={dispatch}
+                  document={document}
+                  entity={entity}
+                  layoutSnapshot={layoutSnapshot}
+                  readOnly={locked}
+                  nodeEditPort={nodeEditPort}
+                  paintEditPort={paintEditPort}
+                  propsBinding={propsBinding}
+                  registry={registry}
+                  scriptScope={scriptScope}
+                />
+              ) : null}
+              {propsBinding ? (
+                <RendererBindingOnlyRows
+                  definition={rendererDefinition}
+                  port={propsBinding}
+                  readOnly={locked}
+                />
+              ) : null}
+            </>
+          ) : (
+            <UnknownInspector
+              label={zh ? '未知 Renderer' : 'Unknown Renderer'}
+              message={zh
+                ? `未知组件：${renderer.type}`
+                : `Unknown renderer: ${renderer.type}`}
+            />
+          )}
+        </ComposePropertyPanelSection>
+      ) : null}
+      {extraSections}
+    </>
+  )
+
+  if (chrome === 'sections') {
+    return sections
   }
 
   return (
@@ -293,199 +524,7 @@ export function EntityInspector({
       <ComposePropertyPanelRoot
         aria-label={zh ? `${entity.name} 属性字段` : `${entity.name} property fields`}
       >
-        {hideIdentity === true && visibleBasicDefinitions.length === 0 ? null : (
-        <ComposePropertyPanelSection defaultExpanded title={zh ? '基础' : 'Identity'}>
-          {hideIdentity === true ? null : (
-            <IdentityInspector
-              dispatch={dispatch}
-              entity={entity}
-              idFactory={idFactory}
-              readOnly={locked || renameDisabled === true}
-              zh={zh}
-            />
-          )}
-          {visibleBasicDefinitions.map((definition) => (
-            <ComposeRegistryComponentInspector
-              componentKey={definition.key}
-              dispatch={dispatch}
-              document={document}
-              entity={entity}
-              key={definition.key}
-              layoutSnapshot={layoutSnapshot}
-              readOnly={locked}
-              nodeEditPort={nodeEditPort}
-              paintEditPort={paintEditPort}
-              registry={registry}
-            />
-          ))}
-        </ComposePropertyPanelSection>
-        )}
-        {componentDefinitions.map((definition) => {
-          if (definition.hidden) return null
-          const componentExists = entity.components[definition.key] !== undefined
-          if (!componentExists) {
-            if (!definition.missingInspector?.isVisible(entity)) return null
-            const hasContent = Boolean(definition.missingInspector.content)
-            return (
-              <ComposePropertyPanelSection
-                actionOnly={!hasContent}
-                actions={(
-                  <ComposeRegistryMissingComponentInspectorHeaderActions
-                    componentKey={definition.key}
-                    dispatch={dispatch}
-                    document={document}
-                    entity={entity}
-                    layoutSnapshot={layoutSnapshot}
-                    readOnly={locked}
-                    nodeEditPort={nodeEditPort}
-                    paintEditPort={paintEditPort}
-                    registry={registry}
-                  />
-                )}
-                defaultExpanded={definition.inspectorDefaultExpanded ?? false}
-                key={definition.key}
-                title={definition.label}
-              >
-                {hasContent ? (
-                  <ComposeRegistryMissingComponentInspector
-                    componentKey={definition.key}
-                    dispatch={dispatch}
-                    document={document}
-                    entity={entity}
-                    layoutSnapshot={layoutSnapshot}
-                    readOnly={locked}
-                    nodeEditPort={nodeEditPort}
-                    paintEditPort={paintEditPort}
-                    registry={registry}
-                  />
-                ) : null}
-              </ComposePropertyPanelSection>
-            )
-          }
-          if (!definition.inspector) return null
-          if (definition.inspectorGroup === 'basic') return null
-          return (
-            <ComposePropertyPanelSection
-              actions={definition.inspectorHeaderActions ? (
-                <ComposeRegistryComponentInspectorHeaderActions
-                  componentKey={definition.key}
-                  dispatch={dispatch}
-                  document={document}
-                  entity={entity}
-                  layoutSnapshot={layoutSnapshot}
-                  readOnly={locked}
-                  nodeEditPort={nodeEditPort}
-                  paintEditPort={paintEditPort}
-                  registry={registry}
-                />
-              ) : undefined}
-              defaultExpanded={definition.inspectorDefaultExpanded ?? false}
-              key={definition.key}
-              title={definition.label}
-            >
-              <ComposeRegistryComponentInspector
-                componentKey={definition.key}
-                dispatch={dispatch}
-                document={document}
-                entity={entity}
-                layoutSnapshot={layoutSnapshot}
-                readOnly={locked}
-                nodeEditPort={nodeEditPort}
-                paintEditPort={paintEditPort}
-                registry={registry}
-              />
-            </ComposePropertyPanelSection>
-          )
-        })}
-
-        {Object.keys(entity.components)
-          .filter((key) => !BUILTIN_COMPONENT_KEYS.has(key) && !registry.getComponent(key))
-          .map((key) => (
-            <ComposePropertyPanelSection defaultExpanded={false} key={key} title={key}>
-              <UnknownInspector
-                label={zh ? '未知 Component' : 'Unknown component'}
-                message={zh ? `未知 Component：${key}` : `Unknown component: ${key}`}
-              />
-            </ComposePropertyPanelSection>
-          ))}
-
-        {rendererDefinition?.propCategories?.map((category) => {
-          const categoryContracts = rendererDefinition.propContracts?.filter(
-            (contract) => contract.category === category.id,
-          ) ?? []
-          if (categoryContracts.length === 0) return null
-          return (
-            <ComposePropertyPanelSection
-              defaultExpanded={category.inspectorDefaultExpanded ?? false}
-              key={`renderer-category:${category.id}`}
-              title={category.label}
-            >
-              {rendererDefinition.inspector ? (
-                <ComposeRegistryRendererInspector
-                  dispatch={dispatch}
-                  document={document}
-                  entity={entity}
-                  layoutSnapshot={layoutSnapshot}
-                  readOnly={locked}
-                  nodeEditPort={nodeEditPort}
-                  paintEditPort={paintEditPort}
-                  propCategory={category}
-                  propsBinding={propsBinding}
-                  registry={registry}
-                  scriptScope={scriptScope}
-                />
-              ) : null}
-              {propsBinding ? (
-                <RendererBindingOnlyRows
-                  categoryId={category.id}
-                  definition={rendererDefinition}
-                  port={propsBinding}
-                  readOnly={locked}
-                />
-              ) : null}
-            </ComposePropertyPanelSection>
-          )
-        })}
-
-        {renderer && rendererAdvancedHasContent ? (
-          <ComposePropertyPanelSection
-            defaultExpanded={rendererDefinition?.inspectorDefaultExpanded ?? false}
-            title={zh ? '高级' : 'Advanced'}
-          >
-            {rendererDefinition ? (
-              <>
-                {rendererAdvancedHasInspector ? (
-                  <ComposeRegistryRendererInspector
-                    dispatch={dispatch}
-                    document={document}
-                    entity={entity}
-                    layoutSnapshot={layoutSnapshot}
-                    readOnly={locked}
-                    nodeEditPort={nodeEditPort}
-                    paintEditPort={paintEditPort}
-                    propsBinding={propsBinding}
-                    registry={registry}
-                    scriptScope={scriptScope}
-                  />
-                ) : null}
-                {propsBinding ? (
-                  <RendererBindingOnlyRows
-                    definition={rendererDefinition}
-                    port={propsBinding}
-                    readOnly={locked}
-                  />
-                ) : null}
-              </>
-            ) : (
-              <UnknownInspector
-                label={zh ? '未知 Renderer' : 'Unknown Renderer'}
-                message={zh
-                  ? `未知组件：${renderer.type}`
-                  : `Unknown renderer: ${renderer.type}`}
-              />
-            )}
-          </ComposePropertyPanelSection>
-        ) : null}
+        {sections}
       </ComposePropertyPanelRoot>
 
       <ComposeConfirmDialog

@@ -922,10 +922,11 @@
 }
 
 /*
- * 页面文档面板与固定画布面板共用同一套工具栏与内容区结构，因此必须使用相同的
+ * 页面文档、组件文档与固定画布面板共用同一套工具栏与内容区结构，因此必须使用相同的
  * flex 列布局：.compose-editor__canvas-content 依赖 flex-1 撑开，放进 grid 容器会塌陷。
  */
-.compose-editor__page-document {
+.compose-editor__page-document,
+.compose-editor__component-document {
   display: flex;
   width: 100%;
   height: 100%;
