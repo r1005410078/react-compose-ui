@@ -9,6 +9,7 @@ import type { ComposeComponentSnapshot, ComposeComponentStore } from '../compone
 import {
   applyComposeInstancePropertyOverrides,
   createComposeVariantAssetFromInstance,
+  readComposeComponentInstance,
 } from './instance-operations'
 
 const reference = {
@@ -128,5 +129,40 @@ describe('component instance operations', () => {
     expect(saved.kind === 'base'
       ? saved.document.entities.text?.components.Renderer
       : null).toMatchObject({ props: { text: 'Danger' } })
+  })
+})
+
+describe('实例覆盖读取', () => {
+  it('读取分区形状的 instanceOverrides', () => {
+    const entity: ComposeEntity = {
+      id: 'instance',
+      name: 'Button',
+      components: {
+        Renderer: {
+          type: 'component-instance',
+          props: {
+            reference,
+            resolvedSnapshot: createComposeResolvedComponentSnapshot(base(), reference, '1'),
+            instanceOverrides: {
+              properties: { label: 'Danger' },
+              operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'text' }],
+            },
+          } as unknown as JsonObject,
+        },
+      },
+    }
+    const facts = readComposeComponentInstance(entity)
+    expect(facts).not.toBeNull()
+    expect(facts?.overrides.properties).toEqual({ label: 'Danger' })
+    expect(facts?.overrides.operations).toHaveLength(1)
+    expect(facts?.migratedFromLegacy).toBe(false)
+  })
+
+  it('显式迁移旧 propertyOverrides 并标记来源', () => {
+    const facts = readComposeComponentInstance(instance(base()))
+    expect(facts?.overrides.properties).toEqual({ label: 'Danger' })
+    expect(facts?.overrides.operations).toEqual([])
+    // 标记让宿主知道该实体仍是旧形状，可在下次写入时落盘为分区形状。
+    expect(facts?.migratedFromLegacy).toBe(true)
   })
 })

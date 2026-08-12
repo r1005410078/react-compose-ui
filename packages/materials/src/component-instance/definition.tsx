@@ -52,7 +52,7 @@ export function createComponentInstanceMaterial(): {
       createComponents: () => ({
         ...rendererPresetComponents({
           type: 'component-instance',
-          props: { reference: null, resolvedSnapshot: null, propertyOverrides: {} },
+          props: { reference: null, resolvedSnapshot: null, instanceOverrides: { properties: {}, operations: [] } },
           size: { width: 1, height: 1 },
           appearance: TRANSPARENT_APPEARANCE,
         }),
@@ -83,7 +83,7 @@ export function createComponentInstanceMaterial(): {
           const rendererProps = {
             reference,
             resolvedSnapshot: snapshot,
-            propertyOverrides: {},
+            instanceOverrides: { properties: {}, operations: [] },
           } as unknown as JsonObject
           const components = rendererPresetComponents({
             type: 'component-instance',

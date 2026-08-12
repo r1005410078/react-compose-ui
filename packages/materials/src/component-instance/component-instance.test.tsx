@@ -163,6 +163,34 @@ describe('OpenSpec: basic-materials / 关联组件实例物料', () => {
     expect(content).toHaveStyle({ pointerEvents: 'none' })
   })
 
+  it('按 instanceOverrides 的结构操作渲染', async () => {
+    const materials = createComposeBasicMaterials()
+    const Renderer = materials.registry.getRenderer('component-instance')!.renderer
+    // 结构操作删除组件内部矩形，渲染结果必须反映操作后的结构而不是原始快照。
+    const props = {
+      reference,
+      resolvedSnapshot: snapshot(),
+      instanceOverrides: {
+        properties: {},
+        operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'rectangle' }],
+      },
+    } as unknown as JsonObject
+
+    render(<Renderer
+      authoredProps={props}
+      entity={{ id: 'instance', name: 'Card', components: {} } as ComposeEntity}
+      mode="editor"
+      props={props}
+      registry={materials.registry}
+      renderer={{ type: 'component-instance', props }}
+    />)
+
+    await screen.findByTestId('compose-component-instance-content')
+    await waitFor(() => {
+      expect(screen.queryByTestId('compose-material-rectangle')).not.toBeInTheDocument()
+    })
+  })
+
   it('循环和超过八层时拒绝继续嵌套', () => {
     const materials = createComposeBasicMaterials()
     const Renderer = materials.registry.getRenderer('component-instance')!.renderer

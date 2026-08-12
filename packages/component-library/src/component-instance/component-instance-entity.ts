@@ -45,7 +45,7 @@ export function createComposeComponentInstanceEntity(input: {
   const rendererProps = {
     reference: input.reference,
     resolvedSnapshot: snapshot,
-    propertyOverrides: {},
+    instanceOverrides: { properties: {}, operations: [] },
   } as unknown as JsonObject
   return {
     ok: true,

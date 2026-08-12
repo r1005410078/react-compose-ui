@@ -1,5 +1,8 @@
 import {
   applyComposeComponentOverrides,
+  migrateLegacyComposeInstanceOverrides,
+  parseComposeInstanceOverrides,
+  type ComposeComponentInstanceOverrides,
   type ComposeComponentOverrideOperation,
   type ComposeComponentReference,
   type ComposeEntity,
@@ -14,20 +17,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-/** 一个合法 component-instance Renderer 中的稳定资源、快照与当前层属性覆盖。 @public */
+/** 一个合法 component-instance Renderer 中的稳定资源、快照与当前层覆盖。 @public */
 export interface ComposeComponentInstanceFacts {
   readonly reference: ComposeComponentReference
   readonly snapshot: ComposeResolvedComponentSnapshot
-  readonly propertyOverrides: Readonly<Record<string, JsonValue>>
+  readonly overrides: ComposeComponentInstanceOverrides
+  /**
+   * 该实体仍是旧 `propertyOverrides` 形状，本次读取经过显式迁移。
+   *
+   * @remarks
+   * 宿主可据此在下一次写入时把实体落盘为分区形状；读取本身不改写文档。
+   */
+  readonly migratedFromLegacy: boolean
 }
 
-/** 读取关联组件实例事实；非实例或损坏数据返回 null。 @public */
+/**
+ * 读取关联组件实例事实；非实例或损坏数据返回 null。
+ *
+ * @remarks
+ * 优先按分区形状解析 `instanceOverrides`。仅当实体完全没有该字段时，才对旧
+ * `propertyOverrides` 调用显式迁移并置位 {@link ComposeComponentInstanceFacts.migratedFromLegacy}；
+ * 形状损坏的 `instanceOverrides` 一律判为无效，不回退到旧字段。
+ *
+ * @public
+ */
 export function readComposeComponentInstance(entity: ComposeEntity): ComposeComponentInstanceFacts | null {
   const renderer = entity.components.Renderer
   if (!renderer || renderer.type !== 'component-instance' || !isRecord(renderer.props)) return null
   const reference = renderer.props.reference
   const snapshot = renderer.props.resolvedSnapshot
-  const propertyOverrides = renderer.props.propertyOverrides
   if (
     !isRecord(reference)
     || reference.kind !== 'component'
@@ -38,12 +56,26 @@ export function readComposeComponentInstance(entity: ComposeEntity): ComposeComp
     || !isRecord(snapshot.document)
     || !Array.isArray(snapshot.properties)
     || !Array.isArray(snapshot.appliedLineage)
-    || !isRecord(propertyOverrides)
   ) return null
+  const raw = renderer.props.instanceOverrides
+  let overrides: ComposeComponentInstanceOverrides
+  let migratedFromLegacy = false
+  if (raw === undefined) {
+    const legacy = renderer.props.propertyOverrides
+    if (!isRecord(legacy)) return null
+    overrides = migrateLegacyComposeInstanceOverrides(legacy as Readonly<Record<string, JsonValue>>)
+    migratedFromLegacy = true
+  }
+  else {
+    const parsed = parseComposeInstanceOverrides(raw)
+    if (!parsed.ok) return null
+    overrides = parsed.overrides
+  }
   return {
     reference: reference as ComposeComponentReference,
     snapshot: snapshot as unknown as ComposeResolvedComponentSnapshot,
-    propertyOverrides: propertyOverrides as Readonly<Record<string, JsonValue>>,
+    overrides,
+    migratedFromLegacy,
   }
 }
 
@@ -77,7 +109,7 @@ export function createComposeVariantAssetFromInstance(input: {
 }): ComposeVariantComponentAsset {
   const facts = readComposeComponentInstance(input.entity)
   if (!facts) throw new Error('选择不是有效的关联组件实例')
-  const overrides = propertyOperations(facts.snapshot, facts.propertyOverrides)
+  const overrides = propertyOperations(facts.snapshot, facts.overrides.properties)
   const applied = applyComposeComponentOverrides(facts.snapshot.document, overrides)
   if (!applied.ok) throw new Error(applied.issues.map(({ message }) => message).join('；'))
   const asset = createComposeVariantAsset({
@@ -135,9 +167,9 @@ export async function updateComposeComponentInstanceFromSource(input: {
     throw new Error(resolved.issues.map(({ message }) => message).join('；'))
   }
   const definitions = new Map(resolved.snapshot.properties.map((definition) => [definition.id, definition]))
-  const conflicts = Object.keys(facts.propertyOverrides).filter((id) => !definitions.has(id))
+  const conflicts = Object.keys(facts.overrides.properties).filter((id) => !definitions.has(id))
   const operations: ComposeComponentOverrideOperation[] = []
-  for (const [id, value] of Object.entries(facts.propertyOverrides)) {
+  for (const [id, value] of Object.entries(facts.overrides.properties)) {
     const definition = definitions.get(id)
     if (!definition) continue
     operations.push({
@@ -168,7 +200,7 @@ export async function updateComposeComponentInstanceFromSource(input: {
     status: 'updated',
     snapshot: resolved.snapshot,
     propertyOverrides: Object.fromEntries(
-      Object.entries(facts.propertyOverrides).filter(([id]) => !discarded.has(id)),
+      Object.entries(facts.overrides.properties).filter(([id]) => !discarded.has(id)),
     ),
     discardedPropertyIds: conflictIds,
   }
@@ -196,7 +228,7 @@ export async function applyComposeInstancePropertyOverrides(input: {
   }
   const operations = propertyOperations(
     facts.snapshot,
-    facts.propertyOverrides,
+    facts.overrides.properties,
     input.propertyIds,
   )
   const source = await input.store.readComponent(facts.reference.assetKey, input.signal)
@@ -247,7 +279,7 @@ export async function applyComposeInstancePropertyOverrides(input: {
     source: written,
     snapshot: resolved.snapshot,
     remainingPropertyOverrides: Object.fromEntries(
-      Object.entries(facts.propertyOverrides).filter(([id]) => !consumed.has(id)),
+      Object.entries(facts.overrides.properties).filter(([id]) => !consumed.has(id)),
     ),
   }
 }

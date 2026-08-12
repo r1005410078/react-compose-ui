@@ -8,6 +8,14 @@ export {
 } from './component-file'
 export { applyComposeComponentOverrides } from './component-overrides'
 export {
+  COMPOSE_INSTANCE_PATH_SEPARATOR,
+  composeInstancePathHostId,
+  decodeComposeInstancePath,
+  encodeComposeInstancePath,
+  isComposeInstancePath,
+  type ComposeInstancePathDecodeResult,
+} from './component-instance-path'
+export {
   migrateLegacyComposeInstanceOverrides,
   parseComposeInstanceOverrides,
   resolveComposeInstanceOverrides,

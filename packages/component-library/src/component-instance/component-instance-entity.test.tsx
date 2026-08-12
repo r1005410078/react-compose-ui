@@ -75,7 +75,7 @@ describe('OpenSpec: component-library / 关联实例实体', () => {
       props: {
         reference: { assetKey: 'Components/Card.component.json' },
         resolvedSnapshot: { componentId: 'card', revision: '3' },
-        propertyOverrides: {},
+        instanceOverrides: { properties: {}, operations: [] },
       },
     })
     expect(getComposeLayoutItem(result.entity)).toMatchObject({

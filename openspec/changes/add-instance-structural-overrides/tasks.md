@@ -25,7 +25,9 @@
 
 ## 3. 投影与选区
 
-- [ ] 3.1 [Red → Green → Refactor] 复合地址编解码、嵌套拼接与碰撞防护
+- [x] 3.1 [Red → Green → Refactor] 复合地址编解码、嵌套拼接与碰撞防护
+  - Red: `bun run --cwd packages/core test -- component-instance-path.test.ts`；6 failed（先收紧 toThrowError 断言，避免调用不存在函数导致的假绿）。
+  - Green/Refactor: 同一命令 6 passed；分隔符禁入 Entity ID，段数上限为嵌套上限两倍。
 - [ ] 3.2 [Red → Green → Refactor] SceneTree 惰性内部子树投影与受限能力位
 - [ ] 3.3 [Red → Green → Refactor] Editor 从 resolvedSnapshot + 实例操作构建投影节点
 - [ ] 3.4 [Red → Green → Refactor] 未展开实例保持单节点的回归

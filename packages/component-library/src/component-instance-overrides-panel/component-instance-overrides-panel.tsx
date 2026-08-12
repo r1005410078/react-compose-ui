@@ -37,14 +37,14 @@ export function ComposeComponentInstanceOverridesPanel({
   const facts = readComposeComponentInstance(entity)
   if (!facts) return <p role="alert">组件实例快照无效</p>
   const change = (id: string, value: JsonValue) => {
-    onChange({ ...facts.propertyOverrides, [id]: value })
+    onChange({ ...facts.overrides.properties, [id]: value })
   }
   const revert = (id: string) => {
-    const next = { ...facts.propertyOverrides }
+    const next = { ...facts.overrides.properties }
     delete next[id]
     onChange(next)
   }
-  const overrideIds = Object.keys(facts.propertyOverrides)
+  const overrideIds = Object.keys(facts.overrides.properties)
   const update = async (discardConflicts = false) => {
     setUpdating(true)
     try {
@@ -85,10 +85,10 @@ export function ComposeComponentInstanceOverridesPanel({
               ?.components[definition.target.componentKey]
             const inherited = atPath(component, definition.target.fieldPath)
             const overridden = Object.prototype.hasOwnProperty.call(
-              facts.propertyOverrides,
+              facts.overrides.properties,
               definition.id,
             )
-            const value = overridden ? facts.propertyOverrides[definition.id] : inherited
+            const value = overridden ? facts.overrides.properties[definition.id] : inherited
             return (
               <li key={definition.id}>
                 <label>{definition.name}

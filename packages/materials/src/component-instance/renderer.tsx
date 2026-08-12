@@ -8,12 +8,15 @@ import {
   type ComposeRendererProps,
 } from '@compose-ui/component-registry'
 import {
-  applyComposeComponentOverrides,
   COMPOSE_COMPONENT_NEST_DEPTH_LIMIT,
   getComposeHierarchy,
   getComposeVisibility,
   isComposeGroupEntity,
+  migrateLegacyComposeInstanceOverrides,
+  parseComposeInstanceOverrides,
+  resolveComposeInstanceOverrides,
   validateComposeDocument,
+  type ComposeComponentInstanceOverrides,
   type ComposeComponentPropertyDefinition,
   type ComposeComponentReference,
   type ComposeDocument,
@@ -75,39 +78,22 @@ function readSnapshot(value: unknown): ComposeResolvedComponentSnapshot | null {
   }
 }
 
-function readJsonOverrides(value: unknown): Readonly<Record<string, JsonValue>> | null {
-  if (!isRecord(value)) return null
-  try {
-    return structuredClone(value) as Readonly<Record<string, JsonValue>>
+/**
+ * 读取实例覆盖，兼容尚未落盘为分区形状的历史实体。
+ *
+ * @remarks
+ * 分区形状优先；只有完全缺少 `instanceOverrides` 时才对旧 `propertyOverrides` 走显式迁移。
+ * 形状损坏的分区数据判为无效，不回退到旧字段，避免把结构操作静默丢成纯属性覆盖。
+ */
+function readInstanceOverrides(props: ComposeRendererProps['props']): ComposeComponentInstanceOverrides | null {
+  const raw = props.instanceOverrides
+  if (raw === undefined) {
+    const legacy = props.propertyOverrides
+    if (!isRecord(legacy)) return null
+    return migrateLegacyComposeInstanceOverrides(legacy as Readonly<Record<string, JsonValue>>)
   }
-  catch {
-    return null
-  }
-}
-
-function applyPropertyOverrides(
-  snapshot: ComposeResolvedComponentSnapshot,
-  overrides: Readonly<Record<string, JsonValue>>,
-): ComposeDocument | null {
-  const definitions = new Map(snapshot.properties.map((definition) => [definition.id, definition]))
-  const operations = Object.entries(overrides).map(([id, value]) => {
-    const definition = definitions.get(id)
-    if (!definition) return null
-    return {
-      id: `instance-property:${id}`,
-      kind: 'set-field' as const,
-      entityId: definition.target.entityId,
-      componentKey: definition.target.componentKey,
-      fieldPath: definition.target.fieldPath,
-      value,
-    }
-  })
-  if (operations.some((operation) => operation === null)) return null
-  const validOperations = operations.filter(
-    (operation): operation is NonNullable<typeof operation> => operation !== null,
-  )
-  const result = applyComposeComponentOverrides(snapshot.document, validOperations)
-  return result.ok ? result.document : null
+  const parsed = parseComposeInstanceOverrides(raw)
+  return parsed.ok ? parsed.overrides : null
 }
 
 function Status({ children, testId, alert = false }: {
@@ -138,7 +124,7 @@ export function ComponentInstanceRenderer({
   const nest = useComposeComponentInstanceNest()
   const reference = readReference(props.reference)
   const snapshot = readSnapshot(props.resolvedSnapshot)
-  const overrides = readJsonOverrides(props.propertyOverrides)
+  const overrides = readInstanceOverrides(props)
   if (!reference || !snapshot || !overrides) {
     return <Status testId="compose-component-instance-invalid" alert>组件快照无效</Status>
   }
@@ -149,10 +135,16 @@ export function ComponentInstanceRenderer({
   if (nest.depth >= COMPOSE_COMPONENT_NEST_DEPTH_LIMIT) {
     return <Status testId="compose-component-instance-depth" alert>组件嵌套层级过深</Status>
   }
-  const document = applyPropertyOverrides(snapshot, overrides)
-  if (!document) {
-    return <Status testId="compose-component-instance-invalid" alert>组件属性覆盖无效</Status>
+  // 四段解析顺序由 core 单点提供：结构操作先成型，属性覆盖才能命中新建目标。
+  const resolved = resolveComposeInstanceOverrides({
+    document: snapshot.document,
+    properties: snapshot.properties,
+    overrides,
+  })
+  if (!resolved.ok) {
+    return <Status testId="compose-component-instance-invalid" alert>组件实例覆盖无效</Status>
   }
+  const document = resolved.document
   return (
     <ResolvedComponentContent
       ancestorKey={key}
