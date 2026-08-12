@@ -42,6 +42,24 @@ Stage MUST 为 container、rectangle、line、arrow、circle 与 text 提供受�
 - **THEN** click 使用 Text Preset 默认尺寸插入，drag 使用拖拽 bounds 创建 text box
 - **AND** Escape、pointercancel 或无效 geometry 不创建 Entity
 
+### Requirement: 两点 Shape 的端点选区
+
+当且仅当单选可编辑的 Shape Renderer Line 或 Arrow 时，Stage MUST 使用其真实首尾世界坐标绘制蓝色线段、
+两个白底蓝边端点控制点及 `长度 × 0` 浮标。它 MUST 不渲染通用矩形 selection bounds、边缘 hit area 或四角
+缩放点；普通 Entity 继续使用通用选区。
+
+#### Scenario: 单选 Line 或 Arrow
+
+- **WHEN** 用户在 select、scale、move 或 rotate 工具中单选 Line 或 Arrow
+- **THEN** 选区始终沿真实线段显示，且没有矩形选框
+- **AND** 仅 select/scale 工具中的首尾控制点可启动 resize，move/rotate 保留各自专属手势
+
+#### Scenario: 拖拽端点并越过另一端
+
+- **WHEN** 用户拖动首端或尾端，并把它越过另一端
+- **THEN** 未拖动端保持固定，预览持续跟随指针和 snap
+- **AND** 松手以一个可撤销 batch 更新空间几何与 Shape `direction`，marker 始终附着在对应语义端点
+
 ## MODIFIED Requirements
 
 ### Requirement: 直接移动缩放与旋转
@@ -61,23 +79,3 @@ Stage MUST 只允许当前工具暴露的 move、resize 或 rotate 手势；每�
 - **WHEN** 当前 Group/Ungroup 目标包含 Flow Entity
 - **THEN** 菜单和快捷键使用相同 availability 禁用该操作并提供可读原因
 - **AND** Delete、Lock、Visibility 与 Rotation 仍按各自能力执行
-
-## ADDED Requirements
-
-### Requirement: 两点 Shape 的端点选区
-
-当且仅当单选可编辑的 Shape Renderer Line 或 Arrow 时，Stage MUST 使用其真实首尾世界坐标绘制蓝色线段、
-两个白底蓝边端点控制点及 `长度 × 0` 浮标。它 MUST 不渲染通用矩形 selection bounds、边缘 hit area 或四角
-缩放点；普通 Entity 继续使用通用选区。
-
-#### Scenario: 单选 Line 或 Arrow
-
-- **WHEN** 用户在 select、scale、move 或 rotate 工具中单选 Line 或 Arrow
-- **THEN** 选区始终沿真实线段显示，且没有矩形选框
-- **AND** 仅 select/scale 工具中的首尾控制点可启动 resize，move/rotate 保留各自专属手势
-
-#### Scenario: 拖拽端点并越过另一端
-
-- **WHEN** 用户拖动首端或尾端，并把它越过另一端
-- **THEN** 未拖动端保持固定，预览持续跟随指针和 snap
-- **AND** 松手以一个可撤销 batch 更新空间几何与 Shape `direction`，marker 始终附着在对应语义端点

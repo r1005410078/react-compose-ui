@@ -23,6 +23,24 @@ StageInteractionController MUST 通过普通数据 context、event、snapshot �
 - **WHEN** draw gesture 收到 Escape、pointercancel、window blur 或失去有效 pointer capture
 - **THEN** draw preview 被清理且不存在 commit 或 command dispatch effect
 
+### Requirement: Headless 两点端点会话
+
+StageInteractionController MUST 通过通用的两点端点 hit、`segmentPreview` snapshot 与 `segment.commit` effect
+支持端点拖拽。该协议只包含 Entity ID 与世界坐标，MUST 不读取 Renderer、SVG、Registry、React 或 DOM；
+surface 负责解释和持久化两点图形的业务含义。
+
+#### Scenario: 端点预览与提交
+
+- **WHEN** surface 为当前单选 Entity 发送端点 hit，并持续发送 pointermove
+- **THEN** Controller 使用既有 grid/smart snap 规则更新 `segmentPreview`，不 dispatch 文档命令
+- **AND** pointerup 最多发出一个包含最终首尾坐标的 `segment.commit` effect
+
+#### Scenario: 端点会话取消
+
+- **WHEN** 端点会话收到 pointercancel、Escape、window blur 或失去 pointer capture
+- **THEN** `segmentPreview` 被清理
+- **AND** 不发出 `segment.commit` 或文档命令 effect
+
 ## MODIFIED Requirements
 
 ### Requirement: Headless 交互 Controller
@@ -42,23 +60,3 @@ surface 连接。
 - **WHEN** 同一 controller 已连接 surface 且另一个 surface 尝试连接
 - **THEN** connectSurface 明确抛错
 - **AND** 原连接与活动交互保持不变
-
-## ADDED Requirements
-
-### Requirement: Headless 两点端点会话
-
-StageInteractionController MUST 通过通用的两点端点 hit、`segmentPreview` snapshot 与 `segment.commit` effect
-支持端点拖拽。该协议只包含 Entity ID 与世界坐标，MUST 不读取 Renderer、SVG、Registry、React 或 DOM；
-surface 负责解释和持久化两点图形的业务含义。
-
-#### Scenario: 端点预览与提交
-
-- **WHEN** surface 为当前单选 Entity 发送端点 hit，并持续发送 pointermove
-- **THEN** Controller 使用既有 grid/smart snap 规则更新 `segmentPreview`，不 dispatch 文档命令
-- **AND** pointerup 最多发出一个包含最终首尾坐标的 `segment.commit` effect
-
-#### Scenario: 端点会话取消
-
-- **WHEN** 端点会话收到 pointercancel、Escape、window blur 或失去 pointer capture
-- **THEN** `segmentPreview` 被清理
-- **AND** 不发出 `segment.commit` 或文档命令 effect
