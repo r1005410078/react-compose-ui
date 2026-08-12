@@ -11,6 +11,7 @@ import {
 import {
   COMPOSE_COMPONENT_NEST_DEPTH_LIMIT,
   getComposeHierarchy,
+  getComposeLayoutItem,
   getComposeVisibility,
   migrateLegacyComposeInstanceOverrides,
   parseComposeInstanceOverrides,
@@ -152,6 +153,30 @@ export function ComponentInstanceRenderer({
   )
 }
 
+/**
+ * 嵌套 Layout Runtime 的 Yoga 画布尺寸取自 `document.output`。
+ * 实例 Resize 会把组件根写成 fixed，但 output 仍可能是创建时的旧值；
+ * 对单根组件文档，将 output 与根 fixed 尺寸对齐，Auto Layout 的 fill 子项才能随外框重排。
+ */
+function alignComponentDocumentOutput(document: ComposeDocument): ComposeDocument {
+  const rootId = document.rootIds[0]
+  if (!rootId || document.rootIds.length !== 1) return document
+  const root = document.entities[rootId]
+  if (!root) return document
+  const item = getComposeLayoutItem(root)
+  const width = item.width.mode === 'fixed' ? item.width.value : document.output.width
+  const height = item.height.mode === 'fixed' ? item.height.value : document.output.height
+  if (width === document.output.width && height === document.output.height) return document
+  return {
+    ...document,
+    output: {
+      ...document.output,
+      width,
+      height,
+    },
+  }
+}
+
 function ResolvedComponentContent({
   ancestorKey,
   assetResolver,
@@ -170,25 +195,27 @@ function ResolvedComponentContent({
   readonly scriptModuleLoader: ComposeRendererProps['scriptModuleLoader']
 }) {
   const nest = useComposeComponentInstanceNest()
-  const [runtime] = useState(() => createComposeLayoutRuntime({ document }))
+  // 布局文档：output 与根 fixed 对齐，保证嵌套 Auto Layout 重算
+  const layoutDocument = useMemo(() => alignComponentDocumentOutput(document), [document])
+  const [runtime] = useState(() => createComposeLayoutRuntime({ document: layoutDocument }))
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
     registry,
     assetResolver,
     pageDocumentPort,
   }), [assetResolver, pageDocumentPort, registry])
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
-  const currentState = state.document === document
+  const currentState = state.document === layoutDocument
     ? state
-    : { status: 'loading' as const, document }
+    : { status: 'loading' as const, document: layoutDocument }
   const runtimeGeneration = useRef(0)
   const adapterGenerations = useRef(new WeakMap<ComposeRendererMeasurementAdapter, number>())
 
   useLayoutEffect(() => {
-    adapter.updateDocument(document)
+    adapter.updateDocument(layoutDocument)
     runtime.setMeasurementPort(adapter)
-    runtime.updateDocument(document)
+    runtime.updateDocument(layoutDocument)
     return () => runtime.setMeasurementPort(undefined)
-  }, [adapter, document, runtime])
+  }, [adapter, layoutDocument, runtime])
   useEffect(() => {
     runtimeGeneration.current += 1
     const mounted = runtimeGeneration.current
@@ -228,10 +255,10 @@ function ResolvedComponentContent({
           ...(mode === 'editor' ? { pointerEvents: 'none' as const } : {}),
         }}
       >
-        {document.rootIds.map((rootId) => (
+        {layoutDocument.rootIds.map((rootId) => (
           <NestedEntity
             assetResolver={assetResolver}
-            document={document}
+            document={layoutDocument}
             entityId={rootId}
             key={rootId}
             layoutSnapshot={currentState.snapshot}

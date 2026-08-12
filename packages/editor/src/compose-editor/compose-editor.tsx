@@ -812,16 +812,20 @@ export function ComposeEditor({
   const syncInstancesAfterComponentSave = useCallback((
     assetKey: string,
     snapshot: ComposeResolvedComponentSnapshot,
+    options?: { readonly excludeEntityIds?: readonly string[] },
   ) => {
     const store = componentWorkspace.store
     const document = controller?.document
     if (!store || !controller || !document) return
+    const excluded = new Set(options?.excludeEntityIds ?? [])
     const plan = planComposeInstanceAutoSync({
       document,
       reference: store.createReference(assetKey),
       snapshot,
     })
     for (const entry of plan.synced) {
+      // 刚完成 Apply 的实例已写好 remainingOverrides，禁止 auto-sync 用旧 ops 盖回去。
+      if (excluded.has(entry.entityId)) continue
       const entity = document.entities[entry.entityId]
       const renderer = entity?.components.Renderer
       if (!renderer) continue
@@ -845,9 +849,10 @@ export function ComposeEditor({
         },
       })
     }
-    if (plan.pending.length > 0) {
+    const pending = plan.pending.filter((entry) => !excluded.has(entry.entityId))
+    if (pending.length > 0) {
       setComponentNotice(
-        `${plan.pending.length} 个实例的本层覆盖已失效，需要在实例上确认更新`,
+        `${pending.length} 个实例的本层覆盖已失效，需要在实例上确认更新`,
       )
     }
   }, [componentWorkspace.store, controller])
@@ -899,8 +904,54 @@ export function ComposeEditor({
     }
     return true
   }, [assets?.browser, componentWorkspace.store, handleHomePageChange, homePageKey, pageStore, requestDocumentClose])
+  /**
+   * 从资源条目打开组件画布（双击默认路径）。
+   *
+   * @remarks
+   * 优先用目录里的 descriptor；列举未就绪时再 readComponent 补齐。
+   * 查看 JSON 走 {@link openAssetDocument}，不在此入口。
+   */
+  const openComponentFromAssetEntry = useCallback(async (entry: ComposeAssetEntry) => {
+    const store = componentWorkspace.store
+    if (!store || entry.kind !== 'file' || !entry.assetKey) return
+    const fromCatalog = componentCatalog?.components.find(
+      (item) => item.assetKey === entry.assetKey,
+    )
+    if (fromCatalog) {
+      await openComponentDocument(fromCatalog)
+      return
+    }
+    try {
+      const source = await store.readComponent(entry.assetKey)
+      const displayName = entry.name.endsWith('.component.json')
+        ? entry.name.slice(0, -'.component.json'.length)
+        : entry.name
+      await openComponentDocument({
+        entryId: source.entryId || entry.id,
+        assetKey: entry.assetKey,
+        displayName: source.asset.name || displayName,
+        componentId: source.asset.componentId,
+        kind: source.asset.kind,
+        revision: source.revision,
+        reference: store.createReference(entry.assetKey),
+      })
+    }
+    catch (error) {
+      setComponentNotice(error instanceof Error ? error.message : String(error))
+    }
+  }, [componentCatalog, componentWorkspace.store, openComponentDocument])
+
   const handleAssetOpen = useCallback((entry: ComposeAssetEntry) => {
     assets?.browser?.onAssetOpen?.(entry)
+    // 组件/变体：双击打开组件画布，不是 Monaco JSON。
+    if (
+      componentWorkspace.store
+      && entry.kind === 'file'
+      && isComposeComponentMediaType(entry.mediaType)
+    ) {
+      void openComponentFromAssetEntry(entry)
+      return
+    }
     // 页面文件走页面标签；其余文件仍走既有的资源文档标签。
     if (pages !== undefined && entry.kind === 'file' && isComposePageMediaType(entry.mediaType)) {
       void openPageDocument(entry)
@@ -909,7 +960,14 @@ export function ComposeEditor({
     openAssetDocument(entry, {
       setupScript: pages !== undefined && isComposePageSetupScriptName(entry.name),
     })
-  }, [assets?.browser, openAssetDocument, openPageDocument, pages])
+  }, [
+    assets?.browser,
+    componentWorkspace.store,
+    openAssetDocument,
+    openComponentFromAssetEntry,
+    openPageDocument,
+    pages,
+  ])
   const handleAssetCanvasDrag = useCallback((
     event: ComposeAssetCanvasDragEvent,
   ) => {
@@ -949,6 +1007,10 @@ export function ComposeEditor({
     }
   }, [assets?.browser, controller?.interactionController])
   const handleOpenPageJson = useCallback((entry: ComposeAssetEntry) => {
+    openAssetDocument(entry, { readOnly: true })
+  }, [openAssetDocument])
+  /** 资源右键「查看 JSON」：组件/变体只读打开原始文件。 */
+  const handleOpenComponentJson = useCallback((entry: ComposeAssetEntry) => {
     openAssetDocument(entry, { readOnly: true })
   }, [openAssetDocument])
   const handleOpenPageSetup = useCallback((entry: ComposeAssetEntry) => {
@@ -995,14 +1057,19 @@ export function ComposeEditor({
   ])
 
   /**
-   * 页面文件可拖入 Canvas。
+   * 页面 / 项目组件 / 变体可拖入 Canvas。
    *
    * @remarks
-   * 这是拖拽写出稳定引用载荷的前提；属性面板的 node 字段据此接收页面。
+   * 写出稳定引用载荷后，Stage 按 mediaType 落点：页面 → Page Slot，组件 → 实例。
    */
-  const canDragPageToCanvas = useCallback(
-    (entry: ComposeAssetEntry) => pages !== undefined && isComposePageMediaType(entry.mediaType),
-    [pages],
+  const canDragEntryToCanvasDefault = useCallback(
+    (entry: ComposeAssetEntry) => {
+      if (entry.kind !== 'file' || !entry.assetKey) return false
+      if (pages !== undefined && isComposePageMediaType(entry.mediaType)) return true
+      if (componentWorkspace.store && isComposeComponentMediaType(entry.mediaType)) return true
+      return false
+    },
+    [componentWorkspace.store, pages],
   )
 
   /**
@@ -1063,12 +1130,32 @@ export function ComposeEditor({
     return <HomePageBadge label={editorMessages.pages.homePageBadge} />
   }, [editorMessages.pages.homePageBadge, homePageKey])
 
+  const componentContextMenuItems = useMemo(() => {
+    if (!componentWorkspace.store) return []
+    return [{
+      id: 'compose-component-view-json',
+      label: editorMessages.components.viewJson,
+      isVisible: (context: { entry?: ComposeAssetEntry }) => (
+        context.entry !== undefined
+        && isComposeComponentMediaType(context.entry.mediaType)
+      ),
+      isDisabled: (context: { entry?: ComposeAssetEntry }) => (
+        context.entry?.assetKey === undefined
+      ),
+      onSelect: (context: { entry?: ComposeAssetEntry }) => {
+        if (context.entry) handleOpenComponentJson(context.entry)
+      },
+    }]
+  }, [componentWorkspace.store, editorMessages.components.viewJson, handleOpenComponentJson])
+
   const hostContextMenuItems = useMemo(() => {
     const hostItems = assets?.browser?.contextMenuItems ?? []
-    return pageContextMenuItems.length === 0
-      ? hostItems
-      : [...hostItems, ...pageContextMenuItems]
-  }, [assets?.browser?.contextMenuItems, pageContextMenuItems])
+    return [...hostItems, ...pageContextMenuItems, ...componentContextMenuItems]
+  }, [
+    assets?.browser?.contextMenuItems,
+    componentContextMenuItems,
+    pageContextMenuItems,
+  ])
 
   // 页面面板自身没有保存入口：保存由这里按面板 ID 注册，交给页面 Store 写入。
   useEffect(() => {
@@ -1187,41 +1274,76 @@ export function ComposeEditor({
   const applyInstanceOverrides = useCallback(async (operationIds?: readonly string[]) => {
     const store = componentWorkspace.store
     if (!controller || !store || !selectedComponentInstance) return
+    // 必须用文档最新实体：闭包中的 selectedComponentInstance 可能落后于刚写入的覆盖。
+    const entity = controller.document.entities[selectedComponentInstance.id]
+      ?? selectedComponentInstance
+    const facts = readComposeComponentInstance(entity)
+    if (!facts) {
+      setComponentNotice('当前选择不是有效的组件实例')
+      return
+    }
+    if (facts.overrides.operations.length === 0) {
+      setComponentNotice('没有可写回的本层覆盖；请先修改实例属性')
+      return
+    }
     try {
       const result = await applyComposeInstanceOverrides({
         store,
-        entity: selectedComponentInstance,
+        entity,
         operationIds,
       })
-      const renderer = selectedComponentInstance.components.Renderer
+      const renderer = entity.components.Renderer
       if (!renderer) return
+      const parentKind = result.source.asset.kind === 'base' ? '主组件' : '变体'
+      // 全量写回时强制清空本层；部分写回用 remaining。避免残留「已在源中」的冗余 op。
+      const remainingOverrides = operationIds && operationIds.length > 0
+        ? result.remainingOverrides
+        : { operations: [] as const }
       const dispatched = controller.dispatch({
         id: typeof globalThis.crypto?.randomUUID === 'function'
           ? globalThis.crypto.randomUUID()
           : `instance-apply-${Date.now()}`,
         type: BUILTIN_COMMAND_TYPES.setRendererProps,
         payload: {
-          entityId: selectedComponentInstance.id,
+          entityId: entity.id,
           props: {
             ...rendererPropsObject(renderer.props),
+            reference: facts.reference,
             resolvedSnapshot: result.snapshot,
-            instanceOverrides: result.remainingOverrides,
+            instanceOverrides: remainingOverrides,
           } as unknown as JsonObject,
         },
         meta: {
-          label: `Apply ${selectedComponentInstance.name} property overrides`,
+          label: `写回${parentKind}：${entity.name}`,
           source: 'inspector',
-          targetIds: [selectedComponentInstance.id],
+          targetIds: [entity.id],
         },
       })
-      if (dispatched.status !== 'committed') {
-        setComponentNotice('来源已保存，但实例快照尚未更新；请显式更新该实例。')
+      if (dispatched.status !== 'committed' && dispatched.status !== 'noop') {
+        setComponentNotice(
+          `${parentKind}已保存，但本页实例快照未更新；请点检查更新或重试写回`,
+        )
+        return
       }
+      // 其它实例跟随新源；当前实例已写好 remaining，不得被 auto-sync 用旧 ops 盖回。
+      syncInstancesAfterComponentSave(result.source.assetKey, result.snapshot, {
+        excludeEntityIds: [entity.id],
+      })
+      setComponentNotice(
+        operationIds && operationIds.length > 0
+          ? `已写回${parentKind}（部分覆盖）`
+          : `已写回${parentKind}`,
+      )
     }
     catch (error) {
       setComponentNotice(error instanceof Error ? error.message : String(error))
     }
-  }, [componentWorkspace.store, controller, selectedComponentInstance])
+  }, [
+    componentWorkspace.store,
+    controller,
+    selectedComponentInstance,
+    syncInstancesAfterComponentSave,
+  ])
 
   const updateComponentInstance = useCallback(async (discardConflicts?: boolean) => {
     const store = componentWorkspace.store
@@ -1427,25 +1549,28 @@ export function ComposeEditor({
           }),
       assetBrowserPanel: slots?.assetBrowser !== undefined
         ? slots.assetBrowser
-        : assets?.browser
-          ? (
+        : (() => {
+            const browser = assets?.browser
+            if (!browser) return undefined
+            return (
               <ComposeAssetBrowser
-                {...assets.browser}
-                externalDrop={assets.browser.externalDrop ?? sceneExternalDrop}
-                canDragEntryToCanvas={
-                  assets.browser.canDragEntryToCanvas ?? canDragPageToCanvas
-                }
+                {...browser}
+                externalDrop={browser.externalDrop ?? sceneExternalDrop}
+                canDragEntryToCanvas={(entry) => (
+                  browser.canDragEntryToCanvas?.(entry)
+                  ?? canDragEntryToCanvasDefault(entry)
+                )}
                 contextMenuItems={hostContextMenuItems}
-                entryNaming={assets.browser.entryNaming ?? entryNaming}
-                renderEntryBadge={assets.browser.renderEntryBadge ?? renderEntryBadge}
-                renderEntryIcon={assets.browser.renderEntryIcon ?? renderEntryIcon}
-                renderEntryLabel={assets.browser.renderEntryLabel ?? renderEntryLabel}
+                entryNaming={browser.entryNaming ?? entryNaming}
+                renderEntryBadge={browser.renderEntryBadge ?? renderEntryBadge}
+                renderEntryIcon={browser.renderEntryIcon ?? renderEntryIcon}
+                renderEntryLabel={browser.renderEntryLabel ?? renderEntryLabel}
                 onAssetOpen={handleAssetOpen}
                 onBeforeAssetMutation={handleDefaultAssetMutation}
                 onCanvasDrag={handleAssetCanvasDrag}
               />
             )
-          : undefined,
+          })(),
       documents,
       stageHostPanelId,
       registerDocumentSave,
@@ -1555,6 +1680,7 @@ export function ComposeEditor({
         fileName: variantName.trim(),
         asset,
       })
+      const reference = store.createReference(created.assetKey)
       const descriptor: ComposeComponentDescriptor = {
         entryId: created.entryId,
         assetKey: created.assetKey,
@@ -1562,7 +1688,44 @@ export function ComposeEditor({
         componentId: created.asset.componentId,
         kind: created.asset.kind,
         revision: created.revision,
-        reference: store.createReference(created.assetKey),
+        reference,
+      }
+      // 对齐 Unity：从实例创建变体后，场景物体默认改绑为新变体的实例，覆盖已固化进变体。
+      if (pendingVariantInstance && controller) {
+        const host = controller.document.entities[pendingVariantInstance.id]
+          ?? pendingVariantInstance
+        const renderer = host.components.Renderer
+        if (renderer?.type === 'component-instance') {
+          const resolved = await store.resolveComponent(reference)
+          if (resolved.status !== 'invalid') {
+            const dispatched = controller.dispatch({
+              id: typeof globalThis.crypto?.randomUUID === 'function'
+                ? globalThis.crypto.randomUUID()
+                : `variant-rebind-${Date.now()}`,
+              type: BUILTIN_COMMAND_TYPES.setRendererProps,
+              payload: {
+                entityId: host.id,
+                props: {
+                  ...rendererPropsObject(renderer.props),
+                  reference,
+                  resolvedSnapshot: resolved.snapshot,
+                  instanceOverrides: { operations: [] },
+                } as unknown as JsonObject,
+              },
+              meta: {
+                label: `Bind ${host.name} to variant ${variantName.trim()}`,
+                source: 'inspector',
+                targetIds: [host.id],
+              },
+            })
+            if (dispatched.status !== 'committed') {
+              setComponentNotice('变体已创建，但本页实例未改绑；可从组件库再次拖入')
+            }
+            else {
+              setComponentNotice(`已创建变体并改绑本实例：${variantName.trim()}`)
+            }
+          }
+        }
       }
       setPendingVariantParent(null)
       setPendingVariantInstance(null)
@@ -1576,6 +1739,7 @@ export function ComposeEditor({
     }
   }, [
     componentWorkspace.store,
+    controller,
     openComponentDocument,
     pendingVariantInstance,
     pendingVariantParent,
@@ -1750,7 +1914,9 @@ export function ComposeEditor({
                     <ComposeDialogHeader>
                       <ComposeDialogTitle>创建变体</ComposeDialogTitle>
                       <ComposeDialogDescription>
-                        {`新 Variant 将直接继承“${pendingVariantParent?.displayName ?? pendingVariantInstance?.name}”，之后只保存当前层覆盖。`}
+                        {pendingVariantInstance
+                          ? `将从当前实例创建变体（基于“${pendingVariantInstance.name}”的引用与本层覆盖）。创建后本实例会改绑到新变体，覆盖固化进变体。`
+                          : `新变体将直接继承“${pendingVariantParent?.displayName}”，之后只保存相对父源的当前层覆盖。`}
                       </ComposeDialogDescription>
                     </ComposeDialogHeader>
                     <ComposeInput

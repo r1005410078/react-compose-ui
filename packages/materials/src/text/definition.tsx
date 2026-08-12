@@ -6,6 +6,7 @@ import type {
 import type { ComposeAppearance, JsonObject } from '@compose-ui/core'
 import * as v from 'valibot'
 import type { ComposeBasicMaterialOptions } from '../types'
+import { ComposeTextMaterialIcon } from '../material-icons'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
   createDefaultInspectorId,
@@ -112,7 +113,7 @@ export function createTextMaterial(
       id: 'text',
       label: options.label ?? 'Text',
       defaultName: options.name ?? 'Text',
-      icon: <span aria-hidden="true">T</span>,
+      icon: <ComposeTextMaterialIcon />,
       // Stage 工具栏已提供文本绘制工具，Palette 不再重复同一个入口。
       paletteHidden: true,
       createComponents: () => textPresetComponents({

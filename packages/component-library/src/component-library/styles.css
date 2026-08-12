@@ -1,8 +1,32 @@
 .compose-component-library {
   display: grid;
   gap: 12px;
+  /* 内容超出时由外层 panel 或自身滚动；align-content 避免网格被拉高后留白错位 */
+  align-content: start;
+  box-sizing: border-box;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
   padding: 8px;
   color: var(--compose-text, #e5e7eb);
+  scrollbar-color: var(--compose-scrollbar, #4b5563) transparent;
+  scrollbar-width: thin;
+}
+
+.compose-component-library::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.compose-component-library::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.compose-component-library::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--compose-scrollbar, #4b5563);
+  background-clip: padding-box;
 }
 
 .compose-component-library__section {
@@ -19,7 +43,8 @@
 
 .compose-component-library__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  /* 方案 A：略加宽列，给 40px 图标留位 */
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   gap: 6px;
 }
 
@@ -34,33 +59,51 @@
 
 .compose-component-library__variant-action {
   position: absolute;
-  top: 0.25rem;
-  right: 0.25rem;
+  top: 0.3rem;
+  right: 0.3rem;
+  z-index: 1;
   display: grid;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
   place-items: center;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  border-radius: 0.25rem;
-  background: var(--compose-surface-raised, #171b22);
-  color: inherit;
+  border: none;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--compose-text-muted, #8b93a3);
   cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.compose-component-library__project-item:hover .compose-component-library__variant-action,
+.compose-component-library__project-item:focus-within .compose-component-library__variant-action,
+.compose-component-library__variant-action:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, var(--compose-accent, #60a5fa) 16%, var(--compose-surface-raised, #171b22));
+  color: var(--compose-accent, #60a5fa);
+  outline: none;
 }
 
 .compose-component-library__tile {
   display: grid;
   min-width: 0;
-  min-height: 68px;
+  /* 方案 A：增高卡片，图标区优先 */
+  min-height: 92px;
   place-items: center;
-  gap: 4px;
-  padding: 7px 4px;
+  align-content: center;
+  gap: 6px;
+  padding: 12px 4px 10px;
   border: 1px solid var(--compose-border, #374151);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--compose-panel-bg, #111827);
   color: inherit;
   cursor: pointer;
   font: inherit;
   font-size: 11px;
+  line-height: 1.2;
 }
 
 .compose-component-library__tile:hover,
@@ -69,10 +112,14 @@
   outline: none;
 }
 
+/* 大图标：库内 40px，拖拽预览略小 */
 .compose-component-library__icon,
-.compose-component-library__icon svg {
-  width: 24px;
-  height: 24px;
+.compose-component-library__icon svg,
+.compose-component-asset-icon {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  filter: drop-shadow(0 3px 6px rgb(0 0 0 / 28%));
 }
 
 .compose-component-library__drag-preview {
@@ -95,7 +142,8 @@
 
 .compose-component-library__drag-preview-icon,
 .compose-component-library__drag-preview-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   flex: none;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 25%));
 }

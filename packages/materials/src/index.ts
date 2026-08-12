@@ -13,6 +13,19 @@ export {
   createComposeBasicMaterials,
 } from './create-basic-materials'
 export {
+  ComposeArrowMaterialIcon,
+  ComposeCircleMaterialIcon,
+  ComposeContainerMaterialIcon,
+  ComposeEchartsMaterialIcon,
+  ComposeGroupMaterialIcon,
+  ComposeImageMaterialIcon,
+  ComposeLineMaterialIcon,
+  ComposePageSlotMaterialIcon,
+  ComposeRectangleMaterialIcon,
+  ComposeSvgMaterialIcon,
+  ComposeTextMaterialIcon,
+} from './material-icons'
+export {
   createComposeBuiltinComponentDefinitions,
   DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS,
   DEFAULT_COMPOSE_COMPONENT_DEFINITIONS,

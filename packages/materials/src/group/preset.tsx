@@ -1,5 +1,6 @@
 import type { ComposeEntityPreset } from '@compose-ui/component-registry'
 import { createComposeGroupEntitySeed } from '@compose-ui/core'
+import { ComposeGroupMaterialIcon } from '../material-icons'
 
 /** 创建隐藏于 Palette 的 first-class Group Preset。 @internal */
 export function createGroupPreset(): ComposeEntityPreset {
@@ -7,12 +8,7 @@ export function createGroupPreset(): ComposeEntityPreset {
     id: 'group',
     label: 'Group',
     defaultName: 'Group',
-    icon: (
-      <svg aria-hidden="true" viewBox="0 0 20 20">
-        <rect fill="none" height="9" rx="1" stroke="currentColor" width="11" x="2.5" y="3" />
-        <rect fill="none" height="9" rx="1" stroke="currentColor" width="11" x="6.5" y="8" />
-      </svg>
-    ),
+    icon: <ComposeGroupMaterialIcon />,
     paletteHidden: true,
     createComponents: () => {
       const seed = createComposeGroupEntitySeed({ id: '__group_preset__' })

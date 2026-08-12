@@ -120,6 +120,45 @@ describe('组件源保存后的实例自动同步', () => {
     expect(plan.pending[0]?.conflictOperationIds).toEqual(['op-1'])
   })
 
+  it('写回源后与最新快照无差异的覆盖被丢弃，不再算本层覆盖', () => {
+    // 源已是 visible:false；实例上仍挂着同一 set-field，应视为已吸收。
+    const base = asset(100)
+    const root = base.document.entities.root!
+    const sourceDoc: ComposeDocument = {
+      ...base.document,
+      entities: {
+        root: {
+          ...root,
+          components: {
+            ...root.components,
+            Visibility: { visible: false },
+          },
+        },
+      },
+    }
+    const entity = instance([{
+      id: 'op-1',
+      kind: 'set-field',
+      entityId: 'root',
+      componentKey: 'Visibility',
+      fieldPath: ['visible'],
+      value: false,
+    }])
+    const plan = planComposeInstanceAutoSync({
+      document: hostDocument(entity),
+      reference,
+      snapshot: {
+        ...createComposeResolvedComponentSnapshot(base, reference, '2'),
+        document: sourceDoc,
+        revision: '2',
+      },
+    })
+
+    expect(plan.synced).toHaveLength(1)
+    expect(plan.synced[0]?.overrides.operations).toHaveLength(0)
+    expect(plan.pending).toHaveLength(0)
+  })
+
   it('忽略引用其他组件的实例', () => {
     const entity = instance([])
     const plan = planComposeInstanceAutoSync({

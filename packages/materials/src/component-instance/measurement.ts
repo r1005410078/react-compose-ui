@@ -1,5 +1,11 @@
 import type { ComposeRendererMeasurementDefinition } from '@compose-ui/component-registry'
-import type { ComposeResolvedComponentSnapshot } from '@compose-ui/core'
+import {
+  getComposeLayoutItem,
+  parseComposeInstanceOverrides,
+  resolveComposeInstanceOverrides,
+  type ComposeDocument,
+  type ComposeResolvedComponentSnapshot,
+} from '@compose-ui/core'
 import { constrainIntrinsicSize } from '../renderer-measurement/intrinsic-size'
 
 function readSnapshot(value: unknown): ComposeResolvedComponentSnapshot | null {
@@ -12,11 +18,53 @@ function readSnapshot(value: unknown): ComposeResolvedComponentSnapshot | null {
     : null
 }
 
-/** component-instance 使用离线快照 output 的同步固有尺寸。 @internal */
+/**
+ * 解析实例当前可见文档：快照 + 本层覆盖。
+ *
+ * @remarks
+ * Hug 测量必须读「覆盖后的组件根尺寸」，不能只用 `output`——否则 Stage Resize
+ * 已写入根覆盖后外框仍被测回原始 output，表现为手柄拖不动。
+ */
+function resolveInstanceDocument(props: Readonly<Record<string, unknown>>): ComposeDocument | null {
+  const snapshot = readSnapshot(props.resolvedSnapshot)
+  if (!snapshot) return null
+  const parsed = parseComposeInstanceOverrides(props.instanceOverrides)
+  if (!parsed.ok || parsed.overrides.operations.length === 0) {
+    return snapshot.document
+  }
+  const resolved = resolveComposeInstanceOverrides({
+    document: snapshot.document,
+    overrides: parsed.overrides,
+  })
+  return resolved.ok ? resolved.document : snapshot.document
+}
+
+/** 取组件根 LayoutItem 尺寸；无根时回退文档 output。 @internal */
+function measureRootSize(document: ComposeDocument): { width: number; height: number } {
+  const rootId = document.rootIds[0]
+  const root = rootId ? document.entities[rootId] : undefined
+  if (!root) {
+    return {
+      width: document.output.width,
+      height: document.output.height,
+    }
+  }
+  const item = getComposeLayoutItem(root)
+  return {
+    width: item.width.value,
+    height: item.height.value,
+  }
+}
+
+/**
+ * component-instance 的同步固有尺寸：覆盖后的组件根尺寸（Hug 外框事实来源）。
+ *
+ * @internal
+ */
 export const COMPONENT_INSTANCE_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
   measure({ props, width, height }) {
-    const snapshot = readSnapshot(props.resolvedSnapshot)
-    if (!snapshot) return null
-    return constrainIntrinsicSize(snapshot.document.output, width, height)
+    const document = resolveInstanceDocument(props as Readonly<Record<string, unknown>>)
+    if (!document) return null
+    return constrainIntrinsicSize(measureRootSize(document), width, height)
   },
 }

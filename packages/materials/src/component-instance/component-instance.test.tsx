@@ -134,7 +134,7 @@ describe('OpenSpec: basic-materials / 关联组件实例物料', () => {
     })
     expect(getComposeGeometryConstraints(entity)).toEqual({
       movable: true,
-      resize: 'none',
+      resize: 'free',
       rotatable: true,
     })
   })

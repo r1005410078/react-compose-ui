@@ -1593,13 +1593,16 @@ export function createStageInteractionController(): StageInteractionController {
           const entity = context!.document.entities[id]
           if (!entity || !index!.isVisible(id) || getComposeLock(entity).locked) return false
           const constraints = resolveComposeGeometryConstraints(entity)
+          // 页面实例最外层始终可 free 缩放（旧文档可能仍存 resize:none）。
+          const isComponentInstance = getComposeRenderer(entity)?.type === 'component-instance'
+          const resizeMode = isComponentInstance ? 'free' as const : constraints.resize
           if (type === 'move') return constraints.movable
           if (type === 'rotate') return constraints.rotatable
-          if (constraints.resize === 'none') return false
+          if (resizeMode === 'none') return false
           if (!handle) return true
-          if (constraints.resize === 'horizontal') return handle === 'e' || handle === 'w'
-          if (constraints.resize === 'vertical') return handle === 'n' || handle === 's'
-          if (constraints.resize === 'preserve-aspect') {
+          if (resizeMode === 'horizontal') return handle === 'e' || handle === 'w'
+          if (resizeMode === 'vertical') return handle === 'n' || handle === 's'
+          if (resizeMode === 'preserve-aspect') {
             return handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw'
           }
           return true

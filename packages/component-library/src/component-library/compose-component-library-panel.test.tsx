@@ -88,12 +88,16 @@ describe('ComposeComponentLibraryPanel', () => {
     const Panel = api.ComposeComponentLibraryPanel!
     render(<Panel registry={registry} store={componentStore()} onCreateIntent={onCreateIntent} />)
 
-    await waitFor(() => { expect(screen.getByRole('button', { name: '添加组件 Button' })).toBeInTheDocument() })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '添加主组件 Button' })).toBeInTheDocument()
+    })
     expect(screen.getByRole('button', { name: '添加变体 Button Danger' })).toBeInTheDocument()
-    expect(within(screen.getByRole('button', { name: '添加组件 Button' }))
+    expect(within(screen.getByRole('button', { name: '添加主组件 Button' }))
       .getByTestId('component-library-base-icon')).toBeInTheDocument()
     expect(screen.getByTestId('component-library-variant-icon')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '添加组件 Button' }))
+    // 主组件实心、变体空心：test id 可区分。
+    expect(screen.queryByTestId('component-library-instance-icon')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '添加主组件 Button' }))
     expect(onCreateIntent).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'component',
       descriptor: expect.objectContaining({ assetKey: 'button' }),
@@ -122,7 +126,7 @@ describe('ComposeComponentLibraryPanel', () => {
       />,
     )
 
-    const base = await screen.findByRole('button', { name: '添加组件 Button' })
+    const base = await screen.findByRole('button', { name: '添加主组件 Button' })
     fireEvent.doubleClick(base)
     expect(onOpenIntent).toHaveBeenCalledWith(expect.objectContaining({ assetKey: 'button' }))
 

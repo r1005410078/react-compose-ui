@@ -859,10 +859,48 @@ describe('useComposeEditorController', () => {
     })
 
     const host = result.current.document.entities.instance!
-    // 宿主尺寸不被改写：尺寸的唯一事实来源是组件根，两处各存一份会立刻不一致。
-    expect(getComposeLayoutItem(host).width.value).toBe(120)
+    // 宿主保持 Hug；回退 value 同步为新尺寸供测量/Inspector，模式不得变成 fixed。
+    expect(getComposeLayoutItem(host)).toMatchObject({
+      width: { mode: 'hug', value: 300 },
+      height: { mode: 'hug', value: 200 },
+    })
     const overrides = (host.components.Renderer as { props: Record<string, unknown> })
       .props.instanceOverrides as { operations: readonly { entityId: string; value?: unknown }[] }
+    expect(overrides.operations.some(({ entityId }) => entityId === 'c-root')).toBe(true)
+  })
+
+  it('Inspector 修改实例尺寸写入组件根覆盖而不是宿主 LayoutItem', () => {
+    const editorRuntime = createTransactionRuntime({
+      document: instanceDocumentFixture(),
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    const hostBefore = getComposeLayoutItem(result.current.document.entities.instance!)
+    act(() => {
+      result.current.dispatch({
+        id: 'layout-size-1',
+        type: BUILTIN_COMMAND_TYPES.updateComponent,
+        payload: {
+          entityId: 'instance',
+          key: 'LayoutItem',
+          value: {
+            ...hostBefore,
+            width: { ...hostBefore.width, mode: 'fixed', value: 360 },
+          },
+        },
+        meta: { label: 'size', source: 'inspector', targetIds: ['instance'] },
+      })
+    })
+
+    const host = result.current.document.entities.instance!
+    expect(getComposeLayoutItem(host).width.value).toBe(hostBefore.width.value)
+    const overrides = (host.components.Renderer as { props: Record<string, unknown> })
+      .props.instanceOverrides as { operations: readonly { entityId: string }[] }
     expect(overrides.operations.some(({ entityId }) => entityId === 'c-root')).toBe(true)
   })
 
@@ -1008,7 +1046,8 @@ describe('useComposeEditorController', () => {
     const editorRuntime = runtime()
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '高级' }))
+    // 有内容的分组默认展开；再点标题会折叠并隐藏字段。
+    expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'true')
     fireEvent.click(screen.getByRole('button', { name: '修改内容' }))
     expect(editorRuntime.document.entities.title?.components.Renderer).toEqual({
       type: 'text',
@@ -1076,7 +1115,7 @@ describe('useComposeEditorController', () => {
     }))
     render(<>{result.current.inspectorPanel}</>)
 
-    fireEvent.click(screen.getByRole('button', { name: '外观' }))
+    expect(screen.getByRole('button', { name: '外观' })).toHaveAttribute('aria-expanded', 'true')
     fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
     expect(result.current.stageProps.paintEditing).toEqual({ entityId: 'title' })
   })
@@ -1097,7 +1136,7 @@ describe('useComposeEditorController', () => {
     expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
     expect(screen.getByRole('button', { name: '容器' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '裁剪' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '容器' }))
+    expect(screen.getByRole('button', { name: '容器' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('spinbutton', { name: '子项数量' })).toHaveValue(0)
   })
 
@@ -1116,7 +1155,10 @@ describe('useComposeEditorController', () => {
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
     expect(screen.getByRole('button', { name: 'HostState' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'HostState' }))
+    expect(screen.getByRole('button', { name: 'HostState' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
     expect(screen.getByLabelText('未知 Component')).toHaveValue('未知 Component：HostState')
     expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
   })
@@ -1148,9 +1190,9 @@ describe('useComposeEditorController', () => {
     })
     render(<InspectorFixture transactionRuntime={editorRuntime} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '高级' }))
+    // 有内容的「高级」默认展开；锁定已并入「基础」。
+    expect(screen.getByRole('button', { name: '高级' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('button', { name: '修改内容' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: '锁定' }))
     const lock = screen.getByRole('checkbox', { name: '锁定' })
     expect(lock).not.toBeDisabled()
     fireEvent.click(lock)

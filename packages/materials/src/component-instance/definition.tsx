@@ -41,11 +41,19 @@ export function createComponentInstanceMaterial(): {
       id: 'component-instance',
       label: 'Component',
       defaultName: 'Component',
+      // 线框三面不同明度：页面实例引用，与库内实心主组件区分。
       icon: (
-        <svg aria-hidden="true" viewBox="0 0 20 20">
-          <path d="m10 2 6.5 3.7v8.6L10 18l-6.5-3.7V5.7L10 2Z" fill="none" stroke="currentColor" />
-          <path d="m3.5 5.7 6.5 3.8 6.5-3.8M10 9.5V18" fill="none" stroke="currentColor" />
-          <path d="M6.5 4.1 13 7.9" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <path d="M12 3.2 19.6 7.4 12 11.6 4.4 7.4Z" stroke="#a8c4e8" strokeLinejoin="round" strokeWidth="1.25" />
+          <path d="M4.4 7.4 12 11.6 12 20.2 4.4 16Z" stroke="#6a8ab0" strokeLinejoin="round" strokeWidth="1.25" />
+          <path d="M19.6 7.4 12 11.6 12 20.2 19.6 16Z" stroke="#4a6588" strokeLinejoin="round" strokeWidth="1.25" />
+          <path d="M12 11.6V20.2" stroke="#8aa6c8" strokeOpacity="0.7" strokeWidth="1" />
         </svg>
       ),
       paletteHidden: true,
@@ -56,7 +64,8 @@ export function createComponentInstanceMaterial(): {
           size: { width: 1, height: 1 },
           appearance: TRANSPARENT_APPEARANCE,
         }),
-        GeometryConstraints: { movable: true, resize: 'none', rotatable: true },
+        // 页面实例最外层需可 free 缩放以便组合；与根约束解耦。
+        GeometryConstraints: { movable: true, resize: 'free', rotatable: true },
       }),
       assetDrop: {
         accepts: ({ mediaType }) => isComposeComponentMediaType(mediaType),
@@ -100,7 +109,7 @@ export function createComponentInstanceMaterial(): {
                 width: { ...components.LayoutItem.width, mode: 'hug' },
                 height: { ...components.LayoutItem.height, mode: 'hug' },
               },
-              GeometryConstraints: { movable: true, resize: 'none', rotatable: true },
+              GeometryConstraints: { movable: true, resize: 'free', rotatable: true },
             },
           }
         },

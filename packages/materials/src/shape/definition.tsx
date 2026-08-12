@@ -5,7 +5,13 @@ import type {
 } from '@compose-ui/component-registry'
 import * as v from 'valibot'
 import type { JsonObject } from '@compose-ui/core'
+import type { ReactNode } from 'react'
 import type { ComposeBasicMaterialOptions, ComposeShapeMaterialOptions } from '../types'
+import {
+  ComposeArrowMaterialIcon,
+  ComposeCircleMaterialIcon,
+  ComposeLineMaterialIcon,
+} from '../material-icons'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
   DEFAULT_ARROW_PROPS,
@@ -43,7 +49,7 @@ function shapePreset(
   fallbackLabel: string,
   fallbackName: string,
   fallbackProps: JsonObject,
-  icon: string,
+  icon: ReactNode,
   options: ComposeBasicMaterialOptions = {},
 ): ComposeEntityPreset {
   const size = options.defaultSize ?? DEFAULT_SHAPE_SIZE
@@ -53,7 +59,7 @@ function shapePreset(
     id,
     label: options.label ?? fallbackLabel,
     defaultName: options.name ?? fallbackName,
-    icon: <span aria-hidden="true">{icon}</span>,
+    icon,
     // Stage 工具栏已提供 line/arrow/circle 绘制工具，Palette 不再重复同一个入口。
     paletteHidden: true,
     createComponents: () => rendererPresetComponents({
@@ -98,9 +104,23 @@ export function createShapeMaterial(
       inspector: createShapeRendererInspector(idFactory),
     },
     presets: [
-      shapePreset('line', 'Line', 'Line', DEFAULT_LINE_PROPS, '╱', options.line),
-      shapePreset('arrow', 'Arrow', 'Arrow', DEFAULT_ARROW_PROPS, '➜', options.arrow),
-      shapePreset('circle', 'Circle', 'Circle', DEFAULT_CIRCLE_PROPS, '○', options.circle),
+      shapePreset('line', 'Line', 'Line', DEFAULT_LINE_PROPS, <ComposeLineMaterialIcon />, options.line),
+      shapePreset(
+        'arrow',
+        'Arrow',
+        'Arrow',
+        DEFAULT_ARROW_PROPS,
+        <ComposeArrowMaterialIcon />,
+        options.arrow,
+      ),
+      shapePreset(
+        'circle',
+        'Circle',
+        'Circle',
+        DEFAULT_CIRCLE_PROPS,
+        <ComposeCircleMaterialIcon />,
+        options.circle,
+      ),
     ],
   }
 }

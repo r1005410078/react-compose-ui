@@ -19,6 +19,15 @@
   font-family: var(--compose-material-font-family);
 }
 
+/* Palette / 场景树：彩色物料图标随容器缩放，并带轻微体积阴影 */
+.compose-material-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  flex: none;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 28%));
+}
+
 /* Page Slot：嵌套页面内容按被引用页面的实体绝对定位，槽位本身裁剪溢出。 */
 .compose-material--page-slot {
   position: relative;

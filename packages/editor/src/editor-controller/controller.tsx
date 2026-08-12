@@ -29,9 +29,9 @@ import {
   encodeComposeInstancePath,
   getComposeComposition,
   getComposeHierarchy,
+  getComposeLayoutItem,
   getComposeLock,
   getComposeRenderer,
-  getComposeSpatialTransform,
   getComposeVisibility,
   isComposeInstancePath,
   resolveComposeInstanceOverrides,
@@ -276,6 +276,28 @@ function applyInstanceInnerCommands(
   if (!diff.ok) return false
   const renderer = host.components.Renderer
   if (!renderer) return false
+  // 同步 snapshot.output 到内层文档根 fixed 尺寸，嵌套 Layout Runtime 以 output 为画布。
+  const nextInner = innerRuntime.document
+  const rootId = nextInner.rootIds[0]
+  const root = rootId ? nextInner.entities[rootId] : undefined
+  let nextSnapshotDocument = facts.snapshot.document
+  if (root) {
+    const rootItem = getComposeLayoutItem(root)
+    if (rootItem.width.mode === 'fixed' || rootItem.height.mode === 'fixed') {
+      nextSnapshotDocument = {
+        ...facts.snapshot.document,
+        output: {
+          ...facts.snapshot.document.output,
+          width: rootItem.width.mode === 'fixed'
+            ? rootItem.width.value
+            : facts.snapshot.document.output.width,
+          height: rootItem.height.mode === 'fixed'
+            ? rootItem.height.value
+            : facts.snapshot.document.output.height,
+        },
+      }
+    }
+  }
   const dispatched = runtime.dispatch({
     // 不用 controller 的 idFactory：它读 ref，会被 React Compiler 判为渲染期访问。
     id: defaultIdFactory(),
@@ -284,6 +306,10 @@ function applyInstanceInnerCommands(
       entityId: host.id,
       props: {
         ...(renderer.props as Record<string, unknown>),
+        resolvedSnapshot: {
+          ...facts.snapshot,
+          document: nextSnapshotDocument,
+        },
         instanceOverrides: {
           operations: diff.operations,
         },
@@ -394,15 +420,31 @@ function resolveInstanceEditTarget(
     instanceId,
     entity,
     document: resolved.document,
+    // 每次命令从 runtime 最新文档取宿主与覆盖，避免闭包陈旧导致二次编辑/Apply 列表丢失。
     dispatch: (command: EditorCommand) => {
-      applyInstanceInnerCommands(
+      const latestHost = runtime.document.entities[instanceId]
+      if (!latestHost) return
+      const latestFacts = readComposeComponentInstance(latestHost)
+      if (!latestFacts) return
+      const latestResolved = resolveComposeInstanceOverrides({
+        document: latestFacts.snapshot.document,
+        overrides: latestFacts.overrides,
+      })
+      if (!latestResolved.ok) return
+      const ok = applyInstanceInnerCommands(
         runtime,
-        host,
-        facts,
-        resolved.document,
+        latestHost,
+        latestFacts,
+        latestResolved.document,
         [command],
-        `Edit ${entity.name} inside ${host.name}`,
+        `Edit ${entity.name} inside ${latestHost.name}`,
       )
+      if (!ok) {
+        // 保持与 TransactionRuntime 一致：调用方难以拿到 boolean，至少打到控制台便于诊断。
+        console.warn(
+          `[compose-editor] 实例内部命令未写入覆盖：${command.type} → ${instanceId}`,
+        )
+      }
     },
   }
 }
@@ -445,23 +487,161 @@ function routeInstanceResize(
     const target = resolveInstanceEditTarget(runtime, document, instanceId)
     if (!target) continue
     const rootId = target.entity.id
-    const rootTransform = getComposeSpatialTransform(target.entity)
-    target.dispatch({
-      id: defaultIdFactory(),
-      type: BUILTIN_COMMAND_TYPES.setTransform,
-      payload: {
-        operation: 'resize',
-        // 只改尺寸：实例在宿主里的位置由宿主 LayoutItem 决定，组件根的位置始终是原点。
-        updates: [{
+    const rootItem = getComposeLayoutItem(target.entity)
+    // 用 LayoutItem 固定宽高，不依赖根 GeometryConstraints.resize（根可能为 none）。
+    const ok = applyInstanceInnerCommands(
+      runtime,
+      runtime.document.entities[instanceId]!,
+      readComposeComponentInstance(runtime.document.entities[instanceId]!)!,
+      target.document,
+      [{
+        id: defaultIdFactory(),
+        type: BUILTIN_COMMAND_TYPES.updateComponent,
+        payload: {
           entityId: rootId,
-          transform: { ...rootTransform, size: { width: size.width, height: size.height } },
-        }],
-      },
-      meta: { label: `Resize ${target.entity.name}`, source: 'stage', targetIds: [rootId] },
-    } as unknown as EditorCommand)
+          key: 'LayoutItem',
+          value: {
+            ...rootItem,
+            width: { ...rootItem.width, mode: 'fixed', value: size.width },
+            height: { ...rootItem.height, mode: 'fixed', value: size.height },
+          },
+        },
+        meta: {
+          label: `Resize ${target.entity.name}`,
+          source: 'stage',
+          targetIds: [rootId],
+        },
+      } as unknown as EditorCommand],
+      `Resize ${target.entity.name} inside instance`,
+    )
+    if (!ok) {
+      console.warn(`[compose-editor] 实例 Resize 未写入覆盖：${instanceId}`)
+      continue
+    }
+    // 同步宿主 Hug 回退值，避免 Inspector/测量回退到旧尺寸。
+    const host = runtime.document.entities[instanceId]
+    if (host) {
+      const hostItem = getComposeLayoutItem(host)
+      runtime.dispatch({
+        id: defaultIdFactory(),
+        type: BUILTIN_COMMAND_TYPES.updateComponent,
+        payload: {
+          entityId: instanceId,
+          key: 'LayoutItem',
+          value: {
+            ...hostItem,
+            width: { ...hostItem.width, mode: 'hug', value: size.width },
+            height: { ...hostItem.height, mode: 'hug', value: size.height },
+          },
+        },
+        meta: {
+          label: `Sync ${host.name} hug fallback`,
+          source: 'stage',
+          targetIds: [instanceId],
+          mergeKey: `instance:${instanceId}:hug-fallback`,
+        },
+      } as unknown as EditorCommand)
+    }
     handled = true
   }
   return handled
+}
+
+/**
+ * 把 Inspector 对实例宿主 LayoutItem 的尺寸编辑改写为组件根覆盖。
+ *
+ * @remarks
+ * 基础区「尺寸宽度/高度」走 `entity.component.update` 更新宿主 LayoutItem；若不改写，
+ * 外框变了、内容不动，且 Apply 列表永远没有可写回主组件的操作。偏移仍留在宿主。
+ */
+function routeInstanceLayoutItemSize(
+  runtime: TransactionRuntime,
+  document: ComposeDocument,
+  command: EditorCommand,
+): boolean {
+  if (command.type !== BUILTIN_COMMAND_TYPES.updateComponent) return false
+  const payload = command.payload as {
+    readonly entityId?: unknown
+    readonly key?: unknown
+    readonly value?: unknown
+  } | undefined
+  if (payload?.key !== 'LayoutItem' || typeof payload.entityId !== 'string') return false
+  const host = document.entities[payload.entityId]
+  if (!host || !readComposeComponentInstance(host)) return false
+  if (!payload.value || typeof payload.value !== 'object' || Array.isArray(payload.value)) {
+    return false
+  }
+  const nextItem = payload.value as ReturnType<typeof getComposeLayoutItem>
+  const hostItem = getComposeLayoutItem(host)
+  const sizeChanged = !layoutSizingEqual(hostItem.width, nextItem.width)
+    || !layoutSizingEqual(hostItem.height, nextItem.height)
+  // 仅偏移/对齐变化时仍写宿主，页面布局位置属于实例层。
+  if (!sizeChanged) return false
+
+  const target = resolveInstanceEditTarget(runtime, document, payload.entityId)
+  if (!target) return false
+  const rootItem = getComposeLayoutItem(target.entity)
+  // 根必须 fixed：若把宿主的 hug 模式原样写入根，Auto Layout 会按内容回缩，外框 Resize 失效。
+  const widthValue = typeof nextItem.width.value === 'number'
+    ? nextItem.width.value
+    : rootItem.width.value
+  const heightValue = typeof nextItem.height.value === 'number'
+    ? nextItem.height.value
+    : rootItem.height.value
+  target.dispatch({
+    id: defaultIdFactory(),
+    type: BUILTIN_COMMAND_TYPES.updateComponent,
+    payload: {
+      entityId: target.entity.id,
+      key: 'LayoutItem',
+      value: {
+        ...rootItem,
+        width: { ...rootItem.width, mode: 'fixed', value: widthValue },
+        height: { ...rootItem.height, mode: 'fixed', value: heightValue },
+      },
+    },
+    meta: {
+      label: `Resize ${target.entity.name} layout`,
+      source: 'inspector',
+      targetIds: [target.entity.id],
+    },
+  } as unknown as EditorCommand)
+
+  // 宿主只同步偏移等非尺寸字段，尺寸保持原 Hug/跟随根，避免双份事实。
+  if (
+    hostItem.offset.x !== nextItem.offset.x
+    || hostItem.offset.y !== nextItem.offset.y
+    || hostItem.alignSelf !== nextItem.alignSelf
+    || JSON.stringify(hostItem.margin) !== JSON.stringify(nextItem.margin)
+  ) {
+    runtime.dispatch({
+      id: defaultIdFactory(),
+      type: BUILTIN_COMMAND_TYPES.updateComponent,
+      payload: {
+        entityId: payload.entityId,
+        key: 'LayoutItem',
+        value: {
+          ...hostItem,
+          offset: nextItem.offset,
+          alignSelf: nextItem.alignSelf,
+          margin: nextItem.margin,
+        },
+      },
+      meta: {
+        label: `Move ${host.name}`,
+        source: 'inspector',
+        targetIds: [payload.entityId],
+      },
+    } as unknown as EditorCommand)
+  }
+  return true
+}
+
+function layoutSizingEqual(
+  left: { readonly mode: string; readonly value: number },
+  right: { readonly mode: string; readonly value: number },
+): boolean {
+  return left.mode === right.mode && left.value === right.value
 }
 
 /** 当前下钻选中的实例内部实体及其编辑入口。 @public */
@@ -493,27 +673,21 @@ function sceneEntity(
   const locked = getComposeLock(entity).locked
   const composition = getComposeComposition(entity)
   const renderer = getComposeRenderer(entity)
-  const resolvedSnapshot = renderer?.props.resolvedSnapshot
-  const snapshotKind = renderer?.type === 'component-instance'
-    && resolvedSnapshot
-    && typeof resolvedSnapshot === 'object'
-    && !Array.isArray(resolvedSnapshot)
-    && (resolvedSnapshot as Readonly<Record<string, unknown>>).kind === 'variant'
-    ? 'variant'
-    : 'base'
   const componentInstance = composition.presetId === 'component-instance'
+    || renderer?.type === 'component-instance'
   return {
     id: entity.id,
     label: entity.name,
     visible: getComposeVisibility(entity).visible,
     locked,
+    // 页面上永远是实例：空心组件符，与库内实心主组件区分。
     icon: componentInstance
-      ? <ComposeComponentAssetIcon kind={snapshotKind} />
+      ? <ComposeComponentAssetIcon kind="instance" />
       : composition.presetId
       ? registry.getPreset(composition.presetId)?.icon
       : undefined,
     iconLabel: componentInstance
-      ? snapshotKind === 'variant' ? '变体实例' : '组件实例'
+      ? '组件实例'
       : composition.presetId === 'group'
         ? 'Group'
         : composition.presetId === 'container'
@@ -1003,6 +1177,10 @@ export function useComposeEditorController({
     (command: EditorCommand) => {
       // 实例的 Resize 必须落到组件根，否则外框变了而内部嵌套 Runtime 不动。
       if (routeInstanceResize(runtime, runtime.document, command)) {
+        return { status: 'committed' } as CommandDispatchResult
+      }
+      // Inspector 尺寸字段同理：宿主 LayoutItem 尺寸改写为根覆盖。
+      if (routeInstanceLayoutItemSize(runtime, runtime.document, command)) {
         return { status: 'committed' } as CommandDispatchResult
       }
       return runtime.dispatch(command)

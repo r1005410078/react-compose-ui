@@ -117,47 +117,14 @@ describe('OpenSpec: component-library / 关联实例实体', () => {
     })
     expect(getComposeGeometryConstraints(result.entity)).toEqual({
       movable: true,
-      resize: 'none',
+      resize: 'free',
       rotatable: true,
     })
   })
 })
 
-describe('实例几何跟随组件根', () => {
-  it('从组件根派生 Resize 能力', () => {
-    const registry = createRegistry()
-    const asset = baseAsset()
-    // 组件根是可自由缩放的容器，实例应当同样允许 Resize。
-    const root = asset.document.entities[asset.document.rootIds[0]!]!
-    const withResizableRoot = {
-      ...asset,
-      document: {
-        ...asset.document,
-        entities: {
-          ...asset.document.entities,
-          [root.id]: {
-            ...root,
-            components: {
-              ...root.components,
-              GeometryConstraints: { movable: true, resize: 'free', rotatable: false },
-            },
-          },
-        },
-      },
-    }
-    const result = createComposeComponentInstanceEntity({
-      registry,
-      id: 'instance',
-      asset: withResizableRoot,
-      reference,
-      revision: '1',
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(getComposeGeometryConstraints(result.entity)).toMatchObject({ resize: 'free' })
-  })
-
-  it('组件根不可缩放时实例同样不可缩放', () => {
+describe('实例最外层 Resize', () => {
+  it('页面实例始终 free，与组件根约束解耦', () => {
     const result = createComposeComponentInstanceEntity({
       registry: createRegistry(),
       id: 'instance',
@@ -167,6 +134,43 @@ describe('实例几何跟随组件根', () => {
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(getComposeGeometryConstraints(result.entity)).toMatchObject({ resize: 'none' })
+    // 根默认无显式 GeometryConstraints 时 resolve 为 free；即使根为 none 也应 free。
+    expect(getComposeGeometryConstraints(result.entity)).toMatchObject({
+      movable: true,
+      resize: 'free',
+      rotatable: true,
+    })
+  })
+
+  it('组件根 resize:none 时实例仍 free', () => {
+    const registry = createRegistry()
+    const asset = baseAsset()
+    const root = asset.document.entities[asset.document.rootIds[0]!]!
+    const withLockedRoot = {
+      ...asset,
+      document: {
+        ...asset.document,
+        entities: {
+          ...asset.document.entities,
+          [root.id]: {
+            ...root,
+            components: {
+              ...root.components,
+              GeometryConstraints: { movable: true, resize: 'none' as const, rotatable: false },
+            },
+          },
+        },
+      },
+    }
+    const result = createComposeComponentInstanceEntity({
+      registry,
+      id: 'instance',
+      asset: withLockedRoot,
+      reference,
+      revision: '1',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(getComposeGeometryConstraints(result.entity)).toMatchObject({ resize: 'free' })
   })
 })

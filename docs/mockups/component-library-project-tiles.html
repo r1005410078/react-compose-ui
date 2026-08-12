@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>项目组件资源卡片 · 紧凑方案设计稿</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #12151a;
+      --raised: #1a1e25;
+      --border: #2a3140;
+      --border-soft: #232933;
+      --text: #e8ecf2;
+      --muted: #8b93a3;
+      --subtle: #6b7383;
+      --accent: #5b9dff;
+      --accent-soft: color-mix(in srgb, var(--accent) 18%, transparent);
+      --danger: #f07178;
+      --radius: 6px;
+      --font: "Inter", "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      background:
+        radial-gradient(900px 420px at 10% -10%, #1a2740 0%, transparent 55%),
+        var(--bg);
+      color: var(--text);
+      padding: 32px 28px 48px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .lead {
+      margin: 0 0 22px;
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .lead strong { color: var(--text); font-weight: 600; }
+
+    .grid-page {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      align-items: start;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border-soft);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgb(0 0 0 / 28%);
+    }
+    .card-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid var(--border-soft);
+      background: linear-gradient(180deg, #161a21, transparent);
+    }
+    .card-head h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+    .badge.rec {
+      color: #9ee6b0;
+      background: color-mix(in srgb, #3d9a5a 22%, transparent);
+      border-color: color-mix(in srgb, #3d9a5a 40%, transparent);
+    }
+    .card-body { padding: 12px 12px 14px; }
+    .note {
+      margin: 10px 2px 0;
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: var(--subtle);
+    }
+    .note em { color: var(--muted); font-style: normal; }
+
+    /* —— panel chrome shared —— */
+    .panel {
+      width: 100%;
+      max-width: 248px;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #0f1217;
+      padding: 8px;
+    }
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin: -8px -8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: #141820;
+    }
+    .tabs span {
+      flex: 1;
+      text-align: center;
+      padding: 8px 6px;
+      font-size: 11.5px;
+      color: var(--subtle);
+    }
+    .tabs span.on {
+      color: var(--text);
+      box-shadow: inset 0 -2px 0 var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+    .sec-title {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--subtle);
+    }
+    .preset-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      margin-bottom: 12px;
+    }
+
+    /* CURRENT (loose) */
+    .tile-loose {
+      display: grid;
+      place-items: center;
+      gap: 6px;
+      min-height: 72px;
+      padding: 8px 4px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #11161e;
+      font-size: 11px;
+      color: var(--text);
+    }
+    .tile-loose .ico { width: 24px; height: 24px; opacity: 0.85; }
+    .proj-loose {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    .proj-loose .tile-loose { width: 100%; min-height: 76px; }
+    .proj-loose .fab {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+      background: #171b22;
+      color: var(--text);
+      font-size: 12px;
+      display: grid;
+      place-items: center;
+    }
+
+    /* A: compact square + corner badge */
+    .grid-a {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+    .tile-a {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      min-height: 56px;
+      padding: 6px 3px 5px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: #11161e;
+      font-size: 10.5px;
+      line-height: 1.15;
+      color: var(--text);
+      cursor: default;
+    }
+    .tile-a:hover { border-color: var(--accent); }
+    .tile-a .ico { width: 18px; height: 18px; }
+    .tile-a .name {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0 2px;
+    }
+    .tile-a .chip {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: none;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      background: color-mix(in srgb, var(--raised) 92%, var(--accent));
+      color: var(--muted);
+      opacity: 0.55;
+      transition: opacity 120ms, background 120ms, color 120ms;
+    }
+    .tile-a:hover .chip,
+    .tile-a .chip:focus {
+      opacity: 1;
+      color: var(--accent);
+      background: color-mix(in srgb, #1a2230 70%, var(--accent));
+    }
+    .tile-a.variant .kind {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: color-mix(in srgb, var(--accent) 70%, white);
+      opacity: 0.7;
+    }
+
+    /* B: denser 4-col mini (recommended) */
+    .grid-b {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .tile-b {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-height: 52px;
+      padding: 5px 2px 4px;
+      border: 1px solid var(--border-soft);
+      border-radius: 5px;
+      background: #10141a;
+      font-size: 10px;
+      line-height: 1.2;
+      color: var(--text);
+    }
+    .tile-b:hover {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+      background: #131922;
+    }
+    .tile-b .ico-wrap {
+      position: relative;
+      width: 22px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+    }
+    .tile-b .ico { width: 16px; height: 16px; }
+    .tile-b .name {
+      max-width: 100%;
+      padding: 0 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #c9d0db;
+    }
+    .tile-b .meta {
+      font-size: 9px;
+      color: var(--subtle);
+      letter-spacing: 0.02em;
+    }
+    .tile-b .action {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 16px;
+      height: 16px;
+      border: none;
+      border-radius: 3px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      color: var(--subtle);
+      opacity: 0;
+    }
+    .tile-b:hover .action,
+    .tile-b .action:focus {
+      opacity: 1;
+      background: color-mix(in srgb, var(--raised) 80%, var(--accent));
+      color: var(--accent);
+    }
+    .tile-b.base .ico { fill: currentColor; opacity: 0.92; }
+    .tile-b.variant .ico { fill: none; stroke: currentColor; }
+
+    /* C: list row compact (best for long names) */
+    .list-c {
+      display: grid;
+      gap: 3px;
+    }
+    .row-c {
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+      padding: 4px 6px 4px 6px;
+      border: 1px solid var(--border-soft);
+      border-radius: 5px;
+      background: #10141a;
+      font-size: 11.5px;
+    }
+    .row-c:hover {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+      background: #131922;
+    }
+    .row-c .ico { width: 16px; height: 16px; }
+    .row-c .main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .row-c .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .row-c .sub {
+      font-size: 9.5px;
+      color: var(--subtle);
+      line-height: 1.2;
+    }
+    .row-c .ops {
+      display: flex;
+      gap: 2px;
+    }
+    .row-c .ops button {
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--subtle);
+      display: grid;
+      place-items: center;
+      padding: 0;
+      cursor: default;
+    }
+    .row-c:hover .ops button {
+      background: #1a2030;
+      color: var(--muted);
+    }
+    .row-c .ops button.primary:hover { color: var(--accent); }
+
+    /* icons */
+    .cube-solid {
+      width: 100%;
+      height: 100%;
+    }
+    svg.cube {
+      display: block;
+      width: inherit;
+      height: inherit;
+    }
+
+    .compare {
+      margin-top: 28px;
+      padding: 16px 18px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--panel) 80%, transparent);
+    }
+    .compare h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+    }
+    .compare ul {
+      margin: 0;
+      padding-left: 1.1em;
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.65;
+    }
+    .compare li strong { color: var(--text); font-weight: 600; }
+    .spec {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .spec div {
+      background: #10141a;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+    .spec b {
+      display: block;
+      color: var(--text);
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+  </style>
+</head>
+<body>
+  <h1>项目组件资源 · 紧凑样式设计稿</h1>
+  <p class="lead">
+    当前问题：主组件图标偏大、卡片 <strong>min-height 68–76px</strong>、创建变体按钮常驻且 24×24，
+    与基础组件网格不对齐、视觉松散。下面三套方案统一图标 16–18px、减 padding，
+    变体入口改为 <strong>hover 显现</strong> 的轻量图标。
+  </p>
+
+  <div class="grid-page">
+    <!-- Current -->
+    <section class="card">
+      <div class="card-head">
+        <h2>现状（对照）</h2>
+        <span class="badge">Before</span>
+      </div>
+      <div class="card-body">
+        <div class="panel">
+          <div class="tabs"><span class="on">基础组件</span><span>历史</span></div>
+          <p class="sec-title">基础组件 (3)</p>
+          <div class="preset-row">
+            <div class="tile-loose"><span class="ico">▣</span>Container</div>
+            <div class="tile-loose"><span class="ico">▭</span>Rectangle</div>
+            <div class="tile-loose"><span class="ico">▦</span>ECharts</div>
+          </div>
+          <p class="sec-title">项目组件 (1)</p>
+          <div class="grid-a" style="grid-template-columns: 1fr 1fr 1fr;">
+            <div class="proj-loose">
+              <div class="tile-loose">
+                <svg class="ico cube" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z"/></svg>
+                Component
+              </div>
+              <span class="fab">◇</span>
+            </div>
+          </div>
+        </div>
+        <p class="note">角标常驻抢注意力；图标 24px + 高卡片，单行只放下约 3 个却显空。</p>
+      </div>
+    </section>
+
+    <!-- A -->
+    <section class="card">
+      <div class="card-head">
+        <h2>A · 紧凑方块</h2>
+        <span class="badge">Compact tile</span>
+      </div>
+      <div class="card-body">
+        <div class="panel">
+          <div class="tabs"><span class="on">基础组件</span><span>历史</span></div>
+          <p class="sec-title">基础组件 (3)</p>
+          <div class="grid-a">
+            <div class="tile-a"><span class="ico">▣</span><span class="name">Container</span></div>
+            <div class="tile-a"><span class="ico">▭</span><span class="name">Rectangle</span></div>
+            <div class="tile-a"><span class="ico">▦</span><span class="name">ECharts Chart</span></div>
+          </div>
+          <p class="sec-title" style="margin-top:10px">项目组件 (3)</p>
+          <div class="grid-a">
+            <div class="tile-a">
+              <button class="chip" title="创建变体" aria-label="创建变体">
+                <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 1.5 10.5 4v4L6 10.5 1.5 8V4L6 1.5Z"/><path d="M6 1.5v9M1.5 4 6 6.5 10.5 4"/></svg>
+              </button>
+              <svg class="ico cube" viewBox="0 0 24 24" fill="currentColor"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z"/></svg>
+              <span class="name">Component</span>
+            </div>
+            <div class="tile-a variant">
+              <span class="kind" title="变体"></span>
+              <svg class="ico cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z"/><path d="m5 7.5 7 3.5 7-3.5M12 11v9"/><path d="M18 11.5v5M20 12.5v3"/></svg>
+              <span class="name">Primary</span>
+            </div>
+            <div class="tile-a">
+              <button class="chip" title="创建变体">◇</button>
+              <svg class="ico cube" viewBox="0 0 24 24" fill="currentColor"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z"/></svg>
+              <span class="name">Card / Header</span>
+            </div>
+          </div>
+        </div>
+        <p class="note">高度 <em>≈56px</em>，图标 18px，变体按钮 14px 且默认半透明；与基础网格同列宽。</p>
+      </div>
+    </section>
+
+    <!-- B recommended -->
+    <section class="card">
+      <div class="card-head">
+        <h2>B · 高密网格</h2>
+        <span class="badge rec">Recommended</span>
+      </div>
+      <div class="card-body">
+        <div class="panel">
+          <div class="tabs"><span class="on">基础组件</span><span>历史</span></div>
+          <p class="sec-title">基础组件 (3)</p>
+          <div class="grid-b">
+            <div class="tile-b"><span class="ico-wrap"><span class="ico">▣</span></span><span class="name">Container</span></div>
+            <div class="tile-b"><span class="ico-wrap"><span class="ico">▭</span></span><span class="name">Rectangle</span></div>
+            <div class="tile-b"><span class="ico-wrap"><span class="ico">▦</span></span><span class="name">ECharts</span></div>
+          </div>
+          <p class="sec-title" style="margin-top:10px">项目组件 (4)</p>
+          <div class="grid-b">
+            <div class="tile-b base">
+              <button class="action" title="创建变体" aria-label="创建变体">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.35"><path d="M6 1.6 10.2 4v4L6 10.4 1.8 8V4L6 1.6Z"/></svg>
+              </button>
+              <span class="ico-wrap">
+                <svg class="ico cube" viewBox="0 0 24 24"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z" fill="currentColor" opacity="0.92"/><path d="m5 7.5 7 3.5 7-3.5M12 11v9" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.3"/></svg>
+              </span>
+              <span class="name">Component</span>
+              <span class="meta">主组件</span>
+            </div>
+            <div class="tile-b variant">
+              <span class="ico-wrap">
+                <svg class="ico cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z"/><path d="m5 7.5 7 3.5 7-3.5M12 11v9"/><path d="M18 11.5v5M20 12.5v3" opacity="0.85"/></svg>
+              </span>
+              <span class="name">Primary</span>
+              <span class="meta">变体</span>
+            </div>
+            <div class="tile-b base">
+              <button class="action" title="创建变体">◇</button>
+              <span class="ico-wrap">
+                <svg class="ico cube" viewBox="0 0 24 24"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z" fill="currentColor" opacity="0.92"/></svg>
+              </span>
+              <span class="name">Nav Item</span>
+              <span class="meta">主组件</span>
+            </div>
+            <div class="tile-b base">
+              <button class="action" title="创建变体">◇</button>
+              <span class="ico-wrap">
+                <svg class="ico cube" viewBox="0 0 24 24"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z" fill="currentColor" opacity="0.92"/></svg>
+              </span>
+              <span class="name">KPI Card</span>
+              <span class="meta">主组件</span>
+            </div>
+          </div>
+        </div>
+        <p class="note">
+          高度 <em>≈52px</em>，图标 16px，gap 4px；副标签区分主组件/变体；
+          创建变体仅 hover 显示。与基础组件同一套密度语言。
+        </p>
+      </div>
+    </section>
+
+    <!-- C list -->
+    <section class="card">
+      <div class="card-head">
+        <h2>C · 紧凑列表</h2>
+        <span class="badge">Long names</span>
+      </div>
+      <div class="card-body">
+        <div class="panel" style="max-width:280px">
+          <div class="tabs"><span class="on">基础组件</span><span>历史</span></div>
+          <p class="sec-title">基础组件 (3)</p>
+          <div class="grid-b" style="margin-bottom:10px">
+            <div class="tile-b"><span class="ico-wrap"><span class="ico">▣</span></span><span class="name">Container</span></div>
+            <div class="tile-b"><span class="ico-wrap"><span class="ico">▭</span></span><span class="name">Rectangle</span></div>
+            <div class="tile-b"><span class="ico-wrap"><span class="ico">▦</span></span><span class="name">ECharts</span></div>
+          </div>
+          <p class="sec-title">项目组件 (3)</p>
+          <div class="list-c">
+            <div class="row-c">
+              <svg class="ico cube" viewBox="0 0 24 24" fill="currentColor"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z"/></svg>
+              <div class="main">
+                <span class="name">Component</span>
+                <span class="sub">主组件</span>
+              </div>
+              <div class="ops">
+                <button class="primary" title="创建变体">◇</button>
+                <button title="打开">↗</button>
+              </div>
+            </div>
+            <div class="row-c">
+              <svg class="ico cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z"/><path d="m5 7.5 7 3.5 7-3.5M12 11v9"/></svg>
+              <div class="main">
+                <span class="name">Component / Primary Dark</span>
+                <span class="sub">变体 · 基于 Component</span>
+              </div>
+              <div class="ops">
+                <button title="打开">↗</button>
+              </div>
+            </div>
+            <div class="row-c">
+              <svg class="ico cube" viewBox="0 0 24 24" fill="currentColor"><path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z"/></svg>
+              <div class="main">
+                <span class="name">Dashboard KPI Header</span>
+                <span class="sub">主组件</span>
+              </div>
+              <div class="ops">
+                <button class="primary" title="创建变体">◇</button>
+                <button title="打开">↗</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">行高 <em>≈30px</em>，适合长中文名与「基于 xxx」副文案；基础区仍可保持方块网格。</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="compare">
+    <h3>推荐落地：B（高密网格），长名称过多时可混用 C 作「列表视图」切换</h3>
+    <ul>
+      <li><strong>统一网格</strong>：基础 / 项目同一 <code>minmax(64px, 1fr)</code> 或固定 3 列，gap 4–5px。</li>
+      <li><strong>卡片</strong>：min-height 52–56px；padding 5×3；字号 10–10.5px；图标 16–18px。</li>
+      <li><strong>主组件</strong>：实心立方体；<strong>变体</strong>：空心 + 侧标；副标签「主组件 / 变体」可选（B 有、A 可省）。</li>
+      <li><strong>创建变体</strong>：右上 14–16px 图标按钮，默认 <code>opacity: 0</code>，hover/focus 显现；勿用常驻 24px 描边方块。</li>
+      <li><strong>交互</strong>：单击拖入、双击打开（保持）；变体按钮 <code>stopPropagation</code>。</li>
+      <li><strong>无障碍</strong>：按钮保留 aria-label「创建变体 {name}」；hover 隐藏时键盘 focus 仍可见。</li>
+    </ul>
+    <div class="spec">
+      <div><b>Token</b>border / raised / accent 与现有 chrome 一致</div>
+      <div><b>密度</b>相对现状约 −25% 高度、角标 −40% 面积</div>
+      <div><b>不推荐</b>继续用「◇ 常驻描边按钮」压在图标上</div>
+      <div><b>实现范围</b>styles.css + project-item 结构微调</div>
+    </div>
+  </section>
+</body>
+</html>

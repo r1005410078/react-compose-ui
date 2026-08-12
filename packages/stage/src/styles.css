@@ -310,6 +310,16 @@
   cursor: nwse-resize;
 }
 
+.compose-stage__handle--n,
+.compose-stage__handle--s {
+  cursor: ns-resize;
+}
+
+.compose-stage__handle--e,
+.compose-stage__handle--w {
+  cursor: ew-resize;
+}
+
 .compose-stage__resize-hit {
   fill: transparent;
   pointer-events: all;

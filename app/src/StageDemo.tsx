@@ -25,7 +25,10 @@ import {
 import type { ComposeEditorTransactionEvent } from '@compose-ui/editor'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import { createComposeComponentStore } from '@compose-ui/component-library'
-import { createComposeBasicMaterials } from '@compose-ui/materials'
+import {
+  ComposeEchartsMaterialIcon,
+  createComposeBasicMaterials,
+} from '@compose-ui/materials'
 import {
   ComposeOperationLogPanel,
   useComposeOperationLog,
@@ -277,7 +280,7 @@ const echartsPreset = {
   id: 'echarts-bar',
   label: 'ECharts Chart',
   defaultName: 'ECharts Chart',
-  icon: <span aria-hidden="true">▥</span>,
+  icon: <ComposeEchartsMaterialIcon />,
   createComponents: () => ({
     Transform: { rotation: 0 },
     LayoutItem: createDefaultComposeLayoutItem(420, 260),

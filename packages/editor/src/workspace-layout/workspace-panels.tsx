@@ -443,6 +443,11 @@ export function ComponentDocumentPanel(props: IDockviewPanelProps) {
   const session = candidate?.kind === 'component' ? candidate : undefined
   if (!panelId || !session) return null
 
+  const kindLabel = session.sourceKind === 'variant' ? '变体' : '主组件'
+  const parentHint = session.asset.kind === 'variant'
+    ? ` · 基于 ${session.asset.parentRef.assetKey}`
+    : ''
+
   return (
     <div
       className="compose-editor__component-document"
@@ -451,9 +456,18 @@ export function ComponentDocumentPanel(props: IDockviewPanelProps) {
       data-workspace-panel="component-document"
     >
       <div className="compose-editor__canvas-toolbar">
+        <span
+          aria-label={`${kindLabel} ${session.displayName}${parentHint}`}
+          className="compose-editor__component-kind-label"
+        >
+          {kindLabel}
+          {' · '}
+          {session.displayName}
+          {parentHint}
+        </span>
         {stageToolbar}
         <button
-          aria-label={`保存${session.sourceKind === 'variant' ? '变体' : '组件'} ${session.displayName}`}
+          aria-label={`保存${kindLabel} ${session.displayName}`}
           className="compose-editor__page-save"
           disabled={!session.dirty}
           type="button"

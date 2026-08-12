@@ -2,7 +2,6 @@ import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createComposeResolvedComponentSnapshot,
   getComposeLayoutItem,
-  resolveComposeGeometryConstraints,
   type ComposeComponentAssetV1,
   type ComposeComponentReference,
   type ComposeEntity,
@@ -48,13 +47,8 @@ export function createComposeComponentInstanceEntity(input: {
     resolvedSnapshot: snapshot,
     instanceOverrides: { operations: [] },
   } as unknown as JsonObject
-  // 实例的几何能力跟随组件根：根可缩放时实例同样可缩放，Resize 结果写入以根为目标的
-  // 实例覆盖。实例自身保持 Hug，避免同一尺寸在宿主与组件两处各存一份。
-  const rootId = snapshot.document.rootIds[0]
-  const root = rootId ? snapshot.document.entities[rootId] : undefined
-  const rootConstraints = root
-    ? resolveComposeGeometryConstraints(root)
-    : { movable: true, resize: 'none' as const, rotatable: false }
+  // 页面上实例最外层用于组合排版：始终 free（8 控点），与组件根是否可缩解耦。
+  // Resize 结果仍写入以根为目标的实例覆盖；宿主 LayoutItem 保持 Hug，尺寸事实在根上。
   return {
     ok: true,
     entity: {
@@ -70,7 +64,7 @@ export function createComposeComponentInstanceEntity(input: {
         },
         GeometryConstraints: {
           movable: true,
-          resize: rootConstraints.resize,
+          resize: 'free',
           rotatable: true,
         },
         Renderer: { type: 'component-instance', props: rendererProps },

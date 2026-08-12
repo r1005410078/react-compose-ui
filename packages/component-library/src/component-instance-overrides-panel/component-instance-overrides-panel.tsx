@@ -1,11 +1,20 @@
 import { ComposeButton } from '@compose-ui/components'
 import type {
   ComposeComponentInstanceOverrides,
-  ComposeComponentOverrideOperation,
   ComposeEntity,
 } from '@compose-ui/core'
 import { readComposeComponentInstance } from '../instance-operations'
 import type { ComposeComponentInstanceUpdateResult } from '../instance-operations'
+import {
+  IconApply,
+  IconComponent,
+  IconRefresh,
+  IconRevert,
+  IconVariant,
+  OverridesIconButton,
+  OverridesOperationsList,
+  OverridesStatusBanner,
+} from '../overrides-chrome'
 import { useState, type ReactNode } from 'react'
 import './styles.css'
 
@@ -48,157 +57,6 @@ export type ComposeInstanceInspectorChromeParts = {
   readonly statusSlot: ReactNode
   /** 标题与属性区之间：本层覆盖列表 / 冲突确认。无内容时为 null。 */
   readonly banner: ReactNode
-}
-
-/** 字段路径末段的可读标签。 */
-const FIELD_LABELS: Readonly<Record<string, string>> = {
-  backgroundPaint: '背景填充',
-  borderColor: '边框颜色',
-  borderWidth: '边框宽度',
-  borderRadius: '圆角',
-  opacity: '透明度',
-  shadow: '阴影',
-  width: '宽度',
-  height: '高度',
-  offset: '位置',
-  rotation: '旋转',
-  visible: '可见',
-  locked: '锁定',
-  childIds: '子项',
-  text: '文本',
-}
-
-function fieldLabel(path: readonly string[] | undefined): string {
-  if (!path || path.length === 0) return '属性'
-  const last = path[path.length - 1]!
-  return FIELD_LABELS[last] ?? last
-}
-
-/**
- * 把结构操作拆成人话主标题 + 次要说明，供列表行展示。
- *
- * @public
- */
-export function describeInstanceOperation(operation: ComposeComponentOverrideOperation): {
-  readonly title: string
-  readonly detail: string
-} {
-  switch (operation.kind) {
-    case 'set-field':
-      return {
-        title: fieldLabel(operation.fieldPath),
-        detail: `${operation.entityId} · ${operation.fieldPath.join('.') || '字段'}`,
-      }
-    case 'remove-field':
-      return {
-        title: `移除 ${fieldLabel(operation.fieldPath)}`,
-        detail: `${operation.entityId} · ${operation.fieldPath.join('.') || '字段'}`,
-      }
-    case 'add-component':
-      return {
-        title: '新增能力',
-        detail: `${operation.entityId} · ${operation.componentKey}`,
-      }
-    case 'remove-component':
-      return {
-        title: '移除能力',
-        detail: `${operation.entityId} · ${operation.componentKey}`,
-      }
-    case 'add-entity':
-      return {
-        title: '新增子树',
-        detail: operation.rootEntityId,
-      }
-    case 'remove-entity':
-      return { title: '删除实体', detail: operation.entityId }
-    case 'move-entity':
-      return { title: '移动实体', detail: operation.entityId }
-    default: {
-      const exhaustive: never = operation
-      return { title: '未知操作', detail: String(exhaustive) }
-    }
-  }
-}
-
-function IconRefresh() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
-      <path d="M3 8a5 5 0 0 1 8.9-3M13 3v3h-3" />
-      <path d="M13 8a5 5 0 0 1-8.9 3M3 13v-3h3" />
-    </svg>
-  )
-}
-
-function IconVariant() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
-      <path d="M4 3h5l3 3v7H4V3Z" />
-      <path d="M9 3v3h3" />
-      <path d="M6.5 9.5h3M8 8v3" />
-    </svg>
-  )
-}
-
-function IconApply() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
-      <path d="M8 2v8" />
-      <path d="m5 7 3 3 3-3" />
-      <path d="M3 13h10" />
-    </svg>
-  )
-}
-
-function IconRevert() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
-      <path d="M4 6a5 5 0 1 1-1 4" />
-      <path d="M4 3v3h3" />
-    </svg>
-  )
-}
-
-function IconComponent() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
-      <path d="m8 1.5 5.5 3.1v6.8L8 14.5 2.5 11.4V4.6L8 1.5Z" />
-      <path d="M8 8.2V14.5M2.5 4.6 8 8.2l5.5-3.6" />
-    </svg>
-  )
-}
-
-function IconButton({
-  label,
-  disabled,
-  tone,
-  onClick,
-  children,
-}: {
-  readonly label: string
-  readonly disabled?: boolean
-  readonly tone?: 'accent' | 'danger'
-  readonly onClick: () => void
-  readonly children: ReactNode
-}) {
-  const toneClass = tone === 'accent'
-    ? ' compose-instance-overrides__icon-btn--accent'
-    : tone === 'danger'
-      ? ' compose-instance-overrides__icon-btn--danger'
-      : ''
-  return (
-    <ComposeButton
-      aria-label={label}
-      className={`compose-instance-overrides__icon-btn${toneClass}`}
-      disabled={disabled}
-      size="icon-sm"
-      title={label}
-      type="button"
-      variant="ghost"
-      onClick={onClick}
-    >
-      {children}
-    </ComposeButton>
-  )
 }
 
 function useInstanceOverridesModel({
@@ -281,78 +139,30 @@ function InstanceToolbar({
       className="compose-instance-overrides__actions"
       role="toolbar"
     >
-      <IconButton disabled={updating} label="检查更新" onClick={onUpdate}>
+      <OverridesIconButton disabled={updating} label="检查更新" onClick={onUpdate}>
         <IconRefresh />
-      </IconButton>
-      <IconButton label="创建变体" onClick={onCreateVariant}>
+      </OverridesIconButton>
+      <OverridesIconButton label="创建变体" onClick={onCreateVariant}>
         <IconVariant />
-      </IconButton>
+      </OverridesIconButton>
       <span aria-hidden="true" className="compose-instance-overrides__sep" />
-      <IconButton
+      <OverridesIconButton
         disabled={!hasOverrides}
         label="Apply 全部实例覆盖"
         tone="accent"
         onClick={onApply}
       >
         <IconApply />
-      </IconButton>
-      <IconButton
+      </OverridesIconButton>
+      <OverridesIconButton
         disabled={!hasOverrides}
         label="Revert 全部实例覆盖"
         tone="danger"
         onClick={onRevertAll}
       >
         <IconRevert />
-      </IconButton>
+      </OverridesIconButton>
     </div>
-  )
-}
-
-function OverridesList({
-  operations,
-  onApply,
-  onRevert,
-}: {
-  readonly operations: readonly ComposeComponentOverrideOperation[]
-  readonly onApply: (id: string) => void
-  readonly onRevert: (id: string) => void
-}) {
-  return (
-    <>
-      <div className="compose-instance-overrides__list-label">
-        <span>本层覆盖</span>
-        <em>↑ 推回源 · ↺ 还原</em>
-      </div>
-      <ul className="compose-instance-overrides__list">
-        {operations.map((operation) => {
-          const { title, detail } = describeInstanceOperation(operation)
-          return (
-            <li className="compose-instance-overrides__row" key={operation.id}>
-              <div className="compose-instance-overrides__row-meta">
-                <strong>{title}</strong>
-                <span>{detail}</span>
-              </div>
-              <div className="compose-instance-overrides__row-ops">
-                <IconButton
-                  label="Apply"
-                  tone="accent"
-                  onClick={() => onApply(operation.id)}
-                >
-                  <IconApply />
-                </IconButton>
-                <IconButton
-                  label="Revert"
-                  tone="danger"
-                  onClick={() => onRevert(operation.id)}
-                >
-                  <IconRevert />
-                </IconButton>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-    </>
   )
 }
 
@@ -437,32 +247,22 @@ export function ComposeComponentInstanceOverridesPanel({
   )
 
   // 成功文案用 ok 色；失败/未提交类警告。
-  const statusTone = message !== null && /已更新|成功/.test(message) ? 'ok' : 'warn'
+  const statusTone = message !== null && /已更新|成功/.test(message) ? 'ok' as const : 'warn' as const
   const statusSlot = message === null
     ? null
     : (
-        <div
-          className={`compose-instance-status compose-instance-status--${statusTone}`}
-          role="status"
-        >
-          <span aria-hidden="true" className="compose-instance-status__dot" />
-          <span className="compose-instance-status__text">{message}</span>
-          <button
-            aria-label="关闭状态"
-            className="compose-instance-status__dismiss"
-            type="button"
-            onClick={dismissMessage}
-          >
-            ×
-          </button>
-        </div>
+        <OverridesStatusBanner
+          message={message}
+          tone={statusTone}
+          onDismiss={dismissMessage}
+        />
       )
 
   const bannerParts = (
     <>
       {hasOverrides ? (
         <div className="compose-instance-overrides__body compose-instance-overrides__body--strip">
-          <OverridesList
+          <OverridesOperationsList
             operations={operations}
             onApply={(id) => onApply([id])}
             onRevert={revert}
@@ -532,7 +332,7 @@ export function ComposeComponentInstanceOverridesPanel({
       <div className="compose-instance-overrides__body">
         {hasOverrides ? (
           <>
-            <OverridesList
+            <OverridesOperationsList
               operations={operations}
               onApply={(id) => onApply([id])}
               onRevert={revert}

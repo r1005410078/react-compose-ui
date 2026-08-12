@@ -332,15 +332,14 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId('stage-grid')).toHaveStyle({ display: 'none' })
   })
 
-  it('OpenSpec: 受控工具模式与专属选区反馈 / 选择工具保留四角控制点且不显示移动 gizmo', () => {
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 选择工具保留 8 控点且不显示移动 gizmo', () => {
     renderStage(document(), { selectedIds: ['a'], tool: 'select' })
 
     expect(screen.queryByTestId('stage-move-gizmo')).not.toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-ne')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-sw')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-nw')).toBeInTheDocument()
-    expect(screen.queryByTestId('stage-resize-e')).not.toBeInTheDocument()
+    // free：4 角 + 4 边可见控点，便于组合缩放。
+    for (const handle of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const) {
+      expect(screen.getByTestId(`stage-resize-${handle}`)).toBeInTheDocument()
+    }
   })
 
   it('OpenSpec: 线段端点选择 / Line 与 Arrow 单选仅显示首尾控制点而不显示矩形框', () => {
@@ -627,11 +626,13 @@ describe('ComposeStage ECS', () => {
   })
 
   it.each([
-    ['horizontal', [], ['e', 'w']],
-    ['vertical', [], ['n', 's']],
+    // 可见手柄可含角与边；边缘 hit 区仅 n/e/s/w（角由手柄本身命中）。
+    ['free', ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'], ['n', 'e', 's', 'w']],
+    ['horizontal', ['e', 'w'], ['e', 'w']],
+    ['vertical', ['n', 's'], ['n', 's']],
     ['preserve-aspect', ['ne', 'se', 'sw', 'nw'], []],
     ['none', [], []],
-  ] as const)('OpenSpec: 受控工具模式与专属选区反馈 / %s 使用四角视觉与边缘命中', (mode, visualHandles, edgeHandles) => {
+  ] as const)('OpenSpec: 受控工具模式与专属选区反馈 / %s 使用可见控点与边缘命中', (mode, visualHandles, edgeHandles) => {
     renderStage(document([entity('a', { resize: mode })]), { selectedIds: ['a'] })
     const all = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
     all.forEach((handle) => {

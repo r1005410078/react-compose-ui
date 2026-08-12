@@ -8,6 +8,11 @@ import {
 } from '@compose-ui/core'
 import { readComposeComponentInstance } from './instance-operations'
 
+/** 文档是否在应用操作后有实质变化（用于丢弃已写回源后的冗余覆盖）。 */
+function documentChanged(before: ComposeDocument, after: ComposeDocument): boolean {
+  return JSON.stringify(before) !== JSON.stringify(after)
+}
+
 /** 可以直接提交的实例同步项。 @public */
 export interface ComposeInstanceAutoSyncEntry {
   readonly entityId: string
@@ -62,11 +67,14 @@ export function planComposeInstanceAutoSync(input: {
     let document = input.snapshot.document
     for (const operation of facts.overrides.operations) {
       const attempt = applyComposeComponentOverrides(document, [operation])
-      if (attempt.ok) {
-        document = attempt.document
-        compatible.push(operation)
+      if (!attempt.ok) {
+        conflictOperationIds.push(operation.id)
+        continue
       }
-      else conflictOperationIds.push(operation.id)
+      // 已写回主组件/变体后，同一 set-field 再应用到新源上无变化；不得继续算作「本层覆盖」。
+      if (!documentChanged(document, attempt.document)) continue
+      document = attempt.document
+      compatible.push(operation)
     }
     if (conflictOperationIds.length === 0) {
       synced.push({

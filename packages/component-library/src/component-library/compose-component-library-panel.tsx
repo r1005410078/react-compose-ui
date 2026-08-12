@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   type HTMLAttributes,
@@ -57,19 +58,124 @@ interface DragPreview {
   readonly clientPoint: { readonly x: number; readonly y: number }
 }
 
-/** 组件与变体共享的关联立方体图标。 @public */
+/**
+ * 主组件 / 变体 / 页面实例的等轴测立方体图标。
+ *
+ * @remarks
+ * 三个可见面使用不同明度与色相形成透视深度（顶亮、左中、右暗）。
+ * 主组件：实心蓝系；变体：半透明青绿 + 侧向标记；实例：线框灰蓝（引用非本体）。
+ *
+ * @public
+ */
 export function ComposeComponentAssetIcon({ kind }: {
-  readonly kind: ComposeComponentDescriptor['kind']
+  readonly kind: ComposeComponentDescriptor['kind'] | 'instance'
 }) {
-  return kind === 'base' ? (
-    <svg aria-hidden="true" data-testid="component-library-base-icon" viewBox="0 0 24 24">
-      <path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5z" fill="none" stroke="currentColor" />
-      <path d="m5 7.5 7 3.5 7-3.5M12 11v9" fill="none" stroke="currentColor" />
-    </svg>
-  ) : (
-    <svg aria-hidden="true" data-testid="component-library-variant-icon" viewBox="0 0 24 24">
-      <path d="M4.5 7.5 11 4l6.5 3.5v8L11 19l-6.5-3.5z" fill="none" stroke="currentColor" />
-      <path d="m4.5 7.5 6.5 3.3 6.5-3.3M11 10.8V19M17.5 12.5h3m-1.5-1.5 1.5 1.5L19 14" fill="none" stroke="currentColor" />
+  // 多实例同页时 gradient id 必须唯一，否则后渲染的 defs 会覆盖填充。
+  const uid = useId().replace(/:/g, '')
+  // 等轴测三面：顶 / 左前 / 右前（路径按 viewBox 24 对齐）。
+  const top = 'M12 3.2 19.6 7.4 12 11.6 4.4 7.4Z'
+  const left = 'M4.4 7.4 12 11.6 12 20.2 4.4 16Z'
+  const right = 'M19.6 7.4 12 11.6 12 20.2 19.6 16Z'
+
+  if (kind === 'base') {
+    const topId = `cube-base-top-${uid}`
+    const leftId = `cube-base-left-${uid}`
+    const rightId = `cube-base-right-${uid}`
+    return (
+      <svg
+        aria-hidden="true"
+        className="compose-component-asset-icon compose-component-asset-icon--base"
+        data-testid="component-library-base-icon"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <linearGradient id={topId} x1="4" x2="20" y1="3" y2="12" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#9fd0ff" />
+            <stop offset="100%" stopColor="#5aa8f0" />
+          </linearGradient>
+          <linearGradient id={leftId} x1="4" x2="12" y1="8" y2="20" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#3d8fd9" />
+            <stop offset="100%" stopColor="#2563a8" />
+          </linearGradient>
+          <linearGradient id={rightId} x1="12" x2="20" y1="8" y2="20" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#2a6fbc" />
+            <stop offset="100%" stopColor="#1a4a82" />
+          </linearGradient>
+        </defs>
+        <path d={right} fill={`url(#${rightId})`} />
+        <path d={left} fill={`url(#${leftId})`} />
+        <path d={top} fill={`url(#${topId})`} />
+        <path
+          d={`${top} ${left} ${right}`}
+          fill="none"
+          stroke="#0c2744"
+          strokeLinejoin="round"
+          strokeOpacity="0.35"
+          strokeWidth="0.6"
+        />
+        <path d="M12 11.6V20.2M4.4 7.4 12 11.6 19.6 7.4" stroke="#cfe6ff" strokeOpacity="0.22" strokeWidth="0.7" />
+      </svg>
+    )
+  }
+
+  if (kind === 'variant') {
+    const topId = `cube-var-top-${uid}`
+    const leftId = `cube-var-left-${uid}`
+    const rightId = `cube-var-right-${uid}`
+    return (
+      <svg
+        aria-hidden="true"
+        className="compose-component-asset-icon compose-component-asset-icon--variant"
+        data-testid="component-library-variant-icon"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <linearGradient id={topId} x1="4" x2="20" y1="3" y2="12" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#8af0c8" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#3ecf8e" stopOpacity="0.35" />
+          </linearGradient>
+          <linearGradient id={leftId} x1="4" x2="12" y1="8" y2="20" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#2db87a" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#1a7a52" stopOpacity="0.55" />
+          </linearGradient>
+          <linearGradient id={rightId} x1="12" x2="20" y1="8" y2="20" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#23966a" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#145c40" stopOpacity="0.65" />
+          </linearGradient>
+        </defs>
+        <path d={right} fill={`url(#${rightId})`} />
+        <path d={left} fill={`url(#${leftId})`} />
+        <path d={top} fill={`url(#${topId})`} />
+        <path
+          d="M4.4 7.4 12 3.2 19.6 7.4 19.6 16 12 20.2 4.4 16Z"
+          fill="none"
+          stroke="#7dffe0"
+          strokeLinejoin="round"
+          strokeOpacity="0.75"
+          strokeWidth="1.15"
+        />
+        <path d="M12 11.6V20.2M4.4 7.4 12 11.6 19.6 7.4" stroke="#b8ffe8" strokeOpacity="0.45" strokeWidth="0.9" />
+        {/* 侧向条纹：变体标记，色相独立于立方体 */}
+        <path d="M21 10.5v5.5M22.6 11.4v3.6" stroke="#e8b84a" strokeLinecap="round" strokeWidth="1.35" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="compose-component-asset-icon compose-component-asset-icon--instance"
+      data-testid="component-library-instance-icon"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      {/* 线框三面不同描边明度，形成空心深度 */}
+      <path d={top} fill="none" stroke="#a8c4e8" strokeLinejoin="round" strokeWidth="1.25" />
+      <path d={left} fill="none" stroke="#6a8ab0" strokeLinejoin="round" strokeWidth="1.25" />
+      <path d={right} fill="none" stroke="#4a6588" strokeLinejoin="round" strokeWidth="1.25" />
+      <path d="M12 11.6V20.2" stroke="#8aa6c8" strokeOpacity="0.7" strokeWidth="1" />
     </svg>
   )
 }
@@ -267,8 +373,9 @@ export function ComposeComponentLibraryPanel({
               <div className="compose-component-library__grid">
                 {projectComponents.map((descriptor) => {
                   const item: ComposeComponentLibraryItem = { kind: 'component', descriptor }
+                  // 产品术语：库内是主组件/变体资源；拖入页面才是实例。
                   const kindLabel = descriptor.kind === 'base'
-                    ? (zh ? '组件' : 'component')
+                    ? (zh ? '主组件' : 'base component')
                     : (zh ? '变体' : 'variant')
                   return (
                     <div className="compose-component-library__project-item" key={descriptor.assetKey}>
