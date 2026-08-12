@@ -157,6 +157,57 @@ describe('Component property panels', () => {
     expect(screen.getByRole('button', { name: 'Revert 全部实例覆盖' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument()
   })
+
+  it('inspector 布局把工具栏与覆盖条拆成 chrome 片段，无覆盖时 banner 为空', () => {
+    const onApply = vi.fn()
+    render(
+      <ComposeComponentInstanceOverridesPanel
+        entity={instanceEntity([{ id: 'op-1', kind: 'remove-entity', entityId: 'label' }])}
+        layout="inspector"
+        onApply={onApply}
+        onChange={vi.fn()}
+        onCreateVariant={vi.fn()}
+        onUpdate={vi.fn()}
+      >
+        {({ leading, subtitle, trailing, banner }) => (
+          <div>
+            <div data-testid="leading">{leading}</div>
+            <div data-testid="subtitle">{subtitle}</div>
+            <div data-testid="trailing">{trailing}</div>
+            <div data-testid="banner">{banner}</div>
+          </div>
+        )}
+      </ComposeComponentInstanceOverridesPanel>,
+    )
+    expect(screen.getByTestId('leading').querySelector('svg')).toBeTruthy()
+    expect(screen.getByText('1 项本层覆盖')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '检查更新' })).toBeInTheDocument()
+    expect(screen.getByTestId('banner')).toHaveTextContent('删除实体')
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(onApply).toHaveBeenCalledWith(['op-1'])
+  })
+
+  it('inspector 无覆盖时 banner 为 null', () => {
+    render(
+      <ComposeComponentInstanceOverridesPanel
+        entity={instanceEntity([])}
+        layout="inspector"
+        onApply={vi.fn()}
+        onChange={vi.fn()}
+        onCreateVariant={vi.fn()}
+        onUpdate={vi.fn()}
+      >
+        {({ subtitle, banner }) => (
+          <div>
+            <div data-testid="subtitle">{subtitle}</div>
+            <div data-testid="banner">{banner === null ? 'empty' : 'filled'}</div>
+          </div>
+        )}
+      </ComposeComponentInstanceOverridesPanel>,
+    )
+    expect(screen.getByText('实例 · 与源同步')).toBeInTheDocument()
+    expect(screen.getByTestId('banner')).toHaveTextContent('empty')
+  })
 })
 
 describe('实例结构覆盖面板', () => {

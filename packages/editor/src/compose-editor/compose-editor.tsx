@@ -1296,19 +1296,29 @@ export function ComposeEditor({
       return entityInspector
     }
     if (!activeComponentSession && selectedComponentInstance && componentWorkspace.store) {
-      // 宿主 + 组件根已由 controller.inspectorPanel 合成单一 EntityInspector；
-      // 这里只追加实例覆盖面板，不再叠第二个属性面板外壳。
+      // 实例操作并入 EntityInspector 标题行；覆盖列表仅在有本层操作时出现在标题下。
+      const authoredBase = slots?.inspector !== undefined
+        ? slots.inspector
+        : addDefaultElementProps(controller?.inspectorPanel, { pageScriptInspector })
       return (
-        <div className="compose-editor__component-inspector">
-          {entityInspector}
-          <ComposeComponentInstanceOverridesPanel
-            entity={selectedComponentInstance}
-            onApply={applySelectedInstanceOverrides}
-            onChange={updateInstanceOverrides}
-            onCreateVariant={createVariantFromSelectedInstance}
-            onUpdate={updateComponentInstance}
-          />
-        </div>
+        <ComposeComponentInstanceOverridesPanel
+          entity={selectedComponentInstance}
+          layout="inspector"
+          onApply={applySelectedInstanceOverrides}
+          onChange={updateInstanceOverrides}
+          onCreateVariant={createVariantFromSelectedInstance}
+          onUpdate={updateComponentInstance}
+        >
+          {({ leading, subtitle, trailing, banner }) => providePaintImageLibrary(
+            addDefaultElementProps(authoredBase, {
+              headerLeading: leading,
+              headerSubtitle: subtitle,
+              headerTrailing: trailing,
+              banner,
+            }),
+            resolvedPaintImageLibrary,
+          )}
+        </ComposeComponentInstanceOverridesPanel>
       )
     }
     return entityInspector

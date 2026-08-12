@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>实例操作并入属性面板头部 · 效果图</title>
+  <style>
+    :root {
+      --bg: #12151b;
+      --panel: #1a1e26;
+      --raised: #222730;
+      --hover: #2a303b;
+      --border: #2f3540;
+      --text: #e8ecf1;
+      --muted: #8b95a5;
+      --subtle: #a8b0bd;
+      --accent: #3b82f6;
+      --font: "Inter", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px 16px 40px;
+      font: 13px/1.45 var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(900px 480px at 70% 0%, #1e2a40 0%, transparent 50%),
+        var(--bg);
+    }
+    .page {
+      max-width: 920px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 650;
+    }
+    .lead {
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+    .lead strong { color: var(--subtle); font-weight: 600; }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 22px;
+      align-items: start;
+    }
+    .card-wrap { display: grid; gap: 8px; }
+    .tag {
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+    .frame {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: 0 20px 50px rgb(0 0 0 / 40%);
+      overflow: hidden;
+    }
+    /* —— 头部（合并后） —— */
+    .head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 10px 0 12px;
+      border-bottom: 1px solid var(--border);
+      background:
+        linear-gradient(105deg, rgb(255 255 255 / 2.5%), transparent 42%),
+        var(--panel);
+    }
+    .head__id {
+      display: flex;
+      min-width: 0;
+      flex: 1;
+      align-items: center;
+      gap: 8px;
+    }
+    .diamond {
+      display: grid;
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 5px;
+      color: #93c5fd;
+      background: rgb(59 130 246 / 16%);
+    }
+    .diamond svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .head__text {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+    }
+    .head__text strong {
+      font-size: 14px;
+      font-weight: 620;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .head__meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      height: 16px;
+      padding: 0 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 650;
+      color: #93c5fd;
+      background: rgb(59 130 246 / 14%);
+    }
+    .chip.is-dirty {
+      color: #fcd34d;
+      background: rgb(251 191 36 / 12%);
+    }
+    .toolbar {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 2px;
+    }
+    .icon {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 0;
+      border-radius: 5px;
+      color: var(--muted);
+      background: transparent;
+      cursor: default;
+    }
+    .icon:hover { color: var(--text); background: var(--hover); }
+    .icon.is-off { opacity: 0.35; }
+    .icon svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .sep {
+      width: 1px;
+      height: 16px;
+      margin: 0 3px;
+      background: var(--border);
+    }
+    .plus {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 5px;
+      color: var(--muted);
+      font-size: 20px;
+      font-weight: 300;
+      line-height: 1;
+    }
+
+    /* 搜索 */
+    .search {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .search__box {
+      flex: 1;
+      height: 28px;
+      border-radius: 6px;
+      background: #11151c;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .search__tools {
+      display: flex;
+      gap: 2px;
+      color: var(--muted);
+    }
+
+    /* 属性组 */
+    .group {
+      border-bottom: 1px solid rgb(255 255 255 / 4%);
+    }
+    .group__h {
+      display: flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 12px;
+      color: var(--subtle);
+      font-size: 12px;
+      font-weight: 600;
+      gap: 6px;
+    }
+    .group__h span { opacity: 0.7; font-size: 10px; }
+    .row {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 8px;
+      align-items: center;
+      padding: 3px 12px;
+      font-size: 12px;
+      color: var(--subtle);
+    }
+    .field {
+      height: 26px;
+      border-radius: 4px;
+      background: var(--raised);
+    }
+
+    /* 覆盖条：仅有变更时，贴在头部下的轻量条，而不是底部大块 */
+    .override-strip {
+      margin: 0;
+      padding: 6px 10px 8px;
+      border-bottom: 1px solid var(--border);
+      background: rgb(251 191 36 / 4%);
+    }
+    .override-strip__label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .orow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 30px;
+      padding: 4px 8px;
+      border-radius: 5px;
+      background: var(--raised);
+      border: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .orow + .orow { margin-top: 4px; }
+    .orow strong { font-weight: 550; }
+    .orow span { color: var(--muted); font-size: 11px; }
+    .orow__ops { display: flex; gap: 1px; }
+
+    .note {
+      margin-top: 28px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .note code {
+      color: #93c5fd;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>实例操作并入属性面板头部</h1>
+    <p class="lead">
+      去掉底部独立「组件实例」区块。选中实例时，顶部标题行即承载身份与操作：
+      <strong>组件图标 · 名称 · 实例徽章 · 同步状态 · 图标工具栏 · 添加能力</strong>。
+      无覆盖时不占垂直空间；有覆盖时在搜索栏上方用一条轻量列表（可选折叠）。
+    </p>
+
+    <div class="gallery">
+      <!-- A 无覆盖 -->
+      <div class="card-wrap">
+        <div class="frame" aria-label="无覆盖">
+          <header class="head">
+            <div class="head__id">
+              <span class="diamond" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><path d="m8 1.5 5.5 3.1v6.8L8 14.5 2.5 11.4V4.6L8 1.5Z"/><path d="M8 8.2V14.5M2.5 4.6 8 8.2l5.5-3.6"/></svg>
+              </span>
+              <div class="head__text">
+                <strong>Component</strong>
+                <div class="head__meta">
+                  <span class="chip">实例</span>
+                  <span>与源同步</span>
+                </div>
+              </div>
+            </div>
+            <div class="toolbar" role="toolbar" aria-label="实例操作">
+              <button class="icon" title="检查更新" type="button">
+                <svg viewBox="0 0 16 16"><path d="M3 8a5 5 0 0 1 8.9-3M13 3v3h-3"/><path d="M13 8a5 5 0 0 1-8.9 3M3 13v-3h3"/></svg>
+              </button>
+              <button class="icon" title="创建变体" type="button">
+                <svg viewBox="0 0 16 16"><path d="M4 3h5l3 3v7H4V3Z"/><path d="M9 3v3h3"/><path d="M6.5 9.5h3M8 8v3"/></svg>
+              </button>
+              <span class="sep"></span>
+              <button class="icon is-off" title="Apply 全部" type="button">
+                <svg viewBox="0 0 16 16"><path d="M8 2v8"/><path d="m5 7 3 3 3-3"/><path d="M3 13h10"/></svg>
+              </button>
+              <button class="icon is-off" title="Revert 全部" type="button">
+                <svg viewBox="0 0 16 16"><path d="M4 6a5 5 0 1 1-1 4"/><path d="M4 3v3h3"/></svg>
+              </button>
+              <span class="sep"></span>
+              <span class="plus" title="添加能力">＋</span>
+            </div>
+          </header>
+          <div class="search">
+            <div class="search__box">🔍 搜索</div>
+            <div class="search__tools">▽ ⚙</div>
+          </div>
+          <div class="group">
+            <div class="group__h"><span>▼</span> 基础</div>
+            <div class="row"><span>名称</span><div class="field"></div></div>
+            <div class="row"><span>位置</span><div class="field"></div></div>
+            <div class="row"><span>尺寸</span><div class="field"></div></div>
+          </div>
+          <div class="group"><div class="group__h"><span>▶</span> 布局</div></div>
+          <div class="group"><div class="group__h"><span>▶</span> 外观</div></div>
+          <div class="group"><div class="group__h"><span>▶</span> 容器</div></div>
+        </div>
+        <p class="tag">A · 无覆盖：底部不再出现第二块「组件实例」</p>
+      </div>
+
+      <!-- B 有覆盖 -->
+      <div class="card-wrap">
+        <div class="frame" aria-label="有覆盖">
+          <header class="head">
+            <div class="head__id">
+              <span class="diamond" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><path d="m8 1.5 5.5 3.1v6.8L8 14.5 2.5 11.4V4.6L8 1.5Z"/><path d="M8 8.2V14.5M2.5 4.6 8 8.2l5.5-3.6"/></svg>
+              </span>
+              <div class="head__text">
+                <strong>Component</strong>
+                <div class="head__meta">
+                  <span class="chip is-dirty">2 项覆盖</span>
+                  <span>可检查更新</span>
+                </div>
+              </div>
+            </div>
+            <div class="toolbar" role="toolbar" aria-label="实例操作">
+              <button class="icon" title="检查更新" type="button">
+                <svg viewBox="0 0 16 16"><path d="M3 8a5 5 0 0 1 8.9-3M13 3v3h-3"/><path d="M13 8a5 5 0 0 1-8.9 3M3 13v-3h3"/></svg>
+              </button>
+              <button class="icon" title="创建变体" type="button">
+                <svg viewBox="0 0 16 16"><path d="M4 3h5l3 3v7H4V3Z"/><path d="M9 3v3h3"/><path d="M6.5 9.5h3M8 8v3"/></svg>
+              </button>
+              <span class="sep"></span>
+              <button class="icon" title="Apply 全部" type="button">
+                <svg viewBox="0 0 16 16"><path d="M8 2v8"/><path d="m5 7 3 3 3-3"/><path d="M3 13h10"/></svg>
+              </button>
+              <button class="icon" title="Revert 全部" type="button">
+                <svg viewBox="0 0 16 16"><path d="M4 6a5 5 0 1 1-1 4"/><path d="M4 3v3h3"/></svg>
+              </button>
+              <span class="sep"></span>
+              <span class="plus" title="添加能力">＋</span>
+            </div>
+          </header>
+          <!-- 可选：有覆盖时在头部与搜索之间出现紧凑条 -->
+          <div class="override-strip">
+            <div class="override-strip__label">
+              <span>本层覆盖</span>
+              <span>↑ 推回源 · ↺ 还原</span>
+            </div>
+            <div class="orow">
+              <div><strong>背景填充</strong> · <span>Rectangle</span></div>
+              <div class="orow__ops">
+                <button class="icon" type="button" title="Apply"><svg viewBox="0 0 16 16"><path d="M8 2v8"/><path d="m5 7 3 3 3-3"/><path d="M3 13h10"/></svg></button>
+                <button class="icon" type="button" title="Revert"><svg viewBox="0 0 16 16"><path d="M4 6a5 5 0 1 1-1 4"/><path d="M4 3v3h3"/></svg></button>
+              </div>
+            </div>
+            <div class="orow" style="margin-top:4px">
+              <div><strong>尺寸宽度</strong> · <span>组件根</span></div>
+              <div class="orow__ops">
+                <button class="icon" type="button" title="Apply"><svg viewBox="0 0 16 16"><path d="M8 2v8"/><path d="m5 7 3 3 3-3"/><path d="M3 13h10"/></svg></button>
+                <button class="icon" type="button" title="Revert"><svg viewBox="0 0 16 16"><path d="M4 6a5 5 0 1 1-1 4"/><path d="M4 3v3h3"/></svg></button>
+              </div>
+            </div>
+          </div>
+          <div class="search">
+            <div class="search__box">🔍 搜索</div>
+            <div class="search__tools">▽ ⚙</div>
+          </div>
+          <div class="group">
+            <div class="group__h"><span>▼</span> 基础</div>
+            <div class="row"><span>名称</span><div class="field"></div></div>
+          </div>
+          <div class="group"><div class="group__h"><span>▶</span> 外观</div></div>
+        </div>
+        <p class="tag">B · 有覆盖：列表贴在标题下，不再沉底占半屏</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong style="color:var(--subtle)">实现要点（供后续开发）</strong><br />
+      1. <code>EntityInspector</code> 头部在选中 component-instance 时切换为「实例模式」：图标 + 名称 + 状态 + 工具栏。<br />
+      2. 底部 <code>ComposeComponentInstanceOverridesPanel</code> 不再整块挂在面板外；改为 header 插槽 + 可选的紧凑覆盖条。<br />
+      3. 无覆盖时不渲染空态大框，状态只在副标题一行显示「与源同步」。
+    </div>
+  </div>
+</body>
+</html>

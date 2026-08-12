@@ -9,6 +9,24 @@
   color: var(--compose-text, #e8ecf1);
 }
 
+/* 挂在 EntityInspector 标题下：无顶部分割线，用浅底区分覆盖条。 */
+.compose-instance-overrides--banner {
+  border-top: 0;
+  border-bottom: 1px solid var(--compose-border, #323844);
+  background: rgb(251 191 36 / 4%);
+}
+
+.compose-instance-overrides__body--strip {
+  padding-top: 6px;
+  padding-bottom: 8px;
+}
+
+.compose-instance-overrides__status-text {
+  color: var(--compose-text-muted, #8b95a5);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .compose-instance-overrides__header {
   display: flex;
   align-items: center;

@@ -86,6 +86,14 @@ interface EntityInspectorProps {
    * 仅 `chrome="full"` 时生效；用于把宿主与根合成一个属性面板。
    */
   readonly extraSections?: ReactNode
+  /** 标题左侧图标（如组件实例菱形）。仅 full chrome。 */
+  readonly headerLeading?: ReactNode
+  /** 名称下方副标题（如「实例 · 与源同步」）。仅 full chrome。 */
+  readonly headerSubtitle?: ReactNode
+  /** 标题行右侧、添加能力之前的操作区（实例工具栏）。仅 full chrome。 */
+  readonly headerTrailing?: ReactNode
+  /** 标题栏与属性字段之间的横幅（覆盖列表、状态消息）。仅 full chrome。 */
+  readonly banner?: ReactNode
 }
 
 // 内建 Component 由 Registry 定义的 inspector 呈现；缺失定义时也不进入“未知”分组，
@@ -187,6 +195,10 @@ export function EntityInspector({
   scriptScope,
   chrome = 'full',
   extraSections,
+  headerLeading,
+  headerSubtitle,
+  headerTrailing,
+  banner,
 }: EntityInspectorProps) {
   const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
   const locked = getComposeLock(entity).locked
@@ -462,34 +474,49 @@ export function EntityInspector({
       role="region"
     >
       <header className="compose-editor__entity-inspector-header">
-        <strong>{entity.name}</strong>
-        <label
-          className="compose-editor__entity-inspector-add-capability"
-          title={zh ? '添加能力' : 'Add capability'}
-        >
-          <span aria-hidden="true">＋</span>
-          <select
-            aria-label={zh ? '添加能力' : 'Add capability'}
-            disabled={locked}
-            value=""
-            onChange={(event) => {
-              if (event.target.value) addCapability(event.target.value)
-            }}
+        <div className="compose-editor__entity-inspector-identity">
+          {headerLeading}
+          <div className="compose-editor__entity-inspector-title-block">
+            <strong>{entity.name}</strong>
+            {headerSubtitle ? (
+              <div className="compose-editor__entity-inspector-subtitle">
+                {headerSubtitle}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="compose-editor__entity-inspector-header-end">
+          {headerTrailing}
+          <label
+            className="compose-editor__entity-inspector-add-capability"
+            title={zh ? '添加能力' : 'Add capability'}
           >
-            <option value="">{zh ? '选择能力…' : 'Choose capability…'}</option>
-            {availability.filter((item) => !item.attached).map((item) => (
-              <option
-                disabled={item.disabled}
-                key={item.capabilityId}
-                title={item.issue?.message}
-                value={item.capabilityId}
-              >
-                {item.definition?.label ?? item.capabilityId}
-              </option>
-            ))}
-          </select>
-        </label>
+            <span aria-hidden="true">＋</span>
+            <select
+              aria-label={zh ? '添加能力' : 'Add capability'}
+              disabled={locked}
+              value=""
+              onChange={(event) => {
+                if (event.target.value) addCapability(event.target.value)
+              }}
+            >
+              <option value="">{zh ? '选择能力…' : 'Choose capability…'}</option>
+              {availability.filter((item) => !item.attached).map((item) => (
+                <option
+                  disabled={item.disabled}
+                  key={item.capabilityId}
+                  title={item.issue?.message}
+                  value={item.capabilityId}
+                >
+                  {item.definition?.label ?? item.capabilityId}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </header>
+
+      {banner}
 
       {composition.capabilityIds.length > 0 ? (
         <section
