@@ -3547,3 +3547,51 @@ test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻�
   // name 不是 Component 字段，稳定操作代数无法表达重命名，因此该字段只读而不是静默失效。
   await expect(inspector.getByLabel('名称')).toHaveAttribute('readonly', '')
 })
+
+test('OpenSpec: component-library / 实例层结构覆盖 / 内部删除写入覆盖且越界拖拽被拒绝', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Container' }).click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const source = sceneTree.getByRole('row').last()
+  await source.click()
+  await source.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '创建组件…' }).click()
+  const dialog = page.getByRole('dialog', { name: '创建组件' })
+  await dialog.getByLabel('组件名称').fill('Struct Card')
+  await dialog.getByRole('button', { name: '创建' }).click()
+  await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
+
+  await sceneTree.getByRole('row').first().getByRole('button', { name: /展开/ }).click()
+  await sceneTree.getByRole('row').nth(1).getByRole('button', { name: /展开/ }).click()
+  await expect(sceneTree.getByRole('row')).toHaveCount(3)
+  await expect(stage.locator('[data-component-instance-entity-id]')).toHaveCount(3)
+
+  // 内部子树是封闭编辑域：拖到宿主根等于移出实例，必须整体拒绝且结构不变。
+  const rectangleRow = sceneTree.getByRole('row', { name: /Rectangle/ })
+  const treeBox = await sceneTree.boundingBox()
+  const rowBox = await rectangleRow.boundingBox()
+  await page.mouse.move(rowBox!.x + rowBox!.width / 2, rowBox!.y + rowBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    treeBox!.x + treeBox!.width / 2,
+    treeBox!.y + treeBox!.height - 30,
+    { steps: 6 },
+  )
+  await page.mouse.up()
+  await expect(sceneTree.getByRole('row')).toHaveCount(3)
+
+  // 删除内部实体只写实例覆盖，渲染同步减少一个内部实体。
+  await rectangleRow.click()
+  await rectangleRow.press('Delete')
+  await expect(sceneTree.getByRole('row')).toHaveCount(2)
+  await expect(stage.locator('[data-component-instance-entity-id]')).toHaveCount(2)
+})

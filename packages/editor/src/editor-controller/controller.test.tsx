@@ -746,6 +746,46 @@ describe('useComposeEditorController', () => {
     expect(overrides.operations.every(({ kind }) => kind === 'set-field')).toBe(true)
   })
 
+  it('实例内部结构编辑写入覆盖，越界移动被拒绝', () => {
+    const editorRuntime = createTransactionRuntime({
+      document: instanceDocumentFixture(),
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    function overrides() {
+      const host = result.current.document.entities.instance!
+      return (host.components.Renderer as { props: Record<string, unknown> })
+        .props.instanceOverrides as { operations: readonly { kind: string }[] }
+    }
+
+    // 删除内部实体产生 remove-entity 覆盖，宿主 entities 不受影响。
+    act(() => {
+      result.current.sceneTreeProps.onOperation?.({
+        type: 'delete',
+        nodeIds: ['instance/c-deep'],
+      })
+    })
+    expect(overrides().operations.some(({ kind }) => kind === 'remove-entity')).toBe(true)
+    expect(Object.keys(result.current.document.entities)).toEqual(['instance'])
+
+    // 把内部实体移到宿主场景是越界操作，必须被拒绝且不改变任何文档。
+    const before = result.current.document
+    act(() => {
+      result.current.sceneTreeProps.onOperation?.({
+        type: 'move',
+        nodeIds: ['instance/c-text'],
+        parentId: null,
+        index: 0,
+      })
+    })
+    expect(result.current.document).toBe(before)
+  })
+
   it('场景树创建操作从 Container Preset 创建 v6 Entity', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({

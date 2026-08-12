@@ -130,8 +130,8 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
  * 地址段数对应实例嵌套层数，而不是树深度：内部实体 ID 在组件文档内已唯一，因此同一实例内的
  * 任意深度都共用同一个前缀。按树深度逐层拼接会让层级较深的组件误撞段数上限。
  *
- * 结构编辑命令尚未接线，因此能力位一律关闭。
- * TODO(add-instance-structural-overrides 5.2): 结构操作接线后放开 canDelete/canMove/canRename。
+ * 能力位只放行已接线的操作：删除与实例内部移动写入实例覆盖；重命名无法由稳定操作代数
+ * 表达（name 不是 Component 字段），可见性与锁定同理，因此保持关闭而不是留成静默失效。
  */
 /**
  * 判断组件实例是否含可投影的内部子项。
@@ -189,8 +189,8 @@ function projectInstanceChildren(
       // 内部层级同样惰性物化，每一层都必须显式声明，否则第二层起就没有展开控件。
       hasChildren: (innerHierarchy?.childIds.length ?? 0) > 0,
       canRename: false,
-      canDelete: false,
-      canMove: false,
+      canDelete: true,
+      canMove: true,
       canToggleVisibility: false,
       canToggleLocked: false,
       ...(children ? { children } : {}),
@@ -247,6 +247,124 @@ function instanceSelectionAncestors(
     }
   }
   return ancestors
+}
+
+/**
+ * 在实例内部文档上执行命令并把结果写回宿主实例覆盖。
+ *
+ * @remarks
+ * 命令先在内部文档的一次性 Runtime 上执行，再与「未施加实例覆盖」的快照做稳定 diff，
+ * 重算整份结构操作后一次写回。重算而非追加，避免同一字段反复编辑累积成等价操作长串。
+ *
+ * 任一命令未提交或 diff 失败时整体放弃，不产生半应用覆盖。
+ */
+function applyInstanceInnerCommands(
+  runtime: TransactionRuntime,
+  host: ComposeEntity,
+  facts: NonNullable<ReturnType<typeof readComposeComponentInstance>>,
+  innerDocument: ComposeDocument,
+  commands: readonly EditorCommand[],
+  label: string,
+): boolean {
+  const innerRuntime = createTransactionRuntime({ document: innerDocument })
+  for (const command of commands) {
+    if (innerRuntime.dispatch(command).status !== 'committed') return false
+  }
+  const diff = diffComposeComponentDocuments({
+    parent: facts.snapshot.document,
+    current: innerRuntime.document,
+  })
+  if (!diff.ok) return false
+  const renderer = host.components.Renderer
+  if (!renderer) return false
+  const dispatched = runtime.dispatch({
+    // 不用 controller 的 idFactory：它读 ref，会被 React Compiler 判为渲染期访问。
+    id: defaultIdFactory(),
+    type: BUILTIN_COMMAND_TYPES.setRendererProps,
+    payload: {
+      entityId: host.id,
+      props: {
+        ...(renderer.props as Record<string, unknown>),
+        instanceOverrides: {
+          properties: facts.overrides.properties,
+          operations: diff.operations,
+        },
+      },
+    },
+    meta: { label, source: 'inspector', targetIds: [host.id] },
+  } as unknown as EditorCommand)
+  return dispatched.status === 'committed'
+}
+
+/**
+ * 把作用于实例内部节点的场景树操作翻译成内部文档命令。
+ *
+ * @remarks
+ * 内部子树是封闭编辑域：所有目标必须属于同一实例，移动的落点也必须仍在该实例内部。
+ * 跨越实例边界的操作返回 `null`，由调用方整体拒绝，而不是退化成宿主文档上的操作。
+ */
+function planInstanceInnerSceneOperation(
+  operation: ComposeSceneTreeOperation,
+  instanceId: string,
+): readonly EditorCommand[] | null {
+  const innerOf = (id: string) => {
+    if (!isComposeInstancePath(id)) return null
+    const decoded = decodeComposeInstancePath(id)
+    if (!decoded.ok || decoded.segments[0] !== instanceId) return null
+    return decoded.segments[1] ?? null
+  }
+  const command = (type: string, payload: Record<string, unknown>, label: string) => ({
+    id: defaultIdFactory(),
+    type,
+    payload,
+    meta: { label, source: 'scene-tree', targetIds: [instanceId] },
+  } as unknown as EditorCommand)
+
+  if (operation.type === 'delete') {
+    const ids = operation.nodeIds.map(innerOf)
+    if (ids.some((id) => id === null)) return null
+    return [command(
+      BUILTIN_COMMAND_TYPES.deleteEntity,
+      { entityIds: ids },
+      `Delete inside ${instanceId}`,
+    )]
+  }
+  if (operation.type === 'move') {
+    const ids = operation.nodeIds.map(innerOf)
+    if (ids.some((id) => id === null)) return null
+    // parentId 为 null 表示落到宿主根，等同于移出实例，必须拒绝。
+    if (operation.parentId === null) return null
+    const parentInner = innerOf(operation.parentId)
+    if (parentInner === null) return null
+    return [command(
+      BUILTIN_COMMAND_TYPES.moveEntity,
+      { entityIds: ids, parentId: parentInner, index: operation.index },
+      `Move inside ${instanceId}`,
+    )]
+  }
+  // create/rename/duplicate 尚未接线：rename 无法由稳定操作代数表达，create/duplicate
+  // 需要在实例覆盖里生成稳定 ID，留待后续任务。
+  return null
+}
+
+/** 列出一个场景树操作触及的全部节点 ID，含落点父级。 */
+function sceneOperationNodeIds(operation: ComposeSceneTreeOperation): readonly string[] {
+  if (operation.type === 'delete') return operation.nodeIds
+  if (operation.type === 'rename') return [operation.nodeId]
+  if (operation.type === 'move') {
+    return operation.parentId === null
+      ? operation.nodeIds
+      : [...operation.nodeIds, operation.parentId]
+  }
+  if (operation.type === 'duplicate') {
+    return operation.parentId === null
+      ? operation.sourceNodeIds
+      : [...operation.sourceNodeIds, operation.parentId]
+  }
+  if (operation.type === 'set-visibility' || operation.type === 'set-locked') {
+    return operation.nodeIds
+  }
+  return operation.parentId === null ? [] : [operation.parentId]
 }
 
 /** 当前下钻选中的实例内部实体及其编辑入口。 @public */
@@ -914,6 +1032,35 @@ export function useComposeEditorController({
     : null
 
   const onSceneOperation = useCallback((operation: ComposeSceneTreeOperation) => {
+    // 目标含实例内部复合地址时改走实例覆盖；内部子树是封闭编辑域，越界一律整体拒绝。
+    const touched = sceneOperationNodeIds(operation)
+    const innerHosts = new Set(
+      touched.filter((id) => isComposeInstancePath(id)).map((id) => composeInstancePathHostId(id)),
+    )
+    if (innerHosts.size > 0) {
+      if (innerHosts.size > 1) return
+      const instanceId = [...innerHosts][0]!
+      const host = document.entities[instanceId]
+      const facts = host ? readComposeComponentInstance(host) : null
+      if (!host || !facts) return
+      const resolved = resolveComposeInstanceOverrides({
+        document: facts.snapshot.document,
+        properties: facts.snapshot.properties,
+        overrides: facts.overrides,
+      })
+      if (!resolved.ok) return
+      const commands = planInstanceInnerSceneOperation(operation, instanceId)
+      if (!commands) return
+      applyInstanceInnerCommands(
+        runtime,
+        host,
+        facts,
+        resolved.document,
+        commands,
+        `Edit inside ${host.name}`,
+      )
+      return
+    }
     const result = planSceneOperation(operation, {
       document,
       layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : null,
@@ -1225,38 +1372,14 @@ export function useComposeEditorController({
       entity,
       document: resolved.document,
       dispatch: (command: EditorCommand) => {
-        // 在内部文档的一次性 Runtime 上执行，得到编辑后的完整内部文档。
-        const innerRuntime = createTransactionRuntime({ document: resolved.document })
-        const applied = innerRuntime.dispatch(command)
-        if (applied.status !== 'committed') return
-        // 与「未施加实例覆盖」的快照做稳定 diff，重算整份结构操作。
-        const diff = diffComposeComponentDocuments({
-          parent: facts.snapshot.document,
-          current: innerRuntime.document,
-        })
-        if (!diff.ok) return
-        const renderer = host.components.Renderer
-        if (!renderer) return
-        runtime.dispatch({
-          // 不用 controller 的 idFactory：它读 ref，会被 React Compiler 判为渲染期访问。
-          id: defaultIdFactory(),
-          type: BUILTIN_COMMAND_TYPES.setRendererProps,
-          payload: {
-            entityId: instanceId,
-            props: {
-              ...(renderer.props as Record<string, unknown>),
-              instanceOverrides: {
-                properties: facts.overrides.properties,
-                operations: diff.operations,
-              },
-            },
-          },
-          meta: {
-            label: `Edit ${entity.name} inside ${host.name}`,
-            source: 'inspector',
-            targetIds: [instanceId],
-          },
-        } as unknown as EditorCommand)
+        applyInstanceInnerCommands(
+          runtime,
+          host,
+          facts,
+          resolved.document,
+          [command],
+          `Edit ${entity.name} inside ${host.name}`,
+        )
       },
     }
   }, [document, runtime, selectedIds])

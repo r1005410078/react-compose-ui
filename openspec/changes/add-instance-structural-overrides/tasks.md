@@ -55,7 +55,11 @@
   - Red: `bun run --cwd packages/editor test -- controller.test.tsx`；1 failed；instanceInnerSelection 不存在。
   - Green/Refactor: 28 passed。命令先在内部文档的一次性 Runtime 执行，再用 diffComposeComponentDocuments 与未施加实例覆盖的快照做稳定 diff，重算整份操作列表后一次写回宿主；重算而非追加，避免同一字段反复编辑累积等价操作。
   - name 不是 Component 字段、稳定操作代数无法表达重命名，因此内部节点 Inspector 的名称字段设为只读，而不是留成静默失效的输入。
-- [ ] 5.2 [Red → Green → Refactor] 实例内部删除、reparent、reorder、增删 Component 生成稳定操作
+- [x] 5.2 [Red → Green → Refactor] 实例内部删除、reparent、reorder 生成稳定操作
+  - Red: `bun run --cwd packages/editor test -- controller.test.tsx`；1 failed；内部场景树操作仍走宿主文档。
+  - Green/Refactor: 29 passed；场景树操作翻译为内部文档命令后复用 applyInstanceInnerCommands 写回；越界（parentId 为宿主根或跨实例）整体拒绝。
+  - 能力位只放行已接线的删除与移动；重命名、可见性、锁定保持关闭，因为稳定操作代数无法表达。
+  - 未接线：create/duplicate 需要在实例覆盖里生成稳定 ID；增删 Component 暂未提供入口。
 - [ ] 5.3 [Red → Green → Refactor] 实例结构操作单项/全部 Apply 到直接父源与 partial success
 - [ ] 5.4 [Red → Green → Refactor] 实例层 Revert、依赖确认与锚点失效的 pending-update
 
