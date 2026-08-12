@@ -1,6 +1,6 @@
 # @compose-ui/materials
 
-Container、Rectangle、Text、Image 与 SVG 的第一方 Entity Presets、Renderer、Component
+Group、Container、Rectangle、Text、Image、SVG 与 Component Instance 的第一方 Entity Presets、Renderer、Component
 Definitions 和 Capabilities。
 
 ```tsx
@@ -23,6 +23,10 @@ const controller = useComposeEditorController({
 Registry 内置 Container、Rectangle、Text、Image、SVG 五种 Preset，全部通过同一个
 `ComposeEntityRegistry` 创建，不再区分 Frame Preset 与普通组件。默认 Palette 展示
 Container、Rectangle 与 Text；Image/SVG 保留为资源拖入 Preset。
+
+Registry 还注册两个隐藏 Preset：`group` 只提供无外观的结构包装；`component-instance` 保存项目
+组件稳定引用、resolved snapshot 和公开属性覆盖。组件实例通过独立 Layout Runtime 渲染嵌套 v6
+文档，Provider 离线时继续使用快照；循环或超过八层时显示错误占位，卸载会释放 Runtime 与测量资源。
 
 - Container：`Transform + Visibility + Lock + Hierarchy + Layout + Clip + Appearance`。
 - Rectangle/Text/Image/SVG：

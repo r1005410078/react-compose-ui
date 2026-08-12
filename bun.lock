@@ -41,6 +41,7 @@
       "dependencies": {
         "@compose-ui/asset-browser": "workspace:*",
         "@compose-ui/assets": "workspace:*",
+        "@compose-ui/component-library": "workspace:*",
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/core": "workspace:*",
         "@compose-ui/editor": "workspace:*",
@@ -119,6 +120,21 @@
         "react-dom": "^18.3.0 || ^19.0.0",
       },
     },
+    "packages/component-library": {
+      "name": "@compose-ui/component-library",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/assets": "workspace:*",
+        "@compose-ui/component-registry": "workspace:*",
+        "@compose-ui/components": "workspace:*",
+        "@compose-ui/core": "workspace:*",
+        "@compose-ui/ui-context": "workspace:*",
+      },
+      "peerDependencies": {
+        "react": "^18.3.0 || ^19.0.0",
+        "react-dom": "^18.3.0 || ^19.0.0",
+      },
+    },
     "packages/component-registry": {
       "name": "@compose-ui/component-registry",
       "version": "0.1.0",
@@ -163,6 +179,7 @@
         "@compose-ui/asset-browser": "workspace:*",
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/command-panel": "workspace:*",
+        "@compose-ui/component-library": "workspace:*",
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/components": "workspace:*",
         "@compose-ui/core": "workspace:*",
@@ -448,6 +465,8 @@
     "@compose-ui/assets": ["@compose-ui/assets@workspace:packages/assets"],
 
     "@compose-ui/command-panel": ["@compose-ui/command-panel@workspace:packages/command-panel"],
+
+    "@compose-ui/component-library": ["@compose-ui/component-library@workspace:packages/component-library"],
 
     "@compose-ui/component-registry": ["@compose-ui/component-registry@workspace:packages/component-registry"],
 

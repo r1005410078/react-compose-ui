@@ -25,6 +25,10 @@ export type {
   ComposeAssetEntryNaming,
   ComposeAssetContextMenuItem,
   ComposeAssetEntryRenderContext,
+  ComposeAssetExternalDropConfig,
+  ComposeAssetExternalDropEvent,
+  ComposeAssetExternalDropPayload,
+  ComposeAssetExternalDropTarget,
   ComposeAssetNamePromptRequest,
   ComposeAssetMutation,
 } from './asset-browser-types'

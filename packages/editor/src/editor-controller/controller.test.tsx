@@ -14,6 +14,7 @@ import {
   type ComposeComponentInspectorProps,
 } from '@compose-ui/component-registry'
 import { ComposePropertyPanel } from '@compose-ui/property-panel'
+import type { ComposeComponentStore } from '@compose-ui/component-library'
 import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
@@ -380,6 +381,19 @@ const registry = createComposeEntityRegistry({
         Renderer: { type: 'text', props: { text: 'New' } },
       }),
     },
+    {
+      id: 'component-instance',
+      label: 'Component',
+      paletteHidden: true,
+      createComponents: () => ({
+        Transform: { rotation: 0 },
+        LayoutItem: layoutItem(transform(0, 0, 1, 1)),
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        GeometryConstraints: { movable: true, resize: 'none', rotatable: true },
+        Renderer: { type: 'component-instance', props: {} },
+      }),
+    },
   ],
   capabilities: [
     {
@@ -416,6 +430,33 @@ function runtime() {
 function ids() {
   let index = 0
   return () => `editor-id-${index++}`
+}
+
+function componentStore(
+  create: ComposeComponentStore['createComponent'] = async (input) => ({
+    asset: input.asset,
+    revision: '1',
+    entryId: 'component-file',
+    assetKey: `Components/${input.fileName}.component.json`,
+  }),
+): ComposeComponentStore {
+  return {
+    providerId: 'project',
+    createReference: (assetKey) => ({
+      kind: 'component',
+      providerId: 'project',
+      assetKey,
+      scope: 'persistent',
+    }),
+    listComponents: async () => ({ components: [], issues: [] }),
+    readComponent: async () => { throw new Error('unused') },
+    createComponent: create,
+    saveComponent: async () => { throw new Error('unused') },
+    resolveComponent: async () => ({ status: 'invalid', issues: [] }),
+    invalidate: () => undefined,
+    subscribe: () => () => undefined,
+    dispose: () => undefined,
+  }
 }
 
 function InspectorFixture({
@@ -939,5 +980,106 @@ describe('useComposeEditorController', () => {
     fireEvent.keyDown(stage, { code: 'KeyP', key: 'p' })
 
     expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
+  })
+
+  it('OpenSpec: editor-workspace-layout / 从场景选区创建组件 / 资源成功后原子替换并可撤销重做', async () => {
+    const editorRuntime = runtime()
+    const create = vi.fn<ComposeComponentStore['createComponent']>(async (input) => ({
+      asset: input.asset,
+      revision: '1',
+      entryId: 'card-file',
+      assetKey: 'Components/Card.component.json',
+    }))
+    const store = componentStore(create)
+    const { result } = renderHook(() => useComposeEditorController({
+      componentStore: store,
+      idFactory: ids(),
+      initialSelection: ['title'],
+      registry,
+      runtime: editorRuntime,
+    }))
+
+    let outcome: Awaited<ReturnType<typeof result.current.createComponentFromSelection>> | undefined
+    await act(async () => {
+      outcome = await result.current.createComponentFromSelection({ name: 'Card' })
+    })
+
+    expect(outcome).toMatchObject({ status: 'committed' })
+    expect(create).toHaveBeenCalledOnce()
+    const saved = create.mock.calls[0]![0].asset
+    expect(saved).toMatchObject({ kind: 'base', name: 'Card' })
+    if (saved.kind !== 'base') throw new Error('expected Base Component')
+    expect(saved.document.rootIds).toHaveLength(1)
+    expect(editorRuntime.document.entities.title).toBeUndefined()
+    const instanceId = outcome?.status === 'committed' ? outcome.instanceId : ''
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
+      .toEqual([instanceId])
+
+    act(() => editorRuntime.undo())
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
+      .toEqual(['title'])
+    expect(create).toHaveBeenCalledOnce()
+    act(() => editorRuntime.redo())
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
+      .toEqual([instanceId])
+    expect(create).toHaveBeenCalledOnce()
+  })
+
+  it('组件资源写入失败时场景保持不变', async () => {
+    const editorRuntime = runtime()
+    const store = componentStore(async () => { throw new Error('disk full') })
+    const { result } = renderHook(() => useComposeEditorController({
+      componentStore: store,
+      idFactory: ids(),
+      initialSelection: ['title'],
+      registry,
+      runtime: editorRuntime,
+    }))
+
+    let outcome: Awaited<ReturnType<typeof result.current.createComponentFromSelection>> | undefined
+    await act(async () => {
+      outcome = await result.current.createComponentFromSelection({ name: 'Card' })
+    })
+    expect(outcome).toMatchObject({ status: 'failed', error: { message: 'disk full' } })
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
+      .toEqual(['title'])
+    expect(editorRuntime.entries).toHaveLength(1)
+  })
+
+  it('资源写入期间文档 revision 改变时保留资源但不实例化', async () => {
+    const editorRuntime = runtime()
+    let finish: ((value: Awaited<ReturnType<ComposeComponentStore['createComponent']>>) => void) | undefined
+    const create = vi.fn<ComposeComponentStore['createComponent']>((input) => new Promise((resolve) => {
+      finish = () => resolve({
+        asset: input.asset,
+        revision: '1',
+        entryId: 'card-file',
+        assetKey: 'Components/Card.component.json',
+      })
+    }))
+    const { result } = renderHook(() => useComposeEditorController({
+      componentStore: componentStore(create),
+      idFactory: ids(),
+      initialSelection: ['title'],
+      registry,
+      runtime: editorRuntime,
+    }))
+
+    let outcome: Awaited<ReturnType<typeof result.current.createComponentFromSelection>> | undefined
+    await act(async () => {
+      const pending = result.current.createComponentFromSelection({ name: 'Card' })
+      editorRuntime.dispatch({
+        id: 'concurrent-rename',
+        type: BUILTIN_COMMAND_TYPES.renameEntity,
+        payload: { entityId: 'title', name: 'Changed during save' },
+      })
+      finish?.({} as never)
+      outcome = await pending
+    })
+
+    expect(outcome).toMatchObject({ status: 'saved-not-instantiated' })
+    expect(editorRuntime.document.entities.title?.name).toBe('Changed during save')
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
+      .toEqual(['title'])
   })
 })

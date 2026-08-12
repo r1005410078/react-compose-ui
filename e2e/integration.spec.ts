@@ -80,7 +80,7 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   await expect(componentLibrary).toBeVisible()
   // Palette 只保留没有专用创建入口的 Preset：Text/Line/Arrow/Circle 走工具栏绘制工具，
   // Page Slot 走资源面板的页面拖入。
-  await expect(componentLibrary.getByRole('button', { name: '基础 (3)' })).toBeVisible()
+  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (3)' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Rectangle' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toHaveCount(0)
 
@@ -637,34 +637,32 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     maxDiffPixelRatio: 0.01,
   })
 
-  await components.nth(0).click()
-  await components.nth(1).click({ modifiers: ['Shift'] })
+  // 历史面板会占据组件库 Dock 的下半区；通过场景树完成等价的键盘可达多选，
+  // 避免测试依赖被 Dock 覆盖的 Stage 像素位置。
+  const firstComponentId = await components.nth(0).getAttribute('data-entity-id')
+  const secondComponentId = await components.nth(1).getAttribute('data-entity-id')
+  const containerId = await frame.getAttribute('data-entity-id')
+  expect(firstComponentId).not.toBeNull()
+  expect(secondComponentId).not.toBeNull()
+  expect(containerId).not.toBeNull()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  await sceneTree
+    .locator(`[data-tree-item-id="${containerId}"]`)
+    .getByRole('button', { name: '展开节点' })
+    .click()
+  await sceneTree.locator(`[data-tree-item-id="${firstComponentId}"]`).click()
+  await sceneTree.locator(`[data-tree-item-id="${secondComponentId}"]`).click({ modifiers: ['Shift'] })
   await stage.press('Control+g')
   const group = frame.locator(':scope > .compose-stage__node.is-container')
   await expect(group).toHaveCount(1)
   const groupId = await group.getAttribute('data-entity-id')
   expect(groupId).not.toBeNull()
-  const groupInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
-  await expandInspectorSection(groupInspector, '容器')
-  await groupInspector.getByRole('combobox', { name: '纵向溢出', exact: true })
-    .selectOption('scroll')
-  await expect(group.getByTestId('stage-overflow-indicator-y')).toBeVisible()
-  await expect(group.getByTestId('stage-overflow-indicator-x')).toHaveCount(0)
-  await expandInspectorSection(groupInspector, '外观')
-  const groupBackground = groupInspector.getByRole('button', { name: '背景填充', exact: true })
-  await groupBackground.click()
-  const colorPicker = page.getByRole('dialog', { name: '背景填充', exact: true })
-  await expect(colorPicker).toBeVisible()
-  await expect(colorPicker.getByRole('textbox')).toHaveCount(2)
-  await colorPicker.getByRole('group', { name: '纯色色盘', exact: true })
-    .press('ArrowRight')
-  await expect(group).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+  await expect(editor.getByRole('region', { name: 'Group 属性', exact: true })).toBeVisible()
+  await expect(group).not.toHaveAttribute('data-compose-entity-border')
   await stage.press('Control+z')
-  await expect(group).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(frame.locator(':scope > .compose-stage__node.is-container')).toHaveCount(0)
   await stage.press('Control+Shift+z')
-  await expect(group).toHaveCSS('background-color', 'rgb(0, 0, 0)')
-  await colorPicker.press('Escape')
-  await expect(colorPicker).not.toBeVisible()
+  await expect(frame.locator(':scope > .compose-stage__node.is-container')).toHaveCount(1)
 
   await stage.locator('.compose-stage__node.is-renderer').filter({
     hasText: 'Text',
@@ -721,9 +719,6 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(
     log.getByRole('button', { name: /^属性 Update Text Text/ }).first(),
   ).toBeVisible()
-  await expect(
-    log.getByRole('button', { name: /^属性 修改 Container 外观 Container/ }),
-  ).toBeVisible()
   await expect(log.getByRole('button', { name: /Undo · Update Text/ })).toBeVisible()
   await expect(log.getByText(/Reject .* outside a Container/)).toHaveCount(0)
   await log.getByRole('button', { name: /Move Text · x .* → .*, y .* → .*/ }).last().click()
@@ -745,14 +740,10 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
   const previewGroup = preview.getByTestId(`compose-preview-entity-${groupId}`)
   await expect(previewGroup).toBeVisible()
-  await expect(previewGroup).toHaveCSS('overflow-y', 'auto')
-  expect(await previewGroup.evaluate((element) => element.scrollHeight - element.clientHeight))
-    .toBeGreaterThan(0)
-  await previewGroup.evaluate((element) => {
-    element.scrollTop = element.scrollHeight
-  })
-  await expect.poll(() => previewGroup.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
-  await expect(previewGroup).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+  // First-class Group 是无 Appearance、无 Clip 的结构包装，不再继承历史 Container 的
+  // 黑色背景与滚动语义；Preview 仍需输出其可见后代。
+  await expect(previewGroup).toHaveCSS('overflow-y', 'visible')
+  await expect(previewGroup).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await expect(previewRegion).toHaveScreenshot('document-preview.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -766,6 +757,190 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+})
+
+test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 / 场景树导出、Revert、Apply 与统一图标', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+    .toHaveCount(1)
+
+  // 普通 Scene Tree 行既保留树内移动，也能跨面板落到可写资源目录。
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  const rectangleRow = sceneTree.getByRole('row', { name: /Rectangle/ })
+  const assetRootRow = editor.getByRole('treegrid', { name: '资源目录' })
+    .getByRole('row', { name: /Demo Assets/ })
+  const assetRootBox = await assetRootRow.boundingBox()
+  expect(assetRootBox).not.toBeNull()
+  await pointerDrop(page, rectangleRow, {
+    x: assetRootBox!.x + assetRootBox!.width / 2,
+    y: assetRootBox!.y + assetRootBox!.height / 2,
+  })
+
+  const createComponent = page.getByRole('dialog', { name: '创建组件' })
+  await expect(createComponent).toBeVisible()
+  await createComponent.getByLabel('名称').fill('Dragged Card')
+  await createComponent.getByRole('button', { name: '创建' }).click()
+  await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
+  await expect(sceneTree.getByRole('img', { name: '组件实例' })).toBeVisible()
+  await expect(editor.getByRole('img', { name: '项目组件' }).first()).toBeVisible()
+
+  // Undo 只恢复页面源节点，Redo 复用同一个已保存资源实例。
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect(stage.getByTestId('compose-component-instance-content')).toHaveCount(0)
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+    .toHaveCount(1)
+  await stage.press('Control+Shift+z')
+  await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const componentLibrary = editor.locator('[data-workspace-panel="component-library"]')
+  await expect(componentLibrary.getByRole('button', { name: '添加组件 Dragged Card' }))
+    .toBeVisible()
+  await componentLibrary.getByRole('button', { name: '创建变体 Dragged Card' }).click()
+  const createVariant = page.getByRole('dialog', { name: '创建变体' })
+  await createVariant.getByLabel('变体名称').fill('Dragged Card Focused')
+  await createVariant.getByRole('button', { name: '创建变体' }).click()
+  await expect(editor.locator('[data-workspace-panel="component-document"][data-component-kind="variant"]'))
+    .toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '添加变体 Dragged Card Focused' }))
+    .toBeVisible()
+  await expect(componentLibrary).toHaveScreenshot('component-library-components-variants.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  // Variant 使用自己的 Runtime。保存生成稳定 ID 操作；Revert 与 Apply 都显式消费当前层覆盖。
+  const variantChild = stage.locator('.compose-stage__scene .compose-stage__node.is-renderer').first()
+  await expect(variantChild).toBeVisible()
+  await variantChild.click()
+  await stage.press('ArrowRight')
+  const saveVariant = editor.getByRole('button', { name: '保存变体 Dragged Card Focused' })
+  await expect(saveVariant).toBeEnabled()
+  await saveVariant.click()
+  await expect(editor.getByText('Variant 覆盖 (1)', { exact: true })).toBeVisible()
+  await editor.getByRole('button', { name: 'Revert 全部' }).click()
+  await expect(editor.getByText('Variant 覆盖 (0)', { exact: true })).toBeVisible()
+  await expect(editor.getByText('当前层覆盖已 Revert', { exact: true })).toBeVisible()
+
+  await variantChild.click()
+  await stage.press('Shift+ArrowRight')
+  await expect(saveVariant).toBeEnabled()
+  await saveVariant.click()
+  await expect(editor.getByText('Variant 覆盖 (1)', { exact: true })).toBeVisible()
+  await editor.getByRole('button', { name: 'Apply 全部' }).click()
+  await expect(editor.getByText('Variant 覆盖 (0)', { exact: true })).toBeVisible()
+  await expect(editor.getByText('覆盖已 Apply 到直接父源', { exact: true })).toBeVisible()
+
+  // 回到页面同时放入 Variant、Container 与 first-class Group，校验四种语义图标一致可访问。
+  await editor.locator('[data-workspace-tab^="compose-page-document:"]').filter({ hasText: 'Home' }).click()
+  await expect(stage.getByTestId('compose-component-instance-content')).toHaveCount(1)
+  await editor.getByRole('button', { name: '关闭 Dragged Card Focused' }).click()
+  const assetBrowserPanel = editor.locator('[data-workspace-panel="asset-browser"]')
+  if (!await assetBrowserPanel.isVisible()) {
+    await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  }
+  await expect(assetBrowserPanel).toBeVisible()
+  await expect(editor.getByRole('img', { name: '组件变体' }).first()).toBeVisible()
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await componentLibrary.getByRole('button', { name: '添加变体 Dragged Card Focused' }).click()
+  await expect(stage.getByTestId('compose-component-instance-content')).toHaveCount(2)
+  await componentLibrary.getByRole('button', { name: '添加 Rectangle' }).click()
+  await componentLibrary.getByRole('button', { name: '添加 Rectangle' }).click()
+  await componentLibrary.getByRole('button', { name: '添加 Container' }).click()
+  const rootRenderers = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(rootRenderers).toHaveCount(4)
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const rectangleRows = sceneTree.getByRole('row', { name: /Rectangle/ })
+  await expect(rectangleRows).toHaveCount(2)
+  await rectangleRows.nth(0).click()
+  await rectangleRows.nth(1).click({ modifiers: ['Shift'] })
+  await stage.focus()
+  await stage.press('Control+g')
+
+  await expect(sceneTree.getByRole('img', { name: '组件实例' })).toBeVisible()
+  await expect(sceneTree.getByRole('img', { name: '变体实例' })).toBeVisible()
+  await expect(sceneTree.getByRole('img', { name: 'Container' })).toBeVisible()
+  await expect(sceneTree.getByRole('img', { name: 'Group' })).toBeVisible()
+  await expect(sceneTree).toHaveScreenshot('scene-tree-group-component-variant-icons.png', {
+      animations: 'disabled',
+      caret: 'hide',
+      maxDiffPixelRatio: 0.01,
+    })
+})
+
+test('OpenSpec: component-library / 离线快照与 revision 冲突 / 保留旧版本、覆盖确认并继续渲染', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/?component-failure-demo')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const failureControls = page.getByRole('region', { name: '组件容错演示' })
+  await expect(failureControls.getByRole('status')).toHaveText('Provider 在线')
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const rectangleRow = editor.getByRole('treegrid', { name: '场景树' })
+    .getByRole('row', { name: /Rectangle/ })
+  const assetRootRow = editor.getByRole('treegrid', { name: '资源目录' })
+    .getByRole('row', { name: /Demo Assets/ })
+  const assetRootBox = await assetRootRow.boundingBox()
+  expect(assetRootBox).not.toBeNull()
+  await pointerDrop(page, rectangleRow, {
+    x: assetRootBox!.x + assetRootBox!.width / 2,
+    y: assetRootBox!.y + assetRootBox!.height / 2,
+  })
+  const createComponent = page.getByRole('dialog', { name: '创建组件' })
+  await createComponent.getByLabel('名称').fill('Resilient Card')
+  await createComponent.getByRole('button', { name: '创建' }).click()
+  await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const projectComponent = editor.getByRole('button', { name: '添加组件 Resilient Card' })
+  await projectComponent.dblclick()
+  const componentPanel = editor.locator(
+    '[data-workspace-panel="component-document"][data-component-kind="base"]',
+  )
+  await expect(componentPanel).toBeVisible()
+  const componentChild = stage.locator('.compose-stage__scene .compose-stage__node.is-renderer').first()
+  await componentChild.click()
+  await stage.press('ArrowRight')
+  const saveComponent = editor.getByRole('button', { name: '保存组件 Resilient Card' })
+  await expect(saveComponent).toBeEnabled()
+
+  // 先模拟另一个客户端推进 revision。取消冲突对话框即保留旧会话，显式覆盖才提交。
+  await failureControls.getByRole('button', { name: '模拟组件源 revision 更新' }).click()
+  await saveComponent.click()
+  const conflictDialog = page.getByRole('dialog', { name: '组件源已在外部更新' })
+  await expect(conflictDialog).toBeVisible()
+  await conflictDialog.getByRole('button', { name: '取消' }).click()
+  await expect(saveComponent).toBeEnabled()
+  await saveComponent.click()
+  await conflictDialog.getByRole('button', { name: '覆盖保存' }).click()
+  await expect(saveComponent).toBeDisabled()
+
+  await editor.getByRole('button', { name: '关闭 Resilient Card' }).click()
+  await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
+  await failureControls.getByRole('button', { name: '模拟 Provider 离线' }).click()
+  await expect(failureControls.getByRole('status')).toHaveText('Provider 离线')
+  await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
+
+  // Preview 与 Stage 都只依赖实例保存的 resolvedSnapshot，源 Provider 离线不影响输出。
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const preview = page.getByRole('dialog', { name: '文档预览对话框' })
+  await expect(preview.getByTestId('compose-component-instance-content')).toBeVisible()
 })
 
 test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边距', async ({ page }) => {

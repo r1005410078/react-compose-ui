@@ -9,6 +9,7 @@ export default mergeConfig(sharedConfig, {
       '@compose-ui/layout-engine': resolve(__dirname, '../layout-engine/src/index.ts'),
       '@compose-ui/command-panel': resolve(__dirname, '../command-panel/src/index.tsx'),
       '@compose-ui/component-registry': resolve(__dirname, '../component-registry/src/index.ts'),
+      '@compose-ui/component-library': resolve(__dirname, '../component-library/src/index.ts'),
       '@compose-ui/scene-tree': resolve(__dirname, '../scene-tree/src/index.tsx'),
       '@compose-ui/stage': resolve(__dirname, '../stage/src/index.ts'),
     },

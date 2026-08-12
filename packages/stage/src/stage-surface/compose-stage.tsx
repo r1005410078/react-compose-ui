@@ -861,6 +861,7 @@ function ComposeStageReady({
   shortcuts,
   selectedIds,
   onSelectedIdsChange,
+  onCreateComponentIntent,
   outputSelected = false,
   paintEditing = null,
   paintSampling = null,
@@ -2817,6 +2818,12 @@ function ComposeStageReady({
               ) onSelectedIdsChange(hierarchy.childIds)
               }}
             >取消编组{contextMenuShortcut('edit.ungroup')}</ComposeContextMenuItem>
+            {onCreateComponentIntent ? (
+              <ComposeContextMenuItem
+                disabled={contextEditableIds.length === 0}
+                onClick={() => { onCreateComponentIntent(contextEditableIds) }}
+              >创建组件…</ComposeContextMenuItem>
+            ) : null}
             <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: BUILTIN_COMMAND_TYPES.deleteEntity, payload: { entityIds: contextEditableIds }, meta: { label: `Delete ${describeEntityTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除{contextMenuShortcut('edit.delete')}</ComposeContextMenuItem>
             <ComposeContextMenuSeparator />
           </> : null}

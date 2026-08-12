@@ -1,3 +1,4 @@
+import { createComposeGroupEntitySeed } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import { createStageSceneIndex } from './scene-index'
 import { document, entity, layoutSnapshot } from './test-fixtures'
@@ -62,6 +63,31 @@ describe('StageSceneIndex ECS queries', () => {
     const index = indexFor(document([lower, upper]))
     expect(index.entityAtPoint({ x: 30, y: 30 })).toBe('upper')
     expect(index.entityAtPoint({ x: 10, y: 10 })).toBe('lower')
+  })
+
+  it('OpenSpec: stage-engine / Group 动态编辑范围 / 后代移出初始范围', () => {
+    const child = entity('child', { x: 200, y: 40, width: 80, height: 30 })
+    const group = createComposeGroupEntitySeed({
+      id: 'group',
+      childIds: ['child'],
+      position: { x: 10, y: 20 },
+      size: { width: 40, height: 40 },
+    })
+    const value = document([group, child], ['group'])
+    const index = indexFor(value)
+
+    expect(index.getWorldBounds('group')).toEqual({
+      x: 210,
+      y: 60,
+      width: 80,
+      height: 30,
+    })
+    expect(index.containerAtPoint({ x: 220, y: 70 })).toBe('group')
+    expect(value.entities.group?.components.LayoutItem).toMatchObject({
+      offset: { x: 10, y: 20 },
+      width: { value: 40 },
+      height: { value: 40 },
+    })
   })
 })
 

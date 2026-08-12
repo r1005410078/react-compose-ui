@@ -114,6 +114,8 @@ export interface ComposeEditorActionContext {
   readonly redo?: () => void
   /** 打开设置；宿主未提供时目录整条省略该动作。 */
   readonly openSettings?: () => void
+  /** 打开“创建组件”命名流程；未配置 Component Store 时目录整条省略。 */
+  readonly createComponent?: () => void
 }
 
 /**
@@ -307,6 +309,9 @@ export function createComposeEditorActionHandlers(
         context.setSelectedIds(childIds)
       }
     }),
+    'edit.createComponent': handler(selectionMissing ?? geometryPending, () => {
+      context.createComponent?.()
+    }),
     'edit.delete': handler(selectionMissing, () => {
       context.dispatch({
         id: context.idFactory(),
@@ -362,6 +367,7 @@ const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'edit.sendToBack',
   'edit.group',
   'edit.ungroup',
+  'edit.createComponent',
   'edit.delete',
   'history.undo',
   'history.redo',
@@ -384,7 +390,10 @@ export function createComposeEditorActions(
 
   return CATALOG_ORDER
     // 宿主没有提供设置入口时整条省略，避免产出点了没反应的条目。
-    .filter((id) => id !== 'editor.settings' || context.openSettings !== undefined)
+    .filter((id) => (
+      (id !== 'editor.settings' || context.openSettings !== undefined)
+      && (id !== 'edit.createComponent' || context.createComponent !== undefined)
+    ))
     .map((id) => {
       const entry = handlers[id]
       return {

@@ -4,6 +4,7 @@ export {
   useWorkspaceContent,
   type ComposeAssetDocumentSession,
   type ComposePageDocumentSession,
+  type ComposeComponentDocumentSession,
   type ComposeWorkspaceDocumentSession,
   type WorkspaceContent,
 } from './workspace-context'
@@ -16,8 +17,10 @@ export {
   createAssetDocumentPanelId,
   initializeWorkspace,
   createPageDocumentPanelId,
+  createComponentDocumentPanelId,
   isAssetDocumentPanelId,
   isPageDocumentPanelId,
+  isComponentDocumentPanelId,
   isWorkspaceDocumentPanelId,
   localizeWorkspace,
 } from './workspace-layout'
@@ -27,6 +30,7 @@ export {
   CanvasPanel,
   ComponentLibraryPanel,
   PageDocumentPanel,
+  ComponentDocumentPanel,
   ComposeCommandPanel,
   InspectorPanel,
   SceneGraphPanel,

@@ -2,6 +2,7 @@ import {
   BUILTIN_COMMAND_TYPES,
   createTransactionRuntime,
   getComposeComposition,
+  getComposeGeometryConstraints,
   getComposeHierarchy,
   getComposeLayoutItem,
   getComposeSpatialTransform,
@@ -96,7 +97,7 @@ function createLayerOrderCommand(
 }
 
 describe('Stage ECS commands', () => {
-  it('OpenSpec: Entity 分组 / 创建可渲染无关的 Container 组合并保持世界位置', () => {
+  it('OpenSpec: stage-engine / ECS 结构命令 / 成组生成 first-class Group', () => {
     const value = document([
       entity('a', { x: 20, y: 30 }),
       entity('b', { x: 150, y: 60 }),
@@ -108,13 +109,22 @@ describe('Stage ECS commands', () => {
       value,
       layoutSnapshot(value),
       ['a', 'b'],
-      'container',
+      'group',
     ))
     expect(result.status).toBe('committed')
     const current = runtime.getState().document
-    expect(current.rootIds).toEqual(['container'])
-    expect(getComposeHierarchy(current.entities.container!)?.childIds).toEqual(['a', 'b'])
-    expect(getComposeSpatialTransform(current.entities.container!)).toEqual({
+    expect(current.rootIds).toEqual(['group'])
+    expect(getComposeHierarchy(current.entities.group!)?.childIds).toEqual(['a', 'b'])
+    expect(getComposeComposition(current.entities.group!).presetId).toBe('group')
+    expect(getComposeGeometryConstraints(current.entities.group!)).toEqual({
+      movable: true,
+      resize: 'none',
+      rotatable: false,
+    })
+    expect(current.entities.group!.components).not.toHaveProperty('Appearance')
+    expect(current.entities.group!.components).not.toHaveProperty('Clip')
+    expect(current.entities.group!.components).not.toHaveProperty('Layout')
+    expect(getComposeSpatialTransform(current.entities.group!)).toEqual({
       position: { x: 20, y: 30 },
       size: { width: 230, height: 80 },
       rotation: 0,
@@ -125,10 +135,83 @@ describe('Stage ECS commands', () => {
     const ungroup = runtime.dispatch(createUngroupCommand(
       current,
       layoutSnapshot(current, 2),
-      'container',
+      'group',
     ))
     expect(ungroup.status).toBe('committed')
     expect(runtime.getState().document.rootIds).toEqual(['a', 'b'])
+  })
+
+  it('OpenSpec: stage-engine / ECS 结构命令 / 限定解除分组', () => {
+    const child = entity('child')
+    const plainContainer = entity('container', { childIds: ['child'] })
+    const container: ComposeEntity = {
+      ...plainContainer,
+      components: {
+        ...plainContainer.components,
+        Composition: {
+          ...getComposeComposition(plainContainer),
+          presetId: 'container',
+        },
+      },
+    }
+    const value = document([container, child], ['container'])
+
+    expect(getUngroupCommandAvailability(value, 'container')).toEqual({
+      available: false,
+      reason: '普通 Container 不能 Ungroup',
+    })
+    const runtime = createTransactionRuntime({ document: value })
+    expect(runtime.dispatch(createUngroupCommand(
+      value,
+      layoutSnapshot(value),
+      'container',
+    ))).toMatchObject({
+      status: 'rejected',
+      issues: [{ code: 'entity.invalid-ungroup' }],
+    })
+    expect(runtime.document).toEqual(value)
+  })
+
+  it('OpenSpec: stage-engine / ECS 结构命令 / 旧透明 Group 仍可显式 Ungroup', () => {
+    const child = entity('child')
+    const legacySource = entity('legacy', { childIds: ['child'] })
+    const legacy: ComposeEntity = {
+      ...legacySource,
+      components: {
+        ...legacySource.components,
+        Composition: {
+          presetId: null,
+          baseComponentKeys: [
+            'Transform',
+            'LayoutItem',
+            'Visibility',
+            'Lock',
+            'Hierarchy',
+            'Clip',
+            'Appearance',
+          ],
+          capabilityIds: [],
+        },
+        Clip: { enabled: false },
+        Appearance: {
+          backgroundPaint: { kind: 'solid', color: 'transparent' },
+          borderColor: 'transparent',
+          borderWidth: 0,
+          borderRadius: 0,
+          opacity: 1,
+          shadow: null,
+        },
+      },
+    }
+    const value = document([legacy, child], ['legacy'])
+    expect(getUngroupCommandAvailability(value, 'legacy')).toEqual({ available: true })
+    const runtime = createTransactionRuntime({ document: value })
+    expect(runtime.dispatch(createUngroupCommand(
+      value,
+      layoutSnapshot(value),
+      'legacy',
+    )).status).toBe('committed')
+    expect(runtime.document.rootIds).toEqual(['child'])
   })
 
   it('OpenSpec: Entity reparent / 使用一个 batch 同步层级和局部 Transform', () => {
@@ -263,7 +346,7 @@ describe('Stage ECS commands', () => {
     )
   })
 
-  it('OpenSpec: auto-layout-interactions / Group availability / Flow 目标返回稳定禁用原因', () => {
+  it('OpenSpec: stage-engine / ECS 结构命令 / Flow 目标返回稳定禁用原因', () => {
     const flow = flowEntity('flow')
     const container = autoLayoutContainer('container', ['flow'])
     const value = document([container, flow], ['container'])
@@ -271,7 +354,18 @@ describe('Stage ECS commands', () => {
       available: false,
       reason: '自动布局 Flow 子项不能参与 Group；请先转为 Absolute',
     })
-    expect(getUngroupCommandAvailability(value, 'container')).toEqual({
+    const group = {
+      ...container,
+      components: {
+        ...container.components,
+        Composition: {
+          ...getComposeComposition(container),
+          presetId: 'group',
+        },
+      },
+    }
+    const grouped = document([group, flow], ['container'])
+    expect(getUngroupCommandAvailability(grouped, 'container')).toEqual({
       available: false,
       reason: '自动布局 Flow 子项不能参与 Ungroup；请先转为 Absolute',
     })

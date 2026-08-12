@@ -7,6 +7,7 @@
 @import '@compose-ui/stage/styles.css';
 @import '@compose-ui/command-panel/styles.css';
 @import '@compose-ui/asset-browser/styles.css';
+@import '@compose-ui/component-library/styles.css';
 
 @layer theme, base, components, utilities;
 
@@ -76,6 +77,19 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.compose-editor__component-inspector {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.compose-editor__component-inspector > [data-compose-ui='property-panel'] {
+  min-height: 240px;
+  flex: 1 1 auto;
 }
 
 .compose-editor__canvas-panel {
@@ -978,6 +992,25 @@
 
 /* 目录网格的缩略图区域为 88px，图标需要相应放大才看得清。 */
 .compose-editor__page-entry-icon--grid {
+  width: 48px;
+  height: 48px;
+}
+
+/* Component Asset 的图标由 Editor 根据 Store 目录判定 Base/Variant；Asset Browser 保持领域无关。 */
+.compose-editor__component-entry-icon,
+.compose-editor__component-entry-icon svg {
+  display: block;
+  color: var(--compose-accent);
+}
+
+.compose-editor__component-entry-icon--tree,
+.compose-editor__component-entry-icon--tree svg {
+  width: 15px;
+  height: 15px;
+}
+
+.compose-editor__component-entry-icon--grid,
+.compose-editor__component-entry-icon--grid svg {
   width: 48px;
   height: 48px;
 }

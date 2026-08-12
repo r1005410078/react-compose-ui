@@ -6,7 +6,8 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 项目把重复的页面编码工作逐步转化为可视化编排、属性配置、预览和保存发布流程。当前仍处于
 基础能力验证阶段：已经具备 ECS 化 JSON 文档、同步命令事务、Entity Registry、无限 Stage、
 基础物料、聚合 Inspector、Scene Tree、History、Command/Operation Log、资源浏览、页面系统、
-setup 脚本 Props 绑定和只读 Preview；动画、变体、数据源与正式发布持久化仍未实现。
+setup 脚本 Props 绑定、first-class Group、项目组件与 Unity 风格 Variant、关联实例和只读 Preview；
+动画、数据源与正式发布持久化仍未实现。
 
 ## 环境与安装
 
@@ -18,7 +19,7 @@ setup 脚本 Props 绑定和只读 Preview；动画、变体、数据源与正�
 ```bash
 bun add @compose-ui/core @compose-ui/assets @compose-ui/layout-engine @compose-ui/stage-engine \
   @compose-ui/ui-context @compose-ui/components @compose-ui/script-runtime \
-  @compose-ui/component-registry \
+  @compose-ui/component-registry @compose-ui/component-library \
   @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/preview
 ```
 
@@ -150,6 +151,24 @@ Hug 容器由 Flow 子项、padding、gap 与 border 决定；Hug 叶子通过 R
 与 Page Slot 分别订阅资源 revision、SVG intrinsic box 与页面 output。准备中或失败时使用
 `LayoutItem.value` 并发布 Snapshot diagnostic，资源恢复只增加 Snapshot revision，不进入文档事务。
 
+## Group、项目组件与 Variant
+
+Group 是独立于 Container 的结构 Entity：无 Renderer、Appearance、Clip 或 Layout，可移动但不可
+缩放/旋转。创建时保存稳定 frame 和子项局部坐标；Stage 的命中、框选和吸附使用可见后代动态并集，
+空 Group 才回退到持久化 frame。Ungroup 只接受 first-class Group 及严格匹配的历史透明 Group，
+普通 Container 不再可解除分组。
+
+项目组件使用 `application/vnd.compose-ui.component+json`、`.component.json` 和独立
+`Component Asset v1`，页面仍是 `ComposeDocument v6`。Base 保存 Group 单根文档和暴露属性；
+Variant 保存直接父引用、稳定 ID 语义覆盖、applied lineage 与离线 resolved snapshot。同一链最多
+八层，只允许同 Provider/scope。实例是宿主场景里的结构叶子，只能编辑位置、旋转和暴露属性；
+内部结构在 Base/Variant 独立标签中编辑。
+
+创建组件可从 Stage、Scene Tree 或 Command Panel 进入，也可把普通 Scene Tree 行拖到可写资源目录。
+资源写入成功后才用一个场景事务把选区替换成关联实例；Undo 不删除资源文件。Apply 只写直接父源，
+Revert 只消费当前层覆盖，来源更新始终显式执行；离线时使用实例保存的快照。未配置
+`ComposeComponentStore` 的宿主仍只显示 Registry Preset。
+
 ## Stage、Inspector 与 Preview
 
 Stage Engine 通过 Component 查询决定系统能力：
@@ -235,7 +254,7 @@ const controller = useComposeEditorController({
 - Headless：`core`、`assets`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`，不依赖 React/DOM。
 - Shared UI/Protocol：`ui-context`、`components`、`component-registry`。
 - Domain Widgets：`stage`、`scene-tree`、`asset-browser`、`history`、`property-panel`、
-  `operation-log`、`command-panel`、`materials`。
+  `operation-log`、`command-panel`、`component-library`、`materials`。
 - Entry：`editor`、`preview`。
 - `app/` 与 `apps/storybook/` 只承担集成演示和公共 API 契约。
 
@@ -267,7 +286,8 @@ bun run test:e2e
 作用域、每页一个自包含 JavaScript setup，不支持 TypeScript 编译、模块图、不可信代码隔离、
 应用级状态、动态 Entity 树、列表/条件模板、双向绑定或 HMR 状态保留。
 
-复用 Instance、Interaction、Animation、结构变体、数据源和正式持久化仍需独立 OpenSpec。
+当前 Component Asset v1 不提供 Detach、跨 Provider Variant、自动更新、批量 Apply、任意实例内部
+结构编辑或超过八层的继承/嵌套。Interaction、Animation、数据源和正式持久化仍需独立 OpenSpec。
 
 ## License
 

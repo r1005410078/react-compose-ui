@@ -23,6 +23,7 @@ import {
 import { isValidComposeSpatialTransform } from './document'
 import { isComposeColor, isValidComposePaint } from './paint'
 import { jsonEqual } from './patches'
+import { isComposeGroupEntity, isComposeUngroupableEntity } from './group'
 import type {
   CommandHandler,
   CommandHandlerResult,
@@ -895,6 +896,7 @@ function groupHandler(): CommandHandler {
       if (
         !container
         || !getComposeHierarchy(container)
+        || !isComposeGroupEntity(container)
         || !requested
         || requested.length < 2
         || !isRecord(transformValues)
@@ -966,6 +968,9 @@ function ungroupHandler(): CommandHandler {
       const container = document.entities[containerId]
       const hierarchy = container && getComposeHierarchy(container)
       if (!container || !hierarchy) return issue('entity.invalid-container', `Container ${containerId} 不存在`)
+      if (!isComposeUngroupableEntity(container)) {
+        return issue('entity.invalid-ungroup', `Entity ${containerId} 不是 Group`)
+      }
       if (getComposeLock(container).locked) return issue('entity.locked', `Container ${containerId} 已锁定`)
       if (!hierarchy.childIds.length) return issue('entity.empty-container', 'Container 没有子项')
       if (

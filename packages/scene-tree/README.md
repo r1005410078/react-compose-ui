@@ -11,6 +11,10 @@
 其子项；横向移动指针可以调整横线目标层级，松手后才发出一次 `move` 操作意图。拖动已选
 节点会按可见顺序移动选择集合；拖动未选节点会先请求单选该节点。
 
+普通行还能通过 `onExternalDrag` 发布无领域的 start/move/end/cancel Pointer 生命周期。树内命中仍执行
+既有 move；树外是否接受由宿主决定。`onCreateComponentIntent` 为右键菜单提供键盘可达的等价入口，
+Scene Tree 本身不读取 ComposeDocument、资源 Provider 或组件协议。
+
 ## 使用
 
 ```tsx

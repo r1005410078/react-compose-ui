@@ -3,6 +3,16 @@ import { createComposeEditorActionHandlers } from './action-catalog'
 import type { ComposeEditorActionHandlerContext } from './action-catalog'
 import { ComposeComponentPalette } from '@compose-ui/stage'
 import {
+  ComposeComponentLibraryPanel,
+  ComposeComponentAssetIcon,
+  createComposeComponentInstanceEntity,
+  type ComposeComponentLibraryItem,
+  type ComposeComponentSnapshot,
+  type ComposeComponentStore,
+} from '@compose-ui/component-library'
+import {
+  createComponentExtractionPlan,
+  createReplaceSelectionWithEntityCommand,
   createStageInteractionController,
   createStageSceneIndex,
   getEntityWorldBounds,
@@ -14,7 +24,9 @@ import {
   getComposeComposition,
   getComposeHierarchy,
   getComposeLock,
+  getComposeRenderer,
   getComposeVisibility,
+  type ComposeBaseComponentAsset,
   type CommandDispatchResult,
   type ComposeDocument,
   type ComposeEntity,
@@ -42,6 +54,7 @@ import type {
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import type {
+  ComposeSceneTreeExternalDragEvent,
   ComposeSceneTreeNode,
   ComposeSceneTreeOperation,
   ComposeSceneTreeProps,
@@ -108,14 +121,33 @@ function sceneEntity(
   const hierarchy = getComposeHierarchy(entity)
   const locked = getComposeLock(entity).locked
   const composition = getComposeComposition(entity)
+  const renderer = getComposeRenderer(entity)
+  const resolvedSnapshot = renderer?.props.resolvedSnapshot
+  const snapshotKind = renderer?.type === 'component-instance'
+    && resolvedSnapshot
+    && typeof resolvedSnapshot === 'object'
+    && !Array.isArray(resolvedSnapshot)
+    && (resolvedSnapshot as Readonly<Record<string, unknown>>).kind === 'variant'
+    ? 'variant'
+    : 'base'
+  const componentInstance = composition.presetId === 'component-instance'
   return {
     id: entity.id,
     label: entity.name,
     visible: getComposeVisibility(entity).visible,
     locked,
-    icon: composition.presetId
+    icon: componentInstance
+      ? <ComposeComponentAssetIcon kind={snapshotKind} />
+      : composition.presetId
       ? registry.getPreset(composition.presetId)?.icon
       : undefined,
+    iconLabel: componentInstance
+      ? snapshotKind === 'variant' ? '变体实例' : '组件实例'
+      : composition.presetId === 'group'
+        ? 'Group'
+        : composition.presetId === 'container'
+          ? 'Container'
+          : undefined,
     canHaveChildren: hierarchy !== undefined,
     canRename: !locked,
     canDelete: !locked,
@@ -189,6 +221,8 @@ export interface UseComposeEditorControllerOptions {
   readonly runtime: TransactionRuntime
   /** Palette、Stage、Inspector 共用的实例级 Entity 注册表。 */
   readonly registry: ComposeEntityRegistry
+  /** 可选项目组件 Store；省略时保持仅 Registry Preset 的基础组件面板。 */
+  readonly componentStore?: ComposeComponentStore
   /** 初始选择；不会写入文档历史。 */
   readonly initialSelection?: readonly string[]
   /** 初始场景树展开项；不会写入文档历史。 */
@@ -247,6 +281,8 @@ export interface ComposeEditorController {
   readonly runtime: TransactionRuntime
   /** controller 使用的 Entity 注册表。 */
   readonly registry: ComposeEntityRegistry
+  /** Controller 与组件工作区共享的项目组件 Store。 */
+  readonly componentStore?: ComposeComponentStore
   /** 结构兼容 `ComposeHistoryNavigationController` 的事务历史。 */
   readonly history: ComposeHistoryNavigationController
   /** 当前有效且可见的选择。 */
@@ -282,6 +318,14 @@ export interface ComposeEditorController {
   readonly setTool: (tool: ComposeStageTool) => void
   /** 向同一 runtime 派发结构化命令。 */
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
+  /** 把当前规范化选区保存为组件资源，并在资源成功后原子替换为关联实例。 */
+  readonly createComponentFromSelection: (
+    input: ComposeCreateComponentFromSelectionInput,
+  ) => Promise<ComposeCreateComponentFromSelectionResult>
+  /** 最近一次来自 Stage、Scene Tree 或命令目录的“创建组件”命名请求。 */
+  readonly createComponentRequest: ComposeCreateComponentRequest | null
+  /** 场景树普通行拖向其他面板时的当前受控外部拖拽事件。 */
+  readonly sceneExternalDragEvent: ComposeSceneTreeExternalDragEvent | null
   /** 默认 ComposeSceneTree 的完整受控属性。 */
   readonly sceneTreeProps: ComposeSceneTreeProps
   /** 默认 Stage 的完整受控属性。 */
@@ -297,6 +341,38 @@ export interface ComposeEditorController {
   /** 默认 Stage 工具栏内容。 */
   readonly stageToolbar: ReactNode
 }
+
+/** 创建组件命名请求；sequence 使重复请求也可被宿主观察。 @public */
+export interface ComposeCreateComponentRequest {
+  readonly sequence: number
+  readonly entityIds: readonly string[]
+}
+
+/** 从当前场景选区创建项目组件的输入。 @public */
+export interface ComposeCreateComponentFromSelectionInput {
+  /** 组件显示名；Store 会补齐 `.component.json` 后缀。 */
+  readonly name: string
+  /** 目标资源目录；null 表示 Provider 根目录。 @defaultValue null */
+  readonly parentId?: string | null
+  /** 覆盖当前选择的规范化来源；用于场景树跨面板拖拽结束时冻结起始选区。 */
+  readonly entityIds?: readonly string[]
+  readonly signal?: AbortSignal
+}
+
+/** 场景选区创建项目组件的失败安全结果。 @public */
+export type ComposeCreateComponentFromSelectionResult =
+  | {
+      readonly status: 'committed'
+      readonly component: ComposeComponentSnapshot
+      readonly instanceId: string
+    }
+  | { readonly status: 'unavailable'; readonly reason: string }
+  | { readonly status: 'failed'; readonly error: Error }
+  | {
+      readonly status: 'saved-not-instantiated'
+      readonly component: ComposeComponentSnapshot
+      readonly reason: string
+    }
 
 function invokeObserver(
   observer: UseComposeEditorControllerOptions['onTransaction'],
@@ -347,6 +423,7 @@ export function useComposeStageViewport(controller: ComposeEditorController): St
 export function useComposeEditorController({
   runtime,
   registry,
+  componentStore,
   initialSelection = [],
   initialExpandedIds = [],
   initialViewport = { x: 80, y: 64, zoom: 1 },
@@ -398,6 +475,13 @@ export function useComposeEditorController({
   // 不进入 ComposeDocument、事务历史或 operation log。
   const [paintEditing, setPaintEditing] = useState<StagePaintEditing | null>(null)
   const [paintSampling, setPaintSampling] = useState<StagePaintSampling | null>(null)
+  const [sceneExternalDragEvent, setSceneExternalDragEvent] = useState<
+    ComposeSceneTreeExternalDragEvent | null
+  >(null)
+  const [createComponentRequest, setCreateComponentRequest] = useState<
+    ComposeCreateComponentRequest | null
+  >(null)
+  const createComponentRequestSequence = useRef(0)
   const [interactionController] = useState(createStageInteractionController)
   const transactionById = useRef(new Map<string, EditorTransaction>())
   const observerRef = useRef(onTransaction)
@@ -419,6 +503,7 @@ export function useComposeEditorController({
     setViewport(initialViewport)
     setPaintEditing(null)
     setPaintSampling(null)
+    setSceneExternalDragEvent(null)
     setGridVisible(true)
     setSnapRestore({
       grid: nextDocument.canvas.grid.snapEnabled,
@@ -505,6 +590,109 @@ export function useComposeEditorController({
     [runtime],
   )
   const nextId = useCallback(() => idFactoryRef.current(), [])
+
+  const createComponentFromSelection = useCallback(async (
+    input: ComposeCreateComponentFromSelectionInput,
+  ): Promise<ComposeCreateComponentFromSelectionResult> => {
+    if (!componentStore) {
+      return { status: 'unavailable', reason: '未配置 Component Store' }
+    }
+    const started = runtime.getState()
+    if (layoutState.status !== 'ready' || layoutState.document !== started.document) {
+      return { status: 'unavailable', reason: '布局尚未就绪' }
+    }
+    const componentId = nextId()
+    const extraction = createComponentExtractionPlan({
+      document: started.document,
+      layoutSnapshot: layoutState.snapshot,
+      selectedIds: input.entityIds ?? selectedIds,
+      groupId: nextId(),
+      name: input.name.trim(),
+    })
+    if (extraction.status !== 'ready') {
+      return { status: 'unavailable', reason: extraction.reason }
+    }
+    const asset: ComposeBaseComponentAsset = {
+      schemaVersion: 1,
+      kind: 'base',
+      componentId,
+      name: input.name.trim(),
+      document: extraction.componentDocument,
+      properties: [],
+    }
+    let component: ComposeComponentSnapshot
+    try {
+      component = await componentStore.createComponent({
+        parentId: input.parentId ?? null,
+        fileName: input.name,
+        asset,
+        signal: input.signal,
+      })
+    }
+    catch (error) {
+      return {
+        status: 'failed',
+        error: error instanceof Error ? error : new Error(String(error)),
+      }
+    }
+    // 资源写入是不可回滚的外部副作用；等待期间场景变化时保留资源并停止实例化。
+    if (runtime.getState().revision !== started.revision) {
+      return {
+        status: 'saved-not-instantiated',
+        component,
+        reason: '资源已保存，但文档在创建期间发生变化',
+      }
+    }
+    const instanceId = nextId()
+    const created = createComposeComponentInstanceEntity({
+      registry,
+      id: instanceId,
+      asset: component.asset,
+      reference: componentStore.createReference(component.assetKey),
+      revision: component.revision,
+    })
+    if (!created.ok) {
+      return {
+        status: 'saved-not-instantiated',
+        component,
+        reason: created.reason,
+      }
+    }
+    const dispatched = runtime.dispatch(createReplaceSelectionWithEntityCommand({
+      document: started.document,
+      plan: extraction,
+      entity: created.entity,
+      commandId: nextId(),
+      deleteCommandId: nextId(),
+      createCommandId: nextId(),
+    }))
+    if (dispatched.status !== 'committed') {
+      return {
+        status: 'saved-not-instantiated',
+        component,
+        reason: dispatched.status === 'rejected'
+          ? dispatched.issues.map(({ message }) => message).join('；')
+          : dispatched.reason ?? '场景事务未提交',
+      }
+    }
+    setSelectedIds([instanceId])
+    return { status: 'committed', component, instanceId }
+  }, [componentStore, layoutState, nextId, registry, runtime, selectedIds, setSelectedIds])
+
+  const libraryDragItem = useCallback((item: ComposeComponentLibraryItem) => (
+    item.kind === 'preset'
+      ? { kind: 'preset' as const, presetId: item.presetId }
+      : {
+          kind: 'assets' as const,
+          items: [{
+            providerId: item.descriptor.reference.providerId,
+            assetKey: item.descriptor.reference.assetKey,
+            scope: item.descriptor.reference.scope,
+            name: item.descriptor.displayName,
+            mediaType: 'application/vnd.compose-ui.component+json',
+          }],
+        }
+  ), [])
   const paintEditPort = useMemo<ComposePaintEditPort>(() => ({
     open: ({ entityId }) => {
       if (!document.entities[entityId]) return
@@ -550,6 +738,15 @@ export function useComposeEditorController({
     }
   }, [containerPresetId, document, layoutState, nextId, registry, runtime, setSelectedIds])
 
+  const requestCreateComponent = useCallback((entityIds: readonly string[] = selectedIds) => {
+    const normalized = validSelection(document, entityIds)
+    if (!componentStore || normalized.length === 0) return
+    setCreateComponentRequest({
+      sequence: ++createComponentRequestSequence.current,
+      entityIds: normalized,
+    })
+  }, [componentStore, document, selectedIds])
+
   const sceneTreeProps = useMemo<ComposeSceneTreeProps>(() => ({
     nodes: deriveSceneEntities(document, registry),
     selectedIds,
@@ -557,6 +754,8 @@ export function useComposeEditorController({
     onSelectionChange: setSelectedIds,
     onExpandedChange: setExpandedIds,
     onOperation: onSceneOperation,
+    onExternalDrag: setSceneExternalDragEvent,
+    onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
   }), [
     document,
     registry,
@@ -565,6 +764,8 @@ export function useComposeEditorController({
     setSelectedIds,
     setExpandedIds,
     onSceneOperation,
+    componentStore,
+    requestCreateComponent,
   ])
 
   // 动作上下文依赖后面才定义的 fit/zoom 回调，而 stageProps 必须先构建。用 ref 转发可以避免
@@ -602,6 +803,7 @@ export function useComposeEditorController({
     onShortcutAction: runShortcutAction,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
+    onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
     outputSelected: resolvedInspectionTarget === 'output',
     onOutputSelect: selectOutput,
     onSurfaceSizeChange: setSurfaceSize,
@@ -633,6 +835,8 @@ export function useComposeEditorController({
     activePaintEditing,
     activePaintSampling,
     runShortcutAction,
+    componentStore,
+    requestCreateComponent,
   ])
 
   const fitBounds = useCallback((ids: readonly string[]) => {
@@ -751,6 +955,7 @@ export function useComposeEditorController({
     document,
     fitContainer,
     fitSelection,
+    createComponent: componentStore ? () => { requestCreateComponent() } : undefined,
     idFactory: nextId,
     layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : null,
     redo: runtime.redo,
@@ -775,6 +980,8 @@ export function useComposeEditorController({
     document,
     fitContainer,
     fitSelection,
+    componentStore,
+    requestCreateComponent,
     layoutState,
     nextId,
     runtime,
@@ -822,6 +1029,7 @@ export function useComposeEditorController({
     document,
     runtime,
     registry,
+    componentStore,
     history: runtime,
     selectedIds,
     expandedIds,
@@ -837,9 +1045,36 @@ export function useComposeEditorController({
     setViewport,
     setTool,
     dispatch,
+    createComponentFromSelection,
+    createComponentRequest,
+    sceneExternalDragEvent,
     sceneTreeProps,
     stageProps,
-    componentLibraryPanel: (
+    componentLibraryPanel: componentStore ? (
+      <ComposeComponentLibraryPanel
+        registry={registry}
+        store={componentStore}
+        onCreateIntent={(item) => {
+          interactionController.send({ type: 'external.add', item: libraryDragItem(item) })
+        }}
+        onItemDragStart={({ item, clientPoint }) => {
+          interactionController.send({
+            type: 'external.begin',
+            item: libraryDragItem(item),
+            clientPoint,
+          })
+        }}
+        onItemDragMove={({ clientPoint }) => {
+          interactionController.send({ type: 'external.move', clientPoint })
+        }}
+        onItemDragEnd={({ clientPoint }) => {
+          interactionController.send({ type: 'external.end', clientPoint })
+        }}
+        onItemDragCancel={() => {
+          interactionController.send({ type: 'external.cancel' })
+        }}
+      />
+    ) : (
       <ComposeComponentPalette
         interactionController={interactionController}
         registry={registry}

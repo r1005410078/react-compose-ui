@@ -17,6 +17,13 @@ export {
   type ComposeStructureCommandAvailability,
 } from './commands'
 export {
+  createComponentExtractionPlan,
+  createReplaceSelectionWithEntityCommand,
+  type ComposeComponentExtractionPlan,
+  type ComposeComponentExtractionResult,
+  type ComposeComponentExtractionUnavailableReason,
+} from './component-extraction'
+export {
   createAxisLattice,
   createRulerTicks,
   latticeLineBand,

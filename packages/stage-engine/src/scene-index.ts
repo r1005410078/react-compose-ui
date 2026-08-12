@@ -3,6 +3,7 @@ import {
   getComposeHierarchy,
   getComposeLock,
   getComposeVisibility,
+  isComposeGroupEntity,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
@@ -147,6 +148,14 @@ export function createStageSceneIndex(
         const entity = document.entities[entityId]
         const matrix = matrices.get(entityId)
         if (!entity || !getComposeHierarchy(entity) || !matrix) return false
+        if (isComposeGroupEntity(entity)) {
+          const rect = bounds.get(entityId)
+          return Boolean(rect
+            && point.x >= rect.x
+            && point.x <= rect.x + rect.width
+            && point.y >= rect.y
+            && point.y <= rect.y + rect.height)
+        }
         const box = layoutSnapshot.boxes[entityId]
         if (!box) return false
         const local = applyMatrix(invertMatrix(matrix), point)
@@ -181,6 +190,14 @@ export function createStageSceneIndex(
         const entity = document.entities[entityId]
         const matrix = matrices.get(entityId)
         if (!entity || !matrix) return false
+        if (isComposeGroupEntity(entity)) {
+          const rect = bounds.get(entityId)
+          return Boolean(rect
+            && point.x >= rect.x
+            && point.x <= rect.x + rect.width
+            && point.y >= rect.y
+            && point.y <= rect.y + rect.height)
+        }
         const box = layoutSnapshot.boxes[entityId]
         if (!box) return false
         const local = applyMatrix(invertMatrix(matrix), point)

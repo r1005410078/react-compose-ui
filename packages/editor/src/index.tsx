@@ -17,6 +17,9 @@ export {
   useComposeStageViewport,
   type ComposeEditorController,
   type ComposeEditorTransactionEvent,
+  type ComposeCreateComponentFromSelectionInput,
+  type ComposeCreateComponentRequest,
+  type ComposeCreateComponentFromSelectionResult,
   type UseComposeEditorControllerOptions,
 } from './editor-controller'
 export { useComposePageCatalog, useNodeEditorPort } from './pages'
@@ -24,6 +27,10 @@ export type {
   ComposeEditorActivePage,
   ComposeEditorPagesConfig,
 } from './pages'
+export type {
+  ComposeEditorActiveComponentSession,
+  ComposeEditorComponentsConfig,
+} from './component-workspace'
 export { createDefaultComposeEditorPreferences } from './editor-preferences'
 export type {
   ComposeEditorKeybinding,

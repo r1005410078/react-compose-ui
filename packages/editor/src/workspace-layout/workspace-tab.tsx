@@ -6,6 +6,7 @@ import type { PointerEventHandler } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import {
   isPageDocumentPanelId,
+  isComponentDocumentPanelId,
   isWorkspaceDocumentPanelId,
   WORKSPACE_GROUP_IDS,
   WORKSPACE_PANEL_IDS,
@@ -99,6 +100,8 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
   const session = documents.get(props.api.id)
   const closeLabel = isPageDocumentPanelId(props.api.id)
     ? editorMessages.pages.closePage(title)
+    : isComponentDocumentPanelId(props.api.id)
+      ? `关闭 ${title}`
     : editorMessages.closeAsset(title)
   const icon =
     props.api.id === WORKSPACE_PANEL_IDS.scene ? (

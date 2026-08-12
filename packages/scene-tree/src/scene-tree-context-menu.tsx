@@ -41,6 +41,8 @@ interface SceneTreeContextMenuProps {
   messages?: SceneTreeMessages
   nodeId: string | null
   rootProps: ComposeContextMenuRootProps
+  onCreateComponentIntent?: (nodeIds: readonly string[]) => void
+  selectedIds?: readonly string[]
 }
 
 /** 使用共享 ComposeContextMenu 呈现场景树领域命令。 */
@@ -49,6 +51,8 @@ export function SceneTreeContextMenu({
   messages = getSceneTreeMessages('zh-CN'),
   nodeId,
   rootProps,
+  onCreateComponentIntent,
+  selectedIds = [],
 }: SceneTreeContextMenuProps) {
   const entries = nodeId === null ? ROOT_MENU_ENTRIES : NODE_MENU_ENTRIES
   return (
@@ -71,6 +75,15 @@ export function SceneTreeContextMenu({
             </div>
           )
         })}
+        {nodeId !== null && onCreateComponentIntent ? (
+          <>
+            <ComposeContextMenuSeparator />
+            <ComposeContextMenuItem
+              disabled={selectedIds.length === 0}
+              onClick={() => { onCreateComponentIntent(selectedIds) }}
+            >创建组件…</ComposeContextMenuItem>
+          </>
+        ) : null}
       </ComposeContextMenuContent>
     </ComposeContextMenu>
   )

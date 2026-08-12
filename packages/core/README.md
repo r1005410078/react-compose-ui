@@ -5,6 +5,10 @@ React Compose UI 的 React/DOM 无关领域内核。
 当前公共文档协议只支持 `ComposeDocument v6`。场景项统一为 `ComposeEntity`，能力由 PascalCase
 Component Key 组合，不再存在 Frame/Component 联合类型或节点继承结构。
 
+项目 Component/Variant 不改变该版本：它们使用独立 `Component Asset v1` 文件协议，内部仍保存
+一个以 first-class Group 为唯一根的 v6 文档。Core 提供严格解析、显式旧草案迁移、稳定 ID
+语义覆盖、继承解析、离线快照和八层深度保护，但不依赖 Asset Provider。
+
 ```ts
 import {
   createDefaultCanvasSettings,
@@ -65,6 +69,10 @@ runtime.dispatch({
 - `Renderer`：宿主 Renderer type 与严格 JSON props。
 - `Bindings`：`rendererProps.fields` 保存顶层字段引用；引用只包含
   `{ scope: 'page', exportName }`。空绑定 Component 非法且应由命令删除。
+
+first-class Group 使用 `presetId: "group"`，固定包含 `Composition + Transform + LayoutItem +
+GeometryConstraints + Visibility + Lock + Hierarchy`，不拥有 Renderer、Appearance、Clip 或 Layout。
+`createComposeGroupEntitySeed()` 是 Core 与 Stage Engine 共享的唯一 seed 工厂。
 
 未知但合法的 PascalCase Component 会被原样保留。Core 不依赖 Registry；缺失的 Renderer 或
 能力定义由上层降级展示，不导致文档被拒绝。

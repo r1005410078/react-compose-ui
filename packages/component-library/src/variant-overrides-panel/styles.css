@@ -1,0 +1,33 @@
+.compose-variant-overrides {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.compose-variant-overrides > header,
+.compose-variant-overrides li,
+.compose-variant-overrides__all {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.compose-variant-overrides > header {
+  justify-content: space-between;
+}
+
+.compose-variant-overrides ul {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compose-variant-overrides li > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

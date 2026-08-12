@@ -139,6 +139,51 @@ export interface ComposeAssetEntryRenderContext {
   readonly expanded: boolean
 }
 
+/** Asset Browser 不解释的普通外部拖拽载荷。 @public */
+export interface ComposeAssetExternalDropPayload {
+  readonly type: string
+  readonly data: unknown
+}
+
+/** 外部 Pointer 生命周期的单调事件。 @public */
+export type ComposeAssetExternalDropEvent =
+  | {
+      readonly sequence: number
+      readonly type: 'start' | 'move' | 'end'
+      readonly payload: ComposeAssetExternalDropPayload
+      readonly clientPoint: { readonly x: number; readonly y: number }
+    }
+  | {
+      readonly sequence: number
+      readonly type: 'cancel'
+      readonly payload: ComposeAssetExternalDropPayload
+    }
+
+/** 外部放置命中的可写资源目录。 @public */
+export interface ComposeAssetExternalDropTarget {
+  readonly folderId: string
+  readonly entry: ComposeAssetEntry
+}
+
+/** 按普通 payload type 注册的外部放置配置。 @public */
+export interface ComposeAssetExternalDropConfig {
+  readonly event?: ComposeAssetExternalDropEvent | null
+  /** 只负责判断普通载荷与目录能力，不得要求 Asset Browser理解载荷业务数据。 */
+  accepts(input: {
+    readonly payload: ComposeAssetExternalDropPayload
+    readonly target: ComposeAssetExternalDropTarget
+  }): boolean
+  /** 在 end 命中可接受目录时调用一次。 */
+  onDrop(input: {
+    readonly payload: ComposeAssetExternalDropPayload
+    readonly target: ComposeAssetExternalDropTarget
+    readonly promptName: (
+      request: ComposeAssetNamePromptRequest,
+    ) => Promise<string | null>
+    readonly refresh: () => void
+  }): void | Promise<void>
+}
+
 /**
  * ComposeAssetBrowser 受控组件属性。
  *
@@ -203,6 +248,8 @@ export interface ComposeAssetBrowserProps
   readonly entryNaming?: ComposeAssetEntryNaming
   /** 追加到内建菜单项之后的宿主上下文菜单项。 */
   readonly contextMenuItems?: readonly ComposeAssetContextMenuItem[]
+  /** 接收由宿主转发的普通跨面板 Pointer 拖拽。 */
+  readonly externalDrop?: ComposeAssetExternalDropConfig
   /**
    * 在条目名称之后渲染附加标记。
    *

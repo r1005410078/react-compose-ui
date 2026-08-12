@@ -4,6 +4,7 @@ import {
   DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS,
 } from './builtin-components'
 import { createContainerPreset, DEFAULT_COMPOSE_CONTAINER_PRESET } from './container'
+import { createGroupPreset, DEFAULT_COMPOSE_GROUP_PRESET } from './group'
 import {
   createDefaultInspectorId,
 } from './material-inspector-kit/renderer-inspectors'
@@ -18,6 +19,11 @@ import {
   DEFAULT_COMPOSE_TEXT_RENDERER,
 } from './text'
 import { createPageSlotMaterial } from './page-slot'
+import {
+  createComponentInstanceMaterial,
+  DEFAULT_COMPOSE_COMPONENT_INSTANCE_PRESET,
+  DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER,
+} from './component-instance'
 import {
   createImageMaterial,
   DEFAULT_COMPOSE_IMAGE_PRESET,
@@ -47,15 +53,18 @@ export const DEFAULT_COMPOSE_BASIC_RENDERERS = Object.freeze([
   DEFAULT_COMPOSE_IMAGE_RENDERER,
   DEFAULT_COMPOSE_SVG_RENDERER,
   DEFAULT_COMPOSE_SHAPE_RENDERER,
+  DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER,
 ])
 
 /** 默认 Entity Presets。 @public */
 export const DEFAULT_COMPOSE_BASIC_PRESETS = Object.freeze([
+  DEFAULT_COMPOSE_GROUP_PRESET,
   DEFAULT_COMPOSE_CONTAINER_PRESET,
   DEFAULT_COMPOSE_RECTANGLE_PRESET,
   DEFAULT_COMPOSE_TEXT_PRESET,
   DEFAULT_COMPOSE_IMAGE_PRESET,
   DEFAULT_COMPOSE_SVG_PRESET,
+  DEFAULT_COMPOSE_COMPONENT_INSTANCE_PRESET,
   DEFAULT_COMPOSE_LINE_PRESET,
   DEFAULT_COMPOSE_ARROW_PRESET,
   DEFAULT_COMPOSE_CIRCLE_PRESET,
@@ -66,6 +75,7 @@ export function createComposeBasicMaterials(
   options: ComposeCreateBasicMaterialsOptions = {},
 ): ComposeBasicMaterials {
   const idFactory = options.idFactory ?? createDefaultInspectorId
+  const group = createGroupPreset()
   const container = createContainerPreset(options.container)
   const rectangle = createRectangleMaterial(options.rectangle)
   const text = createTextMaterial(options.text, idFactory)
@@ -73,6 +83,7 @@ export function createComposeBasicMaterials(
   const svg = createSvgMaterial(options.svg, idFactory)
   const shape = createShapeMaterial(options.shape, idFactory)
   const pageSlot = createPageSlotMaterial(options.pageSlot, idFactory)
+  const componentInstance = createComponentInstanceMaterial()
   const rendererDefinitions = Object.freeze([
     rectangle.renderer,
     text.renderer,
@@ -80,6 +91,7 @@ export function createComposeBasicMaterials(
     svg.renderer,
     shape.renderer,
     pageSlot.renderer,
+    componentInstance.renderer,
     ...(options.extensions?.renderers ?? []),
   ])
   const componentDefinitions = Object.freeze([
@@ -87,12 +99,14 @@ export function createComposeBasicMaterials(
     ...(options.extensions?.components ?? []),
   ])
   const presets = Object.freeze([
+    group,
     container,
     rectangle.preset,
     text.preset,
     image.preset,
     svg.preset,
     pageSlot.preset,
+    componentInstance.preset,
     ...shape.presets,
     ...(options.extensions?.presets ?? []),
   ])

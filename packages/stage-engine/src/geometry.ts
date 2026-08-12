@@ -1,6 +1,8 @@
 import {
   getComposeHierarchy,
   getComposeTransform,
+  getComposeVisibility,
+  isComposeGroupEntity,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
   type ComposeSpatialTransform,
@@ -319,23 +321,39 @@ export function getEntityWorldBounds(
   if (!entity) throw new Error(`Unknown Entity ${entityId}`)
   const box = snapshot.boxes[entityId]
   if (!box) throw new Error(`Layout snapshot ${snapshot.revision} has no box for Entity ${entityId}`)
-  const matrix = getEntityWorldMatrix(document, snapshot, entityId)
-  const points = [
-    applyMatrix(matrix, { x: 0, y: 0 }),
-    applyMatrix(matrix, { x: box.width, y: 0 }),
-    applyMatrix(matrix, { x: box.width, y: box.height }),
-    applyMatrix(matrix, { x: 0, y: box.height }),
-  ]
-  const xs = points.map((point) => point.x)
-  const ys = points.map((point) => point.y)
-  const x = Math.min(...xs)
-  const y = Math.min(...ys)
-  return {
-    x,
-    y,
-    width: Math.max(...xs) - x,
-    height: Math.max(...ys) - y,
+  const ownBounds = () => {
+    const matrix = getEntityWorldMatrix(document, snapshot, entityId)
+    const points = [
+      applyMatrix(matrix, { x: 0, y: 0 }),
+      applyMatrix(matrix, { x: box.width, y: 0 }),
+      applyMatrix(matrix, { x: box.width, y: box.height }),
+      applyMatrix(matrix, { x: 0, y: box.height }),
+    ]
+    const xs = points.map((point) => point.x)
+    const ys = points.map((point) => point.y)
+    const x = Math.min(...xs)
+    const y = Math.min(...ys)
+    return {
+      x,
+      y,
+      width: Math.max(...xs) - x,
+      height: Math.max(...ys) - y,
+    }
   }
+  if (isComposeGroupEntity(entity)) {
+    const descendantBounds: StageRect[] = []
+    const visit = (childId: string) => {
+      const child = document.entities[childId]
+      if (!child || !getComposeVisibility(child).visible) return
+      descendantBounds.push(getEntityWorldBounds(document, snapshot, childId))
+      if (!isComposeGroupEntity(child)) {
+        getComposeHierarchy(child)?.childIds.forEach(visit)
+      }
+    }
+    getComposeHierarchy(entity)?.childIds.forEach(visit)
+    return unionRects(descendantBounds) ?? ownBounds()
+  }
+  return ownBounds()
 }
 
 /** 将持久化 ECS Transform 投影为 Stage 几何值。 @public */

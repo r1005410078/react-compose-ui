@@ -228,6 +228,7 @@ function renderStage(
     snapshot?: ComposeLayoutSnapshot
     scope?: import('@compose-ui/script-runtime').ComposePageScriptScope
     registry?: ReturnType<typeof createComposeEntityRegistry>
+    onCreateComponentIntent?: (entityIds: readonly string[]) => void
     tool?: import('../types').ComposeStageTool
     marqueeMode?: import('../types').ComposeStageMarqueeMode
   } = {},
@@ -247,6 +248,7 @@ function renderStage(
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
       marqueeMode={options.marqueeMode}
       onSelectedIdsChange={selectionSpy}
+      onCreateComponentIntent={options.onCreateComponentIntent}
       onViewportChange={vi.fn()}
       registry={options.registry ?? registry}
       scriptScope={options.scope}
@@ -734,6 +736,17 @@ describe('ComposeStage ECS', () => {
       type: BUILTIN_COMMAND_TYPES.deleteEntity,
       payload: { entityIds: ['a'] },
     }))
+  })
+
+  it('OpenSpec: stage / 创建组件菜单 / 把规范化选区交给宿主命名流程', () => {
+    const onCreateComponentIntent = vi.fn()
+    renderStage(document(), { selectedIds: ['a'], onCreateComponentIntent })
+    fireEvent.contextMenu(screen.getByTestId('stage-entity-a'), {
+      clientX: 40,
+      clientY: 50,
+    })
+    fireEvent.click(screen.getByRole('menuitem', { name: '创建组件…' }))
+    expect(onCreateComponentIntent).toHaveBeenCalledWith(['a'])
   })
 
   it('OpenSpec: stage / Stage 节点层级操作 / 从画布菜单调整前景节点', () => {

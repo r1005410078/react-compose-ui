@@ -102,9 +102,23 @@ describe('createComposeEditorActions', () => {
 
   it('OpenSpec: editor-preferences / 编辑器动作目录 / 宿主未提供入口时省略动作', () => {
     expect(byId(createComposeEditorActions(context()))).not.toContain('editor.settings')
+    expect(byId(createComposeEditorActions(context()))).not.toContain('edit.createComponent')
 
     const withSettings = createComposeEditorActions(context({ openSettings: () => {} }))
     expect(byId(withSettings)).toContain('editor.settings')
+  })
+
+  it('OpenSpec: editor-workspace-layout / 创建组件命令 / 命令目录打开同一命名流程', () => {
+    const createComponent = vi.fn()
+    const actions = createComposeEditorActions(context({
+      createComponent,
+      selectedIds: ['a'],
+    }))
+    const action = actions.find((candidate) => candidate.id === 'edit.createComponent')
+
+    expect(action).toMatchObject({ title: '创建组件…', disabledReason: undefined })
+    action?.run()
+    expect(createComponent).toHaveBeenCalledOnce()
   })
 
   it('OpenSpec: editor-preferences / 编辑器动作目录 / 不可用动作说明原因', () => {

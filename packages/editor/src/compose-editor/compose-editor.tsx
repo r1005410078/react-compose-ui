@@ -5,8 +5,10 @@
  */
 import {
   COMPOSE_UI_CORE_PACKAGE,
+  BUILTIN_COMMAND_TYPES,
   composePageDisplayName,
   composePageFileName,
+  isComposeComponentMediaType,
   isComposePageMediaType,
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
@@ -22,10 +24,12 @@ import {
   ComposeDialogViewport,
   ComposeButton,
   ComposeColorHistoryProvider,
+  ComposeInput,
   ComposePaintImageLibraryProvider,
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
 import type { ComposePageSetupReference } from '@compose-ui/core'
+import type { ComposeEntity, JsonObject, JsonValue } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeHistoryShortcuts } from '@compose-ui/history'
@@ -59,13 +63,31 @@ import type {
   ComposeAssetCanvasDragEvent,
   ComposeAssetEntryNaming,
   ComposeAssetEntryRenderContext,
+  ComposeAssetExternalDropConfig,
+  ComposeAssetExternalDropEvent,
   ComposeAssetMutation,
 } from '@compose-ui/asset-browser'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
+  ComposeComponentLibraryPanel,
+  ComposeComponentAssetIcon,
+  ComposeBasePropertiesPanel,
+  ComposeComponentInstanceOverridesPanel,
+  ComposeVariantOverridesPanel,
+  applyComposeInstancePropertyOverrides,
+  createComposeVariantAsset,
+  createComposeVariantAssetFromInstance,
+  readComposeComponentInstance,
+  updateComposeComponentInstanceFromSource,
+  type ComposeComponentDescriptor,
+  type ComposeComponentLibraryItem,
+  type ComposeVariantOverridesChange,
+} from '@compose-ui/component-library'
+import {
   WorkspaceContentContext,
 } from '../workspace-layout'
 import type {
+  ComposeComponentDocumentSession,
   ComposePageDocumentSession,
   ComposeWorkspaceDocumentSession,
 } from '../workspace-layout'
@@ -73,6 +95,7 @@ import {
   AssetBrowserPanel,
   AssetDocumentPanel,
   CanvasPanel,
+  ComponentDocumentPanel,
   PageDocumentPanel,
   ComposeCommandPanel,
   InspectorPanel,
@@ -81,6 +104,7 @@ import {
 } from '../workspace-layout'
 import {
   createAssetDocumentPanelId,
+  createComponentDocumentPanelId,
   createPageDocumentPanelId,
   isWorkspaceDocumentPanelId,
   initializeWorkspace,
@@ -105,6 +129,8 @@ import {
 } from '../pages/page-script-intelligence'
 import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-layout'
 import type { ComposeEditorController } from '../editor-controller'
+import { useComponentCatalog, useComponentWorkspace } from '../component-workspace'
+import type { ComposeEditorComponentsConfig } from '../component-workspace'
 import { SettingsDialog } from '../editor-preferences'
 import {
   createDefaultComposeEditorPreferences,
@@ -171,6 +197,8 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
    * `onActiveSessionChange` 并据此切换 controller 的 runtime，否则工作区不会跟随活动页面。
    */
   pages?: ComposeEditorPagesConfig
+  /** 项目 Component/Variant 独立工作区；省略时仍可使用 Controller 上的 Store 创建实例。 */
+  components?: ComposeEditorComponentsConfig
 }
 
 const workspaceComponents = {
@@ -182,6 +210,7 @@ const workspaceComponents = {
   [WORKSPACE_COMPONENT_IDS.assetBrowser]: AssetBrowserPanel,
   [WORKSPACE_COMPONENT_IDS.assetDocument]: AssetDocumentPanel,
   [WORKSPACE_COMPONENT_IDS.pageDocument]: PageDocumentPanel,
+  [WORKSPACE_COMPONENT_IDS.componentDocument]: ComponentDocumentPanel,
 } satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
 
 const workspaceTabComponents = { workspaceTab: WorkspaceTab }
@@ -226,6 +255,27 @@ function providePaintImageLibrary(
   )
 }
 
+function createComponentLibraryStageItem(item: ComposeComponentLibraryItem) {
+  return item.kind === 'preset'
+    ? { kind: 'preset' as const, presetId: item.presetId }
+    : {
+        kind: 'assets' as const,
+        items: [{
+          providerId: item.descriptor.reference.providerId,
+          assetKey: item.descriptor.reference.assetKey,
+          scope: item.descriptor.reference.scope,
+          name: item.descriptor.displayName,
+          mediaType: 'application/vnd.compose-ui.component+json',
+        }],
+      }
+}
+
+function rendererPropsObject(value: unknown): JsonObject {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as JsonObject
+    : {}
+}
+
 type EditorRootProps = HTMLAttributes<HTMLElement>
 
 function EditorRoot({
@@ -264,6 +314,7 @@ export function ComposeEditor({
   slots,
   assets,
   pages,
+  components,
   preferences,
   defaultPreferences,
   onPreferencesChange,
@@ -301,7 +352,36 @@ export function ComposeEditor({
   const [pageNotice, setPageNotice] = useState<string | null>(null)
   /** 等待用户确认强制覆盖的页面面板 ID。 */
   const [pendingPageConflict, setPendingPageConflict] = useState<string | null>(null)
+  /** 组件/变体保存与打开失败的非阻断提示。 */
+  const [componentNotice, setComponentNotice] = useState<string | null>(null)
+  /** 等待用户确认强制覆盖的组件或变体面板 ID。 */
+  const [pendingComponentConflict, setPendingComponentConflict] = useState<string | null>(null)
+  const [pendingCreateComponent, setPendingCreateComponent] = useState<{
+    readonly entityIds: readonly string[]
+    readonly sequence: number
+  } | null>(null)
+  const [createComponentName, setCreateComponentName] = useState('Component')
+  const [creatingComponent, setCreatingComponent] = useState(false)
+  const [pendingVariantParent, setPendingVariantParent] = useState<ComposeComponentDescriptor | null>(null)
+  const [pendingVariantInstance, setPendingVariantInstance] = useState<ComposeEntity | null>(null)
+  const [variantName, setVariantName] = useState('Variant')
+  const [creatingVariant, setCreatingVariant] = useState(false)
+  const handledCreateRequestRef = useRef(0)
   const resolvedHistory = history ?? controller?.history
+  const createComponentRequest = controller?.createComponentRequest
+  useEffect(() => {
+    if (
+      !createComponentRequest
+      || handledCreateRequestRef.current === createComponentRequest.sequence
+    ) return
+    handledCreateRequestRef.current = createComponentRequest.sequence
+    const firstId = createComponentRequest.entityIds[0]
+    const defaultName = createComponentRequest.entityIds.length === 1 && firstId
+      ? controller?.document?.entities[firstId]?.name ?? 'Component'
+      : 'Component'
+    setCreateComponentName(defaultName)
+    setPendingCreateComponent(createComponentRequest)
+  }, [controller?.document?.entities, createComponentRequest])
   const resolvedAssetResolver = useMemo(() => {
     if (assets?.resolver) return assets.resolver
     const provider = assets?.browser?.provider
@@ -311,6 +391,55 @@ export function ComposeEditor({
     ) return undefined
     return createComposeAssetResolver(provider)
   }, [assets?.browser?.provider, assets?.resolver])
+  const sceneExternalDropEvent = useMemo<ComposeAssetExternalDropEvent | null>(() => {
+    const event = controller?.sceneExternalDragEvent
+    if (!event) return null
+    const payload = { type: 'scene-entities', data: { entityIds: event.nodeIds } }
+    return event.type === 'cancel'
+      ? { sequence: event.sequence, type: 'cancel', payload }
+      : {
+          sequence: event.sequence,
+          type: event.type,
+          payload,
+          clientPoint: event.clientPoint,
+        }
+  }, [controller?.sceneExternalDragEvent])
+  const sceneExternalDrop = useMemo<ComposeAssetExternalDropConfig | undefined>(() => {
+    const provider = assets?.browser?.provider
+    if (
+      !controller?.componentStore
+      || !sceneExternalDropEvent
+      || !provider?.capabilities.createFile
+      || !provider.createFile
+      || provider.id !== controller.componentStore.providerId
+    ) return undefined
+    return {
+      event: sceneExternalDropEvent,
+      accepts: ({ payload, target }) => payload.type === 'scene-entities'
+        && target.entry.capabilities?.createFile !== false,
+      onDrop: async ({ payload, target, promptName, refresh }) => {
+        if (payload.type !== 'scene-entities') return
+        const data = payload.data as { readonly entityIds?: readonly string[] }
+        if (!Array.isArray(data.entityIds) || data.entityIds.length === 0) return
+        controller.setSelectedIds(data.entityIds)
+        const defaultName = data.entityIds.length === 1
+          ? controller.document.entities[data.entityIds[0]!]?.name ?? 'Component'
+          : 'Component'
+        const name = await promptName({
+          title: '创建组件',
+          initialValue: defaultName,
+          confirmLabel: '创建',
+        })
+        if (!name) return
+        const result = await controller.createComponentFromSelection({
+          name,
+          parentId: target.folderId,
+          entityIds: data.entityIds,
+        })
+        if (result.status === 'committed' || result.status === 'saved-not-instantiated') refresh()
+      },
+    }
+  }, [assets?.browser?.provider, controller, sceneExternalDropEvent])
   const providerPaintImageLibrary = useProviderPaintImageLibrary({
     enabled: assets?.paintImageLibrary === undefined,
     provider: assets?.browser?.provider,
@@ -344,6 +473,12 @@ export function ComposeEditor({
     update: (current: ComposePageDocumentSession) => ComposePageDocumentSession,
   ) => {
     updateDocument(panelId, (current) => current.kind === 'page' ? update(current) : current)
+  }, [updateDocument])
+  const updateComponentDocument = useCallback((
+    panelId: string,
+    update: (current: ComposeComponentDocumentSession) => ComposeComponentDocumentSession,
+  ) => {
+    updateDocument(panelId, (current) => current.kind === 'component' ? update(current) : current)
   }, [updateDocument])
   const closeDocumentImmediately = useCallback((panelId: string) => {
     const panel = initializedApi.current?.getPanel(panelId)
@@ -458,16 +593,34 @@ export function ComposeEditor({
     })
     return map
   }, [documents])
+  const componentSessions = useMemo(() => {
+    const map = new Map<string, ComposeComponentDocumentSession>()
+    documents.forEach((session, panelId) => {
+      if (session.kind === 'component') map.set(panelId, session)
+    })
+    return map
+  }, [documents])
+  const componentWorkspace = useComponentWorkspace({
+    activePanelId: activeDocumentPanelId,
+    config: components,
+    fallbackStore: controller?.componentStore,
+    sessions: componentSessions,
+    updateSession: updateComponentDocument,
+  })
+  const componentCatalog = useComponentCatalog(componentWorkspace.store)
+  const componentKindByAssetKey = useMemo(() => new Map(
+    componentCatalog?.components.map((descriptor) => [descriptor.assetKey, descriptor.kind]) ?? [],
+  ), [componentCatalog])
   /**
-   * 活动页面标签是 Stage 的宿主；只有未启用页面系统的宿主才回落到固定画布面板。
+   * 活动页面或组件标签是 Stage 的宿主；只有未启用文档工作区时才回落到固定画布面板。
    *
    * @remarks
    * Stage 只能有一份：interaction controller 的 surface 是独占的。
    */
   const stageHostPanelId = activeDocumentPanelId !== null
-    && pageSessions.has(activeDocumentPanelId)
+    && (pageSessions.has(activeDocumentPanelId) || componentSessions.has(activeDocumentPanelId))
     ? activeDocumentPanelId
-    : pages === undefined ? WORKSPACE_PANEL_IDS.canvas : ''
+    : pages === undefined && components === undefined ? WORKSPACE_PANEL_IDS.canvas : ''
   const pageWorkspace = usePageWorkspace({
     activePanelId: activeDocumentPanelId,
     assetResolver: resolvedAssetResolver,
@@ -479,6 +632,19 @@ export function ComposeEditor({
   const pageStore = pageWorkspace.store
   const activePageSession = activeDocumentPanelId
     ? pageSessions.get(activeDocumentPanelId)
+    : undefined
+  const activeWorkspaceSession = activeDocumentPanelId
+    ? documents.get(activeDocumentPanelId)
+    : undefined
+  const activeComponentSession = activeWorkspaceSession?.kind === 'component'
+    ? activeWorkspaceSession
+    : undefined
+  const selectedControllerEntity = controller?.selectedIds?.length === 1
+    ? controller.document?.entities[controller.selectedIds[0]!]
+    : undefined
+  const selectedComponentInstance = selectedControllerEntity
+    && readComposeComponentInstance(selectedControllerEntity)
+    ? selectedControllerEntity
     : undefined
   const pageProvider = assets?.browser?.provider
   const homePageKey = pageWorkspace.catalog?.homePageKey ?? null
@@ -576,7 +742,7 @@ export function ComposeEditor({
       return false
     }
     const session = documentsRef.current.get(panelId)
-    if (session) {
+    if (session?.kind === 'page') {
       assets?.browser?.onOperation?.({
         type: 'write',
         entryIds: [session.entry.id],
@@ -587,6 +753,48 @@ export function ComposeEditor({
     return true
   }, [assets?.browser, editorMessages.pages.saveFailed, pageWorkspace])
 
+  const openComponentDocument = useCallback(async (descriptor: ComposeComponentDescriptor) => {
+    const store = componentWorkspace.store
+    if (!store) return
+    const panelId = createComponentDocumentPanelId(store.providerId, descriptor.assetKey)
+    const existing = initializedApi.current?.getPanel(panelId)
+    if (existing) {
+      existing.api.setActive()
+      return
+    }
+    const result = await componentWorkspace.openComponent(descriptor)
+    if (!result.ok) {
+      setComponentNotice(result.error.message)
+      return
+    }
+    const next = new Map(documentsRef.current)
+    next.set(panelId, { ...result.session, panelId })
+    replaceDocuments(next)
+    initializedApi.current?.addPanel({
+      id: panelId,
+      component: WORKSPACE_COMPONENT_IDS.componentDocument,
+      tabComponent: 'workspaceTab',
+      title: result.session.displayName,
+      position: {
+        direction: 'within',
+        referenceGroup: WORKSPACE_GROUP_IDS.canvas,
+      },
+    })
+  }, [componentWorkspace, replaceDocuments])
+
+  const saveComponentDocument = useCallback(async (panelId: string, force?: boolean) => {
+    const outcome = await componentWorkspace.saveComponent(panelId, force)
+    if (outcome === 'conflict') {
+      setPendingComponentConflict(panelId)
+      return false
+    }
+    if (outcome === 'failed') {
+      setComponentNotice('组件保存失败')
+      return false
+    }
+    return true
+  }, [componentWorkspace])
+
   const handleDefaultAssetMutation = useCallback(async (mutation: ComposeAssetMutation) => {
     const hostDecision = assets?.browser?.onBeforeAssetMutation
     if (hostDecision && await hostDecision(mutation) === false) return false
@@ -594,11 +802,12 @@ export function ComposeEditor({
     const affectedIds = new Set(mutation.entries.map((entry) => entry.id))
     const affectedKeys = new Set(mutation.entries.flatMap((entry) => entry.assetKey ? [entry.assetKey] : []))
     const panelIds = [...documentsRef.current.values()]
-      .filter((session) => (
-        session.provider.id === providerId
-        && (affectedIds.has(session.entry.id)
-          || (session.entry.assetKey !== undefined && affectedKeys.has(session.entry.assetKey)))
-      ))
+      .filter((session) => session.kind === 'component'
+        ? componentWorkspace.store?.providerId === providerId
+          && affectedKeys.has(session.assetKey)
+        : session.provider.id === providerId
+          && (affectedIds.has(session.entry.id)
+            || (session.entry.assetKey !== undefined && affectedKeys.has(session.entry.assetKey))))
       .map((session) => session.panelId)
     for (const panelId of panelIds) {
       if (!await requestDocumentClose(panelId)) return false
@@ -618,7 +827,7 @@ export function ComposeEditor({
       }
     }
     return true
-  }, [assets?.browser, handleHomePageChange, homePageKey, pageStore, requestDocumentClose])
+  }, [assets?.browser, componentWorkspace.store, handleHomePageChange, homePageKey, pageStore, requestDocumentClose])
   const handleAssetOpen = useCallback((entry: ComposeAssetEntry) => {
     assets?.browser?.onAssetOpen?.(entry)
     // 页面文件走页面标签；其余文件仍走既有的资源文档标签。
@@ -729,9 +938,25 @@ export function ComposeEditor({
    * 页面条目图标；资源浏览器不认识页面，图标由这里按媒体类型提供。
    */
   const renderEntryIcon = useCallback((context: ComposeAssetEntryRenderContext) => {
-    if (pages === undefined || !isComposePageMediaType(context.entry.mediaType)) return null
-    return <PageEntryIcon label={editorMessages.pages.pageEntry} surface={context.surface} />
-  }, [editorMessages.pages.pageEntry, pages])
+    if (pages !== undefined && isComposePageMediaType(context.entry.mediaType)) {
+      return <PageEntryIcon label={editorMessages.pages.pageEntry} surface={context.surface} />
+    }
+    if (componentWorkspace.store && isComposeComponentMediaType(context.entry.mediaType)) {
+      const kind = componentKindByAssetKey.get(context.entry.assetKey ?? '') ?? 'base'
+      const label = kind === 'variant' ? '组件变体' : '项目组件'
+      return (
+        <span
+          aria-label={label}
+          className={`compose-editor__component-entry-icon compose-editor__component-entry-icon--${context.surface}`}
+          role="img"
+          title={label}
+        >
+          <ComposeComponentAssetIcon kind={kind} />
+        </span>
+      )
+    }
+    return null
+  }, [componentKindByAssetKey, componentWorkspace.store, editorMessages.pages.pageEntry, pages])
 
   /**
    * 页面条目显示名。
@@ -781,6 +1006,13 @@ export function ComposeEditor({
       registerDocumentSave(session.panelId, () => savePageDocument(session.panelId))
     })
   }, [pageSessions, registerDocumentSave, savePageDocument])
+
+  useEffect(() => {
+    componentSessions.forEach((session) => {
+      if (session.save !== null) return
+      registerDocumentSave(session.panelId, () => saveComponentDocument(session.panelId))
+    })
+  }, [componentSessions, registerDocumentSave, saveComponentDocument])
 
   const closeSettings = useCallback(() => {
     restoreSettingsFocusRef.current = true
@@ -840,25 +1072,252 @@ export function ComposeEditor({
     pageProvider,
   ])
 
-  const resolvedInspectorPanel = useMemo(() => {
-    if (slots?.inspector === undefined && controller?.inspectorPanel === undefined) {
-      return undefined
+  const handleVariantOverridesChange = useCallback((change: ComposeVariantOverridesChange) => {
+    const panelId = activeDocumentPanelId
+    if (!panelId) return
+    updateComponentDocument(panelId, (session) => {
+      session.runtime.reset(change.resolved.snapshot.document, session.displayName)
+      return {
+        ...session,
+        asset: change.source.asset,
+        snapshot: change.resolved.snapshot,
+        baseRevision: change.source.revision,
+        savedRevisionId: session.runtime.revision,
+        dirty: false,
+      }
+    })
+  }, [activeDocumentPanelId, updateComponentDocument])
+
+  const updateInstancePropertyOverrides = useCallback((overrides: Readonly<Record<string, JsonValue>>) => {
+    if (!controller || !selectedComponentInstance) return
+    const renderer = selectedComponentInstance.components.Renderer
+    if (!renderer) return
+    controller.dispatch({
+      id: typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : `instance-override-${Date.now()}`,
+      type: BUILTIN_COMMAND_TYPES.setRendererProps,
+      payload: {
+        entityId: selectedComponentInstance.id,
+        props: { ...rendererPropsObject(renderer.props), propertyOverrides: overrides } as JsonObject,
+      },
+      meta: {
+        label: `Update ${selectedComponentInstance.name} property overrides`,
+        source: 'inspector',
+        targetIds: [selectedComponentInstance.id],
+        mergeKey: `instance:${selectedComponentInstance.id}:property-overrides`,
+      },
+    })
+  }, [controller, selectedComponentInstance])
+
+  const applyInstancePropertyOverrides = useCallback(async (propertyIds?: readonly string[]) => {
+    const store = componentWorkspace.store
+    if (!controller || !store || !selectedComponentInstance) return
+    try {
+      const result = await applyComposeInstancePropertyOverrides({
+        store,
+        entity: selectedComponentInstance,
+        propertyIds,
+      })
+      const renderer = selectedComponentInstance.components.Renderer
+      if (!renderer) return
+      const dispatched = controller.dispatch({
+        id: typeof globalThis.crypto?.randomUUID === 'function'
+          ? globalThis.crypto.randomUUID()
+          : `instance-apply-${Date.now()}`,
+        type: BUILTIN_COMMAND_TYPES.setRendererProps,
+        payload: {
+          entityId: selectedComponentInstance.id,
+          props: {
+            ...rendererPropsObject(renderer.props),
+            resolvedSnapshot: result.snapshot,
+            propertyOverrides: result.remainingPropertyOverrides,
+          } as unknown as JsonObject,
+        },
+        meta: {
+          label: `Apply ${selectedComponentInstance.name} property overrides`,
+          source: 'inspector',
+          targetIds: [selectedComponentInstance.id],
+        },
+      })
+      if (dispatched.status !== 'committed') {
+        setComponentNotice('来源已保存，但实例快照尚未更新；请显式更新该实例。')
+      }
     }
-    return providePaintImageLibrary(
-      slots?.inspector !== undefined
-        ? slots.inspector
-        : addDefaultElementProps(controller?.inspectorPanel, { pageScriptInspector }),
-      resolvedPaintImageLibrary,
-    )
+    catch (error) {
+      setComponentNotice(error instanceof Error ? error.message : String(error))
+    }
+  }, [componentWorkspace.store, controller, selectedComponentInstance])
+
+  const updateComponentInstance = useCallback(async (discardConflicts?: boolean) => {
+    const store = componentWorkspace.store
+    if (!controller || !store || !selectedComponentInstance) {
+      throw new Error('组件实例更新不可用')
+    }
+    const result = await updateComposeComponentInstanceFromSource({
+      store,
+      entity: selectedComponentInstance,
+      discardConflicts,
+    })
+    if (result.status === 'conflict') return result
+    const renderer = selectedComponentInstance.components.Renderer
+    if (!renderer) throw new Error('组件实例缺少 Renderer')
+    const dispatched = controller.dispatch({
+      id: typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : `instance-update-${Date.now()}`,
+      type: BUILTIN_COMMAND_TYPES.setRendererProps,
+      payload: {
+        entityId: selectedComponentInstance.id,
+        props: {
+          ...rendererPropsObject(renderer.props),
+          resolvedSnapshot: result.snapshot,
+          propertyOverrides: result.propertyOverrides,
+        } as unknown as JsonObject,
+      },
+      meta: {
+        label: `Update ${selectedComponentInstance.name} from component source`,
+        source: 'inspector',
+        targetIds: [selectedComponentInstance.id],
+      },
+    })
+    if (dispatched.status !== 'committed') throw new Error('实例更新事务未提交')
+    return result
+  }, [componentWorkspace.store, controller, selectedComponentInstance])
+
+  const updateBaseProperties = useCallback((properties: Parameters<
+    typeof ComposeBasePropertiesPanel
+  >[0]['properties']) => {
+    if (!activeComponentSession) return
+    updateComponentDocument(activeComponentSession.panelId, (session) => session.asset.kind === 'base'
+      ? { ...session, asset: { ...session.asset, properties }, dirty: true }
+      : session)
+  }, [activeComponentSession, updateComponentDocument])
+  const createVariantFromSelectedInstance = useCallback(() => {
+    if (!selectedComponentInstance) return
+    setVariantName(`${selectedComponentInstance.name} Variant`)
+    setPendingVariantParent(null)
+    setPendingVariantInstance(selectedComponentInstance)
+  }, [selectedComponentInstance])
+  const applySelectedInstanceOverrides = useCallback((propertyIds?: readonly string[]) => {
+    void applyInstancePropertyOverrides(propertyIds)
+  }, [applyInstancePropertyOverrides])
+
+  const resolvedInspectorPanel = useMemo(() => {
+    const authoredInspector = slots?.inspector !== undefined
+      ? slots.inspector
+      : addDefaultElementProps(controller?.inspectorPanel, { pageScriptInspector })
+    const entityInspector = authoredInspector === undefined
+      ? undefined
+      : providePaintImageLibrary(authoredInspector, resolvedPaintImageLibrary)
+    if (
+      activeComponentSession?.sourceKind === 'variant'
+      && componentWorkspace.store
+    ) {
+      return (
+        <div className="compose-editor__component-inspector">
+          {entityInspector}
+          <ComposeVariantOverridesPanel
+            assetKey={activeComponentSession.assetKey}
+            store={componentWorkspace.store}
+            onChange={handleVariantOverridesChange}
+          />
+        </div>
+      )
+    }
+    if (activeComponentSession?.sourceKind === 'base' && activeComponentSession.asset.kind === 'base') {
+      return (
+        <div className="compose-editor__component-inspector">
+          {entityInspector}
+          <ComposeBasePropertiesPanel
+            document={activeComponentSession.runtime.document}
+            properties={activeComponentSession.asset.properties}
+            selectedEntityId={controller?.selectedIds[0]}
+            onChange={updateBaseProperties}
+          />
+        </div>
+      )
+    }
+    if (!activeComponentSession && selectedComponentInstance && componentWorkspace.store) {
+      return (
+        <ComposeComponentInstanceOverridesPanel
+          entity={selectedComponentInstance}
+          onApply={applySelectedInstanceOverrides}
+          onChange={updateInstancePropertyOverrides}
+          onCreateVariant={createVariantFromSelectedInstance}
+          onUpdate={updateComponentInstance}
+        />
+      )
+    }
+    return entityInspector
   }, [
     controller?.inspectorPanel,
+    controller?.selectedIds,
+    activeComponentSession,
+    applySelectedInstanceOverrides,
+    componentWorkspace.store,
+    createVariantFromSelectedInstance,
+    handleVariantOverridesChange,
     pageScriptInspector,
     resolvedPaintImageLibrary,
     slots,
+    selectedComponentInstance,
+    updateBaseProperties,
+    updateComponentInstance,
+    updateInstancePropertyOverrides,
   ])
 
-  const content = useMemo(
-    () => ({
+  const resolvedComponentLibraryPanel = slots?.componentLibrary !== undefined
+    ? slots.componentLibrary
+    : !controller
+      ? undefined
+      : !componentWorkspace.store
+        ? controller.componentLibraryPanel
+        : (
+      <ComposeComponentLibraryPanel
+        registry={controller.registry}
+        store={componentWorkspace.store}
+        onOpenIntent={openComponentDocument}
+        onCreateVariantIntent={(descriptor) => {
+          setVariantName(`${descriptor.displayName} Variant`)
+          setPendingVariantInstance(null)
+          setPendingVariantParent(descriptor)
+        }}
+        onCreateIntent={(item) => {
+          controller.interactionController.send({
+            type: 'external.add',
+            item: createComponentLibraryStageItem(item),
+          })
+        }}
+        onItemDragStart={({ item, clientPoint }) => {
+          controller.interactionController.send({
+            type: 'external.begin',
+            item: createComponentLibraryStageItem(item),
+            clientPoint,
+          })
+        }}
+        onItemDragMove={({ clientPoint }) => {
+          controller.interactionController.send({ type: 'external.move', clientPoint })
+        }}
+        onItemDragEnd={({ clientPoint }) => {
+          controller.interactionController.send({ type: 'external.end', clientPoint })
+        }}
+        onItemDragCancel={() => {
+          controller.interactionController.send({ type: 'external.cancel' })
+        }}
+      />
+          )
+  const handlePanelDocumentClose = useCallback((panelId: string) => {
+    void requestDocumentClose(panelId)
+  }, [requestDocumentClose])
+  const handlePanelDocumentSave = useCallback((panelId: string) => {
+    void documentsRef.current.get(panelId)?.save?.()
+  }, [])
+  const setSettingsButton = useCallback((element: HTMLButtonElement | null) => {
+    settingsButtonRef.current = element
+  }, [])
+
+  const content = {
       sceneGraphPanel: slots?.sceneGraph !== undefined
         ? slots.sceneGraph
         : (
@@ -866,9 +1325,7 @@ export function ComposeEditor({
               {...(sceneTree ?? controller?.sceneTreeProps ?? emptySceneTreeProps)}
             />
           ),
-      componentLibraryPanel: slots?.componentLibrary !== undefined
-        ? slots.componentLibrary
-        : controller?.componentLibraryPanel,
+      componentLibraryPanel: resolvedComponentLibraryPanel,
       history: resolvedHistory,
       historyPanel: slots?.history,
       historyShortcuts: {
@@ -903,6 +1360,7 @@ export function ComposeEditor({
           ? (
               <ComposeAssetBrowser
                 {...assets.browser}
+                externalDrop={assets.browser.externalDrop ?? sceneExternalDrop}
                 canDragEntryToCanvas={
                   assets.browser.canDragEntryToCanvas ?? canDragPageToCanvas
                 }
@@ -922,51 +1380,13 @@ export function ComposeEditor({
       registerDocumentSave,
       setDocumentDirty,
       setAssetDocumentSaved,
-      requestDocumentClose: (panelId: string) => {
-        void requestDocumentClose(panelId)
-      },
-      saveDocument: (panelId: string) => {
-        void savePageDocument(panelId)
-      },
+      requestDocumentClose: handlePanelDocumentClose,
+      saveDocument: handlePanelDocumentSave,
       settingsOpen,
       settingsPanelId,
-      setSettingsButton: (element: HTMLButtonElement | null) => {
-        settingsButtonRef.current = element
-      },
+      setSettingsButton,
       toggleSettings,
-    }),
-    [
-      slots,
-      sceneTree,
-      controller,
-      resolvedHistory,
-      assets,
-      documents,
-      stageHostPanelId,
-      handleAssetOpen,
-      handleDefaultAssetMutation,
-      canDragPageToCanvas,
-      entryNaming,
-      hostContextMenuItems,
-      renderEntryBadge,
-      renderEntryIcon,
-      renderEntryLabel,
-      resolvedAssetResolver,
-      activePageSession,
-      pages?.scriptModuleLoader,
-      resolvedInspectorPanel,
-      handleAssetCanvasDrag,
-      registerDocumentSave,
-      requestDocumentClose,
-      savePageDocument,
-      setDocumentDirty,
-      setAssetDocumentSaved,
-      resolvedPreferences.shortcuts,
-      settingsOpen,
-      settingsPanelId,
-      toggleSettings,
-    ],
-  )
+    }
   const handleHistoryShortcut = useComposeHistoryShortcuts(
     resolvedHistory ?? disabledHistory,
     {
@@ -983,7 +1403,7 @@ export function ComposeEditor({
       event.api,
       resolvedPreferences.locale,
       hostI18n?.formatMessage,
-      { includeCanvas: pages === undefined },
+      { includeCanvas: pages === undefined && components === undefined },
     )
     initializedApi.current = event.api
     setWorkspaceReady(true)
@@ -999,7 +1419,89 @@ export function ComposeEditor({
       ) return
       setActiveDocumentPanelId(panelId)
     })
-  }, [hostI18n?.formatMessage, pages, resolvedPreferences.locale])
+  }, [components, hostI18n?.formatMessage, pages, resolvedPreferences.locale])
+
+  const confirmCreateComponent = useCallback(async () => {
+    if (!controller || !pendingCreateComponent || createComponentName.trim() === '') return
+    setCreatingComponent(true)
+    const result = await controller.createComponentFromSelection({
+      name: createComponentName.trim(),
+      entityIds: pendingCreateComponent.entityIds,
+    })
+    setCreatingComponent(false)
+    if (result.status === 'committed') {
+      setPendingCreateComponent(null)
+      setComponentNotice(null)
+      return
+    }
+    if (result.status === 'saved-not-instantiated') {
+      setPendingCreateComponent(null)
+      setComponentNotice(`资源已保存但未实例化：${result.reason}`)
+      return
+    }
+    setComponentNotice(result.status === 'unavailable' ? result.reason : result.error.message)
+  }, [controller, createComponentName, pendingCreateComponent])
+
+  const confirmCreateVariant = useCallback(async () => {
+    const store = componentWorkspace.store
+    if (!store || (!pendingVariantParent && !pendingVariantInstance) || variantName.trim() === '') return
+    setCreatingVariant(true)
+    try {
+      const componentId = typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : `variant-${Date.now()}`
+      let asset
+      if (pendingVariantInstance) {
+        asset = createComposeVariantAssetFromInstance({
+          entity: pendingVariantInstance,
+          componentId,
+          name: variantName.trim(),
+        })
+      }
+      else {
+        const parentDescriptor = pendingVariantParent!
+        const parent = await store.resolveComponent(parentDescriptor.reference)
+        if (parent.status === 'invalid') {
+          throw new Error(parent.issues.map(({ message }) => message).join('；'))
+        }
+        asset = createComposeVariantAsset({
+          componentId,
+          name: variantName.trim(),
+          parentRef: parentDescriptor.reference,
+          parentSnapshot: parent.snapshot,
+        })
+      }
+      const created = await store.createComponent({
+        parentId: null,
+        fileName: variantName.trim(),
+        asset,
+      })
+      const descriptor: ComposeComponentDescriptor = {
+        entryId: created.entryId,
+        assetKey: created.assetKey,
+        displayName: created.asset.name,
+        componentId: created.asset.componentId,
+        kind: created.asset.kind,
+        revision: created.revision,
+        reference: store.createReference(created.assetKey),
+      }
+      setPendingVariantParent(null)
+      setPendingVariantInstance(null)
+      await openComponentDocument(descriptor)
+    }
+    catch (error) {
+      setComponentNotice(error instanceof Error ? error.message : String(error))
+    }
+    finally {
+      setCreatingVariant(false)
+    }
+  }, [
+    componentWorkspace.store,
+    openComponentDocument,
+    pendingVariantInstance,
+    pendingVariantParent,
+    variantName,
+  ])
 
   useEffect(() => {
     if (initializedApi.current) {
@@ -1016,6 +1518,9 @@ export function ComposeEditor({
     : undefined
   const pendingPageConflictSession = pendingPageConflict
     ? pageSessions.get(pendingPageConflict)
+    : undefined
+  const pendingComponentConflictSession = pendingComponentConflict
+    ? componentSessions.get(pendingComponentConflict)
     : undefined
   const rootClassName = ['compose-editor', className].filter(Boolean).join(' ')
 
@@ -1048,17 +1553,18 @@ export function ComposeEditor({
             event.preventDefault()
             toggleSettings()
           }
-          // 页面标签没有 Monaco 那样的内建保存入口；这里提供编辑器范围的保存快捷键。
+          // 页面与组件标签没有 Monaco 那样的内建保存入口；这里提供编辑器范围的保存快捷键。
           if (
             !event.defaultPrevented
-            && activePageSession !== undefined
+            && activeWorkspaceSession !== undefined
+            && activeWorkspaceSession.kind !== 'asset'
             && !event.nativeEvent.isComposing
             && !isEditableKeyboardTarget(event.target)
             && (event.metaKey || event.ctrlKey)
             && event.key.toLowerCase() === 's'
           ) {
             event.preventDefault()
-            void savePageDocument(activePageSession.panelId)
+            void activeWorkspaceSession.save?.()
             return
           }
           if (resolvedHistory && !event.defaultPrevented) handleHistoryShortcut(event)
@@ -1088,6 +1594,110 @@ export function ComposeEditor({
               preferences={resolvedPreferences}
             />
           ) : null}
+          {pendingCreateComponent ? (
+            <ComposeDialog
+              open
+              onOpenChange={(open) => {
+                if (!open && !creatingComponent) setPendingCreateComponent(null)
+              }}
+            >
+              <ComposeDialogPortal>
+                <ComposeDialogBackdrop />
+                <ComposeDialogViewport>
+                  <ComposeDialogContent>
+                    <ComposeDialogHeader>
+                      <ComposeDialogTitle>创建组件</ComposeDialogTitle>
+                      <ComposeDialogDescription>
+                        将选择保存为项目组件，并在资源写入成功后替换为关联实例。
+                      </ComposeDialogDescription>
+                    </ComposeDialogHeader>
+                    <ComposeInput
+                      aria-label="组件名称"
+                      autoFocus
+                      disabled={creatingComponent}
+                      value={createComponentName}
+                      onChange={(event) => setCreateComponentName(event.currentTarget.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void confirmCreateComponent()
+                      }}
+                    />
+                    <ComposeDialogFooter>
+                      <ComposeButton
+                        type="button"
+                        variant="outline"
+                        disabled={creatingComponent}
+                        onClick={() => setPendingCreateComponent(null)}
+                      >
+                        {editorMessages.canvasSettings.cancel}
+                      </ComposeButton>
+                      <ComposeButton
+                        type="button"
+                        disabled={creatingComponent || createComponentName.trim() === ''}
+                        onClick={() => void confirmCreateComponent()}
+                      >
+                        {creatingComponent ? '正在创建…' : '创建'}
+                      </ComposeButton>
+                    </ComposeDialogFooter>
+                  </ComposeDialogContent>
+                </ComposeDialogViewport>
+              </ComposeDialogPortal>
+            </ComposeDialog>
+          ) : null}
+          {pendingVariantParent || pendingVariantInstance ? (
+            <ComposeDialog
+              open
+              onOpenChange={(open) => {
+                if (!open && !creatingVariant) {
+                  setPendingVariantParent(null)
+                  setPendingVariantInstance(null)
+                }
+              }}
+            >
+              <ComposeDialogPortal>
+                <ComposeDialogBackdrop />
+                <ComposeDialogViewport>
+                  <ComposeDialogContent>
+                    <ComposeDialogHeader>
+                      <ComposeDialogTitle>创建变体</ComposeDialogTitle>
+                      <ComposeDialogDescription>
+                        {`新 Variant 将直接继承“${pendingVariantParent?.displayName ?? pendingVariantInstance?.name}”，之后只保存当前层覆盖。`}
+                      </ComposeDialogDescription>
+                    </ComposeDialogHeader>
+                    <ComposeInput
+                      aria-label="变体名称"
+                      autoFocus
+                      disabled={creatingVariant}
+                      value={variantName}
+                      onChange={(event) => setVariantName(event.currentTarget.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void confirmCreateVariant()
+                      }}
+                    />
+                    <ComposeDialogFooter>
+                      <ComposeButton
+                        type="button"
+                        variant="outline"
+                        disabled={creatingVariant}
+                        onClick={() => {
+                          setPendingVariantParent(null)
+                          setPendingVariantInstance(null)
+                        }}
+                      >
+                        {editorMessages.canvasSettings.cancel}
+                      </ComposeButton>
+                      <ComposeButton
+                        type="button"
+                        disabled={creatingVariant || variantName.trim() === ''}
+                        onClick={() => void confirmCreateVariant()}
+                      >
+                        {creatingVariant ? '正在创建…' : '创建变体'}
+                      </ComposeButton>
+                    </ComposeDialogFooter>
+                  </ComposeDialogContent>
+                </ComposeDialogViewport>
+              </ComposeDialogPortal>
+            </ComposeDialog>
+          ) : null}
           {pendingAssetDocumentClose && pendingAssetDocument ? (
             <ComposeDialog
               open
@@ -1103,13 +1713,17 @@ export function ComposeEditor({
                       <ComposeDialogTitle>
                         {pendingAssetDocument.kind === 'page'
                           ? editorMessages.pages.unsavedPageTitle
-                          : editorMessages.unsavedAssetTitle}
+                          : pendingAssetDocument.kind === 'component'
+                            ? `未保存的${pendingAssetDocument.sourceKind === 'variant' ? '变体' : '组件'}`
+                            : editorMessages.unsavedAssetTitle}
                       </ComposeDialogTitle>
                       <ComposeDialogDescription>
                         {editorMessages.unsavedAssetQuestion(
                           pendingAssetDocument.kind === 'page'
                             ? pendingAssetDocument.displayName
-                            : pendingAssetDocument.entry.name,
+                            : pendingAssetDocument.kind === 'component'
+                              ? pendingAssetDocument.displayName
+                              : pendingAssetDocument.entry.name,
                         )}
                       </ComposeDialogDescription>
                     </ComposeDialogHeader>
@@ -1179,14 +1793,59 @@ export function ComposeEditor({
               </ComposeDialogPortal>
             </ComposeDialog>
           ) : null}
-          {pageNotice === null && homePageMissingNotice === null ? null : (
+          {pendingComponentConflictSession ? (
+            <ComposeDialog
+              open
+              onOpenChange={(open) => {
+                if (!open) setPendingComponentConflict(null)
+              }}
+            >
+              <ComposeDialogPortal>
+                <ComposeDialogBackdrop />
+                <ComposeDialogViewport>
+                  <ComposeDialogContent>
+                    <ComposeDialogHeader>
+                      <ComposeDialogTitle>组件源已在外部更新</ComposeDialogTitle>
+                      <ComposeDialogDescription>
+                        {`“${pendingComponentConflictSession.displayName}”的 revision 已变化。覆盖会丢弃外部版本。`}
+                      </ComposeDialogDescription>
+                    </ComposeDialogHeader>
+                    <ComposeDialogFooter>
+                      <ComposeButton
+                        type="button"
+                        variant="outline"
+                        onClick={() => setPendingComponentConflict(null)}
+                      >
+                        {editorMessages.canvasSettings.cancel}
+                      </ComposeButton>
+                      <ComposeButton
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          const panelId = pendingComponentConflictSession.panelId
+                          setPendingComponentConflict(null)
+                          void saveComponentDocument(panelId, true)
+                        }}
+                      >
+                        {editorMessages.pages.overwrite}
+                      </ComposeButton>
+                    </ComposeDialogFooter>
+                  </ComposeDialogContent>
+                </ComposeDialogViewport>
+              </ComposeDialogPortal>
+            </ComposeDialog>
+          ) : null}
+          {pageNotice === null && componentNotice === null && homePageMissingNotice === null ? null : (
             <div className="compose-editor__page-notice" role="status">
-              <span>{pageNotice ?? homePageMissingNotice}</span>
-              {pageNotice === null ? null : (
+              <span>{pageNotice ?? componentNotice ?? homePageMissingNotice}</span>
+              {pageNotice === null && componentNotice === null ? null : (
                 <ComposeButton
                   type="button"
                   variant="ghost"
-                  onClick={() => setPageNotice(null)}
+                  onClick={() => {
+                    setPageNotice(null)
+                    setComponentNotice(null)
+                  }}
                 >
                   {editorMessages.close}
                 </ComposeButton>

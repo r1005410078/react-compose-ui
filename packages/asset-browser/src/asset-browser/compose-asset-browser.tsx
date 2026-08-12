@@ -33,6 +33,7 @@ import type {
   ComposeAssetCanvasDragItem,
   ComposeAssetReferenceDragPayload,
   ComposeAssetContextMenuContext,
+  ComposeAssetExternalDropTarget,
   ComposeAssetEntryRenderContext,
   ComposeAssetNamePromptRequest,
 } from '../asset-browser-types'
@@ -164,6 +165,7 @@ export function ComposeAssetBrowser({
   onCanvasDrag,
   canDragEntryToCanvas,
   contextMenuItems,
+  externalDrop,
   entryNaming,
   renderEntryIcon,
   renderEntryLabel,
@@ -209,6 +211,9 @@ export function ComposeAssetBrowser({
   const suppressGridClickUntilRef = useRef(0)
   const importRef = useRef<HTMLInputElement>(null)
   const splitterRef = useRef<{ startX: number; width: number; pointerId: number } | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const lastExternalSequenceRef = useRef(-1)
+  const [externalDropFolderId, setExternalDropFolderId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!provider) return
@@ -238,6 +243,59 @@ export function ComposeAssetBrowser({
     () => folder ? source.folders.get(folder.id) ?? [] : [],
     [folder, source.folders],
   )
+
+  useEffect(() => {
+    const event = externalDrop?.event
+    if (!event || event.sequence === lastExternalSequenceRef.current) return undefined
+    let disposed = false
+    // DOM 命中与 hover 状态属于外部 Pointer 会话；放到微任务避免在 effect setup 内级联渲染。
+    queueMicrotask(() => {
+      if (disposed || event.sequence === lastExternalSequenceRef.current) return
+      lastExternalSequenceRef.current = event.sequence
+      if (event.type === 'cancel') {
+        setExternalDropFolderId(null)
+        return
+      }
+      const hit = typeof document.elementFromPoint === 'function'
+        ? document.elementFromPoint(event.clientPoint.x, event.clientPoint.y)
+        : null
+      const targetElement = hit instanceof Element
+        ? hit.closest<HTMLElement>('[data-compose-asset-external-drop-folder-id]')
+        : null
+      const root = rootRef.current
+      if (!targetElement || !root?.contains(targetElement)) {
+        setExternalDropFolderId(null)
+        return
+      }
+      const folderId = targetElement.dataset.composeAssetExternalDropFolderId
+      const entry = provider && folderId === provider.root.id
+        ? provider.root
+        : folderId ? source.entriesById.get(folderId) : undefined
+      const target: ComposeAssetExternalDropTarget | null = folderId && entry?.kind === 'folder'
+        ? { folderId, entry }
+        : null
+      if (!target || !externalDrop.accepts({ payload: event.payload, target })) {
+        setExternalDropFolderId(null)
+        return
+      }
+      if (event.type === 'end') {
+        setExternalDropFolderId(null)
+        void externalDrop.onDrop({
+          payload: event.payload,
+          target,
+          promptName: async (request) => namePrompt.promptName({
+            title: request.title,
+            initialValue: request.initialValue,
+            confirmLabel: request.confirmLabel ?? messages.create,
+          }),
+          refresh: () => { source.invalidate([target.folderId]) },
+        })
+        return
+      }
+      setExternalDropFolderId(target.folderId)
+    })
+    return () => { disposed = true }
+  }, [externalDrop, messages.create, namePrompt, provider, source])
   const visibleFolderChildren = useMemo(
     () => sortAssetEntries(folderChildren, resolvedLocale)
       .filter((entry) => entry.name.toLocaleLowerCase(resolvedLocale)
@@ -661,6 +719,7 @@ export function ComposeAssetBrowser({
 
   return (
     <div
+      ref={rootRef}
       {...htmlProps}
       className={['asset-browser', className].filter(Boolean).join(' ')}
       data-compose-theme={theme?.resolvedTheme}
@@ -784,6 +843,10 @@ export function ComposeAssetBrowser({
                 : undefined}
               canDrop={(operation) => canMoveTo(operation.itemIds, operation.parentId)}
               getItemAttributes={(context) => context.item.kind === 'folder' ? {
+                'data-compose-asset-external-drop-folder-id': context.item.id,
+                'data-compose-asset-external-drop-active': externalDropFolderId === context.item.id
+                  ? 'true'
+                  : undefined,
                 onDragOver: (event) => {
                   if (canMoveTo(draggedIds, context.item.id)) event.preventDefault()
                 },
@@ -842,7 +905,14 @@ export function ComposeAssetBrowser({
           }}
         />
         <main
-          className="asset-browser__content"
+          className={[
+            'asset-browser__content',
+            externalDropFolderId === folder?.id ? 'asset-browser__content--external-drop' : null,
+          ].filter(Boolean).join(' ')}
+          data-compose-asset-external-drop-folder-id={folder?.id}
+          data-compose-asset-external-drop-active={externalDropFolderId === folder?.id
+            ? 'true'
+            : undefined}
           onContextMenu={(event) => {
             // 条目行与卡片都会 stopPropagation，因此这里只会收到空白区域的右键。
             event.preventDefault()
@@ -864,6 +934,12 @@ export function ComposeAssetBrowser({
                   <button
                     aria-selected={selectedIds.includes(entry.id)}
                     className="asset-browser__asset-card"
+                    data-compose-asset-external-drop-folder-id={entry.kind === 'folder'
+                      ? entry.id
+                      : undefined}
+                    data-compose-asset-external-drop-active={externalDropFolderId === entry.id
+                      ? 'true'
+                      : undefined}
                     draggable={Boolean(
                       capability(provider, entry, 'move') || canvasItemFor(entry),
                     )}

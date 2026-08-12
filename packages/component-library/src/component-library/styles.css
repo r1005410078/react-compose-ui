@@ -1,0 +1,101 @@
+.compose-component-library {
+  display: grid;
+  gap: 12px;
+  padding: 8px;
+  color: var(--compose-text, #e5e7eb);
+}
+
+.compose-component-library__section {
+  display: grid;
+  gap: 8px;
+}
+
+.compose-component-library__section h3 {
+  margin: 0;
+  color: var(--compose-text-muted, #6b7280);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.compose-component-library__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+
+.compose-component-library__project-item {
+  position: relative;
+  min-width: 0;
+}
+
+.compose-component-library__project-item > .compose-component-library__tile {
+  width: 100%;
+}
+
+.compose-component-library__variant-action {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 0.25rem;
+  background: var(--compose-surface-raised, #171b22);
+  color: inherit;
+  cursor: pointer;
+}
+
+.compose-component-library__tile {
+  display: grid;
+  min-width: 0;
+  min-height: 68px;
+  place-items: center;
+  gap: 4px;
+  padding: 7px 4px;
+  border: 1px solid var(--compose-border, #374151);
+  border-radius: 6px;
+  background: var(--compose-panel-bg, #111827);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.compose-component-library__tile:hover,
+.compose-component-library__tile:focus-visible {
+  border-color: var(--compose-accent, #60a5fa);
+  outline: none;
+}
+
+.compose-component-library__icon,
+.compose-component-library__icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.compose-component-library__drag-preview {
+  position: fixed;
+  z-index: 10000;
+  display: inline-flex;
+  min-width: 104px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px dashed var(--compose-accent, #4d9cff);
+  border-radius: 4px;
+  color: var(--compose-text, #d8dde6);
+  background: color-mix(in srgb, var(--compose-panel-bg, #20252d) 88%, var(--compose-accent, #4d9cff));
+  box-shadow: 0 5px 14px rgb(0 0 0 / 20%);
+  font-size: 12px;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.compose-component-library__drag-preview-icon,
+.compose-component-library__drag-preview-icon svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}

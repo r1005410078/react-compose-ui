@@ -28,6 +28,16 @@ interface DemoPageSeed {
   readonly document: ComposeDocument
 }
 
+/** 示例应用用于演示 revision 冲突与离线快照的可控 Provider。 */
+export interface DemoAssetProvider extends ComposeAssetProvider {
+  readonly demo: {
+    /** 仅推进指定资源的 revision，模拟另一个客户端已保存源文件。 */
+    bumpRevision(assetKey: string): void
+    /** 切换资源 I/O；订阅仍保持可用，以便界面观察离线状态。 */
+    setOffline(offline: boolean): void
+  }
+}
+
 const root: ComposeAssetEntry = {
   id: 'demo-assets',
   parentId: null,
@@ -128,8 +138,9 @@ const demoCounterPageText = serializeComposePageFile({
  */
 export function createDemoAssetProvider(options: {
   readonly pages?: readonly DemoPageSeed[]
-} = {}): ComposeAssetProvider {
+} = {}): DemoAssetProvider {
   let revisionNumber = 1
+  let offline = false
   const listeners = new Set<() => void>()
   const assets = new Map<string, MemoryAsset>([
     [root.id, { entry: root }],
@@ -292,6 +303,9 @@ export function createDemoAssetProvider(options: {
   const notify = () => {
     for (const listener of listeners) listener()
   }
+  const assertOnline = () => {
+    if (offline) throw new ComposeAssetError('io', 'Demo Asset Provider is offline')
+  }
   const requireEntry = (id: string) => {
     const asset = assets.get(id)
     if (!asset) throw new ComposeAssetError('not-found', `Unknown asset ${id}`)
@@ -319,14 +333,32 @@ export function createDemoAssetProvider(options: {
       reference: true,
     },
     referenceScope: 'persistent',
+    demo: {
+      bumpRevision(assetKey) {
+        const asset = [...assets.values()].find(
+          (candidate) => candidate.entry.assetKey === assetKey,
+        )
+        if (!asset) throw new ComposeAssetError('not-found', `Unknown asset key ${assetKey}`)
+        revisionNumber += 1
+        asset.entry = { ...asset.entry, revision: revision(revisionNumber) }
+        notify()
+      },
+      setOffline(value) {
+        if (offline === value) return
+        offline = value
+        notify()
+      },
+    },
     async list({ folderId, signal }) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      assertOnline()
       return [...assets.values()]
         .map((asset) => asset.entry)
         .filter((entry) => entry.parentId === folderId)
     },
     async read({ fileId, signal }) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      assertOnline()
       const asset = requireEntry(fileId)
       if (!asset.content) throw new ComposeAssetError('unsupported', 'Cannot read a folder')
       return {
@@ -336,6 +368,7 @@ export function createDemoAssetProvider(options: {
     },
     async resolveAsset({ assetKey, signal }) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      assertOnline()
       const asset = [...assets.values()].find(
         (candidate) => candidate.entry.assetKey === assetKey,
       )
@@ -349,6 +382,7 @@ export function createDemoAssetProvider(options: {
       }
     },
     async createFolder({ parentId, name }) {
+      assertOnline()
       const normalized = validateAssetName(name)
       assertUnique(parentId, normalized)
       const id = `folder-${crypto.randomUUID()}`
@@ -363,6 +397,7 @@ export function createDemoAssetProvider(options: {
       return entry
     },
     async createFile({ parentId, name, content }) {
+      assertOnline()
       const normalized = validateAssetName(name)
       assertUnique(parentId, normalized)
       revisionNumber += 1
@@ -382,6 +417,7 @@ export function createDemoAssetProvider(options: {
       return entry
     },
     async renameEntry({ entryId, name }) {
+      assertOnline()
       const asset = requireEntry(entryId)
       const normalized = validateAssetName(name)
       assertUnique(asset.entry.parentId ?? root.id, normalized, entryId)
@@ -390,6 +426,7 @@ export function createDemoAssetProvider(options: {
       return asset.entry
     },
     async moveEntry({ entryId, parentId }) {
+      assertOnline()
       const asset = requireEntry(entryId)
       assertUnique(parentId, asset.entry.name, entryId)
       asset.entry = { ...asset.entry, parentId }
@@ -397,6 +434,7 @@ export function createDemoAssetProvider(options: {
       return asset.entry
     },
     async deleteEntry({ entryId, recursive }) {
+      assertOnline()
       const descendants = [...assets.values()]
         .filter((asset) => asset.entry.parentId === entryId)
       if (descendants.length > 0 && !recursive) {
@@ -412,6 +450,7 @@ export function createDemoAssetProvider(options: {
       notify()
     },
     async writeFile({ fileId, content, expectedRevision, force }) {
+      assertOnline()
       const asset = requireEntry(fileId)
       if (!force && asset.entry.revision !== expectedRevision) {
         throw new ComposeAssetError('conflict', 'Asset revision changed')
