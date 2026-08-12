@@ -4,7 +4,7 @@ import {
   getComposeLayoutItem,
   getComposeLock,
 } from '@compose-ui/core'
-import { applyMatrix, invertMatrix, type StagePoint } from './geometry'
+import { applyMatrix, invertMatrix, type StagePoint, type StageRect } from './geometry'
 import type { StageSceneIndex } from './scene-index'
 
 /**
@@ -84,6 +84,48 @@ export function applyChildReorder(
   return [...remaining.slice(0, target), ...ordered, ...remaining.slice(target)]
 }
 
+interface FlowSlot {
+  readonly childIndex: number
+  /** 主轴起始边（局部坐标）。 */
+  readonly leading: number
+  /** 主轴结束边（局部坐标）。 */
+  readonly trailing: number
+  readonly mid: number
+}
+
+interface MainAxis {
+  readonly isRow: boolean
+  readonly reversed: boolean
+}
+
+function mainAxisOf(layout: { readonly flexDirection: string }): MainAxis {
+  return {
+    isRow: layout.flexDirection === 'row' || layout.flexDirection === 'row-reverse',
+    reversed: layout.flexDirection.endsWith('-reverse'),
+  }
+}
+
+/** 收集参与排队的 Flow 兄弟；Absolute 子项脱离主轴，位置对插入位无参考意义。 */
+function collectFlowSlots(input: {
+  readonly index: StageSceneIndex
+  readonly childIds: readonly string[]
+  readonly draggedIds: readonly string[]
+  readonly isRow: boolean
+}): readonly FlowSlot[] {
+  const { index, childIds, draggedIds, isRow } = input
+  const dragged = new Set(draggedIds)
+  return childIds.flatMap((id, childIndex) => {
+    if (dragged.has(id)) return []
+    const entity = index.document.entities[id]
+    if (!entity || getComposeLayoutItem(entity).positioning !== 'flow') return []
+    const box = index.layoutSnapshot.boxes[id]
+    if (!box) return []
+    const leading = isRow ? box.x : box.y
+    const trailing = leading + (isRow ? box.width : box.height)
+    return [{ childIndex, leading, trailing, mid: (leading + trailing) / 2 }]
+  })
+}
+
 function resolveInsertIndex(input: {
   readonly index: StageSceneIndex
   readonly containerId: string
@@ -97,21 +139,9 @@ function resolveInsertIndex(input: {
   const local = localPoint(index, containerId, worldPoint)
   if (!layout || !local) return null
 
-  const isRow = layout.flexDirection === 'row' || layout.flexDirection === 'row-reverse'
-  const reversed = layout.flexDirection.endsWith('-reverse')
+  const { isRow, reversed } = mainAxisOf(layout)
   const pointer = isRow ? local.x : local.y
-  const dragged = new Set(draggedIds)
-
-  // 只有参与排队的 Flow 兄弟才构成插入位；Absolute 子项脱离主轴，位置无参考意义。
-  const slots = childIds.flatMap((id, childIndex) => {
-    if (dragged.has(id)) return []
-    const entity = index.document.entities[id]
-    if (!entity || getComposeLayoutItem(entity).positioning !== 'flow') return []
-    const box = index.layoutSnapshot.boxes[id]
-    if (!box) return []
-    const mid = isRow ? box.x + box.width / 2 : box.y + box.height / 2
-    return [{ childIndex, mid }]
-  })
+  const slots = collectFlowSlots({ index, childIds, draggedIds, isRow })
 
   // reverse 方向下 childIds 顺序与坐标顺序相反，比较方向随之翻转。
   const precedingCount = slots.filter(({ mid }) => reversed ? mid > pointer : mid < pointer).length
@@ -169,4 +199,66 @@ export function resolveStageDropTarget(input: {
 
   if (!isDeepInside(index, containerId, worldPoint, zoom)) return null
   return { kind: 'reparent', containerId }
+}
+
+/**
+ * 落点的世界坐标指示几何。
+ *
+ * @remarks
+ * Engine 只给出世界坐标，由 Stage 自行换算到屏幕并决定描边样式——与 `snapGuides`、
+ * `paintHandles` 的分工一致。
+ * @public
+ */
+export type StageDropIndicator =
+  | { readonly kind: 'reparent'; readonly bounds: StageRect }
+  | { readonly kind: 'reorder'; readonly start: StagePoint; readonly end: StagePoint }
+
+/**
+ * 把落点判定换算成可渲染的世界几何。
+ *
+ * @returns 指示几何；目标已失效或缺少布局结果时为 null。
+ * @public
+ */
+export function resolveStageDropIndicator(input: {
+  readonly index: StageSceneIndex
+  readonly target: StageDropTarget
+  readonly draggedIds: readonly string[]
+}): StageDropIndicator | null {
+  const { index, target, draggedIds } = input
+  if (target.kind === 'reparent') {
+    const bounds = index.getWorldBounds(target.containerId)
+    return bounds ? { kind: 'reparent', bounds } : null
+  }
+
+  const container = index.document.entities[target.containerId]
+  const hierarchy = container ? getComposeHierarchy(container) : null
+  const layout = container ? getComposeLayout(container) : null
+  const box = index.layoutSnapshot.boxes[target.containerId]
+  const matrix = index.getWorldMatrix(target.containerId)
+  if (!hierarchy || !layout || !box || !matrix) return null
+
+  const { isRow, reversed } = mainAxisOf(layout)
+  const slots = collectFlowSlots({
+    index,
+    childIds: hierarchy.childIds,
+    draggedIds,
+    isRow,
+  })
+  const last = slots[slots.length - 1]
+  const at = slots.find((slot) => slot.childIndex === target.index)
+  // 插入位落在某个兄弟之前时贴其起始边；追加到末尾时贴最后一个兄弟的结束边。
+  // reverse 方向下「逻辑靠前」对应坐标更大的一侧，两条边随之互换。
+  const main = at
+    ? (reversed ? at.trailing : at.leading)
+    : last
+      ? (reversed ? last.leading : last.trailing)
+      : (reversed ? (isRow ? box.width : box.height) : 0)
+  const cross = isRow ? box.height : box.width
+  const localStart = isRow ? { x: main, y: 0 } : { x: 0, y: main }
+  const localEnd = isRow ? { x: main, y: cross } : { x: cross, y: main }
+  return {
+    kind: 'reorder',
+    start: applyMatrix(matrix, localStart),
+    end: applyMatrix(matrix, localEnd),
+  }
 }

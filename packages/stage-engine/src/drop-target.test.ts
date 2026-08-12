@@ -1,6 +1,10 @@
 import type { ComposeEntity, ComposeFlexLayout } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
-import { applyChildReorder, resolveStageDropTarget } from './drop-target'
+import {
+  applyChildReorder,
+  resolveStageDropIndicator,
+  resolveStageDropTarget,
+} from './drop-target'
 import { createStageSceneIndex } from './scene-index'
 import { document, entity, layoutSnapshot } from './test-fixtures'
 
@@ -234,5 +238,111 @@ describe('applyChildReorder', () => {
     expect(applyChildReorder(['a', 'b', 'c'], ['a'], 2)).toEqual(['b', 'a', 'c'])
     expect(applyChildReorder(['a', 'b', 'c'], ['a'], 0)).toEqual(['a', 'b', 'c'])
     expect(applyChildReorder(['a', 'b', 'c'], ['a', 'b'], 3)).toEqual(['c', 'a', 'b'])
+  })
+})
+
+describe('resolveStageDropIndicator', () => {
+  const rowContainer = layoutContainer('container', {
+    width: 300,
+    height: 100,
+    childIds: ['a', 'b', 'c'],
+  })
+  const rowChildren = [
+    flowChild('a', 0, 0, 100, 100),
+    flowChild('b', 100, 0, 100, 100),
+    flowChild('c', 200, 0, 100, 100),
+  ]
+
+  it('reparent 给出目标容器的世界包围盒', () => {
+    const target = entity('target', { x: 400, y: 20, width: 200, height: 150, childIds: [] })
+    const index = indexFor([target], ['target'])
+
+    expect(resolveStageDropIndicator({
+      index,
+      target: { kind: 'reparent', containerId: 'target' },
+      draggedIds: ['dragged'],
+    })).toEqual({
+      kind: 'reparent',
+      bounds: { x: 400, y: 20, width: 200, height: 150 },
+    })
+  })
+
+  it('重排落点线贴在目标兄弟的起始边并横跨交叉轴', () => {
+    const index = indexFor([rowContainer, ...rowChildren], ['container'])
+
+    // 插到 c 之前 → 贴 c 的左边缘 x=200。
+    expect(resolveStageDropIndicator({
+      index,
+      target: { kind: 'reorder', containerId: 'container', index: 2 },
+      draggedIds: ['a'],
+    })).toEqual({
+      kind: 'reorder',
+      start: { x: 200, y: 0 },
+      end: { x: 200, y: 100 },
+    })
+  })
+
+  it('追加到末尾时贴最后一个兄弟的结束边', () => {
+    const index = indexFor([rowContainer, ...rowChildren], ['container'])
+
+    expect(resolveStageDropIndicator({
+      index,
+      target: { kind: 'reorder', containerId: 'container', index: 3 },
+      draggedIds: ['a'],
+    })).toEqual({
+      kind: 'reorder',
+      start: { x: 300, y: 0 },
+      end: { x: 300, y: 100 },
+    })
+  })
+
+  it('row-reverse 下落点线贴在相反的一侧', () => {
+    const reverseChildren = [
+      flowChild('a', 200, 0, 100, 100),
+      flowChild('b', 100, 0, 100, 100),
+      flowChild('c', 0, 0, 100, 100),
+    ]
+    const index = indexFor(
+      [layoutContainer('container', {
+        width: 300,
+        height: 100,
+        childIds: ['a', 'b', 'c'],
+        layout: { flexDirection: 'row-reverse' },
+      }), ...reverseChildren],
+      ['container'],
+    )
+
+    // 成为逻辑首位 → 视觉最右侧，贴 a 的右边缘 x=300。
+    expect(resolveStageDropIndicator({
+      index,
+      target: { kind: 'reorder', containerId: 'container', index: 0 },
+      draggedIds: ['c'],
+    })).toEqual({
+      kind: 'reorder',
+      start: { x: 300, y: 0 },
+      end: { x: 300, y: 100 },
+    })
+  })
+
+  it('column 方向落点线横跨宽度', () => {
+    const index = indexFor(
+      [layoutContainer('container', {
+        width: 100,
+        height: 300,
+        childIds: ['a', 'b'],
+        layout: { flexDirection: 'column' },
+      }), flowChild('a', 0, 0, 100, 100), flowChild('b', 0, 100, 100, 100)],
+      ['container'],
+    )
+
+    expect(resolveStageDropIndicator({
+      index,
+      target: { kind: 'reorder', containerId: 'container', index: 1 },
+      draggedIds: ['a'],
+    })).toEqual({
+      kind: 'reorder',
+      start: { x: 0, y: 100 },
+      end: { x: 100, y: 100 },
+    })
   })
 })

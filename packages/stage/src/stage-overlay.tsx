@@ -5,6 +5,7 @@ import type {
   StageInteractionHit,
   StageInteractionTool,
   StageDrawingPreview,
+  StageDropIndicator,
   StageMarqueeMode,
   StagePaintHandle,
   StagePaintSamplePreview,
@@ -42,6 +43,13 @@ interface StageOverlayProps {
   readonly textEditing: boolean
   readonly tool: StageInteractionTool
   readonly drawing: StageDrawingPreview | null
+  /**
+   * 拖拽落点的世界坐标指示。
+   *
+   * 存在时说明松手会改变结构：`reparent` 高亮目标容器，`reorder` 在插入位画一根落点线。
+   * 被拖动目标自身的选中框与手柄呈现不受影响——两者是不同对象，不存在反馈叠加。
+   */
+  readonly dropIndicator: StageDropIndicator | null
   /** 当前框选实际生效的判定；决定 marquee 边框是实线还是虚线。 */
   readonly marqueeHitTest: Exclude<StageMarqueeMode, 'directional'> | null
   readonly marqueeScreen: StageRect | null
@@ -122,6 +130,7 @@ export function StageOverlay({
   textEditing,
   tool,
   drawing,
+  dropIndicator,
   marqueeHitTest,
   marqueeScreen,
   paintHandles,
@@ -145,6 +154,19 @@ export function StageOverlay({
         ...worldToScreen(drawing.bounds, viewport),
         width: drawing.bounds.width * viewport.zoom,
         height: drawing.bounds.height * viewport.zoom,
+      }
+    : null
+  const dropScreen = dropIndicator?.kind === 'reparent'
+    ? {
+        ...worldToScreen(dropIndicator.bounds, viewport),
+        width: dropIndicator.bounds.width * viewport.zoom,
+        height: dropIndicator.bounds.height * viewport.zoom,
+      }
+    : null
+  const dropLine = dropIndicator?.kind === 'reorder'
+    ? {
+        start: worldToScreen(dropIndicator.start, viewport),
+        end: worldToScreen(dropIndicator.end, viewport),
       }
     : null
   const drawingToolActive = tool.startsWith('draw-')
@@ -461,6 +483,26 @@ export function StageOverlay({
           width={marqueeScreen.width}
           x={marqueeScreen.x}
           y={marqueeScreen.y}
+        />
+      ) : null}
+      {dropScreen ? (
+        <rect
+          className="compose-stage__drop-container"
+          data-testid="stage-drop-container"
+          height={dropScreen.height}
+          width={dropScreen.width}
+          x={dropScreen.x}
+          y={dropScreen.y}
+        />
+      ) : null}
+      {dropLine ? (
+        <line
+          className="compose-stage__drop-line"
+          data-testid="stage-drop-line"
+          x1={dropLine.start.x}
+          x2={dropLine.end.x}
+          y1={dropLine.start.y}
+          y2={dropLine.end.y}
         />
       ) : null}
       {drawing && drawingPreviewBounds && drawingStart && drawingEnd ? (

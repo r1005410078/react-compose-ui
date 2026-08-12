@@ -72,6 +72,12 @@ export {
   type StageMarqueeQuery,
 } from './marquee-selection'
 export {
+  resolveStageDropIndicator,
+  resolveStageDropTarget,
+  type StageDropIndicator,
+  type StageDropTarget,
+} from './drop-target'
+export {
   createStageSceneIndex,
   type StageSceneIndex,
 } from './scene-index'

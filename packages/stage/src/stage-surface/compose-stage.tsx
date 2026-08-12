@@ -69,6 +69,7 @@ import {
   createRulerTicks,
   createStageInteractionController,
   createStageSceneIndex,
+  resolveStageDropIndicator,
   expandScrollRange,
   scrollAxisToViewport,
   viewportToScrollAxes,
@@ -978,6 +979,16 @@ function ComposeStageReady({
       : null,
     [normalizedSelection, previewDocument, previewLayoutSnapshot],
   )
+  // 落点几何用未经 preview 变形的原始文档：拖动中的目标已被移开，兄弟与容器的真实位置
+  // 才是插入线该贴的地方。
+  const dropTarget = interaction.dropTarget
+  const dropIndicator = useMemo(() => dropTarget
+    ? resolveStageDropIndicator({
+        index: createStageSceneIndex(document, layoutSnapshot),
+        target: dropTarget,
+        draggedIds: normalizedSelection,
+      })
+    : null, [document, dropTarget, layoutSnapshot, normalizedSelection])
   // 首帧可能先于 effect 中的 context 注入；之后（含 gesture preview）以 engine snapshot 为准。
   const bounds = interaction.selectionBounds
     ?? bootstrapSelectionBounds(previewDocument, previewLayoutSnapshot, normalizedSelection)
@@ -2706,6 +2717,7 @@ function ComposeStageReady({
         <StageOverlay
           canvasGuides={canvasGuides}
           drawing={interaction.drawing}
+          dropIndicator={dropIndicator}
           editableSelection={editableSelection}
           handlePoints={handlePoints}
           label={messages.editingOverlay}

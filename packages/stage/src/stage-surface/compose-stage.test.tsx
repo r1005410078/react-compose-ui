@@ -409,6 +409,7 @@ describe('ComposeStage ECS', () => {
           start: { x: 16, y: 20 },
           end: { x: 96, y: 60 },
         }}
+        dropIndicator={null}
         editableSelection={false}
         textEditing={false}
         handlePoints={null}
@@ -430,6 +431,58 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId('stage-drawing-preview')).toHaveAttribute('data-drawing-tool', 'draw-arrow')
     expect(preview.container.querySelector('.compose-stage__drawing-preview path')).toBeInTheDocument()
     expect(screen.queryByTestId('stage-marquee')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 画布拖拽落点反馈 / reparent 高亮容器且不改动手柄呈现', () => {
+    const overlayProps = {
+      canvasGuides: [],
+      drawing: null,
+      editableSelection: true,
+      textEditing: false,
+      handlePoints: null,
+      label: 'Editing overlay',
+      marqueeHitTest: null,
+      marqueeScreen: null,
+      paintHandles: [],
+      paintSample: null,
+      resizeHandles: [],
+      rotatable: false,
+      screenBounds: null,
+      snapGuides: [],
+      tool: 'select' as const,
+      viewport: { x: 0, y: 0, zoom: 1 },
+      visibleResizeHandles: [],
+      onInteraction: vi.fn(),
+    }
+    const view = render(
+      <StageOverlay
+        {...overlayProps}
+        dropIndicator={{
+          kind: 'reparent',
+          bounds: { x: 10, y: 20, width: 100, height: 50 },
+        }}
+      />,
+    )
+    const highlight = view.getByTestId('stage-drop-container')
+    expect(highlight).toHaveAttribute('x', '10')
+    expect(highlight).toHaveAttribute('width', '100')
+    expect(view.queryByTestId('stage-drop-line')).not.toBeInTheDocument()
+
+    view.rerender(
+      <StageOverlay
+        {...overlayProps}
+        dropIndicator={{ kind: 'reorder', start: { x: 40, y: 0 }, end: { x: 40, y: 80 } }}
+      />,
+    )
+    const line = view.getByTestId('stage-drop-line')
+    expect(line).toHaveAttribute('x1', '40')
+    expect(line).toHaveAttribute('y2', '80')
+    expect(view.queryByTestId('stage-drop-container')).not.toBeInTheDocument()
+
+    // 落点清除后两种反馈都消失。
+    view.rerender(<StageOverlay {...overlayProps} dropIndicator={null} />)
+    expect(view.queryByTestId('stage-drop-container')).not.toBeInTheDocument()
+    expect(view.queryByTestId('stage-drop-line')).not.toBeInTheDocument()
   })
 
   it('OpenSpec: stage / Stage 页面 setup 值预览 / 响应式值刷新且方法为 no-op', async () => {

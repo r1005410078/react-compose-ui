@@ -251,6 +251,21 @@
   fill: none;
 }
 
+/* 拖拽落点反馈。加粗描边与普通选中框区分，表示松手会改变结构而不只是移动位置。 */
+.compose-stage__drop-container {
+  fill: rgb(54 135 255 / 8%);
+  stroke: #3687ff;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.compose-stage__drop-line {
+  stroke: #3687ff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
 .compose-stage__line-selection-axis {
   fill: none;
   pointer-events: none;
