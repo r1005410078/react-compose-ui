@@ -28,19 +28,24 @@ Transform rotation，缓存 MUST 同时区分 document 与 snapshot revision。
 StageInteractionController MUST 在 `move` 手势进行中持续判定指针下最深的合法容器（复用
 `containerAtPoint` 并排除被拖动选区自身与其后代）。仅当指针进入该容器包围盒内部达到规定比例时才把它
 记为候选 reparent 目标；贴边掠过 MUST NOT 触发，且 MUST NOT 使用停留计时作为额外或替代的触发条件。
-候选目标 MUST 通过 effect 暴露供宿主渲染高亮，Controller 自身不持有渲染状态。未达到判定条件时 MUST
-保持现有行为：目标坐标在原父级内更新，不触发 reparent。
+候选目标 MUST 通过 snapshot 暴露供宿主渲染高亮（与 `previewTransforms`、`drawing` 等既有 preview
+状态同一机制，而不是 effect），Controller 自身不持有渲染状态。未达到判定条件时 MUST 保持现有行为：
+目标坐标在原父级内更新，不触发 reparent。
 
 Pointer Up 时若存在候选 reparent 目标，Controller MUST 提交一次原子 reparent 命令并使用该目标已有
 的 Flow/Absolute 默认判定（与 `createReparentCommand` 的 `targetManagesFlow` 规则一致），MUST NOT
-新增拖拽手势内的 Flow/Absolute 选择分支。多选拖拽的相对顺序保持、祖先/后代去重规则 MUST 与既有场景
-树批量移动规则一致。Escape、失去指针捕获或候选目标在提交前失效（锁定、被删除、变为无 Hierarchy）时
-MUST NOT 提交任何命令。
+新增拖拽手势内的 Flow/Absolute 选择分支，且 MUST NOT 同时发布 Transform 命令——一次手势只表达一个
+结构意图。多选拖拽 MUST 按文档顺序提交以保持相对顺序，祖先/后代去重规则 MUST 与既有场景树批量移动
+规则一致。Escape 与失去指针捕获时 MUST NOT 提交任何命令。
+
+候选目标失效（锁定、被删除、变为无 Hierarchy）只能经由文档变化发生，而并发文档变化已由「手势预览与
+原子提交」判定为不兼容并取消整个空间手势，因此该情形 MUST NOT 提交任何命令；Controller 仍 MUST 在
+提交前复核目标有效性，避免未来新增的非文档路径产生指向已失效目标的命令。
 
 #### Scenario: 指针进入容器内部触发候选高亮
 
 - **WHEN** 拖动中的指针进入某合法容器包围盒内部达到判定比例
-- **THEN** Controller 发布该容器为候选 reparent 目标的 effect
+- **THEN** Controller 在 snapshot 中发布该容器为候选 reparent 目标
 - **AND** 指针退出该区域后候选目标清除且不产生任何命令
 
 #### Scenario: 贴边掠过不触发吸入
@@ -58,7 +63,7 @@ MUST NOT 提交任何命令。
 #### Scenario: 候选目标提交前失效则不提交
 
 - **WHEN** 候选 reparent 目标在 Pointer Up 前被锁定、删除或经其他事务变为不再是合法容器
-- **THEN** Controller 不提交 reparent 命令，目标退回原父级内移动的结果
+- **THEN** 该并发文档变化按既有手势原子性取消整个手势，不产生任何命令
 - **AND** 不产生指向已失效目标的命令
 
 ### Requirement: Auto Layout 容器内原地重排
@@ -69,9 +74,9 @@ Controller MUST 按指针在主轴上的位置与各兄弟中点比较得到插�
 命令。插入位置与拖动前顺序相同时 MUST NOT 提交任何命令。指针离开容器边界时 MUST 回退到既有的烘焙
 Absolute 行为。`flexWrap` 为 `wrap` 或 `wrap-reverse` 的容器 MUST 保持现有行为，不进行原地重排判定。
 
-拖动过程中 Controller MUST 通过 effect 发布当前插入位置，供宿主呈现落点预览；预览 MUST NOT 产生
-文档事务。多选拖拽中同时包含同容器 Flow 目标与其他目标时，Flow 目标 MUST 按重排规则处理并保持它们
-的相对顺序，其余目标 MUST 按各自既有规则处理，整体 MUST 仍在一次 Pointer Up 内完成提交。
+拖动过程中 Controller MUST 通过 snapshot 发布当前插入位置，供宿主呈现落点预览；预览 MUST NOT 产生
+文档事务。一次拖拽 MUST 只表达一种结构意图：当选区并非全部属于同一候选容器时 MUST NOT 进入重排，
+改按 reparent 或既有 Transform 规则统一处理，MUST NOT 在同一次手势内混合提交重排与其他结构命令。
 
 #### Scenario: 容器内拖拽只重排不烘焙
 
@@ -88,14 +93,14 @@ Absolute 行为。`flexWrap` 为 `wrap` 或 `wrap-reverse` 的容器 MUST 保持
 #### Scenario: 拖动中呈现落点预览
 
 - **WHEN** 用户在 `nowrap` 容器内拖动 Flow 子级并移动指针
-- **THEN** Controller 随指针发布当前插入位置的 effect
+- **THEN** Controller 随指针在 snapshot 中发布当前插入位置
 - **AND** 预览期间不产生任何文档事务
 
-#### Scenario: 多选混合目标一次提交
+#### Scenario: 选区跨容器时不进入重排
 
-- **WHEN** 一次拖动的选区同时包含同一 `nowrap` 容器内的多个 Flow 子级与该容器外的其他目标
-- **THEN** 容器内的 Flow 目标按重排规则处理并保持相对顺序，其余目标按各自既有规则处理
-- **AND** 整个操作在一次 Pointer Up 内完成提交
+- **WHEN** 一次拖动的选区同时包含某 `nowrap` 容器内的 Flow 子级与该容器外的其他目标
+- **THEN** 不产生重排落点，整次手势按 reparent 或既有 Transform 规则统一处理
+- **AND** 不在同一次手势内混合提交重排与其他结构命令
 
 #### Scenario: 拖出容器边界回退为烘焙 Absolute
 

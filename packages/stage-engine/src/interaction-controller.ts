@@ -7,6 +7,7 @@ import type {
 } from '@compose-ui/core'
 import {
   BUILTIN_COMMAND_TYPES,
+  getComposeHierarchy,
   getComposeLock,
   getComposeLayoutItem,
   getComposeAppearance,
@@ -23,11 +24,16 @@ import {
   type StageMarqueeDirection,
   type StageMarqueeMode,
 } from './marquee-selection'
+import { createReparentCommand } from './commands'
+import {
+  resolveStageDropTarget,
+  type StageDropTarget,
+} from './drop-target'
 import {
   createStageSceneIndex,
   type StageSceneIndex,
 } from './scene-index'
-import { describeTransform } from './transaction-labels'
+import { describeEntityTargets, describeTransform } from './transaction-labels'
 import {
   expandScrollRange,
   snapResizePoint,
@@ -387,6 +393,14 @@ export interface StageInteractionSnapshot {
     | 'guide-delete'
   /** 辅助线手势当前停在所属标尺内，松手将删除该辅助线。 */
   readonly guideDelete: boolean
+  /**
+   * move 手势当前的落点判定；非 move phase 或不满足判定条件时为 null。
+   *
+   * @remarks
+   * Overlay 据此渲染候选容器高亮与容器内重排的落点指示。为 null 表示松手只更新坐标，
+   * 不改变父子关系与顺序。
+   */
+  readonly dropTarget: StageDropTarget | null
 }
 
 /*
@@ -473,6 +487,7 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   scrollRange: null,
   cursor: 'default',
   guideDelete: false,
+  dropTarget: null,
 }
 
 type Gesture =
@@ -501,6 +516,7 @@ type Gesture =
       readonly bounds: StageRect
       readonly axis?: 'x' | 'y'
       transforms: Readonly<Record<string, StageTransform>>
+      dropTarget: StageDropTarget | null
     }
   | {
       readonly type: 'resize'
@@ -992,6 +1008,21 @@ export function createStageInteractionController(): StageInteractionController {
   const textEditable = (entityId: string) =>
     Boolean(context?.isTextEditable?.(entityId))
 
+  /**
+   * 提交前复核落点仍然成立。
+   *
+   * @remarks
+   * 拖动期间可能有其他事务把目标容器锁定、删除或去掉 Hierarchy。此时放弃结构命令，
+   * 让手势退回到普通的原父级内移动，而不是提交一条指向已失效目标的命令。
+   */
+  const resolveCommittableDropTarget = (target: StageDropTarget | null) => {
+    if (!target || !context) return null
+    const container = context.document.entities[target.containerId]
+    if (!container || !getComposeHierarchy(container)) return null
+    if (getComposeLock(container).locked) return null
+    return target
+  }
+
   const samplePaintAt = (
     target: StagePaintSampling,
     world: StagePoint,
@@ -1283,7 +1314,14 @@ export function createStageInteractionController(): StageInteractionController {
           : rawDelta
       if (Math.hypot(delta.x, delta.y) * gesture.viewport.zoom < 2) {
         gesture.transforms = {}
-        publish({ ...snapshot, phase: 'move', previewTransforms: {}, snapGuides: [] })
+        gesture.dropTarget = null
+        publish({
+          ...snapshot,
+          phase: 'move',
+          previewTransforms: {},
+          snapGuides: [],
+          dropTarget: null,
+        })
         return
       }
       const snapped = snapTranslation(
@@ -1305,11 +1343,19 @@ export function createStageInteractionController(): StageInteractionController {
         gesture.ids,
         translationMatrix(snapped.delta.x, snapped.delta.y),
       )
+      // 落点跟随指针本身而不是吸附后的几何：用户判断“放进哪里”看的是光标位置。
+      gesture.dropTarget = resolveStageDropTarget({
+        index,
+        draggedIds: gesture.ids,
+        worldPoint: world,
+        zoom: gesture.viewport.zoom,
+      })
       publish({
         ...snapshot,
         phase: 'move',
         previewTransforms: gesture.transforms,
         snapGuides: snapped.guides,
+        dropTarget: gesture.dropTarget,
       })
       return
     }
@@ -1618,6 +1664,7 @@ export function createStageInteractionController(): StageInteractionController {
           bounds,
           axis,
           transforms: {},
+          dropTarget: null,
         }
       }
       else if (type === 'resize' && handle) {
@@ -1922,6 +1969,46 @@ export function createStageInteractionController(): StageInteractionController {
           },
         })
       }
+    }
+    else if (finished.type === 'move' && resolveCommittableDropTarget(finished.dropTarget)) {
+      // 落点有效时这次手势表达的是结构意图（换父级或改顺序），位置由布局重新决定，
+      // 因此不再发布 Transform 命令，避免一次手势产生两条事务。
+      const target = resolveCommittableDropTarget(finished.dropTarget)!
+      const container = context.document.entities[target.containerId]!
+      const childIds = getComposeHierarchy(container)!.childIds
+      // 按文档顺序提交，保证多选批量移动后的相对顺序与画布所见一致。
+      const orderedIds = [...finished.ids].sort((a, b) => {
+        const left = childIds.indexOf(a)
+        const right = childIds.indexOf(b)
+        return (left < 0 ? Number.MAX_SAFE_INTEGER : left)
+          - (right < 0 ? Number.MAX_SAFE_INTEGER : right)
+      })
+      effects.push({
+        type: 'command.dispatch',
+        command: target.kind === 'reparent'
+          ? createReparentCommand(
+              context.document,
+              context.layoutSnapshot,
+              orderedIds,
+              target.containerId,
+              childIds.length,
+              context.idFactory(),
+            )
+          : {
+              id: context.idFactory(),
+              type: BUILTIN_COMMAND_TYPES.moveEntity,
+              payload: {
+                entityIds: orderedIds,
+                parentId: target.containerId,
+                index: target.index,
+              },
+              meta: {
+                label: `Reorder ${describeEntityTargets(context.document, orderedIds)}`,
+                source: 'stage',
+                targetIds: orderedIds,
+              },
+            },
+      })
     }
     else if (
       finished.type === 'move'

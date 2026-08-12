@@ -1359,3 +1359,195 @@ describe('框选工具与选区布尔组合', () => {
     expect(effects.some((effect) => effect.type === 'command.dispatch')).toBe(false)
   })
 })
+
+describe('OpenSpec: stage-engine / 画布拖拽 reparent 与容器内重排', () => {
+  const dragTo = (
+    controller: ReturnType<typeof setup>['controller'],
+    to: { x: number; y: number },
+    entityId = 'dragged',
+  ) => {
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: to, modifiers })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: to, modifiers })
+  }
+
+  function reparentFixture() {
+    const target = entity('target', { x: 400, y: 0, width: 200, height: 200, childIds: [] })
+    const dragged = entity('dragged', { x: 0, y: 0, width: 50, height: 50 })
+    return document([target, dragged], ['target', 'dragged'])
+  }
+
+  it('深入容器内部松手提交一次 reparent，不再发布 Transform 命令', () => {
+    const value = reparentFixture()
+    const { controller, effects } = setup(value, layoutSnapshot(value), ['dragged'])
+    dragTo(controller, { x: 500, y: 100 })
+
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    const batch = commands[0] as Extract<StageInteractionEffect, { type: 'command.dispatch' }>
+    expect(batch.command.type).toBe(BUILTIN_COMMAND_TYPES.batch)
+    expect(JSON.stringify(batch.command)).toContain('"parentId":"target"')
+    expect(JSON.stringify(batch.command)).not.toContain(BUILTIN_COMMAND_TYPES.setTransform)
+  })
+
+  it('贴边掠过维持既有 Transform 提交', () => {
+    const value = reparentFixture()
+    const { controller, effects } = setup(value, layoutSnapshot(value), ['dragged'])
+    dragTo(controller, { x: 404, y: 100 })
+
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: { type: BUILTIN_COMMAND_TYPES.setTransform },
+    })
+  })
+
+  it('拖动期间目标被锁定时按既有原子性取消手势', () => {
+    const value = reparentFixture()
+    const { controller, effects } = setup(value, layoutSnapshot(value), ['dragged'])
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'dragged' },
+      modifiers,
+    })
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 500, y: 100 },
+      modifiers,
+    })
+    expect(controller.getSnapshot().dropTarget)
+      .toEqual({ kind: 'reparent', containerId: 'target' })
+
+    // 拖动期间目标被锁定。
+    const locked = entity('target', {
+      x: 400, y: 0, width: 200, height: 200, childIds: [], locked: true,
+    })
+    const next = document([locked, value.entities.dragged!], ['target', 'dragged'])
+    controller.updateContext({
+      document: next,
+      layoutSnapshot: layoutSnapshot(next),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'select',
+      selectedIds: ['dragged'],
+      idFactory: () => 'id-late',
+    })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 500, y: 100 }, modifiers })
+
+    // 并发文档变化让空间手势整体不兼容，既有规则直接取消，不产生任何命令。
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toHaveLength(0)
+    expect(controller.getSnapshot().dropTarget).toBeNull()
+  })
+
+  it('Escape 取消后不提交任何命令且清除落点', () => {
+    const value = reparentFixture()
+    const { controller, effects } = setup(value, layoutSnapshot(value), ['dragged'])
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'dragged' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 500, y: 100 }, modifiers })
+    controller.send({ type: 'pointer.cancel', pointerId: 1 })
+
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toHaveLength(0)
+    expect(controller.getSnapshot().dropTarget).toBeNull()
+  })
+})
+
+describe('OpenSpec: stage-engine / Auto Layout 容器内原地重排提交', () => {
+  function reorderFixture() {
+    const container = entity('container', { x: 0, y: 0, width: 300, height: 100, childIds: ['a', 'b', 'c'] })
+    const withLayout = {
+      ...container,
+      components: {
+        ...container.components,
+        Layout: {
+          type: 'flex' as const,
+          flexDirection: 'row' as const,
+          flexWrap: 'nowrap' as const,
+          alignContent: 'stretch' as const,
+          justifyContent: 'flex-start' as const,
+          alignItems: 'stretch' as const,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
+        },
+      },
+    }
+    const flow = (id: string, x: number) => {
+      const base = entity(id, { x, y: 0, width: 100, height: 100 })
+      return {
+        ...base,
+        components: {
+          ...base.components,
+          LayoutItem: { ...base.components.LayoutItem, positioning: 'flow' as const },
+        },
+      }
+    }
+    return document([withLayout, flow('a', 0), flow('b', 100), flow('c', 200)], ['container'])
+  }
+
+  it('容器内重排只发一条 moveEntity，不发 Transform 命令', () => {
+    const value = reorderFixture()
+    const { controller, effects } = setup(value, layoutSnapshot(value), ['a'])
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 50, y: 50 },
+      hit: { kind: 'entity', entityId: 'a' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 280, y: 50 }, modifiers })
+
+    // 拖动中随指针发布插入位置，且此时尚未产生任何事务。
+    expect(controller.getSnapshot().dropTarget)
+      .toEqual({ kind: 'reorder', containerId: 'container', index: 3 })
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toHaveLength(0)
+
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 280, y: 50 }, modifiers })
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: {
+        type: BUILTIN_COMMAND_TYPES.moveEntity,
+        payload: { entityIds: ['a'], parentId: 'container', index: 3 },
+      },
+    })
+  })
+
+  it('拖出容器边界回退为既有 Transform 提交', () => {
+    const value = reorderFixture()
+    const { controller, effects } = setup(value, layoutSnapshot(value), ['a'])
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 50, y: 50 },
+      hit: { kind: 'entity', entityId: 'a' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 50, y: 400 }, modifiers })
+
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: { type: BUILTIN_COMMAND_TYPES.setTransform, payload: { operation: 'move' } },
+    })
+  })
+})
