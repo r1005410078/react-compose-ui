@@ -154,6 +154,100 @@ function documentFixture(): ComposeDocument {
   }
 }
 
+
+/**
+ * 带一个关联组件实例的文档；实例内部快照是 Group 根加一个文本子项，
+ * 用来验证 Scene Tree 的内部层级投影。
+ */
+function instanceDocumentFixture(): ComposeDocument {
+  const innerDocument = {
+    schemaVersion: 6 as const,
+    canvas: createDefaultCanvasSettings(),
+    output: { width: 120, height: 80, backgroundPaint: { kind: 'solid' as const, color: 'transparent' } },
+    rootIds: ['c-root'],
+    entities: {
+      'c-root': {
+        id: 'c-root',
+        name: 'Group',
+        components: {
+          Composition: {
+            presetId: 'group',
+            baseComponentKeys: ['Transform', 'LayoutItem', 'GeometryConstraints', 'Visibility', 'Lock', 'Hierarchy'],
+            capabilityIds: [],
+          },
+          Transform: { rotation: 0 },
+          LayoutItem: layoutItem(transform(0, 0, 120, 80)),
+          GeometryConstraints: { movable: true, resize: 'none', rotatable: false },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Hierarchy: { childIds: ['c-text'] },
+        },
+      },
+      'c-text': {
+        id: 'c-text',
+        name: 'Inner Text',
+        components: {
+          Composition: {
+            presetId: 'text',
+            baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Renderer'],
+            capabilityIds: [],
+          },
+          Transform: { rotation: 0 },
+          LayoutItem: layoutItem(transform(0, 0, 80, 20)),
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Renderer: { type: 'text', props: { text: 'Inner' } },
+        },
+      },
+    },
+  } as unknown as ComposeDocument
+  const reference = {
+    kind: 'component' as const,
+    providerId: 'project',
+    assetKey: 'card',
+    scope: 'persistent' as const,
+  }
+  return {
+    schemaVersion: 6,
+    canvas: createDefaultCanvasSettings(),
+    output: createDefaultOutputSettings(),
+    rootIds: ['instance'],
+    entities: {
+      instance: {
+        id: 'instance',
+        name: 'Card',
+        components: {
+          Composition: {
+            presetId: 'component-instance',
+            baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Renderer'],
+            capabilityIds: [],
+          },
+          Transform: { rotation: 0 },
+          LayoutItem: layoutItem(transform(0, 0, 120, 80)),
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          GeometryConstraints: { movable: true, resize: 'none', rotatable: true },
+          Renderer: {
+            type: 'component-instance',
+            props: {
+              reference,
+              resolvedSnapshot: {
+                componentId: 'card',
+                kind: 'base',
+                revision: '1',
+                document: innerDocument,
+                properties: [],
+                appliedLineage: [{ reference, componentId: 'card', kind: 'base', revision: '1' }],
+              },
+              instanceOverrides: { properties: {}, operations: [] },
+            },
+          },
+        },
+      } as unknown as ComposeDocument['entities'][string],
+    },
+  }
+}
+
 // 编辑器测试只验证聚合契约：分组来自 Registry 定义顺序、readOnly 与 dispatch 正确
 // 透传；内建 Inspector 的真实行为由 @compose-ui/materials 的测试覆盖。
 let testCommandIndex = 0
@@ -511,6 +605,34 @@ describe('useComposeEditorController', () => {
     expect(result.current.sceneTreeProps.nodes[0]?.children?.[0]).toMatchObject({
       id: 'title',
       canHaveChildren: false,
+    })
+  })
+
+  it('展开组件实例时投影内部层级，未展开保持单节点', () => {
+    const editorRuntime = createTransactionRuntime({
+      document: instanceDocumentFixture(),
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    const collapsed = result.current.sceneTreeProps.nodes[0]
+    expect(collapsed).toMatchObject({ id: 'instance', canHaveChildren: true })
+    // 未展开不构建投影，观感与既有单节点一致。
+    expect(collapsed?.children).toBeUndefined()
+
+    act(() => {
+      result.current.sceneTreeProps.onExpandedChange?.(['instance'])
+    })
+
+    const expanded = result.current.sceneTreeProps.nodes[0]
+    expect(expanded?.children).toHaveLength(1)
+    expect(expanded?.children?.[0]).toMatchObject({
+      id: 'instance/c-text',
+      label: 'Inner Text',
     })
   })
 

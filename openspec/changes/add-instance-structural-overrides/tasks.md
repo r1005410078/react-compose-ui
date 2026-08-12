@@ -28,9 +28,13 @@
 - [x] 3.1 [Red → Green → Refactor] 复合地址编解码、嵌套拼接与碰撞防护
   - Red: `bun run --cwd packages/core test -- component-instance-path.test.ts`；6 failed（先收紧 toThrowError 断言，避免调用不存在函数导致的假绿）。
   - Green/Refactor: 同一命令 6 passed；分隔符禁入 Entity ID，段数上限为嵌套上限两倍。
-- [ ] 3.2 [Red → Green → Refactor] SceneTree 惰性内部子树投影与受限能力位
-- [ ] 3.3 [Red → Green → Refactor] Editor 从 resolvedSnapshot + 实例操作构建投影节点
-- [ ] 3.4 [Red → Green → Refactor] 未展开实例保持单节点的回归
+- [x] 3.2 [Red → Green → Refactor] SceneTree 惰性内部子树投影与受限能力位
+  - Result: SceneTree 无需改动，受控节点契约已足够；投影与能力位由宿主声明。结构命令未接线前能力位全关，TODO 指向 5.2。
+- [x] 3.3 [Red → Green → Refactor] Editor 从 resolvedSnapshot + 实例操作构建投影节点
+  - Red: `bun run --cwd packages/editor test -- controller.test.tsx`；1 failed；实例节点 canHaveChildren 为 false，无法展开。
+  - Green/Refactor: 同一命令 26 passed；projectInstanceChildren 按展开集合惰性构建，validExpanded 放行实例与复合地址。
+- [x] 3.4 [Red → Green → Refactor] 未展开实例保持单节点的回归
+  - Result: 同一用例断言未展开时 children 为 undefined，不构建投影。
 
 ## 4. Stage 下钻
 

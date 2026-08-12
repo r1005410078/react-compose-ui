@@ -6,6 +6,7 @@ import {
   ComposeComponentLibraryPanel,
   ComposeComponentAssetIcon,
   createComposeComponentInstanceEntity,
+  readComposeComponentInstance,
   type ComposeComponentLibraryItem,
   type ComposeComponentSnapshot,
   type ComposeComponentStore,
@@ -21,11 +22,15 @@ import {
 } from '@compose-ui/stage-engine'
 import {
   BUILTIN_COMMAND_TYPES,
+  composeInstancePathHostId,
+  encodeComposeInstancePath,
   getComposeComposition,
   getComposeHierarchy,
   getComposeLock,
   getComposeRenderer,
   getComposeVisibility,
+  isComposeInstancePath,
+  resolveComposeInstanceOverrides,
   type ComposeBaseComponentAsset,
   type CommandDispatchResult,
   type ComposeDocument,
@@ -113,10 +118,70 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
   }, [controller])
 }
 
+/**
+ * 把组件实例解析后的内部实体投影为 Scene Tree 节点。
+ *
+ * @remarks
+ * 投影只存在于编辑期表示层：宿主文档中实例仍是单个 Entity，内部节点用复合地址标识。
+ * 结构编辑命令尚未接线，因此能力位一律关闭。
+ * TODO(add-instance-structural-overrides 5.2): 结构操作接线后放开 canDelete/canMove/canRename。
+ */
+function projectInstanceChildren(
+  registry: ComposeEntityRegistry,
+  instance: ComposeEntity,
+  expandedIds: ReadonlySet<string>,
+  addressPrefix: readonly string[],
+): readonly ComposeSceneTreeNode[] | undefined {
+  const facts = readComposeComponentInstance(instance)
+  if (!facts) return undefined
+  const resolved = resolveComposeInstanceOverrides({
+    document: facts.snapshot.document,
+    properties: facts.snapshot.properties,
+    overrides: facts.overrides,
+  })
+  if (!resolved.ok) return undefined
+  const innerDocument = resolved.document
+  const rootId = innerDocument.rootIds[0]
+  if (!rootId) return undefined
+  // 组件根就是实例节点本身，因此投影从根的直接子项开始。
+  const rootChildren = getComposeHierarchy(innerDocument.entities[rootId]!)?.childIds ?? []
+  const project = (entityId: string): ComposeSceneTreeNode | null => {
+    const inner = innerDocument.entities[entityId]
+    if (!inner) return null
+    const address = encodeComposeInstancePath([...addressPrefix, entityId])
+    const innerHierarchy = getComposeHierarchy(inner)
+    const composition = getComposeComposition(inner)
+    const expanded = expandedIds.has(address)
+    const children = innerHierarchy && expanded
+      ? innerHierarchy.childIds
+        .map((childId) => project(childId))
+        .filter((node): node is ComposeSceneTreeNode => node !== null)
+      : undefined
+    return {
+      id: address,
+      label: inner.name,
+      visible: getComposeVisibility(inner).visible,
+      locked: getComposeLock(inner).locked,
+      icon: composition.presetId ? registry.getPreset(composition.presetId)?.icon : undefined,
+      canHaveChildren: innerHierarchy !== undefined,
+      canRename: false,
+      canDelete: false,
+      canMove: false,
+      canToggleVisibility: false,
+      canToggleLocked: false,
+      ...(children ? { children } : {}),
+    }
+  }
+  return rootChildren
+    .map((childId) => project(childId))
+    .filter((node): node is ComposeSceneTreeNode => node !== null)
+}
+
 function sceneEntity(
   document: ComposeDocument,
   registry: ComposeEntityRegistry,
   entity: ComposeEntity,
+  expandedIds: ReadonlySet<string>,
 ): ComposeSceneTreeNode {
   const hierarchy = getComposeHierarchy(entity)
   const locked = getComposeLock(entity).locked
@@ -148,7 +213,8 @@ function sceneEntity(
         : composition.presetId === 'container'
           ? 'Container'
           : undefined,
-    canHaveChildren: hierarchy !== undefined,
+    // 实例没有 Hierarchy，但其内部层级可投影，因此仍可展开。
+    canHaveChildren: hierarchy !== undefined || componentInstance,
     canRename: !locked,
     canDelete: !locked,
     canMove: !locked,
@@ -159,8 +225,14 @@ function sceneEntity(
           children: hierarchy.childIds
             .map((id) => document.entities[id])
             .filter((child): child is ComposeEntity => child !== undefined)
-            .map((child) => sceneEntity(document, registry, child)),
+            .map((child) => sceneEntity(document, registry, child, expandedIds)),
         }
+      : {}),
+    ...(componentInstance && expandedIds.has(entity.id)
+      ? (() => {
+          const children = projectInstanceChildren(registry, entity, expandedIds, [entity.id])
+          return children ? { children } : {}
+        })()
       : {}),
   }
 }
@@ -168,11 +240,13 @@ function sceneEntity(
 function deriveSceneEntities(
   document: ComposeDocument,
   registry: ComposeEntityRegistry,
+  expandedIds: readonly string[],
 ): readonly ComposeSceneTreeNode[] {
+  const expanded = new Set(expandedIds)
   return document.rootIds
     .map((id) => document.entities[id])
     .filter((entity): entity is ComposeEntity => entity !== undefined)
-    .map((entity) => sceneEntity(document, registry, entity))
+    .map((entity) => sceneEntity(document, registry, entity, expanded))
 }
 
 function unique(values: readonly string[]) {
@@ -186,10 +260,22 @@ function validSelection(document: ComposeDocument, ids: readonly string[]) {
   })
 }
 
+/**
+ * 归一化展开集合。
+ *
+ * @remarks
+ * 除宿主容器外，组件实例与实例内部复合地址也可展开；复合地址只校验宿主实例是否仍存在，
+ * 内部实体是否存在由投影阶段决定，避免在这里重复解析快照。
+ */
 function validExpanded(document: ComposeDocument, ids: readonly string[]) {
   return unique(ids).filter((id) => {
+    if (isComposeInstancePath(id)) {
+      const host = document.entities[composeInstancePathHostId(id)]
+      return host ? readComposeComponentInstance(host) !== null : false
+    }
     const entity = document.entities[id]
-    return entity ? getComposeHierarchy(entity) !== undefined : false
+    if (!entity) return false
+    return getComposeHierarchy(entity) !== undefined || readComposeComponentInstance(entity) !== null
   })
 }
 
@@ -748,7 +834,7 @@ export function useComposeEditorController({
   }, [componentStore, document, selectedIds])
 
   const sceneTreeProps = useMemo<ComposeSceneTreeProps>(() => ({
-    nodes: deriveSceneEntities(document, registry),
+    nodes: deriveSceneEntities(document, registry, expandedIds),
     selectedIds,
     expandedIds,
     onSelectionChange: setSelectedIds,
