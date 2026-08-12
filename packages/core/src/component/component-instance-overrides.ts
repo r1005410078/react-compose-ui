@@ -10,15 +10,12 @@ import type {
  * `component-instance` 持久化的分层覆盖。
  *
  * @remarks
- * 结构操作与 Variant 共用同一套操作代数，因此 Apply 到直接父源时可以原样并入，无需有损转换。
- * 属性覆盖保持独立分区：property ID 是 Base 声明的稳定契约，与内部实体字段路径的生命周期
- * 和冲突判定规则都不同，合并成一个分区会让二者的失效判定互相污染。
+ * 只有一个结构操作分区：实例内部字段可以直接覆盖，因此不再需要与之并行的暴露属性机制。
+ * 操作与 Variant 共用同一套代数，Apply 到直接父源时可以原样并入，无需有损转换。
  *
  * @public
  */
 export interface ComposeComponentInstanceOverrides {
-  /** 稳定 property ID 到 JSON 值的覆盖。 */
-  readonly properties: Readonly<Record<string, JsonValue>>
   /** 与 Variant 同构的稳定结构操作，按顺序应用。 */
   readonly operations: readonly ComposeComponentOverrideOperation[]
 }
@@ -49,8 +46,9 @@ function issue(
  * 严格解析 `instanceOverrides`。
  *
  * @remarks
- * 缺少 `properties`/`operations` 分区的对象一律判为未迁移的旧 `propertyOverrides`，
- * 不静默接受；调用方必须显式走 {@link migrateLegacyComposeInstanceOverrides}。
+ * 缺少 `operations` 的对象判为未迁移的旧 `propertyOverrides`；仍带 `properties` 分区的对象判为
+ * 未迁移的旧分区形状。两者都不静默接受，必须显式走
+ * {@link migrateLegacyComposeInstanceOverrides}。
  *
  * @public
  */
@@ -58,22 +56,26 @@ export function parseComposeInstanceOverrides(value: unknown): ComposeInstanceOv
   if (!isRecord(value)) {
     return { ok: false, issues: [issue('component-asset.invalid-shape', 'instanceOverrides 必须是对象')] }
   }
-  if (!('properties' in value) || !('operations' in value)) {
+  if (!('operations' in value)) {
     return {
       ok: false,
       issues: [issue(
         'component-asset.legacy',
-        'instanceOverrides 缺少 properties/operations 分区，疑似未迁移的 propertyOverrides',
+        'instanceOverrides 缺少 operations 分区，疑似未迁移的 propertyOverrides',
       )],
     }
   }
-  const { properties, operations } = value
-  if (!isRecord(properties)) {
+  if ('properties' in value) {
     return {
       ok: false,
-      issues: [issue('component-asset.invalid-shape', 'properties 必须是对象', ['instanceOverrides', 'properties'])],
+      issues: [issue(
+        'component-asset.legacy',
+        'instanceOverrides 仍含已删除的 properties 分区，需要显式迁移',
+        ['instanceOverrides', 'properties'],
+      )],
     }
   }
+  const { operations } = value
   if (!Array.isArray(operations)) {
     return {
       ok: false,
@@ -93,61 +95,42 @@ export function parseComposeInstanceOverrides(value: unknown): ComposeInstanceOv
       )],
     }
   }
-  return {
-    ok: true,
-    overrides: {
-      properties: properties as Readonly<Record<string, JsonValue>>,
-      operations: operations as readonly ComposeComponentOverrideOperation[],
-    },
-  }
+  return { ok: true, overrides: { operations: operations as readonly ComposeComponentOverrideOperation[] } }
 }
 
 /**
- * 把旧 `propertyOverrides` 显式迁移为分区形式。
+ * 把旧实例覆盖显式迁移为只含结构操作的形式。
  *
  * @remarks
- * 纯迁移：结构分区为空，渲染输出逐字节不变。
+ * 接受两种旧形状：扁平的 `propertyOverrides` 映射，以及含 `properties` 分区的对象。每条属性覆盖
+ * 按其定义的 target 转换为等价 `set-field` 操作，因此渲染输出不变；已有结构操作排在其后，保持
+ * 「结构先于属性」的原解析顺序。
+ *
+ * @param legacy - 旧覆盖数据
+ * @param definitions - 旧 Base 声明的暴露属性定义，用于把 property ID 还原为字段目标
  *
  * @public
  */
 export function migrateLegacyComposeInstanceOverrides(
-  legacy: Readonly<Record<string, JsonValue>>,
+  legacy: Readonly<Record<string, unknown>>,
+  definitions: readonly ComposeComponentPropertyDefinition[] = [],
 ): ComposeComponentInstanceOverrides {
-  return { properties: { ...legacy }, operations: [] }
-}
-
-/**
- * 按 结构操作 → 属性覆盖 的固定顺序解析实例覆盖。
- *
- * @remarks
- * 结构必须先成型，属性覆盖才能命中由结构操作新建的目标；顺序颠倒会让合法覆盖失败。
- * 任一阶段失败都不返回半应用文档。
- *
- * @public
- */
-export function resolveComposeInstanceOverrides(input: {
-  readonly document: ComposeDocument
-  readonly properties: readonly ComposeComponentPropertyDefinition[]
-  readonly overrides: ComposeComponentInstanceOverrides
-}): ComposeInstanceOverridesResolveResult {
-  const structural = applyComposeComponentOverrides(input.document, input.overrides.operations)
-  if (!structural.ok) return structural
-  const definitions = new Map(input.properties.map((definition) => [definition.id, definition]))
-  const propertyOperations: ComposeComponentOverrideOperation[] = []
-  for (const [propertyId, value] of Object.entries(input.overrides.properties)) {
-    const definition = definitions.get(propertyId)
-    if (!definition) {
-      return {
-        ok: false,
-        issues: [issue(
-          'component-asset.invalid-property',
-          `实例覆盖 ${propertyId} 不是来源公开属性`,
-          ['instanceOverrides', 'properties', propertyId],
-        )],
-      }
-    }
-    propertyOperations.push({
-      id: `instance-property:${propertyId}`,
+  const existing = Array.isArray(legacy.operations)
+    ? legacy.operations as readonly ComposeComponentOverrideOperation[]
+    : []
+  const properties = isRecord(legacy.properties)
+    ? legacy.properties as Readonly<Record<string, JsonValue>>
+    : 'operations' in legacy || 'properties' in legacy
+      ? {}
+      : legacy as Readonly<Record<string, JsonValue>>
+  const byId = new Map(definitions.map((definition) => [definition.id, definition]))
+  const migrated: ComposeComponentOverrideOperation[] = []
+  for (const [propertyId, value] of Object.entries(properties)) {
+    const definition = byId.get(propertyId)
+    // 定义缺失时无法还原字段目标，只能丢弃：保留一条无目标的覆盖会在解析期整体失败。
+    if (!definition) continue
+    migrated.push({
+      id: `migrated-property:${propertyId}`,
       kind: 'set-field',
       entityId: definition.target.entityId,
       componentKey: definition.target.componentKey,
@@ -155,5 +138,20 @@ export function resolveComposeInstanceOverrides(input: {
       value: structuredClone(value),
     })
   }
-  return applyComposeComponentOverrides(structural.document, propertyOperations)
+  return { operations: [...migrated, ...existing] }
+}
+
+/**
+ * 按实例结构操作解析组件文档。
+ *
+ * @remarks
+ * 失败时不返回半应用文档。
+ *
+ * @public
+ */
+export function resolveComposeInstanceOverrides(input: {
+  readonly document: ComposeDocument
+  readonly overrides: ComposeComponentInstanceOverrides
+}): ComposeInstanceOverridesResolveResult {
+  return applyComposeComponentOverrides(input.document, input.overrides.operations)
 }

@@ -27,17 +27,33 @@ export interface ComposeComponentReference extends JsonObject {
   readonly scope: 'persistent' | 'session'
 }
 
-/** 暴露属性支持的首期 JSON 值分类。 @public */
+/**
+ * 暴露属性支持的首期 JSON 值分类。
+ *
+ * @deprecated 暴露属性已删除；该类型只服务旧文件的显式迁移。
+ * @public
+ */
 export type ComposeComponentPropertyValueType = 'string' | 'number' | 'boolean' | 'json'
 
-/** 暴露属性的稳定文档目标。 @public */
+/**
+ * 暴露属性的稳定文档目标。
+ *
+ * @deprecated 暴露属性已删除；该类型只服务旧文件的显式迁移。
+ * @public
+ */
 export interface ComposeComponentPropertyTarget extends JsonObject {
   readonly entityId: string
   readonly componentKey: string
   readonly fieldPath: readonly string[]
 }
 
-/** 只由 Base 声明、Variant 与实例继承的可覆盖属性。 @public */
+/**
+ * 只由 Base 声明、Variant 与实例继承的可覆盖属性。
+ *
+ * @deprecated 暴露属性已删除：实例内部字段可直接覆盖，两套并行机制不再有理由。
+ * 该类型只服务旧文件的显式迁移。
+ * @public
+ */
 export interface ComposeComponentPropertyDefinition extends JsonObject {
   readonly id: string
   readonly name: string
@@ -130,7 +146,6 @@ export interface ComposeResolvedComponentSnapshot {
   readonly kind: 'base' | 'variant'
   readonly revision: string
   readonly document: ComposeDocument
-  readonly properties: readonly ComposeComponentPropertyDefinition[]
   /** 从 Base 到当前资源的有序链。 */
   readonly appliedLineage: readonly ComposeComponentLineageEntry[]
 }
@@ -142,7 +157,6 @@ export interface ComposeBaseComponentAsset {
   readonly componentId: string
   readonly name: string
   readonly document: ComposeDocument
-  readonly properties: readonly ComposeComponentPropertyDefinition[]
 }
 
 /** 只保存相对直接父源操作的 Variant 文件。 @public */

@@ -31,7 +31,6 @@ function baseAsset(): ComposeBaseComponentAsset {
     kind: 'base',
     componentId: 'button',
     name: 'Button',
-    properties: [],
     document: {
       schemaVersion: 6,
       canvas: createDefaultCanvasSettings(),

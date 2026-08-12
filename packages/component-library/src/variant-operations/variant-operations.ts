@@ -54,7 +54,6 @@ function variantSnapshot(
     kind: 'variant',
     revision,
     document,
-    properties: structuredClone(parent.properties),
     appliedLineage: [
       ...parent.appliedLineage,
       {
@@ -336,7 +335,6 @@ export function createComposeVariantAsset(input: {
       kind: 'variant',
       revision: input.parentSnapshot.revision,
       document: structuredClone(input.parentSnapshot.document),
-      properties: structuredClone(input.parentSnapshot.properties),
       appliedLineage: structuredClone(input.parentSnapshot.appliedLineage),
     },
   }

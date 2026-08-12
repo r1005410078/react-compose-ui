@@ -48,7 +48,7 @@ function document(): ComposeBaseComponentAsset['document'] {
 }
 
 function baseAsset(id = 'button'): ComposeBaseComponentAsset {
-  return { schemaVersion: 1, kind: 'base', componentId: id, name: id, document: document(), properties: [] }
+  return { schemaVersion: 1, kind: 'base', componentId: id, name: id, document: document() }
 }
 
 function fakeProvider() {

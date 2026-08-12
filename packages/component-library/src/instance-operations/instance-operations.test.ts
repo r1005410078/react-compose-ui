@@ -26,12 +26,6 @@ function base(): ComposeBaseComponentAsset {
     kind: 'base',
     componentId: 'button',
     name: 'Button',
-    properties: [{
-      id: 'label',
-      name: 'Label',
-      valueType: 'string',
-      target: { entityId: 'text', componentKey: 'Renderer', fieldPath: ['props', 'text'] },
-    }],
     document: {
       schemaVersion: 6,
       canvas: {
@@ -74,7 +68,16 @@ function instance(asset: ComposeBaseComponentAsset): ComposeEntity {
         props: {
           reference,
           resolvedSnapshot: createComposeResolvedComponentSnapshot(asset, reference, '1'),
-          propertyOverrides: { label: 'Danger' },
+          instanceOverrides: {
+            operations: [{
+              id: 'op-1',
+              kind: 'set-field',
+              entityId: 'text',
+              componentKey: 'Renderer',
+              fieldPath: ['props', 'text'],
+              value: 'Danger',
+            }],
+          },
         } as unknown as JsonObject,
       },
     },
@@ -118,14 +121,14 @@ describe('component instance operations', () => {
     })])
   })
 
-  it('OpenSpec: editor-workspace-layout / Apply 和 Revert 覆盖 / 实例只能 Apply 公开属性', async () => {
+  it('OpenSpec: editor-workspace-layout / Apply 和 Revert 覆盖 / 实例结构操作 Apply 到 Base', async () => {
     const source = base()
     const fixture = store(source)
     const result = await applyComposeInstanceOverrides({
       store: fixture.api,
       entity: instance(source),
     })
-    expect(result.remainingOverrides.properties).toEqual({})
+    expect(result.remainingOverrides.operations).toEqual([])
     const saved = fixture.get().asset
     expect(saved.kind === 'base'
       ? saved.document.entities.text?.components.Renderer
@@ -145,7 +148,6 @@ describe('实例覆盖读取', () => {
             reference,
             resolvedSnapshot: createComposeResolvedComponentSnapshot(base(), reference, '1'),
             instanceOverrides: {
-              properties: { label: 'Danger' },
               operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'text' }],
             },
           } as unknown as JsonObject,
@@ -154,25 +156,26 @@ describe('实例覆盖读取', () => {
     }
     const facts = readComposeComponentInstance(entity)
     expect(facts).not.toBeNull()
-    expect(facts?.overrides.properties).toEqual({ label: 'Danger' })
     expect(facts?.overrides.operations).toHaveLength(1)
     expect(facts?.migratedFromLegacy).toBe(false)
   })
 
-  it('显式迁移旧 propertyOverrides 并标记来源', () => {
-    const facts = readComposeComponentInstance(instance(base()))
-    expect(facts?.overrides.properties).toEqual({ label: 'Danger' })
-    expect(facts?.overrides.operations).toEqual([])
-    // 标记让宿主知道该实体仍是旧形状，可在下次写入时落盘为分区形状。
+  it('显式迁移旧分区形状并标记来源', () => {
+    const entity = instance(base())
+    const renderer = entity.components.Renderer as { props: Record<string, unknown> }
+    renderer.props.instanceOverrides = {
+      properties: { label: 'Danger' },
+      operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'text' }],
+    }
+    const facts = readComposeComponentInstance(entity)
+    // 属性覆盖需要已删除的 Base 定义才能还原字段目标，只能保留结构分区。
+    expect(facts?.overrides.operations).toHaveLength(1)
     expect(facts?.migratedFromLegacy).toBe(true)
   })
 })
 
 describe('实例结构覆盖 Apply', () => {
-  function structuralInstance(
-    asset: ComposeBaseComponentAsset,
-    properties: Record<string, string> = {},
-  ): ComposeEntity {
+  function structuralInstance(asset: ComposeBaseComponentAsset): ComposeEntity {
     return {
       id: 'instance',
       name: 'Button',
@@ -183,7 +186,6 @@ describe('实例结构覆盖 Apply', () => {
             reference,
             resolvedSnapshot: createComposeResolvedComponentSnapshot(asset, reference, '1'),
             instanceOverrides: {
-              properties,
               operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'text' }],
             },
           } as unknown as JsonObject,
@@ -205,7 +207,6 @@ describe('实例结构覆盖 Apply', () => {
     const saved = backing.get().asset as ComposeBaseComponentAsset
     expect(saved.document.entities.text).toBeUndefined()
     expect(result.remainingOverrides.operations).toEqual([])
-    expect(result.remainingOverrides.properties).toEqual({})
   })
 
   it('只 Apply 选中的结构操作，其余保留在实例', async () => {
@@ -213,13 +214,11 @@ describe('实例结构覆盖 Apply', () => {
     const backing = store(asset)
     const result = await applyComposeInstanceOverrides({
       store: backing.api,
-      entity: structuralInstance(asset, { label: 'Danger' }),
-      // 只消费属性覆盖，结构操作留在本层。
-      propertyIds: ['label'],
+      entity: structuralInstance(asset),
+      // 不选中任何操作，全部留在本层。
       operationIds: [],
     })
     expect(result.remainingOverrides.operations).toHaveLength(1)
-    expect(result.remainingOverrides.properties).toEqual({})
   })
 })
 
@@ -237,7 +236,6 @@ describe('来源更新时的结构操作冲突', () => {
             reference,
             resolvedSnapshot: createComposeResolvedComponentSnapshot(asset, reference, '1'),
             instanceOverrides: {
-              properties: {},
               // 目标实体在最新来源中已不存在。
               operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'gone' }],
             },
@@ -268,7 +266,6 @@ describe('来源更新时的结构操作冲突', () => {
             reference,
             resolvedSnapshot: createComposeResolvedComponentSnapshot(asset, reference, '1'),
             instanceOverrides: {
-              properties: {},
               operations: [
                 { id: 'op-1', kind: 'remove-entity', entityId: 'gone' },
                 { id: 'op-2', kind: 'remove-entity', entityId: 'text' },

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
   createComposeGroupEntitySeed,
   createDefaultCanvasSettings,
@@ -8,7 +8,6 @@ import {
   type ComposeResolvedComponentSnapshot,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ComposeBasePropertiesPanel } from './base-properties-panel'
 import { ComposeComponentInstanceOverridesPanel } from './component-instance-overrides-panel'
 
 function componentDocument(): ComposeDocument {
@@ -51,18 +50,11 @@ function componentSnapshot(): ComposeResolvedComponentSnapshot {
     kind: 'base',
     revision: '1',
     document: componentDocument(),
-    properties: [{
-      id: 'label',
-      name: 'Label',
-      valueType: 'string',
-      target: { entityId: 'text', componentKey: 'Renderer', fieldPath: ['props', 'text'] },
-    }],
     appliedLineage: [],
   }
 }
 
 function instanceEntity(
-  properties: Readonly<Record<string, string>> = {},
   operations: readonly { id: string; kind: string; entityId: string }[] = [],
 ): ComposeEntity {
   const snapshot = componentSnapshot()
@@ -96,7 +88,7 @@ function instanceEntity(
             scope: 'persistent',
           },
           resolvedSnapshot: snapshot,
-          instanceOverrides: { properties, operations },
+          instanceOverrides: { operations },
         } as unknown as JsonObject,
       },
     },
@@ -106,31 +98,7 @@ function instanceEntity(
 afterEach(cleanup)
 
 describe('Component property panels', () => {
-  it('OpenSpec: component-library / 暴露属性 / Base 只接受存在且类型兼容的稳定字段', () => {
-    const onChange = vi.fn()
-    render(
-      <ComposeBasePropertiesPanel
-        document={componentDocument()}
-        properties={[]}
-        selectedEntityId="text"
-        onChange={onChange}
-      />,
-    )
-
-    fireEvent.change(screen.getByLabelText('字段路径'), { target: { value: 'props.missing' } })
-    fireEvent.click(screen.getByRole('button', { name: '添加暴露属性' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('字段路径不存在或值类型不兼容')
-    expect(onChange).not.toHaveBeenCalled()
-
-    fireEvent.change(screen.getByLabelText('字段路径'), { target: { value: 'props.text' } })
-    fireEvent.click(screen.getByRole('button', { name: '添加暴露属性' }))
-    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({
-      id: 'property',
-      target: { entityId: 'text', componentKey: 'Renderer', fieldPath: ['props', 'text'] },
-    })])
-  })
-
-  it('OpenSpec: component-library / 实例属性覆盖 / 单项和全部 Apply/Revert、显式更新与创建 Variant', async () => {
+  it('OpenSpec: component-library / 实例层结构覆盖 / 单项与全部 Apply/Revert 及显式更新', async () => {
     const onApply = vi.fn()
     const onChange = vi.fn()
     const onCreateVariant = vi.fn()
@@ -138,19 +106,17 @@ describe('Component property panels', () => {
       ? {
           status: 'updated' as const,
           snapshot: componentSnapshot(),
-          overrides: { properties: {}, operations: [] },
-          discardedPropertyIds: ['label'],
-          discardedOperationIds: [],
+          overrides: { operations: [] },
+          discardedOperationIds: ['op-1'],
         }
       : {
           status: 'conflict' as const,
-          propertyIds: ['label'],
-          operationIds: [],
-          messages: ['Label 已删除'],
+          operationIds: ['op-1'],
+          messages: ['结构操作 op-1 的目标在最新来源中已不存在'],
         })
-    const view = render(
+    render(
       <ComposeComponentInstanceOverridesPanel
-        entity={instanceEntity()}
+        entity={instanceEntity([{ id: 'op-1', kind: 'remove-entity', entityId: 'label' }])}
         onApply={onApply}
         onChange={onChange}
         onCreateVariant={onCreateVariant}
@@ -158,41 +124,32 @@ describe('Component property panels', () => {
       />,
     )
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), { target: { value: 'Changed' } })
-    expect(onChange).toHaveBeenCalledWith({ properties: { label: 'Changed' }, operations: [] })
-
-    view.rerender(
-      <ComposeComponentInstanceOverridesPanel
-        entity={instanceEntity({ label: 'Changed' })}
-        onApply={onApply}
-        onChange={onChange}
-        onCreateVariant={onCreateVariant}
-        onUpdate={onUpdate}
-      />,
-    )
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(onApply).toHaveBeenCalledWith(['op-1'])
     fireEvent.click(screen.getByRole('button', { name: 'Apply 全部实例覆盖' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Revert 全部实例覆盖' }))
-    fireEvent.click(screen.getByRole('button', { name: '创建变体…' }))
-    expect(onApply).toHaveBeenNthCalledWith(1, ['label'])
-    expect(onApply).toHaveBeenNthCalledWith(2)
-    expect(onChange).toHaveBeenLastCalledWith({ properties: {}, operations: [] })
-    expect(onCreateVariant).toHaveBeenCalledOnce()
+    expect(onApply).toHaveBeenLastCalledWith()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
+    expect(onChange).toHaveBeenCalledWith({ operations: [] })
+
+    fireEvent.click(screen.getByRole('button', { name: '创建变体…' }))
+    expect(onCreateVariant).toHaveBeenCalled()
+
+    // 冲突先预览，确认后才丢弃。
     fireEvent.click(screen.getByRole('button', { name: '检查更新' }))
-    const confirm = await screen.findByRole('button', { name: '丢弃 1 项冲突并更新' })
-    fireEvent.click(confirm)
-    await waitFor(() => expect(onUpdate).toHaveBeenNthCalledWith(2, true))
+    await screen.findByText(/目标在最新来源中已不存在/)
+    fireEvent.click(screen.getByRole('button', { name: /丢弃 1 项失效覆盖并更新/ }))
+    await screen.findByText(/已更新，并丢弃 1 项失效覆盖/)
   })
 })
 
 describe('实例结构覆盖面板', () => {
-  it('只有结构覆盖时 Apply/Revert 仍可用，Revert 全部同时清空两个分区', () => {
+  it('Revert 全部清空结构操作', () => {
     const onChange = vi.fn()
     const onApply = vi.fn()
     render(
       <ComposeComponentInstanceOverridesPanel
-        entity={instanceEntity({}, [{ id: 'op-1', kind: 'remove-entity', entityId: 'label' }])}
+        entity={instanceEntity([{ id: 'op-1', kind: 'remove-entity', entityId: 'label' }])}
         onApply={onApply}
         onChange={onChange}
         onCreateVariant={vi.fn()}
@@ -206,16 +163,15 @@ describe('实例结构覆盖面板', () => {
     expect(revertAll).toBeEnabled()
 
     fireEvent.click(revertAll)
-    // Revert 全部必须清空结构分区，否则结构覆盖会永久留在实例上无法撤销。
-    expect(onChange).toHaveBeenCalledWith({ properties: {}, operations: [] })
+    expect(onChange).toHaveBeenCalledWith({ operations: [] })
   })
 
-  it('结构覆盖数量可见', () => {
+  it('逐条列出结构覆盖', () => {
     render(
       <ComposeComponentInstanceOverridesPanel
-        entity={instanceEntity({}, [
+        entity={instanceEntity([
           { id: 'op-1', kind: 'remove-entity', entityId: 'label' },
-          { id: 'op-2', kind: 'set-field', entityId: 'label' },
+          { id: 'op-2', kind: 'remove-entity', entityId: 'other' },
         ])}
         onApply={vi.fn()}
         onChange={vi.fn()}
@@ -223,6 +179,6 @@ describe('实例结构覆盖面板', () => {
         onUpdate={vi.fn()}
       />,
     )
-    expect(screen.getByText(/结构覆盖 2 项/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Revert' })).toHaveLength(2)
   })
 })

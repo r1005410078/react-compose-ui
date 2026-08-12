@@ -16,7 +16,6 @@ function asset(): ComposeBaseComponentAsset {
     kind: 'base',
     componentId: 'card',
     name: 'Card',
-    properties: [],
     document: {
       schemaVersion: 6,
       canvas: {

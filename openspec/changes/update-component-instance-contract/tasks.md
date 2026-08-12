@@ -4,15 +4,23 @@
 
 ## 1. 规范与设计
 
-- [ ] 1.1 评审 proposal、design 与四份规范增量
-- [ ] 1.2 运行 `openspec validate update-component-instance-contract --strict` 并记录结果
+- [x] 1.1 评审 proposal、design 与四份规范增量
+  - Result: 已确认。
+- [x] 1.2 运行 `openspec validate update-component-instance-contract --strict` 并记录结果
+  - Result: Change valid。
 
 ## 2. 删除暴露属性
 
-- [ ] 2.1 [Red → Green → Refactor] Core 删除属性定义类型、Base `properties` 与覆盖属性分区
-- [ ] 2.2 [Red → Green → Refactor] 旧 Base 文件与旧实例属性分区的显式纯迁移，渲染输出不变
-- [ ] 2.3 [Red → Green → Refactor] 解析顺序收敛为 Base → Variant 链 → 实例结构操作
-- [ ] 2.4 [Red → Green → Refactor] 移除 Base 暴露属性面板与实例属性覆盖 UI
+- [x] 2.1 [Red → Green → Refactor] Core 删除属性定义类型、Base `properties` 与覆盖属性分区
+  - Red: `bun run --cwd packages/core test -- component-properties-removal`；5 failed。
+  - Green/Refactor: 5 passed。属性定义类型标记 @deprecated 保留，因为迁移仍需读取旧 target；snapshot 与 Base 的 properties 字段删除。
+- [x] 2.2 [Red → Green → Refactor] 旧 Base 文件与旧实例属性分区的显式纯迁移，渲染输出不变
+  - Result: Base 迁移丢弃 properties 字段、文档不变。实例侧扁平 propertyOverrides 与含 properties 分区的对象都可迁移。
+  - 已知有损点：属性覆盖需要 Base 定义才能还原字段目标，而定义随暴露属性一并删除，因此无法还原的覆盖被丢弃而不是保留成无目标操作（后者会在解析期整体失败）。
+- [x] 2.3 [Red → Green → Refactor] 解析顺序收敛为 Base → Variant 链 → 实例结构操作
+  - Result: resolveComposeInstanceOverrides 退化为单纯的操作应用，四段顺序不再存在。
+- [x] 2.4 [Red → Green → Refactor] 移除 Base 暴露属性面板与实例属性覆盖 UI
+  - Result: 删除 base-properties-panel 包目录与 editor 接线；实例覆盖面板重写为逐条列出结构操作并支持单项/全部 Apply、Revert。
 
 ## 3. 组件根放宽
 

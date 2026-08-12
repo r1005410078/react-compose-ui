@@ -72,7 +72,6 @@ import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
   ComposeComponentLibraryPanel,
   ComposeComponentAssetIcon,
-  ComposeBasePropertiesPanel,
   ComposeComponentInstanceOverridesPanel,
   ComposeVariantOverridesPanel,
   applyComposeInstanceOverrides,
@@ -1131,15 +1130,14 @@ export function ComposeEditor({
     })
   }, [controller, selectedComponentInstance])
 
-  const applyInstancePropertyOverrides = useCallback(async (propertyIds?: readonly string[]) => {
+  const applyInstanceOverrides = useCallback(async (operationIds?: readonly string[]) => {
     const store = componentWorkspace.store
     if (!controller || !store || !selectedComponentInstance) return
     try {
-      // 不限定 operationIds：Apply 全部实例覆盖时结构操作与属性覆盖一并写入父源。
       const result = await applyComposeInstanceOverrides({
         store,
         entity: selectedComponentInstance,
-        propertyIds,
+        operationIds,
       })
       const renderer = selectedComponentInstance.components.Renderer
       if (!renderer) return
@@ -1208,14 +1206,6 @@ export function ComposeEditor({
     return result
   }, [componentWorkspace.store, controller, selectedComponentInstance])
 
-  const updateBaseProperties = useCallback((properties: Parameters<
-    typeof ComposeBasePropertiesPanel
-  >[0]['properties']) => {
-    if (!activeComponentSession) return
-    updateComponentDocument(activeComponentSession.panelId, (session) => session.asset.kind === 'base'
-      ? { ...session, asset: { ...session.asset, properties }, dirty: true }
-      : session)
-  }, [activeComponentSession, updateComponentDocument])
   const createVariantFromSelectedInstance = useCallback(() => {
     if (!selectedComponentInstance) return
     setVariantName(`${selectedComponentInstance.name} Variant`)
@@ -1223,8 +1213,8 @@ export function ComposeEditor({
     setPendingVariantInstance(selectedComponentInstance)
   }, [selectedComponentInstance])
   const applySelectedInstanceOverrides = useCallback((propertyIds?: readonly string[]) => {
-    void applyInstancePropertyOverrides(propertyIds)
-  }, [applyInstancePropertyOverrides])
+    void applyInstanceOverrides(propertyIds)
+  }, [applyInstanceOverrides])
 
   const resolvedInspectorPanel = useMemo(() => {
     const authoredInspector = slots?.inspector !== undefined
@@ -1249,17 +1239,7 @@ export function ComposeEditor({
       )
     }
     if (activeComponentSession?.sourceKind === 'base' && activeComponentSession.asset.kind === 'base') {
-      return (
-        <div className="compose-editor__component-inspector">
-          {entityInspector}
-          <ComposeBasePropertiesPanel
-            document={activeComponentSession.runtime.document}
-            properties={activeComponentSession.asset.properties}
-            selectedEntityId={controller?.selectedIds[0]}
-            onChange={updateBaseProperties}
-          />
-        </div>
-      )
+      return entityInspector
     }
     if (!activeComponentSession && selectedComponentInstance && componentWorkspace.store) {
       return (
@@ -1275,7 +1255,6 @@ export function ComposeEditor({
     return entityInspector
   }, [
     controller?.inspectorPanel,
-    controller?.selectedIds,
     activeComponentSession,
     applySelectedInstanceOverrides,
     componentWorkspace.store,
@@ -1285,7 +1264,6 @@ export function ComposeEditor({
     resolvedPaintImageLibrary,
     slots,
     selectedComponentInstance,
-    updateBaseProperties,
     updateComponentInstance,
     updateInstanceOverrides,
   ])

@@ -57,7 +57,6 @@ function snapshotForBase(
     kind: 'base',
     revision,
     document: structuredClone(asset.document),
-    properties: structuredClone(asset.properties),
     appliedLineage: [entry],
   }
 }
@@ -181,7 +180,6 @@ async function resolveLoaded(
     kind: 'variant',
     revision: loaded.revision,
     document: applied.document,
-    properties: structuredClone(parentSnapshot.properties),
     appliedLineage: [...parentSnapshot.appliedLineage, currentEntry],
   }
   if (lineageChanged || parentResult.status === 'pending-update') {

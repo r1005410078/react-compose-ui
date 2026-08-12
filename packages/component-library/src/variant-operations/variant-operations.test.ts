@@ -57,7 +57,6 @@ function baseAsset(withText = true): ComposeBaseComponentAsset {
     kind: 'base',
     componentId: 'base',
     name: 'Base',
-    properties: [],
     document: {
       schemaVersion: 6,
       canvas: {
@@ -96,7 +95,6 @@ function variantAsset(parent = baseAsset()): ComposeVariantComponentAsset {
       kind: 'variant',
       revision: '1',
       document: applied.ok ? applied.document : parent.document,
-      properties: [],
       appliedLineage: parentSnapshot.appliedLineage,
     },
   }

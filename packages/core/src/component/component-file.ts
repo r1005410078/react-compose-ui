@@ -11,7 +11,6 @@ import {
   type ComposeComponentAssetV1,
   type ComposeComponentLineageEntry,
   type ComposeComponentOverrideOperation,
-  type ComposeComponentPropertyDefinition,
   type ComposeComponentReference,
   type ComposeResolvedComponentSnapshot,
 } from './component-types'
@@ -77,80 +76,6 @@ function validateReference(
     && nonEmpty(value.assetKey)
     && value.kind === 'component'
     && (value.scope === 'persistent' || value.scope === 'session')
-}
-
-function valueAtPath(value: unknown, path: readonly string[]): unknown {
-  let current = value
-  for (const field of path) {
-    if (!isRecord(current) || !(field in current)) return undefined
-    current = current[field]
-  }
-  return current
-}
-
-function matchesValueType(value: unknown, type: unknown): boolean {
-  if (type === 'json') return value !== undefined
-  return typeof value === type
-}
-
-function validateProperties(
-  value: unknown,
-  document: ComposeDocument,
-  path: readonly (string | number)[],
-  issues: ComposeComponentAssetIssue[],
-): value is readonly ComposeComponentPropertyDefinition[] {
-  if (!Array.isArray(value)) {
-    issue(issues, 'component-asset.invalid-property', path, 'properties 必须是数组')
-    return false
-  }
-  const ids = new Set<string>()
-  value.forEach((candidate, index) => {
-    const itemPath = [...path, index]
-    if (!isRecord(candidate)) {
-      issue(issues, 'component-asset.invalid-property', itemPath, '属性定义必须是对象')
-      return
-    }
-    rejectUnknown(candidate, ['id', 'name', 'valueType', 'target'], itemPath, issues,
-      'component-asset.invalid-property')
-    if (!nonEmpty(candidate.id)) {
-      issue(issues, 'component-asset.invalid-property', [...itemPath, 'id'], '属性 ID 必须是非空字符串')
-    }
-    else if (ids.has(candidate.id)) {
-      issue(issues, 'component-asset.invalid-property', [...itemPath, 'id'], `属性 ID ${candidate.id} 重复`)
-    }
-    else ids.add(candidate.id)
-    if (!nonEmpty(candidate.name)) {
-      issue(issues, 'component-asset.invalid-property', [...itemPath, 'name'], '属性名称不能为空')
-    }
-    if (!['string', 'number', 'boolean', 'json'].includes(String(candidate.valueType))) {
-      issue(issues, 'component-asset.invalid-property', [...itemPath, 'valueType'], '属性值类型无效')
-    }
-    const target = candidate.target
-    if (!isRecord(target)) {
-      issue(issues, 'component-asset.invalid-property', [...itemPath, 'target'], '属性目标必须是对象')
-      return
-    }
-    rejectUnknown(target, ['entityId', 'componentKey', 'fieldPath'], [...itemPath, 'target'], issues,
-      'component-asset.invalid-property')
-    const fieldPath = target.fieldPath
-    if (
-      !nonEmpty(target.entityId)
-      || !nonEmpty(target.componentKey)
-      || !isComposeComponentKey(String(target.componentKey))
-      || !Array.isArray(fieldPath)
-      || fieldPath.length === 0
-      || fieldPath.some((field) => !nonEmpty(field))
-    ) {
-      issue(issues, 'component-asset.invalid-property', [...itemPath, 'target'], '属性目标无效')
-      return
-    }
-    const component = document.entities[target.entityId]?.components[target.componentKey]
-    const current = valueAtPath(component, fieldPath as string[])
-    if (current === undefined || !matchesValueType(current, candidate.valueType)) {
-      issue(issues, 'component-asset.invalid-property', [...itemPath, 'target'], '属性目标不存在或类型不兼容')
-    }
-  })
-  return issues.every((candidate) => candidate.code !== 'component-asset.invalid-property')
 }
 
 function validateComponentDocument(
@@ -291,14 +216,13 @@ function validateSnapshot(
     issue(issues, 'component-asset.invalid-snapshot', path, 'resolvedSnapshot 必须是对象')
     return false
   }
-  rejectUnknown(value, ['componentId', 'kind', 'revision', 'document', 'properties', 'appliedLineage'], path,
+  rejectUnknown(value, ['componentId', 'kind', 'revision', 'document', 'appliedLineage'], path,
     issues, 'component-asset.invalid-snapshot')
   if (!nonEmpty(value.componentId) || !nonEmpty(value.revision)
     || (value.kind !== 'base' && value.kind !== 'variant')) {
     issue(issues, 'component-asset.invalid-snapshot', path, 'snapshot 标识无效')
   }
   const validDocument = validateComponentDocument(value.document, [...path, 'document'], issues)
-  if (validDocument) validateProperties(value.properties, value.document as ComposeDocument, [...path, 'properties'], issues)
   validateLineage(value.appliedLineage, [...path, 'appliedLineage'], issues)
   return validDocument
 }
@@ -317,9 +241,20 @@ function validateAsset(value: unknown): ComposeComponentAssetParseResult {
   if (!nonEmpty(value.componentId)) issue(issues, 'component-asset.invalid-shape', ['componentId'], 'componentId 不能为空')
   if (!nonEmpty(value.name)) issue(issues, 'component-asset.invalid-shape', ['name'], 'name 不能为空')
   if (value.kind === 'base') {
-    rejectUnknown(value, ['schemaVersion', 'kind', 'componentId', 'name', 'document', 'properties'], [], issues)
-    const validDocument = validateComponentDocument(value.document, ['document'], issues)
-    if (validDocument) validateProperties(value.properties, value.document as ComposeDocument, ['properties'], issues)
+    // properties 是已删除的暴露属性，必须走显式迁移而不是被当作未知字段拒绝，
+    // 因此在这里单独判为 legacy 以便调用方区分。
+    if (value.properties !== undefined) {
+      return {
+        ok: false,
+        issues: [{
+          code: 'component-asset.legacy',
+          path: ['properties'],
+          message: 'Base 含已删除的暴露属性，请显式迁移',
+        }],
+      }
+    }
+    rejectUnknown(value, ['schemaVersion', 'kind', 'componentId', 'name', 'document'], [], issues)
+    validateComponentDocument(value.document, ['document'], issues)
   }
   else if (value.kind === 'variant') {
     rejectUnknown(value, [
@@ -377,13 +312,24 @@ export function serializeComposeComponentAsset(asset: ComposeComponentAssetV1): 
 
 /** 显式把缺少 `kind` 的历史 v1 草案迁移为 Base。 @public */
 export function migrateLegacyComposeComponentAsset(value: unknown): ComposeComponentAssetParseResult {
-  if (!isRecord(value) || value.schemaVersion !== COMPOSE_COMPONENT_SCHEMA_VERSION || value.kind !== undefined) {
+  if (!isRecord(value) || value.schemaVersion !== COMPOSE_COMPONENT_SCHEMA_VERSION) {
     return {
       ok: false,
       issues: [{ code: 'component-asset.invalid-shape', path: [], message: '输入不是可迁移的历史组件草案' }],
     }
   }
-  return validateAsset({ ...value, kind: 'base' })
+  // 两类历史形状：缺少 kind 的旧草案，以及含已删除暴露属性的 Base。
+  const migratable = value.kind === undefined || value.properties !== undefined
+  if (!migratable) {
+    return {
+      ok: false,
+      issues: [{ code: 'component-asset.invalid-shape', path: [], message: '输入不是可迁移的历史组件草案' }],
+    }
+  }
+  const rest = { ...value }
+  // 暴露属性已删除：迁移即丢弃该字段，文档内容不变。
+  delete rest.properties
+  return validateAsset({ ...rest, kind: value.kind ?? 'base' })
 }
 
 /** 在已解析对象边界重新执行严格校验。 @internal */

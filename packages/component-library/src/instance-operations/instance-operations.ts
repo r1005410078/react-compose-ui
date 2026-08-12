@@ -8,7 +8,6 @@ import {
   type ComposeEntity,
   type ComposeResolvedComponentSnapshot,
   type ComposeVariantComponentAsset,
-  type JsonValue,
 } from '@compose-ui/core'
 import type { ComposeComponentSnapshot, ComposeComponentStore } from '../component-store'
 import { createComposeVariantAsset } from '../variant-operations'
@@ -54,7 +53,6 @@ export function readComposeComponentInstance(entity: ComposeEntity): ComposeComp
     || (reference.scope !== 'persistent' && reference.scope !== 'session')
     || !isRecord(snapshot)
     || !isRecord(snapshot.document)
-    || !Array.isArray(snapshot.properties)
     || !Array.isArray(snapshot.appliedLineage)
   ) return null
   const raw = renderer.props.instanceOverrides
@@ -63,13 +61,19 @@ export function readComposeComponentInstance(entity: ComposeEntity): ComposeComp
   if (raw === undefined) {
     const legacy = renderer.props.propertyOverrides
     if (!isRecord(legacy)) return null
-    overrides = migrateLegacyComposeInstanceOverrides(legacy as Readonly<Record<string, JsonValue>>)
+    overrides = migrateLegacyComposeInstanceOverrides(legacy)
     migratedFromLegacy = true
   }
   else {
     const parsed = parseComposeInstanceOverrides(raw)
-    if (!parsed.ok) return null
-    overrides = parsed.overrides
+    if (parsed.ok) overrides = parsed.overrides
+    else if (isRecord(raw) && 'properties' in raw) {
+      // 旧分区形状：属性覆盖需要 Base 定义才能还原字段目标，定义已随暴露属性一起删除，
+      // 因此只能保留结构分区。这是删除暴露属性的已知有损点，见 update-component-instance-contract。
+      overrides = migrateLegacyComposeInstanceOverrides(raw)
+      migratedFromLegacy = true
+    }
+    else return null
   }
   return {
     reference: reference as ComposeComponentReference,
@@ -79,29 +83,7 @@ export function readComposeComponentInstance(entity: ComposeEntity): ComposeComp
   }
 }
 
-function propertyOperations(
-  snapshot: ComposeResolvedComponentSnapshot,
-  overrides: Readonly<Record<string, JsonValue>>,
-  propertyIds?: readonly string[],
-): readonly ComposeComponentOverrideOperation[] {
-  const selected = propertyIds ? new Set(propertyIds) : null
-  const definitions = new Map(snapshot.properties.map((definition) => [definition.id, definition]))
-  return Object.entries(overrides).flatMap(([propertyId, value]) => {
-    if (selected && !selected.has(propertyId)) return []
-    const definition = definitions.get(propertyId)
-    if (!definition) throw new Error(`实例覆盖 ${propertyId} 不是来源公开属性`)
-    return [{
-      id: `instance-apply:${propertyId}`,
-      kind: 'set-field',
-      entityId: definition.target.entityId,
-      componentKey: definition.target.componentKey,
-      fieldPath: definition.target.fieldPath,
-      value: structuredClone(value),
-    } satisfies ComposeComponentOverrideOperation]
-  })
-}
-
-/** 从实例公开属性覆盖创建直接引用其来源的 Variant Asset v1。 @public */
+/** 从实例当前覆盖创建直接引用其来源的 Variant Asset v1。 @public */
 export function createComposeVariantAssetFromInstance(input: {
   readonly entity: ComposeEntity
   readonly componentId: string
@@ -109,7 +91,7 @@ export function createComposeVariantAssetFromInstance(input: {
 }): ComposeVariantComponentAsset {
   const facts = readComposeComponentInstance(input.entity)
   if (!facts) throw new Error('选择不是有效的关联组件实例')
-  const overrides = propertyOperations(facts.snapshot, facts.overrides.properties)
+  const overrides = facts.overrides.operations
   const applied = applyComposeComponentOverrides(facts.snapshot.document, overrides)
   if (!applied.ok) throw new Error(applied.issues.map(({ message }) => message).join('；'))
   const asset = createComposeVariantAsset({
@@ -135,12 +117,10 @@ export type ComposeComponentInstanceUpdateResult =
       readonly snapshot: ComposeResolvedComponentSnapshot
       /** 更新后仍然兼容、应写回实例的完整覆盖。 */
       readonly overrides: ComposeComponentInstanceOverrides
-      readonly discardedPropertyIds: readonly string[]
       readonly discardedOperationIds: readonly string[]
     }
   | {
       readonly status: 'conflict'
-      readonly propertyIds: readonly string[]
       /** 锚点在最新父链中失效的结构操作。 */
       readonly operationIds: readonly string[]
       readonly messages: readonly string[]
@@ -178,51 +158,17 @@ export async function updateComposeComponentInstanceFromSource(input: {
     else conflictOperationIds.push(operation.id)
   }
 
-  const definitions = new Map(resolved.snapshot.properties.map((definition) => [definition.id, definition]))
-  const conflicts = Object.keys(facts.overrides.properties).filter((id) => !definitions.has(id))
-  const operations: ComposeComponentOverrideOperation[] = []
-  for (const [id, value] of Object.entries(facts.overrides.properties)) {
-    const definition = definitions.get(id)
-    if (!definition) continue
-    operations.push({
-      id: `instance-update:${id}`,
-      kind: 'set-field',
-      entityId: definition.target.entityId,
-      componentKey: definition.target.componentKey,
-      fieldPath: definition.target.fieldPath,
-      value: structuredClone(value),
-    })
-  }
-  // 属性覆盖作用在结构操作之后的文档上，与解析顺序一致。
-  const applied = applyComposeComponentOverrides(structuralDocument, operations)
-  const operationConflicts = applied.ok
-    ? []
-    : applied.issues.flatMap(({ operationId }) => operationId
-      ? [operationId.slice('instance-update:'.length)]
-      : [])
-  const conflictIds = [...new Set([...conflicts, ...operationConflicts])]
-  if ((conflictIds.length > 0 || conflictOperationIds.length > 0) && !input.discardConflicts) {
+  if (conflictOperationIds.length > 0 && !input.discardConflicts) {
     return {
       status: 'conflict',
-      propertyIds: conflictIds,
       operationIds: conflictOperationIds,
-      messages: [
-        ...conflictIds.map((id) => `公开属性 ${id} 已被来源删除或目标已变化`),
-        ...conflictOperationIds.map((id) => `结构操作 ${id} 的目标在最新来源中已不存在`),
-      ],
+      messages: conflictOperationIds.map((id) => `结构操作 ${id} 的目标在最新来源中已不存在`),
     }
   }
-  const discarded = new Set(conflictIds)
   return {
     status: 'updated',
     snapshot: resolved.snapshot,
-    overrides: {
-      properties: Object.fromEntries(
-        Object.entries(facts.overrides.properties).filter(([id]) => !discarded.has(id)),
-      ),
-      operations: compatibleOperations,
-    },
-    discardedPropertyIds: conflictIds,
+    overrides: { operations: compatibleOperations },
     discardedOperationIds: conflictOperationIds,
   }
 }
@@ -246,7 +192,6 @@ export interface ComposeInstanceApplyResult {
  * 资源写入先发生。调用方随后应以单个场景事务写回新快照并消费返回的覆盖；场景事务失败时
  * 不回滚已写资源，与 Variant Apply 的 partial-success 顺序一致。
  *
- * @param input.propertyIds - 限定本次消费的属性 ID；省略表示全部
  * @param input.operationIds - 限定本次消费的结构操作 ID；省略表示全部
  *
  * @public
@@ -254,7 +199,6 @@ export interface ComposeInstanceApplyResult {
 export async function applyComposeInstanceOverrides(input: {
   readonly store: ComposeComponentStore
   readonly entity: ComposeEntity
-  readonly propertyIds?: readonly string[]
   readonly operationIds?: readonly string[]
   readonly signal?: AbortSignal
 }): Promise<ComposeInstanceApplyResult> {
@@ -267,13 +211,7 @@ export async function applyComposeInstanceOverrides(input: {
   const structural = facts.overrides.operations.filter(
     ({ id }) => !selectedOperationIds || selectedOperationIds.has(id),
   )
-  const properties = propertyOperations(
-    facts.snapshot,
-    facts.overrides.properties,
-    input.propertyIds,
-  )
-  // 结构先于属性，与 resolveComposeInstanceOverrides 的解析顺序保持一致。
-  const operations = [...structural, ...properties]
+  const operations = structural
   if (operations.length === 0) {
     return {
       source: await input.store.readComponent(facts.reference.assetKey, input.signal),
@@ -324,17 +262,11 @@ export async function applyComposeInstanceOverrides(input: {
   if (resolved.status === 'invalid') {
     throw new Error(resolved.issues.map(({ message }) => message).join('；'))
   }
-  const consumedProperties = new Set(
-    properties.map(({ id }) => id.slice('instance-apply:'.length)),
-  )
   const consumedOperations = new Set(structural.map(({ id }) => id))
   return {
     source: written,
     snapshot: resolved.snapshot,
     remainingOverrides: {
-      properties: Object.fromEntries(
-        Object.entries(facts.overrides.properties).filter(([id]) => !consumedProperties.has(id)),
-      ),
       operations: facts.overrides.operations.filter(({ id }) => !consumedOperations.has(id)),
     },
   }

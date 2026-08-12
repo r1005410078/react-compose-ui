@@ -17,13 +17,11 @@ import {
   resolveComposeInstanceOverrides,
   validateComposeDocument,
   type ComposeComponentInstanceOverrides,
-  type ComposeComponentPropertyDefinition,
   type ComposeComponentReference,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
   type ComposeResolvedComponentSnapshot,
-  type JsonValue,
 } from '@compose-ui/core'
 import { createComposeLayoutRuntime } from '@compose-ui/layout-engine'
 import {
@@ -65,7 +63,6 @@ function readSnapshot(value: unknown): ComposeResolvedComponentSnapshot | null {
     || typeof value.componentId !== 'string'
     || (value.kind !== 'base' && value.kind !== 'variant')
     || typeof value.revision !== 'string'
-    || !Array.isArray(value.properties)
     || !Array.isArray(value.appliedLineage)
   ) return null
   return {
@@ -73,7 +70,6 @@ function readSnapshot(value: unknown): ComposeResolvedComponentSnapshot | null {
     kind: value.kind,
     revision: value.revision,
     document: validation.document,
-    properties: value.properties as readonly ComposeComponentPropertyDefinition[],
     appliedLineage: value.appliedLineage as ComposeResolvedComponentSnapshot['appliedLineage'],
   }
 }
@@ -82,18 +78,19 @@ function readSnapshot(value: unknown): ComposeResolvedComponentSnapshot | null {
  * 读取实例覆盖，兼容尚未落盘为分区形状的历史实体。
  *
  * @remarks
- * 分区形状优先；只有完全缺少 `instanceOverrides` 时才对旧 `propertyOverrides` 走显式迁移。
- * 形状损坏的分区数据判为无效，不回退到旧字段，避免把结构操作静默丢成纯属性覆盖。
+ * 缺少 `instanceOverrides` 时对旧 `propertyOverrides` 走显式迁移；仍带 `properties` 分区的历史
+ * 数据同样迁移，但属性覆盖需要已删除的 Base 定义才能还原目标，只能保留结构分区。
  */
 function readInstanceOverrides(props: ComposeRendererProps['props']): ComposeComponentInstanceOverrides | null {
   const raw = props.instanceOverrides
   if (raw === undefined) {
     const legacy = props.propertyOverrides
     if (!isRecord(legacy)) return null
-    return migrateLegacyComposeInstanceOverrides(legacy as Readonly<Record<string, JsonValue>>)
+    return migrateLegacyComposeInstanceOverrides(legacy)
   }
   const parsed = parseComposeInstanceOverrides(raw)
-  return parsed.ok ? parsed.overrides : null
+  if (parsed.ok) return parsed.overrides
+  return isRecord(raw) && 'properties' in raw ? migrateLegacyComposeInstanceOverrides(raw) : null
 }
 
 function Status({ children, testId, alert = false }: {
@@ -135,10 +132,8 @@ export function ComponentInstanceRenderer({
   if (nest.depth >= COMPOSE_COMPONENT_NEST_DEPTH_LIMIT) {
     return <Status testId="compose-component-instance-depth" alert>组件嵌套层级过深</Status>
   }
-  // 四段解析顺序由 core 单点提供：结构操作先成型，属性覆盖才能命中新建目标。
   const resolved = resolveComposeInstanceOverrides({
     document: snapshot.document,
-    properties: snapshot.properties,
     overrides,
   })
   if (!resolved.ok) {

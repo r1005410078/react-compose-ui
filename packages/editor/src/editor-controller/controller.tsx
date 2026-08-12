@@ -158,7 +158,6 @@ function projectInstanceChildren(
   if (!facts) return undefined
   const resolved = resolveComposeInstanceOverrides({
     document: facts.snapshot.document,
-    properties: facts.snapshot.properties,
     overrides: facts.overrides,
   })
   if (!resolved.ok) return undefined
@@ -226,7 +225,6 @@ function instanceSelectionAncestors(
     if (!facts) continue
     const resolved = resolveComposeInstanceOverrides({
       document: facts.snapshot.document,
-      properties: facts.snapshot.properties,
       overrides: facts.overrides,
     })
     if (!resolved.ok) continue
@@ -286,7 +284,6 @@ function applyInstanceInnerCommands(
       props: {
         ...(renderer.props as Record<string, unknown>),
         instanceOverrides: {
-          properties: facts.overrides.properties,
           operations: diff.operations,
         },
       },
@@ -931,7 +928,6 @@ export function useComposeEditorController({
       componentId,
       name: input.name.trim(),
       document: extraction.componentDocument,
-      properties: [],
     }
     let component: ComposeComponentSnapshot
     try {
@@ -1045,7 +1041,6 @@ export function useComposeEditorController({
       if (!host || !facts) return
       const resolved = resolveComposeInstanceOverrides({
         document: facts.snapshot.document,
-        properties: facts.snapshot.properties,
         overrides: facts.overrides,
       })
       if (!resolved.ok) return
@@ -1361,7 +1356,6 @@ export function useComposeEditorController({
     if (!facts) return null
     const resolved = resolveComposeInstanceOverrides({
       document: facts.snapshot.document,
-      properties: facts.snapshot.properties,
       overrides: facts.overrides,
     })
     if (!resolved.ok) return null

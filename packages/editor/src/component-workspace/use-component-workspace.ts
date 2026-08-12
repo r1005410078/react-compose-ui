@@ -100,7 +100,6 @@ export function useComponentWorkspace(input: {
           ...session.snapshot,
           revision: session.baseRevision,
           document: session.runtime.document,
-          properties: structuredClone(next.properties),
         }
       }
       else {
@@ -118,7 +117,6 @@ export function useComponentWorkspace(input: {
           kind: 'variant',
           revision: session.baseRevision,
           document: session.runtime.document,
-          properties: parentResult.snapshot.properties,
           appliedLineage: [
             ...parentResult.snapshot.appliedLineage,
             {

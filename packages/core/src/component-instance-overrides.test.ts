@@ -18,18 +18,21 @@ function snapshotDocument(): ComposeDocument {
 }
 
 describe('实例覆盖分区模型', () => {
-  it('解析同时含结构操作与属性覆盖的 instanceOverrides', () => {
+  it('解析只含结构操作的 instanceOverrides', () => {
     const operations: ComposeComponentOverrideOperation[] = [
       { id: 'op-1', kind: 'remove-field', entityId: 'root', componentKey: 'Visibility', fieldPath: ['visible'] },
     ]
-    const result = parseComposeInstanceOverrides({
-      properties: { 'prop-a': 'hello' },
-      operations,
-    })
+    const result = parseComposeInstanceOverrides({ operations })
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.overrides.properties).toEqual({ 'prop-a': 'hello' })
     expect(result.overrides.operations).toHaveLength(1)
+  })
+
+  it('仍含 properties 分区的对象判为未迁移', () => {
+    const result = parseComposeInstanceOverrides({ properties: {}, operations: [] })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.issues[0]?.code).toBe('component-asset.legacy')
   })
 
   it('拒绝未迁移的旧 propertyOverrides 字段', () => {
@@ -39,45 +42,33 @@ describe('实例覆盖分区模型', () => {
     expect(result.issues[0]?.code).toBe('component-asset.legacy')
   })
 
-  it('显式迁移把 propertyOverrides 转为属性分区且结构分区为空', () => {
+  it('显式迁移在缺少属性定义时丢弃无法还原目标的覆盖', () => {
+    // 没有定义就无法还原字段目标，保留一条无目标覆盖会在解析期整体失败。
     const migrated = migrateLegacyComposeInstanceOverrides({ 'prop-a': 1, 'prop-b': false })
-    expect(migrated.properties).toEqual({ 'prop-a': 1, 'prop-b': false })
     expect(migrated.operations).toEqual([])
   })
 
-  it('结构操作先于属性覆盖解析', () => {
+  it('结构操作按顺序应用', () => {
     const resolved = resolveComposeInstanceOverrides({
       document: snapshotDocument(),
-      properties: [{
-        id: 'prop-a',
-        name: '名称',
-        valueType: 'string',
-        target: { entityId: 'root', componentKey: 'Name', fieldPath: ['value'] },
-      }],
       overrides: {
-        properties: { 'prop-a': '属性后写' },
-        operations: [{
-          id: 'op-1',
-          kind: 'add-component',
-          entityId: 'root',
-          componentKey: 'Name',
-          value: { value: '结构先写' },
-        }],
+        operations: [
+          { id: 'op-1', kind: 'add-component', entityId: 'root', componentKey: 'Name', value: { value: '先写' } },
+          { id: 'op-2', kind: 'set-field', entityId: 'root', componentKey: 'Name', fieldPath: ['value'], value: '后写' },
+        ],
       },
     })
-    // 属性目标 Component 由结构操作创建；若属性覆盖先解析，写入会因目标缺失而失败。
+    // 后一条依赖前一条创建的 Component；顺序颠倒会直接失败。
     expect(resolved.ok).toBe(true)
     if (!resolved.ok) return
-    expect(resolved.document.entities.root?.components.Name).toEqual({ value: '属性后写' })
+    expect(resolved.document.entities.root?.components.Name).toEqual({ value: '后写' })
   })
 
   it('拒绝把实体 reparent 出实例子树', () => {
     // 实例文档即组件文档，宿主实体不在其中，越界 parentId 表现为父级不存在。
     const resolved = resolveComposeInstanceOverrides({
       document: snapshotDocument(),
-      properties: [],
       overrides: {
-        properties: {},
         operations: [{
           id: 'op-1',
           kind: 'move-entity',
@@ -95,11 +86,7 @@ describe('实例覆盖分区模型', () => {
   it('解析后文档不合法时不返回半应用结果', () => {
     const resolved = resolveComposeInstanceOverrides({
       document: snapshotDocument(),
-      properties: [],
-      overrides: {
-        properties: {},
-        operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'root' }],
-      },
+      overrides: { operations: [{ id: 'op-1', kind: 'remove-entity', entityId: 'root' }] },
     })
     expect(resolved.ok).toBe(false)
   })

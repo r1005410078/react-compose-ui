@@ -87,12 +87,6 @@ function baseAsset() {
     componentId: 'button',
     name: 'Button',
     document: componentDocument(),
-    properties: [{
-      id: 'label',
-      name: 'Label',
-      valueType: 'string',
-      target: { entityId: 'text', componentKey: 'Renderer', fieldPath: ['props', 'text'] },
-    }],
   }
 }
 
@@ -162,7 +156,6 @@ describe('Component Asset v1', () => {
         kind: 'variant',
         revision: '1',
         document: componentDocument(),
-        properties: base.properties,
         appliedLineage: [],
       },
     }
@@ -198,7 +191,6 @@ describe('Component Asset v1', () => {
         kind: 'variant',
         revision: '1',
         document: componentDocument(),
-        properties: [],
         appliedLineage: [],
       },
     })

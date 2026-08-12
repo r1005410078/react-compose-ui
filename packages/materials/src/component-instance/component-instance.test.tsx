@@ -65,7 +65,6 @@ function baseAsset(): ComposeBaseComponentAsset {
     componentId: 'card',
     name: 'Card',
     document: componentDocument(),
-    properties: [],
   }
 }
 
@@ -75,7 +74,6 @@ function snapshot(): ComposeResolvedComponentSnapshot {
     kind: 'base',
     revision: '1',
     document: componentDocument(),
-    properties: [],
     appliedLineage: [{
       reference,
       componentId: 'card',
