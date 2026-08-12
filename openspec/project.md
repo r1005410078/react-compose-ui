@@ -211,8 +211,11 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   Computed 与 Function 不进入文档、Patch 或历史；Renderer `propContracts` 是唯一可绑定边界，
   `propCategories` 决定 Inspector 分类，未分类 Prop 进入“高级”且空分组不显示。默认执行模型只适用于
   受信任脚本。
-- 项目组件只支持同 Provider/scope、最多八层继承与嵌套、显式更新和暴露属性覆盖；不支持 Detach、
-  跨 Provider 变体、自动批量更新或从页面场景直接编辑实例内部结构。
+- 项目组件只支持同 Provider/scope、最多八层继承与嵌套、显式更新；不支持 Detach、跨 Provider 变体
+  或自动批量更新。
+- 实例覆盖分 `properties` 与 `operations` 两个分区。页面场景可直接编辑实例内部：Scene Tree 惰性投影
+  内部层级、Stage 双击逐层下钻，编辑写入实例覆盖。实例子树是封闭编辑域，跨越实例边界的移动一律拒绝；
+  重命名、可见性与锁定不在稳定操作代数内，因此内部节点对应能力位保持关闭而不是静默失效。
 - 数据源协议与正式发布持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
 - 示例中的临时状态、面板 ID 和 Dockview 对象都不是编辑器领域模型或公共协议。
 

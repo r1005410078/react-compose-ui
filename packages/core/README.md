@@ -89,3 +89,11 @@ Transform 命令带 `move | resize | rotate | set` 操作语义，Core 会同时
 临时 Preview Transform 属于会话状态；`canvas`、`output`、Entity 和 Component 数据属于文档。
 v5 文档会被明确拒绝；`migrateComposeDocumentV5ToV6()` 提供不修改输入的显式单向迁移，
 本包不提供兼容类型、v6→v5 或双运行路径。
+
+`instanceOverrides` 是 `component-instance` 的分层覆盖，分 `properties` 与 `operations` 两个分区。
+`resolveComposeInstanceOverrides()` 固定按 结构操作 → 属性覆盖 解析，保证属性能命中由结构操作新建
+的目标；任一阶段失败都不返回半应用文档。边界约束（根不可删/移、基础 Component 不可删、单 Group 根）
+与 Variant 层共用 `applyComposeComponentOverrides()`，单点实现。
+
+复合地址 `实例ID/内部ID` 只服务编辑期表示层：段数对应实例嵌套层数而非树深度，因为内部实体 ID 在
+组件文档内已唯一。Entity ID 不允许包含分隔符，宿主实体的裸 ID 与内部地址因此可在同一选区集合中区分。

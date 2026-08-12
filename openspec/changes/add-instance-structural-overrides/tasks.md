@@ -69,6 +69,10 @@
 
 ## 6. 集成与交付
 
-- [ ] 6.1 更新示例、README、包 README、公共 TSDoc 与 Changeset
-- [ ] 6.2 添加展开内部层级、下钻选中、结构覆盖、Apply/Revert 的 Playwright 场景
-- [ ] 6.3 运行 lint、typecheck、test、build、test:e2e、pack dry-run 与 strict OpenSpec 校验
+- [x] 6.1 更新示例、README、包 README、公共 TSDoc 与 Changeset
+  - Result: README 完成度、AGENTS 协议摘要、project.md 约束、core/component-library/scene-tree 包 README 与 Changeset 已同步。project.md 中「不支持从页面场景直接编辑实例内部结构」的旧约束正是本变更推翻的，已改写。
+  - 示例应用无需新增演示代码：创建组件、展开投影、下钻与内部编辑的完整流程已可在其中操作，Playwright 场景即基于它运行。
+- [x] 6.2 添加展开内部层级、下钻选中、结构覆盖、Apply/Revert 的 Playwright 场景
+  - Result: 新增「双击逐层下钻并与场景树同步」（含单击选实例、逐层下钻、只读选中框无手柄、Inspector 路由、名称只读）与「内部删除写入覆盖且越界拖拽被拒绝」；另有创建组件重名提示场景。
+- [x] 6.3 运行 lint、typecheck、test、build、test:e2e、pack dry-run 与 strict OpenSpec 校验
+  - Result: `bun run lint` 通过；`bun run typecheck` 42/42；`bun run test` 41/41；`bun run build` 22/22；`bunx playwright test` 53/53；`bun run pack:dry-run` 全包通过；`bunx openspec validate add-instance-structural-overrides --strict` Change valid。

@@ -161,12 +161,18 @@ Group 是独立于 Container 的结构 Entity：无 Renderer、Appearance、Clip
 项目组件使用 `application/vnd.compose-ui.component+json`、`.component.json` 和独立
 `Component Asset v1`，页面仍是 `ComposeDocument v6`。Base 保存 Group 单根文档和暴露属性；
 Variant 保存直接父引用、稳定 ID 语义覆盖、applied lineage 与离线 resolved snapshot。同一链最多
-八层，只允许同 Provider/scope。实例是宿主场景里的结构叶子，只能编辑位置、旋转和暴露属性；
-内部结构在 Base/Variant 独立标签中编辑。
+八层，只允许同 Provider/scope。
+
+实例内部层级在宿主编辑期可见：Scene Tree 惰性投影内部实体树，Stage 双击逐层下钻，两者选中态
+与展开状态双向同步。内部节点使用 `实例ID/内部ID` 复合地址，只存在于编辑期表示层——持久化文档里
+实例仍是单个 Entity。选中内部节点后 Inspector 的编辑与场景树的删除、移动都写入实例的
+`instanceOverrides`：属性覆盖与结构操作分区保存，结构操作复用 Variant 的稳定操作代数，因此
+Apply 到父源无需有损转换。实例子树是封闭编辑域，跨越实例边界的移动一律拒绝。
 
 创建组件可从 Stage、Scene Tree 或 Command Panel 进入，也可把普通 Scene Tree 行拖到可写资源目录。
 资源写入成功后才用一个场景事务把选区替换成关联实例；Undo 不删除资源文件。Apply 只写直接父源，
-Revert 只消费当前层覆盖，来源更新始终显式执行；离线时使用实例保存的快照。未配置
+属性覆盖与结构操作一并写入；Revert 只消费当前层覆盖。来源更新始终显式执行，锚点失效的结构操作
+会在更新前逐条列出，由用户确认丢弃；离线时使用实例保存的快照。未配置
 `ComposeComponentStore` 的宿主仍只显示 Registry Preset。
 
 ## Stage、Inspector 与 Preview
