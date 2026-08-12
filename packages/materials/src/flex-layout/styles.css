@@ -349,18 +349,14 @@
   background: #303131;
 }
 
-.flex-layout-inspector__option[aria-checked="true"]:not([data-initial-value]) {
+/* 默认项与非默认项使用同一强调色：此前给默认项单独配的中性弱选中态与未选中态对比过低，
+   用户无法分辨「已选中」与「没选中」。「再点一次恢复默认」的幂等判定读的是
+   FLEX_INITIAL_VALUES 常量而非 DOM，因此去掉这条按默认值区分的配色不影响任何行为。 */
+.flex-layout-inspector__option[aria-checked="true"] {
   border-color: #2f8cff;
   color: #fff;
   background: linear-gradient(180deg, #1674eb, #0759bc);
   box-shadow: inset 0 0 0 1px rgb(83 164 255 / 42%), 0 0 5px rgb(25 116 232 / 28%);
-}
-
-.flex-layout-inspector__option[aria-checked="true"][data-initial-value] {
-  border-color: #555a5d;
-  color: #d4d7d9;
-  background: #292b2c;
-  box-shadow: inset 0 1px rgb(255 255 255 / 4%);
 }
 
 .flex-layout-inspector__option:focus-visible {
