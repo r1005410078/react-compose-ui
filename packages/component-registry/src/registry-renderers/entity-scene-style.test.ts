@@ -62,6 +62,41 @@ describe('composeEntityVisualStyle', () => {
     expect(plain.boxShadow).toBe('none')
   })
 
+  it('Circle Shape 的背景 Paint 强制 50% 圆角，避免显示成矩形', () => {
+    const circle = composeEntityAppearanceStyle(entity({
+      Appearance: {
+        backgroundPaint: { kind: 'solid', color: '#2f7df6' },
+        borderColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 0,
+        opacity: 1,
+        shadow: null,
+      },
+      Renderer: {
+        type: 'shape',
+        props: { kind: 'circle', stroke: '#d8e2f1', strokeWidth: 2 },
+      },
+    }))
+    expect(circle.backgroundColor).toBe('#2f7df6')
+    expect(circle.borderRadius).toBe('50%')
+
+    const line = composeEntityAppearanceStyle(entity({
+      Appearance: {
+        backgroundPaint: { kind: 'solid', color: '#2f7df6' },
+        borderColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 0,
+        opacity: 1,
+        shadow: null,
+      },
+      Renderer: {
+        type: 'shape',
+        props: { kind: 'line', stroke: '#d8e2f1', strokeWidth: 2 },
+      },
+    }))
+    expect(line.borderRadius).toBe(0)
+  })
+
   it('OpenSpec: 共享渲染语义 / Container 的 overflow 由 Clip 控制', () => {
     const clipped = composeEntityVisualStyle(entity({
       Hierarchy: { childIds: [] },

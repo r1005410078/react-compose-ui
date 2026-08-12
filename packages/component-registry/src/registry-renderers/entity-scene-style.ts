@@ -1,5 +1,6 @@
 import {
   getComposeHierarchy,
+  getComposeRenderer,
   getComposeTransform,
   resolveComposeAppearance,
   resolveComposeOverflow,
@@ -9,12 +10,25 @@ import {
 import type { CSSProperties } from 'react'
 
 /**
+ * Circle Shape 的背景/边框 Paint 走 Entity 壳矩形盒；必须以 50% 圆角裁成椭圆，
+ * 否则 `Appearance.backgroundPaint` 会显示成矩形。
+ */
+function isCircleShapeEntity(entity: ComposeEntity): boolean {
+  const renderer = getComposeRenderer(entity)
+  if (!renderer || renderer.type !== 'shape') return false
+  return renderer.props.kind === 'circle'
+}
+
+/**
  * Stage 与 Preview 共享的 Entity appearance 样式（不含 Transform 几何与 overflow）。
  *
  * @remarks
  * 边框由独立顶层覆盖层渲染，因此 Entity 壳使用 `isolation` 把覆盖层限制在自身 stacking
  * context 内，避免高层级边框越过相邻 Entity。overflow 是 Stage 与 Preview 各自的运行时
  * 行为，不属于共享 appearance。
+ *
+ * Circle Shape 强制 `borderRadius: 50%`，让 solid/渐变背景与边框覆盖层随盒体呈椭圆，
+ * 与 SVG ellipse stroke 几何一致；不改写文档里的 Appearance.borderRadius。
  *
  * @public
  */
@@ -34,7 +48,7 @@ export function composeEntityAppearanceStyle(entity: ComposeEntity): CSSProperti
     position: 'relative',
     // 纯色同时写入宿主盒子，维持 DOM Scene 的稳定视觉与命中盒契约；复杂 Paint 仍由共享图层绘制。
     backgroundColor,
-    borderRadius: visual.borderRadius,
+    borderRadius: isCircleShapeEntity(entity) ? '50%' : visual.borderRadius,
     opacity: visual.opacity,
     isolation: 'isolate',
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
