@@ -6,7 +6,8 @@
 
 - [ ] 1.1 评审 proposal、design 与五份规范增量
 - [ ] 1.2 运行 `openspec validate add-instance-structural-overrides --strict` 并记录结果
-- [ ] 1.3 确认下钻手势默认绑定，回填 design 的待解决问题
+- [x] 1.3 确认下钻手势默认绑定，回填 design 的待解决问题
+  - Result: 采用双击；复用 InteractionController 已归一化的 clickCount，与 textEditable 守卫的文本原地编辑天然互斥，无需优先级仲裁。
 
 ## 2. 覆盖模型
 
