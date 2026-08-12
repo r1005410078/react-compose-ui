@@ -40,9 +40,13 @@
 
 ## 4. Stage 下钻
 
-- [ ] 4.1 [Red → Green → Refactor] 命中索引为内部实体建立复合地址条目
-- [ ] 4.2 [Red → Green → Refactor] 下钻/退出手势与既有平移、框选的优先级消解
-- [ ] 4.3 [Red → Green → Refactor] Stage 与 Scene Tree 选中/展开双向同步
+- [x] 4.1 [Red → Green → Refactor] 命中索引为内部实体建立复合地址条目
+  - Result: 改为 DOM 命中而非扩展 stage-engine 场景索引——内部几何只存在于嵌套 Runtime，且编辑态内容 pointer-events 关闭，elementsFromPoint 会跳过。逻辑抽为 instance-drilldown 纯函数并单测。
+- [x] 4.2 [Red → Green → Refactor] 下钻/退出手势与既有平移、框选的优先级消解
+  - Result: 只在 select 工具、偶数 clickCount 上下钻，保证一次双击恰好一层；与 textEditable 守卫的原地编辑天然互斥。下钻上下文存于 ref，因为奇数 pointerdown 会先把选区重置回实例。
+- [x] 4.3 [Red → Green → Refactor] Stage 与 Scene Tree 选中/展开双向同步
+  - Result: 选中复合地址时自动展开宿主实例与内部祖先链；Playwright 覆盖单击选实例、两次双击逐层深入。
+  - 未完成：Stage overlay 尚未为内部实体绘制选中框，Inspector 尚未路由到实例覆盖（见 5.1）。
 
 ## 5. 编辑与 Apply/Revert
 

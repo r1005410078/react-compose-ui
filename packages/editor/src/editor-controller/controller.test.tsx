@@ -670,6 +670,45 @@ describe('useComposeEditorController', () => {
     })
   })
 
+  it('选区保留实例内部复合地址', () => {
+    const editorRuntime = createTransactionRuntime({
+      document: instanceDocumentFixture(),
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => {
+      result.current.sceneTreeProps.onSelectionChange?.(['instance/c-text'])
+    })
+    expect(result.current.sceneTreeProps.selectedIds).toEqual(['instance/c-text'])
+    // 选中内部节点必须自动展开宿主实例，否则从 Stage 下钻后树里看不到被选中的行。
+    expect(result.current.sceneTreeProps.expandedIds).toContain('instance')
+
+    act(() => {
+      result.current.sceneTreeProps.onSelectionChange?.(['instance/c-deep'])
+    })
+    // 深层节点还要展开其内部祖先链。
+    expect(result.current.sceneTreeProps.expandedIds).toEqual(
+      expect.arrayContaining(['instance', 'instance/c-text']),
+    )
+
+    // 文档变化时归一化：宿主实例不存在的复合地址被丢弃，否则选区指向不可达节点。
+    act(() => {
+      result.current.sceneTreeProps.onSelectionChange?.(['missing/c-text'])
+      editorRuntime.dispatch({
+        id: 'select-normalize',
+        type: BUILTIN_COMMAND_TYPES.renameEntity,
+        payload: { entityId: 'instance', name: 'Card 2' },
+        meta: { label: 'rename', source: 'test', targetIds: ['instance'] },
+      })
+    })
+    expect(result.current.sceneTreeProps.selectedIds).toEqual([])
+  })
+
   it('场景树创建操作从 Container Preset 创建 v6 Entity', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({

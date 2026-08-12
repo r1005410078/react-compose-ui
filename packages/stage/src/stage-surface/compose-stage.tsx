@@ -49,6 +49,7 @@ import type {
 import {
   BUILTIN_COMMAND_TYPES,
   describeComposePaint,
+  encodeComposeInstancePath,
   getComposeHierarchy,
   getComposeLock,
   getComposeLayoutItem,
@@ -107,6 +108,7 @@ import type {
   ComposeStageDelegatableAction,
   ComposeStageProps,
 } from '../types'
+import { nextInstanceDrillDownTarget, resolveInstanceDrillDownPath } from './instance-drilldown'
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
@@ -827,6 +829,11 @@ function useComposeStageMeasurement({
 const DOUBLE_CLICK_INTERVAL_MS = 500
 const DOUBLE_CLICK_SLOP_PX = 5
 
+/** 判断 Entity 是否为关联组件实例。 */
+function isComponentInstanceEntity(entity: ComposeEntity) {
+  return getComposeRenderer(entity)?.type === 'component-instance'
+}
+
 /** 读取 Entity 当前 authored 的可编辑纯文本；不可编辑或缺失时返回空串。 */
 function entityEditableText(
   value: ComposeDocument,
@@ -908,6 +915,11 @@ function ComposeStageReady({
     readonly x: number
     readonly y: number
     readonly count: number
+  } | null>(null)
+  /** 当前已下钻到的实例内部层级；见 beginEntity 中的说明。 */
+  const drillContextRef = useRef<{
+    readonly instanceId: string
+    readonly innerId: string
   } | null>(null)
   const expectedLostCaptureRef = useRef(new Map<number, number[]>())
   const [privateController] = useState(createStageInteractionController)
@@ -2034,8 +2046,56 @@ function ComposeStageReady({
     }
   }
 
+  /**
+   * 读取本次 pointerdown 的连击计数而不推进状态。
+   *
+   * @remarks
+   * 真正的计数推进仍由 beginInteraction 负责；这里只做前瞻判断，两者读的是同一份 ref，
+   * 因此结果一致。若在这里推进，beginInteraction 会再算一次导致计数翻倍。
+   */
+  const peekClickCount = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.detail > 0) return event.detail
+    const previous = lastPointerDownRef.current
+    const now = event.timeStamp || Date.now()
+    return previous
+      && now - previous.time <= DOUBLE_CLICK_INTERVAL_MS
+      && Math.abs(event.clientX - previous.x) <= DOUBLE_CLICK_SLOP_PX
+      && Math.abs(event.clientY - previous.y) <= DOUBLE_CLICK_SLOP_PX
+      ? previous.count + 1
+      : 1
+  }
+
   const beginEntity = (entity: ComposeEntity, event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
+    // 下钻上下文不能从选区推导：一次双击的第一个 pointerdown 计数为奇数、不触发下钻，
+    // 它会先把选区重置回实例本身，随后的偶数 pointerdown 就再也看不到当前层级。
+    if (drillContextRef.current && drillContextRef.current.instanceId !== entity.id) {
+      drillContextRef.current = null
+    }
+    // 双击关联组件实例逐层下钻到内部实体。内部内容 pointer-events 关闭且几何不在场景索引里，
+    // 因此命中读 DOM；命中失败时不拦截，落回实例整体的普通选择。
+    if (
+      tool === 'select'
+      && isComponentInstanceEntity(entity)
+      // 一次双击由两个 pointerdown 组成，只在偶数计数上下钻，保证一次双击恰好前进一层；
+      // 用 >= 2 会让 count 2 和 3 各触发一次，一次双击直接跳两层。
+      && peekClickCount(event) % 2 === 0
+    ) {
+      const path = resolveInstanceDrillDownPath(
+        event.currentTarget,
+        { x: event.clientX, y: event.clientY },
+      )
+      const context = drillContextRef.current
+      const innerId = nextInstanceDrillDownTarget(
+        path,
+        context?.instanceId === entity.id ? context.innerId : null,
+      )
+      if (innerId !== null) {
+        drillContextRef.current = { instanceId: entity.id, innerId }
+        onSelectedIdsChange([encodeComposeInstancePath([entity.id, innerId])])
+        return
+      }
+    }
     beginInteraction({ kind: 'entity', entityId: entity.id }, event)
   }
 

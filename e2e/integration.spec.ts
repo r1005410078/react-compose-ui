@@ -3470,3 +3470,61 @@ test('创建组件重名时在对话框内提示并允许改名重试', async ({
   await second.getByRole('button', { name: '创建' }).click()
   await expect(page.getByRole('dialog', { name: '创建组件' })).toHaveCount(0)
 })
+
+test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻并与场景树同步', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  // 组件内部结构为 Group > Container > Rectangle，用于验证逐层下钻。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Container' }).click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const source = sceneTree.getByRole('row').last()
+  await source.click()
+  await source.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '创建组件…' }).click()
+  const dialog = page.getByRole('dialog', { name: '创建组件' })
+  await dialog.getByLabel('组件名称').fill('Drill Card')
+  await dialog.getByRole('button', { name: '创建' }).click()
+
+  const content = stage.getByTestId('compose-component-instance-content')
+  await expect(content).toBeVisible()
+  const inner = content.locator('[data-component-instance-entity-id]').last()
+  const box = await inner.boundingBox()
+  expect(box).not.toBeNull()
+  const x = box!.x + box!.width / 2
+  const y = box!.y + box!.height / 2
+
+  // 单击只选中实例整体，内部实体不被单独选中。
+  await page.mouse.click(x, y)
+  await expect(sceneTree.getByRole('row', { name: /Drill Card/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+
+  // 一次双击恰好前进一层，并自动展开宿主实例使选中行可见。
+  await page.waitForTimeout(600)
+  await page.mouse.dblclick(x, y)
+  await expect(sceneTree.getByRole('row', { name: /Container/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(sceneTree.getByRole('row', { name: /Drill Card/ })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+
+  // 再次双击继续深入一层，祖先链保持展开。
+  await page.waitForTimeout(600)
+  await page.mouse.dblclick(x, y)
+  await expect(sceneTree.getByRole('row', { name: /Rectangle/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+})

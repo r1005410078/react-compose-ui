@@ -23,6 +23,7 @@ import {
 import {
   BUILTIN_COMMAND_TYPES,
   composeInstancePathHostId,
+  decodeComposeInstancePath,
   encodeComposeInstancePath,
   getComposeComposition,
   getComposeHierarchy,
@@ -198,6 +199,54 @@ function projectInstanceChildren(
     .filter((node): node is ComposeSceneTreeNode => node !== null)
 }
 
+/**
+ * 求出为了让复合地址可见而必须展开的祖先集合。
+ *
+ * @remarks
+ * 从 Stage 下钻选中内部节点时，树上对应行可能还没被投影出来。这里解析实例内部文档，
+ * 补齐宿主实例与内部祖先链，使选中行必然可见。
+ */
+function instanceSelectionAncestors(
+  document: ComposeDocument,
+  ids: readonly string[],
+): readonly string[] {
+  const ancestors: string[] = []
+  for (const id of ids) {
+    if (!isComposeInstancePath(id)) continue
+    const decoded = decodeComposeInstancePath(id)
+    if (!decoded.ok) continue
+    const hostId = decoded.segments[0]!
+    const innerId = decoded.segments[1]
+    ancestors.push(hostId)
+    const host = document.entities[hostId]
+    if (!host || innerId === undefined) continue
+    const facts = readComposeComponentInstance(host)
+    if (!facts) continue
+    const resolved = resolveComposeInstanceOverrides({
+      document: facts.snapshot.document,
+      properties: facts.snapshot.properties,
+      overrides: facts.overrides,
+    })
+    if (!resolved.ok) continue
+    // 组件根即实例节点本身，因此祖先链只收集根以下、目标以上的实体。
+    const parentOf = new Map<string, string>()
+    for (const entity of Object.values(resolved.document.entities)) {
+      for (const childId of getComposeHierarchy(entity)?.childIds ?? []) {
+        parentOf.set(childId, entity.id)
+      }
+    }
+    const rootId = resolved.document.rootIds[0]
+    for (
+      let current = parentOf.get(innerId);
+      current !== undefined && current !== rootId;
+      current = parentOf.get(current)
+    ) {
+      ancestors.push(encodeComposeInstancePath([hostId, current]))
+    }
+  }
+  return ancestors
+}
+
 function sceneEntity(
   document: ComposeDocument,
   registry: ComposeEntityRegistry,
@@ -276,10 +325,18 @@ function unique(values: readonly string[]) {
   return [...new Set(values)]
 }
 
+/**
+ * 归一化选区。
+ *
+ * @remarks
+ * 实例内部复合地址不对应宿主实体，只校验宿主实例是否仍存在且可见；内部实体是否存在由投影
+ * 与命中阶段决定，避免在这里重复解析快照。
+ */
 function validSelection(document: ComposeDocument, ids: readonly string[]) {
   return unique(ids).filter((id) => {
-    const entity = document.entities[id]
-    return entity ? getComposeVisibility(entity).visible : false
+    const entity = document.entities[composeInstancePathHostId(id)]
+    if (!entity || !getComposeVisibility(entity).visible) return false
+    return isComposeInstancePath(id) ? readComposeComponentInstance(entity) !== null : true
   })
 }
 
@@ -672,15 +729,21 @@ export function useComposeEditorController({
     })
   }, [runtime])
 
+  // 不在这里按 document 过滤：刚提交的创建事务尚未进入闭包捕获的 document，
+  // 过滤会把合法的新实体选区误杀。归一化只发生在文档变化时。
   const setSelectedIds = useCallback((ids: readonly string[]) => {
     const next = unique(ids)
     setSelectedIdsState(next)
+    const ancestors = instanceSelectionAncestors(document, next)
+    if (ancestors.length > 0) {
+      setExpandedIdsState((current) => unique([...current, ...ancestors]))
+    }
     setInspectionTarget(next.length > 0 ? 'entities' : null)
     if (next.length !== 1) {
       setPaintEditing(null)
       setPaintSampling(null)
     }
-  }, [])
+  }, [document])
   const selectOutput = useCallback(() => {
     setSelectedIdsState([])
     setInspectionTarget('output')
