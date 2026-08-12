@@ -620,7 +620,8 @@ describe('useComposeEditorController', () => {
     }))
 
     const collapsed = result.current.sceneTreeProps.nodes[0]
-    expect(collapsed).toMatchObject({ id: 'instance', canHaveChildren: true })
+    // hasChildren 必须显式声明：惰性投影下 children 为空，仅凭 children 推断会让展开控件消失。
+    expect(collapsed).toMatchObject({ id: 'instance', canHaveChildren: true, hasChildren: true })
     // 未展开不构建投影，观感与既有单节点一致。
     expect(collapsed?.children).toBeUndefined()
 

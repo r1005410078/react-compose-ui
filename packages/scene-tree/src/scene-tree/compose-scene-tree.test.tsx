@@ -626,3 +626,27 @@ describe('ComposeSceneTree', () => {
     expect(onExpandedChange).toHaveBeenCalledWith(['folder'])
   })
 })
+
+describe('OpenSpec: scene-tree / 组件实例内部子树投影', () => {
+  it('声明 hasChildren 的节点即使尚未物化子项也可展开', async () => {
+    const onExpandedChange = vi.fn()
+    render(
+      <ComposeUIProvider locale="zh-CN">
+        <ComposeSceneTree
+          nodes={[{ id: 'instance', label: 'Card', hasChildren: true }]}
+          selectedIds={[]}
+          expandedIds={[]}
+          onSelectionChange={vi.fn()}
+          onExpandedChange={onExpandedChange}
+          onOperation={vi.fn()}
+        />
+      </ComposeUIProvider>,
+    )
+
+    // 惰性投影下未展开时 children 为空，展开控件仍必须可用，否则永远展不开。
+    const row = await screen.findByRole('row', { name: /Card/ })
+    expect(row).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(within(row).getByRole('button', { name: /展开|Expand/ }))
+    expect(onExpandedChange).toHaveBeenCalledWith(['instance'])
+  })
+})

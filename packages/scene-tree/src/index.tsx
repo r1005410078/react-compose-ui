@@ -29,6 +29,16 @@ export interface ComposeSceneTreeNode {
   iconLabel?: string
   /** 子节点；空数组表示能够包含子节点但当前为空。 */
   children?: readonly ComposeSceneTreeNode[]
+  /**
+   * 是否存在子节点，用于宿主惰性物化 `children` 的场景。
+   *
+   * @remarks
+   * 省略时由 `children` 长度推断。宿主按需构建子树（例如组件实例内部层级只在展开时投影）
+   * 时必须显式声明，否则展开控件不会出现，节点将永远无法展开。
+   *
+   * @defaultValue `children` 非空
+   */
+  hasChildren?: boolean
   /** 当前可见状态。省略时视为可见。 */
   visible?: boolean
   /** 当前锁定状态；锁定节点不能执行结构修改。 */

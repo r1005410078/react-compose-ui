@@ -126,6 +126,21 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
  * 结构编辑命令尚未接线，因此能力位一律关闭。
  * TODO(add-instance-structural-overrides 5.2): 结构操作接线后放开 canDelete/canMove/canRename。
  */
+/**
+ * 判断组件实例是否含可投影的内部子项。
+ *
+ * @remarks
+ * 只读组件根的直接子项，不递归；用于在未展开时决定展开控件是否出现。
+ */
+function instanceHasInnerChildren(instance: ComposeEntity): boolean {
+  const facts = readComposeComponentInstance(instance)
+  if (!facts) return false
+  const rootId = facts.snapshot.document.rootIds[0]
+  if (!rootId) return false
+  const root = facts.snapshot.document.entities[rootId]
+  return root ? (getComposeHierarchy(root)?.childIds.length ?? 0) > 0 : false
+}
+
 function projectInstanceChildren(
   registry: ComposeEntityRegistry,
   instance: ComposeEntity,
@@ -215,6 +230,8 @@ function sceneEntity(
           : undefined,
     // 实例没有 Hierarchy，但其内部层级可投影，因此仍可展开。
     canHaveChildren: hierarchy !== undefined || componentInstance,
+    // 投影是惰性的：未展开时 children 尚未构建，必须显式声明才会出现展开控件。
+    ...(componentInstance ? { hasChildren: instanceHasInnerChildren(entity) } : {}),
     canRename: !locked,
     canDelete: !locked,
     canMove: !locked,

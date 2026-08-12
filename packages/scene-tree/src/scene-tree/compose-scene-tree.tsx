@@ -27,7 +27,8 @@ const sceneTreeAdapter: ComposeTreeItemAdapter<ComposeSceneTreeNode> = {
   getChildren: (node) => node.children,
   getId: (node) => node.id,
   getLabel: (node) => node.label,
-  hasChildren: (node) => (node.children?.length ?? 0) > 0,
+  // 宿主惰性物化子树时 children 尚未构建，必须优先采信显式声明，否则展开控件不出现。
+  hasChildren: (node) => node.hasChildren ?? (node.children?.length ?? 0) > 0,
   canHaveChildren: (node) => node.canHaveChildren !== false && !node.locked,
   canMove: (node) => node.canMove !== false && !node.locked,
 }

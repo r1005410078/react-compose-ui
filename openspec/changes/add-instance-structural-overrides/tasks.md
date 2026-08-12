@@ -29,7 +29,9 @@
   - Red: `bun run --cwd packages/core test -- component-instance-path.test.ts`；6 failed（先收紧 toThrowError 断言，避免调用不存在函数导致的假绿）。
   - Green/Refactor: 同一命令 6 passed；分隔符禁入 Entity ID，段数上限为嵌套上限两倍。
 - [x] 3.2 [Red → Green → Refactor] SceneTree 惰性内部子树投影与受限能力位
-  - Result: SceneTree 无需改动，受控节点契约已足够；投影与能力位由宿主声明。结构命令未接线前能力位全关，TODO 指向 5.2。
+  - Red: `bun run --cwd packages/scene-tree test -- compose-scene-tree.test.tsx`；1 failed；未物化 children 的节点不渲染 aria-expanded，展开控件缺失。
+  - Green/Refactor: 同一命令 39 passed；节点模型新增 hasChildren 供宿主惰性物化时显式声明；Playwright 探针在真实应用中确认展开后出现内部节点。
+  - 修正：首版只在 controller 用例里直接调用 onExpandedChange，绕过了展开控件，掩盖了 adapter 只按 children 长度推断 hasChildren 的死锁。
 - [x] 3.3 [Red → Green → Refactor] Editor 从 resolvedSnapshot + 实例操作构建投影节点
   - Red: `bun run --cwd packages/editor test -- controller.test.tsx`；1 failed；实例节点 canHaveChildren 为 false，无法展开。
   - Green/Refactor: 同一命令 26 passed；projectInstanceChildren 按展开集合惰性构建，validExpanded 放行实例与复合地址。
