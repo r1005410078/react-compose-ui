@@ -709,6 +709,43 @@ describe('useComposeEditorController', () => {
     expect(result.current.sceneTreeProps.selectedIds).toEqual([])
   })
 
+  it('选中实例内部节点时 Inspector 编辑写入实例覆盖而非宿主文档', () => {
+    const editorRuntime = createTransactionRuntime({
+      document: instanceDocumentFixture(),
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => {
+      result.current.sceneTreeProps.onSelectionChange?.(['instance/c-deep'])
+    })
+
+    const target = result.current.instanceInnerSelection
+    expect(target).not.toBeNull()
+    expect(target?.entity.id).toBe('c-deep')
+
+    act(() => {
+      target?.dispatch({
+        id: 'inner-edit',
+        type: BUILTIN_COMMAND_TYPES.setRendererProps,
+        payload: { entityId: 'c-deep', props: { text: 'Edited' } },
+        meta: { label: 'edit', source: 'inspector', targetIds: ['c-deep'] },
+      })
+    })
+
+    // 宿主文档只多出实例覆盖，内部实体不会被写进宿主 entities。
+    const host = result.current.document.entities.instance!
+    expect(result.current.document.entities['c-deep']).toBeUndefined()
+    const overrides = (host.components.Renderer as { props: Record<string, unknown> })
+      .props.instanceOverrides as { operations: readonly { kind: string }[] }
+    expect(overrides.operations.length).toBeGreaterThan(0)
+    expect(overrides.operations.every(({ kind }) => kind === 'set-field')).toBe(true)
+  })
+
   it('场景树创建操作从 Container Preset 创建 v6 Entity', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({

@@ -47,6 +47,14 @@ interface EntityInspectorProps {
   readonly nodeEditPort?: ComposeNodeEditPort
   /** 当前页面实例的 setup 返回作用域。 */
   readonly scriptScope?: ComposePageScriptScope
+  /**
+   * 禁止重命名该 Entity。
+   *
+   * @remarks
+   * 组件实例内部节点用之：稳定操作代数只覆盖 Component 字段，name 不是 Component 字段，
+   * 因此无法表达重命名。留成可输入但静默失效的字段会误导用户。
+   */
+  readonly renameDisabled?: boolean
 }
 
 // 内建 Component 由 Registry 定义的 inspector 呈现；缺失定义时也不进入“未知”分组，
@@ -142,6 +150,7 @@ export function EntityInspector({
   idFactory,
   nodeEditPort,
   paintEditPort,
+  renameDisabled,
   scriptScope,
 }: EntityInspectorProps) {
   const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
@@ -274,7 +283,7 @@ export function EntityInspector({
             dispatch={dispatch}
             entity={entity}
             idFactory={idFactory}
-            readOnly={locked}
+            readOnly={locked || renameDisabled === true}
             zh={zh}
           />
           {basicDefinitions.map((definition) => (

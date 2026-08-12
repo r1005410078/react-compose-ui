@@ -47,11 +47,14 @@
 - [x] 4.3 [Red → Green → Refactor] Stage 与 Scene Tree 选中/展开双向同步
   - Result: 选中复合地址时自动展开宿主实例与内部祖先链；Playwright 覆盖单击选实例、两次双击逐层深入。
   - Stage overlay 为内部实体绘制虚线只读选中框，几何由 DOM 测量（instance-selection-bounds），不带手柄。
-  - 未完成：Inspector 尚未路由到实例覆盖（见 5.1）。
+
 
 ## 5. 编辑与 Apply/Revert
 
-- [ ] 5.1 [Red → Green → Refactor] Inspector 选中复合地址时路由写入 instanceOverrides
+- [x] 5.1 [Red → Green → Refactor] Inspector 选中复合地址时路由写入 instanceOverrides
+  - Red: `bun run --cwd packages/editor test -- controller.test.tsx`；1 failed；instanceInnerSelection 不存在。
+  - Green/Refactor: 28 passed。命令先在内部文档的一次性 Runtime 执行，再用 diffComposeComponentDocuments 与未施加实例覆盖的快照做稳定 diff，重算整份操作列表后一次写回宿主；重算而非追加，避免同一字段反复编辑累积等价操作。
+  - name 不是 Component 字段、稳定操作代数无法表达重命名，因此内部节点 Inspector 的名称字段设为只读，而不是留成静默失效的输入。
 - [ ] 5.2 [Red → Green → Refactor] 实例内部删除、reparent、reorder、增删 Component 生成稳定操作
 - [ ] 5.3 [Red → Green → Refactor] 实例结构操作单项/全部 Apply 到直接父源与 partial success
 - [ ] 5.4 [Red → Green → Refactor] 实例层 Revert、依赖确认与锚点失效的 pending-update

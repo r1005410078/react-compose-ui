@@ -23,6 +23,8 @@ import {
 import {
   BUILTIN_COMMAND_TYPES,
   composeInstancePathHostId,
+  createTransactionRuntime,
+  diffComposeComponentDocuments,
   decodeComposeInstancePath,
   encodeComposeInstancePath,
   getComposeComposition,
@@ -245,6 +247,25 @@ function instanceSelectionAncestors(
     }
   }
   return ancestors
+}
+
+/** 当前下钻选中的实例内部实体及其编辑入口。 @public */
+export interface ComposeInstanceInnerSelection {
+  /** 宿主文档中的实例 Entity ID。 */
+  readonly instanceId: string
+  /** 解析后的内部实体，供 Inspector 渲染。 */
+  readonly entity: ComposeEntity
+  /** 解析后的完整内部文档，Inspector 需要它读取父子关系。 */
+  readonly document: ComposeDocument
+  /**
+   * 接收 Inspector 命令并写入实例覆盖。
+   *
+   * @remarks
+   * 命令本是针对宿主文档的，这里先在内部文档的独立 Runtime 上执行，再用稳定 diff 重算
+   * 整份结构操作列表，最后一次写回宿主实例。重算而不是追加，可以避免同一字段反复编辑
+   * 累积成一长串等价操作。
+   */
+  readonly dispatch: (command: EditorCommand) => void
 }
 
 function sceneEntity(
@@ -502,6 +523,8 @@ export interface ComposeEditorController {
   readonly stage: ReactNode
   /** 默认聚合 Entity Inspector 内容。 */
   readonly inspectorPanel: ReactNode
+  /** 当前下钻选中的实例内部实体；未下钻时为 null。 */
+  readonly instanceInnerSelection: ComposeInstanceInnerSelection | null
   /** 默认 ComposeCommandPanel 内容。 */
   readonly commandPanel: ReactNode
   /** 默认 Stage 工具栏内容。 */
@@ -1171,6 +1194,73 @@ export function useComposeEditorController({
     actionContextRef.current = actionContext
   }, [actionContext])
   // Inspector 目标只有画布输出、单选 Entity 和空态三种；三者互斥且由会话状态决定。
+  /**
+   * 解析当前下钻选中的实例内部实体。
+   *
+   * @remarks
+   * 内部实体不在宿主文档里，必须按 Base → Variant 链 → 实例覆盖解析后才能取到。
+   */
+  const instanceInnerSelection = useMemo<ComposeInstanceInnerSelection | null>(() => {
+    if (selectedIds.length !== 1) return null
+    const address = selectedIds[0]!
+    if (!isComposeInstancePath(address)) return null
+    const decoded = decodeComposeInstancePath(address)
+    if (!decoded.ok) return null
+    const [instanceId, innerId] = decoded.segments
+    if (!instanceId || !innerId) return null
+    const host = document.entities[instanceId]
+    if (!host) return null
+    const facts = readComposeComponentInstance(host)
+    if (!facts) return null
+    const resolved = resolveComposeInstanceOverrides({
+      document: facts.snapshot.document,
+      properties: facts.snapshot.properties,
+      overrides: facts.overrides,
+    })
+    if (!resolved.ok) return null
+    const entity = resolved.document.entities[innerId]
+    if (!entity) return null
+    return {
+      instanceId,
+      entity,
+      document: resolved.document,
+      dispatch: (command: EditorCommand) => {
+        // 在内部文档的一次性 Runtime 上执行，得到编辑后的完整内部文档。
+        const innerRuntime = createTransactionRuntime({ document: resolved.document })
+        const applied = innerRuntime.dispatch(command)
+        if (applied.status !== 'committed') return
+        // 与「未施加实例覆盖」的快照做稳定 diff，重算整份结构操作。
+        const diff = diffComposeComponentDocuments({
+          parent: facts.snapshot.document,
+          current: innerRuntime.document,
+        })
+        if (!diff.ok) return
+        const renderer = host.components.Renderer
+        if (!renderer) return
+        runtime.dispatch({
+          // 不用 controller 的 idFactory：它读 ref，会被 React Compiler 判为渲染期访问。
+          id: defaultIdFactory(),
+          type: BUILTIN_COMMAND_TYPES.setRendererProps,
+          payload: {
+            entityId: instanceId,
+            props: {
+              ...(renderer.props as Record<string, unknown>),
+              instanceOverrides: {
+                properties: facts.overrides.properties,
+                operations: diff.operations,
+              },
+            },
+          },
+          meta: {
+            label: `Edit ${entity.name} inside ${host.name}`,
+            source: 'inspector',
+            targetIds: [instanceId],
+          },
+        } as unknown as EditorCommand)
+      },
+    }
+  }, [document, runtime, selectedIds])
+
   const inspectorPanel = resolvedInspectionTarget === 'output' ? (
     // 输出配置会在色盘拖动的每个采样点更新。不能以输出值作为 key，
     // 否则会卸载活跃的 ColorPicker 并中断原生 pointer 手势。
@@ -1178,6 +1268,17 @@ export function useComposeEditorController({
       dispatch={dispatch}
       document={document}
       idFactory={nextId}
+    />
+  ) : instanceInnerSelection ? (
+    <EntityInspector
+      dispatch={instanceInnerSelection.dispatch}
+      document={instanceInnerSelection.document}
+      entity={instanceInnerSelection.entity}
+      idFactory={nextId}
+      // 按复合地址重挂载：切换内部目标时局部会话状态不得残留。
+      key={selectedIds[0]}
+      registry={registry}
+      renameDisabled
     />
   ) : selectedEntity ? (
     <EntityInspector
@@ -1260,6 +1361,7 @@ export function useComposeEditorController({
       />
     ),
     inspectorPanel,
+    instanceInnerSelection,
     commandPanel: (
       <CommandPanelWithActions
         actionContext={actionContext}

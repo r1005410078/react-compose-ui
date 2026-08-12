@@ -3534,4 +3534,16 @@ test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻�
   await expect(outline).toHaveAttribute('width', String(box!.width))
   await expect(outline).toHaveAttribute('height', String(box!.height))
   await expect(stage.getByTestId('stage-resize-edge-nw')).toHaveCount(0)
+
+  // Inspector 路由到内部实体：编辑写入实例覆盖，宿主文档不新增实体。
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await expect(inspector).toContainText('Rectangle')
+  const positionX = inspector.getByLabel('位置 X')
+  await expect(positionX).toHaveValue('520')
+  await positionX.fill('40')
+  await positionX.press('Enter')
+  await expect(inspector.getByLabel('位置 X')).toHaveValue('40')
+
+  // name 不是 Component 字段，稳定操作代数无法表达重命名，因此该字段只读而不是静默失效。
+  await expect(inspector.getByLabel('名称')).toHaveAttribute('readonly', '')
 })
