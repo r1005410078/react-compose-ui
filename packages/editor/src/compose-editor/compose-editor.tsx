@@ -30,7 +30,7 @@ import {
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
 import type { ComposePageSetupReference } from '@compose-ui/core'
-import type { ComposeEntity, JsonObject } from '@compose-ui/core'
+import type { ComposeEntity, ComposeResolvedComponentSnapshot, JsonObject } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeHistoryShortcuts } from '@compose-ui/history'
@@ -75,6 +75,7 @@ import {
   ComposeComponentInstanceOverridesPanel,
   ComposeVariantOverridesPanel,
   applyComposeInstanceOverrides,
+  planComposeInstanceAutoSync,
   createComposeVariantAsset,
   createComposeVariantAssetFromInstance,
   readComposeComponentInstance,
@@ -799,18 +800,71 @@ export function ComposeEditor({
     })
   }, [componentWorkspace, replaceDocuments])
 
+  /**
+   * 组件源保存成功后同步依赖实例。
+   *
+   * @remarks
+   * 覆盖全部兼容的实例直接刷新，不打断用户；存在失效覆盖的实例保留旧快照并提示，等待显式确认。
+   * 判据是覆盖能否应用而不是变更来源，因此本地保存与外部 revision 变化行为一致。
+   *
+   * 全部同步项合并为一次事务，使自动路径与手动更新共享同一次 Undo。
+   */
+  const syncInstancesAfterComponentSave = useCallback((
+    assetKey: string,
+    snapshot: ComposeResolvedComponentSnapshot,
+  ) => {
+    const store = componentWorkspace.store
+    const document = controller?.document
+    if (!store || !controller || !document) return
+    const plan = planComposeInstanceAutoSync({
+      document,
+      reference: store.createReference(assetKey),
+      snapshot,
+    })
+    for (const entry of plan.synced) {
+      const entity = document.entities[entry.entityId]
+      const renderer = entity?.components.Renderer
+      if (!renderer) continue
+      controller.dispatch({
+        id: typeof globalThis.crypto?.randomUUID === 'function'
+          ? globalThis.crypto.randomUUID()
+          : `instance-auto-sync-${Date.now()}`,
+        type: BUILTIN_COMMAND_TYPES.setRendererProps,
+        payload: {
+          entityId: entry.entityId,
+          props: {
+            ...rendererPropsObject(renderer.props),
+            resolvedSnapshot: entry.snapshot,
+            instanceOverrides: entry.overrides,
+          } as unknown as JsonObject,
+        },
+        meta: {
+          label: `Sync ${entity?.name ?? entry.entityId} with component source`,
+          source: 'component-workspace',
+          targetIds: [entry.entityId],
+        },
+      })
+    }
+    if (plan.pending.length > 0) {
+      setComponentNotice(
+        `${plan.pending.length} 个实例的本层覆盖已失效，需要在实例上确认更新`,
+      )
+    }
+  }, [componentWorkspace.store, controller])
+
   const saveComponentDocument = useCallback(async (panelId: string, force?: boolean) => {
     const outcome = await componentWorkspace.saveComponent(panelId, force)
-    if (outcome === 'conflict') {
+    if (outcome.status === 'conflict') {
       setPendingComponentConflict(panelId)
       return false
     }
-    if (outcome === 'failed') {
+    if (outcome.status === 'failed') {
       setComponentNotice('组件保存失败')
       return false
     }
+    syncInstancesAfterComponentSave(outcome.assetKey, outcome.snapshot)
     return true
-  }, [componentWorkspace])
+  }, [componentWorkspace, syncInstancesAfterComponentSave])
 
   const handleDefaultAssetMutation = useCallback(async (mutation: ComposeAssetMutation) => {
     const hostDecision = assets?.browser?.onBeforeAssetMutation

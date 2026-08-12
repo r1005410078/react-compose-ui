@@ -1,4 +1,10 @@
 export {
+  planComposeInstanceAutoSync,
+  type ComposeInstanceAutoSyncEntry,
+  type ComposeInstanceAutoSyncPlan,
+  type ComposeInstancePendingSyncEntry,
+} from './auto-sync'
+export {
   applyComposeInstanceOverrides,
   createComposeVariantAssetFromInstance,
   readComposeComponentInstance,

@@ -46,9 +46,14 @@
 
 ## 5. 自动同步
 
-- [ ] 5.1 [Red → Green → Refactor] 组件源保存后依赖实例的冲突判定与无冲突自动提交
-- [ ] 5.2 [Red → Green → Refactor] 存在失效覆盖时进入 pending-update 并保留旧快照
-- [ ] 5.3 [Red → Green → Refactor] 自动与手动路径共用同一次事务，Undo 可回退
+- [x] 5.1 [Red → Green → Refactor] 组件源保存后依赖实例的冲突判定与无冲突自动提交
+  - Red: `bun run --cwd packages/component-library test -- auto-sync`；planComposeInstanceAutoSync 不存在。
+  - Green/Refactor: 3 passed。判据是覆盖能否应用而不是变更来源，因此本地保存与外部 revision 变化共用同一逻辑。
+- [x] 5.2 [Red → Green → Refactor] 存在失效覆盖时进入 pending-update 并保留旧快照
+  - Result: pending 项返回失效操作 ID 与仍兼容的覆盖，编辑器只提示不自动提交。
+- [x] 5.3 [Red → Green → Refactor] 自动与手动路径共用同一次事务，Undo 可回退
+  - Result: 规划函数不写文档，由 Editor 统一提交 setRendererProps，与手动更新同一通路。
+  - saveComponent 改为返回写入后的 assetKey 与快照：从闭包读 session 拿到的是保存前的旧快照，实例会"同步"成原样。
 
 ## 6. 集成与交付
 

@@ -3633,3 +3633,56 @@ test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件�
   // 根可缩放，实例继承该能力并显示手柄。
   await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(1)
 })
+
+test('OpenSpec: component-library / Apply、Revert 与显式更新 / 组件源保存后实例自动同步', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Container' }).click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const source = sceneTree.getByRole('row').last()
+  await source.click()
+  await source.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '创建组件…' }).click()
+  const dialog = page.getByRole('dialog', { name: '创建组件' })
+  await dialog.getByLabel('组件名称').fill('Sync Card')
+  await dialog.getByRole('button', { name: '创建' }).click()
+  await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
+
+  const instanceContent = stage.locator('[data-component-instance-entity-id]').last()
+  const before = await instanceContent.boundingBox()
+  expect(before?.width).toBe(240)
+
+  // 在组件文档里改内部宽度
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.locator('[data-workspace-panel="component-library"] button')
+    .filter({ hasText: 'Sync Card' }).first().dblclick()
+  // 场景树切换到组件 Runtime 需要一帧；面板可见早于树内容替换。
+  await page.waitForTimeout(800)
+  // 必须等组件文档成为活动面板：实例在页面场景树里同名，只等行会命中页面树而不是组件树。
+  await expect(editor.locator('[data-workspace-panel="component-document"]')).toBeVisible()
+  const componentTree = editor.getByRole('treegrid', { name: '场景树' })
+  const rows = componentTree.getByRole('row')
+  for (let index = 0; index < await rows.count(); index += 1) {
+    const toggle = rows.nth(index).getByRole('button', { name: /展开/ })
+    if (await toggle.count()) await toggle.click()
+  }
+  await componentTree.getByRole('row', { name: /Rectangle/ }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await expect(inspector).toContainText('Rectangle')
+  const width = inspector.getByLabel('尺寸宽度')
+  await width.fill('400')
+  await width.press('Enter')
+
+  // 保存后无需任何确认，页面里的实例直接跟随
+  await editor.getByRole('button', { name: /保存|Save/ }).first().click()
+  await editor.locator('[data-workspace-tab]').filter({ hasText: 'Home' }).click()
+  await expect.poll(async () => (await instanceContent.boundingBox())?.width).toBe(400)
+})

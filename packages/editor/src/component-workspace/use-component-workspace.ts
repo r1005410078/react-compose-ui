@@ -22,6 +22,16 @@ export type OpenComponentResult =
   | { readonly ok: false; readonly error: Error }
 
 /** 管理 Base/Variant 独立运行时、保存基线和活动会话。 @internal */
+/** 组件源保存结果。 @public */
+export type ComposeComponentSaveOutcome =
+  | {
+      readonly status: 'saved'
+      readonly assetKey: string
+      readonly snapshot: ComposeResolvedComponentSnapshot
+    }
+  | { readonly status: 'conflict' }
+  | { readonly status: 'failed' }
+
 export function useComponentWorkspace(input: {
   readonly activePanelId: string | null
   readonly config?: ComposeEditorComponentsConfig
@@ -87,9 +97,9 @@ export function useComponentWorkspace(input: {
   const saveComponent = useCallback(async (
     panelId: string,
     force?: boolean,
-  ): Promise<'saved' | 'conflict' | 'failed'> => {
+  ): Promise<ComposeComponentSaveOutcome> => {
     const session = sessionsRef.current.get(panelId)
-    if (!store || !session) return 'failed'
+    if (!store || !session) return { status: 'failed' }
     const runtimeRevision = session.runtime.revision
     try {
       let next = session.asset
@@ -148,11 +158,18 @@ export function useComponentWorkspace(input: {
         savedRevisionId: runtimeRevision,
         dirty: current.runtime.revision !== runtimeRevision,
       }))
-      return 'saved'
+      // 返回写入后的事实：调用方需要它来同步依赖实例，而此时 session 状态尚未重渲染。
+      return {
+        status: 'saved',
+        assetKey: session.assetKey,
+        snapshot: { ...snapshot, revision: written.revision },
+      }
     }
     catch (error) {
-      if (error instanceof ComposeAssetError && error.code === 'conflict') return 'conflict'
-      return 'failed'
+      if (error instanceof ComposeAssetError && error.code === 'conflict') {
+        return { status: 'conflict' }
+      }
+      return { status: 'failed' }
     }
   }, [store, updateSession])
 

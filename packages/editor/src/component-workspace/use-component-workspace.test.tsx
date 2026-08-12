@@ -138,7 +138,8 @@ describe('useComponentWorkspace', () => {
     })
     await waitFor(() => expect(hook.result.current.sessions.get(panelId)?.dirty).toBe(true))
     await act(async () => {
-      expect(await hook.result.current.workspace.saveComponent(panelId)).toBe('saved')
+      expect(await hook.result.current.workspace.saveComponent(panelId))
+        .toMatchObject({ status: 'saved' })
     })
     expect(hook.result.current.sessions.get(panelId)).toMatchObject({
       baseRevision: '2',
@@ -150,10 +151,12 @@ describe('useComponentWorkspace', () => {
     const hook = renderHook(() => useHarness(componentStore(true)))
     await act(async () => { await hook.result.current.open() })
     await act(async () => {
-      expect(await hook.result.current.workspace.saveComponent('component:button')).toBe('conflict')
+      expect(await hook.result.current.workspace.saveComponent('component:button'))
+        .toMatchObject({ status: 'conflict' })
     })
     await act(async () => {
-      expect(await hook.result.current.workspace.saveComponent('component:button', true)).toBe('saved')
+      expect(await hook.result.current.workspace.saveComponent('component:button', true))
+        .toMatchObject({ status: 'saved' })
     })
   })
 })
