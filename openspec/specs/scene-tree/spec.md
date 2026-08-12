@@ -304,3 +304,29 @@ SceneTree MUST 渲染宿主提供的 Group、Container、Base Component 与 Vari
 - **WHEN** 节点模型包含 Group、Container、Base instance 与 Variant instance
 - **THEN** 每种语义显示可辨识形状和对应 accessible name
 
+### Requirement: 组件实例内部子树投影
+
+SceneTree MUST 支持宿主把组件实例解析后的内部实体树作为该实例节点的后代提供，内部节点使用与宿主实体
+ID 不冲突的复合地址标识。投影 MUST 惰性发生：仅在实例节点展开或被下钻时构建。内部节点 MUST 可选中，
+并按宿主声明的能力位表达可重命名、可删除、可移动等受限行为。
+
+#### Scenario: 展开实例查看内部层级
+
+- **WHEN** 用户展开一个 component-instance 节点
+- **THEN** 树显示解析后的内部实体层级，节点以复合地址标识且不与宿主实体 ID 碰撞
+
+#### Scenario: 内部节点可选中
+
+- **WHEN** 用户点击实例内部节点
+- **THEN** 选区包含该复合地址，宿主据此把编辑路由到实例覆盖
+
+#### Scenario: 受限能力位
+
+- **WHEN** 宿主声明内部节点不可移出实例子树
+- **THEN** 树拒绝越界拖放并保持原结构
+
+#### Scenario: 未展开保持单节点
+
+- **WHEN** 实例节点未展开
+- **THEN** 不构建内部投影，观感与既有单节点一致
+
