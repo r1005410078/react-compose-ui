@@ -8,6 +8,14 @@ export {
 } from './component-file'
 export { applyComposeComponentOverrides } from './component-overrides'
 export {
+  migrateLegacyComposeInstanceOverrides,
+  parseComposeInstanceOverrides,
+  resolveComposeInstanceOverrides,
+  type ComposeComponentInstanceOverrides,
+  type ComposeInstanceOverridesParseResult,
+  type ComposeInstanceOverridesResolveResult,
+} from './component-instance-overrides'
+export {
   diffComposeComponentDocuments,
   planComposeComponentRevert,
   type ComposeComponentDiffResult,

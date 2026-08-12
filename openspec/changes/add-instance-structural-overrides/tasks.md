@@ -4,17 +4,24 @@
 
 ## 1. 规范与设计
 
-- [ ] 1.1 评审 proposal、design 与五份规范增量
-- [ ] 1.2 运行 `openspec validate add-instance-structural-overrides --strict` 并记录结果
+- [x] 1.1 评审 proposal、design 与五份规范增量
+  - Result: 已确认。
+- [x] 1.2 运行 `openspec validate add-instance-structural-overrides --strict` 并记录结果
+  - Result: Change valid。
 - [x] 1.3 确认下钻手势默认绑定，回填 design 的待解决问题
   - Result: 采用双击；复用 InteractionController 已归一化的 clickCount，与 textEditable 守卫的文本原地编辑天然互斥，无需优先级仲裁。
 
 ## 2. 覆盖模型
 
-- [ ] 2.1 [Red → Green → Refactor] Core `instanceOverrides` 结构、结构操作分区与属性分区
-- [ ] 2.2 [Red → Green → Refactor] `propertyOverrides` → `instanceOverrides` 显式纯迁移与旧字段拒绝
-- [ ] 2.3 [Red → Green → Refactor] 实例与 Variant 共用的操作校验器与边界约束（根、基础 Component、越界 reparent）
-- [ ] 2.4 [Red → Green → Refactor] 四段解析顺序与 v6 校验失败回退
+- [x] 2.1 [Red → Green → Refactor] Core `instanceOverrides` 结构、结构操作分区与属性分区
+  - Red: `bun run --cwd packages/core test -- component-instance-overrides.test.ts`；5 failed；parse/migrate/resolve API 均不存在。
+  - Green/Refactor: 同一命令 6 passed；分区类型与 TSDoc 完成，公共入口导出。
+- [x] 2.2 [Red → Green → Refactor] `propertyOverrides` → `instanceOverrides` 显式纯迁移与旧字段拒绝
+  - Red/Green: 同上 suite；缺少 properties/operations 分区一律返回 component-asset.legacy，迁移后结构分区为空。
+- [x] 2.3 [Red → Green → Refactor] 实例与 Variant 共用的操作校验器与边界约束（根、基础 Component、越界 reparent）
+  - Result: 直接复用 applyComposeComponentOverrides，其已强制根不可删/移、基础 Component 不可删、单 Group 根；补充越界 reparent 用例。
+- [x] 2.4 [Red → Green → Refactor] 四段解析顺序与 v6 校验失败回退
+  - Result: resolveComposeInstanceOverrides 固定 结构操作 → 属性覆盖；任一阶段失败不返回半应用文档。
 
 ## 3. 投影与选区
 
