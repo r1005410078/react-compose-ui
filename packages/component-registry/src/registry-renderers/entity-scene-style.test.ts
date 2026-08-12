@@ -2,6 +2,7 @@ import type { ComposeEntity, JsonObject } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import {
   composeEntityAppearanceStyle,
+  composeEntityOverflowStyle,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
 } from './entity-scene-style'
@@ -61,6 +62,41 @@ describe('composeEntityVisualStyle', () => {
     expect(plain.boxShadow).toBe('none')
   })
 
+  it('Circle Shape 的背景 Paint 强制 50% 圆角，避免显示成矩形', () => {
+    const circle = composeEntityAppearanceStyle(entity({
+      Appearance: {
+        backgroundPaint: { kind: 'solid', color: '#2f7df6' },
+        borderColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 0,
+        opacity: 1,
+        shadow: null,
+      },
+      Renderer: {
+        type: 'shape',
+        props: { kind: 'circle', stroke: '#d8e2f1', strokeWidth: 2 },
+      },
+    }))
+    expect(circle.backgroundColor).toBe('#2f7df6')
+    expect(circle.borderRadius).toBe('50%')
+
+    const line = composeEntityAppearanceStyle(entity({
+      Appearance: {
+        backgroundPaint: { kind: 'solid', color: '#2f7df6' },
+        borderColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 0,
+        opacity: 1,
+        shadow: null,
+      },
+      Renderer: {
+        type: 'shape',
+        props: { kind: 'line', stroke: '#d8e2f1', strokeWidth: 2 },
+      },
+    }))
+    expect(line.borderRadius).toBe(0)
+  })
+
   it('OpenSpec: 共享渲染语义 / Container 的 overflow 由 Clip 控制', () => {
     const clipped = composeEntityVisualStyle(entity({
       Hierarchy: { childIds: [] },
@@ -76,6 +112,24 @@ describe('composeEntityVisualStyle', () => {
 
     const noClip = composeEntityVisualStyle(entity({ Hierarchy: { childIds: [] } }))
     expect(noClip.overflow).toBe('visible')
+  })
+})
+
+describe('composeEntityOverflowStyle', () => {
+  it('OpenSpec: 共享 Entity overflow 解析辅助 / 叶子 hidden、分轴 scroll→auto', () => {
+    expect(composeEntityOverflowStyle(entity({}))).toEqual({ overflow: 'hidden' })
+
+    const mixed = composeEntityOverflowStyle(entity({
+      Hierarchy: { childIds: [] },
+      Clip: { enabled: true, horizontal: 'scroll', vertical: 'clip' },
+    }))
+    expect(mixed).toEqual({ overflowX: 'auto', overflowY: 'hidden' })
+
+    const bothScroll = composeEntityOverflowStyle(entity({
+      Hierarchy: { childIds: [] },
+      Clip: { enabled: true, horizontal: 'scroll', vertical: 'scroll' },
+    }))
+    expect(bothScroll).toEqual({ overflow: 'auto' })
   })
 })
 

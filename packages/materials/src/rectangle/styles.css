@@ -1,10 +1,11 @@
-:root {
-  --compose-material-rectangle-background: #2f7df6;
-}
-
+/*
+ * 视觉由 Entity Appearance / PaintLayer 承担（颜色、圆角、阴影）。
+ * Renderer 只占位与命中，不得再铺一层默认蓝底，否则会盖住 Appearance，
+ * 并在未设置 overflow:hidden 的嵌套实例路径上露出无圆角的色块。
+ */
 .compose-material--rectangle {
   display: grid;
   place-items: center;
-  color: #fff;
-  background: var(--compose-material-rectangle-background);
+  color: transparent;
+  background: transparent;
 }

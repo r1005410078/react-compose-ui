@@ -18,6 +18,7 @@ export {
 } from './compose-entity-paint-layer'
 export {
   composeEntityAppearanceStyle,
+  composeEntityOverflowStyle,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
 } from './entity-scene-style'

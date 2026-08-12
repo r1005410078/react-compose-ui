@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>方案 A · 彩色深度 3D 图标</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0b0e13;
+      font-family: system-ui, sans-serif;
+      color: #e8ecf2;
+    }
+    .wrap { text-align: center; padding: 24px; }
+    h1 { font-size: 16px; margin: 0 0 8px; }
+    p { margin: 0 0 20px; color: #8b93a3; font-size: 12.5px; }
+    .row { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .tile {
+      width: 96px;
+      min-height: 100px;
+      border: 1px solid #2c3545;
+      border-radius: 8px;
+      background: #141a22;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 8px 12px;
+      font-size: 11px;
+    }
+    .tile svg { width: 40px; height: 40px; filter: drop-shadow(0 3px 6px rgb(0 0 0 / 28%)); }
+    .lbl { color: #9aa3b5; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>方案 A · 40px 等轴测立方体（三面不同色）</h1>
+    <p>顶亮 / 左中 / 右暗 · 主组件蓝 · 变体青绿+金标 · 实例灰蓝线框</p>
+    <div class="row">
+      <div class="tile">
+        <svg viewBox="0 0 24 24" fill="none">
+          <defs>
+            <linearGradient id="bt" x1="4" x2="20" y1="3" y2="12" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#9fd0ff"/><stop offset="100%" stop-color="#5aa8f0"/>
+            </linearGradient>
+            <linearGradient id="bl" x1="4" x2="12" y1="8" y2="20" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#3d8fd9"/><stop offset="100%" stop-color="#2563a8"/>
+            </linearGradient>
+            <linearGradient id="br" x1="12" x2="20" y1="8" y2="20" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#2a6fbc"/><stop offset="100%" stop-color="#1a4a82"/>
+            </linearGradient>
+          </defs>
+          <path d="M19.6 7.4 12 11.6 12 20.2 19.6 16Z" fill="url(#br)"/>
+          <path d="M4.4 7.4 12 11.6 12 20.2 4.4 16Z" fill="url(#bl)"/>
+          <path d="M12 3.2 19.6 7.4 12 11.6 4.4 7.4Z" fill="url(#bt)"/>
+          <path d="M12 11.6V20.2M4.4 7.4 12 11.6 19.6 7.4" stroke="#cfe6ff" stroke-opacity=".22" stroke-width=".7"/>
+        </svg>
+        <div>Component</div>
+        <div class="lbl">主组件</div>
+      </div>
+      <div class="tile">
+        <svg viewBox="0 0 24 24" fill="none">
+          <defs>
+            <linearGradient id="vt" x1="4" x2="20" y1="3" y2="12" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#8af0c8" stop-opacity=".55"/><stop offset="100%" stop-color="#3ecf8e" stop-opacity=".35"/>
+            </linearGradient>
+            <linearGradient id="vl" x1="4" x2="12" y1="8" y2="20" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#2db87a" stop-opacity=".4"/><stop offset="100%" stop-color="#1a7a52" stop-opacity=".55"/>
+            </linearGradient>
+            <linearGradient id="vr" x1="12" x2="20" y1="8" y2="20" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#23966a" stop-opacity=".45"/><stop offset="100%" stop-color="#145c40" stop-opacity=".65"/>
+            </linearGradient>
+          </defs>
+          <path d="M19.6 7.4 12 11.6 12 20.2 19.6 16Z" fill="url(#vr)"/>
+          <path d="M4.4 7.4 12 11.6 12 20.2 4.4 16Z" fill="url(#vl)"/>
+          <path d="M12 3.2 19.6 7.4 12 11.6 4.4 7.4Z" fill="url(#vt)"/>
+          <path d="M4.4 7.4 12 3.2 19.6 7.4 19.6 16 12 20.2 4.4 16Z" fill="none" stroke="#7dffe0" stroke-opacity=".75" stroke-linejoin="round" stroke-width="1.15"/>
+          <path d="M21 10.5v5.5M22.6 11.4v3.6" stroke="#e8b84a" stroke-linecap="round" stroke-width="1.35"/>
+        </svg>
+        <div>Primary</div>
+        <div class="lbl">变体</div>
+      </div>
+      <div class="tile">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 3.2 19.6 7.4 12 11.6 4.4 7.4Z" stroke="#a8c4e8" stroke-linejoin="round" stroke-width="1.25"/>
+          <path d="M4.4 7.4 12 11.6 12 20.2 4.4 16Z" stroke="#6a8ab0" stroke-linejoin="round" stroke-width="1.25"/>
+          <path d="M19.6 7.4 12 11.6 12 20.2 19.6 16Z" stroke="#4a6588" stroke-linejoin="round" stroke-width="1.25"/>
+          <path d="M12 11.6V20.2" stroke="#8aa6c8" stroke-opacity=".7" stroke-width="1"/>
+        </svg>
+        <div>Instance</div>
+        <div class="lbl">页面实例</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

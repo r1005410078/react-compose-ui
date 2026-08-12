@@ -325,6 +325,16 @@
   cursor: nwse-resize;
 }
 
+.compose-stage__handle--n,
+.compose-stage__handle--s {
+  cursor: ns-resize;
+}
+
+.compose-stage__handle--e,
+.compose-stage__handle--w {
+  cursor: ew-resize;
+}
+
 .compose-stage__resize-hit {
   fill: transparent;
   pointer-events: all;
@@ -409,8 +419,61 @@
   font: 500 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Godot 旋转拉线：中心枢轴 — 拉杆 — 末端点（纯视觉，不抢命中） */
+.compose-stage__rotation-gizmo {
+  pointer-events: none;
+}
+
+.compose-stage__rotation-stem {
+  fill: none;
+  stroke: #3687ff;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.95;
+}
+
+.compose-stage__rotation-center-ring {
+  fill: #f8fbff;
+  stroke: #3687ff;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.compose-stage__rotation-center-dot {
+  fill: #3687ff;
+  stroke: none;
+  pointer-events: none;
+}
+
 .compose-stage__rotation {
-  cursor: grab;
+  fill: var(--compose-surface-raised, #f8fbff);
+  stroke: #3687ff;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.compose-stage__rotation-gizmo.is-snapped .compose-stage__rotation-stem {
+  stroke: #22c55e;
+  stroke-dasharray: 4 3;
+}
+
+.compose-stage__rotation-angle {
+  pointer-events: none;
+}
+
+.compose-stage__rotation-angle rect {
+  fill: rgb(15 23 42 / 88%);
+  stroke: none;
+}
+
+.compose-stage__rotation-angle text {
+  fill: #f8fafc;
+  font: 500 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.compose-stage__rotation-gizmo.is-snapped .compose-stage__rotation-angle rect {
+  fill: rgb(20 83 45 / 92%);
 }
 
 .compose-stage__paint-handle,
@@ -761,4 +824,9 @@
 .component-palette__drag-preview-icon .component-palette__tile-icon-svg {
   width: 20px;
   height: 20px;
+}
+
+/* 实例内部只读选中框：虚线以区别于可编辑的宿主选区，且不带任何手柄。 */
+.compose-stage__selection--instance-inner {
+  stroke-dasharray: 4 3;
 }

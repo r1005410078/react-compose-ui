@@ -34,8 +34,13 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 - `app/` 提供集成示例和最小 E2E 操作演示，不是正式编辑器产品。
 - 当前正式文档协议只支持 `ComposeDocument v6`：隐式自由 Canvas 根、统一 ECS Entity/Component
   组合、`LayoutItem`、`Hierarchy + Layout` Auto Layout 容器、`Renderer` 内容与结构化
-  `Appearance.backgroundPaint`；v5 只能显式单向迁移，
+  `Appearance.backgroundPaint`、first-class Group 与关联组件实例；项目组件/变体使用独立
+  `Component Asset v1`，不改变页面文档版本；v5 只能显式单向迁移，
   数据源协议和持久化接口仍未确定。
+- 组件实例的覆盖是 `instanceOverrides`，只含结构操作并复用 Variant 的稳定操作代数；暴露属性已删除。
+  组件文档只要求单根，根可以是容器或任意 Entity。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址
+  寻址，只存在于表示层：持久化文档中实例仍是单个 Entity，Undo/Redo 作用在宿主实例的 Patch 上。
+  实例的几何与容器属性跟随组件根，尺寸的唯一事实来源是根本身。
 - 不要把示例应用中的临时状态或演示交互当成稳定公共 API。
 
 ## 架构边界
@@ -66,6 +71,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   setup 作用域加载 Hook，可以依赖 `core`、`assets` 和 `script-runtime`，以 React 为 peer dependency，
   不得依赖 `editor` 或 `property-panel`；adapter 只能测量隔离内容，禁止读取 Stage/Preview Scene
   Entity DOM。页面渲染入口不得各自复制脚本作用域的加载、热重载与 dispose 竞态逻辑。
+- `@compose-ui/component-library` 是项目 Component Asset v1 的 Store、继承/Apply/Revert 领域操作与
+  混合组件目录，可依赖 `core`、`assets`、`component-registry`、`components` 和 `ui-context`，
+  不得依赖 `editor`、`stage`、`scene-tree` 或 `asset-browser`；Registry Preset 仍是代码物料，
+  Project Component/Variant 才是 Provider 资源。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面聚合 Store 包，只能依赖
   `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
@@ -77,11 +86,11 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   或 `operation-log`。
 - `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`、`assets`、
   `component-registry`、`script-runtime` 和 `layout-engine`，不得依赖 `editor` 或 `stage`。
-- `@compose-ui/materials` 是 Container、Rectangle、Text、Image、SVG Entity Presets、
+- `@compose-ui/materials` 是 Group、Container、Rectangle、Text、Image、SVG 与 Component Instance Entity Presets、
   Renderer、Component Definitions 与 Capabilities 的独立基础物料包，可以依赖 `core`、
   `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`script-runtime`、`ui-context`、
   DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`；`layout-engine` 只用于
-  Page Slot 的独立嵌套文档 Runtime。
+  Page Slot 与组件实例的独立嵌套文档 Runtime。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。

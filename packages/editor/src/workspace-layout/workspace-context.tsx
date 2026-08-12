@@ -2,7 +2,12 @@ import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import type { ComposeScriptIntelligenceProfile } from '@compose-ui/asset-browser'
-import type { ComposePageFile, TransactionRuntime } from '@compose-ui/core'
+import type {
+  ComposeComponentAssetV1,
+  ComposePageFile,
+  ComposeResolvedComponentSnapshot,
+  TransactionRuntime,
+} from '@compose-ui/core'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import type {
   ComposeHistoryNavigationController,
@@ -50,8 +55,6 @@ export interface WorkspaceContent {
 /** 文档会话共有的关闭与保存契约。 @internal */
 interface ComposeDocumentSessionBase {
   readonly panelId: string
-  readonly provider: ComposeAssetProvider
-  readonly entry: ComposeAssetEntry
   readonly dirty: boolean
   readonly save: (() => Promise<boolean>) | null
 }
@@ -59,6 +62,8 @@ interface ComposeDocumentSessionBase {
 /** Editor 实例内的临时资源文档会话；不写入 Dockview 布局或 ComposeDocument。 @internal */
 export interface ComposeAssetDocumentSession extends ComposeDocumentSessionBase {
   readonly kind: 'asset'
+  readonly provider: ComposeAssetProvider
+  readonly entry: ComposeAssetEntry
   /** 只读标签：不注册保存、不显示未保存指示、关闭时不需要确认。 */
   readonly readOnly: boolean
   /** 由 Editor 为特定脚本会话选择的隐藏类型分析 Profile。 */
@@ -75,6 +80,8 @@ export interface ComposeAssetDocumentSession extends ComposeDocumentSessionBase 
  */
 export interface ComposePageDocumentSession extends ComposeDocumentSessionBase {
   readonly kind: 'page'
+  readonly provider: ComposeAssetProvider
+  readonly entry: ComposeAssetEntry
   /** 页面的稳定资源 key。 */
   readonly pageKey: string
   /** 去掉页面后缀的用户可见名称。 */
@@ -90,10 +97,24 @@ export interface ComposePageDocumentSession extends ComposeDocumentSessionBase {
   readonly savedRevisionId: number
 }
 
+/** 一个 Base 或 Variant 的独立编辑会话。 @internal */
+export interface ComposeComponentDocumentSession extends ComposeDocumentSessionBase {
+  readonly kind: 'component'
+  readonly assetKey: string
+  readonly displayName: string
+  readonly sourceKind: ComposeComponentAssetV1['kind']
+  readonly asset: ComposeComponentAssetV1
+  readonly snapshot: ComposeResolvedComponentSnapshot
+  readonly runtime: TransactionRuntime
+  readonly baseRevision: string
+  readonly savedRevisionId: number
+}
+
 /** 中央 Canvas Group 中可关闭的文档会话。 @internal */
 export type ComposeWorkspaceDocumentSession =
   | ComposeAssetDocumentSession
   | ComposePageDocumentSession
+  | ComposeComponentDocumentSession
 
 export const WorkspaceContentContext = createContext<WorkspaceContent | null>(null)
 

@@ -24,6 +24,14 @@ Move/Resize/Rotate 的命令规划会查询 `GeometryConstraints`，并生成带
 `entity.transform.set`。多选、吸附、group/ungroup、reparent 和 duplicate 继续保持单事务与
 可逆 Patch 边界。
 
+Group 现在是 first-class 结构节点：只接受两个或更多同父级、Absolute、未锁定的顶层规范化选区；
+持久化 frame 提供稳定局部坐标系，命中、框选与吸附范围则实时取可见后代并集。Ungroup 只允许
+first-class Group 和严格匹配的历史透明 Group，普通 Container 会返回稳定禁用原因。
+
+`createComponentExtractionPlan()` 可把一个或多个合法场景根克隆为透明 Group 单根组件文档，保持
+世界几何、旋转和 sibling 顺序。`createReplaceSelectionWithEntityCommand()` 只负责资源写入后的
+原子场景替换与 Undo/Redo；Engine 不执行 Provider 副作用。
+
 手势开始时会冻结 Layout Snapshot。移动 Flow 会以已求解 box 预览，并在松手时原子转换为
 Absolute；其中 Fill 轴会烘焙为 Fixed。Resize Fill 只转换实际改变的轴，Rotation 不改变 Flow
 或 sizing。Scene Tree reparent 移入 Layout 自动 Flow，移出自由父级烘焙 Absolute；同父级排序

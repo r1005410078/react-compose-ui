@@ -1,11 +1,13 @@
 import {
   BUILTIN_COMMAND_TYPES,
+  createComposeGroupEntitySeed,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLayoutItem,
   getComposeLock,
   getComposeSpatialTransform,
   resolveComposeAppearance,
+  isComposeUngroupableEntity,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutItem,
@@ -213,18 +215,33 @@ export function createLayerOrderCommand(
 
 const FLOW_GROUP_REASON = '自动布局 Flow 子项不能参与 Group；请先转为 Absolute'
 const FLOW_UNGROUP_REASON = '自动布局 Flow 子项不能参与 Ungroup；请先转为 Absolute'
+const INVALID_GROUP_REASON = '至少选择两个同父级、未锁定的顶层 Absolute 节点'
+const INVALID_UNGROUP_REASON = '普通 Container 不能 Ungroup'
 
 /** 判断当前选择是否允许 Group。 @public */
 export function getGroupCommandAvailability(
   document: ComposeDocument,
   entityIds: readonly string[],
 ): ComposeStructureCommandAvailability {
-  return entityIds.some((id) => {
+  const uniqueIds = [...new Set(entityIds)]
+  if (uniqueIds.some((id) => {
     const entity = document.entities[id]
     return entity && getComposeLayoutItem(entity).positioning === 'flow'
-  })
-    ? { available: false, reason: FLOW_GROUP_REASON }
-    : { available: true }
+  })) return { available: false, reason: FLOW_GROUP_REASON }
+  if (uniqueIds.length < 2) return { available: false, reason: INVALID_GROUP_REASON }
+  const entities = uniqueIds.map((id) => document.entities[id])
+  if (entities.some((entity) => !entity)) return { available: false, reason: INVALID_GROUP_REASON }
+  if (entities.some((entity) => entity && getComposeLock(entity).locked)) {
+    return { available: false, reason: INVALID_GROUP_REASON }
+  }
+  const parentId = getEntityParentId(document, uniqueIds[0]!)
+  if (uniqueIds.some((id) => getEntityParentId(document, id) !== parentId)) {
+    return { available: false, reason: INVALID_GROUP_REASON }
+  }
+  if (parentId && getComposeLock(document.entities[parentId]!).locked) {
+    return { available: false, reason: INVALID_GROUP_REASON }
+  }
+  return { available: true }
 }
 
 /** 判断 Container 及其直接子项是否允许 Ungroup。 @public */
@@ -234,6 +251,9 @@ export function getUngroupCommandAvailability(
 ): ComposeStructureCommandAvailability {
   const container = document.entities[containerId]
   const hierarchy = container && getComposeHierarchy(container)
+  if (!container || !hierarchy || !isComposeUngroupableEntity(container)) {
+    return { available: false, reason: INVALID_UNGROUP_REASON }
+  }
   const containsFlow = Boolean(
     container
     && (
@@ -288,46 +308,13 @@ export function createGroupCommand(
     safeBounds.width,
     safeBounds.height,
   )
-  const container: ComposeEntity = {
+  const container: ComposeEntity = createComposeGroupEntitySeed({
     id: containerId,
-    name: 'Container',
-    components: {
-      Composition: {
-        presetId: null,
-        baseComponentKeys: [
-          'Transform',
-          'LayoutItem',
-          'Visibility',
-          'Lock',
-          'Hierarchy',
-          'Clip',
-          'Appearance',
-        ],
-        capabilityIds: [],
-      },
-      Transform: { rotation: groupTransform.rotation },
-      LayoutItem: {
-        positioning: 'absolute',
-        offset: groupTransform.position,
-        width: { mode: 'fixed', value: groupTransform.size.width, min: 1, max: null },
-        height: { mode: 'fixed', value: groupTransform.size.height, min: 1, max: null },
-        margin: { top: 0, right: 0, bottom: 0, left: 0 },
-        alignSelf: 'auto',
-      },
-      Visibility: { visible: true },
-      Lock: { locked: false },
-      Hierarchy: { childIds: [...entityIds] },
-      Clip: { enabled: false },
-      Appearance: {
-        backgroundPaint: { kind: 'solid', color: 'transparent' },
-        borderColor: 'transparent',
-        borderWidth: 0,
-        borderRadius: 0,
-        opacity: 1,
-        shadow: null,
-      },
-    },
-  }
+    childIds: entityIds,
+    position: groupTransform.position,
+    size: groupTransform.size,
+    rotation: groupTransform.rotation,
+  })
   const childTransforms: Record<string, JsonValue> = {}
   for (const entityId of entityIds) {
     const entity = document.entities[entityId]

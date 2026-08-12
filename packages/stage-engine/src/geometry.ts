@@ -1,6 +1,8 @@
 import {
   getComposeHierarchy,
   getComposeTransform,
+  getComposeVisibility,
+  isComposeGroupEntity,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
   type ComposeSpatialTransform,
@@ -319,23 +321,39 @@ export function getEntityWorldBounds(
   if (!entity) throw new Error(`Unknown Entity ${entityId}`)
   const box = snapshot.boxes[entityId]
   if (!box) throw new Error(`Layout snapshot ${snapshot.revision} has no box for Entity ${entityId}`)
-  const matrix = getEntityWorldMatrix(document, snapshot, entityId)
-  const points = [
-    applyMatrix(matrix, { x: 0, y: 0 }),
-    applyMatrix(matrix, { x: box.width, y: 0 }),
-    applyMatrix(matrix, { x: box.width, y: box.height }),
-    applyMatrix(matrix, { x: 0, y: box.height }),
-  ]
-  const xs = points.map((point) => point.x)
-  const ys = points.map((point) => point.y)
-  const x = Math.min(...xs)
-  const y = Math.min(...ys)
-  return {
-    x,
-    y,
-    width: Math.max(...xs) - x,
-    height: Math.max(...ys) - y,
+  const ownBounds = () => {
+    const matrix = getEntityWorldMatrix(document, snapshot, entityId)
+    const points = [
+      applyMatrix(matrix, { x: 0, y: 0 }),
+      applyMatrix(matrix, { x: box.width, y: 0 }),
+      applyMatrix(matrix, { x: box.width, y: box.height }),
+      applyMatrix(matrix, { x: 0, y: box.height }),
+    ]
+    const xs = points.map((point) => point.x)
+    const ys = points.map((point) => point.y)
+    const x = Math.min(...xs)
+    const y = Math.min(...ys)
+    return {
+      x,
+      y,
+      width: Math.max(...xs) - x,
+      height: Math.max(...ys) - y,
+    }
   }
+  if (isComposeGroupEntity(entity)) {
+    const descendantBounds: StageRect[] = []
+    const visit = (childId: string) => {
+      const child = document.entities[childId]
+      if (!child || !getComposeVisibility(child).visible) return
+      descendantBounds.push(getEntityWorldBounds(document, snapshot, childId))
+      if (!isComposeGroupEntity(child)) {
+        getComposeHierarchy(child)?.childIds.forEach(visit)
+      }
+    }
+    getComposeHierarchy(entity)?.childIds.forEach(visit)
+    return unionRects(descendantBounds) ?? ownBounds()
+  }
+  return ownBounds()
 }
 
 /** 将持久化 ECS Transform 投影为 Stage 几何值。 @public */
@@ -526,8 +544,15 @@ export function resizeBounds(
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
+/** 旋转角度吸附步进（度），与 Figma / Godot 默认一致。 @public */
+export const ROTATION_SNAP_DEGREES = 15
+
 /**
  * 计算指针围绕共同中心产生的顺时针角度变化。
+ *
+ * @remarks
+ * `shift` 时按 {@link ROTATION_SNAP_DEGREES} 吸附。若提供 `baseRotation`，吸附的是
+ * 「实体绝对旋转角」（`baseRotation + delta`），否则仅吸附相对 delta。
  *
  * @public
  */
@@ -535,11 +560,47 @@ export function rotationFromPointer(
   center: StagePoint,
   start: StagePoint,
   current: StagePoint,
-  shift = false,
+  shiftOrOptions: boolean | {
+    readonly shift?: boolean
+    /** 手势开始时参考实体的旋转角（度）。 */
+    readonly baseRotation?: number
+    readonly step?: number
+  } = false,
 ): number {
+  const options = typeof shiftOrOptions === 'boolean'
+    ? { shift: shiftOrOptions }
+    : shiftOrOptions
+  const shift = options.shift ?? false
+  const step = options.step ?? ROTATION_SNAP_DEGREES
+  const baseRotation = options.baseRotation ?? 0
   const angle = (point: StagePoint) => Math.atan2(point.y - center.y, point.x - center.x)
   let degrees = (angle(current) - angle(start)) * 180 / Math.PI
   while (degrees <= -180) degrees += 360
   while (degrees > 180) degrees -= 360
-  return shift ? Math.round(degrees / 15) * 15 : degrees
+  if (!shift) return degrees
+  // 绝对角吸附：使 base + delta 落在 step 的整数倍上。
+  const target = Math.round((baseRotation + degrees) / step) * step
+  return target - baseRotation
+}
+
+/**
+ * 将指针投影到「起点方位 + 旋转 delta」射线上，用于角度吸附时的拉线视觉对齐。
+ *
+ * @public
+ */
+export function pointOnRotationRay(
+  center: StagePoint,
+  start: StagePoint,
+  current: StagePoint,
+  deltaDegrees: number,
+): StagePoint {
+  const startAngle = Math.atan2(start.y - center.y, start.x - center.x)
+  const currentLength = Math.hypot(current.x - center.x, current.y - center.y)
+  const startLength = Math.hypot(start.x - center.x, start.y - center.y)
+  const length = currentLength > 1 ? currentLength : (startLength > 1 ? startLength : 1)
+  const angle = startAngle + deltaDegrees * Math.PI / 180
+  return {
+    x: center.x + Math.cos(angle) * length,
+    y: center.y + Math.sin(angle) * length,
+  }
 }

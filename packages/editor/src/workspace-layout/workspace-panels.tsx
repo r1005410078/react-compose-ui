@@ -428,3 +428,57 @@ export function PageDocumentPanel(props: IDockviewPanelProps) {
     </div>
   )
 }
+
+/** 渲染中央 Canvas Group 中的 Base/Variant 独立编辑会话。 @internal */
+export function ComponentDocumentPanel(props: IDockviewPanelProps) {
+  const {
+    documents,
+    children,
+    saveDocument,
+    stageHostPanelId,
+    stageToolbar,
+  } = useWorkspaceContent()
+  const panelId = props.api?.id
+  const candidate = panelId ? documents.get(panelId) : undefined
+  const session = candidate?.kind === 'component' ? candidate : undefined
+  if (!panelId || !session) return null
+
+  const kindLabel = session.sourceKind === 'variant' ? '变体' : '主组件'
+  const parentHint = session.asset.kind === 'variant'
+    ? ` · 基于 ${session.asset.parentRef.assetKey}`
+    : ''
+
+  return (
+    <div
+      className="compose-editor__component-document"
+      data-component-asset-key={session.assetKey}
+      data-component-kind={session.sourceKind}
+      data-workspace-panel="component-document"
+    >
+      <div className="compose-editor__canvas-toolbar">
+        <span
+          aria-label={`${kindLabel} ${session.displayName}${parentHint}`}
+          className="compose-editor__component-kind-label"
+        >
+          {kindLabel}
+          {' · '}
+          {session.displayName}
+          {parentHint}
+        </span>
+        {stageToolbar}
+        <button
+          aria-label={`保存${kindLabel} ${session.displayName}`}
+          className="compose-editor__page-save"
+          disabled={!session.dirty}
+          type="button"
+          onClick={() => { saveDocument(panelId) }}
+        >
+          <StageToolbarIcon name="save" />
+        </button>
+      </div>
+      <div className="compose-editor__canvas-content">
+        {stageHostPanelId === panelId ? children : null}
+      </div>
+    </div>
+  )
+}

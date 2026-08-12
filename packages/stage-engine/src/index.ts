@@ -17,6 +17,13 @@ export {
   type ComposeStructureCommandAvailability,
 } from './commands'
 export {
+  createComponentExtractionPlan,
+  createReplaceSelectionWithEntityCommand,
+  type ComposeComponentExtractionPlan,
+  type ComposeComponentExtractionResult,
+  type ComposeComponentExtractionUnavailableReason,
+} from './component-extraction'
+export {
   createAxisLattice,
   createRulerTicks,
   latticeLineBand,
@@ -44,6 +51,8 @@ export {
   rectMappingMatrix,
   rectsIntersect,
   resizeBounds,
+  pointOnRotationRay,
+  ROTATION_SNAP_DEGREES,
   rotationFromPointer,
   rotationMatrixAround,
   screenToWorld,

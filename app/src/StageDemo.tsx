@@ -24,7 +24,11 @@ import {
 } from '@compose-ui/editor'
 import type { ComposeEditorTransactionEvent } from '@compose-ui/editor'
 import { createComposeAssetResolver } from '@compose-ui/assets'
-import { createComposeBasicMaterials } from '@compose-ui/materials'
+import { createComposeComponentStore } from '@compose-ui/component-library'
+import {
+  ComposeEchartsMaterialIcon,
+  createComposeBasicMaterials,
+} from '@compose-ui/materials'
 import {
   ComposeOperationLogPanel,
   useComposeOperationLog,
@@ -46,7 +50,10 @@ import {
 } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ComposeEditorActivePage } from '@compose-ui/editor'
+import type {
+  ComposeEditorActiveComponentSession,
+  ComposeEditorActivePage,
+} from '@compose-ui/editor'
 import { useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
 import { createComposePageDocumentLoader, createComposePageStore } from '@compose-ui/pages'
 import * as v from 'valibot'
@@ -273,7 +280,7 @@ const echartsPreset = {
   id: 'echarts-bar',
   label: 'ECharts Chart',
   defaultName: 'ECharts Chart',
-  icon: <span aria-hidden="true">▥</span>,
+  icon: <ComposeEchartsMaterialIcon />,
   createComponents: () => ({
     Transform: { rotation: 0 },
     LayoutItem: createDefaultComposeLayoutItem(420, 260),
@@ -346,6 +353,8 @@ function targetPath(event: ComposeEditorTransactionEvent, targetId: string) {
 }
 
 export function StageDemoWorkspace() {
+  const demonstrateComponentFailures = new URLSearchParams(window.location.search)
+    .has('component-failure-demo')
   const operationLog = useComposeOperationLog()
   // 页面目录仍在异步读取时，controller 需要一个短暂的 bootstrap runtime；页面模式不会为它
   // 创建中央 Canvas 标签，首页会解析后立即接管。
@@ -361,7 +370,8 @@ export function StageDemoWorkspace() {
    * controller 使用 bootstrap runtime，但页面模式不会将它呈现为可编辑画布。
    */
   const [activePage, setActivePage] = useState<ComposeEditorActivePage | null>(null)
-  const runtime = activePage?.runtime ?? bootstrapRuntime
+  const [activeComponent, setActiveComponent] = useState<ComposeEditorActiveComponentSession | null>(null)
+  const runtime = activeComponent?.runtime ?? activePage?.runtime ?? bootstrapRuntime
   const previousDocument = useRef(runtime.document)
   const observedRuntime = useRef(runtime)
   const lastRecordedCommitId = useRef<string | null>(null)
@@ -417,6 +427,8 @@ export function StageDemoWorkspace() {
     }).then(() => undefined)
   }, [operationLog, runtime])
   const [assetProvider] = useState(createDemoAssetProvider)
+  const [providerOffline, setProviderOffline] = useState(false)
+  const [componentStore] = useState(() => createComposeComponentStore({ provider: assetProvider }))
   /**
    * 宿主同时拥有页面 Store 与 controller。
    *
@@ -437,6 +449,7 @@ export function StageDemoWorkspace() {
     idFactory,
     nodeEditPort,
     pageLoader,
+    componentStore,
     scriptScope: activePage?.scriptScope,
     onTransaction: recordTransaction,
   })
@@ -447,6 +460,10 @@ export function StageDemoWorkspace() {
   const pagesConfig = useMemo(
     () => ({ store: pageStore, onActiveSessionChange: setActivePage }),
     [pageStore],
+  )
+  const componentsConfig = useMemo(
+    () => ({ store: componentStore, onActiveSessionChange: setActiveComponent }),
+    [componentStore],
   )
   const selectedContainerId = controller.selectedIds.length === 1
     && controller.document.entities[controller.selectedIds[0]!]
@@ -463,6 +480,7 @@ export function StageDemoWorkspace() {
           resolver: assetResolver,
         }}
         controller={controller}
+        components={componentsConfig}
         pages={pagesConfig}
         slots={{
           stageToolbar: (
@@ -504,6 +522,31 @@ export function StageDemoWorkspace() {
         registry={registry}
         onOpenChange={setPreviewOpen}
       />
+      {demonstrateComponentFailures ? (
+        <section aria-label="组件容错演示" className="stage-demo__failure-controls">
+          <strong>组件容错演示</strong>
+          <button
+            disabled={!activeComponent || providerOffline}
+            type="button"
+            onClick={() => {
+              if (activeComponent) assetProvider.demo.bumpRevision(activeComponent.assetKey)
+            }}
+          >
+            模拟组件源 revision 更新
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !providerOffline
+              assetProvider.demo.setOffline(next)
+              setProviderOffline(next)
+            }}
+          >
+            {providerOffline ? '恢复 Provider 在线' : '模拟 Provider 离线'}
+          </button>
+          <span role="status">{providerOffline ? 'Provider 离线' : 'Provider 在线'}</span>
+        </section>
+      ) : null}
     </>
   )
 }

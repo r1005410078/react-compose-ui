@@ -7,6 +7,7 @@
 @import '@compose-ui/stage/styles.css';
 @import '@compose-ui/command-panel/styles.css';
 @import '@compose-ui/asset-browser/styles.css';
+@import '@compose-ui/component-library/styles.css';
 
 @layer theme, base, components, utilities;
 
@@ -78,6 +79,19 @@
   overflow: hidden;
 }
 
+.compose-editor__component-inspector {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.compose-editor__component-inspector > [data-compose-ui='property-panel'] {
+  min-height: 240px;
+  flex: 1 1 auto;
+}
+
 .compose-editor__canvas-panel {
   @apply ct:flex ct:flex-col;
 }
@@ -87,6 +101,12 @@
   border-color: var(--compose-border);
   background: var(--compose-surface-raised);
   box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+}
+
+.compose-editor__component-kind-label {
+  @apply ct:shrink-0 ct:truncate ct:px-3 ct:text-xs;
+  color: var(--compose-text-subtle);
+  max-width: 14rem;
 }
 
 .compose-editor__stage-toolbar {
@@ -440,8 +460,8 @@
   min-height: 44px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 12px;
+  gap: 8px;
+  padding: 4px 10px 4px 12px;
   border-bottom: 1px solid var(--compose-border);
   border-color: var(--compose-border);
   background:
@@ -450,9 +470,22 @@
   box-shadow: inset 0 -1px rgb(0 0 0 / 28%);
 }
 
-.compose-editor__entity-inspector-header > strong {
+.compose-editor__entity-inspector-identity {
+  display: flex;
   min-width: 0;
   flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.compose-editor__entity-inspector-title-block {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.compose-editor__entity-inspector-title-block > strong {
+  min-width: 0;
   overflow: hidden;
   color: var(--compose-text-strong);
   font-size: 15px;
@@ -460,6 +493,23 @@
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.compose-editor__entity-inspector-subtitle {
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.compose-editor__entity-inspector-header-end {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 实例工具栏嵌在头部时去掉独立 dock 的顶边。 */
+.compose-editor__entity-inspector-header-end .compose-instance-overrides__actions {
+  flex: 0 0 auto;
 }
 
 .compose-editor__entity-inspector-add-capability {
@@ -521,7 +571,9 @@
 }
 
 .compose-editor__panel[data-workspace-panel='transaction-log'],
-.compose-editor__panel[data-workspace-panel='command'] {
+.compose-editor__panel[data-workspace-panel='command'],
+.compose-editor__panel[data-workspace-panel='component-library'] {
+  /* 项目组件增多后需在面板内滚动；默认 panel 为 hidden 会裁切且无滚动条。 */
   overflow: auto;
 }
 
@@ -911,10 +963,11 @@
 }
 
 /*
- * 页面文档面板与固定画布面板共用同一套工具栏与内容区结构，因此必须使用相同的
+ * 页面文档、组件文档与固定画布面板共用同一套工具栏与内容区结构，因此必须使用相同的
  * flex 列布局：.compose-editor__canvas-content 依赖 flex-1 撑开，放进 grid 容器会塌陷。
  */
-.compose-editor__page-document {
+.compose-editor__page-document,
+.compose-editor__component-document {
   display: flex;
   width: 100%;
   height: 100%;
@@ -981,6 +1034,25 @@
 
 /* 目录网格的缩略图区域为 88px，图标需要相应放大才看得清。 */
 .compose-editor__page-entry-icon--grid {
+  width: 48px;
+  height: 48px;
+}
+
+/* Component Asset 的图标由 Editor 根据 Store 目录判定 Base/Variant；Asset Browser 保持领域无关。 */
+.compose-editor__component-entry-icon,
+.compose-editor__component-entry-icon svg {
+  display: block;
+  color: var(--compose-accent);
+}
+
+.compose-editor__component-entry-icon--tree,
+.compose-editor__component-entry-icon--tree svg {
+  width: 15px;
+  height: 15px;
+}
+
+.compose-editor__component-entry-icon--grid,
+.compose-editor__component-entry-icon--grid svg {
   width: 48px;
   height: 48px;
 }
@@ -1334,4 +1406,12 @@
 
 .compose-editor__page-script-diagnostic {
   color: var(--compose-danger);
+}
+
+/* 对话框内的写入失败提示：与输入框同宽，紧贴输入以说明错误来源。 */
+.compose-editor__dialog-error {
+  margin: 0;
+  color: var(--compose-color-danger-text, #f87171);
+  font-size: 12px;
+  line-height: 1.5;
 }

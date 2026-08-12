@@ -1,0 +1,211 @@
+.compose-component-library {
+  display: grid;
+  gap: 12px;
+  /* 内容超出时由外层 panel 或自身滚动；align-content 避免网格被拉高后留白错位 */
+  align-content: start;
+  box-sizing: border-box;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: 8px;
+  color: var(--compose-text, #e5e7eb);
+  scrollbar-color: var(--compose-scrollbar, #4b5563) transparent;
+  scrollbar-width: thin;
+}
+
+.compose-component-library::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.compose-component-library::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.compose-component-library::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--compose-scrollbar, #4b5563);
+  background-clip: padding-box;
+}
+
+.compose-component-library__section {
+  display: grid;
+  gap: 8px;
+}
+
+.compose-component-library__section h3 {
+  margin: 0;
+  color: var(--compose-text-muted, #6b7280);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.compose-component-library__grid {
+  display: grid;
+  /* 方案 B：列宽给 48px 图标 + 光晕留白 */
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 7px;
+}
+
+.compose-component-library__project-item {
+  position: relative;
+  min-width: 0;
+}
+
+.compose-component-library__project-item > .compose-component-library__tile {
+  width: 100%;
+}
+
+.compose-component-library__variant-action {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  z-index: 1;
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border: none;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--compose-text-muted, #8b93a3);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.compose-component-library__project-item:hover .compose-component-library__variant-action,
+.compose-component-library__project-item:focus-within .compose-component-library__variant-action,
+.compose-component-library__variant-action:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, var(--compose-accent, #60a5fa) 16%, var(--compose-surface-raised, #171b22));
+  color: var(--compose-accent, #60a5fa);
+  outline: none;
+}
+
+.compose-component-library__tile {
+  display: grid;
+  min-width: 0;
+  /* 方案 B：约 104px 高，图标 48px + 轻光晕 */
+  min-height: 104px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 12px 4px 10px;
+  border: 1px solid var(--compose-border, #374151);
+  border-radius: 9px;
+  background:
+    radial-gradient(
+      80% 55% at 50% 32%,
+      color-mix(in srgb, var(--compose-accent, #60a5fa) 10%, transparent),
+      transparent 70%
+    ),
+    var(--compose-panel-bg, #111827);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.compose-component-library__tile:hover,
+.compose-component-library__tile:focus-visible {
+  border-color: color-mix(in srgb, var(--compose-accent, #60a5fa) 55%, var(--compose-border, #374151));
+  background:
+    radial-gradient(
+      80% 55% at 50% 32%,
+      color-mix(in srgb, var(--compose-accent, #60a5fa) 18%, transparent),
+      transparent 70%
+    ),
+    var(--compose-surface-hover, #161b24);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+/* 方案 B：库内 48px 图标 + 体积阴影 */
+.compose-component-library__icon,
+.compose-component-library__icon svg,
+.compose-component-asset-icon {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 35%));
+}
+
+.compose-component-library__drag-preview {
+  position: fixed;
+  z-index: 10000;
+  display: inline-flex;
+  min-width: 104px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px dashed var(--compose-accent, #4d9cff);
+  border-radius: 4px;
+  color: var(--compose-text, #d8dde6);
+  background: color-mix(in srgb, var(--compose-panel-bg, #20252d) 88%, var(--compose-accent, #4d9cff));
+  box-shadow: 0 5px 14px rgb(0 0 0 / 20%);
+  font-size: 12px;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.compose-component-library__drag-preview-icon,
+.compose-component-library__drag-preview-icon svg {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  filter: drop-shadow(0 3px 6px rgb(0 0 0 / 28%));
+}
+
+.compose-component-library__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+
+.compose-component-library__meta {
+  margin-top: -4px;
+  color: var(--compose-text-muted, #8b95a8);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+/* 项目组件：变体用青绿光晕，与主组件蓝光区分 */
+.compose-component-library__tile[data-component-kind='variant'] {
+  background:
+    radial-gradient(
+      80% 55% at 50% 32%,
+      color-mix(in srgb, #45d49a 12%, transparent),
+      transparent 70%
+    ),
+    var(--compose-panel-bg, #111827);
+}
+
+.compose-component-library__tile[data-component-kind='variant'] .compose-component-library__meta {
+  color: color-mix(in srgb, #45d49a 75%, white);
+}
+
+.compose-component-library__tile[data-component-kind='variant']:hover,
+.compose-component-library__tile[data-component-kind='variant']:focus-visible {
+  border-color: color-mix(in srgb, #45d49a 50%, var(--compose-border, #374151));
+  background:
+    radial-gradient(
+      80% 55% at 50% 32%,
+      color-mix(in srgb, #45d49a 20%, transparent),
+      transparent 70%
+    ),
+    var(--compose-surface-hover, #161b24);
+}

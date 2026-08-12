@@ -13,12 +13,26 @@ export {
   createComposeBasicMaterials,
 } from './create-basic-materials'
 export {
+  ComposeArrowMaterialIcon,
+  ComposeCircleMaterialIcon,
+  ComposeContainerMaterialIcon,
+  ComposeEchartsMaterialIcon,
+  ComposeGroupMaterialIcon,
+  ComposeImageMaterialIcon,
+  ComposeLineMaterialIcon,
+  ComposePageSlotMaterialIcon,
+  ComposeRectangleMaterialIcon,
+  ComposeSvgMaterialIcon,
+  ComposeTextMaterialIcon,
+} from './material-icons'
+export {
   createComposeBuiltinComponentDefinitions,
   DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS,
   DEFAULT_COMPOSE_COMPONENT_DEFINITIONS,
 } from './builtin-components'
 export { composeNodePropertySchema } from './material-inspector-kit/node'
 export { DEFAULT_COMPOSE_CONTAINER_PRESET } from './container'
+export { DEFAULT_COMPOSE_GROUP_PRESET } from './group'
 export {
   DEFAULT_COMPOSE_RECTANGLE_PRESET,
   DEFAULT_COMPOSE_RECTANGLE_RENDERER,
@@ -45,6 +59,10 @@ export {
   DEFAULT_COMPOSE_PAGE_SLOT_PRESET,
   DEFAULT_COMPOSE_PAGE_SLOT_RENDERER,
 } from './page-slot'
+export {
+  DEFAULT_COMPOSE_COMPONENT_INSTANCE_PRESET,
+  DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER,
+} from './component-instance'
 export type {
   ComposeBasicContainerOptions,
   ComposeBasicMaterialOptions,

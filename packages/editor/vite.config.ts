@@ -31,6 +31,7 @@ export default defineConfig({
         '@compose-ui/core',
         '@compose-ui/command-panel',
         '@compose-ui/component-registry',
+        '@compose-ui/component-library',
         '@compose-ui/history',
         '@compose-ui/layout-engine',
         '@compose-ui/pages',

@@ -1,12 +1,23 @@
 import {
-  getComposeClip,
   getComposeHierarchy,
+  getComposeRenderer,
   getComposeTransform,
   resolveComposeAppearance,
+  resolveComposeOverflow,
   type ComposeEntity,
   type ComposeResolvedLayoutBox,
 } from '@compose-ui/core'
 import type { CSSProperties } from 'react'
+
+/**
+ * Circle Shape 的背景/边框 Paint 走 Entity 壳矩形盒；必须以 50% 圆角裁成椭圆，
+ * 否则 `Appearance.backgroundPaint` 会显示成矩形。
+ */
+function isCircleShapeEntity(entity: ComposeEntity): boolean {
+  const renderer = getComposeRenderer(entity)
+  if (!renderer || renderer.type !== 'shape') return false
+  return renderer.props.kind === 'circle'
+}
 
 /**
  * Stage 与 Preview 共享的 Entity appearance 样式（不含 Transform 几何与 overflow）。
@@ -15,6 +26,9 @@ import type { CSSProperties } from 'react'
  * 边框由独立顶层覆盖层渲染，因此 Entity 壳使用 `isolation` 把覆盖层限制在自身 stacking
  * context 内，避免高层级边框越过相邻 Entity。overflow 是 Stage 与 Preview 各自的运行时
  * 行为，不属于共享 appearance。
+ *
+ * Circle Shape 强制 `borderRadius: 50%`，让 solid/渐变背景与边框覆盖层随盒体呈椭圆，
+ * 与 SVG ellipse stroke 几何一致；不改写文档里的 Appearance.borderRadius。
  *
  * @public
  */
@@ -34,7 +48,7 @@ export function composeEntityAppearanceStyle(entity: ComposeEntity): CSSProperti
     position: 'relative',
     // 纯色同时写入宿主盒子，维持 DOM Scene 的稳定视觉与命中盒契约；复杂 Paint 仍由共享图层绘制。
     backgroundColor,
-    borderRadius: visual.borderRadius,
+    borderRadius: isCircleShapeEntity(entity) ? '50%' : visual.borderRadius,
     opacity: visual.opacity,
     isolation: 'isolate',
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
@@ -42,21 +56,44 @@ export function composeEntityAppearanceStyle(entity: ComposeEntity): CSSProperti
 }
 
 /**
- * 组合共享 appearance 与旧版静态 overflow 的兼容入口。
+ * Stage、Preview 与 component-instance 嵌套路径共用的 overflow CSS。
  *
  * @remarks
- * 新的 Stage 与 Preview 消费方应使用 `composeEntityAppearanceStyle` 并自行应用运行时 overflow。
+ * 叶子 MUST 为 `hidden`，否则 borderRadius 无法裁剪 Paint/Material 子层。
+ * 容器按 `resolveComposeOverflow` 分轴映射：`scroll`→`auto`、`clip`→`hidden`、`visible` 保持。
+ *
+ * @public
+ */
+export function composeEntityOverflowStyle(entity: ComposeEntity): CSSProperties {
+  if (!getComposeHierarchy(entity)) return { overflow: 'hidden' }
+  const overflow = resolveComposeOverflow(entity)
+  const cssValue = (value: typeof overflow.horizontal): 'auto' | 'hidden' | 'visible' => {
+    if (value === 'scroll') return 'auto'
+    if (value === 'clip') return 'hidden'
+    return 'visible'
+  }
+  if (overflow.horizontal === overflow.vertical) {
+    return { overflow: cssValue(overflow.horizontal) }
+  }
+  return {
+    overflowX: cssValue(overflow.horizontal),
+    overflowY: cssValue(overflow.vertical),
+  }
+}
+
+/**
+ * 组合共享 appearance 与 overflow 的兼容入口。
+ *
+ * @remarks
+ * 新的 Stage 与 Preview 消费方可分别组合 `composeEntityAppearanceStyle` 与
+ * `composeEntityOverflowStyle`；本函数保留给仍使用单一 visual 入口的调用方。
  *
  * @public
  */
 export function composeEntityVisualStyle(entity: ComposeEntity): CSSProperties {
-  const hierarchy = getComposeHierarchy(entity)
-  const clip = getComposeClip(entity)
   return {
     ...composeEntityAppearanceStyle(entity),
-    overflow: hierarchy
-      ? (clip?.enabled ? 'hidden' : 'visible')
-      : 'hidden',
+    ...composeEntityOverflowStyle(entity),
   }
 }
 

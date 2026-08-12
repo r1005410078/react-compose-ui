@@ -7,6 +7,7 @@
 @import './flex-layout/styles.css';
 @import './material-inspector-kit/styles.css';
 
+
 :root {
   --compose-material-font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
@@ -16,6 +17,15 @@
   width: 100%;
   height: 100%;
   font-family: var(--compose-material-font-family);
+}
+
+/* Palette / 场景树：彩色物料图标随容器缩放，并带轻微体积阴影 */
+.compose-material-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  flex: none;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 28%));
 }
 
 /* Page Slot：嵌套页面内容按被引用页面的实体绝对定位，槽位本身裁剪溢出。 */
@@ -29,6 +39,26 @@
 .compose-material--page-slot-status {
   display: flex;
   gap: 8px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  color: var(--compose-text-muted, #8893a2);
+  font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+  text-align: center;
+}
+
+/* Component Instance：与 Page Slot 同样以快照 output 为独立绝对定位坐标系。 */
+.compose-material--component-instance {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.compose-material--component-instance-status {
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;

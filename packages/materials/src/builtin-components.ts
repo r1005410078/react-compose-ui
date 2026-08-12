@@ -81,6 +81,8 @@ export function createComposeBuiltinComponentDefinitions(
       key: 'Visibility',
       label: '可见性',
       order: 20,
+      // 与名称、位置同属「基础」分组，避免单独占一整栏。
+      inspectorGroup: 'basic',
       createDefault: () => ({ ...DEFAULT_COMPOSE_VISIBILITY }),
       inspector: createVisibilityInspector(idFactory),
     },
@@ -88,6 +90,7 @@ export function createComposeBuiltinComponentDefinitions(
       key: 'Lock',
       label: '锁定',
       order: 30,
+      inspectorGroup: 'basic',
       createDefault: () => ({ ...DEFAULT_COMPOSE_LOCK }),
       inspector: createLockInspector(idFactory),
     },

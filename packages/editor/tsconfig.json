@@ -7,6 +7,7 @@
       "@compose-ui/assets": ["../assets/src/index.ts"],
       "@compose-ui/command-panel": ["../command-panel/src/index.tsx"],
       "@compose-ui/component-registry": ["../component-registry/src/index.ts"],
+      "@compose-ui/component-library": ["../component-library/src/index.ts"],
       "@compose-ui/components": ["../components/src/index.tsx"],
       "@compose-ui/core": ["../core/src/index.ts"],
       "@compose-ui/history": ["../history/src/index.tsx"],

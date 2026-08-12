@@ -377,3 +377,8 @@
   height: 100%;
   min-height: 260px;
 }
+.asset-browser [data-compose-asset-external-drop-active='true'] {
+  outline: 1px solid var(--compose-accent, #2388ff);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--compose-accent, #2388ff) 16%, transparent);
+}

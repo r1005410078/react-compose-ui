@@ -2,6 +2,7 @@ import {
   ComposeEntityBorderLayer,
   ComposeEntityPaintLayer,
   ComposeRegistryEntityRenderer,
+  composeEntityOverflowStyle,
   composeEntitySceneStyle,
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
@@ -131,11 +132,8 @@ export function StageSceneLayer({
       const box = layoutSnapshot.boxes[entityId]
       if (!box) return null
       const locked = getComposeLock(entity).locked
+      // 指示器仍读领域 overflow；盒样式与 Preview/NestedEntity 共用 composeEntityOverflowStyle。
       const overflow = resolveComposeOverflow(entity)
-      const staticOverflow = hierarchy ? {
-        overflowX: overflow.horizontal === 'visible' ? 'visible' as const : 'hidden' as const,
-        overflowY: overflow.vertical === 'visible' ? 'visible' as const : 'hidden' as const,
-      } : { overflow: 'hidden' as const }
       return (
         <div
           className={`compose-stage__node${hierarchy ? ' is-container' : ' is-renderer'}${
@@ -144,7 +142,10 @@ export function StageSceneLayer({
           data-entity-id={entity.id}
           data-testid={hierarchy ? 'stage-container' : `stage-entity-${entity.id}`}
           key={entity.id}
-          style={{ ...composeEntitySceneStyle(entity, box), ...staticOverflow }}
+          style={{
+            ...composeEntitySceneStyle(entity, box),
+            ...composeEntityOverflowStyle(entity),
+          }}
           onPointerDown={(event) => pointerDownRef.current(entity, event)}
         >
           <ComposeEntityPaintLayer

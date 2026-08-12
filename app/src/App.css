@@ -32,6 +32,35 @@
   opacity: 0.45;
 }
 
+.stage-demo__failure-controls {
+  position: fixed;
+  z-index: 1000;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  color: #e7ebf1;
+  background: #151a21;
+  border: 1px solid #3b4654;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.stage-demo__failure-controls button {
+  padding: 5px 8px;
+  cursor: pointer;
+  background: #242c36;
+  border: 1px solid #485566;
+  border-radius: 4px;
+}
+
+.stage-demo__failure-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 button,
 input {
   font: inherit;

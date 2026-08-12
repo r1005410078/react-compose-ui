@@ -106,7 +106,7 @@ const messages = {
       createPageTitle: '新建页面',
       defaultPageName: 'untitled',
       setAsHomePage: '设为首页',
-      openJsonConfig: '打开组件 JSON 配置',
+      openJsonConfig: '打开页面 JSON',
       createSetupScript: '创建页面脚本',
       openSetupScript: '打开页面脚本',
       changeSetupScript: '更换页面脚本',
@@ -177,6 +177,9 @@ const messages = {
       invalidBackground: '输出背景不能为空。',
       rejected: '输出设置无效。',
       configureTransaction: '配置画布输出',
+    },
+    components: {
+      viewJson: '查看 JSON',
     },
   },
   'en-US': {
@@ -274,7 +277,7 @@ const messages = {
       createPageTitle: 'New page',
       defaultPageName: 'untitled',
       setAsHomePage: 'Set as home page',
-      openJsonConfig: 'Open JSON configuration',
+      openJsonConfig: 'Open page JSON',
       createSetupScript: 'Create page setup script',
       openSetupScript: 'Open page setup script',
       changeSetupScript: 'Change page setup script',
@@ -346,6 +349,9 @@ const messages = {
       rejected: 'Output settings are invalid.',
       configureTransaction: 'Configure canvas output',
     },
+    components: {
+      viewJson: 'View JSON',
+    },
   },
 } as const
 
@@ -382,6 +388,7 @@ const actionLabels: Record<
     'edit.sendToBack': '置于底层',
     'edit.group': '分组',
     'edit.ungroup': '取消分组',
+    'edit.createComponent': '创建组件…',
     'edit.delete': '删除',
     'history.undo': '撤销',
     'history.redo': '重做',
@@ -415,6 +422,7 @@ const actionLabels: Record<
     'edit.sendToBack': 'Send to back',
     'edit.group': 'Group',
     'edit.ungroup': 'Ungroup',
+    'edit.createComponent': 'Create component…',
     'edit.delete': 'Delete',
     'history.undo': 'Undo',
     'history.redo': 'Redo',
@@ -701,6 +709,9 @@ export function getEditorMessages(
         format(`canvasInspector.${key}`, fallback),
       ]),
     ) as Record<keyof typeof current.canvasInspector, string>,
+    components: {
+      viewJson: format('components.viewJson', current.components.viewJson),
+    },
   }
 }
 

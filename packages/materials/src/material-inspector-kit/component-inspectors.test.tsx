@@ -171,6 +171,8 @@ describe('内建 Component inspectors', () => {
     }
     expect(definitions.find((item) => item.key === 'Transform')?.inspector).toBeUndefined()
     expect(definitions.find((item) => item.key === 'LayoutItem')?.inspectorGroup).toBe('basic')
+    expect(definitions.find((item) => item.key === 'Visibility')?.inspectorGroup).toBe('basic')
+    expect(definitions.find((item) => item.key === 'Lock')?.inspectorGroup).toBe('basic')
     expect(definitions.find((item) => item.key === 'Layout')?.inspectorDefaultExpanded).toBe(true)
     expect(definitions.find((item) => item.key === 'Composition')?.hidden).toBe(true)
     expect(definitions.find((item) => item.key === 'Renderer')?.hidden).toBe(true)

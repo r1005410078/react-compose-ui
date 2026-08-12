@@ -415,6 +415,65 @@ describe('ComposeSceneTree', () => {
     expect(screen.queryByTestId('scene-tree-drop-indicator')).not.toBeInTheDocument()
   })
 
+  it('OpenSpec: scene-tree / 普通行跨面板拖拽 / 发布规范化 external drag lifecycle', async () => {
+    const onExternalDrag = vi.fn()
+    const { onOperation } = renderTree({ selectedIds: ['red'], onExternalDrag })
+    const redRow = await screen.findByRole('row', { name: /Red rectangle/ })
+    const outside = document.createElement('div')
+    document.body.append(outside)
+
+    fireEvent.pointerDown(redRow, {
+      button: 0,
+      pointerId: 41,
+      clientX: 20,
+      clientY: 36,
+    })
+    fireEvent.pointerMove(window, { pointerId: 41, clientX: 22, clientY: 37 })
+    expect(onExternalDrag).not.toHaveBeenCalled()
+
+    fireEvent.pointerMove(window, { pointerId: 41, clientX: 120, clientY: 80 })
+    fireEvent.pointerUp(outside, { pointerId: 41, clientX: 320, clientY: 180 })
+
+    expect(onExternalDrag.mock.calls.map(([event]) => event.type)).toEqual([
+      'start',
+      'move',
+      'end',
+    ])
+    expect(onExternalDrag).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: 'end',
+      nodeIds: ['red'],
+      clientPoint: { x: 320, y: 180 },
+    }))
+    expect(onOperation).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'move' }))
+    outside.remove()
+  })
+
+  it('OpenSpec: scene-tree / 普通行双重语义 / 树内完成移动并取消资源导出', async () => {
+    const onExternalDrag = vi.fn()
+    const { onOperation } = renderTree({ selectedIds: ['red'], onExternalDrag })
+    const tree = screen.getByRole('treegrid', { name: '场景树' })
+    const redRow = await screen.findByRole('row', { name: /Red rectangle/ })
+
+    fireEvent.pointerDown(redRow, { button: 0, pointerId: 42, clientX: 30, clientY: 36 })
+    fireEvent.pointerMove(tree, { pointerId: 42, clientX: 30, clientY: 23 })
+    fireEvent.pointerUp(tree, { pointerId: 42, clientX: 30, clientY: 23 })
+
+    expect(onOperation).toHaveBeenCalledWith(expect.objectContaining({ type: 'move' }))
+    expect(onExternalDrag.mock.calls.map(([event]) => event.type)).toEqual([
+      'start',
+      'move',
+      'cancel',
+    ])
+  })
+
+  it('OpenSpec: scene-tree / 创建组件菜单 / 右键未选节点时使用命中节点', async () => {
+    const onCreateComponentIntent = vi.fn()
+    renderTree({ selectedIds: ['red'], onCreateComponentIntent })
+    fireEvent.contextMenu(await screen.findByRole('row', { name: /Blue Rectangle/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '创建组件…' }))
+    expect(onCreateComponentIntent).toHaveBeenCalledWith(['blue'])
+  })
+
   it('OpenSpec: scene-tree / 场景节点操作意图 / 通过横向位置改变层级 - 从文字区域保持层级', async () => {
     const { onOperation } = renderTree({ selectedIds: ['red'] })
     const tree = screen.getByRole('treegrid', { name: '场景树' })
@@ -565,5 +624,29 @@ describe('ComposeSceneTree', () => {
     await act(() => vi.advanceTimersByTimeAsync(600))
 
     expect(onExpandedChange).toHaveBeenCalledWith(['folder'])
+  })
+})
+
+describe('OpenSpec: scene-tree / 组件实例内部子树投影', () => {
+  it('声明 hasChildren 的节点即使尚未物化子项也可展开', async () => {
+    const onExpandedChange = vi.fn()
+    render(
+      <ComposeUIProvider locale="zh-CN">
+        <ComposeSceneTree
+          nodes={[{ id: 'instance', label: 'Card', hasChildren: true }]}
+          selectedIds={[]}
+          expandedIds={[]}
+          onSelectionChange={vi.fn()}
+          onExpandedChange={onExpandedChange}
+          onOperation={vi.fn()}
+        />
+      </ComposeUIProvider>,
+    )
+
+    // 惰性投影下未展开时 children 为空，展开控件仍必须可用，否则永远展不开。
+    const row = await screen.findByRole('row', { name: /Card/ })
+    expect(row).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(within(row).getByRole('button', { name: /展开|Expand/ }))
+    expect(onExpandedChange).toHaveBeenCalledWith(['instance'])
   })
 })

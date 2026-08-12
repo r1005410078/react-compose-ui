@@ -11,6 +11,10 @@
 其子项；横向移动指针可以调整横线目标层级，松手后才发出一次 `move` 操作意图。拖动已选
 节点会按可见顺序移动选择集合；拖动未选节点会先请求单选该节点。
 
+普通行还能通过 `onExternalDrag` 发布无领域的 start/move/end/cancel Pointer 生命周期。树内命中仍执行
+既有 move；树外是否接受由宿主决定。`onCreateComponentIntent` 为右键菜单提供键盘可达的等价入口，
+Scene Tree 本身不读取 ComposeDocument、资源 Provider 或组件协议。
+
 ## 使用
 
 ```tsx
@@ -146,3 +150,6 @@ Ctrl/Cmd 点击用于切换单个节点的选择状态，Shift 点击用于连�
 Pointer Capture、600ms 延迟展开、RAF 和焦点等副作用由内部 Hook 测试负责。Toolbar、节点
 行、右键菜单和拖拽反馈作为展示组件验证 ARIA 与事件透传，完整 Pointer 和视觉流程继续由
 Playwright 与版本控制中的黄金文件覆盖。这些内部模型、Hook 和展示组件不属于公共 API。
+
+节点的 `hasChildren` 用于宿主惰性物化子树的场景：省略时由 `children` 长度推断，但按需构建子树
+（例如组件实例内部层级只在展开时投影）时必须显式声明，否则展开控件不会出现，节点将永远无法展开。

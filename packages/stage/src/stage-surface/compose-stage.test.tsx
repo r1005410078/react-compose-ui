@@ -228,6 +228,7 @@ function renderStage(
     snapshot?: ComposeLayoutSnapshot
     scope?: import('@compose-ui/script-runtime').ComposePageScriptScope
     registry?: ReturnType<typeof createComposeEntityRegistry>
+    onCreateComponentIntent?: (entityIds: readonly string[]) => void
     tool?: import('../types').ComposeStageTool
     marqueeMode?: import('../types').ComposeStageMarqueeMode
   } = {},
@@ -247,6 +248,7 @@ function renderStage(
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
       marqueeMode={options.marqueeMode}
       onSelectedIdsChange={selectionSpy}
+      onCreateComponentIntent={options.onCreateComponentIntent}
       onViewportChange={vi.fn()}
       registry={options.registry ?? registry}
       scriptScope={options.scope}
@@ -330,15 +332,14 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId('stage-grid')).toHaveStyle({ display: 'none' })
   })
 
-  it('OpenSpec: 受控工具模式与专属选区反馈 / 选择工具保留四角控制点且不显示移动 gizmo', () => {
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 选择工具保留 8 控点且不显示移动 gizmo', () => {
     renderStage(document(), { selectedIds: ['a'], tool: 'select' })
 
     expect(screen.queryByTestId('stage-move-gizmo')).not.toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-ne')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-sw')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-nw')).toBeInTheDocument()
-    expect(screen.queryByTestId('stage-resize-e')).not.toBeInTheDocument()
+    // free：4 角 + 4 边可见控点，便于组合缩放。
+    for (const handle of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const) {
+      expect(screen.getByTestId(`stage-resize-${handle}`)).toBeInTheDocument()
+    }
   })
 
   it('OpenSpec: 线段端点选择 / Line 与 Arrow 单选仅显示首尾控制点而不显示矩形框', () => {
@@ -678,11 +679,13 @@ describe('ComposeStage ECS', () => {
   })
 
   it.each([
-    ['horizontal', [], ['e', 'w']],
-    ['vertical', [], ['n', 's']],
+    // 可见手柄可含角与边；边缘 hit 区仅 n/e/s/w（角由手柄本身命中）。
+    ['free', ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'], ['n', 'e', 's', 'w']],
+    ['horizontal', ['e', 'w'], ['e', 'w']],
+    ['vertical', ['n', 's'], ['n', 's']],
     ['preserve-aspect', ['ne', 'se', 'sw', 'nw'], []],
     ['none', [], []],
-  ] as const)('OpenSpec: 受控工具模式与专属选区反馈 / %s 使用四角视觉与边缘命中', (mode, visualHandles, edgeHandles) => {
+  ] as const)('OpenSpec: 受控工具模式与专属选区反馈 / %s 使用可见控点与边缘命中', (mode, visualHandles, edgeHandles) => {
     renderStage(document([entity('a', { resize: mode })]), { selectedIds: ['a'] })
     const all = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
     all.forEach((handle) => {
@@ -787,6 +790,17 @@ describe('ComposeStage ECS', () => {
       type: BUILTIN_COMMAND_TYPES.deleteEntity,
       payload: { entityIds: ['a'] },
     }))
+  })
+
+  it('OpenSpec: stage / 创建组件菜单 / 把规范化选区交给宿主命名流程', () => {
+    const onCreateComponentIntent = vi.fn()
+    renderStage(document(), { selectedIds: ['a'], onCreateComponentIntent })
+    fireEvent.contextMenu(screen.getByTestId('stage-entity-a'), {
+      clientX: 40,
+      clientY: 50,
+    })
+    fireEvent.click(screen.getByRole('menuitem', { name: '创建组件…' }))
+    expect(onCreateComponentIntent).toHaveBeenCalledWith(['a'])
   })
 
   it('OpenSpec: stage / Stage 节点层级操作 / 从画布菜单调整前景节点', () => {

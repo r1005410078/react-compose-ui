@@ -25,8 +25,20 @@ export interface ComposeSceneTreeNode {
   label: string
   /** 覆盖默认文档或组件图标的自定义内容。 */
   icon?: ReactNode
+  /** 图标的领域可访问名称与 title；省略时图标仅作装饰。 */
+  iconLabel?: string
   /** 子节点；空数组表示能够包含子节点但当前为空。 */
   children?: readonly ComposeSceneTreeNode[]
+  /**
+   * 是否存在子节点，用于宿主惰性物化 `children` 的场景。
+   *
+   * @remarks
+   * 省略时由 `children` 长度推断。宿主按需构建子树（例如组件实例内部层级只在展开时投影）
+   * 时必须显式声明，否则展开控件不会出现，节点将永远无法展开。
+   *
+   * @defaultValue `children` 非空
+   */
+  hasChildren?: boolean
   /** 当前可见状态。省略时视为可见。 */
   visible?: boolean
   /** 当前锁定状态；锁定节点不能执行结构修改。 */
@@ -96,6 +108,10 @@ export interface ComposeSceneTreeProps
   onExpandedChange?: (nodeIds: readonly string[]) => void
   /** 节点结构或属性操作意图。 */
   onOperation?: (operation: ComposeSceneTreeOperation) => void
+  /** 普通行拖拽越过阈值后的无领域跨面板生命周期。 */
+  onExternalDrag?: (event: ComposeSceneTreeExternalDragEvent) => void
+  /** 请求把当前规范化节点选择交给宿主创建组件；组件树不理解资源或文档协议。 */
+  onCreateComponentIntent?: (nodeIds: readonly string[]) => void
   /**
    * 外部创建的共享命令控制器。
    *
@@ -104,6 +120,16 @@ export interface ComposeSceneTreeProps
    */
   commands?: ComposeSceneTreeCommandController
 }
+
+/** SceneTree 普通行向外部面板发布的规范化拖拽生命周期。 @public */
+export type ComposeSceneTreeExternalDragEvent =
+  | {
+      readonly type: 'start' | 'move' | 'end'
+      readonly sequence: number
+      readonly nodeIds: readonly string[]
+      readonly clientPoint: { readonly x: number; readonly y: number }
+    }
+  | { readonly type: 'cancel'; readonly sequence: number; readonly nodeIds: readonly string[] }
 
 /**
  * 场景树菜单和快捷键支持的命令名称。

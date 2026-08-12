@@ -56,6 +56,7 @@ import {
   multiplyMatrices,
   rectMappingMatrix,
   resizeBounds,
+  pointOnRotationRay,
   rotationFromPointer,
   rotationMatrixAround,
   screenToWorld,
@@ -374,6 +375,21 @@ export interface StageInteractionSnapshot {
   readonly drawing: StageDrawingPreview | null
   /** 两点图形端点拖动的世界坐标预览。 */
   readonly segmentPreview: StageSegmentPreview | null
+  /**
+   * 旋转拉线预览（Godot 风格）：从选区中心到当前指针的世界坐标。
+   *
+   * @remarks
+   * 仅在 `phase === 'rotate'` 时有值；Overlay 画拉杆，不依赖固定旋转手柄。
+   * Shift 角度吸附时 `pointer` 落在吸附射线上，`angleDegrees` 为本次增量。
+   */
+  readonly rotationPreview: {
+    readonly center: StagePoint
+    readonly pointer: StagePoint
+    /** 相对手势起点的旋转增量（度），吸附后已量化。 */
+    readonly angleDegrees: number
+    /** 是否处于 Shift 角度吸附。 */
+    readonly snapped: boolean
+  } | null
   /** 临时平移键是否仍被按住。 */
   readonly temporaryPan: boolean
   /** 当前选区（包含 transform preview）的世界轴对齐边界。 */
@@ -482,6 +498,7 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   external: null,
   drawing: null,
   segmentPreview: null,
+  rotationPreview: null,
   temporaryPan: false,
   selectionBounds: null,
   scrollRange: null,
@@ -546,6 +563,15 @@ type Gesture =
       readonly ids: readonly string[]
       readonly startWorld: StagePoint
       readonly bounds: StageRect
+      /** 旋转枢轴（世界坐标），拉线起点。 */
+      readonly center: StagePoint
+      /**
+       * 参考实体在手势开始时的旋转角（度）。
+       * Shift 时对「绝对角」做 15° 吸附，而不是只吸附相对 delta。
+       */
+      readonly baseRotation: number
+      /** 当前指针世界坐标，拉线终点（吸附时已投影到射线）。 */
+      pointerWorld: StagePoint
       transforms: Readonly<Record<string, StageTransform>>
     }
   | {
@@ -1108,14 +1134,12 @@ export function createStageInteractionController(): StageInteractionController {
       : null
     const cursor = next.guideDelete
       ? 'guide-delete'
-      : next.phase === 'pan'
+      : next.phase === 'pan' || next.phase === 'rotate'
       ? 'grabbing'
       : next.phase === 'move'
         ? 'move'
         : next.phase === 'resize' || next.phase === 'segment-resize'
           ? 'resize'
-      : next.phase === 'rotate'
-            ? 'rotate'
             : next.phase === 'draw'
               ? 'crosshair'
             : next.phase === 'marquee'
@@ -1128,6 +1152,8 @@ export function createStageInteractionController(): StageInteractionController {
                 ? 'copy'
                 : next.temporaryPan || context?.tool === 'pan'
                   ? 'grab'
+                  : context?.tool === 'rotate'
+                    ? 'grab'
                   : isDrawingTool(context?.tool ?? 'select') || context?.tool === 'marquee'
                     ? 'crosshair'
                   : 'default'
@@ -1413,16 +1439,17 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
-    const center = {
-      x: gesture.bounds.x + gesture.bounds.width / 2,
-      y: gesture.bounds.y + gesture.bounds.height / 2,
-    }
-    const angle = rotationFromPointer(
-      center,
-      gesture.startWorld,
-      world,
-      modifiers.shift,
-    )
+    if (gesture.type !== 'rotate') return
+    const center = gesture.center
+    const angle = rotationFromPointer(center, gesture.startWorld, world, {
+      shift: modifiers.shift,
+      baseRotation: gesture.baseRotation,
+    })
+    // Shift 吸附时拉线终点也投影到吸附射线，避免线跟着鼠标、物体却已跳角。
+    const pointer = modifiers.shift
+      ? pointOnRotationRay(center, gesture.startWorld, world, angle)
+      : world
+    gesture.pointerWorld = pointer
     gesture.transforms = transformedSelection(
       index,
       gesture.ids,
@@ -1432,6 +1459,12 @@ export function createStageInteractionController(): StageInteractionController {
       ...snapshot,
       phase: 'rotate',
       previewTransforms: gesture.transforms,
+      rotationPreview: {
+        center,
+        pointer,
+        angleDegrees: angle,
+        snapped: modifiers.shift,
+      },
       snapGuides: [],
     })
   }
@@ -1469,6 +1502,145 @@ export function createStageInteractionController(): StageInteractionController {
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
     }
+
+    const startTransform = (
+      type: 'move' | 'resize' | 'rotate',
+      ids: readonly string[],
+      handle?: ResizeHandle,
+      axis?: 'x' | 'y',
+    ) => {
+      const editableIds = index!.topLevelSelection(ids)
+        .filter((id) => {
+          const entity = context!.document.entities[id]
+          if (!entity || !index!.isVisible(id) || getComposeLock(entity).locked) return false
+          const constraints = resolveComposeGeometryConstraints(entity)
+          // 页面实例最外层始终可 free 缩放（旧文档可能仍存 resize:none）。
+          const isComponentInstance = getComposeRenderer(entity)?.type === 'component-instance'
+          const resizeMode = isComponentInstance ? 'free' as const : constraints.resize
+          if (type === 'move') return constraints.movable
+          if (type === 'rotate') return constraints.rotatable
+          if (resizeMode === 'none') return false
+          if (!handle) return true
+          if (resizeMode === 'horizontal') return handle === 'e' || handle === 'w'
+          if (resizeMode === 'vertical') return handle === 'n' || handle === 's'
+          if (resizeMode === 'preserve-aspect') {
+            return handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw'
+          }
+          return true
+        })
+      const bounds = selectionBounds(index!, editableIds)
+      if (!bounds || editableIds.length === 0) return false
+      const viewport = context!.viewport
+      const startWorld = worldPoint(event.point, viewport)
+      if (type === 'move') {
+        gesture = {
+          type,
+          pointerId: event.pointerId,
+          viewport,
+          ids: editableIds,
+          startWorld,
+          bounds,
+          axis,
+          transforms: {},
+          dropTarget: null,
+        }
+        publish({
+          ...initialSnapshot(snapshot.temporaryPan),
+          phase: 'move',
+        })
+      }
+      else if (type === 'resize') {
+        if (!handle) return false
+        gesture = {
+          type,
+          pointerId: event.pointerId,
+          viewport,
+          ids: editableIds,
+          handle,
+          startWorld,
+          bounds,
+          transforms: {},
+        }
+        publish({
+          ...initialSnapshot(snapshot.temporaryPan),
+          phase: 'resize',
+        })
+      }
+      else {
+        const center = {
+          x: bounds.x + bounds.width / 2,
+          y: bounds.y + bounds.height / 2,
+        }
+        const referenceId = editableIds[0]!
+        const baseRotation = getComposeTransform(
+          context!.document.entities[referenceId]!,
+        ).rotation
+        gesture = {
+          type: 'rotate',
+          pointerId: event.pointerId,
+          viewport,
+          ids: editableIds,
+          startWorld,
+          bounds,
+          center,
+          baseRotation,
+          pointerWorld: startWorld,
+          transforms: {},
+        }
+        // Godot 风格：按下即出现中心到指针的拉线，线随指针移动。
+        publish({
+          ...initialSnapshot(snapshot.temporaryPan),
+          phase: 'rotate',
+          rotationPreview: {
+            center,
+            pointer: startWorld,
+            angleDegrees: 0,
+            snapped: false,
+          },
+        })
+      }
+      effects.push({ type: 'pointer.capture', pointerId: event.pointerId })
+      return true
+    }
+
+    /*
+     * Godot 旋转工具与 select/marquee 互斥，必须在 segment-endpoint / paint / 默认 marquee
+     * 之前处理：那些分支在 tool!==select 时会提前 return，否则空白按下会落到框选。
+     */
+    if (context.tool === 'rotate') {
+      if (event.hit.kind === 'entity') {
+        const entity = context.document.entities[event.hit.entityId]
+        if (!entity) return
+        const selected = context.selectedIds.filter((id) => context!.document.entities[id])
+        const nextSelection = event.modifiers.shift
+          ? selected.includes(entity.id)
+            ? selected.filter((id) => id !== entity.id)
+            : [...selected, entity.id]
+          : selected.includes(entity.id) ? selected : [entity.id]
+        effects.push({ type: 'selection.change', selectedIds: nextSelection })
+        if (!getComposeLock(entity).locked) {
+          startTransform('rotate', nextSelection)
+        }
+        apply(effects)
+        return
+      }
+      if (
+        event.hit.kind === 'ruler'
+        || event.hit.kind === 'ruler-corner'
+        || event.hit.kind === 'guide'
+        || event.hit.kind === 'paint-handle'
+      ) {
+        // 标尺/辅助线/Paint 柄保留原语义，交给后续分支。
+      }
+      else {
+        if (context.selectedIds.length > 0) {
+          startTransform('rotate', context.selectedIds)
+        }
+        apply(effects)
+        return
+      }
+    }
+
     if (context.paintSampling) {
       gesture = {
         type: 'paint-sample',
@@ -1628,77 +1800,7 @@ export function createStageInteractionController(): StageInteractionController {
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
     }
-    const startTransform = (
-      type: 'move' | 'resize' | 'rotate',
-      ids: readonly string[],
-      handle?: ResizeHandle,
-      axis?: 'x' | 'y',
-    ) => {
-      const editableIds = index!.topLevelSelection(ids)
-        .filter((id) => {
-          const entity = context!.document.entities[id]
-          if (!entity || !index!.isVisible(id) || getComposeLock(entity).locked) return false
-          const constraints = resolveComposeGeometryConstraints(entity)
-          if (type === 'move') return constraints.movable
-          if (type === 'rotate') return constraints.rotatable
-          if (constraints.resize === 'none') return false
-          if (!handle) return true
-          if (constraints.resize === 'horizontal') return handle === 'e' || handle === 'w'
-          if (constraints.resize === 'vertical') return handle === 'n' || handle === 's'
-          if (constraints.resize === 'preserve-aspect') {
-            return handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw'
-          }
-          return true
-        })
-      const bounds = selectionBounds(index!, editableIds)
-      if (!bounds || editableIds.length === 0) return false
-      const viewport = context!.viewport
-      const startWorld = worldPoint(event.point, viewport)
-      if (type === 'move') {
-        gesture = {
-          type,
-          pointerId: event.pointerId,
-          viewport,
-          ids: editableIds,
-          startWorld,
-          bounds,
-          axis,
-          transforms: {},
-          dropTarget: null,
-        }
-      }
-      else if (type === 'resize' && handle) {
-        gesture = {
-          type,
-          pointerId: event.pointerId,
-          viewport,
-          ids: editableIds,
-          handle,
-          startWorld,
-          bounds,
-          transforms: {},
-        }
-      }
-      else {
-        gesture = {
-          type: 'rotate',
-          pointerId: event.pointerId,
-          viewport,
-          ids: editableIds,
-          startWorld,
-          bounds,
-          transforms: {},
-        }
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: type,
-      })
-      effects.push({ type: 'pointer.capture', pointerId: event.pointerId })
-      return true
-    }
-
-    if (event.hit.kind === 'move-axis') {
+        if (event.hit.kind === 'move-axis') {
       if (context.tool === 'move') {
         if (startTransform('move', context.selectedIds, undefined, event.hit.axis)) apply(effects)
       }
@@ -1743,7 +1845,7 @@ export function createStageInteractionController(): StageInteractionController {
       return
     }
     if (event.hit.kind === 'rotate') {
-      if (context.tool === 'rotate' && startTransform('rotate', context.selectedIds)) apply(effects)
+      // 非 rotate 工具忽略旧旋转命中；rotate 工具已在上方独占处理。
       return
     }
     if (
@@ -1811,6 +1913,8 @@ export function createStageInteractionController(): StageInteractionController {
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
     }
+    // 旋转工具绝不框选（兜底：避免漏判的 hit 落到默认 marquee）。
+    if (context.tool === 'rotate') return
     startMarquee()
   }
 

@@ -49,6 +49,8 @@ import type {
 import {
   BUILTIN_COMMAND_TYPES,
   describeComposePaint,
+  isComposeInstancePath,
+  encodeComposeInstancePath,
   getComposeHierarchy,
   getComposeLock,
   getComposeLayoutItem,
@@ -108,6 +110,8 @@ import type {
   ComposeStageDelegatableAction,
   ComposeStageProps,
 } from '../types'
+import { nextInstanceDrillDownTarget, resolveInstanceDrillDownPath } from './instance-drilldown'
+import { instanceSelectionScreenBounds } from './instance-selection-bounds'
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
@@ -828,6 +832,11 @@ function useComposeStageMeasurement({
 const DOUBLE_CLICK_INTERVAL_MS = 500
 const DOUBLE_CLICK_SLOP_PX = 5
 
+/** 判断 Entity 是否为关联组件实例。 */
+function isComponentInstanceEntity(entity: ComposeEntity) {
+  return getComposeRenderer(entity)?.type === 'component-instance'
+}
+
 /** 读取 Entity 当前 authored 的可编辑纯文本；不可编辑或缺失时返回空串。 */
 function entityEditableText(
   value: ComposeDocument,
@@ -862,6 +871,7 @@ function ComposeStageReady({
   shortcuts,
   selectedIds,
   onSelectedIdsChange,
+  onCreateComponentIntent,
   outputSelected = false,
   paintEditing = null,
   paintSampling = null,
@@ -908,6 +918,13 @@ function ComposeStageReady({
     readonly x: number
     readonly y: number
     readonly count: number
+  } | null>(null)
+  /** 实例内部选中框的 surface 相对矩形；内部几何只在 DOM 上，必须测量而非计算。 */
+  const [instanceSelectionBounds, setInstanceSelectionBounds] = useState<StageRect | null>(null)
+  /** 当前已下钻到的实例内部层级；见 beginEntity 中的说明。 */
+  const drillContextRef = useRef<{
+    readonly instanceId: string
+    readonly innerId: string
   } | null>(null)
   const expectedLostCaptureRef = useRef(new Map<number, number[]>())
   const [privateController] = useState(createStageInteractionController)
@@ -973,6 +990,20 @@ function ComposeStageReady({
     () => selectedIds.filter((id) => Boolean(document.entities[id])),
     [document, selectedIds],
   )
+  // 内部实体几何由嵌套 Runtime 决定，宿主既无 LayoutItem 也无场景索引条目，只能在提交后测量。
+  // viewport 与 document 变化都会改变屏幕矩形，因此都要重新测量。
+  const instanceSelectionAddress = selectedIds.length === 1 && isComposeInstancePath(selectedIds[0]!)
+    ? selectedIds[0]!
+    : null
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current
+    if (!surface || instanceSelectionAddress === null) {
+      setInstanceSelectionBounds(null)
+      return
+    }
+    setInstanceSelectionBounds(instanceSelectionScreenBounds(surface, instanceSelectionAddress))
+  }, [instanceSelectionAddress, viewport, document, layoutSnapshot])
+
   const lineSelection = useMemo(
     () => normalizedSelection.length === 1
       ? lineSegmentForEntity(previewDocument, previewLayoutSnapshot, normalizedSelection[0]!)
@@ -1001,7 +1032,13 @@ function ComposeStageReady({
     })
   const selectionConstraints = normalizedSelection.flatMap((id) => {
     const entity = document.entities[id]
-    return entity ? [resolveComposeGeometryConstraints(entity)] : []
+    if (!entity) return []
+    const constraints = resolveComposeGeometryConstraints(entity)
+    // 已落盘的旧实例可能仍是 resize:none；选区层强制 free，保证页面组合始终有 8 控点。
+    if (getComposeRenderer(entity)?.type === 'component-instance') {
+      return [{ ...constraints, resize: 'free' as const }]
+    }
+    return [constraints]
   })
   const allResizeHandles = [
     'n',
@@ -1023,8 +1060,8 @@ function ComposeStageReady({
       }
       return true
     }))
-  const visibleResizeHandles = resizeHandles.filter((handle) =>
-    handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw')
+  // free：4 角 + 4 边共 8 个可见控点（边此前仅有透明 hit，用户感知为「只有四角」）。
+  const visibleResizeHandles = resizeHandles
   const selectionRotatable = selectionConstraints.length > 0
     && selectionConstraints.every(({ rotatable }) => rotatable)
   const contextNodeId = contextMenu.payload
@@ -2044,8 +2081,56 @@ function ComposeStageReady({
     }
   }
 
+  /**
+   * 读取本次 pointerdown 的连击计数而不推进状态。
+   *
+   * @remarks
+   * 真正的计数推进仍由 beginInteraction 负责；这里只做前瞻判断，两者读的是同一份 ref，
+   * 因此结果一致。若在这里推进，beginInteraction 会再算一次导致计数翻倍。
+   */
+  const peekClickCount = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.detail > 0) return event.detail
+    const previous = lastPointerDownRef.current
+    const now = event.timeStamp || Date.now()
+    return previous
+      && now - previous.time <= DOUBLE_CLICK_INTERVAL_MS
+      && Math.abs(event.clientX - previous.x) <= DOUBLE_CLICK_SLOP_PX
+      && Math.abs(event.clientY - previous.y) <= DOUBLE_CLICK_SLOP_PX
+      ? previous.count + 1
+      : 1
+  }
+
   const beginEntity = (entity: ComposeEntity, event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
+    // 下钻上下文不能从选区推导：一次双击的第一个 pointerdown 计数为奇数、不触发下钻，
+    // 它会先把选区重置回实例本身，随后的偶数 pointerdown 就再也看不到当前层级。
+    if (drillContextRef.current && drillContextRef.current.instanceId !== entity.id) {
+      drillContextRef.current = null
+    }
+    // 双击关联组件实例逐层下钻到内部实体。内部内容 pointer-events 关闭且几何不在场景索引里，
+    // 因此命中读 DOM；命中失败时不拦截，落回实例整体的普通选择。
+    if (
+      tool === 'select'
+      && isComponentInstanceEntity(entity)
+      // 一次双击由两个 pointerdown 组成，只在偶数计数上下钻，保证一次双击恰好前进一层；
+      // 用 >= 2 会让 count 2 和 3 各触发一次，一次双击直接跳两层。
+      && peekClickCount(event) % 2 === 0
+    ) {
+      const path = resolveInstanceDrillDownPath(
+        event.currentTarget,
+        { x: event.clientX, y: event.clientY },
+      )
+      const context = drillContextRef.current
+      const innerId = nextInstanceDrillDownTarget(
+        path,
+        context?.instanceId === entity.id ? context.innerId : null,
+      )
+      if (innerId !== null) {
+        drillContextRef.current = { instanceId: entity.id, innerId }
+        onSelectedIdsChange([encodeComposeInstancePath([entity.id, innerId])])
+        return
+      }
+    }
     beginInteraction({ kind: 'entity', entityId: entity.id }, event)
   }
 
@@ -2728,6 +2813,8 @@ function ComposeStageReady({
           paintSample={interaction.paintSample}
           resizeHandles={resizeHandles}
           rotatable={selectionRotatable}
+          rotationPreview={interaction.rotationPreview}
+          instanceSelectionBounds={instanceSelectionBounds}
           screenBounds={screenBounds}
           snapGuides={snapGuides}
           textEditing={textEditing !== null}
@@ -2829,6 +2916,12 @@ function ComposeStageReady({
               ) onSelectedIdsChange(hierarchy.childIds)
               }}
             >取消编组{contextMenuShortcut('edit.ungroup')}</ComposeContextMenuItem>
+            {onCreateComponentIntent ? (
+              <ComposeContextMenuItem
+                disabled={contextEditableIds.length === 0}
+                onClick={() => { onCreateComponentIntent(contextEditableIds) }}
+              >创建组件…</ComposeContextMenuItem>
+            ) : null}
             <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: BUILTIN_COMMAND_TYPES.deleteEntity, payload: { entityIds: contextEditableIds }, meta: { label: `Delete ${describeEntityTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除{contextMenuShortcut('edit.delete')}</ComposeContextMenuItem>
             <ComposeContextMenuSeparator />
           </> : null}

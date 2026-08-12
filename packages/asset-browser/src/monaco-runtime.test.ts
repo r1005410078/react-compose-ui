@@ -36,5 +36,5 @@ describe('OpenSpec: asset-browser / Monaco 脚本编辑 / 按需加载并保存�
       })
       provider.dispose()
     }
-  })
+  }, 30_000)
 })

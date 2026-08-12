@@ -447,6 +447,75 @@ describe('ComposeAssetBrowser', () => {
     expect(browser).toHaveStyle({ '--compose-panel-bg': '#ffffff' })
   })
 
+  it('OpenSpec: asset-browser / 通用外部放置目标 / 目录 hover 并接收普通 payload', async () => {
+    const onDrop = vi.fn()
+    const accepts = vi.fn(() => true)
+    const provider = createProvider()
+    const payload = { type: 'scene-entities', data: { entityIds: ['title'] } }
+    const view = render(
+      <ComposeAssetBrowser
+        externalDrop={{ accepts, onDrop }}
+        provider={provider}
+      />,
+    )
+    const imagesRow = await findAssetTreeRow(/Images/)
+    const originalElementFromPoint = document.elementFromPoint
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => imagesRow),
+    })
+    try {
+      view.rerender(
+        <ComposeAssetBrowser
+          externalDrop={{
+            accepts,
+            onDrop,
+            event: {
+              sequence: 1,
+              type: 'move',
+              payload,
+              clientPoint: { x: 120, y: 80 },
+            },
+          }}
+          provider={provider}
+        />,
+      )
+      await waitFor(() => expect(imagesRow).toHaveAttribute(
+        'data-compose-asset-external-drop-active',
+        'true',
+      ))
+
+      view.rerender(
+        <ComposeAssetBrowser
+          externalDrop={{
+            accepts,
+            onDrop,
+            event: {
+              sequence: 2,
+              type: 'end',
+              payload,
+              clientPoint: { x: 120, y: 80 },
+            },
+          }}
+          provider={provider}
+        />,
+      )
+      await waitFor(() => expect(onDrop).toHaveBeenCalledWith(expect.objectContaining({
+        payload,
+        target: { folderId: 'images', entry: images },
+        promptName: expect.any(Function),
+        refresh: expect.any(Function),
+      })))
+      expect(imagesRow).not.toHaveAttribute('data-compose-asset-external-drop-active')
+    }
+    finally {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint,
+      })
+    }
+  })
+
   it('OpenSpec: asset-browser / 资源浏览与显式打开预览分离 / 宿主拒绝 rename 时不调用 Provider', async () => {
     const provider = createProvider()
     const onBeforeAssetMutation = vi.fn(async () => false)

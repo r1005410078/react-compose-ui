@@ -19,6 +19,7 @@ export {
   ComposeRegistryEntityRenderer,
   ComposeRegistryRendererInspector,
   composeEntityAppearanceStyle,
+  composeEntityOverflowStyle,
   composeEntitySceneStyle,
   composeEntityVisualStyle,
 } from './registry-renderers'

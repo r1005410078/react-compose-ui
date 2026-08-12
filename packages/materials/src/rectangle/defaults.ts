@@ -8,7 +8,7 @@ export const DEFAULT_RECTANGLE_APPEARANCE: ComposeAppearance = Object.freeze({
   backgroundPaint: { kind: 'solid', color: '#2f7df6' },
   borderColor: 'transparent',
   borderWidth: 0,
-  borderRadius: 12,
+  borderRadius: 0,
   opacity: 1,
   shadow: null,
 } satisfies ComposeAppearance)

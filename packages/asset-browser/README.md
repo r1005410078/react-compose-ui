@@ -45,6 +45,10 @@ Provider、Entry、错误和批处理类型只由轻量 `@compose-ui/assets` 定
 SVG/位图可通过 `onCanvasDrag` 发出普通数据生命周期；脚本、目录和未知二进制不会进入该拖拽。
 资源目录内的 move 仍优先于画布拖入。
 
+`externalDrop` 可按宿主注册的普通 payload type 接收跨面板 Pointer 生命周期，并只对命中的可写目录
+发布 drop。Asset Browser 负责 hover、名称对话框与刷新端口，不解释 ComposeDocument 或 Component
+Asset；`renderEntryIcon` 可让宿主为 Base 与 Variant 提供一致且可访问的不同图标。
+
 浏览器支持 File System Access API 时，可在用户手势中调用
 `openComposeFileSystemAssetProvider()`；本包不会自动持久化目录句柄。
 

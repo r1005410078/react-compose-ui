@@ -4,5 +4,8 @@ export {
   useComposeStageViewport,
   type ComposeEditorController,
   type ComposeEditorTransactionEvent,
+  type ComposeCreateComponentFromSelectionInput,
+  type ComposeCreateComponentRequest,
+  type ComposeCreateComponentFromSelectionResult,
   type UseComposeEditorControllerOptions,
 } from './controller'

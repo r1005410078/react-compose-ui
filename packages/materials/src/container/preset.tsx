@@ -1,5 +1,6 @@
 import type { ComposeEntityPreset } from '@compose-ui/component-registry'
 import type { ComposeBasicContainerOptions } from '../types'
+import { ComposeContainerMaterialIcon } from '../material-icons'
 import { mergeAppearance } from '../material-preset'
 import { DEFAULT_CONTAINER_APPEARANCE, DEFAULT_CONTAINER_SIZE } from './defaults'
 
@@ -16,7 +17,7 @@ export function createContainerPreset(
     id: 'container',
     label: options.label ?? 'Container',
     defaultName: options.name ?? 'Container',
-    icon: <span aria-hidden="true">▣</span>,
+    icon: <ComposeContainerMaterialIcon />,
     createComponents: () => ({
       Transform: { rotation: 0 },
       LayoutItem: {

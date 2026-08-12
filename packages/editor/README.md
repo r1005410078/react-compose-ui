@@ -5,25 +5,36 @@ Palette、Stage、聚合 Inspector、Command Panel、Operation Log 插槽与 Ass
 
 ```tsx
 import { createComposeAssetResolver } from '@compose-ui/assets'
+import { createComposeComponentStore } from '@compose-ui/component-library'
 import { createTransactionRuntime } from '@compose-ui/core'
-import { ComposeEditor, useComposeEditorController } from '@compose-ui/editor'
+import {
+  ComposeEditor,
+  useComposeEditorController,
+  type ComposeEditorActiveComponentSession,
+} from '@compose-ui/editor'
 import { createComposeBasicMaterials } from '@compose-ui/materials'
 import { useState } from 'react'
 import '@compose-ui/editor/styles.css'
 
 export function EditorPage() {
-  const [runtime] = useState(() => createTransactionRuntime({ document }))
+  const [rootRuntime] = useState(() => createTransactionRuntime({ document }))
+  const [activeComponent, setActiveComponent]
+    = useState<ComposeEditorActiveComponentSession | null>(null)
+  const runtime = activeComponent?.runtime ?? rootRuntime
   const [materials] = useState(() => createComposeBasicMaterials())
   const [assetResolver] = useState(() => createComposeAssetResolver(assetProvider))
+  const [componentStore] = useState(() => createComposeComponentStore({ provider: assetProvider }))
   const controller = useComposeEditorController({
     runtime,
     registry: materials.registry,
+    componentStore,
     onTransaction: (event) => operationLog.record(toLogRecord(event)),
   })
 
   return (
     <ComposeEditor
       controller={controller}
+      components={{ store: componentStore, onActiveSessionChange: setActiveComponent }}
       style={{ height: 720 }}
       assets={{ browser: { provider: assetProvider }, resolver: assetResolver }}
     />
@@ -41,6 +52,20 @@ Scene Tree 移入带 Layout 的父级会自动转 Flow，跨 Layout 保持 Flow 
 Controller 拥有文档会话级 Layout Runtime；Stage surface 挂载时用 registry、asset resolver 与 page
 loader 创建 measurement adapter，卸载时 detach。测量 revision 只更新 Snapshot，不进入事务、历史
 或操作日志。
+
+配置 `componentStore` 后，组件库同时显示代码 Preset、项目 Base 和 Variant。Stage、Scene Tree
+右键菜单与 Command Panel 共享“创建组件…”命名流程；Scene Tree 普通行也可拖到可写资源目录。
+资源写入成功后才提交一次场景替换，资源失败时场景保持不变；并发文档变化或场景提交失败时保留
+已创建资源并报告“已保存但未实例化”。Undo/Redo 只往返场景，不删除项目文件。
+
+双击 Base/Variant 会打开独立 TransactionRuntime 标签。宿主必须用
+`components.onActiveSessionChange` 将活动组件 runtime 交给 Controller，与页面标签的接线方式一致。
+Variant 与实例 Inspector 提供单项/全部 Apply、Revert 与从实例创建 Variant。组件源保存后依赖实例
+自动同步，只有覆盖失效时才要求确认。父源写入成功而当前层保存失败时不会破坏性回滚，并明确显示
+partial success。
+
+选中实例时 Inspector 由两部分拼成：宿主实体提供名称、位置与旋转，组件根提供布局、外观与裁剪。
+根侧通过 `hiddenComponentKeys`/`hideIdentity` 隐藏重复项，避免同一属性出现两次且取值互相矛盾。
 默认 Inspector 只创建一个 Property Panel，并按 Registry 元数据聚合。Identity 与标记为
 `inspectorGroup: 'basic'` 的领域 Inspector 共用“基础”；Layout 默认展开，Visibility、Lock、
 Appearance、Hierarchy/Clip、GeometryConstraints 与 Renderer 声明的 Props 分类等其他分组按各自

@@ -4,7 +4,9 @@ import {
   getEntityWorldBounds,
   getEntityWorldMatrix,
   matrixFromTransform,
+  pointOnRotationRay,
   resizeBounds,
+  rotationFromPointer,
   toComposeTransform,
   toStageTransform,
 } from './geometry'
@@ -59,5 +61,30 @@ describe('Stage ECS geometry', () => {
       { x: 210, y: 120 },
       { shift: true, alt: false },
     )).toEqual({ x: 10, y: 20, width: 200, height: 100 })
+  })
+
+  it('旋转角度吸附 / Shift 将绝对角量化到 15°', () => {
+    const center = { x: 0, y: 0 }
+    const start = { x: 100, y: 0 }
+    // 约 +20°：无吸附保留连续角；有 baseRotation=7 时目标绝对角 round((7+20)/15)*15=30 → delta=23
+    const current = {
+      x: 100 * Math.cos((20 * Math.PI) / 180),
+      y: 100 * Math.sin((20 * Math.PI) / 180),
+    }
+    const free = rotationFromPointer(center, start, current, false)
+    expect(free).toBeCloseTo(20, 5)
+
+    const relativeSnap = rotationFromPointer(center, start, current, true)
+    expect(relativeSnap).toBe(15)
+
+    const absoluteSnap = rotationFromPointer(center, start, current, {
+      shift: true,
+      baseRotation: 7,
+    })
+    expect(absoluteSnap).toBe(23)
+
+    const ray = pointOnRotationRay(center, start, current, 15)
+    expect(Math.hypot(ray.x, ray.y)).toBeCloseTo(100, 5)
+    expect(Math.atan2(ray.y, ray.x) * 180 / Math.PI).toBeCloseTo(15, 5)
   })
 })

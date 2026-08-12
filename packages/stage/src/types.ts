@@ -177,6 +177,8 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly onShortcutAction?: (action: ComposeStageDelegatableAction) => boolean
   readonly selectedIds: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
+  /** 为当前规范化选区打开宿主的项目组件创建流程；省略时菜单不显示该入口。 */
+  readonly onCreateComponentIntent?: (entityIds: readonly string[]) => void
   /** 隐式 Canvas 输出区域当前是否为 Inspector 目标。 */
   readonly outputSelected?: boolean
   /** 请求清空节点选择并检查隐式 Canvas 输出属性。 */

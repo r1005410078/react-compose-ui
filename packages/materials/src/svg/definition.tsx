@@ -6,6 +6,7 @@ import type {
 import * as v from 'valibot'
 import { measureSvgAsset } from '../material-inspector-kit/assets'
 import type { ComposeBasicMaterialOptions } from '../types'
+import { ComposeSvgMaterialIcon } from '../material-icons'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
   createDefaultInspectorId,
@@ -76,7 +77,7 @@ export function createSvgMaterial(
       id: 'svg',
       label: options.label ?? 'SVG',
       defaultName: options.name ?? 'SVG',
-      icon: <span aria-hidden="true">◇</span>,
+      icon: <ComposeSvgMaterialIcon />,
       paletteHidden: true,
       createComponents: () => rendererPresetComponents({
         type: 'svg',

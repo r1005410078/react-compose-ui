@@ -73,17 +73,26 @@ describe('Basic ECS materials', () => {
     expect(materials.registry.getPreset('text')).toBeDefined()
     expect(materials.registry.getPreset('page-slot')).toBeDefined()
     expect(materials.registry.getPreset('circle')).toBeDefined()
+    expect(materials.registry.getPreset('component-instance')).toMatchObject({
+      paletteHidden: true,
+    })
+    expect(materials.registry.getPreset('group')).toMatchObject({
+      id: 'group',
+      paletteHidden: true,
+    })
   })
 
   it('OpenSpec: Entity Presets / 基础与绘图物料写入明确基础组合', () => {
     const materials = createComposeBasicMaterials()
     expect(materials.presets.map(({ id }) => id)).toEqual([
+      'group',
       'container',
       'rectangle',
       'text',
       'image',
       'svg',
       'page-slot',
+      'component-instance',
       'line',
       'arrow',
       'circle',
@@ -237,7 +246,7 @@ describe('Basic ECS materials', () => {
     const rectangle = seedEntity(materials, 'rectangle')
     expect(rectangle.components.Appearance).toEqual(expect.objectContaining({
       backgroundPaint: { kind: 'solid', color: '#2f7df6' },
-      borderRadius: 12,
+      borderRadius: 0,
     }))
     expect(getComposeRenderer(rectangle)?.props).toEqual({})
   })

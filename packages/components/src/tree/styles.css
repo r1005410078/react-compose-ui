@@ -127,12 +127,16 @@
   margin-right: 4px;
   flex: 0 0 auto;
   place-items: center;
+  line-height: 0;
   color: var(--compose-text-muted, #aab3bf);
 }
 
+/* block + 固定盒避免 inline SVG 基线导致相对文字/行高的垂直偏移 */
 .compose-tree__icon svg {
+  display: block;
   width: 16px;
   height: 16px;
+  flex: 0 0 auto;
 }
 
 .compose-tree__label {

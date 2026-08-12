@@ -469,9 +469,13 @@ export function Tree<T>(props: TreeProps<T>) {
   const handlePointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
     const session = dragRef.current
     if (!session || session.pointerId !== event.pointerId) return
-    if (session.dragging && moveTarget) onMove?.(moveTarget.operation)
+    const hit = typeof document.elementFromPoint === 'function'
+      ? document.elementFromPoint(event.clientX, event.clientY)
+      : event.target instanceof Element ? event.target : null
+    const endsInsideTree = hit !== null && Boolean(scrollRef.current?.contains(hit))
+    if (session.dragging && moveTarget && endsInsideTree) onMove?.(moveTarget.operation)
     clearDrag()
-  }, [clearDrag, moveTarget, onMove])
+  }, [clearDrag, moveTarget, onMove, scrollRef])
 
   const handlePointerCancel = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return

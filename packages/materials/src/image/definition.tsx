@@ -6,6 +6,7 @@ import type {
 import * as v from 'valibot'
 import { measureRasterAsset } from '../material-inspector-kit/assets'
 import type { ComposeBasicMaterialOptions } from '../types'
+import { ComposeImageMaterialIcon } from '../material-icons'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
   createDefaultInspectorId,
@@ -76,7 +77,7 @@ export function createImageMaterial(
       id: 'image',
       label: options.label ?? 'Image',
       defaultName: options.name ?? 'Image',
-      icon: <span aria-hidden="true">▧</span>,
+      icon: <ComposeImageMaterialIcon />,
       paletteHidden: true,
       createComponents: () => rendererPresetComponents({
         type: 'image',

@@ -3,6 +3,7 @@ import type {
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
 import type { ComposeBasicMaterialOptions } from '../types'
+import { ComposeRectangleMaterialIcon } from '../material-icons'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import { DEFAULT_RECTANGLE_APPEARANCE, DEFAULT_RECTANGLE_SIZE } from './defaults'
 import { RectangleRenderer } from './renderer'
@@ -27,7 +28,7 @@ export function createRectangleMaterial(
       id: 'rectangle',
       label: options.label ?? 'Rectangle',
       defaultName: options.name ?? 'Rectangle',
-      icon: <span aria-hidden="true">▭</span>,
+      icon: <ComposeRectangleMaterialIcon />,
       createComponents: () => rendererPresetComponents({
         type: 'rectangle',
         props,

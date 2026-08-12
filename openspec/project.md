@@ -58,6 +58,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/component-registry` 是实例级 Entity Registry 与 Renderer measurement adapter，统一
   Renderer、Component Definition、Entity Preset 与 Capability，依赖 core、assets 与 script-runtime，以 React 为
   peer，不依赖 editor 或 property-panel；测量禁止读取 Scene Entity DOM。
+- `@compose-ui/component-library` 管理 Project Component/Variant 的 Component Asset v1 Store、解析、
+  Apply/Revert 与混合目录；可依赖 core、assets、component-registry、components、ui-context，不依赖
+  editor、stage、scene-tree 或 asset-browser。Registry Preset 继续代表代码物料，不是项目资源。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面目录、页面聚合 Store 与 `app.json` 应用清单读写包，
   只依赖 `core` 与 `assets`；编辑器与独立预览运行时共用同一 Store，因此页面加载不依赖 `editor`。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
@@ -69,10 +72,10 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
 - `@compose-ui/preview` 依赖 core、assets、component-registry、script-runtime 与 layout-engine，拥有默认 Layout
   Runtime/measurement adapter，也可挂接宿主 Runtime；不得依赖 editor 或 stage。
-- `@compose-ui/materials` 提供 Container、Rectangle、Text、Image、SVG Entity Presets、
+- `@compose-ui/materials` 提供 Group、Container、Rectangle、Text、Image、SVG、Component Instance Entity Presets、
   Renderer、Component Definitions 与 Capabilities，依赖 core、assets、component-registry、
   components、layout-engine、property-panel、script-runtime、ui-context、DOMPurify 与 Valibot，不依赖 stage、
-  editor 或 asset-browser；layout-engine 只服务 Page Slot 嵌套文档 Runtime。
+  editor 或 asset-browser；layout-engine 只服务 Page Slot 与组件实例嵌套文档 Runtime。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage、
   stage-engine 与独立面板包。
 - `@compose-ui/components` 是共享的无业务 Tree 等 React 交互组件包，可依赖 `ui-context`；
@@ -191,7 +194,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   `Transform` rotation、`LayoutItem` Fixed/Fill/Hug 与 `Hierarchy + Layout` Auto Layout、
   `Hierarchy` 容器、`Renderer` 内容、同步命令事务、Entity Registry、Godot 风格无限 Stage、
   聚合 Inspector、controller 默认工作区、文档/Container Preview、事务/会话历史和
-  Container/Rectangle/Text/Image/SVG/ECharts、页面聚合与 setup Props 绑定纵向流程。
+  Group/Container/Rectangle/Text/Image/SVG/ECharts、页面聚合、setup Props 绑定与项目组件/Variant
+  纵向流程。项目组件采用独立 Component Asset v1，不升级 ComposeDocument。
 - Hug container 由 Flow children、padding、gap 与 border 决定；Hug leaf 通过 Registry measurement
   definition 同步读取缓存，并以可选 prepare/subscribe 处理字体、资源和页面 revision。测量缓存、
   diagnostics 与 Yoga 树只增加 LayoutSnapshot revision，不属于文档、事务或历史。
@@ -207,6 +211,13 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   Computed 与 Function 不进入文档、Patch 或历史；Renderer `propContracts` 是唯一可绑定边界，
   `propCategories` 决定 Inspector 分类，未分类 Prop 进入“高级”且空分组不显示。默认执行模型只适用于
   受信任脚本。
+- 项目组件只支持同 Provider/scope、最多八层继承与嵌套、显式更新；不支持 Detach、跨 Provider 变体
+  或自动批量更新。
+- 实例覆盖只含结构操作；暴露属性已删除，需要稳定参数契约时须单独设计。页面场景可直接编辑实例内部：
+  Scene Tree 惰性投影内部层级、Stage 双击逐层下钻，编辑写入实例覆盖。实例子树是封闭编辑域，跨越实例
+  边界的移动一律拒绝；重命名、可见性与锁定不在稳定操作代数内，因此内部节点对应能力位保持关闭而不是
+  静默失效。
+- 组件源保存后依赖实例自动同步，只有覆盖失效时才要求确认；判据是覆盖能否应用而不是变更来源。
 - 数据源协议与正式发布持久化接口尚未完成；事务副作用留在宿主 observer/订阅边界。
 - 示例中的临时状态、面板 ID 和 Dockview 对象都不是编辑器领域模型或公共协议。
 

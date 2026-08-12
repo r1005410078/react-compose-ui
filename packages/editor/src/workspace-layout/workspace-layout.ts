@@ -27,10 +27,12 @@ export const WORKSPACE_COMPONENT_IDS = {
   assetBrowser: 'assetBrowser',
   assetDocument: 'assetDocument',
   pageDocument: 'pageDocument',
+  componentDocument: 'componentDocument',
 } as const
 
 const ASSET_DOCUMENT_PANEL_PREFIX = 'compose-asset-document:'
 const PAGE_DOCUMENT_PANEL_PREFIX = 'compose-page-document:'
+const COMPONENT_DOCUMENT_PANEL_PREFIX = 'compose-component-document:'
 
 /**
  * 从 Provider 与稳定资源 key 派生当前 Editor 实例中的资源标签 ID。
@@ -69,9 +71,21 @@ export function isPageDocumentPanelId(panelId: string) {
   return panelId.startsWith(PAGE_DOCUMENT_PANEL_PREFIX)
 }
 
+/** 从 Provider 与组件稳定 key 派生独立 Base/Variant 标签 ID。 @internal */
+export function createComponentDocumentPanelId(providerId: string, assetKey: string) {
+  return `${COMPONENT_DOCUMENT_PANEL_PREFIX}${encodeURIComponent(providerId)}:${encodeURIComponent(assetKey)}`
+}
+
+/** 判断 Dockview panel 是否为组件或变体文档。 @internal */
+export function isComponentDocumentPanelId(panelId: string) {
+  return panelId.startsWith(COMPONENT_DOCUMENT_PANEL_PREFIX)
+}
+
 /** 判断 Dockview panel 是否为可关闭的文档标签（资源或页面）。 @internal */
 export function isWorkspaceDocumentPanelId(panelId: string) {
-  return isAssetDocumentPanelId(panelId) || isPageDocumentPanelId(panelId)
+  return isAssetDocumentPanelId(panelId)
+    || isPageDocumentPanelId(panelId)
+    || isComponentDocumentPanelId(panelId)
 }
 
 export const WORKSPACE_SIZES = {

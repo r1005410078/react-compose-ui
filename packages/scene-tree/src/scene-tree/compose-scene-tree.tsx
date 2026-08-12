@@ -8,11 +8,12 @@ import {
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type {
   CSSProperties,
   KeyboardEvent,
   ReactNode,
+  PointerEvent as ReactPointerEvent,
 } from 'react'
 import type { ComposeSceneTreeNode, ComposeSceneTreeProps } from '../index'
 import { CubeIcon, DocumentIcon, EyeIcon, LockIcon } from '../icons'
@@ -26,7 +27,8 @@ const sceneTreeAdapter: ComposeTreeItemAdapter<ComposeSceneTreeNode> = {
   getChildren: (node) => node.children,
   getId: (node) => node.id,
   getLabel: (node) => node.label,
-  hasChildren: (node) => (node.children?.length ?? 0) > 0,
+  // 宿主惰性物化子树时 children 尚未构建，必须优先采信显式声明，否则展开控件不出现。
+  hasChildren: (node) => node.hasChildren ?? (node.children?.length ?? 0) > 0,
   canHaveChildren: (node) => node.canHaveChildren !== false && !node.locked,
   canMove: (node) => node.canMove !== false && !node.locked,
 }
@@ -113,6 +115,8 @@ export function ComposeSceneTree({
   onSelectionChange,
   onExpandedChange,
   onOperation,
+  onExternalDrag,
+  onCreateComponentIntent,
   commands: providedCommands,
   className,
   style,
@@ -123,6 +127,14 @@ export function ComposeSceneTree({
   const resolvedLocale = i18n?.locale ?? 'zh-CN'
   const messages = getSceneTreeMessages(resolvedLocale, i18n?.formatMessage)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const externalDragRef = useRef<{
+    readonly pointerId: number
+    readonly nodeIds: readonly string[]
+    readonly start: { readonly x: number; readonly y: number }
+    started: boolean
+  } | null>(null)
+  const externalSequenceRef = useRef(0)
+  const externalCleanupRef = useRef<(() => void) | null>(null)
   const internalCommands = useComposeSceneTreeCommands({ nodes, selectedIds, onOperation })
   const commands = providedCommands ?? internalCommands
   const interaction = useSceneTreeInteraction({
@@ -142,16 +154,109 @@ export function ComposeSceneTree({
     () => new Set(interaction.searchResult.rows.map((row) => row.node.id)),
     [interaction.searchResult.rows],
   )
+
+  useEffect(() => () => externalCleanupRef.current?.(), [])
+
+  const startExternalDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    node: ComposeSceneTreeNode,
+  ) => {
+    if (
+      !onExternalDrag
+      || event.button !== 0
+      || node.locked
+      || node.canMove === false
+      || (event.target as HTMLElement).closest('button, input, textarea, select')
+    ) return
+    externalCleanupRef.current?.()
+    const nodeIds = selectedIds.includes(node.id) ? [...selectedIds] : [node.id]
+    const session = {
+      pointerId: event.pointerId,
+      nodeIds,
+      start: { x: event.clientX, y: event.clientY },
+      started: false,
+    }
+    externalDragRef.current = session
+    const move = (pointerEvent: globalThis.PointerEvent) => {
+      if (pointerEvent.pointerId !== session.pointerId) return
+      const clientPoint = { x: pointerEvent.clientX, y: pointerEvent.clientY }
+      if (!session.started && Math.hypot(
+        clientPoint.x - session.start.x,
+        clientPoint.y - session.start.y,
+      ) >= 4) {
+        session.started = true
+        onExternalDrag({
+          type: 'start',
+          sequence: ++externalSequenceRef.current,
+          nodeIds,
+          clientPoint,
+        })
+      }
+      if (session.started) onExternalDrag({
+        type: 'move',
+        sequence: ++externalSequenceRef.current,
+        nodeIds,
+        clientPoint,
+      })
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', cancel)
+      externalCleanupRef.current = null
+      externalDragRef.current = null
+    }
+    const release = (pointerEvent: globalThis.PointerEvent) => {
+      if (pointerEvent.pointerId !== session.pointerId) return
+      cleanup()
+      if (session.started) {
+        const hit = typeof document.elementFromPoint === 'function'
+          ? document.elementFromPoint(pointerEvent.clientX, pointerEvent.clientY)
+          : pointerEvent.target instanceof Element ? pointerEvent.target : null
+        // Tree 内 pointerup 由 ComposeTree 完成既有层级移动；external lifecycle 必须取消，
+        // 否则同一次普通行拖拽还会被 Editor 当作资源导出。
+        const endsInsideTree = hit?.closest('[data-compose-ui="scene-tree"]') !== null
+        onExternalDrag(endsInsideTree
+          ? {
+              type: 'cancel',
+              sequence: ++externalSequenceRef.current,
+              nodeIds,
+            }
+          : {
+              type: 'end',
+              sequence: ++externalSequenceRef.current,
+              nodeIds,
+              clientPoint: { x: pointerEvent.clientX, y: pointerEvent.clientY },
+            })
+      }
+    }
+    const cancel = (pointerEvent: globalThis.PointerEvent) => {
+      if (pointerEvent.pointerId !== session.pointerId) return
+      cleanup()
+      if (session.started) onExternalDrag({
+        type: 'cancel',
+        sequence: ++externalSequenceRef.current,
+        nodeIds,
+      })
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', cancel)
+    externalCleanupRef.current = cleanup
+  }
   const rootClassName = [
     'st:flex st:h-full st:min-h-0 st:flex-col st:overflow-hidden st:bg-[#111419] st:text-[#c5ccd6]',
     className,
   ].filter(Boolean).join(' ')
 
-  const renderContextIcon = (context: ComposeTreeItemRenderContext<ComposeSceneTreeNode>) => (
-    context.item.icon ?? (context.parentId === null
+  const renderContextIcon = (context: ComposeTreeItemRenderContext<ComposeSceneTreeNode>) => {
+    const icon = context.item.icon ?? (context.parentId === null
       ? <DocumentIcon className="st:stroke-current st:stroke-[1.6]" />
       : <CubeIcon className="st:stroke-current st:stroke-[1.5]" />)
-  )
+    return context.item.iconLabel
+      ? <span aria-label={context.item.iconLabel} role="img" title={context.item.iconLabel}>{icon}</span>
+      : icon
+  }
 
   return (
     <div
@@ -194,6 +299,7 @@ export function ComposeSceneTree({
         getExpandLabel={() => messages.expand}
         getItemAttributes={(context) => ({
           'data-scene-node-id': context.id,
+          onPointerDown: (event) => startExternalDrag(event, context.item),
           onKeyDown: (event) => {
             if (!shouldUseSceneKeyboard(event)) return
             const rowIndex = interaction.rows.findIndex((row) => row.node.id === context.id)
@@ -279,7 +385,12 @@ export function ComposeSceneTree({
         commands={commands}
         messages={messages}
         nodeId={interaction.contextMenu.payload}
+        onCreateComponentIntent={onCreateComponentIntent}
         rootProps={interaction.contextMenu.rootProps}
+        selectedIds={interaction.contextMenu.payload !== null
+          && !selectedIds.includes(interaction.contextMenu.payload)
+          ? [interaction.contextMenu.payload]
+          : selectedIds}
       />
     </div>
   )

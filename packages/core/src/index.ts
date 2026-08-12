@@ -25,6 +25,15 @@ export {
 export { createDefaultCanvasSettings } from './canvas-settings'
 export { createDefaultOutputSettings } from './output-settings'
 export {
+  COMPOSE_GROUP_PRESET_ID,
+  createComposeGroupEntitySeed,
+  isComposeGroupEntity,
+  isComposeUngroupableEntity,
+  isLegacyComposeGroupEntity,
+} from './group'
+export type { CreateComposeGroupEntitySeedInput } from './group'
+export * from './component'
+export {
   DEFAULT_COMPOSE_APPEARANCE,
   DEFAULT_COMPOSE_SHADOW,
   resolveComposeAppearance,

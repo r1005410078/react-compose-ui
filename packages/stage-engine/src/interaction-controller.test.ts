@@ -521,13 +521,22 @@ describe('StageInteractionController ECS systems', () => {
   })
 
   it.each([
-    ['move', entity('a', { resize: 'free', movable: false }), { kind: 'entity', entityId: 'a' }],
-    ['resize', entity('a', { resize: 'none' }), { kind: 'resize', handle: 'se' }],
-    ['rotate', entity('a', { resize: 'free', rotatable: false }), { kind: 'rotate' }],
+    ['move', entity('a', { resize: 'free', movable: false }), { kind: 'entity', entityId: 'a' }, 'select' as const],
+    ['resize', entity('a', { resize: 'none' }), { kind: 'resize', handle: 'se' }, 'select' as const],
+    ['rotate', entity('a', { resize: 'free', rotatable: false }), { kind: 'rotate' }, 'rotate' as const],
   ] as const)(
     'OpenSpec: TransformConstraints System / %s 被独立约束阻止',
-    (_action, constrained, hit) => {
+    (_action, constrained, hit, tool) => {
       const { controller } = setup(document([constrained]))
+      controller.updateContext({
+        document: document([constrained]),
+        layoutSnapshot: layoutSnapshot(document([constrained])),
+        viewport: { x: 0, y: 0, zoom: 1 },
+        surfaceSize: { width: 800, height: 600 },
+        tool,
+        selectedIds: ['a'],
+        idFactory: () => 'constraint-id',
+      })
       controller.send({
         type: 'pointer.down',
         pointerId: 1,
@@ -539,6 +548,157 @@ describe('StageInteractionController ECS systems', () => {
       expect(controller.getSnapshot().phase).toBe('idle')
     },
   )
+
+  it('Godot 旋转工具：无选区时按下不进入框选', () => {
+    const value = document()
+    const { controller } = setup(value, layoutSnapshot(value), [])
+    controller.updateContext({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'rotate' as StageInteractionTool,
+      selectedIds: [],
+      idFactory: () => 'rotate-empty-id',
+    })
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 200, y: 10 },
+      hit: { kind: 'surface' },
+      modifiers,
+    })
+    expect(controller.getSnapshot().phase).toBe('idle')
+    expect(controller.getSnapshot().marquee).toBeNull()
+  })
+
+  it('Godot 旋转工具：任意点按下出现拉线，指针移动时拉线跟随', () => {
+    const value = document()
+    const { controller, effects } = setup(value)
+    controller.updateContext({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'rotate' as StageInteractionTool,
+      selectedIds: ['a'],
+      idFactory: () => 'rotate-id',
+    })
+
+    // 空白处按下：立刻进入 rotate，拉线从选区中心到按下点。
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 200, y: 10 },
+      hit: { kind: 'surface' },
+      modifiers,
+    })
+    const afterDown = controller.getSnapshot()
+    expect(afterDown.phase).toBe('rotate')
+    expect(afterDown.rotationPreview).toMatchObject({
+      center: { x: 50, y: 25 },
+      pointer: { x: 200, y: 10 },
+      angleDegrees: 0,
+      snapped: false,
+    })
+
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 220, y: 80 },
+      modifiers,
+    })
+    const afterMove = controller.getSnapshot()
+    expect(afterMove.phase).toBe('rotate')
+    expect(afterMove.rotationPreview?.pointer).toEqual({ x: 220, y: 80 })
+    expect(afterMove.rotationPreview?.snapped).toBe(false)
+    expect(afterMove.previewTransforms.a).toBeDefined()
+
+    controller.send({
+      type: 'pointer.up',
+      pointerId: 1,
+      point: { x: 220, y: 80 },
+      modifiers,
+    })
+    expect(controller.getSnapshot().phase).toBe('idle')
+    expect(controller.getSnapshot().rotationPreview).toBeNull()
+    expect(effects.some((effect) => effect.type === 'command.dispatch')).toBe(true)
+  })
+
+  it('Godot 旋转工具：Shift 时绝对角 15° 吸附且拉线对齐', () => {
+    // 初始旋转 7°，从正右方按下，拖到约 +20°，绝对角应落到 30°（delta=23）。
+    const value = document([entity('a', { x: 0, y: 0, width: 100, height: 50, rotation: 7 })])
+    const { controller } = setup(value)
+    controller.updateContext({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'rotate' as StageInteractionTool,
+      selectedIds: ['a'],
+      idFactory: () => 'rotate-snap-id',
+    })
+    const center = { x: 50, y: 25 }
+    const start = { x: center.x + 100, y: center.y }
+    const current = {
+      x: center.x + 100 * Math.cos((20 * Math.PI) / 180),
+      y: center.y + 100 * Math.sin((20 * Math.PI) / 180),
+    }
+    const shift = { shift: true, alt: false, command: false }
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: start,
+      hit: { kind: 'surface' },
+      modifiers: shift,
+    })
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: current,
+      modifiers: shift,
+    })
+    const snap = controller.getSnapshot()
+    expect(snap.phase).toBe('rotate')
+    expect(snap.rotationPreview?.snapped).toBe(true)
+    expect(snap.rotationPreview?.angleDegrees).toBe(23)
+    expect(snap.previewTransforms.a?.rotation).toBeCloseTo(30, 5)
+    // 拉线终点在吸附射线上，而非原始指针。
+    const pointer = snap.rotationPreview!.pointer
+    const rayAngle = Math.atan2(pointer.y - center.y, pointer.x - center.x) * 180 / Math.PI
+    expect(rayAngle).toBeCloseTo(23, 5)
+  })
+
+  it('Godot 旋转工具：点在实体上直接开始旋转', () => {
+    const value = document()
+    const { controller } = setup(value)
+    controller.updateContext({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'rotate' as StageInteractionTool,
+      selectedIds: ['a'],
+      idFactory: () => 'rotate-entity-id',
+    })
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 20, y: 20 },
+      hit: { kind: 'entity', entityId: 'a' },
+      modifiers,
+    })
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'rotate',
+      rotationPreview: {
+        pointer: { x: 20, y: 20 },
+      },
+    })
+  })
 
   it('OpenSpec: External Preset / 统一 Palette drop 为 preset', () => {
     const { controller, effects } = setup()

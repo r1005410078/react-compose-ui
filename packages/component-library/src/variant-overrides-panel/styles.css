@@ -1,0 +1,8 @@
+/* 变体面板复用 compose-instance-overrides 视觉；此处仅补嵌套在 inspector 时的间距。 */
+.compose-editor__component-inspector > .compose-variant-overrides,
+.compose-editor__component-inspector > .compose-instance-overrides.compose-variant-overrides {
+  flex: 0 0 auto;
+  max-height: min(42vh, 360px);
+  overflow: auto;
+  border-top: 1px solid var(--compose-border, #323844);
+}
