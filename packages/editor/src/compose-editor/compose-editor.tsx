@@ -1243,18 +1243,25 @@ export function ComposeEditor({
     }
     if (!activeComponentSession && selectedComponentInstance && componentWorkspace.store) {
       return (
-        <ComposeComponentInstanceOverridesPanel
-          entity={selectedComponentInstance}
-          onApply={applySelectedInstanceOverrides}
-          onChange={updateInstanceOverrides}
-          onCreateVariant={createVariantFromSelectedInstance}
-          onUpdate={updateComponentInstance}
-        />
+        <div className="compose-editor__component-inspector">
+          {entityInspector}
+          {/* 实例的最外层就是组件根：把根的尺寸、外观、裁剪与 Auto Layout 一并暴露，
+              编辑经 instanceRootSelection 写入实例覆盖而不是宿主文档。 */}
+          {controller?.instanceRootInspector}
+          <ComposeComponentInstanceOverridesPanel
+            entity={selectedComponentInstance}
+            onApply={applySelectedInstanceOverrides}
+            onChange={updateInstanceOverrides}
+            onCreateVariant={createVariantFromSelectedInstance}
+            onUpdate={updateComponentInstance}
+          />
+        </div>
       )
     }
     return entityInspector
   }, [
     controller?.inspectorPanel,
+    controller?.instanceRootInspector,
     activeComponentSession,
     applySelectedInstanceOverrides,
     componentWorkspace.store,

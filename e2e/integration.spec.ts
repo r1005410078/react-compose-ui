@@ -3597,3 +3597,39 @@ test('OpenSpec: component-library / 实例层结构覆盖 / 内部删除写入�
   await expect(sceneTree.getByRole('row')).toHaveCount(2)
   await expect(stage.locator('[data-component-instance-entity-id]')).toHaveCount(2)
 })
+
+test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件根属性且可 Resize', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Container' }).click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const source = sceneTree.getByRole('row').last()
+  await source.click()
+  await source.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '创建组件…' }).click()
+  const dialog = page.getByRole('dialog', { name: '创建组件' })
+  await dialog.getByLabel('组件名称').fill('Root Card')
+  await dialog.getByRole('button', { name: '创建' }).click()
+  await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
+
+  // 单选提取复用容器作为组件根，因此实例只有一层，展开即是内容。
+  await expect(sceneTree.getByRole('row')).toHaveCount(1)
+
+  await sceneTree.getByRole('row').first().click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  // 组件根的容器属性在实例上可见；名称与位置只出现一次，来自宿主实例。
+  await expect(inspector).toContainText('外观')
+  await expect(inspector).toContainText('容器')
+  await expect(inspector.getByLabel('名称')).toHaveCount(1)
+
+  // 根可缩放，实例继承该能力并显示手柄。
+  await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(1)
+})

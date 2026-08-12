@@ -30,6 +30,40 @@ function asset(): ComposeBaseComponentAsset {
   }
 }
 
+function createRegistry() {
+  return createComposeEntityRegistry({
+    presets: [{
+      id: 'component-instance',
+      label: 'Component',
+      defaultName: 'Component',
+      paletteHidden: true,
+      createComponents: () => ({
+        Transform: { rotation: 0 },
+        LayoutItem: {
+          positioning: 'absolute',
+          offset: { x: 0, y: 0 },
+          width: { mode: 'fixed', value: 1, min: 1, max: null },
+          height: { mode: 'fixed', value: 1, min: 1, max: null },
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          alignSelf: 'auto',
+        },
+        Visibility: { visible: true },
+        Lock: { locked: false },
+        Renderer: { type: 'component-instance', props: {} },
+      }),
+    }],
+  })
+}
+
+const baseAsset = asset
+
+const reference = {
+  kind: 'component' as const,
+  providerId: 'project',
+  assetKey: 'Components/Card.component.json',
+  scope: 'persistent' as const,
+}
+
 describe('OpenSpec: component-library / 关联实例实体', () => {
   it('从 Registry 隐藏 Preset 建立带引用和离线快照的结构叶子', () => {
     const registry = createComposeEntityRegistry({
@@ -74,7 +108,7 @@ describe('OpenSpec: component-library / 关联实例实体', () => {
       props: {
         reference: { assetKey: 'Components/Card.component.json' },
         resolvedSnapshot: { componentId: 'card', revision: '3' },
-        instanceOverrides: { properties: {}, operations: [] },
+        instanceOverrides: { operations: [] },
       },
     })
     expect(getComposeLayoutItem(result.entity)).toMatchObject({
@@ -86,5 +120,53 @@ describe('OpenSpec: component-library / 关联实例实体', () => {
       resize: 'none',
       rotatable: true,
     })
+  })
+})
+
+describe('实例几何跟随组件根', () => {
+  it('从组件根派生 Resize 能力', () => {
+    const registry = createRegistry()
+    const asset = baseAsset()
+    // 组件根是可自由缩放的容器，实例应当同样允许 Resize。
+    const root = asset.document.entities[asset.document.rootIds[0]!]!
+    const withResizableRoot = {
+      ...asset,
+      document: {
+        ...asset.document,
+        entities: {
+          ...asset.document.entities,
+          [root.id]: {
+            ...root,
+            components: {
+              ...root.components,
+              GeometryConstraints: { movable: true, resize: 'free', rotatable: false },
+            },
+          },
+        },
+      },
+    }
+    const result = createComposeComponentInstanceEntity({
+      registry,
+      id: 'instance',
+      asset: withResizableRoot,
+      reference,
+      revision: '1',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(getComposeGeometryConstraints(result.entity)).toMatchObject({ resize: 'free' })
+  })
+
+  it('组件根不可缩放时实例同样不可缩放', () => {
+    const result = createComposeComponentInstanceEntity({
+      registry: createRegistry(),
+      id: 'instance',
+      asset: baseAsset(),
+      reference,
+      revision: '1',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(getComposeGeometryConstraints(result.entity)).toMatchObject({ resize: 'none' })
   })
 })

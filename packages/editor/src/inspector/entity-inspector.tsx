@@ -55,6 +55,16 @@ interface EntityInspectorProps {
    * 因此无法表达重命名。留成可输入但静默失效的字段会误导用户。
    */
   readonly renameDisabled?: boolean
+  /**
+   * 不渲染的 Component Inspector Key。
+   *
+   * @remarks
+   * 组件实例的最外层由两份 Inspector 拼成：宿主实体提供名称、位置与旋转，组件根提供布局、
+   * 外观与裁剪。隐藏根侧重复的 Key，避免同一属性出现两次且取值互相矛盾。
+   */
+  readonly hiddenComponentKeys?: readonly string[]
+  /** 不渲染名称等身份字段。 */
+  readonly hideIdentity?: boolean
 }
 
 // 内建 Component 由 Registry 定义的 inspector 呈现；缺失定义时也不进入“未知”分组，
@@ -150,6 +160,8 @@ export function EntityInspector({
   idFactory,
   nodeEditPort,
   paintEditPort,
+  hiddenComponentKeys,
+  hideIdentity,
   renameDisabled,
   scriptScope,
 }: EntityInspectorProps) {
@@ -191,6 +203,9 @@ export function EntityInspector({
     && definition.inspector
     && entity.components[definition.key] !== undefined
   ))
+  const visibleBasicDefinitions = basicDefinitions.filter(
+    (definition) => !(hiddenComponentKeys ?? []).includes(definition.key),
+  )
   const composition = getComposeComposition(entity)
   const availability = registry.listCapabilityAvailability(entity)
   const [pendingRemoval, setPendingRemoval] = useState<string | null>(null)
@@ -278,15 +293,18 @@ export function EntityInspector({
       <ComposePropertyPanelRoot
         aria-label={zh ? `${entity.name} 属性字段` : `${entity.name} property fields`}
       >
+        {hideIdentity === true && visibleBasicDefinitions.length === 0 ? null : (
         <ComposePropertyPanelSection defaultExpanded title={zh ? '基础' : 'Identity'}>
-          <IdentityInspector
-            dispatch={dispatch}
-            entity={entity}
-            idFactory={idFactory}
-            readOnly={locked || renameDisabled === true}
-            zh={zh}
-          />
-          {basicDefinitions.map((definition) => (
+          {hideIdentity === true ? null : (
+            <IdentityInspector
+              dispatch={dispatch}
+              entity={entity}
+              idFactory={idFactory}
+              readOnly={locked || renameDisabled === true}
+              zh={zh}
+            />
+          )}
+          {visibleBasicDefinitions.map((definition) => (
             <ComposeRegistryComponentInspector
               componentKey={definition.key}
               dispatch={dispatch}
@@ -301,6 +319,7 @@ export function EntityInspector({
             />
           ))}
         </ComposePropertyPanelSection>
+        )}
         {componentDefinitions.map((definition) => {
           if (definition.hidden) return null
           const componentExists = entity.components[definition.key] !== undefined

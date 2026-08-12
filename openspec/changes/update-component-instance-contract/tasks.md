@@ -35,9 +35,14 @@
 
 ## 4. 实例几何跟随组件根
 
-- [ ] 4.1 [Red → Green → Refactor] 实例 LayoutItem 与 GeometryConstraints 从组件根派生
-- [ ] 4.2 [Red → Green → Refactor] 尺寸、外观、裁剪与 Auto Layout 编辑写入以组件根为目标的实例覆盖
-- [ ] 4.3 [Red → Green → Refactor] Stage Resize 手柄与 Inspector 分组在实例上可用
+- [x] 4.1 [Red → Green → Refactor] 实例 GeometryConstraints 从组件根派生
+  - Red/Green: `bun run --cwd packages/component-library test -- component-instance-entity`；根可缩放时实例继承 free，根是 Group 时仍为 none。
+  - 实例自身保持 Hug：尺寸的唯一事实来源是组件根，两处各存一份会立刻不一致。
+- [x] 4.2 [Red → Green → Refactor] 尺寸、外观、裁剪与 Auto Layout 编辑写入以组件根为目标的实例覆盖
+  - Result: 新增 instanceRootSelection 与 instanceRootInspector，复用 5.1 的命令→稳定 diff 通路。
+  - Resize 必须拦截改写：Stage 的 setTransform 默认改宿主 LayoutItem，会让外框变了而内部嵌套 Runtime 不动。
+- [x] 4.3 [Red → Green → Refactor] Stage Resize 手柄与 Inspector 分组在实例上可用
+  - Result: 手柄随根的 resize 能力出现；EntityInspector 新增 hiddenComponentKeys/hideIdentity，根侧隐藏与宿主重复的名称、位置与尺寸，避免同一属性出现两次且取值矛盾；全隐藏时不再留空的「基础」分组。
 
 ## 5. 自动同步
 

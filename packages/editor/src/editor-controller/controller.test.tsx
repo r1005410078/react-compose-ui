@@ -18,6 +18,7 @@ import type { ComposeComponentStore } from '@compose-ui/component-library'
 import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
+  getComposeLayoutItem,
   createDefaultOutputSettings,
   createTransactionRuntime,
   getComposeHierarchy,
@@ -166,18 +167,19 @@ function instanceDocumentFixture(): ComposeDocument {
     output: { width: 120, height: 80, backgroundPaint: { kind: 'solid' as const, color: 'transparent' } },
     rootIds: ['c-root'],
     entities: {
+      // 组件根是可缩放容器：放宽根约束后这是常态，也让实例继承 Resize 能力。
       'c-root': {
         id: 'c-root',
-        name: 'Group',
+        name: 'Card Root',
         components: {
           Composition: {
-            presetId: 'group',
+            presetId: 'container',
             baseComponentKeys: ['Transform', 'LayoutItem', 'GeometryConstraints', 'Visibility', 'Lock', 'Hierarchy'],
             capabilityIds: [],
           },
           Transform: { rotation: 0 },
           LayoutItem: layoutItem(transform(0, 0, 120, 80)),
-          GeometryConstraints: { movable: true, resize: 'none', rotatable: false },
+          GeometryConstraints: { movable: true, resize: 'free', rotatable: false },
           Visibility: { visible: true },
           Lock: { locked: false },
           Hierarchy: { childIds: ['c-text'] },
@@ -784,6 +786,84 @@ describe('useComposeEditorController', () => {
       })
     })
     expect(result.current.document).toBe(before)
+  })
+
+  it('选中实例本身时 Inspector 路由到组件根', () => {
+    const editorRuntime = createTransactionRuntime({
+      document: instanceDocumentFixture(),
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => {
+      result.current.sceneTreeProps.onSelectionChange?.(['instance'])
+    })
+
+    // 实例的最外层就是组件根，其属性编辑必须写入实例覆盖而不是宿主文档。
+    const target = result.current.instanceRootSelection
+    expect(target).not.toBeNull()
+    expect(target?.entity.id).toBe('c-root')
+
+    act(() => {
+      target?.dispatch({
+        id: 'root-edit',
+        type: BUILTIN_COMMAND_TYPES.setAppearance,
+        payload: {
+          entityId: 'c-root',
+          appearance: { backgroundPaint: { kind: 'solid', color: '#ff0000' } },
+        },
+        meta: { label: 'edit', source: 'inspector', targetIds: ['c-root'] },
+      })
+    })
+
+    const host = result.current.document.entities.instance!
+    expect(result.current.document.entities['c-root']).toBeUndefined()
+    const overrides = (host.components.Renderer as { props: Record<string, unknown> })
+      .props.instanceOverrides as { operations: readonly { entityId: string }[] }
+    expect(overrides.operations.length).toBeGreaterThan(0)
+    expect(overrides.operations.every(({ entityId }) => entityId === 'c-root')).toBe(true)
+  })
+
+  it('实例 Resize 写入以组件根为目标的覆盖而不是宿主尺寸', () => {
+    const editorRuntime = createTransactionRuntime({
+      document: instanceDocumentFixture(),
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => {
+      result.current.dispatch({
+        id: 'resize-1',
+        type: BUILTIN_COMMAND_TYPES.setTransform,
+        payload: {
+          operation: 'resize',
+          updates: [{
+            entityId: 'instance',
+            transform: {
+              position: { x: 0, y: 0 },
+              size: { width: 300, height: 200 },
+              rotation: 0,
+            },
+          }],
+        },
+        meta: { label: 'resize', source: 'stage', targetIds: ['instance'] },
+      })
+    })
+
+    const host = result.current.document.entities.instance!
+    // 宿主尺寸不被改写：尺寸的唯一事实来源是组件根，两处各存一份会立刻不一致。
+    expect(getComposeLayoutItem(host).width.value).toBe(120)
+    const overrides = (host.components.Renderer as { props: Record<string, unknown> })
+      .props.instanceOverrides as { operations: readonly { entityId: string; value?: unknown }[] }
+    expect(overrides.operations.some(({ entityId }) => entityId === 'c-root')).toBe(true)
   })
 
   it('场景树创建操作从 Container Preset 创建 v6 Entity', () => {

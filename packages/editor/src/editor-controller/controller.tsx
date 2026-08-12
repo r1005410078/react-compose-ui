@@ -31,6 +31,7 @@ import {
   getComposeHierarchy,
   getComposeLock,
   getComposeRenderer,
+  getComposeSpatialTransform,
   getComposeVisibility,
   isComposeInstancePath,
   resolveComposeInstanceOverrides,
@@ -364,6 +365,105 @@ function sceneOperationNodeIds(operation: ComposeSceneTreeOperation): readonly s
   return operation.parentId === null ? [] : [operation.parentId]
 }
 
+/**
+ * 为宿主实例中的某个内部实体构造 Inspector 编辑入口。
+ *
+ * @remarks
+ * `innerId` 省略时目标是组件根——实例的最外层就是组件根，选中实例本身时编辑的正是它。
+ */
+function resolveInstanceEditTarget(
+  runtime: TransactionRuntime,
+  document: ComposeDocument,
+  instanceId: string,
+  innerId?: string,
+): ComposeInstanceInnerSelection | null {
+  const host = document.entities[instanceId]
+  if (!host) return null
+  const facts = readComposeComponentInstance(host)
+  if (!facts) return null
+  const resolved = resolveComposeInstanceOverrides({
+    document: facts.snapshot.document,
+    overrides: facts.overrides,
+  })
+  if (!resolved.ok) return null
+  const targetId = innerId ?? resolved.document.rootIds[0]
+  if (!targetId) return null
+  const entity = resolved.document.entities[targetId]
+  if (!entity) return null
+  return {
+    instanceId,
+    entity,
+    document: resolved.document,
+    dispatch: (command: EditorCommand) => {
+      applyInstanceInnerCommands(
+        runtime,
+        host,
+        facts,
+        resolved.document,
+        [command],
+        `Edit ${entity.name} inside ${host.name}`,
+      )
+    },
+  }
+}
+
+/**
+ * 把作用于组件实例的 Resize 命令改写为以组件根为目标的实例覆盖。
+ *
+ * @remarks
+ * 实例保持 Hug，尺寸的唯一事实来源是组件根：两处各存一份会立刻不一致，而且内部嵌套 Runtime
+ * 只认组件文档里的尺寸，直接改宿主 LayoutItem 会让外框变了、内容不动。
+ *
+ * @returns 已处理返回 `true`；命令与实例无关时返回 `false` 交回默认通路。
+ */
+function routeInstanceResize(
+  runtime: TransactionRuntime,
+  document: ComposeDocument,
+  command: EditorCommand,
+): boolean {
+  if (command.type !== BUILTIN_COMMAND_TYPES.setTransform) return false
+  const payload = command.payload as {
+    readonly operation?: unknown
+    readonly updates?: readonly { readonly entityId?: unknown; readonly transform?: unknown }[]
+  } | undefined
+  if (payload?.operation !== 'resize' || !Array.isArray(payload.updates)) return false
+  const instanceUpdates = payload.updates.filter((update) => {
+    const entity = typeof update.entityId === 'string' ? document.entities[update.entityId] : undefined
+    return entity ? readComposeComponentInstance(entity) !== null : false
+  })
+  if (instanceUpdates.length === 0) return false
+  // 混合选区不在此拦截：宿主实体与实例的尺寸语义不同，合并成一次事务会让 Undo 粒度失真。
+  if (instanceUpdates.length !== payload.updates.length) return false
+  let handled = false
+  for (const update of instanceUpdates) {
+    const instanceId = update.entityId as string
+    const transform = update.transform as {
+      readonly size?: { readonly width?: number; readonly height?: number }
+    } | undefined
+    const size = transform?.size
+    if (!size || typeof size.width !== 'number' || typeof size.height !== 'number') continue
+    const target = resolveInstanceEditTarget(runtime, document, instanceId)
+    if (!target) continue
+    const rootId = target.entity.id
+    const rootTransform = getComposeSpatialTransform(target.entity)
+    target.dispatch({
+      id: defaultIdFactory(),
+      type: BUILTIN_COMMAND_TYPES.setTransform,
+      payload: {
+        operation: 'resize',
+        // 只改尺寸：实例在宿主里的位置由宿主 LayoutItem 决定，组件根的位置始终是原点。
+        updates: [{
+          entityId: rootId,
+          transform: { ...rootTransform, size: { width: size.width, height: size.height } },
+        }],
+      },
+      meta: { label: `Resize ${target.entity.name}`, source: 'stage', targetIds: [rootId] },
+    } as unknown as EditorCommand)
+    handled = true
+  }
+  return handled
+}
+
 /** 当前下钻选中的实例内部实体及其编辑入口。 @public */
 export interface ComposeInstanceInnerSelection {
   /** 宿主文档中的实例 Entity ID。 */
@@ -640,6 +740,10 @@ export interface ComposeEditorController {
   readonly inspectorPanel: ReactNode
   /** 当前下钻选中的实例内部实体；未下钻时为 null。 */
   readonly instanceInnerSelection: ComposeInstanceInnerSelection | null
+  /** 选中实例本身时的组件根编辑入口；非实例选区为 null。 */
+  readonly instanceRootSelection: ComposeInstanceInnerSelection | null
+  /** 选中实例本身时组件根属性的 Inspector 节点；非实例选区为 null。 */
+  readonly instanceRootInspector: ReactNode
   /** 默认 ComposeCommandPanel 内容。 */
   readonly commandPanel: ReactNode
   /** 默认 Stage 工具栏内容。 */
@@ -896,7 +1000,13 @@ export function useComposeEditorController({
     setExpandedIdsState(unique(ids))
   }, [])
   const dispatch = useCallback(
-    (command: EditorCommand) => runtime.dispatch(command),
+    (command: EditorCommand) => {
+      // 实例的 Resize 必须落到组件根，否则外框变了而内部嵌套 Runtime 不动。
+      if (routeInstanceResize(runtime, runtime.document, command)) {
+        return { status: 'committed' } as CommandDispatchResult
+      }
+      return runtime.dispatch(command)
+    },
     [runtime],
   )
   const nextId = useCallback(() => idFactoryRef.current(), [])
@@ -1342,6 +1452,7 @@ export function useComposeEditorController({
    * @remarks
    * 内部实体不在宿主文档里，必须按 Base → Variant 链 → 实例覆盖解析后才能取到。
    */
+  /** 下钻选中的实例内部实体。 */
   const instanceInnerSelection = useMemo<ComposeInstanceInnerSelection | null>(() => {
     if (selectedIds.length !== 1) return null
     const address = selectedIds[0]!
@@ -1350,33 +1461,42 @@ export function useComposeEditorController({
     if (!decoded.ok) return null
     const [instanceId, innerId] = decoded.segments
     if (!instanceId || !innerId) return null
-    const host = document.entities[instanceId]
-    if (!host) return null
-    const facts = readComposeComponentInstance(host)
-    if (!facts) return null
-    const resolved = resolveComposeInstanceOverrides({
-      document: facts.snapshot.document,
-      overrides: facts.overrides,
-    })
-    if (!resolved.ok) return null
-    const entity = resolved.document.entities[innerId]
-    if (!entity) return null
-    return {
-      instanceId,
-      entity,
-      document: resolved.document,
-      dispatch: (command: EditorCommand) => {
-        applyInstanceInnerCommands(
-          runtime,
-          host,
-          facts,
-          resolved.document,
-          [command],
-          `Edit ${entity.name} inside ${host.name}`,
-        )
-      },
-    }
+    return resolveInstanceEditTarget(runtime, document, instanceId, innerId)
   }, [document, runtime, selectedIds])
+
+  /**
+   * 选中实例本身时的组件根编辑入口。
+   *
+   * @remarks
+   * 实例的最外层就是组件根，其尺寸、外观、裁剪与 Auto Layout 都应可编辑，编辑写入实例覆盖。
+   */
+  const instanceRootSelection = useMemo<ComposeInstanceInnerSelection | null>(() => {
+    if (selectedIds.length !== 1) return null
+    const id = selectedIds[0]!
+    if (isComposeInstancePath(id)) return null
+    return resolveInstanceEditTarget(runtime, document, id)
+  }, [document, runtime, selectedIds])
+
+  /**
+   * 选中实例本身时，组件根属性的 Inspector。
+   *
+   * @remarks
+   * 由 controller 产出而不是让宿主自行组装：registry 与 idFactory 都只在这里可用。
+   */
+  const instanceRootInspector = instanceRootSelection === null ? null : (
+    <EntityInspector
+      dispatch={instanceRootSelection.dispatch}
+      document={instanceRootSelection.document}
+      entity={instanceRootSelection.entity}
+      // 名称、位置与旋转由宿主实例提供，根侧隐藏以免同一属性出现两次且取值矛盾。
+      hiddenComponentKeys={['Transform', 'LayoutItem']}
+      hideIdentity
+      idFactory={nextId}
+      // 按实例重挂载：切换实例时局部会话状态不得残留。
+      key={`${instanceRootSelection.instanceId}:root`}
+      registry={registry}
+    />
+  )
 
   const inspectorPanel = resolvedInspectionTarget === 'output' ? (
     // 输出配置会在色盘拖动的每个采样点更新。不能以输出值作为 key，
@@ -1479,6 +1599,8 @@ export function useComposeEditorController({
     ),
     inspectorPanel,
     instanceInnerSelection,
+    instanceRootSelection,
+    instanceRootInspector,
     commandPanel: (
       <CommandPanelWithActions
         actionContext={actionContext}
