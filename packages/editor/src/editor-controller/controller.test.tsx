@@ -188,15 +188,31 @@ function instanceDocumentFixture(): ComposeDocument {
         name: 'Inner Text',
         components: {
           Composition: {
-            presetId: 'text',
-            baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Renderer'],
+            presetId: 'container',
+            baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Hierarchy'],
             capabilityIds: [],
           },
           Transform: { rotation: 0 },
           LayoutItem: layoutItem(transform(0, 0, 80, 20)),
           Visibility: { visible: true },
           Lock: { locked: false },
-          Renderer: { type: 'text', props: { text: 'Inner' } },
+          Hierarchy: { childIds: ['c-deep'] },
+        },
+      },
+      'c-deep': {
+        id: 'c-deep',
+        name: 'Deep Text',
+        components: {
+          Composition: {
+            presetId: 'text',
+            baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Renderer'],
+            capabilityIds: [],
+          },
+          Transform: { rotation: 0 },
+          LayoutItem: layoutItem(transform(0, 0, 40, 10)),
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Renderer: { type: 'text', props: { text: 'Deep' } },
         },
       },
     },
@@ -631,9 +647,26 @@ describe('useComposeEditorController', () => {
 
     const expanded = result.current.sceneTreeProps.nodes[0]
     expect(expanded?.children).toHaveLength(1)
+    // 内部节点自身还有后代，必须同样声明 hasChildren，否则第二层起没有展开控件。
     expect(expanded?.children?.[0]).toMatchObject({
       id: 'instance/c-text',
       label: 'Inner Text',
+      canHaveChildren: true,
+      hasChildren: true,
+    })
+    expect(expanded?.children?.[0]?.children).toBeUndefined()
+
+    act(() => {
+      result.current.sceneTreeProps.onExpandedChange?.(['instance', 'instance/c-text'])
+    })
+
+    const deep = result.current.sceneTreeProps.nodes[0]?.children?.[0]
+    expect(deep?.children).toHaveLength(1)
+    // 地址段数对应实例嵌套层数而非树深度：内部实体 ID 在组件文档内唯一，无需逐层拼接。
+    expect(deep?.children?.[0]).toMatchObject({
+      id: 'instance/c-deep',
+      label: 'Deep Text',
+      hasChildren: false,
     })
   })
 

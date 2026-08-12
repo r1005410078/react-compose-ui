@@ -123,6 +123,10 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
  *
  * @remarks
  * 投影只存在于编辑期表示层：宿主文档中实例仍是单个 Entity，内部节点用复合地址标识。
+ *
+ * 地址段数对应实例嵌套层数，而不是树深度：内部实体 ID 在组件文档内已唯一，因此同一实例内的
+ * 任意深度都共用同一个前缀。按树深度逐层拼接会让层级较深的组件误撞段数上限。
+ *
  * 结构编辑命令尚未接线，因此能力位一律关闭。
  * TODO(add-instance-structural-overrides 5.2): 结构操作接线后放开 canDelete/canMove/canRename。
  */
@@ -179,6 +183,8 @@ function projectInstanceChildren(
       locked: getComposeLock(inner).locked,
       icon: composition.presetId ? registry.getPreset(composition.presetId)?.icon : undefined,
       canHaveChildren: innerHierarchy !== undefined,
+      // 内部层级同样惰性物化，每一层都必须显式声明，否则第二层起就没有展开控件。
+      hasChildren: (innerHierarchy?.childIds.length ?? 0) > 0,
       canRename: false,
       canDelete: false,
       canMove: false,
