@@ -50,6 +50,19 @@ interface StageOverlayProps {
   readonly textEditing: boolean
   readonly tool: StageInteractionTool
   readonly drawing: StageDrawingPreview | null
+  /**
+   * Godot 旋转拉线预览（世界坐标）：选区中心 → 当前指针。
+   *
+   * @remarks
+   * 仅在 `phase === 'rotate'` 时由 engine 提供；存在时 Overlay 画拉杆并跟随鼠标。
+   * Shift 吸附时 pointer 已投影到 15° 射线，`angleDegrees` 为增量角。
+   */
+  readonly rotationPreview?: {
+    readonly center: StagePoint
+    readonly pointer: StagePoint
+    readonly angleDegrees?: number
+    readonly snapped?: boolean
+  } | null
   /** 当前框选实际生效的判定；决定 marquee 边框是实线还是虚线。 */
   readonly marqueeHitTest: Exclude<StageMarqueeMode, 'directional'> | null
   readonly marqueeScreen: StageRect | null
@@ -115,6 +128,97 @@ function arrowHeadPath(start: { readonly x: number; readonly y: number }, end: {
   return `M${end.x} ${end.y}L${baseX + perpendicularX * 5} ${baseY + perpendicularY * 5}L${baseX - perpendicularX * 5} ${baseY - perpendicularY * 5}Z`
 }
 
+/**
+ * Godot 风格旋转拉线：中心枢轴 + 指向指针的拉杆 + 末端圆点。
+ *
+ * @remarks
+ * 拉线只在手势进行中绘制（`rotationPreview`）；空闲时最多只显示中心点，
+ * 不依赖固定手柄位置——任意点按下即可开始旋转。
+ */
+function RotationRubberBand({
+  centerX,
+  centerY,
+  pointerX,
+  pointerY,
+  active,
+  angleDegrees = 0,
+  snapped = false,
+}: {
+  readonly centerX: number
+  readonly centerY: number
+  readonly pointerX: number
+  readonly pointerY: number
+  readonly active: boolean
+  readonly angleDegrees?: number
+  readonly snapped?: boolean
+}) {
+  // 拉杆不画进枢轴圆心，避免压住中心标记。
+  const dx = pointerX - centerX
+  const dy = pointerY - centerY
+  const length = Math.hypot(dx, dy)
+  const unitX = length > 1 ? dx / length : 0
+  const unitY = length > 1 ? dy / length : -1
+  const stemStartX = centerX + unitX * 5
+  const stemStartY = centerY + unitY * 5
+  const tipInset = active ? 0 : 7
+  const stemEndX = pointerX - unitX * tipInset
+  const stemEndY = pointerY - unitY * tipInset
+  // 角度标注放在拉线中点偏外，吸附态用更高对比。
+  const labelX = (centerX + pointerX) / 2 - unitY * 14
+  const labelY = (centerY + pointerY) / 2 + unitX * 14
+  const angleLabel = `${Math.round(angleDegrees * 10) / 10}°`
+
+  return (
+    <g
+      className={`compose-stage__rotation-gizmo${snapped ? ' is-snapped' : ''}`}
+      data-testid="stage-rotation-gizmo"
+    >
+      {active ? (
+        <line
+          className="compose-stage__rotation-stem"
+          x1={stemStartX}
+          x2={stemEndX}
+          y1={stemStartY}
+          y2={stemEndY}
+        />
+      ) : null}
+      {/* 中心枢轴：外环 + 实心点 */}
+      <circle
+        className="compose-stage__rotation-center-ring"
+        cx={centerX}
+        cy={centerY}
+        data-testid="stage-rotation-center"
+        r="4.5"
+      />
+      <circle
+        className="compose-stage__rotation-center-dot"
+        cx={centerX}
+        cy={centerY}
+        r="1.75"
+      />
+      {active ? (
+        <circle
+          className="compose-stage__handle compose-stage__rotation"
+          cx={pointerX}
+          cy={pointerY}
+          data-testid="stage-rotation-handle"
+          r="5.5"
+        />
+      ) : null}
+      {active ? (
+        <g
+          className="compose-stage__rotation-angle"
+          data-testid="stage-rotation-angle"
+          transform={`translate(${labelX} ${labelY})`}
+        >
+          <rect height="18" rx="4" width={Math.max(36, angleLabel.length * 7 + 12)} x="-18" y="-9" />
+          <text dominantBaseline="middle" textAnchor="middle" x="0" y="0">{angleLabel}</text>
+        </g>
+      ) : null}
+    </g>
+  )
+}
+
 /** 渲染 engine snapshot 的 SVG 编辑覆盖层，不持有手势状态。 */
 export function StageOverlay({
   label,
@@ -131,6 +235,7 @@ export function StageOverlay({
   textEditing,
   tool,
   drawing,
+  rotationPreview = null,
   marqueeHitTest,
   marqueeScreen,
   paintHandles,
@@ -175,11 +280,40 @@ export function StageOverlay({
   const lineDimensionPosition = lineStartScreen && lineEndScreen
     ? lineLabelPosition(lineStartScreen, lineEndScreen)
     : null
-  const lineRotationPoint = lineStartScreen && lineEndScreen
-    ? lineLabelPosition(lineStartScreen, lineEndScreen)
-    : null
   const drawingStart = drawing ? worldToScreen(drawing.start, viewport) : null
   const drawingEnd = drawing ? worldToScreen(drawing.end, viewport) : null
+  // Godot 拉线：手势中心/指针转屏幕；空闲时仅在选区中心画枢轴提示。
+  const rotationPreviewScreen = rotationPreview
+    ? {
+        center: worldToScreen(rotationPreview.center, viewport),
+        pointer: worldToScreen(rotationPreview.pointer, viewport),
+        active: true as const,
+      }
+    : rotatable && tool === 'rotate' && !textEditing && screenBounds
+      ? {
+          center: {
+            x: screenBounds.x + screenBounds.width / 2,
+            y: screenBounds.y + screenBounds.height / 2,
+          },
+          pointer: {
+            x: screenBounds.x + screenBounds.width / 2,
+            y: screenBounds.y + screenBounds.height / 2,
+          },
+          active: false as const,
+        }
+      : rotatable && tool === 'rotate' && !textEditing && lineStartScreen && lineEndScreen
+        ? {
+            center: {
+              x: (lineStartScreen.x + lineEndScreen.x) / 2,
+              y: (lineStartScreen.y + lineEndScreen.y) / 2,
+            },
+            pointer: {
+              x: (lineStartScreen.x + lineEndScreen.x) / 2,
+              y: (lineStartScreen.y + lineEndScreen.y) / 2,
+            },
+            active: false as const,
+          }
+        : null
   // 文字只按点创建，预览框恒为按下点上的一个光标位大小。
   const drawingPreviewBounds = drawing?.tool === 'draw-text' && drawingScreen
     ? { ...drawingScreen, width: 28 * viewport.zoom, height: 16 * viewport.zoom }
@@ -316,16 +450,6 @@ export function StageOverlay({
               <text dominantBaseline="middle" textAnchor="middle" x="0" y="0">{lineDimension}</text>
             </g>
           ) : null}
-          {rotatable && tool === 'rotate' && !textEditing && lineRotationPoint ? (
-            <circle
-              className="compose-stage__handle compose-stage__rotation"
-              cx={lineRotationPoint.x}
-              cy={lineRotationPoint.y + 18}
-              data-testid="stage-rotation-handle"
-              r="5"
-              onPointerDown={(event) => onInteraction({ kind: 'rotate' }, event)}
-            />
-          ) : null}
         </g>
       ) : instanceSelectionBounds ? (
         <rect
@@ -374,17 +498,19 @@ export function StageOverlay({
                 )}
               />
             )) : null}
-          {rotatable && tool === 'rotate' && !textEditing ? (
-            <circle
-              className="compose-stage__handle compose-stage__rotation"
-              cx={handlePoints.n[0]}
-              cy={handlePoints.n[1] - 24}
-              data-testid="stage-rotation-handle"
-              r="5"
-              onPointerDown={(event) => onInteraction({ kind: 'rotate' }, event)}
-            />
-          ) : null}
         </>
+      ) : null}
+      {/* Godot 旋转：空闲只显示中心；按下后拉线跟随鼠标（rotationPreview）。 */}
+      {rotationPreviewScreen ? (
+        <RotationRubberBand
+          active={rotationPreviewScreen.active}
+          angleDegrees={rotationPreview?.angleDegrees ?? 0}
+          centerX={rotationPreviewScreen.center.x}
+          centerY={rotationPreviewScreen.center.y}
+          pointerX={rotationPreviewScreen.pointer.x}
+          pointerY={rotationPreviewScreen.pointer.y}
+          snapped={rotationPreview?.snapped ?? false}
+        />
       ) : null}
       {editableSelection && screenBounds && tool === 'move' && !textEditing ? (
         <g

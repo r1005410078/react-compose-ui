@@ -2801,6 +2801,7 @@ function ComposeStageReady({
           paintSample={interaction.paintSample}
           resizeHandles={resizeHandles}
           rotatable={selectionRotatable}
+          rotationPreview={interaction.rotationPreview}
           instanceSelectionBounds={instanceSelectionBounds}
           screenBounds={screenBounds}
           snapGuides={snapGuides}

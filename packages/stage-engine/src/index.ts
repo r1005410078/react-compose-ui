@@ -51,6 +51,8 @@ export {
   rectMappingMatrix,
   rectsIntersect,
   resizeBounds,
+  pointOnRotationRay,
+  ROTATION_SNAP_DEGREES,
   rotationFromPointer,
   rotationMatrixAround,
   screenToWorld,
