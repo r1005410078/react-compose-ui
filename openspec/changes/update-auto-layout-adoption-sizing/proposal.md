@@ -14,8 +14,10 @@ design.md 写「多数物料的默认尺寸模式是 Hug」，实际相反：`pa
 
 ## What Changes
 
-- 子级**进入** Auto Layout 容器时（创建落点或 reparent），若父级交叉轴对齐会拉伸该子级、而子级交叉轴
-  是 `fixed`，则把该轴改写为 `fill`，`value` 保留为原固定值作为回退。
+- 子级**进入** Auto Layout 容器时，若父级交叉轴对齐会拉伸该子级、而子级交叉轴是 `fixed`，
+  则把该轴改写为 `fill`，`value` 保留为原固定值作为回退。两个落点都适用：Stage 的 reparent，
+  以及容器启用 Auto Layout 时把已有子级转 Flow 的那条命令——后者是「先放物料再开自动布局」
+  这条最常见路径，实施时才发现，提案初稿只写了 reparent。
 - 只改写交叉轴：`flexDirection` 为 row/row-reverse 时改 `height`，为 column/column-reverse 时改
   `width`。
 - 只在父级 `alignItems` 为 `stretch` **且**子级 `alignSelf` 为 `auto` 时改写。子级显式设过
@@ -36,7 +38,12 @@ design.md 写「多数物料的默认尺寸模式是 Hug」，实际相反：`pa
 
 ## 影响
 
-- 受影响的规范：`stage-engine`
-- 受影响的代码：`packages/stage-engine`（`commands.ts` 的 reparent、落点创建路径）
+- 受影响的规范：`stage-engine`、`basic-materials`
+- 受影响的代码：`packages/core`（共享规则 `adoptComposeCrossAxisSizing`）、
+  `packages/stage-engine`（reparent）、`packages/materials`（启用 Auto Layout）。
+  materials 不能依赖 stage-engine，因此规则下沉到两者共同依赖的 core
 - 不改 `ComposeLayoutItem` / `ComposeAxisSizing` 数据结构，不新增文档字段，无迁移
-- 行为变化：此后拖入 stretch 容器的物料会填满交叉轴。已有文档不受影响，因为不做回溯改写
+- 行为变化：此后进入 stretch 容器的物料会填满交叉轴。已有文档不受影响，因为不做回溯改写
+- 已知副作用：采纳发生在进入容器的瞬间，此时若容器仍是默认的 row，改写的是 `height`；用户随后
+  把方向改成 column，`height` 变成主轴，`fill` 的语义从「拉伸」变为 `flexGrow`。首期接受该结果，
+  由用户自行把该轴调回 `fixed`；不引入「父级属性变化时回溯改写」的级联

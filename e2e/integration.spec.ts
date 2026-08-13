@@ -27,7 +27,7 @@ async function drawContainer(page: Page, editor: Locator) {
   await page.mouse.move(outputBox!.x + 696, outputBox!.y + 424, { steps: 4 })
   await page.mouse.up()
   await expect(stage.getByTestId('stage-container')).toBeVisible()
-  await editor.getByRole('button', { name: '选择' }).click()
+  await editor.getByRole('button', { name: '选择', exact: true }).click()
 }
 
 /**
@@ -46,7 +46,7 @@ async function drawText(page: Page, editor: Locator, at: { x: number; y: number 
   await expect(stage.getByTestId('compose-material-text-editable')).toBeFocused()
   await page.keyboard.type('Text')
   await page.keyboard.press('Escape')
-  await editor.getByRole('button', { name: '选择' }).click()
+  await editor.getByRole('button', { name: '选择', exact: true }).click()
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(before + 1)
 }
 
@@ -918,7 +918,7 @@ test('OpenSpec: component-library / 离线快照与 revision 冲突 / 保留旧�
   const componentChild = stage.locator('.compose-stage__scene .compose-stage__node.is-renderer').first()
   await componentChild.click()
   await stage.press('ArrowRight')
-  const saveComponent = editor.getByRole('button', { name: '保存组件 Resilient Card' })
+  const saveComponent = editor.getByRole('button', { name: '保存主组件 Resilient Card' })
   await expect(saveComponent).toBeEnabled()
 
   // 先模拟另一个客户端推进 revision。取消冲突对话框即保留旧会话，显式覆盖才提交。
@@ -966,6 +966,7 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
     .click()
   const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(inspector)
+  await expandInspectorSection(inspector, '布局')
   const layoutHeader = inspector.getByRole('button', { name: '布局', exact: true })
   const layoutSection = layoutHeader.locator('..').locator('..')
   await layoutSection.getByRole('radiogroup', { name: '方向' })
@@ -974,6 +975,28 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
   const padding = layoutSection.getByRole('spinbutton', { name: '内边距' })
   await padding.fill('40')
   await padding.blur()
+
+  // 启用 Auto Layout 时容器还是横向，交叉轴是高度，子项高度因此被采纳为 Fill；切成纵向后
+  // 高度变成主轴，Fill 会让子项均分容器高度而不再溢出。本用例验证的是滚动范围与底部内边距，
+  // 因此按用户会做的操作把子项高度显式设回固定值。
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  // 场景树里容器默认折叠，不展开就取不到子行。
+  await sceneTree.getByRole('row').filter({ hasText: 'Container' })
+    .getByRole('button', { name: /展开/ }).click()
+  const rectangleRows = sceneTree.getByRole('row').filter({ hasText: 'Rectangle' })
+  await expect(rectangleRows.first()).toBeVisible()
+  const rectangleCount = await rectangleRows.count()
+  for (let index = 0; index < rectangleCount; index += 1) {
+    await rectangleRows.nth(index).click()
+    const rectangleInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+    const height = rectangleInspector.getByRole('combobox', { name: '尺寸高度' })
+    await height.fill('120')
+    await height.press('Enter')
+  }
+  await editor.getByRole('treegrid', { name: '场景树' })
+    .getByRole('row')
+    .filter({ hasText: 'Container' })
+    .click()
   await expandInspectorSection(inspector, '容器')
   await inspector.getByRole('combobox', { name: '纵向溢出', exact: true })
     .selectOption('scroll')
@@ -1026,7 +1049,7 @@ test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染
   await expect(chart).toBeVisible()
   await expect(chart.locator('canvas')).toBeVisible()
   const inspector = editor.getByRole('region', { name: 'ECharts Chart 属性', exact: true })
-  await inspector.getByRole('button', { name: '图表' }).click()
+  await expandInspectorSection(inspector, '图表')
   // OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / ECharts 输入分别绑定
   const titleActions = inspector.getByRole('button', { name: '绑定 图表标题' })
   const dataActions = inspector.getByRole('button', { name: '绑定 数据' })
@@ -1064,6 +1087,8 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   await expect(propertyRoot.getByRole('searchbox', { name: '搜索属性' })).toHaveCount(1)
 
   const appearance = propertyRoot.getByRole('button', { name: '外观' })
+  // 分组现在默认展开；这里要验证的是「搜索自动展开命中分组、清空后恢复原状」，先手动折叠。
+  await appearance.click()
   await expect(appearance).toHaveAttribute('aria-expanded', 'false')
   await expect(propertyRoot.getByRole('button', { name: '背景填充', exact: true })).toHaveCount(0)
   await propertyRoot.getByRole('searchbox', { name: '搜索属性' }).fill('背景填充')
@@ -1134,6 +1159,8 @@ test('OpenSpec: 自动布局显式启用 / 自由 Container 添加、移除并�
 
   const emptyLayoutHeader = inspector.getByRole('button', { name: '布局', exact: true })
   const emptyLayoutSection = emptyLayoutHeader.locator('..').locator('..')
+  // 缺失 Component 的引导分组默认折叠，展开后才呈现引导内容。
+  await expandInspectorSection(inspector, '布局')
   await expect(emptyLayoutHeader).toHaveAttribute('aria-expanded', 'true')
   await expect(inspector.getByRole('button', { name: '添加布局' })).toBeVisible()
   await expect(emptyLayoutSection.getByText('使用自动布局', { exact: true })).toBeVisible()
@@ -1181,6 +1208,7 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   const propertyRoot = inspector.getByRole('region', { name: 'Container 属性字段' })
   await enableAutoLayout(inspector)
+  await expandInspectorSection(inspector, '布局')
   const layoutHeader = propertyRoot.getByRole('button', { name: '布局', exact: true })
   const layoutSection = layoutHeader.locator('..').locator('..')
   const topLevelTitles = await propertyRoot.locator(
@@ -3558,6 +3586,7 @@ test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序�
   // 4) 一次撤销回到原顺序。
   await page.keyboard.press('Control+z')
   await expect(children).toHaveCount(2)
+})
 
 test('创建组件重名时在对话框内提示并允许改名重试', async ({ page }) => {
   test.setTimeout(90_000)
@@ -3927,6 +3956,51 @@ test('OpenSpec: align-component-variant-with-unity / 从实例创建变体并改
   await editor.locator('[data-workspace-tab]').filter({ hasText: 'Home' }).click()
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   await hostRow.click()
+  // 切回页面标签后场景树要重新挂载，直接点旧 locator 会落空导致没有选中项。
+  await expect(hostRow).toBeVisible()
+  await hostRow.click()
   await expect(inspector.getByRole('button', { name: 'Apply 全部实例覆盖' })).toBeDisabled()
 
+})
+
+test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺寸子项填满交叉轴', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await drawContainer(page, editor)
+  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  expect(outputBox).not.toBeNull()
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
+
+  const frame = stage.getByTestId('stage-container')
+  const children = frame.locator(':scope > .compose-stage__node.is-renderer')
+  await expect(children).toHaveCount(2)
+  const frameBox = await frame.boundingBox()
+  const beforeHeight = (await children.nth(0).boundingBox())!.height
+  expect(beforeHeight).toBeLessThan(frameBox!.height)
+
+  await frame.click({ position: { x: 8, y: 8 } })
+  const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await enableAutoLayout(containerInspector)
+
+  // 默认 Layout 是 row + alignItems stretch。子项 Preset 交叉轴是 fixed，若不在采纳时改成
+  // fill，stretch 对它们就是空操作——这正是启用自动布局后「拉伸没反应」的原因。
+  // 子项填满的是容器内容区。Yoga 会扣掉容器 Appearance.borderWidth，而该边框在 DOM 侧不是
+  // 真实 CSS border，因此实测高度比容器 boundingBox 少几个像素；这里断言「几乎填满且明显
+  // 高于启用前」，而不是钉死一个依赖边框宽度的数值。
+  for (const index of [0, 1]) {
+    await expect.poll(async () => (await children.nth(index).boundingBox())!.height)
+      .toBeGreaterThan(frameBox!.height - 8)
+  }
+  const stretched = (await children.nth(0).boundingBox())!.height
+  expect(stretched).toBeGreaterThan(beforeHeight)
+  expect((await children.nth(1).boundingBox())!.height).toBe(stretched)
+
+  await children.nth(0).click()
+  const rectInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  await expect(rectInspector.getByRole('combobox', { name: '尺寸高度' })).toHaveValue('Fill')
+  await expect(rectInspector.getByRole('combobox', { name: '尺寸宽度' })).not.toHaveValue('Fill')
 })
