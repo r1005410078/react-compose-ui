@@ -16,6 +16,7 @@ import {
   type ComposeSpatialTransform,
   type ComposeTransform,
   type ComposeVisibility,
+  type ComposeWidgetSwitcher,
   type JsonObject,
 } from './document-types'
 
@@ -83,6 +84,15 @@ export function getComposeHierarchy(entity: ComposeEntity): ComposeHierarchy | u
   return entity.components[
     COMPOSE_BUILTIN_COMPONENT_KEYS.hierarchy
   ] as ComposeHierarchy | undefined
+}
+
+/** 读取可选 WidgetSwitcher。 @public */
+export function getComposeWidgetSwitcher(
+  entity: ComposeEntity,
+): ComposeWidgetSwitcher | undefined {
+  return entity.components[
+    COMPOSE_BUILTIN_COMPONENT_KEYS.widgetSwitcher
+  ] as ComposeWidgetSwitcher | undefined
 }
 
 /** 读取可选 Layout。 @public */

@@ -25,6 +25,22 @@ describe('StageSceneIndex ECS queries', () => {
     expect(index.containerAtPoint({ x: 120, y: 80 })).toBe('container')
   })
 
+  it('OpenSpec: ECS SceneIndex / 隐藏集合不可命中', () => {
+    const leaf = entity('leaf', { width: 100, height: 60 })
+    const branch = entity('branch', { width: 200, height: 120, childIds: ['leaf'] })
+    const root = entity('root', { x: 100, y: 50, width: 300, height: 200, childIds: ['branch'] })
+    const value = document([root, branch, leaf], ['root'])
+    const point = { x: 150, y: 80 }
+
+    expect(createStageSceneIndex(value, layoutSnapshot(value)).entityAtPoint(point)).toBe('leaf')
+
+    const hidden = createStageSceneIndex(value, layoutSnapshot(value), new Set(['branch']))
+    // 隐藏的是 branch，后代 leaf 一并不可见，命中回落到仍可见的 root。
+    expect(hidden.isVisible('branch')).toBe(false)
+    expect(hidden.isVisible('leaf')).toBe(false)
+    expect(hidden.entityAtPoint(point)).toBe('root')
+  })
+
   it('OpenSpec: ECS SceneIndex / 容器命中排除自身与后代', () => {
     // outer > middle > leaf 三层容器同原点重叠（offset 相对父级，故子级用 0）：
     // 拖动 middle 时它自己和后代 leaf 都不能作为落点。

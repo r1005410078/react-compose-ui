@@ -36,6 +36,8 @@ export interface ComposeShapeMaterialOptions {
 /** `createComposeBasicMaterials` 配置。 @public */
 export interface ComposeCreateBasicMaterialsOptions {
   readonly container?: ComposeBasicContainerOptions
+  /** WidgetSwitcher Preset 选项；组合与 Container 一致。 */
+  readonly widgetSwitcher?: ComposeBasicContainerOptions
   readonly rectangle?: ComposeBasicMaterialOptions
   readonly text?: ComposeBasicMaterialOptions
   readonly image?: ComposeBasicMaterialOptions

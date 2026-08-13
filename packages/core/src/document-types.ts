@@ -109,6 +109,25 @@ export interface ComposeHierarchy extends JsonObject {
   readonly childIds: readonly string[]
 }
 
+/**
+ * 让容器同一时刻只显示一个直接子项的切换语义。
+ *
+ * @remarks
+ * 对标 UMG `UWidgetSwitcher`：全部子项照常参与布局求解，只有 `activeIndex` 指向的那个被渲染。
+ * 只在同时拥有 {@link ComposeHierarchy} 的 Entity 上有意义，是可选 Component。
+ *
+ * @public
+ */
+export interface ComposeWidgetSwitcher extends JsonObject {
+  /**
+   * 活动子项在 `Hierarchy.childIds` 中的下标。
+   *
+   * @remarks
+   * 允许越界：子项被删除后不回写索引，读取侧统一钳制，避免一次删除产生两条语义无关的补丁。
+   */
+  readonly activeIndex: number
+}
+
 /** Flex 容器的主轴方向。 @public */
 export type ComposeFlexDirection =
   | 'row'
@@ -255,6 +274,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   visibility: 'Visibility',
   lock: 'Lock',
   hierarchy: 'Hierarchy',
+  widgetSwitcher: 'WidgetSwitcher',
   layout: 'Layout',
   clip: 'Clip',
   appearance: 'Appearance',

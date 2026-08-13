@@ -22,6 +22,7 @@ import {
   getComposeLayout,
   getComposeLayoutItem,
   getComposeVisibility,
+  resolveComposeRenderedChildIds,
   resolveComposeAppearance,
 } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
@@ -180,7 +181,7 @@ function PreviewEntity({
         scriptModuleLoader={scriptModuleLoader}
         scriptScope={scriptScope}
       />
-      {hierarchy?.childIds.map((childId) => (
+      {(hierarchy ? resolveComposeRenderedChildIds(document, entity.id) : []).map((childId) => (
         <PreviewEntity
           assetResolver={assetResolver}
           pageLoader={pageLoader}
@@ -284,7 +285,7 @@ function ComposePreviewReady({
                       scriptModuleLoader={scriptModuleLoader}
                       scriptScope={scriptScope}
                     />
-                    {hierarchy.childIds.map((childId) => (
+                    {resolveComposeRenderedChildIds(document, entity.id).map((childId) => (
                       <PreviewEntity
                         assetResolver={assetResolver}
                         document={document}

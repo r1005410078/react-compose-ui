@@ -6,6 +6,10 @@ import {
 import { createContainerPreset, DEFAULT_COMPOSE_CONTAINER_PRESET } from './container'
 import { createGroupPreset, DEFAULT_COMPOSE_GROUP_PRESET } from './group'
 import {
+  createWidgetSwitcherPreset,
+  DEFAULT_COMPOSE_WIDGET_SWITCHER_PRESET,
+} from './widget-switcher'
+import {
   createDefaultInspectorId,
 } from './material-inspector-kit/renderer-inspectors'
 import {
@@ -60,6 +64,7 @@ export const DEFAULT_COMPOSE_BASIC_RENDERERS = Object.freeze([
 export const DEFAULT_COMPOSE_BASIC_PRESETS = Object.freeze([
   DEFAULT_COMPOSE_GROUP_PRESET,
   DEFAULT_COMPOSE_CONTAINER_PRESET,
+  DEFAULT_COMPOSE_WIDGET_SWITCHER_PRESET,
   DEFAULT_COMPOSE_RECTANGLE_PRESET,
   DEFAULT_COMPOSE_TEXT_PRESET,
   DEFAULT_COMPOSE_IMAGE_PRESET,
@@ -77,6 +82,7 @@ export function createComposeBasicMaterials(
   const idFactory = options.idFactory ?? createDefaultInspectorId
   const group = createGroupPreset()
   const container = createContainerPreset(options.container)
+  const widgetSwitcher = createWidgetSwitcherPreset(options.widgetSwitcher)
   const rectangle = createRectangleMaterial(options.rectangle)
   const text = createTextMaterial(options.text, idFactory)
   const image = createImageMaterial(options.image, idFactory)
@@ -101,6 +107,7 @@ export function createComposeBasicMaterials(
   const presets = Object.freeze([
     group,
     container,
+    widgetSwitcher,
     rectangle.preset,
     text.preset,
     image.preset,

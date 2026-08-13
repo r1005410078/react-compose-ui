@@ -48,6 +48,7 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  collectComposeSwitcherHiddenIds,
   describeComposePaint,
   isComposeInstancePath,
   encodeComposeInstancePath,
@@ -60,6 +61,7 @@ import {
   getComposeVisibility,
   resolveComposeAppearance,
   resolveComposeGeometryConstraints,
+  resolveComposeSwitcherPreview,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
@@ -1004,6 +1006,28 @@ function ComposeStageReady({
     setInstanceSelectionBounds(instanceSelectionScreenBounds(surface, instanceSelectionAddress))
   }, [instanceSelectionAddress, viewport, document, layoutSnapshot])
 
+  // 编辑期把「选中即预览」与 activeIndex 合成一份隐藏集合：渲染、SceneIndex 与手势 Controller
+  // 必须共用同一个引用，否则会出现「看得见却点不到」。
+  // 宿主每次渲染都可能传入新的 selectedIds 数组，因此第一层 memo 以内容 key 作为依赖，
+  // 平移帧不会重新遍历文档。
+  const selectionKey = normalizedSelection.join('\u0000')
+  const hiddenIdsKey = useMemo(
+    () => [...collectComposeSwitcherHiddenIds(
+      document,
+      resolveComposeSwitcherPreview(
+        document,
+        selectionKey === '' ? [] : selectionKey.split('\u0000'),
+      ),
+    )].join('\u0000'),
+    [document, selectionKey],
+  )
+  // 第二层 memo 让集合引用只在内容真正变化时更新：场景子树与 SceneIndex 缓存都以它为键，
+  // 每次文档编辑都换新引用会重建整棵场景，正在测量的实例内部选中框会因此丢失。
+  const hiddenEntityIds = useMemo(
+    () => new Set(hiddenIdsKey === '' ? [] : hiddenIdsKey.split('\u0000')),
+    [hiddenIdsKey],
+  )
+
   const lineSelection = useMemo(
     () => normalizedSelection.length === 1
       ? lineSegmentForEntity(previewDocument, previewLayoutSnapshot, normalizedSelection[0]!)
@@ -1015,11 +1039,11 @@ function ComposeStageReady({
   const dropTarget = interaction.dropTarget
   const dropIndicator = useMemo(() => dropTarget
     ? resolveStageDropIndicator({
-        index: createStageSceneIndex(document, layoutSnapshot),
+        index: createStageSceneIndex(document, layoutSnapshot, hiddenEntityIds),
         target: dropTarget,
         draggedIds: normalizedSelection,
       })
-    : null, [document, dropTarget, layoutSnapshot, normalizedSelection])
+    : null, [document, dropTarget, hiddenEntityIds, layoutSnapshot, normalizedSelection])
   // 首帧可能先于 effect 中的 context 注入；之后（含 gesture preview）以 engine snapshot 为准。
   const bounds = interaction.selectionBounds
     ?? bootstrapSelectionBounds(previewDocument, previewLayoutSnapshot, normalizedSelection)
@@ -1946,6 +1970,7 @@ function ComposeStageReady({
     controller.updateContext({
       document,
       layoutSnapshot,
+      hiddenEntityIds,
       viewport,
       surfaceSize,
       tool,
@@ -1969,6 +1994,7 @@ function ComposeStageReady({
     contentReflowsWithWidth,
     controller,
     document,
+    hiddenEntityIds,
     isTextEditable,
     lastDrawn,
     layoutSnapshot,
@@ -2296,7 +2322,7 @@ function ComposeStageReady({
       return
     }
     if (actionMatches('stage.fitContainer')) {
-      const index = createStageSceneIndex(document, layoutSnapshot)
+      const index = createStageSceneIndex(document, layoutSnapshot, hiddenEntityIds)
       const selectedContainerId = normalizedSelection.length === 1
         && getComposeHierarchy(document.entities[normalizedSelection[0]!]!)
         ? normalizedSelection[0]!
@@ -2780,6 +2806,7 @@ function ComposeStageReady({
         <StageSceneLayer
           assetResolver={assetResolver}
           document={previewDocument}
+          hiddenEntityIds={hiddenEntityIds}
           layoutSnapshot={previewLayoutSnapshot}
           pageLoader={pageLoader}
           paintPreview={interaction.paintPreview}

@@ -12,6 +12,7 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   getComposeHierarchy,
+  resolveComposeRenderedChildIds,
   getComposeVisibility,
   readComposePageReference,
   resolveComposePageNestState,
@@ -328,7 +329,7 @@ function NestedEntity({
         scriptModuleLoader={scriptModuleLoader}
         scriptScope={scriptScope}
       />
-      {hierarchy?.childIds.map((childId) => (
+      {(hierarchy ? resolveComposeRenderedChildIds(document, entity.id) : []).map((childId) => (
         <NestedEntity
           assetResolver={assetResolver}
           key={childId}

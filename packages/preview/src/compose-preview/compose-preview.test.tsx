@@ -301,6 +301,39 @@ describe('ComposePreview', () => {
     expect(click).toHaveBeenCalledOnce()
   })
 
+  it('OpenSpec: Preview 只渲染 WidgetSwitcher 的活动子项 / 运行期只显示活动子项', () => {
+    const base = document()
+    const value: ComposeDocument = {
+      ...base,
+      rootIds: ['switcher'],
+      entities: {
+        ...base.entities,
+        switcher: entity('switcher', {
+          Transform: { position: { x: 0, y: 0 }, size: { width: 400, height: 300 }, rotation: 0 },
+          Hierarchy: { childIds: ['first', 'second', 'third'] },
+          WidgetSwitcher: { activeIndex: 1 },
+        }, 'Switcher'),
+        first: entity('first', {
+          Renderer: { type: 'text', props: { text: 'First branch' } },
+        }, 'First'),
+        second: entity('second', {
+          Hierarchy: { childIds: ['second-leaf'] },
+        }, 'Second'),
+        'second-leaf': entity('second-leaf', {
+          Renderer: { type: 'text', props: { text: 'Second leaf' } },
+        }, 'Second Leaf'),
+        third: entity('third', {
+          Renderer: { type: 'text', props: { text: 'Third branch' } },
+        }, 'Third'),
+      },
+    }
+    render(<ComposePreview document={value} registry={registry()} />)
+
+    expect(screen.getByText('preview:Second leaf')).toBeInTheDocument()
+    expect(screen.queryByText('preview:First branch')).not.toBeInTheDocument()
+    expect(screen.queryByText('preview:Third branch')).not.toBeInTheDocument()
+  })
+
   it('预览指定 Container 并应用嵌套局部变换', () => {
     render(
       <ComposePreview

@@ -264,6 +264,47 @@ function renderStage(
 describe('ComposeStage ECS', () => {
   afterEach(cleanup)
 
+  function switcherDocument(activeIndex = 0) {
+    const first = entity('first')
+    const second = entity('second', { childIds: ['leaf'] })
+    const leaf = entity('leaf')
+    const base = entity('switcher', { childIds: ['first', 'second'] })
+    const switcher: ComposeEntity = {
+      ...base,
+      components: { ...base.components, WidgetSwitcher: { activeIndex } },
+    }
+    return document([switcher, first, second, leaf], ['switcher'])
+  }
+
+  it('OpenSpec: Stage 只渲染 WidgetSwitcher 的活动子项 / 只显示活动子项', () => {
+    const value = switcherDocument(0)
+    const snapshot = layoutSnapshot(value)
+    renderStage(value, { snapshot })
+
+    expect(screen.getByTestId('stage-entity-first')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-entity-leaf')).not.toBeInTheDocument()
+    // 非活动分支仍参与布局求解，box 不受切换影响。
+    expect(snapshot.boxes.second).toBeDefined()
+  })
+
+  it('OpenSpec: 选中 WidgetSwitcher 后代时临时预览该分支 / 选中非活动子项', () => {
+    const value = switcherDocument(0)
+    const { dispatch } = renderStage(value, { selectedIds: ['leaf'] })
+
+    expect(screen.getByTestId('stage-entity-leaf')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-entity-first')).not.toBeInTheDocument()
+    // 预览是表示层派生，不得产生任何文档事务。
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: 选中 WidgetSwitcher 后代时临时预览该分支 / 取消选择后回到活动索引', () => {
+    const value = switcherDocument(0)
+    renderStage(value, { selectedIds: [] })
+
+    expect(screen.getByTestId('stage-entity-first')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-entity-leaf')).not.toBeInTheDocument()
+  })
+
   it('OpenSpec: stage / 直接绘制 Preset / 点击或拖拽绘制文字', () => {
     const textSeed: ComposeEntityPreset['createComponents'] extends () => infer Components
       ? { readonly name: string; readonly components: Components }

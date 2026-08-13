@@ -205,6 +205,15 @@ export interface StageInteractionContext {
   readonly document: ComposeDocument
   /** 与 document 同一求解周期的布局快照。 */
   readonly layoutSnapshot: ComposeLayoutSnapshot
+  /**
+   * 额外视为不可见的 Entity；其后代一并不可命中。
+   *
+   * @remarks
+   * 宿主从 WidgetSwitcher 的活动索引与编辑期预览覆盖派生。Controller 只消费结果，不读取
+   * 切换语义本身，也不感知选择驱动的预览规则。集合引用必须稳定，否则每次上下文更新都会
+   * 绕过 SceneIndex 缓存重建整棵场景。
+   */
+  readonly hiddenEntityIds?: ReadonlySet<string>
   /** 最新受控 viewport。 */
   readonly viewport: StageViewport
   /** 不含标尺和滚动条的 surface CSS 像素尺寸。 */
@@ -2271,7 +2280,11 @@ export function createStageInteractionController(): StageInteractionController {
     },
     updateContext(nextContext) {
       if (disposed) return
-      const nextIndex = createStageSceneIndex(nextContext.document, nextContext.layoutSnapshot)
+      const nextIndex = createStageSceneIndex(
+        nextContext.document,
+        nextContext.layoutSnapshot,
+        nextContext.hiddenEntityIds,
+      )
       const gestureIds = gesture
         && (
           gesture.type === 'move'
