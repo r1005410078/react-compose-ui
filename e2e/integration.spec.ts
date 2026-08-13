@@ -3929,3 +3929,4 @@ test('OpenSpec: align-component-variant-with-unity / 从实例创建变体并改
   await hostRow.click()
   await expect(inspector.getByRole('button', { name: 'Apply 全部实例覆盖' })).toBeDisabled()
 
+})

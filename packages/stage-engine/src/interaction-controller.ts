@@ -2075,8 +2075,9 @@ export function createStageInteractionController(): StageInteractionController {
       }
     }
     else if (finished.type === 'move' && resolveCommittableDropTarget(finished.dropTarget)) {
-      // 落点有效时这次手势表达的是结构意图（换父级或改顺序），位置由布局重新决定，
-      // 因此不再发布 Transform 命令，避免一次手势产生两条事务。
+      // 落点有效时这次手势表达的是结构意图（换父级或改顺序），几何随 reparent 一起写入
+      // 同一条 batch，避免一次手势产生两条事务。Auto Layout 容器会丢弃 offset 改走 flow，
+      // 绝对定位容器则保留手势落点，否则节点会弹回拖拽前的位置。
       const target = resolveCommittableDropTarget(finished.dropTarget)!
       const container = context.document.entities[target.containerId]!
       const childIds = getComposeHierarchy(container)!.childIds
@@ -2097,6 +2098,7 @@ export function createStageInteractionController(): StageInteractionController {
               target.containerId,
               childIds.length,
               context.idFactory(),
+              finished.transforms,
             )
           : {
               id: context.idFactory(),

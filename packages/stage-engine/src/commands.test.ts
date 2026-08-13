@@ -241,6 +241,31 @@ describe('Stage ECS commands', () => {
     expect(getComposeSpatialTransform(current.entities.child!).position).toEqual({ x: 200, y: 70 })
   })
 
+  it('OpenSpec: Entity reparent / 拖入绝对容器时采用手势落点而非拖拽前位置', () => {
+    const child = entity('child', { x: 300, y: 120, width: 60, height: 40 })
+    const container = entity('container', {
+      x: 100,
+      y: 50,
+      width: 400,
+      height: 300,
+      childIds: [],
+    })
+    const value = document([child, container], ['child', 'container'])
+    const command = createReparentCommand(
+      value,
+      layoutSnapshot(value),
+      ['child'],
+      'container',
+      0,
+      'reparent:child',
+      { child: { x: 180, y: 90, width: 60, height: 40, rotation: 0 } },
+    )
+    const runtime = createTransactionRuntime({ document: value })
+    expect(runtime.dispatch(command).status).toBe('committed')
+    const current = runtime.getState().document
+    expect(getComposeLayoutItem(current.entities.child!).offset).toEqual({ x: 80, y: 40 })
+  })
+
   it('OpenSpec: auto-layout-interactions / 移入 Layout / 自动转 Flow 并保留 offset fallback', () => {
     const child = entity('child', { x: 300, y: 120 })
     const container = autoLayoutContainer('container', [])

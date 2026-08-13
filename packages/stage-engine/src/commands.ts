@@ -23,7 +23,9 @@ import {
   getEntityWorldBounds,
   getEntityWorldMatrix,
   invertMatrix,
+  matrixFromTransform,
   multiplyMatrices,
+  type StageTransform,
   toComposeTransform,
   translationMatrix,
   unionRects,
@@ -382,7 +384,13 @@ export function createUngroupCommand(
   }
 }
 
-/** 创建原子 reparent batch，并把每个目标的世界矩阵分解到新父级。 @public */
+/**
+ * 创建原子 reparent batch，并把每个目标的世界矩阵分解到新父级。
+ *
+ * @param worldTransforms - 手势结束时的世界 transform。拖拽入容器时几何来自手势落点而非
+ * 文档快照，缺省才回退到 Snapshot 中的原位置。
+ * @public
+ */
 export function createReparentCommand(
   document: ComposeDocument,
   layoutSnapshot: ComposeLayoutSnapshot,
@@ -390,6 +398,7 @@ export function createReparentCommand(
   parentId: string | null,
   index: number,
   commandId = `reparent:${entityIds.join(',')}`,
+  worldTransforms?: Readonly<Record<string, StageTransform>>,
 ): EditorCommand {
   const targetManagesFlow = Boolean(
     parentId && document.entities[parentId] && getComposeLayout(document.entities[parentId]!),
@@ -398,16 +407,22 @@ export function createReparentCommand(
     ? resolveComposeAppearance(document.entities[parentId]!).borderWidth
     : 0
   const updates = entityIds.map((entityId) => {
+    const dragged = worldTransforms?.[entityId]
     const entity = document.entities[entityId]
     const box = layoutSnapshot.boxes[entityId]
-    const transform = entity && box
+    const size = dragged
+      ? { width: dragged.width, height: dragged.height }
+      : box
+    const transform = entity && size
       ? transformUnderParent(
           document,
           layoutSnapshot,
-          getEntityWorldMatrix(document, layoutSnapshot, entityId),
+          dragged
+            ? matrixFromTransform(dragged)
+            : getEntityWorldMatrix(document, layoutSnapshot, entityId),
           parentId,
-          box.width,
-          box.height,
+          size.width,
+          size.height,
         )
       : {
           position: { x: 0, y: 0 },
