@@ -10,6 +10,7 @@
 
 export {
   createComposeEdges,
+  adoptComposeCrossAxisSizing,
   createDefaultComposeLayoutItem,
   createDefaultComposeFlexLayout,
   createFixedComposeAxisSizing,

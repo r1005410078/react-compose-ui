@@ -284,6 +284,75 @@ describe('Stage ECS commands', () => {
     })
   })
 
+  it('OpenSpec: stage-engine / ECS 结构命令 / 固定尺寸子级进入拉伸容器', () => {
+    const child = entity('child', { x: 300, y: 120, width: 80, height: 40 })
+    const container = autoLayoutContainer('container', [])
+    const value = document([child, container], ['child', 'container'])
+    const runtime = createTransactionRuntime({ document: value })
+    runtime.dispatch(createReparentCommand(value, layoutSnapshot(value), ['child'], 'container', 0))
+
+    // row 容器的交叉轴是 height；stretch 对 fixed 子级本是空操作，采纳时改写为 fill。
+    const item = getComposeLayoutItem(runtime.document.entities.child!)
+    expect(item.height).toMatchObject({ mode: 'fill', value: 40 })
+    expect(item.width).toMatchObject({ mode: 'fixed', value: 80 })
+  })
+
+  it('OpenSpec: stage-engine / ECS 结构命令 / column 容器改写宽度', () => {
+    const child = entity('child', { x: 0, y: 0, width: 80, height: 40 })
+    const base = autoLayoutContainer('container', [])
+    const container = {
+      ...base,
+      components: {
+        ...base.components,
+        Layout: { ...base.components.Layout, flexDirection: 'column' },
+      },
+    }
+    const value = document([child, container], ['child', 'container'])
+    const runtime = createTransactionRuntime({ document: value })
+    runtime.dispatch(createReparentCommand(value, layoutSnapshot(value), ['child'], 'container', 0))
+
+    const item = getComposeLayoutItem(runtime.document.entities.child!)
+    expect(item.width).toMatchObject({ mode: 'fill', value: 80 })
+    expect(item.height).toMatchObject({ mode: 'fixed', value: 40 })
+  })
+
+  it('OpenSpec: stage-engine / ECS 结构命令 / 子级显式对齐或父级非拉伸时不改写尺寸', () => {
+    const base = autoLayoutContainer('container', [])
+    const centered = {
+      ...base,
+      components: {
+        ...base.components,
+        Layout: { ...base.components.Layout, alignItems: 'center' },
+      },
+    }
+    const child = entity('child', { width: 80, height: 40 })
+    const value = document([child, centered], ['child', 'container'])
+    const runtime = createTransactionRuntime({ document: value })
+    runtime.dispatch(createReparentCommand(value, layoutSnapshot(value), ['child'], 'container', 0))
+    expect(getComposeLayoutItem(runtime.document.entities.child!).height).toMatchObject({ mode: 'fixed' })
+
+    const pinned = entity('pinned', { width: 80, height: 40 })
+    const pinnedItem = getComposeLayoutItem(pinned)
+    const explicit = {
+      ...pinned,
+      components: {
+        ...pinned.components,
+        LayoutItem: { ...pinnedItem, alignSelf: 'flex-start' },
+      },
+    }
+    const stretchValue = document([explicit, base], ['pinned', 'container'])
+    const stretchRuntime = createTransactionRuntime({ document: stretchValue })
+    stretchRuntime.dispatch(createReparentCommand(
+      stretchValue,
+      layoutSnapshot(stretchValue),
+      ['pinned'],
+      'container',
+      0,
+    ))
+    expect(getComposeLayoutItem(stretchRuntime.document.entities.pinned!).height)
+      .toMatchObject({ mode: 'fixed' })
+  })
+
   it('OpenSpec: auto-layout-interactions / 移出 Layout / 烘焙 Absolute 且 Fill 转 Fixed', () => {
     const child = flowEntity('child', true)
     const container = {

@@ -184,6 +184,33 @@ export function createFixedComposeAxisSizing(value: number): ComposeAxisSizing {
 }
 
 /** 创建独立的 Absolute Fixed LayoutItem。 @public */
+/**
+ * 子级进入 Auto Layout 容器时，按父级交叉轴对齐决定其交叉轴尺寸模式。
+ *
+ * @remarks
+ * `align-items: stretch` 在 Flexbox 里只对交叉轴尺寸为 auto 的子级生效，而除 Text 外的物料
+ * Preset 交叉轴都是 `fixed`，于是「父级设了拉伸」对它们永远是空操作。采纳时把 `fixed` 改写为
+ * `fill`，原固定值保留为回退。
+ *
+ * 只在子级**进入**容器（reparent 或容器启用 Auto Layout）时写一次：父级此后再改
+ * `alignItems` 不回溯，子级此后自行调整尺寸模式以子级为准，因此不需要「是否被动改过」标记。
+ * `hug` 已经能继承父级 stretch，改写会丢失 Hug 意图；`fill` 本就是目标状态，两者都不改写。
+ *
+ * @public
+ */
+export function adoptComposeCrossAxisSizing(
+  item: ComposeLayoutItem,
+  parentLayout: ComposeFlexLayout,
+): ComposeLayoutItem {
+  if (parentLayout.alignItems !== 'stretch' || item.alignSelf !== 'auto') return item
+  const rowMainAxis = parentLayout.flexDirection === 'row'
+    || parentLayout.flexDirection === 'row-reverse'
+  const crossAxis = rowMainAxis ? 'height' : 'width'
+  const sizing = item[crossAxis]
+  if (sizing.mode !== 'fixed') return item
+  return { ...item, [crossAxis]: { ...sizing, mode: 'fill' } }
+}
+
 export function createDefaultComposeLayoutItem(
   width = 100,
   height = 100,

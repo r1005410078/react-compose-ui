@@ -75,6 +75,40 @@ describe('Auto Layout mode command planning', () => {
     expect(getComposeLayoutItem(runtime.document.entities[childB.id]!).positioning).toBe('flow')
   })
 
+  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 固定尺寸子项转 Flow 时交叉轴改为 Fill', () => {
+    const child = entity('child', { LayoutItem: createDefaultComposeLayoutItem(80, 40) })
+    const parent = entity('parent', { Hierarchy: { childIds: [child.id] } })
+    const document = documentOf(parent, [child])
+
+    const plan = planEnableComposeAutoLayout(document, parent.id, ids())
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+    const runtime = createTransactionRuntime({ document })
+    runtime.dispatch(plan.command)
+
+    // 默认 Layout 是 row + alignItems stretch，交叉轴是 height；固定值保留为回退。
+    const item = getComposeLayoutItem(runtime.document.entities[child.id]!)
+    expect(item.height).toMatchObject({ mode: 'fill', value: 40 })
+    expect(item.width).toMatchObject({ mode: 'fixed', value: 80 })
+  })
+
+  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 子项显式 alignSelf 时不改写尺寸', () => {
+    const child = entity('child', {
+      LayoutItem: { ...createDefaultComposeLayoutItem(80, 40), alignSelf: 'flex-start' },
+    })
+    const parent = entity('parent', { Hierarchy: { childIds: [child.id] } })
+    const document = documentOf(parent, [child])
+
+    const plan = planEnableComposeAutoLayout(document, parent.id, ids())
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+    const runtime = createTransactionRuntime({ document })
+    runtime.dispatch(plan.command)
+
+    expect(getComposeLayoutItem(runtime.document.entities[child.id]!).height)
+      .toMatchObject({ mode: 'fixed', value: 40 })
+  })
+
   it('OpenSpec: 自动布局显式启用 / 任一受影响子项锁定时不生成命令', () => {
     const child = entity('child', { Lock: { locked: true } })
     const parent = entity('parent', { Hierarchy: { childIds: [child.id] } })

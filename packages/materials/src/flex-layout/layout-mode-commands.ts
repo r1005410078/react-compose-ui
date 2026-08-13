@@ -1,6 +1,7 @@
 import {
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
+  adoptComposeCrossAxisSizing,
   createDefaultComposeFlexLayout,
   getComposeComposition,
   getComposeHierarchy,
@@ -103,20 +104,23 @@ export function planEnableComposeAutoLayout(
     children.push(child)
   }
 
+  const layout = createDefaultComposeFlexLayout()
   const commands: EditorCommand[] = [componentCommand(
     idFactory,
     BUILTIN_COMMAND_TYPES.addComponent,
     entity.id,
     'Layout',
-    createDefaultComposeFlexLayout() as unknown as JsonObject,
+    layout as unknown as JsonObject,
   )]
   for (const child of children) {
     const item = getComposeLayoutItem(child)
     if (item.positioning === 'flow') continue
-    commands.push(updateLayoutItemCommand(idFactory, child, {
-      ...item,
-      positioning: 'flow',
-    }))
+    // 转 Flow 与交叉轴采纳是同一次「进入 Auto Layout」，必须在同一条命令里完成，
+    // 否则子项会先以 fixed 尺寸参与一次布局再跳变。
+    commands.push(updateLayoutItemCommand(idFactory, child, adoptComposeCrossAxisSizing(
+      { ...item, positioning: 'flow' },
+      layout,
+    )))
   }
   return {
     ok: true,

@@ -3,6 +3,7 @@ import {
   createComposeGroupEntitySeed,
   getComposeHierarchy,
   getComposeLayout,
+  adoptComposeCrossAxisSizing,
   getComposeLayoutItem,
   getComposeLock,
   getComposeSpatialTransform,
@@ -400,9 +401,10 @@ export function createReparentCommand(
   commandId = `reparent:${entityIds.join(',')}`,
   worldTransforms?: Readonly<Record<string, StageTransform>>,
 ): EditorCommand {
-  const targetManagesFlow = Boolean(
-    parentId && document.entities[parentId] && getComposeLayout(document.entities[parentId]!),
-  )
+  const targetLayout = parentId && document.entities[parentId]
+    ? getComposeLayout(document.entities[parentId]!)
+    : undefined
+  const targetManagesFlow = Boolean(targetLayout)
   const targetBorder = parentId && document.entities[parentId]
     ? resolveComposeAppearance(document.entities[parentId]!).borderWidth
     : 0
@@ -431,8 +433,8 @@ export function createReparentCommand(
         }
     const currentItem = entity ? getComposeLayoutItem(entity) : null
     const item: ComposeLayoutItem | null = currentItem
-      ? targetManagesFlow
-        ? { ...currentItem, positioning: 'flow' }
+      ? targetLayout
+        ? adoptComposeCrossAxisSizing({ ...currentItem, positioning: 'flow' }, targetLayout)
         : {
             ...currentItem,
             positioning: 'absolute',
