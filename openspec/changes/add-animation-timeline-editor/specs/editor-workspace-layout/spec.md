@@ -46,15 +46,17 @@ Editor MUST 在既有 bottom Edge Group 中提供“资源 / Assets”“动画 
 
 Editor MUST 协调 Scene Tree、Stage、动画时间轴和右侧 Inspector 的选择。节点选择 MUST 显示节点
 Animation 能力；关键帧选择 MUST 显示帧序号、时间、属性值和进入该帧的 easing；区间选择 MUST 显示
-Curve/Spring/Hold 编辑器。时间轴选择是编辑器会话状态，不得写入 ComposeDocument 或 Dockview 布局。
+Curve/Spring/Hold 编辑器。时间轴选择是编辑器会话状态，MUST NOT 写入 ComposeDocument 或 Dockview
+布局。
 
 #### Scenario: 节点与关键帧 Inspector 切换
+
 - **WHEN** 用户先选择动画节点，再选择其 200ms 关键帧，最后清除时间轴选择
 - **THEN** Inspector 依次显示节点能力、关键帧上下文、节点能力
 - **AND** 三次切换都不提交文档事务
 
 #### Scenario: 切换活动页面清理动画会话
+
 - **WHEN** 用户在关键帧草稿存在时切换活动页面或组件文档
 - **THEN** Editor 按 dirty 关闭保护处理当前动画资源并清除旧选择和播放调度
 - **AND** 新页面只显示自身容器范围动画
-
