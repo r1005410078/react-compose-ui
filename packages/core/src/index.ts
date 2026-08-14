@@ -78,6 +78,7 @@ export {
   getComposeSpatialTransform,
   getComposeTransform,
   getComposeVisibility,
+  getComposeWidgetSwitcher,
   isComposeComponentKey,
   isComposeContainerEntity,
   isComposeEntityLocked,
@@ -86,6 +87,14 @@ export {
   resolveComposeGeometryConstraints,
   resolveComposeOverflow,
 } from './entity'
+export {
+  collectComposeSwitcherHiddenIds,
+  isValidComposeWidgetSwitcher,
+  resolveComposeActiveChildId,
+  resolveComposeRenderedChildIds,
+  resolveComposeSwitcherPreview,
+} from './widget-switcher'
+export type { ComposeWidgetSwitcherPreview } from './widget-switcher'
 export { applyDocumentPatches } from './patches'
 export { createTransactionRuntime } from './runtime'
 export { migrateComposeDocumentV5ToV6 } from './migration'
@@ -155,6 +164,7 @@ export type {
   ComposeSpatialTransform,
   ComposeTransform,
   ComposeVisibility,
+  ComposeWidgetSwitcher,
   ComposeAlignContent,
   ComposeAlignItems,
   ComposeFlexDirection,

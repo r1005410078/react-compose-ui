@@ -16,6 +16,7 @@ import {
   migrateLegacyComposeInstanceOverrides,
   parseComposeInstanceOverrides,
   resolveComposeInstanceOverrides,
+  resolveComposeRenderedChildIds,
   validateComposeDocument,
   type ComposeComponentInstanceOverrides,
   type ComposeComponentReference,
@@ -315,7 +316,7 @@ function NestedEntity({
         registry={registry}
         scriptModuleLoader={scriptModuleLoader}
       />
-      {hierarchy?.childIds.map((childId) => (
+      {(hierarchy ? resolveComposeRenderedChildIds(document, entity.id) : []).map((childId) => (
         <NestedEntity
           assetResolver={assetResolver}
           document={document}

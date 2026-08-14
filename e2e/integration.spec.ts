@@ -4004,3 +4004,77 @@ test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺�
   await expect(rectInspector.getByRole('combobox', { name: '尺寸高度' })).toHaveValue('Fill')
   await expect(rectInspector.getByRole('combobox', { name: '尺寸宽度' })).not.toHaveValue('Fill')
 })
+
+test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时预览', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  // 1) 从组件库放一个 Widget Switcher，再在它外面放两个矩形。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  expect(outputBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Widget Switcher' }), {
+    x: outputBox!.x + 260,
+    y: outputBox!.y + 300,
+  })
+  const switcher = stage.getByTestId('stage-container')
+  await expect(switcher).toBeVisible()
+
+  const rootRenderers = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  for (const x of [80, 300]) {
+    await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+      x: outputBox!.x + x,
+      y: outputBox!.y + 24,
+    })
+  }
+  await expect(rootRenderers).toHaveCount(2)
+
+  // 2) 依次把两个矩形拖进 switcher；第二个进去后立刻被隐藏，因为活动索引仍是 0。
+  const switcherBox = await switcher.boundingBox()
+  const dropPoint = {
+    x: switcherBox!.x + switcherBox!.width / 2,
+    y: switcherBox!.y + switcherBox!.height / 2,
+  }
+  const children = switcher.locator(':scope > .compose-stage__node.is-renderer')
+  for (const index of [0, 1]) {
+    const rectBox = await rootRenderers.first().boundingBox()
+    await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(dropPoint.x, dropPoint.y, { steps: 8 })
+    await page.mouse.up()
+    await expect(rootRenderers).toHaveCount(1 - index)
+    // 第二个子项落进去时不渲染：活动索引仍指向第一个。
+    await expect(children).toHaveCount(1)
+  }
+
+  // 3) Inspector 把活动索引改到 1，显示的分支随之切换。
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const switcherRow = sceneTree.getByRole('row', { name: /Widget Switcher/ })
+  await switcherRow.click()
+  const inspector = editor.getByRole('region', { name: 'Widget Switcher 属性', exact: true })
+  const activeIndex = inspector.getByRole('spinbutton', { name: '活动索引' })
+  await activeIndex.fill('1')
+  await activeIndex.blur()
+  await expect(activeIndex).toHaveValue('1')
+  await expect(children).toHaveCount(1)
+
+  // 4) 在场景树选中非活动的第一个子项：它临时显示出来，且不产生可撤销事务。
+  const activeChildId = await children.first().getAttribute('data-entity-id')
+  await switcherRow.getByRole('button', { name: '展开节点' }).click()
+  const rectangleRows = sceneTree.getByRole('row', { name: /Rectangle/ })
+  await expect(rectangleRows).toHaveCount(2)
+  await rectangleRows.nth(0).click()
+  await expect(children).toHaveCount(1)
+  await expect(children.first()).not.toHaveAttribute('data-entity-id', activeChildId!)
+
+  // 5) 取消选择（改选 switcher 自身）后回到活动索引，且这一路没有写过文档：
+  //    一次撤销撤掉的仍是第 3 步的索引修改。
+  await switcherRow.click()
+  await expect(children.first()).toHaveAttribute('data-entity-id', activeChildId!)
+  await expect(activeIndex).toHaveValue('1')
+  await page.keyboard.press('Control+z')
+  await expect(activeIndex).toHaveValue('0')
+  await expect(children.first()).not.toHaveAttribute('data-entity-id', activeChildId!)
+})

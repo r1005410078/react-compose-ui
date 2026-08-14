@@ -88,6 +88,26 @@ export function ComposeGroupMaterialIcon() {
   )
 }
 
+/** WidgetSwitcher：叠放的卡片只亮起最前一张，紫色。 */
+export function ComposeWidgetSwitcherMaterialIcon() {
+  return (
+    <svg {...svgProps} data-testid="material-icon-widget-switcher">
+      {/* 后两张是未激活分支，压暗表示只构造不显示 */}
+      <rect x="7.5" y="3.5" width="12" height="9" rx="1.6" fill="#4c1d95" opacity="0.35" />
+      <rect x="6" y="6" width="12" height="9" rx="1.6" fill="#5b21b6" opacity="0.55" />
+      <rect x="4.5" y="8.5" width="12" height="9" rx="1.6" fill="#7c3aed" />
+      <rect x="4.5" y="8.5" width="12" height="2.6" rx="1.2" fill="#c4b5fd" />
+      <path
+        d="M7.5 13.5h6M7.5 15.6h3.6"
+        stroke="#ede9fe"
+        strokeOpacity="0.6"
+        strokeWidth="1"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 /** Text：立体 T，琥珀。 */
 export function ComposeTextMaterialIcon() {
   return (

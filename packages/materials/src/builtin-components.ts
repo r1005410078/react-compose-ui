@@ -9,6 +9,7 @@ import {
   isValidComposeLayout,
   isValidComposeLayoutItem,
   isValidComposeGeometryConstraints,
+  isValidComposeWidgetSwitcher,
 } from '@compose-ui/core'
 import {
   DEFAULT_COMPOSE_CLIP,
@@ -35,6 +36,7 @@ import {
   createDefaultInspectorId,
   type InspectorIdFactory,
 } from './material-inspector-kit/renderer-inspectors'
+import { DEFAULT_WIDGET_SWITCHER, createWidgetSwitcherInspector } from './widget-switcher'
 
 /**
  * 创建带 Inspector 的内建 ECS Component Registry 定义。
@@ -128,6 +130,15 @@ export function createComposeBuiltinComponentDefinitions(
       },
     },
     {
+      key: 'WidgetSwitcher',
+      label: '切换器',
+      // 紧随「容器」，它只在拥有 Hierarchy 时才有意义。
+      order: 55,
+      createDefault: () => ({ ...DEFAULT_WIDGET_SWITCHER }),
+      validate: isValidComposeWidgetSwitcher,
+      inspector: createWidgetSwitcherInspector(idFactory),
+    },
+    {
       key: 'Clip',
       label: '裁剪',
       order: 60,
@@ -165,6 +176,17 @@ export const DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS: readonly ComposeCapabilityD
       createComponents: () => ({
         Hierarchy: { childIds: [] },
         Clip: { enabled: true, horizontal: 'clip', vertical: 'clip' },
+      }),
+    },
+    {
+      id: 'widget-switcher',
+      label: '切换器',
+      description: '让容器同一时刻只显示一个子项',
+      // 只创建 WidgetSwitcher：能力添加会拒绝已存在的 Component Key，若在这里连带创建
+      // Hierarchy/Clip，最主要的用法——给已有容器就地追加切换语义——反而会被判为冲突。
+      // 非容器 Entity 需要先添加「容器」能力，切换语义才会生效。
+      createComponents: () => ({
+        WidgetSwitcher: { ...DEFAULT_WIDGET_SWITCHER },
       }),
     },
     {

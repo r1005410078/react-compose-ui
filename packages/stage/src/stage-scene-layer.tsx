@@ -67,6 +67,13 @@ interface StageSceneLayerProps {
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
   readonly viewport: StageViewport
   readonly paintPreview?: { readonly entityId: string; readonly paint: ComposePaint } | null
+  /**
+   * 额外跳过渲染的 Entity；其后代由递归自然剪掉。
+   *
+   * 由宿主从 core 的 WidgetSwitcher 隐藏派生得到，与 SceneIndex 共用同一个集合引用，
+   * 保证「看得见」与「点得到」始终一致。
+   */
+  readonly hiddenEntityIds?: ReadonlySet<string>
   /** 正在画布内原地编辑文字的 Entity；只有它的 Renderer 收到编辑态。 */
   readonly textEditingEntityId?: string | null
   /**
@@ -95,6 +102,7 @@ export function StageSceneLayer({
   scriptModuleLoader,
   viewport,
   paintPreview,
+  hiddenEntityIds,
   textEditingEntityId = null,
   textEditingValue = null,
   onTextEditingChange,
@@ -125,6 +133,7 @@ export function StageSceneLayer({
     const renderEntity = (entityId: string) => {
       const entity = document.entities[entityId]
       if (!entity || !getComposeVisibility(entity).visible) return null
+      if (hiddenEntityIds?.has(entityId)) return null
       const hierarchy = getComposeHierarchy(entity)
       const renderer = getComposeRenderer(entity)
       const isSegment = renderer?.type === 'shape'
@@ -179,6 +188,7 @@ export function StageSceneLayer({
   }, [
     assetResolver,
     document,
+    hiddenEntityIds,
     layoutSnapshot,
     pageLoader,
     paintPreview,

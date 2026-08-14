@@ -59,25 +59,43 @@ export interface StageSceneIndex {
   snapCandidates(excludedIds: readonly string[]): readonly StageGuide[]
 }
 
-const cache = new WeakMap<ComposeLayoutSnapshot, WeakMap<ComposeDocument, StageSceneIndex>>()
+type SceneIndexCache = WeakMap<
+  ComposeLayoutSnapshot,
+  WeakMap<ComposeDocument, WeakMap<object, StageSceneIndex>>
+>
+
+const cache: SceneIndexCache = new WeakMap()
+
+/** 未传隐藏集合时的稳定缓存键；Set 是对象，可以直接作为第三层 WeakMap 的键。 */
+const NO_HIDDEN_IDS: ReadonlySet<string> = new Set<string>()
 
 /**
  * 为不可变文档创建或复用空间索引。
  *
  * @param document - 已通过 core 校验的 ComposeDocument。
- * @returns 与该文档引用绑定的空间索引。
+ * @param layoutSnapshot - 与该文档对应的 ready Layout Snapshot。
+ * @param hiddenEntityIds - 额外视为不可见的 Entity ID；其后代一并不可见。宿主传入
+ * WidgetSwitcher 的非活动子项与编辑期预览覆盖的结果。调用方 MUST 复用同一个集合引用，
+ * 否则每次调用都会绕过索引缓存重建整棵场景。
+ * @returns 与文档、Snapshot 和隐藏集合三者引用绑定的空间索引。
  * @public
  */
 export function createStageSceneIndex(
   document: ComposeDocument,
   layoutSnapshot: ComposeLayoutSnapshot,
+  hiddenEntityIds: ReadonlySet<string> = NO_HIDDEN_IDS,
 ): StageSceneIndex {
   let documentCache = cache.get(layoutSnapshot)
   if (!documentCache) {
     documentCache = new WeakMap()
     cache.set(layoutSnapshot, documentCache)
   }
-  const cached = documentCache.get(document)
+  let hiddenCache = documentCache.get(document)
+  if (!hiddenCache) {
+    hiddenCache = new WeakMap()
+    documentCache.set(document, hiddenCache)
+  }
+  const cached = hiddenCache.get(hiddenEntityIds)
   if (cached) return cached
 
   const parents = new Map<string, string | null>()
@@ -94,7 +112,9 @@ export function createStageSceneIndex(
     const entity = document.entities[entityId]
     if (!entity || parents.has(entityId)) return
     parents.set(entityId, parentId)
-    const visible = parentVisible && getComposeVisibility(entity).visible
+    const visible = parentVisible
+      && getComposeVisibility(entity).visible
+      && !hiddenEntityIds.has(entityId)
     visibility.set(entityId, visible)
     order.push(entityId)
     matrices.set(entityId, getEntityWorldMatrix(document, layoutSnapshot, entityId))
@@ -283,6 +303,6 @@ export function createStageSceneIndex(
       return candidates
     },
   }
-  documentCache.set(document, index)
+  hiddenCache.set(hiddenEntityIds, index)
   return index
 }

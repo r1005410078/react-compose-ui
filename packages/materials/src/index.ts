@@ -24,6 +24,7 @@ export {
   ComposeRectangleMaterialIcon,
   ComposeSvgMaterialIcon,
   ComposeTextMaterialIcon,
+  ComposeWidgetSwitcherMaterialIcon,
 } from './material-icons'
 export {
   createComposeBuiltinComponentDefinitions,
@@ -33,6 +34,7 @@ export {
 export { composeNodePropertySchema } from './material-inspector-kit/node'
 export { DEFAULT_COMPOSE_CONTAINER_PRESET } from './container'
 export { DEFAULT_COMPOSE_GROUP_PRESET } from './group'
+export { DEFAULT_COMPOSE_WIDGET_SWITCHER_PRESET } from './widget-switcher'
 export {
   DEFAULT_COMPOSE_RECTANGLE_PRESET,
   DEFAULT_COMPOSE_RECTANGLE_RENDERER,

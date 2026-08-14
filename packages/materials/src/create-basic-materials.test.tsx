@@ -68,7 +68,7 @@ describe('Basic ECS materials', () => {
       .filter((preset) => !preset.paletteHidden)
       .map(({ id }) => id)
     // 工具栏已有 text/line/arrow/circle 绘制工具，page-slot 的入口是资源面板拖入页面文件。
-    expect(paletteVisible).toEqual(['container', 'rectangle'])
+    expect(paletteVisible).toEqual(['container', 'widget-switcher', 'rectangle'])
     // 隐藏只影响 Palette 呈现，Registry 仍然注册全部 Preset。
     expect(materials.registry.getPreset('text')).toBeDefined()
     expect(materials.registry.getPreset('page-slot')).toBeDefined()
@@ -87,6 +87,7 @@ describe('Basic ECS materials', () => {
     expect(materials.presets.map(({ id }) => id)).toEqual([
       'group',
       'container',
+      'widget-switcher',
       'rectangle',
       'text',
       'image',
@@ -375,6 +376,7 @@ describe('Basic ECS materials', () => {
     const materials = createComposeBasicMaterials()
     expect(materials.capabilities.map(({ id }) => id)).toEqual([
       'container',
+      'widget-switcher',
       'geometry-constraints',
     ])
     expect(materials.capabilities[0]?.createComponents()).toEqual({
