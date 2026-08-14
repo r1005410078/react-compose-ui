@@ -9,6 +9,7 @@ import './styles.css'
 export { ComposeStage } from './stage-surface'
 export { ComposeComponentPalette, type ComposeComponentPaletteProps } from './component-palette'
 export type {
+  ComposeStageClipboard,
   ComposeStageDispatch,
   ComposeStageKeybinding,
   ComposeStageLayoutRuntime,

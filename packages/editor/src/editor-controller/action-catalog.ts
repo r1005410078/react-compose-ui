@@ -116,6 +116,18 @@ export interface ComposeEditorActionContext {
   readonly openSettings?: () => void
   /** 打开“创建组件”命名流程；未配置 Component Store 时目录整条省略。 */
   readonly createComponent?: () => void
+  /** 当前会话剪贴板是否可复制。省略时按选区推断。 */
+  readonly canCopy?: boolean
+  /** 当前会话剪贴板是否可剪切。省略时按未锁定选区推断。 */
+  readonly canCut?: boolean
+  /** 当前会话剪贴板是否可粘贴。 */
+  readonly canPaste?: boolean
+  /** 把当前选区写入会话剪贴板。 */
+  readonly copySelection?: () => void
+  /** 把当前未锁定选区写入剪切剪贴板。 */
+  readonly cutSelection?: () => void
+  /** 按建议落点粘贴会话剪贴板。 */
+  readonly pasteSelection?: () => void
 }
 
 /**
@@ -231,6 +243,18 @@ export function createComposeEditorActionHandlers(
     ),
     'stage.toggleGridSnap': handler(undefined, () => { context.toggleGridSnap() }),
     'stage.toggleSmartSnap': handler(undefined, () => { context.toggleSmartSnap() }),
+    'edit.copy': handler(
+      (context.canCopy ?? context.selectedIds.length > 0) ? undefined : 'noSelection',
+      () => { context.copySelection?.() },
+    ),
+    'edit.cut': handler(
+      (context.canCut ?? editable.length > 0) ? undefined : 'noSelection',
+      () => { context.cutSelection?.() },
+    ),
+    'edit.paste': handler(
+      context.canPaste ? undefined : 'emptyClipboard',
+      () => { context.pasteSelection?.() },
+    ),
     'edit.duplicate': handler(selectionMissing ?? geometryPending, () => {
       const sourceId = editable[0]
       if (sourceId === undefined) return
@@ -361,6 +385,9 @@ const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'stage.toggleGridSnap',
   'stage.toggleSmartSnap',
   'edit.duplicate',
+  'edit.copy',
+  'edit.cut',
+  'edit.paste',
   'edit.bringForward',
   'edit.sendBackward',
   'edit.bringToFront',

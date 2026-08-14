@@ -29,6 +29,9 @@ export type ComposeEditorShortcutAction =
   | 'stage.toggleGridSnap'
   | 'stage.toggleSmartSnap'
   | 'edit.duplicate'
+  | 'edit.copy'
+  | 'edit.cut'
+  | 'edit.paste'
   | 'edit.bringForward'
   | 'edit.sendBackward'
   | 'edit.bringToFront'
@@ -102,6 +105,9 @@ export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'stage.toggleGridSnap',
   'stage.toggleSmartSnap',
   'edit.duplicate',
+  'edit.copy',
+  'edit.cut',
+  'edit.paste',
   'edit.bringForward',
   'edit.sendBackward',
   'edit.bringToFront',
@@ -139,6 +145,9 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
   'stage.toggleGridSnap': 'stage',
   'stage.toggleSmartSnap': 'stage',
   'edit.duplicate': 'stage',
+  'edit.copy': 'stage',
+  'edit.cut': 'stage',
+  'edit.paste': 'stage',
   'edit.bringForward': 'stage',
   'edit.sendBackward': 'stage',
   'edit.bringToFront': 'stage',
@@ -184,6 +193,9 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
       'stage.toggleGridSnap': [{ code: 'KeyG', shift: true }],
       'stage.toggleSmartSnap': [{ code: 'KeyS', shift: true }],
       'edit.duplicate': [{ code: 'KeyD', primary: true }],
+      'edit.copy': [{ code: 'KeyC', primary: true }],
+      'edit.cut': [{ code: 'KeyX', primary: true }],
+      'edit.paste': [{ code: 'KeyV', primary: true }],
       'edit.bringForward': [{ code: 'BracketRight' }],
       'edit.sendBackward': [{ code: 'BracketLeft' }],
       'edit.bringToFront': [{ code: 'BracketRight', primary: true }],

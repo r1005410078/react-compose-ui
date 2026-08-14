@@ -207,6 +207,19 @@ describe('planSceneOperation', () => {
     expect(result.status).toBe('skipped')
   })
 
+  it('复制到指定父级写入插入位置', () => {
+    const plan = plannedCommand({
+      type: 'duplicate',
+      sourceNodeIds: ['title'],
+      parentId: null,
+      index: 0,
+    })
+    expect(plan.command.payload).toMatchObject({
+      parentId: null,
+      index: 0,
+    })
+  })
+
   it('复制多个来源合并为单个 batch 并选中全部副本', () => {
     const plan = plannedCommand({
       type: 'duplicate',

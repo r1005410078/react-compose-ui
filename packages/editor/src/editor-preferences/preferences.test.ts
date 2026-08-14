@@ -54,6 +54,22 @@ describe('editor preferences', () => {
     ])
   })
 
+  it('OpenSpec: editor-preferences / 可配置复制剪切粘贴快捷键 / 规范化旧偏好', () => {
+    const defaults = createDefaultComposeEditorPreferences()
+    const legacyShortcuts = { ...defaults.shortcuts } as Record<string, unknown>
+    delete legacyShortcuts['edit.copy']
+    delete legacyShortcuts['edit.cut']
+    delete legacyShortcuts['edit.paste']
+    const normalized = normalizeComposeEditorPreferences({
+      ...defaults,
+      shortcuts: legacyShortcuts as unknown as typeof defaults.shortcuts,
+    })
+
+    expect(normalized.shortcuts['edit.copy']).toEqual([{ code: 'KeyC', primary: true }])
+    expect(normalized.shortcuts['edit.cut']).toEqual([{ code: 'KeyX', primary: true }])
+    expect(normalized.shortcuts['edit.paste']).toEqual([{ code: 'KeyV', primary: true }])
+  })
+
   it('OpenSpec: editor-preferences / 可配置层级动作 / 规范化旧快捷键偏好', () => {
     const defaults = createDefaultComposeEditorPreferences()
     const legacyShortcuts = { ...defaults.shortcuts } as Record<string, unknown>

@@ -508,18 +508,27 @@ function subtreeIds(document: ComposeDocument, rootId: string) {
   return result
 }
 
+/** 复制命令可选的结构落点。 @public */
+export interface ComposeDuplicateInsertion {
+  readonly parentId: string | null
+  readonly index: number
+}
+
 /** 为一个 Entity 子树创建 entity.duplicate 命令。 @public */
 export function createDuplicateCommand(
   document: ComposeDocument,
   sourceId: string,
   idFactory: () => string,
   commandId = `duplicate:${sourceId}`,
+  insertion?: ComposeDuplicateInsertion,
 ): { readonly command: EditorCommand; readonly rootId: string } | null {
   const source = document.entities[sourceId]
   if (!source) return null
   const ids = subtreeIds(document, sourceId)
   const remap = new Map(ids.map((id) => [id, idFactory()]))
   const entities: Record<string, JsonValue> = {}
+  const sourceParentId = getEntityParentId(document, sourceId)
+  const sameParent = insertion === undefined || insertion.parentId === sourceParentId
   for (const id of ids) {
     const entity = document.entities[id]
     const cloneId = remap.get(id)
@@ -528,7 +537,9 @@ export function createDuplicateCommand(
     const item = getComposeLayoutItem(clone)
     const transform = getComposeSpatialTransform(clone)
     const hierarchy = getComposeHierarchy(clone)
-    const nextTransform: ComposeSpatialTransform = id === sourceId && item.positioning === 'absolute'
+    const nextTransform: ComposeSpatialTransform = id === sourceId
+      && item.positioning === 'absolute'
+      && sameParent
       ? {
           ...transform,
           position: {
@@ -570,10 +581,12 @@ export function createDuplicateCommand(
   }
   const rootId = remap.get(sourceId)
   if (!rootId) return null
-  const parentId = getEntityParentId(document, sourceId)
+  const parentId = insertion === undefined ? sourceParentId : insertion.parentId
   const siblings = parentId
     ? getComposeHierarchy(document.entities[parentId]!)?.childIds ?? []
     : document.rootIds
+  const index = insertion?.index
+    ?? Math.max(0, siblings.indexOf(sourceId) + 1)
   return {
     rootId,
     command: {
@@ -583,7 +596,7 @@ export function createDuplicateCommand(
         entities: entities as unknown as JsonObject,
         rootIds: [rootId],
         parentId,
-        index: Math.max(0, siblings.indexOf(sourceId) + 1),
+        index,
       },
       meta: {
         label: `Duplicate ${source.name}`,

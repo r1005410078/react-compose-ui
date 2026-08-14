@@ -382,6 +382,9 @@ const actionLabels: Record<
     'stage.toggleGridSnap': '切换网格吸附',
     'stage.toggleSmartSnap': '切换智能吸附',
     'edit.duplicate': '复制节点',
+    'edit.copy': '复制',
+    'edit.cut': '剪切',
+    'edit.paste': '粘贴',
     'edit.bringForward': '前移一层',
     'edit.sendBackward': '后移一层',
     'edit.bringToFront': '置于顶层',
@@ -416,6 +419,9 @@ const actionLabels: Record<
     'stage.toggleGridSnap': 'Toggle grid snap',
     'stage.toggleSmartSnap': 'Toggle smart snap',
     'edit.duplicate': 'Duplicate nodes',
+    'edit.copy': 'Copy',
+    'edit.cut': 'Cut',
+    'edit.paste': 'Paste',
     'edit.bringForward': 'Bring forward',
     'edit.sendBackward': 'Send backward',
     'edit.bringToFront': 'Bring to front',
@@ -449,6 +455,7 @@ const actionReasons = {
     layerOrderBoundary: '选中对象已位于目标层级或不可移动',
     flowGroup: '自动布局 Flow 子项不能参与编组；请先转为 Absolute',
     flowUngroup: '自动布局 Flow 子项不能参与解组；请先转为 Absolute',
+    emptyClipboard: '剪贴板为空',
   },
   'en-US': {
     noSelection: 'Select an object first',
@@ -460,6 +467,7 @@ const actionReasons = {
     layerOrderBoundary: 'Selected objects are already at the requested layer boundary or cannot be reordered',
     flowGroup: 'Auto layout flow children cannot be grouped; convert them to absolute first',
     flowUngroup: 'Auto layout flow children cannot be ungrouped; convert them to absolute first',
+    emptyClipboard: 'Clipboard is empty',
   },
 } as const
 
@@ -482,6 +490,7 @@ export interface EditorActionReasons {
   readonly layerOrderBoundary: string
   readonly flowGroup: string
   readonly flowUngroup: string
+  readonly emptyClipboard: string
 }
 
 /**
@@ -531,6 +540,7 @@ export function getEditorActionReasons(
     ),
     flowGroup: formatMessage('editor.actionReason.flowGroup', current.flowGroup),
     flowUngroup: formatMessage('editor.actionReason.flowUngroup', current.flowUngroup),
+    emptyClipboard: formatMessage('editor.actionReason.emptyClipboard', current.emptyClipboard),
   }
 }
 

@@ -1005,6 +1005,59 @@ describe('useComposeEditorController', () => {
     expect(editorRuntime.document.rootIds).toEqual(['dashboard', 'title'])
   })
 
+  it('OpenSpec: editor-workspace-layout / 画布与场景树共享会话剪贴板 / 场景树复制后在画布粘贴', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      initialSelection: ['title'],
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => result.current.sceneTreeProps.commands?.execute('copy'))
+    expect(result.current.sceneTreeProps.commands?.clipboard).toEqual({
+      kind: 'copy',
+      nodeIds: ['title'],
+    })
+    expect(result.current.stageProps.clipboard).toEqual({
+      kind: 'copy',
+      entityIds: ['title'],
+    })
+
+    const entriesBefore = editorRuntime.entries.length
+    act(() => {
+      result.current.stageProps.onShortcutAction?.('edit.paste')
+    })
+    const children = getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds ?? []
+    expect(children).toHaveLength(2)
+    expect(editorRuntime.entries).toHaveLength(entriesBefore + 1)
+    expect(result.current.sceneTreeProps.commands?.clipboard?.kind).toBe('copy')
+  })
+
+  it('OpenSpec: editor-workspace-layout / 画布与场景树共享会话剪贴板 / 画布剪切后在场景树粘贴', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      initialSelection: ['title'],
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => {
+      result.current.stageProps.onShortcutAction?.('edit.cut')
+    })
+    expect(result.current.sceneTreeProps.commands?.clipboard).toEqual({
+      kind: 'cut',
+      nodeIds: ['title'],
+    })
+
+    act(() => result.current.sceneTreeProps.commands?.execute('paste-root', null))
+    expect(editorRuntime.document.rootIds).toEqual(['dashboard', 'title'])
+    expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
+      .toEqual([])
+    expect(result.current.sceneTreeProps.commands?.clipboard).toBeNull()
+  })
+
   it('场景树复制操作创建副本并选中；多个来源合并为一个事务', () => {
     const editorRuntime = runtime()
     // idFactory 必须跨渲染稳定：写成 `ids()` 会在每次重渲染重置计数器，

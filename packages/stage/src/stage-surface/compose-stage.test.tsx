@@ -818,6 +818,73 @@ describe('ComposeStage ECS', () => {
     expect(dispatch).not.toHaveBeenCalled()
   })
 
+  it('OpenSpec: stage / Stage 复制剪切粘贴 / 使用平台主修饰键', () => {
+    const { runtime } = renderStage(document(), { selectedIds: ['a'] })
+    const stage = screen.getByRole('application')
+    fireEvent.keyDown(stage, { code: 'KeyC', key: 'c', ctrlKey: true })
+    fireEvent.keyDown(stage, { code: 'KeyV', key: 'v', ctrlKey: true })
+    expect(runtime.document.rootIds).toHaveLength(2)
+    expect(runtime.document.rootIds[0]).toBe('a')
+  })
+
+  it('OpenSpec: stage / Stage 复制剪切粘贴 / 从画布菜单复制并粘贴', () => {
+    const { runtime, selection } = renderStage(document(), { selectedIds: ['a'] })
+    const stage = screen.getByRole('application')
+
+    fireEvent.contextMenu(screen.getByTestId('stage-entity-a'), {
+      clientX: 40,
+      clientY: 50,
+    })
+    const copy = screen.getByRole('menuitem', { name: /^复制/ })
+    const paste = screen.getByRole('menuitem', { name: /^粘贴/ })
+    expect(copy).toHaveTextContent(/(?:⌘|Ctrl\+)C/)
+    expect(paste).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(copy)
+
+    fireEvent.contextMenu(stage, { clientX: 10, clientY: 10 })
+    fireEvent.click(screen.getByRole('menuitem', { name: /^粘贴/ }))
+    const copyId = runtime.document.rootIds.find((id) => id !== 'a')
+    expect(copyId).toBeDefined()
+    expect(runtime.document.entities[copyId!]).toBeDefined()
+    expect(selection).toHaveBeenLastCalledWith([copyId])
+  })
+
+  it('OpenSpec: stage / Stage 复制剪切粘贴 / 剪切后粘贴清空剪贴板', () => {
+    const value = document([entity('a'), entity('b')], ['a', 'b'])
+    const { runtime } = renderStage(value, { selectedIds: ['a'] })
+    const stage = screen.getByRole('application')
+
+    fireEvent.contextMenu(screen.getByTestId('stage-entity-a'), {
+      clientX: 40,
+      clientY: 50,
+    })
+    fireEvent.click(screen.getByRole('menuitem', { name: /^剪切/ }))
+    fireEvent.contextMenu(stage, { clientX: 10, clientY: 10 })
+    fireEvent.click(screen.getByRole('menuitem', { name: /^粘贴/ }))
+    expect(runtime.document.rootIds).toEqual(['b', 'a'])
+
+    const afterCut = runtime.document.rootIds
+    fireEvent.contextMenu(stage, { clientX: 10, clientY: 10 })
+    expect(screen.getByRole('menuitem', { name: /^粘贴/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(runtime.document.rootIds).toEqual(afterCut)
+  })
+
+  it('OpenSpec: stage / Stage 复制剪切粘贴 / 可编辑目标保留系统剪贴板', () => {
+    const { runtime } = renderStage(document(), { selectedIds: ['a'] })
+    const input = globalThis.document.createElement('input')
+    screen.getByRole('application').append(input)
+    fireEvent.keyDown(input, { code: 'KeyC', key: 'c', ctrlKey: true })
+    fireEvent.keyDown(screen.getByRole('application'), {
+      code: 'KeyV',
+      key: 'v',
+      ctrlKey: true,
+    })
+    expect(runtime.document.rootIds).toEqual(['a'])
+  })
+
   it('OpenSpec: Context menu / Entity 删除使用新命令并显示快捷键', () => {
     const { dispatch } = renderStage(document(), { selectedIds: ['a'] })
     fireEvent.contextMenu(screen.getByTestId('stage-entity-a'), {

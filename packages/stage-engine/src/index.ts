@@ -13,9 +13,20 @@ export {
   getGroupCommandAvailability,
   getLayerOrderCommandAvailability,
   getUngroupCommandAvailability,
+  type ComposeDuplicateInsertion,
   type ComposeLayerOrderOperation,
   type ComposeStructureCommandAvailability,
 } from './commands'
+export {
+  createEntityClipboard,
+  createPasteFromClipboard,
+  isInvalidCutInsertion,
+  normalizeClipboardEntityIds,
+  resolveSuggestedEntityInsertion,
+  type ComposeClipboardPastePlan,
+  type ComposeEntityClipboard,
+  type ComposeEntityInsertion,
+} from './clipboard'
 export {
   createComponentExtractionPlan,
   createReplaceSelectionWithEntityCommand,

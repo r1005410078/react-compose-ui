@@ -78,9 +78,13 @@ import {
   scrollAxisToViewport,
   viewportToScrollAxes,
   createDuplicateCommand,
+  createEntityClipboard,
   createGroupCommand,
   createLayerOrderCommand,
+  createPasteFromClipboard,
   createUngroupCommand,
+  isInvalidCutInsertion,
+  resolveSuggestedEntityInsertion,
   getGroupCommandAvailability,
   getLayerOrderCommandAvailability,
   getUngroupCommandAvailability,
@@ -107,6 +111,7 @@ import {
   type StageTransform,
 } from '@compose-ui/stage-engine'
 import type {
+  ComposeStageClipboard,
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
   ComposeStageDelegatableAction,
@@ -655,6 +660,9 @@ const STAGE_SHORTCUT_ACTIONS = [
   'stage.toggleGridSnap',
   'stage.toggleSmartSnap',
   'edit.duplicate',
+  'edit.copy',
+  'edit.cut',
+  'edit.paste',
   'edit.bringForward',
   'edit.sendBackward',
   'edit.bringToFront',
@@ -695,6 +703,9 @@ const DEFAULT_STAGE_SHORTCUTS: Readonly<
   'stage.toggleGridSnap': [{ code: 'KeyG', shift: true }],
   'stage.toggleSmartSnap': [{ code: 'KeyS', shift: true }],
   'edit.duplicate': [{ code: 'KeyD', primary: true }],
+  'edit.copy': [{ code: 'KeyC', primary: true }],
+  'edit.cut': [{ code: 'KeyX', primary: true }],
+  'edit.paste': [{ code: 'KeyV', primary: true }],
   'edit.bringForward': [{ code: 'BracketRight' }],
   'edit.sendBackward': [{ code: 'BracketLeft' }],
   'edit.bringToFront': [{ code: 'BracketRight', primary: true }],
@@ -871,6 +882,8 @@ function ComposeStageReady({
   onToolChange,
   onShortcutAction,
   shortcuts,
+  clipboard: clipboardProp,
+  onClipboardChange,
   selectedIds,
   onSelectedIdsChange,
   onCreateComponentIntent,
@@ -968,6 +981,12 @@ function ComposeStageReady({
   // 宿主回灌给 Controller 的「本次绘制创建了谁」；Controller 按 entityId 去重。
   const [lastDrawn, setLastDrawn] = useState<StageDrawnEntity | null>(null)
   const [assetDropStatus, setAssetDropStatus] = useState('')
+  const [localClipboard, setLocalClipboard] = useState<ComposeStageClipboard | null>(null)
+  const clipboard = clipboardProp !== undefined ? clipboardProp : localClipboard
+  const writeClipboard = (next: ComposeStageClipboard | null) => {
+    if (onClipboardChange) onClipboardChange(next)
+    else if (clipboardProp === undefined) setLocalClipboard(next)
+  }
   const contextMenu = useComposeContextMenu<string | null>()
   const pendingAssetDropsRef = useRef(new Set<AbortController>())
   const activeTemporaryPanCodeRef = useRef<string | null>(null)
@@ -2283,6 +2302,15 @@ function ComposeStageReady({
         return
       }
     }
+    if (actionMatches('edit.copy') || actionMatches('edit.cut') || actionMatches('edit.paste')) {
+      executeClipboard(
+        actionMatches('edit.copy')
+          ? 'edit.copy'
+          : actionMatches('edit.cut') ? 'edit.cut' : 'edit.paste',
+      )
+      event.preventDefault()
+      return
+    }
     const toolAction = ([
       ['stage.selectTool', 'select'],
       ['stage.moveTool', 'move'],
@@ -2548,6 +2576,56 @@ function ComposeStageReady({
     const label = formatComposeKeybindings(resolvedShortcuts[action])
     return label ? <ComposeContextMenuShortcut>{label}</ComposeContextMenuShortcut> : null
   }
+  const clipboardSourceIds = (explicitId?: string | null) => (
+    explicitId && !normalizedSelection.includes(explicitId)
+      ? [explicitId]
+      : normalizedSelection
+  )
+  const executeClipboard = (
+    action: 'edit.copy' | 'edit.cut' | 'edit.paste',
+    targetId?: string | null,
+  ) => {
+    if (onShortcutAction?.(action)) return
+    if (action === 'edit.copy' || action === 'edit.cut') {
+      const next = createEntityClipboard(
+        document,
+        clipboardSourceIds(targetId),
+        action === 'edit.copy' ? 'copy' : 'cut',
+      )
+      if (next) writeClipboard(next)
+      return
+    }
+    const insertionTarget = targetId === undefined
+      ? (normalizedSelection[normalizedSelection.length - 1] ?? null)
+      : targetId
+    const insertion = resolveSuggestedEntityInsertion(document, insertionTarget)
+    if (!clipboard || !insertion) return
+    const plan = createPasteFromClipboard(
+      document,
+      clipboard,
+      insertion,
+      idFactory,
+      layoutSnapshot,
+    )
+    if (!plan) return
+    if (dispatch(plan.command).status === 'committed') {
+      onSelectedIdsChange(plan.nextSelection)
+      if (plan.clearClipboard) writeClipboard(null)
+    }
+  }
+  const contextClipboardIds = clipboardSourceIds(contextNodeId)
+  const canCopy = createEntityClipboard(document, contextClipboardIds, 'copy') !== null
+  const canCut = createEntityClipboard(document, contextClipboardIds, 'cut') !== null
+  const contextInsertion = resolveSuggestedEntityInsertion(document, contextNodeId)
+  const canPaste = Boolean(clipboard && contextInsertion && (
+    clipboard.kind === 'copy'
+      ? clipboard.entityIds.every((id) => document.entities[id])
+      : !isInvalidCutInsertion(document, clipboard.entityIds, contextInsertion)
+        && (
+          clipboard.entityIds.every((id) => getEntityParentId(document, id) === contextInsertion.parentId)
+          || layoutSnapshot
+        )
+  ))
   const executeLayerOrder = (operation: ComposeLayerOrderOperation) => {
     const command = createLayerOrderCommand(
       document,
@@ -2873,12 +2951,21 @@ function ComposeStageReady({
       <div aria-hidden="true" className="compose-stage__scroll-corner" />
       <ComposeContextMenu {...contextMenu.rootProps}>
         <ComposeContextMenuContent aria-label="画布操作">
+          <ComposeContextMenuItem disabled={!canCopy} onClick={() => {
+            executeClipboard('edit.copy', contextNodeId)
+          }}>{messages.copy}{contextMenuShortcut('edit.copy')}</ComposeContextMenuItem>
+          <ComposeContextMenuItem disabled={!canCut} onClick={() => {
+            executeClipboard('edit.cut', contextNodeId)
+          }}>{messages.cut}{contextMenuShortcut('edit.cut')}</ComposeContextMenuItem>
+          <ComposeContextMenuItem disabled={!canPaste} onClick={() => {
+            executeClipboard('edit.paste', contextNodeId)
+          }}>{messages.paste}{contextMenuShortcut('edit.paste')}</ComposeContextMenuItem>
           {contextNodeId ? <>
             <ComposeContextMenuItem disabled={contextEditableIds.length !== 1} onClick={() => {
               const id = contextEditableIds[0]
               const duplicate = id ? createDuplicateCommand(document, id, idFactory, idFactory()) : null
               if (duplicate && dispatch(duplicate.command).status === 'committed') onSelectedIdsChange([duplicate.rootId])
-            }}>创建副本{contextMenuShortcut('edit.duplicate')}</ComposeContextMenuItem>
+            }}>{messages.duplicate}{contextMenuShortcut('edit.duplicate')}</ComposeContextMenuItem>
             <ComposeContextMenuSub>
               <ComposeContextMenuSubTrigger>{messages.layerOrder}</ComposeContextMenuSubTrigger>
               <ComposeContextMenuSubContent aria-label={messages.layerOrder}>

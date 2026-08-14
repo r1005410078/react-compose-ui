@@ -76,6 +76,9 @@ export type ComposeStageShortcutAction =
   | 'stage.toggleGridSnap'
   | 'stage.toggleSmartSnap'
   | 'edit.duplicate'
+  | 'edit.copy'
+  | 'edit.cut'
+  | 'edit.paste'
   | 'edit.bringForward'
   | 'edit.sendBackward'
   | 'edit.bringToFront'
@@ -106,6 +109,21 @@ export type ComposeStageDelegatableAction = Exclude<
 export type ComposeStageShortcuts = Readonly<
   Partial<Record<ComposeStageShortcutAction, readonly ComposeStageKeybinding[]>>
 >
+
+/**
+ * Stage 会话剪贴板。
+ *
+ * @remarks
+ * 只保存规范化 Entity ID，不写入系统剪贴板。
+ *
+ * @public
+ */
+export interface ComposeStageClipboard {
+  /** 复制可重复粘贴；剪切在成功移动后清空。 */
+  readonly kind: 'copy' | 'cut'
+  /** 已按文档顺序规范化的顶层来源。 */
+  readonly entityIds: readonly string[]
+}
 
 /**
  * Stage 使用的同步命令派发边界。
@@ -162,6 +180,16 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * @defaultValue 'intersect'
    */
   readonly marqueeMode?: ComposeStageMarqueeMode
+  /**
+   * 宿主持有的会话剪贴板快照。
+   *
+   * @remarks
+   * 省略时 Stage 使用内建内存剪贴板。Editor 传入共享快照，以便菜单根据场景树复制结果
+   * 计算粘贴可用性；写入仍由 `onShortcutAction` 或 `onClipboardChange` 完成。
+   */
+  readonly clipboard?: ComposeStageClipboard | null
+  /** 内建复制/剪切/粘贴写入剪贴板时通知宿主；省略且未提供 clipboard 时写入内部状态。 */
+  readonly onClipboardChange?: (clipboard: ComposeStageClipboard | null) => void
   /** 覆盖 Stage 默认动作键位；动作空数组表示禁用。 */
   readonly shortcuts?: ComposeStageShortcuts
   /**

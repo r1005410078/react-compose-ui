@@ -271,7 +271,13 @@ function planDuplicate(
   context: SceneOperationContext,
 ): SceneOperationResult {
   const duplicates = operation.sourceNodeIds
-    .map((id) => createDuplicateCommand(context.document, id, context.nextId, context.nextId()))
+    .map((id, offset) => createDuplicateCommand(
+      context.document,
+      id,
+      context.nextId,
+      context.nextId(),
+      { parentId: operation.parentId, index: operation.index + offset },
+    ))
     .filter((item): item is NonNullable<typeof item> => item !== null)
   if (duplicates.length === 0) return { status: 'skipped' }
   const selection = duplicates.map((item) => item.rootId)

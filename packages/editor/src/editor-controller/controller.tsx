@@ -62,11 +62,12 @@ import type {
 } from '@compose-ui/component-registry'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
-import type {
-  ComposeSceneTreeExternalDragEvent,
-  ComposeSceneTreeNode,
-  ComposeSceneTreeOperation,
-  ComposeSceneTreeProps,
+import {
+  useComposeSceneTreeCommands,
+  type ComposeSceneTreeExternalDragEvent,
+  type ComposeSceneTreeNode,
+  type ComposeSceneTreeOperation,
+  type ComposeSceneTreeProps,
 } from '@compose-ui/scene-tree'
 import type {
   ComposeStageDelegatableAction,
@@ -1372,18 +1373,28 @@ export function useComposeEditorController({
     })
   }, [componentStore, document, selectedIds])
 
+  const sceneTreeNodes = useMemo(
+    () => deriveSceneEntities(document, registry, expandedIds),
+    [document, registry, expandedIds],
+  )
+  const sceneTreeCommands = useComposeSceneTreeCommands({
+    nodes: sceneTreeNodes,
+    selectedIds,
+    onOperation: onSceneOperation,
+  })
   const sceneTreeProps = useMemo<ComposeSceneTreeProps>(() => ({
-    nodes: deriveSceneEntities(document, registry, expandedIds),
+    nodes: sceneTreeNodes,
     selectedIds,
     expandedIds,
+    commands: sceneTreeCommands,
     onSelectionChange: setSelectedIds,
     onExpandedChange: setExpandedIds,
     onOperation: onSceneOperation,
     onExternalDrag: setSceneExternalDragEvent,
     onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
   }), [
-    document,
-    registry,
+    sceneTreeNodes,
+    sceneTreeCommands,
     selectedIds,
     expandedIds,
     setSelectedIds,
@@ -1426,6 +1437,12 @@ export function useComposeEditorController({
     marqueeMode,
     onToolChange: setTool,
     onShortcutAction: runShortcutAction,
+    clipboard: sceneTreeCommands.clipboard
+      ? {
+          kind: sceneTreeCommands.clipboard.kind,
+          entityIds: sceneTreeCommands.clipboard.nodeIds,
+        }
+      : null,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
     onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
@@ -1451,6 +1468,7 @@ export function useComposeEditorController({
     tool,
     marqueeMode,
     setTool,
+    sceneTreeCommands.clipboard,
     selectedIds,
     resolvedInspectionTarget,
     setSelectedIds,
@@ -1597,6 +1615,12 @@ export function useComposeEditorController({
       !smartSnapEnabled,
       'Toggle smart snap',
     ),
+    canCopy: sceneTreeCommands.isEnabled('copy'),
+    canCut: sceneTreeCommands.isEnabled('cut'),
+    canPaste: sceneTreeCommands.isEnabled('paste-suggested'),
+    copySelection: () => { sceneTreeCommands.execute('copy') },
+    cutSelection: () => { sceneTreeCommands.execute('cut') },
+    pasteSelection: () => { sceneTreeCommands.execute('paste-suggested') },
     undo: runtime.undo,
     zoomBy: zoomByFactor,
     zoomReset,
@@ -1613,6 +1637,7 @@ export function useComposeEditorController({
     selectedIds,
     setSelectedIds,
     setTool,
+    sceneTreeCommands,
     configureCanvas,
     smartSnapEnabled,
     snapshot.canRedo,

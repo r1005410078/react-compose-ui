@@ -426,6 +426,27 @@ describe('Stage ECS commands', () => {
     })
   })
 
+  it('OpenSpec: stage-engine / Entity 会话剪贴板规划 / 复制到指定父级', () => {
+    const source = entity('source', { x: 40, y: 50 })
+    const target = entity('target', { childIds: [] })
+    const value = document([source, target], ['source', 'target'])
+    const result = createDuplicateCommand(
+      value,
+      'source',
+      () => 'copy',
+      'duplicate:source',
+      { parentId: 'target', index: 0 },
+    )!
+    expect(result.command.payload).toMatchObject({
+      parentId: 'target',
+      index: 0,
+    })
+    const copy = (result.command.payload.entities as unknown as Record<string, ComposeEntity>).copy
+    expect(getComposeLayoutItem(copy!)).toMatchObject({
+      offset: { x: 40, y: 50 },
+    })
+  })
+
   it('OpenSpec: auto-layout-interactions / Duplicate Flow / 紧随源节点且不增加偏移', () => {
     const source = flowEntity('source')
     const container = autoLayoutContainer('container', ['source'])

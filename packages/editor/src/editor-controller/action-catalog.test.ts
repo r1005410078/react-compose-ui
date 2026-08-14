@@ -128,6 +128,8 @@ describe('createComposeEditorActions', () => {
     // 空选区下所有结构类动作都必须给出原因。
     expect(find('edit.delete')?.disabledReason).toBeTruthy()
     expect(find('edit.duplicate')?.disabledReason).toBeTruthy()
+    expect(find('edit.copy')?.disabledReason).toBeTruthy()
+    expect(find('edit.paste')?.disabledReason).toBe('剪贴板为空')
     expect(find('edit.group')?.disabledReason).toBeTruthy()
     expect(find('edit.ungroup')?.disabledReason).toBeTruthy()
     expect(find('history.undo')?.disabledReason).toBeTruthy()
@@ -263,6 +265,28 @@ describe('createComposeEditorActionHandlers', () => {
 
     handlers['edit.delete'].run()
     expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: editor-preferences / 可配置复制剪切粘贴快捷键 / 使用默认平台复制键', () => {
+    const copySelection = vi.fn()
+    const pasteSelection = vi.fn()
+    const actions = createComposeEditorActions(context({
+      selectedIds: ['a'],
+      canCopy: true,
+      canCut: true,
+      canPaste: true,
+      copySelection,
+      pasteSelection,
+    }))
+    const copy = actions.find((action) => action.id === 'edit.copy')
+    const paste = actions.find((action) => action.id === 'edit.paste')
+
+    expect(copy?.disabledReason).toBeUndefined()
+    expect(copy?.shortcut).toEqual([{ code: 'KeyC', primary: true }])
+    copy?.run()
+    expect(copySelection).toHaveBeenCalledOnce()
+    paste?.run()
+    expect(pasteSelection).toHaveBeenCalledOnce()
   })
 
   it('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命令面板共用执行', () => {
