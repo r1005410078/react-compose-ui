@@ -143,11 +143,19 @@ function timelineRatio(timeMs: number, durationMs: number) {
 const SCALE_HORIZONTAL_MARGIN_PX = 20
 // 工具栏缩放按钮每次点击的缩放倍数，和 Stage（packages/stage）的 zoomIn/zoomOut 步长保持一致的手感。
 const ZOOM_BUTTON_STEP_FACTOR = 1.2
+// 主刻度步长的候选值，1-2-5 十进制级数（时间轴的通用惯例），供按可读间距反推步长时查表。
+const TIME_MARKER_STEPS_MS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10_000, 20_000, 50_000, 100_000]
+// 相邻主刻度标签之间至少需要的像素间距，避免数字重叠。
+const MIN_MARKER_SPACING_PX = 56
 
-function createTimeMarkers(durationMs: number) {
+function createTimeMarkers(durationMs: number, pixelsPerMs: number) {
   const safeDurationMs = Math.max(0, Math.round(Number.isFinite(durationMs) ? durationMs : 0))
-  const markerStep = [100, 200, 500, 1000, 2000, 5000]
-    .find((step) => step >= safeDurationMs / 8) ?? 10_000
+  // 缩放级别已知时，按当前像素密度反推需要多粗的步长才能保持标签可读间距——放大后
+  // 同样的间距能塞进更细的时间步长，标尺因此自然变密。挂载瞬间/未测出可视宽度时
+  // （pixelsPerMs <= 0）退回旧启发式：把总时长切成约 8 段。
+  const minStepMs = pixelsPerMs > 0 ? MIN_MARKER_SPACING_PX / pixelsPerMs : safeDurationMs / 8
+  const markerStep = TIME_MARKER_STEPS_MS.find((step) => step >= minStepMs)
+    ?? TIME_MARKER_STEPS_MS[TIME_MARKER_STEPS_MS.length - 1]!
   const markers: number[] = []
   for (let timeMs = 0; timeMs < safeDurationMs; timeMs += markerStep) markers.push(timeMs)
   if (markers[markers.length - 1] !== safeDurationMs) markers.push(safeDurationMs)
@@ -204,7 +212,6 @@ export function ComposeAnimationTimeline({
     .filter(Boolean)
     .join(' ')
   const currentRatio = timelineRatio(value.currentTimeMs, value.model.durationMs)
-  const timeMarkers = createTimeMarkers(value.model.durationMs)
   const scaleScrollRef = useRef<HTMLDivElement>(null)
   const scaleRef = useRef<HTMLDivElement>(null)
   // 缩放会改变 `.scale` 的行内宽度，必须等这次渲染真正提交到 DOM 后再写 scrollLeft，
@@ -239,6 +246,7 @@ export function ComposeAnimationTimeline({
       : 0
   )
   const scaleWidthPx = Math.max(0, value.model.durationMs * effectivePixelsPerMs)
+  const timeMarkers = createTimeMarkers(value.model.durationMs, effectivePixelsPerMs)
 
   useEffect(() => {
     const element = scaleScrollRef.current

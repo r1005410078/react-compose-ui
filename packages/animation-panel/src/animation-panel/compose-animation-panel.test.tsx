@@ -689,4 +689,20 @@ describe('ComposeAnimationPanel', () => {
     expect(keyframe.style.width).toBe('')
     expect(keyframe.style.height).toBe('')
   })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 放大后标尺主刻度按可读间距变密', () => {
+    stubTimelineContainerWidth(700)
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
+    const markersBefore = document.querySelectorAll('.compose-animation-timeline__ruler b').length
+
+    fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -300 })
+
+    const markersAfter = document.querySelectorAll('.compose-animation-timeline__ruler b').length
+    expect(markersAfter).toBeGreaterThan(markersBefore)
+  })
 })
