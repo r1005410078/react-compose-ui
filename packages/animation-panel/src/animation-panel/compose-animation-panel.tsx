@@ -163,6 +163,7 @@ export function ComposeAnimationTimeline({
   const theme = useComposeThemeContext()
   const {
     value,
+    notice,
     addKeyframe,
     moveKeyframe,
     selectClip,
@@ -241,7 +242,8 @@ export function ComposeAnimationTimeline({
                 onClick={addKeyframe}
               ><DiamondIcon /></button>
             </div>
-            <output aria-label={t.currentTime} className="compose-animation-timeline__time-readout">
+            {/* 隐式 role 是 status：播放时每帧都会变化，必须显式关掉播报，否则读屏会被刷屏。 */}
+            <output aria-label={t.currentTime} aria-live="off" className="compose-animation-timeline__time-readout">
               {value.currentTimeMs}<small>ms</small>
             </output>
             <label className="compose-animation-timeline__duration-control">
@@ -352,6 +354,9 @@ export function ComposeAnimationTimeline({
           onSelectInterpolationSegment={selectInterpolationSegment}
           onSetCurrentTime={setCurrentTime}
         />
+      <p aria-live="polite" className="compose-animation-panel__sr-only compose-animation-timeline__notice" role="status">
+        {notice ? t.duplicateTime : ''}
+      </p>
       </div>
     </section>
   )
@@ -705,6 +710,7 @@ export function ComposeAnimationInspector({
   const interpolationRange = previousKeyframe && selectedKeyframe
     ? `${previousKeyframe.timeMs} ms → ${selectedKeyframe.keyframe.timeMs} ms`
     : ''
+  const noticeId = useId()
   const easingId = useId()
   const curveTabId = `${easingId}-curve-tab`
   const springTabId = `${easingId}-spring-tab`
@@ -753,6 +759,7 @@ export function ComposeAnimationInspector({
           <span>{t.time}</span>
           <span className="compose-animation-inspector__unit-field">
             <CommittedInput
+              aria-describedby={notice ? noticeId : undefined}
               aria-label={t.time}
               inputMode="numeric"
               key={`${selectedKeyframe?.keyframe.id ?? 'none'}-${selectedKeyframe?.keyframe.timeMs ?? 0}`}
@@ -847,7 +854,9 @@ export function ComposeAnimationInspector({
           <strong>{value.easingEditor === 'curve' ? t[interpolation === 'ease-in' ? 'easeIn' : interpolation === 'ease-out' ? 'easeOut' : 'linear'] : t.spring}</strong>
         </div>
       </div>
-      <p aria-live="polite" className="compose-animation-panel__sr-only" role="status">{notice ? t.duplicateTime : ''}</p>
+      {/* 播报由时间线的 live region 负责：两个组件同时挂载时重复播报比没有播报更糟。
+          这里只做常驻可见说明，并通过 aria-describedby 挂到时间字段上。 */}
+      {notice ? <p className="compose-animation-inspector__notice" id={noticeId}>{t.duplicateTime}</p> : null}
     </aside>
   )
 }

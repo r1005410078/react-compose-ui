@@ -372,6 +372,7 @@
   .compose-animation-inspector__curve-path { fill: none; stroke: #dce5ee; stroke-width: 1.6; }
   .compose-animation-inspector__curve circle { fill: #2486ff; stroke: #bddbff; stroke-width: .8; }
   .compose-animation-inspector__curve strong { color: var(--ap-text); font-size: 14px; font-weight: 500; }
+  .compose-animation-inspector__notice { margin: 0 12px 12px; padding: 7px 9px; border: 1px solid color-mix(in srgb, var(--compose-danger, #e5484d) 55%, transparent); border-radius: 4px; color: #ffd7d9; background: color-mix(in srgb, var(--compose-danger, #e5484d) 16%, transparent); font-size: 12px; }
   .compose-animation-panel__sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; margin: -1px; padding: 0; border: 0; white-space: nowrap; clip: rect(0 0 0 0); }
 
   @media (max-width: 680px) {

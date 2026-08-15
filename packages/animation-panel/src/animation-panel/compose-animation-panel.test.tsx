@@ -515,4 +515,33 @@ describe('ComposeAnimationPanel', () => {
     )
     expect(screen.queryByRole('button', { name: /更多操作/ })).not.toBeInTheDocument()
   })
+
+  it('OpenSpec: animation-panel / 关键帧时间调整 / 时间冲突时给出可见且可访问的反馈', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    const time = screen.getByRole('textbox', { name: '时间' })
+    fireEvent.change(time, { target: { value: '100' } })
+    fireEvent.keyDown(time, { key: 'Enter' })
+
+    // 100 ms 已被占用：关键帧不能移动，且必须说明原因。
+    expect(screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })).toBeInTheDocument()
+    expect(document.querySelector('.compose-animation-timeline__notice'))
+      .toHaveTextContent('该属性轨道已存在同一时间的关键帧')
+    expect(screen.getByRole('textbox', { name: '时间' }))
+      .toHaveAccessibleDescription('该属性轨道已存在同一时间的关键帧')
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('200')
+  })
+
+  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 当前时间读数不在播放时反复播报', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    expect(screen.getByLabelText('当前时间', { selector: 'output' })).toHaveAttribute('aria-live', 'off')
+  })
 })
