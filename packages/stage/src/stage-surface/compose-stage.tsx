@@ -1077,7 +1077,7 @@ function ComposeStageReady({
     const entity = document.entities[id]
     if (!entity) return []
     const constraints = resolveComposeGeometryConstraints(entity)
-    // 已落盘的旧实例可能仍是 resize:none；选区层强制 free，保证页面组合始终有 8 控点。
+    // 已落盘的旧实例可能仍是 resize:none；选区层强制 free，保证页面组合始终可四角缩放。
     if (getComposeRenderer(entity)?.type === 'component-instance') {
       return [{ ...constraints, resize: 'free' as const }]
     }
@@ -1103,8 +1103,17 @@ function ComposeStageReady({
       }
       return true
     }))
-  // free：4 角 + 4 边共 8 个可见控点（边此前仅有透明 hit，用户感知为「只有四角」）。
-  const visibleResizeHandles = resizeHandles
+  // free / preserve-aspect：仅四角可见小方块；边方向缩放靠透明 edge hit，不画中点方块。
+  // horizontal / vertical：仍显示对应边控点（没有角可用）。
+  const visibleResizeHandles = resizeHandles.filter((handle) => {
+    if (handle === 'n' || handle === 'e' || handle === 's' || handle === 'w') {
+      return selectionConstraints.every(
+        (constraints) => constraints.resize === 'horizontal'
+          || constraints.resize === 'vertical',
+      )
+    }
+    return true
+  })
   const selectionRotatable = selectionConstraints.length > 0
     && selectionConstraints.every(({ rotatable }) => rotatable)
   const contextNodeId = contextMenu.payload

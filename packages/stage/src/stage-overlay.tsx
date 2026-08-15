@@ -86,6 +86,8 @@ interface StageOverlayProps {
 const LINE_ENDPOINT_HANDLE_SIZE = 8
 // 可见方块保持轻量，命中区独立放大，避免高分屏上必须像素级对准才能开始端点手势。
 const LINE_ENDPOINT_HIT_RADIUS = 10
+/** 四角缩放手柄边长（屏幕 px）；边方向只靠透明 hit，不渲染中点方块。 */
+const CORNER_HANDLE_SIZE = 7
 
 function lineAngle(start: StagePoint, end: StagePoint) {
   return Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI
@@ -509,11 +511,11 @@ export function StageOverlay({
               <rect
                 className={`compose-stage__handle compose-stage__handle--${handle}`}
                 data-testid={`stage-resize-${handle}`}
-                height="8"
+                height={CORNER_HANDLE_SIZE}
                 key={handle}
-                width="8"
-                x={x - 4}
-                y={y - 4}
+                width={CORNER_HANDLE_SIZE}
+                x={x - CORNER_HANDLE_SIZE / 2}
+                y={y - CORNER_HANDLE_SIZE / 2}
                 onPointerDown={(event) => onInteraction(
                   { kind: 'resize', handle },
                   event,

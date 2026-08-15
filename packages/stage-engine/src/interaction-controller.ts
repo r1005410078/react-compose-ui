@@ -980,19 +980,23 @@ function transformedSelection(
       }
       return
     }
-    // 内容随宽度重排的 Entity（文字换行）保留其 Hug 高度：拖窄后重新换行会长高，若把
-    // 高度一并写死，长出来的部分会被自己的框裁掉。但用户专门拖顶部/底部纯高度手柄时，
-    // 意图就是要一个固定高度——这时不再保留 Hug，让拖拽结果进入预览与提交流程，与 Figma
-    // 的 Auto Height 文字拖动高度手柄自动转 Fixed Size 一致。
+    // 内容随宽度重排的 Entity（文字换行）默认保留 Hug 高度：拖窄后重新换行会长高，若把
+    // 高度一并写死，长出来的部分会被自己的框裁掉。以下两种意图明确要固定高度时放开：
+    // 1. 顶部/底部纯高度手柄（n/s）——与 Figma Auto Height 拖高度手柄一致；
+    // 2. 角手柄把框往外拉高（candidate 高于当前解析高度）——选区只显示四角时，用户只能靠
+    //    角点加高，必须让拖高生效；收窄/压矮仍走 Hug，避免裁切。
     //
-    // 这里必须回 authored 的 `layoutItem.height.value` 而不是解析出的 `transform.height`：
-    // 文档层按 authored 值判断「高度变没变」，而 Hug 实体的 authored 值只是回退尺寸，
-    // 与测量出的实际高度并不相等——回解析值会被判成「改了高度」，照样钉成 Fixed。
+    // 保留 Hug 时必须回 authored 的 `layoutItem.height.value` 而不是解析出的
+    // `transform.height`：文档层按 authored 值判断「高度变没变」，而 Hug 实体的 authored
+    // 值只是回退尺寸，与测量出的实际高度并不相等——回解析值会被判成「改了高度」，照样钉成 Fixed。
     const draggingHeightOnlyHandle = handle === 'n' || handle === 's'
+    // 略大于亚像素抖动，避免角点几乎水平拖时误钉高度。
+    const expandingHeight = candidate.height > transform.height + 0.5
     const preserveHugHeight =
       layoutItem.height.mode === 'hug' &&
       keepsHugHeight?.(id) === true &&
-      !draggingHeightOnlyHandle
+      !draggingHeightOnlyHandle &&
+      !expandingHeight
     updates[id] = {
       ...candidate,
       width: constraints.resize === 'vertical'

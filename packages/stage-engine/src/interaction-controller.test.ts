@@ -1427,13 +1427,55 @@ describe('StageInteractionController 内容重排实体的缩放', () => {
     })
   })
 
-  it('OpenSpec: add-text-height-resize-drag / 拖角手柄时 Hug 高度仍保留（回归保护）', () => {
+  it('OpenSpec: add-text-height-resize-drag / 拖角手柄收窄时 Hug 高度仍保留（回归保护）', () => {
     const { command } = resizeSetup(true, 'se')
     expect(command).toMatchObject({
       command: {
         payload: {
           operation: 'resize',
           updates: [{ entityId: 'a', transform: { size: { width: 64, height: 50 } } }],
+        },
+      },
+    })
+  })
+
+  it('OpenSpec: add-text-height-resize-drag / 拖角手柄拉高时转为 Fixed', () => {
+    // 选区只显示四角时，用户只能靠角点加高；往外拉高必须钉成 Fixed，否则单行文字怎么拖都
+    // 拉不动高度。
+    const value = document([hugHeightEntity('a')])
+    const effects: StageInteractionEffect[] = []
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: (next) => effects.push(...next),
+    })
+    controller.updateContext({
+      document: value,
+      layoutSnapshot: layoutSnapshot(value),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'select',
+      selectedIds: ['a'],
+      contentReflowsWithWidth: () => true,
+      idFactory: () => 'resize-expand-id',
+    })
+    // entity a 默认 0,0 100×50；SE 在 (100,50)，往右下拉到网格点 (120, 96)。
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 100, y: 50 },
+      hit: { kind: 'resize', handle: 'se' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 120, y: 96 }, modifiers })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 120, y: 96 }, modifiers })
+    const command = effects.find((effect) => effect.type === 'command.dispatch')
+    expect(command).toMatchObject({
+      command: {
+        payload: {
+          operation: 'resize',
+          updates: [{ entityId: 'a', transform: { size: { width: 120, height: 96 } } }],
         },
       },
     })

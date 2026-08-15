@@ -47,7 +47,7 @@ export function createComposeComponentInstanceEntity(input: {
     resolvedSnapshot: snapshot,
     instanceOverrides: { operations: [] },
   } as unknown as JsonObject
-  // 页面上实例最外层用于组合排版：始终 free（8 控点），与组件根是否可缩解耦。
+  // 页面上实例最外层用于组合排版：始终 free（四角缩放），与组件根是否可缩解耦。
   // Resize 结果仍写入以根为目标的实例覆盖；宿主 LayoutItem 保持 Hug，尺寸事实在根上。
   return {
     ok: true,

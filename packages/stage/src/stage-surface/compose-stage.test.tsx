@@ -373,13 +373,17 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId('stage-grid')).toHaveStyle({ display: 'none' })
   })
 
-  it('OpenSpec: 受控工具模式与专属选区反馈 / 选择工具保留 8 控点且不显示移动 gizmo', () => {
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 选择工具保留四角控点且不显示移动 gizmo', () => {
     renderStage(document(), { selectedIds: ['a'], tool: 'select' })
 
     expect(screen.queryByTestId('stage-move-gizmo')).not.toBeInTheDocument()
-    // free：4 角 + 4 边可见控点，便于组合缩放。
-    for (const handle of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const) {
+    // free：仅四角可见；边方向靠透明 hit，不渲染中点方块。
+    for (const handle of ['ne', 'se', 'sw', 'nw'] as const) {
       expect(screen.getByTestId(`stage-resize-${handle}`)).toBeInTheDocument()
+    }
+    for (const handle of ['n', 'e', 's', 'w'] as const) {
+      expect(screen.queryByTestId(`stage-resize-${handle}`)).not.toBeInTheDocument()
+      expect(screen.getByTestId(`stage-resize-edge-${handle}`)).toBeInTheDocument()
     }
   })
 
@@ -720,8 +724,8 @@ describe('ComposeStage ECS', () => {
   })
 
   it.each([
-    // 可见手柄可含角与边；边缘 hit 区仅 n/e/s/w（角由手柄本身命中）。
-    ['free', ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'], ['n', 'e', 's', 'w']],
+    // free 仅四角可见；边缘 hit 区仅 n/e/s/w（角由手柄本身命中）。
+    ['free', ['ne', 'se', 'sw', 'nw'], ['n', 'e', 's', 'w']],
     ['horizontal', ['e', 'w'], ['e', 'w']],
     ['vertical', ['n', 's'], ['n', 's']],
     ['preserve-aspect', ['ne', 'se', 'sw', 'nw'], []],
