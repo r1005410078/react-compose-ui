@@ -924,6 +924,7 @@ function transformedSelection(
   worldTransform: StageMatrix,
   resize?: { readonly scaleX: number; readonly scaleY: number },
   keepsHugHeight?: (entityId: string) => boolean,
+  handle?: ResizeHandle,
 ) {
   const updates: Record<string, StageTransform> = {}
   ids.forEach((id) => {
@@ -980,12 +981,18 @@ function transformedSelection(
       return
     }
     // 内容随宽度重排的 Entity（文字换行）保留其 Hug 高度：拖窄后重新换行会长高，若把
-    // 高度一并写死，长出来的部分会被自己的框裁掉。
+    // 高度一并写死，长出来的部分会被自己的框裁掉。但用户专门拖顶部/底部纯高度手柄时，
+    // 意图就是要一个固定高度——这时不再保留 Hug，让拖拽结果进入预览与提交流程，与 Figma
+    // 的 Auto Height 文字拖动高度手柄自动转 Fixed Size 一致。
     //
     // 这里必须回 authored 的 `layoutItem.height.value` 而不是解析出的 `transform.height`：
     // 文档层按 authored 值判断「高度变没变」，而 Hug 实体的 authored 值只是回退尺寸，
     // 与测量出的实际高度并不相等——回解析值会被判成「改了高度」，照样钉成 Fixed。
-    const preserveHugHeight = layoutItem.height.mode === 'hug' && keepsHugHeight?.(id) === true
+    const draggingHeightOnlyHandle = handle === 'n' || handle === 's'
+    const preserveHugHeight =
+      layoutItem.height.mode === 'hug' &&
+      keepsHugHeight?.(id) === true &&
+      !draggingHeightOnlyHandle
     updates[id] = {
       ...candidate,
       width: constraints.resize === 'vertical'
@@ -1007,6 +1014,7 @@ function transformedResizeSelection(
   worldTransform: StageMatrix,
   resize: { readonly scaleX: number; readonly scaleY: number },
   keepsHugHeight?: (entityId: string) => boolean,
+  handle?: ResizeHandle,
 ) {
   return transformedSelection(
     index,
@@ -1014,6 +1022,7 @@ function transformedResizeSelection(
     worldTransform,
     resize,
     keepsHugHeight,
+    handle,
   )
 }
 
@@ -1424,6 +1433,7 @@ export function createStageInteractionController(): StageInteractionController {
           scaleY: nextBounds.height / gesture.bounds.height,
         },
         context?.contentReflowsWithWidth,
+        gesture.handle,
       )
       publish({
         ...snapshot,

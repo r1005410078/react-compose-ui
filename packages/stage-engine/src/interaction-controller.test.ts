@@ -1,5 +1,6 @@
 import { BUILTIN_COMMAND_TYPES } from '@compose-ui/core'
 import { describe, expect, it, vi } from 'vitest'
+import type { ResizeHandle } from './geometry'
 import {
   createStageInteractionController,
   type StageInteractionEffect,
@@ -1354,7 +1355,7 @@ describe('StageInteractionController 内容重排实体的缩放', () => {
     }
   }
 
-  function resizeSetup(reflowing: boolean) {
+  function resizeSetup(reflowing: boolean, handle: ResizeHandle = 'se') {
     const value = document([hugHeightEntity('a')])
     const effects: StageInteractionEffect[] = []
     const controller = createStageInteractionController()
@@ -1377,7 +1378,7 @@ describe('StageInteractionController 内容重排实体的缩放', () => {
       pointerId: 1,
       button: 0,
       point: { x: 100, y: 50 },
-      hit: { kind: 'resize', handle: 'se' },
+      hit: { kind: 'resize', handle },
       modifiers,
     })
     controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 60, y: 30 }, modifiers })
@@ -1407,6 +1408,32 @@ describe('StageInteractionController 内容重排实体的缩放', () => {
         payload: {
           operation: 'resize',
           updates: [{ entityId: 'a', transform: { size: { width: 64, height: 32 } } }],
+        },
+      },
+    })
+  })
+
+  it('OpenSpec: add-text-height-resize-drag / 拖动纯高度手柄转为 Fixed', () => {
+    // 专门拖顶部/底部手柄时用户明确想要固定高度，即使内容会随宽度重排也不再回填
+    // Hug 高度——与角手柄场景（上面两个用例）行为不同。
+    const { command } = resizeSetup(true, 's')
+    expect(command).toMatchObject({
+      command: {
+        payload: {
+          operation: 'resize',
+          updates: [{ entityId: 'a', transform: { size: { width: 100, height: 32 } } }],
+        },
+      },
+    })
+  })
+
+  it('OpenSpec: add-text-height-resize-drag / 拖角手柄时 Hug 高度仍保留（回归保护）', () => {
+    const { command } = resizeSetup(true, 'se')
+    expect(command).toMatchObject({
+      command: {
+        payload: {
+          operation: 'resize',
+          updates: [{ entityId: 'a', transform: { size: { width: 64, height: 50 } } }],
         },
       },
     })
