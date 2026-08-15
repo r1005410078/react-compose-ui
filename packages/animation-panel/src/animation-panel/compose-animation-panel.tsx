@@ -8,6 +8,7 @@ import {
 import { useAnimationPanelSession } from './animation-panel-context'
 import { getComposeAnimationClips } from './animation-panel-model'
 import { AnimationPanelProvider } from './animation-panel-provider'
+import { CommittedInput } from './committed-input'
 import {
   ChevronIcon,
   CurveIcon,
@@ -245,12 +246,24 @@ export function ComposeAnimationTimeline({
             <output aria-label={t.currentTime} className="compose-animation-timeline__time-readout">
               {value.currentTimeMs}<small>ms</small>
             </output>
-            <DurationInput
-              aria-label={t.duration}
-              durationMs={value.model.durationMs}
-              key={value.model.durationMs}
-              onCommit={setDuration}
-            />
+            <label className="compose-animation-timeline__duration-control">
+              <CommittedInput
+                aria-label={t.duration}
+                inputMode="numeric"
+                key={value.model.durationMs}
+                min={10}
+                step={10}
+                type="number"
+                value={String(value.model.durationMs)}
+                onCommit={(draft) => {
+                  const durationMs = Number.parseInt(draft, 10)
+                  if (!Number.isFinite(durationMs)) return false
+                  setDuration(durationMs)
+                  return true
+                }}
+              />
+              <small>ms</small>
+            </label>
             <label className="compose-animation-timeline__playback-mode">
               <LoopIcon />
               <select
@@ -353,47 +366,6 @@ export function ComposeAnimationTimeline({
         />
       </div>
     </section>
-  )
-}
-
-function DurationInput({
-  durationMs,
-  onCommit,
-  ...htmlProps
-}: {
-  readonly durationMs: number
-  readonly onCommit: (durationMs: number) => void
-  readonly 'aria-label': string
-}) {
-  const [draft, setDraft] = useState(String(durationMs))
-  const commit = () => {
-    const nextDurationMs = Number.parseInt(draft, 10)
-    if (Number.isFinite(nextDurationMs)) onCommit(nextDurationMs)
-    else setDraft(String(durationMs))
-  }
-  return (
-    <label className="compose-animation-timeline__duration-control">
-      <input
-        {...htmlProps}
-        inputMode="numeric"
-        min={10}
-        step={10}
-        type="number"
-        value={draft}
-        onBlur={commit}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.currentTarget.blur()
-          }
-          else if (event.key === 'Escape') {
-            setDraft(String(durationMs))
-            event.currentTarget.blur()
-          }
-        }}
-      />
-      <small>ms</small>
-    </label>
   )
 }
 
@@ -767,15 +739,21 @@ export function ComposeAnimationInspector({
       <div className="compose-animation-inspector__fields">
         <label>
           <span>{t.time}</span>
-          <input
-            aria-label={t.time}
-            inputMode="numeric"
-            value={selectedKeyframe ? `${selectedKeyframe.keyframe.timeMs} ms` : ''}
-            onChange={(event) => {
-              const timeMs = Number.parseInt(event.target.value, 10)
-              if (Number.isFinite(timeMs)) updateSelectedKeyframe({ timeMs })
-            }}
-          />
+          <span className="compose-animation-inspector__unit-field">
+            <CommittedInput
+              aria-label={t.time}
+              inputMode="numeric"
+              key={`${selectedKeyframe?.keyframe.id ?? 'none'}-${selectedKeyframe?.keyframe.timeMs ?? 0}`}
+              readOnly={!selectedKeyframe}
+              value={selectedKeyframe ? String(selectedKeyframe.keyframe.timeMs) : ''}
+              onCommit={(draft) => {
+                const timeMs = Number.parseInt(draft, 10)
+                if (!Number.isFinite(timeMs)) return false
+                return updateSelectedKeyframe({ timeMs })
+              }}
+            />
+            <small>ms</small>
+          </span>
         </label>
         <label><span>{t.propertyField}</span><input aria-label={t.propertyField} readOnly value={propertyLabel} /></label>
         {interpolationRange ? <label><span>{t.interpolationRange}</span><input aria-label={t.interpolationRange} readOnly value={interpolationRange} /></label> : null}
@@ -783,13 +761,16 @@ export function ComposeAnimationInspector({
           <span>{t.value}</span>
           <span className="compose-animation-inspector__color-field">
             <i aria-hidden="true" style={{ backgroundColor: color }} />
-            <input
+            <CommittedInput
               aria-label={t.value}
+              key={`${selectedKeyframe?.keyframe.id ?? 'none'}-${color}`}
+              readOnly={!selectedKeyframe}
               spellCheck={false}
               value={color}
-              onChange={(event) => {
-                const next = event.target.value.toUpperCase()
-                if (/^#[0-9A-F]{6}$/.test(next)) updateSelectedKeyframe({ value: next })
+              onCommit={(draft) => {
+                const next = draft.trim().toUpperCase()
+                if (!/^#[0-9A-F]{6}$/.test(next)) return false
+                return updateSelectedKeyframe({ value: next })
               }}
             />
           </span>

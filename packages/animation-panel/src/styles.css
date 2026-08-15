@@ -344,6 +344,10 @@
   .compose-animation-inspector__fields input:focus,
   .compose-animation-inspector__fields select:focus { border-color: var(--ap-accent); box-shadow: 0 0 0 2px rgb(46 133 247 / 20%); }
   .compose-animation-inspector__fields input[readonly] { color: #c5cbd3; }
+  .compose-animation-inspector__unit-field { display: flex; height: 30px; align-items: center; padding-right: 9px; border: 1px solid color-mix(in srgb, var(--ap-border) 85%, black); border-radius: 4px; background: var(--ap-control); }
+  .compose-animation-inspector__unit-field:focus-within { border-color: var(--ap-accent); box-shadow: 0 0 0 2px rgb(46 133 247 / 20%); }
+  .compose-animation-inspector__unit-field input { height: 28px; border: 0; background: transparent; box-shadow: none !important; }
+  .compose-animation-inspector__unit-field small { flex: 0 0 auto; color: var(--ap-muted); font-size: 12px; }
   .compose-animation-inspector__color-field { display: flex; height: 30px; align-items: center; padding-left: 7px; border: 1px solid color-mix(in srgb, var(--ap-border) 85%, black); border-radius: 4px; background: var(--ap-control); }
   .compose-animation-inspector__color-field:focus-within { border-color: var(--ap-accent); box-shadow: 0 0 0 2px rgb(46 133 247 / 20%); }
   .compose-animation-inspector__color-field > i { width: 17px; height: 17px; flex: 0 0 auto; border: 1px solid rgb(255 255 255 / 48%); box-shadow: 0 0 0 1px #7e1725; }

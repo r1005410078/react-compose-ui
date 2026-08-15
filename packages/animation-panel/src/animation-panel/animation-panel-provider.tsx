@@ -37,7 +37,7 @@ export interface ComposeAnimationPanelSession {
   readonly moveKeyframe: (keyframeId: string, timeMs: number) => void
   readonly updateSelectedKeyframe: (
     update: Partial<Pick<ComposeAnimationKeyframe, 'timeMs' | 'value' | 'interpolation'>>,
-  ) => void
+  ) => boolean
   readonly toggleTrack: (trackId: string) => void
   readonly addKeyframe: () => void
   readonly setEasingEditor: (editor: 'curve' | 'spring') => void
@@ -186,17 +186,18 @@ export function AnimationPanelProvider({
     const result = updateComposeAnimationKeyframe(current, keyframeId, update)
     if (result.conflict) {
       setNotice('duplicate-time')
-      return
+      return false
     }
     setNotice(null)
     commit({
       ...result.value,
       selectedKeyframeId: keyframeId,
     })
+    return true
   }, [commit])
   const updateSelectedKeyframe = useCallback((update: Partial<Pick<ComposeAnimationKeyframe, 'timeMs' | 'value' | 'interpolation'>>) => {
     const keyframeId = valueRef.current.selectedKeyframeId
-    if (keyframeId) updateKeyframe(keyframeId, update)
+    return keyframeId ? updateKeyframe(keyframeId, update) : false
   }, [updateKeyframe])
   const moveKeyframe = useCallback((keyframeId: string, timeMs: number) => {
     updateKeyframe(keyframeId, { timeMs })

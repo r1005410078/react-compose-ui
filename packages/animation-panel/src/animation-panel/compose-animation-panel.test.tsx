@@ -28,8 +28,8 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('button', { name: '关键帧 200 ms：背景填充' }))
       .toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('Fault / 背景填充')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('200 ms')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('#FF6B6B')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('200')
+    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#FF6B6B')
     expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('linear')
   })
 
@@ -44,7 +44,7 @@ describe('ComposeAnimationPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '关键帧 100 ms：背景填充' }))
     expect(screen.getByRole('button', { name: '关键帧 100 ms：背景填充' }))
       .toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByDisplayValue('100 ms')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('100')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
     fireEvent.change(screen.getByRole('combobox', { name: '插值' }), {
       target: { value: 'ease-out' },
@@ -84,8 +84,8 @@ describe('ComposeAnimationPanel', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: '关键帧 100 ms：背景填充' }))
-    expect(screen.getByDisplayValue('100 ms')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('#00AA11')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('100')
+    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#00AA11')
     expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('ease-in')
   })
 
@@ -107,7 +107,7 @@ describe('ComposeAnimationPanel', () => {
     expect(segment).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '关键帧 300 ms：背景填充' }))
       .toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByDisplayValue('300 ms')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('300')
     expect(screen.getByDisplayValue('200 ms → 300 ms')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '曲线' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
@@ -132,11 +132,11 @@ describe('ComposeAnimationPanel', () => {
     fireEvent.pointerUp(keyframe, { clientX: 250, pointerId: 8 })
     expect(screen.getByRole('button', { name: '关键帧 250 ms：背景填充' }))
       .toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByDisplayValue('250 ms')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('250')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
 
     fireEvent.keyDown(screen.getByRole('button', { name: '关键帧 250 ms：背景填充' }), { key: 'ArrowLeft' })
-    expect(screen.getByDisplayValue('240 ms')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('240')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
   })
 
@@ -379,5 +379,52 @@ describe('ComposeAnimationPanel', () => {
 
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('100')
     expect(screen.getByRole('button', { name: '暂停动画' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 颜色字段允许输入中间态并在提交时生效', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    const color = screen.getByRole('textbox', { name: '值' })
+
+    // 半成品颜色必须能停留在输入框里，而不是被立即回滚。
+    fireEvent.change(color, { target: { value: '#FF6B6' } })
+    expect(color).toHaveValue('#FF6B6')
+
+    fireEvent.change(color, { target: { value: '#00aa11' } })
+    fireEvent.blur(color)
+    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#00AA11')
+
+    const committed = screen.getByRole('textbox', { name: '值' })
+    fireEvent.change(committed, { target: { value: '不是颜色' } })
+    fireEvent.blur(committed)
+    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#00AA11')
+  })
+
+  it('OpenSpec: animation-panel / 关键帧时间调整 / 时间字段在提交前不移动关键帧', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    const time = screen.getByRole('textbox', { name: '时间' })
+    expect(time).toHaveValue('200')
+
+    fireEvent.change(time, { target: { value: '25' } })
+    expect(screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })).toBeInTheDocument()
+
+    fireEvent.keyDown(time, { key: 'Enter' })
+    expect(screen.getByRole('button', { name: '关键帧 25 ms：背景填充' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('25')
+
+    // Escape 丢弃草稿并回到会话值。
+    const reselected = screen.getByRole('textbox', { name: '时间' })
+    fireEvent.change(reselected, { target: { value: '90' } })
+    fireEvent.keyDown(reselected, { key: 'Escape' })
+    expect(reselected).toHaveValue('25')
   })
 })
