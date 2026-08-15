@@ -154,12 +154,12 @@ function createTimeMarkers(durationMs: number, pixelsPerMs: number) {
   // 同样的间距能塞进更细的时间步长，标尺因此自然变密。挂载瞬间/未测出可视宽度时
   // （pixelsPerMs <= 0）退回旧启发式：把总时长切成约 8 段。
   const minStepMs = pixelsPerMs > 0 ? MIN_MARKER_SPACING_PX / pixelsPerMs : safeDurationMs / 8
-  const markerStep = TIME_MARKER_STEPS_MS.find((step) => step >= minStepMs)
+  const stepMs = TIME_MARKER_STEPS_MS.find((step) => step >= minStepMs)
     ?? TIME_MARKER_STEPS_MS[TIME_MARKER_STEPS_MS.length - 1]!
   const markers: number[] = []
-  for (let timeMs = 0; timeMs < safeDurationMs; timeMs += markerStep) markers.push(timeMs)
+  for (let timeMs = 0; timeMs < safeDurationMs; timeMs += stepMs) markers.push(timeMs)
   if (markers[markers.length - 1] !== safeDurationMs) markers.push(safeDurationMs)
-  return markers
+  return { markers, stepMs }
 }
 
 function playbackModeLabel(mode: ComposeAnimationPlaybackMode, locale: Locale) {
@@ -246,7 +246,7 @@ export function ComposeAnimationTimeline({
       : 0
   )
   const scaleWidthPx = Math.max(0, value.model.durationMs * effectivePixelsPerMs)
-  const timeMarkers = createTimeMarkers(value.model.durationMs, effectivePixelsPerMs)
+  const { markers: timeMarkers, stepMs: timeMarkerStepMs } = createTimeMarkers(value.model.durationMs, effectivePixelsPerMs)
 
   useEffect(() => {
     const element = scaleScrollRef.current
@@ -495,6 +495,7 @@ export function ComposeAnimationTimeline({
           scaleRef={scaleRef}
           scaleScrollRef={scaleScrollRef}
           scaleWidthPx={scaleWidthPx}
+          markerStepMs={timeMarkerStepMs}
         />
       </div>
       {/* 常驻挂载：live region 必须先于内容变化就存在于 DOM 中，AT 才能可靠捕获后续的文本变化。
@@ -518,6 +519,7 @@ export function ComposeAnimationTimeline({
 function TimelineScale({
   currentRatio,
   markers,
+  markerStepMs,
   onKeyDown,
   onMoveKeyframe,
   onSelectClip,
@@ -534,6 +536,7 @@ function TimelineScale({
 }: {
   readonly currentRatio: number
   readonly markers: readonly number[]
+  readonly markerStepMs: number
   readonly onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
   readonly onMoveKeyframe: (keyframeId: string, timeMs: number) => void
   readonly onSelectClip: (clipId: string) => void
@@ -678,7 +681,13 @@ function TimelineScale({
         ref={scaleRef}
         style={{ '--animation-playhead': `${currentRatio * 100}%`, width: `${scaleWidthPx}px` } as CSSProperties}
       >
-        <div className="compose-animation-timeline__ruler" aria-hidden="true">
+        <div
+          aria-hidden="true"
+          className="compose-animation-timeline__ruler"
+          // 次刻度按主刻度步长的 1/5 换算成百分比：主刻度变密/变疏时次刻度网格自动跟着换算，
+          // 不再是与实际时间脱节的固定 30 等分。
+          style={{ '--ruler-minor-step': `${timelineRatio(markerStepMs / 5, value.model.durationMs) * 100}%` } as CSSProperties}
+        >
           {markers.map((marker) => (
             <span key={marker} style={{ left: `${timelineRatio(marker, value.model.durationMs) * 100}%` }}>
               <b>{marker}</b><i />

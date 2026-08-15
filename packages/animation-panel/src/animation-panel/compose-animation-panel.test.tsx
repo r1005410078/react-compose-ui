@@ -705,4 +705,24 @@ describe('ComposeAnimationPanel', () => {
     const markersAfter = document.querySelectorAll('.compose-animation-timeline__ruler b').length
     expect(markersAfter).toBeGreaterThan(markersBefore)
   })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 次刻度间距随主刻度步长换算，而不是固定 30 等分', () => {
+    stubTimelineContainerWidth(700)
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const ruler = document.querySelector<HTMLElement>('.compose-animation-timeline__ruler')!
+    const stepBefore = ruler.style.getPropertyValue('--ruler-minor-step')
+    expect(stepBefore).not.toBe('')
+
+    const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
+    fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -300 })
+
+    // 放大后主刻度步长变细，换算出的次刻度百分比间距必须跟着变——不能停留在固定的 3.333%。
+    const stepAfter = document.querySelector<HTMLElement>('.compose-animation-timeline__ruler')!
+      .style.getPropertyValue('--ruler-minor-step')
+    expect(stepAfter).not.toBe(stepBefore)
+  })
 })

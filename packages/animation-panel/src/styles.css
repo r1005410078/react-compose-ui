@@ -272,7 +272,8 @@
      不再用 CSS 百分比／min-width：缩放级别独立于容器宽度，必须能撑出比可视区域更宽的内容供横向滚动。 */
   .compose-animation-timeline__scale { --animation-playhead: 66.667%; position: relative; min-height: 100%; margin: 0 10px; }
   .compose-animation-timeline__ruler { position: relative; height: var(--ap-ruler-height); flex: 0 0 var(--ap-ruler-height); border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 78%, transparent); }
-  .compose-animation-timeline__ruler::after { position: absolute; right: 0; bottom: 0; left: 0; height: 7px; opacity: .65; background: repeating-linear-gradient(90deg, transparent 0 calc(3.333% - 1px), var(--ap-grid) calc(3.333% - 1px) 3.333%); content: ''; }
+  /* --ruler-minor-step 由 JS 按当前主刻度步长的 1/5 换算，随缩放级别变化；未设置时退回旧的固定 30 等分。 */
+  .compose-animation-timeline__ruler::after { position: absolute; right: 0; bottom: 0; left: 0; height: 7px; opacity: .65; background: repeating-linear-gradient(90deg, transparent 0 calc(var(--ruler-minor-step, 3.333%) - 1px), var(--ap-grid) calc(var(--ruler-minor-step, 3.333%) - 1px) var(--ruler-minor-step, 3.333%)); content: ''; }
   .compose-animation-timeline__ruler > span { position: absolute; top: 4px; display: grid; transform: translateX(-50%); color: var(--ap-muted); font-size: 11px; text-align: center; }
   .compose-animation-timeline__ruler > span:first-child { transform: none; text-align: left; }
   .compose-animation-timeline__ruler > span:last-child { transform: translateX(-100%); text-align: right; }
@@ -336,7 +337,12 @@
   .compose-animation-timeline__playhead-input--ruler { height: var(--ap-ruler-height); }
   /* 用 ~ 而非 +：input 与 .playhead 之间还隔着两个 sr-only 说明 span，相邻兄弟选择器永远匹配不到。 */
   .compose-animation-timeline__playhead-input:focus-visible ~ .compose-animation-timeline__playhead { filter: drop-shadow(0 0 .4rem var(--ap-accent)); }
-  .compose-animation-timeline__playhead { position: absolute; z-index: 4; top: 0; bottom: 0; left: var(--animation-playhead); width: 1px; pointer-events: none; background: #2586f5; box-shadow: 0 0 5px rgb(35 132 255 / 42%); }
+  /* 播放头外框故意比可见的竖线宽（16px），只为给两端菱形手柄留出不被裁切的横向空间；
+     竖线本身移到 ::before 里画。外框 overflow: hidden 顶到 .scale 的上下边界为止：
+     菱形手柄设计成略微探出边界的装饰效果，但 .scale-scroll 是双轴 overflow: auto，任何探出
+     .scale 盒子的像素都会被计入其可滚动区域，此前导致出现一条几像素高、毫无意义的纵向滚动条。 */
+  .compose-animation-timeline__playhead { position: absolute; z-index: 4; top: 0; bottom: 0; left: calc(var(--animation-playhead) - 8px); width: 16px; overflow: hidden; pointer-events: none; }
+  .compose-animation-timeline__playhead::before { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: #2586f5; box-shadow: 0 0 5px rgb(35 132 255 / 42%); content: ''; }
   .compose-animation-timeline__playhead > span { position: absolute; top: -1px; left: 50%; width: 14px; height: 14px; transform: translateX(-50%) rotate(45deg); border-radius: 2px; background: #2586f5; }
   .compose-animation-timeline__playhead > i { position: absolute; bottom: -1px; left: 50%; width: 9px; height: 9px; transform: translate(-50%, 50%) rotate(45deg); border: 1px solid #80b9ff; background: var(--ap-bg); }
 
