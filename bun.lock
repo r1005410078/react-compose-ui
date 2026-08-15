@@ -60,6 +60,7 @@
     "apps/storybook": {
       "name": "@compose-ui/storybook",
       "dependencies": {
+        "@compose-ui/animation-panel": "workspace:*",
         "@compose-ui/asset-browser": "workspace:*",
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/command-panel": "workspace:*",
@@ -87,6 +88,17 @@
         "monaco-editor": "^0.55.1",
         "storybook": "^10.5.6",
         "vitest": "^4.0.18",
+      },
+    },
+    "packages/animation-panel": {
+      "name": "@compose-ui/animation-panel",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/ui-context": "workspace:*",
+      },
+      "peerDependencies": {
+        "react": "^18.3.0 || ^19.0.0",
+        "react-dom": "^18.3.0 || ^19.0.0",
       },
     },
     "packages/asset-browser": {
@@ -176,6 +188,7 @@
       "name": "@compose-ui/editor",
       "version": "0.1.0",
       "dependencies": {
+        "@compose-ui/animation-panel": "workspace:*",
         "@compose-ui/asset-browser": "workspace:*",
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/command-panel": "workspace:*",
@@ -459,6 +472,8 @@
     "@changesets/types": ["@changesets/types@6.1.0", "https://registry.npmmirror.com/@changesets/types/-/types-6.1.0.tgz", {}, "sha512-rKQcJ+o1nKNgeoYRHKOS07tAMNd3YSN0uHaJOZYjBAgxfV7TUE7JE+z4BzZdQwb5hKaYbayKN5KrYV7ODb2rAA=="],
 
     "@changesets/write": ["@changesets/write@0.4.0", "https://registry.npmmirror.com/@changesets/write/-/write-0.4.0.tgz", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
+
+    "@compose-ui/animation-panel": ["@compose-ui/animation-panel@workspace:packages/animation-panel"],
 
     "@compose-ui/asset-browser": ["@compose-ui/asset-browser@workspace:packages/asset-browser"],
 

@@ -60,20 +60,23 @@ describe('initializeWorkspace', () => {
     expect(spies.addGroup).toHaveBeenCalledWith(
       expect.objectContaining({ id: WORKSPACE_GROUP_IDS.canvas }),
     )
-    expect(spies.addEdgeGroup).toHaveBeenNthCalledWith(1, 'left', {
+    expect(spies.addGroup).toHaveBeenNthCalledWith(2, {
+      direction: 'left',
       id: WORKSPACE_GROUP_IDS.scene,
-      ...WORKSPACE_SIZES.scene,
+      referenceGroup: WORKSPACE_GROUP_IDS.canvas,
     })
-    expect(spies.addEdgeGroup).toHaveBeenNthCalledWith(2, 'right', {
+    expect(spies.addGroup).toHaveBeenNthCalledWith(3, {
+      direction: 'right',
       id: WORKSPACE_GROUP_IDS.inspector,
-      ...WORKSPACE_SIZES.inspector,
+      referenceGroup: WORKSPACE_GROUP_IDS.canvas,
     })
-    expect(spies.addEdgeGroup).toHaveBeenNthCalledWith(3, 'bottom', {
+    expect(spies.addEdgeGroup).toHaveBeenCalledTimes(1)
+    expect(spies.addEdgeGroup).toHaveBeenCalledWith('bottom', {
       id: WORKSPACE_GROUP_IDS.bottom,
       ...WORKSPACE_SIZES.bottom,
       collapsed: true,
     })
-    expect(spies.addPanel).toHaveBeenCalledTimes(6)
+    expect(spies.addPanel).toHaveBeenCalledTimes(7)
     expect(panels.get(WORKSPACE_PANEL_IDS.scene)?.api.setActive)
       .toHaveBeenCalledTimes(1)
     expect(edgeGroups.get('bottom')).toEqual(
@@ -97,7 +100,7 @@ describe('initializeWorkspace', () => {
     }))
   })
 
-  it('OpenSpec: editor-workspace-layout / 边缘工具区 / 检查默认边缘组', () => {
+  it('OpenSpec: animation-panel / 全宽底部工具区 / 场景与属性使用主工作区左右分栏', () => {
     const { api, spies } = createWorkspaceApi()
 
     initializeWorkspace(api)
@@ -106,8 +109,21 @@ describe('initializeWorkspace', () => {
       ([options]) => options.id === WORKSPACE_PANEL_IDS.scene,
     )?.[0]
     expect(sceneOptions).toEqual(expect.objectContaining({
+      initialWidth: WORKSPACE_SIZES.scene.initialSize,
+      minimumWidth: WORKSPACE_SIZES.scene.minimumSize,
       position: { referenceGroup: WORKSPACE_GROUP_IDS.scene },
     }))
+    const inspectorOptions = spies.addPanel.mock.calls.find(
+      ([options]) => options.id === WORKSPACE_PANEL_IDS.inspector,
+    )?.[0]
+    expect(inspectorOptions).toEqual(expect.objectContaining({
+      initialWidth: WORKSPACE_SIZES.inspector.initialSize,
+      minimumWidth: WORKSPACE_SIZES.inspector.minimumSize,
+      position: { referenceGroup: WORKSPACE_GROUP_IDS.inspector },
+    }))
+    expect(spies.addEdgeGroup).toHaveBeenCalledWith('bottom', expect.any(Object))
+    expect(spies.addEdgeGroup).not.toHaveBeenCalledWith('left', expect.any(Object))
+    expect(spies.addEdgeGroup).not.toHaveBeenCalledWith('right', expect.any(Object))
     expect(spies.addPanel).not.toHaveBeenCalledWith(expect.objectContaining({
       id: 'compose-component-library',
     }))
@@ -117,7 +133,7 @@ describe('initializeWorkspace', () => {
     expect(WORKSPACE_SIZES.inspector).toEqual({ initialSize: 400, minimumSize: 300 })
   })
 
-  it('OpenSpec: editor-workspace-layout / 资源面板标签 / 将三个底部面板按资源、命令、日志放入默认收起的一组', () => {
+  it('OpenSpec: animation-panel / 编辑器底部动画区 / 将资源、动画、命令、日志放入默认收起的一组', () => {
     const { api, spies } = createWorkspaceApi()
 
     initializeWorkspace(api)
@@ -130,6 +146,9 @@ describe('initializeWorkspace', () => {
     )?.[0]
     const assetOptions = spies.addPanel.mock.calls.find(
       ([options]) => options.id === WORKSPACE_PANEL_IDS.assetBrowser,
+    )?.[0]
+    const animationOptions = spies.addPanel.mock.calls.find(
+      ([options]) => options.id === WORKSPACE_PANEL_IDS.animation,
     )?.[0]
 
     expect(transactionOptions).toEqual(
@@ -149,11 +168,18 @@ describe('initializeWorkspace', () => {
         position: { referenceGroup: WORKSPACE_GROUP_IDS.bottom },
       }),
     )
+    expect(animationOptions).toEqual(
+      expect.objectContaining({
+        inactive: true,
+        position: { referenceGroup: WORKSPACE_GROUP_IDS.bottom },
+      }),
+    )
     expect(spies.addPanel.mock.calls.map(([options]) => options.id)).toEqual([
       WORKSPACE_PANEL_IDS.canvas,
       WORKSPACE_PANEL_IDS.scene,
       WORKSPACE_PANEL_IDS.inspector,
       WORKSPACE_PANEL_IDS.assetBrowser,
+      WORKSPACE_PANEL_IDS.animation,
       WORKSPACE_PANEL_IDS.command,
       WORKSPACE_PANEL_IDS.transactionLog,
     ])
@@ -165,8 +191,8 @@ describe('initializeWorkspace', () => {
     initializeWorkspace(api)
     initializeWorkspace(api)
 
-    expect(spies.addGroup).toHaveBeenCalledTimes(1)
-    expect(spies.addEdgeGroup).toHaveBeenCalledTimes(3)
-    expect(spies.addPanel).toHaveBeenCalledTimes(6)
+    expect(spies.addGroup).toHaveBeenCalledTimes(3)
+    expect(spies.addEdgeGroup).toHaveBeenCalledTimes(1)
+    expect(spies.addPanel).toHaveBeenCalledTimes(7)
   })
 })

@@ -1,0 +1,373 @@
+/*
+ * Editor 的 Tailwind 构建会按扫描结果裁剪保留在其 `components` layer 中的外部规则。
+ * 动画包是独立发布的命名空间样式，不能放入该保留 layer，否则宿主只会渲染出浏览器默认控件。
+ */
+  .compose-animation-panel {
+    --ap-bg: var(--compose-panel-bg, #12161c);
+    --ap-raised: var(--compose-surface-raised, #1a2028);
+    --ap-control: var(--compose-surface-control, #0e1319);
+    --ap-border: var(--compose-border, #303945);
+    --ap-text: var(--compose-text, #e7ebf1);
+    --ap-muted: var(--compose-text-muted, #8e99a7);
+    --ap-accent: var(--compose-accent, #2e85f7);
+    --ap-grid: color-mix(in srgb, var(--ap-border) 58%, transparent);
+    --ap-keyframe-line: #66717d;
+    --ap-keyframe-line-selected: #2c86ed;
+    --ap-row-selected: color-mix(in srgb, var(--ap-accent) 18%, rgb(16 24 34 / 82%));
+    --ap-ruler-height: 42px;
+    --ap-track-row-height: 34px;
+    --ap-property-row-height: 34px;
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+    color: var(--ap-text);
+    background:
+      radial-gradient(ellipse at 39% -28%, rgb(113 154 204 / 9%), transparent 48%),
+      linear-gradient(180deg, rgb(255 255 255 / 1.5%), transparent 34%),
+      var(--ap-bg);
+    font: 12px/1.35 Inter, "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .compose-animation-panel *,
+  .compose-animation-panel *::before,
+  .compose-animation-panel *::after { box-sizing: inherit; }
+  .compose-animation-panel button,
+  .compose-animation-panel input,
+  .compose-animation-panel select { font: inherit; }
+
+  .compose-animation-timeline {
+    display: flex;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    min-height: 150px;
+    flex-direction: column;
+    border-top: 1px solid var(--ap-border);
+  }
+
+  .compose-animation-timeline__controls {
+    display: none;
+  }
+
+  .compose-animation-timeline__button-cluster {
+    display: flex;
+    height: 28px;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, var(--ap-border) 80%, black);
+    border-radius: 6px;
+    background: rgb(5 9 13 / 34%);
+    box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+  }
+
+  .compose-animation-timeline__icon-button,
+  .compose-animation-timeline__more-button,
+  .compose-animation-timeline__track-toggle {
+    display: grid;
+    padding: 0;
+    border: 1px solid transparent;
+    color: var(--ap-text);
+    background: transparent;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .compose-animation-timeline__icon-button { width: 28px; height: 26px; border-radius: 5px; }
+  .compose-animation-timeline__icon-button:hover,
+  .compose-animation-timeline__icon-button:focus-visible,
+  .compose-animation-timeline__icon-button[aria-pressed='true'] {
+    border-color: color-mix(in srgb, var(--ap-accent) 48%, transparent);
+    color: #dfeeff;
+    background: color-mix(in srgb, var(--ap-accent) 18%, transparent);
+    outline: none;
+  }
+
+  .compose-animation-timeline__icon-button svg,
+  .compose-animation-timeline__more-button svg,
+  .compose-animation-timeline__track-toggle svg,
+  .compose-animation-timeline__property-row > svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.55;
+  }
+
+  .compose-animation-timeline__control-separator { width: 1px; height: 20px; background: var(--ap-border); }
+  .compose-animation-timeline__time-readout {
+    display: flex;
+    min-width: 48px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 8px;
+    border: 1px solid color-mix(in srgb, var(--ap-border) 74%, black);
+    border-radius: 5px;
+    color: #f7f9fc;
+    background: var(--ap-control);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .compose-animation-timeline__time-readout small { color: var(--ap-muted); font-size: 11px; font-weight: 500; }
+  .compose-animation-timeline__duration-control {
+    display: inline-flex;
+    min-width: 72px;
+    height: 28px;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border: 1px solid color-mix(in srgb, var(--ap-border) 74%, black);
+    border-radius: 5px;
+    background: var(--ap-control);
+  }
+  .compose-animation-timeline__duration-control:focus-within { border-color: var(--ap-accent); box-shadow: 0 0 0 2px rgb(46 133 247 / 20%); }
+  .compose-animation-timeline__duration-control input { width: 36px; min-width: 0; border: 0; outline: 0; color: var(--ap-text); background: transparent; font-size: 13px; font-weight: 600; }
+  .compose-animation-timeline__duration-control input::-webkit-inner-spin-button,
+  .compose-animation-timeline__duration-control input::-webkit-outer-spin-button { margin: 0; }
+  .compose-animation-timeline__duration-control small { color: var(--ap-muted); font-size: 12px; font-weight: 500; }
+  .compose-animation-timeline__playback-mode {
+    display: inline-flex;
+    height: 28px;
+    align-items: center;
+    gap: 5px;
+    padding: 0 4px 0 6px;
+    border: 1px solid color-mix(in srgb, var(--ap-border) 74%, black);
+    border-radius: 5px;
+    color: var(--ap-muted);
+    background: var(--ap-control);
+  }
+  .compose-animation-timeline__playback-mode > svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.55; }
+  .compose-animation-timeline__playback-mode select {
+    min-width: 52px;
+    border: 0;
+    outline: 0;
+    color: var(--ap-text);
+    background: transparent;
+    cursor: pointer;
+  }
+  .compose-animation-timeline__playback-mode:focus-within { border-color: var(--ap-accent); box-shadow: 0 0 0 2px rgb(46 133 247 / 20%); }
+  .compose-animation-timeline__controls-divider { width: 1px; height: 25px; margin: 0 5px; background: var(--ap-border); }
+
+  .compose-animation-timeline__record-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 5px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--ap-text);
+    background: transparent;
+    cursor: pointer;
+  }
+  .compose-animation-timeline__record-button > span { width: 9px; height: 9px; border-radius: 50%; background: #ff5d5d; box-shadow: 0 0 7px rgb(255 68 68 / 36%); }
+  .compose-animation-timeline__record-button[aria-pressed='false'] > span { background: #59616b; box-shadow: none; }
+  .compose-animation-timeline__record-button:focus-visible { outline: 1px solid var(--ap-accent); outline-offset: 2px; }
+
+  .compose-animation-timeline__content {
+    display: grid;
+    overflow: hidden;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: 340px minmax(0, 1fr);
+  }
+  .compose-animation-timeline__tracks {
+    display: flex;
+    overflow: hidden;
+    min-width: 0;
+    flex-direction: column;
+    border-right: 1px solid var(--ap-border);
+    background: linear-gradient(90deg, rgb(255 255 255 / 1.8%), transparent);
+  }
+  .compose-animation-timeline__track-list { overflow: auto hidden; min-height: 0; flex: 1; }
+  .compose-animation-timeline__track-group { min-width: 0; }
+  .compose-animation-timeline__tracks-header {
+    display: flex;
+    overflow: hidden;
+    height: var(--ap-ruler-height);
+    flex: 0 0 var(--ap-ruler-height);
+    align-items: center;
+    gap: 4px;
+    padding: 0 6px;
+    border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 78%, transparent);
+    background: linear-gradient(180deg, rgb(255 255 255 / 2%), rgb(0 0 0 / 7%));
+  }
+  .compose-animation-timeline__track-row,
+  .compose-animation-timeline__property-row {
+    display: flex;
+    position: relative;
+    height: var(--ap-track-row-height);
+    min-height: var(--ap-track-row-height);
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 72%, transparent);
+    cursor: pointer;
+  }
+  .compose-animation-timeline__row-hit {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  .compose-animation-timeline__row-hit:focus-visible {
+    outline: 1px solid var(--ap-accent);
+    outline-offset: -2px;
+  }
+  .compose-animation-timeline__property-row {
+    height: var(--ap-property-row-height);
+    min-height: var(--ap-property-row-height);
+  }
+  .compose-animation-timeline__track-row { background: linear-gradient(90deg, rgb(255 255 255 / 3%), transparent); }
+  .compose-animation-timeline__track-row[data-selected='true'],
+  .compose-animation-timeline__property-row[data-selected='true'] {
+    z-index: 1;
+    background: var(--ap-row-selected);
+  }
+  .compose-animation-timeline__track-row[data-selected='true']::after,
+  .compose-animation-timeline__property-row[data-selected='true']::after {
+    position: absolute;
+    top: 0;
+    right: -1px;
+    bottom: -1px;
+    width: 1px;
+    background: var(--ap-row-selected);
+    content: '';
+    pointer-events: none;
+  }
+  .compose-animation-timeline__track-label,
+  .compose-animation-timeline__property-label {
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 6px;
+    color: inherit;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .compose-animation-timeline__property-label { font-weight: 500; }
+  .compose-animation-timeline__track-toggle { position: relative; z-index: 1; width: 17px; height: 17px; color: var(--ap-text); }
+  .compose-animation-timeline__track-toggle[aria-expanded='true'] svg { transform: rotate(90deg); }
+  .compose-animation-timeline__track-toggle:focus-visible { outline: 1px solid var(--ap-accent); outline-offset: 2px; }
+  .compose-animation-timeline__more-button { position: relative; z-index: 1; width: 22px; height: 22px; flex: 0 0 auto; margin-left: 0; border-radius: 4px; color: var(--ap-muted); }
+  .compose-animation-timeline__more-button:hover,
+  .compose-animation-timeline__more-button:focus-visible { color: var(--ap-text); background: var(--ap-raised); outline: none; }
+  .compose-animation-timeline__property-row { padding-left: 32px; color: #cbd3dc; font-size: 12px; }
+  .compose-animation-timeline__property-row > svg { position: relative; z-index: 1; width: 12px; height: 12px; color: var(--ap-muted); transform: rotate(90deg); pointer-events: none; }
+
+  .compose-animation-timeline__scale-scroll { overflow: auto; min-width: 0; background: rgb(8 12 17 / 18%); }
+  .compose-animation-timeline__scale { --animation-playhead: 66.667%; position: relative; width: calc(100% - 20px); min-width: 700px; min-height: 100%; margin: 0 10px; }
+  .compose-animation-timeline__ruler { position: relative; height: var(--ap-ruler-height); flex: 0 0 var(--ap-ruler-height); border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 78%, transparent); }
+  .compose-animation-timeline__ruler::after { position: absolute; right: 0; bottom: 0; left: 0; height: 7px; opacity: .65; background: repeating-linear-gradient(90deg, transparent 0 calc(3.333% - 1px), var(--ap-grid) calc(3.333% - 1px) 3.333%); content: ''; }
+  .compose-animation-timeline__ruler > span { position: absolute; top: 4px; display: grid; transform: translateX(-50%); color: var(--ap-muted); font-size: 11px; text-align: center; }
+  .compose-animation-timeline__ruler > span:first-child { transform: none; text-align: left; }
+  .compose-animation-timeline__ruler > span:last-child { transform: translateX(-100%); text-align: right; }
+  .compose-animation-timeline__ruler b { color: #c9d1da; font-size: 11px; font-weight: 550; }
+  .compose-animation-timeline__ruler i { width: 1px; height: 5px; margin: 2px auto 0; background: #7d8896; }
+  .compose-animation-timeline__clip-row { position: relative; height: var(--ap-track-row-height); border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 78%, transparent); }
+  .compose-animation-timeline__track-row[data-selected='true'],
+  .compose-animation-timeline__property-row[data-selected='true'],
+  .compose-animation-timeline__clip-row[data-selected='true'],
+  .compose-animation-timeline__property-lane[data-selected='true'] {
+    background: var(--ap-row-selected);
+  }
+  .compose-animation-timeline__clip-row[data-selected='true']::after,
+  .compose-animation-timeline__property-lane[data-selected='true']::after {
+    position: absolute;
+    z-index: 0;
+    top: 0;
+    right: -10px;
+    bottom: -1px;
+    left: -10px;
+    background: var(--ap-row-selected);
+    content: '';
+    pointer-events: none;
+  }
+  .compose-animation-timeline__clip { display: contents; }
+  .compose-animation-timeline__clip-body { position: absolute; z-index: 1; top: 9px; height: 13px; min-width: 10px; padding: 0; border: 1px solid #3d4956; border-radius: 2px; background: linear-gradient(90deg, #29313a, #36414c 54%, #29313a); cursor: grab; }
+  .compose-animation-timeline__clip-body:hover,
+  .compose-animation-timeline__clip-body:focus-visible { border-color: #6a7888; outline: 0; }
+  .compose-animation-timeline__clip-body[aria-pressed='true'] { border-color: #438fe8; background: linear-gradient(90deg, #19599c, #2577c7 54%, #19599c); box-shadow: inset 0 1px rgb(255 255 255 / 13%); }
+  .compose-animation-timeline__clip-body[data-dragging='true'] { cursor: ew-resize; }
+  .compose-animation-timeline__clip-handle { position: absolute; z-index: 2; top: 7px; width: 7px; height: 17px; padding: 0; border: 1px solid #9eb0c4; border-radius: 2px; opacity: 0; background: #d5e6f8; transform: translateX(-50%); cursor: ew-resize; transition: opacity .12s ease, border-color .12s ease; }
+  .compose-animation-timeline__clip-body:hover ~ .compose-animation-timeline__clip-handle,
+  .compose-animation-timeline__clip-body:focus-visible ~ .compose-animation-timeline__clip-handle,
+  .compose-animation-timeline__clip-handle:hover,
+  .compose-animation-timeline__clip-handle:focus-visible,
+  .compose-animation-timeline__clip-handle[aria-pressed='true'] { opacity: 1; }
+  .compose-animation-timeline__clip-handle:focus-visible { border-color: #4a9cff; outline: 1px solid #4a9cff; outline-offset: 1px; }
+  .compose-animation-timeline__property-lane { position: relative; height: var(--ap-property-row-height); border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 78%, transparent); }
+  .compose-animation-timeline__property-lane:focus-visible { outline: 1px solid var(--ap-accent); outline-offset: -2px; }
+  .compose-animation-timeline__property-lane::before { position: absolute; z-index: 0; top: 19px; right: 0; left: 0; height: 1px; background: #3f4a55; content: ''; }
+  .compose-animation-timeline__interpolation-segment { position: absolute; z-index: 1; top: 8px; height: 23px; min-width: 18px; padding: 0; border: 0; color: var(--ap-keyframe-line); background: transparent; cursor: pointer; }
+  .compose-animation-timeline__interpolation-segment::before { position: absolute; top: 11px; right: 0; left: 0; height: 1px; background: currentColor; content: ''; }
+  .compose-animation-timeline__interpolation-segment svg { position: absolute; top: 50%; left: 50%; width: 24px; height: 24px; padding: 4px; border: 1px solid #3e88df; border-radius: 4px; color: #a4d2ff; background: #151a20; opacity: 0; transform: translate(-50%, -50%); transition: opacity .12s ease; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+  .compose-animation-timeline__interpolation-segment:hover svg,
+  .compose-animation-timeline__interpolation-segment:focus-visible svg,
+  .compose-animation-timeline__interpolation-segment[aria-pressed='true'] svg { opacity: 1; }
+  .compose-animation-timeline__interpolation-segment:hover,
+  .compose-animation-timeline__interpolation-segment:focus-visible { color: #9bcfff; }
+  .compose-animation-timeline__interpolation-segment[aria-pressed='true'] { color: var(--ap-keyframe-line-selected); }
+  .compose-animation-timeline__interpolation-segment:focus-visible { outline: 0; }
+  .compose-animation-timeline__keyframe { position: absolute; z-index: 3; top: 11px; width: 17px; height: 17px; padding: 0; border: 0; color: #8e9aa7; background: transparent; transform: translateX(-50%); cursor: grab; touch-action: none; }
+  .compose-animation-timeline__keyframe svg { width: 16px; height: 16px; fill: #151a20; stroke: currentColor; stroke-width: 1.45; }
+  .compose-animation-timeline__keyframe:hover { color: #d7e0ea; }
+  .compose-animation-timeline__keyframe:focus-visible { outline: 1px solid var(--ap-accent); outline-offset: 2px; }
+  .compose-animation-timeline__keyframe[aria-pressed='true'] { color: #a8d5ff; }
+  .compose-animation-timeline__keyframe[aria-pressed='true']::before { position: absolute; z-index: -1; inset: -4px; border: 1.5px solid var(--ap-accent); transform: rotate(45deg); content: ''; }
+  .compose-animation-timeline__keyframe[data-dragging='true'] { z-index: 6; cursor: ew-resize; color: #fff; }
+  .compose-animation-timeline__playhead-input { position: absolute; z-index: 0; top: 0; right: 0; left: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+  .compose-animation-timeline__playhead-input:focus-visible + .compose-animation-timeline__playhead { filter: drop-shadow(0 0 .4rem var(--ap-accent)); }
+  .compose-animation-timeline__playhead { position: absolute; z-index: 4; top: 0; bottom: 0; left: var(--animation-playhead); width: 1px; pointer-events: none; background: #2586f5; box-shadow: 0 0 5px rgb(35 132 255 / 42%); }
+  .compose-animation-timeline__playhead > span { position: absolute; top: -1px; left: 50%; width: 14px; height: 14px; transform: translateX(-50%) rotate(45deg); border-radius: 2px; background: #2586f5; }
+  .compose-animation-timeline__playhead > i { position: absolute; bottom: -1px; left: 50%; width: 9px; height: 9px; transform: translate(-50%, 50%) rotate(45deg); border: 1px solid #80b9ff; background: var(--ap-bg); }
+
+  .compose-animation-inspector { display: flex; overflow: auto; width: 100%; height: 100%; min-width: 300px; flex-direction: column; border-left: 1px solid var(--ap-border); }
+  .compose-animation-inspector__header { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--ap-border); background: linear-gradient(180deg, rgb(255 255 255 / 2%), transparent); }
+  .compose-animation-inspector__header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .compose-animation-inspector__header > div { display: grid; min-width: 0; gap: 4px; }
+  .compose-animation-inspector__header strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .compose-animation-inspector__header span { justify-self: end; padding: 3px 9px; border-radius: 5px; color: var(--ap-text); background: color-mix(in srgb, var(--ap-raised) 85%, black); font-size: 12px; }
+  .compose-animation-inspector__fields { display: grid; gap: 8px; padding: 12px; }
+  .compose-animation-inspector__fields > label { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 9px; color: var(--ap-text); font-size: 12px; }
+  .compose-animation-inspector__fields input,
+  .compose-animation-inspector__fields select { width: 100%; height: 30px; min-width: 0; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--ap-border) 85%, black); border-radius: 4px; outline: none; color: var(--ap-text); background: linear-gradient(180deg, rgb(0 0 0 / 22%), rgb(255 255 255 / 1%)), var(--ap-control); }
+  .compose-animation-inspector__fields input:focus,
+  .compose-animation-inspector__fields select:focus { border-color: var(--ap-accent); box-shadow: 0 0 0 2px rgb(46 133 247 / 20%); }
+  .compose-animation-inspector__fields input[readonly] { color: #c5cbd3; }
+  .compose-animation-inspector__color-field { display: flex; height: 30px; align-items: center; padding-left: 7px; border: 1px solid color-mix(in srgb, var(--ap-border) 85%, black); border-radius: 4px; background: var(--ap-control); }
+  .compose-animation-inspector__color-field:focus-within { border-color: var(--ap-accent); box-shadow: 0 0 0 2px rgb(46 133 247 / 20%); }
+  .compose-animation-inspector__color-field > i { width: 17px; height: 17px; flex: 0 0 auto; border: 1px solid rgb(255 255 255 / 48%); box-shadow: 0 0 0 1px #7e1725; }
+  .compose-animation-inspector__color-field input { height: 28px; border: 0; background: transparent; box-shadow: none !important; }
+  .compose-animation-inspector__easing-editor { margin: 3px 12px 12px; border: 1px solid var(--ap-border); border-radius: 4px; background: rgb(0 0 0 / 12%); }
+  .compose-animation-inspector__tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--ap-border); }
+  .compose-animation-inspector__tabs button { position: relative; height: 36px; border: 0; color: var(--ap-muted); background: transparent; cursor: pointer; }
+  .compose-animation-inspector__tabs button[aria-selected='true'] { color: #4ca1ff; }
+  .compose-animation-inspector__tabs button[aria-selected='true']::after { position: absolute; right: 18px; bottom: -1px; left: 18px; height: 2px; background: #2384ff; content: ''; }
+  .compose-animation-inspector__tabs button:focus-visible { outline: 1px solid var(--ap-accent); outline-offset: -2px; }
+  .compose-animation-inspector__curve { display: grid; padding: 12px; place-items: center; gap: 7px; }
+  .compose-animation-inspector__curve svg { width: min(100%, 200px); overflow: visible; }
+  .compose-animation-inspector__curve-grid { fill: none; stroke: #34404d; stroke-width: .8; }
+  .compose-animation-inspector__curve-path { fill: none; stroke: #dce5ee; stroke-width: 1.6; }
+  .compose-animation-inspector__curve circle { fill: #2486ff; stroke: #bddbff; stroke-width: .8; }
+  .compose-animation-inspector__curve strong { color: var(--ap-text); font-size: 14px; font-weight: 500; }
+  .compose-animation-panel__sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; margin: -1px; padding: 0; border: 0; white-space: nowrap; clip: rect(0 0 0 0); }
+
+  @media (max-width: 680px) {
+    .compose-animation-timeline__content { grid-template-columns: 260px minmax(0, 1fr); }
+    .compose-animation-timeline__property-row { padding-left: 22px; }
+    .compose-animation-timeline__playback-mode select { max-width: 48px; }
+  }
+  @media (max-height: 240px) {
+    .compose-animation-timeline { --ap-ruler-height: 36px; }
+    .compose-animation-timeline { --ap-track-row-height: 29px; --ap-property-row-height: 29px; }
+  }

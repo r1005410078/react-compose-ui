@@ -26,6 +26,8 @@ export interface WorkspaceContent {
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
   assetBrowserPanel?: ReactNode
+  /** 底部动画标签处于活动状态时，右侧属性区显示关键帧属性而非场景属性。 */
+  animationPanelActive: boolean
   /**
    * 唯一允许渲染 Stage 的面板 ID。
    *

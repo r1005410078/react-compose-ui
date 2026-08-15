@@ -16,6 +16,7 @@ export const WORKSPACE_PANEL_IDS = {
   transactionLog: 'compose-transaction-log',
   command: 'compose-command',
   assetBrowser: 'compose-assets',
+  animation: 'compose-animation',
 } as const
 
 export const WORKSPACE_COMPONENT_IDS = {
@@ -25,6 +26,7 @@ export const WORKSPACE_COMPONENT_IDS = {
   transactionLog: 'transactionLog',
   command: 'command',
   assetBrowser: 'assetBrowser',
+  animation: 'animation',
   assetDocument: 'assetDocument',
   pageDocument: 'pageDocument',
   componentDocument: 'componentDocument',
@@ -91,7 +93,7 @@ export function isWorkspaceDocumentPanelId(panelId: string) {
 export const WORKSPACE_SIZES = {
   scene: { initialSize: 280, minimumSize: 180 },
   inspector: { initialSize: 400, minimumSize: 300 },
-  bottom: { initialSize: 220, minimumSize: 120 },
+  bottom: { initialSize: 280, minimumSize: 160 },
 } as const
 
 const TAB_COMPONENT = 'workspaceTab'
@@ -119,6 +121,7 @@ export function localizeWorkspace(
     [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
     [WORKSPACE_PANEL_IDS.command]: messages.command,
     [WORKSPACE_PANEL_IDS.assetBrowser]: messages.assets,
+    [WORKSPACE_PANEL_IDS.animation]: messages.animation,
   }
   for (const [panelId, title] of Object.entries(titles)) {
     const getPanel = (api as Partial<DockviewApi>).getPanel
@@ -135,13 +138,13 @@ export function initializeWorkspace(
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
   const includeCanvas = options?.includeCanvas ?? true
-  if (!api.getGroup(WORKSPACE_GROUP_IDS.canvas)) {
+  const canvasGroup =
+    api.getGroup(WORKSPACE_GROUP_IDS.canvas) ??
     api.addGroup({
       direction: 'right',
       id: WORKSPACE_GROUP_IDS.canvas,
       locked: 'no-drop-target',
     })
-  }
 
   if (includeCanvas && !api.getPanel(WORKSPACE_PANEL_IDS.canvas)) {
     api.addPanel({
@@ -153,11 +156,14 @@ export function initializeWorkspace(
     })
   }
 
+  // Dockview 的 top/bottom Edge Group 只会占据 left/right Edge Group 之间的中间列。
+  // 场景和属性区因此必须是主 Grid 的左右分栏，才能让底部工具区真正横跨整个编辑器宽度。
   const sceneGroup =
-    api.getEdgeGroup('left') ??
-    api.addEdgeGroup('left', {
+    api.getGroup(WORKSPACE_GROUP_IDS.scene) ??
+    api.addGroup({
+      direction: 'left',
       id: WORKSPACE_GROUP_IDS.scene,
-      ...WORKSPACE_SIZES.scene,
+      referenceGroup: canvasGroup.id,
     })
   sceneGroup.locked = 'no-drop-target'
 
@@ -166,8 +172,10 @@ export function initializeWorkspace(
     scenePanel = api.addPanel({
       id: WORKSPACE_PANEL_IDS.scene,
       component: WORKSPACE_COMPONENT_IDS.scene,
+      initialWidth: WORKSPACE_SIZES.scene.initialSize,
       tabComponent: TAB_COMPONENT,
       title: messages.sceneGraph,
+      minimumWidth: WORKSPACE_SIZES.scene.minimumSize,
       position: { referenceGroup: sceneGroup.id },
     })
   }
@@ -175,10 +183,11 @@ export function initializeWorkspace(
   scenePanel.api.setActive()
 
   const inspectorGroup =
-    api.getEdgeGroup('right') ??
-    api.addEdgeGroup('right', {
+    api.getGroup(WORKSPACE_GROUP_IDS.inspector) ??
+    api.addGroup({
+      direction: 'right',
       id: WORKSPACE_GROUP_IDS.inspector,
-      ...WORKSPACE_SIZES.inspector,
+      referenceGroup: canvasGroup.id,
     })
   inspectorGroup.locked = 'no-drop-target'
 
@@ -186,8 +195,10 @@ export function initializeWorkspace(
     api.addPanel({
       id: WORKSPACE_PANEL_IDS.inspector,
       component: WORKSPACE_COMPONENT_IDS.inspector,
+      initialWidth: WORKSPACE_SIZES.inspector.initialSize,
       tabComponent: TAB_COMPONENT,
       title: messages.inspector,
+      minimumWidth: WORKSPACE_SIZES.inspector.minimumSize,
       position: { referenceGroup: inspectorGroup.id },
     })
   }
@@ -209,6 +220,17 @@ export function initializeWorkspace(
       component: WORKSPACE_COMPONENT_IDS.assetBrowser,
       tabComponent: TAB_COMPONENT,
       title: messages.assets,
+      position: { referenceGroup: bottomGroup.id },
+    })
+  }
+
+  if (!api.getPanel(WORKSPACE_PANEL_IDS.animation)) {
+    api.addPanel({
+      id: WORKSPACE_PANEL_IDS.animation,
+      component: WORKSPACE_COMPONENT_IDS.animation,
+      tabComponent: TAB_COMPONENT,
+      title: messages.animation,
+      inactive: true,
       position: { referenceGroup: bottomGroup.id },
     })
   }

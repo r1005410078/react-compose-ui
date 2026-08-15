@@ -883,13 +883,14 @@ describe('ComposeEditor', () => {
     render(<ComposeEditor />)
 
     expect(screen.getByTestId('default-scene-tree')).toBeEmptyDOMElement()
-    expect(screen.getAllByRole('status')).toHaveLength(6)
+    expect(screen.getAllByRole('status')).toHaveLength(8)
     expect(screen.getByText('舞台工具栏')).toBeInTheDocument()
     expect(screen.getByText('基础组件内容')).toBeInTheDocument()
     expect(screen.getByText('连接资源 Provider 以浏览文件')).toBeInTheDocument()
     expect(screen.getByText('组件属性内容')).toBeInTheDocument()
     expect(screen.getByText('事务日志内容')).toBeInTheDocument()
     expect(screen.getByText('命令内容')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '动画编辑器' })).toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 插槽与场景树内容更新', () => {

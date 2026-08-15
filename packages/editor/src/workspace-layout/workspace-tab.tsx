@@ -91,6 +91,7 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
     [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
     [WORKSPACE_PANEL_IDS.command]: messages.command,
     [WORKSPACE_PANEL_IDS.assetBrowser]: messages.assets,
+    [WORKSPACE_PANEL_IDS.animation]: messages.animation,
     'compose-scene-content-panel': messages.sceneGraph,
     'compose-component-library-panel': messages.componentLibrary,
     'compose-history-panel': messages.history,

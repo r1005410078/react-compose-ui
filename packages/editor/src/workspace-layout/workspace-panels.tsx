@@ -1,5 +1,6 @@
 import { ComposeHistoryPanel } from '@compose-ui/history'
 import { ComposeAssetPreview } from '@compose-ui/asset-browser'
+import { ComposeAnimationTimeline } from '@compose-ui/animation-panel'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComposeI18nContextValue, ComposeLocale } from '@compose-ui/ui-context'
@@ -285,6 +286,15 @@ export function InspectorPanel() {
     <div className="compose-editor__panel" data-workspace-panel="inspector">
       {inspectorPanel
         ?? <Placeholder>{messages.workspace.inspectorEmpty}</Placeholder>}
+    </div>
+  )
+}
+
+/** 底部动画时间线；右侧继续用基础 / 外观，不替换成关键帧面板。 @internal */
+export function AnimationPanel() {
+  return (
+    <div className="compose-editor__panel" data-workspace-panel="animation">
+      <ComposeAnimationTimeline />
     </div>
   )
 }

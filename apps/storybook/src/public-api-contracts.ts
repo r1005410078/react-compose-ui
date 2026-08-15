@@ -6,6 +6,7 @@
  */
 import type { ComposeAssetBrowserProps } from '@compose-ui/asset-browser'
 import * as assetBrowser from '@compose-ui/asset-browser'
+import * as animationPanel from '@compose-ui/animation-panel'
 import * as commandPanel from '@compose-ui/command-panel'
 import * as components from '@compose-ui/components'
 import * as editor from '@compose-ui/editor'
@@ -34,6 +35,8 @@ const publicVisualExports = [
   preview.ComposePreview,
   assetBrowser.ComposeAssetBrowser,
   materials.DEFAULT_COMPOSE_RECTANGLE_PRESET,
+  animationPanel.ComposeAnimationTimeline,
+  animationPanel.ComposeAnimationInspector,
 ] as const
 
 void publicVisualExports

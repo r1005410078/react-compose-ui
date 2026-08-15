@@ -1,6 +1,7 @@
 @import 'tailwindcss/theme.css' layer(theme) prefix(ct);
 @import 'tailwindcss/utilities.css' layer(utilities) prefix(ct);
 @import 'dockview-react/dist/styles/dockview.css';
+@import '@compose-ui/animation-panel/styles.css';
 @import '@compose-ui/history/styles.css';
 @import '@compose-ui/property-panel/styles.css';
 @import '@compose-ui/scene-tree/styles.css';
@@ -45,6 +46,10 @@
   --dv-tab-divider-color: var(--compose-border);
   --dv-separator-border: 1px solid var(--compose-border);
   --dv-active-sash-color: var(--compose-accent);
+}
+
+.compose-editor__panel[data-workspace-panel='animation'] {
+  overflow: hidden;
 }
 
 .compose-editor__panel,

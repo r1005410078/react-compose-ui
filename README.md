@@ -6,8 +6,8 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 项目把重复的页面编码工作逐步转化为可视化编排、属性配置、预览和保存发布流程。当前仍处于
 基础能力验证阶段：已经具备 ECS 化 JSON 文档、同步命令事务、Entity Registry、无限 Stage、
 基础物料、聚合 Inspector、Scene Tree、History、Command/Operation Log、资源浏览、页面系统、
-setup 脚本 Props 绑定、first-class Group、项目组件与 Unity 风格 Variant、关联实例和只读 Preview；
-动画、数据源与正式发布持久化仍未实现。
+setup 脚本 Props 绑定、first-class Group、项目组件与 Unity 风格 Variant、关联实例、只读 Preview，
+以及可独立嵌入的本地动画面板组件；动画持久化、数据源与正式发布流程仍未实现。
 
 ## 环境与安装
 
@@ -20,7 +20,7 @@ setup 脚本 Props 绑定、first-class Group、项目组件与 Unity 风格 Var
 bun add @compose-ui/core @compose-ui/assets @compose-ui/layout-engine @compose-ui/stage-engine \
   @compose-ui/ui-context @compose-ui/components @compose-ui/script-runtime \
   @compose-ui/component-registry @compose-ui/component-library \
-  @compose-ui/stage @compose-ui/materials @compose-ui/editor @compose-ui/preview
+  @compose-ui/stage @compose-ui/materials @compose-ui/animation-panel @compose-ui/editor @compose-ui/preview
 ```
 
 React 与 ReactDOM 由宿主提供。仓库开发阶段不要假设 npm 中已经存在尚未发布的版本。

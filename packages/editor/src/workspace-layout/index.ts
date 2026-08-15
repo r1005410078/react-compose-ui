@@ -25,6 +25,7 @@ export {
   localizeWorkspace,
 } from './workspace-layout'
 export {
+  AnimationPanel,
   AssetBrowserPanel,
   AssetDocumentPanel,
   CanvasPanel,

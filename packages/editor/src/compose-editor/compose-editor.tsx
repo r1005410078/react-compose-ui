@@ -13,6 +13,7 @@ import {
   type ComposeComponentInstanceOverrides,
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
+import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
 import {
   ComposeDialog,
   ComposeDialogBackdrop,
@@ -94,6 +95,7 @@ import type {
 } from '../workspace-layout'
 import {
   AssetBrowserPanel,
+  AnimationPanel,
   AssetDocumentPanel,
   CanvasPanel,
   ComponentDocumentPanel,
@@ -209,6 +211,7 @@ const workspaceComponents = {
   [WORKSPACE_COMPONENT_IDS.transactionLog]: TransactionLogPanel,
   [WORKSPACE_COMPONENT_IDS.command]: ComposeCommandPanel,
   [WORKSPACE_COMPONENT_IDS.assetBrowser]: AssetBrowserPanel,
+  [WORKSPACE_COMPONENT_IDS.animation]: AnimationPanel,
   [WORKSPACE_COMPONENT_IDS.assetDocument]: AssetDocumentPanel,
   [WORKSPACE_COMPONENT_IDS.pageDocument]: PageDocumentPanel,
   [WORKSPACE_COMPONENT_IDS.componentDocument]: ComponentDocumentPanel,
@@ -365,6 +368,8 @@ export function ComposeEditor({
   )
   /** 当前活动的 Dockview 面板 ID；页面工作区据此判定活动页面。 */
   const [activeDocumentPanelId, setActiveDocumentPanelId] = useState<string | null>(null)
+  /** 仅由底部工具组的标签切换；点击右侧面板不能让关键帧属性瞬间消失。 */
+  const [animationPanelActive, setAnimationPanelActive] = useState(false)
   /** 页面读取或保存失败的非阻断提示。 */
   const [pageNotice, setPageNotice] = useState<string | null>(null)
   /** 等待用户确认强制覆盖的页面面板 ID。 */
@@ -1571,6 +1576,7 @@ export function ComposeEditor({
               />
             )
           })(),
+      animationPanelActive,
       documents,
       stageHostPanelId,
       registerDocumentSave,
@@ -1609,6 +1615,16 @@ export function ComposeEditor({
     event.api.onDidActivePanelChange?.((change) => {
       const panelId = change.panel?.id
       if (panelId === undefined) return
+      if (panelId === WORKSPACE_PANEL_IDS.animation) {
+        setAnimationPanelActive(true)
+      }
+      else if (
+        panelId === WORKSPACE_PANEL_IDS.assetBrowser
+        || panelId === WORKSPACE_PANEL_IDS.command
+        || panelId === WORKSPACE_PANEL_IDS.transactionLog
+      ) {
+        setAnimationPanelActive(false)
+      }
       if (
         !isWorkspaceDocumentPanelId(panelId)
         && !(pages === undefined && panelId === WORKSPACE_PANEL_IDS.canvas)
@@ -1813,6 +1829,7 @@ export function ComposeEditor({
           if (resolvedHistory && !event.defaultPrevented) handleHistoryShortcut(event)
         }}
       >
+        <ComposeAnimationPanelProvider>
         <WorkspaceContentContext.Provider value={content}>
           <div
             className="compose-editor__workspace"
@@ -2109,6 +2126,7 @@ export function ComposeEditor({
             </div>
           )}
         </WorkspaceContentContext.Provider>
+        </ComposeAnimationPanelProvider>
       </EditorRoot>
       </ComposeColorHistoryProvider>
     </ComposeUIProvider>
