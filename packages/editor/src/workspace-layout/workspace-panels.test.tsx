@@ -7,9 +7,8 @@ import { WorkspaceContentContext } from './workspace-context'
 import { InspectorPanel } from './workspace-panels'
 
 describe('InspectorPanel', () => {
-  it('激活动画标签时右侧仍显示场景属性，不换成关键帧面板', () => {
+  it('OpenSpec: animation-panel / 编辑器中可见的动画区 / 底部动画标签不改变右侧属性区内容', () => {
     const content = {
-      animationPanelActive: true,
       inspectorPanel: <div>场景属性</div>,
     } as WorkspaceContent
 

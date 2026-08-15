@@ -128,17 +128,17 @@
 ### Requirement: 编辑器中可见的动画区
 
 `@compose-ui/editor` MUST 在默认底部工具组中提供本地化的“动画”标签，并以
-`@compose-ui/animation-panel` 作为纯 UI 依赖挂载时间线。激活该标签时，右侧属性区 MUST 显示
-同一个 Provider 会话的关键帧属性；切换到资源、命令或日志标签时 MUST 恢复常规 Inspector。
-此宿主集成 MUST NOT 把动画操作写入 ComposeDocument、Stage、Preview 或撤销历史。
+`@compose-ui/animation-panel` 作为纯 UI 依赖挂载时间线。切换动画标签 MUST NOT 改变右侧属性区的
+内容：右侧始终显示编辑器原有 Inspector，关键帧属性面板由宿主自行决定是否嵌入。此宿主集成
+MUST NOT 把动画操作写入 ComposeDocument、Stage、Preview 或撤销历史。
 底部工具组 MUST 横跨整个编辑器底边；场景与属性区应位于其上方的主工作区左右分栏，不能限制底部
 工具组的水平宽度。
 
 #### Scenario: 激活动画标签
 
 - **WHEN** 用户在编辑器底部工具组选择“动画”标签
-- **THEN** 底部显示动画时间线，右侧显示 `Fault / 背景填充` 的关键帧属性
-- **AND** 点击右侧关键帧字段时仍保持动画属性可见
+- **THEN** 底部显示动画时间线
+- **AND** 右侧属性区继续显示编辑器原有 Inspector 内容
 
 #### Scenario: 动画编辑器占满底边
 
@@ -149,5 +149,5 @@
 #### Scenario: 切换回常规工具标签
 
 - **WHEN** 用户从“动画”切换到资源、命令或日志标签
-- **THEN** 右侧恢复编辑器原有 Inspector 内容
+- **THEN** 右侧属性区内容保持不变
 - **AND** 本地动画会话值不写入页面文档或撤销历史

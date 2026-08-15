@@ -67,6 +67,9 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `scene-tree`；`editor` 只通过 `inspectorPanel` 插槽集成它。
 - `@compose-ui/history` 是独立的 React 会话快照历史与受控面板，可依赖 `components` 和 `ui-context`，不得依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；`editor` 可以通过公共入口依赖并默认集成它。
+- `@compose-ui/animation-panel` 是与文档协议解耦的独立动画时间线与关键帧属性组件，可依赖
+  `ui-context`，不得依赖 `core`、`editor`、`stage`、`preview` 或任何文档历史；所有操作只改变
+  组件自身的 React 会话，`editor` 只把它当作纯 UI 依赖挂载。
 - `@compose-ui/component-registry` 是实例级宿主组件注册、Renderer measurement adapter 与页面
   setup 作用域加载 Hook，可以依赖 `core`、`assets` 和 `script-runtime`，以 React 为 peer dependency，
   不得依赖 `editor` 或 `property-panel`；adapter 只能测量隔离内容，禁止读取 Stage/Preview Scene
@@ -106,7 +109,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、
-   `property-panel`、`operation-log`、`command-panel`、`materials`，拥有明确领域职责。
+   `property-panel`、`operation-log`、`command-panel`、`materials`、`animation-panel`，拥有明确领域职责。
 4. **Composition / Entry**：`editor`、`preview`，负责组合 Provider、领域组件和宿主协议。
 5. **Application**：`app`，只承担集成示例与端到端演示。
 

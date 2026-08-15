@@ -290,7 +290,7 @@ export function InspectorPanel() {
   )
 }
 
-/** 底部动画时间线；右侧继续用基础 / 外观，不替换成关键帧面板。 @internal */
+/** 底部动画时间线。右侧属性区不随动画标签切换，关键帧属性由宿主自行嵌入。 @internal */
 export function AnimationPanel() {
   return (
     <div className="compose-editor__panel" data-workspace-panel="animation">

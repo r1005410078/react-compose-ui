@@ -368,8 +368,6 @@ export function ComposeEditor({
   )
   /** 当前活动的 Dockview 面板 ID；页面工作区据此判定活动页面。 */
   const [activeDocumentPanelId, setActiveDocumentPanelId] = useState<string | null>(null)
-  /** 仅由底部工具组的标签切换；点击右侧面板不能让关键帧属性瞬间消失。 */
-  const [animationPanelActive, setAnimationPanelActive] = useState(false)
   /** 页面读取或保存失败的非阻断提示。 */
   const [pageNotice, setPageNotice] = useState<string | null>(null)
   /** 等待用户确认强制覆盖的页面面板 ID。 */
@@ -1576,7 +1574,6 @@ export function ComposeEditor({
               />
             )
           })(),
-      animationPanelActive,
       documents,
       stageHostPanelId,
       registerDocumentSave,
@@ -1615,16 +1612,6 @@ export function ComposeEditor({
     event.api.onDidActivePanelChange?.((change) => {
       const panelId = change.panel?.id
       if (panelId === undefined) return
-      if (panelId === WORKSPACE_PANEL_IDS.animation) {
-        setAnimationPanelActive(true)
-      }
-      else if (
-        panelId === WORKSPACE_PANEL_IDS.assetBrowser
-        || panelId === WORKSPACE_PANEL_IDS.command
-        || panelId === WORKSPACE_PANEL_IDS.transactionLog
-      ) {
-        setAnimationPanelActive(false)
-      }
       if (
         !isWorkspaceDocumentPanelId(panelId)
         && !(pages === undefined && panelId === WORKSPACE_PANEL_IDS.canvas)

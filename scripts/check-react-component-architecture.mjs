@@ -7,11 +7,12 @@ const forbiddenDirectoryNames = new Set([
   'components', 'hooks', 'types', 'utils', 'common', 'shared', 'helpers',
 ])
 const visualPackages = new Set([
-  'asset-browser', 'command-panel', 'component-registry', 'components', 'editor',
+  'animation-panel', 'asset-browser', 'command-panel', 'component-registry', 'components', 'editor',
   'history', 'materials', 'operation-log', 'preview', 'property-panel',
   'scene-tree', 'stage', 'ui-context',
 ])
 const requiredVisualFeatures = {
+  'animation-panel': ['animation-panel/compose-animation-panel.tsx'],
   'asset-browser': ['asset-browser/compose-asset-browser.tsx'],
   'command-panel': ['command-panel/compose-command-panel.tsx'],
   'component-registry': ['registry-renderers/compose-registry-renderers.tsx'],
