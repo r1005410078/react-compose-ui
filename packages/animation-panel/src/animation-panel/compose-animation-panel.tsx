@@ -14,7 +14,6 @@ import {
   CurveIcon,
   DiamondIcon,
   LoopIcon,
-  MoreIcon,
   PauseIcon,
   PlayIcon,
 } from './animation-icons'
@@ -53,7 +52,6 @@ const messages = {
     property: '背景填充',
     propertyField: '属性',
     interpolationRange: '曲线区间',
-    more: '更多操作',
     keyframe: (timeMs: number, label: string) => `关键帧 ${timeMs} ms：${label}`,
     interpolationSegment: (startMs: number, endMs: number, label: string) => `编辑 ${startMs} ms 至 ${endMs} ms 的${label}动画曲线`,
     keyframeMove: '使用左右方向键每次移动 10 毫秒，也可以水平拖动',
@@ -96,7 +94,6 @@ const messages = {
     property: 'Background fill',
     propertyField: 'Property',
     interpolationRange: 'Curve range',
-    more: 'More actions',
     keyframe: (timeMs: number, label: string) => `Keyframe ${timeMs} ms: ${label}`,
     interpolationSegment: (startMs: number, endMs: number, label: string) => `Edit ${label} animation curve from ${startMs} ms to ${endMs} ms`,
     keyframeMove: 'Use the left and right arrow keys to move by 10 milliseconds, or drag horizontally',
@@ -220,11 +217,12 @@ export function ComposeAnimationTimeline({
     >
       <div className="compose-animation-timeline__content">
         <div className="compose-animation-timeline__tracks">
+          {/* 这里混着数字输入框与下拉，无法满足 toolbar 要求的方向键漫游；group 只表达"一组相关控件"，没有键盘契约。 */}
           <div
             aria-label={t.toolbar}
             className="compose-animation-timeline__tracks-header"
             data-timeline-header="true"
-            role="toolbar"
+            role="group"
           >
             <div className="compose-animation-timeline__button-cluster">
               <button
@@ -313,11 +311,6 @@ export function ComposeAnimationTimeline({
                     onClick={() => toggleTrack(track.id)}
                   ><ChevronIcon /></button>
                   <span className="compose-animation-timeline__track-label">{trackLabel}</span>
-                  <button
-                    aria-label={`${trackLabel} ${t.more}`}
-                    className="compose-animation-timeline__more-button"
-                    type="button"
-                  ><MoreIcon /></button>
                 </div>
                 {track.expanded ? track.properties.map((property) => {
                   const propertyLabel = displayPropertyLabel(property.id, property.label, locale)
@@ -338,11 +331,6 @@ export function ComposeAnimationTimeline({
                       />
                       <ChevronIcon />
                       <span className="compose-animation-timeline__property-label">{propertyLabel}</span>
-                      <button
-                        aria-label={`${propertyLabel} ${t.more}`}
-                        className="compose-animation-timeline__more-button"
-                        type="button"
-                      ><MoreIcon /></button>
                     </div>
                   )
                 }) : null}
@@ -717,6 +705,33 @@ export function ComposeAnimationInspector({
   const interpolationRange = previousKeyframe && selectedKeyframe
     ? `${previousKeyframe.timeMs} ms → ${selectedKeyframe.keyframe.timeMs} ms`
     : ''
+  const easingId = useId()
+  const curveTabId = `${easingId}-curve-tab`
+  const springTabId = `${easingId}-spring-tab`
+  const easingPanelId = `${easingId}-panel`
+  const curveTabRef = useRef<HTMLButtonElement>(null)
+  const springTabRef = useRef<HTMLButtonElement>(null)
+  const activeTabId = value.easingEditor === 'curve' ? curveTabId : springTabId
+  // Tabs 采用自动激活模式：方向键切换的同时把焦点带到新标签，否则漫游 tabindex 会把焦点留在旧标签上。
+  const focusEasingTab = (editor: 'curve' | 'spring') => {
+    setEasingEditor(editor)
+    const target = editor === 'curve' ? curveTabRef.current : springTabRef.current
+    target?.focus()
+  }
+  const handleEasingTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      focusEasingTab(value.easingEditor === 'curve' ? 'spring' : 'curve')
+    }
+    else if (event.key === 'Home') {
+      event.preventDefault()
+      focusEasingTab('curve')
+    }
+    else if (event.key === 'End') {
+      event.preventDefault()
+      focusEasingTab('spring')
+    }
+  }
 
   return (
     <aside
@@ -789,13 +804,33 @@ export function ComposeAnimationInspector({
       </div>
       <div className="compose-animation-inspector__easing-editor">
         <div aria-label={t.easingEditor} className="compose-animation-inspector__tabs" role="tablist">
-          <button aria-controls="animation-curve-view" aria-selected={value.easingEditor === 'curve'} id="animation-curve-tab" role="tab" type="button" onClick={() => setEasingEditor('curve')}>{t.curve}</button>
-          <button aria-controls="animation-spring-view" aria-selected={value.easingEditor === 'spring'} id="animation-spring-tab" role="tab" type="button" onClick={() => setEasingEditor('spring')}>{t.spring}</button>
+          <button
+            aria-controls={value.easingEditor === 'curve' ? easingPanelId : undefined}
+            aria-selected={value.easingEditor === 'curve'}
+            id={curveTabId}
+            ref={curveTabRef}
+            role="tab"
+            tabIndex={value.easingEditor === 'curve' ? 0 : -1}
+            type="button"
+            onClick={() => setEasingEditor('curve')}
+            onKeyDown={handleEasingTabKeyDown}
+          >{t.curve}</button>
+          <button
+            aria-controls={value.easingEditor === 'spring' ? easingPanelId : undefined}
+            aria-selected={value.easingEditor === 'spring'}
+            id={springTabId}
+            ref={springTabRef}
+            role="tab"
+            tabIndex={value.easingEditor === 'spring' ? 0 : -1}
+            type="button"
+            onClick={() => setEasingEditor('spring')}
+            onKeyDown={handleEasingTabKeyDown}
+          >{t.spring}</button>
         </div>
         <div
-          aria-labelledby={value.easingEditor === 'curve' ? 'animation-curve-tab' : 'animation-spring-tab'}
+          aria-labelledby={activeTabId}
           className="compose-animation-inspector__curve"
-          id={value.easingEditor === 'curve' ? 'animation-curve-view' : 'animation-spring-view'}
+          id={easingPanelId}
           role="tabpanel"
         >
           <svg aria-label={value.easingEditor === 'curve' ? t[interpolation === 'ease-in' ? 'easeIn' : interpolation === 'ease-out' ? 'easeOut' : 'linear'] : t.spring} viewBox="0 0 220 180">

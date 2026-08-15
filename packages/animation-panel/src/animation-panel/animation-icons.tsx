@@ -25,7 +25,3 @@ export function CurveIcon(props: IconProps) {
 export function ChevronIcon(props: IconProps) {
   return <svg aria-hidden="true" viewBox="0 0 16 16" {...props}><path d="m5.5 3.5 5 4.5-5 4.5" /></svg>
 }
-
-export function MoreIcon(props: IconProps) {
-  return <svg aria-hidden="true" viewBox="0 0 16 16" {...props}><circle cx="8" cy="3" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="8" cy="13" r="1" /></svg>
-}

@@ -299,7 +299,7 @@ describe('ComposeAnimationPanel', () => {
       </ComposeAnimationPanelProvider>,
     )
 
-    const toolbar = screen.getByRole('toolbar', { name: '时间线操作栏' })
+    const toolbar = screen.getByRole('group', { name: '时间线操作栏' })
     expect(toolbar).toHaveAttribute('data-timeline-header', 'true')
     expect(toolbar.parentElement).toHaveClass('compose-animation-timeline__tracks')
     expect(screen.getByRole('button', { name: '播放动画' })).toBeInTheDocument()
@@ -470,5 +470,49 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })).not.toHaveAttribute('aria-pressed')
     expect(screen.getByRole('button', { name: '调整动画片段 Fault 的结束时间' })).not.toHaveAttribute('aria-pressed')
     expect(screen.getByRole('button', { name: '调整动画片段 Fault 的结束时间' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 缓动标签实现 Tabs 键盘模式', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    const curve = screen.getByRole('tab', { name: '曲线' })
+    const spring = screen.getByRole('tab', { name: '弹簧' })
+    expect(curve).toHaveAttribute('tabindex', '0')
+    expect(spring).toHaveAttribute('tabindex', '-1')
+    expect(curve).toHaveAttribute('aria-controls', screen.getByRole('tabpanel').id)
+    // 未渲染的面板不能被 aria-controls 引用。
+    expect(spring).not.toHaveAttribute('aria-controls')
+
+    curve.focus()
+    fireEvent.keyDown(curve, { key: 'ArrowRight' })
+    expect(spring).toHaveAttribute('aria-selected', 'true')
+    expect(spring).toHaveFocus()
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', spring.id)
+  })
+
+  it('OpenSpec: animation-panel / 分置嵌入动画区域 / 同页多个属性面板不产生重复 DOM id', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationInspector />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    const ids = [
+      ...screen.getAllByRole('tab').map((tab) => tab.id),
+      ...screen.getAllByRole('tabpanel').map((panel) => panel.id),
+    ]
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 不暴露没有行为的控件', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    expect(screen.queryByRole('button', { name: /更多操作/ })).not.toBeInTheDocument()
   })
 })
