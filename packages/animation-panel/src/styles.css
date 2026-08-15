@@ -73,8 +73,7 @@
 
   .compose-animation-timeline__icon-button { width: 28px; height: 26px; border-radius: 5px; }
   .compose-animation-timeline__icon-button:hover,
-  .compose-animation-timeline__icon-button:focus-visible,
-  .compose-animation-timeline__icon-button[aria-pressed='true'] {
+  .compose-animation-timeline__icon-button:focus-visible {
     border-color: color-mix(in srgb, var(--ap-accent) 48%, transparent);
     color: #dfeeff;
     background: color-mix(in srgb, var(--ap-accent) 18%, transparent);
@@ -309,14 +308,14 @@
   .compose-animation-timeline__clip-body { position: absolute; z-index: 1; top: 9px; height: 13px; min-width: 10px; padding: 0; border: 1px solid #3d4956; border-radius: 2px; background: linear-gradient(90deg, #29313a, #36414c 54%, #29313a); cursor: grab; }
   .compose-animation-timeline__clip-body:hover,
   .compose-animation-timeline__clip-body:focus-visible { border-color: #6a7888; outline: 0; }
-  .compose-animation-timeline__clip-body[aria-pressed='true'] { border-color: #438fe8; background: linear-gradient(90deg, #19599c, #2577c7 54%, #19599c); box-shadow: inset 0 1px rgb(255 255 255 / 13%); }
+  .compose-animation-timeline__clip-body[aria-current='true'] { border-color: #438fe8; background: linear-gradient(90deg, #19599c, #2577c7 54%, #19599c); box-shadow: inset 0 1px rgb(255 255 255 / 13%); }
   .compose-animation-timeline__clip-body[data-dragging='true'] { cursor: ew-resize; }
   .compose-animation-timeline__clip-handle { position: absolute; z-index: 2; top: 7px; width: 7px; height: 17px; padding: 0; border: 1px solid #9eb0c4; border-radius: 2px; opacity: 0; background: #d5e6f8; transform: translateX(-50%); cursor: ew-resize; transition: opacity .12s ease, border-color .12s ease; }
   .compose-animation-timeline__clip-body:hover ~ .compose-animation-timeline__clip-handle,
   .compose-animation-timeline__clip-body:focus-visible ~ .compose-animation-timeline__clip-handle,
   .compose-animation-timeline__clip-handle:hover,
   .compose-animation-timeline__clip-handle:focus-visible,
-  .compose-animation-timeline__clip-handle[aria-pressed='true'] { opacity: 1; }
+  .compose-animation-timeline__clip-handle[data-selected='true'] { opacity: 1; }
   .compose-animation-timeline__clip-handle:focus-visible { border-color: #4a9cff; outline: 1px solid #4a9cff; outline-offset: 1px; }
   .compose-animation-timeline__property-lane { position: relative; height: var(--ap-property-row-height); border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 78%, transparent); }
   .compose-animation-timeline__property-lane:focus-visible { outline: 1px solid var(--ap-accent); outline-offset: -2px; }
@@ -326,17 +325,17 @@
   .compose-animation-timeline__interpolation-segment svg { position: absolute; top: 50%; left: 50%; width: 24px; height: 24px; padding: 4px; border: 1px solid #3e88df; border-radius: 4px; color: #a4d2ff; background: #151a20; opacity: 0; transform: translate(-50%, -50%); transition: opacity .12s ease; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
   .compose-animation-timeline__interpolation-segment:hover svg,
   .compose-animation-timeline__interpolation-segment:focus-visible svg,
-  .compose-animation-timeline__interpolation-segment[aria-pressed='true'] svg { opacity: 1; }
+  .compose-animation-timeline__interpolation-segment[aria-current='true'] svg { opacity: 1; }
   .compose-animation-timeline__interpolation-segment:hover,
   .compose-animation-timeline__interpolation-segment:focus-visible { color: #9bcfff; }
-  .compose-animation-timeline__interpolation-segment[aria-pressed='true'] { color: var(--ap-keyframe-line-selected); }
+  .compose-animation-timeline__interpolation-segment[aria-current='true'] { color: var(--ap-keyframe-line-selected); }
   .compose-animation-timeline__interpolation-segment:focus-visible { outline: 0; }
   .compose-animation-timeline__keyframe { position: absolute; z-index: 3; top: 11px; width: 17px; height: 17px; padding: 0; border: 0; color: #8e9aa7; background: transparent; transform: translateX(-50%); cursor: grab; touch-action: none; }
   .compose-animation-timeline__keyframe svg { width: 16px; height: 16px; fill: #151a20; stroke: currentColor; stroke-width: 1.45; }
   .compose-animation-timeline__keyframe:hover { color: #d7e0ea; }
   .compose-animation-timeline__keyframe:focus-visible { outline: 1px solid var(--ap-accent); outline-offset: 2px; }
-  .compose-animation-timeline__keyframe[aria-pressed='true'] { color: #a8d5ff; }
-  .compose-animation-timeline__keyframe[aria-pressed='true']::before { position: absolute; z-index: -1; inset: -4px; border: 1.5px solid var(--ap-accent); transform: rotate(45deg); content: ''; }
+  .compose-animation-timeline__keyframe[aria-current='true'] { color: #a8d5ff; }
+  .compose-animation-timeline__keyframe[aria-current='true']::before { position: absolute; z-index: -1; inset: -4px; border: 1.5px solid var(--ap-accent); transform: rotate(45deg); content: ''; }
   .compose-animation-timeline__keyframe[data-dragging='true'] { z-index: 6; cursor: ew-resize; color: #fff; }
   /* 擦洗区只覆盖标尺带：铺满整块 scale 会盖住轨道空白区，让属性轨道的点击永远落不到实处。 */
   .compose-animation-timeline__playhead-input { position: absolute; z-index: 5; top: 0; right: 0; left: 0; width: 100%; height: var(--ap-ruler-height); margin: 0; opacity: 0; cursor: ew-resize; }

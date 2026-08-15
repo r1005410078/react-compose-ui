@@ -26,7 +26,7 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('button', { name: '播放动画' })).toBeInTheDocument()
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
     expect(screen.getByRole('button', { name: '关键帧 200 ms：背景填充' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
     expect(screen.getByText('Fault / 背景填充')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('200')
     expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#FF6B6B')
@@ -43,7 +43,7 @@ describe('ComposeAnimationPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关键帧 100 ms：背景填充' }))
     expect(screen.getByRole('button', { name: '关键帧 100 ms：背景填充' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('100')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
     fireEvent.change(screen.getByRole('combobox', { name: '插值' }), {
@@ -100,13 +100,13 @@ describe('ComposeAnimationPanel', () => {
     const segment = screen.getByRole('button', {
       name: '编辑 200 ms 至 300 ms 的背景填充动画曲线',
     })
-    expect(segment).toHaveAttribute('aria-pressed', 'false')
+    expect(segment).not.toHaveAttribute('aria-current')
 
     fireEvent.click(segment)
 
-    expect(segment).toHaveAttribute('aria-pressed', 'true')
+    expect(segment).toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('button', { name: '关键帧 300 ms：背景填充' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('300')
     expect(screen.getByDisplayValue('200 ms → 300 ms')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '曲线' })).toHaveAttribute('aria-selected', 'true')
@@ -131,7 +131,7 @@ describe('ComposeAnimationPanel', () => {
     fireEvent.pointerMove(keyframe, { clientX: 250, pointerId: 8 })
     fireEvent.pointerUp(keyframe, { clientX: 250, pointerId: 8 })
     expect(screen.getByRole('button', { name: '关键帧 250 ms：背景填充' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('250')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
 
@@ -185,20 +185,20 @@ describe('ComposeAnimationPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 300 ms' }))
     expect(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 300 ms' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
 
     const endHandle = screen.getByRole('button', { name: '调整动画片段 Fault 的结束时间' })
     fireEvent.pointerDown(endHandle, { button: 0, clientX: 300, pointerId: 12 })
     fireEvent.pointerMove(endHandle, { clientX: 250, pointerId: 12 })
     fireEvent.pointerUp(endHandle, { clientX: 250, pointerId: 12 })
     expect(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 250 ms' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
 
     fireEvent.keyDown(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 250 ms' }), {
       key: 'ArrowRight',
     })
     expect(screen.getByRole('button', { name: '动画片段 Fault：10 ms 至 260 ms' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
   })
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 键盘调整播放头', () => {
@@ -323,16 +323,16 @@ describe('ComposeAnimationPanel', () => {
 
     const objectRow = screen.getByRole('button', { name: '选择对象轨道 Fault' })
     const propertyRow = screen.getByRole('button', { name: '选择属性轨道 背景填充' })
-    expect(objectRow).toHaveAttribute('aria-pressed', 'true')
+    expect(objectRow).toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 300 ms' }))
-      .toHaveAttribute('aria-pressed', 'true')
-    expect(propertyRow).toHaveAttribute('aria-pressed', 'false')
+      .toHaveAttribute('aria-current', 'true')
+    expect(propertyRow).not.toHaveAttribute('aria-current')
 
     fireEvent.click(document.querySelector('.compose-animation-timeline__property-row .compose-animation-timeline__row-hit')!)
-    expect(propertyRow).toHaveAttribute('aria-pressed', 'true')
-    expect(objectRow).toHaveAttribute('aria-pressed', 'false')
+    expect(propertyRow).toHaveAttribute('aria-current', 'true')
+    expect(objectRow).not.toHaveAttribute('aria-current')
     expect(screen.getByRole('button', { name: '选择 背景填充 关键帧轨道' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
     expect(document.querySelector('.compose-animation-timeline__property-row'))
       .toHaveAttribute('data-selected', 'true')
     expect(document.querySelector('[data-property-lane="background-fill"]'))
@@ -343,10 +343,10 @@ describe('ComposeAnimationPanel', () => {
       .not.toHaveAttribute('data-selected')
 
     fireEvent.click(document.querySelector('.compose-animation-timeline__track-row .compose-animation-timeline__row-hit')!)
-    expect(objectRow).toHaveAttribute('aria-pressed', 'true')
+    expect(objectRow).toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 300 ms' }))
-      .toHaveAttribute('aria-pressed', 'true')
-    expect(propertyRow).toHaveAttribute('aria-pressed', 'false')
+      .toHaveAttribute('aria-current', 'true')
+    expect(propertyRow).not.toHaveAttribute('aria-current')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
   })
 
@@ -444,7 +444,7 @@ describe('ComposeAnimationPanel', () => {
     fireEvent.click(laneHit)
 
     expect(screen.getByRole('button', { name: '选择属性轨道 背景填充' }))
-      .toHaveAttribute('aria-pressed', 'true')
+      .toHaveAttribute('aria-current', 'true')
     expect(lane).toHaveAttribute('data-selected', 'true')
   })
 
@@ -457,5 +457,18 @@ describe('ComposeAnimationPanel', () => {
     // 播放头 range 覆盖整块 scale 时会盖住所有轨道，让 lane 的点击永远到不了。
     expect(screen.getByRole('slider', { name: '当前时间' }))
       .toHaveClass('compose-animation-timeline__playhead-input--ruler')
+  })
+
+  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 选中态与开关态使用不同的 ARIA 属性', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    // 自动记录是真正的开关，保留 aria-pressed；集合内的选中项一律用 aria-current。
+    expect(screen.getByRole('button', { name: '自动记录属性' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })).not.toHaveAttribute('aria-pressed')
+    expect(screen.getByRole('button', { name: '调整动画片段 Fault 的结束时间' })).not.toHaveAttribute('aria-pressed')
+    expect(screen.getByRole('button', { name: '调整动画片段 Fault 的结束时间' })).not.toHaveAttribute('aria-current')
   })
 })

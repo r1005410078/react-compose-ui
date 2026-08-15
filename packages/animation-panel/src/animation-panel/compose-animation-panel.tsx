@@ -298,8 +298,8 @@ export function ComposeAnimationTimeline({
                   data-selected={trackSelected || undefined}
                 >
                   <button
+                    aria-current={trackSelected || undefined}
                     aria-label={t.selectTrack(trackLabel)}
-                    aria-pressed={trackSelected}
                     className="compose-animation-timeline__row-hit"
                     data-object-row={track.id}
                     type="button"
@@ -329,8 +329,8 @@ export function ComposeAnimationTimeline({
                       key={property.id}
                     >
                       <button
+                        aria-current={propertySelected || undefined}
                         aria-label={t.selectProperty(propertyLabel)}
-                        aria-pressed={propertySelected}
                         className="compose-animation-timeline__row-hit"
                         data-property-row={property.id}
                         type="button"
@@ -546,9 +546,9 @@ function TimelineScale({
                   return (
                     <div className="compose-animation-timeline__clip" key={clip.id}>
                       <button
+                        aria-current={selected || undefined}
                         aria-describedby={clipMoveHelpId}
                         aria-label={t.animationClip(label, clip.startTimeMs, clip.endTimeMs)}
-                        aria-pressed={selected}
                         className="compose-animation-timeline__clip-body"
                         data-dragging={draggingClip || undefined}
                         style={{ left: `${startRatio * 100}%`, width: `${(endRatio - startRatio) * 100}%` }}
@@ -562,8 +562,8 @@ function TimelineScale({
                       />
                       <button
                         aria-label={t.clipStart(label)}
-                        aria-pressed={selected}
                         className="compose-animation-timeline__clip-handle compose-animation-timeline__clip-handle--start"
+                        data-selected={selected || undefined}
                         style={{ left: `${startRatio * 100}%` }}
                         type="button"
                         onKeyDown={(event) => adjustClipWithKeyboard(event, clip, 'start')}
@@ -574,8 +574,8 @@ function TimelineScale({
                       />
                       <button
                         aria-label={t.clipEnd(label)}
-                        aria-pressed={selected}
                         className="compose-animation-timeline__clip-handle compose-animation-timeline__clip-handle--end"
+                        data-selected={selected || undefined}
                         style={{ left: `${endRatio * 100}%` }}
                         type="button"
                         onKeyDown={(event) => adjustClipWithKeyboard(event, clip, 'end')}
@@ -600,8 +600,8 @@ function TimelineScale({
                     key={property.id}
                   >
                     <button
+                      aria-current={propertySelected || undefined}
                       aria-label={t.selectPropertyLane(label)}
-                      aria-pressed={propertySelected}
                       className="compose-animation-timeline__lane-hit"
                       data-property-lane-hit={property.id}
                       type="button"
@@ -614,8 +614,8 @@ function TimelineScale({
                       const endRatio = timelineRatio(keyframe.timeMs, value.model.durationMs)
                       return (
                         <button
+                          aria-current={selected || undefined}
                           aria-label={t.interpolationSegment(startKeyframe.timeMs, keyframe.timeMs, label)}
-                          aria-pressed={selected}
                           className="compose-animation-timeline__interpolation-segment"
                           data-interpolation={keyframe.interpolation}
                           key={`${keyframe.id}-segment`}
@@ -632,9 +632,9 @@ function TimelineScale({
                       const selected = value.selectedKeyframeId === keyframe.id
                       return (
                         <button
+                          aria-current={selected || undefined}
                           aria-label={t.keyframe(keyframe.timeMs, label)}
                           aria-describedby={keyframeMoveHelpId}
-                          aria-pressed={selected}
                           className="compose-animation-timeline__keyframe"
                           data-dragging={dragging?.keyframeId === keyframe.id || undefined}
                           key={keyframe.id}
