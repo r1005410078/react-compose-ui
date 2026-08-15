@@ -331,7 +331,7 @@ describe('ComposeAnimationPanel', () => {
     fireEvent.click(document.querySelector('.compose-animation-timeline__property-row .compose-animation-timeline__row-hit')!)
     expect(propertyRow).toHaveAttribute('aria-pressed', 'true')
     expect(objectRow).toHaveAttribute('aria-pressed', 'false')
-    expect(document.querySelector('[data-property-lane="background-fill"]'))
+    expect(screen.getByRole('button', { name: '选择 背景填充 关键帧轨道' }))
       .toHaveAttribute('aria-pressed', 'true')
     expect(document.querySelector('.compose-animation-timeline__property-row'))
       .toHaveAttribute('data-selected', 'true')
@@ -426,5 +426,36 @@ describe('ComposeAnimationPanel', () => {
     fireEvent.change(reselected, { target: { value: '90' } })
     fireEvent.keyDown(reselected, { key: 'Escape' })
     expect(reselected).toHaveValue('25')
+  })
+
+  it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 点击关键帧轨道空白处选中属性轨道', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const lane = document.querySelector('[data-property-lane="background-fill"]')!
+    // 容器不能既是 button 又包着 button：嵌套交互元素在 AT 中无法寻址。
+    expect(lane).not.toHaveAttribute('role')
+    expect(lane).not.toHaveAttribute('tabindex')
+
+    const laneHit = screen.getByRole('button', { name: '选择 背景填充 关键帧轨道' })
+    expect(laneHit.parentElement).toBe(lane)
+    fireEvent.click(laneHit)
+
+    expect(screen.getByRole('button', { name: '选择属性轨道 背景填充' }))
+      .toHaveAttribute('aria-pressed', 'true')
+    expect(lane).toHaveAttribute('data-selected', 'true')
+  })
+
+  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 播放头擦洗区限定在标尺带', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    // 播放头 range 覆盖整块 scale 时会盖住所有轨道，让 lane 的点击永远到不了。
+    expect(screen.getByRole('slider', { name: '当前时间' }))
+      .toHaveClass('compose-animation-timeline__playhead-input--ruler')
   })
 })

@@ -594,22 +594,19 @@ function TimelineScale({
                 const propertySelected = value.selectedPropertyId === property.id
                 return (
                   <div
-                    aria-label={t.selectPropertyLane(label)}
-                    aria-pressed={propertySelected}
                     className="compose-animation-timeline__property-lane"
                     data-property-lane={property.id}
                     data-selected={propertySelected || undefined}
                     key={property.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectProperty(property.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        onSelectProperty(property.id)
-                      }
-                    }}
                   >
+                    <button
+                      aria-label={t.selectPropertyLane(label)}
+                      aria-pressed={propertySelected}
+                      className="compose-animation-timeline__lane-hit"
+                      data-property-lane-hit={property.id}
+                      type="button"
+                      onClick={() => onSelectProperty(property.id)}
+                    />
                     {keyframes.slice(1).map((keyframe, keyframeIndex) => {
                       const startKeyframe = keyframes[keyframeIndex]!
                       const selected = value.selectedKeyframeId === keyframe.id
@@ -668,7 +665,7 @@ function TimelineScale({
         })}
         <input
           aria-label={t.currentTime}
-          className="compose-animation-timeline__playhead-input"
+          className="compose-animation-timeline__playhead-input compose-animation-timeline__playhead-input--ruler"
           max={value.model.durationMs}
           min={0}
           step={10}
