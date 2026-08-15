@@ -96,21 +96,17 @@ import type {
 import {
   AssetBrowserPanel,
   AnimationPanel,
-  AssetDocumentPanel,
-  CanvasPanel,
-  ComponentDocumentPanel,
-  PageDocumentPanel,
   ComposeCommandPanel,
-  InspectorPanel,
-  SceneGraphPanel,
   TransactionLogPanel,
+  WorkspaceCorePanel,
 } from '../workspace-layout'
 import {
   createAssetDocumentPanelId,
   createComponentDocumentPanelId,
   createPageDocumentPanelId,
   isWorkspaceDocumentPanelId,
-  initializeWorkspace,
+  initializeCoreWorkspace,
+  initializeOuterWorkspace,
   localizeWorkspace,
   WORKSPACE_GROUP_IDS,
   WORKSPACE_COMPONENT_IDS,
@@ -130,7 +126,7 @@ import {
   COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE,
   isComposePageSetupScriptName,
 } from '../pages/page-script-intelligence'
-import { WorkspaceHeaderActions, WorkspaceTab } from '../workspace-layout'
+import { WorkspaceTab } from '../workspace-layout'
 import type { ComposeEditorController } from '../editor-controller'
 import { useComponentCatalog, useComponentWorkspace } from '../component-workspace'
 import type { ComposeEditorComponentsConfig } from '../component-workspace'
@@ -204,17 +200,15 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
   components?: ComposeEditorComponentsConfig
 }
 
+// 外层 Dockview 只有一个中央面板（挂载内层 scene/canvas/inspector Dockview）和 bottom Edge
+// Group 里的四个工具标签；scene/canvas/inspector/文档面板的组件映射在内层自己维护
+// （workspace-panels.tsx 的 coreComponents），不属于这里。
 const workspaceComponents = {
-  [WORKSPACE_COMPONENT_IDS.scene]: SceneGraphPanel,
-  [WORKSPACE_COMPONENT_IDS.canvas]: CanvasPanel,
-  [WORKSPACE_COMPONENT_IDS.inspector]: InspectorPanel,
+  [WORKSPACE_COMPONENT_IDS.core]: WorkspaceCorePanel,
   [WORKSPACE_COMPONENT_IDS.transactionLog]: TransactionLogPanel,
   [WORKSPACE_COMPONENT_IDS.command]: ComposeCommandPanel,
   [WORKSPACE_COMPONENT_IDS.assetBrowser]: AssetBrowserPanel,
   [WORKSPACE_COMPONENT_IDS.animation]: AnimationPanel,
-  [WORKSPACE_COMPONENT_IDS.assetDocument]: AssetDocumentPanel,
-  [WORKSPACE_COMPONENT_IDS.pageDocument]: PageDocumentPanel,
-  [WORKSPACE_COMPONENT_IDS.componentDocument]: ComponentDocumentPanel,
 } satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
 
 const workspaceTabComponents = { workspaceTab: WorkspaceTab }
@@ -346,8 +340,11 @@ export function ComposeEditor({
   const hostI18n = useComposeI18nContext()
   const generatedSettingsId = useId()
   const settingsPanelId = `compose-editor-settings-${generatedSettingsId.replace(/:/g, '')}`
+  /** 内层 scene/canvas/inspector Dockview 的 api；文档面板生命周期都挂在这个实例上。 */
   const initializedApi = useRef<DockviewReadyEvent['api'] | null>(null)
-  /** Dockview 已提供中央组；页面目录先返回时必须等到这里才能插入首页标签。 */
+  /** 外层 Dockview 的 api，只用来在 locale 变化时重新本地化 bottom Edge Group 的标签标题。 */
+  const outerApiRef = useRef<DockviewReadyEvent['api'] | null>(null)
+  /** 内层 Dockview 已提供中央组；页面目录先返回时必须等到这里才能插入首页标签。 */
   const [workspaceReady, setWorkspaceReady] = useState(false)
   /** 已自动尝试过的首页 key；用户关闭标签或目录刷新都不应强制再次打开。 */
   const startupHomePageKeysRef = useRef(new Set<string>())
@@ -1513,6 +1510,47 @@ export function ComposeEditor({
     settingsButtonRef.current = element
   }, [])
 
+  /** 外层 Dockview 就绪：只需要建立中央面板（内层 Dockview 的宿主）和 bottom Edge Group。 */
+  const handleOuterReady = useCallback((event: DockviewReadyEvent) => {
+    if (outerApiRef.current === event.api) {
+      return
+    }
+    initializeOuterWorkspace(event.api, resolvedPreferences.locale, hostI18n?.formatMessage)
+    outerApiRef.current = event.api
+  }, [hostI18n?.formatMessage, resolvedPreferences.locale])
+
+  /**
+   * 内层 scene/canvas/inspector Dockview 就绪。它经 Context 的 `onCoreDockviewReady` 从
+   * `WorkspaceCoreDockview` 转发过来，而不是直接作为某个 `<DockviewReact>` 的 `onReady`——
+   * 那个内层实例挂在 workspace-panels.tsx 里，这里拿不到它的 DOM/组件引用。
+   */
+  const handleReady = useCallback((event: DockviewReadyEvent) => {
+    if (initializedApi.current === event.api) {
+      return
+    }
+
+    initializeCoreWorkspace(
+      event.api,
+      resolvedPreferences.locale,
+      hostI18n?.formatMessage,
+      { includeCanvas: pages === undefined && components === undefined },
+    )
+    initializedApi.current = event.api
+    setWorkspaceReady(true)
+    // 活动页面由中央 Canvas Group 内的活动面板决定。Dockview 的活动面板是全局的：点击
+    // 组件库、资源面板等其他组的面板同样会触发该事件，若据此推导 Stage 宿主，页面标签会
+    // 立刻失去宿主身份而让画布整体消失。因此只接受画布组内的面板 ID。
+    event.api.onDidActivePanelChange?.((change) => {
+      const panelId = change.panel?.id
+      if (panelId === undefined) return
+      if (
+        !isWorkspaceDocumentPanelId(panelId)
+        && !(pages === undefined && panelId === WORKSPACE_PANEL_IDS.canvas)
+      ) return
+      setActiveDocumentPanelId(panelId)
+    })
+  }, [components, hostI18n?.formatMessage, pages, resolvedPreferences.locale])
+
   const content = {
       sceneGraphPanel: slots?.sceneGraph !== undefined
         ? slots.sceneGraph
@@ -1585,6 +1623,7 @@ export function ComposeEditor({
       settingsPanelId,
       setSettingsButton,
       toggleSettings,
+      onCoreDockviewReady: handleReady,
     }
   const handleHistoryShortcut = useComposeHistoryShortcuts(
     resolvedHistory ?? disabledHistory,
@@ -1593,33 +1632,7 @@ export function ComposeEditor({
       redo: resolvedPreferences.shortcuts['history.redo'],
     },
   )
-  const handleReady = useCallback((event: DockviewReadyEvent) => {
-    if (initializedApi.current === event.api) {
-      return
-    }
-
-    initializeWorkspace(
-      event.api,
-      resolvedPreferences.locale,
-      hostI18n?.formatMessage,
-      { includeCanvas: pages === undefined && components === undefined },
-    )
-    initializedApi.current = event.api
-    setWorkspaceReady(true)
-    // 活动页面由中央 Canvas Group 内的活动面板决定。Dockview 的活动面板是全局的：点击
-    // 组件库、资源面板等其他组的面板同样会触发该事件，若据此推导 Stage 宿主，页面标签会
-    // 立刻失去宿主身份而让画布整体消失。因此只接受画布组内的面板 ID。
-    event.api.onDidActivePanelChange?.((change) => {
-      const panelId = change.panel?.id
-      if (panelId === undefined) return
-      if (
-        !isWorkspaceDocumentPanelId(panelId)
-        && !(pages === undefined && panelId === WORKSPACE_PANEL_IDS.canvas)
-      ) return
-      setActiveDocumentPanelId(panelId)
-    })
-  }, [components, hostI18n?.formatMessage, pages, resolvedPreferences.locale])
-
+  /** 外层 Dockview 就绪：只需要建立中央面板（内层 Dockview 的宿主）和 bottom Edge Group。 */
   const confirmCreateComponent = useCallback(async () => {
     if (!controller || !pendingCreateComponent || createComponentName.trim() === '') return
     setCreatingComponent(true)
@@ -1750,9 +1763,18 @@ export function ComposeEditor({
   ])
 
   useEffect(() => {
+    // localizeWorkspace 按面板 ID 逐个 getPanel，找不到就跳过，两个 Dockview 实例各自只有
+    // 自己那部分面板；分别调用即可，不需要为外层/内层拆两份本地化函数。
     if (initializedApi.current) {
       localizeWorkspace(
         initializedApi.current,
+        resolvedPreferences.locale,
+        hostI18n?.formatMessage,
+      )
+    }
+    if (outerApiRef.current) {
+      localizeWorkspace(
+        outerApiRef.current,
         resolvedPreferences.locale,
         hostI18n?.formatMessage,
       )
@@ -1827,8 +1849,7 @@ export function ComposeEditor({
               components={workspaceComponents}
               disableDnd
               disableFloatingGroups
-              onReady={handleReady}
-              rightHeaderActionsComponent={WorkspaceHeaderActions}
+              onReady={handleOuterReady}
               tabComponents={workspaceTabComponents}
               theme={themeAbyss}
             />

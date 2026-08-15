@@ -46,6 +46,10 @@ const messages = {
       sceneGraph: '场景图',
       componentLibrary: '基础组件',
       canvas: '画布',
+      /** 外层唯一中央面板（内层 scene/canvas/inspector Dockview 的宿主）标题；隐藏了标签条，
+          但底层 Dockview group 仍会生成 landmark，必须和内层真正的“画布” aria-label 区分开，
+          否则两层同名 landmark 会触发无障碍检测的 landmark-unique 违规。 */
+      workspaceCore: '工作区',
       inspector: '属性',
       transactionLog: '日志',
       command: '命令',
@@ -218,6 +222,7 @@ const messages = {
       sceneGraph: 'Scene Graph',
       componentLibrary: 'Components',
       canvas: 'Canvas',
+      workspaceCore: 'Workspace',
       inspector: 'Properties',
       transactionLog: 'Log',
       command: 'Command',

@@ -9,10 +9,34 @@ import {
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
 
-const initializeWorkspaceMock = vi.hoisted(() => vi.fn())
+// 外层 initializeOuterWorkspace 保持 mock：本文件只关心中央/文档面板行为
+// （现在挂在内层 core Dockview 上），bottom Edge Group 的结构已经在
+// workspace-layout.test.ts 里覆盖。
+const initializeOuterWorkspaceMock = vi.hoisted(() => vi.fn())
+// 外层 mock api 只需要是一个跨渲染稳定的引用，供 handleOuterReady 的幂等判断使用；
+// initializeOuterWorkspace 本身被整体 mock 掉，不会真的调用它的方法。
+const outerDockviewMock = vi.hoisted(() => ({}))
+// 内层 scene/canvas/inspector Dockview：initializeCoreWorkspace 未被 mock，会真的对这个
+// 假 api 调用 addGroup/addEdgeGroup/addPanel，所以形状要跟 workspace-layout.test.ts 里的
+// createWorkspaceApi 一致，而不只是原来的 addPanel/getPanel。
 const workspaceDockviewMock = vi.hoisted(() => {
+  const groups = new Map<string, { id: string; locked?: string }>()
+  const edgeGroups = new Map<string, { id: string; locked?: string }>()
   const panels = new Map<string, { id: string; api: { close: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> } }>()
   return {
+    addGroup: vi.fn((options: { id: string }) => {
+      const group = { id: options.id, locked: undefined as string | undefined }
+      groups.set(options.id, group)
+      return group
+    }),
+    getGroup: vi.fn((id: string) => groups.get(id)),
+    addEdgeGroup: vi.fn((position: string, options: { id: string }) => {
+      const group = { id: options.id, locked: undefined as string | undefined }
+      groups.set(options.id, group)
+      edgeGroups.set(position, group)
+      return group
+    }),
+    getEdgeGroup: vi.fn((position: string) => edgeGroups.get(position)),
     addPanel: vi.fn((options: { id: string }) => {
       const panel = {
         id: options.id,
@@ -22,6 +46,8 @@ const workspaceDockviewMock = vi.hoisted(() => {
       return panel
     }),
     getPanel: vi.fn((id: string) => panels.get(id)),
+    groups,
+    edgeGroups,
     panels,
   }
 })
@@ -61,7 +87,7 @@ vi.mock('../workspace-layout', async (importOriginal) => {
 
   return {
     ...actual,
-    initializeWorkspace: initializeWorkspaceMock,
+    initializeOuterWorkspace: initializeOuterWorkspaceMock,
   }
 })
 
@@ -126,7 +152,17 @@ vi.mock('@compose-ui/asset-browser', async () => {
 
 vi.mock('dockview-react', async () => {
   const React = await import('react')
-  const readyEvent = { api: workspaceDockviewMock }
+  // 三层 Dockview：外层（只挂 core 面板 + bottom Edge Group，被 initializeOuterWorkspace mock
+  // 整体接管）、中层 core（scene/canvas/inspector，真的跑 initializeCoreWorkspace）、
+  // 最内层 scene-history（场景/组件库/历史，真的跑 initializeSceneToolsWorkspace）。
+  const apiByClassName: Record<string, unknown> = {
+    'compose-editor__core-dockview': workspaceDockviewMock,
+    'compose-editor__scene-history-dockview': sceneHistoryDockviewMock,
+  }
+  const testIdByClassName: Record<string, string> = {
+    'compose-editor__core-dockview': 'core-dockview',
+    'compose-editor__scene-history-dockview': 'scene-history-dockview',
+  }
 
   return {
     themeAbyss: { name: 'abyss', className: 'dockview-theme-abyss' },
@@ -140,15 +176,16 @@ vi.mock('dockview-react', async () => {
         group: { id: string }
       }>
     }) => {
-      const nested = className === 'compose-editor__scene-history-dockview'
+      const api = (className && apiByClassName[className]) || outerDockviewMock
+      const testId = (className && testIdByClassName[className]) || 'dockview'
       React.useEffect(() => {
-        onReady(nested ? { api: sceneHistoryDockviewMock } : readyEvent)
-      }, [nested, onReady])
+        onReady({ api })
+      }, [api, onReady])
 
       return React.createElement(
         'div',
-        { 'data-testid': nested ? 'scene-history-dockview' : 'dockview' },
-        !nested && HeaderActions
+        { 'data-testid': testId },
+        className === 'compose-editor__core-dockview' && HeaderActions
           ? React.createElement(HeaderActions, {
               group: { id: 'compose-scene-edge' },
             })
@@ -203,10 +240,13 @@ function createHistoryController(
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
-  initializeWorkspaceMock.mockClear()
-  workspaceDockviewMock.addPanel.mockClear()
-  workspaceDockviewMock.getPanel.mockClear()
+  initializeOuterWorkspaceMock.mockClear()
+  workspaceDockviewMock.groups.clear()
+  workspaceDockviewMock.edgeGroups.clear()
   workspaceDockviewMock.panels.clear()
+  Object.values(workspaceDockviewMock).forEach((member) => {
+    if (typeof member === 'function' && 'mockClear' in member) member.mockClear()
+  })
   sceneHistoryDockviewMock.groups.clear()
   sceneHistoryDockviewMock.panels.clear()
   Object.values(sceneHistoryDockviewMock).forEach((member) => {
@@ -232,6 +272,9 @@ describe('ComposeEditor', () => {
       read: vi.fn(),
     }
     render(<ComposeEditor assets={{ browser: { provider } }} />)
+    // 初次挂载已经为内层 Dockview 建了 canvas/scene/inspector 三个面板；
+    // 下面只关心打开资源文档这一次动作触发的 addPanel 调用。
+    workspaceDockviewMock.addPanel.mockClear()
 
     fireEvent.click(screen.getByRole('button', { name: 'mock asset open' }))
     await waitFor(() => expect(workspaceDockviewMock.addPanel).toHaveBeenCalledWith(expect.objectContaining({
@@ -738,7 +781,7 @@ describe('ComposeEditor', () => {
 
     expect(screen.getByText('Latest inspector')).toBeInTheDocument()
     expect(screen.queryByText('First inspector')).not.toBeInTheDocument()
-    expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
+    expect(initializeOuterWorkspaceMock).toHaveBeenCalledTimes(1)
   })
 
   it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 使用默认历史面板', () => {
@@ -876,7 +919,7 @@ describe('ComposeEditor', () => {
     expect(screen.getByText('第二版属性')).toBeInTheDocument()
     expect(screen.getByTestId('scene-history-dockview')).toBe(nestedDockview)
     expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledTimes(3)
-    expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
+    expect(initializeOuterWorkspaceMock).toHaveBeenCalledTimes(1)
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 默认显示空场景树', () => {
@@ -907,7 +950,7 @@ describe('ComposeEditor', () => {
     )
 
     expect(screen.getByTestId('default-scene-tree')).toHaveTextContent('Latest')
-    expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
+    expect(initializeOuterWorkspaceMock).toHaveBeenCalledTimes(1)
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 宿主覆盖场景树', () => {
@@ -947,7 +990,7 @@ describe('ComposeEditor', () => {
       </StrictMode>,
     )
 
-    expect(initializeWorkspaceMock).toHaveBeenCalledTimes(1)
+    expect(initializeOuterWorkspaceMock).toHaveBeenCalledTimes(1)
   })
 
   it('OpenSpec: editor-preferences / 设置模态弹框 / 打开和关闭设置', async () => {

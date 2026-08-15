@@ -7,6 +7,8 @@ export const WORKSPACE_GROUP_IDS = {
   canvas: 'compose-canvas-group',
   inspector: 'compose-inspector-edge',
   bottom: 'compose-bottom-edge',
+  /** 外层 Dockview 中唯一的中央组，承载内层 scene/canvas/inspector Dockview。 */
+  core: 'compose-workspace-core-group',
 } as const
 
 export const WORKSPACE_PANEL_IDS = {
@@ -17,6 +19,8 @@ export const WORKSPACE_PANEL_IDS = {
   command: 'compose-command',
   assetBrowser: 'compose-assets',
   animation: 'compose-animation',
+  /** 外层唯一中央面板：内层 scene/canvas/inspector Dockview 的宿主。 */
+  core: 'compose-workspace-core',
 } as const
 
 export const WORKSPACE_COMPONENT_IDS = {
@@ -30,6 +34,7 @@ export const WORKSPACE_COMPONENT_IDS = {
   assetDocument: 'assetDocument',
   pageDocument: 'pageDocument',
   componentDocument: 'componentDocument',
+  core: 'workspaceCore',
 } as const
 
 const ASSET_DOCUMENT_PANEL_PREFIX = 'compose-asset-document:'
@@ -122,6 +127,7 @@ export function localizeWorkspace(
     [WORKSPACE_PANEL_IDS.command]: messages.command,
     [WORKSPACE_PANEL_IDS.assetBrowser]: messages.assets,
     [WORKSPACE_PANEL_IDS.animation]: messages.animation,
+    [WORKSPACE_PANEL_IDS.core]: messages.workspaceCore,
   }
   for (const [panelId, title] of Object.entries(titles)) {
     const getPanel = (api as Partial<DockviewApi>).getPanel
@@ -130,76 +136,39 @@ export function localizeWorkspace(
   }
 }
 
-export function initializeWorkspace(
+/**
+ * 初始化外层工作区：只有一个中央面板（宿主内层 scene/canvas/inspector Dockview）和一个
+ * `bottom` Edge Group（资源/动画/命令/日志）。
+ *
+ * @remarks
+ * 外层不持有 `left`/`right` Edge Group，这是让 `bottom` 能横跨整个编辑器宽度的前提——见
+ * `initializeCoreWorkspace` 上的注释。
+ */
+export function initializeOuterWorkspace(
   api: DockviewApi,
   locale: ComposeLocale = 'zh-CN',
   formatMessage?: ComposeI18nContextValue['formatMessage'],
-  options?: InitializeWorkspaceOptions,
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
-  const includeCanvas = options?.includeCanvas ?? true
-  const canvasGroup =
-    api.getGroup(WORKSPACE_GROUP_IDS.canvas) ??
+  // hideHeader：这个组永远只有一个面板（内层 scene/canvas/inspector Dockview 的宿主），
+  // 不需要自己的标签条——它自己内部已经有真正的 Canvas 标签，叠两层标签条只是多余的 chrome。
+  const coreGroup =
+    api.getGroup(WORKSPACE_GROUP_IDS.core) ??
     api.addGroup({
       direction: 'right',
-      id: WORKSPACE_GROUP_IDS.canvas,
+      hideHeader: true,
+      id: WORKSPACE_GROUP_IDS.core,
       locked: 'no-drop-target',
     })
 
-  if (includeCanvas && !api.getPanel(WORKSPACE_PANEL_IDS.canvas)) {
+  if (!api.getPanel(WORKSPACE_PANEL_IDS.core)) {
     api.addPanel({
-      id: WORKSPACE_PANEL_IDS.canvas,
-      component: WORKSPACE_COMPONENT_IDS.canvas,
+      id: WORKSPACE_PANEL_IDS.core,
+      component: WORKSPACE_COMPONENT_IDS.core,
       tabComponent: TAB_COMPONENT,
-      title: messages.canvas,
-      position: { referenceGroup: WORKSPACE_GROUP_IDS.canvas },
-    })
-  }
-
-  // Dockview 的 top/bottom Edge Group 只会占据 left/right Edge Group 之间的中间列。
-  // 场景和属性区因此必须是主 Grid 的左右分栏，才能让底部工具区真正横跨整个编辑器宽度。
-  const sceneGroup =
-    api.getGroup(WORKSPACE_GROUP_IDS.scene) ??
-    api.addGroup({
-      direction: 'left',
-      id: WORKSPACE_GROUP_IDS.scene,
-      referenceGroup: canvasGroup.id,
-    })
-  sceneGroup.locked = 'no-drop-target'
-
-  let scenePanel = api.getPanel(WORKSPACE_PANEL_IDS.scene)
-  if (!scenePanel) {
-    scenePanel = api.addPanel({
-      id: WORKSPACE_PANEL_IDS.scene,
-      component: WORKSPACE_COMPONENT_IDS.scene,
-      initialWidth: WORKSPACE_SIZES.scene.initialSize,
-      tabComponent: TAB_COMPONENT,
-      title: messages.sceneGraph,
-      minimumWidth: WORKSPACE_SIZES.scene.minimumSize,
-      position: { referenceGroup: sceneGroup.id },
-    })
-  }
-
-  scenePanel.api.setActive()
-
-  const inspectorGroup =
-    api.getGroup(WORKSPACE_GROUP_IDS.inspector) ??
-    api.addGroup({
-      direction: 'right',
-      id: WORKSPACE_GROUP_IDS.inspector,
-      referenceGroup: canvasGroup.id,
-    })
-  inspectorGroup.locked = 'no-drop-target'
-
-  if (!api.getPanel(WORKSPACE_PANEL_IDS.inspector)) {
-    api.addPanel({
-      id: WORKSPACE_PANEL_IDS.inspector,
-      component: WORKSPACE_COMPONENT_IDS.inspector,
-      initialWidth: WORKSPACE_SIZES.inspector.initialSize,
-      tabComponent: TAB_COMPONENT,
-      title: messages.inspector,
-      minimumWidth: WORKSPACE_SIZES.inspector.minimumSize,
-      position: { referenceGroup: inspectorGroup.id },
+      // 用与内层真正的 Canvas 不同的标题，避免两层 group landmark 重名（见上面的 hideHeader 注释）。
+      title: messages.workspaceCore,
+      position: { referenceGroup: coreGroup.id },
     })
   }
 
@@ -258,5 +227,81 @@ export function initializeWorkspace(
   }
 
   assetBrowser.api.setActive()
+  localizeWorkspace(api, locale, formatMessage)
+}
+
+/**
+ * 初始化内层工作区：Scene Graph 与 Component Inspector 是真正的 Dockview `left`/`right`
+ * Edge Group（原生支持折叠为窄轨道 + 点击展开），Canvas 是它们之间的中央固定面板。
+ *
+ * @remarks
+ * 这个 Dockview 实例本身挂载在外层唯一中央面板内部（见 `initializeOuterWorkspace`），因此
+ * 这里的 `left`/`right` 边缘组只影响内层实例自己的宽度，不会挤压外层的 `bottom` 边缘组。
+ */
+export function initializeCoreWorkspace(
+  api: DockviewApi,
+  locale: ComposeLocale = 'zh-CN',
+  formatMessage?: ComposeI18nContextValue['formatMessage'],
+  options?: InitializeWorkspaceOptions,
+) {
+  const messages = getEditorMessages(locale, formatMessage).workspace
+  const includeCanvas = options?.includeCanvas ?? true
+  const canvasGroup =
+    api.getGroup(WORKSPACE_GROUP_IDS.canvas) ??
+    api.addGroup({
+      direction: 'right',
+      id: WORKSPACE_GROUP_IDS.canvas,
+      locked: 'no-drop-target',
+    })
+
+  if (includeCanvas && !api.getPanel(WORKSPACE_PANEL_IDS.canvas)) {
+    api.addPanel({
+      id: WORKSPACE_PANEL_IDS.canvas,
+      component: WORKSPACE_COMPONENT_IDS.canvas,
+      tabComponent: TAB_COMPONENT,
+      title: messages.canvas,
+      position: { referenceGroup: canvasGroup.id },
+    })
+  }
+
+  const sceneGroup =
+    api.getEdgeGroup('left') ??
+    api.addEdgeGroup('left', {
+      id: WORKSPACE_GROUP_IDS.scene,
+      ...WORKSPACE_SIZES.scene,
+    })
+  sceneGroup.locked = 'no-drop-target'
+
+  let scenePanel = api.getPanel(WORKSPACE_PANEL_IDS.scene)
+  if (!scenePanel) {
+    scenePanel = api.addPanel({
+      id: WORKSPACE_PANEL_IDS.scene,
+      component: WORKSPACE_COMPONENT_IDS.scene,
+      tabComponent: TAB_COMPONENT,
+      title: messages.sceneGraph,
+      position: { referenceGroup: sceneGroup.id },
+    })
+  }
+
+  scenePanel.api.setActive()
+
+  const inspectorGroup =
+    api.getEdgeGroup('right') ??
+    api.addEdgeGroup('right', {
+      id: WORKSPACE_GROUP_IDS.inspector,
+      ...WORKSPACE_SIZES.inspector,
+    })
+  inspectorGroup.locked = 'no-drop-target'
+
+  if (!api.getPanel(WORKSPACE_PANEL_IDS.inspector)) {
+    api.addPanel({
+      id: WORKSPACE_PANEL_IDS.inspector,
+      component: WORKSPACE_COMPONENT_IDS.inspector,
+      tabComponent: TAB_COMPONENT,
+      title: messages.inspector,
+      position: { referenceGroup: inspectorGroup.id },
+    })
+  }
+
   localizeWorkspace(api, locale, formatMessage)
 }

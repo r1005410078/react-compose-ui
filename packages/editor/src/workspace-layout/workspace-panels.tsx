@@ -13,8 +13,8 @@ import type {
   IDockviewPanelProps,
 } from 'dockview-react'
 import { useWorkspaceContent } from './workspace-context'
-import { WORKSPACE_PANEL_IDS } from './workspace-layout'
-import { WorkspaceTab } from './workspace-tab'
+import { WORKSPACE_COMPONENT_IDS, WORKSPACE_PANEL_IDS } from './workspace-layout'
+import { WorkspaceHeaderActions, WorkspaceTab } from './workspace-tab'
 import { getEditorMessages } from '../editor-i18n'
 import { StageToolbarIcon } from '../stage-toolbar/stage-toolbar-icons'
 
@@ -94,6 +94,14 @@ function localizeSceneToolsWorkspace(
   }
 }
 
+/** 场景内容与工具 Dock 的高度折算：工具区取可用高度的 40%，但受最小高度双向夹紧。 */
+function computeToolsHeight(availableHeight: number) {
+  return Math.min(
+    Math.max(TOOLS_MIN_HEIGHT, Math.round(availableHeight * 0.4)),
+    Math.max(TOOLS_MIN_HEIGHT, availableHeight - SCENE_MIN_HEIGHT),
+  )
+}
+
 function initializeSceneToolsWorkspace(
   api: DockviewApi,
   locale: ComposeLocale,
@@ -102,10 +110,7 @@ function initializeSceneToolsWorkspace(
 ) {
   const messages = getEditorMessages(locale, formatMessage).workspace
   const availableHeight = api.height > 0 ? api.height : DEFAULT_SCENE_TOOLS_HEIGHT
-  const toolsInitialHeight = Math.min(
-    Math.max(TOOLS_MIN_HEIGHT, Math.round(availableHeight * 0.4)),
-    Math.max(TOOLS_MIN_HEIGHT, availableHeight - SCENE_MIN_HEIGHT),
-  )
+  const toolsInitialHeight = computeToolsHeight(availableHeight)
   const sceneGroup = api.getGroup(SCENE_TOOLS_GROUP_IDS.scene) ?? api.addGroup({
     constraints: { minimumHeight: SCENE_MIN_HEIGHT },
     direction: 'right',
@@ -201,6 +206,37 @@ function SceneToolsDockview() {
       )
     }
   }, [historyEnabled, i18n?.formatMessage, locale])
+
+  /*
+   * initializeSceneToolsWorkspace 在 onReady 时用 api.height 或者容器 DOM 高度折算工具区
+   * 40% 的初始高度——两者在这一层嵌套下都不可靠：Scene Graph 现在嵌套在中层 core Dockview
+   * 的 left Edge Group 里，比原来多一层挂载；React 子组件的 effect 先于父组件 effect 触发，
+   * 这层最深的 SceneToolsDockview 挂载时，它上面还有两层 Dockview 各自的初始布局/
+   * ResizeObserver 可能都还没跑完，此时读到的高度（不管是 api.height 还是 DOM
+   * getBoundingClientRect）都可能是过渡态的偏小值，且一旦用错值创建了 group 就不会自动
+   * 再纠正。这里用 ResizeObserver 盯住真正稳定下来的高度，只在挂载后第一次观测到的高度上
+   * 修正一次工具区分栏，不覆盖用户后续手动拖拽调整过的高度。
+   */
+  const toolsHeightCorrectedRef = useRef(false)
+  useEffect(() => {
+    toolsHeightCorrectedRef.current = false
+  }, [])
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      if (toolsHeightCorrectedRef.current) return
+      const height = entries[0]?.contentRect.height
+      if (!height || height <= 0) return
+      const api = initializedApi.current
+      const toolsGroup = api?.getGroup(SCENE_TOOLS_GROUP_IDS.tools)
+      if (!api || !toolsGroup) return
+      toolsHeightCorrectedRef.current = true
+      toolsGroup.api.setSize({ height: computeToolsHeight(height) })
+    })
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     // 外层 Edge Group 与内层 split Dockview 都有 Scene Graph 标签。视觉上保留两处原始标题，
@@ -435,6 +471,54 @@ export function PageDocumentPanel(props: IDockviewPanelProps) {
       <div className="compose-editor__canvas-content">
         {stageHostPanelId === panelId ? children : null}
       </div>
+    </div>
+  )
+}
+
+const coreComponents = {
+  [WORKSPACE_COMPONENT_IDS.scene]: SceneGraphPanel,
+  [WORKSPACE_COMPONENT_IDS.canvas]: CanvasPanel,
+  [WORKSPACE_COMPONENT_IDS.inspector]: InspectorPanel,
+  [WORKSPACE_COMPONENT_IDS.assetDocument]: AssetDocumentPanel,
+  [WORKSPACE_COMPONENT_IDS.pageDocument]: PageDocumentPanel,
+  [WORKSPACE_COMPONENT_IDS.componentDocument]: ComponentDocumentPanel,
+} satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
+const coreTabComponents = { workspaceTab: WorkspaceTab }
+
+/**
+ * 内层 Dockview：Scene Graph（`left` Edge Group）、Canvas（中央固定面板）、
+ * Component Inspector（`right` Edge Group）。
+ *
+ * @remarks
+ * 挂载在外层工作区唯一中央面板（`WorkspaceCorePanel`）内部，`onReady` 通过 Context 转发给
+ * `ComposeEditor`——它拥有 `pages`/`components` 配置和文档面板生命周期，需要自己调用
+ * `initializeCoreWorkspace` 并持有这份内层 `api`。这里只负责渲染和转发事件，不做初始化。
+ * @internal
+ */
+function WorkspaceCoreDockview() {
+  const { onCoreDockviewReady } = useWorkspaceContent()
+
+  return (
+    <div className="compose-editor__core-dockview-host">
+      <DockviewReact
+        className="compose-editor__core-dockview"
+        components={coreComponents}
+        disableDnd
+        disableFloatingGroups
+        onReady={onCoreDockviewReady}
+        rightHeaderActionsComponent={WorkspaceHeaderActions}
+        tabComponents={coreTabComponents}
+        theme={themeAbyss}
+      />
+    </div>
+  )
+}
+
+/** 外层工作区唯一中央面板：宿主内层 scene/canvas/inspector Dockview。 @internal */
+export function WorkspaceCorePanel() {
+  return (
+    <div className="compose-editor__panel" data-workspace-panel="core">
+      <WorkspaceCoreDockview />
     </div>
   )
 }

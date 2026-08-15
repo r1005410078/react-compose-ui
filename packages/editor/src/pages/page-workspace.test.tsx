@@ -16,7 +16,11 @@ import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComposeEditorController } from '../editor-controller'
 
-const initializeWorkspaceMock = vi.hoisted(() => vi.fn())
+// dockviewMock 代表内层 scene/canvas/inspector Dockview（页面/资源文档都挂在这个实例上）；
+// 外层只有 core 面板 + bottom Edge Group，本文件不关心它的结构，两个 init 函数都整体 mock 掉。
+const initializeCoreWorkspaceMock = vi.hoisted(() => vi.fn())
+const initializeOuterWorkspaceMock = vi.hoisted(() => vi.fn())
+const outerDockviewMock = vi.hoisted(() => ({}))
 const assetPreviewPropsMock = vi.hoisted(() => vi.fn())
 
 /**
@@ -87,7 +91,11 @@ const dockviewMock = vi.hoisted(() => {
 
 vi.mock('../workspace-layout', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../workspace-layout')>()
-  return { ...actual, initializeWorkspace: initializeWorkspaceMock }
+  return {
+    ...actual,
+    initializeCoreWorkspace: initializeCoreWorkspaceMock,
+    initializeOuterWorkspace: initializeOuterWorkspaceMock,
+  }
 })
 
 vi.mock('dockview-react', async () => {
@@ -102,20 +110,33 @@ vi.mock('dockview-react', async () => {
       onReady: (event: { api: unknown }) => void
     }) => {
       const nested = className === 'compose-editor__scene-history-dockview'
+      // 页面/资源文档都挂在内层 core Dockview 上（initializedApi.current 由它的 onReady 设置），
+      // 外层只是宿主，用一个静态假 api 打发 handleOuterReady 的幂等判断即可。
+      const isCore = className === 'compose-editor__core-dockview'
       const [, force] = React.useState(0)
       React.useEffect(() => {
         if (nested) return
-        onReady({ api: dockviewMock.api })
+        onReady({ api: isCore ? dockviewMock.api : outerDockviewMock })
+        if (!isCore) return
         // 面板集合的变化不经过 React，测试里靠订阅活动面板变化触发重渲染。
         const subscription = dockviewMock.api.onDidActivePanelChange(() => { force((n) => n + 1) })
         return () => { subscription.dispose() }
-      }, [nested, onReady])
+      }, [isCore, nested, onReady])
       if (nested) return React.createElement('div', { 'data-testid': 'scene-history-dockview' })
+      if (!isCore) {
+        // 外层只有 core 宿主面板 + bottom Edge Group 的四个工具标签，静态渲染一次即可。
+        return React.createElement(
+          'div',
+          { 'data-testid': 'dockview' },
+          Object.entries(components).map(([name, Component]) =>
+            React.createElement(Component, { key: `static-${name}` })),
+        )
+      }
       const Tab = tabComponents?.workspaceTab
       return React.createElement(
         'div',
-        { 'data-testid': 'dockview' },
-        // initializeWorkspace 被 mock，因此基础面板不会进入面板表；固定面板（资源浏览器等）
+        { 'data-testid': 'core-dockview' },
+        // initializeCoreWorkspace 被 mock，因此基础面板不会进入面板表；固定面板（资源浏览器等）
         // 无条件渲染一次，动态面板另外按其 api 渲染。
         Object.entries(components).map(([name, Component]) =>
           React.createElement(Component, { key: `static-${name}` })),
@@ -757,7 +778,7 @@ describe('OpenSpec: editor-workspace-layout / 首页标记与清单对账', () =
     await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
     expect(pageDocumentPanels()[0]).toMatchObject({ title: 'Home' })
     expect(dockviewMock.activeId).toBe(pageDocumentPanels()[0]?.id)
-    expect(initializeWorkspaceMock).toHaveBeenCalledWith(
+    expect(initializeCoreWorkspaceMock).toHaveBeenCalledWith(
       dockviewMock.api,
       'zh-CN',
       undefined,

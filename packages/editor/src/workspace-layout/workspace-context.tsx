@@ -13,6 +13,7 @@ import type {
   ComposeHistoryNavigationController,
   ComposeHistoryShortcuts,
 } from '@compose-ui/history'
+import type { DockviewReadyEvent } from 'dockview-react'
 
 export interface WorkspaceContent {
   sceneGraphPanel?: ReactNode
@@ -26,6 +27,14 @@ export interface WorkspaceContent {
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
   assetBrowserPanel?: ReactNode
+  /**
+   * 外层工作区唯一中央面板挂载内层 scene/canvas/inspector Dockview 时调用。
+   *
+   * @remarks
+   * 内层 Dockview 是通过外层 `core` 面板组件渲染的，不能直接从 `ComposeEditor` 拿到它的
+   * `onReady` 事件；这里把回调经 Context 往下传，内层组件就绪后再往上转发。
+   */
+  onCoreDockviewReady: (event: DockviewReadyEvent) => void
   /**
    * 唯一允许渲染 Stage 的面板 ID。
    *

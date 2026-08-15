@@ -15,7 +15,8 @@ export {
   WORKSPACE_SIZES,
   type InitializeWorkspaceOptions,
   createAssetDocumentPanelId,
-  initializeWorkspace,
+  initializeCoreWorkspace,
+  initializeOuterWorkspace,
   createPageDocumentPanelId,
   createComponentDocumentPanelId,
   isAssetDocumentPanelId,
@@ -36,5 +37,6 @@ export {
   InspectorPanel,
   SceneGraphPanel,
   TransactionLogPanel,
+  WorkspaceCorePanel,
 } from './workspace-panels'
 export { WorkspaceHeaderActions, WorkspaceTab } from './workspace-tab'

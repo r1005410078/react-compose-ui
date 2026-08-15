@@ -62,7 +62,8 @@
   background: var(--compose-panel-bg);
 }
 
-.compose-editor__scene-history-dockview {
+.compose-editor__scene-history-dockview,
+.compose-editor__core-dockview {
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -70,7 +71,8 @@
   overflow: hidden;
 }
 
-.compose-editor__scene-history-dockview-host {
+.compose-editor__scene-history-dockview-host,
+.compose-editor__core-dockview-host {
   min-height: 0;
   height: 100%;
 }
@@ -924,7 +926,8 @@
 }
 
 .compose-editor__dockview,
-.compose-editor__scene-history-dockview {
+.compose-editor__scene-history-dockview,
+.compose-editor__core-dockview {
   --dv-background-color: var(--compose-workspace-bg);
   --dv-group-view-background-color: var(--compose-workspace-bg);
   --dv-tabs-and-actions-container-background-color: var(--compose-surface-raised);
