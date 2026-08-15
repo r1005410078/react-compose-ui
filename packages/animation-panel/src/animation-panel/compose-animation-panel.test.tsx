@@ -552,6 +552,27 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('200')
   })
 
+  it('OpenSpec: animation-panel / 关键帧时间调整 / 提交被钳制回未变化的值时草稿仍会同步', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+
+    // 选中尾帧（300 ms，等于时长）：超出时长的提交会被钳回同一个值，字符串表示不变，
+    // 调用方的 key（由 id + timeMs 拼成）也不会变化，草稿必须靠组件内部机制自行同步。
+    fireEvent.click(screen.getByRole('button', { name: '关键帧 300 ms：背景填充' }))
+    const time = screen.getByRole('textbox', { name: '时间' })
+    expect(time).toHaveValue('300')
+
+    fireEvent.change(time, { target: { value: '400' } })
+    fireEvent.keyDown(time, { key: 'Enter' })
+
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('300')
+    expect(screen.getByRole('button', { name: '关键帧 300 ms：背景填充' })).toBeInTheDocument()
+  })
+
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 当前时间读数不在播放时反复播报', () => {
     render(
       <ComposeAnimationPanelProvider>

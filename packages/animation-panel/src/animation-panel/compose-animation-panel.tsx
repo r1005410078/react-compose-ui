@@ -288,17 +288,6 @@ export function ComposeAnimationTimeline({
               <span aria-hidden="true" />
             </button>
           </div>
-          {/* 常驻挂载：live region 必须先于内容变化就存在于 DOM 中，AT 才能可靠捕获后续的文本变化。
-              视觉样式通过 --active 修饰类切换，避免无冲突时出现一个空的提示框。 */}
-          <p
-            aria-live="polite"
-            className={['compose-animation-timeline__notice', notice ? 'compose-animation-timeline__notice--active' : '']
-              .filter(Boolean)
-              .join(' ')}
-            role="status"
-          >
-            {notice ? t.duplicateTime : ''}
-          </p>
           <div aria-label={t.trackList} className="compose-animation-timeline__track-list" role="list">
           {value.model.tracks.map((track) => {
             const trackLabel = displayTrackLabel(track.id, track.label, locale)
@@ -368,6 +357,20 @@ export function ComposeAnimationTimeline({
           onSetCurrentTime={setCurrentTime}
         />
       </div>
+      {/* 常驻挂载：live region 必须先于内容变化就存在于 DOM 中，AT 才能可靠捕获后续的文本变化。
+          必须是 section 的最后一个子节点、.content 的兄弟节点，而不是 .tracks 的子节点：
+          .tracks 是纵向 flex 列，插入一个带默认 margin 的块级元素会把整个左列（进而与右侧时间线
+          刻度）永久错位，即使没有冲突、提示为空也一样。视觉样式通过 --active 修饰类切换，
+          避免无冲突时出现一个空的提示框。 */}
+      <p
+        aria-live="polite"
+        className={['compose-animation-timeline__notice', notice ? 'compose-animation-timeline__notice--active' : '']
+          .filter(Boolean)
+          .join(' ')}
+        role="status"
+      >
+        {notice ? t.duplicateTime : ''}
+      </p>
     </section>
   )
 }
@@ -849,6 +852,7 @@ export function ComposeAnimationInspector({
           className="compose-animation-inspector__curve"
           id={easingPanelId}
           role="tabpanel"
+          tabIndex={0}
         >
           <svg aria-label={value.easingEditor === 'curve' ? t[interpolation === 'ease-in' ? 'easeIn' : interpolation === 'ease-out' ? 'easeOut' : 'linear'] : t.spring} viewBox="0 0 220 180">
             <path className="compose-animation-inspector__curve-grid" d="M18 162H202V18M18 126H202M18 90H202M18 54H202M64 18V162M110 18V162M156 18V162" />
