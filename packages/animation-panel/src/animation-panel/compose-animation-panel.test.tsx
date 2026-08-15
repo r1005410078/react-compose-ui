@@ -529,8 +529,11 @@ describe('ComposeAnimationPanel', () => {
 
     // 100 ms 已被占用：关键帧不能移动，且必须说明原因。
     expect(screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })).toBeInTheDocument()
-    expect(document.querySelector('.compose-animation-timeline__notice'))
-      .toHaveTextContent('该属性轨道已存在同一时间的关键帧')
+    const timelineNotice = document.querySelector('.compose-animation-timeline__notice')
+    expect(timelineNotice).toHaveTextContent('该属性轨道已存在同一时间的关键帧')
+    // 编辑器实际只挂载时间线，Inspector 的 sr-only live region 不会出现在真实产品中；
+    // 时间线自身的提示必须是可见的，而不仅仅是屏幕阅读器可达。
+    expect(timelineNotice).not.toHaveClass('compose-animation-panel__sr-only')
     expect(screen.getByRole('textbox', { name: '时间' }))
       .toHaveAccessibleDescription('该属性轨道已存在同一时间的关键帧')
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('200')

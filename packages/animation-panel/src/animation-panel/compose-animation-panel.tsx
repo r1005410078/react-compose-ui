@@ -286,6 +286,17 @@ export function ComposeAnimationTimeline({
               <span aria-hidden="true" />
             </button>
           </div>
+          {/* 常驻挂载：live region 必须先于内容变化就存在于 DOM 中，AT 才能可靠捕获后续的文本变化。
+              视觉样式通过 --active 修饰类切换，避免无冲突时出现一个空的提示框。 */}
+          <p
+            aria-live="polite"
+            className={['compose-animation-timeline__notice', notice ? 'compose-animation-timeline__notice--active' : '']
+              .filter(Boolean)
+              .join(' ')}
+            role="status"
+          >
+            {notice ? t.duplicateTime : ''}
+          </p>
           <div aria-label={t.trackList} className="compose-animation-timeline__track-list" role="list">
           {value.model.tracks.map((track) => {
             const trackLabel = displayTrackLabel(track.id, track.label, locale)
@@ -354,9 +365,6 @@ export function ComposeAnimationTimeline({
           onSelectInterpolationSegment={selectInterpolationSegment}
           onSetCurrentTime={setCurrentTime}
         />
-      <p aria-live="polite" className="compose-animation-panel__sr-only compose-animation-timeline__notice" role="status">
-        {notice ? t.duplicateTime : ''}
-      </p>
       </div>
     </section>
   )

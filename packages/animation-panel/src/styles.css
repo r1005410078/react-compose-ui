@@ -190,6 +190,8 @@
     border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 78%, transparent);
     background: linear-gradient(180deg, rgb(255 255 255 / 2%), rgb(0 0 0 / 7%));
   }
+  .compose-animation-timeline__notice { flex: 0 0 auto; }
+  .compose-animation-timeline__notice--active { margin: 6px 6px 0; padding: 7px 9px; border: 1px solid color-mix(in srgb, var(--compose-danger, #e5484d) 55%, transparent); border-radius: 4px; color: #ffd7d9; background: color-mix(in srgb, var(--compose-danger, #e5484d) 16%, transparent); font-size: 12px; }
   .compose-animation-timeline__track-row,
   .compose-animation-timeline__property-row {
     display: flex;
