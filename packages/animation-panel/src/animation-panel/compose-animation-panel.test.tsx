@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useState } from 'react'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
 import {
   ComposeAnimationInspector,
@@ -347,5 +348,36 @@ describe('ComposeAnimationPanel', () => {
       .toHaveAttribute('aria-pressed', 'true')
     expect(propertyRow).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
+  })
+
+  it('OpenSpec: animation-panel / 三种播放模式 / 受控宿主回传会话值时播放头继续推进', () => {
+    const callbacks: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      callbacks.push(callback)
+      return callbacks.length
+    }))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+
+    function ControlledHost() {
+      const [value, setValue] = useState({
+        ...createDefaultComposeAnimationPanelValue(),
+        currentTimeMs: 0,
+      })
+      return (
+        <ComposeAnimationPanelProvider value={value} onValueChange={setValue}>
+          <ComposeAnimationTimeline />
+        </ComposeAnimationPanelProvider>
+      )
+    }
+    render(<ControlledHost />)
+
+    fireEvent.click(screen.getByRole('button', { name: '播放动画' }))
+    // 首帧只记录时间戳；之后每帧推进 50 ms。
+    act(() => callbacks.shift()?.(0))
+    act(() => callbacks.shift()?.(50))
+    act(() => callbacks.shift()?.(100))
+
+    expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('100')
+    expect(screen.getByRole('button', { name: '暂停动画' })).toBeInTheDocument()
   })
 })

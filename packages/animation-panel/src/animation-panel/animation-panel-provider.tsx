@@ -56,9 +56,14 @@ export function AnimationPanelProvider({
   const value = controlledValue ?? uncontrolledValue
   const valueRef = useRef(value)
   const onValueChangeRef = useRef(onValueChange)
-  const frameRef = useRef<number | null>(null)
   const previousFrameTimeRef = useRef<number | null>(null)
   const playbackDirectionRef = useRef<1 | -1>(1)
+  // 不足 1 ms 的帧间隔余量：播放头按整毫秒存储，逐帧四舍五入会在 60 fps 下累积约 2% 的偏快。
+  const frameRemainderRef = useRef(0)
+  // commit 是播放 rAF effect 的依赖，必须在整个会话内保持同一引用。若它随受控值变化，
+  // effect 会在每帧重建并清掉上一帧时间戳，elapsed 永远为 0，受控宿主的播放头再也不会前进。
+  const controlledRef = useRef(controlledValue !== undefined)
+  controlledRef.current = controlledValue !== undefined
 
   useEffect(() => {
     valueRef.current = value
@@ -67,9 +72,9 @@ export function AnimationPanelProvider({
 
   const commit = useCallback((next: ComposeAnimationPanelValue) => {
     valueRef.current = next
-    if (controlledValue === undefined) setUncontrolledValue(next)
+    if (!controlledRef.current) setUncontrolledValue(next)
     onValueChangeRef.current?.(next)
-  }, [controlledValue])
+  }, [])
   const setCurrentTime = useCallback((timeMs: number) => {
     const current = valueRef.current
     commit({ ...current, currentTimeMs: clampComposeAnimationTime(timeMs, current.model.durationMs) })
@@ -207,33 +212,30 @@ export function AnimationPanelProvider({
   }, [commit])
 
   useEffect(() => {
-    if (!value.isPlaying) {
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
-      frameRef.current = null
-      previousFrameTimeRef.current = null
-      return
-    }
-    const tick = (now: number) => {
+    if (!value.isPlaying) return
+    let frame = requestAnimationFrame(function tick(now) {
       const current = valueRef.current
       const previous = previousFrameTimeRef.current ?? now
-      const elapsed = now - previous
       previousFrameTimeRef.current = now
+      const elapsed = now - previous + frameRemainderRef.current
+      const wholeElapsedMs = Math.floor(elapsed)
+      frameRemainderRef.current = elapsed - wholeElapsedMs
       const next = advanceComposeAnimationPlayback(
         current.currentTimeMs,
         current.model.durationMs,
         current.playbackMode,
-        elapsed,
+        wholeElapsedMs,
         playbackDirectionRef.current,
       )
       playbackDirectionRef.current = next.direction
       commit({ ...current, currentTimeMs: next.timeMs, isPlaying: next.isPlaying })
-      if (next.isPlaying) frameRef.current = requestAnimationFrame(tick)
-    }
-    frameRef.current = requestAnimationFrame(tick)
+      if (next.isPlaying) frame = requestAnimationFrame(tick)
+    })
+    // 暂停或卸载时丢弃上一帧时间戳与余量：暂停期间流逝的真实时间不计入播放头。
     return () => {
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
-      frameRef.current = null
+      cancelAnimationFrame(frame)
       previousFrameTimeRef.current = null
+      frameRemainderRef.current = 0
     }
   }, [commit, value.isPlaying])
 
