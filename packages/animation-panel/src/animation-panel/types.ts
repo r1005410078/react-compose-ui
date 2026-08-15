@@ -31,8 +31,20 @@ export interface ComposeAnimationClip {
 export interface ComposeAnimationPropertyTrack {
   /** 属性轨道的稳定标识。 */
   readonly id: string
-  /** 用户可见的属性名称。 */
+  /** 用户可见的属性名称（完整名，如 Position X / 背景填充）。 */
   readonly label: string
+  /**
+   * 左侧列表主名称（Rive 式，如 Position）；缺省使用 `label`。
+   * @remarks 与 `channel` 搭配时，主名称显示在左，分量显示在右。
+   */
+  readonly groupLabel?: string
+  /** 分量通道标记（如 X / Y）；无分量时省略。 */
+  readonly channel?: string
+  /**
+   * 右侧展示值（如 `911.6`、`28.404°`）；缺省取当前播放头附近关键帧的 `value`。
+   * @remarks 演示会话可用人类可读数值；颜色属性可继续用 hex。
+   */
+  readonly displayValue?: string
   /** 属性轨道的关键帧。 */
   readonly keyframes: readonly ComposeAnimationKeyframe[]
 }

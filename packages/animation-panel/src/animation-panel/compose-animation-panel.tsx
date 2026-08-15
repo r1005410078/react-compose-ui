@@ -1,5 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent, PointerEvent, RefObject, WheelEvent } from 'react'
+import type {
+  CSSProperties,
+  Dispatch,
+  KeyboardEvent,
+  PointerEvent,
+  RefObject,
+  SetStateAction,
+} from 'react'
 import {
   createComposeThemeStyle,
   useComposeI18nContext,
@@ -18,16 +25,21 @@ import {
   ChevronIcon,
   CurveIcon,
   DiamondIcon,
+  EyeIcon,
+  LockIcon,
   LoopIcon,
+  ObjectMarkIcon,
   PauseIcon,
+  PingPongIcon,
   PlayIcon,
-  ZoomInIcon,
-  ZoomOutIcon,
+  PlayOnceIcon,
+  SoloIcon,
 } from './animation-icons'
 import type {
   ComposeAnimationInspectorProps,
   ComposeAnimationPlaybackMode,
   ComposeAnimationPanelProviderProps,
+  ComposeAnimationPropertyTrack,
   ComposeAnimationTimelineProps,
 } from './types'
 
@@ -38,13 +50,10 @@ const messages = {
     play: '播放动画',
     pause: '暂停动画',
     addKeyframe: '添加关键帧',
-    zoomIn: '放大时间线',
-    zoomOut: '缩小时间线',
     playbackMode: '播放模式',
     playOnce: '播放一次',
     loop: '循环',
     pingPong: '往返',
-    autoRecord: '自动记录属性',
     animationClip: (label: string, startMs: number, endMs: number) => `动画片段 ${label}：${startMs} ms 至 ${endMs} ms`,
     clipMove: '使用左右方向键移动动画片段，每次 10 毫秒',
     clipStart: (label: string) => `调整动画片段 ${label} 的起始时间`,
@@ -58,6 +67,10 @@ const messages = {
     selectTrack: (name: string) => `选择对象轨道 ${name}`,
     selectProperty: (name: string) => `选择属性轨道 ${name}`,
     selectPropertyLane: (name: string) => `选择 ${name} 关键帧轨道`,
+    lockTrack: (name: string) => `锁定 ${name}`,
+    soloTrack: (name: string) => `单独显示 ${name}`,
+    hideTrack: (name: string) => `隐藏 ${name}`,
+    propertyKeyframe: (name: string) => `${name} 关键帧标记`,
     property: '背景填充',
     propertyField: '属性',
     interpolationRange: '曲线区间',
@@ -83,13 +96,10 @@ const messages = {
     play: 'Play animation',
     pause: 'Pause animation',
     addKeyframe: 'Add keyframe',
-    zoomIn: 'Zoom in timeline',
-    zoomOut: 'Zoom out timeline',
     playbackMode: 'Playback mode',
     playOnce: 'Play once',
     loop: 'Loop',
     pingPong: 'PingPong',
-    autoRecord: 'Auto record properties',
     animationClip: (label: string, startMs: number, endMs: number) => `Animation clip ${label}: ${startMs} ms to ${endMs} ms`,
     clipMove: 'Use the left and right arrow keys to move the animation clip by 10 milliseconds',
     clipStart: (label: string) => `Adjust the start time of animation clip ${label}`,
@@ -103,6 +113,10 @@ const messages = {
     selectTrack: (name: string) => `Select object track ${name}`,
     selectProperty: (name: string) => `Select property track ${name}`,
     selectPropertyLane: (name: string) => `Select ${name} keyframe lane`,
+    lockTrack: (name: string) => `Lock ${name}`,
+    soloTrack: (name: string) => `Solo ${name}`,
+    hideTrack: (name: string) => `Hide ${name}`,
+    propertyKeyframe: (name: string) => `${name} keyframe marker`,
     property: 'Background fill',
     propertyField: 'Property',
     interpolationRange: 'Curve range',
@@ -134,17 +148,38 @@ function displayPropertyLabel(id: string, fallback: string, locale: Locale) {
   return id === 'background-fill' ? messages[locale].property : fallback
 }
 
+/** 左侧列表主名称：优先 groupLabel（Rive 式 Position / Rotation）。 */
+function propertyListLabel(property: ComposeAnimationPropertyTrack, locale: Locale) {
+  if (property.groupLabel) return property.groupLabel
+  return displayPropertyLabel(property.id, property.label, locale)
+}
+
+/** 右侧展示值：显式 displayValue，否则取播放头附近关键帧 value。 */
+function propertyReadoutValue(property: ComposeAnimationPropertyTrack, currentTimeMs: number) {
+  if (property.displayValue) return property.displayValue
+  if (property.keyframes.length === 0) return '—'
+  const sorted = [...property.keyframes].sort((left, right) => left.timeMs - right.timeMs)
+  let nearest = sorted[0]!
+  for (const frame of sorted) {
+    if (frame.timeMs <= currentTimeMs) nearest = frame
+    else break
+  }
+  return nearest.value
+}
+
 function timelineRatio(timeMs: number, durationMs: number) {
   return durationMs <= 0 ? 0 : Math.min(1, Math.max(0, timeMs / durationMs))
 }
 
-// `.compose-animation-timeline__scale` 的 `margin: 0 10px`：可视宽度测量必须扣掉这部分，
-// 否则缩放下限会把内容撑到比 `.scale-scroll` 实际可视区域还宽，出现横向留白。
-const SCALE_HORIZONTAL_MARGIN_PX = 20
-// 工具栏缩放按钮每次点击的缩放倍数，和 Stage（packages/stage）的 zoomIn/zoomOut 步长保持一致的手感。
-const ZOOM_BUTTON_STEP_FACTOR = 1.2
+// 左右 gutter：刻度与片段不贴边；标尺底边用 CSS 铺满不断线。
+// 时间轴可视宽度 = 板面滚动容器宽度 − 左轨列宽 − 两侧 gutter。
+const SCALE_GUTTER_PX = 10
+const SCALE_HORIZONTAL_MARGIN_PX = SCALE_GUTTER_PX * 2
+/** 左轨标签列宽，与样式 `--ap-tracks-width` 一致；属性行与关键帧轨同行对齐。 */
+const TRACKS_COLUMN_WIDTH_PX = 280
 // 主刻度步长的候选值，1-2-5 十进制级数（时间轴的通用惯例），供按可读间距反推步长时查表。
 const TIME_MARKER_STEPS_MS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10_000, 20_000, 50_000, 100_000]
+const PLAYBACK_MODES = ['play-once', 'loop', 'ping-pong'] as const
 // 相邻主刻度标签之间至少需要的像素间距，避免数字重叠。
 const MIN_MARKER_SPACING_PX = 56
 
@@ -202,7 +237,6 @@ export function ComposeAnimationTimeline({
     setDuration,
     setPlaybackMode,
     setPlaying,
-    toggleAutoRecord,
     toggleTrack,
     updateClipRange,
   } = useAnimationPanelSession()
@@ -212,18 +246,46 @@ export function ComposeAnimationTimeline({
     .filter(Boolean)
     .join(' ')
   const currentRatio = timelineRatio(value.currentTimeMs, value.model.durationMs)
+  const boardScrollRef = useRef<HTMLDivElement>(null)
   const scaleScrollRef = useRef<HTMLDivElement>(null)
   const scaleRef = useRef<HTMLDivElement>(null)
+  const rulerScrollRef = useRef<HTMLDivElement>(null)
   // 缩放会改变 `.scale` 的行内宽度，必须等这次渲染真正提交到 DOM 后再写 scrollLeft，
   // 否则浏览器会按旧宽度把请求的滚动位置钳掉。
   const pendingScrollLeftRef = useRef<number | null>(null)
+  // 原生 wheel 监听用 ref 读最新缩放状态，避免 effect 反复解绑
+  const zoomSessionRef = useRef({
+    durationMs: 0,
+    effectiveContainerWidthPx: 0,
+    effectivePixelsPerMs: 0,
+  })
   const [containerWidthPx, setContainerWidthPx] = useState(0)
   // null 表示用户还没有主动缩放过：此时按可视宽度铺满显示，和缩放能力上线前的行为完全一致。
   const [pixelsPerMs, setPixelsPerMs] = useState<number | null>(null)
   // 记录"上一次钳制时用的可视宽度/时长"，用来判断本次渲染是否需要重新钳制（回弹）。
   const [clampedForWidthPx, setClampedForWidthPx] = useState(0)
   const [clampedForDurationMs, setClampedForDurationMs] = useState(value.model.durationMs)
+  // 左轨 Rive 式操作：仅会话 UI，不写入动画模型
+  const [lockedTrackIds, setLockedTrackIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [soloTrackIds, setSoloTrackIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [hiddenTrackIds, setHiddenTrackIds] = useState<ReadonlySet<string>>(() => new Set())
+  // 头部标尺行现在挂在 board-scroll 外面，不再随它一起被纵向滚动条挤窄；
+  // 需要用这个量单独把 board-scroll 出现纵向滚动条时让出的宽度补回 ruler-viewport，
+  // 否则标尺刻度会比下方轨道内容宽出一条滚动条的宽度，缩放/平移久了刻度就跟片段错位。
+  const [scrollbarGutterPx, setScrollbarGutterPx] = useState(0)
   const effectiveContainerWidthPx = Math.max(0, containerWidthPx - SCALE_HORIZONTAL_MARGIN_PX)
+
+  const toggleTrackFlag = (
+    trackId: string,
+    setFlags: Dispatch<SetStateAction<ReadonlySet<string>>>,
+  ) => {
+    setFlags((current) => {
+      const next = new Set(current)
+      if (next.has(trackId)) next.delete(trackId)
+      else next.add(trackId)
+      return next
+    })
+  }
 
   // 容器宽度或时长变化后，把已经设置过的缩放级别重新钳制（回弹），而不是重置成铺满宽度；
   // 还没缩放过（pixelsPerMs 为 null）时不需要处理，下面的 effectivePixelsPerMs 会自动跟着派生。
@@ -248,9 +310,21 @@ export function ComposeAnimationTimeline({
   const scaleWidthPx = Math.max(0, value.model.durationMs * effectivePixelsPerMs)
   const { markers: timeMarkers, stepMs: timeMarkerStepMs } = createTimeMarkers(value.model.durationMs, effectivePixelsPerMs)
 
+  // wheel 监听器是原生事件、只在挂载时订阅一次，靠这个 ref 在每次渲染后同步最新值，
+  // 避免闭包捕获到缩放/平移时的旧 durationMs、宽度或像素比例。
+  useEffect(() => {
+    zoomSessionRef.current = {
+      durationMs: value.model.durationMs,
+      effectiveContainerWidthPx,
+      effectivePixelsPerMs,
+    }
+  })
+
   useEffect(() => {
     const element = scaleScrollRef.current
     if (!element) return
+    // 右列时间轴容器宽度（不含左轨）；缩放钳制与铺满宽度都基于此。
+    // 用 getBoundingClientRect：jsdom 下 clientWidth 常为 0，测试通过 stub rect 注入宽度。
     const measure = () => setContainerWidthPx(element.getBoundingClientRect().width)
     measure()
     // jsdom 等无布局环境没有 ResizeObserver：退化为只测一次挂载时的宽度，
@@ -264,52 +338,111 @@ export function ComposeAnimationTimeline({
   useLayoutEffect(() => {
     if (pendingScrollLeftRef.current === null) return
     if (scaleScrollRef.current) scaleScrollRef.current.scrollLeft = pendingScrollLeftRef.current
+    if (rulerScrollRef.current) rulerScrollRef.current.scrollLeft = pendingScrollLeftRef.current
     pendingScrollLeftRef.current = null
   }, [scaleWidthPx])
+
+  // 纵向滚动条时有时无（内容够高才出现）会让 board-scroll 的可用宽度跟着变，
+  // 但标尺头部行不在 board-scroll 里面、感受不到这个收窄——用实际测得的宽度差
+  // （offsetWidth - clientWidth）动态补一条 padding，让标尺和下方轨道内容宽度始终一致。
+  useEffect(() => {
+    const board = boardScrollRef.current
+    if (!board) return
+    const measure = () => setScrollbarGutterPx(board.offsetWidth - board.clientWidth)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(board)
+    return () => observer.disconnect()
+  }, [])
+
+  /*
+   * 标尺头部行已经搬到 board-scroll 外面（见下方 JSX 的 header-row），不再需要
+   * position:sticky 或每帧 transform 去抵消纵向滚动——它本来就不在滚动区域里，
+   * 纵向滚动条再怎么滚也不会带着它一起动，这是先前 transform 方案会有肉眼可见
+   * 抖动（JS scroll 回调总是比原生滚动的合成线程晚一帧）的根本解法。
+   * 唯一还要处理的是横向：标尺必须跟 .scale-scroll 的横向滚动位置保持一致。
+   * 缩放钳制（上面的 useLayoutEffect）和滚轮平移（下面 wheel 里）已经在各自
+   * 落笔的同一刻同步写了 rulerScrollRef，这里的 scroll 监听只兜底用户直接拖拽
+   * .scale-scroll 原生横向滚动条这一条路径。
+   */
+  useEffect(() => {
+    const scaleScroll = scaleScrollRef.current
+    const rulerScroll = rulerScrollRef.current
+    if (!scaleScroll || !rulerScroll) return
+    const onScroll = () => {
+      rulerScroll.scrollLeft = scaleScroll.scrollLeft
+    }
+    scaleScroll.addEventListener('scroll', onScroll, { passive: true })
+    return () => scaleScroll.removeEventListener('scroll', onScroll)
+  }, [])
 
   const applyZoom = (clientX: number, factor: number) => {
     const scrollElement = scaleScrollRef.current
     const scaleBounds = scaleRef.current?.getBoundingClientRect()
     const scrollBounds = scrollElement?.getBoundingClientRect()
-    if (!scrollElement || !scaleBounds || !scrollBounds || effectivePixelsPerMs <= 0) return
+    const session = zoomSessionRef.current
+    if (!scrollElement || !scaleBounds || !scrollBounds || session.effectivePixelsPerMs <= 0) return
     const anchorTimeMs = Math.min(
-      value.model.durationMs,
-      Math.max(0, (clientX - scaleBounds.left) / effectivePixelsPerMs),
+      session.durationMs,
+      Math.max(0, (clientX - scaleBounds.left) / session.effectivePixelsPerMs),
     )
     const anchorOffsetPx = clientX - scrollBounds.left
     const result = zoomComposeAnimationTimelineAt(
-      effectivePixelsPerMs,
+      session.effectivePixelsPerMs,
       factor,
       anchorTimeMs,
       anchorOffsetPx,
-      effectiveContainerWidthPx,
-      value.model.durationMs,
+      session.effectiveContainerWidthPx,
+      session.durationMs,
     )
     pendingScrollLeftRef.current = result.scrollLeft
     setPixelsPerMs(result.pixelsPerMs)
   }
-  const handleTimelineWheel = (event: WheelEvent<HTMLDivElement>) => {
-    const scrollElement = scaleScrollRef.current
-    if (!scrollElement) return
-    if (event.ctrlKey || event.metaKey) {
+
+  /*
+   * 必须用非 passive 的原生 wheel：
+   * - React onWheel 在多数环境下是 passive，preventDefault 无效
+   * - Ctrl/Cmd+滚轮（触控板捏合）若不拦截，会带动 board-scroll 纵向滚动，与缩放冲突
+   */
+  useEffect(() => {
+    const board = boardScrollRef.current
+    const scaleScroll = scaleScrollRef.current
+    if (!board || !scaleScroll) return
+
+    const onWheel = (event: globalThis.WheelEvent) => {
+      const overScale = scaleScroll.contains(event.target as Node)
+      if (event.ctrlKey || event.metaKey) {
+        // 拦截浏览器缩放与纵向滚动；在时间轴上再做时间缩放
+        event.preventDefault()
+        event.stopPropagation()
+        if (!overScale) return
+        applyZoom(event.clientX, Math.exp(-event.deltaY * 0.002))
+        return
+      }
+      if (!overScale) return
+      // 时间轴横向平移：触控板横向，或 Shift+纵向滚轮
+      const horizontal = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      if (!horizontal) return
       event.preventDefault()
-      applyZoom(event.clientX, Math.exp(-event.deltaY * 0.002))
-      return
+      event.stopPropagation()
+      const session = zoomSessionRef.current
+      scaleScroll.scrollLeft = panComposeAnimationTimeline(
+        scaleScroll.scrollLeft,
+        event.deltaX !== 0 ? event.deltaX : event.deltaY,
+        session.effectiveContainerWidthPx,
+        session.durationMs,
+        session.effectivePixelsPerMs,
+      )
+      // 同一刻同步写标尺的横向滚动位置：不等 scroll 事件回调，平移时刻度和下方
+      // 片段/关键帧的横坐标才不会有哪怕一帧的滞后。
+      if (rulerScrollRef.current) rulerScrollRef.current.scrollLeft = scaleScroll.scrollLeft
     }
-    event.preventDefault()
-    scrollElement.scrollLeft = panComposeAnimationTimeline(
-      scrollElement.scrollLeft,
-      event.deltaY !== 0 ? event.deltaY : event.deltaX,
-      effectiveContainerWidthPx,
-      value.model.durationMs,
-      effectivePixelsPerMs,
-    )
-  }
-  const handleZoomButtonClick = (factor: number) => {
-    const scrollBounds = scaleScrollRef.current?.getBoundingClientRect()
-    if (!scrollBounds) return
-    applyZoom(scrollBounds.left + scrollBounds.width / 2, factor)
-  }
+
+    // capture 阶段先于默认滚动，才能拦住 board-scroll 的纵向滚动
+    board.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    return () => board.removeEventListener('wheel', onWheel, { capture: true })
+  }, [])
   const handlePlayheadKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
@@ -338,102 +471,156 @@ export function ComposeAnimationTimeline({
       data-compose-ui="animation-timeline"
       lang={locale}
       role={htmlProps.role ?? 'region'}
-      style={{ ...(theme ? createComposeThemeStyle(theme.tokens) : {}), ...style } as CSSProperties}
+      style={{
+        ...(theme ? createComposeThemeStyle(theme.tokens) : {}),
+        ...style,
+        // 与左轨列宽常量同步，供样式使用
+        ['--ap-tracks-width' as string]: `${TRACKS_COLUMN_WIDTH_PX}px`,
+      } as CSSProperties}
     >
+      {/*
+        头部行独立于纵向滚动区域之外：左工具栏 + 右标尺都不随 board-scroll 滚动，
+        不需要 position:sticky 或每帧 JS 校正位置，天然没有任何抖动。
+        右侧标尺横向仍需跟 .scale-scroll 同步，见上面的 ref 同步 effect。
+      */}
+      <div className="compose-animation-timeline__header-row">
+        {/* 工具栏只在左轨角格：播放 / 关键帧 / 当前时间·时长 / 播放模式图标。
+            缩放走 Ctrl/Cmd+滚轮；自动记录不在工具栏暴露。
+            group 只表达"一组相关控件"；数字输入无法做 toolbar 方向键漫游。 */}
+        <div
+          aria-label={t.toolbar}
+          className="compose-animation-timeline__tracks-header"
+          data-timeline-header="true"
+          role="group"
+        >
+          <button
+              aria-label={value.isPlaying ? t.pause : t.play}
+              className="compose-animation-timeline__icon-button"
+              type="button"
+              onClick={() => setPlaying(!value.isPlaying)}
+            >
+              {value.isPlaying ? <PauseIcon /> : <PlayIcon />}
+            </button>
+            <button
+              aria-label={t.addKeyframe}
+              className="compose-animation-timeline__icon-button"
+              type="button"
+              onClick={addKeyframe}
+            ><DiamondIcon /></button>
+            <div className="compose-animation-timeline__time-fields">
+              {/* 隐式 role 是 status：播放时每帧都会变化，必须显式关掉播报，否则读屏会被刷屏。 */}
+              <output aria-label={t.currentTime} aria-live="off" className="compose-animation-timeline__time-readout">
+                {value.currentTimeMs}
+              </output>
+              <label className="compose-animation-timeline__duration-control">
+                <CommittedInput
+                  aria-label={t.duration}
+                  inputMode="numeric"
+                  key={value.model.durationMs}
+                  min={10}
+                  step={10}
+                  type="number"
+                  value={String(value.model.durationMs)}
+                  onCommit={(draft) => {
+                    const durationMs = Number.parseInt(draft, 10)
+                    if (!Number.isFinite(durationMs)) return false
+                    setDuration(durationMs)
+                    return true
+                  }}
+                />
+              </label>
+              <small className="compose-animation-timeline__time-unit">ms</small>
+            </div>
+            <div
+              aria-label={t.playbackMode}
+              className="compose-animation-timeline__playback-modes"
+              role="radiogroup"
+            >
+              {PLAYBACK_MODES.map((mode) => {
+                const selected = value.playbackMode === mode
+                const label = playbackModeLabel(mode, locale)
+                return (
+                  <button
+                    aria-checked={selected}
+                    aria-label={label}
+                    className="compose-animation-timeline__icon-button compose-animation-timeline__playback-mode-button"
+                    data-selected={selected || undefined}
+                    key={mode}
+                    role="radio"
+                    type="button"
+                    onClick={() => setPlaybackMode(mode)}
+                  >
+                    {mode === 'play-once' ? <PlayOnceIcon /> : null}
+                    {mode === 'loop' ? <LoopIcon /> : null}
+                    {mode === 'ping-pong' ? <PingPongIcon /> : null}
+                  </button>
+                )
+              })}
+            </div>
+        </div>
+        <div className="compose-animation-timeline__ruler-viewport" ref={rulerScrollRef} style={{ paddingRight: scrollbarGutterPx } as CSSProperties}>
+          <div
+            className="compose-animation-timeline__ruler"
+            style={{
+              '--animation-playhead': `${currentRatio * 100}%`,
+              '--ruler-minor-step': `${timelineRatio(timeMarkerStepMs / 5, value.model.durationMs) * 100}%`,
+              width: `${scaleWidthPx}px`,
+            } as CSSProperties}
+          >
+            {/* 刻度纯装饰：可读的当前时间由下面的 seek input 承担，这里整体 aria-hidden，
+                但不能挂在 .ruler 本身——input 和播放头也在它底下，会被一起吞掉。 */}
+            {timeMarkers.map((marker) => (
+              <span aria-hidden="true" key={marker} style={{ left: `${timelineRatio(marker, value.model.durationMs) * 100}%` }}>
+                <b>{marker}</b><i />
+              </span>
+            ))}
+            <input
+              aria-label={t.currentTime}
+              className="compose-animation-timeline__playhead-input compose-animation-timeline__playhead-input--ruler"
+              max={value.model.durationMs}
+              min={0}
+              // 拖动播放头吸附到标尺次刻度（主刻度步长的 1/5，与 --ruler-minor-step、
+              // getTimeAtClientX 同源），而不是固定 10ms——原生 range input 的 step 只影响
+              // 拖拽/点击跳转，键盘方向键已经在 handlePlayheadKeyDown 里 preventDefault
+              // 接管，不受这里影响。
+              step={timeMarkerStepMs > 0 ? timeMarkerStepMs / 5 : 10}
+              type="range"
+              value={value.currentTimeMs}
+              onChange={(event) => setCurrentTime(Number(event.target.value))}
+              onKeyDown={handlePlayheadKeyDown}
+            />
+            <div aria-hidden="true" className="compose-animation-timeline__playhead"><span /><i /></div>
+          </div>
+        </div>
+      </div>
+      {/* 外层纵向滚动：左标签列与右关键帧列同高同行，共用一个纵向滚动条 */}
+      <div className="compose-animation-timeline__board-scroll" ref={boardScrollRef}>
       <div className="compose-animation-timeline__content">
         <div className="compose-animation-timeline__tracks">
-          {/* 这里混着数字输入框与下拉，无法满足 toolbar 要求的方向键漫游；group 只表达"一组相关控件"，没有键盘契约。 */}
-          <div
-            aria-label={t.toolbar}
-            className="compose-animation-timeline__tracks-header"
-            data-timeline-header="true"
-            role="group"
-          >
-            <div className="compose-animation-timeline__button-cluster">
-              <button
-                aria-label={value.isPlaying ? t.pause : t.play}
-                className="compose-animation-timeline__icon-button"
-                type="button"
-                onClick={() => setPlaying(!value.isPlaying)}
-              >
-                {value.isPlaying ? <PauseIcon /> : <PlayIcon />}
-              </button>
-              <span aria-hidden="true" className="compose-animation-timeline__control-separator" />
-              <button
-                aria-label={t.addKeyframe}
-                className="compose-animation-timeline__icon-button"
-                type="button"
-                onClick={addKeyframe}
-              ><DiamondIcon /></button>
-              <span aria-hidden="true" className="compose-animation-timeline__control-separator" />
-              {/* 滚轮缩放需要按住 Ctrl/Cmd，无法使用该手势的用户仍需要一个可发现、可键盘操作的入口。 */}
-              <button
-                aria-label={t.zoomOut}
-                className="compose-animation-timeline__icon-button"
-                type="button"
-                onClick={() => handleZoomButtonClick(1 / ZOOM_BUTTON_STEP_FACTOR)}
-              ><ZoomOutIcon /></button>
-              <button
-                aria-label={t.zoomIn}
-                className="compose-animation-timeline__icon-button"
-                type="button"
-                onClick={() => handleZoomButtonClick(ZOOM_BUTTON_STEP_FACTOR)}
-              ><ZoomInIcon /></button>
-            </div>
-            {/* 隐式 role 是 status：播放时每帧都会变化，必须显式关掉播报，否则读屏会被刷屏。 */}
-            <output aria-label={t.currentTime} aria-live="off" className="compose-animation-timeline__time-readout">
-              {value.currentTimeMs}<small>ms</small>
-            </output>
-            <label className="compose-animation-timeline__duration-control">
-              <CommittedInput
-                aria-label={t.duration}
-                inputMode="numeric"
-                key={value.model.durationMs}
-                min={10}
-                step={10}
-                type="number"
-                value={String(value.model.durationMs)}
-                onCommit={(draft) => {
-                  const durationMs = Number.parseInt(draft, 10)
-                  if (!Number.isFinite(durationMs)) return false
-                  setDuration(durationMs)
-                  return true
-                }}
-              />
-              <small>ms</small>
-            </label>
-            <label className="compose-animation-timeline__playback-mode">
-              <LoopIcon />
-              <select
-                aria-label={t.playbackMode}
-                value={value.playbackMode}
-                onChange={(event) => setPlaybackMode(event.target.value as ComposeAnimationPlaybackMode)}
-              >
-                {(['play-once', 'loop', 'ping-pong'] as const).map((mode) => (
-                  <option key={mode} value={mode}>{playbackModeLabel(mode, locale)}</option>
-                ))}
-              </select>
-            </label>
-            <button
-              aria-label={t.autoRecord}
-              aria-pressed={value.autoRecord}
-              className="compose-animation-timeline__record-button"
-              type="button"
-              onClick={toggleAutoRecord}
-            >
-              <span aria-hidden="true" />
-            </button>
-          </div>
           <div aria-label={t.trackList} className="compose-animation-timeline__track-list" role="list">
           {value.model.tracks.map((track) => {
             const trackLabel = displayTrackLabel(track.id, track.label, locale)
             const trackSelected = value.selectedTrackId === track.id
+            const propertyInTrackSelected = track.properties.some((property) => property.id === value.selectedPropertyId)
+            // 选中物体 / 其片段 / 其任一属性时，整组（含属性）共用浅底
+            const groupActive = trackSelected || propertyInTrackSelected
+            const locked = lockedTrackIds.has(track.id)
+            const solo = soloTrackIds.has(track.id)
+            const hidden = hiddenTrackIds.has(track.id)
             return (
-              <div className="compose-animation-timeline__track-group" key={track.id} role="listitem">
+              <div
+                className="compose-animation-timeline__track-group"
+                data-group-active={groupActive || undefined}
+                key={track.id}
+                role="listitem"
+              >
                 <div
                   className="compose-animation-timeline__track-row"
+                  data-hidden={hidden || undefined}
+                  data-locked={locked || undefined}
                   data-object-row={track.id}
                   data-selected={trackSelected || undefined}
+                  data-solo={solo || undefined}
                 >
                   <button
                     aria-current={trackSelected || undefined}
@@ -443,6 +630,9 @@ export function ComposeAnimationTimeline({
                     type="button"
                     onClick={() => selectTrack(track.id)}
                   />
+                  <span aria-hidden="true" className="compose-animation-timeline__object-mark">
+                    <ObjectMarkIcon />
+                  </span>
                   <button
                     aria-expanded={track.expanded}
                     aria-label={t.trackToggle(trackLabel)}
@@ -451,14 +641,51 @@ export function ComposeAnimationTimeline({
                     onClick={() => toggleTrack(track.id)}
                   ><ChevronIcon /></button>
                   <span className="compose-animation-timeline__track-label">{trackLabel}</span>
+                  <div className="compose-animation-timeline__track-actions">
+                    <button
+                      aria-label={t.lockTrack(trackLabel)}
+                      aria-pressed={locked}
+                      className="compose-animation-timeline__track-action"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        toggleTrackFlag(track.id, setLockedTrackIds)
+                      }}
+                    ><LockIcon /></button>
+                    <button
+                      aria-label={t.soloTrack(trackLabel)}
+                      aria-pressed={solo}
+                      className="compose-animation-timeline__track-action"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        toggleTrackFlag(track.id, setSoloTrackIds)
+                      }}
+                    ><SoloIcon /></button>
+                    <button
+                      aria-label={t.hideTrack(trackLabel)}
+                      aria-pressed={hidden}
+                      className="compose-animation-timeline__track-action"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        toggleTrackFlag(track.id, setHiddenTrackIds)
+                      }}
+                    ><EyeIcon /></button>
+                  </div>
                 </div>
-                {track.expanded ? track.properties.map((property) => {
+                {track.expanded ? track.properties.map((property, propertyIndex) => {
                   const propertyLabel = displayPropertyLabel(property.id, property.label, locale)
+                  const listLabel = propertyListLabel(property, locale)
                   const propertySelected = value.selectedPropertyId === property.id
+                  const readout = propertyReadoutValue(property, value.currentTimeMs)
+                  const isLast = propertyIndex === track.properties.length - 1
+                  const isColorValue = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(readout)
                   return (
                     <div
                       className="compose-animation-timeline__property-row"
                       data-selected={propertySelected || undefined}
+                      data-tree={isLast ? 'last' : 'branch'}
                       key={property.id}
                     >
                       <button
@@ -469,8 +696,28 @@ export function ComposeAnimationTimeline({
                         type="button"
                         onClick={() => selectProperty(property.id)}
                       />
-                      <ChevronIcon />
-                      <span className="compose-animation-timeline__property-label">{propertyLabel}</span>
+                      <span aria-hidden="true" className="compose-animation-timeline__property-tree" />
+                      <span className="compose-animation-timeline__property-label">{listLabel}</span>
+                      <span className="compose-animation-timeline__property-meta">
+                        {property.channel
+                          ? <em className="compose-animation-timeline__property-channel">{property.channel}</em>
+                          : null}
+                        {isColorValue
+                          ? (
+                              <i
+                                aria-hidden="true"
+                                className="compose-animation-timeline__property-swatch"
+                                style={{ background: readout }}
+                              />
+                            )
+                          : null}
+                        <strong className="compose-animation-timeline__property-value">{readout}</strong>
+                        <span
+                          aria-hidden="true"
+                          className="compose-animation-timeline__property-keyframe-mark"
+                          title={t.propertyKeyframe(propertyLabel)}
+                        ><DiamondIcon /></span>
+                      </span>
                     </div>
                   )
                 }) : null}
@@ -481,28 +728,24 @@ export function ComposeAnimationTimeline({
         </div>
         <TimelineScale
           currentRatio={currentRatio}
-          markers={timeMarkers}
           onSelectClip={selectClip}
           onSelectProperty={selectProperty}
           value={value}
           onUpdateClipRange={updateClipRange}
-          onKeyDown={handlePlayheadKeyDown}
           onMoveKeyframe={moveKeyframe}
           onSelectKeyframe={selectKeyframe}
           onSelectInterpolationSegment={selectInterpolationSegment}
-          onSetCurrentTime={setCurrentTime}
-          onWheel={handleTimelineWheel}
           scaleRef={scaleRef}
           scaleScrollRef={scaleScrollRef}
           scaleWidthPx={scaleWidthPx}
           markerStepMs={timeMarkerStepMs}
         />
       </div>
+      </div>
       {/* 常驻挂载：live region 必须先于内容变化就存在于 DOM 中，AT 才能可靠捕获后续的文本变化。
-          必须是 section 的最后一个子节点、.content 的兄弟节点，而不是 .tracks 的子节点：
-          .tracks 是纵向 flex 列，插入一个带默认 margin 的块级元素会把整个左列（进而与右侧时间线
-          刻度）永久错位，即使没有冲突、提示为空也一样。视觉样式通过 --active 修饰类切换，
-          避免无冲突时出现一个空的提示框。 */}
+          必须是 section 的最后一个子节点、.board-scroll 的兄弟节点，而不是 .tracks 的子节点：
+          插入带默认 margin 的块级元素会把左列与右侧时间线刻度永久错位。
+          视觉样式通过 --active 修饰类切换，避免无冲突时出现空提示框。 */}
       <p
         aria-live="polite"
         className={['compose-animation-timeline__notice', notice ? 'compose-animation-timeline__notice--active' : '']
@@ -518,34 +761,26 @@ export function ComposeAnimationTimeline({
 
 function TimelineScale({
   currentRatio,
-  markers,
   markerStepMs,
-  onKeyDown,
   onMoveKeyframe,
   onSelectClip,
   onSelectProperty,
   onSelectKeyframe,
   onSelectInterpolationSegment,
-  onSetCurrentTime,
   onUpdateClipRange,
-  onWheel,
   scaleRef,
   scaleScrollRef,
   scaleWidthPx,
   value,
 }: {
   readonly currentRatio: number
-  readonly markers: readonly number[]
   readonly markerStepMs: number
-  readonly onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
   readonly onMoveKeyframe: (keyframeId: string, timeMs: number) => void
   readonly onSelectClip: (clipId: string) => void
   readonly onSelectProperty: (propertyId: string) => void
   readonly onSelectKeyframe: (keyframeId: string) => void
   readonly onSelectInterpolationSegment: (endKeyframeId: string) => void
-  readonly onSetCurrentTime: (timeMs: number) => void
   readonly onUpdateClipRange: (clipId: string, startTimeMs: number, endTimeMs: number) => void
-  readonly onWheel: (event: WheelEvent<HTMLDivElement>) => void
   readonly scaleRef: RefObject<HTMLDivElement | null>
   readonly scaleScrollRef: RefObject<HTMLDivElement | null>
   readonly scaleWidthPx: number
@@ -565,13 +800,17 @@ function TimelineScale({
     readonly pointerTimeMs: number
     readonly startTimeMs: number
   } | null>(null)
+  // 拖拽吸附到标尺次刻度（主刻度步长的 1/5，与 --ruler-minor-step 同源），
+  // 而不是固定 10ms：缩放级别变化时次刻度间距跟着变，吸附粒度也要跟着变，
+  // 否则缩小后每次拖拽跳过好几格次刻度、放大后又比次刻度更粗，手感和视觉网格对不上。
   const getTimeAtClientX = (clientX: number) => {
     const bounds = scaleRef.current?.getBoundingClientRect()
     if (!bounds || bounds.width <= 0) return value.currentTimeMs
     const rawTime = timelineRatio(clientX - bounds.left, bounds.width) * value.model.durationMs
+    const snapStepMs = markerStepMs > 0 ? markerStepMs / 5 : 10
     return Math.min(
       value.model.durationMs,
-      Math.max(0, Math.round(rawTime / 10) * 10),
+      Math.max(0, Math.round(rawTime / snapStepMs) * snapStepMs),
     )
   }
   const handleKeyframePointerDown = (
@@ -675,85 +914,86 @@ function TimelineScale({
   }
   const clips = getComposeAnimationClips(value.model)
   return (
-    <div className="compose-animation-timeline__scale-scroll" ref={scaleScrollRef} onWheel={onWheel}>
+    <div className="compose-animation-timeline__scale-scroll" ref={scaleScrollRef}>
       <div
         className="compose-animation-timeline__scale"
         ref={scaleRef}
         style={{ '--animation-playhead': `${currentRatio * 100}%`, width: `${scaleWidthPx}px` } as CSSProperties}
       >
-        <div
-          aria-hidden="true"
-          className="compose-animation-timeline__ruler"
-          // 次刻度按主刻度步长的 1/5 换算成百分比：主刻度变密/变疏时次刻度网格自动跟着换算，
-          // 不再是与实际时间脱节的固定 30 等分。
-          style={{ '--ruler-minor-step': `${timelineRatio(markerStepMs / 5, value.model.durationMs) * 100}%` } as CSSProperties}
-        >
-          {markers.map((marker) => (
-            <span key={marker} style={{ left: `${timelineRatio(marker, value.model.durationMs) * 100}%` }}>
-              <b>{marker}</b><i />
-            </span>
-          ))}
-        </div>
-        {value.model.tracks.map((track, trackIndex) => {
-          const trackClips = trackIndex === 0 ? clips : []
+        {value.model.tracks.map((track) => {
+          // 片段按轨道 label / id 前缀归属；无匹配时该物体行不画片段条
+          const trackClips = clips.filter((clip) => (
+            clip.label === track.label || clip.id.startsWith(`${track.id}-`) || clip.id.startsWith(track.id)
+          ))
+          const propertyInTrackSelected = track.properties.some((property) => property.id === value.selectedPropertyId)
+          const groupActive = value.selectedTrackId === track.id || propertyInTrackSelected
           return (
-            <div className="compose-animation-timeline__track-lanes" key={track.id}>
+            <div
+              className="compose-animation-timeline__track-lanes"
+              data-group-active={groupActive || undefined}
+              key={track.id}
+            >
+              {/* 动画片段：实心圆角色块 + 常驻竖线 trim 手柄；组选中底由 track-lanes 负责 */}
+              {trackClips.map((clip) => {
+                const label = clip.label === 'Fault' ? t.track : clip.label
+                const startRatio = timelineRatio(clip.startTimeMs, value.model.durationMs)
+                const endRatio = timelineRatio(clip.endTimeMs, value.model.durationMs)
+                const selected = value.selectedClipId === clip.id
+                const draggingClip = clipDragging?.clipId === clip.id
+                const clipLeft = `${startRatio * 100}%`
+                const clipWidth = `${Math.max(0, endRatio - startRatio) * 100}%`
+                return (
+                  <div
+                    className="compose-animation-timeline__clip"
+                    data-dragging={draggingClip || undefined}
+                    data-selected={selected || undefined}
+                    key={clip.id}
+                    style={{ left: clipLeft, width: clipWidth }}
+                  >
+                    <button
+                      aria-current={selected || undefined}
+                      aria-describedby={clipMoveHelpId}
+                      aria-label={t.animationClip(label, clip.startTimeMs, clip.endTimeMs)}
+                      className="compose-animation-timeline__clip-body"
+                      data-dragging={draggingClip || undefined}
+                      type="button"
+                      onClick={() => onSelectClip(clip.id)}
+                      onKeyDown={(event) => adjustClipWithKeyboard(event, clip, 'move')}
+                      onPointerCancel={endClipDrag}
+                      onPointerDown={(event) => beginClipDrag(event, clip, 'move')}
+                      onPointerMove={moveClip}
+                      onPointerUp={endClipDrag}
+                    />
+                    <button
+                      aria-label={t.clipStart(label)}
+                      className="compose-animation-timeline__clip-handle compose-animation-timeline__clip-handle--start"
+                      data-selected={selected || undefined}
+                      type="button"
+                      onKeyDown={(event) => adjustClipWithKeyboard(event, clip, 'start')}
+                      onPointerCancel={endClipDrag}
+                      onPointerDown={(event) => beginClipDrag(event, clip, 'start')}
+                      onPointerMove={moveClip}
+                      onPointerUp={endClipDrag}
+                    />
+                    <button
+                      aria-label={t.clipEnd(label)}
+                      className="compose-animation-timeline__clip-handle compose-animation-timeline__clip-handle--end"
+                      data-selected={selected || undefined}
+                      type="button"
+                      onKeyDown={(event) => adjustClipWithKeyboard(event, clip, 'end')}
+                      onPointerCancel={endClipDrag}
+                      onPointerDown={(event) => beginClipDrag(event, clip, 'end')}
+                      onPointerMove={moveClip}
+                      onPointerUp={endClipDrag}
+                    />
+                  </div>
+                )
+              })}
               <div
                 className="compose-animation-timeline__clip-row"
                 data-object-lane={track.id}
                 data-selected={value.selectedTrackId === track.id || undefined}
-              >
-                {trackClips.map((clip) => {
-                  const label = clip.label === 'Fault' ? t.track : clip.label
-                  const startRatio = timelineRatio(clip.startTimeMs, value.model.durationMs)
-                  const endRatio = timelineRatio(clip.endTimeMs, value.model.durationMs)
-                  const selected = value.selectedClipId === clip.id
-                  const draggingClip = clipDragging?.clipId === clip.id
-                  return (
-                    <div className="compose-animation-timeline__clip" key={clip.id}>
-                      <button
-                        aria-current={selected || undefined}
-                        aria-describedby={clipMoveHelpId}
-                        aria-label={t.animationClip(label, clip.startTimeMs, clip.endTimeMs)}
-                        className="compose-animation-timeline__clip-body"
-                        data-dragging={draggingClip || undefined}
-                        style={{ left: `${startRatio * 100}%`, width: `${(endRatio - startRatio) * 100}%` }}
-                        type="button"
-                        onClick={() => onSelectClip(clip.id)}
-                        onKeyDown={(event) => adjustClipWithKeyboard(event, clip, 'move')}
-                        onPointerCancel={endClipDrag}
-                        onPointerDown={(event) => beginClipDrag(event, clip, 'move')}
-                        onPointerMove={moveClip}
-                        onPointerUp={endClipDrag}
-                      />
-                      <button
-                        aria-label={t.clipStart(label)}
-                        className="compose-animation-timeline__clip-handle compose-animation-timeline__clip-handle--start"
-                        data-selected={selected || undefined}
-                        style={{ left: `${startRatio * 100}%` }}
-                        type="button"
-                        onKeyDown={(event) => adjustClipWithKeyboard(event, clip, 'start')}
-                        onPointerCancel={endClipDrag}
-                        onPointerDown={(event) => beginClipDrag(event, clip, 'start')}
-                        onPointerMove={moveClip}
-                        onPointerUp={endClipDrag}
-                      />
-                      <button
-                        aria-label={t.clipEnd(label)}
-                        className="compose-animation-timeline__clip-handle compose-animation-timeline__clip-handle--end"
-                        data-selected={selected || undefined}
-                        style={{ left: `${endRatio * 100}%` }}
-                        type="button"
-                        onKeyDown={(event) => adjustClipWithKeyboard(event, clip, 'end')}
-                        onPointerCancel={endClipDrag}
-                        onPointerDown={(event) => beginClipDrag(event, clip, 'end')}
-                        onPointerMove={moveClip}
-                        onPointerUp={endClipDrag}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
+              />
               {track.expanded ? track.properties.map((property) => {
                 const keyframes = [...property.keyframes].sort((left, right) => left.timeMs - right.timeMs)
                 const label = displayPropertyLabel(property.id, property.label, locale)
@@ -775,12 +1015,13 @@ function TimelineScale({
                     />
                     {keyframes.slice(1).map((keyframe, keyframeIndex) => {
                       const startKeyframe = keyframes[keyframeIndex]!
-                      const selected = value.selectedKeyframeId === keyframe.id
+                      // aria-current 仅表「曲线区间终点」选中，视觉上不把相邻线段刷成选中色
+                      const segmentCurrent = value.selectedKeyframeId === keyframe.id
                       const startRatio = timelineRatio(startKeyframe.timeMs, value.model.durationMs)
                       const endRatio = timelineRatio(keyframe.timeMs, value.model.durationMs)
                       return (
                         <button
-                          aria-current={selected || undefined}
+                          aria-current={segmentCurrent || undefined}
                           aria-label={t.interpolationSegment(startKeyframe.timeMs, keyframe.timeMs, label)}
                           className="compose-animation-timeline__interpolation-segment"
                           data-interpolation={keyframe.interpolation}
@@ -829,20 +1070,11 @@ function TimelineScale({
             </div>
           )
         })}
-        <input
-          aria-label={t.currentTime}
-          className="compose-animation-timeline__playhead-input compose-animation-timeline__playhead-input--ruler"
-          max={value.model.durationMs}
-          min={0}
-          step={10}
-          type="range"
-          value={value.currentTimeMs}
-          onChange={(event) => onSetCurrentTime(Number(event.target.value))}
-          onKeyDown={onKeyDown}
-        />
         <span className="compose-animation-panel__sr-only" id={keyframeMoveHelpId}>{t.keyframeMove}</span>
         <span className="compose-animation-panel__sr-only" id={clipMoveHelpId}>{t.clipMove}</span>
-        <div aria-hidden="true" className="compose-animation-timeline__playhead"><span /><i /></div>
+        {/* 擦洗输入与倒三角只在头部标尺行渲染一份；这里只保留竖线穿过各轨道，与标尺行的
+            playhead 共用同一个 --animation-playhead 百分比，两段视觉上仍是同一条线。 */}
+        <div aria-hidden="true" className="compose-animation-timeline__playhead" data-scope="lanes"><span /><i /></div>
       </div>
     </div>
   )

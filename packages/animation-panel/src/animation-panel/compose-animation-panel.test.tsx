@@ -114,7 +114,11 @@ describe('ComposeAnimationPanel', () => {
       </ComposeAnimationPanelProvider>,
     )
     expect(screen.getByText('未选中关键帧')).toBeInTheDocument()
-    expect(screen.getByText('— / 4')).toBeInTheDocument()
+    const totalKeyframes = createDefaultComposeAnimationPanelValue().model.tracks
+      .flatMap((track) => track.properties)
+      .flatMap((property) => property.keyframes)
+      .length
+    expect(screen.getByText(`— / ${totalKeyframes}`)).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('')
   })
 
@@ -313,12 +317,16 @@ describe('ComposeAnimationPanel', () => {
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
-    const mode = screen.getByRole('combobox', { name: '播放模式' })
-    expect(mode).toHaveValue('play-once')
-    fireEvent.change(mode, { target: { value: 'loop' } })
-    expect(mode).toHaveValue('loop')
-    fireEvent.change(mode, { target: { value: 'ping-pong' } })
-    expect(mode).toHaveValue('ping-pong')
+    const once = screen.getByRole('radio', { name: '播放一次' })
+    const loop = screen.getByRole('radio', { name: '循环' })
+    const pingPong = screen.getByRole('radio', { name: '往返' })
+    expect(once).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(loop)
+    expect(loop).toHaveAttribute('aria-checked', 'true')
+    expect(once).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(pingPong)
+    expect(pingPong).toHaveAttribute('aria-checked', 'true')
+    expect(loop).toHaveAttribute('aria-checked', 'false')
   })
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 头部、物体、属性与右侧三行对齐', () => {
@@ -330,8 +338,13 @@ describe('ComposeAnimationPanel', () => {
 
     const toolbar = screen.getByRole('group', { name: '时间线操作栏' })
     expect(toolbar).toHaveAttribute('data-timeline-header', 'true')
-    expect(toolbar.parentElement).toHaveClass('compose-animation-timeline__tracks')
+    expect(toolbar).toHaveClass('compose-animation-timeline__tracks-header')
+    // 工具栏和标尺同属独立于纵向滚动区域之外的头部行，而不是 .tracks 的子节点——
+    // 这样纵向滚动 board-scroll 时头部行天然不会被带走，不需要 sticky 或 JS 校正。
+    expect(toolbar.parentElement).toHaveClass('compose-animation-timeline__header-row')
     expect(screen.getByRole('button', { name: '播放动画' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '自动记录属性' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '放大时间线' })).toBeNull()
     expect(document.querySelector('.compose-animation-timeline__ruler')).not.toBeNull()
     expect(screen.getByRole('button', { name: '选择对象轨道 Fault' }))
       .toHaveAttribute('data-object-row', 'fault')
@@ -339,8 +352,16 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('button', { name: '选择属性轨道 背景填充' }))
       .toHaveAttribute('data-property-row', 'background-fill')
     expect(document.querySelector('[data-property-lane="background-fill"]')).not.toBeNull()
-    expect(document.querySelectorAll('.compose-animation-timeline__property-lane')).toHaveLength(1)
-    expect(document.querySelectorAll('.compose-animation-timeline__clip-row')).toHaveLength(1)
+    // 演示会话含多物体多属性：展开轨道的属性 lane + 每个物体一行 clip-row
+    const defaultValue = createDefaultComposeAnimationPanelValue()
+    const expandedPropertyCount = defaultValue.model.tracks
+      .filter((track) => track.expanded)
+      .flatMap((track) => track.properties)
+      .length
+    expect(document.querySelectorAll('.compose-animation-timeline__property-lane'))
+      .toHaveLength(expandedPropertyCount)
+    expect(document.querySelectorAll('.compose-animation-timeline__clip-row'))
+      .toHaveLength(defaultValue.model.tracks.length)
   })
 
   it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 选择物体轨道并与动画片段对齐', () => {
@@ -494,8 +515,8 @@ describe('ComposeAnimationPanel', () => {
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
-    // 自动记录是真正的开关，保留 aria-pressed；集合内的选中项一律用 aria-current。
-    expect(screen.getByRole('button', { name: '自动记录属性' })).toHaveAttribute('aria-pressed', 'true')
+    // 播放模式是 radiogroup；关键帧与片段选中用 aria-current，不用 aria-pressed。
+    expect(screen.getByRole('radio', { name: '播放一次' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })).not.toHaveAttribute('aria-pressed')
     expect(screen.getByRole('button', { name: '调整动画片段 Fault 的结束时间' })).not.toHaveAttribute('aria-pressed')
     expect(screen.getByRole('button', { name: '调整动画片段 Fault 的结束时间' })).not.toHaveAttribute('aria-current')
@@ -608,7 +629,7 @@ describe('ComposeAnimationPanel', () => {
     const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
     const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
     const widthBefore = Number.parseFloat(scale.style.width)
-    // `.scale` 的 margin: 0 10px 会从 700 px 的可视宽度里扣掉 20 px，铺满宽度的默认值是 680。
+    // `.scale` 左右各 margin 10px：700 px 可视宽度扣掉 20 px 后，铺满默认值是 680。
     expect(widthBefore).toBeCloseTo(680)
 
     fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -100 })
@@ -626,13 +647,13 @@ describe('ComposeAnimationPanel', () => {
     const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
     const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
 
-    // 已经贴着下限，继续缩小不应把宽度压到可视宽度（扣除 margin 后 680）以下。
+    // 已经贴着下限，继续缩小不应把宽度压到可视宽度（扣除左右 gutter 后 680）以下。
     fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: 500 })
 
     expect(Number.parseFloat(scale.style.width)).toBeCloseTo(680)
   })
 
-  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 不带修饰键的滚动做横向平移', () => {
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 横向滚轮平移时间轴且不改变缩放', () => {
     stubTimelineContainerWidth(700)
     render(
       <ComposeAnimationPanelProvider>
@@ -642,31 +663,13 @@ describe('ComposeAnimationPanel', () => {
     const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
     const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
 
-    // 先放大出可平移的空间，再验证普通滚轮改变 scrollLeft 而不改变宽度。
-    fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -300 })
+    // 先放大出可平移的空间；纵向留给 board-scroll，横向 deltaX 平移时间轴。
+    fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -300, bubbles: true })
     const widthAfterZoom = scale.style.width
-    fireEvent.wheel(scaleScroll, { clientX: 350, deltaY: 40 })
+    fireEvent.wheel(scaleScroll, { clientX: 350, deltaX: 40, deltaY: 0, bubbles: true })
 
     expect(scale.style.width).toBe(widthAfterZoom)
     expect(scaleScroll.scrollLeft).toBeGreaterThan(0)
-  })
-
-  it('OpenSpec: animation-panel / 不依赖滚轮的缩放入口 / 通过工具栏按钮放大缩小', () => {
-    stubTimelineContainerWidth(700)
-    render(
-      <ComposeAnimationPanelProvider>
-        <ComposeAnimationTimeline />
-      </ComposeAnimationPanelProvider>,
-    )
-    const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
-    const widthBefore = Number.parseFloat(scale.style.width)
-
-    fireEvent.click(screen.getByRole('button', { name: '放大时间线' }))
-    expect(Number.parseFloat(scale.style.width)).toBeGreaterThan(widthBefore)
-
-    const widthAfterZoomIn = Number.parseFloat(scale.style.width)
-    fireEvent.click(screen.getByRole('button', { name: '缩小时间线' }))
-    expect(Number.parseFloat(scale.style.width)).toBeLessThan(widthAfterZoomIn)
   })
 
   it('OpenSpec: animation-panel / 缩放不改变片段与关键帧的视觉尺寸 / 放大后片段条与关键帧只有位置随比例变化', () => {
@@ -679,11 +682,12 @@ describe('ComposeAnimationPanel', () => {
     const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
     fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -300 })
 
+    const clip = document.querySelector<HTMLElement>('.compose-animation-timeline__clip')!
     const clipBody = document.querySelector<HTMLElement>('.compose-animation-timeline__clip-body')!
     const keyframe = screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })
-    // 缩放只应该写入位置相关的行内样式；圆角、边框、菱形尺寸完全来自样式表，不受缩放影响。
-    expect(clipBody.style.left).not.toBe('')
-    expect(clipBody.style.width).not.toBe('')
+    // 片段位置写在 .clip 上；缩放不改变圆角/手柄尺寸等样式表属性。
+    expect(clip.style.left).not.toBe('')
+    expect(clip.style.width).not.toBe('')
     expect(clipBody.style.height).toBe('')
     expect(clipBody.style.borderRadius).toBe('')
     expect(keyframe.style.width).toBe('')

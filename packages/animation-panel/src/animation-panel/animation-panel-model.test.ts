@@ -62,12 +62,20 @@ describe('animation panel model', () => {
     expect(extended.model.durationMs).toBe(500)
     expect(extended.model.tracks[0]?.properties[0]?.keyframes.map(({ timeMs }) => timeMs))
       .toEqual([0, 100, 200, 500])
-    expect(extended.model.clips).toMatchObject([{ startTimeMs: 0, endTimeMs: 500 }])
+    expect(extended.model.clips?.find((clip) => clip.id === 'fault-animation'))
+      .toMatchObject({ startTimeMs: 0, endTimeMs: 500 })
 
     const shortened = updateComposeAnimationDuration(initial, 100)
-    expect(shortened.model.durationMs).toBe(210)
+    // 多物体演示会话中，其它轨道可能有更靠后的关键帧，尾帧下限取全局最晚非尾帧 + 10
+    const lastContentKeyframeMs = initial.model.tracks
+      .flatMap((track) => track.properties)
+      .flatMap((property) => property.keyframes)
+      .filter((keyframe) => keyframe.timeMs < initial.model.durationMs)
+      .reduce((maximum, keyframe) => Math.max(maximum, keyframe.timeMs), 0)
+    const minDurationMs = lastContentKeyframeMs + 10
+    expect(shortened.model.durationMs).toBe(minDurationMs)
     expect(shortened.model.tracks[0]?.properties[0]?.keyframes.map(({ timeMs }) => timeMs))
-      .toEqual([0, 100, 200, 210])
+      .toEqual([0, 100, 200, minDurationMs])
   })
 
   it('OpenSpec: animation-panel / 可调整动画片段 / 保持片段范围在时间轴内且至少 10 ms', () => {
@@ -77,13 +85,15 @@ describe('animation panel model', () => {
       endTimeMs: 250,
     })
     expect(resized.selectedClipId).toBe('fault-animation')
-    expect(resized.model.clips).toMatchObject([{ startTimeMs: 40, endTimeMs: 250 }])
+    expect(resized.model.clips?.find((clip) => clip.id === 'fault-animation'))
+      .toMatchObject({ startTimeMs: 40, endTimeMs: 250 })
 
     const constrained = updateComposeAnimationClip(resized, 'fault-animation', {
       startTimeMs: 300,
       endTimeMs: 300,
     })
-    expect(constrained.model.clips).toMatchObject([{ startTimeMs: 290, endTimeMs: 300 }])
+    expect(constrained.model.clips?.find((clip) => clip.id === 'fault-animation'))
+      .toMatchObject({ startTimeMs: 290, endTimeMs: 300 })
   })
 
   it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 在已用过的时间再次添加关键帧不会重复 ID', () => {

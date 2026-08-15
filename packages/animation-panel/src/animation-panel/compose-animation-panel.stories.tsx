@@ -25,12 +25,12 @@ function AnimationPanelFixture({
           position: 'fixed',
           inset: 0,
           overflow: 'hidden',
-          background: '#0d1117',
-          gridTemplateColumns: 'minmax(0, 1fr) 332px',
+          background: '#101010',
+          gridTemplateColumns: 'minmax(0, 1fr) 320px',
           gridTemplateRows: 'minmax(0, 1fr) 300px',
         }}
       >
-        <div aria-label="宿主嵌入区域" style={{ borderRight: '1px solid #303945' }} />
+        <div aria-label="宿主嵌入区域" style={{ borderRight: '1px solid #2a2a2a' }} />
         <ComposeAnimationPanelProvider defaultValue={defaultValue}>
           <ComposeAnimationInspector />
           <ComposeAnimationTimeline style={{ gridColumn: '1 / -1' }} />
@@ -48,7 +48,7 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** 参考图默认关键帧、线性曲线和自动记录状态。 */
+/** 参考图默认关键帧与线性曲线。 */
 export const Default: Story = {}
 
 /** 播放到末尾后会回到零点的循环状态。 */
