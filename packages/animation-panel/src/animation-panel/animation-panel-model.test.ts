@@ -82,4 +82,23 @@ describe('animation panel model', () => {
     })
     expect(constrained.model.clips).toMatchObject([{ startTimeMs: 290, endTimeMs: 300 }])
   })
+
+  it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 在已用过的时间再次添加关键帧不会重复 ID', () => {
+    const added = addComposeAnimationKeyframe({
+      ...createDefaultComposeAnimationPanelValue(),
+      currentTimeMs: 150,
+    })
+    const moved = updateComposeAnimationKeyframe(added, 'background-fill-150', { timeMs: 250 })
+    expect(moved.conflict).toBe(false)
+
+    // 150 ms 已空出来，但 `background-fill-150` 这个 ID 仍被移动后的关键帧占用。
+    const readded = addComposeAnimationKeyframe({
+      ...moved.value,
+      currentTimeMs: 150,
+      selectedKeyframeId: null,
+    })
+    const ids = readded.model.tracks[0]?.properties[0]?.keyframes.map(({ id }) => id) ?? []
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(readded.selectedKeyframeId).toBe('background-fill-150-2')
+  })
 })

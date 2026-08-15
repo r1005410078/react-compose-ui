@@ -229,6 +229,22 @@ export function toggleComposeAnimationTrack(
   }
 }
 
+/**
+ * 关键帧 ID 只把时间当作初始命名依据。关键帧被移动后 ID 不跟随时间变化，
+ * 因此原名可能仍被占用，必须在整个会话范围内查重后追加序号。
+ */
+function createUniqueKeyframeId(model: ComposeAnimationPanelModel, propertyId: string, timeMs: number) {
+  const used = new Set(model.tracks
+    .flatMap((track) => track.properties)
+    .flatMap((property) => property.keyframes)
+    .map(({ id }) => id))
+  const base = `${propertyId}-${timeMs}`
+  if (!used.has(base)) return base
+  let suffix = 2
+  while (used.has(`${base}-${suffix}`)) suffix += 1
+  return `${base}-${suffix}`
+}
+
 export function addComposeAnimationKeyframe(
   value: ComposeAnimationPanelValue,
 ): ComposeAnimationPanelValue {
@@ -246,7 +262,7 @@ export function addComposeAnimationKeyframe(
   if (existing) return { ...value, selectedKeyframeId: existing.id }
   const keyframe: ComposeAnimationKeyframe = {
     ...target.keyframe,
-    id: `${target.property.id}-${value.currentTimeMs}`,
+    id: createUniqueKeyframeId(value.model, target.property.id, value.currentTimeMs),
     timeMs: value.currentTimeMs,
   }
   return {
