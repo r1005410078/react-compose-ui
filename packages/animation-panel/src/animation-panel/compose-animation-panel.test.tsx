@@ -12,7 +12,23 @@ import {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
+
+/**
+ * 让 `.scale-scroll`/`.scale` 在挂载测量阶段就拿到一个非零可视宽度，
+ * 否则缩放测试依赖的初始 `pixelsPerMs` 会因 jsdom 默认 0 尺寸而全程为 0。
+ */
+function stubTimelineContainerWidth(widthPx: number) {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const measured = this.classList.contains('compose-animation-timeline__scale-scroll')
+      || this.classList.contains('compose-animation-timeline__scale')
+    const width = measured ? widthPx : 0
+    return {
+      bottom: 0, height: 0, left: 0, right: width, top: 0, width, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect
+  })
+}
 
 describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 默认关键帧演示时间线 / 初次渲染动画时间线', () => {
@@ -580,5 +596,97 @@ describe('ComposeAnimationPanel', () => {
       </ComposeAnimationPanelProvider>,
     )
     expect(screen.getByLabelText('当前时间', { selector: 'output' })).toHaveAttribute('aria-live', 'off')
+  })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 按住修饰键滚动缩放会撑宽时间线', () => {
+    stubTimelineContainerWidth(700)
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
+    const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
+    const widthBefore = Number.parseFloat(scale.style.width)
+    // `.scale` 的 margin: 0 10px 会从 700 px 的可视宽度里扣掉 20 px，铺满宽度的默认值是 680。
+    expect(widthBefore).toBeCloseTo(680)
+
+    fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -100 })
+
+    expect(Number.parseFloat(scale.style.width)).toBeGreaterThan(widthBefore)
+  })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 缩小后不产生小于可视宽度的空白', () => {
+    stubTimelineContainerWidth(700)
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
+    const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
+
+    // 已经贴着下限，继续缩小不应把宽度压到可视宽度（扣除 margin 后 680）以下。
+    fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: 500 })
+
+    expect(Number.parseFloat(scale.style.width)).toBeCloseTo(680)
+  })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 不带修饰键的滚动做横向平移', () => {
+    stubTimelineContainerWidth(700)
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
+    const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
+
+    // 先放大出可平移的空间，再验证普通滚轮改变 scrollLeft 而不改变宽度。
+    fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -300 })
+    const widthAfterZoom = scale.style.width
+    fireEvent.wheel(scaleScroll, { clientX: 350, deltaY: 40 })
+
+    expect(scale.style.width).toBe(widthAfterZoom)
+    expect(scaleScroll.scrollLeft).toBeGreaterThan(0)
+  })
+
+  it('OpenSpec: animation-panel / 不依赖滚轮的缩放入口 / 通过工具栏按钮放大缩小', () => {
+    stubTimelineContainerWidth(700)
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
+    const widthBefore = Number.parseFloat(scale.style.width)
+
+    fireEvent.click(screen.getByRole('button', { name: '放大时间线' }))
+    expect(Number.parseFloat(scale.style.width)).toBeGreaterThan(widthBefore)
+
+    const widthAfterZoomIn = Number.parseFloat(scale.style.width)
+    fireEvent.click(screen.getByRole('button', { name: '缩小时间线' }))
+    expect(Number.parseFloat(scale.style.width)).toBeLessThan(widthAfterZoomIn)
+  })
+
+  it('OpenSpec: animation-panel / 缩放不改变片段与关键帧的视觉尺寸 / 放大后片段条与关键帧只有位置随比例变化', () => {
+    stubTimelineContainerWidth(700)
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const scaleScroll = document.querySelector<HTMLElement>('.compose-animation-timeline__scale-scroll')!
+    fireEvent.wheel(scaleScroll, { clientX: 350, ctrlKey: true, deltaY: -300 })
+
+    const clipBody = document.querySelector<HTMLElement>('.compose-animation-timeline__clip-body')!
+    const keyframe = screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })
+    // 缩放只应该写入位置相关的行内样式；圆角、边框、菱形尺寸完全来自样式表，不受缩放影响。
+    expect(clipBody.style.left).not.toBe('')
+    expect(clipBody.style.width).not.toBe('')
+    expect(clipBody.style.height).toBe('')
+    expect(clipBody.style.borderRadius).toBe('')
+    expect(keyframe.style.width).toBe('')
+    expect(keyframe.style.height).toBe('')
   })
 })

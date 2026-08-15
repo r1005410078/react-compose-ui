@@ -25,3 +25,11 @@ export function CurveIcon(props: IconProps) {
 export function ChevronIcon(props: IconProps) {
   return <svg aria-hidden="true" viewBox="0 0 16 16" {...props}><path d="m5.5 3.5 5 4.5-5 4.5" /></svg>
 }
+
+export function ZoomInIcon(props: IconProps) {
+  return <svg aria-hidden="true" viewBox="0 0 16 16" {...props}><circle cx="7" cy="7" r="4.5" /><path d="M10.3 10.3 14 14M7 4.5v5M4.5 7h5" /></svg>
+}
+
+export function ZoomOutIcon(props: IconProps) {
+  return <svg aria-hidden="true" viewBox="0 0 16 16" {...props}><circle cx="7" cy="7" r="4.5" /><path d="M10.3 10.3 14 14M4.5 7h5" /></svg>
+}

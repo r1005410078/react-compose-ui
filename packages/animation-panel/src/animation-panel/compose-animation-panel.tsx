@@ -1,12 +1,17 @@
-import { useId, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties, KeyboardEvent, PointerEvent, RefObject, WheelEvent } from 'react'
 import {
   createComposeThemeStyle,
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
 import { useAnimationPanelSession } from './animation-panel-context'
-import { getComposeAnimationClips } from './animation-panel-model'
+import {
+  clampComposeAnimationPixelsPerMs,
+  getComposeAnimationClips,
+  panComposeAnimationTimeline,
+  zoomComposeAnimationTimelineAt,
+} from './animation-panel-model'
 import { AnimationPanelProvider } from './animation-panel-provider'
 import { CommittedInput } from './committed-input'
 import {
@@ -16,6 +21,8 @@ import {
   LoopIcon,
   PauseIcon,
   PlayIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from './animation-icons'
 import type {
   ComposeAnimationInspectorProps,
@@ -31,6 +38,8 @@ const messages = {
     play: '播放动画',
     pause: '暂停动画',
     addKeyframe: '添加关键帧',
+    zoomIn: '放大时间线',
+    zoomOut: '缩小时间线',
     playbackMode: '播放模式',
     playOnce: '播放一次',
     loop: '循环',
@@ -74,6 +83,8 @@ const messages = {
     play: 'Play animation',
     pause: 'Pause animation',
     addKeyframe: 'Add keyframe',
+    zoomIn: 'Zoom in timeline',
+    zoomOut: 'Zoom out timeline',
     playbackMode: 'Playback mode',
     playOnce: 'Play once',
     loop: 'Loop',
@@ -126,6 +137,12 @@ function displayPropertyLabel(id: string, fallback: string, locale: Locale) {
 function timelineRatio(timeMs: number, durationMs: number) {
   return durationMs <= 0 ? 0 : Math.min(1, Math.max(0, timeMs / durationMs))
 }
+
+// `.compose-animation-timeline__scale` 的 `margin: 0 10px`：可视宽度测量必须扣掉这部分，
+// 否则缩放下限会把内容撑到比 `.scale-scroll` 实际可视区域还宽，出现横向留白。
+const SCALE_HORIZONTAL_MARGIN_PX = 20
+// 工具栏缩放按钮每次点击的缩放倍数，和 Stage（packages/stage）的 zoomIn/zoomOut 步长保持一致的手感。
+const ZOOM_BUTTON_STEP_FACTOR = 1.2
 
 function createTimeMarkers(durationMs: number) {
   const safeDurationMs = Math.max(0, Math.round(Number.isFinite(durationMs) ? durationMs : 0))
@@ -188,6 +205,103 @@ export function ComposeAnimationTimeline({
     .join(' ')
   const currentRatio = timelineRatio(value.currentTimeMs, value.model.durationMs)
   const timeMarkers = createTimeMarkers(value.model.durationMs)
+  const scaleScrollRef = useRef<HTMLDivElement>(null)
+  const scaleRef = useRef<HTMLDivElement>(null)
+  // 缩放会改变 `.scale` 的行内宽度，必须等这次渲染真正提交到 DOM 后再写 scrollLeft，
+  // 否则浏览器会按旧宽度把请求的滚动位置钳掉。
+  const pendingScrollLeftRef = useRef<number | null>(null)
+  const [containerWidthPx, setContainerWidthPx] = useState(0)
+  // null 表示用户还没有主动缩放过：此时按可视宽度铺满显示，和缩放能力上线前的行为完全一致。
+  const [pixelsPerMs, setPixelsPerMs] = useState<number | null>(null)
+  // 记录"上一次钳制时用的可视宽度/时长"，用来判断本次渲染是否需要重新钳制（回弹）。
+  const [clampedForWidthPx, setClampedForWidthPx] = useState(0)
+  const [clampedForDurationMs, setClampedForDurationMs] = useState(value.model.durationMs)
+  const effectiveContainerWidthPx = Math.max(0, containerWidthPx - SCALE_HORIZONTAL_MARGIN_PX)
+
+  // 容器宽度或时长变化后，把已经设置过的缩放级别重新钳制（回弹），而不是重置成铺满宽度；
+  // 还没缩放过（pixelsPerMs 为 null）时不需要处理，下面的 effectivePixelsPerMs 会自动跟着派生。
+  // 用渲染期条件性 setState 而不是 effect：本仓库的 react-hooks/set-state-in-effect 规则把
+  // effect 里的 setState 判定为 error，这是 React 官方文档给出的等价替代写法。
+  if (
+    pixelsPerMs !== null
+    && effectiveContainerWidthPx > 0
+    && (clampedForWidthPx !== effectiveContainerWidthPx || clampedForDurationMs !== value.model.durationMs)
+  ) {
+    const clamped = clampComposeAnimationPixelsPerMs(pixelsPerMs, effectiveContainerWidthPx, value.model.durationMs)
+    setClampedForWidthPx(effectiveContainerWidthPx)
+    setClampedForDurationMs(value.model.durationMs)
+    if (clamped !== pixelsPerMs) setPixelsPerMs(clamped)
+  }
+
+  const effectivePixelsPerMs = pixelsPerMs ?? (
+    effectiveContainerWidthPx > 0 && value.model.durationMs > 0
+      ? effectiveContainerWidthPx / value.model.durationMs
+      : 0
+  )
+  const scaleWidthPx = Math.max(0, value.model.durationMs * effectivePixelsPerMs)
+
+  useEffect(() => {
+    const element = scaleScrollRef.current
+    if (!element) return
+    const measure = () => setContainerWidthPx(element.getBoundingClientRect().width)
+    measure()
+    // jsdom 等无布局环境没有 ResizeObserver：退化为只测一次挂载时的宽度，
+    // 和 packages/stage 里 compose-stage.tsx 对 surfaceRef 的处理方式一致。
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (pendingScrollLeftRef.current === null) return
+    if (scaleScrollRef.current) scaleScrollRef.current.scrollLeft = pendingScrollLeftRef.current
+    pendingScrollLeftRef.current = null
+  }, [scaleWidthPx])
+
+  const applyZoom = (clientX: number, factor: number) => {
+    const scrollElement = scaleScrollRef.current
+    const scaleBounds = scaleRef.current?.getBoundingClientRect()
+    const scrollBounds = scrollElement?.getBoundingClientRect()
+    if (!scrollElement || !scaleBounds || !scrollBounds || effectivePixelsPerMs <= 0) return
+    const anchorTimeMs = Math.min(
+      value.model.durationMs,
+      Math.max(0, (clientX - scaleBounds.left) / effectivePixelsPerMs),
+    )
+    const anchorOffsetPx = clientX - scrollBounds.left
+    const result = zoomComposeAnimationTimelineAt(
+      effectivePixelsPerMs,
+      factor,
+      anchorTimeMs,
+      anchorOffsetPx,
+      effectiveContainerWidthPx,
+      value.model.durationMs,
+    )
+    pendingScrollLeftRef.current = result.scrollLeft
+    setPixelsPerMs(result.pixelsPerMs)
+  }
+  const handleTimelineWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const scrollElement = scaleScrollRef.current
+    if (!scrollElement) return
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault()
+      applyZoom(event.clientX, Math.exp(-event.deltaY * 0.002))
+      return
+    }
+    event.preventDefault()
+    scrollElement.scrollLeft = panComposeAnimationTimeline(
+      scrollElement.scrollLeft,
+      event.deltaY !== 0 ? event.deltaY : event.deltaX,
+      effectiveContainerWidthPx,
+      value.model.durationMs,
+      effectivePixelsPerMs,
+    )
+  }
+  const handleZoomButtonClick = (factor: number) => {
+    const scrollBounds = scaleScrollRef.current?.getBoundingClientRect()
+    if (!scrollBounds) return
+    applyZoom(scrollBounds.left + scrollBounds.width / 2, factor)
+  }
   const handlePlayheadKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
@@ -243,6 +357,20 @@ export function ComposeAnimationTimeline({
                 type="button"
                 onClick={addKeyframe}
               ><DiamondIcon /></button>
+              <span aria-hidden="true" className="compose-animation-timeline__control-separator" />
+              {/* 滚轮缩放需要按住 Ctrl/Cmd，无法使用该手势的用户仍需要一个可发现、可键盘操作的入口。 */}
+              <button
+                aria-label={t.zoomOut}
+                className="compose-animation-timeline__icon-button"
+                type="button"
+                onClick={() => handleZoomButtonClick(1 / ZOOM_BUTTON_STEP_FACTOR)}
+              ><ZoomOutIcon /></button>
+              <button
+                aria-label={t.zoomIn}
+                className="compose-animation-timeline__icon-button"
+                type="button"
+                onClick={() => handleZoomButtonClick(ZOOM_BUTTON_STEP_FACTOR)}
+              ><ZoomInIcon /></button>
             </div>
             {/* 隐式 role 是 status：播放时每帧都会变化，必须显式关掉播报，否则读屏会被刷屏。 */}
             <output aria-label={t.currentTime} aria-live="off" className="compose-animation-timeline__time-readout">
@@ -355,6 +483,10 @@ export function ComposeAnimationTimeline({
           onSelectKeyframe={selectKeyframe}
           onSelectInterpolationSegment={selectInterpolationSegment}
           onSetCurrentTime={setCurrentTime}
+          onWheel={handleTimelineWheel}
+          scaleRef={scaleRef}
+          scaleScrollRef={scaleScrollRef}
+          scaleWidthPx={scaleWidthPx}
         />
       </div>
       {/* 常驻挂载：live region 必须先于内容变化就存在于 DOM 中，AT 才能可靠捕获后续的文本变化。
@@ -386,6 +518,10 @@ function TimelineScale({
   onSelectInterpolationSegment,
   onSetCurrentTime,
   onUpdateClipRange,
+  onWheel,
+  scaleRef,
+  scaleScrollRef,
+  scaleWidthPx,
   value,
 }: {
   readonly currentRatio: number
@@ -398,6 +534,10 @@ function TimelineScale({
   readonly onSelectInterpolationSegment: (endKeyframeId: string) => void
   readonly onSetCurrentTime: (timeMs: number) => void
   readonly onUpdateClipRange: (clipId: string, startTimeMs: number, endTimeMs: number) => void
+  readonly onWheel: (event: WheelEvent<HTMLDivElement>) => void
+  readonly scaleRef: RefObject<HTMLDivElement | null>
+  readonly scaleScrollRef: RefObject<HTMLDivElement | null>
+  readonly scaleWidthPx: number
   readonly value: ReturnType<typeof useAnimationPanelSession>['value']
 }) {
   const i18n = useComposeI18nContext()
@@ -405,7 +545,6 @@ function TimelineScale({
   const t = messages[locale]
   const keyframeMoveHelpId = useId()
   const clipMoveHelpId = useId()
-  const scaleRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState<{ readonly keyframeId: string; readonly pointerId: number } | null>(null)
   const [clipDragging, setClipDragging] = useState<{
     readonly clipId: string
@@ -525,8 +664,12 @@ function TimelineScale({
   }
   const clips = getComposeAnimationClips(value.model)
   return (
-    <div className="compose-animation-timeline__scale-scroll">
-      <div className="compose-animation-timeline__scale" ref={scaleRef} style={{ '--animation-playhead': `${currentRatio * 100}%` } as CSSProperties}>
+    <div className="compose-animation-timeline__scale-scroll" ref={scaleScrollRef} onWheel={onWheel}>
+      <div
+        className="compose-animation-timeline__scale"
+        ref={scaleRef}
+        style={{ '--animation-playhead': `${currentRatio * 100}%`, width: `${scaleWidthPx}px` } as CSSProperties}
+      >
         <div className="compose-animation-timeline__ruler" aria-hidden="true">
           {markers.map((marker) => (
             <span key={marker} style={{ left: `${timelineRatio(marker, value.model.durationMs) * 100}%` }}>

@@ -268,7 +268,9 @@
   .compose-animation-timeline__property-row > svg { position: relative; z-index: 1; width: 12px; height: 12px; color: var(--ap-muted); transform: rotate(90deg); pointer-events: none; }
 
   .compose-animation-timeline__scale-scroll { overflow: auto; min-width: 0; background: rgb(8 12 17 / 18%); }
-  .compose-animation-timeline__scale { --animation-playhead: 66.667%; position: relative; width: calc(100% - 20px); min-width: 700px; min-height: 100%; margin: 0 10px; }
+  /* 宽度由 JS 按缩放级别写成行内 px（见 compose-animation-panel.tsx 的 scaleWidthPx），
+     不再用 CSS 百分比／min-width：缩放级别独立于容器宽度，必须能撑出比可视区域更宽的内容供横向滚动。 */
+  .compose-animation-timeline__scale { --animation-playhead: 66.667%; position: relative; min-height: 100%; margin: 0 10px; }
   .compose-animation-timeline__ruler { position: relative; height: var(--ap-ruler-height); flex: 0 0 var(--ap-ruler-height); border-bottom: 1px solid color-mix(in srgb, var(--ap-border) 78%, transparent); }
   .compose-animation-timeline__ruler::after { position: absolute; right: 0; bottom: 0; left: 0; height: 7px; opacity: .65; background: repeating-linear-gradient(90deg, transparent 0 calc(3.333% - 1px), var(--ap-grid) calc(3.333% - 1px) 3.333%); content: ''; }
   .compose-animation-timeline__ruler > span { position: absolute; top: 4px; display: grid; transform: translateX(-50%); color: var(--ap-muted); font-size: 11px; text-align: center; }
