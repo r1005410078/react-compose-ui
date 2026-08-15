@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   addComposeAnimationKeyframe,
   advanceComposeAnimationPlayback,
+  clampComposeAnimationPixelsPerMs,
+  panComposeAnimationTimeline,
   updateComposeAnimationDuration,
   updateComposeAnimationClip,
   updateComposeAnimationKeyframe,
+  zoomComposeAnimationTimelineAt,
 } from './animation-panel-model'
 import { createDefaultComposeAnimationPanelValue } from './default-value'
 
@@ -100,5 +103,64 @@ describe('animation panel model', () => {
     const ids = readded.model.tracks[0]?.properties[0]?.keyframes.map(({ id }) => id) ?? []
     expect(new Set(ids).size).toBe(ids.length)
     expect(readded.selectedKeyframeId).toBe('background-fill-150-2')
+  })
+
+  it('OpenSpec: animation-panel / 缩放边界钳制 / 缩小到下限后停止响应', () => {
+    // 300 ms 动画塞进 700 px 容器：下限是"总宽度等于可视宽度"，即 700 / 300 px/ms。
+    expect(clampComposeAnimationPixelsPerMs(0.1, 700, 300)).toBeCloseTo(700 / 300)
+    expect(clampComposeAnimationPixelsPerMs(700 / 300, 700, 300)).toBeCloseTo(700 / 300)
+  })
+
+  it('OpenSpec: animation-panel / 缩放边界钳制 / 放大到上限后停止响应', () => {
+    expect(clampComposeAnimationPixelsPerMs(999, 700, 300)).toBe(20)
+    expect(clampComposeAnimationPixelsPerMs(20, 700, 300)).toBe(20)
+  })
+
+  it('OpenSpec: animation-panel / 缩放边界钳制 / 上下限之间的值原样通过', () => {
+    expect(clampComposeAnimationPixelsPerMs(5, 700, 300)).toBe(5)
+  })
+
+  it('OpenSpec: animation-panel / 缩放边界钳制 / 容器宽度变化后钳制边界随之更新', () => {
+    // 用户已缩小到旧容器（700 px）的下限，容器又被进一步缩窄到 400 px：
+    // 下限降为 400/300，当前缩放仍在新下限之上，因此保持不变；
+    // 但如果容器反而变宽到 1400 px，新下限升到 1400/300，当前缩放低于新下限，必须回弹。
+    const oldFloor = clampComposeAnimationPixelsPerMs(0.1, 700, 300)
+    expect(clampComposeAnimationPixelsPerMs(oldFloor, 400, 300)).toBeCloseTo(oldFloor)
+    expect(clampComposeAnimationPixelsPerMs(oldFloor, 1400, 300)).toBeCloseTo(1400 / 300)
+  })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 缩放前后光标下方的时间点保持对齐', () => {
+    // 100 ms 处的关键帧在放大前位于像素 500（5 px/ms），鼠标在视口内偏移 50 px 处。
+    const result = zoomComposeAnimationTimelineAt(5, 2, 100, 50, 700, 300)
+    expect(result.pixelsPerMs).toBe(10)
+    // 新缩放下 100 ms 对应像素 1000；scrollLeft 必须让视口内偏移仍是 50 px：1000 - 950 = 50。
+    expect(result.scrollLeft).toBe(950)
+    expect(100 * result.pixelsPerMs - result.scrollLeft).toBe(50)
+  })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 锚点滚动位置钳制在有效范围内', () => {
+    // 请求把已经贴着右边界的锚点继续放大，理论 scrollLeft 会超出内容宽度，必须钳制到 maxScrollLeft。
+    const overshoot = zoomComposeAnimationTimelineAt(5, 4, 300, 690, 700, 300)
+    const totalWidthPx = 300 * overshoot.pixelsPerMs
+    const maxScrollLeft = totalWidthPx - 700
+    expect(overshoot.scrollLeft).toBeCloseTo(maxScrollLeft)
+
+    // 请求缩小到贴着左边界的锚点，理论 scrollLeft 会小于 0，必须钳制到 0。
+    const undershoot = zoomComposeAnimationTimelineAt(5, 0.1, 0, 10, 700, 300)
+    expect(undershoot.scrollLeft).toBe(0)
+  })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 请求的缩放超出边界时用钳制后的值求解滚动位置', () => {
+    // 请求缩放到 999（会被钳制到上限 20），滚动位置必须用钳制后的 20 px/ms 计算，而不是未钳制的 999。
+    const result = zoomComposeAnimationTimelineAt(5, 999 / 5, 100, 50, 700, 300)
+    expect(result.pixelsPerMs).toBe(20)
+    expect(result.scrollLeft).toBe(100 * 20 - 50)
+  })
+
+  it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 不带修饰键的滚动做横向平移', () => {
+    expect(panComposeAnimationTimeline(100, 50, 700, 300, 10)).toBe(150)
+    // 平移量能让滚动位置越界时钳制在 0 和 maxScrollLeft 之间。
+    expect(panComposeAnimationTimeline(10, -50, 700, 300, 10)).toBe(0)
+    expect(panComposeAnimationTimeline(2900, 50, 700, 300, 10)).toBe(2300)
   })
 })

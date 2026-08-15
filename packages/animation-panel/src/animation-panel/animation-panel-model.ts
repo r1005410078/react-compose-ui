@@ -245,6 +245,82 @@ function createUniqueKeyframeId(model: ComposeAnimationPanelModel, propertyId: s
   return `${base}-${suffix}`
 }
 
+/** 最大缩放级别：300 ms 动画在此级别下撑出 6000 px，10 ms 吸附粒度仍有 200 px 可用而不至于让 DOM 过宽。 */
+const MAX_PIXELS_PER_MS = 20
+
+function computeComposeAnimationTimelineMaxScrollLeft(
+  containerWidthPx: number,
+  durationMs: number,
+  pixelsPerMs: number,
+) {
+  const totalWidthPx = Math.max(containerWidthPx, durationMs * pixelsPerMs)
+  return Math.max(0, totalWidthPx - containerWidthPx)
+}
+
+/**
+ * 把缩放级别钳制在有效范围内：下限保证时间线总宽度不小于可视宽度（避免空白），
+ * 上限是一个与关键帧 10 ms 吸附粒度匹配的固定值。容器宽度变化时应重新调用本函数
+ * 对当前缩放级别求值，用返回值替换当前状态即可实现"回弹"。
+ */
+export function clampComposeAnimationPixelsPerMs(
+  pixelsPerMs: number,
+  containerWidthPx: number,
+  durationMs: number,
+): number {
+  const safeDurationMs = Math.max(0, Number.isFinite(durationMs) ? durationMs : 0)
+  const safeContainerWidthPx = Math.max(0, Number.isFinite(containerWidthPx) ? containerWidthPx : 0)
+  const minPixelsPerMs = safeDurationMs > 0 ? safeContainerWidthPx / safeDurationMs : 0
+  const safePixelsPerMs = Number.isFinite(pixelsPerMs) ? pixelsPerMs : minPixelsPerMs
+  return Math.min(MAX_PIXELS_PER_MS, Math.max(minPixelsPerMs, safePixelsPerMs))
+}
+
+/** 缩放后的新级别与滚动位置。 */
+export interface ComposeAnimationTimelineZoomResult {
+  readonly pixelsPerMs: number
+  readonly scrollLeft: number
+}
+
+/**
+ * 以锚点时间为中心求解新的缩放级别与滚动位置，使锚点在视口内的像素偏移在缩放前后保持不变。
+ *
+ * @remarks
+ * `factor` 是请求的缩放倍数（例如 `Math.exp(-event.deltaY * 0.002)`），实际生效的缩放级别会先
+ * 经过 {@link clampComposeAnimationPixelsPerMs} 钳制；滚动位置的锚点方程必须用钳制后的级别求解，
+ * 否则请求的缩放一旦被钳制到边界，锚点对齐关系就会算错。
+ */
+export function zoomComposeAnimationTimelineAt(
+  currentPixelsPerMs: number,
+  factor: number,
+  anchorTimeMs: number,
+  anchorOffsetPx: number,
+  containerWidthPx: number,
+  durationMs: number,
+): ComposeAnimationTimelineZoomResult {
+  const safeFactor = Number.isFinite(factor) && factor > 0 ? factor : 1
+  const nextPixelsPerMs = clampComposeAnimationPixelsPerMs(
+    currentPixelsPerMs * safeFactor,
+    containerWidthPx,
+    durationMs,
+  )
+  const maxScrollLeft = computeComposeAnimationTimelineMaxScrollLeft(containerWidthPx, durationMs, nextPixelsPerMs)
+  const rawScrollLeft = anchorTimeMs * nextPixelsPerMs - anchorOffsetPx
+  const scrollLeft = Math.min(maxScrollLeft, Math.max(0, rawScrollLeft))
+  return { pixelsPerMs: nextPixelsPerMs, scrollLeft }
+}
+
+/** 按像素增量平移时间线，滚动位置钳制在 `[0, 内容总宽度 - 可视宽度]` 内。 */
+export function panComposeAnimationTimeline(
+  scrollLeft: number,
+  deltaPx: number,
+  containerWidthPx: number,
+  durationMs: number,
+  pixelsPerMs: number,
+): number {
+  const maxScrollLeft = computeComposeAnimationTimelineMaxScrollLeft(containerWidthPx, durationMs, pixelsPerMs)
+  const safeDeltaPx = Number.isFinite(deltaPx) ? deltaPx : 0
+  return Math.min(maxScrollLeft, Math.max(0, scrollLeft + safeDeltaPx))
+}
+
 export function addComposeAnimationKeyframe(
   value: ComposeAnimationPanelValue,
 ): ComposeAnimationPanelValue {
