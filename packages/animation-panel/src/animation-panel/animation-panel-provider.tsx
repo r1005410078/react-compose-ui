@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   advanceComposeAnimationPlayback,
   addComposeAnimationKeyframe,
@@ -240,7 +240,9 @@ export function AnimationPanelProvider({
     }
   }, [commit, value.isPlaying])
 
-  const session: ComposeAnimationPanelSession = {
+  // Provider 挂在编辑器根节点上：不记忆化时，宿主任何一次无关重渲染都会换掉 session 引用，
+  // 把整条时间线一起刷新。所有回调都是稳定的 useCallback，依赖只剩会话值与提示。
+  const session = useMemo<ComposeAnimationPanelSession>(() => ({
     value,
     selectedKeyframe: findComposeAnimationKeyframe(value.model, value.selectedKeyframeId),
     notice,
@@ -260,6 +262,10 @@ export function AnimationPanelProvider({
     toggleTrack,
     addKeyframe,
     setEasingEditor,
-  }
+  }), [
+    addKeyframe, moveKeyframe, notice, selectClip, selectInterpolationSegment, selectKeyframe,
+    selectProperty, selectTrack, setCurrentTime, setDuration, setEasingEditor, setPlaybackMode,
+    setPlaying, toggleAutoRecord, toggleTrack, updateClipRange, updateSelectedKeyframe, value,
+  ])
   return <AnimationPanelContext.Provider value={session}>{children}</AnimationPanelContext.Provider>
 }

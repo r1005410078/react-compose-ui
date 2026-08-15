@@ -56,6 +56,7 @@ const messages = {
     interpolationSegment: (startMs: number, endMs: number, label: string) => `编辑 ${startMs} ms 至 ${endMs} ms 的${label}动画曲线`,
     keyframeMove: '使用左右方向键每次移动 10 毫秒，也可以水平拖动',
     keyframeHeading: '关键帧',
+    noSelection: '未选中关键帧',
     time: '时间',
     value: '值',
     interpolation: '插值',
@@ -98,6 +99,7 @@ const messages = {
     interpolationSegment: (startMs: number, endMs: number, label: string) => `Edit ${label} animation curve from ${startMs} ms to ${endMs} ms`,
     keyframeMove: 'Use the left and right arrow keys to move by 10 milliseconds, or drag horizontally',
     keyframeHeading: 'Keyframe',
+    noSelection: 'No keyframe selected',
     time: 'Time',
     value: 'Value',
     interpolation: 'Interpolation',
@@ -698,10 +700,7 @@ export function ComposeAnimationInspector({
     .filter(Boolean)
     .join(' ')
   const keyframes = value.model.tracks.flatMap((track) => track.properties.flatMap((property) => property.keyframes))
-  const selectedIndex = {
-    index: Math.max(0, keyframes.findIndex(({ id }) => id === selectedKeyframe?.keyframe.id)),
-    total: keyframes.length,
-  }
+  const selectedIndex = keyframes.findIndex(({ id }) => id === selectedKeyframe?.keyframe.id)
   const selectedProperty = selectedKeyframe?.property
   const selectedTrack = selectedKeyframe?.track
   const propertyLabel = selectedProperty
@@ -760,7 +759,10 @@ export function ComposeAnimationInspector({
     >
       <header className="compose-animation-inspector__header">
         <h2>{t.keyframeHeading}</h2>
-        <div><strong>{trackLabel} / {propertyLabel}</strong><span>{selectedIndex.index + 1} / {selectedIndex.total}</span></div>
+        <div>
+          <strong>{selectedKeyframe ? `${trackLabel} / ${propertyLabel}` : t.noSelection}</strong>
+          <span>{selectedIndex >= 0 ? selectedIndex + 1 : '—'} / {keyframes.length}</span>
+        </div>
       </header>
       <div className="compose-animation-inspector__fields">
         <label>

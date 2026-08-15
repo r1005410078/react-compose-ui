@@ -45,10 +45,6 @@
     border-top: 1px solid var(--ap-border);
   }
 
-  .compose-animation-timeline__controls {
-    display: none;
-  }
-
   .compose-animation-timeline__button-cluster {
     display: flex;
     height: 28px;
@@ -145,8 +141,6 @@
     cursor: pointer;
   }
   .compose-animation-timeline__playback-mode:focus-within { border-color: var(--ap-accent); box-shadow: 0 0 0 2px rgb(46 133 247 / 20%); }
-  .compose-animation-timeline__controls-divider { width: 1px; height: 25px; margin: 0 5px; background: var(--ap-border); }
-
   .compose-animation-timeline__record-button {
     display: inline-flex;
     align-items: center;

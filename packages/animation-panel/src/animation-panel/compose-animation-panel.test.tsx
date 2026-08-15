@@ -89,6 +89,19 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('ease-in')
   })
 
+  it('OpenSpec: animation-panel / 关键帧选择与属性同步 / 无选中关键帧时不显示虚假序号', () => {
+    render(
+      <ComposeAnimationPanelProvider
+        defaultValue={{ ...createDefaultComposeAnimationPanelValue(), selectedKeyframeId: null }}
+      >
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    expect(screen.getByText('未选中关键帧')).toBeInTheDocument()
+    expect(screen.getByText('— / 4')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('')
+  })
+
   it('OpenSpec: animation-panel / 关键帧间插值曲线段 / 选择曲线段会联动右侧曲线属性', () => {
     render(
       <ComposeAnimationPanelProvider>
