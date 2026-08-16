@@ -23,6 +23,21 @@ export interface ViewportStore {
    * 当前视口，不应为此额外订阅一次。
    */
   setViewport: Dispatch<SetStateAction<StageViewport>>
+  /**
+   * 渲染期安全地重置视口：立即写快照，但把通知推迟到当前渲染之后。
+   *
+   * @remarks
+   * 换 runtime 时 controller 需要在渲染期就把视口复位，否则会先用上一页的视口渲染一帧。
+   * 但渲染期同步通知订阅者，等于在渲染一个组件的过程中更新另一个组件，React 会报
+   * "Cannot update a component while rendering a different component"。
+   *
+   * 快照立即生效即可满足绝大多数订阅者：它们都在这一轮重新渲染，而 `useSyncExternalStore`
+   * 每次渲染都会重读 `getSnapshot`。推迟的通知只为覆盖被 memo 挡住、本轮不重渲的订阅者，
+   * 因此不能省略，也不能提前。
+   *
+   * 只用于渲染期复位；事件回调里的平移与缩放必须走 `setViewport`，那里需要同步通知。
+   */
+  resetViewportDuringRender: (viewport: StageViewport) => void
 }
 
 /**
@@ -48,6 +63,16 @@ export function createViewportStore(initial: StageViewport): ViewportStore {
       if (Object.is(next, snapshot)) return
       snapshot = next
       listeners.forEach((listener) => listener())
+    },
+    resetViewportDuringRender(viewport) {
+      if (Object.is(viewport, snapshot)) return
+      snapshot = viewport
+      // 通知延后一个微任务：此刻仍在渲染中，同步通知会触发跨组件的渲染期更新。
+      queueMicrotask(() => {
+        // 期间可能已被真实交互改写；那次写入自己通知过，这里不再重复唤醒订阅者。
+        if (!Object.is(viewport, snapshot)) return
+        listeners.forEach((listener) => listener())
+      })
     },
   }
 }

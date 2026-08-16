@@ -97,12 +97,15 @@
     gap: 8px;
   }
 
+  /*
+   * 纵向 range 由 writing-mode 表达，不用已废弃的 appearance: slider-vertical
+   * （Chrome 每次渲染都会为它打一条弃用警告，且已宣布移除）。
+   */
   .compose-color-picker__hue,
   .compose-color-picker__alpha {
     width: 14px;
     height: 100%;
     margin: 0;
-    appearance: slider-vertical;
     border-radius: 999px;
     outline: 0;
     cursor: pointer;

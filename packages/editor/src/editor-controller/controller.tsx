@@ -1102,7 +1102,8 @@ export function useComposeEditorController({
     setExpandedIdsState(validExpanded(nextDocument, []))
     // 视口在外部状态源里，这里是渲染期写外部 store。该分支对同一个 runtime 只会写入同一个
     // initialViewport，重复执行（StrictMode 重放）结果一致，且订阅方随后就会读到新快照。
-    setViewport(initialViewport)
+    // 必须走渲染期专用入口：同步通知订阅者等于在本组件渲染中途更新另一个组件。
+    viewportStore.resetViewportDuringRender(initialViewport)
     setPaintEditing(null)
     setPaintSampling(null)
     setSceneExternalDragEvent(null)
