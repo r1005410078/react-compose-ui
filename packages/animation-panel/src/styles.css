@@ -14,16 +14,16 @@
   --ap-accent: var(--compose-accent, #3b8ef0);
   --ap-grid: color-mix(in srgb, var(--ap-border) 70%, transparent);
   /* 组内正常 K 线；未选中组件的 K 线极暗（压低存在感） */
-  --ap-keyframe: color-mix(in srgb, var(--ap-accent) 55%, #5a6570);
+  --ap-keyframe: color-mix(in srgb, var(--ap-accent) 55%, var(--ap-muted));
   --ap-keyframe-selected: var(--ap-accent);
-  --ap-keyframe-line: color-mix(in srgb, var(--ap-accent) 48%, #4a5560);
-  --ap-keyframe-line-dim: color-mix(in srgb, var(--ap-accent) 8%, #1a1c1e);
-  --ap-keyframe-dim: color-mix(in srgb, var(--ap-accent) 10%, #1c1e20);
+  --ap-keyframe-line: color-mix(in srgb, var(--ap-accent) 48%, var(--ap-muted));
+  --ap-keyframe-line-dim: color-mix(in srgb, var(--ap-accent) 8%, var(--ap-border));
+  --ap-keyframe-dim: color-mix(in srgb, var(--ap-accent) 10%, var(--ap-border));
   --ap-keyframe-line-width: 0.5px;
-  --ap-keyframe-selected-ring: #e6b84d;
+  --ap-keyframe-selected-ring: var(--compose-text-strong, #f0f0f0);
   /* 组件组选中（含其属性）浅底；当前行选中更深一档；未选中无底色 */
-  --ap-row-group: color-mix(in srgb, var(--ap-raised) 72%, #1a1a1a);
-  --ap-row-selected: color-mix(in srgb, var(--ap-raised) 40%, #3a3a3c);
+  --ap-row-group: color-mix(in srgb, var(--ap-raised) 72%, var(--ap-bg));
+  --ap-row-selected: var(--compose-surface-selected, #3a3a3c);
   --ap-ruler-height: 30px;
   --ap-track-row-height: 28px;
   --ap-property-row-height: 28px;
@@ -263,7 +263,7 @@
   padding: 6px 8px;
   border: 1px solid color-mix(in srgb, var(--compose-danger, #e5484d) 50%, transparent);
   border-radius: 3px;
-  color: #ffd7d9;
+  color: color-mix(in srgb, var(--compose-danger, #e5484d) 82%, var(--compose-text, #d4d4d4));
   background: color-mix(in srgb, var(--compose-danger, #e5484d) 14%, transparent);
   font-size: 11px;
 }
@@ -671,7 +671,7 @@
  * - 起止 trim 手柄为常驻可见的细竖线，内嵌于色块两端而非贴边方帽
  */
 .compose-animation-timeline__clip {
-  --ap-clip-fill: #444444;
+  --ap-clip-fill: var(--compose-surface-active, #444444);
   position: absolute;
   z-index: 1;
   top: 4px;
@@ -686,7 +686,7 @@
   transition: background-color .12s ease, box-shadow .12s ease;
 }
 .compose-animation-timeline__track-lanes[data-group-active='true'] .compose-animation-timeline__clip {
-  --ap-clip-fill: #0a6dc2;
+  --ap-clip-fill: var(--compose-accent, #0a6dc2);
 }
 .compose-animation-timeline__clip[data-selected='true'],
 .compose-animation-timeline__clip:has(.compose-animation-timeline__clip-body[aria-current='true']) {
@@ -1155,7 +1155,7 @@
   padding: 6px 8px;
   border: 1px solid color-mix(in srgb, var(--compose-danger, #e5484d) 50%, transparent);
   border-radius: 3px;
-  color: #ffd7d9;
+  color: color-mix(in srgb, var(--compose-danger, #e5484d) 82%, var(--compose-text, #d4d4d4));
   background: color-mix(in srgb, var(--compose-danger, #e5484d) 14%, transparent);
   font-size: 11px;
 }

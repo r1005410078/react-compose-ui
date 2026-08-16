@@ -19,6 +19,14 @@ export interface ComposeAnimationKeyframe {
 export interface ComposeAnimationClip {
   /** 在动画面板会话内稳定的标识。 */
   readonly id: string
+  /**
+   * 片段所属的对象轨道 ID。
+   *
+   * @remarks
+   * 必填而不是可选：可选字段会让"按 label 或 ID 前缀猜测归属"的分支永远留在代码里，
+   * 而那种猜测在宿主数据的标识恰好撞车时会把片段渲染到错误的行上。
+   */
+  readonly trackId: string
   /** 用户可见的片段名称。 */
   readonly label: string
   /** 片段在时间轴上的起始毫秒。 */

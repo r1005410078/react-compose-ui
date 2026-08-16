@@ -62,7 +62,6 @@ const messages = {
     duration: '尾帧时长',
     trackList: '动画轨道',
     toolbar: '时间线操作栏',
-    track: 'Fault',
     trackToggle: (name: string) => `展开或收起 ${name} 轨道`,
     selectTrack: (name: string) => `选择对象轨道 ${name}`,
     selectProperty: (name: string) => `选择属性轨道 ${name}`,
@@ -71,7 +70,6 @@ const messages = {
     soloTrack: (name: string) => `单独显示 ${name}`,
     hideTrack: (name: string) => `隐藏 ${name}`,
     propertyKeyframe: (name: string) => `${name} 关键帧标记`,
-    property: '背景填充',
     propertyField: '属性',
     interpolationRange: '曲线区间',
     keyframe: (timeMs: number, label: string) => `关键帧 ${timeMs} ms：${label}`,
@@ -108,7 +106,6 @@ const messages = {
     duration: 'End frame duration',
     trackList: 'Animation tracks',
     toolbar: 'Timeline toolbar',
-    track: 'Fault',
     trackToggle: (name: string) => `Expand or collapse ${name} track`,
     selectTrack: (name: string) => `Select object track ${name}`,
     selectProperty: (name: string) => `Select property track ${name}`,
@@ -117,7 +114,6 @@ const messages = {
     soloTrack: (name: string) => `Solo ${name}`,
     hideTrack: (name: string) => `Hide ${name}`,
     propertyKeyframe: (name: string) => `${name} keyframe marker`,
-    property: 'Background fill',
     propertyField: 'Property',
     interpolationRange: 'Curve range',
     keyframe: (timeMs: number, label: string) => `Keyframe ${timeMs} ms: ${label}`,
@@ -140,18 +136,15 @@ const messages = {
 
 type Locale = keyof typeof messages
 
-function displayTrackLabel(id: string, fallback: string, locale: Locale) {
-  return id === 'fault' ? messages[locale].track : fallback
-}
-
-function displayPropertyLabel(id: string, fallback: string, locale: Locale) {
-  return id === 'background-fill' ? messages[locale].property : fallback
-}
-
-/** 左侧列表主名称：优先 groupLabel（Rive 式 Position / Rotation）。 */
-function propertyListLabel(property: ComposeAnimationPropertyTrack, locale: Locale) {
-  if (property.groupLabel) return property.groupLabel
-  return displayPropertyLabel(property.id, property.label, locale)
+/**
+ * 左侧列表主名称：优先 groupLabel（Rive 式 Position / Rotation）。
+ *
+ * @remarks
+ * 名称一律来自会话数据。包内不再按 ID 匹配任何内置文案——那种映射会在宿主标识与演示数据
+ * 撞车时把用户自己的名称悄悄替换掉。
+ */
+function propertyListLabel(property: ComposeAnimationPropertyTrack) {
+  return property.groupLabel ?? property.label
 }
 
 /** 右侧展示值：显式 displayValue，否则取播放头附近关键帧 value。 */
@@ -599,7 +592,7 @@ export function ComposeAnimationTimeline({
         <div className="compose-animation-timeline__tracks">
           <div aria-label={t.trackList} className="compose-animation-timeline__track-list" role="list">
           {value.model.tracks.map((track) => {
-            const trackLabel = displayTrackLabel(track.id, track.label, locale)
+            const trackLabel = track.label
             const trackSelected = value.selectedTrackId === track.id
             const propertyInTrackSelected = track.properties.some((property) => property.id === value.selectedPropertyId)
             // 选中物体 / 其片段 / 其任一属性时，整组（含属性）共用浅底
@@ -675,8 +668,8 @@ export function ComposeAnimationTimeline({
                   </div>
                 </div>
                 {track.expanded ? track.properties.map((property, propertyIndex) => {
-                  const propertyLabel = displayPropertyLabel(property.id, property.label, locale)
-                  const listLabel = propertyListLabel(property, locale)
+                  const propertyLabel = property.label
+                  const listLabel = propertyListLabel(property)
                   const propertySelected = value.selectedPropertyId === property.id
                   const readout = propertyReadoutValue(property, value.currentTimeMs)
                   const isLast = propertyIndex === track.properties.length - 1
@@ -923,7 +916,7 @@ function TimelineScale({
         {value.model.tracks.map((track) => {
           // 片段按轨道 label / id 前缀归属；无匹配时该物体行不画片段条
           const trackClips = clips.filter((clip) => (
-            clip.label === track.label || clip.id.startsWith(`${track.id}-`) || clip.id.startsWith(track.id)
+            clip.trackId === track.id
           ))
           const propertyInTrackSelected = track.properties.some((property) => property.id === value.selectedPropertyId)
           const groupActive = value.selectedTrackId === track.id || propertyInTrackSelected
@@ -935,7 +928,7 @@ function TimelineScale({
             >
               {/* 动画片段：实心圆角色块 + 常驻竖线 trim 手柄；组选中底由 track-lanes 负责 */}
               {trackClips.map((clip) => {
-                const label = clip.label === 'Fault' ? t.track : clip.label
+                const label = clip.label
                 const startRatio = timelineRatio(clip.startTimeMs, value.model.durationMs)
                 const endRatio = timelineRatio(clip.endTimeMs, value.model.durationMs)
                 const selected = value.selectedClipId === clip.id
@@ -996,7 +989,7 @@ function TimelineScale({
               />
               {track.expanded ? track.properties.map((property) => {
                 const keyframes = [...property.keyframes].sort((left, right) => left.timeMs - right.timeMs)
-                const label = displayPropertyLabel(property.id, property.label, locale)
+                const label = property.label
                 const propertySelected = value.selectedPropertyId === property.id
                 return (
                   <div
@@ -1099,10 +1092,10 @@ export function ComposeAnimationInspector({
   const selectedProperty = selectedKeyframe?.property
   const selectedTrack = selectedKeyframe?.track
   const propertyLabel = selectedProperty
-    ? displayPropertyLabel(selectedProperty.id, selectedProperty.label, locale)
+    ? selectedProperty.label
     : ''
   const trackLabel = selectedTrack
-    ? displayTrackLabel(selectedTrack.id, selectedTrack.label, locale)
+    ? selectedTrack.label
     : ''
   const color = selectedKeyframe?.keyframe.value ?? '#FF6B6B'
   const interpolation = selectedKeyframe?.keyframe.interpolation ?? 'linear'

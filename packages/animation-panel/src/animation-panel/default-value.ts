@@ -54,10 +54,10 @@ export function createDefaultComposeAnimationPanelValue(): ComposeAnimationPanel
     model: {
       durationMs: 300,
       clips: [
-        { id: 'fault-animation', label: 'Fault', startTimeMs: 0, endTimeMs: 300 },
-        { id: 'rectangle-animation', label: 'Rectangle', startTimeMs: 0, endTimeMs: 240 },
-        { id: 'alarm-animation', label: 'Alarm', startTimeMs: 40, endTimeMs: 300 },
-        { id: 'text-title-animation', label: 'Title', startTimeMs: 20, endTimeMs: 280 },
+        { id: 'fault-animation', trackId: 'fault', label: 'Fault', startTimeMs: 0, endTimeMs: 300 },
+        { id: 'rectangle-animation', trackId: 'rectangle', label: 'Rectangle', startTimeMs: 0, endTimeMs: 240 },
+        { id: 'alarm-animation', trackId: 'alarm', label: 'Alarm', startTimeMs: 40, endTimeMs: 300 },
+        { id: 'text-title-animation', trackId: 'title', label: 'Title', startTimeMs: 20, endTimeMs: 280 },
       ],
       tracks: [
         track('fault', 'Fault', true, [

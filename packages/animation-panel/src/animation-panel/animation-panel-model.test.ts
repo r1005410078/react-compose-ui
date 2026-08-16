@@ -3,6 +3,7 @@ import {
   addComposeAnimationKeyframe,
   advanceComposeAnimationPlayback,
   clampComposeAnimationPixelsPerMs,
+  getComposeAnimationClips,
   panComposeAnimationTimeline,
   updateComposeAnimationDuration,
   updateComposeAnimationClip,
@@ -172,5 +173,34 @@ describe('animation panel model', () => {
     // 平移量能让滚动位置越界时钳制在 0 和 maxScrollLeft 之间。
     expect(panComposeAnimationTimeline(10, -50, 700, 300, 10)).toBe(0)
     expect(panComposeAnimationTimeline(2900, 50, 700, 300, 10)).toBe(2300)
+  })
+})
+
+describe('片段与轨道的显式归属', () => {
+  const model = {
+    durationMs: 300,
+    tracks: [
+      { id: 'a', label: 'A', expanded: true, properties: [] },
+      { id: 'b', label: 'A', expanded: true, properties: [] },
+    ],
+  }
+
+  it('OpenSpec: animation-panel / 显式片段归属与宿主提供的文案 / 缺省片段按轨道各生成一条', () => {
+    const clips = getComposeAnimationClips(model)
+    expect(clips.map((clip) => clip.trackId)).toEqual(['a', 'b'])
+    expect(clips.every((clip) => clip.startTimeMs === 0 && clip.endTimeMs === 300)).toBe(true)
+  })
+
+  it('OpenSpec: animation-panel / 显式片段归属与宿主提供的文案 / 同名轨道不会互相认领片段', () => {
+    // 两条轨道 label 相同：按 label 猜测归属的旧启发式会把两条片段都算到第一条轨道上。
+    const clips = getComposeAnimationClips({
+      ...model,
+      clips: [
+        { id: 'c1', trackId: 'b', label: 'A', startTimeMs: 0, endTimeMs: 100 },
+        { id: 'c2', trackId: 'a', label: 'A', startTimeMs: 100, endTimeMs: 200 },
+      ],
+    })
+    expect(clips.filter((clip) => clip.trackId === 'a').map((clip) => clip.id)).toEqual(['c2'])
+    expect(clips.filter((clip) => clip.trackId === 'b').map((clip) => clip.id)).toEqual(['c1'])
   })
 })

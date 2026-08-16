@@ -251,7 +251,7 @@ describe('ComposeAnimationPanel', () => {
     expect(playhead).toHaveValue('300')
   })
 
-  it('OpenSpec: animation-panel / 默认关键帧演示时间线 / 支持受控状态与共享国际化', () => {
+  it('OpenSpec: animation-panel / 由宿主提供的轨道文案 / 受控状态与宿主文案原样显示', () => {
     const value = createDefaultComposeAnimationPanelValue()
     const onValueChange = vi.fn()
     render(
@@ -263,7 +263,8 @@ describe('ComposeAnimationPanel', () => {
       </ComposeUIProvider>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keyframe 100 ms: Background fill' }))
+    // 属性名来自会话数据，en-US 下也不做替换——包内不再内置任何按 ID 匹配的文案映射。
+    fireEvent.click(screen.getByRole('button', { name: 'Keyframe 100 ms: 背景填充' }))
     expect(onValueChange).toHaveBeenCalledWith(expect.objectContaining({
       currentTimeMs: 200,
       selectedKeyframeId: 'fault-background-fill-100',

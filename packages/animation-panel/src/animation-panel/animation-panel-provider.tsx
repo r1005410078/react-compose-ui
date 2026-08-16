@@ -124,10 +124,8 @@ export function AnimationPanelProvider({
     const current = valueRef.current
     if (!current.model.tracks.some((track) => track.id === trackId)) return
     setNotice(null)
-    const track = current.model.tracks.find((candidate) => candidate.id === trackId)
-    const clipId = getComposeAnimationClips(current.model).find((clip) => (
-      clip.label === track?.label || clip.id.startsWith(trackId)
-    ))?.id ?? getComposeAnimationClips(current.model)[0]?.id ?? null
+    const clipId = getComposeAnimationClips(current.model)
+      .find((clip) => clip.trackId === trackId)?.id ?? null
     commit({
       ...current,
       selectedTrackId: trackId,
@@ -153,9 +151,9 @@ export function AnimationPanelProvider({
     const current = valueRef.current
     const clip = getComposeAnimationClips(current.model).find((candidate) => candidate.id === clipId)
     if (!clip) return
-    const trackId = current.model.tracks.find((track) => (
-      track.label === clip.label || clip.id.startsWith(track.id)
-    ))?.id ?? current.model.tracks[0]?.id ?? null
+    const trackId = current.model.tracks.some((track) => track.id === clip.trackId)
+      ? clip.trackId
+      : null
     setNotice(null)
     commit({
       ...current,

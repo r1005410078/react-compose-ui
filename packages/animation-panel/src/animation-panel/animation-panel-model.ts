@@ -8,12 +8,15 @@ import type {
 
 /** 返回显式片段；旧会话没有片段时提供覆盖全时长的兼容默认值。 */
 export function getComposeAnimationClips(model: ComposeAnimationPanelModel): readonly ComposeAnimationClip[] {
-  return model.clips ?? [{
-    id: 'default-animation',
-    label: 'Animation',
+  // 未显式提供片段时，每条对象轨道各自获得一条覆盖全时长的片段——片段必须有归属轨道，
+  // 用一条全局片段会让多轨道会话无处安放它。
+  return model.clips ?? model.tracks.map((track) => ({
+    id: `${track.id}-clip`,
+    trackId: track.id,
+    label: track.label,
     startTimeMs: 0,
     endTimeMs: model.durationMs,
-  }]
+  }))
 }
 
 export type ComposeAnimationKeyframeLocation = {

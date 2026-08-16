@@ -10,11 +10,11 @@
 
 ## 2. animation-panel 基础改造（吸收 update-animation-panel-foundation）
 
-- [ ] 2.1 Red：light 主题下关键前景色的双主题 Story 与断言。
-- [ ] 2.2 Green：`styles.css` 硬编码前景色全部换成 `--compose-*` token。
-- [ ] 2.3 Red：多轨道各自渲染片段、选择片段联动轨道的模型与组件测试。
-- [ ] 2.4 Green：`ComposeAnimationClip.trackId` 改必填，删除 label / ID 前缀启发式。
-- [ ] 2.5 Green：删除 `displayTrackLabel` / `displayPropertyLabel` 白名单与内置演示文案。
+- [x] 2.1 Red：light 主题下关键前景色的双主题 Story 与断言。
+- [x] 2.2 Green：`styles.css` 硬编码前景色全部换成 `--compose-*` token。
+- [x] 2.3 Red：多轨道各自渲染片段、选择片段联动轨道的模型与组件测试。
+- [x] 2.4 Green：`ComposeAnimationClip.trackId` 改必填，删除 label / ID 前缀启发式。
+- [x] 2.5 Green：删除 `displayTrackLabel` / `displayPropertyLabel` 白名单与内置演示文案。
 - [ ] 2.6 Red：超出可视高度的多轨道滚动对齐测试（基线：左栏滚动 80px 后右栏行位置必须同步位移）。
 - [ ] 2.7 Green：重排双栏 DOM，共用同一条垂直滚动。
 - [ ] 2.8 给 `package.json` 增加 `@compose-ui/components` 依赖并在 vite 外置；
