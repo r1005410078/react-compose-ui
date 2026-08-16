@@ -14,6 +14,10 @@ import {
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
+import { createComposeAnimationCommandHandlers } from '@compose-ui/animation'
+import { useAnimationLayout } from '../animation-mode/use-animation-layout'
+import { useAnimationMode } from '../animation-mode/use-animation-mode'
+import { createAnimationFieldAdornment } from '../animation-mode/animation-field-adornment'
 import {
   ComposeDialog,
   ComposeDialogBackdrop,
@@ -363,6 +367,64 @@ export function ComposeEditor({
     () => getEditorMessages(resolvedPreferences.locale, hostI18n?.formatMessage),
     [hostI18n?.formatMessage, resolvedPreferences.locale],
   )
+  // 动画命令 handler 注册进宿主提供的运行时；卸载或换 runtime 时注销。
+  // 宿主若已自行注册同名 handler，跳过重复注册而不是让编辑器挂载崩溃。
+  const animationRuntime = controller?.runtime
+  useEffect(() => {
+    if (!animationRuntime) return
+    const disposers: (() => void)[] = []
+    for (const handler of createComposeAnimationCommandHandlers()) {
+      try {
+        disposers.push(animationRuntime.registerHandler(handler))
+      }
+      catch {
+        // 已注册：宿主拥有该命令的实现，编辑器不抢。
+      }
+    }
+    return () => disposers.forEach((dispose) => dispose())
+  }, [animationRuntime])
+
+  // ref 必须先于 useAnimationMode 初始化：propertyLabel 在同一渲染趟内就会被面板模型 memo 调用。
+  const editorMessagesRef = useRef(editorMessages)
+  useEffect(() => {
+    editorMessagesRef.current = editorMessages
+  }, [editorMessages])
+  const animationPropertyLabel = useCallback((path: readonly (string | number)[]) => {
+    const key = path.map(String).join('.')
+    const labels = editorMessagesRef.current.animationMode
+    if (key === 'LayoutItem.offset') {
+      return { label: labels.propertyPosition, groupLabel: labels.propertyPosition }
+    }
+    if (key === 'Transform.rotation') return { label: labels.propertyRotation }
+    if (key === 'LayoutItem.width.value') return { label: labels.propertyWidth }
+    if (key === 'LayoutItem.height.value') return { label: labels.propertyHeight }
+    if (key === 'Appearance.opacity') return { label: labels.propertyOpacity }
+    if (key === 'Appearance.backgroundPaint.color') {
+      return { label: labels.propertyBackgroundColor }
+    }
+    return null
+  }, [])
+  const animationMode = useAnimationMode({
+    document: controller?.document,
+    dispatch: animationRuntime
+      ? (command) => animationRuntime.dispatch(command)
+      : undefined,
+    idFactory: () => (typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `animation-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+    defaultAnimationName: editorMessages.animationMode.defaultAnimationName,
+    propertyLabel: animationPropertyLabel,
+  })
+  const animationLayout = useAnimationLayout(
+    animationMode.displayDocument,
+    animationMode.active && animationMode.animationId !== null,
+  )
+  // onReady 只执行一次，闭包里不能捕获会随渲染更新的 animationMode。
+  const animationModeRef = useRef(animationMode)
+  useEffect(() => {
+    animationModeRef.current = animationMode
+  }, [animationMode])
+
   /** 当前活动的 Dockview 面板 ID；页面工作区据此判定活动页面。 */
   const [activeDocumentPanelId, setActiveDocumentPanelId] = useState<string | null>(null)
   /** 页面读取或保存失败的非阻断提示。 */
@@ -1392,10 +1454,28 @@ export function ComposeEditor({
     void applyInstanceOverrides(propertyIds)
   }, [applyInstanceOverrides])
 
+  // 动画模式下注入属性面板的菱形装饰：单选普通 Entity 才有意义，实例内部选择的
+  // 复合地址不对应文档 Entity，命令会被拒绝，不如不显示。
+  const animationFieldAdornment = useMemo(() => {
+    if (!animationMode.active || !animationMode.animationId || !controller) return undefined
+    if (controller.selectedIds.length !== 1 || controller.instanceInnerSelection) return undefined
+    const entityId = controller.selectedIds[0]!
+    if (!controller.document.entities[entityId]) return undefined
+    return createAnimationFieldAdornment({
+      session: animationMode,
+      document: controller.document,
+      entityId,
+      messages: editorMessages.animationMode,
+    })
+  }, [animationMode, controller, editorMessages.animationMode])
+
   const resolvedInspectorPanel = useMemo(() => {
     const authoredInspector = slots?.inspector !== undefined
       ? slots.inspector
-      : addDefaultElementProps(controller?.inspectorPanel, { pageScriptInspector })
+      : addDefaultElementProps(controller?.inspectorPanel, {
+          pageScriptInspector,
+          fieldAdornment: animationFieldAdornment,
+        })
     const entityInspector = authoredInspector === undefined
       ? undefined
       : providePaintImageLibrary(authoredInspector, resolvedPaintImageLibrary)
@@ -1458,6 +1538,7 @@ export function ComposeEditor({
     selectedComponentInstance,
     updateComponentInstance,
     updateInstanceOverrides,
+    animationFieldAdornment,
   ])
 
   const resolvedComponentLibraryPanel = slots?.componentLibrary !== undefined
@@ -1543,6 +1624,18 @@ export function ComposeEditor({
     event.api.onDidActivePanelChange?.((change) => {
       const panelId = change.panel?.id
       if (panelId === undefined) return
+      // 底部工具组内的标签切换驱动动画模式：动画标签活动即进入，切到组内其它标签即退出。
+      // 组外面板（画布、场景树等）不改变底部组的可见标签，因此不触碰模式状态。
+      if (panelId === WORKSPACE_PANEL_IDS.animation) {
+        animationModeRef.current.setActive(true)
+      }
+      else if (
+        panelId === WORKSPACE_PANEL_IDS.transactionLog
+        || panelId === WORKSPACE_PANEL_IDS.command
+        || panelId === WORKSPACE_PANEL_IDS.assetBrowser
+      ) {
+        animationModeRef.current.setActive(false)
+      }
       if (
         !isWorkspaceDocumentPanelId(panelId)
         && !(pages === undefined && panelId === WORKSPACE_PANEL_IDS.canvas)
@@ -1578,9 +1671,29 @@ export function ComposeEditor({
           onToolChange: controller?.setTool,
           scriptModuleLoader: pages?.scriptModuleLoader,
           scriptScope: activePageSession?.scriptScope,
+          // 动画模式：画布显示播放头时刻的采样文档与配套布局；dispatch 不变，仍打在基础文档上。
+          ...(animationMode.active && animationMode.animationId && animationMode.displayDocument
+            ? {
+                document: animationMode.displayDocument,
+                layoutSnapshot: animationLayout.state?.status === 'ready'
+                  ? animationLayout.state.snapshot
+                  : undefined,
+              }
+            : {}),
           shortcuts: resolvedPreferences.shortcuts,
         }),
       inspectorPanel: resolvedInspectorPanel,
+      // 空动画的创建引导：有 controller 才给 CTA（创建要派发命令）；纯插槽宿主看到中性提示。
+      animationEmptyState: controller
+        ? (
+            <div className="compose-editor__animation-empty">
+              <p>{editorMessages.animationMode.emptyTimeline}</p>
+              <ComposeButton size="sm" variant="secondary" onClick={animationMode.createAnimation}>
+                {editorMessages.animationMode.createAnimation}
+              </ComposeButton>
+            </div>
+          )
+        : undefined,
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
         ? slots.command
@@ -1838,7 +1951,15 @@ export function ComposeEditor({
           if (resolvedHistory && !event.defaultPrevented) handleHistoryShortcut(event)
         }}
       >
-        <ComposeAnimationPanelProvider>
+        <ComposeAnimationPanelProvider
+          {...(animationMode.panelValue
+            ? {
+                value: animationMode.panelValue,
+                onValueChange: animationMode.onPanelValueChange,
+                onAction: animationMode.onPanelAction,
+              }
+            : {})}
+        >
         <WorkspaceContentContext.Provider value={content}>
           <div
             className="compose-editor__workspace"

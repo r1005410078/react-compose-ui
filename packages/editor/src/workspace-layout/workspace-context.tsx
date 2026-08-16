@@ -24,6 +24,8 @@ export interface WorkspaceContent {
   stageToolbar?: ReactNode
   children?: ReactNode
   inspectorPanel?: ReactNode
+  /** 文档无动画时时间线的创建引导；缺省时面板显示中性空提示。 */
+  animationEmptyState?: ReactNode
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
   assetBrowserPanel?: ReactNode

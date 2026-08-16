@@ -47,26 +47,26 @@
 
 ## 4. editor 动画模式
 
-- [ ] 4.1 新建 `packages/editor/src/animation-mode/animation-mode-state.ts`：
+- [x] 4.1 新建 `packages/editor/src/animation-mode/animation-mode-state.ts`：
   `active` 由底部动画标签是否活动派生，会话状态含 `animationId`、`playheadMs`、
   `isPlaying`、`autoRecord`、选择。播放头单独用一个 context 暴露，避免整个 controller 重渲。
-- [ ] 4.2 Red：`animation-document-adapter` 的纯函数测试——文档动画 → 面板会话值
+- [x] 4.2 Red：`animation-document-adapter` 的纯函数测试——文档动画 → 面板会话值
   （对象轨道取 Entity 名称、vector2 展开成两行共享 `propertyId`）与反向的动作 → 命令翻译。
-- [ ] 4.3 Green：实现 `animation-document-adapter.ts`。
-- [ ] 4.4 Red：`animation-key-state.ts` 的四态测试，含 `flow` 定位与 `fill`/`hug` 尺寸的
+- [x] 4.3 Green：实现 `animation-document-adapter.ts`。
+- [x] 4.4 Red：`animation-key-state.ts` 的四态测试，含 `flow` 定位与 `fill`/`hug` 尺寸的
   `unavailable`。
-- [ ] 4.5 Green：实现 `animation-key-state.ts` 与 `animation-key-button.tsx`
+- [x] 4.5 Green：实现 `animation-key-state.ts` 与 `animation-key-button.tsx`
   （本地化 accessible name、禁用态说明原因）。
-- [ ] 4.6 Green：`use-animated-document.ts` —— 动画模式下用 `@compose-ui/animation` 的
+- [x] 4.6 Green：`use-animated-document.ts` —— 动画模式下用 `@compose-ui/animation` 的
   `applyComposeAnimationAtTime` 派生文档喂给 Stage / LayoutRuntime / Preview，
   dispatch 保持指向基础文档。
-- [ ] 4.7 接线：`entity-inspector.tsx` 按 section 的 `componentKey` 把相对 `PropertyPath`
+- [x] 4.7 接线：`entity-inspector.tsx` 按 section 的 `componentKey` 把相对 `PropertyPath`
   拼成 Entity 内路径后交给 `renderFieldAdornment`，只在白名单路径上渲染菱形；
   `controller.tsx` 注入插槽；`workspace-panels.tsx` 的 `AnimationPanel` 改为受控；
   `compose-editor.tsx` 的 `ComposeAnimationPanelProvider` 从零 props 改为受控。
-- [ ] 4.8 Red/Green：空状态与创建引导——无动画时渲染引导，触发创建派发
+- [x] 4.8 Red/Green：空状态与创建引导——无动画时渲染引导，触发创建派发
   `animation.create` 并自动选中新动画，撤销回到空状态。
-- [ ] 4.9 新增编辑器 i18n 文案：菱形四态、动画模式提示、自动记录、空状态与创建引导。
+- [x] 4.9 新增编辑器 i18n 文案：菱形四态、动画模式提示、自动记录、空状态与创建引导。
 
 ## 5. 自动记录
 

@@ -58,11 +58,12 @@ Rive 只有三态。本项目多一个 `unavailable`：`LayoutItem.offset` 只�
 下参与求解，`width/height.value` 只在 `mode: 'fixed'` 下生效。在 Flow 布局或 Fill/Hug 尺寸下
 打点会产生一条永远看不到效果的轨道，所以菱形置灰禁用并给出说明性 accessible name。
 
-### 决策：vector2 轨道在时间线上显示成两行，但共享一个 `propertyId`
+### 决策：vector2 轨道在时间线上是单行，分量编辑在关键帧属性面板
 
-`ComposeAnimationPropertyTrack` 已有 `groupLabel` + `channel`，足以显示 `Position · X` /
-`Position · Y`。两行指向同一条轨道，因此关键帧在两行上同步出现、同步移动——这正确反映了
-"位置是一个二维量"的事实，也避免了用户在 X 行删掉一个帧而 Y 行还留着。
+最初设想显示成 `Position · X` / `Position · Y` 两行（Rive 式），但面板的轨道模型是
+"一条轨道一行"，两行同步渲染需要给面板发明一套行分身与选中/拖拽联动机制。放弃：
+单行 `Position` 轨道 + Inspector 的 X/Y 双分量输入表达同样的事实，代价小一个量级，
+且天然避免"删了 X 行的帧、Y 行还留着"的伪状态。
 
 ## 风险/权衡
 

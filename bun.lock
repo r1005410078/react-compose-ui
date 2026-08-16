@@ -196,6 +196,7 @@
       "name": "@compose-ui/editor",
       "version": "0.1.0",
       "dependencies": {
+        "@compose-ui/animation": "workspace:*",
         "@compose-ui/animation-panel": "workspace:*",
         "@compose-ui/asset-browser": "workspace:*",
         "@compose-ui/assets": "workspace:*",

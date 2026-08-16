@@ -1423,3 +1423,51 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* —— 动画模式 —— */
+.compose-editor__animation-empty {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+/*
+ * 菱形打点按钮四态（对齐 Rive key 按钮语义）：
+ * none 灰描边、animated 蓝描边、keyed 蓝实心、unavailable 置灰禁用。
+ */
+.compose-editor__animation-key {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  color: var(--compose-text-muted, #7a7a7a);
+  background: transparent;
+  place-items: center;
+  cursor: pointer;
+}
+.compose-editor__animation-key svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+}
+.compose-editor__animation-key[data-key-state='animated'] {
+  color: var(--compose-accent, #3b8ef0);
+}
+.compose-editor__animation-key[data-key-state='keyed'] {
+  color: var(--compose-accent, #3b8ef0);
+}
+.compose-editor__animation-key[data-key-state='keyed'] svg {
+  fill: currentColor;
+}
+.compose-editor__animation-key[data-key-state='unavailable'] {
+  opacity: .4;
+  cursor: not-allowed;
+}
+.compose-editor__animation-key:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--compose-accent, #3b8ef0);
+  border-radius: 2px;
+}

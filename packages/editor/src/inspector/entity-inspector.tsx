@@ -28,6 +28,7 @@ import {
   ComposePropertyPanelRoot,
   ComposePropertyPanelSection,
 } from '@compose-ui/property-panel'
+import type { ComposePropertyPanelFieldAdornmentRenderer } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import {
@@ -73,6 +74,14 @@ interface EntityInspectorProps {
   readonly hiddenComponentKeys?: readonly string[]
   /** 不渲染名称等身份字段。 */
   readonly hideIdentity?: boolean
+  /**
+   * 注入到每个属性分组的字段装饰（动画模式的打点菱形等）。
+   *
+   * @remarks
+   * 分组内容由 Registry Inspector 构造，宿主拿不到那些面板实例；经 Section 的
+   * `renderFieldAdornment` 下发。装饰闭包只看字段相对路径，不区分 Component 分组。
+   */
+  readonly fieldAdornment?: ComposePropertyPanelFieldAdornmentRenderer
   /**
    * 外壳形态。
    *
@@ -207,6 +216,7 @@ export function EntityInspector({
   headerTrailing,
   banner,
   statusSlot,
+  fieldAdornment,
 }: EntityInspectorProps) {
   const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
   const locked = getComposeLock(entity).locked
@@ -268,7 +278,11 @@ export function EntityInspector({
   const sections = (
     <>
       {hideIdentity === true && visibleBasicDefinitions.length === 0 ? null : (
-        <ComposePropertyPanelSection defaultExpanded title={zh ? '基础' : 'Identity'}>
+        <ComposePropertyPanelSection
+          defaultExpanded
+          renderFieldAdornment={fieldAdornment}
+          title={zh ? '基础' : 'Identity'}
+        >
           {hideIdentity === true ? null : (
             <IdentityInspector
               dispatch={dispatch}
@@ -358,6 +372,7 @@ export function EntityInspector({
             // 有内容的分组默认展开；定义可显式覆盖。
             defaultExpanded={definition.inspectorDefaultExpanded ?? true}
             key={definition.key}
+            renderFieldAdornment={fieldAdornment}
             title={definition.label}
           >
             <ComposeRegistryComponentInspector

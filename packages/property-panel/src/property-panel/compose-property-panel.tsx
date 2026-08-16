@@ -517,6 +517,7 @@ interface PropertyPanelSectionView {
   readonly onVisibilityChange: (source: symbol, visible: boolean | undefined) => void
   readonly unregisterVisibility: (source: symbol) => void
   readonly title: string
+  readonly renderFieldAdornment?: PropertyPanelFieldAdornmentRenderer
 }
 
 const PropertyPanelRootContext = createContext<PropertyPanelRootView | null>(null)
@@ -554,6 +555,15 @@ export interface ComposePropertyPanelSectionProps {
   title: string
   /** 初次挂载时是否展开。 @defaultValue true */
   defaultExpanded?: boolean
+  /**
+   * 注入到本 Section 内全部嵌入面板的字段装饰。
+   *
+   * @remarks
+   * Section 的内容通常由领域包（Registry Inspector）构造，宿主拿不到那些
+   * `ComposePropertyPanel` 实例的 props；经 Section 下发让宿主按分组绑定装饰闭包。
+   * 嵌入面板自己的 `renderFieldAdornment` 优先。
+   */
+  renderFieldAdornment?: PropertyPanelFieldAdornmentRenderer
 }
 
 /**
@@ -819,6 +829,7 @@ export function ComposePropertyPanelSection({
   children,
   title,
   defaultExpanded = true,
+  renderFieldAdornment,
 }: ComposePropertyPanelSectionProps) {
   const root = useContext(PropertyPanelRootContext)
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -845,7 +856,8 @@ export function ComposePropertyPanelSection({
     onVisibilityChange,
     unregisterVisibility,
     title,
-  }), [onVisibilityChange, title, unregisterVisibility])
+    renderFieldAdornment,
+  }), [onVisibilityChange, renderFieldAdornment, title, unregisterVisibility])
   if (!root) {
     return (
       <PropertyPanelSectionContext.Provider value={context}>
@@ -993,7 +1005,7 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
     <PropertyTree
       actionWidth={root.actionWidth}
       binding={binding}
-      renderFieldAdornment={renderFieldAdornment}
+      renderFieldAdornment={renderFieldAdornment ?? section.renderFieldAdornment}
       commit={commit}
       defaultValue={defaultValue}
       filter={root.filter}

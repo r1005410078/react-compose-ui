@@ -328,9 +328,10 @@ export function InspectorPanel() {
 
 /** 底部动画时间线。右侧属性区不随动画标签切换，关键帧属性由宿主自行嵌入。 @internal */
 export function AnimationPanel() {
+  const { animationEmptyState } = useWorkspaceContent()
   return (
     <div className="compose-editor__panel" data-workspace-panel="animation">
-      <ComposeAnimationTimeline />
+      <ComposeAnimationTimeline emptyState={animationEmptyState} />
     </div>
   )
 }

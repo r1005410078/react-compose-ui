@@ -64,6 +64,22 @@ const messages = {
       assetBrowserEmpty: '连接资源 Provider 以浏览文件',
       selectNode: '选择一个组件以编辑其属性',
     },
+    animationMode: {
+      emptyTimeline: '当前页面还没有动画',
+      propertyPosition: '位置',
+      propertyRotation: '旋转',
+      propertyWidth: '宽度',
+      propertyHeight: '高度',
+      propertyOpacity: '透明度',
+      propertyBackgroundColor: '背景色',
+      createAnimation: '创建动画',
+      defaultAnimationName: '动画 1',
+      keyNone: (label: string) => `为 ${label} 添加关键帧`,
+      keyAnimated: (label: string) => `在当前播放头为 ${label} 添加关键帧`,
+      keyKeyed: (label: string) => `删除 ${label} 在当前播放头的关键帧`,
+      keyUnavailable: (label: string) => `${label} 在当前布局配置下不参与求解，无法添加关键帧`,
+      autoRecord: '自动记录',
+    },
     stageToolbar: {
       label: 'Stage 工具栏',
       interactionTools: '交互工具',
@@ -236,6 +252,23 @@ const messages = {
       commandEmpty: 'Command content',
       assetBrowserEmpty: 'Connect an asset provider to browse files',
       selectNode: 'Select one component to edit its properties',
+    },
+    animationMode: {
+      emptyTimeline: 'No animation on this page yet',
+      propertyPosition: 'Position',
+      propertyRotation: 'Rotation',
+      propertyWidth: 'Width',
+      propertyHeight: 'Height',
+      propertyOpacity: 'Opacity',
+      propertyBackgroundColor: 'Background color',
+      createAnimation: 'Create animation',
+      defaultAnimationName: 'Animation 1',
+      keyNone: (label: string) => `Add keyframe for ${label}`,
+      keyAnimated: (label: string) => `Add keyframe for ${label} at current playhead`,
+      keyKeyed: (label: string) => `Remove ${label} keyframe at current playhead`,
+      keyUnavailable: (label: string) =>
+        `${label} does not participate in layout under the current configuration; keyframes are unavailable`,
+      autoRecord: 'Auto record',
     },
     stageToolbar: {
       label: 'Stage toolbar',
@@ -617,6 +650,36 @@ export function getEditorMessages(
         format(`workspace.${key}`, fallback),
       ]),
     ) as Record<keyof typeof current.workspace, string>,
+    animationMode: {
+      emptyTimeline: format('animationMode.emptyTimeline', current.animationMode.emptyTimeline),
+      propertyPosition: format('animationMode.propertyPosition', current.animationMode.propertyPosition),
+      propertyRotation: format('animationMode.propertyRotation', current.animationMode.propertyRotation),
+      propertyWidth: format('animationMode.propertyWidth', current.animationMode.propertyWidth),
+      propertyHeight: format('animationMode.propertyHeight', current.animationMode.propertyHeight),
+      propertyOpacity: format('animationMode.propertyOpacity', current.animationMode.propertyOpacity),
+      propertyBackgroundColor: format(
+        'animationMode.propertyBackgroundColor',
+        current.animationMode.propertyBackgroundColor,
+      ),
+      createAnimation: format('animationMode.createAnimation', current.animationMode.createAnimation),
+      defaultAnimationName: format(
+        'animationMode.defaultAnimationName',
+        current.animationMode.defaultAnimationName,
+      ),
+      autoRecord: format('animationMode.autoRecord', current.animationMode.autoRecord),
+      keyNone: (label: string) => withVariables(
+        'animationMode.keyNone', current.animationMode.keyNone(label), { label },
+      ),
+      keyAnimated: (label: string) => withVariables(
+        'animationMode.keyAnimated', current.animationMode.keyAnimated(label), { label },
+      ),
+      keyKeyed: (label: string) => withVariables(
+        'animationMode.keyKeyed', current.animationMode.keyKeyed(label), { label },
+      ),
+      keyUnavailable: (label: string) => withVariables(
+        'animationMode.keyUnavailable', current.animationMode.keyUnavailable(label), { label },
+      ),
+    },
     stageToolbar: Object.fromEntries(
       Object.entries(current.stageToolbar).map(([key, fallback]) => [
         key,
