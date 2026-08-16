@@ -20,7 +20,7 @@ import {
   zoomComposeAnimationTimelineAt,
 } from './animation-panel-model'
 import { AnimationPanelProvider } from './animation-panel-provider'
-import { ComposeButton } from '@compose-ui/components'
+import { ComposeButton, ComposeColorPicker } from '@compose-ui/components'
 import { CommittedInput } from './committed-input'
 import {
   ChevronIcon,
@@ -1237,27 +1237,18 @@ export function ComposeAnimationInspector({
         <label><span>{t.propertyField}</span><input aria-label={t.propertyField} readOnly value={propertyLabel} /></label>
         {interpolationRange ? <label><span>{t.interpolationRange}</span><input aria-label={t.interpolationRange} readOnly value={interpolationRange} /></label> : null}
         {valueKind === 'color' ? (
-          <label>
+          <div className="compose-animation-inspector__color-field" role="group">
             <span>{t.value}</span>
-            <span className="compose-animation-inspector__color-field">
-              <i
-                aria-hidden="true"
-                style={{ backgroundColor: typeof keyframeValue === 'string' ? keyframeValue : undefined }}
-              />
-              <CommittedInput
-                aria-label={t.value}
-                key={`${selectedKeyframe?.keyframe.id ?? 'none'}-${String(keyframeValue)}`}
-                readOnly={!selectedKeyframe}
-                spellCheck={false}
-                value={typeof keyframeValue === 'string' ? keyframeValue : ''}
-                onCommit={(draft) => {
-                  const next = draft.trim().toUpperCase()
-                  if (!/^#[0-9A-F]{6}$/.test(next)) return false
-                  return updateSelectedKeyframe({ value: next })
-                }}
-              />
-            </span>
-          </label>
+            <ComposeColorPicker
+              key={selectedKeyframe?.keyframe.id ?? 'none'}
+              label={t.value}
+              readOnly={!selectedKeyframe}
+              value={typeof keyframeValue === 'string' ? keyframeValue : '#000000'}
+              onValueChange={(next) => {
+                updateSelectedKeyframe({ value: next })
+              }}
+            />
+          </div>
         ) : null}
         {valueKind === 'number' ? (
           <label>

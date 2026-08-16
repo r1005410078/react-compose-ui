@@ -1041,32 +1041,14 @@
   color: var(--ap-muted);
   font-size: 11px;
 }
+/* 颜色值行：布局与 label 行一致，控件本体是共享的 ComposeColorPicker。 */
 .compose-animation-inspector__color-field {
-  display: flex;
-  height: 28px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
   align-items: center;
-  padding-left: 6px;
-  border: 1px solid var(--ap-border);
-  border-radius: 3px;
-  background: var(--ap-control);
-}
-.compose-animation-inspector__color-field:focus-within {
-  border-color: var(--ap-accent);
-  box-shadow: 0 0 0 1px var(--ap-focus-ring);
-}
-.compose-animation-inspector__color-field > i {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  border: 1px solid rgb(255 255 255 / 28%);
-  border-radius: 2px;
-  box-shadow: none;
-}
-.compose-animation-inspector__color-field input {
-  height: 26px;
-  border: 0;
-  background: transparent;
-  box-shadow: none !important;
+  gap: 8px;
+  color: var(--ap-muted);
+  font-size: 11px;
 }
 .compose-animation-inspector__easing-editor {
   margin: 2px 12px 12px;

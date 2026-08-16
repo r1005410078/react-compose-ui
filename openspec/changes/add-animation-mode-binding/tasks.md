@@ -25,7 +25,7 @@
 - [x] 2.8c 图标按钮、播放模式与轨道动作按钮改用 `ComposeButton variant="ghost" size="icon-xs"`；
   面板样式表补 `@import '@compose-ui/components/styles.css'`（dist JS 不携带 CSS），
   删除会压过 layered 工具类的无 layer chrome 规则，保留尺寸覆盖、SVG 描边与状态色。
-- [ ] 2.8d 颜色字段改用 `ComposeColorPicker`（等第 3 节 `valueKind` 落地后一起做，
+- [x] 2.8d 颜色字段改用 `ComposeColorPicker`（等第 3 节 `valueKind` 落地后一起做，
   届时颜色控件只在 `valueKind === 'color'` 的轨道上出现）。
 - [ ] 2.8e 轨道与属性行的"更多操作"菜单——**阻塞**：`update-animation-panel-foundation`
   的 design.md 把"菜单应提供哪些具体动作"列为待产品确认的开放问题，未定义动作前

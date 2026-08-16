@@ -47,7 +47,8 @@ describe('ComposeAnimationPanel', () => {
       .toHaveAttribute('aria-current', 'true')
     expect(screen.getByText('Fault / 背景填充')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('200')
-    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#FF6B6B')
+    // 颜色轨道的值控件是共享 ComposeColorPicker 的触发器。
+    expect(screen.getByRole('button', { name: '选择值颜色' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('linear')
   })
 
@@ -107,7 +108,10 @@ describe('ComposeAnimationPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关键帧 100 ms：背景填充' }))
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('100')
-    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#00AA11')
+    // 取色器触发器的色块反映该关键帧自己的颜色值。
+    expect(
+      screen.getByRole('button', { name: '选择值颜色' }).querySelector('.compose-color-picker__swatch'),
+    ).toHaveStyle({ backgroundColor: '#00aa11' })
     expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('cubic')
   })
 
@@ -438,27 +442,23 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('button', { name: '暂停动画' })).toBeInTheDocument()
   })
 
-  it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 颜色字段允许输入中间态并在提交时生效', () => {
+  it('OpenSpec: animation-panel / 复用共享交互组件 / 颜色字段使用共享取色器', () => {
     render(
       <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
     )
-    const color = screen.getByRole('textbox', { name: '值' })
 
-    // 半成品颜色必须能停留在输入框里，而不是被立即回滚。
-    fireEvent.change(color, { target: { value: '#FF6B6' } })
-    expect(color).toHaveValue('#FF6B6')
+    // 触发器打开共享 ComposeColorPicker 的 Popover。
+    fireEvent.click(screen.getByRole('button', { name: '选择值颜色' }))
+    expect(screen.getByRole('dialog', { name: '值颜色' })).toBeInTheDocument()
 
-    fireEvent.change(color, { target: { value: '#00aa11' } })
-    fireEvent.blur(color)
-    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#00AA11')
-
-    const committed = screen.getByRole('textbox', { name: '值' })
-    fireEvent.change(committed, { target: { value: '不是颜色' } })
-    fireEvent.blur(committed)
-    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#00AA11')
+    // 点击常用色即提交为会话值，触发器色块随之更新。
+    fireEvent.click(screen.getByRole('button', { name: '#22c55e' }))
+    expect(
+      screen.getByRole('button', { name: '选择值颜色' }).querySelector('.compose-color-picker__swatch'),
+    ).toHaveStyle({ backgroundColor: '#22c55e' })
   })
 
   it('OpenSpec: animation-panel / 关键帧时间调整 / 时间字段在提交前不移动关键帧', () => {
