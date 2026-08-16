@@ -11,6 +11,7 @@ export { ComposeComponentPalette, type ComposeComponentPaletteProps } from './co
 export type {
   ComposeStageClipboard,
   ComposeStageDispatch,
+  ComposeStageEditablePathChange,
   ComposeStageKeybinding,
   ComposeStageLayoutRuntime,
   ComposeStageMarqueeMode,

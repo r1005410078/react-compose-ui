@@ -1287,3 +1287,140 @@ describe('ComposeStage 框选判定模式', () => {
     releaseMarquee({ x: 0, y: 0 }, surface())
   })
 })
+
+describe('OpenSpec: stage / 画布可编辑路径覆盖层与手势上报', () => {
+  afterEach(cleanup)
+
+  const overlayBase = {
+    canvasGuides: [],
+    drawing: null,
+    dropIndicator: null,
+    editableSelection: false,
+    textEditing: false,
+    handlePoints: null,
+    label: 'Editing overlay',
+    marqueeHitTest: null,
+    marqueeScreen: null,
+    paintHandles: [],
+    paintSample: null,
+    resizeHandles: [],
+    rotatable: false,
+    screenBounds: null,
+    snapGuides: [],
+    tool: 'select' as const,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    visibleResizeHandles: [],
+    onInteraction: vi.fn(),
+  }
+  const editablePath = {
+    entityId: 'a',
+    polyline: [{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 100, y: 40 }],
+    // 等时采样点：段两端密、中间疏（缓入缓出），由宿主算好后 Overlay 原样呈现。
+    dots: [{ x: 0, y: 0 }, { x: 6, y: 2 }, { x: 94, y: 38 }, { x: 100, y: 40 }],
+    vertices: [
+      {
+        id: 'k0',
+        point: { x: 0, y: 0 },
+        inTangent: null,
+        outTangent: { x: 30, y: 10 },
+        mode: 'smooth' as const,
+      },
+      {
+        id: 'k1',
+        point: { x: 100, y: 40 },
+        inTangent: { x: 70, y: 30 },
+        outTangent: null,
+        mode: 'corner' as const,
+      },
+    ],
+  }
+
+  it('OpenSpec: stage / 画布可编辑路径覆盖层 / 显示轨迹与速度', () => {
+    render(<StageOverlay {...overlayBase} editablePath={editablePath} />)
+    expect(screen.getByTestId('stage-editable-path-line'))
+      .toHaveAttribute('points', '0,0 50,20 100,40')
+    expect(screen.getAllByTestId('stage-editable-path-dot')).toHaveLength(4)
+    // 顶点菱形与时间线关键帧同形：旋转 45° 的方块。
+    expect(screen.getByTestId('stage-path-vertex-k0'))
+      .toHaveAttribute('transform', 'rotate(45 0 0)')
+  })
+
+  it('OpenSpec: stage / 画布可编辑路径覆盖层 / 切线手柄的显示条件', () => {
+    const view = render(<StageOverlay {...overlayBase} editablePath={editablePath} />)
+    // 无活动顶点：只有 smooth 顶点 k0 显示切线手柄。
+    expect(screen.getByTestId('stage-path-tangent-k0-out')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-path-tangent-k1-in')).not.toBeInTheDocument()
+    // corner 顶点 k1 被激活后也显示切线手柄。
+    view.rerender(
+      <StageOverlay {...overlayBase} activePathVertexId="k1" editablePath={editablePath} />,
+    )
+    expect(screen.getByTestId('stage-path-tangent-k1-in')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 画布可编辑路径覆盖层 / 未传入路径时不变', () => {
+    render(<StageOverlay {...overlayBase} />)
+    expect(screen.queryByTestId('stage-editable-path')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 画布路径编辑手势上报 / 双击顶点上报切换', () => {
+    const onInteraction = vi.fn()
+    const onToggle = vi.fn()
+    render(
+      <StageOverlay
+        {...overlayBase}
+        editablePath={editablePath}
+        onInteraction={onInteraction}
+        onPathVertexToggle={onToggle}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByTestId('stage-path-vertex-hit-k0'), {
+      pointerId: 1,
+      button: 0,
+    })
+    expect(onInteraction).toHaveBeenCalledWith(
+      { kind: 'path-handle', handle: 'vertex', vertexId: 'k0' },
+      expect.anything(),
+    )
+    fireEvent.doubleClick(screen.getByTestId('stage-path-vertex-hit-k0'))
+    expect(onToggle).toHaveBeenCalledWith('k0')
+  })
+
+  it('OpenSpec: stage / 画布路径编辑手势上报 / 拖动顶点上报世界坐标', () => {
+    const value = document()
+    const changes: import('../types').ComposeStageEditablePathChange[] = []
+    const dispatchSpy = vi.fn()
+    render(
+      <ComposeStage
+        dispatch={(command) => {
+          dispatchSpy(command)
+          return { status: 'noop', command } as never
+        }}
+        document={value}
+        editablePath={{ ...editablePath, entityId: 'a' }}
+        layoutSnapshot={layoutSnapshot(value)}
+        selectedIds={['a']}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onEditablePathChange={(change) => changes.push(change)}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+        registry={registry}
+      />,
+    )
+    const hit = screen.getByTestId('stage-path-vertex-hit-k0')
+    fireEvent.pointerDown(hit, { pointerId: 1, button: 0, buttons: 1, clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(window, { pointerId: 1, buttons: 1, clientX: 40, clientY: 25, shiftKey: true })
+    fireEvent.pointerUp(window, { pointerId: 1, button: 0, buttons: 0, clientX: 40, clientY: 25 })
+
+    // 阶段序列：一次开始、至少一次移动、一次结束（同点位移会被指针会话归并）。
+    expect(changes[0]!.phase).toBe('start')
+    expect(changes[changes.length - 1]!.phase).toBe('end')
+    expect(changes.filter((change) => change.phase === 'move').length).toBeGreaterThanOrEqual(1)
+    expect(changes[0]).toMatchObject({ vertexId: 'k0', handle: 'vertex' })
+    // 移动阶段携带修饰键；结束回调携带最终世界坐标。
+    expect(changes[1]!.modifiers.shift).toBe(true)
+    expect(changes[changes.length - 1]!.worldPoint).toEqual({ x: 40, y: 25 })
+    // Stage 自身没有因路径编辑派发任何命令。
+    expect(dispatchSpy).not.toHaveBeenCalled()
+  })
+})

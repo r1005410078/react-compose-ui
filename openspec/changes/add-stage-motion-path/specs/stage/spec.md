@@ -4,7 +4,7 @@
 
 `ComposeStage` MUST 支持可选的 `editablePath` 世界坐标几何，并在 Overlay 中渲染虚线轨迹、
 体现速度快慢的等时采样点、切线连杆与手柄，以及关键帧顶点标记。渲染顺序 MUST 位于选区框之下、
-吸附参考线之上。切线手柄 MUST 只在 `smooth` 顶点或当前活动顶点上显示。手柄的命中区
+画布辅助线之上。切线手柄 MUST 只在 `smooth` 顶点或当前活动顶点上显示。手柄的命中区
 MUST 独立于可见尺寸放大。省略 `editablePath` 时 Stage 外观与行为 MUST 完全不变。
 
 #### Scenario: 显示轨迹与速度

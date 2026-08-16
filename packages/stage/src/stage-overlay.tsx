@@ -1,6 +1,7 @@
 import { worldToScreen } from '@compose-ui/stage-engine'
 import type {
   ResizeHandle,
+  StageEditablePath,
   StageGuide,
   StageInteractionHit,
   StageInteractionTool,
@@ -77,6 +78,12 @@ interface StageOverlayProps {
   readonly snapGuides: readonly StageGuide[]
   readonly paintHandles: readonly StagePaintHandle[]
   readonly paintSample: StagePaintSamplePreview | null
+  /** 宿主算好的世界坐标可编辑路径几何；null 时不渲染任何路径元素。 */
+  readonly editablePath?: StageEditablePath | null
+  /** 当前活动顶点：corner 顶点被激活时也显示切线手柄。 */
+  readonly activePathVertexId?: string | null
+  /** 双击路径顶点的回调；切换 corner / smooth 的语义由宿主实现。 */
+  readonly onPathVertexToggle?: (vertexId: string) => void
   readonly onInteraction: (
     hit: StageInteractionHit,
     event: ReactPointerEvent<Element>,
@@ -88,6 +95,133 @@ const LINE_ENDPOINT_HANDLE_SIZE = 8
 const LINE_ENDPOINT_HIT_RADIUS = 10
 /** 四角缩放手柄边长（屏幕 px）；边方向只靠透明 hit，不渲染中点方块。 */
 const CORNER_HANDLE_SIZE = 7
+
+/** 路径顶点菱形的半对角线（屏幕 px）；与时间线关键帧菱形同形呼应。 */
+const PATH_VERTEX_SIZE = 8
+const PATH_TANGENT_HANDLE_RADIUS = 3.5
+
+/**
+ * 可编辑路径覆盖层：虚线轨迹、等时采样点、切线连杆与手柄、关键帧顶点菱形。
+ *
+ * @remarks
+ * 渲染顺序即命中顺序：切线手柄最后渲染，重叠时 DOM 上层先接收指针，实现
+ * "切线命中优先于顶点"；命中区用 `LINE_ENDPOINT_HIT_RADIUS` 独立放大。
+ * 切线只在 `smooth` 顶点或当前活动顶点上显示，corner 顶点全亮会让路径变成一团线。
+ */
+function EditablePathLayer({
+  activeVertexId,
+  onInteraction,
+  onVertexToggle,
+  path,
+  viewport,
+}: {
+  readonly path: StageEditablePath
+  readonly activeVertexId: string | null
+  readonly viewport: StageViewport
+  readonly onVertexToggle?: (vertexId: string) => void
+  readonly onInteraction: (
+    hit: StageInteractionHit,
+    event: ReactPointerEvent<Element>,
+  ) => void
+}) {
+  const vertices = path.vertices.map((vertex) => ({
+    id: vertex.id,
+    mode: vertex.mode,
+    screen: worldToScreen(vertex.point, viewport),
+    inScreen: vertex.inTangent ? worldToScreen(vertex.inTangent, viewport) : null,
+    outScreen: vertex.outTangent ? worldToScreen(vertex.outTangent, viewport) : null,
+    showTangents: vertex.mode === 'smooth' || vertex.id === activeVertexId,
+  }))
+  const tangentHandles = vertices
+    .filter((vertex) => vertex.showTangents)
+    .flatMap((vertex) => [
+      ...(vertex.inScreen ? [{ vertex, handle: 'tangent-in' as const, point: vertex.inScreen }] : []),
+      ...(vertex.outScreen ? [{ vertex, handle: 'tangent-out' as const, point: vertex.outScreen }] : []),
+    ])
+  return (
+    <g className="compose-stage__editable-path" data-testid="stage-editable-path">
+      <polyline
+        className="compose-stage__editable-path-line"
+        data-testid="stage-editable-path-line"
+        points={path.polyline
+          .map((point) => worldToScreen(point, viewport))
+          .map((point) => `${point.x},${point.y}`)
+          .join(' ')}
+      />
+      {path.dots.map((dot, index) => {
+        const point = worldToScreen(dot, viewport)
+        return (
+          <circle
+            className="compose-stage__editable-path-dot"
+            cx={point.x}
+            cy={point.y}
+            data-testid="stage-editable-path-dot"
+            key={index}
+            r={1.5}
+          />
+        )
+      })}
+      {tangentHandles.map(({ vertex, handle, point }) => (
+        <line
+          className="compose-stage__editable-path-tangent-link"
+          key={`link:${vertex.id}:${handle}`}
+          x1={vertex.screen.x}
+          x2={point.x}
+          y1={vertex.screen.y}
+          y2={point.y}
+        />
+      ))}
+      {vertices.map((vertex) => (
+        <g key={`vertex:${vertex.id}`}>
+          <rect
+            className="compose-stage__editable-path-vertex"
+            data-testid={`stage-path-vertex-${vertex.id}`}
+            data-vertex-active={vertex.id === activeVertexId || undefined}
+            data-vertex-mode={vertex.mode}
+            height={PATH_VERTEX_SIZE}
+            transform={`rotate(45 ${vertex.screen.x} ${vertex.screen.y})`}
+            width={PATH_VERTEX_SIZE}
+            x={vertex.screen.x - PATH_VERTEX_SIZE / 2}
+            y={vertex.screen.y - PATH_VERTEX_SIZE / 2}
+          />
+          <circle
+            className="compose-stage__editable-path-hit"
+            cx={vertex.screen.x}
+            cy={vertex.screen.y}
+            data-testid={`stage-path-vertex-hit-${vertex.id}`}
+            r={LINE_ENDPOINT_HIT_RADIUS}
+            onDoubleClick={() => onVertexToggle?.(vertex.id)}
+            onPointerDown={(event) => onInteraction(
+              { kind: 'path-handle', handle: 'vertex', vertexId: vertex.id },
+              event,
+            )}
+          />
+        </g>
+      ))}
+      {tangentHandles.map(({ vertex, handle, point }) => (
+        <g key={`handle:${vertex.id}:${handle}`}>
+          <circle
+            className="compose-stage__editable-path-tangent"
+            cx={point.x}
+            cy={point.y}
+            data-testid={`stage-path-tangent-${vertex.id}-${handle === 'tangent-in' ? 'in' : 'out'}`}
+            r={PATH_TANGENT_HANDLE_RADIUS}
+          />
+          <circle
+            className="compose-stage__editable-path-hit"
+            cx={point.x}
+            cy={point.y}
+            r={LINE_ENDPOINT_HIT_RADIUS}
+            onPointerDown={(event) => onInteraction(
+              { kind: 'path-handle', handle, vertexId: vertex.id },
+              event,
+            )}
+          />
+        </g>
+      ))}
+    </g>
+  )
+}
 
 function lineAngle(start: StagePoint, end: StagePoint) {
   return Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI
@@ -252,6 +386,9 @@ export function StageOverlay({
   paintHandles,
   paintSample,
   snapGuides,
+  editablePath = null,
+  activePathVertexId = null,
+  onPathVertexToggle,
   onInteraction,
 }: StageOverlayProps) {
   const paintPoint = (kind: StagePaintHandle['kind']) => paintHandles.find((handle) => handle.kind === kind)?.point
@@ -403,6 +540,16 @@ export function StageOverlay({
           )}
         />
       ))}
+      {/* 可编辑路径层：位于画布辅助线之上、选区框之下（后续兄弟节点覆盖其上）。 */}
+      {editablePath ? (
+        <EditablePathLayer
+          activeVertexId={activePathVertexId}
+          path={editablePath}
+          viewport={viewport}
+          onInteraction={onInteraction}
+          onVertexToggle={onPathVertexToggle}
+        />
+      ) : null}
       {lineSelectionActive && lineSelection && lineStartScreen && lineEndScreen ? (
         <g className="compose-stage__line-selection" data-testid="stage-line-selection">
           <line

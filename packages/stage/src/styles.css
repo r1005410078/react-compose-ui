@@ -506,6 +506,52 @@
   cursor: ew-resize;
 }
 
+/* 可编辑路径：轨迹虚线与等时采样点表达速度；颜色与时间线关键帧同源（accent）。 */
+.compose-stage__editable-path-line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--compose-accent, #3b82f6) 70%, transparent);
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.compose-stage__editable-path-dot {
+  fill: color-mix(in srgb, var(--compose-accent, #3b82f6) 55%, transparent);
+  pointer-events: none;
+}
+
+/* 顶点菱形与时间线关键帧菱形同形（旋转 45° 的方块）并共用 accent token。 */
+.compose-stage__editable-path-vertex {
+  fill: var(--compose-surface-raised, #f8fbff);
+  stroke: var(--compose-accent, #3b82f6);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.compose-stage__editable-path-vertex[data-vertex-active] {
+  fill: var(--compose-accent, #3b82f6);
+}
+
+.compose-stage__editable-path-tangent {
+  fill: var(--compose-surface-raised, #f8fbff);
+  stroke: var(--compose-accent, #3b82f6);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.compose-stage__editable-path-tangent-link {
+  stroke: color-mix(in srgb, var(--compose-accent, #3b82f6) 50%, transparent);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+/* 命中区独立于可见尺寸放大；透明但可命中。 */
+.compose-stage__editable-path-hit {
+  fill: transparent;
+  cursor: move;
+  pointer-events: all;
+}
+
 .compose-stage__guide {
   stroke: #ff4fc3;
   stroke-width: 1;

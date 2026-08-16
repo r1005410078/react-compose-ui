@@ -80,6 +80,7 @@ export type StageInteractionPhase =
   | 'guide-move'
   | 'paint-edit'
   | 'paint-sample'
+  | 'path-edit'
   | 'external'
 
 /** Stage 的受控工具模式；不包含 React 或 DOM 类型。 @public */
@@ -150,6 +151,12 @@ export type StageInteractionHit =
       readonly handle: StagePaintHandleKind
       readonly stopId?: string
     }
+  | {
+      /** 可编辑路径的顶点或切线手柄；vertexId 对引擎是不透明字符串。 */
+      readonly kind: 'path-handle'
+      readonly handle: StagePathHandleKind
+      readonly vertexId: string
+    }
 
 /** 渐变画布控制柄的稳定语义。 @public */
 export type StagePaintHandleKind =
@@ -168,6 +175,48 @@ export type StagePaintHandleKind =
 export interface StagePaintEditing {
   readonly entityId: string
   readonly activeStopId?: string
+}
+
+/** 可编辑路径手柄的稳定语义。 @public */
+export type StagePathHandleKind = 'vertex' | 'tangent-in' | 'tangent-out'
+
+/**
+ * 宿主打开的可编辑路径会话。
+ *
+ * @remarks
+ * 引擎只用它判定 `path-handle` 命中是否合法并把手势结果路由回宿主；它不携带几何——
+ * 几何经 `StageEditablePath` 直接交给 Overlay 渲染，不进入引擎状态机。
+ * @public
+ */
+export interface StagePathEditing {
+  readonly entityId: string
+  /** 当前活动顶点；Overlay 据此决定 corner 顶点是否也显示切线手柄。 */
+  readonly activeVertexId?: string
+}
+
+/** 可编辑路径的单个顶点；切线端点为世界坐标绝对位置，null 表示该侧无切线。 @public */
+export interface StageEditablePathVertex {
+  readonly id: string
+  readonly point: StagePoint
+  readonly inTangent: StagePoint | null
+  readonly outTangent: StagePoint | null
+  readonly mode: 'corner' | 'smooth'
+}
+
+/**
+ * 宿主算好的世界坐标可编辑路径几何。
+ *
+ * @remarks
+ * `polyline` 按弧长细分用于画轨迹；`dots` 按**时间**等分用于表达速度快慢——两者的点集
+ * 不同，不能合并。顶点 ID 对 Stage 是不透明字符串，手势结果原样回传，由宿主解释它
+ * 对应哪个文档事实。命名不含动画语义：这一层可被将来的矢量路径编辑复用。
+ * @public
+ */
+export interface StageEditablePath {
+  readonly entityId: string
+  readonly polyline: readonly StagePoint[]
+  readonly dots: readonly StagePoint[]
+  readonly vertices: readonly StageEditablePathVertex[]
 }
 
 /** 当前画布图层取色的目标字段。 @public */
@@ -230,6 +279,8 @@ export interface StageInteractionContext {
   readonly selectedIds: readonly string[]
   /** Inspector 打开的单 Entity 背景填充编辑；缺失时不渲染也不接收 Paint 控制柄。 */
   readonly paintEditing?: StagePaintEditing | null
+  /** 宿主打开的可编辑路径会话；缺失时引擎不接收 `path-handle` 命中，行为与现在完全一致。 */
+  readonly pathEditing?: StagePathEditing | null
   /** Inspector 请求的画布图层取色目标；存在时普通 Stage 命中被临时屏蔽。 */
   readonly paintSampling?: StagePaintSampling | null
   /** 宿主持有的画布内文字编辑会话；存在时该 Entity 的空间手势被屏蔽。 */
@@ -298,6 +349,20 @@ export type StageInteractionEffect =
   | { readonly type: 'text-editing.enter'; readonly entityId: string }
   /** 请求宿主结束文字编辑会话并按内容收敛为最多一条事务。 */
   | { readonly type: 'text-editing.exit' }
+  | {
+      /**
+       * 路径手柄手势的阶段性世界坐标结果；引擎不理解它对应的文档语义，也绝不因此
+       * 产出 Patch 或命令。`move` 供宿主更新本地预览，`end` 才应落成一条可撤销记录，
+       * `cancel` 表示手势被打断（Esc、并发文档变化），宿主应丢弃预览。
+       */
+      readonly type: 'path.change'
+      readonly entityId: string
+      readonly vertexId: string
+      readonly handle: StagePathHandleKind
+      readonly phase: 'start' | 'move' | 'end' | 'cancel'
+      readonly worldPoint: StagePoint
+      readonly modifiers: StageInteractionModifiers
+    }
 
 /** surface 与 controller 之间唯一允许的命令式端口。 @public */
 export interface StageInteractionSurfacePort {
@@ -598,6 +663,16 @@ type Gesture =
       readonly handle: StagePaintHandleKind
       readonly stopId?: string
       paint: ComposePaint
+    }
+  | {
+      readonly type: 'path'
+      readonly pointerId: number
+      readonly viewport: StageViewport
+      readonly entityId: string
+      readonly handle: StagePathHandleKind
+      readonly vertexId: string
+      point: StagePoint
+      modifiers: StageInteractionModifiers
     }
   | {
       readonly type: 'paint-sample'
@@ -1201,6 +1276,19 @@ export function createStageInteractionController(): StageInteractionController {
   }
   const reset = (releasePointer = true) => {
     const pointerId = gesture?.pointerId
+    // 路径手势被打断（Esc、并发文档变化、会话关闭）时必须显式告知宿主丢弃预览，
+    // 否则宿主的本地预览几何会停留在半途状态。
+    if (gesture?.type === 'path') {
+      apply([{
+        type: 'path.change',
+        entityId: gesture.entityId,
+        vertexId: gesture.vertexId,
+        handle: gesture.handle,
+        phase: 'cancel',
+        worldPoint: gesture.point,
+        modifiers: gesture.modifiers,
+      }])
+    }
     gesture = null
     publish(initialSnapshot(snapshot.temporaryPan))
     if (releasePointer && pointerId !== undefined) {
@@ -1462,6 +1550,21 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
+    if (gesture.type === 'path') {
+      gesture.point = world
+      gesture.modifiers = modifiers
+      // 移动阶段只把世界坐标交给宿主更新预览；引擎既不产出 Patch 也不缓存几何。
+      apply([{
+        type: 'path.change',
+        entityId: gesture.entityId,
+        vertexId: gesture.vertexId,
+        handle: gesture.handle,
+        phase: 'move',
+        worldPoint: world,
+        modifiers,
+      }])
+      return
+    }
     if (gesture.type !== 'rotate') return
     const center = gesture.center
     const angle = rotationFromPointer(center, gesture.startWorld, world, {
@@ -1652,8 +1755,9 @@ export function createStageInteractionController(): StageInteractionController {
         || event.hit.kind === 'ruler-corner'
         || event.hit.kind === 'guide'
         || event.hit.kind === 'paint-handle'
+        || event.hit.kind === 'path-handle'
       ) {
-        // 标尺/辅助线/Paint 柄保留原语义，交给后续分支。
+        // 标尺/辅助线/Paint 柄/路径柄保留原语义，交给后续分支。
       }
       else {
         if (context.selectedIds.length > 0) {
@@ -1684,6 +1788,39 @@ export function createStageInteractionController(): StageInteractionController {
         paintSample: result.preview,
       })
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
+      return
+    }
+    if (event.hit.kind === 'path-handle') {
+      const editing = context.pathEditing
+      // 未注入路径会话时忽略：Overlay 不该在没有会话时渲染手柄，这里兜底保证行为不变。
+      if (!editing) return
+      const world = worldPoint(event.point, context.viewport)
+      gesture = {
+        type: 'path',
+        pointerId: event.pointerId,
+        viewport: context.viewport,
+        entityId: editing.entityId,
+        handle: event.hit.handle,
+        vertexId: event.hit.vertexId,
+        point: world,
+        modifiers: event.modifiers,
+      }
+      publish({
+        ...initialSnapshot(snapshot.temporaryPan),
+        phase: 'path-edit',
+      })
+      apply([
+        { type: 'pointer.capture', pointerId: event.pointerId },
+        {
+          type: 'path.change',
+          entityId: editing.entityId,
+          vertexId: event.hit.vertexId,
+          handle: event.hit.handle,
+          phase: 'start',
+          worldPoint: world,
+          modifiers: event.modifiers,
+        },
+      ])
       return
     }
     if (event.hit.kind === 'paint-handle') {
@@ -2097,6 +2234,18 @@ export function createStageInteractionController(): StageInteractionController {
         })
       }
     }
+    else if (finished.type === 'path') {
+      // 结束阶段只回传最终世界坐标；写成什么命令由宿主决定，引擎不理解路径的文档语义。
+      effects.push({
+        type: 'path.change',
+        entityId: finished.entityId,
+        vertexId: finished.vertexId,
+        handle: finished.handle,
+        phase: 'end',
+        worldPoint: finished.point,
+        modifiers: event.modifiers,
+      })
+    }
     else if (finished.type === 'move' && resolveCommittableDropTarget(finished.dropTarget)) {
       // 落点有效时这次手势表达的是结构意图（换父级或改顺序），几何随 reparent 一起写入
       // 同一条 batch，避免一次手势产生两条事务。Auto Layout 容器会丢弃 offset 改走 flow，
@@ -2308,6 +2457,7 @@ export function createStageInteractionController(): StageInteractionController {
         ? gesture.ids
         : null
       const paintGestureId = gesture?.type === 'paint' ? gesture.entityId : null
+      const pathGestureId = gesture?.type === 'path' ? gesture.entityId : null
       const segmentGestureId = gesture?.type === 'segment-resize' ? gesture.entityId : null
       const documentChanged = context?.document !== nextContext.document
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
@@ -2339,6 +2489,8 @@ export function createStageInteractionController(): StageInteractionController {
             || nextContext.selectedIds[0] !== paintGestureId
             || nextContext.paintEditing?.entityId !== paintGestureId
           ))
+          || (pathGestureId !== null
+            && nextContext.pathEditing?.entityId !== pathGestureId)
           || (segmentGestureId !== null && (
             nextContext.selectedIds.length !== 1
             || nextContext.selectedIds[0] !== segmentGestureId

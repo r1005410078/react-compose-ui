@@ -124,6 +124,10 @@ export {
   type StagePaintHandleKind,
   type StagePaintSamplePreview,
   type StagePaintSampling,
+  type StagePathEditing,
+  type StagePathHandleKind,
+  type StageEditablePath,
+  type StageEditablePathVertex,
   type StagePreviewGuide,
 } from './interaction-controller'
 export {

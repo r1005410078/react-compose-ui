@@ -891,6 +891,10 @@ function ComposeStageReady({
   paintEditing = null,
   paintSampling = null,
   onPaintSamplingComplete,
+  editablePath = null,
+  editablePathActiveVertexId = null,
+  onEditablePathChange,
+  onEditablePathVertexToggle,
   onOutputSelect,
   onSurfaceSizeChange,
   interactionController,
@@ -1176,6 +1180,7 @@ function ComposeStageReady({
     onSelectedIdsChange,
     onOutputSelect,
     onPaintSamplingComplete,
+    onEditablePathChange,
     idFactory,
   })
   useLayoutEffect(() => {
@@ -1190,6 +1195,7 @@ function ComposeStageReady({
       onSelectedIdsChange,
       onOutputSelect,
       onPaintSamplingComplete,
+      onEditablePathChange,
       idFactory,
     }
   })
@@ -1918,6 +1924,16 @@ function ComposeStageReady({
           current.onPaintSamplingComplete?.()
           return
         }
+        if (effect.type === 'path.change') {
+          current.onEditablePathChange?.({
+            vertexId: effect.vertexId,
+            handle: effect.handle,
+            phase: effect.phase,
+            worldPoint: effect.worldPoint,
+            modifiers: effect.modifiers,
+          })
+          return
+        }
         if (effect.type === 'command.dispatch') {
           current.dispatch(effect.command)
           return
@@ -1994,6 +2010,21 @@ function ComposeStageReady({
     releasePointer,
   ])
 
+  // 引擎只需要会话（entityId + 活动顶点），几何直接交给 Overlay。memo 保持引用稳定，
+  // 避免每次渲染都触发 updateContext 的手势兼容性检查。
+  const editablePathEntityId = editablePath?.entityId ?? null
+  const pathEditing = useMemo(
+    () => (editablePathEntityId === null
+      ? null
+      : {
+          entityId: editablePathEntityId,
+          ...(editablePathActiveVertexId !== null
+            ? { activeVertexId: editablePathActiveVertexId }
+            : {}),
+        }),
+    [editablePathEntityId, editablePathActiveVertexId],
+  )
+
   useLayoutEffect(() => {
     controller.updateContext({
       document,
@@ -2006,6 +2037,7 @@ function ComposeStageReady({
       selectedIds: normalizedSelection,
       paintEditing,
       paintSampling,
+      pathEditing,
       textEditing,
       drawnEntity: lastDrawn,
       contentReflowsWithWidth,
@@ -2035,6 +2067,7 @@ function ComposeStageReady({
     normalizedSelection,
     paintEditing,
     paintSampling,
+    pathEditing,
     surfaceSize,
     textEditing,
     tool,
@@ -2925,6 +2958,9 @@ function ComposeStageReady({
           marqueeScreen={marqueeScreen}
           paintHandles={interaction.paintHandles}
           paintSample={interaction.paintSample}
+          editablePath={editablePath}
+          activePathVertexId={editablePathActiveVertexId}
+          onPathVertexToggle={onEditablePathVertexToggle}
           resizeHandles={resizeHandles}
           rotatable={selectionRotatable}
           rotationPreview={interaction.rotationPreview}

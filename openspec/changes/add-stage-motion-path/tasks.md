@@ -1,23 +1,23 @@
 ## 1. stage-engine 会话、命中与手势
 
-- [ ] 1.1 Red：顶点命中优先于 Entity、切线命中优先于顶点、未注入路径时行为不变的
+- [x] 1.1 Red：顶点命中优先于 Entity、切线命中优先于顶点、未注入路径时行为不变的
   `interaction-controller.test.ts` 用例。
-- [ ] 1.2 Green：新增 `StagePathEditing`、`StageEditablePath`、`StagePathHandleKind`，
+- [x] 1.2 Green：新增 `StagePathEditing`、`StageEditablePath`、`StagePathHandleKind`，
   给 `StageInteractionHit` 增加 `path-handle` 分支，给 `StageInteractionContext`
   增加 `pathEditing`，并在命中排序中插入路径手柄。
-- [ ] 1.3 Red：一次拖拽产生开始/移动/结束三阶段且带修饰键、拖拽期间不产出 Patch 的用例。
-- [ ] 1.4 Green：按 `paint-handle` 现有分支实现路径手柄的手势阶段。
-- [ ] 1.5 从 `packages/stage-engine/src/index.ts` 导出新公共类型，补 TSDoc。
+- [x] 1.3 Red：一次拖拽产生开始/移动/结束三阶段且带修饰键、拖拽期间不产出 Patch 的用例。
+- [x] 1.4 Green：按 `paint-handle` 现有分支实现路径手柄的手势阶段。
+- [x] 1.5 从 `packages/stage-engine/src/index.ts` 导出新公共类型，补 TSDoc。
 
 ## 2. stage Overlay 与 props
 
-- [ ] 2.1 Red：轨迹与等时采样点渲染、切线手柄显示条件、未传路径时不渲染的组件测试。
-- [ ] 2.2 Green：`StageOverlayProps` 增加 `editablePath`，实现虚线轨迹、等时采样点、
+- [x] 2.1 Red：轨迹与等时采样点渲染、切线手柄显示条件、未传路径时不渲染的组件测试。
+- [x] 2.2 Green：`StageOverlayProps` 增加 `editablePath`，实现虚线轨迹、等时采样点、
   切线连杆与手柄、顶点菱形；渲染顺序在选区框之下、吸附参考线之上；
   命中区独立放大，沿用 `LINE_ENDPOINT_HIT_RADIUS` 的做法。
-- [ ] 2.3 Green：`ComposeStageProps` 增加 `editablePath`、`onEditablePathChange`
+- [x] 2.3 Green：`ComposeStageProps` 增加 `editablePath`、`onEditablePathChange`
   与 `onEditablePathVertexToggle`，接线到引擎上下文与命中回调。
-- [ ] 2.4 顶点菱形与时间线关键帧菱形使用同一形状与主题 token。
+- [x] 2.4 顶点菱形与时间线关键帧菱形使用同一形状与主题 token。
 
 ## 3. editor 接线
 

@@ -1780,3 +1780,112 @@ describe('OpenSpec: stage-engine / Auto Layout 容器内原地重排提交', () 
     })
   })
 })
+
+describe('OpenSpec: stage-engine / 可编辑路径会话、命中与手势', () => {
+  const pathContext = (value = document()) => ({
+    document: value,
+    layoutSnapshot: layoutSnapshot(value),
+    viewport: { x: 0, y: 0, zoom: 1 },
+    surfaceSize: { width: 800, height: 600 },
+    tool: 'select' as const,
+    selectedIds: ['a'],
+    pathEditing: { entityId: 'a' },
+    idFactory: () => 'path-id',
+  })
+
+  it('OpenSpec: stage-engine / 可编辑路径会话与命中 / 顶点命中优先于对象本体', () => {
+    const { controller, effects } = setup()
+    controller.updateContext(pathContext())
+    // 顶点命中落在 Entity a 的可见区域之上：得到的是 path 手势，不是移动/选择。
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 10, y: 10 },
+      hit: { kind: 'path-handle', handle: 'vertex', vertexId: 'k0' }, modifiers,
+    })
+    expect(controller.getSnapshot().phase).toBe('path-edit')
+    expect(effects.filter((effect) => effect.type === 'selection.change')).toHaveLength(0)
+    expect(effects).toContainEqual(expect.objectContaining({
+      type: 'path.change',
+      entityId: 'a',
+      vertexId: 'k0',
+      handle: 'vertex',
+      phase: 'start',
+    }))
+  })
+
+  it('OpenSpec: stage-engine / 可编辑路径会话与命中 / 未注入路径会话', () => {
+    const { controller, effects } = setup()
+    // 不设置 pathEditing：path-handle 命中被忽略，不产生任何效果或手势。
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 10, y: 10 },
+      hit: { kind: 'path-handle', handle: 'vertex', vertexId: 'k0' }, modifiers,
+    })
+    expect(controller.getSnapshot().phase).toBe('idle')
+    expect(effects).toEqual([])
+    // 普通 Entity 命中仍走既有移动手势：行为与没有该特性时完全一致。
+    controller.send({
+      type: 'pointer.down', pointerId: 2, button: 0, point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'a' }, modifiers,
+    })
+    controller.send({ type: 'pointer.up', pointerId: 2, point: { x: 30, y: 40 }, modifiers })
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toHaveLength(1)
+  })
+
+  it('OpenSpec: stage-engine / 可编辑路径手势 / 一次拖拽产生三阶段', () => {
+    const { controller, effects } = setup()
+    controller.updateContext(pathContext())
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 100, y: 100 },
+      hit: { kind: 'path-handle', handle: 'tangent-out', vertexId: 'k1' }, modifiers,
+    })
+    controller.send({
+      type: 'pointer.move', pointerId: 1, point: { x: 120, y: 100 },
+      modifiers: { ...modifiers, shift: true },
+    })
+    controller.send({
+      type: 'pointer.move', pointerId: 1, point: { x: 140, y: 90 },
+      modifiers: { ...modifiers, shift: true },
+    })
+    controller.send({
+      type: 'pointer.up', pointerId: 1, point: { x: 140, y: 90 },
+      modifiers: { ...modifiers, shift: true },
+    })
+    const changes = effects.filter((effect) => effect.type === 'path.change')
+    expect(changes.map((change) => change.phase)).toEqual(['start', 'move', 'move', 'move', 'end'])
+    // 每个阶段都携带世界坐标与修饰键状态；Shift 在移动与结束阶段为按下。
+    expect(changes[0]).toMatchObject({ worldPoint: { x: 100, y: 100 }, modifiers: { shift: false } })
+    expect(changes[1]).toMatchObject({ worldPoint: { x: 120, y: 100 }, modifiers: { shift: true } })
+    expect(changes[changes.length - 1]).toMatchObject({
+      handle: 'tangent-out',
+      vertexId: 'k1',
+      worldPoint: { x: 140, y: 90 },
+      modifiers: { shift: true },
+    })
+  })
+
+  it('OpenSpec: stage-engine / 可编辑路径手势 / 拖拽期间文档不被引擎修改', () => {
+    const { controller, effects } = setup()
+    controller.updateContext(pathContext())
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 100, y: 100 },
+      hit: { kind: 'path-handle', handle: 'vertex', vertexId: 'k0' }, modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 200, y: 150 }, modifiers })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 200, y: 150 }, modifiers })
+    // 引擎全程不派发任何命令：写成什么命令由宿主决定。
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toEqual([])
+  })
+
+  it('手势中会话被关闭时发出 cancel，宿主据此丢弃预览', () => {
+    const { controller, effects } = setup()
+    controller.updateContext(pathContext())
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 100, y: 100 },
+      hit: { kind: 'path-handle', handle: 'vertex', vertexId: 'k0' }, modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 160, y: 100 }, modifiers })
+    controller.updateContext({ ...pathContext(), pathEditing: null })
+    const changes = effects.filter((effect) => effect.type === 'path.change')
+    expect(changes.map((change) => change.phase)).toEqual(['start', 'move', 'cancel'])
+    expect(changes[changes.length - 1]).toMatchObject({ worldPoint: { x: 160, y: 100 } })
+  })
+})

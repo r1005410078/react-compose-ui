@@ -10,13 +10,33 @@ import type {
   EditorCommand,
 } from '@compose-ui/core'
 import type {
+  StageEditablePath,
   StageInteractionController,
+  StageInteractionModifiers,
   StageInteractionTool,
   StageMarqueeMode,
   StagePaintEditing,
   StagePaintSampling,
+  StagePathHandleKind,
+  StagePoint,
   StageViewport,
 } from '@compose-ui/stage-engine'
+
+/**
+ * 路径顶点或切线手柄一次拖动的阶段性结果。
+ *
+ * @remarks
+ * `move` 供宿主更新本地预览几何；`end` 才应写成一条可撤销记录；`cancel` 表示手势被
+ * 打断（Esc、并发文档变化、会话关闭），宿主应丢弃预览。坐标为世界坐标。
+ * @public
+ */
+export interface ComposeStageEditablePathChange {
+  readonly vertexId: string
+  readonly handle: StagePathHandleKind
+  readonly phase: 'start' | 'move' | 'end' | 'cancel'
+  readonly worldPoint: StagePoint
+  readonly modifiers: StageInteractionModifiers
+}
 
 /**
  * Stage 的受控工具模式。
@@ -227,6 +247,20 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly paintSampling?: StagePaintSampling | null
   /** 图层取色点击完成后通知宿主退出临时采样模式。 */
   readonly onPaintSamplingComplete?: () => void
+  /**
+   * 宿主算好的世界坐标可编辑路径几何；省略时 Stage 外观与行为完全不变。
+   *
+   * @remarks
+   * Stage 不理解该几何的文档语义（顶点 ID 不透明），只渲染轨迹、采样点与手柄并回报手势。
+   * 几何的事实来源始终在宿主：`move` 阶段宿主应以更新后的几何重新传入本属性做预览。
+   */
+  readonly editablePath?: StageEditablePath | null
+  /** 当前活动顶点；corner 顶点被激活时也显示切线手柄。 */
+  readonly editablePathActiveVertexId?: string | null
+  /** 路径顶点或切线手柄拖动的阶段性世界坐标回调；Stage 不因路径编辑派发任何命令。 */
+  readonly onEditablePathChange?: (change: ComposeStageEditablePathChange) => void
+  /** 双击路径顶点：宿主据此在 corner 与 smooth 之间切换。 */
+  readonly onEditablePathVertexToggle?: (vertexId: string) => void
   /** Entity 与命令 ID factory。默认使用 crypto.randomUUID 或时间回退。 */
   readonly idFactory?: () => string
 }
