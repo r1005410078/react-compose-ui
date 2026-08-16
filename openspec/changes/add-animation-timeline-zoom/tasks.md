@@ -105,11 +105,17 @@
     `--ruler-minor-step` 自定义属性传给 `.ruler`，CSS 里的 `repeating-linear-gradient` 步长从硬编码
     `3.333%` 改为 `var(--ruler-minor-step, 3.333%)`（保留旧值做兜底）。新增组件测试验证该自定义
     属性在缩放前后确实变化；用 Playwright 截图确认放大后次刻度随之变密、始终对应整数毫秒。
-- [ ] 7.3 已确认但本次不修：轨道名列表（左栏 `.track-list`）与关键帧轨道（右栏 `.scale-scroll`）
-  是两个独立的纵向滚动容器，滚动其中一个不会带动另一个，用户反馈的"左右不对齐"正是这个问题被
+- [x] 7.3 诊断并修复：轨道名列表（左栏 `.track-list`）与关键帧轨道（右栏 `.scale-scroll`）曾是
+  两个独立的纵向滚动容器，滚动其中一个不会带动另一个，用户反馈的"左右不对齐"正是这个问题被
   滚轮缩放功能间接放大后更容易触发（默认单轨道演示数据不会遇到，需要轨道数量超出可视高度才会
-  触发）。用 Playwright 在 6 轨道场景下实测复现：滚动左栏后左栏行的位置整体上移，右栏车道行的
-  位置纹丝不动，两者彻底错开。这正是评审阶段已经识别、并记录在
-  `update-animation-panel-foundation` 变更 `tasks.md` 第 5 节"滚动对齐"里的已知架构限制，需要让
-  两栏共用同一条纵向滚动或做 scrollTop 同步，属于架构调整，按项目规则需要先在该提案里定案再实施，
-  不在本次直接修复范围内。
+  触发）。复现证据：用 Playwright 在 6 轨道场景下实测，滚动左栏后左栏行的位置整体上移，右栏车道
+  行的位置纹丝不动，两者彻底错开。
+  - 修复：本变更收尾时一并重排双栏结构（提交 768427f）。纵轴的唯一滚动者是新的 `.board-scroll`，
+    左栏 `.track-list` 改为 `overflow: visible` 高度随内容、右栏 `.scale-scroll` 只保留横向滚动
+    （`overflow-y: clip`），两栏同属一个纵向滚动容器因而必然同步。这同时闭合了
+    `update-animation-panel-foundation`（已归档）`tasks.md` 第 5 节"滚动对齐"记录的架构限制。
+  - 回归：jsdom 测试 `双栏共用垂直滚动 / 左右两栏同属一个纵向滚动容器` 守结构前提（jsdom 不做
+    布局）；真实布局由 Storybook Story `ScrolledManyTracks` 在 Chromium 下守住——断言内容确实
+    纵向溢出、两栏各自都不再拥有独立纵向滚动、滚动 board 后左行与右车道的纵向距离不变。
+    红绿验证：临时把 `.track-list` 改回 `overflow-y: auto; max-height: 120px` 该 Story 失败，
+    恢复后 50 项全通过。

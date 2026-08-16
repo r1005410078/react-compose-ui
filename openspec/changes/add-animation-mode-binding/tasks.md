@@ -27,9 +27,11 @@
   删除会压过 layered 工具类的无 layer chrome 规则，保留尺寸覆盖、SVG 描边与状态色。
 - [x] 2.8d 颜色字段改用 `ComposeColorPicker`（等第 3 节 `valueKind` 落地后一起做，
   届时颜色控件只在 `valueKind === 'color'` 的轨道上出现）。
-- [ ] 2.8e 轨道与属性行的"更多操作"菜单——**阻塞**：`update-animation-panel-foundation`
-  的 design.md 把"菜单应提供哪些具体动作"列为待产品确认的开放问题，未定义动作前
-  无法写 Scenario，也无法实现。
+- [ ] 2.8e 轨道与属性行的"更多操作"菜单——**阻塞于产品决策，非技术依赖**：菜单应提供哪些
+  具体动作从未定义，未定义动作前无法写 Scenario，也无法实现。该开放问题最初记录在
+  `update-animation-panel-foundation` 的 design.md，那份变更已随本提案吸收执行而归档
+  （见 `openspec/changes/archive/2026-08-16-update-animation-panel-foundation/`，其 4.3 即本条），
+  因此这里是该问题目前唯一的在途承载点，不要再回指归档目录等待。
 
 ## 3. animation-panel 数据模型与动作回调
 

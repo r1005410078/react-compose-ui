@@ -1272,6 +1272,7 @@ export function ComposeEditor({
 
   const hostContextMenuItems = useMemo(() => {
     const hostItems = assets?.browser?.contextMenuItems ?? []
+    // eslint-disable-next-line react-hooks/refs -- 菜单项的 onSelect 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
     return [...hostItems, ...pageContextMenuItems, ...componentContextMenuItems]
   }, [
     assets?.browser?.contextMenuItems,

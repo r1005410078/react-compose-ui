@@ -26,15 +26,23 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Run strict OpenSpec validation, affected package tests/typecheck/build and Storybook tests. Strict
+- [x] 3.1 Run strict OpenSpec validation, affected package tests/typecheck/build and Storybook tests. Strict
   validation, affected-package tests/typecheck/build and Storybook build pass. The prior ComposeButton contrast
   failures are fixed; Button, Dialog and Input Storybook tests pass in Chromium. The full Storybook runner starts
   successfully but did not exit after unrelated remaining Stories in this environment, so its global gate remains
   pending.
-- [ ] 3.2 Run repository lint, typecheck, test, build, pack dry-run, E2E and `git diff --check`. Lint, full
+  - Gate closed later: the full Storybook runner now exits cleanly — `bun run --filter @compose-ui/storybook build`
+    and `test` pass (20 files / 50 tests in Chromium). `bunx openspec validate adopt-shadcn-component-foundation
+    --strict` passes.
+- [x] 3.2 Run repository lint, typecheck, test, build, pack dry-run, E2E and `git diff --check`. Lint, full
   typecheck, build, pack dry-run and `git diff --check` pass. The non-Storybook package suite passes; the full
   Storybook process remains pending its non-exit investigation. Targeted real-Chromium E2E flows pass, while the
   full E2E suite remains pending.
+  - Gate closed later: the two pending items now pass. Full Storybook test (50) exits cleanly and the full E2E
+    suite passes (68 tests). `bun run lint` needed one scoped `react-hooks/refs` suppression on the Editor host
+    context-menu memo — a false positive of the same shape already suppressed for `pageContextMenuItems`, since
+    the ref is only read inside `onSelect`. Repository `lint` / `typecheck` / `test` / `build` / `pack:dry-run` /
+    `git diff --check` all pass.
 
 ## 4. Shared ContextMenu and integration
 
@@ -78,11 +86,13 @@
 - [x] 5.4 Refactor: remove duplicate dialog layers, focus loops and styles; update public README, architecture
   checks, change notes and exact component/integration tests. Evidence: the components feature check requires the
   co-located Dialog source, test and Story; obsolete Asset Browser layers and Editor's manual focus loop are gone.
-- [ ] 5.5 Run strict OpenSpec validation, affected package tests/typecheck/build, Storybook build/test, repository
+- [x] 5.5 Run strict OpenSpec validation, affected package tests/typecheck/build, Storybook build/test, repository
   lint/typecheck/test/build/pack dry-run/E2E and `git diff --check`. Strict validation, affected tests, lint,
   full typecheck, full build, pack dry-run, targeted Chromium E2E and diff check pass. Changed Storybook Stories
   pass in Chromium; the full Storybook process remains pending its non-exit investigation, and the full E2E suite
   remains pending.
+  - Gate closed later together with 3.1/3.2: full Storybook build + test (50) and the full E2E suite (68) now pass;
+    see 3.2 for the complete rerun evidence.
 - [x] 5.6 Refactor Dialog form visuals: add the shared Shadcn-adapted ComposeInput, standardize Dialog and
   ConfirmDialog surfaces/actions, replace Asset Browser modal native controls, remove domain overrides, and verify
   Dark/Light contrast plus Chromium screenshots. Evidence: component (11) and Asset Browser (21) tests, component/
@@ -108,8 +118,11 @@
   browsing and central resource documents; retain no-preview-on-single-click and no-document-history invariants.
   Evidence: `ComposeAssetPreview` Storybook states, asset/browser and editor README guidance, and the focused Chromium
   flow all pass; stable Preview callbacks prevent Monaco from being disposed on its first dirty update.
-- [ ] 6.5 Verification: run strict validation, affected package/unit tests, Storybook build/test, lint, typecheck,
+- [x] 6.5 Verification: run strict validation, affected package/unit tests, Storybook build/test, lint, typecheck,
   test, build, pack dry-run, Chromium E2E and `git diff --check`. Strict validation, focused Asset Browser/Editor
   tests, full lint/typecheck/test/build, Storybook build/test, pack dry-run and diff check pass. The focused
   resource-document Chromium flow passes; the full E2E suite remains pending three unrelated Stage regressions:
   SVG Inspector snapshot drift, high-speed gesture atomicity and grouped Frame direct manipulation.
+  - Gate closed later: the three unrelated Stage regressions were fixed by their own changes (the SVG Inspector
+    golden was re-recorded in 0fff497). The full E2E suite now passes (68 tests) alongside the rest of the gate;
+    see 3.2 for the complete rerun evidence.

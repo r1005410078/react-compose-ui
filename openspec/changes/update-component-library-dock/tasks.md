@@ -25,7 +25,12 @@
 
 ## 3. 浏览器验收与交付
 
-- [ ] 3.1 [Red] 添加 Editor 组件库默认展示的确定性 E2E 场景和视觉黄金测试并记录失败证据
+- [x] 3.1 [Red] 添加 Editor 组件库默认展示的确定性 E2E 场景和视觉黄金测试并记录失败证据
+  - 交付物：场景在 `e2e/integration.spec.ts` 的"启动时打开标记首页 / 根路径直接展示 Home 页面
+    工作区"用例中，断言组件库面板可见、`基础组件 (N)` 标题与 Tile，并对面板取视觉黄金图
+    `e2e/__screenshots__/component-library-dock.png`。
+  - 诚实记录：当时勾选遗漏，[Red] 阶段的失败证据未留存；3.2/3.3 的 Chromium 结果已覆盖该场景的
+    通过证据。黄金图其后随 edge-rails 布局与基础组件计数 3→4 重录（提交 0fff497）。
 - [x] 3.2 [Green] 通过 Chromium 验证场景树、基础组件、历史标签和交互
   - Chromium result: `bunx playwright test e2e/integration.spec.ts --project=chromium --grep '完整示例入口' --update-snapshots` 通过并更新组件库黄金图；`--grep 'Controller 驱动的默认组合'` 通过，断言拖拽占位在 Stage client pointer 右下方出现并在 pointerup 后消失。
 - [x] 3.3 [Refactor] 整理文案与样式；运行相关测试、严格 OpenSpec 校验、lint、typecheck、test、build、test:e2e 并记录结果
