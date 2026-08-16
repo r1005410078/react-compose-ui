@@ -82,8 +82,6 @@ interface StageOverlayProps {
   readonly editablePath?: StageEditablePath | null
   /** 当前活动顶点：corner 顶点被激活时也显示切线手柄。 */
   readonly activePathVertexId?: string | null
-  /** 双击路径顶点的回调；切换 corner / smooth 的语义由宿主实现。 */
-  readonly onPathVertexToggle?: (vertexId: string) => void
   readonly onInteraction: (
     hit: StageInteractionHit,
     event: ReactPointerEvent<Element>,
@@ -111,14 +109,12 @@ const PATH_TANGENT_HANDLE_RADIUS = 3.5
 function EditablePathLayer({
   activeVertexId,
   onInteraction,
-  onVertexToggle,
   path,
   viewport,
 }: {
   readonly path: StageEditablePath
   readonly activeVertexId: string | null
   readonly viewport: StageViewport
-  readonly onVertexToggle?: (vertexId: string) => void
   readonly onInteraction: (
     hit: StageInteractionHit,
     event: ReactPointerEvent<Element>,
@@ -190,7 +186,6 @@ function EditablePathLayer({
             cy={vertex.screen.y}
             data-testid={`stage-path-vertex-hit-${vertex.id}`}
             r={LINE_ENDPOINT_HIT_RADIUS}
-            onDoubleClick={() => onVertexToggle?.(vertex.id)}
             onPointerDown={(event) => onInteraction(
               { kind: 'path-handle', handle: 'vertex', vertexId: vertex.id },
               event,
@@ -388,7 +383,6 @@ export function StageOverlay({
   snapGuides,
   editablePath = null,
   activePathVertexId = null,
-  onPathVertexToggle,
   onInteraction,
 }: StageOverlayProps) {
   const paintPoint = (kind: StagePaintHandle['kind']) => paintHandles.find((handle) => handle.kind === kind)?.point
@@ -540,16 +534,6 @@ export function StageOverlay({
           )}
         />
       ))}
-      {/* 可编辑路径层：位于画布辅助线之上、选区框之下（后续兄弟节点覆盖其上）。 */}
-      {editablePath ? (
-        <EditablePathLayer
-          activeVertexId={activePathVertexId}
-          path={editablePath}
-          viewport={viewport}
-          onInteraction={onInteraction}
-          onVertexToggle={onPathVertexToggle}
-        />
-      ) : null}
       {lineSelectionActive && lineSelection && lineStartScreen && lineEndScreen ? (
         <g className="compose-stage__line-selection" data-testid="stage-line-selection">
           <line
@@ -670,6 +654,16 @@ export function StageOverlay({
               />
             )) : null}
         </>
+      ) : null}
+      {/* 可编辑路径层：位于变换手柄之上——关键帧顶点常与对象角点重合，压在手柄之下
+          将永远拖不动；吸附参考线等瞬时反馈仍渲染在其后（最上层）。 */}
+      {editablePath ? (
+        <EditablePathLayer
+          activeVertexId={activePathVertexId}
+          path={editablePath}
+          viewport={viewport}
+          onInteraction={onInteraction}
+        />
       ) : null}
       {/* Godot 旋转：空闲只显示中心；按下后拉线跟随鼠标（rotationPreview）。 */}
       {rotationPreviewScreen ? (

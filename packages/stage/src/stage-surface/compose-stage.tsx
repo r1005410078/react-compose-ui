@@ -1181,6 +1181,7 @@ function ComposeStageReady({
     onOutputSelect,
     onPaintSamplingComplete,
     onEditablePathChange,
+    onEditablePathVertexToggle,
     idFactory,
   })
   useLayoutEffect(() => {
@@ -1196,6 +1197,7 @@ function ComposeStageReady({
       onOutputSelect,
       onPaintSamplingComplete,
       onEditablePathChange,
+      onEditablePathVertexToggle,
       idFactory,
     }
   })
@@ -1932,6 +1934,10 @@ function ComposeStageReady({
             worldPoint: effect.worldPoint,
             modifiers: effect.modifiers,
           })
+          return
+        }
+        if (effect.type === 'path.vertex-toggle') {
+          current.onEditablePathVertexToggle?.(effect.vertexId)
           return
         }
         if (effect.type === 'command.dispatch') {
@@ -2960,7 +2966,6 @@ function ComposeStageReady({
           paintSample={interaction.paintSample}
           editablePath={editablePath}
           activePathVertexId={editablePathActiveVertexId}
-          onPathVertexToggle={onEditablePathVertexToggle}
           resizeHandles={resizeHandles}
           rotatable={selectionRotatable}
           rotationPreview={interaction.rotationPreview}

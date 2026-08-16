@@ -4140,3 +4140,76 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(0)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
 })
+
+test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、双击切换与撤销粒度', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 准备：放 Rectangle → 创建动画 → 0 ms 打点 → 播放头 200 ms 拖出第二个关键帧。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await node.click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const startBox = (await node.boundingBox())!
+  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(startBox.x + startBox.width / 2 + 120, startBox.y + startBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // 位置轨道存在即显示可编辑路径：两个顶点。
+  const path = stage.locator('[data-testid="stage-editable-path"]')
+  await expect(path).toBeVisible()
+  const vertexHits = stage.locator('[data-testid^="stage-path-vertex-hit-"]')
+  await expect(vertexHits).toHaveCount(2)
+
+  // 拖第二个顶点：松手后关键帧值变化，对象在播放头 200 ms 跟到新位置。
+  const draggedBox = (await node.boundingBox())!
+  const secondVertex = (await vertexHits.nth(1).boundingBox())!
+  await page.mouse.move(secondVertex.x + secondVertex.width / 2, secondVertex.y + secondVertex.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    secondVertex.x + secondVertex.width / 2,
+    secondVertex.y + secondVertex.height / 2 + 80,
+    { steps: 4 },
+  )
+  await page.mouse.up()
+  await expect.poll(async () => (await node.boundingBox())!.y - draggedBox.y).toBeGreaterThan(60)
+
+  // 一次拖拽在撤销栈里只有一条记录：撤销一次即回到拖拽前位置。
+  await stage.press('Control+z')
+  await expect.poll(async () => Math.abs((await node.boundingBox())!.y - draggedBox.y)).toBeLessThan(2)
+
+  // 双击第二个顶点切换 smooth：出现切线手柄；拖切线让轨迹弯曲（折线点集变化）。
+  await vertexHits.nth(1).dblclick()
+  const tangentHits = stage.locator('[data-testid^="stage-path-tangent-"]')
+  await expect(tangentHits.first()).toBeVisible()
+  const straightPoints = await stage
+    .locator('[data-testid="stage-editable-path-line"]')
+    .getAttribute('points')
+  const tangent = (await tangentHits.first().boundingBox())!
+  await page.mouse.move(tangent.x + tangent.width / 2, tangent.y + tangent.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(tangent.x + tangent.width / 2, tangent.y + tangent.height / 2 - 60, { steps: 4 })
+  await page.mouse.up()
+  await expect
+    .poll(async () => stage.locator('[data-testid="stage-editable-path-line"]').getAttribute('points'))
+    .not.toBe(straightPoints)
+
+  // 再次双击回 corner：切线清零、手柄消失。
+  await vertexHits.nth(1).dblclick()
+  await expect(tangentHits).toHaveCount(0)
+
+  // 退出动画模式（切到底部组其他标签）：路径覆盖层立即消失。
+  await editor.locator('[data-workspace-tab="compose-transaction-log"]').click()
+  await expect(stage.locator('[data-testid="stage-editable-path"]')).toHaveCount(0)
+})

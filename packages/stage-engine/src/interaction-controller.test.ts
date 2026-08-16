@@ -1875,6 +1875,26 @@ describe('OpenSpec: stage-engine / 可编辑路径会话、命中与手势', () 
     expect(effects.filter((effect) => effect.type === 'command.dispatch')).toEqual([])
   })
 
+  it('双击顶点发出 vertex-toggle 而不开始拖拽手势', () => {
+    const { controller, effects } = setup()
+    controller.updateContext(pathContext())
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 100, y: 100 }, clickCount: 2,
+      hit: { kind: 'path-handle', handle: 'vertex', vertexId: 'k0' }, modifiers,
+    })
+    expect(effects).toContainEqual({ type: 'path.vertex-toggle', entityId: 'a', vertexId: 'k0' })
+    // 不进入 path-edit 手势，也不捕获指针。
+    expect(controller.getSnapshot().phase).toBe('idle')
+    expect(effects.filter((effect) => effect.type === 'pointer.capture')).toEqual([])
+    // 三连击不再次切换：toggle 不幂等，>=2 会让双击的两次按下各切一次。
+    controller.send({
+      type: 'pointer.down', pointerId: 2, button: 0, point: { x: 100, y: 100 }, clickCount: 3,
+      hit: { kind: 'path-handle', handle: 'vertex', vertexId: 'k0' }, modifiers,
+    })
+    controller.send({ type: 'pointer.up', pointerId: 2, point: { x: 100, y: 100 }, modifiers })
+    expect(effects.filter((effect) => effect.type === 'path.vertex-toggle')).toHaveLength(1)
+  })
+
   it('手势中会话被关闭时发出 cancel，宿主据此丢弃预览', () => {
     const { controller, effects } = setup()
     controller.updateContext(pathContext())

@@ -18,6 +18,7 @@ import { createComposeAnimationCommandHandlers } from '@compose-ui/animation'
 import { rewriteAutoRecordCommand } from '../animation-mode/auto-record'
 import { useAnimationLayout } from '../animation-mode/use-animation-layout'
 import { useAnimationMode } from '../animation-mode/use-animation-mode'
+import { useMotionPath } from '../animation-mode/use-motion-path'
 import { createAnimationFieldAdornment } from '../animation-mode/animation-field-adornment'
 import {
   ComposeDialog,
@@ -36,7 +37,7 @@ import {
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
 import type { ComposePageSetupReference } from '@compose-ui/core'
-import type { ComposeEntity, ComposeResolvedComponentSnapshot, JsonObject } from '@compose-ui/core'
+import type { ComposeEntity, ComposeResolvedComponentSnapshot, EditorCommand, JsonObject } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeHistoryShortcuts } from '@compose-ui/history'
@@ -425,6 +426,28 @@ export function ComposeEditor({
     animationMode.displayDocument,
     animationMode.active && animationMode.animationId !== null,
   )
+  // 选中实体的运动路径：单选普通 Entity 才有意义（与菱形注入同一判据）。
+  // 宿主可传部分实现的 controller（测试替身），字段逐个防御。
+  const motionPathEntityId = controller
+    && controller.selectedIds?.length === 1
+    && !controller.instanceInnerSelection
+    && controller.document?.entities[controller.selectedIds[0]!]
+    ? controller.selectedIds[0]!
+    : null
+  const motionPath = useMotionPath({
+    enabled: animationMode.active && animationMode.animationId !== null,
+    document: controller?.document,
+    displayDocument: animationMode.displayDocument,
+    animationId: animationMode.animationId,
+    entityId: motionPathEntityId,
+    layoutSnapshot: animationLayout.state?.status === 'ready'
+      ? animationLayout.state.snapshot
+      : null,
+    ...(animationRuntime
+      ? { dispatch: (command: EditorCommand) => animationRuntime.dispatch(command) }
+      : {}),
+    idFactory: animationCommandId,
+  })
   // 自动记录：动画模式 + 开关开启时安装 dispatch 改写层，把画布与 Inspector 的属性编辑
   // 改写为播放头处的关键帧命令；关闭或退出模式即卸载，编辑恢复直写基础文档。
   const setCommandRewrite = controller?.setCommandRewrite
@@ -1701,12 +1724,17 @@ export function ComposeEditor({
           scriptModuleLoader: pages?.scriptModuleLoader,
           scriptScope: activePageSession?.scriptScope,
           // 动画模式：画布显示播放头时刻的采样文档与配套布局；dispatch 不变，仍打在基础文档上。
+          // 运动路径只在此分支注入：退出动画模式即随 spread 一起消失。
           ...(animationMode.active && animationMode.animationId && animationMode.displayDocument
             ? {
                 document: animationMode.displayDocument,
                 layoutSnapshot: animationLayout.state?.status === 'ready'
                   ? animationLayout.state.snapshot
                   : undefined,
+                editablePath: motionPath.editablePath,
+                editablePathActiveVertexId: motionPath.activeVertexId,
+                onEditablePathChange: motionPath.onEditablePathChange,
+                onEditablePathVertexToggle: motionPath.onEditablePathVertexToggle,
               }
             : {}),
           shortcuts: resolvedPreferences.shortcuts,

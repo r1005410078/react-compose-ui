@@ -363,6 +363,11 @@ export type StageInteractionEffect =
       readonly worldPoint: StagePoint
       readonly modifiers: StageInteractionModifiers
     }
+  /**
+   * 双击路径顶点；宿主据此切换 corner / smooth。放在引擎而不是 DOM dblclick：
+   * 手势期间指针被 capture，DOM 双击事件在真实浏览器里无法可靠合成。
+   */
+  | { readonly type: 'path.vertex-toggle'; readonly entityId: string; readonly vertexId: string }
 
 /** surface 与 controller 之间唯一允许的命令式端口。 @public */
 export interface StageInteractionSurfacePort {
@@ -1794,6 +1799,17 @@ export function createStageInteractionController(): StageInteractionController {
       const editing = context.pathEditing
       // 未注入路径会话时忽略：Overlay 不该在没有会话时渲染手柄，这里兜底保证行为不变。
       if (!editing) return
+      // 双击顶点 = 切换 corner / smooth，不开始拖拽手势。必须恰好等于 2：连击计数会从
+      // 邻近的上一次拖拽延续，若用 >=2，双击的两次按下会各触发一次切换（计数 2 和 3），
+      // 净效果是切过去又切回来。toggle 不幂等，这与实体双击进入文字编辑的 >=2 不同。
+      if (event.hit.handle === 'vertex' && event.clickCount === 2) {
+        apply([{
+          type: 'path.vertex-toggle',
+          entityId: editing.entityId,
+          vertexId: event.hit.vertexId,
+        }])
+        return
+      }
       const world = worldPoint(event.point, context.viewport)
       gesture = {
         type: 'path',

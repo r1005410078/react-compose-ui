@@ -1362,15 +1362,13 @@ describe('OpenSpec: stage / 画布可编辑路径覆盖层与手势上报', () =
     expect(screen.queryByTestId('stage-editable-path')).not.toBeInTheDocument()
   })
 
-  it('OpenSpec: stage / 画布路径编辑手势上报 / 双击顶点上报切换', () => {
+  it('OpenSpec: stage / 画布路径编辑手势上报 / 顶点按下产生 path-handle 命中', () => {
     const onInteraction = vi.fn()
-    const onToggle = vi.fn()
     render(
       <StageOverlay
         {...overlayBase}
         editablePath={editablePath}
         onInteraction={onInteraction}
-        onPathVertexToggle={onToggle}
       />,
     )
     fireEvent.pointerDown(screen.getByTestId('stage-path-vertex-hit-k0'), {
@@ -1381,7 +1379,32 @@ describe('OpenSpec: stage / 画布可编辑路径覆盖层与手势上报', () =
       { kind: 'path-handle', handle: 'vertex', vertexId: 'k0' },
       expect.anything(),
     )
-    fireEvent.doubleClick(screen.getByTestId('stage-path-vertex-hit-k0'))
+  })
+
+  it('OpenSpec: stage / 画布路径编辑手势上报 / 双击顶点上报切换', () => {
+    // 双击判定走引擎 clickCount（DOM dblclick 在指针捕获下无法可靠合成）。
+    const value = document()
+    const onToggle = vi.fn()
+    render(
+      <ComposeStage
+        dispatch={vi.fn() as never}
+        document={value}
+        editablePath={editablePath}
+        layoutSnapshot={layoutSnapshot(value)}
+        selectedIds={['a']}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onEditablePathVertexToggle={onToggle}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+        registry={registry}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByTestId('stage-path-vertex-hit-k0'), {
+      pointerId: 1,
+      button: 0,
+      detail: 2,
+    })
     expect(onToggle).toHaveBeenCalledWith('k0')
   })
 

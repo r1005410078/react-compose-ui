@@ -21,20 +21,25 @@
 
 ## 3. editor 接线
 
-- [ ] 3.1 Red：`motion-path-adapter` 纯函数测试——位置轨道 → `StageEditablePath`，
+- [x] 3.1 Red：`motion-path-adapter` 纯函数测试——位置轨道 → `StageEditablePath`，
   以及手势结果 → 命令的翻译（顶点 → 关键帧写入、切线 → 空间切线、双击 → 模式切换）。
-- [ ] 3.2 Green：实现 `packages/editor/src/animation-mode/motion-path-adapter.ts`，
+- [x] 3.2 Green：实现 `packages/editor/src/animation-mode/motion-path-adapter.ts`，
   用 `@compose-ui/animation` 的 `sampleComposeMotionPath` 求几何。
-- [ ] 3.3 Green：`move` 阶段只更新本地预览几何，`end` 阶段派发带 `meta.mergeKey` 的命令，
+- [x] 3.3 Green：`move` 阶段只更新本地预览几何，`end` 阶段派发带 `meta.mergeKey` 的命令，
   保证一次拖拽在撤销栈里只有一条记录。
-- [ ] 3.4 Green：Shift 约束 smooth 顶点两侧切线共线等长；切到 corner 时清零两侧切线。
-- [ ] 3.5 只在动画模式且选中 Entity 有位置轨道时传入路径；退出动画模式立即清除。
+- [x] 3.4 Green：Shift 约束 smooth 顶点两侧切线共线等长；切到 corner 时清零两侧切线。
+- [x] 3.5 只在动画模式且选中 Entity 有位置轨道时传入路径；退出动画模式立即清除。
 
 ## 4. 验证
 
-- [ ] 4.1 `bun run --filter @compose-ui/stage-engine test`、
+- [x] 4.1 `bun run --filter @compose-ui/stage-engine test`、
   `bun run --filter @compose-ui/stage test`、`bun run --filter @compose-ui/editor test`。
-- [ ] 4.2 仓库根 `bun run lint && bun run typecheck && bun run test && bun run build`。
-- [ ] 4.3 `bun run test:e2e`：拖顶点后关键帧值变化、拖切线后轨迹弯曲、双击切换顶点模式、
-  退出动画模式后覆盖层消失、一次拖拽只产生一条撤销记录。
-- [ ] 4.4 `openspec validate add-stage-motion-path --strict`。
+- [x] 4.2 仓库根 `bun run lint && bun run typecheck && bun run test && bun run build`。
+  typecheck/build 全绿；lint 与 test 仅剩 add-animation-mode-binding 任务 7.2 已记录的
+  既有失败（compose-editor react-hooks/refs 一条、只读页面 JSON 标签两例），与本变更无关。
+- [x] 4.3 `bun run test:e2e`：拖顶点后关键帧值变化、拖切线后轨迹弯曲、双击切换顶点模式、
+  退出动画模式后覆盖层消失、一次拖拽只产生一条撤销记录。该用例抓出并修复三个缺陷：
+  value 草稿命令缺 `timeMs` 被 keyframe.set 拒绝（已补真实 runtime 契约回归测试）；
+  路径层被 nw 缩放手柄压住（顶点与对象角点必然重合，已调层并修订规范措辞）；
+  双击切换用 `>=2` 判定会因连击计数从上次拖拽延续而切换两次（改为恰好等于 2）。
+- [x] 4.4 `openspec validate add-stage-motion-path --strict`。
