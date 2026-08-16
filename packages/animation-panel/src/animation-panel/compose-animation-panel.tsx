@@ -20,6 +20,7 @@ import {
   zoomComposeAnimationTimelineAt,
 } from './animation-panel-model'
 import { AnimationPanelProvider } from './animation-panel-provider'
+import { ComposeButton } from '@compose-ui/components'
 import { CommittedInput } from './committed-input'
 import {
   ChevronIcon,
@@ -486,20 +487,22 @@ export function ComposeAnimationTimeline({
           data-timeline-header="true"
           role="group"
         >
-          <button
+          <ComposeButton
               aria-label={value.isPlaying ? t.pause : t.play}
               className="compose-animation-timeline__icon-button"
-              type="button"
+              size="icon-xs"
+              variant="ghost"
               onClick={() => setPlaying(!value.isPlaying)}
             >
               {value.isPlaying ? <PauseIcon /> : <PlayIcon />}
-            </button>
-            <button
+            </ComposeButton>
+            <ComposeButton
               aria-label={t.addKeyframe}
               className="compose-animation-timeline__icon-button"
-              type="button"
+              size="icon-xs"
+              variant="ghost"
               onClick={addKeyframe}
-            ><DiamondIcon /></button>
+            ><DiamondIcon /></ComposeButton>
             <div className="compose-animation-timeline__time-fields">
               {/* 隐式 role 是 status：播放时每帧都会变化，必须显式关掉播报，否则读屏会被刷屏。 */}
               <output aria-label={t.currentTime} aria-live="off" className="compose-animation-timeline__time-readout">
@@ -533,20 +536,21 @@ export function ComposeAnimationTimeline({
                 const selected = value.playbackMode === mode
                 const label = playbackModeLabel(mode, locale)
                 return (
-                  <button
+                  <ComposeButton
                     aria-checked={selected}
                     aria-label={label}
                     className="compose-animation-timeline__icon-button compose-animation-timeline__playback-mode-button"
                     data-selected={selected || undefined}
                     key={mode}
                     role="radio"
-                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
                     onClick={() => setPlaybackMode(mode)}
                   >
                     {mode === 'play-once' ? <PlayOnceIcon /> : null}
                     {mode === 'loop' ? <LoopIcon /> : null}
                     {mode === 'ping-pong' ? <PingPongIcon /> : null}
-                  </button>
+                  </ComposeButton>
                 )
               })}
             </div>
@@ -635,36 +639,39 @@ export function ComposeAnimationTimeline({
                   ><ChevronIcon /></button>
                   <span className="compose-animation-timeline__track-label">{trackLabel}</span>
                   <div className="compose-animation-timeline__track-actions">
-                    <button
+                    <ComposeButton
                       aria-label={t.lockTrack(trackLabel)}
                       aria-pressed={locked}
                       className="compose-animation-timeline__track-action"
-                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
                       onClick={(event) => {
                         event.stopPropagation()
                         toggleTrackFlag(track.id, setLockedTrackIds)
                       }}
-                    ><LockIcon /></button>
-                    <button
+                    ><LockIcon /></ComposeButton>
+                    <ComposeButton
                       aria-label={t.soloTrack(trackLabel)}
                       aria-pressed={solo}
                       className="compose-animation-timeline__track-action"
-                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
                       onClick={(event) => {
                         event.stopPropagation()
                         toggleTrackFlag(track.id, setSoloTrackIds)
                       }}
-                    ><SoloIcon /></button>
-                    <button
+                    ><SoloIcon /></ComposeButton>
+                    <ComposeButton
                       aria-label={t.hideTrack(trackLabel)}
                       aria-pressed={hidden}
                       className="compose-animation-timeline__track-action"
-                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
                       onClick={(event) => {
                         event.stopPropagation()
                         toggleTrackFlag(track.id, setHiddenTrackIds)
                       }}
-                    ><EyeIcon /></button>
+                    ><EyeIcon /></ComposeButton>
                   </div>
                 </div>
                 {track.expanded ? track.properties.map((property, propertyIndex) => {

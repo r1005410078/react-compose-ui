@@ -1,3 +1,7 @@
+/* 共享 Primitive（ComposeInput / ComposeButton）的 cu: 工具类由 components 包提供；
+   dist JS 不携带 CSS，必须在这里显式引入，独立宿主才不会渲染出无样式控件。 */
+@import '@compose-ui/components/styles.css';
+
 /*
  * Editor 的 Tailwind 构建会按扫描结果裁剪保留在其 `components` layer 中的外部规则。
  * 动画包是独立发布的命名空间样式，不能放入该保留 layer，否则宿主只会渲染出浏览器默认控件。
@@ -57,7 +61,6 @@
 }
 
 /* —— 左轨角格工具栏（参考：播放 / 关键帧 / 时间·时长 / 模式图标） —— */
-.compose-animation-timeline__icon-button,
 .compose-animation-timeline__track-toggle {
   display: grid;
   flex: 0 0 auto;
@@ -69,21 +72,14 @@
   cursor: pointer;
 }
 
+/*
+ * 图标按钮的交互 chrome（hover 底色、焦点环、圆角）由 ComposeButton ghost/icon-xs 提供。
+ * 这里只保留面板语义：默认前景色与 flex 布局参与方式。本文件无 layer，写多了会压过
+ * 共享 Primitive 的 layered 工具类，让 hover 永远失效。
+ */
 .compose-animation-timeline__icon-button {
-  width: 26px;
-  height: 26px;
-  border-radius: 4px;
+  flex: 0 0 auto;
   color: var(--ap-text);
-}
-.compose-animation-timeline__icon-button:hover,
-.compose-animation-timeline__icon-button:focus-visible {
-  border-color: transparent;
-  color: var(--compose-text-strong, #f0f0f0);
-  background: color-mix(in srgb, var(--ap-raised) 70%, #2c2c2c);
-  outline: none;
-}
-.compose-animation-timeline__icon-button:focus-visible {
-  box-shadow: 0 0 0 1px var(--ap-accent);
 }
 
 .compose-animation-timeline__icon-button svg,
@@ -178,9 +174,7 @@
   background: color-mix(in srgb, var(--ap-control) 88%, #2a2a2a);
 }
 .compose-animation-timeline__playback-mode-button {
-  width: 24px;
   height: 22px;
-  border-radius: 3px;
   color: var(--ap-muted);
 }
 .compose-animation-timeline__playback-mode-button[data-selected='true'],
@@ -392,16 +386,9 @@
   margin-left: 4px;
 }
 .compose-animation-timeline__track-action {
-  display: grid;
   width: 20px;
   height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
   color: var(--ap-muted);
-  background: transparent;
-  place-items: center;
-  cursor: pointer;
   opacity: .72;
 }
 .compose-animation-timeline__track-action svg {
@@ -415,10 +402,7 @@
 }
 .compose-animation-timeline__track-action:hover,
 .compose-animation-timeline__track-action:focus-visible {
-  color: var(--ap-text);
-  background: color-mix(in srgb, var(--ap-raised) 70%, #2c2c2c);
   opacity: 1;
-  outline: none;
 }
 .compose-animation-timeline__track-action[aria-pressed='true'] {
   color: var(--ap-accent);

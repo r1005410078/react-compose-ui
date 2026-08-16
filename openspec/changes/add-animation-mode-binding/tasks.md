@@ -22,8 +22,9 @@
 - [x] 2.8a 给 `package.json` 增加 `@compose-ui/components` 依赖并在 vite 外置。
 - [x] 2.8b 数值输入改用共享 Primitive：给 `ComposeInput` 补 `size: default | sm | xs` 变体
   （对齐 `ComposeButton` 已有做法），`CommittedInput` 保留草稿/提交状态机但渲染委托给它。
-- [ ] 2.8c 图标按钮与播放模式按钮改用 `ComposeButton size="icon-xs"`，
-  并清理 `styles.css` 中随之失效的 `__icon-button` / `__playback-mode-button` 规则。
+- [x] 2.8c 图标按钮、播放模式与轨道动作按钮改用 `ComposeButton variant="ghost" size="icon-xs"`；
+  面板样式表补 `@import '@compose-ui/components/styles.css'`（dist JS 不携带 CSS），
+  删除会压过 layered 工具类的无 layer chrome 规则，保留尺寸覆盖、SVG 描边与状态色。
 - [ ] 2.8d 颜色字段改用 `ComposeColorPicker`（等第 3 节 `valueKind` 落地后一起做，
   届时颜色控件只在 `valueKind === 'color'` 的轨道上出现）。
 - [ ] 2.8e 轨道与属性行的"更多操作"菜单——**阻塞**：`update-animation-panel-foundation`
