@@ -117,7 +117,15 @@ const demoCounterDocument: ComposeDocument = {
     },
   },
 }
-const demoHomePageText = serializeComposePageFile(createEmptyComposePageFile())
+// Home 页挂同一份 setup：动画播放控制示例需要页面导出（animate 布尔）可绑定。
+const demoHomePageText = serializeComposePageFile({
+  ...createEmptyComposePageFile(),
+  setupScript: {
+    providerId: 'demo-memory',
+    assetKey: 'demo-home-setup',
+    scope: 'persistent',
+  },
+})
 const demoAppManifestText = serializeComposeAppManifest({
   ...createEmptyComposeAppManifest(),
   // 示例工作区需要一个确定首页，Home 不能只是孤立的页面资源。
@@ -264,7 +272,11 @@ export function createDemoAssetProvider(options: {
   const num = ctx.state(0)
   const onAdd = () => { num.value += 1 }
   const buttonLabel = ctx.computed(() => num.value === 0 ? 'Add' : \`Add \${num.value}\`)
-  return { num, onAdd, buttonLabel }
+  // 动画播放控制示例：把 animate 绑定到动画检查器的"播放"，预览中即自动播放；
+  // onToggleAnimate 可绑到按钮，false -> true 的上升沿会让动画从头重播。
+  const animate = ctx.state(true)
+  const onToggleAnimate = () => { animate.value = !animate.value }
+  return { num, onAdd, buttonLabel, animate, onToggleAnimate }
 }
 `], { type: 'text/javascript' }),
     }],

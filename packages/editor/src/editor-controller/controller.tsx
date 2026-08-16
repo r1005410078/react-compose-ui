@@ -875,6 +875,8 @@ export interface ComposeEditorController {
   readonly registry: ComposeEntityRegistry
   /** Controller 与组件工作区共享的项目组件 Store。 */
   readonly componentStore?: ComposeComponentStore
+  /** 宿主注入的当前页面 setup 作用域；Inspector 绑定候选与动画检查器共用。 */
+  readonly scriptScope?: ComposePageScriptScope
   /** 结构兼容 `ComposeHistoryNavigationController` 的事务历史。 */
   readonly history: ComposeHistoryNavigationController
   /** 当前有效且可见的选择。 */
@@ -1797,6 +1799,7 @@ export function useComposeEditorController({
     runtime,
     registry,
     componentStore,
+    scriptScope,
     history: runtime,
     selectedIds,
     expandedIds,

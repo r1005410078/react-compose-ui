@@ -4213,3 +4213,65 @@ test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、�
   await editor.locator('[data-workspace-tab="compose-transaction-log"]').click()
   await expect(stage.locator('[data-testid="stage-editable-path"]')).toHaveCount(0)
 })
+
+test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打点-绑定-预览自动播放', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 创建动画并打出两个位置关键帧（0 ms 菱形打点 + 200 ms 画布拖动自动记录）。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await node.click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const box = (await node.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // 选中动画片段：属性区切换为动画检查器。
+  await animationPanel.getByRole('button', { name: /^动画片段 Rectangle：/u }).click()
+  await expect(inspector.getByRole('textbox', { name: '名称' })).toHaveValue('动画 1')
+
+  // 选回对象轨道：恢复 Entity Inspector；再点片段回到动画检查器。
+  await animationPanel.getByRole('button', { name: '选择对象轨道 Rectangle' }).click()
+  await expect(inspector.getByRole('spinbutton', { name: '位置 X' })).toBeVisible()
+  await animationPanel.getByRole('button', { name: /^动画片段 Rectangle：/u }).click()
+  await expect(inspector.getByRole('textbox', { name: '名称' })).toHaveValue('动画 1')
+
+  // 循环播放让预览断言稳定；修改经 animation.configure 写入文档。
+  await inspector.getByRole('combobox', { name: '播放模式' }).selectOption('loop')
+
+  // 绑定播放到页面 setup 导出的布尔 animate（候选按语义过滤，字符串/数值成员不出现）。
+  // 绑定入口悬停显隐：先悬停"播放"行让入口可见。
+  await inspector.locator('[data-property-path="playing"]').hover()
+  await inspector.getByRole('button', { name: /绑定\s*播放/u }).click()
+  const picker = page.getByRole('dialog')
+  await expect(picker.getByText('animate')).toBeVisible()
+  await expect(picker.getByText('buttonLabel')).toHaveCount(0)
+  await picker.getByText('animate').click()
+
+  // 打开预览：animate 初始为 true，动画自动播放——实体位置随时间变化。
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const previewEntity = page
+    .getByTestId('compose-preview-dialog-artboard')
+    .locator('[data-testid^="compose-preview-entity-"]')
+    .first()
+  await expect(previewEntity).toBeVisible()
+  const initial = (await previewEntity.boundingBox())!
+  await expect
+    .poll(async () => Math.abs(((await previewEntity.boundingBox())?.x ?? initial.x) - initial.x), {
+      timeout: 4000,
+    })
+    .toBeGreaterThan(10)
+})

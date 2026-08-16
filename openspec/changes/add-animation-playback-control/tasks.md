@@ -56,13 +56,18 @@
 
 ## 6. 示例与文档
 
-- [ ] 6.1 在 `app/` 的集成示例里加一个最小可跑的例子：setup 导出一个布尔，
+- [x] 6.1 在 `app/` 的集成示例里加一个最小可跑的例子：setup 导出一个布尔，
   绑定到动画播放，预览中可见。
-- [ ] 6.2 `README.md` 完成度说明同步——动画控制第一阶段（脚本）已可用，事件仍未实现。
+- [x] 6.2 `README.md` 完成度说明同步——动画控制第一阶段（脚本）已可用，事件仍未实现。
 
 ## 7. 验证
 
-- [ ] 7.1 各包 `test` / `typecheck` / `lint` / `build`。
-- [ ] 7.2 仓库根 `bun run lint && bun run typecheck && bun run test && bun run build`。
-- [ ] 7.3 `bun run test:e2e`：创建动画 → 打点 → 绑定播放变量 → 开预览 → 动画自动播放。
-- [ ] 7.4 `openspec validate add-animation-playback-control --strict`。
+- [x] 7.1 各包 `test` / `typecheck` / `lint` / `build`。
+- [x] 7.2 仓库根 `bun run lint && bun run typecheck && bun run test && bun run build`。
+  typecheck/build 全绿；lint 与 test 仅剩 add-animation-mode-binding 任务 7.2 已记录的
+  既有失败，与本变更无关。
+- [x] 7.3 `bun run test:e2e`：创建动画 → 打点 → 绑定播放变量 → 开预览 → 动画自动播放。
+  用例还覆盖片段/轨道选择切换 Inspector 与播放模式修改。示例 Home 页此前没有挂 setup
+  脚本（计数器脚本在 Counter 页），已把同一份 setup 挂到 Home 并导出 animate 布尔——
+  这同时就是 6.1 的最小示例。
+- [x] 7.4 `openspec validate add-animation-playback-control --strict`。

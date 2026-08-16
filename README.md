@@ -7,7 +7,8 @@ React Compose UI 是一组可嵌入 React 项目的低代码 UI 组件，面向�
 基础能力验证阶段：已经具备 ECS 化 JSON 文档、同步命令事务、Entity Registry、无限 Stage、
 基础物料、聚合 Inspector、Scene Tree、History、Command/Operation Log、资源浏览、页面系统、
 setup 脚本 Props 绑定、first-class Group、项目组件与 Unity 风格 Variant、关联实例、只读 Preview，
-以及可独立嵌入的本地动画面板组件；动画持久化、数据源与正式发布流程仍未实现。
+以及场景动画基础能力（动画模式、关键帧打点、运动路径编辑与脚本播放控制）；
+数据源与正式发布流程仍未实现。
 
 ## 环境与安装
 
@@ -309,9 +310,11 @@ bun run test:e2e
 当前 Component Asset v1 不提供 Detach、跨 Provider Variant、自动更新、批量 Apply、任意实例内部
 结构编辑或超过八层的继承/嵌套。Interaction、数据源和正式持久化仍需独立 OpenSpec。
 
-场景动画目前只有领域模型：`@compose-ui/animation` 提供 `Animation` ECS Component 协议、
-插值采样器、运动路径几何与动画命令，`ComposeDocument.animations` 保存动画清单。
-动画模式 UI、属性面板打点、画布运动路径编辑与脚本播放控制仍在 OpenSpec 提案中，尚未实现。
+场景动画基础能力已交付：`@compose-ui/animation` 提供 `Animation` ECS Component 协议、
+插值采样器、运动路径几何与动画命令，`ComposeDocument.animations` 保存动画清单；编辑器
+提供动画模式（时间线接文档、属性面板菱形打点、自动记录、画布运动路径编辑）与动画检查器，
+预览支持脚本播放控制第一阶段——`playing` 布尔绑定按上升沿从头播放、`currentTime` 数值绑定
+由脚本完全接管时间轴。事件回调（onComplete/onLoop）、播放速度与多动画混合仍未实现。
 
 ## License
 

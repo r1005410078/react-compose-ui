@@ -1538,7 +1538,7 @@ export function ComposeEditor({
             dispatch={(command) => animationRuntime.dispatch(command)}
             idFactory={animationCommandId}
             messages={editorMessages.animationMode}
-            scope={activePageSession?.scriptScope}
+            scope={activePageSession?.scriptScope ?? controller.scriptScope}
           />
         )
       }
