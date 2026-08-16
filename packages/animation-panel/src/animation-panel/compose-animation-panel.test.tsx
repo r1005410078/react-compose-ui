@@ -730,4 +730,22 @@ describe('ComposeAnimationPanel', () => {
       .style.getPropertyValue('--ruler-minor-step')
     expect(stepAfter).not.toBe(stepBefore)
   })
+
+  it('OpenSpec: animation-panel / 双栏共用垂直滚动 / 左右两栏同属一个纵向滚动容器', () => {
+    const view = render(
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const board = view.container.querySelector('.compose-animation-timeline__board-scroll')
+    const trackList = view.container.querySelector('.compose-animation-timeline__track-list')
+    const scaleScroll = view.container.querySelector('.compose-animation-timeline__scale-scroll')
+    expect(board).toBeTruthy()
+    // 两栏都必须住在同一个纵向滚动容器里；各自再开一条纵向滚动就会出现行错位。
+    expect(board?.contains(trackList as Node)).toBe(true)
+    expect(board?.contains(scaleScroll as Node)).toBe(true)
+    // jsdom 不做布局，真实对齐由 Playwright 覆盖；这里守住的是结构前提。
+    expect(view.container.querySelectorAll('.compose-animation-timeline__board-scroll'))
+      .toHaveLength(1)
+  })
 })

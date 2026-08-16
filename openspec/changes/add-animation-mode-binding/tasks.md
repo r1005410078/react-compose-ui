@@ -15,8 +15,10 @@
 - [x] 2.3 Red：多轨道各自渲染片段、选择片段联动轨道的模型与组件测试。
 - [x] 2.4 Green：`ComposeAnimationClip.trackId` 改必填，删除 label / ID 前缀启发式。
 - [x] 2.5 Green：删除 `displayTrackLabel` / `displayPropertyLabel` 白名单与内置演示文案。
-- [ ] 2.6 Red：超出可视高度的多轨道滚动对齐测试（基线：左栏滚动 80px 后右栏行位置必须同步位移）。
-- [ ] 2.7 Green：重排双栏 DOM，共用同一条垂直滚动。
+- [x] 2.6 已由 `add-animation-timeline-zoom` 落地：`board-scroll` 已是唯一纵向滚动容器，
+  左列 `overflow: visible`、右列 `overflow-y: clip`。补了一条结构回归测试守住这个前提；
+  真实布局对齐由 Playwright 覆盖，jsdom 不做布局。
+- [x] 2.7 无需重排：结构已符合要求，见 2.6。
 - [ ] 2.8 给 `package.json` 增加 `@compose-ui/components` 依赖并在 vite 外置；
   按钮、数值输入、颜色字段改用共享 Primitive，用 `ComposeContextMenu` 提供行的更多操作菜单。
 
