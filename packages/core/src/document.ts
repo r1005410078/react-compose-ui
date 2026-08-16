@@ -950,11 +950,14 @@ function validateAnimations(value: unknown, issues: DocumentValidationIssue[]) {
     }
     rejectUnknownFields(
       item,
-      ['id', 'name', 'durationMs', 'playbackMode', 'bindings'],
+      ['id', 'name', 'durationMs', 'playbackMode', 'autoplay', 'bindings'],
       path,
       issues,
       'animation.invalid',
     )
+    if (item.autoplay !== undefined && typeof item.autoplay !== 'boolean') {
+      addIssue(issues, 'animation.invalid', [...path, 'autoplay'], 'autoplay 必须是布尔值')
+    }
     if (!nonEmpty(item.id)) {
       addIssue(issues, 'animation.invalid', [...path, 'id'], '动画 ID 必须是非空字符串')
     }

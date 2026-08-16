@@ -129,9 +129,21 @@ function ScriptMembersRenderer({ value }: ComposePropertyPanelRendererProps) {
   )
 }
 
+/** 标签列内的「返回成员」+ 数量徽标：让标签行承载成员计数信息。 */
+function ScriptMembersLabel({ label, value }: ComposePropertyPanelRendererProps) {
+  const { snapshot } = value as ScriptMembersValue
+  return (
+    <span className="compose-editor__page-script-members-label">
+      {label}
+      <span aria-hidden="true">{snapshot.exports.length}</span>
+    </span>
+  )
+}
+
 const PAGE_SCRIPT_RENDERERS = [{
   id: 'page-script-members',
   component: ScriptMembersRenderer,
+  labelComponent: ScriptMembersLabel,
   layout: 'full-width' as const,
 }]
 

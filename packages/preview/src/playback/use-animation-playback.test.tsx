@@ -40,7 +40,10 @@ function stubAnimationFrames() {
 
 const registry = createComposeEntityRegistry()
 
-function animatedDocument(bindings?: ComposeAnimationBindings): ComposeDocument {
+function animatedDocument(
+  bindings?: ComposeAnimationBindings,
+  autoplay = false,
+): ComposeDocument {
   const box: ComposeEntity = {
     id: 'box',
     name: 'Box',
@@ -83,6 +86,7 @@ function animatedDocument(bindings?: ComposeAnimationBindings): ComposeDocument 
       name: '入场',
       durationMs: 400,
       playbackMode: 'play-once',
+      ...(autoplay ? { autoplay: true } : {}),
       ...(bindings ? { bindings } : {}),
     }],
   }
@@ -103,6 +107,32 @@ describe('ComposePreview 动画播放（脚本绑定驱动）', () => {
     render(<ComposePreview document={animatedDocument()} registry={registry} />)
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
     // 无绑定：显示 0 ms 采样结果且不推进——没有任何 rAF 排队。
+    expect(raf.pending()).toBe(0)
+  })
+
+  it('OpenSpec: compose-preview / 动画自动播放 / 勾选自动播放无需绑定即从头播放', async () => {
+    const raf = stubAnimationFrames()
+    render(<ComposePreview document={animatedDocument(undefined, true)} registry={registry} />)
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+    // autoplay：挂载首帧即触发上升沿，rAF 循环启动；play-once 播完后停止。
+    expect(raf.pending()).toBe(1)
+    act(() => raf.flush(0))
+    act(() => raf.flush(1000))
+    expect(raf.pending()).toBe(0)
+  })
+
+  it('OpenSpec: compose-preview / 动画自动播放 / playing 绑定存在时自动播放被忽略', async () => {
+    const raf = stubAnimationFrames()
+    const { scope } = booleanScope(false)
+    render(
+      <ComposePreview
+        document={animatedDocument({ playing: { scope: 'page', exportName: 'playing' } }, true)}
+        registry={registry}
+        scriptScope={scope}
+      />,
+    )
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+    // 绑定接管：导出为 false，autoplay 不生效，无任何帧排队。
     expect(raf.pending()).toBe(0)
   })
 

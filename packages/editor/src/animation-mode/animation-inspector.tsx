@@ -94,8 +94,8 @@ export function AnimationInspector({
     name: animation.name,
     durationMs: animation.durationMs,
     playbackMode: animation.playbackMode,
-    // 编辑期不播放：这两行只承载绑定入口，字面值是占位。
-    playing: false,
+    // playing 的字面值承载可持久化的自动播放开关；currentTimeMs 编辑期不播放、字面值是占位。
+    playing: animation.autoplay === true,
     currentTimeMs: 0,
   }), [animation])
 
@@ -146,7 +146,11 @@ export function AnimationInspector({
         else if (field === 'playbackMode' && next.playbackMode !== animation.playbackMode) {
           configure({ playbackMode: next.playbackMode })
         }
-        // playing / currentTimeMs 的字面编辑不写文档：编辑期不播放，绑定才是事实。
+        // 未绑定变量时手动勾选播放 = 持久化的自动播放开关。
+        // currentTimeMs 的字面编辑不写文档：编辑期不播放。
+        else if (field === 'playing' && next.playing !== (animation.autoplay === true)) {
+          configure({ autoplay: next.playing })
+        }
       }}
       />
     </div>

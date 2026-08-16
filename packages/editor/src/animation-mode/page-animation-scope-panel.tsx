@@ -258,11 +258,11 @@ export function PageAnimationScopePanel({
     }
     return v.object(fields)
   }, [busy, canChange, currentTimeBound, loading, messages, mirrorReady, selectableEntries])
-  // 编辑期不播放：playing / currentTimeMs 的字面值只是占位，绑定才是事实来源。
+  // playing 的字面值承载可持久化的自动播放开关；currentTimeMs 编辑期不播放、字面值只是占位。
   const panelValue = useMemo(() => ({
     file: currentValue,
-    ...(mirrorReady ? { playing: false, currentTimeMs: 0 } : {}),
-  }), [currentValue, mirrorReady])
+    ...(mirrorReady ? { playing: animation?.autoplay === true, currentTimeMs: 0 } : {}),
+  }), [animation?.autoplay, currentValue, mirrorReady])
   const variables = useMemo(() => buildAnimationBindingVariables(scopeSnapshot), [scopeSnapshot])
   const bindingValue = useMemo(
     () => (animation ? buildAnimationBindingValue(animation) : []),
@@ -328,8 +328,20 @@ export function PageAnimationScopePanel({
             }
           : {})}
         onValueChange={(_next, change) => {
-          // playing / currentTimeMs 的字面编辑不写文档：编辑期不播放。
-          if (change.path[0] === 'file') void chooseAnimation(change.value as string)
+          if (change.path[0] === 'file') {
+            void chooseAnimation(change.value as string)
+            return
+          }
+          // 未绑定变量时手动勾选播放 = 持久化的自动播放开关（写入清单，随保存回写动画文件）。
+          // currentTimeMs 的字面编辑不写文档：编辑期不播放。
+          if (change.path[0] === 'playing' && animation) {
+            dispatch({
+              id: idFactory(),
+              type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
+              payload: { animationId: animation.id, autoplay: change.value === true },
+              meta: { source: 'canvas-animation-inspector' },
+            } as EditorCommand)
+          }
         }}
       />
       {bound && !mirrorReady ? (

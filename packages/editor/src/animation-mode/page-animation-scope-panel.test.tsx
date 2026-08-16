@@ -134,6 +134,21 @@ describe('PageAnimationScopePanel', () => {
     expect(screen.queryByText('未绑定')).not.toBeInTheDocument()
   })
 
+  it('OpenSpec: compose-preview / 动画自动播放 / 未绑定变量时手动勾选播放写入清单', async () => {
+    const { dispatch } = renderPanel({ reference: boundReference, animation: mirrorAnimation })
+
+    const playing = await screen.findByRole('checkbox', { name: '播放' })
+    expect(playing).not.toBeChecked()
+    fireEvent.click(playing)
+
+    await waitFor(() => {
+      expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'animation.configure',
+        payload: { animationId: 'intro', autoplay: true },
+      }))
+    })
+  })
+
   it('OpenSpec: editor-workspace-layout / 画布动画绑定属性 / 取消关联不删除资源', async () => {
     const { onAnimationChange, provider } = renderPanel({
       reference: boundReference,

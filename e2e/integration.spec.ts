@@ -4134,17 +4134,18 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
 
   // 播放头拖到 200 ms 后在画布上拖动对象：自动记录写入第二个关键帧（绝对位置）。
+  // 抓取点取 1/4 处而不是中心：运动路径顶点位于物体中心，中心按下会抓到顶点。
   const originalBox = await node.boundingBox()
   expect(originalBox).not.toBeNull()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   await page.mouse.move(
-    originalBox!.x + originalBox!.width / 2,
-    originalBox!.y + originalBox!.height / 2,
+    originalBox!.x + originalBox!.width / 4,
+    originalBox!.y + originalBox!.height / 4,
   )
   await page.mouse.down()
   await page.mouse.move(
-    originalBox!.x + originalBox!.width / 2 + 96,
-    originalBox!.y + originalBox!.height / 2,
+    originalBox!.x + originalBox!.width / 4 + 96,
+    originalBox!.y + originalBox!.height / 4,
     { steps: 5 },
   )
   await page.mouse.up()
@@ -4240,9 +4241,10 @@ test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、�
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const startBox = (await node.boundingBox())!
-  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(startBox.x + startBox.width / 4, startBox.y + startBox.height / 4)
   await page.mouse.down()
-  await page.mouse.move(startBox.x + startBox.width / 2 + 120, startBox.y + startBox.height / 2, { steps: 4 })
+  await page.mouse.move(startBox.x + startBox.width / 4 + 120, startBox.y + startBox.height / 4, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
@@ -4313,9 +4315,10 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const box = (await node.boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(box.x + box.width / 4, box.y + box.height / 4)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.move(box.x + box.width / 4 + 120, box.y + box.height / 4, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
@@ -4375,9 +4378,10 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   const originalBox = (await nodes.first().boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
-  await page.mouse.move(originalBox.x + originalBox.width / 2, originalBox.y + originalBox.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(originalBox.x + originalBox.width / 4, originalBox.y + originalBox.height / 4)
   await page.mouse.down()
-  await page.mouse.move(originalBox.x + originalBox.width / 2 + 96, originalBox.y + originalBox.height / 2, { steps: 4 })
+  await page.mouse.move(originalBox.x + originalBox.width / 4 + 96, originalBox.y + originalBox.height / 4, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(1)
 
@@ -4449,9 +4453,10 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
   const startBox = (await nested.boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
-  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(startBox.x + startBox.width / 4, startBox.y + startBox.height / 4)
   await page.mouse.down()
-  await page.mouse.move(startBox.x + startBox.width / 2 + 80, startBox.y + startBox.height / 2 + 40, { steps: 4 })
+  await page.mouse.move(startBox.x + startBox.width / 4 + 80, startBox.y + startBox.height / 4 + 40, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
   // 动画拖动只写关键帧，不把子级拖出容器。
@@ -4503,6 +4508,9 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动�
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  // 创建是异步的 建文件→绑定→水合 流程：等时间线退出空态再取几何，避免拖拽落在重绑定窗口。
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+  await expect(instanceContent).toBeVisible()
 
   // 播放头 0 拖动实例：自动记录建轨并打 0 ms 帧；播放头 200 再拖出第二帧。
   const startBox = (await instanceContent.boundingBox())!
@@ -4514,9 +4522,11 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动�
   const zeroBox = (await instanceContent.boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const midBox = (await instanceContent.boundingBox())!
-  await page.mouse.move(midBox.x + midBox.width / 2, midBox.y + midBox.height / 2)
+  // 实例大于画布视口（1280×720，左缘在画布外）：1/4 点会落到画布外的面板上。
+  // 用中心加小偏移抓取——既落在画布内，又避开物体中心的运动路径顶点。
+  await page.mouse.move(midBox.x + midBox.width / 2 + 60, midBox.y + midBox.height / 2 + 40)
   await page.mouse.down()
-  await page.mouse.move(midBox.x + midBox.width / 2 + 140, midBox.y + midBox.height / 2, { steps: 4 })
+  await page.mouse.move(midBox.x + midBox.width / 2 + 200, midBox.y + midBox.height / 2 + 40, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
   await expect(animationPanel.getByRole('button', { name: /^动画片段 Anim Card：/u })).toBeVisible()
@@ -4546,9 +4556,10 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const box = (await node.boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(box.x + box.width / 4, box.y + box.height / 4)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 2 + 96, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.move(box.x + box.width / 4 + 96, box.y + box.height / 4, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 

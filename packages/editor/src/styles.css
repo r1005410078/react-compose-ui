@@ -1174,6 +1174,25 @@
   background: color-mix(in srgb, var(--compose-panel-bg) 88%, black);
 }
 
+/* 标签列内的成员计数徽标：与标签同行、右侧对齐。 */
+.compose-editor__page-script-members-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.compose-editor__page-script-members-label > span {
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  padding: 0 4px;
+  border: 1px solid var(--compose-border-strong);
+  border-radius: 8px;
+  color: var(--compose-text);
+  font-size: 9px;
+}
+
 .compose-editor__page-script-members > ul {
   margin: 0;
   padding: 0;

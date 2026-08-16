@@ -372,6 +372,14 @@ export type ComposeAnimation = JsonObject & {
   /** 动画总时长，有限正数毫秒。 */
   readonly durationMs: number
   readonly playbackMode: ComposeAnimationPlaybackMode
+  /**
+   * 预览与发布输出挂载后是否自动播放。
+   *
+   * @remarks
+   * 缺省等价于 false。`bindings.playing` 存在时脚本绑定优先，本字段被忽略——
+   * 手动勾选与变量驱动是互斥的两种播放来源。
+   */
+  readonly autoplay?: boolean
   /** 缺省表示该动画不受任何脚本导出驱动。 */
   readonly bindings?: ComposeAnimationBindings
 }
