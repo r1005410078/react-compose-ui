@@ -18,11 +18,17 @@ const composeButtonVariants = cva(
           'cu:border-border cu:bg-background cu:hover:bg-muted cu:hover:text-foreground cu:aria-expanded:bg-muted cu:aria-expanded:text-foreground',
         secondary:
           'cu:bg-secondary cu:text-secondary-foreground cu:hover:bg-secondary/80 cu:aria-expanded:bg-secondary cu:aria-expanded:text-secondary-foreground',
+        /*
+         * 无底色的两个 variant 必须显式声明 bg-transparent：Compose 不引入 Tailwind
+         * Preflight（会污染宿主基础元素），因此 <button> 保留浏览器默认的
+         * background-color: buttonface。缺这一句时 ghost 在深色面板上会渲染成
+         * 浅灰实心方块，而不是"只有 hover 才有底"的幽灵按钮。
+         */
         ghost:
-          'cu:hover:bg-muted cu:hover:text-foreground cu:aria-expanded:bg-muted cu:aria-expanded:text-foreground',
+          'cu:bg-transparent cu:hover:bg-muted cu:hover:text-foreground cu:aria-expanded:bg-muted cu:aria-expanded:text-foreground',
         destructive:
           'cu:bg-destructive cu:text-destructive-foreground cu:hover:bg-destructive/90 cu:focus-visible:border-destructive/40 cu:focus-visible:ring-destructive/20',
-        link: 'cu:text-primary cu:underline-offset-4 cu:hover:underline',
+        link: 'cu:bg-transparent cu:text-primary cu:underline-offset-4 cu:hover:underline',
       },
       size: {
         default: 'cu:h-8 cu:gap-1.5 cu:px-2.5',

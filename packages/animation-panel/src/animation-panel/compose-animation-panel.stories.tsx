@@ -107,3 +107,50 @@ export const ScrolledManyTracks: Story = {
     expect(gap()).toBeCloseTo(gapBefore, 0)
   },
 }
+
+/**
+ * 行内动作按钮（锁定 / 独奏 / 隐藏 / 更多操作）的按需显现。
+ *
+ * @remarks
+ * 显现走 CSS 的 `:hover` / `:focus-within`，这里用键盘路径（聚焦行的命中按钮触发
+ * `:focus-within`）来验证：`userEvent.hover` 只派发合成事件，不会真的改变浏览器的
+ * `:hover` 状态，断言不了 CSS 显现。焦点路径本身也是无障碍上必须成立的那一条。
+ *
+ * 之所以要在真实 Chromium 下守：`ComposeButton` 基类带 `transition-all`，会把
+ * `visibility` 这个离散属性一并纳入过渡，于是按钮"能显现但要等到过渡中点"。
+ * jsdom 既不跑过渡也不应用外部样式表，这类缺陷在单测里完全看不见。
+ */
+export const RowActionsOnFocus: Story = {
+  play: async ({ canvasElement }) => {
+    const root = canvasElement.ownerDocument
+    const row = root.querySelectorAll<HTMLElement>('.compose-animation-timeline__track-row')[1]!
+    const lock = row.querySelector<HTMLElement>('.compose-animation-timeline__track-action')!
+    const label = row.querySelector<HTMLElement>('.compose-animation-timeline__track-label')!
+    const visible = (el: HTMLElement) => getComputedStyle(el).visibility === 'visible'
+
+    expect(visible(lock)).toBe(false)
+    const labelLeft = label.getBoundingClientRect().left
+
+    // 过渡里一旦混进 visibility（例如误用 transition-all），显现会推迟到过渡中点。
+    expect(getComputedStyle(lock).transitionProperty).not.toMatch(/\ball\b|visibility/u)
+
+    row.querySelector<HTMLElement>('.compose-animation-timeline__row-hit')!.focus()
+    // 不等任何一帧：显现必须是即时的，等一帧就等于放过了被过渡拖慢的回归。
+    expect(visible(lock)).toBe(true)
+    // 占位常驻：显现前后行内其它元素不得位移。
+    expect(label.getBoundingClientRect().left).toBeCloseTo(labelLeft, 1)
+
+    // 已按下的状态开关在焦点离开后仍要可见，否则"轨道被锁定"这件事无从看出。
+    lock.click()
+    // React 的状态更新不是同步的，aria-pressed 要等这一帧提交完才反映出来。
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    expect(lock.getAttribute('aria-pressed')).toBe('true')
+    // 焦点还在 .row-hit 上（脚本 click 不改变焦点），blur 必须冲着当前焦点元素来，
+    // 否则整行仍处于 :focus-within，下面"未按下的开关回到隐藏"恒为假。
+    ;(root.activeElement as HTMLElement | null)?.blur()
+    expect(visible(lock)).toBe(true)
+    // 同一行里没有按下的开关则回到隐藏。
+    const solo = row.querySelectorAll<HTMLElement>('.compose-animation-timeline__track-action')[1]!
+    expect(visible(solo)).toBe(false)
+  },
+}

@@ -25,9 +25,23 @@
   --ap-keyframe-dim: color-mix(in srgb, var(--ap-accent) 10%, var(--ap-border));
   --ap-keyframe-line-width: 0.5px;
   --ap-keyframe-selected-ring: var(--compose-text-strong, #f0f0f0);
-  /* 组件组选中（含其属性）浅底；当前行选中更深一档；未选中无底色 */
-  --ap-row-group: color-mix(in srgb, var(--ap-raised) 72%, var(--ap-bg));
+  /*
+   * 组件组选中（含其属性）浅底；当前行选中更深一档；未选中无底色。
+   * 组底用前景色兑出中性提亮而不是 raised 表面色：raised 与 panel-bg 在深色主题里只差
+   * 几级亮度，兑出来的组底几乎看不见；用 --ap-text 兑还能自动适配浅色主题——那里
+   * 前景是深色，兑出来的是「压暗」，方向仍然正确。
+   * 行选中不用满色：左侧 2px 强调条才是主信号，底色满上去会盖过右栏同一行的片段。
+   */
+  --ap-row-group: color-mix(in srgb, var(--ap-text) 5%, var(--ap-bg));
   --ap-row-selected: var(--compose-surface-selected, #3a3a3c);
+  --ap-row-selected-fill: color-mix(in srgb, var(--ap-row-selected) 58%, var(--ap-bg));
+  /*
+   * 工具栏小控件的两档表面色。同样用前景色兑背景色而不是掺固定的深灰常量：
+   * 掺 #2a2a2a 这类常量在浅色主题下会把本该更浅的"抬起"面板兑成中灰，
+   * 选中态的播放模式芯片曾因此变成深灰底配深色图标。
+   */
+  --ap-chip-bg: color-mix(in srgb, var(--ap-text) 7%, var(--ap-bg));
+  --ap-chip-active-bg: color-mix(in srgb, var(--ap-text) 16%, var(--ap-bg));
   --ap-ruler-height: 30px;
   --ap-track-row-height: 28px;
   --ap-property-row-height: 28px;
@@ -103,12 +117,16 @@
   stroke: currentColor;
 }
 
+/*
+ * 时间组的分组节奏：组内 2px，组间 8px。工具栏三组（走带 / 时间 / 播放模式）靠间距
+ * 分节而不是分隔线——280px 的角格里每多一条竖线都是噪声。
+ */
 .compose-animation-timeline__time-fields {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
-  margin-left: 2px;
+  margin-left: 8px;
 }
 .compose-animation-timeline__time-readout,
 .compose-animation-timeline__duration-control {
@@ -118,24 +136,42 @@
   justify-content: center;
   min-width: 0;
   padding: 0 6px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 4px;
   /* 时间与时长是用户要读取的实际数值而非次要装饰；muted 色在浅色主题下
      对这块混合底色只有约 3.8:1 对比度，不满足 WCAG 4.5:1。 */
   color: var(--ap-text);
-  background: color-mix(in srgb, var(--ap-control) 88%, #2a2a2a);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/*
+ * 当前时间是只读示数、时长是可编辑输入，两者原本长得一模一样，用户无从判断哪个能点。
+ * 用形状区分而不是颜色：示数无底无框（纯文本），输入保留底色并在 hover 时浮出边框。
+ * "200 / 300 ms" 是播放器通用的「当前 / 总长」读法，斜杠纯装饰，不进可访问名。
+ */
 .compose-animation-timeline__time-readout {
-  min-width: 36px;
+  min-width: 32px;
+  padding: 0 2px;
+  background: transparent;
+}
+.compose-animation-timeline__time-readout::after {
+  margin: 0 0 0 5px;
+  color: var(--ap-muted);
+  content: '/';
+  font-weight: 400;
 }
 .compose-animation-timeline__duration-control {
   min-width: 40px;
   padding: 0 4px;
+  background: var(--ap-chip-bg);
+  transition: border-color .12s ease;
+}
+.compose-animation-timeline__duration-control:hover {
+  border-color: var(--ap-border);
 }
 .compose-animation-timeline__duration-control:focus-within {
+  border-color: var(--ap-accent);
   color: var(--ap-text);
   box-shadow: 0 0 0 1px var(--ap-accent);
 }
@@ -158,7 +194,7 @@
 }
 .compose-animation-timeline__time-unit {
   flex: 0 0 auto;
-  margin-left: 1px;
+  margin-left: 2px;
   color: var(--ap-muted);
   font-size: 11px;
   font-weight: 500;
@@ -169,10 +205,10 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 0;
-  margin-left: 4px;
+  margin-left: 8px;
   padding: 1px;
   border-radius: 5px;
-  background: color-mix(in srgb, var(--ap-control) 88%, #2a2a2a);
+  background: var(--ap-chip-bg);
 }
 .compose-animation-timeline__playback-mode-button {
   height: 22px;
@@ -181,7 +217,7 @@
 .compose-animation-timeline__playback-mode-button[data-selected='true'],
 .compose-animation-timeline__playback-mode-button[aria-checked='true'] {
   color: var(--compose-text-strong, #f0f0f0);
-  background: color-mix(in srgb, var(--ap-raised) 55%, #3a3a3a);
+  background: var(--ap-chip-active-bg);
 }
 .compose-animation-timeline__playback-mode-button svg {
   width: 13px;
@@ -213,6 +249,10 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  /* 细滚动条：默认宽度会在 280px 的窄面板里吃掉可观比例，且亮色滑块与深色面板不搭。
+     标尺右侧的补偿留白由 JS 实测 offsetWidth - clientWidth 得出，会自动跟上这里的宽度。 */
+  scrollbar-color: var(--ap-border) transparent;
+  scrollbar-width: thin;
 }
 .compose-animation-timeline__content {
   display: flex;
@@ -236,7 +276,24 @@
   overflow: visible;
   min-width: 0;
 }
-.compose-animation-timeline__track-group { min-width: 0; }
+.compose-animation-timeline__track-group { position: relative; min-width: 0; }
+/*
+ * 组间发丝线：物体组之间原本只靠"组选中底"区分，未选中时四个组的属性行连成一片，
+ * 扫读时找不到边界。用绝对定位的 1px 伪元素而不是 border-top——左右两栏必须逐行等高，
+ * 任何改变盒高的分隔都会让左侧标签与右侧车道错开一个累积像素。
+ * 右栏的同名规则见 .track-lanes，两侧同一条 y 上各画各的。
+ */
+.compose-animation-timeline__track-group + .compose-animation-timeline__track-group::before {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--ap-border) 80%, transparent);
+  content: '';
+  pointer-events: none;
+}
 /* 头部行左半：宽度与 .tracks 对齐（原来靠父级 .tracks 的 width 撑开，现在挪到 .header-row 里要自己声明） */
 .compose-animation-timeline__tracks-header {
   display: flex;
@@ -316,11 +373,54 @@
 .compose-animation-timeline__track-group[data-group-active='true'] .compose-animation-timeline__property-row {
   background: var(--ap-row-group);
 }
-/* 当前点选行：更深一档，盖过组底 */
+/*
+ * 当前点选行：更深一档，盖过组底。
+ * 必须把"组内"这一份也写出来：选中任何一行都会让它所在的组变成 active，而
+ * `.track-group[data-group-active] .track-row`（三个选择器）特指度高于
+ * `.track-row[data-selected]`（两个），只写后者的话组底永远赢，这一档实际从未生效过。
+ */
 .compose-animation-timeline__track-row[data-selected='true'],
-.compose-animation-timeline__property-row[data-selected='true'] {
+.compose-animation-timeline__property-row[data-selected='true'],
+.compose-animation-timeline__track-group[data-group-active='true'] .compose-animation-timeline__track-row[data-selected='true'],
+.compose-animation-timeline__track-group[data-group-active='true'] .compose-animation-timeline__property-row[data-selected='true'] {
   z-index: 1;
-  background: var(--ap-row-selected);
+  background: var(--ap-row-selected-fill);
+}
+/*
+ * 悬停高亮走独立的 ::after 覆盖层而不是改 background：行底色有「无 / 组选中 / 行选中」
+ * 三档，每档再各写一条 hover 底色会变成九宫格式的组合爆炸，而且半透明覆盖能在任何一档
+ * 之上得到一致的提亮量。z-index 留在默认层：行内容（标签、按钮）都是 z-index:1，
+ * 覆盖层只压住底色和 .row-hit，不会盖住文字。
+ */
+.compose-animation-timeline__track-row::after,
+.compose-animation-timeline__property-row::after {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  content: '';
+  pointer-events: none;
+  transition: background-color .1s ease;
+}
+.compose-animation-timeline__track-row:hover::after,
+.compose-animation-timeline__property-row:hover::after {
+  background: color-mix(in srgb, var(--ap-text) 7%, transparent);
+}
+/*
+ * 选中行的左侧强调条：仅靠一档更深的底色在深色面板上区分度太低，尤其当整组已经有
+ * 组选中底时，「组内哪一行是当前行」几乎看不出来。强调条压在 z-index:2，
+ * 高于 hover 覆盖层。
+ */
+.compose-animation-timeline__track-row[data-selected='true']::before,
+.compose-animation-timeline__property-row[data-selected='true']::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--ap-accent);
+  content: '';
+  pointer-events: none;
 }
 .compose-animation-timeline__track-row[data-hidden='true'] {
   opacity: .55;
@@ -345,6 +445,10 @@
   fill: none;
   stroke: currentColor;
   stroke-width: 1.4;
+}
+/* 组处于活动状态时物体标记跟着提亮，让"当前在编辑哪个物体"在纵向扫读时先被看见 */
+.compose-animation-timeline__track-group[data-group-active='true'] .compose-animation-timeline__object-mark {
+  color: var(--ap-text);
 }
 .compose-animation-timeline__track-label,
 .compose-animation-timeline__property-label {
@@ -390,7 +494,6 @@
   width: 20px;
   height: 20px;
   color: var(--ap-muted);
-  opacity: .72;
 }
 .compose-animation-timeline__track-action svg {
   width: 13px;
@@ -403,11 +506,10 @@
 }
 .compose-animation-timeline__track-action:hover,
 .compose-animation-timeline__track-action:focus-visible {
-  opacity: 1;
+  color: var(--ap-text);
 }
 .compose-animation-timeline__track-action[aria-pressed='true'] {
   color: var(--ap-accent);
-  opacity: 1;
 }
 /* 属性行：树形缩进 + 右侧 channel / 数值 / 菱形；默认无底色 */
 .compose-animation-timeline__property-row {
@@ -417,15 +519,20 @@
   background: transparent;
   font-size: 11px;
 }
-.compose-animation-timeline__property-row:hover {
+/* 活动组的属性名提亮一档：与其它组的属性拉开，但仍低于物体名，保住三级层次 */
+.compose-animation-timeline__track-group[data-group-active='true'] .compose-animation-timeline__property-row {
+  color: color-mix(in srgb, var(--ap-text) 68%, var(--ap-muted));
+}
+/* hover 必须写成同等特指度的两条，否则会被上面的组内规则压掉，活动组里 hover 就没反馈了 */
+.compose-animation-timeline__property-row:hover,
+.compose-animation-timeline__track-group[data-group-active='true'] .compose-animation-timeline__property-row:hover {
   color: var(--ap-text);
 }
-.compose-animation-timeline__track-group[data-group-active='true'] .compose-animation-timeline__property-row:hover:not([data-selected='true']) {
-  background: color-mix(in srgb, var(--ap-row-group) 85%, #2a2a2a);
-}
-.compose-animation-timeline__property-row[data-selected='true'] {
+/* 同上：选中行必然身处活动组，组内那一份要一起写，否则前景色被组规则压掉 */
+.compose-animation-timeline__property-row[data-selected='true'],
+.compose-animation-timeline__track-group[data-group-active='true'] .compose-animation-timeline__property-row[data-selected='true'] {
   color: var(--compose-text-strong, #e8e8e8);
-  background: var(--ap-row-selected);
+  background: var(--ap-row-selected-fill);
 }
 .compose-animation-timeline__property-tree {
   position: relative;
@@ -492,7 +599,8 @@
   width: 10px;
   height: 10px;
   flex: 0 0 auto;
-  border: 1px solid rgb(255 255 255 / 28%);
+  /* 描边跟前景色兑，浅色主题下白描边等于没有 */
+  border: 1px solid color-mix(in srgb, var(--ap-text) 32%, transparent);
   border-radius: 2px;
 }
 .compose-animation-timeline__property-keyframe-mark {
@@ -619,6 +727,23 @@
 .compose-animation-timeline__track-lanes {
   position: relative;
   isolation: isolate;
+}
+/*
+ * 组间发丝线的右栏一半，与左栏 .track-group 的那条同一条 y。
+ * 用 ::after 而不是 border-top 或 inset box-shadow：组选中底是 ::before（z-index:0）
+ * 且要铺进左右 gutter，任何画在元素自身背景层上的线都会被它盖住；同时 border 会改盒高，
+ * 让左右两栏逐行错开。伸进 gutter 与组底同宽，两端才不会断口。
+ */
+.compose-animation-timeline__track-lanes + .compose-animation-timeline__track-lanes::after {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: calc(-1 * var(--ap-scale-gutter, 10px));
+  left: calc(-1 * var(--ap-scale-gutter, 10px));
+  height: 1px;
+  background: color-mix(in srgb, var(--ap-border) 80%, transparent);
+  content: '';
+  pointer-events: none;
 }
 /* 选中组件时组底一直存在：铺满时间列并伸进左右 gutter */
 .compose-animation-timeline__track-lanes[data-group-active='true']::before {
@@ -1141,6 +1266,8 @@
 @media (max-width: 680px) {
   .compose-animation-timeline__content { grid-template-columns: 240px minmax(0, 1fr); }
   .compose-animation-timeline__property-row { padding-left: 20px; }
+  /* 窄面板下工具栏放弃分组留白，先保证三组控件都塞得进角格 */
+  .compose-animation-timeline__time-fields,
   .compose-animation-timeline__playback-modes { margin-left: 2px; }
 }
 @media (max-height: 240px) {
@@ -1162,21 +1289,33 @@
 }
 
 /*
- * 更多操作按钮：占位常驻、可见性按需。
+ * 行内动作按钮（锁定 / 独奏 / 隐藏 / 更多操作）：占位常驻、可见性按需。
+ * 常驻可见时每条物体行都挂着四个图标，纵向扫读被这排重复 chrome 主导，
+ * 真正要读的物体名和数值反而退到次要；这些又都是低频操作，交给悬停揭示。
+ *
  * 用 visibility 而不是 display/条件渲染——占位必须始终参与布局，否则显现的一瞬间
  * 行内元素会横向跳动；条件渲染还会让键盘 Tab 序在悬停前后不一致。
+ * :focus-within 保证键盘用户 Tab 进来即可见，不依赖指针。
  * 菜单打开期间由行上的 data-menu-open 维持可见：指针移开后按钮消失会让菜单
  * 挂在一个看不见的锚点上。
  */
-.compose-animation-timeline__more-actions {
+.compose-animation-timeline__track-action {
   visibility: hidden;
+  /*
+   * ComposeButton 基类带 cu:transition-all，会把 visibility 这个离散属性一并纳入过渡：
+   * 离散属性在过渡中点才翻转，于是悬停后要等约半个 duration 按钮才出现，手感明显发黏，
+   * 断言"悬停即可见"的测试也会随机失败。这里只列真正需要过渡的属性，把 visibility 排除掉。
+   */
+  transition-property: color, background-color, border-color, box-shadow, transform, translate;
 }
-.compose-animation-timeline__track-row:hover .compose-animation-timeline__more-actions,
-.compose-animation-timeline__track-row:focus-within .compose-animation-timeline__more-actions,
-.compose-animation-timeline__track-row[data-menu-open='true'] .compose-animation-timeline__more-actions,
-.compose-animation-timeline__property-row:hover .compose-animation-timeline__more-actions,
-.compose-animation-timeline__property-row:focus-within .compose-animation-timeline__more-actions,
-.compose-animation-timeline__property-row[data-menu-open='true'] .compose-animation-timeline__more-actions {
+/* 已按下的状态开关必须常驻：锁定/独奏/隐藏是轨道的持久状态，藏起来等于状态不可见。 */
+.compose-animation-timeline__track-action[aria-pressed='true'],
+.compose-animation-timeline__track-row:hover .compose-animation-timeline__track-action,
+.compose-animation-timeline__track-row:focus-within .compose-animation-timeline__track-action,
+.compose-animation-timeline__track-row[data-menu-open='true'] .compose-animation-timeline__track-action,
+.compose-animation-timeline__property-row:hover .compose-animation-timeline__track-action,
+.compose-animation-timeline__property-row:focus-within .compose-animation-timeline__track-action,
+.compose-animation-timeline__property-row[data-menu-open='true'] .compose-animation-timeline__track-action {
   visibility: visible;
 }
 /*
@@ -1184,7 +1323,7 @@
  * .property-meta 整体是 pointer-events:none（原本只承载只读文本，好让整行的
  * .row-hit 覆盖层接管点击），按钮必须显式收回指针事件，否则永远被 row-hit 吃掉。
  */
-.compose-animation-timeline__property-meta .compose-animation-timeline__more-actions {
+.compose-animation-timeline__property-meta .compose-animation-timeline__track-action {
   margin-left: 2px;
   pointer-events: auto;
 }
