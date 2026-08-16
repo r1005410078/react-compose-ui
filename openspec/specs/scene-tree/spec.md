@@ -330,3 +330,31 @@ ID 不冲突的复合地址标识。投影 MUST 惰性发生：仅在实例节�
 - **WHEN** 实例节点未展开
 - **THEN** 不构建内部投影，观感与既有单节点一致
 
+### Requirement: 场景树复用共享右键菜单
+
+场景树 MUST 使用 `@compose-ui/components` 的 ContextMenu 与 Hook 呈现节点和空白区命令菜单，
+不得保留独立 Portal 定位、菜单键盘循环或外部点击关闭实现。
+
+#### Scenario: 在共享菜单中保留场景选择语义
+
+- **WHEN** 用户右键已选节点、未选节点或树空白区
+- **THEN** 已选节点保留多选，未选节点先请求单选，空白区只显示根级命令
+- **AND** Ctrl/Meta 特例仍不打开自定义菜单，命令顺序、禁用状态和危险删除标记保持不变
+
+### Requirement: 场景树区分组件实例与普通节点
+
+场景树 MUST 为 component-instance 使用组件符号图标（空心，表示引用），MUST NOT 使用与主组件库
+实心图标相同的填充样式冒充库本体。普通物料节点 MUST 继续使用其物料图标。节点 accessible name
+或可见标签 MUST 不暗示页面行为「创建变体」。
+
+#### Scenario: 实例行使用组件符号
+
+- **WHEN** 场景树包含 component-instance 与 Rectangle 子节点
+- **THEN** 实例行显示空心组件符号，Rectangle 显示矩形类图标
+
+#### Scenario: 复制不改变树语义为变体资源
+
+- **WHEN** 用户通过场景树复制组件实例节点
+- **THEN** 树中出现第二个实例节点
+- **AND** 不出现新的库资源创建成功作为该操作的必然结果
+

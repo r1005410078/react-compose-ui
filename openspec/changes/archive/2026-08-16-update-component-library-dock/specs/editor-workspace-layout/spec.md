@@ -1,3 +1,11 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: 可选场景历史分栏`
+- TO: `### Requirement: 场景下方工具分栏`
+
+- FROM: `### Requirement: Dockview 场景历史布局`
+- TO: `### Requirement: Dockview 场景工具布局`
+
 ## MODIFIED Requirements
 
 ### Requirement: 四区编辑器工作区

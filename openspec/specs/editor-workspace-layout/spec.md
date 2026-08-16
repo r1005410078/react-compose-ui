@@ -6,16 +6,14 @@
 ## Requirements
 ### Requirement: 四区编辑器工作区
 
-系统 MUST 在 `ComposeEditor` 首次挂载时建立四个宏观区域：左侧 Scene Graph 与 Component
-Library、中间 Canvas 与 Stage Toolbar、右侧 Component Inspector、底部 Transaction Log 与
-Command。中央 Canvas 必须获得扣除三个边缘区后的主要可用空间。
+系统 MUST 在 `ComposeEditor` 首次挂载时建立四个宏观区域：左侧 Scene Graph（内部包含下方基础
+组件与可选历史工具区）、中间 Canvas 与 Stage Toolbar、右侧 Component Inspector、底部资源、Command
+与 Transaction Log 工具组。中央 Canvas 必须获得扣除三个边缘区后的主要可用空间。
 
 #### Scenario: 首次挂载编辑器
 
 - **WHEN** 宿主挂载一个 `ComposeEditor`
-- **THEN** 工作区显示 Scene Graph、Component Library 与 Component 图标标签，以及标题为
-  “Canvas”“日志”“命令”的三个文字标签
-- **AND** 三个图标标签分别保留对应的可访问名称和悬停提示
+- **THEN** 工作区显示 Scene Graph、默认选中的基础组件工具区，以及标题为“Canvas”“资源”“命令”“日志”的四个文字标签
 - **AND** Scene Graph 使用设计组件图标，且左侧活动栏底部显示带可访问名称的设置图标
 - **AND** Stage Toolbar 显示在 Canvas 内容区域顶部
 - **AND** Canvas 内容显示在中央主要区域
@@ -31,7 +29,10 @@ Command。中央 Canvas 必须获得扣除三个边缘区后的主要可用空�
 系统 MUST 使用 Dockview Edge Groups 实现 Scene Graph、Component Library、Component Inspector
 和底部日志/命令区。Scene Graph 与 Component Library MUST 作为标签共享固定 `left` Edge Group，
 Scene Graph 初始活动；Component Inspector 必须固定在 `right`；Transaction Log 与 Command
-必须作为标签共享 `bottom` Edge Group。
+必须作为标签共享 `bottom` Edge Group。Scene Graph 与 Component Inspector 的 `left`/`right`
+Edge Group MUST 承载在一个挂载于中央 Canvas 面板内部的嵌套 Dockview 实例中；底部 `bottom`
+Edge Group MUST 留在外层 Dockview 实例，使其宽度与两侧 Edge Group 的折叠/展开状态无关，
+始终横跨整个编辑器宽度。
 
 #### Scenario: 检查默认边缘组
 
@@ -52,22 +53,43 @@ Scene Graph 初始活动；Component Inspector 必须固定在 `right`；Transac
 #### Scenario: 折叠和展开边缘区
 
 - **WHEN** 用户点击一个 Edge Group 的活动标签
-- **THEN** 该 Edge Group 在折叠和展开状态之间切换
+- **THEN** 该 Edge Group 在折叠和展开状态之间切换，折叠后显示为窄轨道
 - **AND** 展开时恢复折叠前的尺寸
+
+#### Scenario: 底部工具区不受两侧折叠影响
+
+- **WHEN** 用户折叠或展开左侧 Scene Graph、右侧 Component Inspector 中的任意一个或两个
+  Edge Group
+- **THEN** 底部 `bottom` Edge Group 的宽度和横向位置保持不变，继续横跨整个编辑器宽度
+- **AND** 底部工具区内容不重新挂载
+
+#### Scenario: Strict Mode 重放嵌套工作区
+
+- **WHEN** React Strict Mode 重放编辑器的挂载生命周期
+- **THEN** 外层 Dockview 只有一个中央面板和一个 `bottom` Edge Group
+- **AND** 嵌套的中层 Dockview 只有一个 `left` Edge Group 和一个 `right` Edge Group
+- **AND** 两层 Dockview 中同名的可访问 landmark 使用不同的 `aria-label`，不会被辅助技术
+  当成同一个区域
 
 ### Requirement: 固定中央画布
 
-系统 MUST 把 Canvas 作为中央普通 Dockview 主组中的固定面板。Canvas Toolbar 必须属于 Canvas 面板内容，不得成为独立 Dockview 面板。系统必须禁用默认面板拖拽、浮动和关闭入口，使 Canvas 与三个 Edge Groups 不会被用户拆散。
+系统 MUST 在未启用页面系统时把 Canvas 作为中央普通 Dockview 主组中的固定面板。启用页面系统时，系统 MUST 保留中央主组但不得创建不对应资源文件的 Canvas 面板；中央区域由打开的页面文档承载。Canvas Toolbar 必须属于其承载文档内容，不得成为独立 Dockview 面板。系统必须禁用默认面板拖拽、浮动和关闭入口，使固定 Canvas（仅单文档模式）与三个 Edge Groups 不会被用户拆散。
 
-#### Scenario: 使用画布工具
+#### Scenario: 使用单文档画布工具
 
-- **WHEN** 用户操作 Canvas Toolbar 中的控件
+- **WHEN** 宿主未提供页面系统且用户操作 Canvas Toolbar 中的控件
 - **THEN** 控件可以影响 Canvas 内容
 - **AND** 工具栏与 Canvas 保持在同一中央面板中
 
-#### Scenario: 用户尝试移除画布
+#### Scenario: 页面模式不显示根画布
 
-- **WHEN** 用户尝试通过 Dockview 标签或拖拽交互移除 Canvas
+- **WHEN** 宿主启用页面系统
+- **THEN** 中央 Dockview group 不创建标题为“画布”或“Canvas”的固定标签
+- **AND** 系统不会把无文件的根 Canvas 作为页面编辑回退
+
+#### Scenario: 用户尝试移除单文档画布
+
+- **WHEN** 宿主未提供页面系统且用户尝试通过 Dockview 标签或拖拽交互移除 Canvas
 - **THEN** Canvas 仍保留在中央主组
 - **AND** 工作区不会进入没有主画布的状态
 
@@ -75,22 +97,23 @@ Scene Graph 初始活动；Component Inspector 必须固定在 `right`；Transac
 
 系统 MUST 将显式 `children` 渲染在 Canvas 内容区域，并将 `componentLibraryPanel`、
 `stageToolbar`、`inspectorPanel`、`transactionLogPanel`、`commandPanel` 分别渲染在对应语义
-区域。`canvasToolbar` MUST 作为已废弃兼容别名继续工作，且与 stageToolbar 同时提供时后者优先。
-Scene Graph MUST 默认渲染 `@compose-ui/scene-tree` 的空场景树，宿主可以通过 `sceneTreeProps`
-提供受控树状态，或通过 `sceneGraphPanel` 完整覆盖默认树。没有 controller 时，缺少的其他可选
-插槽 MUST 显示可访问占位。
+区域。`componentLibraryPanel` MUST 位于 Scene Graph 内部下方工具组的基础组件标签中；`canvasToolbar`
+MUST 作为已废弃兼容别名继续工作，且与 stageToolbar 同时提供时后者优先。Scene Graph MUST 默认渲染
+`@compose-ui/scene-tree` 的空场景树，宿主可以通过 `sceneTreeProps` 提供受控树状态，或通过
+`sceneGraphPanel` 完整覆盖默认树。没有 controller 时，缺少的其他可选插槽 MUST 显示可访问占位。
 
 #### Scenario: 宿主提供全部工作区内容
 
 - **WHEN** 宿主同时传入 `children`、`sceneTreeProps`、componentLibraryPanel 和其余命名插槽
 - **THEN** 默认场景树和每份内容显示在对应语义区域中
+- **AND** 基础组件内容显示在场景树下方的基础组件标签内
 - **AND** 显式 children 覆盖任何 controller 默认 Stage
 
 #### Scenario: 默认显示空场景树
 
 - **WHEN** 宿主未传入 controller、sceneTreeProps 和 sceneGraphPanel
 - **THEN** Scene Graph 区域显示可访问的空场景树
-- **AND** 其他缺少的命名插槽显示说明区域用途的占位内容
+- **AND** 下方基础组件区域和其他缺少的命名插槽显示说明区域用途的占位内容
 
 #### Scenario: 宿主覆盖场景树
 
@@ -160,49 +183,6 @@ Dockview 的公共成员、序列化布局、Edge Group 对象或内部面板对
 - **THEN** 系统重新建立默认的左、右、底 Edge Groups 和中央 Canvas
 - **AND** 不尝试恢复上一个实例的 Dockview JSON
 
-### Requirement: 可选场景历史分栏
-
-系统 MUST 在宿主提供 `history` 或显式提供 `historyPanel` 时，在现有 Scene Graph 外层面板中
-挂载子 Dockview，并把场景内容与历史内容分别渲染为上、下两个真实 Dockview 面板。系统 MUST
-在未提供历史输入时不挂载子 Dockview，并保持原有单栏场景内容。
-
-#### Scenario: 使用默认历史面板
-
-- **WHEN** 宿主向 ComposeEditor 提供 HistoryNavigationController
-- **THEN** 子 Dockview 的 History 面板在场景树面板下方显示 `@compose-ui/history` 的 HistoryPanel
-- **AND** 外层 Dockview 组和面板数量保持不变
-- **AND** history 控制器驱动编辑器焦点范围内的撤销重做快捷键
-
-#### Scenario: 覆盖历史面板
-
-- **WHEN** 宿主显式提供 historyPanel，包括 null
-- **THEN** 下方历史区域使用该值完整覆盖默认 HistoryPanel
-- **AND** 同时提供的 history 控制器仍然驱动编辑器快捷键
-
-#### Scenario: 不启用历史
-
-- **WHEN** 宿主没有提供 history 且没有显式提供 historyPanel
-- **THEN** 场景内容继续占满原 Scene Graph 面板
-- **AND** 编辑器不拦截历史快捷键
-
-### Requirement: Dockview 场景历史布局
-
-系统 MUST 使用 Dockview 原生垂直布局和 sash，默认按 60%/40% 分配场景与历史面板高度，并
-保持场景内容至少 160px、历史内容至少 120px。子 Dockview 布局状态 MUST 只存活于当前编辑器
-实例，不得进入页面文档或持久化存储。
-
-#### Scenario: 调整历史高度
-
-- **WHEN** 用户拖动 Dockview 原生 sash
-- **THEN** 场景内容和历史内容按约束调整高度
-- **AND** 两侧内容保持挂载并可继续操作
-
-#### Scenario: 编辑器内容更新
-
-- **WHEN** 宿主更新场景、历史控制器或其他插槽
-- **THEN** 两个子 Dockview 面板显示最新内容
-- **AND** 用户调整后的子 Dockview 布局和外层 Dockview 布局不被重建
-
 ### Requirement: 单一事务观察边界
 
 Controller MUST 接受可选 transaction observer，并只在 committed 与成功的 undo/redo/navigate 后
@@ -240,14 +220,15 @@ Frame MUST 从当前选择或最近 Frame 祖先推导。
 
 ### Requirement: 设置入口保持布局独立
 
-默认工作区左侧活动栏底部 MUST 提供可聚焦设置按钮。设置模态 MUST 作为 editor root 内的
-sibling 渲染并只覆盖当前 Editor，不得成为 Dockview 面板、portal 到宿主页面或改变左侧
-Edge Group 的展开尺寸。
+默认工作区左侧活动栏底部 MUST 提供可聚焦设置按钮。设置模态 MUST 使用
+`@compose-ui/components` 的 ComposeDialog，通过全视口 Portal 覆盖当前浏览器窗口；它不得成为
+Dockview 面板，也不得被任一 Edge Group、Canvas 或宿主 Editor root 的尺寸、overflow 或 stacking
+context 裁剪。设置模态不得改变左侧 Edge Group 的展开尺寸、Dockview 布局或活动面板。
 
 #### Scenario: 从活动栏打开设置
 
 - **WHEN** 用户通过鼠标或键盘激活左下角设置按钮
-- **THEN** 编辑器范围内显示居中模态弹框与遮罩
+- **THEN** 全视口遮罩上显示居中的设置弹框，且弹框内容使用 Compose Theme/I18n
 - **AND** 当前 Edge Group、中央 Canvas 与其他面板保持挂载和原尺寸
 
 #### Scenario: 更新设置期间保持布局
@@ -448,7 +429,7 @@ history and assets configuration; it MUST not retain legacy aliases.
 
 ### Requirement: Canvas Map 输出尺寸与背景 Inspector
 
-隐式 Canvas Inspector MUST 将输出尺寸显示为 Map 属性：左侧 Key 只能选择“常见尺寸”或“自定义尺寸”；右侧 Value 在“常见尺寸”时显示六个桌面分辨率，在“自定义尺寸”时显示紧凑 Size W/H。输出背景 MUST 显示为 Color 属性。Key 是 Inspector 本地瞬时状态，不得写入 ComposeDocument。
+隐式 Canvas Inspector MUST 将输出尺寸显示为 Map 属性：左侧 Key 只能选择“常见尺寸”或“自定义尺寸”；右侧 Value 在“常见尺寸”时显示六个桌面分辨率，在“自定义尺寸”时显示紧凑 Size W/H。输出背景 MUST 显示为 Color 属性。Key 是 Inspector 本地瞬时状态，不得写入 ComposeDocument。Canvas Inspector MUST 使用与当前受控 value 无关的固定输出默认值作为重置基线，MUST NOT 把当前 value 作为 `defaultValue` 传入 Property Panel。
 
 #### Scenario: 在 Canvas Map 的常见尺寸 Value 选择分辨率
 - **WHEN** 用户将左列 Key 选择为“常见尺寸”，并在右侧 Value 选择 1280×720、1366×768、1440×900、1920×1080、2560×1440 或 3840×2160
@@ -466,6 +447,11 @@ history and assets configuration; it MUST not retain legacy aliases.
 #### Scenario: 编辑 Canvas Color
 - **WHEN** 用户通过 Color Picker 选择输出背景颜色
 - **THEN** Color 行不显示 CSS 字符串，并以一次可逆 `output.configure` 事务提交有效颜色
+
+#### Scenario: 重置 Canvas 输出背景
+- **WHEN** 当前输出背景与默认输出背景不同
+- **THEN** 背景属性行显示重置动作
+- **AND** 执行重置以一次可逆 `output.configure` 事务把背景恢复为默认值
 
 ### Requirement: Editor 协调 Paint 编辑会话
 
@@ -528,26 +514,24 @@ Editor MUST 在双击页面文件时以独立的页面标签打开该页面，�
 
 ### Requirement: 工作区跟随活动页面
 
-Editor MUST 使画布、场景树、Inspector 与历史面板跟随当前活动页面标签。切换活动页面 MUST 使这些
-面板呈现该页面的文档与撤销历史，且 MUST NOT 残留上一页面的选择或视口。无页面打开时工作区
-MUST 回退到宿主注入的控制器。
+页面系统启用时，页面文档标签 MUST 持有各自的事务 runtime。编辑器启动后，系统 MUST 在页面目录解析到一个存在的 `homePageKey` 时自动打开并激活该首页；该尝试在同一页面 key 上至多执行一次，目录刷新或用户随后关闭标签不得重新打开它。Stage、Scene Graph、Inspector、History、Command 和保存动作 MUST 跟随中央组中的活动页面标签；首页为空、悬空或读取失败时，系统 MUST 显示已有非阻断状态而不得回退到宿主的根 Canvas。页面系统未启用时，工作区 MUST 使用宿主注入的 controller，保持既有单文档行为。
 
-#### Scenario: 切换活动页面
+#### Scenario: 启动时打开标记首页
 
-- **WHEN** 用户在两个已打开页面标签之间切换
-- **THEN** 画布、场景树、Inspector 与历史面板均切换到该页面
-- **AND** 每个页面各自的撤销历史保持可用
+- **WHEN** 页面目录加载完成，`app.json` 标记的首页存在且可读取
+- **THEN** 编辑器自动创建并激活该首页对应的页面文档标签
+- **AND** Stage、Scene Graph 与 Inspector 使用该页面的 runtime
 
-#### Scenario: 切换不残留会话状态
+#### Scenario: 首页缺失
 
-- **WHEN** 在一个页面中选中若干实体后切换到另一页面
-- **THEN** 新页面的选择为空且视口为该页面的初始视口
-- **AND** 检视目标不指向已不存在的实体
+- **WHEN** 页面目录的 `homePageKey` 未设置、指向不存在的页面或页面读取失败
+- **THEN** 编辑器不创建或激活无文件的根 Canvas
+- **AND** 悬空首页继续显示非阻断缺失提示
 
-#### Scenario: 无页面打开
+#### Scenario: 未启用页面系统
 
-- **WHEN** 没有任何页面标签打开
-- **THEN** 工作区使用宿主注入的控制器
+- **WHEN** 宿主未提供页面系统配置
+- **THEN** 工作区创建固定 Canvas 并使用宿主注入的 controller
 - **AND** 既有单文档宿主行为不变
 
 ### Requirement: 页面保存与写入冲突
@@ -1069,4 +1053,235 @@ MUST 只接受数值语义的候选。绑定与解绑 MUST 写入文档清单的
 
 - **WHEN** 用户解除播放绑定后撤销
 - **THEN** 绑定恢复，检查器重新显示为已绑定
+
+### Requirement: 页面 Setup JavaScript 智能编辑
+
+Editor 在页面系统启用时 MUST 为页面菜单打开或名称匹配 `*.setup.js` 的可编辑资源
+注入 Setup Script Intelligence Profile。该 Profile MUST 使用 Script Runtime 公共声明为
+`ctx`、State、Computed 与 setup 返回对象提供类型，且 MUST NOT 改写用户脚本。
+
+#### Scenario: 编辑标准 Setup 导出
+
+- **WHEN** 用户编辑 `export function setup(ctx)` 或受支持的等价直接导出
+- **THEN** `ctx.` 补全 `state`、`computed` 和 `effect`，State `.value` 保留初始值类型
+- **AND** 每个 Context 方法的补全详情与悬浮内容包含中文用途说明、关键生命周期语义和可用示例
+- **AND** 示例使用 Markdown JavaScript fenced code block，并按当前 Monaco 主题进行语法着色
+- **AND** Monaco 不在代码行内显示变量或 setup 返回对象的推导类型
+
+#### Scenario: 类型错误不阻断保存
+
+- **WHEN** 页面 Setup 脚本向数字 State 的 `.value` 写入字符串
+- **THEN** Monaco 在可见源码的对应位置显示类型 diagnostic
+- **AND** 用户仍可保存，Provider 收到的内容不包含隐藏声明或 JSDoc
+
+#### Scenario: 非标准 Setup 声明降级
+
+- **WHEN** Setup 脚本不使用 Editor 能够识别的直接导出形式
+- **THEN** 编辑器保留 JavaScript 着色、输入和保存能力并显示不阻断的提示
+- **AND** Editor 不对原始资源执行自动迁移
+
+### Requirement: 页面脚本作为 Canvas Inspector 属性
+
+活动页面的默认 Canvas Inspector MUST 将页面 setup 显示为与输出尺寸、输出背景共用同一个
+Property Panel Root 的“页面脚本”属性，MUST NOT 再在属性工具栏上方显示独立作用域块。
+该属性 MUST 只由 Editor 组合页面、资源和 Script Runtime 语义，不得下沉到 Property Panel
+或 Asset Browser 包。
+
+#### Scenario: 未关联页面选择或快捷创建脚本
+
+- **WHEN** 活动页面没有 setupScript 且用户查看 Canvas Inspector
+- **THEN** 页面脚本属性列出页面同目录中拥有稳定 assetKey 的 `.setup.js` 文件供选择
+- **AND** 可写 Provider 提供按页面名快捷创建入口，创建成功后自动关联并打开脚本标签
+- **AND** 页面输出、场景文档与事务历史保持不变
+
+#### Scenario: 已关联页面查看和管理脚本
+
+- **WHEN** 活动页面关联的 setup 成功运行
+- **THEN** 页面脚本属性显示当前脚本名称以及重新加载、打开、切换和解除操作
+- **AND** 属性内列出 setup 返回成员的名称、value/method 类别、当前值以及运行 diagnostic
+- **AND** State 更新或 setup revision 重载后，成员信息在同一属性内更新
+
+#### Scenario: 页面与 Inspector 目标切换
+
+- **WHEN** 用户在页面标签、Canvas 输出和 Entity Inspector 目标之间切换
+- **THEN** 页面脚本属性只显示活动页面实例的数据并且只出现在 Canvas Inspector
+- **AND** 默认 Inspector 始终只有一个属性搜索工具栏
+
+#### Scenario: 页面脚本属性视觉状态
+
+- **WHEN** 用户在深色工作区打开已关联 setup 的 Canvas Inspector
+- **THEN** 页面脚本以横跨属性网格的可折叠分组显示，标题栏提供重新加载脚本按钮且低频操作位于更多菜单
+- **AND** 返回成员以紧凑列表显示类型徽标、名称与最终值，不重复显示 method 类别
+- **AND** 该确定状态具有 Playwright 视觉黄金文件
+
+### Requirement: 中央 Canvas Group 承载资源文档
+
+默认 Editor 的中央 Canvas Group MUST 永远包含不可关闭的 Canvas panel，并可在同一 Group 创建临时、可关闭的
+资源 document panel。资源 panel MUST 由 `provider.id + assetKey（缺失时 entry.id）` 唯一标识，重复打开同一
+资源时 MUST 激活现有 panel 而非创建副本；panel MUST 使用 `renderer: 'always'` 以保留未保存 Monaco 草稿。
+资源文档不参与 Dockview 拖放、浮动、布局持久化、ComposeDocument、History 或 Operation Log。
+
+#### Scenario: 从默认资源浏览器打开资源
+
+- **WHEN** 默认 Asset Browser 发出文件打开意图
+- **THEN** Editor 在 Canvas Group 打开或激活对应资源 document panel
+- **AND** Canvas panel 保持存在且不可关闭
+
+#### Scenario: 关闭 dirty 资源文档或修改已打开资源
+
+- **WHEN** 用户关闭 dirty 资源 tab，或重命名、移动、删除包含 dirty 已打开资源的条目
+- **THEN** Editor 提供保存、放弃或取消决策，并只在保存成功或放弃后关闭资源 document
+- **AND** 取消、保存失败或 revision conflict 不执行关闭或对应 Provider 操作
+
+### Requirement: 场景下方工具分栏
+
+系统 MUST 在现有 Scene Graph 外层面板中始终挂载子 Dockview：场景内容作为上方真实 Dockview
+面板，基础组件作为下方真实 Dockview 面板。宿主提供 `history` 或显式提供 `historyPanel` 时，History
+MUST 作为基础组件的同组真实标签加入；未提供时系统不得显示空 History 标签。基础组件 MUST 是下方
+工具组的初始活动面板。
+
+#### Scenario: 使用默认历史面板
+
+- **WHEN** 宿主向 ComposeEditor 提供 HistoryNavigationController
+- **THEN** 子 Dockview 下方工具组显示基础组件与 `@compose-ui/history` 的 HistoryPanel 标签
+- **AND** 基础组件保持下方初始活动标签
+- **AND** history 控制器驱动编辑器焦点范围内的撤销重做快捷键
+
+#### Scenario: 覆盖历史面板
+
+- **WHEN** 宿主显式提供 historyPanel，包括 null
+- **THEN** History 标签使用该值完整覆盖默认 HistoryPanel
+- **AND** 同时提供的 history 控制器仍然驱动编辑器快捷键
+
+#### Scenario: 不启用历史
+
+- **WHEN** 宿主没有提供 history 且没有显式提供 historyPanel
+- **THEN** 子 Dockview 仍显示场景内容和下方基础组件
+- **AND** 下方工具组不显示 History 标签，且编辑器不拦截历史快捷键
+
+### Requirement: Dockview 场景工具布局
+
+系统 MUST 使用 Dockview 原生垂直布局和 sash，默认按 60%/40% 分配场景与下方工具组高度，并保持
+场景内容至少 160px、下方工具内容至少 120px。子 Dockview 布局状态 MUST 只存活于当前编辑器实例，
+不得进入页面文档或持久化存储。
+
+#### Scenario: 调整下方工具高度
+
+- **WHEN** 用户拖动 Dockview 原生 sash
+- **THEN** 场景内容和下方工具组按约束调整高度
+- **AND** 两侧内容保持挂载并可继续操作
+
+#### Scenario: 编辑器内容更新
+
+- **WHEN** 宿主更新场景、基础组件、历史控制器或其他插槽
+- **THEN** 子 Dockview 面板显示最新内容
+- **AND** 用户调整后的子 Dockview 布局和外层 Dockview 布局不被重建
+
+### Requirement: 框选工具与判定模式菜单
+
+默认舞台工具栏 MUST 在交互工具分组内提供框选工具入口：主按钮切换到 marquee 工具，紧邻的
+chevron 触发器打开判定模式菜单。模式菜单 MUST 提供相交、包含与方向决定三项，且 MUST 复用现有
+形状工具 split button 的 ARIA 与键盘结构——触发器使用 `aria-haspopup="menu"` 与
+`aria-expanded`，菜单项使用 `menuitemradio` 并通过 `aria-pressed` 表达当前模式，方向键在菜单项
+之间移动焦点，Escape 关闭菜单并把焦点还给触发器。模式 MUST 由编辑器持有并作为受控值传给
+Stage，选择模式本身 MUST NOT 切换当前工具，也 MUST NOT 产生文档事务。主按钮图标 MUST 反映当前
+模式，使用户不展开菜单也能看出生效判定。
+
+#### Scenario: 切换到框选工具
+
+- **WHEN** 用户点击框选主按钮
+- **THEN** Stage 工具变为 marquee 且按钮呈现选中态
+- **AND** 当前判定模式保持不变
+
+#### Scenario: 从菜单切换判定模式
+
+- **WHEN** 用户展开模式菜单并选择包含
+- **THEN** Stage 收到的受控模式变为包含
+- **AND** 菜单关闭、焦点回到触发器、当前工具保持不变
+- **AND** 主按钮图标切换为包含模式图标
+
+#### Scenario: 键盘操作模式菜单
+
+- **WHEN** 焦点位于 chevron 触发器且用户按下方向键下
+- **THEN** 菜单展开并把焦点移到第一项
+- **AND** 按 Escape 关闭菜单并把焦点还给触发器
+
+#### Scenario: 模式在选择工具下同样生效
+
+- **WHEN** 判定模式为包含且用户切回 select 工具从空白拖出 marquee
+- **THEN** 框选按包含判定命中节点
+
+### Requirement: 组件实例合成 Inspector 表面
+
+默认 Editor 在选中页面上的 component-instance（未下钻内部实体）时 MUST 将宿主身份相关字段与组件根视觉/布局字段合成到同一个 Entity Inspector 外壳中：共享唯一标题区（若有）、唯一 Property Panel 搜索/筛选/设置与列宽状态。MUST NOT 纵向堆叠两个完整 Entity Inspector 或两套属性工具栏。宿主侧 MUST 提供名称及页面级位置相关编辑；MUST NOT 在宿主侧再暴露应以组件根为事实源的外观、裁剪、几何限制、Hierarchy/Layout（容器与 Auto Layout）分组。根侧字段 MUST 经实例覆盖通路写入，MUST NOT 修改组件源文档；根侧 MUST 隐藏与宿主重复的名称、Transform、LayoutItem、可见性与锁定。下钻选中内部实体时，Inspector MUST 仅显示该内部实体，不再拼接宿主表面。
+
+#### Scenario: 选中实例只有一个属性搜索框
+
+- **WHEN** 用户在页面上单击选中一个 component-instance
+- **THEN** 右侧 Inspector 只存在一个属性搜索框与一套筛选/显示设置
+- **AND** 名称输入只出现一次
+
+#### Scenario: 根外观与布局可编辑且写入覆盖
+
+- **WHEN** 用户选中实例并修改组件根的外观或 Auto Layout 相关属性
+- **THEN** 变更经实例覆盖通路提交，组件源 Asset 不被修改
+- **AND** 同一面板内可见布局/外观分组，而非第二块独立「Container」属性面板外壳
+
+#### Scenario: 下钻后不再拼接宿主表面
+
+- **WHEN** 用户下钻选中实例内部实体
+- **THEN** Inspector 只显示该内部实体的属性
+- **AND** 不继续拼接宿主 identity 与根表面双段外壳
+
+#### Scenario: 自定义 inspector 插槽仍可全量替换
+
+- **WHEN** 宿主通过 editor slots 提供完整 inspector 内容
+- **THEN** 默认合成逻辑不强制插入第二套面板
+- **AND** 未提供 slots 时默认路径满足本需求
+
+### Requirement: 实例与组件文档的标题语义
+
+默认 Editor 在选中页面 component-instance 时，属性区标题语义 MUST 标明「实例」。打开主组件文档
+会话时 MUST 标明「主组件」；打开变体会话时 MUST 标明「变体」并展示基于父源。实例头栏的「创建变体」
+MUST 为显式动作，文案 MUST 说明将另存为组件库资源（而非复制页面节点）。
+
+#### Scenario: 选中实例显示实例语义
+
+- **WHEN** 用户在页面上选中 component-instance
+- **THEN** 属性头或等价区域出现实例语义（如「实例 · …」）
+- **AND** 提供创建变体入口且不与复制实例混淆
+
+#### Scenario: 打开变体文档显示基于父源
+
+- **WHEN** 用户打开 kind 为 variant 的组件文档
+- **THEN** UI 标明变体并展示基于父源的显示名
+
+### Requirement: 资源拖入画布仅实例化
+
+从 Asset Browser 或等价资源入口将组件媒体类型拖入 Stage 时，系统 MUST 创建 component-instance
+实例并绑定该资源引用，MUST NOT 因此自动创建新的变体资源文件。
+
+#### Scenario: 资源拖入创建实例
+
+- **WHEN** 用户将已有主组件或变体资源拖入画布并成功落点
+- **THEN** 文档中新增实例实体引用该资源
+- **AND** Provider 中组件文件数量不因该次拖入而增加变体文件
+
+### Requirement: 画布与场景树共享会话剪贴板
+
+默认编辑器 MUST 让 Stage 与 SceneTree 共用同一份会话内存剪贴板。任一表面的复制或剪切 MUST
+立即可被另一表面粘贴。粘贴 MUST 使用建议落点，并由现有场景树操作规划器生成文档事务。该剪贴板
+MUST NOT 写入系统剪贴板、ComposeDocument 或 History 条目本身。
+
+#### Scenario: 场景树复制后在画布粘贴
+
+- **WHEN** 用户在场景树复制一个节点，再聚焦画布并执行粘贴
+- **THEN** 文档插入该节点的新副本并选中副本
+- **AND** 只产生一次文档事务
+
+#### Scenario: 画布剪切后在场景树粘贴
+
+- **WHEN** 用户在画布剪切一个节点，再于场景树有效位置粘贴
+- **THEN** 该节点被移动到建议落点
+- **AND** 剪贴板被清空
 

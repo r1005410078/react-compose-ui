@@ -85,9 +85,9 @@ Container 祖先推导目标；`edit.group`/`edit.ungroup` MUST 操作统一 Con
 
 ### Requirement: 设置模态弹框
 
-编辑器 MUST 通过左下角真实 button 打开编辑器范围内的模态设置弹框。弹框 MUST 提供顶部全局
-搜索、左侧外观/语言/键盘快捷方式分类、右侧设置内容和关闭按钮。设置按钮 MUST 提供
-aria-haspopup、aria-expanded 与 aria-controls；弹框 MUST 管理焦点陷阱且不得重建 Dockview。
+编辑器 MUST 通过左下角真实 button 打开使用 `@compose-ui/components` ComposeDialog 的全视口设置模态。
+弹框 MUST 提供顶部全局搜索、左侧外观/语言/键盘快捷方式分类、右侧设置内容和关闭按钮。设置按钮
+MUST 提供 aria-haspopup、aria-expanded 与 aria-controls；弹框 MUST 管理焦点陷阱且不得重建 Dockview。
 
 #### Scenario: 打开和关闭设置
 
@@ -229,4 +229,56 @@ tooltip、shape menu 和设置面板显示的键位一致；输入与 IME 隔离
 - **WHEN** 用户在 Settings 中尝试把两个相同 scope 的工具动作绑定为同一按键组合
 - **THEN** Preferences 返回现有稳定冲突标识并拒绝该绑定
 - **AND** 已保存的其他快捷键保持不变
+
+### Requirement: 可配置层级动作
+
+Editor Preferences MUST 增加前移、后移、置顶和置底四个 Stage scope 动作，并将它们装配到共享执行层、
+设置与命令面板。旧偏好缺少新动作时 MUST 补齐默认键位，不得导致 Stage 运行失败。
+
+#### Scenario: 规范化旧快捷键偏好
+
+- **WHEN** 宿主提供不含四个层级动作的旧 shortcuts 对象
+- **THEN** normalize 为新动作补齐 Figma 风格默认键位
+- **AND** 全部既有自定义键位保持不变
+
+#### Scenario: 命令面板执行层级动作
+
+- **WHEN** 用户从命令面板执行一个可用层级动作
+- **THEN** 动作通过事务运行时提交与 Stage 快捷键相同的顺序结果
+- **AND** 不可用时显示双语边界原因且不产生事务
+
+### Requirement: 框选工具快捷键
+
+Editor Preferences MUST 提供可配置的 `stage.marqueeTool` 动作，默认键位 `B`，并 MUST 与其他
+Stage 工具动作一样归入 stage 分类、出现在快捷键设置与命令面板中。该动作 MUST 只切换工具，
+不改变当前框选判定模式，并 MUST 遵守既有的快捷键输入隔离规则。
+
+#### Scenario: 使用默认键位切换框选工具
+
+- **WHEN** 焦点不在文本输入且用户按下 `B`
+- **THEN** Stage 工具切换为 marquee
+- **AND** 当前框选判定模式保持不变
+
+#### Scenario: 重新绑定框选工具键位
+
+- **WHEN** 用户在快捷键设置中为 `stage.marqueeTool` 捕获新键位
+- **THEN** 新键位生效并随 preferences 一起持久化
+
+### Requirement: 可配置复制剪切粘贴快捷键
+
+编辑器 MUST 把 `edit.copy`、`edit.cut` 和 `edit.paste` 纳入 stage 作用域的可配置 shortcut action
+map，默认分别为 Primary+C、Primary+X 和 Primary+V。旧偏好对象缺少这些动作时 MUST 补默认值。
+菜单、设置面板和命令目录 MUST 按当前平台格式化这些键位。剪贴板为空时粘贴 MUST 给出不可用原因。
+
+#### Scenario: 使用默认平台复制键
+
+- **WHEN** 用户使用默认偏好并在 Stage 焦点下按下 Primary+C
+- **THEN** 编辑器执行复制动作
+- **AND** 设置面板与命令目录按平台显示 ⌘C 或 Ctrl+C
+
+#### Scenario: 规范化旧偏好
+
+- **WHEN** 宿主传入缺少 `edit.copy` 的旧偏好对象
+- **THEN** normalize 补上 Primary+C 默认值
+- **AND** 已有自定义键位保持不变
 

@@ -30,8 +30,11 @@ Stage MUST 接收受控 viewport、tool、selectedIds 和 activeFrameId，并通
 
 ### Requirement: 选择与框选
 
-select 工具 MUST 支持点击选择、Shift 切换多选、点击空白清除选择和空白拖动 marquee。选择结果
-MUST 使用稳定文档 ID，并 MUST 忽略 hidden 节点和完全位于其他 Frame 剪裁范围之外的内容。
+select 工具 MUST 支持点击选择、Shift 切换多选、点击空白清除选择和空白拖动 marquee。marquee
+工具 MUST 支持从任意位置（含节点之上）拖出 marquee。两个工具的框选 MUST 使用同一个受控
+`marqueeMode` prop，Stage MUST 只消费该值而不得自行持有模式的事实来源——Stage 本身不提供切换
+模式的 UI。选择结果 MUST 使用稳定文档 ID，并 MUST 忽略 hidden 节点和完全位于其他 Frame 剪裁
+范围之外的内容。
 
 #### Scenario: 点击与 Shift 多选
 
@@ -42,8 +45,20 @@ MUST 使用稳定文档 ID，并 MUST 忽略 hidden 节点和完全位于其他 
 #### Scenario: 框选节点
 
 - **WHEN** 用户从 Stage 空白处拖出 marquee
-- **THEN** 与 marquee 相交的可见未锁定节点按确定性场景顺序进入选择
+- **THEN** 按当前 `marqueeMode` 命中的可见未锁定节点按确定性场景顺序进入选择
 - **AND** marquee 只作为瞬时 SVG Overlay，不产生文档事务
+
+#### Scenario: 使用框选工具从节点上起框
+
+- **WHEN** 工具为 marquee 且用户在一个可见节点上按下并拖动
+- **THEN** Stage 显示 marquee Overlay 而不是移动该节点
+- **AND** 释放后按当前 `marqueeMode` 请求选择
+
+#### Scenario: Overlay 区分判定模式
+
+- **WHEN** 当前生效判定为包含
+- **THEN** marquee Overlay 使用实线边框
+- **AND** 当前生效判定为相交时使用虚线边框
 
 #### Scenario: 点击空白清选
 
@@ -53,15 +68,24 @@ MUST 使用稳定文档 ID，并 MUST 忽略 hidden 节点和完全位于其他 
 
 ### Requirement: 直接移动缩放与旋转
 
-Stage MUST 只允许当前工具暴露的 move、resize 或 rotate 手势；每种变换 MUST 在拖动或方向键移动 Flow 时把它
-转换为 Absolute 后移动，不得在 Stage 重排 Flow。Resize Fill axis MUST 转为 Fixed；Rotation MUST 保持 Flow
-与 sizing。全部操作 MUST 使用开始 Snapshot 并维持现有 preview/cancel/一次提交保证。
+Stage MUST 只允许当前工具暴露的 move、resize 或 rotate 手势；每种变换 MUST 在拖动或方向键移动 Flow
+时把它转换为 Absolute 后移动，除非该次拖动落在同一 `nowrap` Layout 容器内部且未越过其边界——此时
+MUST 按容器内原地重排处理，保持 Flow 并只改变 `Hierarchy.childIds` 顺序。`wrap`/`wrap-reverse` 容器
+与方向键移动 MUST 保持转换为 Absolute 的既有行为。Resize Fill axis MUST 转为 Fixed；Rotation MUST
+保持 Flow 与 sizing。全部操作 MUST 使用开始 Snapshot 并维持现有 preview/cancel/一次提交保证。
 
 #### Scenario: 拖动 Flow 转为 Absolute
 
-- **WHEN** 用户在允许移动的 Stage 工具中拖动一个或多个 Flow Entity 并正常松手
+- **WHEN** 用户在允许移动的 Stage 工具中拖动一个或多个 Flow Entity 越过其所在容器边界，或该容器为
+  wrap，并正常松手
 - **THEN** preview 保持开始世界几何并跟随指针，提交后目标为 Absolute final offset
-- **AND** Hierarchy.childIds 顺序不因 Stage 拖动改变
+- **AND** Hierarchy.childIds 顺序不因此改变
+
+#### Scenario: nowrap 容器内拖动保持 Flow 并重排
+
+- **WHEN** 用户在 Stage 拖动一个 nowrap 容器内的 Flow Entity，全程未越过该容器边界，并正常松手
+- **THEN** 提交后该 Entity 仍为 Flow，LayoutItem 不变
+- **AND** Hierarchy.childIds 按拖动落点重新排序
 
 #### Scenario: Flow 结构操作禁用
 
@@ -146,12 +170,41 @@ Stage MUST 在 24px 顶部和左侧 ruler 内显示随 viewport 与 canvas grid 
 时 MUST 显示每条配置网格线；更密时 MUST 只按二次幂 stride 抽稀为原网格子集。视觉抽稀
 MUST NOT 改变实际 snap step，标尺仍可按独立可读性阈值抽稀。
 
+标尺 MUST 由 Canvas 2D 绘制，画布网格 MUST 继续由 CSS 多层 gradient 绘制。两者 MUST 共用
+同一个纯点阵函数与同一套设备像素取整规则：一条线覆盖以其世界坐标为左边界的那一个设备像素列。
+标尺刻度 MUST 始终是画布网格线的子集。标尺 MUST 同时绘制细刻度与带数字的刻度：细刻度按不粘连阈值抽稀，数字按可读性阈值抽稀，
+两者与画布网格出自同一点阵，因此细刻度必然落在网格线上、数字刻度必然落在细刻度上。
+数字 MUST 在其所属刻度线上居中，两轴一致。
+
 #### Scenario: 平移缩放标尺网格
 
 - **WHEN** viewport 平移、缩放或 grid step/offset/primaryLineEvery 改变
 - **THEN** ruler label、tick、细线与主线在相同世界位置对齐
 - **AND** 默认 8 单位网格在 75% 与 25% 缩放时分别显示 6px 与 2px 细线
 - **AND** 更低缩放只隐藏部分原始格线，节点仍吸附到原始配置刻度
+
+#### Scenario: 刻度线与网格线落在同一位置
+
+- **WHEN** 在 devicePixelRatio 为 1、2 或 3 且缩放为任意比例下渲染
+- **THEN** 同一世界坐标的标尺刻度线与画布网格线覆盖同一条 1 CSS px 带
+- **AND** 点阵首线按设备像素取整，因此屏幕间距为整数设备像素时每条线都不跨列模糊
+
+#### Scenario: 分数间距下仍保持两者一致
+
+- **WHEN** 缩放使网格屏幕间距不是整数设备像素
+- **THEN** 标尺与网格仍落在同一位置，二者的抗锯齿表现一致
+- **AND** 系统 MUST NOT 只对其中一方取整而使两者分离
+
+#### Scenario: 刻度数字居中于刻度线
+
+- **WHEN** 标尺绘制任意一条带数字的刻度
+- **THEN** 数字的水平中心与该刻度线重合，垂直标尺旋转后仍以刻度线为中心
+
+#### Scenario: 保留细刻度层级
+
+- **WHEN** 标尺在任意缩放下渲染
+- **THEN** 细刻度以更短的线绘制，带数字的刻度更长，落在主网格线上的刻度用更亮的颜色
+- **AND** 三者的左边界规则一致，均与画布网格线重合
 
 #### Scenario: 显示世界原点交叉
 
@@ -170,10 +223,16 @@ MUST NOT 改变实际 snap step，标尺仍可按独立可读性阈值抽稀。
 Stage MUST 允许从 ruler 创建、移动和删除全局世界辅助线。Pointermove MUST 只更新预览；
 pointerup MUST 最多派发一个 canvas 命令或 batch，取消 MUST 不修改文档。
 
+顶部（水平）ruler MUST 拖出水平 guide，左侧（垂直）ruler MUST 拖出垂直 guide；ruler 自身的
+轴与 guide 的轴互为反向。手势停留在该 guide 所属 ruler 内时，Stage MUST 给出可识别的删除
+光标提示，并在 pointerup 删除该 guide。
+
 #### Scenario: 从标尺创建辅助线
 
-- **WHEN** 用户从顶部或左侧 ruler 拖入 surface
-- **THEN** Stage 预览垂直或水平 guide，并在 pointerup 创建一个文档 guide
+- **WHEN** 用户从顶部 ruler 拖入 surface
+- **THEN** Stage 预览并创建一条由世界 Y 定位的水平 guide
+- **WHEN** 用户从左侧 ruler 拖入 surface
+- **THEN** Stage 预览并创建一条由世界 X 定位的垂直 guide
 - **AND** grid snap 开启时 guide position 量化到对应刻度
 
 #### Scenario: 从交叉角创建双轴辅助线
@@ -187,6 +246,12 @@ pointerup MUST 最多派发一个 canvas 命令或 batch，取消 MUST 不修改
 - **WHEN** 用户移动已有 guide、拖回对应 ruler，或取消手势
 - **THEN** pointerup 分别提交 move、delete，取消则恢复原位置且不创建事务
 - **AND** guide 创建、移动和删除进入 History 与 Operation Log
+
+#### Scenario: 拖回标尺时提示删除
+
+- **WHEN** 辅助线手势的指针停留在该 guide 所属的 ruler 内
+- **THEN** Stage 发出 `guide-delete` 语义光标，UI 显示带删除标记的指针
+- **AND** 指针离开该 ruler 后光标恢复为手势的常规光标
 
 ### Requirement: 无限画布滚动条
 
@@ -216,7 +281,7 @@ MUST 只修改 viewport。
 
 Stage MUST 接受可选 locale 与快捷键配置，并在未提供时保持 zh-CN 和现有默认键位。默认动作
 MUST 包括临时平移、select/pan 工具、适配选择/Frame、100%/放大/缩小、grid/smart snap、
-duplicate、group/ungroup 和 delete；动作只通过现有会话回调或 dispatch 边界生效。
+duplicate、copy/cut/paste、group/ungroup 和 delete；动作只通过现有会话回调或 dispatch 边界生效。
 
 #### Scenario: 执行默认 Stage 快捷键
 
@@ -271,7 +336,12 @@ its root while keeping coordinate, snapping and command planning in stage-engine
 
 #### Scenario: Stage structure refactor
 - **WHEN** the Stage implementation is reorganized
-- **THEN** its user-visible grid, rulers, overlays, pointer behaviour, ARIA and stable test IDs remain unchanged
+- **THEN** its user-visible grid, rulers, overlays, pointer behaviour, ARIA and stable container test IDs remain unchanged
+
+#### Scenario: 标尺改用 Canvas 绘制
+- **WHEN** 标尺渲染层从 SVG 迁移到 Canvas
+- **THEN** `stage-ruler-x`、`stage-ruler-y` 与 `stage-ruler-corner` 容器的 test ID 与 ARIA 保持不变
+- **AND** 逐刻度 DOM 节点不再存在，刻度位置改由纯点阵单测与视觉黄金图验证
 
 ### Requirement: 异步资源节点创建
 
@@ -403,8 +473,8 @@ horizontal 显示 E/W，vertical 显示 N/S，none 不显示 Resize；rotatable 
 
 ### Requirement: ECS 上下文菜单与结构操作
 
-Stage 上下文菜单 MUST 根据 Hierarchy、Lock 与 TransformConstraints 计算 duplicate、group、
-ungroup、delete 和视图操作状态，不得读取旧 kind。
+Stage 上下文菜单 MUST 根据 Hierarchy、Lock 与 TransformConstraints 计算 copy、cut、paste、
+duplicate、group、ungroup、delete 和视图操作状态，不得读取旧 kind。
 
 #### Scenario: 取消容器分组
 
@@ -413,13 +483,16 @@ ungroup、delete 和视图操作状态，不得读取旧 kind。
 
 ### Requirement: Stage 右键操作菜单
 
-Stage MUST 在节点和空白画布使用共享右键菜单呈现编辑、视图、工具和吸附操作。
+Stage MUST 在节点和空白画布使用共享右键菜单呈现编辑、视图、工具和吸附操作。编辑区 MUST 在
+创建副本之前显示复制、剪切和粘贴。
 
 #### Scenario: 右键未选节点
+
 - **WHEN** 用户右键未选中的可见节点
 - **THEN** Stage 先请求单选该节点并显示适用编辑操作
 
 #### Scenario: 右键菜单显示当前 Stage 键位
+
 - **WHEN** Stage 打开节点、视图、工具或吸附菜单
 - **THEN** 每个实际配置的动作在菜单末尾显示当前 `shortcuts` 的全部键位
 - **AND** 自定义配置立即生效，空数组隐藏提示，禁用菜单项仍保留已配置的提示
@@ -657,8 +730,7 @@ Stage MUST 支持受控的 `select`、`move`、`scale`、`rotate`、`pan`、`dra
 
 ### Requirement: 直接绘制 Preset
 
-Stage MUST 为 container、rectangle、line、arrow、circle 与 text 提供受控绘制工具。绘制工具 MUST 在
-拖拽期间展示瞬时预览，正常松手时通过 Registry Preset 创建一个合法 Entity，取消时不得产生文档事务。
+Stage MUST 为 container、rectangle、line、arrow、circle 与 text 提供受控绘制工具。绘制工具 MUST 在拖拽期间展示瞬时预览，正常松手时通过 Registry Preset 创建一个合法 Entity，取消时不得产生文档事务。
 
 #### Scenario: 拖拽绘制容器与形状
 
@@ -668,8 +740,11 @@ Stage MUST 为 container、rectangle、line、arrow、circle 与 text 提供受�
 
 #### Scenario: 点击或拖拽绘制文字
 
-- **WHEN** 用户使用 text 工具点击或拖拽 surface
-- **THEN** click 使用 Text Preset 默认尺寸插入，drag 使用拖拽 bounds 创建 text box
+- **WHEN** 用户使用 text 工具点击 surface
+- **THEN** Stage 在点击点创建保留 Text Preset `hug × hug` 轴的文字，初始预览使用 Text 的默认回退尺寸
+- **AND** Layout measurement 完成后选区贴合实际文字内容
+- **WHEN** 用户使用 text 工具拖拽 surface
+- **THEN** Stage 创建两轴为 `fixed` 且使用精确拖拽 bounds 的 text box
 - **AND** Escape、pointercancel 或无效 geometry 不创建 Entity
 
 ### Requirement: 两点 Shape 的端点选区
@@ -705,7 +780,9 @@ Stage MUST 以可见后代动态并集绘制 Group 的选择边框、命中范�
 
 Stage MUST 支持穿透进组件实例内部的命中与选择。默认单击 MUST 选中实例整体；双击 MUST 逐层下钻，
 并受既有八层上限约束。下钻 MUST 复用已归一化的 clickCount，MUST NOT 引入独立计时。内部选区 MUST
-使用与 Scene Tree 一致的复合地址，并与 Scene Tree 的展开与选中状态双向同步。
+使用与 Scene Tree 一致的复合地址，并与 Scene Tree 的展开与选中状态双向同步。选中实例整体时，
+Stage MUST 只呈现一层选中框语义（对应宿主外框/根尺寸），MUST NOT 因宿主壳与嵌套根各画一套
+外观而出现双层可见色块；嵌套内容的 Appearance 渲染 MUST 与组件文档 Stage 路径一致。
 
 #### Scenario: 默认选中实例整体
 
@@ -727,6 +804,12 @@ Stage MUST 支持穿透进组件实例内部的命中与选择。默认单击 MU
 
 - **WHEN** 用户双击的目标是 component-instance 或可编辑文本
 - **THEN** 只触发下钻或只触发原地编辑，两者不同时激活
+
+#### Scenario: 实例整体无双层可见填色
+
+- **WHEN** 用户单击选中 component-instance 且未下钻
+- **THEN** Stage 上可见填色与圆角来自嵌套文档内容
+- **AND** 不出现宿主与根各贡献一层不透明底导致的错色或直角盖层
 
 ### Requirement: Stage 只渲染 WidgetSwitcher 的活动子项
 
@@ -805,4 +888,145 @@ MUST 独立于可见尺寸放大。省略 `editablePath` 时 Stage 外观与行�
 
 - **WHEN** 用户按住 Shift 拖动切线手柄
 - **THEN** 每次移动回调都带有 Shift 已按下的修饰键状态
+
+### Requirement: Stage 滚动配置提示
+
+Stage MUST 为配置了横向或纵向滚动的可见容器绘制对应方向的静态滚动条提示，且不得改变
+Entity 编辑坐标、消费滚轮、维护滚动偏移或产生文档事务。
+
+#### Scenario: 显示不可交互的纵向提示
+
+- **WHEN** 可见容器的纵向溢出配置为 `scroll`
+- **THEN** Stage 在容器右边显示 `aria-hidden`、不可命中的静态提示
+
+### Requirement: 基础组件分类九宫格
+
+`ComposeComponentPalette` MUST 将所有未隐藏的 Registry Preset 显示在本地化“基础 (N)”可折叠
+分类下，并以紧凑的响应式等尺寸网格呈现。网格 MUST 在可用宽度不足时自动将 Tile 排到下一行。每个 Tile MUST 使用与 Preset 类型对应的一致矢量图标、保留
+名称、点击新增和拖入 Stage 的既有行为；Palette 不得修改 Registry 顺序、Preset 定义或 ComposeDocument。
+
+#### Scenario: 展示基础组件网格
+
+- **WHEN** Palette 接收到五个可见 Preset
+- **THEN** 显示一个名称为“基础 (5)”的可聚焦分类控制项
+- **AND** 展开时按 Registry 顺序显示五个 Preset Tile，并根据面板可用宽度自动换行
+- **AND** 每个 Tile 占用相同的网格尺寸，图标的视觉尺寸一致
+- **AND** 隐藏的 Preset 不计入分类数量，也不显示 Tile
+
+#### Scenario: 折叠基础组件分类
+
+- **WHEN** 用户激活已展开的“基础 (N)”分类控制项
+- **THEN** 分类控制项反映折叠状态，且其 Preset Tile 不再可见
+- **WHEN** 用户再次激活该控制项
+- **THEN** Tile 恢复显示，顺序和可访问名称保持不变
+
+#### Scenario: 从网格新增 Preset
+
+- **WHEN** 用户点击或拖动任一 Preset Tile 到 Stage
+- **THEN** 系统沿用既有 `external.add` 或 `external.drop` 流程创建对应 Preset
+- **AND** 不产生旧 Frame/Component Node，也不写入 Palette 的展开状态
+
+#### Scenario: 拖动预览跟随指针
+
+- **WHEN** 用户从 Preset Tile 开始拖动，且指针越过既有拖动阈值
+- **THEN** Palette 显示不拦截指针的半透明 Preset 占位预览，并跟随最新 client pointer 位置
+- **WHEN** 用户取消或结束拖动
+- **THEN** 占位预览立即消失，且只有有效 drop 才会改变文档
+
+### Requirement: 标尺指针游标线
+
+Stage MUST 在顶部和左侧 ruler 上显示跟随指针世界位置的游标标记。该标记 MUST 是瞬时视图状态，
+MUST NOT 写入 ComposeDocument、事务历史或触发文档变更。
+
+#### Scenario: 指针移动时更新游标
+
+- **WHEN** 指针在 surface 或 ruler 上移动
+- **THEN** 两条 ruler 各显示一个对应当前指针世界坐标的游标标记
+
+#### Scenario: 指针离开时隐藏游标
+
+- **WHEN** 指针离开 Stage
+- **THEN** 两条 ruler 的游标标记消失且不残留最后位置
+
+### Requirement: Stage 节点层级操作
+
+Stage MUST 为节点提供前移一层、后移一层、置于顶层和置于底层四个动作。画布右键菜单 MUST 使用
+“层级”子菜单呈现动作、当前快捷键与动态可用状态；独立 Stage 与宿主接管路径 MUST 使用相同命令语义。
+
+#### Scenario: 从画布菜单调整前景节点
+
+- **WHEN** 用户右键选中节点并执行一个可用的层级菜单项
+- **THEN** Stage 提交一次同级重排事务并保持当前选择
+- **AND** 重叠区域的绘制与命中顺序立即使用新的文档顺序
+
+#### Scenario: 使用 Figma 风格默认键位
+
+- **WHEN** Stage 使用默认 shortcuts 且焦点不在可编辑输入中
+- **THEN** `[` 与 `]` 分别后移和前移一层，Primary+`[` 与 Primary+`]` 分别置底和置顶
+- **AND** 自定义键位、宿主动作接管与输入隔离继续生效
+
+#### Scenario: 显示层级边界状态
+
+- **WHEN** 当前可编辑选择无法继续执行某个层级方向
+- **THEN** 对应菜单项被禁用并继续显示当前快捷键
+- **AND** 执行动作不会产生空事务或改变选择
+
+### Requirement: 画布拖拽落点反馈
+
+Stage MUST 在存在候选 reparent 目标期间为该容器渲染高亮描边，区别于普通选中态。Stage MUST 在
+`nowrap` 容器内原地重排期间按 Controller 发布的插入位置渲染落点指示。两种反馈 MUST 在候选目标清除
+或 Pointer Up 提交/取消后立即消失。
+
+被拖动目标自身的选中框与变换手柄呈现 MUST 保持既有行为不变——落点反馈画在目标容器上，与被拖动节点
+的手柄属于不同对象，本变更不改动后者。
+
+#### Scenario: 候选容器显示高亮描边
+
+- **WHEN** 拖动中的指针使某容器成为候选 reparent 目标
+- **THEN** 该容器显示高亮描边
+- **AND** 被拖动 Entity 自身的选中框与手柄呈现与本变更前一致
+
+#### Scenario: 容器内重排显示落点指示
+
+- **WHEN** 用户在 `nowrap` 容器内拖动 Flow 子级
+- **THEN** Stage 按当前插入位置渲染落点指示
+- **AND** 指示随指针移动实时更新且不产生文档事务
+
+#### Scenario: 反馈随会话状态同步消失
+
+- **WHEN** 指针移出候选容器区域，或 Pointer Up 完成提交或取消
+- **THEN** 容器高亮与落点指示立即消失
+- **AND** 不残留在已经不再是候选目标的容器上
+
+### Requirement: Stage 复制剪切粘贴
+
+Stage MUST 为当前画布选区提供复制、剪切和粘贴。复制 MUST 把规范化顶层 Entity 写入会话剪贴板且
+不修改文档；剪切 MUST 只纳入未锁定来源，并在成功粘贴移动后清空剪贴板。粘贴 MUST 使用建议落点：
+可容纳子项的未锁定容器追加子项，叶节点插到自身之后，空白画布落到根级。Stage MUST NOT 读写系统
+剪贴板。独立 Stage 使用内建内存剪贴板；宿主提供 `onShortcutAction` 并返回 `true` 时 MUST 停止内建
+处理。可编辑输入或画布内文字编辑中 MUST NOT 拦截平台复制/剪切/粘贴。
+
+#### Scenario: 从画布菜单复制并粘贴
+
+- **WHEN** 用户右键可见节点并执行复制，再在空白画布执行粘贴
+- **THEN** Stage 提交一次复制事务，新节点位于根级并被选中
+- **AND** 再次粘贴仍可生成另一组副本
+
+#### Scenario: 剪切后粘贴清空剪贴板
+
+- **WHEN** 用户剪切有效选择并粘贴到建议落点
+- **THEN** 来源被移动到新位置且剪贴板被清空
+- **AND** 再次粘贴不产生事务
+
+#### Scenario: 使用平台主修饰键
+
+- **WHEN** Stage 聚焦且用户按下默认 Primary+C / Primary+X / Primary+V
+- **THEN** Stage 分别执行复制、剪切和粘贴
+- **AND** 右键菜单在 macOS 显示 ⌘C/⌘X/⌘V，其他平台显示 Ctrl+C/Ctrl+X/Ctrl+V
+- **AND** 裸 `C` 仍切换容器绘制工具
+
+#### Scenario: 可编辑目标保留系统剪贴板
+
+- **WHEN** 焦点位于 input、textarea 或画布内文字编辑
+- **THEN** Primary+C/X/V 不执行 Entity 复制、剪切或粘贴
 

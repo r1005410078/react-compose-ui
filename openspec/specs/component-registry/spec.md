@@ -107,11 +107,21 @@ Renderer 与 Inspector 错误边界 MUST 在 identity 或输入数据引用变�
 
 系统 MUST 提供 composeEntityVisualStyle 与 composeEntitySceneStyle，把 Appearance、Clip 与
 Transform 解析为一致的盒样式；Stage 与 Preview MUST 使用同一实现渲染 Entity 盒。
+component-instance 嵌套文档中的实体渲染 MUST 在 Appearance 与 overflow/clip 语义上与上述
+实现一致：叶子 Entity MUST 使用 hidden overflow，使 borderRadius 裁剪内部 Paint 与 Material
+层；容器 Entity MUST 按 resolveComposeOverflow 映射分轴 overflow，不得省略导致圆角或裁剪与
+Stage 不一致。
 
 #### Scenario: 边框与阴影合成一致的 boxShadow
 
 - **WHEN** Entity Appearance 同时含边框与 shadow
-- **THEN** 两个消费方得到相同的 inset 边框加投影 boxShadow 与 Clip 决定的 overflow
+- **THEN** Stage 与 Preview 得到相同的 inset 边框加投影 boxShadow 与 Clip 决定的 overflow
+
+#### Scenario: 嵌套实例叶子裁剪圆角
+
+- **WHEN** 叶子 Entity 含非零 borderRadius，并在 component-instance 嵌套路径中渲染
+- **THEN** 该实体盒 overflow 为 hidden
+- **AND** 其 Appearance 填色与圆角与 Stage 渲染同构 Entity 时一致
 
 ### Requirement: Compose-prefixed Registry React bridge
 The component registry MUST expose compose-prefixed factory and renderer bridge names while preserving its headless
@@ -256,6 +266,10 @@ Registry Renderer bridge MUST 同时提供严格 JSON authored Props 与应用�
 `props` MUST 表示 Renderer 实际消费的 runtime 对象并允许包含 Function，`authoredProps` MUST 保持为
 文档 `Renderer.props` 的只读 JSON。绑定解析 MUST NOT 修改 Entity 或 authored Props。
 
+回退语义 MUST 按 Contract 类型区分：value 绑定失败 MUST 回退同名 authored 字面值；method 绑定失败
+MUST 使 runtime prop 为 `undefined`，MUST NOT 回退同名 authored 字面值——authored Props 是严格 JSON，
+其中的同名值永远不是可调用的 handler，把它交给宿主组件会在事件触发时抛错。
+
 #### Scenario: 值绑定覆盖字面 Prop
 
 - **WHEN** 页面 value export 通过目标 Contract validator
@@ -273,6 +287,12 @@ Registry Renderer bridge MUST 同时提供严格 JSON authored Props 与应用�
 - **WHEN** method export 绑定到 event-handler Contract
 - **THEN** Preview runtime props 包含保留调用参数且忽略返回值的方法 wrapper
 - **AND** Function 不出现在 authoredProps、Entity JSON 或 Registry 快照序列化中
+
+#### Scenario: 方法绑定失败不回退字面 Prop
+
+- **WHEN** method Contract 的绑定目标缺失或 kind 不匹配，且 authored Props 中存在同名字面值
+- **THEN** runtime props 中该 Prop 为 `undefined` 并发布目标 diagnostic
+- **AND** authoredProps 仍然保留该字面值供 Inspector 展示
 
 ### Requirement: 响应式 Prop 测量失效
 
@@ -347,4 +367,44 @@ authored props 的呈现与尺寸。
 - **WHEN** 同一个 Entity 分别在 `editor` 与 `preview` 模式下渲染
 - **THEN** 只有 `editor` 模式的 Renderer 得知处于原地编辑
 - **AND** `preview` 模式不提供任何原地编辑入口
+
+### Requirement: 共享外观与 overflow 行为解耦
+
+共享 Registry 渲染基础 MUST 提供不包含消费方 overflow 决策的 Entity appearance 样式入口，
+同时保持既有公共视觉样式入口兼容。
+
+#### Scenario: Stage 与 Preview 选择不同 overflow 行为
+
+- **WHEN** 两个消费方渲染同一个配置了滚动的容器
+- **THEN** 它们复用相同 appearance，但分别应用静态编辑语义和原生预览语义
+
+### Requirement: 页面脚本作用域加载 Hook
+
+`@compose-ui/component-registry` MUST 导出唯一的 React Hook，供渲染入口按页面加载 setup 作用域。
+Hook MUST 在缺省 Loader 时由 Asset Resolver 构造默认 JavaScript Loader，MUST 订阅 setup 资源变更并在
+新 revision 到达时以新模块重建作用域，MUST 在卸载、引用变化和加载被取消时 dispose 自己创建的作用域，
+并且 MUST NOT 在作用域与当前 setup 引用不匹配时把它交给消费方。
+
+页面渲染入口 MUST NOT 各自实现这套加载与竞态逻辑；`preview` 与 Page Slot MUST 消费该 Hook。
+
+#### Scenario: 按页面加载并在热重载后重建
+
+- **WHEN** 页面关联的 setup 资源保存并发布新 revision
+- **THEN** Hook dispose 旧作用域并以新模块建立新作用域
+- **AND** 消费方在新作用域就绪前不会收到与旧引用不匹配的作用域
+
+#### Scenario: 加载期间卸载
+
+- **WHEN** setup 模块仍在加载时消费方卸载
+- **THEN** Hook 取消加载并 dispose 迟到到达的作用域
+- **AND** 不产生卸载后的状态更新
+
+### Requirement: 共享 Entity overflow 解析辅助
+
+系统 MUST 提供可被 Stage、Preview 与 component-instance 嵌套渲染复用的 overflow 样式解析（纯函数或等价共享模块），输入 Entity，输出与 resolveComposeOverflow 语义一致的 CSS overflow 结果。各消费方 MUST NOT 各自维护互相漂移的第三套 overflow 规则。
+
+#### Scenario: 三路径使用同一 overflow 语义
+
+- **WHEN** 同一 Container Entity 配置分轴 clip/scroll/visible
+- **THEN** Stage、Preview 与 component-instance 嵌套路径得到等价的 overflowX/overflowY 映射
 

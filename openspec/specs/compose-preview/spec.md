@@ -116,6 +116,8 @@ Preview 递归渲染 Page Slot 时 MUST 为每个 Slot 页面创建独立 setup 
 Preview MUST 从实例保存的 resolvedSnapshot 递归渲染组件内容，按实例结构操作与属性覆盖解析 Renderer
 props，保留内部真实预览交互，并且不依赖实时 Component Store。Preview MUST 与 Stage 共享八层嵌套、
 循环检测、错误占位和 dispose 行为，但 MUST NOT 暴露编辑期的内部选中、下钻或结构编辑能力。
+嵌套实体的 Appearance 与 overflow/clip 语义 MUST 与 Stage 及组件文档路径一致，使预览中的填色与
+圆角可复现编辑结果。
 
 #### Scenario: 预览在线与离线组件实例
 
@@ -132,6 +134,12 @@ props，保留内部真实预览交互，并且不依赖实时 Component Store�
 
 - **WHEN** 保存快照递归引用自身或超过八层
 - **THEN** Preview 只在该实例位置显示可访问错误，不中断文档其余内容
+
+#### Scenario: 预览圆角与填色与源一致
+
+- **WHEN** 实例快照中叶子 Entity 含非默认 solid 填色与非零 borderRadius
+- **THEN** Preview 中该实体呈现相同填色与圆角裁剪行为
+- **AND** 不出现 Material 默认底色盖住 Appearance 的结果
 
 ### Requirement: Preview 只渲染 WidgetSwitcher 的活动子项
 
@@ -205,4 +213,45 @@ MUST 停止推进循环，MUST NOT 空转。组件卸载或作用域释放时 MU
 
 - **WHEN** 页面 setup 导出的绑定布尔为 `true`，用户同时在编辑器里拖动播放头
 - **THEN** 画布跟随用户拖动的位置，不被脚本改写
+
+### Requirement: 受控 Preview Dialog
+
+`@compose-ui/preview` MUST 提供受控 `ComposePreviewDialog`，接受与 `ComposePreview` 相同的文档、Registry、资源 Resolver 与页面加载端口，并由宿主通过 `open` 和关闭回调控制可见性。该组件不得依赖 Editor 或 Stage。
+
+#### Scenario: 打开完整文档预览
+
+- **WHEN** 宿主以 `open=true` 渲染带 document 与 registry 的 ComposePreviewDialog
+- **THEN** 组件以模态对话框呈现完整文档预览
+- **AND** 关闭控件、Esc 与遮罩操作请求宿主关闭对话框并恢复触发焦点
+
+#### Scenario: 切换指定 Container 预览
+
+- **WHEN** 宿主提供有效的 Container entity ID 并在对话框中选择该范围
+- **THEN** 对话框使用该 ID 作为 ComposePreview 的 Container target
+- **AND** 没有有效 Container 时该切换控件不可用
+
+### Requirement: Preview Dialog 视图控制
+
+ComposePreviewDialog MUST 提供不改变文档的预览缩放与全屏控制；缩放只影响对话框中的画板呈现，不能改变 ComposePreview 的输出语义。
+
+#### Scenario: 调整预览缩放
+
+- **WHEN** 用户选择一个支持的缩放比例
+- **THEN** 画板在预览舞台中按该比例呈现
+- **AND** document、target 与渲染内容不被修改
+
+### Requirement: Preview 原生 Container 滚动
+
+Preview MUST 在真实递归 DOM 层级上把规范化分轴策略映射为原生 overflow，并让滚动位置保持为
+非持久化的浏览器会话状态。
+
+#### Scenario: 纵向内容真实滚动
+
+- **WHEN** 容器纵向配置为 `scroll` 且子内容超过容器高度
+- **THEN** Preview 出现原生纵向滚动范围并允许用户滚动，而文档保持不变
+
+#### Scenario: 滚动范围保留末端内边距
+
+- **WHEN** Auto Layout 容器带有底部或右侧内边距且内容溢出
+- **THEN** Preview 的原生滚动范围在最后一个子项之后保留对应末端内边距
 

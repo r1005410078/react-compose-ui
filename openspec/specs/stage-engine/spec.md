@@ -91,20 +91,20 @@ Stage Engine MUST 从 ComposeDocument v6 与 ready ComposeLayoutSnapshot 建立 
 可见性、锁定、容器、裁剪与 GeometryConstraints 索引。全部世界几何 MUST 使用 Snapshot box 加
 Transform rotation，缓存 MUST 同时区分 document 与 snapshot revision。
 
-SceneIndex MUST 接受一个可选的隐藏 Entity ID 集合，并把集合内 Entity 及其全部后代计为不可见。
-集合由宿主传入——它同时包含 WidgetSwitcher 的非活动子项与编辑期预览覆盖的结果，因此 Stage Engine
-MUST NOT 自行读取选择状态，保持与 React 与编辑器状态无关。
+`containerAtPoint` MUST 接受一个可选的排除 Entity ID 集合，返回结果 MUST NOT 包含集合中的 Entity
+及其任何后代——供画布内拖拽 reparent 判定候选容器时排除被拖动的选区自身，避免把节点拖进它自己或它
+的子孙。
 
 #### Scenario: Snapshot 改变使空间索引失效
 - **WHEN** 文档引用不变但 Layout Snapshot revision 与子项 box 改变
 - **THEN** SceneIndex 返回新的世界矩阵、bounds、命中与裁剪结果
 - **AND** 不读取旧 Transform position/size
 
-#### Scenario: 隐藏集合不可命中
+#### Scenario: 容器命中排除自身与后代
 
-- **WHEN** 以含某个 Entity 的隐藏集合建立 SceneIndex 并在该 Entity 上做命中测试
-- **THEN** 命中结果不返回该 Entity，也不返回它的任何后代
-- **AND** 隐藏集合为空时行为与此前一致
+- **WHEN** 以拖动中选区的 Entity ID 作为排除集合查询 `containerAtPoint`
+- **THEN** 返回结果不是选区中任何 Entity，也不是它们任意一个的后代
+- **AND** 排除集合为空时行为与此前一致
 
 ### Requirement: ECS 结构命令
 
@@ -351,4 +351,227 @@ Pointer 命中路径顶点或切线手柄时产出 `path-handle` 语义命中，
 
 - **WHEN** 用户拖动切线手柄
 - **THEN** 引擎不产出任何文档 Patch
+
+### Requirement: 同级节点层级命令规划
+
+Stage Engine MUST 提供无 React/DOM 的前移、后移、置顶和置底命令规划。规划 MUST 只修改直接父级的
+`rootIds` 或 `Hierarchy.childIds`，保持 Entity 数据、选择和选中项相对顺序；跨父级多选 MUST 合并为一个
+可撤销事务。
+
+#### Scenario: 稳定调整多选层级
+
+- **WHEN** 用户选择同一父级内连续或非连续的多个节点并执行任一层级动作
+- **THEN** 单步动作按连续选中块交换一个相邻未选中节点，置顶置底使用稳定分区
+- **AND** 选中节点彼此的相对顺序保持不变
+
+#### Scenario: 分父级原子重排
+
+- **WHEN** 选择包含多个直接父级的可编辑节点
+- **THEN** 每个父级独立计算新顺序并通过一个 batch 提交
+- **AND** 一个 Undo 恢复所有父级的原始顺序
+
+#### Scenario: 跳过不可移动与边界目标
+
+- **WHEN** 选择包含锁定节点、锁定父级子项或已位于目标边界的节点
+- **THEN** 不可移动或无变化分组不产生子命令，其他有效父级仍正常重排
+- **AND** 全部无变化时 availability 明确不可用且不产生事务
+
+#### Scenario: 重排 Flow 子项
+
+- **WHEN** Auto Layout parent 的 Flow 子项执行层级动作
+- **THEN** 系统只调整 `Hierarchy.childIds` 并允许布局顺序同步变化
+- **AND** 全部 LayoutItem、Transform 与其他 authoring 数据保持不变
+
+### Requirement: 框选判定模式协议
+
+Stage Engine MUST 导出 `StageMarqueeMode`，取值为 `intersect`、`contain` 与 `directional`，并
+MUST 提供不依赖 React、DOM 与 controller 实例的纯函数解析框选结果。判定几何 MUST 使用节点的
+世界 AABB；`intersect` 表示框与 AABB 有交集，`contain` 表示 AABB 完全落在框内。`directional`
+MUST 由拖拽方向决定：起点在终点左侧时等价 `contain`，起点在终点右侧时等价 `intersect`。
+纯函数 MUST 显式接收拖拽方向，不得从已归一化的矩形反推。解析结果 MUST 排除 hidden 与 locked
+节点，并 MUST 按确定性场景顺序返回稳定文档 ID。
+
+#### Scenario: 相交模式选中部分重叠节点
+
+- **WHEN** 以 `intersect` 模式解析一个只与节点 AABB 部分重叠的框
+- **THEN** 该节点进入结果
+
+#### Scenario: 包含模式排除部分重叠节点
+
+- **WHEN** 以 `contain` 模式解析同一个只与节点 AABB 部分重叠的框
+- **THEN** 该节点不进入结果
+- **AND** AABB 完全落在框内的节点仍进入结果
+
+#### Scenario: 方向决定模式按拖拽方向切换判定
+
+- **WHEN** 以 `directional` 模式解析同一个框，方向为从左往右
+- **THEN** 结果与 `contain` 模式一致
+- **AND** 方向为从右往左时结果与 `intersect` 模式一致
+
+#### Scenario: 排除 hidden 与 locked 节点
+
+- **WHEN** 框覆盖了 hidden 节点与 locked 节点
+- **THEN** 两者都不进入结果
+
+### Requirement: 框选工具与选区布尔组合
+
+Stage Engine MUST 提供 `marquee` 工具值；该工具下 pointer 在节点上按下 MUST 起框而不是命中该
+节点。`select` 工具 MUST 保持只在空白处起框。两个入口 MUST 使用受控传入的同一个
+`StageMarqueeMode`，未传入时 MUST 回退 `intersect`。框选提交 MUST 按修饰键与已有选区组合：
+无修饰键替换选区，Shift 与已有选区求并集，Alt 从已有选区中移除。框选 MUST 只发布瞬时
+snapshot 与 selection effect，不得产生文档事务。
+
+#### Scenario: 框选工具从节点上起框
+
+- **WHEN** 工具为 `marquee` 且用户在一个可见节点上按下并拖动
+- **THEN** controller 进入 marquee phase 并发布框选预览
+- **AND** 不发生该节点的 move 手势
+
+#### Scenario: 选择工具保持空白起框
+
+- **WHEN** 工具为 `select` 且用户在一个可见节点上按下并拖动
+- **THEN** controller 进入 move phase
+
+#### Scenario: Shift 加选与 Alt 减选
+
+- **WHEN** 已有选区存在且用户按住 Shift 完成一次框选
+- **THEN** 框选结果与已有选区求并集
+- **AND** 按住 Alt 完成框选时框选结果从已有选区中移除
+
+#### Scenario: 未传入模式时回退相交
+
+- **WHEN** 宿主未提供 `marqueeMode`
+- **THEN** 判定使用 `intersect`
+
+### Requirement: 画布拖拽 reparent 会话
+
+StageInteractionController MUST 在 `move` 手势进行中持续判定指针下最深的合法容器（复用
+`containerAtPoint` 并排除被拖动选区自身与其后代）。仅当指针进入该容器包围盒内部达到规定比例时才把它
+记为候选 reparent 目标；贴边掠过 MUST NOT 触发，且 MUST NOT 使用停留计时作为额外或替代的触发条件。
+候选目标 MUST 通过 snapshot 暴露供宿主渲染高亮（与 `previewTransforms`、`drawing` 等既有 preview
+状态同一机制，而不是 effect），Controller 自身不持有渲染状态。未达到判定条件时 MUST 保持现有行为：
+目标坐标在原父级内更新，不触发 reparent。
+
+Pointer Up 时若存在候选 reparent 目标，Controller MUST 提交一次原子 reparent 命令并使用该目标已有
+的 Flow/Absolute 默认判定（与 `createReparentCommand` 的 `targetManagesFlow` 规则一致），MUST NOT
+新增拖拽手势内的 Flow/Absolute 选择分支，且 MUST NOT 同时发布 Transform 命令——一次手势只表达一个
+结构意图。多选拖拽 MUST 按文档顺序提交以保持相对顺序，祖先/后代去重规则 MUST 与既有场景树批量移动
+规则一致。Escape 与失去指针捕获时 MUST NOT 提交任何命令。
+
+候选目标失效（锁定、被删除、变为无 Hierarchy）只能经由文档变化发生，而并发文档变化已由「手势预览与
+原子提交」判定为不兼容并取消整个空间手势，因此该情形 MUST NOT 提交任何命令；Controller 仍 MUST 在
+提交前复核目标有效性，避免未来新增的非文档路径产生指向已失效目标的命令。
+
+#### Scenario: 指针进入容器内部触发候选高亮
+
+- **WHEN** 拖动中的指针进入某合法容器包围盒内部达到判定比例
+- **THEN** Controller 在 snapshot 中发布该容器为候选 reparent 目标
+- **AND** 指针退出该区域后候选目标清除且不产生任何命令
+
+#### Scenario: 贴边掠过不触发吸入
+
+- **WHEN** 拖动中的指针只在容器边缘附近掠过，未进入内部达到判定比例
+- **THEN** 不产生候选 reparent 目标
+- **AND** Pointer Up 只更新目标在原父级内的坐标
+
+#### Scenario: 提交 reparent 使用目标默认 Flow/Absolute 判定
+
+- **WHEN** Pointer Up 时存在候选 reparent 目标
+- **THEN** 提交的 reparent 命令按目标是否为 Layout 容器分别得到 Flow 或 Absolute 的 LayoutItem
+- **AND** 不产生第二条独立命令来设置 Flow/Absolute
+
+#### Scenario: 候选目标提交前失效则不提交
+
+- **WHEN** 候选 reparent 目标在 Pointer Up 前被锁定、删除或经其他事务变为不再是合法容器
+- **THEN** 该并发文档变化按既有手势原子性取消整个手势，不产生任何命令
+- **AND** 不产生指向已失效目标的命令
+
+### Requirement: Auto Layout 容器内原地重排
+
+Controller MUST 支持 Auto Layout 容器内的原地重排。对 `flexWrap` 为 `nowrap` 的 Layout 容器，
+`move` 手势拖动其 Flow 子级且指针全程未离开该容器边界时，Controller MUST 按指针在主轴上的位置与
+各兄弟中点比较得到插入位置，Pointer Up MUST 只提交一次改变 `Hierarchy.childIds` 顺序的命令，MUST NOT 修改该 Entity 的 `LayoutItem`，MUST NOT 发布 Transform
+命令。插入位置与拖动前顺序相同时 MUST NOT 提交任何命令。指针离开容器边界时 MUST 回退到既有的烘焙
+Absolute 行为。`flexWrap` 为 `wrap` 或 `wrap-reverse` 的容器 MUST 保持现有行为，不进行原地重排判定。
+
+拖动过程中 Controller MUST 通过 snapshot 发布当前插入位置，供宿主呈现落点预览；预览 MUST NOT 产生
+文档事务。一次拖拽 MUST 只表达一种结构意图：当选区并非全部属于同一候选容器时 MUST NOT 进入重排，
+改按 reparent 或既有 Transform 规则统一处理，MUST NOT 在同一次手势内混合提交重排与其他结构命令。
+
+#### Scenario: 容器内拖拽只重排不烘焙
+
+- **WHEN** 用户在 `nowrap` 容器内把一个 Flow 子级拖到另一个兄弟旁边并在容器内松手
+- **THEN** 提交的命令只改变 `Hierarchy.childIds` 顺序
+- **AND** 该 Entity 的 `LayoutItem.positioning` 保持 `flow` 且不产生 Transform 命令
+
+#### Scenario: 顺序未变化不产生事务
+
+- **WHEN** 用户在容器内拖动 Flow 子级后松手，计算出的插入位置与原顺序一致
+- **THEN** 不提交任何命令
+- **AND** 历史不增加条目
+
+#### Scenario: 拖动中呈现落点预览
+
+- **WHEN** 用户在 `nowrap` 容器内拖动 Flow 子级并移动指针
+- **THEN** Controller 随指针在 snapshot 中发布当前插入位置
+- **AND** 预览期间不产生任何文档事务
+
+#### Scenario: 选区跨容器时不进入重排
+
+- **WHEN** 一次拖动的选区同时包含某 `nowrap` 容器内的 Flow 子级与该容器外的其他目标
+- **THEN** 不产生重排落点，整次手势按 reparent 或既有 Transform 规则统一处理
+- **AND** 不在同一次手势内混合提交重排与其他结构命令
+
+#### Scenario: 拖出容器边界回退为烘焙 Absolute
+
+- **WHEN** 用户把 `nowrap` 容器内的 Flow 子级拖出该容器边界后松手
+- **THEN** 该目标按既有规则烘焙为 Absolute
+- **AND** 未拖出边界的其他并发拖动目标不受影响
+
+#### Scenario: wrap 容器维持现状
+
+- **WHEN** 容器 `flexWrap` 为 `wrap` 或 `wrap-reverse`
+- **THEN** 拖动其 Flow 子级立即按既有规则烘焙为 Absolute
+- **AND** 不进行插入位置判定
+
+### Requirement: 组件提取复用已有单根
+
+提取器 MUST 在选区是单个未锁定顶层节点时直接复用该节点作为组件根，不追加 Group 包装；只有多选或
+需要统一归零坐标时才创建 Group 根。两种路径 MUST 都保持后代世界几何、旋转与 sibling 顺序不变。
+
+#### Scenario: 单选容器不产生冗余层级
+
+- **WHEN** 用户对单个 Container 或 Group 创建组件
+- **THEN** 组件文档以该节点为唯一根
+- **AND** 场景树中不出现额外的同名包装层
+
+#### Scenario: 多选仍生成 Group 根
+
+- **WHEN** 用户对两个及以上同父级顶层节点创建组件
+- **THEN** 提取器创建 Group 根并把选区作为其子项
+- **AND** 所有后代的世界几何保持不变
+
+### Requirement: Entity 会话剪贴板规划
+
+Stage Engine MUST 提供与 React 无关的会话剪贴板规划：从选择规范化复制/剪切来源、解析建议粘贴
+落点，以及把剪贴板转成既有 `entity.duplicate` 或移动/reparent 命令。规范化 MUST 按文档遍历顺序
+保留顶层来源并去掉已被祖先覆盖的后代。剪切来源 MUST 排除锁定节点；粘贴到自身、后代或锁定父级
+MUST 判定为不可用且不产生命令。
+
+#### Scenario: 规范化多选复制来源
+
+- **WHEN** 选择同时包含容器及其子项并请求复制
+- **THEN** 剪贴板只保留该容器
+- **AND** 锁定节点仍可进入复制剪贴板
+
+#### Scenario: 建议落点
+
+- **WHEN** 目标是未锁定容器、叶节点或空选区
+- **THEN** 分别解析为容器末尾、该节点之后或根级末尾
+
+#### Scenario: 复制到指定父级
+
+- **WHEN** 规划器为复制剪贴板提供与来源不同的父级
+- **THEN** 生成的 duplicate 命令写入该父级与索引
+- **AND** Absolute 副本不再额外偏移 10
 

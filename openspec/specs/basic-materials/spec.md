@@ -283,8 +283,10 @@ Text MUST 声明原地文字编辑契约，把 `text` prop 标记为可原地编
 测量诊断。
 
 Text measurement MUST 声明内容高度随可用宽度重排。文字换行意味着拖窄后行数增加、内容变高；未声明
-时缩放会把 Hug 高度一并钉成 Fixed，长出来的部分被自己的框裁掉。声明后四角手柄照常保留；角手柄
-收窄宽度时高度保持 Hug 交给内容重排，角手柄向外拉高或纯高度手柄（顶/底边）则转为 Fixed。
+时缩放会把 Hug 高度一并钉成 Fixed，长出来的部分被自己的框裁掉。声明后八向手柄照常保留，且 Stage
+resize 预览 MUST 按拖动的具体手柄区分两种行为：拖宽度或对角手柄时高度继续保持 Hug、随重排自适应；
+拖顶部或底部纯高度手柄时 MUST 应用拖拽产生的高度并把 `LayoutItem.height.mode` 写成 `fixed`，与
+Figma 的 Auto Height 文字拖动高度手柄自动转 Fixed Size 一致。
 
 #### Scenario: 字体完成后更新 Text Hug
 - **WHEN** Text 首次用 fallback 字体测量后目标字体完成加载
@@ -301,13 +303,14 @@ Text measurement MUST 声明内容高度随可用宽度重排。文字换行意�
 
 - **WHEN** 用户拖动角手柄把一段多词文字的框收窄
 - **THEN** 文字重新换行，框的高度随之增加，内容始终完整可见
-- **AND** 四角手柄照常显示，宽度变为 Fixed 而高度保持 Hug
+- **AND** 八向手柄照常显示，宽度变为 Fixed 而高度保持 Hug
 
-#### Scenario: 角手柄拉高文字框时转为 Fixed
+#### Scenario: 拖动纯高度手柄转为 Fixed
 
-- **WHEN** 用户拖动角手柄把一段 Hug 高度的文字框向外拉高
-- **THEN** 高度变为 Fixed 并采用拖拽后的高度
-- **AND** 单行文字也能通过角点加高，而不必依赖不可见的顶/底边 hit
+- **WHEN** 用户拖动一段 Hug 高度 Text 的顶部或底部手柄
+- **THEN** 框的高度按拖拽结果改变，不再被丢弃回退
+- **AND** 提交后 `LayoutItem.height.mode` 变为 `fixed`，值等于拖拽后的高度
+- **AND** 同一手势中若之后改拖宽度或对角手柄，高度不再跟随变化（已是 Fixed）
 
 #### Scenario: 空内容仍量出行高
 
@@ -388,7 +391,7 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 - **THEN** Inspector 将该属性恢复为 ComposeDocument 支持的显式 CSS 初始等价值
 - **AND** 分别使用 row、nowrap、stretch、flex-start 与 stretch，不写入空值或 normal
 - **AND** 当前已是显式默认项时再次点击保持幂等且默认项继续显示为选中
-- **AND** 显式默认项使用中性弱选中样式，非默认选择才使用强调蓝色
+- **AND** 默认项与非默认项的选中态使用同一强调色，不做视觉区分
 
 #### Scenario: 在独立属性中编辑 padding
 
@@ -512,34 +515,52 @@ materials MUST 注册使用 Core seed 的 `group` Preset，供文档识别、图
 ### Requirement: 关联组件实例物料
 
 materials MUST 提供隐藏于基础 Palette 的 `component-instance` Preset；实例保存稳定引用、
-appliedLineage、resolvedSnapshot 和 instanceOverrides，以 Hug 尺寸与快照 fallback 渲染，允许移动和
-旋转但不允许 Resize。实例内部 Entity MUST 可在宿主编辑期被投影、选中并按实例层稳定操作结构编辑，
-且 MUST 保持在实例子树边界内。
+appliedLineage、resolvedSnapshot 和 instanceOverrides。实例的 LayoutItem 与 GeometryConstraints
+MUST 从组件根派生：根允许 Resize 时实例同样允许，尺寸、外观、裁剪与 Auto Layout 的编辑 MUST 写入
+实例覆盖并以组件根为目标，不修改组件源。页面上的宿主 Entity MUST 以透明外观与 Hug 尺寸承载
+嵌套文档，MUST NOT 再绘制一层与组件根竞争的可见填色。实例内部 Entity MUST 可在宿主编辑期被
+投影、选中并按实例层稳定操作结构编辑，且 MUST 保持在实例子树边界内。component-instance 嵌套
+实体的 Appearance、overflow/clip 盒样式语义 MUST 与 Stage / Preview 中同构 Entity 一致，使得
+组件文档内编辑的颜色与圆角在实例中可复现。
 
 #### Scenario: 离线渲染已保存快照
 
 - **WHEN** Provider 不可用但实例含合法 resolvedSnapshot
 - **THEN** Stage 与 Preview 继续渲染快照并显示离线状态
 
-#### Scenario: 显式属性覆盖
+#### Scenario: 实例暴露组件根属性
 
-- **WHEN** 用户修改 Base 声明的暴露属性
-- **THEN** 实例只在 instanceOverrides 的属性分区保存 property ID 到 JSON 值的覆盖并以覆盖结果渲染
+- **WHEN** 组件根是允许 Resize 的容器
+- **THEN** 实例可被 Resize，且尺寸、外观、裁剪与 Auto Layout 在 Inspector 中可编辑
+- **AND** 编辑结果保存为以组件根为目标的实例结构操作
 
 #### Scenario: 实例层结构覆盖
 
 - **WHEN** 用户在实例内部删除、reparent、reorder 实体或增删非基础 Component
-- **THEN** 实例只保存与 Variant 同构的稳定结构操作，并按 Base → Variant 链 → 结构操作 → 属性覆盖解析
+- **THEN** 实例只保存与 Variant 同构的稳定结构操作，并按 Base → Variant 链 → 实例结构操作解析
 
 #### Scenario: 拒绝越界结构编辑
 
-- **WHEN** 操作试图删除或 reparent 实例根、删除基础 Component，或把内部实体移出实例子树
+- **WHEN** 操作试图删除或 reparent 组件根、删除基础 Component，或把内部实体移出实例子树
 - **THEN** 操作被稳定拒绝，实例保持上一个合法状态
 
 #### Scenario: 嵌套组件保护
 
 - **WHEN** 组件嵌套形成循环或超过八层
 - **THEN** Renderer 停止递归、释放已创建 Runtime 并呈现可访问错误状态
+
+#### Scenario: 实例嵌套实体圆角与填色一致
+
+- **WHEN** 组件源中某叶子 Entity 的 Appearance 含非零 borderRadius 与非默认 solid 填色
+- **AND** 页面上的 component-instance 渲染该快照且无覆盖该字段
+- **THEN** 嵌套实体盒应用相同 borderRadius 与填色
+- **AND** 叶子盒 overflow 为 hidden，使圆角裁剪内部 Material 层
+
+#### Scenario: 宿主不贡献第二层填色
+
+- **WHEN** 页面渲染合法 component-instance
+- **THEN** 用户可见的填色与圆角来自嵌套文档解析结果
+- **AND** 宿主 Entity 不以不透明 Appearance 再铺一层盖住或露出第二套色块
 
 ### Requirement: WidgetSwitcher 物料与切换能力
 
@@ -575,4 +596,110 @@ Materials MUST 为 `WidgetSwitcher` 注册带 Inspector 的 Component 定义，�
 - **WHEN** 用户在 Inspector 把活动索引从 0 改为 1
 - **THEN** 只派发一条更新 `WidgetSwitcher` 的命令
 - **AND** Undo 一次即恢复原索引，子项的 LayoutItem 与 Visibility 不变
+
+### Requirement: 容器分轴溢出 Inspector
+
+系统 MUST 让所有具有 Hierarchy 的基础物料通过容器 Inspector 独立配置横向与纵向溢出策略，
+且新建容器默认在两个轴裁剪内容。
+
+#### Scenario: 配置纵向滚动
+
+- **WHEN** 用户将容器纵向溢出设置为滚动
+- **THEN** Inspector 通过单个 Core 命令写入完整且规范化的横纵轴值
+
+### Requirement: 内建 Inspector 提供重置基线
+
+内建 Component Inspector 与 Renderer Inspector MUST 向 `ComposePropertyPanel` 传入稳定的
+`defaultValue`，使属性行的重置动作与“已修改”筛选可用。基线 MUST 由 Component/Renderer
+Definition 的默认值派生，MUST 能通过该 Inspector 自身的 schema 校验，且 MUST NOT 依赖当前
+受控 value。没有与实例无关默认值的字段（如位置、尺寸）MUST NOT 出现在基线中。
+
+#### Scenario: 修改背景填充后出现重置
+
+- **WHEN** 用户把某个基础物料的 Appearance 背景填充改为与默认 Solid Paint 不同的值
+- **THEN** 该属性行的操作列显示重置动作
+- **AND** 执行重置后 Appearance 背景恢复为定义中的默认 Solid Paint
+
+#### Scenario: 属性等于默认值时不显示重置
+
+- **WHEN** 某属性的当前值与其基线深度相等且该属性没有后代绑定
+- **THEN** 该属性行不显示重置动作
+
+#### Scenario: 位置与尺寸不参与重置
+
+- **WHEN** 用户在几何 Inspector 中修改位置或尺寸
+- **THEN** 这两个字段不显示重置动作
+- **AND** 同一 Inspector 中的旋转与外边距在偏离默认值时仍显示重置动作
+
+#### Scenario: 重置 Renderer 属性保留 schema 之外的字段
+
+- **WHEN** Renderer props 含 schema 未覆盖的宿主字段且用户重置某个 schema 内属性
+- **THEN** 派发的 props 中该属性恢复为 Definition 默认值
+- **AND** 宿主扩展字段保持不变
+
+### Requirement: Figma 基线的 Text 默认值与排版
+
+Materials MUST 以 Inter Regular 12px、白色文字填充、自动行高、左对齐、顶部对齐、原始大小写和无文字装饰创建新的 Text Preset。Text Renderer MUST 支持并公开 `textAlign`、`verticalAlign`、`textCase` 与 `textDecoration`，且 Inspector、Stage、Preview、Renderer measurement MUST 使用相同的 Props Contract。颜色 MUST 继续属于 Text 内容分类；字体、对齐、大小写与装饰 MUST 属于排版分类。
+
+#### Scenario: 创建默认 Text
+
+- **WHEN** Registry 从 Text Preset 创建一个新 Entity
+- **THEN** Renderer Props 使用白色 Inter 12px 的基础文字样式，且不持久化数值 lineHeight
+- **AND** LayoutItem 的宽度和高度均为 `hug`
+
+#### Scenario: 编辑文字排版
+
+- **WHEN** 用户在 Text Inspector 修改对齐、大小写或文字装饰
+- **THEN** Stage 与 Preview 立即以相同方式渲染该 Text
+- **AND** 影响文字字形的大小写设置同时用于 Hug measurement，schema 外 authored props 保持不变
+
+#### Scenario: 读取旧 Text
+
+- **WHEN** v6 Text 缺少新的排版字段，或缺少颜色字段
+- **THEN** 显式既有颜色、字号、字体和行高保持不变
+- **AND** 缺失颜色回退为白色，缺失排版字段保持旧的垂直居中、原始大小写和无装饰行为
+
+### Requirement: Text 内容尺寸贴合
+
+Text Preset MUST 为 `hug × hug` 提供不大于默认文字内容的回退尺寸，并使用既有 isolated measurement 收敛到真实文本尺寸；透明 Appearance MUST 不产生文字外框。
+
+#### Scenario: 默认文字选区贴合内容
+
+- **WHEN** 新 Text 的 Layout Runtime 完成 measurement
+- **THEN** Layout snapshot 的选区宽高等于 Text Renderer 的内容尺寸
+- **AND** 不保留 280×72 的固定默认文本框
+
+### Requirement: 形状类 Material 不得覆盖 Appearance 填色
+
+形状类基础物料（至少包含 Rectangle）的 Renderer 根节点 MUST NOT 使用不透明 CSS 默认背景覆盖 Entity Appearance。填色、圆角与阴影 MUST 由共享 Appearance / Paint 层表达；Material 仅承担内容占位或非填色职责。默认视觉值 MUST 写在 Preset/seed 的 Appearance 上，不得依赖 Material 样式表中的第二套默认色。
+
+#### Scenario: Rectangle 改色不被 Material CSS 盖住
+
+- **WHEN** Rectangle Entity 的 Appearance.backgroundPaint 为非默认 solid 色且 borderRadius 非 0
+- **AND** Stage、Preview 或 component-instance 嵌套路径渲染该 Entity
+- **THEN** 可见填色与 computed 背景反映 Appearance 色值
+- **AND** Material 根节点不绘制与 Appearance 冲突的默认蓝底
+
+#### Scenario: Rectangle 默认外观来自 seed Appearance
+
+- **WHEN** Registry 从默认 rectangle Preset 创建 seed
+- **THEN** Appearance 含明确的默认 solid 填色与 borderRadius
+- **AND** 渲染不依赖 Material CSS 变量提供填色
+
+### Requirement: 页面实例使用空心组件符号
+
+`component-instance` 在场景树与依赖 Registry preset 图标的呈现中 MUST 使用空心（描边）组件符号，
+以表示页面引用而非库内主组件本体。主组件 preset 图标 MUST 为实心同形符号。该规则 MUST 与组件库
+中主组件/变体图标体系一致，且 MUST NOT 仅依赖颜色区分。
+
+#### Scenario: 场景树实例图标为空心
+
+- **WHEN** 页面场景树渲染 component-instance 节点
+- **THEN** 行图标为空心组件符号
+- **AND** 与普通 Rectangle/Container 物料图标可区分
+
+#### Scenario: 主组件库图标为实心
+
+- **WHEN** 组件库展示主组件资源
+- **THEN** 图标为实心组件符号
 

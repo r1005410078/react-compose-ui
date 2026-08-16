@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: 中央 Canvas Group 承载资源文档
 
@@ -18,6 +18,8 @@
 - **WHEN** 用户关闭 dirty 资源 tab，或重命名、移动、删除包含 dirty 已打开资源的条目
 - **THEN** Editor 提供保存、放弃或取消决策，并只在保存成功或放弃后关闭资源 document
 - **AND** 取消、保存失败或 revision conflict 不执行关闭或对应 Provider 操作
+
+## MODIFIED Requirements
 
 ### Requirement: 设置入口保持布局独立
 
