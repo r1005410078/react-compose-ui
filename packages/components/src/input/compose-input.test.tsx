@@ -41,3 +41,20 @@ describe('ComposeInput', () => {
     expect(input).toHaveStyle({ '--compose-focus': '#7c3aed' })
   })
 })
+
+describe('OpenSpec: components / 输入框尺寸变体', () => {
+  it('默认尺寸保持既有高度，紧凑变体供密集面板使用', () => {
+    const view = render(
+      <>
+        <ComposeInput aria-label="默认" />
+        <ComposeInput aria-label="紧凑" size="xs" />
+      </>,
+    )
+    const defaultInput = view.getByLabelText('默认')
+    const compactInput = view.getByLabelText('紧凑')
+    // 未传 size 时行为不变，既有消费方不受影响。
+    expect(defaultInput.className).toContain('cu:h-9')
+    expect(compactInput.className).not.toContain('cu:h-9')
+    expect(compactInput.className).toContain('cu:h-[22px]')
+  })
+})

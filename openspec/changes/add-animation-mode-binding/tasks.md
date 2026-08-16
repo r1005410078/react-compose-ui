@@ -19,8 +19,16 @@
   左列 `overflow: visible`、右列 `overflow-y: clip`。补了一条结构回归测试守住这个前提；
   真实布局对齐由 Playwright 覆盖，jsdom 不做布局。
 - [x] 2.7 无需重排：结构已符合要求，见 2.6。
-- [ ] 2.8 给 `package.json` 增加 `@compose-ui/components` 依赖并在 vite 外置；
-  按钮、数值输入、颜色字段改用共享 Primitive，用 `ComposeContextMenu` 提供行的更多操作菜单。
+- [x] 2.8a 给 `package.json` 增加 `@compose-ui/components` 依赖并在 vite 外置。
+- [x] 2.8b 数值输入改用共享 Primitive：给 `ComposeInput` 补 `size: default | sm | xs` 变体
+  （对齐 `ComposeButton` 已有做法），`CommittedInput` 保留草稿/提交状态机但渲染委托给它。
+- [ ] 2.8c 图标按钮与播放模式按钮改用 `ComposeButton size="icon-xs"`，
+  并清理 `styles.css` 中随之失效的 `__icon-button` / `__playback-mode-button` 规则。
+- [ ] 2.8d 颜色字段改用 `ComposeColorPicker`（等第 3 节 `valueKind` 落地后一起做，
+  届时颜色控件只在 `valueKind === 'color'` 的轨道上出现）。
+- [ ] 2.8e 轨道与属性行的"更多操作"菜单——**阻塞**：`update-animation-panel-foundation`
+  的 design.md 把"菜单应提供哪些具体动作"列为待产品确认的开放问题，未定义动作前
+  无法写 Scenario，也无法实现。
 
 ## 3. animation-panel 数据模型与动作回调
 

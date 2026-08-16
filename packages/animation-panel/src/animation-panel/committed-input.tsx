@@ -1,8 +1,8 @@
+import { ComposeInput, type ComposeInputProps } from '@compose-ui/components'
 import { useState } from 'react'
-import type { InputHTMLAttributes } from 'react'
 
 type CommittedInputProps = Omit<
-  InputHTMLAttributes<HTMLInputElement>,
+  ComposeInputProps,
   'defaultValue' | 'onChange' | 'value'
 > & {
   /** 当前会话值的显示文本。 */
@@ -13,6 +13,9 @@ type CommittedInputProps = Omit<
 
 /**
  * 会话值只在提交时更新的文本输入。
+ *
+ * 渲染委托给共享的 {@link ComposeInput}——本组件只提供草稿/提交状态机这一层行为，
+ * 不维护第二套输入控件的外观。
  *
  * 把 model 值直接绑到受控 `value` 会让所有中间态被立即回滚（`#FF6B6` 这类半成品颜色
  * 永远输入不完），逐键提交又会把不完整的数字当成真实编辑写回模型，并因受控回写把光标
@@ -26,7 +29,12 @@ type CommittedInputProps = Omit<
  * effect 里 setState——后者会多触发一轮可避免的 commit，且被本仓库的
  * react-hooks/set-state-in-effect 规则判定为错误。
  */
-export function CommittedInput({ onCommit, value, ...htmlProps }: CommittedInputProps) {
+export function CommittedInput({
+  onCommit,
+  size = 'xs',
+  value,
+  ...inputProps
+}: CommittedInputProps) {
   const [draft, setDraft] = useState(value)
   const [epoch, setEpoch] = useState(0)
   const [syncedEpoch, setSyncedEpoch] = useState(0)
@@ -40,8 +48,9 @@ export function CommittedInput({ onCommit, value, ...htmlProps }: CommittedInput
     else setDraft(value)
   }
   return (
-    <input
-      {...htmlProps}
+    <ComposeInput
+      {...inputProps}
+      size={size}
       value={draft}
       onBlur={commit}
       onChange={(event) => setDraft(event.target.value)}

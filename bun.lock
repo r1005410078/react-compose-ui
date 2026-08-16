@@ -101,6 +101,7 @@
       "name": "@compose-ui/animation-panel",
       "version": "0.1.0",
       "dependencies": {
+        "@compose-ui/components": "workspace:*",
         "@compose-ui/ui-context": "workspace:*",
       },
       "peerDependencies": {
