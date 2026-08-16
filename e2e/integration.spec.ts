@@ -4298,3 +4298,176 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
     })
     .toBeGreaterThan(10)
 })
+
+test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增节点不打断画布与多节点轨道', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 节点 A：打 0 ms 关键帧，播放头 200 ms 拖出第二帧。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(nodes).toHaveCount(1)
+  await nodes.first().click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  const originalBox = (await nodes.first().boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  await page.mouse.move(originalBox.x + originalBox.width / 2, originalBox.y + originalBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(originalBox.x + originalBox.width / 2 + 96, originalBox.y + originalBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(1)
+
+  // 回归：动画模式下点击添加节点 B。采样文档先于布局快照拿到新实体时，
+  // 画布曾因几何索引缺 box 抛错并整体卸载。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await expect(nodes).toHaveCount(2)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(1)
+
+  // 节点 B：直接在画布拖动，自动记录为它新建位置轨道（200 ms 一帧）。
+  const bBox = (await nodes.nth(1).boundingBox())!
+  await page.mouse.move(bBox.x + bBox.width / 2, bBox.y + bBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(bBox.x + bBox.width / 2, bBox.y + bBox.height / 2 + 120, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
+
+  // 回归：真实指针拖入节点 C 也不崩，且已有轨道不受影响。
+  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: outputBox.x + 450,
+    y: outputBox.y + 40,
+  })
+  await expect(nodes).toHaveCount(3)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
+
+  // 采样独立：播放头回 0，A 回到起点；B 只有 200 ms 一帧，端点钳制保持拖后位置。
+  // 注意不能重复点击已激活的动画标签：Dockview 会把它折叠。
+  const draggedB = (await nodes.nth(1).boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  await expect
+    .poll(async () => Math.abs((await nodes.first().boundingBox())!.x - originalBox.x))
+    .toBeLessThan(2)
+  expect(Math.abs((await nodes.nth(1).boundingBox())!.y - draggedB.y)).toBeLessThan(2)
+})
+
+test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可打点采样且拖入嵌套不打断', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 准备嵌套：容器 + 一个拖进容器的矩形子级。
+  await drawContainer(page, editor)
+  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: outputBox.x + 200,
+    y: outputBox.y + 20,
+  })
+  const topLevel = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rectBox = (await topLevel.first().boundingBox())!
+  await page.mouse.move(rectBox.x + rectBox.width / 2, rectBox.y + rectBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(outputBox.x + 300, outputBox.y + 250, { steps: 8 })
+  await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
+  await page.mouse.up()
+  const nested = stage.getByTestId('stage-container').locator(':scope > .compose-stage__node.is-renderer')
+  await expect(nested).toHaveCount(1)
+
+  // 嵌套子级打点：0 ms 菱形 + 200 ms 画布拖动自动记录。
+  await nested.click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  const startBox = (await nested.boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(startBox.x + startBox.width / 2 + 80, startBox.y + startBox.height / 2 + 40, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+  // 动画拖动只写关键帧，不把子级拖出容器。
+  await expect(nested).toHaveCount(1)
+
+  // 播放头回 0：嵌套子级按采样回到容器内起点。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  await expect
+    .poll(async () => Math.abs((await nested.boundingBox())!.x - startBox.x))
+    .toBeLessThan(2)
+
+  // 回归：动画进行中往已含动画子级的容器里再添加节点（点击添加以当前选中实体为
+  // 兄弟插入，正好落进容器）。结构变化曾让采样文档先于布局快照拿到新实体而崩溃。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await expect(nested).toHaveCount(2)
+  await expect(stage.getByTestId('stage-container')).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+})
+
+test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动画', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  // 从容器创建组件实例。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Container' }).click()
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const source = sceneTree.getByRole('row').last()
+  await source.click()
+  await source.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '创建组件…' }).click()
+  const dialog = page.getByRole('dialog', { name: '创建组件' })
+  await dialog.getByLabel('组件名称').fill('Anim Card')
+  await dialog.getByRole('button', { name: '创建' }).click()
+  const instanceContent = stage.getByTestId('compose-component-instance-content')
+  await expect(instanceContent).toBeVisible()
+
+  // 选中实例并进入动画模式：实例是页面文档中的普通 Entity，位置轨道照常可用。
+  const instanceBox = (await instanceContent.boundingBox())!
+  await page.mouse.click(instanceBox.x + instanceBox.width / 2, instanceBox.y + instanceBox.height / 2)
+  await expect(sceneTree.getByRole('row', { name: /Anim Card/ }))
+    .toHaveAttribute('aria-selected', 'true')
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+
+  // 播放头 0 拖动实例：自动记录建轨并打 0 ms 帧；播放头 200 再拖出第二帧。
+  const startBox = (await instanceContent.boundingBox())!
+  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(startBox.x + startBox.width / 2 - 60, startBox.y + startBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  const zeroBox = (await instanceContent.boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const midBox = (await instanceContent.boundingBox())!
+  await page.mouse.move(midBox.x + midBox.width / 2, midBox.y + midBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(midBox.x + midBox.width / 2 + 140, midBox.y + midBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: /^动画片段 Anim Card：/u })).toBeVisible()
+
+  // 采样：播放头回 0，实例回到 0 ms 关键帧位置。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  await expect
+    .poll(async () => Math.abs((await instanceContent.boundingBox())!.x - zeroBox.x))
+    .toBeLessThan(2)
+})

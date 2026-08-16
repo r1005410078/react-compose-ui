@@ -11,6 +11,8 @@ interface PanelApi {
     readonly onCreateIntent?: (item: unknown) => void
     readonly onOpenIntent?: (descriptor: unknown) => void
     readonly onCreateVariantIntent?: (descriptor: unknown) => void
+    readonly onItemDragStart?: (event: unknown) => void
+    readonly onItemDragEnd?: (event: unknown) => void
   }>
 }
 
@@ -111,6 +113,34 @@ describe('ComposeComponentLibraryPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '添加 Container' }))
     expect(onCreateIntent).toHaveBeenCalledWith({ kind: 'preset', presetId: 'container' })
     expect(screen.queryByText('项目组件')).not.toBeInTheDocument()
+  })
+
+  it('面板外松手的拖拽不吞掉下一次点击添加', () => {
+    // 拖拽在画布上松手时 click 不会落在 tile 上，click 抑制标志曾滞留到下一次
+    // 纯点击并把它静默吞掉——用户看到的是"拖入一个节点后再点添加没反应"。
+    const onCreateIntent = vi.fn()
+    const Panel = api.ComposeComponentLibraryPanel!
+    render(
+      <Panel
+        registry={registry}
+        onCreateIntent={onCreateIntent}
+        onItemDragEnd={vi.fn()}
+        onItemDragStart={vi.fn()}
+      />,
+    )
+    const tile = screen.getByRole('button', { name: '添加 Container' })
+
+    // 一次完整的拖出面板：按下 → 超过 4px 阈值 → 在面板外松手（无 click）。
+    fireEvent.pointerDown(tile, { button: 0, pointerId: 7, clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(window, { pointerId: 7, clientX: 60, clientY: 10 })
+    fireEvent.pointerUp(window, { pointerId: 7, clientX: 400, clientY: 300 })
+    expect(onCreateIntent).not.toHaveBeenCalled()
+
+    // 随后的纯点击必须照常创建。
+    fireEvent.pointerDown(tile, { button: 0, pointerId: 8, clientX: 10, clientY: 10 })
+    fireEvent.pointerUp(window, { pointerId: 8, clientX: 10, clientY: 10 })
+    fireEvent.click(tile)
+    expect(onCreateIntent).toHaveBeenCalledWith({ kind: 'preset', presetId: 'container' })
   })
 
   it('OpenSpec: editor-workspace-layout / 组件独立标签 / 双击打开并从 Base 创建 Variant', async () => {

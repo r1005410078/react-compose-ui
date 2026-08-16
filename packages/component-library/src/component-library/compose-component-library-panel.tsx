@@ -247,6 +247,9 @@ export function ComposeComponentLibraryPanel({
   const pointerDown = (event: ReactPointerEvent<HTMLButtonElement>, item: ComposeComponentLibraryItem) => {
     if (event.button !== 0) return
     pointerCleanup.current?.()
+    // 上一次拖拽若在面板外松手，click 不会在 tile 上发生，抑制标志会滞留并吞掉
+    // 下一次点击添加；每次新指针会话开始时复位（click 总在本次 pointerdown 之后）。
+    suppressClick.current = false
     pointer.current = {
       pointerId: event.pointerId,
       item,

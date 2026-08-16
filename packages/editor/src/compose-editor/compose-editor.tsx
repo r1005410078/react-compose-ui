@@ -428,6 +428,16 @@ export function ComposeEditor({
     animationMode.displayDocument,
     animationMode.active && animationMode.animationId !== null,
   )
+  // 画布必须拿到"同一次求解"的文档 + 快照一致对：Runtime 在 effect 里喂采样文档，
+  // 结构变化（新建/删除实体）后的第一次渲染里 displayDocument 已含新实体而快照还没有
+  // 它的 box，直接配对会让 stage 的几何索引抛错并卸载整个画布。ready 状态自带它求解
+  // 时的 document，用它配对最多滞后一次 commit，且值级采样（拖播放头）同样受益。
+  const animationStageDocument = animationLayout.state?.status === 'ready'
+    ? animationLayout.state.document
+    : animationMode.displayDocument
+  const animationStageSnapshot = animationLayout.state?.status === 'ready'
+    ? animationLayout.state.snapshot
+    : undefined
   // 选中实体的运动路径：单选普通 Entity 才有意义（与菱形注入同一判据）。
   // 宿主可传部分实现的 controller（测试替身），字段逐个防御。
   const motionPathEntityId = controller
@@ -439,12 +449,11 @@ export function ComposeEditor({
   const motionPath = useMotionPath({
     enabled: animationMode.active && animationMode.animationId !== null,
     document: controller?.document,
-    displayDocument: animationMode.displayDocument,
+    // 与画布同源的一致对：路径原点 = 快照 box − 采样 offset，两者必须来自同一次求解。
+    displayDocument: animationStageDocument,
     animationId: animationMode.animationId,
     entityId: motionPathEntityId,
-    layoutSnapshot: animationLayout.state?.status === 'ready'
-      ? animationLayout.state.snapshot
-      : null,
+    layoutSnapshot: animationStageSnapshot ?? null,
     ...(animationRuntime
       ? { dispatch: (command: EditorCommand) => animationRuntime.dispatch(command) }
       : {}),
@@ -1755,12 +1764,10 @@ export function ComposeEditor({
           scriptScope: activePageSession?.scriptScope,
           // 动画模式：画布显示播放头时刻的采样文档与配套布局；dispatch 不变，仍打在基础文档上。
           // 运动路径只在此分支注入：退出动画模式即随 spread 一起消失。
-          ...(animationMode.active && animationMode.animationId && animationMode.displayDocument
+          ...(animationMode.active && animationMode.animationId && animationStageDocument
             ? {
-                document: animationMode.displayDocument,
-                layoutSnapshot: animationLayout.state?.status === 'ready'
-                  ? animationLayout.state.snapshot
-                  : undefined,
+                document: animationStageDocument,
+                layoutSnapshot: animationStageSnapshot,
                 editablePath: motionPath.editablePath,
                 editablePathActiveVertexId: motionPath.activeVertexId,
                 onEditablePathChange: motionPath.onEditablePathChange,
