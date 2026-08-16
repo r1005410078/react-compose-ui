@@ -30,16 +30,20 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function validateSetupReference(
+// setupScript 与 animation 是同形的稳定资源引用，共用一套形状校验，只在字段名与
+// issue code 上区分，避免两份规则漂移。
+function validateStableAssetReference(
+  field: 'setupScript' | 'animation',
+  code: 'page.invalid-setup-reference' | 'page.invalid-animation-reference',
   value: unknown,
   issues: ComposePageFileIssue[],
 ): void {
-  const path = ['setupScript'] as const
+  const path = [field] as const
   if (!isRecord(value)) {
     issues.push({
-      code: 'page.invalid-setup-reference',
+      code,
       path,
-      message: 'setupScript 必须是稳定资源引用或 null',
+      message: `${field} 必须是稳定资源引用或 null`,
     })
     return
   }
@@ -47,16 +51,16 @@ function validateSetupReference(
   Object.keys(value).forEach((key) => {
     if (!allowed.has(key)) {
       issues.push({
-        code: 'page.invalid-setup-reference',
+        code,
         path: [...path, key],
-        message: `setupScript 包含未知字段 ${key}`,
+        message: `${field} 包含未知字段 ${key}`,
       })
     }
   })
   for (const key of ['providerId', 'assetKey'] as const) {
     if (!isNonEmptyString(value[key])) {
       issues.push({
-        code: 'page.invalid-setup-reference',
+        code,
         path: [...path, key],
         message: `${key} 必须是非空字符串`,
       })
@@ -64,7 +68,7 @@ function validateSetupReference(
   }
   if (value.scope !== 'persistent' && value.scope !== 'session') {
     issues.push({
-      code: 'page.invalid-setup-reference',
+      code,
       path: [...path, 'scope'],
       message: 'scope 必须为 persistent 或 session',
     })
@@ -155,7 +159,7 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
     }
   }
   const issues: ComposePageFileIssue[] = []
-  const allowed = new Set(['kind', 'pageSchemaVersion', 'document', 'setupScript'])
+  const allowed = new Set(['kind', 'pageSchemaVersion', 'document', 'setupScript', 'animation'])
   Object.keys(parsed).forEach((key) => {
     if (!allowed.has(key)) {
       issues.push({ code: 'page.invalid-shape', path: [key], message: `页面包含未知字段 ${key}` })
@@ -181,9 +185,26 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
       issues.push({ ...issue, path: ['document', ...issue.path] })
     })
   }
-  if (parsed.setupScript !== null) validateSetupReference(parsed.setupScript, issues)
+  if (parsed.setupScript !== null) {
+    validateStableAssetReference(
+      'setupScript',
+      'page.invalid-setup-reference',
+      parsed.setupScript,
+      issues,
+    )
+  }
+  // animation 是加法字段：老页面文件没有它也必须继续解析，缺失归一化为 null。
+  if (parsed.animation !== undefined && parsed.animation !== null) {
+    validateStableAssetReference(
+      'animation',
+      'page.invalid-animation-reference',
+      parsed.animation,
+      issues,
+    )
+  }
   if (issues.length > 0 || !documentValidation.valid) return { ok: false, issues }
-  return { ok: true, page: parsed as unknown as ComposePageFile }
+  const page = parsed as unknown as ComposePageFile
+  return { ok: true, page: page.animation === undefined ? { ...page, animation: null } : page }
 }
 
 /**
@@ -194,7 +215,9 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
  * @public
  */
 export function serializeComposePageFile(page: ComposePageFile): string {
-  return `${JSON.stringify(page, null, 2)}\n`
+  // animation 在类型上可缺省，但落盘格式总是写出该字段，使外部 diff 与旧文件升级路径稳定。
+  const normalized = page.animation === undefined ? { ...page, animation: null } : page
+  return `${JSON.stringify(normalized, null, 2)}\n`
 }
 
 /**
@@ -213,13 +236,14 @@ export function createEmptyComposePageDocument(): ComposeDocument {
   }
 }
 
-/** 创建一份未关联 setup 的空白页面聚合文件。 @public */
+/** 创建一份未关联 setup 与动画的空白页面聚合文件。 @public */
 export function createEmptyComposePageFile(): ComposePageFile {
   return {
     kind: 'compose-page',
     pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
     document: createEmptyComposePageDocument(),
     setupScript: null,
+    animation: null,
   }
 }
 
@@ -240,6 +264,7 @@ export function migrateLegacyComposePageFile(document: unknown): ComposePageMigr
           pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
           document: validation.document,
           setupScript: null,
+          animation: null,
         },
       }
     : { ok: false, issues: validation.issues }

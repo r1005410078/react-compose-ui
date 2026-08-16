@@ -3,18 +3,19 @@ import * as v from 'valibot'
 import { COMPOSE_ANIMATION_COMMAND_TYPES } from '@compose-ui/animation'
 import type {
   ComposeAnimation,
-  ComposeAnimationBindings,
-  ComposePageExportReference,
   EditorCommand,
   JsonObject,
-  JsonValue,
 } from '@compose-ui/core'
 import { ComposePropertyPanel } from '@compose-ui/property-panel'
-import type {
-  ComposePropertyPanelBinding,
-  ComposePropertyPanelVariable,
-} from '@compose-ui/property-panel'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
+import {
+  buildAnimationBindingValue,
+  buildAnimationBindingVariables,
+  bindingsPayloadFromPanel,
+  canBindAnimationTarget,
+  getEmptyScopeSnapshot,
+  subscribeEmptyScope,
+} from './animation-binding-fields'
 
 /** 动画检查器的可本地化文案。 */
 export interface AnimationInspectorMessages {
@@ -35,14 +36,6 @@ export interface AnimationInspectorProps {
   /** 页面作用域；缺省时绑定候选为空但检查器其余功能不受影响。 */
   readonly scope?: ComposePageScriptScope
   readonly messages: AnimationInspectorMessages
-}
-
-const EMPTY_SCOPE_SNAPSHOT = { exports: [], diagnostics: [], disposed: false } as const
-const subscribeEmptyScope = () => () => undefined
-const getEmptyScopeSnapshot = () => EMPTY_SCOPE_SNAPSHOT
-
-function pageReference(exportName: string): ComposePageExportReference {
-  return { scope: 'page', exportName }
 }
 
 /**
@@ -67,17 +60,7 @@ export function AnimationInspector({
     scope?.getSnapshot ?? getEmptyScopeSnapshot,
     scope?.getSnapshot ?? getEmptyScopeSnapshot,
   )
-  const variables = useMemo<readonly ComposePropertyPanelVariable[]>(() => (
-    snapshot.exports
-      .filter((item) => item.kind === 'value')
-      .map((item) => ({
-        id: item.name,
-        label: item.name,
-        scope: 'page' as const,
-        value: item.kind === 'value' ? item.value : undefined,
-        kind: 'value' as const,
-      }))
-  ), [snapshot])
+  const variables = useMemo(() => buildAnimationBindingVariables(snapshot), [snapshot])
 
   const currentTimeBound = animation.bindings?.currentTime !== undefined
   const schema = useMemo(() => v.object({
@@ -116,20 +99,7 @@ export function AnimationInspector({
     currentTimeMs: 0,
   }), [animation])
 
-  const bindingValue = useMemo<readonly ComposePropertyPanelBinding[]>(() => [
-    ...(animation.bindings?.playing
-      ? [{
-          target: { path: ['playing'], targetId: 'value' },
-          variableId: animation.bindings.playing.exportName,
-        }]
-      : []),
-    ...(animation.bindings?.currentTime
-      ? [{
-          target: { path: ['currentTimeMs'], targetId: 'value' },
-          variableId: animation.bindings.currentTime.exportName,
-        }]
-      : []),
-  ], [animation.bindings])
+  const bindingValue = useMemo(() => buildAnimationBindingValue(animation), [animation])
 
   const latest = useRef({ animation, dispatch, idFactory })
   useEffect(() => {
@@ -159,28 +129,9 @@ export function AnimationInspector({
         value: bindingValue,
         variables,
         onChange: (next) => {
-          const exportOf = (field: string) => next
-            .find((binding) => binding.target.path[0] === field)?.variableId
-          const playing = exportOf('playing')
-          const currentTime = exportOf('currentTimeMs')
-          const bindings: ComposeAnimationBindings = {
-            ...(playing !== undefined ? { playing: pageReference(playing) } : {}),
-            ...(currentTime !== undefined ? { currentTime: pageReference(currentTime) } : {}),
-          }
-          // `null` 清除整个 bindings 命名空间；configure 的 undefined 语义是"不碰绑定"。
-          configure({
-            bindings: (playing !== undefined || currentTime !== undefined
-              ? bindings
-              : null) as unknown as JsonValue,
-          })
+          configure({ bindings: bindingsPayloadFromPanel(next) })
         },
-        canBind: (target, variable) => {
-          if (target.address.path[0] === 'playing') return typeof variable.value === 'boolean'
-          if (target.address.path[0] === 'currentTimeMs') {
-            return typeof variable.value === 'number' && Number.isFinite(variable.value)
-          }
-          return false
-        },
+        canBind: (target, variable) => canBindAnimationTarget(target.address.path, variable),
       }}
       schema={schema}
       value={panelValue}

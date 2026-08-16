@@ -912,6 +912,29 @@ describe('空会话状态', () => {
     expect(screen.getByText('当前没有动画数据')).toBeTruthy()
   })
 
+  it('OpenSpec: editor-workspace-layout / 空动画的创建引导 / 受控 empty=false 时零轨道显示正常时间线', () => {
+    stubTimelineContainerWidth(700)
+    render(
+      <ComposeAnimationPanelProvider value={createEmptyComposeAnimationPanelValue()} onValueChange={() => {}}>
+        <ComposeAnimationTimeline empty={false} />
+      </ComposeAnimationPanelProvider>,
+    )
+    // 宿主把空态定义为「页面没有绑定动画」：已绑定但零轨道时仍显示播放控件与标尺，
+    // 并在轨道列表位置给出无轨道提示。
+    expect(screen.getByRole('slider', { name: '当前时间' })).toBeTruthy()
+    expect(screen.getByText('还没有轨道，选中组件打下第一个关键帧')).toBeTruthy()
+  })
+
+  it('受控 empty=true 时即使会话有轨道也显示空状态', () => {
+    render(
+      <ComposeAnimationPanelProvider value={createDefaultComposeAnimationPanelValue()} onValueChange={() => {}}>
+        <ComposeAnimationTimeline empty emptyState={<button type="button">创建动画</button>} />
+      </ComposeAnimationPanelProvider>,
+    )
+    expect(screen.getByRole('button', { name: '创建动画' })).toBeTruthy()
+    expect(screen.queryByRole('slider', { name: '当前时间' })).toBeNull()
+  })
+
   it('空会话切到首条轨道后标尺重新测量宽度（回归：观察器只在挂载时附着）', () => {
     stubTimelineContainerWidth(700)
     const view = render(

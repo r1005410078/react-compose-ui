@@ -7,6 +7,7 @@ export {
 } from './page-types'
 export type {
   ComposeAppManifest,
+  ComposePageAnimationReference,
   ComposePageDocumentLoader,
   ComposePageFile,
   ComposePageFileIssue,

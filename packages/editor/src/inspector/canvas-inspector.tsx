@@ -20,6 +20,8 @@ type CanvasInspectorProps = {
   readonly document: ComposeDocument
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   readonly idFactory: () => string
+  /** 活动页面的动画绑定属性内容；省略时 Canvas 不显示动画区块。 */
+  readonly animationInspector?: ReactNode
   /** 活动页面的 setup 属性内容；省略时 Canvas 保持纯文档输出属性。 */
   readonly pageScriptInspector?: ReactNode
 }
@@ -55,6 +57,7 @@ type CanvasOutputSize =
 type CanvasInspectorValue = {
   readonly outputSize: CanvasOutputSize
   readonly backgroundPaint: ComposePaint
+  readonly animation: ReactNode
   readonly pageScript: ReactNode
 }
 
@@ -64,6 +67,7 @@ function findOutputPreset(width: number, height: number) {
 
 function createCanvasOutputSchema(
   messages: ReturnType<typeof getEditorMessages>['canvasInspector'],
+  showAnimation: boolean,
   showPageScript: boolean,
 ) {
   return v.object({
@@ -110,6 +114,17 @@ function createCanvasOutputSchema(
       v.title(messages.background),
       v.metadata({ propertyPanel: { editor: 'paint', order: 1 } }),
     ),
+    // 动画在页面脚本上方：动画绑定决定时间线的空态语义，是比脚本更靠近画布输出的属性。
+    animation: v.pipe(
+      v.unknown(),
+      v.title(messages.animation),
+      v.metadata({ propertyPanel: {
+        editor: 'animation-section',
+        hidden: !showAnimation,
+        layout: 'full-width',
+        order: 2,
+      } }),
+    ),
     pageScript: v.pipe(
       v.unknown(),
       v.title(messages.pageScript),
@@ -117,7 +132,7 @@ function createCanvasOutputSchema(
         editor: 'page-script',
         hidden: !showPageScript,
         layout: 'full-width',
-        order: 2,
+        order: 3,
       } }),
     ),
   })
@@ -131,6 +146,11 @@ const CANVAS_INSPECTOR_RENDERERS: readonly ComposePropertyPanelRenderer[] = [{
   id: 'page-script',
   component: PageScriptRenderer,
   layout: 'full-width',
+}, {
+  // 与 page-script 相同的透传渲染：区块内容由宿主组合页面、资源与动画语义后注入。
+  id: 'animation-section',
+  component: PageScriptRenderer,
+  layout: 'full-width',
 }]
 
 /** Editor 内部的隐式 Canvas 输出属性编辑器。 */
@@ -138,6 +158,7 @@ export function CanvasInspector({
   document,
   dispatch,
   idFactory,
+  animationInspector,
   pageScriptInspector,
 }: CanvasInspectorProps) {
   const i18n = useComposeI18nContext()
@@ -165,8 +186,12 @@ export function CanvasInspector({
   }, [document.output.height, document.output.width, documentPreset])
 
   const schema = useMemo(
-    () => createCanvasOutputSchema(messages, pageScriptInspector !== undefined),
-    [messages, pageScriptInspector],
+    () => createCanvasOutputSchema(
+      messages,
+      animationInspector !== undefined,
+      pageScriptInspector !== undefined,
+    ),
+    [animationInspector, messages, pageScriptInspector],
   )
   const value = useMemo(
     (): CanvasInspectorValue => ({
@@ -177,9 +202,10 @@ export function CanvasInspector({
           value: { width: document.output.width, height: document.output.height },
         },
       backgroundPaint: document.output.backgroundPaint,
+      animation: animationInspector ?? null,
       pageScript: pageScriptInspector ?? null,
     }),
-    [document.output, documentPreset, outputSizeKey, pageScriptInspector],
+    [animationInspector, document.output, documentPreset, outputSizeKey, pageScriptInspector],
   )
 
   /*
@@ -191,6 +217,7 @@ export function CanvasInspector({
     (): CanvasInspectorValue => ({
       outputSize: value.outputSize,
       backgroundPaint: createDefaultOutputSettings().backgroundPaint,
+      animation: value.animation,
       pageScript: value.pageScript,
     }),
     [value],
@@ -207,7 +234,7 @@ export function CanvasInspector({
       value={value}
       onValueChange={(_nextValue, change) => {
         const next = change.output as CanvasInspectorValue
-        if (change.path[0] === 'pageScript') return
+        if (change.path[0] === 'pageScript' || change.path[0] === 'animation') return
         if (change.path[0] === 'outputSize') {
           const nextOutputSize = next.outputSize
           if (nextOutputSize.key !== value.outputSize.key) {

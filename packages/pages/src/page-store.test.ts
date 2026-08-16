@@ -292,6 +292,53 @@ describe('OpenSpec: pages / 页面 setup 关联写入', () => {
   })
 })
 
+describe('OpenSpec: pages / 页面动画关联写入', () => {
+  it('关联、保存文档与解除动画引用时保持页面聚合字段', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const first = await store.readPage('Pages/Home.page.json')
+    const animation = {
+      providerId: fake.provider.id,
+      assetKey: 'Pages/Home.animation.json',
+      scope: 'persistent' as const,
+    }
+
+    const linked = await store.setPageAnimation(
+      'Pages/Home.page.json',
+      animation,
+      first.revision,
+    )
+    expect(linked.page.animation).toEqual(animation)
+
+    const saved = await store.writePageDocument(
+      'Pages/Home.page.json',
+      pageWithEntity('keeps-animation'),
+      linked.revision,
+    )
+    expect(saved.page.animation).toEqual(animation)
+
+    const unlinked = await store.setPageAnimation(
+      'Pages/Home.page.json',
+      null,
+      saved.revision,
+    )
+    expect(unlinked.page.animation).toBeNull()
+    expect(unlinked.page.document.rootIds).toEqual(['keeps-animation'])
+  })
+
+  it('动画关联使用页面 revision 做乐观并发', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const before = fake.getFile('Pages/Home.page.json')
+    await expect(store.setPageAnimation(
+      'Pages/Home.page.json',
+      { providerId: fake.provider.id, assetKey: 'Home.animation.json', scope: 'persistent' },
+      'stale-revision',
+    )).rejects.toMatchObject({ code: 'conflict' })
+    expect(fake.getFile('Pages/Home.page.json')).toBe(before)
+  })
+})
+
 describe('OpenSpec: pages / 首页设置与能力门禁', () => {
   it('清单缺失时不写入且首页为 null', async () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })

@@ -4,6 +4,7 @@ import type {
   ComposeAppManifest,
   ComposeAppManifestIssue,
   ComposeDocument,
+  ComposePageAnimationReference,
   ComposePageFile,
   ComposePageSetupReference,
   JsonObject,
@@ -112,6 +113,18 @@ export interface ComposePageStore {
   setPageSetupScript(
     pageKey: string,
     setupScript: ComposePageSetupReference | null,
+    expectedRevision?: string,
+    force?: boolean,
+  ): Promise<ComposePageSnapshot>
+  /**
+   * 原子关联、更换或解除页面动画文件引用。
+   *
+   * @remarks
+   * 只改写页面包装中的稳定引用；Store 不解析动画文件内容，解除引用也不删除动画资源。
+   */
+  setPageAnimation(
+    pageKey: string,
+    animation: ComposePageAnimationReference | null,
     expectedRevision?: string,
     force?: boolean,
   ): Promise<ComposePageSnapshot>
@@ -401,6 +414,16 @@ export function createComposePageStore(input: {
       return this.writePage(
         pageKey,
         { ...current.page, setupScript },
+        expectedRevision ?? current.revision,
+        force,
+      )
+    },
+
+    async setPageAnimation(pageKey, animation, expectedRevision, force) {
+      const current = await this.readPage(pageKey)
+      return this.writePage(
+        pageKey,
+        { ...current.page, animation },
         expectedRevision ?? current.revision,
         force,
       )

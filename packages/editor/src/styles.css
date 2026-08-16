@@ -1026,6 +1026,48 @@
   margin-inline-end: 8px;
 }
 
+/* 设计/动画模式切换器：靠右紧贴保存按钮的两段式 radiogroup。 */
+.compose-editor__mode-switcher {
+  display: inline-flex;
+  margin-inline-start: auto;
+  padding: 2px;
+  border: 1px solid var(--compose-border);
+  border-radius: 6px;
+  background: var(--compose-surface-sunken);
+  gap: 2px;
+}
+
+/* 切换器已把保存按钮推到右侧，保存按钮不再需要自己的 auto 外边距。 */
+.compose-editor__mode-switcher ~ .compose-editor__page-save {
+  margin-inline-start: 8px;
+}
+
+.compose-editor__mode-switcher-option {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--compose-text-subtle);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.compose-editor__mode-switcher-option:hover {
+  color: var(--compose-text);
+}
+
+.compose-editor__mode-switcher-option:focus-visible {
+  outline: 2px solid var(--compose-focus);
+  outline-offset: -1px;
+}
+
+.compose-editor__mode-switcher-option[aria-checked='true'] {
+  background: var(--compose-surface-selected);
+  color: var(--compose-text-strong);
+}
+
 /* 页面条目图标：外框加内部组装块，表达「由组件组装成的一屏」。 */
 .compose-editor__page-entry-icon {
   color: var(--compose-accent);
@@ -1065,13 +1107,15 @@
   height: 48px;
 }
 
-/* 页面脚本横跨 Canvas Inspector 全栏，内部自行承载标题、状态、菜单与紧凑成员表。 */
-.compose-editor__canvas-inspector [data-property-path="pageScript"] {
+/* 页面脚本与动画横跨 Canvas Inspector 全栏，内部自行承载标题、状态、菜单与内容。 */
+.compose-editor__canvas-inspector [data-property-path="pageScript"],
+.compose-editor__canvas-inspector [data-property-path="animation"] {
   display: block;
   min-height: 0;
 }
 
-.compose-editor__canvas-inspector [data-property-path="pageScript"] > [data-property-part="label"] {
+.compose-editor__canvas-inspector [data-property-path="pageScript"] > [data-property-part="label"],
+.compose-editor__canvas-inspector [data-property-path="animation"] > [data-property-part="label"] {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1083,7 +1127,8 @@
   white-space: nowrap;
 }
 
-.compose-editor__canvas-inspector [data-property-path="pageScript"] > [data-property-part="editor"] {
+.compose-editor__canvas-inspector [data-property-path="pageScript"] > [data-property-part="editor"],
+.compose-editor__canvas-inspector [data-property-path="animation"] > [data-property-part="editor"] {
   min-height: 0;
   align-items: stretch;
   padding: 6px 8px 8px;
@@ -1091,7 +1136,8 @@
   background: transparent;
 }
 
-.compose-editor__canvas-inspector [data-property-path="pageScript"] [data-property-part="control"] {
+.compose-editor__canvas-inspector [data-property-path="pageScript"] [data-property-part="control"],
+.compose-editor__canvas-inspector [data-property-path="animation"] [data-property-part="control"] {
   width: 100%;
   max-width: none;
   align-items: stretch;

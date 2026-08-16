@@ -76,6 +76,7 @@ const messages = {
     lockTrack: (name: string) => `锁定 ${name}`,
     soloTrack: (name: string) => `单独显示 ${name}`,
     hideTrack: (name: string) => `隐藏 ${name}`,
+    noTracks: '还没有轨道，选中组件打下第一个关键帧',
     menuRemoveTrack: '删除轨道',
     menuRemoveTrackGroup: '删除该对象的全部动画',
     menuAddKeyframeAtPlayhead: '在播放头处打点',
@@ -129,6 +130,7 @@ const messages = {
     lockTrack: (name: string) => `Lock ${name}`,
     soloTrack: (name: string) => `Solo ${name}`,
     hideTrack: (name: string) => `Hide ${name}`,
+    noTracks: 'No tracks yet — select an element and set its first keyframe',
     menuRemoveTrack: 'Delete track',
     menuRemoveTrackGroup: 'Delete all animation on this object',
     menuAddKeyframeAtPlayhead: 'Add keyframe at playhead',
@@ -257,6 +259,7 @@ export function ComposeAnimationPanelProvider(props: ComposeAnimationPanelProvid
 /** 渲染可置于编辑器底部的时间线。 @public */
 export function ComposeAnimationTimeline({
   className,
+  empty,
   emptyState,
   style,
   ...htmlProps
@@ -388,7 +391,9 @@ export function ComposeAnimationTimeline({
 
   // 空会话分支不渲染时间轴：从空态切到首条轨道时两个测量 effect 必须重挂，
   // 否则挂载时 ref 为 null、观察器永远没附着，标尺宽度停在 0。
-  const timelineEmpty = value.model.tracks.length === 0
+  // 受控 `empty` 优先：宿主把空态定义为会话之外的事实（例如页面没有绑定动画）时，
+  // 零轨道会话也要显示正常时间线。
+  const timelineEmpty = empty ?? value.model.tracks.length === 0
 
   useEffect(() => {
     const element = scaleScrollRef.current
@@ -692,6 +697,10 @@ export function ComposeAnimationTimeline({
       <div className="compose-animation-timeline__content">
         <div className="compose-animation-timeline__tracks">
           <div aria-label={t.trackList} className="compose-animation-timeline__track-list" role="list">
+          {/* 只有宿主用受控 empty=false 压住空态时才可能出现零轨道的正常时间线。 */}
+          {value.model.tracks.length === 0 && (
+            <p className="compose-animation-timeline__no-tracks">{t.noTracks}</p>
+          )}
           {value.model.tracks.map((track) => {
             const trackLabel = track.label
             const trackSelected = value.selectedTrackId === track.id
