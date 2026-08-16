@@ -394,3 +394,97 @@ export function addComposeAnimationKeyframe(
     },
   }
 }
+
+/** 选择字段是可选的（`string | null | undefined`），删除时统一按"未选中"处理。 */
+function isRemoved(selectedId: string | null | undefined, removedIds: ReadonlySet<string>) {
+  return selectedId !== null && selectedId !== undefined && removedIds.has(selectedId)
+}
+
+/**
+ * 从会话模型中移除一条属性轨道及其全部关键帧。
+ *
+ * @remarks
+ * 同时清理指向该轨道的选择：留下悬空的 `selectedPropertyId` / `selectedKeyframeId` 会让属性面板
+ * 停在一条已不存在的轨道上。
+ */
+export function removeComposeAnimationPropertyTrack(
+  value: ComposeAnimationPanelValue,
+  propertyId: string,
+): ComposeAnimationPanelValue {
+  const owner = value.model.tracks.find((track) => (
+    track.properties.some((property) => property.id === propertyId)
+  ))
+  if (!owner) return value
+  const removed = owner.properties.find((property) => property.id === propertyId)!
+  const removedKeyframeIds = new Set(removed.keyframes.map((keyframe) => keyframe.id))
+  return {
+    ...value,
+    selectedPropertyId: value.selectedPropertyId === propertyId ? null : value.selectedPropertyId,
+    selectedKeyframeId: value.selectedKeyframeId !== null
+      && removedKeyframeIds.has(value.selectedKeyframeId)
+      ? null
+      : value.selectedKeyframeId,
+    model: {
+      ...value.model,
+      tracks: value.model.tracks.map((track) => track.id !== owner.id
+        ? track
+        : { ...track, properties: track.properties.filter((property) => property.id !== propertyId) }),
+    },
+  }
+}
+
+/** 从会话模型中移除整个对象轨道：它的全部属性轨道、片段与相关选择一并清理。 */
+export function removeComposeAnimationTrackGroup(
+  value: ComposeAnimationPanelValue,
+  trackId: string,
+): ComposeAnimationPanelValue {
+  const owner = value.model.tracks.find((track) => track.id === trackId)
+  if (!owner) return value
+  const removedPropertyIds = new Set(owner.properties.map((property) => property.id))
+  const removedKeyframeIds = new Set(
+    owner.properties.flatMap((property) => property.keyframes.map((keyframe) => keyframe.id)),
+  )
+  const clips = getComposeAnimationClips(value.model)
+  return {
+    ...value,
+    selectedTrackId: value.selectedTrackId === trackId ? null : value.selectedTrackId,
+    selectedPropertyId: isRemoved(value.selectedPropertyId, removedPropertyIds)
+      ? null
+      : value.selectedPropertyId,
+    selectedKeyframeId: isRemoved(value.selectedKeyframeId, removedKeyframeIds)
+      ? null
+      : value.selectedKeyframeId,
+    selectedClipId: clips.some((clip) => (
+      clip.id === value.selectedClipId && clip.trackId === trackId
+    ))
+      ? null
+      : value.selectedClipId,
+    model: {
+      ...value.model,
+      clips: (value.model.clips ?? []).filter((clip) => clip.trackId !== trackId),
+      tracks: value.model.tracks.filter((track) => track.id !== trackId),
+    },
+  }
+}
+
+/**
+ * 求某条属性轨道在给定时间的相邻关键帧时间。
+ *
+ * @returns 该方向上最近的关键帧时间；该方向没有关键帧时返回 `null`。
+ */
+export function adjacentComposeAnimationKeyframeTime(
+  value: ComposeAnimationPanelValue,
+  propertyId: string,
+  fromMs: number,
+  direction: 'previous' | 'next',
+): number | null {
+  const property = value.model.tracks
+    .flatMap((track) => track.properties)
+    .find((candidate) => candidate.id === propertyId)
+  if (!property) return null
+  const times = property.keyframes.map((keyframe) => keyframe.timeMs)
+  const candidates = direction === 'next'
+    ? times.filter((timeMs) => timeMs > fromMs).sort((left, right) => left - right)
+    : times.filter((timeMs) => timeMs < fromMs).sort((left, right) => right - left)
+  return candidates[0] ?? null
+}

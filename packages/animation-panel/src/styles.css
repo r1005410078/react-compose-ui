@@ -1160,3 +1160,31 @@
   place-items: center;
   font-size: 12px;
 }
+
+/*
+ * 更多操作按钮：占位常驻、可见性按需。
+ * 用 visibility 而不是 display/条件渲染——占位必须始终参与布局，否则显现的一瞬间
+ * 行内元素会横向跳动；条件渲染还会让键盘 Tab 序在悬停前后不一致。
+ * 菜单打开期间由行上的 data-menu-open 维持可见：指针移开后按钮消失会让菜单
+ * 挂在一个看不见的锚点上。
+ */
+.compose-animation-timeline__more-actions {
+  visibility: hidden;
+}
+.compose-animation-timeline__track-row:hover .compose-animation-timeline__more-actions,
+.compose-animation-timeline__track-row:focus-within .compose-animation-timeline__more-actions,
+.compose-animation-timeline__track-row[data-menu-open='true'] .compose-animation-timeline__more-actions,
+.compose-animation-timeline__property-row:hover .compose-animation-timeline__more-actions,
+.compose-animation-timeline__property-row:focus-within .compose-animation-timeline__more-actions,
+.compose-animation-timeline__property-row[data-menu-open='true'] .compose-animation-timeline__more-actions {
+  visibility: visible;
+}
+/*
+ * 属性行没有 .track-actions 容器，按钮直接坐在 meta 行尾。
+ * .property-meta 整体是 pointer-events:none（原本只承载只读文本，好让整行的
+ * .row-hit 覆盖层接管点击），按钮必须显式收回指针事件，否则永远被 row-hit 吃掉。
+ */
+.compose-animation-timeline__property-meta .compose-animation-timeline__more-actions {
+  margin-left: 2px;
+  pointer-events: auto;
+}

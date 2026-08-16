@@ -27,11 +27,33 @@
   删除会压过 layered 工具类的无 layer chrome 规则，保留尺寸覆盖、SVG 描边与状态色。
 - [x] 2.8d 颜色字段改用 `ComposeColorPicker`（等第 3 节 `valueKind` 落地后一起做，
   届时颜色控件只在 `valueKind === 'color'` 的轨道上出现）。
-- [ ] 2.8e 轨道与属性行的"更多操作"菜单——**阻塞于产品决策，非技术依赖**：菜单应提供哪些
-  具体动作从未定义，未定义动作前无法写 Scenario，也无法实现。该开放问题最初记录在
-  `update-animation-panel-foundation` 的 design.md，那份变更已随本提案吸收执行而归档
-  （见 `openspec/changes/archive/2026-08-16-update-animation-panel-foundation/`，其 4.3 即本条），
-  因此这里是该问题目前唯一的在途承载点，不要再回指归档目录等待。
+- [x] 2.8e 轨道与属性行的"更多操作"菜单。原先阻塞于"菜单放哪些动作"这一产品决策
+  （开放问题最初记录在已归档的 `update-animation-panel-foundation` 4.3）。现已定案：
+  - 双入口：行上右键（键盘 Shift+F10 / ContextMenu 键走同一个 `contextmenu` 事件）与行右侧
+    悬停/聚焦显现的"更多操作"按钮，两者打开同一份菜单。
+  - 条目：对象行给"删除该对象全部动画"与"跳到上/下一个关键帧"；属性行给"删除轨道"、
+    "在播放头处打点"与"跳到上/下一个关键帧"；车道空白与关键帧上的右键额外给依赖光标时间的
+    条目（在光标时间打点 / 删除本帧 / 设置本段插值），这些不进按钮菜单。
+  - 只新增三个动作类型（`remove-track`、`remove-track-group`、`add-keyframe-at-time`）；
+    "跳到上/下一个关键帧"由面板自行从模型算出时间后复用 `set-current-time`，
+    删除本帧与设置插值复用既有动作。
+- [x] 2.8e-1 [Red] 面板测试：右键与按钮打开同一份菜单、按钮按需显现、菜单打开期间保持可见、
+  车道右键提供依赖时间的条目、删除轨道只发语义动作、Escape 后焦点回到入口。
+- [x] 2.8e-2 [Green] 面板实现：`useComposeContextMenu` 单实例 + 判别联合 target；新增三个动作
+  类型与菜单文案；"更多操作"按钮常驻占位、悬停/`:focus-within` 显现。
+- [x] 2.8e-3 [Red/Green] 编辑器翻译：三个新动作落到 `animation.track.remove`（对象级合成一次
+  事务）与 `animation.keyframe.set`（值取该时刻采样值）；对应 adapter 测试。
+- [x] 2.8e-4 e2e：右键属性行删除轨道并撤销恢复。
+  - Red 证据：面板 6 条菜单测试先失败（64 项中 6 失败），实现后 64 项全通过。
+  - 实现中发现两个真实缺陷：`useComposeContextMenu.openAt` 只在传**事件**时记录返回焦点目标，
+    按钮传纯坐标时 Escape 后焦点掉到 body——改为传带 `currentTarget` 的事件形状，坐标仍按
+    按钮矩形自算（键盘激活的 click 事件 clientX 为 0）；`.property-meta` 是
+    `pointer-events: none`，属性行的"更多操作"按钮被整行 `.row-hit` 覆盖层吃掉点击，
+    需显式收回指针事件。
+  - 既有断言"不暴露没有行为的控件"原本要求「更多操作」按钮缺席（当时它没有行为），
+    按原意改写为「它必须真的能打开菜单」。
+  - 验证：lint / typecheck / test / build 全通过；animation-panel 64、editor 221、e2e 69 全绿；
+    `openspec validate add-animation-mode-binding --strict` 通过。
 
 ## 3. animation-panel 数据模型与动作回调
 
@@ -89,9 +111,11 @@
 
 - [x] 7.1 各包 `test` / `typecheck` / `build`。
 - [x] 7.2 仓库根 `bun run lint && bun run typecheck && bun run test && bun run build`。
-  typecheck 与 build 全绿；lint 剩 1 条本变更之前就存在的 `react-hooks/refs`
+  当时 typecheck 与 build 全绿；lint 剩 1 条本变更之前就存在的 `react-hooks/refs`
   （compose-editor.tsx `componentContextMenuItems`），test 剩 2 个既有的只读页面 JSON
   标签失败（page-workspace.test.tsx），均与本变更无关。
+  - 这两项后续都已清掉：只读标签用例跟随按钮改名"打开页面 JSON"修正，`react-hooks/refs`
+    补了作用域内抑制与原因（与同文件 `pageContextMenuItems` 同形的误报）。四件套现全绿。
 - [x] 7.3 `bun run test:e2e`：新增"动画模式 / 打点、拖播放头、画布采样与撤销"用例并通过。
   该用例抓出并修复了两个真实缺陷：动画模式激活监听挂在内层 core Dockview 而底部工具组
   属于外层（标签点击永远不触发）；时间线空态→首条轨道切换后测量 ResizeObserver 未重挂

@@ -4471,3 +4471,48 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动�
     .poll(async () => Math.abs((await instanceContent.boundingBox())!.x - zeroBox.x))
     .toBeLessThan(2)
 })
+
+test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键删除轨道并撤销恢复', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 准备一条位置轨道：打点 + 播放头 200 ms 拖出第二帧。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await node.click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const box = (await node.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 96, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // 属性行右键 → 删除轨道：轨道连同两个关键帧一起消失。
+  await animationPanel.getByRole('button', { name: '选择属性轨道 位置' }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '删除轨道' }).click()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(0)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(0)
+
+  // 撤销一步整体恢复。
+  await stage.press('Control+z')
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // "更多操作"按钮给出同一份菜单（悬停后才显现，因此先 hover）。
+  const propertyRow = animationPanel.getByRole('button', { name: '选择属性轨道 位置' })
+  await propertyRow.hover()
+  await animationPanel.getByRole('button', { name: '位置 的更多操作' }).click()
+  await expect(page.getByRole('menuitem', { name: '删除轨道' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '在播放头处打点' })).toBeVisible()
+  // 依赖光标时间的条目只属于车道右键，不进按钮菜单。
+  await expect(page.getByRole('menuitem', { name: '在光标所在时间打点' })).toHaveCount(0)
+})

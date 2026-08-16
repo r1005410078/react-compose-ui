@@ -1,12 +1,13 @@
 import {
   COMPOSE_ANIMATION_COMMAND_TYPES,
+  applyComposeAnimationAtTime,
   findComposeAnimationTrack,
   getComposeEntityTracks,
   listComposeAnimationEntities,
 } from '@compose-ui/animation'
 import type { ComposeAnimationTrack } from '@compose-ui/animation'
 import { findComposeAnimation } from '@compose-ui/core'
-import type { ComposeDocument, JsonObject, JsonValue } from '@compose-ui/core'
+import type { ComposeDocument, ComposeEntity, JsonObject, JsonValue } from '@compose-ui/core'
 import type {
   ComposeAnimationKeyframeValue,
   ComposeAnimationPanelAction,
@@ -135,6 +136,23 @@ export function buildAnimationPanelModel(
 export interface AnimationCommandDraft {
   readonly type: string
   readonly payload: JsonObject
+  /** 同一次用户操作展开成多条命令时的合并键，让它们合成一次可撤销事务。 */
+  readonly mergeKey?: string
+}
+
+/** 读取 Entity 上某条 Component 属性路径的当前值；路径不存在时返回 `undefined`。 */
+function readEntityValueAtPath(
+  entity: ComposeEntity,
+  path: readonly (string | number)[],
+): JsonValue | undefined {
+  const [componentKey, ...rest] = path
+  if (typeof componentKey !== 'string') return undefined
+  let cursor: unknown = (entity.components as Record<string, unknown>)[componentKey]
+  for (const segment of rest) {
+    if (cursor === null || typeof cursor !== 'object') return undefined
+    cursor = (cursor as Record<string | number, unknown>)[segment]
+  }
+  return cursor as JsonValue | undefined
 }
 
 function locateDocumentTrack(
@@ -151,36 +169,37 @@ function locateDocumentTrack(
  * 把面板语义动作翻译为动画命令。
  *
  * @remarks
- * 返回 `null` 表示该动作是会话性的（播放头、选择、自动记录），不产生文档命令——
- * 这条界线就是"播放不产生事务"的实现位置。翻译需要读文档（如按值修改找回原关键帧
- * 时间），传入的必须是**基础文档**，不是采样文档。
+ * 返回空数组表示该动作是会话性的（播放头、选择、自动记录），不产生文档命令——
+ * 这条界线就是"播放不产生事务"的实现位置。一个动作可能展开成多条命令，它们共享
+ * `mergeKey` 以便合成一次可撤销事务。翻译需要读文档（如按值修改找回原关键帧时间），
+ * 传入的必须是**基础文档**，不是采样文档。
  */
 export function translateAnimationPanelAction(
   document: ComposeDocument,
   animationId: string,
   action: ComposeAnimationPanelAction,
-): AnimationCommandDraft | null {
+): readonly AnimationCommandDraft[] {
   switch (action.kind) {
     case 'set-current-time':
     case 'select':
     case 'toggle-auto-record':
-      return null
+      return []
     case 'set-duration':
-      return {
+      return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
         payload: { animationId, durationMs: action.durationMs },
-      }
+      }]
     case 'set-playback-mode':
-      return {
+      return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
         payload: { animationId, playbackMode: action.mode },
-      }
+      }]
     case 'add-keyframe': {
       const ref = decodeAnimationPropertyId(action.propertyId)
-      if (!ref) return null
+      if (!ref) return []
       const track = locateDocumentTrack(document, animationId, ref)
-      if (!track) return null
-      return {
+      if (!track) return []
+      return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.setKeyframe,
         payload: {
           animationId,
@@ -192,12 +211,12 @@ export function translateAnimationPanelAction(
           timeMs: action.timeMs,
           value: action.value as JsonValue,
         },
-      }
+      }]
     }
     case 'move-keyframe': {
       const ref = decodeAnimationKeyframeId(action.keyframeId)
-      if (!ref) return null
-      return {
+      if (!ref) return []
+      return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.moveKeyframe,
         payload: {
           animationId,
@@ -206,12 +225,12 @@ export function translateAnimationPanelAction(
           keyframeId: ref.keyframeId,
           timeMs: action.timeMs,
         },
-      }
+      }]
     }
     case 'remove-keyframe': {
       const ref = decodeAnimationKeyframeId(action.keyframeId)
-      if (!ref) return null
-      return {
+      if (!ref) return []
+      return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.removeKeyframe,
         payload: {
           animationId,
@@ -219,16 +238,16 @@ export function translateAnimationPanelAction(
           path: ref.path as JsonValue,
           keyframeId: ref.keyframeId,
         },
-      }
+      }]
     }
     case 'set-keyframe-value': {
       const ref = decodeAnimationKeyframeId(action.keyframeId)
-      if (!ref) return null
+      if (!ref) return []
       const track = locateDocumentTrack(document, animationId, ref)
       const keyframe = track?.keyframes.find((item) => item.id === ref.keyframeId)
-      if (!track || !keyframe) return null
+      if (!track || !keyframe) return []
       // upsert 命中已有时间时替换值并保留身份，正好表达"改值"。
-      return {
+      return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.setKeyframe,
         payload: {
           animationId,
@@ -239,12 +258,12 @@ export function translateAnimationPanelAction(
           timeMs: keyframe.timeMs,
           value: action.value as JsonValue,
         },
-      }
+      }]
     }
     case 'set-interpolation': {
       const ref = decodeAnimationKeyframeId(action.keyframeId)
-      if (!ref) return null
-      return {
+      if (!ref) return []
+      return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.setInterpolation,
         payload: {
           animationId,
@@ -253,7 +272,50 @@ export function translateAnimationPanelAction(
           keyframeId: ref.keyframeId,
           interpolation: action.interpolation as unknown as JsonValue,
         },
-      }
+      }]
+    }
+    case 'remove-track': {
+      const ref = decodeAnimationPropertyId(action.propertyId)
+      if (!ref) return []
+      return [{
+        type: COMPOSE_ANIMATION_COMMAND_TYPES.removeTrack,
+        payload: { animationId, entityId: ref.entityId, path: ref.path as JsonValue },
+      }]
+    }
+    case 'remove-track-group': {
+      // 对象行的 ID 就是 Entity ID（见 buildAnimationPanelModel）。
+      const entity = document.entities[action.trackId]
+      if (!entity) return []
+      // 共享 mergeKey：N 条 removeTrack 合成一次事务，撤销一步整体恢复。
+      const mergeKey = `animation-remove-tracks:${animationId}:${action.trackId}`
+      return getComposeEntityTracks(entity, animationId).map((track) => ({
+        type: COMPOSE_ANIMATION_COMMAND_TYPES.removeTrack,
+        payload: { animationId, entityId: action.trackId, path: track.path as JsonValue },
+        mergeKey,
+      }))
+    }
+    case 'add-keyframe-at-time': {
+      const ref = decodeAnimationPropertyId(action.propertyId)
+      if (!ref) return []
+      const track = locateDocumentTrack(document, animationId, ref)
+      if (!track) return []
+      // 值取该时刻的采样值：与画面所见一致，因而在已有关键帧的轨道上等于"钉住当前姿态"。
+      const sampled = applyComposeAnimationAtTime(document, animationId, action.timeMs)
+      const entity = sampled.entities[ref.entityId]
+      const value = entity ? readEntityValueAtPath(entity, ref.path) : undefined
+      if (value === undefined) return []
+      return [{
+        type: COMPOSE_ANIMATION_COMMAND_TYPES.setKeyframe,
+        payload: {
+          animationId,
+          entityId: ref.entityId,
+          path: ref.path as JsonValue,
+          valueKind: track.valueKind,
+          keyframeId: `kf-${action.timeMs}-${Date.now().toString(36)}`,
+          timeMs: action.timeMs,
+          value,
+        },
+      }]
     }
   }
 }

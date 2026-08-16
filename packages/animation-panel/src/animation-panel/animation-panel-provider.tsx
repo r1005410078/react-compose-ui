@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  adjacentComposeAnimationKeyframeTime,
   advanceComposeAnimationPlayback,
   addComposeAnimationKeyframe,
   removeComposeAnimationKeyframe,
+  removeComposeAnimationPropertyTrack,
+  removeComposeAnimationTrackGroup,
   clampComposeAnimationTime,
   findComposeAnimationKeyframe,
   getComposeAnimationClips,
@@ -38,6 +41,14 @@ export interface ComposeAnimationPanelSession {
   readonly selectInterpolationSegment: (endKeyframeId: string) => void
   readonly moveKeyframe: (keyframeId: string, timeMs: number) => void
   readonly removeKeyframe: (keyframeId: string) => void
+  /** 删除一条属性轨道及其全部关键帧。 */
+  readonly removeTrack: (propertyId: string) => void
+  /** 删除一个对象轨道下的全部属性轨道。 */
+  readonly removeTrackGroup: (trackId: string) => void
+  /** 请求在指定时间打点；值由宿主决定，面板不本地写入关键帧。 */
+  readonly addKeyframeAtTime: (propertyId: string, timeMs: number) => void
+  /** 把播放头移到该属性轨道在当前时间之前/之后最近的关键帧；没有则不动。 */
+  readonly seekAdjacentKeyframe: (propertyId: string, direction: 'previous' | 'next') => void
   readonly updateSelectedKeyframe: (
     update: Partial<Pick<ComposeAnimationKeyframe, 'timeMs' | 'value' | 'interpolation'>>,
   ) => boolean
@@ -253,6 +264,44 @@ export function AnimationPanelProvider({
     commit(removeComposeAnimationKeyframe(current, keyframeId))
     emit({ kind: 'remove-keyframe', propertyId: located.property.id, keyframeId })
   }, [commit, emit])
+  const removeTrack = useCallback((propertyId: string) => {
+    const current = valueRef.current
+    const next = removeComposeAnimationPropertyTrack(current, propertyId)
+    if (next === current) return
+    setNotice(null)
+    commit(next)
+    emit({ kind: 'remove-track', propertyId })
+  }, [commit, emit])
+  const removeTrackGroup = useCallback((trackId: string) => {
+    const current = valueRef.current
+    const next = removeComposeAnimationTrackGroup(current, trackId)
+    if (next === current) return
+    setNotice(null)
+    commit(next)
+    emit({ kind: 'remove-track-group', trackId })
+  }, [commit, emit])
+  const addKeyframeAtTime = useCallback((propertyId: string, timeMs: number) => {
+    // 只发动作不本地改模型：值是宿主的事实，面板复制一份插值实现只会与宿主漂移。
+    emit({
+      kind: 'add-keyframe-at-time',
+      propertyId,
+      timeMs: clampComposeAnimationTime(timeMs, valueRef.current.model.durationMs),
+    })
+  }, [emit])
+  const seekAdjacentKeyframe = useCallback((
+    propertyId: string,
+    direction: 'previous' | 'next',
+  ) => {
+    const current = valueRef.current
+    const target = adjacentComposeAnimationKeyframeTime(
+      current,
+      propertyId,
+      current.currentTimeMs,
+      direction,
+    )
+    if (target === null) return
+    setCurrentTime(target)
+  }, [setCurrentTime])
   const toggleTrack = useCallback((trackId: string) => {
     commit(toggleComposeAnimationTrack(valueRef.current, trackId))
   }, [commit])
@@ -326,12 +375,17 @@ export function AnimationPanelProvider({
     selectInterpolationSegment,
     moveKeyframe,
     removeKeyframe,
+    removeTrack,
+    removeTrackGroup,
+    addKeyframeAtTime,
+    seekAdjacentKeyframe,
     updateSelectedKeyframe,
     toggleTrack,
     addKeyframe,
     setEasingEditor,
   }), [
-    addKeyframe, moveKeyframe, notice, removeKeyframe, selectClip, selectInterpolationSegment,
+    addKeyframe, addKeyframeAtTime, moveKeyframe, notice, removeKeyframe, removeTrack,
+    removeTrackGroup, seekAdjacentKeyframe, selectClip, selectInterpolationSegment,
     selectKeyframe, selectProperty, selectTrack, setCurrentTime, setDuration, setEasingEditor,
     setPlaybackMode, setPlaying, toggleAutoRecord, toggleTrack, updateClipRange,
     updateSelectedKeyframe, value,

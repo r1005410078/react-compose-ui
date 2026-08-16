@@ -3,6 +3,7 @@ import type {
   CSSProperties,
   Dispatch,
   KeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   PointerEvent,
   RefObject,
   SetStateAction,
@@ -20,8 +21,10 @@ import {
   zoomComposeAnimationTimelineAt,
 } from './animation-panel-model'
 import { AnimationPanelProvider } from './animation-panel-provider'
-import { ComposeButton, ComposeColorPicker } from '@compose-ui/components'
+import { ComposeButton, ComposeColorPicker, useComposeContextMenu } from '@compose-ui/components'
 import { CommittedInput } from './committed-input'
+import { MoreActionsButton, TimelineActionsMenu } from './timeline-actions-menu'
+import type { TimelineMenuTarget } from './timeline-actions-menu'
 import {
   ChevronIcon,
   CurveIcon,
@@ -73,6 +76,14 @@ const messages = {
     lockTrack: (name: string) => `锁定 ${name}`,
     soloTrack: (name: string) => `单独显示 ${name}`,
     hideTrack: (name: string) => `隐藏 ${name}`,
+    moreActions: (name: string) => `${name} 的更多操作`,
+    menuRemoveTrack: '删除轨道',
+    menuRemoveTrackGroup: '删除该对象的全部动画',
+    menuAddKeyframeAtPlayhead: '在播放头处打点',
+    menuAddKeyframeAtPointer: '在光标所在时间打点',
+    menuRemoveKeyframe: '删除本帧',
+    menuPreviousKeyframe: '跳到上一个关键帧',
+    menuNextKeyframe: '跳到下一个关键帧',
     propertyKeyframe: (name: string) => `${name} 关键帧标记`,
     propertyField: '属性',
     interpolationRange: '曲线区间',
@@ -119,6 +130,14 @@ const messages = {
     lockTrack: (name: string) => `Lock ${name}`,
     soloTrack: (name: string) => `Solo ${name}`,
     hideTrack: (name: string) => `Hide ${name}`,
+    moreActions: (name: string) => `More actions for ${name}`,
+    menuRemoveTrack: 'Delete track',
+    menuRemoveTrackGroup: 'Delete all animation on this object',
+    menuAddKeyframeAtPlayhead: 'Add keyframe at playhead',
+    menuAddKeyframeAtPointer: 'Add keyframe at pointer time',
+    menuRemoveKeyframe: 'Delete this keyframe',
+    menuPreviousKeyframe: 'Go to previous keyframe',
+    menuNextKeyframe: 'Go to next keyframe',
     propertyKeyframe: (name: string) => `${name} keyframe marker`,
     propertyField: 'Property',
     interpolationRange: 'Curve range',
@@ -250,7 +269,12 @@ export function ComposeAnimationTimeline({
     value,
     notice,
     addKeyframe,
+    addKeyframeAtTime,
     moveKeyframe,
+    removeKeyframe,
+    removeTrack,
+    removeTrackGroup,
+    seekAdjacentKeyframe,
     selectClip,
     selectKeyframe,
     selectProperty,
@@ -263,6 +287,7 @@ export function ComposeAnimationTimeline({
     toggleTrack,
     updateClipRange,
   } = useAnimationPanelSession()
+  const actionsMenu = useComposeContextMenu<TimelineMenuTarget>()
   const locale = i18n?.locale ?? 'zh-CN'
   const t = messages[locale]
   const classNames = ['compose-animation-panel', 'compose-animation-timeline', className]
@@ -669,9 +694,20 @@ export function ComposeAnimationTimeline({
                   className="compose-animation-timeline__track-row"
                   data-hidden={hidden || undefined}
                   data-locked={locked || undefined}
+                  data-menu-open={
+                    actionsMenu.open && actionsMenu.payload?.kind === 'track'
+                    && actionsMenu.payload.trackId === track.id ? 'true' : undefined
+                  }
                   data-object-row={track.id}
                   data-selected={trackSelected || undefined}
                   data-solo={solo || undefined}
+                  onContextMenu={(event) => {
+                    actionsMenu.openAt(event, {
+                      kind: 'track',
+                      trackId: track.id,
+                      label: trackLabel,
+                    })
+                  }}
                 >
                   <button
                     aria-current={trackSelected || undefined}
@@ -726,6 +762,16 @@ export function ComposeAnimationTimeline({
                         toggleTrackFlag(track.id, setHiddenTrackIds)
                       }}
                     ><EyeIcon /></ComposeButton>
+                    <MoreActionsButton
+                      label={t.moreActions(trackLabel)}
+                      onOpen={(openEvent) => {
+                        actionsMenu.openAt(openEvent, {
+                          kind: 'track',
+                          trackId: track.id,
+                          label: trackLabel,
+                        })
+                      }}
+                    />
                   </div>
                 </div>
                 {track.expanded ? track.properties.map((property, propertyIndex) => {
@@ -738,9 +784,20 @@ export function ComposeAnimationTimeline({
                   return (
                     <div
                       className="compose-animation-timeline__property-row"
+                      data-menu-open={
+                        actionsMenu.open && actionsMenu.payload?.kind === 'property'
+                        && actionsMenu.payload.propertyId === property.id ? 'true' : undefined
+                      }
                       data-selected={propertySelected || undefined}
                       data-tree={isLast ? 'last' : 'branch'}
                       key={property.id}
+                      onContextMenu={(event) => {
+                        actionsMenu.openAt(event, {
+                          kind: 'property',
+                          propertyId: property.id,
+                          label: propertyLabel,
+                        })
+                      }}
                     >
                       <button
                         aria-current={propertySelected || undefined}
@@ -771,6 +828,16 @@ export function ComposeAnimationTimeline({
                           className="compose-animation-timeline__property-keyframe-mark"
                           title={t.propertyKeyframe(propertyLabel)}
                         ><DiamondIcon /></span>
+                        <MoreActionsButton
+                          label={t.moreActions(propertyLabel)}
+                          onOpen={(openEvent) => {
+                            actionsMenu.openAt(openEvent, {
+                              kind: 'property',
+                              propertyId: property.id,
+                              label: propertyLabel,
+                            })
+                          }}
+                        />
                       </span>
                     </div>
                   )
@@ -782,6 +849,12 @@ export function ComposeAnimationTimeline({
         </div>
         <TimelineScale
           currentRatio={currentRatio}
+          onKeyframeContextMenu={(event, context) => {
+            actionsMenu.openAt(event, { kind: 'keyframe', ...context })
+          }}
+          onLaneContextMenu={(event, context) => {
+            actionsMenu.openAt(event, { kind: 'lane', ...context })
+          }}
           onSelectClip={selectClip}
           onSelectProperty={selectProperty}
           value={value}
@@ -809,6 +882,28 @@ export function ComposeAnimationTimeline({
       >
         {notice ? t.duplicateTime : ''}
       </p>
+      {/* 单实例：右键与各行的"更多操作"按钮都通过控制器打开它，因此同一行两条入口必然同条目。 */}
+      <TimelineActionsMenu
+        messages={{
+          addKeyframeAtPlayhead: t.menuAddKeyframeAtPlayhead,
+          addKeyframeAtPointer: t.menuAddKeyframeAtPointer,
+          nextKeyframe: t.menuNextKeyframe,
+          previousKeyframe: t.menuPreviousKeyframe,
+          removeKeyframe: t.menuRemoveKeyframe,
+          removeTrack: t.menuRemoveTrack,
+          removeTrackGroup: t.menuRemoveTrackGroup,
+        }}
+        rootProps={actionsMenu.rootProps}
+        target={actionsMenu.payload}
+        onAddKeyframeAtPlayhead={(propertyId) => {
+          addKeyframeAtTime(propertyId, value.currentTimeMs)
+        }}
+        onAddKeyframeAtTime={addKeyframeAtTime}
+        onRemoveKeyframe={removeKeyframe}
+        onRemoveTrack={removeTrack}
+        onRemoveTrackGroup={removeTrackGroup}
+        onSeekAdjacentKeyframe={seekAdjacentKeyframe}
+      />
     </section>
   )
 }
@@ -816,6 +911,8 @@ export function ComposeAnimationTimeline({
 function TimelineScale({
   currentRatio,
   markerStepMs,
+  onKeyframeContextMenu,
+  onLaneContextMenu,
   onMoveKeyframe,
   onSelectClip,
   onSelectProperty,
@@ -829,6 +926,16 @@ function TimelineScale({
 }: {
   readonly currentRatio: number
   readonly markerStepMs: number
+  /** 单个关键帧上的右键；宿主据此打开依赖该帧的菜单。 */
+  readonly onKeyframeContextMenu: (
+    event: ReactMouseEvent,
+    context: { readonly propertyId: string, readonly keyframeId: string, readonly label: string },
+  ) => void
+  /** 车道空白处的右键；`timeMs` 是光标横坐标换算出的时间。 */
+  readonly onLaneContextMenu: (
+    event: ReactMouseEvent,
+    context: { readonly propertyId: string, readonly label: string, readonly timeMs: number },
+  ) => void
   readonly onMoveKeyframe: (keyframeId: string, timeMs: number) => void
   readonly onSelectClip: (clipId: string) => void
   readonly onSelectProperty: (propertyId: string) => void
@@ -1058,6 +1165,13 @@ function TimelineScale({
                     data-property-lane={property.id}
                     data-selected={propertySelected || undefined}
                     key={property.id}
+                    onContextMenu={(event) => {
+                      onLaneContextMenu(event, {
+                        propertyId: property.id,
+                        label,
+                        timeMs: getTimeAtClientX(event.clientX),
+                      })
+                    }}
                   >
                     <button
                       aria-current={propertySelected || undefined}
@@ -1112,6 +1226,15 @@ function TimelineScale({
                             onMoveKeyframe(keyframe.id, keyframe.timeMs + (event.key === 'ArrowLeft' ? -10 : 10))
                           }}
                           onPointerCancel={endKeyframeDrag}
+                          onContextMenu={(event) => {
+                            // 停止冒泡：否则车道会把它当成空白右键，给出"在光标时间打点"。
+                            event.stopPropagation()
+                            onKeyframeContextMenu(event, {
+                              propertyId: property.id,
+                              keyframeId: keyframe.id,
+                              label,
+                            })
+                          }}
                           onPointerDown={(event) => handleKeyframePointerDown(event, keyframe.id)}
                           onPointerMove={handleKeyframePointerMove}
                           onPointerUp={endKeyframeDrag}

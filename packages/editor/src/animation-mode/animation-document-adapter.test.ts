@@ -129,15 +129,15 @@ describe('面板动作 → 动画命令', () => {
     translateAnimationPanelAction(document, 'intro', action)
 
   it('OpenSpec: editor-workspace-layout / 动画模式 / 会话动作不产生文档命令', () => {
-    expect(translate({ kind: 'set-current-time', timeMs: 150 })).toBeNull()
+    expect(translate({ kind: 'set-current-time', timeMs: 150 })).toEqual([])
     expect(translate({ kind: 'select', trackId: 'hero', propertyId: null, keyframeId: null }))
-      .toBeNull()
-    expect(translate({ kind: 'toggle-auto-record' })).toBeNull()
+      .toEqual([])
+    expect(translate({ kind: 'toggle-auto-record' })).toEqual([])
   })
 
   it('OpenSpec: editor-workspace-layout / 时间线显示文档动画 / 拖动关键帧翻译为移动命令', () => {
     const draft = translate({ kind: 'move-keyframe', propertyId, keyframeId, timeMs: 250 })
-    expect(draft).toEqual({
+    expect(draft).toEqual([{
       type: 'animation.keyframe.move',
       payload: {
         animationId: 'intro',
@@ -146,13 +146,13 @@ describe('面板动作 → 动画命令', () => {
         keyframeId: 'b',
         timeMs: 250,
       },
-    })
+    }])
   })
 
   it('改值翻译为同时间 upsert，保留关键帧身份', () => {
     const draft = translate({ kind: 'set-keyframe-value', propertyId, keyframeId, value: { x: 5, y: 6 } })
-    expect(draft?.type).toBe('animation.keyframe.set')
-    expect(draft?.payload).toMatchObject({
+    expect(draft[0]?.type).toBe('animation.keyframe.set')
+    expect(draft[0]?.payload).toMatchObject({
       keyframeId: 'b',
       timeMs: 300,
       value: { x: 5, y: 6 },
@@ -161,27 +161,54 @@ describe('面板动作 → 动画命令', () => {
   })
 
   it('时长与播放模式翻译为 animation.configure', () => {
-    expect(translate({ kind: 'set-duration', durationMs: 500 })).toEqual({
+    expect(translate({ kind: 'set-duration', durationMs: 500 })).toEqual([{
       type: 'animation.configure',
       payload: { animationId: 'intro', durationMs: 500 },
-    })
-    expect(translate({ kind: 'set-playback-mode', mode: 'loop' })).toEqual({
+    }])
+    expect(translate({ kind: 'set-playback-mode', mode: 'loop' })).toEqual([{
       type: 'animation.configure',
       payload: { animationId: 'intro', playbackMode: 'loop' },
-    })
+    }])
   })
 
   it('删除与插值命令携带解码后的文档定位', () => {
-    expect(translate({ kind: 'remove-keyframe', propertyId, keyframeId })?.type)
+    expect(translate({ kind: 'remove-keyframe', propertyId, keyframeId })[0]?.type)
       .toBe('animation.keyframe.remove')
     const interpolation = { kind: 'cubic', control: [0.42, 0, 1, 1] } as const
-    expect(translate({ kind: 'set-interpolation', propertyId, keyframeId, interpolation })?.payload)
+    expect(translate({ kind: 'set-interpolation', propertyId, keyframeId, interpolation })[0]?.payload)
       .toMatchObject({ keyframeId: 'b', interpolation })
   })
 
-  it('无法解码的 ID 返回 null 而不是抛错', () => {
+  it('无法解码的 ID 返回空命令列表而不是抛错', () => {
     expect(translate({ kind: 'move-keyframe', propertyId: 'junk', keyframeId: 'junk', timeMs: 1 }))
-      .toBeNull()
+      .toEqual([])
+  })
+
+  it('OpenSpec: editor-workspace-layout / 时间线更多操作菜单落到可撤销命令 / 删除属性轨道', () => {
+    expect(translate({ kind: 'remove-track', propertyId })).toEqual([{
+      type: 'animation.track.remove',
+      payload: { animationId: 'intro', entityId: 'hero', path: ['LayoutItem', 'offset'] },
+    }])
+  })
+
+  it('OpenSpec: editor-workspace-layout / 时间线更多操作菜单落到可撤销命令 / 删除对象全部轨道合成一次事务', () => {
+    const drafts = translate({ kind: 'remove-track-group', trackId: 'hero' })
+    expect(drafts.length).toBeGreaterThan(0)
+    expect(drafts.every((draft) => draft.type === 'animation.track.remove')).toBe(true)
+    // 全部命令共享同一个 mergeKey，运行时才会把它们折叠成一步撤销。
+    expect(new Set(drafts.map((draft) => draft.mergeKey)).size).toBe(1)
+    expect(drafts[0]?.mergeKey).toBeTruthy()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 时间线更多操作菜单落到可撤销命令 / 在光标时间打点取采样值', () => {
+    // offset 轨道在 0 ms 是 {0,0}、300 ms 是 {120,40}（见夹具）：150 ms 线性采样即中点。
+    const drafts = translate({ kind: 'add-keyframe-at-time', propertyId, timeMs: 150 })
+    expect(drafts[0]?.type).toBe('animation.keyframe.set')
+    expect(drafts[0]?.payload).toMatchObject({
+      timeMs: 150,
+      valueKind: 'vector2',
+      value: { x: 60, y: 20 },
+    })
   })
 })
 

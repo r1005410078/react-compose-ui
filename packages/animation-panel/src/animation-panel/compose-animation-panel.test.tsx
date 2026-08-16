@@ -571,13 +571,17 @@ describe('ComposeAnimationPanel', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 不暴露没有行为的控件', () => {
+  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 不暴露没有行为的控件', async () => {
     render(
       <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
-    expect(screen.queryByRole('button', { name: /更多操作/ })).not.toBeInTheDocument()
+    // 「更多操作」曾经是没有行为的占位按钮因而必须缺席；菜单落地后它必须真的能打开菜单。
+    const trigger = screen.getByRole('button', { name: 'Fault 的更多操作' })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+    fireEvent.click(trigger)
+    expect((await screen.findAllByRole('menuitem')).length).toBeGreaterThan(0)
   })
 
   it('OpenSpec: animation-panel / 关键帧时间调整 / 时间冲突时给出可见且可访问的反馈', () => {
@@ -924,5 +928,89 @@ describe('空会话状态', () => {
     // 空态挂载时时间轴不存在；切到完整时间线后测量 effect 必须重挂，
     // 否则标尺宽度停在 0，播放头 seek input 不可交互。
     expect(slider.closest('.compose-animation-timeline__ruler')).not.toHaveStyle({ width: '0px' })
+  })
+})
+
+describe('更多操作菜单', () => {
+  function renderTimeline(onAction = vi.fn()) {
+    render(
+      <ComposeAnimationPanelProvider
+        defaultValue={createDefaultComposeAnimationPanelValue()}
+        onAction={onAction}
+      >
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    return { onAction }
+  }
+
+  /** 默认夹具第一条属性行：Fault 的背景填充。 */
+  const propertyRow = () => screen.getByRole('button', { name: '选择属性轨道 背景填充' })
+    .closest('.compose-animation-timeline__property-row') as HTMLElement
+
+  it('OpenSpec: animation-panel / 更多操作菜单 / 右键与按钮打开同一份菜单', async () => {
+    renderTimeline()
+    fireEvent.contextMenu(propertyRow())
+    const fromRightClick = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+    fireEvent.click(screen.getByRole('button', { name: '背景填充 的更多操作' }))
+    const fromButton = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
+
+    expect(fromButton).toEqual(fromRightClick)
+    expect(fromButton).toContain('删除轨道')
+  })
+
+  it('OpenSpec: animation-panel / 更多操作菜单 / 删除轨道只发出语义动作', async () => {
+    const { onAction } = renderTimeline()
+    fireEvent.contextMenu(propertyRow())
+    fireEvent.click(await screen.findByRole('menuitem', { name: '删除轨道' }))
+
+    expect(onAction).toHaveBeenCalledWith({
+      kind: 'remove-track',
+      propertyId: 'background-fill',
+    })
+  })
+
+  it('OpenSpec: animation-panel / 更多操作菜单 / 对象行删除整个对象的动画', async () => {
+    const { onAction } = renderTimeline()
+    const trackRow = screen.getByRole('button', { name: '选择对象轨道 Fault' })
+      .closest('.compose-animation-timeline__track-row') as HTMLElement
+    fireEvent.contextMenu(trackRow)
+    fireEvent.click(await screen.findByRole('menuitem', { name: '删除该对象的全部动画' }))
+
+    expect(onAction).toHaveBeenCalledWith({ kind: 'remove-track-group', trackId: 'fault' })
+  })
+
+  it('OpenSpec: animation-panel / 更多操作菜单 / 跳到下一个关键帧只移动播放头', async () => {
+    const { onAction } = renderTimeline()
+    fireEvent.contextMenu(propertyRow())
+    fireEvent.click(await screen.findByRole('menuitem', { name: '跳到下一个关键帧' }))
+
+    // 背景填充轨道的关键帧在 0/100/200/300 ms，夹具播放头初始为 200：下一个是 300。
+    expect(onAction).toHaveBeenCalledWith({ kind: 'set-current-time', timeMs: 300 })
+    expect(onAction).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'add-keyframe-at-time' }),
+    )
+  })
+
+  it('OpenSpec: animation-panel / 更多操作菜单 / 按钮菜单不含依赖时间位置的条目', async () => {
+    renderTimeline()
+    fireEvent.click(screen.getByRole('button', { name: '背景填充 的更多操作' }))
+    const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
+    // 按钮锚定在行上，不表达时间位置；"在光标所在时间打点"只能来自车道右键。
+    expect(items).not.toContain('在光标所在时间打点')
+    expect(items).toContain('在播放头处打点')
+  })
+
+  it('OpenSpec: animation-panel / 更多操作菜单 / 菜单关闭后焦点回到入口', async () => {
+    renderTimeline()
+    const trigger = screen.getByRole('button', { name: '背景填充 的更多操作' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    await screen.findAllByRole('menuitem')
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+    await vi.waitFor(() => { expect(document.activeElement).toBe(trigger) })
   })
 })

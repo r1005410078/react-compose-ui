@@ -120,12 +120,15 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     idFactoryRef.current = idFactory
   }, [dispatch, document, idFactory])
 
-  const dispatchDraft = useCallback((type: string, payload: JsonObject) => {
+  const dispatchDraft = useCallback((type: string, payload: JsonObject, mergeKey?: string) => {
     dispatchRef.current?.({
       id: idFactoryRef.current(),
       type,
       payload,
-      meta: { source: 'animation-mode' },
+      meta: {
+        source: 'animation-mode',
+        ...(mergeKey !== undefined ? { mergeKey } : {}),
+      },
     })
   }, [])
 
@@ -164,8 +167,10 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
   const onPanelAction = useCallback((action: ComposeAnimationPanelAction) => {
     const baseDocument = documentRef.current
     if (!baseDocument || !animationId) return
-    const draft = translateAnimationPanelAction(baseDocument, animationId, action)
-    if (draft) dispatchDraft(draft.type, draft.payload)
+    // 一个动作可能展开成多条命令（如删除某对象的全部轨道）；它们共享 mergeKey 合成一次事务。
+    for (const draft of translateAnimationPanelAction(baseDocument, animationId, action)) {
+      dispatchDraft(draft.type, draft.payload, draft.mergeKey)
+    }
   }, [animationId, dispatchDraft])
 
   const createAnimation = useCallback(() => {

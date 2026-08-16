@@ -182,6 +182,17 @@ export type ComposeAnimationPanelAction =
   | { readonly kind: 'set-duration'; readonly durationMs: number }
   | { readonly kind: 'set-playback-mode'; readonly mode: ComposeAnimationPlaybackMode }
   | { readonly kind: 'toggle-auto-record' }
+  /** 删除一条属性轨道及其全部关键帧。 */
+  | { readonly kind: 'remove-track'; readonly propertyId: string }
+  /** 删除一个对象轨道下的全部属性轨道；宿主应合成一次事务。 */
+  | { readonly kind: 'remove-track-group'; readonly trackId: string }
+  /**
+   * 在指定时间打一个关键帧，值由宿主决定。
+   *
+   * @remarks
+   * 与 `add-keyframe` 的区别是不带 `value`：面板不掌握文档当前值，也不应复制宿主的插值实现。
+   */
+  | { readonly kind: 'add-keyframe-at-time'; readonly propertyId: string; readonly timeMs: number }
 
 /** Provider 的受控或非受控会话属性。 @public */
 export interface ComposeAnimationPanelProviderProps {
