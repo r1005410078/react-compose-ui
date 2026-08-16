@@ -23,7 +23,7 @@ import {
 import { AnimationPanelProvider } from './animation-panel-provider'
 import { ComposeButton, ComposeColorPicker, useComposeContextMenu } from '@compose-ui/components'
 import { CommittedInput } from './committed-input'
-import { MoreActionsButton, TimelineActionsMenu } from './timeline-actions-menu'
+import { TimelineActionsMenu } from './timeline-actions-menu'
 import type { TimelineMenuTarget } from './timeline-actions-menu'
 import {
   ChevronIcon,
@@ -76,7 +76,6 @@ const messages = {
     lockTrack: (name: string) => `锁定 ${name}`,
     soloTrack: (name: string) => `单独显示 ${name}`,
     hideTrack: (name: string) => `隐藏 ${name}`,
-    moreActions: (name: string) => `${name} 的更多操作`,
     menuRemoveTrack: '删除轨道',
     menuRemoveTrackGroup: '删除该对象的全部动画',
     menuAddKeyframeAtPlayhead: '在播放头处打点',
@@ -130,7 +129,6 @@ const messages = {
     lockTrack: (name: string) => `Lock ${name}`,
     soloTrack: (name: string) => `Solo ${name}`,
     hideTrack: (name: string) => `Hide ${name}`,
-    moreActions: (name: string) => `More actions for ${name}`,
     menuRemoveTrack: 'Delete track',
     menuRemoveTrackGroup: 'Delete all animation on this object',
     menuAddKeyframeAtPlayhead: 'Add keyframe at playhead',
@@ -288,6 +286,26 @@ export function ComposeAnimationTimeline({
     updateClipRange,
   } = useAnimationPanelSession()
   const actionsMenu = useComposeContextMenu<TimelineMenuTarget>()
+  /**
+   * 在行的命中按钮上用键盘打开更多操作菜单。
+   *
+   * 不能指望浏览器把 Shift+F10 翻译成 `contextmenu`：实测 Chromium 只对独立的
+   * ContextMenu 键这么做，而 Mac 键盘上根本没有那个键。行上又没有任何可见的菜单入口，
+   * 不自己接管这两个键，macOS 用户就完全没有键盘路径。
+   * 锚点按按钮矩形算：键盘触发的事件没有有意义的 clientX/clientY。
+   */
+  const openRowMenuWithKeyboard = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    target: TimelineMenuTarget,
+  ) => {
+    if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return
+    event.preventDefault()
+    const rect = event.currentTarget.getBoundingClientRect()
+    actionsMenu.openAt(
+      { clientX: rect.left + 16, clientY: rect.bottom, currentTarget: event.currentTarget },
+      target,
+    )
+  }
   const locale = i18n?.locale ?? 'zh-CN'
   const t = messages[locale]
   const classNames = ['compose-animation-panel', 'compose-animation-timeline', className]
@@ -716,6 +734,13 @@ export function ComposeAnimationTimeline({
                     data-object-row={track.id}
                     type="button"
                     onClick={() => selectTrack(track.id)}
+                    onKeyDown={(event) => {
+                      openRowMenuWithKeyboard(event, {
+                        kind: 'track',
+                        trackId: track.id,
+                        label: trackLabel,
+                      })
+                    }}
                   />
                   <span aria-hidden="true" className="compose-animation-timeline__object-mark">
                     <ObjectMarkIcon />
@@ -762,16 +787,6 @@ export function ComposeAnimationTimeline({
                         toggleTrackFlag(track.id, setHiddenTrackIds)
                       }}
                     ><EyeIcon /></ComposeButton>
-                    <MoreActionsButton
-                      label={t.moreActions(trackLabel)}
-                      onOpen={(openEvent) => {
-                        actionsMenu.openAt(openEvent, {
-                          kind: 'track',
-                          trackId: track.id,
-                          label: trackLabel,
-                        })
-                      }}
-                    />
                   </div>
                 </div>
                 {track.expanded ? track.properties.map((property, propertyIndex) => {
@@ -784,10 +799,6 @@ export function ComposeAnimationTimeline({
                   return (
                     <div
                       className="compose-animation-timeline__property-row"
-                      data-menu-open={
-                        actionsMenu.open && actionsMenu.payload?.kind === 'property'
-                        && actionsMenu.payload.propertyId === property.id ? 'true' : undefined
-                      }
                       data-selected={propertySelected || undefined}
                       data-tree={isLast ? 'last' : 'branch'}
                       key={property.id}
@@ -806,6 +817,13 @@ export function ComposeAnimationTimeline({
                         data-property-row={property.id}
                         type="button"
                         onClick={() => selectProperty(property.id)}
+                        onKeyDown={(event) => {
+                          openRowMenuWithKeyboard(event, {
+                            kind: 'property',
+                            propertyId: property.id,
+                            label: propertyLabel,
+                          })
+                        }}
                       />
                       <span aria-hidden="true" className="compose-animation-timeline__property-tree" />
                       <span className="compose-animation-timeline__property-label">{listLabel}</span>
@@ -828,16 +846,6 @@ export function ComposeAnimationTimeline({
                           className="compose-animation-timeline__property-keyframe-mark"
                           title={t.propertyKeyframe(propertyLabel)}
                         ><DiamondIcon /></span>
-                        <MoreActionsButton
-                          label={t.moreActions(propertyLabel)}
-                          onOpen={(openEvent) => {
-                            actionsMenu.openAt(openEvent, {
-                              kind: 'property',
-                              propertyId: property.id,
-                              label: propertyLabel,
-                            })
-                          }}
-                        />
                       </span>
                     </div>
                   )

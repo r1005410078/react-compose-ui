@@ -79,14 +79,3 @@ export function EyeIcon(props: IconProps) {
     </svg>
   )
 }
-
-/** 更多操作：水平三点 */
-export function MoreActionsIcon(props: IconProps) {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" {...props}>
-      <circle cx="3.5" cy="8" r="1.1" />
-      <circle cx="8" cy="8" r="1.1" />
-      <circle cx="12.5" cy="8" r="1.1" />
-    </svg>
-  )
-}

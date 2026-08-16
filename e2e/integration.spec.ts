@@ -4507,12 +4507,20 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
-  // "更多操作"按钮给出同一份菜单（悬停后才显现，因此先 hover）。
+  // 行上没有"更多操作"按钮：右键是唯一入口，行尾不为它留位。
   const propertyRow = animationPanel.getByRole('button', { name: '选择属性轨道 位置' })
   await propertyRow.hover()
-  await animationPanel.getByRole('button', { name: '位置 的更多操作' }).click()
+  await expect(animationPanel.getByRole('button', { name: '位置 的更多操作' })).toHaveCount(0)
+
+  // 键盘走同一条路径：Shift+F10 由浏览器翻译成 contextmenu 派发到焦点元素上。
+  await propertyRow.focus()
+  await page.keyboard.press('Shift+F10')
   await expect(page.getByRole('menuitem', { name: '删除轨道' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: '在播放头处打点' })).toBeVisible()
-  // 依赖光标时间的条目只属于车道右键，不进按钮菜单。
+  // 依赖光标时间的条目只属于车道右键，行不表达时间位置。
   await expect(page.getByRole('menuitem', { name: '在光标所在时间打点' })).toHaveCount(0)
+
+  // 关闭后焦点回到该行的命中按钮，而不是丢给 body。
+  await page.keyboard.press('Escape')
+  await expect(propertyRow).toBeFocused()
 })

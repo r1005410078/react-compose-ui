@@ -154,3 +154,42 @@ export const RowActionsOnFocus: Story = {
     expect(visible(solo)).toBe(false)
   },
 }
+
+/**
+ * 轨道填不满面板时，轨道区仍要铺到底。
+ *
+ * @remarks
+ * 面板停靠在编辑器底部、高度由用户拖动分隔条决定，轨道往往只占上面一小截。左右两栏
+ * 曾都按内容高度收缩，于是左栏分隔线、时间列背景和播放头竖线一起在最后一行下面断掉。
+ * 这是纯布局约束，jsdom 不做布局，只能在真实 Chromium 下守。
+ */
+export const FillsPanelHeight: Story = {
+  render: () => <AnimationPanelFixture timelineHeight={520} />,
+  play: async ({ canvasElement }) => {
+    const root = canvasElement.ownerDocument
+    const pick = (selector: string) => root.querySelector<HTMLElement>(selector)!
+    const board = pick('.compose-animation-timeline__board-scroll')
+    const content = pick('.compose-animation-timeline__content')
+
+    // 断言前提：轨道确实填不满，否则下面几条恒真。
+    expect(board.scrollHeight).toBe(board.clientHeight)
+    const rowsHeight = [...root.querySelectorAll('.compose-animation-timeline__track-group')]
+      .reduce((total, group) => total + group.getBoundingClientRect().height, 0)
+    expect(rowsHeight).toBeLessThan(board.clientHeight)
+
+    const bottom = board.getBoundingClientRect().bottom
+    for (const selector of [
+      '.compose-animation-timeline__content',
+      '.compose-animation-timeline__tracks',
+      '.compose-animation-timeline__scale-scroll',
+      '.compose-animation-timeline__scale',
+      // 播放头是 .scale 里 top:0/bottom:0 的绝对定位元素，它到底等于竖线贯穿整块面板。
+      '.compose-animation-timeline__scale .compose-animation-timeline__playhead',
+    ]) {
+      expect(pick(selector).getBoundingClientRect().bottom).toBeCloseTo(bottom, 0)
+    }
+
+    // 铺满只是下限：内容更高时照常撑开并交给 board-scroll 滚动（见 ScrolledManyTracks）。
+    expect(content.getBoundingClientRect().height).toBeGreaterThanOrEqual(rowsHeight)
+  },
+}

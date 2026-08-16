@@ -1,15 +1,10 @@
 import {
-  ComposeButton,
   ComposeContextMenu,
   ComposeContextMenuContent,
   ComposeContextMenuItem,
   ComposeContextMenuSeparator,
 } from '@compose-ui/components'
-import type {
-  ComposeContextMenuOpenEvent,
-  ComposeContextMenuRootProps,
-} from '@compose-ui/components'
-import { MoreActionsIcon } from './animation-icons'
+import type { ComposeContextMenuRootProps } from '@compose-ui/components'
 
 /**
  * 更多操作菜单的命中目标。
@@ -38,44 +33,6 @@ export type TimelineMenuTarget =
       readonly keyframeId: string
       readonly label: string
     }
-
-/**
- * 行上的"更多操作"按钮。
- *
- * @remarks
- * 用按钮自身的矩形算出锚点交给控制器，因此它和右键走同一条 `openAt` 路径、同一份菜单。
- * 可见性由 CSS 控制（行悬停或 `:focus-within` 时显现），但占位宽度常驻，显现时不引起布局跳动；
- * 菜单打开期间由行上的 `data-menu-open` 维持可见——否则指针一离开行按钮就消失，
- * 菜单会挂在一个看不见的锚点上。
- */
-export function MoreActionsButton({
-  label,
-  onOpen,
-}: {
-  readonly label: string
-  readonly onOpen: (event: ComposeContextMenuOpenEvent) => void
-}) {
-  return (
-    <ComposeButton
-      aria-haspopup="menu"
-      aria-label={label}
-      className="compose-animation-timeline__track-action compose-animation-timeline__more-actions"
-      size="icon-xs"
-      variant="ghost"
-      onClick={(event) => {
-        event.stopPropagation()
-        // 坐标自己按按钮矩形算：键盘激活（Enter/Space）的 click 事件 clientX/clientY 是 0，
-        // 直接透传会把菜单锚到视口左上角。仍以事件形状交给控制器，才能记住返回焦点目标。
-        const rect = event.currentTarget.getBoundingClientRect()
-        onOpen({
-          clientX: rect.left,
-          clientY: rect.bottom,
-          currentTarget: event.currentTarget,
-        })
-      }}
-    ><MoreActionsIcon /></ComposeButton>
-  )
-}
 
 /** 菜单条目文案；由时间线按当前 locale 传入，组件自身不做本地化。 */
 export interface TimelineActionsMenuMessages {

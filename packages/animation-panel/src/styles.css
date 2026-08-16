@@ -254,11 +254,19 @@
   scrollbar-color: var(--ap-border) transparent;
   scrollbar-width: thin;
 }
+/*
+ * 轨道区必须铺满整块面板，而不是止步于最后一行：
+ * 面板停靠在底部，高度由用户拖动分隔条决定，轨道往往只占上面一小截。此前 content
+ * 及其两栏都按内容高度收缩，于是左栏分隔线、时间列背景和播放头竖线全都在最后一行下面
+ * 齐刷刷断掉，下面一大片是无主的空白，播放头看着像没穿过整个面板。
+ * min-height: 100% 只设下限，内容超出时照常撑高并交给 board-scroll 纵向滚动；
+ * 拖动分隔条改变的是 board-scroll 的高度，这个下限跟着重算，不需要任何 JS。
+ */
 .compose-animation-timeline__content {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   min-width: 0;
-  min-height: min-content;
+  min-height: 100%;
 }
 .compose-animation-timeline__tracks {
   position: relative;
@@ -624,12 +632,14 @@
 /* —— 标尺 / 时间轴 —— */
 .compose-animation-timeline__scale-scroll {
   /* 仅横向滚动；clip 避免与 board-scroll 再套一层纵向滚动条 */
+  display: flex;
   position: relative;
   z-index: 1;
   overflow-x: auto;
   overflow-y: clip;
   min-width: 0;
   flex: 1 1 auto;
+  flex-direction: column;
   background: var(--ap-bg);
 }
 /* 宽度由 JS 按缩放级别写成行内 px（见 compose-animation-panel.tsx 的 scaleWidthPx），
@@ -638,7 +648,14 @@
 .compose-animation-timeline__scale {
   --animation-playhead: 66.667%;
   position: relative;
-  /* 高度随轨道内容撑开，与左列 track-group 行高对齐 */
+  /*
+   * flex: 1 0 auto 让它在轨道不足以填满面板时纵向长到底，播放头（top:0;bottom:0）
+   * 才会贯穿整块面板；auto 基准保证内容更高时不被压缩。父级改成纵向 flex 而不是给
+   * 这里写 height:100%，是因为百分比高度要求父级高度确定，而 .scale-scroll 的高度
+   * 来自 stretch，跨浏览器对"拉伸得到的高度算不算确定"并不一致。
+   * 宽度仍由 JS 按缩放级别写成行内 px，纵向 flex 容器不会覆盖显式宽度。
+   */
+  flex: 1 0 auto;
   margin: 0 var(--ap-scale-gutter);
 }
 /*
@@ -1289,15 +1306,15 @@
 }
 
 /*
- * 行内动作按钮（锁定 / 独奏 / 隐藏 / 更多操作）：占位常驻、可见性按需。
- * 常驻可见时每条物体行都挂着四个图标，纵向扫读被这排重复 chrome 主导，
+ * 物体行的状态开关（锁定 / 独奏 / 隐藏）：占位常驻、可见性按需。
+ * 常驻可见时每条物体行都挂着一排图标，纵向扫读被这排重复 chrome 主导，
  * 真正要读的物体名和数值反而退到次要；这些又都是低频操作，交给悬停揭示。
  *
  * 用 visibility 而不是 display/条件渲染——占位必须始终参与布局，否则显现的一瞬间
  * 行内元素会横向跳动；条件渲染还会让键盘 Tab 序在悬停前后不一致。
  * :focus-within 保证键盘用户 Tab 进来即可见，不依赖指针。
- * 菜单打开期间由行上的 data-menu-open 维持可见：指针移开后按钮消失会让菜单
- * 挂在一个看不见的锚点上。
+ * data-menu-open 让右键菜单打开期间保持可见：指针移到菜单上就离开了行，
+ * 否则这排开关会在菜单弹出的同时闪一下消失。
  */
 .compose-animation-timeline__track-action {
   visibility: hidden;
@@ -1312,18 +1329,6 @@
 .compose-animation-timeline__track-action[aria-pressed='true'],
 .compose-animation-timeline__track-row:hover .compose-animation-timeline__track-action,
 .compose-animation-timeline__track-row:focus-within .compose-animation-timeline__track-action,
-.compose-animation-timeline__track-row[data-menu-open='true'] .compose-animation-timeline__track-action,
-.compose-animation-timeline__property-row:hover .compose-animation-timeline__track-action,
-.compose-animation-timeline__property-row:focus-within .compose-animation-timeline__track-action,
-.compose-animation-timeline__property-row[data-menu-open='true'] .compose-animation-timeline__track-action {
+.compose-animation-timeline__track-row[data-menu-open='true'] .compose-animation-timeline__track-action {
   visibility: visible;
-}
-/*
- * 属性行没有 .track-actions 容器，按钮直接坐在 meta 行尾。
- * .property-meta 整体是 pointer-events:none（原本只承载只读文本，好让整行的
- * .row-hit 覆盖层接管点击），按钮必须显式收回指针事件，否则永远被 row-hit 吃掉。
- */
-.compose-animation-timeline__property-meta .compose-animation-timeline__track-action {
-  margin-left: 2px;
-  pointer-events: auto;
 }

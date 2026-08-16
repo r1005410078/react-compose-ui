@@ -577,10 +577,12 @@ describe('ComposeAnimationPanel', () => {
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
-    // 「更多操作」曾经是没有行为的占位按钮因而必须缺席；菜单落地后它必须真的能打开菜单。
-    const trigger = screen.getByRole('button', { name: 'Fault 的更多操作' })
-    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
-    fireEvent.click(trigger)
+    // 行上不再挂「更多操作」按钮：右键是唯一入口，行尾那一格还给数值区。
+    expect(screen.queryByRole('button', { name: 'Fault 的更多操作' })).toBeNull()
+    fireEvent.contextMenu(
+      screen.getByRole('button', { name: '选择对象轨道 Fault' })
+        .closest('.compose-animation-timeline__track-row') as HTMLElement,
+    )
     expect((await screen.findAllByRole('menuitem')).length).toBeGreaterThan(0)
   })
 
@@ -948,17 +950,17 @@ describe('更多操作菜单', () => {
   const propertyRow = () => screen.getByRole('button', { name: '选择属性轨道 背景填充' })
     .closest('.compose-animation-timeline__property-row') as HTMLElement
 
-  it('OpenSpec: animation-panel / 更多操作菜单 / 右键与按钮打开同一份菜单', async () => {
+  it('OpenSpec: animation-panel / 更多操作菜单 / 行上不存在更多操作按钮', () => {
+    renderTimeline()
+    expect(screen.queryAllByRole('button', { name: /的更多操作$/u })).toHaveLength(0)
+  })
+
+  it('OpenSpec: animation-panel / 更多操作菜单 / 右键打开行菜单并能删除属性轨道', async () => {
     renderTimeline()
     fireEvent.contextMenu(propertyRow())
-    const fromRightClick = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
 
-    fireEvent.click(screen.getByRole('button', { name: '背景填充 的更多操作' }))
-    const fromButton = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
-
-    expect(fromButton).toEqual(fromRightClick)
-    expect(fromButton).toContain('删除轨道')
+    expect(items).toContain('删除轨道')
   })
 
   it('OpenSpec: animation-panel / 更多操作菜单 / 删除轨道只发出语义动作', async () => {
@@ -994,23 +996,32 @@ describe('更多操作菜单', () => {
     )
   })
 
-  it('OpenSpec: animation-panel / 更多操作菜单 / 按钮菜单不含依赖时间位置的条目', async () => {
+  it('OpenSpec: animation-panel / 更多操作菜单 / 行菜单不含依赖时间位置的条目', async () => {
     renderTimeline()
-    fireEvent.click(screen.getByRole('button', { name: '背景填充 的更多操作' }))
+    fireEvent.contextMenu(propertyRow())
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
-    // 按钮锚定在行上，不表达时间位置；"在光标所在时间打点"只能来自车道右键。
+    // 行不表达时间位置；"在光标所在时间打点"只能来自车道右键。
     expect(items).not.toContain('在光标所在时间打点')
     expect(items).toContain('在播放头处打点')
   })
 
-  it('OpenSpec: animation-panel / 更多操作菜单 / 菜单关闭后焦点回到入口', async () => {
+  it('OpenSpec: animation-panel / 更多操作菜单 / 键盘用 Shift+F10 打开同一份菜单并恢复焦点', async () => {
     renderTimeline()
-    const trigger = screen.getByRole('button', { name: '背景填充 的更多操作' })
-    trigger.focus()
-    fireEvent.click(trigger)
-    await screen.findAllByRole('menuitem')
+    // 面板自己接管这两个按键，不依赖浏览器把它们翻译成 contextmenu：Chromium 只对
+    // 独立的 ContextMenu 键这么做，Mac 键盘上没有该键。
+    const hit = screen.getByRole('button', { name: '选择属性轨道 背景填充' })
+    hit.focus()
+    fireEvent.keyDown(hit, { key: 'F10', shiftKey: true })
+    const fromKeyboard = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
 
-    await vi.waitFor(() => { expect(document.activeElement).toBe(trigger) })
+    fireEvent.contextMenu(propertyRow())
+    const fromPointer = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
+    expect(fromKeyboard).toEqual(fromPointer)
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+    // 焦点恢复的目标是行内的命中按钮：行本身是不可聚焦的 div，
+    // resolveFocusTarget 会退回到 event.target.closest('button')。
+    await vi.waitFor(() => { expect(document.activeElement).toBe(hit) })
   })
 })
