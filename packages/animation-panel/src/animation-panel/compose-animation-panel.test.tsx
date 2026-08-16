@@ -405,10 +405,17 @@ describe('ComposeAnimationPanel', () => {
 
     fireEvent.click(document.querySelector('.compose-animation-timeline__track-row .compose-animation-timeline__row-hit')!)
     expect(objectRow).toHaveAttribute('aria-current', 'true')
+    // 对象行与片段是不同的选择目标：片段代表"动画本身"（宿主据此切换动画检查器），
+    // 点对象行不连带选中片段；片段 → 轨道的联动方向保留。
     expect(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 300 ms' }))
-      .toHaveAttribute('aria-current', 'true')
+      .not.toHaveAttribute('aria-current')
     expect(propertyRow).not.toHaveAttribute('aria-current')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
+
+    fireEvent.click(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 300 ms' }))
+    expect(screen.getByRole('button', { name: '动画片段 Fault：0 ms 至 300 ms' }))
+      .toHaveAttribute('aria-current', 'true')
+    expect(objectRow).toHaveAttribute('aria-current', 'true')
   })
 
   it('OpenSpec: animation-panel / 三种播放模式 / 受控宿主回传会话值时播放头继续推进', () => {

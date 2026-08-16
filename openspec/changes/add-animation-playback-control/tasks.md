@@ -24,21 +24,27 @@
 
 ## 3. 动画检查器
 
-- [ ] 3.1 Red：选中动画显示检查器、切换标签但未选中动画时属性区不变、
+- [x] 3.1 Red：选中动画显示检查器、切换标签但未选中动画时属性区不变、
   选回对象轨道恢复原 Inspector、修改播放模式可撤销。
-- [ ] 3.2 Green：在 `controller.tsx:1706-1764` 的 Inspector 分支中新增动画目标分支。
-- [ ] 3.3 Green：实现 `packages/editor/src/animation-mode/animation-inspector.tsx`，
+- [x] 3.2 Green：在 `controller.tsx:1706-1764` 的 Inspector 分支中新增动画目标分支。
+  实际落点是 `compose-editor.tsx` 的 `resolvedInspectorPanel`：动画模式会话（选中片段）
+  只存在于该层，controller 不感知动画；与菱形注入（4.7）同一判据同一层。
+  "选中动画本身"的载体是时间线片段：面板的 selectTrack 不再连带选中片段（对象行 ↔
+  Entity、片段 ↔ 动画两种选择可区分），片段 → 轨道方向的联动保留。
+- [x] 3.3 Green：实现 `packages/editor/src/animation-mode/animation-inspector.tsx`，
   用 Valibot Schema 描述名称 / 时长 / 播放模式，改动派发 `animation.configure`。
 
 ## 4. 播放控制绑定编辑
 
-- [ ] 4.1 Red：绑定播放到布尔导出后写入 `bindings.playing`、候选按语义过滤、
+- [x] 4.1 Red：绑定播放到布尔导出后写入 `bindings.playing`、候选按语义过滤、
   绑定 `currentTime` 后播放行禁用并说明原因、解绑可撤销。
-- [ ] 4.2 Green：把检查器接上 `PropertyPanelBindingConfig`——`variables` 来自页面作用域快照，
+- [x] 4.2 Green：把检查器接上 `PropertyPanelBindingConfig`——`variables` 来自页面作用域快照，
   `onChange` 的四种原因映射到 `animation.configure` 的绑定字段写入。
-- [ ] 4.3 Green：用 `canBind` / `isTargetEnabled` 实现语义过滤：
+- [x] 4.3 Green：用 `canBind` / `isTargetEnabled` 实现语义过滤：
   `playing` 只接布尔导出，`currentTime` 只接数值导出。
-- [ ] 4.4 新增 i18n 文案：播放、当前时间、脚本已接管时间轴的禁用说明。
+  禁用 playing 用的是"该状态下不开放绑定 metadata + 始终可见的接管说明"而不是
+  `isTargetEnabled`——后者只授权 metadata 之外的字段，压不掉已显式开启的入口。
+- [x] 4.4 新增 i18n 文案：播放、当前时间、脚本已接管时间轴的禁用说明。
 
 ## 5. 编辑期隔离
 

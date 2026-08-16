@@ -7,6 +7,7 @@ import {
   COMPOSE_UI_CORE_PACKAGE,
   BUILTIN_COMMAND_TYPES,
   composePageDisplayName,
+  getComposeAnimations,
   composePageFileName,
   isComposeComponentMediaType,
   isComposePageMediaType,
@@ -15,6 +16,7 @@ import {
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
 import { createComposeAnimationCommandHandlers } from '@compose-ui/animation'
+import { AnimationInspector } from '../animation-mode/animation-inspector'
 import { rewriteAutoRecordCommand } from '../animation-mode/auto-record'
 import { useAnimationLayout } from '../animation-mode/use-animation-layout'
 import { useAnimationMode } from '../animation-mode/use-animation-mode'
@@ -1519,6 +1521,28 @@ export function ComposeEditor({
   }, [animationMode, controller, editorMessages.animationMode])
 
   const resolvedInspectorPanel = useMemo(() => {
+    // 动画模式下时间线选中了动画本身（片段）：属性区切换为动画检查器。
+    // 选回对象/属性轨道（selectedClipId 归 null）即恢复下面的原有 Inspector。
+    if (
+      animationMode.active
+      && animationMode.animationId
+      && animationMode.panelValue?.selectedClipId
+      && controller
+    ) {
+      const animation = getComposeAnimations(controller.document)
+        .find((item) => item.id === animationMode.animationId)
+      if (animation && animationRuntime) {
+        return (
+          <AnimationInspector
+            animation={animation}
+            dispatch={(command) => animationRuntime.dispatch(command)}
+            idFactory={animationCommandId}
+            messages={editorMessages.animationMode}
+            scope={activePageSession?.scriptScope}
+          />
+        )
+      }
+    }
     const authoredInspector = slots?.inspector !== undefined
       ? slots.inspector
       : addDefaultElementProps(controller?.inspectorPanel, {
@@ -1575,11 +1599,17 @@ export function ComposeEditor({
     }
     return entityInspector
   }, [
-    controller?.inspectorPanel,
+    controller,
     activeComponentSession,
+    activePageSession?.scriptScope,
+    animationMode.active,
+    animationMode.animationId,
+    animationMode.panelValue?.selectedClipId,
+    animationRuntime,
     applySelectedInstanceOverrides,
     componentWorkspace.store,
     createVariantFromSelectedInstance,
+    editorMessages.animationMode,
     handleVariantOverridesChange,
     pageScriptInspector,
     resolvedPaintImageLibrary,

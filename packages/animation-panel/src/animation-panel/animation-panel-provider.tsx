@@ -142,13 +142,13 @@ export function AnimationPanelProvider({
     const current = valueRef.current
     if (!current.model.tracks.some((track) => track.id === trackId)) return
     setNotice(null)
-    const clipId = getComposeAnimationClips(current.model)
-      .find((clip) => clip.trackId === trackId)?.id ?? null
+    // 选对象轨道不连带选中片段：片段代表"动画本身"（宿主据此切换动画检查器），
+    // 对象行代表 Entity。片段 → 轨道的联动保留在 selectClip 里，让所在行仍然高亮。
     commit({
       ...current,
       selectedTrackId: trackId,
       selectedPropertyId: null,
-      selectedClipId: clipId,
+      selectedClipId: null,
     })
     emit({ kind: 'select', trackId, propertyId: null, keyframeId: current.selectedKeyframeId })
   }, [commit, emit])

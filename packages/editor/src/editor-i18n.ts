@@ -79,6 +79,13 @@ const messages = {
       keyKeyed: (label: string) => `删除 ${label} 在当前播放头的关键帧`,
       keyUnavailable: (label: string) => `${label} 在当前布局配置下不参与求解，无法添加关键帧`,
       autoRecord: '自动记录',
+      inspectorLabel: '动画属性',
+      inspectorName: '名称',
+      inspectorDuration: '时长',
+      inspectorPlaybackMode: '播放模式',
+      inspectorPlaying: '播放',
+      inspectorCurrentTime: '当前时间',
+      playingTakenOver: '时间轴已由脚本接管：解除当前时间绑定后才能绑定播放',
     },
     stageToolbar: {
       label: 'Stage 工具栏',
@@ -269,6 +276,13 @@ const messages = {
       keyUnavailable: (label: string) =>
         `${label} does not participate in layout under the current configuration; keyframes are unavailable`,
       autoRecord: 'Auto record',
+      inspectorLabel: 'Animation properties',
+      inspectorName: 'Name',
+      inspectorDuration: 'Duration',
+      inspectorPlaybackMode: 'Playback mode',
+      inspectorPlaying: 'Playing',
+      inspectorCurrentTime: 'Current time',
+      playingTakenOver: 'The timeline is driven by script: unbind current time to bind playing',
     },
     stageToolbar: {
       label: 'Stage toolbar',
@@ -667,6 +681,19 @@ export function getEditorMessages(
         current.animationMode.defaultAnimationName,
       ),
       autoRecord: format('animationMode.autoRecord', current.animationMode.autoRecord),
+      inspectorLabel: format('animationMode.inspectorLabel', current.animationMode.inspectorLabel),
+      inspectorName: format('animationMode.inspectorName', current.animationMode.inspectorName),
+      inspectorDuration: format('animationMode.inspectorDuration', current.animationMode.inspectorDuration),
+      inspectorPlaybackMode: format(
+        'animationMode.inspectorPlaybackMode',
+        current.animationMode.inspectorPlaybackMode,
+      ),
+      inspectorPlaying: format('animationMode.inspectorPlaying', current.animationMode.inspectorPlaying),
+      inspectorCurrentTime: format(
+        'animationMode.inspectorCurrentTime',
+        current.animationMode.inspectorCurrentTime,
+      ),
+      playingTakenOver: format('animationMode.playingTakenOver', current.animationMode.playingTakenOver),
       keyNone: (label: string) => withVariables(
         'animationMode.keyNone', current.animationMode.keyNone(label), { label },
       ),
