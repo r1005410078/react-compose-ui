@@ -2,6 +2,7 @@
 export {
   useComposeEditorController,
   useComposeStageViewport,
+  type ComposeEditorCommandRewrite,
   type ComposeEditorController,
   type ComposeEditorTransactionEvent,
   type ComposeCreateComponentFromSelectionInput,

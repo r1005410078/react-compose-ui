@@ -15,6 +15,7 @@ import {
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
 import { createComposeAnimationCommandHandlers } from '@compose-ui/animation'
+import { rewriteAutoRecordCommand } from '../animation-mode/auto-record'
 import { useAnimationLayout } from '../animation-mode/use-animation-layout'
 import { useAnimationMode } from '../animation-mode/use-animation-mode'
 import { createAnimationFieldAdornment } from '../animation-mode/animation-field-adornment'
@@ -236,6 +237,13 @@ type PendingAssetDocumentClose = {
   readonly resolve: (allowed: boolean) => void
 }
 
+/** 动画命令、关键帧与改写命令共用的 ID factory；无 randomUUID 的环境退化为时间戳。 */
+function animationCommandId() {
+  return typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `animation-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 function addDefaultElementProps(
   node: ReactNode,
   props: Record<string, unknown>,
@@ -409,9 +417,7 @@ export function ComposeEditor({
     dispatch: animationRuntime
       ? (command) => animationRuntime.dispatch(command)
       : undefined,
-    idFactory: () => (typeof globalThis.crypto?.randomUUID === 'function'
-      ? globalThis.crypto.randomUUID()
-      : `animation-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+    idFactory: animationCommandId,
     defaultAnimationName: editorMessages.animationMode.defaultAnimationName,
     propertyLabel: animationPropertyLabel,
   })
@@ -419,6 +425,26 @@ export function ComposeEditor({
     animationMode.displayDocument,
     animationMode.active && animationMode.animationId !== null,
   )
+  // 自动记录：动画模式 + 开关开启时安装 dispatch 改写层，把画布与 Inspector 的属性编辑
+  // 改写为播放头处的关键帧命令；关闭或退出模式即卸载，编辑恢复直写基础文档。
+  const setCommandRewrite = controller?.setCommandRewrite
+  const autoRecordAnimationId = animationMode.active && animationMode.autoRecord
+    ? animationMode.animationId
+    : null
+  const autoRecordPlayheadMs = animationMode.playheadMs
+  useEffect(() => {
+    if (!setCommandRewrite) return
+    if (autoRecordAnimationId === null) {
+      setCommandRewrite(null)
+      return
+    }
+    setCommandRewrite((document, command) => rewriteAutoRecordCommand(document, {
+      animationId: autoRecordAnimationId,
+      playheadMs: autoRecordPlayheadMs,
+      idFactory: animationCommandId,
+    }, command))
+    return () => setCommandRewrite(null)
+  }, [autoRecordAnimationId, autoRecordPlayheadMs, setCommandRewrite])
   // onReady 只执行一次，闭包里不能捕获会随渲染更新的 animationMode。
   const animationModeRef = useRef(animationMode)
   useEffect(() => {

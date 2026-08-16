@@ -46,11 +46,21 @@ provider 目前每次变更只吐完整 `ComposeAnimationPanelValue`，播放时
 `applyComposeAnimationAtTime(document, animationId, playheadMs)` 结果作为 `document`
 传给 Stage、LayoutRuntime 与 Preview；`dispatch` 仍然是基础文档的 dispatch。
 
-**这里有一个必须显式处理的陷阱**：`entity.transform.set` 的 payload 带
-`operation: 'move' | 'resize' | 'rotate' | 'set'`，其中 move 语义可能是增量。用户在采样文档上
-拖动时，增量是相对采样值的；如果直接落到基础文档，就会叠加到未动画的原值上，位置立刻跳掉。
-因此自动记录的翻译层 MUST 先把命令结果折算成**绝对值**再写关键帧，并且必须有专门的回归测试
-覆盖"播放头不在 0 ms 时拖动对象"。
+**payload 语义结论（任务 5.1 考证）**：`entity.transform.set` 的 `updates[].transform` 是
+**绝对值**——完整的目标 `ComposeSpatialTransform`（position/size/rotation），`operation` 只影响
+约束校验与 patch 写法（move 会把 flow item 烘焙成 absolute，resize/set 会把变化轴烘焙成
+fixed），不存在增量语义。因此改写层不需要折算增量；真正的陷阱变成**命令一旦放行到基础文档
+就会把采样值写成静态值**：用户在采样文档上拖动，Stage 发出的绝对位置是"基础值 + 动画偏移"
+的合成结果，直接落地等于把播放头时刻的姿态烘焙进文档。所以自动记录开启时改写层拦截命令、
+只派发 `animation.keyframe.set`，原命令不再派发；仍然必须有回归测试覆盖"播放头不在 0 ms 时
+拖动对象"（断言基础静态值与 0 ms 帧都不变）。
+
+改写层还需要一个**变化基线**来判断哪些通道真的变了：来自画布手势的
+`operation: 'move' | 'resize' | 'rotate'` 与采样文档比（用户看到并拖动的是采样值）；来自
+Inspector 的 `operation: 'set'`、`entity.component.update` 与 `entity.appearance.set` 与基础
+文档比（Inspector 当前显示的是基础值）。任一变化通道不可动画（Flow 布局的 offset、非 fixed
+的宽高、非纯色 Paint、margin 等白名单外字段）时整条命令原样放行，不做部分改写——半改写会把
+一次用户操作拆成"一半进关键帧、一半进静态值"的不可理解状态。
 
 ### 决策：菱形的四种状态，其中 `unavailable` 是本项目特有的
 

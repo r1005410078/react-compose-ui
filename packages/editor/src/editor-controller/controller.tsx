@@ -847,6 +847,21 @@ export interface UseComposeEditorControllerOptions {
 }
 
 /**
+ * controller dispatch 漏斗的可安装改写层。
+ *
+ * @remarks
+ * 画布手势、Inspector 与命令面板的所有命令都经过 controller 的 `dispatch`；改写层在
+ * 实例路由之前运行。返回 `null` 表示不拦截，原命令照常派发；返回命令数组时按序派发
+ * 它们**替代**原命令。动画模式的自动记录用它把属性编辑改写为关键帧命令。
+ *
+ * @public
+ */
+export type ComposeEditorCommandRewrite = (
+  document: ComposeDocument,
+  command: EditorCommand,
+) => readonly EditorCommand[] | null
+
+/**
  * `ComposeEditor` 默认工作区消费的受控组合结果。
  *
  * @public
@@ -895,6 +910,8 @@ export interface ComposeEditorController {
   readonly setTool: (tool: ComposeStageTool) => void
   /** 向同一 runtime 派发结构化命令。 */
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
+  /** 安装或卸载 dispatch 改写层（传 `null` 卸载）；同一时刻只有一个改写层生效。 */
+  readonly setCommandRewrite: (rewrite: ComposeEditorCommandRewrite | null) => void
   /** 把当前规范化选区保存为组件资源，并在资源成功后原子替换为关联实例。 */
   readonly createComponentFromSelection: (
     input: ComposeCreateComponentFromSelectionInput,
@@ -1174,8 +1191,20 @@ export function useComposeEditorController({
   const setExpandedIds = useCallback((ids: readonly string[]) => {
     setExpandedIdsState(unique(ids))
   }, [])
+  // 改写层放 ref：安装/卸载不重建 dispatch，也不触发下游 memo 失效。
+  const commandRewriteRef = useRef<ComposeEditorCommandRewrite | null>(null)
+  const setCommandRewrite = useCallback((rewrite: ComposeEditorCommandRewrite | null) => {
+    commandRewriteRef.current = rewrite
+  }, [])
   const dispatch = useCallback(
     (command: EditorCommand) => {
+      // 改写层先于实例路由：改写返回 null 的命令（如实例 Resize）仍会落到实例路由。
+      const rewritten = commandRewriteRef.current?.(runtime.document, command)
+      if (rewritten && rewritten.length > 0) {
+        let result: CommandDispatchResult = { status: 'noop', command, reason: '改写层未派发命令' }
+        for (const next of rewritten) result = runtime.dispatch(next)
+        return result
+      }
       // 实例的 Resize 必须落到组件根，否则外框变了而内部嵌套 Runtime 不动。
       if (routeInstanceResize(runtime, runtime.document, command)) {
         return { status: 'committed' } as CommandDispatchResult
@@ -1783,6 +1812,7 @@ export function useComposeEditorController({
     setViewport,
     setTool,
     dispatch,
+    setCommandRewrite,
     createComponentFromSelection,
     createComponentRequest,
     sceneExternalDragEvent,

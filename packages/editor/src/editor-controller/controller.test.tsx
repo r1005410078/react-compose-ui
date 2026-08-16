@@ -28,6 +28,7 @@ import {
   type ComposeEntity,
   type ComposeLayoutItem,
   type ComposeSpatialTransform,
+  type EditorCommand,
   type TransactionRuntime,
 } from '@compose-ui/core'
 import { cloneElement, useEffect, type ReactElement } from 'react'
@@ -1528,5 +1529,35 @@ describe('useComposeEditorController', () => {
     expect(editorRuntime.document.entities.title?.name).toBe('Changed during save')
     expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
       .toEqual(['title'])
+  })
+
+  it('OpenSpec: editor-workspace-layout / 自动记录把编辑改写为关键帧 / 改写层拦截 dispatch，卸载后恢复直通', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+    const rename = (id: string, name: string) => ({
+      id,
+      type: BUILTIN_COMMAND_TYPES.renameEntity,
+      payload: { entityId: 'title', name },
+    }) as EditorCommand
+
+    result.current.setCommandRewrite((_document, command) => (
+      command.type === BUILTIN_COMMAND_TYPES.renameEntity
+        ? [{ ...command, id: `${command.id}-rewritten`, payload: { entityId: 'title', name: 'Rewritten' } }]
+        : null
+    ))
+    act(() => {
+      result.current.dispatch(rename('rename-rewrite', 'Original'))
+    })
+    // 改写命令替代原命令：原 payload 的名称不落地。
+    expect(editorRuntime.document.entities.title?.name).toBe('Rewritten')
+
+    result.current.setCommandRewrite(null)
+    act(() => {
+      result.current.dispatch(rename('rename-plain', 'Plain'))
+    })
+    expect(editorRuntime.document.entities.title?.name).toBe('Plain')
   })
 })
