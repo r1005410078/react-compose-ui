@@ -90,6 +90,13 @@
         "vitest": "^4.0.18",
       },
     },
+    "packages/animation": {
+      "name": "@compose-ui/animation",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/core": "workspace:*",
+      },
+    },
     "packages/animation-panel": {
       "name": "@compose-ui/animation-panel",
       "version": "0.1.0",
@@ -472,6 +479,8 @@
     "@changesets/types": ["@changesets/types@6.1.0", "https://registry.npmmirror.com/@changesets/types/-/types-6.1.0.tgz", {}, "sha512-rKQcJ+o1nKNgeoYRHKOS07tAMNd3YSN0uHaJOZYjBAgxfV7TUE7JE+z4BzZdQwb5hKaYbayKN5KrYV7ODb2rAA=="],
 
     "@changesets/write": ["@changesets/write@0.4.0", "https://registry.npmmirror.com/@changesets/write/-/write-0.4.0.tgz", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
+
+    "@compose-ui/animation": ["@compose-ui/animation@workspace:packages/animation"],
 
     "@compose-ui/animation-panel": ["@compose-ui/animation-panel@workspace:packages/animation-panel"],
 

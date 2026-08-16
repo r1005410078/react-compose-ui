@@ -23,6 +23,7 @@ export {
   isValidComposeGeometryConstraints,
   validateComposeDocument,
 } from './document'
+export { findComposeAnimation, getComposeAnimations } from './animations'
 export { createDefaultCanvasSettings } from './canvas-settings'
 export { createDefaultOutputSettings } from './output-settings'
 export {
@@ -95,7 +96,7 @@ export {
   resolveComposeSwitcherPreview,
 } from './widget-switcher'
 export type { ComposeWidgetSwitcherPreview } from './widget-switcher'
-export { applyDocumentPatches } from './patches'
+export { applyDocumentPatches, jsonEqual } from './patches'
 export { createTransactionRuntime } from './runtime'
 export { migrateComposeDocumentV5ToV6 } from './migration'
 export type { ComposeDocumentMigrationResult } from './migration'
@@ -128,6 +129,9 @@ export type {
   TransactionRuntimeState,
 } from './command-types'
 export type {
+  ComposeAnimation,
+  ComposeAnimationBindings,
+  ComposeAnimationPlaybackMode,
   ComposeAppearance,
   ComposeBindings,
   ComposeAxisSizing,

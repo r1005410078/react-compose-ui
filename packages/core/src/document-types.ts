@@ -327,6 +327,55 @@ export interface ComposeOutputSettings {
   readonly backgroundPaint: ComposePaint
 }
 
+/** 动画到达边界后的推进方式。 @public */
+export type ComposeAnimationPlaybackMode = 'play-once' | 'loop' | 'ping-pong'
+
+/**
+ * 整条动画的播放控制到页面 setup 导出的绑定。
+ *
+ * @remarks
+ * 播放与当前时间是**整条动画**的属性，不属于任何单个 Entity，因此挂在文档清单条目上而不是
+ * Entity 的 `Animation` Component 上。引用格式复用 {@link ComposePageExportReference}，
+ * 使属性面板的绑定入口与 `script-runtime` 的订阅原样可用。
+ *
+ * 用命名空间而不是把字段平铺到清单条目上，是为了后续加事件（`onComplete`、`onLoop`）
+ * 时不再改动清单条目的顶层形状。
+ *
+ * @public
+ */
+export type ComposeAnimationBindings = JsonObject & {
+  /** 布尔导出：`true` 播放、`false` 停止。 */
+  readonly playing?: ComposePageExportReference
+  /** 毫秒数值导出；绑定后脚本完全接管时间轴。 */
+  readonly currentTime?: ComposePageExportReference
+}
+
+/**
+ * 文档动画清单中的一条动画。
+ *
+ * @remarks
+ * 这里只有动画的身份与时间属性。关键帧轨道存放在被动画 Entity 的 `Animation` Component 上，
+ * 由 `@compose-ui/animation` 定义——这样复制、删除、Group 与组件继承都自动带上动画，
+ * 不需要任何补偿逻辑。
+ *
+ * 使用 `JsonObject &` 交叉而不是 `extends JsonObject`，因为索引签名的 `JsonValue`
+ * 不接受 `undefined`，而 `bindings` 是可选的；{@link ComposeAppearance} 出于同样原因
+ * 采用这种写法。
+ *
+ * @public
+ */
+export type ComposeAnimation = JsonObject & {
+  /** 在文档内稳定且唯一的标识。 */
+  readonly id: string
+  /** 用户可见的动画名称。 */
+  readonly name: string
+  /** 动画总时长，有限正数毫秒。 */
+  readonly durationMs: number
+  readonly playbackMode: ComposeAnimationPlaybackMode
+  /** 缺省表示该动画不受任何脚本导出驱动。 */
+  readonly bindings?: ComposeAnimationBindings
+}
+
 /** 编辑器、Stage 与 Preview 共享的 v6 ECS 文档。 @public */
 export interface ComposeDocument {
   /** 当前且唯一支持的文档协议版本。 @defaultValue 6 */
@@ -335,6 +384,14 @@ export interface ComposeDocument {
   readonly output: ComposeOutputSettings
   readonly rootIds: readonly string[]
   readonly entities: Readonly<Record<string, ComposeEntity>>
+  /**
+   * 该文档的动画清单；缺省等价于空清单。
+   *
+   * @remarks
+   * 向后兼容的加法扩展，`schemaVersion` 保持 `6`，老文档不含该字段仍然合法。
+   * 读取时使用 {@link getComposeAnimations} 归一化，不要各自处理 `undefined`。
+   */
+  readonly animations?: readonly ComposeAnimation[]
 }
 
 /** 文档校验问题稳定机器码。 @public */
@@ -376,6 +433,10 @@ export type DocumentValidationIssueCode =
   | 'appearance.invalid-paint'
   | 'renderer.invalid'
   | 'bindings.invalid'
+  | 'animation.invalid'
+  | 'animation.duplicate-id'
+  | 'animation.invalid-duration'
+  | 'animation.invalid-binding'
 
 /** 一个可定位的文档校验问题。 @public */
 export interface DocumentValidationIssue {

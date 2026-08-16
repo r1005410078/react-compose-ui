@@ -890,6 +890,103 @@ function validateTopology(
   })
 }
 
+const ANIMATION_PLAYBACK_MODES = ['play-once', 'loop', 'ping-pong'] as const
+const ANIMATION_BINDING_TARGETS = ['playing', 'currentTime'] as const
+
+function validateAnimationBindings(
+  value: unknown,
+  path: Path,
+  issues: DocumentValidationIssue[],
+) {
+  if (value === undefined) return
+  if (!isRecord(value)) {
+    addIssue(issues, 'animation.invalid-binding', path, 'bindings 必须是对象')
+    return
+  }
+  rejectUnknownFields(value, ANIMATION_BINDING_TARGETS, path, issues, 'animation.invalid-binding')
+  ANIMATION_BINDING_TARGETS.forEach((target) => {
+    const reference = value[target]
+    if (reference === undefined) return
+    const targetPath = [...path, target]
+    if (!isRecord(reference) || reference.scope !== 'page' || !nonEmpty(reference.exportName)) {
+      addIssue(
+        issues,
+        'animation.invalid-binding',
+        targetPath,
+        `${target} 必须是 { scope: "page", exportName }`,
+      )
+      return
+    }
+    rejectUnknownFields(
+      reference,
+      ['scope', 'exportName'],
+      targetPath,
+      issues,
+      'animation.invalid-binding',
+    )
+  })
+}
+
+/**
+ * 校验文档动画清单。
+ *
+ * @remarks
+ * 这里只校验清单本身——关键帧轨道存放在 Entity 的 `Animation` Component 上，core 对未知
+ * Component 只做 JSON 合法性检查。轨道级校验由 `@compose-ui/animation` 提供，需要宿主
+ * 在加载后主动调用。
+ */
+function validateAnimations(value: unknown, issues: DocumentValidationIssue[]) {
+  if (value === undefined) return
+  if (!Array.isArray(value)) {
+    addIssue(issues, 'animation.invalid', ['animations'], 'animations 必须是数组')
+    return
+  }
+  const seenIds = new Set<string>()
+  value.forEach((item, index) => {
+    const path: Path = ['animations', index]
+    if (!isRecord(item)) {
+      addIssue(issues, 'animation.invalid', path, '动画必须是对象')
+      return
+    }
+    rejectUnknownFields(
+      item,
+      ['id', 'name', 'durationMs', 'playbackMode', 'bindings'],
+      path,
+      issues,
+      'animation.invalid',
+    )
+    if (!nonEmpty(item.id)) {
+      addIssue(issues, 'animation.invalid', [...path, 'id'], '动画 ID 必须是非空字符串')
+    }
+    else if (seenIds.has(item.id as string)) {
+      addIssue(issues, 'animation.duplicate-id', [...path, 'id'], `动画 ID ${item.id} 重复`)
+    }
+    else {
+      seenIds.add(item.id as string)
+    }
+    if (typeof item.name !== 'string') {
+      addIssue(issues, 'animation.invalid', [...path, 'name'], '动画名称必须是字符串')
+    }
+    if (!positive(item.durationMs)) {
+      addIssue(
+        issues,
+        'animation.invalid-duration',
+        [...path, 'durationMs'],
+        '动画时长必须是有限正数毫秒',
+      )
+    }
+    if (!ANIMATION_PLAYBACK_MODES.includes(item.playbackMode as never)) {
+      addIssue(
+        issues,
+        'animation.invalid',
+        [...path, 'playbackMode'],
+        `playbackMode 必须是 ${ANIMATION_PLAYBACK_MODES.join(' / ')}`,
+      )
+    }
+    validateAnimationBindings(item.bindings, [...path, 'bindings'], issues)
+  })
+}
+
 /** 校验未知输入是否满足 ComposeDocument v6 ECS 协议。 @public */
 export function validateComposeDocument(input: unknown): DocumentValidationResult {
   if (!isRecord(input)) {
@@ -910,6 +1007,7 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
   }
   validateCanvas(input.canvas, issues)
   validateOutput(input.output, issues)
+  validateAnimations(input.animations, issues)
   if (!isRecord(input.entities)) {
     addIssue(issues, 'document.invalid', ['entities'], 'entities 必须是对象')
   }

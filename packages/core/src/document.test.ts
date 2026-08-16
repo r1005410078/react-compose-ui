@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { findComposeAnimation, getComposeAnimations } from './animations'
 import { validateComposeDocument } from './document'
 import { getComposeComposition, getComposeLayoutItem } from './entity'
 import { containerEntity, documentFixture, rendererEntity, transform } from './test-fixtures'
@@ -313,5 +314,113 @@ describe('ComposeDocument v6 validation', () => {
     const legacy = containerEntity('legacy')
     expect(legacy.components.Layout).toBeUndefined()
     expect(validateComposeDocument(documentFixture({ legacy })).valid).toBe(true)
+  })
+})
+
+describe('ComposeDocument 动画清单', () => {
+  const animation = (overrides: Record<string, unknown> = {}) => ({
+    id: 'intro',
+    name: '入场动画',
+    durationMs: 300,
+    playbackMode: 'play-once' as const,
+    ...overrides,
+  })
+
+  it('OpenSpec: compose-document / 文档可选动画清单 / 老文档不含动画字段', () => {
+    const document = documentFixture()
+    expect(document.animations).toBeUndefined()
+    expect(validateComposeDocument(document).valid).toBe(true)
+    expect(getComposeAnimations(document)).toEqual([])
+  })
+
+  it('OpenSpec: compose-document / 文档可选动画清单 / 新文档在动画字段上通过校验', () => {
+    const document = { ...documentFixture(), animations: [animation()] }
+    const result = validateComposeDocument(document)
+    expect(result.valid).toBe(true)
+    if (result.valid) expect(result.document.schemaVersion).toBe(6)
+    expect(findComposeAnimation(document, 'intro')?.name).toBe('入场动画')
+    expect(findComposeAnimation(document, 'missing')).toBeNull()
+  })
+
+  it('OpenSpec: compose-document / 文档可选动画清单 / 动画字段形状非法', () => {
+    const result = validateComposeDocument({ ...documentFixture(), animations: {} })
+    expect(result.valid).toBe(false)
+    if (!result.valid) {
+      expect(result.issues).toContainEqual(expect.objectContaining({
+        code: 'animation.invalid',
+        path: ['animations'],
+      }))
+    }
+  })
+
+  it('OpenSpec: compose-document / 文档可选动画清单 / 清单条目 ID 重复', () => {
+    const result = validateComposeDocument({
+      ...documentFixture(),
+      animations: [animation(), animation({ name: '另一条' })],
+    })
+    expect(result.valid).toBe(false)
+    if (!result.valid) {
+      expect(result.issues).toContainEqual(expect.objectContaining({
+        code: 'animation.duplicate-id',
+        path: ['animations', 1, 'id'],
+      }))
+    }
+  })
+
+  it('OpenSpec: compose-document / 文档可选动画清单 / 清单条目时长非法', () => {
+    for (const durationMs of [0, -1, Number.NaN]) {
+      const result = validateComposeDocument({
+        ...documentFixture(),
+        animations: [animation({ durationMs })],
+      })
+      expect(result.valid).toBe(false)
+      if (!result.valid) {
+        expect(result.issues).toContainEqual(expect.objectContaining({
+          code: durationMs === 0 || durationMs === -1
+            ? 'animation.invalid-duration'
+            : 'json.non-finite-number',
+        }))
+      }
+    }
+  })
+
+  it('OpenSpec: compose-document / 动画播放控制绑定 / 缺省无绑定', () => {
+    const document = { ...documentFixture(), animations: [animation()] }
+    expect(validateComposeDocument(document).valid).toBe(true)
+    expect(findComposeAnimation(document, 'intro')?.bindings).toBeUndefined()
+  })
+
+  it('OpenSpec: compose-document / 动画播放控制绑定 / 合法的播放绑定', () => {
+    const result = validateComposeDocument({
+      ...documentFixture(),
+      animations: [animation({
+        bindings: {
+          playing: { scope: 'page', exportName: 'isReady' },
+          currentTime: { scope: 'page', exportName: 'scrollMs' },
+        },
+      })],
+    })
+    expect(result.valid).toBe(true)
+  })
+
+  it('OpenSpec: compose-document / 动画播放控制绑定 / 绑定引用形状非法', () => {
+    for (const playing of [
+      { scope: 'global', exportName: 'isReady' },
+      { scope: 'page', exportName: '  ' },
+      { scope: 'page' },
+      'isReady',
+    ]) {
+      const result = validateComposeDocument({
+        ...documentFixture(),
+        animations: [animation({ bindings: { playing } })],
+      })
+      expect(result.valid).toBe(false)
+      if (!result.valid) {
+        expect(result.issues).toContainEqual(expect.objectContaining({
+          code: 'animation.invalid-binding',
+          path: ['animations', 0, 'bindings', 'playing'],
+        }))
+      }
+    }
   })
 })

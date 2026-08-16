@@ -20,7 +20,8 @@ setup 脚本 Props 绑定、first-class Group、项目组件与 Unity 风格 Var
 bun add @compose-ui/core @compose-ui/assets @compose-ui/layout-engine @compose-ui/stage-engine \
   @compose-ui/ui-context @compose-ui/components @compose-ui/script-runtime \
   @compose-ui/component-registry @compose-ui/component-library \
-  @compose-ui/stage @compose-ui/materials @compose-ui/animation-panel @compose-ui/editor @compose-ui/preview
+  @compose-ui/stage @compose-ui/materials @compose-ui/animation @compose-ui/animation-panel \
+  @compose-ui/editor @compose-ui/preview
 ```
 
 React 与 ReactDOM 由宿主提供。仓库开发阶段不要假设 npm 中已经存在尚未发布的版本。
@@ -306,7 +307,11 @@ bun run test:e2e
 应用级状态、动态 Entity 树、列表/条件模板、双向绑定或 HMR 状态保留。
 
 当前 Component Asset v1 不提供 Detach、跨 Provider Variant、自动更新、批量 Apply、任意实例内部
-结构编辑或超过八层的继承/嵌套。Interaction、Animation、数据源和正式持久化仍需独立 OpenSpec。
+结构编辑或超过八层的继承/嵌套。Interaction、数据源和正式持久化仍需独立 OpenSpec。
+
+场景动画目前只有领域模型：`@compose-ui/animation` 提供 `Animation` ECS Component 协议、
+插值采样器、运动路径几何与动画命令，`ComposeDocument.animations` 保存动画清单。
+动画模式 UI、属性面板打点、画布运动路径编辑与脚本播放控制仍在 OpenSpec 提案中，尚未实现。
 
 ## License
 

@@ -84,6 +84,11 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解包，只能依赖 `core` 与
   `yoga-layout`；Yoga 类型、Node 与 WASM 指针不得进入公共 API。
+- `@compose-ui/animation` 是无 React、无 DOM 的场景动画领域包，只能依赖 `core`，不得依赖
+  `editor`、`stage`、`preview`、`animation-panel` 或任何 UI Context。关键帧轨道存放在被动画
+  Entity 的 `Animation` Component 上，文档只在 `ComposeDocument.animations` 保留动画清单；
+  core 不认识该 Component，轨道级校验需要宿主主动调用本包的校验入口。命令 handler 通过
+  `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`script-runtime`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。
@@ -105,7 +110,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、
