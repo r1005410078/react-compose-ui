@@ -38,6 +38,7 @@ import type {
   ComposePageScriptScope,
   ComposeScriptModuleLoader,
 } from '@compose-ui/script-runtime'
+import { useComposeAnimationPlayback } from '../playback/use-animation-playback'
 import { useComposePreviewLayout } from './use-layout-runtime'
 
 /**
@@ -71,6 +72,15 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
   /** 输出完整文档或某个根级/嵌套 Container；省略时输出完整文档。 */
   readonly target?: ComposePreviewTarget
+  /**
+   * 宿主接管的动画播放头毫秒（如预览对话框的手动播放会话）。
+   *
+   * @remarks
+   * 存在时优先于文档动画的脚本播放控制绑定；Preview 始终负责采样，宿主不要再传
+   * 预先采样过的文档。宿主自带 `layoutSnapshot` 时动画采样整体停用（快照属于基础
+   * 文档，采样几何与其错配）。
+   */
+  readonly animationTimeMs?: number
 }
 
 /**
@@ -377,11 +387,19 @@ export function ComposePreview(props: ComposePreviewProps) {
     scriptModuleLoader: props.scriptModuleLoader,
   })
   const document = props.document ?? props.page?.document
+  const scriptScope = props.scriptScope ?? ownedScope
+  // 动画采样只在 Preview 自管布局时启用：宿主快照属于基础文档，与采样几何错配。
+  const animatedDocument = useComposeAnimationPlayback({
+    document,
+    scope: scriptScope,
+    enabled: props.layoutSnapshot == null,
+    ...(props.animationTimeMs !== undefined ? { timeMsOverride: props.animationTimeMs } : {}),
+  })
   if (!document) return <section role="alert">Preview 缺少 ComposeDocument 或页面</section>
   const resolvedProps = {
     ...props,
-    document,
-    scriptScope: props.scriptScope ?? ownedScope,
+    document: animatedDocument ?? document,
+    scriptScope,
   }
   return resolvedProps.layoutSnapshot
     ? <ComposePreviewReady {...resolvedProps} layoutSnapshot={resolvedProps.layoutSnapshot} />

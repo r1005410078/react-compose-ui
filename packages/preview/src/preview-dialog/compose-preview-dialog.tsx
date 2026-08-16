@@ -1,12 +1,12 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { applyComposeAnimationAtTime } from '@compose-ui/animation'
 import { getComposeAnimations } from '@compose-ui/core'
 import { ComposePreview } from '../compose-preview'
 import type { ComposePreviewProps, ComposePreviewTarget } from '../compose-preview'
-import { advanceComposePreviewPlayhead } from './playback-model'
-import type { ComposePreviewPlayheadState } from './playback-model'
+import { advanceComposePreviewPlayhead } from '../playback/playback-model'
+import type { ComposePreviewPlayheadState } from '../playback/playback-model'
+import { useAnimationFrameLoop } from '../playback/use-animation-frame-loop'
 import './styles.css'
 
 type PreviewDialogScale = '1' | '0.75' | '0.5'
@@ -156,6 +156,9 @@ export function ComposePreviewDialog({
   // 基础能力阶段与编辑器一致：预览播放第一条动画；多动画选择留给后续提案。
   const animation = composeDocument ? getComposeAnimations(composeDocument)[0] : undefined
   const [playing, setPlaying] = useState(false)
+  // 手动会话是否已接管播放头：未接管时 ComposePreview 按脚本绑定驱动（或停在 0 ms），
+  // 用户第一次按播放即接管，关闭对话框归还。
+  const [manualEngaged, setManualEngaged] = useState(false)
   // 权威播放头放 ref：rAF 回调里直接推进，direction 等 ping-pong 状态不挤进渲染状态；
   // state 只保留渲染需要的 timeMs，每次开始播放时在事件处理器里与 ref 对齐。
   const playhead = useRef(INITIAL_PLAYHEAD)
@@ -168,42 +171,24 @@ export function ComposePreviewDialog({
     setWasOpen(open)
     if (!open) {
       setPlaying(false)
+      setManualEngaged(false)
       setPlayheadMs(0)
     }
   }
 
-  useEffect(() => {
-    if (!open || !playing || !animation) return
-    let frame = 0
-    let last: number | null = null
-    const tick = (now: number) => {
-      const delta = last === null ? 0 : now - last
-      last = now
-      const advanced = advanceComposePreviewPlayhead(
-        playhead.current,
-        delta,
-        animation.durationMs,
-        animation.playbackMode,
-      )
-      playhead.current = advanced.state
-      setPlayheadMs(advanced.state.timeMs)
-      if (advanced.done) {
-        setPlaying(false)
-        return
-      }
-      frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [animation, open, playing])
-
-  // 动画文档始终按播放头采样渲染；layout 交给 ComposePreview 自建的 Runtime 求解——
-  // 宿主传入的 layoutSnapshot/layoutRuntime 属于基础文档，对采样文档是错的。
-  const previewDocument = useMemo(() => (
-    composeDocument && animation
-      ? applyComposeAnimationAtTime(composeDocument, animation.id, playheadMs)
-      : composeDocument
-  ), [animation, composeDocument, playheadMs])
+  // 手动播放循环与 ComposePreview 的脚本驱动共用同一份 rAF 生命周期管理。
+  useAnimationFrameLoop(open && playing && animation !== undefined, (delta) => {
+    if (!animation) return
+    const advanced = advanceComposePreviewPlayhead(
+      playhead.current,
+      delta,
+      animation.durationMs,
+      animation.playbackMode,
+    )
+    playhead.current = advanced.state
+    setPlayheadMs(advanced.state.timeMs)
+    if (advanced.done) setPlaying(false)
+  })
 
   useEffect(() => {
     if (open) {
@@ -261,6 +246,7 @@ export function ComposePreviewDialog({
     const resumeMs = animation && playheadMs < animation.durationMs ? playheadMs : 0
     playhead.current = { timeMs: resumeMs, direction: 1 }
     setPlayheadMs(resumeMs)
+    setManualEngaged(true)
     setPlaying(true)
   }
 
@@ -341,8 +327,9 @@ export function ComposePreviewDialog({
             style={{ '--compose-preview-dialog-scale': scale } as CSSProperties}
           >
             <ComposePreview
+              animationTimeMs={manualEngaged ? playheadMs : undefined}
               assetResolver={assetResolver}
-              document={previewDocument}
+              document={composeDocument}
               page={page}
               layoutRuntime={animation ? undefined : layoutRuntime}
               layoutSnapshot={animation ? undefined : layoutSnapshot}

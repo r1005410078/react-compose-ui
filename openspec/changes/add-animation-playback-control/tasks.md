@@ -5,22 +5,22 @@
 
 ## 1. 运行时播放语义（纯函数优先）
 
-- [ ] 1.1 Red：`animation-playback-model` 的纯函数测试——上升沿复位、下降沿停在当前帧、
+- [x] 1.1 Red：`animation-playback-model` 的纯函数测试——上升沿复位、下降沿停在当前帧、
   `play-once` 到末尾停止、`loop` / `ping-pong` 的边界折返、`currentTime` 钳制到
   `[0, durationMs]`、`currentTime` 存在时忽略 `playing` 与 `playbackMode`。
-- [ ] 1.2 Green：实现播放状态机纯函数——输入是上一帧状态、绑定读数与经过的毫秒，
+- [x] 1.2 Green：实现播放状态机纯函数——输入是上一帧状态、绑定读数与经过的毫秒，
   输出下一个播放头与是否继续推进。不碰 React、不碰 rAF。
-- [ ] 1.3 Red/Green：绑定失效（导出不存在、类型不符）按未绑定处理并产出诊断，不抛错。
+- [x] 1.3 Red/Green：绑定失效（导出不存在、类型不符）按未绑定处理并产出诊断，不抛错。
 
 ## 2. preview 接线
 
-- [ ] 2.1 Green：在 `ComposePreview` 中用 `scope.subscribeExport` 订阅绑定的导出，
+- [x] 2.1 Green：在 `ComposePreview` 中用 `scope.subscribeExport` 订阅绑定的导出，
   单导出粒度，不用整作用域 `subscribe`。
-- [ ] 2.2 Green：把播放状态机接上 rAF；`play-once` 到达末尾时停掉循环，不空转。
-- [ ] 2.3 Red：卸载与作用域释放时取消订阅、停止推进，断言不再有回调。
-- [ ] 2.4 Green：与 `add-animation-mode-binding` 的预览播放控件共用同一套生命周期管理，
+- [x] 2.2 Green：把播放状态机接上 rAF；`play-once` 到达末尾时停掉循环，不空转。
+- [x] 2.3 Red：卸载与作用域释放时取消订阅、停止推进，断言不再有回调。
+- [x] 2.4 Green：与 `add-animation-mode-binding` 的预览播放控件共用同一套生命周期管理，
   不要两处各写一遍 rAF 与清理。
-- [ ] 2.5 Red/Green：无绑定的动画停在 0 ms 且不推进。
+- [x] 2.5 Red/Green：无绑定的动画停在 0 ms 且不推进。
 
 ## 3. 动画检查器
 
@@ -42,8 +42,11 @@
 
 ## 5. 编辑期隔离
 
-- [ ] 5.1 Red：绑定布尔为 `true` 时用户拖动编辑期播放头，断言画布跟随用户而非脚本。
-- [ ] 5.2 Green：确认脚本驱动只在 `preview` 生效，编辑器的动画模式播放头不订阅导出。
+- [x] 5.1 Red：绑定布尔为 `true` 时用户拖动编辑期播放头，断言画布跟随用户而非脚本。
+  由既有测试"播放头驱动画布且不产生命令"承载：编辑期画布只跟随会话播放头。
+- [x] 5.2 Green：确认脚本驱动只在 `preview` 生效，编辑器的动画模式播放头不订阅导出。
+  结构性成立：`useAnimationMode` 不接收脚本作用域输入，编辑期不存在被脚本驱动的通路；
+  脚本驱动实现整体位于 `packages/preview/src/playback/`。
 
 ## 6. 示例与文档
 

@@ -12,6 +12,10 @@ export type ComposeScriptDiagnosticCode =
   | 'script.method-threw'
   | 'script.method-rejected'
   | 'script.unsupported-module'
+  /** 播放控制等绑定指向的导出不存在（含脚本热重载后消失）。 */
+  | 'script.binding-missing-export'
+  /** 绑定的导出类型与目标语义不符（如 playing 绑到了字符串导出）。 */
+  | 'script.binding-type-mismatch'
   | 'script.module-load-failed'
   | 'script.module-load-cancelled'
 
