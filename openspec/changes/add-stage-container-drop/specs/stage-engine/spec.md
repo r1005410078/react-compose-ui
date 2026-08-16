@@ -68,9 +68,9 @@ Pointer Up 时若存在候选 reparent 目标，Controller MUST 提交一次原�
 
 ### Requirement: Auto Layout 容器内原地重排
 
-对 `flexWrap` 为 `nowrap` 的 Layout 容器，`move` 手势拖动其 Flow 子级且指针全程未离开该容器边界时，
-Controller MUST 按指针在主轴上的位置与各兄弟中点比较得到插入位置，Pointer Up MUST 只提交一次改变
-`Hierarchy.childIds` 顺序的命令，MUST NOT 修改该 Entity 的 `LayoutItem`，MUST NOT 发布 Transform
+Controller MUST 支持 Auto Layout 容器内的原地重排。对 `flexWrap` 为 `nowrap` 的 Layout 容器，
+`move` 手势拖动其 Flow 子级且指针全程未离开该容器边界时，Controller MUST 按指针在主轴上的位置与
+各兄弟中点比较得到插入位置，Pointer Up MUST 只提交一次改变 `Hierarchy.childIds` 顺序的命令，MUST NOT 修改该 Entity 的 `LayoutItem`，MUST NOT 发布 Transform
 命令。插入位置与拖动前顺序相同时 MUST NOT 提交任何命令。指针离开容器边界时 MUST 回退到既有的烘焙
 Absolute 行为。`flexWrap` 为 `wrap` 或 `wrap-reverse` 的容器 MUST 保持现有行为，不进行原地重排判定。
 

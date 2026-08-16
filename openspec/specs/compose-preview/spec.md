@@ -149,3 +149,60 @@ MUST NOT 应用任何编辑期预览覆盖——运行期只认 `activeIndex`。
 - **WHEN** Component Instance 或 Page Slot 的内部文档含 WidgetSwitcher
 - **THEN** 嵌套 Runtime 同样只渲染其活动子项
 
+### Requirement: 预览对话框动画播放
+
+文档包含动画时，`ComposePreviewDialog` MUST 提供播放控件，按动画的 `playbackMode` 推进播放头
+并把当前时刻的采样文档交给 `ComposePreview` 渲染。`ComposePreview` 组件自身 MUST NOT 获得动画
+语义，仍然只接受已经采样好的文档。对话框关闭时 MUST 停止播放并释放计时资源。
+
+#### Scenario: 播放文档动画
+
+- **WHEN** 用户在包含动画的文档上打开预览对话框并点击播放
+- **THEN** 预览内容按动画随时间变化
+
+#### Scenario: 无动画时不显示播放控件
+
+- **WHEN** 文档没有任何动画
+- **THEN** 预览对话框不显示播放控件
+
+#### Scenario: 关闭对话框停止播放
+
+- **WHEN** 播放过程中用户关闭预览对话框
+- **THEN** 播放停止且不再有计时回调触发
+
+### Requirement: 预览按脚本绑定驱动动画
+
+`ComposePreview` 在拥有页面作用域时 MUST 按文档动画的播放控制绑定驱动动画，并把当前时刻的
+采样文档用于渲染。没有任何播放控制绑定的动画 MUST NOT 自动播放。`play-once` 动画到达末尾时
+MUST 停止推进循环，MUST NOT 空转。组件卸载或作用域释放时 MUST 取消订阅并停止推进。
+
+#### Scenario: 绑定驱动预览播放
+
+- **WHEN** 页面 setup 导出的布尔成员变为 `true`，预览正在渲染该页面
+- **THEN** 预览中的动画从头开始播放
+
+#### Scenario: 无绑定不自动播放
+
+- **WHEN** 文档中的动画没有任何播放控制绑定
+- **THEN** 预览显示动画在 `0` ms 的采样结果，且不推进
+
+#### Scenario: 播放一次结束后停止推进
+
+- **WHEN** 一条 `play-once` 动画在预览中播放到末尾
+- **THEN** 推进循环停止，不再产生逐帧回调
+
+#### Scenario: 卸载释放资源
+
+- **WHEN** 预览在动画播放期间被卸载
+- **THEN** 导出订阅被取消，推进循环停止，不再有回调触发
+
+### Requirement: 编辑期播放头不被脚本抢占
+
+编辑器画布的播放头 MUST 由用户的手动拖动与播放控件控制，MUST NOT 被页面脚本的播放控制绑定驱动。
+用户验证脚本驱动效果的入口是预览。
+
+#### Scenario: 编辑期手动播放头不受脚本影响
+
+- **WHEN** 页面 setup 导出的绑定布尔为 `true`，用户同时在编辑器里拖动播放头
+- **THEN** 画布跟随用户拖动的位置，不被脚本改写
+
