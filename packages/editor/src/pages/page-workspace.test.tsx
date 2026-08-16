@@ -753,7 +753,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
 
     const inspector = await screen.findByRole('region', { name: '画布属性' })
-    const pageScriptSelect = within(inspector).getByRole('combobox', { name: '选择页面脚本' })
+    const pageScriptSelect = within(inspector).getByRole('combobox', { name: '脚本文件' })
     await waitFor(() => { expect(pageScriptSelect).toBeEnabled() })
     expect(within(inspector).getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
 

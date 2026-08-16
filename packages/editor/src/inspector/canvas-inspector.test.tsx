@@ -4,6 +4,7 @@ import {
   createDefaultCanvasSettings,
   type ComposeDocument,
 } from '@compose-ui/core'
+import { ComposePropertyPanelSection } from '@compose-ui/property-panel'
 import { CanvasInspector } from './canvas-inspector'
 
 function documentFixture(): ComposeDocument {
@@ -65,19 +66,31 @@ describe('CanvasInspector', () => {
   })
 
   it('OpenSpec: editor-workspace-layout / 页面脚本作为 Canvas Inspector 属性 / 页面与 Inspector 目标切换', () => {
+    // 注入内容是共享 Root 内的 Section：与输出分组同一个属性面板、同一个搜索工具栏。
     render(
       <CanvasInspector
         dispatch={vi.fn()}
         document={documentFixture()}
         idFactory={() => 'canvas-page-script'}
-        pageScriptInspector={<div>Counter.setup.js 返回成员</div>}
+        animationInspector={(
+          <ComposePropertyPanelSection title="动画">
+            <div>Home.animation.json 绑定</div>
+          </ComposePropertyPanelSection>
+        )}
+        pageScriptInspector={(
+          <ComposePropertyPanelSection title="页面脚本">
+            <div>Counter.setup.js 返回成员</div>
+          </ComposePropertyPanelSection>
+        )}
       />,
     )
 
     expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
     expect(screen.getByText('Counter.setup.js 返回成员')).toBeInTheDocument()
-    const field = screen.getByText('Counter.setup.js 返回成员').closest('[data-property-path]')
-    expect(field).toHaveAttribute('data-property-path', 'pageScript')
-    expect(field).toHaveAttribute('data-property-layout', 'full-width')
+    // 三个分组按 输出 → 动画 → 页面脚本 排列，动画在页面脚本上方。
+    const groupTitles = screen.getAllByRole('button', { expanded: true })
+      .map((button) => button.textContent)
+      .filter((text) => ['输出', '动画', '页面脚本'].includes(text ?? ''))
+    expect(groupTitles).toEqual(['输出', '动画', '页面脚本'])
   })
 })

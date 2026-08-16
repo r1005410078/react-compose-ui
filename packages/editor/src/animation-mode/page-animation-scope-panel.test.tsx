@@ -1,5 +1,6 @@
 import type { ComposeAssetProvider } from '@compose-ui/assets'
 import type { ComposeAnimation, ComposePageAnimationReference } from '@compose-ui/core'
+import { ComposePropertyPanelRoot } from '@compose-ui/property-panel'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PageAnimationScopePanel } from './page-animation-scope-panel'
@@ -72,18 +73,21 @@ function renderPanel({
   const onAnimationChange = vi.fn(async () => undefined)
   const onError = vi.fn()
   let seq = 0
+  // 组件是共享 Root 内的一个 Section：Root 提供分组 chrome、搜索与列宽。
   render(
-    <PageAnimationScopePanel
-      animation={animation}
-      dispatch={dispatch}
-      idFactory={() => `id-${seq += 1}`}
-      onAnimationChange={onAnimationChange}
-      onError={onError}
-      pageName="Home"
-      pageParentId="root"
-      provider={provider}
-      reference={reference}
-    />,
+    <ComposePropertyPanelRoot>
+      <PageAnimationScopePanel
+        animation={animation}
+        dispatch={dispatch}
+        idFactory={() => `id-${seq += 1}`}
+        onAnimationChange={onAnimationChange}
+        onError={onError}
+        pageName="Home"
+        pageParentId="root"
+        provider={provider}
+        reference={reference}
+      />
+    </ComposePropertyPanelRoot>,
   )
   return { dispatch, onAnimationChange, onError, provider }
 }
@@ -94,7 +98,7 @@ describe('PageAnimationScopePanel', () => {
   it('OpenSpec: editor-workspace-layout / 画布动画绑定属性 / 未绑定页面选择或快捷创建动画', async () => {
     const { onAnimationChange, provider } = renderPanel()
 
-    const select = await screen.findByRole('combobox', { name: '选择动画文件' })
+    const select = await screen.findByRole('combobox', { name: '动画文件' })
     expect(screen.getByText('未绑定')).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Intro.animation.json' })).toBeInTheDocument()
     // 非动画后缀的条目不进入候选。
@@ -123,7 +127,7 @@ describe('PageAnimationScopePanel', () => {
     renderPanel({ reference: boundReference, animation: mirrorAnimation })
 
     // 已绑定：显示当前动画文件与播放控制绑定行。
-    const select = await screen.findByRole('combobox', { name: '选择动画文件' })
+    const select = await screen.findByRole('combobox', { name: '动画文件' })
     expect((select as HTMLSelectElement).value).toBe('animations/Intro.animation.json')
     expect(screen.getByText('播放')).toBeInTheDocument()
     expect(screen.getByText('当前时间')).toBeInTheDocument()

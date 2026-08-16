@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   ComposePropertyPanel,
-  type ComposePropertyPanelRenderer,
-  type ComposePropertyPanelRendererProps,
+  ComposePropertyPanelRoot,
+  ComposePropertyPanelSection,
 } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { createDefaultOutputSettings } from '@compose-ui/core'
@@ -20,9 +20,9 @@ type CanvasInspectorProps = {
   readonly document: ComposeDocument
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   readonly idFactory: () => string
-  /** 活动页面的动画绑定属性内容；省略时 Canvas 不显示动画区块。 */
+  /** 活动页面的动画 Section（`ComposePropertyPanelSection`）；省略时不显示动画分组。 */
   readonly animationInspector?: ReactNode
-  /** 活动页面的 setup 属性内容；省略时 Canvas 保持纯文档输出属性。 */
+  /** 活动页面的页面脚本 Section（`ComposePropertyPanelSection`）；省略时不显示脚本分组。 */
   readonly pageScriptInspector?: ReactNode
 }
 
@@ -57,8 +57,6 @@ type CanvasOutputSize =
 type CanvasInspectorValue = {
   readonly outputSize: CanvasOutputSize
   readonly backgroundPaint: ComposePaint
-  readonly animation: ReactNode
-  readonly pageScript: ReactNode
 }
 
 function findOutputPreset(width: number, height: number) {
@@ -67,8 +65,6 @@ function findOutputPreset(width: number, height: number) {
 
 function createCanvasOutputSchema(
   messages: ReturnType<typeof getEditorMessages>['canvasInspector'],
-  showAnimation: boolean,
-  showPageScript: boolean,
 ) {
   return v.object({
     outputSize: v.pipe(
@@ -114,46 +110,17 @@ function createCanvasOutputSchema(
       v.title(messages.background),
       v.metadata({ propertyPanel: { editor: 'paint', order: 1 } }),
     ),
-    // 动画在页面脚本上方：动画绑定决定时间线的空态语义，是比脚本更靠近画布输出的属性。
-    animation: v.pipe(
-      v.unknown(),
-      v.title(messages.animation),
-      v.metadata({ propertyPanel: {
-        editor: 'animation-section',
-        hidden: !showAnimation,
-        layout: 'full-width',
-        order: 2,
-      } }),
-    ),
-    pageScript: v.pipe(
-      v.unknown(),
-      v.title(messages.pageScript),
-      v.metadata({ propertyPanel: {
-        editor: 'page-script',
-        hidden: !showPageScript,
-        layout: 'full-width',
-        order: 3,
-      } }),
-    ),
   })
 }
 
-function PageScriptRenderer({ value }: ComposePropertyPanelRendererProps) {
-  return value as ReactNode
-}
-
-const CANVAS_INSPECTOR_RENDERERS: readonly ComposePropertyPanelRenderer[] = [{
-  id: 'page-script',
-  component: PageScriptRenderer,
-  layout: 'full-width',
-}, {
-  // 与 page-script 相同的透传渲染：区块内容由宿主组合页面、资源与动画语义后注入。
-  id: 'animation-section',
-  component: PageScriptRenderer,
-  layout: 'full-width',
-}]
-
-/** Editor 内部的隐式 Canvas 输出属性编辑器。 */
+/**
+ * Editor 内部的隐式 Canvas 输出属性编辑器。
+ *
+ * @remarks
+ * 一个共享 Property Panel Root（唯一工具栏与列宽）加三个 Section：输出字段、
+ * 宿主注入的动画 Section 与页面脚本 Section。注入内容必须是
+ * `ComposePropertyPanelSection`，其内部面板嵌入本 Root，不携带自己的 chrome。
+ */
 export function CanvasInspector({
   document,
   dispatch,
@@ -185,14 +152,7 @@ export function CanvasInspector({
     if (dimensionsChanged) setOutputSizeKey(documentPreset ? 'preset' : 'custom')
   }, [document.output.height, document.output.width, documentPreset])
 
-  const schema = useMemo(
-    () => createCanvasOutputSchema(
-      messages,
-      animationInspector !== undefined,
-      pageScriptInspector !== undefined,
-    ),
-    [animationInspector, messages, pageScriptInspector],
-  )
+  const schema = useMemo(() => createCanvasOutputSchema(messages), [messages])
   const value = useMemo(
     (): CanvasInspectorValue => ({
       outputSize: outputSizeKey === 'preset'
@@ -202,96 +162,97 @@ export function CanvasInspector({
           value: { width: document.output.width, height: document.output.height },
         },
       backgroundPaint: document.output.backgroundPaint,
-      animation: animationInspector ?? null,
-      pageScript: pageScriptInspector ?? null,
     }),
-    [animationInspector, document.output, documentPreset, outputSizeKey, pageScriptInspector],
+    [document.output, documentPreset, outputSizeKey],
   )
 
   /*
-   * 重置基线只覆盖有确定默认值的输出背景。输出尺寸由页面自身决定、pageScript 是宿主注入的
-   * 渲染内容，两者都没有可恢复的默认值，因此基线沿用当前值，Property Panel 深度比较后不会
-   * 为它们生成重置动作；整个 defaultValue 仍必须通过 schema 校验，否则背景也会失去重置。
+   * 重置基线只覆盖有确定默认值的输出背景。输出尺寸由页面自身决定，没有可恢复的默认值，
+   * 因此基线沿用当前值，Property Panel 深度比较后不会为它生成重置动作；整个 defaultValue
+   * 仍必须通过 schema 校验，否则背景也会失去重置。
    */
   const defaultValue = useMemo(
     (): CanvasInspectorValue => ({
       outputSize: value.outputSize,
       backgroundPaint: createDefaultOutputSettings().backgroundPaint,
-      animation: value.animation,
-      pageScript: value.pageScript,
     }),
     [value],
   )
 
   return (
-    <ComposePropertyPanel
+    <ComposePropertyPanelRoot
       aria-label={messages.label}
       className="compose-editor__canvas-inspector"
-      defaultValue={defaultValue}
       header={{ title: messages.title }}
-      renderers={CANVAS_INSPECTOR_RENDERERS}
-      schema={schema}
-      value={value}
-      onValueChange={(_nextValue, change) => {
-        const next = change.output as CanvasInspectorValue
-        if (change.path[0] === 'pageScript' || change.path[0] === 'animation') return
-        if (change.path[0] === 'outputSize') {
-          const nextOutputSize = next.outputSize
-          if (nextOutputSize.key !== value.outputSize.key) {
-            setOutputSizeKey(nextOutputSize.key)
-            return
-          }
-          if (nextOutputSize.key === 'preset') {
-            const preset = OUTPUT_PRESETS.find((candidate) => candidate.value === nextOutputSize.value)
-            if (!preset || (
-              preset.width === document.output.width
-              && preset.height === document.output.height
-            )) return
+    >
+      <ComposePropertyPanelSection defaultExpanded title={messages.output}>
+        <ComposePropertyPanel
+          defaultValue={defaultValue}
+          schema={schema}
+          value={value}
+          onValueChange={(_nextValue, change) => {
+            const next = change.output as CanvasInspectorValue
+            if (change.path[0] === 'outputSize') {
+              const nextOutputSize = next.outputSize
+              if (nextOutputSize.key !== value.outputSize.key) {
+                setOutputSizeKey(nextOutputSize.key)
+                return
+              }
+              if (nextOutputSize.key === 'preset') {
+                const preset = OUTPUT_PRESETS.find((candidate) => candidate.value === nextOutputSize.value)
+                if (!preset || (
+                  preset.width === document.output.width
+                  && preset.height === document.output.height
+                )) return
+                dispatch({
+                  id: idFactory(),
+                  type: 'output.configure',
+                  payload: {
+                    width: preset.width,
+                    height: preset.height,
+                    backgroundPaint: document.output.backgroundPaint,
+                  },
+                  meta: { label: messages.configureTransaction, source: 'inspector' },
+                })
+                return
+              }
+              const dimensions = nextOutputSize.value
+              if (
+                dimensions.width === document.output.width
+                && dimensions.height === document.output.height
+              ) return
+              dispatch({
+                id: idFactory(),
+                type: 'output.configure',
+                payload: {
+                  width: dimensions.width,
+                  height: dimensions.height,
+                  backgroundPaint: document.output.backgroundPaint,
+                },
+                meta: { label: messages.configureTransaction, source: 'inspector' },
+              })
+              return
+            }
             dispatch({
               id: idFactory(),
               type: 'output.configure',
               payload: {
-                width: preset.width,
-                height: preset.height,
-                backgroundPaint: document.output.backgroundPaint,
+                width: document.output.width,
+                height: document.output.height,
+                backgroundPaint: next.backgroundPaint,
               },
-              meta: { label: messages.configureTransaction, source: 'inspector' },
+              meta: {
+                // 色盘拖动仅在松手提交，但连续点选/滑杆仍可能短窗合并；同字段共享 mergeKey。
+                mergeKey: 'inspector:output:background-paint',
+                label: messages.configureTransaction,
+                source: 'inspector',
+              },
             })
-            return
-          }
-          const dimensions = nextOutputSize.value
-          if (
-            dimensions.width === document.output.width
-            && dimensions.height === document.output.height
-          ) return
-          dispatch({
-            id: idFactory(),
-            type: 'output.configure',
-            payload: {
-              width: dimensions.width,
-              height: dimensions.height,
-              backgroundPaint: document.output.backgroundPaint,
-            },
-            meta: { label: messages.configureTransaction, source: 'inspector' },
-          })
-          return
-        }
-        dispatch({
-          id: idFactory(),
-          type: 'output.configure',
-          payload: {
-            width: document.output.width,
-            height: document.output.height,
-            backgroundPaint: next.backgroundPaint,
-          },
-          meta: {
-            // 色盘拖动仅在松手提交，但连续点选/滑杆仍可能短窗合并；同字段共享 mergeKey。
-            mergeKey: 'inspector:output:background-paint',
-            label: messages.configureTransaction,
-            source: 'inspector',
-          },
-        })
-      }}
-    />
+          }}
+        />
+      </ComposePropertyPanelSection>
+      {animationInspector}
+      {pageScriptInspector}
+    </ComposePropertyPanelRoot>
   )
 }

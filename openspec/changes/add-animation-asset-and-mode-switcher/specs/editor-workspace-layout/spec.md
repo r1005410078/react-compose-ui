@@ -32,12 +32,14 @@ Dockview 工具组中动态加入并激活时间线面板，并展开底部组�
 
 ### Requirement: 画布动画绑定属性
 
-活动页面的默认 Canvas Inspector MUST 在「页面脚本」属性上方显示「动画」属性：列出页面
-同目录中拥有稳定 assetKey 的动画文件供绑定，支持更换与取消关联，并在可写 Provider 上提供
-按页面名快捷创建入口。创建 MUST 生成动画文件资产并默认绑定到当前页面。已绑定时该属性
-MUST 提供播放控制变量绑定编辑，复用页面 setup 返回作用域的成员作为绑定候选。绑定、更换、
-取消关联与创建是资源与页面包装写入，MUST NOT 进入撤销历史；取消关联 MUST NOT 删除动画
-文件资源。
+活动页面的默认 Canvas Inspector MUST 在「页面脚本」分组上方显示「动画」分组：它 MUST 是
+共享 Property Panel Root 中的一个 Section，动画文件是嵌入该 Root 的标准属性字段行，
+MUST NOT 引入第二个属性工具栏、独立分组 chrome 或嵌套的独立属性面板。分组列出页面同目录
+中拥有稳定 assetKey 的动画文件供绑定，支持更换与取消关联，并在可写 Provider 上通过分组
+标题行动作提供按页面名快捷创建入口。创建 MUST 生成动画文件资产并默认绑定到当前页面。
+已绑定时该分组 MUST 以属性面板既有的绑定入口提供播放控制变量绑定编辑，复用页面 setup
+返回作用域的成员作为绑定候选。绑定、更换、取消关联与创建是资源与页面包装写入，MUST NOT
+进入撤销历史；取消关联 MUST NOT 删除动画文件资源。
 
 #### Scenario: 未绑定页面选择或快捷创建动画
 
@@ -58,6 +60,43 @@ MUST 提供播放控制变量绑定编辑，复用页面 setup 返回作用域�
 - **AND** 会话镜像中的动画清单被移除，时间线回到创建引导
 
 ## MODIFIED Requirements
+
+### Requirement: 页面脚本作为 Canvas Inspector 属性
+
+活动页面的默认 Canvas Inspector MUST 将页面 setup 显示为与输出属性共用同一个
+Property Panel Root 的「页面脚本」Section：脚本文件是嵌入该 Root 的标准属性字段行，
+返回成员是 full-width 自定义属性字段，重新加载、快捷创建与更多操作位于 Section 标题行
+动作槽；MUST NOT 再自带独立分组 chrome、第二个属性工具栏或嵌套的独立属性面板。
+该属性 MUST 只由 Editor 组合页面、资源和 Script Runtime 语义，不得下沉到 Property Panel
+或 Asset Browser 包。
+
+#### Scenario: 未关联页面选择或快捷创建脚本
+
+- **WHEN** 活动页面没有 setupScript 且用户查看 Canvas Inspector
+- **THEN** 脚本文件字段列出页面同目录中拥有稳定 assetKey 的 `.setup.js` 文件供选择
+- **AND** 可写 Provider 在分组标题行提供按页面名快捷创建入口，创建成功后自动关联并打开脚本标签
+- **AND** 页面输出、场景文档与事务历史保持不变
+
+#### Scenario: 已关联页面查看和管理脚本
+
+- **WHEN** 活动页面关联的 setup 成功运行
+- **THEN** 脚本文件字段显示当前脚本名称，分组标题行提供重新加载与更多操作（打开、解除）
+- **AND** 返回成员字段列出 setup 返回成员的名称、value/method 类别、当前值以及运行 diagnostic
+- **AND** State 更新或 setup revision 重载后，成员信息在同一字段内更新
+
+#### Scenario: 页面与 Inspector 目标切换
+
+- **WHEN** 用户在页面标签、Canvas 输出和 Entity Inspector 目标之间切换
+- **THEN** 页面脚本分组只显示活动页面实例的数据并且只出现在 Canvas Inspector
+- **AND** 默认 Inspector 始终只有一个属性搜索工具栏
+
+#### Scenario: 页面脚本属性视觉状态
+
+- **WHEN** 用户在深色工作区打开已关联 setup 的 Canvas Inspector
+- **THEN** 页面脚本以共享 Root 的可折叠分组显示，样式与其它属性分组一致，标题行提供
+  重新加载脚本按钮且低频操作位于更多菜单
+- **AND** 返回成员以紧凑列表显示类型徽标、名称与最终值，不重复显示 method 类别
+- **AND** 该确定状态具有 Playwright 视觉黄金文件
 
 ### Requirement: 动画模式
 

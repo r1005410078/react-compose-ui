@@ -12,14 +12,13 @@ import type {
   ComposePageAnimationReference,
   EditorCommand,
 } from '@compose-ui/core'
-import { ComposePropertyPanel } from '@compose-ui/property-panel'
+import { ComposePropertyPanel, ComposePropertyPanelSection } from '@compose-ui/property-panel'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import * as v from 'valibot'
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -35,7 +34,7 @@ import {
 } from './animation-binding-fields'
 import { createPageAnimationFile } from './animation-asset-store'
 
-/** Canvas Inspector 动画属性的 Editor 侧输入。 @internal */
+/** Canvas Inspector 动画 Section 的 Editor 侧输入。 @internal */
 export interface PageAnimationScopePanelProps {
   readonly pageName: string
   readonly pageParentId: string
@@ -50,27 +49,6 @@ export interface PageAnimationScopePanelProps {
   /** 绑定/更换/解除动画文件；由宿主完成页面包装写入与镜像水合。 */
   readonly onAnimationChange: (reference: ComposePageAnimationReference | null) => Promise<void>
   readonly onError: (message: string) => void
-}
-
-function referenceEntry(
-  reference: ComposePageAnimationReference,
-  parentId: string,
-): ComposeAssetEntry {
-  return {
-    id: reference.assetKey,
-    parentId,
-    name: reference.assetKey.split('/').pop() ?? reference.assetKey,
-    kind: 'file',
-    assetKey: reference.assetKey,
-  }
-}
-
-function ChevronIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  )
 }
 
 function MoreIcon() {
@@ -91,80 +69,15 @@ function AddIcon() {
   )
 }
 
-/** 已绑定动画的播放控制变量绑定编辑。 */
-function AnimationBindingFields({
-  animation,
-  dispatch,
-  idFactory,
-  scope,
-  label,
-  messages,
-}: {
-  readonly animation: ComposeAnimation
-  readonly dispatch: (command: EditorCommand) => unknown
-  readonly idFactory: () => string
-  readonly scope?: ComposePageScriptScope
-  readonly label: string
-  readonly messages: ReturnType<typeof getEditorMessages>['animationMode']
-}) {
-  const snapshot = useSyncExternalStore(
-    scope?.subscribe ?? subscribeEmptyScope,
-    scope?.getSnapshot ?? getEmptyScopeSnapshot,
-    scope?.getSnapshot ?? getEmptyScopeSnapshot,
-  )
-  const variables = useMemo(() => buildAnimationBindingVariables(snapshot), [snapshot])
-  const bindingValue = useMemo(() => buildAnimationBindingValue(animation), [animation])
-  const currentTimeBound = animation.bindings?.currentTime !== undefined
-  const schema = useMemo(() => v.object({
-    // currentTime 已绑定 = 脚本完全接管时间轴：playing 不再开放绑定入口，
-    // 与动画检查器保持同一约束（见 animation-inspector.tsx）。
-    playing: currentTimeBound
-      ? v.pipe(
-          v.boolean(),
-          v.title(messages.inspectorPlaying),
-          v.description(messages.playingTakenOver),
-        )
-      : v.pipe(
-          v.boolean(),
-          v.title(messages.inspectorPlaying),
-          v.metadata({ propertyPanel: { binding: { enabled: true } } }),
-        ),
-    currentTimeMs: v.pipe(
-      v.number(),
-      v.title(messages.inspectorCurrentTime),
-      v.metadata({ propertyPanel: { binding: { enabled: true } } }),
-    ),
-  }), [currentTimeBound, messages])
-  // 编辑期不播放：两行的字面值只是占位，绑定才是事实来源。
-  const panelValue = useMemo(() => ({ playing: false, currentTimeMs: 0 }), [])
-
-  return (
-    <ComposePropertyPanel
-      aria-label={label}
-      className="compose-editor__page-animation-bindings"
-      binding={{
-        value: bindingValue,
-        variables,
-        onChange: (next) => {
-          dispatch({
-            id: idFactory(),
-            type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
-            payload: { animationId: animation.id, bindings: bindingsPayloadFromPanel(next) },
-            meta: { source: 'canvas-animation-inspector' },
-          } as EditorCommand)
-        },
-        canBind: (target, variable) => canBindAnimationTarget(target.address.path, variable),
-      }}
-      schema={schema}
-      value={panelValue}
-      onValueChange={() => {
-        // playing / currentTimeMs 的字面编辑不写文档：编辑期不播放。
-      }}
-    />
-  )
-}
-
-/** 当前页面动画文件的选择、快捷创建、解除与播放控制绑定。 @internal */
+/**
+ * 「动画」作为 Canvas Inspector 的一个共享 Property Panel Section。
+ *
+ * @remarks
+ * 内容是嵌入宿主 Root 的 `ComposePropertyPanel`：动画文件是标准 picklist 字段行，
+ * 播放控制绑定复用面板既有的绑定入口——不引入第二个工具栏或独立分组 chrome。
+ * 快捷创建与解除绑定放在 Section 标题行的 actions 槽。
+ * @internal
+ */
 export function PageAnimationScopePanel({
   animation,
   dispatch,
@@ -180,12 +93,15 @@ export function PageAnimationScopePanel({
   const i18n = useComposeI18nContext()
   const editorMessages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
   const messages = editorMessages.animationMode
-  const contentId = useId()
   const actionsMenu = useComposeContextMenu<'page-animation'>()
   const [entries, setEntries] = useState<readonly ComposeAssetEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [expanded, setExpanded] = useState(true)
+  const scopeSnapshot = useSyncExternalStore(
+    scope?.subscribe ?? subscribeEmptyScope,
+    scope?.getSnapshot ?? getEmptyScopeSnapshot,
+    scope?.getSnapshot ?? getEmptyScopeSnapshot,
+  )
 
   const loadEntries = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -221,20 +137,22 @@ export function PageAnimationScopePanel({
     }
   }, [loadEntries, provider])
 
-  const currentEntry = useMemo(() => {
-    if (!reference) return undefined
-    return entries.find((entry) => entry.assetKey === reference.assetKey)
-      ?? referenceEntry(reference, pageParentId)
-  }, [entries, pageParentId, reference])
   const canChange = provider.capabilities.write !== false
     && typeof provider.writeFile === 'function'
   const canCreate = provider.capabilities.createFile !== false
     && typeof provider.createFile === 'function'
   const currentValue = reference?.providerId === provider.id ? reference.assetKey : ''
-  const selectableEntries = currentEntry
-    && !entries.some((entry) => entry.assetKey === currentEntry.assetKey)
-    ? [currentEntry, ...entries]
-    : entries
+  // 绑定引用可能指向已不在同目录列表中的文件（被移动/重命名）；补一个占位候选保住当前值。
+  const selectableEntries = useMemo(() => reference
+    && !entries.some((entry) => entry.assetKey === reference.assetKey)
+    ? [{
+        id: reference.assetKey,
+        parentId: pageParentId,
+        name: reference.assetKey.split('/').pop() ?? reference.assetKey,
+        kind: 'file' as const,
+        assetKey: reference.assetKey,
+      }, ...entries]
+    : entries, [entries, pageParentId, reference])
 
   const chooseAnimation = async (assetKey: string) => {
     const entry = selectableEntries.find((candidate) => candidate.assetKey === assetKey)
@@ -298,106 +216,137 @@ export function PageAnimationScopePanel({
     }
   }
 
+  const bound = reference !== null
+  const mirrorReady = bound && animation !== null
+  const currentTimeBound = animation?.bindings?.currentTime !== undefined
+  const schema = useMemo(() => {
+    // 条件字段用可变 entries 组装：三元展开会让 TS 推出 schema 形状联合，无法赋给 GenericSchema。
+    const fields: Record<string, v.GenericSchema> = {
+      file: v.pipe(
+        v.picklist(['', ...selectableEntries.map((entry) => entry.assetKey ?? '')]),
+        v.title(messages.animationFileField),
+        v.metadata({ propertyPanel: {
+          order: 0,
+          // 只锁文件选择：绑定行走文档命令，与 Provider 可写性无关。
+          readOnly: !canChange || busy || loading,
+          optionLabels: {
+            '': loading ? messages.animationLoading : messages.selectAnimationFile,
+            ...Object.fromEntries(selectableEntries.map((entry) => [entry.assetKey, entry.name])),
+          },
+        } }),
+      ),
+    }
+    if (mirrorReady) {
+      // currentTime 已绑定 = 脚本完全接管时间轴：playing 不再开放绑定入口，
+      // 与动画检查器保持同一约束（见 animation-inspector.tsx）。
+      fields.playing = currentTimeBound
+        ? v.pipe(
+            v.boolean(),
+            v.title(messages.inspectorPlaying),
+            v.description(messages.playingTakenOver),
+          )
+        : v.pipe(
+            v.boolean(),
+            v.title(messages.inspectorPlaying),
+            v.metadata({ propertyPanel: { binding: { enabled: true }, order: 1 } }),
+          )
+      fields.currentTimeMs = v.pipe(
+        v.number(),
+        v.title(messages.inspectorCurrentTime),
+        v.metadata({ propertyPanel: { binding: { enabled: true }, order: 2 } }),
+      )
+    }
+    return v.object(fields)
+  }, [busy, canChange, currentTimeBound, loading, messages, mirrorReady, selectableEntries])
+  // 编辑期不播放：playing / currentTimeMs 的字面值只是占位，绑定才是事实来源。
+  const panelValue = useMemo(() => ({
+    file: currentValue,
+    ...(mirrorReady ? { playing: false, currentTimeMs: 0 } : {}),
+  }), [currentValue, mirrorReady])
+  const variables = useMemo(() => buildAnimationBindingVariables(scopeSnapshot), [scopeSnapshot])
+  const bindingValue = useMemo(
+    () => (animation ? buildAnimationBindingValue(animation) : []),
+    [animation],
+  )
+
   return (
-    <>
-      <section
-        aria-label={editorMessages.canvasInspector.animation}
-        className="compose-editor__page-script-property compose-editor__page-animation-property"
-        data-expanded={expanded ? 'true' : 'false'}
-        data-state={reference ? 'bound' : 'unbound'}
-      >
-        <header className="compose-editor__page-script-header">
-          <button
-            aria-controls={contentId}
-            aria-expanded={expanded}
-            aria-label={expanded ? messages.collapseAnimation : messages.expandAnimation}
-            className="compose-editor__page-script-toggle"
-            type="button"
-            onClick={() => setExpanded((current) => !current)}
-          >
-            <ChevronIcon />
-            <span>{editorMessages.canvasInspector.animation}</span>
-          </button>
-          {!reference ? (
-            <span
-              className="compose-editor__page-script-status"
-              data-state="disconnected"
-            >
-              <span aria-hidden="true" />
+    <ComposePropertyPanelSection
+      actions={(
+        <>
+          {!bound ? (
+            <span className="compose-editor__inspector-section-status">
               {messages.animationDisconnected}
             </span>
           ) : null}
-          {reference && currentEntry ? (
+          {!bound && canCreate ? (
+            <button
+              aria-label={messages.quickCreateAnimation}
+              className="compose-editor__inspector-section-action"
+              disabled={busy}
+              title={messages.quickCreateAnimation}
+              type="button"
+              onClick={() => { void createAnimation() }}
+            ><AddIcon /></button>
+          ) : null}
+          {bound ? (
             <button
               aria-label={messages.animationMoreActions}
-              className="compose-editor__page-script-more"
+              className="compose-editor__inspector-section-action"
               disabled={busy}
               title={messages.animationMoreActions}
               type="button"
               onClick={(event) => actionsMenu.openAt(event, 'page-animation')}
             ><MoreIcon /></button>
           ) : null}
-        </header>
-
-        {expanded ? (
-          <div className="compose-editor__page-script-body" id={contentId}>
-            <div className="compose-editor__page-script-controls">
-              <select
-                aria-label={messages.selectAnimationFile}
-                disabled={!canChange || busy || loading}
-                title={currentEntry?.name}
-                value={currentValue}
-                onChange={(event) => { void chooseAnimation(event.target.value) }}
-              >
-                <option value="">{loading ? messages.animationLoading : messages.selectAnimationFile}</option>
-                {selectableEntries.map((entry) => (
-                  <option key={entry.assetKey} value={entry.assetKey}>{entry.name}</option>
-                ))}
-              </select>
-              {!reference ? (
-                <button
-                  aria-label={messages.quickCreateAnimation}
-                  className="compose-editor__page-script-create"
-                  disabled={!canCreate || busy}
-                  title={messages.quickCreateAnimation}
-                  type="button"
-                  onClick={() => { void createAnimation() }}
-                ><AddIcon /><span>{editorMessages.pages.quickCreate}</span></button>
-              ) : null}
-            </div>
-
-            {reference ? (
-              animation ? (
-                <AnimationBindingFields
-                  animation={animation}
-                  dispatch={dispatch}
-                  idFactory={idFactory}
-                  label={messages.bindingsLabel}
-                  messages={messages}
-                  scope={scope}
-                />
-              ) : (
-                <p className="compose-editor__page-script-empty">{messages.mirrorMissing}</p>
-              )
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      {reference && currentEntry ? (
-        <ComposeContextMenu {...actionsMenu.rootProps}>
-          <ComposeContextMenuContent aria-label={messages.animationActions} align="end">
-            <ComposeContextMenuItem
-              disabled={!canChange || busy}
-              variant="destructive"
-              onClick={() => {
-                actionsMenu.close()
-                void unlinkAnimation()
-              }}
-            >{messages.unlinkAnimation}</ComposeContextMenuItem>
-          </ComposeContextMenuContent>
-        </ComposeContextMenu>
+        </>
+      )}
+      defaultExpanded
+      title={editorMessages.canvasInspector.animation}
+    >
+      <ComposePropertyPanel
+        schema={schema}
+        value={panelValue}
+        {...(mirrorReady && animation
+          ? {
+              binding: {
+                value: bindingValue,
+                variables,
+                onChange: (next) => {
+                  dispatch({
+                    id: idFactory(),
+                    type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
+                    payload: {
+                      animationId: animation.id,
+                      bindings: bindingsPayloadFromPanel(next),
+                    },
+                    meta: { source: 'canvas-animation-inspector' },
+                  } as EditorCommand)
+                },
+                canBind: (target, variable) =>
+                  canBindAnimationTarget(target.address.path, variable),
+              },
+            }
+          : {})}
+        onValueChange={(_next, change) => {
+          // playing / currentTimeMs 的字面编辑不写文档：编辑期不播放。
+          if (change.path[0] === 'file') void chooseAnimation(change.value as string)
+        }}
+      />
+      {bound && !mirrorReady ? (
+        <p className="compose-editor__inspector-section-note">{messages.mirrorMissing}</p>
       ) : null}
-    </>
+      <ComposeContextMenu {...actionsMenu.rootProps}>
+        <ComposeContextMenuContent aria-label={messages.animationActions} align="end">
+          <ComposeContextMenuItem
+            disabled={!canChange || busy}
+            variant="destructive"
+            onClick={() => {
+              actionsMenu.close()
+              void unlinkAnimation()
+            }}
+          >{messages.unlinkAnimation}</ComposeContextMenuItem>
+        </ComposeContextMenuContent>
+      </ComposeContextMenu>
+    </ComposePropertyPanelSection>
   )
 }

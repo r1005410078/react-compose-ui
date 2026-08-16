@@ -6,12 +6,17 @@ import {
   ComposeContextMenuItem,
   useComposeContextMenu,
 } from '@compose-ui/components'
+import {
+  ComposePropertyPanel,
+  ComposePropertyPanelSection,
+  type ComposePropertyPanelRendererProps,
+} from '@compose-ui/property-panel'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import * as v from 'valibot'
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -24,7 +29,7 @@ const EMPTY_SNAPSHOT = { exports: [], diagnostics: [], disposed: false } as cons
 const subscribeEmpty = () => () => undefined
 const getEmptySnapshot = () => EMPTY_SNAPSHOT
 
-/** Canvas Inspector 页面脚本属性的 Editor 侧输入。 @internal */
+/** Canvas Inspector 页面脚本 Section 的 Editor 侧输入。 @internal */
 export interface PageScriptScopePanelProps {
   readonly pageName: string
   readonly pageParentId: string
@@ -46,28 +51,6 @@ function displayValue(value: unknown): string {
   catch {
     return String(value)
   }
-}
-
-function referenceEntry(
-  reference: ComposePageSetupReference,
-  parentId: string,
-): ComposeAssetEntry {
-  return {
-    id: reference.assetKey,
-    parentId,
-    name: reference.assetKey.split('/').pop() ?? reference.assetKey,
-    kind: 'file',
-    mediaType: 'text/javascript',
-    assetKey: reference.assetKey,
-  }
-}
-
-function ChevronIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  )
 }
 
 function MoreIcon() {
@@ -96,7 +79,71 @@ function AddIcon() {
   )
 }
 
-/** 当前页面 setup 的选择、快捷创建、返回成员与运行诊断。 @internal */
+/** 「返回成员」full-width 字段的渲染值。 */
+interface ScriptMembersValue {
+  readonly snapshot: ReturnType<ComposePageScriptScope['getSnapshot']>
+  readonly scopeAvailable: boolean
+}
+
+/**
+ * 返回成员列表：作为属性面板的 full-width 自定义字段渲染。
+ *
+ * @remarks
+ * 成员是脚本运行值不是可编辑属性，因此走 renderer 扩展而不是普通字段；行内类型徽标、
+ * 名称与最终值沿用既有紧凑样式，diagnostics 以 `role="alert"` 附在列表后。
+ */
+function ScriptMembersRenderer({ value }: ComposePropertyPanelRendererProps) {
+  const i18n = useComposeI18nContext()
+  const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage).pages
+  const { snapshot, scopeAvailable } = value as ScriptMembersValue
+  return (
+    <div className="compose-editor__page-script-members">
+      {scopeAvailable && snapshot.exports.length > 0 ? (
+        <ul aria-label={messages.setupExportsList}>
+          {snapshot.exports.map((item) => (
+            <li key={item.name}>
+              <span
+                aria-hidden="true"
+                className={`compose-editor__page-script-kind compose-editor__page-script-kind--${item.kind}`}
+              >{item.kind === 'method' ? 'ƒ' : item.reactive ? 'S' : 'V'}</span>
+              <strong>{item.name}</strong>
+              <output title={item.kind === 'value' ? displayValue(item.value) : undefined}>
+                {item.kind === 'method' ? messages.setupMethod : displayValue(item.value)}
+              </output>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="compose-editor__page-script-empty">
+          {scopeAvailable ? messages.setupNoExports : messages.setupScopeUnavailable}
+        </p>
+      )}
+      {snapshot.diagnostics.map((diagnostic, index) => (
+        <p
+          className="compose-editor__page-script-diagnostic"
+          key={`${diagnostic.code}:${index}`}
+          role="alert"
+        >{diagnostic.message}</p>
+      ))}
+    </div>
+  )
+}
+
+const PAGE_SCRIPT_RENDERERS = [{
+  id: 'page-script-members',
+  component: ScriptMembersRenderer,
+  layout: 'full-width' as const,
+}]
+
+/**
+ * 「页面脚本」作为 Canvas Inspector 的一个共享 Property Panel Section。
+ *
+ * @remarks
+ * 脚本文件是标准 picklist 字段行，返回成员是 full-width 自定义字段；重新加载、
+ * 快捷创建与更多操作放在 Section 标题行的 actions 槽——不再自带分组 chrome，
+ * 折叠/展开与搜索过滤由宿主 Root 统一提供。
+ * @internal
+ */
 export function PageScriptScopePanel({
   onError,
   onOpen,
@@ -113,7 +160,6 @@ export function PageScriptScopePanel({
     i18n?.locale ?? 'zh-CN',
     i18n?.formatMessage,
   ).pages
-  const contentId = useId()
   const actionsMenu = useComposeContextMenu<'page-script'>()
   const snapshot = useSyncExternalStore(
     scope?.subscribe ?? subscribeEmpty,
@@ -124,7 +170,6 @@ export function PageScriptScopePanel({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [reloading, setReloading] = useState(false)
-  const [expanded, setExpanded] = useState(true)
 
   const loadEntries = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -163,7 +208,14 @@ export function PageScriptScopePanel({
   const currentEntry = useMemo(() => {
     if (!reference) return undefined
     return entries.find((entry) => entry.assetKey === reference.assetKey)
-      ?? referenceEntry(reference, pageParentId)
+      ?? {
+        id: reference.assetKey,
+        parentId: pageParentId,
+        name: reference.assetKey.split('/').pop() ?? reference.assetKey,
+        kind: 'file' as const,
+        mediaType: 'text/javascript',
+        assetKey: reference.assetKey,
+      }
   }, [entries, pageParentId, reference])
   const canChange = provider.capabilities.write !== false
     && typeof provider.writeFile === 'function'
@@ -171,10 +223,10 @@ export function PageScriptScopePanel({
     && provider.capabilities.createFile !== false
     && typeof provider.createFile === 'function'
   const currentValue = reference?.providerId === provider.id ? reference.assetKey : ''
-  const selectableEntries = currentEntry
+  const selectableEntries = useMemo(() => currentEntry
     && !entries.some((entry) => entry.assetKey === currentEntry.assetKey)
     ? [currentEntry, ...entries]
-    : entries
+    : entries, [currentEntry, entries])
 
   const chooseScript = async (assetKey: string) => {
     const entry = selectableEntries.find((candidate) => candidate.assetKey === assetKey)
@@ -256,123 +308,98 @@ export function PageScriptScopePanel({
     }
   }
 
+  const schema = useMemo(() => {
+    // 条件字段用可变 entries 组装：三元展开会让 TS 推出 schema 形状联合，无法赋给 GenericSchema。
+    const fields: Record<string, v.GenericSchema> = {
+      file: v.pipe(
+        v.picklist(['', ...selectableEntries.map((entry) => entry.assetKey ?? '')]),
+        v.title(messages.setupFileField),
+        v.metadata({ propertyPanel: {
+          order: 0,
+          readOnly: !canChange || busy || loading,
+          optionLabels: {
+            '': loading ? messages.setupLoading : messages.selectSetupScript,
+            ...Object.fromEntries(selectableEntries.map((entry) => [entry.assetKey, entry.name])),
+          },
+        } }),
+      ),
+    }
+    if (reference) {
+      fields.exports = v.pipe(
+        v.unknown(),
+        v.title(messages.setupExports),
+        v.metadata({ propertyPanel: {
+          editor: 'page-script-members',
+          layout: 'full-width',
+          order: 1,
+        } }),
+      )
+    }
+    return v.object(fields)
+  }, [busy, canChange, loading, messages, reference, selectableEntries])
+  const membersValue = useMemo<ScriptMembersValue>(() => ({
+    snapshot,
+    scopeAvailable: scope !== undefined,
+  }), [scope, snapshot])
+  const panelValue = useMemo(() => ({
+    file: currentValue,
+    ...(reference ? { exports: membersValue } : {}),
+  }), [currentValue, membersValue, reference])
+
   return (
-    <>
-      <section
-        aria-label={messages.setupProperty}
-        className="compose-editor__page-script-property"
-        data-expanded={expanded ? 'true' : 'false'}
-        data-state={reference ? 'bound' : 'unbound'}
-      >
-        <header className="compose-editor__page-script-header">
-          <button
-            aria-controls={contentId}
-            aria-expanded={expanded}
-            aria-label={expanded ? messages.collapseSetupScript : messages.expandSetupScript}
-            className="compose-editor__page-script-toggle"
-            type="button"
-            onClick={() => setExpanded((current) => !current)}
-          >
-            <ChevronIcon />
-            <span>{messages.setupProperty}</span>
-          </button>
+    <ComposePropertyPanelSection
+      actions={(
+        <>
+          {!reference ? (
+            <span className="compose-editor__inspector-section-status">
+              {messages.setupDisconnected}
+            </span>
+          ) : null}
+          {!reference && canCreate ? (
+            <button
+              aria-label={messages.quickCreateSetupScript}
+              className="compose-editor__inspector-section-action"
+              disabled={busy}
+              title={messages.quickCreateSetupScript}
+              type="button"
+              onClick={() => { void createScript() }}
+            ><AddIcon /></button>
+          ) : null}
           {reference ? (
             <button
               aria-busy={reloading}
-              className="compose-editor__page-script-reload"
+              aria-label={messages.reloadSetupScript}
+              className="compose-editor__inspector-section-action"
               data-loading={reloading ? 'true' : 'false'}
               disabled={busy || !scope}
               title={messages.reloadSetupScript}
               type="button"
               onClick={() => { void reloadScript() }}
-            ><ReloadIcon /><span>{messages.reloadSetupScript}</span></button>
-          ) : (
-            <span
-              className="compose-editor__page-script-status"
-              data-state="disconnected"
-            >
-              <span aria-hidden="true" />
-              {messages.setupDisconnected}
-            </span>
-          )}
+            ><ReloadIcon /></button>
+          ) : null}
           {reference && currentEntry ? (
             <button
               aria-label={messages.setupMoreActions}
-              className="compose-editor__page-script-more"
+              className="compose-editor__inspector-section-action"
               disabled={busy}
               title={messages.setupMoreActions}
               type="button"
               onClick={(event) => actionsMenu.openAt(event, 'page-script')}
             ><MoreIcon /></button>
           ) : null}
-        </header>
-
-        {expanded ? (
-          <div className="compose-editor__page-script-body" id={contentId}>
-            <div className="compose-editor__page-script-controls">
-              <select
-                aria-label={messages.selectSetupScript}
-                disabled={!canChange || busy || loading}
-                title={currentEntry?.name}
-                value={currentValue}
-                onChange={(event) => { void chooseScript(event.target.value) }}
-              >
-                <option value="">{loading ? messages.setupLoading : messages.selectSetupScript}</option>
-                {selectableEntries.map((entry) => (
-                  <option key={entry.assetKey} value={entry.assetKey}>{entry.name}</option>
-                ))}
-              </select>
-              {!reference ? (
-                <button
-                  aria-label={messages.quickCreateSetupScript}
-                  className="compose-editor__page-script-create"
-                  disabled={!canCreate || busy}
-                  title={messages.quickCreateSetupScript}
-                  type="button"
-                  onClick={() => { void createScript() }}
-                ><AddIcon /><span>{messages.quickCreate}</span></button>
-              ) : null}
-            </div>
-
-            {reference ? (
-              <div className="compose-editor__page-script-members">
-                <div className="compose-editor__page-script-members-header">
-                  <span>{messages.setupExports}</span>
-                  <span>{snapshot.exports.length}</span>
-                </div>
-                {scope && snapshot.exports.length > 0 ? (
-                  <ul aria-label={messages.setupExportsList}>
-                    {snapshot.exports.map((item) => (
-                      <li key={item.name}>
-                        <span
-                          aria-hidden="true"
-                          className={`compose-editor__page-script-kind compose-editor__page-script-kind--${item.kind}`}
-                        >{item.kind === 'method' ? 'ƒ' : item.reactive ? 'S' : 'V'}</span>
-                        <strong>{item.name}</strong>
-                        <output title={item.kind === 'value' ? displayValue(item.value) : undefined}>
-                          {item.kind === 'method' ? messages.setupMethod : displayValue(item.value)}
-                        </output>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="compose-editor__page-script-empty">
-                    {scope ? messages.setupNoExports : messages.setupScopeUnavailable}
-                  </p>
-                )}
-                {snapshot.diagnostics.map((diagnostic, index) => (
-                  <p
-                    className="compose-editor__page-script-diagnostic"
-                    key={`${diagnostic.code}:${index}`}
-                    role="alert"
-                  >{diagnostic.message}</p>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
+        </>
+      )}
+      defaultExpanded
+      title={messages.setupProperty}
+    >
+      <ComposePropertyPanel
+        renderers={PAGE_SCRIPT_RENDERERS}
+        schema={schema}
+        value={panelValue}
+        onValueChange={(_next, change) => {
+          if (change.path[0] === 'file') void chooseScript(change.value as string)
+        }}
+      />
       {reference && currentEntry ? (
         <ComposeContextMenu {...actionsMenu.rootProps}>
           <ComposeContextMenuContent aria-label={messages.setupActions} align="end">
@@ -393,6 +420,6 @@ export function PageScriptScopePanel({
           </ComposeContextMenuContent>
         </ComposeContextMenu>
       ) : null}
-    </>
+    </ComposePropertyPanelSection>
   )
 }
