@@ -1,8 +1,12 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
+import { applyComposeAnimationAtTime } from '@compose-ui/animation'
+import { getComposeAnimations } from '@compose-ui/core'
 import { ComposePreview } from '../compose-preview'
 import type { ComposePreviewProps, ComposePreviewTarget } from '../compose-preview'
+import { advanceComposePreviewPlayhead } from './playback-model'
+import type { ComposePreviewPlayheadState } from './playback-model'
 import './styles.css'
 
 type PreviewDialogScale = '1' | '0.75' | '0.5'
@@ -29,6 +33,10 @@ export interface ComposePreviewDialogMessages {
   readonly close: string
   /** 键盘关闭提示。 */
   readonly closeHint: string
+  /** 开始播放动画的无障碍名称；文档无动画时不出现播放控件。 */
+  readonly play: string
+  /** 暂停动画播放的无障碍名称。 */
+  readonly pause: string
 }
 
 const DEFAULT_MESSAGES: ComposePreviewDialogMessages = {
@@ -41,6 +49,8 @@ const DEFAULT_MESSAGES: ComposePreviewDialogMessages = {
   exitFullscreen: 'Exit fullscreen preview',
   close: 'Close preview',
   closeHint: 'Press Esc to close preview',
+  play: 'Play animation',
+  pause: 'Pause animation',
 }
 
 /** ComposePreviewDialog 属性。 @public */
@@ -91,6 +101,24 @@ function FullscreenIcon() {
   )
 }
 
+function PlayIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M8 5.5v13l11-6.5-11-6.5Z" />
+    </svg>
+  )
+}
+
+function PauseIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M8 5.5v13M16 5.5v13" />
+    </svg>
+  )
+}
+
+const INITIAL_PLAYHEAD: ComposePreviewPlayheadState = { timeMs: 0, direction: 1 }
+
 /**
  * 在模态画板中输出完整文档或指定 Container 的只读预览。
  *
@@ -124,6 +152,58 @@ export function ComposePreviewDialog({
   const [scale, setScale] = useState<PreviewDialogScale>('0.75')
   const [target, setTarget] = useState<PreviewDialogTarget>('document')
   const [fullscreen, setFullscreen] = useState(false)
+
+  // 基础能力阶段与编辑器一致：预览播放第一条动画；多动画选择留给后续提案。
+  const animation = composeDocument ? getComposeAnimations(composeDocument)[0] : undefined
+  const [playing, setPlaying] = useState(false)
+  // 权威播放头放 ref：rAF 回调里直接推进，direction 等 ping-pong 状态不挤进渲染状态；
+  // state 只保留渲染需要的 timeMs，每次开始播放时在事件处理器里与 ref 对齐。
+  const playhead = useRef(INITIAL_PLAYHEAD)
+  const [playheadMs, setPlayheadMs] = useState(0)
+
+  // 关闭对话框即复位播放会话（渲染期 prev-adjust 模式，不在 effect 里 setState；
+  // ref 留到下次播放开始时在事件处理器里对齐，渲染期不写 ref）。
+  const [wasOpen, setWasOpen] = useState(open)
+  if (wasOpen !== open) {
+    setWasOpen(open)
+    if (!open) {
+      setPlaying(false)
+      setPlayheadMs(0)
+    }
+  }
+
+  useEffect(() => {
+    if (!open || !playing || !animation) return
+    let frame = 0
+    let last: number | null = null
+    const tick = (now: number) => {
+      const delta = last === null ? 0 : now - last
+      last = now
+      const advanced = advanceComposePreviewPlayhead(
+        playhead.current,
+        delta,
+        animation.durationMs,
+        animation.playbackMode,
+      )
+      playhead.current = advanced.state
+      setPlayheadMs(advanced.state.timeMs)
+      if (advanced.done) {
+        setPlaying(false)
+        return
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [animation, open, playing])
+
+  // 动画文档始终按播放头采样渲染；layout 交给 ComposePreview 自建的 Runtime 求解——
+  // 宿主传入的 layoutSnapshot/layoutRuntime 属于基础文档，对采样文档是错的。
+  const previewDocument = useMemo(() => (
+    composeDocument && animation
+      ? applyComposeAnimationAtTime(composeDocument, animation.id, playheadMs)
+      : composeDocument
+  ), [animation, composeDocument, playheadMs])
 
   useEffect(() => {
     if (open) {
@@ -171,6 +251,18 @@ export function ComposePreviewDialog({
     }
     void element.requestFullscreen().catch(() => undefined)
   }
+  const togglePlayback = () => {
+    if (playing) {
+      setPlaying(false)
+      return
+    }
+    // 以渲染状态为准对齐 ref：关闭复位后 ref 可能还停在旧时刻。
+    // play-once 播完停在末尾：再次播放从头开始。
+    const resumeMs = animation && playheadMs < animation.durationMs ? playheadMs : 0
+    playhead.current = { timeMs: resumeMs, direction: 1 }
+    setPlayheadMs(resumeMs)
+    setPlaying(true)
+  }
 
   return createPortal(
     <div
@@ -212,6 +304,16 @@ export function ComposePreviewDialog({
             </button>
           </div>
           <div className="compose-preview-dialog__actions">
+            {animation ? (
+              <button
+                aria-label={playing ? messages.pause : messages.play}
+                aria-pressed={playing}
+                type="button"
+                onClick={togglePlayback}
+              >
+                {playing ? <PauseIcon /> : <PlayIcon />}
+              </button>
+            ) : null}
             <label>
               <span className="compose-preview-dialog__sr-only">{messages.scale}</span>
               <select value={scale} onChange={(event) => setScale(event.target.value as PreviewDialogScale)}>
@@ -240,10 +342,10 @@ export function ComposePreviewDialog({
           >
             <ComposePreview
               assetResolver={assetResolver}
-              document={composeDocument}
+              document={previewDocument}
               page={page}
-              layoutRuntime={layoutRuntime}
-              layoutSnapshot={layoutSnapshot}
+              layoutRuntime={animation ? undefined : layoutRuntime}
+              layoutSnapshot={animation ? undefined : layoutSnapshot}
               pageLoader={pageLoader}
               registry={registry}
               scriptModuleLoader={scriptModuleLoader}

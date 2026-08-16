@@ -286,6 +286,7 @@
       "name": "@compose-ui/preview",
       "version": "0.1.0",
       "dependencies": {
+        "@compose-ui/animation": "workspace:*",
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/core": "workspace:*",

@@ -70,18 +70,18 @@
 
 ## 5. 自动记录
 
-- [ ] 5.1 先确认 `entity.transform.set` 各 `operation` 的 payload 语义（增量还是绝对值），
+- [x] 5.1 先确认 `entity.transform.set` 各 `operation` 的 payload 语义（增量还是绝对值），
   把结论写进 `design.md`。
-- [ ] 5.2 Red：播放头位于 200 ms 时在采样文档上拖动对象，断言新关键帧的值等于最终**绝对**位置，
+- [x] 5.2 Red：播放头位于 200 ms 时在采样文档上拖动对象，断言新关键帧的值等于最终**绝对**位置，
   且 0 ms 关键帧与基础文档静态值都不变。
-- [ ] 5.3 Green：在 dispatch 链路上实现命令 → `animation.keyframe.set` 的改写层，
+- [x] 5.3 Green：在 dispatch 链路上实现命令 → `animation.keyframe.set` 的改写层，
   覆盖 Transform、LayoutItem 几何与 Appearance。
-- [ ] 5.4 Red/Green：自动记录关闭时修改照常写基础文档。
+- [x] 5.4 Red/Green：自动记录关闭时修改照常写基础文档。
 
 ## 6. preview 播放
 
-- [ ] 6.1 Red：无动画时不显示播放控件、关闭对话框停止播放的测试。
-- [ ] 6.2 Green：在 `preview-dialog` 增加播放控件与 rAF 循环，卸载时释放。
+- [x] 6.1 Red：无动画时不显示播放控件、关闭对话框停止播放的测试。
+- [x] 6.2 Green：在 `preview-dialog` 增加播放控件与 rAF 循环，卸载时释放。
 
 ## 7. 验证
 

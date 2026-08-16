@@ -6,12 +6,36 @@ import {
   type ComposeEntity,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import { ComposePreviewDialog } from '../index'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
+
+/** 手动驱动 rAF：`flush(now)` 执行当前排队的全部回调，`pending()` 返回排队数。 */
+function stubAnimationFrames() {
+  const callbacks = new Map<number, FrameRequestCallback>()
+  let id = 0
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    callbacks.set(++id, callback)
+    return id
+  })
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((handle) => {
+    callbacks.delete(handle)
+  })
+  return {
+    flush(now: number) {
+      const batch = [...callbacks.values()]
+      callbacks.clear()
+      batch.forEach((callback) => callback(now))
+    },
+    pending: () => callbacks.size,
+  }
+}
 
 const container: ComposeEntity = {
   id: 'container',
@@ -50,6 +74,34 @@ const layoutSnapshot: ComposeLayoutSnapshot = {
 }
 
 const registry = createComposeEntityRegistry()
+
+/** 带一条位置动画的文档：play-once、时长 400 ms。 */
+function animatedDocument(): ComposeDocument {
+  return {
+    ...document,
+    entities: {
+      [container.id]: {
+        ...container,
+        components: {
+          ...container.components,
+          Animation: {
+            clips: {
+              intro: [{
+                path: ['LayoutItem', 'offset'],
+                valueKind: 'vector2',
+                keyframes: [
+                  { id: 'a', timeMs: 0, value: { x: 0, y: 0 }, interpolation: { kind: 'linear' } },
+                  { id: 'b', timeMs: 400, value: { x: 200, y: 0 }, interpolation: { kind: 'linear' } },
+                ],
+              }],
+            },
+          },
+        },
+      },
+    },
+    animations: [{ id: 'intro', name: '入场', durationMs: 400, playbackMode: 'play-once' }],
+  }
+}
 
 function renderDialog(overrides: Partial<ComponentProps<typeof ComposePreviewDialog>> = {}) {
   const onOpenChange = vi.fn()
@@ -94,5 +146,45 @@ describe('ComposePreviewDialog', () => {
       target: { value: '0.5' },
     })
     expect(screen.getByTestId('compose-preview-dialog-artboard')).toHaveStyle('--compose-preview-dialog-scale: 0.5')
+  })
+
+  it('OpenSpec: compose-preview / 预览对话框动画播放 / 无动画时不显示播放控件', () => {
+    renderDialog()
+
+    expect(screen.queryByRole('button', { name: 'Play animation' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: compose-preview / 预览对话框动画播放 / 播放文档动画', () => {
+    const raf = stubAnimationFrames()
+    renderDialog({ document: animatedDocument() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play animation' }))
+    expect(screen.getByRole('button', { name: 'Pause animation' })).toHaveAttribute('aria-pressed', 'true')
+
+    // play-once：驱动一帧建立基准，再驱动超过 400 ms 时长的一帧 → 播完自动停止。
+    act(() => raf.flush(0))
+    act(() => raf.flush(1000))
+    expect(screen.getByRole('button', { name: 'Play animation' })).toHaveAttribute('aria-pressed', 'false')
+    // 播完后不再排队新的帧回调。
+    expect(raf.pending()).toBe(0)
+  })
+
+  it('OpenSpec: compose-preview / 预览对话框动画播放 / 关闭对话框停止播放', () => {
+    const raf = stubAnimationFrames()
+    const onOpenChange = vi.fn()
+    const props = {
+      document: animatedDocument(),
+      registry,
+      onOpenChange,
+    }
+    const view = render(<ComposePreviewDialog {...props} open />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play animation' }))
+    act(() => raf.flush(0))
+    expect(raf.pending()).toBe(1)
+
+    view.rerender(<ComposePreviewDialog {...props} open={false} />)
+    // 关闭后计时资源被释放：待执行回调清空，也不再有新的排队。
+    expect(raf.pending()).toBe(0)
   })
 })

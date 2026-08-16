@@ -75,7 +75,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、script-runtime、stage-engine、
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
-- `@compose-ui/preview` 依赖 core、assets、component-registry、script-runtime 与 layout-engine，拥有默认 Layout
+- `@compose-ui/preview` 依赖 core、assets、component-registry、script-runtime、layout-engine 与
+  animation（预览对话框播放动画时逐帧采样文档），拥有默认 Layout
   Runtime/measurement adapter，也可挂接宿主 Runtime；不得依赖 editor 或 stage。
 - `@compose-ui/materials` 提供 Group、Container、Widget Switcher、Rectangle、Text、Image、SVG、Component Instance Entity Presets、
   Renderer、Component Definitions 与 Capabilities，依赖 core、assets、component-registry、
@@ -99,8 +100,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/history` 提供当前 React 实例内的不可变快照历史、快捷键和受控面板，可依赖
   `components`、`ui-context`，不依赖
   `core`、`editor`、`scene-tree` 或 `property-panel`；editor 可以通过公共入口组合它。
-- `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 core、assets 与 component-registry，不得依赖
-  editor 或 stage。
+- `@compose-ui/preview` 是独立 React 渲染入口，可以依赖 core、assets、component-registry 与
+  animation，不得依赖 editor 或 stage。
 - 跨包导入只使用 `@compose-ui/*` 公共入口，不得引用其他包的内部源码。
 - React、ReactDOM 和 JSX runtime 保持为 peer dependency 和外置依赖。
 - 示例应用只承担集成与 E2E 演示，不得把临时状态提升为稳定公共 API。
