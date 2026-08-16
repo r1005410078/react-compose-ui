@@ -898,4 +898,24 @@ describe('空会话状态', () => {
     expect(screen.queryByText('Fault')).toBeNull()
     expect(screen.getByText('当前没有动画数据')).toBeTruthy()
   })
+
+  it('空会话切到首条轨道后标尺重新测量宽度（回归：观察器只在挂载时附着）', () => {
+    stubTimelineContainerWidth(700)
+    const view = render(
+      <ComposeAnimationPanelProvider value={createEmptyComposeAnimationPanelValue()} onValueChange={() => {}}>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    expect(screen.queryByRole('slider', { name: '当前时间' })).toBeNull()
+
+    view.rerender(
+      <ComposeAnimationPanelProvider value={createDefaultComposeAnimationPanelValue()} onValueChange={() => {}}>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const slider = screen.getByRole('slider', { name: '当前时间' })
+    // 空态挂载时时间轴不存在；切到完整时间线后测量 effect 必须重挂，
+    // 否则标尺宽度停在 0，播放头 seek input 不可交互。
+    expect(slider.closest('.compose-animation-timeline__ruler')).not.toHaveStyle({ width: '0px' })
+  })
 })

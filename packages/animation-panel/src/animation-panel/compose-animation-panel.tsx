@@ -343,6 +343,10 @@ export function ComposeAnimationTimeline({
     }
   })
 
+  // 空会话分支不渲染时间轴：从空态切到首条轨道时两个测量 effect 必须重挂，
+  // 否则挂载时 ref 为 null、观察器永远没附着，标尺宽度停在 0。
+  const timelineEmpty = value.model.tracks.length === 0
+
   useEffect(() => {
     const element = scaleScrollRef.current
     if (!element) return
@@ -356,7 +360,7 @@ export function ComposeAnimationTimeline({
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
+  }, [timelineEmpty])
 
   useLayoutEffect(() => {
     if (pendingScrollLeftRef.current === null) return
@@ -377,7 +381,7 @@ export function ComposeAnimationTimeline({
     const observer = new ResizeObserver(measure)
     observer.observe(board)
     return () => observer.disconnect()
-  }, [])
+  }, [timelineEmpty])
 
   /*
    * 标尺头部行已经搬到 board-scroll 外面（见下方 JSX 的 header-row），不再需要
@@ -487,7 +491,7 @@ export function ComposeAnimationTimeline({
 
   // 空会话只渲染宿主引导（或中性提示），不渲染播放控件、标尺或占位轨道——
   // 那些交互对着不存在的数据只能产生困惑。
-  if (value.model.tracks.length === 0) {
+  if (timelineEmpty) {
     return (
       <section
         {...htmlProps}

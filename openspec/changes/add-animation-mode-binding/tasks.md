@@ -85,8 +85,15 @@
 
 ## 7. 验证
 
-- [ ] 7.1 各包 `test` / `typecheck` / `build`。
-- [ ] 7.2 仓库根 `bun run lint && bun run typecheck && bun run test && bun run build`。
-- [ ] 7.3 `bun run test:e2e`：打开动画标签 → 打点 → 拖播放头 → 画布变化 → 撤销。
-- [ ] 7.4 `openspec validate add-animation-mode-binding --strict`。
-- [ ] 7.5 `openspec archive update-animation-panel-foundation --skip-specs --yes`。
+- [x] 7.1 各包 `test` / `typecheck` / `build`。
+- [x] 7.2 仓库根 `bun run lint && bun run typecheck && bun run test && bun run build`。
+  typecheck 与 build 全绿；lint 剩 1 条本变更之前就存在的 `react-hooks/refs`
+  （compose-editor.tsx `componentContextMenuItems`），test 剩 2 个既有的只读页面 JSON
+  标签失败（page-workspace.test.tsx），均与本变更无关。
+- [x] 7.3 `bun run test:e2e`：新增"动画模式 / 打点、拖播放头、画布采样与撤销"用例并通过。
+  该用例抓出并修复了两个真实缺陷：动画模式激活监听挂在内层 core Dockview 而底部工具组
+  属于外层（标签点击永远不触发）；时间线空态→首条轨道切换后测量 ResizeObserver 未重挂
+  （标尺宽度停在 0）。既有 9 个 e2e 失败源自 add-workspace-edge-rails 重构与物料清单
+  漂移（基础组件 3→4）未同步 e2e，属于该变更的欠账，不在本变更范围内。
+- [x] 7.4 `openspec validate add-animation-mode-binding --strict`。
+- [x] 7.5 `openspec archive update-animation-panel-foundation --skip-specs --yes`。

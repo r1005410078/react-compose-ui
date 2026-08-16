@@ -1624,6 +1624,21 @@ export function ComposeEditor({
     }
     initializeOuterWorkspace(event.api, resolvedPreferences.locale, hostI18n?.formatMessage)
     outerApiRef.current = event.api
+    // 底部工具组（资源/动画/命令/日志）属于外层 Dockview：动画模式的进入与退出
+    // 只能在这里监听——内层 core api 收不到这些标签的活动事件。
+    event.api.onDidActivePanelChange?.((change) => {
+      const panelId = change.panel?.id
+      if (panelId === WORKSPACE_PANEL_IDS.animation) {
+        animationModeRef.current.setActive(true)
+      }
+      else if (
+        panelId === WORKSPACE_PANEL_IDS.transactionLog
+        || panelId === WORKSPACE_PANEL_IDS.command
+        || panelId === WORKSPACE_PANEL_IDS.assetBrowser
+      ) {
+        animationModeRef.current.setActive(false)
+      }
+    })
   }, [hostI18n?.formatMessage, resolvedPreferences.locale])
 
   /**
@@ -1650,18 +1665,6 @@ export function ComposeEditor({
     event.api.onDidActivePanelChange?.((change) => {
       const panelId = change.panel?.id
       if (panelId === undefined) return
-      // 底部工具组内的标签切换驱动动画模式：动画标签活动即进入，切到组内其它标签即退出。
-      // 组外面板（画布、场景树等）不改变底部组的可见标签，因此不触碰模式状态。
-      if (panelId === WORKSPACE_PANEL_IDS.animation) {
-        animationModeRef.current.setActive(true)
-      }
-      else if (
-        panelId === WORKSPACE_PANEL_IDS.transactionLog
-        || panelId === WORKSPACE_PANEL_IDS.command
-        || panelId === WORKSPACE_PANEL_IDS.assetBrowser
-      ) {
-        animationModeRef.current.setActive(false)
-      }
       if (
         !isWorkspaceDocumentPanelId(panelId)
         && !(pages === undefined && panelId === WORKSPACE_PANEL_IDS.canvas)

@@ -4078,3 +4078,65 @@ test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时�
   await expect(activeIndex).toHaveValue('0')
   await expect(children.first()).not.toHaveAttribute('data-entity-id', activeChildId!)
 })
+
+test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头、画布采样与撤销', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 放一个 Rectangle 并选中它。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(node).toHaveCount(1)
+  await node.click()
+
+  // 打开动画标签 = 进入动画模式；空态引导创建第一条动画。
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await expect(animationPanel.getByText('当前页面还没有动画')).toBeVisible()
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+
+  // 属性面板位置字段出现菱形；点击在播放头 0 ms 打第一个关键帧。
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  const keyButton = inspector.getByRole('button', { name: '为 位置 添加关键帧' })
+  await expect(keyButton).toBeVisible()
+  await keyButton.click()
+  await expect(
+    inspector.getByRole('button', { name: '删除 位置 在当前播放头的关键帧' }),
+  ).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+
+  // 播放头拖到 200 ms 后在画布上拖动对象：自动记录写入第二个关键帧（绝对位置）。
+  const originalBox = await node.boundingBox()
+  expect(originalBox).not.toBeNull()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  await page.mouse.move(
+    originalBox!.x + originalBox!.width / 2,
+    originalBox!.y + originalBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    originalBox!.x + originalBox!.width / 2 + 96,
+    originalBox!.y + originalBox!.height / 2,
+    { steps: 5 },
+  )
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+  const draggedBox = await node.boundingBox()
+  expect(draggedBox).not.toBeNull()
+  expect(draggedBox!.x - originalBox!.x).toBeGreaterThan(48)
+
+  // 播放头回 0：画布按采样文档回到起始位置——拖动没有污染基础静态值。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  await expect
+    .poll(async () => Math.abs((await node.boundingBox())!.x - originalBox!.x))
+    .toBeLessThan(2)
+
+  // 撤销撤掉的是 200 ms 关键帧事务，而不是画布位置。
+  await stage.press('Control+z')
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(0)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+})
