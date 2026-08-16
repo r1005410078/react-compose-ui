@@ -18,13 +18,13 @@ describe('animation panel model', () => {
     const moved = updateComposeAnimationKeyframe(initial, 'fault-background-fill-200', {
       timeMs: 250,
       value: '#FF8080',
-      interpolation: 'ease-out',
+      interpolation: { kind: 'cubic', control: [0, 0, 0.58, 1] },
     })
 
     expect(moved.conflict).toBe(false)
     expect(moved.value.model.tracks[0]?.properties[0]?.keyframes[2]).toMatchObject({
       id: 'fault-background-fill-200',
-      interpolation: 'ease-out',
+      interpolation: { kind: 'cubic', control: [0, 0, 0.58, 1] },
       timeMs: 250,
       value: '#FF8080',
     })

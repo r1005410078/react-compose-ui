@@ -7,7 +7,9 @@ import {
   ComposeAnimationPanelProvider,
   ComposeAnimationTimeline,
   createDefaultComposeAnimationPanelValue,
+  createEmptyComposeAnimationPanelValue,
 } from '../index'
+import type { ComposeAnimationPanelAction } from '../index'
 
 afterEach(() => {
   cleanup()
@@ -33,7 +35,7 @@ function stubTimelineContainerWidth(widthPx: number) {
 describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 默认关键帧演示时间线 / 初次渲染动画时间线', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -51,7 +53,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 选择并编辑关键帧', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -63,9 +65,11 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('100')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
     fireEvent.change(screen.getByRole('combobox', { name: '插值' }), {
-      target: { value: 'ease-out' },
+      target: { value: 'cubic' },
     })
-    expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('ease-out')
+    expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('cubic')
+    // 切到 cubic 后曲线标签下出现四个可编辑控制点。
+    expect(screen.getAllByRole('textbox', { name: /曲线控制点/u })).toHaveLength(4)
     fireEvent.change(screen.getByRole('slider', { name: '当前时间' }), { target: { value: '150' } })
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('150')
   })
@@ -86,7 +90,9 @@ describe('ComposeAnimationPanel', () => {
                 keyframes: property.keyframes.map((keyframe) => ({
                   ...keyframe,
                   value: keyframe.timeMs === 100 ? '#00AA11' : keyframe.value,
-                  interpolation: keyframe.timeMs === 100 ? 'ease-in' : keyframe.interpolation,
+                  interpolation: keyframe.timeMs === 100
+                    ? { kind: 'cubic' as const, control: [0.42, 0, 1, 1] as const }
+                    : keyframe.interpolation,
                 })),
               }),
         })),
@@ -102,7 +108,7 @@ describe('ComposeAnimationPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '关键帧 100 ms：背景填充' }))
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('100')
     expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('#00AA11')
-    expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('ease-in')
+    expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('cubic')
   })
 
   it('OpenSpec: animation-panel / 关键帧选择与属性同步 / 无选中关键帧时不显示虚假序号', () => {
@@ -124,7 +130,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 关键帧间插值曲线段 / 选择曲线段会联动右侧曲线属性', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -148,7 +154,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 关键帧时间调整 / 拖动或键盘移动关键帧并同步属性面板', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -175,7 +181,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 尾帧时长 / 编辑尾帧时长会移动最后一个关键帧', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -190,7 +196,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 尾帧时长 / 延长后为每个百毫秒主刻度显示标注', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -205,7 +211,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 可调整动画片段 / 选择并拖动片段末端与主体', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -236,7 +242,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 键盘调整播放头', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -314,7 +320,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 播放模式 / 允许选择播放一次、循环和往返', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -332,7 +338,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 头部、物体、属性与右侧三行对齐', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -367,7 +373,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 选择物体轨道并与动画片段对齐', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -434,7 +440,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 颜色字段允许输入中间态并在提交时生效', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -457,7 +463,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 关键帧时间调整 / 时间字段在提交前不移动关键帧', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -481,7 +487,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 点击关键帧轨道空白处选中属性轨道', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -501,7 +507,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 播放头擦洗区限定在标尺带', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -512,7 +518,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 选中态与开关态使用不同的 ARIA 属性', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -525,7 +531,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 缓动标签实现 Tabs 键盘模式', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
     )
@@ -546,7 +552,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 分置嵌入动画区域 / 同页多个属性面板不产生重复 DOM id', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationInspector />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -560,7 +566,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 不暴露没有行为的控件', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -569,7 +575,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 关键帧时间调整 / 时间冲突时给出可见且可访问的反馈', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -592,7 +598,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 关键帧时间调整 / 提交被钳制回未变化的值时草稿仍会同步', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -613,7 +619,7 @@ describe('ComposeAnimationPanel', () => {
 
   it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 当前时间读数不在播放时反复播报', () => {
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -623,7 +629,7 @@ describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 按住修饰键滚动缩放会撑宽时间线', () => {
     stubTimelineContainerWidth(700)
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -641,7 +647,7 @@ describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 缩小后不产生小于可视宽度的空白', () => {
     stubTimelineContainerWidth(700)
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -657,7 +663,7 @@ describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 横向滚轮平移时间轴且不改变缩放', () => {
     stubTimelineContainerWidth(700)
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -676,7 +682,7 @@ describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 缩放不改变片段与关键帧的视觉尺寸 / 放大后片段条与关键帧只有位置随比例变化', () => {
     stubTimelineContainerWidth(700)
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -698,7 +704,7 @@ describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 放大后标尺主刻度按可读间距变密', () => {
     stubTimelineContainerWidth(700)
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -714,7 +720,7 @@ describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 时间线滚轮缩放与平移 / 次刻度间距随主刻度步长换算，而不是固定 30 等分', () => {
     stubTimelineContainerWidth(700)
     render(
-      <ComposeAnimationPanelProvider>
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationTimeline />
       </ComposeAnimationPanelProvider>,
     )
@@ -747,5 +753,149 @@ describe('ComposeAnimationPanel', () => {
     // jsdom 不做布局，真实对齐由 Playwright 覆盖；这里守住的是结构前提。
     expect(view.container.querySelectorAll('.compose-animation-timeline__board-scroll'))
       .toHaveLength(1)
+  })
+})
+
+describe('宿主驱动的关键帧值与插值模型', () => {
+  it('OpenSpec: animation-panel / 宿主驱动的关键帧值与插值模型 / 数值轨道显示数值输入', () => {
+    render(
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
+        <ComposeAnimationTimeline />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '关键帧 240 ms：Rotation' }))
+    const field = screen.getByRole('textbox', { name: '值' })
+    expect(field).toHaveValue('28.404')
+    // 数值输入不是十六进制颜色输入：非法数字被拒绝，合法数字被接受。
+    fireEvent.change(field, { target: { value: '45.5' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(screen.getByRole('textbox', { name: '值' })).toHaveValue('45.5')
+  })
+
+  it('OpenSpec: animation-panel / 宿主驱动的关键帧值与插值模型 / 二维向量轨道显示两个分量', () => {
+    render(
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
+        <ComposeAnimationTimeline />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '关键帧 120 ms：Position' }))
+    expect(screen.getByRole('textbox', { name: '值 X' })).toHaveValue('520')
+    expect(screen.getByRole('textbox', { name: '值 Y' })).toHaveValue('430')
+    const yField = screen.getByRole('textbox', { name: '值 Y' })
+    fireEvent.change(yField, { target: { value: '444' } })
+    fireEvent.keyDown(yField, { key: 'Enter' })
+    expect(screen.getByRole('textbox', { name: '值 Y' })).toHaveValue('444')
+    // 编辑单个分量不能丢掉另一个分量。
+    expect(screen.getByRole('textbox', { name: '值 X' })).toHaveValue('520')
+  })
+
+  it('OpenSpec: animation-panel / 宿主驱动的关键帧值与插值模型 / 选择 cubic 插值后可编辑控制点', () => {
+    const actions: ComposeAnimationPanelAction[] = []
+    render(
+      <ComposeAnimationPanelProvider
+        defaultValue={createDefaultComposeAnimationPanelValue()}
+        onAction={(action) => actions.push(action)}
+      >
+        <ComposeAnimationTimeline />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '关键帧 240 ms：Rotation' }))
+    fireEvent.change(screen.getByRole('combobox', { name: '插值' }), { target: { value: 'cubic' } })
+    const controls = screen.getAllByRole('textbox', { name: /曲线控制点/u })
+    expect(controls).toHaveLength(4)
+    fireEvent.change(controls[0]!, { target: { value: '0.5' } })
+    fireEvent.keyDown(controls[0]!, { key: 'Enter' })
+    const last = actions[actions.length - 1]
+    expect(last).toEqual({
+      kind: 'set-interpolation',
+      propertyId: 'rotation',
+      keyframeId: 'rectangle-rotation-240',
+      interpolation: { kind: 'cubic', control: [0.5, 0, 1, 1] },
+    })
+  })
+})
+
+describe('语义化面板动作回调', () => {
+  it('OpenSpec: animation-panel / 语义化面板动作回调 / 拖动关键帧产生移动动作', () => {
+    const actions: ComposeAnimationPanelAction[] = []
+    render(
+      <ComposeAnimationPanelProvider
+        defaultValue={createDefaultComposeAnimationPanelValue()}
+        onAction={(action) => actions.push(action)}
+      >
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    const scale = document.querySelector<HTMLElement>('.compose-animation-timeline__scale')
+    Object.defineProperty(scale, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, width: 300 }),
+    })
+    const keyframe = screen.getByRole('button', { name: '关键帧 200 ms：背景填充' })
+    fireEvent.pointerDown(keyframe, { button: 0, clientX: 200, pointerId: 8 })
+    fireEvent.pointerMove(keyframe, { clientX: 250, pointerId: 8 })
+    fireEvent.pointerUp(keyframe, { clientX: 250, pointerId: 8 })
+    const moves = actions.filter((action) => action.kind === 'move-keyframe')
+    expect(moves[moves.length - 1]).toEqual({
+      kind: 'move-keyframe',
+      propertyId: 'background-fill',
+      keyframeId: 'fault-background-fill-200',
+      timeMs: 250,
+    })
+  })
+
+  it('OpenSpec: animation-panel / 语义化面板动作回调 / 播放不产生编辑动作', () => {
+    const callbacks: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      callbacks.push(callback)
+      return callbacks.length
+    }))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const actions: ComposeAnimationPanelAction[] = []
+    render(
+      <ComposeAnimationPanelProvider
+        defaultValue={{ ...createDefaultComposeAnimationPanelValue(), currentTimeMs: 0 }}
+        onAction={(action) => actions.push(action)}
+      >
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '播放动画' }))
+    act(() => callbacks[0]?.(0))
+    act(() => callbacks[1]?.(32))
+    act(() => callbacks[2]?.(64))
+    const playbackActions = actions.filter((action) => action.kind !== 'set-current-time')
+    // 播放期间只出现播放头动作，绝不混入编辑动作。
+    expect(playbackActions).toEqual([])
+    expect(actions.some((action) => action.kind === 'set-current-time')).toBe(true)
+  })
+})
+
+describe('空会话状态', () => {
+  it('OpenSpec: animation-panel / 空会话状态 / 宿主提供创建引导', () => {
+    render(
+      <ComposeAnimationPanelProvider defaultValue={createEmptyComposeAnimationPanelValue()}>
+        <ComposeAnimationTimeline emptyState={<button type="button">创建动画</button>} />
+      </ComposeAnimationPanelProvider>,
+    )
+    expect(screen.getByRole('button', { name: '创建动画' })).toBeTruthy()
+    // 不渲染播放控件、标尺或占位轨道。
+    expect(screen.queryByRole('button', { name: '播放动画' })).toBeNull()
+    expect(screen.queryByRole('slider', { name: '当前时间' })).toBeNull()
+    expect(screen.queryByRole('list', { name: '轨道列表' })).toBeNull()
+  })
+
+  it('OpenSpec: animation-panel / 空会话状态 / 不回退到演示数据', () => {
+    render(
+      <ComposeAnimationPanelProvider>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    // 非受控且未提供 defaultValue：空会话 + 中性提示，而不是 Fault 演示轨道。
+    expect(screen.queryByText('Fault')).toBeNull()
+    expect(screen.getByText('当前没有动画数据')).toBeTruthy()
   })
 })

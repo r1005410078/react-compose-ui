@@ -38,6 +38,8 @@ import {
 } from './animation-icons'
 import type {
   ComposeAnimationInspectorProps,
+  ComposeAnimationInterpolation,
+  ComposeAnimationKeyframeValue,
   ComposeAnimationPlaybackMode,
   ComposeAnimationPanelProviderProps,
   ComposeAnimationPropertyTrack,
@@ -47,6 +49,7 @@ import type {
 const messages = {
   'zh-CN': {
     timeline: '动画编辑器',
+    emptyTimeline: '当前没有动画数据',
     inspector: '关键帧属性',
     play: '播放动画',
     pause: '暂停动画',
@@ -84,13 +87,15 @@ const messages = {
     curve: '曲线',
     spring: '弹簧',
     linear: 'Linear',
-    easeIn: 'Ease In',
-    easeOut: 'Ease Out',
+    hold: 'Hold',
+    cubic: 'Cubic',
+    cubicControl: (index: number) => `曲线控制点 ${index}`,
     easingEditor: '缓动编辑器',
     duplicateTime: '该属性轨道已存在同一时间的关键帧',
   },
   'en-US': {
     timeline: 'Animation editor',
+    emptyTimeline: 'No animation data yet',
     inspector: 'Keyframe properties',
     play: 'Play animation',
     pause: 'Pause animation',
@@ -128,8 +133,9 @@ const messages = {
     curve: 'Curve',
     spring: 'Spring',
     linear: 'Linear',
-    easeIn: 'Ease In',
-    easeOut: 'Ease Out',
+    hold: 'Hold',
+    cubic: 'Cubic',
+    cubicControl: (index: number) => `Curve control ${index}`,
     easingEditor: 'Easing editor',
     duplicateTime: 'A keyframe already exists at this time on the property track',
   },
@@ -148,6 +154,28 @@ function propertyListLabel(property: ComposeAnimationPropertyTrack) {
   return property.groupLabel ?? property.label
 }
 
+/**
+ * 由插值对象生成曲线预览路径。
+ *
+ * 画布坐标：x 从 18 到 202、y 从 162 到 18；cubic 控制点按同一映射投影，
+ * 允许 y 越界以呈现过冲曲线。hold 画成阶梯。
+ */
+function curvePathFromInterpolation(interpolation: ComposeAnimationInterpolation): string {
+  if (interpolation.kind === 'hold') return 'M18 162H202V18'
+  if (interpolation.kind === 'linear') return 'M18 162 202 18'
+  const [x1, y1, x2, y2] = interpolation.control
+  const mapX = (x: number) => 18 + x * 184
+  const mapY = (y: number) => 162 - y * 144
+  return `M18 162C${mapX(x1)} ${mapY(y1)} ${mapX(x2)} ${mapY(y2)} 202 18`
+}
+
+/** 把任意关键帧值格式化为左栏展示文本。 */
+function formatKeyframeValue(value: ComposeAnimationKeyframeValue): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return String(Math.round(value * 100) / 100)
+  return `${Math.round(value.x * 10) / 10}, ${Math.round(value.y * 10) / 10}`
+}
+
 /** 右侧展示值：显式 displayValue，否则取播放头附近关键帧 value。 */
 function propertyReadoutValue(property: ComposeAnimationPropertyTrack, currentTimeMs: number) {
   if (property.displayValue) return property.displayValue
@@ -158,7 +186,7 @@ function propertyReadoutValue(property: ComposeAnimationPropertyTrack, currentTi
     if (frame.timeMs <= currentTimeMs) nearest = frame
     else break
   }
-  return nearest.value
+  return formatKeyframeValue(nearest.value)
 }
 
 function timelineRatio(timeMs: number, durationMs: number) {
@@ -212,6 +240,7 @@ export function ComposeAnimationPanelProvider(props: ComposeAnimationPanelProvid
 /** 渲染可置于编辑器底部的时间线。 @public */
 export function ComposeAnimationTimeline({
   className,
+  emptyState,
   style,
   ...htmlProps
 }: ComposeAnimationTimelineProps) {
@@ -456,6 +485,27 @@ export function ComposeAnimationTimeline({
     }
   }
 
+  // 空会话只渲染宿主引导（或中性提示），不渲染播放控件、标尺或占位轨道——
+  // 那些交互对着不存在的数据只能产生困惑。
+  if (value.model.tracks.length === 0) {
+    return (
+      <section
+        {...htmlProps}
+        aria-label={htmlProps['aria-label'] ?? t.timeline}
+        className={classNames}
+        data-compose-theme={theme?.resolvedTheme}
+        data-compose-ui="animation-timeline"
+        lang={locale}
+        role={htmlProps.role ?? 'region'}
+        style={{ ...(theme ? createComposeThemeStyle(theme.tokens) : {}), ...style } as CSSProperties}
+      >
+        <div className="compose-animation-timeline__empty">
+          {emptyState ?? <p>{t.emptyTimeline}</p>}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section
       {...htmlProps}
@@ -680,7 +730,7 @@ export function ComposeAnimationTimeline({
                   const propertySelected = value.selectedPropertyId === property.id
                   const readout = propertyReadoutValue(property, value.currentTimeMs)
                   const isLast = propertyIndex === track.properties.length - 1
-                  const isColorValue = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(readout)
+                  const isColorValue = property.valueKind === 'color'
                   return (
                     <div
                       className="compose-animation-timeline__property-row"
@@ -1104,8 +1154,13 @@ export function ComposeAnimationInspector({
   const trackLabel = selectedTrack
     ? selectedTrack.label
     : ''
-  const color = selectedKeyframe?.keyframe.value ?? '#FF6B6B'
-  const interpolation = selectedKeyframe?.keyframe.interpolation ?? 'linear'
+  const keyframeValue = selectedKeyframe?.keyframe.value
+  const valueKind = selectedProperty?.valueKind ?? 'number'
+  const interpolation: ComposeAnimationInterpolation
+    = selectedKeyframe?.keyframe.interpolation ?? { kind: 'linear' }
+  const interpolationLabel = interpolation.kind === 'hold'
+    ? t.hold
+    : interpolation.kind === 'cubic' ? t.cubic : t.linear
   const previousKeyframe = selectedKeyframe && selectedKeyframe.location.keyframeIndex > 0
     ? selectedKeyframe.property.keyframes[selectedKeyframe.location.keyframeIndex - 1]
     : undefined
@@ -1181,36 +1236,94 @@ export function ComposeAnimationInspector({
         </label>
         <label><span>{t.propertyField}</span><input aria-label={t.propertyField} readOnly value={propertyLabel} /></label>
         {interpolationRange ? <label><span>{t.interpolationRange}</span><input aria-label={t.interpolationRange} readOnly value={interpolationRange} /></label> : null}
-        <label>
-          <span>{t.value}</span>
-          <span className="compose-animation-inspector__color-field">
-            <i aria-hidden="true" style={{ backgroundColor: color }} />
+        {valueKind === 'color' ? (
+          <label>
+            <span>{t.value}</span>
+            <span className="compose-animation-inspector__color-field">
+              <i
+                aria-hidden="true"
+                style={{ backgroundColor: typeof keyframeValue === 'string' ? keyframeValue : undefined }}
+              />
+              <CommittedInput
+                aria-label={t.value}
+                key={`${selectedKeyframe?.keyframe.id ?? 'none'}-${String(keyframeValue)}`}
+                readOnly={!selectedKeyframe}
+                spellCheck={false}
+                value={typeof keyframeValue === 'string' ? keyframeValue : ''}
+                onCommit={(draft) => {
+                  const next = draft.trim().toUpperCase()
+                  if (!/^#[0-9A-F]{6}$/.test(next)) return false
+                  return updateSelectedKeyframe({ value: next })
+                }}
+              />
+            </span>
+          </label>
+        ) : null}
+        {valueKind === 'number' ? (
+          <label>
+            <span>{t.value}</span>
             <CommittedInput
               aria-label={t.value}
-              key={`${selectedKeyframe?.keyframe.id ?? 'none'}-${color}`}
+              inputMode="decimal"
+              key={`${selectedKeyframe?.keyframe.id ?? 'none'}-${String(keyframeValue)}`}
               readOnly={!selectedKeyframe}
-              spellCheck={false}
-              value={color}
+              value={typeof keyframeValue === 'number' ? String(keyframeValue) : ''}
               onCommit={(draft) => {
-                const next = draft.trim().toUpperCase()
-                if (!/^#[0-9A-F]{6}$/.test(next)) return false
+                const next = Number.parseFloat(draft)
+                if (!Number.isFinite(next)) return false
                 return updateSelectedKeyframe({ value: next })
               }}
             />
-          </span>
-        </label>
+          </label>
+        ) : null}
+        {valueKind === 'vector2' ? (
+          <label>
+            <span>{t.value}</span>
+            <span className="compose-animation-inspector__vector-field">
+              {(['x', 'y'] as const).map((axis) => {
+                const vector = typeof keyframeValue === 'object' && keyframeValue !== null
+                  ? keyframeValue
+                  : null
+                return (
+                  <CommittedInput
+                    aria-label={`${t.value} ${axis.toUpperCase()}`}
+                    inputMode="decimal"
+                    key={`${selectedKeyframe?.keyframe.id ?? 'none'}-${axis}-${vector ? vector[axis] : ''}`}
+                    readOnly={!selectedKeyframe || !vector}
+                    value={vector ? String(vector[axis]) : ''}
+                    onCommit={(draft) => {
+                      const next = Number.parseFloat(draft)
+                      if (!Number.isFinite(next) || !vector) return false
+                      return updateSelectedKeyframe({ value: { ...vector, [axis]: next } })
+                    }}
+                  />
+                )
+              })}
+            </span>
+          </label>
+        ) : null}
         <label>
           <span>{t.interpolation}</span>
           <select
             aria-label={t.interpolation}
-            value={interpolation}
-            onChange={(event) => updateSelectedKeyframe({
-              interpolation: event.target.value as 'linear' | 'ease-in' | 'ease-out',
-            })}
+            value={interpolation.kind}
+            onChange={(event) => {
+              // select 是 DOM 边界：测试或宿主可以塞进任意字符串，未知值一律忽略。
+              const kind = event.target.value
+              if (kind !== 'hold' && kind !== 'linear' && kind !== 'cubic') return
+              updateSelectedKeyframe({
+                interpolation: kind === 'cubic'
+                  // 已是 cubic 时保留用户调过的控制点；从别的类型切来才给标准 ease 起点。
+                  ? interpolation.kind === 'cubic'
+                    ? interpolation
+                    : { kind, control: [0.25, 0.1, 0.25, 1] }
+                  : { kind },
+              })
+            }}
           >
+            <option value="hold">{t.hold}</option>
             <option value="linear">{t.linear}</option>
-            <option value="ease-in">{t.easeIn}</option>
-            <option value="ease-out">{t.easeOut}</option>
+            <option value="cubic">{t.cubic}</option>
           </select>
         </label>
       </div>
@@ -1246,18 +1359,33 @@ export function ComposeAnimationInspector({
           role="tabpanel"
           tabIndex={0}
         >
-          <svg aria-label={value.easingEditor === 'curve' ? t[interpolation === 'ease-in' ? 'easeIn' : interpolation === 'ease-out' ? 'easeOut' : 'linear'] : t.spring} viewBox="0 0 220 180">
+          <svg aria-label={value.easingEditor === 'curve' ? interpolationLabel : t.spring} viewBox="0 0 220 180">
             <path className="compose-animation-inspector__curve-grid" d="M18 162H202V18M18 126H202M18 90H202M18 54H202M64 18V162M110 18V162M156 18V162" />
             <path className="compose-animation-inspector__curve-path" d={value.easingEditor === 'curve'
-              ? interpolation === 'ease-in'
-                ? 'M18 162C80 160 170 116 202 18'
-                : interpolation === 'ease-out'
-                  ? 'M18 162C50 64 140 20 202 18'
-                  : 'M18 162 202 18'
+              ? curvePathFromInterpolation(interpolation)
               : 'M18 162C55 162 58 20 105 20S135 130 157 75 178 18 202 18'} />
             <circle cx="18" cy="162" r="4.5" /><circle cx="202" cy="18" r="4.5" />
           </svg>
-          <strong>{value.easingEditor === 'curve' ? t[interpolation === 'ease-in' ? 'easeIn' : interpolation === 'ease-out' ? 'easeOut' : 'linear'] : t.spring}</strong>
+          <strong>{value.easingEditor === 'curve' ? interpolationLabel : t.spring}</strong>
+          {value.easingEditor === 'curve' && interpolation.kind === 'cubic' && selectedKeyframe ? (
+            <div className="compose-animation-inspector__cubic-controls">
+              {interpolation.control.map((component, index) => (
+                <CommittedInput
+                  aria-label={t.cubicControl(index + 1)}
+                  inputMode="decimal"
+                  key={`${selectedKeyframe.keyframe.id}-c${index}-${component}`}
+                  value={String(component)}
+                  onCommit={(draft) => {
+                    const next = Number.parseFloat(draft)
+                    if (!Number.isFinite(next)) return false
+                    const control = [...interpolation.control] as [number, number, number, number]
+                    control[index] = next
+                    return updateSelectedKeyframe({ interpolation: { kind: 'cubic', control } })
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
       {/* 播报由时间线的 live region 负责：两个组件同时挂载时重复播报比没有播报更糟。

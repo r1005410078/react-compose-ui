@@ -324,6 +324,40 @@ export function panComposeAnimationTimeline(
   return Math.min(maxScrollLeft, Math.max(0, scrollLeft + safeDeltaPx))
 }
 
+/**
+ * 从会话中删除一个关键帧；不存在时原样返回。
+ *
+ * @remarks
+ * 删除选中关键帧后选择被清空，而不是自动跳到相邻帧——被删的帧是用户显式指着的对象，
+ * 悄悄换成别的帧会让紧接着的第二次删除毁掉预期之外的数据。
+ */
+export function removeComposeAnimationKeyframe(
+  value: ComposeAnimationPanelValue,
+  keyframeId: string,
+): ComposeAnimationPanelValue {
+  const located = findComposeAnimationKeyframe(value.model, keyframeId)
+  if (!located) return value
+  return {
+    ...value,
+    selectedKeyframeId: value.selectedKeyframeId === keyframeId ? null : value.selectedKeyframeId,
+    model: {
+      ...value.model,
+      tracks: value.model.tracks.map((track, trackIndex) => trackIndex !== located.location.trackIndex
+        ? track
+        : {
+            ...track,
+            properties: track.properties.map((property, propertyIndex) =>
+              propertyIndex !== located.location.propertyIndex
+                ? property
+                : {
+                    ...property,
+                    keyframes: property.keyframes.filter((keyframe) => keyframe.id !== keyframeId),
+                  }),
+          }),
+    },
+  }
+}
+
 export function addComposeAnimationKeyframe(
   value: ComposeAnimationPanelValue,
 ): ComposeAnimationPanelValue {

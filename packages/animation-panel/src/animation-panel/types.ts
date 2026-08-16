@@ -3,16 +3,42 @@ import type { HTMLAttributes, ReactNode } from 'react'
 /** 动画抵达边界后的播放方式。 @public */
 export type ComposeAnimationPlaybackMode = 'play-once' | 'loop' | 'ping-pong'
 
+/**
+ * 关键帧到下一帧之间的插值方式。
+ *
+ * @remarks
+ * 与文档动画模型（`@compose-ui/animation`）同构，但只是类型形状对齐——本包仍不依赖
+ * `core` 或任何文档协议。`cubic` 的 `control` 是标准 CSS `cubic-bezier(x1, y1, x2, y2)`。
+ *
+ * @public
+ */
+export type ComposeAnimationInterpolation =
+  | { readonly kind: 'hold' }
+  | { readonly kind: 'linear' }
+  | { readonly kind: 'cubic'; readonly control: readonly [number, number, number, number] }
+
+/** 二维向量关键帧值。 @public */
+export interface ComposeAnimationVector2Value {
+  readonly x: number
+  readonly y: number
+}
+
+/** 关键帧值：数值、二维向量或颜色字符串，由所属轨道的 `valueKind` 判别。 @public */
+export type ComposeAnimationKeyframeValue = number | string | ComposeAnimationVector2Value
+
+/** 轨道值的语义，决定右侧属性面板的值控件与展示格式。 @public */
+export type ComposeAnimationValueKind = 'number' | 'vector2' | 'color'
+
 /** 单个可编辑关键帧。 @public */
 export interface ComposeAnimationKeyframe {
   /** 在属性轨道内稳定的标识。 */
   readonly id: string
   /** 相对动画开头的毫秒位置。 */
   readonly timeMs: number
-  /** 当前仅用于展示的颜色值。 */
-  readonly value: string
-  /** 进入此关键帧的局部插值方式。 */
-  readonly interpolation: 'linear' | 'ease-in' | 'ease-out'
+  /** 形状由所属轨道的 `valueKind` 决定。 */
+  readonly value: ComposeAnimationKeyframeValue
+  /** 本帧到下一帧之间的插值方式。 */
+  readonly interpolation: ComposeAnimationInterpolation
 }
 
 /** 时间线中可选择和调整范围的动画片段。 @public */
@@ -48,6 +74,8 @@ export interface ComposeAnimationPropertyTrack {
   readonly groupLabel?: string
   /** 分量通道标记（如 X / Y）；无分量时省略。 */
   readonly channel?: string
+  /** 轨道值的语义；决定值编辑控件，不再把所有值当作颜色处理。 */
+  readonly valueKind: ComposeAnimationValueKind
   /**
    * 右侧展示值（如 `911.6`、`28.404°`）；缺省取当前播放头附近关键帧的 `value`。
    * @remarks 演示会话可用人类可读数值；颜色属性可继续用 hex。
@@ -103,20 +131,82 @@ export interface ComposeAnimationPanelValue {
   readonly easingEditor: 'curve' | 'spring'
 }
 
+/**
+ * 描述一次用户操作本身的语义动作。
+ *
+ * @remarks
+ * 受控宿主用它把面板操作翻译成文档命令，而不必从两份 `ComposeAnimationPanelValue`
+ * 快照里 diff 反推"发生了什么"——播放期间快照每帧更新一次，diff 既脆弱又昂贵。
+ * 播放头推进只产生 `set-current-time`，绝不混入编辑动作。
+ *
+ * @public
+ */
+export type ComposeAnimationPanelAction =
+  | { readonly kind: 'set-current-time'; readonly timeMs: number }
+  | {
+      readonly kind: 'select'
+      readonly trackId: string | null
+      readonly propertyId: string | null
+      readonly keyframeId: string | null
+    }
+  | {
+      readonly kind: 'add-keyframe'
+      readonly propertyId: string
+      readonly keyframeId: string
+      readonly timeMs: number
+      readonly value: ComposeAnimationKeyframeValue
+    }
+  | {
+      readonly kind: 'move-keyframe'
+      readonly propertyId: string
+      readonly keyframeId: string
+      readonly timeMs: number
+    }
+  | {
+      readonly kind: 'remove-keyframe'
+      readonly propertyId: string
+      readonly keyframeId: string
+    }
+  | {
+      readonly kind: 'set-keyframe-value'
+      readonly propertyId: string
+      readonly keyframeId: string
+      readonly value: ComposeAnimationKeyframeValue
+    }
+  | {
+      readonly kind: 'set-interpolation'
+      readonly propertyId: string
+      readonly keyframeId: string
+      readonly interpolation: ComposeAnimationInterpolation
+    }
+  | { readonly kind: 'set-duration'; readonly durationMs: number }
+  | { readonly kind: 'set-playback-mode'; readonly mode: ComposeAnimationPlaybackMode }
+  | { readonly kind: 'toggle-auto-record' }
+
 /** Provider 的受控或非受控会话属性。 @public */
 export interface ComposeAnimationPanelProviderProps {
   /** 受控会话值；提供后宿主必须回传 `onValueChange`。 */
   readonly value?: ComposeAnimationPanelValue
-  /** 非受控模式的初始会话值。 */
+  /** 非受控模式的初始会话值；省略时从空会话开始，不再回退到演示数据。 */
   readonly defaultValue?: ComposeAnimationPanelValue
   /** 每个本地会话操作产生的下一个完整快照。 */
   readonly onValueChange?: (value: ComposeAnimationPanelValue) => void
+  /** 每次用户操作时给出的语义动作；与 `onValueChange` 可同时使用。 */
+  readonly onAction?: (action: ComposeAnimationPanelAction) => void
   /** 底部和右侧动画区域。 */
   readonly children: ReactNode
 }
 
-/** 底部动画时间线的标准容器属性。 @public */
-export type ComposeAnimationTimelineProps = HTMLAttributes<HTMLElement>
+/** 底部动画时间线的容器属性。 @public */
+export interface ComposeAnimationTimelineProps extends HTMLAttributes<HTMLElement> {
+  /**
+   * 会话不含任何轨道时渲染的空状态内容。
+   *
+   * @remarks
+   * 省略时渲染一个中性的无数据提示。空状态下不渲染播放控件或占位轨道。
+   */
+  readonly emptyState?: ReactNode
+}
 
 /** 右侧关键帧属性面板的标准容器属性。 @public */
 export type ComposeAnimationInspectorProps = HTMLAttributes<HTMLElement>

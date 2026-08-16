@@ -10,11 +10,15 @@ export {
   ComposeAnimationPanelProvider,
   ComposeAnimationTimeline,
   createDefaultComposeAnimationPanelValue,
+  createEmptyComposeAnimationPanelValue,
 } from './animation-panel'
 export type {
   ComposeAnimationInspectorProps,
   ComposeAnimationClip,
+  ComposeAnimationInterpolation,
   ComposeAnimationKeyframe,
+  ComposeAnimationKeyframeValue,
+  ComposeAnimationPanelAction,
   ComposeAnimationPanelModel,
   ComposeAnimationPanelProviderProps,
   ComposeAnimationPanelValue,
@@ -22,4 +26,6 @@ export type {
   ComposeAnimationPropertyTrack,
   ComposeAnimationTimelineProps,
   ComposeAnimationTrack,
+  ComposeAnimationValueKind,
+  ComposeAnimationVector2Value,
 } from './animation-panel'

@@ -33,16 +33,16 @@
 
 ## 3. animation-panel 数据模型与动作回调
 
-- [ ] 3.1 Red：数值轨道显示数值输入、二维向量轨道显示两个分量、cubic 控制点可编辑的组件测试。
-- [ ] 3.2 Green：`ComposeAnimationKeyframe.value` 放宽为数值 / 二维向量 / 颜色；
+- [x] 3.1 Red：数值轨道显示数值输入、二维向量轨道显示两个分量、cubic 控制点可编辑的组件测试。
+- [x] 3.2 Green：`ComposeAnimationKeyframe.value` 放宽为数值 / 二维向量 / 颜色；
   `interpolation` 改为 `hold` / `linear` / `cubic` 判别联合；
   `ComposeAnimationPropertyTrack` 增加 `valueKind`；Inspector 按 `valueKind` 分派值控件。
-- [ ] 3.3 Red：拖动关键帧产生移动动作、播放只产生播放头动作的测试。
-- [ ] 3.4 Green：新增 `onAction` 与 `ComposeAnimationPanelAction` 联合，在 provider 的每个
+- [x] 3.3 Red：拖动关键帧产生移动动作、播放只产生播放头动作的测试。
+- [x] 3.4 Green：新增 `onAction` 与 `ComposeAnimationPanelAction` 联合，在 provider 的每个
   session 方法里发出对应动作。
-- [ ] 3.5 Red/Green：空会话状态——不含轨道时渲染宿主提供的空状态内容，
+- [x] 3.5 Red/Green：空会话状态——不含轨道时渲染宿主提供的空状态内容，
   受控空值不回退到演示数据；新增对应的空状态插槽属性。
-- [ ] 3.6 更新 `createDefaultComposeAnimationPanelValue`、Storybook 夹具与
+- [x] 3.6 更新 `createDefaultComposeAnimationPanelValue`、Storybook 夹具与
   `apps/storybook/src/public-api-contracts.ts`。
 
 ## 4. editor 动画模式

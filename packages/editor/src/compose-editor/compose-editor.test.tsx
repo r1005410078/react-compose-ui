@@ -926,7 +926,9 @@ describe('ComposeEditor', () => {
     render(<ComposeEditor />)
 
     expect(screen.getByTestId('default-scene-tree')).toBeEmptyDOMElement()
-    expect(screen.getAllByRole('status')).toHaveLength(8)
+    // 动画时间线在空文档下渲染空状态：时间读数与提示 live region（2 个 status）不再出现，
+    // 面板不再回退到演示数据（animation-panel REMOVED: 默认关键帧演示时间线）。
+    expect(screen.getAllByRole('status')).toHaveLength(6)
     expect(screen.getByText('舞台工具栏')).toBeInTheDocument()
     expect(screen.getByText('基础组件内容')).toBeInTheDocument()
     expect(screen.getByText('连接资源 Provider 以浏览文件')).toBeInTheDocument()
