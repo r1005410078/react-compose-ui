@@ -32,8 +32,8 @@ function AnimationPanelFixture({
           gridTemplateRows: 'minmax(0, 1fr) 300px',
         }}
       >
+        {/* 纯装饰的宿主占位区：无 role 的 div 不允许挂 aria-label（axe aria-prohibited-attr）。 */}
         <div
-          aria-label="宿主嵌入区域"
           style={{ borderRight: `1px solid ${theme === 'dark' ? '#2a2a2a' : '#d8d8d8'}` }}
         />
         <ComposeAnimationPanelProvider defaultValue={defaultValue}>

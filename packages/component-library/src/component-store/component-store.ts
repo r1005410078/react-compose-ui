@@ -230,7 +230,12 @@ export function createComposeComponentStore(input: {
           })
         }
       }
-      components.sort((a, b) => a.assetKey.localeCompare(b.assetKey, locale))
+      // assetKey 通常含随机生成段，跨会话顺序不稳定；按显示名排序让目录顺序对用户
+      // 可预期，assetKey 仅作同名时的确定性 tie-break。
+      components.sort((a, b) => (
+        a.displayName.localeCompare(b.displayName, locale)
+        || a.assetKey.localeCompare(b.assetKey, locale)
+      ))
       const result = { components, issues }
       if (requestGeneration === generation) catalog = result
       return result

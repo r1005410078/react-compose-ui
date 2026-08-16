@@ -79,9 +79,10 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   const componentLibrary = editor.locator('[data-workspace-panel="component-library"]')
   await expect(componentLibrary).toBeVisible()
   // Palette 只保留没有专用创建入口的 Preset：Text/Line/Arrow/Circle 走工具栏绘制工具，
-  // Page Slot 走资源面板的页面拖入。
-  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (3)' })).toBeVisible()
+  // Page Slot 走资源面板的页面拖入；Widget Switcher 物料加入后计数为 4。
+  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (4)' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Rectangle' })).toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '添加 Widget Switcher' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toHaveCount(0)
 
   const editorBox = await editor.boundingBox()
@@ -118,7 +119,7 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   expect(bottomBox!.height).toBeLessThan(80)
   expect(await bottom.locator('[data-workspace-tab]').evaluateAll(
     (tabs) => tabs.map((tab) => tab.getAttribute('data-workspace-tab')),
-  )).toEqual(['compose-assets', 'compose-command', 'compose-transaction-log'])
+  )).toEqual(['compose-assets', 'compose-animation', 'compose-command', 'compose-transaction-log'])
   await expect(componentLibrary).toHaveScreenshot('component-library-dock.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -814,6 +815,17 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
     .toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加变体 Dragged Card Focused' }))
     .toBeVisible()
+  // Dock 高度装不下基础组件与项目组件两个区块，可见性断言触发的自动滚动落点不稳定：
+  // 项目组件是最后一个区块，把滚动容器钉到底（scrollTop 会被钳制到最大值，落点唯一），
+  // 保证黄金图取景一致。
+  await componentLibrary.getByRole('heading', { name: '项目组件 (2)' })
+    .evaluate((heading) => {
+      let scroller = heading.parentElement
+      while (scroller && scroller.scrollHeight <= scroller.clientHeight) {
+        scroller = scroller.parentElement
+      }
+      scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'instant' })
+    })
   await expect(componentLibrary).toHaveScreenshot('component-library-components-variants.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -3250,6 +3262,17 @@ test('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命�
     await originY.getAttribute('x1'),
     await originX.getAttribute('y1'),
   ].join('|')
+
+  // Dockview 展开命令面板后 Stage 的尺寸收缩是异步布局：必须等尺寸连续两次
+  // 读数一致再适配，否则键盘路径会以中间尺寸计算视口，与面板路径不可比。
+  let lastStageSize = ''
+  await expect.poll(async () => {
+    const box = await stage.boundingBox()
+    const size = box ? `${box.width}x${box.height}` : ''
+    const stable = size !== '' && size === lastStageSize
+    lastStageSize = size
+    return stable
+  }).toBe(true)
 
   // 键盘路径：新建的 Rectangle 仍处于选中状态，直接按适配选择键位。
   await stage.press('f')

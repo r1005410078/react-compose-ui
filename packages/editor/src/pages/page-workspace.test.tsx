@@ -915,12 +915,12 @@ describe('OpenSpec: editor-workspace-layout / 首页标记与清单对账', () =
 })
 
 describe('OpenSpec: editor-workspace-layout / 只读页面 JSON 标签', () => {
-  it('打开组件 JSON 配置以只读资源标签呈现，且与页面标签并存', async () => {
+  it('打开页面 JSON 以只读资源标签呈现，且与页面标签并存', async () => {
     renderEditor(createProvider())
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
     await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
 
-    fireEvent.click(await screen.findByRole('button', { name: '打开组件 JSON 配置' }))
+    fireEvent.click(await screen.findByRole('button', { name: '打开页面 JSON' }))
 
     await waitFor(() => {
       expect([...dockviewMock.panels.values()]
@@ -937,7 +937,7 @@ describe('OpenSpec: editor-workspace-layout / 只读页面 JSON 标签', () => {
   it('只读标签不显示未保存指示', async () => {
     renderEditor(createProvider())
 
-    fireEvent.click(await screen.findByRole('button', { name: '打开组件 JSON 配置' }))
+    fireEvent.click(await screen.findByRole('button', { name: '打开页面 JSON' }))
 
     await waitFor(() => {
       expect([...dockviewMock.panels.values()]

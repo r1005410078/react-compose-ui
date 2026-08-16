@@ -133,6 +133,51 @@ describe('ComposeComponentStore', () => {
     expect(listener).toHaveBeenCalledWith({ type: 'catalog-changed' })
   })
 
+  it('目录顺序按显示名稳定，与 assetKey 生成顺序无关', async () => {
+    // assetKey 通常含随机段（如 uuid），若按它排序，同一批组件每个会话顺序都会跳。
+    const fake = fakeProvider()
+    const texts: Record<string, string> = {
+      f1: serializeComposeComponentAsset(baseAsset('beta')),
+      f2: serializeComposeComponentAsset(baseAsset('alpha')),
+    }
+    const provider: ComposeAssetProvider = {
+      ...fake.provider,
+      async list({ folderId }) {
+        if (folderId !== 'root') return []
+        return [
+          {
+            id: 'f1',
+            parentId: 'root',
+            name: 'Beta.component.json',
+            kind: 'file',
+            mediaType: COMPOSE_COMPONENT_MEDIA_TYPE,
+            assetKey: 'asset-aaa',
+            revision: '1',
+          },
+          {
+            id: 'f2',
+            parentId: 'root',
+            name: 'Alpha.component.json',
+            kind: 'file',
+            mediaType: COMPOSE_COMPONENT_MEDIA_TYPE,
+            assetKey: 'asset-zzz',
+            revision: '1',
+          },
+        ]
+      },
+      async read({ fileId }) {
+        const text = texts[fileId]
+        if (!text) throw new ComposeAssetError('not-found', fileId)
+        return { blob: new Blob([text], { type: COMPOSE_COMPONENT_MEDIA_TYPE }), revision: '1' }
+      },
+    }
+    const store = api.createComposeComponentStore!({ provider })
+    const catalog = await store.listComponents()
+    // Alpha（assetKey 靠后）必须排在 Beta（assetKey 靠前）之前。
+    expect(catalog.components.map((component) => component.assetKey))
+      .toEqual(['asset-zzz', 'asset-aaa'])
+  })
+
   it('OpenSpec: component-library / 项目组件 Store / 保存 revision 冲突', async () => {
     const fake = fakeProvider()
     const store = api.createComposeComponentStore!({ provider: fake.provider })
