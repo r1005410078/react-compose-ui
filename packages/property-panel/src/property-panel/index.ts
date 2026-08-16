@@ -39,6 +39,8 @@ export type {
   PropertyPanelHeader as ComposePropertyPanelHeader,
   PropertyPanelChange as ComposePropertyPanelChange,
   PropertyPanelInlineValueProps as ComposePropertyPanelInlineValueProps,
+  PropertyPanelFieldAdornmentContext as ComposePropertyPanelFieldAdornmentContext,
+  PropertyPanelFieldAdornmentRenderer as ComposePropertyPanelFieldAdornmentRenderer,
   PropertyPanelRendererProps as ComposePropertyPanelRendererProps,
   PropertyPanelRenderer as ComposePropertyPanelRenderer,
   ComposePropertyPanelProps,

@@ -16,6 +16,8 @@ import {
 } from './icons'
 import type {
   PropertyPanelBindingConfig,
+  PropertyPanelFieldAdornmentContext,
+  PropertyPanelFieldAdornmentRenderer,
   PropertyPanelBindingIssue,
   PropertyPanelBindingTarget,
   PropertyPanelChangeReason,
@@ -80,6 +82,7 @@ interface TreeSharedProps {
 interface PropertyTreeProps extends TreeSharedProps {
   actionWidth: number
   binding?: PropertyPanelBindingConfig
+  renderFieldAdornment?: PropertyPanelFieldAdornmentRenderer
   defaultValue?: unknown
   hasDefaultValue: boolean
   filter: PropertyPanelFilter
@@ -130,6 +133,30 @@ const TUPLE_TYPES = new Set(['tuple', 'loose_tuple', 'strict_tuple', 'tuple_with
 const RendererContext = createContext<readonly PropertyPanelRenderer[]>([])
 const TreeDepthContext = createContext(0)
 const ActionWidthContext = createContext(36)
+const FieldAdornmentContext = createContext<PropertyPanelFieldAdornmentRenderer | undefined>(
+  undefined,
+)
+
+/**
+ * 字段标签后的宿主装饰。
+ *
+ * @remarks
+ * 刻意不进右侧动作栏：那一栏的容量由 `binding-entry-model` 按宽度算出（默认只有 2 格），
+ * 挤进第三个按钮会把已有的绑定与重置动作推入溢出菜单。装饰渲染在标签单元内，与动作栏
+ * 互不影响。
+ *
+ * 返回 `null` 时不渲染容器，字段行与未提供插槽时完全一致。
+ */
+function FieldAdornment(context: PropertyPanelFieldAdornmentContext) {
+  const render = useContext(FieldAdornmentContext)
+  const content = render?.(context)
+  if (content === null || content === undefined || content === false) return null
+  return (
+    <span className="property-panel__adornment" data-property-part="adornment">
+      {content}
+    </span>
+  )
+}
 interface PropertyBindingView {
   config?: PropertyPanelBindingConfig
   resolvedTargets: ReadonlyMap<string, PropertyPanelResolvedBindingTarget>
@@ -162,6 +189,7 @@ const ViewContext = createContext<PropertyTreeView>({
 export function PropertyTree({
   actionWidth,
   binding,
+  renderFieldAdornment,
   schema,
   value,
   defaultValue,
@@ -232,6 +260,7 @@ export function PropertyTree({
   }, [section, sectionVisible])
   return (
     <RendererContext.Provider value={renderers}>
+      <FieldAdornmentContext.Provider value={renderFieldAdornment}>
       <ActionWidthContext.Provider value={actionWidth}>
         <BindingContext.Provider value={{
           config: binding,
@@ -283,6 +312,7 @@ export function PropertyTree({
           </ViewContext.Provider>
         </BindingContext.Provider>
       </ActionWidthContext.Provider>
+      </FieldAdornmentContext.Provider>
     </RendererContext.Provider>
   )
 }
@@ -939,6 +969,15 @@ function PropertyNode({
   if (supportsPresence && missing && renderer?.rendersEmptyState !== true) {
     return (
       <PropertyRow
+        adornment={(
+          <FieldAdornment
+            label={label}
+            metadata={info.metadata}
+            path={path}
+            schema={schema}
+            value={value}
+          />
+        )}
         bindingTargets={rendererBinding?.targets ?? structuralBindingTargets}
         label={label}
         nodeActions={actions}
@@ -995,7 +1034,16 @@ function PropertyNode({
             className={`property-panel__label${LabelRenderer ? ' property-panel__label--interactive' : ''}`}
             data-property-part="label"
             id={rendererLabelId}
-          >{labelElement}</span>
+          >
+            {labelElement}
+            <FieldAdornment
+              label={label}
+              metadata={info.metadata}
+              path={path}
+              schema={schema}
+              value={value}
+            />
+          </span>
           <RowActionRail actions={actions} bindingTargets={rendererBinding?.targets} label={label} />
           <div
             aria-labelledby={rendererLabelId}
@@ -1027,6 +1075,13 @@ function PropertyNode({
           data-property-part="label"
         >
           {labelElement}
+          <FieldAdornment
+            label={label}
+            metadata={info.metadata}
+            path={path}
+            schema={schema}
+            value={value}
+          />
         </span>
         <div className="property-panel__editor" data-property-part="editor">
           <div className="property-panel__control" data-property-part="control">
@@ -1703,12 +1758,15 @@ function UnionGroup({
 }
 
 function PropertyRow({
+  adornment,
   bindingTargets = [],
   children,
   label,
   nodeActions,
   path,
 }: {
+  /** 真实字段行传入装饰；`$branch` 这类合成行不传，避免给非属性长出打点入口。 */
+  adornment?: ReactNode
   bindingTargets?: readonly PropertyPanelRendererBindingTargetState[]
   children: ReactNode
   label: string
@@ -1726,7 +1784,10 @@ function PropertyRow({
       data-property-path={path.join('.')}
       style={createFieldIndentStyle(depth)}
     >
-      <span className="property-panel__label" data-property-part="label">{label}</span>
+      <span className="property-panel__label" data-property-part="label">
+        {label}
+        {adornment}
+      </span>
       <div className="property-panel__editor" data-property-part="editor">{children}</div>
       <RowActionRail actions={nodeActions} bindingTargets={bindingTargets} label={label} />
     </div>
@@ -1893,6 +1954,13 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
     >
       <label data-property-part="label" htmlFor={bound ? undefined : id}>
         <span>{label}</span>
+        <FieldAdornment
+          label={label}
+          metadata={info.metadata}
+          path={path}
+          schema={schema}
+          value={value}
+        />
         {showDescriptions && info.description
           ? <small className="property-panel__description">{info.description}</small>
           : null}

@@ -438,6 +438,30 @@
     padding: 2px 6px;
   }
 
+  /*
+   * 装饰绝对定位在标签单元右侧：标签是列向 flex（文本 + 描述堆叠），把装饰作为普通子项会
+   * 被排到描述下面。定位方案让未提供装饰的字段行完全不受影响。
+   */
+  .property-panel__field > label,
+  .property-panel__label {
+    position: relative;
+  }
+
+  .property-panel__adornment {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    transform: translateY(-50%);
+  }
+
+  /* 有装饰时给标签文本让出空间，避免长标签被压在图标下面。 */
+  .property-panel__field > label:has(> .property-panel__adornment),
+  .property-panel__label:has(> .property-panel__adornment) {
+    padding-right: 24px;
+  }
+
   .property-panel__label-control {
     width: 100%;
     min-width: 0;

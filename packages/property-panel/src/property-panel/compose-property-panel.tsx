@@ -362,6 +362,34 @@ export interface PropertyPanelChange<TOutput = unknown> {
   output: TOutput
 }
 
+/**
+ * 字段装饰插槽获得的上下文。
+ *
+ * @remarks
+ * 只描述字段本身，不含任何业务语义。宿主据此决定是否渲染以及渲染什么——面板不知道
+ * 返回的是按钮、徽标还是别的东西。
+ */
+export interface PropertyPanelFieldAdornmentContext {
+  /** 字段在 Schema 中的路径，与 `PropertyPanelChange.path` 同构。 */
+  path: PropertyPath
+  schema: v.GenericSchema
+  metadata: PropertyPanelMetadata
+  /** 已本地化的字段标签。 */
+  label: string
+  /** 字段当前值。 */
+  value: unknown
+}
+
+/**
+ * 在字段标签后渲染宿主节点。
+ *
+ * @remarks
+ * 返回 `null` 时该字段不渲染装饰容器。
+ */
+export type PropertyPanelFieldAdornmentRenderer = (
+  context: PropertyPanelFieldAdornmentContext,
+) => ReactNode
+
 /** 自定义属性 renderer 获得的字段上下文。 */
 export interface PropertyPanelRendererProps {
   /** 自定义字段在完整受控值中的路径。 */
@@ -462,6 +490,14 @@ export interface ComposePropertyPanelProps<TSchema extends v.GenericSchema>
   colorEditor?: ComposePropertyPanelColorEditorPort
   /** 可选节点目录桥接；未提供时 node 字段呈现无候选状态但仍可清空。 */
   nodeEditor?: ComposePropertyPanelNodeEditorPort
+  /**
+   * 在每个字段标签后渲染宿主装饰节点。
+   *
+   * @remarks
+   * 通用插槽，面板不解释返回内容。装饰渲染在 `data-property-part="adornment"` 容器内，
+   * 不占用右侧动作栏的容量。省略该属性或返回 `null` 时字段行保持原样。
+   */
+  renderFieldAdornment?: PropertyPanelFieldAdornmentRenderer
   /** 完整候选 input 校验成功后调用的受控变更回调。 */
   onValueChange?: (
     value: v.InferInput<TSchema>,
@@ -894,6 +930,7 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
   defaultValue,
   renderers,
   binding,
+  renderFieldAdornment,
   paintEditor: _paintEditor,
   colorEditor: _colorEditor,
   nodeEditor: _nodeEditor,
@@ -956,6 +993,7 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
     <PropertyTree
       actionWidth={root.actionWidth}
       binding={binding}
+      renderFieldAdornment={renderFieldAdornment}
       commit={commit}
       defaultValue={defaultValue}
       filter={root.filter}
@@ -985,6 +1023,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   header,
   renderers,
   binding,
+  renderFieldAdornment,
   paintEditor: _paintEditor,
   colorEditor: _colorEditor,
   nodeEditor: _nodeEditor,
@@ -1222,6 +1261,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
         <PropertyTree
           actionWidth={actionWidth}
           binding={binding}
+          renderFieldAdornment={renderFieldAdornment}
           commit={commit}
           defaultValue={defaultValue}
           filter={filter}

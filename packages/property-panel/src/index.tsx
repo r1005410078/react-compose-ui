@@ -3,7 +3,7 @@
  *
  * @remarks
  * 外部样式契约：结构容器输出 `data-property-part`，取值为 `toolbar`、`separator`、`fields`、
- * `ungrouped`、`field`、`label`、`editor`、`actions`、`control`；字段另外输出
+ * `ungrouped`、`field`、`label`、`adornment`、`editor`、`actions`、`control`；字段另外输出
  * `data-property-path`、`data-property-layout`、`data-property-depth` 与 `data-property-nested`。
  * 需要重排属性面板外壳的消费方只能依赖这些属性。`property-panel__*` 类名是实现细节，
  * 会随内部重构变化，不承诺稳定。
@@ -58,6 +58,8 @@ export type {
   ComposePropertyPanelHeader,
   ComposePropertyPanelChange,
   ComposePropertyPanelInlineValueProps,
+  ComposePropertyPanelFieldAdornmentContext,
+  ComposePropertyPanelFieldAdornmentRenderer,
   ComposePropertyPanelRendererProps,
   ComposePropertyPanelRenderer,
   ComposePropertyPanelProps,

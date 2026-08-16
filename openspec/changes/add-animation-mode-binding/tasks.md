@@ -1,12 +1,12 @@
 ## 1. property-panel 装饰插槽
 
-- [ ] 1.1 Red：为语义 editor、自定义 renderer 与基础 primitive 三种字段上的装饰渲染、
+- [x] 1.1 Red：为语义 editor、自定义 renderer 与基础 primitive 三种字段上的装饰渲染、
   装饰不挤占动作栏、未提供插槽时不渲染容器写测试。
-- [ ] 1.2 Green：给 `ComposePropertyPanelProps` 增加 `renderFieldAdornment`，
+- [x] 1.2 Green：给 `ComposePropertyPanelProps` 增加 `renderFieldAdornment`，
   用 context 下传，接线 `property-tree.tsx` 的四个标签渲染点
   （renderer 分支两处、`PropertyRow`、`PrimitiveField`）。
-- [ ] 1.3 `StandaloneComposePropertyPanel` 与 `EmbeddedComposePropertyPanel` 两条 plumbing 都接。
-- [ ] 1.4 把 `data-property-part="adornment"` 写进 `src/index.tsx` 的稳定契约清单与 TSDoc。
+- [x] 1.3 `StandaloneComposePropertyPanel` 与 `EmbeddedComposePropertyPanel` 两条 plumbing 都接。
+- [x] 1.4 把 `data-property-part="adornment"` 写进 `src/index.tsx` 的稳定契约清单与 TSDoc。
 
 ## 2. animation-panel 基础改造（吸收 update-animation-panel-foundation）
 
