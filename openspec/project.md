@@ -27,7 +27,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ### Architecture Patterns
 
 - 第一方代码采用单向五层结构：无 React/DOM 的 Headless Domain/Protocol（core、assets、pages、
-  script-runtime、layout-engine、stage-engine）→ Shared UI Foundation（ui-context、component-registry、components）→
+  script-runtime、layout-engine、stage-engine、animation）→ Shared UI Foundation（ui-context、component-registry、components）→
   Domain Components/Widgets → Composition/Entry（editor、preview）→ Application（app）。
   高层可以依赖低层，低层不得反向依赖高层；下列包级约束优先于此通用分类。
 - React 包内部采用 Feature-first 目录。每个共享公共组件拥有独立功能目录，并将实现、类型、
@@ -67,6 +67,11 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解器，只向外发布 core 的
   LayoutSnapshot 和测量端口协议，Yoga/WASM 实现不得泄漏到公共 API。
+- `@compose-ui/animation` 是无 React、无 DOM 的场景动画领域包，只依赖 core，不依赖 editor、
+  stage、preview、animation-panel 或任何 UI Context。关键帧轨道存放在被动画 Entity 的
+  `Animation` Component 上，文档只在 `ComposeDocument.animations` 保留动画清单；core 不认识
+  该 Component，轨道级校验需要宿主主动调用包内校验入口。动画命令通过
+  `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、script-runtime、stage-engine、
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
