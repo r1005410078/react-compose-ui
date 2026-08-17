@@ -32,7 +32,7 @@ Dockview 工具组中动态加入并激活时间线面板，并展开底部组�
 
 ### Requirement: 画布动画绑定属性
 
-活动页面的默认 Canvas Inspector MUST 在「页面脚本」分组上方显示「动画」分组：它 MUST 是
+活动页面的默认 Canvas Inspector MUST 在「页面脚本」分组下方显示「动画」分组：它 MUST 是
 共享 Property Panel Root 中的一个 Section，动画文件是嵌入该 Root 的标准属性字段行，
 MUST NOT 引入第二个属性工具栏、独立分组 chrome 或嵌套的独立属性面板。分组列出页面同目录
 中拥有稳定 assetKey 的动画文件供绑定，支持更换与取消关联，并在可写 Provider 上通过分组

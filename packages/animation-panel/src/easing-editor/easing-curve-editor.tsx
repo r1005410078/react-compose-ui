@@ -95,23 +95,35 @@ function easingDomain(interpolation: ComposeAnimationInterpolation): EasingDomai
   }
 }
 
+/**
+ * 画布四周留出的比例边距。
+ *
+ * @remarks
+ * 曲线的起点、终点与控制柄经常正好落在显示域边界上，不留边距时它们会被容器裁掉一半。
+ * 边距同时给了单位方格一圈"呼吸区"，越界的回弹控制点也不会贴着边框。
+ */
+const CANVAS_INSET = 0.1
+
 function projectX(x: number) {
-  return x * 100
+  return (CANVAS_INSET + x * (1 - CANVAS_INSET * 2)) * 100
 }
 
 function projectY(y: number, domain: EasingDomain) {
-  return (1 - (y - domain.min) / (domain.max - domain.min)) * 100
+  const ratio = 1 - (y - domain.min) / (domain.max - domain.min)
+  return (CANVAS_INSET + ratio * (1 - CANVAS_INSET * 2)) * 100
 }
 
 /** 曲线预览路径，坐标系与 `viewBox="0 0 100 100"` 一致。 */
 function curvePath(interpolation: ComposeAnimationInterpolation, domain: EasingDomain) {
+  const left = projectX(0)
+  const right = projectX(1)
   const start = projectY(0, domain)
   const end = projectY(1, domain)
   // hold 是阶梯：保持前值走到段末，再在下一帧瞬间跳变。
-  if (interpolation.kind === 'hold') return `M0 ${start}H100V${end}`
-  if (interpolation.kind === 'linear') return `M0 ${start}L100 ${end}`
+  if (interpolation.kind === 'hold') return `M${left} ${start}H${right}V${end}`
+  if (interpolation.kind === 'linear') return `M${left} ${start}L${right} ${end}`
   const [x1, y1, x2, y2] = interpolation.control
-  return `M0 ${start}C${projectX(x1)} ${projectY(y1, domain)} ${projectX(x2)} ${projectY(y2, domain)} 100 ${end}`
+  return `M${left} ${start}C${projectX(x1)} ${projectY(y1, domain)} ${projectX(x2)} ${projectY(y2, domain)} ${right} ${end}`
 }
 
 /**
@@ -169,9 +181,12 @@ export function ComposeEasingCurveEditor({
     // 控制柄就挂在画布 div 上：从 parentElement 量比持一个 ref 更省，也避免渲染期读 ref。
     const rect = event.currentTarget.parentElement?.getBoundingClientRect()
     if (!rect || rect.width === 0 || rect.height === 0) return null
+    // 反投影必须抵消同一圈边距，否则指针与控制柄会差一个固定偏移。
+    const ratioX = ((event.clientX - rect.left) / rect.width - CANVAS_INSET) / (1 - CANVAS_INSET * 2)
+    const ratioY = ((event.clientY - rect.top) / rect.height - CANVAS_INSET) / (1 - CANVAS_INSET * 2)
     return {
-      x: (event.clientX - rect.left) / rect.width,
-      y: frozen.max - ((event.clientY - rect.top) / rect.height) * (frozen.max - frozen.min),
+      x: ratioX,
+      y: frozen.max - ratioY * (frozen.max - frozen.min),
     }
   }
 
@@ -236,17 +251,37 @@ export function ComposeEasingCurveEditor({
       ) : null}
       <div className="compose-easing-editor__canvas">
         <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 100 100">
+          {/* 单位方格：域被回弹控制点撑大时，这个框标出「0 → 1」的实际位置。 */}
+          <rect
+            className="compose-easing-editor__unit"
+            height={projectY(0, domain) - projectY(1, domain)}
+            width={projectX(1) - projectX(0)}
+            x={projectX(0)}
+            y={projectY(1, domain)}
+          />
           <path
             className="compose-easing-editor__grid"
-            d={`M0 ${projectY(0, domain)}H100M0 ${projectY(1, domain)}H100M33.33 0V100M66.66 0V100`}
+            d={`M${projectX(1 / 3)} ${projectY(1, domain)}V${projectY(0, domain)}M${projectX(2 / 3)} ${projectY(1, domain)}V${projectY(0, domain)}`}
           />
           {control ? (
             <path
               className="compose-easing-editor__leash"
-              d={`M0 ${projectY(0, domain)}L${projectX(control[0])} ${projectY(control[1], domain)}M100 ${projectY(1, domain)}L${projectX(control[2])} ${projectY(control[3], domain)}`}
+              d={`M${projectX(0)} ${projectY(0, domain)}L${projectX(control[0])} ${projectY(control[1], domain)}M${projectX(1)} ${projectY(1, domain)}L${projectX(control[2])} ${projectY(control[3], domain)}`}
             />
           ) : null}
           <path className="compose-easing-editor__curve" d={curvePath(value, domain)} />
+          <circle
+            className="compose-easing-editor__anchor"
+            cx={projectX(0)}
+            cy={projectY(0, domain)}
+            r="1.6"
+          />
+          <circle
+            className="compose-easing-editor__anchor"
+            cx={projectX(1)}
+            cy={projectY(1, domain)}
+            r="1.6"
+          />
         </svg>
         {control ? [0, 1].map((index) => {
           const x = control[index * 2]!

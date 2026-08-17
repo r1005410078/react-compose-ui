@@ -94,7 +94,7 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   const scriptSection = inspector.locator('.property-panel__group').filter({ hasText: '页面脚本' })
   const animationBox = (await animationSection.boundingBox())!
   const scriptBox = (await scriptSection.boundingBox())!
-  expect(animationBox.y).toBeLessThan(scriptBox.y)
+  expect(animationBox.y).toBeGreaterThan(scriptBox.y)
 
   // 保存页面：绑定引用与清单写盘。
   await editor.getByRole('button', { name: '保存页面' }).click()

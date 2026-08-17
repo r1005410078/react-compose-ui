@@ -118,7 +118,7 @@ function createCanvasOutputSchema(
  *
  * @remarks
  * 一个共享 Property Panel Root（唯一工具栏与列宽）加三个 Section：输出字段、
- * 宿主注入的动画 Section 与页面脚本 Section。注入内容必须是
+ * 宿主注入的页面脚本 Section 与动画 Section。注入内容必须是
  * `ComposePropertyPanelSection`，其内部面板嵌入本 Root，不携带自己的 chrome。
  */
 export function CanvasInspector({
@@ -251,8 +251,8 @@ export function CanvasInspector({
           }}
         />
       </ComposePropertyPanelSection>
-      {animationInspector}
       {pageScriptInspector}
+      {animationInspector}
     </ComposePropertyPanelRoot>
   )
 }

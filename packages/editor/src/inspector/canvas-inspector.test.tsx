@@ -87,10 +87,10 @@ describe('CanvasInspector', () => {
 
     expect(screen.getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
     expect(screen.getByText('Counter.setup.js 返回成员')).toBeInTheDocument()
-    // 三个分组按 输出 → 动画 → 页面脚本 排列，动画在页面脚本上方。
+    // 三个分组按 输出 → 页面脚本 → 动画 排列，动画在页面脚本下方。
     const groupTitles = screen.getAllByRole('button', { expanded: true })
       .map((button) => button.textContent)
       .filter((text) => ['输出', '动画', '页面脚本'].includes(text ?? ''))
-    expect(groupTitles).toEqual(['输出', '动画', '页面脚本'])
+    expect(groupTitles).toEqual(['输出', '页面脚本', '动画'])
   })
 })
