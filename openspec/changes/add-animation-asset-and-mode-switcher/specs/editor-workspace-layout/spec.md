@@ -82,7 +82,7 @@ MUST NOT 引入第二个属性工具栏、独立分组 chrome 或嵌套的独立
 
 活动页面的默认 Canvas Inspector MUST 将页面 setup 显示为与输出属性共用同一个
 Property Panel Root 的「页面脚本」Section：脚本文件是嵌入该 Root 的标准属性字段行，
-返回成员是 full-width 自定义属性字段，重新加载、快捷创建与更多操作位于 Section 标题行
+返回成员是贴边整行的自定义属性字段，重新加载、快捷创建与更多操作位于 Section 标题行
 动作槽；MUST NOT 再自带独立分组 chrome、第二个属性工具栏或嵌套的独立属性面板。
 该属性 MUST 只由 Editor 组合页面、资源和 Script Runtime 语义，不得下沉到 Property Panel
 或 Asset Browser 包。

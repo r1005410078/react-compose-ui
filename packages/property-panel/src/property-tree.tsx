@@ -1018,7 +1018,9 @@ function PropertyNode({
       <Renderer {...rendererProps} />
     )
     const labelElement = LabelRenderer ? <LabelRenderer {...rendererProps} /> : label
-    if (layout === 'full-width') {
+    if (layout === 'full-width' || layout === 'full-bleed') {
+      // 贴边与全宽共用同一套 DOM：差别只在内容区的左右内缩，拆成两条渲染分支只会漂移。
+      const bleedModifier = layout === 'full-bleed' ? ' property-panel__editor--full-bleed' : ''
       return (
         <div
           className="property-panel__field property-panel__field--full-width"
@@ -1047,7 +1049,7 @@ function PropertyNode({
           <RowActionRail actions={actions} bindingTargets={rendererBinding?.targets} label={label} />
           <div
             aria-labelledby={rendererLabelId}
-            className="property-panel__editor property-panel__editor--full-width"
+            className={`property-panel__editor property-panel__editor--full-width${bleedModifier}`}
             data-property-part="editor"
             data-property-renderer-content=""
             role="group"
@@ -2008,8 +2010,9 @@ function resolveRendererLayout(
   metadataLayout: PropertyPanelRenderer['layout'],
   rendererLayout: PropertyPanelRenderer['layout'],
 ): NonNullable<PropertyPanelRenderer['layout']> {
-  if (metadataLayout === 'inline' || metadataLayout === 'full-width') return metadataLayout
-  if (rendererLayout === 'inline' || rendererLayout === 'full-width') return rendererLayout
+  const known = ['inline', 'full-width', 'full-bleed'] as const
+  if (metadataLayout && known.includes(metadataLayout)) return metadataLayout
+  if (rendererLayout && known.includes(rendererLayout)) return rendererLayout
   return 'inline'
 }
 

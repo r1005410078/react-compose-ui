@@ -545,10 +545,15 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
 
   const easing = inspector.getByRole('combobox', { name: '缓动' })
   await expect(easing).toHaveValue('linear')
-  // 缓动区必须落在「当前时间」行下方。
+  // 缓动区必须落在「当前时间」行下方，且贴边占满整行宽度。
   const currentTimeRow = (await inspector.getByText('当前时间').boundingBox())!
   const easingBox = (await inspector.locator('.compose-easing-editor').boundingBox())!
   expect(easingBox.y).toBeGreaterThan(currentTimeRow.y)
+  const easingRow = (await inspector.locator('[data-property-path="easing"]').boundingBox())!
+  const curveBox = (await inspector.locator('.compose-easing-editor__canvas').boundingBox())!
+  expect(Math.abs(curveBox.x - easingRow.x)).toBeLessThanOrEqual(1)
+  expect(Math.abs((curveBox.x + curveBox.width) - (easingRow.x + easingRow.width)))
+    .toBeLessThanOrEqual(1)
 
   // 选预设：曲线与控制点数值同步，改动写入文档。
   await easing.selectOption('ease-in-out')

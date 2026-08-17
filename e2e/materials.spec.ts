@@ -155,6 +155,13 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await expect(pageScriptProperty.getByRole('list', { name: '页面脚本返回成员' }))
     .toContainText('onAdd')
   await expect(pageScriptProperty.getByRole('button', { name: '重新加载脚本' })).toBeVisible()
+  // 返回成员贴边占满整行：内容盒左右边界与所在属性行一致。
+  const membersRow = (await pageScriptProperty.locator('[data-property-path="exports"]').boundingBox())!
+  const membersBox = (await pageScriptProperty
+    .locator('.compose-editor__page-script-members').boundingBox())!
+  expect(Math.abs(membersBox.x - membersRow.x)).toBeLessThanOrEqual(1)
+  expect(Math.abs((membersBox.x + membersBox.width) - (membersRow.x + membersRow.width)))
+    .toBeLessThanOrEqual(1)
   await expect(pageScriptProperty).toHaveScreenshot('page-script-canvas-property.png', {
     animations: 'disabled',
     caret: 'hide',
