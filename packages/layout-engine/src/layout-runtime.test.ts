@@ -388,6 +388,158 @@ describe('Yoga Compose layout runtime', () => {
     runtime.dispose()
   })
 
+  it('OpenSpec: layout-engine / 增量重解性能 / 单节点变更不重写全树样式', async () => {
+    const hugItem = {
+      ...fixedItem(0, 0, 50, 20, 'flow'),
+      width: { mode: 'hug' as const, value: 50, min: null, max: null },
+      height: { mode: 'hug' as const, value: 20, min: null, max: null },
+    }
+    const calls = new Map<string, number>()
+    const port: ComposeLayoutMeasurementPort = {
+      revision: 0,
+      measure: ({ entity }) => {
+        calls.set(entity.id, (calls.get(entity.id) ?? 0) + 1)
+        return { width: 40, height: 20 }
+      },
+      subscribe: () => () => undefined,
+    }
+    const container = entity('container', fixedItem(0, 0, 300, 200), ['first', 'second'])
+    const second = entity('second', hugItem)
+    const runtime = createComposeLayoutRuntime({
+      document: documentFixture({ container, first: entity('first', hugItem), second }),
+      measurementPort: port,
+    })
+    const initial = await waitForReady(runtime)
+    const secondCalls = calls.get('second')
+
+    // 只替换 first 的对象引用（margin 变化），container 与 second 保持同一引用。
+    runtime.updateDocument(documentFixture({
+      container,
+      first: entity('first', { ...hugItem, margin: { top: 4, right: 0, bottom: 0, left: 0 } }),
+      second,
+    }))
+    const next = await waitForReady(runtime, initial.snapshot.revision)
+
+    expect(next.snapshot.boxes.first).toMatchObject({ y: 16 })
+    expect(calls.get('second')).toBe(secondCalls)
+    runtime.dispose()
+  })
+
+  it('OpenSpec: layout-engine / 增量重解性能 / 引用变化但测量输入未变时命中缓存', async () => {
+    // Absolute hug leaf 拖拽（只改 offset）是最高频路径：Yoga 以相同约束重测，必须命中缓存。
+    const hugItem = {
+      ...fixedItem(10, 10, 50, 20),
+      width: { mode: 'hug' as const, value: 50, min: null, max: null },
+      height: { mode: 'hug' as const, value: 20, min: null, max: null },
+    }
+    const measure = vi.fn(() => ({ width: 40, height: 20 }))
+    const port: ComposeLayoutMeasurementPort = {
+      revision: 0,
+      measure,
+      subscribe: () => () => undefined,
+    }
+    const container = entity('container', fixedItem(0, 0, 300, 200), ['leaf'])
+    const leaf = entity('leaf', hugItem)
+    const runtime = createComposeLayoutRuntime({
+      document: documentFixture({ container, leaf }),
+      measurementPort: port,
+    })
+    const initial = await waitForReady(runtime)
+    const initialCalls = measure.mock.calls.length
+
+    // 模拟真实 Patch：只替换 LayoutItem（offset 变化），Renderer 等组件保持同一引用。
+    // 样式因此重写，但 Renderer 与 Yoga 约束未变，测量应命中缓存。
+    const movedLeaf: typeof leaf = {
+      ...leaf,
+      components: {
+        ...leaf.components,
+        LayoutItem: {
+          ...(leaf.components.LayoutItem as object),
+          offset: { x: 60, y: 40 },
+        } as typeof leaf.components.LayoutItem,
+      },
+    }
+    runtime.updateDocument(documentFixture({ container, leaf: movedLeaf }))
+    const next = await waitForReady(runtime, initial.snapshot.revision)
+
+    expect(next.snapshot.boxes.leaf).toMatchObject({ x: 62, y: 42 })
+    expect(measure.mock.calls.length).toBe(initialCalls)
+    runtime.dispose()
+  })
+
+  it('OpenSpec: layout-engine / 增量重解性能 / 未变化 box 保持引用相等', async () => {
+    const container = entity('container', fixedItem(0, 0, 300, 200), ['first', 'second'])
+    const first = entity('first', fixedItem(10, 10, 40, 20))
+    const second = entity('second', fixedItem(100, 80, 30, 25))
+    const runtime = createComposeLayoutRuntime({
+      document: documentFixture({ container, first, second }),
+    })
+    const initial = await waitForReady(runtime)
+
+    runtime.updateDocument(documentFixture({
+      container,
+      first: entity('first', fixedItem(20, 10, 40, 20)),
+      second,
+    }))
+    const next = await waitForReady(runtime, initial.snapshot.revision)
+
+    expect(next.snapshot.boxes.second).toBe(initial.snapshot.boxes.second)
+    expect(next.snapshot.boxes.first).not.toBe(initial.snapshot.boxes.first)
+    expect(next.snapshot.boxes.first).toMatchObject({ x: 22 })
+    runtime.dispose()
+  })
+
+  it('OpenSpec: layout-engine / 手势期预览求解通道 / 预览求解不污染提交态', async () => {
+    const container = entity('container', fixedItem(0, 0, 300, 200), ['child'])
+    const child = entity('child', fixedItem(10, 10, 40, 20))
+    const committed = documentFixture({ container, child })
+    const runtime = createComposeLayoutRuntime({ document: committed })
+    const initial = await waitForReady(runtime)
+    expect(initial.preview).toBe(false)
+
+    runtime.previewDocument(documentFixture({
+      container,
+      child: entity('child', fixedItem(80, 10, 40, 20)),
+    }))
+    const previewed = await waitForReady(runtime, initial.snapshot.revision)
+    expect(previewed.preview).toBe(true)
+    expect(previewed.snapshot.boxes.child).toMatchObject({ x: 82 })
+
+    runtime.clearPreview()
+    const restored = await waitForReady(runtime, previewed.snapshot.revision)
+    expect(restored.preview).toBe(false)
+    expect(restored.document).toBe(committed)
+    expect(restored.snapshot.boxes.child).toMatchObject({ x: 12 })
+    runtime.dispose()
+  })
+
+  it('OpenSpec: layout-engine / 手势期预览求解通道 / 正式提交隐式终止预览', async () => {
+    const container = entity('container', fixedItem(0, 0, 300, 200), ['child'])
+    const child = entity('child', fixedItem(10, 10, 40, 20))
+    const runtime = createComposeLayoutRuntime({
+      document: documentFixture({ container, child }),
+    })
+    const initial = await waitForReady(runtime)
+
+    runtime.previewDocument(documentFixture({
+      container,
+      child: entity('child', fixedItem(80, 10, 40, 20)),
+    }))
+    const previewed = await waitForReady(runtime, initial.snapshot.revision)
+
+    const next = documentFixture({ container, child: entity('child', fixedItem(50, 10, 40, 20)) })
+    runtime.updateDocument(next)
+    const committed = await waitForReady(runtime, previewed.snapshot.revision)
+    expect(committed.preview).toBe(false)
+    expect(committed.document).toBe(next)
+    expect(committed.snapshot.boxes.child).toMatchObject({ x: 52 })
+
+    // 预览已被正式提交终止，clearPreview 不得再回退状态。
+    runtime.clearPreview()
+    expect(runtime.getState()).toBe(committed)
+    runtime.dispose()
+  })
+
   it('OpenSpec: layout-engine / 增量节点树 / 已有 Layout 容器新增 Absolute 子项不会重置卡死', async () => {
     const container = entity('container', fixedItem(0, 0, 300, 200), [])
     const initial = documentFixture({ container })

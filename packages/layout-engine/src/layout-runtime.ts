@@ -27,6 +27,14 @@ export type ComposeLayoutRuntimeState =
       readonly status: 'ready'
       readonly document: ComposeDocument
       readonly snapshot: ComposeLayoutSnapshot
+      /**
+       * 该 Snapshot 是否来自手势期预览求解。
+       *
+       * @remarks
+       * 预览态的 `document` 是宿主提交的瞬态文档，不等于最后一次正式提交；订阅方不应把
+       * 预览 Snapshot 当作文档变化的依据。
+       */
+      readonly preview: boolean
     }
   | { readonly status: 'error'; readonly document: ComposeDocument; readonly error: Error }
 
@@ -39,7 +47,26 @@ export interface ComposeLayoutRuntimeOptions {
 /** 文档会话级布局运行时。 @public */
 export interface ComposeLayoutRuntime {
   getState(): ComposeLayoutRuntimeState
+  /**
+   * 最后一次**正式提交**的状态：预览求解期间保持返回预览开始前的提交态（引用稳定）。
+   *
+   * @remarks
+   * 供交互 Controller context、SceneIndex 等必须忽略预览的消费方使用；无预览时与
+   * {@link ComposeLayoutRuntime.getState} 相同。
+   */
+  getCommittedState(): ComposeLayoutRuntimeState
   updateDocument(document: ComposeDocument): void
+  /**
+   * 用瞬态预览文档求解并发布带预览标记的 Snapshot。
+   *
+   * @remarks
+   * 供手势期实时布局使用：不改变正式提交状态、不产生文档事务。下一次
+   * {@link ComposeLayoutRuntime.updateDocument} 会隐式终止预览；引擎仍在加载时调用被忽略
+   * （加载期不存在可交互手势）。
+   */
+  previewDocument(document: ComposeDocument): void
+  /** 结束预览并回到最后一次正式提交的求解结果；无生效预览时为 no-op。 */
+  clearPreview(): void
   setMeasurementPort(port: ComposeLayoutMeasurementPort | undefined): void
   subscribe(listener: () => void): () => void
   dispose(): void
@@ -101,6 +128,12 @@ function measureConstraint(yoga: Yoga, mode: number, value: number): ComposeMeas
   return { mode: 'undefined' }
 }
 
+function sameConstraint(a: ComposeMeasureConstraint, b: ComposeMeasureConstraint): boolean {
+  if (a.mode !== b.mode) return false
+  if (a.mode === 'undefined') return true
+  return 'value' in a && 'value' in b && a.value === b.value
+}
+
 function setAxisBounds(node: Node, axis: 'width' | 'height', sizing: ComposeAxisSizing) {
   if (axis === 'width') {
     node.setMinWidth(sizing.min ?? undefined)
@@ -113,7 +146,7 @@ function setAxisBounds(node: Node, axis: 'width' | 'height', sizing: ComposeAxis
 }
 
 class YogaLayoutRuntime implements ComposeLayoutRuntime {
-  private state: ComposeLayoutRuntimeState
+  private state!: ComposeLayoutRuntimeState
   private readonly listeners = new Set<() => void>()
   private document: ComposeDocument
   private measurementPort: ComposeLayoutMeasurementPort | undefined
@@ -122,6 +155,35 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   private config: Config | undefined
   private root: Node | undefined
   private readonly nodes = new Map<string, Node>()
+  /**
+   * 样式增量缓存：Entity 引用与父级 Layout 引用都未变时跳过整套 Yoga setter 重写。
+   *
+   * @remarks
+   * 单个 Entity 的样式只由自身组件与父级 Layout（决定 isFlow 与主轴方向）推导；文档不可变，
+   * 引用未变即输入未变。跨 WASM 边界的 setter 是全量 solve 的主要成本（实测约占 90%），
+   * 该缓存把单次重解成本从文档总量降到变更子树规模。
+   */
+  private readonly styleCache = new Map<string, {
+    readonly entity: ComposeEntity
+    readonly parentLayout: ReturnType<typeof getComposeLayout>
+  }>()
+
+  /**
+   * 测量结果缓存：Renderer 引用与 Yoga 约束都未变时不重新调用 measurement port。
+   *
+   * @remarks
+   * adapter 契约要求只测量隔离内容，测量输入因此不含 LayoutItem——这让「仅几何变化」的
+   * 高频路径（拖拽 offset/margin）不会触发宿主的真实 DOM 测量。port 或其 revision 失效时
+   * 由 setMeasurementPort/invalidateMeasurements 清除对应条目。只缓存成功结果，
+   * 失败允许下次重试。
+   */
+  private readonly measurementCache = new Map<string, {
+    readonly renderer: ReturnType<typeof getComposeRenderer>
+    readonly width: ComposeMeasureConstraint
+    readonly height: ComposeMeasureConstraint
+    readonly result: { readonly width: number; readonly height: number; readonly baseline?: number }
+  }>()
+
   private readonly measuredEntityIds = new Set<string>()
   private readonly measurementDiagnostics = new Map<
     string,
@@ -129,13 +191,26 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   >()
   private revision = 0
   private disposed = false
+  /** 最后一次正式提交的文档；`document` 在预览期指向瞬态文档，结束后回到这里。 */
+  private committedDocument: ComposeDocument
+  private previewing = false
+  /** 与 `state` 同步维护的最后提交态，见 {@link ComposeLayoutRuntime.getCommittedState}。 */
+  private lastCommittedState: ComposeLayoutRuntimeState
+
+  /** 统一入口：非预览态的每次状态替换同时刷新提交态缓存。 */
+  private setState(next: ComposeLayoutRuntimeState) {
+    this.state = next
+    if (!(next.status === 'ready' && next.preview)) this.lastCommittedState = next
+  }
 
   constructor(
     options: ComposeLayoutRuntimeOptions,
     private readonly loadYoga: ComposeYogaLoader = loadYogaSingleton,
   ) {
     this.document = options.document
-    this.state = { status: 'loading', document: options.document }
+    this.committedDocument = options.document
+    this.lastCommittedState = { status: 'loading', document: options.document }
+    this.setState({ status: 'loading', document: options.document })
     this.setMeasurementPort(options.measurementPort)
     void this.initialize()
   }
@@ -143,17 +218,41 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   // React 的 useSyncExternalStore 会把 getter 作为裸函数调用，因此这里必须保留词法 this。
   readonly getState = () => this.state
 
+  readonly getCommittedState = () => (this.state.status === 'ready' && this.state.preview
+    ? this.lastCommittedState
+    : this.state)
+
   updateDocument(document: ComposeDocument) {
-    if (this.disposed || this.document === document) return
+    if (this.disposed || (this.document === document && !this.previewing)) return
+    // 正式提交隐式终止预览：即使文档引用与提交前相同，也要把求解结果切回提交态。
+    this.previewing = false
+    this.committedDocument = document
     this.document = document
     if (this.yoga) this.solve()
-    else this.state = { status: 'loading', document }
+    else this.setState({ status: 'loading', document })
+  }
+
+  previewDocument(document: ComposeDocument) {
+    // 加载期不存在可交互手势，忽略而不是排队——迟到的预览只会覆盖首帧正式求解。
+    if (this.disposed || !this.yoga || this.document === document) return
+    this.previewing = true
+    this.document = document
+    this.solve()
+  }
+
+  clearPreview() {
+    if (this.disposed || !this.previewing) return
+    this.previewing = false
+    this.document = this.committedDocument
+    if (this.yoga) this.solve()
   }
 
   setMeasurementPort(port: ComposeLayoutMeasurementPort | undefined) {
     if (this.disposed || this.measurementPort === port) return
     this.measurementUnsubscribe?.()
     this.measurementPort = port
+    // 不同 port 对同一约束可能给出不同结果，缓存跨 port 无效。
+    this.measurementCache.clear()
     this.measurementUnsubscribe = port?.subscribe((entityIds) => {
       if (this.yoga && !this.disposed) this.invalidateMeasurements(entityIds)
     })
@@ -191,11 +290,11 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     }
     catch (cause) {
       if (this.disposed) return
-      this.state = {
+      this.setState({
         status: 'error',
         document: this.document,
         error: cause instanceof Error ? cause : new Error(String(cause)),
-      }
+      })
       this.emit()
     }
   }
@@ -205,6 +304,8 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     this.nodes.clear()
     this.measuredEntityIds.clear()
     this.measurementDiagnostics.clear()
+    this.styleCache.clear()
+    this.measurementCache.clear()
     this.root?.free()
     this.root = undefined
     this.config?.free()
@@ -362,12 +463,29 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       this.measuredEntityIds.add(entity.id)
       const fallbackWidth = Math.max(0, item.width.value - appearance.borderWidth * 2)
       const fallbackHeight = Math.max(0, item.height.value - appearance.borderWidth * 2)
+      const renderer = getComposeRenderer(entity)
       node.setMeasureFunc((width, widthMode, height, heightMode) => {
-        const measured = this.measurementPort?.measure({
-          entity,
-          width: measureConstraint(yoga, widthMode, width),
-          height: measureConstraint(yoga, heightMode, height),
-        })
+        const widthConstraint = measureConstraint(yoga, widthMode, width)
+        const heightConstraint = measureConstraint(yoga, heightMode, height)
+        const cached = this.measurementCache.get(entity.id)
+        const measured = cached
+          && cached.renderer === renderer
+          && sameConstraint(cached.width, widthConstraint)
+          && sameConstraint(cached.height, heightConstraint)
+          ? cached.result
+          : this.measurementPort?.measure({
+              entity,
+              width: widthConstraint,
+              height: heightConstraint,
+            })
+        if (measured) {
+          this.measurementCache.set(entity.id, {
+            renderer,
+            width: widthConstraint,
+            height: heightConstraint,
+            result: measured,
+          })
+        }
         if (!measured) {
           this.measurementDiagnostics.set(entity.id, this.measurementPort?.getDiagnostic?.(entity.id) ?? {
             code: 'measurement.unregistered',
@@ -391,7 +509,12 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   ): Node {
     const entity = this.document.entities[entityId]!
     const node = this.nodeFor(entityId)
-    this.applyEntityStyle(entity, parent)
+    const parentLayout = parent && getComposeLayout(parent)
+    const cached = this.styleCache.get(entityId)
+    if (!cached || cached.entity !== entity || cached.parentLayout !== parentLayout) {
+      this.applyEntityStyle(entity, parent)
+      this.styleCache.set(entityId, { entity, parentLayout })
+    }
     const hierarchy = getComposeHierarchy(entity)
     const children = (hierarchy?.childIds ?? []).map((childId) =>
       this.prepareTree(childId, entity, desiredChildren))
@@ -421,15 +544,17 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
         this.nodes.delete(entityId)
         this.measuredEntityIds.delete(entityId)
         this.measurementDiagnostics.delete(entityId)
+        this.styleCache.delete(entityId)
+        this.measurementCache.delete(entityId)
       })
       this.calculateAndPublish()
     }
     catch (cause) {
-      this.state = {
+      this.setState({
         status: 'error',
         document: this.document,
         error: cause instanceof Error ? cause : new Error(String(cause)),
-      }
+      })
       this.emit()
     }
   }
@@ -442,6 +567,8 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       if (!this.measuredEntityIds.has(entityId)) return
       const node = this.nodes.get(entityId)
       if (!node) return
+      // port revision 失效表示宿主内容变了，缓存的旧结果必须一并作废。
+      this.measurementCache.delete(entityId)
       node.markDirty()
       dirty = true
     })
@@ -456,16 +583,27 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
         this.document.output.height,
         this.yoga.DIRECTION_LTR,
       )
+      const previousBoxes = this.state.status === 'ready' ? this.state.snapshot.boxes : undefined
       const boxes: Record<string, ComposeLayoutSnapshot['boxes'][string]> = {}
       this.nodes.forEach((node, entityId) => {
         const item = getComposeLayoutItem(this.document.entities[entityId]!)
-        boxes[entityId] = Object.freeze({
+        const next = {
           x: node.getComputedLeft(),
           y: node.getComputedTop(),
           width: node.getComputedWidth(),
           height: node.getComputedHeight(),
           positioning: item.positioning,
-        })
+        }
+        // 值未变时复用上一 Snapshot 的冻结对象，让订阅方的相等性检查与 memo 生效。
+        const previous = previousBoxes?.[entityId]
+        boxes[entityId] = previous
+          && previous.x === next.x
+          && previous.y === next.y
+          && previous.width === next.width
+          && previous.height === next.height
+          && previous.positioning === next.positioning
+          ? previous
+          : Object.freeze(next)
       })
       const diagnostics: ComposeLayoutDiagnostic[] = []
       this.measurementDiagnostics.forEach((measurement, entityId) => {
@@ -482,23 +620,24 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
           })
         }
       })
-      this.state = {
+      this.setState({
         status: 'ready',
         document: this.document,
+        preview: this.previewing,
         snapshot: Object.freeze({
           revision: ++this.revision,
           boxes: Object.freeze(boxes),
           diagnostics: Object.freeze(diagnostics),
         }),
-      }
+      })
       this.emit()
     }
     catch (cause) {
-      this.state = {
+      this.setState({
         status: 'error',
         document: this.document,
         error: cause instanceof Error ? cause : new Error(String(cause)),
-      }
+      })
       this.emit()
     }
   }

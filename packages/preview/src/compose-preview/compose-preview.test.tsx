@@ -227,10 +227,18 @@ describe('ComposePreview', () => {
     const value = document()
     const setMeasurementPort = vi.fn()
     const dispose = vi.fn()
-    const layoutState = { status: 'ready' as const, document: value, snapshot: snapshot(value) }
+    const layoutState = {
+      status: 'ready' as const,
+      document: value,
+      snapshot: snapshot(value),
+      preview: false,
+    }
     const runtime: ComposeLayoutRuntime = {
       getState: () => layoutState,
+      getCommittedState: () => layoutState,
       updateDocument: vi.fn(),
+      previewDocument: vi.fn(),
+      clearPreview: vi.fn(),
       setMeasurementPort,
       subscribe: () => () => undefined,
       dispose,

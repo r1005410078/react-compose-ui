@@ -91,6 +91,10 @@ interface FlowSlot {
   /** 主轴结束边（局部坐标）。 */
   readonly trailing: number
   readonly mid: number
+  /** 交叉轴起始边（局部坐标）。 */
+  readonly crossLeading: number
+  /** 交叉轴结束边（局部坐标）。 */
+  readonly crossTrailing: number
 }
 
 interface MainAxis {
@@ -122,8 +126,67 @@ function collectFlowSlots(input: {
     if (!box) return []
     const leading = isRow ? box.x : box.y
     const trailing = leading + (isRow ? box.width : box.height)
-    return [{ childIndex, leading, trailing, mid: (leading + trailing) / 2 }]
+    const crossLeading = isRow ? box.y : box.x
+    const crossTrailing = crossLeading + (isRow ? box.height : box.width)
+    return [{ childIndex, leading, trailing, mid: (leading + trailing) / 2, crossLeading, crossTrailing }]
   })
+}
+
+interface FlowRow {
+  readonly crossStart: number
+  readonly crossEnd: number
+  readonly slots: readonly FlowSlot[]
+}
+
+/**
+ * 把 Flow 兄弟按交叉轴区间聚类成逻辑行。
+ *
+ * @remarks
+ * Yoga 按 childIds 顺序换行，slots 已是逻辑序；同一行的交叉轴区间必然重叠，下一行
+ * （wrap 向交叉轴正方向、wrap-reverse 向负方向）与当前行不重叠。据此只需顺序扫描：
+ * 区间不再重叠即开新行，天然得到逻辑行序，无需关心 wrap 方向。nowrap 恒为单行。
+ */
+function clusterRows(slots: readonly FlowSlot[], wraps: boolean): readonly FlowRow[] {
+  if (slots.length === 0) return []
+  if (!wraps) {
+    return [{
+      crossStart: Math.min(...slots.map((slot) => slot.crossLeading)),
+      crossEnd: Math.max(...slots.map((slot) => slot.crossTrailing)),
+      slots,
+    }]
+  }
+  const rows: { crossStart: number; crossEnd: number; slots: FlowSlot[] }[] = []
+  for (const slot of slots) {
+    const row = rows[rows.length - 1]
+    const overlaps = row
+      && slot.crossLeading < row.crossEnd
+      && slot.crossTrailing > row.crossStart
+    if (row && overlaps) {
+      row.crossStart = Math.min(row.crossStart, slot.crossLeading)
+      row.crossEnd = Math.max(row.crossEnd, slot.crossTrailing)
+      row.slots.push(slot)
+    }
+    else rows.push({ crossStart: slot.crossLeading, crossEnd: slot.crossTrailing, slots: [slot] })
+  }
+  return rows
+}
+
+/** 指针交叉轴坐标选行：优先包含，否则取交叉轴距离最近的行。 */
+function rowAtCross(rows: readonly FlowRow[], cross: number): FlowRow | null {
+  let best: FlowRow | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const row of rows) {
+    const distance = cross < row.crossStart
+      ? row.crossStart - cross
+      : cross > row.crossEnd
+        ? cross - row.crossEnd
+        : 0
+    if (distance < bestDistance) {
+      best = row
+      bestDistance = distance
+    }
+  }
+  return best
 }
 
 function resolveInsertIndex(input: {
@@ -141,11 +204,94 @@ function resolveInsertIndex(input: {
 
   const { isRow, reversed } = mainAxisOf(layout)
   const pointer = isRow ? local.x : local.y
+  const cross = isRow ? local.y : local.x
   const slots = collectFlowSlots({ index, childIds, draggedIds, isRow })
+  const wraps = layout.flexWrap !== 'nowrap'
 
-  // reverse 方向下 childIds 顺序与坐标顺序相反，比较方向随之翻转。
-  const precedingCount = slots.filter(({ mid }) => reversed ? mid > pointer : mid < pointer).length
+  const inRowComparison = (row: readonly FlowSlot[]) =>
+    // reverse 方向下 childIds 顺序与坐标顺序相反，比较方向随之翻转。
+    row.filter(({ mid }) => reversed ? mid > pointer : mid < pointer).length
+
+  let precedingCount = 0
+  if (!wraps) {
+    // nowrap 单行：交叉轴位置对插入位无意义，保持纯主轴中点比较。
+    precedingCount = inRowComparison(slots)
+  }
+  else {
+    const rows = clusterRows(slots, true)
+    const targetRow = rowAtCross(rows, cross)
+    // 指针落在目标行交叉轴区间外侧时，位于「换行方向」一侧算整行之后，反侧算整行之前；
+    // 只有落在区间内才做行内主轴比较。wrap-reverse 的换行方向指向交叉轴负向，两侧互换。
+    const wrapReversed = layout.flexWrap === 'wrap-reverse'
+    // 目标行之前的逻辑行整行计入；行按 childIds 连续分段，因此「计入的 slot 数」
+    // 始终是逻辑序 slots 的前缀长度。
+    for (const row of rows) {
+      if (row !== targetRow) {
+        precedingCount += row.slots.length
+        continue
+      }
+      const pastRow = wrapReversed ? cross < row.crossStart : cross > row.crossEnd
+      const beforeRow = wrapReversed ? cross > row.crossEnd : cross < row.crossStart
+      if (pastRow) precedingCount += row.slots.length
+      else if (!beforeRow) precedingCount += inRowComparison(row.slots)
+      break
+    }
+  }
   return slots[precedingCount]?.childIndex ?? childIds.length
+}
+
+/**
+ * 拖拽手势的结构意图修饰键。
+ *
+ * @remarks
+ * `alt` 强制以指针命中的最内层合法容器为 reparent 落点（跳过边缘留白的深入判定）；
+ * `space` 锁定原父级，指针经过其他容器不产生 reparent 落点，但不阻止原容器内的重排。
+ * 两者同按时锁定优先——结构意图的否决权高于命中放宽。
+ * @public
+ */
+export interface StageDropModifiers {
+  readonly alt?: boolean
+  readonly space?: boolean
+}
+
+function pointInsideBox(index: StageSceneIndex, entityId: string, worldPoint: StagePoint): boolean {
+  const box = index.layoutSnapshot.boxes[entityId]
+  const local = localPoint(index, entityId, worldPoint)
+  return Boolean(box && local
+    && local.x >= 0 && local.x <= box.width
+    && local.y >= 0 && local.y <= box.height)
+}
+
+function resolveSameContainerReorder(input: {
+  readonly index: StageSceneIndex
+  readonly containerId: string
+  readonly draggedIds: readonly string[]
+  readonly worldPoint: StagePoint
+}): StageDropTarget | null {
+  const { index, containerId, draggedIds, worldPoint } = input
+  const container = index.document.entities[containerId]
+  const hierarchy = container ? getComposeHierarchy(container) : null
+  if (!container || !hierarchy) return null
+  const layout = getComposeLayout(container)
+  if (!layout) return null
+  const allFlow = draggedIds.every((id) => {
+    const entity = index.document.entities[id]
+    return entity && getComposeLayoutItem(entity).positioning === 'flow'
+  })
+  if (!allFlow) return null
+  const insertIndex = resolveInsertIndex({
+    index,
+    containerId,
+    childIds: hierarchy.childIds,
+    draggedIds,
+    worldPoint,
+  })
+  if (insertIndex === null) return null
+  const next = applyChildReorder(hierarchy.childIds, draggedIds, insertIndex)
+  const unchanged = next.length === hierarchy.childIds.length
+    && next.every((id, at) => id === hierarchy.childIds[at])
+  if (unchanged) return null
+  return { kind: 'reorder', containerId, index: insertIndex }
 }
 
 /**
@@ -153,9 +299,11 @@ function resolveInsertIndex(input: {
  *
  * @remarks
  * 纯函数：只读取索引与文档，不产生命令，也不持有会话状态。跨容器 reparent 要求指针深入
- * 目标内部，同容器则只在 `nowrap` Auto Layout 且全部拖动目标为 Flow 时给出重排位置。
+ * 目标内部（`alt` 放宽为命中即可）；同容器在全部拖动目标为 Flow 时给出重排位置，wrap
+ * 容器按行聚类做二维插槽命中。
  *
- * @returns 当前落点；不满足任何判定条件时为 null，表示松手只更新坐标。
+ * @returns 当前落点；为 null 表示无结构意图——松手时 Absolute 目标只更新坐标，Flow 目标
+ * 回弹（拖拽不改变 positioning，脱流走显式入口）。
  * @public
  */
 export function resolveStageDropTarget(input: {
@@ -163,9 +311,22 @@ export function resolveStageDropTarget(input: {
   readonly draggedIds: readonly string[]
   readonly worldPoint: StagePoint
   readonly zoom: number
+  readonly modifiers?: StageDropModifiers
 }): StageDropTarget | null {
-  const { index, draggedIds, worldPoint, zoom } = input
+  const { index, draggedIds, worldPoint, zoom, modifiers } = input
   if (draggedIds.length === 0) return null
+
+  if (modifiers?.space) {
+    // 锁定原父级：只允许共同父级内的重排，其余情况一律无落点。
+    const parents = draggedIds.map((id) => index.getParentId(id))
+    const locked = parents[0]
+    if (!locked || parents.some((parentId) => parentId !== locked)) return null
+    const container = index.document.entities[locked]
+    if (!container || getComposeLock(container).locked) return null
+    if (!pointInsideBox(index, locked, worldPoint)) return null
+    return resolveSameContainerReorder({ index, containerId: locked, draggedIds, worldPoint })
+  }
+
   const containerId = index.containerAtPoint(worldPoint, draggedIds)
   if (!containerId) return null
   const container = index.document.entities[containerId]
@@ -174,30 +335,10 @@ export function resolveStageDropTarget(input: {
 
   const staysInPlace = draggedIds.every((id) => index.getParentId(id) === containerId)
   if (staysInPlace) {
-    const layout = getComposeLayout(container)
-    // wrap 容器里指针位置无法无歧义地反推插入序号，维持既有的烘焙 Absolute 行为。
-    if (!layout || layout.flexWrap !== 'nowrap') return null
-    const allFlow = draggedIds.every((id) => {
-      const entity = index.document.entities[id]
-      return entity && getComposeLayoutItem(entity).positioning === 'flow'
-    })
-    if (!allFlow) return null
-    const insertIndex = resolveInsertIndex({
-      index,
-      containerId,
-      childIds: hierarchy.childIds,
-      draggedIds,
-      worldPoint,
-    })
-    if (insertIndex === null) return null
-    const next = applyChildReorder(hierarchy.childIds, draggedIds, insertIndex)
-    const unchanged = next.length === hierarchy.childIds.length
-      && next.every((id, at) => id === hierarchy.childIds[at])
-    if (unchanged) return null
-    return { kind: 'reorder', containerId, index: insertIndex }
+    return resolveSameContainerReorder({ index, containerId, draggedIds, worldPoint })
   }
 
-  if (!isDeepInside(index, containerId, worldPoint, zoom)) return null
+  if (!modifiers?.alt && !isDeepInside(index, containerId, worldPoint, zoom)) return null
   return { kind: 'reparent', containerId }
 }
 
@@ -244,6 +385,8 @@ export function resolveStageDropIndicator(input: {
     draggedIds,
     isRow,
   })
+  const wraps = layout.flexWrap !== 'nowrap'
+  const rows = clusterRows(slots, wraps)
   const last = slots[slots.length - 1]
   const at = slots.find((slot) => slot.childIndex === target.index)
   // 插入位落在某个兄弟之前时贴其起始边；追加到末尾时贴最后一个兄弟的结束边。
@@ -253,9 +396,13 @@ export function resolveStageDropIndicator(input: {
     : last
       ? (reversed ? last.leading : last.trailing)
       : (reversed ? (isRow ? box.width : box.height) : 0)
-  const cross = isRow ? box.height : box.width
-  const localStart = isRow ? { x: main, y: 0 } : { x: 0, y: main }
-  const localEnd = isRow ? { x: main, y: cross } : { x: cross, y: main }
+  // nowrap 横跨整个容器交叉轴；wrap 只覆盖目标行的交叉轴区间，行间空隙不画线。
+  const anchor = at ?? last
+  const row = anchor && rows.find((candidate) => candidate.slots.includes(anchor))
+  const crossStart = wraps && row ? row.crossStart : 0
+  const crossEnd = wraps && row ? row.crossEnd : (isRow ? box.height : box.width)
+  const localStart = isRow ? { x: main, y: crossStart } : { x: crossStart, y: main }
+  const localEnd = isRow ? { x: main, y: crossEnd } : { x: crossEnd, y: main }
   return {
     kind: 'reorder',
     start: applyMatrix(matrix, localStart),

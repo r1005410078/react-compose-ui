@@ -807,11 +807,14 @@ function appendSpatialTransformPatches(
   entity: ComposeEntity,
   next: ComposeSpatialTransform,
   operation: TransformOperation = 'set',
+  detachFromFlow = false,
 ) {
   const current = getComposeSpatialTransform(entity)
   const item = getComposeLayoutItem(entity)
   if (!samePosition(current, next) || !sameSize(current, next)) {
-    const movingFlowItem = operation === 'move' && item.positioning === 'flow'
+    // Flow→Absolute 只由显式脱流意图驱动：普通 move 不得隐式改变 positioning，
+    // 拖拽重排/回弹语义依赖这一点（脱流入口是几何 Inspector 的显式开关）。
+    const movingFlowItem = operation === 'move' && detachFromFlow && item.positioning === 'flow'
     const resizing = operation === 'resize' || operation === 'set'
     result.push({
       op: 'set',
@@ -859,7 +862,11 @@ function transformHandler(): CommandHandler {
       ) return issue('transform.invalid', 'Transform 命令参数无效')
       const result: DocumentPatch[] = []
       for (const update of updates) {
-        if (!isRecord(update) || typeof update.entityId !== 'string') {
+        if (
+          !isRecord(update)
+          || typeof update.entityId !== 'string'
+          || (update.detachFromFlow !== undefined && typeof update.detachFromFlow !== 'boolean')
+        ) {
           return issue('transform.invalid', 'Transform update 参数无效')
         }
         const entity = document.entities[update.entityId]
@@ -879,6 +886,7 @@ function transformHandler(): CommandHandler {
           entity,
           update.transform,
           operation as TransformOperation,
+          update.detachFromFlow === true,
         )
       }
       return patches(result)

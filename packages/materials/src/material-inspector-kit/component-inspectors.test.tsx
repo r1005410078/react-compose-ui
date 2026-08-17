@@ -345,6 +345,127 @@ describe('内建 Component inspectors', () => {
     })
   })
 
+  it('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 开启脱流且视觉位置不变', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const child = entity({
+      Renderer: { type: 'rectangle', props: {} },
+      LayoutItem: {
+        ...createDefaultComposeLayoutItem(80, 40),
+        positioning: 'flow',
+        width: { mode: 'fill', value: 80, min: null, max: null },
+      },
+    })
+    const parent = { ...entity({
+      Hierarchy: { childIds: [child.id] },
+      Layout: createDefaultComposeFlexLayout(),
+      Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' }, borderWidth: 2 },
+    }), id: 'parent', name: 'Parent' }
+    const document: ComposeDocument = {
+      schemaVersion: 6,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [parent.id],
+      entities: { [parent.id]: parent, [child.id]: child },
+    }
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        document={document}
+        entity={child}
+        layoutSnapshot={{
+          revision: 1,
+          boxes: {
+            [child.id]: { x: 30, y: 40, width: 240, height: 40, positioning: 'flow' },
+          },
+          diagnostics: [],
+        }}
+        readOnly={false}
+        value={child.components.LayoutItem!}
+      />,
+    )
+
+    const toggle = screen.getByRole('checkbox', { name: '忽略自动布局' })
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+    // offset 从布局 box 反算（box - 父级 border 2），fill 轴烘焙为 fixed（求解尺寸）。
+    expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
+      entityId: child.id,
+      key: 'LayoutItem',
+      value: {
+        positioning: 'absolute',
+        offset: { x: 28, y: 38 },
+        width: { mode: 'fixed', value: 240 },
+        height: { mode: 'fixed', value: 40 },
+      },
+    })
+  })
+
+  it('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 关闭回流并采纳容器规则', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const child = entity({
+      Renderer: { type: 'rectangle', props: {} },
+      LayoutItem: {
+        ...createDefaultComposeLayoutItem(80, 40, { x: 28, y: 38 }),
+        positioning: 'absolute',
+      },
+    })
+    // 默认 Flex 布局是 row + stretch：回流采纳规则应把交叉轴（height）fixed 改写为 fill。
+    const parent = { ...entity({
+      Hierarchy: { childIds: [child.id] },
+      Layout: createDefaultComposeFlexLayout(),
+    }), id: 'parent', name: 'Parent' }
+    const document: ComposeDocument = {
+      schemaVersion: 6,
+      canvas: createDefaultCanvasSettings(),
+      output: createDefaultOutputSettings(),
+      rootIds: [parent.id],
+      entities: { [parent.id]: parent, [child.id]: child },
+    }
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        document={document}
+        entity={child}
+        readOnly={false}
+        value={child.components.LayoutItem!}
+      />,
+    )
+
+    const toggle = screen.getByRole('checkbox', { name: '忽略自动布局' })
+    expect(toggle).toBeChecked()
+    fireEvent.click(toggle)
+    expect((dispatch.mock.lastCall?.[0] as EditorCommand).payload).toMatchObject({
+      entityId: child.id,
+      key: 'LayoutItem',
+      value: {
+        positioning: 'flow',
+        width: { mode: 'fixed', value: 80 },
+        height: { mode: 'fill', value: 40 },
+      },
+    })
+  })
+
+  it('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 非 Auto Layout 父级不显示', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const target = entity()
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    expect(screen.queryByRole('checkbox', { name: '忽略自动布局' })).not.toBeInTheDocument()
+  })
+
   it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / 尺寸 0 视为非法输入不产生事务', () => {
     // Core 要求 AxisSizing.value 为有限正数；0 若被放行会派发出必然被拒的命令，
     // 文档不变而输入框继续显示 0。

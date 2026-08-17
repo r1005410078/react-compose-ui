@@ -123,6 +123,7 @@ import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
 import { StageSceneLayer } from '../stage-scene-layer'
+import { buildResizePreviewSolveDocument } from './resize-preview'
 import {
   describeEntityCreation,
   describeEntityTargets,
@@ -777,12 +778,10 @@ export function ComposeStage(props: ComposeStageProps) {
   }
   const {
     layoutError: _layoutError,
-    layoutRuntime: _layoutRuntime,
     layoutSnapshot,
     ...readyProps
   } = props
   void _layoutError
-  void _layoutRuntime
   return (
     <ComposeStageReady
       {...readyProps}
@@ -794,7 +793,7 @@ export function ComposeStage(props: ComposeStageProps) {
 
 type ComposeStageReadyProps = Omit<
   ComposeStageProps,
-  'layoutError' | 'layoutRuntime' | 'layoutSnapshot'
+  'layoutError' | 'layoutSnapshot'
 > & {
   readonly layoutSnapshot: ComposeLayoutSnapshot
   /** 原地编辑期间把编辑中的文本送进测量链路，使 Auto width 实时改宽。 */
@@ -867,6 +866,8 @@ function entityEditableText(
 function ComposeStageReady({
   document,
   layoutSnapshot,
+  layoutPreviewSnapshot,
+  layoutRuntime,
   measurementAdapter,
   registry,
   assetResolver,
@@ -1011,6 +1012,33 @@ function ComposeStageReady({
     () => transformLayoutSnapshot(layoutSnapshot, previewTransforms),
     [layoutSnapshot, previewTransforms],
   )
+  // resize 手势的实时布局：把预览文档交给 Layout Runtime 求解，兄弟随拖动让位。
+  // 只有 Flow 目标需要求解（Absolute 不参与排布，previewTransforms 覆盖已足够）。
+  const resizeSolveDocument = useMemo(
+    () => (interaction.phase === 'resize' && layoutRuntime?.previewDocument
+      ? buildResizePreviewSolveDocument(previewDocument, Object.keys(previewTransforms))
+      : null),
+    [interaction.phase, layoutRuntime, previewDocument, previewTransforms],
+  )
+  useEffect(() => {
+    const runtime = layoutRuntime
+    if (!runtime?.previewDocument || !runtime.clearPreview) return
+    if (!resizeSolveDocument) {
+      runtime.clearPreview()
+      return
+    }
+    // rAF 合并：120Hz pointermove 下每帧最多一次求解；卸载或换帧取消未执行的请求。
+    const frame = requestAnimationFrame(() => runtime.previewDocument!(resizeSolveDocument))
+    return () => cancelAnimationFrame(frame)
+  }, [layoutRuntime, resizeSolveDocument])
+  // 卸载兜底：手势中途卸载 Stage 时不把预览状态留在宿主 Runtime 里。
+  useEffect(() => () => layoutRuntime?.clearPreview?.(), [layoutRuntime])
+  // 场景渲染优先用实时求解结果；求解只在 resize 期间生效，其余手势维持既有覆盖预览。
+  // 预览 Snapshot 不进入交互 Controller 的 context（见 updateContext），提交几何始终以
+  // 冻结的提交态 Snapshot 为准。
+  const sceneLayoutSnapshot = resizeSolveDocument && layoutPreviewSnapshot
+    ? layoutPreviewSnapshot
+    : previewLayoutSnapshot
   const normalizedSelection = useMemo(
     () => selectedIds.filter((id) => Boolean(document.entities[id])),
     [document, selectedIds],
@@ -2556,8 +2584,11 @@ function ComposeStageReady({
     }
     const direction = directions[event.key]
     if (direction) {
+      // Flow 子级的位置由 Auto Layout 决定，方向键平移对它没有可见效果；过滤掉以免提交
+      // 只写 offset 的空事务。脱流是显式操作，不再由 move 类命令隐式触发。
       const movableIds = editableIds.filter((id) =>
-        resolveComposeGeometryConstraints(document.entities[id]!).movable)
+        resolveComposeGeometryConstraints(document.entities[id]!).movable
+        && getComposeLayoutItem(document.entities[id]!).positioning !== 'flow')
       if (movableIds.length === 0) return
       const distance = event.shiftKey ? 10 : 1
       const stageUpdates = movableIds.map((entityId) => {
@@ -2933,7 +2964,7 @@ function ComposeStageReady({
           assetResolver={assetResolver}
           document={previewDocument}
           hiddenEntityIds={hiddenEntityIds}
-          layoutSnapshot={previewLayoutSnapshot}
+          layoutSnapshot={sceneLayoutSnapshot}
           pageLoader={pageLoader}
           paintPreview={interaction.paintPreview}
           registry={registry}

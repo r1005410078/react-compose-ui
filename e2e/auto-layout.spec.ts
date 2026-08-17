@@ -242,7 +242,7 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
 })
 
 
-test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Absolute 并一次提交', async ({ page }) => {
+test('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 显式脱流保持视觉位置', async ({ page }) => {
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
@@ -349,16 +349,22 @@ test('OpenSpec: auto-layout-interactions / Fill 与 Flow 移动 / 烘焙为 Abso
   const fillBox = await children.nth(0).boundingBox()
   expect(fillBox).not.toBeNull()
   expect(fillBox!.width).toBeGreaterThan(firstFlowBox!.width)
+
+  // 方向键平移 Flow 子级是 no-op：位置由布局决定，不再隐式脱流。
   await stage.focus()
   await stage.press('ArrowRight')
+  await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toBeVisible()
+  const nudgedBox = await children.nth(0).boundingBox()
+  expect(nudgedBox!.x).toBeCloseTo(fillBox!.x, 0)
 
+  // 显式脱流走「忽略自动布局」开关：视觉位置不变，fill 轴烘焙为 fixed。
+  await childInspector.getByRole('checkbox', { name: '忽略自动布局' }).check()
   await expect(childInspector.getByRole('spinbutton', { name: '位置 X' })).toBeVisible()
   await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toHaveCount(0)
   await expect.poll(async () => Number.isFinite(Number(await widthSizing.inputValue()))).toBe(true)
   const absoluteBox = await children.nth(0).boundingBox()
   expect(absoluteBox).not.toBeNull()
-  expect(absoluteBox!.x).toBeGreaterThan(fillBox!.x)
-  expect(absoluteBox!.x - fillBox!.x).toBeLessThanOrEqual(3)
+  expect(absoluteBox!.x).toBeCloseTo(fillBox!.x, 0)
   expect(absoluteBox!.width).toBeCloseTo(fillBox!.width, 0)
 
   await expect(basicSection).toHaveScreenshot('basic-inspector-absolute-fixed.png', {

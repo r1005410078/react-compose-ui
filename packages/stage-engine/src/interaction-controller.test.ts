@@ -314,7 +314,7 @@ describe('StageInteractionController ECS systems', () => {
     }))
   })
 
-  it('OpenSpec: auto-layout-interactions / Flow 拖动 / 使用冻结 Snapshot 并烘焙 Fill 尺寸', () => {
+  it('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 无有效落点时 Flow 目标回弹', () => {
     const flowBase = entity('a')
     const flow = {
       ...flowBase,
@@ -364,20 +364,12 @@ describe('StageInteractionController ECS systems', () => {
     controller.send({
       type: 'pointer.up', pointerId: 1, point: { x: 50, y: 60 }, modifiers,
     })
-    expect(effects.find((effect) => effect.type === 'command.dispatch')).toMatchObject({
-      command: {
-        payload: {
-          operation: 'move',
-          updates: [{
-            entityId: 'a',
-            transform: { size: { width: 260, height: 50 } },
-          }],
-        },
-      },
-    })
+    // 唯一子级无可变顺序、也没有 reparent 落点：Flow 目标回弹，不提交任何命令，
+    // positioning 不因拖拽改变（脱流走几何 Inspector 的显式开关）。
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toEqual([])
   })
 
-  it('OpenSpec: auto-layout-interactions / 混合多选移动 / Flow 与 Absolute 共用一次提交', () => {
+  it('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 混合多选只提交 Absolute 目标', () => {
     const flowBase = entity('flow')
     const flow = {
       ...flowBase,
@@ -426,17 +418,18 @@ describe('StageInteractionController ECS systems', () => {
 
     const commands = effects.filter((effect) => effect.type === 'command.dispatch')
     expect(commands).toHaveLength(1)
+    // Flow 目标回弹（不出现在 updates 里），Absolute 目标正常提交坐标。
     expect(commands[0]).toMatchObject({
       command: {
         payload: {
           operation: 'move',
           updates: [
-            { entityId: 'flow', transform: { position: { x: 32, y: 41 } } },
             { entityId: 'absolute', transform: { position: { x: 202, y: 109 } } },
           ],
         },
       },
     })
+    expect(JSON.stringify(commands[0])).not.toContain('"entityId":"flow"')
   })
 
   it('OpenSpec: auto-layout-interactions / 手势取消 / 清除预览且零事务', () => {
@@ -1698,6 +1691,73 @@ describe('OpenSpec: stage-engine / 画布拖拽 reparent 与容器内重排', ()
   })
 })
 
+describe('OpenSpec: stage-engine / 拖拽修饰键结构意图', () => {
+  function modifierFixture() {
+    const target = entity('target', { x: 400, y: 0, width: 200, height: 200, childIds: [] })
+    const dragged = entity('dragged', { x: 0, y: 0, width: 50, height: 50 })
+    return document([target, dragged], ['target', 'dragged'])
+  }
+
+  it('Alt 拖动把边缘留白内的命中强制为 reparent 落点', () => {
+    const value = modifierFixture()
+    const { controller, effects } = setup(value, layoutSnapshot(value), ['dragged'])
+    const altModifiers = { ...modifiers, alt: true }
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'dragged' }, modifiers,
+    })
+    // 留白区（距 target 左边缘 5px）：默认无落点，Alt 强制命中。
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 405, y: 100 }, modifiers })
+    expect(controller.getSnapshot().dropTarget).toBeNull()
+    controller.send({
+      type: 'pointer.move', pointerId: 1, point: { x: 405, y: 100 }, modifiers: altModifiers,
+    })
+    expect(controller.getSnapshot().dropTarget)
+      .toEqual({ kind: 'reparent', containerId: 'target' })
+
+    controller.send({
+      type: 'pointer.up', pointerId: 1, point: { x: 405, y: 100 }, modifiers: altModifiers,
+    })
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    // reparent 以 batch 提交（结构 + 几何一条事务），与既有 reparent 提交路径一致。
+    expect(commands[0]).toMatchObject({
+      command: { type: 'transaction.batch' },
+    })
+  })
+
+  it('手势中 Space 锁定原父级且不进入临时平移', () => {
+    const value = modifierFixture()
+    const { controller, effects } = setup(value, layoutSnapshot(value), ['dragged'])
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'dragged' }, modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 500, y: 100 }, modifiers })
+    expect(controller.getSnapshot().dropTarget)
+      .toEqual({ kind: 'reparent', containerId: 'target' })
+
+    // Space 按下：候选目标原地清除，snapshot 不进入 temporaryPan。
+    controller.send({ type: 'temporary-pan.start' })
+    expect(controller.getSnapshot().dropTarget).toBeNull()
+    expect(controller.getSnapshot().temporaryPan).toBe(false)
+
+    // Space 松开：无需移动指针即恢复候选目标。
+    controller.send({ type: 'temporary-pan.end' })
+    expect(controller.getSnapshot().dropTarget)
+      .toEqual({ kind: 'reparent', containerId: 'target' })
+
+    controller.send({ type: 'temporary-pan.start' })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 500, y: 100 }, modifiers })
+    // 锁定状态下松手：顶层自由目标只更新坐标，不产生 reparent。
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: { type: BUILTIN_COMMAND_TYPES.setTransform, payload: { operation: 'move' } },
+    })
+  })
+})
+
 describe('OpenSpec: stage-engine / Auto Layout 容器内原地重排提交', () => {
   function reorderFixture() {
     const container = entity('container', { x: 0, y: 0, width: 300, height: 100, childIds: ['a', 'b', 'c'] })
@@ -1760,7 +1820,7 @@ describe('OpenSpec: stage-engine / Auto Layout 容器内原地重排提交', () 
     })
   })
 
-  it('拖出容器边界回退为既有 Transform 提交', () => {
+  it('拖出容器边界无落点时 Flow 目标回弹零事务', () => {
     const value = reorderFixture()
     const { controller, effects } = setup(value, layoutSnapshot(value), ['a'])
     controller.send({
@@ -1773,11 +1833,8 @@ describe('OpenSpec: stage-engine / Auto Layout 容器内原地重排提交', () 
     })
     controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 50, y: 400 }, modifiers })
 
-    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
-    expect(commands).toHaveLength(1)
-    expect(commands[0]).toMatchObject({
-      command: { type: BUILTIN_COMMAND_TYPES.setTransform, payload: { operation: 'move' } },
-    })
+    // 松手点不在任何合法容器的落点判定区内：不烘焙 Absolute，也不产生 Transform 事务。
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toEqual([])
   })
 })
 

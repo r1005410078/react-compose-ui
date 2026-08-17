@@ -205,7 +205,10 @@ Resize 模式支持 `free`、`preserve-aspect`、`horizontal`、`vertical`、`no
 
 Inspector 按 Registry 顺序聚合当前 Entity 的 Component 属性区。Definition 可用
 `inspectorGroup: 'basic'` 把领域字段合并到“基础”，也可指定独立分组的默认展开状态。
-内建基础区按“名称、位置/自身对齐、旋转、尺寸、外边距”紧凑组合 Transform 与 LayoutItem：
+内建基础区按“名称、忽略自动布局、位置/自身对齐、旋转、尺寸、外边距”紧凑组合 Transform 与
+LayoutItem：父级为 Auto Layout 容器时提供「忽略自动布局」开关，作为 Flow↔Absolute 的唯一
+显式转换入口（画布拖拽只做重排/换父级，不再隐式脱流；Alt 强制吸入指针命中容器，手势中按住
+Space 锁定原父级；resize Auto Layout 子级时兄弟实时让位）。
 Absolute 的 X/Y 使用独立 Position 类型，Flow 显示独立自身对齐字段，旋转复用 Angle 类型；尺寸的
 W/H 分别使用单一智能输入：数字表达 Fixed，聚焦后可选择或直接输入英文 `Fill`/`Hug`，
 外边距可按 T/R/B/L 展开。Auto Layout 的内边距复用同一套单值/四边展开交互，并按其他布局字段
