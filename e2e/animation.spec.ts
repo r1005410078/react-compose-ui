@@ -1,0 +1,425 @@
+import { expect, test } from '@playwright/test'
+import { pointerDrop, drawContainer } from './support/test-helpers'
+
+test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头、画布采样与撤销', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 放一个 Rectangle 并选中它。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(node).toHaveCount(1)
+  await node.click()
+
+  // 打开动画标签 = 进入动画模式；空态引导创建第一条动画。
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await expect(animationPanel.getByText('当前页面还没有动画')).toBeVisible()
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+
+  // 属性面板位置字段出现菱形；点击在播放头 0 ms 打第一个关键帧。
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  const keyButton = inspector.getByRole('button', { name: '为 位置 添加关键帧' })
+  await expect(keyButton).toBeVisible()
+  await keyButton.click()
+  await expect(
+    inspector.getByRole('button', { name: '删除 位置 在当前播放头的关键帧' }),
+  ).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+
+  // 播放头拖到 200 ms 后在画布上拖动对象：自动记录写入第二个关键帧（绝对位置）。
+  const originalBox = await node.boundingBox()
+  expect(originalBox).not.toBeNull()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  await page.mouse.move(
+    originalBox!.x + originalBox!.width / 2,
+    originalBox!.y + originalBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    originalBox!.x + originalBox!.width / 2 + 96,
+    originalBox!.y + originalBox!.height / 2,
+    { steps: 5 },
+  )
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+  const draggedBox = await node.boundingBox()
+  expect(draggedBox).not.toBeNull()
+  expect(draggedBox!.x - originalBox!.x).toBeGreaterThan(48)
+
+  // 播放头回 0：画布按采样文档回到起始位置——拖动没有污染基础静态值。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  await expect
+    .poll(async () => Math.abs((await node.boundingBox())!.x - originalBox!.x))
+    .toBeLessThan(2)
+
+  // 撤销撤掉的是 200 ms 关键帧事务，而不是画布位置。
+  await stage.press('Control+z')
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(0)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+})
+
+
+test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、双击切换与撤销粒度', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 准备：放 Rectangle → 创建动画 → 0 ms 打点 → 播放头 200 ms 拖出第二个关键帧。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await node.click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const startBox = (await node.boundingBox())!
+  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(startBox.x + startBox.width / 2 + 120, startBox.y + startBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // 位置轨道存在即显示可编辑路径：两个顶点。
+  const path = stage.locator('[data-testid="stage-editable-path"]')
+  await expect(path).toBeVisible()
+  const vertexHits = stage.locator('[data-testid^="stage-path-vertex-hit-"]')
+  await expect(vertexHits).toHaveCount(2)
+
+  // 拖第二个顶点：松手后关键帧值变化，对象在播放头 200 ms 跟到新位置。
+  const draggedBox = (await node.boundingBox())!
+  const secondVertex = (await vertexHits.nth(1).boundingBox())!
+  await page.mouse.move(secondVertex.x + secondVertex.width / 2, secondVertex.y + secondVertex.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    secondVertex.x + secondVertex.width / 2,
+    secondVertex.y + secondVertex.height / 2 + 80,
+    { steps: 4 },
+  )
+  await page.mouse.up()
+  await expect.poll(async () => (await node.boundingBox())!.y - draggedBox.y).toBeGreaterThan(60)
+
+  // 一次拖拽在撤销栈里只有一条记录：撤销一次即回到拖拽前位置。
+  await stage.press('Control+z')
+  await expect.poll(async () => Math.abs((await node.boundingBox())!.y - draggedBox.y)).toBeLessThan(2)
+
+  // 双击第二个顶点切换 smooth：出现切线手柄；拖切线让轨迹弯曲（折线点集变化）。
+  await vertexHits.nth(1).dblclick()
+  const tangentHits = stage.locator('[data-testid^="stage-path-tangent-"]')
+  await expect(tangentHits.first()).toBeVisible()
+  const straightPoints = await stage
+    .locator('[data-testid="stage-editable-path-line"]')
+    .getAttribute('points')
+  const tangent = (await tangentHits.first().boundingBox())!
+  await page.mouse.move(tangent.x + tangent.width / 2, tangent.y + tangent.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(tangent.x + tangent.width / 2, tangent.y + tangent.height / 2 - 60, { steps: 4 })
+  await page.mouse.up()
+  await expect
+    .poll(async () => stage.locator('[data-testid="stage-editable-path-line"]').getAttribute('points'))
+    .not.toBe(straightPoints)
+
+  // 再次双击回 corner：切线清零、手柄消失。
+  await vertexHits.nth(1).dblclick()
+  await expect(tangentHits).toHaveCount(0)
+
+  // 退出动画模式（切到底部组其他标签）：路径覆盖层立即消失。
+  await editor.locator('[data-workspace-tab="compose-transaction-log"]').click()
+  await expect(stage.locator('[data-testid="stage-editable-path"]')).toHaveCount(0)
+})
+
+
+test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打点-绑定-预览自动播放', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 创建动画并打出两个位置关键帧（0 ms 菱形打点 + 200 ms 画布拖动自动记录）。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await node.click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const box = (await node.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // 选中动画片段：属性区切换为动画检查器。
+  await animationPanel.getByRole('button', { name: /^动画片段 Rectangle：/u }).click()
+  await expect(inspector.getByRole('textbox', { name: '名称' })).toHaveValue('动画 1')
+
+  // 选回对象轨道：恢复 Entity Inspector；再点片段回到动画检查器。
+  await animationPanel.getByRole('button', { name: '选择对象轨道 Rectangle' }).click()
+  await expect(inspector.getByRole('spinbutton', { name: '位置 X' })).toBeVisible()
+  await animationPanel.getByRole('button', { name: /^动画片段 Rectangle：/u }).click()
+  await expect(inspector.getByRole('textbox', { name: '名称' })).toHaveValue('动画 1')
+
+  // 循环播放让预览断言稳定；修改经 animation.configure 写入文档。
+  await inspector.getByRole('combobox', { name: '播放模式' }).selectOption('loop')
+
+  // 绑定播放到页面 setup 导出的布尔 animate（候选按语义过滤，字符串/数值成员不出现）。
+  // 绑定入口悬停显隐：先悬停"播放"行让入口可见。
+  await inspector.locator('[data-property-path="playing"]').hover()
+  await inspector.getByRole('button', { name: /绑定\s*播放/u }).click()
+  const picker = page.getByRole('dialog')
+  await expect(picker.getByText('animate')).toBeVisible()
+  await expect(picker.getByText('buttonLabel')).toHaveCount(0)
+  await picker.getByText('animate').click()
+
+  // 打开预览：animate 初始为 true，动画自动播放——实体位置随时间变化。
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const previewEntity = page
+    .getByTestId('compose-preview-dialog-artboard')
+    .locator('[data-testid^="compose-preview-entity-"]')
+    .first()
+  await expect(previewEntity).toBeVisible()
+  const initial = (await previewEntity.boundingBox())!
+  await expect
+    .poll(async () => Math.abs(((await previewEntity.boundingBox())?.x ?? initial.x) - initial.x), {
+      timeout: 4000,
+    })
+    .toBeGreaterThan(10)
+})
+
+
+test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增节点不打断画布与多节点轨道', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 节点 A：打 0 ms 关键帧，播放头 200 ms 拖出第二帧。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(nodes).toHaveCount(1)
+  await nodes.first().click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  const originalBox = (await nodes.first().boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  await page.mouse.move(originalBox.x + originalBox.width / 2, originalBox.y + originalBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(originalBox.x + originalBox.width / 2 + 96, originalBox.y + originalBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(1)
+
+  // 回归：动画模式下点击添加节点 B。采样文档先于布局快照拿到新实体时，
+  // 画布曾因几何索引缺 box 抛错并整体卸载。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await expect(nodes).toHaveCount(2)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(1)
+
+  // 节点 B：直接在画布拖动，自动记录为它新建位置轨道（200 ms 一帧）。
+  const bBox = (await nodes.nth(1).boundingBox())!
+  await page.mouse.move(bBox.x + bBox.width / 2, bBox.y + bBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(bBox.x + bBox.width / 2, bBox.y + bBox.height / 2 + 120, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
+
+  // 回归：真实指针拖入节点 C 也不崩，且已有轨道不受影响。
+  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: outputBox.x + 450,
+    y: outputBox.y + 40,
+  })
+  await expect(nodes).toHaveCount(3)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
+
+  // 采样独立：播放头回 0，A 回到起点；B 只有 200 ms 一帧，端点钳制保持拖后位置。
+  // 注意不能重复点击已激活的动画标签：Dockview 会把它折叠。
+  const draggedB = (await nodes.nth(1).boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  await expect
+    .poll(async () => Math.abs((await nodes.first().boundingBox())!.x - originalBox.x))
+    .toBeLessThan(2)
+  expect(Math.abs((await nodes.nth(1).boundingBox())!.y - draggedB.y)).toBeLessThan(2)
+})
+
+
+test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可打点采样且拖入嵌套不打断', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 准备嵌套：容器 + 一个拖进容器的矩形子级。
+  await drawContainer(page, editor)
+  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: outputBox.x + 200,
+    y: outputBox.y + 20,
+  })
+  const topLevel = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rectBox = (await topLevel.first().boundingBox())!
+  await page.mouse.move(rectBox.x + rectBox.width / 2, rectBox.y + rectBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(outputBox.x + 300, outputBox.y + 250, { steps: 8 })
+  await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
+  await page.mouse.up()
+  const nested = stage.getByTestId('stage-container').locator(':scope > .compose-stage__node.is-renderer')
+  await expect(nested).toHaveCount(1)
+
+  // 嵌套子级打点：0 ms 菱形 + 200 ms 画布拖动自动记录。
+  await nested.click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  const startBox = (await nested.boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(startBox.x + startBox.width / 2 + 80, startBox.y + startBox.height / 2 + 40, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+  // 动画拖动只写关键帧，不把子级拖出容器。
+  await expect(nested).toHaveCount(1)
+
+  // 播放头回 0：嵌套子级按采样回到容器内起点。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  await expect
+    .poll(async () => Math.abs((await nested.boundingBox())!.x - startBox.x))
+    .toBeLessThan(2)
+
+  // 回归：动画进行中往已含动画子级的容器里再添加节点（点击添加以当前选中实体为
+  // 兄弟插入，正好落进容器）。结构变化曾让采样文档先于布局快照拿到新实体而崩溃。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await expect(nested).toHaveCount(2)
+  await expect(stage.getByTestId('stage-container')).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+})
+
+
+test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动画', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+
+  // 从容器创建组件实例。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Container' }).click()
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const source = sceneTree.getByRole('row').last()
+  await source.click()
+  await source.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '创建组件…' }).click()
+  const dialog = page.getByRole('dialog', { name: '创建组件' })
+  await dialog.getByLabel('组件名称').fill('Anim Card')
+  await dialog.getByRole('button', { name: '创建' }).click()
+  const instanceContent = stage.getByTestId('compose-component-instance-content')
+  await expect(instanceContent).toBeVisible()
+
+  // 选中实例并进入动画模式：实例是页面文档中的普通 Entity，位置轨道照常可用。
+  const instanceBox = (await instanceContent.boundingBox())!
+  await page.mouse.click(instanceBox.x + instanceBox.width / 2, instanceBox.y + instanceBox.height / 2)
+  await expect(sceneTree.getByRole('row', { name: /Anim Card/ }))
+    .toHaveAttribute('aria-selected', 'true')
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+
+  // 播放头 0 拖动实例：自动记录建轨并打 0 ms 帧；播放头 200 再拖出第二帧。
+  const startBox = (await instanceContent.boundingBox())!
+  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(startBox.x + startBox.width / 2 - 60, startBox.y + startBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  const zeroBox = (await instanceContent.boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const midBox = (await instanceContent.boundingBox())!
+  await page.mouse.move(midBox.x + midBox.width / 2, midBox.y + midBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(midBox.x + midBox.width / 2 + 140, midBox.y + midBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: /^动画片段 Anim Card：/u })).toBeVisible()
+
+  // 采样：播放头回 0，实例回到 0 ms 关键帧位置。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  await expect
+    .poll(async () => Math.abs((await instanceContent.boundingBox())!.x - zeroBox.x))
+    .toBeLessThan(2)
+})
+
+
+test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键删除轨道并撤销恢复', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 准备一条位置轨道：打点 + 播放头 200 ms 拖出第二帧。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await node.click()
+  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const box = (await node.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 96, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // 属性行右键 → 删除轨道：轨道连同两个关键帧一起消失。
+  await animationPanel.getByRole('button', { name: '选择属性轨道 位置' }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '删除轨道' }).click()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(0)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(0)
+
+  // 撤销一步整体恢复。
+  await stage.press('Control+z')
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // "更多操作"按钮给出同一份菜单（悬停后才显现，因此先 hover）。
+  const propertyRow = animationPanel.getByRole('button', { name: '选择属性轨道 位置' })
+  await propertyRow.hover()
+  await animationPanel.getByRole('button', { name: '位置 的更多操作' }).click()
+  await expect(page.getByRole('menuitem', { name: '删除轨道' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '在播放头处打点' })).toBeVisible()
+  // 依赖光标时间的条目只属于车道右键，不进按钮菜单。
+  await expect(page.getByRole('menuitem', { name: '在光标所在时间打点' })).toHaveCount(0)
+})
+
+
