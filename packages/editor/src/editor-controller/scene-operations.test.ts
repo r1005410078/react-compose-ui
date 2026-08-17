@@ -142,6 +142,54 @@ describe('planSceneOperation', () => {
     }
   })
 
+  it('OpenSpec: stage-engine / ECS 结构命令 / 在 Auto Layout 容器下新建时转为 Flow 并采纳交叉轴', () => {
+    const base = documentFixture()
+    const dashboard = base.entities.dashboard!
+    const value: ComposeDocument = {
+      ...base,
+      entities: {
+        ...base.entities,
+        dashboard: {
+          ...dashboard,
+          components: {
+            ...dashboard.components,
+            Layout: {
+              type: 'flex',
+              flexDirection: 'row',
+              flexWrap: 'nowrap',
+              alignContent: 'stretch',
+              justifyContent: 'flex-start',
+              alignItems: 'stretch',
+              padding: { top: 0, right: 0, bottom: 0, left: 0 },
+              rowGap: 0,
+              columnGap: 0,
+            },
+          },
+        } as ComposeEntity,
+        title: {
+          ...base.entities.title!,
+          components: {
+            ...base.entities.title!.components,
+            LayoutItem: {
+              ...base.entities.title!.components.LayoutItem as object,
+              positioning: 'flow',
+            },
+          },
+        } as ComposeEntity,
+      },
+    }
+    const nested = plannedCommand(
+      { type: 'create', parentId: 'dashboard', index: 0 },
+      context({ document: value, layoutSnapshot: snapshot(value) }),
+    )
+    const nestedEntity = nested.command.payload.entity as unknown as ComposeEntity
+    // 父级是 stretch 的 row 容器：新建子级进入排队，交叉轴 fixed 采纳为 fill。
+    expect(getComposeLayoutItem(nestedEntity)).toMatchObject({
+      positioning: 'flow',
+      height: { mode: 'fill' },
+    })
+  })
+
   it('容器 Preset 缺失时报告 unavailable 而不是抛错', () => {
     const result = planSceneOperation(
       { type: 'create', parentId: null, index: 0 },

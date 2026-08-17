@@ -529,6 +529,41 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子�
   expect(firstAfter!.height - firstBefore!.height).toBeGreaterThan(50)
 })
 
+test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout 的容器即参与布局', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage.getByTestId('stage-output-boundary')).toBeVisible()
+  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+
+  await drawContainer(page, editor)
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
+
+  const frame = stage.getByTestId('stage-container')
+  const children = frame.locator(':scope > .compose-stage__node.is-renderer')
+  await expect(children).toHaveCount(1)
+  await frame.click({ position: { x: 8, y: 8 } })
+  await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+  const firstBox = await children.nth(0).boundingBox()
+
+  // 向已启用 Auto Layout 的容器拖入新 Rectangle：应作为 Flow 子级排在兄弟旁边，
+  // 而不是以 Absolute 落在指针位置。
+  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 400, y: outputBox!.y + 300 })
+  await expect(children).toHaveCount(2)
+  const secondBox = await children.nth(1).boundingBox()
+  expect(Math.round(secondBox!.y)).toBe(Math.round(firstBox!.y))
+  expect(Math.round(secondBox!.x)).toBe(Math.round(firstBox!.x + firstBox!.width))
+
+  // Inspector 呈现 Flow 形态：有自身对齐、无位置 X，「忽略自动布局」未勾选。
+  await children.nth(1).click()
+  const childInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toBeVisible()
+  await expect(childInspector.getByRole('spinbutton', { name: '位置 X' })).toHaveCount(0)
+  await expect(childInspector.getByRole('checkbox', { name: '忽略自动布局' })).not.toBeChecked()
+})
+
 test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器跨行重排', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

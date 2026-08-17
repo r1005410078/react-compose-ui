@@ -53,6 +53,7 @@ import {
   isComposeInstancePath,
   encodeComposeInstancePath,
   getComposeHierarchy,
+  getComposeLayout,
   getComposeLock,
   getComposeLayoutItem,
   getComposeRenderer,
@@ -1712,7 +1713,12 @@ function ComposeStageReady({
         const localCenter = inverseParent
           ? applyMatrix(inverseParent, worldCenter)
           : worldCenter
-        return entityFromSeed(seed, current.idFactory(), localCenter)
+        return entityFromSeed(
+          seed,
+          current.idFactory(),
+          localCenter,
+          parent ? getComposeLayout(parent) : undefined,
+        )
       })
       const commands: EditorCommand[] = entities.map((entity) => ({
         id: current.idFactory(),
@@ -2014,7 +2020,12 @@ function ComposeStageReady({
               effect.worldPoint,
             )
           : effect.worldPoint
-        const entity = entityFromSeed(seed.seed, entityId, localCenter)
+        const entity = entityFromSeed(
+          seed.seed,
+          entityId,
+          localCenter,
+          validParent ? getComposeLayout(validParent) : undefined,
+        )
         const result = current.dispatch({
           id: current.idFactory(),
           type: BUILTIN_COMMAND_TYPES.createEntity,
