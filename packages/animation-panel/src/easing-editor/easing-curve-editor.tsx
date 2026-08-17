@@ -78,39 +78,43 @@ interface EasingDomain {
   readonly max: number
 }
 
+/** 纵向显示域两端各留的余量，占域高的比例。 */
+const DOMAIN_MARGIN = 0.08
+
 /**
  * 计算纵向显示域。
  *
  * @remarks
- * 单位方格固定是 0～1，回弹曲线的控制点会超出它。显示域按 0.5 量化到刚好包住所有控制点，
- * 量化是为了让拖拽过程中的重标定只在跨过半格时发生一次，而不是随指针连续缩放。
+ * 域按 `0 → 1` 与两个控制点的 y 取包络，再各留一点余量。贴合而不是量化到固定档位，
+ * 是为了让常规缓动把画布填满——量化到 0.5 会让一条 y 最大 1.56 的回弹曲线只用掉半屏。
+ * 拖拽期间显示域被冻结，因此贴合不会带来连续重标定的抖动。
  */
 function easingDomain(interpolation: ComposeAnimationInterpolation): EasingDomain {
   const components = interpolation.kind === 'cubic'
     ? [0, 1, interpolation.control[1], interpolation.control[3]]
     : [0, 1]
-  return {
-    min: Math.floor(Math.min(...components) * 2) / 2,
-    max: Math.ceil(Math.max(...components) * 2) / 2,
-  }
+  const min = Math.min(...components)
+  const max = Math.max(...components)
+  const margin = (max - min) * DOMAIN_MARGIN
+  return { min: min - margin, max: max + margin }
 }
 
 /**
- * 画布四周留出的比例边距。
+ * 横向留白比例。
  *
  * @remarks
- * 曲线的起点、终点与控制柄经常正好落在显示域边界上，不留边距时它们会被容器裁掉一半。
- * 边距同时给了单位方格一圈"呼吸区"，越界的回弹控制点也不会贴着边框。
+ * 时间轴要占满整个画布宽度——参考 Rive，曲线从最左走到最右才看得出快慢分布。这里只留出
+ * 一个控制柄半径的余量：控制点 x 取 0 或 1 时（缓入、缓出预设都会）圆点正好压在边界上，
+ * 完全不留会被裁掉一半。纵向余量由显示域自己带（见 DOMAIN_MARGIN），不重复叠加。
  */
-const CANVAS_INSET = 0.1
+const CANVAS_INSET_X = 0.03
 
 function projectX(x: number) {
-  return (CANVAS_INSET + x * (1 - CANVAS_INSET * 2)) * 100
+  return (CANVAS_INSET_X + x * (1 - CANVAS_INSET_X * 2)) * 100
 }
 
 function projectY(y: number, domain: EasingDomain) {
-  const ratio = 1 - (y - domain.min) / (domain.max - domain.min)
-  return (CANVAS_INSET + ratio * (1 - CANVAS_INSET * 2)) * 100
+  return (1 - (y - domain.min) / (domain.max - domain.min)) * 100
 }
 
 /** 曲线预览路径，坐标系与 `viewBox="0 0 100 100"` 一致。 */
@@ -181,9 +185,10 @@ export function ComposeEasingCurveEditor({
     // 控制柄就挂在画布 div 上：从 parentElement 量比持一个 ref 更省，也避免渲染期读 ref。
     const rect = event.currentTarget.parentElement?.getBoundingClientRect()
     if (!rect || rect.width === 0 || rect.height === 0) return null
-    // 反投影必须抵消同一圈边距，否则指针与控制柄会差一个固定偏移。
-    const ratioX = ((event.clientX - rect.left) / rect.width - CANVAS_INSET) / (1 - CANVAS_INSET * 2)
-    const ratioY = ((event.clientY - rect.top) / rect.height - CANVAS_INSET) / (1 - CANVAS_INSET * 2)
+    // 反投影必须抵消横向留白，否则指针与控制柄会差一个固定偏移。
+    const ratioX = ((event.clientX - rect.left) / rect.width - CANVAS_INSET_X)
+      / (1 - CANVAS_INSET_X * 2)
+    const ratioY = (event.clientY - rect.top) / rect.height
     return {
       x: ratioX,
       y: frozen.max - ratioY * (frozen.max - frozen.min),
@@ -251,17 +256,10 @@ export function ComposeEasingCurveEditor({
       ) : null}
       <div className="compose-easing-editor__canvas">
         <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 100 100">
-          {/* 单位方格：域被回弹控制点撑大时，这个框标出「0 → 1」的实际位置。 */}
-          <rect
-            className="compose-easing-editor__unit"
-            height={projectY(0, domain) - projectY(1, domain)}
-            width={projectX(1) - projectX(0)}
-            x={projectX(0)}
-            y={projectY(1, domain)}
-          />
+          {/* 起止值参考线：域被回弹控制点撑大时，这两条线标出「0」与「1」的实际高度。 */}
           <path
-            className="compose-easing-editor__grid"
-            d={`M${projectX(1 / 3)} ${projectY(1, domain)}V${projectY(0, domain)}M${projectX(2 / 3)} ${projectY(1, domain)}V${projectY(0, domain)}`}
+            className="compose-easing-editor__guide"
+            d={`M0 ${projectY(0, domain)}H100M0 ${projectY(1, domain)}H100`}
           />
           {control ? (
             <path
@@ -270,18 +268,6 @@ export function ComposeEasingCurveEditor({
             />
           ) : null}
           <path className="compose-easing-editor__curve" d={curvePath(value, domain)} />
-          <circle
-            className="compose-easing-editor__anchor"
-            cx={projectX(0)}
-            cy={projectY(0, domain)}
-            r="1.6"
-          />
-          <circle
-            className="compose-easing-editor__anchor"
-            cx={projectX(1)}
-            cy={projectY(1, domain)}
-            r="1.6"
-          />
         </svg>
         {control ? [0, 1].map((index) => {
           const x = control[index * 2]!

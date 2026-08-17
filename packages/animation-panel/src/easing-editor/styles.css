@@ -48,17 +48,16 @@
 
 .compose-easing-editor__canvas {
   position: relative;
+  /* 时间轴占满整行宽度（参考 Rive）：留边会让曲线缩成一小块，也读不出快慢分布。
+     高度用宽高比跟随，但设上限，避免宽面板下把属性列撑成一屏高。 */
   width: 100%;
-  /* 近似方形：曲线的斜率是主要判读对象，拉扁会让缓入缓出看起来一样。
-     上限 240px 是为了嵌进属性面板时不把整列撑成一屏高。 */
-  max-width: 240px;
-  aspect-ratio: 4 / 3;
-  border: 1px solid var(--ap-border, var(--compose-border, #2a2a2a));
-  border-radius: 6px;
-  /* 画布比字段行底色再低一档，让白色曲线成为视觉主体。 */
+  aspect-ratio: 16 / 11;
+  max-height: 200px;
+  border-radius: 4px;
+  /* 画布比字段行底色再低一档，让白色曲线成为视觉主体；不描边，边框会和面板行线打架。 */
   background: color-mix(
     in srgb,
-    var(--ap-control, var(--compose-surface-control, #111111)) 82%,
+    var(--ap-control, var(--compose-surface-control, #111111)) 78%,
     var(--ap-bg, var(--compose-panel-bg, #141414))
   );
   touch-action: none;
@@ -70,27 +69,19 @@
   height: 100%;
 }
 
-/* 单位方格：0 → 1 的实际范围，回弹曲线越出它时一眼能看出越了多少。 */
-.compose-easing-editor__unit {
-  fill: color-mix(in srgb, var(--ap-text, var(--compose-text, #d4d4d4)) 4%, transparent);
-  stroke: color-mix(in srgb, var(--ap-border, var(--compose-border, #2a2a2a)) 85%, transparent);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.compose-easing-editor__grid {
+/* 起止值参考线：只标 0 与 1 两个高度，多余的栅格会和曲线抢注意力。 */
+.compose-easing-editor__guide {
   fill: none;
-  stroke: color-mix(in srgb, var(--ap-border, var(--compose-border, #2a2a2a)) 65%, transparent);
+  stroke: color-mix(in srgb, var(--ap-text, var(--compose-text, #d4d4d4)) 12%, transparent);
   stroke-width: 1;
-  stroke-dasharray: 2 3;
   vector-effect: non-scaling-stroke;
 }
 
+/* 控制柄拉杆：实线细线，与控制柄同色，表达"这个点吊着曲线的哪一端"。 */
 .compose-easing-editor__leash {
   fill: none;
-  stroke: color-mix(in srgb, var(--ap-accent, var(--compose-accent, #3b8ef0)) 55%, transparent);
+  stroke: color-mix(in srgb, var(--ap-accent, var(--compose-accent, #3b8ef0)) 60%, transparent);
   stroke-width: 1;
-  stroke-dasharray: 3 3;
   vector-effect: non-scaling-stroke;
 }
 
@@ -102,27 +93,23 @@
   vector-effect: non-scaling-stroke;
 }
 
-/* 段两端的锚点是固定的 (0,0) 与 (1,1)，不可拖动，因此压低存在感。 */
-.compose-easing-editor__anchor {
-  fill: color-mix(in srgb, var(--ap-text, var(--compose-text, #d4d4d4)) 55%, transparent);
-}
-
 .compose-easing-editor__handle {
   position: absolute;
-  width: 11px;
-  height: 11px;
-  margin: -5.5px 0 0 -5.5px;
+  /* 实心小圆点（Rive 式）：空心大圈在细曲线上显得比曲线还重。 */
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
   padding: 0;
-  border: 2px solid var(--ap-accent, var(--compose-accent, #3b8ef0));
+  border: 0;
   border-radius: 50%;
-  background: var(--ap-control, var(--compose-surface-control, #111111));
+  background: var(--ap-accent, var(--compose-accent, #3b8ef0));
   cursor: grab;
   touch-action: none;
-  transition: transform .1s ease, background-color .1s ease;
+  transition: transform .1s ease;
 }
 
 .compose-easing-editor__handle:hover:not(:disabled) {
-  transform: scale(1.15);
+  transform: scale(1.3);
 }
 
 .compose-easing-editor__handle:focus-visible {
@@ -131,9 +118,8 @@
 }
 
 .compose-easing-editor__handle[data-dragging] {
-  background: var(--ap-accent, var(--compose-accent, #3b8ef0));
   cursor: grabbing;
-  transform: scale(1.15);
+  transform: scale(1.3);
 }
 
 .compose-easing-editor__handle:disabled {
