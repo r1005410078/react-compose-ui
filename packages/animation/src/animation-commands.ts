@@ -255,7 +255,7 @@ function configureHandler(): CommandHandler {
   return {
     type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
     execute(document, command) {
-      const { animationId, name, durationMs, playbackMode, bindings } = command.payload
+      const { animationId, name, durationMs, playbackMode, autoplay, bindings } = command.payload
       if (typeof animationId !== 'string') {
         return reject('animation.invalid-command', '命令必须提供 animationId')
       }
@@ -273,6 +273,9 @@ function configureHandler(): CommandHandler {
         && (typeof playbackMode !== 'string' || !PLAYBACK_MODES.includes(playbackMode))) {
         return reject('animation.invalid-command', `playbackMode 必须是 ${PLAYBACK_MODES.join(' / ')}`)
       }
+      if (autoplay !== undefined && autoplay !== null && typeof autoplay !== 'boolean') {
+        return reject('animation.invalid-command', 'autoplay 必须是布尔值或 null')
+      }
       if (bindings !== undefined && bindings !== null && !isRecord(bindings)) {
         return reject('animation.invalid-binding', 'bindings 必须是对象或 null')
       }
@@ -282,7 +285,10 @@ function configureHandler(): CommandHandler {
         ...(durationMs !== undefined ? { durationMs } : {}),
         ...(playbackMode !== undefined ? { playbackMode } : {}),
       }
-      // `null` 表示清除绑定；`undefined` 表示这次命令不碰绑定。
+      // `null` 表示清除该字段；`undefined` 表示这次命令不碰它。false 也序列化为删除，
+      // 避免清单里长期留着无信息量的 `autoplay: false`。
+      if (autoplay === null || autoplay === false) delete next.autoplay
+      else if (autoplay === true) next.autoplay = true
       if (bindings === null) delete next.bindings
       else if (bindings !== undefined) next.bindings = bindings as JsonValue
       if (jsonEqual(current, next)) return { status: 'noop', reason: '动画参数没有变化' }

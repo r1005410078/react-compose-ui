@@ -47,6 +47,23 @@ export {
   COMPOSE_ANIMATION_COMMAND_TYPES,
   createComposeAnimationCommandHandlers,
 } from './animation-commands'
+export {
+  COMPOSE_ANIMATION_FILE_SCHEMA_VERSION,
+  COMPOSE_ANIMATION_FILE_SUFFIX,
+  COMPOSE_ANIMATION_MEDIA_TYPE,
+  composeAnimationDisplayName,
+  composeAnimationFileName,
+  createComposeAnimationFile,
+  isComposeAnimationFileName,
+  parseComposeAnimationFile,
+  serializeComposeAnimationFile,
+} from './animation-file'
+export type {
+  ComposeAnimationFile,
+  ComposeAnimationFileIssue,
+  ComposeAnimationFileIssueCode,
+  ComposeAnimationFileParseResult,
+} from './animation-file'
 
 /** `@compose-ui/animation` 的稳定包标识。 @public */
 export const COMPOSE_UI_ANIMATION_PACKAGE = '@compose-ui/animation' as const

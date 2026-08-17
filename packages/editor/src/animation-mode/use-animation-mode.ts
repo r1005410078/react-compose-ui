@@ -9,6 +9,7 @@ import type { ComposeAnimationValueKind } from '@compose-ui/animation'
 import { getComposeAnimations } from '@compose-ui/core'
 import type {
   CommandDispatchResult,
+  ComposeAnimation,
   ComposeDocument,
   EditorCommand,
   JsonObject,
@@ -54,8 +55,6 @@ export interface AnimationModeOptions {
   readonly document: ComposeDocument | undefined
   readonly dispatch?: (command: EditorCommand) => CommandDispatchResult
   readonly idFactory: () => string
-  /** 创建第一条动画时的默认名称（已本地化）。 */
-  readonly defaultAnimationName: string
   readonly propertyLabel?: AnimationPropertyLabelPort
 }
 
@@ -74,8 +73,16 @@ export interface AnimationModeSession {
   readonly panelValue: ComposeAnimationPanelValue | null
   readonly onPanelValueChange: (next: ComposeAnimationPanelValue) => void
   readonly onPanelAction: (action: ComposeAnimationPanelAction) => void
-  /** 空状态创建引导：建立第一条动画并进入正常时间线。 */
-  readonly createAnimation: () => void
+  /**
+   * 用绑定动画文件的清单水合文档镜像。
+   *
+   * @remarks
+   * 创建与可选的绑定配置共享 mergeKey，合成一次可撤销事务；撤销它后时间线回到
+   * 「载入绑定动画」状态，重新调用本方法即可恢复。
+   */
+  readonly hydrateAnimation: (manifest: ComposeAnimation) => void
+  /** 解除绑定时移除镜像清单与所有实体上的对应分组。 */
+  readonly removeAnimation: (animationId: string) => void
   /** 菱形按钮状态查询。 */
   readonly keyStateFor: (
     entityId: string,
@@ -102,7 +109,7 @@ export interface AnimationModeSession {
  * 模型的事实来源是文档，面板本地的乐观修改会在命令落地后的重建中得到同样结果。
  */
 export function useAnimationMode(options: AnimationModeOptions): AnimationModeSession {
-  const { defaultAnimationName, dispatch, document, idFactory, propertyLabel } = options
+  const { dispatch, document, idFactory, propertyLabel } = options
   const [active, setActive] = useState(false)
   const [session, setSession] = useState(INITIAL_SESSION)
 
@@ -173,13 +180,27 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     }
   }, [animationId, dispatchDraft])
 
-  const createAnimation = useCallback(() => {
+  const hydrateAnimation = useCallback((manifest: ComposeAnimation) => {
+    // create 命令不接收 bindings：绑定经 configure 补写，与 create 共享 mergeKey
+    // 合成一次事务，撤销时清单与绑定一起消失。
+    const mergeKey = `animation-hydrate:${manifest.id}`
     dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
-      animationId: idFactoryRef.current(),
-      name: defaultAnimationName,
-      durationMs: 300,
-    })
-  }, [defaultAnimationName, dispatchDraft])
+      animationId: manifest.id,
+      name: manifest.name,
+      durationMs: manifest.durationMs,
+      playbackMode: manifest.playbackMode,
+    }, mergeKey)
+    if (manifest.bindings) {
+      dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+        animationId: manifest.id,
+        bindings: manifest.bindings as JsonValue,
+      }, mergeKey)
+    }
+  }, [dispatchDraft])
+
+  const removeAnimation = useCallback((targetAnimationId: string) => {
+    dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.delete, { animationId: targetAnimationId })
+  }, [dispatchDraft])
 
   const displayDocument = useMemo(() => {
     if (!active || !document || !animationId) return document
@@ -236,7 +257,8 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     panelValue,
     onPanelValueChange,
     onPanelAction,
-    createAnimation,
+    hydrateAnimation,
+    removeAnimation,
     keyStateFor,
     toggleKey,
   }

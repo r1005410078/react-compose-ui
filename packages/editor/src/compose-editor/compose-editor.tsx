@@ -17,6 +17,8 @@ import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
 import { createComposeAnimationCommandHandlers } from '@compose-ui/animation'
 import { AnimationInspector } from '../animation-mode/animation-inspector'
+import { createPageAnimationFile } from '../animation-mode/animation-asset-store'
+import { PageAnimationScopePanel } from '../animation-mode/page-animation-scope-panel'
 import { rewriteAutoRecordCommand } from '../animation-mode/auto-record'
 import { useAnimationLayout } from '../animation-mode/use-animation-layout'
 import { useAnimationMode } from '../animation-mode/use-animation-mode'
@@ -38,7 +40,7 @@ import {
   ComposePaintImageLibraryProvider,
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
-import type { ComposePageSetupReference } from '@compose-ui/core'
+import type { ComposePageAnimationReference, ComposePageSetupReference } from '@compose-ui/core'
 import type { ComposeEntity, ComposeResolvedComponentSnapshot, EditorCommand, JsonObject } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
@@ -421,7 +423,6 @@ export function ComposeEditor({
       ? (command) => animationRuntime.dispatch(command)
       : undefined,
     idFactory: animationCommandId,
-    defaultAnimationName: editorMessages.animationMode.defaultAnimationName,
     propertyLabel: animationPropertyLabel,
   })
   const animationLayout = useAnimationLayout(
@@ -1144,6 +1145,25 @@ export function ComposeEditor({
   ) => pageWorkspace.setPageSetupScript(pageKey, reference), [pageWorkspace])
   const handlePageSetupReload = useCallback((pageKey: string) =>
     pageWorkspace.reloadPageSetupScript(pageKey), [pageWorkspace])
+  /**
+   * 绑定/更换/解除页面动画文件，并同步文档镜像：旧动画从镜像移除、新清单水合进镜像。
+   * 页面包装与文件写入不可撤销；镜像事务可撤销（撤销后时间线提供重新载入入口）。
+   */
+  const currentAnimationId = animationMode.animationId
+  const { hydrateAnimation, removeAnimation } = animationMode
+  const handlePageAnimationChanged = useCallback(async (
+    pageKey: string,
+    reference: ComposePageAnimationReference | null,
+  ) => {
+    const previousId = currentAnimationId
+    const manifest = await pageWorkspace.setPageAnimation(pageKey, reference)
+    if (previousId !== null && previousId !== manifest?.id) {
+      removeAnimation(previousId)
+    }
+    if (manifest && previousId !== manifest.id) {
+      hydrateAnimation(manifest)
+    }
+  }, [currentAnimationId, hydrateAnimation, pageWorkspace, removeAnimation])
   const handlePageCreated = useCallback((descriptor: ComposePageDescriptor) => {
     void openPageDocument({
       id: descriptor.entryId,
@@ -1353,6 +1373,37 @@ export function ComposeEditor({
     pageProvider,
   ])
 
+  const animationInspector = useMemo(() => {
+    if (!activePageSession || !pageProvider) return undefined
+    const mirrorAnimation = controller?.document
+      ? getComposeAnimations(controller.document)[0] ?? null
+      : null
+    return (
+      <PageAnimationScopePanel
+        animation={mirrorAnimation}
+        dispatch={(command) => animationRuntime?.dispatch(command as EditorCommand)}
+        idFactory={animationCommandId}
+        key={`${pageProvider.id}:${activePageSession.pageKey}:animation`}
+        onAnimationChange={(reference) => handlePageAnimationChanged(
+          activePageSession.pageKey,
+          reference,
+        )}
+        onError={setPageNotice}
+        pageName={activePageSession.displayName}
+        pageParentId={activePageSession.entry.parentId ?? pageProvider.root.id}
+        provider={pageProvider}
+        reference={activePageSession.page.animation ?? null}
+        scope={activePageSession.scriptScope}
+      />
+    )
+  }, [
+    activePageSession,
+    animationRuntime,
+    controller,
+    handlePageAnimationChanged,
+    pageProvider,
+  ])
+
   const handleVariantOverridesChange = useCallback((change: ComposeVariantOverridesChange) => {
     const panelId = activeDocumentPanelId
     if (!panelId) return
@@ -1556,6 +1607,7 @@ export function ComposeEditor({
     const authoredInspector = slots?.inspector !== undefined
       ? slots.inspector
       : addDefaultElementProps(controller?.inspectorPanel, {
+          animationInspector,
           pageScriptInspector,
           fieldAdornment: animationFieldAdornment,
         })
@@ -1584,7 +1636,7 @@ export function ComposeEditor({
       // 实例操作并入 EntityInspector 标题行；覆盖列表仅在有本层操作时出现在标题下。
       const authoredBase = slots?.inspector !== undefined
         ? slots.inspector
-        : addDefaultElementProps(controller?.inspectorPanel, { pageScriptInspector })
+        : addDefaultElementProps(controller?.inspectorPanel, { animationInspector, pageScriptInspector })
       return (
         <ComposeComponentInstanceOverridesPanel
           entity={selectedComponentInstance}
@@ -1612,6 +1664,7 @@ export function ComposeEditor({
     controller,
     activeComponentSession,
     activePageSession?.scriptScope,
+    animationInspector,
     animationMode.active,
     animationMode.animationId,
     animationMode.panelValue?.selectedClipId,
@@ -1680,6 +1733,113 @@ export function ComposeEditor({
     settingsButtonRef.current = element
   }, [])
 
+  /** setEditorMode 正在重组底部面板时抑制 onDidActivePanelChange 的回流。 */
+  const editorModeGuardRef = useRef(false)
+  /** 进入动画模式前底部组的折叠状态；切回设计模式时恢复。 */
+  const bottomCollapsedBeforeAnimationRef = useRef<boolean | null>(null)
+  /**
+   * 设计/动画模式的唯一切换入口：驱动会话状态并重组底部 Dockview 工具组。
+   *
+   * @remarks
+   * 进入动画：动态加入时间线面板、激活并展开底部组；回到设计：移除时间线面板、
+   * 恢复资源标签与切换前的折叠状态。addPanel/removePanel 会触发
+   * `onDidActivePanelChange`，用 guard 防止监听器把切换路由回自己形成循环。
+   */
+  const setEditorMode = useCallback((
+    mode: 'design' | 'animation',
+    options?: { readonly restoreCollapsed?: boolean },
+  ) => {
+    const rawApi = outerApiRef.current
+    if (!rawApi || editorModeGuardRef.current) return
+    const active = animationModeRef.current.active
+    if ((mode === 'animation') === active) return
+    editorModeGuardRef.current = true
+    try {
+      // 宿主测试替身可能只实现部分外层 api：Dockview 操作逐个防御，会话状态照常切换。
+      const api = rawApi as Partial<DockviewReadyEvent['api']>
+      const bottomGroup = typeof api.getEdgeGroup === 'function'
+        ? api.getEdgeGroup('bottom')
+        : undefined
+      if (mode === 'animation') {
+        bottomCollapsedBeforeAnimationRef.current = bottomGroup?.isCollapsed() ?? null
+        let panel = api.getPanel?.(WORKSPACE_PANEL_IDS.animation)
+        if (!panel && bottomGroup && typeof api.addPanel === 'function') {
+          panel = api.addPanel({
+            id: WORKSPACE_PANEL_IDS.animation,
+            component: WORKSPACE_COMPONENT_IDS.animation,
+            tabComponent: 'workspaceTab',
+            title: editorMessagesRef.current.workspace.animation,
+            position: { referenceGroup: bottomGroup.id },
+          })
+        }
+        panel?.api.setActive()
+        bottomGroup?.expand()
+        animationModeRef.current.setActive(true)
+      }
+      else {
+        const panel = api.getPanel?.(WORKSPACE_PANEL_IDS.animation)
+        const animationWasActive = panel?.api.isActive ?? false
+        if (panel) api.removePanel?.(panel)
+        // 只有时间线仍是活动标签（切换器退出）才回到资源标签；用户点击其它底部标签
+        // 退出时，保持他们刚选中的标签。
+        if (animationWasActive) {
+          api.getPanel?.(WORKSPACE_PANEL_IDS.assetBrowser)?.api.setActive()
+        }
+        // 折叠恢复同理：点击底部标签退出说明用户正要使用底部内容，不应立刻折叠回去。
+        if ((options?.restoreCollapsed ?? true)
+          && bottomCollapsedBeforeAnimationRef.current === true) bottomGroup?.collapse()
+        bottomCollapsedBeforeAnimationRef.current = null
+        animationModeRef.current.setActive(false)
+      }
+    }
+    finally {
+      editorModeGuardRef.current = false
+    }
+  }, [])
+
+  /** 空态创建引导：在页面同目录创建动画文件、绑定并水合镜像。 */
+  const animationModeMessages = editorMessages.animationMode
+  const handleCreateAnimationFromEmptyState = useCallback(async () => {
+    if (!activePageSession || !pageProvider) return
+    try {
+      const { entry } = await createPageAnimationFile(
+        pageProvider,
+        activePageSession.entry.parentId ?? pageProvider.root.id,
+        activePageSession.displayName,
+        {
+          id: animationCommandId(),
+          name: animationModeMessages.defaultAnimationName,
+        },
+      )
+      const assetKey = entry.assetKey
+      if (!assetKey) throw new Error('动画文件缺少稳定 assetKey')
+      await handlePageAnimationChanged(activePageSession.pageKey, {
+        providerId: pageProvider.id,
+        assetKey,
+        scope: pageProvider.referenceScope ?? 'persistent',
+      })
+    }
+    catch {
+      setPageNotice(animationModeMessages.animationOperationFailed)
+    }
+  }, [activePageSession, animationModeMessages, handlePageAnimationChanged, pageProvider])
+
+  /** 撤销越过水合事务后的恢复入口：重新派发水合，不再创建文件。 */
+  const handleLoadBoundAnimation = useCallback(() => {
+    const manifest = activePageSession?.animationManifest
+    if (manifest) {
+      hydrateAnimation(manifest)
+      return
+    }
+    // 打开页面时文件加载失败会让会话没有基线清单：按当前引用重新加载一次。
+    const reference = activePageSession?.page.animation
+    if (activePageSession && reference) {
+      void handlePageAnimationChanged(activePageSession.pageKey, reference).catch(() => {
+        setPageNotice(animationModeMessages.animationOperationFailed)
+      })
+    }
+  }, [activePageSession, animationModeMessages, handlePageAnimationChanged, hydrateAnimation])
+
   /** 外层 Dockview 就绪：只需要建立中央面板（内层 Dockview 的宿主）和 bottom Edge Group。 */
   const handleOuterReady = useCallback((event: DockviewReadyEvent) => {
     if (outerApiRef.current === event.api) {
@@ -1687,22 +1847,20 @@ export function ComposeEditor({
     }
     initializeOuterWorkspace(event.api, resolvedPreferences.locale, hostI18n?.formatMessage)
     outerApiRef.current = event.api
-    // 底部工具组（资源/动画/命令/日志）属于外层 Dockview：动画模式的进入与退出
-    // 只能在这里监听——内层 core api 收不到这些标签的活动事件。
+    // 底部工具组（资源/命令/日志 + 动态时间线）属于外层 Dockview：动画模式下点击其它
+    // 底部标签等价于切回设计模式——只能在这里监听，内层 core api 收不到这些标签的活动事件。
     event.api.onDidActivePanelChange?.((change) => {
+      if (editorModeGuardRef.current) return
       const panelId = change.panel?.id
-      if (panelId === WORKSPACE_PANEL_IDS.animation) {
-        animationModeRef.current.setActive(true)
-      }
-      else if (
+      if (
         panelId === WORKSPACE_PANEL_IDS.transactionLog
         || panelId === WORKSPACE_PANEL_IDS.command
         || panelId === WORKSPACE_PANEL_IDS.assetBrowser
       ) {
-        animationModeRef.current.setActive(false)
+        setEditorMode('design', { restoreCollapsed: false })
       }
     })
-  }, [hostI18n?.formatMessage, resolvedPreferences.locale])
+  }, [hostI18n?.formatMessage, resolvedPreferences.locale, setEditorMode])
 
   /**
    * 内层 scene/canvas/inspector Dockview 就绪。它经 Context 的 `onCoreDockviewReady` 从
@@ -1778,17 +1936,40 @@ export function ComposeEditor({
           shortcuts: resolvedPreferences.shortcuts,
         }),
       inspectorPanel: resolvedInspectorPanel,
-      // 空动画的创建引导：有 controller 才给 CTA（创建要派发命令）；纯插槽宿主看到中性提示。
-      animationEmptyState: controller
-        ? (
+      // 空动画的创建引导：空态 = 会话镜像没有动画。已绑定但镜像缺失（撤销越过水合事务
+      // 或文件加载失败）给「载入」入口；未绑定且有活动页面给「创建」入口（创建动画文件
+      // 并绑定当前页面）；其余宿主（纯插槽、组件文档）看到中性提示。
+      animationEmptyState: (() => {
+        if (!controller) return undefined
+        if (activePageSession?.page.animation && animationMode.animationId === null) {
+          return (
             <div className="compose-editor__animation-empty">
-              <p>{editorMessages.animationMode.emptyTimeline}</p>
-              <ComposeButton size="sm" variant="secondary" onClick={animationMode.createAnimation}>
-                {editorMessages.animationMode.createAnimation}
+              <p>{editorMessages.animationMode.mirrorMissing}</p>
+              <ComposeButton size="sm" variant="secondary" onClick={handleLoadBoundAnimation}>
+                {editorMessages.animationMode.loadAnimation}
               </ComposeButton>
             </div>
           )
-        : undefined,
+        }
+        return (
+          <div className="compose-editor__animation-empty">
+            <p>{editorMessages.animationMode.emptyTimeline}</p>
+            {activePageSession && pageProvider ? (
+              <ComposeButton
+                size="sm"
+                variant="secondary"
+                onClick={() => { void handleCreateAnimationFromEmptyState() }}
+              >
+                {editorMessages.animationMode.createAnimation}
+              </ComposeButton>
+            ) : null}
+          </div>
+        )
+      })(),
+      // 空态触发条件是「镜像无动画」而不是「无轨道」：已绑定且零轨道显示正常时间线。
+      animationEmpty: animationMode.animationId === null,
+      editorMode: animationMode.active ? 'animation' as const : 'design' as const,
+      onEditorModeChange: setEditorMode,
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
         ? slots.command

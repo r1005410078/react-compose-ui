@@ -39,12 +39,35 @@ export interface ComposePageSetupReference extends JsonObject {
   readonly scope: 'persistent' | 'session'
 }
 
-/** 页面视觉模板与可选 setup 脚本引用的版本化聚合文件。 @public */
+/**
+ * 页面绑定动画文件的稳定资源引用。
+ *
+ * @remarks
+ * 与 {@link ComposePageSetupReference} 同形：按 providerId + assetKey 引用，动画文件随后
+ * 重命名或移动不改变页面关联。页面只保存引用；动画文件内容由 `@compose-ui/animation`
+ * 的文件协议解析，core 不理解它。
+ * @public
+ */
+export interface ComposePageAnimationReference extends JsonObject {
+  readonly [key: string]: string
+  readonly providerId: string
+  readonly assetKey: string
+  readonly scope: 'persistent' | 'session'
+}
+
+/** 页面视觉模板与可选 setup 脚本、动画文件引用的版本化聚合文件。 @public */
 export interface ComposePageFile {
   readonly kind: 'compose-page'
   readonly pageSchemaVersion: typeof COMPOSE_PAGE_SCHEMA_VERSION
   readonly document: ComposeDocument
   readonly setupScript: ComposePageSetupReference | null
+  /**
+   * 页面绑定的动画文件引用；未绑定为 null。
+   *
+   * @remarks
+   * 加法字段：解析容忍缺失并归一化为 null，`pageSchemaVersion` 保持 1。
+   */
+  readonly animation?: ComposePageAnimationReference | null
 }
 
 /** 页面文件解析问题的稳定机器码。 @public */
@@ -53,6 +76,7 @@ export type ComposePageFileIssueCode =
   | 'page.invalid-shape'
   | 'page.unsupported-version'
   | 'page.invalid-setup-reference'
+  | 'page.invalid-animation-reference'
   | DocumentValidationIssueCode
 
 /** 页面文件中一个可定位的问题。 @public */

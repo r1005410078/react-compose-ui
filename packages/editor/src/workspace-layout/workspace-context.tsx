@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import type { ComposeScriptIntelligenceProfile } from '@compose-ui/asset-browser'
 import type {
+  ComposeAnimation,
   ComposeComponentAssetV1,
   ComposePageFile,
   ComposeResolvedComponentSnapshot,
@@ -24,8 +25,14 @@ export interface WorkspaceContent {
   stageToolbar?: ReactNode
   children?: ReactNode
   inspectorPanel?: ReactNode
-  /** 文档无动画时时间线的创建引导；缺省时面板显示中性空提示。 */
+  /** 时间线空态（无绑定动画/镜像缺失）的引导内容；缺省时面板显示中性空提示。 */
   animationEmptyState?: ReactNode
+  /** 受控的时间线空态：会话镜像没有动画即为 true；缺省回退面板自身的轨道判定。 */
+  animationEmpty?: boolean
+  /** 当前编辑模式；驱动页面文档工具栏的 设计/动画 切换器。 */
+  editorMode?: 'design' | 'animation'
+  /** 模式切换回调；由 compose-editor 集中完成会话与底部 Dockview 重组。 */
+  onEditorModeChange?: (mode: 'design' | 'animation') => void
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
   assetBrowserPanel?: ReactNode
@@ -106,6 +113,12 @@ export interface ComposePageDocumentSession extends ComposeDocumentSessionBase {
   readonly baseRevision: string | undefined
   /** 与运行时 revision 比较以判定脏状态的基线。 */
   readonly savedRevisionId: number
+  /** 绑定动画文件的 Provider 条目 ID；未绑定或文件加载失败时为 undefined。 */
+  readonly animationEntryId: string | undefined
+  /** 绑定动画文件最近一次读写的 revision，用于保存回写的乐观并发。 */
+  readonly animationRevision: string | undefined
+  /** 动画文件当前落盘的清单基线；保存时与文档镜像比较判断是否需要回写。 */
+  readonly animationManifest: ComposeAnimation | undefined
 }
 
 /** 一个 Base 或 Variant 的独立编辑会话。 @internal */

@@ -1305,6 +1305,14 @@
   font-size: 12px;
 }
 
+/* 宿主压住空态（受控 empty=false）且会话零轨道时，左轨道列里的引导提示 */
+.compose-animation-timeline__no-tracks {
+  margin: 0;
+  padding: 12px;
+  color: var(--ap-muted);
+  font-size: 12px;
+}
+
 /*
  * 物体行的状态开关（锁定 / 独奏 / 隐藏）：占位常驻、可见性按需。
  * 常驻可见时每条物体行都挂着一排图标，纵向扫读被这排重复 chrome 主导，

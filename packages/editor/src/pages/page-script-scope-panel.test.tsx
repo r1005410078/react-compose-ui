@@ -1,5 +1,6 @@
 import type { ComposeAssetProvider } from '@compose-ui/assets'
 import type { ComposePageSetupReference } from '@compose-ui/core'
+import { ComposePropertyPanelRoot } from '@compose-ui/property-panel'
 import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -67,18 +68,21 @@ function renderPanel({
   const onReload = vi.fn(async () => undefined)
   const onSetupChange = vi.fn(async () => undefined)
   const onError = vi.fn()
+  // 组件是共享 Root 内的一个 Section：Root 提供分组 chrome、搜索与列宽。
   render(
-    <PageScriptScopePanel
-      onError={onError}
-      onOpen={onOpen}
-      onReload={onReload}
-      onSetupChange={onSetupChange}
-      pageName="Home"
-      pageParentId="root"
-      provider={provider}
-      reference={reference}
-      scope={scope}
-    />,
+    <ComposePropertyPanelRoot>
+      <PageScriptScopePanel
+        onError={onError}
+        onOpen={onOpen}
+        onReload={onReload}
+        onSetupChange={onSetupChange}
+        pageName="Home"
+        pageParentId="root"
+        provider={provider}
+        reference={reference}
+        scope={scope}
+      />
+    </ComposePropertyPanelRoot>,
   )
   return { onError, onOpen, onReload, onSetupChange, provider }
 }
@@ -89,7 +93,7 @@ describe('PageScriptScopePanel', () => {
   it('OpenSpec: editor-workspace-layout / 页面脚本作为 Canvas Inspector 属性 / 未关联页面选择或快捷创建脚本', async () => {
     const { onOpen, onSetupChange, provider } = renderPanel()
 
-    const select = await screen.findByRole('combobox', { name: '选择页面脚本' })
+    const select = await screen.findByRole('combobox', { name: '脚本文件' })
     expect(screen.getByText('未连接')).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Counter.setup.js' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'helper.js' })).not.toBeInTheDocument()
@@ -133,7 +137,7 @@ describe('PageScriptScopePanel', () => {
       scope,
     })
 
-    expect(await screen.findByRole('combobox', { name: '选择页面脚本' }))
+    expect(await screen.findByRole('combobox', { name: '脚本文件' }))
       .toHaveValue('scripts/Counter.setup.js')
     expect(screen.getByRole('list', { name: '页面脚本返回成员' })).toHaveTextContent('num')
     expect(screen.getByRole('list', { name: '页面脚本返回成员' })).toHaveTextContent('onAdd')
@@ -143,9 +147,10 @@ describe('PageScriptScopePanel', () => {
     expect(screen.queryByText('响应式')).not.toBeInTheDocument()
     expect(screen.getAllByText('方法')).toHaveLength(1)
 
-    fireEvent.click(screen.getByRole('button', { name: '收起页面脚本' }))
+    // 折叠/展开由共享 Section 的分组标题按钮承担。
+    fireEvent.click(screen.getByRole('button', { name: '页面脚本' }))
     expect(screen.queryByRole('list', { name: '页面脚本返回成员' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '展开页面脚本' }))
+    fireEvent.click(screen.getByRole('button', { name: '页面脚本' }))
     expect(screen.getByRole('list', { name: '页面脚本返回成员' })).toBeInTheDocument()
 
     act(() => {

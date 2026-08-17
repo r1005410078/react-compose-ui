@@ -88,7 +88,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `editor`、`stage`、`preview`、`animation-panel` 或任何 UI Context。关键帧轨道存放在被动画
   Entity 的 `Animation` Component 上，文档只在 `ComposeDocument.animations` 保留动画清单；
   core 不认识该 Component，轨道级校验需要宿主主动调用本包的校验入口。命令 handler 通过
-  `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。
+  `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。本包还定义动画文件
+  协议（`.animation.json`，只存清单与变量绑定，不存轨道）：文件是静态权威，页面在
+  `ComposePageFile.animation` 持有稳定引用，编辑器打开页面时把清单水合进文档镜像、
+  保存时回写文件；解除引用不删除文件资源。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`script-runtime`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。

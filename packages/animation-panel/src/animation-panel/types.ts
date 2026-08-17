@@ -211,12 +211,21 @@ export interface ComposeAnimationPanelProviderProps {
 /** 底部动画时间线的容器属性。 @public */
 export interface ComposeAnimationTimelineProps extends HTMLAttributes<HTMLElement> {
   /**
-   * 会话不含任何轨道时渲染的空状态内容。
+   * 空状态下渲染的内容。
    *
    * @remarks
    * 省略时渲染一个中性的无数据提示。空状态下不渲染播放控件或占位轨道。
    */
   readonly emptyState?: ReactNode
+  /**
+   * 受控的空状态开关。
+   *
+   * @remarks
+   * 省略时回退为「会话不含任何轨道」的派生判定。宿主把空态语义定义为会话之外的事实
+   * （例如"页面没有绑定动画"）时用本属性接管：传 `false` 可以让零轨道会话仍显示
+   * 正常时间线，传 `true` 强制显示空状态。组件保持文档无关，只消费这个布尔值。
+   */
+  readonly empty?: boolean
 }
 
 /** 右侧关键帧属性面板的标准容器属性。 @public */

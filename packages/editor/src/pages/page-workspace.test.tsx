@@ -1,3 +1,8 @@
+import {
+  createComposeAnimationCommandHandlers,
+  createComposeAnimationFile,
+  serializeComposeAnimationFile,
+} from '@compose-ui/animation'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import { ComposeAssetError } from '@compose-ui/assets'
 import {
@@ -20,7 +25,59 @@ import type { ComposeEditorController } from '../editor-controller'
 // 外层只有 core 面板 + bottom Edge Group，本文件不关心它的结构，两个 init 函数都整体 mock 掉。
 const initializeCoreWorkspaceMock = vi.hoisted(() => vi.fn())
 const initializeOuterWorkspaceMock = vi.hoisted(() => vi.fn())
-const outerDockviewMock = vi.hoisted(() => ({}))
+/**
+ * 外层 Dockview 替身：initializeOuterWorkspace 被 mock，因此初始没有任何面板；
+ * 只实现模式切换器需要的 bottom Edge Group 与面板增删，供动画模式重组断言。
+ */
+const outerDockviewMock = vi.hoisted(() => {
+  interface OuterFakePanel {
+    id: string
+    api: { id: string; isActive: boolean; setActive: () => void; setTitle: ReturnType<typeof vi.fn> }
+  }
+  const panels = new Map<string, OuterFakePanel>()
+  let collapsed = true
+  const bottomGroup = {
+    id: 'compose-bottom-edge',
+    isCollapsed: () => collapsed,
+    expand: vi.fn(() => { collapsed = false }),
+    collapse: vi.fn(() => { collapsed = true }),
+  }
+  const api = {
+    getEdgeGroup: vi.fn((position: string) => (position === 'bottom' ? bottomGroup : undefined)),
+    getPanel: vi.fn((id: string) => panels.get(id)),
+    addPanel: vi.fn((options: { id: string }) => {
+      const panel: OuterFakePanel = {
+        id: options.id,
+        api: {
+          id: options.id,
+          isActive: false,
+          setActive: () => {
+            panels.forEach((item) => { item.api.isActive = item.id === options.id })
+          },
+          setTitle: vi.fn(),
+        },
+      }
+      panels.set(options.id, panel)
+      return panel
+    }),
+    removePanel: vi.fn((panel: { id: string }) => { panels.delete(panel.id) }),
+    onDidActivePanelChange: vi.fn(() => ({ dispose: () => undefined })),
+  }
+  return {
+    api,
+    panels,
+    bottomGroup,
+    get collapsed() { return collapsed },
+    reset() {
+      panels.clear()
+      collapsed = true
+      bottomGroup.expand.mockClear()
+      bottomGroup.collapse.mockClear()
+      api.addPanel.mockClear()
+      api.removePanel.mockClear()
+    },
+  }
+})
 const assetPreviewPropsMock = vi.hoisted(() => vi.fn())
 
 /**
@@ -116,7 +173,7 @@ vi.mock('dockview-react', async () => {
       const [, force] = React.useState(0)
       React.useEffect(() => {
         if (nested) return
-        onReady({ api: isCore ? dockviewMock.api : outerDockviewMock })
+        onReady({ api: isCore ? dockviewMock.api : outerDockviewMock.api })
         if (!isCore) return
         // 面板集合的变化不经过 React，测试里靠订阅活动面板变化触发重渲染。
         const subscription = dockviewMock.api.onDidActivePanelChange(() => { force((n) => n + 1) })
@@ -321,6 +378,7 @@ function pageDocumentPanels() {
 beforeEach(() => {
   dockviewMock.reset()
   dockviewMock.api.addPanel.mockClear()
+  outerDockviewMock.reset()
 })
 
 afterEach(() => {
@@ -413,6 +471,158 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
     })
     const session = lastSession(onActiveSessionChange)
     expect(session?.runtime.document.schemaVersion).toBe(6)
+  })
+})
+
+describe('OpenSpec: editor-workspace-layout / 设计与动画模式切换器', () => {
+  it('切到动画加入并激活时间线面板且展开底部组；切回设计移除面板并恢复折叠', async () => {
+    renderEditor(createProvider())
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+
+    const designRadio = screen.getByRole('radio', { name: '设计' })
+    expect(designRadio).toHaveAttribute('aria-checked', 'true')
+    expect(outerDockviewMock.panels.has('compose-animation')).toBe(false)
+
+    fireEvent.click(screen.getByRole('radio', { name: '动画' }))
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: '动画' })).toHaveAttribute('aria-checked', 'true')
+    })
+    expect(outerDockviewMock.api.addPanel).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'compose-animation',
+      position: { referenceGroup: 'compose-bottom-edge' },
+    }))
+    expect(outerDockviewMock.bottomGroup.expand).toHaveBeenCalledTimes(1)
+    expect(outerDockviewMock.panels.get('compose-animation')?.api.isActive).toBe(true)
+
+    fireEvent.click(screen.getByRole('radio', { name: '设计' }))
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: '设计' })).toHaveAttribute('aria-checked', 'true')
+    })
+    expect(outerDockviewMock.api.removePanel).toHaveBeenCalledTimes(1)
+    expect(outerDockviewMock.panels.has('compose-animation')).toBe(false)
+    // 进入动画模式前底部处于折叠状态：切换器退出后恢复折叠。
+    expect(outerDockviewMock.bottomGroup.collapse).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写', () => {
+  const animationEntry: ComposeAssetEntry = {
+    id: 'home-animation',
+    parentId: 'root',
+    name: 'Home.animation.json',
+    kind: 'file',
+    revision: 'a1',
+    assetKey: 'Home.animation.json',
+  }
+  const animationFileText = serializeComposeAnimationFile(createComposeAnimationFile({
+    id: 'intro',
+    name: '入场',
+    durationMs: 500,
+    playbackMode: 'loop',
+  }))
+  const boundPageText = serializeComposePageFile({
+    ...createEmptyComposePageFile(),
+    animation: { providerId: 'memory', assetKey: 'Home.animation.json', scope: 'persistent' },
+  })
+
+  function createBoundProvider(overrides: Partial<ComposeAssetProvider> = {}) {
+    return createProvider({
+      list: vi.fn(async ({ folderId }) =>
+        folderId === 'root' ? [pageEntry, scriptEntry, animationEntry] : []),
+      read: vi.fn(async ({ fileId }) => fileId === 'home-animation'
+        ? { blob: new Blob([animationFileText]), revision: 'a1' }
+        : { blob: new Blob([boundPageText]), revision: '1' }),
+      ...overrides,
+    })
+  }
+
+  it('打开页面时把绑定动画文件的清单水合进文档镜像', async () => {
+    const { onActiveSessionChange } = renderEditor(createBoundProvider())
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const session = lastSession(onActiveSessionChange)
+    expect(session?.runtime.document.animations).toEqual([
+      expect.objectContaining({ id: 'intro', name: '入场', durationMs: 500, playbackMode: 'loop' }),
+    ])
+  })
+
+  it('动画文件加载失败时保留页面内嵌镜像并照常打开', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const provider = createBoundProvider({
+      read: vi.fn(async ({ fileId }) => {
+        if (fileId === 'home-animation') throw new ComposeAssetError('not-found', 'missing')
+        return { blob: new Blob([boundPageText]), revision: '1' }
+      }),
+    })
+    const { onActiveSessionChange } = renderEditor(provider)
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const session = lastSession(onActiveSessionChange)
+    expect(session?.runtime.document.animations ?? []).toEqual([])
+    warn.mockRestore()
+  })
+
+  it('保存页面时把镜像清单变化回写动画文件', async () => {
+    const provider = createBoundProvider()
+    const { onActiveSessionChange } = renderEditor(provider)
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const session = lastSession(onActiveSessionChange)
+    // 无 controller 场景下动画 handler 不会被编辑器注册；镜像编辑仍走同一命令协议。
+    for (const handler of createComposeAnimationCommandHandlers()) {
+      try { session.runtime.registerHandler(handler) }
+      catch { /* 已注册 */ }
+    }
+    act(() => session.runtime.dispatch({
+      id: 'configure-animation',
+      type: 'animation.configure',
+      payload: { animationId: 'intro', durationMs: 800 },
+    }))
+    await screen.findByRole('img', { name: '有未保存改动' })
+
+    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+
+    await waitFor(() => {
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({
+        fileId: 'home-animation',
+        expectedRevision: 'a1',
+      }))
+    })
+    const writeInput = (provider.writeFile as ReturnType<typeof vi.fn>).mock.calls
+      .map(([input]) => input as { fileId: string; content: Blob })
+      .find((input) => input.fileId === 'home-animation')
+    const written = JSON.parse(await writeInput!.content.text()) as {
+      kind: string
+      animation: { durationMs: number }
+    }
+    expect(written.kind).toBe('compose-animation')
+    expect(written.animation.durationMs).toBe(800)
+  })
+
+  it('镜像清单未变化时保存不回写动画文件', async () => {
+    const provider = createBoundProvider()
+    const { onActiveSessionChange } = renderEditor(provider)
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const session = lastSession(onActiveSessionChange)
+    act(() => session.runtime.dispatch({
+      id: 'configure',
+      type: BUILTIN_COMMAND_TYPES.configureOutput,
+      payload: {
+        width: 800,
+        height: 600,
+        backgroundPaint: { kind: 'solid', color: 'transparent' },
+      },
+    }))
+    await screen.findByRole('img', { name: '有未保存改动' })
+
+    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+
+    await waitFor(() => { expect(provider.writeFile).toHaveBeenCalled() })
+    const animationWrites = (provider.writeFile as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([input]) => (input as { fileId: string }).fileId === 'home-animation')
+    expect(animationWrites).toHaveLength(0)
   })
 })
 
@@ -543,7 +753,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
 
     const inspector = await screen.findByRole('region', { name: '画布属性' })
-    const pageScriptSelect = within(inspector).getByRole('combobox', { name: '选择页面脚本' })
+    const pageScriptSelect = within(inspector).getByRole('combobox', { name: '脚本文件' })
     await waitFor(() => { expect(pageScriptSelect).toBeEnabled() })
     expect(within(inspector).getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
 

@@ -4,14 +4,20 @@ import {
   type ComposeAssetProvider,
   type ComposeAssetResolver,
 } from '@compose-ui/assets'
-import { composePageDisplayName, createTransactionRuntime } from '@compose-ui/core'
-import type { ComposePageSetupReference } from '@compose-ui/core'
+import { composePageDisplayName, createTransactionRuntime, getComposeAnimations } from '@compose-ui/core'
+import type {
+  ComposeAnimation,
+  ComposeDocument,
+  ComposePageAnimationReference,
+  ComposePageSetupReference,
+} from '@compose-ui/core'
 import { createComposePageStore, type ComposePageCatalog, type ComposePageStore } from '@compose-ui/pages'
 import {
   createComposeJavaScriptModuleLoader,
   loadComposePageScriptScope,
   type ComposePageScriptScope,
 } from '@compose-ui/script-runtime'
+import { loadPageAnimation, writePageAnimationManifest } from '../animation-mode/animation-asset-store'
 import { useComposePageCatalog } from './use-page-catalog'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ComposePageDocumentSession } from '../workspace-layout/workspace-context'
@@ -37,6 +43,15 @@ export interface PageWorkspaceHandle {
   ) => Promise<void>
   /** 重新执行当前页面已关联的 setup，并用新作用域替换旧实例。 */
   readonly reloadPageSetupScript: (pageKey: string) => Promise<void>
+  /**
+   * 原子绑定/更换/解除页面动画文件引用，并同步已打开页面会话的动画基线。
+   *
+   * @returns 绑定时返回动画文件中的清单，供调用方派发镜像水合事务；解除时返回 null。
+   */
+  readonly setPageAnimation: (
+    pageKey: string,
+    reference: ComposePageAnimationReference | null,
+  ) => Promise<ComposeAnimation | null>
   readonly refreshCatalog: () => void
 }
 
@@ -211,8 +226,31 @@ export function usePageWorkspace({
     try {
       const snapshot = await store.readPage(pageKey)
       const displayName = composePageDisplayName(entry.name)
+      // 动画文件是静态权威：打开页面时把文件清单水合进文档镜像，此后编辑走可撤销的
+      // animation.* 命令。运行时没有整文档替换 API，水合必须发生在创建运行时之前。
+      // 加载失败保留页面内嵌镜像作为降级回退，不阻塞页面打开。
+      let document: ComposeDocument = snapshot.page.document
+      let animationEntryId: string | undefined
+      let animationRevision: string | undefined
+      let animationManifest: ComposeAnimation | undefined
+      if (snapshot.page.animation) {
+        try {
+          const loaded = await loadPageAnimation(
+            provider,
+            entry.parentId ?? provider.root.id,
+            snapshot.page.animation,
+          )
+          animationEntryId = loaded.entryId
+          animationRevision = loaded.revision
+          animationManifest = loaded.file.animation
+          document = { ...document, animations: [loaded.file.animation] }
+        }
+        catch (error) {
+          console.warn('[compose-editor] 绑定动画文件加载失败，使用页面内嵌镜像', error)
+        }
+      }
       const runtime = createTransactionRuntime({
-        document: snapshot.page.document,
+        document,
         initialLabel: displayName,
       })
       let scriptScope: ComposePageScriptScope | undefined
@@ -237,6 +275,9 @@ export function usePageWorkspace({
         savedRevisionId: runtime.revision,
         dirty: false,
         save: null,
+        animationEntryId,
+        animationRevision,
+        animationManifest,
       }
       return { ok: true, session }
     }
@@ -257,10 +298,11 @@ export function usePageWorkspace({
     const session = pageSessionOf(sessionsRef.current.get(panelId))
     if (!store || !session) return 'failed'
     const runtimeRevision = session.runtime.revision
+    const documentAtSave = session.runtime.document
     try {
       const written = await store.writePage(
         session.pageKey,
-        { ...session.page, document: session.runtime.document },
+        { ...session.page, document: documentAtSave },
         session.baseRevision,
         force,
       )
@@ -273,12 +315,38 @@ export function usePageWorkspace({
         savedRevisionId: runtimeRevision,
         dirty: current.runtime.revision !== runtimeRevision,
       }))
-      return 'saved'
     }
     catch (error) {
       if (error instanceof ComposeAssetError && error.code === 'conflict') return 'conflict'
       return 'failed'
     }
+    // 动画文件是静态权威：页面保存后把镜像清单的变化回写文件。镜像被撤销移除时
+    // 只跳过回写，不删除文件——解除绑定才是删除引用的入口。
+    const mirror = getComposeAnimations(documentAtSave)
+      .find((item) => item.id === session.animationManifest?.id)
+      ?? getComposeAnimations(documentAtSave)[0]
+    if (session.animationEntryId !== undefined && mirror !== undefined
+      && JSON.stringify(mirror) !== JSON.stringify(session.animationManifest)) {
+      try {
+        const writtenAnimation = await writePageAnimationManifest(
+          session.provider,
+          session.animationEntryId,
+          mirror,
+          session.animationRevision ?? '',
+          force,
+        )
+        updateSession(panelId, (current) => ({
+          ...current,
+          animationRevision: writtenAnimation.revision,
+          animationManifest: mirror,
+        }))
+      }
+      catch (error) {
+        if (error instanceof ComposeAssetError && error.code === 'conflict') return 'conflict'
+        return 'failed'
+      }
+    }
+    return 'saved'
   }, [store, updateSession])
 
   const setPageSetupScript = useCallback(async (
@@ -324,6 +392,36 @@ export function usePageWorkspace({
     }))
   }, [adoptScope, scriptLoader, store, updateSession])
 
+  const setPageAnimation = useCallback(async (
+    pageKey: string,
+    reference: ComposePageAnimationReference | null,
+  ): Promise<ComposeAnimation | null> => {
+    if (!store || !provider) throw new ComposeAssetError('unsupported', '页面 Store 不可用')
+    const session = [...sessionsRef.current.values()].find((item) => item.pageKey === pageKey)
+    // 绑定前先加载并解析动画文件：文件不合法时页面包装保持不变，调用方直接得到原因。
+    let loaded: Awaited<ReturnType<typeof loadPageAnimation>> | undefined
+    if (reference) {
+      loaded = await loadPageAnimation(
+        provider,
+        session?.entry.parentId ?? provider.root.id,
+        reference,
+      )
+    }
+    const expectedRevision = session ? session.baseRevision : (await store.readPage(pageKey)).revision
+    const written = await store.setPageAnimation(pageKey, reference, expectedRevision)
+    if (session) {
+      updateSession(session.panelId, (current) => ({
+        ...current,
+        page: written.page,
+        baseRevision: written.revision,
+        animationEntryId: loaded?.entryId,
+        animationRevision: loaded?.revision,
+        animationManifest: loaded?.file.animation,
+      }))
+    }
+    return loaded?.file.animation ?? null
+  }, [provider, store, updateSession])
+
   // 页面会话的脏状态由其运行时 revision 与保存基线的差异决定。
   useEffect(() => {
     const unsubscribes = [...sessions.values()].map((session) => session.runtime.subscribe(() => {
@@ -360,6 +458,7 @@ export function usePageWorkspace({
     savePage,
     setPageSetupScript,
     reloadPageSetupScript,
+    setPageAnimation,
     refreshCatalog,
   }
 }

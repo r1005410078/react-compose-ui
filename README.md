@@ -314,10 +314,13 @@ bun run test:e2e
 结构编辑或超过八层的继承/嵌套。Interaction、数据源和正式持久化仍需独立 OpenSpec。
 
 场景动画基础能力已交付：`@compose-ui/animation` 提供 `Animation` ECS Component 协议、
-插值采样器、运动路径几何与动画命令，`ComposeDocument.animations` 保存动画清单；编辑器
-提供动画模式（时间线接文档、属性面板菱形打点、自动记录、画布运动路径编辑）与动画检查器，
-预览支持脚本播放控制第一阶段——`playing` 布尔绑定按上升沿从头播放、`currentTime` 数值绑定
-由脚本完全接管时间轴。事件回调（onComplete/onLoop）、播放速度与多动画混合仍未实现。
+插值采样器、运动路径几何、动画命令与动画文件协议（`.animation.json`，只存清单与绑定，
+静态权威），页面在 `ComposePageFile.animation` 持有稳定引用，编辑期以
+`ComposeDocument.animations` 为会话镜像；编辑器通过画布工具栏的「设计 / 动画」模式
+切换器进入动画模式（时间线接文档、属性面板菱形打点、自动记录、画布运动路径编辑），
+画布 Inspector 提供动画文件的绑定/快捷创建与播放控制变量绑定，预览支持脚本播放控制
+第一阶段——`playing` 布尔绑定按上升沿从头播放、`currentTime` 数值绑定由脚本完全接管
+时间轴。事件回调（onComplete/onLoop）、播放速度与多动画混合仍未实现。
 
 ## License
 

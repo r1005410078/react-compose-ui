@@ -3,18 +3,19 @@ import * as v from 'valibot'
 import { COMPOSE_ANIMATION_COMMAND_TYPES } from '@compose-ui/animation'
 import type {
   ComposeAnimation,
-  ComposeAnimationBindings,
-  ComposePageExportReference,
   EditorCommand,
   JsonObject,
-  JsonValue,
 } from '@compose-ui/core'
 import { ComposePropertyPanel } from '@compose-ui/property-panel'
-import type {
-  ComposePropertyPanelBinding,
-  ComposePropertyPanelVariable,
-} from '@compose-ui/property-panel'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
+import {
+  buildAnimationBindingValue,
+  buildAnimationBindingVariables,
+  bindingsPayloadFromPanel,
+  canBindAnimationTarget,
+  getEmptyScopeSnapshot,
+  subscribeEmptyScope,
+} from './animation-binding-fields'
 
 /** 动画检查器的可本地化文案。 */
 export interface AnimationInspectorMessages {
@@ -35,14 +36,6 @@ export interface AnimationInspectorProps {
   /** 页面作用域；缺省时绑定候选为空但检查器其余功能不受影响。 */
   readonly scope?: ComposePageScriptScope
   readonly messages: AnimationInspectorMessages
-}
-
-const EMPTY_SCOPE_SNAPSHOT = { exports: [], diagnostics: [], disposed: false } as const
-const subscribeEmptyScope = () => () => undefined
-const getEmptyScopeSnapshot = () => EMPTY_SCOPE_SNAPSHOT
-
-function pageReference(exportName: string): ComposePageExportReference {
-  return { scope: 'page', exportName }
 }
 
 /**
@@ -67,17 +60,7 @@ export function AnimationInspector({
     scope?.getSnapshot ?? getEmptyScopeSnapshot,
     scope?.getSnapshot ?? getEmptyScopeSnapshot,
   )
-  const variables = useMemo<readonly ComposePropertyPanelVariable[]>(() => (
-    snapshot.exports
-      .filter((item) => item.kind === 'value')
-      .map((item) => ({
-        id: item.name,
-        label: item.name,
-        scope: 'page' as const,
-        value: item.kind === 'value' ? item.value : undefined,
-        kind: 'value' as const,
-      }))
-  ), [snapshot])
+  const variables = useMemo(() => buildAnimationBindingVariables(snapshot), [snapshot])
 
   const currentTimeBound = animation.bindings?.currentTime !== undefined
   const schema = useMemo(() => v.object({
@@ -111,25 +94,12 @@ export function AnimationInspector({
     name: animation.name,
     durationMs: animation.durationMs,
     playbackMode: animation.playbackMode,
-    // 编辑期不播放：这两行只承载绑定入口，字面值是占位。
-    playing: false,
+    // playing 的字面值承载可持久化的自动播放开关；currentTimeMs 编辑期不播放、字面值是占位。
+    playing: animation.autoplay === true,
     currentTimeMs: 0,
   }), [animation])
 
-  const bindingValue = useMemo<readonly ComposePropertyPanelBinding[]>(() => [
-    ...(animation.bindings?.playing
-      ? [{
-          target: { path: ['playing'], targetId: 'value' },
-          variableId: animation.bindings.playing.exportName,
-        }]
-      : []),
-    ...(animation.bindings?.currentTime
-      ? [{
-          target: { path: ['currentTimeMs'], targetId: 'value' },
-          variableId: animation.bindings.currentTime.exportName,
-        }]
-      : []),
-  ], [animation.bindings])
+  const bindingValue = useMemo(() => buildAnimationBindingValue(animation), [animation])
 
   const latest = useRef({ animation, dispatch, idFactory })
   useEffect(() => {
@@ -159,28 +129,9 @@ export function AnimationInspector({
         value: bindingValue,
         variables,
         onChange: (next) => {
-          const exportOf = (field: string) => next
-            .find((binding) => binding.target.path[0] === field)?.variableId
-          const playing = exportOf('playing')
-          const currentTime = exportOf('currentTimeMs')
-          const bindings: ComposeAnimationBindings = {
-            ...(playing !== undefined ? { playing: pageReference(playing) } : {}),
-            ...(currentTime !== undefined ? { currentTime: pageReference(currentTime) } : {}),
-          }
-          // `null` 清除整个 bindings 命名空间；configure 的 undefined 语义是"不碰绑定"。
-          configure({
-            bindings: (playing !== undefined || currentTime !== undefined
-              ? bindings
-              : null) as unknown as JsonValue,
-          })
+          configure({ bindings: bindingsPayloadFromPanel(next) })
         },
-        canBind: (target, variable) => {
-          if (target.address.path[0] === 'playing') return typeof variable.value === 'boolean'
-          if (target.address.path[0] === 'currentTimeMs') {
-            return typeof variable.value === 'number' && Number.isFinite(variable.value)
-          }
-          return false
-        },
+        canBind: (target, variable) => canBindAnimationTarget(target.address.path, variable),
       }}
       schema={schema}
       value={panelValue}
@@ -195,7 +146,11 @@ export function AnimationInspector({
         else if (field === 'playbackMode' && next.playbackMode !== animation.playbackMode) {
           configure({ playbackMode: next.playbackMode })
         }
-        // playing / currentTimeMs 的字面编辑不写文档：编辑期不播放，绑定才是事实。
+        // 未绑定变量时手动勾选播放 = 持久化的自动播放开关。
+        // currentTimeMs 的字面编辑不写文档：编辑期不播放。
+        else if (field === 'playing' && next.playing !== (animation.autoplay === true)) {
+          configure({ autoplay: next.playing })
+        }
       }}
       />
     </div>

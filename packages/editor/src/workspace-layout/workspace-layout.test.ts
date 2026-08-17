@@ -152,7 +152,7 @@ describe('initializeOuterWorkspace', () => {
     // 外层只有一个中央组，不持有 left/right Edge Group——这是让 bottom 能横跨全宽的前提。
     expect(spies.addEdgeGroup).not.toHaveBeenCalledWith('left', expect.any(Object))
     expect(spies.addEdgeGroup).not.toHaveBeenCalledWith('right', expect.any(Object))
-    expect(spies.addPanel).toHaveBeenCalledTimes(5)
+    expect(spies.addPanel).toHaveBeenCalledTimes(4)
     expect(edgeGroups.get('bottom')).toEqual(
       expect.objectContaining({ id: WORKSPACE_GROUP_IDS.bottom }),
     )
@@ -160,7 +160,7 @@ describe('initializeOuterWorkspace', () => {
       .toHaveBeenCalledTimes(1)
   })
 
-  it('OpenSpec: animation-panel / 编辑器底部动画区 / 将资源、动画、命令、日志放入默认收起的一组', () => {
+  it('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 底部默认只有资源、命令、日志', () => {
     const { api, spies } = createWorkspaceApi()
 
     initializeOuterWorkspace(api)
@@ -195,16 +195,11 @@ describe('initializeOuterWorkspace', () => {
         position: { referenceGroup: WORKSPACE_GROUP_IDS.bottom },
       }),
     )
-    expect(animationOptions).toEqual(
-      expect.objectContaining({
-        inactive: true,
-        position: { referenceGroup: WORKSPACE_GROUP_IDS.bottom },
-      }),
-    )
+    // 时间线面板不在初始化时注册：它由动画模式切换器动态加入。
+    expect(animationOptions).toBeUndefined()
     expect(spies.addPanel.mock.calls.map(([options]) => options.id)).toEqual([
       WORKSPACE_PANEL_IDS.core,
       WORKSPACE_PANEL_IDS.assetBrowser,
-      WORKSPACE_PANEL_IDS.animation,
       WORKSPACE_PANEL_IDS.command,
       WORKSPACE_PANEL_IDS.transactionLog,
     ])
@@ -218,6 +213,6 @@ describe('initializeOuterWorkspace', () => {
 
     expect(spies.addGroup).toHaveBeenCalledTimes(1)
     expect(spies.addEdgeGroup).toHaveBeenCalledTimes(1)
-    expect(spies.addPanel).toHaveBeenCalledTimes(5)
+    expect(spies.addPanel).toHaveBeenCalledTimes(4)
   })
 })

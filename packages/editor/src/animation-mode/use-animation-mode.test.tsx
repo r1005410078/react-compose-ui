@@ -70,23 +70,57 @@ function setup(document: ComposeDocument) {
       return { status: 'noop', command } as never
     },
     idFactory: () => `id-${seq += 1}`,
-    defaultAnimationName: '动画 1',
   }))
   return { dispatched, view }
 }
 
 describe('useAnimationMode', () => {
-  it('OpenSpec: editor-workspace-layout / 空动画的创建引导 / 创建第一条动画', () => {
+  it('OpenSpec: editor-workspace-layout / 空动画的创建引导 / 水合绑定动画清单', () => {
     const { dispatched, view } = setup(documentWith({ rect: entity('rect') }, false))
     // 无动画：面板显示空模型，animationId 为 null。
     expect(view.result.current.animationId).toBeNull()
     expect(view.result.current.panelValue?.model.tracks).toEqual([])
-    act(() => view.result.current.createAnimation())
+    act(() => view.result.current.hydrateAnimation({
+      id: 'intro',
+      name: '动画 1',
+      durationMs: 300,
+      playbackMode: 'play-once',
+    }))
     expect(dispatched).toHaveLength(1)
     expect(dispatched[0]).toMatchObject({
       type: 'animation.create',
-      payload: { name: '动画 1', durationMs: 300 },
+      payload: { animationId: 'intro', name: '动画 1', durationMs: 300 },
       meta: { source: 'animation-mode' },
+    })
+  })
+
+  it('OpenSpec: editor-workspace-layout / 空动画的创建引导 / 带绑定的清单水合为一次事务', () => {
+    const { dispatched, view } = setup(documentWith({ rect: entity('rect') }, false))
+    act(() => view.result.current.hydrateAnimation({
+      id: 'intro',
+      name: '动画 1',
+      durationMs: 300,
+      playbackMode: 'loop',
+      bindings: { playing: { scope: 'page', exportName: 'animate' } },
+    }))
+    expect(dispatched).toHaveLength(2)
+    expect(dispatched[0]).toMatchObject({ type: 'animation.create' })
+    expect(dispatched[1]).toMatchObject({
+      type: 'animation.configure',
+      payload: { animationId: 'intro' },
+    })
+    // 共享 mergeKey：创建与绑定合成一次可撤销事务。
+    expect(dispatched[0]?.meta?.mergeKey).toBeDefined()
+    expect(dispatched[0]?.meta?.mergeKey).toBe(dispatched[1]?.meta?.mergeKey)
+  })
+
+  it('OpenSpec: 画布动画绑定属性 / 解除绑定移除镜像清单', () => {
+    const { dispatched, view } = setup(documentWith({ rect: entity('rect') }))
+    act(() => view.result.current.removeAnimation('intro'))
+    expect(dispatched).toHaveLength(1)
+    expect(dispatched[0]).toMatchObject({
+      type: 'animation.delete',
+      payload: { animationId: 'intro' },
     })
   })
 

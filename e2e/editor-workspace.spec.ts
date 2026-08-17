@@ -52,7 +52,7 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   expect(bottomBox!.height).toBeLessThan(80)
   expect(await bottom.locator('[data-workspace-tab]').evaluateAll(
     (tabs) => tabs.map((tab) => tab.getAttribute('data-workspace-tab')),
-  )).toEqual(['compose-assets', 'compose-animation', 'compose-command', 'compose-transaction-log'])
+  )).toEqual(['compose-assets', 'compose-command', 'compose-transaction-log'])
   await expect(componentLibrary).toHaveScreenshot('component-library-dock.png', {
     animations: 'disabled',
     caret: 'hide',

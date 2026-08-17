@@ -40,3 +40,5 @@ export {
   WorkspaceCorePanel,
 } from './workspace-panels'
 export { WorkspaceHeaderActions, WorkspaceTab } from './workspace-tab'
+export { EditorModeSwitcher } from './editor-mode-switcher'
+export type { ComposeEditorMode, EditorModeSwitcherProps } from './editor-mode-switcher'

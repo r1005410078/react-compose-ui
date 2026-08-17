@@ -48,8 +48,8 @@ export interface MotionPathPort {
  * @remarks
  * `move` 阶段只把草稿套在本地预览轨道上重建几何，不派发命令；`end` 阶段与轨道现状
  * 不同才派发一条带 `mergeKey` 的命令——一次拖拽在撤销栈里只有一条记录，原地点击
- * 不产生事务。世界坐标原点从采样文档的布局快照反推（box 角点 − 采样 offset），
- * 因此路径跟随父级当前位置；父级旋转暂不支持。
+ * 不产生事务。世界坐标原点从采样文档的布局快照反推（box 角点 − 采样 offset + 半尺寸），
+ * 路径从物体中心出发并跟随父级当前位置；父级旋转暂不支持。
  */
 export function useMotionPath(options: MotionPathOptions): MotionPathPort {
   const {
@@ -87,7 +87,13 @@ export function useMotionPath(options: MotionPathOptions): MotionPathPort {
     const box = layoutSnapshot.boxes[entityId]
     if (!sampled || !box) return null
     const offset = getComposeLayoutItem(sampled).offset
-    return { x: box.x - offset.x, y: box.y - offset.y }
+    // 原点加半宽半高：路径穿过物体中心而不是左上角，顶点/切线的世界↔offset 换算
+    // 经同一 origin 折返，编辑语义不变。尺寸取当前采样时刻的盒子（尺寸被动画时路径
+    // 锚随当前尺寸的中心走）。
+    return {
+      x: box.x - offset.x + box.width / 2,
+      y: box.y - offset.y + box.height / 2,
+    }
   }, [displayDocument, entityId, layoutSnapshot])
 
   const latest = useRef({ animationId, baseTrack, dispatch, entityId, idFactory, origin })

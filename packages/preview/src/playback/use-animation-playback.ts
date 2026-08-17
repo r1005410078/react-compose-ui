@@ -148,10 +148,17 @@ export function useComposeAnimationPlayback(
       getSnapshot: () => holder.snapshot,
     }
   }, [currentTimeName, playingName, scope])
-  const reading = useSyncExternalStore(
+  const boundReading = useSyncExternalStore(
     readingStore.subscribe,
     readingStore.getSnapshot,
     readingStore.getSnapshot,
+  )
+  // 手动勾选的自动播放：playing 未绑定时按恒 true 读数处理——挂载首帧即触发
+  // 上升沿从头播放，播放模式照常生效；脚本绑定存在时仍由绑定接管。
+  const autoplay = playingName === null && animation?.autoplay === true
+  const reading = useMemo<BindingSnapshot>(
+    () => (autoplay ? { ...boundReading, playing: true } : boundReading),
+    [autoplay, boundReading],
   )
 
   // 失效诊断在 effect 中报告并按内容去重：同一失效原因只报一次，恢复有效后允许再报。

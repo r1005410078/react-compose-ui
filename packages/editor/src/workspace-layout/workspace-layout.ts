@@ -138,7 +138,7 @@ export function localizeWorkspace(
 
 /**
  * 初始化外层工作区：只有一个中央面板（宿主内层 scene/canvas/inspector Dockview）和一个
- * `bottom` Edge Group（资源/动画/命令/日志）。
+ * `bottom` Edge Group（资源/命令/日志；时间线面板由动画模式动态加入）。
  *
  * @remarks
  * 外层不持有 `left`/`right` Edge Group，这是让 `bottom` 能横跨整个编辑器宽度的前提——见
@@ -193,17 +193,8 @@ export function initializeOuterWorkspace(
     })
   }
 
-  if (!api.getPanel(WORKSPACE_PANEL_IDS.animation)) {
-    api.addPanel({
-      id: WORKSPACE_PANEL_IDS.animation,
-      component: WORKSPACE_COMPONENT_IDS.animation,
-      tabComponent: TAB_COMPONENT,
-      title: messages.animation,
-      inactive: true,
-      position: { referenceGroup: bottomGroup.id },
-    })
-  }
-
+  // 时间线面板不在这里注册：动画模式入口是画布工具栏的模式切换器，切到「动画」时
+  // 才动态加入（见 compose-editor 的 setEditorMode），底部默认只有 资源/命令/日志。
   if (!api.getPanel(WORKSPACE_PANEL_IDS.command)) {
     api.addPanel({
       id: WORKSPACE_PANEL_IDS.command,

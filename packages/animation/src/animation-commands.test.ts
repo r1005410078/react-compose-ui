@@ -130,6 +130,25 @@ describe('动画清单命令', () => {
       bindings: { playing: { scope: 'page', exportName: 'isReady' } },
     })
   })
+
+  it('OpenSpec: compose-preview / 动画自动播放 / 配置自动播放且 false 不留字段', () => {
+    const host = runtime(documentWith({ rect: entity('rect') }))
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+      animationId: 'intro',
+      autoplay: true,
+    }))
+    expect(host.document.animations?.[0]?.autoplay).toBe(true)
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+      animationId: 'intro',
+      autoplay: false,
+    }))
+    // 关闭序列化为删除字段：清单不长期携带无信息量的 `autoplay: false`。
+    expect(host.document.animations?.[0]).not.toHaveProperty('autoplay')
+    expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+      animationId: 'intro',
+      autoplay: 'yes',
+    })).status).toBe('rejected')
+  })
 })
 
 describe('关键帧命令', () => {

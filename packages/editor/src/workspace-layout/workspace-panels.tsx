@@ -12,6 +12,7 @@ import type {
   DockviewReadyEvent,
   IDockviewPanelProps,
 } from 'dockview-react'
+import { EditorModeSwitcher } from './editor-mode-switcher'
 import { useWorkspaceContent } from './workspace-context'
 import { WORKSPACE_COMPONENT_IDS, WORKSPACE_PANEL_IDS } from './workspace-layout'
 import { WorkspaceHeaderActions, WorkspaceTab } from './workspace-tab'
@@ -328,10 +329,13 @@ export function InspectorPanel() {
 
 /** 底部动画时间线。右侧属性区不随动画标签切换，关键帧属性由宿主自行嵌入。 @internal */
 export function AnimationPanel() {
-  const { animationEmptyState } = useWorkspaceContent()
+  const { animationEmpty, animationEmptyState } = useWorkspaceContent()
   return (
     <div className="compose-editor__panel" data-workspace-panel="animation">
-      <ComposeAnimationTimeline emptyState={animationEmptyState} />
+      <ComposeAnimationTimeline
+        emptyState={animationEmptyState}
+        {...(animationEmpty !== undefined ? { empty: animationEmpty } : {})}
+      />
     </div>
   )
 }
@@ -437,6 +441,8 @@ export function PageDocumentPanel(props: IDockviewPanelProps) {
   const {
     documents,
     children,
+    editorMode,
+    onEditorModeChange,
     saveDocument,
     stageHostPanelId,
     stageToolbar,
@@ -457,6 +463,10 @@ export function PageDocumentPanel(props: IDockviewPanelProps) {
     >
       <div className="compose-editor__canvas-toolbar">
         {stageToolbar ?? <Placeholder>{messages.workspace.stageToolbarEmpty}</Placeholder>}
+        {/* 设计/动画模式切换器只挂在页面文档：动画绑定是页面级概念，组件文档本期不进动画模式。 */}
+        {editorMode !== undefined && onEditorModeChange !== undefined ? (
+          <EditorModeSwitcher mode={editorMode} onModeChange={onEditorModeChange} />
+        ) : null}
         {/* 页面没有 Monaco 那样的内建保存入口，这里提供显式按钮；快捷键同为 Cmd/Ctrl+S。 */}
         <button
           aria-label={messages.pages.savePage}

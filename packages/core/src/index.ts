@@ -215,6 +215,7 @@ export type {
   ComposeAppManifestIssue,
   ComposeAppManifestIssueCode,
   ComposeAppManifestParseResult,
+  ComposePageAnimationReference,
   ComposePageDocumentLoader,
   ComposePageFile,
   ComposePageFileIssue,

@@ -15,8 +15,8 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
   await expect(node).toHaveCount(1)
   await node.click()
 
-  // 打开动画标签 = 进入动画模式；空态引导创建第一条动画。
-  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  // 工具栏模式切换器切到「动画」= 进入动画模式；空态引导创建第一条动画（生成文件资产并绑定页面）。
+  await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await expect(animationPanel.getByText('当前页面还没有动画')).toBeVisible()
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
@@ -35,14 +35,15 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
   const originalBox = await node.boundingBox()
   expect(originalBox).not.toBeNull()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  // 抓取点取 1/4 处而不是中心：运动路径顶点位于物体中心，中心按下会抓到顶点。
   await page.mouse.move(
-    originalBox!.x + originalBox!.width / 2,
-    originalBox!.y + originalBox!.height / 2,
+    originalBox!.x + originalBox!.width / 4,
+    originalBox!.y + originalBox!.height / 4,
   )
   await page.mouse.down()
   await page.mouse.move(
-    originalBox!.x + originalBox!.width / 2 + 96,
-    originalBox!.y + originalBox!.height / 2,
+    originalBox!.x + originalBox!.width / 4 + 96,
+    originalBox!.y + originalBox!.height / 4,
     { steps: 5 },
   )
   await page.mouse.up()
@@ -64,6 +65,62 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
 })
 
 
+test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创建动画生成文件资产并绑定页面', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 进入动画模式：底部动态出现时间线标签并展开，空态提供创建入口。
+  await editor.getByRole('radio', { name: '动画' }).click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await expect(animationPanel.getByText('当前页面还没有动画')).toBeVisible()
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+
+  // 绑定后即显示正常时间线（零轨道 + 提示行），不再是创建引导。
+  await expect(animationPanel.getByText('还没有轨道，选中组件打下第一个关键帧')).toBeVisible()
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '创建动画' })).toHaveCount(0)
+
+  // 点击输出区域激活画布 Inspector：动画区块（页面脚本上方）显示绑定的动画文件。
+  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  await page.mouse.click(outputBox.x + 40, outputBox.y + 40)
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await expect(editor.getByRole('region', { name: '画布属性' })).toBeVisible()
+  const animationSelect = inspector.getByRole('combobox', { name: '动画文件' })
+  await expect(animationSelect.locator('option:checked')).toHaveText('Home.animation.json')
+  const animationSection = inspector.locator('.property-panel__group').filter({ hasText: '动画文件' })
+  const scriptSection = inspector.locator('.property-panel__group').filter({ hasText: '页面脚本' })
+  const animationBox = (await animationSection.boundingBox())!
+  const scriptBox = (await scriptSection.boundingBox())!
+  expect(animationBox.y).toBeLessThan(scriptBox.y)
+
+  // 保存页面：绑定引用与清单写盘。
+  await editor.getByRole('button', { name: '保存页面' }).click()
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+
+  // 切回设计模式：时间线标签移除，底部恢复 资源/命令/日志。
+  await editor.getByRole('radio', { name: '设计' }).click()
+  const bottom = page.getByTestId('dv-edge-group-compose-bottom-edge')
+  await expect
+    .poll(async () => bottom.locator('[data-workspace-tab]').evaluateAll(
+      (tabs) => tabs.map((tab) => tab.getAttribute('data-workspace-tab')),
+    ))
+    .toEqual(['compose-assets', 'compose-command', 'compose-transaction-log'])
+
+  // 资源浏览器的 Pages 目录出现动画文件资产。
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid').first().getByRole('gridcell', { name: /^Pages/ }).click()
+  await expect(assets.getByRole('gridcell', { name: /^Home\.animation\.json/ })).toBeVisible()
+
+  // 重新进入动画模式：绑定持久，时间线直接显示而不是创建引导。
+  await editor.getByRole('radio', { name: '动画' }).click()
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+  await expect(animationPanel.getByText('当前页面还没有动画')).toHaveCount(0)
+})
+
 test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、双击切换与撤销粒度', async ({ page }) => {
   await page.goto('/')
 
@@ -76,16 +133,17 @@ test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、�
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
   await node.click()
-  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const startBox = (await node.boundingBox())!
-  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(startBox.x + startBox.width / 4, startBox.y + startBox.height / 4)
   await page.mouse.down()
-  await page.mouse.move(startBox.x + startBox.width / 2 + 120, startBox.y + startBox.height / 2, { steps: 4 })
+  await page.mouse.move(startBox.x + startBox.width / 4 + 120, startBox.y + startBox.height / 4, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
@@ -150,16 +208,17 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
   await node.click()
-  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const box = (await node.boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(box.x + box.width / 4, box.y + box.height / 4)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.move(box.x + box.width / 4 + 120, box.y + box.height / 4, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
@@ -213,16 +272,17 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(1)
   await nodes.first().click()
-  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   const originalBox = (await nodes.first().boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
-  await page.mouse.move(originalBox.x + originalBox.width / 2, originalBox.y + originalBox.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(originalBox.x + originalBox.width / 4, originalBox.y + originalBox.height / 4)
   await page.mouse.down()
-  await page.mouse.move(originalBox.x + originalBox.width / 2 + 96, originalBox.y + originalBox.height / 2, { steps: 4 })
+  await page.mouse.move(originalBox.x + originalBox.width / 4 + 96, originalBox.y + originalBox.height / 4, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(1)
 
@@ -252,7 +312,6 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
 
   // 采样独立：播放头回 0，A 回到起点；B 只有 200 ms 一帧，端点钳制保持拖后位置。
-  // 注意不能重复点击已激活的动画标签：Dockview 会把它折叠。
   const draggedB = (await nodes.nth(1).boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
   await expect
@@ -288,7 +347,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
 
   // 嵌套子级打点：0 ms 菱形 + 200 ms 画布拖动自动记录。
   await nested.click()
-  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
@@ -296,9 +355,10 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
   const startBox = (await nested.boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
-  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(startBox.x + startBox.width / 4, startBox.y + startBox.height / 4)
   await page.mouse.down()
-  await page.mouse.move(startBox.x + startBox.width / 2 + 80, startBox.y + startBox.height / 2 + 40, { steps: 4 })
+  await page.mouse.move(startBox.x + startBox.width / 4 + 80, startBox.y + startBox.height / 4 + 40, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
   // 动画拖动只写关键帧，不把子级拖出容器。
@@ -348,9 +408,12 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动�
   await page.mouse.click(instanceBox.x + instanceBox.width / 2, instanceBox.y + instanceBox.height / 2)
   await expect(sceneTree.getByRole('row', { name: /Anim Card/ }))
     .toHaveAttribute('aria-selected', 'true')
-  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  // 创建是异步的 建文件→绑定→水合 流程：等时间线退出空态再取几何，避免拖拽落在重绑定窗口。
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+  await expect(instanceContent).toBeVisible()
 
   // 播放头 0 拖动实例：自动记录建轨并打 0 ms 帧；播放头 200 再拖出第二帧。
   const startBox = (await instanceContent.boundingBox())!
@@ -362,9 +425,11 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动�
   const zeroBox = (await instanceContent.boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const midBox = (await instanceContent.boundingBox())!
-  await page.mouse.move(midBox.x + midBox.width / 2, midBox.y + midBox.height / 2)
+  // 实例大于画布视口（1280×720，左缘在画布外）：1/4 点会落到画布外的面板上。
+  // 用中心加小偏移抓取——既落在画布内，又避开物体中心的运动路径顶点。
+  await page.mouse.move(midBox.x + midBox.width / 2 + 60, midBox.y + midBox.height / 2 + 40)
   await page.mouse.down()
-  await page.mouse.move(midBox.x + midBox.width / 2 + 140, midBox.y + midBox.height / 2, { steps: 4 })
+  await page.mouse.move(midBox.x + midBox.width / 2 + 200, midBox.y + midBox.height / 2 + 40, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
   await expect(animationPanel.getByRole('button', { name: /^动画片段 Anim Card：/u })).toBeVisible()
@@ -388,16 +453,17 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
   await node.click()
-  await editor.locator('[data-workspace-tab="compose-animation"]').click()
+  await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const box = (await node.boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  // 1/4 处抓取：避开物体中心的运动路径顶点。
+  await page.mouse.move(box.x + box.width / 4, box.y + box.height / 4)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 2 + 96, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.move(box.x + box.width / 4 + 96, box.y + box.height / 4, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 

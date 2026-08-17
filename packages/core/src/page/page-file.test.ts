@@ -113,6 +113,50 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     }
   })
 
+  // 旧页面文件没有 animation 键：从空白页面上删掉该键模拟存量数据。
+  function legacyPageWithoutAnimationKey() {
+    const page = { ...createEmptyComposePageFile() }
+    delete (page as { animation?: unknown }).animation
+    return page
+  }
+
+  it('OpenSpec: pages / 页面动画关联写入 / 旧页面文件容缺解析并归一化为 null', () => {
+    const result = parseComposePageFile(
+      `${JSON.stringify(legacyPageWithoutAnimationKey(), null, 2)}\n`,
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.page.animation).toBeNull()
+  })
+
+  it('OpenSpec: pages / 页面动画关联写入 / 序列化总是写出动画字段', () => {
+    const text = serializeComposePageFile(legacyPageWithoutAnimationKey())
+    expect(JSON.parse(text)).toHaveProperty('animation', null)
+  })
+
+  it('OpenSpec: pages / 页面动画关联写入 / 往返动画引用并拒绝非法引用', () => {
+    const page = {
+      ...createEmptyComposePageFile(),
+      animation: {
+        providerId: 'project',
+        assetKey: 'animations/Home.animation.json',
+        scope: 'persistent' as const,
+      },
+    }
+    const roundTrip = parseComposePageFile(serializeComposePageFile(page))
+    expect(roundTrip.ok).toBe(true)
+    if (roundTrip.ok) expect(roundTrip.page).toEqual(page)
+
+    const invalid = parseComposePageFile(JSON.stringify({
+      ...page,
+      animation: { providerId: '', assetKey: 'a.animation.json', scope: 'project' },
+    }))
+    expect(invalid.ok).toBe(false)
+    if (!invalid.ok) {
+      expect(invalid.issues.map((issue) => issue.code))
+        .toContain('page.invalid-animation-reference')
+    }
+  })
+
   it('OpenSpec: compose-document / 页面文件约定 / 普通解析不接受旧裸文档', () => {
     const result = parseComposePageFile(JSON.stringify(createEmptyComposePageFile().document))
     expect(result.ok).toBe(false)
@@ -132,6 +176,7 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
         pageSchemaVersion: 1,
         document,
         setupScript: null,
+        animation: null,
       })
     }
   })

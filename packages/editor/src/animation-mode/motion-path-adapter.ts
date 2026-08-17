@@ -11,7 +11,13 @@ import type {
 import type { EditorCommand, JsonObject, JsonValue } from '@compose-ui/core'
 import type { StageEditablePath } from '@compose-ui/stage-engine'
 
-/** 把 `LayoutItem.offset`（父坐标）平移到 Stage 世界坐标的原点，即父容器角点。 */
+/**
+ * 把 `LayoutItem.offset`（父坐标）平移到 Stage 世界坐标的原点。
+ *
+ * @remarks
+ * 由宿主计算为「父容器角点 + 物体半尺寸」：路径几何与手势换算共用同一原点，
+ * 因此路径视觉上从物体中心出发，写回的仍是 offset 语义的关键帧值。
+ */
 export interface MotionPathOrigin {
   readonly x: number
   readonly y: number
