@@ -6,8 +6,21 @@ export function PlayIcon(props: IconProps) {
   return <svg aria-hidden="true" viewBox="0 0 16 16" {...props}><path d="m4 2.8 8.5 5.2L4 13.2V2.8Z" /></svg>
 }
 
+/**
+ * 暂停：两根实心竖条。
+ *
+ * @remarks
+ * 必须是填充图形而不是描边路径。播放/暂停共用工具栏第一个按钮，那个位置被样式设成
+ * `fill: currentColor; stroke: none`（播放三角要实心），描边型图形在那里等于隐身——
+ * 早先的两笔竖线写法就是这样在播放期间变成空图标的。
+ */
 export function PauseIcon(props: IconProps) {
-  return <svg aria-hidden="true" viewBox="0 0 16 16" {...props}><path d="M4.5 3v10M11.5 3v10" /></svg>
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" {...props}>
+      <rect height="10" rx="0.6" width="2" x="4.25" y="3" />
+      <rect height="10" rx="0.6" width="2" x="9.75" y="3" />
+    </svg>
+  )
 }
 
 export function DiamondIcon(props: IconProps) {

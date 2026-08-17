@@ -324,6 +324,21 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('button', { name: '暂停动画' })).toBeInTheDocument()
   })
 
+  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 播放中的暂停图标可见', () => {
+    render(
+      <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
+        <ComposeAnimationTimeline />
+      </ComposeAnimationPanelProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '播放动画' }))
+
+    // 播放/暂停共用的这个按钮位被样式设成 fill: currentColor / stroke: none，
+    // 描边型图形在那里画不出任何像素，暂停图标必须由填充图形组成。
+    const pause = screen.getByRole('button', { name: '暂停动画' })
+    expect(pause.querySelectorAll('svg rect, svg polygon, svg circle').length).toBeGreaterThan(0)
+    expect(pause.querySelector('svg path')).toBeNull()
+  })
+
   it('OpenSpec: animation-panel / 播放模式 / 允许选择播放一次、循环和往返', () => {
     render(
       <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
