@@ -517,6 +517,15 @@
     background: rgb(13 14 14 / 42%);
   }
 
+  /*
+   * 贴边：只归零左右内缩，纵向内缩、上边框与底色保持不变。曲线、色带这类可视化控件的
+   * 判读依赖完整宽度，按属性名列缩进对齐反而在行首留下一条与内容无关的竖带。
+   */
+  .property-panel__editor--full-bleed {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
   .property-panel__control {
     position: relative;
     display: flex;

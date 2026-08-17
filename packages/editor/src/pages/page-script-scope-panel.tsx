@@ -144,7 +144,8 @@ const PAGE_SCRIPT_RENDERERS = [{
   id: 'page-script-members',
   component: ScriptMembersRenderer,
   labelComponent: ScriptMembersLabel,
-  layout: 'full-width' as const,
+  // 贴边：成员列表是整行的表格式内容，按属性名列缩进会把它推离行首。
+  layout: 'full-bleed' as const,
 }]
 
 /**
@@ -342,7 +343,7 @@ export function PageScriptScopePanel({
         v.title(messages.setupExports),
         v.metadata({ propertyPanel: {
           editor: 'page-script-members',
-          layout: 'full-width',
+          layout: 'full-bleed',
           order: 1,
         } }),
       )

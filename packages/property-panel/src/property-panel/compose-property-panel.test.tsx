@@ -616,6 +616,58 @@ describe('OpenSpec: property-panel / 自定义类型 Renderer Registry / 使用�
     )
   })
 
+  it('OpenSpec: property-panel / 贴边整行的自定义 renderer 内容区 / 声明贴边布局的可视化字段', () => {
+    render(
+      <ComposePropertyPanel
+        renderers={[{ id: 'echart', component: ChartRenderer, layout: 'full-bleed' }]}
+        schema={chartSchema}
+        value={{ chart: { series: [1] } }}
+      />,
+    )
+
+    const content = screen.getByRole('group', { name: '图表' })
+    const field = content.closest('.property-panel__field')
+    // 贴边与全宽共用同一套 DOM：标题行、跨三列的内容区与操作轨道都保持不变。
+    expect(field).toHaveAttribute('data-property-layout', 'full-bleed')
+    expect(field).toHaveClass('property-panel__field--full-width')
+    expect(content).toHaveClass('property-panel__editor--full-width')
+    expect(content).toHaveClass('property-panel__editor--full-bleed')
+  })
+
+  it('OpenSpec: property-panel / 贴边整行的自定义 renderer 内容区 / 未声明贴边的全宽字段保持原位', () => {
+    render(
+      <ComposePropertyPanel
+        renderers={[{ id: 'echart', component: ChartRenderer, layout: 'full-width' }]}
+        schema={chartSchema}
+        value={{ chart: { series: [1] } }}
+      />,
+    )
+
+    const content = screen.getByRole('group', { name: '图表' })
+    expect(content).toHaveClass('property-panel__editor--full-width')
+    expect(content).not.toHaveClass('property-panel__editor--full-bleed')
+  })
+
+  it('OpenSpec: property-panel / 贴边整行的自定义 renderer 内容区 / metadata 覆盖 renderer 默认布局', () => {
+    const bleedSchema = v.object({
+      chart: v.pipe(
+        v.custom<ChartOptionFixture>(isChartOptionFixture),
+        v.title('贴边图表'),
+        v.metadata({ propertyPanel: { editor: 'echart', layout: 'full-bleed' } }),
+      ),
+    })
+    render(
+      <ComposePropertyPanel
+        renderers={[{ id: 'echart', component: ChartRenderer, layout: 'full-width' }]}
+        schema={bleedSchema}
+        value={{ chart: { series: [1] } }}
+      />,
+    )
+
+    expect(screen.getByRole('group', { name: '贴边图表' }))
+      .toHaveClass('property-panel__editor--full-bleed')
+  })
+
   it('字段 metadata 可以双向覆盖 renderer 默认布局', () => {
     const fullWidthSchema = v.object({
       chart: v.pipe(

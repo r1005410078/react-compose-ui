@@ -91,7 +91,8 @@ function keyframeSummary(easing: AnimationKeyframeEasing) {
 const KEYFRAME_EASING_RENDERERS = [{
   id: 'animation-easing',
   component: KeyframeEasingRenderer,
-  layout: 'full-width' as const,
+  // 贴边而不是全宽：曲线的判读依赖完整时间轴，行首留一条竖带既浪费又误导。
+  layout: 'full-bleed' as const,
 }]
 
 function AddIcon() {
@@ -310,7 +311,7 @@ export function PageAnimationScopePanel({
       fields.easing = v.pipe(
         v.unknown(),
         v.title(messages.easingField),
-        v.metadata({ propertyPanel: { editor: 'animation-easing', layout: 'full-width', order: 5 } }),
+        v.metadata({ propertyPanel: { editor: 'animation-easing', layout: 'full-bleed', order: 5 } }),
       )
     }
     return v.object(fields)

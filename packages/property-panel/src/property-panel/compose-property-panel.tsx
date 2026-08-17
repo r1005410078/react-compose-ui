@@ -70,7 +70,19 @@ const MIN_EDITOR_WIDTH = 120
 export type PropertyPath = readonly (string | number)[]
 
 /** 自定义 renderer 在属性树中的字段布局。 */
-export type PropertyPanelRendererLayout = 'inline' | 'full-width'
+/**
+ * 自定义 renderer 的字段布局。
+ *
+ * @remarks
+ * `inline` 是普通三列行；`full-width` 在标题行下另起一行跨越三列，内容仍按属性名列的缩进
+ * 对齐；`full-bleed` 与 `full-width` 结构相同但左右不留内缩，内容盒与整行等宽。
+ *
+ * `full-bleed` 面向曲线、色带、直方图这类判读依赖完整宽度的可视化控件；普通表单控件与
+ * 嵌套在树里的子字段应继续用 `full-width`，贴边会让它们与属性名列和分支引导线失去对齐。
+ *
+ * @public
+ */
+export type PropertyPanelRendererLayout = 'inline' | 'full-width' | 'full-bleed'
 
 /** 一个可绑定逻辑输入在属性面板中的稳定地址。 */
 export interface PropertyPanelBindingAddress {
