@@ -479,6 +479,56 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 兄弟随拖动实时�
   }).toBe(0)
 })
 
+test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子级实时重排', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage.getByTestId('stage-output-boundary')).toBeVisible()
+  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+
+  await drawContainer(page, editor)
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
+
+  const frame = stage.getByTestId('stage-container')
+  const children = frame.locator(':scope > .compose-stage__node.is-renderer')
+  await expect(children).toHaveCount(2)
+  await frame.click({ position: { x: 8, y: 8 } })
+  await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+
+  // 进入 Auto Layout 后子级交叉轴被采纳为 fill；选中容器本身拖 S 边，子级高度应实时跟随。
+  const firstBefore = await children.nth(0).boundingBox()
+  await editor.getByRole('treegrid', { name: '场景树' })
+    .getByRole('row')
+    .filter({ hasText: 'Container' })
+    .click()
+  const handle = stage.getByTestId('stage-resize-edge-s')
+  const handleBox = await handle.boundingBox()
+  expect(handleBox).not.toBeNull()
+
+  await page.mouse.move(
+    handleBox!.x + handleBox!.width / 2,
+    handleBox!.y + handleBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    handleBox!.x + handleBox!.width / 2,
+    handleBox!.y + handleBox!.height / 2 + 60,
+    { steps: 8 },
+  )
+  await expect.poll(async () => {
+    const box = await children.nth(0).boundingBox()
+    return box!.height - firstBefore!.height
+  }).toBeGreaterThan(50)
+  await page.mouse.up()
+
+  // 提交后的最终布局与松手前所见一致。
+  const firstAfter = await children.nth(0).boundingBox()
+  expect(firstAfter!.height - firstBefore!.height).toBeGreaterThan(50)
+})
+
 test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器跨行重排', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

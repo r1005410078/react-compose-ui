@@ -38,15 +38,22 @@ Layout 容器内原地重排期间按 Controller 发布的插入位置渲染落�
 
 ### Requirement: resize 手势实时布局反馈
 
-Auto Layout 容器的子级被 resize 期间，Stage MUST 按预览 Snapshot 渲染场景，使兄弟随拖动实时
-让位，所见结果与 Pointer Up 提交后的布局一致。预览渲染 MUST 以 rAF 合并，单帧最多触发一次
-预览求解。手势取消时 MUST 立即恢复提交态 Snapshot 的渲染，MUST NOT 残留预览几何；预览期间
-MUST NOT 产生文档事务或历史条目。
+Auto Layout 容器的子级或带子级的 Auto Layout 容器本身被 resize 期间，Stage MUST 按预览
+Snapshot 渲染场景：拖子级时兄弟随拖动实时让位，拖容器时子级排布（fill 伸缩、wrap 换行）
+随拖动实时更新，所见结果与 Pointer Up 提交后的布局一致。预览渲染 MUST 以 rAF 合并，单帧
+最多触发一次预览求解。手势取消时 MUST 立即恢复提交态 Snapshot 的渲染，MUST NOT 残留预览
+几何；预览期间 MUST NOT 产生文档事务或历史条目。
 
-#### Scenario: resize 时兄弟实时让位
+#### Scenario: resize 子级时兄弟实时让位
 
 - **WHEN** 用户拖动 Auto Layout 容器内某子级的 resize 手柄
 - **THEN** 兄弟节点随拖动按预览 Snapshot 实时重新排布
+- **AND** Pointer Up 提交后的最终布局与松手前所见一致
+
+#### Scenario: resize 容器时子级实时重排
+
+- **WHEN** 用户拖动带子级的 Auto Layout 容器自身的 resize 手柄
+- **THEN** 子级随拖动按预览 Snapshot 实时重新排布
 - **AND** Pointer Up 提交后的最终布局与松手前所见一致
 
 #### Scenario: 取消手势恢复提交态
