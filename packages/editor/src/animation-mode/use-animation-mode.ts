@@ -5,7 +5,7 @@ import {
   findComposeKeyframeAt,
   findComposeAnimationTrack,
 } from '@compose-ui/animation'
-import type { ComposeAnimationValueKind } from '@compose-ui/animation'
+import type { ComposeAnimationValueKind, ComposeKeyframeInterpolation } from '@compose-ui/animation'
 import { getComposeAnimations } from '@compose-ui/core'
 import type {
   CommandDispatchResult,
@@ -26,6 +26,8 @@ import {
 import type { AnimationPropertyLabelPort } from './animation-document-adapter'
 import { getAnimationKeyState } from './animation-key-state'
 import type { AnimationKeyState } from './animation-key-state'
+import { resolveAnimationKeyframeEasing } from './keyframe-easing'
+import type { AnimationKeyframeEasing } from './keyframe-easing'
 
 /** 动画模式的编辑器会话状态；永不写入文档或撤销历史。 */
 interface AnimationModeSessionState {
@@ -36,7 +38,6 @@ interface AnimationModeSessionState {
   readonly selectedTrackId: string | null
   readonly selectedPropertyId: string | null
   readonly selectedClipId: string | null
-  readonly easingEditor: 'curve' | 'spring'
 }
 
 const INITIAL_SESSION: AnimationModeSessionState = {
@@ -47,7 +48,6 @@ const INITIAL_SESSION: AnimationModeSessionState = {
   selectedTrackId: null,
   selectedPropertyId: null,
   selectedClipId: null,
-  easingEditor: 'curve',
 }
 
 /** `useAnimationMode` 的接入端口。 */
@@ -71,6 +71,19 @@ export interface AnimationModeSession {
   readonly displayDocument: ComposeDocument | undefined
   /** 面板受控值；无文档时为 null。 */
   readonly panelValue: ComposeAnimationPanelValue | null
+  /** 时间线当前选中关键帧的缓动上下文；没有选中或已失效时为 null。 */
+  readonly selectedKeyframeEasing: AnimationKeyframeEasing | null
+  /**
+   * 改写选中关键帧的出向插值。
+   *
+   * @remarks
+   * `transient` 表示这是一次连续调节（拖拽或方向键连按）的中间值，命令共享 mergeKey
+   * 由事务运行时合并成一条撤销记录；离散动作传 false 各自成一条记录。
+   */
+  readonly setKeyframeInterpolation: (
+    interpolation: ComposeKeyframeInterpolation,
+    transient: boolean,
+  ) => void
   readonly onPanelValueChange: (next: ComposeAnimationPanelValue) => void
   readonly onPanelAction: (action: ComposeAnimationPanelAction) => void
   /**
@@ -154,9 +167,38 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
       isPlaying: session.isPlaying,
       playbackMode: animation?.playbackMode ?? 'play-once',
       autoRecord: session.autoRecord,
-      easingEditor: session.easingEditor,
     }
   }, [animation?.playbackMode, animationId, document, propertyLabel, session])
+
+  const selectedKeyframeEasing = useMemo(
+    () => resolveAnimationKeyframeEasing(
+      document,
+      animationId,
+      session.selectedKeyframeId,
+      propertyLabel,
+    ),
+    [animationId, document, propertyLabel, session.selectedKeyframeId],
+  )
+
+  const setKeyframeInterpolation = useCallback((
+    interpolation: ComposeKeyframeInterpolation,
+    transient: boolean,
+  ) => {
+    const target = selectedKeyframeEasing
+    if (!target || !animationId) return
+    dispatchDraft(
+      COMPOSE_ANIMATION_COMMAND_TYPES.setInterpolation,
+      {
+        animationId,
+        entityId: target.entityId,
+        path: target.path as JsonValue,
+        keyframeId: target.keyframeId,
+        interpolation: interpolation as unknown as JsonValue,
+      },
+      // 连续调节共享 mergeKey：一次拖拽或一串方向键只留一条撤销记录。
+      transient ? `animation-easing:${target.keyframeId}` : undefined,
+    )
+  }, [animationId, dispatchDraft, selectedKeyframeEasing])
 
   const onPanelValueChange = useCallback((next: ComposeAnimationPanelValue) => {
     setSession({
@@ -167,7 +209,6 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
       selectedTrackId: next.selectedTrackId ?? null,
       selectedPropertyId: next.selectedPropertyId ?? null,
       selectedClipId: next.selectedClipId ?? null,
-      easingEditor: next.easingEditor,
     })
   }, [])
 
@@ -252,6 +293,8 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     setActive,
     animationId,
     playheadMs: session.currentTimeMs,
+    selectedKeyframeEasing,
+    setKeyframeInterpolation,
     autoRecord: session.autoRecord,
     displayDocument,
     panelValue,

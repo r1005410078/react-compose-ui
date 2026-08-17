@@ -1,6 +1,7 @@
 /* 共享 Primitive（ComposeInput / ComposeButton）的 cu: 工具类由 components 包提供；
    dist JS 不携带 CSS，必须在这里显式引入，独立宿主才不会渲染出无样式控件。 */
 @import '@compose-ui/components/styles.css';
+@import './easing-editor/styles.css';
 
 /*
  * Editor 的 Tailwind 构建会按扫描结果裁剪保留在其 `components` layer 中的外部规则。
@@ -1194,70 +1195,12 @@
   font-size: 11px;
 }
 .compose-animation-inspector__easing-editor {
+  /* 曲线编辑器自带内部布局；这里只负责它在属性面板里的外框与留白。 */
   margin: 2px 12px 12px;
+  padding: 8px;
   border: 1px solid var(--ap-border);
   border-radius: 3px;
   background: var(--ap-control);
-}
-.compose-animation-inspector__tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-bottom: 1px solid var(--ap-border);
-}
-.compose-animation-inspector__tabs button {
-  position: relative;
-  height: 32px;
-  border: 0;
-  color: var(--ap-muted);
-  background: transparent;
-  cursor: pointer;
-  font-size: 11px;
-}
-.compose-animation-inspector__tabs button[aria-selected='true'] {
-  color: var(--ap-accent);
-}
-.compose-animation-inspector__tabs button[aria-selected='true']::after {
-  position: absolute;
-  right: 16px;
-  bottom: -1px;
-  left: 16px;
-  height: 1.5px;
-  background: var(--ap-accent);
-  content: '';
-}
-.compose-animation-inspector__tabs button:focus-visible {
-  outline: 1px solid var(--ap-accent);
-  outline-offset: -2px;
-}
-.compose-animation-inspector__curve {
-  display: grid;
-  padding: 12px;
-  place-items: center;
-  gap: 6px;
-}
-.compose-animation-inspector__curve svg {
-  width: min(100%, 200px);
-  overflow: visible;
-}
-.compose-animation-inspector__curve-grid {
-  fill: none;
-  stroke: color-mix(in srgb, var(--ap-border) 90%, #3a3a3a);
-  stroke-width: .8;
-}
-.compose-animation-inspector__curve-path {
-  fill: none;
-  stroke: color-mix(in srgb, var(--ap-text) 85%, white);
-  stroke-width: 1.5;
-}
-.compose-animation-inspector__curve circle {
-  fill: var(--ap-accent);
-  stroke: color-mix(in srgb, var(--ap-accent) 45%, white);
-  stroke-width: .8;
-}
-.compose-animation-inspector__curve strong {
-  color: var(--ap-text);
-  font-size: 12px;
-  font-weight: 500;
 }
 .compose-animation-inspector__notice {
   margin: 0 12px 12px;

@@ -38,7 +38,7 @@ export interface ComposeAnimationPanelSession {
   readonly selectProperty: (propertyId: string) => void
   readonly selectClip: (clipId: string) => void
   readonly updateClipRange: (clipId: string, startTimeMs: number, endTimeMs: number) => void
-  readonly selectInterpolationSegment: (endKeyframeId: string) => void
+  readonly selectInterpolationSegment: (startKeyframeId: string) => void
   readonly moveKeyframe: (keyframeId: string, timeMs: number) => void
   readonly removeKeyframe: (keyframeId: string) => void
   /** 删除一条属性轨道及其全部关键帧。 */
@@ -54,7 +54,6 @@ export interface ComposeAnimationPanelSession {
   ) => boolean
   readonly toggleTrack: (trackId: string) => void
   readonly addKeyframe: () => void
-  readonly setEasingEditor: (editor: 'curve' | 'spring') => void
 }
 
 export function AnimationPanelProvider({
@@ -198,15 +197,15 @@ export function AnimationPanelProvider({
     setNotice(null)
     commit(updateComposeAnimationClip(valueRef.current, clipId, { startTimeMs, endTimeMs }))
   }, [commit])
-  const selectInterpolationSegment = useCallback((endKeyframeId: string) => {
+  const selectInterpolationSegment = useCallback((startKeyframeId: string) => {
     const current = valueRef.current
-    const located = findComposeAnimationKeyframe(current.model, endKeyframeId)
-    if (!located || located.location.keyframeIndex === 0) return
+    const located = findComposeAnimationKeyframe(current.model, startKeyframeId)
+    // 插值挂出向段：段由起点关键帧控制，末帧没有出向段因此不可选。
+    if (!located || located.location.keyframeIndex >= located.property.keyframes.length - 1) return
     setNotice(null)
     commit({
       ...current,
-      easingEditor: 'curve',
-      selectedKeyframeId: endKeyframeId,
+      selectedKeyframeId: startKeyframeId,
       selectedPropertyId: located.property.id,
       selectedTrackId: null,
     })
@@ -214,7 +213,7 @@ export function AnimationPanelProvider({
       kind: 'select',
       trackId: null,
       propertyId: located.property.id,
-      keyframeId: endKeyframeId,
+      keyframeId: startKeyframeId,
     })
   }, [commit, emit])
   const updateKeyframe = useCallback((keyframeId: string, update: Partial<Pick<ComposeAnimationKeyframe, 'timeMs' | 'value' | 'interpolation'>>) => {
@@ -322,10 +321,6 @@ export function AnimationPanelProvider({
       value: located.keyframe.value,
     })
   }, [commit, emit])
-  const setEasingEditor = useCallback((easingEditor: 'curve' | 'spring') => {
-    commit({ ...valueRef.current, easingEditor })
-  }, [commit])
-
   useEffect(() => {
     if (!value.isPlaying) return
     let frame = requestAnimationFrame(function tick(now) {
@@ -382,11 +377,10 @@ export function AnimationPanelProvider({
     updateSelectedKeyframe,
     toggleTrack,
     addKeyframe,
-    setEasingEditor,
   }), [
     addKeyframe, addKeyframeAtTime, moveKeyframe, notice, removeKeyframe, removeTrack,
     removeTrackGroup, seekAdjacentKeyframe, selectClip, selectInterpolationSegment,
-    selectKeyframe, selectProperty, selectTrack, setCurrentTime, setDuration, setEasingEditor,
+    selectKeyframe, selectProperty, selectTrack, setCurrentTime, setDuration,
     setPlaybackMode, setPlaying, toggleAutoRecord, toggleTrack, updateClipRange,
     updateSelectedKeyframe, value,
   ])

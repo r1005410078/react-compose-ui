@@ -1373,6 +1373,7 @@ export function ComposeEditor({
     pageProvider,
   ])
 
+  const { selectedKeyframeEasing, setKeyframeInterpolation } = animationMode
   const animationInspector = useMemo(() => {
     if (!activePageSession || !pageProvider) return undefined
     const mirrorAnimation = controller?.document
@@ -1384,11 +1385,14 @@ export function ComposeEditor({
         dispatch={(command) => animationRuntime?.dispatch(command as EditorCommand)}
         idFactory={animationCommandId}
         key={`${pageProvider.id}:${activePageSession.pageKey}:animation`}
+        // 缓动区只属于动画模式：设计模式下选中态仍在会话里，但那时没有时间线可编辑。
+        keyframeEasing={animationMode.active ? selectedKeyframeEasing : null}
         onAnimationChange={(reference) => handlePageAnimationChanged(
           activePageSession.pageKey,
           reference,
         )}
         onError={setPageNotice}
+        onInterpolationChange={setKeyframeInterpolation}
         pageName={activePageSession.displayName}
         pageParentId={activePageSession.entry.parentId ?? pageProvider.root.id}
         provider={pageProvider}
@@ -1398,10 +1402,13 @@ export function ComposeEditor({
     )
   }, [
     activePageSession,
+    animationMode.active,
     animationRuntime,
     controller,
     handlePageAnimationChanged,
     pageProvider,
+    selectedKeyframeEasing,
+    setKeyframeInterpolation,
   ])
 
   const handleVariantOverridesChange = useCallback((change: ComposeVariantOverridesChange) => {

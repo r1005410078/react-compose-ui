@@ -82,7 +82,6 @@ export function createEmptyComposeAnimationPanelValue(): ComposeAnimationPanelVa
     isPlaying: false,
     playbackMode: 'play-once',
     autoRecord: true,
-    easingEditor: 'curve',
   }
 }
 
@@ -162,6 +161,5 @@ export function createDefaultComposeAnimationPanelValue(): ComposeAnimationPanel
     isPlaying: false,
     playbackMode: 'play-once',
     autoRecord: true,
-    easingEditor: 'curve',
   }
 }

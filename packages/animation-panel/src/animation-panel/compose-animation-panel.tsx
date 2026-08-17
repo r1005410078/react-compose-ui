@@ -23,6 +23,7 @@ import {
 import { AnimationPanelProvider } from './animation-panel-provider'
 import { ComposeButton, ComposeColorPicker, useComposeContextMenu } from '@compose-ui/components'
 import { CommittedInput } from './committed-input'
+import { ComposeEasingCurveEditor } from '../easing-editor'
 import { TimelineActionsMenu } from './timeline-actions-menu'
 import type { TimelineMenuTarget } from './timeline-actions-menu'
 import {
@@ -94,14 +95,7 @@ const messages = {
     noSelection: '未选中关键帧',
     time: '时间',
     value: '值',
-    interpolation: '插值',
-    curve: '曲线',
-    spring: '弹簧',
-    linear: 'Linear',
-    hold: 'Hold',
-    cubic: 'Cubic',
-    cubicControl: (index: number) => `曲线控制点 ${index}`,
-    easingEditor: '缓动编辑器',
+    lastKeyframeNote: '末帧的出向段没有下一帧，暂不参与求值',
     duplicateTime: '该属性轨道已存在同一时间的关键帧',
   },
   'en-US': {
@@ -148,14 +142,7 @@ const messages = {
     noSelection: 'No keyframe selected',
     time: 'Time',
     value: 'Value',
-    interpolation: 'Interpolation',
-    curve: 'Curve',
-    spring: 'Spring',
-    linear: 'Linear',
-    hold: 'Hold',
-    cubic: 'Cubic',
-    cubicControl: (index: number) => `Curve control ${index}`,
-    easingEditor: 'Easing editor',
+    lastKeyframeNote: 'The last keyframe has no following keyframe, so its outgoing segment is not sampled',
     duplicateTime: 'A keyframe already exists at this time on the property track',
   },
 } as const
@@ -171,21 +158,6 @@ type Locale = keyof typeof messages
  */
 function propertyListLabel(property: ComposeAnimationPropertyTrack) {
   return property.groupLabel ?? property.label
-}
-
-/**
- * 由插值对象生成曲线预览路径。
- *
- * 画布坐标：x 从 18 到 202、y 从 162 到 18；cubic 控制点按同一映射投影，
- * 允许 y 越界以呈现过冲曲线。hold 画成阶梯。
- */
-function curvePathFromInterpolation(interpolation: ComposeAnimationInterpolation): string {
-  if (interpolation.kind === 'hold') return 'M18 162H202V18'
-  if (interpolation.kind === 'linear') return 'M18 162 202 18'
-  const [x1, y1, x2, y2] = interpolation.control
-  const mapX = (x: number) => 18 + x * 184
-  const mapY = (y: number) => 162 - y * 144
-  return `M18 162C${mapX(x1)} ${mapY(y1)} ${mapX(x2)} ${mapY(y2)} 202 18`
 }
 
 /** 把任意关键帧值格式化为左栏展示文本。 */
@@ -1200,8 +1172,8 @@ function TimelineScale({
                     />
                     {keyframes.slice(1).map((keyframe, keyframeIndex) => {
                       const startKeyframe = keyframes[keyframeIndex]!
-                      // aria-current 仅表「曲线区间终点」选中，视觉上不把相邻线段刷成选中色
-                      const segmentCurrent = value.selectedKeyframeId === keyframe.id
+                      // 插值挂出向段：控制这一段的是起点关键帧，选中态与点击都跟着它走。
+                      const segmentCurrent = value.selectedKeyframeId === startKeyframe.id
                       const startRatio = timelineRatio(startKeyframe.timeMs, value.model.durationMs)
                       const endRatio = timelineRatio(keyframe.timeMs, value.model.durationMs)
                       return (
@@ -1209,13 +1181,13 @@ function TimelineScale({
                           aria-current={segmentCurrent || undefined}
                           aria-label={t.interpolationSegment(startKeyframe.timeMs, keyframe.timeMs, label)}
                           className="compose-animation-timeline__interpolation-segment"
-                          data-interpolation={keyframe.interpolation}
+                          data-interpolation={startKeyframe.interpolation.kind}
                           key={`${keyframe.id}-segment`}
                           style={{ left: `${startRatio * 100}%`, width: `${(endRatio - startRatio) * 100}%` }}
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation()
-                            onSelectInterpolationSegment(keyframe.id)
+                            onSelectInterpolationSegment(startKeyframe.id)
                           }}
                         ><CurveIcon /></button>
                       )
@@ -1282,7 +1254,7 @@ export function ComposeAnimationInspector({
 }: ComposeAnimationInspectorProps) {
   const i18n = useComposeI18nContext()
   const theme = useComposeThemeContext()
-  const { notice, selectedKeyframe, setEasingEditor, updateSelectedKeyframe, value } = useAnimationPanelSession()
+  const { notice, selectedKeyframe, updateSelectedKeyframe, value } = useAnimationPanelSession()
   const locale = i18n?.locale ?? 'zh-CN'
   const t = messages[locale]
   const rootClassName = ['compose-animation-panel', 'compose-animation-inspector', className]
@@ -1302,43 +1274,15 @@ export function ComposeAnimationInspector({
   const valueKind = selectedProperty?.valueKind ?? 'number'
   const interpolation: ComposeAnimationInterpolation
     = selectedKeyframe?.keyframe.interpolation ?? { kind: 'linear' }
-  const interpolationLabel = interpolation.kind === 'hold'
-    ? t.hold
-    : interpolation.kind === 'cubic' ? t.cubic : t.linear
-  const previousKeyframe = selectedKeyframe && selectedKeyframe.location.keyframeIndex > 0
-    ? selectedKeyframe.property.keyframes[selectedKeyframe.location.keyframeIndex - 1]
+  // 插值挂出向段：区间是「本帧 → 下一帧」，末帧没有下一帧因此没有区间。
+  const nextKeyframe = selectedKeyframe
+    ? selectedKeyframe.property.keyframes[selectedKeyframe.location.keyframeIndex + 1]
     : undefined
-  const interpolationRange = previousKeyframe && selectedKeyframe
-    ? `${previousKeyframe.timeMs} ms → ${selectedKeyframe.keyframe.timeMs} ms`
+  const interpolationRange = nextKeyframe && selectedKeyframe
+    ? `${selectedKeyframe.keyframe.timeMs} ms → ${nextKeyframe.timeMs} ms`
     : ''
+  const isLastKeyframe = selectedKeyframe !== undefined && nextKeyframe === undefined
   const noticeId = useId()
-  const easingId = useId()
-  const curveTabId = `${easingId}-curve-tab`
-  const springTabId = `${easingId}-spring-tab`
-  const easingPanelId = `${easingId}-panel`
-  const curveTabRef = useRef<HTMLButtonElement>(null)
-  const springTabRef = useRef<HTMLButtonElement>(null)
-  const activeTabId = value.easingEditor === 'curve' ? curveTabId : springTabId
-  // Tabs 采用自动激活模式：方向键切换的同时把焦点带到新标签，否则漫游 tabindex 会把焦点留在旧标签上。
-  const focusEasingTab = (editor: 'curve' | 'spring') => {
-    setEasingEditor(editor)
-    const target = editor === 'curve' ? curveTabRef.current : springTabRef.current
-    target?.focus()
-  }
-  const handleEasingTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.preventDefault()
-      focusEasingTab(value.easingEditor === 'curve' ? 'spring' : 'curve')
-    }
-    else if (event.key === 'Home') {
-      event.preventDefault()
-      focusEasingTab('curve')
-    }
-    else if (event.key === 'End') {
-      event.preventDefault()
-      focusEasingTab('spring')
-    }
-  }
 
   return (
     <aside
@@ -1437,91 +1381,17 @@ export function ComposeAnimationInspector({
             </span>
           </label>
         ) : null}
-        <label>
-          <span>{t.interpolation}</span>
-          <select
-            aria-label={t.interpolation}
-            value={interpolation.kind}
-            onChange={(event) => {
-              // select 是 DOM 边界：测试或宿主可以塞进任意字符串，未知值一律忽略。
-              const kind = event.target.value
-              if (kind !== 'hold' && kind !== 'linear' && kind !== 'cubic') return
-              updateSelectedKeyframe({
-                interpolation: kind === 'cubic'
-                  // 已是 cubic 时保留用户调过的控制点；从别的类型切来才给标准 ease 起点。
-                  ? interpolation.kind === 'cubic'
-                    ? interpolation
-                    : { kind, control: [0.25, 0.1, 0.25, 1] }
-                  : { kind },
-              })
-            }}
-          >
-            <option value="hold">{t.hold}</option>
-            <option value="linear">{t.linear}</option>
-            <option value="cubic">{t.cubic}</option>
-          </select>
-        </label>
       </div>
       <div className="compose-animation-inspector__easing-editor">
-        <div aria-label={t.easingEditor} className="compose-animation-inspector__tabs" role="tablist">
-          <button
-            aria-controls={value.easingEditor === 'curve' ? easingPanelId : undefined}
-            aria-selected={value.easingEditor === 'curve'}
-            id={curveTabId}
-            ref={curveTabRef}
-            role="tab"
-            tabIndex={value.easingEditor === 'curve' ? 0 : -1}
-            type="button"
-            onClick={() => setEasingEditor('curve')}
-            onKeyDown={handleEasingTabKeyDown}
-          >{t.curve}</button>
-          <button
-            aria-controls={value.easingEditor === 'spring' ? easingPanelId : undefined}
-            aria-selected={value.easingEditor === 'spring'}
-            id={springTabId}
-            ref={springTabRef}
-            role="tab"
-            tabIndex={value.easingEditor === 'spring' ? 0 : -1}
-            type="button"
-            onClick={() => setEasingEditor('spring')}
-            onKeyDown={handleEasingTabKeyDown}
-          >{t.spring}</button>
-        </div>
-        <div
-          aria-labelledby={activeTabId}
-          className="compose-animation-inspector__curve"
-          id={easingPanelId}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          <svg aria-label={value.easingEditor === 'curve' ? interpolationLabel : t.spring} viewBox="0 0 220 180">
-            <path className="compose-animation-inspector__curve-grid" d="M18 162H202V18M18 126H202M18 90H202M18 54H202M64 18V162M110 18V162M156 18V162" />
-            <path className="compose-animation-inspector__curve-path" d={value.easingEditor === 'curve'
-              ? curvePathFromInterpolation(interpolation)
-              : 'M18 162C55 162 58 20 105 20S135 130 157 75 178 18 202 18'} />
-            <circle cx="18" cy="162" r="4.5" /><circle cx="202" cy="18" r="4.5" />
-          </svg>
-          <strong>{value.easingEditor === 'curve' ? interpolationLabel : t.spring}</strong>
-          {value.easingEditor === 'curve' && interpolation.kind === 'cubic' && selectedKeyframe ? (
-            <div className="compose-animation-inspector__cubic-controls">
-              {interpolation.control.map((component, index) => (
-                <CommittedInput
-                  aria-label={t.cubicControl(index + 1)}
-                  inputMode="decimal"
-                  key={`${selectedKeyframe.keyframe.id}-c${index}-${component}`}
-                  value={String(component)}
-                  onCommit={(draft) => {
-                    const next = Number.parseFloat(draft)
-                    if (!Number.isFinite(next)) return false
-                    const control = [...interpolation.control] as [number, number, number, number]
-                    control[index] = next
-                    return updateSelectedKeyframe({ interpolation: { kind: 'cubic', control } })
-                  }}
-                />
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <ComposeEasingCurveEditor
+          key={selectedKeyframe?.keyframe.id ?? 'none'}
+          note={isLastKeyframe ? t.lastKeyframeNote : undefined}
+          readOnly={!selectedKeyframe}
+          value={interpolation}
+          onChange={(next) => {
+            updateSelectedKeyframe({ interpolation: next })
+          }}
+        />
       </div>
       {/* 播报由时间线的 live region 负责：两个组件同时挂载时重复播报比没有播报更糟。
           这里只做常驻可见说明，并通过 aria-describedby 挂到时间字段上。 */}

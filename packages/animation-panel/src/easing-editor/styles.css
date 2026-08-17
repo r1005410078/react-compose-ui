@@ -1,0 +1,136 @@
+/*
+ * 缓动曲线编辑器：可独立嵌入宿主属性面板，因此只声明自身命名空间下的规则。
+ * 颜色优先取动画包的 --ap-* token；嵌在时间线之外（例如 Canvas Inspector 的属性
+ * Section）时那些变量并不存在，因此每一处都再兜底到 Compose Theme token，最后才是
+ * 深色字面值——直接写死深色会让浅色主题的宿主渲染出黑底控件。
+ */
+.compose-easing-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.compose-easing-editor__preset,
+.compose-easing-editor__control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* 11px 文字用 muted 色只有 4.29:1，达不到 WCAG 4.5:1；字段名与说明都是必须读的正文。 */
+  font-size: 11px;
+  color: var(--ap-text, var(--compose-text, #d4d4d4));
+}
+
+.compose-easing-editor__preset > span,
+.compose-easing-editor__control > span {
+  flex: 0 0 auto;
+}
+
+.compose-easing-editor__preset select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--ap-border, var(--compose-border, #2a2a2a));
+  border-radius: 4px;
+  background: var(--ap-control, var(--compose-surface-control, #111111));
+  color: var(--ap-text, var(--compose-text, #d4d4d4));
+  font: inherit;
+}
+
+.compose-easing-editor__control :where(input) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.compose-easing-editor__canvas {
+  position: relative;
+  width: 100%;
+  /* 近似方形：曲线的斜率是主要判读对象，拉扁会让缓入缓出看起来一样。
+     上限 220px 是为了嵌进属性面板时不把整列撑成一屏高。 */
+  max-width: 220px;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--ap-border, var(--compose-border, #2a2a2a));
+  border-radius: 4px;
+  background: var(--ap-control, var(--compose-surface-control, #111111));
+  /* 回弹曲线会越出单位方格；容器裁掉超出部分，显示域已保证控制柄始终在内。 */
+  overflow: hidden;
+  touch-action: none;
+}
+
+.compose-easing-editor__canvas > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.compose-easing-editor__grid {
+  fill: none;
+  stroke: var(--ap-grid, color-mix(in srgb, var(--compose-border, #2a2a2a) 70%, transparent));
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.compose-easing-editor__leash {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ap-accent, var(--compose-accent, #3b8ef0)) 45%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.compose-easing-editor__curve {
+  fill: none;
+  stroke: var(--ap-text, var(--compose-text, #d4d4d4));
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.compose-easing-editor__handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  padding: 0;
+  border: 2px solid var(--ap-accent, var(--compose-accent, #3b8ef0));
+  border-radius: 50%;
+  background: var(--ap-control, var(--compose-surface-control, #111111));
+  cursor: grab;
+  touch-action: none;
+}
+
+.compose-easing-editor__handle:focus-visible {
+  outline: 2px solid var(--ap-keyframe-selected-ring, var(--compose-text-strong, #f0f0f0));
+  outline-offset: 1px;
+}
+
+.compose-easing-editor__handle[data-dragging] {
+  background: var(--ap-accent, var(--compose-accent, #3b8ef0));
+  cursor: grabbing;
+}
+
+.compose-easing-editor__handle:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.compose-easing-editor__hint,
+.compose-easing-editor__note {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--ap-text, var(--compose-text, #d4d4d4)) 85%, var(--ap-bg, var(--compose-panel-bg, #141414)));
+}
+
+.compose-easing-editor__hint {
+  /* 键盘说明只服务读屏与聚焦用户，常驻显示会挤占本来就窄的属性列。 */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -49,7 +49,7 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('200')
     // 颜色轨道的值控件是共享 ComposeColorPicker 的触发器。
     expect(screen.getByRole('button', { name: '选择值颜色' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('linear')
+    expect(screen.getByRole('combobox', { name: '缓动预设' })).toHaveValue('linear')
   })
 
   it('OpenSpec: animation-panel / 本地时间线与关键帧交互 / 选择并编辑关键帧', () => {
@@ -65,12 +65,13 @@ describe('ComposeAnimationPanel', () => {
       .toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('100')
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
-    fireEvent.change(screen.getByRole('combobox', { name: '插值' }), {
-      target: { value: 'cubic' },
+    // 100 ms 关键帧本来是缓入；改选缓出后控制点数值行同步。
+    expect(screen.getByRole('combobox', { name: '缓动预设' })).toHaveValue('ease-in')
+    fireEvent.change(screen.getByRole('combobox', { name: '缓动预设' }), {
+      target: { value: 'ease-out' },
     })
-    expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('cubic')
-    // 切到 cubic 后曲线标签下出现四个可编辑控制点。
-    expect(screen.getAllByRole('textbox', { name: /曲线控制点/u })).toHaveLength(4)
+    expect(screen.getByRole('combobox', { name: '缓动预设' })).toHaveValue('ease-out')
+    expect(screen.getByRole('textbox', { name: '控制点' })).toHaveValue('0, 0, 0.58, 1')
     fireEvent.change(screen.getByRole('slider', { name: '当前时间' }), { target: { value: '150' } })
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('150')
   })
@@ -112,7 +113,7 @@ describe('ComposeAnimationPanel', () => {
     expect(
       screen.getByRole('button', { name: '选择值颜色' }).querySelector('.compose-color-picker__swatch'),
     ).toHaveStyle({ backgroundColor: '#00aa11' })
-    expect(screen.getByRole('combobox', { name: '插值' })).toHaveValue('cubic')
+    expect(screen.getByRole('combobox', { name: '缓动预设' })).toHaveValue('ease-in')
   })
 
   it('OpenSpec: animation-panel / 关键帧选择与属性同步 / 无选中关键帧时不显示虚假序号', () => {
@@ -140,19 +141,20 @@ describe('ComposeAnimationPanel', () => {
       </ComposeAnimationPanelProvider>,
     )
 
+    // 会话默认选中 200 ms 关键帧，它已经是 200→300 段的起点；换一段验证联动。
     const segment = screen.getByRole('button', {
-      name: '编辑 200 ms 至 300 ms 的背景填充动画曲线',
+      name: '编辑 100 ms 至 200 ms 的背景填充动画曲线',
     })
     expect(segment).not.toHaveAttribute('aria-current')
 
     fireEvent.click(segment)
 
+    // 插值挂出向段：这一段由 100 ms 的起点关键帧控制，选中的必须是它。
     expect(segment).toHaveAttribute('aria-current', 'true')
-    expect(screen.getByRole('button', { name: '关键帧 300 ms：背景填充' }))
+    expect(screen.getByRole('button', { name: '关键帧 100 ms：背景填充' }))
       .toHaveAttribute('aria-current', 'true')
-    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('300')
-    expect(screen.getByDisplayValue('200 ms → 300 ms')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '曲线' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('100')
+    expect(screen.getByDisplayValue('100 ms → 200 ms')).toBeInTheDocument()
     expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
   })
 
@@ -536,25 +538,15 @@ describe('ComposeAnimationPanel', () => {
     expect(screen.getByRole('button', { name: '调整动画片段 Fault 的结束时间' })).not.toHaveAttribute('aria-current')
   })
 
-  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 缓动标签实现 Tabs 键盘模式', () => {
+  it('OpenSpec: animation-panel / 参考图一致的可访问视觉结构 / 缓动区不出现协议外的编辑器标签', () => {
     render(
       <ComposeAnimationPanelProvider defaultValue={createDefaultComposeAnimationPanelValue()}>
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
     )
-    const curve = screen.getByRole('tab', { name: '曲线' })
-    const spring = screen.getByRole('tab', { name: '弹簧' })
-    expect(curve).toHaveAttribute('tabindex', '0')
-    expect(spring).toHaveAttribute('tabindex', '-1')
-    expect(curve).toHaveAttribute('aria-controls', screen.getByRole('tabpanel').id)
-    // 未渲染的面板不能被 aria-controls 引用。
-    expect(spring).not.toHaveAttribute('aria-controls')
-
-    curve.focus()
-    fireEvent.keyDown(curve, { key: 'ArrowRight' })
-    expect(spring).toHaveAttribute('aria-selected', 'true')
-    expect(spring).toHaveFocus()
-    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', spring.id)
+    // 协议没有 spring 插值：缓动区只有预设、曲线与控制点，不再有曲线/弹簧标签页。
+    expect(screen.queryAllByRole('tab')).toHaveLength(0)
+    expect(screen.getByRole('combobox', { name: '缓动预设' })).toBeInTheDocument()
   })
 
   it('OpenSpec: animation-panel / 分置嵌入动画区域 / 同页多个属性面板不产生重复 DOM id', () => {
@@ -564,10 +556,10 @@ describe('ComposeAnimationPanel', () => {
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
     )
-    const ids = [
-      ...screen.getAllByRole('tab').map((tab) => tab.id),
-      ...screen.getAllByRole('tabpanel').map((panel) => panel.id),
-    ]
+    // 两个属性面板各自 useId：缓动区的键盘说明等带 id 元素不能撞车。
+    const ids = [...document.querySelectorAll('.compose-animation-inspector [id]')]
+      .map((element) => element.id)
+    expect(ids.length).toBeGreaterThan(0)
     expect(new Set(ids).size).toBe(ids.length)
   })
 
@@ -816,11 +808,10 @@ describe('宿主驱动的关键帧值与插值模型', () => {
       </ComposeAnimationPanelProvider>,
     )
     fireEvent.click(screen.getByRole('button', { name: '关键帧 240 ms：Rotation' }))
-    fireEvent.change(screen.getByRole('combobox', { name: '插值' }), { target: { value: 'cubic' } })
-    const controls = screen.getAllByRole('textbox', { name: /曲线控制点/u })
-    expect(controls).toHaveLength(4)
-    fireEvent.change(controls[0]!, { target: { value: '0.5' } })
-    fireEvent.keyDown(controls[0]!, { key: 'Enter' })
+    const control = screen.getByRole('textbox', { name: '控制点' })
+    expect(control).toHaveValue('0.42, 0, 1, 1')
+    fireEvent.change(control, { target: { value: '0.5, 0, 1, 1' } })
+    fireEvent.keyDown(control, { key: 'Enter' })
     const last = actions[actions.length - 1]
     expect(last).toEqual({
       kind: 'set-interpolation',

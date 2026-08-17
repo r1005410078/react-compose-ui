@@ -103,6 +103,10 @@ const messages = {
       inspectorPlaying: '播放',
       inspectorCurrentTime: '当前时间',
       playingTakenOver: '时间轴已由脚本接管：解除当前时间绑定后才能绑定播放',
+      keyframeField: '关键帧',
+      easingPresetField: '缓动',
+      easingField: '缓动曲线',
+      lastKeyframeNote: '末帧的出向段没有下一帧，暂不参与求值',
     },
     stageToolbar: {
       label: 'Stage 工具栏',
@@ -317,6 +321,10 @@ const messages = {
       inspectorPlaying: 'Playing',
       inspectorCurrentTime: 'Current time',
       playingTakenOver: 'The timeline is driven by script: unbind current time to bind playing',
+      keyframeField: 'Keyframe',
+      easingPresetField: 'Easing',
+      easingField: 'Easing curve',
+      lastKeyframeNote: 'The last keyframe has no following keyframe, so its outgoing segment is not sampled',
     },
     stageToolbar: {
       label: 'Stage toolbar',
@@ -763,6 +771,10 @@ export function getEditorMessages(
         current.animationMode.inspectorCurrentTime,
       ),
       playingTakenOver: format('animationMode.playingTakenOver', current.animationMode.playingTakenOver),
+      keyframeField: format('animationMode.keyframeField', current.animationMode.keyframeField),
+      easingPresetField: format('animationMode.easingPresetField', current.animationMode.easingPresetField),
+      easingField: format('animationMode.easingField', current.animationMode.easingField),
+      lastKeyframeNote: format('animationMode.lastKeyframeNote', current.animationMode.lastKeyframeNote),
       keyNone: (label: string) => withVariables(
         'animationMode.keyNone', current.animationMode.keyNone(label), { label },
       ),

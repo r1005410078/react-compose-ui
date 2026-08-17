@@ -1,5 +1,13 @@
 import { isComposeAnimationFileName } from '@compose-ui/animation'
 import { COMPOSE_ANIMATION_COMMAND_TYPES } from '@compose-ui/animation'
+import type { ComposeKeyframeInterpolation } from '@compose-ui/animation'
+import {
+  COMPOSE_EASING_PRESETS,
+  composeEasingPresetInterpolation,
+  getComposeEasingPresetLabels,
+  matchComposeEasingPreset,
+} from '@compose-ui/animation-panel'
+import type { ComposeEasingSelectionId } from '@compose-ui/animation-panel'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import {
   ComposeContextMenu,
@@ -33,6 +41,9 @@ import {
   subscribeEmptyScope,
 } from './animation-binding-fields'
 import { createPageAnimationFile } from './animation-asset-store'
+import { KeyframeEasingRenderer } from './keyframe-easing-field'
+import type { KeyframeEasingValue } from './keyframe-easing-field'
+import type { AnimationKeyframeEasing } from './keyframe-easing'
 
 /** Canvas Inspector 动画 Section 的 Editor 侧输入。 @internal */
 export interface PageAnimationScopePanelProps {
@@ -49,6 +60,13 @@ export interface PageAnimationScopePanelProps {
   /** 绑定/更换/解除动画文件；由宿主完成页面包装写入与镜像水合。 */
   readonly onAnimationChange: (reference: ComposePageAnimationReference | null) => Promise<void>
   readonly onError: (message: string) => void
+  /** 时间线当前选中关键帧的缓动上下文；为空时不渲染缓动三行。 */
+  readonly keyframeEasing?: AnimationKeyframeEasing | null
+  /** 改写选中关键帧的出向插值；`transient` 表示连续调节的中间值。 */
+  readonly onInterpolationChange?: (
+    interpolation: ComposeKeyframeInterpolation,
+    transient: boolean,
+  ) => void
 }
 
 function MoreIcon() {
@@ -60,6 +78,21 @@ function MoreIcon() {
     </svg>
   )
 }
+
+/** 关键帧标识行：对象 / 属性 · 出向区间，让用户确认正在编辑哪一段曲线。 */
+function keyframeSummary(easing: AnimationKeyframeEasing) {
+  const range = easing.nextTimeMs === null
+    ? `${easing.timeMs} ms`
+    : `${easing.timeMs} ms → ${easing.nextTimeMs} ms`
+  return `${easing.entityName} / ${easing.propertyLabel} · ${range}`
+}
+
+/** 缓动字段的自定义 renderer 表；实例级注册，不进属性面板的内建 editor。 */
+const KEYFRAME_EASING_RENDERERS = [{
+  id: 'animation-easing',
+  component: KeyframeEasingRenderer,
+  layout: 'full-width' as const,
+}]
 
 function AddIcon() {
   return (
@@ -82,8 +115,10 @@ export function PageAnimationScopePanel({
   animation,
   dispatch,
   idFactory,
+  keyframeEasing = null,
   onAnimationChange,
   onError,
+  onInterpolationChange,
   pageName,
   pageParentId,
   provider,
@@ -94,6 +129,10 @@ export function PageAnimationScopePanel({
   const editorMessages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
   const messages = editorMessages.animationMode
   const actionsMenu = useComposeContextMenu<'page-animation'>()
+  const presetLabels = useMemo(
+    () => getComposeEasingPresetLabels(i18n?.locale === 'en-US' ? 'en-US' : 'zh-CN'),
+    [i18n?.locale],
+  )
   const [entries, setEntries] = useState<readonly ComposeAssetEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -256,13 +295,45 @@ export function PageAnimationScopePanel({
         v.metadata({ propertyPanel: { binding: { enabled: true }, order: 2 } }),
       )
     }
+    // 缓动三行只在时间线选中某个关键帧时出现；没有选中就没有编辑对象。
+    if (mirrorReady && keyframeEasing) {
+      fields.keyframe = v.pipe(
+        v.string(),
+        v.title(messages.keyframeField),
+        v.metadata({ propertyPanel: { order: 3, readOnly: true } }),
+      )
+      fields.easingPreset = v.pipe(
+        v.picklist([...COMPOSE_EASING_PRESETS.map((preset) => preset.id), 'custom']),
+        v.title(messages.easingPresetField),
+        v.metadata({ propertyPanel: { order: 4, optionLabels: presetLabels } }),
+      )
+      fields.easing = v.pipe(
+        v.unknown(),
+        v.title(messages.easingField),
+        v.metadata({ propertyPanel: { editor: 'animation-easing', layout: 'full-width', order: 5 } }),
+      )
+    }
     return v.object(fields)
-  }, [busy, canChange, currentTimeBound, loading, messages, mirrorReady, selectableEntries])
+  }, [
+    busy, canChange, currentTimeBound, keyframeEasing, loading, messages, mirrorReady,
+    presetLabels, selectableEntries,
+  ])
   // playing 的字面值承载可持久化的自动播放开关；currentTimeMs 编辑期不播放、字面值只是占位。
   const panelValue = useMemo(() => ({
     file: currentValue,
     ...(mirrorReady ? { playing: animation?.autoplay === true, currentTimeMs: 0 } : {}),
-  }), [animation?.autoplay, currentValue, mirrorReady])
+    ...(mirrorReady && keyframeEasing
+      ? {
+          keyframe: keyframeSummary(keyframeEasing),
+          easingPreset: matchComposeEasingPreset(keyframeEasing.interpolation),
+          easing: {
+            interpolation: keyframeEasing.interpolation,
+            // 末帧的出向段没有下一帧，说明必须常驻而不是折叠进字段描述。
+            note: keyframeEasing.nextTimeMs === null ? messages.lastKeyframeNote : null,
+          } satisfies KeyframeEasingValue,
+        }
+      : {}),
+  }), [animation?.autoplay, currentValue, keyframeEasing, messages, mirrorReady])
   const variables = useMemo(() => buildAnimationBindingVariables(scopeSnapshot), [scopeSnapshot])
   const bindingValue = useMemo(
     () => (animation ? buildAnimationBindingValue(animation) : []),
@@ -304,6 +375,7 @@ export function PageAnimationScopePanel({
       title={editorMessages.canvasInspector.animation}
     >
       <ComposePropertyPanel
+        renderers={KEYFRAME_EASING_RENDERERS}
         schema={schema}
         value={panelValue}
         {...(mirrorReady && animation
@@ -341,6 +413,25 @@ export function PageAnimationScopePanel({
               payload: { animationId: animation.id, autoplay: change.value === true },
               meta: { source: 'canvas-animation-inspector' },
             } as EditorCommand)
+            return
+          }
+          if (!keyframeEasing || !onInterpolationChange) return
+          if (change.path[0] === 'easingPreset') {
+            onInterpolationChange(
+              composeEasingPresetInterpolation(
+                change.value as ComposeEasingSelectionId,
+                keyframeEasing.interpolation,
+              ),
+              false,
+            )
+            return
+          }
+          if (change.path[0] === 'easing') {
+            // 连续调节以 input 提交、离散提交以 commit 提交；宿主据此决定是否合并撤销。
+            onInterpolationChange(
+              (change.value as KeyframeEasingValue).interpolation,
+              change.reason === 'input',
+            )
           }
         }}
       />

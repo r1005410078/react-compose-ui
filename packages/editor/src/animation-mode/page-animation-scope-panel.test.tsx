@@ -4,6 +4,7 @@ import { ComposePropertyPanelRoot } from '@compose-ui/property-panel'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PageAnimationScopePanel } from './page-animation-scope-panel'
+import type { AnimationKeyframeEasing } from './keyframe-easing'
 
 const animationEntry = {
   id: 'intro-file',
@@ -60,18 +61,32 @@ const mirrorAnimation: ComposeAnimation = {
   playbackMode: 'play-once',
 }
 
+const keyframeEasingFixture: AnimationKeyframeEasing = {
+  entityId: 'rect',
+  path: ['LayoutItem', 'offset'],
+  keyframeId: 'k1',
+  interpolation: { kind: 'linear' },
+  timeMs: 0,
+  nextTimeMs: 300,
+  entityName: 'Rectangle',
+  propertyLabel: '位置',
+}
+
 function renderPanel({
   provider = providerFixture(),
   reference = null,
   animation = null,
+  keyframeEasing = null,
 }: {
   readonly provider?: ComposeAssetProvider
   readonly reference?: ComposePageAnimationReference | null
   readonly animation?: ComposeAnimation | null
+  readonly keyframeEasing?: AnimationKeyframeEasing | null
 } = {}) {
   const dispatch = vi.fn()
   const onAnimationChange = vi.fn(async () => undefined)
   const onError = vi.fn()
+  const onInterpolationChange = vi.fn()
   let seq = 0
   // 组件是共享 Root 内的一个 Section：Root 提供分组 chrome、搜索与列宽。
   render(
@@ -80,8 +95,10 @@ function renderPanel({
         animation={animation}
         dispatch={dispatch}
         idFactory={() => `id-${seq += 1}`}
+        keyframeEasing={keyframeEasing}
         onAnimationChange={onAnimationChange}
         onError={onError}
+        onInterpolationChange={onInterpolationChange}
         pageName="Home"
         pageParentId="root"
         provider={provider}
@@ -89,7 +106,7 @@ function renderPanel({
       />
     </ComposePropertyPanelRoot>,
   )
-  return { dispatch, onAnimationChange, onError, provider }
+  return { dispatch, onAnimationChange, onError, onInterpolationChange, provider }
 }
 
 afterEach(() => { cleanup() })
@@ -162,6 +179,75 @@ describe('PageAnimationScopePanel', () => {
       expect(onAnimationChange).toHaveBeenCalledWith(null)
     })
     expect(provider.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑 / 未选中关键帧时不渲染缓动区', async () => {
+    renderPanel({ reference: boundReference, animation: mirrorAnimation })
+
+    expect(await screen.findByText('当前时间')).toBeInTheDocument()
+    expect(screen.queryByText('关键帧')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '缓动' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑 / 选中关键帧后出现缓动区', async () => {
+    renderPanel({
+      reference: boundReference,
+      animation: mirrorAnimation,
+      keyframeEasing: keyframeEasingFixture,
+    })
+
+    // 标识行说明正在编辑哪一段出向曲线。
+    expect(await screen.findByDisplayValue('Rectangle / 位置 · 0 ms → 300 ms')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '缓动' })).toHaveValue('linear')
+  })
+
+  it('OpenSpec: editor-workspace-layout / 关键帧缓动写入文档并可撤销 / 选择预设产生离散改动', async () => {
+    const { onInterpolationChange } = renderPanel({
+      reference: boundReference,
+      animation: mirrorAnimation,
+      keyframeEasing: keyframeEasingFixture,
+    })
+
+    fireEvent.change(await screen.findByRole('combobox', { name: '缓动' }), {
+      target: { value: 'ease-in-out' },
+    })
+
+    expect(onInterpolationChange).toHaveBeenCalledWith(
+      { kind: 'cubic', control: [0.42, 0, 0.58, 1] },
+      false,
+    )
+  })
+
+  it('OpenSpec: editor-workspace-layout / 关键帧缓动写入文档并可撤销 / 键盘调节控制柄产生连续改动', async () => {
+    const { onInterpolationChange } = renderPanel({
+      reference: boundReference,
+      animation: mirrorAnimation,
+      keyframeEasing: {
+        ...keyframeEasingFixture,
+        interpolation: { kind: 'cubic', control: [0.42, 0, 1, 1] },
+      },
+    })
+
+    const handle = await screen.findByRole('slider', { name: '控制点 1' })
+    fireEvent.keyDown(handle, { key: 'ArrowRight' })
+
+    // 连续调节标记为中间值，宿主据此合并撤销记录。
+    expect(onInterpolationChange).toHaveBeenCalledWith(
+      { kind: 'cubic', control: [0.43, 0, 1, 1] },
+      true,
+    )
+  })
+
+  it('OpenSpec: editor-workspace-layout / 关键帧缓动写入文档并可撤销 / 末帧可编辑并给出说明', async () => {
+    renderPanel({
+      reference: boundReference,
+      animation: mirrorAnimation,
+      keyframeEasing: { ...keyframeEasingFixture, timeMs: 300, nextTimeMs: null },
+    })
+
+    expect(await screen.findByDisplayValue('Rectangle / 位置 · 300 ms')).toBeInTheDocument()
+    expect(screen.getByText('末帧的出向段没有下一帧，暂不参与求值')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '缓动' })).toBeEnabled()
   })
 
   it('OpenSpec: editor-workspace-layout / 空动画的创建引导 / 已绑定但镜像缺失时提示载入', async () => {

@@ -127,8 +127,6 @@ export interface ComposeAnimationPanelValue {
   readonly playbackMode: ComposeAnimationPlaybackMode
   /** 是否显示本地自动记录状态。 */
   readonly autoRecord: boolean
-  /** 右侧缓动编辑器的活动标签。 */
-  readonly easingEditor: 'curve' | 'spring'
 }
 
 /**
