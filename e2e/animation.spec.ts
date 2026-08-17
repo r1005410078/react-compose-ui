@@ -497,3 +497,72 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
 })
 
 
+
+test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑 / 选中关键帧调曲线、撤销与采样', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(node).toHaveCount(1)
+  await node.click()
+
+  await editor.getByRole('radio', { name: '动画' }).click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+
+  // 0 ms 与 300 ms 各打一帧：后者由自动记录在拖动时写入。
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  const originalBox = (await node.boundingBox())!
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('300')
+  // 抓取点取 1/4 处：物体中心是运动路径顶点。
+  await page.mouse.move(
+    originalBox.x + originalBox.width / 4,
+    originalBox.y + originalBox.height / 4,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    originalBox.x + originalBox.width / 4 + 120,
+    originalBox.y + originalBox.height / 4,
+    { steps: 5 },
+  )
+  await page.mouse.up()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 300 ms：位置' })).toBeVisible()
+
+  // 点画布空白处回到画布 Inspector；此时时间线选中首帧，缓动区出现在「当前时间」下方。
+  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  await page.mouse.click(outputBox.x + 40, outputBox.y + 40)
+  await expect(editor.getByRole('region', { name: '画布属性' })).toBeVisible()
+  await animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' }).click()
+  await expect(inspector.getByRole('textbox', { name: '关键帧' }))
+    .toHaveValue(/位置 · 0 ms → 300 ms$/u)
+
+  const easing = inspector.getByRole('combobox', { name: '缓动' })
+  await expect(easing).toHaveValue('linear')
+  // 缓动区必须落在「当前时间」行下方。
+  const currentTimeRow = (await inspector.getByText('当前时间').boundingBox())!
+  const easingBox = (await inspector.locator('.compose-easing-editor').boundingBox())!
+  expect(easingBox.y).toBeGreaterThan(currentTimeRow.y)
+
+  // 选预设：曲线与控制点数值同步，改动写入文档。
+  await easing.selectOption('ease-in-out')
+  await expect(inspector.getByRole('textbox', { name: '控制点' })).toHaveValue('0.42, 0, 0.58, 1')
+
+  // 一次预设选择就是一条事务：撤销回到 linear。
+  await stage.press('Control+z')
+  await expect(easing).toHaveValue('linear')
+
+  // 改成 hold 后播放头停在段中：采样保持前值，画布不做插值。
+  await easing.selectOption('hold')
+  // 播放头滑杆 step 是 4 ms：取 152 而不是 150，否则 fill 会被判为非法值。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('152')
+  await expect
+    .poll(async () => Math.abs((await node.boundingBox())!.x - originalBox.x))
+    .toBeLessThan(2)
+})

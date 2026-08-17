@@ -6,6 +6,27 @@
 import './styles.css'
 
 export {
+  COMPOSE_EASING_DEFAULT_CONTROL,
+  COMPOSE_EASING_PRESETS,
+  ComposeEasingCurveEditor,
+  clampComposeEasingControl,
+  composeEasingPresetInterpolation,
+  formatComposeEasingControl,
+  getComposeEasingPresetLabels,
+  matchComposeEasingPreset,
+  parseComposeEasingControl,
+} from './easing-editor'
+export type {
+  ComposeEasingChangeMeta,
+  ComposeEasingControl,
+  ComposeEasingCurveEditorProps,
+  ComposeEasingLocale,
+  ComposeEasingPreset,
+  ComposeEasingPresetId,
+  ComposeEasingSelectionId,
+} from './easing-editor'
+
+export {
   ComposeAnimationInspector,
   ComposeAnimationPanelProvider,
   ComposeAnimationTimeline,
