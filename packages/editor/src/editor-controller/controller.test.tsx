@@ -43,6 +43,7 @@ vi.mock('@compose-ui/layout-engine', () => ({
     const solve = () => ({
       status: 'ready' as const,
       document: current,
+      preview: false,
       snapshot: {
         revision: ++revision,
         boxes: Object.fromEntries(Object.values(current.entities).map((item) => {
@@ -61,6 +62,7 @@ vi.mock('@compose-ui/layout-engine', () => ({
     let state = solve()
     return {
       getState: () => state,
+      getCommittedState: () => state,
       subscribe: (listener: () => void) => {
         listeners.add(listener)
         return () => listeners.delete(listener)
@@ -71,6 +73,8 @@ vi.mock('@compose-ui/layout-engine', () => ({
         state = solve()
         listeners.forEach((listener) => listener())
       },
+      previewDocument: () => undefined,
+      clearPreview: () => undefined,
       setMeasurementPort: () => undefined,
       dispose: () => listeners.clear(),
     }

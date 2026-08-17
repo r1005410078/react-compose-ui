@@ -1452,6 +1452,8 @@ export function useComposeEditorController({
   const stageProps = useMemo<ComposeStageProps>(() => ({
     document,
     layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : undefined,
+    // resize 实时布局的预览结果只进场景渲染，交互 context 仍用上面的提交态 Snapshot。
+    layoutPreviewSnapshot: layoutSession.previewSnapshot ?? undefined,
     layoutError: layoutState.status === 'error' ? layoutState.error.message : undefined,
     layoutRuntime: layoutSession.runtime,
     registry,
@@ -1489,6 +1491,7 @@ export function useComposeEditorController({
   }), [
     document,
     layoutState,
+    layoutSession.previewSnapshot,
     layoutSession.runtime,
     registry,
     pageLoader,

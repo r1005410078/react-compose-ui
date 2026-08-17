@@ -1,0 +1,943 @@
+import { expect, test } from '@playwright/test'
+import { pointerDrop, drawContainer, drawText } from './support/test-helpers'
+
+test('OpenSpec: stage / 四角缩放 / resize 手柄在预览阶段跟随鼠标', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await drawContainer(page, editor)
+  const movements = {
+    ne: { x: -100, y: 60 },
+    se: { x: -100, y: -60 },
+    sw: { x: 100, y: -60 },
+    nw: { x: 100, y: 60 },
+  } as const
+
+  for (const [direction, movement] of Object.entries(movements)) {
+    const handle = stage.getByTestId(`stage-resize-${direction}`)
+    const startBox = await handle.boundingBox()
+    expect(startBox).not.toBeNull()
+    const start = {
+      x: startBox!.x + startBox!.width / 2,
+      y: startBox!.y + startBox!.height / 2,
+    }
+    const target = {
+      x: start.x + movement.x,
+      y: start.y + movement.y,
+    }
+    expect(await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute('data-testid'),
+      start,
+    )).toBe(`stage-resize-${direction}`)
+
+    for (const [from, to] of [[start, target], [target, start]] as const) {
+      await page.mouse.move(from.x, from.y)
+      await page.mouse.down()
+      await page.mouse.move(to.x, to.y, { steps: 5 })
+      await expect.poll(async () => {
+        const box = await handle.boundingBox()
+        return box
+          ? Math.max(
+              Math.abs(box.x + box.width / 2 - to.x),
+              Math.abs(box.y + box.height / 2 - to.y),
+            )
+          : Number.POSITIVE_INFINITY
+      }).toBeLessThanOrEqual(4.1)
+      await page.mouse.up()
+      await expect.poll(async () => {
+        const box = await handle.boundingBox()
+        return box
+          ? Math.max(
+              Math.abs(box.x + box.width / 2 - to.x),
+              Math.abs(box.y + box.height / 2 - to.y),
+            )
+          : Number.POSITIVE_INFINITY
+      }).toBeLessThanOrEqual(4.1)
+    }
+  }
+})
+
+
+test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形状预览与尺寸浮标', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'crosshair')
+  await expect(output).toHaveCSS('cursor', /crosshair/)
+
+  const start = { x: outputBox!.x + 180, y: outputBox!.y + 132 }
+  const target = { x: start.x + 248, y: start.y + 144 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+
+  const preview = stage.getByTestId('stage-drawing-preview')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-rectangle')
+  await expect(preview.locator('rect')).toHaveCount(2)
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
+  await expect(stage.getByTestId('stage-marquee')).toHaveCount(0)
+  await expect(stage).toHaveScreenshot('stage-drawing-rectangle-preview.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await page.mouse.up()
+  await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
+})
+
+
+test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中与撤销保持一致', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+  const start = { x: outputBox!.x + 240, y: outputBox!.y + 180 }
+  const target = { x: start.x + 200, y: start.y + 120 }
+  const overlap = { x: start.x + 100, y: start.y + 60 }
+
+  for (let index = 0; index < 2; index += 1) {
+    await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(target.x, target.y, { steps: 4 })
+    await page.mouse.up()
+  }
+
+  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await expect(nodes).toHaveCount(2)
+  const originalBackId = await nodes.nth(0).getAttribute('data-entity-id')
+  const originalFrontId = await nodes.nth(1).getAttribute('data-entity-id')
+  expect(originalBackId).not.toBeNull()
+  expect(originalFrontId).not.toBeNull()
+
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const tree = editor.getByRole('treegrid', { name: '场景树' })
+  const treeOrder = () => tree.locator('[data-scene-node-id]').evaluateAll((rows) =>
+    rows.map((row) => row.getAttribute('data-scene-node-id')))
+  await expect.poll(treeOrder).toEqual([originalBackId, originalFrontId])
+
+  await page.mouse.click(overlap.x, overlap.y)
+  await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+  await page.mouse.click(overlap.x, overlap.y, { button: 'right' })
+  const layerOrder = page.getByRole('menuitem', { name: /^层级/ })
+  await layerOrder.hover()
+  const sendToBack = page.getByRole('menuitem', { name: /置于底层/ })
+  await expect(sendToBack).toBeVisible()
+  await expect(page).toHaveScreenshot('stage-layer-order-menu.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await sendToBack.click()
+
+  await expect.poll(treeOrder).toEqual([originalFrontId, originalBackId])
+  await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+  await page.mouse.click(overlap.x, overlap.y)
+  await expect(tree.locator(`[data-scene-node-id="${originalBackId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+
+  await stage.press('Control+[')
+  await expect.poll(treeOrder).toEqual([originalBackId, originalFrontId])
+  await page.mouse.click(overlap.x, overlap.y)
+  await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+
+  await stage.press('Control+z')
+  await expect.poll(treeOrder).toEqual([originalFrontId, originalBackId])
+  await page.mouse.click(overlap.x, overlap.y)
+  await expect(tree.locator(`[data-scene-node-id="${originalBackId}"]`))
+    .toHaveAttribute('aria-selected', 'true')
+})
+
+
+test('OpenSpec: stage / 直接绘制 Preset / 文字工具只按点创建', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  const textTool = editor.getByRole('button', { name: '文字', exact: true })
+  await textTool.click()
+  const clickPoint = { x: outputBox!.x + 180, y: outputBox!.y + 132 }
+  await page.mouse.click(clickPoint.x, clickPoint.y)
+
+  await expect(editor.getByRole('button', { name: '选择', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  const defaultText = stage.getByTestId('compose-material-text')
+  await expect(defaultText).toHaveCSS('color', 'rgb(255, 255, 255)')
+  await expect(defaultText).toHaveCSS('font-size', '12px')
+  const defaultTextBox = await defaultText.boundingBox()
+  expect(defaultTextBox).not.toBeNull()
+  expect(defaultTextBox!.width).toBeLessThan(64)
+  expect(defaultTextBox!.height).toBeLessThanOrEqual(24)
+
+  await textTool.click()
+  const start = { x: outputBox!.x + 280, y: outputBox!.y + 172 }
+  const target = { x: start.x + 160, y: start.y + 48 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+  const preview = stage.getByTestId('stage-drawing-preview')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-text')
+  // 占位文案不得出现在 Stage 的任何位置。范围必须是整个 Stage 而不是预览元素内部：
+  // 它曾经就画在预览框之外（y + 25，落在 16px 高的框下方），只查预览会漏掉。
+  // 尺寸标签本身也是 SVG text，因此按内容精确匹配。
+  await expect(stage.getByText('Text', { exact: true })).toHaveCount(0)
+  // 文字预览只有一根光标：不画框、不标尺寸，也不随拖拽变化。
+  const caret = preview.getByTestId('stage-drawing-preview-caret')
+  await expect(caret).toHaveCount(1)
+  await expect(preview.locator('rect')).toHaveCount(0)
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toHaveCount(0)
+  const caretGeometry = async () => caret.evaluate((node) => ({
+    x: node.getAttribute('x1'),
+    y1: node.getAttribute('y1'),
+    y2: node.getAttribute('y2'),
+  }))
+  const pressed = await caretGeometry()
+
+  await page.mouse.move(target.x + 120, target.y + 60, { steps: 4 })
+  await expect(stage.getByText('Text', { exact: true })).toHaveCount(0)
+  expect(await caretGeometry()).toEqual(pressed)
+  await expect(stage).toHaveScreenshot('stage-drawing-text-preview.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await page.mouse.up()
+
+  // 拖了 160×48 也只得到按下点上的 Auto width 文字，并直接进入编辑。
+  await expect(stage.getByTestId('compose-material-text-editable')).toHaveText('')
+  const created = stage.locator('.compose-stage__node.is-renderer').last()
+  const createdBox = await created.boundingBox()
+  expect(createdBox!.width).toBeLessThan(64)
+})
+
+
+test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主图标同步', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
+  await shapeButtons.nth(1).click()
+  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '线条' }).click()
+  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-line')
+
+  const start = { x: outputBox!.x + 196, y: outputBox!.y + 128 }
+  const target = { x: start.x, y: start.y + 144 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+
+  const preview = stage.getByTestId('stage-drawing-preview')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-line')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('0 × 144')
+  await page.mouse.up()
+
+  await expect(editor.getByRole('button', { name: '选择', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-line')
+  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection-start')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection-end')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection-dimensions')).toContainText('× 0')
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
+  await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(0)
+
+  const startEndpoint = stage.getByTestId('stage-line-selection-start')
+  const startHandle = await startEndpoint.boundingBox()
+  expect(startHandle).not.toBeNull()
+  await expect.poll(() => startEndpoint.evaluate((element) => getComputedStyle(element).cursor)).toBe('ns-resize')
+
+  // 命中圆比可见控制柄大；从圆的边缘抓取时，拖动应保持按下偏移而不是让端点跳到指针。
+  await editor.getByRole('button', { name: '吸附', exact: true }).click()
+  const edgeGrab = {
+    x: startHandle!.x + startHandle!.width - 2,
+    y: startHandle!.y + startHandle!.height / 2,
+  }
+  await page.mouse.move(edgeGrab.x, edgeGrab.y)
+  await page.mouse.down()
+  await page.mouse.move(edgeGrab.x + 24, edgeGrab.y + 32, { steps: 3 })
+  await page.mouse.up()
+  const movedStartHandle = await startEndpoint.boundingBox()
+  expect(movedStartHandle).not.toBeNull()
+  expect(movedStartHandle!.x).toBeCloseTo(startHandle!.x + 24, 0)
+  expect(movedStartHandle!.y).toBeCloseTo(startHandle!.y + 32, 0)
+
+  await page.mouse.move(
+    movedStartHandle!.x + movedStartHandle!.width / 2,
+    movedStartHandle!.y + movedStartHandle!.height / 2,
+  )
+  await page.mouse.down()
+  // 拖过另一端：固定终点不动，底层方向会翻转，但可见选择态始终保持两个端点。
+  await page.mouse.move(target.x + 72, target.y + 32, { steps: 4 })
+  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+  await page.mouse.up()
+  await expect(stage.getByTestId('stage-line-selection-start')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection-end')).toBeVisible()
+})
+
+
+test('OpenSpec: stage / 线段命中 / 透明外接矩形不选中，线身仍可选中', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
+  await shapeButtons.nth(1).click()
+  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '线条' }).click()
+
+  const start = { x: outputBox!.x + 180, y: outputBox!.y + 420 }
+  const end = { x: start.x + 360, y: start.y - 240 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 4 })
+  await page.mouse.up()
+  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+
+  // 位于轴对齐外接矩形内部，但离实际线段很远；点击应落到画布并清除选择。
+  await page.mouse.click(end.x - 24, start.y - 24)
+  await expect(stage.getByTestId('stage-line-selection')).toHaveCount(0)
+
+  // 加宽的透明 stroke 仍给细线保留易用的点击命中带。
+  await page.mouse.click((start.x + end.x) / 2, (start.y + end.y) / 2)
+  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+})
+
+
+test('OpenSpec: stage / 画布平移手势 / 空闲张手且拖动时握手', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  const horizontalRuler = stage.getByTestId('stage-ruler-x')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  const rulerBox = await horizontalRuler.boundingBox()
+  expect(outputBox).not.toBeNull()
+  expect(rulerBox).not.toBeNull()
+  const point = { x: outputBox!.x + 320, y: outputBox!.y + 240 }
+
+  await editor.getByRole('button', { name: '平移', exact: true }).click()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
+  await expect(output).toHaveCSS('cursor', 'grab')
+
+  await page.mouse.move(point.x, point.y)
+  await page.mouse.down()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await expect(output).toHaveCSS('cursor', 'grabbing')
+  await page.mouse.move(point.x + 40, point.y + 24, { steps: 3 })
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await expect(output).toHaveCSS('cursor', 'grabbing')
+  // Pointer capture 期间即使拖过标尺，也不能跳回标尺自己的准星手势。
+  await page.mouse.move(point.x + 40, rulerBox!.y + rulerBox!.height / 2, { steps: 3 })
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await expect(horizontalRuler).toHaveCSS('cursor', 'grabbing')
+  await page.mouse.up()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
+  await expect(output).toHaveCSS('cursor', 'grab')
+
+  // 临时 Space 平移沿用同一组手势，松开后恢复选择工具的默认光标。
+  await editor.getByRole('button', { name: '选择', exact: true }).click()
+  await stage.focus()
+  await page.keyboard.down('Space')
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
+  await expect(output).toHaveCSS('cursor', 'grab')
+  await page.mouse.move(point.x + 40, point.y + 24)
+  await page.mouse.down()
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await expect(output).toHaveCSS('cursor', 'grabbing')
+  await page.mouse.up()
+  await page.keyboard.up('Space')
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'default')
+})
+
+
+test('OpenSpec: stage / Shift 绘制正方形与正圆 / 拖动中动态锁定预览与提交', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-output-boundary')
+  await expect(output).toBeVisible()
+  const outputBox = await output.boundingBox()
+  expect(outputBox).not.toBeNull()
+
+  await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+  const start = { x: outputBox!.x + 180, y: outputBox!.y + 132 }
+  const target = { x: start.x + 248, y: start.y + 144 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 4 })
+
+  const preview = stage.getByTestId('stage-drawing-preview')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-rectangle')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
+  await page.keyboard.down('Shift')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 248')
+  const squarePreviewBounds = await preview.locator('rect').first().boundingBox()
+  expect(squarePreviewBounds).not.toBeNull()
+  // SVG 的 1.5px 白色描边会使 DOM box 向外扩 0.75px；允许一个物理像素的视觉误差。
+  expect(Math.abs(squarePreviewBounds!.x + squarePreviewBounds!.width - target.x)).toBeLessThan(1)
+  expect(Math.abs(squarePreviewBounds!.y + squarePreviewBounds!.height - target.y)).toBeLessThan(1)
+  await page.keyboard.up('Shift')
+  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
+  await page.keyboard.down('Shift')
+  await page.mouse.up()
+  await page.keyboard.up('Shift')
+
+  await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
+  const createdRectangle = stage.locator('.compose-stage__node.is-renderer').last()
+  await expect(createdRectangle).toHaveCSS('width', '248px')
+  await expect(createdRectangle).toHaveCSS('height', '248px')
+  await expect(createdRectangle).toHaveCSS('border-radius', '0px')
+})
+
+
+test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍显示网格并保持 8 单位吸附', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  await rectangle.click()
+  await editor.locator('[data-workspace-tab="compose-history-panel"]').click()
+
+  const historyEntries = editor.locator('[data-compose-ui="history"] li')
+  let expectedHistoryCount = await historyEntries.count()
+  for (let index = 0; index < 13; index += 1) {
+    await stage.press('Control+-')
+  }
+  await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  const grid = stage.getByTestId('stage-grid')
+  await expect.poll(() => grid.evaluate((element) =>
+    getComputedStyle(element).backgroundSize.split(',').length)).toBe(4)
+  await expect.poll(() => grid.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
+    .toBeCloseTo(3.2, 1)
+
+  const beforeMove = await rectangle.boundingBox()
+  expect(beforeMove).not.toBeNull()
+  await page.mouse.move(
+    beforeMove!.x + beforeMove!.width / 2,
+    beforeMove!.y + beforeMove!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    beforeMove!.x + beforeMove!.width / 2 + 19,
+    beforeMove!.y + beforeMove!.height / 2 + 13,
+    { steps: 1 },
+  )
+  await page.mouse.up()
+  expectedHistoryCount += 1
+  await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  const xField = editor.getByRole('spinbutton', { name: '位置 X', exact: true })
+  await expect.poll(async () => Number(await xField.inputValue()) % 8).toBe(0)
+
+  const resize = stage.getByTestId('stage-resize-se')
+  const resizeBox = await resize.boundingBox()
+  expect(resizeBox).not.toBeNull()
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2,
+    resizeBox!.y + resizeBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2 + 17,
+    resizeBox!.y + resizeBox!.height / 2 + 11,
+    { steps: 1 },
+  )
+  await page.mouse.up()
+  expectedHistoryCount += 1
+  await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  const widthField = editor.getByRole('combobox', { name: '尺寸宽度', exact: true })
+  await expect.poll(async () => Number(await widthField.inputValue()) % 8).toBe(0)
+})
+
+
+test('OpenSpec: stage / Pointer 手势原子性与取消 / move 与 resize 各只提交一次且松手不回弹', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const historyEntries = editor.locator('[data-compose-ui="history"] li')
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await drawContainer(page, editor)
+  const frame = editor.getByTestId('stage-container')
+  const frameBox = await frame.boundingBox()
+  expect(frameBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: frameBox!.x + frameBox!.width * 0.35,
+    y: frameBox!.y + frameBox!.height * 0.4,
+  })
+  const rectangle = stage.locator('.compose-stage__node.is-renderer').filter({
+    hasText: 'Rectangle',
+  })
+  await rectangle.click()
+  const rectangleId = await rectangle.getAttribute('data-entity-id')
+  expect(rectangleId).not.toBeNull()
+  const stableRectangle = editor.locator(`[data-entity-id="${rectangleId}"]`)
+  await editor.locator('[data-workspace-tab="compose-history-panel"]').click()
+
+  let expectedHistoryCount = await historyEntries.count()
+  const beforeMove = await stableRectangle.boundingBox()
+  expect(beforeMove).not.toBeNull()
+  const moveStart = {
+    x: beforeMove!.x + beforeMove!.width / 2,
+    y: beforeMove!.y + beforeMove!.height / 2,
+  }
+  await page.keyboard.down('Control')
+  await page.mouse.move(moveStart.x, moveStart.y)
+  await page.mouse.down()
+  await page.mouse.move(moveStart.x + 48, moveStart.y + 24, { steps: 8 })
+  await page.mouse.up()
+  await page.keyboard.up('Control')
+  expectedHistoryCount += 1
+  await expect(historyEntries).toHaveCount(expectedHistoryCount)
+  const afterMove = await stableRectangle.boundingBox()
+  expect(afterMove).not.toBeNull()
+  expect(afterMove!.x).not.toBeCloseTo(beforeMove!.x, 1)
+  const committedMoveX = afterMove!.x
+  await page.waitForTimeout(100)
+  await expect.poll(async () => (await stableRectangle.boundingBox())?.x)
+    .toBeCloseTo(committedMoveX, 1)
+
+  const latestContainerBox = await frame.boundingBox()
+  expect(latestContainerBox).not.toBeNull()
+  await page.mouse.click(latestContainerBox!.x + 8, latestContainerBox!.y + 8)
+  const resize = editor.getByTestId('stage-resize-se')
+  expectedHistoryCount = await historyEntries.count()
+  const beforeResize = await resize.boundingBox()
+  expect(beforeResize).not.toBeNull()
+  const resizeStart = {
+    x: beforeResize!.x + beforeResize!.width / 2,
+    y: beforeResize!.y + beforeResize!.height / 2,
+  }
+  await page.keyboard.down('Control')
+  await page.mouse.move(resizeStart.x, resizeStart.y)
+  await page.mouse.down()
+  await page.mouse.move(resizeStart.x + 40, resizeStart.y + 32, { steps: 8 })
+  await page.mouse.up()
+  await page.keyboard.up('Control')
+  await expect(historyEntries).toHaveCount(expectedHistoryCount + 1)
+  const afterResize = await resize.boundingBox()
+  expect(afterResize).not.toBeNull()
+  expect(afterResize!.x).not.toBeCloseTo(beforeResize!.x, 1)
+  const committedResizeX = afterResize!.x
+  await page.waitForTimeout(100)
+  await expect.poll(async () => (await resize.boundingBox())?.x)
+    .toBeCloseTo(committedResizeX, 1)
+})
+
+
+test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Container 且子节点保持可命中', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await drawContainer(page, editor)
+  const frame = stage.locator('.compose-stage__scene > .compose-stage__node.is-container')
+  const frameBox = await frame.boundingBox()
+  expect(frameBox).not.toBeNull()
+  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  await pointerDrop(page, rectangleButton, {
+    x: frameBox!.x + 220,
+    y: frameBox!.y + 220,
+  })
+  await pointerDrop(page, rectangleButton, {
+    x: frameBox!.x + 580,
+    y: frameBox!.y + 220,
+  })
+
+  const components = stage.locator('.compose-stage__node.is-renderer')
+  const firstEntityId = await components.nth(0).getAttribute('data-entity-id')
+  const secondEntityId = await components.nth(1).getAttribute('data-entity-id')
+  expect(firstEntityId).not.toBeNull()
+  expect(secondEntityId).not.toBeNull()
+  await components.nth(0).click()
+  await components.nth(1).click({ modifiers: ['Shift'] })
+  await stage.press('Control+g')
+  const group = frame.locator(':scope > .compose-stage__node.is-container')
+  await expect(group).toHaveCount(1)
+  const groupId = await group.getAttribute('data-entity-id')
+  expect(groupId).not.toBeNull()
+  const stableGroup = editor.locator(`[data-entity-id="${groupId}"]`)
+  const componentBoxes = await Promise.all([
+    components.nth(0).boundingBox(),
+    components.nth(1).boundingBox(),
+  ])
+  expect(componentBoxes.every(Boolean)).toBe(true)
+  const [left, right] = [...componentBoxes]
+    .map((box) => box!)
+    .sort((first, second) => first.x - second.x)
+  const gapPoint = {
+    x: (left.x + left.width + right.x) / 2,
+    y: (Math.max(left.y, right.y) + Math.min(
+      left.y + left.height,
+      right.y + right.height,
+    )) / 2,
+  }
+  const nodeAt = (point: { x: number; y: number }) => page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)
+      ?.closest('[data-entity-id]')
+      ?.getAttribute('data-entity-id'),
+    point,
+  )
+  expect(await nodeAt(gapPoint)).toBe(groupId)
+
+  const groupBefore = await stableGroup.boundingBox()
+  expect(groupBefore).not.toBeNull()
+  await page.keyboard.down('Control')
+  await page.mouse.move(gapPoint.x, gapPoint.y)
+  await page.mouse.down()
+  await page.mouse.move(gapPoint.x + 80, gapPoint.y + 40, { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.up('Control')
+  const groupAfter = await stableGroup.boundingBox()
+  expect(groupAfter).not.toBeNull()
+  expect(groupAfter!.x).not.toBeCloseTo(groupBefore!.x, 1)
+  const committedGroupX = groupAfter!.x
+  await page.waitForTimeout(100)
+  await expect.poll(async () => (await stableGroup.boundingBox())?.x)
+    .toBeCloseTo(committedGroupX, 1)
+
+  const child = editor.locator(`[data-entity-id="${firstEntityId}"]`)
+  const childBefore = await child.boundingBox()
+  expect(childBefore).not.toBeNull()
+  const childPoint = {
+    x: childBefore!.x + childBefore!.width / 2,
+    y: childBefore!.y + childBefore!.height / 2,
+  }
+  expect(await nodeAt(childPoint)).toBe(await child.getAttribute('data-entity-id'))
+  await page.keyboard.down('Control')
+  await page.mouse.move(childPoint.x, childPoint.y)
+  await page.mouse.down()
+  await page.mouse.move(childPoint.x + 40, childPoint.y + 20, { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.up('Control')
+  const childAfter = await child.boundingBox()
+  expect(childAfter).not.toBeNull()
+  expect(childAfter!.x).not.toBeCloseTo(childBefore!.x, 1)
+  const childX = childAfter!.x
+  await page.waitForTimeout(100)
+  await expect.poll(async () => (await child.boundingBox())?.x)
+    .toBeCloseTo(childX, 1)
+})
+
+
+test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风格纵向流程', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await drawContainer(page, editor)
+  await editor.getByRole('button', { name: '网格大小' }).click()
+  await editor.getByRole('menu', { name: '网格大小' })
+    .getByRole('menuitem', { name: '画布设置' })
+    .click()
+  const settings = editor.getByRole('dialog', { name: '画布网格与吸附设置' })
+  await settings.getByRole('textbox', { name: 'X 步长' }).fill('16')
+  await settings.getByRole('textbox', { name: 'Y 步长' }).fill('16')
+  await settings.getByRole('button', { name: '应用' }).click()
+  await expect(editor.getByRole('button', { name: '吸附' }))
+    .toHaveAttribute('aria-pressed', 'true')
+
+  const frame = stage.getByTestId('stage-container')
+  const frameBox = await frame.boundingBox()
+  expect(frameBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: frameBox!.x + frameBox!.width * 0.3,
+    y: frameBox!.y + frameBox!.height * 0.35,
+  })
+  const rectangle = stage.locator('.compose-stage__node.is-renderer').filter({
+    hasText: 'Rectangle',
+  })
+  await rectangle.click()
+
+  const beforeMove = await rectangle.boundingBox()
+  expect(beforeMove).not.toBeNull()
+  await page.mouse.move(
+    beforeMove!.x + beforeMove!.width / 2,
+    beforeMove!.y + beforeMove!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    beforeMove!.x + beforeMove!.width / 2 + 27,
+    beforeMove!.y + beforeMove!.height / 2 + 19,
+    { steps: 5 },
+  )
+  await page.mouse.up()
+  const xField = editor.getByRole('spinbutton', { name: '位置 X', exact: true })
+  // Yoga absolute inset 以父容器 border 内沿为原点；默认 Container border 为 1px。
+  await expect.poll(async () => {
+    const resolvedX = Number(await xField.inputValue()) + 1
+    return Math.abs(resolvedX - Math.round(resolvedX / 16) * 16)
+  }).toBeLessThan(0.001)
+
+  const resize = stage.getByTestId('stage-resize-se')
+  const resizeBox = await resize.boundingBox()
+  expect(resizeBox).not.toBeNull()
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2,
+    resizeBox!.y + resizeBox!.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2 + 31,
+    resizeBox!.y + resizeBox!.height / 2 + 23,
+    { steps: 5 },
+  )
+  await page.mouse.up()
+  const widthField = editor.getByRole('combobox', { name: '尺寸宽度', exact: true })
+  await expect.poll(async () => {
+    const width = Number(await widthField.inputValue())
+    return Math.abs(width - Math.round(width / 16) * 16)
+  }).toBeLessThan(0.001)
+
+  // 标尺已改为 Canvas，无法再按刻度节点断言。改为验证共享点阵：世界原点必须正好落在画布
+  // 网格线上；标尺与网格由同一 lattice 产出（见 stage-engine 单测），因此二者随之对齐。
+  const originX = Number(await stage.getByTestId('stage-origin-y').getAttribute('x1'))
+  const originY = Number(await stage.getByTestId('stage-origin-x').getAttribute('y1'))
+  const gridLattice = await stage.getByTestId('stage-grid').evaluate((element) => {
+    const computed = getComputedStyle(element)
+    const sizes = computed.backgroundSize.split(', ')
+    const positions = computed.backgroundPosition.split(', ')
+    return {
+      stepX: Number.parseFloat(sizes[2] ?? ''),
+      stepY: Number.parseFloat(sizes[3]?.split(' ')[1] ?? ''),
+      offsetX: Number.parseFloat(positions[2] ?? ''),
+      offsetY: Number.parseFloat(positions[3]?.split(' ')[1] ?? ''),
+    }
+  })
+  const distanceToLine = (position: number, offset: number, step: number) => {
+    const remainder = Math.abs(position - offset) % step
+    return Math.min(remainder, step - remainder)
+  }
+  expect(distanceToLine(originX, gridLattice.offsetX, gridLattice.stepX)).toBeLessThan(0.001)
+  expect(distanceToLine(originY, gridLattice.offsetY, gridLattice.stepY)).toBeLessThan(0.001)
+
+  const ruler = stage.getByTestId('stage-ruler-x')
+  const rulerBox = await ruler.boundingBox()
+  const surfaceBox = await stage.getByTestId('stage-surface').boundingBox()
+  expect(rulerBox).not.toBeNull()
+  expect(surfaceBox).not.toBeNull()
+  await page.mouse.move(rulerBox!.x + rulerBox!.width * 0.6, rulerBox!.y + 10)
+  await page.mouse.down()
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.62, surfaceBox!.y + 120)
+  await page.mouse.up()
+  await expect(stage.locator('.compose-stage__canvas-guide')).toHaveCount(1)
+  await expect(editor).toHaveScreenshot('stage-workspace-guide.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await stage.press('Control+z')
+  await expect(stage.locator('.compose-stage__canvas-guide')).toHaveCount(0)
+  await stage.press('Control+Shift+z')
+  await expect(stage.locator('.compose-stage__canvas-guide')).toHaveCount(1)
+
+  const horizontal = stage.getByRole('scrollbar', { name: '水平画布滚动条' })
+  const beforeScroll = await horizontal.getAttribute('aria-valuenow')
+  await horizontal.press('End')
+  await expect(horizontal).not.toHaveAttribute('aria-valuenow', beforeScroll!)
+  await horizontal.press('Home')
+  // 回到 Home 后视口起点必须落到负世界坐标，即标尺重新覆盖负刻度区间。
+  // 虚拟滚动范围会单调扩展，因此只能断言符号而不能断言等于 aria-valuemin。
+  await expect.poll(async () => {
+    const now = await horizontal.getAttribute('aria-valuenow')
+    return now === null ? Number.NaN : Number(now)
+  }).toBeLessThan(0)
+  await expect(editor).toHaveScreenshot('stage-workspace-negative-scroll.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+})
+
+
+test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄金文件', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+
+  await expect(editor).toHaveScreenshot('stage-workspace-default.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+    .toHaveCount(1)
+  await editor.getByText('命令', { exact: true }).click()
+  await expect(editor.getByRole('region', { name: '命令调试台' })
+    .getByText('成功').first()).toBeVisible()
+  await expect(editor).toHaveScreenshot('stage-workspace-root-component.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await editor.getByText('命令', { exact: true }).click()
+
+  await drawContainer(page, editor)
+  const frameBox = await stage.getByTestId('stage-container').boundingBox()
+  expect(frameBox).not.toBeNull()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: frameBox!.x + 160,
+    y: frameBox!.y + 180,
+  })
+  // 这个用例改过视口缩放，固定像素偏移会落到容器外；按容器尺寸取比例才稳定。
+  await drawText(page, editor, {
+    x: frameBox!.x + frameBox!.width * 0.6,
+    y: frameBox!.y + frameBox!.height * 0.35,
+  })
+  const frame = stage.getByTestId('stage-container')
+  const frameComponents = frame.locator(':scope > .compose-stage__node.is-renderer')
+  await frameComponents.nth(0).click()
+  await frameComponents.nth(1).click({
+    modifiers: ['Shift'],
+  })
+
+  await expect(editor).toHaveScreenshot('stage-workspace-selected.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await stage.press('Control+g')
+  await expect(stage.locator('.compose-stage__node.is-container .compose-stage__node.is-container'))
+    .toHaveCount(1)
+  await expect(editor).toHaveScreenshot('stage-workspace-nested-frame.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await stage.press('Control+Shift+g')
+
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  await editor.getByRole('row', { name: /Container/ })
+    .getByRole('button', { name: '展开节点' })
+    .click()
+  await editor.getByRole('row', { name: /Rectangle/ }).last().click()
+  const rectangle = frame.locator(':scope > .compose-stage__node.is-renderer').filter({
+    hasText: 'Rectangle',
+  })
+  const rectangleBox = await rectangle.boundingBox()
+  expect(rectangleBox).not.toBeNull()
+  await expect(editor.getByRole('region', { name: 'Rectangle 属性', exact: true })).toBeVisible()
+  const pointerStart = {
+    clientX: rectangleBox!.x + rectangleBox!.width / 2,
+    clientY: rectangleBox!.y + rectangleBox!.height / 2,
+  }
+  const pointerEnd = {
+    clientX: pointerStart.clientX + frameBox!.x - rectangleBox!.x + 2,
+    clientY: pointerStart.clientY,
+  }
+  await rectangle.dispatchEvent('pointerdown', {
+    ...pointerStart,
+    bubbles: true,
+    button: 0,
+    buttons: 1,
+    pointerId: 41,
+  })
+  await stage.dispatchEvent('pointermove', {
+    ...pointerEnd,
+    bubbles: true,
+    button: 0,
+    buttons: 1,
+    pointerId: 41,
+  })
+  await expect(stage.locator('.compose-stage__guide')).not.toHaveCount(0)
+  await expect(editor).toHaveScreenshot('stage-workspace-snapping.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    maxDiffPixelRatio: 0.01,
+  })
+  await stage.dispatchEvent('pointerup', {
+    ...pointerEnd,
+    bubbles: true,
+    button: 0,
+    buttons: 0,
+    pointerId: 41,
+  })
+})
+
+
+test('OpenSpec: stage / 自适应网格标尺与世界原点 / Canvas 标尺对齐网格并显示选区与游标', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await stage.locator('.compose-stage__node.is-renderer').first().click()
+
+  const horizontal = stage.getByTestId('stage-ruler-x')
+  const vertical = stage.getByTestId('stage-ruler-y')
+  // 容器语义必须在迁移到 Canvas 后保持不变；刻度本身不再是 DOM。
+  await expect(horizontal).toHaveAttribute('aria-label', '水平标尺')
+  await expect(vertical).toHaveAttribute('aria-label', '垂直标尺')
+  await expect(horizontal.locator('canvas')).toHaveAttribute('aria-hidden', 'true')
+  await expect(horizontal.locator('[data-world-value]')).toHaveCount(0)
+
+  const surface = await stage.getByTestId('stage-surface').boundingBox()
+  expect(surface).not.toBeNull()
+  // 指针停在一个确定位置，让游标线进入黄金图。
+  await page.mouse.move(surface!.x + 180, surface!.y + 140)
+
+  const stageBox = await stage.boundingBox()
+  expect(stageBox).not.toBeNull()
+  await expect(page).toHaveScreenshot('stage-ruler-canvas.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    clip: { x: stageBox!.x, y: stageBox!.y, width: 320, height: 220 },
+    maxDiffPixelRatio: 0.01,
+  })
+})
+
+

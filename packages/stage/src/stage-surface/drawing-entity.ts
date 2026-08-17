@@ -1,8 +1,10 @@
 import type { ComposeEntitySeed } from '@compose-ui/component-registry'
 import {
+  adoptComposeCrossAxisSizing,
   getComposeLayoutItem,
   getComposeSpatialTransform,
   type ComposeEntity,
+  type ComposeFlexLayout,
   type JsonValue,
 } from '@compose-ui/core'
 import type { StagePoint, StageRect } from '@compose-ui/stage-engine'
@@ -13,26 +15,38 @@ export type ShapeDirection = {
   readonly y: -1 | 0 | 1
 }
 
-/** 用 Preset 的默认尺寸将 Entity 放在指定世界中心。 @internal */
+/**
+ * 用 Preset 的默认尺寸将 Entity 放在指定世界中心。
+ *
+ * @remarks
+ * 目标父级是 Auto Layout 容器时（传入 `parentLayout`），新 Entity 以 Flow 进入排队并按
+ * 交叉轴采纳规则改写尺寸——与画布 reparent 的 `targetManagesFlow` 判定一致，避免同一个
+ * 「放进容器」动作在拖入创建与拖动换父两条路径上得到不同结果。
+ * @internal
+ */
 export function entityFromSeed(
   seed: ComposeEntitySeed,
   id: string,
   center: StagePoint,
+  parentLayout?: ComposeFlexLayout,
 ): ComposeEntity {
   const transform = getComposeSpatialTransform({ id: '__seed__', ...seed })
+  const placed = {
+    ...getComposeLayoutItem({ id: '__seed__', ...seed }),
+    offset: {
+      x: center.x - transform.size.width / 2,
+      y: center.y - transform.size.height / 2,
+    },
+  }
   return {
     id,
     name: seed.name,
     components: {
       ...structuredClone(seed.components),
       Transform: { rotation: transform.rotation },
-      LayoutItem: {
-        ...getComposeLayoutItem({ id: '__seed__', ...seed }),
-        offset: {
-          x: center.x - transform.size.width / 2,
-          y: center.y - transform.size.height / 2,
-        },
-      },
+      LayoutItem: parentLayout
+        ? adoptComposeCrossAxisSizing({ ...placed, positioning: 'flow' }, parentLayout)
+        : placed,
     },
   }
 }

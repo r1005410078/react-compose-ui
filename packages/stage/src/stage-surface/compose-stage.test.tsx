@@ -762,7 +762,7 @@ describe('ComposeStage ECS', () => {
     }))
   })
 
-  it('OpenSpec: auto-layout-interactions / Flow nudge / 用 Snapshot 转 Absolute 并烘焙 Fill', () => {
+  it('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / Flow nudge 不脱流零事务', () => {
     const child = flowEntity('a', true)
     const parent = autoLayoutContainer('parent', ['a'])
     const value = document([parent, child], ['parent'])
@@ -774,26 +774,12 @@ describe('ComposeStage ECS', () => {
       },
       diagnostics: [],
     }
+    // Flow 子级的位置由布局决定，方向键平移无可见效果；不再隐式转 Absolute。
     const { dispatch, runtime } = renderStage(value, { selectedIds: ['a'], snapshot })
     fireEvent.keyDown(screen.getByRole('application'), { key: 'ArrowRight' })
-    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      type: BUILTIN_COMMAND_TYPES.setTransform,
-      payload: {
-        operation: 'move',
-        updates: [{
-          entityId: 'a',
-          transform: {
-            position: { x: 13, y: 16 },
-            size: { width: 260, height: 50 },
-            rotation: 0,
-          },
-        }],
-      },
-    }))
+    expect(dispatch).not.toHaveBeenCalled()
     expect(getComposeLayoutItem(runtime.document.entities.a!)).toMatchObject({
-      positioning: 'absolute',
-      offset: { x: 13, y: 16 },
-      width: { mode: 'fixed', value: 260 },
+      positioning: 'flow',
     })
   })
 

@@ -5,11 +5,14 @@ import {
 } from '@compose-ui/stage-engine'
 import {
   BUILTIN_COMMAND_TYPES,
+  adoptComposeCrossAxisSizing,
   createComposeBatchCommand,
+  getComposeLayout,
   getComposeLayoutItem,
   getComposeSpatialTransform,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeFlexLayout,
   type ComposeLayoutSnapshot,
   type ComposeSpatialTransform,
   type EditorCommand,
@@ -114,25 +117,25 @@ function entityFromSeed(
   id: string,
   seed: ComposeEntitySeed,
   transform: ComposeSpatialTransform,
+  parentLayout?: ComposeFlexLayout,
 ): ComposeEntity {
+  const item = getComposeLayoutItem({ id: '__seed__', ...seed })
+  const placed = {
+    ...item,
+    offset: transform.position,
+    width: { ...item.width, value: transform.size.width },
+    height: { ...item.height, value: transform.size.height },
+  }
   return {
     id,
     name: seed.name,
     components: {
       ...seed.components,
       Transform: { rotation: transform.rotation },
-      LayoutItem: {
-        ...getComposeLayoutItem({ id: '__seed__', ...seed }),
-        offset: transform.position,
-        width: {
-          ...getComposeLayoutItem({ id: '__seed__', ...seed }).width,
-          value: transform.size.width,
-        },
-        height: {
-          ...getComposeLayoutItem({ id: '__seed__', ...seed }).height,
-          value: transform.size.height,
-        },
-      },
+      // 父级是 Auto Layout 容器时进入排队并采纳交叉轴，与画布 reparent/拖入判定一致。
+      LayoutItem: parentLayout
+        ? adoptComposeCrossAxisSizing({ ...placed, positioning: 'flow' }, parentLayout)
+        : placed,
     },
   }
 }
@@ -158,7 +161,15 @@ function planCreate(
     position: isRoot ? { x: rootOffset, y: rootOffset } : { x: 0, y: 0 },
     size: isRoot ? initial.size : { ...NESTED_CONTAINER_SIZE },
   }
-  const entity = entityFromSeed(entityId, created.seed, transform)
+  const parent = operation.parentId
+    ? context.document.entities[operation.parentId]
+    : undefined
+  const entity = entityFromSeed(
+    entityId,
+    created.seed,
+    transform,
+    parent ? getComposeLayout(parent) : undefined,
+  )
   return planned(
     sceneCommand(
       context,

@@ -613,6 +613,11 @@ type Gesture =
       readonly axis?: 'x' | 'y'
       transforms: Readonly<Record<string, StageTransform>>
       dropTarget: StageDropTarget | null
+      /** 手势中按住 Space：锁定原父级，经过其他容器不产生 reparent 落点。 */
+      parentLocked: boolean
+      /** 最近一次指针位置与修饰键，Space 切换时用于原地重算落点。 */
+      lastPoint: StagePoint
+      lastModifiers: StageInteractionModifiers
     }
   | {
       readonly type: 'resize'
@@ -1444,6 +1449,8 @@ export function createStageInteractionController(): StageInteractionController {
       return
     }
     if (gesture.type === 'move') {
+      gesture.lastPoint = point
+      gesture.lastModifiers = modifiers
       const rawDelta = {
         x: world.x - gesture.startWorld.x,
         y: world.y - gesture.startWorld.y,
@@ -1490,6 +1497,7 @@ export function createStageInteractionController(): StageInteractionController {
         draggedIds: gesture.ids,
         worldPoint: world,
         zoom: gesture.viewport.zoom,
+        modifiers: { alt: modifiers.alt, space: gesture.parentLocked },
       })
       publish({
         ...snapshot,
@@ -1674,6 +1682,9 @@ export function createStageInteractionController(): StageInteractionController {
           axis,
           transforms: {},
           dropTarget: null,
+          parentLocked: false,
+          lastPoint: event.point,
+          lastModifiers: event.modifiers,
         }
         publish({
           ...initialSnapshot(snapshot.temporaryPan),
@@ -2309,10 +2320,18 @@ export function createStageInteractionController(): StageInteractionController {
       || finished.type === 'resize'
       || finished.type === 'rotate'
     ) {
-      const stageUpdates = Object.entries(finished.transforms).map(([entityId, transform]) => ({
-        entityId,
-        transform,
-      }))
+      // 无结构落点的 move 对 Flow 目标回弹：位置由 Auto Layout 决定，提交 Transform 只会
+      // 写入无效 offset。脱流不再由拖拽隐式触发，唯一入口是几何 Inspector 的显式开关。
+      const stageUpdates = Object.entries(finished.transforms)
+        .filter(([entityId]) => {
+          if (finished.type !== 'move') return true
+          const entity = context!.document.entities[entityId]
+          return !entity || getComposeLayoutItem(entity).positioning !== 'flow'
+        })
+        .map(([entityId, transform]) => ({
+          entityId,
+          transform,
+        }))
       if (stageUpdates.length > 0) {
         const updates = stageUpdates.map(({ entityId, transform }) => {
           const next = toComposeTransform(transform)
@@ -2600,10 +2619,22 @@ export function createStageInteractionController(): StageInteractionController {
         return
       }
       if (event.type === 'temporary-pan.start') {
+        // move 手势进行中 Space 表达「锁定原父级」而不是临时平移：两种意图不会同时出现，
+        // 手势中无法再按下第二个指针开始平移。
+        if (gesture?.type === 'move') {
+          gesture.parentLocked = true
+          updateGesture(gesture.lastPoint, gesture.lastModifiers)
+          return
+        }
         if (!snapshot.temporaryPan) publish({ ...snapshot, temporaryPan: true })
         return
       }
       if (event.type === 'temporary-pan.end') {
+        if (gesture?.type === 'move') {
+          gesture.parentLocked = false
+          updateGesture(gesture.lastPoint, gesture.lastModifiers)
+          return
+        }
         if (gesture?.type === 'pan') reset()
         if (snapshot.temporaryPan) publish({ ...snapshot, temporaryPan: false })
         return

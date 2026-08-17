@@ -5,6 +5,7 @@ import {
   DEFAULT_COMPOSE_APPEARANCE,
   createDefaultComposeLayoutItem,
   getComposeAppearance,
+  adoptComposeCrossAxisSizing,
   getComposeClip,
   getComposeHierarchy,
   getComposeLayout,
@@ -93,6 +94,8 @@ interface BasicPositionValue {
 }
 
 interface BasicGeometryValue {
+  /** 父级为 Auto Layout 容器时才出现：true 表示子级已脱流为 Absolute。 */
+  readonly ignoreLayout?: boolean
   readonly position?: { readonly x: number; readonly y: number }
   readonly alignSelf?: ComposeLayoutItem['alignSelf']
   readonly rotation: number
@@ -432,7 +435,10 @@ export function createLayoutItemInspector(
       ? Object.values(document.entities).find((candidate) =>
           getComposeHierarchy(candidate)?.childIds.includes(entity.id))
       : undefined), [document, entity.id])
-    const fillAllowed = item.positioning === 'flow' && Boolean(parent && getComposeLayout(parent))
+    const parentLayout = parent ? getComposeLayout(parent) : undefined
+    const fillAllowed = item.positioning === 'flow' && Boolean(parentLayout)
+    // 「忽略 Auto Layout」是 Flow↔Absolute 的唯一显式转换入口；拖拽不再隐式脱流。
+    const detachAllowed = Boolean(parentLayout)
     const hierarchy = getComposeHierarchy(entity)
     const hugAllowed = hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
     const box = layoutSnapshot?.boxes[entity.id]
@@ -463,8 +469,18 @@ export function createLayoutItemInspector(
           propertyPanel: { editor: 'basic-geometry-margin' },
         })),
       }
+      // 显式标注 ObjectEntries：条件展开会把字段推断成 Schema | undefined，无法进 v.object。
+      const detachField: v.ObjectEntries = detachAllowed
+        ? {
+            ignoreLayout: v.pipe(
+              v.boolean(),
+              v.title(zh ? '忽略自动布局' : 'Ignore auto layout'),
+            ),
+          }
+        : {}
       if (item.positioning === 'absolute') {
         return v.object({
+          ...detachField,
           position: v.pipe(v.custom<BasicPositionValue>(isBasicPositionValue),
             v.title(zh ? '位置' : 'Position'), v.metadata({
             propertyPanel: { editor: 'basic-geometry-position' },
@@ -473,6 +489,7 @@ export function createLayoutItemInspector(
         }) as unknown as v.GenericSchema<BasicGeometryValue>
       }
       return v.object({
+        ...detachField,
         alignSelf: v.pipe(v.picklist(ALIGN_SELF_VALUES),
           v.title(zh ? '自身对齐' : 'Align self'), v.metadata({
           propertyPanel: {
@@ -484,11 +501,12 @@ export function createLayoutItemInspector(
         })),
         ...sharedFields,
       }) as unknown as v.GenericSchema<BasicGeometryValue>
-    }, [fillAllowed, hugAllowed, item.positioning, zh])
+    }, [detachAllowed, fillAllowed, hugAllowed, item.positioning, zh])
     const placementValue = item.positioning === 'absolute'
       ? { position: { x: item.offset.x, y: item.offset.y } }
       : { alignSelf: item.alignSelf }
     const viewValue: BasicGeometryValue = {
+      ...(detachAllowed ? { ignoreLayout: item.positioning === 'absolute' } : {}),
       ...placementValue,
       rotation: transform.rotation,
       size: { width: item.width, height: item.height },
@@ -500,13 +518,15 @@ export function createLayoutItemInspector(
      * 同时整个 defaultValue 仍能通过本 Inspector 的 schema 校验（校验失败会禁用全部重置）。
      */
     const defaultValue = useMemo<BasicGeometryValue>(() => ({
+      // 脱流状态由用户显式决定，没有实例无关默认值，基线复用当前值使其不参与重置。
+      ...(detachAllowed ? { ignoreLayout: item.positioning === 'absolute' } : {}),
       ...(item.positioning === 'absolute'
         ? { position: { x: item.offset.x, y: item.offset.y } }
         : { alignSelf: createDefaultComposeLayoutItem().alignSelf }),
       rotation: DEFAULT_COMPOSE_TRANSFORM.rotation,
       size: { width: item.width, height: item.height },
       margin: createDefaultComposeLayoutItem().margin,
-    }), [item.offset.x, item.offset.y, item.positioning, item.width, item.height])
+    }), [detachAllowed, item.offset.x, item.offset.y, item.positioning, item.width, item.height])
     const updateLayoutItem = (nextItem: ComposeLayoutItem) => dispatch(command(
       idFactory,
       entity,
@@ -532,6 +552,36 @@ export function createLayoutItemInspector(
             value={viewValue}
             onValueChange={(next, change) => {
               const field = change.path[0]
+              if (field === 'ignoreLayout' && next.ignoreLayout !== undefined && parentLayout) {
+                if (next.ignoreLayout && item.positioning === 'flow') {
+                  // 脱流：offset 从求解 box 反算（减去父级 border，视觉位置不变），
+                  // fill 轴烘焙为 fixed（求解尺寸）——与 reparent 移出 Flow 的烘焙规则一致。
+                  const borderInset = parent ? resolveComposeAppearance(parent).borderWidth : 0
+                  const bakeAxis = (
+                    sizing: ComposeAxisSizing,
+                    solved: number | undefined,
+                  ): ComposeAxisSizing => (sizing.mode === 'fill'
+                    ? { ...sizing, mode: 'fixed', value: solved ?? sizing.value }
+                    : sizing)
+                  updateLayoutItem({
+                    ...item,
+                    positioning: 'absolute',
+                    offset: box
+                      ? { x: box.x - borderInset, y: box.y - borderInset }
+                      : item.offset,
+                    width: bakeAxis(item.width, box?.width),
+                    height: bakeAxis(item.height, box?.height),
+                  })
+                }
+                else if (!next.ignoreLayout && item.positioning === 'absolute') {
+                  // 回流：保持 childIds 位置不变，按进入容器的既有交叉轴采纳规则改写尺寸。
+                  updateLayoutItem(adoptComposeCrossAxisSizing(
+                    { ...item, positioning: 'flow' },
+                    parentLayout,
+                  ))
+                }
+                return
+              }
               if (field === 'position' && next.position) {
                 updateLayoutItem({
                   ...item,

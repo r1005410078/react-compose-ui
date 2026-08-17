@@ -118,6 +118,71 @@ describe('OpenSpec: stage-engine / 画布拖拽 reparent 会话', () => {
     })).toBeNull()
   })
 
+  it('Alt 强制以指针命中容器为落点，绕过边缘留白', () => {
+    const target = entity('target', { x: 400, y: 0, width: 200, height: 200, childIds: [] })
+    const dragged = entity('dragged', { x: 0, y: 0, width: 50, height: 50 })
+    const index = indexFor([target, dragged], ['target', 'dragged'])
+    // 指针在留白区内：默认不产生落点，Alt 强制命中。
+    const edgePoint = { x: 405, y: 100 }
+
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: edgePoint,
+      zoom: 1,
+    })).toBeNull()
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: edgePoint,
+      zoom: 1,
+      modifiers: { alt: true },
+    })).toEqual({ kind: 'reparent', containerId: 'target' })
+  })
+
+  it('Space 锁定原父级，深入其他容器也不产生 reparent 落点', () => {
+    const target = entity('target', { x: 400, y: 0, width: 200, height: 200, childIds: [] })
+    const dragged = entity('dragged', { x: 0, y: 0, width: 50, height: 50 })
+    const index = indexFor([target, dragged], ['target', 'dragged'])
+    const deepPoint = { x: 500, y: 100 }
+
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: deepPoint,
+      zoom: 1,
+      modifiers: { space: true },
+    })).toBeNull()
+    // Alt 与 Space 同按时锁定优先：结构意图的否决权高于命中放宽。
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: deepPoint,
+      zoom: 1,
+      modifiers: { alt: true, space: true },
+    })).toBeNull()
+  })
+
+  it('Space 不阻止原容器内的重排', () => {
+    const container = layoutContainer('container', {
+      width: 300,
+      height: 100,
+      childIds: ['a', 'b'],
+    })
+    const index = indexFor(
+      [container, flowChild('a', 0, 0, 100, 100), flowChild('b', 100, 0, 100, 100)],
+      ['container'],
+    )
+
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['a'],
+      worldPoint: { x: 180, y: 50 },
+      zoom: 1,
+      modifiers: { space: true },
+    })).toEqual({ kind: 'reorder', containerId: 'container', index: 2 })
+  })
+
   it('锁定容器不作为落点', () => {
     const target = entity('target', {
       x: 400, y: 0, width: 200, height: 200, childIds: [], locked: true,
@@ -208,15 +273,68 @@ describe('OpenSpec: stage-engine / Auto Layout 容器内原地重排', () => {
     })).toBeNull()
   })
 
-  it('wrap 容器维持现状不做重排', () => {
-    const index = indexFor([container({ flexWrap: 'wrap' }), ...children], ['container'])
+  it('wrap 容器按行聚类后跨行重排', () => {
+    // 两行布局：a、b 在第一行，c 换行到第二行。
+    const wrapContainer = layoutContainer('container', {
+      width: 250,
+      height: 100,
+      childIds: ['a', 'b', 'c'],
+      layout: { flexWrap: 'wrap' },
+    })
+    const wrapChildren = [
+      flowChild('a', 0, 0, 100, 50),
+      flowChild('b', 100, 0, 100, 50),
+      flowChild('c', 0, 50, 100, 50),
+    ]
+    const index = indexFor([wrapContainer, ...wrapChildren], ['container'])
 
+    // 把第二行的 c 拖到第一行 a、b 之间 → 插到 b 之前。
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['c'],
+      worldPoint: { x: 105, y: 25 },
+      zoom: 1,
+    })).toEqual({ kind: 'reorder', containerId: 'container', index: 1 })
+
+    // 把第一行的 a 拖到第二行 c 之后 → 追加到末尾。
     expect(resolveStageDropTarget({
       index,
       draggedIds: ['a'],
-      worldPoint: { x: 280, y: 50 },
+      worldPoint: { x: 180, y: 75 },
+      zoom: 1,
+    })).toEqual({ kind: 'reorder', containerId: 'container', index: 3 })
+
+    // 指针停在 c 原位 → 顺序未变，不产生落点。
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['c'],
+      worldPoint: { x: 30, y: 75 },
       zoom: 1,
     })).toBeNull()
+  })
+
+  it('wrap-reverse 容器按逻辑行序重排', () => {
+    // wrap-reverse 求解结果：第一逻辑行贴交叉轴末端（下方），换行向上堆叠。
+    const wrapContainer = layoutContainer('container', {
+      width: 250,
+      height: 100,
+      childIds: ['a', 'b', 'c'],
+      layout: { flexWrap: 'wrap-reverse' },
+    })
+    const wrapChildren = [
+      flowChild('a', 0, 50, 100, 50),
+      flowChild('b', 100, 50, 100, 50),
+      flowChild('c', 0, 0, 100, 50),
+    ]
+    const index = indexFor([wrapContainer, ...wrapChildren], ['container'])
+
+    // 把上方（第二逻辑行）的 c 拖到下方第一逻辑行 a、b 之间 → 插到 b 之前。
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['c'],
+      worldPoint: { x: 105, y: 75 },
+      zoom: 1,
+    })).toEqual({ kind: 'reorder', containerId: 'container', index: 1 })
   })
 
   it('拖动 Absolute 子项不进入重排分支', () => {
@@ -293,6 +411,43 @@ describe('resolveStageDropIndicator', () => {
       kind: 'reorder',
       start: { x: 300, y: 0 },
       end: { x: 300, y: 100 },
+    })
+  })
+
+  it('wrap 容器插入线只横跨目标行的交叉轴区间', () => {
+    const wrapContainer = layoutContainer('container', {
+      width: 250,
+      height: 100,
+      childIds: ['a', 'b', 'c'],
+      layout: { flexWrap: 'wrap' },
+    })
+    const wrapChildren = [
+      flowChild('a', 0, 0, 100, 50),
+      flowChild('b', 100, 0, 100, 50),
+      flowChild('c', 0, 50, 100, 50),
+    ]
+    const index = indexFor([wrapContainer, ...wrapChildren], ['container'])
+
+    // 插到第一行 b 之前 → 线在 x=100，只覆盖第一行 y 0..50。
+    expect(resolveStageDropIndicator({
+      index,
+      target: { kind: 'reorder', containerId: 'container', index: 1 },
+      draggedIds: ['c'],
+    })).toEqual({
+      kind: 'reorder',
+      start: { x: 100, y: 0 },
+      end: { x: 100, y: 50 },
+    })
+
+    // 追加到末尾 → 贴第二行 c 的右边缘，只覆盖第二行 y 50..100。
+    expect(resolveStageDropIndicator({
+      index,
+      target: { kind: 'reorder', containerId: 'container', index: 3 },
+      draggedIds: ['a'],
+    })).toEqual({
+      kind: 'reorder',
+      start: { x: 100, y: 50 },
+      end: { x: 100, y: 100 },
     })
   })
 

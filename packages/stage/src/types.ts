@@ -152,9 +152,20 @@ export interface ComposeStageClipboard {
  */
 export type ComposeStageDispatch = (command: EditorCommand) => CommandDispatchResult
 
-/** Stage 挂接 Renderer measurement 时需要的最小 Layout Runtime 边界。 @public */
+/** Stage 挂接 Renderer measurement 与手势期实时布局时需要的最小 Layout Runtime 边界。 @public */
 export interface ComposeStageLayoutRuntime {
   setMeasurementPort(port: ComposeLayoutMeasurementPort | undefined): void
+  /**
+   * 以瞬态预览文档求解一帧布局；resize 手势期间由 Stage 以 rAF 合并驱动。
+   *
+   * @remarks
+   * 可选能力：宿主不提供时 resize 退回「只有被拖动目标跟手、兄弟在提交后重排」的行为。
+   * 求解结果经宿主回传 {@link ComposeStageProps.layoutPreviewSnapshot} 进入场景渲染，
+   * 不得进入交互 Controller 的 context。
+   */
+  previewDocument?(document: ComposeDocument): void
+  /** 结束预览并回到提交态求解结果；与 {@link ComposeStageLayoutRuntime.previewDocument} 成对。 */
+  clearPreview?(): void
 }
 
 /**
@@ -166,6 +177,14 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly document: ComposeDocument
   /** 与 document 对应的布局结果；加载期间省略并显示禁用态。 */
   readonly layoutSnapshot?: ComposeLayoutSnapshot
+  /**
+   * 手势期实时布局的预览求解结果；存在时场景按它渲染，兄弟随 resize 实时让位。
+   *
+   * @remarks
+   * 只影响场景渲染层；交互 Controller 的 context 始终使用 `layoutSnapshot`，保证外部并发
+   * 变化的手势中止判定与提交几何不受预览影响。
+   */
+  readonly layoutPreviewSnapshot?: ComposeLayoutSnapshot
   /** Layout Runtime 失败时显示的可读错误。 */
   readonly layoutError?: string
   /** Controller 拥有的同会话 Runtime；Stage 用它挂接并卸载 Registry measurement adapter。 */
