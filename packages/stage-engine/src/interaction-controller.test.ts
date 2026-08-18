@@ -8,7 +8,7 @@ import {
   type StageInteractionTool,
 } from './interaction-controller'
 import type { StageMarqueeMode } from './marquee-selection'
-import { document, entity, layoutSnapshot } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
 
 const modifiers = { shift: false, alt: false, command: false }
 
@@ -353,6 +353,8 @@ describe('StageInteractionController ECS systems', () => {
     const snapshot = {
       ...layoutSnapshot(value),
       boxes: {
+        // 手写 boxes 会整体覆盖快照，根 Frame 的盒子必须一并给出。
+        [ROOT_FRAME_ID]: { x: 0, y: 0, width: 1280, height: 720, positioning: 'absolute' as const },
         parent: { x: 0, y: 0, width: 400, height: 200, positioning: 'absolute' as const },
         a: { x: 12, y: 16, width: 260, height: 50, positioning: 'flow' as const },
       },
@@ -405,6 +407,8 @@ describe('StageInteractionController ECS systems', () => {
     const snapshot = {
       ...layoutSnapshot(value),
       boxes: {
+        // 手写 boxes 会整体覆盖快照，根 Frame 的盒子必须一并给出。
+        [ROOT_FRAME_ID]: { x: 0, y: 0, width: 1280, height: 720, positioning: 'absolute' as const },
         parent: { x: 0, y: 0, width: 400, height: 200, positioning: 'absolute' as const },
         flow: { x: 10, y: 12, width: 100, height: 50, positioning: 'flow' as const },
         absolute: { x: 180, y: 80, width: 100, height: 50, positioning: 'absolute' as const },
@@ -489,6 +493,8 @@ describe('StageInteractionController ECS systems', () => {
     const snapshot = {
       ...layoutSnapshot(value),
       boxes: {
+        // 手写 boxes 会整体覆盖快照，根 Frame 的盒子必须一并给出。
+        [ROOT_FRAME_ID]: { x: 0, y: 0, width: 1280, height: 720, positioning: 'absolute' as const },
         parent: { x: 0, y: 0, width: 400, height: 200, positioning: 'absolute' as const },
         a: { x: 12, y: 16, width: 260, height: 160, positioning: 'flow' as const },
       },
@@ -935,8 +941,8 @@ describe('OpenSpec: stage / 可拖拽全局辅助线 / 从标尺创建辅助线'
     expect(commands).toHaveLength(1)
     expect(commands[0]).toMatchObject({
       command: {
-        type: 'canvas.guide.create',
-        payload: { guide: { axis: 'y', position: 200 } },
+        type: 'frame.guide.create',
+        payload: { frameId: ROOT_FRAME_ID, guide: { axis: 'y', position: 200 } },
       },
     })
   })
@@ -947,8 +953,8 @@ describe('OpenSpec: stage / 可拖拽全局辅助线 / 从标尺创建辅助线'
     expect(commands).toHaveLength(1)
     expect(commands[0]).toMatchObject({
       command: {
-        type: 'canvas.guide.create',
-        payload: { guide: { axis: 'x', position: 120 } },
+        type: 'frame.guide.create',
+        payload: { frameId: ROOT_FRAME_ID, guide: { axis: 'x', position: 120 } },
       },
     })
   })
@@ -965,9 +971,20 @@ describe('OpenSpec: stage / 可拖拽全局辅助线 / 拖回标尺删除辅助�
     to: { x: number; y: number },
   ) {
     const value = document()
+    // v7 的辅助线保存在 Frame 局部坐标里；根 Frame 原点在世界 (0,0)，因此两者数值相同。
+    const frame = value.entities[ROOT_FRAME_ID]!
     const withGuide = {
       ...value,
-      canvas: { ...value.canvas, guides: [guide] },
+      entities: {
+        ...value.entities,
+        [ROOT_FRAME_ID]: {
+          ...frame,
+          components: {
+            ...frame.components,
+            Frame: { ...(frame.components.Frame as object), guides: [guide] },
+          },
+        },
+      },
     }
     const { controller, effects } = setup(withGuide, layoutSnapshot(withGuide))
     controller.send({
@@ -991,7 +1008,7 @@ describe('OpenSpec: stage / 可拖拽全局辅助线 / 拖回标尺删除辅助�
     const { commands } = dragExistingGuide({ id: 'g1', axis: 'y', position: 80 }, { x: 120, y: -6 })
 
     expect(commands[0]).toMatchObject({
-      command: { type: 'canvas.guide.delete', payload: { guideId: 'g1' } },
+      command: { type: 'frame.guide.delete', payload: { frameId: ROOT_FRAME_ID, guideId: 'g1' } },
     })
   })
 
@@ -999,7 +1016,7 @@ describe('OpenSpec: stage / 可拖拽全局辅助线 / 拖回标尺删除辅助�
     const { commands } = dragExistingGuide({ id: 'g1', axis: 'x', position: 80 }, { x: -6, y: 120 })
 
     expect(commands[0]).toMatchObject({
-      command: { type: 'canvas.guide.delete', payload: { guideId: 'g1' } },
+      command: { type: 'frame.guide.delete', payload: { frameId: ROOT_FRAME_ID, guideId: 'g1' } },
     })
   })
 
@@ -1542,8 +1559,9 @@ describe('框选工具与选区布尔组合', () => {
 
   it('OpenSpec: 未传入模式时回退相交', () => {
     const { drag, selection } = marqueeSetup()
+    // 框从画板外面起手，因此也相交到根 Frame。
     drag({ x: -10, y: -10, }, { x: 50, y: 60 })
-    expect(selection()).toMatchObject({ selectedIds: ['left'] })
+    expect(selection()).toMatchObject({ selectedIds: [ROOT_FRAME_ID, 'left'] })
   })
 
   it('OpenSpec: 框选判定模式协议 / 包含模式排除部分重叠节点', () => {
@@ -1563,13 +1581,13 @@ describe('框选工具与选区布尔组合', () => {
     const leftward = marqueeSetup({ marqueeMode: 'directional' })
     const leftwardDrag = leftward.drag({ x: 50, y: 60 }, { x: -10, y: -10 })
     expect(leftwardDrag.marqueeHitTest).toBe('intersect')
-    expect(leftward.selection()).toMatchObject({ selectedIds: ['left'] })
+    expect(leftward.selection()).toMatchObject({ selectedIds: [ROOT_FRAME_ID, 'left'] })
   })
 
   it('OpenSpec: Shift 加选与 Alt 减选', () => {
     const added = marqueeSetup({ selectedIds: ['right'] })
     added.drag({ x: -10, y: -10 }, { x: 50, y: 60 }, { kind: 'surface' }, { ...modifiers, shift: true })
-    expect(added.selection()).toMatchObject({ selectedIds: ['right', 'left'] })
+    expect(added.selection()).toMatchObject({ selectedIds: ['right', ROOT_FRAME_ID, 'left'] })
 
     const subtracted = marqueeSetup({ selectedIds: ['left', 'right'] })
     subtracted.drag({ x: -10, y: -10 }, { x: 50, y: 60 }, { kind: 'surface' }, { ...modifiers, alt: true })
@@ -1834,8 +1852,13 @@ describe('OpenSpec: stage-engine / Auto Layout 容器内原地重排提交', () 
     })
     controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 50, y: 400 }, modifiers })
 
-    // 松手点不在任何合法容器的落点判定区内：不烘焙 Absolute，也不产生 Transform 事务。
-    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toEqual([])
+    // 松手点落在 Auto Layout 容器之外、但仍在根 Frame 内：v7 的画板本身就是合法落点，
+    // 因此这里烘焙为根 Frame 下的 Absolute 子项，而不是回弹。
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: { meta: { targetIds: ['a'] } },
+    })
   })
 })
 

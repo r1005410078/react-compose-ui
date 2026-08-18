@@ -34,6 +34,11 @@ import {
   createStageSceneIndex,
   type StageSceneIndex,
 } from './scene-index'
+import {
+  listFrameWorldGuides,
+  resolveActiveFrameId,
+  toFrameGuidePosition,
+} from './frame-space'
 import { describeEntityTargets, describeTransform } from './transaction-labels'
 import {
   expandScrollRange,
@@ -288,6 +293,14 @@ export interface StageInteractionContext {
   readonly marqueeMode?: StageMarqueeMode
   /** 最新受控选择，按宿主顺序排列。 */
   readonly selectedIds: readonly string[]
+  /**
+   * 没有选择时 Frame 相关动作回退的默认 Frame。
+   *
+   * @remarks
+   * 只承担回退职责：有选择时目标始终解析为选中项最近的祖先 Frame，本字段 MUST NOT 覆盖
+   * 显式选择。缺省时回退到第一个根 Frame。
+   */
+  readonly defaultFrameId?: string | null
   /** Inspector 打开的单 Entity 背景填充编辑；缺失时不渲染也不接收 Paint 控制柄。 */
   readonly paintEditing?: StagePaintEditing | null
   /** 宿主打开的可编辑路径会话；缺失时引擎不接收 `path-handle` 命中，行为与现在完全一致。 */
@@ -797,7 +810,8 @@ function isDrawingTool(
  * Figma Frame 与 Rive Artboard 的约定，此时容器体不再抢占选中，选中入口收敛到标题标签。
  *
  * 收敛只发生在**顶层**容器上：标题标签只画给顶层容器，嵌套容器一旦收敛就没有任何选中
- * 入口了。已经在选区里的容器同理例外，否则从标签选中之后就再也无法拖动它。
+ * 入口了。v7 的顶层是"根 Frame 的直接子级"——文档根本身只放 Frame。已经在选区里的容器
+ * 同理例外，否则从标签选中之后就再也无法拖动它。
  */
 function shouldConvergeToMarquee(
   tool: StageInteractionTool,
@@ -814,10 +828,23 @@ function shouldConvergeToMarquee(
   if (hierarchy && getComposeLock(entity).locked) return true
   if (hit.source === 'label') return false
   if (selectedIds.includes(hit.entityId)) return false
-  if (!document.rootIds.includes(hit.entityId)) return false
+  if (!isTopLevelEntity(document, hit.entityId)) return false
   // Group 不是「容器」：它没有画布标签，收敛之后就再也选不中了。
   if (isComposeGroupEntity(entity)) return false
   return (hierarchy?.childIds.length ?? 0) > 0
+}
+
+/**
+ * 判断 Entity 是否位于顶层。
+ *
+ * @remarks
+ * v7 的 `rootIds` 只放 Frame，用户眼里的"顶层元素"是根 Frame 的直接子级；Frame 自身也算
+ * 顶层，它就是画板。
+ */
+function isTopLevelEntity(document: ComposeDocument, entityId: string): boolean {
+  if (document.rootIds.includes(entityId)) return true
+  return document.rootIds.some((frameId) =>
+    getComposeHierarchy(document.entities[frameId])?.childIds.includes(entityId) === true)
 }
 
 /** 归一化矩形丢失了拖拽方向，因此方向必须从手势起止点单独取。 */
@@ -1178,6 +1205,10 @@ export function createStageInteractionController(): StageInteractionController {
   let snapshot = IDLE_SNAPSHOT
   const listeners = new Set<() => void>()
   let surface: StageInteractionSurfacePort | null = null
+  /** 辅助线读写与 Frame 相关动作共用的活动 Frame 求解。 */
+  const activeFrameId = (value: StageInteractionContext) =>
+    resolveActiveFrameId(value.document, value.selectedIds, value.defaultFrameId)
+
   let context: StageInteractionContext | null = null
   let index: StageSceneIndex | null = null
   let gesture: Gesture | null = null
@@ -1263,12 +1294,10 @@ export function createStageInteractionController(): StageInteractionController {
         height: context.surfaceSize.height / context.viewport.zoom,
       }
       const content = unionRects([
-        {
-          x: 0,
-          y: 0,
-          width: context.document.output.width,
-          height: context.document.output.height,
-        },
+        // v7 没有文档级输出：滚动范围以全部根 Frame 的世界边界为内容基线。
+        ...context.document.rootIds
+          .map((frameId) => index!.getWorldBounds(frameId))
+          .filter((rect): rect is StageRect => rect !== null),
         ...index.order
           .filter((id) => index!.isVisible(id))
           .map((id) => index!.getWorldBounds(id))
@@ -1420,7 +1449,7 @@ export function createStageInteractionController(): StageInteractionController {
         point: draggedPoint,
         // 两点图形的端点可以沿两个轴自由移动；使用角手柄复用既有 smart/grid snap 规则。
         handle: 'se',
-        candidates: index.snapCandidates([gesture.entityId]),
+        candidates: index.snapCandidates([gesture.entityId], activeFrameId(context)),
         canvas: context.document.canvas,
         zoom: gesture.viewport.zoom,
         disabled: modifiers.command,
@@ -1524,7 +1553,7 @@ export function createStageInteractionController(): StageInteractionController {
       const snapped = snapTranslation(
         gesture.bounds,
         delta,
-        index.snapCandidates(gesture.ids),
+        index.snapCandidates(gesture.ids, activeFrameId(context)),
         gesture.viewport.zoom,
         modifiers.command,
         {
@@ -1561,7 +1590,7 @@ export function createStageInteractionController(): StageInteractionController {
       const snapped = snapResizePoint({
         point: world,
         handle: gesture.handle,
-        candidates: index.snapCandidates(gesture.ids),
+        candidates: index.snapCandidates(gesture.ids, activeFrameId(context)),
         canvas: context.document.canvas,
         zoom: gesture.viewport.zoom,
         disabled: modifiers.command,
@@ -2141,9 +2170,11 @@ export function createStageInteractionController(): StageInteractionController {
     }
     if (event.hit.kind === 'guide') {
       const guideId = event.hit.guideId
-      const guide = context.document.canvas.guides.find(
-        (item) => item.id === guideId,
-      )
+      const guide = listFrameWorldGuides(
+        context.document,
+        activeFrameId(context),
+        index,
+      ).find((item) => item.id === guideId)
       if (!guide) return
       gesture = {
         type: 'guide-move',
@@ -2151,13 +2182,13 @@ export function createStageInteractionController(): StageInteractionController {
         viewport: context.viewport,
         guideId: guide.id,
         axis: guide.axis,
-        position: guide.position,
+        position: guide.value,
         point: event.point,
       }
       publish({
         ...initialSnapshot(snapshot.temporaryPan),
         phase: 'guide-move',
-        guidePreview: [guide],
+        guidePreview: [{ id: guide.id, axis: guide.axis, position: guide.value }],
       })
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
@@ -2261,11 +2292,21 @@ export function createStageInteractionController(): StageInteractionController {
       const created = finished.guides.filter((guide) => guide.axis === 'y'
         ? finished.point.y >= 0
         : finished.point.x >= 0)
-      if (created.length > 0) {
+      const frameId = activeFrameId(context)
+      const frameOrigin = frameId ? index.getFrameOrigin(frameId) : null
+      if (created.length > 0 && frameId && frameOrigin) {
+        // 手势全程在世界坐标里进行，落盘前换算回该 Frame 的局部坐标。
         const commands = created.map((guide) => ({
           id: context!.idFactory(),
-          type: 'canvas.guide.create',
-          payload: { guide: { ...guide } as unknown as JsonValue },
+          type: 'frame.guide.create',
+          payload: {
+            frameId,
+            guide: {
+              id: guide.id,
+              axis: guide.axis,
+              position: toFrameGuidePosition(guide.axis, guide.position, frameOrigin),
+            } as unknown as JsonValue,
+          },
         }))
         effects.push({
           type: 'command.dispatch',
@@ -2291,14 +2332,21 @@ export function createStageInteractionController(): StageInteractionController {
     }
     else if (finished.type === 'guide-move') {
       const shouldDelete = isInsideOwningRuler(finished.axis, finished.point)
+      const frameId = activeFrameId(context)
+      const frameOrigin = frameId ? index.getFrameOrigin(frameId) : null
+      if (!frameId || !frameOrigin) return effects
       effects.push({
         type: 'command.dispatch',
         command: {
           id: context.idFactory(),
-          type: shouldDelete ? 'canvas.guide.delete' : 'canvas.guide.move',
+          type: shouldDelete ? 'frame.guide.delete' : 'frame.guide.move',
           payload: shouldDelete
-            ? { guideId: finished.guideId }
-            : { guideId: finished.guideId, position: finished.position },
+            ? { frameId, guideId: finished.guideId }
+            : {
+                frameId,
+                guideId: finished.guideId,
+                position: toFrameGuidePosition(finished.axis, finished.position, frameOrigin),
+              },
           meta: {
             label: shouldDelete
               ? context.labels?.deleteGuide ?? 'Delete guide'

@@ -4,7 +4,7 @@ import type {
   ComposeLayoutSnapshot,
   ComposeResizeMode,
 } from '@compose-ui/core'
-import { getComposeLayoutItem } from '@compose-ui/core'
+import { createComposeFrameEntity, getComposeLayoutItem } from '@compose-ui/core'
 
 export function entity(
   id: string,
@@ -93,12 +93,20 @@ export function entity(
   }
 }
 
+/** 测试文档的根 Frame ID；v7 的根层级只接受 Frame，夹具据此包住给定的顶层 Entity。 */
+export const ROOT_FRAME_ID = 'frame-root'
+
 export function document(
   entities: readonly ComposeEntity[] = [entity('a')],
   rootIds: readonly string[] = entities.map(({ id }) => id),
 ): ComposeDocument {
+  const frame = createComposeFrameEntity({
+    id: ROOT_FRAME_ID,
+    childIds: rootIds,
+    backgroundPaint: { kind: 'solid', color: '#111827' },
+  })
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: {
         stepX: 8,
@@ -109,11 +117,12 @@ export function document(
         snapEnabled: true,
       },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: '#111827' } },
-    rootIds,
-    entities: Object.fromEntries(entities.map((item) => [item.id, item])),
+    rootIds: [ROOT_FRAME_ID],
+    entities: {
+      ...Object.fromEntries(entities.map((item) => [item.id, item])),
+      [ROOT_FRAME_ID]: frame,
+    },
   }
 }
 

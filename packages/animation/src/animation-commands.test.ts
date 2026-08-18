@@ -98,8 +98,12 @@ function documentWith(
 }
 
 /** 读取根 Frame 当前的动画清单；没有 Component 时返回 undefined。 */
-function manifestOf(document: ComposeDocument, frameId = FRAME_ID) {
-  const component = document.entities[frameId]?.components.Animations as { items?: unknown } | undefined
+function manifestOf(
+  document: ComposeDocument,
+  frameId = FRAME_ID,
+): readonly ComposeAnimation[] | undefined {
+  const component = document.entities[frameId]?.components.Animations as
+    { items?: readonly ComposeAnimation[] } | undefined
   return component?.items
 }
 
@@ -132,7 +136,6 @@ describe('动画清单命令', () => {
     const host = runtime(documentWith({ rect: entity('rect') }, null))
     expect(manifestOf(host.document)).toBeUndefined()
     const result = host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
-      frameId: FRAME_ID,
       frameId: FRAME_ID, animationId: 'intro', name: '入场动画', durationMs: 300,
     }))
     expect(result.status).toBe('committed')
@@ -151,7 +154,6 @@ describe('动画清单命令', () => {
       animationId: 'intro', name: '重复', durationMs: 300,
     })).status).toBe('rejected')
     expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
-      frameId: FRAME_ID,
       frameId: FRAME_ID, animationId: 'other', name: '零时长', durationMs: 0,
     })).status).toBe('rejected')
   })

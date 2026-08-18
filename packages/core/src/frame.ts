@@ -1,11 +1,14 @@
 import {
   COMPOSE_BUILTIN_COMPONENT_KEYS,
+  type ComposeAnimation,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeFrame,
   type ComposeFrameGuide,
   type ComposeSize,
+  type JsonObject,
 } from './document-types'
+import type { ComposePaint } from './paint'
 
 /** 新建 Frame 时使用的默认尺寸。 @public */
 export const COMPOSE_DEFAULT_FRAME_SIZE: ComposeSize = { width: 1280, height: 720 }
@@ -112,4 +115,60 @@ function buildParentIndex(document: ComposeDocument): Map<string, string | null>
     })
   })
   return parentById
+}
+
+/**
+ * 创建一个完整的 Frame Entity。
+ *
+ * @remarks
+ * Frame 是 v7 唯一的"有尺寸的结构单元"，页面根、画板、组件根都用它，因此构造逻辑必须只有
+ * 一份：宿主、迁移器与测试夹具共用这里，避免各自拼装出形状略有出入的 Frame。
+ *
+ * `LayoutItem` 的 fixed fallback 与 `Frame.size` 保持一致——Frame 一旦被降格为普通容器，
+ * 尺寸不应当跳回一个陌生的值。
+ *
+ * @public
+ */
+export function createComposeFrameEntity(options: {
+  readonly id: string
+  readonly name?: string
+  readonly childIds?: readonly string[]
+  readonly size?: ComposeSize
+  readonly offset?: { readonly x: number; readonly y: number }
+  readonly backgroundPaint?: ComposePaint
+  readonly animations?: readonly ComposeAnimation[]
+}): ComposeEntity {
+  const frame = createComposeFrame(options.size)
+  const offset = options.offset ?? { x: 0, y: 0 }
+  const base: Record<string, JsonObject> = {
+    Transform: { rotation: 0 },
+    LayoutItem: {
+      positioning: 'absolute',
+      offset: { x: offset.x, y: offset.y },
+      width: { mode: 'fixed', value: frame.size.width, min: 1, max: null },
+      height: { mode: 'fixed', value: frame.size.height, min: 1, max: null },
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      alignSelf: 'auto',
+    },
+    Visibility: { visible: true },
+    Lock: { locked: false },
+    Hierarchy: { childIds: [...(options.childIds ?? [])] },
+    Frame: frame,
+    Appearance: {
+      backgroundPaint: options.backgroundPaint ?? { kind: 'solid', color: 'transparent' },
+    },
+    ...(options.animations ? { Animations: { items: options.animations } as JsonObject } : {}),
+  }
+  return {
+    id: options.id,
+    name: options.name ?? options.id,
+    components: {
+      Composition: {
+        presetId: 'frame',
+        baseComponentKeys: Object.keys(base),
+        capabilityIds: [],
+      },
+      ...base,
+    },
+  }
 }

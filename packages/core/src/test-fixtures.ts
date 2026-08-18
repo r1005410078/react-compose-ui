@@ -1,4 +1,5 @@
 import {
+  type ComposeAnimation,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutItem,
@@ -7,7 +8,7 @@ import {
   type JsonObject,
 } from './document-types'
 import { createDefaultCanvasSettings } from './canvas-settings'
-import { COMPOSE_DEFAULT_FRAME_SIZE } from './frame'
+import { COMPOSE_DEFAULT_FRAME_SIZE, createComposeFrameEntity } from './frame'
 
 export function transform(
   x = 0,
@@ -114,40 +115,18 @@ export function frameEntity(
   overrides: {
     readonly width?: number
     readonly height?: number
-    readonly animations?: readonly JsonObject[]
+    readonly animations?: readonly ComposeAnimation[]
   } = {},
 ): ComposeEntity {
-  const width = overrides.width ?? COMPOSE_DEFAULT_FRAME_SIZE.width
-  const height = overrides.height ?? COMPOSE_DEFAULT_FRAME_SIZE.height
-  const base: Record<string, JsonObject> = {
-    Transform: { rotation: 0 } satisfies ComposeTransform,
-    LayoutItem: {
-      positioning: 'absolute',
-      offset: { x: 0, y: 0 },
-      width: { mode: 'fixed', value: width, min: 1, max: null },
-      height: { mode: 'fixed', value: height, min: 1, max: null },
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      alignSelf: 'auto',
-    },
-    Visibility: { visible: true },
-    Lock: { locked: false },
-    Hierarchy: { childIds },
-    Frame: { size: { width, height }, guides: [] },
-    Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
-    ...(overrides.animations ? { Animations: { items: overrides.animations } } : {}),
-  }
-  return {
+  return createComposeFrameEntity({
     id,
-    name: id,
-    components: {
-      Composition: {
-        presetId: 'frame',
-        baseComponentKeys: Object.keys(base),
-        capabilityIds: [],
-      },
-      ...base,
+    childIds,
+    size: {
+      width: overrides.width ?? COMPOSE_DEFAULT_FRAME_SIZE.width,
+      height: overrides.height ?? COMPOSE_DEFAULT_FRAME_SIZE.height,
     },
-  }
+    animations: overrides.animations,
+  })
 }
 
 /**

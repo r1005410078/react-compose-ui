@@ -20,7 +20,7 @@ import {
   getGroupCommandAvailability,
   getUngroupCommandAvailability,
 } from './commands'
-import { document, entity, layoutSnapshot } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
 
 function autoLayoutContainer(id: string, childIds: readonly string[]): ComposeEntity {
   const base = entity(id, { width: 400, height: 200, childIds })
@@ -96,6 +96,11 @@ function createLayerOrderCommand(
   return layerOrderApi.createLayerOrderCommand!(value, entityIds, operation, 'layer-order')
 }
 
+/** v7 的顶层 Entity 是根 Frame 的子级；断言"根顺序"就是断言它的 childIds。 */
+function rootChildIds(value: ComposeDocument): readonly string[] {
+  return getComposeHierarchy(value.entities[ROOT_FRAME_ID]!)?.childIds ?? []
+}
+
 describe('Stage ECS commands', () => {
   it('OpenSpec: stage-engine / ECS 结构命令 / 成组生成 first-class Group', () => {
     const value = document([
@@ -113,7 +118,7 @@ describe('Stage ECS commands', () => {
     ))
     expect(result.status).toBe('committed')
     const current = runtime.getState().document
-    expect(current.rootIds).toEqual(['group'])
+    expect(getComposeHierarchy(current.entities[ROOT_FRAME_ID]!)?.childIds).toEqual(['group'])
     expect(getComposeHierarchy(current.entities.group!)?.childIds).toEqual(['a', 'b'])
     expect(getComposeComposition(current.entities.group!).presetId).toBe('group')
     expect(getComposeGeometryConstraints(current.entities.group!)).toEqual({
@@ -138,7 +143,7 @@ describe('Stage ECS commands', () => {
       'group',
     ))
     expect(ungroup.status).toBe('committed')
-    expect(runtime.getState().document.rootIds).toEqual(['a', 'b'])
+    expect(rootChildIds(runtime.getState().document)).toEqual(['a', 'b'])
   })
 
   it('OpenSpec: stage-engine / ECS 结构命令 / 限定解除分组', () => {
@@ -211,7 +216,7 @@ describe('Stage ECS commands', () => {
       layoutSnapshot(value),
       'legacy',
     )).status).toBe('committed')
-    expect(runtime.document.rootIds).toEqual(['child'])
+    expect(getComposeHierarchy(runtime.document.entities[ROOT_FRAME_ID]!)?.childIds).toEqual(['child'])
   })
 
   it('OpenSpec: Entity reparent / 使用一个 batch 同步层级和局部 Transform', () => {
@@ -369,6 +374,7 @@ describe('Stage ECS commands', () => {
     const snapshot = {
       ...layoutSnapshot(value),
       boxes: {
+        [ROOT_FRAME_ID]: { x: 0, y: 0, width: 1280, height: 720, positioning: 'absolute' as const },
         container: { x: 100, y: 50, width: 400, height: 200, positioning: 'absolute' as const },
         child: { x: 20, y: 30, width: 300, height: 50, positioning: 'flow' as const },
       },
@@ -378,7 +384,7 @@ describe('Stage ECS commands', () => {
       value,
       snapshot,
       ['child'],
-      null,
+      ROOT_FRAME_ID,
       1,
     )).status).toBe('committed')
     expect(getComposeLayoutItem(runtime.document.entities.child!)).toMatchObject({
@@ -500,7 +506,7 @@ describe('Stage ECS commands', () => {
 
       expect(command).not.toBeNull()
       expect(runtime.dispatch(command!).status).toBe('committed')
-      expect(runtime.document.rootIds).toEqual(expected)
+      expect(rootChildIds(runtime.document)).toEqual(expected)
     },
   )
 
@@ -513,7 +519,7 @@ describe('Stage ECS commands', () => {
       ['b', 'c'],
       'bring-forward',
     )!).status).toBe('committed')
-    expect(runtime.document.rootIds).toEqual(['a', 'd', 'b', 'c', 'e'])
+    expect(rootChildIds(runtime.document)).toEqual(['a', 'd', 'b', 'c', 'e'])
   })
 
   it('OpenSpec: stage-engine / 同级节点层级命令规划 / 分父级原子重排', () => {
@@ -558,7 +564,7 @@ describe('Stage ECS commands', () => {
       ['parent', 'a'],
       'bring-forward',
     )!).status).toBe('committed')
-    expect(runtime.document.rootIds).toEqual(['before', 'after', 'parent'])
+    expect(rootChildIds(runtime.document)).toEqual(['before', 'after', 'parent'])
     expect(getComposeHierarchy(runtime.document.entities.parent!)?.childIds)
       .toEqual(['b', 'a', 'c'])
   })
@@ -590,7 +596,7 @@ describe('Stage ECS commands', () => {
     )
 
     expect(runtime.dispatch(command!).status).toBe('committed')
-    expect(runtime.document.rootIds).toEqual(['locked', 'a', 'locked-parent'])
+    expect(rootChildIds(runtime.document)).toEqual(['locked', 'a', 'locked-parent'])
     expect(getComposeHierarchy(runtime.document.entities['locked-parent']!)?.childIds)
       .toEqual(['child'])
 
