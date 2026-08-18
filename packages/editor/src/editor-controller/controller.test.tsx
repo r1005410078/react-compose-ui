@@ -1314,7 +1314,8 @@ describe('useComposeEditorController', () => {
 
     expect(result.current.runtime).toBe(second)
     expect(result.current.selectedIds).toEqual([])
-    expect(result.current.expandedIds).toEqual([])
+    // 根 Frame 默认展开：换文档后展开集合回到"只有画板"。
+    expect(result.current.expandedIds).toEqual([ROOT_FRAME_ID])
     expect(result.current.viewport).toEqual({ x: 80, y: 64, zoom: 1 })
   })
 
