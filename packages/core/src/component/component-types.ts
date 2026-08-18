@@ -13,7 +13,7 @@ export const COMPOSE_COMPONENT_FILE_SUFFIX = '.component.json' as const
 export const COMPOSE_COMPONENT_MEDIA_TYPE = 'application/vnd.compose-ui.component+json' as const
 
 /** 当前 Component Asset 协议版本。 @public */
-export const COMPOSE_COMPONENT_SCHEMA_VERSION = 1 as const
+export const COMPOSE_COMPONENT_SCHEMA_VERSION = 2 as const
 
 /** Variant 继承和 component-instance 嵌套各自允许的最大资源层数。 @public */
 export const COMPOSE_COMPONENT_NEST_DEPTH_LIMIT = 8 as const
@@ -187,6 +187,7 @@ export type ComposeComponentAssetIssueCode =
   | 'component-asset.invalid-lineage'
   | 'component-asset.invalid-snapshot'
   | 'component-asset.invalid-root'
+  | 'component-asset.invalid-document'
   | 'component-asset.cycle'
   | 'component-asset.depth-exceeded'
   | 'component-asset.parent-missing'

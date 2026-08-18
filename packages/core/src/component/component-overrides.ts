@@ -15,9 +15,8 @@ interface MutableEntity {
 }
 
 interface MutableDocument {
-  schemaVersion: 6
+  schemaVersion: 7
   canvas: ComposeDocument['canvas']
-  output: ComposeDocument['output']
   rootIds: string[]
   entities: Record<string, MutableEntity>
 }

@@ -1,7 +1,7 @@
 import { createDefaultCanvasSettings } from '../canvas-settings'
 import type { ComposeDocument, DocumentValidationIssue } from '../document-types'
 import { validateComposeDocument } from '../document'
-import { createDefaultOutputSettings } from '../output-settings'
+import { createComposeFrame } from '../frame'
 import {
   COMPOSE_PAGE_FILE_SUFFIX,
   COMPOSE_PAGE_MEDIA_TYPE,
@@ -223,16 +223,52 @@ export function serializeComposePageFile(page: ComposePageFile): string {
 /**
  * 创建一份空白页面文档。
  *
- * @returns 每次调用均返回可独立修改的新文档，使用默认画布设置与默认输出设置。
+ * @returns 每次调用均返回可独立修改的新文档：默认视口设置，加一个默认尺寸的空白根 Frame。
  * @public
  */
 export function createEmptyComposePageDocument(): ComposeDocument {
+  const frameId = 'frame-root'
+  const frame = createComposeFrame()
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: [],
-    entities: {},
+    rootIds: [frameId],
+    entities: {
+      [frameId]: {
+        id: frameId,
+        name: '画板',
+        components: {
+          Composition: {
+            presetId: 'frame',
+            baseComponentKeys: [
+              'Composition',
+              'Transform',
+              'LayoutItem',
+              'Visibility',
+              'Lock',
+              'Hierarchy',
+              'Frame',
+              'Appearance',
+            ],
+            capabilityIds: [],
+          },
+          Transform: { rotation: 0 },
+          LayoutItem: {
+            positioning: 'absolute',
+            offset: { x: 0, y: 0 },
+            width: { mode: 'fixed', value: frame.size.width, min: 1, max: null },
+            height: { mode: 'fixed', value: frame.size.height, min: 1, max: null },
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            alignSelf: 'auto',
+          },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Hierarchy: { childIds: [] },
+          Frame: frame,
+          Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
+        },
+      },
+    },
   }
 }
 

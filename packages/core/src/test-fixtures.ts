@@ -7,7 +7,7 @@ import {
   type JsonObject,
 } from './document-types'
 import { createDefaultCanvasSettings } from './canvas-settings'
-import { createDefaultOutputSettings } from './output-settings'
+import { COMPOSE_DEFAULT_FRAME_SIZE } from './frame'
 
 export function transform(
   x = 0,
@@ -105,6 +105,81 @@ export function containerEntity(
   }
 }
 
+/** 测试用根 Frame 的固定 ID；`documentFixture` 总是用它包住给定的顶层 Entity。 */
+export const ROOT_FRAME_ID = 'frame-root'
+
+export function frameEntity(
+  id: string,
+  childIds: readonly string[] = [],
+  overrides: {
+    readonly width?: number
+    readonly height?: number
+    readonly animations?: readonly JsonObject[]
+  } = {},
+): ComposeEntity {
+  const width = overrides.width ?? COMPOSE_DEFAULT_FRAME_SIZE.width
+  const height = overrides.height ?? COMPOSE_DEFAULT_FRAME_SIZE.height
+  const base: Record<string, JsonObject> = {
+    Transform: { rotation: 0 } satisfies ComposeTransform,
+    LayoutItem: {
+      positioning: 'absolute',
+      offset: { x: 0, y: 0 },
+      width: { mode: 'fixed', value: width, min: 1, max: null },
+      height: { mode: 'fixed', value: height, min: 1, max: null },
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      alignSelf: 'auto',
+    },
+    Visibility: { visible: true },
+    Lock: { locked: false },
+    Hierarchy: { childIds },
+    Frame: { size: { width, height }, guides: [] },
+    Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
+    ...(overrides.animations ? { Animations: { items: overrides.animations } } : {}),
+  }
+  return {
+    id,
+    name: id,
+    components: {
+      Composition: {
+        presetId: 'frame',
+        baseComponentKeys: Object.keys(base),
+        capabilityIds: [],
+      },
+      ...base,
+    },
+  }
+}
+
+/**
+ * 构造一份以单个 Frame 为根的组件文档。
+ *
+ * @remarks
+ * Component Asset v2 要求单根且根是 Frame；这里直接把给定 Entity 挂到该 Frame 之下。
+ */
+export function componentDocumentFixture(
+  entities: Readonly<Record<string, ComposeEntity>>,
+  childIds: readonly string[] = Object.keys(entities),
+  frameId = ROOT_FRAME_ID,
+  size: { readonly width?: number; readonly height?: number } = {},
+): ComposeDocument {
+  return {
+    schemaVersion: 7,
+    canvas: createDefaultCanvasSettings(),
+    rootIds: [frameId],
+    entities: {
+      ...entities,
+      [frameId]: frameEntity(frameId, childIds, size),
+    },
+  }
+}
+
+/**
+ * 构造一份合法 v7 文档。
+ *
+ * @remarks
+ * v7 的根层级只接受 Frame，因此这里总是插入一个 {@link ROOT_FRAME_ID} 根 Frame，把调用方
+ * 给出的 `rootIds` 变成它的子级——测试因此不必每处都自己搭画板。
+ */
 export function documentFixture(
   entities: Readonly<Record<string, ComposeEntity>> = {
     rectangle: rendererEntity('rectangle'),
@@ -112,10 +187,12 @@ export function documentFixture(
   rootIds: readonly string[] = Object.keys(entities),
 ): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds,
-    entities,
+    rootIds: [ROOT_FRAME_ID],
+    entities: {
+      ...entities,
+      [ROOT_FRAME_ID]: frameEntity(ROOT_FRAME_ID, rootIds),
+    },
   }
 }

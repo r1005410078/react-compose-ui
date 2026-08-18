@@ -98,32 +98,6 @@ function rejectUnknownFields(
   })
 }
 
-function validateOutput(
-  value: unknown,
-  issues: DocumentValidationIssue[],
-) {
-  const path = ['output'] as const
-  if (!isRecord(value)) {
-    addIssue(issues, 'output.invalid', path, 'output 必须是对象')
-    return
-  }
-  rejectUnknownFields(value, ['width', 'height', 'backgroundPaint'], path, issues, 'output.invalid')
-  if (!positive(value.width)) {
-    addIssue(issues, 'output.invalid-size', [...path, 'width'], '输出宽度必须是有限正数')
-  }
-  if (!positive(value.height)) {
-    addIssue(issues, 'output.invalid-size', [...path, 'height'], '输出高度必须是有限正数')
-  }
-  if (!isValidComposePaint(value.backgroundPaint)) {
-    addIssue(
-      issues,
-      'output.invalid-background',
-      [...path, 'backgroundPaint'],
-      '输出背景必须是规范 ComposePaint',
-    )
-  }
-}
-
 function validateCanvas(
   value: unknown,
   issues: DocumentValidationIssue[],
@@ -132,6 +106,11 @@ function validateCanvas(
   if (!isRecord(value) || !isRecord(value.grid) || !isRecord(value.smartSnap)) {
     addIssue(issues, 'canvas.invalid', path, 'canvas、grid 和 smartSnap 必须是对象')
     return
+  }
+  rejectUnknownFields(value, ['grid', 'smartSnap'], path, issues, 'canvas.invalid')
+  if ('guides' in value) {
+    // v7 起辅助线归属 Frame；残留的 canvas.guides 必须显式报错而不是被静默忽略。
+    addIssue(issues, 'canvas.invalid', [...path, 'guides'], 'v7 的辅助线归属 Frame，canvas 不得保存 guides')
   }
   const { grid, smartSnap } = value
   for (const key of ['stepX', 'stepY'] as const) {
@@ -174,33 +153,6 @@ function validateCanvas(
       )
     }
   }
-  if (!Array.isArray(value.guides)) {
-    addIssue(issues, 'canvas.invalid-guide', [...path, 'guides'], 'guides 必须是数组')
-    return
-  }
-  const ids = new Set<string>()
-  value.guides.forEach((guide, index) => {
-    const guidePath = [...path, 'guides', index] as const
-    if (
-      !isRecord(guide)
-      || !nonEmpty(guide.id)
-      || (guide.axis !== 'x' && guide.axis !== 'y')
-      || !finite(guide.position)
-    ) {
-      addIssue(issues, 'canvas.invalid-guide', guidePath, 'guide 字段无效')
-      return
-    }
-    const id = guide.id as string
-    if (ids.has(id)) {
-      addIssue(
-        issues,
-        'canvas.duplicate-guide',
-        [...guidePath, 'id'],
-        `guide ID ${id} 重复`,
-      )
-    }
-    ids.add(id)
-  })
 }
 
 function validateTransform(
@@ -499,6 +451,55 @@ function validateBooleanComponent(
   }
 }
 
+function validateFrame(
+  value: JsonObject,
+  path: Path,
+  issues: DocumentValidationIssue[],
+) {
+  if (!isRecord(value)) return
+  rejectUnknownFields(value, ['size', 'guides'], path, issues, 'frame.invalid')
+  const size = value.size
+  if (!isRecord(size)) {
+    addIssue(issues, 'frame.invalid-size', [...path, 'size'], 'Frame size 必须是对象')
+  }
+  else {
+    rejectUnknownFields(size, ['width', 'height'], [...path, 'size'], issues, 'frame.invalid-size')
+    for (const key of ['width', 'height'] as const) {
+      if (!positive(size[key])) {
+        addIssue(
+          issues,
+          'frame.invalid-size',
+          [...path, 'size', key],
+          `Frame ${key} 必须是有限正数`,
+        )
+      }
+    }
+  }
+  if (value.guides === undefined) return
+  if (!Array.isArray(value.guides)) {
+    addIssue(issues, 'frame.invalid-guide', [...path, 'guides'], 'guides 必须是数组')
+    return
+  }
+  const ids = new Set<string>()
+  value.guides.forEach((guide, index) => {
+    const guidePath = [...path, 'guides', index] as const
+    if (
+      !isRecord(guide)
+      || !nonEmpty(guide.id)
+      || (guide.axis !== 'x' && guide.axis !== 'y')
+      || !finite(guide.position)
+    ) {
+      addIssue(issues, 'frame.invalid-guide', guidePath, 'guide 字段无效')
+      return
+    }
+    const id = guide.id as string
+    if (ids.has(id)) {
+      addIssue(issues, 'frame.duplicate-guide', [...guidePath, 'id'], `guide ID ${id} 重复`)
+    }
+    ids.add(id)
+  })
+}
+
 function validateClip(
   value: JsonObject,
   path: Path,
@@ -613,6 +614,8 @@ function validateEntity(
   const hasBindings = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.bindings])
   const hasLayout = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.layout])
   const hasClip = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.clip])
+  const hasFrame = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.frame])
+  const hasAnimations = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.animations])
   if (!hasHierarchy && !hasRenderer) {
     addIssue(
       issues,
@@ -635,6 +638,22 @@ function validateEntity(
       'component.invalid-combination',
       [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.clip],
       'Clip 必须与 Hierarchy 组合',
+    )
+  }
+  if (hasFrame && !hasHierarchy) {
+    addIssue(
+      issues,
+      'component.invalid-combination',
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.frame],
+      'Frame 必须与 Hierarchy 组合',
+    )
+  }
+  if (hasAnimations && !hasFrame) {
+    addIssue(
+      issues,
+      'component.invalid-combination',
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.animations],
+      'Animations 必须与 Frame 组合',
     )
   }
   if (hasLayout && !hasHierarchy) {
@@ -713,6 +732,20 @@ function validateEntity(
       addIssue(issues, 'layout.invalid', [...layoutPath, ...issue.path], issue.message)
     })
   }
+  if (hasFrame) {
+    validateFrame(
+      components[COMPOSE_BUILTIN_COMPONENT_KEYS.frame]!,
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.frame],
+      issues,
+    )
+  }
+  if (hasAnimations) {
+    validateAnimations(
+      components[COMPOSE_BUILTIN_COMPONENT_KEYS.animations]!,
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.animations],
+      issues,
+    )
+  }
   if (hasClip) {
     validateClip(
       components[COMPOSE_BUILTIN_COMPONENT_KEYS.clip]!,
@@ -777,6 +810,9 @@ function validateTopology(
     addIssue(issues, 'document.invalid-root', ['rootIds'], 'rootIds 必须是字符串数组')
     return
   }
+  if (rootIds.length === 0) {
+    addIssue(issues, 'document.empty-root', ['rootIds'], 'rootIds 至少包含一个根 Frame')
+  }
   const parentById = new Map<string, string | null>()
   rootIds.forEach((id, index) => {
     if (!entities[id]) {
@@ -786,6 +822,14 @@ function validateTopology(
     if (parentById.has(id)) {
       addIssue(issues, 'document.duplicate-root', ['rootIds', index], `根 Entity ${id} 重复`)
       return
+    }
+    if (!entities[id]!.components[COMPOSE_BUILTIN_COMPONENT_KEYS.frame]) {
+      addIssue(
+        issues,
+        'document.root-not-frame',
+        ['rootIds', index],
+        `根 Entity ${id} 必须拥有 Frame Component`,
+      )
     }
     parentById.set(id, null)
   })
@@ -866,7 +910,15 @@ function validateTopology(
           'Fill 只允许用于 Layout parent 下的 Flow 子项',
         )
       }
-      if (
+      if (item[axis]?.mode === 'hug' && entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.frame]) {
+        addIssue(
+          issues,
+          'layout-item.invalid',
+          [...itemPath, axis, 'mode'],
+          'Frame 的尺寸由 Frame.size 唯一确定，不得使用 Hug',
+        )
+      }
+      else if (
         item[axis]?.mode === 'hug'
         && (
           (
@@ -928,22 +980,23 @@ function validateAnimationBindings(
 }
 
 /**
- * 校验文档动画清单。
+ * 校验一个 Frame 的动画清单 Component。
  *
  * @remarks
  * 这里只校验清单本身——关键帧轨道存放在 Entity 的 `Animation` Component 上，core 对未知
- * Component 只做 JSON 合法性检查。轨道级校验由 `@compose-ui/animation` 提供，需要宿主
- * 在加载后主动调用。
+ * Component 只做 JSON 合法性检查。轨道级校验（含跨 Frame 边界不变量）由
+ * `@compose-ui/animation` 提供，需要宿主在加载后主动调用。
  */
-function validateAnimations(value: unknown, issues: DocumentValidationIssue[]) {
-  if (value === undefined) return
-  if (!Array.isArray(value)) {
-    addIssue(issues, 'animation.invalid', ['animations'], 'animations 必须是数组')
+function validateAnimations(value: JsonObject, basePath: Path, issues: DocumentValidationIssue[]) {
+  if (!isRecord(value)) return
+  rejectUnknownFields(value, ['items'], basePath, issues, 'animation.invalid')
+  if (!Array.isArray(value.items)) {
+    addIssue(issues, 'animation.invalid', [...basePath, 'items'], 'Animations.items 必须是数组')
     return
   }
   const seenIds = new Set<string>()
-  value.forEach((item, index) => {
-    const path: Path = ['animations', index]
+  value.items.forEach((item, index) => {
+    const path: Path = [...basePath, 'items', index]
     if (!isRecord(item)) {
       addIssue(issues, 'animation.invalid', path, '动画必须是对象')
       return
@@ -990,7 +1043,7 @@ function validateAnimations(value: unknown, issues: DocumentValidationIssue[]) {
   })
 }
 
-/** 校验未知输入是否满足 ComposeDocument v6 ECS 协议。 @public */
+/** 校验未知输入是否满足 ComposeDocument v7 ECS 协议。 @public */
 export function validateComposeDocument(input: unknown): DocumentValidationResult {
   if (!isRecord(input)) {
     return {
@@ -1000,17 +1053,22 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
   }
   const issues: DocumentValidationIssue[] = []
   validateJson(input, [], issues)
-  if (input.schemaVersion !== 6) {
+  if (input.schemaVersion !== 7) {
     addIssue(
       issues,
       'document.unsupported-version',
       ['schemaVersion'],
-      '只支持 ComposeDocument schemaVersion 6',
+      '只支持 ComposeDocument schemaVersion 7；v6 文档需要显式迁移',
     )
   }
+  if ('output' in input) {
+    // v7 删除了文档级 output，其语义由根 Frame 承载；静默忽略会让迁移遗漏无声通过。
+    addIssue(issues, 'document.invalid', ['output'], 'v7 不支持文档级 output，请迁移到根 Frame')
+  }
+  if ('animations' in input) {
+    addIssue(issues, 'animation.invalid', ['animations'], 'v7 的动画清单归属 Frame 的 Animations Component')
+  }
   validateCanvas(input.canvas, issues)
-  validateOutput(input.output, issues)
-  validateAnimations(input.animations, issues)
   if (!isRecord(input.entities)) {
     addIssue(issues, 'document.invalid', ['entities'], 'entities 必须是对象')
   }

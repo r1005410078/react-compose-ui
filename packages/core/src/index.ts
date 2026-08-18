@@ -23,9 +23,23 @@ export {
   isValidComposeGeometryConstraints,
   validateComposeDocument,
 } from './document'
-export { findComposeAnimation, getComposeAnimations } from './animations'
+export {
+  findComposeAnimation,
+  getComposeAnimations,
+  getFrameAnimations,
+  resolveAnimationHostFrameId,
+} from './animations'
 export { createDefaultCanvasSettings } from './canvas-settings'
-export { createDefaultOutputSettings } from './output-settings'
+export {
+  COMPOSE_DEFAULT_FRAME_SIZE,
+  createComposeFrame,
+  getComposeFrame,
+  getComposeFrameGuides,
+  isComposeFrameEntity,
+  isWithinFrame,
+  listComposeFrameIds,
+  resolveOwningFrameId,
+} from './frame'
 export {
   COMPOSE_GROUP_PRESET_ID,
   createComposeGroupEntitySeed,
@@ -98,7 +112,10 @@ export {
 export type { ComposeWidgetSwitcherPreview } from './widget-switcher'
 export { applyDocumentPatches, jsonEqual } from './patches'
 export { createTransactionRuntime } from './runtime'
-export { migrateComposeDocumentV5ToV6 } from './migration'
+export {
+  migrateComposeDocumentV5ToV7,
+  migrateComposeDocumentV6ToV7,
+} from './migration'
 export type { ComposeDocumentMigrationResult } from './migration'
 export {
   BUILTIN_COMMAND_TYPES,
@@ -136,7 +153,9 @@ export type {
   ComposeBindings,
   ComposeAxisSizing,
   ComposeBuiltinComponentKey,
-  ComposeCanvasGuide,
+  ComposeAnimations,
+  ComposeFrame,
+  ComposeFrameGuide,
   ComposeCanvasSettings,
   ComposeClip,
   ComposeComposition,
@@ -154,7 +173,6 @@ export type {
   ComposeLock,
   ComposeMeasureConstraint,
   ComposeMeasuredSize,
-  ComposeOutputSettings,
   ComposePageExportReference,
   ComposeRendererPropsBindings,
   ComposeOverflowMode,

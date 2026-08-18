@@ -1,6 +1,8 @@
 import { validateComposeDocument } from '../document'
 import type { ComposeDocument, JsonObject, JsonValue } from '../document-types'
 import { isComposeComponentKey } from '../entity'
+import { isComposeFrameEntity } from '../frame'
+import { migrateComposeDocumentV6ToV7 } from '../migration'
 import {
   COMPOSE_COMPONENT_FILE_SUFFIX,
   COMPOSE_COMPONENT_MEDIA_TYPE,
@@ -90,9 +92,17 @@ function validateComponentDocument(
     return false
   }
   // 单根是硬约束：diff 与操作应用都依赖父子两份文档共享同一根 ID，多根会让锚点失去参照。
-  // 根的类型不作限制，容器或任意 Entity 都可以作为组件根。
-  if (result.document.rootIds.length !== 1 || !result.document.rootIds[0]) {
+  // v2 起根还必须是 Frame——组件实例的尺寸事实来源就是组件根的 Frame.size，且 Frame 是
+  // 实例内部的坐标、布局、裁剪、动画与脚本作用域边界。
+  const rootId = result.document.rootIds[0]
+  if (result.document.rootIds.length !== 1 || !rootId) {
     issue(issues, 'component-asset.invalid-root', [...path, 'rootIds'], '组件文档必须只有一个根')
+    return false
+  }
+  // 文档层已经拒绝了非 Frame 根（`document.root-not-frame`），这里是解析边界的兜底：
+  // 它保证即使未来放宽文档层约束，组件资产仍然只接受 Frame 根。
+  if (!isComposeFrameEntity(result.document.entities[rootId])) {
+    issue(issues, 'component-asset.invalid-root', [...path, 'rootIds', 0], '组件文档的根必须是 Frame')
     return false
   }
   return true
@@ -306,26 +316,117 @@ export function serializeComposeComponentAsset(asset: ComposeComponentAssetV1): 
   return `${JSON.stringify(asset, null, 2)}\n`
 }
 
-/** 显式把缺少 `kind` 的历史 v1 草案迁移为 Base。 @public */
+/**
+ * 把 v1 组件文档的单根提升为 Frame。
+ *
+ * @remarks
+ * 原根已经是 Frame 时原地通过——这样"容器早就升格过"的组件不会被多包一层。否则包一层新的
+ * Frame，尺寸取原根 LayoutItem 的 fixed fallback，原根成为它的唯一子级。
+ */
+function ensureFrameRoot(document: unknown): unknown {
+  if (!isRecord(document)) return document
+  const entities = document.entities
+  const rootIds = document.rootIds
+  if (!isRecord(entities) || !Array.isArray(rootIds) || rootIds.length !== 1) return document
+  const rootId = rootIds[0]
+  if (typeof rootId !== 'string') return document
+  const root = entities[rootId]
+  if (!isRecord(root) || !isRecord(root.components)) return document
+  if (root.components.Frame !== undefined) return document
+
+  const item = root.components.LayoutItem
+  const axis = (key: 'width' | 'height', fallback: number) => {
+    const value = isRecord(item) && isRecord(item[key]) ? (item[key] as Record<string, unknown>).value : undefined
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+  }
+  const size = { width: axis('width', 100), height: axis('height', 100) }
+  const frameId = entities['frame-root'] === undefined ? 'frame-root' : `frame-root-${rootId}`
+  return {
+    ...document,
+    rootIds: [frameId],
+    entities: {
+      ...entities,
+      [frameId]: {
+        id: frameId,
+        name: typeof root.name === 'string' ? root.name : frameId,
+        components: {
+          Composition: {
+            presetId: 'frame',
+            baseComponentKeys: [
+              'Composition',
+              'Transform',
+              'LayoutItem',
+              'Visibility',
+              'Lock',
+              'Hierarchy',
+              'Frame',
+              'Appearance',
+            ],
+            capabilityIds: [],
+          },
+          Transform: { rotation: 0 },
+          LayoutItem: {
+            positioning: 'absolute',
+            offset: { x: 0, y: 0 },
+            width: { mode: 'fixed', value: size.width, min: 1, max: null },
+            height: { mode: 'fixed', value: size.height, min: 1, max: null },
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            alignSelf: 'auto',
+          },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Hierarchy: { childIds: [rootId] },
+          Frame: { size, guides: [] },
+          Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
+        },
+      },
+    },
+  }
+}
+
+/**
+ * 显式迁移历史组件文件。
+ *
+ * @remarks
+ * 覆盖三类历史形状：`schemaVersion: 1`、缺少 `kind` 的旧草案，以及含已删除暴露属性的 Base。
+ * v1→v2 还负责把文档提升到 ComposeDocument v7 并保证单根是 Frame。迁移不修改输入。
+ *
+ * @public
+ */
 export function migrateLegacyComposeComponentAsset(value: unknown): ComposeComponentAssetParseResult {
-  if (!isRecord(value) || value.schemaVersion !== COMPOSE_COMPONENT_SCHEMA_VERSION) {
-    return {
-      ok: false,
-      issues: [{ code: 'component-asset.invalid-shape', path: [], message: '输入不是可迁移的历史组件草案' }],
-    }
+  const invalid: ComposeComponentAssetParseResult = {
+    ok: false,
+    issues: [{ code: 'component-asset.invalid-shape', path: [], message: '输入不是可迁移的历史组件草案' }],
   }
-  // 两类历史形状：缺少 kind 的旧草案，以及含已删除暴露属性的 Base。
-  const migratable = value.kind === undefined || value.properties !== undefined
-  if (!migratable) {
-    return {
-      ok: false,
-      issues: [{ code: 'component-asset.invalid-shape', path: [], message: '输入不是可迁移的历史组件草案' }],
-    }
-  }
-  const rest = { ...value }
+  if (!isRecord(value)) return invalid
+  const legacyVersion = value.schemaVersion === 1
+  if (!legacyVersion && value.schemaVersion !== COMPOSE_COMPONENT_SCHEMA_VERSION) return invalid
+  if (!legacyVersion && value.kind !== undefined && value.properties === undefined) return invalid
+
+  const rest = { ...structuredClone(value) } as Record<string, unknown>
   // 暴露属性已删除：迁移即丢弃该字段，文档内容不变。
   delete rest.properties
-  return validateAsset({ ...rest, kind: value.kind ?? 'base' })
+  let document = rest.document
+  if (isRecord(document) && document.schemaVersion === 6) {
+    const migrated = migrateComposeDocumentV6ToV7(document)
+    if (!migrated.ok) {
+      return {
+        ok: false,
+        issues: migrated.issues.map((candidate) => ({
+          code: 'component-asset.invalid-document',
+          path: ['document', ...candidate.path],
+          message: candidate.message,
+        })),
+      }
+    }
+    document = migrated.document
+  }
+  return validateAsset({
+    ...rest,
+    schemaVersion: COMPOSE_COMPONENT_SCHEMA_VERSION,
+    kind: rest.kind ?? 'base',
+    document: ensureFrameRoot(document),
+  })
 }
 
 /** 在已解析对象边界重新执行严格校验。 @internal */

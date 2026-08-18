@@ -11,7 +11,7 @@ import { createComposeEdges } from './layout'
 
 type RecordValue = Record<string, unknown>
 
-/** v5→v6 迁移的判别结果。 @public */
+/** 文档协议显式迁移的判别结果。 @public */
 export type ComposeDocumentMigrationResult =
   | {
       readonly ok: true
@@ -207,19 +207,15 @@ function migrateEntity(value: RecordValue): ComposeEntity {
 }
 
 /**
- * 把一份合法 ComposeDocument v5 显式迁移为保持初始视觉的 v6。
+ * 把一份合法 v5 文档提升为 v6 形状。
  *
  * @remarks
- * 迁移不会修改输入；所有既有子项都先保持 Absolute，宿主可在加载边界决定何时保存 v6。
- *
- * @public
+ * v6 自身已不再是受支持的持久化版本，因此这里只产出中间形状，由
+ * {@link migrateComposeDocumentV5ToV7} 接力到 v7 后统一校验。
  */
-export function migrateComposeDocumentV5ToV6(input: unknown): ComposeDocumentMigrationResult {
-  const legacyIssues = validateLegacyV5(input)
-  if (legacyIssues.length > 0) return { ok: false, issues: legacyIssues }
-  const source = input as RecordValue
+function toV6Shape(source: RecordValue): RecordValue {
   const sourceEntities = source.entities as Record<string, RecordValue>
-  const document = {
+  return {
     schemaVersion: 6,
     canvas: structuredClone(source.canvas),
     output: structuredClone(source.output),
@@ -228,9 +224,142 @@ export function migrateComposeDocumentV5ToV6(input: unknown): ComposeDocumentMig
       Object.entries(sourceEntities).map(([id, entity]) => [id, migrateEntity(entity)]),
     ),
   }
+}
+
+function validateLegacyV6(input: unknown): readonly DocumentValidationIssue[] {
+  const issues: DocumentValidationIssue[] = []
+  if (!record(input)) return [issue([], 'ComposeDocument v6 必须是对象')]
+  if (input.schemaVersion !== 6) {
+    issues.push({
+      code: 'document.unsupported-version',
+      path: ['schemaVersion'],
+      message: '迁移器只接受 ComposeDocument schemaVersion 6',
+    })
+  }
+  if (!record(input.canvas)) issues.push(issue(['canvas'], 'v6 canvas 必须是对象'))
+  if (!record(input.output)) issues.push(issue(['output'], 'v6 output 必须是对象'))
+  else if (!positive(input.output.width) || !positive(input.output.height)) {
+    issues.push(issue(['output'], 'v6 output 尺寸必须是有限正数'))
+  }
+  if (!Array.isArray(input.rootIds) || !input.rootIds.every((id) => typeof id === 'string')) {
+    issues.push(issue(['rootIds'], 'v6 rootIds 必须是字符串数组'))
+  }
+  if (!record(input.entities)) issues.push(issue(['entities'], 'v6 entities 必须是对象'))
+  try {
+    structuredClone(input)
+  }
+  catch {
+    issues.push({ code: 'json.unsupported', path: [], message: 'v6 文档必须是可克隆的严格 JSON' })
+  }
+  return issues
+}
+
+/**
+ * 为迁移产物挑一个不与既有 Entity 冲突的稳定根 Frame ID。
+ *
+ * @remarks
+ * 优先使用固定名，使同一输入总是得到同一份输出（迁移必须是确定性纯函数）；只有在极少数
+ * 命名冲突时才追加数字后缀。
+ */
+function allocateRootFrameId(entities: Record<string, unknown>): string {
+  const base = 'frame-root'
+  if (entities[base] === undefined) return base
+  let index = 2
+  while (entities[`${base}-${index}`] !== undefined) index += 1
+  return `${base}-${index}`
+}
+
+/**
+ * 把一份合法 ComposeDocument v6 显式迁移为等价的 v7。
+ *
+ * @remarks
+ * 迁移不修改输入，且对同一输入产生确定结果：新建唯一根 Frame，把 `output` 的尺寸与背景、
+ * `animations` 清单与 `canvas.guides` 全部搬到该 Frame 上，原 rootIds 按原顺序成为它的子级。
+ * 因为 v6 的输出原点固定为世界 `(0,0)`，guides 的坐标变换是恒等的，无需重算。
+ *
+ * 所有既有 Entity 的 ID、Components 与动画轨道逐字段保持不变。
+ *
+ * @public
+ */
+export function migrateComposeDocumentV6ToV7(input: unknown): ComposeDocumentMigrationResult {
+  const legacyIssues = validateLegacyV6(input)
+  if (legacyIssues.length > 0) return { ok: false, issues: legacyIssues }
+  const source = structuredClone(input) as RecordValue
+  const entities = source.entities as Record<string, unknown>
+  const output = source.output as RecordValue
+  const canvas = source.canvas as RecordValue
+  const rootIds = source.rootIds as readonly string[]
+  const guides = Array.isArray(canvas.guides) ? canvas.guides : []
+  const animations = Array.isArray(source.animations) ? source.animations : []
+  const size = { width: output.width as number, height: output.height as number }
+  const rootId = allocateRootFrameId(entities)
+
+  const frameComponents: Record<string, JsonObject> = {
+    Composition: {
+      presetId: 'frame',
+      baseComponentKeys: [
+        'Composition',
+        'Transform',
+        'LayoutItem',
+        'Visibility',
+        'Lock',
+        'Hierarchy',
+        'Frame',
+        'Appearance',
+      ],
+      capabilityIds: [],
+    },
+    Transform: { rotation: 0 },
+    LayoutItem: {
+      positioning: 'absolute',
+      offset: { x: 0, y: 0 },
+      width: { mode: 'fixed', value: size.width, min: 1, max: null },
+      height: { mode: 'fixed', value: size.height, min: 1, max: null },
+      margin: createComposeEdges(),
+      alignSelf: 'auto',
+    },
+    Visibility: { visible: true },
+    Lock: { locked: false },
+    Hierarchy: { childIds: [...rootIds] },
+    Frame: { size, guides },
+    Appearance: { backgroundPaint: output.backgroundPaint as JsonObject },
+  }
+  if (animations.length > 0) {
+    frameComponents.Animations = { items: animations } as unknown as JsonObject
+    ;(frameComponents.Composition as RecordValue).baseComponentKeys = [
+      ...(frameComponents.Composition as { baseComponentKeys: string[] }).baseComponentKeys,
+      'Animations',
+    ]
+  }
+
+  const { grid, smartSnap } = canvas as { grid: unknown; smartSnap: unknown }
+  const document = {
+    schemaVersion: 7,
+    canvas: { grid, smartSnap },
+    rootIds: [rootId],
+    entities: {
+      ...entities,
+      [rootId]: { id: rootId, name: '画板', components: frameComponents },
+    },
+  }
   const validation = validateComposeDocument(document)
   return validation.valid
     ? { ok: true, document: validation.document, warnings: [] }
     : { ok: false, issues: validation.issues }
+}
+
+/**
+ * 把一份合法 ComposeDocument v5 显式迁移为保持初始视觉的 v7。
+ *
+ * @remarks
+ * 迁移不会修改输入；所有既有子项都先保持 Absolute，宿主可在加载边界决定何时保存 v7。
+ * v6 只作为不可见的中间形状存在，调用方不会拿到它。
+ *
+ * @public
+ */
+export function migrateComposeDocumentV5ToV7(input: unknown): ComposeDocumentMigrationResult {
+  const legacyIssues = validateLegacyV5(input)
+  if (legacyIssues.length > 0) return { ok: false, issues: legacyIssues }
+  return migrateComposeDocumentV6ToV7(toV6Shape(input as RecordValue))
 }
 

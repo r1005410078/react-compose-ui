@@ -49,9 +49,11 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
       kind: 'compose-page',
       pageSchemaVersion: 1,
       setupScript: null,
-      document: { schemaVersion: 6, rootIds: [], entities: {} },
+      document: { schemaVersion: 7, rootIds: ['frame-root'] },
     })
-    expect(first.document.output.width).toBeGreaterThan(0)
+    // 空白页面自带一个默认尺寸的根 Frame，而不是空的 rootIds。
+    const frame = first.document.entities['frame-root']!.components.Frame as { size: { width: number } }
+    expect(frame.size.width).toBeGreaterThan(0)
     expect(first.document.canvas).not.toBe(second.document.canvas)
   })
 
