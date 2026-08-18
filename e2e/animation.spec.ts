@@ -251,11 +251,14 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
     .locator('[data-testid^="compose-preview-entity-"]')
     .first()
   await expect(previewEntity).toBeVisible()
-  const initial = (await previewEntity.boundingBox())!
+  // 位置必须用 getBoundingClientRect 读：boundingBox() 会等元素连续两帧几何稳定，
+  // 而这里的元素正在被动画持续驱动，它多数时候直接返回 null。
+  const measureX = async () => previewEntity.evaluate(
+    (element) => element.getBoundingClientRect().x,
+  )
+  const initial = await measureX()
   await expect
-    .poll(async () => Math.abs(((await previewEntity.boundingBox())?.x ?? initial.x) - initial.x), {
-      timeout: 4000,
-    })
+    .poll(async () => Math.abs(await measureX() - initial), { timeout: 4000 })
     .toBeGreaterThan(10)
 })
 
