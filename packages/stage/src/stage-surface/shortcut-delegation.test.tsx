@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
   createDefaultCanvasSettings,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
+  createComposeFrameEntity,
   createTransactionRuntime,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
@@ -45,17 +45,21 @@ function entity(id: string) {
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: ['a', 'b'],
-    entities: { a: entity('a'), b: entity('b') },
+    rootIds: ['frame-root'],
+    entities: {
+      a: entity('a'),
+      b: entity('b'),
+      'frame-root': createComposeFrameEntity({ id: 'frame-root', childIds: ['a', 'b'] }),
+    },
   }
 }
 
 const snapshot: ComposeLayoutSnapshot = {
   revision: 1,
   boxes: {
+    'frame-root': { x: 0, y: 0, width: 1280, height: 720, positioning: 'absolute' },
     a: { x: 0, y: 0, width: 100, height: 100, positioning: 'absolute' },
     b: { x: 200, y: 0, width: 100, height: 100, positioning: 'absolute' },
   },
@@ -166,7 +170,7 @@ describe('ComposeStage 快捷键接管', () => {
     fireEvent.keyDown(stage, { code: 'BracketRight', key: ']' })
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
       type: 'entity.move',
-      payload: { entityIds: ['a'], parentId: null, index: 2 },
+      payload: { entityIds: ['a'], parentId: 'frame-root', index: 2 },
     }))
   })
 
@@ -181,7 +185,7 @@ describe('ComposeStage 快捷键接管', () => {
     fireEvent.keyDown(stage, { code: 'KeyP', key: 'p' })
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
       type: 'entity.move',
-      payload: { entityIds: ['a'], parentId: null, index: 2 },
+      payload: { entityIds: ['a'], parentId: 'frame-root', index: 2 },
     }))
   })
 })

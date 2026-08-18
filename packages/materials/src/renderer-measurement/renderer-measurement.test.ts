@@ -193,7 +193,7 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
     expect(close).toHaveBeenCalledOnce()
   })
 
-  it('SVG 解析 viewBox，Page Slot 使用目标 v6 output 并订阅 revision', async () => {
+  it('SVG 解析 viewBox，Page Slot 使用目标页面默认 Frame 尺寸并订阅 revision', async () => {
     const svg = definition('svg')
     const svgRenderer = renderer('svg', {
       asset: { providerId: 'memory', assetKey: 'logo', scope: 'persistent' },
@@ -229,7 +229,19 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
       return () => undefined
     })
     const pageDocumentPort = {
-      load: vi.fn(async () => ({ document: { output: { width: 1280, height: 720 } } }) as never),
+      // 页面的"输出尺寸"就是它默认 Frame 的尺寸。
+      load: vi.fn(async () => ({
+        document: {
+          rootIds: ['frame-root'],
+          entities: {
+            'frame-root': {
+              id: 'frame-root',
+              name: 'frame-root',
+              components: { Frame: { size: { width: 1280, height: 720 } } },
+            },
+          },
+        },
+      }) as never),
       subscribe,
     }
     const pagePrepared = await page.prepare?.({

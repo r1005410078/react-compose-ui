@@ -1,6 +1,5 @@
 import {
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
   type ComposeDocument,
   type JsonObject,
 } from '@compose-ui/core'
@@ -33,13 +32,8 @@ function measureInput(
 
 function snapshotDocument(size: { width: number; height: number }): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: {
-      ...createDefaultOutputSettings(),
-      width: size.width,
-      height: size.height,
-    },
     rootIds: ['root'],
     entities: {
       root: {
@@ -62,6 +56,9 @@ function snapshotDocument(size: { width: number; height: number }): ComposeDocum
           },
           Visibility: { visible: true },
           Lock: { locked: false },
+          Hierarchy: { childIds: [] },
+          // 组件根是 Frame：尺寸事实来源在这里。
+          Frame: { size: { width: size.width, height: size.height }, guides: [] },
           Renderer: { type: 'rectangle', props: {} },
         },
       },

@@ -61,10 +61,18 @@ function outerDocument(): ComposeDocument {
  * 表现为只看到第一个），容器必须递归渲染 Hierarchy 子节点。
  */
 function nestedTreeDocument(): ComposeDocument {
+  // 顶层实体挂在页面默认 Frame 之下：v7 的文档根只接受 Frame。
+  const empty = createEmptyComposePageDocument()
+  const frameId = empty.rootIds[0]!
+  const frame = empty.entities[frameId]!
   return {
-    ...createEmptyComposePageDocument(),
-    rootIds: ['first', 'group'],
+    ...empty,
     entities: {
+      ...empty.entities,
+      [frameId]: {
+        ...frame,
+        components: { ...frame.components, Hierarchy: { childIds: ['first', 'group'] } },
+      },
       first: entity('first', { Renderer: { type: 'rectangle', props: {} } }),
       group: entity('group', { Hierarchy: { childIds: ['child'] } }),
       child: entity('child', { Renderer: { type: 'rectangle', props: {} } }),
@@ -74,15 +82,32 @@ function nestedTreeDocument(): ComposeDocument {
 
 /** 被引用页面的文档，含一个可见的矩形实体。 */
 function nestedDocument(): ComposeDocument {
+  // 页面文档的根是 Frame；被引用页面的"输出尺寸"就是它默认 Frame 的尺寸。
+  const empty = createEmptyComposePageDocument()
+  const frameId = empty.rootIds[0]!
+  const frame = empty.entities[frameId]!
   return {
-    ...createEmptyComposePageDocument(),
-    rootIds: ['nested-rect'],
+    ...empty,
     entities: {
+      ...empty.entities,
+      [frameId]: {
+        ...frame,
+        components: {
+          ...frame.components,
+          Hierarchy: { childIds: ['nested-rect'] },
+        },
+      },
       'nested-rect': entity('nested-rect', {
         Renderer: { type: 'rectangle', props: {} },
       }),
     },
   } as ComposeDocument
+}
+
+/** 读取页面默认 Frame 的尺寸。 */
+function nestedFrameSize(document: ComposeDocument) {
+  const frameId = document.rootIds[0]!
+  return (document.entities[frameId]!.components.Frame as { size: { width: number; height: number } }).size
 }
 
 function page(document: ComposeDocument): ComposePageFile {
@@ -270,10 +295,8 @@ describe('OpenSpec: basic-materials / 页面拖入画布创建 Page Slot', () =>
       width: { value: number }
       height: { value: number }
     }
-    expect({ width: layoutItem.width.value, height: layoutItem.height.value }).toEqual({
-      width: nested.output.width,
-      height: nested.output.height,
-    })
+    expect({ width: layoutItem.width.value, height: layoutItem.height.value })
+      .toEqual(nestedFrameSize(nested))
   })
 
   it('页面内容不可解析时回退到默认尺寸', async () => {
@@ -347,10 +370,20 @@ describe('OpenSpec: basic-materials / Page Slot 递归渲染被引用页面', ()
 
 describe('OpenSpec: page-script-runtime / Page Slot setup 实例', () => {
   it('同一页面的两个 Slot 拥有独立 State', async () => {
+    const countingBase = createEmptyComposePageDocument()
+    const countingFrameId = countingBase.rootIds[0]!
+    const countingFrame = countingBase.entities[countingFrameId]!
     const countingDocument: ComposeDocument = {
-      ...createEmptyComposePageDocument(),
-      rootIds: ['count', 'add'],
+      ...countingBase,
       entities: {
+        ...countingBase.entities,
+        [countingFrameId]: {
+          ...countingFrame,
+          components: {
+            ...countingFrame.components,
+            Hierarchy: { childIds: ['count', 'add'] },
+          },
+        },
         count: entity('count', {
           Renderer: { type: 'text', props: { text: 'fallback' } },
           Bindings: {

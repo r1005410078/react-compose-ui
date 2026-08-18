@@ -43,8 +43,9 @@ describe('entity clipboard planner', () => {
       parentId: 'container',
       index: 1,
     })
+    // 没有命中目标时落点是画板末尾，而不是文档根——v7 的根只接受 Frame。
     expect(resolveSuggestedEntityInsertion(value, null)).toEqual({
-      parentId: null,
+      parentId: ROOT_FRAME_ID,
       index: 1,
     })
   })

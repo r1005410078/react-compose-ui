@@ -4,6 +4,8 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   COMPOSE_COMPONENT_MEDIA_TYPE,
+  COMPOSE_DEFAULT_FRAME_SIZE,
+  getComposeFrame,
   createComposeResolvedComponentSnapshot,
   isComposeComponentMediaType,
   parseComposeComponentAsset,
@@ -88,7 +90,10 @@ export function createComponentInstanceMaterial(): {
             reference,
             resolved.revision,
           )
-          const size = snapshot.document.output
+          // 实例尺寸跟随组件根 Frame。
+          const rootId = snapshot.document.rootIds[0]
+          const size = (rootId ? getComposeFrame(snapshot.document.entities[rootId]) : null)?.size
+            ?? COMPOSE_DEFAULT_FRAME_SIZE
           const rendererProps = {
             reference,
             resolvedSnapshot: snapshot,

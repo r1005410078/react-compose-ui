@@ -989,7 +989,33 @@ function validateAnimationBindings(
  */
 function validateAnimations(value: JsonObject, basePath: Path, issues: DocumentValidationIssue[]) {
   if (!isRecord(value)) return
-  rejectUnknownFields(value, ['items'], basePath, issues, 'animation.invalid')
+  rejectUnknownFields(value, ['items', 'source'], basePath, issues, 'animation.invalid')
+  // source 是该 Frame 绑定的动画文件稳定引用；文件是静态权威，items 是它水合进文档的镜像。
+  if (value.source !== undefined && value.source !== null) {
+    const source = value.source
+    if (
+      !isRecord(source)
+      || !nonEmpty(source.providerId)
+      || !nonEmpty(source.assetKey)
+      || (source.scope !== 'persistent' && source.scope !== 'session')
+    ) {
+      addIssue(
+        issues,
+        'animation.invalid',
+        [...basePath, 'source'],
+        'Animations.source 必须是 { providerId, assetKey, scope }',
+      )
+    }
+    else {
+      rejectUnknownFields(
+        source,
+        ['providerId', 'assetKey', 'scope'],
+        [...basePath, 'source'],
+        issues,
+        'animation.invalid',
+      )
+    }
+  }
   if (!Array.isArray(value.items)) {
     addIssue(issues, 'animation.invalid', [...basePath, 'items'], 'Animations.items 必须是数组')
     return

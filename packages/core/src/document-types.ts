@@ -435,8 +435,20 @@ export type ComposeAnimation = JsonObject & {
  *
  * @public
  */
-export interface ComposeAnimations extends JsonObject {
+export type ComposeAnimations = JsonObject & {
   readonly items: readonly ComposeAnimation[]
+  /**
+   * 该 Frame 绑定的动画文件稳定引用；未绑定时缺省。
+   *
+   * @remarks
+   * 动画文件是静态权威：宿主打开页面时把文件里的清单水合进 `items`，保存时把 `items` 的
+   * 变化回写文件。解除引用不删除文件资源。
+   */
+  readonly source?: {
+    readonly providerId: string
+    readonly assetKey: string
+    readonly scope: 'persistent' | 'session'
+  }
 }
 
 /** 编辑器、Stage 与 Preview 共享的 v7 ECS 文档。 @public */

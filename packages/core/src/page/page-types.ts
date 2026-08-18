@@ -29,7 +29,7 @@ export const COMPOSE_APP_MANIFEST_FILE_NAME = 'app.json' as const
 export const COMPOSE_APP_MANIFEST_SCHEMA_VERSION = 1 as const
 
 /** 当前页面聚合文件版本。 @public */
-export const COMPOSE_PAGE_SCHEMA_VERSION = 1 as const
+export const COMPOSE_PAGE_SCHEMA_VERSION = 2 as const
 
 /** 页面 setup 脚本的稳定资源引用。 @public */
 export interface ComposePageSetupReference extends JsonObject {
@@ -62,12 +62,13 @@ export interface ComposePageFile {
   readonly document: ComposeDocument
   readonly setupScript: ComposePageSetupReference | null
   /**
-   * 页面绑定的动画文件引用；未绑定为 null。
+   * 页面的默认 Frame。
    *
    * @remarks
-   * 加法字段：解析容忍缺失并归一化为 null，`pageSchemaVersion` 保持 1。
+   * 只承担两件事：预览的默认目标，以及没有选择时 Frame 相关动作的回退目标。它 MUST NOT
+   * 覆盖显式选择。必须指向 `document.rootIds` 中的一个 Frame；缺省时读取侧回退到第一个根 Frame。
    */
-  readonly animation?: ComposePageAnimationReference | null
+  readonly defaultFrameId?: string | null
 }
 
 /** 页面文件解析问题的稳定机器码。 @public */
@@ -77,6 +78,7 @@ export type ComposePageFileIssueCode =
   | 'page.unsupported-version'
   | 'page.invalid-setup-reference'
   | 'page.invalid-animation-reference'
+  | 'page.invalid-default-frame'
   | DocumentValidationIssueCode
 
 /** 页面文件中一个可定位的问题。 @public */

@@ -46,21 +46,26 @@ function componentDocument(): ComposeDocument {
     childIds: [rectangle.id],
     size: { width: 120, height: 80 },
   })
+  // 组件根就地升格为 Frame：Component Asset v2 要求单根是 Frame。
   return {
     ...createEmptyComposePageDocument(),
-    output: {
-      width: 120,
-      height: 80,
-      backgroundPaint: { kind: 'solid', color: 'transparent' },
-    },
     rootIds: [group.id],
-    entities: { [group.id]: group, [rectangle.id]: rectangle },
+    entities: {
+      [group.id]: {
+        ...group,
+        components: {
+          ...group.components,
+          Frame: { size: { width: 120, height: 80 }, guides: [] },
+        },
+      },
+      [rectangle.id]: rectangle,
+    },
   }
 }
 
 function baseAsset(): ComposeBaseComponentAsset {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'card',
     name: 'Card',

@@ -163,7 +163,10 @@ export function PageSlotRenderer({
       </div>
     )
   }
-  if (state.page.document.rootIds.length === 0) {
+  // v7 的空白页面自带一个空的根 Frame：判空要看那块画板里有没有内容，而不是 rootIds。
+  const slotFrameId = state.page.defaultFrameId ?? state.page.document.rootIds[0]
+  const slotFrame = slotFrameId ? state.page.document.entities[slotFrameId] : undefined
+  if (!slotFrame || (getComposeHierarchy(slotFrame)?.childIds.length ?? 0) === 0) {
     return <Placeholder testId="compose-page-slot-empty">页面暂无内容</Placeholder>
   }
 

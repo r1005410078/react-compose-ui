@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import {
   createDefaultCanvasSettings,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
+  createComposeFrameEntity,
   createTransactionRuntime,
   type ComposeDocument,
 } from '@compose-ui/core'
@@ -33,11 +33,11 @@ afterEach(cleanup)
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: ['container'],
+    rootIds: ['frame-root'],
     entities: {
+      'frame-root': createComposeFrameEntity({ id: 'frame-root', childIds: ['container'] }),
       container: {
         id: 'container',
         name: 'Container',

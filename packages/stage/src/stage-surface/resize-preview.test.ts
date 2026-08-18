@@ -25,9 +25,8 @@ function entity(id: string, positioning: 'flow' | 'absolute', widthMode: 'fixed'
 
 function doc(entities: readonly ComposeEntity[]): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {} as ComposeDocument['canvas'],
-    output: { width: 800, height: 600 } as ComposeDocument['output'],
     rootIds: entities.map((item) => item.id),
     entities: Object.fromEntries(entities.map((item) => [item.id, item])),
   }
