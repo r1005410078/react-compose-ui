@@ -80,3 +80,12 @@ export async function expandInspectorSection(inspector: Locator, name: string) {
     await trigger.click()
   }
 }
+
+/**
+ * 选中根画板（Frame）。
+ *
+ * 画板边界只是装饰性 Overlay（`pointerEvents: none`），选中入口是画布上的标题标签。
+ */
+export async function selectRootFrame(editor: Locator) {
+  await editor.getByTestId('stage-container-label-frame-root').click()
+}

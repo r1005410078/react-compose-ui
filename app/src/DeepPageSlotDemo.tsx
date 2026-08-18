@@ -1,5 +1,6 @@
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import {
+  createComposeFrameEntity,
   createDefaultComposeLayoutItem,
   createEmptyComposePageDocument,
   type ComposeDocument,
@@ -52,8 +53,16 @@ function entity(
 function documentWith(entities: readonly ComposeEntity[]): ComposeDocument {
   return {
     ...createEmptyComposePageDocument(),
-    rootIds: entities.map(({ id }) => id),
-    entities: Object.fromEntries(entities.map((item) => [item.id, item])),
+    // v7 的文档根只接受 Frame；示例内容统一挂在这块画板下。
+    rootIds: ['frame-root'],
+    entities: {
+      'frame-root': createComposeFrameEntity({
+        id: 'frame-root',
+        name: '画板',
+        childIds: entities.map(({ id }) => id),
+      }),
+      ...Object.fromEntries(entities.map((item) => [item.id, item])),
+    },
   }
 }
 

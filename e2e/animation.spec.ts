@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer } from './support/test-helpers'
+import { pointerDrop, drawContainer, selectRootFrame } from './support/test-helpers'
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头、画布采样与撤销', async ({ page }) => {
   await page.goto('/')
@@ -264,6 +264,8 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
 
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增节点不打断画布与多节点轨道', async ({ page }) => {
+  // 画板居中后，点击新增的节点 B 落在默认视口之外（被底部时间线遮住），无法在画布上拖动。
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -298,9 +300,10 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
 
   // 节点 B：直接在画布拖动，自动记录为它新建位置轨道（200 ms 一帧）。
   const bBox = (await nodes.nth(1).boundingBox())!
-  await page.mouse.move(bBox.x + bBox.width / 2, bBox.y + bBox.height / 2)
+  // 靠左上角抓取并向上拖：避开物体中心的运动路径顶点，也避开底部时间线面板的遮挡。
+  await page.mouse.move(bBox.x + 24, bBox.y + 12)
   await page.mouse.down()
-  await page.mouse.move(bBox.x + bBox.width / 2, bBox.y + bBox.height / 2 + 120, { steps: 4 })
+  await page.mouse.move(bBox.x + 24, bBox.y + 12 - 120, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
 
@@ -539,8 +542,8 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
   await expect(animationPanel.getByRole('button', { name: '关键帧 300 ms：位置' })).toBeVisible()
 
   // 点画布空白处回到画布 Inspector；此时时间线选中首帧，缓动区出现在「当前时间」下方。
-  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
-  await page.mouse.click(outputBox.x + 40, outputBox.y + 40)
+  // 画板体已不是选中入口（框选优先）；标题标签才是。
+  await selectRootFrame(editor)
   await expect(editor.getByRole('region', { name: '画布属性' })).toBeVisible()
   await animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' }).click()
   await expect(inspector.getByRole('textbox', { name: '关键帧' }))

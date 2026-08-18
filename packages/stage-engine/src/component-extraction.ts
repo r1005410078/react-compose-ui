@@ -241,12 +241,18 @@ export function createComponentExtractionPlan(input: {
         ? {
             Composition: {
               ...rootComposition,
-              baseComponentKeys: baseComponentKeys.includes('Frame')
-                ? baseComponentKeys
-                : [...baseComponentKeys, 'Frame'],
+              baseComponentKeys: [
+                ...baseComponentKeys,
+                ...(baseComponentKeys.includes('Hierarchy') || rootEntity.components.Hierarchy
+                  ? []
+                  : ['Hierarchy']),
+                ...(baseComponentKeys.includes('Frame') ? [] : ['Frame']),
+              ],
             } as JsonObject,
           }
         : {}),
+      // Frame 必须同时是容器：复用单选叶子节点作组件根时，它可能还没有 Hierarchy。
+      ...(rootEntity.components.Hierarchy ? {} : { Hierarchy: { childIds: [] } }),
       Frame: createComposeFrame({ width: safeBounds.width, height: safeBounds.height }),
     },
   }

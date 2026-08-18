@@ -74,7 +74,8 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   })
 
   // Variant 使用自己的 Runtime。保存生成稳定 ID 操作；Revert 与 Apply 都显式消费当前层覆盖。
-  const variantChild = stage.locator('.compose-stage__scene .compose-stage__node.is-renderer').first()
+  // 组件根现在是 Frame（因此也是容器节点），复用单选叶子作根时它不再带 is-renderer。
+  const variantChild = stage.locator('.compose-stage__scene .compose-stage__node').first()
   await expect(variantChild).toBeVisible()
   await variantChild.click()
   await stage.press('ArrowRight')
@@ -169,7 +170,8 @@ test('OpenSpec: component-library / 离线快照与 revision 冲突 / 保留旧�
     '[data-workspace-panel="component-document"][data-component-kind="base"]',
   )
   await expect(componentPanel).toBeVisible()
-  const componentChild = stage.locator('.compose-stage__scene .compose-stage__node.is-renderer').first()
+  // 组件根现在是 Frame（容器节点）；复用单选叶子作根时不再带 is-renderer。
+  const componentChild = stage.locator('.compose-stage__scene .compose-stage__node').first()
   await componentChild.click()
   await stage.press('ArrowRight')
   const saveComponent = editor.getByRole('button', { name: '保存主组件 Resilient Card' })
@@ -260,9 +262,10 @@ test('OpenSpec: component-library / 实例层结构覆盖 / 内部删除写入�
   await dialog.getByRole('button', { name: '创建' }).click()
   await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
 
-  await sceneTree.getByRole('row').first().getByRole('button', { name: /展开/ }).click()
+  // 第 0 行是默认展开的根画板，实例从第 1 行开始。
   await sceneTree.getByRole('row').nth(1).getByRole('button', { name: /展开/ }).click()
-  await expect(sceneTree.getByRole('row')).toHaveCount(3)
+  await sceneTree.getByRole('row').nth(2).getByRole('button', { name: /展开/ }).click()
+  await expect(sceneTree.getByRole('row')).toHaveCount(4)
   await expect(stage.locator('[data-component-instance-entity-id]')).toHaveCount(3)
 
   // 内部子树是封闭编辑域：拖到宿主根等于移出实例，必须整体拒绝且结构不变。
@@ -277,12 +280,12 @@ test('OpenSpec: component-library / 实例层结构覆盖 / 内部删除写入�
     { steps: 6 },
   )
   await page.mouse.up()
-  await expect(sceneTree.getByRole('row')).toHaveCount(3)
+  await expect(sceneTree.getByRole('row')).toHaveCount(4)
 
   // 删除内部实体只写实例覆盖，渲染同步减少一个内部实体。
   await rectangleRow.click()
   await rectangleRow.press('Delete')
-  await expect(sceneTree.getByRole('row')).toHaveCount(2)
+  await expect(sceneTree.getByRole('row')).toHaveCount(3)
   await expect(stage.locator('[data-component-instance-entity-id]')).toHaveCount(2)
 })
 
@@ -389,10 +392,10 @@ test('OpenSpec: align-component-variant-with-unity / 实例 Apply 写回主组�
     .filter({ hasText: 'Apply Card' }).first().dblclick()
   await page.waitForTimeout(800)
   await expect(editor.locator('[data-workspace-panel="component-document"]')).toBeVisible()
-  const componentTree = editor.getByRole('treegrid', { name: '场景树' })
-  await componentTree.getByRole('row').first().click()
-  const componentInspector = editor.locator('[data-workspace-panel="inspector"]')
-  await expect(componentInspector.getByRole('spinbutton', { name: '圆角' })).toHaveValue('24')
+  // 组件根现在是 Frame，选中它打开的是 Frame Inspector（不含圆角），因此直接断言渲染结果。
+  await expect(
+    editor.locator('[data-workspace-panel="component-document"] .compose-stage__scene > .compose-stage__node'),
+  ).toHaveCSS('border-radius', '24px')
 
   // 第二实例应已同步（无冲突覆盖）。
   await editor.locator('[data-workspace-tab]').filter({ hasText: 'Home' }).click()

@@ -165,6 +165,8 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 空内容退出删除实�
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
 
   await stage.getByTestId('compose-material-text').dblclick()
+  // 编辑元素的聚焦推迟一帧以避开 pointer 默认动作；不等焦点落定就打字会丢按键。
+  await expect(stage.getByTestId('compose-material-text-editable')).toBeFocused()
   await page.keyboard.press('ControlOrMeta+a')
   await page.keyboard.press('Delete')
   await page.keyboard.press('Escape')

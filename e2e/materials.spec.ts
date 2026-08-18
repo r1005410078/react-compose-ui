@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, expandInspectorSection } from './support/test-helpers'
+import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, expandInspectorSection, selectRootFrame } from './support/test-helpers'
 
 test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边距', async ({ page }) => {
   await page.goto('/')
@@ -58,11 +58,14 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
   await inspector.getByRole('combobox', { name: '纵向溢出', exact: true })
     .selectOption('scroll')
   await expect(container.getByTestId('stage-overflow-indicator-y')).toBeVisible()
+  // 预览目标收敛为画板；容器在预览里是普通 Entity 节点，按实体 ID 定位。
+  const containerId = await container.getAttribute('data-entity-id')
+  expect(containerId).not.toBeNull()
   await editor.getByRole('button', { name: '打开预览' }).click()
   const dialog = page.getByRole('dialog', { name: '文档预览对话框' })
   await dialog.getByRole('combobox', { name: '预览缩放' }).selectOption('1')
-  await dialog.getByRole('button', { name: '选中容器' }).click()
-  const preview = dialog.getByTestId('compose-preview-container')
+  await dialog.getByRole('button', { name: '选中画板' }).click()
+  const preview = dialog.getByTestId(`compose-preview-entity-${containerId}`)
   await expect(preview).toHaveCSS('overflow-y', 'auto')
 
   const metrics = await preview.evaluate((element) => {
@@ -145,7 +148,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
   await stage.getByRole('button', { name: 'Add' }).click()
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
-  await stage.getByTestId('stage-frame-boundary-frame-root').click({ position: { x: 8, y: 8 } })
+  await selectRootFrame(editor)
   const canvasInspector = editor.getByRole('region', { name: '画布属性' })
   const pageScriptProperty = canvasInspector.locator('.property-panel__group')
     .filter({ hasText: '页面脚本' })
@@ -206,7 +209,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await pageTab.click()
   await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
   await expect(stage.getByRole('button', { name: 'Add' })).toBeVisible()
-  await stage.getByTestId('stage-frame-boundary-frame-root').click({ position: { x: 8, y: 8 } })
+  await selectRootFrame(editor)
   await expect(pageScriptProperty.getByRole('list', { name: '页面脚本返回成员' }))
     .toContainText('10')
   await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
@@ -250,7 +253,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await page.keyboard.press('Control+S')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
   await pageTab.click()
-  await stage.getByTestId('stage-frame-boundary-frame-root').click({ position: { x: 8, y: 8 } })
+  await selectRootFrame(editor)
   await expect(pageScriptProperty)
     .toContainText('页面脚本导入失败')
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
@@ -304,18 +307,19 @@ test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与�
 
   // 5) 预览中同样渲染
   await editor.getByRole('button', { name: '打开预览' }).click()
-  const preview = page.getByRole('dialog').or(page.getByTestId('compose-preview-document'))
+  const preview = page.getByRole('dialog').or(page.getByTestId('compose-preview-frame'))
   await expect(preview.getByTestId('compose-page-slot-content').first()).toBeVisible()
 })
 
 
 test('回归：Page Slot / A → B → Home 冷加载不会被 StrictMode 取消', async ({ page }) => {
   await page.goto('/?deep-page-slot')
-  const preview = page.getByTestId('compose-preview-document')
+  const preview = page.getByTestId('compose-preview-frame')
   await expect(page.getByTestId('deep-page-slot-demo')).toBeVisible()
   await expect(preview.getByTestId('compose-page-slot-content')).toHaveCount(3)
   await expect(preview.getByTestId('compose-page-slot-error')).toHaveCount(0)
-  await expect(preview.locator('[data-page-slot-entity-id]')).toHaveCount(4)
+  // 每个被引用页面的根 Frame 现在也是一个被渲染实体：3 个页面各多一层。
+  await expect(preview.locator('[data-page-slot-entity-id]')).toHaveCount(7)
 })
 
 
@@ -357,13 +361,14 @@ test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完�
 
   // 嵌套内容必须逐个实体渲染并各自定位；缺少定位包装或递归时数量会少于 3
   await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
-  await expect(stage.locator('[data-page-slot-entity-id]')).toHaveCount(3)
+  // 被引用页面的根 Frame 也参与渲染，因此是画板 + 三个实体。
+  await expect(stage.locator('[data-page-slot-entity-id]')).toHaveCount(4)
 
   await editor.getByRole('button', { name: '打开预览' }).click()
-  const previewDoc = page.getByTestId('compose-preview-document')
+  const previewDoc = page.getByTestId('compose-preview-frame')
   await expect(previewDoc).toBeVisible()
   // 与画布逐个实体一致：两端共用同一个 page-slot 渲染实现
-  await expect(previewDoc.locator('[data-page-slot-entity-id]')).toHaveCount(3)
+  await expect(previewDoc.locator('[data-page-slot-entity-id]')).toHaveCount(4)
 })
 
 
@@ -389,10 +394,10 @@ test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件�
   await dialog.getByRole('button', { name: '创建' }).click()
   await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
 
-  // 单选提取复用容器作为组件根，因此实例只有一层，展开即是内容。
-  await expect(sceneTree.getByRole('row')).toHaveCount(1)
+  // 单选提取复用容器作为组件根，因此实例只有一层，展开即是内容；另一行是根画板。
+  await expect(sceneTree.getByRole('row')).toHaveCount(2)
 
-  await sceneTree.getByRole('row').first().click()
+  await sceneTree.getByRole('row').last().click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   // 组件根的容器属性在实例上可见；名称与位置只出现一次，来自宿主实例。
   await expect(inspector).toContainText('外观')

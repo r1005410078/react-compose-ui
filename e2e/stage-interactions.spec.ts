@@ -130,7 +130,8 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
   const tree = editor.getByRole('treegrid', { name: '场景树' })
   const treeOrder = () => tree.locator('[data-scene-node-id]').evaluateAll((rows) =>
     rows.map((row) => row.getAttribute('data-scene-node-id')))
-  await expect.poll(treeOrder).toEqual([originalBackId, originalFrontId])
+  // 场景树的第一行是根画板，两个渲染节点是它的子级。
+  await expect.poll(treeOrder).toEqual(['frame-root', originalBackId, originalFrontId])
 
   await page.mouse.click(overlap.x, overlap.y)
   await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
@@ -147,7 +148,7 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
   })
   await sendToBack.click()
 
-  await expect.poll(treeOrder).toEqual([originalFrontId, originalBackId])
+  await expect.poll(treeOrder).toEqual(['frame-root', originalFrontId, originalBackId])
   await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
     .toHaveAttribute('aria-selected', 'true')
   await page.mouse.click(overlap.x, overlap.y)
@@ -155,13 +156,14 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
     .toHaveAttribute('aria-selected', 'true')
 
   await stage.press('Control+[')
-  await expect.poll(treeOrder).toEqual([originalBackId, originalFrontId])
+  // 场景树的第一行是根画板，两个渲染节点是它的子级。
+  await expect.poll(treeOrder).toEqual(['frame-root', originalBackId, originalFrontId])
   await page.mouse.click(overlap.x, overlap.y)
   await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
     .toHaveAttribute('aria-selected', 'true')
 
   await stage.press('Control+z')
-  await expect.poll(treeOrder).toEqual([originalFrontId, originalBackId])
+  await expect.poll(treeOrder).toEqual(['frame-root', originalFrontId, originalBackId])
   await page.mouse.click(overlap.x, overlap.y)
   await expect(tree.locator(`[data-scene-node-id="${originalBackId}"]`))
     .toHaveAttribute('aria-selected', 'true')
@@ -848,8 +850,9 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
     maxDiffPixelRatio: 0.01,
   })
   await stage.press('Control+g')
+  // 根画板自身也是容器节点，Group 后画板下多一层嵌套容器。
   await expect(stage.locator('.compose-stage__node.is-container .compose-stage__node.is-container'))
-    .toHaveCount(1)
+    .toHaveCount(2)
   await expect(editor).toHaveScreenshot('stage-workspace-nested-frame.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -957,7 +960,8 @@ test('OpenSpec: stage / 顶层容器标题标签 / 标签选中重命名且容�
     x: frameBox.x + frameBox.width * 0.3,
     y: frameBox.y + frameBox.height * 0.3,
   })
-  const label = editor.locator('[data-testid^="stage-container-label-"]')
+  // 根画板同样带标题标签；这里只断言被测的普通容器。
+  const label = editor.locator('[data-testid^="stage-container-label-"]:not([data-testid$="frame-root"])')
   await expect(label).toHaveText('Container')
 
   // 点容器空白处不再选中容器；空白处拖动起框并选中其中的子项。

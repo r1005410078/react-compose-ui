@@ -441,7 +441,7 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
   await page.getByRole('dialog', { name: '文档预览对话框' })
     .getByRole('combobox', { name: '预览缩放' })
     .selectOption('1')
-  const preview = page.getByTestId('compose-preview-document')
+  const preview = page.getByTestId('compose-preview-frame')
   const previewTextBox = await preview.getByText('Text', { exact: true }).boundingBox()
   expect(previewTextBox).not.toBeNull()
   expect(previewTextBox!.width).toBeCloseTo(stageTextBox!.width, 0)

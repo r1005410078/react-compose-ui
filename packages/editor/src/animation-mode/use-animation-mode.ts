@@ -231,11 +231,14 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     }
   }, [animationId, dispatchDraft])
 
+  // 清单级命令（create/delete/configure）必须带宿主 Frame：v7 的动画清单归属 Frame，
+  // handler 不接受沉默回退到"第一个根 Frame"。
   const hydrateAnimation = useCallback((manifest: ComposeAnimation) => {
     // create 命令不接收 bindings：绑定经 configure 补写，与 create 共享 mergeKey
     // 合成一次事务，撤销时清单与绑定一起消失。
     const mergeKey = `animation-hydrate:${manifest.id}`
     dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
+      frameId: hostFrameId ?? '',
       animationId: manifest.id,
       name: manifest.name,
       durationMs: manifest.durationMs,
@@ -243,15 +246,19 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     }, mergeKey)
     if (manifest.bindings) {
       dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+        frameId: hostFrameId ?? '',
         animationId: manifest.id,
         bindings: manifest.bindings as JsonValue,
       }, mergeKey)
     }
-  }, [dispatchDraft])
+  }, [dispatchDraft, hostFrameId])
 
   const removeAnimation = useCallback((targetAnimationId: string) => {
-    dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.delete, { animationId: targetAnimationId })
-  }, [dispatchDraft])
+    dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.delete, {
+      frameId: hostFrameId ?? '',
+      animationId: targetAnimationId,
+    })
+  }, [dispatchDraft, hostFrameId])
 
   const displayDocument = useMemo(() => {
     if (!active || !document || !animationId) return document

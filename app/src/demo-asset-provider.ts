@@ -6,6 +6,7 @@ import {
   COMPOSE_PAGE_MEDIA_TYPE,
   createDefaultComposeLayoutItem,
   createEmptyComposeAppManifest,
+  createComposeFrameEntity,
   createEmptyComposePageDocument,
   createEmptyComposePageFile,
   serializeComposeAppManifest,
@@ -74,8 +75,14 @@ function createDemoBitmap() {
 
 const demoCounterDocument: ComposeDocument = {
   ...createEmptyComposePageDocument(),
-  rootIds: ['demo-counter-value', 'demo-counter-button'],
+  rootIds: ['frame-root'],
   entities: {
+    // v7 的文档根只接受 Frame；示例内容挂在这块画板下。
+    'frame-root': createComposeFrameEntity({
+      id: 'frame-root',
+      name: '画板',
+      childIds: ['demo-counter-value', 'demo-counter-button'],
+    }),
     'demo-counter-value': {
       id: 'demo-counter-value',
       name: 'Counter value',

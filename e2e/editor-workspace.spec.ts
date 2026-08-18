@@ -67,6 +67,7 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
+  const framePaint = stage.locator('[data-entity-id="frame-root"] > [data-compose-paint]').first()
   const xAxis = stage.getByTestId('stage-origin-x')
   const yAxis = stage.getByTestId('stage-origin-y')
   const bottomEdge = stage.getByTestId('stage-frame-edge-bottom-frame-root')
@@ -181,8 +182,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await canvasPaintPicker.getByRole('button', { name: '图片', exact: true }).click()
   await expect(canvasPaintPicker.getByRole('button', { name: 'compose-grid.svg' })).toBeVisible()
   await canvasPaintPicker.getByRole('button', { name: 'compose-grid.svg' }).click()
-  await expect(stage.getByTestId('stage-output-paint'))
-    .toHaveAttribute('data-compose-output-paint', 'image')
+  await expect(framePaint)
+    .toHaveAttribute('data-compose-paint', 'image')
   await expect(canvasPaintPicker.getByRole('checkbox', { name: '叠加颜色' })).toBeChecked()
   await canvasPaintPicker.getByRole('button', { name: '适应', exact: true }).click()
   await expect(canvasPaintPicker.getByRole('button', { name: '适应', exact: true }))
@@ -216,8 +217,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#8b5cf6"/></svg>'),
   })
-  await expect(stage.getByTestId('stage-output-paint'))
-    .toHaveAttribute('data-compose-output-paint', 'image')
+  await expect(framePaint)
+    .toHaveAttribute('data-compose-paint', 'image')
   await expectCompactPaintPicker()
 
   await canvasPaintPicker.getByRole('button', { name: '渐变', exact: true }).click()
@@ -228,8 +229,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await expect(canvasPaintPicker.getByRole('button', { name: '角向', exact: true })).toBeVisible()
   await canvasPaintPicker.getByRole('button', { name: '线性', exact: true }).click()
   await expect(canvasPaintPicker.getByLabel('渐变色标轨道')).toBeVisible()
-  await expect(stage.getByTestId('stage-output-paint'))
-    .toHaveAttribute('data-compose-output-paint', 'linear-gradient')
+  await expect(framePaint)
+    .toHaveAttribute('data-compose-paint', 'linear-gradient')
   await expect(editor).toHaveScreenshot('stage-workspace-canvas-color-picker.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -260,8 +261,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await expect(canvasPaintPicker.getByRole('spinbutton', { name: '角度' })).toHaveValue('90')
 
   await canvasPaintPicker.getByRole('button', { name: '径向', exact: true }).click()
-  await expect(stage.getByTestId('stage-output-paint'))
-    .toHaveAttribute('data-compose-output-paint', 'radial-gradient')
+  await expect(framePaint)
+    .toHaveAttribute('data-compose-paint', 'radial-gradient')
   await expect(canvasPaintPicker.getByRole('slider', { name: '方向角度' })).toHaveCount(0)
   await canvasPaintPicker.getByRole('spinbutton', { name: '中心 X' }).fill('65')
   await canvasPaintPicker.getByRole('spinbutton', { name: '垂直半径' }).fill('35')
@@ -271,8 +272,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await expectPaintCardsContained()
 
   await canvasPaintPicker.getByRole('button', { name: '角向', exact: true }).click()
-  await expect(stage.getByTestId('stage-output-paint'))
-    .toHaveAttribute('data-compose-output-paint', 'angular-gradient')
+  await expect(framePaint)
+    .toHaveAttribute('data-compose-paint', 'angular-gradient')
   await canvasPaintPicker.getByRole('spinbutton', { name: '角度' }).fill('135')
   await expect(canvasPaintPicker.getByRole('slider', { name: '方向角度' }))
     .toHaveAttribute('aria-valuenow', '135')
@@ -506,8 +507,8 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
-  await preview.getByRole('button', { name: '选中容器' }).click()
-  await expect(preview.getByTestId('compose-preview-container')).toBeVisible()
+  await preview.getByRole('button', { name: '选中画板' }).click()
+  await expect(preview.getByTestId('compose-preview-frame')).toBeVisible()
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
   await expect(previewRegion).toHaveScreenshot('frame-preview.png', {
     animations: 'disabled',

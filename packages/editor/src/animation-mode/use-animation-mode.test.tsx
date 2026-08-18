@@ -104,7 +104,8 @@ describe('useAnimationMode', () => {
     expect(dispatched).toHaveLength(1)
     expect(dispatched[0]).toMatchObject({
       type: 'animation.create',
-      payload: { animationId: 'intro', name: '动画 1', durationMs: 300 },
+      // frameId 必不可缺：v7 的清单归属 Frame，handler 不接受回退。
+      payload: { frameId: ROOT_FRAME_ID, animationId: 'intro', name: '动画 1', durationMs: 300 },
       meta: { source: 'animation-mode' },
     })
   })
@@ -122,7 +123,7 @@ describe('useAnimationMode', () => {
     expect(dispatched[0]).toMatchObject({ type: 'animation.create' })
     expect(dispatched[1]).toMatchObject({
       type: 'animation.configure',
-      payload: { animationId: 'intro' },
+      payload: { frameId: ROOT_FRAME_ID, animationId: 'intro' },
     })
     // 共享 mergeKey：创建与绑定合成一次可撤销事务。
     expect(dispatched[0]?.meta?.mergeKey).toBeDefined()
@@ -135,7 +136,7 @@ describe('useAnimationMode', () => {
     expect(dispatched).toHaveLength(1)
     expect(dispatched[0]).toMatchObject({
       type: 'animation.delete',
-      payload: { animationId: 'intro' },
+      payload: { frameId: ROOT_FRAME_ID, animationId: 'intro' },
     })
   })
 
