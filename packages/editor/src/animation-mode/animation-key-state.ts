@@ -54,12 +54,13 @@ export function isAnimationPathAvailable(
  */
 export function getAnimationKeyState(
   document: ComposeDocument,
+  frameId: string,
   animationId: string,
   entityId: string,
   path: readonly (string | number)[],
   playheadMs: number,
 ): AnimationKeyState {
-  if (!findComposeAnimation(document, animationId)) return 'unavailable'
+  if (!findComposeAnimation(document, frameId, animationId)) return 'unavailable'
   if (!isAnimationPathAvailable(document, entityId, path)) return 'unavailable'
   const entity = document.entities[entityId]
   if (!entity) return 'unavailable'

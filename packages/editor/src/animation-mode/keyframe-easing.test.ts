@@ -1,3 +1,4 @@
+import { createComposeFrameEntity } from '@compose-ui/core'
 import type { ComposeDocument, ComposeEntity, JsonObject } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import { encodeAnimationKeyframeId } from './animation-document-adapter'
@@ -49,16 +50,20 @@ function entity(animation?: JsonObject): ComposeEntity {
 
 function documentWith(target: ComposeEntity): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1920, height: 1080, backgroundPaint: { kind: 'solid', color: '#ffffff' } },
-    rootIds: [target.id],
-    entities: { [target.id]: target },
-    animations: [{ id: 'intro', name: '入场', durationMs: 300, playbackMode: 'play-once' }],
+    rootIds: ['frame-root'],
+    entities: {
+      [target.id]: target,
+      'frame-root': createComposeFrameEntity({
+        id: 'frame-root',
+        childIds: [target.id],
+        animations: [{ id: 'intro', name: '入场', durationMs: 300, playbackMode: 'play-once' }],
+      }),
+    },
   }
 }
 

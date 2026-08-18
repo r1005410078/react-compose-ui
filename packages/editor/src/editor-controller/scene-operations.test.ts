@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
+  createComposeFrameEntity,
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
   getComposeLayoutItem,
   getComposeSpatialTransform,
   type ComposeDocument,
@@ -56,13 +56,20 @@ function entity(
   }
 }
 
+/** v7 的文档根只接受 Frame。 */
+const ROOT_FRAME_ID = 'frame-root'
+
 function documentFixture(): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: ['dashboard'],
+    rootIds: [ROOT_FRAME_ID],
     entities: {
+      [ROOT_FRAME_ID]: createComposeFrameEntity({
+        id: ROOT_FRAME_ID,
+        name: '画板',
+        childIds: ['dashboard'],
+      }),
       dashboard: entity('dashboard', {
         Transform: transform(40, 30, 800, 600),
         Hierarchy: { childIds: ['title'] },
@@ -262,8 +269,9 @@ describe('planSceneOperation', () => {
       parentId: null,
       index: 0,
     })
+    // 场景树的"根级"翻译为文档中的第一块画板：v7 的文档根只放 Frame。
     expect(plan.command.payload).toMatchObject({
-      parentId: null,
+      parentId: ROOT_FRAME_ID,
       index: 0,
     })
   })

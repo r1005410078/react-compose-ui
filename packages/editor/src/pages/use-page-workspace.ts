@@ -233,17 +233,36 @@ export function usePageWorkspace({
       let animationEntryId: string | undefined
       let animationRevision: string | undefined
       let animationManifest: ComposeAnimation | undefined
-      if (snapshot.page.animation) {
+      // v7 的动画清单归属 Frame：绑定引用在默认 Frame 的 Animations.source 上。
+      const animationFrameId = snapshot.page.defaultFrameId ?? document.rootIds[0] ?? null
+      const animationSource = animationFrameId
+        ? (document.entities[animationFrameId]?.components.Animations as
+            { source?: ComposePageAnimationReference } | undefined)?.source
+        : undefined
+      if (animationSource && animationFrameId) {
         try {
           const loaded = await loadPageAnimation(
             provider,
             entry.parentId ?? provider.root.id,
-            snapshot.page.animation,
+            animationSource,
           )
           animationEntryId = loaded.entryId
           animationRevision = loaded.revision
           animationManifest = loaded.file.animation
-          document = { ...document, animations: [loaded.file.animation] }
+          const frame = document.entities[animationFrameId]!
+          document = {
+            ...document,
+            entities: {
+              ...document.entities,
+              [animationFrameId]: {
+                ...frame,
+                components: {
+                  ...frame.components,
+                  Animations: { source: animationSource, items: [loaded.file.animation] },
+                },
+              },
+            },
+          }
         }
         catch (error) {
           console.warn('[compose-editor] 绑定动画文件加载失败，使用页面内嵌镜像', error)
@@ -276,6 +295,7 @@ export function usePageWorkspace({
         dirty: false,
         save: null,
         animationEntryId,
+        animationFrameId: animationFrameId ?? undefined,
         animationRevision,
         animationManifest,
       }
@@ -322,9 +342,10 @@ export function usePageWorkspace({
     }
     // 动画文件是静态权威：页面保存后把镜像清单的变化回写文件。镜像被撤销移除时
     // 只跳过回写，不删除文件——解除绑定才是删除引用的入口。
-    const mirror = getComposeAnimations(documentAtSave)
-      .find((item) => item.id === session.animationManifest?.id)
-      ?? getComposeAnimations(documentAtSave)[0]
+    const mirrorFrameId = session.animationFrameId ?? documentAtSave.rootIds[0] ?? null
+    const mirrorItems = mirrorFrameId ? getComposeAnimations(documentAtSave, mirrorFrameId) : []
+    const mirror = mirrorItems.find((item) => item.id === session.animationManifest?.id)
+      ?? mirrorItems[0]
     if (session.animationEntryId !== undefined && mirror !== undefined
       && JSON.stringify(mirror) !== JSON.stringify(session.animationManifest)) {
       try {
@@ -408,13 +429,19 @@ export function usePageWorkspace({
       )
     }
     const expectedRevision = session ? session.baseRevision : (await store.readPage(pageKey)).revision
-    const written = await store.setPageAnimation(pageKey, reference, expectedRevision)
+    const targetFrameId = session?.animationFrameId
+      ?? session?.page.defaultFrameId
+      ?? session?.page.document.rootIds[0]
+      ?? (await store.readPage(pageKey)).page.document.rootIds[0]
+    if (!targetFrameId) throw new ComposeAssetError('unsupported', '页面没有可绑定动画的 Frame')
+    const written = await store.setFrameAnimation(pageKey, targetFrameId, reference, expectedRevision)
     if (session) {
       updateSession(session.panelId, (current) => ({
         ...current,
         page: written.page,
         baseRevision: written.revision,
         animationEntryId: loaded?.entryId,
+        animationFrameId: targetFrameId,
         animationRevision: loaded?.revision,
         animationManifest: loaded?.file.animation,
       }))

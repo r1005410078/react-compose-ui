@@ -307,7 +307,8 @@ function ComposePreviewReady({
   fit = 'none',
   alignment = 'center',
   // 采样由上层的 useComposeAnimationPlayback 消费；这里只负责不要把它透传到 DOM。
-  animationTimeMs: _animationTimeMs,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 仅用于从 props 中剥离
+  animationTimeMs,
   ...props
 }: ComposePreviewProps & {
   readonly document: ComposeDocument

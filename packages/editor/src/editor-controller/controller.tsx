@@ -21,6 +21,8 @@ import {
   zoomViewportAt,
 } from '@compose-ui/stage-engine'
 import {
+  COMPOSE_COMPONENT_SCHEMA_VERSION,
+  getComposeFrame,
   BUILTIN_COMMAND_TYPES,
   composeInstancePathHostId,
   createTransactionRuntime,
@@ -94,7 +96,7 @@ import { DefaultStageToolbar } from '../stage-toolbar'
 import { createViewportStore } from './viewport-store'
 import { useComposeEditorLayout } from './use-layout-runtime'
 
-type InspectionTarget = 'entities' | 'output' | null
+type InspectionTarget = 'entities' | null
 type ShapeDrawingTool = 'draw-rectangle' | 'draw-line' | 'draw-arrow' | 'draw-circle'
 
 function isShapeDrawingTool(tool: ComposeStageTool): tool is ShapeDrawingTool {
@@ -277,24 +279,32 @@ function applyInstanceInnerCommands(
   if (!diff.ok) return false
   const renderer = host.components.Renderer
   if (!renderer) return false
-  // 同步 snapshot.output 到内层文档根 fixed 尺寸，嵌套 Layout Runtime 以 output 为画布。
+  // 同步组件根 Frame 的尺寸到根 fixed LayoutItem：嵌套 Layout Runtime 以 Frame.size 为画布。
   const nextInner = innerRuntime.document
   const rootId = nextInner.rootIds[0]
   const root = rootId ? nextInner.entities[rootId] : undefined
   let nextSnapshotDocument = facts.snapshot.document
-  if (root) {
+  if (root && rootId) {
     const rootItem = getComposeLayoutItem(root)
-    if (rootItem.width.mode === 'fixed' || rootItem.height.mode === 'fixed') {
+    const snapshotRoot = facts.snapshot.document.entities[rootId]
+    const snapshotFrame = getComposeFrame(snapshotRoot)
+    if (snapshotRoot && snapshotFrame
+      && (rootItem.width.mode === 'fixed' || rootItem.height.mode === 'fixed')) {
+      const size = {
+        width: rootItem.width.mode === 'fixed' ? rootItem.width.value : snapshotFrame.size.width,
+        height: rootItem.height.mode === 'fixed' ? rootItem.height.value : snapshotFrame.size.height,
+      }
       nextSnapshotDocument = {
         ...facts.snapshot.document,
-        output: {
-          ...facts.snapshot.document.output,
-          width: rootItem.width.mode === 'fixed'
-            ? rootItem.width.value
-            : facts.snapshot.document.output.width,
-          height: rootItem.height.mode === 'fixed'
-            ? rootItem.height.value
-            : facts.snapshot.document.output.height,
+        entities: {
+          ...facts.snapshot.document.entities,
+          [rootId]: {
+            ...snapshotRoot,
+            components: {
+              ...snapshotRoot.components,
+              Frame: { ...snapshotFrame, size },
+            },
+          },
         },
       }
     }
@@ -1045,7 +1055,8 @@ export function useComposeEditorController({
   const document = snapshot.document
   const [selectedIds, setSelectedIdsState] = useState<readonly string[]>(() =>
     validSelection(document, initialSelection))
-  const [inspectionTarget, setInspectionTarget] = useState<InspectionTarget>(() =>
+  // Inspector 目标完全由选择决定：v7 没有"不进入文档的 output 检查目标"这一说。
+  const [, setInspectionTarget] = useState<InspectionTarget>(() =>
     validSelection(document, initialSelection).length > 0 ? 'entities' : null)
   const [expandedIds, setExpandedIdsState] = useState<readonly string[]>(() =>
     validExpanded(document, initialExpandedIds))
@@ -1181,16 +1192,6 @@ export function useComposeEditorController({
       setPaintSampling(null)
     }
   }, [document])
-  const selectOutput = useCallback(() => {
-    setSelectedIdsState([])
-    setInspectionTarget('output')
-    setPaintEditing(null)
-    setPaintSampling(null)
-  }, [])
-  const resolvedInspectionTarget = inspectionTarget === 'entities'
-    && selectedIds.length === 0
-    ? null
-    : inspectionTarget
   const setExpandedIds = useCallback((ids: readonly string[]) => {
     setExpandedIdsState(unique(ids))
   }, [])
@@ -1244,7 +1245,7 @@ export function useComposeEditorController({
       return { status: 'unavailable', reason: extraction.reason }
     }
     const asset: ComposeBaseComponentAsset = {
-      schemaVersion: 1,
+      schemaVersion: COMPOSE_COMPONENT_SCHEMA_VERSION,
       kind: 'base',
       componentId,
       name: input.name.trim(),
@@ -1486,8 +1487,7 @@ export function useComposeEditorController({
     onSelectedIdsChange: setSelectedIds,
     onEntityRename: renameEntity,
     onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
-    outputSelected: resolvedInspectionTarget === 'output',
-    onOutputSelect: selectOutput,
+    defaultFrameId: document.rootIds[0] ?? null,
     onSurfaceSizeChange: setSurfaceSize,
     interactionController,
     paintEditing: activePaintEditing,
@@ -1511,10 +1511,8 @@ export function useComposeEditorController({
     setTool,
     sceneTreeCommands.clipboard,
     selectedIds,
-    resolvedInspectionTarget,
     setSelectedIds,
     renameEntity,
-    selectOutput,
     interactionController,
     nextId,
     activePaintEditing,
@@ -1745,12 +1743,16 @@ export function useComposeEditorController({
     />
   )
 
-  const inspectorPanel = resolvedInspectionTarget === 'output' ? (
-    // 输出配置会在色盘拖动的每个采样点更新。不能以输出值作为 key，
-    // 否则会卸载活跃的 ColorPicker 并中断原生 pointer 手势。
+  // Frame 是普通 Entity 选择目标：选中它就打开 Frame Inspector（尺寸、背景、脚本、动画）。
+  // 不能以尺寸或背景值作为 key，否则色盘拖动的每个采样点都会卸载活跃的 ColorPicker。
+  const selectedFrameId = selectedEntity && getComposeFrame(selectedEntity)
+    ? selectedEntity.id
+    : null
+  const inspectorPanel = selectedFrameId ? (
     <CanvasInspector
       dispatch={dispatch}
       document={document}
+      frameId={selectedFrameId}
       idFactory={nextId}
     />
   ) : instanceInnerSelection ? (

@@ -115,6 +115,8 @@ export interface ComposePageDocumentSession extends ComposeDocumentSessionBase {
   readonly savedRevisionId: number
   /** 绑定动画文件的 Provider 条目 ID；未绑定或文件加载失败时为 undefined。 */
   readonly animationEntryId: string | undefined
+  /** 持有该动画绑定的 Frame；v7 的清单归属 Frame。 */
+  readonly animationFrameId: string | undefined
   /** 绑定动画文件最近一次读写的 revision，用于保存回写的乐观并发。 */
   readonly animationRevision: string | undefined
   /** 动画文件当前落盘的清单基线；保存时与文档镜像比较判断是否需要回写。 */

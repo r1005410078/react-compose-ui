@@ -6,6 +6,7 @@ import {
 } from '@compose-ui/animation'
 import {
   BUILTIN_COMMAND_TYPES,
+  createComposeFrameEntity,
   createTransactionRuntime,
   getComposeLayoutItem,
 } from '@compose-ui/core'
@@ -49,18 +50,25 @@ const movingClips = {
   },
 } as unknown as JsonObject
 
+/** 动画清单归属 Frame。 */
+const FRAME_ID = 'frame-root'
+
 function documentWith(entities: Readonly<Record<string, ComposeEntity>>): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1920, height: 1080, backgroundPaint: { kind: 'solid', color: '#ffffff' } },
-    rootIds: Object.keys(entities),
-    entities,
-    animations: [{ id: 'intro', name: '入场', durationMs: 400, playbackMode: 'play-once' }],
+    rootIds: [FRAME_ID],
+    entities: {
+      ...entities,
+      [FRAME_ID]: createComposeFrameEntity({
+        id: FRAME_ID,
+        childIds: Object.keys(entities),
+        animations: [{ id: 'intro', name: '入场', durationMs: 400, playbackMode: 'play-once' }],
+      }),
+    },
   }
 }
 
@@ -73,6 +81,7 @@ function createRuntime(document: ComposeDocument) {
 
 let seq = 0
 const context = (playheadMs: number) => ({
+  frameId: FRAME_ID,
   animationId: 'intro',
   playheadMs,
   idFactory: () => `rewrite-${seq += 1}`,

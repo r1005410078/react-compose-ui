@@ -112,10 +112,11 @@ function toPanelProperty(
  */
 export function buildAnimationPanelModel(
   document: ComposeDocument,
+  frameId: string,
   animationId: string,
   options?: { readonly propertyLabel?: AnimationPropertyLabelPort },
 ): ComposeAnimationPanelModel {
-  const animation = findComposeAnimation(document, animationId)
+  const animation = findComposeAnimation(document, frameId, animationId)
   if (!animation) return { durationMs: 300, tracks: [] }
   return {
     durationMs: animation.durationMs,

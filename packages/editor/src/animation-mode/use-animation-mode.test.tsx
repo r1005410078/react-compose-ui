@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { createComposeFrameEntity } from '@compose-ui/core'
 import type { ComposeDocument, ComposeEntity, EditorCommand, JsonObject } from '@compose-ui/core'
 import { useAnimationMode } from './use-animation-mode'
 
@@ -40,23 +41,37 @@ const movingClips = {
   },
 } as unknown as JsonObject
 
+/** v7 的文档根只接受 Frame。 */
+const ROOT_FRAME_ID = 'frame-root'
+
 function documentWith(
   entities: Readonly<Record<string, ComposeEntity>>,
   hasAnimation = true,
 ): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1920, height: 1080, backgroundPaint: { kind: 'solid', color: '#ffffff' } },
-    rootIds: Object.keys(entities),
-    entities,
-    ...(hasAnimation
-      ? { animations: [{ id: 'intro', name: '入场', durationMs: 300, playbackMode: 'play-once' as const }] }
-      : {}),
+    rootIds: [ROOT_FRAME_ID],
+    entities: {
+      ...entities,
+      [ROOT_FRAME_ID]: createComposeFrameEntity({
+        id: ROOT_FRAME_ID,
+        childIds: Object.keys(entities),
+        ...(hasAnimation
+          ? {
+              animations: [{
+                id: 'intro',
+                name: '入场',
+                durationMs: 300,
+                playbackMode: 'play-once' as const,
+              }],
+            }
+          : {}),
+      }),
+    },
   }
 }
 

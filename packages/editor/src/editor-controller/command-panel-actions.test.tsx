@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
+  createComposeFrameEntity,
   createDefaultCanvasSettings,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
   createTransactionRuntime,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
@@ -14,13 +14,16 @@ import { isEditableKeyboardTarget } from '../editor-preferences'
 
 afterEach(cleanup)
 
+/** v7 的文档根只接受 Frame。 */
+const ROOT_FRAME_ID = 'frame-root'
+
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: ['a'],
+    rootIds: [ROOT_FRAME_ID],
     entities: {
+      [ROOT_FRAME_ID]: createComposeFrameEntity({ id: ROOT_FRAME_ID, childIds: ['a'] }),
       a: {
         id: 'a',
         name: 'Container',
@@ -142,15 +145,23 @@ describe('CommandPanelWithActions', () => {
     }
     const document = {
       ...value,
-      rootIds: ['a', 'b'],
-      entities: { ...value.entities, b: second },
+      entities: {
+        ...value.entities,
+        b: second,
+        [ROOT_FRAME_ID]: createComposeFrameEntity({
+          id: ROOT_FRAME_ID,
+          childIds: ['a', 'b'],
+        }),
+      },
     }
     const { input, runtime } = renderPanel({ document, selectedIds: ['a'] })
 
     fireEvent.change(input, { target: { value: '前移一层' } })
     fireEvent.click(screen.getByRole('option', { name: /前移一层/ }))
 
-    expect(runtime.document.rootIds).toEqual(['b', 'a'])
+    const rootChildIds = (runtime.document.entities[ROOT_FRAME_ID]?.components.Hierarchy as
+      { childIds?: readonly string[] } | undefined)?.childIds
+    expect(rootChildIds).toEqual(['b', 'a'])
   })
 
   it('OpenSpec: editor-preferences / 编辑器动作目录 / 不可用动作在面板中展示原因', () => {

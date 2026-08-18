@@ -40,6 +40,7 @@ import {
   ComposePaintImageLibraryProvider,
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
+import { resolveActiveFrameId } from '@compose-ui/stage-engine'
 import type { ComposePageAnimationReference, ComposePageSetupReference } from '@compose-ui/core'
 import type { ComposeEntity, ComposeResolvedComponentSnapshot, EditorCommand, JsonObject } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
@@ -474,12 +475,14 @@ export function ComposeEditor({
       return
     }
     setCommandRewrite((document, command) => rewriteAutoRecordCommand(document, {
+      // 动画清单归属 Frame；自动记录写回的是活动 Frame 的那条动画。
+      frameId: resolveActiveFrameId(document, controller?.selectedIds ?? []) ?? '',
       animationId: autoRecordAnimationId,
       playheadMs: autoRecordPlayheadMs,
       idFactory: animationCommandId,
     }, command))
     return () => setCommandRewrite(null)
-  }, [autoRecordAnimationId, autoRecordPlayheadMs, setCommandRewrite])
+  }, [autoRecordAnimationId, autoRecordPlayheadMs, controller?.selectedIds, setCommandRewrite])
   // onReady 只执行一次，闭包里不能捕获会随渲染更新的 animationMode。
   const animationModeRef = useRef(animationMode)
   useEffect(() => {
@@ -1373,11 +1376,33 @@ export function ComposeEditor({
     pageProvider,
   ])
 
+  /**
+   * 活动页面当前 Frame 的动画文件引用。
+   *
+   * @remarks
+   * v7 的绑定挂在 Frame 的 `Animations.source` 上；这里读会话文档而不是页面文件，
+   * 保证水合与解绑之后立即反映。
+   */
+  const activePageFrameAnimationSource = useMemo(() => {
+    const document = activePageSession?.page.document
+    if (!document) return null
+    const frameId = activePageSession?.animationFrameId
+      ?? activePageSession?.page.defaultFrameId
+      ?? document.rootIds[0]
+    if (!frameId) return null
+    const animations = document.entities[frameId]?.components.Animations as
+      { source?: ComposePageAnimationReference } | undefined
+    return animations?.source ?? null
+  }, [activePageSession])
+
   const { selectedKeyframeEasing, setKeyframeInterpolation } = animationMode
   const animationInspector = useMemo(() => {
     if (!activePageSession || !pageProvider) return undefined
-    const mirrorAnimation = controller?.document
-      ? getComposeAnimations(controller.document)[0] ?? null
+    const animationFrameId = controller?.document
+      ? resolveActiveFrameId(controller.document, controller.selectedIds)
+      : null
+    const mirrorAnimation = controller?.document && animationFrameId
+      ? getComposeAnimations(controller.document, animationFrameId)[0] ?? null
       : null
     return (
       <PageAnimationScopePanel
@@ -1396,11 +1421,12 @@ export function ComposeEditor({
         pageName={activePageSession.displayName}
         pageParentId={activePageSession.entry.parentId ?? pageProvider.root.id}
         provider={pageProvider}
-        reference={activePageSession.page.animation ?? null}
+        reference={activePageFrameAnimationSource ?? null}
         scope={activePageSession.scriptScope}
       />
     )
   }, [
+    activePageFrameAnimationSource,
     activePageSession,
     animationMode.active,
     animationRuntime,
@@ -1597,12 +1623,15 @@ export function ComposeEditor({
       && animationMode.panelValue?.selectedClipId
       && controller
     ) {
-      const animation = getComposeAnimations(controller.document)
-        .find((item) => item.id === animationMode.animationId)
+      const inspectorFrameId = resolveActiveFrameId(controller.document, controller.selectedIds)
+      const animation = (inspectorFrameId
+        ? getComposeAnimations(controller.document, inspectorFrameId)
+        : []).find((item) => item.id === animationMode.animationId)
       if (animation && animationRuntime) {
         return (
           <AnimationInspector
             animation={animation}
+            frameId={inspectorFrameId ?? ''}
             dispatch={(command) => animationRuntime.dispatch(command)}
             idFactory={animationCommandId}
             messages={editorMessages.animationMode}
@@ -1839,13 +1868,19 @@ export function ComposeEditor({
       return
     }
     // 打开页面时文件加载失败会让会话没有基线清单：按当前引用重新加载一次。
-    const reference = activePageSession?.page.animation
+    const reference = activePageFrameAnimationSource
     if (activePageSession && reference) {
       void handlePageAnimationChanged(activePageSession.pageKey, reference).catch(() => {
         setPageNotice(animationModeMessages.animationOperationFailed)
       })
     }
-  }, [activePageSession, animationModeMessages, handlePageAnimationChanged, hydrateAnimation])
+  }, [
+    activePageFrameAnimationSource,
+    activePageSession,
+    animationModeMessages,
+    handlePageAnimationChanged,
+    hydrateAnimation,
+  ])
 
   /** 外层 Dockview 就绪：只需要建立中央面板（内层 Dockview 的宿主）和 bottom Edge Group。 */
   const handleOuterReady = useCallback((event: DockviewReadyEvent) => {
@@ -1948,7 +1983,7 @@ export function ComposeEditor({
       // 并绑定当前页面）；其余宿主（纯插槽、组件文档）看到中性提示。
       animationEmptyState: (() => {
         if (!controller) return undefined
-        if (activePageSession?.page.animation && animationMode.animationId === null) {
+        if (activePageFrameAnimationSource && animationMode.animationId === null) {
           return (
             <div className="compose-editor__animation-empty">
               <p>{editorMessages.animationMode.mirrorMissing}</p>

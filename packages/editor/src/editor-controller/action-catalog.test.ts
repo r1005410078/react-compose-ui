@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createDefaultCanvasSettings,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
   type CommandDispatchResult,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
@@ -38,9 +37,8 @@ function entity(id: string) {
 
 function fixture(): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
     rootIds: ['a', 'b'],
     entities: { a: entity('a'), b: entity('b') },
   }

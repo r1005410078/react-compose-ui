@@ -117,14 +117,23 @@ export interface ComposePageStore {
     force?: boolean,
   ): Promise<ComposePageSnapshot>
   /**
-   * 原子关联、更换或解除页面动画文件引用。
+   * 原子关联、更换或解除某个 Frame 的动画文件引用。
    *
    * @remarks
-   * 只改写页面包装中的稳定引用；Store 不解析动画文件内容，解除引用也不删除动画资源。
+   * v7 的动画清单归属 Frame：引用写在该 Frame 的 `Animations.source` 上，同一页面的多个
+   * 根 Frame 可以各自绑定不同的动画文件。Store 不解析动画文件内容，解除引用也不删除资源。
    */
-  setPageAnimation(
+  setFrameAnimation(
     pageKey: string,
+    frameId: string,
     animation: ComposePageAnimationReference | null,
+    expectedRevision?: string,
+    force?: boolean,
+  ): Promise<ComposePageSnapshot>
+  /** 改写页面默认 Frame；必须指向 `document.rootIds` 中的一个 Frame。 */
+  setPageDefaultFrame(
+    pageKey: string,
+    defaultFrameId: string | null,
     expectedRevision?: string,
     force?: boolean,
   ): Promise<ComposePageSnapshot>
@@ -419,11 +428,44 @@ export function createComposePageStore(input: {
       )
     },
 
-    async setPageAnimation(pageKey, animation, expectedRevision, force) {
+    async setFrameAnimation(pageKey, frameId, animation, expectedRevision, force) {
       const current = await this.readPage(pageKey)
+      const frame = current.page.document.entities[frameId]
+      if (!frame || frame.components.Frame === undefined) {
+        throw new ComposeAssetError('unsupported', `Entity ${frameId} 不是 Frame`)
+      }
+      const existing = frame.components.Animations as { items?: unknown } | undefined
+      const nextAnimations = animation === null
+        ? (existing?.items === undefined ? undefined : { items: existing.items })
+        : { items: existing?.items ?? [], source: animation }
+      const nextComponents = { ...frame.components }
+      if (nextAnimations === undefined) delete nextComponents.Animations
+      else nextComponents.Animations = nextAnimations as never
       return this.writePage(
         pageKey,
-        { ...current.page, animation },
+        {
+          ...current.page,
+          document: {
+            ...current.page.document,
+            entities: {
+              ...current.page.document.entities,
+              [frameId]: { ...frame, components: nextComponents },
+            },
+          },
+        },
+        expectedRevision ?? current.revision,
+        force,
+      )
+    },
+
+    async setPageDefaultFrame(pageKey, defaultFrameId, expectedRevision, force) {
+      const current = await this.readPage(pageKey)
+      if (defaultFrameId !== null && !current.page.document.rootIds.includes(defaultFrameId)) {
+        throw new ComposeAssetError('unsupported', `defaultFrameId ${defaultFrameId} 不是根 Frame`)
+      }
+      return this.writePage(
+        pageKey,
+        { ...current.page, defaultFrameId },
         expectedRevision ?? current.revision,
         force,
       )

@@ -10,7 +10,6 @@ import {
 import { createComposePageScriptScope } from '@compose-ui/script-runtime'
 import {
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
   type ComposeDocument,
   type ComposeEntity,
 } from '@compose-ui/core'
@@ -49,9 +48,8 @@ const entity: ComposeEntity = {
 }
 
 const document: ComposeDocument = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   canvas: createDefaultCanvasSettings(),
-  output: createDefaultOutputSettings(),
   rootIds: [entity.id],
   entities: { [entity.id]: entity },
 }

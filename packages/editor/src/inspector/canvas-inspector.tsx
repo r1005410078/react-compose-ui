@@ -6,7 +6,12 @@ import {
   ComposePropertyPanelSection,
 } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
-import { createDefaultOutputSettings } from '@compose-ui/core'
+import {
+  BUILTIN_COMMAND_TYPES,
+  COMPOSE_DEFAULT_FRAME_SIZE,
+  getComposeFrame,
+  resolveComposeAppearance,
+} from '@compose-ui/core'
 import type {
   CommandDispatchResult,
   ComposeDocument,
@@ -18,6 +23,8 @@ import { getEditorMessages } from '../editor-i18n'
 
 type CanvasInspectorProps = {
   readonly document: ComposeDocument
+  /** 被检查的 Frame Entity ID。 */
+  readonly frameId: string
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   readonly idFactory: () => string
   /** 活动页面的动画 Section（`ComposePropertyPanelSection`）；省略时不显示动画分组。 */
@@ -123,6 +130,7 @@ function createCanvasOutputSchema(
  */
 export function CanvasInspector({
   document,
+  frameId,
   dispatch,
   idFactory,
   animationInspector,
@@ -133,24 +141,26 @@ export function CanvasInspector({
     i18n?.locale ?? 'zh-CN',
     i18n?.formatMessage,
   ).canvasInspector
+  const frame = getComposeFrame(document.entities[frameId])
+  const frameSize = frame?.size ?? COMPOSE_DEFAULT_FRAME_SIZE
+  const backgroundPaint = resolveComposeAppearance(
+    document.entities[frameId] ?? { id: frameId, name: frameId, components: {} },
+  ).backgroundPaint
   const documentPreset = useMemo(
-    () => findOutputPreset(document.output.width, document.output.height),
-    [document.output.height, document.output.width],
+    () => findOutputPreset(frameSize.width, frameSize.height),
+    [frameSize.height, frameSize.width],
   )
   const [outputSizeKey, setOutputSizeKey] = useState<OutputSizeKey>(
     documentPreset ? 'preset' : 'custom',
   )
-  const previousDimensions = useRef({
-    width: document.output.width,
-    height: document.output.height,
-  })
+  const previousDimensions = useRef({ width: frameSize.width, height: frameSize.height })
 
   useEffect(() => {
-    const dimensionsChanged = previousDimensions.current.width !== document.output.width
-      || previousDimensions.current.height !== document.output.height
-    previousDimensions.current = { width: document.output.width, height: document.output.height }
+    const dimensionsChanged = previousDimensions.current.width !== frameSize.width
+      || previousDimensions.current.height !== frameSize.height
+    previousDimensions.current = { width: frameSize.width, height: frameSize.height }
     if (dimensionsChanged) setOutputSizeKey(documentPreset ? 'preset' : 'custom')
-  }, [document.output.height, document.output.width, documentPreset])
+  }, [documentPreset, frameSize.height, frameSize.width])
 
   const schema = useMemo(() => createCanvasOutputSchema(messages), [messages])
   const value = useMemo(
@@ -159,11 +169,11 @@ export function CanvasInspector({
         ? { key: 'preset', value: documentPreset?.value ?? '' }
         : {
           key: 'custom',
-          value: { width: document.output.width, height: document.output.height },
+          value: { width: frameSize.width, height: frameSize.height },
         },
-      backgroundPaint: document.output.backgroundPaint,
+      backgroundPaint,
     }),
-    [document.output, documentPreset, outputSizeKey],
+    [backgroundPaint, documentPreset, frameSize.height, frameSize.width, outputSizeKey],
   )
 
   /*
@@ -174,7 +184,7 @@ export function CanvasInspector({
   const defaultValue = useMemo(
     (): CanvasInspectorValue => ({
       outputSize: value.outputSize,
-      backgroundPaint: createDefaultOutputSettings().backgroundPaint,
+      backgroundPaint: { kind: 'solid', color: 'transparent' },
     }),
     [value],
   )
@@ -198,36 +208,19 @@ export function CanvasInspector({
                 setOutputSizeKey(nextOutputSize.key)
                 return
               }
-              if (nextOutputSize.key === 'preset') {
-                const preset = OUTPUT_PRESETS.find((candidate) => candidate.value === nextOutputSize.value)
-                if (!preset || (
-                  preset.width === document.output.width
-                  && preset.height === document.output.height
-                )) return
-                dispatch({
-                  id: idFactory(),
-                  type: 'output.configure',
-                  payload: {
-                    width: preset.width,
-                    height: preset.height,
-                    backgroundPaint: document.output.backgroundPaint,
-                  },
-                  meta: { label: messages.configureTransaction, source: 'inspector' },
-                })
+              const dimensions = nextOutputSize.key === 'preset'
+                ? OUTPUT_PRESETS.find((candidate) => candidate.value === nextOutputSize.value)
+                : nextOutputSize.value
+              if (!dimensions) return
+              if (dimensions.width === frameSize.width && dimensions.height === frameSize.height) {
                 return
               }
-              const dimensions = nextOutputSize.value
-              if (
-                dimensions.width === document.output.width
-                && dimensions.height === document.output.height
-              ) return
               dispatch({
                 id: idFactory(),
-                type: 'output.configure',
+                type: BUILTIN_COMMAND_TYPES.setFrameSize,
                 payload: {
-                  width: dimensions.width,
-                  height: dimensions.height,
-                  backgroundPaint: document.output.backgroundPaint,
+                  entityId: frameId,
+                  size: { width: dimensions.width, height: dimensions.height },
                 },
                 meta: { label: messages.configureTransaction, source: 'inspector' },
               })
@@ -235,15 +228,11 @@ export function CanvasInspector({
             }
             dispatch({
               id: idFactory(),
-              type: 'output.configure',
-              payload: {
-                width: document.output.width,
-                height: document.output.height,
-                backgroundPaint: next.backgroundPaint,
-              },
+              type: BUILTIN_COMMAND_TYPES.setAppearance,
+              payload: { entityId: frameId, appearance: { backgroundPaint: next.backgroundPaint } },
               meta: {
                 // 色盘拖动仅在松手提交，但连续点选/滑杆仍可能短窗合并；同字段共享 mergeKey。
-                mergeKey: 'inspector:output:background-paint',
+                mergeKey: `inspector:frame:${frameId}:background-paint`,
                 label: messages.configureTransaction,
                 source: 'inspector',
               },

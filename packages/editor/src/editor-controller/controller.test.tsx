@@ -16,10 +16,10 @@ import {
 import { ComposePropertyPanel } from '@compose-ui/property-panel'
 import type { ComposeComponentStore } from '@compose-ui/component-library'
 import {
+  createComposeFrameEntity,
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
   getComposeLayoutItem,
-  createDefaultOutputSettings,
   createTransactionRuntime,
   getComposeHierarchy,
   getComposeLock,
@@ -138,13 +138,26 @@ function entity(
   }
 }
 
+/** v7 的文档根只接受 Frame；夹具把既有顶层实体挂进这块画板。 */
+const ROOT_FRAME_ID = 'frame-root'
+
+/** v7 的顶层 Entity 是根 Frame 的子级。 */
+function rootChildIds(value: ComposeDocument): readonly string[] {
+  return (value.entities[ROOT_FRAME_ID]?.components.Hierarchy as
+    { childIds?: readonly string[] } | undefined)?.childIds ?? []
+}
+
 function documentFixture(): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: ['dashboard'],
+    rootIds: [ROOT_FRAME_ID],
     entities: {
+      [ROOT_FRAME_ID]: createComposeFrameEntity({
+        id: ROOT_FRAME_ID,
+        name: '画板',
+        childIds: ['dashboard'],
+      }),
       dashboard: entity('dashboard', {
         Transform: transform(40, 30, 800, 600),
         Hierarchy: { childIds: ['title'] },
@@ -167,9 +180,8 @@ function documentFixture(): ComposeDocument {
  */
 function instanceDocumentFixture(): ComposeDocument {
   const innerDocument = {
-    schemaVersion: 6 as const,
+    schemaVersion: 7 as const,
     canvas: createDefaultCanvasSettings(),
-    output: { width: 120, height: 80, backgroundPaint: { kind: 'solid' as const, color: 'transparent' } },
     rootIds: ['c-root'],
     entities: {
       // 组件根是可缩放容器：放宽根约束后这是常态，也让实例继承 Resize 能力。
@@ -188,6 +200,8 @@ function instanceDocumentFixture(): ComposeDocument {
           Visibility: { visible: true },
           Lock: { locked: false },
           Hierarchy: { childIds: ['c-text'] },
+          // 组件根就是 Frame：Component Asset v2 的单根要求。
+          Frame: { size: { width: 120, height: 80 }, guides: [] },
         },
       },
       'c-text': {
@@ -231,11 +245,15 @@ function instanceDocumentFixture(): ComposeDocument {
     scope: 'persistent' as const,
   }
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: ['instance'],
+    rootIds: [ROOT_FRAME_ID],
     entities: {
+      [ROOT_FRAME_ID]: createComposeFrameEntity({
+        id: ROOT_FRAME_ID,
+        name: '画板',
+        childIds: ['instance'],
+      }),
       instance: {
         id: 'instance',
         name: 'Card',
@@ -620,12 +638,12 @@ describe('useComposeEditorController', () => {
     }))
 
     expect(result.current.sceneTreeProps.nodes).toHaveLength(1)
-    expect(result.current.sceneTreeProps.nodes[0]).toMatchObject({
+    expect(result.current.sceneTreeProps.nodes[0]?.children?.[0]).toMatchObject({
       id: 'dashboard',
       label: 'Dashboard',
       canHaveChildren: true,
     })
-    expect(result.current.sceneTreeProps.nodes[0]?.children?.[0]).toMatchObject({
+    expect(result.current.sceneTreeProps.nodes[0]?.children?.[0]?.children?.[0]).toMatchObject({
       id: 'title',
       canHaveChildren: false,
     })
@@ -642,7 +660,7 @@ describe('useComposeEditorController', () => {
       registry,
     }))
 
-    const collapsed = result.current.sceneTreeProps.nodes[0]
+    const collapsed = result.current.sceneTreeProps.nodes[0]?.children?.[0]
     // hasChildren 必须显式声明：惰性投影下 children 为空，仅凭 children 推断会让展开控件消失。
     expect(collapsed).toMatchObject({ id: 'instance', canHaveChildren: true, hasChildren: true })
     // 未展开不构建投影，观感与既有单节点一致。
@@ -652,7 +670,7 @@ describe('useComposeEditorController', () => {
       result.current.sceneTreeProps.onExpandedChange?.(['instance'])
     })
 
-    const expanded = result.current.sceneTreeProps.nodes[0]
+    const expanded = result.current.sceneTreeProps.nodes[0]?.children?.[0]
     expect(expanded?.children).toHaveLength(1)
     // 内部节点自身还有后代，必须同样声明 hasChildren，否则第二层起没有展开控件。
     expect(expanded?.children?.[0]).toMatchObject({
@@ -667,7 +685,7 @@ describe('useComposeEditorController', () => {
       result.current.sceneTreeProps.onExpandedChange?.(['instance', 'instance/c-text'])
     })
 
-    const deep = result.current.sceneTreeProps.nodes[0]?.children?.[0]
+    const deep = result.current.sceneTreeProps.nodes[0]?.children?.[0]?.children?.[0]
     expect(deep?.children).toHaveLength(1)
     // 地址段数对应实例嵌套层数而非树深度：内部实体 ID 在组件文档内唯一，无需逐层拼接。
     expect(deep?.children?.[0]).toMatchObject({
@@ -778,7 +796,8 @@ describe('useComposeEditorController', () => {
       })
     })
     expect(overrides().operations.some(({ kind }) => kind === 'remove-entity')).toBe(true)
-    expect(Object.keys(result.current.document.entities)).toEqual(['instance'])
+    expect(Object.keys(result.current.document.entities).sort())
+      .toEqual([ROOT_FRAME_ID, 'instance'])
 
     // 把内部实体移到宿主场景是越界操作，必须被拒绝且不改变任何文档。
     const before = result.current.document
@@ -786,7 +805,7 @@ describe('useComposeEditorController', () => {
       result.current.sceneTreeProps.onOperation?.({
         type: 'move',
         nodeIds: ['instance/c-text'],
-        parentId: null,
+        parentId: ROOT_FRAME_ID,
         index: 0,
       })
     })
@@ -919,7 +938,7 @@ describe('useComposeEditorController', () => {
 
     act(() => result.current.sceneTreeProps.onOperation?.({
       type: 'create',
-      parentId: null,
+      parentId: ROOT_FRAME_ID,
       index: 1,
     }))
 
@@ -991,11 +1010,11 @@ describe('useComposeEditorController', () => {
     act(() => result.current.sceneTreeProps.onOperation?.({
       type: 'move',
       nodeIds: ['title'],
-      parentId: null,
+      parentId: ROOT_FRAME_ID,
       index: 0,
     }))
 
-    expect(editorRuntime.document.rootIds).toEqual(['title', 'dashboard'])
+    expect(rootChildIds(editorRuntime.document)).toEqual(['title', 'dashboard'])
     expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds).toEqual([])
     // reparent 保持世界坐标：title 原本在 dashboard(40,30) 内偏移 (10,10)。
     expect(getComposeSpatialTransform(editorRuntime.document.entities.title!).position)
@@ -1004,10 +1023,10 @@ describe('useComposeEditorController', () => {
     act(() => result.current.sceneTreeProps.onOperation?.({
       type: 'move',
       nodeIds: ['title'],
-      parentId: null,
+      parentId: ROOT_FRAME_ID,
       index: 2,
     }))
-    expect(editorRuntime.document.rootIds).toEqual(['dashboard', 'title'])
+    expect(rootChildIds(editorRuntime.document)).toEqual(['dashboard', 'title'])
   })
 
   it('OpenSpec: editor-workspace-layout / 画布与场景树共享会话剪贴板 / 场景树复制后在画布粘贴', () => {
@@ -1057,7 +1076,7 @@ describe('useComposeEditorController', () => {
     })
 
     act(() => result.current.sceneTreeProps.commands?.execute('paste-root', null))
-    expect(editorRuntime.document.rootIds).toEqual(['dashboard', 'title'])
+    expect(rootChildIds(editorRuntime.document)).toEqual(['dashboard', 'title'])
     expect(getComposeHierarchy(editorRuntime.document.entities.dashboard!)?.childIds)
       .toEqual([])
     expect(result.current.sceneTreeProps.commands?.clipboard).toBeNull()
@@ -1257,7 +1276,7 @@ describe('useComposeEditorController', () => {
     expect(getComposeLock(editorRuntime.document.entities.title!).locked).toBe(false)
   })
 
-  it('选择 Canvas 输出时展示 Canvas Inspector 并清空 Entity 选择', () => {
+  it('OpenSpec: editor-workspace-layout / Frame Inspector / 选中 Frame 时展示 Frame Inspector', () => {
     // runtime 必须在渲染之间保持稳定：换 runtime 表示换文档，会重置全部会话状态。
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
@@ -1266,9 +1285,11 @@ describe('useComposeEditorController', () => {
       registry,
     }))
 
-    act(() => result.current.stageProps.onOutputSelect?.())
-    expect(result.current.selectedIds).toEqual([])
-    expect(result.current.stageProps.outputSelected).toBe(true)
+    // Frame 是普通 Entity 选择目标：不再有"不进入文档的输出检查目标"。
+    const frameId = editorRuntime.document.rootIds[0]!
+    act(() => result.current.setSelectedIds([frameId]))
+    expect(result.current.selectedIds).toEqual([frameId])
+    expect(result.current.inspectorPanel).toBeTruthy()
   })
 
   it('OpenSpec: editor-workspace-layout / 工作区跟随活动页面 / 换 runtime 重置会话状态', () => {
@@ -1286,9 +1307,7 @@ describe('useComposeEditorController', () => {
     )
 
     act(() => result.current.setViewport({ x: 500, y: 500, zoom: 2 }))
-    act(() => result.current.stageProps.onOutputSelect?.())
     expect(result.current.viewport.x).toBe(500)
-    expect(result.current.stageProps.outputSelected).toBe(true)
 
     // 换 runtime 表示换文档：选择、检视目标、展开集合与视口都不得残留。
     rerender({ transactionRuntime: second })
@@ -1296,7 +1315,6 @@ describe('useComposeEditorController', () => {
     expect(result.current.runtime).toBe(second)
     expect(result.current.selectedIds).toEqual([])
     expect(result.current.expandedIds).toEqual([])
-    expect(result.current.stageProps.outputSelected).toBe(false)
     expect(result.current.viewport).toEqual({ x: 80, y: 64, zoom: 1 })
   })
 
@@ -1338,7 +1356,7 @@ describe('useComposeEditorController', () => {
       act(() => {
         result.current.sceneTreeProps.onOperation?.({
           type: 'create',
-          parentId: null,
+          parentId: ROOT_FRAME_ID,
           index: 0,
         })
       })
