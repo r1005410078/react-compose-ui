@@ -11,6 +11,7 @@ import {
 import {
   COMPOSE_COMPONENT_NEST_DEPTH_LIMIT,
   getComposeHierarchy,
+  getComposeFrame,
   getComposeLayoutItem,
   getComposeVisibility,
   migrateLegacyComposeInstanceOverrides,
@@ -157,23 +158,34 @@ export function ComponentInstanceRenderer({
 /**
  * 嵌套 Layout Runtime 的 Yoga 画布尺寸取自 `document.output`。
  * 实例 Resize 会把组件根写成 fixed，但 output 仍可能是创建时的旧值；
- * 对单根组件文档，将 output 与根 fixed 尺寸对齐，Auto Layout 的 fill 子项才能随外框重排。
+ * 对单根组件文档，把根 Frame 的尺寸与根 fixed LayoutItem 对齐，Auto Layout 的 fill 子项
+ * 才能随外框重排。
+ *
+ * @remarks
+ * Frame.size 是尺寸的唯一事实来源；实例覆盖改写的是根的 LayoutItem，因此这里把两者对齐，
+ * 而不是维护第二份尺寸。
  */
 function alignComponentDocumentOutput(document: ComposeDocument): ComposeDocument {
   const rootId = document.rootIds[0]
   if (!rootId || document.rootIds.length !== 1) return document
   const root = document.entities[rootId]
-  if (!root) return document
+  const frame = getComposeFrame(root)
+  if (!root || !frame) return document
   const item = getComposeLayoutItem(root)
-  const width = item.width.mode === 'fixed' ? item.width.value : document.output.width
-  const height = item.height.mode === 'fixed' ? item.height.value : document.output.height
-  if (width === document.output.width && height === document.output.height) return document
+  const width = item.width.mode === 'fixed' ? item.width.value : frame.size.width
+  const height = item.height.mode === 'fixed' ? item.height.value : frame.size.height
+  if (width === frame.size.width && height === frame.size.height) return document
   return {
     ...document,
-    output: {
-      ...document.output,
-      width,
-      height,
+    entities: {
+      ...document.entities,
+      [rootId]: {
+        ...root,
+        components: {
+          ...root.components,
+          Frame: { ...frame, size: { width, height } },
+        },
+      },
     },
   }
 }

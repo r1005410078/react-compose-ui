@@ -1,3 +1,4 @@
+import { createComposeFrameEntity } from '@compose-ui/core'
 import type { ComposeDocument, ComposeEntity, JsonObject } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import type { ComposeAnimationPanelAction } from '@compose-ui/animation-panel'
@@ -61,18 +62,25 @@ const offsetTracks = {
   },
 } as unknown as JsonObject
 
+/** 动画清单归属 Frame：夹具把被测 Entity 挂进一块持有清单的根 Frame。 */
+const FRAME_ID = 'frame-root'
+
 function documentWith(entities: Readonly<Record<string, ComposeEntity>>): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1920, height: 1080, backgroundPaint: { kind: 'solid', color: '#ffffff' } },
-    rootIds: Object.keys(entities),
-    entities,
-    animations: [{ id: 'intro', name: '入场', durationMs: 300, playbackMode: 'play-once' }],
+    rootIds: [FRAME_ID],
+    entities: {
+      ...entities,
+      [FRAME_ID]: createComposeFrameEntity({
+        id: FRAME_ID,
+        childIds: Object.keys(entities),
+        animations: [{ id: 'intro', name: '入场', durationMs: 300, playbackMode: 'play-once' }],
+      }),
+    },
   }
 }
 
@@ -82,7 +90,7 @@ describe('文档动画 → 面板会话模型', () => {
       hero: entity('hero', '主视觉矩形', { animation: offsetTracks }),
       plain: entity('plain', '无动画'),
     })
-    const model = buildAnimationPanelModel(document, 'intro')
+    const model = buildAnimationPanelModel(document, FRAME_ID, 'intro')
     expect(model.durationMs).toBe(300)
     expect(model.tracks).toHaveLength(1)
     expect(model.tracks[0]?.id).toBe('hero')
@@ -91,7 +99,7 @@ describe('文档动画 → 面板会话模型', () => {
 
   it('OpenSpec: editor-workspace-layout / 时间线显示文档动画 / vector2 是单条属性轨道', () => {
     const document = documentWith({ hero: entity('hero', '主视觉', { animation: offsetTracks }) })
-    const model = buildAnimationPanelModel(document, 'intro', {
+    const model = buildAnimationPanelModel(document, FRAME_ID, 'intro', {
       propertyLabel: (path) => path[1] === 'offset'
         ? { label: 'Position', groupLabel: 'Position' }
         : null,
@@ -217,9 +225,9 @@ describe('菱形四态', () => {
     const document = documentWith({ hero: entity('hero', '主视觉', { animation: offsetTracks }) })
     const offset = ['LayoutItem', 'offset']
     // 播放头正落在 0 ms 关键帧上 → keyed；落在无帧时刻 → animated；无轨道属性 → none。
-    expect(getAnimationKeyState(document, 'intro', 'hero', offset, 0)).toBe('keyed')
-    expect(getAnimationKeyState(document, 'intro', 'hero', offset, 150)).toBe('animated')
-    expect(getAnimationKeyState(document, 'intro', 'hero', ['Transform', 'rotation'], 0))
+    expect(getAnimationKeyState(document, FRAME_ID, 'intro', 'hero', offset, 0)).toBe('keyed')
+    expect(getAnimationKeyState(document, FRAME_ID, 'intro', 'hero', offset, 150)).toBe('animated')
+    expect(getAnimationKeyState(document, FRAME_ID, 'intro', 'hero', ['Transform', 'rotation'], 0))
       .toBe('none')
   })
 
@@ -228,9 +236,9 @@ describe('菱形四态', () => {
       flowing: entity('flowing', 'Flow 子项', { positioning: 'flow' }),
       hugging: entity('hugging', 'Fill 宽度', { widthMode: 'fill' }),
     })
-    expect(getAnimationKeyState(document, 'intro', 'flowing', ['LayoutItem', 'offset'], 0))
+    expect(getAnimationKeyState(document, FRAME_ID, 'intro', 'flowing', ['LayoutItem', 'offset'], 0))
       .toBe('unavailable')
-    expect(getAnimationKeyState(document, 'intro', 'hugging', ['LayoutItem', 'width', 'value'], 0))
+    expect(getAnimationKeyState(document, FRAME_ID, 'intro', 'hugging', ['LayoutItem', 'width', 'value'], 0))
       .toBe('unavailable')
     // 同一 Entity 的其他属性不受影响。
     expect(isAnimationPathAvailable(document, 'flowing', ['Appearance', 'opacity'])).toBe(true)
@@ -240,9 +248,9 @@ describe('菱形四态', () => {
 
   it('动画或 Entity 不存在时为 unavailable', () => {
     const document = documentWith({ hero: entity('hero', '主视觉') })
-    expect(getAnimationKeyState(document, 'missing', 'hero', ['Appearance', 'opacity'], 0))
+    expect(getAnimationKeyState(document, FRAME_ID, 'missing', 'hero', ['Appearance', 'opacity'], 0))
       .toBe('unavailable')
-    expect(getAnimationKeyState(document, 'intro', 'ghost', ['Appearance', 'opacity'], 0))
+    expect(getAnimationKeyState(document, FRAME_ID, 'intro', 'ghost', ['Appearance', 'opacity'], 0))
       .toBe('unavailable')
   })
 })

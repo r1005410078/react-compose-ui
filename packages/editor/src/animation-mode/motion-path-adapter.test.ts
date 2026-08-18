@@ -4,7 +4,9 @@ import {
   findComposeAnimationTrack,
 } from '@compose-ui/animation'
 import type { ComposeAnimationTrack } from '@compose-ui/animation'
-import { createTransactionRuntime } from '@compose-ui/core'
+import {
+  createComposeFrameEntity,
+createTransactionRuntime } from '@compose-ui/core'
 import type { ComposeDocument, ComposeEntity, JsonObject } from '@compose-ui/core'
 import {
   applyMotionPathDraftToTrack,
@@ -166,16 +168,20 @@ describe('motion-path-adapter', () => {
       },
     }
     const value: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: {
         grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
         smartSnap: { nodes: true, guides: true },
-        guides: [],
       },
-      output: { width: 1920, height: 1080, backgroundPaint: { kind: 'solid', color: '#ffffff' } },
-      rootIds: ['moving'],
-      entities: { moving: entity },
-      animations: [{ id: 'intro', name: '入场', durationMs: 400, playbackMode: 'play-once' }],
+      rootIds: ['frame-root'],
+      entities: {
+        moving: entity,
+        'frame-root': createComposeFrameEntity({
+          id: 'frame-root',
+          childIds: ['moving'],
+          animations: [{ id: 'intro', name: '入场', durationMs: 400, playbackMode: 'play-once' }],
+        }),
+      },
     }
     const runtime = createTransactionRuntime({
       document: value,

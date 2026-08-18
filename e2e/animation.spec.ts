@@ -11,7 +11,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
   // 放一个 Rectangle 并选中它。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(node).toHaveCount(1)
   await node.click()
 
@@ -84,7 +84,7 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   await expect(animationPanel.getByRole('button', { name: '创建动画' })).toHaveCount(0)
 
   // 点击输出区域激活画布 Inspector：动画区块（页面脚本上方）显示绑定的动画文件。
-  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   await page.mouse.click(outputBox.x + 40, outputBox.y + 40)
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await expect(editor.getByRole('region', { name: '画布属性' })).toBeVisible()
@@ -131,7 +131,7 @@ test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、�
   // 准备：放 Rectangle → 创建动画 → 0 ms 打点 → 播放头 200 ms 拖出第二个关键帧。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await node.click()
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
@@ -206,7 +206,7 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
   // 创建动画并打出两个位置关键帧（0 ms 菱形打点 + 200 ms 画布拖动自动记录）。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await node.click()
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
@@ -272,7 +272,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   // 节点 A：打 0 ms 关键帧，播放头 200 ms 拖出第二帧。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(1)
   await nodes.first().click()
   await editor.getByRole('radio', { name: '动画' }).click()
@@ -305,7 +305,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
 
   // 回归：真实指针拖入节点 C 也不崩，且已有轨道不受影响。
-  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
     x: outputBox.x + 450,
@@ -332,13 +332,13 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
 
   // 准备嵌套：容器 + 一个拖进容器的矩形子级。
   await drawContainer(page, editor)
-  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
     x: outputBox.x + 200,
     y: outputBox.y + 20,
   })
-  const topLevel = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const topLevel = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = (await topLevel.first().boundingBox())!
   await page.mouse.move(rectBox.x + rectBox.width / 2, rectBox.y + rectBox.height / 2)
   await page.mouse.down()
@@ -454,7 +454,7 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
   // 准备一条位置轨道：打点 + 播放头 200 ms 拖出第二帧。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await node.click()
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
@@ -510,7 +510,7 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  const node = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(node).toHaveCount(1)
   await node.click()
 
@@ -539,7 +539,7 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
   await expect(animationPanel.getByRole('button', { name: '关键帧 300 ms：位置' })).toBeVisible()
 
   // 点画布空白处回到画布 Inspector；此时时间线选中首帧，缓动区出现在「当前时间」下方。
-  const outputBox = (await stage.getByTestId('stage-output-boundary').boundingBox())!
+  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   await page.mouse.click(outputBox.x + 40, outputBox.y + 40)
   await expect(editor.getByRole('region', { name: '画布属性' })).toBeVisible()
   await animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' }).click()

@@ -16,7 +16,7 @@ export async function pointerDrop(page: Page, source: Locator, target: { x: numb
 /** 通过新的画布工具流创建一个可供后续断言操作的 Container。 */
 export async function drawContainer(page: Page, editor: Locator) {
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -56,7 +56,11 @@ export async function drawText(page: Page, editor: Locator, at: { x: number; y: 
  * 非空容器的选中入口已经收敛到画布标题标签，点容器体只会起框选。
  */
 export async function selectContainer(editor: Locator, index = 0) {
-  await editor.locator('[data-testid^="stage-container-label-"]').nth(index).click()
+  // 根 Frame 同样带标题标签（画板也是容器）；这里只在被测的普通容器里数序号。
+  await editor
+    .locator('[data-testid^="stage-container-label-"]:not([data-testid$="frame-root"])')
+    .nth(index)
+    .click()
 }
 
 export async function enableAutoLayout(inspector: Locator) {

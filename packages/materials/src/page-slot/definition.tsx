@@ -3,7 +3,7 @@ import type {
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
 import * as v from 'valibot'
-import { isComposePageMediaType, parseComposePageFile } from '@compose-ui/core'
+import { getComposeFrame, isComposePageMediaType, parseComposePageFile } from '@compose-ui/core'
 import type { ComposeBasicMaterialOptions } from '../types'
 import { ComposePageSlotMaterialIcon } from '../material-icons'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
@@ -66,10 +66,16 @@ export function createPageSlotMaterial(
         // 只接受页面：身份判据是媒体类型，不是文件名。
         accepts: ({ mediaType }) => isComposePageMediaType(mediaType),
         async createSeed({ reference, resolved, name }) {
-          // 能读出被引用页面的输出尺寸时按它建槽位，否则用默认尺寸。
+          // 能读出被引用页面默认 Frame 的尺寸时按它建槽位，否则用默认尺寸。
           const parsed = parseComposePageFile(await resolved.blob.text())
-          const measured = parsed.ok
-            ? { width: parsed.page.document.output.width, height: parsed.page.document.output.height }
+          const frameId = parsed.ok
+            ? parsed.page.defaultFrameId ?? parsed.page.document.rootIds[0]
+            : undefined
+          const frame = parsed.ok && frameId
+            ? getComposeFrame(parsed.page.document.entities[frameId])
+            : null
+          const measured = frame
+            ? { width: frame.size.width, height: frame.size.height }
             : size
           return {
             name,

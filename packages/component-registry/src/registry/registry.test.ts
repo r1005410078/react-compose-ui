@@ -1,5 +1,6 @@
 import {
   BUILTIN_COMMAND_TYPES,
+  createComposeFrameEntity,
   type ComposeDocument,
   type ComposeEntity,
   type JsonObject,
@@ -78,8 +79,14 @@ function capability(
 }
 
 function document(entity: ComposeEntity): ComposeDocument {
+  // v7 的文档根必须是 Frame；被测 Entity 挂在它下面。
+  const frame = createComposeFrameEntity({
+    id: 'frame-root',
+    childIds: [entity.id],
+    backgroundPaint: { kind: 'solid', color: '#111827' },
+  })
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: {
         stepX: 8,
@@ -90,11 +97,9 @@ function document(entity: ComposeEntity): ComposeDocument {
         snapEnabled: true,
       },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: '#111827' } },
-    rootIds: [entity.id],
-    entities: { [entity.id]: entity },
+    rootIds: [frame.id],
+    entities: { [entity.id]: entity, [frame.id]: frame },
   }
 }
 

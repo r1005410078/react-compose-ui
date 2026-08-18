@@ -24,7 +24,7 @@ function page(setupScript: ComposePageSetupReference | null): ComposePageFile {
     pageSchemaVersion: 1,
     setupScript,
     document: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       rootIds: [],
       entities: {},
       canvas: { background: null },

@@ -11,7 +11,7 @@ import {
   isInvalidCutInsertion,
   resolveSuggestedEntityInsertion,
 } from './clipboard'
-import { document, entity } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity } from './test-fixtures'
 
 describe('entity clipboard planner', () => {
   it('OpenSpec: stage-engine / Entity 会话剪贴板规划 / 规范化多选复制来源', () => {
@@ -43,8 +43,9 @@ describe('entity clipboard planner', () => {
       parentId: 'container',
       index: 1,
     })
+    // 没有命中目标时落点是画板末尾，而不是文档根——v7 的根只接受 Frame。
     expect(resolveSuggestedEntityInsertion(value, null)).toEqual({
-      parentId: null,
+      parentId: ROOT_FRAME_ID,
       index: 1,
     })
   })
@@ -81,9 +82,9 @@ describe('entity clipboard planner', () => {
     const value = document([a, b], ['a', 'b'])
 
     expect(isInvalidCutInsertion(value, ['a'], { parentId: 'a', index: 0 })).toBe(true)
-    expect(isInvalidCutInsertion(value, ['a'], { parentId: null, index: 0 })).toBe(true)
-    expect(isInvalidCutInsertion(value, ['a'], { parentId: null, index: 1 })).toBe(true)
-    expect(isInvalidCutInsertion(value, ['a'], { parentId: null, index: 2 })).toBe(false)
+    expect(isInvalidCutInsertion(value, ['a'], { parentId: ROOT_FRAME_ID, index: 0 })).toBe(true)
+    expect(isInvalidCutInsertion(value, ['a'], { parentId: ROOT_FRAME_ID, index: 1 })).toBe(true)
+    expect(isInvalidCutInsertion(value, ['a'], { parentId: ROOT_FRAME_ID, index: 2 })).toBe(false)
   })
 
   it('moves a cut clipboard with a single reorder command', () => {
@@ -93,7 +94,7 @@ describe('entity clipboard planner', () => {
     const plan = createPasteFromClipboard(
       value,
       { kind: 'cut', entityIds: ['a'] },
-      { parentId: null, index: 2 },
+      { parentId: ROOT_FRAME_ID, index: 2 },
       () => 'move-a',
     )
 
@@ -104,6 +105,7 @@ describe('entity clipboard planner', () => {
     })
     const runtime = createTransactionRuntime({ document: value })
     expect(runtime.dispatch(plan!.command).status).toBe('committed')
-    expect(runtime.document.rootIds).toEqual(['b', 'a'])
+    expect(getComposeHierarchy(runtime.document.entities[ROOT_FRAME_ID]!)?.childIds)
+      .toEqual(['b', 'a'])
   })
 })

@@ -6,7 +6,7 @@ import {
 import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
+  createComposeFrameEntity,
   createTransactionRuntime,
   getComposeClip,
   getComposeComposition,
@@ -401,11 +401,16 @@ describe('Basic ECS materials', () => {
       },
     }
     const document: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: createDefaultOutputSettings(),
-      rootIds: [legacyContainer.id],
-      entities: { [legacyContainer.id]: legacyContainer },
+      rootIds: ['frame-root'],
+      entities: {
+        [legacyContainer.id]: legacyContainer,
+        'frame-root': createComposeFrameEntity({
+          id: 'frame-root',
+          childIds: [legacyContainer.id],
+        }),
+      },
     }
     let commandIndex = 0
     const plan = materials.registry.planRemoveCapability(

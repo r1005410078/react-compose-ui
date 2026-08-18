@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultComposeEditorPreferences } from '../editor-preferences'
@@ -9,9 +8,8 @@ import { DefaultStageToolbar } from './default-stage-toolbar'
 
 function document() {
   return {
-    schemaVersion: 6 as const,
+    schemaVersion: 7 as const,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
     rootIds: [],
     entities: {},
   }

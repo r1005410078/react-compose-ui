@@ -1,5 +1,6 @@
 import {
   getComposeHierarchy,
+  getComposeFrame,
   getComposeLayout,
   getComposeLayoutItem,
   getComposeRenderer,
@@ -424,8 +425,16 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     node.setMargin(yoga.EDGE_BOTTOM, item.margin.bottom)
     node.setMargin(yoga.EDGE_LEFT, item.margin.left)
     node.setAlignSelf(align(yoga, item.alignSelf))
-    this.applyAxis(node, 'width', item.width, rowMainAxis, isFlow)
-    this.applyAxis(node, 'height', item.height, !rowMainAxis, isFlow)
+    const frame = getComposeFrame(entity)
+    if (frame) {
+      // Frame.size 是该 Entity 尺寸的唯一事实来源，覆盖 LayoutItem 的任何推导结果。
+      node.setWidth(frame.size.width)
+      node.setHeight(frame.size.height)
+    }
+    else {
+      this.applyAxis(node, 'width', item.width, rowMainAxis, isFlow)
+      this.applyAxis(node, 'height', item.height, !rowMainAxis, isFlow)
+    }
     if (isFlow && item.width.mode === 'fill' && !rowMainAxis) {
       node.setAlignSelf(yoga.ALIGN_STRETCH)
     }
@@ -526,8 +535,9 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     if (!this.yoga || !this.root || !this.config || this.disposed) return
     try {
       const yoga = this.yoga
-      this.root.setWidth(this.document.output.width)
-      this.root.setHeight(this.document.output.height)
+      const extent = this.rootExtent()
+      this.root.setWidth(extent.width)
+      this.root.setHeight(extent.height)
       this.root.setFlexDirection(yoga.FLEX_DIRECTION_ROW)
       const desiredChildren = new Map<Node, readonly Node[]>()
       const rootChildren = this.document.rootIds.map((entityId) =>
@@ -559,6 +569,29 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     }
   }
 
+  /**
+   * 求合成 Yoga 根需要的尺寸。
+   *
+   * @remarks
+   * v7 的文档根是一个或多个 Frame，没有全局输出尺寸可用。根 Frame 全部是 Absolute 定位且
+   * 尺寸固定，因此合成根只需要覆盖它们的并集包围盒——这个值不影响任何 Frame 自身的求解，
+   * 只是给 Yoga 一个确定的可用空间，避免依赖 `undefined` 造成的实现相关行为。
+   */
+  private rootExtent(): { readonly width: number; readonly height: number } {
+    let width = 0
+    let height = 0
+    this.document.rootIds.forEach((entityId) => {
+      const entity = this.document.entities[entityId]
+      if (!entity) return
+      const frame = getComposeFrame(entity)
+      if (!frame) return
+      const offset = getComposeLayoutItem(entity).offset
+      width = Math.max(width, offset.x + frame.size.width)
+      height = Math.max(height, offset.y + frame.size.height)
+    })
+    return { width, height }
+  }
+
   private invalidateMeasurements(entityIds?: readonly string[]) {
     if (!this.yoga || this.disposed) return
     const targets = entityIds ?? [...this.measuredEntityIds]
@@ -578,11 +611,8 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   private calculateAndPublish() {
     if (!this.yoga || !this.root || this.disposed) return
     try {
-      this.root.calculateLayout(
-        this.document.output.width,
-        this.document.output.height,
-        this.yoga.DIRECTION_LTR,
-      )
+      const extent = this.rootExtent()
+      this.root.calculateLayout(extent.width, extent.height, this.yoga.DIRECTION_LTR)
       const previousBoxes = this.state.status === 'ready' ? this.state.snapshot.boxes : undefined
       const boxes: Record<string, ComposeLayoutSnapshot['boxes'][string]> = {}
       this.nodes.forEach((node, entityId) => {

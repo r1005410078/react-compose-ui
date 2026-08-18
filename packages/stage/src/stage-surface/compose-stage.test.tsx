@@ -12,6 +12,7 @@ import {
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
+  createComposeFrameEntity,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
@@ -81,12 +82,27 @@ function entity(
   }
 }
 
+const ROOT_FRAME_ID = 'frame-root'
+
+/** v7 的顶层 Entity 是根 Frame 的子级；断言"根顺序"就是断言它的 childIds。 */
+function rootChildIds(value: ComposeDocument): readonly string[] {
+  const hierarchy = value.entities[ROOT_FRAME_ID]?.components.Hierarchy as
+    { childIds?: readonly string[] } | undefined
+  return hierarchy?.childIds ?? []
+}
+
 function document(
   entities: readonly ComposeEntity[] = [entity('a')],
   rootIds: readonly string[] = entities.map(({ id }) => id),
 ): ComposeDocument {
+  // v7 的根层级只接受 Frame；夹具把给定的顶层 Entity 包进一块 1280×720 的画板。
+  const frame = createComposeFrameEntity({
+    id: ROOT_FRAME_ID,
+    childIds: rootIds,
+    backgroundPaint: { kind: 'solid', color: '#111827' },
+  })
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: {
         stepX: 8,
@@ -97,11 +113,12 @@ function document(
         snapEnabled: true,
       },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: '#111827' } },
-    rootIds,
-    entities: Object.fromEntries(entities.map((item) => [item.id, item])),
+    rootIds: [ROOT_FRAME_ID],
+    entities: {
+      ...Object.fromEntries(entities.map((item) => [item.id, item])),
+      [ROOT_FRAME_ID]: frame,
+    },
   }
 }
 
@@ -614,25 +631,35 @@ describe('ComposeStage ECS', () => {
     expect(setMeasurementPort).toHaveBeenLastCalledWith(undefined)
   })
 
-  it('OpenSpec: stage / Stage 输出背景 Paint / 编辑渐变输出背景', () => {
+  it('OpenSpec: stage / Stage Frame 背景 Paint / 编辑渐变 Frame 背景', () => {
     const value = document()
+    const frame = value.entities[ROOT_FRAME_ID]!
     renderStage({
       ...value,
-      output: {
-        ...value.output,
-        backgroundPaint: {
-          kind: 'linear-gradient',
-          start: { x: 0, y: 0.5 },
-          end: { x: 1, y: 0.5 },
-          stops: [
-            { id: 'start', position: 0, color: '#0cdeab' },
-            { id: 'end', position: 1, color: '#06785c' },
-          ],
+      entities: {
+        ...value.entities,
+        [ROOT_FRAME_ID]: {
+          ...frame,
+          components: {
+            ...frame.components,
+            Appearance: {
+              backgroundPaint: {
+                kind: 'linear-gradient',
+                start: { x: 0, y: 0.5 },
+                end: { x: 1, y: 0.5 },
+                stops: [
+                  { id: 'start', position: 0, color: '#0cdeab' },
+                  { id: 'end', position: 1, color: '#06785c' },
+                ],
+              },
+            },
+          },
         },
       },
     })
 
-    expect(screen.getByTestId('stage-output-paint')).toHaveAttribute('data-compose-output-paint', 'linear-gradient')
+    // Frame 是普通 Entity，背景由场景层按 Appearance 渲染，不再有独立的输出 Paint 层。
+    expect(screen.getByTestId(`stage-frame-boundary-${ROOT_FRAME_ID}`)).toBeInTheDocument()
   })
 
   it('OpenSpec: Renderer + Hierarchy / 先渲染自身 Renderer 再渲染子项', () => {
@@ -769,6 +796,7 @@ describe('ComposeStage ECS', () => {
     const snapshot: ComposeLayoutSnapshot = {
       revision: 2,
       boxes: {
+        [ROOT_FRAME_ID]: { x: 0, y: 0, width: 1280, height: 720, positioning: 'absolute' as const },
         parent: { x: 20, y: 30, width: 400, height: 200, positioning: 'absolute' },
         a: { x: 12, y: 16, width: 260, height: 50, positioning: 'flow' },
       },
@@ -813,8 +841,8 @@ describe('ComposeStage ECS', () => {
     const stage = screen.getByRole('application')
     fireEvent.keyDown(stage, { code: 'KeyC', key: 'c', ctrlKey: true })
     fireEvent.keyDown(stage, { code: 'KeyV', key: 'v', ctrlKey: true })
-    expect(runtime.document.rootIds).toHaveLength(2)
-    expect(runtime.document.rootIds[0]).toBe('a')
+    expect(rootChildIds(runtime.document)).toHaveLength(2)
+    expect(rootChildIds(runtime.document)[0]).toBe('a')
   })
 
   it('OpenSpec: stage / Stage 复制剪切粘贴 / 从画布菜单复制并粘贴', () => {
@@ -833,7 +861,7 @@ describe('ComposeStage ECS', () => {
 
     fireEvent.contextMenu(stage, { clientX: 10, clientY: 10 })
     fireEvent.click(screen.getByRole('menuitem', { name: /^粘贴/ }))
-    const copyId = runtime.document.rootIds.find((id) => id !== 'a')
+    const copyId = rootChildIds(runtime.document).find((id) => id !== 'a')
     expect(copyId).toBeDefined()
     expect(runtime.document.entities[copyId!]).toBeDefined()
     expect(selection).toHaveBeenLastCalledWith([copyId])
@@ -851,15 +879,15 @@ describe('ComposeStage ECS', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /^剪切/ }))
     fireEvent.contextMenu(stage, { clientX: 10, clientY: 10 })
     fireEvent.click(screen.getByRole('menuitem', { name: /^粘贴/ }))
-    expect(runtime.document.rootIds).toEqual(['b', 'a'])
+    expect(rootChildIds(runtime.document)).toEqual(['b', 'a'])
 
-    const afterCut = runtime.document.rootIds
+    const afterCut = rootChildIds(runtime.document)
     fireEvent.contextMenu(stage, { clientX: 10, clientY: 10 })
     expect(screen.getByRole('menuitem', { name: /^粘贴/ })).toHaveAttribute(
       'aria-disabled',
       'true',
     )
-    expect(runtime.document.rootIds).toEqual(afterCut)
+    expect(rootChildIds(runtime.document)).toEqual(afterCut)
   })
 
   it('OpenSpec: stage / Stage 复制剪切粘贴 / 可编辑目标保留系统剪贴板', () => {
@@ -872,7 +900,7 @@ describe('ComposeStage ECS', () => {
       key: 'v',
       ctrlKey: true,
     })
-    expect(runtime.document.rootIds).toEqual(['a'])
+    expect(rootChildIds(runtime.document)).toEqual(['a'])
   })
 
   it('OpenSpec: Context menu / Entity 删除使用新命令并显示快捷键', () => {
@@ -920,7 +948,7 @@ describe('ComposeStage ECS', () => {
     expect(sendToBack).toHaveAttribute('aria-disabled', 'true')
     expect(sendToBack).toHaveAttribute('title', '选中对象已位于目标层级或不可移动')
     fireEvent.click(bringToFront)
-    expect(runtime.document.rootIds).toEqual(['b', 'a'])
+    expect(rootChildIds(runtime.document)).toEqual(['b', 'a'])
   })
 
   it('OpenSpec: stage-paint-tools / 打开单选背景填充时以 Paint 控制柄替换普通 resize 控制柄', () => {

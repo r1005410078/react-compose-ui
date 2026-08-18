@@ -1,4 +1,4 @@
-import { getComposeLock, type ComposeDocument } from '@compose-ui/core'
+import { getComposeLock, isComposeFrameEntity, type ComposeDocument } from '@compose-ui/core'
 import { rectContains, rectsIntersect, type StageRect } from './geometry'
 import type { StageSceneIndex } from './scene-index'
 
@@ -93,6 +93,9 @@ export function resolveMarqueeHitTest(
  * hidden 与 locked 节点永远不进入结果，`subtract` 也不会因此把它们从既有选区中漏掉，因为
  * 它们本就不该出现在既有选区里。
  *
+ * 完全包住框选区域的 Frame 不进入结果：在画板里拖框表达的是"选这些子级"，把画板本身
+ * 一并选中会让紧接着的移动整体搬走画板。从画板外面框住它仍然选得中。
+ *
  * @returns 稳定文档 ID。`replace` 按确定性场景顺序返回；`add` 保留既有选区顺序并在其后追加
  * 新命中，避免打乱宿主依赖的「首个选中项」语义。
  * @public
@@ -108,6 +111,7 @@ export function resolveMarqueeSelection(query: StageMarqueeQuery): readonly stri
         const bounds = index.getWorldBounds(entityId)
         if (!entity || !bounds) return false
         if (!index.isVisible(entityId) || getComposeLock(entity).locked) return false
+        if (isComposeFrameEntity(entity) && rectContains(bounds, area)) return false
         return hitTest === 'contain'
           ? rectContains(area, bounds)
           : rectsIntersect(area, bounds)

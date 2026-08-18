@@ -66,7 +66,7 @@ test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -103,7 +103,7 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -119,7 +119,7 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
     await page.mouse.up()
   }
 
-  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(2)
   const originalBackId = await nodes.nth(0).getAttribute('data-entity-id')
   const originalFrontId = await nodes.nth(1).getAttribute('data-entity-id')
@@ -174,7 +174,7 @@ test('OpenSpec: stage / 直接绘制 Preset / 文字工具只按点创建', asyn
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -241,7 +241,7 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -311,7 +311,7 @@ test('OpenSpec: stage / 线段命中 / 透明外接矩形不选中，线身仍�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -344,7 +344,7 @@ test('OpenSpec: stage / 画布平移手势 / 空闲张手且拖动时握手', as
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   const horizontalRuler = stage.getByTestId('stage-ruler-x')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
@@ -394,7 +394,7 @@ test('OpenSpec: stage / Shift 绘制正方形与正圆 / 拖动中动态锁定�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -438,7 +438,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await rectangle.click()
   await editor.locator('[data-workspace-tab="compose-history-panel"]').click()
 
@@ -576,7 +576,7 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await drawContainer(page, editor)
-  const frame = stage.locator('.compose-stage__scene > .compose-stage__node.is-container')
+  const frame = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-container')
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
   const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
@@ -811,7 +811,7 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
   await editor.getByText('命令', { exact: true }).click()
   await expect(editor.getByRole('region', { name: '命令调试台' })

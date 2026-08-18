@@ -254,8 +254,13 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly onEntityRename?: (entityId: string, name: string) => void
   /** 为当前规范化选区打开宿主的项目组件创建流程；省略时菜单不显示该入口。 */
   readonly onCreateComponentIntent?: (entityIds: readonly string[]) => void
-  /** 隐式 Canvas 输出区域当前是否为 Inspector 目标。 */
-  readonly outputSelected?: boolean
+  /**
+   * 没有选择时 Frame 相关动作与辅助线回退的默认 Frame。
+   *
+   * @remarks
+   * 只承担回退职责：有选择时活动 Frame 始终解析为选中项最近的祖先 Frame。
+   */
+  readonly defaultFrameId?: string | null
   /** 请求清空节点选择并检查隐式 Canvas 输出属性。 */
   readonly onOutputSelect?: () => void
   /**

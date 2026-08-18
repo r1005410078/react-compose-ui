@@ -2,8 +2,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it } from 'vitest'
 import { createComposeAnimationCommandHandlers } from '@compose-ui/animation'
 import {
+  createComposeFrameEntity,
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
   createTransactionRuntime,
   getComposeAnimations,
 } from '@compose-ui/core'
@@ -24,20 +24,26 @@ const messages: AnimationInspectorMessages = {
   playingTakenOver: '时间轴已由脚本接管：解除当前时间绑定后才能绑定播放',
 }
 
+/** 动画清单归属 Frame。 */
+const FRAME_ID = 'frame-root'
+
 function documentWith(bindings?: Record<string, unknown>): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: [],
-    entities: {},
-    animations: [{
-      id: 'intro',
-      name: '入场',
-      durationMs: 400,
-      playbackMode: 'play-once',
-      ...(bindings ? { bindings } : {}),
-    }],
+    rootIds: [FRAME_ID],
+    entities: {
+      [FRAME_ID]: createComposeFrameEntity({
+        id: FRAME_ID,
+        animations: [{
+          id: 'intro',
+          name: '入场',
+          durationMs: 400,
+          playbackMode: 'play-once',
+          ...(bindings ? { bindings } : {}),
+        }] as never,
+      }),
+    },
   } as ComposeDocument
 }
 
@@ -54,10 +60,11 @@ function setup(document: ComposeDocument) {
     return { running, progress, title }
   })
   const renderInspector = () => {
-    const animation = getComposeAnimations(runtime.document)[0]!
+    const animation = getComposeAnimations(runtime.document, FRAME_ID)[0]!
     return (
       <AnimationInspector
         animation={animation}
+        frameId={FRAME_ID}
         dispatch={(command) => runtime.dispatch(command)}
         idFactory={() => `inspector-${sequence += 1}`}
         messages={messages}
@@ -77,10 +84,10 @@ describe('AnimationInspector', () => {
     fireEvent.change(screen.getByRole('combobox', { name: '播放模式' }), {
       target: { value: 'loop' },
     })
-    expect(getComposeAnimations(runtime.document)[0]!.playbackMode).toBe('loop')
+    expect(getComposeAnimations(runtime.document, FRAME_ID)[0]!.playbackMode).toBe('loop')
     // 修改经 animation.configure 进入文档与撤销历史。
     runtime.undo()
-    expect(getComposeAnimations(runtime.document)[0]!.playbackMode).toBe('play-once')
+    expect(getComposeAnimations(runtime.document, FRAME_ID)[0]!.playbackMode).toBe('play-once')
     view.rerender(renderInspector())
     expect(screen.getByRole('combobox', { name: '播放模式' })).toHaveValue('play-once')
   })
@@ -97,7 +104,7 @@ describe('AnimationInspector', () => {
     expect(within(picker).queryByText('title')).not.toBeInTheDocument()
 
     fireEvent.click(within(picker).getByText('running'))
-    expect(getComposeAnimations(runtime.document)[0]!.bindings).toEqual({
+    expect(getComposeAnimations(runtime.document, FRAME_ID)[0]!.bindings).toEqual({
       playing: { scope: 'page', exportName: 'running' },
     })
   })
@@ -121,10 +128,10 @@ describe('AnimationInspector', () => {
 
     // 已绑定状态提供解绑入口；解除后 bindings 整个命名空间清空。
     fireEvent.click(screen.getByRole('button', { name: '解绑 播放' }))
-    expect(getComposeAnimations(runtime.document)[0]!.bindings).toBeUndefined()
+    expect(getComposeAnimations(runtime.document, FRAME_ID)[0]!.bindings).toBeUndefined()
 
     runtime.undo()
-    expect(getComposeAnimations(runtime.document)[0]!.bindings).toEqual({
+    expect(getComposeAnimations(runtime.document, FRAME_ID)[0]!.bindings).toEqual({
       playing: { scope: 'page', exportName: 'running' },
     })
     view.rerender(renderInspector())

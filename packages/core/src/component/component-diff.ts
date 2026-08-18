@@ -156,7 +156,7 @@ function fieldOperations(input: {
  *
  * @remarks
  * 数组只作为完整字段写入，绝不生成数组下标路径。Hierarchy.childIds 只由 add/remove/move
- * 结构操作表达。顶层 canvas/output 与 Entity name 当前不是可覆盖语义，变化会显式拒绝。
+ * 结构操作表达。顶层 canvas 与 Entity name 当前不是可覆盖语义，变化会显式拒绝。
  *
  * @public
  */
@@ -173,8 +173,8 @@ export function diffComposeComponentDocuments(input: {
     || !parentRoot
     || parentRoot !== currentRoot
   ) return issue('Variant 必须保持与直接父源相同的唯一根 ID', ['rootIds'])
-  if (!equal(input.parent.canvas, input.current.canvas) || !equal(input.parent.output, input.current.output)) {
-    return issue('Variant 不支持覆盖 canvas 或 output', ['output'])
+  if (!equal(input.parent.canvas, input.current.canvas)) {
+    return issue('Variant 不支持覆盖 canvas', ['canvas'])
   }
   const commonIds = Object.keys(input.parent.entities)
     .filter((id) => input.current.entities[id] !== undefined)

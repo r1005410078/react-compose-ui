@@ -1,5 +1,6 @@
 import {
   getComposeClip,
+  isComposeFrameEntity,
   getComposeHierarchy,
   getComposeLock,
   getComposeVisibility,
@@ -14,8 +15,10 @@ import {
   invertMatrix,
   type StageGuide,
   type StageMatrix,
+  type StagePoint,
   type StageRect,
 } from './geometry'
+import { listFrameWorldGuides } from './frame-space'
 
 /**
  * 一个不可变 ComposeDocument 的空间查询索引。
@@ -55,8 +58,19 @@ export interface StageSceneIndex {
   ): string | null
   /** 按 paint order 查询包含世界点且未被裁剪祖先遮蔽的最上层可见 Entity。 */
   entityAtPoint(point: { readonly x: number; readonly y: number }): string | null
-  /** 为选区建立 Entity 与文档辅助线吸附候选。 */
-  snapCandidates(excludedIds: readonly string[]): readonly StageGuide[]
+  /** 查询 Frame 局部原点的世界坐标；不是 Frame 或缺失时返回 null。 */
+  getFrameOrigin(frameId: string): StagePoint | null
+  /**
+   * 为选区建立 Entity 与辅助线吸附候选。
+   *
+   * @param excludedIds - 不参与吸附的 Entity；其后代一并排除。
+   * @param activeFrameId - 提供辅助线的 Frame；辅助线是 Frame 局部数据，省略时不产生
+   * guide 候选。
+   */
+  snapCandidates(
+    excludedIds: readonly string[],
+    activeFrameId?: string | null,
+  ): readonly StageGuide[]
 }
 
 type SceneIndexCache = WeakMap<
@@ -258,7 +272,12 @@ export function createStageSceneIndex(
         visibility.get(entityId) === true && contains(entityId) && isExposed(entityId)
       )) ?? null
     },
-    snapCandidates(excludedIds) {
+    getFrameOrigin(frameId) {
+      if (!isComposeFrameEntity(document.entities[frameId])) return null
+      const matrix = matrices.get(frameId)
+      return matrix ? applyMatrix(matrix, { x: 0, y: 0 }) : null
+    },
+    snapCandidates(excludedIds, activeFrameId) {
       const excluded = new Set(excludedIds)
       const excludeDescendants = (entityId: string) => {
         const entity = document.entities[entityId]
@@ -294,11 +313,9 @@ export function createStageSceneIndex(
         })
       }
       if (document.canvas.smartSnap.guides) {
-        document.canvas.guides.forEach((guide) => candidates.push({
-          axis: guide.axis,
-          value: guide.position,
-          source: 'guide',
-        }))
+        // 辅助线保存在 Frame 局部坐标，吸附在世界坐标进行，因此这里必须过一次映射。
+        listFrameWorldGuides(document, activeFrameId ?? null, index).forEach((guide) =>
+          candidates.push({ axis: guide.axis, value: guide.value, source: 'guide' }))
       }
       return candidates
     },

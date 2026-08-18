@@ -4,28 +4,39 @@ import {
   getComposeGeometryConstraints,
   getComposeLayoutItem,
   getComposeRenderer,
+  type ComposeEntity,
   type ComposeBaseComponentAsset,
 } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import { createComposeComponentInstanceEntity } from './component-instance-entity'
 
+/** 给组件根就地加上 Frame Component：组件文档的单根必须是 Frame。 */
+function withFrame(entity: ComposeEntity, width: number, height: number): ComposeEntity {
+  return {
+    ...entity,
+    components: {
+      ...entity.components,
+      Frame: { size: { width, height }, guides: [] },
+    },
+  }
+}
+
 function asset(): ComposeBaseComponentAsset {
   const root = createComposeGroupEntitySeed({ id: 'root', size: { width: 240, height: 120 } })
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'card',
     name: 'Card',
     document: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: {
         grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
         smartSnap: { nodes: true, guides: true },
-        guides: [],
       },
-      output: { width: 240, height: 120, backgroundPaint: { kind: 'solid', color: 'transparent' } },
+      // 组件文档的单根必须是 Frame；这里给既有根就地加上 Frame Component。
       rootIds: ['root'],
-      entities: { root },
+      entities: { root: withFrame(root, 240, 120) },
     },
   }
 }

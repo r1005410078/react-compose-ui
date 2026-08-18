@@ -1,7 +1,7 @@
 import {
+  createComposeFrameEntity,
   createDefaultCanvasSettings,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
   createTransactionRuntime,
   getComposeBindings,
   type ComposeDocument,
@@ -24,11 +24,13 @@ const entity: ComposeEntity = {
 }
 
 const document: ComposeDocument = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   canvas: createDefaultCanvasSettings(),
-  output: createDefaultOutputSettings(),
-  rootIds: [entity.id],
-  entities: { [entity.id]: entity },
+  rootIds: ['frame-root'],
+  entities: {
+    [entity.id]: entity,
+    'frame-root': createComposeFrameEntity({ id: 'frame-root', childIds: [entity.id] }),
+  },
 }
 
 describe('OpenSpec: editor-workspace-layout / 文档绑定事务', () => {

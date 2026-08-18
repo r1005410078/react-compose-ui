@@ -470,7 +470,7 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
       }))
     })
     const session = lastSession(onActiveSessionChange)
-    expect(session?.runtime.document.schemaVersion).toBe(6)
+    expect(session?.runtime.document.schemaVersion).toBe(7)
   })
 })
 
@@ -521,10 +521,35 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     durationMs: 500,
     playbackMode: 'loop',
   }))
-  const boundPageText = serializeComposePageFile({
-    ...createEmptyComposePageFile(),
-    animation: { providerId: 'memory', assetKey: 'Home.animation.json', scope: 'persistent' },
-  })
+  // v7 的动画绑定挂在 Frame 的 Animations.source 上。
+  const boundPageText = (() => {
+    const page = createEmptyComposePageFile()
+    const frameId = page.document.rootIds[0]!
+    const frame = page.document.entities[frameId]!
+    return serializeComposePageFile({
+      ...page,
+      document: {
+        ...page.document,
+        entities: {
+          ...page.document.entities,
+          [frameId]: {
+            ...frame,
+            components: {
+              ...frame.components,
+              Animations: {
+                items: [],
+                source: {
+                  providerId: 'memory',
+                  assetKey: 'Home.animation.json',
+                  scope: 'persistent',
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+  })()
 
   function createBoundProvider(overrides: Partial<ComposeAssetProvider> = {}) {
     return createProvider({
@@ -542,7 +567,11 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
     await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
-    expect(session?.runtime.document.animations).toEqual([
+    // 清单归属 Frame：水合写进默认 Frame 的 Animations.items。
+    const frameId = session.runtime.document.rootIds[0]!
+    const animations = session.runtime.document.entities[frameId]?.components.Animations as
+      { items?: readonly unknown[] } | undefined
+    expect(animations?.items).toEqual([
       expect.objectContaining({ id: 'intro', name: '入场', durationMs: 500, playbackMode: 'loop' }),
     ])
   })
@@ -577,7 +606,11 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     act(() => session.runtime.dispatch({
       id: 'configure-animation',
       type: 'animation.configure',
-      payload: { animationId: 'intro', durationMs: 800 },
+      payload: {
+        frameId: session.runtime.document.rootIds[0]!,
+        animationId: 'intro',
+        durationMs: 800,
+      },
     }))
     await screen.findByRole('img', { name: '有未保存改动' })
 
@@ -608,11 +641,10 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     const session = lastSession(onActiveSessionChange)
     act(() => session.runtime.dispatch({
       id: 'configure',
-      type: BUILTIN_COMMAND_TYPES.configureOutput,
+      type: BUILTIN_COMMAND_TYPES.setFrameSize,
       payload: {
-        width: 800,
-        height: 600,
-        backgroundPaint: { kind: 'solid', color: 'transparent' },
+        entityId: session.runtime.document.rootIds[0]!,
+        size: { width: 800, height: 600 },
       },
     }))
     await screen.findByRole('img', { name: '有未保存改动' })
@@ -636,11 +668,10 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
 
     act(() => session.runtime.dispatch({
       id: 'configure',
-      type: BUILTIN_COMMAND_TYPES.configureOutput,
+      type: BUILTIN_COMMAND_TYPES.setFrameSize,
       payload: {
-        width: 800,
-        height: 600,
-        backgroundPaint: { kind: 'solid', color: 'transparent' },
+        entityId: session.runtime.document.rootIds[0]!,
+        size: { width: 800, height: 600 },
       },
     }))
 
@@ -676,11 +707,10 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
     const session = lastSession(onActiveSessionChange)
     act(() => session.runtime.dispatch({
       id: 'configure',
-      type: BUILTIN_COMMAND_TYPES.configureOutput,
+      type: BUILTIN_COMMAND_TYPES.setFrameSize,
       payload: {
-        width: 800,
-        height: 600,
-        backgroundPaint: { kind: 'solid', color: 'transparent' },
+        entityId: session.runtime.document.rootIds[0]!,
+        size: { width: 800, height: 600 },
       },
     }))
     await screen.findByRole('img', { name: '有未保存改动' })
@@ -703,11 +733,10 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
     const session = lastSession(onActiveSessionChange)
     act(() => session.runtime.dispatch({
       id: 'configure',
-      type: BUILTIN_COMMAND_TYPES.configureOutput,
+      type: BUILTIN_COMMAND_TYPES.setFrameSize,
       payload: {
-        width: 800,
-        height: 600,
-        backgroundPaint: { kind: 'solid', color: 'transparent' },
+        entityId: session.runtime.document.rootIds[0]!,
+        size: { width: 800, height: 600 },
       },
     }))
     await screen.findByRole('img', { name: '有未保存改动' })
@@ -736,6 +765,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
         <CanvasInspector
           dispatch={vi.fn()}
           document={createEmptyComposePageFile().document}
+          frameId={createEmptyComposePageFile().document.rootIds[0]!}
           idFactory={() => 'page-script-inspector'}
         />
       ),
@@ -880,6 +910,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
         <CanvasInspector
           dispatch={vi.fn()}
           document={createEmptyComposePageFile().document}
+          frameId={createEmptyComposePageFile().document.rootIds[0]!}
           idFactory={() => 'page-script-reload'}
         />
       ),

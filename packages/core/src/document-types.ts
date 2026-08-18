@@ -1,5 +1,5 @@
 /**
- * ComposeDocument v6 的严格 JSON、ECS Entity/Component 与派生布局公共协议。
+ * ComposeDocument v7 的严格 JSON、ECS Entity/Component 与派生布局公共协议。
  *
  * @packageDocumentation
  */
@@ -265,7 +265,7 @@ export interface ComposeBindings extends JsonObject {
   readonly rendererProps: ComposeRendererPropsBindings
 }
 
-/** ComposeDocument v6 内建 Component Key。 @public */
+/** ComposeDocument v7 内建 Component Key。 @public */
 export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   composition: 'Composition',
   transform: 'Transform',
@@ -277,12 +277,14 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   widgetSwitcher: 'WidgetSwitcher',
   layout: 'Layout',
   clip: 'Clip',
+  frame: 'Frame',
+  animations: 'Animations',
   appearance: 'Appearance',
   renderer: 'Renderer',
   bindings: 'Bindings',
 } as const
 
-/** ComposeDocument v6 内建 Component Key 联合。 @public */
+/** ComposeDocument v7 内建 Component Key 联合。 @public */
 export type ComposeBuiltinComponentKey =
   typeof COMPOSE_BUILTIN_COMPONENT_KEYS[keyof typeof COMPOSE_BUILTIN_COMPONENT_KEYS]
 
@@ -296,14 +298,30 @@ export interface ComposeEntity {
   readonly components: Readonly<Record<string, JsonObject>>
 }
 
-/** 一条全局世界坐标辅助线。 @public */
-export interface ComposeCanvasGuide {
+/**
+ * 一条 Frame 局部坐标辅助线。
+ *
+ * @remarks
+ * v7 起辅助线归属 Frame 而不是文档：Frame 是坐标原点边界，世界坐标辅助线在多画板下没有意义。
+ * `position` 使用所属 Frame 的局部坐标，因此移动 Frame 不会改写任何 guide。
+ *
+ * @public
+ */
+export interface ComposeFrameGuide extends JsonObject {
   readonly id: string
   readonly axis: 'x' | 'y'
   readonly position: number
 }
 
-/** 编辑器画布的持久化设置。 @public */
+/**
+ * 编辑器视口的持久化设置。
+ *
+ * @remarks
+ * v7 起这里只剩网格与吸附——它们是编辑辅助，不是内容。辅助线随 Frame 走，见
+ * {@link ComposeFrameGuide}；输出尺寸与背景由根 Frame 自身承载。
+ *
+ * @public
+ */
 export interface ComposeCanvasSettings {
   readonly grid: {
     readonly stepX: number
@@ -317,14 +335,34 @@ export interface ComposeCanvasSettings {
     readonly nodes: boolean
     readonly guides: boolean
   }
-  readonly guides: readonly ComposeCanvasGuide[]
 }
 
-/** 文档发布与 Preview 使用的固定原点输出设置。 @public */
-export interface ComposeOutputSettings {
-  readonly width: number
-  readonly height: number
-  readonly backgroundPaint: ComposePaint
+/**
+ * 把 Entity 提升为独立作用域边界的 Component。
+ *
+ * @remarks
+ * Frame 是 v7 唯一的"有尺寸的结构单元"：页面根、画板、组件根、Page Slot 目标都是 Frame。
+ * 它不是新的 Entity 类型而是一个 Component——"把容器升格为画板/组件根"因此只是加一个
+ * Component，Entity ID、子级与动画轨道全部原地保留，不需要换类型式的结构搬迁。
+ *
+ * 拥有 Frame 的 Entity MUST 同时拥有 {@link ComposeHierarchy}，并构成六重隔离边界：
+ * 坐标原点、独立布局求解 Runtime、裁剪、动画时间轴、脚本作用域、预览/导出单位。
+ *
+ * `size` 是该 Entity 尺寸的唯一事实来源，覆盖 LayoutItem 的推导结果；因此 Frame 上不允许
+ * 使用 Hug。
+ *
+ * @public
+ */
+export type ComposeFrame = JsonObject & {
+  readonly size: ComposeSize
+  /**
+   * 该 Frame 局部坐标下的辅助线；缺省等价于空数组。
+   *
+   * @remarks
+   * 使用 `JsonObject &` 交叉而不是 `extends JsonObject`，因为索引签名的 `JsonValue`
+   * 不接受 `undefined`；{@link ComposeAppearance} 出于同样原因采用这种写法。
+   */
+  readonly guides?: readonly ComposeFrameGuide[]
 }
 
 /** 动画到达边界后的推进方式。 @public */
@@ -384,22 +422,49 @@ export type ComposeAnimation = JsonObject & {
   readonly bindings?: ComposeAnimationBindings
 }
 
-/** 编辑器、Stage 与 Preview 共享的 v6 ECS 文档。 @public */
-export interface ComposeDocument {
-  /** 当前且唯一支持的文档协议版本。 @defaultValue 6 */
-  readonly schemaVersion: 6
-  readonly canvas: ComposeCanvasSettings
-  readonly output: ComposeOutputSettings
-  readonly rootIds: readonly string[]
-  readonly entities: Readonly<Record<string, ComposeEntity>>
+/**
+ * Frame 的动画清单 Component。
+ *
+ * @remarks
+ * v7 起动画归属 Frame 而不是文档：Frame 是动画时间轴边界，因此组件根 Frame 天然拥有自己的
+ * 时间线，实例播放自己的动画。关键帧轨道仍存放在被动画 Entity 的 `Animation` Component 上，
+ * 由 `@compose-ui/animation` 定义——轨道随 Entity 复制与删除的既有语义完全不变。
+ *
+ * 轨道所属 Entity 与清单所属 Frame 之间不得跨越任何嵌套 Frame 边界，该不变量由
+ * `@compose-ui/animation` 的校验入口负责。
+ *
+ * @public
+ */
+export type ComposeAnimations = JsonObject & {
+  readonly items: readonly ComposeAnimation[]
   /**
-   * 该文档的动画清单；缺省等价于空清单。
+   * 该 Frame 绑定的动画文件稳定引用；未绑定时缺省。
    *
    * @remarks
-   * 向后兼容的加法扩展，`schemaVersion` 保持 `6`，老文档不含该字段仍然合法。
-   * 读取时使用 {@link getComposeAnimations} 归一化，不要各自处理 `undefined`。
+   * 动画文件是静态权威：宿主打开页面时把文件里的清单水合进 `items`，保存时把 `items` 的
+   * 变化回写文件。解除引用不删除文件资源。
    */
-  readonly animations?: readonly ComposeAnimation[]
+  readonly source?: {
+    readonly providerId: string
+    readonly assetKey: string
+    readonly scope: 'persistent' | 'session'
+  }
+}
+
+/** 编辑器、Stage 与 Preview 共享的 v7 ECS 文档。 @public */
+export interface ComposeDocument {
+  /** 当前且唯一支持的文档协议版本。 @defaultValue 7 */
+  readonly schemaVersion: 7
+  readonly canvas: ComposeCanvasSettings
+  /**
+   * 文档的根 Frame，至少一个。
+   *
+   * @remarks
+   * v7 起根层级只接受拥有 {@link ComposeFrame} 的 Entity——多个根即多画板。v6 的隐式
+   * Canvas 根与文档级 `output` 已被删除：输出尺寸、背景与原点全部由根 Frame 自身承载。
+   */
+  readonly rootIds: readonly string[]
+  readonly entities: Readonly<Record<string, ComposeEntity>>
 }
 
 /** 文档校验问题稳定机器码。 @public */
@@ -415,15 +480,16 @@ export type DocumentValidationIssueCode =
   | 'document.multiple-parents'
   | 'document.cycle'
   | 'document.orphan-entity'
-  | 'output.invalid'
-  | 'output.invalid-size'
-  | 'output.invalid-background'
+  | 'document.empty-root'
+  | 'document.root-not-frame'
   | 'canvas.invalid'
   | 'canvas.invalid-step'
   | 'canvas.invalid-offset'
   | 'canvas.invalid-primary-interval'
-  | 'canvas.invalid-guide'
-  | 'canvas.duplicate-guide'
+  | 'frame.invalid'
+  | 'frame.invalid-size'
+  | 'frame.invalid-guide'
+  | 'frame.duplicate-guide'
   | 'entity.invalid'
   | 'entity.id-mismatch'
   | 'entity.invalid-field'
@@ -445,6 +511,7 @@ export type DocumentValidationIssueCode =
   | 'animation.duplicate-id'
   | 'animation.invalid-duration'
   | 'animation.invalid-binding'
+  | 'animation.orphan-group'
 
 /** 一个可定位的文档校验问题。 @public */
 export interface DocumentValidationIssue {

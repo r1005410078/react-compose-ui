@@ -1,7 +1,7 @@
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
+  createComposeFrameEntity,
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
   createEmptyComposePageFile,
   type ComposeDocument,
   type ComposeEntity,
@@ -78,6 +78,8 @@ function document(): ComposeDocument {
         },
       },
       Renderer: { type: 'surface', props: { text: 'Desktop surface' } },
+      // v7 的根必须是 Frame：desktop 与 mobile 就是这份文档的两块画板。
+      Frame: { size: { width: 800, height: 600 }, guides: [] },
     }, 'Desktop'),
     group: entity('group', {
       Transform: {
@@ -118,20 +120,15 @@ function document(): ComposeDocument {
       },
       Hierarchy: { childIds: ['mobile-text'] },
       Clip: { enabled: true },
+      Frame: { size: { width: 390, height: 844 }, guides: [] },
     }, 'Mobile'),
     'mobile-text': entity('mobile-text', {
       Renderer: { type: 'text', props: { text: 'Mobile text' } },
     }, 'Mobile Text'),
   }
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: {
-      ...createDefaultOutputSettings(),
-      width: 1440,
-      height: 900,
-      backgroundPaint: { kind: 'solid', color: '#eef2ff' },
-    },
     rootIds: ['desktop', 'mobile'],
     entities,
   }
@@ -188,8 +185,13 @@ describe('ComposePreview', () => {
     const text = base.entities.text!
     const value: ComposeDocument = {
       ...base,
-      rootIds: ['text'],
+      rootIds: ['hug-frame'],
       entities: {
+        'hug-frame': createComposeFrameEntity({
+          id: 'hug-frame',
+          childIds: ['text'],
+          size: { width: 400, height: 300 },
+        }),
         text: {
           ...text,
           components: {
@@ -260,7 +262,7 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={document()}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'desktop' }}
+        frameId="desktop"
       />,
     )
 
@@ -284,7 +286,7 @@ describe('ComposePreview', () => {
         assetResolver={assetResolver}
         document={document()}
         registry={assetRegistry}
-        target={{ kind: 'container', entityId: 'group' }}
+        frameId="desktop"
       />,
     )
 
@@ -313,9 +315,14 @@ describe('ComposePreview', () => {
     const base = document()
     const value: ComposeDocument = {
       ...base,
-      rootIds: ['switcher'],
+      rootIds: ['switcher-frame'],
       entities: {
         ...base.entities,
+        'switcher-frame': createComposeFrameEntity({
+          id: 'switcher-frame',
+          childIds: ['switcher'],
+          size: { width: 400, height: 300 },
+        }),
         switcher: entity('switcher', {
           Transform: { position: { x: 0, y: 0 }, size: { width: 400, height: 300 }, rotation: 0 },
           Hierarchy: { childIds: ['first', 'second', 'third'] },
@@ -347,11 +354,11 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={document()}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'desktop' }}
+        frameId="desktop"
       />,
     )
 
-    const container = screen.getByTestId('compose-preview-container')
+    const container = screen.getByTestId('compose-preview-frame')
     expect(container).toHaveStyle({ width: '800px', height: '600px', overflow: 'hidden' })
     expect(container).not.toHaveStyle({ left: '-500px', top: '200px' })
     expect(screen.getByTestId('compose-preview-entity-group')).toHaveStyle({
@@ -406,11 +413,11 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={layoutDocument}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'desktop' }}
+        frameId="desktop"
       />,
     )
 
-    expect(screen.getByTestId('compose-preview-container').style.display).toBe('')
+    expect(screen.getByTestId('compose-preview-frame').style.display).toBe('')
     expect(screen.getByTestId('compose-preview-entity-group')).toHaveStyle({
       position: 'absolute',
       left: '100px',
@@ -423,11 +430,11 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={document()}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'desktop' }}
+        frameId="desktop"
       />,
     )
 
-    const container = screen.getByTestId('compose-preview-container')
+    const container = screen.getByTestId('compose-preview-frame')
     expect(container).toHaveStyle({
       borderRadius: '10px',
       opacity: '0.95',
@@ -457,10 +464,10 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={scrolling}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'desktop' }}
+        frameId="desktop"
       />,
     )
-    const container = screen.getByTestId('compose-preview-container')
+    const container = screen.getByTestId('compose-preview-frame')
     expect(container).toHaveStyle({ overflowX: 'hidden', overflowY: 'auto' })
     container.scrollTop = 42
     view.unmount()
@@ -468,10 +475,10 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={scrolling}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'desktop' }}
+        frameId="desktop"
       />,
     )
-    expect(screen.getByTestId('compose-preview-container').scrollTop).toBe(0)
+    expect(screen.getByTestId('compose-preview-frame').scrollTop).toBe(0)
   })
 
   it('滚动内容尺寸包含 Auto Layout 的底部和右侧内边距', () => {
@@ -523,7 +530,7 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={padded}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'desktop' }}
+        frameId="desktop"
       />,
     )
 
@@ -538,7 +545,7 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={document()}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'desktop' }}
+        frameId="desktop"
       />,
     )
     expect(screen.getByRole('status', { name: /missing/ })).toBeInTheDocument()
@@ -550,7 +557,7 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={document()}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'missing-container' }}
+        frameId="missing-container"
       />,
     )
     expect(screen.getByRole('alert')).toHaveTextContent('missing-container')
@@ -559,7 +566,7 @@ describe('ComposePreview', () => {
       <ComposePreview
         document={document()}
         registry={registry()}
-        target={{ kind: 'container', entityId: 'text' }}
+        frameId="text"
       />,
     )
     expect(screen.getByRole('alert')).toHaveTextContent('text')
@@ -568,37 +575,43 @@ describe('ComposePreview', () => {
   it('预览完整文档并忽略画布编辑元数据', () => {
     render(<ComposePreview document={document()} registry={registry()} />)
 
-    expect(screen.getByTestId('compose-preview-document')).toHaveStyle({
-      width: '1440px',
-      height: '900px',
-      overflow: 'hidden',
+    // 省略 frameId 时渲染第一个根 Frame（desktop），另一块画板不出现在同一次预览里。
+    expect(screen.getByTestId('compose-preview-frame')).toHaveStyle({
+      width: '800px',
+      height: '600px',
     })
-    expect(screen.getByTestId('compose-preview-output-paint')).toHaveAttribute('data-compose-paint', 'solid')
-    expect(screen.getByTestId('compose-preview-entity-desktop')).toHaveStyle({
-      left: '-500px',
-      top: '200px',
-    })
-    expect(screen.getByText('preview:Mobile text')).toBeInTheDocument()
+    expect(screen.getByText('preview:Desktop text')).toBeInTheDocument()
+    expect(screen.queryByText('preview:Mobile text')).not.toBeInTheDocument()
     expect(screen.queryByTestId('stage-ruler-x')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Stage 编辑覆盖层')).not.toBeInTheDocument()
   })
 
-  it('OpenSpec: compose-preview / Preview 输出背景 Paint / 预览渐变输出背景', () => {
+  it('OpenSpec: compose-preview / Preview Frame 背景 Paint / 预览渐变 Frame 背景', () => {
     const value = document()
+    const desktop = value.entities.desktop!
     render(
       <ComposePreview
         document={{
           ...value,
-          output: {
-            ...value.output,
-            backgroundPaint: {
-              kind: 'angular-gradient',
-              center: { x: 0.5, y: 0.5 },
-              angle: 45,
-              stops: [
-                { id: 'start', position: 0, color: '#0cdeab' },
-                { id: 'end', position: 1, color: '#06785c' },
-              ],
+          entities: {
+            ...value.entities,
+            desktop: {
+              ...desktop,
+              components: {
+                ...desktop.components,
+                Appearance: {
+                  ...desktop.components.Appearance,
+                  backgroundPaint: {
+                    kind: 'angular-gradient',
+                    center: { x: 0.5, y: 0.5 },
+                    angle: 45,
+                    stops: [
+                      { id: 'start', position: 0, color: '#0cdeab' },
+                      { id: 'end', position: 1, color: '#06785c' },
+                    ],
+                  },
+                },
+              },
             },
           },
         }}
@@ -606,7 +619,8 @@ describe('ComposePreview', () => {
       />,
     )
 
-    expect(screen.getByTestId('compose-preview-output-paint')).toHaveAttribute('data-compose-paint', 'angular-gradient')
+    expect(screen.getByTestId('compose-preview-entity-paint-desktop'))
+      .toHaveAttribute('data-compose-paint', 'angular-gradient')
   })
 
   it('OpenSpec: compose-preview / Preview 页面 setup 运行 / 点击方法更新绑定值且实例隔离', async () => {
@@ -634,8 +648,16 @@ describe('ComposePreview', () => {
     })
     const value: ComposeDocument = {
       ...document(),
-      rootIds: ['count', 'add'],
-      entities: { count: text, add: button },
+      rootIds: ['counter-frame'],
+      entities: {
+        count: text,
+        add: button,
+        'counter-frame': createComposeFrameEntity({
+          id: 'counter-frame',
+          childIds: ['count', 'add'],
+          size: { width: 400, height: 300 },
+        }),
+      },
     }
     const page = {
       ...createEmptyComposePageFile(),

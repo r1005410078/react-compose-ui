@@ -1,7 +1,7 @@
 import { createComposeGroupEntitySeed } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import { createStageSceneIndex } from './scene-index'
-import { document, entity, layoutSnapshot } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
 
 function indexFor(value: ReturnType<typeof document>) {
   return createStageSceneIndex(value, layoutSnapshot(value))
@@ -18,7 +18,7 @@ describe('StageSceneIndex ECS queries', () => {
       childIds: ['child'],
     })
     const index = indexFor(document([container, child], ['container']))
-    expect(index.order).toEqual(['container', 'child'])
+    expect(index.order).toEqual([ROOT_FRAME_ID, 'container', 'child'])
     expect(index.getParentId('child')).toBe('container')
     expect(index.closestContainerForEntity('child')).toBe('container')
     expect(index.commonContainerForSelection(['child'])).toBe('container')
@@ -53,7 +53,8 @@ describe('StageSceneIndex ECS queries', () => {
     expect(index.containerAtPoint(point)).toBe('leaf')
     expect(index.containerAtPoint(point, ['middle'])).toBe('outer')
     expect(index.containerAtPoint(point, [])).toBe('leaf')
-    expect(index.containerAtPoint(point, ['outer'])).toBeNull()
+    // 排除 outer 子树后，命中落到根 Frame——Frame 本身就是一个可作为落点的容器。
+    expect(index.containerAtPoint(point, ['outer'])).toBe(ROOT_FRAME_ID)
   })
 
   it('OpenSpec: Visibility/Clip System / 祖先隐藏并排除裁剪外容器', () => {
@@ -78,7 +79,8 @@ describe('StageSceneIndex ECS queries', () => {
       childIds: ['clipped'],
     })
     const index = indexFor(document([outside, clipped], ['outside']))
-    expect(index.containerAtPoint({ x: 310, y: 310 })).toBeNull()
+    // 被裁剪的容器不可命中，落点退回到根 Frame。
+    expect(index.containerAtPoint({ x: 310, y: 310 })).toBe(ROOT_FRAME_ID)
   })
 
   it('OpenSpec: Selection Query / 移除已选祖先的后代', () => {
@@ -128,6 +130,6 @@ describe('OpenSpec: stage / Page Slot 嵌套内容不进入场景索引', () => 
     // 因此框选、吸附候选与场景树都取不到它们，嵌套渲染不会把它们注入外层索引。
     const index = indexFor(document([entity('slot')]))
 
-    expect(index.order).toEqual(['slot'])
+    expect(index.order).toEqual([ROOT_FRAME_ID, 'slot'])
   })
 })

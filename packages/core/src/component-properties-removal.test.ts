@@ -8,15 +8,15 @@ import {
 } from './index'
 import type { ComposeBaseComponentAsset } from './index'
 import { createComposeGroupEntitySeed } from './group'
-import { documentFixture } from './test-fixtures'
+import { componentDocumentFixture } from './test-fixtures'
 
 function baseAsset(): ComposeBaseComponentAsset {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'card',
     name: 'Card',
-    document: documentFixture(
+    document: componentDocumentFixture(
       { root: createComposeGroupEntitySeed({ id: 'root', name: 'Group' }) },
       ['root'],
     ),

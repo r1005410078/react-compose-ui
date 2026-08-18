@@ -8,6 +8,7 @@ import {
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import {
+  getComposeFrame,
   getComposeHierarchy,
   getComposeLock,
   getComposeRenderer,
@@ -149,7 +150,9 @@ export function StageSceneLayer({
             locked ? ' is-locked' : ''
           }${isSegment ? ' is-segment' : ''}`}
           data-entity-id={entity.id}
-          data-testid={hierarchy ? 'stage-container' : `stage-entity-${entity.id}`}
+          data-testid={getComposeFrame(entity)
+            ? `stage-frame-${entity.id}`
+            : hierarchy ? 'stage-container' : `stage-entity-${entity.id}`}
           key={entity.id}
           style={{
             ...composeEntitySceneStyle(entity, box),

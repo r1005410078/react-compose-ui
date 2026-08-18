@@ -12,7 +12,7 @@ import {
   createComponentExtractionPlan,
   createReplaceSelectionWithEntityCommand,
 } from './component-extraction'
-import { document, entity, layoutSnapshot } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
 
 function instanceEntity(): ComposeEntity {
   return {
@@ -100,10 +100,10 @@ describe('OpenSpec: stage-engine / 场景选区组件抽取', () => {
     if (result.status !== 'ready') return
 
     expect(result.sourceEntityIds).toEqual(['a', 'b'])
-    expect(result.componentDocument.output).toEqual({
-      width: 230,
-      height: 80,
-      backgroundPaint: { kind: 'solid', color: 'transparent' },
+    // 组件根即 Frame：创建组件是「隐含升格」的四个入口之一。
+    expect(result.componentDocument.entities['component-root']!.components.Frame).toEqual({
+      size: { width: 230, height: 80 },
+      guides: [],
     })
     expect(result.componentDocument.rootIds).toEqual(['component-root'])
     const root = result.componentDocument.entities['component-root']!
@@ -194,11 +194,11 @@ describe('OpenSpec: stage-engine / 场景选区组件抽取', () => {
     }))
 
     expect(result.status).toBe('committed')
-    expect(runtime.document.rootIds).toEqual(['before', 'instance', 'middle'])
+    expect(getComposeHierarchy(runtime.document.entities[ROOT_FRAME_ID]!)?.childIds).toEqual(['before', 'instance', 'middle'])
     expect(getComposeSpatialTransform(runtime.document.entities.instance!)).toEqual(plan.instanceTransform)
     runtime.undo()
-    expect(runtime.document.rootIds).toEqual(['before', 'a', 'middle', 'b'])
+    expect(getComposeHierarchy(runtime.document.entities[ROOT_FRAME_ID]!)?.childIds).toEqual(['before', 'a', 'middle', 'b'])
     runtime.redo()
-    expect(runtime.document.rootIds).toEqual(['before', 'instance', 'middle'])
+    expect(getComposeHierarchy(runtime.document.entities[ROOT_FRAME_ID]!)?.childIds).toEqual(['before', 'instance', 'middle'])
   })
 })

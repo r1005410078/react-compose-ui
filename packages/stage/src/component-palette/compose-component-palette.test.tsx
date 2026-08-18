@@ -49,7 +49,7 @@ const registry = createComposeEntityRegistry({
 })
 
 const document: ComposeDocument = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   canvas: {
     grid: {
       stepX: 8,
@@ -60,9 +60,7 @@ const document: ComposeDocument = {
       snapEnabled: true,
     },
     smartSnap: { nodes: true, guides: true },
-    guides: [],
   },
-    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: '#111827' } },
   rootIds: [],
   entities: {},
 }

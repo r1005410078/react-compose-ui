@@ -1,10 +1,9 @@
 import {
   COMPOSE_BUILTIN_COMPONENT_KEYS,
-  type ComposeCanvasGuide,
+  type ComposeFrameGuide,
   type ComposeCanvasSettings,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposeOutputSettings,
   type ComposeOverflowMode,
   type ComposeSpatialTransform,
   type JsonObject,
@@ -33,13 +32,13 @@ import type {
   EditorCommandMeta,
 } from './command-types'
 
-/** ComposeDocument v6 内置命令 type。 @public */
+/** ComposeDocument v7 内置命令 type。 @public */
 export const BUILTIN_COMMAND_TYPES = {
   configureCanvas: 'canvas.configure',
-  configureOutput: 'output.configure',
-  createCanvasGuide: 'canvas.guide.create',
-  moveCanvasGuide: 'canvas.guide.move',
-  deleteCanvasGuide: 'canvas.guide.delete',
+  setFrameSize: 'entity.frame.size.set',
+  createFrameGuide: 'frame.guide.create',
+  moveFrameGuide: 'frame.guide.move',
+  deleteFrameGuide: 'frame.guide.delete',
   createEntity: 'entity.create',
   deleteEntity: 'entity.delete',
   duplicateEntity: 'entity.duplicate',
@@ -102,7 +101,7 @@ function asEntity(value: unknown): ComposeEntity | null {
     : null
 }
 
-function asCanvasSettings(value: unknown): Omit<ComposeCanvasSettings, 'guides'> | null {
+function asCanvasSettings(value: unknown): ComposeCanvasSettings | null {
   if (!isRecord(value) || !isRecord(value.grid) || !isRecord(value.smartSnap)) return null
   const { grid, smartSnap } = value
   if (
@@ -136,7 +135,7 @@ function asCanvasSettings(value: unknown): Omit<ComposeCanvasSettings, 'guides'>
   }
 }
 
-function asCanvasGuide(value: unknown): ComposeCanvasGuide | null {
+function asFrameGuide(value: unknown): ComposeFrameGuide | null {
   if (
     !isRecord(value)
     || typeof value.id !== 'string'
@@ -148,40 +147,13 @@ function asCanvasGuide(value: unknown): ComposeCanvasGuide | null {
   return { id: value.id, axis: value.axis, position: value.position }
 }
 
-function asOutputSettings(value: unknown): ComposeOutputSettings | null {
-  if (
-    !isRecord(value)
-    || Object.keys(value).length !== 3
-    || !Object.keys(value).every((key) => key === 'width' || key === 'height' || key === 'backgroundPaint')
-    || typeof value.width !== 'number'
-    || !Number.isFinite(value.width)
-    || value.width <= 0
-    || typeof value.height !== 'number'
-    || !Number.isFinite(value.height)
-    || value.height <= 0
-    || !isValidComposePaint(value.backgroundPaint)
-  ) return null
-  return {
-    width: value.width,
-    height: value.height,
-    backgroundPaint: value.backgroundPaint,
-  }
-}
-
-function configureOutputHandler(): CommandHandler {
-  return {
-    type: BUILTIN_COMMAND_TYPES.configureOutput,
-    execute(document, command) {
-      const output = asOutputSettings(command.payload)
-      if (!output) return issue('output.invalid-settings', 'output.configure 参数无效')
-      if (jsonEqual(document.output, output)) return { status: 'noop', reason: '输出设置没有变化' }
-      return patches([{
-        op: 'set',
-        path: ['output'],
-        value: output as unknown as JsonValue,
-      }])
-    },
-  }
+function frameGuides(
+  document: ComposeDocument,
+  frameId: string,
+): readonly ComposeFrameGuide[] | null {
+  const frame = document.entities[frameId]?.components[COMPOSE_BUILTIN_COMPONENT_KEYS.frame]
+  if (!frame) return null
+  return Array.isArray(frame.guides) ? (frame.guides as readonly ComposeFrameGuide[]) : []
 }
 
 function configureCanvasHandler(): CommandHandler {
@@ -210,57 +182,114 @@ function configureCanvasHandler(): CommandHandler {
   }
 }
 
-function createCanvasGuideHandler(): CommandHandler {
+/**
+ * 设置 Frame 尺寸。
+ *
+ * @remarks
+ * Frame.size 是该 Entity 尺寸的唯一事实来源，因此这里同时把 LayoutItem 的 fixed fallback
+ * 对齐到新尺寸——否则 Frame 一旦被降格为普通容器就会跳回旧尺寸。
+ */
+function setFrameSizeHandler(): CommandHandler {
   return {
-    type: BUILTIN_COMMAND_TYPES.createCanvasGuide,
+    type: BUILTIN_COMMAND_TYPES.setFrameSize,
     execute(document, command) {
+      const entityId = valueAt(command.payload, 'entityId')
+      if (typeof entityId !== 'string') return issue('frame.invalid-target', 'entityId 无效')
+      const frame = document.entities[entityId]?.components[COMPOSE_BUILTIN_COMPONENT_KEYS.frame]
+      if (!frame) return issue('frame.missing', `Entity ${entityId} 不是 Frame`)
+      const size = valueAt(command.payload, 'size')
+      if (
+        !isRecord(size)
+        || typeof size.width !== 'number'
+        || !Number.isFinite(size.width)
+        || size.width <= 0
+        || typeof size.height !== 'number'
+        || !Number.isFinite(size.height)
+        || size.height <= 0
+      ) return issue('frame.invalid-size', 'Frame size 必须是有限正数')
+      if (jsonEqual(frame.size, size as unknown as JsonValue)) {
+        return { status: 'noop', reason: 'Frame 尺寸没有变化' }
+      }
+      const framePath = ['entities', entityId, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.frame]
+      const itemPath = ['entities', entityId, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem]
+      return patches([
+        { op: 'set', path: [...framePath, 'size'], value: { width: size.width, height: size.height } },
+        { op: 'set', path: [...itemPath, 'width', 'value'], value: size.width },
+        { op: 'set', path: [...itemPath, 'height', 'value'], value: size.height },
+      ])
+    },
+  }
+}
+
+function createFrameGuideHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.createFrameGuide,
+    execute(document, command) {
+      const frameId = valueAt(command.payload, 'frameId')
+      if (typeof frameId !== 'string') return issue('frame.invalid-target', 'frameId 无效')
+      const existing = frameGuides(document, frameId)
+      if (!existing) return issue('frame.missing', `Entity ${frameId} 不是 Frame`)
       const guidesValue = valueAt(command.payload, 'guides')
       const values = guidesValue === undefined ? [valueAt(command.payload, 'guide')] : guidesValue
       if (!Array.isArray(values) || values.length === 0) {
-        return issue('canvas.invalid-guide', 'canvas.guide.create 参数无效')
+        return issue('frame.invalid-guide', 'frame.guide.create 参数无效')
       }
-      const guides = values.map(asCanvasGuide)
+      const guides = values.map(asFrameGuide)
       if (guides.some((guide) => !guide)) {
-        return issue('canvas.invalid-guide', 'canvas.guide.create 包含非法 guide')
+        return issue('frame.invalid-guide', 'frame.guide.create 包含非法 guide')
       }
-      const known = new Set(document.canvas.guides.map(({ id }) => id))
-      for (const guide of guides as ComposeCanvasGuide[]) {
-        if (known.has(guide.id)) return issue('canvas.duplicate-guide', `Guide ${guide.id} 已存在`)
+      const known = new Set(existing.map(({ id }) => id))
+      for (const guide of guides as ComposeFrameGuide[]) {
+        if (known.has(guide.id)) return issue('frame.duplicate-guide', `Guide ${guide.id} 已存在`)
         known.add(guide.id)
       }
-      return patches((guides as ComposeCanvasGuide[]).map((guide, offset) => ({
+      const guidesPath = [
+        'entities',
+        frameId,
+        'components',
+        COMPOSE_BUILTIN_COMPONENT_KEYS.frame,
+        'guides',
+      ]
+      return patches((guides as ComposeFrameGuide[]).map((guide, offset) => ({
         op: 'insert' as const,
-        path: ['canvas', 'guides'],
-        index: document.canvas.guides.length + offset,
+        path: guidesPath,
+        index: existing.length + offset,
         value: guide as unknown as JsonValue,
       })))
     },
   }
 }
 
-function canvasGuideHandler(type: string): CommandHandler {
+function frameGuideHandler(type: string): CommandHandler {
   return {
     type,
     execute(document, command) {
+      const frameId = valueAt(command.payload, 'frameId')
+      if (typeof frameId !== 'string') return issue('frame.invalid-target', 'frameId 无效')
+      const existing = frameGuides(document, frameId)
+      if (!existing) return issue('frame.missing', `Entity ${frameId} 不是 Frame`)
       const guideId = valueAt(command.payload, 'guideId')
-      if (typeof guideId !== 'string') return issue('canvas.invalid-guide', 'guideId 无效')
-      const index = document.canvas.guides.findIndex(({ id }) => id === guideId)
-      if (index < 0) return issue('canvas.guide-missing', `Guide ${guideId} 不存在`)
-      if (type === BUILTIN_COMMAND_TYPES.deleteCanvasGuide) {
-        return patches([{ op: 'remove', path: ['canvas', 'guides', index] }])
+      if (typeof guideId !== 'string') return issue('frame.invalid-guide', 'guideId 无效')
+      const index = existing.findIndex(({ id }) => id === guideId)
+      if (index < 0) return issue('frame.guide-missing', `Guide ${guideId} 不存在`)
+      const guidesPath = [
+        'entities',
+        frameId,
+        'components',
+        COMPOSE_BUILTIN_COMPONENT_KEYS.frame,
+        'guides',
+      ]
+      if (type === BUILTIN_COMMAND_TYPES.deleteFrameGuide) {
+        return patches([{ op: 'remove', path: [...guidesPath, index] }])
       }
       const position = valueAt(command.payload, 'position')
       if (typeof position !== 'number' || !Number.isFinite(position)) {
-        return issue('canvas.invalid-guide', 'Guide position 必须是有限数')
+        return issue('frame.invalid-guide', 'Guide position 必须是有限数')
       }
-      if (document.canvas.guides[index]?.position === position) {
+      if (existing[index]?.position === position) {
         return { status: 'noop', reason: 'Guide 位置没有变化' }
       }
-      return patches([{
-        op: 'set',
-        path: ['canvas', 'guides', index, 'position'],
-        value: position,
-      }])
+      return patches([{ op: 'set', path: [...guidesPath, index, 'position'], value: position }])
     },
   }
 }
@@ -1022,10 +1051,10 @@ function ungroupHandler(): CommandHandler {
 export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
   return [
     configureCanvasHandler(),
-    configureOutputHandler(),
-    createCanvasGuideHandler(),
-    canvasGuideHandler(BUILTIN_COMMAND_TYPES.moveCanvasGuide),
-    canvasGuideHandler(BUILTIN_COMMAND_TYPES.deleteCanvasGuide),
+    setFrameSizeHandler(),
+    createFrameGuideHandler(),
+    frameGuideHandler(BUILTIN_COMMAND_TYPES.moveFrameGuide),
+    frameGuideHandler(BUILTIN_COMMAND_TYPES.deleteFrameGuide),
     createEntityHandler(),
     deleteEntityHandler(),
     duplicateEntityHandler(),

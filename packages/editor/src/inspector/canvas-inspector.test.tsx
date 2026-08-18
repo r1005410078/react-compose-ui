@@ -1,34 +1,39 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  createComposeFrameEntity,
   createDefaultCanvasSettings,
   type ComposeDocument,
 } from '@compose-ui/core'
 import { ComposePropertyPanelSection } from '@compose-ui/property-panel'
 import { CanvasInspector } from './canvas-inspector'
 
+const FRAME_ID = 'frame-root'
+
 function documentFixture(): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: {
-      width: 1280,
-      height: 720,
-      backgroundPaint: { kind: 'solid', color: '#0cdeab' },
+    rootIds: [FRAME_ID],
+    entities: {
+      [FRAME_ID]: createComposeFrameEntity({
+        id: FRAME_ID,
+        // 与默认背景不同，重置动作才会出现。
+        backgroundPaint: { kind: 'solid', color: '#111827' },
+      }),
     },
-    rootIds: [],
-    entities: {},
   }
 }
 
 afterEach(() => { cleanup() })
 
-describe('CanvasInspector', () => {
-  it('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 点击输出并编辑背景 Paint', () => {
+describe('Frame Inspector', () => {
+  it('OpenSpec: editor-workspace-layout / Frame Inspector / 选中 Frame 并编辑背景 Paint', () => {
     render(
       <CanvasInspector
         dispatch={vi.fn()}
         document={documentFixture()}
+        frameId={FRAME_ID}
         idFactory={() => 'canvas-output-paint'}
       />,
     )
@@ -40,12 +45,13 @@ describe('CanvasInspector', () => {
     expect(screen.getByRole('button', { name: '线性' })).toBeInTheDocument()
   })
 
-  it('OpenSpec: editor-workspace-layout / Canvas Map 输出尺寸与背景 Inspector / 重置输出背景', () => {
+  it('OpenSpec: editor-workspace-layout / Frame Map 尺寸与背景 Inspector / 重置 Frame 背景', () => {
     const dispatch = vi.fn()
     render(
       <CanvasInspector
         dispatch={dispatch}
         document={documentFixture()}
+        frameId={FRAME_ID}
         idFactory={() => 'canvas-output-reset'}
       />,
     )
@@ -56,21 +62,21 @@ describe('CanvasInspector', () => {
 
     expect(dispatch).toHaveBeenCalledTimes(1)
     expect(dispatch.mock.lastCall?.[0]).toMatchObject({
-      type: 'output.configure',
+      type: 'entity.appearance.set',
       payload: {
-        width: 1280,
-        height: 720,
-        backgroundPaint: { kind: 'solid', color: 'transparent' },
+        entityId: FRAME_ID,
+        appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
       },
     })
   })
 
-  it('OpenSpec: editor-workspace-layout / 页面脚本作为 Canvas Inspector 属性 / 页面与 Inspector 目标切换', () => {
+  it('OpenSpec: editor-workspace-layout / 页面脚本作为 Frame Inspector 属性 / 页面与 Inspector 目标切换', () => {
     // 注入内容是共享 Root 内的 Section：与输出分组同一个属性面板、同一个搜索工具栏。
     render(
       <CanvasInspector
         dispatch={vi.fn()}
         document={documentFixture()}
+        frameId={FRAME_ID}
         idFactory={() => 'canvas-page-script'}
         animationInspector={(
           <ComposePropertyPanelSection title="动画">

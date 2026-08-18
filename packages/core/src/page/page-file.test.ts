@@ -47,11 +47,13 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     const second = createEmptyComposePageFile()
     expect(first).toMatchObject({
       kind: 'compose-page',
-      pageSchemaVersion: 1,
+      pageSchemaVersion: 2,
       setupScript: null,
-      document: { schemaVersion: 6, rootIds: [], entities: {} },
+      document: { schemaVersion: 7, rootIds: ['frame-root'] },
     })
-    expect(first.document.output.width).toBeGreaterThan(0)
+    // 空白页面自带一个默认尺寸的根 Frame，而不是空的 rootIds。
+    const frame = first.document.entities['frame-root']!.components.Frame as { size: { width: number } }
+    expect(frame.size.width).toBeGreaterThan(0)
     expect(first.document.canvas).not.toBe(second.document.canvas)
   })
 
@@ -81,7 +83,7 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
 
   it('OpenSpec: compose-document / 页面文件约定 / 拒绝版本、document 与 setup 引用错误', () => {
     const page = createEmptyComposePageFile()
-    const unsupported = parseComposePageFile(JSON.stringify({ ...page, pageSchemaVersion: 2 }))
+    const unsupported = parseComposePageFile(JSON.stringify({ ...page, pageSchemaVersion: 3 }))
     expect(unsupported.ok).toBe(false)
     if (!unsupported.ok) {
       expect(unsupported.issues).toContainEqual(expect.objectContaining({
@@ -113,47 +115,31 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     }
   })
 
-  // 旧页面文件没有 animation 键：从空白页面上删掉该键模拟存量数据。
-  function legacyPageWithoutAnimationKey() {
+  it('OpenSpec: pages / 页面默认 Frame 与 Frame 级动画绑定 / 缺省 defaultFrameId 归一化为 null', () => {
     const page = { ...createEmptyComposePageFile() }
-    delete (page as { animation?: unknown }).animation
-    return page
-  }
-
-  it('OpenSpec: pages / 页面动画关联写入 / 旧页面文件容缺解析并归一化为 null', () => {
-    const result = parseComposePageFile(
-      `${JSON.stringify(legacyPageWithoutAnimationKey(), null, 2)}\n`,
-    )
+    delete (page as { defaultFrameId?: unknown }).defaultFrameId
+    const result = parseComposePageFile(`${JSON.stringify(page, null, 2)}\n`)
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.page.animation).toBeNull()
+    if (result.ok) expect(result.page.defaultFrameId).toBeNull()
   })
 
-  it('OpenSpec: pages / 页面动画关联写入 / 序列化总是写出动画字段', () => {
-    const text = serializeComposePageFile(legacyPageWithoutAnimationKey())
-    expect(JSON.parse(text)).toHaveProperty('animation', null)
+  it('OpenSpec: pages / 页面默认 Frame 与 Frame 级动画绑定 / 序列化总是写出 defaultFrameId', () => {
+    const page = { ...createEmptyComposePageFile() }
+    delete (page as { defaultFrameId?: unknown }).defaultFrameId
+    expect(JSON.parse(serializeComposePageFile(page))).toHaveProperty('defaultFrameId', null)
   })
 
-  it('OpenSpec: pages / 页面动画关联写入 / 往返动画引用并拒绝非法引用', () => {
-    const page = {
-      ...createEmptyComposePageFile(),
-      animation: {
-        providerId: 'project',
-        assetKey: 'animations/Home.animation.json',
-        scope: 'persistent' as const,
-      },
-    }
+  it('OpenSpec: pages / 页面默认 Frame 与 Frame 级动画绑定 / 往返默认 Frame 并拒绝悬空值', () => {
+    const empty = createEmptyComposePageFile()
+    const page = { ...empty, defaultFrameId: empty.document.rootIds[0]! }
     const roundTrip = parseComposePageFile(serializeComposePageFile(page))
     expect(roundTrip.ok).toBe(true)
     if (roundTrip.ok) expect(roundTrip.page).toEqual(page)
 
-    const invalid = parseComposePageFile(JSON.stringify({
-      ...page,
-      animation: { providerId: '', assetKey: 'a.animation.json', scope: 'project' },
-    }))
-    expect(invalid.ok).toBe(false)
-    if (!invalid.ok) {
-      expect(invalid.issues.map((issue) => issue.code))
-        .toContain('page.invalid-animation-reference')
+    const dangling = parseComposePageFile(JSON.stringify({ ...page, defaultFrameId: 'missing' }))
+    expect(dangling.ok).toBe(false)
+    if (!dangling.ok) {
+      expect(dangling.issues.map((issue) => issue.code)).toContain('page.invalid-default-frame')
     }
   })
 
@@ -173,10 +159,10 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     if (result.ok) {
       expect(result.page).toEqual({
         kind: 'compose-page',
-        pageSchemaVersion: 1,
+        pageSchemaVersion: 2,
         document,
         setupScript: null,
-        animation: null,
+        defaultFrameId: null,
       })
     }
   })

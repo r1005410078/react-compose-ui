@@ -3,8 +3,9 @@ import {
   type ComposeAssetProvider,
 } from '@compose-ui/assets'
 import {
-  createEmptyComposePageFile,
+  createComposeFrameEntity,
   createDefaultComposeLayoutItem,
+  createEmptyComposePageFile,
   serializeComposePageFile,
 } from '@compose-ui/core'
 import { describe, expect, it, vi } from 'vitest'
@@ -20,10 +21,17 @@ const pageText = () => serializeComposePageFile(createEmptyComposePageFile())
  * Store 的写入路径会重新解析文档，因此测试夹具必须能通过 `validateComposeDocument`：
  * Entity 至少需要 Composition、Transform、Visibility、Lock，并拥有 Renderer 或 Hierarchy。
  */
+const ROOT_FRAME_ID = 'frame-root'
+
+/** v7 的顶层 Entity 是根 Frame 的子级。 */
+const rootChildIds = (document: { entities: Record<string, { components: Record<string, unknown> }> }) =>
+  (document.entities[ROOT_FRAME_ID]?.components.Hierarchy as { childIds?: readonly string[] } | undefined)?.childIds ?? []
+
 const pageWithEntity = (entityId: string) => ({
   ...createEmptyComposePageFile().document,
-  rootIds: [entityId],
+  rootIds: [ROOT_FRAME_ID],
   entities: {
+    [ROOT_FRAME_ID]: createComposeFrameEntity({ id: ROOT_FRAME_ID, childIds: [entityId] }),
     [entityId]: {
       id: entityId,
       name: entityId,
@@ -99,7 +107,7 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })
     const store = createComposePageStore({ provider: fake.provider })
     const snapshot = await store.readPage('Pages/Home.page.json')
-    expect(snapshot.page.document.schemaVersion).toBe(6)
+    expect(snapshot.page.document.schemaVersion).toBe(7)
     expect(snapshot.page.setupScript).toBeNull()
     const reads = fake.calls.read
     await store.readPage('Pages/Home.page.json')
@@ -146,7 +154,7 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
 
     await firstCancelled
     finishRead?.()
-    await expect(second).resolves.toMatchObject({ page: { document: { schemaVersion: 6 } } })
+    await expect(second).resolves.toMatchObject({ page: { document: { schemaVersion: 7 } } })
     expect(fake.calls.read).toBe(1)
   })
 
@@ -171,7 +179,8 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     await store.writePageDocument('Pages/Home.page.json', pageWithEntity('a'), snapshot.revision)
     expect(fake.getFile('Pages/Home.page.json')).toContain('"rootIds"')
     store.invalidate('Pages/Home.page.json')
-    expect((await store.readPage('Pages/Home.page.json')).page.document.rootIds).toEqual(['a'])
+    expect(rootChildIds((await store.readPage('Pages/Home.page.json')).page.document))
+      .toEqual(['a'])
   })
 
   it('期望 revision 过期时抛出 conflict 且不修改文件', async () => {
@@ -200,7 +209,8 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
       '1',
       true,
     )
-    expect(written.page.document.rootIds).toEqual(['forced'])
+    expect(rootChildIds(written.page.document))
+      .toEqual(['forced'])
     expect(fake.getFile('Pages/Home.page.json')).toContain('forced')
   })
 
@@ -221,7 +231,7 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     expect(created.pageKey).toBe('Pages/New.page.json')
     const catalog = await store.listPages()
     expect(catalog.pages.map((page) => page.pageKey)).toContain('Pages/New.page.json')
-    expect((await store.readPage('Pages/New.page.json')).page.document.rootIds).toEqual([])
+    expect(rootChildIds((await store.readPage('Pages/New.page.json')).page.document)).toEqual([])
   })
 
   it('外部变更通知失效缓存并广播', async () => {
@@ -236,7 +246,8 @@ describe('OpenSpec: pages / 页面文档读写与乐观并发', () => {
     }))
     fake.notify()
     expect(listener).toHaveBeenCalledWith({ type: 'page-changed', pageKey: 'Pages/Home.page.json' })
-    expect((await store.readPage('Pages/Home.page.json')).page.document.rootIds).toEqual(['external'])
+    expect(rootChildIds((await store.readPage('Pages/Home.page.json')).page.document))
+      .toEqual(['external'])
     unsubscribe()
     fake.notify()
     expect(listener).toHaveBeenCalledTimes(3)
@@ -267,7 +278,8 @@ describe('OpenSpec: pages / 页面 setup 关联写入', () => {
       linked.revision,
     )
     expect(saved.page.setupScript).toEqual(setupScript)
-    expect(saved.page.document.rootIds).toEqual(['keeps-setup'])
+    expect(rootChildIds(saved.page.document))
+      .toEqual(['keeps-setup'])
 
     const unlinked = await store.setPageSetupScript(
       'Pages/Home.page.json',
@@ -275,7 +287,8 @@ describe('OpenSpec: pages / 页面 setup 关联写入', () => {
       saved.revision,
     )
     expect(unlinked.page.setupScript).toBeNull()
-    expect(unlinked.page.document.rootIds).toEqual(['keeps-setup'])
+    expect(rootChildIds(unlinked.page.document))
+      .toEqual(['keeps-setup'])
     expect(fake.getFile('scripts/Home.setup.js')).toBeUndefined()
   })
 
@@ -293,45 +306,45 @@ describe('OpenSpec: pages / 页面 setup 关联写入', () => {
 })
 
 describe('OpenSpec: pages / 页面动画关联写入', () => {
-  it('关联、保存文档与解除动画引用时保持页面聚合字段', async () => {
+  it('OpenSpec: pages / 页面默认 Frame 与 Frame 级动画绑定 / 按 Frame 绑定动画', async () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })
     const store = createComposePageStore({ provider: fake.provider })
     const first = await store.readPage('Pages/Home.page.json')
+    const frameId = first.page.document.rootIds[0]!
     const animation = {
       providerId: fake.provider.id,
       assetKey: 'Pages/Home.animation.json',
       scope: 'persistent' as const,
     }
 
-    const linked = await store.setPageAnimation(
+    const readSource = (page: typeof first.page, id: string) =>
+      (page.document.entities[id]?.components.Animations as { source?: unknown } | undefined)?.source
+
+    const linked = await store.setFrameAnimation(
       'Pages/Home.page.json',
+      frameId,
       animation,
       first.revision,
     )
-    expect(linked.page.animation).toEqual(animation)
+    expect(readSource(linked.page, frameId)).toEqual(animation)
 
-    const saved = await store.writePageDocument(
+    const unlinked = await store.setFrameAnimation(
       'Pages/Home.page.json',
-      pageWithEntity('keeps-animation'),
+      frameId,
+      null,
       linked.revision,
     )
-    expect(saved.page.animation).toEqual(animation)
-
-    const unlinked = await store.setPageAnimation(
-      'Pages/Home.page.json',
-      null,
-      saved.revision,
-    )
-    expect(unlinked.page.animation).toBeNull()
-    expect(unlinked.page.document.rootIds).toEqual(['keeps-animation'])
+    expect(readSource(unlinked.page, frameId)).toBeUndefined()
   })
 
   it('动画关联使用页面 revision 做乐观并发', async () => {
     const fake = createFakeAssetProvider({ files: defaultFiles() })
     const store = createComposePageStore({ provider: fake.provider })
     const before = fake.getFile('Pages/Home.page.json')
-    await expect(store.setPageAnimation(
+    const frameId = (await store.readPage('Pages/Home.page.json')).page.document.rootIds[0]!
+    await expect(store.setFrameAnimation(
       'Pages/Home.page.json',
+      frameId,
       { providerId: fake.provider.id, assetKey: 'Home.animation.json', scope: 'persistent' },
       'stale-revision',
     )).rejects.toMatchObject({ code: 'conflict' })

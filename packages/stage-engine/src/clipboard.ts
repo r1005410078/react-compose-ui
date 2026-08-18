@@ -1,4 +1,5 @@
 import {
+  isComposeFrameEntity,
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
   getComposeHierarchy,
@@ -87,8 +88,19 @@ export function createEntityClipboard(
 export function resolveSuggestedEntityInsertion(
   document: ComposeDocument,
   targetId: string | null,
+  fallbackFrameId?: string | null,
 ): ComposeEntityInsertion | null {
-  if (targetId === null) return { parentId: null, index: document.rootIds.length }
+  // v7 的文档根只接受 Frame：没有命中目标时落点是某块画板，而不是文档根。
+  if (targetId === null) {
+    const frameId = fallbackFrameId
+      ?? document.rootIds.find((id) => isComposeFrameEntity(document.entities[id]))
+      ?? null
+    if (frameId === null) return null
+    return {
+      parentId: frameId,
+      index: getComposeHierarchy(document.entities[frameId])?.childIds.length ?? 0,
+    }
+  }
   const target = document.entities[targetId]
   if (!target) return null
   const hierarchy = getComposeHierarchy(target)

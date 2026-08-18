@@ -22,6 +22,8 @@ import { isAnimationPathAvailable } from './animation-key-state'
 
 /** 自动记录改写层的会话输入。 */
 export interface AutoRecordRewriteContext {
+  /** 提供动画清单的 Frame。 */
+  readonly frameId: string
   readonly animationId: string
   readonly playheadMs: number
   /** 新关键帧与改写命令的 ID factory。 */
@@ -210,7 +212,7 @@ export function rewriteAutoRecordCommand(
   context: AutoRecordRewriteContext,
   command: EditorCommand,
 ): readonly EditorCommand[] | null {
-  const animation = findComposeAnimation(document, context.animationId)
+  const animation = findComposeAnimation(document, context.frameId, context.animationId)
   if (!animation) return null
   const timeMs = Math.min(Math.max(context.playheadMs, 0), animation.durationMs)
 

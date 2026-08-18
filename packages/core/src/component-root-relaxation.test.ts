@@ -5,9 +5,9 @@ import {
   serializeComposeComponentAsset,
 } from './index'
 import type { ComposeBaseComponentAsset, ComposeDocument, ComposeEntity } from './index'
-import { documentFixture } from './test-fixtures'
+import { ROOT_FRAME_ID, componentDocumentFixture } from './test-fixtures'
 
-/** 以 Container（含 Hierarchy 与 Appearance）为唯一根的组件文档。 */
+/** 以单个 Frame 为根、内含一个 Container 的组件文档。 */
 function containerRootDocument(): ComposeDocument {
   const root: ComposeEntity = {
     id: 'root',
@@ -33,12 +33,12 @@ function containerRootDocument(): ComposeDocument {
       Appearance: { backgroundPaint: { kind: 'solid', color: '#123456' } },
     },
   }
-  return documentFixture({ root }, ['root'])
+  return componentDocumentFixture({ root }, ['root'])
 }
 
 function containerRootAsset(): ComposeBaseComponentAsset {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'card',
     name: 'Card',
@@ -46,13 +46,13 @@ function containerRootAsset(): ComposeBaseComponentAsset {
   }
 }
 
-describe('组件根放宽为任意单根', () => {
-  it('Parser 接受以 Container 为唯一根的 Base', () => {
+describe('组件根必须是单个 Frame', () => {
+  it('OpenSpec: component-library / Component Asset v1 判别协议 / 要求单个 Frame 根', () => {
     const parsed = parseComposeComponentAsset(serializeComposeComponentAsset(containerRootAsset()))
     expect(parsed.ok).toBe(true)
   })
 
-  it('覆盖应用后仍接受非 Group 单根', () => {
+  it('覆盖应用后仍接受单个 Frame 根', () => {
     const applied = applyComposeComponentOverrides(containerRootDocument(), [{
       id: 'op-1',
       kind: 'set-field',
@@ -66,14 +66,32 @@ describe('组件根放宽为任意单根', () => {
 
   it('多根仍被拒绝', () => {
     const base = containerRootDocument()
-    const second: ComposeEntity = {
-      ...base.entities.root!,
-      id: 'root-2',
-    }
+    const second: ComposeEntity = { ...base.entities[ROOT_FRAME_ID]!, id: 'frame-2' }
     const applied = applyComposeComponentOverrides(
-      { ...base, rootIds: ['root', 'root-2'], entities: { ...base.entities, 'root-2': second } },
+      {
+        ...base,
+        rootIds: [ROOT_FRAME_ID, 'frame-2'],
+        entities: { ...base.entities, 'frame-2': second },
+      },
       [],
     )
     expect(applied.ok).toBe(false)
+  })
+
+  it('根不是 Frame 时被拒绝', () => {
+    const base = containerRootDocument()
+    // 只保留 Container 作为唯一根：文档拓扑仍然自洽，唯一的问题就是根不是 Frame。
+    const parsed = parseComposeComponentAsset(serializeComposeComponentAsset({
+      ...containerRootAsset(),
+      document: { ...base, rootIds: ['root'], entities: { root: base.entities.root! } },
+    }))
+    expect(parsed.ok).toBe(false)
+    if (!parsed.ok) {
+      // 根不是 Frame 是 v7 文档层的不变量，Parser 原样透传文档校验的稳定 issue。
+      expect(parsed.issues).toContainEqual(expect.objectContaining({
+        code: 'document.root-not-frame',
+        path: ['document', 'rootIds', 0],
+      }))
+    }
   })
 })

@@ -1,5 +1,6 @@
 export {
   ComposePreview,
   type ComposePreviewProps,
-  type ComposePreviewTarget,
+  type ComposePreviewAlignment,
+  type ComposePreviewFit,
 } from './compose-preview'

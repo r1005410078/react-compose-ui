@@ -6,7 +6,7 @@ import {
   findComposeAnimationTrack,
 } from '@compose-ui/animation'
 import type { ComposeAnimationValueKind, ComposeKeyframeInterpolation } from '@compose-ui/animation'
-import { getComposeAnimations } from '@compose-ui/core'
+import { getComposeAnimations, isComposeFrameEntity } from '@compose-ui/core'
 import type {
   CommandDispatchResult,
   ComposeAnimation,
@@ -53,6 +53,13 @@ const INITIAL_SESSION: AnimationModeSessionState = {
 /** `useAnimationMode` 的接入端口。 */
 export interface AnimationModeOptions {
   readonly document: ComposeDocument | undefined
+  /**
+   * 提供动画清单的活动 Frame。
+   *
+   * @remarks
+   * v7 的动画归属 Frame，动画模式因此以活动 Frame 为作用域；省略时回退到第一个根 Frame。
+   */
+  readonly frameId?: string | null
   readonly dispatch?: (command: EditorCommand) => CommandDispatchResult
   readonly idFactory: () => string
   readonly propertyLabel?: AnimationPropertyLabelPort
@@ -122,11 +129,14 @@ export interface AnimationModeSession {
  * 模型的事实来源是文档，面板本地的乐观修改会在命令落地后的重建中得到同样结果。
  */
 export function useAnimationMode(options: AnimationModeOptions): AnimationModeSession {
-  const { dispatch, document, idFactory, propertyLabel } = options
+  const { dispatch, document, frameId, idFactory, propertyLabel } = options
+  const hostFrameId = document
+    ? frameId ?? document.rootIds.find((id) => isComposeFrameEntity(document.entities[id])) ?? null
+    : null
   const [active, setActive] = useState(false)
   const [session, setSession] = useState(INITIAL_SESSION)
 
-  const animations = document ? getComposeAnimations(document) : []
+  const animations = document && hostFrameId ? getComposeAnimations(document, hostFrameId) : []
   // 基础能力阶段 UI 只用第一条动画；多动画选择留给后续提案。
   const animationId = animations[0]?.id ?? null
   const animation = animations[0] ?? null
@@ -155,7 +165,7 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
   const panelValue = useMemo<ComposeAnimationPanelValue | null>(() => {
     if (!document) return null
     const model = animationId
-      ? buildAnimationPanelModel(document, animationId, { propertyLabel })
+      ? buildAnimationPanelModel(document, hostFrameId ?? '', animationId, { propertyLabel })
       : { durationMs: 300, tracks: [] as const }
     return {
       model,
@@ -168,7 +178,7 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
       playbackMode: animation?.playbackMode ?? 'play-once',
       autoRecord: session.autoRecord,
     }
-  }, [animation?.playbackMode, animationId, document, propertyLabel, session])
+  }, [animation?.playbackMode, animationId, document, hostFrameId, propertyLabel, session])
 
   const selectedKeyframeEasing = useMemo(
     () => resolveAnimationKeyframeEasing(
@@ -253,9 +263,16 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     path: readonly (string | number)[],
   ): AnimationKeyState => {
     // 直接闭包基础文档而不是读 ref：菱形按钮在渲染期调用本函数，渲染期禁止访问 ref。
-    if (!document || !animationId) return 'unavailable'
-    return getAnimationKeyState(document, animationId, entityId, path, session.currentTimeMs)
-  }, [animationId, document, session.currentTimeMs])
+    if (!document || !animationId || !hostFrameId) return 'unavailable'
+    return getAnimationKeyState(
+      document,
+      hostFrameId,
+      animationId,
+      entityId,
+      path,
+      session.currentTimeMs,
+    )
+  }, [animationId, document, hostFrameId, session.currentTimeMs])
 
   const toggleKey = useCallback((
     entityId: string,

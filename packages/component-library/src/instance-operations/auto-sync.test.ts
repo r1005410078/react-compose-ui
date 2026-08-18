@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createComposeResolvedComponentSnapshot } from '@compose-ui/core'
+import { createComposeFrameEntity, createComposeResolvedComponentSnapshot } from '@compose-ui/core'
 import type { ComposeBaseComponentAsset, ComposeDocument, ComposeEntity, JsonObject } from '@compose-ui/core'
 import { planComposeInstanceAutoSync } from './auto-sync'
 
@@ -12,13 +12,12 @@ const reference = {
 
 function componentDocument(rootWidth: number): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: rootWidth, height: 40, backgroundPaint: { kind: 'solid', color: 'transparent' } },
+    // 组件文档的单根必须是 Frame；这里给既有根就地加上 Frame Component。
     rootIds: ['root'],
     entities: {
       root: {
@@ -42,6 +41,7 @@ function componentDocument(rootWidth: number): ComposeDocument {
           Visibility: { visible: true },
           Lock: { locked: false },
           Hierarchy: { childIds: [] },
+          Frame: { size: { width: rootWidth, height: 40 }, guides: [] },
         },
       },
     },
@@ -50,7 +50,7 @@ function componentDocument(rootWidth: number): ComposeDocument {
 
 function asset(rootWidth: number): ComposeBaseComponentAsset {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'card',
     name: 'Card',
@@ -77,11 +77,14 @@ function instance(operations: readonly unknown[]): ComposeEntity {
 
 function hostDocument(entity: ComposeEntity): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: componentDocument(100).canvas,
-    output: componentDocument(100).output,
-    rootIds: ['instance'],
-    entities: { instance: entity },
+    // 宿主文档的根必须是 Frame；实例挂在这块画板下面。
+    rootIds: ['host-frame'],
+    entities: {
+      instance: entity,
+      'host-frame': createComposeFrameEntity({ id: 'host-frame', childIds: ['instance'] }),
+    },
   } as unknown as ComposeDocument
 }
 

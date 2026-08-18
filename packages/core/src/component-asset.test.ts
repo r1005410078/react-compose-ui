@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ComposeDocument, JsonValue } from './document-types'
 import { createComposeGroupEntitySeed } from './group'
+import { componentDocumentFixture } from './test-fixtures'
+import type { ComposeEntity } from './document-types'
 import * as coreApi from './index'
 
 interface ComponentAssetApi {
@@ -67,22 +69,18 @@ function componentDocument(): ComposeDocument {
     childIds: ['text'],
     size: { width: 120, height: 60 },
   })
-  return {
-    schemaVersion: 6,
-    canvas: {
-      grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
-      smartSnap: { nodes: true, guides: true },
-      guides: [],
-    },
-    output: { width: 120, height: 60, backgroundPaint: { kind: 'solid', color: 'transparent' } },
-    rootIds: ['root'],
-    entities: { root: group, text: child },
-  }
+  // v2 起组件文档的单根必须是 Frame；Group 作为它的唯一子级继续承载既有覆盖语义。
+  return componentDocumentFixture(
+    { root: group as unknown as ComposeEntity, text: child as unknown as ComposeEntity },
+    ['root'],
+    'frame-root',
+    { width: 120, height: 60 },
+  )
 }
 
 function baseAsset() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'button',
     name: 'Button',
@@ -90,7 +88,7 @@ function baseAsset() {
   }
 }
 
-describe('Component Asset v1', () => {
+describe('Component Asset v2', () => {
   it('OpenSpec: component-library / Component Asset v1 判别协议 / 解析 Base 与 Variant', () => {
     expect(componentApi.parseComposeComponentAsset).toBeTypeOf('function')
     expect(componentApi.parseComposeComponentAsset!(JSON.stringify(baseAsset()))).toMatchObject({
@@ -132,7 +130,7 @@ describe('Component Asset v1', () => {
     expect(componentApi.resolveComposeComponentAsset).toBeTypeOf('function')
     const base = baseAsset()
     const variant = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       kind: 'variant',
       componentId: 'button-danger',
       name: 'Button Danger',
@@ -179,7 +177,7 @@ describe('Component Asset v1', () => {
       scope: 'persistent' as const,
     })
     const variant = (assetKey: string, parentKey: string) => ({
-      schemaVersion: 1,
+      schemaVersion: 2,
       kind: 'variant',
       componentId: assetKey,
       name: assetKey,

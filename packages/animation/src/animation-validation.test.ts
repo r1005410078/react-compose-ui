@@ -32,21 +32,52 @@ function entity(id: string, animation?: JsonObject): ComposeEntity {
   }
 }
 
+/** 测试文档的根 Frame ID；动画清单挂在它的 `Animations` Component 上。 */
+const FRAME_ID = 'frame-root'
+
+function frame(childIds: readonly string[], animations: readonly ComposeAnimation[]): ComposeEntity {
+  return {
+    id: FRAME_ID,
+    name: FRAME_ID,
+    components: {
+      Composition: {
+        presetId: 'frame',
+        baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Hierarchy', 'Frame'],
+        capabilityIds: [],
+      },
+      Transform: { rotation: 0 },
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'fixed', value: 1920, min: 1, max: null },
+        height: { mode: 'fixed', value: 1080, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Hierarchy: { childIds },
+      Frame: { size: { width: 1920, height: 1080 }, guides: [] },
+      Animations: { items: animations },
+    },
+  }
+}
+
 function documentWith(
   animationComponent: JsonObject | undefined,
   animations: readonly ComposeAnimation[] = [intro],
 ): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1920, height: 1080, backgroundPaint: { kind: 'solid', color: '#ffffff' } },
-    rootIds: ['rect'],
-    entities: { rect: entity('rect', animationComponent) },
-    animations,
+    rootIds: [FRAME_ID],
+    entities: {
+      rect: entity('rect', animationComponent),
+      [FRAME_ID]: frame(['rect'], animations),
+    },
   }
 }
 
@@ -170,5 +201,39 @@ describe('动画数据校验', () => {
       .toContainEqual(expect.objectContaining({ code: 'animation.invalid-component' }))
     expect(collectComposeAnimationIssues(documentWith({ notClips: {} })))
       .toContainEqual(expect.objectContaining({ code: 'animation.invalid-component' }))
+  })
+})
+
+describe('跨 Frame 轨道校验', () => {
+  it('OpenSpec: scene-animation / 动画数据校验 / 轨道跨越 Frame 边界', () => {
+    const base = documentWith({ clips: { intro: [numberTrack([keyframe('k0', 0, 1)])] } })
+    // rect 被移进一个嵌套 Frame，但轨道仍属于外层 Frame 的 'intro'。
+    const inner = { ...frame(['rect'], []), id: 'inner', name: 'inner' }
+    const outer = base.entities[FRAME_ID]!
+    const document: ComposeDocument = {
+      ...base,
+      entities: {
+        ...base.entities,
+        inner,
+        [FRAME_ID]: {
+          ...outer,
+          components: { ...outer.components, Hierarchy: { childIds: ['inner'] } },
+        },
+      },
+    }
+    const issues = collectComposeAnimationIssues(document)
+    expect(issues).toContainEqual(expect.objectContaining({
+      code: 'animation.cross-frame-track',
+      path: ['entities', 'rect', 'components', 'Animation', 'clips', 'intro'],
+    }))
+  })
+
+  it('OpenSpec: scene-animation / 动画数据校验 / 分组不在所属 Frame 清单中', () => {
+    const document = documentWith(
+      { clips: { missing: [numberTrack([keyframe('k0', 0, 1)])] } },
+    )
+    expect(collectComposeAnimationIssues(document)).toContainEqual(expect.objectContaining({
+      code: 'animation.dangling-clip',
+    }))
   })
 })

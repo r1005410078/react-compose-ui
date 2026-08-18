@@ -8,9 +8,9 @@ import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
+  createComposeFrameEntity,
   createTransactionRuntime,
-  getComposeHierarchy,
+  resolveOwningFrameId,
 } from '@compose-ui/core'
 import type {
   ComposeDocument,
@@ -70,12 +70,13 @@ function PreviewIcon() {
   )
 }
 
+const DEMO_FRAME_ID = 'frame-root'
+
 const emptyDocument: ComposeDocument = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   canvas: createDefaultCanvasSettings(),
-  output: createDefaultOutputSettings(),
-  rootIds: [],
-  entities: {},
+  rootIds: [DEMO_FRAME_ID],
+  entities: { [DEMO_FRAME_ID]: createComposeFrameEntity({ id: DEMO_FRAME_ID, name: '画板' }) },
 }
 
 const chartSchema = v.object({
@@ -465,10 +466,9 @@ export function StageDemoWorkspace() {
     () => ({ store: componentStore, onActiveSessionChange: setActiveComponent }),
     [componentStore],
   )
-  const selectedContainerId = controller.selectedIds.length === 1
-    && controller.document.entities[controller.selectedIds[0]!]
-    && getComposeHierarchy(controller.document.entities[controller.selectedIds[0]!]!)
-    ? controller.selectedIds[0]!
+  // 预览目标只有 Frame 一种：取当前选区所属的画板。
+  const selectedFrameId = controller.selectedIds.length === 1
+    ? resolveOwningFrameId(controller.document, controller.selectedIds[0]!)
     : null
 
   return (
@@ -502,14 +502,14 @@ export function StageDemoWorkspace() {
       />
       <ComposePreviewDialog
         assetResolver={assetResolver}
-        containerId={selectedContainerId}
+        selectedFrameId={selectedFrameId}
         dialogLabel="文档预览对话框"
         document={controller.document}
         page={activePage?.page}
         messages={{
           title: '预览',
           document: '文档',
-          selectedContainer: '选中容器',
+          selectedFrame: '选中画板',
           target: '预览范围',
           scale: '预览缩放',
           enterFullscreen: '全屏预览',

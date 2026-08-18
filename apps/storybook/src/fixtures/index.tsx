@@ -5,7 +5,7 @@ import type { ComposeAssetProvider } from '@compose-ui/assets'
 import {
   createDefaultCanvasSettings,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
+  createComposeFrameEntity,
   type ComposeDocument,
 } from '@compose-ui/core'
 
@@ -126,11 +126,15 @@ export const storyRegistry = createComposeEntityRegistry({
 /** 返回新的文档对象，避免每个 Story 或 play function 相互污染。 */
 export function createStoryDocument(): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: ['story-container'],
+    rootIds: ['story-frame'],
     entities: {
+      'story-frame': createComposeFrameEntity({
+        id: 'story-frame',
+        name: '画板',
+        childIds: ['story-container'],
+      }),
       'story-container': {
         id: 'story-container',
         name: 'Story container',

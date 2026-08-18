@@ -1,7 +1,7 @@
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
+  createComposeFrameEntity,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
@@ -57,18 +57,24 @@ const container: ComposeEntity = {
   },
 }
 
+const rootFrame = createComposeFrameEntity({
+  id: 'frame-root',
+  childIds: [container.id],
+  size: { width: 640, height: 360 },
+})
+
 const document: ComposeDocument = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   canvas: createDefaultCanvasSettings(),
-  output: { ...createDefaultOutputSettings(), width: 640, height: 360 },
-  rootIds: [container.id],
-  entities: { [container.id]: container },
+  rootIds: [rootFrame.id],
+  entities: { [container.id]: container, [rootFrame.id]: rootFrame },
 }
 
 const layoutSnapshot: ComposeLayoutSnapshot = {
   revision: 1,
   boxes: {
     [container.id]: { x: 0, y: 0, width: 320, height: 180, positioning: 'absolute' },
+    [rootFrame.id]: { x: 0, y: 0, width: 640, height: 360, positioning: 'absolute' },
   },
   diagnostics: [],
 }
@@ -80,6 +86,7 @@ function animatedDocument(): ComposeDocument {
   return {
     ...document,
     entities: {
+      ...document.entities,
       [container.id]: {
         ...container,
         components: {
@@ -98,8 +105,16 @@ function animatedDocument(): ComposeDocument {
           },
         },
       },
+      [rootFrame.id]: {
+        ...rootFrame,
+        components: {
+          ...rootFrame.components,
+          Animations: {
+            items: [{ id: 'intro', name: '入场', durationMs: 400, playbackMode: 'play-once' }],
+          },
+        },
+      },
     },
-    animations: [{ id: 'intro', name: '入场', durationMs: 400, playbackMode: 'play-once' }],
   }
 }
 
@@ -125,7 +140,7 @@ describe('ComposePreviewDialog', () => {
     const { onOpenChange } = renderDialog()
 
     expect(screen.getByRole('dialog', { name: 'Preview' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Selected container' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Selected frame' })).toBeDisabled()
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     expect(onOpenChange).toHaveBeenCalledWith(false)
     fireEvent.mouseDown(screen.getByTestId('compose-preview-dialog-backdrop'))
@@ -133,10 +148,11 @@ describe('ComposePreviewDialog', () => {
   })
 
   it('OpenSpec: compose-preview / 受控 Preview Dialog / 切换指定 Container 预览', () => {
-    renderDialog({ containerId: container.id })
+    // 预览目标只有 Frame 一种；宿主传入的是当前选区所属的画板。
+    renderDialog({ selectedFrameId: rootFrame.id })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Selected container' }))
-    expect(screen.getByTestId('compose-preview-container')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Selected frame' }))
+    expect(screen.getByTestId('compose-preview-frame')).toBeInTheDocument()
   })
 
   it('OpenSpec: compose-preview / Preview Dialog 视图控制 / 调整预览缩放', () => {

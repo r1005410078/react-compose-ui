@@ -11,7 +11,6 @@ import {
   createDefaultCanvasSettings,
   createDefaultComposeFlexLayout,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeFlexLayout,
@@ -95,9 +94,8 @@ describe('内建 Component inspectors', () => {
     const Content = missingInspectorContentOf('Layout')
     const container = entity({ Hierarchy: { childIds: [] } })
     const document: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: createDefaultOutputSettings(),
       rootIds: [container.id],
       entities: { [container.id]: container },
     }
@@ -135,9 +133,8 @@ describe('内建 Component inspectors', () => {
     const Actions = missingInspectorActionsOf('Layout')
     const container = entity({ Hierarchy: { childIds: [] } })
     const document: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: createDefaultOutputSettings(),
       rootIds: [container.id],
       entities: { [container.id]: container },
     }
@@ -253,9 +250,8 @@ describe('内建 Component inspectors', () => {
       Layout: createDefaultComposeFlexLayout(),
     }), id: 'parent', name: 'Parent' }
     const document: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: createDefaultOutputSettings(),
       rootIds: [parent.id],
       entities: { [parent.id]: parent, [child.id]: child },
     }
@@ -362,9 +358,8 @@ describe('内建 Component inspectors', () => {
       Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' }, borderWidth: 2 },
     }), id: 'parent', name: 'Parent' }
     const document: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: createDefaultOutputSettings(),
       rootIds: [parent.id],
       entities: { [parent.id]: parent, [child.id]: child },
     }
@@ -418,9 +413,8 @@ describe('内建 Component inspectors', () => {
       Layout: createDefaultComposeFlexLayout(),
     }), id: 'parent', name: 'Parent' }
     const document: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: createDefaultOutputSettings(),
       rootIds: [parent.id],
       entities: { [parent.id]: parent, [child.id]: child },
     }
@@ -476,9 +470,8 @@ describe('内建 Component inspectors', () => {
       LayoutItem: createDefaultComposeLayoutItem(180, 40, { x: 10, y: 20 }),
     })
     const document: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: createDefaultOutputSettings(),
       rootIds: [target.id],
       entities: { [target.id]: target },
     }
@@ -1013,9 +1006,8 @@ describe('内建 Component inspectors', () => {
       Layout: createDefaultComposeFlexLayout(),
     }), id: 'parent', name: 'Parent' }
     const document: ComposeDocument = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: createDefaultOutputSettings(),
       rootIds: [container.id],
       entities: { [container.id]: container, [child.id]: child },
     }

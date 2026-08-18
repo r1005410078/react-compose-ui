@@ -33,6 +33,8 @@ export interface ComposeEntityPaintLayerProps {
    * 仍可用于选择和拖动。Preview 保持 `false`，避免渲染层承载交互语义。
    */
   readonly interactive?: boolean
+  /** 透传给底层 Paint 层的 test id；宿主用它定位某个 Entity 的背景层。 */
+  readonly testId?: string
   /** 图片 Paint 解析稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
 }
@@ -157,8 +159,16 @@ export function ComposeEntityPaintLayer({
   paint,
   interactive = false,
   assetResolver,
+  testId,
 }: ComposeEntityPaintLayerProps) {
   const resolvedPaint = paint ?? resolveComposeAppearance(entity).backgroundPaint
   // 透明 Container 只有编辑 Stage 需要补足 Pointer 命中；Preview 始终保持不可交互。
-  return <ComposePaintLayer assetResolver={assetResolver} interactive={interactive} paint={resolvedPaint} />
+  return (
+    <ComposePaintLayer
+      assetResolver={assetResolver}
+      interactive={interactive}
+      paint={resolvedPaint}
+      testId={testId}
+    />
+  )
 }

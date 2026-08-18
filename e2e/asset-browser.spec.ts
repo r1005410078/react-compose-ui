@@ -150,7 +150,7 @@ test('OpenSpec: components / Paint Picker / 色盘与透明度滑动在真实指
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-history-panel"]').click()
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
   await page.mouse.click(outputBox!.x + 40, outputBox!.y + 40)

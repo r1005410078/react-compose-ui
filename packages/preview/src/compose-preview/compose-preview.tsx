@@ -7,7 +7,6 @@
 import {
   ComposeEntityBorderLayer,
   ComposeEntityPaintLayer,
-  ComposePaintLayer,
   ComposeRegistryEntityRenderer,
   composeEntityAppearanceStyle,
   composeEntityOverflowStyle,
@@ -22,6 +21,7 @@ import {
   getComposeLayout,
   getComposeLayoutItem,
   getComposeVisibility,
+  getComposeFrame,
   resolveComposeRenderedChildIds,
   resolveComposeAppearance,
 } from '@compose-ui/core'
@@ -70,8 +70,33 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
   readonly scriptScope?: ComposePageScriptScope
   /** 页面及嵌套 Page Slot 使用的可替换脚本模块 Loader。 */
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
-  /** 输出完整文档或某个根级/嵌套 Container；省略时输出完整文档。 */
-  readonly target?: ComposePreviewTarget
+  /**
+   * 要渲染的 Frame。
+   *
+   * @remarks
+   * Preview 永远只渲染**一个** Frame——页面根、画板、组件根与 Page Slot 目标都是 Frame，
+   * 因此不需要第二条整份文档的渲染路径。省略时使用 {@link ComposePreviewProps.defaultFrameId}，
+   * 再回退到第一个根 Frame。
+   */
+  readonly frameId?: string
+  /** 未显式指定 `frameId` 时的回退目标；只承担回退职责。 */
+  readonly defaultFrameId?: string | null
+  /**
+   * Frame 映射进宿主盒子的方式。
+   *
+   * @remarks
+   * 适配策略属于播放侧而不是内容：同一份文档在不同宿主容器里的期望不同，写进文档会让它
+   * 无法在多宿主复用。因此这里是 props，MUST NOT 从文档读取或写回文档。
+   *
+   * @defaultValue 'none'
+   */
+  readonly fit?: ComposePreviewFit
+  /**
+   * `fit` 生效时 Frame 在宿主盒子内的对齐方式。
+   *
+   * @defaultValue 'center'
+   */
+  readonly alignment?: ComposePreviewAlignment
   /**
    * 宿主接管的动画播放头毫秒（如预览对话框的手动播放会话）。
    *
@@ -84,13 +109,27 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
 }
 
 /**
- * Preview 输出目标。
+ * Frame 映射进宿主盒子的方式。
+ *
+ * @remarks
+ * 语义与 CSS `object-fit` 一致：`contain` 完整放入并留白，`cover` 铺满并裁掉溢出，
+ * `fill` 拉伸到宿主盒子，`none` 按 Frame 自身尺寸原样输出。
  *
  * @public
  */
-export type ComposePreviewTarget =
-  | { readonly kind: 'document' }
-  | { readonly kind: 'container'; readonly entityId: string }
+export type ComposePreviewFit = 'contain' | 'cover' | 'fill' | 'none'
+
+/** `fit` 生效时 Frame 在宿主盒子内的对齐方式。 @public */
+export type ComposePreviewAlignment =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'center-left'
+  | 'center'
+  | 'center-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
 
 function entityStyle(entity: ComposeEntity, box: ComposeResolvedLayoutBox): CSSProperties {
   return {
@@ -222,6 +261,37 @@ function PreviewEntity({
  *
  * @public
  */
+/** 把 fit 与 alignment 归约为 Frame 外层包裹盒的样式。 */
+function frameFitStyle(
+  fit: ComposePreviewFit,
+  alignment: ComposePreviewAlignment,
+): { readonly wrapper: CSSProperties; readonly transformOrigin: string } {
+  const [vertical, horizontal] = alignment === 'center'
+    ? ['center', 'center']
+    : alignment.split('-') as [string, string]
+  const justify = horizontal === 'left' ? 'flex-start' : horizontal === 'right' ? 'flex-end' : 'center'
+  const align = vertical === 'top' ? 'flex-start' : vertical === 'bottom' ? 'flex-end' : 'center'
+  return {
+    wrapper: fit === 'none'
+      ? {}
+      : {
+          display: 'flex',
+          width: '100%',
+          height: '100%',
+          justifyContent: justify,
+          alignItems: align,
+          overflow: fit === 'cover' ? 'hidden' : undefined,
+        },
+    transformOrigin: `${horizontal === 'left' ? 'left' : horizontal === 'right' ? 'right' : 'center'} `
+      + `${vertical === 'top' ? 'top' : vertical === 'bottom' ? 'bottom' : 'center'}`,
+  }
+}
+
+/**
+ * 用普通 DOM 预览一个 Frame。
+ *
+ * @public
+ */
 function ComposePreviewReady({
   document,
   layoutRuntime: _layoutRuntime,
@@ -232,7 +302,13 @@ function ComposePreviewReady({
   page: _page,
   scriptScope,
   scriptModuleLoader,
-  target = { kind: 'document' },
+  frameId,
+  defaultFrameId,
+  fit = 'none',
+  alignment = 'center',
+  // 采样由上层的 useComposeAnimationPlayback 消费；这里只负责不要把它透传到 DOM。
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 仅用于从 props 中剥离
+  animationTimeMs,
   ...props
 }: ComposePreviewProps & {
   readonly document: ComposeDocument
@@ -240,52 +316,46 @@ function ComposePreviewReady({
 }) {
   void _layoutRuntime
   void _page
-  const content = target.kind === 'document'
+  const targetFrameId = resolvePreviewFrameId(document, frameId, defaultFrameId)
+  const entity = targetFrameId ? document.entities[targetFrameId] : undefined
+  const frame = getComposeFrame(entity)
+  const fitStyle = frameFitStyle(fit, alignment)
+  const content = entity && frame
     ? (
-      <div
-        data-testid="compose-preview-document"
-        style={{
-          position: 'relative',
-          width: document.output.width,
-          height: document.output.height,
-          overflow: 'hidden',
-        }}
-      >
-        <ComposePaintLayer assetResolver={assetResolver} paint={document.output.backgroundPaint} testId="compose-preview-output-paint" />
-        {document.rootIds.map((entityId) => (
-          <PreviewEntity
-            assetResolver={assetResolver}
-            document={document}
-            layoutSnapshot={layoutSnapshot}
-            pageLoader={pageLoader}
-            entityId={entityId}
-            key={entityId}
-            registry={registry}
-            scriptModuleLoader={scriptModuleLoader}
-            scriptScope={scriptScope}
-          />
-        ))}
-      </div>
-    )
-    : (() => {
-        const entity = document.entities[target.entityId]
-        const hierarchy = entity ? getComposeHierarchy(entity) : undefined
-        const box = entity ? layoutSnapshot.boxes[entity.id] : undefined
-        return entity && hierarchy && box ? (
+        <div style={fitStyle.wrapper}>
           <div
-            data-testid="compose-preview-container"
+            data-compose-frame={entity.id}
+            data-testid="compose-preview-frame"
             style={{
               ...composeEntityAppearanceStyle(entity),
               ...composeEntityOverflowStyle(entity),
               position: 'relative',
-              width: box.width,
-              height: box.height,
+              // Frame.size 是尺寸的唯一事实来源；布局盒只决定它内部子级的位置。
+              width: frame.size.width,
+              height: frame.size.height,
+              flex: 'none',
+              ...(fit === 'fill'
+                ? { width: '100%', height: '100%' }
+                : fit === 'contain' || fit === 'cover'
+                  ? {
+                      maxWidth: fit === 'contain' ? '100%' : undefined,
+                      maxHeight: fit === 'contain' ? '100%' : undefined,
+                      minWidth: fit === 'cover' ? '100%' : undefined,
+                      minHeight: fit === 'cover' ? '100%' : undefined,
+                      objectFit: fit,
+                      transformOrigin: fitStyle.transformOrigin,
+                    }
+                  : {}),
             }}
           >
             {getComposeVisibility(entity).visible
               ? (
                   <>
-                    <ComposeEntityPaintLayer assetResolver={assetResolver} entity={entity} />
+                    <ComposeEntityPaintLayer
+                      assetResolver={assetResolver}
+                      entity={entity}
+                      testId={`compose-preview-entity-paint-${entity.id}`}
+                    />
                     <ComposeRegistryEntityRenderer
                       assetResolver={assetResolver}
                       entity={entity}
@@ -309,7 +379,13 @@ function ComposePreviewReady({
                       />
                     ))}
                     <PreviewContentExtent
-                      box={box}
+                      box={layoutSnapshot.boxes[entity.id] ?? {
+                        x: 0,
+                        y: 0,
+                        width: frame.size.width,
+                        height: frame.size.height,
+                        positioning: 'absolute',
+                      }}
                       document={document}
                       entity={entity}
                       layoutSnapshot={layoutSnapshot}
@@ -319,12 +395,13 @@ function ComposePreviewReady({
                 )
               : null}
           </div>
-        ) : (
-          <div role="alert">
-            Preview Container {target.entityId} 不存在或不是 Container
-          </div>
-        )
-      })()
+        </div>
+      )
+    : (
+        <div role="alert">
+          Preview 目标 {frameId ?? defaultFrameId ?? '(默认)'} 不存在或不是 Frame
+        </div>
+      )
 
   return (
     <section
@@ -351,6 +428,27 @@ function ComposePreviewReady({
       {content}
     </section>
   )
+}
+
+/**
+ * 解析本次要渲染的 Frame。
+ *
+ * @remarks
+ * 显式 `frameId` 必须命中一个真实 Frame，否则报错而不是换一个渲染。省略时按 `defaultFrameId`
+ * 再到第一个根 Frame 回退——失效的默认值不该让整页变成错误提示。
+ */
+function resolvePreviewFrameId(
+  document: ComposeDocument,
+  frameId?: string,
+  defaultFrameId?: string | null,
+): string | null {
+  // 显式目标不做回退：宿主指名的 Frame 不存在是它的 bug，静默换一个 Frame 会让错误一直藏着。
+  if (frameId !== undefined) {
+    return getComposeFrame(document.entities[frameId]) ? frameId : null
+  }
+  const candidates = [defaultFrameId ?? undefined, ...document.rootIds]
+  return candidates.find((candidate) =>
+    candidate !== undefined && getComposeFrame(document.entities[candidate]) !== null) ?? null
 }
 
 function ManagedComposePreview(props: ComposePreviewProps & { readonly document: ComposeDocument }) {

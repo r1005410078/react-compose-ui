@@ -145,7 +145,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
   await stage.getByRole('button', { name: 'Add' }).click()
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
-  await stage.getByTestId('stage-output-boundary').click({ position: { x: 8, y: 8 } })
+  await stage.getByTestId('stage-frame-boundary-frame-root').click({ position: { x: 8, y: 8 } })
   const canvasInspector = editor.getByRole('region', { name: '画布属性' })
   const pageScriptProperty = canvasInspector.locator('.property-panel__group')
     .filter({ hasText: '页面脚本' })
@@ -206,7 +206,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await pageTab.click()
   await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
   await expect(stage.getByRole('button', { name: 'Add' })).toBeVisible()
-  await stage.getByTestId('stage-output-boundary').click({ position: { x: 8, y: 8 } })
+  await stage.getByTestId('stage-frame-boundary-frame-root').click({ position: { x: 8, y: 8 } })
   await expect(pageScriptProperty.getByRole('list', { name: '页面脚本返回成员' }))
     .toContainText('10')
   await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
@@ -250,7 +250,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await page.keyboard.press('Control+S')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
   await pageTab.click()
-  await stage.getByTestId('stage-output-boundary').click({ position: { x: 8, y: 8 } })
+  await stage.getByTestId('stage-frame-boundary-frame-root').click({ position: { x: 8, y: 8 } })
   await expect(pageScriptProperty)
     .toContainText('页面脚本导入失败')
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
@@ -425,7 +425,7 @@ test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时�
 
   // 1) 从组件库放一个 Widget Switcher，再在它外面放两个矩形。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
   expect(outputBox).not.toBeNull()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Widget Switcher' }), {
     x: outputBox!.x + 260,
@@ -434,7 +434,7 @@ test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时�
   const switcher = stage.getByTestId('stage-container')
   await expect(switcher).toBeVisible()
 
-  const rootRenderers = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rootRenderers = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   for (const x of [80, 300]) {
     await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
       x: outputBox!.x + x,

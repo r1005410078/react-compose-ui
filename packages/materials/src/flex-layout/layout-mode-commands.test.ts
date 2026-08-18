@@ -1,9 +1,9 @@
 import {
   BUILTIN_COMMAND_TYPES,
+  createComposeFrameEntity,
   createDefaultCanvasSettings,
   createDefaultComposeFlexLayout,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
   createTransactionRuntime,
   getComposeComposition,
   getComposeLayout,
@@ -40,11 +40,13 @@ function entity(
 
 function documentOf(parent: ComposeEntity, children: readonly ComposeEntity[]): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: [parent.id],
-    entities: Object.fromEntries([parent, ...children].map((item) => [item.id, item])),
+    rootIds: ['frame-root'],
+    entities: {
+      ...Object.fromEntries([parent, ...children].map((item) => [item.id, item])),
+      'frame-root': createComposeFrameEntity({ id: 'frame-root', childIds: [parent.id] }),
+    },
   }
 }
 

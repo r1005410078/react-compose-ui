@@ -5,6 +5,12 @@
  */
 
 export {
+  listFrameWorldGuides,
+  resolveActiveFrameId,
+  toFrameGuidePosition,
+  type FrameOriginResolver,
+} from './frame-space'
+export {
   createLayerOrderCommand,
   createDuplicateCommand,
   createGroupCommand,

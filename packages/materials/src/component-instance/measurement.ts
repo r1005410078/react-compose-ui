@@ -5,15 +5,20 @@ import {
   resolveComposeInstanceOverrides,
   type ComposeDocument,
   type ComposeResolvedComponentSnapshot,
+  COMPOSE_DEFAULT_FRAME_SIZE,
+  getComposeFrame,
 } from '@compose-ui/core'
 import { constrainIntrinsicSize } from '../renderer-measurement/intrinsic-size'
 
 function readSnapshot(value: unknown): ComposeResolvedComponentSnapshot | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const candidate = value as Partial<ComposeResolvedComponentSnapshot>
-  return candidate.document?.output
-    && Number.isFinite(candidate.document.output.width)
-    && Number.isFinite(candidate.document.output.height)
+  // v7 的组件根是 Frame，尺寸事实来源是它的 Frame.size。
+  const rootId = candidate.document?.rootIds[0]
+  const frame = rootId ? getComposeFrame(candidate.document?.entities[rootId]) : null
+  return frame
+    && Number.isFinite(frame.size.width)
+    && Number.isFinite(frame.size.height)
     ? candidate as ComposeResolvedComponentSnapshot
     : null
 }
@@ -39,17 +44,28 @@ function resolveInstanceDocument(props: Readonly<Record<string, unknown>>): Comp
   return resolved.ok ? resolved.document : snapshot.document
 }
 
-/** 取组件根 LayoutItem 尺寸；无根时回退文档 output。 @internal */
+/**
+ * 取组件根尺寸。
+ *
+ * @remarks
+ * 覆盖可能改写根的 Frame.size 或 LayoutItem，因此按 Frame.size 优先、LayoutItem 兜底读取。
+ *
+ * @internal
+ */
 function measureRootSize(document: ComposeDocument): { width: number; height: number } {
   const rootId = document.rootIds[0]
   const root = rootId ? document.entities[rootId] : undefined
-  if (!root) {
+  if (!root) return { width: COMPOSE_DEFAULT_FRAME_SIZE.width, height: COMPOSE_DEFAULT_FRAME_SIZE.height }
+  // 实例覆盖改写的是根的 LayoutItem；fixed 值在场时它就是"覆盖后的根尺寸"，
+  // 只有非 fixed（Hug/Fill）才回落到 Frame.size 这个事实来源。
+  const item = getComposeLayoutItem(root)
+  const frame = getComposeFrame(root)
+  if (frame) {
     return {
-      width: document.output.width,
-      height: document.output.height,
+      width: item.width.mode === 'fixed' ? item.width.value : frame.size.width,
+      height: item.height.mode === 'fixed' ? item.height.value : frame.size.height,
     }
   }
-  const item = getComposeLayoutItem(root)
   return {
     width: item.width.value,
     height: item.height.value,

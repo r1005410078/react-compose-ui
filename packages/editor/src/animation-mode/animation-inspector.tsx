@@ -31,6 +31,8 @@ export interface AnimationInspectorMessages {
 /** 动画检查器的受控属性。 */
 export interface AnimationInspectorProps {
   readonly animation: ComposeAnimation
+  /** 持有该动画清单的 Frame；v7 的清单归属 Frame。 */
+  readonly frameId: string
   readonly dispatch: (command: EditorCommand) => unknown
   readonly idFactory: () => string
   /** 页面作用域；缺省时绑定候选为空但检查器其余功能不受影响。 */
@@ -51,6 +53,7 @@ export interface AnimationInspectorProps {
 export function AnimationInspector({
   animation,
   dispatch,
+  frameId,
   idFactory,
   messages,
   scope,
@@ -101,16 +104,16 @@ export function AnimationInspector({
 
   const bindingValue = useMemo(() => buildAnimationBindingValue(animation), [animation])
 
-  const latest = useRef({ animation, dispatch, idFactory })
+  const latest = useRef({ animation, dispatch, frameId, idFactory })
   useEffect(() => {
-    latest.current = { animation, dispatch, idFactory }
+    latest.current = { animation, dispatch, frameId, idFactory }
   })
   const configure = (payload: JsonObject) => {
     const current = latest.current
     current.dispatch({
       id: current.idFactory(),
       type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
-      payload: { animationId: current.animation.id, ...payload },
+      payload: { frameId: current.frameId, animationId: current.animation.id, ...payload },
       meta: { source: 'animation-inspector' },
     } as EditorCommand)
   }

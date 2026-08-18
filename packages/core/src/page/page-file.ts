@@ -1,7 +1,7 @@
 import { createDefaultCanvasSettings } from '../canvas-settings'
 import type { ComposeDocument, DocumentValidationIssue } from '../document-types'
 import { validateComposeDocument } from '../document'
-import { createDefaultOutputSettings } from '../output-settings'
+import { createComposeFrame } from '../frame'
 import {
   COMPOSE_PAGE_FILE_SUFFIX,
   COMPOSE_PAGE_MEDIA_TYPE,
@@ -159,7 +159,7 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
     }
   }
   const issues: ComposePageFileIssue[] = []
-  const allowed = new Set(['kind', 'pageSchemaVersion', 'document', 'setupScript', 'animation'])
+  const allowed = new Set(['kind', 'pageSchemaVersion', 'document', 'setupScript', 'defaultFrameId'])
   Object.keys(parsed).forEach((key) => {
     if (!allowed.has(key)) {
       issues.push({ code: 'page.invalid-shape', path: [key], message: `页面包含未知字段 ${key}` })
@@ -193,18 +193,26 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
       issues,
     )
   }
-  // animation 是加法字段：老页面文件没有它也必须继续解析，缺失归一化为 null。
-  if (parsed.animation !== undefined && parsed.animation !== null) {
-    validateStableAssetReference(
-      'animation',
-      'page.invalid-animation-reference',
-      parsed.animation,
-      issues,
-    )
+  // defaultFrameId 必须指向一个真实的根 Frame；悬空值报错而不是被静默改写。
+  if (parsed.defaultFrameId !== undefined && parsed.defaultFrameId !== null) {
+    const frameId = parsed.defaultFrameId
+    const validFrame = typeof frameId === 'string'
+      && documentValidation.valid
+      && documentValidation.document.rootIds.includes(frameId)
+    if (!validFrame) {
+      issues.push({
+        code: 'page.invalid-default-frame',
+        path: ['defaultFrameId'],
+        message: 'defaultFrameId 必须指向 rootIds 中的一个 Frame',
+      })
+    }
   }
   if (issues.length > 0 || !documentValidation.valid) return { ok: false, issues }
   const page = parsed as unknown as ComposePageFile
-  return { ok: true, page: page.animation === undefined ? { ...page, animation: null } : page }
+  return {
+    ok: true,
+    page: page.defaultFrameId === undefined ? { ...page, defaultFrameId: null } : page,
+  }
 }
 
 /**
@@ -215,24 +223,60 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
  * @public
  */
 export function serializeComposePageFile(page: ComposePageFile): string {
-  // animation 在类型上可缺省，但落盘格式总是写出该字段，使外部 diff 与旧文件升级路径稳定。
-  const normalized = page.animation === undefined ? { ...page, animation: null } : page
+  // defaultFrameId 在类型上可缺省，但落盘格式总是写出该字段，使外部 diff 与升级路径稳定。
+  const normalized = page.defaultFrameId === undefined ? { ...page, defaultFrameId: null } : page
   return `${JSON.stringify(normalized, null, 2)}\n`
 }
 
 /**
  * 创建一份空白页面文档。
  *
- * @returns 每次调用均返回可独立修改的新文档，使用默认画布设置与默认输出设置。
+ * @returns 每次调用均返回可独立修改的新文档：默认视口设置，加一个默认尺寸的空白根 Frame。
  * @public
  */
 export function createEmptyComposePageDocument(): ComposeDocument {
+  const frameId = 'frame-root'
+  const frame = createComposeFrame()
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: [],
-    entities: {},
+    rootIds: [frameId],
+    entities: {
+      [frameId]: {
+        id: frameId,
+        name: '画板',
+        components: {
+          Composition: {
+            presetId: 'frame',
+            baseComponentKeys: [
+              'Composition',
+              'Transform',
+              'LayoutItem',
+              'Visibility',
+              'Lock',
+              'Hierarchy',
+              'Frame',
+              'Appearance',
+            ],
+            capabilityIds: [],
+          },
+          Transform: { rotation: 0 },
+          LayoutItem: {
+            positioning: 'absolute',
+            offset: { x: 0, y: 0 },
+            width: { mode: 'fixed', value: frame.size.width, min: 1, max: null },
+            height: { mode: 'fixed', value: frame.size.height, min: 1, max: null },
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            alignSelf: 'auto',
+          },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Hierarchy: { childIds: [] },
+          Frame: frame,
+          Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
+        },
+      },
+    },
   }
 }
 
@@ -243,7 +287,7 @@ export function createEmptyComposePageFile(): ComposePageFile {
     pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
     document: createEmptyComposePageDocument(),
     setupScript: null,
-    animation: null,
+    defaultFrameId: null,
   }
 }
 
@@ -264,7 +308,7 @@ export function migrateLegacyComposePageFile(document: unknown): ComposePageMigr
           pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
           document: validation.document,
           setupScript: null,
-          animation: null,
+          defaultFrameId: null,
         },
       }
     : { ok: false, issues: validation.issues }

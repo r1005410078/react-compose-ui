@@ -27,16 +27,15 @@ const reference = {
 function baseAsset(): ComposeBaseComponentAsset {
   const root = createComposeGroupEntitySeed({ id: 'root' })
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'button',
     name: 'Button',
     document: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: createDefaultCanvasSettings(),
-      output: { width: 100, height: 40, backgroundPaint: { kind: 'solid', color: 'transparent' } },
       rootIds: ['root'],
-      entities: { root },
+      entities: { root: { ...root, components: { ...root.components, Frame: { size: { width: 120, height: 60 }, guides: [] } } } },
     },
   }
 }

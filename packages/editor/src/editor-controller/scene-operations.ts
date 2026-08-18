@@ -4,6 +4,7 @@ import {
   getEntityParentId,
 } from '@compose-ui/stage-engine'
 import {
+  getComposeHierarchy,
   BUILTIN_COMMAND_TYPES,
   adoptComposeCrossAxisSizing,
   createComposeBatchCommand,
@@ -151,19 +152,23 @@ function planCreate(
       reason: `无法创建容器 Preset "${context.containerPresetId}"：${created.error.message}`,
     }
   }
-  const isRoot = operation.parentId === null
+  // v7 的"根级"是根 Frame 的直接子级：文档根本身只放 Frame，没有 parent 时落到第一块画板。
+  const frameId = context.document.rootIds[0] ?? null
+  const parentId = operation.parentId ?? frameId
+  const isRoot = parentId !== null && context.document.rootIds.includes(parentId)
   const entityId = context.nextId()
   const initial = getComposeSpatialTransform({ id: '__seed__', ...created.seed })
   // 根级新建沿对角线依次错开，避免多个容器完全重叠；子级从父容器原点开始。
-  const rootOffset = 80 + context.document.rootIds.length * 40
+  const siblings = isRoot && parentId
+    ? getComposeHierarchy(context.document.entities[parentId])?.childIds.length ?? 0
+    : 0
+  const rootOffset = 80 + siblings * 40
   const transform: ComposeSpatialTransform = {
     ...initial,
     position: isRoot ? { x: rootOffset, y: rootOffset } : { x: 0, y: 0 },
     size: isRoot ? initial.size : { ...NESTED_CONTAINER_SIZE },
   }
-  const parent = operation.parentId
-    ? context.document.entities[operation.parentId]
-    : undefined
+  const parent = parentId ? context.document.entities[parentId] : undefined
   const entity = entityFromSeed(
     entityId,
     created.seed,
@@ -176,7 +181,7 @@ function planCreate(
       BUILTIN_COMMAND_TYPES.createEntity,
       {
         entity: entity as unknown as JsonValue,
-        parentId: operation.parentId,
+        parentId,
         index: operation.index,
       },
       `Create Container · ${transform.size.width} × ${transform.size.height}`,
@@ -241,14 +246,29 @@ function planSetLocked(
   ))
 }
 
+/**
+ * 把场景树的"根级"落点解析为文档中的落点。
+ *
+ * @remarks
+ * 场景树是通用受控组件，`parentId: null` 表示树的根；v7 的文档根只放 Frame，因此这里统一
+ * 翻译成第一块画板。所有会写入父子关系的规划器都必须走这里。
+ */
+function resolveDropParentId(
+  document: SceneOperationContext['document'],
+  parentId: string | null,
+): string | null {
+  return parentId ?? document.rootIds[0] ?? null
+}
+
 function planMove(
   operation: Extract<ComposeSceneTreeOperation, { type: 'move' }>,
   context: SceneOperationContext,
 ): SceneOperationResult {
   // 跨父级移动必须保持世界坐标，交由 stage-engine 重算局部 Transform；
   // 同父级内只是顺序变化，用轻量的 moveEntity 即可。
+  const parentId = resolveDropParentId(context.document, operation.parentId)
   const crossesParent = operation.nodeIds.some(
-    (id) => getEntityParentId(context.document, id) !== operation.parentId,
+    (id) => getEntityParentId(context.document, id) !== parentId,
   )
   if (crossesParent) {
     if (!context.layoutSnapshot) {
@@ -258,7 +278,7 @@ function planMove(
       context.document,
       context.layoutSnapshot,
       operation.nodeIds,
-      operation.parentId,
+      parentId,
       operation.index,
       context.nextId(),
     ))
@@ -268,7 +288,7 @@ function planMove(
     BUILTIN_COMMAND_TYPES.moveEntity,
     {
       entityIds: operation.nodeIds,
-      parentId: operation.parentId,
+      parentId,
       index: operation.index,
     },
     `Reorder ${describeEntityTargets(context.document, operation.nodeIds)}`
@@ -287,7 +307,10 @@ function planDuplicate(
       id,
       context.nextId,
       context.nextId(),
-      { parentId: operation.parentId, index: operation.index + offset },
+      {
+        parentId: resolveDropParentId(context.document, operation.parentId),
+        index: operation.index + offset,
+      },
     ))
     .filter((item): item is NonNullable<typeof item> => item !== null)
   if (duplicates.length === 0) return { status: 'skipped' }

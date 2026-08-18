@@ -11,7 +11,7 @@ import {
   type EditorCommand,
   type JsonObject,
 } from './index'
-import { containerEntity, documentFixture, rendererEntity, transform } from './test-fixtures'
+import { ROOT_FRAME_ID, containerEntity, documentFixture, rendererEntity, transform } from './test-fixtures'
 
 let commandId = 0
 function dispatch(
@@ -28,7 +28,7 @@ function dispatch(
   return runtime.dispatch(command)
 }
 
-describe('ComposeDocument v6 built-in commands', () => {
+describe('ComposeDocument v7 built-in commands', () => {
   it('OpenSpec: Container 分轴溢出协议 / 规范化混合滚动策略并支持撤销重做', () => {
     const container = containerEntity('container')
     const runtime = createTransactionRuntime({ document: documentFixture({ container }) })
@@ -57,32 +57,69 @@ describe('ComposeDocument v6 built-in commands', () => {
     })
   })
 
-  it('OpenSpec: command-transaction / 输出 Paint 配置事务 / 提交并撤销输出渐变', () => {
+  it('OpenSpec: command-transaction / Frame 尺寸事务 / 提交并撤销 Frame 尺寸', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
-    const backgroundPaint = {
-      kind: 'linear-gradient' as const,
-      start: { x: 0, y: 0.5 },
-      end: { x: 1, y: 0.5 },
-      stops: [
-        { id: 'start', position: 0, color: '#0cdeab' as const },
-        { id: 'end', position: 1, color: '#06785c' as const },
-      ],
-    }
+    const frameSize = () =>
+      (runtime.document.entities[ROOT_FRAME_ID]?.components.Frame as { size: unknown }).size
+    const layoutValue = (axis: 'width' | 'height') =>
+      ((runtime.document.entities[ROOT_FRAME_ID]?.components.LayoutItem as Record<string, { value: number }>)[axis]).value
 
-    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.configureOutput, {
-      width: 1440,
-      height: 900,
-      backgroundPaint,
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.setFrameSize, {
+      entityId: ROOT_FRAME_ID,
+      size: { width: 1440, height: 900 },
     }).status).toBe('committed')
-    expect(runtime.document.output).toEqual({ width: 1440, height: 900, backgroundPaint })
+    expect(frameSize()).toEqual({ width: 1440, height: 900 })
+    // Frame.size 是唯一事实来源，但 LayoutItem 的 fixed fallback 必须同步，避免降格后跳回旧尺寸。
+    expect([layoutValue('width'), layoutValue('height')]).toEqual([1440, 900])
     runtime.undo()
-    expect(runtime.document.output).toEqual(documentFixture().output)
+    expect(frameSize()).toEqual({ width: 1280, height: 720 })
     runtime.redo()
-    expect(runtime.document.output).toEqual({ width: 1440, height: 900, backgroundPaint })
-    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.configureOutput, {
-      width: 1440,
-      height: 900,
-      backgroundColor: '#0cdeab',
+    expect(frameSize()).toEqual({ width: 1440, height: 900 })
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.setFrameSize, {
+      entityId: ROOT_FRAME_ID,
+      size: { width: 0, height: 900 },
+    }).status).toBe('rejected')
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.setFrameSize, {
+      entityId: 'rectangle',
+      size: { width: 100, height: 100 },
+    }).status).toBe('rejected')
+  })
+
+  it('OpenSpec: command-transaction / Frame 局部辅助线 / 创建移动删除都作用在 Frame 上', () => {
+    const runtime = createTransactionRuntime({ document: documentFixture() })
+    const guides = () =>
+      (runtime.document.entities[ROOT_FRAME_ID]?.components.Frame as { guides: readonly { id: string; position: number }[] }).guides
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.createFrameGuide, {
+      frameId: ROOT_FRAME_ID,
+      guides: [
+        { id: 'gx', axis: 'x', position: 120 },
+        { id: 'gy', axis: 'y', position: 40 },
+      ],
+    }).status).toBe('committed')
+    expect(guides().map(({ id }) => id)).toEqual(['gx', 'gy'])
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.moveFrameGuide, {
+      frameId: ROOT_FRAME_ID,
+      guideId: 'gx',
+      position: -16,
+    }).status).toBe('committed')
+    expect(guides()[0]?.position).toBe(-16)
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.deleteFrameGuide, {
+      frameId: ROOT_FRAME_ID,
+      guideId: 'gy',
+    }).status).toBe('committed')
+    expect(guides().map(({ id }) => id)).toEqual(['gx'])
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.createFrameGuide, {
+      frameId: 'rectangle',
+      guide: { id: 'g2', axis: 'x', position: 0 },
+    }).status).toBe('rejected')
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.createFrameGuide, {
+      frameId: ROOT_FRAME_ID,
+      guide: { id: 'gx', axis: 'x', position: 8 },
     }).status).toBe('rejected')
   })
 
@@ -444,9 +481,10 @@ describe('ComposeDocument v6 built-in commands', () => {
     expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.duplicateEntity, {
       entities: { copy: copy as unknown as JsonObject },
       rootIds: ['copy'],
-      parentId: null,
+      parentId: ROOT_FRAME_ID,
     }).status).toBe('committed')
-    expect(runtime.document.rootIds).toEqual(['parent', 'copy'])
+    expect((runtime.document.entities[ROOT_FRAME_ID]?.components.Hierarchy as { childIds: string[] }).childIds)
+      .toEqual(['parent', 'copy'])
     expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.deleteEntity, {
       entityIds: ['parent'],
     }).status).toBe('committed')

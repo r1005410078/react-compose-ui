@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
   getComposeComposition,
   getComposeHierarchy,
   getComposeWidgetSwitcher,
@@ -25,9 +24,8 @@ function seed(
 
 function documentOf(entities: readonly ComposeEntity[]): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
     rootIds: [entities[0]!.id],
     entities: Object.fromEntries(entities.map((entity) => [entity.id, entity])),
   }

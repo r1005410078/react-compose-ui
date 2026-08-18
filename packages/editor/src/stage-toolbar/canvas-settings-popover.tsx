@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import { getComposeFrameGuides } from '@compose-ui/core'
 import type {
   ComposeDocument,
   EditorCommand,
@@ -55,6 +56,11 @@ export function CanvasSettingsPopover({
     i18n?.formatMessage,
   ).canvasSettings
   const [draft, setDraft] = useState(() => initialDraft(document))
+  // 活动 Frame 缺省回退到第一个根 Frame，与 Stage 的辅助线绘制口径一致。
+  const activeFrameId = document.rootIds[0] ?? null
+  const frameGuides = activeFrameId
+    ? getComposeFrameGuides(document.entities[activeFrameId])
+    : []
   const [error, setError] = useState('')
   const updateNumber = (field: keyof Pick<
     Draft,
@@ -104,11 +110,12 @@ export function CanvasSettingsPopover({
       },
       meta: { label: messages.configureTransaction, source: 'stage-toolbar' },
     }
+    // 辅助线归属 Frame：清空只作用于活动 Frame，别的画板的辅助线不受影响。
     const deletes: EditorCommand[] = draft.clearGuides
-      ? document.canvas.guides.map((guide) => ({
+      ? frameGuides.map((guide) => ({
           id: idFactory(),
-          type: 'canvas.guide.delete',
-          payload: { guideId: guide.id },
+          type: 'frame.guide.delete',
+          payload: { frameId: activeFrameId!, guideId: guide.id },
         }))
       : []
     const commands = [configure, ...deletes]
@@ -214,7 +221,7 @@ export function CanvasSettingsPopover({
       <button
         aria-pressed={draft.clearGuides}
         className="compose-editor__clear-guides"
-        disabled={document.canvas.guides.length === 0}
+        disabled={frameGuides.length === 0}
         type="button"
         onClick={() => setDraft((current) => ({
           ...current,
@@ -223,7 +230,7 @@ export function CanvasSettingsPopover({
       >
         {draft.clearGuides
           ? messages.willClearGuides
-          : messages.clearGuides(document.canvas.guides.length)}
+          : messages.clearGuides(frameGuides.length)}
       </button>
       {error ? <p role="alert">{error}</p> : null}
       <div className="compose-editor__canvas-settings-actions">

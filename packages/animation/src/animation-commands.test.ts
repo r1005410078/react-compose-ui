@@ -46,23 +46,65 @@ function entity(id: string, animation?: JsonObject): ComposeEntity {
   }
 }
 
+/** 测试文档的根 Frame ID；动画清单挂在它的 `Animations` Component 上。 */
+const FRAME_ID = 'frame-root'
+
+function frame(
+  id: string,
+  childIds: readonly string[],
+  animations: readonly ComposeAnimation[] | null,
+): ComposeEntity {
+  return {
+    id,
+    name: id,
+    components: {
+      Composition: {
+        presetId: 'frame',
+        baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Hierarchy', 'Frame'],
+        capabilityIds: [],
+      },
+      Transform: { rotation: 0 },
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'fixed', value: 1920, min: 1, max: null },
+        height: { mode: 'fixed', value: 1080, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Hierarchy: { childIds },
+      Frame: { size: { width: 1920, height: 1080 }, guides: [] },
+      ...(animations ? { Animations: { items: animations } } : {}),
+    },
+  }
+}
+
 function documentWith(
   entities: Readonly<Record<string, ComposeEntity>>,
-  // 用 null 表达"文档没有 animations 字段"；传 undefined 会落回默认参数。
+  // 用 null 表达"该 Frame 没有 Animations Component"；传 undefined 会落回默认参数。
   animations: readonly ComposeAnimation[] | null = [intro],
 ): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1920, height: 1080, backgroundPaint: { kind: 'solid', color: '#ffffff' } },
-    rootIds: Object.keys(entities),
-    entities,
-    ...(animations ? { animations } : {}),
+    rootIds: [FRAME_ID],
+    entities: { ...entities, [FRAME_ID]: frame(FRAME_ID, Object.keys(entities), animations) },
   }
+}
+
+/** 读取根 Frame 当前的动画清单；没有 Component 时返回 undefined。 */
+function manifestOf(
+  document: ComposeDocument,
+  frameId = FRAME_ID,
+): readonly ComposeAnimation[] | undefined {
+  const component = document.entities[frameId]?.components.Animations as
+    { items?: readonly ComposeAnimation[] } | undefined
+  return component?.items
 }
 
 let commandSeq = 0
@@ -92,37 +134,39 @@ const opacityKeyframe = (timeMs: number, value: number, keyframeId = `k-${timeMs
 describe('动画清单命令', () => {
   it('OpenSpec: scene-animation / 动画编辑命令 / 创建动画写入清单并可撤销', () => {
     const host = runtime(documentWith({ rect: entity('rect') }, null))
-    expect(host.document.animations).toBeUndefined()
+    expect(manifestOf(host.document)).toBeUndefined()
     const result = host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
-      animationId: 'intro', name: '入场动画', durationMs: 300,
+      frameId: FRAME_ID, animationId: 'intro', name: '入场动画', durationMs: 300,
     }))
     expect(result.status).toBe('committed')
-    expect(host.document.animations).toEqual([
+    expect(manifestOf(host.document)).toEqual([
       { id: 'intro', name: '入场动画', durationMs: 300, playbackMode: 'play-once' },
     ])
     host.undo()
     // 原文档没有 animations 字段，撤销后必须彻底消失而不是留下空数组。
-    expect(host.document.animations).toBeUndefined()
+    expect(manifestOf(host.document)).toBeUndefined()
   })
 
   it('OpenSpec: scene-animation / 动画编辑命令 / 重复 ID 与非法时长被拒绝', () => {
     const host = runtime(documentWith({ rect: entity('rect') }))
     expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
+      frameId: FRAME_ID,
       animationId: 'intro', name: '重复', durationMs: 300,
     })).status).toBe('rejected')
     expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
-      animationId: 'other', name: '零时长', durationMs: 0,
+      frameId: FRAME_ID, animationId: 'other', name: '零时长', durationMs: 0,
     })).status).toBe('rejected')
   })
 
   it('OpenSpec: scene-animation / 动画编辑命令 / 配置动画参数与播放绑定', () => {
     const host = runtime(documentWith({ rect: entity('rect') }))
     host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+      frameId: FRAME_ID,
       animationId: 'intro',
       playbackMode: 'loop',
       bindings: { playing: { scope: 'page', exportName: 'isReady' } },
     }))
-    expect(host.document.animations?.[0]).toEqual({
+    expect(manifestOf(host.document)?.[0]).toEqual({
       id: 'intro',
       name: '入场动画',
       durationMs: 300,
@@ -134,17 +178,20 @@ describe('动画清单命令', () => {
   it('OpenSpec: compose-preview / 动画自动播放 / 配置自动播放且 false 不留字段', () => {
     const host = runtime(documentWith({ rect: entity('rect') }))
     host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+      frameId: FRAME_ID,
       animationId: 'intro',
       autoplay: true,
     }))
-    expect(host.document.animations?.[0]?.autoplay).toBe(true)
+    expect(manifestOf(host.document)?.[0]?.autoplay).toBe(true)
     host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+      frameId: FRAME_ID,
       animationId: 'intro',
       autoplay: false,
     }))
     // 关闭序列化为删除字段：清单不长期携带无信息量的 `autoplay: false`。
-    expect(host.document.animations?.[0]).not.toHaveProperty('autoplay')
+    expect(manifestOf(host.document)?.[0]).not.toHaveProperty('autoplay')
     expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+      frameId: FRAME_ID,
       animationId: 'intro',
       autoplay: 'yes',
     })).status).toBe('rejected')
@@ -324,8 +371,8 @@ describe('删除动画', () => {
         ...opacityKeyframe(0, 0.5), entityId,
       }))
     }
-    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.delete, { animationId: 'intro' }))
-    expect(host.document.animations).toEqual([])
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.delete, { frameId: FRAME_ID, animationId: 'intro' }))
+    expect(manifestOf(host.document)).toEqual([])
     for (const entityId of ['a', 'b', 'c']) {
       expect(host.document.entities[entityId]?.components[COMPOSE_ANIMATION_COMPONENT_KEY])
         .toBeUndefined()
@@ -341,7 +388,7 @@ describe('删除动画', () => {
     host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setKeyframe, {
       ...opacityKeyframe(0, 0.9), animationId: 'outro',
     }))
-    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.delete, { animationId: 'intro' }))
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.delete, { frameId: FRAME_ID, animationId: 'intro' }))
     expect(getComposeEntityTracks(host.document.entities.rect!, 'intro')).toEqual([])
     expect(getComposeEntityTracks(host.document.entities.rect!, 'outro')).toHaveLength(1)
   })
@@ -359,7 +406,7 @@ describe('结构操作自动带上动画', () => {
     const result = host.dispatch(command(BUILTIN_COMMAND_TYPES.duplicateEntity, {
       entities: { 'rect-copy': copy },
       rootIds: ['rect-copy'],
-      parentId: null,
+      parentId: FRAME_ID,
     }))
     expect(result.status).toBe('committed')
     const copied = getComposeEntityTracks(host.document.entities['rect-copy']!, 'intro')
@@ -375,5 +422,103 @@ describe('结构操作自动带上动画', () => {
     expect(host.document.entities.rect).toBeUndefined()
     host.undo()
     expect(host.document).toEqual(withAnimation)
+  })
+})
+
+describe('跨 Frame 轨道重定位', () => {
+  /** 两个根 Frame：source 内含 rect，target 为空。 */
+  function twoFrameDocument(
+    targetAnimations: readonly ComposeAnimation[] = [],
+  ): ComposeDocument {
+    const base = documentWith({ rect: entity('rect') })
+    const target = {
+      ...frame('frame-target', [], targetAnimations),
+      id: 'frame-target',
+      name: 'frame-target',
+    }
+    return {
+      ...base,
+      rootIds: [FRAME_ID, 'frame-target'],
+      entities: { ...base.entities, 'frame-target': target },
+    }
+  }
+
+  const relocate = (payload: JsonObject) =>
+    command(COMPOSE_ANIMATION_COMMAND_TYPES.relocateTracks, payload)
+
+  it('OpenSpec: scene-animation / 跨 Frame 轨道重定位命令 / 搬迁到没有对应动画的 Frame', () => {
+    const host = runtime(twoFrameDocument())
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setKeyframe, opacityKeyframe(120, 0.4)))
+    const before = getComposeEntityTracks(host.document.entities.rect!, 'intro')
+
+    expect(host.dispatch(relocate({ entityId: 'rect', targetFrameId: 'frame-target' })).status)
+      .toBe('committed')
+
+    // 目标 Frame 继承源动画的名称、时长与播放模式。
+    expect(manifestOf(host.document, 'frame-target')).toEqual([
+      { id: 'intro', name: '入场动画', durationMs: 300, playbackMode: 'play-once' },
+    ])
+    // 源清单里这条动画已经没有任何轨道，随之移除。
+    expect(manifestOf(host.document)).toEqual([])
+    // 关键帧逐字段保持。
+    expect(getComposeEntityTracks(host.document.entities.rect!, 'intro')).toEqual(before)
+  })
+
+  it('OpenSpec: scene-animation / 跨 Frame 轨道重定位命令 / 目标存在同名动画时要求显式分组', () => {
+    const conflicting = { id: 'other', name: '入场动画', durationMs: 500, playbackMode: 'loop' as const }
+    const host = runtime(twoFrameDocument([conflicting]))
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setKeyframe, opacityKeyframe(0, 0.4)))
+
+    const rejected = host.dispatch(relocate({ entityId: 'rect', targetFrameId: 'frame-target' }))
+    expect(rejected.status).toBe('rejected')
+    // 两侧清单与轨道都不得被修改。
+    expect(manifestOf(host.document, 'frame-target')).toEqual([conflicting])
+    expect(manifestOf(host.document)).toEqual([intro])
+    expect(getComposeEntityTracks(host.document.entities.rect!, 'intro')).toHaveLength(1)
+
+    expect(host.dispatch(relocate({
+      entityId: 'rect',
+      targetFrameId: 'frame-target',
+      mapping: { intro: 'other' },
+    })).status).toBe('committed')
+    expect(getComposeEntityTracks(host.document.entities.rect!, 'other')).toHaveLength(1)
+    expect(manifestOf(host.document, 'frame-target')).toEqual([conflicting])
+  })
+
+  it('OpenSpec: scene-animation / 跨 Frame 轨道重定位命令 / 搬迁与结构变更共享撤销', () => {
+    const host = runtime(twoFrameDocument())
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setKeyframe, opacityKeyframe(0, 0.4)))
+    const before = host.document
+
+    const batchResult = host.dispatch(command(BUILTIN_COMMAND_TYPES.batch, {
+      // 重定位必须排在结构变更之前：源 Frame 由 Entity 当前层级反查。
+      commands: [
+        {
+          id: 'relocate',
+          type: COMPOSE_ANIMATION_COMMAND_TYPES.relocateTracks,
+          payload: { entityId: 'rect', targetFrameId: 'frame-target' },
+        },
+        {
+          id: 'move',
+          type: BUILTIN_COMMAND_TYPES.moveEntity,
+          payload: { entityIds: ['rect'], parentId: 'frame-target', index: 0 },
+        },
+      ],
+    }))
+    expect(batchResult).toMatchObject({ status: 'committed' })
+    expect(manifestOf(host.document, 'frame-target')).toHaveLength(1)
+
+    host.undo()
+    // 一次撤销同时还原归属与两侧清单。
+    expect(host.document).toEqual(before)
+  })
+
+  it('OpenSpec: scene-animation / 嵌套 Frame 只暴露播放控制 / 拒绝对嵌套 Frame 内部打点', () => {
+    const host = runtime(twoFrameDocument())
+    // rect 属于 FRAME_ID，'intro' 是它的动画；用目标 Frame 的清单去打点必须失败。
+    expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setKeyframe, {
+      ...opacityKeyframe(0, 0.4),
+      animationId: 'not-in-my-frame',
+    })).status).toBe('rejected')
   })
 })

@@ -16,9 +16,13 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
-export const ContainerTarget: Story = {
-  args: { target: { kind: 'container', entityId: 'story-container' } },
+export const FrameTarget: Story = {
+  args: { frameId: 'story-frame' },
+}
+export const Contain: Story = {
+  args: { fit: 'contain' },
+  decorators: [(Story) => <div style={{ width: 400, height: 260 }}><Story /></div>],
 }
 export const Error: Story = {
-  args: { target: { kind: 'container', entityId: 'missing-container' } },
+  args: { frameId: 'missing-frame' },
 }

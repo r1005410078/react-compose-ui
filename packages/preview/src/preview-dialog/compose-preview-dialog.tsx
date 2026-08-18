@@ -3,15 +3,21 @@ import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { getComposeAnimations } from '@compose-ui/core'
 import { ComposePreview } from '../compose-preview'
-import type { ComposePreviewProps, ComposePreviewTarget } from '../compose-preview'
+import type { ComposePreviewProps } from '../compose-preview'
 import { advanceComposePreviewPlayhead } from '../playback/playback-model'
 import type { ComposePreviewPlayheadState } from '../playback/playback-model'
 import { useAnimationFrameLoop } from '../playback/use-animation-frame-loop'
 import './styles.css'
 
 type PreviewDialogScale = '1' | '0.75' | '0.5'
-type PreviewDialogTarget = Extract<ComposePreviewTarget, { readonly kind: 'document' }>['kind']
-  | Extract<ComposePreviewTarget, { readonly kind: 'container' }>['kind']
+/**
+ * 对话框的两个预览目标。
+ *
+ * @remarks
+ * `document` 表示页面的默认 Frame，`container` 表示宿主传入的那个 Frame（通常是当前选区
+ * 所属的画板）。两者最终都解析成一个 `frameId`——Preview 只有一种目标。
+ */
+type PreviewDialogTarget = 'document' | 'container'
 
 /** ComposePreviewDialog 的可本地化文案。 @public */
 export interface ComposePreviewDialogMessages {
@@ -20,7 +26,7 @@ export interface ComposePreviewDialogMessages {
   /** 完整文档范围标签。 */
   readonly document: string
   /** 指定容器范围标签。 */
-  readonly selectedContainer: string
+  readonly selectedFrame: string
   /** 范围选择的无障碍名称。 */
   readonly target: string
   /** 缩放选择的无障碍名称。 */
@@ -42,7 +48,7 @@ export interface ComposePreviewDialogMessages {
 const DEFAULT_MESSAGES: ComposePreviewDialogMessages = {
   title: 'Preview',
   document: 'Document',
-  selectedContainer: 'Selected container',
+  selectedFrame: 'Selected frame',
   target: 'Preview target',
   scale: 'Preview scale',
   enterFullscreen: 'Enter fullscreen preview',
@@ -68,8 +74,13 @@ export interface ComposePreviewDialogProps extends Pick<ComposePreviewProps,
   readonly open: boolean
   /** 用户请求打开或关闭对话框时调用。 */
   readonly onOpenChange: (open: boolean) => void
-  /** 可选的 Hierarchy Container ID；提供后允许切换到该局部预览。 */
-  readonly containerId?: string | null
+  /**
+   * 可选的 Frame ID；提供后允许从默认 Frame 切换到该 Frame 的预览。
+   *
+   * @remarks
+   * 通常是当前选区所属的画板。Preview 只有一种目标——一个 Frame，因此这里也只接受 Frame。
+   */
+  readonly selectedFrameId?: string | null
   /** 覆盖由标题派生的 Dialog 无障碍名称。 */
   readonly dialogLabel?: string
   /** 覆盖默认英文文案的本地化内容。 */
@@ -130,7 +141,7 @@ const INITIAL_PLAYHEAD: ComposePreviewPlayheadState = { timeMs: 0, direction: 1 
  */
 export function ComposePreviewDialog({
   assetResolver,
-  containerId,
+  selectedFrameId,
   dialogLabel,
   document: composeDocument,
   page,
@@ -154,7 +165,13 @@ export function ComposePreviewDialog({
   const [fullscreen, setFullscreen] = useState(false)
 
   // 基础能力阶段与编辑器一致：预览播放第一条动画；多动画选择留给后续提案。
-  const animation = composeDocument ? getComposeAnimations(composeDocument)[0] : undefined
+  // 清单归属 Frame：预览播放的是当前目标 Frame 自己的时间线。
+  const animationHostFrameId = composeDocument
+    ? (target === 'container' && selectedFrameId ? selectedFrameId : composeDocument.rootIds[0])
+    : undefined
+  const animation = composeDocument && animationHostFrameId
+    ? getComposeAnimations(composeDocument, animationHostFrameId)[0]
+    : undefined
   const [playing, setPlaying] = useState(false)
   // 手动会话是否已接管播放头：未接管时 ComposePreview 按脚本绑定驱动（或停在 0 ms），
   // 用户第一次按播放即接管，关闭对话框归还。
@@ -221,12 +238,10 @@ export function ComposePreviewDialog({
 
   if (!open || typeof window === 'undefined') return null
 
-  const activeTarget: PreviewDialogTarget = target === 'container' && containerId
+  const activeTarget: PreviewDialogTarget = target === 'container' && selectedFrameId
     ? 'container'
     : 'document'
-  const previewTarget: ComposePreviewTarget = activeTarget === 'container' && containerId
-    ? { kind: 'container', entityId: containerId }
-    : { kind: 'document' }
+  const previewFrameId = activeTarget === 'container' && selectedFrameId ? selectedFrameId : undefined
   const toggleFullscreen = () => {
     const element = shell.current
     if (!element) return
@@ -282,11 +297,11 @@ export function ComposePreviewDialog({
             </button>
             <button
               aria-pressed={activeTarget === 'container'}
-              disabled={!containerId}
+              disabled={!selectedFrameId}
               type="button"
               onClick={() => setTarget('container')}
             >
-              {messages.selectedContainer}
+              {messages.selectedFrame}
             </button>
           </div>
           <div className="compose-preview-dialog__actions">
@@ -337,7 +352,7 @@ export function ComposePreviewDialog({
               registry={registry}
               scriptModuleLoader={scriptModuleLoader}
               scriptScope={scriptScope}
-              target={previewTarget}
+              frameId={previewFrameId}
             />
           </div>
         </div>
