@@ -10,6 +10,6 @@ export default mergeConfig(sharedConfig, {
   },
   test: {
     name: 'preview',
-    setupFiles: ['../../test/setup.ts'],
+    setupFiles: ['./test/setup.ts'],
   },
 })

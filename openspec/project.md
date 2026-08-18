@@ -14,6 +14,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - Dockview 7 编辑器工作区、Tailwind CSS 4、Shadcn source primitives、Valibot 1.4 Schema 属性面板、Monaco Editor
 - TanStack React Virtual 与内部 Pointer Events 场景树交互
 - Vitest、Testing Library 与 Playwright Chromium
+- `@vitest/coverage-v8` 覆盖率插桩，仓库级阈值由 `scripts/coverage-summary.mjs` 判定
 
 ## Project Conventions
 
@@ -107,6 +108,16 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - 示例应用只承担集成与 E2E 演示，不得把临时状态提升为稳定公共 API。
 
 ### Testing Strategy
+
+#### 覆盖率
+
+- 覆盖率由 `bun run test:coverage` 度量：各包用 v8 provider 生成 `coverage-summary.json`，
+  再由 `scripts/coverage-summary.mjs` 汇总为仓库级数字并对阈值判定。
+- 阈值只在 `scripts/coverage-summary.mjs` 一处定义，作用于仓库合计而非单个包；
+  各包体量差异过大，逐包阈值会退化成互不相关的孤立数字。
+- 阈值 MUST 只做棘轮用途：允许上升，阻止回落。调高基线时 MUST 同步更新脚本内记录基线
+  来源的注释；调低阈值 MUST 给出理由，且 MUST NOT 用于让失败的测试通过。
+- 覆盖率是缺口信号而非质量目标，MUST NOT 通过无断言测试或只为覆盖行数的测试抬高数字。
 
 #### TDD 基本原则
 

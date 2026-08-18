@@ -267,6 +267,15 @@ bun run test:e2e
 bun run test:e2e:ui
 ```
 
+需要查看测试覆盖率时，运行：
+
+```bash
+bun run test:coverage
+```
+
+该命令逐包生成 v8 覆盖率报告，再由 `scripts/coverage-summary.mjs` 汇总出仓库级数字并对
+阈值判定；阈值只做棘轮用途，允许上升、阻止回落。降低阈值 MUST 在提交说明中给出理由。
+
 ## 文档同步
 
 - 产品定位、目标用户、解决的问题或当前完成度发生变化时，同步更新 `README.md`。

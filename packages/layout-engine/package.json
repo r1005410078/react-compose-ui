@@ -19,6 +19,7 @@
     "dev": "vite build --watch --emptyOutDir false",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint . --max-warnings 0",
     "pack:dry-run": "bun pm pack --dry-run"
   },
