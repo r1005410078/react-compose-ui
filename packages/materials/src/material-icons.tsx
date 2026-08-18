@@ -14,31 +14,21 @@ const svgProps = {
   className: 'compose-material-icon',
 }
 
-/** Container：开口框 + 内层，蓝灰立体。 */
+/**
+ * Container：井号字形，与 Figma Frame / Rive Artboard 的通行标识一致。
+ *
+ * @remarks
+ * 与 Rectangle 一样采用平面处理：容器的语义是“框住一片区域”，立体块反而会读成实心物体。
+ */
 export function ComposeContainerMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-container">
-      {/* 底面阴影 */}
-      <path
-        d="M4.5 8.2 12 4.5l7.5 3.7v8.6L12 20.5 4.5 16.8Z"
-        fill="#1a3558"
-        opacity="0.35"
-        transform="translate(0 1.2)"
-      />
-      {/* 外框体 */}
-      <path d="M4.5 7.2 12 3.5l7.5 3.7v8.6L12 19.5 4.5 15.8Z" fill="#2d6cb5" />
-      <path d="M4.5 7.2 12 10.9 19.5 7.2" fill="#6eb0ff" />
-      <path d="M12 10.9 19.5 7.2v8.6L12 19.5Z" fill="#245a9a" />
-      <path d="M4.5 7.2 12 10.9 12 19.5 4.5 15.8Z" fill="#3d86d4" />
-      {/* 内腔：更深，表现“可容纳” */}
-      <path d="M8 9.8 12 7.9l4 1.9v4.4L12 16.1 8 14.2Z" fill="#0f243d" opacity="0.55" />
-      <path d="M8 9.8 12 11.7 16 9.8" fill="#8ec4ff" opacity="0.45" />
-      <path
-        d="M4.5 7.2 12 3.5l7.5 3.7v8.6L12 19.5 4.5 15.8Z"
-        stroke="#9fd0ff"
-        strokeOpacity="0.35"
-        strokeWidth="0.6"
-      />
+      {/* 两竖略带倾斜，避免与网格线读成同一个东西 */}
+      <path d="M9.1 3.5h2.4L9.9 20.5H7.5Z" fill="#2f7df6" />
+      <path d="M15.6 3.5H18l-1.6 17H14Z" fill="#2f7df6" />
+      {/* 两横压在竖线之上，颜色更亮以形成交叠层次 */}
+      <path d="M4.2 8.3h15.6v2.5H4.2Z" fill="#6eb0ff" />
+      <path d="M3.6 13.2h15.6v2.5H3.6Z" fill="#6eb0ff" />
     </svg>
   )
 }

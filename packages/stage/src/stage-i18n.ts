@@ -35,6 +35,8 @@ const translations = {
     basicCategory: (count: number) => `基础 (${count})`,
     basicCategoryItems: '基础组件',
     add: (label: string) => `添加 ${label}`,
+    containerLabels: '容器名称',
+    renameContainer: (name: string) => `重命名容器 ${name}`,
   },
   'en-US': {
     rulerOrigin: 'Ruler origin',
@@ -65,6 +67,8 @@ const translations = {
     basicCategory: (count: number) => `Basic (${count})`,
     basicCategoryItems: 'Basic components',
     add: (label: string) => `Add ${label}`,
+    containerLabels: 'Container names',
+    renameContainer: (name: string) => `Rename container ${name}`,
   },
 } as const
 
@@ -120,6 +124,12 @@ export function getStageMessages(
       'stage.add',
       messages.add(label),
       { label },
+    ),
+    containerLabels: formatMessage('stage.containerLabels', messages.containerLabels),
+    renameContainer: (name: string) => formatMessage(
+      'stage.renameContainer',
+      messages.renameContainer(name),
+      { name },
     ),
   }
 }

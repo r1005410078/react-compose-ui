@@ -244,6 +244,14 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly onShortcutAction?: (action: ComposeStageDelegatableAction) => boolean
   readonly selectedIds: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
+  /**
+   * 画布上的容器标题标签提交重命名。
+   *
+   * @remarks
+   * Stage 不持有文档写权限：重命名必须由宿主用与场景树相同的命令提交，否则同一个动作会
+   * 产生两种 Undo 语义。省略时标签只读，双击不进入编辑态。
+   */
+  readonly onEntityRename?: (entityId: string, name: string) => void
   /** 为当前规范化选区打开宿主的项目组件创建流程；省略时菜单不显示该入口。 */
   readonly onCreateComponentIntent?: (entityIds: readonly string[]) => void
   /** 隐式 Canvas 输出区域当前是否为 Inspector 目标。 */

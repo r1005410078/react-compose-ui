@@ -51,6 +51,29 @@ export function entityFromSeed(
   }
 }
 
+/** 绘制拖拽被视为「单击」的世界尺寸阈值。 @internal */
+const DRAWING_CLICK_EPSILON = 1
+
+/**
+ * 把单击（没有有效拖拽）的绘制 bounds 展开为 Preset 默认尺寸，按下点作为左上角。
+ *
+ * @remarks
+ * `entityFromDrawingSeed` 对非 Hug 轴一律写 `Math.max(1, bounds.*)`，因此不加干预时单击
+ * 会得到 1×1 的退化 Entity。默认尺寸取自 Preset 自身的 Transform，Stage 因此不需要认识
+ * 具体物料的常量。
+ * @internal
+ */
+export function expandClickDrawingBounds(seed: ComposeEntitySeed, bounds: StageRect): StageRect {
+  if (bounds.width >= DRAWING_CLICK_EPSILON || bounds.height >= DRAWING_CLICK_EPSILON) return bounds
+  const { size } = getComposeSpatialTransform({ id: '__seed__', ...seed })
+  return {
+    x: bounds.x,
+    y: bounds.y,
+    width: Math.max(1, size.width),
+    height: Math.max(1, size.height),
+  }
+}
+
 /** 将绘制 bounds 映射为独立 Entity；Text click 会保留 Preset 的 Hug 轴。 @internal */
 export function entityFromDrawingSeed(
   seed: ComposeEntitySeed,

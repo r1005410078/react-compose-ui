@@ -4,6 +4,7 @@ import type { ResizeHandle } from './geometry'
 import {
   createStageInteractionController,
   type StageInteractionEffect,
+  type StageInteractionHit,
   type StageInteractionTool,
 } from './interaction-controller'
 import type { StageMarqueeMode } from './marquee-selection'
@@ -1964,5 +1965,203 @@ describe('OpenSpec: stage-engine / 可编辑路径会话、命中与手势', () 
     const changes = effects.filter((effect) => effect.type === 'path.change')
     expect(changes.map((change) => change.phase)).toEqual(['start', 'move', 'cancel'])
     expect(changes[changes.length - 1]).toMatchObject({ worldPoint: { x: 160, y: 100 } })
+  })
+})
+
+describe('OpenSpec: 非空容器体的命中收敛', () => {
+  const container = () => document(
+    [
+      entity('frame', { x: 0, y: 0, width: 400, height: 300, childIds: ['child'] }),
+      entity('child', { x: 20, y: 20, width: 60, height: 40 }),
+    ],
+    ['frame'],
+  )
+  const empty = () => document(
+    [entity('frame', { x: 0, y: 0, width: 400, height: 300, childIds: [] })],
+    ['frame'],
+  )
+  const press = (
+    controller: ReturnType<typeof createStageInteractionController>,
+    hit: StageInteractionHit,
+  ) => controller.send({
+    type: 'pointer.down',
+    pointerId: 1,
+    button: 0,
+    point: { x: 200, y: 150 },
+    hit,
+    modifiers,
+  })
+
+  it('在非空容器空白处按下进入框选且选区不变', () => {
+    const value = container()
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'frame' })
+    expect(controller.getSnapshot().phase).toBe('marquee')
+    expect(effects.some((effect) => effect.type === 'selection.change')).toBe(false)
+  })
+
+  it('空容器仍然可以点体选中', () => {
+    const value = empty()
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'frame' })
+    expect(controller.getSnapshot().phase).toBe('move')
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['frame'] })
+  })
+
+  it('已选中的非空容器可以拖体移动', () => {
+    const value = container()
+    const { controller } = setup(value, layoutSnapshot(value), ['frame'])
+    press(controller, { kind: 'entity', entityId: 'frame' })
+    expect(controller.getSnapshot().phase).toBe('move')
+  })
+
+  it('标签来源始终直接选中容器', () => {
+    const value = container()
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'frame', source: 'label' })
+    expect(controller.getSnapshot().phase).toBe('move')
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['frame'] })
+  })
+
+  it('容器内的子元素不受收敛影响', () => {
+    const value = container()
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'child' })
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['child'] })
+  })
+})
+
+describe('OpenSpec: 非空容器体的命中收敛 / Group 例外', () => {
+  it('含子项的 first-class Group 仍然点体选中', () => {
+    const group = {
+      ...entity('group', { childIds: ['child'] }),
+      components: {
+        ...entity('group', { childIds: ['child'] }).components,
+        Composition: { presetId: 'group', baseComponentKeys: [], capabilityIds: [] },
+      },
+    }
+    const value = document([group, entity('child', { width: 10, height: 10 })], ['group'])
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 20, y: 20 },
+      hit: { kind: 'entity', entityId: 'group' },
+      modifiers,
+    })
+    expect(controller.getSnapshot().phase).toBe('move')
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['group'] })
+  })
+})
+
+describe('OpenSpec: 非空容器体的命中收敛 / 起框容器不进入结果', () => {
+  it('在容器内框选只选中子项', () => {
+    const value = document(
+      [
+        entity('frame', { x: 0, y: 0, width: 400, height: 300, childIds: ['child'] }),
+        entity('child', { x: 40, y: 40, width: 60, height: 40 }),
+      ],
+      ['frame'],
+    )
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'frame' },
+      modifiers,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 380, y: 280 }, modifiers })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 380, y: 280 }, modifiers })
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['child'] })
+  })
+})
+
+describe('OpenSpec: 非空容器体的命中收敛 / 只作用于顶层容器', () => {
+  it('嵌套的非空容器仍然点体选中', () => {
+    const value = document(
+      [
+        entity('outer', { x: 0, y: 0, width: 600, height: 400, childIds: ['inner'] }),
+        entity('inner', { x: 20, y: 20, width: 300, height: 200, childIds: ['leaf'] }),
+        entity('leaf', { x: 10, y: 10, width: 40, height: 30 }),
+      ],
+      ['outer'],
+    )
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 200, y: 150 },
+      hit: { kind: 'entity', entityId: 'inner' },
+      modifiers,
+    })
+    expect(controller.getSnapshot().phase).toBe('move')
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['inner'] })
+  })
+})
+
+describe('OpenSpec: 锁定容器与 Group 退出画布选中', () => {
+  const press = (
+    controller: ReturnType<typeof createStageInteractionController>,
+    hit: StageInteractionHit,
+  ) => controller.send({
+    type: 'pointer.down',
+    pointerId: 1,
+    button: 0,
+    point: { x: 30, y: 30 },
+    hit,
+    modifiers,
+  })
+
+  it('锁定的空容器点体也不选中', () => {
+    const value = document(
+      [entity('frame', { width: 400, height: 300, childIds: [], locked: true })],
+      ['frame'],
+    )
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'frame' })
+    expect(controller.getSnapshot().phase).toBe('marquee')
+    expect(effects.some((effect) => effect.type === 'selection.change')).toBe(false)
+  })
+
+  it('锁定容器的标签同样不再是选中入口', () => {
+    const value = document(
+      [entity('frame', { width: 400, height: 300, childIds: [], locked: true })],
+      ['frame'],
+    )
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'frame', source: 'label' })
+    expect(effects.some((effect) => effect.type === 'selection.change')).toBe(false)
+  })
+
+  it('锁定的嵌套 Group 也不选中', () => {
+    const locked = entity('group', { childIds: ['leaf'], locked: true })
+    const value = document(
+      [
+        entity('outer', { width: 600, height: 400, childIds: ['group'] }),
+        {
+          ...locked,
+          components: {
+            ...locked.components,
+            Composition: { presetId: 'group', baseComponentKeys: [], capabilityIds: [] },
+          },
+        },
+        entity('leaf', { width: 40, height: 30 }),
+      ],
+      ['outer'],
+    )
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'group' })
+    expect(effects.some((effect) => effect.type === 'selection.change')).toBe(false)
+  })
+
+  it('锁定的非容器 Entity 仍然可以选中检查', () => {
+    const value = document([entity('a', { locked: true })], ['a'])
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'a' })
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['a'] })
   })
 })

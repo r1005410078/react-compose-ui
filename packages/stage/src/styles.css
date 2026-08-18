@@ -162,8 +162,9 @@
   box-sizing: border-box;
 }
 
+/* 容器默认深色底，继承的文字色必须跟着翻过来，否则新建文字在容器里几乎不可见。 */
 .compose-stage__node.is-container {
-  color: #172033;
+  color: #e6edf7;
 }
 
 .compose-stage__node.is-renderer {
@@ -875,4 +876,49 @@
 /* 实例内部只读选中框：虚线以区别于可编辑的宿主选区，且不带任何手柄。 */
 .compose-stage__selection--instance-inner {
   stroke-dasharray: 4 3;
+}
+
+/*
+ * 顶层容器标题标签。恒定屏幕字号，不随视口缩放；层级压在 Scene 之上、Overlay 之下，
+ * 因此不会遮挡变换手柄的命中区。
+ */
+.compose-stage__container-labels {
+  position: absolute;
+  inset: 0;
+  /* 与 Scene 同层并排在其后：标签压过容器边框，但仍在 z-index 3 的手柄 Overlay 之下。 */
+  z-index: 2;
+  pointer-events: none;
+}
+
+.compose-stage__container-label {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #6b7684;
+  font: 500 11px/14px system-ui, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  pointer-events: auto;
+}
+
+.compose-stage__container-label.is-locked {
+  color: #5a6270;
+  pointer-events: none;
+}
+
+.compose-stage__container-label.is-selected {
+  color: #3687ff;
+}
+
+.compose-stage__container-label.is-editing {
+  padding: 0 2px;
+  border: 1px solid #3687ff;
+  border-radius: 2px;
+  background: #fff;
+  color: #172033;
+  cursor: text;
+  outline: none;
 }

@@ -5,6 +5,7 @@ import {
   drawText,
   enableAutoLayout,
   expandInspectorSection,
+  selectContainer,
 } from './support/test-helpers'
 
 test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输入并提交为一条事务', async ({ page }) => {
@@ -270,7 +271,7 @@ test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序�
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
   await expect(children).toHaveCount(2)
 
-  await frame.click({ position: { x: 8, y: 8 } })
+  await selectContainer(editor)
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(containerInspector)
 
@@ -321,7 +322,7 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器�
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
   await expect(children).toHaveCount(2)
-  await frame.click({ position: { x: 8, y: 8 } })
+  await selectContainer(editor)
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
 
   const firstBox = await children.nth(0).boundingBox()
@@ -424,7 +425,7 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 兄弟随拖动实时�
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
   await expect(children).toHaveCount(2)
-  await frame.click({ position: { x: 8, y: 8 } })
+  await selectContainer(editor)
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
 
   const secondBefore = await children.nth(1).boundingBox()
@@ -495,7 +496,7 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子�
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
   await expect(children).toHaveCount(2)
-  await frame.click({ position: { x: 8, y: 8 } })
+  await selectContainer(editor)
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
 
   // 进入 Auto Layout 后子级交叉轴被采纳为 fill；选中容器本身拖 S 边，子级高度应实时跟随。
@@ -544,7 +545,7 @@ test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout �
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
   await expect(children).toHaveCount(1)
-  await frame.click({ position: { x: 8, y: 8 } })
+  await selectContainer(editor)
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
   const firstBox = await children.nth(0).boundingBox()
 
@@ -581,7 +582,7 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器�
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
   await expect(children).toHaveCount(3)
-  await frame.click({ position: { x: 8, y: 8 } })
+  await selectContainer(editor)
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(containerInspector)
   await expandInspectorSection(containerInspector, '布局')
@@ -686,10 +687,10 @@ test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻�
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await expect(inspector).toContainText('Rectangle')
   const positionX = inspector.getByLabel('位置 X')
-  await expect(positionX).toHaveValue('520')
-  await positionX.fill('40')
+  await expect(positionX).toHaveValue('40')
+  await positionX.fill('120')
   await positionX.press('Enter')
-  await expect(inspector.getByLabel('位置 X')).toHaveValue('40')
+  await expect(inspector.getByLabel('位置 X')).toHaveValue('120')
 
   // name 不是 Component 字段，稳定操作代数无法表达重命名，因此该字段只读而不是静默失效。
   await expect(inspector.getByLabel('名称')).toHaveAttribute('readonly', '')

@@ -361,7 +361,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(dragPreview).toHaveCount(0)
   const frame = stage.locator('.compose-stage__scene > .compose-stage__node.is-container')
   await expect(frame).toHaveCount(1)
-  await expect(frame).toHaveCSS('background-color', 'rgb(248, 250, 252)')
+  await expect(frame).toHaveCSS('background-color', 'rgb(30, 34, 41)')
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
 
@@ -482,7 +482,9 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(operationDetail).toContainText('之后')
   await expect(operationDetail).toContainText('forwardPatches')
 
-  await group.click()
+  // 容器缩小后 Group 的可见空白被子项占满，改从场景树选中它，避免依赖像素位置。
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  await sceneTree.locator(`[data-tree-item-id="${groupId}"]`).click()
   await editor.getByRole('button', { name: '打开预览' }).click()
   const preview = page.getByRole('dialog', { name: '文档预览对话框' })
   const previewRegion = preview.getByRole('region', { name: 'Compose preview' })
@@ -1104,7 +1106,7 @@ test('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命�
   }).toBe(true)
 
   // 键盘路径：新建的 Rectangle 仍处于选中状态，直接按适配选择键位。
-  await stage.press('f')
+  await stage.press('Shift+Digit2')
   const afterKeyboard = await viewportSignature()
 
   // 先把视口挪开，确保第二次适配是真的重新计算而不是原地不动。
