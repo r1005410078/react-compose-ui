@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText } from './support/test-helpers'
+import { pointerDrop, drawContainer, drawText, selectContainer } from './support/test-helpers'
 
 test('OpenSpec: stage / 四角缩放 / resize 手柄在预览阶段跟随鼠标', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
@@ -542,9 +542,7 @@ test('OpenSpec: stage / Pointer 手势原子性与取消 / move 与 resize 各�
   await expect.poll(async () => (await stableRectangle.boundingBox())?.x)
     .toBeCloseTo(committedMoveX, 1)
 
-  const latestContainerBox = await frame.boundingBox()
-  expect(latestContainerBox).not.toBeNull()
-  await page.mouse.click(latestContainerBox!.x + 8, latestContainerBox!.y + 8)
+  await selectContainer(editor)
   const resize = editor.getByTestId('stage-resize-se')
   expectedHistoryCount = await historyEntries.count()
   const beforeResize = await resize.boundingBox()
@@ -941,3 +939,53 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / Canvas 标尺对�
 })
 
 
+
+
+test('OpenSpec: stage / 顶层容器标题标签 / 标签选中重命名且容器内可框选', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await drawContainer(page, editor)
+  const frameBox = (await stage.getByTestId('stage-container').boundingBox())!
+
+  // 容器内放两个矩形，容器体从此不再是选中入口。
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: frameBox.x + frameBox.width * 0.3,
+    y: frameBox.y + frameBox.height * 0.3,
+  })
+  const label = editor.locator('[data-testid^="stage-container-label-"]')
+  await expect(label).toHaveText('Container')
+
+  // 点容器空白处不再选中容器；空白处拖动起框并选中其中的子项。
+  await page.mouse.click(frameBox.x + frameBox.width - 24, frameBox.y + frameBox.height - 24)
+  await expect(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+    .toHaveCount(0)
+  await page.mouse.move(frameBox.x + 8, frameBox.y + 8)
+  await page.mouse.down()
+  await page.mouse.move(frameBox.x + frameBox.width - 8, frameBox.y + frameBox.height - 8, {
+    steps: 8,
+  })
+  await page.mouse.up()
+  await expect(editor.getByRole('region', { name: 'Rectangle 属性', exact: true }))
+    .toBeVisible()
+  await expect(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+    .toHaveCount(0)
+
+  // 标签是容器唯一的选中入口。
+  await label.click()
+  await expect(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+    .toBeVisible()
+
+  // 双击标签就地重命名，结果与场景树同步。
+  await label.dblclick()
+  const input = editor.locator('input.compose-stage__container-label')
+  await input.fill('登录页')
+  await input.press('Enter')
+  await expect(label).toHaveText('登录页')
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  await expect(sceneTree.getByRole('row', { name: /登录页/ })).toBeVisible()
+})

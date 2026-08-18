@@ -132,9 +132,11 @@ import {
 } from '@compose-ui/stage-engine'
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
+import { ComposeContainerLabelLayer } from '../container-label-layer'
 import {
   entityFromDrawingSeed,
   entityFromSeed,
+  expandClickDrawingBounds,
   type ShapeDirection,
 } from './drawing-entity'
 
@@ -691,13 +693,13 @@ const DEFAULT_STAGE_SHORTCUTS: Readonly<
   'stage.scaleTool': [{ code: 'KeyS' }],
   'stage.rotateTool': [{ code: 'KeyR', shift: true }],
   'stage.panTool': [{ code: 'KeyH' }],
-  'stage.drawContainerTool': [{ code: 'KeyC' }],
+  'stage.drawContainerTool': [{ code: 'KeyF' }],
   'stage.drawRectangleTool': [{ code: 'KeyR' }],
   'stage.drawLineTool': [{ code: 'KeyL' }],
   'stage.drawArrowTool': [{ code: 'KeyL', shift: true }],
   'stage.drawCircleTool': [{ code: 'KeyO' }],
   'stage.drawTextTool': [{ code: 'KeyT' }],
-  'stage.fitSelection': [{ code: 'KeyF' }],
+  'stage.fitSelection': [{ code: 'Digit2', shift: true }],
   'stage.fitContainer': [{ code: 'KeyF', shift: true }],
   'stage.zoomReset': [{ code: 'Digit0', primary: true }],
   'stage.zoomIn': [{ code: 'Equal', primary: true }],
@@ -888,6 +890,7 @@ function ComposeStageReady({
   onClipboardChange,
   selectedIds,
   onSelectedIdsChange,
+  onEntityRename,
   onCreateComponentIntent,
   outputSelected = false,
   paintEditing = null,
@@ -1795,7 +1798,11 @@ function ComposeStageReady({
           parent.id,
         ))
       : null
-    const localBounds = boundsInParentSpace(effect.bounds, inverseParent)
+    const drawnBounds = boundsInParentSpace(effect.bounds, inverseParent)
+    // 容器单击不拖时落到 Preset 默认尺寸；文字有自己的 Hug 语义，其余图形保持精确 bounds。
+    const localBounds = effect.tool === 'draw-container'
+      ? expandClickDrawingBounds(seedResult.seed, drawnBounds)
+      : drawnBounds
     const textClick = effect.tool === 'draw-text'
       && localBounds.width < 1
       && localBounds.height < 1
@@ -2264,6 +2271,12 @@ function ComposeStageReady({
       }
     }
     beginInteraction({ kind: 'entity', entityId: entity.id }, event)
+  }
+
+  // 标签命中不参与非空容器的框选收敛：它是这类容器唯一的选中入口。
+  const beginContainerLabel = (entityId: string, event: ReactPointerEvent<HTMLElement>) => {
+    event.stopPropagation()
+    beginInteraction({ kind: 'entity', entityId, source: 'label' }, event)
   }
 
   // 只播种 authored 值，不回传编辑中的文本：后者放在 ref 里，既避免每个字符重建整棵
@@ -2986,6 +2999,17 @@ function ComposeStageReady({
           viewport={viewport}
           onEntityPointerDown={beginEntity}
           onTextEditingChange={changeTextEditing}
+        />
+        <ComposeContainerLabelLayer
+          document={previewDocument}
+          hiddenEntityIds={hiddenEntityIds}
+          label={messages.containerLabels}
+          layoutSnapshot={sceneLayoutSnapshot}
+          renameLabel={messages.renameContainer}
+          selectedIds={selectedIds}
+          viewport={viewport}
+          onLabelPointerDown={beginContainerLabel}
+          onRename={onEntityRename}
         />
         {assetDropStatus
           ? (

@@ -1409,6 +1409,11 @@ export function useComposeEditorController({
     () => deriveSceneEntities(document, registry, expandedIds),
     [document, registry, expandedIds],
   )
+  // 画布容器标签与场景树共用同一条 rename 操作，因此两处重命名的事务标签与 Undo 语义一致。
+  const renameEntity = useCallback((entityId: string, name: string) => {
+    onSceneOperation({ type: 'rename', nodeId: entityId, label: name })
+  }, [onSceneOperation])
+
   const sceneTreeCommands = useComposeSceneTreeCommands({
     nodes: sceneTreeNodes,
     selectedIds,
@@ -1479,6 +1484,7 @@ export function useComposeEditorController({
       : null,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
+    onEntityRename: renameEntity,
     onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
     outputSelected: resolvedInspectionTarget === 'output',
     onOutputSelect: selectOutput,
@@ -1507,6 +1513,7 @@ export function useComposeEditorController({
     selectedIds,
     resolvedInspectionTarget,
     setSelectedIds,
+    renameEntity,
     selectOutput,
     interactionController,
     nextId,

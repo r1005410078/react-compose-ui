@@ -69,12 +69,8 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
     ),
     'chevron-down': <path d="m7 10 5 5 5-5" />,
     circle: <circle cx="12" cy="12" r="7.25" />,
-    container: (
-      <>
-        <rect height="14" rx="1.5" width="16" x="4" y="6" />
-        <path d="M4 10h16M8 6v4" />
-      </>
-    ),
+    // 井号字形：与 Figma Frame / Rive Artboard 的通行标识一致，避免与 rectangle 工具混淆。
+    container: <path d="M9.5 4 7.5 20M16.5 4l-2 16M4 9h16M3 15h16" />,
     'grid-snap': (
       <g stroke="#58a6ff">
         <path d="M4 4h16M4 10h16M4 16h16M4 4v12M10 4v12M16 4v12M20 4v12" />

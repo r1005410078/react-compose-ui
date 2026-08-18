@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ComposeEntitySeed } from '@compose-ui/component-registry'
 import { getComposeLayoutItem, type ComposeFlexLayout } from '@compose-ui/core'
-import { entityFromSeed } from './drawing-entity'
+import { entityFromSeed, expandClickDrawingBounds } from './drawing-entity'
 
 const seed: ComposeEntitySeed = {
   name: 'Rectangle',
@@ -51,5 +51,21 @@ describe('OpenSpec: stage-engine / ECS 外部拖入', () => {
       width: { mode: 'fixed', value: 240 },
       height: { mode: 'fill' },
     })
+  })
+})
+
+describe('OpenSpec: stage / 直接绘制 Preset', () => {
+  it('单击不拖时展开为 Preset 默认尺寸并以按下点为左上角', () => {
+    expect(expandClickDrawingBounds(seed, { x: 40, y: 60, width: 0, height: 0 })).toEqual({
+      x: 40,
+      y: 60,
+      width: 240,
+      height: 140,
+    })
+  })
+
+  it('有效拖拽保持精确 bounds', () => {
+    const bounds = { x: 40, y: 60, width: 12, height: 3 }
+    expect(expandClickDrawingBounds(seed, bounds)).toBe(bounds)
   })
 })

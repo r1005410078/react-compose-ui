@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, expandInspectorSection } from './support/test-helpers'
+import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, selectContainer, expandInspectorSection } from './support/test-helpers'
 
 test('OpenSpec: 自动布局显式启用 / 自由 Container 添加、移除并可撤销重做', async ({ page }) => {
   await page.goto('/')
@@ -411,7 +411,7 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
     x: initialContainerBox!.x + 160,
     y: initialContainerBox!.y + 120,
   })
-  await container.click({ position: { x: 8, y: 8 } })
+  await selectContainer(editor)
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(containerInspector)
 
@@ -468,7 +468,7 @@ test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺�
   const beforeHeight = (await children.nth(0).boundingBox())!.height
   expect(beforeHeight).toBeLessThan(frameBox!.height)
 
-  await frame.click({ position: { x: 8, y: 8 } })
+  await selectContainer(editor)
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(containerInspector)
 

@@ -9,6 +9,7 @@ import {
   BUILTIN_COMMAND_TYPES,
   getComposeHierarchy,
   getComposeLock,
+  isComposeGroupEntity,
   getComposeLayoutItem,
   getComposeAppearance,
   getComposeRenderer,
@@ -131,7 +132,17 @@ export type StageExternalDragItem =
 export type StageInteractionHit =
   | { readonly kind: 'surface' }
   | { readonly kind: 'output' }
-  | { readonly kind: 'entity'; readonly entityId: string }
+  | {
+      readonly kind: 'entity'
+      readonly entityId: string
+      /**
+       * 命中来源：Entity 自身的几何（`body`）还是它在画布上的标题标签（`label`）。
+       *
+       * 省略时按 `body` 处理。非空容器的 body 命中会收敛为框选，只有 `label` 能直接选中
+       * 它；见 `shouldConvergeToMarquee`。
+       */
+      readonly source?: 'body' | 'label'
+    }
   | { readonly kind: 'resize'; readonly handle: ResizeHandle }
   | {
       /** 由 surface 从任意两点图形推导的端点；Engine 不依赖 Renderer 或物料类型。 */
@@ -599,6 +610,13 @@ type Gesture =
       readonly viewport: StageViewport
       readonly startWorld: StagePoint
       readonly origin: 'surface' | 'output'
+      /**
+       * 起框所在的容器 Entity。
+       *
+       * 从非空容器体上起框时，用户看的是「容器内的画布」，结果不应把这个容器连同它的祖先
+       * 一起选中——否则收敛之后仍然会选到容器，等于没有解决冲突。
+       */
+      readonly originEntityId?: string
       /** 框选开始前的选区；Shift 加选与 Alt 减选以它为基准，不受拖拽过程影响。 */
       readonly baseSelection: readonly string[]
       currentWorld: StagePoint
@@ -769,6 +787,37 @@ function isDrawingTool(
   tool: StageInteractionTool,
 ): tool is Extract<StageInteractionTool, `draw-${string}`> {
   return tool.startsWith('draw-')
+}
+
+/**
+ * 判断一次 entity 命中是否应当收敛为框选而不是选中该 Entity。
+ *
+ * @remarks
+ * 容器一旦装了内容，它的空白区域在用户眼里就是「容器内的画布」而不是容器本身——沿用
+ * Figma Frame 与 Rive Artboard 的约定，此时容器体不再抢占选中，选中入口收敛到标题标签。
+ *
+ * 收敛只发生在**顶层**容器上：标题标签只画给顶层容器，嵌套容器一旦收敛就没有任何选中
+ * 入口了。已经在选区里的容器同理例外，否则从标签选中之后就再也无法拖动它。
+ */
+function shouldConvergeToMarquee(
+  tool: StageInteractionTool,
+  document: ComposeDocument,
+  selectedIds: readonly string[],
+  hit: Extract<StageInteractionHit, { kind: 'entity' }>,
+): boolean {
+  if (tool !== 'select' && tool !== 'move') return false
+  const entity = document.entities[hit.entityId]
+  if (!entity) return false
+  const hierarchy = getComposeHierarchy(entity)
+  // 锁定的容器与 Group 完全退出画布选中：它们本来就是用来「挡住不要动的东西」的，
+  // 还能被点中只会让用户反复误选。标签同样不再是入口，改从场景树选中。
+  if (hierarchy && getComposeLock(entity).locked) return true
+  if (hit.source === 'label') return false
+  if (selectedIds.includes(hit.entityId)) return false
+  if (!document.rootIds.includes(hit.entityId)) return false
+  // Group 不是「容器」：它没有画布标签，收敛之后就再也选不中了。
+  if (isComposeGroupEntity(entity)) return false
+  return (hierarchy?.childIds.length ?? 0) > 0
 }
 
 /** 归一化矩形丢失了拖拽方向，因此方向必须从手势起止点单独取。 */
@@ -1915,7 +1964,7 @@ export function createStageInteractionController(): StageInteractionController {
       apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
       return
     }
-    const startMarquee = () => {
+    const startMarquee = (originEntityId?: string) => {
       const viewport = context!.viewport
       const startWorld = worldPoint(event.point, viewport)
       const outputHit = event.hit.kind === 'output'
@@ -1931,6 +1980,7 @@ export function createStageInteractionController(): StageInteractionController {
         viewport,
         startWorld,
         origin: outputHit ? 'output' : 'surface',
+        originEntityId,
         baseSelection: context!.selectedIds,
         currentWorld: startWorld,
       }
@@ -1994,6 +2044,18 @@ export function createStageInteractionController(): StageInteractionController {
       return
     }
 
+    if (
+      event.hit.kind === 'entity'
+      && shouldConvergeToMarquee(
+        context.tool,
+        context.document,
+        context.selectedIds,
+        event.hit,
+      )
+    ) {
+      startMarquee(event.hit.entityId)
+      return
+    }
     if (event.hit.kind === 'entity') {
       const entity = context.document.entities[event.hit.entityId]
       if (!entity) return
@@ -2143,7 +2205,7 @@ export function createStageInteractionController(): StageInteractionController {
       })
     }
     else if (finished.type === 'marquee') {
-      const selectedIds = resolveMarqueeSelection({
+      const resolved = resolveMarqueeSelection({
         area: rectFromPoints(finished.startWorld, finished.currentWorld),
         base: finished.baseSelection,
         // 组合意图以释放时按住的修饰键为准，用户可以在拖拽途中改主意。
@@ -2153,6 +2215,16 @@ export function createStageInteractionController(): StageInteractionController {
         index,
         mode: context.marqueeMode,
       })
+      // 起框容器与它的祖先被框住只是几何巧合：用户是在这个容器「里面」框内容。
+      const excluded = new Set<string>()
+      let ancestor = finished.originEntityId ?? null
+      while (ancestor) {
+        excluded.add(ancestor)
+        ancestor = index.getParentId(ancestor)
+      }
+      const selectedIds = excluded.size === 0
+        ? resolved
+        : resolved.filter((entityId) => !excluded.has(entityId))
       if (finished.origin !== 'output' || selectedIds.length > 0) {
         effects.push({ type: 'selection.change', selectedIds })
       }

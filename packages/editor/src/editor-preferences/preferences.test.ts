@@ -131,6 +131,19 @@ describe('editor preferences', () => {
     expect(formatComposeEditorKeybinding({ code: 'Space' }, 'MacIntel')).toBe('Space')
   })
 
+  it('OpenSpec: editor-preferences / 可配置绘制与变换工具快捷键 / 容器工具默认 F', () => {
+    const defaults = createDefaultComposeEditorPreferences()
+    expect(defaults.shortcuts['stage.drawContainerTool']).toEqual([{ code: 'KeyF' }])
+    expect(defaults.shortcuts['stage.fitSelection']).toEqual([{ code: 'Digit2', shift: true }])
+    expect(defaults.shortcuts['stage.fitContainer']).toEqual([{ code: 'KeyF', shift: true }])
+    // F 让位之后不得与任何既有 stage 动作撞车。
+    expect(findComposeEditorShortcutConflict(
+      defaults.shortcuts,
+      'stage.drawContainerTool',
+      { code: 'KeyF' },
+    )).toBeNull()
+  })
+
   it('OpenSpec: editor-preferences / 可配置单次快捷键 / 拒绝同作用域冲突', () => {
     const defaults = createDefaultComposeEditorPreferences()
     expect(findComposeEditorShortcutConflict(

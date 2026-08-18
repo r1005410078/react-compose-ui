@@ -50,6 +50,15 @@ export async function drawText(page: Page, editor: Locator, at: { x: number; y: 
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(before + 1)
 }
 
+/**
+ * 选中一个顶层容器。
+ *
+ * 非空容器的选中入口已经收敛到画布标题标签，点容器体只会起框选。
+ */
+export async function selectContainer(editor: Locator, index = 0) {
+  await editor.locator('[data-testid^="stage-container-label-"]').nth(index).click()
+}
+
 export async function enableAutoLayout(inspector: Locator) {
   await inspector.getByRole('button', { name: '添加布局' }).click()
   await inspector.getByRole('menuitem', { name: 'Auto Layout display: flex' }).click()
