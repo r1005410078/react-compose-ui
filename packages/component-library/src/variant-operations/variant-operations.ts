@@ -1,4 +1,5 @@
 import {
+  COMPOSE_COMPONENT_SCHEMA_VERSION,
   applyComposeComponentOverrides,
   planComposeComponentRevert,
   type ComposeComponentOverrideOperation,
@@ -323,7 +324,7 @@ export function createComposeVariantAsset(input: {
   readonly parentSnapshot: ComposeResolvedComponentSnapshot
 }): ComposeVariantComponentAsset {
   return {
-    schemaVersion: 1,
+    schemaVersion: COMPOSE_COMPONENT_SCHEMA_VERSION,
     kind: 'variant',
     componentId: input.componentId,
     name: input.name,

@@ -10,6 +10,17 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposeComponentInstanceOverridesPanel } from './component-instance-overrides-panel'
 
+/** 给组件根就地加上 Frame Component：组件文档的单根必须是 Frame。 */
+function withFrame(entity: ComposeEntity, width: number, height: number): ComposeEntity {
+  return {
+    ...entity,
+    components: {
+      ...entity.components,
+      Frame: { size: { width, height }, guides: [] },
+    },
+  }
+}
+
 function componentDocument(): ComposeDocument {
   const root = createComposeGroupEntitySeed({ id: 'root', childIds: ['text'] })
   const text: ComposeEntity = {
@@ -36,11 +47,11 @@ function componentDocument(): ComposeDocument {
     },
   }
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: { width: 100, height: 30, backgroundPaint: { kind: 'solid', color: 'transparent' } },
+    // 组件文档的单根必须是 Frame；这里给既有根就地加上 Frame Component。
     rootIds: ['root'],
-    entities: { root, text },
+    entities: { root: withFrame(root, 100, 30), text },
   }
 }
 

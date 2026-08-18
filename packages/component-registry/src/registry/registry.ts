@@ -6,6 +6,7 @@ import {
   getComposeLock,
   getComposeRenderer,
   isComposeComponentKey,
+  createComposeFrameEntity,
   validateComposeDocument,
   type ComposeComposition,
   type ComposeDocument,
@@ -168,8 +169,13 @@ function validatePresetSeed(preset: ComposeEntityPreset, components: Record<stri
       },
     },
   }
+  // 探针文档的根必须是 Frame（v7 拓扑约束）；被校验的 Preset Entity 作为它的子级。
+  const probeFrame = createComposeFrameEntity({
+    id: '__preset_frame__',
+    childIds: [entity.id],
+  })
   const result = validateComposeDocument({
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: {
         stepX: 8,
@@ -180,11 +186,9 @@ function validatePresetSeed(preset: ComposeEntityPreset, components: Record<stri
         snapEnabled: true,
       },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1280, height: 720, backgroundPaint: { kind: 'solid', color: '#111827' } },
-    rootIds: [entity.id],
-    entities: { [entity.id]: entity },
+    rootIds: [probeFrame.id],
+    entities: { [entity.id]: entity, [probeFrame.id]: probeFrame },
   })
   return result.valid ? null : result.issues[0]?.message ?? 'Preset Entity 无效'
 }

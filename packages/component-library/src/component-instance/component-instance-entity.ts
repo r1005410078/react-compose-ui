@@ -1,6 +1,8 @@
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
+  COMPOSE_DEFAULT_FRAME_SIZE,
   createComposeResolvedComponentSnapshot,
+  getComposeFrame,
   getComposeLayoutItem,
   type ComposeComponentAssetV1,
   type ComposeComponentReference,
@@ -47,6 +49,9 @@ export function createComposeComponentInstanceEntity(input: {
     resolvedSnapshot: snapshot,
     instanceOverrides: { operations: [] },
   } as unknown as JsonObject
+  const rootFrameId = snapshot.document.rootIds[0]
+  const rootFrame = rootFrameId ? getComposeFrame(snapshot.document.entities[rootFrameId]) : null
+  const rootFrameSize = rootFrame?.size ?? COMPOSE_DEFAULT_FRAME_SIZE
   // 页面上实例最外层用于组合排版：始终 free（四角缩放），与组件根是否可缩解耦。
   // Resize 结果仍写入以根为目标的实例覆盖；宿主 LayoutItem 保持 Hug，尺寸事实在根上。
   return {
@@ -59,8 +64,9 @@ export function createComposeComponentInstanceEntity(input: {
         LayoutItem: {
           ...item,
           positioning: 'absolute',
-          width: { ...item.width, mode: 'hug', value: snapshot.document.output.width },
-          height: { ...item.height, mode: 'hug', value: snapshot.document.output.height },
+          // 尺寸事实在组件根 Frame 上；这里的 fixed fallback 只在测量缺席时兜底。
+          width: { ...item.width, mode: 'hug', value: rootFrameSize.width },
+          height: { ...item.height, mode: 'hug', value: rootFrameSize.height },
         },
         GeometryConstraints: {
           movable: true,

@@ -22,18 +22,17 @@ const reference = {
 
 function base(): ComposeBaseComponentAsset {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'button',
     name: 'Button',
     document: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: {
         grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
         smartSnap: { nodes: true, guides: true },
-        guides: [],
       },
-      output: { width: 100, height: 40, backgroundPaint: { kind: 'solid', color: 'transparent' } },
+      // 组件文档的单根必须是 Frame；这里给既有根就地加上 Frame Component。
       rootIds: ['root'],
       entities: {
         root: {
@@ -43,6 +42,7 @@ function base(): ComposeBaseComponentAsset {
             LayoutItem: { positioning: 'absolute', offset: { x: 0, y: 0 }, width: { mode: 'fixed', value: 100, min: 0, max: null }, height: { mode: 'fixed', value: 40, min: 0, max: null }, margin: { top: 0, right: 0, bottom: 0, left: 0 }, alignSelf: 'auto' },
             GeometryConstraints: { movable: true, resize: 'none', rotatable: false },
             Visibility: { visible: true }, Lock: { locked: false }, Hierarchy: { childIds: ['text'] },
+            Frame: { size: { width: 100, height: 40 }, guides: [] },
           },
         },
         text: {

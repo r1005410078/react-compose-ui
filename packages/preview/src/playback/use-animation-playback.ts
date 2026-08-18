@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { applyComposeAnimationAtTime } from '@compose-ui/animation'
-import { getComposeAnimations } from '@compose-ui/core'
+import { getComposeAnimations, isComposeFrameEntity } from '@compose-ui/core'
 import type { ComposeDocument } from '@compose-ui/core'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import {
@@ -109,6 +109,14 @@ export interface ComposeAnimationPlaybackOptions {
    * 宿主接管的播放头毫秒（如预览对话框的手动播放会话）；存在时优先于脚本绑定。
    */
   readonly timeMsOverride?: number
+  /**
+   * 提供动画清单的 Frame。
+   *
+   * @remarks
+   * v7 的清单归属 Frame。省略时回退到第一个根 Frame——Preview 本来就只渲染一个 Frame，
+   * 播放的自然是它自己的时间线。
+   */
+  readonly frameId?: string | null
 }
 
 /**
@@ -124,8 +132,13 @@ export interface ComposeAnimationPlaybackOptions {
 export function useComposeAnimationPlayback(
   options: ComposeAnimationPlaybackOptions,
 ): ComposeDocument | undefined {
-  const { document, enabled, scope, timeMsOverride } = options
-  const animation = enabled && document ? getComposeAnimations(document)[0] : undefined
+  const { document, enabled, frameId, scope, timeMsOverride } = options
+  const hostFrameId = document
+    ? frameId ?? document.rootIds.find((id) => isComposeFrameEntity(document.entities[id])) ?? null
+    : null
+  const animation = enabled && document && hostFrameId
+    ? getComposeAnimations(document, hostFrameId)[0]
+    : undefined
   const playingName = animation?.bindings?.playing?.exportName ?? null
   const currentTimeName = animation?.bindings?.currentTime?.exportName ?? null
 

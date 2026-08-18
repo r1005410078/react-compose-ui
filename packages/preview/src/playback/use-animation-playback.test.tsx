@@ -1,7 +1,7 @@
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
+  createComposeFrameEntity,
   type ComposeAnimationBindings,
   type ComposeDocument,
   type ComposeEntity,
@@ -75,20 +75,27 @@ function animatedDocument(
       } as unknown as JsonObject,
     },
   }
+  // 动画清单归属 Frame：box 挂在根 Frame 下，清单写在这个 Frame 上。
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: { ...createDefaultOutputSettings(), width: 640, height: 360 },
-    rootIds: ['box'],
-    entities: { box },
-    animations: [{
-      id: 'intro',
-      name: '入场',
-      durationMs: 400,
-      playbackMode: 'play-once',
-      ...(autoplay ? { autoplay: true } : {}),
-      ...(bindings ? { bindings } : {}),
-    }],
+    rootIds: ['frame-root'],
+    entities: {
+      box,
+      'frame-root': createComposeFrameEntity({
+        id: 'frame-root',
+        childIds: ['box'],
+        size: { width: 640, height: 360 },
+        animations: [{
+          id: 'intro',
+          name: '入场',
+          durationMs: 400,
+          playbackMode: 'play-once',
+          ...(autoplay ? { autoplay: true } : {}),
+          ...(bindings ? { bindings } : {}),
+        }],
+      }),
+    },
   }
 }
 

@@ -5,6 +5,7 @@ import type {
 } from '@compose-ui/assets'
 import { ComposeAssetError } from '@compose-ui/assets'
 import {
+  type ComposeEntity,
   COMPOSE_COMPONENT_MEDIA_TYPE,
   createComposeGroupEntitySeed,
   serializeComposeComponentAsset,
@@ -32,23 +33,33 @@ interface StoreApi {
 
 const api = libraryApi as unknown as StoreApi
 
+/** 给组件根就地加上 Frame Component：组件文档的单根必须是 Frame。 */
+function withFrame(entity: ComposeEntity, width: number, height: number): ComposeEntity {
+  return {
+    ...entity,
+    components: {
+      ...entity.components,
+      Frame: { size: { width, height }, guides: [] },
+    },
+  }
+}
+
 function document(): ComposeBaseComponentAsset['document'] {
   const root = createComposeGroupEntitySeed({ id: 'root' })
   return {
-    schemaVersion: 6 as const,
+    schemaVersion: 7 as const,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 100, height: 100, backgroundPaint: { kind: 'solid', color: 'transparent' } },
+    // 组件文档的单根必须是 Frame；这里给既有根就地加上 Frame Component。
     rootIds: ['root'],
-    entities: { root },
+    entities: { root: withFrame(root, 100, 100) },
   }
 }
 
 function baseAsset(id = 'button'): ComposeBaseComponentAsset {
-  return { schemaVersion: 1, kind: 'base', componentId: id, name: id, document: document() }
+  return { schemaVersion: 2, kind: 'base', componentId: id, name: id, document: document() }
 }
 
 function fakeProvider() {

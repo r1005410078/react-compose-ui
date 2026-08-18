@@ -1,4 +1,5 @@
 import {
+  type ComposeEntity,
   applyComposeComponentOverrides,
   createComposeGroupEntitySeed,
   createComposeResolvedComponentSnapshot,
@@ -21,6 +22,17 @@ const baseRef: ComposeComponentReference = {
 }
 const variantRef: ComposeComponentReference = {
   kind: 'component', providerId: 'project', assetKey: 'variant', scope: 'persistent',
+}
+
+/** 给组件根就地加上 Frame Component：组件文档的单根必须是 Frame。 */
+function withFrame(entity: ComposeEntity, width: number, height: number): ComposeEntity {
+  return {
+    ...entity,
+    components: {
+      ...entity.components,
+      Frame: { size: { width, height }, guides: [] },
+    },
+  }
 }
 
 function baseAsset(withText = true): ComposeBaseComponentAsset {
@@ -53,20 +65,21 @@ function baseAsset(withText = true): ComposeBaseComponentAsset {
     },
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'base',
     componentId: 'base',
     name: 'Base',
     document: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       canvas: {
         grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
         smartSnap: { nodes: true, guides: true },
-        guides: [],
       },
-      output: { width: 120, height: 60, backgroundPaint: { kind: 'solid', color: 'transparent' } },
+      // 组件文档的单根必须是 Frame；这里给既有根就地加上 Frame Component。
       rootIds: ['root'],
-      entities: withText ? { root, text } : { root },
+      entities: withText
+        ? { root: withFrame(root, 120, 60), text }
+        : { root: withFrame(root, 120, 60) },
     },
   }
 }
@@ -83,7 +96,7 @@ function variantAsset(parent = baseAsset()): ComposeVariantComponentAsset {
   const applied = applyComposeComponentOverrides(parent.document, [operation])
   const parentSnapshot = createComposeResolvedComponentSnapshot(parent, baseRef, '1')
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'variant',
     componentId: 'variant',
     name: 'Variant',
