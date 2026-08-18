@@ -9,6 +9,7 @@ import {
   type JsonValue,
   getComposeAnimations,
   jsonEqual,
+  resolveOwningFrameId,
 } from '@compose-ui/core'
 import {
   getComposeAnimationComponent,
@@ -44,6 +45,7 @@ export const COMPOSE_ANIMATION_COMMAND_TYPES = {
   setInterpolation: 'animation.keyframe.interpolation.set',
   setSpatialTangent: 'animation.keyframe.spatial.set',
   removeTrack: 'animation.track.remove',
+  relocateTracks: 'animation.tracks.relocate',
 } as const
 
 const PLAYBACK_MODES = ['play-once', 'loop', 'ping-pong']
@@ -66,6 +68,42 @@ function applied(value: readonly DocumentPatch[]): CommandHandlerResult {
   return value.length === 0
     ? { status: 'noop', reason: '命令没有产生文档修改' }
     : { status: 'patches', patches: value }
+}
+
+/**
+ * 读取命令载荷中的宿主 Frame，并返回它当前的动画清单。
+ *
+ * @remarks
+ * v7 的动画清单归属 Frame。命令必须显式指定 `frameId`——沉默地回退到"第一个根 Frame"
+ * 会在多画板文档里写错清单。
+ */
+function resolveManifest(
+  document: ComposeDocument,
+  frameId: unknown,
+): { readonly frameId: string; readonly items: readonly ComposeAnimation[] } | CommandHandlerResult {
+  if (typeof frameId !== 'string' || frameId.trim().length === 0) {
+    return reject('animation.invalid-command', '命令必须提供 frameId')
+  }
+  const entity = document.entities[frameId]
+  if (!entity || entity.components.Frame === undefined) {
+    return reject('frame.missing', `Entity ${frameId} 不是 Frame`)
+  }
+  return { frameId, items: getComposeAnimations(document, frameId) }
+}
+
+function isManifest(
+  value: { readonly frameId: string; readonly items: readonly ComposeAnimation[] } | CommandHandlerResult,
+): value is { readonly frameId: string; readonly items: readonly ComposeAnimation[] } {
+  return 'items' in value
+}
+
+/** 整条清单以单个 Component 写入：Animations 可能尚不存在，逐字段 set 会落空。 */
+function manifestPatch(frameId: string, items: readonly ComposeAnimation[]): DocumentPatch {
+  return {
+    op: 'set',
+    path: ['entities', frameId, 'components', 'Animations'],
+    value: { items } as unknown as JsonValue,
+  }
 }
 
 function readPath(payload: JsonObject): readonly (string | number)[] | null {
@@ -103,6 +141,7 @@ function readSpatialTangent(value: unknown): ComposeSpatialTangent | null {
 /** 定位一条命令共同需要的动画、Entity 与轨道上下文。 */
 interface CommandTarget {
   readonly animation: ComposeAnimation
+  readonly frameId: string
   readonly entityId: string
   readonly entity: ComposeEntity
   readonly path: readonly (string | number)[]
@@ -117,13 +156,19 @@ function resolveTarget(
   if (typeof animationId !== 'string' || typeof entityId !== 'string') {
     return reject('animation.invalid-command', '命令必须提供 animationId 与 entityId')
   }
-  const animation = getComposeAnimations(document).find((item) => item.id === animationId)
-  if (!animation) return reject('animation.missing', `动画 ${animationId} 不存在`)
   const entity = document.entities[entityId]
   if (!entity) return reject('entity.missing', `Entity ${entityId} 不存在`)
+  // 宿主 Frame 由 Entity 反查而不是由调用方给出：这样"轨道不得跨越嵌套 Frame 边界"
+  // 在命令层就是构造性成立的，不需要额外校验分支。
+  const frameId = resolveOwningFrameId(document, entityId)
+  if (!frameId) return reject('frame.missing', `Entity ${entityId} 不在任何 Frame 内`)
+  const animation = getComposeAnimations(document, frameId).find((item) => item.id === animationId)
+  if (!animation) {
+    return reject('animation.missing', `动画 ${animationId} 不在 Frame ${frameId} 的清单中`)
+  }
   const path = readPath(payload)
   if (!path) return reject('track.invalid-path', '轨道路径必须是非空的字符串或下标数组')
-  return { animation, entityId, entity, path }
+  return { animation, frameId, entityId, entity, path }
 }
 
 function isTarget(value: CommandTarget | CommandHandlerResult): value is CommandTarget {
@@ -208,17 +253,17 @@ function createHandler(): CommandHandler {
       if (typeof mode !== 'string' || !PLAYBACK_MODES.includes(mode)) {
         return reject('animation.invalid-command', `playbackMode 必须是 ${PLAYBACK_MODES.join(' / ')}`)
       }
-      const animations = getComposeAnimations(document)
-      if (animations.some((item) => item.id === animationId)) {
+      const manifest = resolveManifest(document, command.payload.frameId)
+      if (!isManifest(manifest)) return manifest
+      if (manifest.items.some((item) => item.id === animationId)) {
         return reject('animation.duplicate-id', `动画 ${animationId} 已存在`)
       }
-      const next = [...animations, {
+      return applied([manifestPatch(manifest.frameId, [...manifest.items, {
         id: animationId,
         name,
         durationMs,
         playbackMode: mode,
-      }] as unknown as JsonValue
-      return applied([{ op: 'set', path: ['animations'], value: next }])
+      } as ComposeAnimation])])
     },
   }
 }
@@ -231,19 +276,20 @@ function deleteHandler(): CommandHandler {
       if (typeof animationId !== 'string') {
         return reject('animation.invalid-command', '命令必须提供 animationId')
       }
-      const animations = getComposeAnimations(document)
-      if (!animations.some((item) => item.id === animationId)) {
+      const manifest = resolveManifest(document, command.payload.frameId)
+      if (!isManifest(manifest)) return manifest
+      if (!manifest.items.some((item) => item.id === animationId)) {
         return reject('animation.missing', `动画 ${animationId} 不存在`)
       }
-      const patches: DocumentPatch[] = [{
-        op: 'set',
-        path: ['animations'],
-        value: animations.filter((item) => item.id !== animationId) as unknown as JsonValue,
-      }]
+      const patches: DocumentPatch[] = [
+        manifestPatch(manifest.frameId, manifest.items.filter((item) => item.id !== animationId)),
+      ]
       // 清单条目与各 Entity 的分组是同一条动画的两半，必须在同一个事务里一起清掉，
-      // 否则撤销一半会留下悬空分组。
+      // 否则撤销一半会留下悬空分组。只清该 Frame 作用域内的 Entity——同名分组在别的
+      // Frame 下是另一条动画。
       Object.entries(document.entities).forEach(([entityId, entity]) => {
         if (getComposeEntityTracks(entity, animationId).length === 0) return
+        if (resolveOwningFrameId(document, entityId) !== manifest.frameId) return
         patches.push(...writeClipPatches(entityId, entity, animationId, []))
       })
       return applied(patches)
@@ -259,8 +305,9 @@ function configureHandler(): CommandHandler {
       if (typeof animationId !== 'string') {
         return reject('animation.invalid-command', '命令必须提供 animationId')
       }
-      const animations = getComposeAnimations(document)
-      const current = animations.find((item) => item.id === animationId)
+      const manifest = resolveManifest(document, command.payload.frameId)
+      if (!isManifest(manifest)) return manifest
+      const current = manifest.items.find((item) => item.id === animationId)
       if (!current) return reject('animation.missing', `动画 ${animationId} 不存在`)
 
       if (name !== undefined && typeof name !== 'string') {
@@ -292,11 +339,10 @@ function configureHandler(): CommandHandler {
       if (bindings === null) delete next.bindings
       else if (bindings !== undefined) next.bindings = bindings as JsonValue
       if (jsonEqual(current, next)) return { status: 'noop', reason: '动画参数没有变化' }
-      return applied([{
-        op: 'set',
-        path: ['animations'],
-        value: animations.map((item) => item.id === animationId ? next : item) as unknown as JsonValue,
-      }])
+      return applied([manifestPatch(
+        manifest.frameId,
+        manifest.items.map((item) => item.id === animationId ? next as ComposeAnimation : item),
+      )])
     },
   }
 }
@@ -428,6 +474,145 @@ function removeTrackHandler(): CommandHandler {
 }
 
 /**
+ * 把一棵子树的动画轨道从源 Frame 搬迁到目标 Frame。
+ *
+ * @remarks
+ * 跨 Frame 拖拽必须与本命令组成单个事务，且**本命令排在结构变更之前**——源 Frame 由
+ * Entity 当前的层级反查，结构一旦先动，源与目标就会是同一个 Frame 而退化成 noop。
+ * 撤销时两侧 Frame 的清单与轨道一起还原。关键帧的时间、值、插值与空间切线逐字段保持，
+ * 重定位只改变归属。
+ *
+ * 目标 Frame 已存在同名动画时**不静默合并**——调用方必须通过 `mapping` 显式给出目标分组
+ * ID，否则命令拒绝。静默合并会把两条语义无关的时间线叠在一起，且无法从结果反推原状。
+ */
+function relocateTracksHandler(): CommandHandler {
+  return {
+    type: COMPOSE_ANIMATION_COMMAND_TYPES.relocateTracks,
+    execute(document, command) {
+      const { entityId, targetFrameId, mapping } = command.payload
+      if (typeof entityId !== 'string' || typeof targetFrameId !== 'string') {
+        return reject('animation.invalid-command', '命令必须提供 entityId 与 targetFrameId')
+      }
+      const target = resolveManifest(document, targetFrameId)
+      if (!isManifest(target)) return target
+      const sourceFrameId = resolveOwningFrameId(document, entityId)
+      if (!sourceFrameId) return reject('frame.missing', `Entity ${entityId} 不在任何 Frame 内`)
+      if (sourceFrameId === targetFrameId) {
+        return { status: 'noop', reason: '源与目标是同一个 Frame' }
+      }
+      if (mapping !== undefined && !isRecord(mapping)) {
+        return reject('animation.invalid-command', 'mapping 必须是 { [源动画ID]: 目标动画ID }')
+      }
+      const source = resolveManifest(document, sourceFrameId)
+      if (!isManifest(source)) return source
+
+      const subtree = collectSubtreeIds(document, entityId)
+      // 先按源动画 ID 汇总要搬的轨道，再一次性决定每条动画在目标侧的落点。
+      const moving = new Map<string, {
+        readonly entityId: string
+        readonly entity: ComposeEntity
+        readonly tracks: readonly ComposeAnimationTrack[]
+      }[]>()
+      subtree.forEach((memberId) => {
+        const member = document.entities[memberId]
+        if (!member) return
+        const component = getComposeAnimationComponent(member)
+        if (!component) return
+        Object.keys(component.clips).forEach((animationId) => {
+          const tracks = getComposeEntityTracks(member, animationId)
+          if (tracks.length === 0) return
+          const bucket = moving.get(animationId) ?? []
+          bucket.push({ entityId: memberId, entity: member, tracks })
+          moving.set(animationId, bucket)
+        })
+      })
+      if (moving.size === 0) return { status: 'noop', reason: '子树没有需要搬迁的轨道' }
+
+      const targetIdBySourceId = new Map<string, string>()
+      const created: ComposeAnimation[] = []
+      for (const sourceAnimationId of moving.keys()) {
+        const sourceAnimation = source.items.find((item) => item.id === sourceAnimationId)
+        if (!sourceAnimation) {
+          return reject('animation.missing', `源 Frame 清单中没有动画 ${sourceAnimationId}`)
+        }
+        const explicit = isRecord(mapping) ? mapping[sourceAnimationId] : undefined
+        if (explicit !== undefined) {
+          if (typeof explicit !== 'string'
+            || !target.items.some((item) => item.id === explicit)) {
+            return reject('animation.missing', `目标 Frame 清单中没有动画 ${String(explicit)}`)
+          }
+          targetIdBySourceId.set(sourceAnimationId, explicit)
+          continue
+        }
+        const conflict = target.items.some((item) =>
+          item.id === sourceAnimationId || item.name === sourceAnimation.name)
+        if (conflict) {
+          return reject(
+            'animation.relocate-ambiguous',
+            `目标 Frame 已有同名动画，请显式指定 ${sourceAnimationId} 的目标分组`,
+          )
+        }
+        targetIdBySourceId.set(sourceAnimationId, sourceAnimationId)
+        created.push(sourceAnimation)
+      }
+
+      const patches: DocumentPatch[] = []
+      moving.forEach((members, sourceAnimationId) => {
+        const targetAnimationId = targetIdBySourceId.get(sourceAnimationId)!
+        members.forEach(({ entityId: memberId, entity, tracks }) => {
+          const component = getComposeAnimationComponent(entity)!
+          const nextClips: Record<string, readonly ComposeAnimationTrack[]> = { ...component.clips }
+          delete nextClips[sourceAnimationId]
+          nextClips[targetAnimationId] = tracks
+          patches.push({
+            op: 'set',
+            path: ['entities', memberId, 'components', COMPOSE_ANIMATION_COMPONENT_KEY],
+            value: { clips: nextClips } as unknown as JsonValue,
+          })
+        })
+      })
+
+      if (created.length > 0) {
+        patches.push(manifestPatch(target.frameId, [...target.items, ...created]))
+      }
+      // 源清单只丢弃已经没有任何轨道留下的动画；同一条动画可能还驱动着子树之外的 Entity。
+      const orphaned = new Set<string>()
+      moving.forEach((_members, sourceAnimationId) => {
+        const stillUsed = Object.keys(document.entities).some((candidateId) => {
+          if (subtree.has(candidateId)) return false
+          if (resolveOwningFrameId(document, candidateId) !== source.frameId) return false
+          return getComposeEntityTracks(document.entities[candidateId]!, sourceAnimationId).length > 0
+        })
+        if (!stillUsed) orphaned.add(sourceAnimationId)
+      })
+      if (orphaned.size > 0) {
+        patches.push(manifestPatch(
+          source.frameId,
+          source.items.filter((item) => !orphaned.has(item.id)),
+        ))
+      }
+      return applied(patches)
+    },
+  }
+}
+
+/** 收集包含自身在内的整棵子树 Entity ID。 */
+function collectSubtreeIds(document: ComposeDocument, rootId: string): ReadonlySet<string> {
+  const ids = new Set<string>()
+  const walk = (id: string) => {
+    if (ids.has(id)) return
+    ids.add(id)
+    const hierarchy = document.entities[id]?.components.Hierarchy
+    if (!hierarchy || !Array.isArray(hierarchy.childIds)) return
+    hierarchy.childIds.forEach((childId) => {
+      if (typeof childId === 'string') walk(childId)
+    })
+  }
+  walk(rootId)
+  return ids
+}
+
+/**
  * 创建可注入事务运行时的动画命令 handler 集合。
  *
  * @example
@@ -477,6 +662,7 @@ export function createComposeAnimationCommandHandlers(): readonly CommandHandler
         return updateKeyframe(track, keyframeId, (keyframe) => ({ ...keyframe, interpolation }))
       },
     ),
+    relocateTracksHandler(),
     keyframeMutationHandler(
       COMPOSE_ANIMATION_COMMAND_TYPES.setSpatialTangent,
       (track, keyframeId, payload) => {

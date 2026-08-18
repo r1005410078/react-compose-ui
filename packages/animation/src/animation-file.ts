@@ -1,8 +1,8 @@
 import {
   type ComposeAnimation,
   type DocumentValidationIssueCode,
+  createComposeFrame,
   createDefaultCanvasSettings,
-  createDefaultOutputSettings,
   validateComposeDocument,
 } from '@compose-ui/core'
 
@@ -110,31 +110,68 @@ export function composeAnimationFileName(displayName: string): string {
  *
  * @remarks
  * core 的清单校验是 `validateComposeDocument` 的私有部分，这里不复制规则，而是把候选
- * 清单放进一份最小探针文档统一校验，再取回 `animations[0]` 下的问题。这保证文件内清单
+ * 清单放进一份最小探针文档的根 Frame 上统一校验，再取回该清单下的问题。这保证文件内清单
  * 与文档内镜像遵守完全相同的约束，两边不会漂移。
  */
 function validateAnimationManifest(
   candidate: unknown,
   issues: ComposeAnimationFileIssue[],
 ): candidate is ComposeAnimation {
+  const frameId = 'probe-frame'
+  const frame = createComposeFrame()
   const probe = {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: [],
-    entities: {},
-    animations: [candidate],
+    rootIds: [frameId],
+    entities: {
+      [frameId]: {
+        id: frameId,
+        name: frameId,
+        components: {
+          Composition: {
+            presetId: 'frame',
+            baseComponentKeys: [
+              'Composition',
+              'Transform',
+              'LayoutItem',
+              'Visibility',
+              'Lock',
+              'Hierarchy',
+              'Frame',
+              'Animations',
+            ],
+            capabilityIds: [],
+          },
+          Transform: { rotation: 0 },
+          LayoutItem: {
+            positioning: 'absolute',
+            offset: { x: 0, y: 0 },
+            width: { mode: 'fixed', value: frame.size.width, min: 1, max: null },
+            height: { mode: 'fixed', value: frame.size.height, min: 1, max: null },
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            alignSelf: 'auto',
+          },
+          Visibility: { visible: true },
+          Lock: { locked: false },
+          Hierarchy: { childIds: [] },
+          Frame: frame,
+          Animations: { items: [candidate] },
+        },
+      },
+    },
   }
+  const manifestPath = ['entities', frameId, 'components', 'Animations', 'items']
   const validation = validateComposeDocument(probe)
   if (validation.valid) return true
   let manifestInvalid = false
   validation.issues.forEach((issue) => {
-    if (issue.path[0] !== 'animations') return
+    const inManifest = manifestPath.every((segment, index) => issue.path[index] === segment)
+    if (!inManifest) return
     manifestInvalid = true
     issues.push({
       code: issue.code,
-      // 探针文档中的 ['animations', 0, ...] 对应文件里的 ['animation', ...]。
-      path: ['animation', ...issue.path.slice(2)],
+      // 探针中的 [...Animations, 'items', 0, ...] 对应文件里的 ['animation', ...]。
+      path: ['animation', ...issue.path.slice(manifestPath.length + 1)],
       message: issue.message,
     })
   })

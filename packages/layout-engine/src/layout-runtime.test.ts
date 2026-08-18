@@ -2,7 +2,7 @@ import {
   createDefaultCanvasSettings,
   createDefaultComposeFlexLayout,
   createDefaultComposeLayoutItem,
-  createDefaultOutputSettings,
+  createComposeFrame,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutMeasurementPort,
@@ -72,13 +72,43 @@ function fixedItem(
   }
 }
 
+/** v7 的文档根必须是 Frame，因此夹具把既有 'container' 根挂进一个 1280×720 的根 Frame。 */
+function frameEntity(childIds: readonly string[]): ComposeEntity {
+  const components = {
+    Transform: { rotation: 0 },
+    LayoutItem: {
+      ...createDefaultComposeLayoutItem(),
+      positioning: 'absolute',
+      offset: { x: 0, y: 0 },
+      width: { mode: 'fixed', value: 1280, min: null, max: null },
+      height: { mode: 'fixed', value: 720, min: null, max: null },
+    } as ComposeLayoutItem,
+    Visibility: { visible: true },
+    Lock: { locked: false },
+    Hierarchy: { childIds },
+    Frame: createComposeFrame({ width: 1280, height: 720 }),
+    Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
+  } as const
+  return {
+    id: 'frame-root',
+    name: 'frame-root',
+    components: {
+      Composition: {
+        presetId: 'frame',
+        baseComponentKeys: Object.keys(components),
+        capabilityIds: [],
+      },
+      ...components,
+    },
+  }
+}
+
 function documentFixture(entities: Record<string, ComposeEntity>): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: createDefaultCanvasSettings(),
-    output: createDefaultOutputSettings(),
-    rootIds: ['container'],
-    entities,
+    rootIds: ['frame-root'],
+    entities: { ...entities, 'frame-root': frameEntity(['container']) },
   }
 }
 
@@ -123,9 +153,8 @@ describe('Yoga Compose layout runtime', () => {
     }
     const runtime = createComposeLayoutRuntimeWithBackendForTesting({
       document: {
-        schemaVersion: 6,
+        schemaVersion: 7,
         canvas: createDefaultCanvasSettings(),
-        output: createDefaultOutputSettings(),
         rootIds: [],
         entities: {},
       },
@@ -135,7 +164,9 @@ describe('Yoga Compose layout runtime', () => {
 
     expect(config.setUseWebDefaults).toHaveBeenCalledWith(true)
     expect(config.setPointScaleFactor).toHaveBeenCalledWith(0)
-    expect(root.calculateLayout).toHaveBeenCalledWith(1280, 720, 1)
+    // v7 没有文档级输出尺寸：合成根的可用空间是全部根 Frame 的并集包围盒，
+    // 空文档因此是 0×0。这里验证的是 LTR 方向与求解被调用一次。
+    expect(root.calculateLayout).toHaveBeenCalledWith(0, 0, 1)
     runtime.dispose()
     expect(root.free).toHaveBeenCalledOnce()
     expect(config.free).toHaveBeenCalledOnce()

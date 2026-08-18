@@ -112,18 +112,46 @@ function entity(id: string, animation?: JsonObject): ComposeEntity {
   }
 }
 
+/** 测试文档的根 Frame ID；动画清单挂在它的 `Animations` Component 上。 */
+const FRAME_ID = 'frame-root'
+
+function frame(childIds: readonly string[], animations: readonly ComposeAnimation[]): ComposeEntity {
+  return {
+    id: FRAME_ID,
+    name: FRAME_ID,
+    components: {
+      Composition: {
+        presetId: 'frame',
+        baseComponentKeys: ['Transform', 'LayoutItem', 'Visibility', 'Lock', 'Hierarchy', 'Frame'],
+        capabilityIds: [],
+      },
+      Transform: { rotation: 0 },
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'fixed', value: 1920, min: 1, max: null },
+        height: { mode: 'fixed', value: 1080, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Hierarchy: { childIds },
+      Frame: { size: { width: 1920, height: 1080 }, guides: [] },
+      Animations: { items: animations },
+    },
+  }
+}
+
 function documentWith(entities: Readonly<Record<string, ComposeEntity>>): ComposeDocument {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     canvas: {
       grid: { stepX: 8, stepY: 8, offsetX: 0, offsetY: 0, primaryLineEvery: 5, snapEnabled: true },
       smartSnap: { nodes: true, guides: true },
-      guides: [],
     },
-    output: { width: 1920, height: 1080, backgroundPaint: { kind: 'solid', color: '#ffffff' } },
-    rootIds: Object.keys(entities),
-    entities,
-    animations: [intro],
+    rootIds: [FRAME_ID],
+    entities: { ...entities, [FRAME_ID]: frame(Object.keys(entities), [intro]) },
   }
 }
 
