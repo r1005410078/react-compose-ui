@@ -13,7 +13,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -59,7 +59,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 缩窄文字框时高度�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -102,7 +102,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后未输入�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -126,7 +126,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 双击改写后 Esc 提交
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -156,7 +156,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 空内容退出删除实�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -188,7 +188,7 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子�
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   expect(frameBox).not.toBeNull()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   const outputBox = await output.boundingBox()
   // Stage 可视区约 600x600，而 output 是 1280x720：落点必须留在可视区内，
   // 否则 pointer 事件打不到画布上。容器占 output 的 48..696 x 64..424，这里放它上方。
@@ -196,7 +196,7 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子�
     x: outputBox!.x + 200,
     y: outputBox!.y + 20,
   })
-  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(rectangle).toHaveCount(1)
   await expect(sceneTree.getByRole('row', { name: /Rectangle/ })).toBeVisible()
 
@@ -211,7 +211,7 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子�
 
   // 3) 松手后矩形成为容器子级，不再是根层节点。
   await expect(stage.getByTestId('stage-drop-container')).toHaveCount(0)
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(0)
   await expect(
     stage.getByTestId('stage-container').locator(':scope > .compose-stage__node.is-renderer'),
@@ -219,7 +219,7 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子�
 
   // 4) 一次拖拽只产生一条可撤销事务。
   await page.keyboard.press('Control+z')
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
 })
 
@@ -232,12 +232,12 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 贴边掠过不吸入', as
   await drawContainer(page, editor)
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
     x: outputBox!.x + 200,
     y: outputBox!.y + 20,
   })
-  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = await rectangle.boundingBox()
 
   // 只贴到容器左边缘内 4px，未达到判定留白。
@@ -248,7 +248,7 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 贴边掠过不吸入', as
   await page.mouse.up()
 
   // 仍是根层节点，只是坐标变了。
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
 })
 
@@ -257,8 +257,8 @@ test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序�
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-output-boundary')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
 
   // 1) 容器内放两个矩形，再启用 Auto Layout 把它们转成 Flow。
   await drawContainer(page, editor)
@@ -306,12 +306,12 @@ test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序�
 })
 
 
-test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器无落点回弹不脱流', async ({ page }) => {
+test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器落到画板成为 Absolute 子项', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-output-boundary')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
@@ -326,21 +326,17 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器�
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
 
   const firstBox = await children.nth(0).boundingBox()
-  // 把第一个 Flow 子级拖到容器上方的空白画布并松手：无任何合法落点。
+  // 把第一个 Flow 子级拖到容器上方的空白画板并松手：v7 的画板本身就是合法落点。
   await page.mouse.move(firstBox!.x + firstBox!.width / 2, firstBox!.y + firstBox!.height / 2)
   await page.mouse.down()
   await page.mouse.move(outputBox!.x + 200, outputBox!.y + 20, { steps: 8 })
-  await expect(stage.getByTestId('stage-drop-container')).toHaveCount(0)
-  await expect(stage.getByTestId('stage-drop-line')).toHaveCount(0)
+  await expect(stage.getByTestId('stage-drop-container')).toHaveCount(1)
   await page.mouse.up()
 
-  // 回弹：仍是容器的 Flow 子级，位置与拖动前一致；根层没有多出脱流节点。
-  await expect(children).toHaveCount(2)
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
-    .toHaveCount(0)
-  const afterBox = await children.nth(0).boundingBox()
-  expect(Math.round(afterBox!.x)).toBe(Math.round(firstBox!.x))
-  expect(Math.round(afterBox!.y)).toBe(Math.round(firstBox!.y))
+  // 脱离 Auto Layout 容器，成为画板的 Absolute 子项：容器只剩一个 Flow 子级。
+  await expect(children).toHaveCount(1)
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
+    .toHaveCount(1)
 })
 
 test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Alt 强制吸入贴边容器', async ({ page }) => {
@@ -351,12 +347,12 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Alt 强制吸入贴
   await drawContainer(page, editor)
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
     x: outputBox!.x + 200,
     y: outputBox!.y + 20,
   })
-  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = await rectangle.boundingBox()
 
   // 贴到容器左边缘内 4px：默认不吸入，按下 Alt 后强制成为落点。
@@ -370,7 +366,7 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Alt 强制吸入贴
   await page.mouse.up()
   await page.keyboard.up('Alt')
 
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(0)
   await expect(
     stage.getByTestId('stage-container').locator(':scope > .compose-stage__node.is-renderer'),
@@ -384,12 +380,12 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Space 锁定原父�
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
     x: outputBox!.x + 200,
     y: outputBox!.y + 20,
   })
-  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = await rectangle.boundingBox()
 
   // 深入容器内部本会吸入；手势中按住 Space 锁定原父级，高亮原地消失。
@@ -403,7 +399,7 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Space 锁定原父�
   await page.keyboard.up('Space')
 
   // 仍是根层节点，坐标已更新到松手位置附近。
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
   const droppedBox = await rectangle.boundingBox()
   expect(droppedBox!.y).toBeGreaterThan(rectBox!.y + 100)
@@ -413,8 +409,8 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 兄弟随拖动实时�
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-output-boundary')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
@@ -484,8 +480,8 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子�
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-output-boundary')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
@@ -534,8 +530,8 @@ test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout �
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-output-boundary')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
@@ -569,8 +565,8 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器�
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-output-boundary')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()

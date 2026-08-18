@@ -768,6 +768,17 @@ function validSelection(document: ComposeDocument, ids: readonly string[]) {
  * 除宿主容器外，组件实例与实例内部复合地址也可展开；复合地址只校验宿主实例是否仍存在，
  * 内部实体是否存在由投影阶段决定，避免在这里重复解析快照。
  */
+/**
+ * 根 Frame 默认展开。
+ *
+ * @remarks
+ * v7 的顶层 Entity 都挂在画板下面，画板折叠会让场景树看上去只有一行——默认展开才与
+ * 「画板是工作区」的心智一致。宿主显式给出 `initialExpandedIds` 时仍然完全由它决定。
+ */
+function withExpandedRootFrames(document: ComposeDocument, ids: readonly string[]) {
+  return unique([...document.rootIds, ...ids])
+}
+
 function validExpanded(document: ComposeDocument, ids: readonly string[]) {
   return unique(ids).filter((id) => {
     if (isComposeInstancePath(id)) {
@@ -1059,7 +1070,7 @@ export function useComposeEditorController({
   const [, setInspectionTarget] = useState<InspectionTarget>(() =>
     validSelection(document, initialSelection).length > 0 ? 'entities' : null)
   const [expandedIds, setExpandedIdsState] = useState<readonly string[]>(() =>
-    validExpanded(document, initialExpandedIds))
+    validExpanded(document, withExpandedRootFrames(document, initialExpandedIds)))
   const [viewportStore] = useState(() => createViewportStore(initialViewport))
   const setViewport = viewportStore.setViewport
   const [tool, setToolState] = useState<ComposeStageTool>(initialTool)
@@ -1110,7 +1121,7 @@ export function useComposeEditorController({
     const nextDocument = runtime.getState().document
     setSelectedIdsState(validSelection(nextDocument, []))
     setInspectionTarget(null)
-    setExpandedIdsState(validExpanded(nextDocument, []))
+    setExpandedIdsState(validExpanded(nextDocument, withExpandedRootFrames(nextDocument, [])))
     // 视口在外部状态源里，这里是渲染期写外部 store。该分支对同一个 runtime 只会写入同一个
     // initialViewport，重复执行（StrictMode 重放）结果一致，且订阅方随后就会读到新快照。
     // 必须走渲染期专用入口：同步通知订阅者等于在本组件渲染中途更新另一个组件。

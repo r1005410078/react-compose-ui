@@ -1635,7 +1635,7 @@ function ComposeStageReady({
         type: BUILTIN_COMMAND_TYPES.createEntity,
         payload: {
           entity: entity as unknown as JsonValue,
-          parentId: parent?.id ?? null,
+          parentId: parent?.id ?? current.document.rootIds[0] ?? null,
         },
         meta: {
           label: describeEntityCreation(entity),
@@ -1755,7 +1755,7 @@ function ComposeStageReady({
       type: BUILTIN_COMMAND_TYPES.createEntity,
       payload: {
         entity: entity as unknown as JsonValue,
-        parentId: parent?.id ?? null,
+        parentId: parent?.id ?? current.document.rootIds[0] ?? null,
       },
       meta: {
         label: describeEntityCreation(entity),
@@ -1945,7 +1945,7 @@ function ComposeStageReady({
           type: BUILTIN_COMMAND_TYPES.createEntity,
           payload: {
             entity: entity as unknown as JsonValue,
-            parentId: validParent?.id ?? null,
+            parentId: validParent?.id ?? current.document.rootIds[0] ?? null,
           },
           meta: {
             label: describeEntityCreation(entity),
@@ -2811,19 +2811,20 @@ function ComposeStageReady({
             const selected = selectedIds.includes(frameBounds.frameId)
             return (
               <g key={frameBounds.frameId}>
+                {/*
+                  * 边界只是装饰：Frame 自身在 DOM 场景层就是一个可命中的容器，命中与收敛
+                  * 规则由那一层统一负责。这里若接管 pointer，会把绘制工具的按下吞掉。
+                  */}
                 <rect
                   className={`compose-stage__output-boundary${selected ? ' is-selected' : ''}`}
                   data-frame-id={frameBounds.frameId}
                   data-testid={`stage-frame-boundary-${frameBounds.frameId}`}
                   fill="transparent"
                   height={frameBounds.height}
+                  style={{ pointerEvents: 'none' }}
                   width={frameBounds.width}
                   x={frameBounds.x}
                   y={frameBounds.y}
-                  onPointerDown={(event) => {
-                    event.stopPropagation()
-                    beginInteraction({ kind: 'entity', entityId: frameBounds.frameId }, event)
-                  }}
                 />
                 <g className={`compose-stage__output-decoration${selected ? ' is-selected' : ''}`}>
                   <line

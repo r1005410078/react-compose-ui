@@ -454,7 +454,7 @@ test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await drawContainer(page, editor)
-  const outputBox = await stage.getByTestId('stage-output-boundary').boundingBox()
+  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
   expect(outputBox).not.toBeNull()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })

@@ -66,11 +66,11 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-output-boundary')
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
   const xAxis = stage.getByTestId('stage-origin-x')
   const yAxis = stage.getByTestId('stage-origin-y')
-  const bottomEdge = stage.getByTestId('stage-output-edge-bottom')
-  const rightEdge = stage.getByTestId('stage-output-edge-right')
+  const bottomEdge = stage.getByTestId('stage-frame-edge-bottom-frame-root')
+  const rightEdge = stage.getByTestId('stage-frame-edge-right-frame-root')
   const origin = stage.getByTestId('stage-world-origin')
   const originSilhouette = stage.getByTestId('stage-world-origin-silhouette')
   const originPosition = stage.getByTestId('stage-world-origin-position')
@@ -331,7 +331,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(editor.getByRole('button').filter({ hasText: /Container|Rectangle|ECharts/ }))
     .toHaveCount(3)
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
 
   const stageBox = await stage.boundingBox()
@@ -359,7 +359,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   expect(Math.round(dragPreviewBox!.y)).toBe(Math.round(containerDropTarget.y + 12))
   await page.mouse.up()
   await expect(dragPreview).toHaveCount(0)
-  const frame = stage.locator('.compose-stage__scene > .compose-stage__node.is-container')
+  const frame = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-container')
   await expect(frame).toHaveCount(1)
   await expect(frame).toHaveCSS('background-color', 'rgb(30, 34, 41)')
   const frameBox = await frame.boundingBox()
@@ -1053,7 +1053,7 @@ test('OpenSpec: command-panel / 命令动作检索与执行 / 从命令面板执
   // 新建 Rectangle 会自动选中它；这一步本身派发一条命令。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(1)
   await expect(events).toHaveCount(1)
 
@@ -1077,7 +1077,7 @@ test('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命�
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
 
   // 必须先展开命令面板：它会压缩 Stage 的可视尺寸，而适配结果依赖该尺寸。

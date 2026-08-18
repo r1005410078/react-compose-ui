@@ -47,7 +47,8 @@ const LABEL_LINE_HEIGHT = 14
  * 计算需要渲染标题标签的顶层容器。
  *
  * @remarks
- * 只取 `rootIds` 的直接成员：嵌套容器在 Figma/Rive 里同样不带标签，否则一个三层结构会在
+ * 顶层 = 根 Frame 自身与它的直接子级：v7 的 `rootIds` 只放 Frame，用户眼里的"顶层容器"
+ * 是画板里那一层。更深的嵌套容器在 Figma/Rive 里同样不带标签，否则一个三层结构会在
  * 左上角堆出三行互相遮挡的文字。可见性、宿主隐藏集与低缩放阈值都在这里一次筛掉，渲染层
  * 只负责摆放。
  * @internal
@@ -60,7 +61,11 @@ export function resolveComposeContainerLabels(
 ): readonly ComposeContainerLabel[] {
   if (viewport.zoom < MIN_LABEL_ZOOM) return []
   const labels: ComposeContainerLabel[] = []
-  for (const entityId of document.rootIds) {
+  const topLevelIds = document.rootIds.flatMap((frameId) => [
+    frameId,
+    ...(getComposeHierarchy(document.entities[frameId])?.childIds ?? []),
+  ])
+  for (const entityId of topLevelIds) {
     const entity = document.entities[entityId]
     if (!entity) continue
     if (!getComposeHierarchy(entity)) continue

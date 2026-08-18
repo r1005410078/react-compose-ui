@@ -10,7 +10,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   await expect(stage).toBeVisible()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
 
   // 普通 Scene Tree 行既保留树内移动，也能跨面板落到可写资源目录。
@@ -39,7 +39,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   await stage.focus()
   await stage.press('Control+z')
   await expect(stage.getByTestId('compose-component-instance-content')).toHaveCount(0)
-  await expect(stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer'))
+  await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
   await stage.press('Control+Shift+z')
   await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
@@ -111,7 +111,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   await componentLibrary.getByRole('button', { name: '添加 Rectangle' }).click()
   await componentLibrary.getByRole('button', { name: '添加 Rectangle' }).click()
   await componentLibrary.getByRole('button', { name: '添加 Container' }).click()
-  const rootRenderers = stage.locator('.compose-stage__scene > .compose-stage__node.is-renderer')
+  const rootRenderers = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(rootRenderers).toHaveCount(4)
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   const rectangleRows = sceneTree.getByRole('row', { name: /Rectangle/ })
