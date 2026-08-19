@@ -2020,17 +2020,12 @@ describe('OpenSpec: stage-engine / 可编辑路径会话、命中与手势', () 
 })
 
 describe('OpenSpec: 非空容器体的命中收敛', () => {
+  // 收敛只作用于带标题标签的顶层容器：v7 下即 rootIds 里的场景（夹具的 ROOT_FRAME_ID）。
   const container = () => document(
-    [
-      entity('frame', { x: 0, y: 0, width: 400, height: 300, childIds: ['child'] }),
-      entity('child', { x: 20, y: 20, width: 60, height: 40 }),
-    ],
-    ['frame'],
+    [entity('child', { x: 20, y: 20, width: 60, height: 40 })],
+    ['child'],
   )
-  const empty = () => document(
-    [entity('frame', { x: 0, y: 0, width: 400, height: 300, childIds: [] })],
-    ['frame'],
-  )
+  const empty = () => document([], [])
   const press = (
     controller: ReturnType<typeof createStageInteractionController>,
     hit: StageInteractionHit,
@@ -2046,7 +2041,7 @@ describe('OpenSpec: 非空容器体的命中收敛', () => {
   it('在非空容器空白处按下进入框选且选区不变', () => {
     const value = container()
     const { controller, effects } = setup(value, layoutSnapshot(value), [])
-    press(controller, { kind: 'entity', entityId: 'frame' })
+    press(controller, { kind: 'entity', entityId: ROOT_FRAME_ID })
     expect(controller.getSnapshot().phase).toBe('marquee')
     expect(effects.some((effect) => effect.type === 'selection.change')).toBe(false)
   })
@@ -2054,24 +2049,24 @@ describe('OpenSpec: 非空容器体的命中收敛', () => {
   it('空容器仍然可以点体选中', () => {
     const value = empty()
     const { controller, effects } = setup(value, layoutSnapshot(value), [])
-    press(controller, { kind: 'entity', entityId: 'frame' })
+    press(controller, { kind: 'entity', entityId: ROOT_FRAME_ID })
     expect(controller.getSnapshot().phase).toBe('move')
-    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['frame'] })
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: [ROOT_FRAME_ID] })
   })
 
   it('已选中的非空容器可以拖体移动', () => {
     const value = container()
-    const { controller } = setup(value, layoutSnapshot(value), ['frame'])
-    press(controller, { kind: 'entity', entityId: 'frame' })
+    const { controller } = setup(value, layoutSnapshot(value), [ROOT_FRAME_ID])
+    press(controller, { kind: 'entity', entityId: ROOT_FRAME_ID })
     expect(controller.getSnapshot().phase).toBe('move')
   })
 
   it('标签来源始终直接选中容器', () => {
     const value = container()
     const { controller, effects } = setup(value, layoutSnapshot(value), [])
-    press(controller, { kind: 'entity', entityId: 'frame', source: 'label' })
+    press(controller, { kind: 'entity', entityId: ROOT_FRAME_ID, source: 'label' })
     expect(controller.getSnapshot().phase).toBe('move')
-    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['frame'] })
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: [ROOT_FRAME_ID] })
   })
 
   it('容器内的子元素不受收敛影响', () => {
@@ -2079,6 +2074,21 @@ describe('OpenSpec: 非空容器体的命中收敛', () => {
     const { controller, effects } = setup(value, layoutSnapshot(value), [])
     press(controller, { kind: 'entity', entityId: 'child' })
     expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['child'] })
+  })
+
+  it('场景内的非空容器点体选中而不收敛', () => {
+    // 场景子级不再带标题标签，收敛之后将没有任何画布选中入口——点体必须直接选中。
+    const value = document(
+      [
+        entity('nested', { x: 0, y: 0, width: 400, height: 300, childIds: ['leaf'] }),
+        entity('leaf', { x: 20, y: 20, width: 60, height: 40 }),
+      ],
+      ['nested'],
+    )
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    press(controller, { kind: 'entity', entityId: 'nested' })
+    expect(controller.getSnapshot().phase).toBe('move')
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['nested'] })
   })
 })
 
@@ -2109,11 +2119,8 @@ describe('OpenSpec: 非空容器体的命中收敛 / Group 例外', () => {
 describe('OpenSpec: 非空容器体的命中收敛 / 起框容器不进入结果', () => {
   it('在容器内框选只选中子项', () => {
     const value = document(
-      [
-        entity('frame', { x: 0, y: 0, width: 400, height: 300, childIds: ['child'] }),
-        entity('child', { x: 40, y: 40, width: 60, height: 40 }),
-      ],
-      ['frame'],
+      [entity('child', { x: 40, y: 40, width: 60, height: 40 })],
+      ['child'],
     )
     const { controller, effects } = setup(value, layoutSnapshot(value), [])
     controller.send({
@@ -2121,7 +2128,7 @@ describe('OpenSpec: 非空容器体的命中收敛 / 起框容器不进入结果
       pointerId: 1,
       button: 0,
       point: { x: 10, y: 10 },
-      hit: { kind: 'entity', entityId: 'frame' },
+      hit: { kind: 'entity', entityId: ROOT_FRAME_ID },
       modifiers,
     })
     controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 380, y: 280 }, modifiers })

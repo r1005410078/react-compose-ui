@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText, selectContainer } from './support/test-helpers'
+import { openPageInspector, pointerDrop, drawContainer, drawText, selectContainer } from './support/test-helpers'
 
 test('OpenSpec: stage / 四角缩放 / resize 手柄在预览阶段跟随鼠标', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
@@ -944,7 +944,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / Canvas 标尺对�
 
 
 
-test('OpenSpec: stage / 顶层容器标题标签 / 标签选中重命名且容器内可框选', async ({ page }) => {
+test('OpenSpec: stage / 顶层容器标题标签 / 场景带标签重命名而嵌套容器点体选中', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
 
@@ -955,41 +955,41 @@ test('OpenSpec: stage / 顶层容器标题标签 / 标签选中重命名且容�
   await drawContainer(page, editor)
   const frameBox = (await stage.getByTestId('stage-container').boundingBox())!
 
-  // 容器内放两个矩形，容器体从此不再是选中入口。
+  // 容器内放一个矩形：即使有内容，场景内的容器也不收敛、不带标签。
   await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
     x: frameBox.x + frameBox.width * 0.3,
     y: frameBox.y + frameBox.height * 0.3,
   })
-  // 根画板同样带标题标签；这里只断言被测的普通容器。
-  const label = editor.locator('[data-testid^="stage-container-label-"]:not([data-testid$="frame-root"])')
-  await expect(label).toHaveText('Container')
+  // 标题标签只画给场景（rootIds 直接成员）；场景内的容器已是嵌套层，不带标签。
+  const nestedLabels = editor
+    .locator('[data-testid^="stage-container-label-"]:not([data-testid$="frame-root"])')
+  await expect(nestedLabels).toHaveCount(0)
+  const sceneLabel = editor.getByTestId('stage-container-label-frame-root')
+  await expect(sceneLabel).toHaveText('场景')
 
-  // 点容器空白处不再选中容器；空白处拖动起框并选中其中的子项。
+  // 嵌套容器没有标签，点体就是它的选中入口——即使装了内容也不收敛为框选。
   await page.mouse.click(frameBox.x + frameBox.width - 24, frameBox.y + frameBox.height - 24)
   await expect(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+    .toBeVisible()
+
+  // 场景体仍然收敛：点空白工作区清空选择，再从场景空白处起框。框只与容器右缘相交
+  //（避开内部矩形），选中的是容器本身，起框的场景不进入结果。
+  await openPageInspector(page, editor)
+  await expect(editor.getByRole('region', { name: 'Container 属性', exact: true }))
     .toHaveCount(0)
-  await page.mouse.move(frameBox.x + 8, frameBox.y + 8)
+  await page.mouse.move(frameBox.x + frameBox.width + 40, frameBox.y + 20)
   await page.mouse.down()
-  await page.mouse.move(frameBox.x + frameBox.width - 8, frameBox.y + frameBox.height - 8, {
-    steps: 8,
-  })
+  await page.mouse.move(frameBox.x + frameBox.width - 40, frameBox.y + 80, { steps: 8 })
   await page.mouse.up()
-  await expect(editor.getByRole('region', { name: 'Rectangle 属性', exact: true }))
-    .toBeVisible()
-  await expect(editor.getByRole('region', { name: 'Container 属性', exact: true }))
-    .toHaveCount(0)
-
-  // 标签是容器唯一的选中入口。
-  await label.click()
   await expect(editor.getByRole('region', { name: 'Container 属性', exact: true }))
     .toBeVisible()
 
-  // 双击标签就地重命名，结果与场景树同步。
-  await label.dblclick()
+  // 双击场景标签就地重命名，结果与场景树同步。
+  await sceneLabel.dblclick()
   const input = editor.locator('input.compose-stage__container-label')
   await input.fill('登录页')
   await input.press('Enter')
-  await expect(label).toHaveText('登录页')
+  await expect(sceneLabel).toHaveText('登录页')
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   await expect(sceneTree.getByRole('row', { name: /登录页/ })).toBeVisible()
 })
