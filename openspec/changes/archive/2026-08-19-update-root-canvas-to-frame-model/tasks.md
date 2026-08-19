@@ -71,18 +71,19 @@
       解析最近祖先 Frame，无选择回退 `defaultFrameId`；补测试。
 - [x] 6.6 `@compose-ui/scene-tree`：根层列出 Frame，Frame 图标与普通 Container 区分。
 
-> 状态：协议层、动画、组件资产、渲染嵌套、Stage 与 Editor 已完成，全仓 lint/typecheck/
-> test/build 通过。剩余：3.4 detach、6.3 受约束升格入口、7.1 夹具收尾、7.2 文档同步、
-> 7.4 e2e（79 条中 52 条通过，27 条待改）、7.6 归档。
+> 状态：协议层、动画、组件资产、渲染嵌套、Stage、Editor、示例夹具与文档已完成，全仓
+> lint/typecheck/test/build/e2e（79/79）通过。剩余：3.4 detach 与 6.3 受约束升格入口
+> 尚未实现，另需单开一条变更补 Frame Inspector 的外观字段（圆角/边框/透明度）——
+> 组件文档的根现在是 Frame，选中它无法编辑这些属性。
 
 ## 7. 迁移与验证
 
-- [ ] 7.1 `app/` 示例文档与全部测试夹具迁到 v7 / Component v2 / PageFile 2。
-- [ ] 7.2 更新 `README.md`（当前文档协议描述）与 `AGENTS.md`（v6 → v7、Frame 边界、
+- [x] 7.1 `app/` 示例文档与全部测试夹具迁到 v7 / Component v2 / PageFile 2。
+- [x] 7.2 更新 `README.md`（当前文档协议描述）与 `AGENTS.md`（v6 → v7、Frame 边界、
       各包职责措辞）。
 - [x] 7.3 `bun run lint && bun run typecheck && bun run test && bun run build`。
-- [ ] 7.4 `bun run test:e2e`（多画板、跨 Frame 拖拽、组件动画、Frame Inspector 黄金图）。
-- [ ] 7.5 `openspec validate update-root-canvas-to-frame-model --strict`。
-- [ ] 7.6 归档：先 `openspec archive add-animation-asset-and-mode-switcher --yes`，
+- [x] 7.4 `bun run test:e2e`（多画板、跨 Frame 拖拽、组件动画、Frame Inspector 黄金图）。
+- [x] 7.5 `openspec validate update-root-canvas-to-frame-model --strict`。
+- [x] 7.6 归档：先 `openspec archive add-animation-asset-and-mode-switcher --yes`，
       再 `openspec archive update-root-canvas-to-frame-model --yes`，最后
       `openspec validate --strict` 确认 `specs/` 反映 Frame 级绑定。

@@ -84,7 +84,22 @@ Frame 边界。命令 handler MUST 在写入前校验自己的输入并拒绝非
 - **THEN** 校验报告稳定的跨 Frame issue，路径定位到该 Entity、该分组与边界 Frame
 - **AND** 采样器跳过该轨道而不抛错
 
-#### Scenario: 分组不在所属 Frame 清单中
+#### Scenario: 关键帧值与 valueKind 不符
+
+- **WHEN** 一条 `valueKind: 'number'` 的轨道里出现值为 `{ x, y }` 的关键帧
+- **THEN** 校验报告 `keyframe.value-kind-mismatch`
+
+#### Scenario: 关键帧超出动画时长
+
+- **WHEN** 关键帧的 `timeMs` 为负数或大于所属动画的 `durationMs`
+- **THEN** 校验报告 `keyframe.out-of-range`
+
+#### Scenario: 悬空动画分组
 
 - **WHEN** Entity 的 `Animation` 引用了其所属 Frame `Animations` 清单中不存在的分组 id
-- **THEN** 校验报告稳定的孤立分组 issue 并定位到该 Entity 与分组 id
+- **THEN** 校验报告悬空分组并定位到该 Entity 与分组 id，但采样与命令不因此失败
+
+#### Scenario: 坏数据不让采样崩溃
+
+- **WHEN** 对一份含非法关键帧值的文档在任意时刻采样
+- **THEN** 该轨道被跳过，其余轨道正常求值，且不抛出异常

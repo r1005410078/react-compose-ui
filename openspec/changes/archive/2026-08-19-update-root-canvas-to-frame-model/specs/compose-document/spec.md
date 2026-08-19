@@ -112,6 +112,12 @@ guides——辅助线归属 Frame。`canvas` 是编辑器视口设置，MUST NOT
 - **THEN** 得到 8×8、零偏移、每 8 格主线且三类吸附开启的独立 JSON
 - **AND** 结果不包含 guides 字段且多次调用不共享可变对象
 
+#### Scenario: 保存全局辅助线
+
+- **WHEN** 文档需要保存辅助线
+- **THEN** 辅助线 MUST 保存在所属 Frame 的 `Frame.guides` 上，位置以该 Frame 原点为参照
+- **AND** `canvas.guides` 不再存在；带该字段的文档被拒绝而不是静默丢弃
+
 #### Scenario: 拒绝非法画布配置
 
 - **WHEN** canvas 缺失、grid 数值非法、主线间隔不是正整数，或 canvas 仍包含 guides 字段

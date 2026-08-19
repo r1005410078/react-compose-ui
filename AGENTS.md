@@ -32,13 +32,19 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 
 - 当前仓库已经完成 Bun monorepo、包构建、测试、CI 和发布基座。
 - `app/` 提供集成示例和最小 E2E 操作演示，不是正式编辑器产品。
-- 当前正式文档协议只支持 `ComposeDocument v6`：隐式自由 Canvas 根、统一 ECS Entity/Component
-  组合、`LayoutItem`、`Hierarchy + Layout` Auto Layout 容器、`Renderer` 内容与结构化
-  `Appearance.backgroundPaint`、first-class Group 与关联组件实例；项目组件/变体使用独立
-  `Component Asset v1`，不改变页面文档版本；v5 只能显式单向迁移，
+- 当前正式文档协议只支持 `ComposeDocument v7`：显式 Frame 根（`rootIds` 只接受 Frame，
+  隐式 Canvas 根与 `document.output` 已删除）、统一 ECS Entity/Component 组合、`LayoutItem`、
+  `Hierarchy + Layout` Auto Layout 容器、`Renderer` 内容与结构化 `Appearance.backgroundPaint`、
+  first-class Group 与关联组件实例；项目组件/变体使用独立 `Component Asset v2`，
+  页面文件为 `ComposePageFile 2`；v5、v6 只能显式单向迁移，
   数据源协议和持久化接口仍未确定。
+- **Frame 是一个 Component，不是新的 Entity 类型**：给任意容器加上 `Frame` 就完成「升格」，
+  Entity ID、子级与动画轨道全部原地保留。Frame 是六重隔离边界——坐标原点、独立 Yoga 布局
+  Runtime、裁剪、动画时间线、脚本作用域、预览/导出单位。不变量：`Frame ⇒ Hierarchy`，
+  Frame 不接受 Hug，尺寸的事实来源是 `Frame.size`（`LayoutItem` 固定尺寸只是求解回退，
+  由 `entity.frame.size.set` 同步）。`fit`/`alignment` 是宿主呈现参数，不写进文档。
 - 组件实例的覆盖是 `instanceOverrides`，只含结构操作并复用 Variant 的稳定操作代数；暴露属性已删除。
-  组件文档只要求单根，根可以是容器或任意 Entity。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址
+  组件文档只要求单根，且根必须是 Frame。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址
   寻址，只存在于表示层：持久化文档中实例仍是单个 Entity，Undo/Redo 作用在宿主实例的 Patch 上。
   实例的几何与容器属性跟随组件根，尺寸的唯一事实来源是根本身。
 - 不要把示例应用中的临时状态或演示交互当成稳定公共 API。
@@ -47,7 +53,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 
 - `@compose-ui/ui-context` 是跨包共享的 React 主题与国际化 Context，只依赖 React peer；
   第一方 React chrome 包可以依赖它，但必须在构建中外置，避免产生多份 Context 实例。
-- `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载 v6 Entity/Component 文档模型、布局快照协议、命令及
+- `@compose-ui/core` 必须保持与 React 和 DOM 无关，承载 v7 Entity/Component 文档模型、布局快照协议、命令及
   通用逻辑。
 - `@compose-ui/assets` 是无 React、无 DOM 的资源 Provider、稳定引用与运行时 Resolver 协议包；
   不得依赖资源浏览 UI、编辑器、文档历史或组件注册表。
@@ -74,7 +80,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   setup 作用域加载 Hook，可以依赖 `core`、`assets` 和 `script-runtime`，以 React 为 peer dependency，
   不得依赖 `editor` 或 `property-panel`；adapter 只能测量隔离内容，禁止读取 Stage/Preview Scene
   Entity DOM。页面渲染入口不得各自复制脚本作用域的加载、热重载与 dispose 竞态逻辑。
-- `@compose-ui/component-library` 是项目 Component Asset v1 的 Store、继承/Apply/Revert 领域操作与
+- `@compose-ui/component-library` 是项目 Component Asset v2 的 Store、继承/Apply/Revert 领域操作与
   混合组件目录，可依赖 `core`、`assets`、`component-registry`、`components` 和 `ui-context`，
   不得依赖 `editor`、`stage`、`scene-tree` 或 `asset-browser`；Registry Preset 仍是代码物料，
   Project Component/Variant 才是 Provider 资源。
@@ -86,12 +92,15 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `yoga-layout`；Yoga 类型、Node 与 WASM 指针不得进入公共 API。
 - `@compose-ui/animation` 是无 React、无 DOM 的场景动画领域包，只能依赖 `core`，不得依赖
   `editor`、`stage`、`preview`、`animation-panel` 或任何 UI Context。关键帧轨道存放在被动画
-  Entity 的 `Animation` Component 上，文档只在 `ComposeDocument.animations` 保留动画清单；
-  core 不认识该 Component，轨道级校验需要宿主主动调用本包的校验入口。命令 handler 通过
+  Entity 的 `Animation` Component 上，动画清单挂在**所属 Frame** 的 `Animations` Component
+  上（`items` 是会话镜像，`source` 是指向动画文件的稳定引用）；core 不认识这两个 Component，
+  轨道级校验需要宿主主动调用本包的校验入口。清单级命令（create/delete/configure）必须显式
+  传 `frameId`，handler 不接受回退到「第一个根 Frame」。跨 Frame 拖拽用
+  `animation.tracks.relocate` 在同一次事务里搬迁轨道，且该命令 MUST 排在结构变更之前——
+  源 Frame 由 Entity 当前层级反查，结构先动就会退化成 noop。命令 handler 通过
   `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。本包还定义动画文件
-  协议（`.animation.json`，只存清单与变量绑定，不存轨道）：文件是静态权威，页面在
-  `ComposePageFile.animation` 持有稳定引用，编辑器打开页面时把清单水合进文档镜像、
-  保存时回写文件；解除引用不删除文件资源。
+  协议（`.animation.json`，只存清单与变量绑定，不存轨道）：文件是静态权威，编辑器打开页面时
+  把清单水合进 Frame 镜像、保存时回写文件；解除引用不删除文件资源。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`script-runtime`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。

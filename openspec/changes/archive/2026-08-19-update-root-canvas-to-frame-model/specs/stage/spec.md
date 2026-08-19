@@ -12,13 +12,13 @@ Stage MUST 在当前活动 Frame 的局部原点显示固定屏幕尺寸、Godot
 带 Hierarchy 的 Container Entity MUST 可以嵌套、旋转，并按 Clip 裁剪或显示溢出；嵌套 Frame MUST
 按自身边界裁剪并建立独立局部原点；Frame 边界不得限制无限 Stage 中的编辑和滚动范围。
 
-#### Scenario: 编辑 Frame 边界外的 Entity
+#### Scenario: 编辑输出边界外的根 Entity
 
 - **WHEN** 某 Entity 被移动到其所属 Frame 的边界外
 - **THEN** Stage 仍渲染、选择、移动和 resize 该 Entity
 - **AND** Frame 区域只作为网格之上、Entity 之下的检查目标，不阻止边界外编辑
 
-#### Scenario: 检查透明 Frame 区域
+#### Scenario: 检查透明输出区域
 
 - **WHEN** 用户点击某 Frame 中没有子级 Entity 覆盖的区域
 - **THEN** Stage 选中该 Frame Entity 并在 Inspector 显示其属性
@@ -26,7 +26,7 @@ Stage MUST 在当前活动 Frame 的局部原点显示固定屏幕尺寸、Godot
 - **AND** 未选中时四边使用同一主题中性色且不与 X/Y 轴混淆，选中时四边统一使用强调色
 - **AND** 原点标记在连续 X/Y 轴之后按 Godot `EditorPosition` 的双填充路径和精确颜色绘制
 
-#### Scenario: 渲染嵌套 Frame 与 Container 裁剪
+#### Scenario: 渲染嵌套 Container 裁剪
 
 - **WHEN** 嵌套 Container 切换 Clip.enabled，或场景中存在嵌套 Frame
 - **THEN** Stage 对越界后代切换 hidden/visible overflow，嵌套 Frame 始终按自身边界裁剪
@@ -38,7 +38,7 @@ ComposeStage MUST 在每个 Frame 的边界内渲染其 `Appearance.backgroundPa
 Frame 背景 MUST 参与 Frame Entity 自身的选中与 Paint edit/sample session，MUST NOT 被其后代
 Entity 的命中测试吞掉。
 
-#### Scenario: 编辑渐变 Frame 背景
+#### Scenario: 编辑渐变输出背景
 
 - **WHEN** Frame Inspector 提交合法的 Gradient Paint
 - **THEN** Stage 在下一文档快照显示对应 Frame 渐变

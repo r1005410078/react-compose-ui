@@ -7,7 +7,7 @@ Frame 的尺寸、结构化背景 Paint、页面脚本与动画绑定。Frame MU
 中；Editor MUST NOT 保留任何不进入文档的 output inspection 会话目标。Frame 背景 MUST 使用既有
 `paint` 属性编辑器。
 
-#### Scenario: 选中 Frame 并编辑背景 Paint
+#### Scenario: 点击输出并编辑背景 Paint
 
 - **WHEN** 用户点击 Stage 中某 Frame 的空白区域，并把背景从 Solid 改为任一合法 Gradient
 - **THEN** 右侧显示 Frame Inspector，且每次确认只提交一个可逆的 Entity Appearance 事务
@@ -19,7 +19,7 @@ Frame 的尺寸、结构化背景 Paint、页面脚本与动画绑定。Frame MU
 - **THEN** Inspector 一次更新该 Frame 的宽高并提交一个事务
 - **AND** 用户仍可输入任意合法自定义尺寸
 
-#### Scenario: 分离 Frame 属性与编辑辅助设置
+#### Scenario: 分离输出与编辑辅助设置
 
 - **WHEN** 用户打开工具栏画布设置
 - **THEN** 弹层只显示网格与吸附设置
@@ -34,12 +34,12 @@ Frame 的尺寸、结构化背景 Paint、页面脚本与动画绑定。Frame MU
 
 Frame Inspector MUST 将 Frame 尺寸显示为 Map 属性：左侧 Key 只能选择“常见尺寸”或“自定义尺寸”；右侧 Value 在“常见尺寸”时显示六个桌面分辨率，在“自定义尺寸”时显示紧凑 Size W/H。Frame 背景 MUST 显示为 Color 属性。Key 是 Inspector 本地瞬时状态，不得写入 ComposeDocument。Frame Inspector MUST 使用与当前受控 value 无关的固定默认 Frame 尺寸作为重置基线，MUST NOT 把当前 value 作为 `defaultValue` 传入 Property Panel。
 
-#### Scenario: 在 Frame Map 的常见尺寸 Value 选择分辨率
+#### Scenario: 在 Canvas Map 的常见尺寸 Value 选择分辨率
 - **WHEN** 用户将左列 Key 选择为“常见尺寸”，并在右侧 Value 选择 1280×720、1366×768、1440×900、1920×1080、2560×1440 或 3840×2160
 - **THEN** 该 Frame 的 W/H 同步为该分辨率且不显示自定义 W/H 属性
 - **AND** 系统只提交一次可逆事务
 
-#### Scenario: 选择并编辑自定义 Frame Size
+#### Scenario: 选择并编辑自定义 Canvas Size
 - **WHEN** 用户将左列 Key 选择为“自定义尺寸”
 - **THEN** 同一 property row 的右侧 Value 显示当前 Frame W/H
 - **AND** 系统不派发事务
@@ -47,11 +47,11 @@ Frame Inspector MUST 将 Frame 尺寸显示为 Map 属性：左侧 Key 只能选
 - **THEN** 系统只提交一次可逆事务，尺寸匹配常见分辨率时 Key 自动回到“常见尺寸”，否则保持“自定义尺寸”
 - **AND** 无效草稿不改写 Frame；Undo/Redo 或宿主外部 W/H 更新后，Inspector 依据当前尺寸重新选择 Key/Value 并保持该 Frame 选中
 
-#### Scenario: 编辑 Frame 背景 Color
+#### Scenario: 编辑 Canvas Color
 - **WHEN** 用户通过 Color Picker 选择 Frame 背景颜色
 - **THEN** Color 行不显示 CSS 字符串，并以一次可逆事务提交有效颜色
 
-#### Scenario: 重置 Frame 背景
+#### Scenario: 重置 Canvas 输出背景
 - **WHEN** 当前 Frame 背景与默认 Frame 背景不同
 - **THEN** 背景属性行显示重置动作
 - **AND** 执行重置以一次可逆事务把背景恢复为默认值

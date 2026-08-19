@@ -50,14 +50,21 @@ TBD - created by archiving change add-scene-animation-model. Update Purpose afte
 
 包 MUST 导出对整份文档的动画校验入口，并以稳定机器码报告问题。校验 MUST 覆盖轨道路径非空、
 同一动画分组内路径不重复、关键帧时间在所属动画 `[0, durationMs]` 内、同一轨道内关键帧时间
-不重复且升序、关键帧值形状与 `valueKind` 一致、插值与空间切线形状合法，以及 Component 中
-存在文档清单里没有的动画分组。命令 handler MUST 在写入前校验自己的输入并拒绝非法命令。
-采样器遇到非法数据 MUST 静默跳过而不是抛错。
+不重复且升序、关键帧值形状与 `valueKind` 一致、插值与空间切线形状合法、Entity 的动画分组存在于
+其所属 Frame 的 `Animations` 清单中，以及轨道所属 Entity 与清单所属 Frame 之间不跨越任何嵌套
+Frame 边界。命令 handler MUST 在写入前校验自己的输入并拒绝非法命令。采样器遇到非法数据 MUST
+静默跳过而不是抛错。
 
 #### Scenario: 同一轨道出现重复时间
 
 - **WHEN** 一条轨道内两个关键帧的 `timeMs` 相同
 - **THEN** 校验报告 `keyframe.duplicate-time`，问题路径定位到该 Entity 该轨道
+
+#### Scenario: 轨道跨越 Frame 边界
+
+- **WHEN** 某 Entity 被移动进一个嵌套 Frame，但其轨道仍属于外层 Frame 的动画分组
+- **THEN** 校验报告稳定的跨 Frame issue，路径定位到该 Entity、该分组与边界 Frame
+- **AND** 采样器跳过该轨道而不抛错
 
 #### Scenario: 关键帧值与 valueKind 不符
 
@@ -71,8 +78,8 @@ TBD - created by archiving change add-scene-animation-model. Update Purpose afte
 
 #### Scenario: 悬空动画分组
 
-- **WHEN** 某 Entity 的 `Animation` Component 中存在文档清单里不存在的动画 ID 分组
-- **THEN** 校验报告悬空分组，但采样与命令不因此失败
+- **WHEN** Entity 的 `Animation` 引用了其所属 Frame `Animations` 清单中不存在的分组 id
+- **THEN** 校验报告悬空分组并定位到该 Entity 与分组 id，但采样与命令不因此失败
 
 #### Scenario: 坏数据不让采样崩溃
 
@@ -163,4 +170,115 @@ TBD - created by archiving change add-scene-animation-model. Update Purpose afte
 - **WHEN** 三个 Entity 都参与了某条动画，用户删除该动画
 - **THEN** 文档清单中该条消失，三个 Entity 的 `Animation` Component 中对应分组一并移除
 - **AND** 分组清空后 `Animation` Component 本身被移除，不留空壳
+
+### Requirement: 动画清单归属 Frame
+
+`@compose-ui/animation` MUST 把动画清单读写在 Frame Entity 的 `Animations` Component 上，
+MUST NOT 依赖任何文档级 `animations` 字段。一条动画 MUST 只属于一个 Frame，其轨道 MUST 只能
+寻址该 Frame 内、且不跨越任何嵌套 Frame 边界的 Entity。包 MUST 导出「给定 Entity 求其所属 Frame」
+的纯函数供命令与校验共用。
+
+#### Scenario: 组件 Frame 拥有独立动画
+
+- **WHEN** 用户在组件文档的根 Frame 上创建动画并为其后代打关键帧
+- **THEN** 清单写入该 Frame 的 `Animations`，轨道写入对应后代的 `Animation`
+- **AND** 宿主页面的根 Frame 清单不发生任何变化
+
+#### Scenario: 求 Entity 所属 Frame
+
+- **WHEN** 对一个位于嵌套 Frame 内三层深处的 Entity 调用所属 Frame 求解
+- **THEN** 返回最近的祖先 Frame，而不是文档的根 Frame
+
+### Requirement: 嵌套 Frame 只暴露播放控制
+
+宿主 Frame MUST NOT 对嵌套 Frame（组件实例、Page Slot）内部的 Entity 建立轨道或写入关键帧。
+宿主对嵌套 Frame 的唯一动画能力 MUST 是播放控制：play、pause、seek 与播放模式。命令 handler
+MUST 在写入前拒绝任何指向嵌套 Frame 内部的轨道命令，并返回稳定 issue。
+
+#### Scenario: 拒绝对实例内部打关键帧
+
+- **WHEN** 用户下钻进组件实例内部并尝试为某个内部 Entity 建立轨道
+- **THEN** 命令被拒绝并返回稳定 issue
+- **AND** 宿主文档与撤销历史不发生变化
+
+#### Scenario: 控制嵌套播放
+
+- **WHEN** 宿主对某个组件实例发出 seek 到 200 ms
+- **THEN** 该实例内部按其自身动画在 200 ms 采样
+- **AND** 宿主 Frame 的播放头不受影响
+
+### Requirement: 跨 Frame 轨道重定位命令
+
+`@compose-ui/animation` MUST 导出轨道重定位命令，把一个 Entity 及其后代携带的轨道从源 Frame
+的动画分组搬迁到目标 Frame。命令 MUST 保持关键帧的 `timeMs`、值、插值与空间切线逐字段不变，
+MUST 在目标 Frame 缺少对应动画时按源动画的名称、`durationMs` 与播放模式创建一条新动画，
+并 MUST 在目标 Frame 已存在同名动画时要求宿主显式给出目标分组 id 而不是静默合并。命令 MUST
+可与结构变更组成单个事务，并 MUST 在撤销时同时还原两侧 Frame 的清单与轨道。
+
+#### Scenario: 搬迁到没有对应动画的 Frame
+
+- **WHEN** 宿主把一个携带 `位置` 轨道的 Entity 从 Frame A 搬到 Frame B，B 没有同名动画
+- **THEN** B 的 `Animations` 新增一条继承 A 源动画名称、时长与播放模式的动画，轨道挂在该分组下
+- **AND** 关键帧的时间、值、插值与空间切线与搬迁前逐字段相同
+
+#### Scenario: 目标存在同名动画时要求显式分组
+
+- **WHEN** 目标 Frame 已存在与源动画同名的动画且宿主未指定目标分组 id
+- **THEN** 命令返回稳定 issue 要求显式选择或新建分组
+- **AND** 两侧 Frame 的清单与轨道均未被修改
+
+#### Scenario: 搬迁与结构变更共享撤销
+
+- **WHEN** 宿主把重定位命令与重设父级命令组成一个事务并撤销
+- **THEN** Entity 归属、源 Frame 清单、目标 Frame 清单与全部轨道一并还原
+- **AND** 撤销历史中只出现一个条目
+
+### Requirement: 动画文件格式
+
+`@compose-ui/animation` MUST 提供 Compose Animation 文件协议：文件只包含动画清单与
+变量绑定（id、名称、时长、播放模式、bindings），MUST NOT 包含关键帧轨道——轨道仍存放
+在被动画 Entity 的 `Animation` Component 上。包 MUST 导出文件后缀与 media type 常量、
+按名称后缀识别动画文件的谓词、issue 式解析入口、序列化入口与默认文件构造器；解析 MUST
+拒绝未知版本、非法形状与非法清单并报告结构化 issue，序列化与解析 MUST 可无损往返。
+动画文件是静态权威：宿主打开页面时把清单水合进所属 Frame `Animations.items` 会话镜像，
+保存时把镜像变化回写文件；本协议保持无 React、无 DOM，仅依赖 core。
+
+#### Scenario: 序列化与解析往返
+
+- **WHEN** 宿主用清单与绑定构造动画文件并序列化后再解析
+- **THEN** 解析结果与原始清单逐字段相等且没有 issue
+
+#### Scenario: 拒绝非法动画文件
+
+- **WHEN** 解析入口收到未知版本、缺失清单或清单字段非法的内容
+- **THEN** 返回结构化 issue 而不抛出异常，也不产生部分解析结果
+
+#### Scenario: 按名称识别动画文件
+
+- **WHEN** 宿主用文件名谓词过滤资源目录
+- **THEN** 只有携带动画文件后缀的条目被识别为动画文件，无需 Provider 理解 media type
+
+### Requirement: Frame 动画关联写入
+
+Frame MUST 支持可选的动画稳定资源引用：`Animations.source` 保存 providerId、assetKey 与
+scope。解析 MUST 容忍字段缺失并归一化为 null，非 null 时 MUST 校验引用形状。宿主 MUST 能以
+关联、更换和解除三种操作原子改写该引用；实现 MUST NOT 解析动画文件内容、MUST NOT 根据文件名
+隐式猜测动画关系，也 MUST NOT 因解除引用自动删除动画资源。
+
+#### Scenario: 旧文档容缺解析
+
+- **WHEN** 解析一个 `Animations` 不含 `source` 的既有文档
+- **THEN** 解析成功且动画引用归一化为 null，清单与轨道不受影响
+
+#### Scenario: 关联稳定动画引用
+
+- **WHEN** 宿主把一个可引用动画文件关联到某个 Frame
+- **THEN** `Animations.source` 写入其 providerId、assetKey 与持久性 scope
+- **AND** 动画文件随后重命名或移动不改变该关联
+
+#### Scenario: 解除动画不删除资源
+
+- **WHEN** 用户解除某 Frame 当前的动画引用
+- **THEN** `Animations.source` 被清空且轨道保持不变
+- **AND** 原动画文件仍由 Asset Provider 保留
 

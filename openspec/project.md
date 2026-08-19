@@ -58,7 +58,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/component-registry` 是实例级 Entity Registry 与 Renderer measurement adapter，统一
   Renderer、Component Definition、Entity Preset 与 Capability，依赖 core、assets 与 script-runtime，以 React 为
   peer，不依赖 editor 或 property-panel；测量禁止读取 Scene Entity DOM。
-- `@compose-ui/component-library` 管理 Project Component/Variant 的 Component Asset v1 Store、解析、
+- `@compose-ui/component-library` 管理 Project Component/Variant 的 Component Asset v2 Store、解析、
   Apply/Revert 与混合目录；可依赖 core、assets、component-registry、components、ui-context，不依赖
   editor、stage、scene-tree 或 asset-browser。Registry Preset 继续代表代码物料，不是项目资源。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面目录、页面聚合 Store 与 `app.json` 应用清单读写包，
@@ -69,8 +69,10 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   LayoutSnapshot 和测量端口协议，Yoga/WASM 实现不得泄漏到公共 API。
 - `@compose-ui/animation` 是无 React、无 DOM 的场景动画领域包，只依赖 core，不依赖 editor、
   stage、preview、animation-panel 或任何 UI Context。关键帧轨道存放在被动画 Entity 的
-  `Animation` Component 上，文档只在 `ComposeDocument.animations` 保留动画清单；core 不认识
-  该 Component，轨道级校验需要宿主主动调用包内校验入口。动画命令通过
+  `Animation` Component 上，动画清单挂在所属 Frame 的 `Animations` Component 上（`items` 是
+  会话镜像，`source` 是动画文件的稳定引用）；core 不认识这两个 Component，轨道级校验需要
+  宿主主动调用包内校验入口。清单级命令必须显式传 `frameId`；跨 Frame 拖拽用
+  `animation.tracks.relocate` 搬迁轨道，且必须排在结构变更之前。动画命令通过
   `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、script-runtime、stage-engine、
@@ -196,19 +198,23 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 ## Domain Context
 
 - 目标用户需要在客户现场快速调整数据大屏，编辑器必须能嵌入现有 React 宿主。
-- 当前仓库只支持 `ComposeDocument v6`：隐式自由 Canvas 根、统一 ECS Entity/Component 组合、
+- 当前仓库只支持 `ComposeDocument v7`：显式 Frame 根、统一 ECS Entity/Component 组合、
   `Transform` rotation、`LayoutItem` Fixed/Fill/Hug 与 `Hierarchy + Layout` Auto Layout、
   `Hierarchy` 容器、`Renderer` 内容、同步命令事务、Entity Registry、Godot 风格无限 Stage、
-  聚合 Inspector、controller 默认工作区、文档/Container Preview、事务/会话历史和
+  聚合 Inspector、controller 默认工作区、Frame Preview、事务/会话历史和
   Group/Container/Rectangle/Text/Image/SVG/ECharts、页面聚合、setup Props 绑定与项目组件/Variant
-  纵向流程。项目组件采用独立 Component Asset v1，不升级 ComposeDocument。
+  纵向流程。项目组件采用独立 Component Asset v2，页面文件为 `ComposePageFile 2`。
+- Frame 是加在容器 Entity 上的 Component，不是新的 Entity 类型；它同时是坐标原点、独立布局
+  Runtime、裁剪、动画时间线、脚本作用域与预览/导出单位这六重边界。`Frame ⇒ Hierarchy`，
+  Frame 不接受 Hug，尺寸事实来源是 `Frame.size`。
 - Hug container 由 Flow children、padding、gap 与 border 决定；Hug leaf 通过 Registry measurement
   definition 同步读取缓存，并以可选 prepare/subscribe 处理字体、资源和页面 revision。测量缓存、
   diagnostics 与 Yoga 树只增加 LayoutSnapshot revision，不属于文档、事务或历史。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
-  surface 尺寸和动态滚动范围是会话状态。`document.output` 定义固定原点输出边界；Preview
-  接受 v6 并忽略 canvas 编辑元数据。v5 只允许显式单向迁移；output 默认透明；Stage 输出边界可作为独立 Canvas
-  Inspector 会话目标，但不进入 Entity 选择或 SceneTree。
+  surface 尺寸和动态滚动范围是会话状态。输出边界由根 Frame 自身的 `Frame.size` 定义，背景是
+  它的 `Appearance.backgroundPaint`（默认透明）；Preview 接受 v7、渲染目标是**一块 Frame**，
+  并忽略 canvas 编辑元数据。v5、v6 只允许显式单向迁移。画板是普通 Entity：它进入 Entity 选择
+  与 SceneTree，选中即打开 Frame Inspector。
 - 每个场景 Entity 必须拥有 `Composition`、`Transform`、`LayoutItem`、`Visibility`、`Lock`，并至少拥有
   `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法
   Component 保留并由 Registry 边界降级。

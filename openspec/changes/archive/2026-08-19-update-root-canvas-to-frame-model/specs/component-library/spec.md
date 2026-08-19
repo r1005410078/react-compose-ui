@@ -14,11 +14,11 @@
 - **THEN** 返回对应判别分支及稳定引用所需字段
 - **AND** 不访问 Provider 或解析父链
 
-#### Scenario: 要求单个 Frame 根
+#### Scenario: 接受非 Group 单根
 
-- **WHEN** Base 文档的唯一根拥有 `Frame` Component
+- **WHEN** Base 文档的唯一根是 Container 或其他任意 Entity，且拥有 `Frame` Component
 - **THEN** Parser 接受该文档
-- **AND** 多根文档以及根不是 Frame 的文档被拒绝并返回稳定 issue
+- **AND** 多根文档，以及根缺少 `Frame` Component 的文档，被拒绝并返回稳定 issue
 
 #### Scenario: v1 到 v2 显式迁移
 

@@ -32,18 +32,18 @@ Dockview 工具组中动态加入并激活时间线面板，并展开底部组�
 
 ### Requirement: 画布动画绑定属性
 
-活动页面的默认 Canvas Inspector MUST 在「页面脚本」分组下方显示「动画」分组：它 MUST 是
+活动页面默认 Frame 的 Inspector MUST 在「页面脚本」分组下方显示「动画」分组：它 MUST 是
 共享 Property Panel Root 中的一个 Section，动画文件是嵌入该 Root 的标准属性字段行，
 MUST NOT 引入第二个属性工具栏、独立分组 chrome 或嵌套的独立属性面板。分组列出页面同目录
 中拥有稳定 assetKey 的动画文件供绑定，支持更换与取消关联，并在可写 Provider 上通过分组
 标题行动作提供按页面名快捷创建入口。创建 MUST 生成动画文件资产并默认绑定到当前页面。
 已绑定时该分组 MUST 以属性面板既有的绑定入口提供播放控制变量绑定编辑，复用页面 setup
-返回作用域的成员作为绑定候选。绑定、更换、取消关联与创建是资源与页面包装写入，MUST NOT
-进入撤销历史；取消关联 MUST NOT 删除动画文件资源。
+返回作用域的成员作为绑定候选。绑定引用保存在该 Frame `Animations.source` 上，绑定、更换、取消关联与创建是资源写入，
+MUST NOT 进入撤销历史；取消关联 MUST NOT 删除动画文件资源。
 
 #### Scenario: 未绑定页面选择或快捷创建动画
 
-- **WHEN** 活动页面没有绑定动画且用户查看 Canvas Inspector
+- **WHEN** 活动页面没有绑定动画且用户选中其默认 Frame
 - **THEN** 动画属性列出页面同目录中拥有稳定 assetKey 的动画文件供选择
 - **AND** 可写 Provider 提供按页面名快捷创建入口，创建成功后自动绑定并水合会话镜像
 
@@ -56,7 +56,7 @@ MUST NOT 引入第二个属性工具栏、独立分组 chrome 或嵌套的独立
 #### Scenario: 取消关联不删除资源
 
 - **WHEN** 用户取消页面当前动画绑定
-- **THEN** 页面包装保存 null，动画文件仍由 Asset Provider 保留
+- **THEN** 该 Frame 的 `Animations.source` 被清空，动画文件仍由 Asset Provider 保留
 - **AND** 会话镜像中的动画清单被移除，时间线回到创建引导
 
 ### Requirement: 运动路径以物体中心为锚
@@ -78,21 +78,21 @@ MUST NOT 引入第二个属性工具栏、独立分组 chrome 或嵌套的独立
 
 ## MODIFIED Requirements
 
-### Requirement: 页面脚本作为 Canvas Inspector 属性
+### Requirement: 页面脚本作为 Frame Inspector 属性
 
-活动页面的默认 Canvas Inspector MUST 将页面 setup 显示为与输出属性共用同一个
+活动页面默认 Frame 的 Inspector MUST 将页面 setup 显示为与 Frame 尺寸、背景共用同一个
 Property Panel Root 的「页面脚本」Section：脚本文件是嵌入该 Root 的标准属性字段行，
 返回成员是贴边整行的自定义属性字段，重新加载、快捷创建与更多操作位于 Section 标题行
 动作槽；MUST NOT 再自带独立分组 chrome、第二个属性工具栏或嵌套的独立属性面板。
-该属性 MUST 只由 Editor 组合页面、资源和 Script Runtime 语义，不得下沉到 Property Panel
-或 Asset Browser 包。
+该属性 MUST 只在拥有页面 setup 归属的 Frame 上出现，MUST 只由 Editor 组合页面、资源和
+Script Runtime 语义，不得下沉到 Property Panel 或 Asset Browser 包。
 
 #### Scenario: 未关联页面选择或快捷创建脚本
 
-- **WHEN** 活动页面没有 setupScript 且用户查看 Canvas Inspector
+- **WHEN** 活动页面没有 setupScript 且用户选中其默认 Frame
 - **THEN** 脚本文件字段列出页面同目录中拥有稳定 assetKey 的 `.setup.js` 文件供选择
 - **AND** 可写 Provider 在分组标题行提供按页面名快捷创建入口，创建成功后自动关联并打开脚本标签
-- **AND** 页面输出、场景文档与事务历史保持不变
+- **AND** 页面文档与事务历史保持不变
 
 #### Scenario: 已关联页面查看和管理脚本
 
@@ -103,13 +103,13 @@ Property Panel Root 的「页面脚本」Section：脚本文件是嵌入该 Root
 
 #### Scenario: 页面与 Inspector 目标切换
 
-- **WHEN** 用户在页面标签、Canvas 输出和 Entity Inspector 目标之间切换
-- **THEN** 页面脚本分组只显示活动页面实例的数据并且只出现在 Canvas Inspector
+- **WHEN** 用户在页面标签、默认 Frame 与其它 Entity Inspector 目标之间切换
+- **THEN** 页面脚本分组只显示活动页面实例的数据并且只出现在默认 Frame 的 Inspector
 - **AND** 默认 Inspector 始终只有一个属性搜索工具栏
 
 #### Scenario: 页面脚本属性视觉状态
 
-- **WHEN** 用户在深色工作区打开已关联 setup 的 Canvas Inspector
+- **WHEN** 用户在深色工作区打开已关联 setup 的默认 Frame Inspector
 - **THEN** 页面脚本以共享 Root 的可折叠分组显示，样式与其它属性分组一致，标题行提供
   重新加载脚本按钮且低频操作位于更多菜单
 - **AND** 返回成员以紧凑列表显示类型徽标、名称与最终值，不重复显示 method 类别
@@ -117,17 +117,30 @@ Property Panel Root 的「页面脚本」Section：脚本文件是嵌入该 Root
 
 ### Requirement: 动画模式
 
-页面文档工具栏的模式切换器切到「动画」时，编辑器 MUST 进入动画模式；切回「设计」、激活
-底部工具组的其它标签或折叠底部组时 MUST 退出。动画模式下画布、属性面板与预览 MUST 显示
-当前播放头时刻的采样文档，而所有编辑命令 MUST 仍然派发到基础文档。播放头、播放状态、
-自动记录开关与动画选择 MUST 是编辑器会话状态，MUST NOT 写入文档或撤销历史。
+页面文档工具栏的模式切换器切到「动画」时，编辑器 MUST 进入动画模式；切回「设计」时
+MUST 退出。动画模式 MUST 以当前活动 Frame 为作用域：时间线显示该 Frame `Animations` 清单中的
+动画，属性面板打点只作用于该 Frame 内的 Entity。组件文档工作区 MUST 同样支持动画模式，作用域
+为组件的根 Frame。动画模式下画布、属性面板与预览 MUST 显示当前播放头时刻的采样文档，而所有
+编辑命令 MUST 仍然派发到基础文档。播放头、播放状态、自动记录开关与动画选择 MUST 是编辑器会话
+状态，MUST NOT 写入文档或撤销历史。
 
 #### Scenario: 进入与退出动画模式
 
 - **WHEN** 用户在页面文档工具栏把模式切换到「动画」
-- **THEN** 编辑器进入动画模式，时间线显示当前文档的动画
+- **THEN** 编辑器进入动画模式，时间线显示当前活动 Frame 的动画
 - **WHEN** 用户把模式切换回「设计」
 - **THEN** 编辑器退出动画模式，画布恢复显示基础文档
+
+#### Scenario: 组件文档的动画模式
+
+- **WHEN** 用户在组件工作区打开动画模式
+- **THEN** 时间线显示组件根 Frame 的动画，打点写入该组件文档
+- **AND** 宿主页面文档不发生任何变化
+
+#### Scenario: 切换活动 Frame 更新时间线
+
+- **WHEN** 用户在多画板文档中把活动 Frame 从 A 切换到 B
+- **THEN** 时间线切换为 B 的动画清单，播放头重置为 B 的会话状态
 
 #### Scenario: 播放头驱动画布
 
@@ -142,25 +155,25 @@ Property Panel Root 的「页面脚本」Section：脚本文件是嵌入该 Root
 
 ### Requirement: 空动画的创建引导
 
-页面还没有绑定动画时，时间线 MUST 显示空状态而不是演示数据，并提供一个本地化的创建入口：
-触发创建 MUST 生成动画文件资产、绑定到当前页面并把清单水合进文档镜像；文件创建与绑定是
-资源与页面包装写入，不进入撤销历史，镜像水合 MUST 是可撤销事务。页面已绑定动画但会话
-镜像缺失（如撤销越过水合事务）时，空状态 MUST 改为提供「载入绑定动画」入口，只重新派发
+当前活动 Frame 还没有绑定动画时，时间线 MUST 显示空状态而不是演示数据，并提供一个本地化的
+创建入口：触发创建 MUST 生成动画文件资产、写入该 Frame 的 `Animations.source` 并把清单水合进
+`Animations.items` 会话镜像；文件创建与绑定是资源写入，不进入撤销历史，镜像水合 MUST 是
+可撤销事务。Frame 已绑定动画但会话镜像缺失（如撤销越过水合事务）时，空状态 MUST 改为提供「载入绑定动画」入口，只重新派发
 水合事务而不重复创建文件。创建或载入完成后 MUST 自动选中该动画，时间线切换到正常状态；
 已绑定动画即使没有任何轨道也 MUST 显示正常时间线而非创建引导。空状态 MUST NOT 显示播放
 控件、标尺以外的关键帧交互或任何占位轨道。
 
-#### Scenario: 未绑定页面进入动画模式
+#### Scenario: 初始页面打开动画标签
 
-- **WHEN** 用户在一个没有绑定动画的页面上切换到动画模式
+- **WHEN** 用户在一个活动 Frame 没有绑定动画的页面上切换到动画模式
 - **THEN** 时间线显示空状态与创建入口，不显示任何演示轨道
 - **AND** 属性面板不显示动画检查器
 
-#### Scenario: 创建第一条动画生成文件并绑定
+#### Scenario: 创建第一条动画
 
 - **WHEN** 用户在空状态下触发创建
-- **THEN** 页面同目录新增动画文件资产，页面包装写入其稳定引用
-- **AND** 文档镜像新增该动画清单，时间线退出空状态并选中它
+- **THEN** 页面同目录新增动画文件资产，该 Frame 的 `Animations.source` 写入其稳定引用
+- **AND** `Animations.items` 新增该动画清单，时间线退出空状态并选中它
 
 #### Scenario: 撤销越过水合事务后重新载入
 
@@ -171,5 +184,5 @@ Property Panel Root 的「页面脚本」Section：脚本文件是嵌入该 Root
 
 #### Scenario: 已绑定零轨道显示正常时间线
 
-- **WHEN** 页面绑定的动画还没有任何轨道
+- **WHEN** 该 Frame 绑定的动画还没有任何轨道
 - **THEN** 时间线显示正常状态与本地化的无轨道提示，不显示创建引导

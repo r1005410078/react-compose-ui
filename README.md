@@ -30,7 +30,7 @@ React 与 ReactDOM 由宿主提供。仓库开发阶段不要假设 npm 中已�
 ## 快速开始
 
 ```tsx
-import { createDefaultCanvasSettings, createDefaultOutputSettings } from '@compose-ui/core'
+import { createComposeFrameEntity, createDefaultCanvasSettings } from '@compose-ui/core'
 import { createTransactionRuntime, type ComposeDocument } from '@compose-ui/core'
 import { ComposeEditor, useComposeEditorController } from '@compose-ui/editor'
 import { createComposeBasicMaterials } from '@compose-ui/materials'
@@ -38,12 +38,14 @@ import { ComposePreview } from '@compose-ui/preview'
 import { useMemo } from 'react'
 import '@compose-ui/editor/styles.css'
 
+// 文档根只接受 Frame（画板）；空文档也至少有一块画板。
 const document: ComposeDocument = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   canvas: createDefaultCanvasSettings(),
-  output: createDefaultOutputSettings(),
-  rootIds: [],
-  entities: {},
+  rootIds: ['frame-root'],
+  entities: {
+    'frame-root': createComposeFrameEntity({ id: 'frame-root', name: '画板' }),
+  },
 }
 
 export function ComposePage() {
@@ -67,22 +69,24 @@ export function ComposePage() {
 内部实现；面板对象、布局 JSON、选择、viewport 和临时交互状态都不会写入文档。
 
 使用 `ComposePreviewDialog` 时，宿主还必须导入 `@compose-ui/preview/styles.css`；Dialog 以受控
-`open`/`onOpenChange` 组合 `ComposePreview`，可选 `containerId` 用于在完整文档与指定容器之间切换。
+`open`/`onOpenChange` 组合 `ComposePreview`，可选 `selectedFrameId` 用于在默认画板与当前选区
+所属画板之间切换。`ComposePreview` 的渲染目标是**一块 Frame**：`frameId` 指定目标，
+`defaultFrameId` 只承担回退职责，`fit`/`alignment` 决定这块画板如何放进宿主盒子——它们是宿主
+呈现参数，不写进文档。
 
 viewport 是编辑器会话状态里变化最频繁的一项：一次平移手势每帧都会更新它。为了让平移不牵动
 场景树与 Inspector，它存放在外部状态源中——`controller.viewport` 读取始终返回最新快照，但读取
 它的组件不会因平移自动重渲。默认工作区的画布与工具栏已内建订阅；自己渲染 `ComposeStage` 或
 需要显示缩放读数的宿主，用 `useComposeStageViewport(controller)` 订阅。
 
-## ComposeDocument v6 与 Auto Layout
+## ComposeDocument v7、Frame 与 Auto Layout
 
 文档只保存严格 JSON：
 
 ```ts
 interface ComposeDocument {
-  readonly schemaVersion: 6
+  readonly schemaVersion: 7
   readonly canvas: ComposeCanvasSettings
-  readonly output: ComposeOutputSettings
   readonly rootIds: readonly string[]
   readonly entities: Readonly<Record<string, ComposeEntity>>
 }
@@ -93,12 +97,22 @@ interface ComposeEntity {
   readonly components: Readonly<Record<string, JsonObject>>
 }
 
-interface ComposeOutputSettings {
-  readonly width: number
-  readonly height: number
-  readonly backgroundPaint: ComposePaint
+/** 画板：加在任意容器 Entity 上的 Component，不是新的 Entity 类型。 */
+interface ComposeFrame {
+  readonly size: ComposeSize
+  readonly guides?: readonly ComposeFrameGuide[]
 }
 ```
+
+**Frame 是唯一的输出与嵌套单位。** v6 的隐式 Canvas 根与 `document.output` 已删除：
+`rootIds` 只接受 Frame，画板本身就是场景里一个可选中、可命名、可放进别的画板的普通 Entity。
+Frame 同时是六重隔离边界——坐标原点、独立 Yoga 布局 Runtime、裁剪、动画时间线、脚本作用域、
+预览/导出单位。一句话记住它：**Frame 里面是一个独立的小世界。**
+
+`Frame ⇒ Hierarchy`：画板必然是容器；Frame 不接受 Hug 尺寸，尺寸的事实来源是 `Frame.size`
+（`LayoutItem` 的固定尺寸只是布局求解的回退，由 `entity.frame.size.set` 同步）。
+把一个普通容器「升格」为画板就是给它加一个 `Frame` Component——Entity ID、子级与动画轨道
+全部原地保留，没有替换节点这回事。
 
 Component Key 强制 PascalCase，字段保持 camelCase。每个场景 Entity 必须拥有
 `Composition + Transform + LayoutItem + Visibility + Lock`，并至少拥有 `Renderer` 或 `Hierarchy`。
@@ -106,14 +120,16 @@ Component Key 强制 PascalCase，字段保持 camelCase。每个场景 Entity �
 
 `Hierarchy.childIds` 是唯一父子事实来源，`rootIds` 保存顶层顺序。`Composition` 记录 Preset
 基础项和已附加 Capability，使能力增删可以可靠保护基础数据。未知合法 Component 会被保留并
-降级展示。v5 不会被运行时隐式接受；宿主必须显式调用
-`migrateComposeDocumentV5ToV6()`，迁移成功后再保存 v6。没有 v6→v5 或双运行路径。
+降级展示。v5 与 v6 都不会被运行时隐式接受；宿主必须显式调用
+`migrateComposeDocumentV6ToV7()` 或 `migrateComposeDocumentV5ToV7()`，迁移成功后再保存 v7。
+迁移是纯函数且无损：旧的隐式根被包进一块新画板，`output` 的尺寸落到 `Frame.size`、背景落到
+该画板的 `Appearance.backgroundPaint`，`document.animations` 落到画板的 `Animations`，
+`canvas.guides` 恒等映射为 `Frame.guides`。没有 v7→v6 或双运行路径。
 
-输出背景使用结构化 `ComposePaint`：`solid`、`linear-gradient`、`radial-gradient` 和
-`angular-gradient` 都是同一字段的合法值。v5 的旧 `output.backgroundColor` 已移除，输入文档和
-`output.configure` 命令必须传入 `backgroundPaint`。Editor 的 Canvas Inspector 会在同一个紧凑
-Paint 面板中切换 Solid 与各类 Gradient；Stage/Preview 会渲染该输出背景，但不把它当作可编辑的
-Entity。
+画板背景使用结构化 `ComposePaint`：`solid`、`linear-gradient`、`radial-gradient` 和
+`angular-gradient` 都是同一字段的合法值，并且就是这个 Entity 自己的
+`Appearance.backgroundPaint`——不再有一份文档级的独立输出背景。Editor 的 Frame Inspector
+（选中画板即打开）会在同一个紧凑 Paint 面板中切换 Solid 与各类 Gradient。
 
 ## Registry、Preset 与能力
 
@@ -152,7 +168,7 @@ Component Key、基础项移除和带子项容器移除都会被阻止。Registr
 `ComposeLayoutSnapshot` 绝对定位 DOM，不再以 CSS Flex 或旧 Transform 作为第二布局路径。
 Hug 容器由 Flow 子项、padding、gap 与 border 决定；Hug 叶子通过 Registry 的同步
 `measurement.measure` 和可选异步 `prepare` 获取内容尺寸。Text 使用隔离离屏 host，Image、SVG
-与 Page Slot 分别订阅资源 revision、SVG intrinsic box 与页面 output。准备中或失败时使用
+与 Page Slot 分别订阅资源 revision、SVG intrinsic box 与被引用页面画板的尺寸。准备中或失败时使用
 `LayoutItem.value` 并发布 Snapshot diagnostic，资源恢复只增加 Snapshot revision，不进入文档事务。
 
 ## Group、项目组件与 Variant
@@ -163,7 +179,8 @@ Group 是独立于 Container 的结构 Entity：无 Renderer、Appearance、Clip
 普通 Container 不再可解除分组。
 
 项目组件使用 `application/vnd.compose-ui.component+json`、`.component.json` 和独立
-`Component Asset v1`，页面仍是 `ComposeDocument v6`。Base 保存单根文档，根可以是容器或任意 Entity；
+`Component Asset v2`，页面是 `ComposeDocument v7`。Base 保存单根文档，且根必须是 Frame——
+组件就是一块可复用的画板，`创建组件` 会把被复用的根隐式升格；
 Variant 保存直接父引用、稳定 ID 语义覆盖、applied lineage 与离线 resolved snapshot。同一链最多
 八层，只允许同 Provider/scope。
 
@@ -226,8 +243,10 @@ Clip 和 Renderer 语义，但不包含编辑 chrome。
 ## 页面系统
 
 页面文件是 `{ kind, pageSchemaVersion, document, setupScript }` 聚合，以 `.page.json` 后缀持久化；
-`document` 是画布对 JSX/template 的可视化表达，`setupScript` 是零或一个稳定资源引用。首页仍由
-资源根的 `app.json` 唯一表达。旧裸 v6 页面必须显式调用 `migrateLegacyComposePageFile()` 迁移。
+`document` 是画布对 JSX/template 的可视化表达，`setupScript` 是零或一个稳定资源引用，可选
+`defaultFrameId` 只承担预览默认目标与无选择时的回退，MUST NOT 覆盖显式选择。首页仍由
+资源根的 `app.json` 唯一表达。`pageSchemaVersion` 现为 `2`；旧页面文件必须显式迁移，
+运行时不隐式升级。
 `@compose-ui/pages` 提供无 React、无 DOM 的聚合 Store 与 Loader。
 
 setup 是受信任的同 Realm、自包含 JavaScript ESM，不经过编译，也不是安全沙箱：
@@ -310,15 +329,17 @@ bun run test:e2e
 作用域、每页一个自包含 JavaScript setup，不支持 TypeScript 编译、模块图、不可信代码隔离、
 应用级状态、动态 Entity 树、列表/条件模板、双向绑定或 HMR 状态保留。
 
-当前 Component Asset v1 不提供 Detach、跨 Provider Variant、自动更新、批量 Apply、任意实例内部
+当前 Component Asset v2 不提供 Detach、跨 Provider Variant、自动更新、批量 Apply、任意实例内部
 结构编辑或超过八层的继承/嵌套。Interaction、数据源和正式持久化仍需独立 OpenSpec。
 
 场景动画基础能力已交付：`@compose-ui/animation` 提供 `Animation` ECS Component 协议、
 插值采样器、运动路径几何、动画命令与动画文件协议（`.animation.json`，只存清单与绑定，
-静态权威），页面在 `ComposePageFile.animation` 持有稳定引用，编辑期以
-`ComposeDocument.animations` 为会话镜像；编辑器通过画布工具栏的「设计 / 动画」模式
+静态权威）。**动画的作用域是 Frame**：清单挂在画板的 `Animations` Component 上
+（`items` 是会话镜像，`source` 是指向动画文件的稳定引用），关键帧轨道仍挂在被动画 Entity
+自己的 `Animation` Component 上；跨画板拖拽会用 `animation.tracks.relocate` 在同一次事务里
+搬迁轨道，且该命令必须排在结构变更之前。编辑器通过画布工具栏的「设计 / 动画」模式
 切换器进入动画模式（时间线接文档、属性面板菱形打点、自动记录、画布运动路径编辑），
-画布 Inspector 提供动画文件的绑定/快捷创建与播放控制变量绑定，预览支持脚本播放控制
+Frame Inspector 提供动画文件的绑定/快捷创建与播放控制变量绑定，预览支持脚本播放控制
 第一阶段——`playing` 布尔绑定按上升沿从头播放、`currentTime` 数值绑定由脚本完全接管
 时间轴。事件回调（onComplete/onLoop）、播放速度与多动画混合仍未实现。
 

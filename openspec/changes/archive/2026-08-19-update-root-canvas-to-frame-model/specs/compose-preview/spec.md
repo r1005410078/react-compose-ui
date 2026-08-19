@@ -24,7 +24,7 @@ ComposePreview MUST 在目标 Frame 的边界内渲染该 Frame `Appearance.back
 Linear、Radial 与 Angular 描述，并保持其位于该 Frame 全部后代 Entity 之后。嵌套 Frame MUST 各自
 渲染自己的背景。Preview 不得渲染渐变编辑控制柄或其它 Editor chrome。
 
-#### Scenario: 预览渐变 Frame 背景
+#### Scenario: 预览渐变输出背景
 
 - **WHEN** v7 文档的根 Frame 使用任一合法 Gradient Paint
 - **THEN** Preview 显示与 Stage Frame 边界一致的渐变背景
