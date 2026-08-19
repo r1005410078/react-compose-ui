@@ -2987,6 +2987,14 @@ function ComposeStageReady({
       <div aria-hidden="true" className="compose-stage__scroll-corner" />
       <ComposeContextMenu {...contextMenu.rootProps}>
         <ComposeContextMenuContent aria-label="画布操作">
+          {onSceneActivate && contextNodeId && document.rootIds.includes(contextNodeId) ? (
+            <ComposeContextMenuItem
+              disabled={contextNodeId === activeFrameId}
+              onClick={() => onSceneActivate(contextNodeId)}
+            >
+              {messages.setActiveScene}
+            </ComposeContextMenuItem>
+          ) : null}
           <ComposeContextMenuItem disabled={!canCopy} onClick={() => {
             executeClipboard('edit.copy', contextNodeId)
           }}>{messages.copy}{contextMenuShortcut('edit.copy')}</ComposeContextMenuItem>

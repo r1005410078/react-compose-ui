@@ -140,7 +140,9 @@ describe('ComposePreviewDialog', () => {
     const { onOpenChange } = renderDialog()
 
     expect(screen.getByRole('dialog', { name: 'Preview' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Selected frame' })).toBeDisabled()
+    // 目标是场景选择器：文档里只有一块场景时它就是唯一选项，且默认选中。
+    expect(screen.getByRole('combobox', { name: 'Preview scene' }))
+      .toHaveValue(rootFrame.id)
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     expect(onOpenChange).toHaveBeenCalledWith(false)
     fireEvent.mouseDown(screen.getByTestId('compose-preview-dialog-backdrop'))
@@ -148,10 +150,10 @@ describe('ComposePreviewDialog', () => {
   })
 
   it('OpenSpec: compose-preview / 受控 Preview Dialog / 切换指定 Container 预览', () => {
-    // 预览目标只有 Frame 一种；宿主传入的是当前选区所属的画板。
+    // 预览目标只有场景一种；宿主传入的是页面的激活场景，用户可在选择器里改。
     renderDialog({ selectedFrameId: rootFrame.id })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Selected frame' }))
+    expect(screen.getByRole('combobox', { name: 'Preview scene' })).toHaveValue(rootFrame.id)
     expect(screen.getByTestId('compose-preview-frame')).toBeInTheDocument()
   })
 

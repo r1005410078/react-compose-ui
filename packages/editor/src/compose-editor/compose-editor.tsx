@@ -213,6 +213,14 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
   pages?: ComposeEditorPagesConfig
   /** 项目 Component/Variant 独立工作区；省略时仍可使用 Controller 上的 Store 创建实例。 */
   components?: ComposeEditorComponentsConfig
+  /**
+   * 请求以某个场景为目标打开预览。
+   *
+   * @remarks
+   * 预览对话框由宿主拥有（editor 不依赖 preview），因此激活场景标签上的播放按钮只发出请求。
+   * 省略时该按钮不出现。
+   */
+  onScenePreview?: (frameId: string) => void
 }
 
 // 外层 Dockview 只有一个中央面板（挂载内层 scene/canvas/inspector Dockview）和 bottom Edge
@@ -351,6 +359,7 @@ export function ComposeEditor({
   assets,
   pages,
   components,
+  onScenePreview,
   preferences,
   defaultPreferences,
   onPreferencesChange,
@@ -2004,6 +2013,9 @@ export function ComposeEditor({
           scriptScope: activePageSession?.scriptScope,
           // 无选择时 Frame 动作与辅助线的回退目标是页面的激活场景，不是第一个根 Frame。
           ...(pageActiveFrameId ? { activeFrameId: pageActiveFrameId } : {}),
+          // 激活写在页面文件里，只有存在页面会话时才谈得上"切换激活场景"。
+          ...(activePageSession ? { onSceneActivate: handleActiveFrameChange } : {}),
+          onScenePreview,
           // 动画模式：画布显示播放头时刻的采样文档与配套布局；dispatch 不变，仍打在基础文档上。
           // 运动路径只在此分支注入：退出动画模式即随 spread 一起消失。
           ...(animationMode.active && animationMode.animationId && animationStageDocument

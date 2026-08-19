@@ -40,6 +40,7 @@ const translations = {
     sceneActive: (name: string) => `${name} 是当前激活场景`,
     sceneInactive: (name: string) => `把 ${name} 设为激活场景`,
     scenePreview: (name: string) => `预览场景 ${name}`,
+    setActiveScene: '设为激活场景',
   },
   'en-US': {
     rulerOrigin: 'Ruler origin',
@@ -75,6 +76,7 @@ const translations = {
     sceneActive: (name: string) => `${name} is the active scene`,
     sceneInactive: (name: string) => `Set ${name} as the active scene`,
     scenePreview: (name: string) => `Preview scene ${name}`,
+    setActiveScene: 'Set as active scene',
   },
 } as const
 
@@ -152,5 +154,6 @@ export function getStageMessages(
       messages.scenePreview(name),
       { name },
     ),
+    setActiveScene: formatMessage('stage.setActiveScene', messages.setActiveScene),
   }
 }
