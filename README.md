@@ -38,13 +38,13 @@ import { ComposePreview } from '@compose-ui/preview'
 import { useMemo } from 'react'
 import '@compose-ui/editor/styles.css'
 
-// 文档根只接受 Frame（画板）；空文档也至少有一块画板。
+// 文档根只接受 Frame（界面上称「场景」）；空文档也至少有一块场景。
 const document: ComposeDocument = {
   schemaVersion: 7,
   canvas: createDefaultCanvasSettings(),
   rootIds: ['frame-root'],
   entities: {
-    'frame-root': createComposeFrameEntity({ id: 'frame-root', name: '画板' }),
+    'frame-root': createComposeFrameEntity({ id: 'frame-root', name: '场景' }),
   },
 }
 
@@ -69,10 +69,10 @@ export function ComposePage() {
 内部实现；面板对象、布局 JSON、选择、viewport 和临时交互状态都不会写入文档。
 
 使用 `ComposePreviewDialog` 时，宿主还必须导入 `@compose-ui/preview/styles.css`；Dialog 以受控
-`open`/`onOpenChange` 组合 `ComposePreview`，可选 `selectedFrameId` 用于在默认画板与当前选区
-所属画板之间切换。`ComposePreview` 的渲染目标是**一块 Frame**：`frameId` 指定目标，
-`defaultFrameId` 只承担回退职责，`fit`/`alignment` 决定这块画板如何放进宿主盒子——它们是宿主
-呈现参数，不写进文档。
+`open`/`onOpenChange` 组合 `ComposePreview`，对话框以场景选择器表达预览目标，默认选中
+宿主给出的激活场景。`ComposePreview` 的渲染目标是**一块 Frame**：`frameId` 指定目标，
+`defaultFrameId` 只承担回退职责（宿主通常传 `ComposePageFile.activeFrameId`），
+`fit`/`alignment` 决定这块场景如何放进宿主盒子——它们是宿主呈现参数，不写进文档。
 
 viewport 是编辑器会话状态里变化最频繁的一项：一次平移手势每帧都会更新它。为了让平移不牵动
 场景树与 Inspector，它存放在外部状态源中——`controller.viewport` 读取始终返回最新快照，但读取
@@ -97,7 +97,7 @@ interface ComposeEntity {
   readonly components: Readonly<Record<string, JsonObject>>
 }
 
-/** 画板：加在任意容器 Entity 上的 Component，不是新的 Entity 类型。 */
+/** 场景：加在任意容器 Entity 上的 Component，不是新的 Entity 类型。 */
 interface ComposeFrame {
   readonly size: ComposeSize
   readonly guides?: readonly ComposeFrameGuide[]
@@ -105,13 +105,13 @@ interface ComposeFrame {
 ```
 
 **Frame 是唯一的输出与嵌套单位。** v6 的隐式 Canvas 根与 `document.output` 已删除：
-`rootIds` 只接受 Frame，画板本身就是场景里一个可选中、可命名、可放进别的画板的普通 Entity。
+`rootIds` 只接受 Frame，场景本身就是画布上一个可选中、可命名、可嵌进别的场景的普通 Entity。
 Frame 同时是六重隔离边界——坐标原点、独立 Yoga 布局 Runtime、裁剪、动画时间线、脚本作用域、
 预览/导出单位。一句话记住它：**Frame 里面是一个独立的小世界。**
 
-`Frame ⇒ Hierarchy`：画板必然是容器；Frame 不接受 Hug 尺寸，尺寸的事实来源是 `Frame.size`
+`Frame ⇒ Hierarchy`：场景必然是容器；Frame 不接受 Hug 尺寸，尺寸的事实来源是 `Frame.size`
 （`LayoutItem` 的固定尺寸只是布局求解的回退，由 `entity.frame.size.set` 同步）。
-把一个普通容器「升格」为画板就是给它加一个 `Frame` Component——Entity ID、子级与动画轨道
+把一个普通容器「升格」为场景就是给它加一个 `Frame` Component——Entity ID、子级与动画轨道
 全部原地保留，没有替换节点这回事。
 
 Component Key 强制 PascalCase，字段保持 camelCase。每个场景 Entity 必须拥有
@@ -122,14 +122,15 @@ Component Key 强制 PascalCase，字段保持 camelCase。每个场景 Entity �
 基础项和已附加 Capability，使能力增删可以可靠保护基础数据。未知合法 Component 会被保留并
 降级展示。v5 与 v6 都不会被运行时隐式接受；宿主必须显式调用
 `migrateComposeDocumentV6ToV7()` 或 `migrateComposeDocumentV5ToV7()`，迁移成功后再保存 v7。
-迁移是纯函数且无损：旧的隐式根被包进一块新画板，`output` 的尺寸落到 `Frame.size`、背景落到
-该画板的 `Appearance.backgroundPaint`，`document.animations` 落到画板的 `Animations`，
+迁移是纯函数且无损：旧的隐式根被包进一块新场景，`output` 的尺寸落到 `Frame.size`、背景落到
+该场景的 `Appearance.backgroundPaint`，`document.animations` 落到场景的 `Animations`，
 `canvas.guides` 恒等映射为 `Frame.guides`。没有 v7→v6 或双运行路径。
 
-画板背景使用结构化 `ComposePaint`：`solid`、`linear-gradient`、`radial-gradient` 和
+场景背景使用结构化 `ComposePaint`：`solid`、`linear-gradient`、`radial-gradient` 和
 `angular-gradient` 都是同一字段的合法值，并且就是这个 Entity 自己的
-`Appearance.backgroundPaint`——不再有一份文档级的独立输出背景。Editor 的 Frame Inspector
-（选中画板即打开）会在同一个紧凑 Paint 面板中切换 Solid 与各类 Gradient。
+`Appearance.backgroundPaint`——不再有一份文档级的独立输出背景。选中场景打开的就是普通容器
+Inspector：背景在「外观」分组，与其它容器用同一个紧凑 Paint 面板；场景专有的常见尺寸预设与
+辅助线在「场景」分组，由 Registry 的 `Frame` Component Definition 提供。
 
 ## Registry、Preset 与能力
 
@@ -168,7 +169,7 @@ Component Key、基础项移除和带子项容器移除都会被阻止。Registr
 `ComposeLayoutSnapshot` 绝对定位 DOM，不再以 CSS Flex 或旧 Transform 作为第二布局路径。
 Hug 容器由 Flow 子项、padding、gap 与 border 决定；Hug 叶子通过 Registry 的同步
 `measurement.measure` 和可选异步 `prepare` 获取内容尺寸。Text 使用隔离离屏 host，Image、SVG
-与 Page Slot 分别订阅资源 revision、SVG intrinsic box 与被引用页面画板的尺寸。准备中或失败时使用
+与 Page Slot 分别订阅资源 revision、SVG intrinsic box 与被引用页面场景的尺寸。准备中或失败时使用
 `LayoutItem.value` 并发布 Snapshot diagnostic，资源恢复只增加 Snapshot revision，不进入文档事务。
 
 ## Group、项目组件与 Variant
@@ -180,7 +181,7 @@ Group 是独立于 Container 的结构 Entity：无 Renderer、Appearance、Clip
 
 项目组件使用 `application/vnd.compose-ui.component+json`、`.component.json` 和独立
 `Component Asset v2`，页面是 `ComposeDocument v7`。Base 保存单根文档，且根必须是 Frame——
-组件就是一块可复用的画板，`创建组件` 会把被复用的根隐式升格；
+组件就是一块可复用的场景，`创建组件` 会把被复用的根隐式升格；
 Variant 保存直接父引用、稳定 ID 语义覆盖、applied lineage 与离线 resolved snapshot。同一链最多
 八层，只允许同 Provider/scope。
 
@@ -242,11 +243,16 @@ Clip 和 Renderer 语义，但不包含编辑 chrome。
 
 ## 页面系统
 
-页面文件是 `{ kind, pageSchemaVersion, document, setupScript }` 聚合，以 `.page.json` 后缀持久化；
-`document` 是画布对 JSX/template 的可视化表达，`setupScript` 是零或一个稳定资源引用，可选
-`defaultFrameId` 只承担预览默认目标与无选择时的回退，MUST NOT 覆盖显式选择。首页仍由
-资源根的 `app.json` 唯一表达。`pageSchemaVersion` 现为 `2`；旧页面文件必须显式迁移，
-运行时不隐式升级。
+页面文件是 `{ kind, pageSchemaVersion, document, setupScript, activeFrameId }` 聚合，
+以 `.page.json` 后缀持久化；`document` 是画布对 JSX/template 的可视化表达，`setupScript`
+是零或一个稳定资源引用。`activeFrameId` 是**激活场景**：预览的默认目标、生成真实页面时
+渲染的那一块，以及没有选择时 Frame 动作的回退目标；它 MUST NOT 覆盖显式选择。读取侧一律
+用 `resolveComposePageActiveFrameId()` 解析，避免各处自己实现回退。首页仍由资源根的
+`app.json` 唯一表达。`pageSchemaVersion` 现为 `3`；v2 需显式调用
+`migrateComposePageFileV2ToV3()`，运行时不隐式升级。
+
+激活状态存在页面文件里而不是 ComposeDocument 里，因此切换激活是一次资源写入，
+**不进撤销历史**；相对地「新建场景」改的是文档，可撤销，且刻意不自动激活。
 `@compose-ui/pages` 提供无 React、无 DOM 的聚合 Store 与 Loader。
 
 setup 是受信任的同 Realm、自包含 JavaScript ESM，不经过编译，也不是安全沙箱：
@@ -334,9 +340,9 @@ bun run test:e2e
 
 场景动画基础能力已交付：`@compose-ui/animation` 提供 `Animation` ECS Component 协议、
 插值采样器、运动路径几何、动画命令与动画文件协议（`.animation.json`，只存清单与绑定，
-静态权威）。**动画的作用域是 Frame**：清单挂在画板的 `Animations` Component 上
+静态权威）。**动画的作用域是 Frame**：清单挂在场景的 `Animations` Component 上
 （`items` 是会话镜像，`source` 是指向动画文件的稳定引用），关键帧轨道仍挂在被动画 Entity
-自己的 `Animation` Component 上；跨画板拖拽会用 `animation.tracks.relocate` 在同一次事务里
+自己的 `Animation` Component 上；跨场景拖拽会用 `animation.tracks.relocate` 在同一次事务里
 搬迁轨道，且该命令必须排在结构变更之前。编辑器通过画布工具栏的「设计 / 动画」模式
 切换器进入动画模式（时间线接文档、属性面板菱形打点、自动记录、画布运动路径编辑），
 Frame Inspector 提供动画文件的绑定/快捷创建与播放控制变量绑定，预览支持脚本播放控制

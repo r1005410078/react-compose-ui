@@ -36,8 +36,14 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   隐式 Canvas 根与 `document.output` 已删除）、统一 ECS Entity/Component 组合、`LayoutItem`、
   `Hierarchy + Layout` Auto Layout 容器、`Renderer` 内容与结构化 `Appearance.backgroundPaint`、
   first-class Group 与关联组件实例；项目组件/变体使用独立 `Component Asset v2`，
-  页面文件为 `ComposePageFile 2`；v5、v6 只能显式单向迁移，
+  页面文件为 `ComposePageFile 3`；v5、v6 与 PageFile 2 只能显式单向迁移，
   数据源协议和持久化接口仍未确定。
+- **界面上把 Frame 称作「场景」**：协议、命令、类型与 testid 一律保持 `Frame`，只有用户可见
+  文案是「场景 / Scene」。无限工作区上摆着多个场景，其中恰好一个是**激活场景**
+  （`ComposePageFile.activeFrameId`）——预览默认目标与生成真实页面用的都是它。激活写在
+  页面文件里，因此切换激活是资源写入、**不进撤销历史**；新建场景改文档、可撤销，且不自动激活。
+  选中场景打开的是普通容器 Inspector（场景专有属性由 Registry 的 `Frame` Component
+  Definition 提供）；点空白工作区打开页面配置面板（激活场景 + 页面脚本 + 动画，无尺寸）。
 - **Frame 是一个 Component，不是新的 Entity 类型**：给任意容器加上 `Frame` 就完成「升格」，
   Entity ID、子级与动画轨道全部原地保留。Frame 是六重隔离边界——坐标原点、独立 Yoga 布局
   Runtime、裁剪、动画时间线、脚本作用域、预览/导出单位。不变量：`Frame ⇒ Hierarchy`，
