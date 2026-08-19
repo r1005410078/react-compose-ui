@@ -128,6 +128,8 @@ export interface ComposePageDocumentSession extends ComposeDocumentSessionBase {
 export interface ComposePageAnimationFileState {
   /** Provider 条目 ID，写回时作为 `writeFile.fileId` 使用。 */
   readonly entryId: string
+  /** 条目的文件名；保存失败提示按名字指认文件，assetKey 可能是不可读的机器键。 */
+  readonly entryName: string
   /** 最近一次读写得到的 revision，用于保存回写的乐观并发。 */
   readonly revision: string
   /** 当前落盘的文件基线；保存时与各 Frame 的文档镜像比较，判断是否需要回写。 */

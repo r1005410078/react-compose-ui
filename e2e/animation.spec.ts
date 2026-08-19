@@ -83,12 +83,13 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
   await expect(animationPanel.getByRole('button', { name: '创建动画' })).toHaveCount(0)
 
-  // 点空白工作区打开页面配置：动画区块（页面脚本下方）显示绑定的动画文件。
+  // 点空白工作区打开页面配置：动画区块（页面脚本下方）按场景列出绑定行，
+  // 行标签是场景名（激活徽标），文件按「页面名-场景名」命名。
   await openPageInspector(page, editor)
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  const animationSelect = inspector.getByRole('combobox', { name: '动画文件' })
-  await expect(animationSelect.locator('option:checked')).toHaveText('Home.animation.json')
-  const animationSection = inspector.locator('.property-panel__group').filter({ hasText: '动画文件' })
+  const animationSelect = inspector.getByRole('combobox', { name: '场景（激活）' })
+  await expect(animationSelect.locator('option:checked')).toHaveText('Home-场景.animation.json')
+  const animationSection = inspector.locator('.property-panel__group').filter({ hasText: '场景（激活）' })
   const scriptSection = inspector.locator('.property-panel__group').filter({ hasText: '页面脚本' })
   const animationBox = (await animationSection.boundingBox())!
   const scriptBox = (await scriptSection.boundingBox())!
@@ -111,7 +112,7 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   const assets = editor.locator('[data-workspace-panel="asset-browser"]')
   await assets.getByRole('grid').first().getByRole('gridcell', { name: /^Pages/ }).click()
-  await expect(assets.getByRole('gridcell', { name: /^Home\.animation\.json/ })).toBeVisible()
+  await expect(assets.getByRole('gridcell', { name: /^Home-场景\.animation\.json/ })).toBeVisible()
 
   // 重新进入动画模式：绑定持久，时间线直接显示而不是创建引导。
   await editor.getByRole('radio', { name: '动画' }).click()

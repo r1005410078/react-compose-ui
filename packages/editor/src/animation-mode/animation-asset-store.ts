@@ -19,6 +19,8 @@ export interface PageAnimationSnapshot {
   readonly file: ComposeAnimationFile
   /** Provider 条目 ID，写回时作为 `writeFile.fileId` 使用。 */
   readonly entryId: string
+  /** 条目的文件名；保存失败提示按名字指认文件，assetKey 可能是不可读的机器键。 */
+  readonly entryName: string
   /** 最近一次读写得到的文件 revision，用于乐观并发。 */
   readonly revision: string
 }
@@ -80,7 +82,7 @@ export async function loadPageAnimation(
       `动画文件内容不合法：${parsed.issues[0]?.message ?? '未知原因'}`,
     )
   }
-  return { file: parsed.file, entryId: entry.id, revision }
+  return { file: parsed.file, entryId: entry.id, entryName: entry.name, revision }
 }
 
 /**

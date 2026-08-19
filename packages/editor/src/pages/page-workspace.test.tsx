@@ -2,6 +2,7 @@ import {
   createComposeAnimationCommandHandlers,
   createComposeAnimationFile,
   serializeComposeAnimationFile,
+  setComposeAnimationFileFrame,
 } from '@compose-ui/animation'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import { ComposeAssetError } from '@compose-ui/assets'
@@ -657,6 +658,211 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     const animationWrites = (provider.writeFile as ReturnType<typeof vi.fn>).mock.calls
       .filter(([input]) => (input as { fileId: string }).fileId === 'home-animation')
     expect(animationWrites).toHaveLength(0)
+  })
+})
+
+describe('OpenSpec: editor-workspace-layout / 多场景动画会话 / 按绑定文件聚合回写', () => {
+  const sceneAEntry: ComposeAssetEntry = {
+    id: 'anim-a',
+    parentId: 'root',
+    name: 'Home-主屏.animation.json',
+    kind: 'file',
+    revision: 'a1',
+    assetKey: 'Home-主屏.animation.json',
+  }
+  const sceneBEntry: ComposeAssetEntry = {
+    id: 'anim-b',
+    parentId: 'root',
+    name: 'Home-副屏.animation.json',
+    kind: 'file',
+    revision: 'b1',
+    assetKey: 'Home-副屏.animation.json',
+  }
+  const sceneAFileText = serializeComposeAnimationFile(
+    createComposeAnimationFile('frame-root', {
+      id: 'intro-a',
+      name: '入场 A',
+      durationMs: 300,
+      playbackMode: 'play-once',
+    }),
+  )
+  const sceneBFileText = serializeComposeAnimationFile(
+    createComposeAnimationFile('frame-two', {
+      id: 'intro-b',
+      name: '入场 B',
+      durationMs: 300,
+      playbackMode: 'play-once',
+    }),
+  )
+  // 两块根场景各自绑定自己的动画文件：source 是 per-Frame 的文档状态。
+  const twoScenePageText = (() => {
+    const page = createEmptyComposePageFile()
+    const frameId = page.document.rootIds[0]!
+    const frame = page.document.entities[frameId]!
+    const bind = (assetKey: string) => ({
+      items: [],
+      source: { providerId: 'memory', assetKey, scope: 'persistent' },
+    })
+    return serializeComposePageFile({
+      ...page,
+      document: {
+        ...page.document,
+        rootIds: [frameId, 'frame-two'],
+        entities: {
+          ...page.document.entities,
+          [frameId]: {
+            ...frame,
+            components: { ...frame.components, Animations: bind(sceneAEntry.assetKey!) },
+          },
+          'frame-two': {
+            ...frame,
+            id: 'frame-two',
+            name: '副屏',
+            components: { ...frame.components, Animations: bind(sceneBEntry.assetKey!) },
+          },
+        },
+      },
+    })
+  })()
+
+  function createTwoSceneProvider(overrides: Partial<ComposeAssetProvider> = {}) {
+    return createProvider({
+      list: vi.fn(async ({ folderId }) =>
+        folderId === 'root' ? [pageEntry, scriptEntry, sceneAEntry, sceneBEntry] : []),
+      read: vi.fn(async ({ fileId }) => {
+        if (fileId === 'anim-a') return { blob: new Blob([sceneAFileText]), revision: 'a1' }
+        if (fileId === 'anim-b') return { blob: new Blob([sceneBFileText]), revision: 'b1' }
+        return { blob: new Blob([twoScenePageText]), revision: '1' }
+      }),
+      ...overrides,
+    })
+  }
+
+  /** 打开双场景页面并把两条清单各改一笔，制造两份文件的待回写变化。 */
+  async function openAndTouchBothScenes(
+    provider: ComposeAssetProvider,
+  ) {
+    const onActiveSessionChange = vi.fn()
+    renderEditor(provider, onActiveSessionChange)
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    const session = lastSession(onActiveSessionChange)
+    for (const handler of createComposeAnimationCommandHandlers()) {
+      try { session.runtime.registerHandler(handler) }
+      catch { /* 已注册 */ }
+    }
+    act(() => session.runtime.dispatch({
+      id: 'configure-a',
+      type: 'animation.configure',
+      payload: { frameId: 'frame-root', animationId: 'intro-a', durationMs: 800 },
+    }))
+    act(() => session.runtime.dispatch({
+      id: 'configure-b',
+      type: 'animation.configure',
+      payload: { frameId: 'frame-two', animationId: 'intro-b', durationMs: 900 },
+    }))
+    await screen.findByRole('img', { name: '有未保存改动' })
+    return session
+  }
+
+  it('独立文件各自回写：两份文件各写一次且只含所属场景的分区', async () => {
+    const provider = createTwoSceneProvider()
+    await openAndTouchBothScenes(provider)
+
+    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+
+    await waitFor(() => {
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'anim-a' }))
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'anim-b' }))
+    })
+    const writes = (provider.writeFile as ReturnType<typeof vi.fn>).mock.calls
+      .map(([input]) => input as { fileId: string; content: Blob })
+    const animationWrites = writes.filter((input) => input.fileId.startsWith('anim-'))
+    expect(animationWrites).toHaveLength(2)
+    const writtenA = JSON.parse(await animationWrites
+      .find((input) => input.fileId === 'anim-a')!.content.text()) as {
+      frames: Record<string, { durationMs: number }[]>
+    }
+    const writtenB = JSON.parse(await animationWrites
+      .find((input) => input.fileId === 'anim-b')!.content.text()) as {
+      frames: Record<string, { durationMs: number }[]>
+    }
+    expect(Object.keys(writtenA.frames)).toEqual(['frame-root'])
+    expect(writtenA.frames['frame-root']?.[0]?.durationMs).toBe(800)
+    expect(Object.keys(writtenB.frames)).toEqual(['frame-two'])
+    expect(writtenB.frames['frame-two']?.[0]?.durationMs).toBe(900)
+  })
+
+  it('共享文件合并回写：两块场景绑定同一份文件时只写一次且含两个分区', async () => {
+    // 既有共享文件页面：两块场景的 source 指向同一 assetKey，文件里已有两个分区。
+    const sharedFileText = serializeComposeAnimationFile(setComposeAnimationFileFrame(
+      createComposeAnimationFile('frame-root', {
+        id: 'intro-a',
+        name: '入场 A',
+        durationMs: 300,
+        playbackMode: 'play-once',
+      }),
+      'frame-two',
+      [{ id: 'intro-b', name: '入场 B', durationMs: 300, playbackMode: 'play-once' }],
+    ))
+    const sharedPageText = (() => {
+      const page = JSON.parse(twoScenePageText) as {
+        document: { entities: Record<string, { components: Record<string, unknown> }> }
+      }
+      const bind = {
+        items: [],
+        source: { providerId: 'memory', assetKey: sceneAEntry.assetKey, scope: 'persistent' },
+      }
+      page.document.entities['frame-root']!.components.Animations = bind
+      page.document.entities['frame-two']!.components.Animations = bind
+      return JSON.stringify(page)
+    })()
+    const provider = createTwoSceneProvider({
+      read: vi.fn(async ({ fileId }) => fileId === 'anim-a'
+        ? { blob: new Blob([sharedFileText]), revision: 'a1' }
+        : { blob: new Blob([sharedPageText]), revision: '1' }),
+    })
+    await openAndTouchBothScenes(provider)
+
+    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+
+    await waitFor(() => {
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'anim-a' }))
+    })
+    const animationWrites = (provider.writeFile as ReturnType<typeof vi.fn>).mock.calls
+      .map(([input]) => input as { fileId: string; content: Blob })
+      .filter((input) => input.fileId.startsWith('anim-'))
+    expect(animationWrites).toHaveLength(1)
+    const written = JSON.parse(await animationWrites[0]!.content.text()) as {
+      frames: Record<string, { durationMs: number }[]>
+    }
+    expect(written.frames['frame-root']?.[0]?.durationMs).toBe(800)
+    expect(written.frames['frame-two']?.[0]?.durationMs).toBe(900)
+  })
+
+  it('单份动画文件写入失败不阻塞页面本体与其他文件，并按文件名提示', async () => {
+    const provider = createTwoSceneProvider()
+    const writeFile = provider.writeFile as ReturnType<typeof vi.fn>
+    writeFile.mockImplementation(async ({ fileId }: { fileId: string }) => {
+      if (fileId === 'anim-b') throw new ComposeAssetError('io', 'disk full')
+      return { ...pageEntry, id: fileId, revision: '2' }
+    })
+    await openAndTouchBothScenes(provider)
+
+    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+
+    // 页面本体与场景 A 的文件照常写入；失败的只有 B。
+    await waitFor(() => {
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'home' }))
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'anim-a' }))
+      expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'anim-b' }))
+    })
+    await waitFor(() => {
+      expect(document.querySelector('.compose-editor__page-notice'))
+        .toHaveTextContent('动画文件保存失败：Home-副屏.animation.json；页面已保存，下次保存会重试')
+    })
+    // 页面本体保存成功：未保存标记消失，失败只属于那份动画文件。
+    expect(screen.queryByRole('img', { name: '有未保存改动' })).not.toBeInTheDocument()
   })
 })
 

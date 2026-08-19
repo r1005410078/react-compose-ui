@@ -103,6 +103,20 @@ function jsonEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
+/**
+ * 保存页面的结果。
+ *
+ * @remarks
+ * 动画文件逐份写入：单份失败不阻塞页面本体与其他文件的保存。`animation-failed` 表示
+ * 页面本体已落盘、列出的动画文件写入失败——文档镜像仍是权威，下次保存会重试。
+ * @internal
+ */
+export type SavePageResult =
+  | { readonly status: 'saved' }
+  | { readonly status: 'conflict' }
+  | { readonly status: 'failed' }
+  | { readonly status: 'animation-failed'; readonly failedFiles: readonly string[] }
+
 /** 一次页面打开尝试的结果。 @internal */
 export type OpenPageResult =
   | { readonly ok: true; readonly session: ComposePageDocumentSession }
@@ -115,7 +129,7 @@ export interface PageWorkspaceHandle {
   /** 打开或复用一个页面会话；面板创建由调用方完成。 */
   readonly openPage: (entry: ComposeAssetEntry) => Promise<OpenPageResult>
   /** 保存页面；冲突时返回 `conflict` 让调用方决定是否强制覆盖。 */
-  readonly savePage: (panelId: string, force?: boolean) => Promise<'saved' | 'conflict' | 'failed'>
+  readonly savePage: (panelId: string, force?: boolean) => Promise<SavePageResult>
   /** 原子更换/解除 setup，并同步已打开页面会话与作用域。 */
   readonly setPageSetupScript: (
     pageKey: string,
@@ -330,10 +344,16 @@ export function usePageWorkspace({
         try {
           const cached = animationFiles.get(source.assetKey)
           const loaded = cached
-            ? { file: cached.baseline, entryId: cached.entryId, revision: cached.revision }
+            ? {
+                file: cached.baseline,
+                entryId: cached.entryId,
+                entryName: cached.entryName,
+                revision: cached.revision,
+              }
             : await loadPageAnimation(provider, entry.parentId ?? provider.root.id, source)
           animationFiles.set(source.assetKey, {
             entryId: loaded.entryId,
+            entryName: loaded.entryName,
             revision: loaded.revision,
             baseline: loaded.file,
           })
@@ -391,9 +411,9 @@ export function usePageWorkspace({
   const savePage = useCallback(async (
     panelId: string,
     force?: boolean,
-  ): Promise<'saved' | 'conflict' | 'failed'> => {
+  ): Promise<SavePageResult> => {
     const session = pageSessionOf(sessionsRef.current.get(panelId))
-    if (!store || !session) return 'failed'
+    if (!store || !session) return { status: 'failed' }
     const runtimeRevision = session.runtime.revision
     const documentAtSave = session.runtime.document
     try {
@@ -414,13 +434,16 @@ export function usePageWorkspace({
       }))
     }
     catch (error) {
-      if (error instanceof ComposeAssetError && error.code === 'conflict') return 'conflict'
-      return 'failed'
+      if (error instanceof ComposeAssetError && error.code === 'conflict') return { status: 'conflict' }
+      return { status: 'failed' }
     }
-    // 动画文件是静态权威：页面保存后把各 Frame 镜像的变化合并回写文件。一份文件承载多块
-    // 场景的分区，因此以文件为单位合并，一次保存对同一份文件只写一次；某块场景的镜像被
-    // 撤销移除时该分区写空，但不删除文件——解除绑定才是删除引用的入口。
+    // 动画文件是静态权威：页面保存后把各 Frame 镜像的变化按其绑定的文件聚合回写。同一份
+    // 文件只写一次、不同文件各自写入；单份失败不中断循环——文档镜像仍是权威，失败的文件
+    // 在下次保存重试，其余文件与页面本体不受牵连。某块场景的镜像被撤销移除时该分区写空，
+    // 但不删除文件——解除绑定才是删除引用的入口。
     const merged = mergeFrameMirrorsIntoFiles(documentAtSave, session.animationFiles)
+    let animationConflict = false
+    const failedFiles: string[] = []
     for (const [assetKey, next] of merged) {
       const current = session.animationFiles.get(assetKey)
       if (!current || jsonEqual(next, current.baseline)) continue
@@ -436,17 +459,21 @@ export function usePageWorkspace({
           ...item,
           animationFiles: new Map(item.animationFiles).set(assetKey, {
             entryId: current.entryId,
+            entryName: current.entryName,
             revision: written.revision,
             baseline: next,
           }),
         }))
       }
       catch (error) {
-        if (error instanceof ComposeAssetError && error.code === 'conflict') return 'conflict'
-        return 'failed'
+        // 冲突走既有的覆盖确认流程；其余失败按文件名列出，页面本体的保存结果不受影响。
+        if (error instanceof ComposeAssetError && error.code === 'conflict') animationConflict = true
+        else failedFiles.push(current.entryName)
       }
     }
-    return 'saved'
+    if (animationConflict) return { status: 'conflict' }
+    if (failedFiles.length > 0) return { status: 'animation-failed', failedFiles }
+    return { status: 'saved' }
   }, [store, updateSession])
 
   /**
@@ -541,6 +568,7 @@ export function usePageWorkspace({
         ...current,
         animationFiles: new Map(current.animationFiles).set(reference.assetKey, {
           entryId: loaded.entryId,
+          entryName: loaded.entryName,
           revision: loaded.revision,
           baseline: loaded.file,
         }),
