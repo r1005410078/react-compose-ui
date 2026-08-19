@@ -209,6 +209,51 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不�
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(0)
 })
 
+test('OpenSpec: editor-workspace-layout / 运动路径以物体中心为锚 / 第二块场景的路径画在自己场景内', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+
+  // 第二块场景（不在世界原点）里放一个矩形并打两个位置关键帧。
+  const sceneTwoId = await createSecondScene(page, editor)
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const rect = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
+  await expect(rect).toHaveCount(1)
+  await rect.click()
+  await editor.getByRole('radio', { name: '动画' }).click()
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  // 键盘微移打点而不是画布拖拽：场景 2 位置靠下，动画模式展开时间线后可能遮住它，
+  // 微移同样派发 transform 命令并被自动记录改写为关键帧，且不依赖屏幕几何。
+  await stage.focus()
+  for (let i = 0; i < 3; i += 1) await stage.press('ArrowRight')
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // 路径必须画在矩形所在的场景里：每个顶点都落在场景 2 的边界盒内，
+  // 而不是整体平移一个场景原点、画进场景 1。
+  const sceneTwoBox = (await stage.getByTestId(`stage-frame-boundary-${sceneTwoId}`).boundingBox())!
+  const vertices = stage.locator('circle[data-testid^="stage-path-vertex-hit-"]')
+  await expect(vertices).toHaveCount(2)
+  for (let i = 0; i < 2; i += 1) {
+    const vertexBox = (await vertices.nth(i).boundingBox())!
+    const center = {
+      x: vertexBox.x + vertexBox.width / 2,
+      y: vertexBox.y + vertexBox.height / 2,
+    }
+    expect(center.x).toBeGreaterThanOrEqual(sceneTwoBox.x - 1)
+    expect(center.x).toBeLessThanOrEqual(sceneTwoBox.x + sceneTwoBox.width + 1)
+    expect(center.y).toBeGreaterThanOrEqual(sceneTwoBox.y - 1)
+    expect(center.y).toBeLessThanOrEqual(sceneTwoBox.y + sceneTwoBox.height + 1)
+  }
+})
+
 test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 刚画出来的场景就能建动画', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')

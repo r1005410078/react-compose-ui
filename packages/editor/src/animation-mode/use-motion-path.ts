@@ -3,6 +3,7 @@ import { findComposeAnimationTrack } from '@compose-ui/animation'
 import type { ComposeAnimationTrack } from '@compose-ui/animation'
 import { getComposeLayoutItem } from '@compose-ui/core'
 import type { ComposeDocument, ComposeLayoutSnapshot, EditorCommand } from '@compose-ui/core'
+import { getEntityWorldBounds } from '@compose-ui/stage-engine'
 import type { StageEditablePath } from '@compose-ui/stage-engine'
 import type { ComposeStageEditablePathChange } from '@compose-ui/stage'
 import {
@@ -84,9 +85,11 @@ export function useMotionPath(options: MotionPathOptions): MotionPathPort {
   const origin = useMemo<MotionPathOrigin | null>(() => {
     if (!entityId || !displayDocument || !layoutSnapshot) return null
     const sampled = displayDocument.entities[entityId]
-    const box = layoutSnapshot.boxes[entityId]
-    if (!sampled || !box) return null
+    if (!sampled || !layoutSnapshot.boxes[entityId]) return null
     const offset = getComposeLayoutItem(sampled).offset
+    // 快照盒是父级局部坐标，必须先换算成世界盒——否则场景不在世界原点时（第二块及
+    // 之后的场景），路径会整体平移一个场景原点、画进别块场景的区域。
+    const box = getEntityWorldBounds(displayDocument, layoutSnapshot, entityId)
     // 原点加半宽半高：路径穿过物体中心而不是左上角，顶点/切线的世界↔offset 换算
     // 经同一 origin 折返，编辑语义不变。尺寸取当前采样时刻的盒子（尺寸被动画时路径
     // 锚随当前尺寸的中心走）。
