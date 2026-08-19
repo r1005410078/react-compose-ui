@@ -271,6 +271,32 @@ describe('Stage ECS commands', () => {
     expect(getComposeLayoutItem(current.entities.child!).offset).toEqual({ x: 80, y: 40 })
   })
 
+  it('OpenSpec: Entity reparent / 手势落点按源父级局部坐标解读', () => {
+    // gesture.transforms 是**当前父级**局部坐标（Stage 预览与无落点直接落盘用的也是它）。
+    // 当成世界坐标直接用的话，源父级不在原点时结果会整体偏掉一个源父级原点——跨场景拖拽
+    // 会把节点甩到画面外，而源父级恰好在原点时又完全看不出来。
+    const child = entity('child', { x: 30, y: 20, width: 60, height: 40 })
+    const source = entity('source', { x: 200, y: 400, width: 400, height: 300, childIds: ['child'] })
+    const target = entity('target', { x: 100, y: 50, width: 400, height: 300, childIds: [] })
+    const value = document([child, source, target], ['source', 'target'])
+    const command = createReparentCommand(
+      value,
+      layoutSnapshot(value),
+      ['child'],
+      'target',
+      0,
+      'reparent:child',
+      // 落点世界坐标 (150, 90)，在源父级 (200, 400) 的局部坐标里是 (-50, -310)。
+      { child: { x: -50, y: -310, width: 60, height: 40, rotation: 0 } },
+    )
+    const runtime = createTransactionRuntime({ document: value })
+    expect(runtime.dispatch(command).status).toBe('committed')
+    const current = runtime.getState().document
+    expect(getComposeHierarchy(current.entities.target!)?.childIds).toEqual(['child'])
+    // 世界 (150, 90) 落进 target (100, 50) 就是局部 (50, 40)。
+    expect(getComposeLayoutItem(current.entities.child!).offset).toEqual({ x: 50, y: 40 })
+  })
+
   it('OpenSpec: auto-layout-interactions / 移入 Layout / 自动转 Flow 并保留 offset fallback', () => {
     const child = entity('child', { x: 300, y: 120 })
     const container = autoLayoutContainer('container', [])
