@@ -273,7 +273,7 @@ vi.mock('@compose-ui/asset-browser', async () => {
 })
 
 const { ComposeEditor } = await import('../compose-editor')
-const { CanvasInspector } = await import('../inspector')
+const { PageInspector } = await import('../inspector')
 
 const pageText = serializeComposePageFile(createEmptyComposePageFile())
 
@@ -762,11 +762,9 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       componentLibraryPanel: null,
       stage: null,
       inspectorPanel: (
-        <CanvasInspector
-          dispatch={vi.fn()}
+        <PageInspector
+          activeFrameId={createEmptyComposePageFile().document.rootIds[0]!}
           document={createEmptyComposePageFile().document}
-          frameId={createEmptyComposePageFile().document.rootIds[0]!}
-          idFactory={() => 'page-script-inspector'}
         />
       ),
       commandPanel: null,
@@ -782,7 +780,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
 
-    const inspector = await screen.findByRole('region', { name: '画布属性' })
+    const inspector = await screen.findByRole('region', { name: '页面属性' })
     const pageScriptSelect = within(inspector).getByRole('combobox', { name: '脚本文件' })
     await waitFor(() => { expect(pageScriptSelect).toBeEnabled() })
     expect(within(inspector).getAllByRole('searchbox', { name: '搜索属性' })).toHaveLength(1)
@@ -907,11 +905,9 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       componentLibraryPanel: null,
       stage: null,
       inspectorPanel: (
-        <CanvasInspector
-          dispatch={vi.fn()}
+        <PageInspector
+          activeFrameId={createEmptyComposePageFile().document.rootIds[0]!}
           document={createEmptyComposePageFile().document}
-          frameId={createEmptyComposePageFile().document.rootIds[0]!}
-          idFactory={() => 'page-script-reload'}
         />
       ),
       commandPanel: null,

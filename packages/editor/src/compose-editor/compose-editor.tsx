@@ -1168,6 +1168,20 @@ export function ComposeEditor({
       hydrateAnimation(manifest)
     }
   }, [currentAnimationId, hydrateAnimation, pageWorkspace, removeAnimation])
+  /**
+   * 切换激活场景。
+   *
+   * @remarks
+   * 激活写在页面文件里而不是 ComposeDocument 里，因此**不进撤销历史**——用户撤销一次误删，
+   * 不该顺带把"这个页面发布哪一块"也撤回去。写入失败必须显式报出来，不能乐观翻转 UI。
+   */
+  const handleActiveFrameChange = useCallback((frameId: string) => {
+    const pageKey = activePageSession?.pageKey
+    if (!pageKey) return
+    void pageWorkspace.setPageActiveFrame(pageKey, frameId).catch((error: unknown) => {
+      setPageNotice(error instanceof Error ? error.message : String(error))
+    })
+  }, [activePageSession?.pageKey, pageWorkspace])
   const handlePageCreated = useCallback((descriptor: ComposePageDescriptor) => {
     void openPageDocument({
       id: descriptor.entryId,
@@ -1646,6 +1660,13 @@ export function ComposeEditor({
           animationInspector,
           pageScriptInspector,
           fieldAdornment: animationFieldAdornment,
+          // 页面配置面板拿不到页面会话（它由 controller 返回），沿用既有 cloneElement 注入。
+          ...(activePageSession
+            ? {
+                activeFrameId: activePageSession.page.activeFrameId ?? null,
+                onActiveFrameChange: handleActiveFrameChange,
+              }
+            : {}),
         })
     const entityInspector = authoredInspector === undefined
       ? undefined
@@ -1699,7 +1720,7 @@ export function ComposeEditor({
   }, [
     controller,
     activeComponentSession,
-    activePageSession?.scriptScope,
+    activePageSession,
     animationInspector,
     animationMode.active,
     animationMode.animationId,
@@ -1709,6 +1730,7 @@ export function ComposeEditor({
     componentWorkspace.store,
     createVariantFromSelectedInstance,
     editorMessages.animationMode,
+    handleActiveFrameChange,
     handleVariantOverridesChange,
     pageScriptInspector,
     resolvedPaintImageLibrary,

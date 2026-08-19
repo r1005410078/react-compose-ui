@@ -84,9 +84,9 @@ import type {
   StageViewport,
 } from '@compose-ui/stage-engine'
 import {
-  CanvasInspector,
   DefaultEmptyInspector,
   EntityInspector,
+  PageInspector,
 } from '../inspector'
 import { planSceneOperation } from './scene-operations'
 import {
@@ -1754,19 +1754,9 @@ export function useComposeEditorController({
     />
   )
 
-  // Frame 是普通 Entity 选择目标：选中它就打开 Frame Inspector（尺寸、背景、脚本、动画）。
-  // 不能以尺寸或背景值作为 key，否则色盘拖动的每个采样点都会卸载活跃的 ColorPicker。
-  const selectedFrameId = selectedEntity && getComposeFrame(selectedEntity)
-    ? selectedEntity.id
-    : null
-  const inspectorPanel = selectedFrameId ? (
-    <CanvasInspector
-      dispatch={dispatch}
-      document={document}
-      frameId={selectedFrameId}
-      idFactory={nextId}
-    />
-  ) : instanceInnerSelection ? (
+  // Frame 是普通容器：它走和其它 Entity 完全一样的 Inspector，场景专有属性由 Registry 的
+  // Frame Component Definition 提供。页面脚本与动画不在这里——它们属于页面配置面板。
+  const inspectorPanel = instanceInnerSelection ? (
     <EntityInspector
       dispatch={instanceInnerSelection.dispatch}
       document={instanceInnerSelection.document}
@@ -1814,8 +1804,11 @@ export function useComposeEditorController({
       registry={registry}
       scriptScope={scriptScope}
     />
+  ) : selectedIds.length > 1 ? (
+    // 多选下「页面配置」没有确定含义，且会让"点空白工作区"这个唯一入口变得不确定。
+    <DefaultEmptyInspector multiple />
   ) : (
-    <DefaultEmptyInspector />
+    <PageInspector document={document} />
   )
 
   return {

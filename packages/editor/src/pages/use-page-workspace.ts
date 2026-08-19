@@ -57,6 +57,13 @@ export interface PageWorkspaceHandle {
     pageKey: string,
     reference: ComposePageAnimationReference | null,
   ) => Promise<ComposeAnimation | null>
+  /**
+   * 切换页面的激活场景，并同步已打开页面会话的 revision 基线。
+   *
+   * @remarks
+   * 激活状态在页面文件里而不是 ComposeDocument 里，因此这是资源写入，**不进撤销历史**。
+   */
+  readonly setPageActiveFrame: (pageKey: string, frameId: string) => Promise<void>
   readonly refreshCatalog: () => void
 }
 
@@ -375,6 +382,28 @@ export function usePageWorkspace({
     return 'saved'
   }, [store, updateSession])
 
+  /**
+   * 切换页面的激活场景。
+   *
+   * @remarks
+   * 激活状态在页面文件里，不在 ComposeDocument 里，因此这是一次资源写入而**不进撤销历史**
+   * ——与 setPageSetupScript、setPageAnimation 同类。写入成功后必须回写会话的 page 与
+   * baseRevision，否则下一次保存会拿着过期 revision 冲突。
+   */
+  const setPageActiveFrame = useCallback(async (pageKey: string, frameId: string) => {
+    if (!store) throw new ComposeAssetError('unsupported', '页面 Store 不可用')
+    const session = [...sessionsRef.current.values()].find((item) => item.pageKey === pageKey)
+    const base = session ?? await store.readPage(pageKey)
+    const expectedRevision = 'baseRevision' in base ? base.baseRevision : base.revision
+    const written = await store.setPageActiveFrame(pageKey, frameId, expectedRevision)
+    if (!session) return
+    updateSession(session.panelId, (current) => ({
+      ...current,
+      page: written.page,
+      baseRevision: written.revision,
+    }))
+  }, [store, updateSession])
+
   const setPageSetupScript = useCallback(async (
     pageKey: string,
     reference: ComposePageSetupReference | null,
@@ -490,6 +519,7 @@ export function usePageWorkspace({
     setPageSetupScript,
     reloadPageSetupScript,
     setPageAnimation,
+    setPageActiveFrame,
     refreshCatalog,
   }
 }

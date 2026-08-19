@@ -63,6 +63,7 @@ const messages = {
       commandEmpty: '命令内容',
       assetBrowserEmpty: '连接资源 Provider 以浏览文件',
       selectNode: '选择一个组件以编辑其属性',
+      selectSingleNode: '同时选中了多个组件；只选中一个才能编辑属性',
       modeSwitcher: '编辑模式',
       modeDesign: '设计',
       modeAnimation: '动画',
@@ -209,6 +210,13 @@ const messages = {
       rejected: '画布设置无效。',
       configureTransaction: '配置画布网格与吸附',
     },
+    pageInspector: {
+      label: '页面属性',
+      title: '页面',
+      scene: '场景',
+      activeScene: '激活场景',
+      activateTransaction: '设置激活场景',
+    },
     canvasInspector: {
       label: '画布属性',
       title: '画布',
@@ -277,6 +285,7 @@ const messages = {
       commandEmpty: 'Command content',
       assetBrowserEmpty: 'Connect an asset provider to browse files',
       selectNode: 'Select one component to edit its properties',
+      selectSingleNode: 'Multiple components selected; select exactly one to edit properties',
       modeSwitcher: 'Editor mode',
       modeDesign: 'Design',
       modeAnimation: 'Animation',
@@ -423,6 +432,13 @@ const messages = {
       invalid: 'Steps must be positive, offsets finite, and the primary interval a positive integer.',
       rejected: 'Canvas settings are invalid.',
       configureTransaction: 'Configure canvas grid and snapping',
+    },
+    pageInspector: {
+      label: 'Page properties',
+      title: 'Page',
+      scene: 'Scene',
+      activeScene: 'Active scene',
+      activateTransaction: 'Set active scene',
     },
     canvasInspector: {
       label: 'Canvas properties',
@@ -867,6 +883,12 @@ export function getEditorMessages(
         current.canvasSettings.configureTransaction,
       ),
     },
+    pageInspector: Object.fromEntries(
+      Object.entries(current.pageInspector).map(([key, fallback]) => [
+        key,
+        format(`pageInspector.${key}`, fallback),
+      ]),
+    ) as Record<keyof typeof current.pageInspector, string>,
     canvasInspector: Object.fromEntries(
       Object.entries(current.canvasInspector).map(([key, fallback]) => [
         key,
