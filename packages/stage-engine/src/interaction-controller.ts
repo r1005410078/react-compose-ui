@@ -816,9 +816,9 @@ function isDrawingTool(
  * 容器一旦装了内容，它的空白区域在用户眼里就是「容器内的画布」而不是容器本身——沿用
  * Figma Frame 与 Rive Artboard 的约定，此时容器体不再抢占选中，选中入口收敛到标题标签。
  *
- * 收敛只发生在**顶层**容器上：标题标签只画给顶层容器，嵌套容器一旦收敛就没有任何选中
- * 入口了。v7 的顶层是"根 Frame 的直接子级"——文档根本身只放 Frame。已经在选区里的容器
- * 同理例外，否则从标签选中之后就再也无法拖动它。
+ * 收敛只发生在**顶层**容器上：标题标签只画给顶层容器（v7 下即 `rootIds` 里的场景），
+ * 嵌套容器没有标签，一旦收敛就没有任何选中入口了。已经在选区里的容器同理例外，
+ * 否则从标签选中之后就再也无法拖动它。
  */
 function shouldConvergeToMarquee(
   tool: StageInteractionTool,
@@ -845,13 +845,11 @@ function shouldConvergeToMarquee(
  * 判断 Entity 是否位于顶层。
  *
  * @remarks
- * v7 的 `rootIds` 只放 Frame，用户眼里的"顶层元素"是根 Frame 的直接子级；Frame 自身也算
- * 顶层，它就是画板。
+ * 顶层 = `rootIds` 的直接成员，v7 下即各块场景。判定必须与标题标签的渲染范围保持一致：
+ * 收敛只能作用于带标签的容器，否则被收敛的容器在画布上没有任何选中入口。
  */
 function isTopLevelEntity(document: ComposeDocument, entityId: string): boolean {
-  if (document.rootIds.includes(entityId)) return true
-  return document.rootIds.some((frameId) =>
-    getComposeHierarchy(document.entities[frameId])?.childIds.includes(entityId) === true)
+  return document.rootIds.includes(entityId)
 }
 
 /** 归一化矩形丢失了拖拽方向，因此方向必须从手势起止点单独取。 */

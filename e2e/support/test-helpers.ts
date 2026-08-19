@@ -51,14 +51,19 @@ export async function drawText(page: Page, editor: Locator, at: { x: number; y: 
 }
 
 /**
- * 选中一个顶层容器。
+ * 选中一个场景内的普通容器。
  *
- * 非空容器的选中入口已经收敛到画布标题标签，点容器体只会起框选。
+ * 标题标签只属于场景（rootIds 直接成员）：场景子级容器没有标签。画布点体虽然可选中，
+ * 但容器可能被子项铺满或伸出可视区（右侧被 Inspector 面板遮挡），因此走场景树——
+ * 它是任何布局与视口下都稳定的选中入口。会切换底部标签到场景树。
  */
 export async function selectContainer(editor: Locator, index = 0) {
-  // 根 Frame 同样带标题标签（画板也是容器）；这里只在被测的普通容器里数序号。
-  await editor
-    .locator('[data-testid^="stage-container-label-"]:not([data-testid$="frame-root"])')
+  // 先关掉可能残留的浮层（如 Ctrl+点击在 macOS 上弹出的上下文菜单）：base-ui portal
+  // 会把背景设为 inert，拦截一切点击。
+  await editor.page().keyboard.press('Escape')
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  await editor.getByRole('treegrid', { name: '场景树' })
+    .getByRole('row', { name: /Container/ })
     .nth(index)
     .click()
 }

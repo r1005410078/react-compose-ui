@@ -54,10 +54,9 @@ const LABEL_LINE_HEIGHT = 14
  * 计算需要渲染标题标签的顶层容器。
  *
  * @remarks
- * 顶层 = 根 Frame 自身与它的直接子级：v7 的 `rootIds` 只放 Frame，用户眼里的"顶层容器"
- * 是画板里那一层。更深的嵌套容器在 Figma/Rive 里同样不带标签，否则一个三层结构会在
- * 左上角堆出三行互相遮挡的文字。可见性、宿主隐藏集与低缩放阈值都在这里一次筛掉，渲染层
- * 只负责摆放。
+ * 只取 `rootIds` 的直接成员——v7 下即各块场景。场景内的容器已经是嵌套层，与 Figma/Rive
+ * 一致不带标签，否则一个多层结构会在左上角堆出多行互相遮挡的文字。可见性、宿主隐藏集与
+ * 低缩放阈值都在这里一次筛掉，渲染层只负责摆放。
  * @internal
  */
 export function resolveComposeContainerLabels(
@@ -68,11 +67,7 @@ export function resolveComposeContainerLabels(
 ): readonly ComposeContainerLabel[] {
   if (viewport.zoom < MIN_LABEL_ZOOM) return []
   const labels: ComposeContainerLabel[] = []
-  const topLevelIds = document.rootIds.flatMap((frameId) => [
-    frameId,
-    ...(getComposeHierarchy(document.entities[frameId])?.childIds ?? []),
-  ])
-  for (const entityId of topLevelIds) {
+  for (const entityId of document.rootIds) {
     const entity = document.entities[entityId]
     if (!entity) continue
     if (!getComposeHierarchy(entity)) continue
@@ -90,7 +85,8 @@ export function resolveComposeContainerLabels(
       // 旋转容器用的是 AABB 宽度，标签因此可能比容器视觉边略宽；这比让标签跟着旋转更可读。
       maxWidth: Math.max(bounds.width * viewport.zoom, LABEL_LINE_HEIGHT),
       locked: getComposeLock(entity).locked,
-      scene: document.rootIds.includes(entityId),
+      // 迭代范围就是 rootIds：v7 下这些直接成员全部是场景。
+      scene: true,
     })
   }
   return labels

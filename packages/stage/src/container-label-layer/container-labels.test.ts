@@ -43,8 +43,16 @@ function leafEntity(id: string) {
 /** v7 的文档根只接受 Frame；夹具把给定的顶层容器挂进这块画板。 */
 const ROOT_FRAME_ID = 'frame-root'
 
-function scene(entities: readonly ReturnType<typeof containerEntity>[], rootIds: readonly string[]) {
-  const frame = createComposeFrameEntity({ id: ROOT_FRAME_ID, childIds: rootIds })
+function scene(
+  entities: readonly ReturnType<typeof containerEntity>[],
+  rootIds: readonly string[],
+  frameComponentOverrides: Record<string, unknown> = {},
+) {
+  const base = createComposeFrameEntity({ id: ROOT_FRAME_ID, childIds: rootIds })
+  const frame = {
+    ...base,
+    components: { ...base.components, ...frameComponentOverrides },
+  }
   const document = {
     schemaVersion: 7,
     canvas: {
@@ -60,10 +68,10 @@ function scene(entities: readonly ReturnType<typeof containerEntity>[], rootIds:
   const layoutSnapshot = {
     revision: 1,
     boxes: {
-      // 画板在世界原点；被测容器的局部盒沿用既有夹具值。
+      // 画板不在世界原点，使屏幕换算用例能区分平移与缩放；容器局部盒沿用既有夹具值。
       [ROOT_FRAME_ID]: {
-        x: 0,
-        y: 0,
+        x: 100,
+        y: 200,
         width: 1280,
         height: 720,
         positioning: 'absolute' as const,
@@ -92,8 +100,9 @@ describe('OpenSpec: stage / 顶层容器标题标签', () => {
       layoutSnapshot,
       { x: 0, y: 0, zoom: 1 },
     )
-    // 画板自身也带标签（Figma 同样给 Frame 画标题）；嵌套容器 inner 仍被排除。
-    expect(labels.map((item) => item.entityId)).toEqual([ROOT_FRAME_ID, 'outer'])
+    // 只有场景（rootIds 直接成员）带标签；场景内的容器已是嵌套层，与 Figma 一致不带标签。
+    expect(labels.map((item) => item.entityId)).toEqual([ROOT_FRAME_ID])
+    expect(labels[0]).toMatchObject({ scene: true })
   })
 
   it('非容器根 Entity 不显示标签', () => {
@@ -109,22 +118,24 @@ describe('OpenSpec: stage / 顶层容器标题标签', () => {
       document,
       layoutSnapshot,
       { x: 10, y: 20, zoom: 2 },
-    ).find((item) => item.entityId === 'outer')
-    expect(label).toMatchObject({ name: '名称 outer', x: 210, maxWidth: 640 })
+    ).find((item) => item.entityId === ROOT_FRAME_ID)
+    // 画板世界 (100, 200)、zoom 2、平移 (10, 20)：屏幕 x = 100 × 2 + 10。
+    expect(label).toMatchObject({ x: 210, maxWidth: 2560 })
     expect(label!.y).toBeLessThan(420)
   })
 
   it('锁定容器的标签只剩信息，不再是交互入口', () => {
     const { document, layoutSnapshot } = scene(
-      [containerEntity('outer', [], true, true)],
+      [containerEntity('outer', [])],
       ['outer'],
+      { Lock: { locked: true } },
     )
     const label = resolveComposeContainerLabels(
       document,
       layoutSnapshot,
       { x: 0, y: 0, zoom: 1 },
-    ).find((item) => item.entityId === 'outer')
-    expect(label).toMatchObject({ entityId: 'outer', locked: true })
+    ).find((item) => item.entityId === ROOT_FRAME_ID)
+    expect(label).toMatchObject({ entityId: ROOT_FRAME_ID, locked: true })
   })
 
   it('隐藏与低缩放时不渲染标签', () => {
