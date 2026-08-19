@@ -233,7 +233,7 @@ describe('PageAnimationScopePanel', () => {
     await waitFor(() => {
       expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
         type: 'animation.configure',
-        payload: { animationId: 'intro', autoplay: true },
+        payload: { frameId: 'frame-root', animationId: 'intro', autoplay: true },
       }))
     })
   })

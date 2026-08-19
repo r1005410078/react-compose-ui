@@ -282,6 +282,8 @@ function SceneBindingPanel({
                     id: idFactory(),
                     type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
                     payload: {
+                      // 清单级命令必须显式携带该行场景的 frameId，缺失会被 handler 拒绝。
+                      frameId: scene.frameId,
                       animationId: animation.id,
                       bindings: bindingsPayloadFromPanel(next),
                     },
@@ -307,7 +309,7 @@ function SceneBindingPanel({
             dispatch({
               id: idFactory(),
               type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
-              payload: { animationId: animation.id, autoplay: change.value === true },
+              payload: { frameId: scene.frameId, animationId: animation.id, autoplay: change.value === true },
               meta: { source: 'canvas-animation-inspector' },
             } as EditorCommand)
             return

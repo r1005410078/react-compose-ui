@@ -177,6 +177,7 @@ function locateDocumentTrack(
  */
 export function translateAnimationPanelAction(
   document: ComposeDocument,
+  frameId: string,
   animationId: string,
   action: ComposeAnimationPanelAction,
 ): readonly AnimationCommandDraft[] {
@@ -185,15 +186,17 @@ export function translateAnimationPanelAction(
     case 'select':
     case 'toggle-auto-record':
       return []
+    // 清单级 configure 必须显式携带宿主 frameId：handler 不接受回退到「第一个根 Frame」，
+    // 缺失会被整条拒绝——时长与播放模式改了没反应就是这么来的。
     case 'set-duration':
       return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
-        payload: { animationId, durationMs: action.durationMs },
+        payload: { frameId, animationId, durationMs: action.durationMs },
       }]
     case 'set-playback-mode':
       return [{
         type: COMPOSE_ANIMATION_COMMAND_TYPES.configure,
-        payload: { animationId, playbackMode: action.mode },
+        payload: { frameId, animationId, playbackMode: action.mode },
       }]
     case 'add-keyframe': {
       const ref = decodeAnimationPropertyId(action.propertyId)

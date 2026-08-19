@@ -227,12 +227,12 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
 
   const onPanelAction = useCallback((action: ComposeAnimationPanelAction) => {
     const baseDocument = documentRef.current
-    if (!baseDocument || !animationId) return
+    if (!baseDocument || !animationId || !hostFrameId) return
     // 一个动作可能展开成多条命令（如删除某对象的全部轨道）；它们共享 mergeKey 合成一次事务。
-    for (const draft of translateAnimationPanelAction(baseDocument, animationId, action)) {
+    for (const draft of translateAnimationPanelAction(baseDocument, hostFrameId, animationId, action)) {
       dispatchDraft(draft.type, draft.payload, draft.mergeKey)
     }
-  }, [animationId, dispatchDraft])
+  }, [animationId, dispatchDraft, hostFrameId])
 
   // 清单级命令（create/delete/configure）必须带宿主 Frame：v7 的动画清单归属 Frame，
   // handler 不接受沉默回退到"第一个根 Frame"。
