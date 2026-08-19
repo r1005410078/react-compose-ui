@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { emptyWorkspaceRect } from './support/test-helpers'
+import { emptyWorkspaceRect, pointerDrop } from './support/test-helpers'
 
 /**
  * 在所有场景之外拖出一个矩形区域。
@@ -24,6 +24,7 @@ async function drawInEmptyWorkspace(page: Page, editor: Locator, tool: '创建�
   await page.mouse.move(start.x + width, start.y + height, { steps: 4 })
   await page.mouse.up()
   await editor.getByRole('button', { name: '选择', exact: true }).click()
+  return { x: start.x, y: start.y, width, height }
 }
 
 /** 断言 inner 完整落在 outer 内，允许 1px 边框与取整带来的误差。 */
@@ -63,7 +64,7 @@ test('OpenSpec: stage / 空白工作区的新建落点 / 在场景外绘制容�
   await expect(tags).toHaveCount(1)
 })
 
-test('OpenSpec: stage / 空白工作区的新建落点 / 在场景外绘制矩形落进激活场景且完整可见', async ({ page }) => {
+test('OpenSpec: stage / 空白工作区的新建落点 / 在场景外绘制矩形落进激活场景并保留落点', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
@@ -72,20 +73,44 @@ test('OpenSpec: stage / 空白工作区的新建落点 / 在场景外绘制矩�
 
   const renderers = stage.locator('.compose-stage__node.is-renderer')
   const before = await renderers.count()
-  await drawInEmptyWorkspace(page, editor, '形状')
+  const drawn = await drawInEmptyWorkspace(page, editor, '形状')
 
   // 先确认真的画出了东西：落在浮动工具条上时什么都不会创建，选中态不变会让下面的
-  // 包含断言无条件通过。
+  // 断言无条件通过。
   await expect(renderers).toHaveCount(before + 1)
   // 没有多出一块场景：非容器落进激活场景，而不是升格。
   await expect(stage.locator('[data-testid^="stage-frame-boundary-"]')).toHaveCount(1)
   await expect(stage.locator(
     '[data-entity-id="frame-root"] .compose-stage__node.is-renderer',
   )).toHaveCount(1)
-  const frameBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  // 保留落点：矩形留在绘制处（越出场景边界也不被钳回），场景不裁剪因此仍然可见。
   const selection = (await stage.getByTestId('stage-selection-bounds').boundingBox())!
-  // 落点在定义上落在场景外，钳制必须把它整块拉回场景里，否则用户会觉得「画了但没出现」。
-  expectContained(selection, frameBox)
+  expectContained(selection, {
+    x: drawn.x - 8, y: drawn.y - 8, width: drawn.width + 16, height: drawn.height + 16,
+  })
+})
+
+test('OpenSpec: stage / 空白工作区的新建落点 / 物料拖到场景外保留落点且可见', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const region = await emptyWorkspaceRect(page, editor)
+  const drop = {
+    x: region.x + region.width / 2,
+    y: region.y + region.height / 2,
+  }
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), drop)
+
+  // 属于激活场景，但保留拖放位置：矩形中心贴着落点，不被钳回场景边界。
+  const rect = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
+  await expect(rect).toHaveCount(1)
+  const box = (await rect.boundingBox())!
+  expect(Math.abs(box.x + box.width / 2 - drop.x)).toBeLessThan(16)
+  expect(Math.abs(box.y + box.height / 2 - drop.y)).toBeLessThan(16)
 })
 
 test('OpenSpec: stage / 空白工作区的新建落点 / 切换激活场景后落点跟随', async ({ page }) => {
@@ -114,8 +139,8 @@ test('OpenSpec: stage / 空白工作区的新建落点 / 切换激活场景后�
   await drawInEmptyWorkspace(page, editor, '形状')
   await expect(renderers).toHaveCount(1)
 
-  // 落进的是激活场景，而不是 rootIds 里恰好排第一的那块。这里断言 DOM 父子关系而不是
-  // 几何包含：第二块场景是手画出来的，可能比矩形还小，钳制只保证靠齐原点。
+  // 落进的是激活场景，而不是 rootIds 里恰好排第一的那块。断言 DOM 父子关系：
+  // 落点保留在绘制处，几何上不必与场景有包含关系。
   await expect(stage.locator(
     `[data-entity-id="${activatedId}"] .compose-stage__node.is-renderer`,
   )).toHaveCount(1)
