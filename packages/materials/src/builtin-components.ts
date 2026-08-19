@@ -4,6 +4,7 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   DEFAULT_COMPOSE_APPEARANCE,
+  createComposeFrame,
   createDefaultComposeFlexLayout,
   createDefaultComposeLayoutItem,
   isValidComposeLayout,
@@ -11,6 +12,7 @@ import {
   isValidComposeGeometryConstraints,
   isValidComposeWidgetSwitcher,
 } from '@compose-ui/core'
+import { createFrameInspector } from './frame'
 import {
   DEFAULT_COMPOSE_CLIP,
   DEFAULT_COMPOSE_GEOMETRY_CONSTRAINTS,
@@ -106,6 +108,16 @@ export function createComposeBuiltinComponentDefinitions(
         backgroundPaint: { ...DEFAULT_COMPOSE_APPEARANCE.backgroundPaint },
       }),
       inspector: createAppearanceInspector(idFactory),
+    },
+    {
+      // 「场景」是 Frame 的界面名；协议层仍叫 Frame，两者是同一个 Component。
+      // 排在外观与容器之间：场景本质是一种容器，且不能插进「布局分组紧跟变换分组」的相邻契约。
+      key: 'Frame',
+      label: '场景',
+      order: 45,
+      createDefault: () => createComposeFrame(),
+      inspectorDefaultExpanded: true,
+      inspector: createFrameInspector(idFactory),
     },
     {
       key: 'Hierarchy',
