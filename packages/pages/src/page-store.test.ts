@@ -437,3 +437,38 @@ describe('OpenSpec: pages / 首页设置与能力门禁', () => {
     })
   })
 })
+
+describe('OpenSpec: pages / 页面激活 Frame 与 Frame 级动画绑定', () => {
+  it('设置激活 Frame 并拒绝非根 Frame', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const current = await store.readPage('Pages/Home.page.json')
+    const frameId = current.page.document.rootIds[0]!
+    const written = await store.setPageActiveFrame('Pages/Home.page.json', frameId)
+    expect(written.page.activeFrameId).toBe(frameId)
+    await expect(store.setPageActiveFrame('Pages/Home.page.json', 'missing'))
+      .rejects.toThrow(/不是根 Frame/)
+  })
+
+  it('删掉激活场景后写入不会写出打不开的页面', async () => {
+    const fake = createFakeAssetProvider({ files: defaultFiles() })
+    const store = createComposePageStore({ provider: fake.provider })
+    const current = await store.readPage('Pages/Home.page.json')
+    const oldFrameId = current.page.document.rootIds[0]!
+    await store.setPageActiveFrame('Pages/Home.page.json', oldFrameId)
+
+    // 用户删掉了激活场景、换成另一块，再保存。若不对账就会写出悬空 activeFrameId，
+    // 而解析侧对悬空 id 直接报错——页面从此打不开。
+    const replacement = createComposeFrameEntity({ id: 'frame-next', name: '场景 2' })
+    const written = await store.writePageDocument('Pages/Home.page.json', {
+      ...current.page.document,
+      rootIds: ['frame-next'],
+      entities: { 'frame-next': replacement },
+    })
+    expect(written.page.activeFrameId).toBe('frame-next')
+
+    // 关键断言：写出去的文本必须能被重新解析。
+    const reread = await store.readPage('Pages/Home.page.json')
+    expect(reread.page.activeFrameId).toBe('frame-next')
+  })
+})

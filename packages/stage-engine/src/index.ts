@@ -6,7 +6,7 @@
 
 export {
   listFrameWorldGuides,
-  resolveActiveFrameId,
+  resolveTargetFrameId,
   toFrameGuidePosition,
   type FrameOriginResolver,
 } from './frame-space'

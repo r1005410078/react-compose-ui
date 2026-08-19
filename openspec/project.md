@@ -203,18 +203,22 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   `Hierarchy` 容器、`Renderer` 内容、同步命令事务、Entity Registry、Godot 风格无限 Stage、
   聚合 Inspector、controller 默认工作区、Frame Preview、事务/会话历史和
   Group/Container/Rectangle/Text/Image/SVG/ECharts、页面聚合、setup Props 绑定与项目组件/Variant
-  纵向流程。项目组件采用独立 Component Asset v2，页面文件为 `ComposePageFile 2`。
+  纵向流程。项目组件采用独立 Component Asset v2，页面文件为 `ComposePageFile 3`。
 - Frame 是加在容器 Entity 上的 Component，不是新的 Entity 类型；它同时是坐标原点、独立布局
   Runtime、裁剪、动画时间线、脚本作用域与预览/导出单位这六重边界。`Frame ⇒ Hierarchy`，
   Frame 不接受 Hug，尺寸事实来源是 `Frame.size`。
+- 界面上 Frame 称作「场景」，协议标识符不变。页面以 `ComposePageFile.activeFrameId` 记录
+  **激活场景**：预览默认目标与生成真实页面用的都是它，没有选择时 Frame 动作也回退到它，
+  但它 MUST NOT 覆盖显式选择。激活在页面文件里而不是文档里，因此切换激活是资源写入、
+  不进撤销历史；新建场景改文档、可撤销，且不自动激活。
 - Hug container 由 Flow children、padding、gap 与 border 决定；Hug leaf 通过 Registry measurement
   definition 同步读取缓存，并以可选 prepare/subscribe 处理字体、资源和页面 revision。测量缓存、
   diagnostics 与 Yoga 树只增加 LayoutSnapshot revision，不属于文档、事务或历史。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
   surface 尺寸和动态滚动范围是会话状态。输出边界由根 Frame 自身的 `Frame.size` 定义，背景是
   它的 `Appearance.backgroundPaint`（默认透明）；Preview 接受 v7、渲染目标是**一块 Frame**，
-  并忽略 canvas 编辑元数据。v5、v6 只允许显式单向迁移。画板是普通 Entity：它进入 Entity 选择
-  与 SceneTree，选中即打开 Frame Inspector。
+  并忽略 canvas 编辑元数据。v5、v6 只允许显式单向迁移。场景是普通 Entity：它进入 Entity 选择
+  与 SceneTree，选中即打开普通容器 Inspector（含场景分组）。
 - 每个场景 Entity 必须拥有 `Composition`、`Transform`、`LayoutItem`、`Visibility`、`Lock`，并至少拥有
   `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法
   Component 保留并由 Registry 边界降级。

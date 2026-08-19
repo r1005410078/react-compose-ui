@@ -27,6 +27,13 @@ export interface ComposeContainerLabel {
   readonly maxWidth: number
   /** 容器是否锁定；锁定容器的标签只显示名字，不再是选中或重命名入口。 */
   readonly locked: boolean
+  /**
+   * 该容器是不是一个场景（根 Frame）。
+   *
+   * @remarks
+   * 只有场景标签承载播放与激活标记；普通容器标签保持原样，以免给每个容器都挂上两个按钮。
+   */
+  readonly scene: boolean
 }
 
 /**
@@ -83,6 +90,7 @@ export function resolveComposeContainerLabels(
       // 旋转容器用的是 AABB 宽度，标签因此可能比容器视觉边略宽；这比让标签跟着旋转更可读。
       maxWidth: Math.max(bounds.width * viewport.zoom, LABEL_LINE_HEIGHT),
       locked: getComposeLock(entity).locked,
+      scene: document.rootIds.includes(entityId),
     })
   }
   return labels

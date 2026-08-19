@@ -1,4 +1,7 @@
 import { BUILTIN_COMMAND_TYPES } from '@compose-ui/core'
+
+/** 新场景与既有场景之间的世界坐标间隙，取默认场景宽度的 1/16，肉眼可辨且不显空旷。 */
+const SCENE_GAP = 80
 import {
   createDuplicateCommand,
   createGroupCommand,
@@ -9,7 +12,15 @@ import {
   getUngroupCommandAvailability,
   type ComposeLayerOrderOperation,
 } from '@compose-ui/stage-engine'
-import { getComposeHierarchy, getComposeLock } from '@compose-ui/core'
+import {
+  COMPOSE_DEFAULT_FRAME_SIZE,
+  createComposeFrameEntity,
+  getComposeFrame,
+  getComposeHierarchy,
+  getComposeLayoutItem,
+  getComposeLock,
+} from '@compose-ui/core'
+import type { JsonValue } from '@compose-ui/core'
 import type { ComposeCommandAction } from '@compose-ui/command-panel'
 import type {
   CommandDispatchResult,
@@ -336,6 +347,35 @@ export function createComposeEditorActionHandlers(
     'edit.createComponent': handler(selectionMissing ?? geometryPending, () => {
       context.createComponent?.()
     }),
+    'scene.create': handler(undefined, () => {
+      // 新场景摆在既有场景右侧、留一段间隙，避免与任何一块重叠。
+      // 刻意不自动激活：激活写在页面文件里、不进撤销历史，自动激活会造出
+      // 「撤销后场景已删除但激活仍指向它」的悬空状态。
+      const right = document.rootIds.reduce((max, id) => {
+        const frame = getComposeFrame(document.entities[id])
+        if (!frame) return max
+        const item = getComposeLayoutItem(document.entities[id]!)
+        return Math.max(max, item.offset.x + frame.size.width)
+      }, 0)
+      const entity = createComposeFrameEntity({
+        id: context.idFactory(),
+        // 与 core 写入根场景的默认名保持同一措辞；序号让多场景在场景树里可区分。
+        name: `场景 ${document.rootIds.length + 1}`,
+        offset: { x: right + SCENE_GAP, y: 0 },
+        size: COMPOSE_DEFAULT_FRAME_SIZE,
+      })
+      const result = context.dispatch({
+        id: context.idFactory(),
+        type: BUILTIN_COMMAND_TYPES.createEntity,
+        payload: { entity: entity as unknown as JsonValue, parentId: null },
+        meta: {
+          label: `Create ${entity.name}`,
+          source: 'command-panel',
+          targetIds: [entity.id],
+        },
+      })
+      if (result.status === 'committed') context.setSelectedIds([entity.id])
+    }),
     'edit.delete': handler(selectionMissing, () => {
       context.dispatch({
         id: context.idFactory(),
@@ -395,6 +435,7 @@ const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'edit.group',
   'edit.ungroup',
   'edit.createComponent',
+  'scene.create',
   'edit.delete',
   'history.undo',
   'history.redo',

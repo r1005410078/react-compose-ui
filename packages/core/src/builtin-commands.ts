@@ -23,6 +23,7 @@ import { isValidComposeSpatialTransform } from './document'
 import { isComposeColor, isValidComposePaint } from './paint'
 import { jsonEqual } from './patches'
 import { isComposeGroupEntity, isComposeUngroupableEntity } from './group'
+import { getComposeFrame } from './frame'
 import type {
   CommandHandler,
   CommandHandlerResult,
@@ -867,6 +868,16 @@ function appendSpatialTransformPatches(
             : {}),
         },
       },
+    })
+  }
+  // Frame 的尺寸事实来源是 Frame.size，布局求解会用它覆盖 LayoutItem 的推导结果。
+  // 只写 LayoutItem 会让文档已经改变而画面纹丝不动——拖手柄缩放场景必须同时写这里。
+  const frame = getComposeFrame(entity)
+  if (frame && !sameSize(current, next)) {
+    result.push({
+      op: 'set',
+      path: ['entities', entity.id, 'components', 'Frame', 'size'],
+      value: { width: next.size.width, height: next.size.height },
     })
   }
   if (current.rotation !== next.rotation) {

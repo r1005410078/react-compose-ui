@@ -73,7 +73,7 @@ import {
   createStageInteractionController,
   createStageSceneIndex,
   listFrameWorldGuides,
-  resolveActiveFrameId,
+  resolveTargetFrameId,
   resolveStageDropIndicator,
   expandScrollRange,
   scrollAxisToViewport,
@@ -798,8 +798,10 @@ function ComposeStageReady({
   selectedIds,
   onSelectedIdsChange,
   onEntityRename,
+  onSceneActivate,
+  onScenePreview,
   onCreateComponentIntent,
-  defaultFrameId,
+  activeFrameId,
   paintEditing = null,
   paintSampling = null,
   onPaintSamplingComplete,
@@ -807,7 +809,6 @@ function ComposeStageReady({
   editablePathActiveVertexId = null,
   onEditablePathChange,
   onEditablePathVertexToggle,
-  onOutputSelect,
   onSurfaceSizeChange,
   interactionController,
   idFactory = defaultId,
@@ -1117,7 +1118,6 @@ function ComposeStageReady({
     viewport,
     onViewportChange,
     onSelectedIdsChange,
-    onOutputSelect,
     onPaintSamplingComplete,
     onEditablePathChange,
     onEditablePathVertexToggle,
@@ -1133,7 +1133,6 @@ function ComposeStageReady({
       viewport,
       onViewportChange,
       onSelectedIdsChange,
-      onOutputSelect,
       onPaintSamplingComplete,
       onEditablePathChange,
       onEditablePathVertexToggle,
@@ -1866,10 +1865,6 @@ function ComposeStageReady({
           current.onSelectedIdsChange(effect.selectedIds)
           return
         }
-        if (effect.type === 'output.select') {
-          current.onOutputSelect?.()
-          return
-        }
         if (effect.type === 'paint.sample.complete') {
           current.onPaintSamplingComplete?.()
           return
@@ -2249,8 +2244,8 @@ function ComposeStageReady({
   })
   const previewById = new Map(guidePreview.map((guide) => [guide.id, guide]))
   // 辅助线保存在活动 Frame 的局部坐标里；Overlay 在世界坐标绘制，因此这里映射一次。
-  const activeFrameId = resolveActiveFrameId(document, selectedIds, defaultFrameId)
-  const worldGuides = listFrameWorldGuides(document, activeFrameId, boundarySceneIndex)
+  const targetFrameId = resolveTargetFrameId(document, selectedIds, activeFrameId)
+  const worldGuides = listFrameWorldGuides(document, targetFrameId, boundarySceneIndex)
     .map((guide) => ({ id: guide.id, axis: guide.axis, position: guide.value }))
   const canvasGuides = [
     ...worldGuides.map((guide) => previewById.get(guide.id) ?? guide),
@@ -2674,8 +2669,11 @@ function ComposeStageReady({
         // ContextMenu 的 Portal 在 React 事件树中仍会冒泡到 Stage；不能把菜单自身的右键
         // 当作新的画布右键，否则会重置根菜单。
         if (event.defaultPrevented || !rootRef.current?.contains(event.target as Node)) return
-        const entityId = (event.target as Element)
-          .closest<HTMLElement>('[data-entity-id]')?.dataset.entityId ?? null
+        // 标签用独立属性标记归属：data-entity-id 必须唯一指向 Scene 里的那个节点，
+        // 否则任何按实体查询 DOM 的地方都会同时命中标签。
+        const target = (event.target as Element)
+          .closest<HTMLElement>('[data-entity-id],[data-label-entity-id]')
+        const entityId = target?.dataset.entityId ?? target?.dataset.labelEntityId ?? null
         if (entityId && !normalizedSelection.includes(entityId)) {
           onSelectedIdsChange([entityId])
         }
@@ -2927,8 +2925,14 @@ function ComposeStageReady({
           renameLabel={messages.renameContainer}
           selectedIds={selectedIds}
           viewport={viewport}
+          activeFrameId={activeFrameId}
+          sceneActiveLabel={messages.sceneActive}
+          sceneInactiveLabel={messages.sceneInactive}
+          scenePreviewLabel={messages.scenePreview}
           onLabelPointerDown={beginContainerLabel}
           onRename={onEntityRename}
+          onSceneActivate={onSceneActivate}
+          onScenePreview={onScenePreview}
         />
         {assetDropStatus
           ? (
@@ -2986,6 +2990,14 @@ function ComposeStageReady({
       <div aria-hidden="true" className="compose-stage__scroll-corner" />
       <ComposeContextMenu {...contextMenu.rootProps}>
         <ComposeContextMenuContent aria-label="画布操作">
+          {onSceneActivate && contextNodeId && document.rootIds.includes(contextNodeId) ? (
+            <ComposeContextMenuItem
+              disabled={contextNodeId === activeFrameId}
+              onClick={() => onSceneActivate(contextNodeId)}
+            >
+              {messages.setActiveScene}
+            </ComposeContextMenuItem>
+          ) : null}
           <ComposeContextMenuItem disabled={!canCopy} onClick={() => {
             executeClipboard('edit.copy', contextNodeId)
           }}>{messages.copy}{contextMenuShortcut('edit.copy')}</ComposeContextMenuItem>

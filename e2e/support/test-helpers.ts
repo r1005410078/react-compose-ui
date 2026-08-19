@@ -81,11 +81,38 @@ export async function expandInspectorSection(inspector: Locator, name: string) {
   }
 }
 
-/**
- * 选中根画板（Frame）。
- *
- * 画板边界只是装饰性 Overlay（`pointerEvents: none`），选中入口是画布上的标题标签。
- */
-export async function selectRootFrame(editor: Locator) {
-  await editor.getByTestId('stage-container-label-frame-root').click()
+export async function openPageInspector(page: Page, editor: Locator) {
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const stageBox = (await stage.boundingBox())!
+  // 场景边界盒是未裁剪的世界矩形，可能远大于 stage 视口，因此不能直接拿它的外侧算落点：
+  // 必须取一个既在 stage 视口内、又在场景之外的点。标尺占据上/左边缘，留出安全距。
+  const RULER = 28
+  const frameBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const viewport = {
+    left: stageBox.x + RULER,
+    top: stageBox.y + RULER,
+    right: stageBox.x + stageBox.width - RULER,
+    bottom: stageBox.y + stageBox.height - RULER,
+  }
+  const midY = (viewport.top + viewport.bottom) / 2
+  const midX = (viewport.left + viewport.right) / 2
+  const candidates = [
+    { x: (viewport.left + frameBox.x) / 2, y: midY, ok: frameBox.x - viewport.left > 24 },
+    { x: midX, y: (viewport.top + frameBox.y) / 2, ok: frameBox.y - viewport.top > 24 },
+    {
+      x: (frameBox.x + frameBox.width + viewport.right) / 2,
+      y: midY,
+      ok: viewport.right - (frameBox.x + frameBox.width) > 24,
+    },
+    {
+      x: midX,
+      y: (frameBox.y + frameBox.height + viewport.bottom) / 2,
+      ok: viewport.bottom - (frameBox.y + frameBox.height) > 24,
+    },
+  ]
+  const spot = candidates.find((candidate) => candidate.ok)
+  expect(spot, 'stage 视口里找不到场景之外的空白处').toBeTruthy()
+  await page.mouse.click(spot!.x, spot!.y)
+  await expect(editor.getByRole('region', { name: '页面属性' })).toBeVisible()
 }

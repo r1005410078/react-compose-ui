@@ -170,6 +170,9 @@ Appearance 更新命令 MUST 校验 v5 ComposePaint，并以 Patch 正确保留�
 
 Transform 命令 MUST 声明 `move|resize|rotate|set` 操作，拒绝锁定 Entity、非法字段变化和违反
 TransformConstraints 的结果。多目标手势 MUST 继续由一次命令原子提交。
+目标拥有 `Frame` 且尺寸发生变化时，命令 MUST 在同一个事务里同时写入 `Frame.size` 与
+`LayoutItem` 的固定尺寸回退：布局求解以 `Frame.size` 为准，只写 `LayoutItem` 会让文档已经改变
+而画面纹丝不动。
 
 #### Scenario: 拒绝绕过几何限制
 
@@ -180,6 +183,12 @@ TransformConstraints 的结果。多目标手势 MUST 继续由一次命令原�
 
 - **WHEN** Stage 提交多个 Entity 的最终局部 Transform
 - **THEN** 运行时生成一个事务并允许一次 undo 恢复全部目标
+
+#### Scenario: 拖拽手柄缩放 Frame
+
+- **WHEN** 用户拖拽一个 Frame 的 resize 手柄
+- **THEN** `Frame.size` 与 `LayoutItem` 固定尺寸在同一事务中更新为同一个值
+- **AND** 画布上该 Frame 的边界随手柄实时变化，undo 一次同时恢复两者
 
 ### Requirement: 能力原子事务
 
@@ -205,17 +214,6 @@ core MUST 提供 createComposeBatchCommand，从类型化子命令数组构造 t
 
 - **WHEN** 调用方传入子命令数组与 meta
 - **THEN** 返回的命令经 dispatch 后原子应用全部子命令
-
-### Requirement: 输出 Paint 配置事务
-
-`output.configure` MUST 校验完整的 v5 `ComposeOutputSettings`，并在宽高或 `backgroundPaint` 任一变化时保存
-一个可逆 output Patch。命令不得接受 `backgroundColor` 或只更新 Paint 的局部字段。
-
-#### Scenario: 提交并撤销输出渐变
-
-- **WHEN** 用户在 Canvas Inspector 把输出背景从 Solid 改为 Linear、Radial 或 Angular Paint
-- **THEN** Runtime 记录一个完整且可逆的 `output.configure` 事务
-- **AND** undo/redo 分别恢复变化前后的完整输出尺寸和 Paint
 
 ### Requirement: 布局意图命令原子性
 

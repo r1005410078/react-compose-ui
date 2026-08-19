@@ -33,6 +33,22 @@ export interface ComposeContainerLabelLayerProps {
    * 否则同一个动作会产生两种 Undo 语义。
    */
   readonly onRename?: (entityId: string, name: string) => void
+  /**
+   * 当前激活场景。
+   *
+   * @remarks
+   * 只影响场景标签的呈现：激活的那一块显示实心标记与播放按钮。Stage 不写入激活状态，
+   * 它只发出请求，由宿主决定如何持久化。
+   */
+  readonly activeFrameId?: string | null
+  /** 请求把某个场景设为激活；未提供时不渲染激活标记。 */
+  readonly onSceneActivate?: (entityId: string) => void
+  /** 请求以某个场景为目标打开预览；未提供时不渲染播放按钮。 */
+  readonly onScenePreview?: (entityId: string) => void
+  /** 场景标记的无障碍名称。 */
+  readonly sceneActiveLabel?: (name: string) => string
+  readonly sceneInactiveLabel?: (name: string) => string
+  readonly scenePreviewLabel?: (name: string) => string
 }
 
 /**
@@ -52,11 +68,20 @@ export function ComposeContainerLabelLayer({
   renameLabel,
   onLabelPointerDown,
   onRename,
+  activeFrameId,
+  onSceneActivate,
+  onScenePreview,
+  sceneActiveLabel,
+  sceneInactiveLabel,
+  scenePreviewLabel,
 }: ComposeContainerLabelLayerProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
-  const lastPointerDownRef = useRef<{ x: number; y: number; time: number } | null>(null)
+  // 按 entityId 区分：整层共享一个 ref 时，先点 A 再点 B 会被 5px slop 误判成双击 B。
+  const lastPointerDownRef = useRef<
+    { entityId: string; x: number; y: number; time: number } | null
+  >(null)
   const labels = resolveComposeContainerLabels(
     document,
     layoutSnapshot,
@@ -102,6 +127,7 @@ export function ComposeContainerLabelLayer({
             </span>
           )
         }
+        const isActiveScene = item.scene && item.entityId === activeFrameId
         return editing
           ? (
               <input
@@ -131,11 +157,32 @@ export function ComposeContainerLabelLayer({
               />
             )
           : (
+              <div
+                className={`compose-stage__label-row${item.scene ? ' is-scene' : ''}`}
+                data-label-entity-id={item.entityId}
+                key={item.entityId}
+                style={{ left: item.x, top: item.y, maxWidth: item.maxWidth }}
+              >
+                {item.scene && isActiveScene && onScenePreview ? (
+                  <button
+                    aria-label={scenePreviewLabel?.(item.name)}
+                    className="compose-stage__scene-play"
+                    data-testid={`stage-scene-play-${item.entityId}`}
+                    type="button"
+                    // 必须在 pointerdown 阶段拦截：Stage 会在这一步对 surface 设置 pointer
+                    // capture，放行的话这次点击会变成标签的选中手势，click 也收不到。
+                    onPointerDown={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    onClick={() => onScenePreview(item.entityId)}
+                  >
+                    ▶
+                  </button>
+                ) : null}
               <button
                 className={`compose-stage__container-label${selected ? ' is-selected' : ''}`}
                 data-testid={`stage-container-label-${item.entityId}`}
-                key={item.entityId}
-                style={{ left: item.x, top: item.y, maxWidth: item.maxWidth }}
                 type="button"
                 onPointerDown={(event) => {
                   // 自己判连击而不是用 dblclick：第一次按下会让 Stage 对 surface 设置
@@ -144,12 +191,13 @@ export function ComposeContainerLabelLayer({
                   const previous = lastPointerDownRef.current
                   const now = event.timeStamp || Date.now()
                   const isSecondClick = previous !== null
+                    && previous.entityId === item.entityId
                     && now - previous.time <= DOUBLE_CLICK_INTERVAL_MS
                     && Math.abs(event.clientX - previous.x) <= DOUBLE_CLICK_SLOP_PX
                     && Math.abs(event.clientY - previous.y) <= DOUBLE_CLICK_SLOP_PX
                   lastPointerDownRef.current = isSecondClick
                     ? null
-                    : { x: event.clientX, y: event.clientY, time: now }
+                    : { entityId: item.entityId, x: event.clientX, y: event.clientY, time: now }
                   if (onRename && isSecondClick) {
                     // 不 preventDefault 的话，浏览器的默认聚焦会在输入框挂载后立刻把焦点
                     // 交还给 Stage，输入框当帧就 blur 提交，重命名根本进不去。
@@ -162,8 +210,28 @@ export function ComposeContainerLabelLayer({
                   onLabelPointerDown(item.entityId, event)
                 }}
               >
-                {item.name}
+                <span className="compose-stage__container-label-name">{item.name}</span>
               </button>
+                {item.scene && onSceneActivate ? (
+                  <button
+                    aria-label={isActiveScene
+                      ? sceneActiveLabel?.(item.name)
+                      : sceneInactiveLabel?.(item.name)}
+                    className={`compose-stage__scene-tag${isActiveScene ? ' is-active' : ''}`}
+                    data-testid={`stage-scene-tag-${item.entityId}`}
+                    type="button"
+                    onPointerDown={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    onClick={() => {
+                      if (!isActiveScene) onSceneActivate(item.entityId)
+                    }}
+                  >
+                    {isActiveScene ? '●' : '○'}
+                  </button>
+                ) : null}
+              </div>
             )
       })}
     </div>

@@ -255,14 +255,22 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   /** 为当前规范化选区打开宿主的项目组件创建流程；省略时菜单不显示该入口。 */
   readonly onCreateComponentIntent?: (entityIds: readonly string[]) => void
   /**
-   * 没有选择时 Frame 相关动作与辅助线回退的默认 Frame。
+   * 页面的激活场景。
    *
    * @remarks
-   * 只承担回退职责：有选择时活动 Frame 始终解析为选中项最近的祖先 Frame。
+   * 只承担回退职责：没有选择时 Frame 相关动作与辅助线以它为目标；有选择时目标始终解析为
+   * 选中项最近的祖先 Frame，激活场景 MUST NOT 覆盖显式选择。
    */
-  readonly defaultFrameId?: string | null
-  /** 请求清空节点选择并检查隐式 Canvas 输出属性。 */
-  readonly onOutputSelect?: () => void
+  readonly activeFrameId?: string | null
+  /**
+   * 请求把某个场景设为激活。
+   *
+   * @remarks
+   * Stage 不持有页面写权限：激活状态在页面文件里，必须由宿主提交。省略时标签不显示激活标记。
+   */
+  readonly onSceneActivate?: (frameId: string) => void
+  /** 请求以某个场景为目标打开预览；省略时激活场景标签不显示播放按钮。 */
+  readonly onScenePreview?: (frameId: string) => void
   /**
    * surface 可视尺寸变化回调。
    *

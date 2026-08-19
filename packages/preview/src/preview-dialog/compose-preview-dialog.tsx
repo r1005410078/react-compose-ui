@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { getComposeAnimations } from '@compose-ui/core'
+import { getComposeAnimations, getComposeFrame } from '@compose-ui/core'
 import { ComposePreview } from '../compose-preview'
 import type { ComposePreviewProps } from '../compose-preview'
 import { advanceComposePreviewPlayhead } from '../playback/playback-model'
@@ -17,17 +17,12 @@ type PreviewDialogScale = '1' | '0.75' | '0.5'
  * `document` 表示页面的默认 Frame，`container` 表示宿主传入的那个 Frame（通常是当前选区
  * 所属的画板）。两者最终都解析成一个 `frameId`——Preview 只有一种目标。
  */
-type PreviewDialogTarget = 'document' | 'container'
 
 /** ComposePreviewDialog 的可本地化文案。 @public */
 export interface ComposePreviewDialogMessages {
   /** 对话框标题。 */
   readonly title: string
-  /** 完整文档范围标签。 */
-  readonly document: string
-  /** 指定容器范围标签。 */
-  readonly selectedFrame: string
-  /** 范围选择的无障碍名称。 */
+  /** 场景选择器的无障碍名称。 */
   readonly target: string
   /** 缩放选择的无障碍名称。 */
   readonly scale: string
@@ -47,9 +42,7 @@ export interface ComposePreviewDialogMessages {
 
 const DEFAULT_MESSAGES: ComposePreviewDialogMessages = {
   title: 'Preview',
-  document: 'Document',
-  selectedFrame: 'Selected frame',
-  target: 'Preview target',
+  target: 'Preview scene',
   scale: 'Preview scale',
   enterFullscreen: 'Enter fullscreen preview',
   exitFullscreen: 'Exit fullscreen preview',
@@ -161,14 +154,22 @@ export function ComposePreviewDialog({
   const closeButton = useRef<HTMLButtonElement>(null)
   const focusBeforeOpen = useRef<HTMLElement | null>(null)
   const [scale, setScale] = useState<PreviewDialogScale>('0.75')
-  const [target, setTarget] = useState<PreviewDialogTarget>('document')
+  // 预览目标永远是一个场景：null 表示跟随宿主给出的激活场景，用户显式选过之后才固定。
+  const [target, setTarget] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
+
+  // 场景列表就是文档的根 Frame；目标解析顺序：用户显式选择 → 宿主给的激活场景 → 第一个根 Frame。
+  const sceneIds = composeDocument
+    ? composeDocument.rootIds.filter((id) => getComposeFrame(composeDocument.entities[id]))
+    : []
+  const resolvedFrameId = (target && sceneIds.includes(target) ? target : null)
+    ?? (selectedFrameId && sceneIds.includes(selectedFrameId) ? selectedFrameId : null)
+    ?? sceneIds[0]
+    ?? undefined
 
   // 基础能力阶段与编辑器一致：预览播放第一条动画；多动画选择留给后续提案。
   // 清单归属 Frame：预览播放的是当前目标 Frame 自己的时间线。
-  const animationHostFrameId = composeDocument
-    ? (target === 'container' && selectedFrameId ? selectedFrameId : composeDocument.rootIds[0])
-    : undefined
+  const animationHostFrameId = resolvedFrameId
   const animation = composeDocument && animationHostFrameId
     ? getComposeAnimations(composeDocument, animationHostFrameId)[0]
     : undefined
@@ -238,10 +239,7 @@ export function ComposePreviewDialog({
 
   if (!open || typeof window === 'undefined') return null
 
-  const activeTarget: PreviewDialogTarget = target === 'container' && selectedFrameId
-    ? 'container'
-    : 'document'
-  const previewFrameId = activeTarget === 'container' && selectedFrameId ? selectedFrameId : undefined
+  const previewFrameId = resolvedFrameId
   const toggleFullscreen = () => {
     const element = shell.current
     if (!element) return
@@ -287,23 +285,19 @@ export function ComposePreviewDialog({
             <PreviewIcon />
             <span id={titleId}>{messages.title}</span>
           </div>
-          <div aria-label={messages.target} className="compose-preview-dialog__target" role="group">
-            <button
-              aria-pressed={activeTarget === 'document'}
-              type="button"
-              onClick={() => setTarget('document')}
+          <label className="compose-preview-dialog__target">
+            <span className="compose-preview-dialog__sr-only">{messages.target}</span>
+            <select
+              value={resolvedFrameId ?? ''}
+              onChange={(event) => setTarget(event.target.value)}
             >
-              {messages.document}
-            </button>
-            <button
-              aria-pressed={activeTarget === 'container'}
-              disabled={!selectedFrameId}
-              type="button"
-              onClick={() => setTarget('container')}
-            >
-              {messages.selectedFrame}
-            </button>
-          </div>
+              {sceneIds.map((id) => (
+                <option key={id} value={id}>
+                  {composeDocument?.entities[id]?.name ?? id}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="compose-preview-dialog__actions">
             {animation ? (
               <button

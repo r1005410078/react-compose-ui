@@ -1,0 +1,16 @@
+/* 场景分组的清空辅助线动作：与属性面板的次要按钮同宽同高，避免自成一格。 */
+.compose-frame-inspector__clear-guides {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--compose-border, #2c333d);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--compose-text, #dce8fa);
+  font: inherit;
+  cursor: pointer;
+}
+
+.compose-frame-inspector__clear-guides:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

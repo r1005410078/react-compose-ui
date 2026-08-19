@@ -10,6 +10,7 @@ import {
   DEFAULT_COMPOSE_APPEARANCE,
   createDefaultCanvasSettings,
   createDefaultComposeFlexLayout,
+  createComposeFrame,
   createDefaultComposeLayoutItem,
   type ComposeDocument,
   type ComposeEntity,
@@ -1234,5 +1235,61 @@ describe('内建 Component inspectors', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '背景填充' }))
     expect(open).toHaveBeenCalledWith({ entityId: 'entity-a' })
+  })
+
+  it('OpenSpec: basic-materials / Frame 几何编辑约束 / 场景尺寸只有一个入口且同步 Frame.size', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const frame = createComposeFrame({ width: 180, height: 40 })
+    const target = entity({ Hierarchy: { childIds: [] }, Frame: frame as unknown as JsonObject })
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    const widthInput = screen.getByRole('combobox', { name: '尺寸宽度' })
+    fireEvent.focus(widthInput)
+    fireEvent.change(widthInput, { target: { value: '320' } })
+    fireEvent.keyDown(widthInput, { key: 'Enter' })
+
+    // 尺寸提交必须改派 setFrameSize，并与 LayoutItem 合成一次事务：
+    // 只写 LayoutItem 会让布局求解仍按旧的 Frame.size 出图。
+    const calls = dispatch.mock.calls as [EditorCommand][]
+    const [command] = calls[calls.length - 1]!
+    expect(command.type).toBe('transaction.batch')
+    const inner = (command.payload as unknown as { commands: readonly EditorCommand[] }).commands
+    expect(inner[0]).toMatchObject({
+      type: BUILTIN_COMMAND_TYPES.setFrameSize,
+      payload: { entityId: 'entity-a', size: { width: 320, height: 40 } },
+    })
+    expect(inner[1]).toMatchObject({ type: BUILTIN_COMMAND_TYPES.updateComponent })
+  })
+
+  it('OpenSpec: basic-materials / Frame 几何编辑约束 / 场景不提供 Hug', () => {
+    const Inspector = inspectorOf('LayoutItem')
+    const frame = createComposeFrame({ width: 180, height: 40 })
+    const target = entity({
+      Hierarchy: { childIds: [] },
+      Layout: createDefaultComposeFlexLayout() as unknown as JsonObject,
+      Frame: frame as unknown as JsonObject,
+    })
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+    // 启用 Auto Layout 的容器本来会开放 Hug，但 Frame 的尺寸由 Frame.size 唯一决定，
+    // 文档校验直接拒绝 Hug——不能在 UI 上暴露一个提交必然失败的选项。
+    fireEvent.focus(screen.getByRole('combobox', { name: '尺寸宽度' }))
+    expect(screen.queryByRole('option', { name: /Hug/ })).not.toBeInTheDocument()
   })
 })

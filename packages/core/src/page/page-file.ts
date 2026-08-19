@@ -152,6 +152,17 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
       }],
     }
   }
+  return parseComposePageFileValue(parsed)
+}
+
+/**
+ * 校验一个已解析出来的页面对象。
+ *
+ * @remarks
+ * 与 {@link parseComposePageFile} 共用同一套规则——迁移入口也必须走它，否则改名后的结果会
+ * 绕过悬空 `activeFrameId` 之类的既有校验。
+ */
+function parseComposePageFileValue(parsed: unknown): ComposePageParseResult {
   if (!isRecord(parsed)) {
     return {
       ok: false,
@@ -159,7 +170,7 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
     }
   }
   const issues: ComposePageFileIssue[] = []
-  const allowed = new Set(['kind', 'pageSchemaVersion', 'document', 'setupScript', 'defaultFrameId'])
+  const allowed = new Set(['kind', 'pageSchemaVersion', 'document', 'setupScript', 'activeFrameId'])
   Object.keys(parsed).forEach((key) => {
     if (!allowed.has(key)) {
       issues.push({ code: 'page.invalid-shape', path: [key], message: `页面包含未知字段 ${key}` })
@@ -193,17 +204,17 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
       issues,
     )
   }
-  // defaultFrameId 必须指向一个真实的根 Frame；悬空值报错而不是被静默改写。
-  if (parsed.defaultFrameId !== undefined && parsed.defaultFrameId !== null) {
-    const frameId = parsed.defaultFrameId
+  // activeFrameId 必须指向一个真实的根 Frame；悬空值报错而不是被静默改写。
+  if (parsed.activeFrameId !== undefined && parsed.activeFrameId !== null) {
+    const frameId = parsed.activeFrameId
     const validFrame = typeof frameId === 'string'
       && documentValidation.valid
       && documentValidation.document.rootIds.includes(frameId)
     if (!validFrame) {
       issues.push({
-        code: 'page.invalid-default-frame',
-        path: ['defaultFrameId'],
-        message: 'defaultFrameId 必须指向 rootIds 中的一个 Frame',
+        code: 'page.invalid-active-frame',
+        path: ['activeFrameId'],
+        message: 'activeFrameId 必须指向 rootIds 中的一个 Frame',
       })
     }
   }
@@ -211,7 +222,7 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
   const page = parsed as unknown as ComposePageFile
   return {
     ok: true,
-    page: page.defaultFrameId === undefined ? { ...page, defaultFrameId: null } : page,
+    page: page.activeFrameId === undefined ? { ...page, activeFrameId: null } : page,
   }
 }
 
@@ -223,8 +234,8 @@ export function parseComposePageFile(text: string): ComposePageParseResult {
  * @public
  */
 export function serializeComposePageFile(page: ComposePageFile): string {
-  // defaultFrameId 在类型上可缺省，但落盘格式总是写出该字段，使外部 diff 与升级路径稳定。
-  const normalized = page.defaultFrameId === undefined ? { ...page, defaultFrameId: null } : page
+  // activeFrameId 在类型上可缺省，但落盘格式总是写出该字段，使外部 diff 与升级路径稳定。
+  const normalized = page.activeFrameId === undefined ? { ...page, activeFrameId: null } : page
   return `${JSON.stringify(normalized, null, 2)}\n`
 }
 
@@ -244,7 +255,7 @@ export function createEmptyComposePageDocument(): ComposeDocument {
     entities: {
       [frameId]: {
         id: frameId,
-        name: '画板',
+        name: '场景',
         components: {
           Composition: {
             presetId: 'frame',
@@ -287,7 +298,7 @@ export function createEmptyComposePageFile(): ComposePageFile {
     pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
     document: createEmptyComposePageDocument(),
     setupScript: null,
-    defaultFrameId: null,
+    activeFrameId: null,
   }
 }
 
@@ -308,10 +319,68 @@ export function migrateLegacyComposePageFile(document: unknown): ComposePageMigr
           pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
           document: validation.document,
           setupScript: null,
-          defaultFrameId: null,
+          activeFrameId: null,
         },
       }
     : { ok: false, issues: validation.issues }
+}
+
+/**
+ * 把 `pageSchemaVersion: 2` 的页面文件显式迁移到 3。
+ *
+ * @remarks
+ * 唯一的差异是 `defaultFrameId` 恒等改名为 `activeFrameId`——字段语义从「仅回退目标」升为
+ * 「激活目标」，取值不变，因此迁移是纯改名，不解析文档内容也不改写任何 id。
+ *
+ * 正常解析不会隐式调用本函数：运行路径不长期兼容两种页面版本。
+ *
+ * @param input 待迁移的 v2 页面文件对象（不是文本）。
+ * @returns 迁移后的 v3 页面文件，或定位到具体字段的 issues。输入对象不被修改。
+ * @public
+ */
+export function migrateComposePageFileV2ToV3(input: unknown): ComposePageMigrationResult {
+  if (!isRecord(input)) {
+    return {
+      ok: false,
+      issues: [{ code: 'page.invalid-shape', path: [], message: '页面文件必须是对象' }],
+    }
+  }
+  if (input.pageSchemaVersion !== 2) {
+    return {
+      ok: false,
+      issues: [{
+        code: 'page.unsupported-version',
+        path: ['pageSchemaVersion'],
+        message: `迁移入口只接受页面版本 2，收到 ${String(input.pageSchemaVersion)}`,
+      }],
+    }
+  }
+  const { defaultFrameId, ...rest } = input
+  // 迁移结果仍须通过完整校验：改名不豁免悬空 activeFrameId 之类的既有约束。
+  return parseComposePageFileValue({
+    ...rest,
+    pageSchemaVersion: COMPOSE_PAGE_SCHEMA_VERSION,
+    activeFrameId: defaultFrameId ?? null,
+  })
+}
+
+/**
+ * 解析页面当前的激活 Frame。
+ *
+ * @remarks
+ * `activeFrameId` 可以缺省或为 null，也可能因为文档编辑（例如删除了那块场景）而悬空。
+ * 所有读取侧都必须经由本函数取值，否则各处会各自实现回退，进而出现「预览用一块、
+ * 动画绑定用另一块」的分歧。
+ *
+ * @param page 页面聚合文件。
+ * @returns 激活 Frame 的 id；页面没有任何根 Frame 时为 `null`。
+ * @public
+ */
+export function resolveComposePageActiveFrameId(page: ComposePageFile): string | null {
+  const rootIds = page.document.rootIds
+  const declared = page.activeFrameId
+  if (typeof declared === 'string' && rootIds.includes(declared)) return declared
+  return rootIds[0] ?? null
 }
 
 /** @deprecated 仅用于显式处理旧裸文档；页面运行路径请使用 {@link parseComposePageFile}。 */

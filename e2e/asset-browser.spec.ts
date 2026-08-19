@@ -155,10 +155,11 @@ test('OpenSpec: components / Paint Picker / 色盘与透明度滑动在真实指
   expect(outputBox).not.toBeNull()
   await page.mouse.click(outputBox!.x + 40, outputBox!.y + 40)
 
-  const inspector = editor.getByRole('region', { name: '画布属性' })
-  const trigger = inspector.getByRole('button', { name: '输出背景', exact: true })
+  // 场景是普通容器：背景在外观分组，用的是通用的「背景填充」Paint 编辑器。
+  const inspector = editor.getByRole('region', { name: '场景 属性', exact: true })
+  const trigger = inspector.getByRole('button', { name: '背景填充', exact: true })
   await trigger.click()
-  const picker = page.getByRole('dialog', { name: '输出背景', exact: true })
+  const picker = page.getByRole('dialog', { name: '背景填充', exact: true })
   const plane = picker.getByLabel('纯色色盘', { exact: true })
   const planeBox = await plane.boundingBox()
   const history = editor.locator('[data-compose-ui="history"] li')

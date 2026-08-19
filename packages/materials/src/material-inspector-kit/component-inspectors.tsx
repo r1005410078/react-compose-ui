@@ -24,6 +24,8 @@ import {
   type EditorCommand,
   type JsonObject,
   type JsonValue,
+  createComposeBatchCommand,
+  isComposeFrameEntity,
 } from '@compose-ui/core'
 import {
   ComposePropertyPanel,
@@ -440,7 +442,12 @@ export function createLayoutItemInspector(
     // 「忽略 Auto Layout」是 Flow↔Absolute 的唯一显式转换入口；拖拽不再隐式脱流。
     const detachAllowed = Boolean(parentLayout)
     const hierarchy = getComposeHierarchy(entity)
-    const hugAllowed = hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
+    // Frame（场景）的尺寸由 Frame.size 唯一决定，文档校验直接拒绝 Hug；启用 Auto Layout 的
+    // Frame 会让下面这个判断误判为 true，因此必须显式排除，避免暴露一个提交必然被拒的选项。
+    const isFrame = isComposeFrameEntity(entity)
+    const hugAllowed = isFrame
+      ? false
+      : hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
     const box = layoutSnapshot?.boxes[entity.id]
     const transform = getComposeSpatialTransform(entity)
     const schema = useMemo<v.GenericSchema<BasicGeometryValue>>(() => {
@@ -527,13 +534,42 @@ export function createLayoutItemInspector(
       size: { width: item.width, height: item.height },
       margin: createDefaultComposeLayoutItem().margin,
     }), [detachAllowed, item.offset.x, item.offset.y, item.positioning, item.width, item.height])
-    const updateLayoutItem = (nextItem: ComposeLayoutItem) => dispatch(command(
-      idFactory,
-      entity,
-      BUILTIN_COMMAND_TYPES.updateComponent,
-      { entityId: entity.id, key: 'LayoutItem', value: nextItem as unknown as JsonValue },
-      zh ? `修改 ${entity.name} 布局项` : `Update ${entity.name} layout item`,
-    ))
+    const updateLayoutItem = (nextItem: ComposeLayoutItem) => {
+      const layoutItemCommand = command(
+        idFactory,
+        entity,
+        BUILTIN_COMMAND_TYPES.updateComponent,
+        { entityId: entity.id, key: 'LayoutItem', value: nextItem as unknown as JsonValue },
+        zh ? `修改 ${entity.name} 布局项` : `Update ${entity.name} layout item`,
+      )
+      const sizeChanged = nextItem.width.value !== item.width.value
+        || nextItem.height.value !== item.height.value
+      // Frame 的尺寸事实来源是 Frame.size，布局求解会用它覆盖 LayoutItem 的推导结果。
+      // 因此尺寸变化必须一并写 Frame.size，否则文档变了而画面不动。两条命令合成一次事务：
+      // 用户只做了一个动作，撤销就该一步回到位。
+      if (!isFrame || !sizeChanged) return dispatch(layoutItemCommand)
+      return dispatch(createComposeBatchCommand({
+        id: idFactory(),
+        commands: [
+          command(
+            idFactory,
+            entity,
+            BUILTIN_COMMAND_TYPES.setFrameSize,
+            {
+              entityId: entity.id,
+              size: { width: nextItem.width.value, height: nextItem.height.value },
+            },
+            zh ? `修改 ${entity.name} 尺寸` : `Resize ${entity.name}`,
+          ),
+          layoutItemCommand,
+        ],
+        meta: {
+          label: zh ? `修改 ${entity.name} 尺寸` : `Resize ${entity.name}`,
+          source: 'inspector',
+          targetIds: [entity.id],
+        },
+      }))
+    }
     return (
       <BasicGeometryInspectorContext.Provider value={{
         computedHeight: box?.height ?? item.height.value,

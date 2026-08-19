@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, expandInspectorSection, selectRootFrame } from './support/test-helpers'
+import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, expandInspectorSection, openPageInspector } from './support/test-helpers'
 
 test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边距', async ({ page }) => {
   await page.goto('/')
@@ -64,7 +64,8 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
   await editor.getByRole('button', { name: '打开预览' }).click()
   const dialog = page.getByRole('dialog', { name: '文档预览对话框' })
   await dialog.getByRole('combobox', { name: '预览缩放' }).selectOption('1')
-  await dialog.getByRole('button', { name: '选中画板' }).click()
+  // 预览目标是场景选择器，默认就是激活场景；这里只有一块场景，无需切换。
+  await expect(dialog.getByRole('combobox', { name: '预览场景' })).toBeVisible()
   const preview = dialog.getByTestId(`compose-preview-entity-${containerId}`)
   await expect(preview).toHaveCSS('overflow-y', 'auto')
 
@@ -148,8 +149,8 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
   await stage.getByRole('button', { name: 'Add' }).click()
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')
-  await selectRootFrame(editor)
-  const canvasInspector = editor.getByRole('region', { name: '画布属性' })
+  await openPageInspector(page, editor)
+  const canvasInspector = editor.getByRole('region', { name: '页面属性' })
   const pageScriptProperty = canvasInspector.locator('.property-panel__group')
     .filter({ hasText: '页面脚本' })
   await expect(canvasInspector.getByRole('searchbox', { name: '搜索属性' })).toHaveCount(1)
@@ -209,7 +210,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await pageTab.click()
   await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
   await expect(stage.getByRole('button', { name: 'Add' })).toBeVisible()
-  await selectRootFrame(editor)
+  await openPageInspector(page, editor)
   await expect(pageScriptProperty.getByRole('list', { name: '页面脚本返回成员' }))
     .toContainText('10')
   await expect(stage.getByTestId('compose-material-text')).toHaveText('10')
@@ -253,7 +254,7 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
   await page.keyboard.press('Control+S')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
   await pageTab.click()
-  await selectRootFrame(editor)
+  await openPageInspector(page, editor)
   await expect(pageScriptProperty)
     .toContainText('页面脚本导入失败')
   await expect(stage.getByTestId('compose-material-text')).toHaveText('0')

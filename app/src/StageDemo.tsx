@@ -10,7 +10,6 @@ import {
   createDefaultComposeLayoutItem,
   createComposeFrameEntity,
   createTransactionRuntime,
-  resolveOwningFrameId,
 } from '@compose-ui/core'
 import type {
   ComposeDocument,
@@ -76,7 +75,7 @@ const emptyDocument: ComposeDocument = {
   schemaVersion: 7,
   canvas: createDefaultCanvasSettings(),
   rootIds: [DEMO_FRAME_ID],
-  entities: { [DEMO_FRAME_ID]: createComposeFrameEntity({ id: DEMO_FRAME_ID, name: '画板' }) },
+  entities: { [DEMO_FRAME_ID]: createComposeFrameEntity({ id: DEMO_FRAME_ID, name: '场景' }) },
 }
 
 const chartSchema = v.object({
@@ -466,10 +465,13 @@ export function StageDemoWorkspace() {
     () => ({ store: componentStore, onActiveSessionChange: setActiveComponent }),
     [componentStore],
   )
-  // 预览目标只有 Frame 一种：取当前选区所属的画板。
-  const selectedFrameId = controller.selectedIds.length === 1
-    ? resolveOwningFrameId(controller.document, controller.selectedIds[0]!)
-    : null
+  // 预览目标只有场景一种。默认取页面的激活场景；标签上的播放按钮可以直接指定另一块，
+  // 用户在对话框的场景选择器里也能改。
+  const [previewFrameId, setPreviewFrameId] = useState<string | null>(null)
+  const activeFrameId = activePage?.page.activeFrameId
+    ?? controller.document.rootIds[0]
+    ?? null
+  const previewTargetFrameId = previewFrameId ?? activeFrameId
 
   return (
     <>
@@ -482,6 +484,10 @@ export function StageDemoWorkspace() {
         controller={controller}
         components={componentsConfig}
         pages={pagesConfig}
+        onScenePreview={(frameId) => {
+          setPreviewFrameId(frameId)
+          setPreviewOpen(true)
+        }}
         slots={{
           stageToolbar: (
             <>
@@ -491,7 +497,10 @@ export function StageDemoWorkspace() {
                 aria-label="打开预览"
                 title="打开预览"
                 type="button"
-                onClick={() => setPreviewOpen(true)}
+                onClick={() => {
+                  setPreviewFrameId(null)
+                  setPreviewOpen(true)
+                }}
               >
                 <PreviewIcon />
               </button>
@@ -502,15 +511,13 @@ export function StageDemoWorkspace() {
       />
       <ComposePreviewDialog
         assetResolver={assetResolver}
-        selectedFrameId={selectedFrameId}
+        selectedFrameId={previewTargetFrameId}
         dialogLabel="文档预览对话框"
         document={controller.document}
         page={activePage?.page}
         messages={{
           title: '预览',
-          document: '文档',
-          selectedFrame: '选中画板',
-          target: '预览范围',
+          target: '预览场景',
           scale: '预览缩放',
           enterFullscreen: '全屏预览',
           exitFullscreen: '退出全屏预览',

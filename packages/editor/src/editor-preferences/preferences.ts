@@ -39,6 +39,7 @@ export type ComposeEditorShortcutAction =
   | 'edit.group'
   | 'edit.ungroup'
   | 'edit.createComponent'
+  | 'scene.create'
   | 'edit.delete'
   | 'history.undo'
   | 'history.redo'
@@ -115,6 +116,7 @@ export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'edit.group',
   'edit.ungroup',
   'edit.createComponent',
+  'scene.create',
   'edit.delete',
   'history.undo',
   'history.redo',
@@ -155,6 +157,7 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
   'edit.group': 'stage',
   'edit.ungroup': 'stage',
   'edit.createComponent': 'stage',
+  'scene.create': 'stage',
   'edit.delete': 'stage',
   'history.undo': 'history',
   'history.redo': 'history',
@@ -203,6 +206,7 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
       'edit.group': [{ code: 'KeyG', primary: true }],
       'edit.ungroup': [{ code: 'KeyG', primary: true, shift: true }],
       'edit.createComponent': [],
+      'scene.create': [],
       'edit.delete': [{ code: 'Delete' }, { code: 'Backspace' }],
       'history.undo': [{ code: 'KeyZ', primary: true }],
       'history.redo': [

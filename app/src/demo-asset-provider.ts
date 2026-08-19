@@ -80,7 +80,7 @@ const demoCounterDocument: ComposeDocument = {
     // v7 的文档根只接受 Frame；示例内容挂在这块画板下。
     'frame-root': createComposeFrameEntity({
       id: 'frame-root',
-      name: '画板',
+      name: '场景',
       childIds: ['demo-counter-value', 'demo-counter-button'],
     }),
     'demo-counter-value': {

@@ -4,7 +4,12 @@ import {
   type ComposeAssetProvider,
   type ComposeAssetResolver,
 } from '@compose-ui/assets'
-import { composePageDisplayName, createTransactionRuntime, getComposeAnimations } from '@compose-ui/core'
+import {
+  composePageDisplayName,
+  createTransactionRuntime,
+  getComposeAnimations,
+  resolveComposePageActiveFrameId,
+} from '@compose-ui/core'
 import type {
   ComposeAnimation,
   ComposeDocument,
@@ -52,6 +57,13 @@ export interface PageWorkspaceHandle {
     pageKey: string,
     reference: ComposePageAnimationReference | null,
   ) => Promise<ComposeAnimation | null>
+  /**
+   * 切换页面的激活场景，并同步已打开页面会话的 revision 基线。
+   *
+   * @remarks
+   * 激活状态在页面文件里而不是 ComposeDocument 里，因此这是资源写入，**不进撤销历史**。
+   */
+  readonly setPageActiveFrame: (pageKey: string, frameId: string) => Promise<void>
   readonly refreshCatalog: () => void
 }
 
@@ -233,8 +245,8 @@ export function usePageWorkspace({
       let animationEntryId: string | undefined
       let animationRevision: string | undefined
       let animationManifest: ComposeAnimation | undefined
-      // v7 的动画清单归属 Frame：绑定引用在默认 Frame 的 Animations.source 上。
-      const animationFrameId = snapshot.page.defaultFrameId ?? document.rootIds[0] ?? null
+      // v7 的动画清单归属 Frame：绑定引用在激活场景的 Animations.source 上。
+      const animationFrameId = resolveComposePageActiveFrameId(snapshot.page)
       const animationSource = animationFrameId
         ? (document.entities[animationFrameId]?.components.Animations as
             { source?: ComposePageAnimationReference } | undefined)?.source
@@ -370,6 +382,34 @@ export function usePageWorkspace({
     return 'saved'
   }, [store, updateSession])
 
+  /**
+   * 切换页面的激活场景。
+   *
+   * @remarks
+   * 激活状态在页面文件里，不在 ComposeDocument 里，因此这是一次资源写入而**不进撤销历史**
+   * ——与 setPageSetupScript、setPageAnimation 同类。写入成功后必须回写会话的 page 与
+   * baseRevision，否则下一次保存会拿着过期 revision 冲突。
+   */
+  const setPageActiveFrame = useCallback(async (pageKey: string, frameId: string) => {
+    if (!store) throw new ComposeAssetError('unsupported', '页面 Store 不可用')
+    const session = [...sessionsRef.current.values()].find((item) => item.pageKey === pageKey)
+    const base = session ?? await store.readPage(pageKey)
+    const expectedRevision = 'baseRevision' in base ? base.baseRevision : base.revision
+    // 激活写的是页面文件，而页面文件里的文档是**上次保存**的那份。刚新建、尚未保存的场景
+    // 不在其中，直接写会被 Store 以「不是根 Frame」拒绝——那句话对用户毫无意义。这里提前
+    // 给出可操作的说明；不在这里顺手保存文档，保存必须是用户的显式动作。
+    if (!base.page.document.rootIds.includes(frameId)) {
+      throw new ComposeAssetError('unsupported', '这个场景还没有保存，先保存页面再设为激活场景')
+    }
+    const written = await store.setPageActiveFrame(pageKey, frameId, expectedRevision)
+    if (!session) return
+    updateSession(session.panelId, (current) => ({
+      ...current,
+      page: written.page,
+      baseRevision: written.revision,
+    }))
+  }, [store, updateSession])
+
   const setPageSetupScript = useCallback(async (
     pageKey: string,
     reference: ComposePageSetupReference | null,
@@ -430,9 +470,8 @@ export function usePageWorkspace({
     }
     const expectedRevision = session ? session.baseRevision : (await store.readPage(pageKey)).revision
     const targetFrameId = session?.animationFrameId
-      ?? session?.page.defaultFrameId
-      ?? session?.page.document.rootIds[0]
-      ?? (await store.readPage(pageKey)).page.document.rootIds[0]
+      ?? (session ? resolveComposePageActiveFrameId(session.page) : null)
+      ?? resolveComposePageActiveFrameId((await store.readPage(pageKey)).page)
     if (!targetFrameId) throw new ComposeAssetError('unsupported', '页面没有可绑定动画的 Frame')
     const written = await store.setFrameAnimation(pageKey, targetFrameId, reference, expectedRevision)
     if (session) {
@@ -486,6 +525,7 @@ export function usePageWorkspace({
     setPageSetupScript,
     reloadPageSetupScript,
     setPageAnimation,
+    setPageActiveFrame,
     refreshCatalog,
   }
 }

@@ -36,7 +36,7 @@ import {
 } from './scene-index'
 import {
   listFrameWorldGuides,
-  resolveActiveFrameId,
+  resolveTargetFrameId,
   toFrameGuidePosition,
 } from './frame-space'
 import { describeEntityTargets, describeTransform } from './transaction-labels'
@@ -136,7 +136,6 @@ export type StageExternalDragItem =
 /** Pointer 命中的 Stage 语义目标。 @public */
 export type StageInteractionHit =
   | { readonly kind: 'surface' }
-  | { readonly kind: 'output' }
   | {
       readonly kind: 'entity'
       readonly entityId: string
@@ -300,7 +299,7 @@ export interface StageInteractionContext {
    * 只承担回退职责：有选择时目标始终解析为选中项最近的祖先 Frame，本字段 MUST NOT 覆盖
    * 显式选择。缺省时回退到第一个根 Frame。
    */
-  readonly defaultFrameId?: string | null
+  readonly activeFrameId?: string | null
   /** Inspector 打开的单 Entity 背景填充编辑；缺失时不渲染也不接收 Paint 控制柄。 */
   readonly paintEditing?: StagePaintEditing | null
   /** 宿主打开的可编辑路径会话；缺失时引擎不接收 `path-handle` 命中，行为与现在完全一致。 */
@@ -344,7 +343,6 @@ export type StageInteractionEffect =
   | { readonly type: 'pointer.release'; readonly pointerId: number }
   | { readonly type: 'viewport.change'; readonly viewport: StageViewport }
   | { readonly type: 'selection.change'; readonly selectedIds: readonly string[] }
-  | { readonly type: 'output.select' }
   | { readonly type: 'paint.sample.complete' }
   | { readonly type: 'command.dispatch'; readonly command: EditorCommand }
   | {
@@ -622,7 +620,7 @@ type Gesture =
       readonly pointerId: number
       readonly viewport: StageViewport
       readonly startWorld: StagePoint
-      readonly origin: 'surface' | 'output'
+      readonly origin: 'surface'
       /**
        * 起框所在的容器 Entity。
        *
@@ -1206,8 +1204,8 @@ export function createStageInteractionController(): StageInteractionController {
   const listeners = new Set<() => void>()
   let surface: StageInteractionSurfacePort | null = null
   /** 辅助线读写与 Frame 相关动作共用的活动 Frame 求解。 */
-  const activeFrameId = (value: StageInteractionContext) =>
-    resolveActiveFrameId(value.document, value.selectedIds, value.defaultFrameId)
+  const targetFrameId = (value: StageInteractionContext) =>
+    resolveTargetFrameId(value.document, value.selectedIds, value.activeFrameId)
 
   let context: StageInteractionContext | null = null
   let index: StageSceneIndex | null = null
@@ -1449,7 +1447,7 @@ export function createStageInteractionController(): StageInteractionController {
         point: draggedPoint,
         // 两点图形的端点可以沿两个轴自由移动；使用角手柄复用既有 smart/grid snap 规则。
         handle: 'se',
-        candidates: index.snapCandidates([gesture.entityId], activeFrameId(context)),
+        candidates: index.snapCandidates([gesture.entityId], targetFrameId(context)),
         canvas: context.document.canvas,
         zoom: gesture.viewport.zoom,
         disabled: modifiers.command,
@@ -1553,7 +1551,7 @@ export function createStageInteractionController(): StageInteractionController {
       const snapped = snapTranslation(
         gesture.bounds,
         delta,
-        index.snapCandidates(gesture.ids, activeFrameId(context)),
+        index.snapCandidates(gesture.ids, targetFrameId(context)),
         gesture.viewport.zoom,
         modifiers.command,
         {
@@ -1590,7 +1588,7 @@ export function createStageInteractionController(): StageInteractionController {
       const snapped = snapResizePoint({
         point: world,
         handle: gesture.handle,
-        candidates: index.snapCandidates(gesture.ids, activeFrameId(context)),
+        candidates: index.snapCandidates(gesture.ids, targetFrameId(context)),
         canvas: context.document.canvas,
         zoom: gesture.viewport.zoom,
         disabled: modifiers.command,
@@ -1996,19 +1994,12 @@ export function createStageInteractionController(): StageInteractionController {
     const startMarquee = (originEntityId?: string) => {
       const viewport = context!.viewport
       const startWorld = worldPoint(event.point, viewport)
-      const outputHit = event.hit.kind === 'output'
-      if (outputHit) {
-        effects.push(
-          { type: 'selection.change', selectedIds: [] },
-          { type: 'output.select' },
-        )
-      }
       gesture = {
         type: 'marquee',
         pointerId: event.pointerId,
         viewport,
         startWorld,
-        origin: outputHit ? 'output' : 'surface',
+        origin: 'surface',
         originEntityId,
         baseSelection: context!.selectedIds,
         currentWorld: startWorld,
@@ -2027,7 +2018,6 @@ export function createStageInteractionController(): StageInteractionController {
       context.tool === 'marquee'
       && (
         event.hit.kind === 'surface'
-        || event.hit.kind === 'output'
         || event.hit.kind === 'entity'
       )
     ) {
@@ -2038,7 +2028,6 @@ export function createStageInteractionController(): StageInteractionController {
       isDrawingTool(context.tool)
       && (
         event.hit.kind === 'surface'
-        || event.hit.kind === 'output'
         || event.hit.kind === 'entity'
       )
     ) {
@@ -2172,7 +2161,7 @@ export function createStageInteractionController(): StageInteractionController {
       const guideId = event.hit.guideId
       const guide = listFrameWorldGuides(
         context.document,
-        activeFrameId(context),
+        targetFrameId(context),
         index,
       ).find((item) => item.id === guideId)
       if (!guide) return
@@ -2256,9 +2245,7 @@ export function createStageInteractionController(): StageInteractionController {
       const selectedIds = excluded.size === 0
         ? resolved
         : resolved.filter((entityId) => !excluded.has(entityId))
-      if (finished.origin !== 'output' || selectedIds.length > 0) {
-        effects.push({ type: 'selection.change', selectedIds })
-      }
+      effects.push({ type: 'selection.change', selectedIds })
     }
     else if (finished.type === 'paint-sample') {
       const result = samplePaintAt(finished.target, finished.point, finished.alt)
@@ -2292,7 +2279,7 @@ export function createStageInteractionController(): StageInteractionController {
       const created = finished.guides.filter((guide) => guide.axis === 'y'
         ? finished.point.y >= 0
         : finished.point.x >= 0)
-      const frameId = activeFrameId(context)
+      const frameId = targetFrameId(context)
       const frameOrigin = frameId ? index.getFrameOrigin(frameId) : null
       if (created.length > 0 && frameId && frameOrigin) {
         // 手势全程在世界坐标里进行，落盘前换算回该 Frame 的局部坐标。
@@ -2332,7 +2319,7 @@ export function createStageInteractionController(): StageInteractionController {
     }
     else if (finished.type === 'guide-move') {
       const shouldDelete = isInsideOwningRuler(finished.axis, finished.point)
-      const frameId = activeFrameId(context)
+      const frameId = targetFrameId(context)
       const frameOrigin = frameId ? index.getFrameOrigin(frameId) : null
       if (!frameId || !frameOrigin) return effects
       effects.push({
