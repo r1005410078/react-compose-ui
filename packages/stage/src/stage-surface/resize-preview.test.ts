@@ -81,4 +81,36 @@ describe('OpenSpec: stage / resize 手势实时布局反馈', () => {
     })
     expect(solve!.entities.child).toBe(value.entities.child)
   })
+
+  it('Frame 目标把拖动尺寸写进 Frame.size，场景 Auto Layout 子级才能实时重排', () => {
+    const base = entity('scene', 'absolute', 'fixed')
+    const scene = {
+      ...base,
+      components: {
+        ...base.components,
+        // 预览文档里 LayoutItem 的 value 已是拖动中的尺寸；Frame.size 仍是旧值。
+        Frame: { size: { width: 1280, height: 720 } },
+        Hierarchy: { childIds: ['child'] },
+        Layout: {
+          type: 'flex',
+          flexDirection: 'column',
+          flexWrap: 'nowrap',
+          alignContent: 'stretch',
+          justifyContent: 'flex-start',
+          alignItems: 'stretch',
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
+        },
+      },
+    } as typeof base
+    const value = doc([scene, entity('child', 'flow', 'fill')])
+    const solve = buildResizePreviewSolveDocument(value, ['scene'])
+
+    expect(solve).not.toBeNull()
+    // 求解以 Frame.size 为唯一事实来源，必须覆盖成 LayoutItem 里的拖动尺寸。
+    expect(solve!.entities.scene!.components.Frame).toEqual({
+      size: { width: 120, height: 40 },
+    })
+  })
 })

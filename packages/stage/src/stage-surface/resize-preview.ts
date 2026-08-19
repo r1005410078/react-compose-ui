@@ -1,4 +1,5 @@
 import {
+  getComposeFrame,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLayoutItem,
@@ -15,6 +16,10 @@ import {
  * 活动轴按规范「Fill resize preview 视为 Fixed」，非活动轴的 value 即求解尺寸、改写后
  * 视觉不变；Hug 轴若保持 hug 会在求解中触发重新测量并覆盖拖动尺寸。其余 Absolute 目标
  * 不影响任何排布，previewTransforms 的视觉覆盖已足够，不需要进入求解。
+ *
+ * 目标若是 Frame（场景），还必须把拖动尺寸写进 `Frame.size`：布局求解以 `Frame.size` 为
+ * 尺寸的唯一事实来源并覆盖 LayoutItem，不写它的话场景的 Auto Layout 子级在拖动期间
+ * 始终按旧尺寸排布，松手才跳变。
  *
  * @returns 求解用文档；没有影响排布的目标时返回 null，表示无需实时求解。
  * @internal
@@ -34,6 +39,7 @@ export function buildResizePreviewSolveDocument(
       && (getComposeHierarchy(entity)?.childIds.length ?? 0) > 0
     if (!isFlowChild && !isLayoutContainer) continue
     hasReflowTarget = true
+    const frame = getComposeFrame(entity)
     entities[entityId] = {
       ...entity,
       components: {
@@ -43,6 +49,9 @@ export function buildResizePreviewSolveDocument(
           width: { ...item.width, mode: 'fixed' },
           height: { ...item.height, mode: 'fixed' },
         },
+        ...(frame
+          ? { Frame: { ...frame, size: { width: item.width.value, height: item.height.value } } }
+          : {}),
       },
     }
   }
