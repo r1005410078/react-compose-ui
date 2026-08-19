@@ -74,8 +74,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   宿主主动调用包内校验入口。清单级命令必须显式传 `frameId`；跨 Frame 拖拽用
   `animation.tracks.relocate` 搬迁轨道，且必须排在结构变更之前。动画命令通过
   `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。动画文件按所属根
-  Frame 分区（`animationSchemaVersion: 2`，1→2 显式迁移），一页共用一份文件而各场景互不
-  影响；`Animations` 整体写入，清单命令与 `animation.source.set` 各自带上另一半。绑定是文档
+  Frame 分区（`animationSchemaVersion: 2`，1→2 显式迁移），编辑器默认一场景一份文件，
+  多场景共享一份的既有文件同样合法，保存按绑定文件聚合回写；`Animations` 整体写入，
+  清单命令与 `animation.source.set` 各自带上另一半。绑定是文档
   写入而不是页面文件写入，因此尚未保存的场景也能绑定动画。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、script-runtime、stage-engine、

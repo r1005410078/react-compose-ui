@@ -97,18 +97,26 @@ test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景�
   await editor.getByRole('radio', { name: '动画' }).click()
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(1)
 
-  // 保存把两块场景的清单合并回同一份文件，保存后不再有未保存标记。
+  // 保存把两块场景的清单各自回写进自己绑定的文件，保存后不再有未保存标记。
   await editor.getByRole('radio', { name: '设计' }).click()
   await stage.focus()
   await page.keyboard.press('Control+s')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
 
-  // 一页只有一份动画文件：两块场景是同一份文件里的两个分区，不该增生出第二个文件。
-  // 文件选择器列出页面同目录下的全部动画文件，因此选项数 = 占位项 + 文件数。
+  // 一场景一份文件：页面配置面板的动画分组逐场景列出绑定行，两行各自绑定不同的文件。
   await openPageInspector(page, editor)
-  const fileSelect = editor.getByRole('region', { name: '页面属性' })
-    .getByRole('combobox', { name: '动画文件' })
-  await expect(fileSelect.locator('option')).toHaveCount(2)
+  const pageInspector = editor.getByRole('region', { name: '页面属性' })
+  await expect
+    .poll(async () => pageInspector.locator('select option:checked').evaluateAll((options) =>
+      options
+        .map((option) => option.textContent ?? '')
+        .filter((text) => text.endsWith('.animation.json'))))
+    .toHaveLength(2)
+  const boundFiles = await pageInspector.locator('select option:checked').evaluateAll((options) =>
+    options
+      .map((option) => option.textContent ?? '')
+      .filter((text) => text.endsWith('.animation.json')))
+  expect(new Set(boundFiles).size).toBe(2)
 })
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 清空选择回退到激活场景', async ({ page }) => {
@@ -167,7 +175,7 @@ test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 创�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  // 正常建一次动画，确认只落一份文件；文件选择器列出页面同目录的全部动画文件。
+  // 正常建一次动画，确认只落一份文件；绑定行候选 = 解除项 + 同目录文件 + 新建项。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   await stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer').click()
@@ -175,6 +183,7 @@ test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 创�
 
   await openPageInspector(page, editor)
   const fileSelect = editor.getByRole('region', { name: '页面属性' })
-    .getByRole('combobox', { name: '动画文件' })
-  await expect(fileSelect.locator('option')).toHaveCount(2)
+    .getByRole('combobox', { name: '场景（激活）' })
+  await expect(fileSelect.locator('option:checked')).toHaveText('Home-场景.animation.json')
+  await expect(fileSelect.locator('option')).toHaveCount(3)
 })

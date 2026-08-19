@@ -99,10 +99,13 @@ export interface AnimationModeSession {
    * @remarks
    * 创建与可选的绑定配置共享 mergeKey，合成一次可撤销事务；撤销它后时间线回到
    * 「载入绑定动画」状态，重新调用本方法即可恢复。
+   *
+   * `frameId` 缺省写入当前作用域 Frame；页面配置面板按场景逐行绑定时传入行自己的
+   * Frame，使非作用域场景的镜像也能就地水合。
    */
-  readonly hydrateAnimation: (manifest: ComposeAnimation) => void
-  /** 解除绑定时移除镜像清单与所有实体上的对应分组。 */
-  readonly removeAnimation: (animationId: string) => void
+  readonly hydrateAnimation: (manifest: ComposeAnimation, frameId?: string) => void
+  /** 解除绑定时移除镜像清单与所有实体上的对应分组。`frameId` 语义同 hydrateAnimation。 */
+  readonly removeAnimation: (animationId: string, frameId?: string) => void
   /** 菱形按钮状态查询。 */
   readonly keyStateFor: (
     entityId: string,
@@ -233,12 +236,13 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
 
   // 清单级命令（create/delete/configure）必须带宿主 Frame：v7 的动画清单归属 Frame，
   // handler 不接受沉默回退到"第一个根 Frame"。
-  const hydrateAnimation = useCallback((manifest: ComposeAnimation) => {
+  const hydrateAnimation = useCallback((manifest: ComposeAnimation, frameId?: string) => {
     // create 命令不接收 bindings：绑定经 configure 补写，与 create 共享 mergeKey
     // 合成一次事务，撤销时清单与绑定一起消失。
+    const targetFrameId = frameId ?? hostFrameId ?? ''
     const mergeKey = `animation-hydrate:${manifest.id}`
     dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
-      frameId: hostFrameId ?? '',
+      frameId: targetFrameId,
       animationId: manifest.id,
       name: manifest.name,
       durationMs: manifest.durationMs,
@@ -246,16 +250,16 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     }, mergeKey)
     if (manifest.bindings) {
       dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
-        frameId: hostFrameId ?? '',
+        frameId: targetFrameId,
         animationId: manifest.id,
         bindings: manifest.bindings as JsonValue,
       }, mergeKey)
     }
   }, [dispatchDraft, hostFrameId])
 
-  const removeAnimation = useCallback((targetAnimationId: string) => {
+  const removeAnimation = useCallback((targetAnimationId: string, frameId?: string) => {
     dispatchDraft(COMPOSE_ANIMATION_COMMAND_TYPES.delete, {
-      frameId: hostFrameId ?? '',
+      frameId: frameId ?? hostFrameId ?? '',
       animationId: targetAnimationId,
     })
   }, [dispatchDraft, hostFrameId])
