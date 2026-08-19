@@ -1498,7 +1498,8 @@ export function useComposeEditorController({
     onSelectedIdsChange: setSelectedIds,
     onEntityRename: renameEntity,
     onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
-    defaultFrameId: document.rootIds[0] ?? null,
+    // 宿主有页面会话时会用页面的激活场景覆盖它；没有页面系统时回退第一个根 Frame。
+    activeFrameId: document.rootIds[0] ?? null,
     onSurfaceSizeChange: setSurfaceSize,
     interactionController,
     paintEditing: activePaintEditing,

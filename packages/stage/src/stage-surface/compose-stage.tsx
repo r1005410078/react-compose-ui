@@ -73,7 +73,7 @@ import {
   createStageInteractionController,
   createStageSceneIndex,
   listFrameWorldGuides,
-  resolveActiveFrameId,
+  resolveTargetFrameId,
   resolveStageDropIndicator,
   expandScrollRange,
   scrollAxisToViewport,
@@ -799,7 +799,7 @@ function ComposeStageReady({
   onSelectedIdsChange,
   onEntityRename,
   onCreateComponentIntent,
-  defaultFrameId,
+  activeFrameId,
   paintEditing = null,
   paintSampling = null,
   onPaintSamplingComplete,
@@ -2249,8 +2249,8 @@ function ComposeStageReady({
   })
   const previewById = new Map(guidePreview.map((guide) => [guide.id, guide]))
   // 辅助线保存在活动 Frame 的局部坐标里；Overlay 在世界坐标绘制，因此这里映射一次。
-  const activeFrameId = resolveActiveFrameId(document, selectedIds, defaultFrameId)
-  const worldGuides = listFrameWorldGuides(document, activeFrameId, boundarySceneIndex)
+  const targetFrameId = resolveTargetFrameId(document, selectedIds, activeFrameId)
+  const worldGuides = listFrameWorldGuides(document, targetFrameId, boundarySceneIndex)
     .map((guide) => ({ id: guide.id, axis: guide.axis, position: guide.value }))
   const canvasGuides = [
     ...worldGuides.map((guide) => previewById.get(guide.id) ?? guide),

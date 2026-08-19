@@ -41,7 +41,10 @@ import {
   ComposePaintImageLibraryProvider,
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
-import { resolveActiveFrameId } from '@compose-ui/stage-engine'
+import { resolveTargetFrameId } from '@compose-ui/stage-engine'
+
+/** 解析动画作用域时不看选区：内联 `[]` 每次渲染都是新引用，会破坏 memo。 */
+const NO_SELECTION: readonly string[] = []
 import type { ComposePageAnimationReference, ComposePageSetupReference } from '@compose-ui/core'
 import type { ComposeEntity, ComposeResolvedComponentSnapshot, EditorCommand, JsonObject } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
@@ -476,8 +479,10 @@ export function ComposeEditor({
       return
     }
     setCommandRewrite((document, command) => rewriteAutoRecordCommand(document, {
-      // 动画清单归属 Frame；自动记录写回的是活动 Frame 的那条动画。
-      frameId: resolveActiveFrameId(document, controller?.selectedIds ?? []) ?? '',
+      // 自动记录刻意按**被拖动实体所属**的 Frame 解析，而不是激活场景：这样在非激活场景里
+      // 拖动时，rewriteAutoRecordCommand 会因为该 Frame 的清单里没有这条动画而自然 no-op，
+      // 不会写出跨 Frame 的悬空分组。
+      frameId: resolveTargetFrameId(document, controller?.selectedIds ?? []) ?? '',
       animationId: autoRecordAnimationId,
       playheadMs: autoRecordPlayheadMs,
       idFactory: animationCommandId,
@@ -1409,14 +1414,25 @@ export function ComposeEditor({
     return animations?.source ?? null
   }, [activePageSession])
 
+  /**
+   * 动画作用域 Frame。
+   *
+   * @remarks
+   * 一页一个激活场景，就一条时间线：文件选择器、会话镜像、自动记录与关键帧 Inspector 必须
+   * 解析到同一个 Frame。此前 reference 取会话/页面默认 Frame 而 mirror 取选区所属 Frame，
+   * 多场景下两者会指向不同的画板。要编辑另一块场景的动画，先把它设为激活场景。
+   */
+  const animationScopeDocument = controller?.document
+  const pageActiveFrameId = activePageSession?.page.activeFrameId ?? null
+  const animationScopeFrameId = useMemo(() => (animationScopeDocument
+    ? resolveTargetFrameId(animationScopeDocument, NO_SELECTION, pageActiveFrameId)
+    : null), [animationScopeDocument, pageActiveFrameId])
+
   const { selectedKeyframeEasing, setKeyframeInterpolation } = animationMode
   const animationInspector = useMemo(() => {
     if (!activePageSession || !pageProvider) return undefined
-    const animationFrameId = controller?.document
-      ? resolveActiveFrameId(controller.document, controller.selectedIds)
-      : null
-    const mirrorAnimation = controller?.document && animationFrameId
-      ? getComposeAnimations(controller.document, animationFrameId)[0] ?? null
+    const mirrorAnimation = controller?.document && animationScopeFrameId
+      ? getComposeAnimations(controller.document, animationScopeFrameId)[0] ?? null
       : null
     return (
       <PageAnimationScopePanel
@@ -1444,6 +1460,7 @@ export function ComposeEditor({
     activePageSession,
     animationMode.active,
     animationRuntime,
+    animationScopeFrameId,
     controller,
     handlePageAnimationChanged,
     pageProvider,
@@ -1637,15 +1654,14 @@ export function ComposeEditor({
       && animationMode.panelValue?.selectedClipId
       && controller
     ) {
-      const inspectorFrameId = resolveActiveFrameId(controller.document, controller.selectedIds)
-      const animation = (inspectorFrameId
-        ? getComposeAnimations(controller.document, inspectorFrameId)
+      const animation = (animationScopeFrameId
+        ? getComposeAnimations(controller.document, animationScopeFrameId)
         : []).find((item) => item.id === animationMode.animationId)
       if (animation && animationRuntime) {
         return (
           <AnimationInspector
             animation={animation}
-            frameId={inspectorFrameId ?? ''}
+            frameId={animationScopeFrameId ?? ''}
             dispatch={(command) => animationRuntime.dispatch(command)}
             idFactory={animationCommandId}
             messages={editorMessages.animationMode}
@@ -1739,6 +1755,7 @@ export function ComposeEditor({
     updateComponentInstance,
     updateInstanceOverrides,
     animationFieldAdornment,
+    animationScopeFrameId,
   ])
 
   const resolvedComponentLibraryPanel = slots?.componentLibrary !== undefined
@@ -1985,6 +2002,8 @@ export function ComposeEditor({
           onToolChange: controller?.setTool,
           scriptModuleLoader: pages?.scriptModuleLoader,
           scriptScope: activePageSession?.scriptScope,
+          // 无选择时 Frame 动作与辅助线的回退目标是页面的激活场景，不是第一个根 Frame。
+          ...(pageActiveFrameId ? { activeFrameId: pageActiveFrameId } : {}),
           // 动画模式：画布显示播放头时刻的采样文档与配套布局；dispatch 不变，仍打在基础文档上。
           // 运动路径只在此分支注入：退出动画模式即随 spread 一起消失。
           ...(animationMode.active && animationMode.animationId && animationStageDocument
