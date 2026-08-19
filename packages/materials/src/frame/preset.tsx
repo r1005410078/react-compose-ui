@@ -30,7 +30,9 @@ export function createFramePreset(
   // 场景默认尺寸是画板尺寸而不是容器尺寸；LayoutItem 的固定尺寸回退必须与 Frame.size 一致，
   // 否则降格回普通容器时尺寸会跳到一个陌生的值。
   const size = options.defaultSize ?? COMPOSE_DEFAULT_FRAME_SIZE
-  const container = createContainerPreset({ ...options, defaultSize: size })
+  // 场景默认不裁剪：它是绝对坐标原点与工作区里的画板，内容越界默认可见——与「新建场景」
+  // 命令及初始场景一致；需要裁剪时由用户在溢出属性里显式开启。容器保持默认裁剪不变。
+  const container = createContainerPreset({ ...options, defaultSize: size, defaultClip: false })
   return {
     id: 'frame',
     label: '场景',
