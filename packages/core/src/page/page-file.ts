@@ -255,7 +255,7 @@ export function createEmptyComposePageDocument(): ComposeDocument {
     entities: {
       [frameId]: {
         id: frameId,
-        name: '画板',
+        name: '场景',
         components: {
           Composition: {
             presetId: 'frame',

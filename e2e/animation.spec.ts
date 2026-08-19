@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, selectRootFrame } from './support/test-helpers'
+import { pointerDrop, drawContainer, openPageInspector } from './support/test-helpers'
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头、画布采样与撤销', async ({ page }) => {
   await page.goto('/')
@@ -83,11 +83,9 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
   await expect(animationPanel.getByRole('button', { name: '创建动画' })).toHaveCount(0)
 
-  // 点击输出区域激活画布 Inspector：动画区块（页面脚本上方）显示绑定的动画文件。
-  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
-  await page.mouse.click(outputBox.x + 40, outputBox.y + 40)
+  // 点空白工作区打开页面配置：动画区块（页面脚本下方）显示绑定的动画文件。
+  await openPageInspector(page, editor)
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  await expect(editor.getByRole('region', { name: '画布属性' })).toBeVisible()
   const animationSelect = inspector.getByRole('combobox', { name: '动画文件' })
   await expect(animationSelect.locator('option:checked')).toHaveText('Home.animation.json')
   const animationSection = inspector.locator('.property-panel__group').filter({ hasText: '动画文件' })
@@ -542,9 +540,8 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
   await expect(animationPanel.getByRole('button', { name: '关键帧 300 ms：位置' })).toBeVisible()
 
   // 点画布空白处回到画布 Inspector；此时时间线选中首帧，缓动区出现在「当前时间」下方。
-  // 画板体已不是选中入口（框选优先）；标题标签才是。
-  await selectRootFrame(editor)
-  await expect(editor.getByRole('region', { name: '画布属性' })).toBeVisible()
+  // 关键帧缓动编辑在页面配置面板的动画区块里。
+  await openPageInspector(page, editor)
   await animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' }).click()
   await expect(inspector.getByRole('textbox', { name: '关键帧' }))
     .toHaveValue(/位置 · 0 ms → 300 ms$/u)

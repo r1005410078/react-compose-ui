@@ -2669,8 +2669,11 @@ function ComposeStageReady({
         // ContextMenu 的 Portal 在 React 事件树中仍会冒泡到 Stage；不能把菜单自身的右键
         // 当作新的画布右键，否则会重置根菜单。
         if (event.defaultPrevented || !rootRef.current?.contains(event.target as Node)) return
-        const entityId = (event.target as Element)
-          .closest<HTMLElement>('[data-entity-id]')?.dataset.entityId ?? null
+        // 标签用独立属性标记归属：data-entity-id 必须唯一指向 Scene 里的那个节点，
+        // 否则任何按实体查询 DOM 的地方都会同时命中标签。
+        const target = (event.target as Element)
+          .closest<HTMLElement>('[data-entity-id],[data-label-entity-id]')
+        const entityId = target?.dataset.entityId ?? target?.dataset.labelEntityId ?? null
         if (entityId && !normalizedSelection.includes(entityId)) {
           onSelectedIdsChange([entityId])
         }

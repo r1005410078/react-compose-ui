@@ -102,7 +102,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   expect(outputBox).not.toBeNull()
   await page.mouse.click(outputBox!.x + 40, outputBox!.y + 40)
 
-  const inspector = editor.getByRole('region', { name: '画布属性' })
+  // 场景分组自己的面板也叫「场景属性」，这里要的是整个 Entity Inspector 根。
+  const inspector = editor.getByRole('region', { name: '场景 属性', exact: true })
   await expect(inspector).toBeVisible()
   await expect(output).toHaveClass(/is-selected/)
   await expect(bottomEdge).toHaveCSS('stroke', 'rgb(54, 135, 255)')
@@ -144,15 +145,13 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   })
   await stage.press('Control+0')
 
-  const outputSizeKey = inspector.getByRole('combobox', { name: '输出尺寸键', exact: true })
+  // 场景是普通容器：常见尺寸在「场景」分组，背景在「外观」分组，尺寸数值在几何分组。
   const commonOutputSize = inspector.getByRole('combobox', { name: '常见尺寸', exact: true })
-  await expect(outputSizeKey).toHaveValue('preset')
   await expect(commonOutputSize).toHaveValue('1280x720')
-  await expect(inspector.getByTestId('semantic-editor-size')).toHaveCount(0)
-  await expect(inspector.getByTestId('semantic-editor-paint')).toBeVisible()
-  const canvasPaint = inspector.getByRole('button', { name: '输出背景', exact: true })
+  await expect(inspector.getByRole('combobox', { name: '尺寸宽度' })).toHaveValue('1280')
+  const canvasPaint = inspector.getByRole('button', { name: '背景填充', exact: true })
   await canvasPaint.click()
-  const canvasPaintPicker = page.getByRole('dialog', { name: '输出背景', exact: true })
+  const canvasPaintPicker = page.getByRole('dialog', { name: '背景填充', exact: true })
   const expectCompactPaintPicker = async () => {
     expect(await canvasPaintPicker.evaluate((element) => ({
       overflowX: getComputedStyle(element).overflowX,
@@ -286,34 +285,32 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
 
   await canvasPaintPicker.press('Escape')
   await expect(canvasPaint).toBeFocused()
+
+  // 常见尺寸是场景分组里的快捷入口；尺寸数值本身在几何分组，两处指向同一个 Frame.size。
   await commonOutputSize.selectOption('1920x1080')
-  await expect(outputSizeKey).toHaveValue('preset')
   await expect(commonOutputSize).toHaveValue('1920x1080')
-  await expect(inspector.getByTestId('semantic-editor-size')).toHaveCount(0)
   await expect(output).toHaveAttribute('width', '1920')
   await expect(output).toHaveAttribute('height', '1080')
 
-  await outputSizeKey.selectOption('custom')
-  await expect(outputSizeKey).toHaveValue('custom')
-  const customWidth = inspector.getByRole('spinbutton', { name: '自定义尺寸宽度' })
-  const customHeight = inspector.getByRole('spinbutton', { name: '自定义尺寸高度' })
-  await expect(customWidth).toHaveValue('1920')
-  await expect(customHeight).toHaveValue('1080')
-  await customWidth.fill('1600')
-  await customWidth.press('Enter')
+  const frameWidth = inspector.getByRole('combobox', { name: '尺寸宽度' })
+  const frameHeight = inspector.getByRole('combobox', { name: '尺寸高度' })
+  await expect(frameWidth).toHaveValue('1920')
+  await expect(frameHeight).toHaveValue('1080')
+  await frameWidth.fill('1600')
+  await frameWidth.press('Enter')
   await expect(output).toHaveAttribute('width', '1600')
-  await expect(outputSizeKey).toHaveValue('custom')
+  // 不匹配任何预设时下拉落到「自定义尺寸」，但不派发命令。
+  await expect(commonOutputSize).toHaveValue('custom')
 
+  // 几何分组改尺寸与 Frame.size 是同一次事务：撤销一步回到预设尺寸。
   await stage.focus()
   await stage.press('Control+z')
-  await expect(outputSizeKey).toHaveValue('preset')
   await expect(commonOutputSize).toHaveValue('1920x1080')
-  await expect(inspector.getByTestId('semantic-editor-size')).toHaveCount(0)
+  await expect(output).toHaveAttribute('width', '1920')
   await expect(output).toHaveClass(/is-selected/)
   await stage.press('Control+Shift+z')
-  await expect(outputSizeKey).toHaveValue('custom')
-  await expect(customWidth).toHaveValue('1600')
-  await expect(customHeight).toHaveValue('1080')
+  await expect(output).toHaveAttribute('width', '1600')
+  await expect(commonOutputSize).toHaveValue('custom')
 })
 
 
@@ -507,7 +504,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
-  await preview.getByRole('button', { name: '选中画板' }).click()
+  await expect(preview.getByRole('combobox', { name: '预览场景' })).toBeVisible()
   await expect(preview.getByTestId('compose-preview-frame')).toBeVisible()
   await expect(preview.getByText('统一事务舞台')).toBeVisible()
   await expect(previewRegion).toHaveScreenshot('frame-preview.png', {

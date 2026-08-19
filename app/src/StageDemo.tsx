@@ -75,7 +75,7 @@ const emptyDocument: ComposeDocument = {
   schemaVersion: 7,
   canvas: createDefaultCanvasSettings(),
   rootIds: [DEMO_FRAME_ID],
-  entities: { [DEMO_FRAME_ID]: createComposeFrameEntity({ id: DEMO_FRAME_ID, name: '画板' }) },
+  entities: { [DEMO_FRAME_ID]: createComposeFrameEntity({ id: DEMO_FRAME_ID, name: '场景' }) },
 }
 
 const chartSchema = v.object({

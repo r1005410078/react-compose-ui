@@ -58,7 +58,7 @@ function documentWith(entities: readonly ComposeEntity[]): ComposeDocument {
     entities: {
       'frame-root': createComposeFrameEntity({
         id: 'frame-root',
-        name: '画板',
+        name: '场景',
         childIds: entities.map(({ id }) => id),
       }),
       ...Object.fromEntries(entities.map((item) => [item.id, item])),

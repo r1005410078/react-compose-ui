@@ -159,7 +159,7 @@ export function ComposeContainerLabelLayer({
           : (
               <div
                 className={`compose-stage__label-row${item.scene ? ' is-scene' : ''}`}
-                data-entity-id={item.entityId}
+                data-label-entity-id={item.entityId}
                 key={item.entityId}
                 style={{ left: item.x, top: item.y, maxWidth: item.maxWidth }}
               >

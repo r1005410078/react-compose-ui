@@ -339,7 +339,7 @@ export function migrateComposeDocumentV6ToV7(input: unknown): ComposeDocumentMig
     rootIds: [rootId],
     entities: {
       ...entities,
-      [rootId]: { id: rootId, name: '画板', components: frameComponents },
+      [rootId]: { id: rootId, name: '场景', components: frameComponents },
     },
   }
   const validation = validateComposeDocument(document)
