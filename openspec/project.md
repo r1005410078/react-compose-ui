@@ -75,7 +75,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   `animation.tracks.relocate` 搬迁轨道，且必须排在结构变更之前。动画命令通过
   `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。动画文件按所属根
   Frame 分区（`animationSchemaVersion: 2`，1→2 显式迁移），一页共用一份文件而各场景互不
-  影响；清单以整个 `Animations` Component 写入，写入方必须自己带上 `source`。
+  影响；`Animations` 整体写入，清单命令与 `animation.source.set` 各自带上另一半。绑定是文档
+  写入而不是页面文件写入，因此尚未保存的场景也能绑定动画。
 - `@compose-ui/stage` 是 DOM Scene/SVG/DOM Overlay 无限编辑舞台适配层，提供固定标尺、文档
   网格与全局辅助线、世界原点和滚动 chrome；依赖 core、assets、script-runtime、stage-engine、
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
@@ -229,7 +230,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - 动画按场景独立、脚本按页面共享：动画作用域跟随选中对象所属的场景（无选择时回退激活场景），
   页面 setup 脚本保持 `ComposePageFile` 上的页面级单值。这个不对称是设计——绑定是页面级平坦
   命名空间，动画自身的播放绑定也解析页面作用域，按场景切分脚本会让实体跨场景移动即失去绑定。
-  `Animations.source` 住在文档里却由页面文件写入产生，保存前必须补回待存文档。
+  `Animations.source` 住在文档里，因此绑定走可撤销的文档命令；判据是看字段住在哪里——
+  `setupScript` 与 `activeFrameId` 在页面文件上，才走不进撤销历史的资源写入。
 - 每个场景 Entity 必须拥有 `Composition`、`Transform`、`LayoutItem`、`Visibility`、`Lock`，并至少拥有
   `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法
   Component 保留并由 Registry 边界降级。

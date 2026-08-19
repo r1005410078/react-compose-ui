@@ -13,7 +13,6 @@ import {
   composePageDisplayName,
   createTransactionRuntime,
   getComposeAnimations,
-  resolveComposePageActiveFrameId,
 } from '@compose-ui/core'
 import type {
   ComposeAnimation,
@@ -99,44 +98,6 @@ function mergeFrameMirrorsIntoFiles(
   return merged
 }
 
-/**
- * 把页面文件里的动画绑定带回待保存的文档。
- *
- * @remarks
- * `Animations.source` 住在文档里，却由 `setFrameAnimation` 这条**页面文件**写入产生——
- * 与 `setupScript`、`activeFrameId` 同类。于是会话中途绑定的动画只进了页面文件，运行时文档
- * 并不知道；保存时如果直接把运行时文档写下去，就会把刚写好的绑定覆盖掉，下次打开水合不出
- * 任何清单，再建动画还会因为找不到既有文件而多造一份。
- *
- * 因此保存前按 Frame 把页面文件里的 `source` 补回文档：`items` 以运行时文档为准（它才是
- * 用户编辑的那份），`source` 以页面文件为准（它才是绑定写入的落点）。解除绑定后页面文件
- * 里没有 source，这里自然也不会补回去。
- */
-function carryFrameAnimationSources(
-  previous: ComposeDocument,
-  next: ComposeDocument,
-): ComposeDocument {
-  let entities = next.entities
-  for (const [frameId, source] of listFrameAnimationSources(previous)) {
-    const frame = entities[frameId]
-    if (!frame) continue
-    const animations = frame.components.Animations as
-      { readonly items?: readonly ComposeAnimation[]; readonly source?: unknown } | undefined
-    if (animations?.source !== undefined) continue
-    entities = {
-      ...entities,
-      [frameId]: {
-        ...frame,
-        components: {
-          ...frame.components,
-          Animations: { items: animations?.items ?? [], source } as never,
-        },
-      },
-    }
-  }
-  return entities === next.entities ? next : { ...next, entities }
-}
-
 /** 结构相等判定；文件是纯 JSON，序列化比较足够且与落盘内容一致。 */
 function jsonEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
@@ -163,15 +124,19 @@ export interface PageWorkspaceHandle {
   /** 重新执行当前页面已关联的 setup，并用新作用域替换旧实例。 */
   readonly reloadPageSetupScript: (pageKey: string) => Promise<void>
   /**
-   * 原子绑定/更换/解除某块场景的动画文件引用，并同步已打开页面会话的动画基线。
+   * 载入某个引用指向的动画文件，并把它记进会话的动画文件桶。
    *
-   * @param frameId - 绑定目标 Frame；省略时回退到页面的激活场景。
-   * @returns 绑定时返回该 Frame 分区中的清单，供调用方派发镜像水合事务；解除时返回 null。
+   * @remarks
+   * 只负责读取与会话记账。引用本身是**文档状态**，由调用方用 `animation.source.set` 写进
+   * 文档——走页面文件写入的话，尚未保存的场景会被 Store 判成「不是 Frame」而绑不上。
+   *
+   * @param frameId - 要取哪一块场景的分区清单。
+   * @returns 该 Frame 分区中的清单，供调用方派发镜像水合事务；`reference` 为 null 时返回 null。
    */
-  readonly setPageAnimation: (
+  readonly loadFrameAnimation: (
     pageKey: string,
     reference: ComposePageAnimationReference | null,
-    frameId?: string | null,
+    frameId: string,
   ) => Promise<ComposeAnimation | null>
   /**
    * 切换页面的激活场景，并同步已打开页面会话的 revision 基线。
@@ -430,10 +395,7 @@ export function usePageWorkspace({
     const session = pageSessionOf(sessionsRef.current.get(panelId))
     if (!store || !session) return 'failed'
     const runtimeRevision = session.runtime.revision
-    const documentAtSave = carryFrameAnimationSources(
-      session.page.document,
-      session.runtime.document,
-    )
+    const documentAtSave = session.runtime.document
     try {
       const written = await store.writePage(
         session.pageKey,
@@ -492,7 +454,8 @@ export function usePageWorkspace({
    *
    * @remarks
    * 激活状态在页面文件里，不在 ComposeDocument 里，因此这是一次资源写入而**不进撤销历史**
-   * ——与 setPageSetupScript、setPageAnimation 同类。写入成功后必须回写会话的 page 与
+   * ——与 setPageSetupScript 同类（动画绑定不在此列：它住在文档里，走文档命令）。
+   * 写入成功后必须回写会话的 page 与
    * baseRevision，否则下一次保存会拿着过期 revision 冲突。
    */
   const setPageActiveFrame = useCallback(async (pageKey: string, frameId: string) => {
@@ -558,50 +521,33 @@ export function usePageWorkspace({
     }))
   }, [adoptScope, scriptLoader, store, updateSession])
 
-  const setPageAnimation = useCallback(async (
+  const loadFrameAnimation = useCallback(async (
     pageKey: string,
     reference: ComposePageAnimationReference | null,
-    frameId?: string | null,
+    frameId: string,
   ): Promise<ComposeAnimation | null> => {
-    if (!store || !provider) throw new ComposeAssetError('unsupported', '页面 Store 不可用')
+    if (!provider) throw new ComposeAssetError('unsupported', '资源 Provider 不可用')
     const session = [...sessionsRef.current.values()].find((item) => item.pageKey === pageKey)
-    // 绑定前先加载并解析动画文件：文件不合法时页面包装保持不变，调用方直接得到原因。
-    let loaded: Awaited<ReturnType<typeof loadPageAnimation>> | undefined
-    if (reference) {
-      loaded = await loadPageAnimation(
-        provider,
-        session?.entry.parentId ?? provider.root.id,
-        reference,
-      )
-    }
-    const expectedRevision = session ? session.baseRevision : (await store.readPage(pageKey)).revision
-    // 绑定目标由调用方给出（编辑器传当前动画作用域场景），不再用会话固定值：那会让第二块
-    // 场景的绑定写到第一块上。
-    const targetFrameId = frameId
-      ?? (session ? resolveComposePageActiveFrameId(session.page) : null)
-      ?? resolveComposePageActiveFrameId((await store.readPage(pageKey)).page)
-    if (!targetFrameId) throw new ComposeAssetError('unsupported', '页面没有可绑定动画的 Frame')
-    const written = await store.setFrameAnimation(pageKey, targetFrameId, reference, expectedRevision)
+    if (!reference) return null
+    // 先加载并解析动画文件：文件不合法时调用方直接得到原因，不会把一个读不出内容的引用
+    // 写进文档。引用本身由调用方用 `animation.source.set` 写进文档——它是文档状态。
+    const loaded = await loadPageAnimation(
+      provider,
+      session?.entry.parentId ?? provider.root.id,
+      reference,
+    )
     if (session) {
-      updateSession(session.panelId, (current) => {
-        const animationFiles = new Map(current.animationFiles)
-        if (loaded && reference) {
-          animationFiles.set(reference.assetKey, {
-            entryId: loaded.entryId,
-            revision: loaded.revision,
-            baseline: loaded.file,
-          })
-        }
-        return {
-          ...current,
-          page: written.page,
-          baseRevision: written.revision,
-          animationFiles,
-        }
-      })
+      updateSession(session.panelId, (current) => ({
+        ...current,
+        animationFiles: new Map(current.animationFiles).set(reference.assetKey, {
+          entryId: loaded.entryId,
+          revision: loaded.revision,
+          baseline: loaded.file,
+        }),
+      }))
     }
-    return loaded ? getComposeAnimationFileFrame(loaded.file, targetFrameId)[0] ?? null : null
-  }, [provider, store, updateSession])
+    return getComposeAnimationFileFrame(loaded.file, frameId)[0] ?? null
+  }, [provider, updateSession])
 
   // 页面会话的脏状态由其运行时 revision 与保存基线的差异决定。
   useEffect(() => {
@@ -639,7 +585,7 @@ export function usePageWorkspace({
     savePage,
     setPageSetupScript,
     reloadPageSetupScript,
-    setPageAnimation,
+    loadFrameAnimation,
     setPageActiveFrame,
     refreshCatalog,
   }

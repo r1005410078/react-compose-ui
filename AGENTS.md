@@ -61,8 +61,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   「哪一块会被发布」与「正在编辑哪一块的动画」可以不同。页面 setup 脚本相反，保持
   `ComposePageFile` 上的页面级单值：绑定是页面级平坦命名空间，动画自身的播放绑定也解析页面
   作用域，按场景切分脚本会制造一类跨场景移动即失效的悬空引用。这个不对称是设计，不是遗漏。
-  `Animations.source` 住在文档里却由页面文件写入产生，保存前必须把它补回待存文档，否则运行时
-  文档会覆盖掉刚写好的绑定。
+  **动画绑定是文档写入**：`Animations.source` 住在文档里，因此关联/解除走可撤销的
+  `animation.source.set` 命令而不是页面文件写入——走页面文件的话 Store 校验的是上次保存的
+  那份文档，刚画出来、尚未保存的场景会被判成「不是 Frame」而绑不上。判据是**看字段住在哪里**：
+  `setupScript`、`activeFrameId` 在页面文件上，所以是资源写入且不进撤销历史。
 - **根层落点按类型分流。** 在所有场景之外新建时，容器类 Entity 升格为一块新场景；其余
   Entity 落进**激活场景**并把世界坐标钳制进该场景边界。任何新建路径都不得回退到
   `rootIds[0]`——那既选错场景，又会跳过世界→局部换算。点击添加（没有落点意图）不走升格。
@@ -125,8 +127,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   协议（`.animation.json`，只存清单与变量绑定，不存轨道）：文件**按所属根 Frame 分区**，
   一页共用一份文件而各场景互不影响，因此不需要动画文件命名策略；文件是静态权威，编辑器打开
   页面时把各分区水合进对应 Frame 的镜像、保存时把各镜像合并回同一份文件；解除引用不删除文件
-  资源。清单以整个 `Animations` Component 写入，因此写入方必须自己带上 `source`——只写
-  `items` 会把绑定从文档里抹掉。
+  资源。`Animations` 整体写入，清单命令与 `animation.source.set` 共用同一个写入口各自带上
+  另一半——只写 `items` 会抹掉绑定，只写 `source` 会抹掉清单。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`script-runtime`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。
