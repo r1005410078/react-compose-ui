@@ -395,6 +395,12 @@ export function usePageWorkspace({
     const session = [...sessionsRef.current.values()].find((item) => item.pageKey === pageKey)
     const base = session ?? await store.readPage(pageKey)
     const expectedRevision = 'baseRevision' in base ? base.baseRevision : base.revision
+    // 激活写的是页面文件，而页面文件里的文档是**上次保存**的那份。刚新建、尚未保存的场景
+    // 不在其中，直接写会被 Store 以「不是根 Frame」拒绝——那句话对用户毫无意义。这里提前
+    // 给出可操作的说明；不在这里顺手保存文档，保存必须是用户的显式动作。
+    if (!base.page.document.rootIds.includes(frameId)) {
+      throw new ComposeAssetError('unsupported', '这个场景还没有保存，先保存页面再设为激活场景')
+    }
     const written = await store.setPageActiveFrame(pageKey, frameId, expectedRevision)
     if (!session) return
     updateSession(session.panelId, (current) => ({

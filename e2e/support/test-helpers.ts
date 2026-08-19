@@ -83,6 +83,7 @@ export async function expandInspectorSection(inspector: Locator, name: string) {
 
 export async function openPageInspector(page: Page, editor: Locator) {
   const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
   const stageBox = (await stage.boundingBox())!
   // 场景边界盒是未裁剪的世界矩形，可能远大于 stage 视口，因此不能直接拿它的外侧算落点：
   // 必须取一个既在 stage 视口内、又在场景之外的点。标尺占据上/左边缘，留出安全距。
