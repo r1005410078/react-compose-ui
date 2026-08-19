@@ -35,6 +35,7 @@ import {
   getComposeLock,
   getComposeRenderer,
   getComposeVisibility,
+  isComposeFrameEntity,
   isComposeInstancePath,
   resolveComposeInstanceOverrides,
   type ComposeBaseComponentAsset,
@@ -697,13 +698,17 @@ function sceneEntity(
       : composition.presetId
       ? registry.getPreset(composition.presetId)?.icon
       : undefined,
+    // 场景与容器共用同一个图标（场景就是放在顶层的容器），可访问名称仍要区分两者，
+    // 且必须按 Frame-ness 判定而不是 presetId：在场景外画出来的场景 presetId 仍是 container。
     iconLabel: componentInstance
       ? '组件实例'
-      : composition.presetId === 'group'
-        ? 'Group'
-        : composition.presetId === 'container'
-          ? 'Container'
-          : undefined,
+      : isComposeFrameEntity(entity)
+        ? 'Scene'
+        : composition.presetId === 'group'
+          ? 'Group'
+          : composition.presetId === 'container'
+            ? 'Container'
+            : undefined,
     // 实例没有 Hierarchy，但其内部层级可投影，因此仍可展开。
     canHaveChildren: hierarchy !== undefined || componentInstance,
     // 投影是惰性的：未展开时 children 尚未构建，必须显式声明才会出现展开控件。

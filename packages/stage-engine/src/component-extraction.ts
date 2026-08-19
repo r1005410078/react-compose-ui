@@ -1,17 +1,16 @@
 import {
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
-  createComposeFrame,
   createComposeGroupEntitySeed,
   getComposeHierarchy,
   getComposeLayoutItem,
   getComposeLock,
+  promoteComposeEntityToFrame,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
   type ComposeSpatialTransform,
   type EditorCommand,
-  type JsonObject,
   type JsonValue,
 } from '@compose-ui/core'
 import {
@@ -227,35 +226,12 @@ export function createComponentExtractionPlan(input: {
       size: safeBounds,
     })
   }
-  // 组件根必须是 Frame（Component Asset v2）。这里是「创建组件」这一用户动作的隐含升格：
-  // 只往既有根上加一个 Frame Component，Entity ID、子级与动画轨道全部原地保留。
-  const rootEntity = entities[componentRootId]!
-  const rootComposition = rootEntity.components.Composition as
-    { readonly baseComponentKeys?: readonly string[] } | undefined
-  const baseComponentKeys = rootComposition?.baseComponentKeys ?? []
-  entities[componentRootId] = {
-    ...rootEntity,
-    components: {
-      ...rootEntity.components,
-      ...(rootComposition
-        ? {
-            Composition: {
-              ...rootComposition,
-              baseComponentKeys: [
-                ...baseComponentKeys,
-                ...(baseComponentKeys.includes('Hierarchy') || rootEntity.components.Hierarchy
-                  ? []
-                  : ['Hierarchy']),
-                ...(baseComponentKeys.includes('Frame') ? [] : ['Frame']),
-              ],
-            } as JsonObject,
-          }
-        : {}),
-      // Frame 必须同时是容器：复用单选叶子节点作组件根时，它可能还没有 Hierarchy。
-      ...(rootEntity.components.Hierarchy ? {} : { Hierarchy: { childIds: [] } }),
-      Frame: createComposeFrame({ width: safeBounds.width, height: safeBounds.height }),
-    },
-  }
+  // 组件根必须是 Frame（Component Asset v2）。这里是「创建组件」这一用户动作的隐含升格，
+  // 与「在场景外画容器」共用同一个纯函数：只加 Frame，其余原地保留。
+  entities[componentRootId] = promoteComposeEntityToFrame(
+    entities[componentRootId]!,
+    { width: safeBounds.width, height: safeBounds.height },
+  )
   const siblings = childrenOf(input.document, parentId)
   const siblingIndex = Math.min(...roots.map((id) => siblings.indexOf(id)))
   const componentDocument: ComposeDocument = {

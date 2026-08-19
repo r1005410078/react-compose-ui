@@ -1,7 +1,7 @@
 import { createDefaultCanvasSettings } from '../canvas-settings'
 import type { ComposeDocument, DocumentValidationIssue } from '../document-types'
 import { validateComposeDocument } from '../document'
-import { createComposeFrame } from '../frame'
+import { COMPOSE_DEFAULT_SCENE_APPEARANCE, createComposeFrame } from '../frame'
 import {
   COMPOSE_PAGE_FILE_SUFFIX,
   COMPOSE_PAGE_MEDIA_TYPE,
@@ -284,7 +284,8 @@ export function createEmptyComposePageDocument(): ComposeDocument {
           Lock: { locked: false },
           Hierarchy: { childIds: [] },
           Frame: frame,
-          Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
+          // 场景就是放在顶层的容器，默认外观必须与 Container Preset 一致。
+          Appearance: { ...COMPOSE_DEFAULT_SCENE_APPEARANCE },
         },
       },
     },

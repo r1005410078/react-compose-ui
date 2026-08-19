@@ -81,38 +81,85 @@ export async function expandInspectorSection(inspector: Locator, name: string) {
   }
 }
 
-export async function openPageInspector(page: Page, editor: Locator) {
-  const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage).toBeVisible()
-  const stageBox = (await stage.boundingBox())!
-  // 场景边界盒是未裁剪的世界矩形，可能远大于 stage 视口，因此不能直接拿它的外侧算落点：
-  // 必须取一个既在 stage 视口内、又在场景之外的点。标尺占据上/左边缘，留出安全距。
+/**
+ * 可以在里面绘制的空白区最小尺寸。
+ *
+ * 点一下只要有一个像素就够，绘制不行：stage 顶部还浮着缩放控件条，窄条区域会把 pointerdown
+ * 喂给它而不是画布，于是"画了但什么都没创建"，而选中态没变会让后续断言无条件通过。
+ */
+const MIN_DRAWABLE_BLANK = 80
+
+/** 只需要落一次点击时的最小尺寸。 */
+const MIN_CLICKABLE_BLANK = 24
+
+/** 场景填满视口时最多缩小几次腾出空白区。 */
+const MAX_ZOOM_OUT = 6
+
+/** 标尺占据上/左边缘，四个方向各留安全距后取面积最大的一块空白。 */
+function largestBlankRegion(
+  stageBox: { x: number; y: number; width: number; height: number },
+  occupied: readonly { x: number; y: number; width: number; height: number }[],
+  minSize: number,
+) {
   const RULER = 28
-  const frameBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   const viewport = {
     left: stageBox.x + RULER,
     top: stageBox.y + RULER,
     right: stageBox.x + stageBox.width - RULER,
     bottom: stageBox.y + stageBox.height - RULER,
   }
-  const midY = (viewport.top + viewport.bottom) / 2
-  const midX = (viewport.left + viewport.right) / 2
-  const candidates = [
-    { x: (viewport.left + frameBox.x) / 2, y: midY, ok: frameBox.x - viewport.left > 24 },
-    { x: midX, y: (viewport.top + frameBox.y) / 2, ok: frameBox.y - viewport.top > 24 },
-    {
-      x: (frameBox.x + frameBox.width + viewport.right) / 2,
-      y: midY,
-      ok: viewport.right - (frameBox.x + frameBox.width) > 24,
-    },
-    {
-      x: midX,
-      y: (frameBox.y + frameBox.height + viewport.bottom) / 2,
-      ok: viewport.bottom - (frameBox.y + frameBox.height) > 24,
-    },
+  const left = Math.min(...occupied.map((box) => box.x))
+  const top = Math.min(...occupied.map((box) => box.y))
+  const right = Math.max(...occupied.map((box) => box.x + box.width))
+  const bottom = Math.max(...occupied.map((box) => box.y + box.height))
+  return [
+    { x: viewport.left, y: viewport.top, width: left - viewport.left, height: viewport.bottom - viewport.top },
+    { x: viewport.left, y: viewport.top, width: viewport.right - viewport.left, height: top - viewport.top },
+    { x: right, y: viewport.top, width: viewport.right - right, height: viewport.bottom - viewport.top },
+    { x: viewport.left, y: bottom, width: viewport.right - viewport.left, height: viewport.bottom - bottom },
   ]
-  const spot = candidates.find((candidate) => candidate.ok)
-  expect(spot, 'stage 视口里找不到场景之外的空白处').toBeTruthy()
-  await page.mouse.click(spot!.x, spot!.y)
+    .filter((region) => region.width >= minSize && region.height >= minSize)
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0]
+}
+
+/** 读取当前所有场景在屏幕上的矩形。 */
+async function frameScreenBoxes(stage: Locator) {
+  const frames = await stage.locator('[data-testid^="stage-frame-boundary-"]').all()
+  const boxes = await Promise.all(frames.map((frame) => frame.boundingBox()))
+  return boxes.filter((box): box is NonNullable<typeof box> => box !== null)
+}
+
+/**
+ * 求一块既在 stage 视口内、又落在所有场景之外的空白矩形。
+ *
+ * 场景边界盒是未裁剪的世界矩形，可能远大于 stage 视口，因此不能直接拿它的外侧算落点。
+ * 场景多了以后可能把视口填满，此时先缩小视图再找——多场景用例不该因为"看不见空地"而失败。
+ */
+export async function emptyWorkspaceRect(page: Page, editor: Locator) {
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  for (let attempt = 0; attempt <= MAX_ZOOM_OUT; attempt += 1) {
+    const stageBox = (await stage.boundingBox())!
+    const region = largestBlankRegion(stageBox, await frameScreenBoxes(stage), MIN_DRAWABLE_BLANK)
+    if (region) return region
+    await stage.focus()
+    await stage.press('Control+-')
+  }
+  throw new Error('stage 视口里找不到场景之外的空白处')
+}
+
+/**
+ * 点空白工作区打开页面属性面板。
+ *
+ * 这里刻意不缩放视图：调用方常常在前后测量画布几何，任何视口变化都会让那些断言凭空偏移。
+ * 只落一次点击，因此对空白区的尺寸要求也比绘制宽松得多。
+ */
+export async function openPageInspector(page: Page, editor: Locator) {
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const stageBox = (await stage.boundingBox())!
+  const region = largestBlankRegion(stageBox, await frameScreenBoxes(stage), MIN_CLICKABLE_BLANK)
+  expect(region, 'stage 视口里找不到场景之外的空白处').toBeTruthy()
+  await page.mouse.click(region!.x + region!.width / 2, region!.y + region!.height / 2)
   await expect(editor.getByRole('region', { name: '页面属性' })).toBeVisible()
 }

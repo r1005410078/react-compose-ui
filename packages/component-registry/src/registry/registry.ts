@@ -170,9 +170,11 @@ function validatePresetSeed(preset: ComposeEntityPreset, components: Record<stri
     },
   }
   // 探针文档的根必须是 Frame（v7 拓扑约束）；被校验的 Preset Entity 作为它的子级。
+  // 探针只用于校验，外观显式透明：它不是场景，不该带上场景的默认底色与边框。
   const probeFrame = createComposeFrameEntity({
     id: '__preset_frame__',
     childIds: [entity.id],
+    appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
   })
   const result = validateComposeDocument({
     schemaVersion: 7,

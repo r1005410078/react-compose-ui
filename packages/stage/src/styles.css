@@ -118,28 +118,11 @@
   stroke-width: 0.5;
 }
 
-.compose-stage__output-boundary {
-  cursor: default;
-  pointer-events: all;
-  stroke: none;
-}
-
-.compose-stage__output-edge,
+/* 场景区域只是一个可检查锚点，不画任何描边——场景与容器的外观完全来自各自的 Appearance。 */
+.compose-stage__output-boundary,
 .compose-stage__world-origin {
   pointer-events: none;
-}
-
-.compose-stage__output-edge {
-  vector-effect: non-scaling-stroke;
-  stroke: var(--compose-text-muted, #8e98a8);
-  stroke-opacity: 0.72;
-  stroke-width: 1;
-}
-
-.compose-stage__output-decoration.is-selected .compose-stage__output-edge {
-  stroke: var(--compose-accent, #3687ff);
-  stroke-opacity: 1;
-  stroke-width: 0.5;
+  stroke: none;
 }
 
 .compose-stage__axis.is-x {
@@ -900,6 +883,14 @@
   align-items: center;
   gap: 4px;
   pointer-events: none;
+}
+
+/*
+ * 场景与容器在画布上长得一模一样，唯一的区别就是这个标题标签——所以场景名要读起来像
+ * 「头部」而不是又一个容器名。加粗是这里唯一的差异化手段：颜色留给选中/锁定/激活三态。
+ */
+.compose-stage__label-row.is-scene .compose-stage__container-label {
+  font-weight: 600;
 }
 
 /* 名称按钮在 flex 里必须显式允许收缩，否则它不让位、标记会被挤出裁剪框。 */

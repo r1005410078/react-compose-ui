@@ -2554,9 +2554,11 @@ export function createStageInteractionController(): StageInteractionController {
           }
     if (!surfacePoint) return
     const world = worldPoint(surfacePoint)
+    // 点击添加没有空间意图：没有选区时也要按落点找容器，否则会被当成"在所有场景之外新建"
+    // 而升格出一块新场景——而用户只是点了一下物料面板。
     const parentId = clientPoint
       ? index.containerAtPoint(world)
-      : selectionParentId
+      : selectionParentId ?? index.containerAtPoint(world)
     apply([{
       type: 'external.drop',
       item,

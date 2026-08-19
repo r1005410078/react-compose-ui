@@ -2,15 +2,20 @@ import {
   createDuplicateCommand,
   createReparentCommand,
   getEntityParentId,
+  resolveNextScenePlacement,
+  resolveTargetFrameId,
 } from '@compose-ui/stage-engine'
 import {
   getComposeHierarchy,
   BUILTIN_COMMAND_TYPES,
+  COMPOSE_DEFAULT_FRAME_SIZE,
   adoptComposeCrossAxisSizing,
   createComposeBatchCommand,
   getComposeLayout,
   getComposeLayoutItem,
   getComposeSpatialTransform,
+  isComposeFrameEntity,
+  promoteComposeEntityToFrame,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeFlexLayout,
@@ -27,6 +32,9 @@ const SCENE_TREE_SOURCE = 'scene-tree'
 
 /** 嵌套容器创建时使用的默认尺寸。 @internal */
 const NESTED_CONTAINER_SIZE = { width: 320, height: 180 } as const
+
+/** 落点解析只关心"没有选中任何东西"这一种回退，因此选区常量提到模块级。 */
+const NO_SELECTION: readonly string[] = []
 
 /**
  * 规划场景树操作所需的只读上下文。
@@ -152,14 +160,40 @@ function planCreate(
       reason: `无法创建容器 Preset "${context.containerPresetId}"：${created.error.message}`,
     }
   }
-  // v7 的"根级"是根 Frame 的直接子级：文档根本身只放 Frame，没有 parent 时落到第一块画板。
-  const frameId = context.document.rootIds[0] ?? null
-  const parentId = operation.parentId ?? frameId
-  const isRoot = parentId !== null && context.document.rootIds.includes(parentId)
   const entityId = context.nextId()
   const initial = getComposeSpatialTransform({ id: '__seed__', ...created.seed })
-  // 根级新建沿对角线依次错开，避免多个容器完全重叠；子级从父容器原点开始。
-  const siblings = isRoot && parentId
+  // 场景树的"根级"就是场景所在的那一层：在那里新建一个容器等于新建一块场景，与在画布上
+  // 所有场景之外画一个容器是同一条规则。MUST NOT 像过去那样悄悄塞进 rootIds[0]。
+  if (operation.parentId === null) {
+    const transform: ComposeSpatialTransform = {
+      ...initial,
+      position: { ...resolveNextScenePlacement(context.document) },
+      size: { ...COMPOSE_DEFAULT_FRAME_SIZE },
+    }
+    const scene = promoteComposeEntityToFrame(
+      entityFromSeed(entityId, created.seed, transform),
+      transform.size,
+    )
+    const name = `场景 ${context.document.rootIds.length + 1}`
+    return planned(
+      sceneCommand(
+        context,
+        BUILTIN_COMMAND_TYPES.createEntity,
+        {
+          entity: { ...scene, name } as unknown as JsonValue,
+          parentId: null,
+          index: operation.index,
+        },
+        `Create ${name}`,
+        [entityId],
+      ),
+      [entityId],
+    )
+  }
+  const parentId = operation.parentId
+  const isRoot = context.document.rootIds.includes(parentId)
+  // 根 Frame 直接子级沿对角线依次错开，避免多个容器完全重叠；更深的子级从父容器原点开始。
+  const siblings = isRoot
     ? getComposeHierarchy(context.document.entities[parentId])?.childIds.length ?? 0
     : 0
   const rootOffset = 80 + siblings * 40
@@ -168,7 +202,7 @@ function planCreate(
     position: isRoot ? { x: rootOffset, y: rootOffset } : { x: 0, y: 0 },
     size: isRoot ? initial.size : { ...NESTED_CONTAINER_SIZE },
   }
-  const parent = parentId ? context.document.entities[parentId] : undefined
+  const parent = context.document.entities[parentId]
   const entity = entityFromSeed(
     entityId,
     created.seed,
@@ -250,14 +284,27 @@ function planSetLocked(
  * 把场景树的"根级"落点解析为文档中的落点。
  *
  * @remarks
- * 场景树是通用受控组件，`parentId: null` 表示树的根；v7 的文档根只放 Frame，因此这里统一
- * 翻译成第一块画板。所有会写入父子关系的规划器都必须走这里。
+ * 场景树是通用受控组件，`parentId: null` 表示树的根；v7 的文档根只放 Frame，所以要么留在
+ * 根层、要么落进某块场景：
+ *
+ * - 被移动或复制的**全是场景**时留在根层。否则在树里拖动场景排序会把它塞进上一块场景，
+ *   复制一块场景也会变成嵌套容器。
+ * - 其余情况落进第一块根场景。场景树没有"当前正在编辑哪块场景"的空间语义，而页面的激活
+ *   场景只有 `ComposeEditor` 知道（controller 由宿主创建、页面会话在编辑器内），因此这里
+ *   不去解析激活场景——想按空间意图落点的是画布，不是树。
+ *
+ * 所有会写入父子关系的规划器都必须走这里。
  */
 function resolveDropParentId(
-  document: SceneOperationContext['document'],
+  context: SceneOperationContext,
   parentId: string | null,
+  entityIds: readonly string[],
 ): string | null {
-  return parentId ?? document.rootIds[0] ?? null
+  if (parentId !== null) return parentId
+  const allFrames = entityIds.length > 0
+    && entityIds.every((id) => isComposeFrameEntity(context.document.entities[id]))
+  if (allFrames) return null
+  return resolveTargetFrameId(context.document, NO_SELECTION)
 }
 
 function planMove(
@@ -266,7 +313,7 @@ function planMove(
 ): SceneOperationResult {
   // 跨父级移动必须保持世界坐标，交由 stage-engine 重算局部 Transform；
   // 同父级内只是顺序变化，用轻量的 moveEntity 即可。
-  const parentId = resolveDropParentId(context.document, operation.parentId)
+  const parentId = resolveDropParentId(context, operation.parentId, operation.nodeIds)
   const crossesParent = operation.nodeIds.some(
     (id) => getEntityParentId(context.document, id) !== parentId,
   )
@@ -308,7 +355,7 @@ function planDuplicate(
       context.nextId,
       context.nextId(),
       {
-        parentId: resolveDropParentId(context.document, operation.parentId),
+        parentId: resolveDropParentId(context, operation.parentId, operation.sourceNodeIds),
         index: operation.index + offset,
       },
     ))

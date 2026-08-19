@@ -70,18 +70,14 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   const framePaint = stage.locator('[data-entity-id="frame-root"] > [data-compose-paint]').first()
   const xAxis = stage.getByTestId('stage-origin-x')
   const yAxis = stage.getByTestId('stage-origin-y')
-  const bottomEdge = stage.getByTestId('stage-frame-edge-bottom-frame-root')
-  const rightEdge = stage.getByTestId('stage-frame-edge-right-frame-root')
   const origin = stage.getByTestId('stage-world-origin')
   const originSilhouette = stage.getByTestId('stage-world-origin-silhouette')
   const originPosition = stage.getByTestId('stage-world-origin-position')
   await expect(output).toHaveAttribute('fill', 'transparent')
   await expect(xAxis).toHaveCSS('stroke', 'rgba(216, 91, 216, 0.75)')
   await expect(yAxis).toHaveCSS('stroke', 'rgba(194, 238, 109, 0.75)')
-  await expect(bottomEdge).toHaveCSS('stroke', 'rgb(142, 152, 168)')
-  await expect(rightEdge).toHaveCSS('stroke', 'rgb(142, 152, 168)')
-  await expect(bottomEdge).toHaveCSS('stroke-opacity', '0.72')
-  await expect(rightEdge).toHaveCSS('stroke-opacity', '0.72')
+  // 场景与容器共用同一条呈现管线：Stage 不再为 Frame 补画任何描边，区域矩形只是几何锚点。
+  await expect(stage.locator('.compose-stage__output-edge')).toHaveCount(0)
   await expect(originSilhouette).toHaveCSS('fill', 'rgb(32, 37, 45)')
   await expect(originSilhouette).toHaveCSS('fill-opacity', '0.9')
   await expect(originPosition).toHaveCSS('fill', 'rgb(164, 172, 183)')
@@ -95,8 +91,7 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
     const yAxisElement = element.previousElementSibling
     return yAxisElement?.getAttribute('data-testid') === 'stage-origin-y'
   })).toBe(true)
-  await expect(bottomEdge).toHaveCSS('stroke-width', '1px')
-  await expect(rightEdge).toHaveCSS('stroke-width', '1px')
+
 
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
@@ -105,13 +100,9 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   // 场景分组自己的面板也叫「场景属性」，这里要的是整个 Entity Inspector 根。
   const inspector = editor.getByRole('region', { name: '场景 属性', exact: true })
   await expect(inspector).toBeVisible()
-  await expect(output).toHaveClass(/is-selected/)
-  await expect(bottomEdge).toHaveCSS('stroke', 'rgb(54, 135, 255)')
-  await expect(rightEdge).toHaveCSS('stroke', 'rgb(54, 135, 255)')
-  await expect(bottomEdge).toHaveCSS('stroke-opacity', '1')
-  await expect(rightEdge).toHaveCSS('stroke-opacity', '1')
-  await expect(bottomEdge).toHaveCSS('stroke-width', '0.5px')
-  await expect(rightEdge).toHaveCSS('stroke-width', '0.5px')
+  // 场景选中后走的是与容器完全相同的选中框，没有 Frame 专属的选中描边。
+  await expect(stage.getByTestId('stage-selection-bounds')).toBeVisible()
+  await expect(stage.locator('.compose-stage__output-edge')).toHaveCount(0)
   const grid = stage.getByTestId('stage-grid')
   for (let index = 0; index < 2; index += 1) {
     await stage.press('Control+-')
@@ -307,7 +298,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await stage.press('Control+z')
   await expect(commonOutputSize).toHaveValue('1920x1080')
   await expect(output).toHaveAttribute('width', '1920')
-  await expect(output).toHaveClass(/is-selected/)
+  // 撤销不改变选择：场景仍被选中，选中框仍在。
+  await expect(stage.getByTestId('stage-selection-bounds')).toBeVisible()
   await stage.press('Control+Shift+z')
   await expect(output).toHaveAttribute('width', '1600')
   await expect(commonOutputSize).toHaveValue('custom')

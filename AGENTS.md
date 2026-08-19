@@ -49,6 +49,16 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   Runtime、裁剪、动画时间线、脚本作用域、预览/导出单位。不变量：`Frame ⇒ Hierarchy`，
   Frame 不接受 Hug，尺寸的事实来源是 `Frame.size`（`LayoutItem` 固定尺寸只是求解回退，
   由 `entity.frame.size.set` 同步）。`fit`/`alignment` 是宿主呈现参数，不写进文档。
+  **升格只做一件事——加上 `Frame`**：`promoteComposeEntityToFrame` 是唯一入口，Appearance、
+  Clip、Renderer 与动画轨道一律原地保留，不做任何规范化；所有隐含升格必须复用它。
+- **场景就是放在顶层的容器**，因此在画布上与容器共用同一条呈现管线：背景、边框、圆角全部
+  来自 Entity 自身的 `Appearance`，Stage 不为 Frame 补画任何描边，场景树里两者也是同一个
+  图标（`frame` Preset 复用 Container 的图标与背景）。唯一的视觉区分是标题标签。
+  场景默认外观与 Container 同底色但**边框宽度为 0**：布局求解把边框计入内容盒，而场景是
+  绝对坐标的原点，默认边框会让按网格吸附的子级在属性面板里读成 7、15、23。
+- **根层落点按类型分流。** 在所有场景之外新建时，容器类 Entity 升格为一块新场景；其余
+  Entity 落进**激活场景**并把世界坐标钳制进该场景边界。任何新建路径都不得回退到
+  `rootIds[0]`——那既选错场景，又会跳过世界→局部换算。点击添加（没有落点意图）不走升格。
 - 组件实例的覆盖是 `instanceOverrides`，只含结构操作并复用 Variant 的稳定操作代数；暴露属性已删除。
   组件文档只要求单根，且根必须是 Frame。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址
   寻址，只存在于表示层：持久化文档中实例仍是单个 Entity，Undo/Redo 作用在宿主实例的 Patch 上。

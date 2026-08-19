@@ -33,6 +33,7 @@ export {
 } from './builtin-components'
 export { composeNodePropertySchema } from './material-inspector-kit/node'
 export { DEFAULT_COMPOSE_CONTAINER_PRESET } from './container'
+export { DEFAULT_COMPOSE_FRAME_PRESET } from './frame'
 export { DEFAULT_COMPOSE_GROUP_PRESET } from './group'
 export { DEFAULT_COMPOSE_WIDGET_SWITCHER_PRESET } from './widget-switcher'
 export {
