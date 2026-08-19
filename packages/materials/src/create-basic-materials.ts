@@ -4,6 +4,7 @@ import {
   DEFAULT_COMPOSE_CAPABILITY_DEFINITIONS,
 } from './builtin-components'
 import { createContainerPreset, DEFAULT_COMPOSE_CONTAINER_PRESET } from './container'
+import { createFramePreset, DEFAULT_COMPOSE_FRAME_PRESET } from './frame'
 import { createGroupPreset, DEFAULT_COMPOSE_GROUP_PRESET } from './group'
 import {
   createWidgetSwitcherPreset,
@@ -63,6 +64,7 @@ export const DEFAULT_COMPOSE_BASIC_RENDERERS = Object.freeze([
 /** 默认 Entity Presets。 @public */
 export const DEFAULT_COMPOSE_BASIC_PRESETS = Object.freeze([
   DEFAULT_COMPOSE_GROUP_PRESET,
+  DEFAULT_COMPOSE_FRAME_PRESET,
   DEFAULT_COMPOSE_CONTAINER_PRESET,
   DEFAULT_COMPOSE_WIDGET_SWITCHER_PRESET,
   DEFAULT_COMPOSE_RECTANGLE_PRESET,
@@ -81,6 +83,8 @@ export function createComposeBasicMaterials(
 ): ComposeBasicMaterials {
   const idFactory = options.idFactory ?? createDefaultInspectorId
   const group = createGroupPreset()
+  // 场景与容器共用同一组默认值：场景就是放在顶层的容器。
+  const frame = createFramePreset(options.container)
   const container = createContainerPreset(options.container)
   const widgetSwitcher = createWidgetSwitcherPreset(options.widgetSwitcher)
   const rectangle = createRectangleMaterial(options.rectangle)
@@ -106,6 +110,7 @@ export function createComposeBasicMaterials(
   ])
   const presets = Object.freeze([
     group,
+    frame,
     container,
     widgetSwitcher,
     rectangle.preset,

@@ -134,11 +134,14 @@ import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
 import { ComposeContainerLabelLayer } from '../container-label-layer'
 import {
+  boundsCenter,
   entityFromDrawingSeed,
   entityFromSeed,
   expandClickDrawingBounds,
+  seedWorldBounds,
   type ShapeDirection,
 } from './drawing-entity'
+import { boundsInParentSpace, resolveRootLanding } from './root-landing'
 
 type TransformMap = Readonly<Record<string, StageTransform>>
 type ShapeAxis = -1 | 0 | 1
@@ -508,27 +511,6 @@ function assetSeedCenters(
     previousRowHeight = rowHeight
   })
   return points
-}
-
-function boundsInParentSpace(
-  bounds: StageRect,
-  inverseParent: ReturnType<typeof invertMatrix> | null,
-): StageRect {
-  if (!inverseParent) return bounds
-  const points = [
-    applyMatrix(inverseParent, { x: bounds.x, y: bounds.y }),
-    applyMatrix(inverseParent, { x: bounds.x + bounds.width, y: bounds.y }),
-    applyMatrix(inverseParent, { x: bounds.x, y: bounds.y + bounds.height }),
-    applyMatrix(inverseParent, { x: bounds.x + bounds.width, y: bounds.y + bounds.height }),
-  ]
-  const xs = points.map(({ x }) => x)
-  const ys = points.map(({ y }) => y)
-  return {
-    x: Math.min(...xs),
-    y: Math.min(...ys),
-    width: Math.max(...xs) - Math.min(...xs),
-    height: Math.max(...ys) - Math.min(...ys),
-  }
 }
 
 function presetForDrawingTool(tool: Extract<StageInteractionTool, `draw-${string}`>) {
@@ -1113,6 +1095,7 @@ function ComposeStageReady({
     document,
     layoutSnapshot,
     registry,
+    activeFrameId,
     assetResolver,
     dispatch,
     viewport,
@@ -1128,6 +1111,7 @@ function ComposeStageReady({
       document,
       layoutSnapshot,
       registry,
+      activeFrameId,
       assetResolver,
       dispatch,
       viewport,
@@ -1613,28 +1597,38 @@ function ComposeStageReady({
           ))
         : null
       const offsets = assetSeedCenters(successful)
-      const entities = successful.map(({ seed }, index): ComposeEntity => {
+      const placements = successful.map(({ seed }, index) => {
         const offset = offsets[index]!
         const worldCenter = {
           x: effect.worldPoint.x + offset.x,
           y: effect.worldPoint.y + offset.y,
         }
-        const localCenter = inverseParent
-          ? applyMatrix(inverseParent, worldCenter)
-          : worldCenter
-        return entityFromSeed(
+        const entityId = current.idFactory()
+        const build = (center: StagePoint) => entityFromSeed(
           seed,
-          current.idFactory(),
-          localCenter,
+          entityId,
+          center,
           parent ? getComposeLayout(parent) : undefined,
         )
+        if (parent) {
+          return { entity: build(applyMatrix(inverseParent!, worldCenter)), parentId: parent.id }
+        }
+        const landing = resolveRootLanding(
+          current,
+          seedWorldBounds(seed, worldCenter),
+          (bounds) => build(boundsCenter(bounds)),
+        )
+        return landing
+          ? { entity: landing.entity, parentId: landing.parentId }
+          : { entity: build(worldCenter), parentId: null }
       })
-      const commands: EditorCommand[] = entities.map((entity) => ({
+      const entities = placements.map(({ entity }) => entity)
+      const commands: EditorCommand[] = placements.map(({ entity, parentId }) => ({
         id: current.idFactory(),
         type: BUILTIN_COMMAND_TYPES.createEntity,
         payload: {
           entity: entity as unknown as JsonValue,
-          parentId: parent?.id ?? current.document.rootIds[0] ?? null,
+          parentId,
         },
         meta: {
           label: describeEntityCreation(entity),
@@ -1709,52 +1703,57 @@ function ComposeStageReady({
     const localBounds = effect.tool === 'draw-container'
       ? expandClickDrawingBounds(seedResult.seed, drawnBounds)
       : drawnBounds
-    const textClick = effect.tool === 'draw-text'
-      && localBounds.width < 1
-      && localBounds.height < 1
     const entityId = current.idFactory()
-    const drawnEntity = entityFromDrawingSeed(
-      seedResult.seed,
-      entityId,
-      localBounds,
-      effect.tool === 'draw-line' || effect.tool === 'draw-arrow'
+    const buildEntity = (bounds: StageRect) => {
+      const textClick = effect.tool === 'draw-text' && bounds.width < 1 && bounds.height < 1
+      const drawnEntity = entityFromDrawingSeed(
+        seedResult.seed,
+        entityId,
+        bounds,
+        effect.tool === 'draw-line' || effect.tool === 'draw-arrow'
+          ? {
+              x: directionAxis(effect.end.x - effect.start.x),
+              y: directionAxis(effect.end.y - effect.start.y),
+            }
+          : undefined,
+        textClick
+          ? {
+              preserveHugSizing: true,
+              // 点击创建即刻进入编辑，占位文案会逼用户先全选删除；Prop 名从 Registry 查，
+              // Stage 不认识具体物料类型。
+              emptyTextPropName:
+                current.registry.getEditableTextPropName({
+                  ...seedResult.seed,
+                  id: entityId,
+                }) ?? undefined,
+            }
+          : undefined,
+      )
+      // 组件库中的 Rectangle 可保留其圆角默认值；画布矩形工具遵循设计工具惯例，初始绘制为直角。
+      return effect.tool === 'draw-rectangle'
         ? {
-            x: directionAxis(effect.end.x - effect.start.x),
-            y: directionAxis(effect.end.y - effect.start.y),
-          }
-        : undefined,
-      textClick
-        ? {
-            preserveHugSizing: true,
-            // 点击创建即刻进入编辑，占位文案会逼用户先全选删除；Prop 名从 Registry 查，
-            // Stage 不认识具体物料类型。
-            emptyTextPropName:
-              current.registry.getEditableTextPropName({
-                ...seedResult.seed,
-                id: entityId,
-              }) ?? undefined,
-          }
-        : undefined,
-    )
-    // 组件库中的 Rectangle 可保留其圆角默认值；画布矩形工具遵循设计工具惯例，初始绘制为直角。
-    const entity = effect.tool === 'draw-rectangle'
-      ? {
-          ...drawnEntity,
-          components: {
-            ...drawnEntity.components,
-            Appearance: {
-              ...resolveComposeAppearance(drawnEntity),
-              borderRadius: 0,
+            ...drawnEntity,
+            components: {
+              ...drawnEntity.components,
+              Appearance: {
+                ...resolveComposeAppearance(drawnEntity),
+                borderRadius: 0,
+              },
             },
-          },
-        }
-      : drawnEntity
+          }
+        : drawnEntity
+    }
+    // 命中容器时照常做子级；落在所有场景之外时按类型分流：容器升格成新场景，其余落进激活场景。
+    const landing = parent ? null : resolveRootLanding(current, localBounds, buildEntity)
+    const entity = landing?.entity ?? buildEntity(localBounds)
     const result = current.dispatch({
       id: current.idFactory(),
       type: BUILTIN_COMMAND_TYPES.createEntity,
       payload: {
         entity: entity as unknown as JsonValue,
-        parentId: parent?.id ?? current.document.rootIds[0] ?? null,
+        // 升格分支的 parentId 就是 null（文档根），不能用 ?? 串下去——那会把新场景吞回
+        // rootIds[0] 里变成嵌套 Frame。
+        parentId: parent ? parent.id : landing ? landing.parentId : null,
       },
       meta: {
         label: describeEntityCreation(entity),
@@ -1919,7 +1918,21 @@ function ComposeStageReady({
           && getComposeVisibility(parent).visible
           ? parent
           : undefined
-        const localCenter = validParent
+        const buildEntity = (center: StagePoint) => entityFromSeed(
+          seed.seed,
+          entityId,
+          center,
+          validParent ? getComposeLayout(validParent) : undefined,
+        )
+        // 命中容器时照常做子级；落在所有场景之外时按类型分流，与绘制工具同一条规则。
+        const landing = validParent
+          ? null
+          : resolveRootLanding(
+              current,
+              seedWorldBounds(seed.seed, effect.worldPoint),
+              (bounds) => buildEntity(boundsCenter(bounds)),
+            )
+        const entity = landing?.entity ?? buildEntity(validParent
           ? applyMatrix(
               invertMatrix(getEntityWorldMatrix(
                 current.document,
@@ -1928,19 +1941,14 @@ function ComposeStageReady({
               )),
               effect.worldPoint,
             )
-          : effect.worldPoint
-        const entity = entityFromSeed(
-          seed.seed,
-          entityId,
-          localCenter,
-          validParent ? getComposeLayout(validParent) : undefined,
-        )
+          : effect.worldPoint)
         const result = current.dispatch({
           id: current.idFactory(),
           type: BUILTIN_COMMAND_TYPES.createEntity,
           payload: {
             entity: entity as unknown as JsonValue,
-            parentId: validParent?.id ?? current.document.rootIds[0] ?? null,
+            // 升格分支的 parentId 是 null（文档根），不能用 ?? 串下去。
+            parentId: validParent ? validParent.id : landing ? landing.parentId : null,
           },
           meta: {
             label: describeEntityCreation(entity),
@@ -2609,7 +2617,8 @@ function ComposeStageReady({
     const insertionTarget = targetId === undefined
       ? (normalizedSelection[normalizedSelection.length - 1] ?? null)
       : targetId
-    const insertion = resolveSuggestedEntityInsertion(document, insertionTarget)
+    // 无命中目标时落进激活场景，而不是 rootIds 里恰好排第一的那块。
+    const insertion = resolveSuggestedEntityInsertion(document, insertionTarget, activeFrameId)
     if (!clipboard || !insertion) return
     const plan = createPasteFromClipboard(
       document,
@@ -2627,7 +2636,7 @@ function ComposeStageReady({
   const contextClipboardIds = clipboardSourceIds(contextNodeId)
   const canCopy = createEntityClipboard(document, contextClipboardIds, 'copy') !== null
   const canCut = createEntityClipboard(document, contextClipboardIds, 'cut') !== null
-  const contextInsertion = resolveSuggestedEntityInsertion(document, contextNodeId)
+  const contextInsertion = resolveSuggestedEntityInsertion(document, contextNodeId, activeFrameId)
   const canPaste = Boolean(clipboard && contextInsertion && (
     clipboard.kind === 'copy'
       ? clipboard.entityIds.every((id) => document.entities[id])
@@ -2805,62 +2814,25 @@ function ComposeStageReady({
             : { display: 'none' }}
         />
         <svg aria-hidden="true" className="compose-stage__world-overlay">
-          {frameScreenBounds.map((frameBounds) => {
-            const selected = selectedIds.includes(frameBounds.frameId)
-            return (
-              <g key={frameBounds.frameId}>
-                {/*
-                  * 边界只是装饰：Frame 自身在 DOM 场景层就是一个可命中的容器，命中与收敛
-                  * 规则由那一层统一负责。这里若接管 pointer，会把绘制工具的按下吞掉。
-                  */}
-                <rect
-                  className={`compose-stage__output-boundary${selected ? ' is-selected' : ''}`}
-                  data-frame-id={frameBounds.frameId}
-                  data-testid={`stage-frame-boundary-${frameBounds.frameId}`}
-                  fill="transparent"
-                  height={frameBounds.height}
-                  style={{ pointerEvents: 'none' }}
-                  width={frameBounds.width}
-                  x={frameBounds.x}
-                  y={frameBounds.y}
-                />
-                <g className={`compose-stage__output-decoration${selected ? ' is-selected' : ''}`}>
-                  <line
-                    className="compose-stage__output-edge"
-                    data-testid={`stage-frame-edge-top-${frameBounds.frameId}`}
-                    x1={frameBounds.x}
-                    x2={frameBounds.x + frameBounds.width}
-                    y1={frameBounds.y}
-                    y2={frameBounds.y}
-                  />
-                  <line
-                    className="compose-stage__output-edge"
-                    data-testid={`stage-frame-edge-left-${frameBounds.frameId}`}
-                    x1={frameBounds.x}
-                    x2={frameBounds.x}
-                    y1={frameBounds.y}
-                    y2={frameBounds.y + frameBounds.height}
-                  />
-                  <line
-                    className="compose-stage__output-edge"
-                    data-testid={`stage-frame-edge-bottom-${frameBounds.frameId}`}
-                    x1={frameBounds.x}
-                    x2={frameBounds.x + frameBounds.width}
-                    y1={frameBounds.y + frameBounds.height}
-                    y2={frameBounds.y + frameBounds.height}
-                  />
-                  <line
-                    className="compose-stage__output-edge"
-                    data-testid={`stage-frame-edge-right-${frameBounds.frameId}`}
-                    x1={frameBounds.x + frameBounds.width}
-                    x2={frameBounds.x + frameBounds.width}
-                    y1={frameBounds.y}
-                    y2={frameBounds.y + frameBounds.height}
-                  />
-                </g>
-              </g>
-            )
-          })}
+          {/*
+            * 场景与容器共用同一条呈现管线：背景、边框、圆角都来自 Entity 自身的 Appearance，
+            * Stage 不为 Frame 补画任何容器得不到的装饰。这里只保留一个透明矩形标出场景区域
+            * ——它是「可检查边界」的锚点，pointerEvents 关掉，否则会吞掉绘制工具的按下。
+            */}
+          {frameScreenBounds.map((frameBounds) => (
+            <rect
+              className="compose-stage__output-boundary"
+              data-frame-id={frameBounds.frameId}
+              data-testid={`stage-frame-boundary-${frameBounds.frameId}`}
+              fill="transparent"
+              height={frameBounds.height}
+              key={frameBounds.frameId}
+              style={{ pointerEvents: 'none' }}
+              width={frameBounds.width}
+              x={frameBounds.x}
+              y={frameBounds.y}
+            />
+          ))}
           <line
             className="compose-stage__axis is-x"
             data-testid="stage-origin-x"

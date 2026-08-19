@@ -34,6 +34,11 @@ export {
   type ComposeEntityInsertion,
 } from './clipboard'
 export {
+  clampBoundsIntoFrame,
+  isComposeContainerEntity,
+  resolveNextScenePlacement,
+} from './entity-placement'
+export {
   createComponentExtractionPlan,
   createReplaceSelectionWithEntityCommand,
   type ComposeComponentExtractionPlan,

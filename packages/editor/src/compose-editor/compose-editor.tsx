@@ -12,7 +12,6 @@ import {
   isComposeComponentMediaType,
   isComposePageMediaType,
   type ComposeComponentInstanceOverrides,
-  resolveComposePageActiveFrameId,
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
@@ -411,6 +410,42 @@ export function ComposeEditor({
     return () => disposers.forEach((dispose) => dispose())
   }, [animationRuntime])
 
+  /** 当前活动的 Dockview 面板 ID；页面工作区据此判定活动页面。 */
+  const [activeDocumentPanelId, setActiveDocumentPanelId] = useState<string | null>(null)
+  const [documents, setDocuments] = useState<ReadonlyMap<string, ComposeWorkspaceDocumentSession>>(
+    () => new Map(),
+  )
+
+  /**
+   * 动画作用域 Frame。
+   *
+   * @remarks
+   * 页面会话在打开时把「动画挂在哪块场景上」记进 `animationFrameId`，此后文件选择器、绑定
+   * 写入与保存回写都以它为准。时间线会话必须解析到**同一个** Frame，否则清单会落在一块场景
+   * 上、文件引用落在另一块，页面配置面板与时间线各说各话。
+   *
+   * 这两个 state 与本解析被刻意提到 {@link useAnimationMode} 之前：动画会话在缺省 `frameId`
+   * 时会回退到 `rootIds[0]`，那是四个消费方里唯一不一致的一个。
+   *
+   * 注意这**不是**「每块场景各自一个动画面板」：会话只跟踪一块场景的动画。规范
+   * （`pages` 的「按 Frame 绑定动画」）要求多个根 Frame 能各自绑定不同动画文件，Store 也已
+   * 支持，但编辑器会话尚未按 Frame 分桶，属于独立变更。
+   */
+  const activePageSessionForScope = activeDocumentPanelId
+    ? documents.get(activeDocumentPanelId)
+    : undefined
+  const activePageForScope = activePageSessionForScope?.kind === 'page'
+    ? activePageSessionForScope
+    : undefined
+  const pageActiveFrameId = activePageForScope?.page.activeFrameId ?? null
+  const sessionAnimationFrameId = activePageForScope?.animationFrameId ?? null
+  const animationScopeDocument = controller?.document
+  const animationScopeFrameId = useMemo(() => sessionAnimationFrameId
+    ?? (animationScopeDocument
+      ? resolveTargetFrameId(animationScopeDocument, NO_SELECTION, pageActiveFrameId)
+      : null),
+  [animationScopeDocument, pageActiveFrameId, sessionAnimationFrameId])
+
   // ref 必须先于 useAnimationMode 初始化：propertyLabel 在同一渲染趟内就会被面板模型 memo 调用。
   const editorMessagesRef = useRef(editorMessages)
   useEffect(() => {
@@ -436,6 +471,7 @@ export function ComposeEditor({
     dispatch: animationRuntime
       ? (command) => animationRuntime.dispatch(command)
       : undefined,
+    frameId: animationScopeFrameId,
     idFactory: animationCommandId,
     propertyLabel: animationPropertyLabel,
   })
@@ -504,8 +540,6 @@ export function ComposeEditor({
     animationModeRef.current = animationMode
   }, [animationMode])
 
-  /** 当前活动的 Dockview 面板 ID；页面工作区据此判定活动页面。 */
-  const [activeDocumentPanelId, setActiveDocumentPanelId] = useState<string | null>(null)
   /** 页面读取或保存失败的非阻断提示。 */
   const [pageNotice, setPageNotice] = useState<string | null>(null)
   /** 等待用户确认强制覆盖的页面面板 ID。 */
@@ -605,9 +639,6 @@ export function ComposeEditor({
     uploadParentId: assets?.paintImageUploadParentId,
   })
   const resolvedPaintImageLibrary = assets?.paintImageLibrary ?? providerPaintImageLibrary
-  const [documents, setDocuments] = useState<ReadonlyMap<string, ComposeWorkspaceDocumentSession>>(
-    () => new Map(),
-  )
   const documentsRef = useRef(documents)
   const [pendingAssetDocumentClose, setPendingAssetDocumentClose] = useState<
     PendingAssetDocumentClose | null
@@ -1414,28 +1445,11 @@ export function ComposeEditor({
    */
   const activePageFrameAnimationSource = useMemo(() => {
     const document = activePageSession?.page.document
-    if (!document) return null
-    const frameId = activePageSession?.animationFrameId
-      ?? (activePageSession ? resolveComposePageActiveFrameId(activePageSession.page) : null)
-    if (!frameId) return null
-    const animations = document.entities[frameId]?.components.Animations as
+    if (!document || !animationScopeFrameId) return null
+    const animations = document.entities[animationScopeFrameId]?.components.Animations as
       { source?: ComposePageAnimationReference } | undefined
     return animations?.source ?? null
-  }, [activePageSession])
-
-  /**
-   * 动画作用域 Frame。
-   *
-   * @remarks
-   * 一页一个激活场景，就一条时间线：文件选择器、会话镜像、自动记录与关键帧 Inspector 必须
-   * 解析到同一个 Frame。此前 reference 取会话/页面默认 Frame 而 mirror 取选区所属 Frame，
-   * 多场景下两者会指向不同的画板。要编辑另一块场景的动画，先把它设为激活场景。
-   */
-  const animationScopeDocument = controller?.document
-  const pageActiveFrameId = activePageSession?.page.activeFrameId ?? null
-  const animationScopeFrameId = useMemo(() => (animationScopeDocument
-    ? resolveTargetFrameId(animationScopeDocument, NO_SELECTION, pageActiveFrameId)
-    : null), [animationScopeDocument, pageActiveFrameId])
+  }, [activePageSession, animationScopeFrameId])
 
   const { selectedKeyframeEasing, setKeyframeInterpolation } = animationMode
   const animationInspector = useMemo(() => {

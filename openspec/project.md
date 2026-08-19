@@ -206,7 +206,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   纵向流程。项目组件采用独立 Component Asset v2，页面文件为 `ComposePageFile 3`。
 - Frame 是加在容器 Entity 上的 Component，不是新的 Entity 类型；它同时是坐标原点、独立布局
   Runtime、裁剪、动画时间线、脚本作用域与预览/导出单位这六重边界。`Frame ⇒ Hierarchy`，
-  Frame 不接受 Hug，尺寸事实来源是 `Frame.size`。
+  Frame 不接受 Hug，尺寸事实来源是 `Frame.size`。升格只加 `Frame`，Appearance、Clip 与动画
+  轨道原地保留；唯一入口是 core 的 `promoteComposeEntityToFrame`。
 - 界面上 Frame 称作「场景」，协议标识符不变。页面以 `ComposePageFile.activeFrameId` 记录
   **激活场景**：预览默认目标与生成真实页面用的都是它，没有选择时 Frame 动作也回退到它，
   但它 MUST NOT 覆盖显式选择。激活在页面文件里而不是文档里，因此切换激活是资源写入、
@@ -216,9 +217,13 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   diagnostics 与 Yoga 树只增加 LayoutSnapshot revision，不属于文档、事务或历史。
 - `ComposeDocument.canvas` 持久化网格、智能吸附设置与全局世界辅助线；viewport、选择、工具、
   surface 尺寸和动态滚动范围是会话状态。输出边界由根 Frame 自身的 `Frame.size` 定义，背景是
-  它的 `Appearance.backgroundPaint`（默认透明）；Preview 接受 v7、渲染目标是**一块 Frame**，
-  并忽略 canvas 编辑元数据。v5、v6 只允许显式单向迁移。场景是普通 Entity：它进入 Entity 选择
-  与 SceneTree，选中即打开普通容器 Inspector（含场景分组）。
+  它的 `Appearance.backgroundPaint`（默认与 Container Preset 同底色，但边框宽度为 0——布局求解
+  把边框计入内容盒，场景又是绝对坐标原点，默认边框会让吸附后的子级坐标整体偏 1）；
+  Preview 接受 v7、渲染目标是**一块 Frame**，并忽略 canvas 编辑元数据。v5、v6 只允许显式单向
+  迁移。场景是普通 Entity：它进入 Entity 选择与 SceneTree，选中即打开普通容器 Inspector
+  （含场景分组），画布上与容器共用同一条呈现管线、同一个图标，只有标题标签不同。
+- 根层落点按类型分流：在所有场景之外新建时，容器类 Entity 升格为一块新场景，其余 Entity 落进
+  激活场景并把世界坐标钳制进边界。任何新建路径都不得回退到 `rootIds[0]`。
 - 每个场景 Entity 必须拥有 `Composition`、`Transform`、`LayoutItem`、`Visibility`、`Lock`，并至少拥有
   `Renderer` 或 `Hierarchy`。Component Key 使用 PascalCase，字段使用 camelCase；未知合法
   Component 保留并由 Registry 边界降级。

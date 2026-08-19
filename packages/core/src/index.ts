@@ -32,6 +32,7 @@ export {
 export { createDefaultCanvasSettings } from './canvas-settings'
 export {
   COMPOSE_DEFAULT_FRAME_SIZE,
+  COMPOSE_DEFAULT_SCENE_APPEARANCE,
   createComposeFrame,
   createComposeFrameEntity,
   getComposeFrame,
@@ -39,6 +40,7 @@ export {
   isComposeFrameEntity,
   isWithinFrame,
   listComposeFrameIds,
+  promoteComposeEntityToFrame,
   resolveOwningFrameId,
 } from './frame'
 export {

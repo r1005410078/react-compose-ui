@@ -134,3 +134,19 @@ export function entityFromDrawingSeed(
     },
   }
 }
+
+/** Preset 默认尺寸在给定世界中心处的包围盒。 @internal */
+export function seedWorldBounds(seed: ComposeEntitySeed, center: StagePoint): StageRect {
+  const { size } = getComposeSpatialTransform({ id: '__seed__', ...seed })
+  return {
+    x: center.x - size.width / 2,
+    y: center.y - size.height / 2,
+    width: size.width,
+    height: size.height,
+  }
+}
+
+/** 包围盒中心点。 @internal */
+export function boundsCenter(bounds: StageRect): StagePoint {
+  return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+}

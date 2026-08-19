@@ -3,6 +3,8 @@ import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createComposeFrameEntity,
   BUILTIN_COMMAND_TYPES,
+  getComposeFrame,
+  isComposeFrameEntity,
   createDefaultCanvasSettings,
   getComposeLayoutItem,
   getComposeSpatialTransform,
@@ -207,17 +209,20 @@ describe('planSceneOperation', () => {
     expect(result.reason).toContain('missing')
   })
 
-  it('根级创建沿对角线错开，子级创建从父容器原点开始并使用嵌套尺寸', () => {
+  it('OpenSpec: editor-workspace-layout / 场景树根级落点 / 根级创建得到一块新场景', () => {
     const root = plannedCommand({ type: 'create', parentId: null, index: 0 })
     const rootEntity = root.command.payload.entity as unknown as ComposeEntity
-    // 文档已有 1 个根级 Entity：80 + 1 × 40。
-    expect(getComposeSpatialTransform(rootEntity).position)
-      .toEqual({ x: 120, y: 120 })
-    expect(getComposeSpatialTransform(rootEntity).size)
-      .toEqual({ width: 1280, height: 720 })
-    expect(root.command.meta?.label).toBe('Create Container · 1280 × 720')
+    // 树的根级就是场景所在那一层：在那里新建容器等于新建场景，落在既有场景右侧留 80 间隙。
+    expect(root.command.payload.parentId).toBeNull()
+    expect(isComposeFrameEntity(rootEntity)).toBe(true)
+    expect(getComposeFrame(rootEntity)?.size).toEqual({ width: 1280, height: 720 })
+    expect(getComposeSpatialTransform(rootEntity).position).toEqual({ x: 1360, y: 0 })
+    expect(rootEntity.name).toBe('场景 2')
+    expect(root.command.meta?.label).toBe('Create 场景 2')
     expect(root.nextSelection).toEqual([rootEntity.id])
+  })
 
+  it('子级创建从父容器原点开始并使用嵌套尺寸', () => {
     const nested = plannedCommand({ type: 'create', parentId: 'dashboard', index: 0 })
     const nestedEntity = nested.command.payload.entity as unknown as ComposeEntity
     expect(getComposeSpatialTransform(nestedEntity).position)

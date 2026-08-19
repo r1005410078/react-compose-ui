@@ -5,10 +5,13 @@ import {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  COMPOSE_DEFAULT_FRAME_SIZE,
+  COMPOSE_DEFAULT_SCENE_APPEARANCE,
   createDefaultCanvasSettings,
   createComposeFrameEntity,
   createTransactionRuntime,
   getComposeClip,
+  getComposeFrame,
   getComposeComposition,
   getComposeHierarchy,
   getComposeLayout,
@@ -82,10 +85,35 @@ describe('Basic ECS materials', () => {
     })
   })
 
+  it('OpenSpec: basic-materials / 场景 Entity Preset / 场景与容器同图标同外观', () => {
+    const materials = createComposeBasicMaterials()
+    const frame = materials.registry.getPreset('frame')
+    const container = materials.registry.getPreset('container')
+    expect(frame).toMatchObject({ id: 'frame', paletteHidden: true })
+    // 图标必须是同一个元素类型：场景就是放在顶层的容器，两者在场景树里不该有视觉差异。
+    expect((frame?.icon as { type?: unknown } | undefined)?.type)
+      .toBe((container?.icon as { type?: unknown } | undefined)?.type)
+    const sceneAppearance = seedEntity(materials, 'frame').components.Appearance
+    const containerAppearance = seedEntity(materials, 'container').components.Appearance
+    // 这条断言把 core 的场景默认外观与 materials 的容器默认外观锁在一起：任何一侧改了
+    // 背景色都会让这里立刻变红，而不是等到用户看见场景和容器颜色不一样。
+    expect(sceneAppearance).toMatchObject({
+      backgroundPaint: containerAppearance!.backgroundPaint,
+    })
+    expect(sceneAppearance).toEqual(COMPOSE_DEFAULT_SCENE_APPEARANCE)
+    // 唯一的例外：场景不带默认边框。布局求解把边框计入内容盒，而场景是绝对坐标的原点，
+    // 1px 边框会把每个直接子级整体推离网格 1px。
+    expect(sceneAppearance).toMatchObject({ borderWidth: 0 })
+    expect(containerAppearance).toMatchObject({ borderWidth: 1 })
+    expect(getComposeFrame(seedEntity(materials, 'frame'))?.size)
+      .toEqual(COMPOSE_DEFAULT_FRAME_SIZE)
+  })
+
   it('OpenSpec: Entity Presets / 基础与绘图物料写入明确基础组合', () => {
     const materials = createComposeBasicMaterials()
     expect(materials.presets.map(({ id }) => id)).toEqual([
       'group',
+      'frame',
       'container',
       'widget-switcher',
       'rectangle',

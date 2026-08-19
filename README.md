@@ -111,8 +111,13 @@ Frame 同时是六重隔离边界——坐标原点、独立 Yoga 布局 Runtime
 
 `Frame ⇒ Hierarchy`：场景必然是容器；Frame 不接受 Hug 尺寸，尺寸的事实来源是 `Frame.size`
 （`LayoutItem` 的固定尺寸只是布局求解的回退，由 `entity.frame.size.set` 同步）。
-把一个普通容器「升格」为场景就是给它加一个 `Frame` Component——Entity ID、子级与动画轨道
-全部原地保留，没有替换节点这回事。
+把一个普通容器「升格」为场景就是给它加一个 `Frame` Component——Entity ID、子级、外观与动画
+轨道全部原地保留，没有替换节点这回事。升格的唯一入口是 `promoteComposeEntityToFrame`。
+
+因此**场景在画布上就是一个普通容器**：背景、边框、圆角来自它自己的 `Appearance`，Stage 不为
+Frame 补画任何描边，场景树里也是同一个图标；两者唯一的区别是场景带标题标签（激活场景还带
+播放按钮与激活标记）。这一点在交互上也成立——**在所有场景之外画一个容器，得到的就是另一块
+场景**；画的若不是容器，它会落进激活场景并被钳制进边界，因为文档根只接受 Frame。
 
 Component Key 强制 PascalCase，字段保持 camelCase。每个场景 Entity 必须拥有
 `Composition + Transform + LayoutItem + Visibility + Lock`，并至少拥有 `Renderer` 或 `Hierarchy`。

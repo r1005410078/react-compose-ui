@@ -1,6 +1,7 @@
 import {
   COMPOSE_BUILTIN_COMPONENT_KEYS,
   type ComposeAnimation,
+  type ComposeAppearance,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeFrame,
@@ -12,6 +13,30 @@ import type { ComposePaint } from './paint'
 
 /** 新建 Frame 时使用的默认尺寸。 @public */
 export const COMPOSE_DEFAULT_FRAME_SIZE: ComposeSize = { width: 1280, height: 720 }
+
+/**
+ * 新建场景使用的默认外观。
+ *
+ * @remarks
+ * 场景就是放在顶层的容器，背景 MUST 与 `@compose-ui/materials` 的 Container Preset 默认
+ * 外观相同——否则用户会看到"画一个容器"和"画一块场景"颜色不一样。core 不能依赖 materials
+ * （架构边界），所以这是一份刻意的副本，由 materials 侧的断言锁住：漂移会让单测立刻变红。
+ *
+ * **唯一的例外是边框宽度**：Container 默认带 1px 边框，场景默认不带。布局求解会把边框
+ * 计入内容盒（`node.setBorder`），场景又是绝对坐标的原点，1px 边框会把每个直接子级整体推
+ * 离网格 1px——按网格吸附拖动后，属性面板里的 X 会读成 7、15、23 而不是 8、16、24。
+ * 用户当然可以给某块场景手动加边框，那是显式选择；默认值不该埋进这个偏差。
+ *
+ * @public
+ */
+export const COMPOSE_DEFAULT_SCENE_APPEARANCE: ComposeAppearance = Object.freeze({
+  backgroundPaint: { kind: 'solid', color: '#1e2229' },
+  borderColor: 'transparent',
+  borderWidth: 0,
+  borderRadius: 0,
+  opacity: 1,
+  shadow: null,
+} satisfies ComposeAppearance)
 
 /**
  * 创建一个 Frame Component。
@@ -136,6 +161,11 @@ export function createComposeFrameEntity(options: {
   readonly size?: ComposeSize
   readonly offset?: { readonly x: number; readonly y: number }
   readonly backgroundPaint?: ComposePaint
+  /**
+   * 覆盖整份外观。缺省为 {@link COMPOSE_DEFAULT_SCENE_APPEARANCE}；组件根、动画文件默认根
+   * 与测量探针这类非场景用途必须显式传入透明外观。
+   */
+  readonly appearance?: ComposeAppearance
   readonly animations?: readonly ComposeAnimation[]
 }): ComposeEntity {
   const frame = createComposeFrame(options.size)
@@ -154,8 +184,10 @@ export function createComposeFrameEntity(options: {
     Lock: { locked: false },
     Hierarchy: { childIds: [...(options.childIds ?? [])] },
     Frame: frame,
+    // 场景默认与容器同色；backgroundPaint 只覆盖背景一项，appearance 覆盖整份。
     Appearance: {
-      backgroundPaint: options.backgroundPaint ?? { kind: 'solid', color: 'transparent' },
+      ...(options.appearance ?? COMPOSE_DEFAULT_SCENE_APPEARANCE),
+      ...(options.backgroundPaint ? { backgroundPaint: options.backgroundPaint } : {}),
     },
     ...(options.animations ? { Animations: { items: options.animations } as JsonObject } : {}),
   }
@@ -169,6 +201,62 @@ export function createComposeFrameEntity(options: {
         capabilityIds: [],
       },
       ...base,
+    },
+  }
+}
+
+/**
+ * 把一个既有 Entity 就地升格为 Frame。
+ *
+ * @remarks
+ * 升格**只做一件事**：加上 `Frame`。id、名称、子级与其余全部 Component——包括 `Appearance`
+ * 与 `Clip`——原地保留，不做任何规范化。这是"场景就是放在顶层的容器"这句话的实现：用户画
+ * 一个改过底色的容器再把它变成场景，颜色不应该被悄悄改掉。归一化只发生在
+ * {@link createComposeFrameEntity} 构造**新**场景时。
+ *
+ * `Frame` 会被写进 `Composition.baseComponentKeys`，此后 `entity.component.remove` 会拒绝
+ * 移除它——否则 Inspector 上会出现一个能把根场景变成非法文档的删除按钮。`Hierarchy` 只在
+ * 本次补齐时才写进该列表：升格不该顺手保护一个它没有创建的 Component。
+ *
+ * 对已经是 Frame 的 Entity 调用是幂等的，只更新 `size`。
+ *
+ * @param entity - 待升格的 Entity。
+ * @param size - 升格后的 Frame 尺寸。
+ * @returns 新的 Entity 对象；入参不被修改。
+ * @public
+ */
+export function promoteComposeEntityToFrame(
+  entity: ComposeEntity,
+  size: ComposeSize,
+): ComposeEntity {
+  const { composition: compositionKey, frame: frameKey, hierarchy: hierarchyKey }
+    = COMPOSE_BUILTIN_COMPONENT_KEYS
+  const needsHierarchy = entity.components[hierarchyKey] === undefined
+  const composition = entity.components[compositionKey] as
+    { readonly baseComponentKeys?: readonly string[] } | undefined
+  const baseComponentKeys = composition?.baseComponentKeys ?? []
+  return {
+    ...entity,
+    components: {
+      ...entity.components,
+      ...(composition
+        ? {
+            [compositionKey]: {
+              ...composition,
+              baseComponentKeys: [
+                ...baseComponentKeys,
+                ...(needsHierarchy && !baseComponentKeys.includes(hierarchyKey)
+                  ? [hierarchyKey]
+                  : []),
+                ...(baseComponentKeys.includes(frameKey) ? [] : [frameKey]),
+              ],
+            } as JsonObject,
+          }
+        : {}),
+      // Frame 必须同时是容器：升格目标可能是一个还没有 Hierarchy 的叶 Entity。
+      ...(needsHierarchy ? { [hierarchyKey]: { childIds: [] } } : {}),
+      // 对已经是 Frame 的 Entity 重复调用只改尺寸，辅助线不能被重置。
+      [frameKey]: { ...createComposeFrame(size), guides: getComposeFrameGuides(entity) },
     },
   }
 }
