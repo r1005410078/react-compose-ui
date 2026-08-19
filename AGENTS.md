@@ -56,6 +56,13 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   图标（`frame` Preset 复用 Container 的图标与背景）。唯一的视觉区分是标题标签。
   场景默认外观与 Container 同底色但**边框宽度为 0**：布局求解把边框计入内容盒，而场景是
   绝对坐标的原点，默认边框会让按网格吸附的子级在属性面板里读成 7、15、23。
+- **动画按场景独立，脚本按页面共享。** 每块场景有自己的动画：清单挂在各自 Frame 上，动画
+  文件按 Frame 分区。动画作用域跟随**选中对象所属的场景**，没有选择时回退激活场景，因此
+  「哪一块会被发布」与「正在编辑哪一块的动画」可以不同。页面 setup 脚本相反，保持
+  `ComposePageFile` 上的页面级单值：绑定是页面级平坦命名空间，动画自身的播放绑定也解析页面
+  作用域，按场景切分脚本会制造一类跨场景移动即失效的悬空引用。这个不对称是设计，不是遗漏。
+  `Animations.source` 住在文档里却由页面文件写入产生，保存前必须把它补回待存文档，否则运行时
+  文档会覆盖掉刚写好的绑定。
 - **根层落点按类型分流。** 在所有场景之外新建时，容器类 Entity 升格为一块新场景；其余
   Entity 落进**激活场景**并把世界坐标钳制进该场景边界。任何新建路径都不得回退到
   `rootIds[0]`——那既选错场景，又会跳过世界→局部换算。点击添加（没有落点意图）不走升格。
@@ -115,8 +122,11 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `animation.tracks.relocate` 在同一次事务里搬迁轨道，且该命令 MUST 排在结构变更之前——
   源 Frame 由 Entity 当前层级反查，结构先动就会退化成 noop。命令 handler 通过
   `TransactionRuntimeOptions.handlers` 注入，不进入 core 的内建命令表。本包还定义动画文件
-  协议（`.animation.json`，只存清单与变量绑定，不存轨道）：文件是静态权威，编辑器打开页面时
-  把清单水合进 Frame 镜像、保存时回写文件；解除引用不删除文件资源。
+  协议（`.animation.json`，只存清单与变量绑定，不存轨道）：文件**按所属根 Frame 分区**，
+  一页共用一份文件而各场景互不影响，因此不需要动画文件命名策略；文件是静态权威，编辑器打开
+  页面时把各分区水合进对应 Frame 的镜像、保存时把各镜像合并回同一份文件；解除引用不删除文件
+  资源。清单以整个 `Animations` Component 写入，因此写入方必须自己带上 `source`——只写
+  `items` 会把绑定从文档里抹掉。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`script-runtime`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。

@@ -1,9 +1,9 @@
 import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
+import type { ComposeAnimationFile } from '@compose-ui/animation'
 import type { ComposeScriptIntelligenceProfile } from '@compose-ui/asset-browser'
 import type {
-  ComposeAnimation,
   ComposeComponentAssetV1,
   ComposePageFile,
   ComposeResolvedComponentSnapshot,
@@ -113,14 +113,25 @@ export interface ComposePageDocumentSession extends ComposeDocumentSessionBase {
   readonly baseRevision: string | undefined
   /** 与运行时 revision 比较以判定脏状态的基线。 */
   readonly savedRevisionId: number
-  /** 绑定动画文件的 Provider 条目 ID；未绑定或文件加载失败时为 undefined。 */
-  readonly animationEntryId: string | undefined
-  /** 持有该动画绑定的 Frame；v7 的清单归属 Frame。 */
-  readonly animationFrameId: string | undefined
-  /** 绑定动画文件最近一次读写的 revision，用于保存回写的乐观并发。 */
-  readonly animationRevision: string | undefined
-  /** 动画文件当前落盘的清单基线；保存时与文档镜像比较判断是否需要回写。 */
-  readonly animationManifest: ComposeAnimation | undefined
+  /**
+   * 按动画文件 assetKey 分桶的会话状态。
+   *
+   * @remarks
+   * 一个页面的多块场景各自持有 `Animations.source`，且通常都指向同一份文件——文件内部按
+   * Frame 分区。因此桶必须以**文件**为单位而不是以 Frame 为单位：entryId 与 revision 属于
+   * 文件，保存时每份文件只写一次；各 Frame 的清单基线放在 `baseline` 的对应分区里。
+   */
+  readonly animationFiles: ReadonlyMap<string, ComposePageAnimationFileState>
+}
+
+/** 一份绑定动画文件的会话状态。 @internal */
+export interface ComposePageAnimationFileState {
+  /** Provider 条目 ID，写回时作为 `writeFile.fileId` 使用。 */
+  readonly entryId: string
+  /** 最近一次读写得到的 revision，用于保存回写的乐观并发。 */
+  readonly revision: string
+  /** 当前落盘的文件基线；保存时与各 Frame 的文档镜像比较，判断是否需要回写。 */
+  readonly baseline: ComposeAnimationFile
 }
 
 /** 一个 Base 或 Variant 的独立编辑会话。 @internal */

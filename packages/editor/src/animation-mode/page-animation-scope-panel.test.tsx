@@ -94,6 +94,7 @@ function renderPanel({
       <PageAnimationScopePanel
         animation={animation}
         dispatch={dispatch}
+        frameId="frame-root"
         idFactory={() => `id-${seq += 1}`}
         keyframeEasing={keyframeEasing}
         onAnimationChange={onAnimationChange}

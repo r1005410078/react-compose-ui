@@ -15,7 +15,10 @@ import {
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
-import { createComposeAnimationCommandHandlers } from '@compose-ui/animation'
+import {
+  createComposeAnimationCommandHandlers,
+  getComposeAnimationFileFrame,
+} from '@compose-ui/animation'
 import { AnimationInspector } from '../animation-mode/animation-inspector'
 import { createPageAnimationFile } from '../animation-mode/animation-asset-store'
 import { PageAnimationScopePanel } from '../animation-mode/page-animation-scope-panel'
@@ -44,6 +47,9 @@ import { resolveTargetFrameId } from '@compose-ui/stage-engine'
 
 /** 解析动画作用域时不看选区：内联 `[]` 每次渲染都是新引用，会破坏 memo。 */
 const NO_SELECTION: readonly string[] = []
+
+/** 新建动画的默认时长；与 `createComposeAnimationFile` 的缺省保持一致。 */
+const DEFAULT_ANIMATION_DURATION_MS = 300
 import type { ComposePageAnimationReference, ComposePageSetupReference } from '@compose-ui/core'
 import type { ComposeEntity, ComposeResolvedComponentSnapshot, EditorCommand, JsonObject } from '@compose-ui/core'
 import { createComposeAssetResolver } from '@compose-ui/assets'
@@ -420,16 +426,14 @@ export function ComposeEditor({
    * 动画作用域 Frame。
    *
    * @remarks
-   * 页面会话在打开时把「动画挂在哪块场景上」记进 `animationFrameId`，此后文件选择器、绑定
-   * 写入与保存回写都以它为准。时间线会话必须解析到**同一个** Frame，否则清单会落在一块场景
-   * 上、文件引用落在另一块，页面配置面板与时间线各说各话。
+   * 每块场景有自己的动画，因此作用域跟随**选中对象所属的那块场景**，没有选择时回退页面的
+   * 激活场景——与 `多画板下的 Frame 动作目标` 同一条规则。这也意味着「哪一块会被发布」
+   * （`activeFrameId`）与「正在编辑哪一块的动画」可以不同：后者跟手，前者是显式声明。
    *
-   * 这两个 state 与本解析被刻意提到 {@link useAnimationMode} 之前：动画会话在缺省 `frameId`
-   * 时会回退到 `rootIds[0]`，那是四个消费方里唯一不一致的一个。
-   *
-   * 注意这**不是**「每块场景各自一个动画面板」：会话只跟踪一块场景的动画。规范
-   * （`pages` 的「按 Frame 绑定动画」）要求多个根 Frame 能各自绑定不同动画文件，Store 也已
-   * 支持，但编辑器会话尚未按 Frame 分桶，属于独立变更。
+   * 时间线会话、文件选择器、镜像水合、绑定写入与关键帧 Inspector 必须解析到**同一个**
+   * Frame，否则清单落在一块场景、文件引用落在另一块，页面配置面板与时间线各说各话。
+   * 这两个 state 与本解析因此被刻意提到 {@link useAnimationMode} 之前：动画会话在缺省
+   * `frameId` 时会回退到 `rootIds[0]`。
    */
   const activePageSessionForScope = activeDocumentPanelId
     ? documents.get(activeDocumentPanelId)
@@ -438,13 +442,12 @@ export function ComposeEditor({
     ? activePageSessionForScope
     : undefined
   const pageActiveFrameId = activePageForScope?.page.activeFrameId ?? null
-  const sessionAnimationFrameId = activePageForScope?.animationFrameId ?? null
   const animationScopeDocument = controller?.document
-  const animationScopeFrameId = useMemo(() => sessionAnimationFrameId
-    ?? (animationScopeDocument
-      ? resolveTargetFrameId(animationScopeDocument, NO_SELECTION, pageActiveFrameId)
-      : null),
-  [animationScopeDocument, pageActiveFrameId, sessionAnimationFrameId])
+  const animationScopeSelection = controller?.selectedIds ?? NO_SELECTION
+  const animationScopeFrameId = useMemo(() => (animationScopeDocument
+    ? resolveTargetFrameId(animationScopeDocument, animationScopeSelection, pageActiveFrameId)
+    : null),
+  [animationScopeDocument, animationScopeSelection, pageActiveFrameId])
 
   // ref 必须先于 useAnimationMode 初始化：propertyLabel 在同一渲染趟内就会被面板模型 memo 调用。
   const editorMessagesRef = useRef(editorMessages)
@@ -1203,15 +1206,17 @@ export function ComposeEditor({
   const handlePageAnimationChanged = useCallback(async (
     pageKey: string,
     reference: ComposePageAnimationReference | null,
+    frameId: string | null,
   ) => {
     const previousId = currentAnimationId
-    const manifest = await pageWorkspace.setPageAnimation(pageKey, reference)
+    const manifest = await pageWorkspace.setPageAnimation(pageKey, reference, frameId)
     if (previousId !== null && previousId !== manifest?.id) {
       removeAnimation(previousId)
     }
     if (manifest && previousId !== manifest.id) {
       hydrateAnimation(manifest)
     }
+    return manifest
   }, [currentAnimationId, hydrateAnimation, pageWorkspace, removeAnimation])
   /**
    * 切换激活场景。
@@ -1451,6 +1456,24 @@ export function ComposeEditor({
     return animations?.source ?? null
   }, [activePageSession, animationScopeFrameId])
 
+  /**
+   * 该页面已经绑定的动画文件（任意一块场景上的）。
+   *
+   * @remarks
+   * 一页共用一份动画文件、按场景分区，因此第二块场景创建动画时要复用这一份而不是新建：
+   * 新建会撞上同名文件、退化成 `Home 2.animation.json`，页面就散成多份文件了。
+   */
+  const activePageAnimationReference = useMemo(() => {
+    const document = activePageSession?.page.document
+    if (!document) return null
+    for (const frameId of document.rootIds) {
+      const source = (document.entities[frameId]?.components.Animations as
+        { source?: ComposePageAnimationReference } | undefined)?.source
+      if (source) return source
+    }
+    return null
+  }, [activePageSession])
+
   const { selectedKeyframeEasing, setKeyframeInterpolation } = animationMode
   const animationInspector = useMemo(() => {
     if (!activePageSession || !pageProvider) return undefined
@@ -1461,14 +1484,18 @@ export function ComposeEditor({
       <PageAnimationScopePanel
         animation={mirrorAnimation}
         dispatch={(command) => animationRuntime?.dispatch(command as EditorCommand)}
+        frameId={animationScopeFrameId}
         idFactory={animationCommandId}
         key={`${pageProvider.id}:${activePageSession.pageKey}:animation`}
         // 缓动区只属于动画模式：设计模式下选中态仍在会话里，但那时没有时间线可编辑。
         keyframeEasing={animationMode.active ? selectedKeyframeEasing : null}
-        onAnimationChange={(reference) => handlePageAnimationChanged(
-          activePageSession.pageKey,
-          reference,
-        )}
+        onAnimationChange={async (reference) => {
+          await handlePageAnimationChanged(
+            activePageSession.pageKey,
+            reference,
+            animationScopeFrameId,
+          )
+        }}
         onError={setPageNotice}
         onInterpolationChange={setKeyframeInterpolation}
         pageName={activePageSession.displayName}
@@ -1900,39 +1927,73 @@ export function ComposeEditor({
   const handleCreateAnimationFromEmptyState = useCallback(async () => {
     if (!activePageSession || !pageProvider) return
     try {
-      const { entry } = await createPageAnimationFile(
-        pageProvider,
-        activePageSession.entry.parentId ?? pageProvider.root.id,
-        activePageSession.displayName,
-        {
-          id: animationCommandId(),
-          name: animationModeMessages.defaultAnimationName,
-        },
+      if (!animationScopeFrameId) throw new Error('页面没有可绑定动画的场景')
+      const manifest = {
+        id: animationCommandId(),
+        name: animationModeMessages.defaultAnimationName,
+        durationMs: DEFAULT_ANIMATION_DURATION_MS,
+        playbackMode: 'play-once' as const,
+      }
+      // 一页共用一份动画文件、按场景分区：已经有别的场景绑定过就复用那一份，只在这一页头
+      // 一次建动画时造文件。不复用会撞上同名文件、退化成 `Home 2.animation.json`。
+      const reference = activePageAnimationReference ?? await (async () => {
+        const { entry } = await createPageAnimationFile(
+          pageProvider,
+          activePageSession.entry.parentId ?? pageProvider.root.id,
+          activePageSession.displayName,
+          animationScopeFrameId,
+          manifest,
+        )
+        const assetKey = entry.assetKey
+        if (!assetKey) throw new Error('动画文件缺少稳定 assetKey')
+        return {
+          providerId: pageProvider.id,
+          assetKey,
+          scope: pageProvider.referenceScope ?? 'persistent',
+        }
+      })()
+      const bound = await handlePageAnimationChanged(
+        activePageSession.pageKey,
+        reference,
+        animationScopeFrameId,
       )
-      const assetKey = entry.assetKey
-      if (!assetKey) throw new Error('动画文件缺少稳定 assetKey')
-      await handlePageAnimationChanged(activePageSession.pageKey, {
-        providerId: pageProvider.id,
-        assetKey,
-        scope: pageProvider.referenceScope ?? 'persistent',
-      })
+      // 复用既有文件时这块场景在文件里还没有分区，绑定回来的清单是空的：这里补建一条。
+      // 新造文件的分支里文件已经带上了这条清单，绑定就会把它水合回来。
+      if (!bound) hydrateAnimation(manifest)
     }
     catch {
       setPageNotice(animationModeMessages.animationOperationFailed)
     }
-  }, [activePageSession, animationModeMessages, handlePageAnimationChanged, pageProvider])
+  }, [
+    activePageAnimationReference,
+    activePageSession,
+    animationModeMessages,
+    animationScopeFrameId,
+    handlePageAnimationChanged,
+    hydrateAnimation,
+    pageProvider,
+  ])
 
   /** 撤销越过水合事务后的恢复入口：重新派发水合，不再创建文件。 */
   const handleLoadBoundAnimation = useCallback(() => {
-    const manifest = activePageSession?.animationManifest
+    const reference = activePageFrameAnimationSource
+    const baseline = reference
+      ? activePageSession?.animationFiles.get(reference.assetKey)?.baseline
+      : undefined
+    const manifest = baseline && animationScopeFrameId
+      ? getComposeAnimationFileFrame(baseline, animationScopeFrameId)[0]
+      : undefined
     if (manifest) {
       hydrateAnimation(manifest)
       return
     }
     // 打开页面时文件加载失败会让会话没有基线清单：按当前引用重新加载一次。
-    const reference = activePageFrameAnimationSource
     if (activePageSession && reference) {
-      void handlePageAnimationChanged(activePageSession.pageKey, reference).catch(() => {
+      void handlePageAnimationChanged(
+        activePageSession.pageKey,
+        reference,
+        animationScopeFrameId,
+      ).catch(() => {
         setPageNotice(animationModeMessages.animationOperationFailed)
       })
     }
@@ -1940,6 +2001,7 @@ export function ComposeEditor({
     activePageFrameAnimationSource,
     activePageSession,
     animationModeMessages,
+    animationScopeFrameId,
     handlePageAnimationChanged,
     hydrateAnimation,
   ])

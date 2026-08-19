@@ -95,6 +95,7 @@ export async function createPageAnimationFile(
   provider: ComposeAssetProvider,
   parentId: string,
   displayName: string,
+  frameId: string,
   animation: Pick<ComposeAnimation, 'id' | 'name'> & Partial<ComposeAnimation>,
   signal?: AbortSignal,
 ): Promise<{ readonly entry: ComposeAssetEntry; readonly file: ComposeAnimationFile }> {
@@ -102,7 +103,7 @@ export async function createPageAnimationFile(
   if (!createFile || provider.capabilities.createFile === false) {
     throw new ComposeAssetError('unsupported', '当前 Provider 不支持创建动画文件')
   }
-  const file = createComposeAnimationFile(animation)
+  const file = createComposeAnimationFile(frameId, animation)
   const content = new Blob(
     [serializeComposeAnimationFile(file)],
     { type: COMPOSE_ANIMATION_MEDIA_TYPE },
@@ -129,27 +130,24 @@ export async function createPageAnimationFile(
 }
 
 /**
- * 把最新清单写回绑定的动画文件。
+ * 把整份动画文件写回资产。
  *
  * @remarks
+ * 一份文件承载多块场景的分区，因此写回的单位是**整份文件**而不是单条清单：调用方先把各
+ * Frame 的镜像合并进文件再交给这里，一次保存对同一份文件只写一次。
  * 用调用方持有的文件 revision 做乐观并发；`conflict` 由调用方决定提示或强制覆盖。
  * @internal
  */
-export async function writePageAnimationManifest(
+export async function writePageAnimationFile(
   provider: ComposeAssetProvider,
   entryId: string,
-  animation: ComposeAnimation,
+  file: ComposeAnimationFile,
   expectedRevision: string,
   force?: boolean,
 ): Promise<{ readonly revision: string }> {
   const writeFile = provider.writeFile
   if (!writeFile || provider.capabilities.write === false) {
     throw new ComposeAssetError('unsupported', '当前 Provider 不支持写入动画文件')
-  }
-  const file: ComposeAnimationFile = {
-    kind: 'compose-animation',
-    animationSchemaVersion: 1,
-    animation,
   }
   let entry: ComposeAssetEntry
   try {

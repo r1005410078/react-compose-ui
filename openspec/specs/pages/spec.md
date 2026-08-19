@@ -142,16 +142,24 @@ Page Store MUST 以页面文件的 expected revision 原子改写可选 setupScr
 rootIds 中的一个 Frame。`activeFrameId` 是页面的**激活目标**：它 MUST 决定预览的默认目标与
 「生成真实页面」时渲染的 Frame，并 MUST 在没有任何选择时作为 Frame 相关动作的回退目标；
 它 MUST NOT 覆盖显式选择。动画文件的稳定引用 MUST 保存在 Frame 上而不是页面级 `animation`
-字段；一个页面的多个根 Frame MUST 能各自绑定不同的动画文件。Store MUST 提供按 Frame 设置
-动画引用的乐观并发写入，以及设置 `activeFrameId` 的乐观并发写入；后者 MUST 拒绝不在 rootIds
-中的 id。`pageSchemaVersion: 1` 与 `2` 文件 MUST 只能显式迁移：1→2 把页面级 `animation` 移到
-唯一根 Frame 并填充默认 Frame；2→3 把 `defaultFrameId` 恒等改名为 `activeFrameId`。
+字段；一个页面的多个根 Frame MUST 能各自持有独立的引用，并 MAY 指向同一个动画文件——文件
+按所属 Frame 分区，因此一页共用一份文件时各场景的动画仍互不影响。解除某个 Frame 的引用
+MUST NOT 改变其他 Frame 的引用。Store MUST 提供按 Frame 设置动画引用的乐观并发写入，以及
+设置 `activeFrameId` 的乐观并发写入；后者 MUST 拒绝不在 rootIds 中的 id。
+`pageSchemaVersion: 1` 与 `2` 文件 MUST 只能显式迁移：1→2 把页面级 `animation` 移到唯一根
+Frame 并填充默认 Frame；2→3 把 `defaultFrameId` 恒等改名为 `activeFrameId`。
 
 #### Scenario: 按 Frame 绑定动画
 
 - **WHEN** 宿主为某页面的第二个根 Frame 设置动画文件引用
 - **THEN** 写入只改变该 Frame 的引用
 - **AND** 第一个根 Frame 的绑定与页面其余内容保持不变
+
+#### Scenario: 多个根 Frame 指向同一动画文件
+
+- **WHEN** 页面的两个根 Frame 都引用同一个动画文件，用户解除其中一个的引用
+- **THEN** 只有该 Frame 的 `Animations.source` 被清空
+- **AND** 另一个 Frame 的引用与该动画文件本身都保持不变
 
 #### Scenario: 页面文件 1 到 2 显式迁移
 

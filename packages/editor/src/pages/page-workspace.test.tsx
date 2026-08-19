@@ -515,12 +515,14 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     revision: 'a1',
     assetKey: 'Home.animation.json',
   }
-  const animationFileText = serializeComposeAnimationFile(createComposeAnimationFile({
-    id: 'intro',
-    name: '入场',
-    durationMs: 500,
-    playbackMode: 'loop',
-  }))
+  const animationFileText = serializeComposeAnimationFile(
+    createComposeAnimationFile('frame-root', {
+      id: 'intro',
+      name: '入场',
+      durationMs: 500,
+      playbackMode: 'loop',
+    }),
+  )
   // v7 的动画绑定挂在 Frame 的 Animations.source 上。
   const boundPageText = (() => {
     const page = createEmptyComposePageFile()
@@ -627,10 +629,10 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
       .find((input) => input.fileId === 'home-animation')
     const written = JSON.parse(await writeInput!.content.text()) as {
       kind: string
-      animation: { durationMs: number }
+      frames: Record<string, { durationMs: number }[]>
     }
     expect(written.kind).toBe('compose-animation')
-    expect(written.animation.durationMs).toBe(800)
+    expect(written.frames['frame-root']?.[0]?.durationMs).toBe(800)
   })
 
   it('镜像清单未变化时保存不回写动画文件', async () => {
