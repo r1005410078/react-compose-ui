@@ -12,6 +12,7 @@ import {
   isComposeComponentMediaType,
   isComposePageMediaType,
   type ComposeComponentInstanceOverrides,
+  resolveComposePageActiveFrameId,
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
@@ -1387,8 +1388,7 @@ export function ComposeEditor({
     const document = activePageSession?.page.document
     if (!document) return null
     const frameId = activePageSession?.animationFrameId
-      ?? activePageSession?.page.defaultFrameId
-      ?? document.rootIds[0]
+      ?? (activePageSession ? resolveComposePageActiveFrameId(activePageSession.page) : null)
     if (!frameId) return null
     const animations = document.entities[frameId]?.components.Animations as
       { source?: ComposePageAnimationReference } | undefined

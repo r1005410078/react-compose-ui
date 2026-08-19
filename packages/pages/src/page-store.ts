@@ -130,10 +130,10 @@ export interface ComposePageStore {
     expectedRevision?: string,
     force?: boolean,
   ): Promise<ComposePageSnapshot>
-  /** 改写页面默认 Frame；必须指向 `document.rootIds` 中的一个 Frame。 */
-  setPageDefaultFrame(
+  /** 改写页面激活 Frame（界面上的「激活场景」）；必须指向 `document.rootIds` 中的一个 Frame。 */
+  setPageActiveFrame(
     pageKey: string,
-    defaultFrameId: string | null,
+    activeFrameId: string | null,
     expectedRevision?: string,
     force?: boolean,
   ): Promise<ComposePageSnapshot>
@@ -385,13 +385,20 @@ export function createComposePageStore(input: {
       if (!writeFile || provider.capabilities.write === false) {
         throw new ComposeAssetError('unsupported', '当前 Provider 不支持写入页面')
       }
+      // 所有页面写入都经由这里，因此激活 Frame 的对账只需做一次。文档编辑可以删掉激活场景，
+      // 而解析侧对悬空 activeFrameId 直接报错——不对账就会写出一个自己再也打不开的页面。
+      // 这里只修悬空值，不把 null 补成第一个根 Frame：null 表示"没有显式选择"，是合法状态。
+      const reconciled = page.activeFrameId != null
+        && !page.document.rootIds.includes(page.activeFrameId)
+        ? { ...page, activeFrameId: page.document.rootIds[0] ?? null }
+        : page
       const descriptor = await findDescriptor(pageKey)
       let entry: ComposeAssetEntry
       try {
         entry = await writeFile.call(provider, {
           fileId: descriptor.entryId,
           content: new Blob(
-            [serializeComposePageFile(page)],
+            [serializeComposePageFile(reconciled)],
             { type: COMPOSE_PAGE_MEDIA_TYPE },
           ),
           expectedRevision: expectedRevision ?? '',
@@ -401,7 +408,7 @@ export function createComposePageStore(input: {
       catch (error) {
         throw normalizeComposeAssetError(error)
       }
-      const snapshot: ComposePageSnapshot = { page, revision: entry.revision ?? '' }
+      const snapshot: ComposePageSnapshot = { page: reconciled, revision: entry.revision ?? '' }
       pageCache.set(pageKey, snapshot)
       catalogCache = null
       emit({ type: 'page-changed', pageKey })
@@ -458,14 +465,14 @@ export function createComposePageStore(input: {
       )
     },
 
-    async setPageDefaultFrame(pageKey, defaultFrameId, expectedRevision, force) {
+    async setPageActiveFrame(pageKey, activeFrameId, expectedRevision, force) {
       const current = await this.readPage(pageKey)
-      if (defaultFrameId !== null && !current.page.document.rootIds.includes(defaultFrameId)) {
-        throw new ComposeAssetError('unsupported', `defaultFrameId ${defaultFrameId} 不是根 Frame`)
+      if (activeFrameId !== null && !current.page.document.rootIds.includes(activeFrameId)) {
+        throw new ComposeAssetError('unsupported', `activeFrameId ${activeFrameId} 不是根 Frame`)
       }
       return this.writePage(
         pageKey,
-        { ...current.page, defaultFrameId },
+        { ...current.page, activeFrameId },
         expectedRevision ?? current.revision,
         force,
       )

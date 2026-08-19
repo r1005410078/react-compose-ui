@@ -6,8 +6,10 @@ import {
   createEmptyComposePageFile,
   isComposePageFileName,
   isComposePageMediaType,
+  migrateComposePageFileV2ToV3,
   migrateLegacyComposePageFile,
   parseComposePageFile,
+  resolveComposePageActiveFrameId,
   serializeComposePageFile,
 } from './page-file'
 
@@ -47,7 +49,7 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     const second = createEmptyComposePageFile()
     expect(first).toMatchObject({
       kind: 'compose-page',
-      pageSchemaVersion: 2,
+      pageSchemaVersion: 3,
       setupScript: null,
       document: { schemaVersion: 7, rootIds: ['frame-root'] },
     })
@@ -83,7 +85,7 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
 
   it('OpenSpec: compose-document / 页面文件约定 / 拒绝版本、document 与 setup 引用错误', () => {
     const page = createEmptyComposePageFile()
-    const unsupported = parseComposePageFile(JSON.stringify({ ...page, pageSchemaVersion: 3 }))
+    const unsupported = parseComposePageFile(JSON.stringify({ ...page, pageSchemaVersion: 2 }))
     expect(unsupported.ok).toBe(false)
     if (!unsupported.ok) {
       expect(unsupported.issues).toContainEqual(expect.objectContaining({
@@ -115,31 +117,31 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     }
   })
 
-  it('OpenSpec: pages / 页面默认 Frame 与 Frame 级动画绑定 / 缺省 defaultFrameId 归一化为 null', () => {
+  it('OpenSpec: pages / 页面激活 Frame 与 Frame 级动画绑定 / 缺省 activeFrameId 归一化为 null', () => {
     const page = { ...createEmptyComposePageFile() }
-    delete (page as { defaultFrameId?: unknown }).defaultFrameId
+    delete (page as { activeFrameId?: unknown }).activeFrameId
     const result = parseComposePageFile(`${JSON.stringify(page, null, 2)}\n`)
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.page.defaultFrameId).toBeNull()
+    if (result.ok) expect(result.page.activeFrameId).toBeNull()
   })
 
-  it('OpenSpec: pages / 页面默认 Frame 与 Frame 级动画绑定 / 序列化总是写出 defaultFrameId', () => {
+  it('OpenSpec: pages / 页面激活 Frame 与 Frame 级动画绑定 / 序列化总是写出 activeFrameId', () => {
     const page = { ...createEmptyComposePageFile() }
-    delete (page as { defaultFrameId?: unknown }).defaultFrameId
-    expect(JSON.parse(serializeComposePageFile(page))).toHaveProperty('defaultFrameId', null)
+    delete (page as { activeFrameId?: unknown }).activeFrameId
+    expect(JSON.parse(serializeComposePageFile(page))).toHaveProperty('activeFrameId', null)
   })
 
-  it('OpenSpec: pages / 页面默认 Frame 与 Frame 级动画绑定 / 往返默认 Frame 并拒绝悬空值', () => {
+  it('OpenSpec: pages / 页面激活 Frame 与 Frame 级动画绑定 / 往返默认 Frame 并拒绝悬空值', () => {
     const empty = createEmptyComposePageFile()
-    const page = { ...empty, defaultFrameId: empty.document.rootIds[0]! }
+    const page = { ...empty, activeFrameId: empty.document.rootIds[0]! }
     const roundTrip = parseComposePageFile(serializeComposePageFile(page))
     expect(roundTrip.ok).toBe(true)
     if (roundTrip.ok) expect(roundTrip.page).toEqual(page)
 
-    const dangling = parseComposePageFile(JSON.stringify({ ...page, defaultFrameId: 'missing' }))
+    const dangling = parseComposePageFile(JSON.stringify({ ...page, activeFrameId: 'missing' }))
     expect(dangling.ok).toBe(false)
     if (!dangling.ok) {
-      expect(dangling.issues.map((issue) => issue.code)).toContain('page.invalid-default-frame')
+      expect(dangling.issues.map((issue) => issue.code)).toContain('page.invalid-active-frame')
     }
   })
 
@@ -159,11 +161,68 @@ describe('OpenSpec: compose-document / 页面文件约定', () => {
     if (result.ok) {
       expect(result.page).toEqual({
         kind: 'compose-page',
-        pageSchemaVersion: 2,
+        pageSchemaVersion: 3,
         document,
         setupScript: null,
-        defaultFrameId: null,
+        activeFrameId: null,
       })
     }
+  })
+  it('OpenSpec: pages / 页面激活 Frame 与 Frame 级动画绑定 / 页面文件 2 到 3 显式迁移', () => {
+    const empty = createEmptyComposePageFile()
+    const frameId = empty.document.rootIds[0]!
+    const v2 = {
+      kind: 'compose-page',
+      pageSchemaVersion: 2,
+      document: empty.document,
+      setupScript: null,
+      defaultFrameId: frameId,
+    }
+    const snapshot = JSON.stringify(v2)
+    const result = migrateComposePageFileV2ToV3(v2)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.page).toEqual({
+        kind: 'compose-page',
+        pageSchemaVersion: 3,
+        document: empty.document,
+        setupScript: null,
+        activeFrameId: frameId,
+      })
+    }
+    // 迁移是纯函数：输入对象不得被就地改写。
+    expect(JSON.stringify(v2)).toBe(snapshot)
+  })
+
+  it('OpenSpec: pages / 页面激活 Frame 与 Frame 级动画绑定 / 迁移入口拒绝非 2 版本', () => {
+    const result = migrateComposePageFileV2ToV3(createEmptyComposePageFile())
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.issues.map((issue) => issue.code)).toContain('page.unsupported-version')
+    }
+  })
+
+  it('OpenSpec: pages / 页面激活 Frame 与 Frame 级动画绑定 / 迁移结果仍受悬空校验约束', () => {
+    const empty = createEmptyComposePageFile()
+    const result = migrateComposePageFileV2ToV3({
+      kind: 'compose-page',
+      pageSchemaVersion: 2,
+      document: empty.document,
+      setupScript: null,
+      defaultFrameId: 'missing',
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.issues.map((issue) => issue.code)).toContain('page.invalid-active-frame')
+    }
+  })
+
+  it('OpenSpec: pages / 页面激活 Frame 与 Frame 级动画绑定 / 解析激活 Frame 时回退第一个根 Frame', () => {
+    const empty = createEmptyComposePageFile()
+    const frameId = empty.document.rootIds[0]!
+    expect(resolveComposePageActiveFrameId(empty)).toBe(frameId)
+    expect(resolveComposePageActiveFrameId({ ...empty, activeFrameId: frameId })).toBe(frameId)
+    // 文档编辑可能让 activeFrameId 悬空（例如那块场景被删掉），读取侧回退而不是抛错。
+    expect(resolveComposePageActiveFrameId({ ...empty, activeFrameId: 'missing' })).toBe(frameId)
   })
 })

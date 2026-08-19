@@ -4,7 +4,12 @@ import {
   type ComposeAssetProvider,
   type ComposeAssetResolver,
 } from '@compose-ui/assets'
-import { composePageDisplayName, createTransactionRuntime, getComposeAnimations } from '@compose-ui/core'
+import {
+  composePageDisplayName,
+  createTransactionRuntime,
+  getComposeAnimations,
+  resolveComposePageActiveFrameId,
+} from '@compose-ui/core'
 import type {
   ComposeAnimation,
   ComposeDocument,
@@ -233,8 +238,8 @@ export function usePageWorkspace({
       let animationEntryId: string | undefined
       let animationRevision: string | undefined
       let animationManifest: ComposeAnimation | undefined
-      // v7 的动画清单归属 Frame：绑定引用在默认 Frame 的 Animations.source 上。
-      const animationFrameId = snapshot.page.defaultFrameId ?? document.rootIds[0] ?? null
+      // v7 的动画清单归属 Frame：绑定引用在激活场景的 Animations.source 上。
+      const animationFrameId = resolveComposePageActiveFrameId(snapshot.page)
       const animationSource = animationFrameId
         ? (document.entities[animationFrameId]?.components.Animations as
             { source?: ComposePageAnimationReference } | undefined)?.source
@@ -430,9 +435,8 @@ export function usePageWorkspace({
     }
     const expectedRevision = session ? session.baseRevision : (await store.readPage(pageKey)).revision
     const targetFrameId = session?.animationFrameId
-      ?? session?.page.defaultFrameId
-      ?? session?.page.document.rootIds[0]
-      ?? (await store.readPage(pageKey)).page.document.rootIds[0]
+      ?? (session ? resolveComposePageActiveFrameId(session.page) : null)
+      ?? resolveComposePageActiveFrameId((await store.readPage(pageKey)).page)
     if (!targetFrameId) throw new ComposeAssetError('unsupported', '页面没有可绑定动画的 Frame')
     const written = await store.setFrameAnimation(pageKey, targetFrameId, reference, expectedRevision)
     if (session) {
