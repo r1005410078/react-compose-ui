@@ -52,23 +52,6 @@ MUST 丢弃全部布局意图 preview，pointerup MUST 请求最多一个命令�
 - **THEN** 绘制手势保持进行，松手仍然请求一次 `drawing.commit`
 - **AND** 同样情况下的移动手势仍然被中止
 
-### Requirement: 输出区域检查命中
-
-controller MUST 接受独立的 output hit，并通过 output selection effect 请求宿主检查隐式 Canvas。
-输出检查不得写入 selectedIds；节点、resize、rotate、guide 和平移命中 MUST 保持原优先级。
-
-#### Scenario: 点击与框选输出区域
-
-- **WHEN** 选择工具在输出区域空白处按下并松开
-- **THEN** controller 清空节点选择并请求检查 output
-- **AND** 从输出区域拖出有效框选后改为返回命中的节点选择
-
-#### Scenario: 平移不切换检查目标
-
-- **WHEN** pan 工具、Space 临时平移或中键从输出区域开始
-- **THEN** controller 只更新 viewport
-- **AND** 不发送 output selection effect
-
 ### Requirement: 资源批量外部拖入会话
 
 Stage Engine MUST 以纯数据 assets descriptor 支持 external begin/move/end/cancel，并用现有
