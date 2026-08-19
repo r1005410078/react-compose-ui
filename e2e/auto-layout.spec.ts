@@ -492,3 +492,48 @@ test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺�
 })
 
 
+
+test('OpenSpec: stage / resize 手势实时布局反馈 / 场景 Auto Layout 子级随场景缩放实时重排', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const frame = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frame).toBeVisible()
+  const frameBox = (await frame.boundingBox())!
+
+  // 场景里画一个矩形，作为 Auto Layout 采纳后的 flow 子级。
+  await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+  await page.mouse.move(frameBox.x + 60, frameBox.y + 60)
+  await page.mouse.down()
+  await page.mouse.move(frameBox.x + 220, frameBox.y + 160, { steps: 4 })
+  await page.mouse.up()
+  await editor.getByRole('button', { name: '选择', exact: true }).click()
+
+  // 场景（Frame 根）自己开 Auto Layout。
+  await editor.getByTestId('stage-container-label-frame-root').click()
+  const sceneInspector = editor.getByRole('region', { name: /属性$/ }).first()
+  await enableAutoLayout(sceneInspector)
+
+  // 子级宽度 Fill：宽度跟随场景宽度，是「实时重排」的可观察信号。
+  const rect = stage.locator('[data-testid^="stage-entity-"]').first()
+  await rect.click({ force: true })
+  await selectAxisSizing(editor.getByRole('region', { name: 'Rectangle 属性', exact: true }), '宽度', 'Fill')
+  const before = (await rect.boundingBox())!.width
+
+  // 拖场景西侧手柄加宽 240；右下角与东侧在默认视口可能被属性面板遮挡。
+  await editor.getByTestId('stage-container-label-frame-root').click()
+  const handle = editor.getByTestId('stage-resize-edge-w')
+  const handleBox = (await handle.boundingBox())!
+  const start = { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x - 240, start.y, { steps: 8 })
+  // 仍按住不放：Frame.size 已写进预览求解文档，子级必须在拖动期间就按新宽度重排。
+  await expect.poll(async () => (await rect.boundingBox())!.width).toBeGreaterThan(before + 200)
+  await page.mouse.up()
+
+  // 松手提交后宽度保持一致，不发生二次跳变。
+  const held = (await rect.boundingBox())!.width
+  await expect.poll(async () => (await rect.boundingBox())!.width).toBe(held)
+})
