@@ -4,6 +4,7 @@ import {
   createComposeBatchCommand,
   createTransactionRuntime,
   getComposeComposition,
+  getComposeFrame,
   getComposeLayoutItem,
   resolveComposeOverflow,
   getComposeSpatialTransform,
@@ -539,5 +540,29 @@ describe('ComposeDocument v7 built-in commands', () => {
     expect(runtime.document.entities.rectangle?.name).toBe('Renamed')
     expect(runtime.document.entities.rectangle?.components.Visibility).toEqual({ visible: false })
     expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('OpenSpec: command-transaction / 受约束 Transform 命令 / 拖拽手柄缩放 Frame 同步 Frame.size', () => {
+    const runtime = createTransactionRuntime({ document: documentFixture() })
+    const before = getComposeFrame(runtime.document.entities[ROOT_FRAME_ID]!)!
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.setTransform, {
+      operation: 'resize',
+      updates: [{
+        entityId: ROOT_FRAME_ID,
+        transform: transform(0, 0, before.size.width + 120, before.size.height + 80),
+      }],
+    }).status).toBe('committed')
+    const frame = getComposeFrame(runtime.document.entities[ROOT_FRAME_ID]!)!
+    // Frame.size 是布局求解的事实来源：只写 LayoutItem 会让文档变了而画面不动。
+    expect(frame.size).toEqual({
+      width: before.size.width + 120,
+      height: before.size.height + 80,
+    })
+    expect(getComposeLayoutItem(runtime.document.entities[ROOT_FRAME_ID]!)).toMatchObject({
+      width: { mode: 'fixed', value: before.size.width + 120 },
+      height: { mode: 'fixed', value: before.size.height + 80 },
+    })
+    runtime.undo()
+    expect(getComposeFrame(runtime.document.entities[ROOT_FRAME_ID]!)!.size).toEqual(before.size)
   })
 })

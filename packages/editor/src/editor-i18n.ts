@@ -203,14 +203,11 @@ const messages = {
       primaryLineEvery: '主线间隔',
       nodeSnap: '节点吸附',
       guideSnap: '辅助线吸附',
-      clearGuides: (count: number) => `清空辅助线（${count}）`,
-      willClearGuides: '将清空辅助线',
       cancel: '取消',
       apply: '应用',
       invalid: '步长必须为正数，偏移必须有限，主线间隔必须为正整数。',
       rejected: '画布设置无效。',
       configureTransaction: '配置画布网格与吸附',
-      configureAndClearTransaction: '配置画布并清空辅助线',
     },
     canvasInspector: {
       label: '画布属性',
@@ -421,14 +418,11 @@ const messages = {
       primaryLineEvery: 'Primary line interval',
       nodeSnap: 'Snap to nodes',
       guideSnap: 'Snap to guides',
-      clearGuides: (count: number) => `Clear guides (${count})`,
-      willClearGuides: 'Guides will be cleared',
       cancel: 'Cancel',
       apply: 'Apply',
       invalid: 'Steps must be positive, offsets finite, and the primary interval a positive integer.',
       rejected: 'Canvas settings are invalid.',
       configureTransaction: 'Configure canvas grid and snapping',
-      configureAndClearTransaction: 'Configure canvas and clear guides',
     },
     canvasInspector: {
       label: 'Canvas properties',
@@ -864,15 +858,6 @@ export function getEditorMessages(
       ),
       nodeSnap: format('canvasSettings.nodeSnap', current.canvasSettings.nodeSnap),
       guideSnap: format('canvasSettings.guideSnap', current.canvasSettings.guideSnap),
-      clearGuides: (count: number) => withVariables(
-        'canvasSettings.clearGuides',
-        current.canvasSettings.clearGuides(count),
-        { count },
-      ),
-      willClearGuides: format(
-        'canvasSettings.willClearGuides',
-        current.canvasSettings.willClearGuides,
-      ),
       cancel: format('canvasSettings.cancel', current.canvasSettings.cancel),
       apply: format('canvasSettings.apply', current.canvasSettings.apply),
       invalid: format('canvasSettings.invalid', current.canvasSettings.invalid),
@@ -880,10 +865,6 @@ export function getEditorMessages(
       configureTransaction: format(
         'canvasSettings.configureTransaction',
         current.canvasSettings.configureTransaction,
-      ),
-      configureAndClearTransaction: format(
-        'canvasSettings.configureAndClearTransaction',
-        current.canvasSettings.configureAndClearTransaction,
       ),
     },
     canvasInspector: Object.fromEntries(

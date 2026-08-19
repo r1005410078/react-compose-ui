@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
-import { getComposeFrameGuides } from '@compose-ui/core'
 import type {
   ComposeDocument,
   EditorCommand,
-  JsonValue,
 } from '@compose-ui/core'
 import type { ComposeStageDispatch } from '@compose-ui/stage'
 import { getEditorMessages } from '../editor-i18n'
@@ -24,7 +22,6 @@ type Draft = {
   primaryLineEvery: string
   nodes: boolean
   guides: boolean
-  clearGuides: boolean
 }
 
 function initialDraft(document: ComposeDocument): Draft {
@@ -37,7 +34,6 @@ function initialDraft(document: ComposeDocument): Draft {
     primaryLineEvery: String(grid.primaryLineEvery),
     nodes: smartSnap.nodes,
     guides: smartSnap.guides,
-    clearGuides: false,
   }
 }
 
@@ -56,11 +52,6 @@ export function CanvasSettingsPopover({
     i18n?.formatMessage,
   ).canvasSettings
   const [draft, setDraft] = useState(() => initialDraft(document))
-  // 活动 Frame 缺省回退到第一个根 Frame，与 Stage 的辅助线绘制口径一致。
-  const activeFrameId = document.rootIds[0] ?? null
-  const frameGuides = activeFrameId
-    ? getComposeFrameGuides(document.entities[activeFrameId])
-    : []
   const [error, setError] = useState('')
   const updateNumber = (field: keyof Pick<
     Draft,
@@ -110,31 +101,7 @@ export function CanvasSettingsPopover({
       },
       meta: { label: messages.configureTransaction, source: 'stage-toolbar' },
     }
-    // 辅助线归属 Frame：清空只作用于活动 Frame，别的画板的辅助线不受影响。
-    const deletes: EditorCommand[] = draft.clearGuides
-      ? frameGuides.map((guide) => ({
-          id: idFactory(),
-          type: 'frame.guide.delete',
-          payload: { frameId: activeFrameId!, guideId: guide.id },
-        }))
-      : []
-    const commands = [configure, ...deletes]
-    const command = commands.length === 1
-      ? commands[0]!
-      : {
-          id: idFactory(),
-          type: 'transaction.batch',
-          payload: {
-            commands: commands as unknown as JsonValue,
-          },
-          meta: {
-            label: deletes.length > 0
-              ? messages.configureAndClearTransaction
-              : messages.configureTransaction,
-            source: 'stage-toolbar',
-          },
-        }
-    const result = dispatch(command)
+    const result = dispatch(configure)
     if (result.status === 'rejected') {
       setError(result.issues[0]?.message ?? messages.rejected)
       return
@@ -218,20 +185,6 @@ export function CanvasSettingsPopover({
         />
         {messages.guideSnap}
       </label>
-      <button
-        aria-pressed={draft.clearGuides}
-        className="compose-editor__clear-guides"
-        disabled={frameGuides.length === 0}
-        type="button"
-        onClick={() => setDraft((current) => ({
-          ...current,
-          clearGuides: !current.clearGuides,
-        }))}
-      >
-        {draft.clearGuides
-          ? messages.willClearGuides
-          : messages.clearGuides(frameGuides.length)}
-      </button>
       {error ? <p role="alert">{error}</p> : null}
       <div className="compose-editor__canvas-settings-actions">
         <button type="button" onClick={onClose}>{messages.cancel}</button>
