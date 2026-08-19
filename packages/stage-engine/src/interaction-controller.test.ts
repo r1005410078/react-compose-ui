@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ResizeHandle } from './geometry'
 import {
   createStageInteractionController,
+  type StageInteractionController,
   type StageInteractionEffect,
   type StageInteractionHit,
   type StageInteractionTool,
@@ -16,6 +17,7 @@ function setup(
   value = document(),
   snapshot = layoutSnapshot(value),
   selectedIds: readonly string[] = ['a'],
+  contextOverrides: Partial<Parameters<StageInteractionController['updateContext']>[0]> = {},
 ) {
   const effects: StageInteractionEffect[] = []
   const controller = createStageInteractionController()
@@ -32,6 +34,7 @@ function setup(
     tool: 'select',
     selectedIds,
     idFactory: () => `id-${++nextId}`,
+    ...contextOverrides,
   })
   return { controller, effects }
 }
@@ -1742,6 +1745,31 @@ describe('OpenSpec: stage-engine / 拖拽修饰键结构意图', () => {
     // reparent 以 batch 提交（结构 + 几何一条事务），与既有 reparent 提交路径一致。
     expect(commands[0]).toMatchObject({
       command: { type: 'transaction.batch' },
+    })
+  })
+
+  it('OpenSpec: stage-engine / 画布拖拽 reparent 会话 / 宿主锁定原父级时不产生结构落点', () => {
+    const value = modifierFixture()
+    const { controller, effects } = setup(
+      value,
+      layoutSnapshot(value),
+      ['dragged'],
+      { lockGestureParent: true },
+    )
+    controller.send({
+      type: 'pointer.down', pointerId: 1, button: 0, point: { x: 10, y: 10 },
+      hit: { kind: 'entity', entityId: 'dragged' }, modifiers,
+    })
+    // 指针深入 target 内部：默认会产生 reparent 候选，宿主锁定下全程无落点。
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 500, y: 100 }, modifiers })
+    expect(controller.getSnapshot().dropTarget).toBeNull()
+
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 500, y: 100 }, modifiers })
+    // 松手只更新原父级内坐标，不产生任何结构命令。
+    const commands = effects.filter((effect) => effect.type === 'command.dispatch')
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({
+      command: { type: BUILTIN_COMMAND_TYPES.setTransform, payload: { operation: 'move' } },
     })
   })
 

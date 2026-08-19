@@ -326,6 +326,15 @@ export interface StageInteractionContext {
    * 查询后传入。缩放这类 Entity 时其 Hug 高度会被保留——见下方缩放规则。
    */
   readonly contentReflowsWithWidth?: (entityId: string) => boolean
+  /**
+   * 宿主级「锁定原父级」：为 true 时全部 move 手势与按住 Space 同一语义——不产生跨父级
+   * reparent 落点与命令，同容器重排照常。
+   *
+   * @remarks
+   * 编辑器动画模式用它把画布拖拽限定为姿态编辑：拖动只表达关键帧/offset 变化，不得把
+   * 对象拖出所属场景。与手势中的 Space 锁定可叠加，任一生效即锁定。
+   */
+  readonly lockGestureParent?: boolean
   /** 为命令、batch、guide 和结构节点创建稳定 ID。 */
   readonly idFactory: () => string
   /** 保留 React/i18n 层提供的命令标签。 */
@@ -1568,12 +1577,16 @@ export function createStageInteractionController(): StageInteractionController {
         translationMatrix(snapped.delta.x, snapped.delta.y),
       )
       // 落点跟随指针本身而不是吸附后的几何：用户判断“放进哪里”看的是光标位置。
+      // 宿主级锁定（动画模式）与手势中的 Space 锁定同一语义，任一生效即锁定原父级。
       gesture.dropTarget = resolveStageDropTarget({
         index,
         draggedIds: gesture.ids,
         worldPoint: world,
         zoom: gesture.viewport.zoom,
-        modifiers: { alt: modifiers.alt, space: gesture.parentLocked },
+        modifiers: {
+          alt: modifiers.alt,
+          space: gesture.parentLocked || context.lockGestureParent === true,
+        },
       })
       publish({
         ...snapshot,

@@ -145,6 +145,70 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 清空选择回退到�
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
 })
 
+test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不跨场景挂载', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+
+  // 场景 2（画完处于选中态）里直接添加 Rectangle，再复制一份拖回场景 1——
+  // 复刻缺陷报告的操作序列：动画模式下拖动场景 2 的原件曾被判成跨场景挂载。
+  const sceneTwoId = await createSecondScene(page, editor)
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const inScene1 = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
+  const inScene2 = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
+  await expect(inScene2).toHaveCount(1)
+  await inScene2.click()
+  await stage.press('Control+d')
+  await expect(inScene2).toHaveCount(2)
+  const sceneOneBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const copyBox = (await inScene2.last().boundingBox())!
+  await page.mouse.move(copyBox.x + copyBox.width / 2, copyBox.y + copyBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(sceneOneBox.x + 300, sceneOneBox.y + 300, { steps: 8 })
+  await page.mouse.up()
+  await expect(inScene1).toHaveCount(1)
+  await expect(inScene2).toHaveCount(1)
+
+  // 场景 1 的副本刻一条动画。
+  await inScene1.click()
+  await editor.getByRole('radio', { name: '动画' }).click()
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+  await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+
+  // 保持动画模式直接选中场景 2 的原件并创建它自己的动画。
+  await inScene2.click()
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+
+  // 把播放头拖到 200 ms 后在画布上拖动对象：拖拽是姿态编辑，不得跨场景挂载。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  const dragBox = (await inScene2.first().boundingBox())!
+  await page.mouse.move(dragBox.x + dragBox.width / 4, dragBox.y + dragBox.height / 4)
+  await page.mouse.down()
+  await page.mouse.move(dragBox.x + dragBox.width / 4 + 80, dragBox.y + dragBox.height / 4, { steps: 4 })
+  await page.mouse.up()
+
+  // 对象仍属场景 2，且这次拖动在播放头处写入了场景 2 动画的关键帧。
+  await expect(inScene2).toHaveCount(1)
+  await expect(inScene1).toHaveCount(1)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
+
+  // 场景 1 的动画不受影响：仍只有副本自己的一条对象轨道与 0 ms 关键帧。
+  await editor.getByRole('radio', { name: '设计' }).click()
+  await inScene1.click()
+  await editor.getByRole('radio', { name: '动画' }).click()
+  await expect(animationPanel.getByRole('button', { name: /^选择对象轨道/ })).toHaveCount(1)
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(0)
+})
+
 test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 刚画出来的场景就能建动画', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
