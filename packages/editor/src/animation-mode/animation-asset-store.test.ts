@@ -1,14 +1,19 @@
 import {
   createComposeAnimationFile,
+  getComposeAnimationFileFrame,
   serializeComposeAnimationFile,
+  setComposeAnimationFileFrame,
 } from '@compose-ui/animation'
 import { ComposeAssetError, type ComposeAssetProvider } from '@compose-ui/assets'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createPageAnimationFile,
   loadPageAnimation,
-  writePageAnimationManifest,
+  writePageAnimationFile,
 } from './animation-asset-store'
+
+const SCENE_A = 'frame-root'
+const SCENE_B = 'frame-2'
 
 const animationEntry = {
   id: 'intro-file',
@@ -19,7 +24,7 @@ const animationEntry = {
   revision: 'a1',
 }
 
-const fileText = serializeComposeAnimationFile(createComposeAnimationFile({
+const fileText = serializeComposeAnimationFile(createComposeAnimationFile(SCENE_A, {
   id: 'intro',
   name: '入场',
   durationMs: 500,
@@ -65,7 +70,8 @@ describe('animation-asset-store', () => {
     })
     expect(snapshot.entryId).toBe('intro-file')
     expect(snapshot.revision).toBe('a1')
-    expect(snapshot.file.animation).toMatchObject({ id: 'intro', durationMs: 500 })
+    expect(getComposeAnimationFileFrame(snapshot.file, SCENE_A)[0])
+      .toMatchObject({ id: 'intro', durationMs: 500 })
   })
 
   it('动画文件缺失按 not-found 报告，内容不合法按 io 报告', async () => {
@@ -101,12 +107,14 @@ describe('animation-asset-store', () => {
       }
     })
     const provider = providerFixture({ createFile })
-    const { entry, file } = await createPageAnimationFile(provider, 'root', 'Home', {
+    const { entry, file } = await createPageAnimationFile(provider, 'root', 'Home', SCENE_B, {
       id: 'anim-1',
       name: '动画 1',
     })
     expect(entry.name).toBe('Home 2.animation.json')
-    expect(file.animation.id).toBe('anim-1')
+    // 新建的清单落在指定场景的分区里。
+    expect(getComposeAnimationFileFrame(file, SCENE_B)[0]?.id).toBe('anim-1')
+    expect(getComposeAnimationFileFrame(file, SCENE_A)).toEqual([])
   })
 
   it('创建的动画文件缺少稳定 assetKey 时按 unsupported 报告', async () => {
@@ -118,23 +126,33 @@ describe('animation-asset-store', () => {
         kind: 'file' as const,
       })),
     })
-    await expect(createPageAnimationFile(provider, 'root', 'Home', { id: 'a', name: 'A' }))
+    await expect(createPageAnimationFile(provider, 'root', 'Home', SCENE_A, { id: 'a', name: 'A' }))
       .rejects.toMatchObject({ code: 'unsupported' })
   })
 
-  it('回写清单使用乐观并发并序列化完整动画文件', async () => {
+  it('回写整份文件使用乐观并发并保留其他场景的分区', async () => {
     const provider = providerFixture()
-    const result = await writePageAnimationManifest(provider, 'intro-file', {
-      id: 'intro',
-      name: '入场',
-      durationMs: 800,
-      playbackMode: 'loop',
-    }, 'a1')
+    const merged = setComposeAnimationFileFrame(
+      createComposeAnimationFile(SCENE_A, {
+        id: 'intro',
+        name: '入场',
+        durationMs: 800,
+        playbackMode: 'loop',
+      }),
+      SCENE_B,
+      [{ id: 'outro', name: '退场', durationMs: 400, playbackMode: 'play-once' }],
+    )
+    const result = await writePageAnimationFile(provider, 'intro-file', merged, 'a1')
     expect(result.revision).toBe('a2')
     const writeFile = provider.writeFile as ReturnType<typeof vi.fn>
     const input = writeFile.mock.calls[0]?.[0] as { expectedRevision: string; content: Blob }
     expect(input.expectedRevision).toBe('a1')
-    const written = JSON.parse(await input.content.text()) as { kind: string }
+    const written = JSON.parse(await input.content.text()) as {
+      kind: string
+      frames: Record<string, { id: string }[]>
+    }
     expect(written.kind).toBe('compose-animation')
+    expect(written.frames[SCENE_A]?.[0]?.id).toBe('intro')
+    expect(written.frames[SCENE_B]?.[0]?.id).toBe('outro')
   })
 })

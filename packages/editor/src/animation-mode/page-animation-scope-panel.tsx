@@ -51,6 +51,13 @@ export interface PageAnimationScopePanelProps {
   readonly pageParentId: string
   readonly provider: ComposeAssetProvider
   readonly reference: ComposePageAnimationReference | null
+  /**
+   * 新建动画归属的场景（根 Frame）Entity id。
+   *
+   * @remarks
+   * 动画文件按场景分区，因此新建时必须知道这条清单属于哪一块；宿主传当前动画作用域场景。
+   */
+  readonly frameId: string | null
   /** 会话镜像中的绑定动画清单；撤销越过水合事务后可能暂缺。 */
   readonly animation: ComposeAnimation | null
   /** 页面作用域；缺省时绑定候选为空。 */
@@ -115,6 +122,7 @@ function AddIcon() {
 export function PageAnimationScopePanel({
   animation,
   dispatch,
+  frameId,
   idFactory,
   keyframeEasing = null,
   onAnimationChange,
@@ -217,7 +225,8 @@ export function PageAnimationScopePanel({
     setBusy(true)
     let created: ComposeAssetEntry | undefined
     try {
-      const result = await createPageAnimationFile(provider, pageParentId, pageName, {
+      if (!frameId) throw new Error('没有可绑定动画的场景')
+      const result = await createPageAnimationFile(provider, pageParentId, pageName, frameId, {
         id: idFactory(),
         name: messages.defaultAnimationName,
       })

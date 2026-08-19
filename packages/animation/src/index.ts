@@ -54,9 +54,12 @@ export {
   composeAnimationDisplayName,
   composeAnimationFileName,
   createComposeAnimationFile,
+  getComposeAnimationFileFrame,
   isComposeAnimationFileName,
+  migrateComposeAnimationFileV1ToV2,
   parseComposeAnimationFile,
   serializeComposeAnimationFile,
+  setComposeAnimationFileFrame,
 } from './animation-file'
 export type {
   ComposeAnimationFile,

@@ -97,12 +97,27 @@ function isManifest(
   return 'items' in value
 }
 
-/** 整条清单以单个 Component 写入：Animations 可能尚不存在，逐字段 set 会落空。 */
-function manifestPatch(frameId: string, items: readonly ComposeAnimation[]): DocumentPatch {
+/**
+ * 整条清单以单个 Component 写入。
+ *
+ * @remarks
+ * 逐字段 set 会落空——`Animations` 可能尚不存在。整体写入就必须自己带上 `source`：那是该
+ * Frame 绑定的动画文件引用，只写 `items` 会把绑定从文档里抹掉，页面保存时连同引用一起丢失，
+ * 下次打开就水合不出任何清单。
+ */
+function manifestPatch(
+  document: ComposeDocument,
+  frameId: string,
+  items: readonly ComposeAnimation[],
+): DocumentPatch {
+  const existing = document.entities[frameId]?.components.Animations as
+    { readonly source?: JsonValue } | undefined
   return {
     op: 'set',
     path: ['entities', frameId, 'components', 'Animations'],
-    value: { items } as unknown as JsonValue,
+    value: (existing?.source === undefined
+      ? { items }
+      : { items, source: existing.source }) as unknown as JsonValue,
   }
 }
 
@@ -258,7 +273,7 @@ function createHandler(): CommandHandler {
       if (manifest.items.some((item) => item.id === animationId)) {
         return reject('animation.duplicate-id', `动画 ${animationId} 已存在`)
       }
-      return applied([manifestPatch(manifest.frameId, [...manifest.items, {
+      return applied([manifestPatch(document, manifest.frameId, [...manifest.items, {
         id: animationId,
         name,
         durationMs,
@@ -282,7 +297,7 @@ function deleteHandler(): CommandHandler {
         return reject('animation.missing', `动画 ${animationId} 不存在`)
       }
       const patches: DocumentPatch[] = [
-        manifestPatch(manifest.frameId, manifest.items.filter((item) => item.id !== animationId)),
+        manifestPatch(document, manifest.frameId, manifest.items.filter((item) => item.id !== animationId)),
       ]
       // 清单条目与各 Entity 的分组是同一条动画的两半，必须在同一个事务里一起清掉，
       // 否则撤销一半会留下悬空分组。只清该 Frame 作用域内的 Entity——同名分组在别的
@@ -340,6 +355,7 @@ function configureHandler(): CommandHandler {
       else if (bindings !== undefined) next.bindings = bindings as JsonValue
       if (jsonEqual(current, next)) return { status: 'noop', reason: '动画参数没有变化' }
       return applied([manifestPatch(
+        document,
         manifest.frameId,
         manifest.items.map((item) => item.id === animationId ? next as ComposeAnimation : item),
       )])
@@ -573,7 +589,7 @@ function relocateTracksHandler(): CommandHandler {
       })
 
       if (created.length > 0) {
-        patches.push(manifestPatch(target.frameId, [...target.items, ...created]))
+        patches.push(manifestPatch(document, target.frameId, [...target.items, ...created]))
       }
       // 源清单只丢弃已经没有任何轨道留下的动画；同一条动画可能还驱动着子树之外的 Entity。
       const orphaned = new Set<string>()
@@ -587,6 +603,7 @@ function relocateTracksHandler(): CommandHandler {
       })
       if (orphaned.size > 0) {
         patches.push(manifestPatch(
+          document,
           source.frameId,
           source.items.filter((item) => !orphaned.has(item.id)),
         ))

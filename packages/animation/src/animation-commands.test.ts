@@ -147,6 +147,44 @@ describe('动画清单命令', () => {
     expect(manifestOf(host.document)).toBeUndefined()
   })
 
+  it('OpenSpec: scene-animation / 动画编辑命令 / 清单写入保留该 Frame 的动画文件引用', () => {
+    // source 是绑定的动画文件引用。清单以整个 Component 写入，只写 items 会把绑定抹掉——
+    // 页面保存的是文档，绑定丢了下次打开就水合不出任何清单。
+    const source = { providerId: 'memory', assetKey: 'Home.animation.json', scope: 'persistent' }
+    const base = documentWith({ rect: entity('rect') })
+    const withSource: ComposeDocument = {
+      ...base,
+      entities: {
+        ...base.entities,
+        [FRAME_ID]: {
+          ...base.entities[FRAME_ID]!,
+          components: {
+            ...base.entities[FRAME_ID]!.components,
+            Animations: { items: [intro], source },
+          },
+        },
+      },
+    }
+    const host = runtime(withSource)
+    const sourceOf = () => (host.document.entities[FRAME_ID]?.components.Animations as
+      { source?: unknown } | undefined)?.source
+
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.configure, {
+      frameId: FRAME_ID, animationId: 'intro', durationMs: 800,
+    }))
+    expect(sourceOf()).toEqual(source)
+
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
+      frameId: FRAME_ID, animationId: 'second', name: '第二条', durationMs: 300,
+    }))
+    expect(sourceOf()).toEqual(source)
+
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.delete, {
+      frameId: FRAME_ID, animationId: 'second',
+    }))
+    expect(sourceOf()).toEqual(source)
+  })
+
   it('OpenSpec: scene-animation / 动画编辑命令 / 重复 ID 与非法时长被拒绝', () => {
     const host = runtime(documentWith({ rect: entity('rect') }))
     expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.create, {
