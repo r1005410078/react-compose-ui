@@ -388,8 +388,11 @@ export function createUngroupCommand(
 /**
  * 创建原子 reparent batch，并把每个目标的世界矩阵分解到新父级。
  *
- * @param worldTransforms - 手势结束时的世界 transform。拖拽入容器时几何来自手势落点而非
- * 文档快照，缺省才回退到 Snapshot 中的原位置。
+ * @param draggedTransforms - 手势结束时的 transform，以各自**当前父级**的局部坐标表达
+ * （与 Stage 手势预览、以及无结构落点时直接落盘的那份是同一个空间）。拖拽入容器时几何来自
+ * 手势落点而非文档快照，缺省才回退到 Snapshot 中的原位置。本函数会先把它乘回原父级的世界
+ * 矩阵再分解到新父级——当成世界坐标直接用的话，源父级不在原点时目标位置会整体偏掉一个源
+ * 父级原点，跨场景拖拽会把节点甩到画面外。
  * @public
  */
 export function createReparentCommand(
@@ -399,7 +402,7 @@ export function createReparentCommand(
   parentId: string | null,
   index: number,
   commandId = `reparent:${entityIds.join(',')}`,
-  worldTransforms?: Readonly<Record<string, StageTransform>>,
+  draggedTransforms?: Readonly<Record<string, StageTransform>>,
 ): EditorCommand {
   const targetLayout = parentId && document.entities[parentId]
     ? getComposeLayout(document.entities[parentId]!)
@@ -409,19 +412,26 @@ export function createReparentCommand(
     ? resolveComposeAppearance(document.entities[parentId]!).borderWidth
     : 0
   const updates = entityIds.map((entityId) => {
-    const dragged = worldTransforms?.[entityId]
+    const dragged = draggedTransforms?.[entityId]
     const entity = document.entities[entityId]
     const box = layoutSnapshot.boxes[entityId]
     const size = dragged
       ? { width: dragged.width, height: dragged.height }
       : box
+    const sourceParentId = getEntityParentId(document, entityId)
+    const draggedWorld = dragged
+      ? (sourceParentId
+          ? multiplyMatrices(
+              getEntityWorldMatrix(document, layoutSnapshot, sourceParentId),
+              matrixFromTransform(dragged),
+            )
+          : matrixFromTransform(dragged))
+      : null
     const transform = entity && size
       ? transformUnderParent(
           document,
           layoutSnapshot,
-          dragged
-            ? matrixFromTransform(dragged)
-            : getEntityWorldMatrix(document, layoutSnapshot, entityId),
+          draggedWorld ?? getEntityWorldMatrix(document, layoutSnapshot, entityId),
           parentId,
           size.width,
           size.height,

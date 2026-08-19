@@ -3,6 +3,7 @@ import {
   pointerDrop,
   drawContainer,
   drawText,
+  emptyWorkspaceRect,
   enableAutoLayout,
   expandInspectorSection,
   selectContainer,
@@ -695,3 +696,68 @@ test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻�
 })
 
 
+
+test('OpenSpec: stage-engine / 拖拽换父级 / 从非原点场景拖回时落在手势落点', async ({ page }) => {
+  // 手势 transform 是源父级局部坐标。当成世界坐标直接用的话，源父级不在原点时结果会整体
+  // 偏掉一个源父级原点——从第二块场景拖回第一块，节点会被甩到画面外。
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const inScene1 = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
+  await expect(inScene1).toHaveCount(1)
+
+  // 在场景 1 之外画出第二块场景。
+  const region = await emptyWorkspaceRect(page, editor)
+  const width = Math.min(400, region.width - 16)
+  const height = Math.min(260, region.height - 16)
+  const start = {
+    x: region.x + (region.width - width) / 2,
+    y: region.y + (region.height - height) / 2,
+  }
+  await editor.getByRole('button', { name: '创建容器', exact: true }).first().click()
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x + width, start.y + height, { steps: 4 })
+  await page.mouse.up()
+  await editor.getByRole('button', { name: '选择', exact: true }).click()
+  const frameIds = await stage.locator('[data-testid^="stage-frame-boundary-"]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute('data-frame-id')!))
+  const sceneTwoId = frameIds.find((id) => id !== 'frame-root')!
+  const sceneTwoBox = (await stage.getByTestId(`stage-frame-boundary-${sceneTwoId}`).boundingBox())!
+
+  // 拖进第二块场景。
+  const rectBox = (await inScene1.boundingBox())!
+  await page.mouse.move(rectBox.x + rectBox.width / 2, rectBox.y + rectBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    sceneTwoBox.x + sceneTwoBox.width / 2,
+    sceneTwoBox.y + sceneTwoBox.height / 2,
+    { steps: 8 },
+  )
+  await page.mouse.up()
+  await expect(inScene1).toHaveCount(0)
+
+  // 在第二块场景里复制一份，再拖回第一块场景。
+  await stage.press('Control+d')
+  const inScene2 = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
+  await expect(inScene2).toHaveCount(2)
+  const sceneOneBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const copyBox = (await inScene2.last().boundingBox())!
+  const drop = { x: sceneOneBox.x + 300, y: sceneOneBox.y + 300 }
+  await page.mouse.move(copyBox.x + copyBox.width / 2, copyBox.y + copyBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(drop.x, drop.y, { steps: 8 })
+  await page.mouse.up()
+
+  await expect(inScene1).toHaveCount(1)
+  const movedBox = (await inScene1.boundingBox())!
+  const center = { x: movedBox.x + movedBox.width / 2, y: movedBox.y + movedBox.height / 2 }
+  // 网格吸附会带来几像素偏差，落点本身必须就在手势松手处。
+  expect(Math.abs(center.x - drop.x)).toBeLessThan(16)
+  expect(Math.abs(center.y - drop.y)).toBeLessThan(16)
+})
