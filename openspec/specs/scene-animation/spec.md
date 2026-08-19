@@ -282,6 +282,11 @@ MAY 持有指向同一个文件的引用；宿主 MUST 能以关联、更换和�
 的引用，且 MUST NOT 因此改动其他 Frame 的引用。实现 MUST NOT 解析动画文件内容、
 MUST NOT 根据文件名隐式猜测动画关系，也 MUST NOT 因解除引用自动删除动画资源。
 
+`Animations.source` 是**文档状态**，因此 `@compose-ui/animation` MUST 提供一条改写它的文档
+命令，使关联/更换/解除成为普通可撤销事务并立即对运行时文档生效。该命令 MUST 保留同一
+Component 上的 `items`——`Animations` 整体写入，只写一半就会丢掉另一半。宿主 MUST NOT 要求
+目标 Frame 已经存在于**上次保存**的页面文件中：刚创建、尚未保存的场景 MUST 同样可以绑定。
+
 #### Scenario: 旧文档容缺解析
 
 - **WHEN** 解析一个 `Animations` 不含 `source` 的既有文档
@@ -298,4 +303,15 @@ MUST NOT 根据文件名隐式猜测动画关系，也 MUST NOT 因解除引用�
 - **WHEN** 用户解除某 Frame 当前的动画引用
 - **THEN** `Animations.source` 被清空且轨道保持不变
 - **AND** 原动画文件仍由 Asset Provider 保留
+
+#### Scenario: 绑定写入保留清单
+
+- **WHEN** 对一个已有清单的 Frame 关联或解除动画文件
+- **THEN** 该 Frame 的 `Animations.items` 逐条保持不变
+
+#### Scenario: 绑定可撤销
+
+- **WHEN** 用户关联一个动画文件后撤销
+- **THEN** `Animations.source` 回到关联前的值
+- **AND** 动画文件资源不被删除
 

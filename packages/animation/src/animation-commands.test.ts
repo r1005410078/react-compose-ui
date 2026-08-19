@@ -236,6 +236,57 @@ describe('动画清单命令', () => {
   })
 })
 
+describe('OpenSpec: scene-animation / Frame 动画关联写入', () => {
+  const source = { providerId: 'memory', assetKey: 'Home.animation.json', scope: 'persistent' }
+  const sourceOf = (host: ReturnType<typeof runtime>, frameId = FRAME_ID) =>
+    (host.document.entities[frameId]?.components.Animations as
+      { source?: unknown } | undefined)?.source
+
+  it('关联写入 source 且保留清单', () => {
+    const host = runtime(documentWith({ rect: entity('rect') }))
+    expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setSource, {
+      frameId: FRAME_ID, source,
+    })).status).toBe('committed')
+    expect(sourceOf(host)).toEqual(source)
+    expect(manifestOf(host.document)).toEqual([intro])
+  })
+
+  it('解除只清引用，清单与轨道不变', () => {
+    const host = runtime(documentWith({ rect: entity('rect') }))
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setSource, { frameId: FRAME_ID, source }))
+    expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setSource, {
+      frameId: FRAME_ID, source: null,
+    })).status).toBe('committed')
+    expect(sourceOf(host)).toBeUndefined()
+    expect(manifestOf(host.document)).toEqual([intro])
+  })
+
+  it('绑定可撤销', () => {
+    const host = runtime(documentWith({ rect: entity('rect') }))
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setSource, { frameId: FRAME_ID, source }))
+    host.undo()
+    expect(sourceOf(host)).toBeUndefined()
+  })
+
+  it('重复写入同一个引用是 noop', () => {
+    const host = runtime(documentWith({ rect: entity('rect') }))
+    host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setSource, { frameId: FRAME_ID, source }))
+    expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setSource, {
+      frameId: FRAME_ID, source,
+    })).status).toBe('noop')
+  })
+
+  it('非 Frame 与非法引用被拒绝', () => {
+    const host = runtime(documentWith({ rect: entity('rect') }))
+    expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setSource, {
+      frameId: 'rect', source,
+    })).status).toBe('rejected')
+    expect(host.dispatch(command(COMPOSE_ANIMATION_COMMAND_TYPES.setSource, {
+      frameId: FRAME_ID, source: { providerId: 'memory' },
+    })).status).toBe('rejected')
+  })
+})
+
 describe('关键帧命令', () => {
   it('OpenSpec: scene-animation / 动画编辑命令 / 首次打点自动建立 Component 与轨道', () => {
     const host = runtime(documentWith({ rect: entity('rect') }))

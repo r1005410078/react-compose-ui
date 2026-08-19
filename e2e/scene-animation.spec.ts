@@ -19,11 +19,7 @@ async function createSecondScene(page: Page, editor: Locator) {
   await page.mouse.up()
   await editor.getByRole('button', { name: '选择', exact: true }).click()
   await expect(stage.locator('[data-testid^="stage-frame-boundary-"]')).toHaveCount(2)
-  // 绑定动画写的是页面文件，而页面文件里的文档是**上次保存**的那份：新场景必须先保存，
-  // 否则 Store 会以「不是 Frame」拒绝这次绑定。
-  await stage.focus()
-  await page.keyboard.press('Control+s')
-  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
+  // 刻意不保存：绑定是文档命令，尚未保存的场景同样能创建动画。
   const ids = await stage.locator('[data-testid^="stage-frame-boundary-"]').evaluateAll((els) =>
     els.map((el) => el.getAttribute('data-frame-id')!))
   return ids.find((id) => id !== 'frame-root')!
@@ -139,4 +135,46 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 清空选择回退到�
   await openPageInspector(page, editor)
   await editor.getByRole('radio', { name: '动画' }).click()
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+})
+
+test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 刚画出来的场景就能建动画', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+
+  // 画出第二块场景后**不保存**，直接在它里面放对象、建动画。
+  const sceneTwoId = await createSecondScene(page, editor)
+  await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(1)
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
+    .first().click()
+  await createAnimationWithKeyframe(editor)
+
+  await editor.getByRole('radio', { name: '动画' }).click()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
+  // 激活场景不因为建动画而改变。
+  await expect(editor.getByTestId('stage-scene-tag-frame-root')).toHaveClass(/is-active/)
+})
+
+test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 创建失败不留孤儿文件', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  // 正常建一次动画，确认只落一份文件；文件选择器列出页面同目录的全部动画文件。
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer').click()
+  await createAnimationWithKeyframe(editor)
+
+  await openPageInspector(page, editor)
+  const fileSelect = editor.getByRole('region', { name: '页面属性' })
+    .getByRole('combobox', { name: '动画文件' })
+  await expect(fileSelect.locator('option')).toHaveCount(2)
 })

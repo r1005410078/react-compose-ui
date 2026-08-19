@@ -16,6 +16,7 @@ import {
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
 import {
+  COMPOSE_ANIMATION_COMMAND_TYPES,
   createComposeAnimationCommandHandlers,
   getComposeAnimationFileFrame,
 } from '@compose-ui/animation'
@@ -52,7 +53,7 @@ const NO_SELECTION: readonly string[] = []
 const DEFAULT_ANIMATION_DURATION_MS = 300
 import type { ComposePageAnimationReference, ComposePageSetupReference } from '@compose-ui/core'
 import type { ComposeEntity, ComposeResolvedComponentSnapshot, EditorCommand, JsonObject } from '@compose-ui/core'
-import { createComposeAssetResolver } from '@compose-ui/assets'
+import { ComposeAssetError, createComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeAssetEntry } from '@compose-ui/assets'
 import { useComposeHistoryShortcuts } from '@compose-ui/history'
 import { ComposeSceneTree } from '@compose-ui/scene-tree'
@@ -1208,8 +1209,22 @@ export function ComposeEditor({
     reference: ComposePageAnimationReference | null,
     frameId: string | null,
   ) => {
+    if (!frameId) throw new ComposeAssetError('unsupported', '页面没有可绑定动画的场景')
     const previousId = currentAnimationId
-    const manifest = await pageWorkspace.setPageAnimation(pageKey, reference, frameId)
+    // 先读文件：内容不合法时不该把一个打不开的引用写进文档。
+    const manifest = await pageWorkspace.loadFrameAnimation(pageKey, reference, frameId)
+    // 引用是文档状态，走可撤销的文档命令写入——不经页面文件，因此刚画出来、尚未保存的
+    // 场景也能绑定。
+    animationRuntime?.dispatch({
+      id: animationCommandId(),
+      type: COMPOSE_ANIMATION_COMMAND_TYPES.setSource,
+      payload: { frameId, source: reference },
+      meta: {
+        label: reference ? 'Bind animation' : 'Unbind animation',
+        source: 'animation',
+        targetIds: [frameId],
+      },
+    } as EditorCommand)
     if (previousId !== null && previousId !== manifest?.id) {
       removeAnimation(previousId)
     }
@@ -1217,7 +1232,13 @@ export function ComposeEditor({
       hydrateAnimation(manifest)
     }
     return manifest
-  }, [currentAnimationId, hydrateAnimation, pageWorkspace, removeAnimation])
+  }, [
+    animationRuntime,
+    currentAnimationId,
+    hydrateAnimation,
+    pageWorkspace,
+    removeAnimation,
+  ])
   /**
    * 切换激活场景。
    *
@@ -1449,12 +1470,13 @@ export function ComposeEditor({
    * 保证水合与解绑之后立即反映。
    */
   const activePageFrameAnimationSource = useMemo(() => {
-    const document = activePageSession?.page.document
+    // 读运行时文档而不是上次保存的那份：绑定是文档命令，会话中途绑上的引用只在运行时文档里。
+    const document = controller?.document
     if (!document || !animationScopeFrameId) return null
     const animations = document.entities[animationScopeFrameId]?.components.Animations as
       { source?: ComposePageAnimationReference } | undefined
     return animations?.source ?? null
-  }, [activePageSession, animationScopeFrameId])
+  }, [animationScopeFrameId, controller])
 
   /**
    * 该页面已经绑定的动画文件（任意一块场景上的）。
@@ -1464,7 +1486,7 @@ export function ComposeEditor({
    * 新建会撞上同名文件、退化成 `Home 2.animation.json`，页面就散成多份文件了。
    */
   const activePageAnimationReference = useMemo(() => {
-    const document = activePageSession?.page.document
+    const document = controller?.document
     if (!document) return null
     for (const frameId of document.rootIds) {
       const source = (document.entities[frameId]?.components.Animations as
@@ -1472,7 +1494,7 @@ export function ComposeEditor({
       if (source) return source
     }
     return null
-  }, [activePageSession])
+  }, [controller])
 
   const { selectedKeyframeEasing, setKeyframeInterpolation } = animationMode
   const animationInspector = useMemo(() => {
@@ -1926,8 +1948,13 @@ export function ComposeEditor({
   const animationModeMessages = editorMessages.animationMode
   const handleCreateAnimationFromEmptyState = useCallback(async () => {
     if (!activePageSession || !pageProvider) return
+    // 先确认有可绑定的作用域场景再落文件：顺序反过来的话，任何前置校验失败都会在用户的
+    // 资源目录里留下一个没有任何引用的孤儿动画文件。
+    if (!animationScopeFrameId) {
+      setPageNotice(animationModeMessages.animationOperationFailed)
+      return
+    }
     try {
-      if (!animationScopeFrameId) throw new Error('页面没有可绑定动画的场景')
       const manifest = {
         id: animationCommandId(),
         name: animationModeMessages.defaultAnimationName,

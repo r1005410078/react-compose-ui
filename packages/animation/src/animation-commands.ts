@@ -46,6 +46,7 @@ export const COMPOSE_ANIMATION_COMMAND_TYPES = {
   setSpatialTangent: 'animation.keyframe.spatial.set',
   removeTrack: 'animation.track.remove',
   relocateTracks: 'animation.tracks.relocate',
+  setSource: 'animation.source.set',
 } as const
 
 const PLAYBACK_MODES = ['play-once', 'loop', 'ping-pong']
@@ -98,27 +99,39 @@ function isManifest(
 }
 
 /**
- * 整条清单以单个 Component 写入。
+ * 整个 `Animations` Component 以一次 set 写入。
  *
  * @remarks
- * 逐字段 set 会落空——`Animations` 可能尚不存在。整体写入就必须自己带上 `source`：那是该
- * Frame 绑定的动画文件引用，只写 `items` 会把绑定从文档里抹掉，页面保存时连同引用一起丢失，
- * 下次打开就水合不出任何清单。
+ * 逐字段 set 会落空——`Animations` 可能尚不存在。整体写入就必须自己带上另一半：`items` 是
+ * 清单镜像，`source` 是该 Frame 绑定的动画文件引用，只写其一就会把另一个抹掉。清单命令与
+ * 绑定命令因此共用这一个写入口，两边都不需要各自记得这件事。
  */
+function animationsPatch(
+  frameId: string,
+  items: readonly ComposeAnimation[],
+  source: JsonValue | undefined,
+): DocumentPatch {
+  return {
+    op: 'set',
+    path: ['entities', frameId, 'components', 'Animations'],
+    value: (source === undefined ? { items } : { items, source }) as unknown as JsonValue,
+  }
+}
+
+/** 读取该 Frame 当前绑定的动画文件引用；未绑定时为 undefined。 */
+function currentSource(document: ComposeDocument, frameId: string): JsonValue | undefined {
+  const existing = document.entities[frameId]?.components.Animations as
+    { readonly source?: JsonValue } | undefined
+  return existing?.source
+}
+
+/** 写入清单，保留该 Frame 已有的动画文件引用。 */
 function manifestPatch(
   document: ComposeDocument,
   frameId: string,
   items: readonly ComposeAnimation[],
 ): DocumentPatch {
-  const existing = document.entities[frameId]?.components.Animations as
-    { readonly source?: JsonValue } | undefined
-  return {
-    op: 'set',
-    path: ['entities', frameId, 'components', 'Animations'],
-    value: (existing?.source === undefined
-      ? { items }
-      : { items, source: existing.source }) as unknown as JsonValue,
-  }
+  return animationsPatch(frameId, items, currentSource(document, frameId))
 }
 
 function readPath(payload: JsonObject): readonly (string | number)[] | null {
@@ -468,6 +481,46 @@ function keyframeMutationHandler(
   }
 }
 
+/**
+ * 关联/更换/解除该 Frame 的动画文件引用。
+ *
+ * @remarks
+ * `Animations.source` 是**文档状态**，因此绑定是一次普通文档事务而不是页面文件写入：
+ * 走页面文件的话，Store 校验的是上次保存的那份文档，刚画出来、尚未保存的场景会被判成
+ * 「不是 Frame」而绑不上；而且绑定只进页面文件、运行时文档不知情，下次保存又会把它覆盖掉。
+ *
+ * `source` 为 null 表示解除。解除只清引用，不动清单也不删动画文件资源。
+ */
+function setSourceHandler(): CommandHandler {
+  return {
+    type: COMPOSE_ANIMATION_COMMAND_TYPES.setSource,
+    execute(document, command) {
+      const manifest = resolveManifest(document, command.payload.frameId)
+      if (!isManifest(manifest)) return manifest
+      const { source } = command.payload
+      if (source !== null && !isAnimationSource(source)) {
+        return reject(
+          'animation.invalid-source',
+          'source 必须是含 providerId、assetKey 与 scope 的引用，或 null',
+        )
+      }
+      const next = source === null ? undefined : source as JsonValue
+      if (jsonEqual(next ?? null, currentSource(document, manifest.frameId) ?? null)) {
+        return { status: 'noop', reason: '动画文件引用未变化' }
+      }
+      return applied([animationsPatch(manifest.frameId, manifest.items, next)])
+    },
+  }
+}
+
+/** 稳定资源引用的形状判定；与 core 的页面引用一致。 */
+function isAnimationSource(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  return typeof value.providerId === 'string'
+    && typeof value.assetKey === 'string'
+    && (value.scope === 'persistent' || value.scope === 'session')
+}
+
 function removeTrackHandler(): CommandHandler {
   return {
     type: COMPOSE_ANIMATION_COMMAND_TYPES.removeTrack,
@@ -647,6 +700,7 @@ export function createComposeAnimationCommandHandlers(): readonly CommandHandler
     createHandler(),
     deleteHandler(),
     configureHandler(),
+    setSourceHandler(),
     setKeyframeHandler(),
     removeTrackHandler(),
     keyframeMutationHandler(

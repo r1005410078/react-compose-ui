@@ -145,7 +145,9 @@ rootIds 中的一个 Frame。`activeFrameId` 是页面的**激活目标**：它 
 字段；一个页面的多个根 Frame MUST 能各自持有独立的引用，并 MAY 指向同一个动画文件——文件
 按所属 Frame 分区，因此一页共用一份文件时各场景的动画仍互不影响。解除某个 Frame 的引用
 MUST NOT 改变其他 Frame 的引用。Store MUST 提供按 Frame 设置动画引用的乐观并发写入，以及
-设置 `activeFrameId` 的乐观并发写入；后者 MUST 拒绝不在 rootIds 中的 id。
+设置 `activeFrameId` 的乐观并发写入；后者 MUST 拒绝不在 rootIds 中的 id。前者是宿主可用的
+页面文件级入口，MUST NOT 成为编辑器内交互绑定的必经路径——`Animations.source` 是文档状态，
+编辑器 MUST 通过文档命令改写它，否则尚未保存的场景无法绑定动画。
 `pageSchemaVersion: 1` 与 `2` 文件 MUST 只能显式迁移：1→2 把页面级 `animation` 移到唯一根
 Frame 并填充默认 Frame；2→3 把 `defaultFrameId` 恒等改名为 `activeFrameId`。
 
