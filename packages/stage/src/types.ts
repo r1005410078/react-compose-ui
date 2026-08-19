@@ -220,6 +220,15 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    */
   readonly marqueeMode?: ComposeStageMarqueeMode
   /**
+   * 宿主级「锁定原父级」：为 true 时画布 move 手势不产生跨父级 reparent 落点高亮与
+   * 结构命令，同容器重排照常；缺省时行为与既有一致。
+   *
+   * @remarks
+   * Stage 不感知宿主启用锁定的理由（如编辑器的动画模式），只把布尔原样传入交互
+   * Controller 的 context。
+   */
+  readonly lockGestureParent?: boolean
+  /**
    * 宿主持有的会话剪贴板快照。
    *
    * @remarks

@@ -2132,6 +2132,9 @@ export function ComposeEditor({
           onScenePreview,
           // 动画模式：画布显示播放头时刻的采样文档与配套布局；dispatch 不变，仍打在基础文档上。
           // 运动路径只在此分支注入：退出动画模式即随 spread 一起消失。
+          // 动画模式拖拽锁定原父级：拖动表达姿态编辑（关键帧/offset），不得跨场景挂载——
+          // 否则对象被静默挂进激活场景，后续打点全部落进别块场景的动画。
+          ...(animationMode.active ? { lockGestureParent: true } : {}),
           ...(animationMode.active && animationMode.animationId && animationStageDocument
             ? {
                 document: animationStageDocument,
