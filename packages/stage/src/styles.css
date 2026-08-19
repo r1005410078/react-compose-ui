@@ -890,6 +890,50 @@
   pointer-events: none;
 }
 
+/*
+ * 场景标签是一行 flex：[播放按钮?] [名称] [激活标记]。
+ * 容器自身不接收指针事件，三个控件各自开启——否则控件之间的空隙会吞掉画布上的按下。
+ */
+.compose-stage__label-row {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+/* 名称按钮在 flex 里必须显式允许收缩，否则它不让位、标记会被挤出裁剪框。 */
+.compose-stage__label-row .compose-stage__container-label {
+  position: static;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* 省略号要作用在真正的文本节点上：外层变成 flex 之后 text-overflow 对它自己失效。 */
+.compose-stage__container-label-name {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.compose-stage__scene-play,
+.compose-stage__scene-tag {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #6b7684;
+  font: 500 11px/14px system-ui, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.compose-stage__scene-tag.is-active {
+  color: #3687ff;
+  cursor: default;
+}
+
 .compose-stage__container-label {
   position: absolute;
   padding: 0;

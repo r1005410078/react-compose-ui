@@ -60,18 +60,27 @@ function renderLayer(overrides: {
   readonly onLabelPointerDown?: (entityId: string) => void
   readonly selectedIds?: readonly string[]
   readonly locked?: boolean
+  readonly activeFrameId?: string | null
+  readonly onSceneActivate?: (entityId: string) => void
+  readonly onScenePreview?: (entityId: string) => void
 } = {}) {
   const document_ = overrides.locked ? lockedDocument : unlockedDocument
   return render(
     <ComposeContainerLabelLayer
+      activeFrameId={overrides.activeFrameId}
       document={document_}
       label="容器名称"
       layoutSnapshot={layoutSnapshot}
       renameLabel={(name) => `重命名容器 ${name}`}
+      sceneActiveLabel={(name) => `${name} 是当前激活场景`}
+      sceneInactiveLabel={(name) => `把 ${name} 设为激活场景`}
+      scenePreviewLabel={(name) => `预览场景 ${name}`}
       selectedIds={overrides.selectedIds ?? []}
       viewport={{ x: 0, y: 0, zoom: 1 }}
       onLabelPointerDown={overrides.onLabelPointerDown ?? (() => {})}
       onRename={overrides.onRename}
+      onSceneActivate={overrides.onSceneActivate}
+      onScenePreview={overrides.onScenePreview}
     />,
   )
 }
@@ -94,7 +103,8 @@ describe('OpenSpec: stage / 顶层容器标题标签', () => {
 
   it('选中态标记在标签上', () => {
     renderLayer({ selectedIds: ['frame'] })
-    expect(screen.getByText('登录页').className).toContain('is-selected')
+    // 名称现在是按钮里的一个 span（flex 行下省略号必须作用在文本节点上），选中态仍在按钮上。
+    expect(screen.getByText('登录页').closest('button')?.className).toContain('is-selected')
   })
 
   it('双击重命名，Enter 提交', () => {
@@ -136,5 +146,48 @@ describe('OpenSpec: 锁定容器与 Group 退出画布选中', () => {
     doubleClickLabel(label)
     expect(onLabelPointerDown).not.toHaveBeenCalled()
     expect(screen.queryByLabelText('重命名容器 登录页')).toBeNull()
+  })
+
+  it('OpenSpec: stage / 场景标签的激活与预览入口 / 激活场景显示播放按钮与实心标记', () => {
+    renderLayer({
+      activeFrameId: 'frame',
+      onSceneActivate: vi.fn(),
+      onScenePreview: vi.fn(),
+    })
+    expect(screen.getByRole('button', { name: '预览场景 登录页' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '登录页 是当前激活场景' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 场景标签的激活与预览入口 / 非激活场景只有可点标记', () => {
+    const onSceneActivate = vi.fn()
+    renderLayer({ activeFrameId: 'other', onSceneActivate, onScenePreview: vi.fn() })
+    expect(screen.queryByRole('button', { name: /预览场景/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '把 登录页 设为激活场景' }))
+    expect(onSceneActivate).toHaveBeenCalledWith('frame')
+  })
+
+  it('OpenSpec: stage / 场景标签的激活与预览入口 / 未提供回调时不出现控件', () => {
+    renderLayer({ activeFrameId: 'frame' })
+    expect(screen.queryByRole('button', { name: /预览场景/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /激活场景/ })).not.toBeInTheDocument()
+    expect(screen.getByText('登录页')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 场景标签的激活与预览入口 / 新控件不触发选中也不进入重命名', () => {
+    const onLabelPointerDown = vi.fn()
+    const onRename = vi.fn()
+    renderLayer({
+      activeFrameId: 'frame',
+      onLabelPointerDown,
+      onRename,
+      onSceneActivate: vi.fn(),
+      onScenePreview: vi.fn(),
+    })
+    const tag = screen.getByRole('button', { name: '登录页 是当前激活场景' })
+    // 连点两次标记：既不能上报选中，也不能被当成标签双击而进入重命名。
+    fireEvent.pointerDown(tag, { clientX: 10, clientY: 10 })
+    fireEvent.pointerDown(tag, { clientX: 10, clientY: 10 })
+    expect(onLabelPointerDown).not.toHaveBeenCalled()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
 })

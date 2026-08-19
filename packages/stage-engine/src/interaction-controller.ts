@@ -136,7 +136,6 @@ export type StageExternalDragItem =
 /** Pointer 命中的 Stage 语义目标。 @public */
 export type StageInteractionHit =
   | { readonly kind: 'surface' }
-  | { readonly kind: 'output' }
   | {
       readonly kind: 'entity'
       readonly entityId: string
@@ -344,7 +343,6 @@ export type StageInteractionEffect =
   | { readonly type: 'pointer.release'; readonly pointerId: number }
   | { readonly type: 'viewport.change'; readonly viewport: StageViewport }
   | { readonly type: 'selection.change'; readonly selectedIds: readonly string[] }
-  | { readonly type: 'output.select' }
   | { readonly type: 'paint.sample.complete' }
   | { readonly type: 'command.dispatch'; readonly command: EditorCommand }
   | {
@@ -622,7 +620,7 @@ type Gesture =
       readonly pointerId: number
       readonly viewport: StageViewport
       readonly startWorld: StagePoint
-      readonly origin: 'surface' | 'output'
+      readonly origin: 'surface'
       /**
        * 起框所在的容器 Entity。
        *
@@ -1996,19 +1994,12 @@ export function createStageInteractionController(): StageInteractionController {
     const startMarquee = (originEntityId?: string) => {
       const viewport = context!.viewport
       const startWorld = worldPoint(event.point, viewport)
-      const outputHit = event.hit.kind === 'output'
-      if (outputHit) {
-        effects.push(
-          { type: 'selection.change', selectedIds: [] },
-          { type: 'output.select' },
-        )
-      }
       gesture = {
         type: 'marquee',
         pointerId: event.pointerId,
         viewport,
         startWorld,
-        origin: outputHit ? 'output' : 'surface',
+        origin: 'surface',
         originEntityId,
         baseSelection: context!.selectedIds,
         currentWorld: startWorld,
@@ -2027,7 +2018,6 @@ export function createStageInteractionController(): StageInteractionController {
       context.tool === 'marquee'
       && (
         event.hit.kind === 'surface'
-        || event.hit.kind === 'output'
         || event.hit.kind === 'entity'
       )
     ) {
@@ -2038,7 +2028,6 @@ export function createStageInteractionController(): StageInteractionController {
       isDrawingTool(context.tool)
       && (
         event.hit.kind === 'surface'
-        || event.hit.kind === 'output'
         || event.hit.kind === 'entity'
       )
     ) {
@@ -2256,9 +2245,7 @@ export function createStageInteractionController(): StageInteractionController {
       const selectedIds = excluded.size === 0
         ? resolved
         : resolved.filter((entityId) => !excluded.has(entityId))
-      if (finished.origin !== 'output' || selectedIds.length > 0) {
-        effects.push({ type: 'selection.change', selectedIds })
-      }
+      effects.push({ type: 'selection.change', selectedIds })
     }
     else if (finished.type === 'paint-sample') {
       const result = samplePaintAt(finished.target, finished.point, finished.alt)

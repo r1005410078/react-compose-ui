@@ -262,8 +262,15 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * 选中项最近的祖先 Frame，激活场景 MUST NOT 覆盖显式选择。
    */
   readonly activeFrameId?: string | null
-  /** 请求清空节点选择并检查隐式 Canvas 输出属性。 */
-  readonly onOutputSelect?: () => void
+  /**
+   * 请求把某个场景设为激活。
+   *
+   * @remarks
+   * Stage 不持有页面写权限：激活状态在页面文件里，必须由宿主提交。省略时标签不显示激活标记。
+   */
+  readonly onSceneActivate?: (frameId: string) => void
+  /** 请求以某个场景为目标打开预览；省略时激活场景标签不显示播放按钮。 */
+  readonly onScenePreview?: (frameId: string) => void
   /**
    * surface 可视尺寸变化回调。
    *

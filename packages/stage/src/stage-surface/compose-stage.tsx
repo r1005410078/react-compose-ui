@@ -798,6 +798,8 @@ function ComposeStageReady({
   selectedIds,
   onSelectedIdsChange,
   onEntityRename,
+  onSceneActivate,
+  onScenePreview,
   onCreateComponentIntent,
   activeFrameId,
   paintEditing = null,
@@ -807,7 +809,6 @@ function ComposeStageReady({
   editablePathActiveVertexId = null,
   onEditablePathChange,
   onEditablePathVertexToggle,
-  onOutputSelect,
   onSurfaceSizeChange,
   interactionController,
   idFactory = defaultId,
@@ -1117,7 +1118,6 @@ function ComposeStageReady({
     viewport,
     onViewportChange,
     onSelectedIdsChange,
-    onOutputSelect,
     onPaintSamplingComplete,
     onEditablePathChange,
     onEditablePathVertexToggle,
@@ -1133,7 +1133,6 @@ function ComposeStageReady({
       viewport,
       onViewportChange,
       onSelectedIdsChange,
-      onOutputSelect,
       onPaintSamplingComplete,
       onEditablePathChange,
       onEditablePathVertexToggle,
@@ -1864,10 +1863,6 @@ function ComposeStageReady({
         }
         if (effect.type === 'selection.change') {
           current.onSelectedIdsChange(effect.selectedIds)
-          return
-        }
-        if (effect.type === 'output.select') {
-          current.onOutputSelect?.()
           return
         }
         if (effect.type === 'paint.sample.complete') {
@@ -2927,8 +2922,14 @@ function ComposeStageReady({
           renameLabel={messages.renameContainer}
           selectedIds={selectedIds}
           viewport={viewport}
+          activeFrameId={activeFrameId}
+          sceneActiveLabel={messages.sceneActive}
+          sceneInactiveLabel={messages.sceneInactive}
+          scenePreviewLabel={messages.scenePreview}
           onLabelPointerDown={beginContainerLabel}
           onRename={onEntityRename}
+          onSceneActivate={onSceneActivate}
+          onScenePreview={onScenePreview}
         />
         {assetDropStatus
           ? (

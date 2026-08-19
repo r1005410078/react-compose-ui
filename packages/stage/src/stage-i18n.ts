@@ -37,6 +37,9 @@ const translations = {
     add: (label: string) => `添加 ${label}`,
     containerLabels: '容器名称',
     renameContainer: (name: string) => `重命名容器 ${name}`,
+    sceneActive: (name: string) => `${name} 是当前激活场景`,
+    sceneInactive: (name: string) => `把 ${name} 设为激活场景`,
+    scenePreview: (name: string) => `预览场景 ${name}`,
   },
   'en-US': {
     rulerOrigin: 'Ruler origin',
@@ -69,6 +72,9 @@ const translations = {
     add: (label: string) => `Add ${label}`,
     containerLabels: 'Container names',
     renameContainer: (name: string) => `Rename container ${name}`,
+    sceneActive: (name: string) => `${name} is the active scene`,
+    sceneInactive: (name: string) => `Set ${name} as the active scene`,
+    scenePreview: (name: string) => `Preview scene ${name}`,
   },
 } as const
 
@@ -129,6 +135,21 @@ export function getStageMessages(
     renameContainer: (name: string) => formatMessage(
       'stage.renameContainer',
       messages.renameContainer(name),
+      { name },
+    ),
+    sceneActive: (name: string) => formatMessage(
+      'stage.sceneActive',
+      messages.sceneActive(name),
+      { name },
+    ),
+    sceneInactive: (name: string) => formatMessage(
+      'stage.sceneInactive',
+      messages.sceneInactive(name),
+      { name },
+    ),
+    scenePreview: (name: string) => formatMessage(
+      'stage.scenePreview',
+      messages.scenePreview(name),
       { name },
     ),
   }
