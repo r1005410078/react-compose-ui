@@ -134,7 +134,7 @@ describe('面板动作 → 动画命令', () => {
     keyframeId: 'b',
   })
   const translate = (action: ComposeAnimationPanelAction) =>
-    translateAnimationPanelAction(document, 'intro', action)
+    translateAnimationPanelAction(document, 'frame-root', 'intro', action)
 
   it('OpenSpec: editor-workspace-layout / 动画模式 / 会话动作不产生文档命令', () => {
     expect(translate({ kind: 'set-current-time', timeMs: 150 })).toEqual([])
@@ -169,13 +169,14 @@ describe('面板动作 → 动画命令', () => {
   })
 
   it('时长与播放模式翻译为 animation.configure', () => {
+    // 清单级 configure 必须携带宿主 frameId，否则 handler 整条拒绝。
     expect(translate({ kind: 'set-duration', durationMs: 500 })).toEqual([{
       type: 'animation.configure',
-      payload: { animationId: 'intro', durationMs: 500 },
+      payload: { frameId: 'frame-root', animationId: 'intro', durationMs: 500 },
     }])
     expect(translate({ kind: 'set-playback-mode', mode: 'loop' })).toEqual([{
       type: 'animation.configure',
-      payload: { animationId: 'intro', playbackMode: 'loop' },
+      payload: { frameId: 'frame-root', animationId: 'intro', playbackMode: 'loop' },
     }])
   })
 
@@ -244,6 +245,17 @@ describe('菱形四态', () => {
     expect(isAnimationPathAvailable(document, 'flowing', ['Appearance', 'opacity'])).toBe(true)
     expect(isAnimationPathAvailable(document, 'hugging', ['LayoutItem', 'height', 'value']))
       .toBe(true)
+  })
+
+  it('Frame 的宽高不可动画：尺寸事实来源是 Frame.size，关键帧写了也看不到效果', () => {
+    const document = documentWith({})
+    expect(isAnimationPathAvailable(document, FRAME_ID, ['LayoutItem', 'width', 'value']))
+      .toBe(false)
+    expect(isAnimationPathAvailable(document, FRAME_ID, ['LayoutItem', 'height', 'value']))
+      .toBe(false)
+    // 场景的位置与其余通道不受影响。
+    expect(isAnimationPathAvailable(document, FRAME_ID, ['LayoutItem', 'offset'])).toBe(true)
+    expect(isAnimationPathAvailable(document, FRAME_ID, ['Appearance', 'opacity'])).toBe(true)
   })
 
   it('动画或 Entity 不存在时为 unavailable', () => {

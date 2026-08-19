@@ -120,6 +120,71 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   await expect(animationPanel.getByText('当前页面还没有动画')).toHaveCount(0)
 })
 
+test('OpenSpec: editor-workspace-layout / 动画模式 / 时间线播放模式与时长写入文档', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  await editor.getByRole('radio', { name: '动画' }).click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+
+  // 播放模式与尾帧时长都是清单级 configure：缺 frameId 时会被 handler 整条拒绝，
+  // 表现为「选不中/改了没反应」。
+  await animationPanel.getByRole('radio', { name: '循环' }).click()
+  await expect(animationPanel.getByRole('radio', { name: '循环' }))
+    .toHaveAttribute('aria-checked', 'true')
+  await animationPanel.getByRole('spinbutton', { name: '尾帧时长' }).fill('500')
+  await animationPanel.getByRole('spinbutton', { name: '尾帧时长' }).press('Enter')
+
+  // 写进的是文档：切出动画模式再回来仍然是 loop / 500。
+  await editor.getByRole('radio', { name: '设计' }).click()
+  await editor.getByRole('radio', { name: '动画' }).click()
+  await expect(animationPanel.getByRole('radio', { name: '循环' }))
+    .toHaveAttribute('aria-checked', 'true')
+  await expect(animationPanel.getByRole('spinbutton', { name: '尾帧时长' })).toHaveValue('500')
+})
+
+test('OpenSpec: editor-workspace-layout / 自动记录把编辑改写为关键帧 / 场景缩放落基础文档不回弹', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  await editor.getByRole('radio', { name: '动画' }).click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
+
+  // 选中场景并用画布手柄缩放：Frame 的宽高不可动画（尺寸事实来源是 Frame.size），
+  // 自动记录必须放行为基础文档编辑，而不是改写成一条永远看不到效果的关键帧。
+  await editor.getByTestId('stage-container-label-frame-root').click()
+  const inspector = editor.getByRole('region', { name: /属性$/ }).first()
+  const widthField = editor.getByRole('combobox', { name: '尺寸宽度' })
+  await expect(widthField).toHaveValue('1280')
+  // 用左侧手柄：场景右下角在默认视口下被右侧属性面板遮住。
+  const handle = editor.getByTestId('stage-resize-edge-w')
+  const handleBox = (await handle.boundingBox())!
+  const start = { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x - 120, start.y, { steps: 6 })
+  await page.mouse.up()
+
+  // 松手后尺寸保持缩放结果，不回弹到 1280。
+  await expect(widthField).not.toHaveValue('1280')
+  const resized = await widthField.inputValue()
+  await page.waitForTimeout(300)
+  await expect(widthField).toHaveValue(resized)
+  // 退出动画模式仍保持：写的是基础文档；模式切换保留选择，直接读尺寸字段。
+  await editor.getByRole('radio', { name: '设计' }).click()
+  await expect(editor.getByRole('combobox', { name: '尺寸宽度' })).toHaveValue(resized)
+  void inspector
+})
+
 test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、双击切换与撤销粒度', async ({ page }) => {
   await page.goto('/')
 

@@ -1,5 +1,5 @@
 import { findComposeAnimationTrack, findComposeKeyframeAt } from '@compose-ui/animation'
-import { findComposeAnimation, getComposeLayoutItem } from '@compose-ui/core'
+import { findComposeAnimation, getComposeFrame, getComposeLayoutItem } from '@compose-ui/core'
 import type { ComposeDocument } from '@compose-ui/core'
 
 /**
@@ -30,6 +30,10 @@ const HEIGHT_PATH = ['LayoutItem', 'height', 'value'] as const
  * `LayoutItem.offset` 只在 `positioning: 'absolute'` 下参与求解；
  * `width/height.value` 只在对应轴 `mode: 'fixed'` 下生效。
  * 其余白名单路径（旋转、透明度、纯色背景）没有配置前提。
+ *
+ * Frame 的宽高不可动画：尺寸事实来源是 `Frame.size`，求解器会用它覆盖 LayoutItem 的
+ * 推导结果，宽高关键帧写了也看不到效果。判掉之后自动记录会把场景缩放原样放行成
+ * 基础文档编辑（transform 命令同步写 `Frame.size`），而不是改写成无效关键帧。
  */
 export function isAnimationPathAvailable(
   document: ComposeDocument,
@@ -39,9 +43,10 @@ export function isAnimationPathAvailable(
   const entity = document.entities[entityId]
   if (!entity) return false
   const layoutItem = getComposeLayoutItem(entity)
+  const isFrame = getComposeFrame(entity) !== null
   if (isSamePath(path, OFFSET_PATH)) return layoutItem.positioning === 'absolute'
-  if (isSamePath(path, WIDTH_PATH)) return layoutItem.width.mode === 'fixed'
-  if (isSamePath(path, HEIGHT_PATH)) return layoutItem.height.mode === 'fixed'
+  if (isSamePath(path, WIDTH_PATH)) return !isFrame && layoutItem.width.mode === 'fixed'
+  if (isSamePath(path, HEIGHT_PATH)) return !isFrame && layoutItem.height.mode === 'fixed'
   return true
 }
 
