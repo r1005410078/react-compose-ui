@@ -16,6 +16,10 @@ export {
   type StageSessionArbiter,
 } from './session-arbiter'
 export {
+  createStageTextEditGuardPlugin,
+  STAGE_TEXT_EDIT_GUARD_PLUGIN_ID,
+} from './text-edit-guard-plugin'
+export {
   createStagePanPlugin,
   STAGE_PAN_PLUGIN_ID,
 } from './pan-plugin'

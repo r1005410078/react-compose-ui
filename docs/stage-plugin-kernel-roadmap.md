@@ -124,23 +124,46 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 `draw`；另有两个只存在于 React 层的会话——`text-edit` 与 `drilldown`（它们不在引擎里）。
 `path` 就是动画模式的运动路径编辑。
 
-按缠绕程度从低到高：`pan` ✅ → `marquee` → `draw` / `segment-resize` → `guide-create` /
-`guide-move` → `paint` / `paint-sample` / `path` → `move` / `resize` / `rotate`
-→ `text-edit` / `drilldown`。每搬一个，legacy 巨插件瘦一圈，对应测试转为插件纯状态机测试
+**抽取顺序必须严格按优先级自上而下**，不能按「缠绕程度从低到高」——这条是踩坑之后改正的，
+理由是硬的：
+
+> legacy 单体插件的 claim 在 `begin()` 未产生手势时一律返回 `consumed`，因此它**必须始终排在
+> 最后**（优先级 0）。于是任何仍留在 legacy 里的分支，其**实际**优先级都是 0。抽出一个优先级
+> 为 p 的分支，就等于把它提到所有未抽取分支之前；只要存在优先级高于 p 且尚未抽取的分支，
+> 顺序就发生了反转。
+
+第一次抽取 `pan`(1700) 时正是这样翻车的：`text-edit-guard`(1800) 仍在 legacy 里，于是编辑态下
+按中键绕过守卫——不仅会开始平移，编辑会话还再也退不出去。修复方式是把守卫也抽成插件
+（`fix-stage-extraction-order`），并加了两条回归用例与一条**前缀不变量**测试：已抽取集合必须
+是优先级表的前缀，出现空洞即失败。
+
+因此实际顺序就是优先级表的顺序：
+`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` → `paint-sample` → `path` → `paint`
+→ `segment-resize` → `marquee-tool` → `draw` → `move-axis` → `marquee-converge`
+→ `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
+→ `rotate-tool-fallback` → `marquee-fallback`。
+
+注意 `marquee` 的三个入口分散在 1100 / 800 / 100，中间夹着 draw、resize、guide 等，
+**不能作为一个插件一次抽完**：它必须是三个共享同一会话工厂的插件，各自在自己的位次落地。
+
+每搬一个，legacy 巨插件瘦一圈，对应测试转为插件纯状态机测试
 （`interaction-controller.test.ts` 2225 行由此自然散成十来个小文件）。
-**门槛**：每步 e2e 绿、legacy 行数单调递减。
+**门槛**：每步 e2e 绿、legacy 行数单调递减、前缀不变量测试通过。
 
-**`pan` 已完成**（`refactor-stage-pan-plugin`）：`interaction-controller.ts` 2922 → 2890 行。
-它逼出两处契约扩展——`StagePluginContext` 的只读 `snapshot` 与 `idleSnapshot()`（claim 要读
-跨会话存活的 `temporaryPan`），以及 `StageSessionArbiter.activePluginId()`（内核在
-`temporary-pan.end` 上要区分会话种类，而手势分类不得回流到内核）。优先级表由此首次生效，
-但 pan(1700) 与 legacy(0) 之间没有其它插件，因此本步只验证了「表能用」，还验证不了
-「表的顺序对」——顺序风险要等 `marquee` 那三个入口落地。
+**已完成：`text-edit-guard`(1800) 与 `pan`(1700)**，`interaction-controller.ts` 2922 → 2879 行。
 
-**`marquee` 是下一刀，也是第一次真正检验优先级表**：它在级联里有三处入口
-（`marquee-tool` 1100、`marquee-converge` 800、`marquee-fallback` 100），中间夹着 `draw`、
-`move-axis`、`entity-select-move`、`resize`、`guide-*`。因此它必须拆成三个共享同一会话
-工厂的插件，而不是一个。
+`pan`（`refactor-stage-pan-plugin`）逼出两处契约扩展：`StagePluginContext` 的只读 `snapshot`
+与 `idleSnapshot()`（claim 要读跨会话存活的 `temporaryPan`），以及
+`StageSessionArbiter.activePluginId()`（内核在 `temporary-pan.end` 上要区分会话种类，
+而手势分类不得回流到内核）。
+
+`text-edit-guard`（`fix-stage-extraction-order`）本是修复上述顺序反转而抽取的。它不是手势
+而是级联的最高优先级前置判定，三种结果恰好各自对应契约的一态：命中编辑目标或变换手柄返回
+`consumed`；编辑态下按在别处发出 `text-editing.exit` 后返回 `null`（本次按下继续交给后续
+插件）；非编辑态返回 `null`。**`claim` 允许有副作用**——它本就要发 `pointer.capture`，
+这里发的是退出编辑。
+
+下一刀是 `rotate-tool`(1600)——按优先级自上而下，它是 pan 之后的下一项。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 
