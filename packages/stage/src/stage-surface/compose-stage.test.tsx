@@ -259,16 +259,17 @@ function renderStage(
   }
   render(
     <ComposeStage
-      dispatch={dispatch}
       document={value}
-      gridVisible={options.gridVisible}
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
-      marqueeMode={options.marqueeMode}
       onSelectedIdsChange={selectionSpy}
       onCreateComponentIntent={options.onCreateComponentIntent}
       onViewportChange={vi.fn()}
-      registry={options.registry ?? registry}
+      policy={{
+        gridVisible: options.gridVisible,
+        marqueeMode: options.marqueeMode,
+      }}
       scriptScope={options.scope}
+      services={{ dispatch, registry: options.registry ?? registry }}
       paintEditing={options.paintEditing}
       selectedIds={options.selectedIds ?? []}
       tool={options.tool ?? 'select'}
@@ -611,13 +612,15 @@ describe('ComposeStage ECS', () => {
     const setMeasurementPort = vi.fn()
     const view = render(
       <ComposeStage
-        dispatch={vi.fn()}
         document={value}
-        layoutRuntime={{ setMeasurementPort }}
         layoutSnapshot={layoutSnapshot(value)}
         onSelectedIdsChange={vi.fn()}
         onViewportChange={vi.fn()}
-        registry={registry}
+        services={{
+          dispatch: vi.fn(),
+          layoutRuntime: { setMeasurementPort },
+          registry,
+        }}
         selectedIds={[]}
         tool="select"
         viewport={{ x: 0, y: 0, zoom: 1 }}
@@ -994,12 +997,11 @@ describe('ComposeStage ECS', () => {
     const snapshot = layoutSnapshot(value)
     const stage = (viewport: { x: number; y: number; zoom: number }) => (
       <ComposeStage
-        dispatch={vi.fn()}
         document={value}
         layoutSnapshot={snapshot}
         onSelectedIdsChange={vi.fn()}
         onViewportChange={vi.fn()}
-        registry={countingRegistry}
+        services={{ dispatch: vi.fn(), registry: countingRegistry }}
         selectedIds={[]}
         tool="select"
         viewport={viewport}
@@ -1034,12 +1036,11 @@ describe('ComposeStage ECS', () => {
     const snapshot = layoutSnapshot(value)
     const stage = (viewport: { x: number; y: number; zoom: number }) => (
       <ComposeStage
-        dispatch={vi.fn()}
         document={probed}
         layoutSnapshot={snapshot}
         onSelectedIdsChange={vi.fn()}
         onViewportChange={vi.fn()}
-        registry={registry}
+        services={{ dispatch: vi.fn(), registry }}
         selectedIds={[]}
         tool="select"
         viewport={viewport}
@@ -1170,12 +1171,11 @@ describe('ComposeStage 画布内原地文字编辑', () => {
     }
     render(
       <ComposeStage
-        dispatch={dispatch}
         document={emptyDocument}
         layoutSnapshot={layoutSnapshot(emptyDocument)}
         onSelectedIdsChange={vi.fn()}
         onViewportChange={vi.fn()}
-        registry={editableRegistry}
+        services={{ dispatch, registry: editableRegistry }}
         selectedIds={['a']}
         tool="select"
         viewport={{ x: 0, y: 0, zoom: 1 }}
@@ -1401,17 +1401,16 @@ describe('OpenSpec: stage / 画布可编辑路径覆盖层与手势上报', () =
     const onToggle = vi.fn()
     render(
       <ComposeStage
-        dispatch={vi.fn() as never}
         document={value}
         editablePath={editablePath}
         layoutSnapshot={layoutSnapshot(value)}
         selectedIds={['a']}
+        services={{ dispatch: vi.fn() as never, registry }}
         tool="select"
         viewport={{ x: 0, y: 0, zoom: 1 }}
         onEditablePathVertexToggle={onToggle}
         onSelectedIdsChange={vi.fn()}
         onViewportChange={vi.fn()}
-        registry={registry}
       />,
     )
     fireEvent.pointerDown(screen.getByTestId('stage-path-vertex-hit-k0'), {
@@ -1428,20 +1427,22 @@ describe('OpenSpec: stage / 画布可编辑路径覆盖层与手势上报', () =
     const dispatchSpy = vi.fn()
     render(
       <ComposeStage
-        dispatch={(command) => {
-          dispatchSpy(command)
-          return { status: 'noop', command } as never
-        }}
         document={value}
         editablePath={{ ...editablePath, entityId: 'a' }}
         layoutSnapshot={layoutSnapshot(value)}
         selectedIds={['a']}
+        services={{
+          dispatch: (command) => {
+            dispatchSpy(command)
+            return { status: 'noop', command } as never
+          },
+          registry,
+        }}
         tool="select"
         viewport={{ x: 0, y: 0, zoom: 1 }}
         onEditablePathChange={(change) => changes.push(change)}
         onSelectedIdsChange={vi.fn()}
         onViewportChange={vi.fn()}
-        registry={registry}
       />,
     )
     const hit = screen.getByTestId('stage-path-vertex-hit-k0')

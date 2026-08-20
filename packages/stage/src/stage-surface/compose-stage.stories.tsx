@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { useState, useSyncExternalStore } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { createTransactionRuntime } from '@compose-ui/core'
 import { createStoryDocument, storyRegistry } from '@compose-ui/storybook-fixtures'
 import { ComposeStage } from './compose-stage'
@@ -9,13 +9,16 @@ function StageFixture({ selected = true }: { readonly selected?: boolean }) {
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 })
   const [selectedIds, setSelectedIds] = useState<readonly string[]>(selected ? ['story-card'] : [])
+  const services = useMemo(
+    () => ({ dispatch: runtime.dispatch, registry: storyRegistry }),
+    [runtime],
+  )
   return (
     <ComposeStage
-      dispatch={runtime.dispatch}
       document={state.document}
       onSelectedIdsChange={setSelectedIds}
       onViewportChange={setViewport}
-      registry={storyRegistry}
+      services={services}
       selectedIds={selectedIds}
       style={{ height: 560, width: 900 }}
       tool="select"

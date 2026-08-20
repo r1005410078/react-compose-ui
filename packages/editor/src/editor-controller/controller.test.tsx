@@ -31,7 +31,8 @@ import {
   type EditorCommand,
   type TransactionRuntime,
 } from '@compose-ui/core'
-import { cloneElement, useEffect, type ReactElement } from 'react'
+import { useEffect } from 'react'
+import { composeEditorStageProps } from './stage-props-composition'
 import { useComposeEditorController } from './controller'
 
 // Controller 契约测试使用确定性 fake；Yoga/WASM 数值与异步加载由 layout-engine 集成测试覆盖。
@@ -1043,7 +1044,7 @@ describe('useComposeEditorController', () => {
       kind: 'copy',
       nodeIds: ['title'],
     })
-    expect(result.current.stageProps.clipboard).toEqual({
+    expect(result.current.stageProps.services.clipboard).toEqual({
       kind: 'copy',
       entityIds: ['title'],
     })
@@ -1432,9 +1433,8 @@ describe('useComposeEditorController', () => {
     expect(controller.sceneTreeProps).toBe(sceneTreePropsBefore)
   })
 
-  it('controller.stage 透传宿主克隆注入的 Stage 属性', () => {
-    // ComposeEditor 用 cloneElement 往 controller.stage 上注入 assetResolver、shortcuts 与
-    // onToolChange。stage 节点若不透传这些属性，资源解析与自定义快捷键都会静默失效。
+  it('OpenSpec: editor-workspace-layout / Editor Stage 属性显式组合 / 宿主覆盖优先于 controller 默认值', () => {
+    // 宿主覆盖若没有真正合并进 Stage，资源解析与自定义快捷键都会静默失效。
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({
       idFactory: ids(),
@@ -1442,7 +1442,7 @@ describe('useComposeEditorController', () => {
       runtime: editorRuntime,
     }))
 
-    render(cloneElement(result.current.stage as ReactElement<Record<string, unknown>>, {
+    render(result.current.renderStage({
       shortcuts: { 'stage.temporaryPan': [{ code: 'KeyP' }] },
     }))
     const stage = screen.getByRole('application', { name: 'Stage' })
@@ -1451,6 +1451,29 @@ describe('useComposeEditorController', () => {
     fireEvent.keyDown(stage, { code: 'KeyP', key: 'p' })
 
     expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
+  })
+
+  it('OpenSpec: stage / Stage 注入面聚合 / 覆盖一个端口不抹掉 controller 的其余端口', () => {
+    // 聚合对象若按整体替换而不是按字段合并，宿主只想加 assetResolver 就会连 dispatch、
+    // registry 一起丢掉——这类失效在类型上看不出来，只会在运行时表现为画布整体不工作。
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      registry,
+      runtime: editorRuntime,
+    }))
+    const baseServices = result.current.stageProps.services
+
+    const merged = composeEditorStageProps(result.current.stageProps, {
+      services: { assetResolver: undefined, scriptModuleLoader: undefined },
+      policy: { lockGestureParent: true },
+    })
+
+    expect(merged.services.dispatch).toBe(baseServices.dispatch)
+    expect(merged.services.registry).toBe(baseServices.registry)
+    expect(merged.policy?.lockGestureParent).toBe(true)
+    // policy 的其余字段来自 controller，不因宿主只覆盖一项而丢失。
+    expect(merged.policy?.marqueeMode).toBe(result.current.stageProps.policy?.marqueeMode)
   })
 
   it('OpenSpec: editor-workspace-layout / 从场景选区创建组件 / 资源成功后原子替换并可撤销重做', async () => {

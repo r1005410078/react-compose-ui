@@ -79,6 +79,13 @@ viewport 是编辑器会话状态里变化最频繁的一项：一次平移手�
 它的组件不会因平移自动重渲。默认工作区的画布与工具栏已内建订阅；自己渲染 `ComposeStage` 或
 需要显示缩放读数的宿主，用 `useComposeStageViewport(controller)` 订阅。
 
+`ComposeStage` 的宿主注入面收敛为两个聚合对象：`services` 是能力端口（`dispatch`、
+`registry`、`assetResolver`、`pageLoader`、`scriptModuleLoader`、`layoutRuntime`、剪贴板），
+`policy` 是宿主拥有事实来源、Stage 只消费的开关（`marqueeMode`、`lockGestureParent`、
+`gridVisible`）。Stage 按字段消费二者，因此重新构造对象不会重建场景。要在默认工作区之上
+追加宿主覆盖，用 `controller.renderStage(overrides)`——覆盖按字段合并，优先级由类型表达；
+宿主模式应组装一份 `policy`，而不是逐项追加平铺开关。
+
 ## ComposeDocument v7、Frame 与 Auto Layout
 
 文档只保存严格 JSON：

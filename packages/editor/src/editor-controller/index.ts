@@ -10,3 +10,7 @@ export {
   type ComposeCreateComponentFromSelectionResult,
   type UseComposeEditorControllerOptions,
 } from './controller'
+export {
+  composeEditorStageProps,
+  type ComposeEditorStageOverrides,
+} from './stage-props-composition'

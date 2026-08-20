@@ -15,19 +15,16 @@ export function ViewportBoundStage({
   store,
   stageProps,
   surfaceSize,
-  ...hostProps
-}: Partial<ComposeStageProps> & {
+}: {
   readonly store: ViewportStore
   readonly stageProps: ComposeStageProps
   readonly surfaceSize: { readonly width: number; readonly height: number } | null
 }) {
   const viewport = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
-  // ComposeEditor 用 cloneElement 往 controller.stage 上注入 assetResolver、shortcuts 与
-  // onToolChange。这一层是宿主与 ComposeStage 之间新增的节点，必须原样透传这些属性，
-  // 并保持「注入值覆盖 controller 默认值」的既有优先级。
+  // 宿主覆盖已由 composeEditorStageProps 在上游合并进 stageProps，这一层只补当前视口快照。
   return (
     <div className="compose-editor__stage-viewport-host">
-      <ComposeStage {...stageProps} {...hostProps} viewport={viewport} />
+      <ComposeStage {...stageProps} viewport={viewport} />
       <CanvasViewportControls store={store} surfaceSize={surfaceSize} />
     </div>
   )

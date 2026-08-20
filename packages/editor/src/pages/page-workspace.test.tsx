@@ -969,6 +969,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
       componentLibraryPanel: null,
       stage: null,
+      renderStage: () => null,
       inspectorPanel: (
         <PageInspector
           activeFrameId={createEmptyComposePageFile().document.rootIds[0]!}
@@ -1112,6 +1113,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
       componentLibraryPanel: null,
       stage: null,
+      renderStage: () => null,
       inspectorPanel: (
         <PageInspector
           activeFrameId={createEmptyComposePageFile().document.rootIds[0]!}

@@ -116,6 +116,7 @@ import type {
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
   ComposeStageDelegatableAction,
+  ComposeStagePolicy,
   ComposeStageProps,
 } from '../types'
 import { nextInstanceDrillDownTarget, resolveInstanceDrillDownPath } from './instance-drilldown'
@@ -179,6 +180,9 @@ function defaultId() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
   return `stage-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
+
+/** 宿主省略 policy 时的解构底座；共用常量避免每帧分配一个空对象。 */
+const EMPTY_STAGE_POLICY: ComposeStagePolicy = Object.freeze({})
 
 
 function useFinalControllerDisposal(controller: StageInteractionController) {
@@ -693,13 +697,13 @@ type ComposeStageReadyProps = Omit<
 }
 
 function useComposeStageMeasurement({
-  assetResolver,
   document,
-  layoutRuntime,
-  pageLoader,
-  registry,
   scriptScope,
+  services,
 }: ComposeStageProps) {
+  // 按字段消费端口而不是整个 services 对象：adapter 只应在它实际使用的那几个端口变化时
+  // 重建。以对象引用作依赖会让宿主每次重新构造 services 都重建 adapter 并丢弃测量缓存。
+  const { assetResolver, layoutRuntime, pageLoader, registry } = services
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
     registry,
     assetResolver,
@@ -759,25 +763,16 @@ function ComposeStageReady({
   document,
   layoutSnapshot,
   layoutPreviewSnapshot,
-  layoutRuntime,
   measurementAdapter,
-  registry,
-  assetResolver,
-  pageLoader,
   scriptScope,
-  scriptModuleLoader,
-  dispatch,
+  services,
+  policy,
   viewport,
   onViewportChange,
-  gridVisible = true,
   tool,
-  marqueeMode,
-  lockGestureParent,
   onToolChange,
   onShortcutAction,
   shortcuts,
-  clipboard: clipboardProp,
-  onClipboardChange,
   selectedIds,
   onSelectedIdsChange,
   onEntityRename,
@@ -807,6 +802,22 @@ function ComposeStageReady({
   onWheel,
   ...props
 }: ComposeStageReadyProps) {
+  const {
+    assetResolver,
+    clipboard: clipboardProp,
+    dispatch,
+    layoutRuntime,
+    onClipboardChange,
+    pageLoader,
+    registry,
+    scriptModuleLoader,
+  } = services
+  // policy 的每一项都有自身缺省值，宿主整体省略与逐项省略必须等价。
+  const {
+    gridVisible = true,
+    lockGestureParent,
+    marqueeMode,
+  } = policy ?? EMPTY_STAGE_POLICY
   const i18n = useComposeI18nContext()
   const theme = useComposeThemeContext()
   const resolvedLocale = i18n?.locale ?? 'zh-CN'
