@@ -34,11 +34,11 @@
 
 ## 5. materials Inspector
 
-- [ ] 5.1 注册 `Interaction` 的 Component Definition 与 Inspector
-- [ ] 5.2 trigger 列表编辑:添加 / 编辑 / 移除单条,单次操作一条可撤销事务
-- [ ] 5.3 navigate 目标复用既有 node 页面拖入赋值,拒绝非页面文件
-- [ ] 5.4 目标为空与目标缺失的明确呈现
-- [ ] 5.5 组件测试覆盖以上,断言不引入第二套页面选择器
+- [x] 5.1 注册 `Interaction` 的 Component Definition 与 Inspector
+- [x] 5.2 trigger 列表编辑:添加 / 编辑 / 移除单条,单次操作一条可撤销事务
+- [x] 5.3 navigate 目标复用既有 node 页面拖入赋值,拒绝非页面文件
+- [x] 5.4 目标为空与目标缺失的明确呈现
+- [x] 5.5 组件测试覆盖以上,断言不引入第二套页面选择器
 
 ## 6. stage 编辑期约束
 

@@ -30,6 +30,8 @@ const ACTIVATION_KEYS = new Set(['Enter', ' ', 'Spacebar'])
 
 function runAction(action: ComposeInteractionAction, navigation: ComposeNavigationPort) {
   if (action.type === 'navigate') {
+    // 目标还没选：这条交互是编辑期的半成品，运行期什么都不做。
+    if (action.target === null) return
     void navigation.navigate(action.target, action.params)
     return
   }

@@ -7,9 +7,11 @@
 trigger 列表呈现,每行选择事件与动作;动作为 `navigate` 时 MUST 提供页面目标选择,并 MUST
 复用既有的 node 属性页面拖入赋值,MUST NOT 另建一套页面选择器。
 
-Inspector MUST 对目标为空、目标页面不存在这两种状态给出明确呈现,并 MUST 允许在不清空
-其他 trigger 的前提下移除单个 trigger。所有编辑 MUST 通过文档命令派发,单次用户操作
-MUST 只产生一条可撤销事务。
+Inspector MUST 对目标为空、目标页面不存在这两种状态给出明确呈现,并 MUST 允许移除单个
+trigger 而不移除整个 `Interaction`。trigger 列表的长度上限 MUST 等于当前支持的事件数量——
+文档拒绝重复事件,列表若能加出第二条同事件 trigger,用户只会看到"点了没反应"。
+所有编辑 MUST 通过文档命令派发,单次用户操作 MUST 只产生一条可撤销事务;Schema 之外的
+字段(如 `action.params`)MUST 在写回时原样保留。
 
 #### Scenario: 给矩形添加跳转
 
@@ -29,8 +31,14 @@ MUST 只产生一条可撤销事务。
 - **THEN** Inspector 以明确的错误状态呈现该行
 - **AND** 文档中的引用不被自动清空
 
-#### Scenario: 移除单个 trigger
+#### Scenario: 移除 trigger 保留 Component
 
-- **WHEN** Entity 含两条 trigger 且用户移除其中一条
-- **THEN** 另一条保持不变
-- **AND** 只派发一条命令
+- **WHEN** 用户移除 Entity 上唯一一条 trigger
+- **THEN** 只派发一条命令,`Interaction` 仍然附着且 `triggers` 为空数组
+- **AND** 移除整个 `Interaction` 是另一个显式操作
+
+#### Scenario: 不产生重复事件的 trigger
+
+- **WHEN** Entity 已有一条 click trigger,用户再次点击列表的添加入口
+- **THEN** 不派发任何命令
+- **AND** 文档中的 trigger 数量不变

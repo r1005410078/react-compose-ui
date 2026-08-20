@@ -8,8 +8,11 @@ trigger 与 action。它 MUST 可以与任意 Entity 组合,MUST NOT 要求 `Ren
 
 `Interaction` 的形状 MUST 为 `{ version: 1, triggers: Trigger[] }`。每个 Trigger MUST 含
 `event` 与 `action`。v1 MUST 只接受 `event` 为 `'click'`;`action` MUST 是可判别联合,v1
-MUST 只接受 `{ type: 'navigate', target: PageReference, params?: JsonObject }` 与
-`{ type: 'navigate-back' }`。`navigate` 的 `target` MUST 复用既有页面引用值。
+MUST 只接受 `{ type: 'navigate', target: PageReference | null, params?: JsonObject }` 与
+`{ type: 'navigate-back' }`。`navigate` 的 `target` MUST 复用既有页面引用值,并 MUST 允许
+为 `null` 表示"尚未选择目标"——属性面板新增一条交互时先产生一行,用户才能在这行里挑页面,
+不允许 null 会让新建交互与选目标互为前提。**不完整**的引用(缺字段)MUST 仍然被拒绝:
+那是配错了,与"还没配"是两回事。运行期 null 目标 MUST 是 no-op。
 未知的 `event` 或 `action.type` MUST 在校验时被拒绝而不是静默丢弃。
 
 `triggers` MUST 是数组且同一 `event` MUST NOT 出现多次。空数组 MUST 合法,语义等价于
@@ -32,6 +35,12 @@ MUST 只接受 `{ type: 'navigate', target: PageReference, params?: JsonObject }
 
 - **WHEN** `triggers` 中出现两个 `event` 均为 `'click'` 的条目
 - **THEN** 校验拒绝该文档
+
+#### Scenario: 目标尚未选择
+
+- **WHEN** `Interaction` 含 `{ type: 'navigate', target: null }`
+- **THEN** 文档通过校验
+- **AND** 运行期点击该 Entity 不发生跳转
 
 #### Scenario: 空 triggers 合法
 

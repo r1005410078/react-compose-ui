@@ -30,7 +30,15 @@ export type ComposeInteractionEvent = 'click'
  */
 export type ComposeNavigateAction = JsonObject & {
   readonly type: 'navigate'
-  readonly target: ComposePageReference
+  /**
+   * 目标页面；尚未选择时为 null。
+   *
+   * @remarks
+   * 允许为 null 是编辑期的需要：属性面板新增一条交互时先产生一行，用户才能在这行里挑
+   * 页面。运行期 null 目标是 no-op。**不完整**的引用（缺字段）仍然非法——那是配错了，
+   * 与"还没配"是两回事。语义与 Page Slot 的 `page: null` 一致。
+   */
+  readonly target: ComposePageReference | null
   /**
    * 预留的跳转参数。
    *
@@ -112,8 +120,8 @@ function collectActionIssues(
   // 未知 type 必须拒绝而不是静默丢弃：静默丢弃会让一条配好的跳转在升级后无声失效。
   if (value.type === 'navigate') {
     collectUnknownFields(value, NAVIGATE_FIELDS, basePath, issues)
-    if (readComposePageReference(value.target) === null) {
-      issues.push({ path: [...basePath, 'target'], message: 'target 必须是完整页面引用' })
+    if (value.target !== null && readComposePageReference(value.target) === null) {
+      issues.push({ path: [...basePath, 'target'], message: 'target 必须是完整页面引用或 null' })
     }
     if (value.params !== undefined && !isRecord(value.params)) {
       issues.push({ path: [...basePath, 'params'], message: 'params 必须是对象' })
@@ -209,7 +217,7 @@ export function resolveComposeInteractionAction(
 
 /** 创建只含一条页面跳转的 Interaction。 @public */
 export function createComposeNavigateInteraction(
-  target: ComposePageReference,
+  target: ComposePageReference | null = null,
 ): ComposeInteraction {
   return { version: 1, triggers: [{ event: 'click', action: { type: 'navigate', target } }] }
 }

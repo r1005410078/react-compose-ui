@@ -81,10 +81,17 @@ describe('Interaction 校验', () => {
     })
     expect(partial).toContainEqual({
       path: ['triggers', 0, 'action', 'target'],
-      message: 'target 必须是完整页面引用',
+      message: 'target 必须是完整页面引用或 null',
     })
     expect(collectComposeInteractionValidationIssues({ version: 1, triggers: {} }))
       .toContainEqual({ path: ['triggers'], message: 'triggers 必须是数组' })
+  })
+
+  it('目标未选择时合法，运行期是 no-op', () => {
+    expect(collectComposeInteractionValidationIssues({
+      version: 1,
+      triggers: [{ event: 'click', action: { type: 'navigate', target: null } }],
+    })).toEqual([])
   })
 
   it('navigate-back 不接受额外字段', () => {
