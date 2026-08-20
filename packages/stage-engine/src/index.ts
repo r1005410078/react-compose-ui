@@ -147,5 +147,21 @@ export {
   describeTransform,
 } from './transaction-labels'
 
+export {
+  createStagePluginRegistry,
+  createStageSessionArbiter,
+  STAGE_GESTURE_PRIORITY,
+  STAGE_LEGACY_MONOLITH_PRIORITY,
+  type StageArbiterBeginResult,
+  type StageClaimResult,
+  type StageGesturePriorityEntry,
+  type StageInteractionPlugin,
+  type StagePluginContext,
+  type StagePluginRegistry,
+  type StagePointerDownEvent,
+  type StageSession,
+  type StageSessionArbiter,
+} from './interaction-kernel'
+
 /** `@compose-ui/stage-engine` 的稳定包标识。 @public */
 export const COMPOSE_UI_STAGE_ENGINE_PACKAGE = '@compose-ui/stage-engine' as const

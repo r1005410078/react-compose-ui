@@ -71,6 +71,17 @@ import {
   translationMatrix,
   unionRects,
 } from './geometry'
+// 交互内核只做类型级依赖回指（`import type`），因此这里的相互引用不产生运行时循环。
+import {
+  createStagePluginRegistry,
+  createStageSessionArbiter,
+  STAGE_LEGACY_MONOLITH_PRIORITY,
+} from './interaction-kernel'
+import type {
+  StageInteractionPlugin,
+  StagePluginContext,
+  StageSession,
+} from './interaction-kernel'
 
 /** Stage 当前活动交互。 @public */
 export type StageInteractionPhase =
@@ -1210,6 +1221,19 @@ export function createStageInteractionController(): StageInteractionController {
   let snapshot = IDLE_SNAPSHOT
   const listeners = new Set<() => void>()
   let surface: StageInteractionSurfacePort | null = null
+  /*
+   * 绞杀式重构的过渡形态：注册表里只有 legacy 一个插件，它内部仍走 begin() 的原级联，
+   * 因此 STAGE_GESTURE_PRIORITY 这张表当前尚未承担仲裁职责。步骤 3 每拆出一个真实插件，
+   * 就把它按表中优先级排到 legacy 之前，legacy 只接住尚未搬走的分支。
+   *
+   * claim 引用后面定义的 legacyClaim：它只在事件到达时被调用，届时闭包已完整建立。
+   */
+  const legacyPlugin: StageInteractionPlugin = {
+    id: 'legacy-monolith',
+    priority: STAGE_LEGACY_MONOLITH_PRIORITY,
+    claim: (event, pluginContext) => legacyClaim(event, pluginContext),
+  }
+  const arbiter = createStageSessionArbiter(createStagePluginRegistry([legacyPlugin]))
   /** 辅助线读写与 Frame 相关动作共用的活动 Frame 求解。 */
   const targetFrameId = (value: StageInteractionContext) =>
     resolveTargetFrameId(value.document, value.selectedIds, value.activeFrameId)
@@ -1383,6 +1407,10 @@ export function createStageInteractionController(): StageInteractionController {
       }])
     }
     gesture = null
+    // reset 是 legacy 中止手势的唯一漏斗，并且有一半调用点在指针生命周期之外（并发文档
+    // 变化、surface 断开、dispose）。在这里同步释放仲裁器的会话引用，否则仲裁器会认为手势
+    // 仍在进行而拒绝下一次接管。release 不回调 session.cancel，因此不会与本函数互相递归。
+    arbiter.release()
     publish(initialSnapshot(snapshot.temporaryPan))
     if (releasePointer && pointerId !== undefined) {
       apply([{ type: 'pointer.release', pointerId }])
@@ -2202,7 +2230,8 @@ export function createStageInteractionController(): StageInteractionController {
     event: Extract<StageInteractionEvent, { type: 'pointer.up' }>,
   ) => {
     if (!gesture || gesture.pointerId !== event.pointerId || !context || !index) return
-    updateGesture(event.point, event.modifiers)
+    // 最终点的推进由仲裁器在 commit 之前驱动（见 StageSessionArbiter.commit），这里不再自行
+    // 调用 updateGesture：提交几何取自最终点推进之后的状态，该约束现在由内核统一保证。
     const finished = gesture
     const pointerId = finished.pointerId
     gesture = null
@@ -2541,6 +2570,89 @@ export function createStageInteractionController(): StageInteractionController {
     apply([{ type: 'pointer.release', pointerId }])
   }
 
+  /**
+   * legacy 单体插件的会话：把内核的三段生命周期转调既有的 updateGesture / finish / reset。
+   *
+   * 会话记住最近一次指针事件，因为 finish 需要松手时的修饰键（例如 marquee 的布尔组合以
+   * 释放时按住的键为准）。仲裁器保证 commit 之前刚以 pointerup 调用过 update，因此这里记下的
+   * 就是那次事件。
+   */
+  const createLegacySession = (pointerId: number): StageSession => {
+    let lastPointerEvent: Extract<
+      StageInteractionEvent,
+      { type: 'pointer.up' | 'pointer.move' }
+    > | null = null
+    return {
+      pointerId,
+      update(event) {
+        if (event.type === 'pointer.move' || event.type === 'pointer.up') {
+          lastPointerEvent = event
+          updateGesture(event.point, event.modifiers)
+          return
+        }
+        // move 手势用 Space 表达「锁定原父级」而不是临时平移：两种意图不会同时出现，
+        // 手势中无法再按下第二个指针开始平移。原地重算落点以立即反映锁定状态。
+        if (event.type === 'temporary-pan.start' && gesture?.type === 'move') {
+          gesture.parentLocked = true
+          updateGesture(gesture.lastPoint, gesture.lastModifiers)
+          return
+        }
+        if (event.type === 'temporary-pan.end' && gesture?.type === 'move') {
+          gesture.parentLocked = false
+          updateGesture(gesture.lastPoint, gesture.lastModifiers)
+        }
+      },
+      commit() {
+        // 没有指针事件说明会话在任何 update 之前就被提交，legacy 无从确定终点，按取消处理。
+        if (!lastPointerEvent || lastPointerEvent.type !== 'pointer.up') {
+          reset()
+          return
+        }
+        finish(lastPointerEvent)
+      },
+      cancel() {
+        reset()
+      },
+    }
+  }
+
+  /**
+   * legacy 插件的 claim：整段既有 begin() 级联就是它的判定。
+   *
+   * begin 即使不开手势也可能已经处理掉这次按下（改选区、进入文字编辑、被守卫拦下），
+   * 而 legacy 是注册表里最后一个插件，因此无论是否产生手势都算「已消费」——返回 null 会让
+   * 仲裁器继续询问不存在的后续插件，语义上也不成立。
+   */
+  const legacyClaim = (
+    event: Extract<StageInteractionEvent, { type: 'pointer.down' }>,
+    _pluginContext: StagePluginContext,
+  ): StageSession | 'consumed' => {
+    void _pluginContext
+    begin(event)
+    return gesture ? createLegacySession(gesture.pointerId) : 'consumed'
+  }
+
+  /**
+   * 交给插件的运行时上下文。
+   *
+   * @remarks
+   * legacy 插件闭包捕获了同一批值，因此忽略本参数；这里仍如实构造，使步骤 3 拆出的真实插件
+   * 从第一天起就只依赖公开的 {@link StagePluginContext} 而不是闭包。context 与 index 用取值器
+   * 读取当前值——它们随 updateContext 变化，快照式传入会让会话读到过期文档。
+   */
+  const pluginContext: StagePluginContext = {
+    get context() {
+      if (!context) throw new Error('StageInteractionController has no context')
+      return context
+    },
+    get index() {
+      if (!index) throw new Error('StageInteractionController has no scene index')
+      return index
+    },
+    apply,
+    publish,
+  }
+
   const externalDrop = (
     item: StageExternalDragItem,
     clientPoint: StagePoint | null,
@@ -2720,30 +2832,28 @@ export function createStageInteractionController(): StageInteractionController {
         apply([{ type: 'text-editing.enter', entityId: targetId }])
         return
       }
+      // 指针生命周期统一走仲裁器：接管判定、单会话独占与「commit 前吃掉最终点」都由内核保证。
       if (event.type === 'pointer.down') {
-        begin(event)
+        arbiter.begin(event, pluginContext)
         return
       }
       if (event.type === 'pointer.move') {
-        if (gesture?.pointerId === event.pointerId) updateGesture(event.point, event.modifiers)
+        arbiter.update(event, pluginContext)
         return
       }
       if (event.type === 'pointer.up') {
-        finish(event)
+        arbiter.commit(event, pluginContext)
         return
       }
       if (event.type === 'pointer.cancel') {
-        if (gesture && (event.pointerId === undefined || gesture.pointerId === event.pointerId)) {
-          reset()
-        }
+        arbiter.cancel(event.pointerId)
         return
       }
       if (event.type === 'temporary-pan.start') {
-        // move 手势进行中 Space 表达「锁定原父级」而不是临时平移：两种意图不会同时出现，
-        // 手势中无法再按下第二个指针开始平移。
+        // 非指针事件同样转给活动会话：move 手势用它表达「锁定原父级」。会话消费掉的场景下
+        // 不再改 temporaryPan 标志——两种意图不会同时出现。
         if (gesture?.type === 'move') {
-          gesture.parentLocked = true
-          updateGesture(gesture.lastPoint, gesture.lastModifiers)
+          arbiter.update(event, pluginContext)
           return
         }
         if (!snapshot.temporaryPan) publish({ ...snapshot, temporaryPan: true })
@@ -2751,11 +2861,10 @@ export function createStageInteractionController(): StageInteractionController {
       }
       if (event.type === 'temporary-pan.end') {
         if (gesture?.type === 'move') {
-          gesture.parentLocked = false
-          updateGesture(gesture.lastPoint, gesture.lastModifiers)
+          arbiter.update(event, pluginContext)
           return
         }
-        if (gesture?.type === 'pan') reset()
+        if (gesture?.type === 'pan') arbiter.cancel()
         if (snapshot.temporaryPan) publish({ ...snapshot, temporaryPan: false })
         return
       }
