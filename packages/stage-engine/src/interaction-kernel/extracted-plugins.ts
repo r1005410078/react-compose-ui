@@ -3,6 +3,7 @@ import { createStagePaintSamplePlugin } from './paint-sample-plugin'
 import { createStagePanPlugin } from './pan-plugin'
 import { createStagePathPlugin } from './path-plugin'
 import { createStageRotatePlugin } from './rotate-plugin'
+import { createStageSegmentResizePlugin } from './segment-resize-plugin'
 import { createStageTextEditGuardPlugin } from './text-edit-guard-plugin'
 import type { StageInteractionPlugin } from './kernel-types'
 
@@ -25,4 +26,5 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStagePaintSamplePlugin,
   createStagePathPlugin,
   createStagePaintPlugin,
+  createStageSegmentResizePlugin,
 ]

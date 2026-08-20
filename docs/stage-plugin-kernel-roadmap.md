@@ -139,7 +139,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 
 因此实际顺序就是优先级表的顺序：
 `text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
-→ `segment-resize` → `marquee-tool` → `draw` → `move-axis` → `marquee-converge`
+→ `segment-resize` ✅ → `marquee-tool` → `draw` → `move-axis` → `marquee-converge`
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
 
@@ -205,7 +205,14 @@ paint-sample，守卫看着还在、其实早已不检查新插件。
 属于快照派生」**：`paintHandlesFor` 同样是 Paint 几何，但它算的是派生字段，因此留在 controller。
 `interaction-controller.ts` 2271 → 2145 行。
 
-下一刀是 `segment-resize`(1200)。
+`segment-resize`(1200) ✅ 是第一个需要**吸附求解**的会话：端点拖动复用 `snapResizePoint` 的
+smart/grid 规则，候选来自 `index.snapCandidates`，而候选作用域要按活动 Frame 求解。这条链原本
+靠 controller 的私有 `targetFrameId` 闭包拿到，插件里改为直接调用 `resolveTargetFrameId`——
+同一个纯函数，只是不再经过闭包。`move`(700) 与 `resize`(600) 走同一条链，这刀先把路探通。
+`interaction-controller.ts` 2145 → 2053 行。
+
+下一刀是 `marquee-tool`(1100)——它是 marquee 三个入口中最靠前的一个，抽取时必须同时把
+共享会话工厂建好，另外两个入口（800 / 100）在各自位次上复用它。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 
