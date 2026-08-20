@@ -195,6 +195,7 @@ export function createComposeNavigationSession(
     getSnapshot: () => snapshot,
     navigate,
     back,
+    referenceFor: referenceOf,
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)

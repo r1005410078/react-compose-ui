@@ -17,20 +17,20 @@
 
 ## 3. script-runtime 逃生舱
 
-- [ ] 3.1 `createComposePageScriptScope` 选项接受可选导航端口
-- [ ] 3.2 `ctx` 暴露 `navigate` / `navigateBack`,委托同一端口
-- [ ] 3.3 未注入端口调用产生 diagnostic 而不抛出;setup 同步期调用被忽略并 diagnostic
-- [ ] 3.4 单测覆盖三种情形,并确认包未新增对 `pages` 的依赖
+- [x] 3.1 `createComposePageScriptScope` 选项接受可选导航端口
+- [x] 3.2 `ctx` 暴露 `navigate` / `navigateBack`,委托同一端口
+- [x] 3.3 未注入端口调用产生 diagnostic 而不抛出;setup 同步期调用被忽略并 diagnostic
+- [x] 3.4 单测覆盖三种情形,并确认包未新增对 `pages` 的依赖
 
 ## 4. preview 页面宿主
 
-- [ ] 4.1 新增 `ComposePageHost`:按导航端口加载页面、渲染 `activeFrameId` 指向的 Frame
-- [ ] 4.2 复用 `useComposePageScriptScope`,切页时先 dispose 旧 scope 再建新 scope
-- [ ] 4.3 为带 `Interaction` 的 Entity 建立 click 处理与 button 语义、键盘可达性、可访问名称
-- [ ] 4.4 处理器挂在 Entity 容器层且不阻止冒泡到物料自身交互
-- [ ] 4.5 加载中 / 导航失败作为可区分的确定状态暴露给宿主
-- [ ] 4.6 `ComposePreviewDialog` 接受导航端口后切换为页面预览;场景选择器跟随当前页面
-- [ ] 4.7 未提供端口时对话框行为与变更前完全一致(回归测试)
+- [x] 4.1 新增 `ComposePageHost`:按导航端口加载页面、渲染 `activeFrameId` 指向的 Frame
+- [x] 4.2 复用 `useComposePageScriptScope`,切页时先 dispose 旧 scope 再建新 scope
+- [x] 4.3 为带 `Interaction` 的 Entity 建立 click 处理与 button 语义、键盘可达性、可访问名称
+- [x] 4.4 处理器挂在 Entity 容器层且不阻止冒泡到物料自身交互
+- [x] 4.5 加载中 / 导航失败作为可区分的确定状态暴露给宿主
+- [x] 4.6 `ComposePreviewDialog` 接受导航端口后切换为页面预览;场景选择器跟随当前页面
+- [x] 4.7 未提供端口时对话框行为与变更前完全一致(回归测试)
 
 ## 5. materials Inspector
 

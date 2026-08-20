@@ -1,6 +1,6 @@
 import type {
   ComposeComputed,
-  ComposePageScriptContext,
+  ComposeReactivePrimitives,
   ComposeScriptDiagnostic,
   ComposeState,
 } from './types'
@@ -295,7 +295,14 @@ export class ComposeReactiveOwner {
     })
   }
 
-  context(): ComposePageScriptContext {
+  /**
+   * 只含响应式原语的上下文子集。
+   *
+   * @remarks
+   * 返回类型刻意不是完整的 `ComposePageScriptContext`——导航由宿主端口提供，
+   * 响应式 owner 不应该知道页面之间怎么跳。scope 负责把两半合成交给 setup。
+   */
+  context(): ComposeReactivePrimitives {
     return {
       state: <T>(initial?: T) => this.createState(initial as T),
       computed: <T>(read: () => T) => this.createComputed(read),

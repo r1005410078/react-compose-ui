@@ -10,6 +10,11 @@ export {
   type ComposePreviewFit,
 } from './compose-preview'
 export {
+  ComposePageHost,
+  type ComposePageHostMessages,
+  type ComposePageHostProps,
+} from './page-host'
+export {
   ComposePreviewDialog,
   type ComposePreviewDialogMessages,
   type ComposePreviewDialogProps,

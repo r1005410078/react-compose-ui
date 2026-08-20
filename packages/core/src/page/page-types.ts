@@ -227,6 +227,15 @@ export interface ComposeNavigationPort {
   navigate(reference: ComposePageReference, params?: JsonObject): Promise<void>
   /** 返回上一页；返回栈为空时是无副作用的 no-op。 */
   back(): Promise<void>
+  /**
+   * 由页面 key 构造完整引用。
+   *
+   * @remarks
+   * `providerId` 与 `scope` 只有实现知道，所以引用构造归端口。声明式 `Interaction` 存的
+   * 已经是完整引用，这个方法服务于只拿得到 key 的调用方——例如页面脚本里的
+   * `ctx.navigate('pages/detail.page.json')`。
+   */
+  referenceFor(pageKey: string): ComposePageReference
   /** 订阅快照变化。 @returns 取消订阅的函数。 */
   subscribe(listener: () => void): () => void
 }

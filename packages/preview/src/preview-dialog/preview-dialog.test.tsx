@@ -2,11 +2,17 @@ import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createDefaultCanvasSettings,
   createComposeFrameEntity,
+  createEmptyComposePageFile,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
+  type ComposeNavigationPort,
+  type ComposeNavigationSnapshot,
+  type ComposePageFile,
+  type ComposePageLoader,
+  type ComposePageReference,
 } from '@compose-ui/core'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import { ComposePreviewDialog } from '../index'
@@ -204,5 +210,154 @@ describe('ComposePreviewDialog', () => {
     view.rerender(<ComposePreviewDialog {...props} open={false} />)
     // 关闭后计时资源被释放：待执行回调清空，也不再有新的排队。
     expect(raf.pending()).toBe(0)
+  })
+})
+
+
+/** 页面预览模式的最小夹具：两块页面，首页上有一个可点击跳转的 Entity。 */
+function pageModeFixture() {
+  const providerId = 'memory'
+  const reference = (assetKey: string): ComposePageReference => ({
+    kind: 'page',
+    providerId,
+    assetKey,
+    scope: 'persistent',
+  })
+
+  const label = (id: string, text: string, extra: ComposeEntity['components'] = {}): ComposeEntity => ({
+    id,
+    name: id,
+    components: {
+      Composition: { presetId: null, baseComponentKeys: [], capabilityIds: [] },
+      Transform: { rotation: 0 },
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: { x: 0, y: 0 },
+        width: { mode: 'fixed', value: 100, min: 1, max: null },
+        height: { mode: 'fixed', value: 40, min: 1, max: null },
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        alignSelf: 'auto',
+      },
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Renderer: { type: 'label', props: { text } },
+      ...extra,
+    },
+  })
+
+  const homeDocument: ComposeDocument = {
+    schemaVersion: 7,
+    canvas: createDefaultCanvasSettings(),
+    rootIds: ['home-frame'],
+    entities: {
+      cta: label('cta', 'Go to detail', {
+        Interaction: {
+          version: 1,
+          triggers: [{ event: 'click', action: { type: 'navigate', target: reference('detail') } }],
+        },
+      }),
+      'home-frame': createComposeFrameEntity({
+        id: 'home-frame',
+        childIds: ['cta'],
+        size: { width: 400, height: 300 },
+      }),
+    },
+  }
+  // 详情页有两块场景：跳转后场景选择器必须换成这两块。
+  const detailDocument: ComposeDocument = {
+    schemaVersion: 7,
+    canvas: createDefaultCanvasSettings(),
+    rootIds: ['detail-main', 'detail-alt'],
+    entities: {
+      headline: label('headline', 'Detail page'),
+      aside: label('aside', 'Detail aside'),
+      'detail-main': createComposeFrameEntity({
+        id: 'detail-main',
+        childIds: ['headline'],
+        size: { width: 400, height: 300 },
+      }),
+      'detail-alt': createComposeFrameEntity({
+        id: 'detail-alt',
+        childIds: ['aside'],
+        size: { width: 400, height: 300 },
+      }),
+    },
+  }
+
+  const pages: Record<string, ComposePageFile> = {
+    home: { ...createEmptyComposePageFile(), document: homeDocument, activeFrameId: 'home-frame' },
+    detail: { ...createEmptyComposePageFile(), document: detailDocument, activeFrameId: 'detail-main' },
+  }
+
+  const listeners = new Set<() => void>()
+  let current: ComposePageReference = reference('home')
+  let snapshot: ComposeNavigationSnapshot = {
+    currentPageKey: 'home',
+    current,
+    canGoBack: false,
+    issue: null,
+  }
+  const navigation: ComposeNavigationPort = {
+    getSnapshot: () => snapshot,
+    referenceFor: reference,
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    async navigate(target) {
+      current = target
+      snapshot = { currentPageKey: target.assetKey, current, canGoBack: true, issue: null }
+      listeners.forEach((listener) => { listener() })
+    },
+    async back() {},
+  }
+  const pageLoader: ComposePageLoader = {
+    async load(target) {
+      const page = pages[target.assetKey]
+      if (!page) throw new Error(`缺少页面 ${target.assetKey}`)
+      return page
+    },
+  }
+  const pageRegistry = createComposeEntityRegistry({
+    renderers: [{
+      type: 'label',
+      label: 'Label',
+      renderer: ({ props }) => <span>{String(props.text)}</span>,
+    }],
+  })
+  return { navigation, pageLoader, registry: pageRegistry }
+}
+
+describe('OpenSpec: compose-preview / 受控 Preview Dialog（页面预览）', () => {
+  it('页面预览内跳转', async () => {
+    const { navigation, pageLoader, registry: pageRegistry } = pageModeFixture()
+    render(
+      <ComposePreviewDialog
+        navigation={navigation}
+        open
+        pageLoader={pageLoader}
+        registry={pageRegistry}
+        onOpenChange={vi.fn()}
+      />,
+    )
+
+    const cta = await screen.findByRole('button', { name: 'cta' })
+    // 首页只有一块场景，选择器里只有它。
+    expect(screen.getByRole('combobox', { name: 'Preview scene' })).toHaveValue('home-frame')
+
+    await act(async () => { fireEvent.click(cta) })
+    await waitFor(() => { expect(screen.getByText('Detail page')).toBeTruthy() })
+    // 场景选择器跟随新页面重置为它的激活场景。
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Preview scene' })).toHaveValue('detail-main')
+    })
+    expect(screen.getAllByRole('option').map((option) => option.getAttribute('value')))
+      .toContain('detail-alt')
+  })
+
+  it('未提供导航端口保持兼容', () => {
+    renderDialog()
+    expect(screen.getByRole('combobox', { name: 'Preview scene' })).toHaveValue(rootFrame.id)
+    expect(screen.queryByTestId('compose-page-host-loading')).toBeNull()
   })
 })

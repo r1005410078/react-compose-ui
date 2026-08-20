@@ -88,6 +88,26 @@ interface ComposePageScriptContext {
    * @param run 副作用函数；可以返回 cleanup 清理函数。
    */
   effect(run: () => void | (() => void)): void
+
+  /**
+   * 跳转到目标页面。target 是页面的资源 key，也可以传一个完整的页面引用对象。
+   *
+   * 与画布上配置的点击跳转共用同一份当前页面与返回栈。
+   * 只能在事件方法或 effect 中调用；在 setup 同步执行期间调用会被忽略并产生一条诊断。
+   *
+   * 示例：
+   * \`\`\`javascript
+   * return {
+   *   openDetail: () => ctx.navigate('pages/detail.page.json'),
+   * }
+   * \`\`\`
+   *
+   * @param target 目标页面的资源 key，或完整页面引用。
+   */
+  navigate(target: string | { kind: 'page', providerId: string, assetKey: string, scope: string }): Promise<void>
+
+  /** 返回上一页；没有可返回的页面时什么都不做。 */
+  navigateBack(): Promise<void>
 }
 
 /** 页面 setup 函数；返回对象中的状态与方法可用于画布属性和事件绑定。 */
