@@ -16,7 +16,7 @@ import {
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type {
   ComposeNavigationPort,
-  ComposePageDocumentLoader,
+  ComposePageLoader,
   ComposePageFile,
 } from '@compose-ui/core'
 import {
@@ -70,7 +70,7 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
    * @remarks
    * Preview 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
    */
-  readonly pageLoader?: ComposePageDocumentLoader
+  readonly pageLoader?: ComposePageLoader
   /**
    * 宿主导航端口。
    *
@@ -220,7 +220,7 @@ function PreviewEntity({
   scriptModuleLoader,
 }: {
   assetResolver?: ComposeAssetResolver
-  pageLoader?: ComposePageDocumentLoader
+  pageLoader?: ComposePageLoader
   document: ComposeDocument
   layoutSnapshot: ComposeLayoutSnapshot
   navigation?: ComposeNavigationPort
@@ -245,7 +245,6 @@ function PreviewEntity({
         assetResolver={assetResolver}
         entity={entity}
         mode="preview"
-        pageDocumentPort={pageLoader}
         registry={registry}
         scriptModuleLoader={scriptModuleLoader}
         scriptScope={scriptScope}
@@ -383,8 +382,7 @@ function ComposePreviewReady({
                       assetResolver={assetResolver}
                       entity={entity}
                       mode="preview"
-                      pageDocumentPort={pageLoader}
-                      registry={registry}
+                                    registry={registry}
                       scriptModuleLoader={scriptModuleLoader}
                       scriptScope={scriptScope}
                     />
@@ -480,7 +478,6 @@ function ManagedComposePreview(props: ComposePreviewProps & { readonly document:
     props.document,
     props.registry,
     props.assetResolver,
-    props.pageLoader,
     props.layoutRuntime,
     props.scriptScope,
   )

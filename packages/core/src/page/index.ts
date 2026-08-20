@@ -8,7 +8,6 @@ export {
 export type {
   ComposeAppManifest,
   ComposePageAnimationReference,
-  ComposePageDocumentLoader,
   ComposePageFile,
   ComposePageFileIssue,
   ComposePageFileIssueCode,

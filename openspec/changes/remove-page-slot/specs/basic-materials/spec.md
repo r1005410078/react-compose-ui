@@ -6,8 +6,10 @@
 属性/结构覆盖、没有变体、编辑期不能下钻、不能离线渲染，能力严格弱于组件实例。复用由
 Component Asset v2 与变体承担，页面回归为可跳转的目标。
 
-**迁移**：复用一块 UI 的场景改用 Component Instance。文档中已有的 `page-slot` Entity 由
-`compose-document` 的显式迁移降级为保留几何与外观的空 Container 并返回稳定 issue。
+**迁移**：复用一块 UI 的场景改用 Component Instance。**不提供迁移器**——尚无线上资产使用
+Page Slot，为零份文档写迁移是纯粹的负债。文档中万一残留的 `page-slot` Entity 落到 Registry
+既有的「未知 Renderer」占位上：几何与外观保留，占位带 `role="status"` 与可访问名称，
+因此不会静默丢失内容。
 
 ### Requirement: Page Slot 加载状态与嵌套护栏
 

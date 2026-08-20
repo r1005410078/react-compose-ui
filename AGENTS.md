@@ -100,10 +100,9 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `rootIds[0]`——那既选错场景，又会跳过世界→局部换算。点击添加（没有落点意图）不走升格。
 - **页面之间只有跳转关系，没有嵌套关系。** Page Slot 已删除：它是「弱化版组件实例」——没有
   属性/结构覆盖、没有变体、编辑期不能下钻、不能离线渲染。复用一块 UI 一律用 Component
-  Asset v2 与 Variant。文档里遗留的 `page-slot` Entity 由 `migrateComposeDocumentPageSlots`
-  显式降级为保留几何与外观的占位 Container 并返回稳定 issue；普通解析遇到它返回
-  `renderer.legacy-page-slot` 而不是静默丢弃。**纯函数迁移不能把被内嵌页面转成组件资产**——
-  那需要写 Provider，超出纯函数的能力边界。
+  Asset v2 与 Variant。**没有为它写迁移器**：删除时尚无线上资产使用 Page Slot，为零份文档
+  写迁移是纯粹的负债。万一残留的 `page-slot` Entity 落到 Registry 既有的「未知 Renderer」
+  占位上——几何与外观保留，占位带 `role="status"` 与可访问名称，不会静默丢失内容。
 - **跳转是 Entity 的能力，不是某个物料的能力。** `Interaction` 是可选 Entity Component，
   可以挂在任意 Entity 上（矩形、图片、容器都能成为跳转源），v1 只有 `click` trigger 与
   `navigate` / `navigate-back` 两种 action。同一事件在一个 Entity 上只能声明一次，因此

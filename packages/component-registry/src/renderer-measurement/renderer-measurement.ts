@@ -7,7 +7,6 @@ import {
   type ComposeLayoutMeasurementDiagnostic,
   type ComposeLayoutMeasurementPort,
   type ComposeMeasuredSize,
-  type ComposePageDocumentLoader,
   type JsonValue,
 } from '@compose-ui/core'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
@@ -22,7 +21,6 @@ import type {
 export interface ComposeRendererMeasurementAdapterOptions {
   readonly registry: ComposeEntityRegistry
   readonly assetResolver?: ComposeAssetResolver
-  readonly pageDocumentPort?: ComposePageDocumentLoader
   readonly scriptScope?: ComposePageScriptScope
 }
 
@@ -268,7 +266,6 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
           props: resolved.props,
           authoredProps: resolved.authoredProps,
           assetResolver: this.options.assetResolver,
-          pageDocumentPort: this.options.pageDocumentPort,
           invalidate: () => this.invalidateEntry(entry),
         })
       }
@@ -312,7 +309,6 @@ class RegistryMeasurementAdapter implements ComposeRendererMeasurementAdapter {
       props: resolved.props,
       authoredProps: resolved.authoredProps,
       assetResolver: this.options.assetResolver,
-      pageDocumentPort: this.options.pageDocumentPort,
       signal: controller.signal,
     })).then((prepared) => {
       if (!this.isCurrent(entry, generation) || controller.signal.aborted) return

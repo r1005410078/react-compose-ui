@@ -42,7 +42,6 @@ import {
   type CommandDispatchResult,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposePageDocumentLoader,
   type EditorCommand,
   type EditorTransaction,
   type TransactionRuntime,
@@ -870,14 +869,6 @@ export interface UseComposeEditorControllerOptions {
    * node 字段呈现无候选状态但仍可清空。
    */
   readonly nodeEditPort?: ComposeNodeEditPort
-  /**
-   * 页面型物料使用的文档加载端口。
-   *
-   * @remarks
-   * 由宿主从页面 Store 派生（`createComposePageDocumentLoader`）；未提供时画布上的页面槽位
-   * 呈现占位状态。
-   */
-  readonly pageLoader?: ComposePageDocumentLoader
   /** 当前页面实例的 setup 返回作用域；用于 Stage value 绑定与 Inspector 候选。 */
   readonly scriptScope?: ComposePageScriptScope
 }
@@ -1072,7 +1063,6 @@ export function useComposeEditorController({
   onTransaction,
   idFactory = defaultIdFactory,
   nodeEditPort,
-  pageLoader,
   scriptScope,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
   // Layout 订阅先于文档订阅建立，保证同一次事务的 document/Snapshot 成对发布。
@@ -1490,8 +1480,7 @@ export function useComposeEditorController({
     layoutError: layoutState.status === 'error' ? layoutState.error.message : undefined,
     layoutRuntime: layoutSession.runtime,
     registry,
-    pageLoader,
-    scriptScope,
+      scriptScope,
     dispatch,
     // 视口不参与 memo 依赖：它是外部状态源，读取时取当前快照，订阅由渲染 Stage 的组件负责。
     // 宿主如果自己渲染 ComposeStage，需要用 useComposeStageViewport 订阅才能随平移重渲。
@@ -1529,8 +1518,7 @@ export function useComposeEditorController({
     layoutSession.previewSnapshot,
     layoutSession.runtime,
     registry,
-    pageLoader,
-    scriptScope,
+      scriptScope,
     dispatch,
     viewportStore,
     setViewport,

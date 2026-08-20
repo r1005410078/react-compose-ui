@@ -139,15 +139,6 @@ export type {
   ComposeNavigateAction,
   ComposeNavigateBackAction,
 } from './interaction'
-export {
-  COMPOSE_LEGACY_PAGE_SLOT_RENDERER_TYPE,
-  isComposeLegacyPageSlotEntity,
-  migrateComposeDocumentPageSlots,
-} from './page-slot-migration'
-export type {
-  ComposePageSlotMigrationEntry,
-  ComposePageSlotMigrationResult,
-} from './page-slot-migration'
 export { applyDocumentPatches, jsonEqual } from './patches'
 export { createTransactionRuntime } from './runtime'
 export {
@@ -276,7 +267,6 @@ export type {
   ComposeNavigationPort,
   ComposeNavigationSnapshot,
   ComposePageAnimationReference,
-  ComposePageDocumentLoader,
   ComposePageFile,
   ComposePageFileIssue,
   ComposePageFileIssueCode,

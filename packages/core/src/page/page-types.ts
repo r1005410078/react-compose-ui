@@ -144,8 +144,6 @@ export interface ComposePageLoader {
   subscribe?(reference: ComposePageReference, listener: () => void): () => void
 }
 
-/** @deprecated 使用返回聚合页面的 {@link ComposePageLoader}。 @public */
-export type ComposePageDocumentLoader = ComposePageLoader
 
 /** 导航失败的稳定原因。 @public */
 export type ComposeNavigationIssueCode =
