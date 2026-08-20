@@ -9,6 +9,7 @@ import {
   type ComposeSize,
   type JsonObject,
 } from './document-types'
+import { formatComposeNumber } from './geometry-precision'
 import type { ComposePaint } from './paint'
 
 /** 新建 Frame 时使用的默认尺寸。 @public */
@@ -66,11 +67,11 @@ export function findComposeSceneSizePreset(size: ComposeSize): ComposeSceneSizeP
  *
  * @remarks
  * 乘号用 U+00D7 而不是字母 x，且不带单位：宽高在所有 locale 下都是同一串数字，因此这里
- * 不经过 i18n。
+ * 不经过 i18n。数值走统一的几何精度——历史数据里带小数的场景尺寸不该在标签上甩出一串长尾。
  * @public
  */
 export function formatComposeSceneSize(size: ComposeSize): string {
-  return `${size.width} × ${size.height}`
+  return `${formatComposeNumber(size.width)} × ${formatComposeNumber(size.height)}`
 }
 
 /**

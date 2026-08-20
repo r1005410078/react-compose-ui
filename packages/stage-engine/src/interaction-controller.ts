@@ -1223,6 +1223,36 @@ export function createStageInteractionController(): StageInteractionController {
   // 同一次创建重复触发进入编辑。
   let consumedDrawnEntityId: string | null = null
 
+  /**
+   * 绘制落点吸附。
+   *
+   * @remarks
+   * 复用 resize 的整套规则（智能候选优先、无候选回退网格、Cmd 临时禁用）：绘制此前是画布上
+   * 唯一一条没接吸附的几何手势——move 走 `snapTranslation`，resize 与两点端点走
+   * `snapResizePoint`，辅助线走 `snapValueToGrid`，只有它把原始世界坐标直接送进提交。
+   *
+   * 缩放恒为 1 时屏幕像素与世界单位一一对应，不吸附也看起来是整数，所以问题一直被盖住；
+   * 缩放一旦不是 1，`world = (屏幕 - 视口) / zoom` 每次都会写进一串小数。
+   *
+   * 起点与终点都要吸附：只吸终点的话起点仍带小数，宽高照样不是网格倍数。绘制的两个轴都
+   * 自由，等价于拖角手柄，因此 handle 取 `se`。
+   */
+  const snapDrawingPoint = (
+    world: StagePoint,
+    modifiers: StageInteractionModifiers,
+  ): StagePoint => {
+    if (!context || !index) return world
+    return snapResizePoint({
+      point: world,
+      handle: 'se',
+      // 绘制还没有对应的 Entity，没有需要排除的自身候选。
+      candidates: index.snapCandidates([], targetFrameId(context)),
+      canvas: context.document.canvas,
+      zoom: context.viewport.zoom,
+      disabled: modifiers.command,
+    }).point
+  }
+
   const textEditable = (entityId: string) =>
     Boolean(context?.isTextEditable?.(entityId))
 
@@ -1424,13 +1454,15 @@ export function createStageInteractionController(): StageInteractionController {
       return
     }
     if (gesture.type === 'draw') {
+      // 吸附必须排在 Shift 约束之前：先约束再吸附会把正方形的一条边单独拉走。
+      const snappedWorld = snapDrawingPoint(world, modifiers)
       const drawing = constrainedDrawingPoints(
         gesture.tool,
         gesture.startWorld,
-        world,
+        snappedWorld,
         modifiers,
       )
-      gesture.currentWorld = world
+      gesture.currentWorld = snappedWorld
       gesture.drawingStartWorld = drawing.start
       gesture.drawingEndWorld = drawing.end
       publish({
@@ -2042,7 +2074,10 @@ export function createStageInteractionController(): StageInteractionController {
         || event.hit.kind === 'entity'
       )
     ) {
-      const startWorld = worldPoint(event.point, context.viewport)
+      const startWorld = snapDrawingPoint(
+        worldPoint(event.point, context.viewport),
+        event.modifiers,
+      )
       gesture = {
         type: 'draw',
         pointerId: event.pointerId,

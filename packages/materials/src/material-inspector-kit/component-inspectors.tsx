@@ -11,6 +11,7 @@ import {
   getComposeLayout,
   getComposeRenderer,
   getComposeSpatialTransform,
+  formatComposeNumber,
   resolveComposeAppearance,
   resolveComposeOverflow,
   type ComposeAppearance,
@@ -177,8 +178,9 @@ function AxisSizingControl({
   const computedId = useId()
   const listboxId = useId()
   const external = `${sizing.mode}:${sizing.value}`
+  // Fixed 轴显示数值时走统一的几何精度；Fill/Hug 显示模式名，不受精度影响。
   const displayValue = sizing.mode === 'fixed'
-    ? String(sizing.value)
+    ? formatComposeNumber(sizing.value)
     : (sizing.mode === 'fill' ? 'Fill' : 'Hug')
   const [draft, setDraft] = useState({
     external,

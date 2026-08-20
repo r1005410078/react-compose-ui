@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatComposeNumber } from '@compose-ui/core'
 import type { ComposeEdges } from '@compose-ui/core'
 
 interface InspectorNumberDraftInputProps {
@@ -19,11 +20,15 @@ export function InspectorNumberDraftInput({
   readOnly,
   value,
 }: InspectorNumberDraftInputProps) {
-  const [draft, setDraft] = useState({ external: value, text: String(value), dirty: false })
+  // 显示走统一的几何精度：手势写进文档的值可能带 82.96874999999991 这样的浮点残渣，
+  // 原样 String() 会在一个 6 字宽的输入框里甩出 17 个字符。dirty 保证未编辑不提交，
+  // 因此格式化只影响呈现，不会把显示值反写回文档。
+  const display = formatComposeNumber(value)
+  const [draft, setDraft] = useState({ external: value, text: display, dirty: false })
   const current = Object.is(draft.external, value)
     ? draft
-    : { external: value, text: String(value), dirty: false }
-  const reset = () => setDraft({ external: value, text: String(value), dirty: false })
+    : { external: value, text: display, dirty: false }
+  const reset = () => setDraft({ external: value, text: display, dirty: false })
   const submit = () => {
     if (!current.dirty) return
     const text = current.text.trim()
@@ -33,7 +38,7 @@ export function InspectorNumberDraftInput({
       return
     }
     onCommit(candidate)
-    setDraft({ external: candidate, text: String(candidate), dirty: false })
+    setDraft({ external: candidate, text: formatComposeNumber(candidate), dirty: false })
   }
   return (
     <label className="layout-item-inspector__number">

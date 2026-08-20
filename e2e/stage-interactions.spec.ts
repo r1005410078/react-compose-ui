@@ -415,9 +415,21 @@ test('OpenSpec: stage / Shift 绘制正方形与正圆 / 拖动中动态锁定�
   await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 248')
   const squarePreviewBounds = await preview.locator('rect').first().boundingBox()
   expect(squarePreviewBounds).not.toBeNull()
-  // SVG 的 1.5px 白色描边会使 DOM box 向外扩 0.75px；允许一个物理像素的视觉误差。
-  expect(Math.abs(squarePreviewBounds!.x + squarePreviewBounds!.width - target.x)).toBeLessThan(1)
-  expect(Math.abs(squarePreviewBounds!.y + squarePreviewBounds!.height - target.y)).toBeLessThan(1)
+  /*
+   * 绘制终点是**吸附后**的落点，不是光标所在的裸坐标——与 resize 一致：吸附一旦生效，
+   * 被拖动的那条边就落在网格线上，光标只是引导。这里 zoom 为 1，因此屏幕偏移等于世界
+   * 坐标，直接按 8 网格算出该落在哪。Shift 正方形仍以这个落点为终点角，向另一侧扩边。
+   * SVG 的 1.5px 白色描边会使 DOM box 向外扩 0.75px；允许一个物理像素的视觉误差。
+   */
+  const snapToGrid = (value: number) => Math.round(value / 8) * 8
+  const snappedCorner = {
+    x: outputBox!.x + snapToGrid(target.x - outputBox!.x),
+    y: outputBox!.y + snapToGrid(target.y - outputBox!.y),
+  }
+  expect(Math.abs(squarePreviewBounds!.x + squarePreviewBounds!.width - snappedCorner.x))
+    .toBeLessThan(1)
+  expect(Math.abs(squarePreviewBounds!.y + squarePreviewBounds!.height - snappedCorner.y))
+    .toBeLessThan(1)
   await page.keyboard.up('Shift')
   await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
   await page.keyboard.down('Shift')
@@ -1064,4 +1076,38 @@ test('OpenSpec: stage / 场景尺寸弹框 / 双击尺寸胶囊改尺寸并重�
   await expect(chip).toHaveText('1280 × 720')
   await chip.dblclick()
   await expect(dialog.getByTestId('stage-scene-size-width')).toHaveValue('1280')
+})
+
+test('OpenSpec: stage-engine / Headless 绘制会话 / 非 100% 缩放下绘制读数仍是网格倍数', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const frame = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frame).toBeVisible()
+  // 首次进入已经适配，缩放不是 100%：world = (屏幕 - 视口) / zoom 此时必然带小数，
+  // 这正是绘制没接吸附时会写进文档的那串长尾。
+  await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
+
+  // 起止都用奇数屏幕偏移：未吸附的话每一个读数都会带小数。
+  const box = await frame.boundingBox()
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  await page.mouse.move(box!.x + 41, box!.y + 43)
+  await page.mouse.down()
+  await page.mouse.move(box!.x + 223, box!.y + 161, { steps: 6 })
+  await page.mouse.up()
+  await editor.getByRole('button', { name: '选择', exact: true }).click()
+
+  const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  const readings = await Promise.all([
+    inspector.getByRole('spinbutton', { name: '位置 X' }).inputValue(),
+    inspector.getByRole('spinbutton', { name: '位置 Y' }).inputValue(),
+    inspector.getByRole('combobox', { name: '尺寸宽度' }).inputValue(),
+    inspector.getByRole('combobox', { name: '尺寸高度' }).inputValue(),
+  ])
+  for (const reading of readings) {
+    // 吸附把四条边都拉回 8 网格，因此读数是整数且是 8 的倍数——没有小数需要保留。
+    expect(reading).toMatch(/^-?\d+$/)
+    expect(Number(reading) % 8).toBe(0)
+  }
 })
