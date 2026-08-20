@@ -22,6 +22,8 @@ export {
   type ComposeCreateComponentRequest,
   type ComposeCreateComponentFromSelectionResult,
   type UseComposeEditorControllerOptions,
+  composeEditorStageProps,
+  type ComposeEditorStageOverrides,
 } from './editor-controller'
 export { useComposePageCatalog, useNodeEditorPort } from './pages'
 export type {

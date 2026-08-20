@@ -74,8 +74,10 @@ import {
 } from '@compose-ui/scene-tree'
 import type {
   ComposeStageDelegatableAction,
+  ComposeStagePolicy,
   ComposeStageProps,
   ComposeStageMarqueeMode,
+  ComposeStageServices,
   ComposeStageTool,
 } from '@compose-ui/stage'
 import type {
@@ -93,6 +95,8 @@ import { planSceneOperation } from './scene-operations'
 import {
   ViewportBoundStage,
 } from './viewport-bound-panels'
+import { composeEditorStageProps } from './stage-props-composition'
+import type { ComposeEditorStageOverrides } from './stage-props-composition'
 import { DefaultStageToolbar } from '../stage-toolbar'
 import { createViewportStore } from './viewport-store'
 import { useComposeEditorLayout } from './use-layout-runtime'
@@ -954,8 +958,16 @@ export interface ComposeEditorController {
   readonly stageProps: ComposeStageProps
   /** 默认 Entity Preset Library 内容。 */
   readonly componentLibraryPanel: ReactNode
-  /** 默认中央 Stage 内容。 */
+  /** 默认中央 Stage 内容；等价于不带覆盖的 {@link ComposeEditorController.renderStage}。 */
   readonly stage: ReactNode
+  /**
+   * 以宿主覆盖渲染默认中央 Stage。
+   *
+   * @remarks
+   * 覆盖按字段合并（`services`、`policy` 各自再合一层），优先级由类型表达而不是由调用顺序
+   * 或注释约定。宿主模式应组装一份 `policy` 传入，而不是逐项追加平铺开关。
+   */
+  readonly renderStage: (overrides?: ComposeEditorStageOverrides) => ReactNode
   /** 默认聚合 Entity Inspector 内容。 */
   readonly inspectorPanel: ReactNode
   /** 当前下钻选中的实例内部实体；未下钻时为 null。 */
@@ -1471,34 +1483,45 @@ export function useComposeEditorController({
     return true
   }, [])
 
-  const stageProps = useMemo<ComposeStageProps>(() => ({
-    document,
-    layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : undefined,
-    // resize 实时布局的预览结果只进场景渲染，交互 context 仍用上面的提交态 Snapshot。
-    layoutPreviewSnapshot: layoutSession.previewSnapshot ?? undefined,
-    layoutError: layoutState.status === 'error' ? layoutState.error.message : undefined,
-    layoutRuntime: layoutSession.runtime,
+  // 端口与策略各自记忆化，而不是跟着 stageProps 每次文档编辑重建：Stage 虽然按字段消费
+  // 二者，但分开构建让「端口变了」与「模式变了」在依赖数组上就是两件事，宿主自己也更难
+  // 把一个模式开关误挂到端口上。
+  const stageServices = useMemo<ComposeStageServices>(() => ({
+    dispatch,
     registry,
     pageLoader,
-    scriptScope,
-    dispatch,
-    // 视口不参与 memo 依赖：它是外部状态源，读取时取当前快照，订阅由渲染 Stage 的组件负责。
-    // 宿主如果自己渲染 ComposeStage，需要用 useComposeStageViewport 订阅才能随平移重渲。
-    get viewport() {
-      return viewportStore.getSnapshot()
-    },
-    onViewportChange: setViewport,
-    gridVisible,
-    tool,
-    marqueeMode,
-    onToolChange: setTool,
-    onShortcutAction: runShortcutAction,
+    layoutRuntime: layoutSession.runtime,
     clipboard: sceneTreeCommands.clipboard
       ? {
           kind: sceneTreeCommands.clipboard.kind,
           entityIds: sceneTreeCommands.clipboard.nodeIds,
         }
       : null,
+  }), [dispatch, registry, pageLoader, layoutSession.runtime, sceneTreeCommands.clipboard])
+
+  const stagePolicy = useMemo<ComposeStagePolicy>(
+    () => ({ gridVisible, marqueeMode }),
+    [gridVisible, marqueeMode],
+  )
+
+  const stageProps = useMemo<ComposeStageProps>(() => ({
+    document,
+    layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : undefined,
+    // resize 实时布局的预览结果只进场景渲染，交互 context 仍用上面的提交态 Snapshot。
+    layoutPreviewSnapshot: layoutSession.previewSnapshot ?? undefined,
+    layoutError: layoutState.status === 'error' ? layoutState.error.message : undefined,
+    scriptScope,
+    services: stageServices,
+    policy: stagePolicy,
+    // 视口不参与 memo 依赖：它是外部状态源，读取时取当前快照，订阅由渲染 Stage 的组件负责。
+    // 宿主如果自己渲染 ComposeStage，需要用 useComposeStageViewport 订阅才能随平移重渲。
+    get viewport() {
+      return viewportStore.getSnapshot()
+    },
+    onViewportChange: setViewport,
+    tool,
+    onToolChange: setTool,
+    onShortcutAction: runShortcutAction,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
     onEntityRename: renameEntity,
@@ -1515,18 +1538,13 @@ export function useComposeEditorController({
     document,
     layoutState,
     layoutSession.previewSnapshot,
-    layoutSession.runtime,
-    registry,
-    pageLoader,
     scriptScope,
-    dispatch,
+    stageServices,
+    stagePolicy,
     viewportStore,
     setViewport,
-    gridVisible,
     tool,
-    marqueeMode,
     setTool,
-    sceneTreeCommands.clipboard,
     selectedIds,
     setSelectedIds,
     renameEntity,
@@ -1538,6 +1556,28 @@ export function useComposeEditorController({
     componentStore,
     requestCreateComponent,
   ])
+
+  // 默认 Stage 元素直接构造而不是回调调用一次：在渲染期调用 useCallback 会被 React 规则
+  // 判定为渲染期读 ref。带覆盖的调用才走 renderStage。
+  const stageElement = useMemo(() => (
+    <ViewportBoundStage
+      stageProps={stageProps}
+      store={viewportStore}
+      surfaceSize={surfaceSize}
+    />
+  ), [stageProps, viewportStore, surfaceSize])
+
+  const renderStage = useCallback((overrides?: ComposeEditorStageOverrides) => (
+    overrides
+      ? (
+          <ViewportBoundStage
+            stageProps={composeEditorStageProps(stageProps, overrides)}
+            store={viewportStore}
+            surfaceSize={surfaceSize}
+          />
+        )
+      : stageElement
+  ), [stageElement, stageProps, viewportStore, surfaceSize])
 
   const fitBounds = useCallback((ids: readonly string[]) => {
     if (!surfaceSize || layoutState.status !== 'ready') return
@@ -1874,13 +1914,8 @@ export function useComposeEditorController({
         registry={registry}
       />
     ),
-    stage: (
-      <ViewportBoundStage
-        stageProps={stageProps}
-        store={viewportStore}
-        surfaceSize={surfaceSize}
-      />
-    ),
+    stage: stageElement,
+    renderStage,
     inspectorPanel,
     instanceInnerSelection,
     instanceRootSelection,

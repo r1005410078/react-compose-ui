@@ -199,7 +199,7 @@ vi.mock('dockview-react', async () => {
 })
 
 import { ComposeEditor } from '../index'
-import type { ComposeEditorController } from '../index'
+import type { ComposeEditorController, ComposeEditorStageOverrides } from '../index'
 import { getRequiredEditorMessage } from '../editor-i18n'
 import { createDefaultComposeEditorPreferences } from '../editor-preferences'
 
@@ -327,6 +327,10 @@ describe('ComposeEditor', () => {
     const controller = {
       sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
       stage: <StageProbe />,
+      // 桩如实消费覆盖：resolver 现在经 services 送达，断言仍是「Stage 拿到了 resolver」。
+      renderStage: (overrides?: ComposeEditorStageOverrides) => (
+        <StageProbe assetResolver={overrides?.services?.assetResolver} />
+      ),
       componentLibraryPanel: null,
       inspectorPanel: null,
       commandPanel: null,
@@ -438,6 +442,7 @@ describe('ComposeEditor', () => {
       },
       componentLibraryPanel: <div>Controller palette</div>,
       stage: <div>Controller stage</div>,
+      renderStage: () => <div>Controller stage</div>,
       inspectorPanel: <div>Controller inspector</div>,
       commandPanel: <div>Controller command</div>,
       stageToolbar: <div>Controller toolbar</div>,
@@ -463,6 +468,7 @@ describe('ComposeEditor', () => {
       sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
       componentLibraryPanel: null,
       stage: null,
+      renderStage: () => null,
       inspectorPanel: (
         <ComposePaintPicker
           label="背景填充"
@@ -549,6 +555,7 @@ describe('ComposeEditor', () => {
       sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
       componentLibraryPanel: null,
       stage: null,
+      renderStage: () => null,
       inspectorPanel: (
         <ComposePaintPicker
           label="背景填充"
@@ -639,6 +646,7 @@ describe('ComposeEditor', () => {
       sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
       componentLibraryPanel: null,
       stage: null,
+      renderStage: () => null,
       inspectorPanel: (
         <ComposePaintPicker
           label="背景填充"
@@ -707,6 +715,7 @@ describe('ComposeEditor', () => {
       sceneTreeProps: { nodes: [], selectedIds: [], expandedIds: [] },
       componentLibraryPanel: null,
       stage: null,
+      renderStage: () => null,
       inspectorPanel: (
         <ComposePaintPicker
           label="背景填充"
@@ -759,6 +768,7 @@ describe('ComposeEditor', () => {
       },
       componentLibraryPanel: null,
       stage: <div>Controller stage</div>,
+      renderStage: () => <div>Controller stage</div>,
       inspectorPanel: null,
       commandPanel: null,
       stageToolbar: null,

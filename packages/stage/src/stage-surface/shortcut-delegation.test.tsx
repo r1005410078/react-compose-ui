@@ -81,14 +81,13 @@ function renderStage(options: {
   }
   render(
     <ComposeStage
-      dispatch={dispatch}
       document={value}
       layoutSnapshot={snapshot}
       onSelectedIdsChange={vi.fn()}
       onShortcutAction={options.onShortcutAction as never}
       onToolChange={options.onToolChange}
       onViewportChange={vi.fn()}
-      registry={registry}
+      services={{ dispatch, registry }}
       selectedIds={options.selectedIds ?? ['a', 'b']}
       shortcuts={options.shortcuts}
       tool="select"

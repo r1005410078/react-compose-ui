@@ -169,6 +169,71 @@ export interface ComposeStageLayoutRuntime {
 }
 
 /**
+ * 宿主拥有的能力端口集合。
+ *
+ * @remarks
+ * Stage MUST 按字段消费本对象，MUST NOT 以它的引用作为场景子树或 measurement adapter 的
+ * 缓存键——因此宿主重新构造 services 不会重建场景。宿主仍应在组合根记忆化，避免逐帧分配。
+ *
+ * 与 {@link ComposeStagePolicy} 分开是因为二者生命周期不同：端口跟随宿主能力，策略随宿主
+ * 模式切换而变。合并后每次模式切换都会牵动端口，反过来也一样。
+ *
+ * @public
+ */
+export interface ComposeStageServices {
+  readonly dispatch: ComposeStageDispatch
+  readonly registry: ComposeEntityRegistry
+  /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
+  readonly assetResolver?: ComposeAssetResolver
+  /**
+   * 页面型物料使用的文档加载端口。
+   *
+   * @remarks
+   * Stage 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
+   */
+  readonly pageLoader?: ComposePageDocumentLoader
+  /** 透传给嵌套 Page Slot 的模块 Loader。 */
+  readonly scriptModuleLoader?: ComposeScriptModuleLoader
+  /** Controller 拥有的同会话 Runtime；Stage 用它挂接并卸载 Registry measurement adapter。 */
+  readonly layoutRuntime?: ComposeStageLayoutRuntime
+  /**
+   * 宿主持有的会话剪贴板快照。
+   *
+   * @remarks
+   * 省略时 Stage 使用内建内存剪贴板。Editor 传入共享快照，以便菜单根据场景树复制结果
+   * 计算粘贴可用性；写入仍由 `onShortcutAction` 或 `onClipboardChange` 完成。
+   */
+  readonly clipboard?: ComposeStageClipboard | null
+  /** 内建复制/剪切/粘贴写入剪贴板时通知宿主；省略且未提供 clipboard 时写入内部状态。 */
+  readonly onClipboardChange?: (clipboard: ComposeStageClipboard | null) => void
+}
+
+/**
+ * 宿主拥有事实来源、Stage 只消费的开关集合。
+ *
+ * @remarks
+ * Stage MUST NOT 为其中任何一项持有事实来源或提供切换 UI，也不感知宿主启用它们的理由
+ * （例如编辑器的动画模式）。宿主模式以组装一份 policy 表达，而不是逐项追加布尔 prop。
+ *
+ * @public
+ */
+export interface ComposeStagePolicy {
+  /**
+   * 框选命中判定模式；`select` 与 `marquee` 两个入口共用同一个值。
+   *
+   * @defaultValue 'intersect'
+   */
+  readonly marqueeMode?: ComposeStageMarqueeMode
+  /**
+   * 宿主级「锁定原父级」：为 true 时画布 move 手势不产生跨父级 reparent 落点高亮与
+   * 结构命令，同容器重排照常；缺省时行为与既有一致。
+   */
+  readonly lockGestureParent?: boolean
+  /** 是否显示会话级网格；不会修改文档中的网格吸附设置。 @defaultValue true */
+  readonly gridVisible?: boolean
+}
+
+/**
  * 受控无限 Stage 属性。
  *
  * @public
@@ -187,57 +252,17 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly layoutPreviewSnapshot?: ComposeLayoutSnapshot
   /** Layout Runtime 失败时显示的可读错误。 */
   readonly layoutError?: string
-  /** Controller 拥有的同会话 Runtime；Stage 用它挂接并卸载 Registry measurement adapter。 */
-  readonly layoutRuntime?: ComposeStageLayoutRuntime
-  readonly registry: ComposeEntityRegistry
-  /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
-  readonly assetResolver?: ComposeAssetResolver
-  /**
-   * 页面型物料使用的文档加载端口。
-   *
-   * @remarks
-   * Stage 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
-   */
-  readonly pageLoader?: ComposePageDocumentLoader
   /** 当前页面实例的 setup 返回作用域；Stage 只消费，不加载脚本。 */
   readonly scriptScope?: ComposePageScriptScope
-  /** 透传给嵌套 Page Slot 的模块 Loader。 */
-  readonly scriptModuleLoader?: ComposeScriptModuleLoader
-  readonly dispatch: ComposeStageDispatch
+  /** 宿主拥有的能力端口；引用 MUST 在会话内保持稳定。 */
+  readonly services: ComposeStageServices
+  /** 宿主拥有事实来源、Stage 只消费的开关；省略时各项取自身缺省值。 */
+  readonly policy?: ComposeStagePolicy
   readonly viewport: StageViewport
   readonly onViewportChange: (viewport: StageViewport) => void
-  /** 是否显示会话级网格；不会修改文档中的网格吸附设置。 @defaultValue true */
-  readonly gridVisible?: boolean
   readonly tool: ComposeStageTool
   /** 请求切换选择或平移工具；省略时对应快捷键不改变工具。 */
   readonly onToolChange?: (tool: ComposeStageTool) => void
-  /**
-   * 框选命中判定模式；`select` 与 `marquee` 两个入口共用同一个值。
-   *
-   * @remarks
-   * Stage 只消费该值，模式的事实来源由宿主持有——Stage 自身没有切换模式的 UI。
-   * @defaultValue 'intersect'
-   */
-  readonly marqueeMode?: ComposeStageMarqueeMode
-  /**
-   * 宿主级「锁定原父级」：为 true 时画布 move 手势不产生跨父级 reparent 落点高亮与
-   * 结构命令，同容器重排照常；缺省时行为与既有一致。
-   *
-   * @remarks
-   * Stage 不感知宿主启用锁定的理由（如编辑器的动画模式），只把布尔原样传入交互
-   * Controller 的 context。
-   */
-  readonly lockGestureParent?: boolean
-  /**
-   * 宿主持有的会话剪贴板快照。
-   *
-   * @remarks
-   * 省略时 Stage 使用内建内存剪贴板。Editor 传入共享快照，以便菜单根据场景树复制结果
-   * 计算粘贴可用性；写入仍由 `onShortcutAction` 或 `onClipboardChange` 完成。
-   */
-  readonly clipboard?: ComposeStageClipboard | null
-  /** 内建复制/剪切/粘贴写入剪贴板时通知宿主；省略且未提供 clipboard 时写入内部状态。 */
-  readonly onClipboardChange?: (clipboard: ComposeStageClipboard | null) => void
   /** 覆盖 Stage 默认动作键位；动作空数组表示禁用。 */
   readonly shortcuts?: ComposeStageShortcuts
   /**
