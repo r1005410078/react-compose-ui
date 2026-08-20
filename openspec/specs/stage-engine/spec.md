@@ -141,6 +141,13 @@ Hierarchy 命中，React adapter MUST 使用 Registry 创建 Entity seed。
 Move、Resize 与 Rotate MUST 查询 Transform、Visibility、Lock 和 TransformConstraints。缺失约束
 时保持当前自由变换；存在约束时 MUST 限制操作、Resize 轴、宽高比和尺寸区间。
 
+变换目标的解析与提交规划 MUST 由不产生副作用的纯函数承担：前者从文档、场景索引、变换类型
+与可选手柄解析出可变换目标与选区 bounds，无可变换目标时返回空结果而不是抛错；后者从已完成
+的手势规划出至多一条命令。两者 MUST NOT 创建手势、发布快照或直接产生 surface effect，
+使这些判定可以脱离交互会话单独测试。
+
+调用方 MUST 传入同一求解周期的文档与场景索引。
+
 #### Scenario: 使用全部 Resize 模式
 
 - **WHEN** 选区分别配置 free、preserve-aspect、horizontal、vertical 和 none
@@ -151,6 +158,19 @@ Move、Resize 与 Rotate MUST 查询 Transform、Visibility、Lock 和 Transform
 
 - **WHEN** Entity 不可见、锁定或禁止目标变换
 - **THEN** Engine 不开始对应手势且不产生命令 effect
+
+#### Scenario: 目标解析可脱离会话调用
+
+- **WHEN** 以文档、场景索引、变换类型与手柄调用目标解析
+- **THEN** 得到按约束过滤后的目标与选区 bounds，且没有任何手势或快照副作用
+- **AND** 没有可变换目标时得到空结果
+
+#### Scenario: 提交规划可脱离会话调用
+
+- **WHEN** 以一个已完成的 move、resize 或 rotate 手势调用提交规划
+- **THEN** 得到至多一条命令：move 排除 Flow 目标，resize 只改被拖动的轴，
+  rotate 的位置与尺寸取持久值
+- **AND** 没有可提交的更新时得到空结果
 
 ### Requirement: 无 DOM Paint 编辑与图层采样会话
 
@@ -166,11 +186,25 @@ StageInteractionController MUST 通过普通数据 context、event、snapshot �
 
 Engine MUST 命中最深、最上层、可见且未被裁剪排除的 Entity。普通采样返回点击局部点的 Solid/Gradient 颜色；Alt/Option 采样返回完整 backgroundPaint。无可求值 Paint 的 Entity 不得产生文档命令。
 
+取色 MUST 由独立交互插件承担，其接管条件是宿主已启动采样，**与命中类型无关**——采样期间画布上
+任何位置按下都是一次采样。采样几何计算 MUST 是接收文档与场景索引的纯函数，不依赖会话闭包。
+采样目标变化时会话 MUST 结束。
+
 #### Scenario: 采样被裁剪层与完整 Paint
 
 - **WHEN** 用户在 Stage sample mode 点击被裁剪排除的层，或 Alt 点击可见 Gradient layer
 - **THEN** 前者不会被采样，后者返回完整结构化 Paint
 - **AND** 选择、viewport 和普通移动手势不改变
+
+#### Scenario: 采样期间任何命中都触发采样
+
+- **WHEN** 采样进行中用户在画布 chrome 或任意实体上按下
+- **THEN** 本次按下作为采样处理，不落到该命中原本的手势
+
+#### Scenario: 采样目标变化结束会话
+
+- **WHEN** 采样会话进行中宿主把采样目标换成另一个 Entity 或另一个字段
+- **THEN** 会话结束且不产生指向原目标的命令
 
 ### Requirement: 无 DOM 文字编辑会话
 
@@ -605,6 +639,11 @@ Arbiter MUST 在调用 `commit` 前，先以 pointerup 的点与修饰键调用�
 MUST 至多规划一个命令或 batch，`cancel` MUST 丢弃全部预览。
 
 插件 MUST NOT 自行组装或发布 snapshot，MUST 经内核统一的发布路径，使派生字段不缺失。
+内核 MUST 向插件提供当前快照的只读访问与保留 `temporaryPan` 的空闲快照工厂，使插件不必
+各自复制「哪些内核状态跨会话存活」这条规则。
+
+Arbiter MUST 暴露活动会话由哪个插件创建。内核在处理非指针事件时 MUST 依据该插件身份判定，
+MUST NOT 依据会话自报的手势类型——手势分类属于插件，不得回流到内核。
 
 #### Scenario: 按优先级接管
 
@@ -627,7 +666,98 @@ MUST 至多规划一个命令或 batch，`cancel` MUST 丢弃全部预览。
 #### Scenario: 单体插件保持既有行为
 
 - **WHEN** 内核只注册包装既有实现的单个插件
-- **THEN** pan、marquee、move、resize、segment-resize、rotate、guide、paint、path、draw
+- **THEN** marquee、move、resize、segment-resize、rotate、guide、paint、path、draw
   与外部拖入的行为与重构前逐项一致
 - **AND** snapshot、effect 与 surface port 协议不变
+
+#### Scenario: 插件读取内核快照
+
+- **WHEN** 插件在 claim 中读取当前快照以判定是否接管
+- **THEN** 读到的是判定当刻的值而非注册时的快照
+- **AND** 插件据此发布的快照以内核提供的空闲快照为基线，`temporaryPan` 不被抹掉
+
+#### Scenario: 依据活动插件身份处理非指针事件
+
+- **WHEN** 内核在非指针事件上需要区分当前会话的种类
+- **THEN** 依据 Arbiter 暴露的活动插件 id 判定
+- **AND** 无活动会话时该 id 为空
+
+### Requirement: 平移手势插件
+
+平移 MUST 由独立的交互插件实现，并按 `STAGE_GESTURE_PRIORITY` 声明的优先级排在单体插件之前。
+该插件 MUST NOT 读取文档或场景索引——平移只改变视口，不引用任何 Entity。
+
+插件 MUST 在 `tool` 为 pan、处于临时平移状态、或按下的是中键时接管。会话 MUST 在每次指针
+移动上发出视口变更，其位移 MUST 以按下时的视口与按下点为基线。会话结束 MUST NOT 产生任何
+文档命令。
+
+单体插件 MUST NOT 再保留平移分支：两处判定并存时，行为将依赖优先级顺序而非显式实现，
+优先级写错会静默回退且没有可见失败。
+
+#### Scenario: 三种入口都接管平移
+
+- **WHEN** 用户在 pan 工具下按下、在按住临时平移键时按下、或按下中键
+- **THEN** 平移插件接管本次按下并捕获指针
+- **AND** 后续移动按「按下时视口 + 指针位移」改变视口
+
+#### Scenario: 平移不产生文档命令
+
+- **WHEN** 用户完成一次平移并松手
+- **THEN** 不产生任何命令或 batch
+- **AND** 快照回到空闲且指针捕获被释放
+
+#### Scenario: 临时平移结束时取消会话
+
+- **WHEN** 用户在平移进行中松开临时平移键
+- **THEN** 平移会话被取消
+- **AND** 临时平移标志随之清除
+
+### Requirement: 会话自检上下文兼容性
+
+交互会话 MUST 能在受控上下文变化后自行判断是否仍然成立，内核 MUST NOT 通过枚举手势种类
+做这件事。判定为不成立时内核 MUST 取消该会话。未声明判定的会话 MUST 视为始终成立——
+不引用任何 Entity 的会话（平移只改视口、绘制只由世界坐标定义）不得被并发文档变化打断。
+
+会话的 `cancel` MUST 接收插件上下文：会话在接管与推进过程中发布过快照、捕获过指针，
+取消时 MUST 由它自己还原，内核不知道某个会话发布过什么。
+
+#### Scenario: 空间手势被并发变化中止
+
+- **WHEN** 旋转进行中，选区被别处的编辑改成另一批目标
+- **THEN** 旋转会话被取消，快照回到空闲且指针捕获被释放
+- **AND** 不产生任何命令
+
+#### Scenario: 工具切换中止空间手势
+
+- **WHEN** 旋转进行中工具切换为 select
+- **THEN** 旋转会话被取消
+
+#### Scenario: 无 Entity 引用的会话不受影响
+
+- **WHEN** 会话未声明兼容性判定且上下文发生变化
+- **THEN** 会话保持进行
+
+### Requirement: 旋转工具插件
+
+旋转 MUST 由独立交互插件实现，并按 `STAGE_GESTURE_PRIORITY` 排在绘制、框选与实体选择之前——
+那些分支在工具非 select 时会提前退出，若排在旋转之前，空白按下会落到框选。
+
+插件 MUST 在实体命中时先请求选区变更再开始旋转；MUST 在标尺、辅助线、Paint 柄与路径柄命中时
+不接管，把本次按下交给后续插件；其余命中 MUST 对当前选区开始旋转，没有可旋转目标时
+MUST 消费本次按下而不落到框选。
+
+#### Scenario: 实体命中改选区并开始旋转
+
+- **WHEN** 旋转工具下在一个未选中的可旋转实体上按下
+- **THEN** 请求把选区改为该实体并开始旋转
+
+#### Scenario: 画布 chrome 命中不被接管
+
+- **WHEN** 旋转工具下在标尺上按下
+- **THEN** 旋转插件不接管，标尺保留拖出辅助线的原语义
+
+#### Scenario: 无选区时不落到框选
+
+- **WHEN** 旋转工具下没有选区且在空白处按下
+- **THEN** 本次按下被消费，不开始框选也不开始旋转
 

@@ -158,6 +158,51 @@ describe('OpenSpec: stage-engine / 手势预览与原子提交 / 并发变化中
 
     expect(controller.getSnapshot().phase).toBe('idle')
   })
+
+  it('并发文档变化中止旋转且不提交命令', () => {
+    const { controller, effects, update } = rotateSetup(['a'])
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 40, y: 20 },
+      hit: { kind: 'entity', entityId: 'a' },
+      modifiers: MODIFIERS,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 90, y: 60 }, modifiers: MODIFIERS })
+    expect(controller.getSnapshot().phase).toBe('rotate')
+
+    // 别处的编辑换掉了 document：选区与 top-level 目标都没变，但旋转按下当刻算好的
+    // center / bounds / baseRotation 可能已经过期。
+    const next = document([entity('a', { x: 0, y: 0, width: 100, height: 50 }), entity('b', { x: 300 })])
+    update({ document: next, layoutSnapshot: layoutSnapshot(next) })
+
+    expect(controller.getSnapshot().phase).toBe('idle')
+
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 90, y: 60 }, modifiers: MODIFIERS })
+    expect(effects.filter((effect) => effect.type === 'command.dispatch')).toHaveLength(0)
+  })
+
+  it('并发布局重排中止旋转', () => {
+    const { controller, update } = rotateSetup(['a'])
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 40, y: 20 },
+      hit: { kind: 'entity', entityId: 'a' },
+      modifiers: MODIFIERS,
+    })
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 90, y: 60 }, modifiers: MODIFIERS })
+
+    // 文档不变、只有布局 revision 前进：Auto Layout 重排同样会挪动世界坐标。
+    const solved = layoutSnapshot(value)
+    update({ layoutSnapshot: { ...solved, revision: solved.revision + 1 } })
+
+    expect(controller.getSnapshot().phase).toBe('idle')
+  })
 })
 
 describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / revalidate', () => {

@@ -12,6 +12,7 @@ import { resolveTransformTargets } from '../transform-planning'
 import { planTransformCommit } from '../transform-planning'
 import { transformedSelection } from '../transform-preview'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
+import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type {
   StageClaimResult,
   StageInteractionPlugin,
@@ -43,8 +44,9 @@ function createRotateSession(options: {
   readonly bounds: StageRect
   readonly center: StagePoint
   readonly baseRotation: number
+  readonly baselineHolds: StageSpatialBaselineCheck
 }): StageSession {
-  const { pointerId, viewport, ids, startWorld, center, baseRotation } = options
+  const { pointerId, viewport, ids, startWorld, center, baseRotation, baselineHolds } = options
   let transforms: Readonly<Record<string, ReturnType<typeof transformedSelection>[string]>> = {}
 
   return {
@@ -97,11 +99,12 @@ function createRotateSession(options: {
       ctx.apply([{ type: 'pointer.release', pointerId }])
     },
     isCompatibleWith(next, nextIndex) {
-      // 旋转引用具体 Entity 的冻结几何：文档或布局一变、工具一换、选区不再是同一批目标，
-      // 继续沿用就会提交出错误的变换。
+      // 旋转引用具体 Entity 的冻结几何（center / bounds / baseRotation 都是按下当刻算好的）：
+      // 文档或布局一变、工具一换就必须中止，否则提交的是绕着过期中心算出来的角度。
+      if (!baselineHolds(next)) return false
+      // 选区不再是同一批目标同样不成立——那已经是另一次旋转的对象。
       const sameTargets = nextIndex.topLevelSelection(next.selectedIds)
-      return next.tool === 'rotate'
-        && ids.length === sameTargets.length
+      return ids.length === sameTargets.length
         && ids.every((id, i) => sameTargets[i] === id)
     },
   }
@@ -155,6 +158,7 @@ export function createStageRotatePlugin(): StageInteractionPlugin {
           bounds,
           center,
           baseRotation,
+          baselineHolds: captureStageSpatialBaseline(context),
         })
       }
 

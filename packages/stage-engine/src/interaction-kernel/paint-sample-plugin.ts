@@ -129,6 +129,10 @@ function createPaintSampleSession(
     },
     isCompatibleWith(next) {
       // 采样目标换了（宿主切到另一个 Entity 或另一个字段）本次会话就不再成立。
+      //
+      // 这里**刻意**不加空间基线（见 spatial-baseline.ts）：取色不冻结任何几何，每一帧都从
+      // ctx 当前的 document 与 index 重新求值，因此并发文档变化只会让下一次采样读到新文档，
+      // 不会产生错误结果。绑上文档恒等只会让别处一次无关编辑白白打断取色。
       return next.paintSampling?.entityId === target.entityId
         && next.paintSampling?.field === target.field
     },

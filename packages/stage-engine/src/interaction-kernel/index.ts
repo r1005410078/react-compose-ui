@@ -10,6 +10,11 @@ export {
   createStagePluginRegistry,
   type StagePluginRegistry,
 } from './plugin-registry'
+export { STAGE_EXTRACTED_PLUGIN_FACTORIES } from './extracted-plugins'
+export {
+  captureStageSpatialBaseline,
+  type StageSpatialBaselineCheck,
+} from './spatial-baseline'
 export {
   createStageSessionArbiter,
   type StageArbiterBeginResult,
