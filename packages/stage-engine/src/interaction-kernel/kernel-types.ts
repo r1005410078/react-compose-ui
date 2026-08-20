@@ -28,10 +28,27 @@ export interface StagePluginContext {
   readonly context: StageInteractionContext
   /** 与 `context.document` 对应的场景索引。 */
   readonly index: StageSceneIndex
+  /**
+   * 当前快照的只读视图。
+   *
+   * @remarks
+   * 读的必须是访问当刻的值，而不是插件注册或会话创建时捕获的那一份：部分内核状态跨会话
+   * 存活并在会话之外变化（例如按住空格期间的 `temporaryPan`），claim 依赖它做判定。
+   */
+  readonly snapshot: StageInteractionSnapshot
   /** 向 surface 发出效果；空数组是合法的 no-op。 */
   apply(effects: readonly StageInteractionEffect[]): void
   /** 发布快照，内核负责补齐派生字段并通知订阅者。 */
   publish(snapshot: StageInteractionSnapshot): void
+  /**
+   * 保留跨会话内核状态的空闲快照，作为插件发布时的基线。
+   *
+   * @remarks
+   * 由内核提供而不是导出一个裸函数：「空闲」意味着哪些字段归零、哪些字段必须留下
+   * （目前是 `temporaryPan`）是内核的规则，让每个插件自行拼装等于把这条规则复制 N 份，
+   * 将来新增一个跨会话字段就要逐个插件去改。
+   */
+  idleSnapshot(): StageInteractionSnapshot
 }
 
 /**

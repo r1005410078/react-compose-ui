@@ -73,9 +73,11 @@ import {
 } from './geometry'
 // 交互内核只做类型级依赖回指（`import type`），因此这里的相互引用不产生运行时循环。
 import {
+  createStagePanPlugin,
   createStagePluginRegistry,
   createStageSessionArbiter,
   STAGE_LEGACY_MONOLITH_PRIORITY,
+  STAGE_PAN_PLUGIN_ID,
 } from './interaction-kernel'
 import type {
   StageInteractionPlugin,
@@ -629,12 +631,6 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
 }
 
 type Gesture =
-  | {
-      readonly type: 'pan'
-      readonly pointerId: number
-      readonly startPoint: StagePoint
-      readonly startViewport: StageViewport
-    }
   | {
       readonly type: 'marquee'
       readonly pointerId: number
@@ -1233,7 +1229,9 @@ export function createStageInteractionController(): StageInteractionController {
     priority: STAGE_LEGACY_MONOLITH_PRIORITY,
     claim: (event, pluginContext) => legacyClaim(event, pluginContext),
   }
-  const arbiter = createStageSessionArbiter(createStagePluginRegistry([legacyPlugin]))
+  const arbiter = createStageSessionArbiter(
+    createStagePluginRegistry([createStagePanPlugin(), legacyPlugin]),
+  )
   /** 辅助线读写与 Frame 相关动作共用的活动 Frame 求解。 */
   const targetFrameId = (value: StageInteractionContext) =>
     resolveTargetFrameId(value.document, value.selectedIds, value.activeFrameId)
@@ -1424,17 +1422,6 @@ export function createStageInteractionController(): StageInteractionController {
     modifiers: StageInteractionModifiers,
   ) => {
     if (!gesture || !context || !index) return
-    if (gesture.type === 'pan') {
-      apply([{
-        type: 'viewport.change',
-        viewport: {
-          ...gesture.startViewport,
-          x: gesture.startViewport.x + point.x - gesture.startPoint.x,
-          y: gesture.startViewport.y + point.y - gesture.startPoint.y,
-        },
-      }])
-      return
-    }
     // 变换会话使用 pointerdown 时的 viewport；宿主布局重测或受控 viewport 回传
     // 不得改变同一次 Pointer 手势的坐标基线。
     const world = worldPoint(point, gesture.viewport)
@@ -1742,21 +1729,6 @@ export function createStageInteractionController(): StageInteractionController {
       apply([{ type: 'text-editing.exit' }])
       // 退出后本次按下继续按普通交互处理：点空白即取消选择，点别的实体即选中它。
     }
-    const startPan = context.tool === 'pan'
-      || snapshot.temporaryPan
-      || event.button === 1
-    if (startPan) {
-      gesture = {
-        type: 'pan',
-        pointerId: event.pointerId,
-        startPoint: event.point,
-        startViewport: context.viewport,
-      }
-      publish({ ...initialSnapshot(snapshot.temporaryPan), phase: 'pan' })
-      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
-      return
-    }
-
     const startTransform = (
       type: 'move' | 'resize' | 'rotate',
       ids: readonly string[],
@@ -2649,8 +2621,13 @@ export function createStageInteractionController(): StageInteractionController {
       if (!index) throw new Error('StageInteractionController has no scene index')
       return index
     },
+    // 取值器而非快照式捕获：temporaryPan 在会话之外变化，claim 必须读到判定当刻的值。
+    get snapshot() {
+      return snapshot
+    },
     apply,
     publish,
+    idleSnapshot: () => initialSnapshot(snapshot.temporaryPan),
   }
 
   const externalDrop = (
@@ -2864,7 +2841,7 @@ export function createStageInteractionController(): StageInteractionController {
           arbiter.update(event, pluginContext)
           return
         }
-        if (gesture?.type === 'pan') arbiter.cancel()
+        if (arbiter.activePluginId() === STAGE_PAN_PLUGIN_ID) arbiter.cancel()
         if (snapshot.temporaryPan) publish({ ...snapshot, temporaryPan: false })
         return
       }

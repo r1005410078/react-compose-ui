@@ -16,6 +16,10 @@ export {
   type StageSessionArbiter,
 } from './session-arbiter'
 export {
+  createStagePanPlugin,
+  STAGE_PAN_PLUGIN_ID,
+} from './pan-plugin'
+export {
   STAGE_GESTURE_PRIORITY,
   STAGE_LEGACY_MONOLITH_PRIORITY,
   type StageGesturePriorityEntry,
