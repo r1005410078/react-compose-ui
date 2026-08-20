@@ -33,8 +33,12 @@ export { createDefaultCanvasSettings } from './canvas-settings'
 export {
   COMPOSE_DEFAULT_FRAME_SIZE,
   COMPOSE_DEFAULT_SCENE_APPEARANCE,
+  COMPOSE_SCENE_SIZE_PRESETS,
   createComposeFrame,
   createComposeFrameEntity,
+  findComposeSceneSizePreset,
+  formatComposeSceneSize,
+  formatComposeSceneSizePresetLabel,
   getComposeFrame,
   getComposeFrameGuides,
   isComposeFrameEntity,
@@ -43,6 +47,7 @@ export {
   promoteComposeEntityToFrame,
   resolveOwningFrameId,
 } from './frame'
+export type { ComposeSceneSizePreset } from './frame'
 export {
   COMPOSE_GROUP_PRESET_ID,
   createComposeGroupEntitySeed,

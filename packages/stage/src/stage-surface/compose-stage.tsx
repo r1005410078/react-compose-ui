@@ -65,6 +65,7 @@ import {
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
+  type ComposeSize,
   type EditorCommand,
   type JsonValue,
 } from '@compose-ui/core'
@@ -133,6 +134,7 @@ import {
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
 import { ComposeContainerLabelLayer } from '../container-label-layer'
+import { fitViewportToRect } from './viewport-fit'
 import {
   boundsCenter,
   entityFromDrawingSeed,
@@ -793,6 +795,7 @@ function ComposeStageReady({
   onEditablePathChange,
   onEditablePathVertexToggle,
   onSurfaceSizeChange,
+  autoFitActiveFrame = true,
   interactionController,
   idFactory = defaultId,
   id,
@@ -870,6 +873,13 @@ function ComposeStageReady({
   const snapGuides = interaction.snapGuides
   const guidePreview = interaction.guidePreview
   const [surfaceSize, setSurfaceSize] = useState({ width: 900, height: 600 })
+  /*
+   * surface 是否已经量到过真实尺寸。首次适配必须等这一刻：在此之前 surfaceSize 还是那份
+   * 兜底的 900×600，按它算出来的缩放和真实可视区域没有关系，用户会看到画面先跳一次再定住。
+   */
+  const [surfaceMeasured, setSurfaceMeasured] = useState(false)
+  /** 首次适配只发生一次；此后文档编辑、选择变化与窗口缩放都不再自动改视口。 */
+  const autoFitDoneRef = useRef(false)
   // 会话本身进出很少，用 state 驱动渲染；编辑中的文本每次按键都变，只放在 ref 里——
   // 放进 state 会让整棵 Scene 每敲一个字符重建，而文本本就由 contentEditable 的 DOM 拥有。
   // ref 里的 `text` 为 null 表示「进入编辑后还没改过」，与「改成了空串」是两件事。
@@ -1263,6 +1273,7 @@ function ComposeStageReady({
       setSurfaceSize((current) => current.width === next.width && current.height === next.height
         ? current
         : next)
+      setSurfaceMeasured(true)
       onSurfaceSizeChange?.(next)
     }
     measure()
@@ -1271,6 +1282,38 @@ function ComposeStageReady({
     observer.observe(surface)
     return () => observer.disconnect()
   }, [onSurfaceSizeChange])
+
+  /*
+   * 首次布局就绪后把视口适配到激活场景。
+   *
+   * 固定初始视口在任何真实场景尺寸下都不合适：1280×720 的场景在 100% 缩放下就已经超出
+   * 可视区域，用户进来第一件事永远是手动缩放。适配一次之后就交还给受控视口——依赖列表
+   * 里的 document/layoutSnapshot 每次编辑都会变，真正拦住重复触发的是 ref 而不是依赖。
+   */
+  useEffect(() => {
+    if (!autoFitActiveFrame || autoFitDoneRef.current || !surfaceMeasured) return
+    // 激活场景缺省或已失效时回退第一块根 Frame，与 resolveTargetFrameId 的回退一致。
+    const frameId = activeFrameId && document.entities[activeFrameId]
+      ? activeFrameId
+      : document.rootIds[0]
+    if (!frameId || !document.entities[frameId]) return
+    const next = fitViewportToRect(
+      getEntityWorldBounds(document, layoutSnapshot, frameId),
+      surfaceSize,
+    )
+    // 求解宽高为 0 时不占用这次机会：下一次布局就绪还应该再试。
+    if (!next) return
+    autoFitDoneRef.current = true
+    onViewportChange(next)
+  }, [
+    activeFrameId,
+    autoFitActiveFrame,
+    document,
+    layoutSnapshot,
+    onViewportChange,
+    surfaceMeasured,
+    surfaceSize,
+  ])
 
   const clearPending = useCallback((generation?: number) => {
     if (
@@ -2284,6 +2327,42 @@ function ComposeStageReady({
     ?? expandScrollRange(null, bootstrapContentBounds(), visibleWorld)
   const scrollAxes = viewportToScrollAxes(viewport, surfaceSize, activeScrollRange)
 
+  /**
+   * 把视口适配到一个世界矩形。
+   *
+   * @remarks
+   * 键盘的「适配选择/适配容器」、场景尺寸提交后的适配与首次进入的激活场景适配共用它，
+   * 因此三条路径的留白与缩放钳制不可能各自漂移。目标无效时不发出任何视口变化。
+   */
+  const fitViewport = (target: StageRect | null) => {
+    const next = fitViewportToRect(target, surfaceSize)
+    if (next) onViewportChange(next)
+  }
+
+  /**
+   * 提交场景的新尺寸，并按新尺寸适配一次视口。
+   *
+   * @remarks
+   * 适配用的矩形是「当前世界原点 + 刚提交的尺寸」，而不是重新读布局快照：命令刚派发，
+   * 本帧的 `layoutSnapshot` 仍是旧尺寸，按它取景会先给用户一帧错误的缩放。改尺寸不会
+   * 移动场景原点，因此原点直接沿用当前快照是准确的。
+   */
+  const changeSceneSize = (entityId: string, size: ComposeSize) => {
+    const origin = getEntityWorldBounds(document, layoutSnapshot, entityId)
+    const result = dispatch({
+      id: idFactory(),
+      type: BUILTIN_COMMAND_TYPES.setFrameSize,
+      payload: { entityId, size: { width: size.width, height: size.height } },
+      meta: {
+        label: messages.setSceneSize,
+        source: 'stage',
+        targetIds: [entityId],
+      },
+    })
+    if (result.status === 'rejected') return
+    fitViewport({ x: origin.x, y: origin.y, width: size.width, height: size.height })
+  }
+
   const keyboardCommand = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     onKeyDown?.(event)
     if (event.defaultPrevented || event.nativeEvent.isComposing) return
@@ -2347,21 +2426,6 @@ function ComposeStageReady({
       onToolChange?.(toolAction[1])
       event.preventDefault()
       return
-    }
-    const fitViewport = (target: StageRect | null) => {
-      if (!target || target.width <= 0 || target.height <= 0) return
-      const zoom = Math.min(
-        8,
-        Math.max(
-          0.1,
-          Math.min(surfaceSize.width / target.width, surfaceSize.height / target.height) * 0.85,
-        ),
-      )
-      onViewportChange({
-        zoom,
-        x: (surfaceSize.width - target.width * zoom) / 2 - target.x * zoom,
-        y: (surfaceSize.height - target.height * zoom) / 2 - target.y * zoom,
-      })
     }
     if (actionMatches('stage.fitSelection')) {
       fitViewport(bounds)
@@ -2904,10 +2968,12 @@ function ComposeStageReady({
           sceneActiveLabel={messages.sceneActive}
           sceneInactiveLabel={messages.sceneInactive}
           scenePreviewLabel={messages.scenePreview}
+          sceneSizeLabel={messages.sceneSize}
           onLabelPointerDown={beginContainerLabel}
           onRename={onEntityRename}
           onSceneActivate={onSceneActivate}
           onScenePreview={onScenePreview}
+          onSceneSizeChange={changeSceneSize}
         />
         {assetDropStatus
           ? (

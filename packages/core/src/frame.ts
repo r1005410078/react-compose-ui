@@ -15,6 +15,75 @@ import type { ComposePaint } from './paint'
 export const COMPOSE_DEFAULT_FRAME_SIZE: ComposeSize = { width: 1280, height: 720 }
 
 /**
+ * 场景常见尺寸预设的单项。
+ *
+ * @public
+ */
+export interface ComposeSceneSizePreset {
+  /** 稳定标识，形如 `1920x1080`；用于下拉与单选的 value，不面向用户显示。 */
+  readonly id: string
+  /** 该分辨率的公认通名；没有通名时为空串。 */
+  readonly name: string
+  readonly size: ComposeSize
+}
+
+/**
+ * 场景常见尺寸预设。
+ *
+ * @remarks
+ * 编辑器有两个改场景尺寸的入口——画布标签上的尺寸胶囊与 Inspector 的场景分组——它们必须
+ * 列出同一组分辨率，因此预设住在 core 而不是任一 UI 包里：`stage` 与 `materials` 之间没有
+ * 依赖关系，各写一份必然漂移。
+ *
+ * 预设只是快捷入口，不参与文档校验：任何正有限尺寸都是合法的 `Frame.size`。
+ *
+ * @public
+ */
+export const COMPOSE_SCENE_SIZE_PRESETS: readonly ComposeSceneSizePreset[] = Object.freeze([
+  { id: '1280x720', name: 'HD', size: { width: 1280, height: 720 } },
+  { id: '1366x768', name: '', size: { width: 1366, height: 768 } },
+  { id: '1440x900', name: '', size: { width: 1440, height: 900 } },
+  { id: '1920x1080', name: 'Full HD', size: { width: 1920, height: 1080 } },
+  { id: '2560x1440', name: 'QHD', size: { width: 2560, height: 1440 } },
+  { id: '3840x2160', name: '4K UHD', size: { width: 3840, height: 2160 } },
+] satisfies readonly ComposeSceneSizePreset[])
+
+/**
+ * 按尺寸反查常见尺寸预设。
+ *
+ * @param size - 待匹配的尺寸。
+ * @returns 宽高都完全相等的预设；没有匹配时返回 `null`（即"自定义尺寸"）。
+ * @public
+ */
+export function findComposeSceneSizePreset(size: ComposeSize): ComposeSceneSizePreset | null {
+  return COMPOSE_SCENE_SIZE_PRESETS.find(
+    (preset) => preset.size.width === size.width && preset.size.height === size.height,
+  ) ?? null
+}
+
+/**
+ * 把尺寸格式化成画布与弹框共用的 `1920 × 1080`。
+ *
+ * @remarks
+ * 乘号用 U+00D7 而不是字母 x，且不带单位：宽高在所有 locale 下都是同一串数字，因此这里
+ * 不经过 i18n。
+ * @public
+ */
+export function formatComposeSceneSize(size: ComposeSize): string {
+  return `${size.width} × ${size.height}`
+}
+
+/**
+ * 把预设格式化成带通名的选项文案，形如 `1920 × 1080 (Full HD)`。
+ *
+ * @public
+ */
+export function formatComposeSceneSizePresetLabel(preset: ComposeSceneSizePreset): string {
+  const size = formatComposeSceneSize(preset.size)
+  return preset.name ? `${size} (${preset.name})` : size
+}
+
+/**
  * 新建场景使用的默认外观。
  *
  * @remarks

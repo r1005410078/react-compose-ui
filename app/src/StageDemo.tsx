@@ -450,6 +450,9 @@ export function StageDemoWorkspace() {
     nodeEditPort,
     pageLoader,
     componentStore,
+    // 演示宿主关掉首次自动适配的取向：视觉回归与端到端需要确定性取景，否则每个用例的
+    // 屏幕坐标都要跟着可视区域尺寸走。默认（不带该参数）仍是自动适配激活场景。
+    autoFitActiveFrame: !new URLSearchParams(window.location.search).has('no-auto-fit'),
     scriptScope: activePage?.scriptScope,
     onTransaction: recordTransaction,
   })

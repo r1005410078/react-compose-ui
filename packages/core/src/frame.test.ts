@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   COMPOSE_DEFAULT_SCENE_APPEARANCE,
+  COMPOSE_SCENE_SIZE_PRESETS,
   createComposeFrame,
+  findComposeSceneSizePreset,
+  formatComposeSceneSize,
+  formatComposeSceneSizePresetLabel,
   createComposeFrameEntity,
   getComposeFrame,
   getComposeFrameGuides,
@@ -173,5 +177,47 @@ describe('OpenSpec: compose-document / 场景默认外观', () => {
       ...COMPOSE_DEFAULT_SCENE_APPEARANCE,
       backgroundPaint: { kind: 'solid', color: '#101010' },
     })
+  })
+})
+
+describe('场景常见尺寸预设', () => {
+  it('列出六个桌面分辨率且 id 唯一', () => {
+    expect(COMPOSE_SCENE_SIZE_PRESETS.map((preset) => preset.size)).toEqual([
+      { width: 1280, height: 720 },
+      { width: 1366, height: 768 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+      { width: 2560, height: 1440 },
+      { width: 3840, height: 2160 },
+    ])
+    expect(new Set(COMPOSE_SCENE_SIZE_PRESETS.map((preset) => preset.id)).size)
+      .toBe(COMPOSE_SCENE_SIZE_PRESETS.length)
+  })
+
+  it('按尺寸反查命中预设', () => {
+    expect(findComposeSceneSizePreset({ width: 1920, height: 1080 })?.name).toBe('Full HD')
+  })
+
+  it('自定义尺寸没有匹配预设', () => {
+    expect(findComposeSceneSizePreset({ width: 1000, height: 800 })).toBeNull()
+    // 宽命中而高不命中不算匹配：预设是一整个分辨率，不是两个独立轴。
+    expect(findComposeSceneSizePreset({ width: 1920, height: 1000 })).toBeNull()
+  })
+
+  it('格式化尺寸与预设文案', () => {
+    expect(formatComposeSceneSize({ width: 1920, height: 1080 })).toBe('1920 × 1080')
+    expect(formatComposeSceneSizePresetLabel(COMPOSE_SCENE_SIZE_PRESETS[3]!))
+      .toBe('1920 × 1080 (Full HD)')
+    // 没有通名的分辨率不留下空括号。
+    expect(formatComposeSceneSizePresetLabel(COMPOSE_SCENE_SIZE_PRESETS[1]!))
+      .toBe('1366 × 768')
+  })
+
+  it('尺寸不匹配预设不影响文档校验', () => {
+    const document = documentFixture({
+      scene: frameEntity('scene', [], { width: 1000, height: 800 }),
+    })
+    expect(findComposeSceneSizePreset({ width: 1000, height: 800 })).toBeNull()
+    expect(validateComposeDocument(document).valid).toBe(true)
   })
 })

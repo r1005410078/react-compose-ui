@@ -39,7 +39,7 @@ async function createAnimationWithKeyframe(editor: Locator) {
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 选中另一块场景内的对象切换作用域', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
@@ -67,7 +67,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 选中另一块场景�
 
 test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景各自建动画并保存', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
@@ -121,7 +121,7 @@ test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景�
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 清空选择回退到激活场景', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
@@ -147,7 +147,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 清空选择回退到�
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不跨场景挂载', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()

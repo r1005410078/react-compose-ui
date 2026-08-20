@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, expandInspectorSection, openPageInspector } from './support/test-helpers'
 
 test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边距', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -325,7 +325,7 @@ test('回归：Page Slot / A → B → Home 冷加载不会被 StrictMode 取消
 
 
 test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完全一致', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
 
@@ -424,7 +424,7 @@ test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件�
 
 
 test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时预览', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })

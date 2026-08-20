@@ -41,6 +41,16 @@ const translations = {
     sceneInactive: (name: string) => `把 ${name} 设为激活场景`,
     scenePreview: (name: string) => `预览场景 ${name}`,
     setActiveScene: '设为激活场景',
+    sceneSize: (name: string) => `修改场景 ${name} 的尺寸`,
+    sceneSizeTitle: '场景尺寸',
+    sceneSizeDescription: (name: string) => `为场景「${name}」选择常见尺寸，或输入自定义宽高。`,
+    sceneSizeCommon: '常见尺寸',
+    sceneSizeCustom: '自定义尺寸',
+    sceneSizeWidth: '宽',
+    sceneSizeHeight: '高',
+    setSceneSize: '设置场景尺寸',
+    confirm: '确定',
+    cancel: '取消',
   },
   'en-US': {
     rulerOrigin: 'Ruler origin',
@@ -77,6 +87,17 @@ const translations = {
     sceneInactive: (name: string) => `Set ${name} as the active scene`,
     scenePreview: (name: string) => `Preview scene ${name}`,
     setActiveScene: 'Set as active scene',
+    sceneSize: (name: string) => `Change the size of scene ${name}`,
+    sceneSizeTitle: 'Scene size',
+    sceneSizeDescription: (name: string) =>
+      `Pick a common size for scene ${name}, or enter a custom width and height.`,
+    sceneSizeCommon: 'Common sizes',
+    sceneSizeCustom: 'Custom size',
+    sceneSizeWidth: 'Width',
+    sceneSizeHeight: 'Height',
+    setSceneSize: 'Set scene size',
+    confirm: 'Confirm',
+    cancel: 'Cancel',
   },
 } as const
 
@@ -155,5 +176,23 @@ export function getStageMessages(
       { name },
     ),
     setActiveScene: formatMessage('stage.setActiveScene', messages.setActiveScene),
+    sceneSize: (name: string) => formatMessage(
+      'stage.sceneSize',
+      messages.sceneSize(name),
+      { name },
+    ),
+    sceneSizeTitle: formatMessage('stage.sceneSizeTitle', messages.sceneSizeTitle),
+    sceneSizeDescription: (name: string) => formatMessage(
+      'stage.sceneSizeDescription',
+      messages.sceneSizeDescription(name),
+      { name },
+    ),
+    sceneSizeCommon: formatMessage('stage.sceneSizeCommon', messages.sceneSizeCommon),
+    sceneSizeCustom: formatMessage('stage.sceneSizeCustom', messages.sceneSizeCustom),
+    sceneSizeWidth: formatMessage('stage.sceneSizeWidth', messages.sceneSizeWidth),
+    sceneSizeHeight: formatMessage('stage.sceneSizeHeight', messages.sceneSizeHeight),
+    setSceneSize: formatMessage('stage.setSceneSize', messages.setSceneSize),
+    confirm: formatMessage('stage.confirm', messages.confirm),
+    cancel: formatMessage('stage.cancel', messages.cancel),
   }
 }

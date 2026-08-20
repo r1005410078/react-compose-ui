@@ -1,10 +1,12 @@
 import {
+  getComposeFrame,
   getComposeHierarchy,
   getComposeLock,
   getComposeVisibility,
   isComposeGroupEntity,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
+  type ComposeSize,
 } from '@compose-ui/core'
 import { getEntityWorldBounds, worldToScreen, type StageViewport } from '@compose-ui/stage-engine'
 
@@ -34,6 +36,14 @@ export interface ComposeContainerLabel {
    * 只有场景标签承载播放与激活标记；普通容器标签保持原样，以免给每个容器都挂上两个按钮。
    */
   readonly scene: boolean
+  /**
+   * 场景的创作尺寸；不是 Frame 时为 `null`。
+   *
+   * @remarks
+   * 取自 `Frame.size` 而不是求解出的 AABB：`Frame.size` 是尺寸的唯一事实来源，AABB 在
+   * 场景被旋转时会变大，标签上就会显示一个用户从没输入过的数字。
+   */
+  readonly size: ComposeSize | null
 }
 
 /**
@@ -87,6 +97,7 @@ export function resolveComposeContainerLabels(
       locked: getComposeLock(entity).locked,
       // 迭代范围就是 rootIds：v7 下这些直接成员全部是场景。
       scene: true,
+      size: getComposeFrame(entity)?.size ?? null,
     })
   }
   return labels
