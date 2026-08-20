@@ -18,6 +18,7 @@ import {
   collectComposeLayoutValidationIssues,
 } from './layout'
 import { isComposeColor, isValidComposePaint } from './paint'
+import { collectComposeInteractionValidationIssues } from './interaction'
 
 type Path = readonly (string | number)[]
 type UnknownRecord = Record<string, unknown>
@@ -790,6 +791,18 @@ function validateEntity(
       [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.bindings],
       issues,
     )
+  }
+  // Interaction 可与任意 Entity 组合，因此这里没有组合校验，只有字段级校验。
+  const interaction = components[COMPOSE_BUILTIN_COMPONENT_KEYS.interaction]
+  if (interaction !== undefined) {
+    const interactionPath = [
+      ...path,
+      'components',
+      COMPOSE_BUILTIN_COMPONENT_KEYS.interaction,
+    ] as const
+    collectComposeInteractionValidationIssues(interaction).forEach((issue) => {
+      addIssue(issues, 'interaction.invalid', [...interactionPath, ...issue.path], issue.message)
+    })
   }
   return value as unknown as ComposeEntity
 }
