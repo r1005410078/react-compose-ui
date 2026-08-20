@@ -81,8 +81,23 @@ export function ComposePageHost({
   const [state, setState] = useState<PageState>({ status: 'idle' })
   // current 是每次发布都可能新建的对象；身份字符串才是"要不要重新加载"的判据。
   const requestKey = current ? `${current.providerId}:${current.assetKey}` : null
-  // 当前页就是正在编辑的那一页：没有任何要加载的东西，live 文档就是最新的事实。
-  const live = livePage && current?.assetKey === livePage.pageKey ? livePage : null
+  /**
+   * 直接渲染 live 文档的条件。
+   *
+   * @remarks
+   * 除了"当前页就是正在编辑的那一页"，会话**还没有起点**时也走这里：宿主刚挂载、或宿主
+   * 忘了对齐起点，都不该让用户看见「未设置首页」——它正在编辑的那一页就在手上。
+   */
+  const live = livePage && (current === null || current.assetKey === livePage.pageKey)
+    ? livePage
+    : null
+
+  // 会话没有起点时补一个：跳转需要来路才能记进返回栈，否则返回是死键。
+  useEffect(() => {
+    if (livePage && navigation.getSnapshot().currentPageKey === null) {
+      navigation.reset(livePage.pageKey)
+    }
+  }, [livePage?.pageKey, navigation]) // eslint-disable-line react-hooks/exhaustive-deps
   // 渲染期 prev-adjust：目标一变就立刻进入 loading，不在 effect 里同步 setState，
   // 否则先渲染一帧仍然是旧页面的内容，再被 effect 推翻。
   const [requestedKey, setRequestedKey] = useState<string | null>(requestKey)

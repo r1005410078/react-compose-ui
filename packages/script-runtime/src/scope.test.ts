@@ -99,6 +99,7 @@ describe('OpenSpec: page-script-runtime / 脚本导航逃生舱', () => {
         scope: 'persistent',
       }),
       getSnapshot: () => ({ currentPageKey: null, current: null, canGoBack: false, issue: null }),
+      reset: () => undefined,
       subscribe: () => () => undefined,
     }
     return { port, navigate, back }

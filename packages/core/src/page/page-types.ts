@@ -224,6 +224,15 @@ export interface ComposeNavigationPort {
    * `ctx.navigate('pages/detail.page.json')`。
    */
   referenceFor(pageKey: string): ComposePageReference
+  /**
+   * 把会话起点设到指定页面。
+   *
+   * @remarks
+   * 同步、不验证目标、不进返回栈——它表达的是"这次会话从这里开始"。渲染入口用它把起点
+   * 对齐到宿主正在编辑的那一页：会话没有起点时跳转无法记录来路，返回就成了死键。
+   * 传 null 回到"无当前页面"。
+   */
+  reset(pageKey: string | null): void
   /** 订阅快照变化。 @returns 取消订阅的函数。 */
   subscribe(listener: () => void): () => void
 }

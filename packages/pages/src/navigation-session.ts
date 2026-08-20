@@ -51,15 +51,6 @@ export interface ComposeNavigationSession extends ComposeNavigationPort {
   setHomePageKey(pageKey: string | null): void
   /** 跳转到当前首页；未设首页时是 no-op。 */
   navigateHome(): Promise<void>
-  /**
-   * 把会话重置到指定页面。
-   *
-   * @remarks
-   * 同步、不验证目标、不进返回栈——它表达的是"这次会话从这里开始"，而不是一次跳转。
-   * 预览宿主用它把起点对齐到用户正在编辑的页面：从首页起步会让用户打开预览后看到的
-   * 不是自己刚改的那一页。传 null 回到"无当前页面"。
-   */
-  reset(pageKey: string | null): void
   /** 停止接受后续跳转并清空订阅。 */
   dispose(): void
 }

@@ -117,6 +117,12 @@ function testNavigation(initialPageKey: string, available: Iterable<string>) {
       issue = null
       publish()
     },
+    reset(pageKey) {
+      current = pageKey === null ? null : reference(pageKey)
+      backStack = []
+      issue = null
+      publish()
+    },
   }
   return port
 }
@@ -450,6 +456,34 @@ describe('OpenSpec: 页面宿主与跳转执行', () => {
     await act(async () => { await navigation.back() })
     // 回到首页看到的必须还是 live 文档，而不是 Provider 里那份空的。
     await waitFor(() => { expect(screen.getByText('Go to detail')).toBeTruthy() })
+  })
+
+  it('会话没有起点时仍然显示正在编辑的那一页', async () => {
+    const { home, detail } = twoPageFixture()
+    const navigation = testNavigation('home', ['home', 'detail'])
+    // 起点为空：宿主刚挂载、或宿主忘了对齐起点，都不该让用户看见「未设置首页」。
+    navigation.reset(null)
+    expect(navigation.getSnapshot().currentPageKey).toBeNull()
+
+    render(
+      <ComposePageHost
+        livePage={{ pageKey: 'home', page: home }}
+        navigation={navigation}
+        pageLoader={loaderOf({ home, detail })}
+        registry={registry()}
+      />,
+    )
+
+    const cta = await screen.findByRole('button', { name: 'cta' })
+    expect(screen.queryByTestId('compose-page-host-empty')).toBeNull()
+    // 宿主顺带把起点补上，否则跳转记不进返回栈、返回成死键。
+    await waitFor(() => {
+      expect(navigation.getSnapshot().currentPageKey).toBe('home')
+    })
+
+    await act(async () => { fireEvent.click(cta) })
+    await waitFor(() => { expect(screen.getByText('Detail page')).toBeTruthy() })
+    expect(navigation.getSnapshot().canGoBack).toBe(true)
   })
 
   it('没有导航端口时 Interaction 不产生 button 语义', async () => {

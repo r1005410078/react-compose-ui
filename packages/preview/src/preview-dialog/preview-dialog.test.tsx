@@ -310,6 +310,16 @@ function pageModeFixture() {
       listeners.forEach((listener) => { listener() })
     },
     async back() {},
+    reset(pageKey) {
+      current = pageKey === null ? reference('home') : reference(pageKey)
+      snapshot = {
+        currentPageKey: current.assetKey,
+        current,
+        canGoBack: false,
+        issue: null,
+      }
+      listeners.forEach((listener) => { listener() })
+    },
   }
   const pageLoader: ComposePageLoader = {
     async load(target) {
