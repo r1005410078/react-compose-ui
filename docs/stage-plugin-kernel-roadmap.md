@@ -95,10 +95,21 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 不会重建场景；`services` 与 `policy` 在 controller 各自记忆化，「端口变了」与「模式变了」
 在依赖数组上就是两件事。
 
-### 步骤 2 · 内核骨架 + legacy 巨插件 — `refactor-stage-kernel-arbiter`
+### 步骤 2 · 内核骨架 + legacy 巨插件 — `refactor-stage-kernel-arbiter` ✅ 已完成
 
 `stage-engine` 落地 Session Arbiter 与 Plugin Registry；现有单体 controller 原样包成一个
-插件整体注册，对外快照协议不变。**门槛**：快照协议兼容、e2e 绿。
+插件整体注册，对外快照协议不变。**验证**：lint / typecheck 46 / test 45（stage-engine
+198，含 25 个新增内核用例）/ build 24 / e2e 99 全绿，`interaction-controller.test.ts`
+2225 行**一行未改**。
+
+落地要点：
+
+- 仲裁器额外提供 `release()`——丢弃会话引用但不调用 `cancel`。`reset()` 的 6 个调用点里有
+  4 个在指针生命周期之外（并发文档变化、surface 断开、dispose、外部拖入开始），它们已自行
+  拆除手势；`reset()` 统一调用 `release()` 让仲裁器同步，否则下一次接管会被误拒。
+- `finish()` 开头内联的 `updateGesture` 已移除，最终点推进改由仲裁器在 `commit` 前驱动。
+  legacy 会话记住最近一次指针事件，供 `finish` 读取松手时的修饰键（marquee 的布尔组合以
+  释放时按住的键为准）。
 
 读代码得到的两处修正（详见该变更的 design.md）：
 
