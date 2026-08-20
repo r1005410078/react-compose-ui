@@ -56,7 +56,7 @@ import type {
 import { useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
 import {
   createComposeNavigationSession,
-  createComposePageDocumentLoader,
+  createComposePageLoader,
   createComposePageStore,
 } from '@compose-ui/pages'
 import * as v from 'valibot'
@@ -455,13 +455,13 @@ export function StageDemoWorkspace() {
    */
   const [pageStore] = useState(() => createComposePageStore({ provider: assetProvider }))
   const pageCatalog = useComposePageCatalog(pageStore)
-  const pageLoader = useMemo(() => createComposePageDocumentLoader(pageStore), [pageStore])
+  const pageLoader = useMemo(() => createComposePageLoader(pageStore), [pageStore])
   const nodeEditPort = useNodeEditorPort({
     catalog: pageCatalog,
     providerId: assetProvider.id,
   })
   const [navigationSession] = useState(() => createComposeNavigationSession({
-    loader: createComposePageDocumentLoader(pageStore),
+    loader: createComposePageLoader(pageStore),
     providerId: assetProvider.id,
   }))
   useEffect(() => {
@@ -477,7 +477,6 @@ export function StageDemoWorkspace() {
     registry,
     idFactory,
     nodeEditPort,
-    pageLoader,
     componentStore,
     // 演示宿主关掉首次自动适配的取向：视觉回归与端到端需要确定性取景，否则每个用例的
     // 屏幕坐标都要跟着可视区域尺寸走。默认（不带该参数）仍是自动适配激活场景。

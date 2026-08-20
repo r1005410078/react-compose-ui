@@ -32,5 +32,3 @@ export function createComposePageLoader(
   }
 }
 
-/** @deprecated 使用 {@link createComposePageLoader}。 @public */
-export const createComposePageDocumentLoader = createComposePageLoader

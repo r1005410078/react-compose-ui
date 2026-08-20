@@ -11,12 +11,12 @@
 
 ### Requirement: Preview 页面文档加载注入
 
-Preview MUST 接受可选的页面文档加载端口并将其注入渲染上下文，供页面导航按页面引用加载
-目标页面。Preview MUST NOT 自行实现页面加载逻辑，也 MUST NOT 因此依赖 `editor`、`stage`
-或页面 Store 实现包——端口类型来自 `core`，实现来自 `@compose-ui/pages`。未注入端口时
-Preview MUST 正常渲染当前文档。
+Preview MUST 接受可选的页面加载端口，供页面导航按页面引用加载目标页面。Preview MUST NOT
+自行实现页面加载逻辑，也 MUST NOT 因此依赖 `editor`、`stage` 或页面 Store 实现包——端口
+类型来自 `core`，实现来自 `@compose-ui/pages`。未注入端口时 Preview MUST 正常渲染当前文档。
 
-Preview MUST NOT 再递归渲染任何"引用了页面的实体"——页面嵌套已被删除。
+Preview MUST NOT 再把该端口注入 Registry 渲染上下文，也 MUST NOT 递归渲染任何"引用了页面
+的实体"——页面嵌套已被删除，端口现在只服务导航。
 
 #### Scenario: 注入端口供导航加载
 

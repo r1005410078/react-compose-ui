@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposeLayoutMeasurementPort, ComposePageDocumentLoader } from '@compose-ui/core'
+import type { ComposeLayoutMeasurementPort } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import type {
@@ -192,13 +192,6 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly registry: ComposeEntityRegistry
   /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
-  /**
-   * 页面型物料使用的文档加载端口。
-   *
-   * @remarks
-   * Stage 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
-   */
-  readonly pageLoader?: ComposePageDocumentLoader
   /** 当前页面实例的 setup 返回作用域；Stage 只消费，不加载脚本。 */
   readonly scriptScope?: ComposePageScriptScope
   /** 透传给嵌套 Page Slot 的模块 Loader。 */

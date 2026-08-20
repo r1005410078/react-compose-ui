@@ -11,7 +11,6 @@ import {
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import { resolveComposeRendererRuntimeProps } from '../registry/runtime-props'
 import type { ComposeEntityRegistry, ComposeRendererTextEditing } from '../registry/types'
-import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import type {
   ComposeNodeEditPort,
   ComposePaintEditPort,
@@ -79,7 +78,6 @@ export function ComposeRegistryEntityRenderer({
   entity,
   mode,
   assetResolver,
-  pageDocumentPort,
   scriptScope,
   scriptModuleLoader,
   textEditing,
@@ -88,7 +86,6 @@ export function ComposeRegistryEntityRenderer({
   readonly entity: ComposeEntity
   readonly mode: 'editor' | 'preview'
   readonly assetResolver?: ComposeAssetResolver
-  readonly pageDocumentPort?: ComposePageDocumentLoader
   /** 当前页面渲染实例的可选 setup 返回作用域。 */
   readonly scriptScope?: ComposePageScriptScope
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
@@ -140,7 +137,6 @@ export function ComposeRegistryEntityRenderer({
         authoredProps={resolved.authoredProps}
         entity={entity}
         mode={mode}
-        pageDocumentPort={pageDocumentPort}
         props={props}
         registry={registry}
         renderer={renderer}

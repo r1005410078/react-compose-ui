@@ -193,7 +193,7 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
     expect(close).toHaveBeenCalledOnce()
   })
 
-  it('SVG 解析 viewBox，Page Slot 使用目标页面默认 Frame 尺寸并订阅 revision', async () => {
+  it('SVG 解析 viewBox 并订阅 revision', async () => {
     const svg = definition('svg')
     const svgRenderer = renderer('svg', {
       asset: { providerId: 'memory', assetKey: 'logo', scope: 'persistent' },
@@ -214,56 +214,5 @@ describe('OpenSpec: basic-materials / built-in Hug measurement', () => {
     })
     expect(svgPrepared).toEqual({ width: 200, height: 80, revision: 'svg-3' })
 
-    const page = definition('page-slot')
-    const pageRenderer = renderer('page-slot', {
-      page: {
-        kind: 'page',
-        providerId: 'memory',
-        assetKey: 'Pages/Home.page.json',
-        scope: 'persistent',
-      },
-    })
-    const invalidate = vi.fn()
-    const subscribe = vi.fn((_reference, listener: () => void) => {
-      listener()
-      return () => undefined
-    })
-    const pageDocumentPort = {
-      // 页面的"输出尺寸"就是它默认 Frame 的尺寸。
-      load: vi.fn(async () => ({
-        document: {
-          rootIds: ['frame-root'],
-          entities: {
-            'frame-root': {
-              id: 'frame-root',
-              name: 'frame-root',
-              components: { Frame: { size: { width: 1280, height: 720 } } },
-            },
-          },
-        },
-      }) as never),
-      subscribe,
-    }
-    const pagePrepared = await page.prepare?.({
-      entity: baseEntity,
-      renderer: pageRenderer,
-      props: pageRenderer.props,
-      authoredProps: pageRenderer.props,
-      pageDocumentPort,
-      signal: new AbortController().signal,
-    })
-    const unsubscribe = page.subscribe?.({
-      entity: baseEntity,
-      renderer: pageRenderer,
-      props: pageRenderer.props,
-      authoredProps: pageRenderer.props,
-      pageDocumentPort,
-      invalidate,
-    })
-
-    expect(pagePrepared).toEqual({ width: 1280, height: 720 })
-    expect(invalidate).toHaveBeenCalledOnce()
-    expect(subscribe).toHaveBeenCalledOnce()
-    unsubscribe?.()
   })
 })

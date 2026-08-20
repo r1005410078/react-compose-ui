@@ -173,8 +173,8 @@ Component Key、基础项移除和带子项容器移除都会被阻止。Registr
 和 min/max。`@compose-ui/layout-engine` 使用 Yoga 异步求解，Stage 与 Preview 始终按同一
 `ComposeLayoutSnapshot` 绝对定位 DOM，不再以 CSS Flex 或旧 Transform 作为第二布局路径。
 Hug 容器由 Flow 子项、padding、gap 与 border 决定；Hug 叶子通过 Registry 的同步
-`measurement.measure` 和可选异步 `prepare` 获取内容尺寸。Text 使用隔离离屏 host，Image、SVG
-与 Page Slot 分别订阅资源 revision、SVG intrinsic box 与被引用页面场景的尺寸。准备中或失败时使用
+`measurement.measure` 和可选异步 `prepare` 获取内容尺寸。Text 使用隔离离屏 host，Image 与 SVG
+分别订阅资源 revision 与 SVG intrinsic box。准备中或失败时使用
 `LayoutItem.value` 并发布 Snapshot diagnostic，资源恢复只增加 Snapshot revision，不进入文档事务。
 
 ## Group、项目组件与 Variant
@@ -336,9 +336,13 @@ bun run test:e2e
 
 ## 当前边界
 
-页面聚合、Page Slot、setup 脚本、页面作用域 value/method Props 绑定已交付。首期只支持页面
-作用域、每页一个自包含 JavaScript setup，不支持 TypeScript 编译、模块图、不可信代码隔离、
-应用级状态、动态 Entity 树、列表/条件模板、双向绑定或 HMR 状态保留。
+页面聚合、页面跳转、setup 脚本、页面作用域 value/method Props 绑定已交付。**页面之间是跳转
+关系而不是嵌套关系**：复用一块 UI 由 Component Asset v2 与 Variant 承担，页面只是可被跳转到
+的目标。跳转由任意 Entity 上的可选 `Interaction` Component 声明，运行期在预览宿主里生效；
+页面脚本另有 `ctx.navigate` 作为条件跳转的逃生舱。首期不支持 URL 路由、跳转参数与转场动画。
+
+页面脚本首期只支持页面作用域、每页一个自包含 JavaScript setup，不支持 TypeScript 编译、
+模块图、不可信代码隔离、应用级状态、动态 Entity 树、列表/条件模板、双向绑定或 HMR 状态保留。
 
 当前 Component Asset v2 不提供 Detach、跨 Provider Variant、自动更新、批量 Apply、任意实例内部
 结构编辑或超过八层的继承/嵌套。Interaction、数据源和正式持久化仍需独立 OpenSpec。

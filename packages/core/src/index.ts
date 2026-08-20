@@ -238,7 +238,6 @@ export {
   COMPOSE_PAGE_FILE_SUFFIX,
   COMPOSE_PAGE_MEDIA_TYPE,
   COMPOSE_PAGE_SCHEMA_VERSION,
-  COMPOSE_PAGE_NEST_DEPTH_LIMIT,
   composePageDisplayName,
   composePageFileName,
   createEmptyComposeAppManifest,
@@ -253,7 +252,6 @@ export {
   resolveComposePageActiveFrameId,
   parseComposePageDocument,
   readComposePageReference,
-  resolveComposePageNestState,
   serializeComposeAppManifest,
   serializeComposePageDocument,
   serializeComposePageFile,
@@ -269,17 +267,14 @@ export type {
   ComposeNavigationPort,
   ComposeNavigationSnapshot,
   ComposePageAnimationReference,
-  ComposePageDocumentLoader,
   ComposePageFile,
   ComposePageFileIssue,
   ComposePageFileIssueCode,
   ComposePageLoader,
   ComposePageMigrationResult,
-  ComposePageNestState,
   ComposePageParseResult,
   ComposePageReference,
   ComposePageSetupReference,
-  ResolveComposePageNestStateInput,
 } from './page'
 
 /** `@compose-ui/core` 的稳定包标识。 @public */

@@ -8,7 +8,6 @@ export {
 export type {
   ComposeAppManifest,
   ComposePageAnimationReference,
-  ComposePageDocumentLoader,
   ComposePageFile,
   ComposePageFileIssue,
   ComposePageFileIssueCode,
@@ -17,7 +16,6 @@ export type {
   ComposeNavigationPort,
   ComposeNavigationSnapshot,
   ComposePageLoader,
-  ComposePageNestState,
   ComposePageReference,
   ComposePageSetupReference,
 } from './page-types'
@@ -37,12 +35,7 @@ export {
   serializeComposePageFile,
 } from './page-file'
 export type { ComposePageMigrationResult, ComposePageParseResult } from './page-file'
-export {
-  COMPOSE_PAGE_NEST_DEPTH_LIMIT,
-  readComposePageReference,
-  resolveComposePageNestState,
-} from './page-graph'
-export type { ResolveComposePageNestStateInput } from './page-graph'
+export { readComposePageReference } from './page-graph'
 export {
   createEmptyComposeAppManifest,
   parseComposeAppManifest,

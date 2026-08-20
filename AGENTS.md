@@ -98,6 +98,11 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   的 Clip 归一为不裁剪，与「新建场景」命令一致）；其余 Entity 落进**激活场景**并**保留世界
   落点**——换算成局部坐标后越界也不钳制，场景默认不裁剪因此仍可见。任何新建路径都不得回退到
   `rootIds[0]`——那既选错场景，又会跳过世界→局部换算。点击添加（没有落点意图）不走升格。
+- **页面之间只有跳转关系，没有嵌套关系。** Page Slot 已删除：它是「弱化版组件实例」——没有
+  属性/结构覆盖、没有变体、编辑期不能下钻、不能离线渲染。复用一块 UI 一律用 Component
+  Asset v2 与 Variant。**没有为它写迁移器**：删除时尚无线上资产使用 Page Slot，为零份文档
+  写迁移是纯粹的负债。万一残留的 `page-slot` Entity 落到 Registry 既有的「未知 Renderer」
+  占位上——几何与外观保留，占位带 `role="status"` 与可访问名称，不会静默丢失内容。
 - **跳转是 Entity 的能力，不是某个物料的能力。** `Interaction` 是可选 Entity Component，
   可以挂在任意 Entity 上（矩形、图片、容器都能成为跳转源），v1 只有 `click` trigger 与
   `navigate` / `navigate-back` 两种 action。同一事件在一个 Entity 上只能声明一次，因此
@@ -197,7 +202,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   Renderer、Component Definitions 与 Capabilities 的独立基础物料包，可以依赖 `core`、
   `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`script-runtime`、`ui-context`、
   DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`；`layout-engine` 只用于
-  Page Slot 与组件实例的独立嵌套文档 Runtime。
+  组件实例的独立嵌套文档 Runtime。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。

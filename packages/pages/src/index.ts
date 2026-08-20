@@ -10,7 +10,7 @@
 
 export { listComposePageDescriptors } from './page-catalog'
 export type { ComposePageDescriptor } from './page-catalog'
-export { createComposePageDocumentLoader, createComposePageLoader } from './page-document-loader'
+export { createComposePageLoader } from './page-document-loader'
 export {
   COMPOSE_NAVIGATION_BACK_STACK_LIMIT,
   createComposeNavigationSession,

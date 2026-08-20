@@ -1,4 +1,4 @@
-import type { ComposeNavigationPort, ComposePageDocumentLoader, ComposePageFile } from '@compose-ui/core'
+import type { ComposeNavigationPort, ComposePageLoader, ComposePageFile } from '@compose-ui/core'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { ComposePreview, type ComposePreviewProps } from '../compose-preview'
 
@@ -25,7 +25,7 @@ export interface ComposePageHostProps extends Omit<
   /** 决定当前是哪一页的导航端口。 */
   readonly navigation: ComposeNavigationPort
   /** 按引用加载页面聚合的端口；宿主通常由页面 Store 派生。 */
-  readonly pageLoader: ComposePageDocumentLoader
+  readonly pageLoader: ComposePageLoader
   /** 覆盖默认中文文案。 */
   readonly messages?: Partial<ComposePageHostMessages>
   /**
