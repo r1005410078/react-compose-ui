@@ -51,7 +51,6 @@ import type {
 } from './geometry'
 import {
   applyMatrix,
-  invertMatrix,
   matrixFromTransform,
   multiplyMatrices,
   rectMappingMatrix,
@@ -690,15 +689,6 @@ type Gesture =
       point: StagePoint
     }
   | {
-      readonly type: 'paint'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly entityId: string
-      readonly handle: StagePaintHandleKind
-      readonly stopId?: string
-      paint: ComposePaint
-    }
-  | {
       readonly type: 'guide-move'
       readonly pointerId: number
       readonly viewport: StageViewport
@@ -892,51 +882,6 @@ function paintHandlesFor(
     { kind: 'angular-arm', point: world(radialPoint(0)) },
     ...paint.stops.map((stop) => ({ kind: 'angular-stop' as const, point: world(radialPoint(stop.position)), stopId: stop.id })),
   ]
-}
-
-function paintAtLocalPoint(
-  index: StageSceneIndex,
-  entityId: string,
-  worldPoint: StagePoint,
-): { readonly x: number; readonly y: number } | null {
-  const entity = index.document.entities[entityId]
-  const matrix = index.getWorldMatrix(entityId)
-  if (!entity || !matrix) return null
-  const transform = resolvedSpatialTransform(index, entityId)
-  if (!transform) return null
-  const local = applyMatrix(invertMatrix(matrix), worldPoint)
-  return { x: local.x / transform.width, y: local.y / transform.height }
-}
-
-function updatePaintFromPointer(
-  paint: ComposePaint,
-  handle: StagePaintHandleKind,
-  stopId: string | undefined,
-  local: { readonly x: number; readonly y: number },
-): ComposePaint {
-  if (paint.kind === 'solid' || paint.kind === 'image') return paint
-  if (paint.kind === 'linear-gradient') {
-    if (handle === 'linear-start') return { ...paint, start: local }
-    if (handle === 'linear-end') return { ...paint, end: local }
-    const x = paint.end.x - paint.start.x
-    const y = paint.end.y - paint.start.y
-    const length = x * x + y * y
-    const position = length === 0 ? 0 : Math.min(1, Math.max(0, ((local.x - paint.start.x) * x + (local.y - paint.start.y) * y) / length))
-    return { ...paint, stops: paint.stops.map((stop) => stop.id === stopId ? { ...stop, position } : stop) }
-  }
-  if (paint.kind === 'radial-gradient') {
-    if (handle === 'radial-center') return { ...paint, center: local }
-    if (handle === 'radial-radius-x') return { ...paint, radiusX: Math.max(0.000_001, Math.abs(local.x - paint.center.x)) }
-    if (handle === 'radial-radius-y') return { ...paint, radiusY: Math.max(0.000_001, Math.abs(local.y - paint.center.y)) }
-    const position = Math.min(1, Math.max(0, Math.abs(local.x - paint.center.x) / paint.radiusX))
-    return { ...paint, stops: paint.stops.map((stop) => stop.id === stopId ? { ...stop, position } : stop) }
-  }
-  if (handle === 'angular-center') return { ...paint, center: local }
-  const degrees = Math.atan2(local.y - paint.center.y, local.x - paint.center.x) * 180 / Math.PI
-  const angle = ((degrees % 360) + 360) % 360
-  if (handle === 'angular-arm') return { ...paint, angle }
-  const position = (((angle - paint.angle) % 360) + 360) % 360 / 360
-  return { ...paint, stops: paint.stops.map((stop) => stop.id === stopId ? { ...stop, position } : stop) }
 }
 
 function previewSelectionBounds(
@@ -1378,21 +1323,6 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
-    if (gesture.type === 'paint') {
-      const local = paintAtLocalPoint(index, gesture.entityId, world)
-      if (!local) return
-      gesture.paint = updatePaintFromPointer(gesture.paint, gesture.handle, gesture.stopId, local)
-      publish({
-        ...snapshot,
-        phase: 'paint-edit',
-        paintPreview: {
-          entityId: gesture.entityId,
-          paint: gesture.paint,
-          activeStopId: gesture.stopId,
-        },
-      })
-      return
-    }
   }
 
   const begin = (event: Extract<StageInteractionEvent, { type: 'pointer.down' }>) => {
@@ -1456,32 +1386,6 @@ export function createStageInteractionController(): StageInteractionController {
       return true
     }
 
-    if (event.hit.kind === 'paint-handle') {
-      const editing = context.paintEditing
-      const entity = editing ? context.document.entities[editing.entityId] : undefined
-      if (
-        !editing
-        || !entity
-        || context.selectedIds.length !== 1
-        || context.selectedIds[0] !== editing.entityId
-        || getComposeLock(entity).locked
-      ) return
-      gesture = {
-        type: 'paint',
-        pointerId: event.pointerId,
-        viewport: context.viewport,
-        entityId: editing.entityId,
-        handle: event.hit.handle,
-        stopId: event.hit.stopId,
-        paint: resolveComposeAppearance(entity).backgroundPaint,
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'paint-edit',
-      })
-      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
-      return
-    }
     if (event.hit.kind === 'segment-endpoint') {
       const entity = context.document.entities[event.hit.entityId]
       const selected = index.topLevelSelection(context.selectedIds)
@@ -1847,31 +1751,6 @@ export function createStageInteractionController(): StageInteractionController {
         },
       })
     }
-    else if (finished.type === 'paint') {
-      const entity = context.document.entities[finished.entityId]
-      if (entity && !getComposeLock(entity).locked) {
-        effects.push({
-          type: 'command.dispatch',
-          command: {
-            id: context.idFactory(),
-            type: BUILTIN_COMMAND_TYPES.setAppearance,
-            payload: {
-              entityId: entity.id,
-              appearance: {
-                ...resolveComposeAppearance(entity),
-                backgroundPaint: finished.paint,
-              } as unknown as JsonValue,
-            },
-            meta: {
-              label: `Update ${entity.name} background paint`,
-              source: 'stage',
-              targetIds: [entity.id],
-              mergeKey: `stage:paint:${entity.id}`,
-            },
-          },
-        })
-      }
-    }
     else if (finished.type === 'move' && resolveCommittableDropTarget(finished.dropTarget)) {
       // 落点有效时这次手势表达的是结构意图（换父级或改顺序），几何随 reparent 一起写入
       // 同一条 batch，避免一次手势产生两条事务。Auto Layout 容器会丢弃 offset 改走 flow，
@@ -2085,7 +1964,6 @@ export function createStageInteractionController(): StageInteractionController {
         && (gesture.type === 'move' || gesture.type === 'resize')
         ? gesture.ids
         : null
-      const paintGestureId = gesture?.type === 'paint' ? gesture.entityId : null
       const segmentGestureId = gesture?.type === 'segment-resize' ? gesture.entityId : null
       const documentChanged = context?.document !== nextContext.document
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
@@ -2112,11 +1990,6 @@ export function createStageInteractionController(): StageInteractionController {
               nextIndex.topLevelSelection(nextContext.selectedIds),
             )
           )
-          || (paintGestureId !== null && (
-            nextContext.selectedIds.length !== 1
-            || nextContext.selectedIds[0] !== paintGestureId
-            || nextContext.paintEditing?.entityId !== paintGestureId
-          ))
           || (segmentGestureId !== null && (
             nextContext.selectedIds.length !== 1
             || nextContext.selectedIds[0] !== segmentGestureId

@@ -25,6 +25,10 @@ export {
   STAGE_TEXT_EDIT_GUARD_PLUGIN_ID,
 } from './text-edit-guard-plugin'
 export {
+  createStagePaintPlugin,
+  STAGE_PAINT_PLUGIN_ID,
+} from './paint-plugin'
+export {
   createStagePaintSamplePlugin,
   STAGE_PAINT_SAMPLE_PLUGIN_ID,
 } from './paint-sample-plugin'

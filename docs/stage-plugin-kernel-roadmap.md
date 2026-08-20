@@ -138,7 +138,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 是优先级表的前缀，出现空洞即失败。
 
 因此实际顺序就是优先级表的顺序：
-`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint`
+`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
 → `segment-resize` → `marquee-tool` → `draw` → `move-axis` → `marquee-converge`
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
@@ -198,7 +198,14 @@ paint-sample，守卫看着还在、其实早已不检查新插件。
 漏斗，却有一半调用点在指针生命周期之外；会话化之后它落到 `cancel(ctx)`，由会话自己还原
 自己发布过的东西。`interaction-controller.ts` 2385 → 2271 行。
 
-下一刀是 `paint`(1300)。
+`paint`(1300) ✅ 顺带消掉一处**已经存在的重复**：`paint-sample` 抽取时把「世界坐标 → Paint
+归一化局部坐标」的换算原样内联进了 `samplePaintAt`，与 controller 里的 `paintAtLocalPoint`
+是同一段逆世界矩阵除以 resolved 尺寸。paint 需要同一段换算，不提取就会变成三份，于是它连同
+`updatePaintFromPointer` 一起进了 `paint-geometry.ts`。**判断留还是走的标准是「属于手势还是
+属于快照派生」**：`paintHandlesFor` 同样是 Paint 几何，但它算的是派生字段，因此留在 controller。
+`interaction-controller.ts` 2271 → 2145 行。
+
+下一刀是 `segment-resize`(1200)。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

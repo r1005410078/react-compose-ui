@@ -9,8 +9,8 @@ import {
   type ComposePaint,
   type JsonValue,
 } from '@compose-ui/core'
-import { applyMatrix, invertMatrix, screenToWorld, type StagePoint } from '../geometry'
-import { resolvedSpatialTransform } from '../transform-preview'
+import { screenToWorld, type StagePoint } from '../geometry'
+import { paintSpacePoint } from '../paint-geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import type {
   StagePaintSampling,
@@ -61,11 +61,8 @@ function samplePaintAt(
   if (sampled && !hasSampleableBackgroundPaint(sampled)) return unavailable(sampledEntityId)
   const explicitPaint = sampled ? getComposeAppearance(sampled)?.backgroundPaint : undefined
   if (!sampled || !explicitPaint) return unavailable(sampledEntityId)
-  const matrix = index.getWorldMatrix(sampledEntityId)
-  const transform = resolvedSpatialTransform(index, sampledEntityId)
-  if (!matrix || !transform) return unavailable(sampledEntityId)
-  const local = applyMatrix(invertMatrix(matrix), world)
-  const point = { x: local.x / transform.width, y: local.y / transform.height }
+  const point = paintSpacePoint(index, sampledEntityId, world)
+  if (!point) return unavailable(sampledEntityId)
   const color = evaluateComposePaintAtLocalPoint(explicitPaint, point)
   return {
     preview: { target, point: world, sampledEntityId, color, status: 'ready' },

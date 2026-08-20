@@ -1,3 +1,4 @@
+import { createStagePaintPlugin } from './paint-plugin'
 import { createStagePaintSamplePlugin } from './paint-sample-plugin'
 import { createStagePanPlugin } from './pan-plugin'
 import { createStagePathPlugin } from './path-plugin'
@@ -23,4 +24,5 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStageRotatePlugin,
   createStagePaintSamplePlugin,
   createStagePathPlugin,
+  createStagePaintPlugin,
 ]
