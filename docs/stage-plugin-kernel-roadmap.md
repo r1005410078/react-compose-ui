@@ -138,7 +138,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 是优先级表的前缀，出现空洞即失败。
 
 因此实际顺序就是优先级表的顺序：
-`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` → `paint`
+`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint`
 → `segment-resize` → `marquee-tool` → `draw` → `move-axis` → `marquee-converge`
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
@@ -180,7 +180,25 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 采样），因此挡在其后所有按命中判定的插件之前，抽取顺序上必须早做。`interaction-controller.ts`
 2500 → 2385 行。
 
-下一刀是 `path`(1400)。
+两个洞随后被 `fix-stage-plugin-extraction-guards` 补上，都是抽取过程中静默产生的：
+rotate 的 `isCompatibleWith` 只比了选区，丢掉了基线规范要求的「并发文档或布局变化中止空间
+手势」——危害不在交互期，预览照常跟随指针，只有落库的角度是绕过期中心算出来的；而
+`extraction-order.test.ts` 里的「已抽取集合」是手抄字面量，停在两项没跟上 rotate 与
+paint-sample，守卫看着还在、其实早已不检查新插件。
+
+由此立了两条**长期机制**：`captureStageSpatialBaseline` 承载「并发中止」判据，按**是否持有
+冻结几何**划分而不是按「有没有提到 Entity」——旋转中心、外接盒、起点局部坐标这类接管当刻
+算好、之后不再重算的量必须绑文档恒等，而每帧重新求值的取色刻意不绑；
+`STAGE_EXTRACTED_PLUGIN_FACTORIES` 成为已抽取插件的唯一登记处，controller 与顺序不变量
+测试共用它，新增插件不可能只改一处。
+
+`path`(1400) ✅ 是第一个**中断时必须主动向宿主发效果**的会话：路径几何住在宿主的本地预览里，
+引擎既不产 Patch 也不缓存几何，手势被打断时不显式发一次 `path.change` `phase: 'cancel'`，
+宿主的预览就永远停在半途。抽取前这条通知挂在 legacy 的 `reset()` 里——那是中止手势的唯一
+漏斗，却有一半调用点在指针生命周期之外；会话化之后它落到 `cancel(ctx)`，由会话自己还原
+自己发布过的东西。`interaction-controller.ts` 2385 → 2271 行。
+
+下一刀是 `paint`(1300)。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

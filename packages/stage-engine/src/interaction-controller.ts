@@ -699,16 +699,6 @@ type Gesture =
       paint: ComposePaint
     }
   | {
-      readonly type: 'path'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly entityId: string
-      readonly handle: StagePathHandleKind
-      readonly vertexId: string
-      point: StagePoint
-      modifiers: StageInteractionModifiers
-    }
-  | {
       readonly type: 'guide-move'
       readonly pointerId: number
       readonly viewport: StageViewport
@@ -1153,19 +1143,6 @@ export function createStageInteractionController(): StageInteractionController {
   }
   const reset = (releasePointer = true) => {
     const pointerId = gesture?.pointerId
-    // 路径手势被打断（Esc、并发文档变化、会话关闭）时必须显式告知宿主丢弃预览，
-    // 否则宿主的本地预览几何会停留在半途状态。
-    if (gesture?.type === 'path') {
-      apply([{
-        type: 'path.change',
-        entityId: gesture.entityId,
-        vertexId: gesture.vertexId,
-        handle: gesture.handle,
-        phase: 'cancel',
-        worldPoint: gesture.point,
-        modifiers: gesture.modifiers,
-      }])
-    }
     gesture = null
     // reset 是 legacy 中止手势的唯一漏斗，并且有一半调用点在指针生命周期之外（并发文档
     // 变化、surface 断开、dispose）。在这里同步释放仲裁器的会话引用，否则仲裁器会认为手势
@@ -1416,21 +1393,6 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
-    if (gesture.type === 'path') {
-      gesture.point = world
-      gesture.modifiers = modifiers
-      // 移动阶段只把世界坐标交给宿主更新预览；引擎既不产出 Patch 也不缓存几何。
-      apply([{
-        type: 'path.change',
-        entityId: gesture.entityId,
-        vertexId: gesture.vertexId,
-        handle: gesture.handle,
-        phase: 'move',
-        worldPoint: world,
-        modifiers,
-      }])
-      return
-    }
   }
 
   const begin = (event: Extract<StageInteractionEvent, { type: 'pointer.down' }>) => {
@@ -1494,54 +1456,6 @@ export function createStageInteractionController(): StageInteractionController {
       return true
     }
 
-    /*
-     * Godot 旋转工具与 select/marquee 互斥，必须在 segment-endpoint / paint / 默认 marquee
-     * 之前处理：那些分支在 tool!==select 时会提前 return，否则空白按下会落到框选。
-     */
-    if (event.hit.kind === 'path-handle') {
-      const editing = context.pathEditing
-      // 未注入路径会话时忽略：Overlay 不该在没有会话时渲染手柄，这里兜底保证行为不变。
-      if (!editing) return
-      // 双击顶点 = 切换 corner / smooth，不开始拖拽手势。必须恰好等于 2：连击计数会从
-      // 邻近的上一次拖拽延续，若用 >=2，双击的两次按下会各触发一次切换（计数 2 和 3），
-      // 净效果是切过去又切回来。toggle 不幂等，这与实体双击进入文字编辑的 >=2 不同。
-      if (event.hit.handle === 'vertex' && event.clickCount === 2) {
-        apply([{
-          type: 'path.vertex-toggle',
-          entityId: editing.entityId,
-          vertexId: event.hit.vertexId,
-        }])
-        return
-      }
-      const world = worldPoint(event.point, context.viewport)
-      gesture = {
-        type: 'path',
-        pointerId: event.pointerId,
-        viewport: context.viewport,
-        entityId: editing.entityId,
-        handle: event.hit.handle,
-        vertexId: event.hit.vertexId,
-        point: world,
-        modifiers: event.modifiers,
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'path-edit',
-      })
-      apply([
-        { type: 'pointer.capture', pointerId: event.pointerId },
-        {
-          type: 'path.change',
-          entityId: editing.entityId,
-          vertexId: event.hit.vertexId,
-          handle: event.hit.handle,
-          phase: 'start',
-          worldPoint: world,
-          modifiers: event.modifiers,
-        },
-      ])
-      return
-    }
     if (event.hit.kind === 'paint-handle') {
       const editing = context.paintEditing
       const entity = editing ? context.document.entities[editing.entityId] : undefined
@@ -1958,18 +1872,6 @@ export function createStageInteractionController(): StageInteractionController {
         })
       }
     }
-    else if (finished.type === 'path') {
-      // 结束阶段只回传最终世界坐标；写成什么命令由宿主决定，引擎不理解路径的文档语义。
-      effects.push({
-        type: 'path.change',
-        entityId: finished.entityId,
-        vertexId: finished.vertexId,
-        handle: finished.handle,
-        phase: 'end',
-        worldPoint: finished.point,
-        modifiers: event.modifiers,
-      })
-    }
     else if (finished.type === 'move' && resolveCommittableDropTarget(finished.dropTarget)) {
       // 落点有效时这次手势表达的是结构意图（换父级或改顺序），几何随 reparent 一起写入
       // 同一条 batch，避免一次手势产生两条事务。Auto Layout 容器会丢弃 offset 改走 flow，
@@ -2184,7 +2086,6 @@ export function createStageInteractionController(): StageInteractionController {
         ? gesture.ids
         : null
       const paintGestureId = gesture?.type === 'paint' ? gesture.entityId : null
-      const pathGestureId = gesture?.type === 'path' ? gesture.entityId : null
       const segmentGestureId = gesture?.type === 'segment-resize' ? gesture.entityId : null
       const documentChanged = context?.document !== nextContext.document
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
@@ -2216,8 +2117,6 @@ export function createStageInteractionController(): StageInteractionController {
             || nextContext.selectedIds[0] !== paintGestureId
             || nextContext.paintEditing?.entityId !== paintGestureId
           ))
-          || (pathGestureId !== null
-            && nextContext.pathEditing?.entityId !== pathGestureId)
           || (segmentGestureId !== null && (
             nextContext.selectedIds.length !== 1
             || nextContext.selectedIds[0] !== segmentGestureId

@@ -37,6 +37,10 @@ export {
   STAGE_PAN_PLUGIN_ID,
 } from './pan-plugin'
 export {
+  createStagePathPlugin,
+  STAGE_PATH_PLUGIN_ID,
+} from './path-plugin'
+export {
   STAGE_GESTURE_PRIORITY,
   STAGE_LEGACY_MONOLITH_PRIORITY,
   type StageGesturePriorityEntry,
