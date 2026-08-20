@@ -324,6 +324,15 @@ bun run dev
 
 默认示例地址为 `http://localhost:5173`。
 
+Storybook 是独立的一条命令，与示例应用互不启动：
+
+```bash
+bun run storybook
+```
+
+默认地址为 `http://localhost:6006`。两条命令各自带上所依赖包的 watch 构建，因此单独跑
+任意一条都能看到包源码的改动；同时跑两条会启动两份包 watch，只在确实需要对照时才这么做。
+
 ```bash
 bun run lint
 bun run typecheck
