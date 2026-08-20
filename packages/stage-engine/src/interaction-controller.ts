@@ -10,9 +10,6 @@ import {
   getComposeHierarchy,
   getComposeLock,
   isComposeGroupEntity,
-  getComposeAppearance,
-  getComposeRenderer,
-  evaluateComposePaintAtLocalPoint,
   resolveComposeAppearance,
   resolveComposeGeometryConstraints,
 } from '@compose-ui/core'
@@ -66,6 +63,7 @@ import {
 } from './geometry'
 // 交互内核只做类型级依赖回指（`import type`），因此这里的相互引用不产生运行时循环。
 import {
+  createStagePaintSamplePlugin,
   createStagePanPlugin,
   createStageRotatePlugin,
   createStageTextEditGuardPlugin,
@@ -714,14 +712,6 @@ type Gesture =
       modifiers: StageInteractionModifiers
     }
   | {
-      readonly type: 'paint-sample'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly target: StagePaintSampling
-      point: StagePoint
-      alt: boolean
-    }
-  | {
       readonly type: 'guide-move'
       readonly pointerId: number
       readonly viewport: StageViewport
@@ -1012,15 +1002,6 @@ function samePaintSampling(
   return left?.entityId === right?.entityId && left?.field === right?.field
 }
 
-/**
- * 图层取色只能读取我们能用结构化 Paint 精确解释的层。Image/SVG 的可见像素来自资源内容，
- * 自定义 Renderer 的像素也没有 headless 采样协议；把它们当作背景色会制造错误的取色结果。
- */
-function hasSampleableBackgroundPaint(entity: ComposeDocument['entities'][string]): boolean {
-  const renderer = getComposeRenderer(entity)
-  return renderer === undefined || renderer.type === 'rectangle' || renderer.type === 'text'
-}
-
 
 
 
@@ -1055,6 +1036,7 @@ export function createStageInteractionController(): StageInteractionController {
       createStageTextEditGuardPlugin(),
       createStagePanPlugin(),
       createStageRotatePlugin(),
+      createStagePaintSamplePlugin(),
       legacyPlugin,
     ]),
   )
@@ -1089,46 +1071,6 @@ export function createStageInteractionController(): StageInteractionController {
     return target
   }
 
-  const samplePaintAt = (
-    target: StagePaintSampling,
-    world: StagePoint,
-    alt: boolean,
-  ): {
-    readonly preview: StagePaintSamplePreview
-    readonly paint?: ComposePaint
-    readonly color?: string
-  } => {
-    const currentContext = context
-    const currentIndex = index
-    if (!currentContext || !currentIndex) {
-      return { preview: { target, point: world, status: 'unavailable' } }
-    }
-    const sampledEntityId = currentIndex.entityAtPoint(world)
-    if (!sampledEntityId) {
-      return { preview: { target, point: world, status: 'unavailable' } }
-    }
-    const sampled = currentContext.document.entities[sampledEntityId]
-    if (sampled && !hasSampleableBackgroundPaint(sampled)) {
-      return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
-    }
-    const explicitPaint = sampled ? getComposeAppearance(sampled)?.backgroundPaint : undefined
-    if (!sampled || !explicitPaint) {
-      return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
-    }
-    const matrix = currentIndex.getWorldMatrix(sampledEntityId)
-    const transform = resolvedSpatialTransform(currentIndex, sampledEntityId)
-    if (!matrix) return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
-    if (!transform) return { preview: { target, point: world, sampledEntityId, status: 'unavailable' } }
-    const local = applyMatrix(invertMatrix(matrix), world)
-    const point = { x: local.x / transform.width, y: local.y / transform.height }
-    const color = evaluateComposePaintAtLocalPoint(explicitPaint, point)
-    return {
-      preview: { target, point: world, sampledEntityId, color, status: 'ready' },
-      ...(target.field === 'backgroundPaint' && alt
-        ? { paint: explicitPaint }
-        : { color }),
-    }
-  }
 
   const enrich = (next: StageInteractionSnapshot): StageInteractionSnapshot => {
     const selected = next.segmentPreview
@@ -1334,17 +1276,6 @@ export function createStageInteractionController(): StageInteractionController {
         phase: 'guide-create',
         guidePreview: gesture.guides,
         guideDelete: gesture.guides.every((guide) => isInsideOwningRuler(guide.axis, point)),
-      })
-      return
-    }
-    if (gesture.type === 'paint-sample') {
-      const result = samplePaintAt(gesture.target, world, modifiers.alt)
-      gesture.point = world
-      gesture.alt = modifiers.alt
-      publish({
-        ...snapshot,
-        phase: 'paint-sample',
-        paintSample: result.preview,
       })
       return
     }
@@ -1573,28 +1504,6 @@ export function createStageInteractionController(): StageInteractionController {
      * Godot 旋转工具与 select/marquee 互斥，必须在 segment-endpoint / paint / 默认 marquee
      * 之前处理：那些分支在 tool!==select 时会提前 return，否则空白按下会落到框选。
      */
-    if (context.paintSampling) {
-      gesture = {
-        type: 'paint-sample',
-        pointerId: event.pointerId,
-        viewport: context.viewport,
-        target: context.paintSampling,
-        point: worldPoint(event.point, context.viewport),
-        alt: event.modifiers.alt,
-      }
-      const result = samplePaintAt(
-        context.paintSampling,
-        gesture.point,
-        event.modifiers.alt,
-      )
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'paint-sample',
-        paintSample: result.preview,
-      })
-      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
-      return
-    }
     if (event.hit.kind === 'path-handle') {
       const editing = context.pathEditing
       // 未注入路径会话时忽略：Overlay 不该在没有会话时渲染手柄，这里兜底保证行为不变。
@@ -1961,33 +1870,6 @@ export function createStageInteractionController(): StageInteractionController {
         : resolved.filter((entityId) => !excluded.has(entityId))
       effects.push({ type: 'selection.change', selectedIds })
     }
-    else if (finished.type === 'paint-sample') {
-      const result = samplePaintAt(finished.target, finished.point, finished.alt)
-      if (result.preview.status === 'ready') {
-        const entity = context.document.entities[finished.target.entityId]
-        if (entity && !getComposeLock(entity).locked) {
-          const current = resolveComposeAppearance(entity)
-          const appearance = finished.target.field === 'backgroundPaint'
-            ? { ...current, backgroundPaint: result.paint ?? { kind: 'solid' as const, color: result.color! } }
-            : { ...current, borderColor: result.color! }
-          effects.push({
-            type: 'command.dispatch',
-            command: {
-              id: context.idFactory(),
-              type: BUILTIN_COMMAND_TYPES.setAppearance,
-              payload: { entityId: entity.id, appearance: appearance as unknown as JsonValue },
-              meta: {
-                label: `Sample ${entity.name} paint`,
-                source: 'stage',
-                targetIds: [entity.id],
-                mergeKey: `stage:paint-sample:${entity.id}:${finished.target.field}`,
-              },
-            },
-          })
-        }
-      }
-      effects.push({ type: 'paint.sample.complete' })
-    }
     else if (finished.type === 'guide-create') {
       // axis 'y' 的横线来自顶部标尺，落点仍在标尺内（y < 0）就放弃创建；竖线同理看 x。
       const created = finished.guides.filter((guide) => guide.axis === 'y'
@@ -2345,10 +2227,6 @@ export function createStageInteractionController(): StageInteractionController {
           || (segmentGestureId !== null && (
             nextContext.selectedIds.length !== 1
             || nextContext.selectedIds[0] !== segmentGestureId
-          ))
-          || (gesture?.type === 'paint-sample' && !samePaintSampling(
-            gesture.target,
-            nextContext.paintSampling,
           ))
         ),
       )

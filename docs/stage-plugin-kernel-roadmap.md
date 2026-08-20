@@ -138,7 +138,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 是优先级表的前缀，出现空洞即失败。
 
 因此实际顺序就是优先级表的顺序：
-`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` → `path` → `paint`
+`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` → `paint`
 → `segment-resize` → `marquee-tool` → `draw` → `move-axis` → `marquee-converge`
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
@@ -176,7 +176,11 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 `arbiter.revalidate`：并发文档变化中止空间手势原本靠内核枚举 `gesture.type`，会话进插件后
 必须由会话自己判断。
 
-下一刀是 `paint-sample`(1500)。
+`paint-sample`(1500) ✅ 随后落地：它的接管条件与命中类型无关（采样期间任何位置按下都是一次
+采样），因此挡在其后所有按命中判定的插件之前，抽取顺序上必须早做。`interaction-controller.ts`
+2500 → 2385 行。
+
+下一刀是 `path`(1400)。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 
