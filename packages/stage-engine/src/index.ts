@@ -148,6 +148,10 @@ export {
 } from './transaction-labels'
 
 export {
+  transformedSelection,
+  transformedResizeSelection,
+} from './transform-preview'
+export {
   planTransformCommit,
   resolveTransformTargets,
   type StageFinishedTransform,
