@@ -124,11 +124,23 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 `draw`；另有两个只存在于 React 层的会话——`text-edit` 与 `drilldown`（它们不在引擎里）。
 `path` 就是动画模式的运动路径编辑。
 
-按缠绕程度从低到高：`marquee` / `pan` → `draw` / `segment-resize` → `guide-create` /
+按缠绕程度从低到高：`pan` ✅ → `marquee` → `draw` / `segment-resize` → `guide-create` /
 `guide-move` → `paint` / `paint-sample` / `path` → `move` / `resize` / `rotate`
 → `text-edit` / `drilldown`。每搬一个，legacy 巨插件瘦一圈，对应测试转为插件纯状态机测试
 （`interaction-controller.test.ts` 2225 行由此自然散成十来个小文件）。
 **门槛**：每步 e2e 绿、legacy 行数单调递减。
+
+**`pan` 已完成**（`refactor-stage-pan-plugin`）：`interaction-controller.ts` 2922 → 2890 行。
+它逼出两处契约扩展——`StagePluginContext` 的只读 `snapshot` 与 `idleSnapshot()`（claim 要读
+跨会话存活的 `temporaryPan`），以及 `StageSessionArbiter.activePluginId()`（内核在
+`temporary-pan.end` 上要区分会话种类，而手势分类不得回流到内核）。优先级表由此首次生效，
+但 pan(1700) 与 legacy(0) 之间没有其它插件，因此本步只验证了「表能用」，还验证不了
+「表的顺序对」——顺序风险要等 `marquee` 那三个入口落地。
+
+**`marquee` 是下一刀，也是第一次真正检验优先级表**：它在级联里有三处入口
+（`marquee-tool` 1100、`marquee-converge` 800、`marquee-fallback` 100），中间夹着 `draw`、
+`move-axis`、`entity-select-move`、`resize`、`guide-*`。因此它必须拆成三个共享同一会话
+工厂的插件，而不是一个。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

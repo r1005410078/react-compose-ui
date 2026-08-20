@@ -20,6 +20,15 @@ export interface StageSessionArbiter {
   /** 活动会话绑定的指针；无会话时为 null。 */
   activePointerId(): number | null
   /**
+   * 创建了活动会话的插件 id；无会话时为 null。
+   *
+   * @remarks
+   * 内核处理非指针事件时据此区分会话种类（例如松开临时平移键只应结束平移会话）。
+   * 暴露的是**谁创建了会话**这一内核已知的事实，而不是让会话自报手势类型——后者会把手势
+   * 分类重新塞回内核，正是插件化要消除的耦合。
+   */
+  activePluginId(): string | null
+  /**
    * 按优先级询问插件。
    *
    * @remarks
@@ -65,6 +74,7 @@ export function createStageSessionArbiter(
   registry: StagePluginRegistry,
 ): StageSessionArbiter {
   let session: StageSession | null = null
+  let ownerId: string | null = null
 
   const matches = (pointerId: number | undefined) =>
     session !== null && (pointerId === undefined || session.pointerId === pointerId)
@@ -72,6 +82,7 @@ export function createStageSessionArbiter(
   return {
     hasSession: () => session !== null,
     activePointerId: () => session?.pointerId ?? null,
+    activePluginId: () => ownerId,
     begin(event, ctx) {
       if (session) return 'declined'
       for (const plugin of registry.ordered()) {
@@ -80,6 +91,7 @@ export function createStageSessionArbiter(
         // 已消费：本次按下被处理掉但不开会话，且必须阻止其余插件再判定。
         if (claimed === 'consumed') return 'consumed'
         session = claimed
+        ownerId = plugin.id
         return 'claimed'
       }
       return 'declined'
@@ -99,6 +111,7 @@ export function createStageSessionArbiter(
       // 先清空再回调：commit 内部若触发重入（宿主同步回灌 context），看到的是「无会话」，
       // 不会把同一个会话提交两次。
       session = null
+      ownerId = null
       finished.update(event, ctx)
       finished.commit(ctx)
     },
@@ -106,10 +119,12 @@ export function createStageSessionArbiter(
       if (!matches(pointerId)) return
       const finished = session!
       session = null
+      ownerId = null
       finished.cancel()
     },
     release() {
       session = null
+      ownerId = null
     },
   }
 }
