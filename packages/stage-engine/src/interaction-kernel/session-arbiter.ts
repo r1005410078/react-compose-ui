@@ -1,4 +1,8 @@
-import type { StageInteractionEvent } from '../interaction-controller'
+import type {
+  StageInteractionContext,
+  StageInteractionEvent,
+} from '../interaction-controller'
+import type { StageSceneIndex } from '../scene-index'
 import type { StagePluginRegistry } from './plugin-registry'
 import type {
   StagePluginContext,
@@ -51,7 +55,20 @@ export interface StageSessionArbiter {
    *
    * @param pointerId - 省略表示取消任意会话；给出时只取消匹配的会话。
    */
-  cancel(pointerId?: number): void
+  cancel(ctx: StagePluginContext, pointerId?: number): void
+  /**
+   * 让活动会话按新上下文自检；不成立时取消它。
+   *
+   * @remarks
+   * 会话未实现 `isCompatibleWith` 时视为始终成立。无会话时是空操作。
+   *
+   * @returns 是否因不兼容而取消了会话。
+   */
+  revalidate(
+    next: StageInteractionContext,
+    nextIndex: StageSceneIndex,
+    ctx: StagePluginContext,
+  ): boolean
   /**
    * 丢弃对活动会话的引用，且**不**调用它的 `cancel`。
    *
@@ -115,12 +132,21 @@ export function createStageSessionArbiter(
       finished.update(event, ctx)
       finished.commit(ctx)
     },
-    cancel(pointerId) {
+    cancel(ctx, pointerId) {
       if (!matches(pointerId)) return
       const finished = session!
       session = null
       ownerId = null
-      finished.cancel()
+      finished.cancel(ctx)
+    },
+    revalidate(next, nextIndex, ctx) {
+      if (!session?.isCompatibleWith) return false
+      if (session.isCompatibleWith(next, nextIndex)) return false
+      const finished = session
+      session = null
+      ownerId = null
+      finished.cancel(ctx)
+      return true
     },
     release() {
       session = null

@@ -41,9 +41,10 @@ function createPanSession(
       ctx.publish(ctx.idleSnapshot())
       ctx.apply([{ type: 'pointer.release', pointerId }])
     },
-    cancel() {
-      // 取消由内核的 reset 路径统一收尾（发布空闲快照并释放捕获），这里没有插件自有的
-      // 预览状态需要丢弃。
+    cancel(ctx) {
+      // 收尾必须由会话自己做：它在 claim 里发布过 pan phase 并捕获了指针，内核并不知道。
+      ctx.publish(ctx.idleSnapshot())
+      ctx.apply([{ type: 'pointer.release', pointerId }])
     },
   }
 }

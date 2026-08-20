@@ -20,6 +20,10 @@ export {
   STAGE_TEXT_EDIT_GUARD_PLUGIN_ID,
 } from './text-edit-guard-plugin'
 export {
+  createStageRotatePlugin,
+  STAGE_ROTATE_PLUGIN_ID,
+} from './rotate-plugin'
+export {
   createStagePanPlugin,
   STAGE_PAN_PLUGIN_ID,
 } from './pan-plugin'

@@ -82,7 +82,28 @@ export interface StageSession {
    */
   update(event: StageInteractionEvent, ctx: StagePluginContext): void
   commit(ctx: StagePluginContext): void
-  cancel(): void
+  /**
+   * 丢弃预览并收尾。
+   *
+   * @remarks
+   * 与 `commit` 一样接收 ctx：会话在 claim/update 里发布过快照、捕获过指针，取消时必须由
+   * 它自己还原——内核不知道某个会话发布过什么。
+   */
+  cancel(ctx: StagePluginContext): void
+  /**
+   * 受控上下文变化后，本会话是否仍然成立。
+   *
+   * @remarks
+   * 并发的文档或布局变化 MUST 中止引用 Entity 的空间手势——被拖动的目标可能已经被别处的
+   * 编辑移动、改尺寸甚至删除，继续沿用手势开始时冻结的几何会提交出错误的变换。
+   *
+   * 判据由会话自己给出而不是由内核枚举手势种类：只有会话知道自己引用了哪些 Entity、
+   * 依赖了哪部分上下文。返回 `false` 时内核取消该会话。
+   *
+   * 省略即视为始终成立——适用于不引用任何 Entity 的会话（例如平移只改视口、绘制只由世界
+   * 坐标定义，两者都不应被并发文档变化打断）。
+   */
+  isCompatibleWith?(next: StageInteractionContext, nextIndex: StageSceneIndex): boolean
 }
 
 /**

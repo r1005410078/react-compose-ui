@@ -146,7 +146,7 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 依据活动插件
     arbiter.begin(pointerDown(), ctx)
     expect(arbiter.activePluginId()).toBe(STAGE_PAN_PLUGIN_ID)
 
-    arbiter.cancel()
+    arbiter.cancel(ctx)
     expect(arbiter.activePluginId()).toBeNull()
   })
 
