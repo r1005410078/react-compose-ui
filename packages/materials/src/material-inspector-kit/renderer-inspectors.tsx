@@ -24,7 +24,6 @@ import {
 } from '../text/defaults'
 import { SHAPE_RENDERER_PROP_SCHEMAS } from '../shape/props'
 import { TEXT_RENDERER_PROP_SCHEMAS } from '../text/props'
-import { composeNodePropertySchema } from './node'
 
 /** Inspector 命令 ID factory。 @internal */
 export type InspectorIdFactory = () => string
@@ -380,41 +379,6 @@ export function createShapeRendererInspector(idFactory: InspectorIdFactory) {
   }
 }
 
-/**
- * 创建 Page Slot Renderer Props Inspector。
- *
- * @remarks
- * `page` 使用 node 基础 editor；候选与拖入解析由宿主经 `nodeEditPort` 注入，物料不理解
- * 页面目录本身。
- * @internal
- */
-export function createPageSlotRendererInspector(idFactory: InspectorIdFactory) {
-  return function PageSlotRendererInspector(context: ComposeRendererInspectorProps) {
-    const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
-    const schema = v.object({
-      page: composeNodePropertySchema({ title: title(zh, 'Page', '页面') }),
-    })
-    const props = inspectorBaseProps(context)
-    const value = { page: (props.page ?? null) as never }
-    return (
-      <ComposePropertyPanel
-        aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
-        binding={createPropsBinding(context)}
-        defaultValue={{ page: null as never }}
-        nodeEditor={context.nodeEditPort}
-        readOnly={context.readOnly}
-        schema={schema}
-        value={value}
-        onValueChange={(next) => dispatchProps(
-          context,
-          // setRendererProps 是整体替换语义；schema 之外的宿主 props 必须原样保留。
-          { ...context.authoredProps, ...next } as JsonObject,
-          idFactory,
-        )}
-      />
-    )
-  }
-}
 
 /** 创建 Image Renderer Props Inspector。 @internal */
 export function createImageRendererInspector(idFactory: InspectorIdFactory) {

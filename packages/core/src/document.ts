@@ -19,6 +19,7 @@ import {
 } from './layout'
 import { isComposeColor, isValidComposePaint } from './paint'
 import { collectComposeInteractionValidationIssues } from './interaction'
+import { COMPOSE_LEGACY_PAGE_SLOT_RENDERER_TYPE } from './page-slot-migration'
 
 type Path = readonly (string | number)[]
 type UnknownRecord = Record<string, unknown>
@@ -357,6 +358,16 @@ function validateRenderer(
   rejectUnknownFields(value, ['type', 'props'], path, issues, 'renderer.invalid')
   if (!nonEmpty(value.type)) {
     addIssue(issues, 'renderer.invalid', [...path, 'type'], 'Renderer type 必须是非空字符串')
+  }
+  if (value.type === COMPOSE_LEGACY_PAGE_SLOT_RENDERER_TYPE) {
+    // 页面嵌套已删除。这里报可判别的 legacy issue 而不是静默放行：放行会让一个没有
+    // Renderer 实现的 Entity 一路走到渲染层才变成空白，用户无从知道内容去哪了。
+    addIssue(
+      issues,
+      'renderer.legacy-page-slot',
+      [...path, 'type'],
+      'Page Slot 已删除，请对文档执行显式降级迁移后改用组件实例',
+    )
   }
   if (!isRecord(value.props)) {
     addIssue(issues, 'renderer.invalid', [...path, 'props'], 'Renderer props 必须是 JsonObject')

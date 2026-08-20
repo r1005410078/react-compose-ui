@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_COMPOSE_IMAGE_RENDERER } from './image/definition'
-import { DEFAULT_COMPOSE_PAGE_SLOT_RENDERER } from './page-slot/definition'
 import { DEFAULT_COMPOSE_SVG_RENDERER } from './svg/definition'
 import { DEFAULT_COMPOSE_TEXT_RENDERER } from './text/definition'
 
@@ -76,9 +75,6 @@ describe('first-party Renderer Prop Contracts', () => {
       'strokeColor',
     ])
     expect(DEFAULT_COMPOSE_SVG_RENDERER.propCategories).toEqual([{ id: 'svg', label: 'SVG' }])
-    expect(contractNames(DEFAULT_COMPOSE_PAGE_SLOT_RENDERER)).toEqual(['page'])
-    expect(DEFAULT_COMPOSE_PAGE_SLOT_RENDERER.inspectorPropNames).toEqual(['page'])
-    expect(DEFAULT_COMPOSE_PAGE_SLOT_RENDERER.propCategories).toEqual([{ id: 'page', label: '页面' }])
   })
 
   it('OpenSpec: component-registry / 字段绑定校验 / Contract 与 Inspector Schema 接受同一值域', () => {

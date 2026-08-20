@@ -121,16 +121,6 @@ export interface ComposePageReference extends JsonObject {
 }
 
 /**
- * 页面嵌套渲染的判定结果。
- *
- * @remarks
- * `cycle` 与 `depth-exceeded` 都要求调用方停止加载并呈现警示，而不是回退为空内容 ——
- * 否则用户无法区分「引用错了」和「目标页面是空的」。
- * @public
- */
-export type ComposePageNestState = 'ok' | 'cycle' | 'depth-exceeded'
-
-/**
  * 按页面引用加载页面聚合的宿主端口。
  *
  * @remarks

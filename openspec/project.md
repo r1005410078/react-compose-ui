@@ -90,7 +90,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/materials` 提供 Group、Container、Widget Switcher、Rectangle、Text、Image、SVG、Component Instance Entity Presets、
   Renderer、Component Definitions 与 Capabilities，依赖 core、assets、component-registry、
   components、layout-engine、property-panel、script-runtime、ui-context、DOMPurify 与 Valibot，不依赖 stage、
-  editor 或 asset-browser；layout-engine 只服务 Page Slot 与组件实例嵌套文档 Runtime。
+  editor 或 asset-browser；layout-engine 只服务组件实例嵌套文档 Runtime。
 - `@compose-ui/editor` 是可嵌入 React 编辑器入口，可以依赖 core、registry、stage、
   stage-engine 与独立面板包。
 - `@compose-ui/components` 是共享的无业务 Tree 等 React 交互组件包，可依赖 `ui-context`；

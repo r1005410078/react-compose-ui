@@ -507,6 +507,8 @@ export type DocumentValidationIssueCode =
   | 'appearance.invalid'
   | 'appearance.invalid-paint'
   | 'renderer.invalid'
+  /** 文档含已删除的 Page Slot Entity；需要显式降级迁移。 */
+  | 'renderer.legacy-page-slot'
   | 'bindings.invalid'
   | 'interaction.invalid'
   | 'animation.invalid'

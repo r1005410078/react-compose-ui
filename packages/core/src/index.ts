@@ -139,6 +139,15 @@ export type {
   ComposeNavigateAction,
   ComposeNavigateBackAction,
 } from './interaction'
+export {
+  COMPOSE_LEGACY_PAGE_SLOT_RENDERER_TYPE,
+  isComposeLegacyPageSlotEntity,
+  migrateComposeDocumentPageSlots,
+} from './page-slot-migration'
+export type {
+  ComposePageSlotMigrationEntry,
+  ComposePageSlotMigrationResult,
+} from './page-slot-migration'
 export { applyDocumentPatches, jsonEqual } from './patches'
 export { createTransactionRuntime } from './runtime'
 export {
@@ -238,7 +247,6 @@ export {
   COMPOSE_PAGE_FILE_SUFFIX,
   COMPOSE_PAGE_MEDIA_TYPE,
   COMPOSE_PAGE_SCHEMA_VERSION,
-  COMPOSE_PAGE_NEST_DEPTH_LIMIT,
   composePageDisplayName,
   composePageFileName,
   createEmptyComposeAppManifest,
@@ -253,7 +261,6 @@ export {
   resolveComposePageActiveFrameId,
   parseComposePageDocument,
   readComposePageReference,
-  resolveComposePageNestState,
   serializeComposeAppManifest,
   serializeComposePageDocument,
   serializeComposePageFile,
@@ -275,11 +282,9 @@ export type {
   ComposePageFileIssueCode,
   ComposePageLoader,
   ComposePageMigrationResult,
-  ComposePageNestState,
   ComposePageParseResult,
   ComposePageReference,
   ComposePageSetupReference,
-  ResolveComposePageNestStateInput,
 } from './page'
 
 /** `@compose-ui/core` 的稳定包标识。 @public */
