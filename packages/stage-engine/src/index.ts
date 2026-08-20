@@ -148,6 +148,13 @@ export {
 } from './transaction-labels'
 
 export {
+  planTransformCommit,
+  resolveTransformTargets,
+  type StageFinishedTransform,
+  type StageTransformKind,
+  type StageTransformTargets,
+} from './transform-planning'
+export {
   createStagePluginRegistry,
   createStageSessionArbiter,
   STAGE_GESTURE_PRIORITY,
