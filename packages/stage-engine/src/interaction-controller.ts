@@ -13,7 +13,6 @@ import {
   getComposeAppearance,
   getComposeRenderer,
   evaluateComposePaintAtLocalPoint,
-  getComposeTransform,
   resolveComposeAppearance,
   resolveComposeGeometryConstraints,
 } from '@compose-ui/core'
@@ -60,9 +59,6 @@ import {
   multiplyMatrices,
   rectMappingMatrix,
   resizeBounds,
-  pointOnRotationRay,
-  rotationFromPointer,
-  rotationMatrixAround,
   screenToWorld,
   snapTranslation,
   translationMatrix,
@@ -71,6 +67,7 @@ import {
 // 交互内核只做类型级依赖回指（`import type`），因此这里的相互引用不产生运行时循环。
 import {
   createStagePanPlugin,
+  createStageRotatePlugin,
   createStageTextEditGuardPlugin,
   createStagePluginRegistry,
   createStageSessionArbiter,
@@ -691,24 +688,6 @@ type Gesture =
       end: StagePoint
     }
   | {
-      readonly type: 'rotate'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly ids: readonly string[]
-      readonly startWorld: StagePoint
-      readonly bounds: StageRect
-      /** 旋转枢轴（世界坐标），拉线起点。 */
-      readonly center: StagePoint
-      /**
-       * 参考实体在手势开始时的旋转角（度）。
-       * Shift 时对「绝对角」做 15° 吸附，而不是只吸附相对 delta。
-       */
-      readonly baseRotation: number
-      /** 当前指针世界坐标，拉线终点（吸附时已投影到射线）。 */
-      pointerWorld: StagePoint
-      transforms: Readonly<Record<string, StageTransform>>
-    }
-  | {
       readonly type: 'guide-create'
       readonly pointerId: number
       readonly viewport: StageViewport
@@ -1075,6 +1054,7 @@ export function createStageInteractionController(): StageInteractionController {
     createStagePluginRegistry([
       createStageTextEditGuardPlugin(),
       createStagePanPlugin(),
+      createStageRotatePlugin(),
       legacyPlugin,
     ]),
   )
@@ -1526,41 +1506,13 @@ export function createStageInteractionController(): StageInteractionController {
       }])
       return
     }
-    if (gesture.type !== 'rotate') return
-    const center = gesture.center
-    const angle = rotationFromPointer(center, gesture.startWorld, world, {
-      shift: modifiers.shift,
-      baseRotation: gesture.baseRotation,
-    })
-    // Shift 吸附时拉线终点也投影到吸附射线，避免线跟着鼠标、物体却已跳角。
-    const pointer = modifiers.shift
-      ? pointOnRotationRay(center, gesture.startWorld, world, angle)
-      : world
-    gesture.pointerWorld = pointer
-    gesture.transforms = transformedSelection(
-      index,
-      gesture.ids,
-      rotationMatrixAround(center, angle),
-    )
-    publish({
-      ...snapshot,
-      phase: 'rotate',
-      previewTransforms: gesture.transforms,
-      rotationPreview: {
-        center,
-        pointer,
-        angleDegrees: angle,
-        snapped: modifiers.shift,
-      },
-      snapGuides: [],
-    })
   }
 
   const begin = (event: Extract<StageInteractionEvent, { type: 'pointer.down' }>) => {
     if (!context || !index || !surface || event.button > 1) return
     const effects: StageInteractionEffect[] = []
     const startTransform = (
-      type: 'move' | 'resize' | 'rotate',
+      type: 'move' | 'resize',
       ids: readonly string[],
       handle?: ResizeHandle,
       axis?: 'x' | 'y',
@@ -1613,39 +1565,6 @@ export function createStageInteractionController(): StageInteractionController {
           phase: 'resize',
         })
       }
-      else {
-        const center = {
-          x: bounds.x + bounds.width / 2,
-          y: bounds.y + bounds.height / 2,
-        }
-        const referenceId = editableIds[0]!
-        const baseRotation = getComposeTransform(
-          context!.document.entities[referenceId]!,
-        ).rotation
-        gesture = {
-          type: 'rotate',
-          pointerId: event.pointerId,
-          viewport,
-          ids: editableIds,
-          startWorld,
-          bounds,
-          center,
-          baseRotation,
-          pointerWorld: startWorld,
-          transforms: {},
-        }
-        // Godot 风格：按下即出现中心到指针的拉线，线随指针移动。
-        publish({
-          ...initialSnapshot(snapshot.temporaryPan),
-          phase: 'rotate',
-          rotationPreview: {
-            center,
-            pointer: startWorld,
-            angleDegrees: 0,
-            snapped: false,
-          },
-        })
-      }
       effects.push({ type: 'pointer.capture', pointerId: event.pointerId })
       return true
     }
@@ -1654,41 +1573,6 @@ export function createStageInteractionController(): StageInteractionController {
      * Godot 旋转工具与 select/marquee 互斥，必须在 segment-endpoint / paint / 默认 marquee
      * 之前处理：那些分支在 tool!==select 时会提前 return，否则空白按下会落到框选。
      */
-    if (context.tool === 'rotate') {
-      if (event.hit.kind === 'entity') {
-        const entity = context.document.entities[event.hit.entityId]
-        if (!entity) return
-        const selected = context.selectedIds.filter((id) => context!.document.entities[id])
-        const nextSelection = event.modifiers.shift
-          ? selected.includes(entity.id)
-            ? selected.filter((id) => id !== entity.id)
-            : [...selected, entity.id]
-          : selected.includes(entity.id) ? selected : [entity.id]
-        effects.push({ type: 'selection.change', selectedIds: nextSelection })
-        if (!getComposeLock(entity).locked) {
-          startTransform('rotate', nextSelection)
-        }
-        apply(effects)
-        return
-      }
-      if (
-        event.hit.kind === 'ruler'
-        || event.hit.kind === 'ruler-corner'
-        || event.hit.kind === 'guide'
-        || event.hit.kind === 'paint-handle'
-        || event.hit.kind === 'path-handle'
-      ) {
-        // 标尺/辅助线/Paint 柄/路径柄保留原语义，交给后续分支。
-      }
-      else {
-        if (context.selectedIds.length > 0) {
-          startTransform('rotate', context.selectedIds)
-        }
-        apply(effects)
-        return
-      }
-    }
-
     if (context.paintSampling) {
       gesture = {
         type: 'paint-sample',
@@ -2252,11 +2136,7 @@ export function createStageInteractionController(): StageInteractionController {
             },
       })
     }
-    else if (
-      finished.type === 'move'
-      || finished.type === 'resize'
-      || finished.type === 'rotate'
-    ) {
+    else if (finished.type === 'move' || finished.type === 'resize') {
       const planned = planTransformCommit({
         document: context.document,
         layoutSnapshot: context.layoutSnapshot,
@@ -2424,11 +2304,7 @@ export function createStageInteractionController(): StageInteractionController {
         nextContext.hiddenEntityIds,
       )
       const gestureIds = gesture
-        && (
-          gesture.type === 'move'
-          || gesture.type === 'resize'
-          || gesture.type === 'rotate'
-        )
+        && (gesture.type === 'move' || gesture.type === 'resize')
         ? gesture.ids
         : null
       const paintGestureId = gesture?.type === 'paint' ? gesture.entityId : null
@@ -2504,6 +2380,9 @@ export function createStageInteractionController(): StageInteractionController {
         reset()
         return
       }
+      // 已抽成插件的会话自己判断是否仍然成立：内核不再枚举手势种类。上面的 incompatible
+      // 只覆盖仍住在 legacy 里的手势。
+      if (arbiter.revalidate(nextContext, nextIndex, pluginContext)) return
       const next = enrich(snapshot)
       if (
         next.cursor !== snapshot.cursor
@@ -2554,7 +2433,7 @@ export function createStageInteractionController(): StageInteractionController {
         return
       }
       if (event.type === 'pointer.cancel') {
-        arbiter.cancel(event.pointerId)
+        arbiter.cancel(pluginContext, event.pointerId)
         return
       }
       if (event.type === 'temporary-pan.start') {
@@ -2572,7 +2451,7 @@ export function createStageInteractionController(): StageInteractionController {
           arbiter.update(event, pluginContext)
           return
         }
-        if (arbiter.activePluginId() === STAGE_PAN_PLUGIN_ID) arbiter.cancel()
+        if (arbiter.activePluginId() === STAGE_PAN_PLUGIN_ID) arbiter.cancel(pluginContext)
         if (snapshot.temporaryPan) publish({ ...snapshot, temporaryPan: false })
         return
       }

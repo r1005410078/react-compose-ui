@@ -235,7 +235,7 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 取消释放会话
     const arbiter = createStageSessionArbiter(registry)
     arbiter.begin(pointerDown(1), ctx)
 
-    arbiter.cancel()
+    arbiter.cancel(ctx)
 
     expect(log).toEqual(['session.cancel'])
     expect(arbiter.hasSession()).toBe(false)
@@ -249,7 +249,7 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 取消释放会话
     const arbiter = createStageSessionArbiter(registry)
     arbiter.begin(pointerDown(1), ctx)
 
-    arbiter.cancel(2)
+    arbiter.cancel(ctx, 2)
 
     expect(log).toEqual([])
     expect(arbiter.hasSession()).toBe(true)
@@ -259,7 +259,7 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 取消释放会话
     const registry = createStagePluginRegistry([plugin('only', 10, () => null)])
     const arbiter = createStageSessionArbiter(registry)
 
-    expect(() => arbiter.cancel()).not.toThrow()
+    expect(() => arbiter.cancel(ctx)).not.toThrow()
   })
 
   it('release 丢弃会话但不调用 cancel', () => {

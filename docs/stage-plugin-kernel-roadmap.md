@@ -138,7 +138,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 是优先级表的前缀，出现空洞即失败。
 
 因此实际顺序就是优先级表的顺序：
-`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` → `paint-sample` → `path` → `paint`
+`text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` → `path` → `paint`
 → `segment-resize` → `marquee-tool` → `draw` → `move-axis` → `marquee-converge`
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
@@ -165,9 +165,18 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 
 `rotate-tool`(1600) 是下一项，但它没法像 pan 那样直接抽：`startTransform` 是 move/resize/rotate
 共用的目标解析工厂，提交分支也是三者的融合体，合计约 200 行。因此先做
-`refactor-stage-transform-helpers` ✅ 把这两段变成纯函数
-（`resolveTransformTargets` / `planTransformCommit`），`interaction-controller.ts`
-2879 → 2773 行，并让这些业务规则第一次有了直接单测。rotate 插件本身是下一刀。
+两个前置：`refactor-stage-transform-helpers` ✅ 抽出提交侧纯函数
+（`resolveTransformTargets` / `planTransformCommit`），`refactor-stage-transform-preview` ✅
+把预览几何（`transformedSelection` 及其依赖链）移出 controller——插件导入私有函数会构成运行时
+循环。随后 `refactor-stage-rotate-plugin` ✅ 落地插件本体。
+
+`interaction-controller.ts` 至此 2879 → 2509 行。rotate 又暴露契约两处缺口：
+`StageSession.cancel` 需要接收 ctx（会话发布过快照、捕获过指针，取消时必须自己还原——
+**pan 也有同一问题**，取消后快照会停在 `pan` phase），以及 `isCompatibleWith` +
+`arbiter.revalidate`：并发文档变化中止空间手势原本靠内核枚举 `gesture.type`，会话进插件后
+必须由会话自己判断。
+
+下一刀是 `paint-sample`(1500)。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 
