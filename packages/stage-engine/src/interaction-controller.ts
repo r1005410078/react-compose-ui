@@ -39,7 +39,7 @@ import {
   resolveTargetFrameId,
   toFrameGuidePosition,
 } from './frame-space'
-import { describeEntityTargets, describeTransform } from './transaction-labels'
+import { describeEntityTargets } from './transaction-labels'
 import {
   expandScrollRange,
   snapResizePoint,
@@ -67,7 +67,6 @@ import {
   rotationMatrixAround,
   screenToWorld,
   snapTranslation,
-  toComposeTransform,
   translationMatrix,
   unionRects,
 } from './geometry'
@@ -80,6 +79,7 @@ import {
   STAGE_LEGACY_MONOLITH_PRIORITY,
   STAGE_PAN_PLUGIN_ID,
 } from './interaction-kernel'
+import { planTransformCommit, resolveTransformTargets } from './transform-planning'
 import type {
   StageInteractionPlugin,
   StagePluginContext,
@@ -873,13 +873,6 @@ function marqueeCombine(modifiers: StageInteractionModifiers): StageMarqueeCombi
   if (modifiers.shift) return 'add'
   if (modifiers.alt) return 'subtract'
   return 'replace'
-}
-
-function selectionBounds(index: StageSceneIndex, ids: readonly string[]) {
-  return unionRects(ids
-    .filter((id) => index.isVisible(id))
-    .map((id) => index.getWorldBounds(id))
-    .filter((rect): rect is StageRect => rect !== null))
 }
 
 function matrixBounds(matrix: StageMatrix, width: number, height: number): StageRect {
@@ -1724,27 +1717,15 @@ export function createStageInteractionController(): StageInteractionController {
       handle?: ResizeHandle,
       axis?: 'x' | 'y',
     ) => {
-      const editableIds = index!.topLevelSelection(ids)
-        .filter((id) => {
-          const entity = context!.document.entities[id]
-          if (!entity || !index!.isVisible(id) || getComposeLock(entity).locked) return false
-          const constraints = resolveComposeGeometryConstraints(entity)
-          // 页面实例最外层始终可 free 缩放（旧文档可能仍存 resize:none）。
-          const isComponentInstance = getComposeRenderer(entity)?.type === 'component-instance'
-          const resizeMode = isComponentInstance ? 'free' as const : constraints.resize
-          if (type === 'move') return constraints.movable
-          if (type === 'rotate') return constraints.rotatable
-          if (resizeMode === 'none') return false
-          if (!handle) return true
-          if (resizeMode === 'horizontal') return handle === 'e' || handle === 'w'
-          if (resizeMode === 'vertical') return handle === 'n' || handle === 's'
-          if (resizeMode === 'preserve-aspect') {
-            return handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw'
-          }
-          return true
-        })
-      const bounds = selectionBounds(index!, editableIds)
-      if (!bounds || editableIds.length === 0) return false
+      const targets = resolveTransformTargets({
+        document: context!.document,
+        index: index!,
+        type,
+        ids,
+        handle,
+      })
+      if (!targets) return false
+      const { editableIds, bounds } = targets
       const viewport = context!.viewport
       const startWorld = worldPoint(event.point, viewport)
       if (type === 'move') {
@@ -2428,101 +2409,14 @@ export function createStageInteractionController(): StageInteractionController {
       || finished.type === 'resize'
       || finished.type === 'rotate'
     ) {
-      // 无结构落点的 move 对 Flow 目标回弹：位置由 Auto Layout 决定，提交 Transform 只会
-      // 写入无效 offset。脱流不再由拖拽隐式触发，唯一入口是几何 Inspector 的显式开关。
-      const stageUpdates = Object.entries(finished.transforms)
-        .filter(([entityId]) => {
-          if (finished.type !== 'move') return true
-          const entity = context!.document.entities[entityId]
-          return !entity || getComposeLayoutItem(entity).positioning !== 'flow'
-        })
-        .map(([entityId, transform]) => ({
-          entityId,
-          transform,
-        }))
-      if (stageUpdates.length > 0) {
-        const updates = stageUpdates.map(({ entityId, transform }) => {
-          const next = toComposeTransform(transform)
-          const entity = context!.document.entities[entityId]
-          const item = entity ? getComposeLayoutItem(entity) : null
-          const persistedAbsolutePosition = () => {
-            const initialBox = context!.layoutSnapshot.boxes[entityId]
-            const parentId = index?.getParentId(entityId)
-            const parent = parentId ? context!.document.entities[parentId] : undefined
-            const borderInset = parent ? resolveComposeAppearance(parent).borderWidth : 0
-            const inset = item?.positioning === 'absolute' && initialBox
-              ? {
-                  x: initialBox.x - item.offset.x,
-                  y: initialBox.y - item.offset.y,
-                }
-              : { x: borderInset, y: borderInset }
-            return {
-              x: next.position.x - inset.x,
-              y: next.position.y - inset.y,
-            }
-          }
-          // move 的几何来自冻结 Snapshot；非 Fill 轴仍保留持久 fallback，避免把
-          // Yoga clamp 后的尺寸误记成一次 Resize。Fill 转 Absolute 时才烘焙求解尺寸。
-          if (!item) return { entityId, transform: next }
-          if (finished.type === 'move') {
-            return {
-              entityId,
-              transform: {
-                ...next,
-                position: persistedAbsolutePosition(),
-                size: {
-                  width: item.width.mode === 'fill' ? next.size.width : item.width.value,
-                  height: item.height.mode === 'fill' ? next.size.height : item.height.value,
-                },
-              },
-            }
-          }
-          if (finished.type === 'resize') {
-            const changesWidth = finished.handle.includes('e') || finished.handle.includes('w')
-            const changesHeight = finished.handle.includes('n') || finished.handle.includes('s')
-            return {
-              entityId,
-              transform: {
-                ...next,
-                position: item.positioning === 'flow'
-                  ? item.offset
-                  : persistedAbsolutePosition(),
-                size: {
-                  width: changesWidth ? next.size.width : item.width.value,
-                  height: changesHeight ? next.size.height : item.height.value,
-                },
-              },
-            }
-          }
-          return {
-            entityId,
-            transform: {
-              ...next,
-              position: item.positioning === 'flow'
-                ? item.offset
-                : persistedAbsolutePosition(),
-              size: { width: item.width.value, height: item.height.value },
-            },
-          }
-        })
-        effects.push({
-          type: 'command.dispatch',
-          command: {
-            id: context.idFactory(),
-            type: BUILTIN_COMMAND_TYPES.setTransform,
-            payload: { operation: finished.type, updates },
-            meta: {
-              label: describeTransform(
-                context.document,
-                stageUpdates,
-                finished.type,
-              ),
-              source: 'stage',
-              targetIds: finished.ids,
-            },
-          },
-        })
-      }
+      const planned = planTransformCommit({
+        document: context.document,
+        layoutSnapshot: context.layoutSnapshot,
+        index,
+        finished,
+        idFactory: context.idFactory,
+      })
+      if (planned) effects.push(planned)
     }
     // 正式命令必须在 preview 清理和 capture 释放前同步交给宿主，否则 React
     // 会短暂重新渲染旧 document，造成高速松手时可见的“回弹”。

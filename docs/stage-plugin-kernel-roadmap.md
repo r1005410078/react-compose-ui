@@ -163,7 +163,11 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 插件）；非编辑态返回 `null`。**`claim` 允许有副作用**——它本就要发 `pointer.capture`，
 这里发的是退出编辑。
 
-下一刀是 `rotate-tool`(1600)——按优先级自上而下，它是 pan 之后的下一项。
+`rotate-tool`(1600) 是下一项，但它没法像 pan 那样直接抽：`startTransform` 是 move/resize/rotate
+共用的目标解析工厂，提交分支也是三者的融合体，合计约 200 行。因此先做
+`refactor-stage-transform-helpers` ✅ 把这两段变成纯函数
+（`resolveTransformTargets` / `planTransformCommit`），`interaction-controller.ts`
+2879 → 2773 行，并让这些业务规则第一次有了直接单测。rotate 插件本身是下一刀。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 
