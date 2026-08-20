@@ -74,6 +74,7 @@ import {
 // 交互内核只做类型级依赖回指（`import type`），因此这里的相互引用不产生运行时循环。
 import {
   createStagePanPlugin,
+  createStageTextEditGuardPlugin,
   createStagePluginRegistry,
   createStageSessionArbiter,
   STAGE_LEGACY_MONOLITH_PRIORITY,
@@ -1230,7 +1231,11 @@ export function createStageInteractionController(): StageInteractionController {
     claim: (event, pluginContext) => legacyClaim(event, pluginContext),
   }
   const arbiter = createStageSessionArbiter(
-    createStagePluginRegistry([createStagePanPlugin(), legacyPlugin]),
+    createStagePluginRegistry([
+      createStageTextEditGuardPlugin(),
+      createStagePanPlugin(),
+      legacyPlugin,
+    ]),
   )
   /** 辅助线读写与 Frame 相关动作共用的活动 Frame 求解。 */
   const targetFrameId = (value: StageInteractionContext) =>
@@ -1713,22 +1718,6 @@ export function createStageInteractionController(): StageInteractionController {
   const begin = (event: Extract<StageInteractionEvent, { type: 'pointer.down' }>) => {
     if (!context || !index || !surface || event.button > 1) return
     const effects: StageInteractionEffect[] = []
-    const editing = context.textEditing
-    if (editing) {
-      // 编辑态下在目标自身上拖拽的语义是选择文本，不是移动实体；整条手势就此打住，
-      // 否则用户在文字上拖选会把实体拖走。
-      const onEditingTarget = event.hit.kind === 'entity'
-        && event.hit.entityId === editing.entityId
-      // 变换手柄始终作用于当前选区，而编辑态的选区就是编辑目标，因此一并屏蔽——
-      // Stage 在编辑态本就不渲染这些手柄，这里是协议层的兜底。
-      const onEditingHandle = event.hit.kind === 'resize'
-        || event.hit.kind === 'rotate'
-        || event.hit.kind === 'move-axis'
-        || (event.hit.kind === 'segment-endpoint' && event.hit.entityId === editing.entityId)
-      if (onEditingTarget || onEditingHandle) return
-      apply([{ type: 'text-editing.exit' }])
-      // 退出后本次按下继续按普通交互处理：点空白即取消选择，点别的实体即选中它。
-    }
     const startTransform = (
       type: 'move' | 'resize' | 'rotate',
       ids: readonly string[],
