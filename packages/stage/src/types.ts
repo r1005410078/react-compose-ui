@@ -288,6 +288,20 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly onSurfaceSizeChange?: (
     size: { readonly width: number; readonly height: number },
   ) => void
+  /**
+   * 首次布局就绪时是否自动把视口适配到激活场景。
+   *
+   * @remarks
+   * Stage 在第一次量到真实 surface 尺寸后适配一次，使激活场景整体可见并居中；
+   * `activeFrameId` 缺省或失效时回退第一块根 Frame。适配结果通过
+   * {@link ComposeStageProps.onViewportChange} 发出，Stage 仍然不持有视口。
+   *
+   * 该适配每次挂载只发生一次：随后的编辑、选择变化与窗口缩放都不再自动改视口。
+   * 宿主自己恢复上次保存的视口时应传 `false`，否则会被这次适配覆盖。
+   *
+   * @defaultValue true
+   */
+  readonly autoFitActiveFrame?: boolean
   /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */
   readonly interactionController?: StageInteractionController
   /** 仅当单选 Entity 的背景 Paint Inspector 打开时传入，Stage 才显示渐变画布控制柄。 */

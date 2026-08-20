@@ -1461,3 +1461,91 @@ describe('OpenSpec: stage / 画布可编辑路径覆盖层与手势上报', () =
     expect(dispatchSpy).not.toHaveBeenCalled()
   })
 })
+
+describe('OpenSpec: stage / 场景视口适配', () => {
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  /**
+   * jsdom 里所有元素的 rect 恒为 0，surface 量不到尺寸就不会触发首次适配。
+   * 这里替身出一块 1000×800 的可视区域，让测量分支走通。
+   */
+  function measureSurfaceAs(width: number, height: number) {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width,
+      height,
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: width,
+      bottom: height,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
+
+  function renderFitStage(options: { autoFitActiveFrame?: boolean } = {}) {
+    const value = document([entity('a')])
+    const runtime = createTransactionRuntime({ document: value })
+    const dispatchSpy = vi.fn()
+    const viewportSpy = vi.fn()
+    const dispatch: ComposeStageDispatch = (command) => {
+      dispatchSpy(command)
+      return runtime.dispatch(command)
+    }
+    render(
+      <ComposeStage
+        activeFrameId={ROOT_FRAME_ID}
+        autoFitActiveFrame={options.autoFitActiveFrame}
+        dispatch={dispatch}
+        document={value}
+        layoutSnapshot={layoutSnapshot(value)}
+        registry={registry}
+        selectedIds={[]}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={viewportSpy}
+      />,
+    )
+    return { dispatch: dispatchSpy, viewport: viewportSpy }
+  }
+
+  it('首次布局就绪后把视口适配到激活场景', () => {
+    measureSurfaceAs(1000, 800)
+    const { viewport } = renderFitStage()
+    // 1280×720 的场景放进 1000×800：更紧的是宽轴，缩放 = 1000 / 1280 * 0.85。
+    expect(viewport).toHaveBeenCalledTimes(1)
+    expect(viewport.mock.calls[0]![0].zoom).toBeCloseTo(0.6640625)
+    expect(viewport.mock.calls[0]![0].x).toBeCloseTo(75)
+  })
+
+  it('关闭自动适配时不改变受控视口', () => {
+    measureSurfaceAs(1000, 800)
+    const { viewport } = renderFitStage({ autoFitActiveFrame: false })
+    expect(viewport).not.toHaveBeenCalled()
+  })
+
+  it('surface 尚未量到真实尺寸时不适配', () => {
+    const { viewport } = renderFitStage()
+    expect(viewport).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: stage / 场景尺寸弹框 / 提交尺寸并按新尺寸适配', () => {
+    measureSurfaceAs(1000, 800)
+    const { dispatch, viewport } = renderFitStage()
+    viewport.mockClear()
+    fireEvent.doubleClick(screen.getByTestId(`stage-scene-size-${ROOT_FRAME_ID}`))
+    fireEvent.click(screen.getByTestId('stage-scene-size-preset-1920x1080'))
+    fireEvent.click(screen.getByTestId('stage-scene-size-confirm'))
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: BUILTIN_COMMAND_TYPES.setFrameSize,
+      payload: { entityId: ROOT_FRAME_ID, size: { width: 1920, height: 1080 } },
+    }))
+    // 适配必须按刚提交的 1920×1080 算，而不是本帧快照里的 1280×720。
+    expect(viewport).toHaveBeenCalledTimes(1)
+    expect(viewport.mock.calls[0]![0].zoom).toBeCloseTo(1000 / 1920 * 0.85)
+  })
+})

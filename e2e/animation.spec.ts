@@ -149,7 +149,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 时间线播放模式�
 
 test('OpenSpec: editor-workspace-layout / 自动记录把编辑改写为关键帧 / 场景缩放落基础文档不回弹', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()

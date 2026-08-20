@@ -176,6 +176,57 @@ describe('内建 Component inspectors', () => {
     expect(definitions.find((item) => item.key === 'Renderer')?.hidden).toBe(true)
   })
 
+  it('OpenSpec: basic-materials / Inspector 数值显示精度 / 位置与尺寸按 2 位显示', () => {
+    const Inspector = inspectorOf('LayoutItem')
+    // 手势在非 100% 缩放下写进文档的典型值：真实小数外面裹着一层浮点残渣。
+    const target = entity({
+      LayoutItem: createDefaultComposeLayoutItem(
+        373.3592610597958,
+        248.9061740398639,
+        { x: 82.96874999999991, y: 1280 },
+      ) as unknown as JsonObject,
+    })
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    expect(screen.getByRole('spinbutton', { name: '位置 X' })).toHaveValue(82.97)
+    // 整数不补零。
+    expect(screen.getByRole('spinbutton', { name: '位置 Y' })).toHaveValue(1280)
+    expect(screen.getByRole('combobox', { name: '尺寸宽度' })).toHaveValue('373.36')
+    expect(screen.getByRole('combobox', { name: '尺寸高度' })).toHaveValue('248.91')
+  })
+
+  it('OpenSpec: basic-materials / Inspector 数值显示精度 / 只是失焦不提交', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const target = entity({
+      LayoutItem: createDefaultComposeLayoutItem(
+        180,
+        40,
+        { x: 82.96874999999991, y: 20 },
+      ) as unknown as JsonObject,
+    })
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+    // 显示值 82.97 与底层值不字面相等；未编辑的失焦不得因此产生一次事务。
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '位置 X' }))
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
   it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / Absolute 位置与 Angle 属性分别提交', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('LayoutItem')

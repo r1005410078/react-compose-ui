@@ -832,6 +832,16 @@ export interface UseComposeEditorControllerOptions {
   readonly initialExpandedIds?: readonly string[]
   /** 初始无限 Stage 视口。 @defaultValue `{ x: 80, y: 64, zoom: 1 }` */
   readonly initialViewport?: StageViewport
+  /**
+   * 首次布局就绪时是否把视口自动适配到激活场景。
+   *
+   * @remarks
+   * 关闭时 `initialViewport` 就是用户进入后看到的取景。宿主自己恢复上次保存的视口，
+   * 或需要确定性取景（视觉回归、端到端）时传 `false`。
+   *
+   * @defaultValue true
+   */
+  readonly autoFitActiveFrame?: boolean
   /** 初始 Stage 工具。 @defaultValue `"select"` */
   readonly initialTool?: ComposeStageTool
   /** ComposeCommandPanel 显示的结构化命令预设。 */
@@ -1055,6 +1065,7 @@ export function useComposeEditorController({
   initialSelection = [],
   initialExpandedIds = [],
   initialViewport = { x: 80, y: 64, zoom: 1 },
+  autoFitActiveFrame = true,
   initialTool = 'select',
   commandPresets,
   containerPresetId = 'container',
@@ -1505,6 +1516,7 @@ export function useComposeEditorController({
     onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
     // 宿主有页面会话时会用页面的激活场景覆盖它；没有页面系统时回退第一个根 Frame。
     activeFrameId: document.rootIds[0] ?? null,
+    autoFitActiveFrame,
     onSurfaceSizeChange: setSurfaceSize,
     interactionController,
     paintEditing: activePaintEditing,
@@ -1522,6 +1534,7 @@ export function useComposeEditorController({
     dispatch,
     viewportStore,
     setViewport,
+    autoFitActiveFrame,
     gridVisible,
     tool,
     marqueeMode,

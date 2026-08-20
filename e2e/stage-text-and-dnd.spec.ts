@@ -123,7 +123,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后未输入�
 
 
 test('OpenSpec: stage / 画布内原地文字编辑 / 双击改写后 Esc 提交并可撤销', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -153,7 +153,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 双击改写后 Esc 提交
 
 
 test('OpenSpec: stage / 画布内原地文字编辑 / 空内容退出删除实体且可撤销', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -480,7 +480,7 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 兄弟随拖动实时�
 })
 
 test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子级实时重排', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
@@ -565,7 +565,7 @@ test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout �
 })
 
 test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器跨行重排', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()

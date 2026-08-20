@@ -292,7 +292,7 @@ test('OpenSpec: component-library / 实例层结构覆盖 / 内部删除写入�
 
 test('OpenSpec: component-library / Apply、Revert 与显式更新 / 组件源保存后实例自动同步', async ({ page }) => {
   test.setTimeout(90_000)
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })

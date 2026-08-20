@@ -370,3 +370,55 @@ describe('OpenSpec: property-panel / Color editor 可访问名称', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument()
   })
 })
+
+describe('OpenSpec: property-panel / 数值显示精度', () => {
+  const noisyValue: SemanticValue = {
+    position: { x: 82.96874999999991, y: 1280 },
+    // 高度取 720.5：schema 要求 >= 1，同时覆盖"真实一位小数不该被补成两位"。
+    size: { preset: 'custom' as const, width: 373.3592610597958, height: 720.5 },
+    background: 'transparent',
+  }
+
+  it('长尾小数按 2 位显示，整数不补零', () => {
+    render(<ComposePropertyPanel schema={semanticSchema} value={noisyValue} />)
+    expect(screen.getByLabelText('位置 X')).toHaveValue(82.97)
+    // 整数保持原样，不会变成 1280.00。
+    expect(screen.getByLabelText('位置 Y')).toHaveValue(1280)
+    expect(screen.getByLabelText('尺寸宽度')).toHaveValue(373.36)
+    // 尾随零去掉：720.5 而不是 720.50。
+    expect(screen.getByLabelText('尺寸高度')).toHaveValue(720.5)
+  })
+
+  it('只是聚焦再失焦不产生值变化', () => {
+    const onValueChange = vi.fn()
+    render(
+      <ComposePropertyPanel
+        schema={semanticSchema}
+        value={noisyValue}
+        onValueChange={onValueChange}
+      />,
+    )
+    const input = screen.getByLabelText('位置 X')
+    fireEvent.focus(input)
+    fireEvent.blur(input)
+    expect(onValueChange).not.toHaveBeenCalled()
+  })
+
+  it('用户改过之后按输入值提交', () => {
+    const onValueChange = vi.fn()
+    render(
+      <ComposePropertyPanel
+        schema={semanticSchema}
+        value={noisyValue}
+        onValueChange={onValueChange}
+      />,
+    )
+    const input = screen.getByLabelText('位置 X')
+    fireEvent.change(input, { target: { value: '120' } })
+    fireEvent.blur(input)
+    expect(onValueChange).toHaveBeenCalledWith(
+      expect.objectContaining({ position: { x: 120, y: 1280 } }),
+      expect.anything(),
+    )
+  })
+})

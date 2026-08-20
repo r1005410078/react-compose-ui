@@ -62,7 +62,7 @@ test('OpenSpec: stage / 四角缩放 / resize 手柄在预览阶段跟随鼠标'
 
 test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形状预览与尺寸浮标', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -239,7 +239,7 @@ test('OpenSpec: stage / 直接绘制 Preset / 文字工具只按点创建', asyn
 
 test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主图标同步', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -392,7 +392,7 @@ test('OpenSpec: stage / 画布平移手势 / 空闲张手且拖动时握手', as
 
 test('OpenSpec: stage / Shift 绘制正方形与正圆 / 拖动中动态锁定预览与提交', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -415,9 +415,21 @@ test('OpenSpec: stage / Shift 绘制正方形与正圆 / 拖动中动态锁定�
   await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 248')
   const squarePreviewBounds = await preview.locator('rect').first().boundingBox()
   expect(squarePreviewBounds).not.toBeNull()
-  // SVG 的 1.5px 白色描边会使 DOM box 向外扩 0.75px；允许一个物理像素的视觉误差。
-  expect(Math.abs(squarePreviewBounds!.x + squarePreviewBounds!.width - target.x)).toBeLessThan(1)
-  expect(Math.abs(squarePreviewBounds!.y + squarePreviewBounds!.height - target.y)).toBeLessThan(1)
+  /*
+   * 绘制终点是**吸附后**的落点，不是光标所在的裸坐标——与 resize 一致：吸附一旦生效，
+   * 被拖动的那条边就落在网格线上，光标只是引导。这里 zoom 为 1，因此屏幕偏移等于世界
+   * 坐标，直接按 8 网格算出该落在哪。Shift 正方形仍以这个落点为终点角，向另一侧扩边。
+   * SVG 的 1.5px 白色描边会使 DOM box 向外扩 0.75px；允许一个物理像素的视觉误差。
+   */
+  const snapToGrid = (value: number) => Math.round(value / 8) * 8
+  const snappedCorner = {
+    x: outputBox!.x + snapToGrid(target.x - outputBox!.x),
+    y: outputBox!.y + snapToGrid(target.y - outputBox!.y),
+  }
+  expect(Math.abs(squarePreviewBounds!.x + squarePreviewBounds!.width - snappedCorner.x))
+    .toBeLessThan(1)
+  expect(Math.abs(squarePreviewBounds!.y + squarePreviewBounds!.height - snappedCorner.y))
+    .toBeLessThan(1)
   await page.keyboard.up('Shift')
   await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
   await page.keyboard.down('Shift')
@@ -669,7 +681,7 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
 
 test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风格纵向流程', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -992,4 +1004,110 @@ test('OpenSpec: stage / 顶层容器标题标签 / 场景带标签重命名而�
   await expect(sceneLabel).toHaveText('登录页')
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   await expect(sceneTree.getByRole('row', { name: /登录页/ })).toBeVisible()
+})
+
+test('OpenSpec: stage / 场景视口适配 / 首次进入适配激活场景', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const frame = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frame).toBeVisible()
+
+  // 1280×720 的场景在这块可视区域里放不下 100%，因此适配一定把缩放压到 100% 以下。
+  // 适配发生在首次量到 surface 之后的一个 effect 里，读数值前必须等它落地。
+  const zoomValue = editor.locator('.compose-editor__canvas-zoom-value')
+  await expect(zoomValue).not.toHaveText('100%')
+  const zoom = Number((await zoomValue.textContent())!.replace('%', ''))
+  expect(zoom).toBeGreaterThan(10)
+  expect(zoom).toBeLessThan(100)
+
+  // 适配后场景整体落在 Stage 可视区域内，四周还留有空白。
+  const stageBox = await stage.boundingBox()
+  const frameBox = await frame.boundingBox()
+  expect(frameBox!.x).toBeGreaterThan(stageBox!.x)
+  expect(frameBox!.y).toBeGreaterThan(stageBox!.y)
+  expect(frameBox!.x + frameBox!.width).toBeLessThan(stageBox!.x + stageBox!.width)
+  expect(frameBox!.y + frameBox!.height).toBeLessThan(stageBox!.y + stageBox!.height)
+
+  // 关掉自动适配的宿主停在受控初始视口，缩放仍是 100%。
+  await page.goto('/?no-auto-fit')
+  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
+  await expect(zoomValue).toHaveText('100%')
+})
+
+test('OpenSpec: stage / 场景尺寸弹框 / 双击尺寸胶囊改尺寸并重新适配', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const chip = stage.getByTestId('stage-scene-size-frame-root')
+  const frame = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frame).toBeVisible()
+  await expect(chip).toHaveText('1280 × 720')
+  // 先等首次适配落地，否则量到的是适配前那一帧的场景宽度。
+  await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
+  const fittedWidth = (await frame.boundingBox())!.width
+
+  await chip.dblclick()
+  const dialog = page.getByTestId('stage-scene-size-dialog')
+  await expect(dialog).toBeVisible()
+  await dialog.getByTestId('stage-scene-size-preset-1920x1080').click()
+  await expect(dialog.getByTestId('stage-scene-size-width')).toHaveValue('1920')
+  await dialog.getByTestId('stage-scene-size-confirm').click()
+  await expect(dialog).toBeHidden()
+
+  await expect(chip).toHaveText('1920 × 1080')
+  // 改完立刻重新适配：更宽的场景在屏幕上仍占据同一片可视区域，而不是溢出到画布外。
+  expect((await frame.boundingBox())!.width).toBeCloseTo(fittedWidth, 0)
+  const stageBox = await stage.boundingBox()
+  const frameBox = await frame.boundingBox()
+  expect(frameBox!.x + frameBox!.width).toBeLessThan(stageBox!.x + stageBox!.width)
+
+  // 与 Inspector 走同一条命令，撤销一步回到原尺寸。
+  await stage.press('Control+z')
+  await expect(chip).toHaveText('1280 × 720')
+
+  // 取消不写文档：改了输入再按 Esc，尺寸不变，重新打开回到当前值。
+  await chip.dblclick()
+  await dialog.getByTestId('stage-scene-size-width').fill('900')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(chip).toHaveText('1280 × 720')
+  await chip.dblclick()
+  await expect(dialog.getByTestId('stage-scene-size-width')).toHaveValue('1280')
+})
+
+test('OpenSpec: stage-engine / Headless 绘制会话 / 非 100% 缩放下绘制读数仍是网格倍数', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const frame = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frame).toBeVisible()
+  // 首次进入已经适配，缩放不是 100%：world = (屏幕 - 视口) / zoom 此时必然带小数，
+  // 这正是绘制没接吸附时会写进文档的那串长尾。
+  await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
+
+  // 起止都用奇数屏幕偏移：未吸附的话每一个读数都会带小数。
+  const box = await frame.boundingBox()
+  await editor.getByRole('button', { name: '创建容器' }).click()
+  await page.mouse.move(box!.x + 41, box!.y + 43)
+  await page.mouse.down()
+  await page.mouse.move(box!.x + 223, box!.y + 161, { steps: 6 })
+  await page.mouse.up()
+  await editor.getByRole('button', { name: '选择', exact: true }).click()
+
+  const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  const readings = await Promise.all([
+    inspector.getByRole('spinbutton', { name: '位置 X' }).inputValue(),
+    inspector.getByRole('spinbutton', { name: '位置 Y' }).inputValue(),
+    inspector.getByRole('combobox', { name: '尺寸宽度' }).inputValue(),
+    inspector.getByRole('combobox', { name: '尺寸高度' }).inputValue(),
+  ])
+  for (const reading of readings) {
+    // 吸附把四条边都拉回 8 网格，因此读数是整数且是 8 的倍数——没有小数需要保留。
+    expect(reading).toMatch(/^-?\d+$/)
+    expect(Number(reading) % 8).toBe(0)
+  }
 })
