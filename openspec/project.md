@@ -51,7 +51,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/assets` 保持与 React、DOM 和 ComposeDocument 无关，承载资源 Provider、稳定
   `assetKey` 引用与运行时 Resolver 协议。
 - `@compose-ui/script-runtime` 保持与 React、DOM 和 Editor 无关，承载页面 setup Signal、实例作用域
-  与受信任自包含 JavaScript ESM Loader；它不是安全沙箱，也不编译 TypeScript。
+  与受信任自包含 JavaScript ESM Loader；它不是安全沙箱，也不编译 TypeScript。`ctx.navigate`
+  只转发宿主注入的导航端口，本包不实现导航。
 - `@compose-ui/command-panel` 是订阅 core TransactionRuntime 的独立 React 调试台，只接受宿主
   声明的结构化命令预设，可依赖 components、ui-context，不依赖 editor、history、scene-tree、
   property-panel 或 operation-log。
@@ -61,8 +62,9 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - `@compose-ui/component-library` 管理 Project Component/Variant 的 Component Asset v2 Store、解析、
   Apply/Revert 与混合目录；可依赖 core、assets、component-registry、components、ui-context，不依赖
   editor、stage、scene-tree 或 asset-browser。Registry Preset 继续代表代码物料，不是项目资源。
-- `@compose-ui/pages` 是无 React、无 DOM 的页面目录、页面聚合 Store 与 `app.json` 应用清单读写包，
-  只依赖 `core` 与 `assets`；编辑器与独立预览运行时共用同一 Store，因此页面加载不依赖 `editor`。
+- `@compose-ui/pages` 是无 React、无 DOM 的页面目录、页面聚合 Store、`app.json` 应用清单读写与
+  页面导航会话包，只依赖 `core` 与 `assets`；编辑器与独立预览运行时共用同一 Store，因此页面
+  加载不依赖 `editor`。导航会话只决定当前是哪一页，不渲染、不执行脚本、不持有文档。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的 Stage 坐标、SceneIndex、吸附、交互状态机、
   外部拖入和空间命令包；只依赖 core，不依赖 registry、ui-context 或任何 React 包。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解器，只向外发布 core 的
@@ -83,7 +85,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   component-registry、components、ui-context，不依赖 editor、property-panel 或 operation-log。
 - `@compose-ui/preview` 依赖 core、assets、component-registry、script-runtime、layout-engine 与
   animation（预览对话框播放动画时逐帧采样文档），拥有默认 Layout
-  Runtime/measurement adapter，也可挂接宿主 Runtime；不得依赖 editor 或 stage。
+  Runtime/measurement adapter，也可挂接宿主 Runtime；不得依赖 editor、stage 或 pages。
+  `ComposePageHost` 只消费 core 的 `ComposeNavigationPort` 与 `ComposePageLoader` 协议类型。
 - `@compose-ui/materials` 提供 Group、Container、Widget Switcher、Rectangle、Text、Image、SVG、Component Instance Entity Presets、
   Renderer、Component Definitions 与 Capabilities，依赖 core、assets、component-registry、
   components、layout-engine、property-panel、script-runtime、ui-context、DOMPurify 与 Valibot，不依赖 stage、

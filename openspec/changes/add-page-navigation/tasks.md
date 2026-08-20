@@ -42,18 +42,22 @@
 
 ## 6. stage 编辑期约束
 
-- [ ] 6.1 确认命中测试与手势不因 `Interaction` 改变,补回归测试
-- [ ] 6.2 可选的交互视觉标记不参与命中、不改变几何
+- [x] 6.1 确认命中测试与手势不因 `Interaction` 改变，补回归测试
+- [x] 6.2 **确认不做**画布交互视觉标记（spec 为 MAY）：Inspector 已经表达配置状态，
+      画布标记需要新样式与命中排除逻辑，价值不足以在本变更引入
 
 ## 7. 示例与端到端
 
-- [ ] 7.1 示例应用提供两个互相跳转的页面与首页设置
-- [ ] 7.2 e2e:在预览对话框中点击跳转、返回、目标缺失时停留在当前页
-- [ ] 7.3 e2e:画布上点击带跳转的 Entity 只选中、不跳转
+- [x] 7.1 示例应用提供两个互相跳转的页面与首页设置（`?page-preview` 开启；默认首页
+      保持空白，否则所有以空白首页为起点的既有 e2e 用例都会被污染）
+- [x] 7.2 e2e：预览对话框中点击跳转、返回、键盘激活。**目标缺失留在单测**：
+      `pages/navigation-session.test.ts` 与 `preview/page-host` 各覆盖一次，
+      e2e 要制造缺失目标得先删页面资源，收益不抵脆弱度
+- [x] 7.3 e2e：画布上点击带跳转的 Entity 只选中、不跳转，且编辑期不出现 button 语义
 
 ## 8. 文档与验证
 
-- [ ] 8.1 更新 `AGENTS.md`:`Interaction` 是 Entity Component、导航类型在 core /
+- [x] 8.1 更新 `AGENTS.md`:`Interaction` 是 Entity Component、导航类型在 core /
       实现在 pages / 消费在 preview、编辑期不跳转
-- [ ] 8.2 更新 `openspec/project.md` 中受影响的包边界描述
-- [ ] 8.3 `bun run lint` / `typecheck` / `test` / `build` / `test:e2e` 全绿
+- [x] 8.2 更新 `openspec/project.md` 中受影响的包边界描述
+- [x] 8.3 `bun run lint` / `typecheck` / `test` / `build` / `test:e2e` 全绿
