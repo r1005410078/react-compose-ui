@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import {
   BUILTIN_COMMAND_TYPES,
-  getComposeInteraction,
   validateComposeDocument,
   createDefaultCanvasSettings,
   createComposeFrameEntity,

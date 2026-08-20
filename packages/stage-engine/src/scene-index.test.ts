@@ -133,3 +133,44 @@ describe('OpenSpec: stage / Page Slot 嵌套内容不进入场景索引', () => 
     expect(index.order).toEqual([ROOT_FRAME_ID, 'slot'])
   })
 })
+
+describe('OpenSpec: 编辑期 Interaction 不改变命中与行为', () => {
+  it('携带 Interaction 不改变命中结果', () => {
+    const leaf = entity('leaf', { x: 10, y: 10, width: 100, height: 60 })
+    const root = entity('root', { x: 0, y: 0, width: 300, height: 200, childIds: ['leaf'] })
+    const plain = document([root, leaf], ['root'])
+    const point = { x: 40, y: 40 }
+    const before = indexFor(plain).entityAtPoint(point)
+
+    const interactive = document(
+      [
+        root,
+        {
+          ...leaf,
+          components: {
+            ...leaf.components,
+            Interaction: {
+              version: 1,
+              triggers: [{
+                event: 'click',
+                action: {
+                  type: 'navigate',
+                  target: {
+                    kind: 'page',
+                    providerId: 'demo',
+                    assetKey: 'pages/detail.page.json',
+                    scope: 'persistent',
+                  },
+                },
+              }],
+            },
+          },
+        },
+      ],
+      ['root'],
+    )
+
+    expect(indexFor(interactive).entityAtPoint(point)).toBe(before)
+    expect(indexFor(interactive).order).toEqual(indexFor(plain).order)
+  })
+})
