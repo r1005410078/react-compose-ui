@@ -14,7 +14,11 @@ import {
   useComposePageScriptScope,
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposePageDocumentLoader, ComposePageFile } from '@compose-ui/core'
+import type {
+  ComposeNavigationPort,
+  ComposePageDocumentLoader,
+  ComposePageFile,
+} from '@compose-ui/core'
 import {
   COMPOSE_UI_CORE_PACKAGE,
   getComposeHierarchy,
@@ -38,6 +42,7 @@ import type {
   ComposePageScriptScope,
   ComposeScriptModuleLoader,
 } from '@compose-ui/script-runtime'
+import { composeEntityInteractionProps } from '../entity-interaction'
 import { useComposeAnimationPlayback } from '../playback/use-animation-playback'
 import { useComposePreviewLayout } from './use-layout-runtime'
 
@@ -66,6 +71,15 @@ export interface ComposePreviewProps extends Omit<HTMLAttributes<HTMLElement>, '
    * Preview 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
    */
   readonly pageLoader?: ComposePageDocumentLoader
+  /**
+   * 宿主导航端口。
+   *
+   * @remarks
+   * 提供后带 `Interaction` 的 Entity 在预览中取得 button 语义并真的跳转；缺省时
+   * `Interaction` 不产生任何行为，独立 Preview 因此保持原样。通常由
+   * `ComposePageHost` 传入，宿主也可以直接给。
+   */
+  readonly navigation?: ComposeNavigationPort
   /** 已由宿主创建的页面作用域；独立 document 模式也可显式注入。 */
   readonly scriptScope?: ComposePageScriptScope
   /** 页面及嵌套 Page Slot 使用的可替换脚本模块 Loader。 */
@@ -199,6 +213,7 @@ function PreviewEntity({
   pageLoader,
   document,
   layoutSnapshot,
+  navigation,
   registry,
   entityId,
   scriptScope,
@@ -208,6 +223,7 @@ function PreviewEntity({
   pageLoader?: ComposePageDocumentLoader
   document: ComposeDocument
   layoutSnapshot: ComposeLayoutSnapshot
+  navigation?: ComposeNavigationPort
   registry: ComposeEntityRegistry
   entityId: string
   scriptScope?: ComposePageScriptScope
@@ -219,7 +235,11 @@ function PreviewEntity({
   const box = layoutSnapshot.boxes[entityId]
   if (!box) return null
   return (
-    <div data-testid={`compose-preview-entity-${entity.id}`} style={entityStyle(entity, box)}>
+    <div
+      data-testid={`compose-preview-entity-${entity.id}`}
+      style={entityStyle(entity, box)}
+      {...composeEntityInteractionProps(entity, navigation)}
+    >
       <ComposeEntityPaintLayer assetResolver={assetResolver} entity={entity} />
       <ComposeRegistryEntityRenderer
         assetResolver={assetResolver}
@@ -236,6 +256,7 @@ function PreviewEntity({
           pageLoader={pageLoader}
           document={document}
           layoutSnapshot={layoutSnapshot}
+          navigation={navigation}
           entityId={childId}
           key={childId}
           registry={registry}
@@ -298,6 +319,7 @@ function ComposePreviewReady({
   layoutSnapshot,
   registry,
   assetResolver,
+  navigation,
   pageLoader,
   page: _page,
   scriptScope,
@@ -347,6 +369,7 @@ function ComposePreviewReady({
                     }
                   : {}),
             }}
+            {...composeEntityInteractionProps(entity, navigation)}
           >
             {getComposeVisibility(entity).visible
               ? (
@@ -370,6 +393,7 @@ function ComposePreviewReady({
                         assetResolver={assetResolver}
                         document={document}
                         layoutSnapshot={layoutSnapshot}
+                        navigation={navigation}
                         pageLoader={pageLoader}
                         entityId={childId}
                         key={childId}

@@ -16,7 +16,11 @@ import type {
   ComposeAssetEntry,
   ComposeAssetProvider,
 } from '@compose-ui/assets'
-import type { ComposeDocument } from '@compose-ui/core'
+import type {
+  ComposeDocument,
+  ComposeEntity,
+  ComposeInteractionAction,
+} from '@compose-ui/core'
 
 interface MemoryAsset {
   entry: ComposeAssetEntry
@@ -73,7 +77,8 @@ function createDemoBitmap() {
   return new Blob([bytes], { type: 'image/bmp' })
 }
 
-const demoCounterDocument: ComposeDocument = {
+function demoCounterDocument(navigation: boolean): ComposeDocument {
+  return {
   ...createEmptyComposePageDocument(),
   rootIds: ['frame-root'],
   entities: {
@@ -81,7 +86,9 @@ const demoCounterDocument: ComposeDocument = {
     'frame-root': createComposeFrameEntity({
       id: 'frame-root',
       name: '场景',
-      childIds: ['demo-counter-value', 'demo-counter-button'],
+      childIds: navigation
+        ? ['demo-counter-value', 'demo-counter-button', 'demo-counter-back']
+        : ['demo-counter-value', 'demo-counter-button'],
     }),
     'demo-counter-value': {
       id: 'demo-counter-value',
@@ -101,6 +108,17 @@ const demoCounterDocument: ComposeDocument = {
         },
       },
     },
+    ...(navigation
+      ? {
+          'demo-counter-back': demoNavigationEntity({
+            id: 'demo-counter-back',
+            name: '返回',
+            text: '← 返回',
+            offset: { x: 80, y: 260 },
+            action: { type: 'navigate-back' },
+          }),
+        }
+      : {}),
     'demo-counter-button': {
       id: 'demo-counter-button',
       name: 'Add button',
@@ -123,10 +141,70 @@ const demoCounterDocument: ComposeDocument = {
       },
     },
   },
+  }
 }
+/** 跳转目标的稳定引用；两块页面互相指向对方。 */
+function demoPageReference(assetKey: string) {
+  return { kind: 'page' as const, providerId: 'demo-memory', assetKey, scope: 'persistent' as const }
+}
+
+/** 一个只有文字与跳转的矩形；示例里的跳转源不是按钮物料，正好演示任意 Entity 都能跳。 */
+function demoNavigationEntity(input: {
+  readonly id: string
+  readonly name: string
+  readonly text: string
+  readonly offset: { readonly x: number; readonly y: number }
+  readonly action: ComposeInteractionAction
+}): ComposeEntity {
+  return {
+    id: input.id,
+    name: input.name,
+    components: {
+      Composition: { presetId: 'text', baseComponentKeys: [], capabilityIds: [] },
+      Transform: { rotation: 0 },
+      LayoutItem: createDefaultComposeLayoutItem(240, 56, input.offset),
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#1d4ed8' }, borderRadius: 8 },
+      Renderer: { type: 'text', props: { text: input.text, color: '#e8f0ff', fontSize: 20 } },
+      Interaction: { version: 1, triggers: [{ event: 'click', action: input.action }] },
+    },
+  }
+}
+
+/**
+ * 首页文档。
+ *
+ * @remarks
+ * 跳转入口只在导航演示下出现：首页是编辑器启动时打开的页面，往它的默认内容里塞东西会
+ * 改变所有以空白首页为前提的端到端用例。
+ */
+function demoHomeDocument(navigation: boolean): ComposeDocument {
+  if (!navigation) return createEmptyComposePageDocument()
+  return {
+    ...createEmptyComposePageDocument(),
+    rootIds: ['frame-root'],
+    entities: {
+      'frame-root': createComposeFrameEntity({
+        id: 'frame-root',
+        name: '场景',
+        childIds: ['demo-home-goto-counter'],
+      }),
+      'demo-home-goto-counter': demoNavigationEntity({
+        id: 'demo-home-goto-counter',
+        name: '去计数器',
+        text: '去计数器 →',
+        offset: { x: 80, y: 80 },
+        action: { type: 'navigate', target: demoPageReference('demo-counter-page') },
+      }),
+    },
+  }
+}
+
 // Home 页挂同一份 setup：动画播放控制示例需要页面导出（animate 布尔）可绑定。
-const demoHomePageText = serializeComposePageFile({
+const demoHomePageText = (navigation: boolean) => serializeComposePageFile({
   ...createEmptyComposePageFile(),
+  document: demoHomeDocument(navigation),
   setupScript: {
     providerId: 'demo-memory',
     assetKey: 'demo-home-setup',
@@ -138,9 +216,9 @@ const demoAppManifestText = serializeComposeAppManifest({
   // 示例工作区需要一个确定首页，Home 不能只是孤立的页面资源。
   homePageKey: 'demo-home-page',
 })
-const demoCounterPageText = serializeComposePageFile({
+const demoCounterPageText = (navigation: boolean) => serializeComposePageFile({
   ...createEmptyComposePageFile(),
-  document: demoCounterDocument,
+  document: demoCounterDocument(navigation),
   setupScript: {
     providerId: 'demo-memory',
     assetKey: 'demo-home-setup',
@@ -153,7 +231,18 @@ const demoCounterPageText = serializeComposePageFile({
  */
 export function createDemoAssetProvider(options: {
   readonly pages?: readonly DemoPageSeed[]
+  /**
+   * 是否在示例页面上放置跳转入口。
+   *
+   * @remarks
+   * 默认关闭：首页是编辑器启动时打开的页面，默认往它的内容里加东西会改变所有以空白
+   * 首页为前提的端到端用例。示例应用用 `?page-preview` 打开。
+   */
+  readonly navigationDemo?: boolean
 } = {}): DemoAssetProvider {
+  const navigationDemo = options.navigationDemo ?? false
+  const homePageText = demoHomePageText(navigationDemo)
+  const counterPageText = demoCounterPageText(navigationDemo)
   let revisionNumber = 1
   let offline = false
   const listeners = new Set<() => void>()
@@ -246,11 +335,11 @@ export function createDemoAssetProvider(options: {
         kind: 'file',
         // 页面文件必须上报页面媒体类型，宿主据此在不读内容的前提下识别页面。
         mediaType: COMPOSE_PAGE_MEDIA_TYPE,
-        size: demoHomePageText.length,
+        size: homePageText.length,
         revision: revision(revisionNumber),
         assetKey: 'demo-home-page',
       },
-      content: new Blob([demoHomePageText], { type: COMPOSE_PAGE_MEDIA_TYPE }),
+      content: new Blob([homePageText], { type: COMPOSE_PAGE_MEDIA_TYPE }),
     }],
     ['demo-counter-page', {
       entry: {
@@ -259,11 +348,11 @@ export function createDemoAssetProvider(options: {
         name: 'Counter.page.json',
         kind: 'file',
         mediaType: COMPOSE_PAGE_MEDIA_TYPE,
-        size: demoCounterPageText.length,
+        size: counterPageText.length,
         revision: revision(revisionNumber),
         assetKey: 'demo-counter-page',
       },
-      content: new Blob([demoCounterPageText], { type: COMPOSE_PAGE_MEDIA_TYPE }),
+      content: new Blob([counterPageText], { type: COMPOSE_PAGE_MEDIA_TYPE }),
     }],
     ['demo-home-setup', {
       entry: {

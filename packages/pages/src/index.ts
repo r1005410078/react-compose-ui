@@ -11,6 +11,14 @@
 export { listComposePageDescriptors } from './page-catalog'
 export type { ComposePageDescriptor } from './page-catalog'
 export { createComposePageDocumentLoader, createComposePageLoader } from './page-document-loader'
+export {
+  COMPOSE_NAVIGATION_BACK_STACK_LIMIT,
+  createComposeNavigationSession,
+} from './navigation-session'
+export type {
+  ComposeNavigationSession,
+  CreateComposeNavigationSessionOptions,
+} from './navigation-session'
 export { createComposePageStore } from './page-store'
 export type {
   ComposePageCatalog,

@@ -123,6 +123,22 @@ export {
   resolveComposeSwitcherPreview,
 } from './widget-switcher'
 export type { ComposeWidgetSwitcherPreview } from './widget-switcher'
+export {
+  collectComposeInteractionValidationIssues,
+  createComposeNavigateInteraction,
+  getComposeInteraction,
+  isValidComposeInteraction,
+  resolveComposeInteractionAction,
+} from './interaction'
+export type {
+  ComposeInteraction,
+  ComposeInteractionAction,
+  ComposeInteractionEvent,
+  ComposeInteractionTrigger,
+  ComposeInteractionValidationIssue,
+  ComposeNavigateAction,
+  ComposeNavigateBackAction,
+} from './interaction'
 export { applyDocumentPatches, jsonEqual } from './patches'
 export { createTransactionRuntime } from './runtime'
 export {
@@ -248,6 +264,10 @@ export type {
   ComposeAppManifestIssue,
   ComposeAppManifestIssueCode,
   ComposeAppManifestParseResult,
+  ComposeNavigationIssue,
+  ComposeNavigationIssueCode,
+  ComposeNavigationPort,
+  ComposeNavigationSnapshot,
   ComposePageAnimationReference,
   ComposePageDocumentLoader,
   ComposePageFile,

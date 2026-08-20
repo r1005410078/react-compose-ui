@@ -98,6 +98,27 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   的 Clip 归一为不裁剪，与「新建场景」命令一致）；其余 Entity 落进**激活场景**并**保留世界
   落点**——换算成局部坐标后越界也不钳制，场景默认不裁剪因此仍可见。任何新建路径都不得回退到
   `rootIds[0]`——那既选错场景，又会跳过世界→局部换算。点击添加（没有落点意图）不走升格。
+- **跳转是 Entity 的能力，不是某个物料的能力。** `Interaction` 是可选 Entity Component，
+  可以挂在任意 Entity 上（矩形、图片、容器都能成为跳转源），v1 只有 `click` trigger 与
+  `navigate` / `navigate-back` 两种 action。同一事件在一个 Entity 上只能声明一次，因此
+  Inspector 的 trigger 列表上限等于支持的事件数量——没有这条上限，面板能加出第二行 click
+  而文档校验会拒绝，用户只看到「点了没反应」。`navigate.target` **允许为 null**：属性面板
+  的「添加项」先造默认项、用户才能在那一行挑页面，不允许 null 会让新建交互与选目标互为
+  前提；但**不完整**的引用仍然非法——「配错了」与「还没配」必须可区分。运行期 null 目标是 no-op。
+- **导航的类型在 `core`、实现在 `pages`、消费在 `preview`**，与 `ComposePageDocumentLoader`
+  是同一条既有分层，因此 `preview` 不依赖 `pages`。声明式 `Interaction` 与页面脚本的
+  `ctx.navigate` 必须委托**同一个** `ComposeNavigationPort` 实例，否则两条路径各自维护一份
+  当前页面与返回栈。会话在提交切换**之前**用 loader 验证目标可读，因此当前页面变化时目标
+  一定已可用；目标不存在与读取失败是两个可判别 issue，失败一律停在当前页。
+- **编辑期不跳转。** Stage 是布局态：点击带 `Interaction` 的 Entity 只选中它，命中测试与手势
+  完全不受该 Component 影响，也不为它引入新的编辑模式。跳转只在预览里生效——`ComposePageHost`
+  跟随导航端口决定当前页，渲染该页 `activeFrameId` 指向的场景，切页时给 `ComposePreview` 换
+  `key` 整棵重挂载。换 key 不是保险起见：setup 作用域按**脚本引用**去重，两个页面引用同一个
+  setup 时不换 key 就会共享 State。交互处理器挂在 Entity 自己的容器上且**不** `stopPropagation`——
+  容器是物料的祖先，点击先到达物料再冒泡到容器，两者都要执行。
+- **页面预览渲染的是已保存的页面**，默认的文档预览渲染的是当前编辑中的文档。示例应用用
+  `?page-preview` 开启页面预览，跳转入口也只在这个模式下出现在示例页面上——首页是编辑器
+  启动时打开的页面，默认往它的内容里加东西会污染所有以空白首页为起点的端到端用例。
 - 组件实例的覆盖是 `instanceOverrides`，只含结构操作并复用 Variant 的稳定操作代数；暴露属性已删除。
   组件文档只要求单根，且根必须是 Frame。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址
   寻址，只存在于表示层：持久化文档中实例仍是单个 Entity，Undo/Redo 作用在宿主实例的 Patch 上。
@@ -114,6 +135,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   不得依赖资源浏览 UI、编辑器、文档历史或组件注册表。
 - `@compose-ui/script-runtime` 是无 React、无 DOM 的页面 setup Signal、作用域与受信任 JavaScript
   Loader 包，只能依赖 `core` 与 `assets`；不得依赖 Registry、Stage、Preview、Editor 或 UI 包。
+  `ctx.navigate` / `ctx.navigateBack` 是宿主注入端口的**转发**，本包不实现导航；未注入时调用
+  只产生 diagnostic 而不抛出，setup 同步执行期间的调用同样被忽略。
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`、`assets`、`pages`、
   `script-runtime` 与既有领域组件，通过公开协议组合页面脚本工作流。
 - `@compose-ui/components` 是跨第一方包复用的 React 交互组件层，可依赖 `ui-context`，
@@ -139,8 +162,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   混合组件目录，可依赖 `core`、`assets`、`component-registry`、`components` 和 `ui-context`，
   不得依赖 `editor`、`stage`、`scene-tree` 或 `asset-browser`；Registry Preset 仍是代码物料，
   Project Component/Variant 才是 Provider 资源。
-- `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面聚合 Store 包，只能依赖
-  `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
+- `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录、页面聚合 Store 与**页面导航
+  会话**包，只能依赖 `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、
+  `editor`、`preview` 或 `stage`。导航会话只决定「当前应该是哪一页」，不渲染、不执行脚本、
+  不持有文档。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
   包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解包，只能依赖 `core` 与
@@ -166,7 +191,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   或 `operation-log`。
 - `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`、`assets`、
   `component-registry`、`script-runtime`、`layout-engine` 和 `animation`（预览对话框的动画
-  播放采样），不得依赖 `editor` 或 `stage`。
+  播放采样），不得依赖 `editor`、`stage` 或 `pages`。`ComposePageHost` 只消费 `core` 的
+  `ComposeNavigationPort` 与 `ComposePageLoader` 两个协议类型，实现由宿主注入。
 - `@compose-ui/materials` 是 Group、Container、Rectangle、Text、Image、SVG 与 Component Instance Entity Presets、
   Renderer、Component Definitions 与 Capabilities 的独立基础物料包，可以依赖 `core`、
   `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`script-runtime`、`ui-context`、

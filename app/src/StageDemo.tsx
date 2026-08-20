@@ -54,7 +54,11 @@ import type {
   ComposeEditorActivePage,
 } from '@compose-ui/editor'
 import { useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
-import { createComposePageDocumentLoader, createComposePageStore } from '@compose-ui/pages'
+import {
+  createComposeNavigationSession,
+  createComposePageDocumentLoader,
+  createComposePageStore,
+} from '@compose-ui/pages'
 import * as v from 'valibot'
 import { createDemoAssetProvider } from './demo-asset-provider'
 
@@ -426,7 +430,20 @@ export function StageDemoWorkspace() {
         : undefined,
     }).then(() => undefined)
   }, [operationLog, runtime])
-  const [assetProvider] = useState(createDemoAssetProvider)
+  /**
+   * 页面预览会话开关。
+   *
+   * @remarks
+   * 用 `?page-preview` 显式开启：页面预览渲染的是 Provider 里**已保存**的页面，而默认的
+   * 文档预览渲染的是当前编辑中的文档。把它设成默认会让「预览」悄悄不再包含未保存的改动。
+   * 示例页面上的跳转入口同样只在这个模式下出现。
+   */
+  const [pagePreview] = useState(
+    () => new URLSearchParams(window.location.search).has('page-preview'),
+  )
+  const [assetProvider] = useState(
+    () => createDemoAssetProvider({ navigationDemo: pagePreview }),
+  )
   const [providerOffline, setProviderOffline] = useState(false)
   const [componentStore] = useState(() => createComposeComponentStore({ provider: assetProvider }))
   /**
@@ -443,6 +460,18 @@ export function StageDemoWorkspace() {
     catalog: pageCatalog,
     providerId: assetProvider.id,
   })
+  const [navigationSession] = useState(() => createComposeNavigationSession({
+    loader: createComposePageDocumentLoader(pageStore),
+    providerId: assetProvider.id,
+  }))
+  useEffect(() => {
+    navigationSession.setHomePageKey(pageCatalog?.homePageKey ?? null)
+    // 目录首次到达时会话还停在"无当前页面"，此时把它推到首页。
+    if (navigationSession.getSnapshot().currentPageKey === null) {
+      void navigationSession.navigateHome()
+    }
+  }, [navigationSession, pageCatalog?.homePageKey])
+  useEffect(() => () => { navigationSession.dispose() }, [navigationSession])
   const controller = useComposeEditorController({
     runtime,
     registry,
@@ -527,6 +556,7 @@ export function StageDemoWorkspace() {
           close: '关闭预览',
           closeHint: '按 Esc 关闭预览',
         }}
+        navigation={pagePreview ? navigationSession : undefined}
         open={previewOpen}
         pageLoader={pageLoader}
         registry={registry}

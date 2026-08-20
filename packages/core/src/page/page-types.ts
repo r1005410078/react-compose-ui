@@ -156,3 +156,86 @@ export interface ComposePageLoader {
 
 /** @deprecated 使用返回聚合页面的 {@link ComposePageLoader}。 @public */
 export type ComposePageDocumentLoader = ComposePageLoader
+
+/** 导航失败的稳定原因。 @public */
+export type ComposeNavigationIssueCode =
+  /** 目标 `assetKey` 在当前 Provider 中找不到对应页面。 */
+  | 'navigation.target-missing'
+  /** 目标页面存在但读取或解析失败。 */
+  | 'navigation.load-failed'
+
+/**
+ * 一次失败跳转的可判别说明。
+ *
+ * @remarks
+ * 「目标不存在」与「读取失败」必须可区分：前者是引用错了或页面被删了，后者是 Provider
+ * 出问题，两者对用户的下一步操作完全不同。
+ * @public
+ */
+export interface ComposeNavigationIssue {
+  readonly code: ComposeNavigationIssueCode
+  readonly reference: ComposePageReference
+  readonly message: string
+  readonly cause?: unknown
+}
+
+/**
+ * 导航状态的只读快照。
+ *
+ * @remarks
+ * 实现必须在状态未变化时返回**同一个对象引用**——React 消费方使用 `useSyncExternalStore`，
+ * 每次调用都新建对象会造成无限重渲染。
+ * @public
+ */
+export interface ComposeNavigationSnapshot {
+  /** 当前页面的稳定资源 key；未设首页且宿主未指定初始页面时为 null。 */
+  readonly currentPageKey: string | null
+  /**
+   * 当前页面的完整引用。
+   *
+   * @remarks
+   * 与 `currentPageKey` 同源，单独给出是因为渲染入口需要一个完整引用才能调用
+   * {@link ComposePageLoader}，只有 key 时它还得自己拼 providerId 与 scope。
+   */
+  readonly current: ComposePageReference | null
+  /** 返回栈是否非空。 */
+  readonly canGoBack: boolean
+  /** 最近一次失败跳转的说明；成功跳转后清空。 */
+  readonly issue: ComposeNavigationIssue | null
+}
+
+/**
+ * 页面导航的宿主端口。
+ *
+ * @remarks
+ * 与 {@link ComposePageLoader} 同样只是协议：`core` 不实现导航，`@compose-ui/pages` 提供
+ * 由页面目录派生的默认实现，渲染入口只消费本类型，因此不会因此依赖实现包。
+ *
+ * 声明式 `Interaction` 与页面脚本的 `navigate` 必须委托同一个端口实例，否则两条路径会各自
+ * 维护一份当前页面与返回栈。
+ * @public
+ */
+export interface ComposeNavigationPort {
+  /** 读取当前快照；状态未变化时必须返回同一引用。 */
+  getSnapshot(): ComposeNavigationSnapshot
+  /**
+   * 跳转到目标页面。
+   *
+   * @param params - 预留的跳转参数；v1 的实现不消费它。
+   * @remarks 目标不可解析时实现必须停留在当前页面并在快照中发布 issue，而不是抛出。
+   */
+  navigate(reference: ComposePageReference, params?: JsonObject): Promise<void>
+  /** 返回上一页；返回栈为空时是无副作用的 no-op。 */
+  back(): Promise<void>
+  /**
+   * 由页面 key 构造完整引用。
+   *
+   * @remarks
+   * `providerId` 与 `scope` 只有实现知道，所以引用构造归端口。声明式 `Interaction` 存的
+   * 已经是完整引用，这个方法服务于只拿得到 key 的调用方——例如页面脚本里的
+   * `ctx.navigate('pages/detail.page.json')`。
+   */
+  referenceFor(pageKey: string): ComposePageReference
+  /** 订阅快照变化。 @returns 取消订阅的函数。 */
+  subscribe(listener: () => void): () => void
+}
