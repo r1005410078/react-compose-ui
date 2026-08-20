@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createStageInteractionController } from '../interaction-controller'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
+import { STAGE_EXTRACTED_PLUGIN_FACTORIES } from './extracted-plugins'
 import { STAGE_GESTURE_PRIORITY, STAGE_LEGACY_MONOLITH_PRIORITY } from './gesture-priority'
-import { STAGE_PAN_PLUGIN_ID } from './pan-plugin'
-import { STAGE_TEXT_EDIT_GUARD_PLUGIN_ID } from './text-edit-guard-plugin'
 import type { StageInteractionEffect } from '../interaction-controller'
 
 /*
@@ -82,10 +81,12 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 抽取顺序不变
   it('已抽取的插件在优先级表中构成一个自顶向下的前缀', () => {
     // legacy 永远排最后，因此已抽取集合必须是表的前缀；出现空洞就意味着某个更高优先级的
     // 分支仍在 legacy 里，会被挤到已抽取插件之后询问。
-    const extracted = new Set<string>([
-      STAGE_TEXT_EDIT_GUARD_PLUGIN_ID,
-      STAGE_PAN_PLUGIN_ID,
-    ])
+    //
+    // 集合从 controller 实际注册的那份清单推导，不再手抄：手抄的版本在 rotate 与
+    // paint-sample 落地时没人更新，守卫看着还在、其实早已不检查新插件。
+    const extracted = new Set(
+      STAGE_EXTRACTED_PLUGIN_FACTORIES.map((create) => create().id),
+    )
     const ids = STAGE_GESTURE_PRIORITY.map(({ id }) => id)
     const lastExtracted = ids.reduce(
       (acc, id, i) => (extracted.has(id) ? i : acc),
@@ -93,6 +94,16 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 抽取顺序不变
     )
 
     expect(ids.slice(0, lastExtracted + 1).every((id) => extracted.has(id))).toBe(true)
+  })
+
+  it('每个已抽取插件都在优先级表里登记，且优先级与表一致', () => {
+    // 少了这条，一个表外的 id 会让前缀断言在空前缀上空转通过。
+    const table = new Map(STAGE_GESTURE_PRIORITY.map(({ id, priority }) => [id, priority]))
+
+    for (const create of STAGE_EXTRACTED_PLUGIN_FACTORIES) {
+      const plugin = create()
+      expect(table.get(plugin.id)).toBe(plugin.priority)
+    }
   })
 
   it('legacy 优先级低于表中任何一项，保证它始终最后被询问', () => {

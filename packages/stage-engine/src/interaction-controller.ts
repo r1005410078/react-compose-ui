@@ -63,12 +63,9 @@ import {
 } from './geometry'
 // 交互内核只做类型级依赖回指（`import type`），因此这里的相互引用不产生运行时循环。
 import {
-  createStagePaintSamplePlugin,
-  createStagePanPlugin,
-  createStageRotatePlugin,
-  createStageTextEditGuardPlugin,
   createStagePluginRegistry,
   createStageSessionArbiter,
+  STAGE_EXTRACTED_PLUGIN_FACTORIES,
   STAGE_LEGACY_MONOLITH_PRIORITY,
   STAGE_PAN_PLUGIN_ID,
 } from './interaction-kernel'
@@ -1033,10 +1030,7 @@ export function createStageInteractionController(): StageInteractionController {
   }
   const arbiter = createStageSessionArbiter(
     createStagePluginRegistry([
-      createStageTextEditGuardPlugin(),
-      createStagePanPlugin(),
-      createStageRotatePlugin(),
-      createStagePaintSamplePlugin(),
+      ...STAGE_EXTRACTED_PLUGIN_FACTORIES.map((create) => create()),
       legacyPlugin,
     ]),
   )
