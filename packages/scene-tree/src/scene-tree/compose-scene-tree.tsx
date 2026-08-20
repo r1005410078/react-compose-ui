@@ -154,6 +154,16 @@ export function ComposeSceneTree({
     () => new Set(interaction.searchResult.rows.map((row) => row.node.id)),
     [interaction.searchResult.rows],
   )
+  /*
+   * filter 必须保持引用稳定：ComposeTree 按它 memo 化 `flattenTree`（全树遍历）。
+   * 写成行内闭包的话，搜索期间每一次渲染都会重跑一遍全树。
+   */
+  const treeFilter = useMemo(
+    () => interaction.query.length > 0
+      ? (node: ComposeSceneTreeNode) => visibleIds.has(node.id)
+      : undefined,
+    [interaction.query.length, visibleIds],
+  )
 
   useEffect(() => () => externalCleanupRef.current?.(), [])
 
@@ -292,9 +302,7 @@ export function ComposeSceneTree({
         dropIndicatorTestId="scene-tree-drop-indicator"
         dropTargetDataAttribute="data-scene-drop-target"
         expandedIds={expandedIds}
-        filter={interaction.query.length > 0
-          ? (node) => visibleIds.has(node.id)
-          : undefined}
+        filter={treeFilter}
         getCollapseLabel={() => messages.collapse}
         getExpandLabel={() => messages.expand}
         getItemAttributes={(context) => ({

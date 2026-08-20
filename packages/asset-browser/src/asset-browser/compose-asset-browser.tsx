@@ -296,11 +296,24 @@ export function ComposeAssetBrowser({
     })
     return () => { disposed = true }
   }, [externalDrop, messages.create, namePrompt, provider, source])
+  /*
+   * Tree 的 `items` 与 `filter` 必须保持引用稳定：ComposeTree 内部按它们 memo 化
+   * `createTreeIndex` 与 `flattenTree`（两者都是全树遍历）。写成行内字面量的话，选择、
+   * 悬停、每敲一个搜索字符都会让两个 memo 失效，重跑一遍全树。
+   */
+  const treeItems = useMemo(() => source.root ? [source.root] : [], [source.root])
+  const normalizedQuery = query.toLocaleLowerCase(resolvedLocale)
+  const treeFilter = useMemo(
+    () => normalizedQuery
+      ? (entry: AssetTreeEntry) =>
+          entry.name.toLocaleLowerCase(resolvedLocale).includes(normalizedQuery)
+      : undefined,
+    [normalizedQuery, resolvedLocale],
+  )
   const visibleFolderChildren = useMemo(
     () => sortAssetEntries(folderChildren, resolvedLocale)
-      .filter((entry) => entry.name.toLocaleLowerCase(resolvedLocale)
-        .includes(query.toLocaleLowerCase(resolvedLocale))),
-    [folderChildren, query, resolvedLocale],
+      .filter((entry) => entry.name.toLocaleLowerCase(resolvedLocale).includes(normalizedQuery)),
+    [folderChildren, normalizedQuery, resolvedLocale],
   )
 
   const requestSelection = useCallback((next: readonly string[]) => {
@@ -799,9 +812,8 @@ export function ComposeAssetBrowser({
               adapter={assetTreeAdapter}
               aria-label={messages.tree}
               expandedIds={expandedIds}
-              filter={query ? (entry) => entry.name.toLocaleLowerCase(resolvedLocale)
-                .includes(query.toLocaleLowerCase(resolvedLocale)) : undefined}
-              items={[source.root]}
+              filter={treeFilter}
+              items={treeItems}
               selectionMode="multiple"
               selectedIds={selectedIds}
               renderIcon={(context) => renderIconFor({
