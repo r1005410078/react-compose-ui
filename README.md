@@ -347,7 +347,8 @@ bun run test:e2e
 
 页面聚合、页面跳转、setup 脚本、页面作用域 value/method Props 绑定已交付。**页面之间是跳转
 关系而不是嵌套关系**：复用一块 UI 由 Component Asset v2 与 Variant 承担，页面只是可被跳转到
-的目标。跳转由任意 Entity 上的可选 `Interaction` Component 声明，运行期在预览宿主里生效；
+的目标。跳转由任意 Entity 上的可选 `Interaction` Component 声明，运行期在预览宿主里生效，
+且预览包含尚未保存的改动；
 页面脚本另有 `ctx.navigate` 作为条件跳转的逃生舱。首期不支持 URL 路由、跳转参数与转场动画。
 
 页面脚本首期只支持页面作用域、每页一个自包含 JavaScript setup，不支持 TypeScript 编译、

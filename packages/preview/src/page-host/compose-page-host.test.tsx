@@ -396,6 +396,62 @@ describe('OpenSpec: 页面宿主与跳转执行', () => {
     expect(screen.getByText('Go nowhere')).toBeTruthy()
   })
 
+  it('未保存的改动出现在页面预览中', async () => {
+    const { home, detail } = twoPageFixture()
+    // Provider 里的首页是空的：live 文档才有那个带跳转的 Entity。
+    const savedHome = pageWith(
+      documentOf({}, [{ id: 'home-frame', childIds: [] }]),
+      'home-frame',
+    )
+    const load = vi.fn(async (target: ComposePageReference) => {
+      const page = { home: savedHome, detail }[target.assetKey]
+      if (!page) throw new Error(`缺少页面 ${target.assetKey}`)
+      return page
+    })
+
+    render(
+      <ComposePageHost
+        livePage={{ pageKey: 'home', page: home }}
+        navigation={testNavigation('home', ['home', 'detail'])}
+        pageLoader={{ load }}
+        registry={registry()}
+      />,
+    )
+
+    const cta = await screen.findByRole('button', { name: 'cta' })
+    // 渲染 live 页时完全不经过加载端口——已保存的那份根本没被读。
+    expect(load).not.toHaveBeenCalled()
+
+    await act(async () => { fireEvent.click(cta) })
+    await waitFor(() => { expect(screen.getByText('Detail page')).toBeTruthy() })
+    // 跳到别的页面仍然走 loader。
+    expect(load.mock.calls.map(([target]) => target.assetKey)).toEqual(['detail'])
+  })
+
+  it('跳回 live 页时重新使用 live 文档', async () => {
+    const { home, detail } = twoPageFixture()
+    const savedHome = pageWith(
+      documentOf({}, [{ id: 'home-frame', childIds: [] }]),
+      'home-frame',
+    )
+    const navigation = testNavigation('home', ['home', 'detail'])
+    render(
+      <ComposePageHost
+        livePage={{ pageKey: 'home', page: home }}
+        navigation={navigation}
+        pageLoader={loaderOf({ home: savedHome, detail })}
+        registry={registry()}
+      />,
+    )
+
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'cta' })) })
+    await waitFor(() => { expect(screen.getByText('Detail page')).toBeTruthy() })
+
+    await act(async () => { await navigation.back() })
+    // 回到首页看到的必须还是 live 文档，而不是 Provider 里那份空的。
+    await waitFor(() => { expect(screen.getByText('Go to detail')).toBeTruthy() })
+  })
+
   it('没有导航端口时 Interaction 不产生 button 语义', async () => {
     const { home } = twoPageFixture()
     const { ComposePreview } = await import('../compose-preview')

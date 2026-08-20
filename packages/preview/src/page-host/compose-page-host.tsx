@@ -29,6 +29,15 @@ export interface ComposePageHostProps extends Omit<
   /** 覆盖默认中文文案。 */
   readonly messages?: Partial<ComposePageHostMessages>
   /**
+   * 宿主正在编辑的那一页及其 live 文档。
+   *
+   * @remarks
+   * `pageKey` 与当前页一致时宿主**直接渲染它，不经过 loader**，因此预览包含尚未保存的
+   * 改动——否则「配好跳转→预览」会看到上次保存的内容，用户以为交互没生效。跳到其他页面
+   * 仍然走 loader；跳回来时又回到 live 文档。
+   */
+  readonly livePage?: { readonly pageKey: string; readonly page: ComposePageFile }
+  /**
    * 当前页面变化回调。
    *
    * @remarks
@@ -63,6 +72,7 @@ export function ComposePageHost({
   pageLoader,
   messages,
   onPageChange,
+  livePage,
   ...previewProps
 }: ComposePageHostProps) {
   const text = { ...DEFAULT_MESSAGES, ...messages }
@@ -71,6 +81,8 @@ export function ComposePageHost({
   const [state, setState] = useState<PageState>({ status: 'idle' })
   // current 是每次发布都可能新建的对象；身份字符串才是"要不要重新加载"的判据。
   const requestKey = current ? `${current.providerId}:${current.assetKey}` : null
+  // 当前页就是正在编辑的那一页：没有任何要加载的东西，live 文档就是最新的事实。
+  const live = livePage && current?.assetKey === livePage.pageKey ? livePage : null
   // 渲染期 prev-adjust：目标一变就立刻进入 loading，不在 effect 里同步 setState，
   // 否则先渲染一帧仍然是旧页面的内容，再被 effect 推翻。
   const [requestedKey, setRequestedKey] = useState<string | null>(requestKey)
@@ -80,7 +92,7 @@ export function ComposePageHost({
   }
 
   useEffect(() => {
-    if (!current) return undefined
+    if (!current || live) return undefined
     const controller = new AbortController()
     let cancelled = false
     void pageLoader.load(current, controller.signal).then(
@@ -98,10 +110,10 @@ export function ComposePageHost({
       controller.abort()
     }
     // requestKey 是目标的完整身份；会话因为别的原因发布快照时不应重新加载页面。
-  }, [requestKey, pageLoader]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [requestKey, pageLoader, live !== null]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const readyPage = state.status === 'ready' ? state.page : null
-  const readyPageKey = state.status === 'ready' ? state.pageKey : null
+  const readyPage = live ? live.page : state.status === 'ready' ? state.page : null
+  const readyPageKey = live ? live.pageKey : state.status === 'ready' ? state.pageKey : null
   useEffect(() => {
     onPageChange?.(readyPage, readyPageKey)
     // onPageChange 由宿主提供，通常是内联函数；把它放进依赖会每次渲染都重跑。
@@ -117,6 +129,22 @@ export function ComposePageHost({
       )
     : null
 
+  if (live) {
+    return (
+      <>
+        {issueBanner}
+        <ComposePreview
+          {...previewProps}
+          defaultFrameId={live.page.activeFrameId}
+          document={live.page.document}
+          key={live.pageKey}
+          navigation={navigation}
+          page={live.page}
+          pageLoader={pageLoader}
+        />
+      </>
+    )
+  }
   if (state.status === 'idle') {
     return (
       <section data-testid="compose-page-host-empty" role="status">

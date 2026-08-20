@@ -276,3 +276,80 @@ describe('订阅与生命周期', () => {
     expect(session.getSnapshot().currentPageKey).toBe('b')
   })
 })
+
+describe('OpenSpec: 会话起点重置', () => {
+  it('重置到正在编辑的页面', async () => {
+    const load = vi.fn(async () => PAGE)
+    const session = createComposeNavigationSession({
+      loader: { load },
+      providerId: PROVIDER_ID,
+      homePageKey: 'a',
+    })
+    await session.navigate(reference('b'))
+    await session.navigate(reference('c'))
+    expect(session.getSnapshot().canGoBack).toBe(true)
+
+    const before = load.mock.calls.length
+    session.reset('editing')
+
+    expect(session.getSnapshot().currentPageKey).toBe('editing')
+    expect(session.getSnapshot().canGoBack).toBe(false)
+    // 重置不是跳转：它不验证目标，因此不产生任何读取。
+    expect(load.mock.calls).toHaveLength(before)
+  })
+
+  it('重置清空失败说明', async () => {
+    const session = createComposeNavigationSession({
+      loader: loaderOf(['a']),
+      providerId: PROVIDER_ID,
+      homePageKey: 'a',
+    })
+    await session.navigate(reference('gone'))
+    expect(session.getSnapshot().issue).not.toBeNull()
+
+    session.reset('a')
+    expect(session.getSnapshot().issue).toBeNull()
+  })
+
+  it('已经就位时不发布', () => {
+    const session = createComposeNavigationSession({
+      loader: loaderOf(['a']),
+      providerId: PROVIDER_ID,
+      homePageKey: 'a',
+    })
+    const listener = vi.fn()
+    session.subscribe(listener)
+    session.reset('a')
+    // 宿主每次打开预览都会调用一次，无谓的发布会白白重挂一次内容。
+    expect(listener).not.toHaveBeenCalled()
+
+    session.reset('b')
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('重置到 null 回到无当前页面', () => {
+    const session = createComposeNavigationSession({
+      loader: loaderOf(['a']),
+      providerId: PROVIDER_ID,
+      homePageKey: 'a',
+    })
+    session.reset(null)
+    expect(session.getSnapshot().currentPageKey).toBeNull()
+    expect(session.getSnapshot().current).toBeNull()
+  })
+
+  it('重置后正在飞行的跳转结果被丢弃', async () => {
+    let release: (() => void) | undefined
+    const session = createComposeNavigationSession({
+      loader: { load: () => new Promise((resolve) => { release = () => resolve(PAGE) }) },
+      providerId: PROVIDER_ID,
+      homePageKey: 'a',
+    })
+    const pending = session.navigate(reference('slow'))
+    session.reset('editing')
+    release!()
+    await pending
+
+    expect(session.getSnapshot().currentPageKey).toBe('editing')
+  })
+})

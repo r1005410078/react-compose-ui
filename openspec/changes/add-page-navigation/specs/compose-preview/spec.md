@@ -15,6 +15,17 @@ MUST 挂在 Entity 容器层且 MUST NOT 阻止事件继续到达物料自身的
 复用既有的页面 setup 作用域 Hook 而不是自建加载与竞态逻辑。加载中与导航失败 MUST 是可被
 宿主区分的确定状态。
 
+`ComposePageHost` MUST 接受宿主正在编辑的那一页及其 live 文档。该页与当前页一致时宿主
+MUST 直接渲染它而**不经过页面加载端口**，使预览包含尚未保存的改动；否则「配好跳转→预览」
+会呈现上次保存的内容，用户会认为交互没有生效。跳转到其他页面 MUST 仍然经过加载端口，
+跳回该页时 MUST 重新使用 live 文档。
+
+#### Scenario: 未保存的改动出现在页面预览中
+
+- **WHEN** 宿主传入正在编辑页面的 live 文档，其中含一个尚未保存、带 click→navigate 的 Entity
+- **THEN** 预览中出现该 Entity 且它的跳转可用
+- **AND** 渲染该页时不发起页面加载
+
 #### Scenario: 点击跳转到另一个页面
 
 - **WHEN** 当前页面中一个带 click→navigate 的 Entity 被点击

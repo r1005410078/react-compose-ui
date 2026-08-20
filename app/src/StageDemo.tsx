@@ -434,15 +434,14 @@ export function StageDemoWorkspace() {
    * 页面预览会话开关。
    *
    * @remarks
-   * 用 `?page-preview` 显式开启：页面预览渲染的是 Provider 里**已保存**的页面，而默认的
-   * 文档预览渲染的是当前编辑中的文档。把它设成默认会让「预览」悄悄不再包含未保存的改动。
-   * 示例页面上的跳转入口同样只在这个模式下出现。
+   * 只影响**示例页面上预置的跳转入口**：首页是编辑器启动时打开的页面，默认往它的内容里
+   * 塞东西会污染所有以空白首页为起点的端到端用例。页面预览本身不再需要开关。
    */
-  const [pagePreview] = useState(
+  const [navigationDemo] = useState(
     () => new URLSearchParams(window.location.search).has('page-preview'),
   )
   const [assetProvider] = useState(
-    () => createDemoAssetProvider({ navigationDemo: pagePreview }),
+    () => createDemoAssetProvider({ navigationDemo }),
   )
   const [providerOffline, setProviderOffline] = useState(false)
   const [componentStore] = useState(() => createComposeComponentStore({ provider: assetProvider }))
@@ -466,10 +465,6 @@ export function StageDemoWorkspace() {
   }))
   useEffect(() => {
     navigationSession.setHomePageKey(pageCatalog?.homePageKey ?? null)
-    // 目录首次到达时会话还停在"无当前页面"，此时把它推到首页。
-    if (navigationSession.getSnapshot().currentPageKey === null) {
-      void navigationSession.navigateHome()
-    }
   }, [navigationSession, pageCatalog?.homePageKey])
   useEffect(() => () => { navigationSession.dispose() }, [navigationSession])
   const controller = useComposeEditorController({
@@ -503,6 +498,21 @@ export function StageDemoWorkspace() {
     ?? controller.document.rootIds[0]
     ?? null
   const previewTargetFrameId = previewFrameId ?? activeFrameId
+  /**
+   * 页面预览的 live 页面。
+   *
+   * @remarks
+   * `activePage.page` 是上次保存的聚合；文档的事实来源是 controller，因此这里现拼一份，
+   * 使预览包含尚未保存的改动。没有打开任何页面时不进入页面预览——那时画布上的文档不属于
+   * 任何页面，导航没有起点。
+   */
+  const livePage = activePage
+    ? { pageKey: activePage.pageKey, page: { ...activePage.page, document: controller.document } }
+    : undefined
+  useEffect(() => {
+    // 每次打开预览都把会话对齐到正在编辑的页面：从首页起步会让用户看到的不是自己刚改的那页。
+    if (previewOpen) navigationSession.reset(activePage?.pageKey ?? null)
+  }, [activePage?.pageKey, navigationSession, previewOpen])
 
   return (
     <>
@@ -555,7 +565,8 @@ export function StageDemoWorkspace() {
           close: '关闭预览',
           closeHint: '按 Esc 关闭预览',
         }}
-        navigation={pagePreview ? navigationSession : undefined}
+        livePage={livePage}
+        navigation={livePage ? navigationSession : undefined}
         open={previewOpen}
         pageLoader={pageLoader}
         registry={registry}

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { expandInspectorSection, pointerDrop } from './support/test-helpers'
 
 /**
  * 页面预览渲染 Provider 里已保存的页面，因此示例用 `?page-preview` 显式开启；
@@ -55,4 +56,52 @@ test('OpenSpec: 编辑期 Interaction 不改变命中与行为 / 画布点击只
   await expect(target).toBeVisible()
   // 编辑期不应出现 button 语义——那是预览宿主才建立的。
   await expect(stage.getByRole('button', { name: '去计数器' })).toHaveCount(0)
+})
+
+/**
+ * 回归：配好跳转但**尚未保存**时，预览必须包含这条交互。
+ *
+ * 页面预览渲染的是 Provider 里的页面，而刚画出来的东西只存在于编辑中的文档；宿主不把
+ * live 文档交给页面宿主的话，用户会看到上次保存的内容，以为「交互没生效」。
+ */
+test('OpenSpec: 页面宿主与跳转执行 / 未保存的跳转在预览中生效', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+
+  // 1) 在首页上画一个矩形——只存在于编辑中的文档，标签页处于未保存状态。
+  const frame = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frame).toBeVisible()
+  const frameBox = await frame.boundingBox()
+  expect(frameBox).not.toBeNull()
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    x: frameBox!.x + 200,
+    y: frameBox!.y + 160,
+  })
+  const rectangle = stage.getByTestId('stage-entity-stage-demo-0')
+    .or(stage.locator('[data-testid^="stage-entity-"]').filter({ hasText: '' }).last())
+  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')
+    .getByRole('img', { name: '有未保存改动' })).toBeVisible()
+
+  // 2) 通过 Inspector 给它配一条点击跳转。
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  await inspector.getByRole('button', { name: '添加交互' }).click()
+  await expandInspectorSection(inspector, '交互')
+  const nodeField = inspector.getByTestId('semantic-editor-node')
+  await expect(nodeField).toBeVisible()
+  await nodeField.getByRole('combobox').click()
+  await page.getByRole('option', { name: 'Counter' }).click()
+
+  // 3) 不保存直接预览：矩形与它的跳转都必须在。
+  await editor.getByRole('button', { name: '打开预览' }).click()
+  const preview = page.getByRole('dialog', { name: '文档预览对话框' })
+  const target = preview.getByRole('button', { name: 'Rectangle' })
+  await expect(target).toBeVisible()
+
+  await target.click()
+  // 落到 Counter 页面：它的计数文本来自页面 setup 绑定。
+  await expect(preview.getByTestId('compose-material-text').first()).toHaveText('0')
+  void rectangle
 })

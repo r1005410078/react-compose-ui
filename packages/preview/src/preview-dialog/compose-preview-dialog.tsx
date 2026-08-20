@@ -84,6 +84,13 @@ export interface ComposePreviewDialogProps extends Pick<ComposePreviewProps,
    * 在对话框内真实生效，场景选择器只列出当前页面的根 Frame。缺省时对话框保持文档预览。
    */
   readonly navigation?: ComposeNavigationPort
+  /**
+   * 正在编辑的那一页及其 live 文档；页面预览据此显示尚未保存的改动。
+   *
+   * @remarks
+   * 省略时页面预览只呈现 Provider 里已保存的内容。
+   */
+  readonly livePage?: { readonly pageKey: string; readonly page: ComposePageFile }
   /** 覆盖由标题派生的 Dialog 无障碍名称。 */
   readonly dialogLabel?: string
   /** 覆盖默认英文文案的本地化内容。 */
@@ -145,6 +152,7 @@ const INITIAL_PLAYHEAD: ComposePreviewPlayheadState = { timeMs: 0, direction: 1 
 export function ComposePreviewDialog({
   assetResolver,
   navigation,
+  livePage,
   selectedFrameId,
   dialogLabel,
   document: composeDocument,
@@ -376,6 +384,7 @@ export function ComposePreviewDialog({
                     onPageChange={(nextPage, nextPageKey) => {
                       setHostPage({ page: nextPage, pageKey: nextPageKey })
                     }}
+                    livePage={livePage}
                     pageLoader={pageLoader}
                     registry={registry}
                     scriptModuleLoader={scriptModuleLoader}
