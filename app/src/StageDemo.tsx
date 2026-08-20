@@ -466,7 +466,6 @@ export function StageDemoWorkspace() {
   useEffect(() => {
     navigationSession.setHomePageKey(pageCatalog?.homePageKey ?? null)
   }, [navigationSession, pageCatalog?.homePageKey])
-  useEffect(() => () => { navigationSession.dispose() }, [navigationSession])
   const controller = useComposeEditorController({
     runtime,
     registry,

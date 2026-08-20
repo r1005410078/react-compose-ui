@@ -49,10 +49,16 @@ export interface ComposeNavigationSession extends ComposeNavigationPort {
    * 只影响后续构造，不改变当前页面——用户正在看的页面不应该因为别人改了首页而被换掉。
    */
   setHomePageKey(pageKey: string | null): void
-  /** 跳转到当前首页；未设首页时是 no-op。 */
+  /**
+   * 跳转到当前首页；未设首页时是 no-op。
+   *
+   * @remarks
+   * 会话不持有需要显式释放的资源，因此**没有** `dispose`：迟到的加载结果由内部令牌挡掉，
+   * 订阅由订阅方自己在卸载时移除。曾经有过一个 `dispose`，它在 React StrictMode 下是陷阱——
+   * 「useState 创建 + effect cleanup 释放」是最自然的写法，而 StrictMode 的
+   * 挂载→清理→再挂载会让会话在首次渲染后就永久失效，所有跳转静默早退。
+   */
   navigateHome(): Promise<void>
-  /** 停止接受后续跳转并清空订阅。 */
-  dispose(): void
 }
 
 function sameTarget(left: ComposePageReference | null, right: ComposePageReference): boolean {
@@ -104,7 +110,6 @@ export function createComposeNavigationSession(
   let backStack: readonly ComposePageReference[] = []
   let current: ComposePageReference | null = null
   let issue: ComposeNavigationIssue | null = null
-  let disposed = false
   // 单调递增的令牌：连续跳转时只有最后一次的结果可以提交，避免慢的那次覆盖快的那次。
   let token = 0
 
@@ -156,11 +161,10 @@ export function createComposeNavigationSession(
   async function navigate(reference: ComposePageReference, _params?: JsonObject): Promise<void> {
     // params 是协议预留字段，v1 不消费；显式忽略以免读者以为漏了实现。
     void _params
-    if (disposed) return
     if (sameTarget(current, reference)) return
     const ticket = ++token
     const failure = await verify(reference)
-    if (disposed || ticket !== token) return
+    if (ticket !== token) return
     if (failure) {
       issue = failure
       publish()
@@ -173,11 +177,11 @@ export function createComposeNavigationSession(
   }
 
   async function back(): Promise<void> {
-    if (disposed || backStack.length === 0) return
+    if (backStack.length === 0) return
     const ticket = ++token
     const target = backStack[backStack.length - 1]!
     const failure = await verify(target)
-    if (disposed || ticket !== token) return
+    if (ticket !== token) return
     if (failure) {
       // 弹出读不到的那一项：留着它会让返回按钮永久卡在同一个失败上，用户没有别的出路。
       backStack = backStack.slice(0, -1)
@@ -204,7 +208,6 @@ export function createComposeNavigationSession(
       homePageKey = pageKey
     },
     reset(pageKey) {
-      if (disposed) return
       // 递增令牌：正在飞行的跳转结果不能落到刚重置过的会话上。
       token += 1
       const nextKey = pageKey !== null && pageKey.length > 0 ? pageKey : null
@@ -221,10 +224,6 @@ export function createComposeNavigationSession(
     async navigateHome() {
       if (homePageKey === null || homePageKey.length === 0) return
       await navigate(referenceOf(homePageKey))
-    },
-    dispose() {
-      disposed = true
-      listeners.clear()
     },
   }
 }

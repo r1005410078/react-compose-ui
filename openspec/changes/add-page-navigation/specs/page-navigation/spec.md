@@ -63,6 +63,18 @@ MUST 继续由既有的页面 Loader 承担。
 - **WHEN** 跳转目标就是当前页面
 - **THEN** 当前页面不变且返回栈不增长
 
+### Requirement: 会话无需显式释放
+
+导航会话 MUST NOT 暴露会使自身永久失效的释放入口。迟到的加载结果 MUST 由内部令牌挡掉，
+订阅 MUST 由订阅方自己移除。宿主最自然的写法是「`useState` 创建 + effect cleanup 释放」，
+而 React StrictMode 的挂载→清理→再挂载会让这样的会话在首次渲染后即永久失效，此后所有
+跳转静默早退——一个只在开发模式出现、且没有任何报错的失败态。
+
+#### Scenario: 反复挂载后跳转仍然可用
+
+- **WHEN** 宿主在 StrictMode 下挂载消费该会话的渲染入口
+- **THEN** 跳转与返回在双调用之后仍然生效
+
 ### Requirement: 会话起点重置
 
 导航端口 MUST 提供把当前页面同步重置到指定页面的入口。重置 MUST NOT 验证目标、MUST NOT

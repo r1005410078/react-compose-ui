@@ -110,6 +110,12 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   而文档校验会拒绝，用户只看到「点了没反应」。`navigate.target` **允许为 null**：属性面板
   的「添加项」先造默认项、用户才能在那一行挑页面，不允许 null 会让新建交互与选目标互为
   前提；但**不完整**的引用仍然非法——「配错了」与「还没配」必须可区分。运行期 null 目标是 no-op。
+- **导航会话没有 `dispose`，这是刻意的。** 它不持有需要显式释放的资源：迟到的加载结果由
+  内部令牌挡掉，订阅由订阅方卸载时自己移除。曾经有过一个 `dispose`，而「`useState` 创建 +
+  effect cleanup 释放」是宿主最自然的写法——React StrictMode 的**挂载→清理→再挂载**会让
+  会话在首次渲染后就永久失效，此后所有跳转静默早退。同类「会话对象」在设计 API 时都要过
+  这一关：**端到端跑的是生产构建，StrictMode 双调用在那里不会发生，103 条全绿也挡不住这类
+  回归**，只能靠把组件放进 `<StrictMode>` 的组件测试。
 - **导航的类型在 `core`、实现在 `pages`、消费在 `preview`**，与 `ComposePageDocumentLoader`
   是同一条既有分层，因此 `preview` 不依赖 `pages`。声明式 `Interaction` 与页面脚本的
   `ctx.navigate` 必须委托**同一个** `ComposeNavigationPort` 实例，否则两条路径各自维护一份

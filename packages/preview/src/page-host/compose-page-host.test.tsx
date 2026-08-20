@@ -13,6 +13,7 @@ import {
 } from '@compose-ui/core'
 import type { ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposePageHost } from './compose-page-host'
 
@@ -484,6 +485,30 @@ describe('OpenSpec: 页面宿主与跳转执行', () => {
     await act(async () => { fireEvent.click(cta) })
     await waitFor(() => { expect(screen.getByText('Detail page')).toBeTruthy() })
     expect(navigation.getSnapshot().canGoBack).toBe(true)
+  })
+
+  it('StrictMode 下跳转依然可用', async () => {
+    // 端到端跑的是生产构建，StrictMode 的「挂载→清理→再挂载」在那里不会发生；
+    // 把宿主放进 StrictMode 才能挡住只在开发模式暴露的 effect 双调用问题。
+    const { home, detail } = twoPageFixture()
+    const navigation = testNavigation('home', ['home', 'detail'])
+    render(
+      <StrictMode>
+        <ComposePageHost
+          livePage={{ pageKey: 'home', page: home }}
+          navigation={navigation}
+          pageLoader={loaderOf({ home, detail })}
+          registry={registry()}
+        />
+      </StrictMode>,
+    )
+
+    const cta = await screen.findByRole('button', { name: 'cta' })
+    await act(async () => { fireEvent.click(cta) })
+    await waitFor(() => { expect(screen.getByText('Detail page')).toBeTruthy() })
+
+    await act(async () => { await navigation.back() })
+    await waitFor(() => { expect(screen.getByText('Go to detail')).toBeTruthy() })
   })
 
   it('没有导航端口时 Interaction 不产生 button 语义', async () => {

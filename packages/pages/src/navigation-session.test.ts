@@ -248,17 +248,6 @@ describe('订阅与生命周期', () => {
     expect(session.getSnapshot().currentPageKey).toBe('fast')
   })
 
-  it('dispose 后不再接受跳转', async () => {
-    const session = createComposeNavigationSession({
-      loader: loaderOf(['a', 'b']),
-      providerId: PROVIDER_ID,
-      homePageKey: 'a',
-    })
-    session.dispose()
-    await session.navigate(reference('b'))
-    expect(session.getSnapshot().currentPageKey).toBe('a')
-  })
-
   it('navigateHome 跳回当前首页', async () => {
     const session = createComposeNavigationSession({
       loader: loaderOf(['a', 'b']),
