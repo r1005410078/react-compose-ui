@@ -671,17 +671,6 @@ type Gesture =
       transforms: Readonly<Record<string, StageTransform>>
     }
   | {
-      readonly type: 'segment-resize'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly entityId: string
-      readonly endpoint: 'start' | 'end'
-      /** 端点相对 pointerdown 的世界坐标偏移，避免放大命中区导致首次移动时跳点。 */
-      readonly grabOffset: StagePoint
-      start: StagePoint
-      end: StagePoint
-    }
-  | {
       readonly type: 'guide-create'
       readonly pointerId: number
       readonly viewport: StageViewport
@@ -1144,34 +1133,6 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
-    if (gesture.type === 'segment-resize') {
-      const draggedPoint = {
-        x: world.x + gesture.grabOffset.x,
-        y: world.y + gesture.grabOffset.y,
-      }
-      const snapped = snapResizePoint({
-        point: draggedPoint,
-        // 两点图形的端点可以沿两个轴自由移动；使用角手柄复用既有 smart/grid snap 规则。
-        handle: 'se',
-        candidates: index.snapCandidates([gesture.entityId], targetFrameId(context)),
-        canvas: context.document.canvas,
-        zoom: gesture.viewport.zoom,
-        disabled: modifiers.command,
-      })
-      if (gesture.endpoint === 'start') gesture.start = snapped.point
-      else gesture.end = snapped.point
-      publish({
-        ...snapshot,
-        phase: 'segment-resize',
-        segmentPreview: {
-          entityId: gesture.entityId,
-          start: gesture.start,
-          end: gesture.end,
-        },
-        snapGuides: snapped.guides,
-      })
-      return
-    }
     if (gesture.type === 'guide-create') {
       gesture.point = point
       gesture.guides = gesture.guides.map((guide) => ({
@@ -1386,45 +1347,6 @@ export function createStageInteractionController(): StageInteractionController {
       return true
     }
 
-    if (event.hit.kind === 'segment-endpoint') {
-      const entity = context.document.entities[event.hit.entityId]
-      const selected = index.topLevelSelection(context.selectedIds)
-      const constraints = entity ? resolveComposeGeometryConstraints(entity) : null
-      if (
-        !entity
-        || selected.length !== 1
-        || selected[0] !== event.hit.entityId
-        || !index.isVisible(entity.id)
-        || getComposeLock(entity).locked
-        || constraints?.resize === 'none'
-        || (context.tool !== 'select' && context.tool !== 'scale')
-      ) return
-      gesture = {
-        type: 'segment-resize',
-        pointerId: event.pointerId,
-        viewport: context.viewport,
-        entityId: entity.id,
-        endpoint: event.hit.endpoint,
-        grabOffset: (() => {
-          const pointer = worldPoint(event.point, context.viewport)
-          const endpoint = event.hit.endpoint === 'start' ? event.hit.start : event.hit.end
-          return { x: endpoint.x - pointer.x, y: endpoint.y - pointer.y }
-        })(),
-        start: event.hit.start,
-        end: event.hit.end,
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'segment-resize',
-        segmentPreview: {
-          entityId: entity.id,
-          start: event.hit.start,
-          end: event.hit.end,
-        },
-      })
-      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
-      return
-    }
     const startMarquee = (originEntityId?: string) => {
       const viewport = context!.viewport
       const startWorld = worldPoint(event.point, viewport)
@@ -1650,14 +1572,6 @@ export function createStageInteractionController(): StageInteractionController {
           parentId: index.containerAtPoint(center),
         })
       }
-    }
-    else if (finished.type === 'segment-resize') {
-      effects.push({
-        type: 'segment.commit',
-        entityId: finished.entityId,
-        start: finished.start,
-        end: finished.end,
-      })
     }
     else if (finished.type === 'marquee') {
       const resolved = resolveMarqueeSelection({
@@ -1964,7 +1878,6 @@ export function createStageInteractionController(): StageInteractionController {
         && (gesture.type === 'move' || gesture.type === 'resize')
         ? gesture.ids
         : null
-      const segmentGestureId = gesture?.type === 'segment-resize' ? gesture.entityId : null
       const documentChanged = context?.document !== nextContext.document
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
       const paintEditingChanged = !samePaintEditing(context?.paintEditing, nextContext.paintEditing)
@@ -1990,10 +1903,6 @@ export function createStageInteractionController(): StageInteractionController {
               nextIndex.topLevelSelection(nextContext.selectedIds),
             )
           )
-          || (segmentGestureId !== null && (
-            nextContext.selectedIds.length !== 1
-            || nextContext.selectedIds[0] !== segmentGestureId
-          ))
         ),
       )
       // 会话的存续只看新 context：目标从文档中消失，或选区已经不再是该目标，都必须结束。
