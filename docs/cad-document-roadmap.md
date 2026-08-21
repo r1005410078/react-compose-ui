@@ -6,7 +6,7 @@
 公共 API。每一步都是一个独立可发布、可回退的 OpenSpec 提案。与 `overview.md`、
 `stage-plugin-kernel-roadmap.md` 同为指导提案的架构文档，区别是本文只覆盖 CAD 文档类型。
 
-**当前状态：步骤 1–4 已完成。** 本文写于 2026-08-21，记录的是动手前的判断与决策，
+**当前状态：步骤 1–5 已完成。** 本文写于 2026-08-21，记录的是动手前的判断与决策，
 每完成一步回填实测结果与被推翻的预判。
 
 ## 产品意图
@@ -185,7 +185,7 @@ ComposeDocument 的 `DocumentValidationIssue`，CAD 的机器码塞不进去。�
 图元词汇、也就没有层级。第一个图元落地时它必须改成按层级遍历，否则子级会被误判成孤儿。
 已在实现处注明。
 
-### 步骤 5 · 命令引擎跑通一把工具 — `add-cad-command-engine`
+### 步骤 5 · 命令引擎跑通一把工具 — `add-cad-command-engine` ✅
 
 第一条可运行的纵向流程：**敲 `L↵` → 点两下画出一条线 → Ctrl+Z 撤销 → 存盘重开还在**。
 
@@ -205,7 +205,30 @@ session 是 `update`/`commit` 两态。多步命令要在 session 内部跑状�
 （步骤由 pointer session 隐含表达），提示循环是离散的（每步等一次确定输入，且输入可能
 来自键盘）。
 
-**门槛**：五道 + 上述 e2e 全链路。
+**门槛**：五道 + 上述 e2e 全链路。✅ 全绿，e2e 100 → 101/101。
+
+**契约定形**：会话推进返回**四态**——`prompt` / `commit` / `cancelled` / `rejected`。关键在
+`rejected` **不结束会话**：输入不合法在 CAD 里是常态（点错、打错关键字），结束命令会让用户
+从头再来。`Esc` 是中止整条命令而不是退一步，退一步由命令自己的「放弃(U)」关键字表达——
+这一点此前记成了「Esc 逐级退出」，与 AutoCAD 不符，已按实际行为改正。
+
+**本刀没有使用交互内核仲裁器，这是刻意的。** CAD 目前只有平移、缩放与命令驱动的取点三种
+输入，彼此不竞争，用仲裁器是纯粹的仪式；而 `activate(command)` 该长什么样，要等步骤 6 有了
+选择与对象捕捉、出现真正竞争的手势才知道。因此**步骤 1 对 CAD 的收益推迟到步骤 6 兑现**，
+它当时的另一半价值（清理三个自称文档无关却 import 了 Stage 类型的文件并加守卫）不受影响。
+
+**两处只有 e2e 能抓到的接线漏洞**：`useCadWorkspace` 建运行时时漏注入
+`createCadCommandHandlers()`（单测显式传了 handlers，因此照常通过）；CAD 面板原本渲染
+`session.runtime.document`，而会话只在 `dirty` 翻转时换身份，第一次修改之后画布就停住——
+改为 `useSyncExternalStore` 订阅运行时。
+
+**撤销历史改为跟随活动文档标签**：`TransactionRuntime` 与 `ComposeHistoryNavigationController`
+在 entries / canUndo / undo / redo / navigate 上结构兼容，CAD 标签激活时直接接上去即可，
+历史面板随之显示 CAD 的撤销栈。这条兼容性是既有 TSDoc 写明的，不是巧合。
+
+**一处 CSS 陷阱值得记**：SVG 在 flex 容器里不会可靠地撑满——它有 intrinsic 尺寸（300×150），
+既可能不够高也可能溢出到命令行之上，表现是画布上的点击被命令行拦截。用 relative 包裹层 +
+绝对定位，图面的盒子才与可见区域严格一致。
 
 ### 步骤 6 · 捕捉与作图范式 — `add-cad-osnap-and-ortho`
 
