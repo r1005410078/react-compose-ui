@@ -1,44 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createStagePluginRegistry } from './stage-kernel-profile'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
-import type { StageInteractionPlugin } from './stage-kernel-profile'
 
-function plugin(id: string, priority: number): StageInteractionPlugin {
-  return { id, priority, claim: () => null }
-}
-
-describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 注册表按优先级排序', () => {
-  it('按 priority 降序排列', () => {
-    const registry = createStagePluginRegistry([
-      plugin('c', 1),
-      plugin('a', 30),
-      plugin('b', 20),
-    ])
-
-    expect(registry.ordered().map(({ id }) => id)).toEqual(['a', 'b', 'c'])
-  })
-
-  it('同优先级保持注册顺序', () => {
-    const registry = createStagePluginRegistry([
-      plugin('first', 10),
-      plugin('second', 10),
-      plugin('third', 10),
-    ])
-
-    expect(registry.ordered().map(({ id }) => id)).toEqual(['first', 'second', 'third'])
-  })
-
-  it('重复 id 被拒绝', () => {
-    expect(() => createStagePluginRegistry([plugin('dup', 10), plugin('dup', 20)]))
-      .toThrow(/Duplicate interaction plugin id: dup/)
-  })
-
-  it('排序结果引用稳定，不在每次询问时重排', () => {
-    const registry = createStagePluginRegistry([plugin('a', 10)])
-
-    expect(registry.ordered()).toBe(registry.ordered())
-  })
-})
+/*
+ * 注册表本身的排序与去重语义住在 `@compose-ui/interaction-kernel` 的用例里。这里只锁定
+ * Stage 自己的那张优先级表——顺序即语义，写错会静默改变「同一次按下由谁接管」。
+ */
 
 describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 优先级表锁定', () => {
   /*

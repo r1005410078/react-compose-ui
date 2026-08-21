@@ -120,14 +120,21 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   Project Component/Variant 才是 Provider 资源。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面聚合 Store 包，只能依赖
   `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
-- `@compose-ui/cad` 是无 React、无 DOM 的 CAD 文档协议与资源 Store 包，只能依赖 `core` 与
-  `assets`。`CadDocument` **复用 ComposeDocument 的 ECS 底座**——Entity 结构、Patch 代数、
+- `@compose-ui/cad` 是无 React、无 DOM 的 CAD 文档协议、命令与资源 Store 包，只能依赖 `core`、
+  `assets` 与 `commands`。`CadDocument` **复用 ComposeDocument 的 ECS 底座**——Entity 结构、Patch 代数、
   事务运行时、Undo/Redo 与序列化全部共用，差异只在校验器与 Component 词汇，因此不存在第二套
   事务实现。CAD 是**无限图纸**：文档不带任何画布或输出尺寸，也没有 Frame，因此不受
   「`Frame.size` 是尺寸唯一事实来源」这条不变量约束；单位固定 `px`，没有图纸比例。
   文档以 `.cad.json` 持久化，Store 在写入前必检查，非法内容不落盘。
+- `@compose-ui/interaction-kernel` 是**零运行时依赖**的交互内核包：插件契约、按优先级排序的
+  注册表、同时至多一个会话的仲裁器。连 `core` 都不依赖——内核逻辑不认识文档，只有类型签名
+  通过 `InteractionKernelProfile` 认识。「内核不认识文档」这条边界由**包依赖**承载而不是命名
+  约定：想引用文档类型必须先加依赖，而那条依赖会被本包的边界用例挡下。新文档类型声明自己的
+  profile 即可复用同一套仲裁规则，内核一行不改。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
-  包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
+  包，只能依赖 `core` 与 `interaction-kernel`，不得依赖任何 React chrome、registry 或 UI
+  Context 包。仲裁器与注册表来自 `interaction-kernel`，Stage 侧只保留 `StageKernelProfile`
+  这一处绑定与既有名称别名，不得再实现第二份仲裁。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解包，只能依赖 `core` 与
   `yoga-layout`；Yoga 类型、Node 与 WASM 指针不得进入公共 API。
 - `@compose-ui/animation` 是无 React、无 DOM 的场景动画领域包，只能依赖 `core`，不得依赖
@@ -157,6 +164,11 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`script-runtime`、`ui-context`、
   DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`；`layout-engine` 只用于
   Page Slot 与组件实例的独立嵌套文档 Runtime。
+- `@compose-ui/cad-canvas` 是 AutoCAD 风格的受控 CAD 编辑画布（SVG 图面 + 命令行），可以依赖
+  `cad`、`commands`、`core`、`components` 与 `ui-context`，不得依赖 `stage`、`stage-engine`、
+  `editor`、`property-panel` 或 `scene-tree`。它**不复用 Stage 的场景渲染**：Stage 的命中单位
+  是矩形（`getWorldBounds` 返回 `StageRect`），而 CAD 的直线没有盒模型，命中判据是点到线段的
+  距离——两者不是同一件事。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。
@@ -168,10 +180,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`cad`、`commands`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`cad`、`commands`、`interaction-kernel`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
-3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、
+3. **Domain Components / Widgets**：`stage`、`cad-canvas`、`scene-tree`、`asset-browser`、`history`、
    `property-panel`、`operation-log`、`command-panel`、`materials`、`animation-panel`，拥有明确领域职责。
 4. **Composition / Entry**：`editor`、`preview`，负责组合 Provider、领域组件和宿主协议。
 5. **Application**：`app`，只承担集成示例与端到端演示。

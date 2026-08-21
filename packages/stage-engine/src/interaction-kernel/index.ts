@@ -1,22 +1,21 @@
 /** Stage 交互内核：插件契约、会话仲裁与优先级表。 */
 
-/** 文档无关的泛型内核契约；新文档类型绑定自己的 profile 后复用同一套仲裁规则。 */
-export type {
-  InteractionClaimResult,
-  InteractionKernelProfile,
-  InteractionPlugin,
-  InteractionPluginContext,
-  InteractionSession,
-} from './kernel-types'
+/*
+ * 文档无关的泛型内核契约来自 `@compose-ui/interaction-kernel`。这里继续转导，是为了让
+ * 抽包对 `@compose-ui/stage-engine` 的消费者完全不可见——公共名称一个都没变。
+ */
 export {
   createInteractionPluginRegistry,
-  type InteractionPluginRegistry,
-} from './plugin-registry'
-export {
   createInteractionSessionArbiter,
   type InteractionArbiterBeginResult,
+  type InteractionClaimResult,
+  type InteractionKernelProfile,
+  type InteractionPlugin,
+  type InteractionPluginContext,
+  type InteractionPluginRegistry,
+  type InteractionSession,
   type InteractionSessionArbiter,
-} from './session-arbiter'
+} from '@compose-ui/interaction-kernel'
 
 /** 泛型内核在 Stage 文档协议上的绑定与既有名称。 */
 export {
