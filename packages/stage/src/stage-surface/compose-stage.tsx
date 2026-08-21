@@ -29,7 +29,6 @@ import {
   createComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import type {
-  ComposeEntityRegistry,
   ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import {
@@ -45,7 +44,6 @@ import {
   resolveComposeAppearance,
   resolveComposeGeometryConstraints,
   resolveComposeSwitcherPreview,
-  type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
   type EditorCommand,
@@ -116,6 +114,7 @@ import {
   STAGE_SHORTCUT_ACTIONS,
 } from './stage-shortcuts'
 import { StageContextMenu } from './stage-context-menu'
+import { useStageTextEditing } from './use-stage-text-editing'
 import { useStageClipboard } from './use-stage-clipboard'
 import { useStageKeyboardCommands } from './use-stage-keyboard'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
@@ -123,7 +122,6 @@ import { StageSceneLayer } from '../stage-scene-layer'
 import { buildResizePreviewSolveDocument } from './resize-preview'
 import {
   describeEntityCreation,
-  describeEntityTargets,
 } from '@compose-ui/stage-engine'
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
@@ -271,20 +269,6 @@ function isComponentInstanceEntity(entity: ComposeEntity) {
   return getComposeRenderer(entity)?.type === 'component-instance'
 }
 
-/** 读取 Entity 当前 authored 的可编辑纯文本；不可编辑或缺失时返回空串。 */
-function entityEditableText(
-  value: ComposeDocument,
-  registry: ComposeEntityRegistry,
-  entityId: string,
-) {
-  const entity = value.entities[entityId]
-  if (!entity) return ''
-  const propName = registry.getEditableTextPropName(entity)
-  if (propName === null) return ''
-  const current = getComposeRenderer(entity)?.props[propName]
-  return typeof current === 'string' ? current : String(current ?? '')
-}
-
 function ComposeStageReady({
   document,
   layoutSnapshot,
@@ -407,14 +391,23 @@ function ComposeStageReady({
   const snapGuides = interaction.snapGuides
   const guidePreview = interaction.guidePreview
   const [surfaceSize, setSurfaceSize] = useState({ width: 900, height: 600 })
-  // 会话本身进出很少，用 state 驱动渲染；编辑中的文本每次按键都变，只放在 ref 里——
-  // 放进 state 会让整棵 Scene 每敲一个字符重建，而文本本就由 contentEditable 的 DOM 拥有。
-  // ref 里的 `text` 为 null 表示「进入编辑后还没改过」，与「改成了空串」是两件事。
-  const [textEditing, setTextEditing] = useState<{ readonly entityId: string } | null>(null)
-  const textEditingRef = useRef<{
-    readonly entityId: string
-    text: string | null
-  } | null>(null)
+  const {
+    authoredText: textEditingValue,
+    changeTextEditing,
+    contentReflowsWithWidth,
+    enterTextEditing,
+    exitTextEditing,
+    isEditing: isTextEditingActive,
+    isTextEditable,
+    session: textEditing,
+  } = useStageTextEditing({
+    dispatch,
+    document,
+    idFactory,
+    measurementAdapter,
+    registry,
+    restoreFocus: () => surfaceRef.current?.focus(),
+  })
   // 宿主回灌给 Controller 的「本次绘制创建了谁」；Controller 按 entityId 去重。
   const [lastDrawn, setLastDrawn] = useState<StageDrawnEntity | null>(null)
   const [assetDropStatus, setAssetDropStatus] = useState('')
@@ -611,91 +604,6 @@ function ComposeStageReady({
       idFactory,
     }
   })
-
-  const contentReflowsWithWidth = useCallback((entityId: string) => {
-    const current = latestRef.current
-    const entity = current.document.entities[entityId]
-    return entity ? current.registry.getContentReflowsWithWidth(entity) : false
-  }, [])
-
-  const isTextEditable = useCallback((entityId: string) => {
-    const current = latestRef.current
-    const entity = current.document.entities[entityId]
-    if (!entity || getComposeLock(entity).locked) return false
-    return current.registry.getEditableTextPropName(entity) !== null
-  }, [])
-
-  const enterTextEditing = useCallback((entityId: string) => {
-    if (!isTextEditable(entityId)) return
-    textEditingRef.current = { entityId, text: null }
-    setTextEditing({ entityId })
-  }, [isTextEditable])
-
-  const changeTextEditing = useCallback((value: string) => {
-    const session = textEditingRef.current
-    if (!session) return
-    session.text = value
-    // 只更新运行时覆盖，不派发任何文档命令；覆盖让渲染与测量看到同一个值，
-    // Auto width 据此经既有 measurement 失效链路实时改宽。
-    measurementAdapter.setEditableTextOverride(session.entityId, value)
-  }, [measurementAdapter])
-
-  /**
-   * 结束会话并按内容收敛为最多一条事务。
-   *
-   * 编辑期间不产生任何事务——逐字符提交会让历史被单个单词撑满，`Ctrl+Z` 也退化成逐字符
-   * 回退。因此提交只发生在这里，且三种情况互斥：有变化写 Prop、为空删实体、无变化不发命令。
-   */
-  const exitTextEditing = useCallback(() => {
-    const session = textEditingRef.current
-    if (!session) return
-    textEditingRef.current = null
-    setTextEditing(null)
-    measurementAdapter.setEditableTextOverride(session.entityId, null)
-    // 焦点交还 surface，否则编辑元素卸载后焦点落到 body，后续快捷键全部失效。
-    surfaceRef.current?.focus()
-    const current = latestRef.current
-    const entity = current.document.entities[session.entityId]
-    if (!entity) return
-    const propName = current.registry.getEditableTextPropName(entity)
-    if (propName === null) return
-    const renderer = getComposeRenderer(entity)
-    const previous = renderer?.props[propName]
-    const previousText = typeof previous === 'string' ? previous : String(previous ?? '')
-    // session.text 为 null 表示一个字都没敲；此时当前内容就是文档里的 authored 值。
-    const nextText = session.text ?? previousText
-    // 「为空」优先于「未变化」：点击创建的文字本就是空的，用户没敲字就退出时若按
-    // 「未变化」放过，文档里会留下一个看不见也选不中的空文字。
-    if (nextText.length === 0) {
-      // 空 Hug 文字会塌缩到接近零尺寸，既不可见也很难再在画布上选中，留着只会污染场景树。
-      // 删除是普通可撤销事务，Ctrl+Z 可恢复。
-      current.dispatch({
-        id: current.idFactory(),
-        type: BUILTIN_COMMAND_TYPES.deleteEntity,
-        payload: { entityIds: [session.entityId] },
-        meta: {
-          label: describeEntityTargets(current.document, [session.entityId]),
-          source: 'stage',
-          targetIds: [session.entityId],
-        },
-      })
-      return
-    }
-    if (nextText === previousText) return
-    current.dispatch({
-      id: current.idFactory(),
-      type: BUILTIN_COMMAND_TYPES.setRendererProps,
-      payload: {
-        entityId: session.entityId,
-        props: { ...renderer?.props, [propName]: nextText } as JsonValue,
-      },
-      meta: {
-        label: `Edit ${entity.name}`,
-        source: 'stage',
-        targetIds: [session.entityId],
-      },
-    })
-  }, [measurementAdapter])
 
   useEffect(() => {
     const root = rootRef.current
@@ -1655,12 +1563,6 @@ function ComposeStageReady({
     beginInteraction({ kind: 'entity', entityId, source: 'label' }, event)
   }
 
-  // 只播种 authored 值，不回传编辑中的文本：后者放在 ref 里，既避免每个字符重建整棵
-  // Scene，也避免 Auto width 重排引起的重渲染把用户刚敲的内容覆盖回旧值。
-  const textEditingValue = textEditing
-    ? entityEditableText(document, registry, textEditing.entityId)
-    : null
-
   const screenBounds = bounds
     ? {
         ...worldToScreen(bounds, viewport),
@@ -1775,7 +1677,7 @@ function ComposeStageReady({
     executeClipboard,
     hiddenEntityIds,
     idFactory,
-    isTextEditing: () => textEditingRef.current !== null,
+    isTextEditing: isTextEditingActive,
     layoutSnapshot,
     messages,
     normalizedSelection,
