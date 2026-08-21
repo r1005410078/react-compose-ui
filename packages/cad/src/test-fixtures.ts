@@ -4,7 +4,39 @@ import type {
   ComposeAssetProvider,
 } from '@compose-ui/assets'
 import { ComposeAssetError } from '@compose-ui/assets'
+import type { CadCommandContext, CadCommandMessages } from './command'
 import { COMPOSE_CAD_MEDIA_TYPE, isComposeCadFileName } from './store'
+
+/** 测试用命令文案；内容只需可区分，不需要真的本地化。 @internal */
+export const cadTestCommandMessages: CadCommandMessages = {
+  specifyFirstPoint: '指定第一点',
+  specifyNextPoint: '指定下一点',
+  keywordUndo: '放弃',
+  keywordFinish: '结束',
+  expectedPoint: '需要一个点',
+  lineTitle: '直线',
+  eraseTitle: '删除',
+  selectObjects: '选择对象',
+  expectedSelection: '需要选择对象',
+}
+
+/**
+ * 测试用命令上下文，ID 递增可预期。
+ *
+ * @param selection - 启动当刻的选择集；「先选后执行」的用例靠它区分两条次序。
+ * @internal
+ */
+export function createCadTestCommandContext(
+  selection: readonly string[] = [],
+): CadCommandContext {
+  let counter = 0
+  return {
+    layerId: '0',
+    idFactory: () => `id-${++counter}`,
+    selection,
+    messages: cadTestCommandMessages,
+  }
+}
 
 /** 测试用 Provider 的可观测调用计数。 @internal */
 export interface FakeProviderCalls {

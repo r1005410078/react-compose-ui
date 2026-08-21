@@ -12,13 +12,21 @@ import type { DocumentValidationIssueShape, EditorCommand } from '@compose-ui/co
 import { ComposeCadCanvas } from './compose-cad-canvas'
 
 /**
- * 让画布拿到确定的 surface 尺寸。
+ * 补齐 jsdom 缺的三样图面依赖。
  *
  * @remarks
- * jsdom 下 `getBoundingClientRect` 恒为 0，且没有 `ResizeObserver`——坐标换算依赖前者，
- * 网格依赖后者，两个都要补。
+ * `getBoundingClientRect` 恒为 0（坐标换算依赖它）、没有 `ResizeObserver`（网格依赖它）、
+ * `SVGElement` 上没有 Pointer Capture 三件套（框选与平移依赖它）。少了第三样时按下与松手会
+ * 抛出未捕获异常，测试仍会「通过」而错误只出现在 Vitest 的 Unhandled Errors 里。
  */
 function stubSurfaceRect() {
+  for (const name of ['setPointerCapture', 'releasePointerCapture'] as const) {
+    Object.defineProperty(SVGElement.prototype, name, { configurable: true, value: () => {} })
+  }
+  Object.defineProperty(SVGElement.prototype, 'hasPointerCapture', {
+    configurable: true,
+    value: () => false,
+  })
   Object.defineProperty(SVGElement.prototype, 'getBoundingClientRect', {
     configurable: true,
     value: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0 }),
@@ -70,9 +78,23 @@ function marker() {
   return screen.queryByTestId('cad-snap-marker')
 }
 
-function clickAt(x: number, y: number) {
+function clickAt(x: number, y: number, options: { readonly shiftKey?: boolean } = {}) {
   const surface = screen.getByTestId('cad-surface')
-  fireEvent.pointerDown(surface, { button: 0, clientX: x, clientY: y, pointerId: 1 })
+  fireEvent.pointerDown(surface, { button: 0, clientX: x, clientY: y, pointerId: 1, ...options })
+  fireEvent.pointerUp(surface, { button: 0, clientX: x, clientY: y, pointerId: 1, ...options })
+}
+
+/** 从一点拖到另一点：左→右是窗口，右→左是交叉。 */
+function dragAt(from: readonly [number, number], to: readonly [number, number]) {
+  const surface = screen.getByTestId('cad-surface')
+  fireEvent.pointerDown(surface, { button: 0, clientX: from[0], clientY: from[1], pointerId: 1 })
+  fireEvent.pointerMove(surface, { clientX: to[0], clientY: to[1], pointerId: 1 })
+  fireEvent.pointerUp(surface, { button: 0, clientX: to[0], clientY: to[1], pointerId: 1 })
+}
+
+function selectedIds() {
+  return [...document.querySelectorAll('[data-cad-entity][data-selected]')]
+    .map((node) => node.getAttribute('data-cad-entity'))
 }
 
 /** 在命令行键入一行并回车；空字符串等于直接确认。 */
@@ -349,5 +371,211 @@ describe('CAD 画布与命令行', () => {
     }
     render(<ComposeCadCanvas document={hidden} onDispatch={vi.fn()} />)
     expect(document.querySelectorAll('[data-cad-entity]')).toHaveLength(0)
+  })
+})
+
+describe('CAD 选择集与手势仲裁', () => {
+  /** 画两条水平线：y=20 与 y=60，各从 x=10 到 x=110。 */
+  function drawTwoLines(rerender: () => void) {
+    submit('L')
+    clickAt(10, 20)
+    clickAt(110, 20)
+    submit('')
+    submit('L')
+    clickAt(10, 60)
+    clickAt(110, 60)
+    submit('')
+    rerender()
+  }
+
+  it('OpenSpec: cad-document / CAD 选择集语义 / 点选累积', () => {
+    const { rerender } = setup()
+    drawTwoLines(rerender)
+
+    clickAt(50, 20)
+    rerender()
+    expect(selectedIds()).toHaveLength(1)
+
+    clickAt(50, 60)
+    rerender()
+    expect(selectedIds()).toHaveLength(2)
+    expect(screen.getByTestId('cad-selection-count')).toHaveTextContent('2')
+  })
+
+  it('OpenSpec: cad-document / CAD 选择集语义 / Shift 点选移出', () => {
+    const { rerender } = setup()
+    drawTwoLines(rerender)
+    clickAt(50, 20)
+    rerender()
+
+    clickAt(50, 20, { shiftKey: true })
+    rerender()
+
+    expect(selectedIds()).toEqual([])
+    expect(screen.queryByTestId('cad-selection-count')).toBeNull()
+  })
+
+  it('OpenSpec: cad-document / CAD 选择集语义 / 单击空白清空', () => {
+    const { runtime, rerender } = setup()
+    drawTwoLines(rerender)
+    const before = runtime.document
+    clickAt(50, 20)
+    rerender()
+
+    clickAt(400, 400)
+    rerender()
+
+    expect(selectedIds()).toEqual([])
+    // 清空选择不是文档改动。
+    expect(runtime.document).toBe(before)
+  })
+
+  it('OpenSpec: cad-document / CAD 选择集语义 / Escape 的两级语义', () => {
+    const { rerender } = setup()
+    drawTwoLines(rerender)
+    clickAt(50, 20)
+    rerender()
+
+    // 有活动命令时 Esc 取消命令，选择集不动。
+    submit('L')
+    cancel()
+    rerender()
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('已取消')
+    expect(selectedIds()).toHaveLength(1)
+
+    // 没有活动命令时 Esc 清空选择集。
+    cancel()
+    rerender()
+    expect(selectedIds()).toEqual([])
+  })
+
+  it('OpenSpec: cad-document / CAD 指针手势仲裁 / 命令取点压过点选', () => {
+    const { rerender } = setup()
+    drawTwoLines(rerender)
+
+    submit('L')
+    clickAt(50, 20)
+    rerender()
+
+    // 命令正等待取点，落在既有线上的这一次按下是一个顶点，不改变选择集。
+    expect(selectedIds()).toEqual([])
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('指定下一点')
+  })
+
+  it('OpenSpec: cad-document / CAD 框选的窗口与交叉模式 / 窗口只选完全包含的', () => {
+    const { rerender } = setup()
+    drawTwoLines(rerender)
+
+    // 左→右且只框住 y=20 那条的一部分：窗口模式选不中它。
+    dragAt([0, 0], [60, 40])
+    rerender()
+    expect(selectedIds()).toEqual([])
+
+    // 完整框住两条。
+    dragAt([0, 0], [200, 200])
+    rerender()
+    expect(selectedIds()).toHaveLength(2)
+  })
+
+  it('OpenSpec: cad-document / CAD 框选的窗口与交叉模式 / 交叉选相交的', () => {
+    const { rerender } = setup()
+    drawTwoLines(rerender)
+
+    // 右→左：只碰到 y=20 那条的中段即可选中它。
+    dragAt([60, 40], [40, 0])
+    rerender()
+
+    expect(selectedIds()).toHaveLength(1)
+  })
+
+  it('OpenSpec: cad-document / CAD 框选的窗口与交叉模式 / 选框的视觉区分', () => {
+    const { rerender } = setup()
+    drawTwoLines(rerender)
+    const surface = screen.getByTestId('cad-surface')
+
+    fireEvent.pointerDown(surface, { button: 0, clientX: 0, clientY: 0, pointerId: 1 })
+    fireEvent.pointerMove(surface, { clientX: 80, clientY: 80, pointerId: 1 })
+    expect(screen.getByTestId('cad-marquee')).toHaveAttribute('data-marquee-mode', 'window')
+
+    fireEvent.pointerMove(surface, { clientX: -80, clientY: 80, pointerId: 1 })
+    expect(screen.getByTestId('cad-marquee')).toHaveAttribute('data-marquee-mode', 'crossing')
+
+    fireEvent.pointerUp(surface, { button: 0, clientX: -80, clientY: 80, pointerId: 1 })
+    expect(screen.queryByTestId('cad-marquee')).toBeNull()
+  })
+
+  it('OpenSpec: cad-document / CAD ERASE 命令与先选后执行 / 先选后执行', () => {
+    const { runtime, rerender } = setup()
+    drawTwoLines(rerender)
+    dragAt([0, 0], [200, 200])
+    rerender()
+    expect(selectedIds()).toHaveLength(2)
+
+    submit('E')
+    rerender()
+
+    expect(runtime.document.rootIds).toEqual([])
+    // 一次撤销把两条线一起恢复。
+    runtime.undo()
+    expect(runtime.document.rootIds).toHaveLength(2)
+  })
+
+  it('OpenSpec: cad-document / CAD ERASE 命令与先选后执行 / 先执行后选', () => {
+    const { runtime, rerender } = setup()
+    drawTwoLines(rerender)
+
+    submit('E')
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('选择对象')
+
+    clickAt(50, 20)
+    clickAt(50, 60)
+    submit('')
+    rerender()
+
+    expect(runtime.document.rootIds).toEqual([])
+  })
+
+  it('OpenSpec: cad-document / CAD ERASE 命令与先选后执行 / 没有选中任何对象时取消', () => {
+    const { runtime, rerender } = setup()
+    drawTwoLines(rerender)
+    const before = runtime.document
+
+    submit('E')
+    submit('')
+    rerender()
+
+    expect(runtime.document).toBe(before)
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('已取消')
+  })
+
+  it('删除后被删的 id 不留在选择集里', () => {
+    const { runtime, rerender } = setup()
+    drawTwoLines(rerender)
+    clickAt(50, 20)
+    rerender()
+
+    submit('E')
+    rerender()
+
+    expect(runtime.document.rootIds).toHaveLength(1)
+    expect(screen.queryByTestId('cad-selection-count')).toBeNull()
+    expect(selectedIds()).toEqual([])
+  })
+
+  it('OpenSpec: cad-document / CAD 指针手势仲裁 / 中键平移走兜底路径', () => {
+    const { rerender } = setup()
+    drawTwoLines(rerender)
+    const surface = screen.getByTestId('cad-surface')
+
+    // 中键落在一条线上：不选中它，改为平移视图。
+    fireEvent.pointerDown(surface, { button: 1, clientX: 50, clientY: 20, pointerId: 2 })
+    fireEvent.pointerMove(surface, { clientX: 90, clientY: 20, pointerId: 2 })
+    fireEvent.pointerUp(surface, { button: 1, clientX: 90, clientY: 20, pointerId: 2 })
+    rerender()
+
+    expect(selectedIds()).toEqual([])
+    // 视图右移 40，图元跟着走。
+    const first = document.querySelector('[data-cad-entity]')
+    expect(first).toHaveAttribute('x1', '50')
   })
 })

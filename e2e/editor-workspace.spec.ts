@@ -1303,3 +1303,58 @@ test('OpenSpec: cad-document / CAD 对象捕捉 / 捕捉端点画出精确相接
   await surface.hover({ position: { x: 145, y: 89 } })
   await expect(marker).toHaveCount(0)
 })
+
+test('OpenSpec: cad-document / CAD 选择集与手势仲裁 / 交叉框选两条线后 E 一次删除', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Select')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  const commandInput = canvas.locator('[data-testid="cad-command-input"]')
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+
+  // 1) 画两条水平线：y=40 与 y=80，都从 x=40 到 x=240
+  for (const text of ['L', '40,40', '240,40', 'F', 'L', '40,80', '240,80', 'F']) {
+    await commandInput.fill(text)
+    await commandInput.press('Enter')
+  }
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(2)
+
+  // 2) 点选一条：不需要修饰键，选中态可见
+  await surface.click({ position: { x: 140, y: 40 } })
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(1)
+
+  // 3) Esc 清空选择——没有活动命令时 Esc 的语义是清除选择集
+  await commandInput.press('Escape')
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(0)
+
+  // 4) 右→左拖出交叉选框：只碰到中段就把两条都抓住，选框是虚线
+  await surface.hover({ position: { x: 160, y: 20 } })
+  await page.mouse.down()
+  await surface.hover({ position: { x: 120, y: 100 } })
+  await expect(canvas.locator('[data-testid="cad-marquee"]'))
+    .toHaveAttribute('data-marquee-mode', 'crossing')
+  await page.mouse.up()
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(2)
+  await expect(canvas.locator('[data-testid="cad-selection-count"]')).toHaveText('2')
+
+  // 5) 先选后执行：E 直接删除，不再提示选择对象
+  await commandInput.fill('E')
+  await commandInput.press('Enter')
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(0)
+  await expect(canvas.locator('[data-testid="cad-selection-count"]')).toHaveCount(0)
+
+  // 6) 一次撤销把两条线一起恢复——同一次 ERASE 是一个 batch
+  await page.keyboard.press('Control+z')
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(2)
+})

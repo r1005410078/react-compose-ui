@@ -1,6 +1,13 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { getCadLine, getCadPlacement, type CadDocument, type CadSnapCandidate } from '@compose-ui/cad'
+import {
+  getCadLine,
+  getCadPlacement,
+  type CadDocument,
+  type CadInteractionSnapshot,
+  type CadPointerModifiers,
+  type CadSnapCandidate,
+} from '@compose-ui/cad'
 import {
   cadPanViewport,
   cadScreenToWorld,
@@ -16,6 +23,14 @@ export interface CadPreviewSegment {
   readonly end: CadCanvasPoint
 }
 
+/** 归一化后的图面指针事件；点已换算为世界坐标。 @internal */
+export interface CadSurfacePointerEvent {
+  readonly pointerId: number
+  readonly button: number
+  readonly point: CadCanvasPoint
+  readonly modifiers: CadPointerModifiers
+}
+
 /** CAD SVG 图面的属性。 @internal */
 export interface CadSurfaceProps {
   readonly document: CadDocument
@@ -23,12 +38,22 @@ export interface CadSurfaceProps {
   readonly gridStep: number | null
   readonly viewport: CadViewport
   readonly onViewportChange: (viewport: CadViewport) => void
-  /** 用户在图面上取的一个点，已换算为世界坐标。 */
-  readonly onPickPoint: (point: CadCanvasPoint) => void
+  /**
+   * 图面上的一次按下。
+   *
+   * @returns 是否被宿主接管；接管时图面捕获指针，并且**不再**走自己的中键平移兜底。
+   */
+  readonly onPointerDown: (event: CadSurfacePointerEvent) => boolean
+  readonly onPointerMove: (event: CadSurfacePointerEvent) => void
+  readonly onPointerUp: (event: CadSurfacePointerEvent) => void
+  /** 指针捕获被浏览器收走或手势被中止。 */
+  readonly onPointerAbort: (pointerId: number) => void
   /** 指针在图面上移动，已换算为世界坐标；离开图面时为 `null`。 */
   readonly onHoverPoint: (point: CadCanvasPoint | null) => void
   /** 当前捕捉命中的特征点；没有命中时为 `null`。 */
   readonly snap: CadSnapCandidate | null
+  /** 选择集与框选；由宿主的交互仲裁发布。 */
+  readonly interaction: CadInteractionSnapshot
   readonly previewSegments: readonly CadPreviewSegment[]
   readonly label: string
 }
@@ -84,9 +109,13 @@ export function CadSurface({
   gridStep,
   viewport,
   onViewportChange,
-  onPickPoint,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerAbort,
   onHoverPoint,
   snap,
+  interaction,
   previewSegments,
   label,
 }: CadSurfaceProps) {
@@ -96,9 +125,25 @@ export function CadSurface({
   const panRef = useRef<{ pointerId: number; last: CadCanvasPoint } | null>(null)
   // 事件处理器从 ref 读取最新值：滚轮监听只注册一次，把 viewport 放进依赖会让它每帧重挂；
   // 宿主回调同样从这里读，宿主传内联箭头也不会让处理器每帧换身份。
-  const latest = useRef({ viewport, onViewportChange, onHoverPoint })
+  const latest = useRef({
+    viewport,
+    onViewportChange,
+    onHoverPoint,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerAbort,
+  })
   useLayoutEffect(() => {
-    latest.current = { viewport, onViewportChange, onHoverPoint }
+    latest.current = {
+      viewport,
+      onViewportChange,
+      onHoverPoint,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerAbort,
+    }
   })
 
   const localPoint = useCallback((event: { clientX: number; clientY: number }): CadCanvasPoint => {
@@ -131,23 +176,45 @@ export function CadSurface({
     return () => { surface.removeEventListener('wheel', onWheel) }
   }, [])
 
+  /** 归一化一次指针事件：屏幕坐标换成世界坐标，修饰键收成一个平坦结构。 */
+  const normalize = useCallback((event: ReactPointerEvent<SVGSVGElement>): CadSurfacePointerEvent => ({
+    pointerId: event.pointerId,
+    button: event.button,
+    point: cadScreenToWorld(latest.current.viewport, localPoint(event)),
+    modifiers: { shift: event.shiftKey, alt: event.altKey, command: event.metaKey || event.ctrlKey },
+  }), [localPoint])
+
+  const releaseCapture = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }, [])
+
+  /**
+   * 图面上的指针拥有者只有一个。
+   *
+   * @remarks
+   * **所有按下先问宿主**（宿主内部走仲裁器），只有被拒绝才轮到图面自己的中键平移。两个独立
+   * 的指针拥有者才是真正会出问题的写法——平移与框选各自捕获指针时，谁先谁后取决于事件顺序。
+   */
   const handlePointerDown = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
-    // 中键平移；左键取点。右键留给后续的上下文菜单，这里不接管。
-    if (event.button === 1) {
-      event.preventDefault()
-      panRef.current = { pointerId: event.pointerId, last: localPoint(event) }
+    if (latest.current.onPointerDown(normalize(event))) {
       event.currentTarget.setPointerCapture(event.pointerId)
       return
     }
-    if (event.button !== 0) return
-    onPickPoint(cadScreenToWorld(latest.current.viewport, localPoint(event)))
-  }, [localPoint, onPickPoint])
+    // 右键留给后续的上下文菜单，这里不接管。
+    if (event.button !== 1) return
+    event.preventDefault()
+    panRef.current = { pointerId: event.pointerId, last: localPoint(event) }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }, [localPoint, normalize])
 
   const handlePointerMove = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     const pan = panRef.current
     if (!pan || pan.pointerId !== event.pointerId) {
       // 不在平移中才上报悬停：平移时光标位置代表的是视图位移，拿它求捕捉毫无意义。
       latest.current.onHoverPoint(cadScreenToWorld(latest.current.viewport, localPoint(event)))
+      latest.current.onPointerMove(normalize(event))
       return
     }
     const point = localPoint(event)
@@ -156,18 +223,36 @@ export function CadSurface({
       y: point.y - pan.last.y,
     }))
     panRef.current = { pointerId: pan.pointerId, last: point }
-  }, [localPoint])
+  }, [localPoint, normalize])
 
-  const endPan = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
-    if (panRef.current?.pointerId !== event.pointerId) return
-    panRef.current = null
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
+  const handlePointerUp = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    if (panRef.current?.pointerId === event.pointerId) {
+      panRef.current = null
+      releaseCapture(event)
+      return
     }
+    latest.current.onPointerUp(normalize(event))
+    releaseCapture(event)
+  }, [normalize, releaseCapture])
+
+  /**
+   * 指针捕获被收走或手势被中止。
+   *
+   * @remarks
+   * `lostpointercapture` 在正常松手后也会触发，因此这里只处理**还没结束**的手势：平移由自己
+   * 的 ref 判定，其余交给宿主决定要不要取消。宿主那边的取消是幂等的。
+   */
+  const handlePointerAbort = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    if (panRef.current?.pointerId === event.pointerId) {
+      panRef.current = null
+      return
+    }
+    latest.current.onPointerAbort(event.pointerId)
   }, [])
 
   const layerColors = new Map(document.layers.map((layer) => [layer.id, layer]))
   const grid = gridLines(gridStep, viewport, size)
+  const selected = new Set(interaction.selection)
 
   return (
     <svg
@@ -176,12 +261,11 @@ export function CadSurface({
       className="compose-cad-canvas__surface"
       data-testid="cad-surface"
       role="img"
-      onLostPointerCapture={endPan}
-      onPointerCancel={endPan}
+      onPointerCancel={handlePointerAbort}
       onPointerDown={handlePointerDown}
       onPointerLeave={() => { latest.current.onHoverPoint(null) }}
       onPointerMove={handlePointerMove}
-      onPointerUp={endPan}
+      onPointerUp={handlePointerUp}
     >
       {grid.map(({ key, x1, y1, x2, y2 }) => (
         <line
@@ -200,11 +284,16 @@ export function CadSurface({
         if (!line || !layer || !layer.visible) return null
         const start = cadWorldToScreen(viewport, line.start)
         const end = cadWorldToScreen(viewport, line.end)
+        const isSelected = selected.has(id)
         return (
           <line
             key={id}
+            className="compose-cad-canvas__entity"
             data-cad-entity={id}
-            stroke={layer.color}
+            data-selected={isSelected ? '' : undefined}
+            // 选中态不改 stroke 属性而是交给 CSS：图元颜色来自图层（ByLayer），把高亮写死在
+            // 属性上会让「这条线是什么颜色」有两个答案。
+            stroke={isSelected ? undefined : layer.color}
             strokeWidth={1}
             x1={start.x}
             x2={end.x}
@@ -213,6 +302,9 @@ export function CadSurface({
           />
         )
       })}
+      {interaction.marquee ? (
+        <MarqueeRect marquee={interaction.marquee} viewport={viewport} />
+      ) : null}
       {snap ? <SnapMarker snap={snap} viewport={viewport} /> : null}
       {previewSegments.map((segment, index) => {
         const start = cadWorldToScreen(viewport, segment.start)
@@ -267,6 +359,33 @@ function SnapMarker({ snap, viewport }: {
     <path
       {...shared}
       d={`M ${x - r} ${y - r} L ${x + r} ${y + r} M ${x + r} ${y - r} L ${x - r} ${y + r}`}
+    />
+  )
+}
+
+
+/**
+ * 渲染框选的选框。
+ *
+ * @remarks
+ * **实线是窗口、虚线是交叉**，沿用 AutoCAD 的约定。这条视觉区分不是装饰：两种模式选中的东西
+ * 差别很大，用户要在拉框的过程中就知道自己拉的是哪一种。
+ */
+function MarqueeRect({ marquee, viewport }: {
+  readonly marquee: NonNullable<CadInteractionSnapshot['marquee']>
+  readonly viewport: CadViewport
+}) {
+  const topLeft = cadWorldToScreen(viewport, { x: marquee.bounds.minX, y: marquee.bounds.minY })
+  const bottomRight = cadWorldToScreen(viewport, { x: marquee.bounds.maxX, y: marquee.bounds.maxY })
+  return (
+    <rect
+      className="compose-cad-canvas__marquee"
+      data-marquee-mode={marquee.mode}
+      data-testid="cad-marquee"
+      height={bottomRight.y - topLeft.y}
+      width={bottomRight.x - topLeft.x}
+      x={topLeft.x}
+      y={topLeft.y}
     />
   )
 }

@@ -7,51 +7,8 @@ import type {
 } from '@compose-ui/commands'
 import type { EditorCommand } from '@compose-ui/core'
 import { createCadLineEntity } from '../document'
+import type { CadCommandContext, CadCommandEffect, CadCommandMessages } from './cad-command-context'
 import { CAD_COMMAND_TYPES } from './cad-command-handlers'
-
-/** CAD 命令启动时可读的上下文。 @public */
-export interface CadCommandContext {
-  /** 新图元落在哪个图层。 */
-  readonly layerId: string
-  /** 生成稳定 Entity 与命令 ID。 */
-  readonly idFactory: () => string
-  /** 已本地化的命令提示文案。 */
-  readonly messages: CadCommandMessages
-}
-
-/** LINE 命令用到的提示文案。 @public */
-export interface CadCommandMessages {
-  readonly specifyFirstPoint: string
-  readonly specifyNextPoint: string
-  readonly keywordUndo: string
-  readonly keywordFinish: string
-  readonly expectedPoint: string
-  readonly lineTitle: string
-}
-
-/**
- * LINE 命令一次执行的产出。
- *
- * @remarks
- * 提交的是**一个** batch：一次 LINE 画出的多段折线属于同一次操作，逐段撤销会让用户按 N 次
- * Ctrl+Z 才回到命令开始之前。预览用的 `segments` 与提交载荷分开给出，宿主据此画未落库的线。
- *
- * @public
- */
-export interface CadCommandEffect {
-  /** 已确定的线段；命令进行中即可用于预览。 */
-  readonly segments: readonly { readonly start: ComposeCommandPoint; readonly end: ComposeCommandPoint }[]
-  /**
-   * 后续相对输入的参照点，即最近一个已确定的顶点。
-   *
-   * @remarks
-   * 由会话给出而不是让宿主记住自己送进来的最后一个点：「放弃」会退回上一个顶点，宿主自行
-   * 记账会与会话失步，随后的正交与相对坐标全部以错误的点为基准。
-   */
-  readonly reference?: ComposeCommandPoint
-  /** 提交时派发的命令；预览阶段为 `null`。 */
-  readonly command: EditorCommand | null
-}
 
 const UNDO_KEY = 'U'
 const FINISH_KEY = 'F'

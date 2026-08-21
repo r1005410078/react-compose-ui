@@ -4,9 +4,11 @@
  * @remarks
  * `accept` 与 `cancel` 不在此列——它们是流程控制而非数据，任何一步都接受。
  *
+ * `selection` 是一批对象标识；对本包而言只是字符串，本包不解释它们指向什么。
+ *
  * @public
  */
-export type ComposeCommandInputKind = 'point' | 'text' | 'keyword'
+export type ComposeCommandInputKind = 'point' | 'text' | 'keyword' | 'selection'
 
 /** 一个可在提示中键入的关键字选项。 @public */
 export interface ComposeCommandKeyword {
@@ -51,6 +53,15 @@ export type ComposeCommandInput =
   | { readonly kind: 'point'; readonly point: ComposeCommandPoint }
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'keyword'; readonly key: string }
+  /**
+   * 一批对象标识。
+   *
+   * @remarks
+   * 标识对本包是**不透明字符串**：本包不认识任何文档协议，也不解释这些标识指向什么。它存在
+   * 的意义是让「先选后执行」与「先执行后选」共用同一条状态机——命令要么在启动上下文里拿到
+   * 选择，要么自己提示，收到的是同一种东西。
+   */
+  | { readonly kind: 'selection'; readonly ids: readonly string[] }
   /** 直接确认；有 `defaultKeyword` 时等价于键入它，否则被拒绝。 */
   | { readonly kind: 'accept' }
   /** 取消整条命令。 */
@@ -85,8 +96,15 @@ export type ComposeCommandStep<TEffect> =
  * @public
  */
 export interface ComposeCommandSession<TEffect> {
-  /** 当前等待的输入；随 `advance` 返回的 `prompt` 更新。 */
-  readonly prompt: ComposeCommandPrompt
+  /**
+   * 当前等待的输入；随 `advance` 返回的 `prompt` 更新。
+   *
+   * @remarks
+   * `null` 表示这一步**不需要任何输入**，宿主 MUST 立即以 `accept` 推进。命令能从启动上下文
+   * 里拿全所需信息时走这条路——AutoCAD 里先选好对象再敲 `E↵`，对象立刻就删了，不会再问一句
+   * 「选择对象」。没有这一档的话，这种命令只能靠宿主认识它是哪条命令来特判。
+   */
+  readonly prompt: ComposeCommandPrompt | null
   advance(input: ComposeCommandInput): ComposeCommandStep<TEffect>
 }
 

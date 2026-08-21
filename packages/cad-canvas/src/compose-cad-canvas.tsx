@@ -1,15 +1,25 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   CAD_DEFAULT_LAYER_ID,
+  createCadEraseCommand,
+  createCadInteractionPlugins,
   createCadLineCommand,
+  createCadPluginRegistry,
+  createCadSceneIndex,
+  createCadSessionArbiter,
   findCadSnap,
   parseCadCoordinate,
+  pruneCadSelection,
   resolveCadPoint,
   type CadCommandContext,
   type CadCommandEffect,
   type CadDocument,
   type CadInputPoint,
+  type CadInteractionContext,
+  type CadInteractionEffect,
+  type CadInteractionSnapshot,
+  type CadPluginContext,
   type CadSnapCandidate,
 } from '@compose-ui/cad'
 import {
@@ -22,7 +32,7 @@ import type { EditorCommand } from '@compose-ui/core'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { getCadCanvasMessages } from './cad-canvas-i18n'
 import { CadCommandLine } from './command-line'
-import { CadSurface, type CadPreviewSegment } from './canvas-surface'
+import { CadSurface, type CadPreviewSegment, type CadSurfacePointerEvent } from './canvas-surface'
 import { CAD_INITIAL_VIEWPORT, type CadCanvasPoint, type CadViewport } from './viewport'
 
 /**
@@ -43,6 +53,8 @@ export interface ComposeCadCanvasProps {
   readonly gridStep?: number
   /** 对象捕捉的屏幕半径（CSS 像素）。 @defaultValue 12 */
   readonly snapRadius?: number
+  /** 点选命中的屏幕容差（CSS 像素）。 @defaultValue 5 */
+  readonly pickRadius?: number
 }
 
 function defaultIdFactory() {
@@ -50,16 +62,18 @@ function defaultIdFactory() {
   return `cad-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+const EMPTY_INTERACTION: CadInteractionSnapshot = { selection: [], marquee: null }
+
 /**
  * AutoCAD 风格的 CAD 编辑画布。
  *
  * @remarks
  * **命令由键盘启动**：键入 `L↵` 开始画线，随后画布上的点击成为命令的一步输入。本组件不理解
- * 任何命令有几步——状态机住在 `@compose-ui/cad`，协议住在 `@compose-ui/commands`，这里只做
- * 三件事：把输入归一化、渲染提示与预览、在命令提交时派发事务。
+ * 任何命令有几步——状态机住在 `@compose-ui/cad`，协议住在 `@compose-ui/commands`。
  *
- * 没有活动命令时点击图面**不做任何事**。CAD 的点击语义由当前命令决定，空闲时的点选（选择集）
- * 是后续能力。
+ * **同一次左键按下有三种互斥含义**：交给活动命令当一个点、点中图元、在空白处拉框。谁赢由
+ * `@compose-ui/interaction-kernel` 的仲裁器按声明的优先级决定，本组件只负责归一化输入、执行
+ * 插件发出的效果、渲染提示与预览。
  *
  * @public
  */
@@ -70,6 +84,7 @@ export function ComposeCadCanvas({
   activeLayerId = CAD_DEFAULT_LAYER_ID,
   gridStep = 10,
   snapRadius = 12,
+  pickRadius = 5,
 }: ComposeCadCanvasProps) {
   const i18n = useComposeI18nContext()
   const messages = getCadCanvasMessages(i18n?.locale ?? 'zh-CN')
@@ -81,6 +96,7 @@ export function ComposeCadCanvas({
   const [gridEnabled, setGridEnabled] = useState(true)
   const [snapEnabled, setSnapEnabled] = useState(true)
   const [hover, setHover] = useState<CadCanvasPoint | null>(null)
+  const [interaction, setInteraction] = useState<CadInteractionSnapshot>(EMPTY_INTERACTION)
   // 后续相对输入的参照点由会话给出：「放弃」会退回上一个顶点，宿主自行记账会与会话失步。
   const [reference, setReference] = useState<CadInputPoint | undefined>(undefined)
   // 活动会话不进 state：它是可变对象，进 state 既不会触发正确的重渲染，也会让「同一次命令」
@@ -90,6 +106,7 @@ export function ComposeCadCanvas({
   const registry = useMemo(
     () => createComposeCommandRegistry<CadCommandContext, CadCommandEffect>([
       createCadLineCommand(messages),
+      createCadEraseCommand(messages),
     ]),
     [messages],
   )
@@ -116,9 +133,39 @@ export function ComposeCadCanvas({
       setNotice(step.message)
       return
     }
-    if (step.status === 'commit' && step.effect.command) onDispatch(step.effect.command)
+    if (step.status === 'commit') {
+      if (step.effect.command) onDispatch(step.effect.command)
+      // 被删掉的 id 留在选择集里会指向不存在的 Entity，随后任何以选择集为输入的命令都会拿到
+      // 幽灵目标。
+      const removed = step.effect.removed
+      if (removed && removed.length > 0) {
+        const gone = new Set(removed)
+        setInteraction((current) => ({
+          ...current,
+          selection: pruneCadSelection(current.selection, (id) => !gone.has(id)),
+        }))
+      }
+    }
     endSession(step.status === 'cancelled' ? messages.cancelled : null)
   }, [endSession, messages.cancelled, onDispatch])
+
+  /**
+   * 启动一条命令，并在它「没有要等的输入」时立刻推进。
+   *
+   * @remarks
+   * `prompt` 为 `null` 表示命令从启动上下文里已经拿全了所需信息——先选好对象再敲 `E↵`，对象
+   * 当场就删。没有这一档的话，宿主只能靠认识命令 id 来特判。
+   */
+  const startSession = useCallback((session: ComposeCommandSession<CadCommandEffect>) => {
+    sessionRef.current = session
+    setPreview([])
+    setNotice(null)
+    if (session.prompt === null) {
+      applyStep(session, { kind: 'accept' })
+      return
+    }
+    setPrompt(session.prompt)
+  }, [applyStep])
 
   /**
    * 当前捕捉命中的特征点。
@@ -139,12 +186,6 @@ export function ComposeCadCanvas({
     ortho,
     grid: { enabled: gridEnabled, step: gridStep },
   }), [gridEnabled, gridStep, ortho, reference, snap])
-
-  const handlePickPoint = useCallback((point: CadCanvasPoint) => {
-    const session = sessionRef.current
-    if (!session) return
-    applyStep(session, { kind: 'point', point: resolveCadPoint(point, 'pointer', pointContext) })
-  }, [applyStep, pointContext])
 
   const handleSubmit = useCallback((text: string) => {
     const session = sessionRef.current
@@ -177,24 +218,112 @@ export function ComposeCadCanvas({
       setNotice(`${messages.unknownCommand}: ${text.trim()}`)
       return
     }
-    const started = command.start({ layerId: activeLayerId, idFactory, messages })
-    sessionRef.current = started
-    setPrompt(started.prompt)
-    setPreview([])
-    setNotice(null)
-  }, [activeLayerId, applyStep, idFactory, messages, pointContext, prompt, reference, registry])
-
-  const handleCancel = useCallback(() => {
-    const session = sessionRef.current
-    if (!session) return
-    applyStep(session, { kind: 'cancel' })
-  }, [applyStep])
+    startSession(command.start({
+      layerId: activeLayerId,
+      idFactory,
+      selection: interaction.selection,
+      messages,
+    }))
+  }, [
+    activeLayerId, applyStep, idFactory, interaction.selection, messages, pointContext,
+    prompt, reference, registry, startSession,
+  ])
 
   /**
-   * F8 切换正交、F7 切换网格、F3 切换对象捕捉。
+   * Escape 的两级语义。
    *
    * @remarks
-   * 挂在容器上而不是画布上：焦点通常在命令行输入框里，挂在画布上按键根本收不到。这两个键在
+   * 有活动命令时取消命令——AutoCAD 的 Esc 是**中止整条命令**而不是退一步，退一步由命令自己
+   * 的「放弃」关键字表达。没有活动命令时清空选择集。
+   */
+  const handleCancel = useCallback(() => {
+    const session = sessionRef.current
+    if (session) {
+      applyStep(session, { kind: 'cancel' })
+      return
+    }
+    setInteraction((current) => (
+      current.selection.length === 0 && current.marquee === null
+        ? current
+        : EMPTY_INTERACTION
+    ))
+    setNotice(messages.selectionCleared)
+  }, [applyStep, messages.selectionCleared])
+
+  // ---- 交互仲裁 ----
+
+  const arbiterRef = useRef(
+    createCadSessionArbiter(createCadPluginRegistry(createCadInteractionPlugins())),
+  )
+  // 插件上下文每次事件现拼：它必须与事件同一求解周期，缓存下来会让插件读到上一帧的文档。
+  // 值从 ref 读而不是进依赖数组：指针处理器要保持引用稳定，否则图面上的监听每帧换身份。
+  const latest = useRef({ document, prompt, interaction, pickRadius, zoom: viewport.zoom })
+  useLayoutEffect(() => {
+    latest.current = { document, prompt, interaction, pickRadius, zoom: viewport.zoom }
+  })
+
+  const runEffects = useCallback((effects: readonly CadInteractionEffect[]) => {
+    for (const effect of effects) {
+      // 指针捕获由图面自己按「按下是否被接管」处理，这里不重复执行。
+      if (effect.kind === 'pointer.capture' || effect.kind === 'pointer.release') continue
+      const session = sessionRef.current
+      if (!session) continue
+      if (effect.kind === 'command.point') {
+        applyStep(session, { kind: 'point', point: resolveCadPoint(effect.point, 'pointer', pointContext) })
+        continue
+      }
+      applyStep(session, { kind: 'selection', ids: effect.ids })
+    }
+  }, [applyStep, pointContext])
+
+  const pluginContext = useCallback((): CadPluginContext => {
+    const snapshot = latest.current
+    const context: CadInteractionContext = {
+      document: snapshot.document,
+      prompt: snapshot.prompt,
+      selection: snapshot.interaction.selection,
+      // 容差按屏幕像素给出、除以缩放换成世界单位：命中本质是屏幕概念，与捕捉半径同理。
+      hitTolerance: snapshot.pickRadius / snapshot.zoom,
+    }
+    return {
+      context,
+      index: createCadSceneIndex(snapshot.document, context),
+      get snapshot() {
+        return latest.current.interaction
+      },
+      apply: runEffects,
+      publish: setInteraction,
+      idleSnapshot: () => ({ selection: latest.current.interaction.selection, marquee: null }),
+    }
+  }, [runEffects])
+
+  const handlePointerDown = useCallback((event: CadSurfacePointerEvent) => {
+    const result = arbiterRef.current.begin(
+      { type: 'pointer.down', ...event },
+      pluginContext(),
+    )
+    // `consumed` 也算被接管：它表示这次按下已被处理掉，图面不该再走中键平移兜底。但只有
+    // `claimed` 才真正开了会话，需要捕获指针。
+    return result === 'claimed'
+  }, [pluginContext])
+
+  const handlePointerMove = useCallback((event: CadSurfacePointerEvent) => {
+    arbiterRef.current.update({ type: 'pointer.move', ...event }, pluginContext())
+  }, [pluginContext])
+
+  const handlePointerUp = useCallback((event: CadSurfacePointerEvent) => {
+    arbiterRef.current.commit({ type: 'pointer.up', ...event }, pluginContext())
+  }, [pluginContext])
+
+  const handlePointerAbort = useCallback((pointerId: number) => {
+    arbiterRef.current.cancel(pluginContext(), pointerId)
+  }, [pluginContext])
+
+  /**
+   * F8 切换正交、F7 切换网格、F3 切换对象捕捉，Escape 走两级取消。
+   *
+   * @remarks
+   * 挂在容器上而不是画布上：焦点通常在命令行输入框里，挂在画布上按键根本收不到。这几个键在
    * 输入框中不产生字符，因此拦截它们不会吞掉用户正在打的内容。
    */
   const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -220,12 +349,16 @@ export function ComposeCadCanvas({
         <CadSurface
           document={document}
           gridStep={gridEnabled ? gridStep : null}
+          interaction={interaction}
           label={messages.canvasLabel}
           previewSegments={preview}
           snap={snap}
           viewport={viewport}
           onHoverPoint={setHover}
-          onPickPoint={handlePickPoint}
+          onPointerAbort={handlePointerAbort}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
           onViewportChange={setViewport}
         />
       </div>
@@ -234,6 +367,7 @@ export function ComposeCadCanvas({
         notice={notice}
         ortho={ortho}
         prompt={prompt}
+        selectionCount={interaction.selection.length}
         snap={snapEnabled}
         onCancel={handleCancel}
         onSubmit={handleSubmit}

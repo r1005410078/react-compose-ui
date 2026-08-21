@@ -20,6 +20,10 @@ const messages = {
     needsReference: '需要一个参照点',
     snapOn: '对象捕捉 开',
     snapOff: '对象捕捉 关',
+    eraseTitle: '删除',
+    selectObjects: '选择对象',
+    expectedSelection: '需要选择对象',
+    selectionCleared: '已清除选择',
   },
   'en-US': {
     canvasLabel: 'CAD drawing',
@@ -39,6 +43,10 @@ const messages = {
     needsReference: 'A reference point is required',
     snapOn: 'Object snap on',
     snapOff: 'Object snap off',
+    eraseTitle: 'Erase',
+    selectObjects: 'Select objects',
+    expectedSelection: 'A selection is required',
+    selectionCleared: 'Selection cleared',
   },
 } as const
 
