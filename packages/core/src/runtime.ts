@@ -5,6 +5,7 @@ import {
   BUILTIN_COMMAND_TYPES,
   createBuiltinCommandHandlers,
 } from './builtin-commands'
+import type { ComposeDocument, DocumentValidator } from './document-types'
 import type {
   CommandDispatchResult,
   CommandHandler,
@@ -91,28 +92,37 @@ function safeNotify<T>(listeners: ReadonlySet<(value: T) => void>, value: T) {
 }
 
 /**
- * 创建同步、可逆且可订阅的 ComposeDocument 事务运行时。
+ * 创建同步、可逆且可订阅的事务运行时，文档类型由调用方决定。
  *
- * @param options - 初始文档、handler 与可控历史依赖。
+ * @remarks
+ * 运行时对文档形状没有任何假设：克隆是 JSON 深拷贝，Patch 按路径寻址，合法性完全交给注入的
+ * `validate`。`validate` 在这里是**必填**——若给它一个默认值，为其他文档类型创建运行时时
+ * 漏传校验器会通过类型检查，却在运行时以无关的校验问题失败。面向 ComposeDocument 的
+ * {@link createTransactionRuntime} 是本函数的特化。
+ *
+ * @param options - 初始文档、校验器、handler 与可控历史依赖。
  * @returns 同时满足文档控制、事件订阅和历史导航协议的运行时。
  * @throws 初始文档非法，或初始 handler type 重复时抛出配置错误。
  * @public
  */
-export function createTransactionRuntime(
-  options: TransactionRuntimeOptions,
-): TransactionRuntime {
-  const initialValidation = validateComposeDocument(options.document)
+export function createDocumentTransactionRuntime<TDocument extends object>(
+  options: TransactionRuntimeOptions<TDocument> & {
+    readonly validate: DocumentValidator<TDocument>
+  },
+): TransactionRuntime<TDocument> {
+  const validate = options.validate
+  const initialValidation = validate(options.document)
   if (!initialValidation.valid) {
-    throw new Error(`Invalid ComposeDocument: ${initialValidation.issues[0]?.message ?? 'unknown'}`)
+    throw new Error(`Invalid document: ${initialValidation.issues[0]?.message ?? 'unknown'}`)
   }
 
-  const handlers = new Map<string, CommandHandler>()
+  const handlers = new Map<string, CommandHandler<TDocument>>()
   const idFactory = options.idFactory ?? defaultIdFactory
   const clock = options.clock ?? Date.now
   const historyLimit = normalizeLimit(options.historyLimit, 100)
   const mergeWindowMs = normalizeLimit(options.mergeWindowMs, 750)
   const stateListeners = new Set<() => void>()
-  const eventListeners = new Set<(event: TransactionRuntimeEvent) => void>()
+  const eventListeners = new Set<(event: TransactionRuntimeEvent<TDocument>) => void>()
 
   let document = initialValidation.document
   let baselineDocument = document
@@ -121,7 +131,7 @@ export function createTransactionRuntime(
   let revision = 0
   let timeline: TimelineEntry[] = []
   let cursor = 0
-  let snapshot: TransactionRuntimeState
+  let snapshot: TransactionRuntimeState<TDocument>
 
   const entries = (): readonly TransactionHistoryEntry[] => [
     { id: `baseline-${baselineVersion}`, label: baselineLabel },
@@ -135,7 +145,7 @@ export function createTransactionRuntime(
     ? `baseline-${baselineVersion}`
     : timeline[cursor - 1]?.transaction.id ?? null
 
-  const buildSnapshot = (): TransactionRuntimeState => ({
+  const buildSnapshot = (): TransactionRuntimeState<TDocument> => ({
     document,
     revision,
     entries: entries(),
@@ -156,7 +166,7 @@ export function createTransactionRuntime(
       }
     }
   }
-  const notifyEvent = (event: TransactionRuntimeEvent) => safeNotify(eventListeners, event)
+  const notifyEvent = (event: TransactionRuntimeEvent<TDocument>) => safeNotify(eventListeners, event)
 
   const reject = (
     command: EditorCommand,
@@ -167,7 +177,7 @@ export function createTransactionRuntime(
     return result
   }
 
-  const registerHandler = (handler: CommandHandler) => {
+  const registerHandler = (handler: CommandHandler<TDocument>) => {
     if (handler.type.length === 0) throw new Error('Command handler type must not be empty')
     if (handler.type === BUILTIN_COMMAND_TYPES.batch) {
       throw new Error(`Command handler type is reserved: ${handler.type}`)
@@ -181,13 +191,14 @@ export function createTransactionRuntime(
     }
   }
 
-  for (const handler of createBuiltinCommandHandlers()) registerHandler(handler)
+  // 内建 handler 不在这里注册：`entity.*` 那套是 ComposeDocument 的命令词汇，对其他文档
+  // 类型是错的。batch 例外——它是事务原语而非文档命令，因此仍由本函数内联处理。
   for (const handler of options.handlers ?? []) registerHandler(handler)
 
   const executeHandler = (
-    currentDocument: TransactionRuntimeState['document'],
+    currentDocument: TDocument,
     command: EditorCommand,
-  ): ReturnType<CommandHandler['execute']> => {
+  ): ReturnType<CommandHandler<TDocument>['execute']> => {
     if (command.type === BUILTIN_COMMAND_TYPES.batch) {
       const batch = asBatchCommands(command)
       if ('code' in batch) return { status: 'rejected', issues: [batch] }
@@ -208,7 +219,7 @@ export function createTransactionRuntime(
             }],
           }
         }
-        const validation = validateComposeDocument(applied.document)
+        const validation = validate(applied.document)
         if (!validation.valid) {
           return {
             status: 'rejected',
@@ -263,7 +274,7 @@ export function createTransactionRuntime(
     cursor = Math.max(0, cursor - removeCount)
   }
 
-  const runtime: TransactionRuntime = {
+  const runtime: TransactionRuntime<TDocument> = {
     get document() {
       return document
     },
@@ -323,7 +334,7 @@ export function createTransactionRuntime(
           path: applied.issue.path,
         }])
       }
-      const validation = validateComposeDocument(applied.document)
+      const validation = validate(applied.document)
       if (!validation.valid) {
         return reject(command, validation.issues.map((issue) => ({
           code: issue.code,
@@ -453,7 +464,7 @@ export function createTransactionRuntime(
       })
     },
     reset(nextDocument, label = options.initialLabel ?? '开始'): TransactionResetResult {
-      const validation = validateComposeDocument(nextDocument)
+      const validation = validate(nextDocument)
       if (!validation.valid) return { status: 'rejected', issues: validation.issues }
       document = validation.document
       baselineDocument = document
@@ -469,4 +480,27 @@ export function createTransactionRuntime(
   }
 
   return runtime
+}
+
+/**
+ * 创建同步、可逆且可订阅的 ComposeDocument 事务运行时。
+ *
+ * @remarks
+ * {@link createDocumentTransactionRuntime} 在 ComposeDocument 上的特化：省略 `validate`
+ * 时使用 `validateComposeDocument`。签名与注入化之前完全一致。
+ *
+ * @param options - 初始文档、handler 与可控历史依赖。
+ * @returns 同时满足文档控制、事件订阅和历史导航协议的运行时。
+ * @throws 初始文档非法，或初始 handler type 重复时抛出配置错误。
+ * @public
+ */
+export function createTransactionRuntime(
+  options: TransactionRuntimeOptions,
+): TransactionRuntime {
+  return createDocumentTransactionRuntime<ComposeDocument>({
+    ...options,
+    validate: options.validate ?? validateComposeDocument,
+    // 内建 handler 先注册、宿主 handler 后注册，与注入化之前的顺序一致；重复 type 仍抛错。
+    handlers: [...createBuiltinCommandHandlers(), ...(options.handlers ?? [])],
+  })
 }

@@ -1,4 +1,4 @@
-import type { ComposeDocument, JsonValue } from './document-types'
+import type { JsonValue } from './document-types'
 import type {
   ApplyDocumentPatchesResult,
   DocumentPatch,
@@ -12,8 +12,8 @@ function hasOwn(value: object, key: PropertyKey) {
   return Object.prototype.hasOwnProperty.call(value, key)
 }
 
-function cloneDocument(document: ComposeDocument): ComposeDocument {
-  return JSON.parse(JSON.stringify(document)) as ComposeDocument
+function cloneDocument<TDocument>(document: TDocument): TDocument {
+  return JSON.parse(JSON.stringify(document)) as TDocument
 }
 
 function isContainer(value: unknown): value is MutableContainer {
@@ -46,18 +46,27 @@ function getParent(
   return { container: parent, key: path[path.length - 1] }
 }
 
+/**
+ * Patch 应用失败的分支。
+ *
+ * @remarks
+ * 单独命名而不是复用 `ApplyDocumentPatchesResult`：后者带文档类型参数，而失败分支不携带
+ * 文档，四个私有 helper 因此可以在任意文档类型上复用同一个返回类型。
+ */
+type PatchFailure = { readonly ok: false; readonly issue: PatchIssue }
+
 function issue(
   code: PatchIssue['code'],
   path: DocumentPath,
   message: string,
-): ApplyDocumentPatchesResult {
+): PatchFailure {
   return { ok: false, issue: { code, path, message } }
 }
 
 function setPatch(
-  root: ComposeDocument,
+  root: object,
   patch: Extract<DocumentPatch, { op: 'set' }>,
-): { inverse: DocumentPatch } | ApplyDocumentPatchesResult {
+): { inverse: DocumentPatch } | PatchFailure {
   const target = getParent(root, patch.path)
   if (!target) return issue('patch.invalid-path', patch.path, 'set 路径不存在')
   const { container, key } = target
@@ -83,9 +92,9 @@ function setPatch(
 }
 
 function insertPatch(
-  root: ComposeDocument,
+  root: object,
   patch: Extract<DocumentPatch, { op: 'insert' }>,
-): { inverse: DocumentPatch } | ApplyDocumentPatchesResult {
+): { inverse: DocumentPatch } | PatchFailure {
   const target = getAtPath(root, patch.path)
   if (!Array.isArray(target)) {
     return issue('patch.invalid-path', patch.path, 'insert 目标必须是数组')
@@ -98,9 +107,9 @@ function insertPatch(
 }
 
 function removePatch(
-  root: ComposeDocument,
+  root: object,
   patch: Extract<DocumentPatch, { op: 'remove' }>,
-): { inverse: DocumentPatch } | ApplyDocumentPatchesResult {
+): { inverse: DocumentPatch } | PatchFailure {
   const target = getParent(root, patch.path)
   if (!target) return issue('patch.invalid-path', patch.path, 'remove 路径不存在')
   const { container, key } = target
@@ -127,9 +136,9 @@ function removePatch(
 }
 
 function movePatch(
-  root: ComposeDocument,
+  root: object,
   patch: Extract<DocumentPatch, { op: 'move' }>,
-): { inverse: DocumentPatch } | ApplyDocumentPatchesResult {
+): { inverse: DocumentPatch } | PatchFailure {
   const target = getAtPath(root, patch.path)
   if (!Array.isArray(target)) {
     return issue('patch.invalid-path', patch.path, 'move 目标必须是数组')
@@ -159,10 +168,10 @@ function movePatch(
  * @returns 成功候选文档与 inverse，或第一个失败问题。
  * @public
  */
-export function applyDocumentPatches(
-  document: ComposeDocument,
+export function applyDocumentPatches<TDocument extends object>(
+  document: TDocument,
   patches: readonly DocumentPatch[],
-): ApplyDocumentPatchesResult {
+): ApplyDocumentPatchesResult<TDocument> {
   const candidate = cloneDocument(document)
   const inverse: DocumentPatch[] = []
   for (const patch of patches) {

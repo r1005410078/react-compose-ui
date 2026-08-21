@@ -1,6 +1,7 @@
 import type {
   ComposeDocument,
   DocumentValidationIssue,
+  DocumentValidator,
   JsonObject,
   JsonValue,
 } from './document-types'
@@ -86,10 +87,10 @@ export interface PatchIssue {
  *
  * @public
  */
-export type ApplyDocumentPatchesResult =
+export type ApplyDocumentPatchesResult<TDocument = ComposeDocument> =
   | {
       readonly ok: true
-      readonly document: ComposeDocument
+      readonly document: TDocument
       readonly inverse: readonly DocumentPatch[]
     }
   | { readonly ok: false; readonly issue: PatchIssue }
@@ -155,7 +156,7 @@ export type CommandHandlerResult =
  *
  * @public
  */
-export interface CommandHandler {
+export interface CommandHandler<TDocument = ComposeDocument> {
   /** 该 handler 独占的命令 type。 */
   readonly type: string
   /**
@@ -164,7 +165,7 @@ export interface CommandHandler {
    * @param document - dispatch 开始时的完整文档。
    * @param command - type 与当前 handler 匹配的命令。
    */
-  execute(document: ComposeDocument, command: EditorCommand): CommandHandlerResult
+  execute(document: TDocument, command: EditorCommand): CommandHandlerResult
 }
 
 /**
@@ -220,8 +221,8 @@ export interface TransactionHistoryEntry {
  *
  * @public
  */
-export interface TransactionRuntimeState {
-  readonly document: ComposeDocument
+export interface TransactionRuntimeState<TDocument = ComposeDocument> {
+  readonly document: TDocument
   readonly revision: number
   readonly entries: readonly TransactionHistoryEntry[]
   readonly activeEntryId: string | null
@@ -234,7 +235,7 @@ export interface TransactionRuntimeState {
  *
  * @public
  */
-export type TransactionRuntimeEvent =
+export type TransactionRuntimeEvent<TDocument = ComposeDocument> =
   | {
       readonly type: 'committed'
       readonly command: EditorCommand
@@ -255,18 +256,26 @@ export type TransactionRuntimeEvent =
       readonly type: 'history-navigation'
       readonly direction: 'undo' | 'redo' | 'navigate'
       readonly transactionIds: readonly string[]
-      readonly document: ComposeDocument
+      readonly document: TDocument
     }
-  | { readonly type: 'reset'; readonly document: ComposeDocument }
+  | { readonly type: 'reset'; readonly document: TDocument }
 
 /**
  * 创建 TransactionRuntime 时可注入的依赖与限制。
  *
  * @public
  */
-export interface TransactionRuntimeOptions {
-  readonly document: ComposeDocument
-  readonly handlers?: readonly CommandHandler[]
+export interface TransactionRuntimeOptions<TDocument = ComposeDocument> {
+  readonly document: TDocument
+  /**
+   * 判定并规范化文档的校验器。
+   *
+   * @remarks
+   * 面向 ComposeDocument 的 {@link createTransactionRuntime} 省略时使用
+   * `validateComposeDocument`；泛型入口 {@link createDocumentTransactionRuntime} 要求必填。
+   */
+  readonly validate?: DocumentValidator<TDocument>
+  readonly handlers?: readonly CommandHandler<TDocument>[]
   /** 事务 ID factory；不负责命令或基线 ID。 */
   readonly idFactory?: () => string
   /** 返回毫秒时间戳的可控时钟。 */
@@ -297,20 +306,20 @@ export type TransactionResetResult =
  *
  * @public
  */
-export interface TransactionRuntime {
-  readonly document: ComposeDocument
+export interface TransactionRuntime<TDocument = ComposeDocument> {
+  readonly document: TDocument
   readonly revision: number
   readonly entries: readonly TransactionHistoryEntry[]
   readonly activeEntryId: string | null
   readonly canUndo: boolean
   readonly canRedo: boolean
-  getState(): TransactionRuntimeState
+  getState(): TransactionRuntimeState<TDocument>
   subscribe(listener: () => void): () => void
-  subscribeEvents(listener: (event: TransactionRuntimeEvent) => void): () => void
+  subscribeEvents(listener: (event: TransactionRuntimeEvent<TDocument>) => void): () => void
   dispatch(command: EditorCommand): CommandDispatchResult
   undo(): void
   redo(): void
   navigate(entryId: string): void
-  reset(document: ComposeDocument, label?: string): TransactionResetResult
-  registerHandler(handler: CommandHandler): () => void
+  reset(document: TDocument, label?: string): TransactionResetResult
+  registerHandler(handler: CommandHandler<TDocument>): () => void
 }

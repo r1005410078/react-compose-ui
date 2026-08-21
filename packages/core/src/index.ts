@@ -114,7 +114,7 @@ export {
 } from './widget-switcher'
 export type { ComposeWidgetSwitcherPreview } from './widget-switcher'
 export { applyDocumentPatches, jsonEqual } from './patches'
-export { createTransactionRuntime } from './runtime'
+export { createDocumentTransactionRuntime, createTransactionRuntime } from './runtime'
 export {
   migrateComposeDocumentV5ToV7,
   migrateComposeDocumentV6ToV7,
@@ -199,6 +199,8 @@ export type {
   DocumentValidationIssue,
   DocumentValidationIssueCode,
   DocumentValidationResult,
+  DocumentValidationResultOf,
+  DocumentValidator,
   JsonArray,
   JsonObject,
   JsonPrimitive,
