@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { getCadLine, getCadPlacement, type CadDocument } from '@compose-ui/cad'
+import { getCadLine, getCadPlacement, type CadDocument, type CadSnapCandidate } from '@compose-ui/cad'
 import {
   cadPanViewport,
   cadScreenToWorld,
@@ -25,6 +25,10 @@ export interface CadSurfaceProps {
   readonly onViewportChange: (viewport: CadViewport) => void
   /** 用户在图面上取的一个点，已换算为世界坐标。 */
   readonly onPickPoint: (point: CadCanvasPoint) => void
+  /** 指针在图面上移动，已换算为世界坐标；离开图面时为 `null`。 */
+  readonly onHoverPoint: (point: CadCanvasPoint | null) => void
+  /** 当前捕捉命中的特征点；没有命中时为 `null`。 */
+  readonly snap: CadSnapCandidate | null
   readonly previewSegments: readonly CadPreviewSegment[]
   readonly label: string
 }
@@ -81,6 +85,8 @@ export function CadSurface({
   viewport,
   onViewportChange,
   onPickPoint,
+  onHoverPoint,
+  snap,
   previewSegments,
   label,
 }: CadSurfaceProps) {
@@ -88,10 +94,11 @@ export function CadSurface({
   // 尺寸进 state 而不是渲染期读 ref：首帧还没有元素，且窗口或面板改变大小时网格必须重画。
   const [size, setSize] = useState({ width: 0, height: 0 })
   const panRef = useRef<{ pointerId: number; last: CadCanvasPoint } | null>(null)
-  // 事件处理器从 ref 读取最新值：滚轮监听只注册一次，把 viewport 放进依赖会让它每帧重挂。
-  const latest = useRef({ viewport, onViewportChange })
+  // 事件处理器从 ref 读取最新值：滚轮监听只注册一次，把 viewport 放进依赖会让它每帧重挂；
+  // 宿主回调同样从这里读，宿主传内联箭头也不会让处理器每帧换身份。
+  const latest = useRef({ viewport, onViewportChange, onHoverPoint })
   useLayoutEffect(() => {
-    latest.current = { viewport, onViewportChange }
+    latest.current = { viewport, onViewportChange, onHoverPoint }
   })
 
   const localPoint = useCallback((event: { clientX: number; clientY: number }): CadCanvasPoint => {
@@ -138,7 +145,11 @@ export function CadSurface({
 
   const handlePointerMove = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     const pan = panRef.current
-    if (!pan || pan.pointerId !== event.pointerId) return
+    if (!pan || pan.pointerId !== event.pointerId) {
+      // 不在平移中才上报悬停：平移时光标位置代表的是视图位移，拿它求捕捉毫无意义。
+      latest.current.onHoverPoint(cadScreenToWorld(latest.current.viewport, localPoint(event)))
+      return
+    }
     const point = localPoint(event)
     latest.current.onViewportChange(cadPanViewport(latest.current.viewport, {
       x: point.x - pan.last.x,
@@ -168,6 +179,7 @@ export function CadSurface({
       onLostPointerCapture={endPan}
       onPointerCancel={endPan}
       onPointerDown={handlePointerDown}
+      onPointerLeave={() => { latest.current.onHoverPoint(null) }}
       onPointerMove={handlePointerMove}
       onPointerUp={endPan}
     >
@@ -201,6 +213,7 @@ export function CadSurface({
           />
         )
       })}
+      {snap ? <SnapMarker snap={snap} viewport={viewport} /> : null}
       {previewSegments.map((segment, index) => {
         const start = cadWorldToScreen(viewport, segment.start)
         const end = cadWorldToScreen(viewport, segment.end)
@@ -219,5 +232,41 @@ export function CadSurface({
         )
       })}
     </svg>
+  )
+}
+
+
+/** 捕捉标记的屏幕半径（CSS 像素）。 */
+const SNAP_MARKER_RADIUS = 5
+
+/**
+ * 按模式渲染捕捉标记。
+ *
+ * @remarks
+ * 形状沿用 AutoCAD 的约定：端点方框、中点三角、交点叉号。用形状而不是颜色区分，是因为用户
+ * 要在扫视中判断「捕到的是不是我想要的那个特征」，形状在余光里也分得清。
+ */
+function SnapMarker({ snap, viewport }: {
+  readonly snap: CadSnapCandidate
+  readonly viewport: CadViewport
+}) {
+  const { x, y } = cadWorldToScreen(viewport, snap.point)
+  const r = SNAP_MARKER_RADIUS
+  const shared = {
+    className: 'compose-cad-canvas__snap-marker',
+    'data-snap-mode': snap.mode,
+    'data-testid': 'cad-snap-marker',
+  }
+  if (snap.mode === 'endpoint') {
+    return <rect {...shared} height={r * 2} width={r * 2} x={x - r} y={y - r} />
+  }
+  if (snap.mode === 'midpoint') {
+    return <polygon {...shared} points={`${x},${y - r} ${x + r},${y + r} ${x - r},${y + r}`} />
+  }
+  return (
+    <path
+      {...shared}
+      d={`M ${x - r} ${y - r} L ${x + r} ${y + r} M ${x + r} ${y - r} L ${x - r} ${y + r}`}
+    />
   )
 }

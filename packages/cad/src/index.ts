@@ -28,6 +28,12 @@ export {
   type CadPoint,
 } from './document'
 export {
+  CAD_SNAP_MODES,
+  findCadSnap,
+  type CadSnapCandidate,
+  type CadSnapMode,
+} from './snap'
+export {
   parseCadCoordinate,
   resolveCadPoint,
   type CadCoordinateFailure,

@@ -12,6 +12,8 @@ export interface CadCommandLineProps {
   readonly messages: CadCanvasMessages
   /** 正交模式是否开启；显示在命令行右侧。 */
   readonly ortho: boolean
+  /** 对象捕捉是否开启。 */
+  readonly snap: boolean
   /** 用户提交了一行文本：空闲时是命令名，命令进行中是关键字。 */
   readonly onSubmit: (text: string) => void
   /** 用户按下 Esc。 */
@@ -47,6 +49,7 @@ export function CadCommandLine({
   notice,
   messages,
   ortho,
+  snap,
   onSubmit,
   onCancel,
 }: CadCommandLineProps) {
@@ -82,6 +85,13 @@ export function CadCommandLine({
         onChange={(event) => { setText(event.target.value) }}
         onKeyDown={handleKeyDown}
       />
+      <span
+        className="compose-cad-canvas__mode"
+        data-active={snap ? '' : undefined}
+        data-testid="cad-snap-state"
+      >
+        {snap ? messages.snapOn : messages.snapOff}
+      </span>
       <span
         className="compose-cad-canvas__mode"
         data-active={ortho ? '' : undefined}

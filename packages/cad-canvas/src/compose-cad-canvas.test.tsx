@@ -62,6 +62,14 @@ function setup() {
   return { runtime, rerender }
 }
 
+function hoverAt(x: number, y: number) {
+  fireEvent.pointerMove(screen.getByTestId('cad-surface'), { clientX: x, clientY: y, pointerId: 1 })
+}
+
+function marker() {
+  return screen.queryByTestId('cad-snap-marker')
+}
+
 function clickAt(x: number, y: number) {
   const surface = screen.getByTestId('cad-surface')
   fireEvent.pointerDown(surface, { button: 0, clientX: x, clientY: y, pointerId: 1 })
@@ -255,6 +263,70 @@ describe('CAD 画布与命令行', () => {
     submit('L')
     submit('U')
     expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('需要一个点')
+  })
+
+  it('OpenSpec: cad-document / CAD 捕捉标记 / 标记随指针移动更新', () => {
+    const { rerender } = setup()
+    // 先画一条 (0,0)-(100,0) 的线。
+    submit('L')
+    submit('0,0')
+    submit('100,0')
+    submit('F')
+    rerender()
+
+    // 空闲时不求解捕捉，也不渲染标记。
+    hoverAt(2, 2)
+    expect(marker()).toBeNull()
+
+    submit('L')
+    hoverAt(2, 2)
+    expect(marker()).toHaveAttribute('data-snap-mode', 'endpoint')
+
+    hoverAt(50, 3)
+    expect(marker()).toHaveAttribute('data-snap-mode', 'midpoint')
+
+    // 移出捕捉半径后标记消失。
+    hoverAt(50, 400)
+    expect(marker()).toBeNull()
+  })
+
+  it('OpenSpec: cad-document / CAD 对象捕捉 / 捕捉压过网格，端点精确相接', () => {
+    const { runtime, rerender } = setup()
+    submit('L')
+    submit('0,0')
+    submit('103,47')
+    submit('F')
+    rerender()
+
+    // 网格开启（步长 10），但捕捉到 (103,47) 这个端点，不被取整。
+    submit('L')
+    hoverAt(104, 48)
+    clickAt(104, 48)
+    submit('200,200')
+    submit('F')
+    expect(lines(runtime.document)[1]?.start).toEqual({ x: 103, y: 47 })
+  })
+
+  it('OpenSpec: cad-document / CAD 捕捉标记 / 关闭对象捕捉', () => {
+    const { runtime, rerender } = setup()
+    submit('L')
+    submit('0,0')
+    submit('103,47')
+    submit('F')
+    rerender()
+
+    expect(screen.getByTestId('cad-snap-state')).toHaveTextContent('对象捕捉 开')
+    fireEvent.keyDown(screen.getByTestId('cad-canvas'), { key: 'F3' })
+    expect(screen.getByTestId('cad-snap-state')).toHaveTextContent('对象捕捉 关')
+
+    submit('L')
+    hoverAt(104, 48)
+    expect(marker()).toBeNull()
+    clickAt(104, 48)
+    submit('200,200')
+    submit('F')
+    // 回到网格吸附。
+    expect(lines(runtime.document)[1]?.start).toEqual({ x: 100, y: 50 })
   })
 
   it('隐藏图层上的图元不渲染', () => {

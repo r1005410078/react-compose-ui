@@ -81,3 +81,11 @@
   background: var(--compose-surface-raised, #1e2733);
   opacity: 1;
 }
+
+/* 捕捉标记：描边不填充，压在图元之上但不遮挡它。 */
+.compose-cad-canvas__snap-marker {
+  fill: none;
+  stroke: var(--compose-accent, #63b3ed);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
