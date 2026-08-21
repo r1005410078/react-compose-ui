@@ -7,8 +7,12 @@
     "#lib/*": "./src/lib/*.ts",
     "#hooks/*": "./src/hooks/*.ts"
   },
-  "sideEffects": ["**/*.css"],
-  "files": ["dist"],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -33,6 +37,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
+    "@compose-ui/commands": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
     "@tanstack/react-virtual": "^3.14.6",

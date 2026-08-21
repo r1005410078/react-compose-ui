@@ -140,6 +140,10 @@
         "react-dom": "^18.3.0 || ^19.0.0",
       },
     },
+    "packages/commands": {
+      "name": "@compose-ui/commands",
+      "version": "0.1.0",
+    },
     "packages/component-library": {
       "name": "@compose-ui/component-library",
       "version": "0.1.0",
@@ -173,6 +177,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@base-ui/react": "^1.6.0",
+        "@compose-ui/commands": "workspace:*",
         "@compose-ui/core": "workspace:*",
         "@compose-ui/ui-context": "workspace:*",
         "@tanstack/react-virtual": "^3.14.6",
@@ -201,6 +206,7 @@
         "@compose-ui/asset-browser": "workspace:*",
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/command-panel": "workspace:*",
+        "@compose-ui/commands": "workspace:*",
         "@compose-ui/component-library": "workspace:*",
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/components": "workspace:*",
@@ -340,6 +346,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@compose-ui/assets": "workspace:*",
+        "@compose-ui/commands": "workspace:*",
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/components": "workspace:*",
         "@compose-ui/core": "workspace:*",
@@ -492,6 +499,8 @@
     "@compose-ui/assets": ["@compose-ui/assets@workspace:packages/assets"],
 
     "@compose-ui/command-panel": ["@compose-ui/command-panel@workspace:packages/command-panel"],
+
+    "@compose-ui/commands": ["@compose-ui/commands@workspace:packages/commands"],
 
     "@compose-ui/component-library": ["@compose-ui/component-library@workspace:packages/component-library"],
 

@@ -1,3 +1,9 @@
+import {
+  normalizeComposeKeybinding,
+  serializeComposeKeybinding,
+} from '@compose-ui/commands'
+import type { ComposeKeybinding } from '@compose-ui/commands'
+import { DEFAULT_STAGE_SHORTCUTS } from '@compose-ui/stage'
 import type { ComposeLocale, ComposeTheme } from '@compose-ui/ui-context'
 import { formatComposeKeybinding } from '@compose-ui/components'
 
@@ -48,22 +54,12 @@ export type ComposeEditorShortcutAction =
  * 单次键盘按键或组合键。
  *
  * @remarks
- * `code` 使用 `KeyboardEvent.code`；`primary` 接受 Command 或 Control，展示时按平台格式化。
+ * `@compose-ui/commands` 的 `ComposeKeybinding` 别名。`code` 使用 `KeyboardEvent.code`；
+ * `primary` 接受 Command 或 Control，展示时按平台格式化。
  *
  * @public
  */
-export interface ComposeEditorKeybinding {
-  /** 布局无关的物理键位代码。 */
-  readonly code: string
-  /** 是否要求平台主修饰键。 */
-  readonly primary?: boolean
-  /** 是否明确要求 Control；用于所有平台通用的 Ctrl+Y 等兼容键位。 */
-  readonly control?: boolean
-  /** 是否要求 Shift。 */
-  readonly shift?: boolean
-  /** 是否要求 Alt/Option。 */
-  readonly alt?: boolean
-}
+export type ComposeEditorKeybinding = ComposeKeybinding
 
 /**
  * 当前 ComposeEditor 实例的完整用户偏好。
@@ -173,41 +169,14 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
   return {
     theme: 'dark',
     locale: 'zh-CN',
+    // Stage 的 30 项由 Stage 自己给出，这里只补 Editor 独有的动作。此前两份表逐字重复，
+    // 靠人工同步维持一致且没有任何测试守住。
     shortcuts: cloneShortcutMap({
+      ...DEFAULT_STAGE_SHORTCUTS,
       'editor.settings': [{ code: 'Comma', primary: true }],
-      'stage.temporaryPan': [{ code: 'Space' }],
-      'stage.selectTool': [{ code: 'KeyV' }],
       'stage.marqueeTool': [{ code: 'KeyB' }],
-      'stage.moveTool': [{ code: 'KeyM' }],
-      'stage.scaleTool': [{ code: 'KeyS' }],
-      'stage.rotateTool': [{ code: 'KeyR', shift: true }],
-      'stage.panTool': [{ code: 'KeyH' }],
-      'stage.drawContainerTool': [{ code: 'KeyF' }],
-      'stage.drawRectangleTool': [{ code: 'KeyR' }],
-      'stage.drawLineTool': [{ code: 'KeyL' }],
-      'stage.drawArrowTool': [{ code: 'KeyL', shift: true }],
-      'stage.drawCircleTool': [{ code: 'KeyO' }],
-      'stage.drawTextTool': [{ code: 'KeyT' }],
-      'stage.fitSelection': [{ code: 'Digit2', shift: true }],
-      'stage.fitContainer': [{ code: 'KeyF', shift: true }],
-      'stage.zoomReset': [{ code: 'Digit0', primary: true }],
-      'stage.zoomIn': [{ code: 'Equal', primary: true }],
-      'stage.zoomOut': [{ code: 'Minus', primary: true }],
-      'stage.toggleGridSnap': [{ code: 'KeyG', shift: true }],
-      'stage.toggleSmartSnap': [{ code: 'KeyS', shift: true }],
-      'edit.duplicate': [{ code: 'KeyD', primary: true }],
-      'edit.copy': [{ code: 'KeyC', primary: true }],
-      'edit.cut': [{ code: 'KeyX', primary: true }],
-      'edit.paste': [{ code: 'KeyV', primary: true }],
-      'edit.bringForward': [{ code: 'BracketRight' }],
-      'edit.sendBackward': [{ code: 'BracketLeft' }],
-      'edit.bringToFront': [{ code: 'BracketRight', primary: true }],
-      'edit.sendToBack': [{ code: 'BracketLeft', primary: true }],
-      'edit.group': [{ code: 'KeyG', primary: true }],
-      'edit.ungroup': [{ code: 'KeyG', primary: true, shift: true }],
       'edit.createComponent': [],
       'scene.create': [],
-      'edit.delete': [{ code: 'Delete' }, { code: 'Backspace' }],
       'history.undo': [{ code: 'KeyZ', primary: true }],
       'history.redo': [
         { code: 'KeyZ', primary: true, shift: true },
@@ -216,6 +185,7 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
     }),
   }
 }
+
 
 export function normalizeComposeEditorPreferences(
   preferences: ComposeEditorPreferences,
@@ -236,7 +206,7 @@ export function normalizeComposeEditorPreferences(
         action,
         normalized.filter((binding, index) =>
           normalized.findIndex((candidate) =>
-            serializeBinding(candidate) === serializeBinding(binding)) === index),
+            serializeComposeKeybinding(candidate) === serializeComposeKeybinding(binding)) === index),
       ]
     }),
   ) as unknown as ComposeEditorPreferences['shortcuts']
@@ -247,19 +217,7 @@ export function normalizeComposeEditorPreferences(
 export function normalizeComposeEditorKeybinding(
   binding: ComposeEditorKeybinding,
 ): ComposeEditorKeybinding {
-  const code = binding.code.trim()
-  if (!code) throw new Error('Shortcut code must not be empty')
-  if (binding.primary && binding.control) {
-    throw new Error('Shortcut cannot require primary and explicit Control together')
-  }
-
-  return {
-    code,
-    ...(binding.primary ? { primary: true } : {}),
-    ...(binding.control ? { control: true } : {}),
-    ...(binding.shift ? { shift: true } : {}),
-    ...(binding.alt ? { alt: true } : {}),
-  }
+  return normalizeComposeKeybinding(binding)
 }
 
 export function isComposeEditorKeybindingMatch(
@@ -297,12 +255,12 @@ export function findComposeEditorShortcutConflict(
   binding: ComposeEditorKeybinding,
 ) {
   const scope = COMPOSE_EDITOR_SHORTCUT_SCOPES[action]
-  const serialized = serializeBinding(normalizeComposeEditorKeybinding(binding))
+  const serialized = serializeComposeKeybinding(normalizeComposeEditorKeybinding(binding))
   return COMPOSE_EDITOR_SHORTCUT_ACTIONS.find((candidate) =>
     candidate !== action
     && COMPOSE_EDITOR_SHORTCUT_SCOPES[candidate] === scope
     && shortcuts[candidate].some((item) =>
-      serializeBinding(normalizeComposeEditorKeybinding(item)) === serialized)) ?? null
+      serializeComposeKeybinding(normalizeComposeEditorKeybinding(item)) === serialized)) ?? null
 }
 
 export function isEditableKeyboardTarget(target: EventTarget | null) {
@@ -323,15 +281,6 @@ function cloneShortcutMap(
   ) as unknown as ComposeEditorPreferences['shortcuts']
 }
 
-function serializeBinding(binding: ComposeEditorKeybinding) {
-  return [
-    binding.code,
-    binding.primary ? 'primary' : '',
-    binding.control ? 'control' : '',
-    binding.shift ? 'shift' : '',
-    binding.alt ? 'alt' : '',
-  ].join(':')
-}
 
 function isMacPlatform(platform: string) {
   return /Mac|iPhone|iPad|iPod/i.test(platform)
