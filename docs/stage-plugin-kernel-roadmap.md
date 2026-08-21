@@ -465,8 +465,7 @@ window 事件、浏览器单方面收走 Pointer capture。**判等一律用单�
 （前六刀一直在拆的正是这个），或者把 JSX 拆成宽契约的单调用方组件。两条都让代码更难读。
 
 **目标该随认识更新**，与 `lockGestureParent` 那次是同一个判断。真正要达成的是「适配层只做
-适配」，这一点已经达成：3088 → 800 行（−74%），能力各自成模块，纯逻辑各自有单测。每一块都持有 ref 与 effect，拆分要按**用户能力**切成 Hook
-而不是按代码形态切，且每刀都需要黄金图护航。目标 < 600 行。
+适配」，这一点已经达成：3088 → 800 行（−74%），能力各自成模块，纯逻辑各自有单测。
 
 ### 关于 `lockGestureParent`：撤销删除计划
 
@@ -478,3 +477,32 @@ window 事件、浏览器单方面收走 Pointer capture。**判等一律用单�
 少一个布尔。
 
 **留着它是更小的接口，不是欠下的债。** 计划该随认识更新，而不是因为写下来了就执行。
+
+### 步骤 6 · 目录归位 — 两个提案 ✅
+
+前五步产出的模块一直平铺在包根，`stage-surface/` 42 个文件、`stage-engine/src/` 32 个文件。
+AGENTS.md 的 Feature-first 规则要求按功能而非技术类型分目录，因此收尾两刀只搬文件、不改代码。
+
+**`refactor-stage-surface-features` ✅**：`stage-surface/` 按**用户能力**分成 `pointer-session/`、
+`keyboard/`、`entity-creation/`、`preview-document/`、`instance-drilldown/`、`screen-model/`
+六个目录 + 13 个根文件。准入门槛取 AGENTS.md 的原文——**三个及以上协同实现文件，或自带状态机 /
+样式 / 测试**——所以没有为「一个 Hook 一个目录」凑出八个。这一刀也回答了「是不是缺个 `hooks/`
+文件夹」：不缺，`hooks/` 正是规则点名禁止的技术类型横向堆放。
+
+**`refactor-stage-engine-features` ✅**：`stage-engine/src/` 根目录 32 → 5 个文件，分成
+`geometry/`、`hit-testing/`、`gesture-planning/`、`commands/` 与既有的 `interaction-kernel/`。
+**分组依据不是另想的**，是 AGENTS.md 里这个包自己的边界描述——「坐标、场景索引、吸附、手势
+状态机与空间命令」——五个词对五个目录，目录名与边界描述从此不会各说各话。顺带改掉两个与目录
+同名因而不携带信息的文件名（`geometry/geometry.ts` → `stage-geometry.ts`、
+`commands/commands.ts` → `structure-commands.ts`），并把公共入口从 15 个 export 块（其中 5 个
+都指向 `./commands`）合并成 6 个、每目录一块。仍逐符号列出而不用 `export *`：它是对外契约，
+不该随内部文件增删自动变化。
+
+**`interaction-kernel/` 有 34 个文件但刻意没拆。** 那 18 个插件是一组形态统一的兄弟（各约
+150 行、同一套 claim/session 契约、由**一张优先级表**排序），而那张表连同守护它的
+`extracted-plugins.ts` 与 `extraction-order.test.ts` 就在同一层。把插件挪进 `plugins/` 等于
+**把排序表和它排序的对象分开**——绞杀式重构里吃过亏的正是这条顺序不变量。文件多不是拆分理由，
+「谁和谁必须一起看」才是。
+
+**目录重排会大量改动导入路径，turbo 缓存命中率反而高。** stage-surface 那刀 `typecheck` 报绿
+而真错误仍在，是 vitest 抓出来的。此后目录级改动一律带 `--force` 跑全部门槛。
