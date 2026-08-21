@@ -412,8 +412,24 @@ legacy 已在步骤 3 删除，本步只剩「把 `compose-stage.tsx` 收敛成�
 修法是让宿主传入的函数型依赖也从内部「最新值」ref 里读，不进依赖数组。约束写进了 Hook 的
 TSDoc，因为签名上看不出来——而后面每一刀都会再遇到它。
 
-**剩余**：`ComposeStageReady` 仍有约 1700 行——指针路由与会话、实例下钻、
-resize 实时布局求解、资源拖入。每一块都持有 ref 与 effect，拆分要按**用户能力**切成 Hook
+**第五刀 `refactor-stage-pointer-session` ✅**：这一轮最大的一块。「一次指针交互从按下到
+结束」原本是七个 ref、十一个回调、一个卸载 effect 与一个 JSX 处理器，散在五处，中间还夹着
+与它无关的资源拖入与效果分派。整块进 `use-stage-pointer-session.ts`（517 行）。
+2034 → 1621 行。
+
+它同时是 Stage 里最容易出错的一段，三类竞态都要在这里挡住：迟到的 rAF 回调、跨会话的
+window 事件、浏览器单方面收走 Pointer capture。**判等一律用单调递增的 generation 而不是
+`pointerId`**——同一个 pointerId 可以先后属于两次会话，过期消息因此被丢弃而不是误伤新会话。
+主动释放 capture 留下的 lostpointercapture 回声按 generation 排队消费，与「被动丢失」区分。
+这些判定散着看只是一堆 `if`，聚到一起才读得出它们防的是同一类事。
+
+两处刻意留在宿主：**临时平移的结束**（属于键盘能力，Hook 通过 `onCaptureLostAbort` 交出去，
+不去认识这个概念）与**宿主 `onLostPointerCapture` 的透传顺序**（既有契约）。代价是宿主多了
+一个 `stopTemporaryPanRef`——键盘 Hook 必须排在剪贴板之后，指针会话排在最前，两者构成声明
+顺序的环。用 ref 打破它是诚实的：指针会话只在事件发生时读取它，不在渲染期读取。
+
+**剩余**：`ComposeStageReady` 约 1600 行——效果分派与资源拖入、实例下钻、
+resize 实时布局求解、Overlay 与标尺的派生几何、JSX 本体。每一块都持有 ref 与 effect，拆分要按**用户能力**切成 Hook
 而不是按代码形态切，且每刀都需要黄金图护航。目标 < 600 行。
 
 ### 关于 `lockGestureParent`：撤销删除计划
