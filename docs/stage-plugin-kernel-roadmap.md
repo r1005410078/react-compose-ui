@@ -140,7 +140,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 因此实际顺序就是优先级表的顺序：
 `text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
 → `segment-resize` ✅ → `marquee-tool` ✅ → `draw` ✅ → `move-axis` ✅ → `marquee-converge` ✅
-→ `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
+→ `entity-select-move` ✅ → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
 
 注意 `marquee` 的三个入口分散在 1100 / 800 / 100，中间夹着 draw、resize、guide 等，
@@ -280,8 +280,33 @@ temporaryPan 标志、落点没被锁掉），复原后全绿。后果正是 AGE
 测试的技术细节，而是收敛这条规则的适用范围。修正后判定的防御性分支（Group、空容器、嵌套、
 不存在）经 controller 已不可达，改用导出的纯函数直接单测。
 
-下一刀是 `entity-select-move`(700)：复用 `claimStageMove`，但它还带着选区变更、双击下钻与
-组件实例复合寻址，是剩下几刀里最厚的一个。
+`entity-select-move`(700) ✅ 复用 `claimStageMove`，接管条件本身是一棵决策树：先改选区，
+再按工具与目标状态决定这次按下变成原地文字编辑、移动手势、还是仅仅改选区。三条出口一律
+`consumed`——选区已经改过了，再交给后续插件会让同一次按下既改选区又起框。
+
+它顺带**清空了 legacy 的整套移动机制**：`startTransform('move', …)` 至此再无调用者，于是
+`Gesture` 的 move 变体、update / finish 的 move 分支、legacy 会话里 move 专属的 Space 处理、
+并发中止里的 move 判定全部成为死代码。`startTransform` 收窄成只服务缩放的 `startResize`，
+内核的 temporary-pan 分派也不必再问 legacy 的 `gesture`，只问会话的 `consumesTemporaryPan`。
+**上一刀加的契约在这一刀才真正取代掉旧路径**——这是绞杀式重构的常态：新路先通，旧路等最后一个
+调用者消失才拆。`interaction-controller.ts` 1718 → 1592 行。
+
+### 一处被这一刀暴露的既有缺口：副按键
+
+e2e 报「节点层级操作」失败——右键不再弹出上下文菜单。根因不在新代码，而在**抽取模型本身**：
+`event.button > 1` 是 legacy `begin()` 顶部的一道总闸，而插件排在 legacy **之前**被询问，
+**从第一个插件落地起就绕过了它**。此前没暴露，只因已抽取插件接管的命中类型恰好没被右键点过——
+`entity` 是第一个。
+
+修法是把判定放回唯一正确的位置：controller 询问插件之前。放进各插件既会漏、又要每个新插件
+重复一遍；放进仲裁器则等于让内核认识鼠标按键语义。
+
+**这类缺口有个共同形状**：legacy 单体在级联顶部设的"总闸"，抽取时不会自动跟着任何一个分支
+走，因为它不属于任何分支。已知的总闸目前只剩 `!context || !index || !surface` 这一条，它由
+`pluginContext` 的取值器抛错兜住。后续每刀都该先问一句：这个分支之上还有没有没搬走的总闸。
+
+下一刀是 `resize`(600)——legacy 最后一个变换会话，抽完 `startTransform` 与 `Gesture` 的
+transform 变体一并消失。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

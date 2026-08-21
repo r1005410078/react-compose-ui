@@ -18,7 +18,6 @@ import {
   type StageMarqueeMode,
 } from './marquee-selection'
 import { isDrawingTool } from './drawing-tools'
-import { planMoveCommit, planMovePreview } from './move-planning'
 import {
   type StageDropTarget,
 } from './drop-target'
@@ -639,22 +638,6 @@ type Gesture =
       currentWorld: StagePoint
     }
   | {
-      readonly type: 'move'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly ids: readonly string[]
-      readonly startWorld: StagePoint
-      readonly bounds: StageRect
-      readonly axis?: 'x' | 'y'
-      transforms: Readonly<Record<string, StageTransform>>
-      dropTarget: StageDropTarget | null
-      /** 手势中按住 Space：锁定原父级，经过其他容器不产生 reparent 落点。 */
-      parentLocked: boolean
-      /** 最近一次指针位置与修饰键，Space 切换时用于原地重算落点。 */
-      lastPoint: StagePoint
-      lastModifiers: StageInteractionModifiers
-    }
-  | {
       readonly type: 'resize'
       readonly pointerId: number
       readonly viewport: StageViewport
@@ -791,6 +774,15 @@ function samePaintSampling(
 
 
 
+
+/**
+ * 大于此值的按键视为副按键，不开启手势。
+ *
+ * @remarks
+ * 0 是主键、1 是中键（临时平移），2 及以上是右键与浏览器扩展键——它们承载上下文菜单，
+ * 一旦被手势接管，菜单就再也打不开。
+ */
+const SECONDARY_BUTTON_THRESHOLD = 1
 
 function initialSnapshot(temporaryPan: boolean): StageInteractionSnapshot {
   return temporaryPan ? { ...IDLE_SNAPSHOT, temporaryPan: true } : IDLE_SNAPSHOT
@@ -1009,32 +1001,6 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
-    if (gesture.type === 'move') {
-      gesture.lastPoint = point
-      gesture.lastModifiers = modifiers
-      const preview = planMovePreview({
-        context,
-        index,
-        ids: gesture.ids,
-        bounds: gesture.bounds,
-        startWorld: gesture.startWorld,
-        world,
-        axis: gesture.axis,
-        zoom: gesture.viewport.zoom,
-        modifiers,
-        parentLocked: gesture.parentLocked,
-      })
-      gesture.transforms = preview.transforms
-      gesture.dropTarget = preview.dropTarget
-      publish({
-        ...snapshot,
-        phase: 'move',
-        previewTransforms: preview.transforms,
-        snapGuides: preview.snapGuides,
-        dropTarget: preview.dropTarget,
-      })
-      return
-    }
     if (gesture.type === 'resize') {
       const snapped = snapResizePoint({
         point: world,
@@ -1080,60 +1046,30 @@ export function createStageInteractionController(): StageInteractionController {
   const begin = (event: Extract<StageInteractionEvent, { type: 'pointer.down' }>) => {
     if (!context || !index || !surface || event.button > 1) return
     const effects: StageInteractionEffect[] = []
-    const startTransform = (
-      type: 'move' | 'resize',
-      ids: readonly string[],
-      handle?: ResizeHandle,
-      axis?: 'x' | 'y',
-    ) => {
+    /** 移动的三个入口都已插件化，legacy 只剩缩放这一个变换会话。 */
+    const startResize = (ids: readonly string[], handle: ResizeHandle) => {
       const targets = resolveTransformTargets({
         document: context!.document,
         index: index!,
-        type,
+        type: 'resize',
         ids,
         handle,
       })
       if (!targets) return false
-      const { editableIds, bounds } = targets
-      const viewport = context!.viewport
-      const startWorld = worldPoint(event.point, viewport)
-      if (type === 'move') {
-        gesture = {
-          type,
-          pointerId: event.pointerId,
-          viewport,
-          ids: editableIds,
-          startWorld,
-          bounds,
-          axis,
-          transforms: {},
-          dropTarget: null,
-          parentLocked: false,
-          lastPoint: event.point,
-          lastModifiers: event.modifiers,
-        }
-        publish({
-          ...initialSnapshot(snapshot.temporaryPan),
-          phase: 'move',
-        })
+      gesture = {
+        type: 'resize',
+        pointerId: event.pointerId,
+        viewport: context!.viewport,
+        ids: targets.editableIds,
+        handle,
+        startWorld: worldPoint(event.point, context!.viewport),
+        bounds: targets.bounds,
+        transforms: {},
       }
-      else if (type === 'resize') {
-        if (!handle) return false
-        gesture = {
-          type,
-          pointerId: event.pointerId,
-          viewport,
-          ids: editableIds,
-          handle,
-          startWorld,
-          bounds,
-          transforms: {},
-        }
-        publish({
-          ...initialSnapshot(snapshot.temporaryPan),
-          phase: 'resize',
-        })
-      }
+      publish({
+        ...initialSnapshot(snapshot.temporaryPan),
+        phase: 'resize',
+      })
       effects.push({ type: 'pointer.capture', pointerId: event.pointerId })
       return true
     }
@@ -1159,40 +1095,10 @@ export function createStageInteractionController(): StageInteractionController {
       })
       apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
     }
-    if (event.hit.kind === 'entity') {
-      const entity = context.document.entities[event.hit.entityId]
-      if (!entity) return
-      const selected = context.selectedIds.filter((id) => context!.document.entities[id])
-      const nextSelection = event.modifiers.shift
-        ? selected.includes(entity.id)
-          ? selected.filter((id) => id !== entity.id)
-          : [...selected, entity.id]
-        : selected.includes(entity.id) ? selected : [entity.id]
-      effects.push(
-        { type: 'selection.change', selectedIds: nextSelection },
-      )
-      // 双击可编辑 Entity 进入原地编辑，且不开始移动手势。
-      if (
-        context.tool === 'select'
-        && (event.clickCount ?? 1) >= 2
-        && !getComposeLock(entity).locked
-        && textEditable(entity.id)
-      ) {
-        effects.push({ type: 'text-editing.enter', entityId: entity.id })
-        apply(effects)
-        return
-      }
-      if (
-        !getComposeLock(entity).locked
-        && (context.tool === 'select' || context.tool === 'move')
-      ) startTransform('move', nextSelection)
-      apply(effects)
-      return
-    }
     if (event.hit.kind === 'resize') {
       if (
         (context.tool === 'select' || context.tool === 'scale')
-        && startTransform('resize', context.selectedIds, event.hit.handle)
+        && startResize(context.selectedIds, event.hit.handle)
       ) apply(effects)
       return
     }
@@ -1365,18 +1271,6 @@ export function createStageInteractionController(): StageInteractionController {
         },
       })
     }
-    else if (finished.type === 'move') {
-      const planned = planMoveCommit({
-        document: context.document,
-        layoutSnapshot: context.layoutSnapshot,
-        index,
-        ids: finished.ids,
-        transforms: finished.transforms,
-        dropTarget: finished.dropTarget,
-        idFactory: context.idFactory,
-      })
-      if (planned) effects.push(planned)
-    }
     else if (finished.type === 'resize') {
       const planned = planTransformCommit({
         document: context.document,
@@ -1413,17 +1307,6 @@ export function createStageInteractionController(): StageInteractionController {
           lastPointerEvent = event
           updateGesture(event.point, event.modifiers)
           return
-        }
-        // move 手势用 Space 表达「锁定原父级」而不是临时平移：两种意图不会同时出现，
-        // 手势中无法再按下第二个指针开始平移。原地重算落点以立即反映锁定状态。
-        if (event.type === 'temporary-pan.start' && gesture?.type === 'move') {
-          gesture.parentLocked = true
-          updateGesture(gesture.lastPoint, gesture.lastModifiers)
-          return
-        }
-        if (event.type === 'temporary-pan.end' && gesture?.type === 'move') {
-          gesture.parentLocked = false
-          updateGesture(gesture.lastPoint, gesture.lastModifiers)
         }
       },
       commit() {
@@ -1545,7 +1428,7 @@ export function createStageInteractionController(): StageInteractionController {
         nextContext.hiddenEntityIds,
       )
       const gestureIds = gesture
-        && (gesture.type === 'move' || gesture.type === 'resize')
+        && gesture.type === 'resize'
         ? gesture.ids
         : null
       const documentChanged = context?.document !== nextContext.document
@@ -1639,6 +1522,9 @@ export function createStageInteractionController(): StageInteractionController {
       }
       // 指针生命周期统一走仲裁器：接管判定、单会话独占与「commit 前吃掉最终点」都由内核保证。
       if (event.type === 'pointer.down') {
+        // 副按键（右键及以上）不开启任何手势——它承载的是上下文菜单。这条判定必须在询问插件
+        // **之前**：插件排在 legacy 之前被询问，放到各插件里既会漏，也让每个新插件都要重复它。
+        if (event.button > SECONDARY_BUTTON_THRESHOLD) return
         arbiter.begin(event, pluginContext)
         return
       }
@@ -1657,7 +1543,7 @@ export function createStageInteractionController(): StageInteractionController {
       if (event.type === 'temporary-pan.start') {
         // 非指针事件同样转给活动会话：move 手势用它表达「锁定原父级」。会话消费掉的场景下
         // 不再改 temporaryPan 标志——两种意图不会同时出现。判据由会话自报，内核不认识手势种类。
-        if (gesture?.type === 'move' || arbiter.activeSessionConsumesTemporaryPan()) {
+        if (arbiter.activeSessionConsumesTemporaryPan()) {
           arbiter.update(event, pluginContext)
           return
         }
@@ -1665,7 +1551,7 @@ export function createStageInteractionController(): StageInteractionController {
         return
       }
       if (event.type === 'temporary-pan.end') {
-        if (gesture?.type === 'move' || arbiter.activeSessionConsumesTemporaryPan()) {
+        if (arbiter.activeSessionConsumesTemporaryPan()) {
           arbiter.update(event, pluginContext)
           return
         }
