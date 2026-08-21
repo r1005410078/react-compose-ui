@@ -12,7 +12,7 @@ import {
   createComponentExtractionPlan,
   createReplaceSelectionWithEntityCommand,
 } from './component-extraction'
-import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from '../test-fixtures'
 
 function instanceEntity(): ComposeEntity {
   return {

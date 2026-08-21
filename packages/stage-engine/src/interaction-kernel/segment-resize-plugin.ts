@@ -1,6 +1,6 @@
 import { getComposeLock, resolveComposeGeometryConstraints } from '@compose-ui/core'
-import { snapResizePoint } from '../canvas-geometry'
-import { resolveTargetFrameId } from '../frame-space'
+import { snapResizePoint } from '../geometry'
+import { resolveTargetFrameId } from '../geometry'
 import { screenToWorld, type StagePoint, type StageViewport } from '../geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'

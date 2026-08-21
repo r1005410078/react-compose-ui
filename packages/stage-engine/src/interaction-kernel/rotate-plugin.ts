@@ -8,9 +8,9 @@ import {
   type StageRect,
   type StageViewport,
 } from '../geometry'
-import { resolveTransformTargets } from '../transform-planning'
-import { planTransformCommit } from '../transform-planning'
-import { transformedSelection } from '../transform-preview'
+import { resolveTransformTargets } from '../gesture-planning'
+import { planTransformCommit } from '../gesture-planning'
+import { transformedSelection } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type {

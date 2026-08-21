@@ -6,7 +6,7 @@ import {
   resolveStageDropTarget,
 } from './drop-target'
 import { createStageSceneIndex } from './scene-index'
-import { document, entity, layoutSnapshot } from './test-fixtures'
+import { document, entity, layoutSnapshot } from '../test-fixtures'
 
 /** 带 Auto Layout 的容器；boxes 由 offset/size 派生，因此 offset 即已求解的局部位置。 */
 function layoutContainer(

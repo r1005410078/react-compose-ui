@@ -30,7 +30,7 @@ import {
   toComposeTransform,
   translationMatrix,
   unionRects,
-} from './geometry'
+} from '../geometry'
 import { describeEntityTargets } from './transaction-labels'
 
 /** 结构命令的稳定可用性结果。 @public */

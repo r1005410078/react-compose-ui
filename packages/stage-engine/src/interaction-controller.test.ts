@@ -8,7 +8,7 @@ import {
   type StageInteractionHit,
   type StageInteractionTool,
 } from './interaction-controller'
-import type { StageMarqueeMode } from './marquee-selection'
+import type { StageMarqueeMode } from './hit-testing'
 import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
 
 const modifiers = { shift: false, alt: false, command: false }

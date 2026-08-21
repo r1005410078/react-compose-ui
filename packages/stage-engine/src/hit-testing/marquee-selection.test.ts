@@ -5,7 +5,7 @@ import {
   type StageMarqueeQuery,
 } from './marquee-selection'
 import { createStageSceneIndex } from './scene-index'
-import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from '../test-fixtures'
 
 /** 左侧节点占 0..100，右侧节点占 200..300，两者都高 50。 */
 const left = entity('left', { x: 0, y: 0, width: 100, height: 50 })

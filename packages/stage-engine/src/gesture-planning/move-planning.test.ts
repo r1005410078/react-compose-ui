@@ -4,9 +4,9 @@ import {
   planMovePreview,
   resolveCommittableDropTarget,
 } from './move-planning'
-import { createStageSceneIndex } from './scene-index'
-import { document, entity, layoutSnapshot } from './test-fixtures'
-import type { StageInteractionContext } from './interaction-controller'
+import { createStageSceneIndex } from '../hit-testing'
+import { document, entity, layoutSnapshot } from '../test-fixtures'
+import type { StageInteractionContext } from '../interaction-controller'
 
 const MODIFIERS = { shift: false, alt: false, command: false }
 

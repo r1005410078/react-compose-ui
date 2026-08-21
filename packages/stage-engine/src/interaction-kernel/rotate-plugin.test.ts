@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createStageInteractionController } from '../interaction-controller'
-import { createStageSceneIndex } from '../scene-index'
+import { createStageSceneIndex } from '../hit-testing'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { createStageRotatePlugin, STAGE_ROTATE_PLUGIN_ID } from './rotate-plugin'

@@ -6,11 +6,11 @@ import {
   type StageTransform,
   type StageViewport,
 } from '../geometry'
-import { planMoveCommit, planMovePreview } from '../move-planning'
-import { resolveTransformTargets } from '../transform-planning'
+import { planMoveCommit, planMovePreview } from '../gesture-planning'
+import { resolveTransformTargets } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
-import type { StageDropTarget } from '../drop-target'
+import type { StageDropTarget } from '../hit-testing'
 import type { StageInteractionModifiers } from '../interaction-controller'
 import type {
   StageClaimResult,

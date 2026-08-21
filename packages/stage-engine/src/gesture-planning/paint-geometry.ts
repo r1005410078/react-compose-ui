@@ -1,8 +1,8 @@
-import { applyMatrix, invertMatrix, type StagePoint } from './geometry'
+import { applyMatrix, invertMatrix, type StagePoint } from '../geometry'
 import { resolvedSpatialTransform } from './transform-preview'
 import type { ComposePaint } from '@compose-ui/core'
-import type { StageSceneIndex } from './scene-index'
-import type { StagePaintHandleKind } from './interaction-controller'
+import type { StageSceneIndex } from '../hit-testing'
+import type { StagePaintHandleKind } from '../interaction-controller'
 
 /**
  * 把世界坐标换算成该 Entity 的 Paint 局部坐标。

@@ -1,7 +1,7 @@
-import type { StagePoint } from './geometry'
+import type { StagePoint } from '../geometry'
 // 类型级回指：`StageInteractionTool` 是 controller 的公开协议类型，`import type` 在编译后
 // 被完全擦除，因此 controller 反过来引用本模块的值不会构成运行时循环。
-import type { StageInteractionModifiers, StageInteractionTool } from './interaction-controller'
+import type { StageInteractionModifiers, StageInteractionTool } from '../interaction-controller'
 
 /** 绘制工具，即工具名以 `draw-` 开头的那一族。 @public */
 export type StageDrawingTool = Extract<StageInteractionTool, `draw-${string}`>

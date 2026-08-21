@@ -1,4 +1,4 @@
-import type { StageSceneIndex } from '../scene-index'
+import type { StageSceneIndex } from '../hit-testing'
 import type {
   StageInteractionContext,
   StageInteractionEffect,

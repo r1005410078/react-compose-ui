@@ -8,10 +8,10 @@ import {
   type ComposeDocument,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
-import { toComposeTransform, unionRects, type ResizeHandle, type StageRect, type StageTransform } from './geometry'
-import { describeTransform } from './transaction-labels'
-import type { StageSceneIndex } from './scene-index'
-import type { StageInteractionEffect } from './interaction-controller'
+import { toComposeTransform, unionRects, type ResizeHandle, type StageRect, type StageTransform } from '../geometry'
+import { describeTransform } from '../commands'
+import type { StageSceneIndex } from '../hit-testing'
+import type { StageInteractionEffect } from '../interaction-controller'
 
 /** 变换手势的三种语义；决定约束查询与提交规划的分支。 @public */
 export type StageTransformKind = 'move' | 'resize' | 'rotate'

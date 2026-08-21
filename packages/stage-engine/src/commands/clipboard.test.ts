@@ -11,7 +11,7 @@ import {
   isInvalidCutInsertion,
   resolveSuggestedEntityInsertion,
 } from './clipboard'
-import { ROOT_FRAME_ID, document, entity } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity } from '../test-fixtures'
 
 describe('entity clipboard planner', () => {
   it('OpenSpec: stage-engine / Entity 会话剪贴板规划 / 规范化多选复制来源', () => {

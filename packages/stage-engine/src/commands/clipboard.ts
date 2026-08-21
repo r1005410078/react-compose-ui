@@ -8,8 +8,8 @@ import {
   type ComposeLayoutSnapshot,
   type EditorCommand,
 } from '@compose-ui/core'
-import { createDuplicateCommand, createReparentCommand } from './commands'
-import { getEntityParentId } from './geometry'
+import { createDuplicateCommand, createReparentCommand } from './structure-commands'
+import { getEntityParentId } from '../geometry'
 import { describeEntityTargets } from './transaction-labels'
 
 /**

@@ -11,7 +11,7 @@ import {
   type EditorCommand,
 } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
-import * as commandApi from './commands'
+import * as commandApi from './structure-commands'
 import {
   createDuplicateCommand,
   createGroupCommand,
@@ -19,8 +19,8 @@ import {
   createUngroupCommand,
   getGroupCommandAvailability,
   getUngroupCommandAvailability,
-} from './commands'
-import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
+} from './structure-commands'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from '../test-fixtures'
 
 function autoLayoutContainer(id: string, childIds: readonly string[]): ComposeEntity {
   const base = entity(id, { width: 400, height: 200, childIds })

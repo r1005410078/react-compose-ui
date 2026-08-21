@@ -10,18 +10,18 @@ import {
 } from '@compose-ui/core'
 import {
   type StageMarqueeMode,
-} from './marquee-selection'
-import { isDrawingTool } from './drawing-tools'
+} from './hit-testing'
+import { isDrawingTool } from './gesture-planning'
 import {
   type StageDropTarget,
-} from './drop-target'
+} from './hit-testing'
 import {
   createStageSceneIndex,
   type StageSceneIndex,
-} from './scene-index'
+} from './hit-testing'
 import {
   expandScrollRange,
-} from './canvas-geometry'
+} from './geometry'
 import type {
   ResizeHandle,
   StageGuide,
@@ -49,7 +49,7 @@ import {
 import {
   matrixBounds,
   resolvedSpatialTransform,
-} from './transform-preview'
+} from './gesture-planning'
 import type {
   StagePluginContext,
 } from './interaction-kernel'

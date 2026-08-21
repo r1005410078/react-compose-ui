@@ -23,7 +23,7 @@ import {
   toComposeTransform,
   translationMatrix,
   unionRects,
-} from './geometry'
+} from '../geometry'
 
 /** 组件抽取失败的稳定原因。 @public */
 export type ComposeComponentExtractionUnavailableReason =

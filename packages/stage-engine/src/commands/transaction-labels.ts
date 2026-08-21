@@ -3,7 +3,7 @@ import {
   type ComposeDocument,
   type ComposeEntity,
 } from '@compose-ui/core'
-import type { StageTransform } from './geometry'
+import type { StageTransform } from '../geometry'
 
 type TransformAction = 'move' | 'resize' | 'rotate'
 

@@ -1,7 +1,7 @@
 import { createComposeGroupEntitySeed } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import { createStageSceneIndex } from './scene-index'
-import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from '../test-fixtures'
 
 function indexFor(value: ReturnType<typeof document>) {
   return createStageSceneIndex(value, layoutSnapshot(value))

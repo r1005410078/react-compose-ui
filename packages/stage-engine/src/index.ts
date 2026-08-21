@@ -4,116 +4,127 @@
  * @packageDocumentation
  */
 
+/** 坐标、矩阵、网格点阵与吸附。 */
 export {
-  listFrameWorldGuides,
-  resolveTargetFrameId,
-  toFrameGuidePosition,
-  type FrameOriginResolver,
-} from './frame-space'
-export {
-  createLayerOrderCommand,
-  createDuplicateCommand,
-  createGroupCommand,
-  createReparentCommand,
-  createUngroupCommand,
-  getGroupCommandAvailability,
-  getLayerOrderCommandAvailability,
-  getUngroupCommandAvailability,
-  type ComposeDuplicateInsertion,
-  type ComposeLayerOrderOperation,
-  type ComposeStructureCommandAvailability,
-} from './commands'
-export {
-  createEntityClipboard,
-  createPasteFromClipboard,
-  isInvalidCutInsertion,
-  normalizeClipboardEntityIds,
-  resolveSuggestedEntityInsertion,
-  type ComposeClipboardPastePlan,
-  type ComposeEntityClipboard,
-  type ComposeEntityInsertion,
-} from './clipboard'
-export {
-  clampBoundsIntoFrame,
-  isComposeContainerEntity,
-  resolveNextScenePlacement,
-} from './entity-placement'
-export {
-  createComponentExtractionPlan,
-  createReplaceSelectionWithEntityCommand,
-  type ComposeComponentExtractionPlan,
-  type ComposeComponentExtractionResult,
-  type ComposeComponentExtractionUnavailableReason,
-} from './component-extraction'
-export {
+  ROTATION_SNAP_DEGREES,
+  applyMatrix,
   createAxisLattice,
   createRulerTicks,
-  latticeLineBand,
-  latticeLinePosition,
-  expandScrollRange,
-  scrollAxisToViewport,
-  snapResizePoint,
-  snapValueToGrid,
-  viewportToScrollAxes,
-  type StageAxisLattice,
-  type StageLatticeBand,
-  type StageRulerTick,
-  type StageScrollAxis,
-} from './canvas-geometry'
-export {
-  applyMatrix,
   decomposeMatrix,
+  expandScrollRange,
   getEntityParentId,
   getEntityWorldBounds,
   getEntityWorldMatrix,
   invertMatrix,
+  latticeLineBand,
+  latticeLinePosition,
+  listFrameWorldGuides,
   matrixFromTransform,
   multiplyMatrices,
+  pointOnRotationRay,
   rectContains,
   rectMappingMatrix,
   rectsIntersect,
   resizeBounds,
-  pointOnRotationRay,
-  ROTATION_SNAP_DEGREES,
+  resolveTargetFrameId,
   rotationFromPointer,
   rotationMatrixAround,
   screenToWorld,
+  scrollAxisToViewport,
+  snapResizePoint,
   snapTranslation,
+  snapValueToGrid,
   toComposeTransform,
+  toFrameGuidePosition,
   toStageTransform,
   translationMatrix,
   unionRects,
+  viewportToScrollAxes,
   worldToScreen,
   zoomViewportAt,
+  type FrameOriginResolver,
   type ResizeHandle,
+  type StageAxisLattice,
   type StageGuide,
+  type StageLatticeBand,
   type StageMatrix,
   type StagePoint,
   type StageRect,
+  type StageRulerTick,
+  type StageScrollAxis,
   type StageTransform,
   type StageViewport,
 } from './geometry'
+
+/** 场景索引、拖放落点与框选。 */
 export {
   DEFAULT_STAGE_MARQUEE_MODE,
+  createStageSceneIndex,
   resolveMarqueeHitTest,
   resolveMarqueeSelection,
-  type StageMarqueeCombine,
-  type StageMarqueeDirection,
-  type StageMarqueeMode,
-  type StageMarqueeQuery,
-} from './marquee-selection'
-export {
   resolveStageDropIndicator,
   resolveStageDropTarget,
   type StageDropIndicator,
   type StageDropTarget,
-} from './drop-target'
-export {
-  createStageSceneIndex,
+  type StageMarqueeCombine,
+  type StageMarqueeDirection,
+  type StageMarqueeMode,
+  type StageMarqueeQuery,
   type StageSceneIndex,
-} from './scene-index'
+} from './hit-testing'
+
+/** 手势的预览几何与提交规划。 */
+export {
+  planTransformCommit,
+  resolveTransformTargets,
+  transformedResizeSelection,
+  transformedSelection,
+  type StageFinishedTransform,
+  type StageTransformKind,
+  type StageTransformTargets,
+} from './gesture-planning'
+
+/** 空间命令的规划与事务标签。 */
+export {
+  clampBoundsIntoFrame,
+  createComponentExtractionPlan,
+  createDuplicateCommand,
+  createEntityClipboard,
+  createGroupCommand,
+  createLayerOrderCommand,
+  createPasteFromClipboard,
+  createReparentCommand,
+  createReplaceSelectionWithEntityCommand,
+  createUngroupCommand,
+  describeEntityCreation,
+  describeEntityTargets,
+  describeTransform,
+  getGroupCommandAvailability,
+  getLayerOrderCommandAvailability,
+  getUngroupCommandAvailability,
+  isComposeContainerEntity,
+  isInvalidCutInsertion,
+  normalizeClipboardEntityIds,
+  resolveNextScenePlacement,
+  resolveSuggestedEntityInsertion,
+  type ComposeClipboardPastePlan,
+  type ComposeComponentExtractionPlan,
+  type ComposeComponentExtractionResult,
+  type ComposeComponentExtractionUnavailableReason,
+  type ComposeDuplicateInsertion,
+  type ComposeEntityClipboard,
+  type ComposeEntityInsertion,
+  type ComposeLayerOrderOperation,
+  type ComposeStructureCommandAvailability,
+} from './commands'
+
+/** 交互运行时入口。 */
 export {
   createStageInteractionController,
+  type StageDrawingPreview,
+  type StageDrawnEntity,
+  type StageEditablePath,
+  type StageEditablePathVertex,
   type StageExternalAssetItem,
   type StageExternalDragItem,
   type StageInteractionContext,
@@ -126,10 +137,6 @@ export {
   type StageInteractionSnapshot,
   type StageInteractionSurfacePort,
   type StageInteractionTool,
-  type StageDrawingPreview,
-  type StageDrawnEntity,
-  type StageSegmentPreview,
-  type StageTextEditing,
   type StagePaintEditing,
   type StagePaintHandle,
   type StagePaintHandleKind,
@@ -137,33 +144,18 @@ export {
   type StagePaintSampling,
   type StagePathEditing,
   type StagePathHandleKind,
-  type StageEditablePath,
-  type StageEditablePathVertex,
   type StagePreviewGuide,
+  type StageSegmentPreview,
+  type StageTextEditing,
 } from './interaction-controller'
-export {
-  describeEntityCreation,
-  describeEntityTargets,
-  describeTransform,
-} from './transaction-labels'
 
+/** 手势仲裁与插件协议。 */
 export {
-  transformedSelection,
-  transformedResizeSelection,
-} from './transform-preview'
-export {
-  planTransformCommit,
-  resolveTransformTargets,
-  type StageFinishedTransform,
-  type StageTransformKind,
-  type StageTransformTargets,
-} from './transform-planning'
-export {
+  STAGE_EXTRACTED_PLUGIN_FACTORIES,
+  STAGE_GESTURE_PRIORITY,
   captureStageSpatialBaseline,
   createStagePluginRegistry,
   createStageSessionArbiter,
-  STAGE_EXTRACTED_PLUGIN_FACTORIES,
-  STAGE_GESTURE_PRIORITY,
   type StageArbiterBeginResult,
   type StageClaimResult,
   type StageGesturePriorityEntry,

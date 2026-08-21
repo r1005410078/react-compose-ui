@@ -1,6 +1,6 @@
 import { resolveComposeGeometryConstraints } from '@compose-ui/core'
-import { snapResizePoint } from '../canvas-geometry'
-import { resolveTargetFrameId } from '../frame-space'
+import { snapResizePoint } from '../geometry'
+import { resolveTargetFrameId } from '../geometry'
 import {
   rectMappingMatrix,
   resizeBounds,
@@ -11,8 +11,8 @@ import {
   type StageTransform,
   type StageViewport,
 } from '../geometry'
-import { planTransformCommit, resolveTransformTargets } from '../transform-planning'
-import { transformedResizeSelection } from '../transform-preview'
+import { planTransformCommit, resolveTransformTargets } from '../gesture-planning'
+import { transformedResizeSelection } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type {
