@@ -56,6 +56,10 @@ export {
   STAGE_PAINT_SAMPLE_PLUGIN_ID,
 } from './paint-sample-plugin'
 export {
+  createStageResizePlugin,
+  STAGE_RESIZE_PLUGIN_ID,
+} from './resize-plugin'
+export {
   createStageRotatePlugin,
   STAGE_ROTATE_PLUGIN_ID,
 } from './rotate-plugin'
