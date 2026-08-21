@@ -18,8 +18,6 @@ import {
 import type {
   CSSProperties,
 } from 'react'
-import {
-} from '@compose-ui/component-registry'
 import type {
   ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
@@ -42,46 +40,39 @@ import type {
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
 import {
-} from './stage-pointer-geometry'
-import {
   bootstrapSelectionBounds,
   lineSegmentForEntity,
-} from './stage-preview-document'
+  useStagePreviewDocuments,
+} from './preview-document'
 import {
   DEFAULT_STAGE_SHORTCUTS,
   STAGE_SHORTCUT_ACTIONS,
-} from './stage-shortcuts'
+  useStageKeyboardCommands,
+} from './keyboard'
 import {
   isStageSelectionEditable,
   isStageSelectionRotatable,
   resolveStageResizeHandles,
+  resolveStageScreenModel,
   resolveStageSelectionConstraints,
+  StageWorldUnderlay,
   unlockedStageIds,
-} from './stage-selection-derivations'
-import { resolveStageScreenModel } from './stage-screen-model'
+} from './screen-model'
 import { useStageHiddenEntityIds } from './use-stage-hidden-entities'
 import { useStageSurfaceSize } from './use-stage-surface-size'
-import { useStageInstanceDrilldown } from './use-stage-instance-drilldown'
-import { useStagePreviewDocuments } from './use-stage-preview-documents'
+import { useStageInstanceDrilldown } from './instance-drilldown'
 import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-lifecycle'
-import { useStageRootHandlers } from './use-stage-root-handlers'
-import { StageWorldUnderlay } from './stage-world-underlay'
 import { StageContextMenu } from './stage-context-menu'
-import { useStageEffectDispatch } from './use-stage-effect-dispatch'
-import { useStagePointerSession } from './use-stage-pointer-session'
+import { useStageEffectDispatch } from './entity-creation'
+import { useStagePointerSession, useStageRootHandlers } from './pointer-session'
 import { useStageWheelNavigation } from './use-stage-wheel-navigation'
 import { useStageTextEditing } from './use-stage-text-editing'
 import { useStageClipboard } from './use-stage-clipboard'
-import { useStageKeyboardCommands } from './use-stage-keyboard'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
 import { StageSceneLayer } from '../stage-scene-layer'
-import {
-} from '@compose-ui/stage-engine'
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
 import { ComposeContainerLabelLayer } from '../container-label-layer'
-import {
-} from './drawing-entity'
 
 
 function defaultId() {

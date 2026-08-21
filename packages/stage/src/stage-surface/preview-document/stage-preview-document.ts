@@ -20,7 +20,18 @@ import type {
   StageSegmentPreview,
   StageTransform,
 } from '@compose-ui/stage-engine'
-import type { ShapeDirection } from './drawing-entity'
+
+/**
+ * 两点 Shape 在各轴上的几何朝向。
+ *
+ * @remarks
+ * 与线段几何同住而不是跟着绘制走：产生它的是绘制，但读它的是预览烘焙与端点求解，
+ * 放在绘制侧会让预览目录反向依赖创建目录。
+ */
+export type ShapeDirection = {
+  readonly x: -1 | 0 | 1
+  readonly y: -1 | 0 | 1
+}
 
 /** 按 Entity 分组的预览变换。 */
 export type StageTransformMap = Readonly<Record<string, StageTransform>>

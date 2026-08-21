@@ -3,7 +3,7 @@ import type {
   ComposeStageDelegatableAction,
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
-} from '../types'
+} from '../../types'
 
 export function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false

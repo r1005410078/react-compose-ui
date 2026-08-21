@@ -36,8 +36,8 @@ import type {
   ComposeStageDispatch,
   ComposeStageEditablePathChange,
   ComposeStageTool,
-} from '../types'
-import type { getStageMessages } from '../stage-i18n'
+} from '../../types'
+import type { getStageMessages } from '../../stage-i18n'
 import {
   boundsCenter,
   entityFromDrawingSeed,
@@ -51,8 +51,8 @@ import {
   directionAxis,
   lineSegmentForEntity,
   lineSegmentTransform,
-} from './stage-preview-document'
-import { resolveClientPoint } from './stage-pointer-geometry'
+} from '../preview-document'
+import { resolveClientPoint } from '../pointer-session'
 
 /** 并行解析拖入资源的并发上限；超过之后 Provider 侧的排队收益递减。 */
 const ASSET_RESOLVE_CONCURRENCY = 4

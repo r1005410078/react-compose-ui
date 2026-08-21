@@ -4,15 +4,15 @@ import type {
   StageInteractionPhase,
   StageSegmentPreview,
 } from '@compose-ui/stage-engine'
-import type { ComposeStageLayoutRuntime } from '../types'
+import type { ComposeStageLayoutRuntime } from '../../types'
 import { buildResizePreviewSolveDocument } from './resize-preview'
 import {
   lineSegmentTransform,
   transformDocument,
   transformLayoutSnapshot,
+  type ShapeDirection,
   type StageTransformMap,
 } from './stage-preview-document'
-import type { ShapeDirection } from './drawing-entity'
 
 /** 预览文档能力的依赖清单。 */
 export interface StagePreviewDocumentsParams {

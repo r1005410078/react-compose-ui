@@ -24,7 +24,7 @@ import {
   type StageFrameScreenBounds,
   type StageScreenRect,
 } from './stage-screen-geometry'
-import type { StageSurfaceSize } from './use-stage-surface-size'
+import type { StageSurfaceSize } from '../use-stage-surface-size'
 
 /** 求屏幕模型所需的输入。 */
 export interface StageScreenModelInput {

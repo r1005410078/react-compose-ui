@@ -8,12 +8,7 @@ import {
   type JsonValue,
 } from '@compose-ui/core'
 import type { StagePoint, StageRect } from '@compose-ui/stage-engine'
-
-/** 两点 Shape 在各轴上的几何朝向。 @internal */
-export type ShapeDirection = {
-  readonly x: -1 | 0 | 1
-  readonly y: -1 | 0 | 1
-}
+import type { ShapeDirection } from '../preview-document'
 
 /**
  * 用 Preset 的默认尺寸将 Entity 放在指定世界中心。
