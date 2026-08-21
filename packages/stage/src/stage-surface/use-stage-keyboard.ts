@@ -18,7 +18,6 @@ import {
   getEntityWorldBounds,
   getGroupCommandAvailability,
   getUngroupCommandAvailability,
-  zoomViewportAt,
   type StageInteractionController,
   type StageRect,
   type StageViewport,
@@ -32,6 +31,7 @@ import type {
 } from '../types'
 import type { getStageMessages } from '../stage-i18n'
 import { planStageNudge } from './nudge-planning'
+import { fitViewportTo, zoomViewportByIntent } from './stage-viewport-actions'
 import {
   DELEGATABLE_STAGE_ACTIONS,
   isEditableTarget,
@@ -62,11 +62,6 @@ const TOOL_SHORTCUTS: readonly (readonly [ComposeStageShortcutAction, ComposeSta
   ['stage.drawCircleTool', 'draw-circle'],
   ['stage.drawTextTool', 'draw-text'],
 ]
-
-const FIT_VIEWPORT_MARGIN = 0.85
-const MIN_FIT_ZOOM = 0.1
-const MAX_FIT_ZOOM = 8
-const ZOOM_STEP = 1.2
 
 /**
  * 键盘能力的完整依赖清单。
@@ -241,20 +236,8 @@ export function useStageKeyboardCommands(
       return
     }
     const fitViewport = (target: StageRect | null) => {
-      if (!target || target.width <= 0 || target.height <= 0) return
-      const zoom = Math.min(
-        MAX_FIT_ZOOM,
-        Math.max(
-          MIN_FIT_ZOOM,
-          Math.min(surfaceSize.width / target.width, surfaceSize.height / target.height)
-          * FIT_VIEWPORT_MARGIN,
-        ),
-      )
-      onViewportChange({
-        zoom,
-        x: (surfaceSize.width - target.width * zoom) / 2 - target.x * zoom,
-        y: (surfaceSize.height - target.height * zoom) / 2 - target.y * zoom,
-      })
+      const next = fitViewportTo(target, surfaceSize)
+      if (next) onViewportChange(next)
     }
     if (actionMatches('stage.fitSelection')) {
       fitViewport(selectionBounds)
@@ -278,22 +261,13 @@ export function useStageKeyboardCommands(
       event.preventDefault()
       return
     }
-    const viewportCenter = {
-      x: surfaceSize.width / 2,
-      y: surfaceSize.height / 2,
-    }
-    if (actionMatches('stage.zoomReset')) {
-      onViewportChange(zoomViewportAt(viewport, viewportCenter, 1))
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('stage.zoomIn')) {
-      onViewportChange(zoomViewportAt(viewport, viewportCenter, viewport.zoom * ZOOM_STEP))
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('stage.zoomOut')) {
-      onViewportChange(zoomViewportAt(viewport, viewportCenter, viewport.zoom / ZOOM_STEP))
+    const zoomIntent = ([
+      ['stage.zoomReset', 'reset'],
+      ['stage.zoomIn', 'in'],
+      ['stage.zoomOut', 'out'],
+    ] as const).find(([action]) => actionMatches(action))
+    if (zoomIntent) {
+      onViewportChange(zoomViewportByIntent(viewport, surfaceSize, zoomIntent[1]))
       event.preventDefault()
       return
     }

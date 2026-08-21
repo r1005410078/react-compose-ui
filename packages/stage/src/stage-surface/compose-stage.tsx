@@ -4,18 +4,6 @@ import {
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
 import {
-  ComposeContextMenu,
-  ComposeContextMenuCheckboxItem,
-  ComposeContextMenuContent,
-  ComposeContextMenuItem,
-  ComposeContextMenuRadioGroup,
-  ComposeContextMenuRadioItem,
-  ComposeContextMenuSeparator,
-  ComposeContextMenuShortcut,
-  ComposeContextMenuSub,
-  ComposeContextMenuSubContent,
-  ComposeContextMenuSubTrigger,
-  formatComposeKeybindings,
   useComposeContextMenu,
 } from '@compose-ui/components'
 import {
@@ -73,17 +61,6 @@ import {
   expandScrollRange,
   scrollAxisToViewport,
   viewportToScrollAxes,
-  createDuplicateCommand,
-  createEntityClipboard,
-  createGroupCommand,
-  createLayerOrderCommand,
-  createPasteFromClipboard,
-  createUngroupCommand,
-  isInvalidCutInsertion,
-  resolveSuggestedEntityInsertion,
-  getGroupCommandAvailability,
-  getLayerOrderCommandAvailability,
-  getUngroupCommandAvailability,
   applyMatrix,
   getEntityWorldBounds,
   getEntityWorldMatrix,
@@ -92,10 +69,8 @@ import {
   unionRects,
   worldToScreen,
   zoomViewportAt,
-  getEntityParentId,
   toComposeTransform,
   type ResizeHandle,
-  type ComposeLayerOrderOperation,
   type StagePoint,
   type StageRect,
   type StageDrawnEntity,
@@ -104,7 +79,6 @@ import {
   type StageInteractionController,
 } from '@compose-ui/stage-engine'
 import type {
-  ComposeStageClipboard,
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
   ComposeStagePolicy,
@@ -141,6 +115,8 @@ import {
   DEFAULT_STAGE_SHORTCUTS,
   STAGE_SHORTCUT_ACTIONS,
 } from './stage-shortcuts'
+import { StageContextMenu } from './stage-context-menu'
+import { useStageClipboard } from './use-stage-clipboard'
 import { useStageKeyboardCommands } from './use-stage-keyboard'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
 import { StageSceneLayer } from '../stage-scene-layer'
@@ -442,12 +418,6 @@ function ComposeStageReady({
   // 宿主回灌给 Controller 的「本次绘制创建了谁」；Controller 按 entityId 去重。
   const [lastDrawn, setLastDrawn] = useState<StageDrawnEntity | null>(null)
   const [assetDropStatus, setAssetDropStatus] = useState('')
-  const [localClipboard, setLocalClipboard] = useState<ComposeStageClipboard | null>(null)
-  const clipboard = clipboardProp !== undefined ? clipboardProp : localClipboard
-  const writeClipboard = (next: ComposeStageClipboard | null) => {
-    if (onClipboardChange) onClipboardChange(next)
-    else if (clipboardProp === undefined) setLocalClipboard(next)
-  }
   const contextMenu = useComposeContextMenu<string | null>()
   const pendingAssetDropsRef = useRef(new Set<AbortController>())
   const resolvedShortcuts = useMemo(
@@ -608,50 +578,7 @@ function ComposeStageReady({
     const entity = document.entities[id]
     return entity && !getComposeLock(entity).locked
   })
-  const unavailableLayerOrder = { available: false, reason: '' } as const
-  const layerOrderAvailability: Readonly<
-    Record<ComposeLayerOrderOperation, ReturnType<typeof getLayerOrderCommandAvailability>>
-  > = contextNodeId
-    ? {
-        'bring-forward': getLayerOrderCommandAvailability(
-          document,
-          contextEditableIds,
-          'bring-forward',
-        ),
-        'send-backward': getLayerOrderCommandAvailability(
-          document,
-          contextEditableIds,
-          'send-backward',
-        ),
-        'bring-to-front': getLayerOrderCommandAvailability(
-          document,
-          contextEditableIds,
-          'bring-to-front',
-        ),
-        'send-to-back': getLayerOrderCommandAvailability(
-          document,
-          contextEditableIds,
-          'send-to-back',
-        ),
-      }
-    : {
-        'bring-forward': unavailableLayerOrder,
-        'send-backward': unavailableLayerOrder,
-        'bring-to-front': unavailableLayerOrder,
-        'send-to-back': unavailableLayerOrder,
-      }
-  const groupAvailability = getGroupCommandAvailability(document, contextEditableIds)
-  const ungroupAvailability = contextEditableIds.length === 1
-    ? getUngroupCommandAvailability(document, contextEditableIds[0]!)
-    : { available: true as const }
-  const canGroup = groupAvailability.available
-    && contextEditableIds.length >= 2
-    && contextEditableIds.every((id) =>
-      getEntityParentId(document, id)
-      === getEntityParentId(document, contextEditableIds[0]!))
-  const canUngroup = ungroupAvailability.available
-    && contextEditableIds.length === 1
-    && Boolean(getComposeHierarchy(document.entities[contextEditableIds[0]!]!)?.childIds.length)
+
   const latestRef = useRef({
     document,
     layoutSnapshot,
@@ -1820,70 +1747,19 @@ function ComposeStageReady({
     ?? expandScrollRange(null, bootstrapContentBounds(), visibleWorld)
   const scrollAxes = viewportToScrollAxes(viewport, surfaceSize, activeScrollRange)
 
-  const contextMenuShortcut = (action: ComposeStageShortcutAction) => {
-    const label = formatComposeKeybindings(resolvedShortcuts[action])
-    return label ? <ComposeContextMenuShortcut>{label}</ComposeContextMenuShortcut> : null
-  }
-  const clipboardSourceIds = (explicitId?: string | null) => (
-    explicitId && !normalizedSelection.includes(explicitId)
-      ? [explicitId]
-      : normalizedSelection
-  )
-  const executeClipboard = (
-    action: 'edit.copy' | 'edit.cut' | 'edit.paste',
-    targetId?: string | null,
-  ) => {
-    if (onShortcutAction?.(action)) return
-    if (action === 'edit.copy' || action === 'edit.cut') {
-      const next = createEntityClipboard(
-        document,
-        clipboardSourceIds(targetId),
-        action === 'edit.copy' ? 'copy' : 'cut',
-      )
-      if (next) writeClipboard(next)
-      return
-    }
-    const insertionTarget = targetId === undefined
-      ? (normalizedSelection[normalizedSelection.length - 1] ?? null)
-      : targetId
-    // 无命中目标时落进激活场景，而不是 rootIds 里恰好排第一的那块。
-    const insertion = resolveSuggestedEntityInsertion(document, insertionTarget, activeFrameId)
-    if (!clipboard || !insertion) return
-    const plan = createPasteFromClipboard(
-      document,
-      clipboard,
-      insertion,
-      idFactory,
-      layoutSnapshot,
-    )
-    if (!plan) return
-    if (dispatch(plan.command).status === 'committed') {
-      onSelectedIdsChange(plan.nextSelection)
-      if (plan.clearClipboard) writeClipboard(null)
-    }
-  }
-  const contextClipboardIds = clipboardSourceIds(contextNodeId)
-  const canCopy = createEntityClipboard(document, contextClipboardIds, 'copy') !== null
-  const canCut = createEntityClipboard(document, contextClipboardIds, 'cut') !== null
-  const contextInsertion = resolveSuggestedEntityInsertion(document, contextNodeId, activeFrameId)
-  const canPaste = Boolean(clipboard && contextInsertion && (
-    clipboard.kind === 'copy'
-      ? clipboard.entityIds.every((id) => document.entities[id])
-      : !isInvalidCutInsertion(document, clipboard.entityIds, contextInsertion)
-        && (
-          clipboard.entityIds.every((id) => getEntityParentId(document, id) === contextInsertion.parentId)
-          || layoutSnapshot
-        )
-  ))
-  const executeLayerOrder = (operation: ComposeLayerOrderOperation) => {
-    const command = createLayerOrderCommand(
-      document,
-      contextEditableIds,
-      operation,
-      idFactory(),
-    )
-    if (command) dispatch(command)
-  }
+  const { executeClipboard, availabilityFor } = useStageClipboard({
+    activeFrameId,
+    clipboard: clipboardProp,
+    dispatch,
+    document,
+    idFactory,
+    layoutSnapshot,
+    normalizedSelection,
+    onClipboardChange,
+    onSelectedIdsChange,
+    onShortcutAction,
+  })
+  const clipboardAvailability = availabilityFor(contextNodeId)
 
   // 必须排在 executeClipboard 与 cancelGesture 之后：键盘级联把它们当依赖接收，而不是
   // 靠闭包在渲染函数里就近取用。
@@ -2225,115 +2101,29 @@ function ComposeStageReady({
         onValueChange={(value) => onViewportChange(scrollAxisToViewport(viewport, 'y', value))}
       />
       <div aria-hidden="true" className="compose-stage__scroll-corner" />
-      <ComposeContextMenu {...contextMenu.rootProps}>
-        <ComposeContextMenuContent aria-label="画布操作">
-          {onSceneActivate && contextNodeId && document.rootIds.includes(contextNodeId) ? (
-            <ComposeContextMenuItem
-              disabled={contextNodeId === activeFrameId}
-              onClick={() => onSceneActivate(contextNodeId)}
-            >
-              {messages.setActiveScene}
-            </ComposeContextMenuItem>
-          ) : null}
-          <ComposeContextMenuItem disabled={!canCopy} onClick={() => {
-            executeClipboard('edit.copy', contextNodeId)
-          }}>{messages.copy}{contextMenuShortcut('edit.copy')}</ComposeContextMenuItem>
-          <ComposeContextMenuItem disabled={!canCut} onClick={() => {
-            executeClipboard('edit.cut', contextNodeId)
-          }}>{messages.cut}{contextMenuShortcut('edit.cut')}</ComposeContextMenuItem>
-          <ComposeContextMenuItem disabled={!canPaste} onClick={() => {
-            executeClipboard('edit.paste', contextNodeId)
-          }}>{messages.paste}{contextMenuShortcut('edit.paste')}</ComposeContextMenuItem>
-          {contextNodeId ? <>
-            <ComposeContextMenuItem disabled={contextEditableIds.length !== 1} onClick={() => {
-              const id = contextEditableIds[0]
-              const duplicate = id ? createDuplicateCommand(document, id, idFactory, idFactory()) : null
-              if (duplicate && dispatch(duplicate.command).status === 'committed') onSelectedIdsChange([duplicate.rootId])
-            }}>{messages.duplicate}{contextMenuShortcut('edit.duplicate')}</ComposeContextMenuItem>
-            <ComposeContextMenuSub>
-              <ComposeContextMenuSubTrigger>{messages.layerOrder}</ComposeContextMenuSubTrigger>
-              <ComposeContextMenuSubContent aria-label={messages.layerOrder}>
-                <ComposeContextMenuItem
-                  disabled={!layerOrderAvailability['bring-to-front'].available}
-                  title={!layerOrderAvailability['bring-to-front'].available
-                    ? messages.layerOrderUnavailable
-                    : undefined}
-                  onClick={() => executeLayerOrder('bring-to-front')}
-                >{messages.bringToFront}{contextMenuShortcut('edit.bringToFront')}</ComposeContextMenuItem>
-                <ComposeContextMenuItem
-                  disabled={!layerOrderAvailability['bring-forward'].available}
-                  title={!layerOrderAvailability['bring-forward'].available
-                    ? messages.layerOrderUnavailable
-                    : undefined}
-                  onClick={() => executeLayerOrder('bring-forward')}
-                >{messages.bringForward}{contextMenuShortcut('edit.bringForward')}</ComposeContextMenuItem>
-                <ComposeContextMenuItem
-                  disabled={!layerOrderAvailability['send-backward'].available}
-                  title={!layerOrderAvailability['send-backward'].available
-                    ? messages.layerOrderUnavailable
-                    : undefined}
-                  onClick={() => executeLayerOrder('send-backward')}
-                >{messages.sendBackward}{contextMenuShortcut('edit.sendBackward')}</ComposeContextMenuItem>
-                <ComposeContextMenuItem
-                  disabled={!layerOrderAvailability['send-to-back'].available}
-                  title={!layerOrderAvailability['send-to-back'].available
-                    ? messages.layerOrderUnavailable
-                    : undefined}
-                  onClick={() => executeLayerOrder('send-to-back')}
-                >{messages.sendToBack}{contextMenuShortcut('edit.sendToBack')}</ComposeContextMenuItem>
-              </ComposeContextMenuSubContent>
-            </ComposeContextMenuSub>
-            <ComposeContextMenuItem
-              disabled={!canGroup}
-              title={!groupAvailability.available ? groupAvailability.reason : undefined}
-              onClick={() => {
-              const groupId = idFactory()
-              if (dispatch(createGroupCommand(
-                document,
-                layoutSnapshot,
-                contextEditableIds,
-                groupId,
-                idFactory(),
-              )).status === 'committed') onSelectedIdsChange([groupId])
-              }}
-            >编组{contextMenuShortcut('edit.group')}</ComposeContextMenuItem>
-            <ComposeContextMenuItem
-              disabled={!canUngroup}
-              title={!ungroupAvailability.available ? ungroupAvailability.reason : undefined}
-              onClick={() => {
-              const container = document.entities[contextEditableIds[0]!]
-              const hierarchy = container && getComposeHierarchy(container)
-              if (
-                dispatch(createUngroupCommand(
-                  document,
-                  layoutSnapshot,
-                  contextEditableIds[0]!,
-                  idFactory(),
-                )).status === 'committed'
-                && hierarchy
-              ) onSelectedIdsChange(hierarchy.childIds)
-              }}
-            >取消编组{contextMenuShortcut('edit.ungroup')}</ComposeContextMenuItem>
-            {onCreateComponentIntent ? (
-              <ComposeContextMenuItem
-                disabled={contextEditableIds.length === 0}
-                onClick={() => { onCreateComponentIntent(contextEditableIds) }}
-              >创建组件…</ComposeContextMenuItem>
-            ) : null}
-            <ComposeContextMenuItem disabled={contextEditableIds.length === 0} variant="destructive" onClick={() => dispatch({ id: idFactory(), type: BUILTIN_COMMAND_TYPES.deleteEntity, payload: { entityIds: contextEditableIds }, meta: { label: `Delete ${describeEntityTargets(document, contextEditableIds)}`, source: 'stage', targetIds: contextEditableIds } })}>删除{contextMenuShortcut('edit.delete')}</ComposeContextMenuItem>
-            <ComposeContextMenuSeparator />
-          </> : null}
-          <ComposeContextMenuSub><ComposeContextMenuSubTrigger>视图</ComposeContextMenuSubTrigger><ComposeContextMenuSubContent aria-label="视图">
-            <ComposeContextMenuItem disabled={!bounds} onClick={() => { if (!bounds) return; const zoom = Math.min(8, Math.max(.1, Math.min(surfaceSize.width / bounds.width, surfaceSize.height / bounds.height) * .85)); onViewportChange({ zoom, x: (surfaceSize.width - bounds.width * zoom) / 2 - bounds.x * zoom, y: (surfaceSize.height - bounds.height * zoom) / 2 - bounds.y * zoom }) }}>适配选择{contextMenuShortcut('stage.fitSelection')}</ComposeContextMenuItem>
-            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, viewport.zoom * 1.2))}>放大{contextMenuShortcut('stage.zoomIn')}</ComposeContextMenuItem>
-            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, viewport.zoom / 1.2))}>缩小{contextMenuShortcut('stage.zoomOut')}</ComposeContextMenuItem>
-            <ComposeContextMenuItem onClick={() => onViewportChange(zoomViewportAt(viewport, { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }, 1))}>100%{contextMenuShortcut('stage.zoomReset')}</ComposeContextMenuItem>
-          </ComposeContextMenuSubContent></ComposeContextMenuSub>
-          <ComposeContextMenuSub><ComposeContextMenuSubTrigger>工具</ComposeContextMenuSubTrigger><ComposeContextMenuSubContent aria-label="工具"><ComposeContextMenuRadioGroup value={tool} onValueChange={(value) => onToolChange?.(value as typeof tool)}><ComposeContextMenuRadioItem value="select">选择{contextMenuShortcut('stage.selectTool')}</ComposeContextMenuRadioItem><ComposeContextMenuRadioItem value="pan">平移{contextMenuShortcut('stage.panTool')}</ComposeContextMenuRadioItem></ComposeContextMenuRadioGroup></ComposeContextMenuSubContent></ComposeContextMenuSub>
-          <ComposeContextMenuCheckboxItem checked={document.canvas.grid.snapEnabled} onCheckedChange={() => dispatch({ id: idFactory(), type: 'canvas.configure', payload: { grid: { ...document.canvas.grid, snapEnabled: !document.canvas.grid.snapEnabled }, smartSnap: document.canvas.smartSnap }, meta: { label: messages.toggleGridSnap, source: 'stage' } })}>网格吸附{contextMenuShortcut('stage.toggleGridSnap')}</ComposeContextMenuCheckboxItem>
-          <ComposeContextMenuCheckboxItem checked={document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides} onCheckedChange={() => dispatch({ id: idFactory(), type: 'canvas.configure', payload: { grid: document.canvas.grid, smartSnap: { nodes: !(document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides), guides: !(document.canvas.smartSnap.nodes || document.canvas.smartSnap.guides) } }, meta: { label: messages.toggleSmartSnap, source: 'stage' } })}>智能吸附{contextMenuShortcut('stage.toggleSmartSnap')}</ComposeContextMenuCheckboxItem>
-        </ComposeContextMenuContent>
-      </ComposeContextMenu>
+      <StageContextMenu
+        activeFrameId={activeFrameId}
+        clipboardAvailability={clipboardAvailability}
+        contextNodeId={contextNodeId}
+        dispatch={dispatch}
+        document={document}
+        editableIds={contextEditableIds}
+        idFactory={idFactory}
+        layoutSnapshot={layoutSnapshot}
+        messages={messages}
+        rootProps={contextMenu.rootProps}
+        selectionBounds={bounds}
+        shortcuts={resolvedShortcuts}
+        surfaceSize={surfaceSize}
+        tool={tool}
+        viewport={viewport}
+        onClipboardAction={executeClipboard}
+        onCreateComponentIntent={onCreateComponentIntent}
+        onSceneActivate={onSceneActivate}
+        onSelectedIdsChange={onSelectedIdsChange}
+        onToolChange={onToolChange}
+        onViewportChange={onViewportChange}
+      />
     </div>
   )
 }
