@@ -6,7 +6,7 @@
 公共 API。每一步都是一个独立可发布、可回退的 OpenSpec 提案。与 `overview.md`、
 `stage-plugin-kernel-roadmap.md` 同为指导提案的架构文档，区别是本文只覆盖 CAD 文档类型。
 
-**当前状态：步骤 1–3 已完成。** 本文写于 2026-08-21，记录的是动手前的判断与决策，
+**当前状态：步骤 1–4 已完成。** 本文写于 2026-08-21，记录的是动手前的判断与决策，
 每完成一步回填实测结果与被推翻的预判。
 
 ## 产品意图
@@ -153,7 +153,7 @@ ComposeDocument 的命令词汇，预置给其他文档类型既是一批必然�
 **逐字相同**（`diff` 确认）。它依赖 `Element`/`HTMLElement`，放进无 DOM 的 Layer 1 包会破坏
 包定位，因此未纳入本刀，记为已知遗留。
 
-### 步骤 4 · CAD 文档类型与外壳 — `add-cad-document-kind`
+### 步骤 4 · CAD 文档类型与外壳 — `add-cad-document-kind` ✅
 
 `CadDocument v1` 协议 + 资源浏览器新建入口 + 第四种文档 panel（`cadDocument`）。左右面板
 默认收起。**此步不含任何绘制能力**，目标是一份空 CAD 文档能新建、打开、存盘、重开。
@@ -165,7 +165,25 @@ ComposeDocument 的命令词汇，预置给其他文档类型既是一批必然�
 **顺带解决的矛盾**：`Frame.size` 是尺寸唯一事实来源，而 CAD 要无限图纸。独立文档类型正好
 绕开——CadDocument 没有 Frame。这反过来印证决策 1 是对的，不只是 UI 偏好。
 
-**门槛**：五道 + 新增 e2e（新建 → 打开 → 存盘 → 重开）。
+**门槛**：五道 + 新增 e2e（新建 → 打开 → 存盘 → 重开）。✅ 全绿，e2e 99 → 100/100。
+
+**落地要点**：`CadDocument` 直接复用 `ComposeEntity`——它本身只要求 `{ id, name, components }`，
+Composition、Hierarchy 之类的约束住在 ComposeDocument 的**校验器**里而不是类型里。这一点是
+「复用 ECS 底座」能成立的前提，读代码才确认得了。
+
+边缘面板的做法是**按文档类型记忆**而不是简单的「CAD 就收起」：初值 CAD 收起、其余展开，
+用户手动展开或收起记入当前类型，切走再切回恢复用户的选择。Dockview 7 的边缘组自带
+`collapse()` / `expand()` / `onDidCollapsedChange`，不必自己造收起状态。
+
+**步骤 2 的泛型化漏了一层**：`DocumentValidationResultOf<TDocument>` 仍把问题类型写死成
+ComposeDocument 的 `DocumentValidationIssue`，CAD 的机器码塞不进去。本刀补上
+`DocumentValidationIssueShape` 与第二个类型参数（默认不变），贯穿 `TransactionRuntime`、
+`TransactionRuntimeOptions` 与 `TransactionResetResult`。**泛型化要一路贯到叶子类型**，
+只换主类型会在第二个消费者出现时才暴露。
+
+**一处必须跟着扩展的临时实现**：孤儿判定当前等价于「未被 `rootIds` 引用」，因为本步尚无
+图元词汇、也就没有层级。第一个图元落地时它必须改成按层级遍历，否则子级会被误判成孤儿。
+已在实现处注明。
 
 ### 步骤 5 · 命令引擎跑通一把工具 — `add-cad-command-engine`
 
