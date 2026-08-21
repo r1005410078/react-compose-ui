@@ -24,24 +24,13 @@ import type {
   ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import {
-  collectComposeSwitcherHiddenIds,
-  getComposeVisibility,
-  resolveComposeSwitcherPreview,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import {
-  createRulerTicks,
   createStageInteractionController,
   createStageSceneIndex,
-  listFrameWorldGuides,
-  resolveTargetFrameId,
   resolveStageDropIndicator,
-  expandScrollRange,
   scrollAxisToViewport,
-  viewportToScrollAxes,
-  getEntityWorldBounds,
-  unionRects,
-  worldToScreen,
   type StageDrawnEntity,
 } from '@compose-ui/stage-engine'
 import type {
@@ -57,20 +46,11 @@ import {
 import {
   bootstrapSelectionBounds,
   lineSegmentForEntity,
-  lineSegmentTransform,
-  type StageTransformMap,
 } from './stage-preview-document'
 import {
   DEFAULT_STAGE_SHORTCUTS,
   STAGE_SHORTCUT_ACTIONS,
 } from './stage-shortcuts'
-import {
-  frameScreenBounds,
-  mergeCanvasGuides,
-  resizeHandlePoints,
-  visibleWorldRect,
-  worldRectToScreen,
-} from './stage-screen-geometry'
 import {
   isStageSelectionEditable,
   isStageSelectionRotatable,
@@ -78,6 +58,9 @@ import {
   resolveStageSelectionConstraints,
   unlockedStageIds,
 } from './stage-selection-derivations'
+import { resolveStageScreenModel } from './stage-screen-model'
+import { useStageHiddenEntityIds } from './use-stage-hidden-entities'
+import { useStageSurfaceSize } from './use-stage-surface-size'
 import { useStageInstanceDrilldown } from './use-stage-instance-drilldown'
 import { useStagePreviewDocuments } from './use-stage-preview-documents'
 import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-lifecycle'
@@ -98,7 +81,6 @@ import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
 import { ComposeContainerLabelLayer } from '../container-label-layer'
 import {
-  type ShapeDirection,
 } from './drawing-entity'
 
 
@@ -112,6 +94,7 @@ const EMPTY_STAGE_POLICY: ComposeStagePolicy = Object.freeze({})
 
 
 export function ComposeStage(props: ComposeStageProps) {
+  const i18n = useComposeI18nContext()
   const measurementAdapter = useComposeStageMeasurement(props)
   if (!props.layoutSnapshot) {
     return (
@@ -121,7 +104,8 @@ export function ComposeStage(props: ComposeStageProps) {
         data-compose-ui="stage"
         role={props.layoutError ? 'alert' : 'status'}
       >
-        {props.layoutError ?? '正在加载自动布局引擎…'}
+        {props.layoutError
+          ?? getStageMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage).loadingLayoutEngine}
       </div>
     )
   }
@@ -241,27 +225,10 @@ function ComposeStageReady({
     // 失去 capture 而被迫取消时，临时平移也该结束——它不属于指针会话，但必须同批处理。
     onCaptureLostAbort: () => stopTemporaryPanRef.current(),
   })
-  const segmentTransform = useMemo(
-    () => interaction.segmentPreview
-      ? lineSegmentTransform(document, layoutSnapshot, interaction.segmentPreview)
-      : null,
-    [document, interaction.segmentPreview, layoutSnapshot],
-  )
-  const previewTransforms = useMemo<StageTransformMap>(() => ({
-    ...interaction.previewTransforms,
-    ...(segmentTransform
-      ? { [interaction.segmentPreview!.entityId]: segmentTransform.transform }
-      : {}),
-  }), [interaction.previewTransforms, interaction.segmentPreview, segmentTransform])
-  const previewDirections = useMemo<Readonly<Record<string, ShapeDirection>>>(() => (
-    segmentTransform && interaction.segmentPreview
-      ? { [interaction.segmentPreview.entityId]: segmentTransform.direction }
-      : {}
-  ), [interaction.segmentPreview, segmentTransform])
   const marquee = interaction.marquee
   const snapGuides = interaction.snapGuides
   const guidePreview = interaction.guidePreview
-  const [surfaceSize, setSurfaceSize] = useState({ width: 900, height: 600 })
+  const surfaceSize = useStageSurfaceSize(surfaceRef, onSurfaceSizeChange)
   const {
     authoredText: textEditingValue,
     changeTextEditing,
@@ -301,8 +268,8 @@ function ComposeStageReady({
     layoutPreviewSnapshot,
     layoutRuntime,
     layoutSnapshot,
-    previewDirections,
-    previewTransforms,
+    segmentPreview: interaction.segmentPreview,
+    transforms: interaction.previewTransforms,
   })
   const normalizedSelection = useMemo(
     () => selectedIds.filter((id) => Boolean(document.entities[id])),
@@ -324,23 +291,7 @@ function ComposeStageReady({
     onSelectedIdsChange,
   })
 
-  const selectionKey = normalizedSelection.join('\u0000')
-  const hiddenIdsKey = useMemo(
-    () => [...collectComposeSwitcherHiddenIds(
-      document,
-      resolveComposeSwitcherPreview(
-        document,
-        selectionKey === '' ? [] : selectionKey.split('\u0000'),
-      ),
-    )].join('\u0000'),
-    [document, selectionKey],
-  )
-  // 第二层 memo 让集合引用只在内容真正变化时更新：场景子树与 SceneIndex 缓存都以它为键，
-  // 每次文档编辑都换新引用会重建整棵场景，正在测量的实例内部选中框会因此丢失。
-  const hiddenEntityIds = useMemo(
-    () => new Set(hiddenIdsKey === '' ? [] : hiddenIdsKey.split('\u0000')),
-    [hiddenIdsKey],
-  )
+  const hiddenEntityIds = useStageHiddenEntityIds(document, normalizedSelection)
 
   const lineSelection = useMemo(
     () => normalizedSelection.length === 1
@@ -371,24 +322,6 @@ function ComposeStageReady({
   const contextNodeId = contextMenu.payload
   const contextEditableIds = unlockedStageIds(document, normalizedSelection)
 
-  useEffect(() => {
-    const surface = surfaceRef.current
-    if (!surface) return
-    const measure = () => {
-      const rect = surface.getBoundingClientRect()
-      if (rect.width <= 0 || rect.height <= 0) return
-      const next = { width: rect.width, height: rect.height }
-      setSurfaceSize((current) => current.width === next.width && current.height === next.height
-        ? current
-        : next)
-      onSurfaceSizeChange?.(next)
-    }
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(surface)
-    return () => observer.disconnect()
-  }, [onSurfaceSizeChange])
 
 
   const { assetDropStatus } = useStageEffectDispatch({
@@ -487,50 +420,31 @@ function ComposeStageReady({
 
   useFinalControllerDisposal(privateController)
 
-  const screenBounds = worldRectToScreen(bounds, viewport)
-  const boundarySceneIndex = createStageSceneIndex(document, layoutSnapshot, hiddenEntityIds)
-  const frameBounds = frameScreenBounds(document, boundarySceneIndex, viewport)
-  const worldOriginScreen = worldToScreen({ x: 0, y: 0 }, viewport)
-  const marqueeScreen = worldRectToScreen(marquee, viewport)
-  const handlePoints = resizeHandlePoints(screenBounds)
-  const horizontalTicks = createRulerTicks({
-    axis: 'x',
-    viewport,
-    length: surfaceSize.width,
-    step: document.canvas.grid.stepX,
-    offset: document.canvas.grid.offsetX,
-    primaryLineEvery: document.canvas.grid.primaryLineEvery,
-  })
-  const verticalTicks = createRulerTicks({
-    axis: 'y',
-    viewport,
-    length: surfaceSize.height,
-    step: document.canvas.grid.stepY,
-    offset: document.canvas.grid.offsetY,
-    primaryLineEvery: document.canvas.grid.primaryLineEvery,
-  })
-  // 辅助线保存在活动 Frame 的局部坐标里；Overlay 在世界坐标绘制，因此这里映射一次。
-  const targetFrameId = resolveTargetFrameId(document, selectedIds, activeFrameId)
-  const canvasGuides = mergeCanvasGuides(
-    listFrameWorldGuides(document, targetFrameId, boundarySceneIndex)
-      .map((guide) => ({ id: guide.id, axis: guide.axis, position: guide.value })),
+  const {
+    canvasGuides,
+    frameBounds,
+    handlePoints,
+    horizontalTicks,
+    marqueeScreen,
+    screenBounds,
+    scrollAxes,
+    verticalTicks,
+    worldOriginScreen,
+  } = resolveStageScreenModel({
+    activeFrameId,
+    document,
     guidePreview,
-  )
-  const visibleWorld = visibleWorldRect(viewport, surfaceSize)
-  // 内容边界要遍历全部 Entity 计算世界包围盒，但只在引擎尚未发布滚动范围的首帧才会用到。
-  // 必须惰性求值：否则每个平移帧都会为一个立刻被丢弃的结果做一次全场景遍历。
-  const bootstrapContentBounds = () => unionRects([
-    ...Object.values(previewDocument.entities)
-      .filter((entity) => getComposeVisibility(entity).visible)
-      .map((entity) => getEntityWorldBounds(
-        previewDocument,
-        previewLayoutSnapshot,
-        entity.id,
-      )),
-  ])
-  const activeScrollRange = interaction.scrollRange
-    ?? expandScrollRange(null, bootstrapContentBounds(), visibleWorld)
-  const scrollAxes = viewportToScrollAxes(viewport, surfaceSize, activeScrollRange)
+    hiddenEntityIds,
+    layoutSnapshot,
+    marquee,
+    previewDocument,
+    previewLayoutSnapshot,
+    scrollRange: interaction.scrollRange,
+    selectedIds,
+    selectionBounds: bounds,
+    surfaceSize,
+    viewport,
+  })
 
   const { executeClipboard, availabilityFor } = useStageClipboard({
     activeFrameId,

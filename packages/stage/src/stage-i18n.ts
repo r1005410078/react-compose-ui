@@ -56,6 +56,7 @@ const translations = {
     zoomIn: '放大',
     zoomOut: '缩小',
     zoomReset: '100%',
+    loadingLayoutEngine: '正在加载自动布局引擎…',
     assetDropNoResolver: '无法添加资源：未连接资源解析器。',
     assetDropAllFailed: (failed: number) => `未添加任何资源，${failed} 项失败。`,
     assetDropAdded: (added: number) => `已添加 ${added} 个资源。`,
@@ -113,6 +114,7 @@ const translations = {
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
     zoomReset: '100%',
+    loadingLayoutEngine: 'Loading the auto layout engine…',
     assetDropNoResolver: 'Assets could not be added: no asset resolver is connected.',
     assetDropAllFailed: (failed: number) => `No assets were added. ${failed} failed.`,
     assetDropAdded: (added: number) =>
@@ -214,6 +216,10 @@ export function getStageMessages(
     zoomIn: formatMessage('stage.zoomIn', messages.zoomIn),
     zoomOut: formatMessage('stage.zoomOut', messages.zoomOut),
     zoomReset: formatMessage('stage.zoomReset', messages.zoomReset),
+    loadingLayoutEngine: formatMessage(
+      'stage.loadingLayoutEngine',
+      messages.loadingLayoutEngine,
+    ),
     assetDropNoResolver: formatMessage(
       'stage.assetDropNoResolver',
       messages.assetDropNoResolver,
