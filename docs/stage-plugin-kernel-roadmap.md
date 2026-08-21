@@ -139,7 +139,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 
 因此实际顺序就是优先级表的顺序：
 `text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
-→ `segment-resize` ✅ → `marquee-tool` ✅ → `draw` ✅ → `move-axis` → `marquee-converge`
+→ `segment-resize` ✅ → `marquee-tool` ✅ → `draw` ✅ → `move-axis` ✅ → `marquee-converge`
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
 
@@ -251,9 +251,22 @@ legacy 与将来的插件同时调用，否则吸附与落点规则会分叉成�
 抽的过程里顺手把一个裸阈值 `< 2` 变成具名常量并写明它按**屏幕**像素判定（所以要乘 zoom）——
 缩小视图下同样的世界位移在屏幕上更小，这一点原先只能从乘法里反推。
 
-下一刀是 `refactor-stage-move-axis-plugin`：共享 move 会话工厂 + 900 入口。注意 `temporary-pan`
-事件目前按 `gesture?.type === 'move'` 转发给 legacy 手势，move 进插件后内核需要改用
-`activePluginId()` 判定，否则动画模式下按 Space 会退化成临时平移而不是锁定原父级。
+第二步 `refactor-stage-move-axis-plugin` ✅ 落地了共享 move 会话工厂与 900 入口，并解决了
+上面预判的那个缺口——但解法比预判的更好。
+
+预判是「内核改用 `activePluginId()` 判定」。真做的时候发现那等于让内核维护一份移动插件 id
+列表：手势知识重新塞回内核，而且每新增一个移动入口就要改内核一次。改成**会话自报**：
+`StageSession.consumesTemporaryPan` + `arbiter.activeSessionConsumesTemporaryPan()`。内核只问
+「你接管 Space 吗」，不问「你是谁」。这是继 `isCompatibleWith` 之后第二次把判据从内核的枚举
+搬回会话自己手里，形状完全一致。
+
+缺口是**验证过**的，不是推演：临时去掉修复后 9 条用例里有 2 条当场失败（Space 切了
+temporaryPan 标志、落点没被锁掉），复原后全绿。后果正是 AGENTS.md 点名要防的那类——动画模式
+下拖拽失去父级锁定，对象被静默挂进激活场景、打点串进别块场景的动画。
+`interaction-controller.ts` 1783 → 1776 行（删得少是因为 `startTransform` 还要留给 700 与 600）。
+
+下一刀是 `marquee-converge`(800)——marquee 三个入口的第二个，复用已经建好的
+`createStageMarqueeSession`，同时要把 `shouldConvergeToMarquee` 与 `isTopLevelEntity` 一起搬走。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

@@ -1205,13 +1205,6 @@ export function createStageInteractionController(): StageInteractionController {
       })
       apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
     }
-    if (event.hit.kind === 'move-axis') {
-      if (context.tool === 'move') {
-        if (startTransform('move', context.selectedIds, undefined, event.hit.axis)) apply(effects)
-      }
-      return
-    }
-
     if (
       event.hit.kind === 'entity'
       && shouldConvergeToMarquee(
@@ -1721,8 +1714,8 @@ export function createStageInteractionController(): StageInteractionController {
       }
       if (event.type === 'temporary-pan.start') {
         // 非指针事件同样转给活动会话：move 手势用它表达「锁定原父级」。会话消费掉的场景下
-        // 不再改 temporaryPan 标志——两种意图不会同时出现。
-        if (gesture?.type === 'move') {
+        // 不再改 temporaryPan 标志——两种意图不会同时出现。判据由会话自报，内核不认识手势种类。
+        if (gesture?.type === 'move' || arbiter.activeSessionConsumesTemporaryPan()) {
           arbiter.update(event, pluginContext)
           return
         }
@@ -1730,7 +1723,7 @@ export function createStageInteractionController(): StageInteractionController {
         return
       }
       if (event.type === 'temporary-pan.end') {
-        if (gesture?.type === 'move') {
+        if (gesture?.type === 'move' || arbiter.activeSessionConsumesTemporaryPan()) {
           arbiter.update(event, pluginContext)
           return
         }

@@ -91,6 +91,20 @@ export interface StageSession {
    */
   cancel(ctx: StagePluginContext): void
   /**
+   * 本会话是否把临时平移键（Space）重新解释为自己的修饰键。
+   *
+   * @remarks
+   * 移动手势用 Space 表达「锁定原父级」而不是临时平移——两种意图不会同时出现，手势进行中也
+   * 无法再按下第二个指针开始平移。声明为 `true` 时内核把 `temporary-pan.start` /
+   * `temporary-pan.end` 只转发给本会话，不再切换 `temporaryPan` 标志。
+   *
+   * 由会话自报而不是让内核按插件 id 列表判断：后者会把手势知识重新塞回内核，正是插件化要
+   * 消除的耦合，而且每新增一个移动入口就要改内核一次。
+   *
+   * @defaultValue false
+   */
+  readonly consumesTemporaryPan?: boolean
+  /**
    * 受控上下文变化后，本会话是否仍然成立。
    *
    * @remarks
