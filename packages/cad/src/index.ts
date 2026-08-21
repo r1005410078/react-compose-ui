@@ -28,6 +28,16 @@ export {
   type CadPoint,
 } from './document'
 export {
+  parseCadCoordinate,
+  resolveCadPoint,
+  type CadCoordinateFailure,
+  type CadInputPoint,
+  type CadGridSettings,
+  type CadPointContext,
+  type CadPointSource,
+  type ParseCadCoordinateResult,
+} from './point-input'
+export {
   CAD_COMMAND_TYPES,
   createCadCommandHandlers,
   createCadLineCommand,

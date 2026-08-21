@@ -1,10 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   CAD_DEFAULT_LAYER_ID,
   createCadLineCommand,
+  parseCadCoordinate,
+  resolveCadPoint,
   type CadCommandContext,
   type CadCommandEffect,
   type CadDocument,
+  type CadInputPoint,
 } from '@compose-ui/cad'
 import {
   createComposeCommandRegistry,
@@ -33,6 +37,8 @@ export interface ComposeCadCanvasProps {
   readonly idFactory?: () => string
   /** 新图元落在哪个图层。 @defaultValue 默认图层 `0` */
   readonly activeLayerId?: string
+  /** 网格步长（世界单位）。 @defaultValue 10 */
+  readonly gridStep?: number
 }
 
 function defaultIdFactory() {
@@ -58,6 +64,7 @@ export function ComposeCadCanvas({
   onDispatch,
   idFactory = defaultIdFactory,
   activeLayerId = CAD_DEFAULT_LAYER_ID,
+  gridStep = 10,
 }: ComposeCadCanvasProps) {
   const i18n = useComposeI18nContext()
   const messages = getCadCanvasMessages(i18n?.locale ?? 'zh-CN')
@@ -65,6 +72,10 @@ export function ComposeCadCanvas({
   const [prompt, setPrompt] = useState<ComposeCommandPrompt | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [preview, setPreview] = useState<readonly CadPreviewSegment[]>([])
+  const [ortho, setOrtho] = useState(false)
+  const [gridEnabled, setGridEnabled] = useState(true)
+  // 后续相对输入的参照点由会话给出：「放弃」会退回上一个顶点，宿主自行记账会与会话失步。
+  const [reference, setReference] = useState<CadInputPoint | undefined>(undefined)
   // 活动会话不进 state：它是可变对象，进 state 既不会触发正确的重渲染，也会让「同一次命令」
   // 在严格模式的双调用下变成两个。
   const sessionRef = useRef<ComposeCommandSession<CadCommandEffect> | null>(null)
@@ -80,6 +91,7 @@ export function ComposeCadCanvas({
     sessionRef.current = null
     setPrompt(null)
     setPreview([])
+    setReference(undefined)
     setNotice(noticeText)
   }, [])
 
@@ -88,6 +100,7 @@ export function ComposeCadCanvas({
     if (step.status === 'prompt') {
       setPrompt(step.prompt)
       setPreview(step.preview?.segments ?? [])
+      setReference(step.preview?.reference)
       setNotice(null)
       return
     }
@@ -100,19 +113,41 @@ export function ComposeCadCanvas({
     endSession(step.status === 'cancelled' ? messages.cancelled : null)
   }, [endSession, messages.cancelled, onDispatch])
 
+  const pointContext = useMemo(() => ({
+    reference,
+    ortho,
+    grid: { enabled: gridEnabled, step: gridStep },
+  }), [gridEnabled, gridStep, ortho, reference])
+
   const handlePickPoint = useCallback((point: CadCanvasPoint) => {
     const session = sessionRef.current
     if (!session) return
-    applyStep(session, { kind: 'point', point })
-  }, [applyStep])
+    applyStep(session, { kind: 'point', point: resolveCadPoint(point, 'pointer', pointContext) })
+  }, [applyStep, pointContext])
 
   const handleSubmit = useCallback((text: string) => {
     const session = sessionRef.current
     if (session) {
-      // 命令进行中：空行等于确认（Enter），否则按关键字解释。
-      applyStep(session, text.trim().length === 0
-        ? { kind: 'accept' }
-        : { kind: 'keyword', key: text })
+      if (text.trim().length === 0) {
+        applyStep(session, { kind: 'accept' })
+        return
+      }
+      // 键入的文本**先当坐标解析**，失败才按关键字处理——坐标写法住在宿主，命令状态机不认识
+      // `@10,20` 这类语法。只有本步接受点时才尝试，否则 `100,50` 会在只收关键字的步骤上
+      // 被误解成一个点。
+      if (prompt?.accepts.includes('point')) {
+        const parsed = parseCadCoordinate(text, reference)
+        if (parsed.ok) {
+          // 键入的坐标是精确值，不再经过正交与网格。
+          applyStep(session, { kind: 'point', point: resolveCadPoint(parsed.point, 'typed', pointContext) })
+          return
+        }
+        if (parsed.reason === 'missing-reference') {
+          setNotice(messages.needsReference)
+          return
+        }
+      }
+      applyStep(session, { kind: 'keyword', key: text })
       return
     }
     if (text.trim().length === 0) return
@@ -126,7 +161,7 @@ export function ComposeCadCanvas({
     setPrompt(started.prompt)
     setPreview([])
     setNotice(null)
-  }, [activeLayerId, applyStep, idFactory, messages, registry])
+  }, [activeLayerId, applyStep, idFactory, messages, pointContext, prompt, reference, registry])
 
   const handleCancel = useCallback(() => {
     const session = sessionRef.current
@@ -134,11 +169,31 @@ export function ComposeCadCanvas({
     applyStep(session, { kind: 'cancel' })
   }, [applyStep])
 
+  /**
+   * F8 切换正交、F7 切换网格。
+   *
+   * @remarks
+   * 挂在容器上而不是画布上：焦点通常在命令行输入框里，挂在画布上按键根本收不到。这两个键在
+   * 输入框中不产生字符，因此拦截它们不会吞掉用户正在打的内容。
+   */
+  const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'F8') {
+      event.preventDefault()
+      setOrtho((current) => !current)
+      return
+    }
+    if (event.key === 'F7') {
+      event.preventDefault()
+      setGridEnabled((current) => !current)
+    }
+  }, [])
+
   return (
-    <div className="compose-cad-canvas" data-testid="cad-canvas">
+    <div className="compose-cad-canvas" data-testid="cad-canvas" onKeyDown={handleKeyDown}>
       <div className="compose-cad-canvas__viewport">
         <CadSurface
           document={document}
+          gridStep={gridEnabled ? gridStep : null}
           label={messages.canvasLabel}
           previewSegments={preview}
           viewport={viewport}
@@ -149,6 +204,7 @@ export function ComposeCadCanvas({
       <CadCommandLine
         messages={messages}
         notice={notice}
+        ortho={ortho}
         prompt={prompt}
         onCancel={handleCancel}
         onSubmit={handleSubmit}
