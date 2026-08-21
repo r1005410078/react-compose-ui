@@ -237,7 +237,23 @@ controller 的 `spatialGesture = gesture.type !== 'draw'` 上；绘制搬进插�
 文件，`test`/`e2e` 也不会失败，所以只有 typecheck 能拦住它。**五道门槛缺一不可，且必须在最后
 一起跑一遍**——中途跑过不算数。
 
-下一刀是 `move-axis`(900)。
+`move-axis`(900) 无法直接抽：它与 `entity-select-move`(700)、`resize`(600) 共用
+`startTransform` 工厂，移动会话的推进（吸附 + 落点求解）与提交（reparent batch / 纯几何）
+合计约 120 行。这是 rotate 那一轮走过的形状，因此同样拆成两步。
+
+第一步 `refactor-stage-move-planning` ✅ 已落地：`planMovePreview` / `planMoveCommit` /
+`resolveCommittableDropTarget` 三个纯函数进 `move-planning.ts`，`finish` 里原本的两条 move
+分支合并成一个入口，controller 随之卸掉七个导入。**不引入插件、不改变行为**——legacy 照常
+工作，只是把求解交出去。移动和 marquee 一样有多个入口，所以这些纯函数从第一天就要能被
+legacy 与将来的插件同时调用，否则吸附与落点规则会分叉成两份。
+`interaction-controller.ts` 1872 → 1783 行。
+
+抽的过程里顺手把一个裸阈值 `< 2` 变成具名常量并写明它按**屏幕**像素判定（所以要乘 zoom）——
+缩小视图下同样的世界位移在屏幕上更小，这一点原先只能从乘法里反推。
+
+下一刀是 `refactor-stage-move-axis-plugin`：共享 move 会话工厂 + 900 入口。注意 `temporary-pan`
+事件目前按 `gesture?.type === 'move'` 转发给 legacy 手势，move 进插件后内核需要改用
+`activePluginId()` 判定，否则动画模式下按 Space 会退化成临时平移而不是锁定原父级。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 
