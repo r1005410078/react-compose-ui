@@ -1,3 +1,4 @@
+import { createStageMarqueeToolPlugin } from './marquee-plugin'
 import { createStagePaintPlugin } from './paint-plugin'
 import { createStagePaintSamplePlugin } from './paint-sample-plugin'
 import { createStagePanPlugin } from './pan-plugin'
@@ -27,4 +28,5 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStagePathPlugin,
   createStagePaintPlugin,
   createStageSegmentResizePlugin,
+  createStageMarqueeToolPlugin,
 ]

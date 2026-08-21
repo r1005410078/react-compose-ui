@@ -139,7 +139,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 
 因此实际顺序就是优先级表的顺序：
 `text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
-→ `segment-resize` ✅ → `marquee-tool` → `draw` → `move-axis` → `marquee-converge`
+→ `segment-resize` ✅ → `marquee-tool` ✅ → `draw` → `move-axis` → `marquee-converge`
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
 
@@ -211,8 +211,22 @@ smart/grid 规则，候选来自 `index.snapCandidates`，而候选作用域要�
 同一个纯函数，只是不再经过闭包。`move`(700) 与 `resize`(600) 走同一条链，这刀先把路探通。
 `interaction-controller.ts` 2145 → 2053 行。
 
-下一刀是 `marquee-tool`(1100)——它是 marquee 三个入口中最靠前的一个，抽取时必须同时把
-共享会话工厂建好，另外两个入口（800 / 100）在各自位次上复用它。
+`marquee-tool`(1100) ✅ 是第一刀**不能一次抽完**的手势。框选有三个入口，分散在 1100 / 800 /
+100，中间夹着 draw(1000)、move-axis(900)、entity-select-move(700)、resize(600)、guide(400/300)、
+rotate-fallback(200) 六类仍在 legacy 里的分支；把 800 提到 legacy(0) 之前就等于把它插到了
+draw(1000) 前面，前缀不变量会当场失败。
+
+处理办法是**先建共享件、再逐个入口落位**：`createStageMarqueeSession` 与 `claimStageMarquee`
+承载「接管之后的全部行为」，三个入口只在何时接管上不同，差异收敛成 `originEntityId` 一个参数。
+这一刀只把 1100 那个入口挪进插件，legacy 的 marquee 分支照旧留着给 800 与 100 用——但它的
+`finish` 改调新的 `resolveMarqueeCommit`，因此**不存在两份提交实现**。这是绞杀式重构里
+"一个手势跨多刀"的标准形状：共享件先行，入口逐个搬，任何时刻都只有一份实现。
+
+同时把两个通用件提了上来：`rectFromPoints` 从 controller 私有函数进 `geometry.ts`（draw 与
+resize 抽取时同样要用），起框容器及其祖先的排除从 `finish` 进 `marquee-selection.ts`——那段
+逻辑属于提交语义，不属于 legacy。`interaction-controller.ts` 2053 → 2007 行。
+
+下一刀是 `draw`(1000)。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

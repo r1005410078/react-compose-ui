@@ -14,10 +14,10 @@ import {
   resolveComposeGeometryConstraints,
 } from '@compose-ui/core'
 import {
+  marqueeCombine,
+  marqueeDirection,
+  resolveMarqueeCommit,
   resolveMarqueeHitTest,
-  resolveMarqueeSelection,
-  type StageMarqueeCombine,
-  type StageMarqueeDirection,
   type StageMarqueeMode,
 } from './marquee-selection'
 import { createReparentCommand } from './commands'
@@ -53,6 +53,7 @@ import {
   applyMatrix,
   matrixFromTransform,
   multiplyMatrices,
+  rectFromPoints,
   rectMappingMatrix,
   resizeBounds,
   screenToWorld,
@@ -697,17 +698,6 @@ type Gesture =
       drawingEndWorld: StagePoint
     }
 
-function rectFromPoints(first: StagePoint, second: StagePoint): StageRect {
-  const x = Math.min(first.x, second.x)
-  const y = Math.min(first.y, second.y)
-  return {
-    x,
-    y,
-    width: Math.abs(first.x - second.x),
-    height: Math.abs(first.y - second.y),
-  }
-}
-
 interface DrawingPoints {
   readonly start: StagePoint
   readonly end: StagePoint
@@ -797,21 +787,6 @@ function shouldConvergeToMarquee(
  */
 function isTopLevelEntity(document: ComposeDocument, entityId: string): boolean {
   return document.rootIds.includes(entityId)
-}
-
-/** 归一化矩形丢失了拖拽方向，因此方向必须从手势起止点单独取。 */
-function marqueeDirection(
-  startWorld: StagePoint,
-  currentWorld: StagePoint,
-): StageMarqueeDirection {
-  return currentWorld.x >= startWorld.x ? 'ltr' : 'rtl'
-}
-
-/** 修饰键表达的是与既有选区的布尔组合，与判定模式正交。 */
-function marqueeCombine(modifiers: StageInteractionModifiers): StageMarqueeCombine {
-  if (modifiers.shift) return 'add'
-  if (modifiers.alt) return 'subtract'
-  return 'replace'
 }
 
 
@@ -1368,18 +1343,6 @@ export function createStageInteractionController(): StageInteractionController {
       })
       apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
     }
-    // marquee 工具压在节点上也起框，这是它与 select 唯一的行为差异——密集画布上用户否则
-    // 无处下手。命中判定与组合规则两者完全一致。
-    if (
-      context.tool === 'marquee'
-      && (
-        event.hit.kind === 'surface'
-        || event.hit.kind === 'entity'
-      )
-    ) {
-      startMarquee()
-      return
-    }
     if (
       isDrawingTool(context.tool)
       && (
@@ -1574,7 +1537,7 @@ export function createStageInteractionController(): StageInteractionController {
       }
     }
     else if (finished.type === 'marquee') {
-      const resolved = resolveMarqueeSelection({
+      const selectedIds = resolveMarqueeCommit({
         area: rectFromPoints(finished.startWorld, finished.currentWorld),
         base: finished.baseSelection,
         // 组合意图以释放时按住的修饰键为准，用户可以在拖拽途中改主意。
@@ -1583,17 +1546,8 @@ export function createStageInteractionController(): StageInteractionController {
         document: context.document,
         index,
         mode: context.marqueeMode,
+        originEntityId: finished.originEntityId,
       })
-      // 起框容器与它的祖先被框住只是几何巧合：用户是在这个容器「里面」框内容。
-      const excluded = new Set<string>()
-      let ancestor = finished.originEntityId ?? null
-      while (ancestor) {
-        excluded.add(ancestor)
-        ancestor = index.getParentId(ancestor)
-      }
-      const selectedIds = excluded.size === 0
-        ? resolved
-        : resolved.filter((entityId) => !excluded.has(entityId))
       effects.push({ type: 'selection.change', selectedIds })
     }
     else if (finished.type === 'guide-create') {
