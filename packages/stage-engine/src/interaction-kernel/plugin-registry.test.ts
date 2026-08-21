@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createStagePluginRegistry } from './plugin-registry'
-import {
-  STAGE_GESTURE_PRIORITY,
-  STAGE_LEGACY_MONOLITH_PRIORITY,
-} from './gesture-priority'
+import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import type { StageInteractionPlugin } from './kernel-types'
 
 function plugin(id: string, priority: number): StageInteractionPlugin {
@@ -79,12 +76,6 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 优先级表锁定
       // 行号同序是抄录正确性的独立校验：级联在源文件里是自上而下的。
       expect(previous.sourceLine).toBeLessThan(current.sourceLine)
     }
-  })
-
-  it('legacy 单体插件排在全部真实插件之后', () => {
-    const lowest = Math.min(...STAGE_GESTURE_PRIORITY.map(({ priority }) => priority))
-
-    expect(STAGE_LEGACY_MONOLITH_PRIORITY).toBeLessThan(lowest)
   })
 
   it('id 唯一，可直接作为注册表键', () => {

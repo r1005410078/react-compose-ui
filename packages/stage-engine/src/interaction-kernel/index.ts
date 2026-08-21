@@ -12,6 +12,20 @@ export {
 } from './plugin-registry'
 export { STAGE_EXTRACTED_PLUGIN_FACTORIES } from './extracted-plugins'
 export {
+  createStageLegacyRotateHitPlugin,
+  createStageMarqueeFallbackPlugin,
+  createStageRotateToolFallbackPlugin,
+  STAGE_LEGACY_ROTATE_HIT_PLUGIN_ID,
+  STAGE_MARQUEE_FALLBACK_PLUGIN_ID,
+  STAGE_ROTATE_TOOL_FALLBACK_PLUGIN_ID,
+} from './fallback-plugins'
+export {
+  createStageGuideCreatePlugin,
+  createStageGuideMovePlugin,
+  STAGE_GUIDE_CREATE_PLUGIN_ID,
+  STAGE_GUIDE_MOVE_PLUGIN_ID,
+} from './guide-plugin'
+export {
   captureStageSpatialBaseline,
   type StageSpatialBaselineCheck,
 } from './spatial-baseline'
@@ -77,6 +91,5 @@ export {
 } from './path-plugin'
 export {
   STAGE_GESTURE_PRIORITY,
-  STAGE_LEGACY_MONOLITH_PRIORITY,
   type StageGesturePriorityEntry,
 } from './gesture-priority'

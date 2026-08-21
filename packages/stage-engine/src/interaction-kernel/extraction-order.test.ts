@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createStageInteractionController } from '../interaction-controller'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
 import { STAGE_EXTRACTED_PLUGIN_FACTORIES } from './extracted-plugins'
-import { STAGE_GESTURE_PRIORITY, STAGE_LEGACY_MONOLITH_PRIORITY } from './gesture-priority'
+import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import type { StageInteractionEffect } from '../interaction-controller'
 
 /*
@@ -77,27 +77,22 @@ describe('OpenSpec: stage-engine / 无 DOM 文字编辑会话 / 编辑期间屏�
   })
 })
 
-describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 抽取顺序不变量', () => {
-  it('已抽取的插件在优先级表中构成一个自顶向下的前缀', () => {
-    // legacy 永远排最后，因此已抽取集合必须是表的前缀；出现空洞就意味着某个更高优先级的
-    // 分支仍在 legacy 里，会被挤到已抽取插件之后询问。
-    //
-    // 集合从 controller 实际注册的那份清单推导，不再手抄：手抄的版本在 rotate 与
-    // paint-sample 落地时没人更新，守卫看着还在、其实早已不检查新插件。
-    const extracted = new Set(
-      STAGE_EXTRACTED_PLUGIN_FACTORIES.map((create) => create().id),
-    )
-    const ids = STAGE_GESTURE_PRIORITY.map(({ id }) => id)
-    const lastExtracted = ids.reduce(
-      (acc, id, i) => (extracted.has(id) ? i : acc),
-      -1,
-    )
+describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 注册表覆盖优先级表', () => {
+  /*
+   * 绞杀式重构期间，这里守的是「已抽取集合必须是优先级表的前缀」——因为 legacy 单体永远排在
+   * 最后兜底，插到它前面的插件一旦跳号，仍留在 legacy 里的高优先级分支就会被挤到后面询问。
+   *
+   * legacy 删除之后不变量随之升级：**没有兜底了**，注册表必须逐项覆盖整张表，漏掉一项就是
+   * 一类命中彻底无人接管——那不再是顺序反转，而是功能消失。
+   */
+  it('注册表逐项覆盖优先级表，没有兜底可以掩盖遗漏', () => {
+    const registered = new Set(STAGE_EXTRACTED_PLUGIN_FACTORIES.map((create) => create().id))
 
-    expect(ids.slice(0, lastExtracted + 1).every((id) => extracted.has(id))).toBe(true)
+    expect([...STAGE_GESTURE_PRIORITY].map(({ id }) => id).filter((id) => !registered.has(id)))
+      .toEqual([])
   })
 
-  it('每个已抽取插件都在优先级表里登记，且优先级与表一致', () => {
-    // 少了这条，一个表外的 id 会让前缀断言在空前缀上空转通过。
+  it('每个注册插件都在优先级表里登记，且优先级与表一致', () => {
     const table = new Map(STAGE_GESTURE_PRIORITY.map(({ id, priority }) => [id, priority]))
 
     for (const create of STAGE_EXTRACTED_PLUGIN_FACTORIES) {
@@ -106,9 +101,9 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 抽取顺序不变
     }
   })
 
-  it('legacy 优先级低于表中任何一项，保证它始终最后被询问', () => {
-    const lowest = Math.min(...STAGE_GESTURE_PRIORITY.map(({ priority }) => priority))
+  it('优先级两两不同，询问顺序完全确定', () => {
+    const priorities = STAGE_EXTRACTED_PLUGIN_FACTORIES.map((create) => create().priority)
 
-    expect(STAGE_LEGACY_MONOLITH_PRIORITY).toBeLessThan(lowest)
+    expect(new Set(priorities).size).toBe(priorities.length)
   })
 })
