@@ -333,10 +333,22 @@ rotate 那轮已经吃过一次亏。
 `interaction-controller.ts` **2922 → 1073 行**（−63%），18 个插件，stage-engine 测试 198 → 318。
 `interaction-controller.test.ts` 自始至终**一行未改**。
 
-### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
+### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots` ✅
 
-落地 Overlay Registry 与 OverlayContribution；`stage-overlay.tsx` 按 slot 拆分，
-渲染结果逐像素对照黄金图。**门槛**：黄金图零差异。
+871 行的 `stage-overlay.tsx` 拆成 `stage-overlay/` 功能目录：12 个层文件 + 注册表 + 纯几何
+助手，壳只剩 37 行（挂 `<svg>`、按序铺开）。`createStageOverlayRegistry(extra)` 让新文档类型
+贡献自己的层而不必改 Overlay 本体。
+
+关键在于**把隐含关系变成显式数值**：SVG 没有 z-index，绘制顺序即命中顺序，原先这层关系只
+写在 JSX 的书写次序里。现在是 `order`，理由与 `STAGE_GESTURE_PRIORITY` 完全一致——顺序错位
+会静默改变「重叠区域归谁接收指针」。两处硬约束由测试锁定：路径顶点必须压在缩放手柄之上
+（关键帧顶点常与对象角点重合，否则永远拖不动），吸附参考线必须在最上层（被盖住等于没画）。
+
+**层之间刻意不共享派生包。** 原文件顶部有约 100 行共享派生喂给 13 个层；拆开后各层自行换算。
+预先算一个共享包会让每加一层就往里塞几个字段，最终又变回一个谁都在读、谁都不敢改的大对象；
+重复几次 `worldToScreen` 的代价远小于它。
+
+**门槛**：41 张黄金图逐像素一致 ✅，e2e 99/99。
 
 ### 步骤 5 · 删除 legacy · 收敛适配层 — `refactor-stage-adapter-slimming`
 
