@@ -37,8 +37,11 @@ export {
 } from './draw-plugin'
 export {
   claimStageMarquee,
+  createStageMarqueeConvergePlugin,
   createStageMarqueeSession,
   createStageMarqueeToolPlugin,
+  shouldConvergeToMarquee,
+  STAGE_MARQUEE_CONVERGE_PLUGIN_ID,
   STAGE_MARQUEE_TOOL_PLUGIN_ID,
   type StageMarqueeSessionOptions,
 } from './marquee-plugin'
