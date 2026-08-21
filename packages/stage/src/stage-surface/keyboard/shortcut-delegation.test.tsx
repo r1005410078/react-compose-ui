@@ -9,8 +9,8 @@ import {
 } from '@compose-ui/core'
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ComposeStage } from './compose-stage'
-import type { ComposeStageDispatch, ComposeStageProps } from '../types'
+import { ComposeStage } from '../compose-stage'
+import type { ComposeStageDispatch, ComposeStageProps } from '../../types'
 
 afterEach(cleanup)
 
@@ -68,7 +68,7 @@ const snapshot: ComposeLayoutSnapshot = {
 
 function renderStage(options: {
   onShortcutAction?: (action: string) => boolean
-  onToolChange?: (tool: import('../types').ComposeStageTool) => void
+  onToolChange?: (tool: import('../../types').ComposeStageTool) => void
   selectedIds?: readonly string[]
   shortcuts?: ComposeStageProps['shortcuts']
 } = {}) {

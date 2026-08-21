@@ -6,7 +6,7 @@ import type {
   RefObject,
 } from 'react'
 import type { StageInteractionHit } from '@compose-ui/stage-engine'
-import type { StageRulersHandle } from '../stage-ruler'
+import type { StageRulersHandle } from '../../stage-ruler'
 import { screenPoint } from './stage-pointer-geometry'
 
 /** 根元素事件接线的依赖清单。 */

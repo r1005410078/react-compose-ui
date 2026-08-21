@@ -13,7 +13,7 @@ import type {
   StageRect,
   StageViewport,
 } from '@compose-ui/stage-engine'
-import type { ComposeStageTool } from '../types'
+import type { ComposeStageTool } from '../../types'
 import { nextInstanceDrillDownTarget, resolveInstanceDrillDownPath } from './instance-drilldown'
 import { instanceSelectionScreenBounds } from './instance-selection-bounds'
 

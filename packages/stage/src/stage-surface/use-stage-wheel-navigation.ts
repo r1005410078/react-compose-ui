@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { RefObject } from 'react'
 import { zoomViewportAt, type StageViewport } from '@compose-ui/stage-engine'
-import { screenPoint } from './stage-pointer-geometry'
+import { screenPoint } from './pointer-session'
 
 /** 滚轮缩放的灵敏度；指数换算保证放大与缩小对称。 */
 const WHEEL_ZOOM_SENSITIVITY = 0.002

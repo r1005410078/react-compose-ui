@@ -17,7 +17,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
 import { ComposeStage } from './compose-stage'
-import { entityFromDrawingSeed } from './drawing-entity'
+import { entityFromDrawingSeed } from './entity-creation'
 import type { ComposeStageDispatch } from '../types'
 import { StageOverlay } from '../stage-overlay'
 

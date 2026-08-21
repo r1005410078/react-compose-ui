@@ -28,10 +28,10 @@ import type {
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
   ComposeStageTool,
-} from '../types'
-import type { getStageMessages } from '../stage-i18n'
+} from '../../types'
+import type { getStageMessages } from '../../stage-i18n'
 import { planStageNudge } from './nudge-planning'
-import { fitViewportTo, zoomViewportByIntent } from './stage-viewport-actions'
+import { fitViewportTo, zoomViewportByIntent } from '../stage-viewport-actions'
 import {
   DELEGATABLE_STAGE_ACTIONS,
   isEditableTarget,
