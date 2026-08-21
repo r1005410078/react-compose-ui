@@ -139,7 +139,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 
 因此实际顺序就是优先级表的顺序：
 `text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
-→ `segment-resize` ✅ → `marquee-tool` ✅ → `draw` ✅ → `move-axis` ✅ → `marquee-converge`
+→ `segment-resize` ✅ → `marquee-tool` ✅ → `draw` ✅ → `move-axis` ✅ → `marquee-converge` ✅
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
 
@@ -265,8 +265,23 @@ temporaryPan 标志、落点没被锁掉），复原后全绿。后果正是 AGE
 下拖拽失去父级锁定，对象被静默挂进激活场景、打点串进别块场景的动画。
 `interaction-controller.ts` 1783 → 1776 行（删得少是因为 `startTransform` 还要留给 700 与 600）。
 
-下一刀是 `marquee-converge`(800)——marquee 三个入口的第二个，复用已经建好的
-`createStageMarqueeSession`，同时要把 `shouldConvergeToMarquee` 与 `isTopLevelEntity` 一起搬走。
+`marquee-converge`(800) ✅ 印证了上一轮那个决定的价值：因为共享会话工厂已经建好，这一刀
+**只需搬接管条件**——`shouldConvergeToMarquee` 迁进 `marquee-plugin.ts` 与 1100 入口同住，
+两个入口共用同一个 `claimStageMarquee`，差异仍然只是 `originEntityId` 一个参数。
+`interaction-controller.ts` 1776 → 1718 行。
+
+顺手删掉了 `isTopLevelEntity`。它只有一行 `rootIds.includes()`，独立存在时反而把「顶层判定
+必须与标题标签的渲染范围一致」这条真正的约束推远了；内联之后约束就写在调用处。**一行函数的
+名字不构成抽象**，只有约束才是。
+
+写测试时踩了个夹具坑，值得记：`document()` 会把传入的 Entity 全包进一个根 Frame，所以
+`document.rootIds` 永远是 `[frame-root]`。第一版夹具让 `box` 当顶层容器，实际它是嵌套的，
+收敛判定正确地返回 false，用例落到 `move` 手势上。**v7 的「顶层容器」就是场景本身**——这不是
+测试的技术细节，而是收敛这条规则的适用范围。修正后判定的防御性分支（Group、空容器、嵌套、
+不存在）经 controller 已不可达，改用导出的纯函数直接单测。
+
+下一刀是 `entity-select-move`(700)：复用 `claimStageMove`，但它还带着选区变更、双击下钻与
+组件实例复合寻址，是剩下几刀里最厚的一个。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

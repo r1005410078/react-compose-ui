@@ -1,3 +1,9 @@
+import {
+  getComposeHierarchy,
+  getComposeLock,
+  isComposeGroupEntity,
+  type ComposeDocument,
+} from '@compose-ui/core'
 import { rectFromPoints, screenToWorld, type StagePoint, type StageViewport } from '../geometry'
 import {
   marqueeCombine,
@@ -7,7 +13,11 @@ import {
 } from '../marquee-selection'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
-import type { StageInteractionModifiers } from '../interaction-controller'
+import type {
+  StageInteractionHit,
+  StageInteractionModifiers,
+  StageInteractionTool,
+} from '../interaction-controller'
 import type {
   StageInteractionPlugin,
   StagePluginContext,
@@ -18,8 +28,11 @@ import type {
 /** 框选工具入口的注册 id。 @public */
 export const STAGE_MARQUEE_TOOL_PLUGIN_ID = 'marquee-tool'
 
-const MARQUEE_TOOL_PRIORITY = STAGE_GESTURE_PRIORITY
-  .find(({ id }) => id === STAGE_MARQUEE_TOOL_PLUGIN_ID)!.priority
+/** 容器体收敛入口的注册 id。 @public */
+export const STAGE_MARQUEE_CONVERGE_PLUGIN_ID = 'marquee-converge'
+
+const priorityOf = (id: string) =>
+  STAGE_GESTURE_PRIORITY.find((entry) => entry.id === id)!.priority
 
 /**
  * 一次框选会话的接管参数。
@@ -152,11 +165,73 @@ export function claimStageMarquee(
 export function createStageMarqueeToolPlugin(): StageInteractionPlugin {
   return {
     id: STAGE_MARQUEE_TOOL_PLUGIN_ID,
-    priority: MARQUEE_TOOL_PRIORITY,
+    priority: priorityOf(STAGE_MARQUEE_TOOL_PLUGIN_ID),
     claim(event: StagePointerDownEvent, ctx: StagePluginContext) {
       if (ctx.context.tool !== 'marquee') return null
       if (event.hit.kind !== 'surface' && event.hit.kind !== 'entity') return null
       return claimStageMarquee(event, ctx)
+    },
+  }
+}
+
+/**
+ * 判断一次 entity 命中是否应当收敛为框选而不是选中该 Entity。
+ *
+ * @remarks
+ * 容器一旦装了内容，它的空白区域在用户眼里就是「容器内的画布」而不是容器本身——沿用
+ * Figma Frame 与 Rive Artboard 的约定，此时容器体不再抢占选中，选中入口收敛到标题标签。
+ *
+ * 收敛只发生在**顶层**容器上：标题标签只画给顶层容器（v7 下即 `rootIds` 里的场景），
+ * 嵌套容器没有标签，一旦收敛就没有任何选中入口了。已经在选区里的容器同理例外，
+ * 否则从标签选中之后就再也无法拖动它。
+ *
+ * @public
+ */
+export function shouldConvergeToMarquee(
+  tool: StageInteractionTool,
+  document: ComposeDocument,
+  selectedIds: readonly string[],
+  hit: Extract<StageInteractionHit, { kind: 'entity' }>,
+): boolean {
+  if (tool !== 'select' && tool !== 'move') return false
+  const entity = document.entities[hit.entityId]
+  if (!entity) return false
+  const hierarchy = getComposeHierarchy(entity)
+  // 锁定的容器与 Group 完全退出画布选中：它们本来就是用来「挡住不要动的东西」的，
+  // 还能被点中只会让用户反复误选。标签同样不再是入口，改从场景树选中。
+  if (hierarchy && getComposeLock(entity).locked) return true
+  if (hit.source === 'label') return false
+  if (selectedIds.includes(hit.entityId)) return false
+  // 顶层 = `rootIds` 的直接成员，v7 下即各块场景。判定必须与标题标签的渲染范围保持一致：
+  // 收敛只能作用于带标签的容器，否则被收敛的容器在画布上没有任何选中入口。
+  if (!document.rootIds.includes(hit.entityId)) return false
+  // Group 不是「容器」：它没有画布标签，收敛之后就再也选不中了。
+  if (isComposeGroupEntity(entity)) return false
+  return (hierarchy?.childIds.length ?? 0) > 0
+}
+
+/**
+ * 容器体收敛入口插件。
+ *
+ * @remarks
+ * 在装了内容的顶层容器体上按下时起框而不是选中该容器，起框容器与它的祖先随后被排除在结果之外。
+ *
+ * 它在优先级表中位于 800，与 1100 的工具入口之间隔着 draw(1000) 与 move-axis(900)——因此两者
+ * **不能**作为一个插件一次抽完，只能各自在自己的位次上复用 {@link createStageMarqueeSession}。
+ *
+ * @public
+ */
+export function createStageMarqueeConvergePlugin(): StageInteractionPlugin {
+  return {
+    id: STAGE_MARQUEE_CONVERGE_PLUGIN_ID,
+    priority: priorityOf(STAGE_MARQUEE_CONVERGE_PLUGIN_ID),
+    claim(event: StagePointerDownEvent, ctx: StagePluginContext) {
+      if (event.hit.kind !== 'entity') return null
+      const { context } = ctx
+      if (!shouldConvergeToMarquee(context.tool, context.document, context.selectedIds, event.hit)) {
+        return null
+      }
+      return claimStageMarquee(event, ctx, event.hit.entityId)
     },
   }
 }
