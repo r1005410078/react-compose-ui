@@ -13,13 +13,7 @@ import { planTransformCommit } from '../gesture-planning'
 import { transformedSelection } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 旋转工具的注册 id。 @public */
 export const STAGE_ROTATE_PLUGIN_ID = 'rotate-tool'

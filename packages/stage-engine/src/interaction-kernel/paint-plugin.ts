@@ -10,13 +10,7 @@ import { paintSpacePoint, updatePaintFromPointer } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type { StagePaintHandleKind } from '../interaction-controller'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 渐变控制柄拖拽的注册 id。 @public */
 export const STAGE_PAINT_PLUGIN_ID = 'paint'

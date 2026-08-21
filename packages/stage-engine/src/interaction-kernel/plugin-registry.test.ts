@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { createStagePluginRegistry } from './plugin-registry'
+import { createStagePluginRegistry } from './stage-kernel-profile'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
-import type { StageInteractionPlugin } from './kernel-types'
+import type { StageInteractionPlugin } from './stage-kernel-profile'
 
 function plugin(id: string, priority: number): StageInteractionPlugin {
   return { id, priority, claim: () => null }
@@ -30,7 +30,7 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 注册表按优先
 
   it('重复 id 被拒绝', () => {
     expect(() => createStagePluginRegistry([plugin('dup', 10), plugin('dup', 20)]))
-      .toThrow(/Duplicate Stage interaction plugin id: dup/)
+      .toThrow(/Duplicate interaction plugin id: dup/)
   })
 
   it('排序结果引用稳定，不在每次询问时重排', () => {

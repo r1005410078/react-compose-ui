@@ -1,9 +1,5 @@
 import type { StagePoint, StageViewport } from '../geometry'
-import type {
-  StageInteractionPlugin,
-  StagePluginContext,
-  StageSession,
-} from './kernel-types'
+import type { StageInteractionPlugin, StagePluginContext, StageSession } from './stage-kernel-profile'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 
 /** 平移插件的注册 id；内核在非指针事件上据此识别活动会话。 @public */

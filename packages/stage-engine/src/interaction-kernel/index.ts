@@ -1,15 +1,37 @@
 /** Stage 交互内核：插件契约、会话仲裁与优先级表。 */
+
+/** 文档无关的泛型内核契约；新文档类型绑定自己的 profile 后复用同一套仲裁规则。 */
 export type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
+  InteractionClaimResult,
+  InteractionKernelProfile,
+  InteractionPlugin,
+  InteractionPluginContext,
+  InteractionSession,
 } from './kernel-types'
 export {
-  createStagePluginRegistry,
-  type StagePluginRegistry,
+  createInteractionPluginRegistry,
+  type InteractionPluginRegistry,
 } from './plugin-registry'
+export {
+  createInteractionSessionArbiter,
+  type InteractionArbiterBeginResult,
+  type InteractionSessionArbiter,
+} from './session-arbiter'
+
+/** 泛型内核在 Stage 文档协议上的绑定与既有名称。 */
+export {
+  createStagePluginRegistry,
+  createStageSessionArbiter,
+  type StageArbiterBeginResult,
+  type StageClaimResult,
+  type StageInteractionPlugin,
+  type StageKernelProfile,
+  type StagePluginContext,
+  type StagePluginRegistry,
+  type StagePointerDownEvent,
+  type StageSession,
+  type StageSessionArbiter,
+} from './stage-kernel-profile'
 export { STAGE_EXTRACTED_PLUGIN_FACTORIES } from './extracted-plugins'
 export {
   createStageLegacyRotateHitPlugin,
@@ -29,11 +51,6 @@ export {
   captureStageSpatialBaseline,
   type StageSpatialBaselineCheck,
 } from './spatial-baseline'
-export {
-  createStageSessionArbiter,
-  type StageArbiterBeginResult,
-  type StageSessionArbiter,
-} from './session-arbiter'
 export {
   createStageTextEditGuardPlugin,
   STAGE_TEXT_EDIT_GUARD_PLUGIN_ID,

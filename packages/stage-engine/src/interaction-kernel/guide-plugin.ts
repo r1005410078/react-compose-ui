@@ -13,13 +13,7 @@ import type {
   StageInteractionEffect,
   StagePreviewGuide,
 } from '../interaction-controller'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 从标尺拖出辅助线的注册 id。 @public */
 export const STAGE_GUIDE_CREATE_PLUGIN_ID = 'guide-create'

@@ -18,12 +18,7 @@ import type {
   StageInteractionModifiers,
   StageInteractionTool,
 } from '../interaction-controller'
-import type {
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 框选工具入口的注册 id。 @public */
 export const STAGE_MARQUEE_TOOL_PLUGIN_ID = 'marquee-tool'
