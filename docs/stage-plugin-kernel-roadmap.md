@@ -140,7 +140,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 因此实际顺序就是优先级表的顺序：
 `text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
 → `segment-resize` ✅ → `marquee-tool` ✅ → `draw` ✅ → `move-axis` ✅ → `marquee-converge` ✅
-→ `entity-select-move` ✅ → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
+→ `entity-select-move` ✅ → `resize` ✅ → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
 
 注意 `marquee` 的三个入口分散在 1100 / 800 / 100，中间夹着 draw、resize、guide 等，
@@ -305,8 +305,15 @@ e2e 报「节点层级操作」失败——右键不再弹出上下文菜单。�
 走，因为它不属于任何分支。已知的总闸目前只剩 `!context || !index || !surface` 这一条，它由
 `pluginContext` 的取值器抛错兜住。后续每刀都该先问一句：这个分支之上还有没有没搬走的总闸。
 
-下一刀是 `resize`(600)——legacy 最后一个变换会话，抽完 `startTransform` 与 `Gesture` 的
-transform 变体一并消失。
+`resize`(600) ✅ 是 legacy 最后一个变换会话。抽完之后 `startTransform` 这一族工厂、`Gesture`
+的全部变换变体、以及并发中止里的 `gestureIds` / `sameIds` 同时消失——判定退化成上下文三项恒等：
+**所有引用具体 Entity 的手势都已插件化，各自用 `isCompatibleWith` 自报是否仍然成立**。
+`interaction-controller.ts` 1592 → 1488 行。
+
+legacy 至此只剩 marquee 的两个尾部入口与两个 guide 手势，全都不引用选区。
+
+下一刀是 `legacy-rotate-hit`(500)、`guide-create`(400)、`guide-move`(300)、
+`rotate-tool-fallback`(200)、`marquee-fallback`(100)。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

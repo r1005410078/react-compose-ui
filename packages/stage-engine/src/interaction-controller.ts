@@ -8,7 +8,6 @@ import type {
 import {
   getComposeLock,
   resolveComposeAppearance,
-  resolveComposeGeometryConstraints,
 } from '@compose-ui/core'
 import {
   marqueeCombine,
@@ -32,7 +31,6 @@ import {
 } from './frame-space'
 import {
   expandScrollRange,
-  snapResizePoint,
   snapValueToGrid,
 } from './canvas-geometry'
 import type {
@@ -49,8 +47,6 @@ import {
   matrixFromTransform,
   multiplyMatrices,
   rectFromPoints,
-  rectMappingMatrix,
-  resizeBounds,
   screenToWorld,
   unionRects,
 } from './geometry'
@@ -62,11 +58,9 @@ import {
   STAGE_LEGACY_MONOLITH_PRIORITY,
   STAGE_PAN_PLUGIN_ID,
 } from './interaction-kernel'
-import { planTransformCommit, resolveTransformTargets } from './transform-planning'
 import {
   matrixBounds,
   resolvedSpatialTransform,
-  transformedResizeSelection,
 } from './transform-preview'
 import type {
   StageInteractionPlugin,
@@ -638,16 +632,6 @@ type Gesture =
       currentWorld: StagePoint
     }
   | {
-      readonly type: 'resize'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly ids: readonly string[]
-      readonly handle: ResizeHandle
-      readonly startWorld: StagePoint
-      readonly bounds: StageRect
-      transforms: Readonly<Record<string, StageTransform>>
-    }
-  | {
       readonly type: 'guide-create'
       readonly pointerId: number
       readonly viewport: StageViewport
@@ -752,10 +736,6 @@ function equalRect(left: StageRect | null, right: StageRect | null) {
     && left.width === right.width
     && left.height === right.height,
   )
-}
-
-function sameIds(left: readonly string[], right: readonly string[]) {
-  return left.length === right.length && left.every((id, index) => id === right[index])
 }
 
 function samePaintEditing(
@@ -1001,79 +981,11 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
-    if (gesture.type === 'resize') {
-      const snapped = snapResizePoint({
-        point: world,
-        handle: gesture.handle,
-        candidates: index.snapCandidates(gesture.ids, targetFrameId(context)),
-        canvas: context.document.canvas,
-        zoom: gesture.viewport.zoom,
-        disabled: modifiers.command,
-      })
-      const preserveAspect = gesture.ids.some((id) => {
-        const entity = context!.document.entities[id]
-        return entity
-          ? resolveComposeGeometryConstraints(entity).resize === 'preserve-aspect'
-          : false
-      })
-      const nextBounds = resizeBounds(
-        gesture.bounds,
-        gesture.handle,
-        snapped.point,
-        { ...modifiers, shift: modifiers.shift || preserveAspect },
-      )
-      gesture.transforms = transformedResizeSelection(
-        index,
-        gesture.ids,
-        rectMappingMatrix(gesture.bounds, nextBounds),
-        {
-          scaleX: nextBounds.width / gesture.bounds.width,
-          scaleY: nextBounds.height / gesture.bounds.height,
-        },
-        context?.contentReflowsWithWidth,
-        gesture.handle,
-      )
-      publish({
-        ...snapshot,
-        phase: 'resize',
-        previewTransforms: gesture.transforms,
-        snapGuides: snapped.guides,
-      })
-      return
-    }
   }
 
   const begin = (event: Extract<StageInteractionEvent, { type: 'pointer.down' }>) => {
     if (!context || !index || !surface || event.button > 1) return
     const effects: StageInteractionEffect[] = []
-    /** 移动的三个入口都已插件化，legacy 只剩缩放这一个变换会话。 */
-    const startResize = (ids: readonly string[], handle: ResizeHandle) => {
-      const targets = resolveTransformTargets({
-        document: context!.document,
-        index: index!,
-        type: 'resize',
-        ids,
-        handle,
-      })
-      if (!targets) return false
-      gesture = {
-        type: 'resize',
-        pointerId: event.pointerId,
-        viewport: context!.viewport,
-        ids: targets.editableIds,
-        handle,
-        startWorld: worldPoint(event.point, context!.viewport),
-        bounds: targets.bounds,
-        transforms: {},
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'resize',
-      })
-      effects.push({ type: 'pointer.capture', pointerId: event.pointerId })
-      return true
-    }
-
     const startMarquee = (originEntityId?: string) => {
       const viewport = context!.viewport
       const startWorld = worldPoint(event.point, viewport)
@@ -1094,13 +1006,6 @@ export function createStageInteractionController(): StageInteractionController {
         marqueeHitTest: resolveMarqueeHitTest(context!.marqueeMode, 'ltr'),
       })
       apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
-    }
-    if (event.hit.kind === 'resize') {
-      if (
-        (context.tool === 'select' || context.tool === 'scale')
-        && startResize(context.selectedIds, event.hit.handle)
-      ) apply(effects)
-      return
     }
     if (event.hit.kind === 'rotate') {
       // 非 rotate 工具忽略旧旋转命中；rotate 工具已在上方独占处理。
@@ -1271,16 +1176,6 @@ export function createStageInteractionController(): StageInteractionController {
         },
       })
     }
-    else if (finished.type === 'resize') {
-      const planned = planTransformCommit({
-        document: context.document,
-        layoutSnapshot: context.layoutSnapshot,
-        index,
-        finished,
-        idFactory: context.idFactory,
-      })
-      if (planned) effects.push(planned)
-    }
     // 正式命令必须在 preview 清理和 capture 释放前同步交给宿主，否则 React
     // 会短暂重新渲染旧 document，造成高速松手时可见的“回弹”。
     apply(effects)
@@ -1427,16 +1322,12 @@ export function createStageInteractionController(): StageInteractionController {
         nextContext.layoutSnapshot,
         nextContext.hiddenEntityIds,
       )
-      const gestureIds = gesture
-        && gesture.type === 'resize'
-        ? gesture.ids
-        : null
       const documentChanged = context?.document !== nextContext.document
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
       const paintEditingChanged = !samePaintEditing(context?.paintEditing, nextContext.paintEditing)
       const paintSamplingChanged = !samePaintSampling(context?.paintSampling, nextContext.paintSampling)
-      // draw 抽成插件后，legacy 里只剩引用 Entity 的空间手势，「绘制不被文档变化打断」这条
-      // 例外随之搬进了 draw 插件的 isCompatibleWith，这里不再需要区分手势种类。
+      // 所有引用具体 Entity 的手势都已插件化，各自用 isCompatibleWith 自报是否仍然成立。
+      // legacy 只剩 marquee 与两个 guide 手势：它们不引用选区，因此判定退化成上下文三项恒等。
       const incompatible = Boolean(
         gesture
         && context
@@ -1444,13 +1335,6 @@ export function createStageInteractionController(): StageInteractionController {
           context.document !== nextContext.document
           || context.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
           || context.tool !== nextContext.tool
-          || (
-            gestureIds
-            && !sameIds(
-              gestureIds,
-              nextIndex.topLevelSelection(nextContext.selectedIds),
-            )
-          )
         ),
       )
       // 会话的存续只看新 context：目标从文档中消失，或选区已经不再是该目标，都必须结束。
