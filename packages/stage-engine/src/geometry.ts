@@ -604,3 +604,21 @@ export function pointOnRotationRay(
     y: center.y + Math.sin(angle) * length,
   }
 }
+
+/**
+ * 由任意两个点求归一化矩形。
+ *
+ * @remarks
+ * 结果始终是左上原点的正尺寸矩形，因此**丢失了拖拽方向**。需要方向的判定（例如 CAD 惯例的
+ * directional 框选）必须另行从起止点取，不能从矩形反推。
+ *
+ * @public
+ */
+export function rectFromPoints(first: StagePoint, second: StagePoint): StageRect {
+  return {
+    x: Math.min(first.x, second.x),
+    y: Math.min(first.y, second.y),
+    width: Math.abs(first.x - second.x),
+    height: Math.abs(first.y - second.y),
+  }
+}

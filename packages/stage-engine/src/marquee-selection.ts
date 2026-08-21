@@ -122,3 +122,58 @@ export function resolveMarqueeSelection(query: StageMarqueeQuery): readonly stri
   const baseSet = new Set(base)
   return [...base, ...hits.filter((entityId) => !baseSet.has(entityId))]
 }
+
+/**
+ * 从手势起止点取出拖拽方向。
+ *
+ * @remarks
+ * 归一化矩形丢失了方向，因此方向必须从起止点单独取，不能从矩形反推。
+ * @public
+ */
+export function marqueeDirection(
+  startWorld: { readonly x: number },
+  currentWorld: { readonly x: number },
+): StageMarqueeDirection {
+  return currentWorld.x >= startWorld.x ? 'ltr' : 'rtl'
+}
+
+/**
+ * 把修饰键翻译成与既有选区的布尔组合。
+ *
+ * @remarks
+ * 组合与判定模式正交：模式决定「框住什么算命中」，组合决定「命中之后怎么并入选区」。
+ * @public
+ */
+export function marqueeCombine(
+  modifiers: { readonly shift: boolean; readonly alt: boolean },
+): StageMarqueeCombine {
+  if (modifiers.shift) return 'add'
+  if (modifiers.alt) return 'subtract'
+  return 'replace'
+}
+
+/**
+ * 解析一次框选**提交**最终写入的选区。
+ *
+ * @remarks
+ * 与 {@link resolveMarqueeSelection} 的差别只在起框容器的排除：从非空容器体上起框时，用户看的
+ * 是「容器内的画布」，把这个容器连同它的祖先一并选中等于没有解决当初的收敛冲突——它们被框住
+ * 只是几何巧合。排除沿 index 的父链一路上溯，因此嵌套容器同样成立。
+ *
+ * @param originEntityId - 起框所在的容器；`undefined`（从空白起框）时不排除任何节点。
+ * @returns 稳定文档 ID。
+ * @public
+ */
+export function resolveMarqueeCommit(
+  query: StageMarqueeQuery & { readonly originEntityId?: string },
+): readonly string[] {
+  const resolved = resolveMarqueeSelection(query)
+  if (!query.originEntityId) return resolved
+  const excluded = new Set<string>()
+  let ancestor: string | null = query.originEntityId
+  while (ancestor) {
+    excluded.add(ancestor)
+    ancestor = query.index.getParentId(ancestor)
+  }
+  return resolved.filter((entityId) => !excluded.has(entityId))
+}
