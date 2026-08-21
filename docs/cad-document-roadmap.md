@@ -6,7 +6,7 @@
 公共 API。每一步都是一个独立可发布、可回退的 OpenSpec 提案。与 `overview.md`、
 `stage-plugin-kernel-roadmap.md` 同为指导提案的架构文档，区别是本文只覆盖 CAD 文档类型。
 
-**当前状态：全部步骤未开始。** 本文写于 2026-08-21，记录的是动手前的判断与决策，
+**当前状态：步骤 1–3 已完成。** 本文写于 2026-08-21，记录的是动手前的判断与决策，
 每完成一步回填实测结果与被推翻的预判。
 
 ## 产品意图
@@ -82,7 +82,7 @@ Patch 代数、事务运行时、Undo/Redo、序列化与历史面板全部复�
 
 ## 路线
 
-### 步骤 1 · 泛型化交互内核 — `refactor-kernel-generics`
+### 步骤 1 · 泛型化交互内核 — `refactor-kernel-generics` ✅
 
 `kernel-types.ts`(158) + `session-arbiter.ts`(164) + `plugin-registry.ts`(36) 共 **358 行**
 改为对 context / snapshot / effect 三个类型参数泛型。这三个文件本来就不认识文档，只是
@@ -93,14 +93,33 @@ CAD 由此复用仲裁器、优先级表与「注册表逐项覆盖优先级表�
 
 **无行为变化。门槛**：五道 + 黄金图 41 张逐像素一致，`interaction-controller.test.ts` 不改。
 
-### 步骤 2 · 事务运行时注入 validator — `refactor-transaction-validator`
+**落地要点**：用**单个类型级 profile** 而不是六个类型参数——否则每个插件、会话工厂与测试夹具
+的签名都要重复六个类型。`claimEvent` 是 profile 成员而非 `Extract<event, {type:'pointer.down'}>`
+推导，内核因此不假设交互由指针发起（CAD 的 `L↵` 不成立）。三个泛型文件对 Stage 类型的
+import 清零，Stage 绑定与七个既有公共名称移入新的 `stage-kernel-profile.ts`，边界由
+`dependency-boundary.test.ts` 守住并做过 Red 验证。
+
+**已知残留**：仲裁器仍按 `pointerId` 判定事件归属，这是泛型内核里唯一一处指针语义泄漏。
+刻意不在本步抽象成中性的会话身份——CAD 命令由 `L↵` 启动时尚无指针，首次点击才产生一个，
+「绑首次点击还是绑命令调用」要等步骤 5 有真实消费者才知道，现在设计等于猜。
+
+### 步骤 2 · 事务运行时注入 validator — `refactor-transaction-validator` ✅
 
 `core/runtime.ts` 第 104、211、326、456 行四处硬编码 `validateComposeDocument` 改为注入，
 缺省保持现有行为。非 Compose 文档由此获得事务、Patch 与 Undo/Redo。
 
 **无行为变化。门槛**：五道全绿。
 
-### 步骤 3 · 命令包 — `add-commands-package`
+**落地要点**：泛型入口 `createDocumentTransactionRuntime` 的 `validate` **必填**，
+`createTransactionRuntime` 保持原签名成为 ComposeDocument 特化。若给泛型入口一个默认校验器，
+`createDocumentTransactionRuntime<CadDocument>({ document })` 会通过类型检查却在运行时用
+Compose 规则去校验——这条错误路径现在在类型层就不存在。
+
+**顺带解耦**：`createBuiltinCommandHandlers()` 的注册随之移出泛型运行时——`entity.*` 是
+ComposeDocument 的命令词汇，预置给其他文档类型既是一批必然失败的 handler 又会占住 type。
+`transaction.batch` 例外，它是事务原语，仍由泛型运行时内联处理。
+
+### 步骤 3 · 命令包 — `add-commands-package` ✅
 
 **这一刀独立于 CAD，且在第一个消费者身上就已还本。** 仓库现状是三种键位类型互不相识：
 `ComposeKeybinding`(components) / `ComposeStageKeybinding`(stage) / `ComposeEditorKeybinding`(editor)；
@@ -123,7 +142,16 @@ CAD 由此复用仲裁器、优先级表与「注册表逐项覆盖优先级表�
 **破坏性变更**：`ComposeKeybinding` 现住在 `components`(Layer 2)，需**下沉**到 `commands`，
 `components` 反向导入。这是本刀唯一触及既有公共 API 的地方。
 
-**门槛**：五道 + 页面编辑器快捷键与命令面板行为不变。
+**门槛**：五道 + 页面编辑器快捷键与命令面板行为不变。✅ 全绿，editor 262 / stage 148 项
+既有测试无回归，e2e 99/99。
+
+**核对结果修正了提案里的一处判断**：两张默认表 30 项重叠、当前取值**逐项一致**，所以这一刀
+消除的是「等待漂移的重复」而不是已发生的缺陷。展开 `DEFAULT_STAGE_SHORTCUTS` 之后重复在
+结构上消失，不再依赖人工同步。
+
+**另一处意外收获**：`isEditableTarget`(stage) 与 `isEditableKeyboardTarget`(editor) 实现
+**逐字相同**（`diff` 确认）。它依赖 `Element`/`HTMLElement`，放进无 DOM 的 Layer 1 包会破坏
+包定位，因此未纳入本刀，记为已知遗留。
 
 ### 步骤 4 · CAD 文档类型与外壳 — `add-cad-document-kind`
 
