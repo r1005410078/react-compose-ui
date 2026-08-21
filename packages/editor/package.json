@@ -34,6 +34,7 @@
     "@compose-ui/animation-panel": "workspace:*",
     "@compose-ui/asset-browser": "workspace:*",
     "@compose-ui/assets": "workspace:*",
+    "@compose-ui/cad": "workspace:*",
     "@compose-ui/command-panel": "workspace:*",
     "@compose-ui/commands": "workspace:*",
     "@compose-ui/component-library": "workspace:*",

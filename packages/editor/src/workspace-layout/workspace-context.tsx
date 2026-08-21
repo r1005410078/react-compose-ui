@@ -2,11 +2,13 @@ import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
 import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets'
 import type { ComposeAnimationFile } from '@compose-ui/animation'
+import type { CadDocument } from '@compose-ui/cad'
 import type { ComposeScriptIntelligenceProfile } from '@compose-ui/asset-browser'
 import type {
   ComposeComponentAssetV1,
   ComposePageFile,
   ComposeResolvedComponentSnapshot,
+  DocumentValidationIssueShape,
   TransactionRuntime,
 } from '@compose-ui/core'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
@@ -149,11 +151,32 @@ export interface ComposeComponentDocumentSession extends ComposeDocumentSessionB
   readonly savedRevisionId: number
 }
 
+/**
+ * 一份 CAD 文档的独立编辑会话。
+ *
+ * @remarks
+ * 与页面、组件一样各自持有事务运行时，因此撤销历史在切换标签后仍然保留。CAD 复用
+ * ComposeDocument 的 ECS 底座，差异只在校验器与 Component 词汇，因此这里不需要第二套
+ * 事务实现——运行时类型参数换成 `CadDocument` 即可。
+ * @internal
+ */
+export interface ComposeCadDocumentSession extends ComposeDocumentSessionBase {
+  readonly kind: 'cad'
+  readonly assetKey: string
+  readonly displayName: string
+  readonly runtime: TransactionRuntime<CadDocument, DocumentValidationIssueShape>
+  /** 最近一次成功读写得到的 Provider revision，用于乐观并发。 */
+  readonly baseRevision: string
+  /** 与运行时 revision 比较以判定脏状态的基线。 */
+  readonly savedRevisionId: number
+}
+
 /** 中央 Canvas Group 中可关闭的文档会话。 @internal */
 export type ComposeWorkspaceDocumentSession =
   | ComposeAssetDocumentSession
   | ComposePageDocumentSession
   | ComposeComponentDocumentSession
+  | ComposeCadDocumentSession
 
 export const WorkspaceContentContext = createContext<WorkspaceContent | null>(null)
 

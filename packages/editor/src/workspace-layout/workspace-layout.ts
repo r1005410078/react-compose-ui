@@ -34,12 +34,14 @@ export const WORKSPACE_COMPONENT_IDS = {
   assetDocument: 'assetDocument',
   pageDocument: 'pageDocument',
   componentDocument: 'componentDocument',
+  cadDocument: 'cadDocument',
   core: 'workspaceCore',
 } as const
 
 const ASSET_DOCUMENT_PANEL_PREFIX = 'compose-asset-document:'
 const PAGE_DOCUMENT_PANEL_PREFIX = 'compose-page-document:'
 const COMPONENT_DOCUMENT_PANEL_PREFIX = 'compose-component-document:'
+const CAD_DOCUMENT_PANEL_PREFIX = 'compose-cad-document:'
 
 /**
  * 从 Provider 与稳定资源 key 派生当前 Editor 实例中的资源标签 ID。
@@ -88,11 +90,26 @@ export function isComponentDocumentPanelId(panelId: string) {
   return panelId.startsWith(COMPONENT_DOCUMENT_PANEL_PREFIX)
 }
 
-/** 判断 Dockview panel 是否为可关闭的文档标签（资源或页面）。 @internal */
+/**
+ * 从 Provider 与稳定资源 key 派生 CAD 文档标签 ID。
+ *
+ * @internal
+ */
+export function createCadDocumentPanelId(providerId: string, assetKey: string) {
+  return `${CAD_DOCUMENT_PANEL_PREFIX}${providerId}:${assetKey}`
+}
+
+/** 判断 Dockview panel 是否为 CAD 文档。 @internal */
+export function isCadDocumentPanelId(panelId: string) {
+  return panelId.startsWith(CAD_DOCUMENT_PANEL_PREFIX)
+}
+
+/** 判断 Dockview panel 是否为可关闭的文档标签（资源、页面、组件或 CAD）。 @internal */
 export function isWorkspaceDocumentPanelId(panelId: string) {
   return isAssetDocumentPanelId(panelId)
     || isPageDocumentPanelId(panelId)
     || isComponentDocumentPanelId(panelId)
+    || isCadDocumentPanelId(panelId)
 }
 
 export const WORKSPACE_SIZES = {

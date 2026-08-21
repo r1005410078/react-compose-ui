@@ -520,10 +520,29 @@ export interface DocumentValidationIssue {
   readonly message: string
 }
 
+/**
+ * 任意文档协议的校验问题形状。
+ *
+ * @remarks
+ * `code` 在这里只约束为 string：稳定机器码的**取值集合**属于各文档协议自己
+ * （ComposeDocument 是 {@link DocumentValidationIssueCode}，CAD 有自己的一套），
+ * 但事务运行时把它们一律转成 `CommandIssue`，只需要这三个字段。
+ *
+ * @public
+ */
+export interface DocumentValidationIssueShape {
+  readonly code: string
+  readonly path: readonly (string | number)[]
+  readonly message: string
+}
+
 /** 文档校验判别结果。 @public */
-export type DocumentValidationResultOf<TDocument> =
+export type DocumentValidationResultOf<
+  TDocument,
+  TIssue extends DocumentValidationIssueShape = DocumentValidationIssue,
+> =
   | { readonly valid: true; readonly document: TDocument }
-  | { readonly valid: false; readonly issues: readonly DocumentValidationIssue[] }
+  | { readonly valid: false; readonly issues: readonly TIssue[] }
 
 /** ComposeDocument 上的校验结果。 @public */
 export type DocumentValidationResult = DocumentValidationResultOf<ComposeDocument>
@@ -538,7 +557,10 @@ export type DocumentValidationResult = DocumentValidationResultOf<ComposeDocumen
  *
  * @public
  */
-export type DocumentValidator<TDocument> = (input: unknown) => DocumentValidationResultOf<TDocument>
+export type DocumentValidator<
+  TDocument,
+  TIssue extends DocumentValidationIssueShape = DocumentValidationIssue,
+> = (input: unknown) => DocumentValidationResultOf<TDocument, TIssue>
 
 /** Runtime 为一个 Entity 解析出的 parent-local border box。 @public */
 export interface ComposeResolvedLayoutBox {

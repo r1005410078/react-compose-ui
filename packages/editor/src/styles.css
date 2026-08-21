@@ -110,7 +110,8 @@
   box-shadow: inset 0 1px rgb(255 255 255 / 2%);
 }
 
-.compose-editor__component-kind-label {
+.compose-editor__component-kind-label,
+.compose-editor__cad-kind-label {
   @apply ct:shrink-0 ct:truncate ct:px-3 ct:text-xs;
   color: var(--compose-text-subtle);
   max-width: 14rem;
@@ -975,7 +976,8 @@
  * flex 列布局：.compose-editor__canvas-content 依赖 flex-1 撑开，放进 grid 容器会塌陷。
  */
 .compose-editor__page-document,
-.compose-editor__component-document {
+.compose-editor__component-document,
+.compose-editor__cad-document {
   display: flex;
   width: 100%;
   height: 100%;
@@ -1325,4 +1327,10 @@
   outline: none;
   box-shadow: 0 0 0 1px var(--compose-accent, #3b8ef0);
   border-radius: 2px;
+}
+
+/* CAD 空态说明：本步没有绘图工具，画布区域只呈现文字提示。 */
+.compose-editor__cad-empty {
+  @apply ct:flex ct:h-full ct:items-center ct:justify-center ct:px-8 ct:text-center ct:text-sm;
+  color: var(--compose-text-subtle);
 }

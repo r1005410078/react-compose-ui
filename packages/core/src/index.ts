@@ -199,6 +199,7 @@ export type {
   DocumentValidationIssue,
   DocumentValidationIssueCode,
   DocumentValidationResult,
+  DocumentValidationIssueShape,
   DocumentValidationResultOf,
   DocumentValidator,
   JsonArray,

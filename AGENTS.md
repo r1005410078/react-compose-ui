@@ -120,6 +120,12 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   Project Component/Variant 才是 Provider 资源。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面聚合 Store 包，只能依赖
   `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
+- `@compose-ui/cad` 是无 React、无 DOM 的 CAD 文档协议与资源 Store 包，只能依赖 `core` 与
+  `assets`。`CadDocument` **复用 ComposeDocument 的 ECS 底座**——Entity 结构、Patch 代数、
+  事务运行时、Undo/Redo 与序列化全部共用，差异只在校验器与 Component 词汇，因此不存在第二套
+  事务实现。CAD 是**无限图纸**：文档不带任何画布或输出尺寸，也没有 Frame，因此不受
+  「`Frame.size` 是尺寸唯一事实来源」这条不变量约束；单位固定 `px`，没有图纸比例。
+  文档以 `.cad.json` 持久化，Store 在写入前必检查，非法内容不落盘。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
   包，只能依赖 `core`，不得依赖任何 React chrome、registry 或 UI Context 包。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解包，只能依赖 `core` 与
@@ -162,7 +168,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`commands`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`cad`、`commands`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、
