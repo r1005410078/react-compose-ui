@@ -521,9 +521,24 @@ export interface DocumentValidationIssue {
 }
 
 /** 文档校验判别结果。 @public */
-export type DocumentValidationResult =
-  | { readonly valid: true; readonly document: ComposeDocument }
+export type DocumentValidationResultOf<TDocument> =
+  | { readonly valid: true; readonly document: TDocument }
   | { readonly valid: false; readonly issues: readonly DocumentValidationIssue[] }
+
+/** ComposeDocument 上的校验结果。 @public */
+export type DocumentValidationResult = DocumentValidationResultOf<ComposeDocument>
+
+/**
+ * 判定并规范化一份文档。
+ *
+ * @remarks
+ * 校验器**同时承担规范化职责**：调用方 MUST 采用返回的 `document` 而不是送入校验的那一份。
+ * 事务运行时据此保存基线并计算后续 Patch，用错哪一份会让规范化在第一次 dispatch 时被
+ * 悄悄回退。
+ *
+ * @public
+ */
+export type DocumentValidator<TDocument> = (input: unknown) => DocumentValidationResultOf<TDocument>
 
 /** Runtime 为一个 Entity 解析出的 parent-local border box。 @public */
 export interface ComposeResolvedLayoutBox {
