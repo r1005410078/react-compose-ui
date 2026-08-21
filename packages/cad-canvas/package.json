@@ -1,8 +1,10 @@
 {
-  "name": "@compose-ui/cad",
+  "name": "@compose-ui/cad-canvas",
   "version": "0.1.0",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "files": [
     "dist"
   ],
@@ -13,10 +15,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@compose-ui/cad": "workspace:*",
+    "@compose-ui/commands": "workspace:*",
+    "@compose-ui/components": "workspace:*",
+    "@compose-ui/core": "workspace:*",
+    "@compose-ui/ui-context": "workspace:*"
   },
   "scripts": {
     "build": "vite build",
@@ -24,11 +34,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint . --max-warnings 0",
-    "pack:dry-run": "bun pm pack --dry-run"
+    "pack:dry-run": "vite build && bun pm pack --dry-run"
   },
-  "dependencies": {
-    "@compose-ui/assets": "workspace:*",
-    "@compose-ui/commands": "workspace:*",
-    "@compose-ui/core": "workspace:*"
+  "peerDependencies": {
+    "react": "^18.3.0 || ^19.0.0",
+    "react-dom": "^18.3.0 || ^19.0.0"
   }
 }

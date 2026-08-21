@@ -573,7 +573,6 @@ export function ComposeEditor({
   const [variantName, setVariantName] = useState('Variant')
   const [creatingVariant, setCreatingVariant] = useState(false)
   const handledCreateRequestRef = useRef(0)
-  const resolvedHistory = history ?? controller?.history
   const createComponentRequest = controller?.createComponentRequest
   useEffect(() => {
     if (
@@ -829,6 +828,16 @@ export function ComposeEditor({
     sessions: cadSessions,
     updateSession: updateCadDocument,
   })
+  /**
+   * 撤销历史跟随活动文档标签。
+   *
+   * @remarks
+   * CAD 标签有自己的事务运行时，撤销必须落在它上面而不是页面/组件的历史。`TransactionRuntime`
+   * 在 entries / canUndo / undo / redo / navigate 上与历史导航控制器结构兼容，因此直接接上去
+   * 即可，历史面板也随之显示 CAD 的撤销栈。
+   */
+  const activeCadSession = activeDocumentPanelId ? cadSessions.get(activeDocumentPanelId) : undefined
+  const resolvedHistory = activeCadSession?.runtime ?? history ?? controller?.history
   const componentKindByAssetKey = useMemo(() => new Map(
     componentCatalog?.components.map((descriptor) => [descriptor.assetKey, descriptor.kind]) ?? [],
   ), [componentCatalog])

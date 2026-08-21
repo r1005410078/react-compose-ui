@@ -1,0 +1,84 @@
+import { useCallback, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { ComposeCommandPrompt } from '@compose-ui/commands'
+import type { CadCanvasMessages } from '../cad-canvas-i18n'
+
+/** CAD 命令行的属性。 @internal */
+export interface CadCommandLineProps {
+  /** 命令进行中的当前提示；空闲时为 null。 */
+  readonly prompt: ComposeCommandPrompt | null
+  /** 上一次操作的反馈，例如「未知命令」。 */
+  readonly notice: string | null
+  readonly messages: CadCanvasMessages
+  /** 用户提交了一行文本：空闲时是命令名，命令进行中是关键字。 */
+  readonly onSubmit: (text: string) => void
+  /** 用户按下 Esc。 */
+  readonly onCancel: () => void
+}
+
+/**
+ * 把提示与关键字渲染成 AutoCAD 风格的一行文本。
+ *
+ * @remarks
+ * 关键字写成 `[放弃(U)/结束(F)]`——括号里的字母就是用户要键入的内容，这个格式本身在告诉用户
+ * 怎么操作，所以不做成下拉或按钮。
+ */
+function promptText(prompt: ComposeCommandPrompt | null, messages: CadCanvasMessages) {
+  if (!prompt) return messages.ready
+  const keywords = prompt.keywords ?? []
+  if (keywords.length === 0) return `${prompt.message}:`
+  const options = keywords.map(({ key, label }) => `${label}(${key})`).join('/')
+  return `${prompt.message}或 [${options}]:`
+}
+
+/**
+ * CAD 命令行。
+ *
+ * @remarks
+ * 命令由这里启动：空闲时键入命令名回车，命令进行中键入关键字回车。Esc 取消整条命令——
+ * AutoCAD 的 Esc 是中止而不是退一步，退一步由命令自己的「放弃」关键字表达。
+ *
+ * @internal
+ */
+export function CadCommandLine({
+  prompt,
+  notice,
+  messages,
+  onSubmit,
+  onCancel,
+}: CadCommandLineProps) {
+  const [text, setText] = useState('')
+
+  const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setText('')
+      onCancel()
+      return
+    }
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    const value = text
+    setText('')
+    onSubmit(value)
+  }, [onCancel, onSubmit, text])
+
+  return (
+    <div className="compose-cad-canvas__command-line">
+      <span className="compose-cad-canvas__prompt" data-testid="cad-command-prompt">
+        {notice ?? promptText(prompt, messages)}
+      </span>
+      <input
+        aria-label={messages.commandLineLabel}
+        className="compose-cad-canvas__command-input"
+        data-testid="cad-command-input"
+        placeholder={messages.commandPlaceholder}
+        spellCheck={false}
+        type="text"
+        value={text}
+        onChange={(event) => { setText(event.target.value) }}
+        onKeyDown={handleKeyDown}
+      />
+    </div>
+  )
+}

@@ -132,7 +132,23 @@
       "version": "0.1.0",
       "dependencies": {
         "@compose-ui/assets": "workspace:*",
+        "@compose-ui/commands": "workspace:*",
         "@compose-ui/core": "workspace:*",
+      },
+    },
+    "packages/cad-canvas": {
+      "name": "@compose-ui/cad-canvas",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/cad": "workspace:*",
+        "@compose-ui/commands": "workspace:*",
+        "@compose-ui/components": "workspace:*",
+        "@compose-ui/core": "workspace:*",
+        "@compose-ui/ui-context": "workspace:*",
+      },
+      "peerDependencies": {
+        "react": "^18.3.0 || ^19.0.0",
+        "react-dom": "^18.3.0 || ^19.0.0",
       },
     },
     "packages/command-panel": {
@@ -214,6 +230,7 @@
         "@compose-ui/asset-browser": "workspace:*",
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/cad": "workspace:*",
+        "@compose-ui/cad-canvas": "workspace:*",
         "@compose-ui/command-panel": "workspace:*",
         "@compose-ui/commands": "workspace:*",
         "@compose-ui/component-library": "workspace:*",
@@ -508,6 +525,8 @@
     "@compose-ui/assets": ["@compose-ui/assets@workspace:packages/assets"],
 
     "@compose-ui/cad": ["@compose-ui/cad@workspace:packages/cad"],
+
+    "@compose-ui/cad-canvas": ["@compose-ui/cad-canvas@workspace:packages/cad-canvas"],
 
     "@compose-ui/command-panel": ["@compose-ui/command-panel@workspace:packages/command-panel"],
 

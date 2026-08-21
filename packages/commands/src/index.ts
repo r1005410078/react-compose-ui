@@ -6,12 +6,25 @@
  * 泛型映射。这五项属于同一件事：分散在不同包时，任何一方都无法独立判定「一次按键命中了
  * 哪个动作」或「两个动作是否撞键」。
  *
- * 本包不认识任何文档协议——动作只是 `run(ctx)`——因此页面编辑器、Stage 与将来的 CAD
- * 命令行可以共用同一套判定。
+ * 另有由**键盘启动**的多步提示命令会话协议：命令自己跑状态机，宿主只转发输入并渲染提示与
+ * 预览。效果类型对消费者泛型，因此本包仍不认识任何文档协议。
  *
  * @packageDocumentation
  */
 
+export {
+  createComposeCommandRegistry,
+  resolveComposeCommand,
+  type ComposeCommandDefinition,
+  type ComposeCommandInput,
+  type ComposeCommandInputKind,
+  type ComposeCommandKeyword,
+  type ComposeCommandPoint,
+  type ComposeCommandPrompt,
+  type ComposeCommandRegistry,
+  type ComposeCommandSession,
+  type ComposeCommandStep,
+} from './command'
 export {
   composeKeyboardEventCode,
   findComposeKeybindingConflict,

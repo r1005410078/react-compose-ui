@@ -12,14 +12,32 @@
  */
 
 export {
+  CAD_COMPONENT_KEYS,
   CAD_DEFAULT_LAYER_ID,
+  createCadLineEntity,
   createEmptyCadDocument,
+  getCadLine,
+  getCadPlacement,
   validateCadDocument,
   type CadDocument,
   type CadDocumentIssue,
   type CadDocumentIssueCode,
   type CadLayer,
+  type CadLine,
+  type CadPlacement,
+  type CadPoint,
 } from './document'
+export {
+  CAD_COMMAND_TYPES,
+  createCadCommandHandlers,
+  createCadLineCommand,
+  createCadLineSession,
+  type CadAddEntityPayload,
+  type CadCommandContext,
+  type CadCommandEffect,
+  type CadCommandMessages,
+  type CadRemoveEntityPayload,
+} from './command'
 export {
   COMPOSE_CAD_FILE_SUFFIX,
   COMPOSE_CAD_MEDIA_TYPE,

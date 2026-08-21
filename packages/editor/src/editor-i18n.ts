@@ -163,7 +163,6 @@ const messages = {
       createFailed: 'CAD 创建失败',
       openFailed: 'CAD 打开失败',
       saveFailed: 'CAD 保存失败',
-      emptyHint: '这份 CAD 文档还没有绘图工具；本步只打通新建、打开与存盘。',
     },
     pages: {
       createPage: '创建页面',
@@ -390,7 +389,6 @@ const messages = {
       createFailed: 'Failed to create the CAD document',
       openFailed: 'Failed to open the CAD document',
       saveFailed: 'Failed to save the CAD document',
-      emptyHint: 'This CAD document has no drawing tools yet; this step only wires up create, open and save.',
     },
     pages: {
       createPage: 'New page',

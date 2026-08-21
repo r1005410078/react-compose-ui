@@ -1328,9 +1328,3 @@
   box-shadow: 0 0 0 1px var(--compose-accent, #3b8ef0);
   border-radius: 2px;
 }
-
-/* CAD 空态说明：本步没有绘图工具，画布区域只呈现文字提示。 */
-.compose-editor__cad-empty {
-  @apply ct:flex ct:h-full ct:items-center ct:justify-center ct:px-8 ct:text-center ct:text-sm;
-  color: var(--compose-text-subtle);
-}
