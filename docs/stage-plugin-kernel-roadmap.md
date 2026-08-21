@@ -428,8 +428,24 @@ window 事件、浏览器单方面收走 Pointer capture。**判等一律用单�
 一个 `stopTemporaryPanRef`——键盘 Hook 必须排在剪贴板之后，指针会话排在最前，两者构成声明
 顺序的环。用 ref 打破它是诚实的：指针会话只在事件发生时读取它，不在渲染期读取。
 
-**剩余**：`ComposeStageReady` 约 1600 行——效果分派与资源拖入、实例下钻、
-resize 实时布局求解、Overlay 与标尺的派生几何、JSX 本体。每一块都持有 ref 与 effect，拆分要按**用户能力**切成 Hook
+**第六刀 `refactor-stage-effect-dispatch` ✅**：内核只产出效果，`applyEffects` 是它们**唯一
+的落地点**；连同三个命令规划器（两点图形端点、绘制提交、外部拖入）共 446 行进
+`use-stage-effect-dispatch.ts`。滚轮平移与缩放另成 `use-stage-wheel-navigation.ts`——它必须
+手装非 passive 原生监听，React 的合成 wheel 是 passive 委托，`preventDefault` 拦不住页面滚动。
+1621 → 1097 行，**宿主里那个 13 字段的 `latestRef` 就此消失**（它正是前几刀反复要求新 Hook
+不要接收的那种聚合引用，搬完之后没有消费者了）。
+
+**又一处平行的 i18n**：资源拖入的六条播报文案走内联 `resolvedLocale === 'en-US' ? … : …`
+三元，绕过了 `stage-i18n` 与宿主的 `formatMessage`。与上一刀在右键菜单修掉的是同一类问题，
+只是这次伪装成了「看起来已经做过国际化」。
+
+**回调稳定性这条约束第三次出现，形状完全一样**：`createDroppedAssets` 的依赖数组里写了
+`messages`，而 `getStageMessages` 每次渲染返回新对象，`connectSurface` 于是每帧重新注册，
+同样的七条用例同样失败。第一次是宿主传入的内联箭头，这次是每帧新建的派生对象——
+**判据不是「它是不是函数」，而是「它每帧是不是新的」。** 这条已写进 spec。
+
+**剩余**：`ComposeStageReady` 约 1000 行——实例下钻、resize 实时布局求解、Overlay 与标尺的
+派生几何、JSX 本体。每一块都持有 ref 与 effect，拆分要按**用户能力**切成 Hook
 而不是按代码形态切，且每刀都需要黄金图护航。目标 < 600 行。
 
 ### 关于 `lockGestureParent`：撤销删除计划

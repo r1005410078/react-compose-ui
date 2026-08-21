@@ -7,7 +7,6 @@ import {
   useComposeContextMenu,
 } from '@compose-ui/components'
 import {
-  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -20,11 +19,6 @@ import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
 } from 'react'
-import type {
-  ComposeAssetReference,
-  ComposeAssetResolver,
-  ComposeResolvedAsset,
-} from '@compose-ui/assets'
 import {
   createComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
@@ -32,22 +26,16 @@ import type {
   ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import {
-  BUILTIN_COMMAND_TYPES,
   collectComposeSwitcherHiddenIds,
   isComposeInstancePath,
   encodeComposeInstancePath,
-  getComposeHierarchy,
-  getComposeLayout,
   getComposeLock,
   getComposeRenderer,
   getComposeVisibility,
-  resolveComposeAppearance,
   resolveComposeGeometryConstraints,
   resolveComposeSwitcherPreview,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
-  type EditorCommand,
-  type JsonValue,
 } from '@compose-ui/core'
 import {
   createRulerTicks,
@@ -59,20 +47,13 @@ import {
   expandScrollRange,
   scrollAxisToViewport,
   viewportToScrollAxes,
-  applyMatrix,
   getEntityWorldBounds,
-  getEntityWorldMatrix,
-  invertMatrix,
   screenToWorld,
   unionRects,
   worldToScreen,
-  zoomViewportAt,
-  toComposeTransform,
   type ResizeHandle,
-  type StagePoint,
   type StageRect,
   type StageDrawnEntity,
-  type StageInteractionEffect,
   type StageInteractionController,
 } from '@compose-ui/stage-engine'
 import type {
@@ -86,17 +67,10 @@ import { instanceSelectionScreenBounds } from './instance-selection-bounds'
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
 import {
-  assetSeedCenters,
-  mapWithConcurrency,
-  presetForDrawingTool,
-} from './stage-asset-drop'
-import {
-  resolveClientPoint,
   screenPoint,
 } from './stage-pointer-geometry'
 import {
   bootstrapSelectionBounds,
-  directionAxis,
   lineSegmentForEntity,
   lineSegmentTransform,
   transformDocument,
@@ -108,7 +82,9 @@ import {
   STAGE_SHORTCUT_ACTIONS,
 } from './stage-shortcuts'
 import { StageContextMenu } from './stage-context-menu'
+import { useStageEffectDispatch } from './use-stage-effect-dispatch'
 import { useStagePointerSession } from './use-stage-pointer-session'
+import { useStageWheelNavigation } from './use-stage-wheel-navigation'
 import { useStageTextEditing } from './use-stage-text-editing'
 import { useStageClipboard } from './use-stage-clipboard'
 import { useStageKeyboardCommands } from './use-stage-keyboard'
@@ -116,20 +92,13 @@ import { StageRulers, type StageRulersHandle } from '../stage-ruler'
 import { StageSceneLayer } from '../stage-scene-layer'
 import { buildResizePreviewSolveDocument } from './resize-preview'
 import {
-  describeEntityCreation,
 } from '@compose-ui/stage-engine'
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
 import { ComposeContainerLabelLayer } from '../container-label-layer'
 import {
-  boundsCenter,
-  entityFromDrawingSeed,
-  entityFromSeed,
-  expandClickDrawingBounds,
-  seedWorldBounds,
   type ShapeDirection,
 } from './drawing-entity'
-import { boundsInParentSpace, resolveRootLanding } from './root-landing'
 
 
 const WORLD_ORIGIN_ICON_HALF_SIZE = 8
@@ -373,9 +342,7 @@ function ComposeStageReady({
   })
   // 宿主回灌给 Controller 的「本次绘制创建了谁」；Controller 按 entityId 去重。
   const [lastDrawn, setLastDrawn] = useState<StageDrawnEntity | null>(null)
-  const [assetDropStatus, setAssetDropStatus] = useState('')
   const contextMenu = useComposeContextMenu<string | null>()
-  const pendingAssetDropsRef = useRef(new Set<AbortController>())
   const resolvedShortcuts = useMemo(
     () => Object.fromEntries(STAGE_SHORTCUT_ACTIONS.map((action) => [
       action,
@@ -535,82 +502,6 @@ function ComposeStageReady({
     return entity && !getComposeLock(entity).locked
   })
 
-  const latestRef = useRef({
-    document,
-    layoutSnapshot,
-    registry,
-    activeFrameId,
-    assetResolver,
-    dispatch,
-    viewport,
-    onViewportChange,
-    onSelectedIdsChange,
-    onPaintSamplingComplete,
-    onEditablePathChange,
-    onEditablePathVertexToggle,
-    idFactory,
-  })
-  useLayoutEffect(() => {
-    latestRef.current = {
-      document,
-      layoutSnapshot,
-      registry,
-      activeFrameId,
-      assetResolver,
-      dispatch,
-      viewport,
-      onViewportChange,
-      onSelectedIdsChange,
-      onPaintSamplingComplete,
-      onEditablePathChange,
-      onEditablePathVertexToggle,
-      idFactory,
-    }
-  })
-
-  useEffect(() => {
-    const root = rootRef.current
-    if (!root) return
-    const handleWheel = (event: WheelEvent) => {
-      const surface = surfaceRef.current
-      if (
-        !surface
-        || (!surface.contains(event.target as Node) && event.target !== root)
-      ) return
-      const current = latestRef.current
-      const point = screenPoint(event, surface)
-      if (event.ctrlKey || event.metaKey) {
-        const factor = Math.exp(-event.deltaY * 0.002)
-        current.onViewportChange(zoomViewportAt(
-          current.viewport,
-          point,
-          current.viewport.zoom * factor,
-        ))
-      }
-      else {
-        current.onViewportChange({
-          ...current.viewport,
-          x: current.viewport.x - event.deltaX,
-          y: current.viewport.y - event.deltaY,
-        })
-      }
-      // React 将 wheel 事件作为 passive listener 委托；在其 SyntheticEvent 中调用
-      // preventDefault 会产生浏览器警告且无法阻止页面滚动。Stage 需要独占画布平移，
-      // 因此在根元素上安装显式的非 passive 原生监听器。
-      event.preventDefault()
-    }
-    root.addEventListener('wheel', handleWheel, { passive: false })
-    return () => root.removeEventListener('wheel', handleWheel)
-  }, [])
-
-  useEffect(() => {
-    const pending = pendingAssetDropsRef.current
-    return () => {
-      pending.forEach((request) => request.abort())
-      pending.clear()
-    }
-  }, [assetResolver])
-
   useEffect(() => {
     const surface = surfaceRef.current
     if (!surface) return
@@ -630,451 +521,34 @@ function ComposeStageReady({
     return () => observer.disconnect()
   }, [onSurfaceSizeChange])
 
-  const createDroppedAssets = useCallback(async (
-    effect: Extract<StageInteractionEffect, { readonly type: 'external.drop' }>,
-  ) => {
-    if (effect.item.kind !== 'assets' || effect.item.items.length === 0) return
-    const started = latestRef.current
-    const resolver: ComposeAssetResolver | undefined = started.assetResolver
-    if (!resolver) {
-      setAssetDropStatus(
-        resolvedLocale === 'en-US'
-          ? 'Assets could not be added: no asset resolver is connected.'
-          : '无法添加资源：未连接资源解析器。',
-      )
-      return
-    }
-    const request = new AbortController()
-    pendingAssetDropsRef.current.add(request)
-    try {
-      const results = await mapWithConcurrency(effect.item.items, 4, async (item) => {
-        const reference: ComposeAssetReference = {
-          providerId: item.providerId,
-          assetKey: item.assetKey,
-          scope: item.scope,
-        }
-        try {
-          const resolved: ComposeResolvedAsset = await resolver.resolve({
-            reference,
-            signal: request.signal,
-          })
-          const created = await started.registry.createAssetSeed({
-            reference,
-            resolved,
-            name: item.name,
-          })
-          return created.ok
-            ? { ok: true as const, value: { reference, seed: created.seed } }
-            : { ok: false as const }
-        }
-        catch {
-          return { ok: false as const }
-        }
-      })
-      if (request.signal.aborted || latestRef.current.assetResolver !== resolver) return
-      const successful = results.flatMap((result) => result.ok ? [result.value] : [])
-      const failedCount = results.length - successful.length
-      if (successful.length === 0) {
-        setAssetDropStatus(
-          resolvedLocale === 'en-US'
-            ? `No assets were added. ${failedCount} failed.`
-            : `未添加任何资源，${failedCount} 项失败。`,
-        )
-        return
-      }
 
-      const current = latestRef.current
-      const target = effect.parentId
-        ? current.document.entities[effect.parentId]
-        : undefined
-      const parent = target
-        && getComposeHierarchy(target)
-        && getComposeVisibility(target).visible
-        && !getComposeLock(target).locked
-        ? target
-        : undefined
-      const inverseParent = parent
-        ? invertMatrix(getEntityWorldMatrix(
-            current.document,
-            current.layoutSnapshot,
-            parent.id,
-          ))
-        : null
-      const offsets = assetSeedCenters(successful)
-      const placements = successful.map(({ seed }, index) => {
-        const offset = offsets[index]!
-        const worldCenter = {
-          x: effect.worldPoint.x + offset.x,
-          y: effect.worldPoint.y + offset.y,
-        }
-        const entityId = current.idFactory()
-        const build = (center: StagePoint) => entityFromSeed(
-          seed,
-          entityId,
-          center,
-          parent ? getComposeLayout(parent) : undefined,
-        )
-        if (parent) {
-          return { entity: build(applyMatrix(inverseParent!, worldCenter)), parentId: parent.id }
-        }
-        const landing = resolveRootLanding(
-          current,
-          seedWorldBounds(seed, worldCenter),
-          (bounds) => build(boundsCenter(bounds)),
-        )
-        return landing
-          ? { entity: landing.entity, parentId: landing.parentId }
-          : { entity: build(worldCenter), parentId: null }
-      })
-      const entities = placements.map(({ entity }) => entity)
-      const commands: EditorCommand[] = placements.map(({ entity, parentId }) => ({
-        id: current.idFactory(),
-        type: BUILTIN_COMMAND_TYPES.createEntity,
-        payload: {
-          entity: entity as unknown as JsonValue,
-          parentId,
-        },
-        meta: {
-          label: describeEntityCreation(entity),
-          source: 'asset-browser',
-          targetIds: [entity.id],
-        },
-      }))
-      const result = current.dispatch({
-        id: current.idFactory(),
-        type: BUILTIN_COMMAND_TYPES.batch,
-        payload: {
-          commands: commands as unknown as JsonValue,
-        },
-        meta: {
-          label: resolvedLocale === 'en-US'
-            ? `Add ${entities.length} asset${entities.length === 1 ? '' : 's'}`
-            : `添加 ${entities.length} 个资源`,
-          source: 'asset-browser',
-          targetIds: entities.map((entity) => entity.id),
-        },
-      })
-      if (result.status === 'committed') {
-        current.onSelectedIdsChange(entities.map((entity) => entity.id))
-      }
-      else {
-        setAssetDropStatus(
-          resolvedLocale === 'en-US'
-            ? `No assets were added. ${results.length} failed.`
-            : `未添加任何资源，${results.length} 项失败。`,
-        )
-        return
-      }
-      setAssetDropStatus(
-        failedCount === 0
-          ? resolvedLocale === 'en-US'
-            ? `${entities.length} asset${entities.length === 1 ? '' : 's'} added.`
-            : `已添加 ${entities.length} 个资源。`
-          : resolvedLocale === 'en-US'
-            ? `${entities.length} added, ${failedCount} failed.`
-            : `已添加 ${entities.length} 项，${failedCount} 项失败。`,
-      )
-    }
-    finally {
-      pendingAssetDropsRef.current.delete(request)
-    }
-  }, [resolvedLocale])
-
-  const createDrawing = useCallback((
-    effect: Extract<StageInteractionEffect, { readonly type: 'drawing.commit' }>,
-  ) => {
-    const current = latestRef.current
-    const seedResult = current.registry.createSeed(presetForDrawingTool(effect.tool))
-    if (!seedResult.ok) return
-    const parentCandidate = effect.parentId
-      ? current.document.entities[effect.parentId]
-      : undefined
-    const parent = parentCandidate
-      && getComposeHierarchy(parentCandidate)
-      && !getComposeLock(parentCandidate).locked
-      && getComposeVisibility(parentCandidate).visible
-      ? parentCandidate
-      : undefined
-    const inverseParent = parent
-      ? invertMatrix(getEntityWorldMatrix(
-          current.document,
-          current.layoutSnapshot,
-          parent.id,
-        ))
-      : null
-    const drawnBounds = boundsInParentSpace(effect.bounds, inverseParent)
-    // 容器单击不拖时落到 Preset 默认尺寸；文字有自己的 Hug 语义，其余图形保持精确 bounds。
-    const localBounds = effect.tool === 'draw-container'
-      ? expandClickDrawingBounds(seedResult.seed, drawnBounds)
-      : drawnBounds
-    const entityId = current.idFactory()
-    const buildEntity = (bounds: StageRect) => {
-      const textClick = effect.tool === 'draw-text' && bounds.width < 1 && bounds.height < 1
-      const drawnEntity = entityFromDrawingSeed(
-        seedResult.seed,
-        entityId,
-        bounds,
-        effect.tool === 'draw-line' || effect.tool === 'draw-arrow'
-          ? {
-              x: directionAxis(effect.end.x - effect.start.x),
-              y: directionAxis(effect.end.y - effect.start.y),
-            }
-          : undefined,
-        textClick
-          ? {
-              preserveHugSizing: true,
-              // 点击创建即刻进入编辑，占位文案会逼用户先全选删除；Prop 名从 Registry 查，
-              // Stage 不认识具体物料类型。
-              emptyTextPropName:
-                current.registry.getEditableTextPropName({
-                  ...seedResult.seed,
-                  id: entityId,
-                }) ?? undefined,
-            }
-          : undefined,
-      )
-      // 组件库中的 Rectangle 可保留其圆角默认值；画布矩形工具遵循设计工具惯例，初始绘制为直角。
-      return effect.tool === 'draw-rectangle'
-        ? {
-            ...drawnEntity,
-            components: {
-              ...drawnEntity.components,
-              Appearance: {
-                ...resolveComposeAppearance(drawnEntity),
-                borderRadius: 0,
-              },
-            },
-          }
-        : drawnEntity
-    }
-    // 命中容器时照常做子级；落在所有场景之外时按类型分流：容器升格成新场景，其余落进激活场景。
-    const landing = parent ? null : resolveRootLanding(current, localBounds, buildEntity)
-    const entity = landing?.entity ?? buildEntity(localBounds)
-    const result = current.dispatch({
-      id: current.idFactory(),
-      type: BUILTIN_COMMAND_TYPES.createEntity,
-      payload: {
-        entity: entity as unknown as JsonValue,
-        // 升格分支的 parentId 就是 null（文档根），不能用 ?? 串下去——那会把新场景吞回
-        // rootIds[0] 里变成嵌套 Frame。
-        parentId: parent ? parent.id : landing ? landing.parentId : null,
-      },
-      meta: {
-        label: describeEntityCreation(entity),
-        source: 'stage',
-        targetIds: [entity.id],
-      },
-    })
-    if (result.status === 'committed') {
-      current.onSelectedIdsChange([entity.id])
-      // Controller 发 drawing.commit 时并不铸 ID，拿不到新 Entity；回灌后它才能判断
-      // 「这次点击创建的是文字，应当立刻进入编辑」。按 entityId 去重由 Controller 负责。
-      setLastDrawn({ entityId: entity.id, tool: effect.tool })
-      // 单次绘制结束即回到选择模式，避免下一次点击意外继续创建同类图形。
-      onToolChange?.('select')
-    }
-  }, [onToolChange])
-
-  const commitSegment = useCallback((
-    effect: Extract<StageInteractionEffect, { readonly type: 'segment.commit' }>,
-  ) => {
-    const current = latestRef.current
-    const entity = current.document.entities[effect.entityId]
-    const renderer = entity ? getComposeRenderer(entity) : null
-    const currentSegment = lineSegmentForEntity(
-      current.document,
-      current.layoutSnapshot,
-      effect.entityId,
-    )
-    const next = lineSegmentTransform(
-      current.document,
-      current.layoutSnapshot,
-      effect,
-    )
-    if (
-      !entity
-      || !renderer
-      || renderer.type !== 'shape'
-      || !currentSegment
-      || !next
-      || getComposeLock(entity).locked
-      || (
-        currentSegment.start.x === effect.start.x
-        && currentSegment.start.y === effect.start.y
-        && currentSegment.end.x === effect.end.x
-        && currentSegment.end.y === effect.end.y
-      )
-    ) return
-    current.dispatch({
-      id: current.idFactory(),
-      type: 'transaction.batch',
-      payload: {
-        commands: [
-          {
-            id: current.idFactory(),
-            type: BUILTIN_COMMAND_TYPES.setTransform,
-            payload: {
-              operation: 'resize',
-              updates: [{
-                entityId: entity.id,
-                transform: toComposeTransform(next.transform),
-              }],
-            },
-          },
-          {
-            id: current.idFactory(),
-            type: BUILTIN_COMMAND_TYPES.setRendererProps,
-            payload: {
-              entityId: entity.id,
-              props: {
-                ...renderer.props,
-                direction: next.direction,
-              },
-            },
-          },
-        ] as unknown as JsonValue,
-      },
-      meta: {
-        label: `Resize ${entity.name} endpoints`,
-        mergeKey: `stage:segment:${entity.id}`,
-        source: 'stage',
-        targetIds: [entity.id],
-      },
-    })
-  }, [])
-
-  useEffect(() => controller.connectSurface({
-    resolveClientPoint(point) {
-      const surface = surfaceRef.current
-      return surface ? resolveClientPoint(point, surface) : null
-    },
-    applyEffects(effects: readonly StageInteractionEffect[]) {
-      const current = latestRef.current
-      effects.forEach((effect) => {
-        if (effect.type === 'pointer.capture') {
-          const root = rootRef.current
-          if (root) capturePointer(root, effect.pointerId)
-          return
-        }
-        if (effect.type === 'pointer.release') {
-          releasePointer(effect.pointerId)
-          return
-        }
-        if (effect.type === 'viewport.change') {
-          current.onViewportChange(effect.viewport)
-          return
-        }
-        if (effect.type === 'selection.change') {
-          current.onSelectedIdsChange(effect.selectedIds)
-          return
-        }
-        if (effect.type === 'paint.sample.complete') {
-          current.onPaintSamplingComplete?.()
-          return
-        }
-        if (effect.type === 'path.change') {
-          current.onEditablePathChange?.({
-            vertexId: effect.vertexId,
-            handle: effect.handle,
-            phase: effect.phase,
-            worldPoint: effect.worldPoint,
-            modifiers: effect.modifiers,
-          })
-          return
-        }
-        if (effect.type === 'path.vertex-toggle') {
-          current.onEditablePathVertexToggle?.(effect.vertexId)
-          return
-        }
-        if (effect.type === 'command.dispatch') {
-          current.dispatch(effect.command)
-          return
-        }
-        if (effect.type === 'segment.commit') {
-          commitSegment(effect)
-          return
-        }
-        if (effect.type === 'drawing.commit') {
-          createDrawing(effect)
-          return
-        }
-        if (effect.type === 'text-editing.enter') {
-          enterTextEditing(effect.entityId)
-          return
-        }
-        if (effect.type === 'text-editing.exit') {
-          exitTextEditing()
-          return
-        }
-        if (effect.item.kind === 'assets') {
-          void createDroppedAssets(effect)
-          return
-        }
-        const entityId = current.idFactory()
-        const seed = current.registry.createSeed(effect.item.presetId)
-        if (!seed.ok) return
-        const parent = effect.parentId
-          ? current.document.entities[effect.parentId]
-          : undefined
-        const validParent = parent
-          && getComposeHierarchy(parent)
-          && !getComposeLock(parent).locked
-          && getComposeVisibility(parent).visible
-          ? parent
-          : undefined
-        const buildEntity = (center: StagePoint) => entityFromSeed(
-          seed.seed,
-          entityId,
-          center,
-          validParent ? getComposeLayout(validParent) : undefined,
-        )
-        // 命中容器时照常做子级；落在所有场景之外时按类型分流，与绘制工具同一条规则。
-        const landing = validParent
-          ? null
-          : resolveRootLanding(
-              current,
-              seedWorldBounds(seed.seed, effect.worldPoint),
-              (bounds) => buildEntity(boundsCenter(bounds)),
-            )
-        const entity = landing?.entity ?? buildEntity(validParent
-          ? applyMatrix(
-              invertMatrix(getEntityWorldMatrix(
-                current.document,
-                current.layoutSnapshot,
-                validParent.id,
-              )),
-              effect.worldPoint,
-            )
-          : effect.worldPoint)
-        const result = current.dispatch({
-          id: current.idFactory(),
-          type: BUILTIN_COMMAND_TYPES.createEntity,
-          payload: {
-            entity: entity as unknown as JsonValue,
-            // 升格分支的 parentId 是 null（文档根），不能用 ?? 串下去。
-            parentId: validParent ? validParent.id : landing ? landing.parentId : null,
-          },
-          meta: {
-            label: describeEntityCreation(entity),
-            source: 'component-palette',
-            targetIds: [entityId],
-          },
-        })
-        if (result.status === 'committed') {
-          current.onSelectedIdsChange([entityId])
-        }
-      })
-    },
-  }), [
+  const { assetDropStatus } = useStageEffectDispatch({
+    activeFrameId,
+    assetResolver,
     capturePointer,
-    commitSegment,
     controller,
-    createDrawing,
-    createDroppedAssets,
+    dispatch,
+    document,
     enterTextEditing,
     exitTextEditing,
+    idFactory,
+    layoutSnapshot,
+    messages,
+    registry,
     releasePointer,
-  ])
+    rootRef,
+    surfaceRef,
+    viewport,
+    onDrawn: setLastDrawn,
+    onToolChange,
+    onEditablePathChange,
+    onEditablePathVertexToggle,
+    onPaintSamplingComplete,
+    onSelectedIdsChange,
+    onViewportChange,
+  })
+
+  useStageWheelNavigation({ rootRef, surfaceRef, viewport, onViewportChange })
 
   // 引擎只需要会话（entityId + 活动顶点），几何直接交给 Overlay。memo 保持引用稳定，
   // 避免每次渲染都触发 updateContext 的手势兼容性检查。
