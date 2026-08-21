@@ -30,7 +30,6 @@ import {
 } from 'react'
 import type {
   CSSProperties,
-  KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from 'react'
 import type {
@@ -53,9 +52,7 @@ import {
   getComposeHierarchy,
   getComposeLayout,
   getComposeLock,
-  getComposeLayoutItem,
   getComposeRenderer,
-  getComposeTransform,
   getComposeVisibility,
   resolveComposeAppearance,
   resolveComposeGeometryConstraints,
@@ -105,7 +102,6 @@ import {
   type StageInteractionEffect,
   type StageInteractionHit,
   type StageInteractionController,
-  type StageTransform,
 } from '@compose-ui/stage-engine'
 import type {
   ComposeStageClipboard,
@@ -143,20 +139,15 @@ import {
 } from './stage-preview-document'
 import {
   DEFAULT_STAGE_SHORTCUTS,
-  DELEGATABLE_STAGE_ACTIONS,
-  isEditableTarget,
-  isStageShortcutMatch,
-  keyboardEventCode,
-  LAYER_ORDER_SHORTCUTS,
   STAGE_SHORTCUT_ACTIONS,
 } from './stage-shortcuts'
+import { useStageKeyboardCommands } from './use-stage-keyboard'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
 import { StageSceneLayer } from '../stage-scene-layer'
 import { buildResizePreviewSolveDocument } from './resize-preview'
 import {
   describeEntityCreation,
   describeEntityTargets,
-  describeTransform,
 } from '@compose-ui/stage-engine'
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
@@ -459,7 +450,6 @@ function ComposeStageReady({
   }
   const contextMenu = useComposeContextMenu<string | null>()
   const pendingAssetDropsRef = useRef(new Set<AbortController>())
-  const activeTemporaryPanCodeRef = useRef<string | null>(null)
   const resolvedShortcuts = useMemo(
     () => Object.fromEntries(STAGE_SHORTCUT_ACTIONS.map((action) => [
       action,
@@ -1629,30 +1619,6 @@ function ComposeStageReady({
     else controller.send({ type: 'pointer.cancel' })
   }
 
-  useEffect(() => {
-    const stopTemporaryPan = () => {
-      activeTemporaryPanCodeRef.current = null
-      controller.send({ type: 'temporary-pan.end' })
-    }
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (activeTemporaryPanCodeRef.current === keyboardEventCode(event)) {
-        stopTemporaryPan()
-      }
-    }
-    const handleBlur = () => {
-      stopTemporaryPan()
-      const session = activePointerSessionRef.current
-      if (session) cancelPointerSession(session)
-      else controller.send({ type: 'pointer.cancel' })
-    }
-    window.addEventListener('keyup', handleKeyUp)
-    window.addEventListener('blur', handleBlur)
-    return () => {
-      window.removeEventListener('keyup', handleKeyUp)
-      window.removeEventListener('blur', handleBlur)
-    }
-  }, [cancelPointerSession, controller])
-
   const beginInteraction = (
     hit: StageInteractionHit,
     event: ReactPointerEvent<Element>,
@@ -1854,316 +1820,6 @@ function ComposeStageReady({
     ?? expandScrollRange(null, bootstrapContentBounds(), visibleWorld)
   const scrollAxes = viewportToScrollAxes(viewport, surfaceSize, activeScrollRange)
 
-  const keyboardCommand = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    onKeyDown?.(event)
-    if (event.defaultPrevented || event.nativeEvent.isComposing) return
-    // 必须排在 isEditableTarget 之前：编辑目标本身就是 contentEditable，焦点在它上面时
-    // 该守卫会把 Esc 一并吞掉，会话就再也退不出去。Enter 不在此列——编辑中它属于换行。
-    if (textEditingRef.current && event.key === 'Escape') {
-      controller.send({ type: 'key.down', key: 'Escape' })
-      event.preventDefault()
-      return
-    }
-    if (isEditableTarget(event.target)) return
-    const actionMatches = (action: ComposeStageShortcutAction) =>
-      resolvedShortcuts[action].some((binding) =>
-        isStageShortcutMatch(event.nativeEvent, binding))
-    if (actionMatches('stage.temporaryPan')) {
-      activeTemporaryPanCodeRef.current = keyboardEventCode(event.nativeEvent)
-      controller.send({ type: 'temporary-pan.start' })
-      event.preventDefault()
-      return
-    }
-    if (event.key === 'Escape') {
-      cancelGesture()
-      return
-    }
-    if (event.key === 'Enter') {
-      controller.send({ type: 'key.down', key: 'Enter' })
-      return
-    }
-    // 宿主可以用统一的动作实现接管可配置动作，避免键盘、工具栏与命令面板各有一套行为。
-    // 必须排在内建分支之前，且只在宿主确认接管时才短路，未接管时行为与不传该属性一致。
-    if (onShortcutAction) {
-      const delegated = DELEGATABLE_STAGE_ACTIONS.find(actionMatches)
-      if (delegated !== undefined && onShortcutAction(delegated)) {
-        event.preventDefault()
-        return
-      }
-    }
-    if (actionMatches('edit.copy') || actionMatches('edit.cut') || actionMatches('edit.paste')) {
-      executeClipboard(
-        actionMatches('edit.copy')
-          ? 'edit.copy'
-          : actionMatches('edit.cut') ? 'edit.cut' : 'edit.paste',
-      )
-      event.preventDefault()
-      return
-    }
-    const toolAction = ([
-      ['stage.selectTool', 'select'],
-      ['stage.moveTool', 'move'],
-      ['stage.scaleTool', 'scale'],
-      ['stage.rotateTool', 'rotate'],
-      ['stage.panTool', 'pan'],
-      ['stage.drawContainerTool', 'draw-container'],
-      ['stage.drawRectangleTool', 'draw-rectangle'],
-      ['stage.drawLineTool', 'draw-line'],
-      ['stage.drawArrowTool', 'draw-arrow'],
-      ['stage.drawCircleTool', 'draw-circle'],
-      ['stage.drawTextTool', 'draw-text'],
-    ] as const).find(([action]) => actionMatches(action))
-    if (toolAction) {
-      onToolChange?.(toolAction[1])
-      event.preventDefault()
-      return
-    }
-    const fitViewport = (target: StageRect | null) => {
-      if (!target || target.width <= 0 || target.height <= 0) return
-      const zoom = Math.min(
-        8,
-        Math.max(
-          0.1,
-          Math.min(surfaceSize.width / target.width, surfaceSize.height / target.height) * 0.85,
-        ),
-      )
-      onViewportChange({
-        zoom,
-        x: (surfaceSize.width - target.width * zoom) / 2 - target.x * zoom,
-        y: (surfaceSize.height - target.height * zoom) / 2 - target.y * zoom,
-      })
-    }
-    if (actionMatches('stage.fitSelection')) {
-      fitViewport(bounds)
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('stage.fitContainer')) {
-      const index = createStageSceneIndex(document, layoutSnapshot, hiddenEntityIds)
-      const selectedContainerId = normalizedSelection.length === 1
-        && getComposeHierarchy(document.entities[normalizedSelection[0]!]!)
-        ? normalizedSelection[0]!
-        : index.commonContainerForSelection(normalizedSelection)
-      const container = selectedContainerId
-        ? document.entities[selectedContainerId]
-        : undefined
-      fitViewport(
-        container && getComposeHierarchy(container)
-          ? getEntityWorldBounds(document, layoutSnapshot, container.id)
-          : null,
-      )
-      event.preventDefault()
-      return
-    }
-    const viewportCenter = {
-      x: surfaceSize.width / 2,
-      y: surfaceSize.height / 2,
-    }
-    if (actionMatches('stage.zoomReset')) {
-      onViewportChange(zoomViewportAt(viewport, viewportCenter, 1))
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('stage.zoomIn')) {
-      onViewportChange(zoomViewportAt(viewport, viewportCenter, viewport.zoom * 1.2))
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('stage.zoomOut')) {
-      onViewportChange(zoomViewportAt(viewport, viewportCenter, viewport.zoom / 1.2))
-      event.preventDefault()
-      return
-    }
-    if (
-      actionMatches('stage.toggleGridSnap')
-      || actionMatches('stage.toggleSmartSnap')
-    ) {
-      const gridAction = actionMatches('stage.toggleGridSnap')
-      dispatch({
-        id: idFactory(),
-        type: 'canvas.configure',
-        payload: gridAction
-          ? {
-              grid: {
-                ...document.canvas.grid,
-                snapEnabled: !document.canvas.grid.snapEnabled,
-              },
-              smartSnap: document.canvas.smartSnap,
-            }
-          : {
-              grid: document.canvas.grid,
-              smartSnap: {
-                nodes: !(
-                  document.canvas.smartSnap.nodes
-                  || document.canvas.smartSnap.guides
-                ),
-                guides: !(
-                  document.canvas.smartSnap.nodes
-                  || document.canvas.smartSnap.guides
-                ),
-              },
-            },
-        meta: {
-          label: gridAction ? messages.toggleGridSnap : messages.toggleSmartSnap,
-          source: 'stage',
-        },
-      })
-      event.preventDefault()
-      return
-    }
-    const editableIds = normalizedSelection.filter((id) => {
-      const entity = document.entities[id]
-      return entity && !getComposeLock(entity).locked
-    })
-    if (editableIds.length === 0) return
-    const layerOrderAction = LAYER_ORDER_SHORTCUTS.find(([action]) =>
-      actionMatches(action))
-    if (layerOrderAction) {
-      const command = createLayerOrderCommand(
-        document,
-        editableIds,
-        layerOrderAction[1],
-        idFactory(),
-      )
-      if (command) dispatch(command)
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('edit.duplicate')) {
-      const duplicate = createDuplicateCommand(
-        document,
-        editableIds[0]!,
-        idFactory,
-        idFactory(),
-      )
-      if (duplicate) {
-        const result = dispatch(duplicate.command)
-        if (result.status === 'committed') onSelectedIdsChange([duplicate.rootId])
-      }
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('edit.group') || actionMatches('edit.ungroup')) {
-      const wantsUngroup = actionMatches('edit.ungroup')
-      const groupAllowed = getGroupCommandAvailability(document, editableIds).available
-      const ungroupAllowed = editableIds.length === 1
-        && getUngroupCommandAvailability(document, editableIds[0]!).available
-      if (wantsUngroup && editableIds.length === 1 && ungroupAllowed) {
-        const container = document.entities[editableIds[0]!]
-        const hierarchy = container && getComposeHierarchy(container)
-        const result = dispatch(createUngroupCommand(
-          document,
-          layoutSnapshot,
-          editableIds[0]!,
-          idFactory(),
-        ))
-        if (result.status === 'committed' && hierarchy) {
-          onSelectedIdsChange(hierarchy.childIds)
-        }
-      }
-      else if (!wantsUngroup && editableIds.length >= 2 && groupAllowed) {
-        const groupId = idFactory()
-        const result = dispatch(createGroupCommand(
-          document,
-          layoutSnapshot,
-          editableIds,
-          groupId,
-          idFactory(),
-        ))
-        if (result.status === 'committed') onSelectedIdsChange([groupId])
-      }
-      event.preventDefault()
-      return
-    }
-    if (actionMatches('edit.delete')) {
-      dispatch({
-        id: idFactory(),
-        type: BUILTIN_COMMAND_TYPES.deleteEntity,
-        payload: { entityIds: editableIds },
-        meta: {
-          label: `Delete ${describeEntityTargets(document, editableIds)}`,
-          source: 'stage',
-          targetIds: editableIds,
-        },
-      })
-      event.preventDefault()
-      return
-    }
-    const directions: Record<string, StagePoint> = {
-      ArrowLeft: { x: -1, y: 0 },
-      ArrowRight: { x: 1, y: 0 },
-      ArrowUp: { x: 0, y: -1 },
-      ArrowDown: { x: 0, y: 1 },
-    }
-    const direction = directions[event.key]
-    if (direction) {
-      // Flow 子级的位置由 Auto Layout 决定，方向键平移对它没有可见效果；过滤掉以免提交
-      // 只写 offset 的空事务。脱流是显式操作，不再由 move 类命令隐式触发。
-      const movableIds = editableIds.filter((id) =>
-        resolveComposeGeometryConstraints(document.entities[id]!).movable
-        && getComposeLayoutItem(document.entities[id]!).positioning !== 'flow')
-      if (movableIds.length === 0) return
-      const distance = event.shiftKey ? 10 : 1
-      const stageUpdates = movableIds.map((entityId) => {
-        const entity = document.entities[entityId]!
-        const box = layoutSnapshot.boxes[entityId]!
-        const transform: StageTransform = {
-          x: box.x,
-          y: box.y,
-          width: box.width,
-          height: box.height,
-          rotation: getComposeTransform(entity).rotation,
-        }
-        return {
-          entityId,
-          transform: {
-            ...transform,
-            x: transform.x + direction.x * distance,
-            y: transform.y + direction.y * distance,
-          },
-        }
-      })
-      const updates = stageUpdates.map(({ entityId, transform }) => {
-        const entity = document.entities[entityId]!
-        const item = getComposeLayoutItem(entity)
-        const box = layoutSnapshot.boxes[entityId]!
-        const parentId = getEntityParentId(document, entityId)
-        const parent = parentId ? document.entities[parentId] : undefined
-        const borderInset = parent ? resolveComposeAppearance(parent).borderWidth : 0
-        const inset = item.positioning === 'absolute'
-          ? { x: box.x - item.offset.x, y: box.y - item.offset.y }
-          : { x: borderInset, y: borderInset }
-        const next = toComposeTransform(transform)
-        return {
-          entityId,
-          transform: {
-            ...next,
-            position: {
-              x: next.position.x - inset.x,
-              y: next.position.y - inset.y,
-            },
-            size: {
-              width: item.width.mode === 'fill' ? next.size.width : item.width.value,
-              height: item.height.mode === 'fill' ? next.size.height : item.height.value,
-            },
-          },
-        }
-      })
-      dispatch({
-        id: idFactory(),
-        type: BUILTIN_COMMAND_TYPES.setTransform,
-        payload: { operation: 'move', updates },
-        meta: {
-          label: describeTransform(document, stageUpdates, 'move'),
-          source: 'stage',
-          targetIds: movableIds,
-          mergeKey: `stage:nudge:${movableIds.join(',')}`,
-        },
-      })
-      event.preventDefault()
-    }
-  }
-
   const contextMenuShortcut = (action: ComposeStageShortcutAction) => {
     const label = formatComposeKeybindings(resolvedShortcuts[action])
     return label ? <ComposeContextMenuShortcut>{label}</ComposeContextMenuShortcut> : null
@@ -2229,6 +1885,48 @@ function ComposeStageReady({
     if (command) dispatch(command)
   }
 
+  // 必须排在 executeClipboard 与 cancelGesture 之后：键盘级联把它们当依赖接收，而不是
+  // 靠闭包在渲染函数里就近取用。
+  const {
+    onKeyDown: keyboardCommand,
+    onKeyUp: keyboardRelease,
+    stopTemporaryPan,
+  } = useStageKeyboardCommands({
+    cancelGesture,
+    controller,
+    dispatch,
+    document,
+    executeClipboard,
+    hiddenEntityIds,
+    idFactory,
+    isTextEditing: () => textEditingRef.current !== null,
+    layoutSnapshot,
+    messages,
+    normalizedSelection,
+    onKeyDown,
+    onSelectedIdsChange,
+    onShortcutAction,
+    onToolChange,
+    onViewportChange,
+    selectionBounds: bounds,
+    shortcuts: resolvedShortcuts,
+    surfaceSize,
+    viewport,
+  })
+
+  // 失焦要同时结束临时平移与取消指针会话，两者必须留在同一个监听器里：拆成两个 blur
+  // 监听器，其相对顺序就变成了 effect 注册顺序的副产品。
+  useEffect(() => {
+    const handleBlur = () => {
+      stopTemporaryPan()
+      const session = activePointerSessionRef.current
+      if (session) cancelPointerSession(session)
+      else controller.send({ type: 'pointer.cancel' })
+    }
+    window.addEventListener('blur', handleBlur)
+    return () => window.removeEventListener('blur', handleBlur)
+  }, [cancelPointerSession, controller, stopTemporaryPan])
+
   return (
     <div
       {...props}
@@ -2263,12 +1961,7 @@ function ComposeStageReady({
         contextMenu.openAt(event, entityId)
       }}
       onKeyDown={keyboardCommand}
-      onKeyUp={(event) => {
-        if (activeTemporaryPanCodeRef.current === keyboardEventCode(event.nativeEvent)) {
-          activeTemporaryPanCodeRef.current = null
-          controller.send({ type: 'temporary-pan.end' })
-        }
-      }}
+      onKeyUp={keyboardRelease}
       onLostPointerCapture={(event) => {
         onLostPointerCapture?.(event)
         if (event.target !== event.currentTarget) return
@@ -2300,8 +1993,7 @@ function ComposeStageReady({
           finishPointerSession(session, event.nativeEvent)
           return
         }
-        activeTemporaryPanCodeRef.current = null
-        controller.send({ type: 'temporary-pan.end' })
+        stopTemporaryPan()
         cancelPointerSession(session, true)
       }}
       onPointerCancel={(event) => {
