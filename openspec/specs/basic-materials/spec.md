@@ -270,11 +270,19 @@ MUST 以警示语义呈现且 MUST NOT 发起加载。引用变化或组件卸�
 Container Preset 与容器能力 MUST 为 v6 创建 Hierarchy、Layout、Clip、LayoutItem、rotation-only
 Transform 和 Appearance。Layout Inspector MUST 编辑明确 Flex 值、padding 与双轴 gap；LayoutItem
 Inspector MUST 编辑 Fixed sizing、Flow/Absolute、offset、margin 与 alignSelf。
+Container Preset 的默认尺寸 MUST 为 `320×240`，使拖入或点击创建的容器在默认缩放下不铺满视口；
+默认外观 MUST 使用深色背景与深色描边，使新建容器不需要先改一次背景就能与深色大屏一致；
+容器物料图标 MUST 使用井号（`#`）字形，以区别于 rectangle 物料。
 
 #### Scenario: 把既有子项转换为 Flow
 - **WHEN** 用户在 Layout Inspector 对含 Absolute 直接子项的 Container 执行转换
 - **THEN** 一个 batch 按 Hierarchy 顺序把全部直接子项设为 Flow
 - **AND** Undo 一次恢复全部原 LayoutItem，后代和未知 Component 不变
+
+#### Scenario: 从物料面板拖入容器
+- **WHEN** 用户把 Container 物料拖入画布
+- **THEN** 创建的容器尺寸为 `320×240`
+- **AND** 默认背景为深色，无需额外改动即可承载深色大屏内容
 
 ### Requirement: 内建 Text 物料
 
@@ -427,53 +435,29 @@ Materials MUST 根据 LayoutItem 当前语义隐藏无效字段，把 Identity�
 
 ### Requirement: Auto Layout 按需启用
 
-新建 Container 与“容器”能力 MUST 默认创建自由 Hierarchy 而不创建 Layout。拥有 Hierarchy 且缺少
-Layout 的 Inspector MUST 提供“布局 +”菜单；菜单当前 MUST 只包含 Auto Layout，不得显示 Grid。
+Container MUST 支持显式启用与移除 Auto Layout。启用 MUST 在一个事务内添加 Layout 并把直接子项
+转为 Flow；移除 MUST 把布局结果烘焙回自由布局所需的持久化几何。
 
-#### Scenario: 创建默认自由 Container
+启用时若新建 Layout 的 `alignItems` 为 `stretch`、子项 `alignSelf` 为 `auto` 且其交叉轴尺寸模式为
+`fixed`，同一条命令 MUST 把该交叉轴改写为 `fill` 并保留原固定值作为回退。改写 MUST 与转 Flow 在
+同一命令内完成，否则子项会先以 fixed 尺寸参与一次布局再跳变。
 
-- **WHEN** Registry 从 Container Preset 创建 Entity，或给 Renderer 添加“容器”能力
-- **THEN** Entity 拥有 Hierarchy 与 Clip 但不拥有 Layout
-- **AND** 直接子项只能使用 Absolute
+#### Scenario: 单事务添加 Layout 并把直接子项转为 Flow
 
-#### Scenario: 添加 Auto Layout
+- **WHEN** 用户在自由 Container 上启用 Auto Layout
+- **THEN** 一个事务内添加 Layout 并把全部直接子项转为 Flow
+- **AND** 任一受影响子项锁定时不生成命令
 
-- **WHEN** 用户从“布局 +”菜单选择 Auto Layout
-- **THEN** 系统在一个事务中添加默认 Flex Layout 并按 childIds 将全部直接子项转为 Flow
-- **AND** 子项顺序、尺寸意图、margin、alignSelf 与旧 offset 保持不变
+#### Scenario: 固定尺寸子项转 Flow 时交叉轴改为 Fill
 
-#### Scenario: 展开未启用布局引导
+- **WHEN** 交叉轴为 `fixed`、`alignSelf` 为 `auto` 的子项随容器启用 Auto Layout 转为 Flow
+- **THEN** 该子项的交叉轴尺寸模式变为 `fill`，原固定值保留为回退值
+- **AND** 主轴尺寸模式保持不变
 
-- **WHEN** 拥有 Hierarchy 且缺少 Layout 的 Entity 展开“布局”分组
-- **THEN** Inspector 紧凑显示 Auto Layout 图示、“使用自动布局”、用途说明、“添加自动布局”操作
-  和“添加后可随时移除”辅助文案
-- **AND** 标题栏加号继续打开布局类型菜单，正文添加操作直接启用 Auto Layout
-- **AND** 两个入口使用同一原子添加规划，锁定或缺少文档时均保持禁用
+#### Scenario: 子项显式对齐时不改写尺寸
 
-#### Scenario: 锁定目标阻止添加
-
-- **WHEN** 容器或任一需要转为 Flow 的直接子项已锁定
-- **THEN** Auto Layout 添加入口禁用并提供可读原因
-- **AND** 文档、历史与 Operation Log 均不变化
-
-#### Scenario: 移除 Auto Layout 保持视觉
-
-- **WHEN** 用户移除一个 Snapshot 完整的 Auto Layout
-- **THEN** 直接 Flow 子项按当前 local box 烘焙为 Absolute，Fill 轴转为 Fixed
-- **AND** 容器自身 Hug 轴转为 Fixed，Absolute 子项与嵌套 Layout 保持不变
-- **AND** 整个操作只提交一个事务
-
-#### Scenario: 无可靠 Snapshot 时禁止移除
-
-- **WHEN** LayoutSnapshot 未就绪或缺少容器或 Flow 子项的必要 box
-- **THEN** 移除入口禁用并说明需要等待布局计算
-- **AND** 系统不使用旧 offset 或 fallback 尺寸降级
-
-#### Scenario: 旧基础 Layout 主动解除归属
-
-- **WHEN** 旧 v6 Entity 的 Composition.baseComponentKeys 仍包含 Layout 且用户主动移除布局
-- **THEN** 同一事务先解除 Layout 的基础归属再移除 Component
-- **AND** 加载旧文档本身不会修改任何 JSON
+- **WHEN** 子项 `alignSelf` 不是 `auto`
+- **THEN** 其交叉轴尺寸模式保持原样
 
 ### Requirement: 物料样式不依赖属性面板内部类名
 
@@ -735,16 +719,47 @@ Text Preset MUST 为 `hug × hug` 提供不大于默认文字内容的回退尺�
 
 基础物料 MUST 注册一个 id 与 Frame Entity 的 `Composition.presetId` 一致的 Entity Preset，
 使所有按 presetId 查询 Registry 的位置都能解析到它。该 Preset MUST 使用与 Container Preset
-相同的图标与默认外观，MUST 标记为面板隐藏——场景由绘制或具名动作产生，MUST NOT 出现在
-基础组件面板里供拖拽。
+相同的图标与默认外观，但默认 Clip MUST 为不裁剪——场景是绝对坐标的原点与工作区里的
+画板，内容越界默认可见，与「新建场景」命令及初始场景的行为一致；需要裁剪时由用户在
+溢出属性里显式开启。Preset MUST 标记为面板隐藏——场景由绘制或具名动作产生，MUST NOT
+出现在基础组件面板里供拖拽。
 
 #### Scenario: 场景 Preset 可从 Registry 解析
 
 - **WHEN** 宿主用 Frame Entity 的 `presetId` 查询 Registry
-- **THEN** 返回场景 Preset，其图标与 Container Preset 相同
+- **THEN** 返回场景 Preset，其图标与 Container Preset 相同且默认 Clip 为不裁剪
 
 #### Scenario: 场景不出现在物料面板
 
 - **WHEN** 基础组件面板列出可拖拽物料
 - **THEN** 列表中不含场景，且列表内容不因新增该 Preset 而改变
+
+### Requirement: 忽略 Auto Layout 开关
+
+几何 Inspector MUST 为父级是 Layout 容器的 Entity 提供「忽略 Auto Layout」开关，作为
+Flow↔Absolute 的唯一显式转换入口；父级不是 Layout 容器时 MUST NOT 显示该开关。
+
+开启（脱流）MUST 在单条事务内：把 `positioning` 切为 `absolute`，offset 从当前布局 box 反算使
+视觉位置不变，并把 fill 轴烘焙为 fixed（值取当前求解尺寸），与 reparent 移出 Flow 的既有烘焙
+规则一致。关闭（回流）MUST 在单条事务内把 `positioning` 切回 `flow`，保持当前 `childIds` 位置
+不变，并按进入 Auto Layout 容器的既有交叉轴采纳规则处理 axis sizing。两个方向 MUST 均可一次
+undo 恢复。
+
+#### Scenario: 开启开关脱流且视觉位置不变
+
+- **WHEN** 用户对 Auto Layout 容器内的 Flow 子级开启「忽略 Auto Layout」
+- **THEN** 一条事务把该子级切为 Absolute，offset 反算自当前布局 box，fill 轴烘焙为 fixed
+- **AND** 切换前后子级在画布上的视觉位置一致，undo 一次恢复
+
+#### Scenario: 关闭开关回流并采纳容器规则
+
+- **WHEN** 用户对已脱流的子级关闭「忽略 Auto Layout」
+- **THEN** 一条事务把该子级切回 Flow，`childIds` 位置不变
+- **AND** axis sizing 按进入容器的既有采纳规则改写，undo 一次恢复
+
+#### Scenario: 非 Auto Layout 父级不显示开关
+
+- **WHEN** 选中 Entity 的父级不是 Layout 容器
+- **THEN** 几何 Inspector 不渲染「忽略 Auto Layout」开关
+- **AND** 其余几何字段呈现不受影响
 

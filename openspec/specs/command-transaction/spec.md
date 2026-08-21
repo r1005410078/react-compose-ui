@@ -220,10 +220,20 @@ core MUST 提供 createComposeBatchCommand，从类型化子命令数组构造 t
 系统 MUST 以结构化命令更新 LayoutItem positioning、axis sizing 与 offset。一次用户 move、nudge、
 resize 或 reparent MUST 最多提交一个 command 或 batch，并 MUST 生成完整 inverse。
 
-#### Scenario: Flow move 原子转换 Absolute
-- **WHEN** 用户完成一次包含 Flow 与 Absolute 目标的 Stage move
-- **THEN** 一个事务把 Flow 目标切为 Absolute、烘焙开始 box 并写入最终 offset
-- **AND** Undo 一次恢复全部目标的 positioning、offset 和原父级几何意图
+`setTransform` 的 move 操作 MUST NOT 隐式改变目标的 `LayoutItem.positioning`。Flow→Absolute 的
+转换与伴随的 fill→fixed 烘焙 MUST 只在 update 项携带显式脱流意图字段（`detachFromFlow: true`）时
+发生；字段缺省为 false，旧命令 JSON 语义不变。意图字段为 true 时，同一事务 MUST 完成 positioning
+切换、开始 box 烘焙与最终 offset 写入，undo 一次恢复全部。
+
+#### Scenario: 显式脱流意图原子转换 Absolute
+- **WHEN** 一条 move 类 `setTransform` 的 update 项携带 `detachFromFlow: true`
+- **THEN** 同一事务把该目标切为 Absolute、烘焙开始 box 并写入最终 offset
+- **AND** Undo 一次恢复 positioning、offset 和原父级几何意图
+
+#### Scenario: 无脱流意图的 move 不改 positioning
+- **WHEN** 一条 move 类 `setTransform` 作用于 Flow 目标且 update 项未携带脱流意图
+- **THEN** 该目标的 `LayoutItem.positioning` 与 axis sizing mode 保持不变
+- **AND** 只有 offset 按命令写入
 
 #### Scenario: Resize Fill 转为 Fixed
 - **WHEN** 用户直接调整一个 Fill axis 的最终尺寸
@@ -245,4 +255,41 @@ document revision、来源父级、顺序与锁定状态。Undo MUST 恢复完�
 
 - **WHEN** document revision、来源父级或来源实体已变化
 - **THEN** 命令在任何 Patch 生效前被拒绝
+
+### Requirement: 可注入的文档校验器
+
+事务运行时 MUST 通过注入的校验器判定文档合法性，MUST NOT 在实现中硬编码任何具体文档协议
+的校验函数。校验器 MUST 同时承担规范化职责：运行时 MUST 采用校验器返回的文档，而不是
+送入校验的那一份。
+
+运行时的文档类型、命令 handler、状态快照、事件与 Patch 应用结果 MUST 对文档类型泛型，
+且 MUST 以 `ComposeDocument` 为默认类型参数，使既有消费者无需改动。
+
+泛型入口 MUST 要求显式传入校验器；MUST NOT 提供回退到 ComposeDocument 校验器的默认值——
+否则为其他文档类型创建运行时时漏传校验器会通过类型检查，却在运行时以无关的校验问题失败。
+面向 ComposeDocument 的既有入口 MUST 保持签名不变，作为泛型入口的特化。
+
+#### Scenario: 其他文档类型获得事务与历史
+
+- **WHEN** 一个非 ComposeDocument 的文档类型传入自己的校验器创建运行时
+- **THEN** dispatch、Patch 应用、Undo/Redo、历史导航与订阅按既有语义工作
+- **AND** 运行时不引用 ComposeDocument 的任何校验规则
+
+#### Scenario: 漏传校验器在类型层被拒绝
+
+- **WHEN** 为非 ComposeDocument 的文档类型调用泛型入口但未提供校验器
+- **THEN** 类型检查失败
+- **AND** 不存在静默使用 ComposeDocument 校验器的运行时路径
+
+#### Scenario: 采用校验器返回的文档
+
+- **WHEN** 校验器对合法输入返回了规范化后的文档
+- **THEN** 运行时保存并对外发布的是规范化后的那一份
+- **AND** 后续 Patch 以它为基线
+
+#### Scenario: 既有消费者不受影响
+
+- **WHEN** 现有代码按原样调用面向 ComposeDocument 的运行时入口与类型
+- **THEN** 编译通过且行为与注入化之前逐项一致
+- **AND** 初始文档非法时仍以配置错误抛出
 

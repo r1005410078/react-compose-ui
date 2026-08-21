@@ -5,13 +5,21 @@ TBD - created by archiving change extract-stage-interaction-engine. Update Purpo
 ## Requirements
 ### Requirement: 无 React 的 Stage Engine 包
 
-Stage Engine MUST 继续只依赖 `@compose-ui/core`，并 MUST 接受 core 定义的 Layout Snapshot 协议而
-不得依赖 layout-engine 或 Yoga。
+Stage Engine MUST 只依赖 `@compose-ui/core` 与 `@compose-ui/interaction-kernel`，并 MUST 接受
+core 定义的 Layout Snapshot 协议而不得依赖 layout-engine 或 Yoga。
+
+`@compose-ui/interaction-kernel` 是零运行时依赖的交互内核包，因此这条依赖 MUST NOT 引入
+React、DOM 或第二套文档协议。
 
 #### Scenario: 独立消费已解析布局
 - **WHEN** 非 DOM 消费者提供 v6 document 与合法 Snapshot
 - **THEN** 可以计算世界几何、吸附与空间命令
 - **AND** 构建产物不包含 Yoga、WASM、React 或 DOM 类型
+
+#### Scenario: 依赖清单只有两项
+- **WHEN** 检查本包的 `package.json`
+- **THEN** `dependencies` 只有 `@compose-ui/core` 与 `@compose-ui/interaction-kernel`
+- **AND** 没有 `peerDependencies`
 
 ### Requirement: Headless 交互 Controller
 
@@ -44,16 +52,21 @@ MUST 保持既有公共签名，并 MUST 默认组合出与重构前逐项一致
 ### Requirement: 手势预览与原子提交
 
 StageInteractionController MUST 在 session 开始冻结 Layout Snapshot。Flow move preview MUST 使用
-resolved box 转为 Absolute 后应用位移；Fill resize preview MUST 把活动 axis 视为 Fixed。Cancel
-MUST 丢弃全部布局意图 preview，pointerup MUST 请求最多一个命令或 batch。
+resolved box 应用位移且 MUST NOT 改变 preview 中的 positioning 语义；Fill resize preview MUST 把
+活动 axis 视为 Fixed。Cancel MUST 丢弃全部布局意图 preview，pointerup MUST 请求最多一个命令或
+batch。
 
-并发的文档或布局变化 MUST 中止引用 Entity 的空间手势（移动、缩放、旋转、端点、Paint），
+并发的**外部**文档或布局变化 MUST 中止引用 Entity 的空间手势（移动、缩放、旋转、端点、Paint），
 但 MUST NOT 中止绘制手势——绘制只由世界坐标定义，不引用任何 Entity。退出文字编辑时删除空文字
 会在同一次指针按下里改动文档，若一并中止，紧接着开始的绘制会当场消失。工具切换仍然中止绘制。
 
+手势自身触发的预览 Snapshot MUST NOT 中止手势：宿主 MUST NOT 把预览 Snapshot 作为 controller
+context 的输入（预览只交给场景渲染层），controller context 始终持有提交态文档与 Snapshot，
+手势的落点判定与提交几何因此始终以冻结 Snapshot 为准。外部并发文档变化的中止判定不变。
+
 #### Scenario: 混合选择移动并取消
 - **WHEN** Flow 与 Absolute 混合选择开始移动后收到 Escape
-- **THEN** preview 中的 positioning 与 offset 全部清除并恢复原 Snapshot
+- **THEN** preview 中的 offset 全部清除并恢复原 Snapshot
 - **AND** surface 不收到 dispatch effect
 
 #### Scenario: 绘制中途的文档变化不打断手势
@@ -61,6 +74,13 @@ MUST 丢弃全部布局意图 preview，pointerup MUST 请求最多一个命令�
 - **WHEN** 绘制手势进行中，文档因删除其他 Entity 而变化
 - **THEN** 绘制手势保持进行，松手仍然请求一次 `drawing.commit`
 - **AND** 同样情况下的移动手势仍然被中止
+
+#### Scenario: 手势自身的预览 Snapshot 不中止手势
+
+- **WHEN** resize 手势期间宿主经预览通道得到新的预览 Snapshot 并渲染
+- **THEN** 手势保持进行，controller context 仍持有提交态 Snapshot，落点与提交几何以冻结
+  Snapshot 为准
+- **AND** 同一期间到达的外部文档事务仍按既有规则中止手势
 
 ### Requirement: 资源批量外部拖入会话
 
@@ -102,28 +122,31 @@ Transform rotation，缓存 MUST 同时区分 document 与 snapshot revision。
 ### Requirement: ECS 结构命令
 
 Reparent 与 Duplicate MUST 接受开始 Layout Snapshot，并按目标 parent Layout 决定 positioning、offset
-与 Fill 转换；Group/Ungroup MUST 为 Flow 目标返回稳定不可用原因。Group MUST 只接受同一直接父级、
-顶层、Absolute、未锁定选择，并通过 Core Group seed 创建 `Composition.presetId: "group"` 的无外观
-结构 Entity，保持世界几何、sibling 顺序和 Undo/Redo。Ungroup MUST 拒绝普通 Container，但允许
-first-class Group 与精确匹配旧 Group seed 的 `presetId: null` 兼容结构。
+与 Fill 转换；Group/Ungroup MUST 为 Flow 目标返回稳定不可用原因。
+
+子级进入 Auto Layout 容器时，若父级 `alignItems` 为 `stretch`、子级 `alignSelf` 为 `auto` 且子级交叉轴
+尺寸模式为 `fixed`，命令 MUST 把该交叉轴改写为 `fill` 并保留原固定值作为回退。改写 MUST 只作用于交叉
+轴，MUST NOT 作用于 `hug` 或 `fill`，也 MUST NOT 在父级 `alignItems` 后续变化时重新触发。
 
 #### Scenario: Scene Tree 跨布局移动
-
 - **WHEN** 节点从 free parent 移入 Layout、在 Layout 间移动或移出到 free parent
 - **THEN** 分别得到 Flow、保持 Flow、或烘焙 Absolute 的确定 LayoutItem
 - **AND** 一个 Undo 恢复 parent、index 与全部原 authoring 值
 
-#### Scenario: 成组生成 first-class Group
+#### Scenario: 固定尺寸子级进入拉伸容器
+- **WHEN** 交叉轴为 `fixed` 的子级进入 `alignItems: stretch` 且自身 `alignSelf` 为 `auto` 的容器
+- **THEN** 该子级的交叉轴尺寸模式变为 `fill`，原固定值保留为回退值
+- **AND** 主轴尺寸模式保持不变
 
-- **WHEN** 用户对同一 free parent 下的两个或更多顶层 Absolute 节点执行 Group
-- **THEN** planner 生成无 Renderer/Appearance/Clip/Layout 的 `presetId: "group"` Entity
-- **AND** 子项世界几何、相对顺序和一次 Undo/Redo 保持确定
+#### Scenario: 子级显式对齐时不改写尺寸
+- **WHEN** 子级 `alignSelf` 不是 `auto`，或父级 `alignItems` 不是 `stretch`
+- **THEN** 子级的交叉轴尺寸模式保持原样
+- **WHEN** 子级交叉轴是 `hug` 或 `fill`
+- **THEN** 命令不改写该轴
 
-#### Scenario: 限定解除分组
-
-- **WHEN** 用户对普通 Container、first-class Group 或历史 Group 兼容结构请求 Ungroup
-- **THEN** 普通 Container 返回稳定不可用原因
-- **AND** 两类 Group 提升子项并保持世界几何
+#### Scenario: 父级此后改变对齐不回溯
+- **WHEN** 子级已按上述规则改写为 `fill`，随后父级 `alignItems` 改为非 stretch
+- **THEN** 已有子级的尺寸模式不被自动改回，用户可自行调整
 
 ### Requirement: ECS 外部拖入
 
@@ -138,49 +161,75 @@ Hierarchy 命中，React adapter MUST 使用 Registry 创建 Entity seed。
 
 ### Requirement: 受约束变换 System
 
-Move、Resize 与 Rotate MUST 查询 Transform、Visibility、Lock 和 TransformConstraints。缺失约束
-时保持当前自由变换；存在约束时 MUST 限制操作、Resize 轴、宽高比和尺寸区间。
+Stage Engine MUST 提供受约束的移动与缩放：轴向手柄把位移约束到单轴，缩放手柄按约束求解新几何，
+两者都只在拖拽期间发布预览、松手时至多提交一条命令。
 
-变换目标的解析与提交规划 MUST 由不产生副作用的纯函数承担：前者从文档、场景索引、变换类型
-与可选手柄解析出可变换目标与选区 bounds，无可变换目标时返回空结果而不是抛错；后者从已完成
-的手势规划出至多一条命令。两者 MUST NOT 创建手势、发布快照或直接产生 surface effect，
-使这些判定可以脱离交互会话单独测试。
+轴向移动手柄 MUST 由独立交互插件承担，并与其他移动入口共用同一个会话工厂——各入口只在**何时
+接管**与是否带轴向约束上不同，接管之后的推进与提交完全一致。
 
-调用方 MUST 传入同一求解周期的文档与场景索引。
+缩放 MUST 由独立交互插件承担，且只在 select 与 scale 工具下接管。选区中只要有一个目标要求
+保持比例，整个选区 MUST 按等比求解，等价于用户一直按着 Shift——否则同一次拖拽会让一部分目标
+变形、另一部分不变形。
 
-#### Scenario: 使用全部 Resize 模式
+命中变换手柄但接管条件不成立时（工具不对、选区没有可变换目标），插件 MUST 消费这次按下而不是
+放行——手柄画在选区之上，放行会让它退化成一次移动或框选。
 
-- **WHEN** 选区分别配置 free、preserve-aspect、horizontal、vertical 和 none
-- **THEN** Engine 只生成对应允许方向的 Transform preview
-- **AND** pointerup 命令声明正确操作语义
+#### Scenario: 轴向手柄只改变一个轴
 
-#### Scenario: Core 与 Engine 一致拒绝锁定
+- **WHEN** move 工具下拖动 X 轴手柄并同时产生 Y 方向位移
+- **THEN** 预览只沿 X 轴移动
 
-- **WHEN** Entity 不可见、锁定或禁止目标变换
-- **THEN** Engine 不开始对应手势且不产生命令 effect
+#### Scenario: 工具已切换时手柄按下被消费
 
-#### Scenario: 目标解析可脱离会话调用
+- **WHEN** 工具已不是 move，用户在残留的轴向手柄上按下
+- **THEN** 本次按下被消费，不产生任何效果，也不开始自由拖动
 
-- **WHEN** 以文档、场景索引、变换类型与手柄调用目标解析
-- **THEN** 得到按约束过滤后的目标与选区 bounds，且没有任何手势或快照副作用
-- **AND** 没有可变换目标时得到空结果
+#### Scenario: 缩放只在松手提交一次
 
-#### Scenario: 提交规划可脱离会话调用
+- **WHEN** 用户拖动角手柄后松手
+- **THEN** 拖拽期间只发布预览，松手请求一条命令
 
-- **WHEN** 以一个已完成的 move、resize 或 rotate 手势调用提交规划
-- **THEN** 得到至多一条命令：move 排除 Flow 目标，resize 只改被拖动的轴，
-  rotate 的位置与尺寸取持久值
-- **AND** 没有可提交的更新时得到空结果
+#### Scenario: 等比约束等价于按住 Shift
+
+- **WHEN** 选区含要求保持比例的目标，用户只沿一个轴拖动手柄
+- **THEN** 另一个轴同步变化
+
+#### Scenario: 并发变化中止变换
+
+- **WHEN** 轴向移动或缩放进行中 `document` 被别处的编辑替换
+- **THEN** 会话被取消，松手不产生任何命令
 
 ### Requirement: 无 DOM Paint 编辑与图层采样会话
 
-StageInteractionController MUST 通过普通数据 context、event、snapshot 和 effect 支持 Paint edit 与 sample；不得导入 React、DOM、Registry 或 Renderer。编辑仅限当前单选 target，pointer move 只产生 preview，pointer up 最多产生一个命令；取消和不兼容 context 更新不提交。
+Engine MUST 在无 DOM 环境下维护 Paint 控制柄拖拽与图层采样会话，移动期间只发布 preview，
+松手时至多请求一条 Appearance 命令。
 
-#### Scenario: 拖动旋转 Entity 的渐变 stop
+Paint 控制柄拖拽 MUST 由独立交互插件承担。命中控制柄但接管条件不成立时（宿主未打开该 Entity
+的 Paint 编辑、选区不止一个、选区不是该 Entity、目标被锁定），插件 MUST 消费这次按下而不是
+放行——控制柄压在 Entity 自身之上，放行会让它退化成一次移动手势。
 
-- **WHEN** 用户拖动旋转或嵌套 Entity 的渐变控制柄
+世界坐标到 Paint 归一化局部坐标的换算 MUST 只有一处实现，供控制柄拖拽与图层采样共用。
+
+#### Scenario: 渐变控制柄只 preview
+
+- **WHEN** 用户拖动线性渐变端点控制柄
 - **THEN** Engine 以逆世界矩阵换算局部 Paint 坐标并发布 preview
-- **AND** pointer up 只提交一次完整 Paint
+- **AND** 松手时请求一条 setAppearance 命令
+
+#### Scenario: 锁定目标上的控制柄按下不退化成移动
+
+- **WHEN** Paint 编辑打开但目标已被锁定，用户在控制柄上按下
+- **THEN** 本次按下被消费，不产生任何效果，也不开始移动手势
+
+#### Scenario: 并发文档变化中止渐变拖拽
+
+- **WHEN** 渐变拖拽进行中，`document` 被别处的编辑替换
+- **THEN** 会话被取消，松手不产生任何命令
+
+#### Scenario: 编辑目标或选区变化结束会话
+
+- **WHEN** 渐变拖拽进行中，宿主关闭 Paint 编辑或选区不再恰好是该 Entity
+- **THEN** 会话被取消，不产生命令
 
 ### Requirement: 基于图层的安全降级取色
 
@@ -290,44 +339,76 @@ context 反复回灌同一事实而重复进入会话，也 MUST NOT 对其他�
 
 ### Requirement: Headless 绘制会话
 
-StageInteractionController MUST 通过普通数据 context、event、snapshot 与 effect 支持 draw preview 和
-`drawing.commit`，不得读取 Registry、Renderer props、React 或 DOM。绘制 geometry MUST 在世界坐标中
-规范化，pointermove MUST 不 dispatch，pointerup MUST 最多请求一个 commit effect，取消 MUST 丢弃 preview。
+Engine MUST 在无 DOM 环境下维护绘制会话：拖拽期间只发布绘制预览，松手时至多请求一次
+`drawing.commit`，MUST NOT 自行创建实体或铸造 ID——真正创建的是宿主。
 
-#### Scenario: 绘制 preview 与提交
+绘制 MUST 由独立交互插件承担，且绘制工具下在空白或节点上按下都起笔：画布上已有内容不该挡住
+继续作图。
 
-- **WHEN** draw tool 从 surface 开始拖拽并正常松手
-- **THEN** snapshot 在拖拽中发布预览 bounds，松手时发出包含 tool、bounds 与合法 parent 命中的 commit effect
-- **AND** Engine 不创建 Entity 或读取 Preset 内容
+绘制会话 MUST NOT 因并发的文档或布局变化中止——它只由世界坐标定义，不引用任何 Entity。退出
+文字编辑时删除空文字会在同一次指针按下里改动文档，一并中止会让紧接着开始的绘制当场消失。
+工具切换 MUST 中止绘制。
 
-#### Scenario: Shift 锁定正方形与正圆
+绘制点的约束（文字只按点创建、Shift 锁定正方形）MUST 只有一处实现，预览与提交共用；否则会
+出现拖动时长出一个框、松手又缩回去的跳变。
 
-- **WHEN** 用户使用 rectangle 或 circle 工具拖拽，并在 pointermove 与 pointerup 时按住 Shift
-- **THEN** preview 与 `drawing.commit` MUST 使用相同的等宽高 bounds，当前鼠标点 MUST 保持为绘制终点，负向拖拽仍保持正确象限
-- **AND** 约束只存在于 Headless Engine；松开 Shift 后恢复常规矩形或椭圆 bounds
+#### Scenario: 松手才请求绘制提交
 
-#### Scenario: 绘制被取消
+- **WHEN** 用户用矩形工具拖出一个区域并松手
+- **THEN** 拖拽期间只发布预览，松手请求一次 `drawing.commit`
 
-- **WHEN** draw gesture 收到 Escape、pointercancel、window blur 或失去有效 pointer capture
-- **THEN** draw preview 被清理且不存在 commit 或 command dispatch effect
+#### Scenario: 绘制中途的文档变化不打断手势
+
+- **WHEN** 绘制手势进行中，文档因删除其他 Entity 而变化
+- **THEN** 绘制手势保持进行，松手仍然请求一次 `drawing.commit`
+
+#### Scenario: 工具切换中止绘制
+
+- **WHEN** 绘制手势进行中工具切换为 select
+- **THEN** 会话被取消，松手不请求任何提交
+
+#### Scenario: 零尺寸按下不创建
+
+- **WHEN** 用户用矩形工具按下后未移动即松手
+- **THEN** 不请求提交
+
+#### Scenario: 文字工具按点即创建
+
+- **WHEN** 用户用文字工具按下后未移动即松手
+- **THEN** 请求一次零尺寸的 `drawing.commit`
 
 ### Requirement: Headless 两点端点会话
 
-StageInteractionController MUST 通过通用的两点端点 hit、`segmentPreview` snapshot 与 `segment.commit` effect
-支持端点拖拽。该协议只包含 Entity ID 与世界坐标，MUST 不读取 Renderer、SVG、Registry、React 或 DOM；
-surface 负责解释和持久化两点图形的业务含义。
+Engine MUST 支持两点图形的端点拖拽会话：移动期间只发布端点 preview 与吸附参考线，松手时
+请求一次端点提交，MUST NOT 自行决定文档表示。
 
-#### Scenario: 端点预览与提交
+端点拖拽 MUST 由独立交互插件承担。插件 MUST 在接管当刻冻结端点与指针的世界坐标偏移，使拖动
+从端点原位开始——端点命中区大于端点本身，直接采用指针位置会让首次移动把端点吸到指针上。
 
-- **WHEN** surface 为当前单选 Entity 发送端点 hit，并持续发送 pointermove
-- **THEN** Controller 使用既有 grid/smart snap 规则更新 `segmentPreview`，不 dispatch 文档命令
-- **AND** pointerup 最多发出一个包含最终首尾坐标的 `segment.commit` effect
+命中端点但接管条件不成立时（目标不存在或不可见、顶层选区不是该 Entity、目标被锁定、几何约束
+禁止 resize、工具既非 select 也非 scale），插件 MUST 消费这次按下而不是放行——端点手柄画在
+图形自身两端，放行会让它退化成一次移动手势。
 
-#### Scenario: 端点会话取消
+#### Scenario: 端点预览只在松手请求一次提交
 
-- **WHEN** 端点会话收到 pointercancel、Escape、window blur 或失去 pointer capture
-- **THEN** `segmentPreview` 被清理
-- **AND** 不发出 `segment.commit` 或文档命令 effect
+- **WHEN** 用户拖动线段端点后松手
+- **THEN** 移动期间只发布 preview，松手请求一次端点提交
+- **AND** 拖动期间不产生任何文档命令
+
+#### Scenario: 抓取偏移避免首次移动跳点
+
+- **WHEN** 用户按在端点命中区内但偏离端点本身的位置并开始拖动
+- **THEN** 端点保持与指针的原始偏移，不跳到指针位置
+
+#### Scenario: 锁定目标上的端点按下不退化成移动
+
+- **WHEN** 目标已被锁定，用户在其端点手柄上按下
+- **THEN** 本次按下被消费，不产生任何效果，也不开始移动手势
+
+#### Scenario: 并发变化中止端点拖拽
+
+- **WHEN** 端点拖拽进行中，`document` 被别处的编辑替换，或选区不再是该 Entity
+- **THEN** 会话被取消，松手不产生端点提交
 
 ### Requirement: Group 动态编辑范围
 
@@ -369,6 +450,12 @@ Pointer 命中路径顶点或切线手柄时产出 `path-handle` 语义命中，
 派发命令。手势 MUST 区分开始、移动与结束三个阶段，并携带修饰键状态，使宿主能实现
 "移动中只更新预览、结束时才写入一条可撤销记录"。
 
+路径手势 MUST 由独立交互插件承担。手势被中断时插件 MUST 显式发出 `cancel` 阶段并携带会话
+推进到的最新世界坐标——路径几何住在宿主的本地预览里，引擎不缓存几何，不通知就收不回来。
+
+未注入路径会话时的 `path-handle` 命中 MUST 被消费而不落到后续插件；顶点上的双击 MUST 只
+请求一次 corner/smooth 切换，不开始拖拽手势。
+
 #### Scenario: 一次拖拽产生三阶段
 
 - **WHEN** 用户按下顶点、移动若干次、松开
@@ -378,6 +465,21 @@ Pointer 命中路径顶点或切线手柄时产出 `path-handle` 语义命中，
 
 - **WHEN** 用户拖动切线手柄
 - **THEN** 引擎不产出任何文档 Patch
+
+#### Scenario: 中断通知带最新世界坐标
+
+- **WHEN** 路径拖拽移动若干次后被取消
+- **THEN** 宿主收到一次 `cancel` 阶段，其世界坐标是最后一次移动的位置而不是按下点
+
+#### Scenario: 并发变化中止路径手势
+
+- **WHEN** 路径拖拽进行中，`document` 被别处的编辑替换，或 `layoutSnapshot.revision` 前进
+- **THEN** 手势被取消并发出 `cancel` 阶段，快照回到空闲
+
+#### Scenario: 宿主换掉编辑目标
+
+- **WHEN** 路径拖拽进行中，宿主把 `pathEditing` 指向另一个 Entity
+- **THEN** 手势被取消，不产生指向原目标的结束阶段
 
 ### Requirement: 同级节点层级命令规划
 
@@ -442,88 +544,84 @@ MUST 由拖拽方向决定：起点在终点左侧时等价 `contain`，起点�
 
 ### Requirement: 框选工具与选区布尔组合
 
-Stage Engine MUST 提供 `marquee` 工具值；该工具下 pointer 在节点上按下 MUST 起框而不是命中该
-节点。`select` 工具 MUST 保持只在空白处起框。两个入口 MUST 使用受控传入的同一个
-`StageMarqueeMode`，未传入时 MUST 回退 `intersect`。框选提交 MUST 按修饰键与已有选区组合：
-无修饰键替换选区，Shift 与已有选区求并集，Alt 从已有选区中移除。框选 MUST 只发布瞬时
-snapshot 与 selection effect，不得产生文档事务。
+Stage Engine MUST 提供独立的框选工具入口：该工具下在空白或节点上按下都起框，这是它与 select
+的唯一行为差异。命中判定模式与选区布尔组合规则两个入口 MUST 完全一致。
 
-#### Scenario: 框选工具从节点上起框
+框选 MUST 至多有一处会话实现。三个接管入口（工具、容器体收敛、默认兜底）MUST 共用同一个会话
+工厂，只在接管条件与起框容器参数上不同——它们在优先级表中分处不同位次，逐个抽取期间尤其
+MUST NOT 各自维护一份推进与提交逻辑。
 
-- **WHEN** 工具为 `marquee` 且用户在一个可见节点上按下并拖动
-- **THEN** controller 进入 marquee phase 并发布框选预览
-- **AND** 不发生该节点的 move 手势
+框选提交 MUST 排除起框容器及其祖先：从非空容器体上起框时用户看的是「容器内的画布」，把该容器
+一并选中等于没有解决当初的收敛冲突。该排除 MUST 与命中解析同属一处提交语义实现。
 
-#### Scenario: 选择工具保持空白起框
+选区布尔组合 MUST 以**释放时**按住的修饰键为准，允许用户在拖拽途中改变意图。
 
-- **WHEN** 工具为 `select` 且用户在一个可见节点上按下并拖动
-- **THEN** controller 进入 move phase
+#### Scenario: 框选工具压在节点上也起框
 
-#### Scenario: Shift 加选与 Alt 减选
+- **WHEN** 框选工具下用户在一个节点上按下
+- **THEN** 开始框选，不选中该节点
 
-- **WHEN** 已有选区存在且用户按住 Shift 完成一次框选
-- **THEN** 框选结果与已有选区求并集
-- **AND** 按住 Alt 完成框选时框选结果从已有选区中移除
+#### Scenario: 组合意图以松手修饰键为准
 
-#### Scenario: 未传入模式时回退相交
+- **WHEN** 用户不按修饰键起框、拖拽途中按住 Shift 并松手
+- **THEN** 结果与既有选区做加选组合
 
-- **WHEN** 宿主未提供 `marqueeMode`
-- **THEN** 判定使用 `intersect`
+#### Scenario: 并发文档变化中止框选
+
+- **WHEN** 框选进行中 `document` 被别处的编辑替换
+- **THEN** 会话被取消，松手不请求任何选区变更
 
 ### Requirement: 画布拖拽 reparent 会话
 
-StageInteractionController MUST 在 `move` 手势进行中持续判定指针下最深的合法容器（复用
-`containerAtPoint` 并排除被拖动选区自身与其后代）。仅当指针进入该容器包围盒内部达到规定比例时才把它
-记为候选 reparent 目标；贴边掠过 MUST NOT 触发，且 MUST NOT 使用停留计时作为额外或替代的触发条件。
-候选目标 MUST 通过 snapshot 暴露供宿主渲染高亮（与 `previewTransforms`、`drawing` 等既有 preview
-状态同一机制，而不是 effect），Controller 自身不持有渲染状态。未达到判定条件时 MUST 保持现有行为：
-目标坐标在原父级内更新，不触发 reparent。
+Stage Engine MUST 在拖拽移动期间求解落点并只发布预览，松手时至多提交一条命令。
 
-Pointer Up 时若存在候选 reparent 目标，Controller MUST 提交一次原子 reparent 命令并使用该目标已有
-的 Flow/Absolute 默认判定（与 `createReparentCommand` 的 `targetManagesFlow` 规则一致），MUST NOT
-新增拖拽手势内的 Flow/Absolute 选择分支，且 MUST NOT 同时发布 Transform 命令——一次手势只表达一个
-结构意图。多选拖拽 MUST 按文档顺序提交以保持相对顺序，祖先/后代去重规则 MUST 与既有场景树批量移动
-规则一致。Escape 与失去指针捕获时 MUST NOT 提交任何命令。
+移动的预览求解与提交规划 MUST 是不写文档、不发效果的纯函数，且 MUST 只有一处实现——移动有
+多个接管入口（轴向手柄与实体拖动），各自维护一份吸附与落点规则会让两条路径悄悄分叉。
 
-候选目标失效（锁定、被删除、变为无 Hierarchy）只能经由文档变化发生，而并发文档变化已由「手势预览与
-原子提交」判定为不兼容并取消整个空间手势，因此该情形 MUST NOT 提交任何命令；Controller 仍 MUST 在
-提交前复核目标有效性，避免未来新增的非文档路径产生指向已失效目标的命令。
+位移在屏幕上不足以视为「开始拖动」时 MUST NOT 产出预览变换、吸附参考线或落点。判定 MUST 按
+屏幕像素而非世界像素——缩小视图下同样的世界位移在屏幕上更小。
 
-#### Scenario: 指针进入容器内部触发候选高亮
+落点仍然成立时，几何 MUST 与 reparent/reorder 写进同一条命令：一次手势产生两条事务会让撤销
+需要按两下。提交前 MUST 复核落点——拖动期间目标容器可能已被锁定、删除或去掉 Hierarchy，此时
+MUST 退回纯几何提交而不是发出指向失效目标的命令。
 
-- **WHEN** 拖动中的指针进入某合法容器包围盒内部达到判定比例
-- **THEN** Controller 在 snapshot 中发布该容器为候选 reparent 目标
-- **AND** 指针退出该区域后候选目标清除且不产生任何命令
+#### Scenario: 拖到容器上换父级
 
-#### Scenario: 贴边掠过不触发吸入
+- **WHEN** 用户把节点拖到另一个容器体上并松手
+- **THEN** 请求一条同时完成换父级与几何写入的命令
 
-- **WHEN** 拖动中的指针只在容器边缘附近掠过，未进入内部达到判定比例
-- **THEN** 不产生候选 reparent 目标
-- **AND** Pointer Up 只更新目标在原父级内的坐标
+#### Scenario: 抖动不产生预览
 
-#### Scenario: 提交 reparent 使用目标默认 Flow/Absolute 判定
+- **WHEN** 用户按下后只移动了不足以激活的距离
+- **THEN** 不发布预览变换、吸附参考线或落点
 
-- **WHEN** Pointer Up 时存在候选 reparent 目标
-- **THEN** 提交的 reparent 命令按目标是否为 Layout 容器分别得到 Flow 或 Absolute 的 LayoutItem
-- **AND** 不产生第二条独立命令来设置 Flow/Absolute
+#### Scenario: 锁定原父级时不产生落点
 
-#### Scenario: 候选目标提交前失效则不提交
+- **WHEN** 拖动中按住 Space，或宿主传入 `lockGestureParent`
+- **THEN** 经过其他容器不产生 reparent 落点
 
-- **WHEN** 候选 reparent 目标在 Pointer Up 前被锁定、删除或经其他事务变为不再是合法容器
+#### Scenario: 落点在提交前失效
+
+- **WHEN** 拖动期间目标容器被别处的编辑锁定
 - **THEN** 该并发文档变化按既有手势原子性取消整个手势，不产生任何命令
-- **AND** 不产生指向已失效目标的命令
 
 ### Requirement: Auto Layout 容器内原地重排
 
-Controller MUST 支持 Auto Layout 容器内的原地重排。对 `flexWrap` 为 `nowrap` 的 Layout 容器，
-`move` 手势拖动其 Flow 子级且指针全程未离开该容器边界时，Controller MUST 按指针在主轴上的位置与
-各兄弟中点比较得到插入位置，Pointer Up MUST 只提交一次改变 `Hierarchy.childIds` 顺序的命令，MUST NOT 修改该 Entity 的 `LayoutItem`，MUST NOT 发布 Transform
-命令。插入位置与拖动前顺序相同时 MUST NOT 提交任何命令。指针离开容器边界时 MUST 回退到既有的烘焙
-Absolute 行为。`flexWrap` 为 `wrap` 或 `wrap-reverse` 的容器 MUST 保持现有行为，不进行原地重排判定。
+Controller MUST 支持 Auto Layout 容器内的原地重排。`move` 手势拖动 Layout 容器的 Flow 子级时，
+Controller MUST 判定插入位置：`flexWrap` 为 `nowrap` 的容器按指针在主轴上的位置与各兄弟中点比较；
+`wrap`/`wrap-reverse` 容器 MUST 先按冻结 Snapshot 中兄弟 box 的交叉轴区间聚类成行（`wrap-reverse`
+行序取反），指针交叉轴坐标先选行，再在行内做主轴中点比较。插入序号 MUST 映射回容器原始
+`childIds` 下标并复用与 `entity.move` 一致的索引代数。
+
+Pointer Up 时存在顺序变化的插入位置则 MUST 只提交一次改变 `Hierarchy.childIds` 顺序的命令，
+MUST NOT 修改该 Entity 的 `LayoutItem`，MUST NOT 发布 Transform 命令。插入位置与拖动前顺序相同、
+或整个手势未产生任何 reorder/reparent 落点时，Flow 目标 MUST 回弹：不提交任何命令，历史不增加
+条目，MUST NOT 回落为烘焙 Absolute——拖拽 MUST NOT 隐式改变 `LayoutItem.positioning`，脱流只能
+经由显式入口（几何 Inspector 的「忽略 Auto Layout」开关）发生。
 
 拖动过程中 Controller MUST 通过 snapshot 发布当前插入位置，供宿主呈现落点预览；预览 MUST NOT 产生
 文档事务。一次拖拽 MUST 只表达一种结构意图：当选区并非全部属于同一候选容器时 MUST NOT 进入重排，
-改按 reparent 或既有 Transform 规则统一处理，MUST NOT 在同一次手势内混合提交重排与其他结构命令。
+改按 reparent 规则统一处理或回弹，MUST NOT 在同一次手势内混合提交重排与其他结构命令。
 
 #### Scenario: 容器内拖拽只重排不烘焙
 
@@ -531,35 +629,35 @@ Absolute 行为。`flexWrap` 为 `wrap` 或 `wrap-reverse` 的容器 MUST 保持
 - **THEN** 提交的命令只改变 `Hierarchy.childIds` 顺序
 - **AND** 该 Entity 的 `LayoutItem.positioning` 保持 `flow` 且不产生 Transform 命令
 
-#### Scenario: 顺序未变化不产生事务
+#### Scenario: wrap 容器跨行重排
+
+- **WHEN** 用户在 `wrap` 容器内把第二行的 Flow 子级拖到第一行两个兄弟之间并松手
+- **THEN** 提交的命令只把该子级移动到第一行对应的 `childIds` 位置
+- **AND** `LayoutItem.positioning` 保持 `flow` 且不产生 Transform 命令
+
+#### Scenario: 顺序未变化回弹且不产生事务
 
 - **WHEN** 用户在容器内拖动 Flow 子级后松手，计算出的插入位置与原顺序一致
-- **THEN** 不提交任何命令
-- **AND** 历史不增加条目
+- **THEN** 不提交任何命令，节点回到布局位置
+- **AND** 历史不增加条目且 `LayoutItem` 不变
+
+#### Scenario: 无有效落点时 Flow 目标回弹
+
+- **WHEN** 用户把 Flow 子级拖出容器边界，松手时指针不在任何合法容器的落点判定区内
+- **THEN** 不提交任何命令，节点回到原容器的布局位置
+- **AND** `LayoutItem.positioning` 保持 `flow`
 
 #### Scenario: 拖动中呈现落点预览
 
-- **WHEN** 用户在 `nowrap` 容器内拖动 Flow 子级并移动指针
+- **WHEN** 用户在 Layout 容器内拖动 Flow 子级并移动指针
 - **THEN** Controller 随指针在 snapshot 中发布当前插入位置
 - **AND** 预览期间不产生任何文档事务
 
 #### Scenario: 选区跨容器时不进入重排
 
-- **WHEN** 一次拖动的选区同时包含某 `nowrap` 容器内的 Flow 子级与该容器外的其他目标
-- **THEN** 不产生重排落点，整次手势按 reparent 或既有 Transform 规则统一处理
+- **WHEN** 一次拖动的选区同时包含某容器内的 Flow 子级与该容器外的其他目标
+- **THEN** 不产生重排落点，整次手势按 reparent 规则统一处理或回弹
 - **AND** 不在同一次手势内混合提交重排与其他结构命令
-
-#### Scenario: 拖出容器边界回退为烘焙 Absolute
-
-- **WHEN** 用户把 `nowrap` 容器内的 Flow 子级拖出该容器边界后松手
-- **THEN** 该目标按既有规则烘焙为 Absolute
-- **AND** 未拖出边界的其他并发拖动目标不受影响
-
-#### Scenario: wrap 容器维持现状
-
-- **WHEN** 容器 `flexWrap` 为 `wrap` 或 `wrap-reverse`
-- **THEN** 拖动其 Flow 子级立即按既有规则烘焙为 Absolute
-- **AND** 不进行插入位置判定
 
 ### Requirement: 组件提取复用已有单根
 
@@ -627,8 +725,14 @@ MUST 判定为不可用且不产生命令。
 
 ### Requirement: Stage 交互插件仲裁
 
-Stage Engine MUST 提供 headless 交互内核：插件按声明的 `priority` 注册，Session Arbiter
-在指针按下时按优先级逐个询问插件，同一时刻 MUST 至多存在一个活动会话。
+Stage Engine MUST 从 `@compose-ui/interaction-kernel` 消费插件契约、注册表与会话仲裁器，
+MUST NOT 自行实现第二套仲裁逻辑。Stage 侧 MUST 只保留 `StageKernelProfile` 这一处绑定与
+建立在它之上的既有名称别名。
+
+Stage 的公共入口 MUST 继续导出既有名称，使插件与消费方不因抽包而改动。
+
+插件按声明的 `priority` 注册，Session Arbiter 在指针按下时按优先级逐个询问插件，同一时刻
+MUST 至多存在一个活动会话。
 
 `claim` 的结果 MUST 是三态：返回会话表示接管并独占后续事件；返回 `consumed` 表示本次按下
 已被处理但不产生会话，Arbiter MUST 停止询问其余插件；返回 `null` 表示不接管，Arbiter
@@ -644,6 +748,18 @@ MUST 至多规划一个命令或 batch，`cancel` MUST 丢弃全部预览。
 
 Arbiter MUST 暴露活动会话由哪个插件创建。内核在处理非指针事件时 MUST 依据该插件身份判定，
 MUST NOT 依据会话自报的手势类型——手势分类属于插件，不得回流到内核。
+
+#### Scenario: 内核来自独立包
+
+- **WHEN** 检查 Stage Engine 的交互内核目录
+- **THEN** 插件契约、注册表与仲裁器由 `@compose-ui/interaction-kernel` 提供
+- **AND** Stage 侧只有 profile 绑定与别名，没有第二份仲裁实现
+
+#### Scenario: 抽包不改变公共名称
+
+- **WHEN** 消费方从 `@compose-ui/stage-engine` 导入既有的插件与仲裁名称
+- **THEN** 全部仍然可用且语义不变
+- **AND** 插件源码不需要修改
 
 #### Scenario: 按优先级接管
 
@@ -715,8 +831,15 @@ MUST NOT 依据会话自报的手势类型——手势分类属于插件，不�
 ### Requirement: 会话自检上下文兼容性
 
 交互会话 MUST 能在受控上下文变化后自行判断是否仍然成立，内核 MUST NOT 通过枚举手势种类
-做这件事。判定为不成立时内核 MUST 取消该会话。未声明判定的会话 MUST 视为始终成立——
-不引用任何 Entity 的会话（平移只改视口、绘制只由世界坐标定义）不得被并发文档变化打断。
+做这件事。判定为不成立时内核 MUST 取消该会话。未声明判定的会话 MUST 视为始终成立。
+
+判据 MUST 按会话是否持有**冻结几何**划分，而不是按它是否提到某个 Entity：
+
+- 持有冻结几何的会话（旋转中心、外接盒、基准角度、起始局部坐标等在接管当刻算好、之后不再
+  重算的量）MUST 在 `document` 引用、`layoutSnapshot.revision` 或 `tool` 任一变化时判定为
+  不成立。这类会话的错误不在交互期显形——预览照常跟随指针，只有落库的数值是错的。
+- 每帧从当前上下文重新求值的会话（图层取色）与不引用任何 Entity 的会话（平移只改视口、
+  绘制只由世界坐标定义）MUST NOT 因并发文档变化中止。
 
 会话的 `cancel` MUST 接收插件上下文：会话在接管与推进过程中发布过快照、捕获过指针，
 取消时 MUST 由它自己还原，内核不知道某个会话发布过什么。
@@ -727,10 +850,25 @@ MUST NOT 依据会话自报的手势类型——手势分类属于插件，不�
 - **THEN** 旋转会话被取消，快照回到空闲且指针捕获被释放
 - **AND** 不产生任何命令
 
+#### Scenario: 并发文档变化中止冻结几何会话
+
+- **WHEN** 旋转进行中，别处的编辑替换了 `document`，而选区与顶层目标都没有变化
+- **THEN** 旋转会话被取消，松手不产生任何命令
+
+#### Scenario: 并发布局重排中止冻结几何会话
+
+- **WHEN** 旋转进行中，`document` 不变但 `layoutSnapshot.revision` 前进
+- **THEN** 旋转会话被取消
+
 #### Scenario: 工具切换中止空间手势
 
 - **WHEN** 旋转进行中工具切换为 select
 - **THEN** 旋转会话被取消
+
+#### Scenario: 逐帧求值的会话不被并发文档变化中止
+
+- **WHEN** 图层取色进行中文档因别处编辑而变化，采样目标未变
+- **THEN** 取色会话保持进行，并按新文档采样
 
 #### Scenario: 无 Entity 引用的会话不受影响
 
@@ -760,4 +898,223 @@ MUST 消费本次按下而不落到框选。
 
 - **WHEN** 旋转工具下没有选区且在空白处按下
 - **THEN** 本次按下被消费，不开始框选也不开始旋转
+
+### Requirement: 非空容器体的命中收敛
+
+`StageInteractionHit` 的 entity 分支 MUST 携带命中来源 `source`，取值 `body` 与 `label`，
+缺省 MUST 视为 `body`。在 `select` 与 `move` 工具下，来源为 `body` 的命中若同时满足
+「目标是 `rootIds` 的直接成员」「目标含 Hierarchy」「其 childIds 非空」「该目标不是
+first-class Group」「该目标不在当前选区内」，controller MUST NOT 选中
+该目标，而是 MUST 起框选，判定几何、方向判定、修饰键布尔组合与「不产生文档事务」MUST 与在
+空白 surface 上起框一致。起框所在的容器及其祖先 MUST NOT 出现在框选结果中：用户是在这个
+容器「里面」框内容，把它自己选中等于没有收敛。
+
+锁定的容器与 first-class Group MUST 完全退出画布选中：无论是否有子元素、是否顶层、命中
+来源是 body 还是 label，controller MUST NOT 选中它们，MUST 起框选。它们的选中入口只剩场景树。
+锁定的非容器 Entity MUST 保持既有行为，仍可被选中检查但不可变换。
+
+来源为 `label` 的命中 MUST 始终按普通 entity 命中处理（锁定容器除外）。收敛 MUST 只作用于会渲染标题标签的
+顶层容器：嵌套容器与 first-class Group 没有标签，收敛之后将没有任何选中入口，因此
+MUST NOT 参与收敛。空容器、已在选区内的容器、非容器
+Entity、Shift 加选、锁定判定、marquee 工具与绘制工具的既有分支 MUST NOT 受影响。收敛
+MUST NOT 改变 SceneIndex 的 `containerAtPoint` 与外部拖入的落点解析。
+
+收敛判定 MUST 是可独立求值的纯函数，与它触发的框选会话同处一个模块——两者是同一个手势的不同
+入口，分开放会让「哪些命中会起框」散在多处。
+
+#### Scenario: 在非空容器空白处起框
+
+- **WHEN** 工具为 `select`，容器含至少一个子元素且不在当前选区内，用户在其空白处按下并拖动
+- **THEN** controller 进入 marquee phase，选区在按下瞬间保持不变
+- **AND** 松手后按框选判定模式与修饰键组合出结果，不产生该容器的 move 手势
+- **AND** 结果只包含被框住的后代，起框容器与其祖先不在其中
+
+#### Scenario: 空容器仍可点体选中
+
+- **WHEN** 容器没有子元素且用户在其上按下
+- **THEN** 该容器成为选区并进入 move 手势
+
+#### Scenario: 已选中的容器可以拖体移动
+
+- **WHEN** 容器已在当前选区内且用户在其空白处按下并拖动
+- **THEN** controller 进入 move phase，容器随指针移动
+
+#### Scenario: 锁定容器与 Group 不可在画布上选中
+
+- **WHEN** 用户在锁定的容器或 first-class Group 上按下，无论来源是 body 还是 label
+- **THEN** 选区不发生变化，controller 进入 marquee phase
+- **AND** 锁定的非容器 Entity 仍可被选中检查
+
+#### Scenario: 嵌套容器不参与收敛
+
+- **WHEN** 用户在一个含子元素、但父级不是画布根的容器上按下
+- **THEN** 该容器成为选区并进入 move 手势
+
+#### Scenario: Group 不参与收敛
+
+- **WHEN** 用户在含子项的 first-class Group 上按下
+- **THEN** 该 Group 成为选区并进入 move 手势
+
+#### Scenario: 标签来源不参与收敛
+
+- **WHEN** 命中来源为 `label` 且目标是含子元素的容器
+- **THEN** 该容器成为选区并进入 move 手势
+
+### Requirement: 会话自报是否接管临时平移键
+
+会话 MUST 能自行声明它把临时平移键（Space）重新解释为自己的修饰键——移动手势用它表达
+「锁定原父级」而不是临时平移，两种意图不会同时出现，手势进行中也无法再按下第二个指针开始平移。
+
+声明后内核 MUST 把
+`temporary-pan.start` / `temporary-pan.end` 只转发给该会话，MUST NOT 再切换 `temporaryPan`
+标志。内核 MUST NOT 按插件 id 列表做这个判断——那会把手势知识重新塞回内核，且每新增一个入口
+都要改内核一次。
+
+未声明的会话与空闲状态 MUST 保持既有行为：切换 `temporaryPan` 标志。
+
+#### Scenario: 移动中按 Space 锁定原父级
+
+- **WHEN** 移动手势进行中用户按下 Space
+- **THEN** `temporaryPan` 标志不变，手势保持在移动阶段
+- **AND** 落点立即重算，经过其他容器不再产生 reparent 落点
+
+#### Scenario: 松开 Space 恢复落点
+
+- **WHEN** 移动手势进行中松开 Space
+- **THEN** 落点恢复，且会话不被当作平移取消
+
+#### Scenario: 空闲时 Space 仍是临时平移
+
+- **WHEN** 没有活动会话时用户按下 Space
+- **THEN** `temporaryPan` 标志置位
+
+### Requirement: 副按键不开启手势
+
+副按键（右键及以上）的按下 MUST NOT 开启任何手势——它承载上下文菜单，一旦被手势接管，菜单就
+再也打不开。
+
+该判定 MUST 在询问插件**之前**完成，MUST NOT 交由各插件各自实现：插件排在单体实现之前被询问，
+分散实现既会漏，也让每个新插件都要重复它。
+
+#### Scenario: 右键点击实体
+
+- **WHEN** 用户在实体上按下右键
+- **THEN** 不改变选区、不开始移动、不产生任何效果
+
+#### Scenario: 中键仍然临时平移
+
+- **WHEN** 用户在画布上按下中键
+- **THEN** 开始平移手势
+
+### Requirement: 实体命中的选中与拖动
+
+在实体上按下 MUST 先请求选区变更，再按工具与目标状态决定这次按下的后续语义：select 工具下对
+可编辑目标的双击进入原地文字编辑且 MUST NOT 开始移动；select/move 工具下未锁定的目标开始移动；
+其余情形只改选区。
+
+选区变更 MUST 先于指针捕获发出——宿主据此更新选中态，顺序颠倒会让捕获落在旧选区上。
+
+基准选区 MUST 滤掉已从文档中消失的 ID，否则 Shift 加选会把失效引用一路带进新选区。
+
+无论是否开始移动，这次按下 MUST 被消费：选区已经改过了，再交给后续插件会让同一次按下既改
+选区又起框。命中不存在的 Entity 时 MUST NOT 产生任何效果——命中判定与文档已经脱节。
+
+#### Scenario: 按下即改选区并开始移动
+
+- **WHEN** select 工具下在未锁定实体上按下
+- **THEN** 先请求把选区改为该实体，再开始移动手势
+
+#### Scenario: 双击进入编辑而不拖动
+
+- **WHEN** select 工具下双击一个可原地编辑的实体
+- **THEN** 请求进入文字编辑，且不开始移动手势
+
+#### Scenario: 锁定目标只改选区
+
+- **WHEN** 用户在锁定实体上按下
+- **THEN** 选区变为该实体，不开始移动，也不落到框选
+
+#### Scenario: Shift 组合忽略失效引用
+
+- **WHEN** 既有选区含已被删除的 ID，用户 Shift 点击另一个实体
+- **THEN** 新选区只含仍然存在的实体
+
+#### Scenario: 命中不存在的实体
+
+- **WHEN** 命中的 Entity 已不在文档中
+- **THEN** 不产生任何效果，也不开始框选
+
+### Requirement: 源码目录对应包的职责描述
+
+`stage-engine` 的功能目录 MUST 与该包在架构边界中声明的职责一一对应——坐标与吸附、场景索引与
+命中、手势规划、空间命令、手势状态机。目录 MUST NOT 按技术类型划分。
+
+新增职责时 MUST 同步更新架构边界描述，两者 MUST NOT 各自演化。
+
+#### Scenario: 读边界描述即可定位代码
+
+- **WHEN** 需要修改吸附规则
+- **THEN** 从「坐标、吸附」这一职责直接定位到 `geometry/`，无需全局搜索
+
+### Requirement: 文件名不得与其目录同名
+
+模块文件名 MUST 在目录之外携带信息，MUST NOT 与所在目录重名——`geometry/geometry.ts` 这样的
+命名等于没有命名。
+
+#### Scenario: 命令目录下的结构命令
+
+- **WHEN** 层级顺序与编组命令住在 `commands/`
+- **THEN** 文件名说明它是哪一类命令，而不是重复目录名
+
+### Requirement: 功能目录经由自身入口对外
+
+每个功能目录 MUST 有自己的 `index.ts`。目录之间以及包公共入口对目录的引用 MUST 走该入口，
+MUST NOT 深层引用实现文件。
+
+包公共入口 MUST 逐符号列出导出而非 `export *`，并按目录分块——它是对外契约，不能随内部文件
+的增删自动变化。
+
+#### Scenario: 新增内部模块不改变公共 API
+
+- **WHEN** 某个功能目录内新增一个实现文件并从目录入口导出
+- **THEN** 包的公共 API 不变，除非公共入口显式列出新符号
+
+### Requirement: 文档无关的交互内核契约
+
+交互内核的会话仲裁、插件注册与插件契约 MUST 对文档类型泛型，MUST NOT 在类型或实现中
+引用任何具体文档协议。内核 MUST 通过单一类型级 profile 接收 context、场景索引、事件、
+claim 触发事件、效果与快照六个类型，使消费者只声明一个类型参数。
+
+承载这三项契约的模块 MUST NOT import Stage 专有类型；该约束 MUST 由依赖边界测试守住，
+而不只是写在文档里。
+
+claim 的触发事件 MUST 由 profile 声明，内核 MUST NOT 硬编码任何事件种类名——命令驱动的
+文档类型由键盘而非指针按下发起交互。
+
+Stage 自身的内核类型 MUST 保持既有公共名称，作为 Stage profile 上的别名对外暴露，使既有
+插件与消费者无需改动。
+
+#### Scenario: 内核不引用具体文档类型
+
+- **WHEN** 检查仲裁器、插件注册表与插件契约三个模块的 import
+- **THEN** 其中不存在对 Stage 专有 context、场景索引、事件、效果或快照类型的引用
+- **AND** 依赖边界测试在出现此类引用时失败
+
+#### Scenario: 单一类型参数
+
+- **WHEN** 一个新文档类型要复用内核
+- **THEN** 它只需声明一个 profile 绑定六个类型
+- **AND** 无需在每个插件、会话与测试夹具的签名上重复这六个类型
+
+#### Scenario: claim 触发事件由 profile 决定
+
+- **WHEN** 某文档类型的交互由键盘命令而非指针按下发起
+- **THEN** 该 profile 把 claim 触发事件声明为对应的事件变体
+- **AND** 内核不因此需要修改
+
+#### Scenario: Stage 既有名称与行为不变
+
+- **WHEN** 泛型化完成后运行既有的 Stage 交互测试与端到端用例
+- **THEN** 18 个插件、Controller 与全部测试的 import 与调用一行未改
+- **AND** 手势行为、快照协议与 effect 协议逐项与泛型化之前一致
 
