@@ -15,6 +15,9 @@ const messages = {
     expectedPoint: '需要一个点',
     lineTitle: '直线',
     cancelled: '已取消',
+    orthoOn: '正交 开',
+    orthoOff: '正交 关',
+    needsReference: '需要一个参照点',
   },
   'en-US': {
     canvasLabel: 'CAD drawing',
@@ -29,6 +32,9 @@ const messages = {
     expectedPoint: 'A point is required',
     lineTitle: 'Line',
     cancelled: 'Cancelled',
+    orthoOn: 'Ortho on',
+    orthoOff: 'Ortho off',
+    needsReference: 'A reference point is required',
   },
 } as const
 

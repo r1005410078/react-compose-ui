@@ -41,6 +41,14 @@ export interface CadCommandMessages {
 export interface CadCommandEffect {
   /** 已确定的线段；命令进行中即可用于预览。 */
   readonly segments: readonly { readonly start: ComposeCommandPoint; readonly end: ComposeCommandPoint }[]
+  /**
+   * 后续相对输入的参照点，即最近一个已确定的顶点。
+   *
+   * @remarks
+   * 由会话给出而不是让宿主记住自己送进来的最后一个点：「放弃」会退回上一个顶点，宿主自行
+   * 记账会与会话失步，随后的正交与相对坐标全部以错误的点为基准。
+   */
+  readonly reference?: ComposeCommandPoint
   /** 提交时派发的命令；预览阶段为 `null`。 */
   readonly command: EditorCommand | null
 }
@@ -88,7 +96,11 @@ export function createCadLineSession(
   const preview = (): ComposeCommandStep<CadCommandEffect> => ({
     status: 'prompt',
     prompt,
-    preview: { segments: segmentsOf(vertices), command: null },
+    preview: {
+      segments: segmentsOf(vertices),
+      command: null,
+      reference: vertices[vertices.length - 1],
+    },
   })
 
   const commit = (): ComposeCommandStep<CadCommandEffect> => {
@@ -109,6 +121,7 @@ export function createCadLineSession(
       status: 'commit',
       effect: {
         segments,
+        reference: vertices[vertices.length - 1],
         command: {
           id: context.idFactory(),
           type: 'transaction.batch',

@@ -1208,3 +1208,43 @@ test('OpenSpec: cad-document / CAD 直线命令 / 敲 L 画两点、撤销、存
   await pagesGrid.getByRole('gridcell', { name: /^Wiring/ }).dblclick()
   await expect(editor.locator('[data-cad-entity]')).toHaveCount(1)
 })
+
+test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Coords')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  const commandInput = canvas.locator('[data-testid="cad-command-input"]')
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+
+  // 1) 三种坐标写法各画一段
+  for (const text of ['L', '0,0', '@100,0', '100<90', 'F']) {
+    await commandInput.fill(text)
+    await commandInput.press('Enter')
+  }
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(2)
+
+  // 2) 缺少参照点时相对写法被拒绝，且会话不结束
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await commandInput.fill('@10,20')
+  await commandInput.press('Enter')
+  await expect(canvas.locator('[data-testid="cad-command-prompt"]')).toContainText('需要一个参照点')
+  await commandInput.press('Escape')
+
+  // 3) F8 切换正交并显示状态
+  await expect(canvas.locator('[data-testid="cad-ortho-state"]')).toHaveText('正交 关')
+  await commandInput.press('F8')
+  await expect(canvas.locator('[data-testid="cad-ortho-state"]')).toHaveText('正交 开')
+})
