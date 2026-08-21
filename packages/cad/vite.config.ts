@@ -18,7 +18,7 @@ export default defineConfig({
       fileName: 'index',
     },
     rollupOptions: {
-      external: ['@compose-ui/assets', '@compose-ui/core'],
+      external: ['@compose-ui/assets', '@compose-ui/commands', '@compose-ui/core'],
     },
   },
 })

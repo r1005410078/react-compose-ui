@@ -1,4 +1,5 @@
 import type { ComposeEntity, DocumentValidationResultOf } from '@compose-ui/core'
+import { CAD_COMPONENT_KEYS, type CadPoint } from './cad-entity'
 import {
   CAD_DEFAULT_LAYER_ID,
   type CadDocument,
@@ -80,6 +81,47 @@ function validateLayers(input: unknown, issues: CadDocumentIssue[]): readonly Ca
   return layers
 }
 
+function isFinitePoint(value: unknown): value is CadPoint {
+  return isRecord(value)
+    && typeof value.x === 'number' && Number.isFinite(value.x)
+    && typeof value.y === 'number' && Number.isFinite(value.y)
+}
+
+/**
+ * 校验图元自身的 Component。
+ *
+ * @remarks
+ * 只校验**已知**的 Component：未知 Key 原样保留，使新增图元种类不必同步改这里就能先落盘。
+ * 但已知 Key 一旦出现就必须完整——半条直线比没有直线更难排查。
+ */
+function validateEntityComponents(
+  entity: ComposeEntity,
+  layerIds: ReadonlySet<string>,
+  issues: CadDocumentIssue[],
+) {
+  const placement = entity.components[CAD_COMPONENT_KEYS.placement]
+  if (placement !== undefined) {
+    const layerId = isRecord(placement) ? placement.layerId : undefined
+    if (typeof layerId !== 'string' || !layerIds.has(layerId)) {
+      issues.push(issue(
+        'entity.missing-layer',
+        ['entities', entity.id, CAD_COMPONENT_KEYS.placement],
+        `图元所属图层不存在：${String(layerId)}`,
+      ))
+    }
+  }
+  const line = entity.components[CAD_COMPONENT_KEYS.line]
+  if (line !== undefined) {
+    if (!isRecord(line) || !isFinitePoint(line.start) || !isFinitePoint(line.end)) {
+      issues.push(issue(
+        'entity.invalid-geometry',
+        ['entities', entity.id, CAD_COMPONENT_KEYS.line],
+        '直线端点必须是有限数值',
+      ))
+    }
+  }
+}
+
 function validateEntities(
   input: unknown,
   issues: CadDocumentIssue[],
@@ -148,6 +190,10 @@ export function validateCadDocument(
 
   const layers = validateLayers(input.layers, issues)
   const entities = validateEntities(input.entities, issues)
+  const layerIds = new Set(layers.map(({ id }) => id))
+  for (const entity of Object.values(entities)) {
+    validateEntityComponents(entity, layerIds, issues)
+  }
 
   const rootIds: string[] = []
   if (!Array.isArray(input.rootIds)) {

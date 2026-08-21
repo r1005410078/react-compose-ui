@@ -69,6 +69,8 @@ export type CadDocumentIssueCode =
   | 'document.missing-root'
   | 'document.duplicate-root'
   | 'document.orphan-entity'
+  | 'entity.missing-layer'
+  | 'entity.invalid-geometry'
 
 /** 一条 CAD 文档校验问题。 @public */
 export interface CadDocumentIssue {

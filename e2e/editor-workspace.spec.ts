@@ -1137,7 +1137,7 @@ test('OpenSpec: editor-workspace-layout / CAD 文档标签 / 新建、打开、�
   const cadTab = editor.locator('[data-workspace-tab^="compose-cad-document:"]')
     .filter({ hasText: 'Topology' })
   await expect(cadTab).toHaveCount(1)
-  await expect(editor.locator('[data-testid="cad-empty-hint"]')).toBeVisible()
+  await expect(editor.locator('[data-testid="cad-canvas"]')).toBeVisible()
 
   // 3) CAD 标签激活时左右边缘面板默认收起
   const sceneTree = editor.locator('[data-workspace-panel="scene-graph"]')
@@ -1154,5 +1154,57 @@ test('OpenSpec: editor-workspace-layout / CAD 文档标签 / 新建、打开、�
 
   await pagesGrid.getByRole('gridcell', { name: /^Topology/ }).dblclick()
   await expect(editor.locator('[data-workspace-tab^="compose-cad-document:"]')).toHaveCount(1)
-  await expect(editor.locator('[data-testid="cad-empty-hint"]')).toBeVisible()
+  await expect(editor.locator('[data-testid="cad-canvas"]')).toBeVisible()
+})
+
+test('OpenSpec: cad-document / CAD 直线命令 / 敲 L 画两点、撤销、存盘重开', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Wiring')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const commandInput = canvas.locator('[data-testid="cad-command-input"]')
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+
+  // 1) 键入 L↵ 启动命令，提示切到「指定第一点」
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await expect(canvas.locator('[data-testid="cad-command-prompt"]')).toContainText('指定第一点')
+
+  // 2) 在图面上点两下，随后回车结束
+  await surface.click({ position: { x: 120, y: 120 } })
+  await expect(canvas.locator('[data-testid="cad-command-prompt"]')).toContainText('指定下一点')
+  await surface.click({ position: { x: 220, y: 100 } })
+  await commandInput.press('Enter')
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(1)
+
+  // 3) 一次撤销回到命令开始之前
+  await surface.click({ position: { x: 60, y: 60 } })
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(0)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(1)
+
+  // 4) 存盘、关闭、重开，直线仍在
+  const cadTab = editor.locator('[data-workspace-tab^="compose-cad-document:"]')
+    .filter({ hasText: 'Wiring' })
+  await cadTab.getByRole('button', { name: /^关闭/ }).click()
+  const unsaved = page.getByRole('dialog')
+  await expect(unsaved).toBeVisible()
+  await unsaved.getByRole('button', { name: '保存' }).click()
+  await expect(cadTab).toHaveCount(0)
+
+  await pagesGrid.getByRole('gridcell', { name: /^Wiring/ }).dblclick()
+  await expect(editor.locator('[data-cad-entity]')).toHaveCount(1)
 })

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ComposeAssetProvider } from '@compose-ui/assets'
 import {
+  createCadCommandHandlers,
   createComposeCadStore,
   validateCadDocument,
   type CadDocument,
@@ -66,6 +67,8 @@ export function useCadWorkspace({
       const runtime = createDocumentTransactionRuntime<CadDocument, DocumentValidationIssueShape>({
         document: snapshot.document,
         validate: validateCadDocument,
+        // CAD 的命令词汇必须显式注入：泛型运行时不预置任何文档协议的内建 handler。
+        handlers: createCadCommandHandlers(),
       })
       return {
         ok: true,
