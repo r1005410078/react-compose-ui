@@ -55,13 +55,3 @@ export const STAGE_GESTURE_PRIORITY: readonly StageGesturePriorityEntry[] = Obje
   { id: 'marquee-fallback', priority: 100, sourceLine: 2198, condition: '无条件兜底 startMarquee()' },
 ])
 
-/**
- * legacy 单体插件的优先级。
- *
- * @remarks
- * 低于表中任何一项：步骤 3 每拆出一个真实插件，它都排在 legacy 之前先被询问，legacy 只接住
- * 尚未搬走的分支。全部搬完后 legacy 归零并删除。
- *
- * @public
- */
-export const STAGE_LEGACY_MONOLITH_PRIORITY = 0

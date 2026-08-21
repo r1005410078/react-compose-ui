@@ -159,10 +159,11 @@ export {
   type StageTransformTargets,
 } from './transform-planning'
 export {
+  captureStageSpatialBaseline,
   createStagePluginRegistry,
   createStageSessionArbiter,
+  STAGE_EXTRACTED_PLUGIN_FACTORIES,
   STAGE_GESTURE_PRIORITY,
-  STAGE_LEGACY_MONOLITH_PRIORITY,
   type StageArbiterBeginResult,
   type StageClaimResult,
   type StageGesturePriorityEntry,
@@ -172,6 +173,7 @@ export {
   type StagePointerDownEvent,
   type StageSession,
   type StageSessionArbiter,
+  type StageSpatialBaselineCheck,
 } from './interaction-kernel'
 
 /** `@compose-ui/stage-engine` 的稳定包标识。 @public */

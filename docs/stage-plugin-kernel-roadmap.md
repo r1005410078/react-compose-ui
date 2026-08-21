@@ -140,8 +140,8 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 因此实际顺序就是优先级表的顺序：
 `text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
 → `segment-resize` ✅ → `marquee-tool` ✅ → `draw` ✅ → `move-axis` ✅ → `marquee-converge` ✅
-→ `entity-select-move` ✅ → `resize` ✅ → `legacy-rotate-hit` → `guide-create` → `guide-move`
-→ `rotate-tool-fallback` → `marquee-fallback`。
+→ `entity-select-move` ✅ → `resize` ✅ → `legacy-rotate-hit` ✅ → `guide-create` ✅ → `guide-move` ✅
+→ `rotate-tool-fallback` ✅ → `marquee-fallback` ✅。
 
 注意 `marquee` 的三个入口分散在 1100 / 800 / 100，中间夹着 draw、resize、guide 等，
 **不能作为一个插件一次抽完**：它必须是三个共享同一会话工厂的插件，各自在自己的位次落地。
@@ -312,8 +312,26 @@ e2e 报「节点层级操作」失败——右键不再弹出上下文菜单。�
 
 legacy 至此只剩 marquee 的两个尾部入口与两个 guide 手势，全都不引用选区。
 
-下一刀是 `legacy-rotate-hit`(500)、`guide-create`(400)、`guide-move`(300)、
-`rotate-tool-fallback`(200)、`marquee-fallback`(100)。
+最后五个入口 ✅ 一次抽完——它们都又小又互不牵连，而「全部」是最平凡的前缀。抽完之后
+**legacy 单体已删除**：`Gesture` 联合类型、`updateGesture`、`begin`、`finish`、
+`createLegacySession`、`legacyClaim` 与 `STAGE_LEGACY_MONOLITH_PRIORITY` 全部不复存在，
+`reset()` 换成转调 `arbiter.cancel` 的 `abortActiveSession()`。
+`interaction-controller.ts` 1488 → 1073 行。
+
+三个 fallback 各自只有一两行判定，但**必须存在**：删掉兜底之后，任何一类命中无人接管就是功能
+消失，而不是退化。`marquee-fallback` 同时是框选的第三个也是最后一个入口——四刀之前建的
+`claimStageMarquee` 在这里收官，三个入口共用一份实现。
+
+**不变量随之升级。** 抽取期间守的是「已抽取集合必须是优先级表的**前缀**」，因为 legacy 永远
+排最后兜底，跳号会让仍在 legacy 里的高优先级分支被挤到后面询问。legacy 删除后没有兜底了，
+守卫改成「注册表必须**逐项覆盖**整张表」外加「优先级两两不同」：漏一项不再是顺序反转，而是
+一类命中彻底无人接管。**守卫要跟着它所保护的结构一起演化，否则它会静默失效**——这一点在
+rotate 那轮已经吃过一次亏。
+
+### 步骤 3 完成
+
+`interaction-controller.ts` **2922 → 1073 行**（−63%），18 个插件，stage-engine 测试 198 → 318。
+`interaction-controller.test.ts` 自始至终**一行未改**。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 

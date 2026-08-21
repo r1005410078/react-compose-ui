@@ -3,17 +3,12 @@ import type {
   ComposeDocument,
   ComposeLayoutSnapshot,
   EditorCommand,
-  JsonValue,
 } from '@compose-ui/core'
 import {
   getComposeLock,
   resolveComposeAppearance,
 } from '@compose-ui/core'
 import {
-  marqueeCombine,
-  marqueeDirection,
-  resolveMarqueeCommit,
-  resolveMarqueeHitTest,
   type StageMarqueeMode,
 } from './marquee-selection'
 import { isDrawingTool } from './drawing-tools'
@@ -25,13 +20,7 @@ import {
   type StageSceneIndex,
 } from './scene-index'
 import {
-  listFrameWorldGuides,
-  resolveTargetFrameId,
-  toFrameGuidePosition,
-} from './frame-space'
-import {
   expandScrollRange,
-  snapValueToGrid,
 } from './canvas-geometry'
 import type {
   ResizeHandle,
@@ -55,7 +44,6 @@ import {
   createStagePluginRegistry,
   createStageSessionArbiter,
   STAGE_EXTRACTED_PLUGIN_FACTORIES,
-  STAGE_LEGACY_MONOLITH_PRIORITY,
   STAGE_PAN_PLUGIN_ID,
 } from './interaction-kernel'
 import {
@@ -63,9 +51,7 @@ import {
   resolvedSpatialTransform,
 } from './transform-preview'
 import type {
-  StageInteractionPlugin,
   StagePluginContext,
-  StageSession,
 } from './interaction-kernel'
 
 /** Stage 当前活动交互。 @public */
@@ -525,15 +511,6 @@ export interface StageInteractionSnapshot {
   readonly dropTarget: StageDropTarget | null
 }
 
-/*
- * 辅助线拖回“自己那条标尺”即视为删除：横线（axis 'y'）属于顶部标尺，落点 y 为负表示已经
- * 退回标尺区域；竖线（axis 'x'）属于左侧标尺，看 x。surface 坐标以标尺内边缘为原点，因此
- * 负值就等价于“在标尺里”。
- */
-function isInsideOwningRuler(axis: 'x' | 'y', point: StagePoint): boolean {
-  return axis === 'y' ? point.y < 0 : point.x < 0
-}
-
 /** controller 接受的普通数据事件。 @public */
 export type StageInteractionEvent =
   | {
@@ -612,41 +589,6 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   guideDelete: false,
   dropTarget: null,
 }
-
-type Gesture =
-  | {
-      readonly type: 'marquee'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly startWorld: StagePoint
-      readonly origin: 'surface'
-      /**
-       * 起框所在的容器 Entity。
-       *
-       * 从非空容器体上起框时，用户看的是「容器内的画布」，结果不应把这个容器连同它的祖先
-       * 一起选中——否则收敛之后仍然会选到容器，等于没有解决冲突。
-       */
-      readonly originEntityId?: string
-      /** 框选开始前的选区；Shift 加选与 Alt 减选以它为基准，不受拖拽过程影响。 */
-      readonly baseSelection: readonly string[]
-      currentWorld: StagePoint
-    }
-  | {
-      readonly type: 'guide-create'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      guides: readonly StagePreviewGuide[]
-      point: StagePoint
-    }
-  | {
-      readonly type: 'guide-move'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly guideId: string
-      readonly axis: 'x' | 'y'
-      position: number
-      point: StagePoint
-    }
 
 function localPaintPointToWorld(
   matrix: StageMatrix,
@@ -778,31 +720,13 @@ export function createStageInteractionController(): StageInteractionController {
   let snapshot = IDLE_SNAPSHOT
   const listeners = new Set<() => void>()
   let surface: StageInteractionSurfacePort | null = null
-  /*
-   * 绞杀式重构的过渡形态：注册表里只有 legacy 一个插件，它内部仍走 begin() 的原级联，
-   * 因此 STAGE_GESTURE_PRIORITY 这张表当前尚未承担仲裁职责。步骤 3 每拆出一个真实插件，
-   * 就把它按表中优先级排到 legacy 之前，legacy 只接住尚未搬走的分支。
-   *
-   * claim 引用后面定义的 legacyClaim：它只在事件到达时被调用，届时闭包已完整建立。
-   */
-  const legacyPlugin: StageInteractionPlugin = {
-    id: 'legacy-monolith',
-    priority: STAGE_LEGACY_MONOLITH_PRIORITY,
-    claim: (event, pluginContext) => legacyClaim(event, pluginContext),
-  }
+  // 绞杀式重构已完成：手势全部住在插件里，仲裁完全由 STAGE_GESTURE_PRIORITY 决定。
   const arbiter = createStageSessionArbiter(
-    createStagePluginRegistry([
-      ...STAGE_EXTRACTED_PLUGIN_FACTORIES.map((create) => create()),
-      legacyPlugin,
-    ]),
+    createStagePluginRegistry(STAGE_EXTRACTED_PLUGIN_FACTORIES.map((create) => create())),
   )
-  /** 辅助线读写与 Frame 相关动作共用的活动 Frame 求解。 */
-  const targetFrameId = (value: StageInteractionContext) =>
-    resolveTargetFrameId(value.document, value.selectedIds, value.activeFrameId)
 
   let context: StageInteractionContext | null = null
   let index: StageSceneIndex | null = null
-  let gesture: Gesture | null = null
   let scrollRange: StageRect | null = null
   let disposed = false
   // 已消费过的回灌 Entity；context 会因文档、选区、viewport 等无关原因反复更新，不去重会让
@@ -898,342 +822,19 @@ export function createStageInteractionController(): StageInteractionController {
   const apply = (effects: readonly StageInteractionEffect[]) => {
     if (effects.length > 0) surface?.applyEffects(effects)
   }
-  const reset = (releasePointer = true) => {
-    const pointerId = gesture?.pointerId
-    gesture = null
-    // reset 是 legacy 中止手势的唯一漏斗，并且有一半调用点在指针生命周期之外（并发文档
-    // 变化、surface 断开、dispose）。在这里同步释放仲裁器的会话引用，否则仲裁器会认为手势
-    // 仍在进行而拒绝下一次接管。release 不回调 session.cancel，因此不会与本函数互相递归。
-    arbiter.release()
-    publish(initialSnapshot(snapshot.temporaryPan))
-    if (releasePointer && pointerId !== undefined) {
-      apply([{ type: 'pointer.release', pointerId }])
-    }
+  /**
+   * 在指针生命周期之外中止活动会话。
+   *
+   * @remarks
+   * 调用点是并发上下文变化、surface 断开与 dispose——它们都不是 pointerup / pointercancel，
+   * 但同样必须让会话把发布过的快照与捕获过的指针还原。会话自己知道该还什么，内核不知道。
+   */
+  const abortActiveSession = () => {
+    arbiter.cancel(pluginContext)
   }
   const worldPoint = (point: StagePoint, viewport = context?.viewport) => viewport
     ? screenToWorld(point, viewport)
     : point
-  const updateGesture = (
-    point: StagePoint,
-    modifiers: StageInteractionModifiers,
-  ) => {
-    if (!gesture || !context || !index) return
-    // 变换会话使用 pointerdown 时的 viewport；宿主布局重测或受控 viewport 回传
-    // 不得改变同一次 Pointer 手势的坐标基线。
-    const world = worldPoint(point, gesture.viewport)
-    if (gesture.type === 'marquee') {
-      gesture.currentWorld = world
-      publish({
-        ...snapshot,
-        phase: 'marquee',
-        marquee: rectFromPoints(gesture.startWorld, world),
-        marqueeHitTest: resolveMarqueeHitTest(
-          context?.marqueeMode,
-          marqueeDirection(gesture.startWorld, world),
-        ),
-      })
-      return
-    }
-    if (gesture.type === 'guide-create') {
-      gesture.point = point
-      gesture.guides = gesture.guides.map((guide) => ({
-        ...guide,
-        position: snapValueToGrid(
-          guide.axis === 'x' ? world.x : world.y,
-          guide.axis === 'x'
-            ? context!.document.canvas.grid.stepX
-            : context!.document.canvas.grid.stepY,
-          guide.axis === 'x'
-            ? context!.document.canvas.grid.offsetX
-            : context!.document.canvas.grid.offsetY,
-          context!.document.canvas.grid.snapEnabled && !modifiers.command,
-        ),
-      }))
-      publish({
-        ...snapshot,
-        phase: 'guide-create',
-        guidePreview: gesture.guides,
-        guideDelete: gesture.guides.every((guide) => isInsideOwningRuler(guide.axis, point)),
-      })
-      return
-    }
-    if (gesture.type === 'guide-move') {
-      gesture.point = point
-      gesture.position = snapValueToGrid(
-        gesture.axis === 'x' ? world.x : world.y,
-        gesture.axis === 'x'
-          ? context.document.canvas.grid.stepX
-          : context.document.canvas.grid.stepY,
-        gesture.axis === 'x'
-          ? context.document.canvas.grid.offsetX
-          : context.document.canvas.grid.offsetY,
-        context.document.canvas.grid.snapEnabled && !modifiers.command,
-      )
-      publish({
-        ...snapshot,
-        phase: 'guide-move',
-        guideDelete: isInsideOwningRuler(gesture.axis, point),
-        guidePreview: [{
-          id: gesture.guideId,
-          axis: gesture.axis,
-          position: gesture.position,
-        }],
-      })
-      return
-    }
-  }
-
-  const begin = (event: Extract<StageInteractionEvent, { type: 'pointer.down' }>) => {
-    if (!context || !index || !surface || event.button > 1) return
-    const effects: StageInteractionEffect[] = []
-    const startMarquee = (originEntityId?: string) => {
-      const viewport = context!.viewport
-      const startWorld = worldPoint(event.point, viewport)
-      gesture = {
-        type: 'marquee',
-        pointerId: event.pointerId,
-        viewport,
-        startWorld,
-        origin: 'surface',
-        originEntityId,
-        baseSelection: context!.selectedIds,
-        currentWorld: startWorld,
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'marquee',
-        // 起点即终点，方向尚未确定；按下的一瞬间先按 ltr 归约，移动时会立即刷新。
-        marqueeHitTest: resolveMarqueeHitTest(context!.marqueeMode, 'ltr'),
-      })
-      apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
-    }
-    if (event.hit.kind === 'rotate') {
-      // 非 rotate 工具忽略旧旋转命中；rotate 工具已在上方独占处理。
-      return
-    }
-    if (
-      event.hit.kind === 'ruler'
-      || event.hit.kind === 'ruler-corner'
-    ) {
-      /*
-       * 顶部（水平）标尺拖出的是横线，横线由 world.y 定位，因此 guide.axis 是 'y'；左侧标尺
-       * 同理拖出 axis 'x' 的竖线。标尺自身的 axis 与辅助线的 axis 互为反向，不能直接沿用。
-       */
-      const axes: readonly ('x' | 'y')[] = event.hit.kind === 'ruler-corner'
-        ? ['x', 'y']
-        : [event.hit.axis === 'x' ? 'y' : 'x']
-      const viewport = context.viewport
-      const world = worldPoint(event.point, viewport)
-      const guides = axes.map((axis) => ({
-        id: context!.idFactory(),
-        axis,
-        position: snapValueToGrid(
-          axis === 'x' ? world.x : world.y,
-          axis === 'x'
-            ? context!.document.canvas.grid.stepX
-            : context!.document.canvas.grid.stepY,
-          axis === 'x'
-            ? context!.document.canvas.grid.offsetX
-            : context!.document.canvas.grid.offsetY,
-          context!.document.canvas.grid.snapEnabled && !event.modifiers.command,
-        ),
-      }))
-      gesture = {
-        type: 'guide-create',
-        pointerId: event.pointerId,
-        viewport,
-        guides,
-        point: event.point,
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'guide-create',
-        guidePreview: guides,
-      })
-      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
-      return
-    }
-    if (event.hit.kind === 'guide') {
-      const guideId = event.hit.guideId
-      const guide = listFrameWorldGuides(
-        context.document,
-        targetFrameId(context),
-        index,
-      ).find((item) => item.id === guideId)
-      if (!guide) return
-      gesture = {
-        type: 'guide-move',
-        pointerId: event.pointerId,
-        viewport: context.viewport,
-        guideId: guide.id,
-        axis: guide.axis,
-        position: guide.value,
-        point: event.point,
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'guide-move',
-        guidePreview: [{ id: guide.id, axis: guide.axis, position: guide.value }],
-      })
-      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
-      return
-    }
-    // 旋转工具绝不框选（兜底：避免漏判的 hit 落到默认 marquee）。
-    if (context.tool === 'rotate') return
-    startMarquee()
-  }
-
-  const finish = (
-    event: Extract<StageInteractionEvent, { type: 'pointer.up' }>,
-  ) => {
-    if (!gesture || gesture.pointerId !== event.pointerId || !context || !index) return
-    // 最终点的推进由仲裁器在 commit 之前驱动（见 StageSessionArbiter.commit），这里不再自行
-    // 调用 updateGesture：提交几何取自最终点推进之后的状态，该约束现在由内核统一保证。
-    const finished = gesture
-    const pointerId = finished.pointerId
-    gesture = null
-    const effects: StageInteractionEffect[] = []
-    if (finished.type === 'marquee') {
-      const selectedIds = resolveMarqueeCommit({
-        area: rectFromPoints(finished.startWorld, finished.currentWorld),
-        base: finished.baseSelection,
-        // 组合意图以释放时按住的修饰键为准，用户可以在拖拽途中改主意。
-        combine: marqueeCombine(event.modifiers),
-        direction: marqueeDirection(finished.startWorld, finished.currentWorld),
-        document: context.document,
-        index,
-        mode: context.marqueeMode,
-        originEntityId: finished.originEntityId,
-      })
-      effects.push({ type: 'selection.change', selectedIds })
-    }
-    else if (finished.type === 'guide-create') {
-      // axis 'y' 的横线来自顶部标尺，落点仍在标尺内（y < 0）就放弃创建；竖线同理看 x。
-      const created = finished.guides.filter((guide) => guide.axis === 'y'
-        ? finished.point.y >= 0
-        : finished.point.x >= 0)
-      const frameId = targetFrameId(context)
-      const frameOrigin = frameId ? index.getFrameOrigin(frameId) : null
-      if (created.length > 0 && frameId && frameOrigin) {
-        // 手势全程在世界坐标里进行，落盘前换算回该 Frame 的局部坐标。
-        const commands = created.map((guide) => ({
-          id: context!.idFactory(),
-          type: 'frame.guide.create',
-          payload: {
-            frameId,
-            guide: {
-              id: guide.id,
-              axis: guide.axis,
-              position: toFrameGuidePosition(guide.axis, guide.position, frameOrigin),
-            } as unknown as JsonValue,
-          },
-        }))
-        effects.push({
-          type: 'command.dispatch',
-          command: created.length === 1
-            ? {
-                ...commands[0]!,
-                meta: {
-                  label: context.labels?.createGuide ?? 'Create guide',
-                  source: 'stage',
-                },
-              }
-            : {
-                id: context.idFactory(),
-                type: 'transaction.batch',
-                payload: { commands: commands as unknown as JsonValue },
-                meta: {
-                  label: context.labels?.createGuides ?? 'Create guides',
-                  source: 'stage',
-                },
-              },
-        })
-      }
-    }
-    else if (finished.type === 'guide-move') {
-      const shouldDelete = isInsideOwningRuler(finished.axis, finished.point)
-      const frameId = targetFrameId(context)
-      const frameOrigin = frameId ? index.getFrameOrigin(frameId) : null
-      if (!frameId || !frameOrigin) return effects
-      effects.push({
-        type: 'command.dispatch',
-        command: {
-          id: context.idFactory(),
-          type: shouldDelete ? 'frame.guide.delete' : 'frame.guide.move',
-          payload: shouldDelete
-            ? { frameId, guideId: finished.guideId }
-            : {
-                frameId,
-                guideId: finished.guideId,
-                position: toFrameGuidePosition(finished.axis, finished.position, frameOrigin),
-              },
-          meta: {
-            label: shouldDelete
-              ? context.labels?.deleteGuide ?? 'Delete guide'
-              : context.labels?.moveGuide ?? 'Move guide',
-            source: 'stage',
-          },
-        },
-      })
-    }
-    // 正式命令必须在 preview 清理和 capture 释放前同步交给宿主，否则 React
-    // 会短暂重新渲染旧 document，造成高速松手时可见的“回弹”。
-    apply(effects)
-    publish(initialSnapshot(snapshot.temporaryPan))
-    apply([{ type: 'pointer.release', pointerId }])
-  }
-
-  /**
-   * legacy 单体插件的会话：把内核的三段生命周期转调既有的 updateGesture / finish / reset。
-   *
-   * 会话记住最近一次指针事件，因为 finish 需要松手时的修饰键（例如 marquee 的布尔组合以
-   * 释放时按住的键为准）。仲裁器保证 commit 之前刚以 pointerup 调用过 update，因此这里记下的
-   * 就是那次事件。
-   */
-  const createLegacySession = (pointerId: number): StageSession => {
-    let lastPointerEvent: Extract<
-      StageInteractionEvent,
-      { type: 'pointer.up' | 'pointer.move' }
-    > | null = null
-    return {
-      pointerId,
-      update(event) {
-        if (event.type === 'pointer.move' || event.type === 'pointer.up') {
-          lastPointerEvent = event
-          updateGesture(event.point, event.modifiers)
-          return
-        }
-      },
-      commit() {
-        // 没有指针事件说明会话在任何 update 之前就被提交，legacy 无从确定终点，按取消处理。
-        if (!lastPointerEvent || lastPointerEvent.type !== 'pointer.up') {
-          reset()
-          return
-        }
-        finish(lastPointerEvent)
-      },
-      cancel() {
-        reset()
-      },
-    }
-  }
-
-  /**
-   * legacy 插件的 claim：整段既有 begin() 级联就是它的判定。
-   *
-   * begin 即使不开手势也可能已经处理掉这次按下（改选区、进入文字编辑、被守卫拦下），
-   * 而 legacy 是注册表里最后一个插件，因此无论是否产生手势都算「已消费」——返回 null 会让
-   * 仲裁器继续询问不存在的后续插件，语义上也不成立。
-   */
-  const legacyClaim = (
-    event: Extract<StageInteractionEvent, { type: 'pointer.down' }>,
-    _pluginContext: StagePluginContext,
-  ): StageSession | 'consumed' => {
-    void _pluginContext
-    begin(event)
-    return gesture ? createLegacySession(gesture.pointerId) : 'consumed'
-  }
-
   /**
    * 交给插件的运行时上下文。
    *
@@ -1310,8 +911,8 @@ export function createStageInteractionController(): StageInteractionController {
       surface = port
       return () => {
         if (surface !== port) return
-        if (gesture) reset(false)
-        else if (snapshot.external) publish(initialSnapshot(snapshot.temporaryPan))
+        abortActiveSession()
+        if (snapshot.external) publish(initialSnapshot(snapshot.temporaryPan))
         surface = null
       }
     },
@@ -1326,17 +927,6 @@ export function createStageInteractionController(): StageInteractionController {
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
       const paintEditingChanged = !samePaintEditing(context?.paintEditing, nextContext.paintEditing)
       const paintSamplingChanged = !samePaintSampling(context?.paintSampling, nextContext.paintSampling)
-      // 所有引用具体 Entity 的手势都已插件化，各自用 isCompatibleWith 自报是否仍然成立。
-      // legacy 只剩 marquee 与两个 guide 手势：它们不引用选区，因此判定退化成上下文三项恒等。
-      const incompatible = Boolean(
-        gesture
-        && context
-        && (
-          context.document !== nextContext.document
-          || context.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
-          || context.tool !== nextContext.tool
-        ),
-      )
       // 会话的存续只看新 context：目标从文档中消失，或选区已经不再是该目标，都必须结束。
       // 这两种情况来自撤销、删除、替换或外部选择变化，Controller 无法预先知道。
       const editingTarget = nextContext.textEditing?.entityId
@@ -1361,12 +951,7 @@ export function createStageInteractionController(): StageInteractionController {
         consumedDrawnEntityId = drawn!.entityId
         apply([{ type: 'text-editing.enter', entityId: drawn!.entityId }])
       }
-      if (incompatible) {
-        reset()
-        return
-      }
-      // 已抽成插件的会话自己判断是否仍然成立：内核不再枚举手势种类。上面的 incompatible
-      // 只覆盖仍住在 legacy 里的手势。
+      // 会话自己判断是否仍然成立：内核不再枚举手势种类，也不再保留任何按手势分类的判定。
       if (arbiter.revalidate(nextContext, nextIndex, pluginContext)) return
       const next = enrich(snapshot)
       if (
@@ -1444,7 +1029,7 @@ export function createStageInteractionController(): StageInteractionController {
         return
       }
       if (event.type === 'external.begin') {
-        if (gesture) reset()
+        abortActiveSession()
         publish({
           ...IDLE_SNAPSHOT,
           phase: 'external',
@@ -1476,7 +1061,7 @@ export function createStageInteractionController(): StageInteractionController {
     dispose() {
       if (disposed) return
       disposed = true
-      if (gesture) reset()
+      abortActiveSession()
       surface = null
       snapshot = IDLE_SNAPSHOT
       context = null
