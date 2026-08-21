@@ -25,6 +25,13 @@ export {
   STAGE_TEXT_EDIT_GUARD_PLUGIN_ID,
 } from './text-edit-guard-plugin'
 export {
+  claimStageMove,
+  createStageMoveAxisPlugin,
+  createStageMoveSession,
+  STAGE_MOVE_AXIS_PLUGIN_ID,
+  type StageMoveSessionOptions,
+} from './move-plugin'
+export {
   createStageDrawPlugin,
   STAGE_DRAW_PLUGIN_ID,
 } from './draw-plugin'

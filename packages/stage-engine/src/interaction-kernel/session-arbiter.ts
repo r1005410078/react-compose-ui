@@ -24,6 +24,13 @@ export interface StageSessionArbiter {
   /** 活动会话绑定的指针；无会话时为 null。 */
   activePointerId(): number | null
   /**
+   * 活动会话是否把临时平移键重新解释为自己的修饰键。
+   *
+   * @remarks
+   * 见 {@link StageSession.consumesTemporaryPan}。无会话时为 `false`。
+   */
+  activeSessionConsumesTemporaryPan(): boolean
+  /**
    * 创建了活动会话的插件 id；无会话时为 null。
    *
    * @remarks
@@ -100,6 +107,7 @@ export function createStageSessionArbiter(
     hasSession: () => session !== null,
     activePointerId: () => session?.pointerId ?? null,
     activePluginId: () => ownerId,
+    activeSessionConsumesTemporaryPan: () => session?.consumesTemporaryPan === true,
     begin(event, ctx) {
       if (session) return 'declined'
       for (const plugin of registry.ordered()) {
