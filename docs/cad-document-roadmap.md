@@ -280,6 +280,26 @@ session 是 `update`/`commit` 两态。多步命令要在 session 内部跑状�
 
 极轴追踪（正交的推广，带追踪线 UI）与动态输入浮层留到之后。
 
+##### 关于「能不能复用页面的 Stage」
+
+答案按层分，不是一个是非题：
+
+| 层 | 能否复用 | 依据 |
+| --- | --- | --- |
+| 交互内核（仲裁器 / 注册表 / 插件契约，358 行） | **能，而且本来就该** | 步骤 1 已泛型化，`dependency-boundary.test.ts` 守着它不引用任何 Stage 类型 |
+| 指针会话（519 行，三类竞态） | **能，但要先抽出来** | 只 import `StageInteractionController` 与 `StageInteractionHit` 两个类型，耦合很浅 |
+| 场景渲染 / SceneIndex / 吸附 / 变换规划 | **不能** | 硬绑 `ComposeLayoutSnapshot` 与盒模型 |
+
+第三行是硬的：`StageSceneIndex.getWorldBounds(entityId): StageRect`——**命中的单位是矩形**，
+Stage 的场景是 `LayoutItem` 求解出来的 DOM 盒子。而 CAD 的直线**没有盒模型**：一条对角线的
+包围盒里绝大部分是空的，按矩形命中会让两条交叉线互相「挡住」对方。CAD 的命中判据是**点到线段
+的距离**，与 Stage 的判据不是同一件事。这也是 `cad-canvas` 用 SVG 自己画而不是复用 Scene 的
+原因。
+
+因此 6c 的形状是：**复用内核，自建命中**。指针会话是否一并抽出来在 6c 决定——框选是第一个
+真正需要那三类竞态防护的手势，在此之前 `cad-canvas` 那约 50 行指针处理已经够用，提前抽取
+等于为一个还不存在的需求改动 519 行。
+
 ### 步骤 7 · 块与组件对接 — `add-cad-blocks`
 
 块定义与插入，与 Component Asset v2 对接。决策已定：**两个方向都要**。
@@ -304,6 +324,35 @@ session 是 `update`/`commit` 两态。多步命令要在 session 内部跑状�
 变体操作代数的不变量，而不是靠约定。
 
 正交走线（曼哈顿路由）、避障、线段合并是打磨层，可后置。
+
+### 步骤 8.5 · CAD 动画 — `add-cad-animation`（未开始）
+
+**图纸也要能刻动画**：电流流向、告警闪烁、拓扑图上的数据包流动。读代码之后结论比预期乐观。
+
+**协议与采样白拿。** `ComposeAnimationTrack.path` 是**相对 Entity 的属性路径**——今天是
+`['LayoutItem','offset']` / `['Appearance','opacity']`，明天可以是 `['CadStroke','dashOffset']`，
+类型层完全通用。`@compose-ui/animation` 的 9 个源文件里只有 3 个提到 Frame
+（`animation-file.ts`、`animation-commands.ts`、`index.ts`）；类型、采样、插值、运动路径与
+校验**一处都没有**。
+
+**要改的只有清单归属。** 清单现在挂在 Frame 的 `Animations` Component 上、文件按根 Frame 分区，
+而 CadDocument 没有 Frame。但它也**不需要分区**：AGENTS.md 说 Frame 是六重隔离边界、其中一重
+是动画时间线，而**一份 CAD 文档就是一个时间线作用域**。因此清单落在文档级即可——比页面那套
+更简单，不是更难。
+
+**前置依赖：图元得先有可动画的外观。** CAD 图元目前只有 `CadPlacement` 与 `CadLine`，颜色
+一律 ByLayer，没有任何 per-entity 外观。而 CAD 动画的主要对象**恰恰不是几何而是外观与状态**：
+
+| 想做的 | 动的是什么 |
+| --- | --- |
+| 电流流向 | 线的 `strokeDashoffset` |
+| 告警闪烁 | 颜色 / 可见性 |
+| 数据包流动 | 沿线运动的一个点（运动路径） |
+| 断路器合闸 | **变体切换**，不是关键帧 |
+
+因此本步排在步骤 7（块与组件）之后：per-entity 描边覆盖要先有，**「变体切换」这类离散状态
+能不能表达成轨道**也要等组件实例进了 CAD 才谈得上——它是结构变更而不是数值插值，可能需要
+一种 step 轨道，这是本步唯一的未决问题。
 
 ### 步骤 9 · DXF 导入 — `add-dxf-import`
 
