@@ -40,7 +40,6 @@ import type {
 } from '@compose-ui/assets'
 import {
   createComposeRendererMeasurementAdapter,
-  type ComposeEntitySeed,
 } from '@compose-ui/component-registry'
 import type {
   ComposeEntityRegistry,
@@ -56,7 +55,6 @@ import {
   getComposeLock,
   getComposeLayoutItem,
   getComposeRenderer,
-  getComposeSpatialTransform,
   getComposeTransform,
   getComposeVisibility,
   resolveComposeAppearance,
@@ -103,19 +101,16 @@ import {
   type ComposeLayerOrderOperation,
   type StagePoint,
   type StageRect,
-  type StageSegmentPreview,
   type StageDrawnEntity,
   type StageInteractionEffect,
   type StageInteractionHit,
   type StageInteractionController,
-  type StageInteractionTool,
   type StageTransform,
 } from '@compose-ui/stage-engine'
 import type {
   ComposeStageClipboard,
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
-  ComposeStageDelegatableAction,
   ComposeStagePolicy,
   ComposeStageProps,
 } from '../types'
@@ -123,6 +118,38 @@ import { nextInstanceDrillDownTarget, resolveInstanceDrillDownPath } from './ins
 import { instanceSelectionScreenBounds } from './instance-selection-bounds'
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
+import {
+  assetSeedCenters,
+  mapWithConcurrency,
+  presetForDrawingTool,
+} from './stage-asset-drop'
+import {
+  frozenSurfaceRect,
+  modifiers,
+  pressedButtons,
+  resolveClientPoint,
+  screenPoint,
+  screenPointFromRect,
+  type FrozenSurfaceRect,
+} from './stage-pointer-geometry'
+import {
+  bootstrapSelectionBounds,
+  directionAxis,
+  lineSegmentForEntity,
+  lineSegmentTransform,
+  transformDocument,
+  transformLayoutSnapshot,
+  type StageTransformMap,
+} from './stage-preview-document'
+import {
+  DEFAULT_STAGE_SHORTCUTS,
+  DELEGATABLE_STAGE_ACTIONS,
+  isEditableTarget,
+  isStageShortcutMatch,
+  keyboardEventCode,
+  LAYER_ORDER_SHORTCUTS,
+  STAGE_SHORTCUT_ACTIONS,
+} from './stage-shortcuts'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
 import { StageSceneLayer } from '../stage-scene-layer'
 import { buildResizePreviewSolveDocument } from './resize-preview'
@@ -144,20 +171,11 @@ import {
 } from './drawing-entity'
 import { boundsInParentSpace, resolveRootLanding } from './root-landing'
 
-type TransformMap = Readonly<Record<string, StageTransform>>
-type ShapeAxis = -1 | 0 | 1
 type Modifiers = { shift: boolean; alt: boolean; command: boolean }
 type PointerSessionStatus = 'active' | 'finishing' | 'ended'
 
 const WORLD_ORIGIN_ICON_HALF_SIZE = 8
-
-interface FrozenSurfaceRect {
-  readonly left: number
-  readonly top: number
-  readonly width: number
-  readonly height: number
-}
-
+/** 一次进行中的指针会话；surface 矩形在按下当刻冻结。 */
 interface ActivePointerSession {
   readonly pointerId: number
   readonly generation: number
@@ -199,465 +217,6 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
   }, [controller])
 }
 
-function stageElementRect(
-  element: HTMLElement,
-): DOMRect {
-  let rect = element.getBoundingClientRect()
-  if (
-    rect.width === 0
-    && rect.height === 0
-    && element.classList.contains('compose-stage__surface')
-    && element.parentElement
-  ) {
-    // JSDOM 不做布局；组件测试仍可通过根元素的显式 rect 验证坐标算法。
-    rect = element.parentElement.getBoundingClientRect()
-  }
-  return rect
-}
-
-function screenPoint(
-  event: { clientX: number; clientY: number },
-  element: HTMLElement,
-): StagePoint {
-  const rect = stageElementRect(element)
-  return { x: event.clientX - rect.left, y: event.clientY - rect.top }
-}
-
-function frozenSurfaceRect(element: HTMLElement): FrozenSurfaceRect {
-  const rect = stageElementRect(element)
-  return {
-    left: rect.left,
-    top: rect.top,
-    width: rect.width,
-    height: rect.height,
-  }
-}
-
-function screenPointFromRect(
-  event: { clientX: number; clientY: number },
-  rect: FrozenSurfaceRect,
-): StagePoint {
-  return { x: event.clientX - rect.left, y: event.clientY - rect.top }
-}
-
-function pressedButtons(button: number, buttons: number) {
-  if (buttons !== 0) return buttons
-  if (button === 0) return 1
-  if (button === 1) return 4
-  if (button === 2) return 2
-  return 0
-}
-
-function resolveClientPoint(
-  point: StagePoint,
-  element: HTMLElement,
-): StagePoint | null {
-  const rect = stageElementRect(element)
-  if (!Number.isFinite(rect.left) || !Number.isFinite(rect.top)) return null
-  return { x: point.x - rect.left, y: point.y - rect.top }
-}
-
-function modifiers(event: {
-  shiftKey: boolean
-  altKey: boolean
-  ctrlKey: boolean
-  metaKey: boolean
-}): Modifiers {
-  return {
-    shift: event.shiftKey,
-    alt: event.altKey,
-    command: event.ctrlKey || event.metaKey,
-  }
-}
-
-function transformDocument(
-  document: ComposeDocument,
-  transforms: TransformMap,
-  directions: Readonly<Record<string, ShapeDirection>> = {},
-): ComposeDocument {
-  if (Object.keys(transforms).length === 0 && Object.keys(directions).length === 0) return document
-  const entities = { ...document.entities }
-  const ids = new Set([...Object.keys(transforms), ...Object.keys(directions)])
-  for (const id of ids) {
-    const entity = entities[id]
-    if (entity) {
-      const transform = transforms[id]
-      const direction = directions[id]
-      const renderer = getComposeRenderer(entity)
-      entities[id] = {
-        ...entity,
-        components: {
-          ...entity.components,
-          ...(transform
-            ? {
-                Transform: { rotation: transform.rotation },
-                LayoutItem: {
-                  ...getComposeLayoutItem(entity),
-                  offset: { x: transform.x, y: transform.y },
-                  width: { ...getComposeLayoutItem(entity).width, value: transform.width },
-                  height: { ...getComposeLayoutItem(entity).height, value: transform.height },
-                },
-              }
-            : {}),
-          ...(direction && renderer?.type === 'shape'
-            ? {
-                Renderer: {
-                  ...renderer,
-                  props: {
-                    ...renderer.props,
-                    direction: direction as unknown as JsonValue,
-                  },
-                },
-              }
-            : {}),
-        },
-      }
-    }
-  }
-  return { ...document, entities }
-}
-
-function directionAxis(delta: number): ShapeAxis {
-  if (Math.abs(delta) < 0.000_001) return 0
-  return delta < 0 ? -1 : 1
-}
-
-function shapeDirection(value: unknown): ShapeDirection {
-  if (!value || typeof value !== 'object') return { x: 1, y: 1 }
-  const candidate = value as { readonly x?: unknown; readonly y?: unknown }
-  return {
-    x: candidate.x === -1 || candidate.x === 0 ? candidate.x : 1,
-    y: candidate.y === -1 || candidate.y === 0 ? candidate.y : 1,
-  }
-}
-
-function localLineEndpoint(
-  axis: ShapeAxis,
-  size: number,
-  endpoint: 'start' | 'end',
-) {
-  if (axis === 0) return size / 2
-  if (endpoint === 'start') return axis < 0 ? size : 0
-  return axis < 0 ? 0 : size
-}
-
-function rotatePoint(point: StagePoint, center: StagePoint, degrees: number): StagePoint {
-  const radians = degrees * Math.PI / 180
-  const cosine = Math.cos(radians)
-  const sine = Math.sin(radians)
-  const x = point.x - center.x
-  const y = point.y - center.y
-  return {
-    x: center.x + x * cosine - y * sine,
-    y: center.y + x * sine + y * cosine,
-  }
-}
-
-interface ShapeSegmentGeometry {
-  readonly entityId: string
-  readonly start: StagePoint
-  readonly end: StagePoint
-}
-
-interface ShapeSegmentTransform {
-  readonly direction: ShapeDirection
-  readonly transform: StageTransform
-}
-
-function lineSegmentForEntity(
-  document: ComposeDocument,
-  snapshot: ComposeLayoutSnapshot,
-  entityId: string,
-): ShapeSegmentGeometry | null {
-  const entity = document.entities[entityId]
-  const renderer = entity ? getComposeRenderer(entity) : null
-  const box = snapshot.boxes[entityId]
-  if (
-    !entity
-    || !renderer
-    || renderer.type !== 'shape'
-    || !box
-    || (renderer.props.kind !== 'line' && renderer.props.kind !== 'arrow')
-  ) return null
-  const direction = shapeDirection(renderer.props.direction)
-  const matrix = getEntityWorldMatrix(document, snapshot, entityId)
-  const endpoint = (kind: 'start' | 'end') => applyMatrix(matrix, {
-    x: localLineEndpoint(direction.x, box.width, kind),
-    y: localLineEndpoint(direction.y, box.height, kind),
-  })
-  return { entityId, start: endpoint('start'), end: endpoint('end') }
-}
-
-function lineSegmentTransform(
-  document: ComposeDocument,
-  snapshot: ComposeLayoutSnapshot,
-  preview: StageSegmentPreview,
-): ShapeSegmentTransform | null {
-  const entity = document.entities[preview.entityId]
-  const renderer = entity ? getComposeRenderer(entity) : null
-  if (!entity || !renderer || renderer.type !== 'shape') return null
-  const parentId = getEntityParentId(document, preview.entityId)
-  const inverseParent = parentId
-    ? invertMatrix(getEntityWorldMatrix(document, snapshot, parentId))
-    : null
-  const start = inverseParent ? applyMatrix(inverseParent, preview.start) : preview.start
-  const end = inverseParent ? applyMatrix(inverseParent, preview.end) : preview.end
-  const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
-  const rotation = getComposeTransform(entity).rotation
-  // Line 的几何由未旋转的 box + direction 表达；先逆转 Entity 自身旋转，再维持其 rotation。
-  const localStart = rotation === 0 ? start : rotatePoint(start, center, -rotation)
-  const localEnd = rotation === 0 ? end : rotatePoint(end, center, -rotation)
-  const direction = {
-    x: directionAxis(localEnd.x - localStart.x),
-    y: directionAxis(localEnd.y - localStart.y),
-  } satisfies ShapeDirection
-  const rawWidth = Math.abs(localEnd.x - localStart.x)
-  const rawHeight = Math.abs(localEnd.y - localStart.y)
-  return {
-    direction,
-    transform: {
-      // SVG 的零轴在最小 1px box 的中心绘制，使端点仍落在真实坐标而非产生 1px 斜线。
-      x: direction.x === 0 ? localStart.x - 0.5 : Math.min(localStart.x, localEnd.x),
-      y: direction.y === 0 ? localStart.y - 0.5 : Math.min(localStart.y, localEnd.y),
-      width: Math.max(1, rawWidth),
-      height: Math.max(1, rawHeight),
-      rotation,
-    },
-  }
-}
-
-function transformLayoutSnapshot(
-  snapshot: ComposeLayoutSnapshot,
-  transforms: TransformMap,
-): ComposeLayoutSnapshot {
-  if (Object.keys(transforms).length === 0) return snapshot
-  const boxes = { ...snapshot.boxes }
-  Object.entries(transforms).forEach(([entityId, transform]) => {
-    const box = boxes[entityId]
-    if (!box) return
-    boxes[entityId] = {
-      ...box,
-      x: transform.x,
-      y: transform.y,
-      width: transform.width,
-      height: transform.height,
-    }
-  })
-  return { ...snapshot, boxes }
-}
-
-function bootstrapSelectionBounds(
-  document: ComposeDocument,
-  layoutSnapshot: ComposeLayoutSnapshot,
-  ids: readonly string[],
-) {
-  return unionRects(ids
-    .filter((id) => {
-      const entity = document.entities[id]
-      return entity ? getComposeVisibility(entity).visible : false
-    })
-    .map((id) => getEntityWorldBounds(document, layoutSnapshot, id)))
-}
-
-interface ResolvedAssetSeed {
-  readonly seed: ComposeEntitySeed
-  readonly reference: ComposeAssetReference
-}
-
-async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number,
-  mapper: (item: T, index: number) => Promise<R>,
-): Promise<readonly R[]> {
-  const results = new Array<R>(items.length)
-  let cursor = 0
-  const worker = async () => {
-    while (cursor < items.length) {
-      const index = cursor
-      cursor += 1
-      results[index] = await mapper(items[index]!, index)
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
-  )
-  return results
-}
-
-function assetSeedCenters(
-  seeds: readonly ResolvedAssetSeed[],
-  gap = 24,
-): readonly StagePoint[] {
-  const rows: ResolvedAssetSeed[][] = []
-  for (let index = 0; index < seeds.length; index += 4) {
-    rows.push(seeds.slice(index, index + 4))
-  }
-  const points: StagePoint[] = []
-  let rowCenterY = 0
-  let previousRowHeight = 0
-  rows.forEach((row, rowIndex) => {
-    const rowHeight = Math.max(...row.map(({ seed }) =>
-      getComposeSpatialTransform({ id: '__seed__', ...seed }).size.height))
-    if (rowIndex > 0) {
-      rowCenterY += previousRowHeight / 2 + gap + rowHeight / 2
-    }
-    let centerX = 0
-    let previousWidth = 0
-    row.forEach(({ seed }, columnIndex) => {
-      if (columnIndex > 0) {
-        centerX += previousWidth / 2
-          + gap
-          + getComposeSpatialTransform({ id: '__seed__', ...seed }).size.width / 2
-      }
-      points.push({ x: centerX, y: rowCenterY })
-      previousWidth = getComposeSpatialTransform({ id: '__seed__', ...seed }).size.width
-    })
-    previousRowHeight = rowHeight
-  })
-  return points
-}
-
-function presetForDrawingTool(tool: Extract<StageInteractionTool, `draw-${string}`>) {
-  const presets = {
-    'draw-container': 'container',
-    'draw-rectangle': 'rectangle',
-    'draw-line': 'line',
-    'draw-arrow': 'arrow',
-    'draw-circle': 'circle',
-    'draw-text': 'text',
-  } as const
-  return presets[tool]
-}
-
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) return false
-  if (target.closest('input, textarea, select')) return true
-  if (target instanceof HTMLElement && target.contentEditable === 'true') return true
-  return target.closest('[contenteditable]:not([contenteditable="false"])') !== null
-}
-
-const STAGE_SHORTCUT_ACTIONS = [
-  'stage.temporaryPan',
-  'stage.selectTool',
-  'stage.moveTool',
-  'stage.scaleTool',
-  'stage.rotateTool',
-  'stage.panTool',
-  'stage.drawContainerTool',
-  'stage.drawRectangleTool',
-  'stage.drawLineTool',
-  'stage.drawArrowTool',
-  'stage.drawCircleTool',
-  'stage.drawTextTool',
-  'stage.fitSelection',
-  'stage.fitContainer',
-  'stage.zoomReset',
-  'stage.zoomIn',
-  'stage.zoomOut',
-  'stage.toggleGridSnap',
-  'stage.toggleSmartSnap',
-  'edit.duplicate',
-  'edit.copy',
-  'edit.cut',
-  'edit.paste',
-  'edit.bringForward',
-  'edit.sendBackward',
-  'edit.bringToFront',
-  'edit.sendToBack',
-  'edit.group',
-  'edit.ungroup',
-  'edit.delete',
-] as const satisfies readonly ComposeStageShortcutAction[]
-
-/**
- * 可交给宿主接管的动作。
- *
- * 临时平移按下后要等松开才结束，接管方无法表达这段生命周期，因此排除在外。
- */
-const DELEGATABLE_STAGE_ACTIONS = STAGE_SHORTCUT_ACTIONS
-  .filter((action) => action !== 'stage.temporaryPan') as readonly ComposeStageDelegatableAction[]
-
-const DEFAULT_STAGE_SHORTCUTS: Readonly<
-  Record<ComposeStageShortcutAction, readonly ComposeStageKeybinding[]>
-> = {
-  'stage.temporaryPan': [{ code: 'Space' }],
-  'stage.selectTool': [{ code: 'KeyV' }],
-  'stage.moveTool': [{ code: 'KeyM' }],
-  'stage.scaleTool': [{ code: 'KeyS' }],
-  'stage.rotateTool': [{ code: 'KeyR', shift: true }],
-  'stage.panTool': [{ code: 'KeyH' }],
-  'stage.drawContainerTool': [{ code: 'KeyF' }],
-  'stage.drawRectangleTool': [{ code: 'KeyR' }],
-  'stage.drawLineTool': [{ code: 'KeyL' }],
-  'stage.drawArrowTool': [{ code: 'KeyL', shift: true }],
-  'stage.drawCircleTool': [{ code: 'KeyO' }],
-  'stage.drawTextTool': [{ code: 'KeyT' }],
-  'stage.fitSelection': [{ code: 'Digit2', shift: true }],
-  'stage.fitContainer': [{ code: 'KeyF', shift: true }],
-  'stage.zoomReset': [{ code: 'Digit0', primary: true }],
-  'stage.zoomIn': [{ code: 'Equal', primary: true }],
-  'stage.zoomOut': [{ code: 'Minus', primary: true }],
-  'stage.toggleGridSnap': [{ code: 'KeyG', shift: true }],
-  'stage.toggleSmartSnap': [{ code: 'KeyS', shift: true }],
-  'edit.duplicate': [{ code: 'KeyD', primary: true }],
-  'edit.copy': [{ code: 'KeyC', primary: true }],
-  'edit.cut': [{ code: 'KeyX', primary: true }],
-  'edit.paste': [{ code: 'KeyV', primary: true }],
-  'edit.bringForward': [{ code: 'BracketRight' }],
-  'edit.sendBackward': [{ code: 'BracketLeft' }],
-  'edit.bringToFront': [{ code: 'BracketRight', primary: true }],
-  'edit.sendToBack': [{ code: 'BracketLeft', primary: true }],
-  'edit.group': [{ code: 'KeyG', primary: true }],
-  'edit.ungroup': [{ code: 'KeyG', primary: true, shift: true }],
-  'edit.delete': [{ code: 'Delete' }, { code: 'Backspace' }],
-}
-
-const LAYER_ORDER_SHORTCUTS = [
-  ['edit.bringForward', 'bring-forward'],
-  ['edit.sendBackward', 'send-backward'],
-  ['edit.bringToFront', 'bring-to-front'],
-  ['edit.sendToBack', 'send-to-back'],
-] as const satisfies readonly (readonly [ComposeStageShortcutAction, ComposeLayerOrderOperation])[]
-
-function keyboardEventCode(event: {
-  code: string
-  key: string
-}) {
-  if (event.code) return event.code
-  if (/^[a-z]$/i.test(event.key)) return `Key${event.key.toUpperCase()}`
-  if (/^[0-9]$/.test(event.key)) return `Digit${event.key}`
-  const codes: Record<string, string> = {
-    ' ': 'Space',
-    ',': 'Comma',
-    '=': 'Equal',
-    '-': 'Minus',
-    '[': 'BracketLeft',
-    ']': 'BracketRight',
-  }
-  return codes[event.key] ?? event.key
-}
-
-function isStageShortcutMatch(
-  event: {
-    altKey: boolean
-    code: string
-    ctrlKey: boolean
-    key: string
-    metaKey: boolean
-    shiftKey: boolean
-  },
-  binding: ComposeStageKeybinding,
-) {
-  const modifierMatches = binding.primary
-    ? event.ctrlKey !== event.metaKey
-    : event.ctrlKey === Boolean(binding.control) && !event.metaKey
-  return keyboardEventCode(event) === binding.code
-    && modifierMatches
-    && event.shiftKey === Boolean(binding.shift)
-    && event.altKey === Boolean(binding.alt)
-}
-
-/** 渲染受控 DOM/SVG 无限 Stage，并显式呈现 Layout Runtime 加载或失败状态。 @public */
 export function ComposeStage(props: ComposeStageProps) {
   const measurementAdapter = useComposeStageMeasurement(props)
   if (!props.layoutSnapshot) {
@@ -866,7 +425,7 @@ function ComposeStageReady({
       : null,
     [document, interaction.segmentPreview, layoutSnapshot],
   )
-  const previewTransforms = useMemo<TransformMap>(() => ({
+  const previewTransforms = useMemo<StageTransformMap>(() => ({
     ...interaction.previewTransforms,
     ...(segmentTransform
       ? { [interaction.segmentPreview!.entityId]: segmentTransform.transform }

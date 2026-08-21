@@ -350,42 +350,27 @@ rotate 那轮已经吃过一次亏。
 
 **门槛**：41 张黄金图逐像素一致 ✅，e2e 99/99。
 
-### 步骤 5 · 删除 legacy · 收敛适配层 — `refactor-stage-adapter-slimming`
+### 步骤 5 · 收敛适配层 — 进行中
 
-`compose-stage.tsx` 收敛到适配层（目标 < 600 行）；动画模式改为组装 policy + `motion-path`
-插件，`lockGestureParent` prop 删除（**BREAKING**，随本步声明）。
-**门槛**：lint / typecheck / test / build / e2e 全绿。
+legacy 已在步骤 3 删除，本步只剩「把 `compose-stage.tsx` 收敛成适配层」。
 
-## 风险
+**第一刀 `refactor-stage-adapter-helpers` ✅**：前 500 行与 React 无关的纯函数按职责拆成四个
+同目录模块——`stage-preview-document.ts`（预览烘焙与两点图形端点几何）、
+`stage-pointer-geometry.ts`（surface 矩形冻结与坐标归一化）、`stage-asset-drop.ts`（落点排布、
+绘制 Preset、并发上限解析）、`stage-shortcuts.ts`（动作表与键位匹配）。它们没有 Hook、没有 ref、
+没有闭包依赖，搬动只改导入，因此是这一轮风险最低的起点。3088 → 2647 行。
 
-- **引用稳定是性能生命线**。现有代码用两层 memo 保证隐藏集合、场景子树与 SceneIndex 的
-  引用只在内容变化时更新；插件化的快照派生必须继承同样纪律，否则平移每帧重建整棵场景。
-- **缠绕最深的两处放最后**。`resize` 的实时布局预览（预览 Snapshot 不进提交上下文）与
-  `text-edit` 的 ref 会话（每键不重渲）都有注释明示的性能契约，搬迁时逐字保留。
+**剩余**：`ComposeStageReady` 仍有约 2300 行，里面是真正纠缠的部分——指针路由与会话、文字编辑
+会话、剪贴板、上下文菜单、实例下钻、resize 实时布局求解、资源拖入。每一块都持有 ref 与 effect，
+拆分要按**用户能力**切成 Hook 而不是按代码形态切，且每刀都需要黄金图护航。目标 < 600 行。
 
-## 明确不做
+### 关于 `lockGestureParent`：撤销删除计划
 
-- 渲染层插件化、面向宿主的第三方插件市场。
-- 任何「为 CAD 留口子」的设计。CAD 是命令解释器范式（多步命令状态机 + 对象捕捉 +
-  坐标键入），另建内核；与本重构共享的只有视口数学与拆封后的事务内核。
+原计划在本步删除它（BREAKING）。**不删了，理由是这条计划写在插件内核落地之前。**
 
-## 与其它工作的关系
+当时它是 Stage 的一个裸 prop，删掉它才能让动画模式自己组装策略。步骤 2 之后它已经住在
+`ComposeStagePolicy` 里——语义单一、有文档、服务真实产品需求（动画模式禁止跨父级挂载）。
+现在删掉它意味着宿主要自行组装插件集合才能表达同一件事：API 面更大、宿主更复杂，换来的只是
+少一个布尔。
 
-三条轨道相互正交，可并行推进：
-
-1. **CAD 轨道**：`refactor-transaction-kernel`（把 `validateComposeDocument` 从
-   `runtime.ts` 的 4 处硬调用改为注入，体量最小、风险最低）→ 文档类型注册 → CAD 文档协议
-   与几何内核。是 CAD 的硬前置，与本路线图无依赖关系。
-2. **本路线图**：Stage 交互层插件化。
-3. **文件瘦身**：仅限「抽屉太满」型文件——`property-tree.tsx`（2210 行 / 44 个顶层定义，
-   平均 50 行的独立小编辑器）、`compose-paint-picker.tsx`、`compose-asset-browser.tsx`。
-   机械拆分即可，低风险，随时可做。
-
-**不要先瘦身架构债文件**（`compose-stage.tsx`、`interaction-controller.ts`、
-`stage-overlay.tsx`、`compose-editor.tsx`、`editor-controller/controller.tsx`）：机械瘦身
-沿「哪些纯函数好抽出去」切，插件化沿「哪个手势是可替换单元」切，切割线不同，先切一次
-等于同一块代码付两次钱，且中间态没有消费方。
-
-**不要先动测试文件**：`interaction-controller.test.ts` 2225 行是本重构敢动手的唯一依据，
-它会在步骤 3 中免费瘦身。行数从来不是问题本身——`editor-i18n.ts` 923 行是扁平文案目录，
-5 个定义，完全正常；耦合才是判据。
+**留着它是更小的接口，不是欠下的债。** 计划该随认识更新，而不是因为写下来了就执行。
