@@ -10,7 +10,7 @@ import {
   marqueeDirection,
   resolveMarqueeCommit,
   resolveMarqueeHitTest,
-} from '../marquee-selection'
+} from '../hit-testing'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type {

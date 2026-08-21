@@ -2,8 +2,8 @@ import {
   listFrameWorldGuides,
   resolveTargetFrameId,
   toFrameGuidePosition,
-} from '../frame-space'
-import { snapValueToGrid } from '../canvas-geometry'
+} from '../geometry'
+import { snapValueToGrid } from '../geometry'
 import { screenToWorld, type StagePoint, type StageViewport } from '../geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'

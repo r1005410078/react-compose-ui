@@ -5,7 +5,7 @@ import {
   resolveOwningFrameId,
   type ComposeDocument,
 } from '@compose-ui/core'
-import type { StageGuide, StagePoint } from './geometry'
+import type { StageGuide, StagePoint } from './stage-geometry'
 
 /**
  * 求编辑器动作应当作用的目标 Frame。

@@ -10,13 +10,13 @@ import {
   type JsonValue,
 } from '@compose-ui/core'
 import { screenToWorld, type StagePoint } from '../geometry'
-import { paintSpacePoint } from '../paint-geometry'
+import { paintSpacePoint } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import type {
   StagePaintSampling,
   StagePaintSamplePreview,
 } from '../interaction-controller'
-import type { StageSceneIndex } from '../scene-index'
+import type { StageSceneIndex } from '../hit-testing'
 import type {
   StageInteractionPlugin,
   StagePluginContext,

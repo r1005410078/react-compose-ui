@@ -6,7 +6,7 @@ import {
   type JsonValue,
 } from '@compose-ui/core'
 import { screenToWorld, type StageViewport } from '../geometry'
-import { paintSpacePoint, updatePaintFromPointer } from '../paint-geometry'
+import { paintSpacePoint, updatePaintFromPointer } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type { StagePaintHandleKind } from '../interaction-controller'

@@ -5,7 +5,7 @@ import type {
   StagePoint,
   StageRect,
   StageViewport,
-} from './geometry'
+} from './stage-geometry'
 
 /**
  * 标尺上一条可见刻度。

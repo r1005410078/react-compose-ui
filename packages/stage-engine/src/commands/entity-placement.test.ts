@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createComposeFrameEntity, createComposeGroupEntitySeed } from '@compose-ui/core'
 import { clampBoundsIntoFrame, isComposeContainerEntity } from './entity-placement'
-import { entity } from './test-fixtures'
+import { entity } from '../test-fixtures'
 
 const FRAME_SIZE = { width: 1280, height: 720 }
 

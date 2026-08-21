@@ -12,8 +12,8 @@ import {
   type StageMatrix,
   type StageRect,
   type StageTransform,
-} from './geometry'
-import type { StageSceneIndex } from './scene-index'
+} from '../geometry'
+import type { StageSceneIndex } from '../hit-testing'
 
 /*
  * 变换预览的几何计算：把一次手势的世界变换换算成每个目标 Entity 的局部盒。

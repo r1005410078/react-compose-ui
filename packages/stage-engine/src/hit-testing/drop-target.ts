@@ -4,7 +4,7 @@ import {
   getComposeLayoutItem,
   getComposeLock,
 } from '@compose-ui/core'
-import { applyMatrix, invertMatrix, type StagePoint, type StageRect } from './geometry'
+import { applyMatrix, invertMatrix, type StagePoint, type StageRect } from '../geometry'
 import type { StageSceneIndex } from './scene-index'
 
 /**

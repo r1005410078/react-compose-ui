@@ -7,7 +7,7 @@ import {
   type ComposeEntity,
   type ComposeSize,
 } from '@compose-ui/core'
-import type { StagePoint, StageRect } from './geometry'
+import type { StagePoint, StageRect } from '../geometry'
 
 /**
  * 判断一个 Entity 是否是"容器类"——即能作为场景的那种容器。

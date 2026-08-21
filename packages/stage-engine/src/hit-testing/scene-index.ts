@@ -17,8 +17,8 @@ import {
   type StageMatrix,
   type StagePoint,
   type StageRect,
-} from './geometry'
-import { listFrameWorldGuides } from './frame-space'
+} from '../geometry'
+import { listFrameWorldGuides } from '../geometry'
 
 /**
  * 一个不可变 ComposeDocument 的空间查询索引。

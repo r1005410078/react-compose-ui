@@ -1,5 +1,5 @@
 import { getComposeLock, isComposeFrameEntity, type ComposeDocument } from '@compose-ui/core'
-import { rectContains, rectsIntersect, type StageRect } from './geometry'
+import { rectContains, rectsIntersect, type StageRect } from '../geometry'
 import type { StageSceneIndex } from './scene-index'
 
 /**

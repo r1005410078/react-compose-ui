@@ -2,7 +2,7 @@ import {
   constrainedDrawingPoints,
   isDrawingTool,
   type StageDrawingTool,
-} from '../drawing-tools'
+} from '../gesture-planning'
 import { rectFromPoints, screenToWorld, type StagePoint, type StageViewport } from '../geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import type { StageInteractionContext } from '../interaction-controller'

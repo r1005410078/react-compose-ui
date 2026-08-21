@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { getComposeLayoutItem, type ComposeDocument, type ComposeEntity } from '@compose-ui/core'
-import { createStageSceneIndex } from './scene-index'
-import { document, entity, layoutSnapshot } from './test-fixtures'
+import { createStageSceneIndex } from '../hit-testing'
+import { document, entity, layoutSnapshot } from '../test-fixtures'
 import { planTransformCommit, resolveTransformTargets } from './transform-planning'
-import type { StageTransform } from './geometry'
+import type { StageTransform } from '../geometry'
 
 /*
  * 这两段逻辑此前埋在 begin()/finish() 的闭包里，只能经由完整手势间接覆盖。抽成纯函数后

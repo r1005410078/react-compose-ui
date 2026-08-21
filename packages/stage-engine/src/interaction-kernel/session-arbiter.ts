@@ -2,7 +2,7 @@ import type {
   StageInteractionContext,
   StageInteractionEvent,
 } from '../interaction-controller'
-import type { StageSceneIndex } from '../scene-index'
+import type { StageSceneIndex } from '../hit-testing'
 import type { StagePluginRegistry } from './plugin-registry'
 import type {
   StagePluginContext,

@@ -5,9 +5,9 @@ import {
   type ComposeDocument,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
-import { createReparentCommand } from './commands'
-import { resolveStageDropTarget, type StageDropTarget } from './drop-target'
-import { resolveTargetFrameId } from './frame-space'
+import { createReparentCommand } from '../commands'
+import { resolveStageDropTarget, type StageDropTarget } from '../hit-testing'
+import { resolveTargetFrameId } from '../geometry'
 import {
   snapTranslation,
   translationMatrix,
@@ -15,16 +15,16 @@ import {
   type StagePoint,
   type StageRect,
   type StageTransform,
-} from './geometry'
-import { describeEntityTargets } from './transaction-labels'
+} from '../geometry'
+import { describeEntityTargets } from '../commands'
 import { planTransformCommit } from './transform-planning'
 import { transformedSelection } from './transform-preview'
 import type {
   StageInteractionContext,
   StageInteractionEffect,
   StageInteractionModifiers,
-} from './interaction-controller'
-import type { StageSceneIndex } from './scene-index'
+} from '../interaction-controller'
+import type { StageSceneIndex } from '../hit-testing'
 
 /**
  * 视为「还没真正开始拖动」的屏幕像素阈值。

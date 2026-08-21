@@ -9,8 +9,8 @@ import {
   rotationFromPointer,
   toComposeTransform,
   toStageTransform,
-} from './geometry'
-import { document, entity, layoutSnapshot } from './test-fixtures'
+} from './stage-geometry'
+import { document, entity, layoutSnapshot } from '../test-fixtures'
 
 describe('Stage ECS geometry', () => {
   it('OpenSpec: Transform System / 在 Hierarchy 中组合局部矩阵', () => {
