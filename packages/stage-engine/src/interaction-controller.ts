@@ -6,7 +6,6 @@ import type {
   JsonValue,
 } from '@compose-ui/core'
 import {
-  BUILTIN_COMMAND_TYPES,
   getComposeHierarchy,
   getComposeLock,
   isComposeGroupEntity,
@@ -20,10 +19,9 @@ import {
   resolveMarqueeHitTest,
   type StageMarqueeMode,
 } from './marquee-selection'
-import { createReparentCommand } from './commands'
 import { isDrawingTool } from './drawing-tools'
+import { planMoveCommit, planMovePreview } from './move-planning'
 import {
-  resolveStageDropTarget,
   type StageDropTarget,
 } from './drop-target'
 import {
@@ -35,7 +33,6 @@ import {
   resolveTargetFrameId,
   toFrameGuidePosition,
 } from './frame-space'
-import { describeEntityTargets } from './transaction-labels'
 import {
   expandScrollRange,
   snapResizePoint,
@@ -58,8 +55,6 @@ import {
   rectMappingMatrix,
   resizeBounds,
   screenToWorld,
-  snapTranslation,
-  translationMatrix,
   unionRects,
 } from './geometry'
 // 交互内核只做类型级依赖回指（`import type`），因此这里的相互引用不产生运行时循环。
@@ -75,7 +70,6 @@ import {
   matrixBounds,
   resolvedSpatialTransform,
   transformedResizeSelection,
-  transformedSelection,
 } from './transform-preview'
 import type {
   StageInteractionPlugin,
@@ -892,21 +886,6 @@ export function createStageInteractionController(): StageInteractionController {
   const textEditable = (entityId: string) =>
     Boolean(context?.isTextEditable?.(entityId))
 
-  /**
-   * 提交前复核落点仍然成立。
-   *
-   * @remarks
-   * 拖动期间可能有其他事务把目标容器锁定、删除或去掉 Hierarchy。此时放弃结构命令，
-   * 让手势退回到普通的原父级内移动，而不是提交一条指向已失效目标的命令。
-   */
-  const resolveCommittableDropTarget = (target: StageDropTarget | null) => {
-    if (!target || !context) return null
-    const container = context.document.entities[target.containerId]
-    if (!container || !getComposeHierarchy(container)) return null
-    if (getComposeLock(container).locked) return null
-    return target
-  }
-
 
   const enrich = (next: StageInteractionSnapshot): StageInteractionSnapshot => {
     const selected = next.segmentPreview
@@ -1079,64 +1058,26 @@ export function createStageInteractionController(): StageInteractionController {
     if (gesture.type === 'move') {
       gesture.lastPoint = point
       gesture.lastModifiers = modifiers
-      const rawDelta = {
-        x: world.x - gesture.startWorld.x,
-        y: world.y - gesture.startWorld.y,
-      }
-      const delta = gesture.axis === 'x'
-        ? { x: rawDelta.x, y: 0 }
-        : gesture.axis === 'y'
-          ? { x: 0, y: rawDelta.y }
-          : rawDelta
-      if (Math.hypot(delta.x, delta.y) * gesture.viewport.zoom < 2) {
-        gesture.transforms = {}
-        gesture.dropTarget = null
-        publish({
-          ...snapshot,
-          phase: 'move',
-          previewTransforms: {},
-          snapGuides: [],
-          dropTarget: null,
-        })
-        return
-      }
-      const snapped = snapTranslation(
-        gesture.bounds,
-        delta,
-        index.snapCandidates(gesture.ids, targetFrameId(context)),
-        gesture.viewport.zoom,
-        modifiers.command,
-        {
-          stepX: context.document.canvas.grid.stepX,
-          stepY: context.document.canvas.grid.stepY,
-          offsetX: context.document.canvas.grid.offsetX,
-          offsetY: context.document.canvas.grid.offsetY,
-          enabled: context.document.canvas.grid.snapEnabled,
-        },
-      )
-      gesture.transforms = transformedSelection(
+      const preview = planMovePreview({
+        context,
         index,
-        gesture.ids,
-        translationMatrix(snapped.delta.x, snapped.delta.y),
-      )
-      // 落点跟随指针本身而不是吸附后的几何：用户判断“放进哪里”看的是光标位置。
-      // 宿主级锁定（动画模式）与手势中的 Space 锁定同一语义，任一生效即锁定原父级。
-      gesture.dropTarget = resolveStageDropTarget({
-        index,
-        draggedIds: gesture.ids,
-        worldPoint: world,
+        ids: gesture.ids,
+        bounds: gesture.bounds,
+        startWorld: gesture.startWorld,
+        world,
+        axis: gesture.axis,
         zoom: gesture.viewport.zoom,
-        modifiers: {
-          alt: modifiers.alt,
-          space: gesture.parentLocked || context.lockGestureParent === true,
-        },
+        modifiers,
+        parentLocked: gesture.parentLocked,
       })
+      gesture.transforms = preview.transforms
+      gesture.dropTarget = preview.dropTarget
       publish({
         ...snapshot,
         phase: 'move',
-        previewTransforms: gesture.transforms,
-        snapGuides: snapped.guides,
-        dropTarget: gesture.dropTarget,
+        previewTransforms: preview.transforms,
+        snapGuides: preview.snapGuides,
+        dropTarget: preview.dropTarget,
       })
       return
     }
@@ -1489,49 +1430,19 @@ export function createStageInteractionController(): StageInteractionController {
         },
       })
     }
-    else if (finished.type === 'move' && resolveCommittableDropTarget(finished.dropTarget)) {
-      // 落点有效时这次手势表达的是结构意图（换父级或改顺序），几何随 reparent 一起写入
-      // 同一条 batch，避免一次手势产生两条事务。Auto Layout 容器会丢弃 offset 改走 flow，
-      // 绝对定位容器则保留手势落点，否则节点会弹回拖拽前的位置。
-      const target = resolveCommittableDropTarget(finished.dropTarget)!
-      const container = context.document.entities[target.containerId]!
-      const childIds = getComposeHierarchy(container)!.childIds
-      // 按文档顺序提交，保证多选批量移动后的相对顺序与画布所见一致。
-      const orderedIds = [...finished.ids].sort((a, b) => {
-        const left = childIds.indexOf(a)
-        const right = childIds.indexOf(b)
-        return (left < 0 ? Number.MAX_SAFE_INTEGER : left)
-          - (right < 0 ? Number.MAX_SAFE_INTEGER : right)
+    else if (finished.type === 'move') {
+      const planned = planMoveCommit({
+        document: context.document,
+        layoutSnapshot: context.layoutSnapshot,
+        index,
+        ids: finished.ids,
+        transforms: finished.transforms,
+        dropTarget: finished.dropTarget,
+        idFactory: context.idFactory,
       })
-      effects.push({
-        type: 'command.dispatch',
-        command: target.kind === 'reparent'
-          ? createReparentCommand(
-              context.document,
-              context.layoutSnapshot,
-              orderedIds,
-              target.containerId,
-              childIds.length,
-              context.idFactory(),
-              finished.transforms,
-            )
-          : {
-              id: context.idFactory(),
-              type: BUILTIN_COMMAND_TYPES.moveEntity,
-              payload: {
-                entityIds: orderedIds,
-                parentId: target.containerId,
-                index: target.index,
-              },
-              meta: {
-                label: `Reorder ${describeEntityTargets(context.document, orderedIds)}`,
-                source: 'stage',
-                targetIds: orderedIds,
-              },
-            },
-      })
+      if (planned) effects.push(planned)
     }
-    else if (finished.type === 'move' || finished.type === 'resize') {
+    else if (finished.type === 'resize') {
       const planned = planTransformCommit({
         document: context.document,
         layoutSnapshot: context.layoutSnapshot,
