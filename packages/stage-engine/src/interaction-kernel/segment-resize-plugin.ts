@@ -4,13 +4,7 @@ import { resolveTargetFrameId } from '../geometry'
 import { screenToWorld, type StagePoint, type StageViewport } from '../geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 两点图形端点拖拽的注册 id。 @public */
 export const STAGE_SEGMENT_RESIZE_PLUGIN_ID = 'segment-resize'

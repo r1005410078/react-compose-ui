@@ -4,8 +4,8 @@ import { createStageSceneIndex } from '../hit-testing'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { createStageRotatePlugin, STAGE_ROTATE_PLUGIN_ID } from './rotate-plugin'
-import { createStagePluginRegistry } from './plugin-registry'
-import { createStageSessionArbiter } from './session-arbiter'
+import { createStagePluginRegistry } from './stage-kernel-profile'
+import { createStageSessionArbiter } from './stage-kernel-profile'
 import type { StageInteractionEffect } from '../interaction-controller'
 
 const MODIFIERS = { shift: false, alt: false, command: false }

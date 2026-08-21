@@ -6,12 +6,7 @@ import {
 import { rectFromPoints, screenToWorld, type StagePoint, type StageViewport } from '../geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import type { StageInteractionContext } from '../interaction-controller'
-import type {
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 图形绘制的注册 id。 @public */
 export const STAGE_DRAW_PLUGIN_ID = 'draw'

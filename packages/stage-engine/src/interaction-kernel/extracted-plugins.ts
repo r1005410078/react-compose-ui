@@ -24,7 +24,7 @@ import { createStageResizePlugin } from './resize-plugin'
 import { createStageRotatePlugin } from './rotate-plugin'
 import { createStageSegmentResizePlugin } from './segment-resize-plugin'
 import { createStageTextEditGuardPlugin } from './text-edit-guard-plugin'
-import type { StageInteractionPlugin } from './kernel-types'
+import type { StageInteractionPlugin } from './stage-kernel-profile'
 
 /**
  * Stage 交互插件的全量登记处，按优先级自顶向下排列。

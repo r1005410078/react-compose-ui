@@ -12,13 +12,7 @@ import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type { StageDropTarget } from '../hit-testing'
 import type { StageInteractionModifiers } from '../interaction-controller'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 轴向移动手柄入口的注册 id。 @public */
 export const STAGE_MOVE_AXIS_PLUGIN_ID = 'move-axis'

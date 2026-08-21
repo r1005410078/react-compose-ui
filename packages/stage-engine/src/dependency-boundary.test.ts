@@ -39,4 +39,29 @@ describe('stage-engine dependency boundary', () => {
       /\b(?:HTMLElement|PointerEvent|KeyboardEvent|DOMMatrix|ResizeObserver)\b/,
     )
   })
+
+  it('OpenSpec: stage-engine / 文档无关的交互内核契约 / 内核不引用具体文档类型', () => {
+    // 泛型内核的三个模块。Stage 的绑定单独住在 stage-kernel-profile.ts，因此这里是结构性
+    // 约束而不是口头约定：一旦有人把 Stage 类型写回这三个文件，这条用例立刻失败。
+    const kernelModules = [
+      'kernel-types.ts',
+      'session-arbiter.ts',
+      'plugin-registry.ts',
+    ]
+    for (const name of kernelModules) {
+      const source = readFileSync(
+        join(packageRoot, 'src', 'interaction-kernel', name),
+        'utf8',
+      )
+      const executable = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
+      expect(
+        executable,
+        `${name} 不得引用 Stage 专有类型或模块`,
+      ).not.toMatch(/\bStage[A-Z]\w*/)
+      expect(
+        executable,
+        `${name} 不得 import interaction-controller、hit-testing 等 Stage 专有模块`,
+      ).not.toMatch(/from\s+['"]\.\.\//)
+    }
+  })
 })

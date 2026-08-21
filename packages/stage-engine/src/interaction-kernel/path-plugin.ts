@@ -5,13 +5,7 @@ import type {
   StageInteractionModifiers,
   StagePathHandleKind,
 } from '../interaction-controller'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 可编辑路径手柄拖拽的注册 id。 @public */
 export const STAGE_PATH_PLUGIN_ID = 'path'

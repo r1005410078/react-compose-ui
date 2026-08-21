@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createStagePanPlugin, STAGE_PAN_PLUGIN_ID } from './pan-plugin'
-import { createStagePluginRegistry } from './plugin-registry'
-import { createStageSessionArbiter } from './session-arbiter'
+import { createStagePluginRegistry } from './stage-kernel-profile'
+import { createStageSessionArbiter } from './stage-kernel-profile'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import type {
   StageInteractionEffect,
   StageInteractionSnapshot,
 } from '../interaction-controller'
-import type { StagePluginContext, StagePointerDownEvent } from './kernel-types'
+import type { StagePluginContext, StagePointerDownEvent } from './stage-kernel-profile'
 
 const MODIFIERS = { shift: false, alt: false, command: false } as const
 const VIEWPORT = { x: 100, y: 50, zoom: 2 }

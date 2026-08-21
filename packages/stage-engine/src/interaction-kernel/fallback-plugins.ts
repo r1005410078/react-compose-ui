@@ -1,11 +1,6 @@
 import { claimStageMarquee } from './marquee-plugin'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-} from './kernel-types'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent } from './stage-kernel-profile'
 
 /** 旧旋转命中兜底的注册 id。 @public */
 export const STAGE_LEGACY_ROTATE_HIT_PLUGIN_ID = 'legacy-rotate-hit'

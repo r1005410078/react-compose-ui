@@ -15,13 +15,7 @@ import { planTransformCommit, resolveTransformTargets } from '../gesture-plannin
 import { transformedResizeSelection } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 缩放手柄的注册 id。 @public */
 export const STAGE_RESIZE_PLUGIN_ID = 'resize'

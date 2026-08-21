@@ -1,24 +1,26 @@
-import type {
-  StageInteractionContext,
-  StageInteractionEvent,
-} from '../interaction-controller'
-import type { StageSceneIndex } from '../hit-testing'
-import type { StagePluginRegistry } from './plugin-registry'
-import type {
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import type { InteractionPluginRegistry } from './plugin-registry'
+import type { InteractionKernelProfile, InteractionPluginContext, InteractionSession } from './kernel-types'
+
+/**
+ * 读取事件携带的指针绑定。
+ *
+ * @remarks
+ * profile 只把事件约束为 object，因此要先窄化再断言。内核对「会话身份如何绑定」目前仍
+ * 假设指针语义，这是泛型化之后唯一残留的一处耦合；命令驱动的文档类型出现时再一并处理。
+ */
+function pointerIdOf(event: object): number | undefined {
+  return 'pointerId' in event ? (event as { readonly pointerId?: number }).pointerId : undefined
+}
 
 /** `begin` 的结果，供内核决定是否继续走自己的兜底路径。 @public */
-export type StageArbiterBeginResult = 'claimed' | 'consumed' | 'declined'
+export type InteractionArbiterBeginResult = 'claimed' | 'consumed' | 'declined'
 
 /**
  * 同一时刻至多一个交互会话的仲裁器。
  *
  * @public
  */
-export interface StageSessionArbiter {
+export interface InteractionSessionArbiter<K extends InteractionKernelProfile> {
   /** 当前是否有活动会话。 */
   hasSession(): boolean
   /** 活动会话绑定的指针；无会话时为 null。 */
@@ -27,7 +29,7 @@ export interface StageSessionArbiter {
    * 活动会话是否把临时平移键重新解释为自己的修饰键。
    *
    * @remarks
-   * 见 {@link StageSession.consumesTemporaryPan}。无会话时为 `false`。
+   * 见 {@link InteractionSession.consumesTemporaryPan}。无会话时为 `false`。
    */
   activeSessionConsumesTemporaryPan(): boolean
   /**
@@ -45,9 +47,9 @@ export interface StageSessionArbiter {
    * @remarks
    * 已有活动会话时直接返回 `declined`：一次手势进行中不接受第二次接管。
    */
-  begin(event: StagePointerDownEvent, ctx: StagePluginContext): StageArbiterBeginResult
+  begin(event: K['claimEvent'], ctx: InteractionPluginContext<K>): InteractionArbiterBeginResult
   /** 把事件转给活动会话；无会话或指针不匹配时忽略。 */
-  update(event: StageInteractionEvent, ctx: StagePluginContext): void
+  update(event: K['event'], ctx: InteractionPluginContext<K>): void
   /**
    * 结束并提交活动会话。
    *
@@ -56,13 +58,13 @@ export interface StageSessionArbiter {
    * 「最终点推进之后」的状态，而不是最后一帧 move 留下的状态。这条约束放在仲裁器里而不是
    * 交给各插件自觉，否则漏掉的表现是「松手位置与落点差最后一帧」这类极难定位的偏移。
    */
-  commit(event: StageInteractionEvent, ctx: StagePluginContext): void
+  commit(event: K['event'], ctx: InteractionPluginContext<K>): void
   /**
    * 取消活动会话。
    *
    * @param pointerId - 省略表示取消任意会话；给出时只取消匹配的会话。
    */
-  cancel(ctx: StagePluginContext, pointerId?: number): void
+  cancel(ctx: InteractionPluginContext<K>, pointerId?: number): void
   /**
    * 让活动会话按新上下文自检；不成立时取消它。
    *
@@ -72,9 +74,9 @@ export interface StageSessionArbiter {
    * @returns 是否因不兼容而取消了会话。
    */
   revalidate(
-    next: StageInteractionContext,
-    nextIndex: StageSceneIndex,
-    ctx: StagePluginContext,
+    next: K['context'],
+    nextIndex: K['index'],
+    ctx: InteractionPluginContext<K>,
   ): boolean
   /**
    * 丢弃对活动会话的引用，且**不**调用它的 `cancel`。
@@ -94,10 +96,10 @@ export interface StageSessionArbiter {
  *
  * @public
  */
-export function createStageSessionArbiter(
-  registry: StagePluginRegistry,
-): StageSessionArbiter {
-  let session: StageSession | null = null
+export function createInteractionSessionArbiter<K extends InteractionKernelProfile>(
+  registry: InteractionPluginRegistry<K>,
+): InteractionSessionArbiter<K> {
+  let session: InteractionSession<K> | null = null
   let ownerId: string | null = null
 
   const matches = (pointerId: number | undefined) =>
@@ -123,15 +125,13 @@ export function createStageSessionArbiter(
     },
     update(event, ctx) {
       if (!session) return
-      // 非指针事件（temporary-pan 等）没有 pointerId，一律转发给活动会话。
-      const pointerId = 'pointerId' in event ? event.pointerId : undefined
-      if (!matches(pointerId)) return
+      // 非指针事件（temporary-pan 等）不携带 pointerId，一律转发给活动会话。
+      if (!matches(pointerIdOf(event))) return
       session.update(event, ctx)
     },
     commit(event, ctx) {
       if (!session) return
-      const pointerId = 'pointerId' in event ? event.pointerId : undefined
-      if (!matches(pointerId)) return
+      if (!matches(pointerIdOf(event))) return
       const finished = session
       // 先清空再回调：commit 内部若触发重入（宿主同步回灌 context），看到的是「无会话」，
       // 不会把同一个会话提交两次。

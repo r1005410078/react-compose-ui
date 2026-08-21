@@ -1,4 +1,4 @@
-import type { StageInteractionPlugin, StagePluginContext } from './kernel-types'
+import type { StageInteractionPlugin, StagePluginContext } from './stage-kernel-profile'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 
 /** 文字编辑守卫的注册 id。 @public */

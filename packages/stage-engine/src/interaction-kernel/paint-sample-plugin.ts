@@ -17,11 +17,7 @@ import type {
   StagePaintSamplePreview,
 } from '../interaction-controller'
 import type { StageSceneIndex } from '../hit-testing'
-import type {
-  StageInteractionPlugin,
-  StagePluginContext,
-  StageSession,
-} from './kernel-types'
+import type { StageInteractionPlugin, StagePluginContext, StageSession } from './stage-kernel-profile'
 
 /** 图层取色的注册 id。 @public */
 export const STAGE_PAINT_SAMPLE_PLUGIN_ID = 'paint-sample'

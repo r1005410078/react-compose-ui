@@ -1,13 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createStagePluginRegistry } from './plugin-registry'
-import { createStageSessionArbiter } from './session-arbiter'
-import type {
-  StageClaimResult,
-  StageInteractionPlugin,
-  StagePluginContext,
-  StagePointerDownEvent,
-  StageSession,
-} from './kernel-types'
+import { createStagePluginRegistry } from './stage-kernel-profile'
+import { createStageSessionArbiter } from './stage-kernel-profile'
+import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /*
  * 内核用伪插件测试：这里锁定的是仲裁语义本身（优先级、consumed 短路、单会话独占、
