@@ -3,12 +3,14 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   CAD_DEFAULT_LAYER_ID,
   createCadLineCommand,
+  findCadSnap,
   parseCadCoordinate,
   resolveCadPoint,
   type CadCommandContext,
   type CadCommandEffect,
   type CadDocument,
   type CadInputPoint,
+  type CadSnapCandidate,
 } from '@compose-ui/cad'
 import {
   createComposeCommandRegistry,
@@ -39,6 +41,8 @@ export interface ComposeCadCanvasProps {
   readonly activeLayerId?: string
   /** 网格步长（世界单位）。 @defaultValue 10 */
   readonly gridStep?: number
+  /** 对象捕捉的屏幕半径（CSS 像素）。 @defaultValue 12 */
+  readonly snapRadius?: number
 }
 
 function defaultIdFactory() {
@@ -65,6 +69,7 @@ export function ComposeCadCanvas({
   idFactory = defaultIdFactory,
   activeLayerId = CAD_DEFAULT_LAYER_ID,
   gridStep = 10,
+  snapRadius = 12,
 }: ComposeCadCanvasProps) {
   const i18n = useComposeI18nContext()
   const messages = getCadCanvasMessages(i18n?.locale ?? 'zh-CN')
@@ -74,6 +79,8 @@ export function ComposeCadCanvas({
   const [preview, setPreview] = useState<readonly CadPreviewSegment[]>([])
   const [ortho, setOrtho] = useState(false)
   const [gridEnabled, setGridEnabled] = useState(true)
+  const [snapEnabled, setSnapEnabled] = useState(true)
+  const [hover, setHover] = useState<CadCanvasPoint | null>(null)
   // 后续相对输入的参照点由会话给出：「放弃」会退回上一个顶点，宿主自行记账会与会话失步。
   const [reference, setReference] = useState<CadInputPoint | undefined>(undefined)
   // 活动会话不进 state：它是可变对象，进 state 既不会触发正确的重渲染，也会让「同一次命令」
@@ -113,11 +120,25 @@ export function ComposeCadCanvas({
     endSession(step.status === 'cancelled' ? messages.cancelled : null)
   }, [endSession, messages.cancelled, onDispatch])
 
+  /**
+   * 当前捕捉命中的特征点。
+   *
+   * @remarks
+   * 只在命令**正等待取点**时求解：空闲时算捕捉既没有消费者，又会在每次指针移动上做无谓的
+   * 几何计算。捕捉半径按屏幕像素给出，除以缩放换成世界单位——视图缩小时同样的屏幕半径必须
+   * 覆盖更大的世界范围，否则放远了就再也捕不到。
+   */
+  const snap = useMemo<CadSnapCandidate | null>(() => {
+    if (!snapEnabled || !hover || !prompt?.accepts.includes('point')) return null
+    return findCadSnap(document, hover, snapRadius / viewport.zoom)
+  }, [document, hover, prompt, snapEnabled, snapRadius, viewport.zoom])
+
   const pointContext = useMemo(() => ({
+    snapped: snap?.point,
     reference,
     ortho,
     grid: { enabled: gridEnabled, step: gridStep },
-  }), [gridEnabled, gridStep, ortho, reference])
+  }), [gridEnabled, gridStep, ortho, reference, snap])
 
   const handlePickPoint = useCallback((point: CadCanvasPoint) => {
     const session = sessionRef.current
@@ -170,7 +191,7 @@ export function ComposeCadCanvas({
   }, [applyStep])
 
   /**
-   * F8 切换正交、F7 切换网格。
+   * F8 切换正交、F7 切换网格、F3 切换对象捕捉。
    *
    * @remarks
    * 挂在容器上而不是画布上：焦点通常在命令行输入框里，挂在画布上按键根本收不到。这两个键在
@@ -185,6 +206,11 @@ export function ComposeCadCanvas({
     if (event.key === 'F7') {
       event.preventDefault()
       setGridEnabled((current) => !current)
+      return
+    }
+    if (event.key === 'F3') {
+      event.preventDefault()
+      setSnapEnabled((current) => !current)
     }
   }, [])
 
@@ -196,7 +222,9 @@ export function ComposeCadCanvas({
           gridStep={gridEnabled ? gridStep : null}
           label={messages.canvasLabel}
           previewSegments={preview}
+          snap={snap}
           viewport={viewport}
+          onHoverPoint={setHover}
           onPickPoint={handlePickPoint}
           onViewportChange={setViewport}
         />
@@ -206,6 +234,7 @@ export function ComposeCadCanvas({
         notice={notice}
         ortho={ortho}
         prompt={prompt}
+        snap={snapEnabled}
         onCancel={handleCancel}
         onSubmit={handleSubmit}
       />

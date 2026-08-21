@@ -18,6 +18,8 @@ const messages = {
     orthoOn: '正交 开',
     orthoOff: '正交 关',
     needsReference: '需要一个参照点',
+    snapOn: '对象捕捉 开',
+    snapOff: '对象捕捉 关',
   },
   'en-US': {
     canvasLabel: 'CAD drawing',
@@ -35,6 +37,8 @@ const messages = {
     orthoOn: 'Ortho on',
     orthoOff: 'Ortho off',
     needsReference: 'A reference point is required',
+    snapOn: 'Object snap on',
+    snapOff: 'Object snap off',
   },
 } as const
 

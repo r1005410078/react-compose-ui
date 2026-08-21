@@ -1248,3 +1248,58 @@ test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', 
   await commandInput.press('F8')
   await expect(canvas.locator('[data-testid="cad-ortho-state"]')).toHaveText('正交 开')
 })
+
+test('OpenSpec: cad-document / CAD 对象捕捉 / 捕捉端点画出精确相接的两条线', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Snap')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  const commandInput = canvas.locator('[data-testid="cad-command-input"]')
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+
+  // 1) 先键入一条端点不在网格上的线
+  for (const text of ['L', '40,40', '143,87', 'F']) {
+    await commandInput.fill(text)
+    await commandInput.press('Enter')
+  }
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(1)
+
+  // 2) 第二条线从该端点附近起笔：悬停出现端点标记
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await surface.hover({ position: { x: 145, y: 89 } })
+  const marker = canvas.locator('[data-testid="cad-snap-marker"]')
+  await expect(marker).toHaveAttribute('data-snap-mode', 'endpoint')
+
+  // 3) 点下去落在精确端点上，而不是被网格取整到 (140,90)
+  await surface.click({ position: { x: 145, y: 89 } })
+  await commandInput.fill('240,87')
+  await commandInput.press('Enter')
+  await commandInput.press('Enter')
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(2)
+
+  const second = surface.locator('[data-cad-entity]').nth(1)
+  const first = surface.locator('[data-cad-entity]').first()
+  // 两条线在屏幕上严格共点：第一条的终点就是第二条的起点。
+  expect(await second.getAttribute('x1')).toBe(await first.getAttribute('x2'))
+  expect(await second.getAttribute('y1')).toBe(await first.getAttribute('y2'))
+
+  // 4) F3 关闭对象捕捉后不再出现标记
+  await commandInput.press('F3')
+  await expect(canvas.locator('[data-testid="cad-snap-state"]')).toHaveText('对象捕捉 关')
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await surface.hover({ position: { x: 145, y: 89 } })
+  await expect(marker).toHaveCount(0)
+})

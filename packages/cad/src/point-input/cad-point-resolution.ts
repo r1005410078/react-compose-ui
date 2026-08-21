@@ -10,6 +10,15 @@ export interface CadGridSettings {
 /** 求解一个点时可用的上下文。 @public */
 export interface CadPointContext {
   /**
+   * 对象捕捉命中的特征点。
+   *
+   * @remarks
+   * 管线中**优先级最高**：命中时结果就是它，不再经过正交与网格——捕捉到端点之后再被网格挪走，
+   * 等于捕捉没发生。由宿主求解后传入而不是在这里查文档：宿主本来就要拿它渲染捕捉标记，
+   * 让本函数保持无依赖的纯计算。
+   */
+  readonly snapped?: CadInputPoint
+  /**
    * 上一个已确定的点。
    *
    * @remarks
@@ -54,8 +63,8 @@ function applyGrid(point: CadInputPoint, grid: CadGridSettings): CadInputPoint {
  * 求解用户指定的一个点。
  *
  * @remarks
- * 这是一条**有序管线**，当前两级是正交与网格。对象捕捉将来作为**最高优先级的一级**插在它们
- * 之前——捕捉到端点之后不应再被网格挪走。管线形式让新增一级不必改动任何调用方。
+ * 这是一条**有序管线**：对象捕捉 > 正交 > 网格，另有「键入的坐标跳过全部吸附」这条总闸。
+ * 新增一级只需在这里插一句并给上下文加一个字段，调用方不必改动——捕捉正是这样加进来的。
  *
  * @param point - 原始点：指针取点时是世界坐标，键入坐标时是解析结果。
  * @param source - 点的来源；`typed` 跳过全部吸附。
@@ -68,5 +77,6 @@ export function resolveCadPoint(
   context: CadPointContext,
 ): CadInputPoint {
   if (source === 'typed') return point
+  if (context.snapped) return context.snapped
   return applyGrid(context.ortho ? applyOrtho(point, context.reference) : point, context.grid)
 }
