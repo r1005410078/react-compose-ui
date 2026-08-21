@@ -56,6 +56,12 @@ const translations = {
     zoomIn: '放大',
     zoomOut: '缩小',
     zoomReset: '100%',
+    assetDropNoResolver: '无法添加资源：未连接资源解析器。',
+    assetDropAllFailed: (failed: number) => `未添加任何资源，${failed} 项失败。`,
+    assetDropAdded: (added: number) => `已添加 ${added} 个资源。`,
+    assetDropPartial: (added: number, failed: number) =>
+      `已添加 ${added} 项，${failed} 项失败。`,
+    assetDropCommand: (added: number) => `添加 ${added} 个资源`,
   },
   'en-US': {
     rulerOrigin: 'Ruler origin',
@@ -107,6 +113,14 @@ const translations = {
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
     zoomReset: '100%',
+    assetDropNoResolver: 'Assets could not be added: no asset resolver is connected.',
+    assetDropAllFailed: (failed: number) => `No assets were added. ${failed} failed.`,
+    assetDropAdded: (added: number) =>
+      `${added} asset${added === 1 ? '' : 's'} added.`,
+    assetDropPartial: (added: number, failed: number) =>
+      `${added} added, ${failed} failed.`,
+    assetDropCommand: (added: number) =>
+      `Add ${added} asset${added === 1 ? '' : 's'}`,
   },
 } as const
 
@@ -200,5 +214,29 @@ export function getStageMessages(
     zoomIn: formatMessage('stage.zoomIn', messages.zoomIn),
     zoomOut: formatMessage('stage.zoomOut', messages.zoomOut),
     zoomReset: formatMessage('stage.zoomReset', messages.zoomReset),
+    assetDropNoResolver: formatMessage(
+      'stage.assetDropNoResolver',
+      messages.assetDropNoResolver,
+    ),
+    assetDropAllFailed: (failed: number) => formatMessage(
+      'stage.assetDropAllFailed',
+      messages.assetDropAllFailed(failed),
+      { failed },
+    ),
+    assetDropAdded: (added: number) => formatMessage(
+      'stage.assetDropAdded',
+      messages.assetDropAdded(added),
+      { added },
+    ),
+    assetDropPartial: (added: number, failed: number) => formatMessage(
+      'stage.assetDropPartial',
+      messages.assetDropPartial(added, failed),
+      { added, failed },
+    ),
+    assetDropCommand: (added: number) => formatMessage(
+      'stage.assetDropCommand',
+      messages.assetDropCommand(added),
+      { added },
+    ),
   }
 }
