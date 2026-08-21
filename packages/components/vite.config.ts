@@ -38,6 +38,7 @@ export default defineConfig({
       // Base UI 的条件导出在下游 Rolldown 构建中会回退到 CJS require。
       // 将其随组件库产出为 ESM，保证嵌入 Vite/Rolldown 宿主时不依赖浏览器端 require。
       external: [
+        '@compose-ui/commands',
         '@compose-ui/ui-context',
         '@tanstack/react-virtual',
         'class-variance-authority',

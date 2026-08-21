@@ -1,3 +1,5 @@
+import { composeKeyboardEventCode, matchesComposeKeybinding } from '@compose-ui/commands'
+import type { ComposeKeyboardEventShape } from '@compose-ui/commands'
 import type { ComposeLayerOrderOperation } from '@compose-ui/stage-engine'
 import type {
   ComposeStageDelegatableAction,
@@ -95,42 +97,32 @@ export const LAYER_ORDER_SHORTCUTS = [
   ['edit.sendToBack', 'send-to-back'],
 ] as const satisfies readonly (readonly [ComposeStageShortcutAction, ComposeLayerOrderOperation])[]
 
-export function keyboardEventCode(event: {
-  code: string
-  key: string
-}) {
-  if (event.code) return event.code
-  if (/^[a-z]$/i.test(event.key)) return `Key${event.key.toUpperCase()}`
-  if (/^[0-9]$/.test(event.key)) return `Digit${event.key}`
-  const codes: Record<string, string> = {
-    ' ': 'Space',
-    ',': 'Comma',
-    '=': 'Equal',
-    '-': 'Minus',
-    '[': 'BracketLeft',
-    ']': 'BracketRight',
-  }
-  return codes[event.key] ?? event.key
+/**
+ * 把键盘事件归一为物理键码。
+ *
+ * @remarks
+ * 保留 Stage 既有的公共名称；实现住在 `@compose-ui/commands`，与匹配用的是同一份归一化。
+ *
+ * @public
+ */
+export function keyboardEventCode(event: ComposeKeyboardEventShape) {
+  return composeKeyboardEventCode(event)
 }
 
+/**
+ * 判定一次按键是否命中某个 Stage 键位。
+ *
+ * @remarks
+ * 归一化与匹配住在 `@compose-ui/commands`：此前匹配只在 Stage 有、归一化只在 Editor 有，
+ * 两边都无法独立完成命中判定。本函数只是保留 Stage 既有的公共名称。
+ *
+ * @public
+ */
 export function isStageShortcutMatch(
-  event: {
-    altKey: boolean
-    code: string
-    ctrlKey: boolean
-    key: string
-    metaKey: boolean
-    shiftKey: boolean
-  },
+  event: ComposeKeyboardEventShape,
   binding: ComposeStageKeybinding,
 ) {
-  const modifierMatches = binding.primary
-    ? event.ctrlKey !== event.metaKey
-    : event.ctrlKey === Boolean(binding.control) && !event.metaKey
-  return keyboardEventCode(event) === binding.code
-    && modifierMatches
-    && event.shiftKey === Boolean(binding.shift)
-    && event.altKey === Boolean(binding.alt)
+  return matchesComposeKeybinding(event, binding)
 }
 
 /** 渲染受控 DOM/SVG 无限 Stage，并显式呈现 Layout Runtime 加载或失败状态。 @public */

@@ -1,5 +1,6 @@
 import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
+import type { ComposeKeybinding } from '@compose-ui/commands'
 import type { ComposeLayoutMeasurementPort, ComposePageDocumentLoader } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
@@ -55,20 +56,13 @@ export type ComposeStageMarqueeMode = StageMarqueeMode
 /**
  * Stage 可配置的单次键位。
  *
+ * @remarks
+ * `@compose-ui/commands` 的 `ComposeKeybinding` 别名。此前 Stage、Editor 与 components
+ * 各自声明了字段逐字相同的类型，归一化与匹配也因此分散在不同包里。
+ *
  * @public
  */
-export interface ComposeStageKeybinding {
-  /** `KeyboardEvent.code` 物理键位。 */
-  readonly code: string
-  /** macOS 使用 Command，其他平台使用 Control。 */
-  readonly primary?: boolean
-  /** 所有平台都明确使用 Control。 */
-  readonly control?: boolean
-  /** 是否要求 Shift。 */
-  readonly shift?: boolean
-  /** 是否要求 Alt/Option。 */
-  readonly alt?: boolean
-}
+export type ComposeStageKeybinding = ComposeKeybinding
 
 /**
  * Stage 可修改快捷键动作。

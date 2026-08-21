@@ -23,6 +23,7 @@ export default defineConfig({
     rollupOptions: {
       external: [
         '@compose-ui/assets',
+        '@compose-ui/commands',
         '@compose-ui/component-registry',
         '@compose-ui/core',
         '@compose-ui/script-runtime',

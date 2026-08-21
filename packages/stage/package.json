@@ -2,8 +2,12 @@
   "name": "@compose-ui/stage",
   "version": "0.1.0",
   "type": "module",
-  "sideEffects": ["**/*.css"],
-  "files": ["dist"],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,6 +31,7 @@
   },
   "dependencies": {
     "@compose-ui/assets": "workspace:*",
+    "@compose-ui/commands": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/components": "workspace:*",
     "@compose-ui/core": "workspace:*",

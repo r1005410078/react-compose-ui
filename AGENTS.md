@@ -92,6 +92,11 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `script-runtime` 与既有领域组件，通过公开协议组合页面脚本工作流。
 - `@compose-ui/components` 是跨第一方包复用的 React 交互组件层，可依赖 `ui-context`，
   不包含场景、资源 Provider、文档命令或持久化语义。
+- `@compose-ui/commands` 是无 React、无 DOM、**零运行时依赖**的命令与键位包，连 `core` 都不
+  依赖——动作只是 `run(ctx)`，本包不认识任何文档协议。它是 `ComposeKeybinding` 的唯一定义处，
+  同时承载归一化、序列化、事件匹配与平台格式化，以及动作 id 到键位列表的泛型映射；
+  `components`、`stage`、`editor` 的键位类型都是它的别名。平台格式化的 `platform` 必填，
+  本包不读取 `navigator`。
 - `@compose-ui/scene-tree` 是独立受控 React 树组件，可依赖 `components` 和 `ui-context`，
   不得依赖 `core` 或 `editor`；`editor` 可以通过公共入口依赖并默认集成它。
 - `@compose-ui/asset-browser` 是独立文件浏览预览和 Monaco 编辑包，可依赖 `assets`、
@@ -157,7 +162,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`commands`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`，提供跨包协议、
    Context 与无业务语义的交互组件。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、
