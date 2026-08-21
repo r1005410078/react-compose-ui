@@ -6,7 +6,7 @@ import {
   segmentNearPoint,
   squaredDistance,
   type CadSegment,
-} from './cad-snap-geometry'
+} from '../geometry'
 
 /**
  * 对象捕捉模式。

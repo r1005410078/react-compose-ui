@@ -3,21 +3,8 @@ import { createDocumentTransactionRuntime } from '@compose-ui/core'
 import type { DocumentValidationIssueShape, EditorCommand } from '@compose-ui/core'
 import { createEmptyCadDocument, getCadLine, validateCadDocument, type CadDocument } from '../document'
 import { createCadCommandHandlers } from './cad-command-handlers'
-import { createCadLineSession, type CadCommandContext, type CadCommandMessages } from './cad-line-command'
-
-const messages: CadCommandMessages = {
-  specifyFirstPoint: '指定第一点',
-  specifyNextPoint: '指定下一点',
-  keywordUndo: '放弃',
-  keywordFinish: '结束',
-  expectedPoint: '需要一个点',
-  lineTitle: '直线',
-}
-
-function context(): CadCommandContext {
-  let counter = 0
-  return { layerId: '0', idFactory: () => `id-${++counter}`, messages }
-}
+import { createCadTestCommandContext as context } from '../test-fixtures'
+import { createCadLineSession } from './cad-line-command'
 
 const point = (x: number, y: number) => ({ kind: 'point', point: { x, y } } as const)
 
@@ -36,9 +23,9 @@ function lines(document: CadDocument) {
 describe('LINE 命令状态机', () => {
   it('OpenSpec: cad-document / CAD 直线命令 / 两点画出一条直线', () => {
     const session = createCadLineSession(context())
-    expect(session.prompt.message).toBe('指定第一点')
+    expect(session.prompt?.message).toBe('指定第一点')
     expect(session.advance(point(0, 0)).status).toBe('prompt')
-    expect(session.prompt.message).toBe('指定下一点')
+    expect(session.prompt?.message).toBe('指定下一点')
 
     session.advance(point(100, 0))
     const finished = session.advance({ kind: 'accept' })
@@ -113,7 +100,7 @@ describe('LINE 命令状态机', () => {
     })
     expect(session.advance({ kind: 'accept' }).status).toBe('rejected')
     // 会话仍停在原提示，随后正常取点。
-    expect(session.prompt.message).toBe('指定第一点')
+    expect(session.prompt?.message).toBe('指定第一点')
     expect(session.advance(point(1, 1)).status).toBe('prompt')
 
     // 未列出的关键字同样被拒绝，且不改变已有顶点。

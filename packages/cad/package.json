@@ -29,6 +29,7 @@
   "dependencies": {
     "@compose-ui/assets": "workspace:*",
     "@compose-ui/commands": "workspace:*",
-    "@compose-ui/core": "workspace:*"
+    "@compose-ui/core": "workspace:*",
+    "@compose-ui/interaction-kernel": "workspace:*"
   }
 }

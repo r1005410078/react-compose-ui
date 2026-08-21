@@ -89,3 +89,25 @@
   stroke-width: 1.5;
   pointer-events: none;
 }
+
+/*
+ * 图元颜色来自所属图层（ByLayer），因此未选中时由 stroke 属性给出，这里只兜底。选中态改用
+ * 强调色并加粗：CAD 图上线条又细又多，只靠改色在余光里分不出来。
+ */
+.compose-cad-canvas__entity[data-selected] {
+  stroke: var(--compose-accent, #63b3ed);
+  stroke-width: 2;
+}
+
+/* 选框：实线是窗口、虚线是交叉，沿用 AutoCAD 的约定。 */
+.compose-cad-canvas__marquee {
+  fill: var(--compose-accent, #63b3ed);
+  fill-opacity: 0.08;
+  stroke: var(--compose-accent, #63b3ed);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.compose-cad-canvas__marquee[data-marquee-mode='crossing'] {
+  stroke-dasharray: 4 3;
+}

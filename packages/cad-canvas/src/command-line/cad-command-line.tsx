@@ -14,6 +14,8 @@ export interface CadCommandLineProps {
   readonly ortho: boolean
   /** 对象捕捉是否开启。 */
   readonly snap: boolean
+  /** 当前选择集大小；为 0 时不显示。 */
+  readonly selectionCount: number
   /** 用户提交了一行文本：空闲时是命令名，命令进行中是关键字。 */
   readonly onSubmit: (text: string) => void
   /** 用户按下 Esc。 */
@@ -39,8 +41,9 @@ function promptText(prompt: ComposeCommandPrompt | null, messages: CadCanvasMess
  * CAD 命令行。
  *
  * @remarks
- * 命令由这里启动：空闲时键入命令名回车，命令进行中键入关键字回车。Esc 取消整条命令——
- * AutoCAD 的 Esc 是中止而不是退一步，退一步由命令自己的「放弃」关键字表达。
+ * 命令由这里启动：空闲时键入命令名回车，命令进行中键入关键字回车。Esc 有两级语义——有活动
+ * 命令时中止整条命令（AutoCAD 的 Esc 是中止而不是退一步，退一步由命令自己的「放弃」关键字
+ * 表达），没有活动命令时清空选择集。两级都由宿主判定，本组件只负责把按键报上去。
  *
  * @internal
  */
@@ -50,6 +53,7 @@ export function CadCommandLine({
   messages,
   ortho,
   snap,
+  selectionCount,
   onSubmit,
   onCancel,
 }: CadCommandLineProps) {
@@ -85,6 +89,15 @@ export function CadCommandLine({
         onChange={(event) => { setText(event.target.value) }}
         onKeyDown={handleKeyDown}
       />
+      {selectionCount > 0 ? (
+        <span
+          className="compose-cad-canvas__mode"
+          data-active=""
+          data-testid="cad-selection-count"
+        >
+          {selectionCount}
+        </span>
+      ) : null}
       <span
         className="compose-cad-canvas__mode"
         data-active={snap ? '' : undefined}

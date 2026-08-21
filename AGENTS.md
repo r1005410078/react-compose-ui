@@ -120,8 +120,12 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   Project Component/Variant 才是 Provider 资源。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面聚合 Store 包，只能依赖
   `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
-- `@compose-ui/cad` 是无 React、无 DOM 的 CAD 文档协议、命令与资源 Store 包，只能依赖 `core`、
-  `assets` 与 `commands`。`CadDocument` **复用 ComposeDocument 的 ECS 底座**——Entity 结构、Patch 代数、
+- `@compose-ui/cad` 是无 React、无 DOM 的 CAD 文档协议、命令、选择集与手势仲裁包，只能依赖
+  `core`、`assets`、`commands` 与 `interaction-kernel`。**命中判据是点到几何的距离而不是包围盒**：
+  直线没有盒模型，按矩形判定会让两条交叉线互相遮挡对方的命中区。选择集语义按 AutoCAD——
+  点中即加入（不需要修饰键）、Shift 移出、左→右是窗口、右→左是交叉；这与页面编辑器相反，
+  是刻意的。手势插件是纯状态机：不认识命令会话，只发效果，点的捕捉/正交/网格求解留在宿主。
+  `CadDocument` **复用 ComposeDocument 的 ECS 底座**——Entity 结构、Patch 代数、
   事务运行时、Undo/Redo 与序列化全部共用，差异只在校验器与 Component 词汇，因此不存在第二套
   事务实现。CAD 是**无限图纸**：文档不带任何画布或输出尺寸，也没有 Frame，因此不受
   「`Frame.size` 是尺寸唯一事实来源」这条不变量约束；单位固定 `px`，没有图纸比例。
