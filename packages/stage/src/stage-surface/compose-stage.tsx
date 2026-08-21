@@ -17,24 +17,16 @@ import {
 } from 'react'
 import type {
   CSSProperties,
-  PointerEvent as ReactPointerEvent,
 } from 'react'
 import {
-  createComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import type {
   ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import {
   collectComposeSwitcherHiddenIds,
-  isComposeInstancePath,
-  encodeComposeInstancePath,
-  getComposeLock,
-  getComposeRenderer,
   getComposeVisibility,
-  resolveComposeGeometryConstraints,
   resolveComposeSwitcherPreview,
-  type ComposeEntity,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import {
@@ -48,13 +40,9 @@ import {
   scrollAxisToViewport,
   viewportToScrollAxes,
   getEntityWorldBounds,
-  screenToWorld,
   unionRects,
   worldToScreen,
-  type ResizeHandle,
-  type StageRect,
   type StageDrawnEntity,
-  type StageInteractionController,
 } from '@compose-ui/stage-engine'
 import type {
   ComposeStageKeybinding,
@@ -62,25 +50,39 @@ import type {
   ComposeStagePolicy,
   ComposeStageProps,
 } from '../types'
-import { nextInstanceDrillDownTarget, resolveInstanceDrillDownPath } from './instance-drilldown'
-import { instanceSelectionScreenBounds } from './instance-selection-bounds'
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
 import {
-  screenPoint,
 } from './stage-pointer-geometry'
 import {
   bootstrapSelectionBounds,
   lineSegmentForEntity,
   lineSegmentTransform,
-  transformDocument,
-  transformLayoutSnapshot,
   type StageTransformMap,
 } from './stage-preview-document'
 import {
   DEFAULT_STAGE_SHORTCUTS,
   STAGE_SHORTCUT_ACTIONS,
 } from './stage-shortcuts'
+import {
+  frameScreenBounds,
+  mergeCanvasGuides,
+  resizeHandlePoints,
+  visibleWorldRect,
+  worldRectToScreen,
+} from './stage-screen-geometry'
+import {
+  isStageSelectionEditable,
+  isStageSelectionRotatable,
+  resolveStageResizeHandles,
+  resolveStageSelectionConstraints,
+  unlockedStageIds,
+} from './stage-selection-derivations'
+import { useStageInstanceDrilldown } from './use-stage-instance-drilldown'
+import { useStagePreviewDocuments } from './use-stage-preview-documents'
+import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-lifecycle'
+import { useStageRootHandlers } from './use-stage-root-handlers'
+import { StageWorldUnderlay } from './stage-world-underlay'
 import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './use-stage-effect-dispatch'
 import { useStagePointerSession } from './use-stage-pointer-session'
@@ -90,7 +92,6 @@ import { useStageClipboard } from './use-stage-clipboard'
 import { useStageKeyboardCommands } from './use-stage-keyboard'
 import { StageRulers, type StageRulersHandle } from '../stage-ruler'
 import { StageSceneLayer } from '../stage-scene-layer'
-import { buildResizePreviewSolveDocument } from './resize-preview'
 import {
 } from '@compose-ui/stage-engine'
 import { getStageMessages } from '../stage-i18n'
@@ -101,7 +102,6 @@ import {
 } from './drawing-entity'
 
 
-const WORLD_ORIGIN_ICON_HALF_SIZE = 8
 function defaultId() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
   return `stage-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -110,20 +110,6 @@ function defaultId() {
 /** 宿主省略 policy 时的解构底座；共用常量避免每帧分配一个空对象。 */
 const EMPTY_STAGE_POLICY: ComposeStagePolicy = Object.freeze({})
 
-
-function useFinalControllerDisposal(controller: StageInteractionController) {
-  const effectGeneration = useRef(0)
-  useEffect(() => {
-    effectGeneration.current += 1
-    const mountedGeneration = effectGeneration.current
-    return () => {
-      // StrictMode 的 effect 重放不是最终卸载；后续 setup 会提升 generation 并取消本次释放。
-      queueMicrotask(() => {
-        if (effectGeneration.current === mountedGeneration) controller.dispose()
-      })
-    }
-  }, [controller])
-}
 
 export function ComposeStage(props: ComposeStageProps) {
   const measurementAdapter = useComposeStageMeasurement(props)
@@ -161,46 +147,6 @@ type ComposeStageReadyProps = Omit<
   readonly layoutSnapshot: ComposeLayoutSnapshot
   /** 原地编辑期间把编辑中的文本送进测量链路，使 Auto width 实时改宽。 */
   readonly measurementAdapter: ComposeRendererMeasurementAdapter
-}
-
-function useComposeStageMeasurement({
-  document,
-  scriptScope,
-  services,
-}: ComposeStageProps) {
-  // 按字段消费端口而不是整个 services 对象：adapter 只应在它实际使用的那几个端口变化时
-  // 重建。以对象引用作依赖会让宿主每次重新构造 services 都重建 adapter 并丢弃测量缓存。
-  const { assetResolver, layoutRuntime, pageLoader, registry } = services
-  const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
-    registry,
-    assetResolver,
-    pageDocumentPort: pageLoader,
-    scriptScope,
-  }), [assetResolver, pageLoader, registry, scriptScope])
-  const disposalGenerations = useRef(new WeakMap<ComposeRendererMeasurementAdapter, number>())
-
-  useLayoutEffect(() => adapter.updateDocument(document), [adapter, document])
-  useLayoutEffect(() => {
-    if (!layoutRuntime) return
-    layoutRuntime.setMeasurementPort(adapter)
-    return () => layoutRuntime.setMeasurementPort(undefined)
-  }, [adapter, layoutRuntime])
-  useEffect(() => {
-    const generations = disposalGenerations.current
-    const generation = (generations.get(adapter) ?? 0) + 1
-    generations.set(adapter, generation)
-    return () => queueMicrotask(() => {
-      if (generations.get(adapter) !== generation) return
-      adapter.dispose()
-      generations.delete(adapter)
-    })
-  }, [adapter])
-  return adapter
-}
-
-/** 判断 Entity 是否为关联组件实例。 */
-function isComponentInstanceEntity(entity: ComposeEntity) {
-  return getComposeRenderer(entity)?.type === 'component-instance'
 }
 
 function ComposeStageReady({
@@ -271,13 +217,6 @@ function ComposeStageReady({
   const rootRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const rulersRef = useRef<StageRulersHandle>(null)
-  /** 实例内部选中框的 surface 相对矩形；内部几何只在 DOM 上，必须测量而非计算。 */
-  const [instanceSelectionBounds, setInstanceSelectionBounds] = useState<StageRect | null>(null)
-  /** 当前已下钻到的实例内部层级；见 beginEntity 中的说明。 */
-  const drillContextRef = useRef<{
-    readonly instanceId: string
-    readonly innerId: string
-  } | null>(null)
   const [privateController] = useState(createStageInteractionController)
   const controller = interactionController ?? privateController
   const interaction = useSyncExternalStore(
@@ -352,63 +291,39 @@ function ComposeStageReady({
     >,
     [shortcuts],
   )
-  const previewDocument = useMemo(
-    () => transformDocument(document, previewTransforms, previewDirections),
-    [document, previewDirections, previewTransforms],
-  )
-  const previewLayoutSnapshot = useMemo(
-    () => transformLayoutSnapshot(layoutSnapshot, previewTransforms),
-    [layoutSnapshot, previewTransforms],
-  )
-  // resize 手势的实时布局：把预览文档交给 Layout Runtime 求解，兄弟随拖动让位。
-  // 只有 Flow 目标需要求解（Absolute 不参与排布，previewTransforms 覆盖已足够）。
-  const resizeSolveDocument = useMemo(
-    () => (interaction.phase === 'resize' && layoutRuntime?.previewDocument
-      ? buildResizePreviewSolveDocument(previewDocument, Object.keys(previewTransforms))
-      : null),
-    [interaction.phase, layoutRuntime, previewDocument, previewTransforms],
-  )
-  useEffect(() => {
-    const runtime = layoutRuntime
-    if (!runtime?.previewDocument || !runtime.clearPreview) return
-    if (!resizeSolveDocument) {
-      runtime.clearPreview()
-      return
-    }
-    // rAF 合并：120Hz pointermove 下每帧最多一次求解；卸载或换帧取消未执行的请求。
-    const frame = requestAnimationFrame(() => runtime.previewDocument!(resizeSolveDocument))
-    return () => cancelAnimationFrame(frame)
-  }, [layoutRuntime, resizeSolveDocument])
-  // 卸载兜底：手势中途卸载 Stage 时不把预览状态留在宿主 Runtime 里。
-  useEffect(() => () => layoutRuntime?.clearPreview?.(), [layoutRuntime])
-  // 场景渲染优先用实时求解结果；求解只在 resize 期间生效，其余手势维持既有覆盖预览。
-  // 预览 Snapshot 不进入交互 Controller 的 context（见 updateContext），提交几何始终以
-  // 冻结的提交态 Snapshot 为准。
-  const sceneLayoutSnapshot = resizeSolveDocument && layoutPreviewSnapshot
-    ? layoutPreviewSnapshot
-    : previewLayoutSnapshot
+  const {
+    previewDocument,
+    previewLayoutSnapshot,
+    sceneLayoutSnapshot,
+  } = useStagePreviewDocuments({
+    document,
+    interactionPhase: interaction.phase,
+    layoutPreviewSnapshot,
+    layoutRuntime,
+    layoutSnapshot,
+    previewDirections,
+    previewTransforms,
+  })
   const normalizedSelection = useMemo(
     () => selectedIds.filter((id) => Boolean(document.entities[id])),
     [document, selectedIds],
   )
-  // 内部实体几何由嵌套 Runtime 决定，宿主既无 LayoutItem 也无场景索引条目，只能在提交后测量。
-  // viewport 与 document 变化都会改变屏幕矩形，因此都要重新测量。
-  const instanceSelectionAddress = selectedIds.length === 1 && isComposeInstancePath(selectedIds[0]!)
-    ? selectedIds[0]!
-    : null
-  useLayoutEffect(() => {
-    const surface = surfaceRef.current
-    if (!surface || instanceSelectionAddress === null) {
-      setInstanceSelectionBounds(null)
-      return
-    }
-    setInstanceSelectionBounds(instanceSelectionScreenBounds(surface, instanceSelectionAddress))
-  }, [instanceSelectionAddress, viewport, document, layoutSnapshot])
+  const {
+    beginContainerLabel,
+    beginEntity,
+    instanceSelectionBounds,
+  } = useStageInstanceDrilldown({
+    beginInteraction,
+    document,
+    layoutSnapshot,
+    peekClickCount,
+    selectedIds,
+    surfaceRef,
+    tool,
+    viewport,
+    onSelectedIdsChange,
+  })
 
-  // 编辑期把「选中即预览」与 activeIndex 合成一份隐藏集合：渲染、SceneIndex 与手势 Controller
-  // 必须共用同一个引用，否则会出现「看得见却点不到」。
-  // 宿主每次渲染都可能传入新的 selectedIds 数组，因此第一层 memo 以内容 key 作为依赖，
-  // 平移帧不会重新遍历文档。
   const selectionKey = normalizedSelection.join('\u0000')
   const hiddenIdsKey = useMemo(
     () => [...collectComposeSwitcherHiddenIds(
@@ -446,61 +361,15 @@ function ComposeStageReady({
   // 首帧可能先于 effect 中的 context 注入；之后（含 gesture preview）以 engine snapshot 为准。
   const bounds = interaction.selectionBounds
     ?? bootstrapSelectionBounds(previewDocument, previewLayoutSnapshot, normalizedSelection)
-  const editableSelection = normalizedSelection.length > 0
-    && normalizedSelection.every((id) => {
-      const entity = document.entities[id]
-      return entity
-        && getComposeVisibility(entity).visible
-        && !getComposeLock(entity).locked
-    })
-  const selectionConstraints = normalizedSelection.flatMap((id) => {
-    const entity = document.entities[id]
-    if (!entity) return []
-    const constraints = resolveComposeGeometryConstraints(entity)
-    // 已落盘的旧实例可能仍是 resize:none；选区层强制 free，保证页面组合始终可四角缩放。
-    if (getComposeRenderer(entity)?.type === 'component-instance') {
-      return [{ ...constraints, resize: 'free' as const }]
-    }
-    return [constraints]
-  })
-  const allResizeHandles = [
-    'n',
-    'ne',
-    'e',
-    'se',
-    's',
-    'sw',
-    'w',
-    'nw',
-  ] as const satisfies readonly ResizeHandle[]
-  const resizeHandles = allResizeHandles.filter((handle) =>
-    selectionConstraints.every((constraints) => {
-      if (constraints.resize === 'none') return false
-      if (constraints.resize === 'horizontal') return handle === 'e' || handle === 'w'
-      if (constraints.resize === 'vertical') return handle === 'n' || handle === 's'
-      if (constraints.resize === 'preserve-aspect') {
-        return handle === 'ne' || handle === 'se' || handle === 'sw' || handle === 'nw'
-      }
-      return true
-    }))
-  // free / preserve-aspect：仅四角可见小方块；边方向缩放靠透明 edge hit，不画中点方块。
-  // horizontal / vertical：仍显示对应边控点（没有角可用）。
-  const visibleResizeHandles = resizeHandles.filter((handle) => {
-    if (handle === 'n' || handle === 'e' || handle === 's' || handle === 'w') {
-      return selectionConstraints.every(
-        (constraints) => constraints.resize === 'horizontal'
-          || constraints.resize === 'vertical',
-      )
-    }
-    return true
-  })
-  const selectionRotatable = selectionConstraints.length > 0
-    && selectionConstraints.every(({ rotatable }) => rotatable)
+  const editableSelection = isStageSelectionEditable(document, normalizedSelection)
+  const selectionConstraints = resolveStageSelectionConstraints(document, normalizedSelection)
+  const {
+    enabled: resizeHandles,
+    visible: visibleResizeHandles,
+  } = resolveStageResizeHandles(selectionConstraints)
+  const selectionRotatable = isStageSelectionRotatable(selectionConstraints)
   const contextNodeId = contextMenu.payload
-  const contextEditableIds = normalizedSelection.filter((id) => {
-    const entity = document.entities[id]
-    return entity && !getComposeLock(entity).locked
-  })
+  const contextEditableIds = unlockedStageIds(document, normalizedSelection)
 
   useEffect(() => {
     const surface = surfaceRef.current
@@ -618,85 +487,12 @@ function ComposeStageReady({
 
   useFinalControllerDisposal(privateController)
 
-  const beginEntity = (entity: ComposeEntity, event: ReactPointerEvent<HTMLDivElement>) => {
-    event.stopPropagation()
-    // 下钻上下文不能从选区推导：一次双击的第一个 pointerdown 计数为奇数、不触发下钻，
-    // 它会先把选区重置回实例本身，随后的偶数 pointerdown 就再也看不到当前层级。
-    if (drillContextRef.current && drillContextRef.current.instanceId !== entity.id) {
-      drillContextRef.current = null
-    }
-    // 双击关联组件实例逐层下钻到内部实体。内部内容 pointer-events 关闭且几何不在场景索引里，
-    // 因此命中读 DOM；命中失败时不拦截，落回实例整体的普通选择。
-    if (
-      tool === 'select'
-      && isComponentInstanceEntity(entity)
-      // 一次双击由两个 pointerdown 组成，只在偶数计数上下钻，保证一次双击恰好前进一层；
-      // 用 >= 2 会让 count 2 和 3 各触发一次，一次双击直接跳两层。
-      && peekClickCount(event) % 2 === 0
-    ) {
-      const path = resolveInstanceDrillDownPath(
-        event.currentTarget,
-        { x: event.clientX, y: event.clientY },
-      )
-      const context = drillContextRef.current
-      const innerId = nextInstanceDrillDownTarget(
-        path,
-        context?.instanceId === entity.id ? context.innerId : null,
-      )
-      if (innerId !== null) {
-        drillContextRef.current = { instanceId: entity.id, innerId }
-        onSelectedIdsChange([encodeComposeInstancePath([entity.id, innerId])])
-        return
-      }
-    }
-    beginInteraction({ kind: 'entity', entityId: entity.id }, event)
-  }
-
-  // 标签命中不参与非空容器的框选收敛：它是这类容器唯一的选中入口。
-  const beginContainerLabel = (entityId: string, event: ReactPointerEvent<HTMLElement>) => {
-    event.stopPropagation()
-    beginInteraction({ kind: 'entity', entityId, source: 'label' }, event)
-  }
-
-  const screenBounds = bounds
-    ? {
-        ...worldToScreen(bounds, viewport),
-        width: bounds.width * viewport.zoom,
-        height: bounds.height * viewport.zoom,
-    }
-    : null
-  // v7 没有文档级输出：每个根 Frame 各自画一圈可检查边界。
+  const screenBounds = worldRectToScreen(bounds, viewport)
   const boundarySceneIndex = createStageSceneIndex(document, layoutSnapshot, hiddenEntityIds)
-  const frameScreenBounds = document.rootIds.flatMap((frameId) => {
-    const worldBounds = boundarySceneIndex.getWorldBounds(frameId)
-    if (!worldBounds) return []
-    const screen = worldToScreen(worldBounds, viewport)
-    return [{
-      frameId,
-      x: screen.x,
-      y: screen.y,
-      width: worldBounds.width * viewport.zoom,
-      height: worldBounds.height * viewport.zoom,
-    }]
-  })
+  const frameBounds = frameScreenBounds(document, boundarySceneIndex, viewport)
   const worldOriginScreen = worldToScreen({ x: 0, y: 0 }, viewport)
-  const marqueeScreen = marquee
-    ? {
-        ...worldToScreen(marquee, viewport),
-        width: marquee.width * viewport.zoom,
-        height: marquee.height * viewport.zoom,
-      }
-    : null
-  const handlePoints = screenBounds ? {
-    nw: [screenBounds.x, screenBounds.y],
-    n: [screenBounds.x + screenBounds.width / 2, screenBounds.y],
-    ne: [screenBounds.x + screenBounds.width, screenBounds.y],
-    e: [screenBounds.x + screenBounds.width, screenBounds.y + screenBounds.height / 2],
-    se: [screenBounds.x + screenBounds.width, screenBounds.y + screenBounds.height],
-    s: [screenBounds.x + screenBounds.width / 2, screenBounds.y + screenBounds.height],
-    sw: [screenBounds.x, screenBounds.y + screenBounds.height],
-    w: [screenBounds.x, screenBounds.y + screenBounds.height / 2],
-  } satisfies Record<ResizeHandle, readonly [number, number]> : null
+  const marqueeScreen = worldRectToScreen(marquee, viewport)
+  const handlePoints = resizeHandlePoints(screenBounds)
   const horizontalTicks = createRulerTicks({
     axis: 'x',
     viewport,
@@ -713,22 +509,14 @@ function ComposeStageReady({
     offset: document.canvas.grid.offsetY,
     primaryLineEvery: document.canvas.grid.primaryLineEvery,
   })
-  const previewById = new Map(guidePreview.map((guide) => [guide.id, guide]))
   // 辅助线保存在活动 Frame 的局部坐标里；Overlay 在世界坐标绘制，因此这里映射一次。
   const targetFrameId = resolveTargetFrameId(document, selectedIds, activeFrameId)
-  const worldGuides = listFrameWorldGuides(document, targetFrameId, boundarySceneIndex)
-    .map((guide) => ({ id: guide.id, axis: guide.axis, position: guide.value }))
-  const canvasGuides = [
-    ...worldGuides.map((guide) => previewById.get(guide.id) ?? guide),
-    ...guidePreview.filter((guide) => !worldGuides.some(({ id }) => id === guide.id)),
-  ]
-  const visibleWidth = surfaceSize.width / viewport.zoom
-  const visibleHeight = surfaceSize.height / viewport.zoom
-  const visibleWorld = {
-    ...screenToWorld({ x: 0, y: 0 }, viewport),
-    width: visibleWidth,
-    height: visibleHeight,
-  }
+  const canvasGuides = mergeCanvasGuides(
+    listFrameWorldGuides(document, targetFrameId, boundarySceneIndex)
+      .map((guide) => ({ id: guide.id, axis: guide.axis, position: guide.value })),
+    guidePreview,
+  )
+  const visibleWorld = visibleWorldRect(viewport, surfaceSize)
   // 内容边界要遍历全部 Entity 计算世界包围盒，但只在引擎尚未发布滚动范围的首帧才会用到。
   // 必须惰性求值：否则每个平移帧都会为一个立刻被丢弃的结果做一次全场景遍历。
   const bootstrapContentBounds = () => unionRects([
@@ -801,6 +589,28 @@ function ComposeStageReady({
     return () => window.removeEventListener('blur', handleBlur)
   }, [cancelGesture, stopTemporaryPan])
 
+  const rootHandlers = useStageRootHandlers({
+    beginInteraction,
+    handleLostPointerCapture,
+    keyboardCommand,
+    keyboardRelease,
+    normalizedSelection,
+    openContextMenu: contextMenu.openAt,
+    rootRef,
+    rulersRef,
+    surfaceRef,
+    onSelectedIdsChange,
+    host: {
+      onContextMenu: props.onContextMenu,
+      onLostPointerCapture,
+      onPointerCancel,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onWheel,
+    },
+  })
+
   return (
     <div
       {...props}
@@ -818,55 +628,7 @@ function ComposeStageReady({
         ...style,
       } as CSSProperties}
       tabIndex={0}
-      onContextMenu={(event) => {
-        props.onContextMenu?.(event)
-        // ContextMenu 的 Portal 在 React 事件树中仍会冒泡到 Stage；不能把菜单自身的右键
-        // 当作新的画布右键，否则会重置根菜单。
-        if (event.defaultPrevented || !rootRef.current?.contains(event.target as Node)) return
-        // 标签用独立属性标记归属：data-entity-id 必须唯一指向 Scene 里的那个节点，
-        // 否则任何按实体查询 DOM 的地方都会同时命中标签。
-        const target = (event.target as Element)
-          .closest<HTMLElement>('[data-entity-id],[data-label-entity-id]')
-        const entityId = target?.dataset.entityId ?? target?.dataset.labelEntityId ?? null
-        if (entityId && !normalizedSelection.includes(entityId)) {
-          onSelectedIdsChange([entityId])
-        }
-        event.preventDefault()
-        contextMenu.openAt(event, entityId)
-      }}
-      onKeyDown={keyboardCommand}
-      onKeyUp={keyboardRelease}
-      onLostPointerCapture={(event) => {
-        onLostPointerCapture?.(event)
-        handleLostPointerCapture(event)
-      }}
-      onPointerCancel={(event) => {
-        onPointerCancel?.(event)
-      }}
-      onPointerDown={(event) => {
-        onPointerDown?.(event)
-        const surface = surfaceRef.current
-        if (
-          event.defaultPrevented
-          || !surface
-          || (event.target !== surface && event.target !== event.currentTarget)
-        ) return
-        // Portal 中子菜单的 pointerdown 会沿 React 树冒泡到此处；仅真实画布点击才夺取焦点，
-        // 否则触发项失焦会让二级菜单立即关闭。
-        event.currentTarget.focus({ preventScroll: true })
-        beginInteraction({ kind: 'surface' }, event)
-      }}
-      onPointerMove={(event) => {
-        // 指针位置是瞬时视图状态：走命令式接口直接重绘标尺，不进 React state，也不入文档。
-        const surface = surfaceRef.current
-        if (surface) rulersRef.current?.setCursor(screenPoint(event, surface))
-        onPointerMove?.(event)
-      }}
-      onPointerLeave={() => { rulersRef.current?.setCursor(null) }}
-      onPointerUp={(event) => {
-        onPointerUp?.(event)
-      }}
-      onWheel={onWheel}
+      {...rootHandlers}
     >
       {layoutSnapshot.diagnostics.length > 0 ? (
         <span
@@ -922,66 +684,7 @@ function ComposeStageReady({
             ? createVisualGridStyle(document.canvas.grid, viewport)
             : { display: 'none' }}
         />
-        <svg aria-hidden="true" className="compose-stage__world-overlay">
-          {/*
-            * 场景与容器共用同一条呈现管线：背景、边框、圆角都来自 Entity 自身的 Appearance，
-            * Stage 不为 Frame 补画任何容器得不到的装饰。这里只保留一个透明矩形标出场景区域
-            * ——它是「可检查边界」的锚点，pointerEvents 关掉，否则会吞掉绘制工具的按下。
-            */}
-          {frameScreenBounds.map((frameBounds) => (
-            <rect
-              className="compose-stage__output-boundary"
-              data-frame-id={frameBounds.frameId}
-              data-testid={`stage-frame-boundary-${frameBounds.frameId}`}
-              fill="transparent"
-              height={frameBounds.height}
-              key={frameBounds.frameId}
-              style={{ pointerEvents: 'none' }}
-              width={frameBounds.width}
-              x={frameBounds.x}
-              y={frameBounds.y}
-            />
-          ))}
-          <line
-            className="compose-stage__axis is-x"
-            data-testid="stage-origin-x"
-            x1="0"
-            x2="100%"
-            y1={worldToScreen({ x: 0, y: 0 }, viewport).y}
-            y2={worldToScreen({ x: 0, y: 0 }, viewport).y}
-          />
-          <line
-            className="compose-stage__axis is-y"
-            data-testid="stage-origin-y"
-            x1={worldToScreen({ x: 0, y: 0 }, viewport).x}
-            x2={worldToScreen({ x: 0, y: 0 }, viewport).x}
-            y1="0"
-            y2="100%"
-          />
-          <g
-            aria-hidden="true"
-            className="compose-stage__world-origin"
-            data-testid="stage-world-origin"
-            transform={`translate(${
-              worldOriginScreen.x - WORLD_ORIGIN_ICON_HALF_SIZE
-            } ${
-              worldOriginScreen.y - WORLD_ORIGIN_ICON_HALF_SIZE
-            })`}
-          >
-            <path
-              d="M6 0v4.42A4 4 0 0 0 4.42 6H0v4h4.42A4 4 0 0 0 6 11.58V16h4v-4.42A4 4 0 0 0 11.58 10H16V6h-4.42A4 4 0 0 0 10 4.42V0Z"
-              data-testid="stage-world-origin-silhouette"
-              fill="#20252d"
-              fillOpacity="0.9"
-            />
-            <path
-              d="M7 1v3a4 4 0 0 1 2 0V1Zm1 4a3 3 0 0 0 0 6 3 3 0 0 0 0-6ZM1 7v2h3a4 4 0 0 1 0-2H1Zm11 0a4 4 0 0 1 0 2h3V7Zm-5 8h2v-3a4 4 0 0 1-2 0Z"
-              data-testid="stage-world-origin-position"
-              fill="#a4acb7"
-              fillOpacity="0.88"
-            />
-          </g>
-        </svg>
+        <StageWorldUnderlay frameBounds={frameBounds} worldOriginScreen={worldOriginScreen} />
         <StageSceneLayer
           assetResolver={assetResolver}
           document={previewDocument}
