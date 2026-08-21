@@ -5,13 +5,18 @@ import type {
   StageInteractionEvent,
   StageInteractionSnapshot,
 } from '../interaction-controller'
-import type { InteractionClaimResult, InteractionKernelProfile, InteractionPlugin, InteractionPluginContext, InteractionSession } from './kernel-types'
-import { createInteractionPluginRegistry, type InteractionPluginRegistry } from './plugin-registry'
 import {
+  createInteractionPluginRegistry,
   createInteractionSessionArbiter,
   type InteractionArbiterBeginResult,
+  type InteractionClaimResult,
+  type InteractionKernelProfile,
+  type InteractionPlugin,
+  type InteractionPluginContext,
+  type InteractionPluginRegistry,
+  type InteractionSession,
   type InteractionSessionArbiter,
-} from './session-arbiter'
+} from '@compose-ui/interaction-kernel'
 
 /**
  * 指针按下事件；Stage 的插件 claim 只在这个事件上被询问。
@@ -24,10 +29,9 @@ export type StagePointerDownEvent = Extract<StageInteractionEvent, { type: 'poin
  * 把泛型交互内核绑定到 Stage 的文档协议。
  *
  * @remarks
- * 这个文件是 Stage 与内核之间唯一的接线处：`kernel-types.ts`、`session-arbiter.ts` 与
- * `plugin-registry.ts` 因此不 import 任何 Stage 专有类型，该约束由
- * `dependency-boundary.test.ts` 守住。把绑定写回那三个文件会让守卫无从谈起——
- * 边界要从声明变成结构才守得住。
+ * 这个文件是 Stage 与内核之间**唯一**的接线处。内核本身住在 `@compose-ui/interaction-kernel`，
+ * 那个包 `dependencies` 为空，因此「内核不认识文档」不再靠正则守卫，而是靠安装清单：想把
+ * Stage 类型写回内核，必须先给它加一条依赖。
  *
  * @public
  */

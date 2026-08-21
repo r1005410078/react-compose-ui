@@ -1,11 +1,9 @@
 {
-  "name": "@compose-ui/stage-engine",
+  "name": "@compose-ui/interaction-kernel",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,9 +23,5 @@
     "test": "vitest run",
     "lint": "eslint . --max-warnings 0",
     "pack:dry-run": "bun pm pack --dry-run"
-  },
-  "dependencies": {
-    "@compose-ui/core": "workspace:*",
-    "@compose-ui/interaction-kernel": "workspace:*"
   }
 }

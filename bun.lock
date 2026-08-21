@@ -266,6 +266,10 @@
         "react-dom": "^18.3.0 || ^19.0.0",
       },
     },
+    "packages/interaction-kernel": {
+      "name": "@compose-ui/interaction-kernel",
+      "version": "0.1.0",
+    },
     "packages/layout-engine": {
       "name": "@compose-ui/layout-engine",
       "version": "0.1.0",
@@ -390,6 +394,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@compose-ui/core": "workspace:*",
+        "@compose-ui/interaction-kernel": "workspace:*",
       },
     },
     "packages/ui-context": {
@@ -545,6 +550,8 @@
     "@compose-ui/example": ["@compose-ui/example@workspace:app"],
 
     "@compose-ui/history": ["@compose-ui/history@workspace:packages/history"],
+
+    "@compose-ui/interaction-kernel": ["@compose-ui/interaction-kernel@workspace:packages/interaction-kernel"],
 
     "@compose-ui/layout-engine": ["@compose-ui/layout-engine@workspace:packages/layout-engine"],
 
