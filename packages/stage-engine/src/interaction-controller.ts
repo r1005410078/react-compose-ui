@@ -21,6 +21,7 @@ import {
   type StageMarqueeMode,
 } from './marquee-selection'
 import { createReparentCommand } from './commands'
+import { isDrawingTool } from './drawing-tools'
 import {
   resolveStageDropTarget,
   type StageDropTarget,
@@ -687,64 +688,6 @@ type Gesture =
       position: number
       point: StagePoint
     }
-  | {
-      readonly type: 'draw'
-      readonly pointerId: number
-      readonly viewport: StageViewport
-      readonly tool: Extract<StageInteractionTool, `draw-${string}`>
-      readonly startWorld: StagePoint
-      currentWorld: StagePoint
-      drawingStartWorld: StagePoint
-      drawingEndWorld: StagePoint
-    }
-
-interface DrawingPoints {
-  readonly start: StagePoint
-  readonly end: StagePoint
-}
-
-/**
- * Shift 约束时，鼠标必须始终落在正在绘制图形的角点上。若只调整 end，视觉上的角点会偏离
- * 指针；这里保持 end 为真实指针位置，并把较短轴的起点外扩为等长边。
- */
-function constrainSquareDrawingPoints(start: StagePoint, end: StagePoint): DrawingPoints {
-  const deltaX = end.x - start.x
-  const deltaY = end.y - start.y
-  const side = Math.max(Math.abs(deltaX), Math.abs(deltaY))
-  const directionX = deltaX === 0 ? (deltaY < 0 ? -1 : 1) : Math.sign(deltaX)
-  const directionY = deltaY === 0 ? (deltaX < 0 ? -1 : 1) : Math.sign(deltaY)
-
-  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-    return {
-      start: { x: start.x, y: end.y - directionY * side },
-      end,
-    }
-  }
-  return {
-    start: { x: end.x - directionX * side, y: start.y },
-    end,
-  }
-}
-
-function constrainedDrawingPoints(
-  tool: Extract<StageInteractionTool, `draw-${string}`>,
-  start: StagePoint,
-  end: StagePoint,
-  modifiers: StageInteractionModifiers,
-) : DrawingPoints {
-  // 文字只按点创建：拖拽不承载“拖出一个尺寸”的语义，终点始终锁在按下点。预览与提交
-  // 都走这里，因此不会出现拖动时长出一个框、松手又缩回去的跳变。
-  if (tool === 'draw-text') return { start, end: start }
-  return modifiers.shift && (tool === 'draw-rectangle' || tool === 'draw-circle')
-    ? constrainSquareDrawingPoints(start, end)
-    : { start, end }
-}
-
-function isDrawingTool(
-  tool: StageInteractionTool,
-): tool is Extract<StageInteractionTool, `draw-${string}`> {
-  return tool.startsWith('draw-')
-}
 
 /**
  * 判断一次 entity 命中是否应当收敛为框选而不是选中该 Entity。
@@ -1086,28 +1029,6 @@ export function createStageInteractionController(): StageInteractionController {
       })
       return
     }
-    if (gesture.type === 'draw') {
-      const drawing = constrainedDrawingPoints(
-        gesture.tool,
-        gesture.startWorld,
-        world,
-        modifiers,
-      )
-      gesture.currentWorld = world
-      gesture.drawingStartWorld = drawing.start
-      gesture.drawingEndWorld = drawing.end
-      publish({
-        ...snapshot,
-        phase: 'draw',
-        drawing: {
-          tool: gesture.tool,
-          bounds: rectFromPoints(drawing.start, drawing.end),
-          start: drawing.start,
-          end: drawing.end,
-        },
-      })
-      return
-    }
     if (gesture.type === 'guide-create') {
       gesture.point = point
       gesture.guides = gesture.guides.map((guide) => ({
@@ -1343,38 +1264,7 @@ export function createStageInteractionController(): StageInteractionController {
       })
       apply([...effects, { type: 'pointer.capture', pointerId: event.pointerId }])
     }
-    if (
-      isDrawingTool(context.tool)
-      && (
-        event.hit.kind === 'surface'
-        || event.hit.kind === 'entity'
-      )
-    ) {
-      const startWorld = worldPoint(event.point, context.viewport)
-      gesture = {
-        type: 'draw',
-        pointerId: event.pointerId,
-        viewport: context.viewport,
-        tool: context.tool,
-        startWorld,
-        currentWorld: startWorld,
-        drawingStartWorld: startWorld,
-        drawingEndWorld: startWorld,
-      }
-      publish({
-        ...initialSnapshot(snapshot.temporaryPan),
-        phase: 'draw',
-        drawing: {
-          tool: context.tool,
-          bounds: rectFromPoints(startWorld, startWorld),
-          start: startWorld,
-          end: startWorld,
-        },
-      })
-      apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
-      return
-    }
-        if (event.hit.kind === 'move-axis') {
+    if (event.hit.kind === 'move-axis') {
       if (context.tool === 'move') {
         if (startTransform('move', context.selectedIds, undefined, event.hit.axis)) apply(effects)
       }
@@ -1516,27 +1406,7 @@ export function createStageInteractionController(): StageInteractionController {
     const pointerId = finished.pointerId
     gesture = null
     const effects: StageInteractionEffect[] = []
-    if (finished.type === 'draw') {
-      const bounds = rectFromPoints(finished.drawingStartWorld, finished.drawingEndWorld)
-      const canCreate = finished.tool === 'draw-text'
-        || bounds.width >= 1
-        || bounds.height >= 1
-      if (canCreate) {
-        const center = {
-          x: bounds.x + bounds.width / 2,
-          y: bounds.y + bounds.height / 2,
-        }
-        effects.push({
-          type: 'drawing.commit',
-          tool: finished.tool,
-          bounds,
-          start: finished.drawingStartWorld,
-          end: finished.drawingEndWorld,
-          parentId: index.containerAtPoint(center),
-        })
-      }
-    }
-    else if (finished.type === 'marquee') {
+    if (finished.type === 'marquee') {
       const selectedIds = resolveMarqueeCommit({
         area: rectFromPoints(finished.startWorld, finished.currentWorld),
         base: finished.baseSelection,
@@ -1836,19 +1706,14 @@ export function createStageInteractionController(): StageInteractionController {
         || context?.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
       const paintEditingChanged = !samePaintEditing(context?.paintEditing, nextContext.paintEditing)
       const paintSamplingChanged = !samePaintSampling(context?.paintSampling, nextContext.paintSampling)
-      // 绘制手势只由世界坐标定义，不引用任何 Entity，因此并发的文档/布局变化不该打断它。
-      // 退出文字编辑时删除空文字就会在同一次指针按下里改动文档，若一并重置，紧接着开始的
-      // 绘制会当场消失。工具切换仍然算不兼容。
-      const spatialGesture = gesture !== null && gesture.type !== 'draw'
+      // draw 抽成插件后，legacy 里只剩引用 Entity 的空间手势，「绘制不被文档变化打断」这条
+      // 例外随之搬进了 draw 插件的 isCompatibleWith，这里不再需要区分手势种类。
       const incompatible = Boolean(
         gesture
         && context
         && (
-          (spatialGesture && context.document !== nextContext.document)
-          || (
-            spatialGesture
-            && context.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
-          )
+          context.document !== nextContext.document
+          || context.layoutSnapshot.revision !== nextContext.layoutSnapshot.revision
           || context.tool !== nextContext.tool
           || (
             gestureIds

@@ -25,6 +25,10 @@ export {
   STAGE_TEXT_EDIT_GUARD_PLUGIN_ID,
 } from './text-edit-guard-plugin'
 export {
+  createStageDrawPlugin,
+  STAGE_DRAW_PLUGIN_ID,
+} from './draw-plugin'
+export {
   claimStageMarquee,
   createStageMarqueeSession,
   createStageMarqueeToolPlugin,

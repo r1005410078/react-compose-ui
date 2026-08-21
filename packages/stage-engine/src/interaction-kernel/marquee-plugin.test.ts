@@ -6,7 +6,7 @@ import {
   createStageMarqueeToolPlugin,
   STAGE_MARQUEE_TOOL_PLUGIN_ID,
 } from './marquee-plugin'
-import type { StageInteractionEffect } from '../interaction-controller'
+import type { StageInteractionEffect, StageInteractionHit } from '../interaction-controller'
 
 const MODIFIERS = { shift: false, alt: false, command: false }
 const value = document([
@@ -39,7 +39,7 @@ function marqueeSetup(patch: Record<string, unknown> = {}) {
   return { controller, effects, update, selections }
 }
 
-const down = (hit: Record<string, unknown>) => ({
+const down = (hit: StageInteractionHit) => ({
   type: 'pointer.down' as const,
   pointerId: 1,
   button: 0,

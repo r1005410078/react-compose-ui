@@ -139,7 +139,7 @@ Stage Kernel  Input Pipeline · Session Arbiter · Plugin/Overlay Registry · �
 
 因此实际顺序就是优先级表的顺序：
 `text-edit-guard` ✅ → `pan` ✅ → `rotate-tool` ✅ → `paint-sample` ✅ → `path` ✅ → `paint` ✅
-→ `segment-resize` ✅ → `marquee-tool` ✅ → `draw` → `move-axis` → `marquee-converge`
+→ `segment-resize` ✅ → `marquee-tool` ✅ → `draw` ✅ → `move-axis` → `marquee-converge`
 → `entity-select-move` → `resize` → `legacy-rotate-hit` → `guide-create` → `guide-move`
 → `rotate-tool-fallback` → `marquee-fallback`。
 
@@ -226,7 +226,18 @@ draw(1000) 前面，前缀不变量会当场失败。
 resize 抽取时同样要用），起框容器及其祖先的排除从 `finish` 进 `marquee-selection.ts`——那段
 逻辑属于提交语义，不属于 legacy。`interaction-controller.ts` 2053 → 2007 行。
 
-下一刀是 `draw`(1000)。
+`draw`(1000) ✅ 是内核里**唯一一个不该被并发文档变化打断**的手势。这条例外此前写死在
+controller 的 `spatialGesture = gesture.type !== 'draw'` 上；绘制搬进插件、会话自己声明
+「只比 tool、不接空间基线」之后，legacy 里只剩引用 Entity 的空间手势，这个按手势种类分类的
+判定**整体消失**了。例外跟着它的手势一起走，正是插件化要达到的效果——判据回到唯一知道它的
+那个会话手里。`interaction-controller.ts` 2007 → 1872 行。
+
+这一刀还补了个教训：上一刀（marquee）的最终门槛漏跑了 `bun run typecheck`，测试文件里一个
+`hit: Record<string, unknown>` 因此带着 6 个类型错误合进了 main。`bun run build` 不检查测试
+文件，`test`/`e2e` 也不会失败，所以只有 typecheck 能拦住它。**五道门槛缺一不可，且必须在最后
+一起跑一遍**——中途跑过不算数。
+
+下一刀是 `move-axis`(900)。
 
 ### 步骤 4 · Overlay 拆分 — `refactor-stage-overlay-slots`
 
