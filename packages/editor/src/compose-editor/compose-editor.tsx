@@ -23,6 +23,9 @@ import {
 } from '@compose-ui/animation'
 import { AnimationInspector } from '../animation-mode/animation-inspector'
 import { createPageAnimationFile } from '../animation-mode/animation-asset-store'
+import { createCadContextMenuItems, useCadWorkspace } from '../cad'
+import { composeCadDisplayName, isComposeCadFileName } from '@compose-ui/cad'
+import type { ComposeCadDescriptor } from '@compose-ui/cad'
 import { PageAnimationScopePanel } from '../animation-mode/page-animation-scope-panel'
 import type { PageAnimationSceneBinding } from '../animation-mode/page-animation-scope-panel'
 import { rewriteAutoRecordCommand } from '../animation-mode/auto-record'
@@ -114,6 +117,7 @@ import {
 import type {
   ComposeComponentDocumentSession,
   ComposePageDocumentSession,
+  ComposeCadDocumentSession,
   ComposeWorkspaceDocumentSession,
 } from '../workspace-layout'
 import {
@@ -125,10 +129,12 @@ import {
 } from '../workspace-layout'
 import {
   createAssetDocumentPanelId,
+  createCadDocumentPanelId,
   createComponentDocumentPanelId,
   createPageDocumentPanelId,
   isWorkspaceDocumentPanelId,
   initializeCoreWorkspace,
+  useWorkspaceEdgeCollapse,
   initializeOuterWorkspace,
   localizeWorkspace,
   WORKSPACE_GROUP_IDS,
@@ -552,6 +558,7 @@ export function ComposeEditor({
   const [pendingPageConflict, setPendingPageConflict] = useState<string | null>(null)
   /** 组件/变体保存与打开失败的非阻断提示。 */
   const [componentNotice, setComponentNotice] = useState<string | null>(null)
+  const [cadNotice, setCadNotice] = useState<string | null>(null)
   /** 等待用户确认强制覆盖的组件或变体面板 ID。 */
   const [pendingComponentConflict, setPendingComponentConflict] = useState<string | null>(null)
   const [pendingCreateComponent, setPendingCreateComponent] = useState<{
@@ -675,6 +682,12 @@ export function ComposeEditor({
     update: (current: ComposeComponentDocumentSession) => ComposeComponentDocumentSession,
   ) => {
     updateDocument(panelId, (current) => current.kind === 'component' ? update(current) : current)
+  }, [updateDocument])
+  const updateCadDocument = useCallback((
+    panelId: string,
+    update: (current: ComposeCadDocumentSession) => ComposeCadDocumentSession,
+  ) => {
+    updateDocument(panelId, (current) => current.kind === 'cad' ? update(current) : current)
   }, [updateDocument])
   const closeDocumentImmediately = useCallback((panelId: string) => {
     const panel = initializedApi.current?.getPanel(panelId)
@@ -804,6 +817,18 @@ export function ComposeEditor({
     updateSession: updateComponentDocument,
   })
   const componentCatalog = useComponentCatalog(componentWorkspace.store)
+  const cadSessions = useMemo(() => {
+    const map = new Map<string, ComposeCadDocumentSession>()
+    documents.forEach((session, panelId) => {
+      if (session.kind === 'cad') map.set(panelId, session)
+    })
+    return map
+  }, [documents])
+  const cadWorkspace = useCadWorkspace({
+    provider: assets?.browser?.provider,
+    sessions: cadSessions,
+    updateSession: updateCadDocument,
+  })
   const componentKindByAssetKey = useMemo(() => new Map(
     componentCatalog?.components.map((descriptor) => [descriptor.assetKey, descriptor.kind]) ?? [],
   ), [componentCatalog])
@@ -982,6 +1007,35 @@ export function ComposeEditor({
     })
   }, [componentWorkspace, replaceDocuments])
 
+  const openCadDocument = useCallback(async (descriptor: ComposeCadDescriptor) => {
+    const store = cadWorkspace.store
+    if (!store) return
+    const panelId = createCadDocumentPanelId(store.providerId, descriptor.assetKey)
+    const existing = initializedApi.current?.getPanel(panelId)
+    if (existing) {
+      existing.api.setActive()
+      return
+    }
+    const result = await cadWorkspace.openDocument(descriptor)
+    if (!result.ok) {
+      setCadNotice(result.message)
+      return
+    }
+    const next = new Map(documentsRef.current)
+    next.set(panelId, { ...result.session, panelId })
+    replaceDocuments(next)
+    initializedApi.current?.addPanel({
+      id: panelId,
+      component: WORKSPACE_COMPONENT_IDS.cadDocument,
+      tabComponent: 'workspaceTab',
+      title: result.session.displayName,
+      position: {
+        direction: 'within',
+        referenceGroup: WORKSPACE_GROUP_IDS.canvas,
+      },
+    })
+  }, [cadWorkspace, replaceDocuments])
+
   /**
    * 组件源保存成功后同步依赖实例。
    *
@@ -1060,12 +1114,20 @@ export function ComposeEditor({
     const affectedIds = new Set(mutation.entries.map((entry) => entry.id))
     const affectedKeys = new Set(mutation.entries.flatMap((entry) => entry.assetKey ? [entry.assetKey] : []))
     const panelIds = [...documentsRef.current.values()]
-      .filter((session) => session.kind === 'component'
-        ? componentWorkspace.store?.providerId === providerId
-          && affectedKeys.has(session.assetKey)
-        : session.provider.id === providerId
+      .filter((session) => {
+        // 组件与 CAD 都住在各自 Store 的 assetKey 命名空间里，没有 provider/entry 字段。
+        if (session.kind === 'component') {
+          return componentWorkspace.store?.providerId === providerId
+            && affectedKeys.has(session.assetKey)
+        }
+        if (session.kind === 'cad') {
+          return cadWorkspace.store?.providerId === providerId
+            && affectedKeys.has(session.assetKey)
+        }
+        return session.provider.id === providerId
           && (affectedIds.has(session.entry.id)
-            || (session.entry.assetKey !== undefined && affectedKeys.has(session.entry.assetKey))))
+            || (session.entry.assetKey !== undefined && affectedKeys.has(session.entry.assetKey)))
+      })
       .map((session) => session.panelId)
     for (const panelId of panelIds) {
       if (!await requestDocumentClose(panelId)) return false
@@ -1085,7 +1147,15 @@ export function ComposeEditor({
       }
     }
     return true
-  }, [assets?.browser, componentWorkspace.store, handleHomePageChange, homePageKey, pageStore, requestDocumentClose])
+  }, [
+    assets?.browser,
+    cadWorkspace.store?.providerId,
+    componentWorkspace.store,
+    handleHomePageChange,
+    homePageKey,
+    pageStore,
+    requestDocumentClose,
+  ])
   /**
    * 从资源条目打开组件画布（双击默认路径）。
    *
@@ -1139,13 +1209,25 @@ export function ComposeEditor({
       void openPageDocument(entry)
       return
     }
+    if (cadWorkspace.store && entry.kind === 'file' && isComposeCadFileName(entry.name)
+      && entry.assetKey !== undefined) {
+      void openCadDocument({
+        entryId: entry.id,
+        assetKey: entry.assetKey,
+        displayName: composeCadDisplayName(entry.name),
+        revision: entry.revision ?? '',
+      })
+      return
+    }
     openAssetDocument(entry, {
       setupScript: pages !== undefined && isComposePageSetupScriptName(entry.name),
     })
   }, [
     assets?.browser,
+    cadWorkspace.store,
     componentWorkspace.store,
     openAssetDocument,
+    openCadDocument,
     openComponentFromAssetEntry,
     openPageDocument,
     pages,
@@ -1388,12 +1470,25 @@ export function ComposeEditor({
     }]
   }, [componentWorkspace.store, editorMessages.components.viewJson, handleOpenComponentJson])
 
+  // eslint-disable-next-line react-hooks/refs -- 菜单项的 onSelect 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
+  const cadContextMenuItems = useMemo(() => {
+    return createCadContextMenuItems({
+      messages: editorMessages,
+      onDocumentCreated: openCadDocument,
+      onError: setCadNotice,
+      provider: assets?.browser?.provider,
+      store: cadWorkspace.store,
+    })
+  }, [assets?.browser?.provider, cadWorkspace.store, editorMessages, openCadDocument])
+
   const hostContextMenuItems = useMemo(() => {
     const hostItems = assets?.browser?.contextMenuItems ?? []
-    // eslint-disable-next-line react-hooks/refs -- 菜单项的 onSelect 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
-    return [...hostItems, ...pageContextMenuItems, ...componentContextMenuItems]
+    // 这里不需要单独抑制 react-hooks/refs：读 ref 的回调在 cadContextMenuItems 处已被抑制，
+    // 规则不会对同一条链路重复上报。
+    return [...hostItems, ...pageContextMenuItems, ...componentContextMenuItems, ...cadContextMenuItems]
   }, [
     assets?.browser?.contextMenuItems,
+    cadContextMenuItems,
     componentContextMenuItems,
     pageContextMenuItems,
   ])
@@ -1412,6 +1507,13 @@ export function ComposeEditor({
       registerDocumentSave(session.panelId, () => saveComponentDocument(session.panelId))
     })
   }, [componentSessions, registerDocumentSave, saveComponentDocument])
+
+  useEffect(() => {
+    cadSessions.forEach((session) => {
+      if (session.save !== null) return
+      registerDocumentSave(session.panelId, () => cadWorkspace.saveDocument(session.panelId))
+    })
+  }, [cadSessions, cadWorkspace, registerDocumentSave])
 
   const closeSettings = useCallback(() => {
     restoreSettingsFocusRef.current = true
@@ -2066,6 +2168,13 @@ export function ComposeEditor({
     })
   }, [hostI18n?.formatMessage, resolvedPreferences.locale, setEditorMode])
 
+  // 边缘面板的展开状态按文档类型记忆：CAD 默认收起，其余保持展开。
+  useWorkspaceEdgeCollapse(
+    initializedApi,
+    activeDocumentPanelId ? documents.get(activeDocumentPanelId)?.kind ?? null : null,
+    workspaceReady,
+  )
+
   /**
    * 内层 scene/canvas/inspector Dockview 就绪。它经 Context 的 `onCoreDockviewReady` 从
    * `WorkspaceCoreDockview` 转发过来，而不是直接作为某个 `<DockviewReact>` 的 `onReady`——
@@ -2611,11 +2720,10 @@ export function ComposeEditor({
                       </ComposeDialogTitle>
                       <ComposeDialogDescription>
                         {editorMessages.unsavedAssetQuestion(
-                          pendingAssetDocument.kind === 'page'
+                          // 页面、组件与 CAD 都有 displayName；只有临时资源文档退回文件名。
+                          'displayName' in pendingAssetDocument
                             ? pendingAssetDocument.displayName
-                            : pendingAssetDocument.kind === 'component'
-                              ? pendingAssetDocument.displayName
-                              : pendingAssetDocument.entry.name,
+                            : pendingAssetDocument.entry.name,
                         )}
                       </ComposeDialogDescription>
                     </ComposeDialogHeader>
@@ -2727,16 +2835,18 @@ export function ComposeEditor({
               </ComposeDialogPortal>
             </ComposeDialog>
           ) : null}
-          {pageNotice === null && componentNotice === null && homePageMissingNotice === null ? null : (
+          {pageNotice === null && componentNotice === null && cadNotice === null
+            && homePageMissingNotice === null ? null : (
             <div className="compose-editor__page-notice" role="status">
-              <span>{pageNotice ?? componentNotice ?? homePageMissingNotice}</span>
-              {pageNotice === null && componentNotice === null ? null : (
+              <span>{pageNotice ?? componentNotice ?? cadNotice ?? homePageMissingNotice}</span>
+              {pageNotice === null && componentNotice === null && cadNotice === null ? null : (
                 <ComposeButton
                   type="button"
                   variant="ghost"
                   onClick={() => {
                     setPageNotice(null)
                     setComponentNotice(null)
+                    setCadNotice(null)
                   }}
                 >
                   {editorMessages.close}

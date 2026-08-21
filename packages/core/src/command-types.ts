@@ -1,6 +1,7 @@
 import type {
   ComposeDocument,
   DocumentValidationIssue,
+  DocumentValidationIssueShape,
   DocumentValidator,
   JsonObject,
   JsonValue,
@@ -265,7 +266,10 @@ export type TransactionRuntimeEvent<TDocument = ComposeDocument> =
  *
  * @public
  */
-export interface TransactionRuntimeOptions<TDocument = ComposeDocument> {
+export interface TransactionRuntimeOptions<
+  TDocument = ComposeDocument,
+  TIssue extends DocumentValidationIssueShape = DocumentValidationIssue,
+> {
   readonly document: TDocument
   /**
    * 判定并规范化文档的校验器。
@@ -274,7 +278,7 @@ export interface TransactionRuntimeOptions<TDocument = ComposeDocument> {
    * 面向 ComposeDocument 的 {@link createTransactionRuntime} 省略时使用
    * `validateComposeDocument`；泛型入口 {@link createDocumentTransactionRuntime} 要求必填。
    */
-  readonly validate?: DocumentValidator<TDocument>
+  readonly validate?: DocumentValidator<TDocument, TIssue>
   readonly handlers?: readonly CommandHandler<TDocument>[]
   /** 事务 ID factory；不负责命令或基线 ID。 */
   readonly idFactory?: () => string
@@ -293,9 +297,11 @@ export interface TransactionRuntimeOptions<TDocument = ComposeDocument> {
  *
  * @public
  */
-export type TransactionResetResult =
+export type TransactionResetResult<
+  TIssue extends DocumentValidationIssueShape = DocumentValidationIssue,
+> =
   | { readonly status: 'reset' }
-  | { readonly status: 'rejected'; readonly issues: readonly DocumentValidationIssue[] }
+  | { readonly status: 'rejected'; readonly issues: readonly TIssue[] }
 
 /**
  * React/DOM 无关的文档命令、事务和历史控制器。
@@ -306,7 +312,10 @@ export type TransactionResetResult =
  *
  * @public
  */
-export interface TransactionRuntime<TDocument = ComposeDocument> {
+export interface TransactionRuntime<
+  TDocument = ComposeDocument,
+  TIssue extends DocumentValidationIssueShape = DocumentValidationIssue,
+> {
   readonly document: TDocument
   readonly revision: number
   readonly entries: readonly TransactionHistoryEntry[]
@@ -320,6 +329,6 @@ export interface TransactionRuntime<TDocument = ComposeDocument> {
   undo(): void
   redo(): void
   navigate(entryId: string): void
-  reset(document: TDocument, label?: string): TransactionResetResult
+  reset(document: TDocument, label?: string): TransactionResetResult<TIssue>
   registerHandler(handler: CommandHandler<TDocument>): () => void
 }

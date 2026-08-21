@@ -5,7 +5,12 @@ import {
   BUILTIN_COMMAND_TYPES,
   createBuiltinCommandHandlers,
 } from './builtin-commands'
-import type { ComposeDocument, DocumentValidator } from './document-types'
+import type {
+  ComposeDocument,
+  DocumentValidationIssue,
+  DocumentValidationIssueShape,
+  DocumentValidator,
+} from './document-types'
 import type {
   CommandDispatchResult,
   CommandHandler,
@@ -105,11 +110,14 @@ function safeNotify<T>(listeners: ReadonlySet<(value: T) => void>, value: T) {
  * @throws 初始文档非法，或初始 handler type 重复时抛出配置错误。
  * @public
  */
-export function createDocumentTransactionRuntime<TDocument extends object>(
-  options: TransactionRuntimeOptions<TDocument> & {
-    readonly validate: DocumentValidator<TDocument>
+export function createDocumentTransactionRuntime<
+  TDocument extends object,
+  TIssue extends DocumentValidationIssueShape = DocumentValidationIssue,
+>(
+  options: TransactionRuntimeOptions<TDocument, TIssue> & {
+    readonly validate: DocumentValidator<TDocument, TIssue>
   },
-): TransactionRuntime<TDocument> {
+): TransactionRuntime<TDocument, TIssue> {
   const validate = options.validate
   const initialValidation = validate(options.document)
   if (!initialValidation.valid) {
@@ -274,7 +282,7 @@ export function createDocumentTransactionRuntime<TDocument extends object>(
     cursor = Math.max(0, cursor - removeCount)
   }
 
-  const runtime: TransactionRuntime<TDocument> = {
+  const runtime: TransactionRuntime<TDocument, TIssue> = {
     get document() {
       return document
     },
@@ -463,7 +471,7 @@ export function createDocumentTransactionRuntime<TDocument extends object>(
         document,
       })
     },
-    reset(nextDocument, label = options.initialLabel ?? '开始'): TransactionResetResult {
+    reset(nextDocument, label = options.initialLabel ?? '开始'): TransactionResetResult<TIssue> {
       const validation = validate(nextDocument)
       if (!validation.valid) return { status: 'rejected', issues: validation.issues }
       document = validation.document

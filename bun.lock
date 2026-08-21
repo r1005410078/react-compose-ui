@@ -127,6 +127,14 @@
       "name": "@compose-ui/assets",
       "version": "0.1.0",
     },
+    "packages/cad": {
+      "name": "@compose-ui/cad",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/assets": "workspace:*",
+        "@compose-ui/core": "workspace:*",
+      },
+    },
     "packages/command-panel": {
       "name": "@compose-ui/command-panel",
       "version": "0.1.0",
@@ -205,6 +213,7 @@
         "@compose-ui/animation-panel": "workspace:*",
         "@compose-ui/asset-browser": "workspace:*",
         "@compose-ui/assets": "workspace:*",
+        "@compose-ui/cad": "workspace:*",
         "@compose-ui/command-panel": "workspace:*",
         "@compose-ui/commands": "workspace:*",
         "@compose-ui/component-library": "workspace:*",
@@ -497,6 +506,8 @@
     "@compose-ui/asset-browser": ["@compose-ui/asset-browser@workspace:packages/asset-browser"],
 
     "@compose-ui/assets": ["@compose-ui/assets@workspace:packages/assets"],
+
+    "@compose-ui/cad": ["@compose-ui/cad@workspace:packages/cad"],
 
     "@compose-ui/command-panel": ["@compose-ui/command-panel@workspace:packages/command-panel"],
 

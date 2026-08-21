@@ -1112,3 +1112,47 @@ test('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命�
 })
 
 
+
+test('OpenSpec: editor-workspace-layout / CAD 文档标签 / 新建、打开、存盘、重开', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  const rootGrid = assets.getByRole('grid', { name: 'Demo Assets' })
+  await expect(rootGrid).toBeVisible()
+
+  // 1) 进入 Pages 目录后右键新建 CAD（与页面创建用例同一个可写目录）
+  await rootGrid.getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await expect(pagesGrid).toBeVisible()
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  const menu = page.getByRole('menu')
+  await menu.getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Topology')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  // 2) 创建后随即以 CAD 标签打开
+  const cadTab = editor.locator('[data-workspace-tab^="compose-cad-document:"]')
+    .filter({ hasText: 'Topology' })
+  await expect(cadTab).toHaveCount(1)
+  await expect(editor.locator('[data-testid="cad-empty-hint"]')).toBeVisible()
+
+  // 3) CAD 标签激活时左右边缘面板默认收起
+  const sceneTree = editor.locator('[data-workspace-panel="scene-graph"]')
+  await expect(sceneTree).not.toBeVisible()
+
+  // 4) 切回页面标签时边缘面板恢复展开
+  await editor.locator('[data-workspace-tab^="compose-page-document:"]').first().click()
+  await expect(sceneTree).toBeVisible()
+
+  // 5) 关闭再重开，CAD 文档仍在且内容可读
+  await cadTab.click()
+  await cadTab.getByRole('button', { name: /^关闭/ }).click()
+  await expect(cadTab).toHaveCount(0)
+
+  await pagesGrid.getByRole('gridcell', { name: /^Topology/ }).dblclick()
+  await expect(editor.locator('[data-workspace-tab^="compose-cad-document:"]')).toHaveCount(1)
+  await expect(editor.locator('[data-testid="cad-empty-hint"]')).toBeVisible()
+})

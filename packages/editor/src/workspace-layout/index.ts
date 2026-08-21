@@ -3,6 +3,7 @@ export {
   WorkspaceContentContext,
   useWorkspaceContent,
   type ComposeAssetDocumentSession,
+  type ComposeCadDocumentSession,
   type ComposePageDocumentSession,
   type ComposeComponentDocumentSession,
   type ComposeWorkspaceDocumentSession,
@@ -18,9 +19,11 @@ export {
   initializeCoreWorkspace,
   initializeOuterWorkspace,
   createPageDocumentPanelId,
+  createCadDocumentPanelId,
   createComponentDocumentPanelId,
   isAssetDocumentPanelId,
   isPageDocumentPanelId,
+  isCadDocumentPanelId,
   isComponentDocumentPanelId,
   isWorkspaceDocumentPanelId,
   localizeWorkspace,
@@ -40,5 +43,9 @@ export {
   WorkspaceCorePanel,
 } from './workspace-panels'
 export { WorkspaceHeaderActions, WorkspaceTab } from './workspace-tab'
+export {
+  useWorkspaceEdgeCollapse,
+  type ComposeWorkspaceDocumentKind,
+} from './use-edge-collapse'
 export { EditorModeSwitcher } from './editor-mode-switcher'
 export type { ComposeEditorMode, EditorModeSwitcherProps } from './editor-mode-switcher'

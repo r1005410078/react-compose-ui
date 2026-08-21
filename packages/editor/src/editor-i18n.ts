@@ -154,6 +154,17 @@ const messages = {
       zoomIn: '放大',
       toggleSnapTransaction: '切换画布吸附',
     },
+    cad: {
+      createDocument: '创建 CAD',
+      createDocumentTitle: '新建 CAD',
+      defaultDocumentName: 'untitled',
+      documentLabel: 'CAD',
+      save: '保存 CAD',
+      createFailed: 'CAD 创建失败',
+      openFailed: 'CAD 打开失败',
+      saveFailed: 'CAD 保存失败',
+      emptyHint: '这份 CAD 文档还没有绘图工具；本步只打通新建、打开与存盘。',
+    },
     pages: {
       createPage: '创建页面',
       createPageTitle: '新建页面',
@@ -369,6 +380,17 @@ const messages = {
       resetZoom: 'Reset to 100%',
       zoomIn: 'Zoom in',
       toggleSnapTransaction: 'Toggle canvas snapping',
+    },
+    cad: {
+      createDocument: 'New CAD',
+      createDocumentTitle: 'New CAD',
+      defaultDocumentName: 'untitled',
+      documentLabel: 'CAD',
+      save: 'Save CAD',
+      createFailed: 'Failed to create the CAD document',
+      openFailed: 'Failed to open the CAD document',
+      saveFailed: 'Failed to save the CAD document',
+      emptyHint: 'This CAD document has no drawing tools yet; this step only wires up create, open and save.',
     },
     pages: {
       createPage: 'New page',
@@ -798,6 +820,9 @@ export function getEditorMessages(
         format(`stageToolbar.${key}`, fallback),
       ]),
     ) as Record<keyof typeof current.stageToolbar, string>,
+    cad: Object.fromEntries(
+      Object.entries(current.cad).map(([key, fallback]) => [key, format(`cad.${key}`, fallback)]),
+    ) as Record<keyof typeof current.cad, string>,
     pages: {
       createPage: format('pages.createPage', current.pages.createPage),
       createPageTitle: format('pages.createPageTitle', current.pages.createPageTitle),
