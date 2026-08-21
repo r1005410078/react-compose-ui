@@ -1,3 +1,4 @@
+import { getComposeLock } from '@compose-ui/core'
 import {
   screenToWorld,
   type StagePoint,
@@ -22,8 +23,11 @@ import type {
 /** 轴向移动手柄入口的注册 id。 @public */
 export const STAGE_MOVE_AXIS_PLUGIN_ID = 'move-axis'
 
-const MOVE_AXIS_PRIORITY = STAGE_GESTURE_PRIORITY
-  .find(({ id }) => id === STAGE_MOVE_AXIS_PLUGIN_ID)!.priority
+/** 实体选中并拖动入口的注册 id。 @public */
+export const STAGE_ENTITY_SELECT_MOVE_PLUGIN_ID = 'entity-select-move'
+
+const priorityOf = (id: string) =>
+  STAGE_GESTURE_PRIORITY.find((entry) => entry.id === id)!.priority
 
 /**
  * 一次移动会话的接管参数。
@@ -199,11 +203,65 @@ export function claimStageMove(
 export function createStageMoveAxisPlugin(): StageInteractionPlugin {
   return {
     id: STAGE_MOVE_AXIS_PLUGIN_ID,
-    priority: MOVE_AXIS_PRIORITY,
+    priority: priorityOf(STAGE_MOVE_AXIS_PLUGIN_ID),
     claim(event: StagePointerDownEvent, ctx: StagePluginContext): StageClaimResult {
       if (event.hit.kind !== 'move-axis') return null
       if (ctx.context.tool !== 'move') return 'consumed'
       return claimStageMove(event, ctx, ctx.context.selectedIds, event.hit.axis) ?? 'consumed'
+    },
+  }
+}
+
+/**
+ * 实体选中并拖动插件。
+ *
+ * @remarks
+ * 画布上最常走的一条路径：在实体上按下先改选区，随后按工具决定这次按下变成什么——
+ * select 工具下的双击进入原地文字编辑（**不**开始移动），select/move 工具下未锁定的目标开始
+ * 拖动，其余情形只改选区。
+ *
+ * 无论是否开始移动，这次按下都被消费：选区已经改过了，再交给后续插件会让同一次按下既改选区
+ * 又起框。
+ *
+ * 选区变更 MUST 先于指针捕获发出——宿主据此更新选中态，顺序颠倒会让捕获落在旧选区上。
+ *
+ * @public
+ */
+export function createStageEntitySelectMovePlugin(): StageInteractionPlugin {
+  return {
+    id: STAGE_ENTITY_SELECT_MOVE_PLUGIN_ID,
+    priority: priorityOf(STAGE_ENTITY_SELECT_MOVE_PLUGIN_ID),
+    claim(event: StagePointerDownEvent, ctx: StagePluginContext): StageClaimResult {
+      if (event.hit.kind !== 'entity') return null
+      const { context } = ctx
+      const entity = context.document.entities[event.hit.entityId]
+      // 命中一个不存在的 Entity：命中判定与文档已经脱节，这次按下就此打住，不落到框选。
+      if (!entity) return 'consumed'
+
+      // 基准选区要滤掉已从文档中消失的 ID，否则 Shift 加选会把幽灵一路带下去。
+      const selected = context.selectedIds.filter((id) => context.document.entities[id])
+      const nextSelection = event.modifiers.shift
+        ? selected.includes(entity.id)
+          ? selected.filter((id) => id !== entity.id)
+          : [...selected, entity.id]
+        : selected.includes(entity.id) ? selected : [entity.id]
+      ctx.apply([{ type: 'selection.change', selectedIds: nextSelection }])
+
+      const locked = getComposeLock(entity).locked
+      // 双击可编辑 Entity 进入原地编辑，且不开始移动手势——否则一次双击会同时打开编辑器并
+      // 拖动目标。这里用 >=2 而不是 ==2：连击计数继续增长仍应停留在编辑态。
+      if (
+        context.tool === 'select'
+        && (event.clickCount ?? 1) >= 2
+        && !locked
+        && context.isTextEditable?.(entity.id) === true
+      ) {
+        ctx.apply([{ type: 'text-editing.enter', entityId: entity.id }])
+        return 'consumed'
+      }
+
+      if (locked || (context.tool !== 'select' && context.tool !== 'move')) return 'consumed'
+      return claimStageMove(event, ctx, nextSelection) ?? 'consumed'
     },
   }
 }
