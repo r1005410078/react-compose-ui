@@ -138,21 +138,6 @@ export function marqueeDirection(
 }
 
 /**
- * 把修饰键翻译成与既有选区的布尔组合。
- *
- * @remarks
- * 组合与判定模式正交：模式决定「框住什么算命中」，组合决定「命中之后怎么并入选区」。
- * @public
- */
-export function marqueeCombine(
-  modifiers: { readonly shift: boolean; readonly alt: boolean },
-): StageMarqueeCombine {
-  if (modifiers.shift) return 'add'
-  if (modifiers.alt) return 'subtract'
-  return 'replace'
-}
-
-/**
  * 解析一次框选**提交**最终写入的选区。
  *
  * @remarks

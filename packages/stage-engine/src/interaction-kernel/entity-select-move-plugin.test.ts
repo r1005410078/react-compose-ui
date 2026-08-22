@@ -105,6 +105,31 @@ describe('OpenSpec: stage-engine / ECS SceneIndex / 实体选中并拖动插件'
     expect(selections()).toEqual([{ type: 'selection.change', selectedIds: ['a', 'b'] }])
   })
 
+  it('累加模式下点中即加入，不换掉已有选区', () => {
+    const { down, selections } = selectSetup({ selectedIds: ['a'], selectionMode: 'accumulate' })
+
+    down('b')
+
+    expect(selections()).toEqual([{ type: 'selection.change', selectedIds: ['a', 'b'] }])
+  })
+
+  it('累加模式下 Shift 是移出', () => {
+    const { down, selections } = selectSetup({ selectedIds: ['a', 'b'], selectionMode: 'accumulate' })
+
+    down('b', { modifiers: { ...MODIFIERS, shift: true } })
+
+    expect(selections()).toEqual([{ type: 'selection.change', selectedIds: ['a'] }])
+  })
+
+  it('累加模式下 Shift 点中未选中的对象不把它加进来', () => {
+    const { down, selections } = selectSetup({ selectedIds: ['a'], selectionMode: 'accumulate' })
+
+    // Shift 在 CAD 里只有「移出」一个含义，点未选中的对象是 no-op。
+    down('b', { modifiers: { ...MODIFIERS, shift: true } })
+
+    expect(selections()).toEqual([{ type: 'selection.change', selectedIds: ['a'] }])
+  })
+
   it('双击可编辑 Entity 进入原地编辑且不开始移动', () => {
     const { controller, effects, down } = selectSetup({ isTextEditable: () => true })
 

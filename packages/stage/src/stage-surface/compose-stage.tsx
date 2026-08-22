@@ -416,6 +416,13 @@ function ComposeStageReady({
     specifyNextPoint: messages.draftingSpecifyNextPoint,
     expectedPoint: messages.draftingExpectedPoint,
     lineTitle: messages.draftingLineTitle,
+    selectObjects: messages.draftingSelectObjects,
+    expectedSelection: messages.draftingExpectedSelection,
+    basePoint: messages.draftingBasePoint,
+    displacementPoint: messages.draftingDisplacementPoint,
+    moveTitle: messages.draftingMoveTitle,
+    copyTitle: messages.draftingCopyTitle,
+    eraseTitle: messages.draftingEraseTitle,
     orthoOn: messages.draftingOrthoOn,
     orthoOff: messages.draftingOrthoOff,
     snapOn: messages.draftingSnapOn,
@@ -432,6 +439,8 @@ function ComposeStageReady({
     idFactory,
     activeFrameId,
     messages: draftingMessages,
+    selectedIds: normalizedSelection,
+    onSelectedIdsChange,
   })
   // 取点效果在 effect dispatch 里被消费，而会话又依赖它——用 ref 打断这条循环，会话对象
   // 每帧重建也不会让 effect dispatch 的记忆化失效。
@@ -505,6 +514,8 @@ function ComposeStageReady({
       // 绘图模式的框选按方向判定（左→右窗口、右→左交叉）：这是 AutoCAD 的惯例，也是宿主
       // 没有显式指定时该模式下最合理的默认，宿主显式给出的值仍然优先。
       marqueeMode: marqueeMode ?? (drafting ? 'directional' : undefined),
+      // 绘图模式用 CAD 选择语义：点中即加入、Shift 移出。点选与框选读同一个标记。
+      selectionMode: drafting ? 'accumulate' : undefined,
       lockGestureParent,
       draftingAwaitingPoint: draftingSession.awaitingPoint,
       selectedIds: normalizedSelection,
@@ -791,6 +802,7 @@ function ComposeStageReady({
         {drafting ? (
           <StageDraftingOverlay
             crosshair={draftingSession.pointerScreen}
+            outlines={draftingSession.outlines}
             rubberBand={draftingSession.rubberBand}
             snap={draftingSession.snap}
             surfaceSize={surfaceSize}
@@ -856,6 +868,13 @@ function ComposeStageReady({
           notice={draftingSession.notice}
           prompt={draftingSession.prompt}
           status={[
+            ...(draftingSession.selectionCount === null
+              ? []
+              : [{
+                  id: 'selection-count',
+                  label: messages.draftingSelectionCount(draftingSession.selectionCount),
+                  active: draftingSession.selectionCount > 0,
+                }]),
             {
               id: 'snap-state',
               label: draftingSession.snapEnabled ? messages.draftingSnapOn : messages.draftingSnapOff,

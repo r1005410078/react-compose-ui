@@ -7,5 +7,6 @@
 export * from './scene-index'
 export * from './drop-target'
 export * from './marquee-selection'
+export * from './selection-mode'
 export { findStageFeaturePoint } from './feature-points'
 export type { StageFeaturePoint, StageFeatureSnapMode } from './feature-points'

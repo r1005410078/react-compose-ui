@@ -1,3 +1,11 @@
+export { planStageDraftingEdits, type StageDraftingEditQuery } from './drafting-edits'
+export { createStageEraseCommand, createStageEraseSession } from './erase-command'
+export {
+  createStageCopyCommand,
+  createStageCopySession,
+  createStageMoveCommand,
+  createStageMoveSession,
+} from './move-copy-command'
 export {
   createStageDraftingCommands,
   createStageLineCommand,
@@ -12,4 +20,5 @@ export type {
   StageDraftingEffect,
   StageDraftingMessages,
   StageDraftingSegment,
+  StageDraftingTranslation,
 } from './drafting-types'

@@ -6,7 +6,7 @@ import {
 } from '@compose-ui/core'
 import { rectFromPoints, screenToWorld, type StagePoint, type StageViewport } from '../geometry'
 import {
-  marqueeCombine,
+  resolveStageMarqueeCombine,
   marqueeDirection,
   resolveMarqueeCommit,
   resolveMarqueeHitTest,
@@ -88,7 +88,7 @@ export function createStageMarqueeSession(options: StageMarqueeSessionOptions): 
       const selectedIds = resolveMarqueeCommit({
         area: rectFromPoints(startWorld, currentWorld),
         base: baseSelection,
-        combine: marqueeCombine(modifiers),
+        combine: resolveStageMarqueeCombine(modifiers, ctx.context.selectionMode),
         direction: marqueeDirection(startWorld, currentWorld),
         document: ctx.context.document,
         index: ctx.index,

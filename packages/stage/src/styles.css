@@ -1079,6 +1079,14 @@
   stroke-width: 1.5;
 }
 
+/* 被 MOVE/COPY/ERASE 作用的对象轮廓。虚线以区别于选中框的实线。 */
+.compose-stage__drafting-outline {
+  fill: none;
+  stroke: var(--compose-accent, #4c8dff);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
 /* 绘图模式下光标交给十字线，系统光标会与它重影。 */
 .compose-stage[data-drafting] .compose-stage__surface {
   cursor: none;

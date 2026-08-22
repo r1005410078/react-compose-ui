@@ -7,6 +7,7 @@ import {
   type StageViewport,
 } from '../geometry'
 import { planMoveCommit, planMovePreview } from '../gesture-planning'
+import { resolveStageClickSelection } from '../hit-testing'
 import { resolveTransformTargets } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
@@ -234,11 +235,12 @@ export function createStageEntitySelectMovePlugin(): StageInteractionPlugin {
 
       // 基准选区要滤掉已从文档中消失的 ID，否则 Shift 加选会把幽灵一路带下去。
       const selected = context.selectedIds.filter((id) => context.document.entities[id])
-      const nextSelection = event.modifiers.shift
-        ? selected.includes(entity.id)
-          ? selected.filter((id) => id !== entity.id)
-          : [...selected, entity.id]
-        : selected.includes(entity.id) ? selected : [entity.id]
+      const nextSelection = resolveStageClickSelection({
+        mode: context.selectionMode,
+        current: selected,
+        entityId: entity.id,
+        shift: event.modifiers.shift,
+      })
       ctx.apply([{ type: 'selection.change', selectedIds: nextSelection }])
 
       const locked = getComposeLock(entity).locked

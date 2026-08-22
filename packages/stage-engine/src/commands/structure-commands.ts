@@ -524,13 +524,31 @@ export interface ComposeDuplicateInsertion {
   readonly index: number
 }
 
-/** 为一个 Entity 子树创建 entity.duplicate 命令。 @public */
+/**
+ * 同父级复制时施加给根节点的默认错开量。
+ *
+ * @remarks
+ * 语义是「复制一份别正好盖住原件」，只对同父级的绝对定位根成立。
+ *
+ * @public
+ */
+export const DEFAULT_DUPLICATE_OFFSET = { x: 10, y: 10 } as const
+
+/**
+ * 为一个 Entity 子树创建 entity.duplicate 命令。
+ *
+ * @param offset - 覆盖同父级绝对定位根节点的错开量。绘图模式的 `COPY` 有真实位移，
+ *   叠加默认错开会让每一个副本都偏出一个常量，而这在图上看着像手抖。
+ * @defaultValue offset - {@link DEFAULT_DUPLICATE_OFFSET}
+ * @public
+ */
 export function createDuplicateCommand(
   document: ComposeDocument,
   sourceId: string,
   idFactory: () => string,
   commandId = `duplicate:${sourceId}`,
   insertion?: ComposeDuplicateInsertion,
+  offset: { readonly x: number; readonly y: number } = DEFAULT_DUPLICATE_OFFSET,
 ): { readonly command: EditorCommand; readonly rootId: string } | null {
   const source = document.entities[sourceId]
   if (!source) return null
@@ -553,8 +571,8 @@ export function createDuplicateCommand(
       ? {
           ...transform,
           position: {
-            x: transform.position.x + 10,
-            y: transform.position.y + 10,
+            x: transform.position.x + offset.x,
+            y: transform.position.y + offset.y,
           },
         }
       : transform

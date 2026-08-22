@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   parseComposeCoordinate,
@@ -16,12 +16,14 @@ import {
   createStageDraftingCommands,
   createStageSceneIndex,
   findStageFeaturePoint,
+  planStageDraftingEdits,
   worldToScreen,
   type StageDraftingContext,
   type StageDraftingEffect,
   type StageDraftingMessages,
   type StageFeaturePoint,
   type StagePoint,
+  type StageRect,
   type StageViewport,
 } from '@compose-ui/stage-engine'
 import type { ComposeStageDispatch } from '../types'
@@ -52,6 +54,9 @@ export interface StageDraftingOptions {
   readonly idFactory: () => string
   readonly messages: StageDraftingHookMessages
   readonly activeFrameId?: string | null
+  /** 当前选择集；命令的「先选后执行」与「选择对象」步骤都读它。 */
+  readonly selectedIds: readonly string[]
+  readonly onSelectedIdsChange: (ids: readonly string[]) => void
   /** 捕捉的屏幕半径（CSS 像素）。 @defaultValue 12 */
   readonly snapRadius?: number
 }
@@ -82,6 +87,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
     idFactory,
     messages,
     activeFrameId,
+    selectedIds,
+    onSelectedIdsChange,
     snapRadius = DEFAULT_SNAP_RADIUS,
   } = options
 
@@ -89,6 +96,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const [prompt, setPrompt] = useState<ComposeCommandSession<StageDraftingEffect>['prompt']>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [reference, setReference] = useState<ComposeInputPoint | null>(null)
+  const [preview, setPreview] = useState<StageDraftingEffect | null>(null)
   const [pointer, setPointer] = useState<StagePoint | null>(null)
   const [ortho, setOrtho] = useState(false)
   const [snapEnabled, setSnapEnabled] = useState(true)
@@ -106,16 +114,27 @@ export function useStageDrafting(options: StageDraftingOptions) {
     stepY: document.canvas.grid.stepY,
   }), [document.canvas.grid])
 
-  const snapshot = { document, layoutSnapshot, index, registry, dispatch, idFactory, activeFrameId }
+  const snapshot = {
+    document,
+    layoutSnapshot,
+    index,
+    registry,
+    dispatch,
+    idFactory,
+    activeFrameId,
+    selectedIds,
+    onSelectedIdsChange,
+  }
   const latest = useRef(snapshot)
   useLayoutEffect(() => {
     latest.current = snapshot
   })
 
   const commit = useCallback((effect: StageDraftingEffect | undefined) => {
-    if (!effect || effect.segments.length === 0) return
+    if (!effect) return
     const current = latest.current
-    for (const segment of effect.segments) {
+
+    for (const segment of effect.segments ?? []) {
       const command = createStageDraftingCurveCommand({
         document: current.document,
         layoutSnapshot: current.layoutSnapshot,
@@ -126,12 +145,28 @@ export function useStageDrafting(options: StageDraftingOptions) {
       }, segment)
       if (command) current.dispatch(command)
     }
+
+    // 平移、复制与删除只认识文档，因此由引擎规划成命令；宿主只负责派发。
+    for (const command of planStageDraftingEdits({
+      document: current.document,
+      layoutSnapshot: current.layoutSnapshot,
+      index: current.index,
+      effect,
+      idFactory: current.idFactory,
+    })) {
+      current.dispatch(command)
+    }
+
+    // 已删标识留在选择集里会指向不存在的 Entity，随后任何以选择集为输入的命令都会拿到
+    // 幽灵目标。AutoCAD 里 ERASE 之后选择集也是空的。
+    if (effect.removed && effect.removed.length > 0) current.onSelectedIdsChange([])
   }, [])
 
   const endSession = useCallback((message: string | null) => {
     sessionRef.current = null
     setPrompt(null)
     setReference(null)
+    setPreview(null)
     setNotice(message)
   }, [])
 
@@ -140,6 +175,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       commit(step.commit)
       setPrompt(step.prompt)
       setReference(step.preview?.reference ?? step.commit?.reference ?? null)
+      setPreview(step.preview ?? null)
       setNotice(null)
       return
     }
@@ -193,12 +229,23 @@ export function useStageDrafting(options: StageDraftingOptions) {
         setNotice(messages.unknownCommand)
         return
       }
-      const context: StageDraftingContext = { messages }
+      const context: StageDraftingContext = {
+        messages,
+        // 先选后执行：命令要么在启动上下文里拿到目标，要么自己提示选择。
+        selection: latest.current.selectedIds,
+      }
       const next = definition.start(context)
       sessionRef.current = next
-      setPrompt(next.prompt)
       setReference(null)
+      setPreview(null)
       setNotice(null)
+      // `prompt` 为 null 表示命令从启动上下文里已经拿全了所需信息——先选好对象再敲 `E↵`，
+      // 对象当场就删。没有这一档，宿主只能靠认识命令 id 来特判。
+      if (next.prompt === null) {
+        applyStep(next.advance({ kind: 'accept' }))
+        return
+      }
+      setPrompt(next.prompt)
       return
     }
 
@@ -224,7 +271,10 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const cancel = useCallback(() => {
     const session = sessionRef.current
     if (!session) {
+      // 没有命令在跑时 Esc 清空选择集，与 AutoCAD 一致。累加语义下点空白不会清空
+      // （那是一次没框住东西的框选），Esc 因此是**唯一**的清空入口。
       setNotice(null)
+      latest.current.onSelectedIdsChange([])
       return
     }
     applyStep(session.advance({ kind: 'cancel' }))
@@ -245,6 +295,37 @@ export function useStageDrafting(options: StageDraftingOptions) {
     return false
   }, [enabled])
 
+  // 选择集归宿主：命令等着选对象时，把**当前完整选择集**喂进去，并在它变化时重新喂。
+  // 让命令会话自己拦截点选等于同一次点击有两个消费者，而用户无法预期哪一个赢。
+  useEffect(() => {
+    const session = sessionRef.current
+    if (!enabled || !session) return
+    if (session.prompt?.accepts.includes('selection') !== true) return
+    applyStep(session.advance({ kind: 'selection', ids: selectedIds }))
+  }, [applyStep, enabled, selectedIds])
+
+  /**
+   * 被作用对象的轮廓预览。
+   *
+   * @remarks
+   * 完整幽灵渲染需要把绘图会话的位移接进仲裁器的 `previewTransforms` 通道，而绘图会话
+   * 不在仲裁器里——它是 Stage 自己的状态。轮廓是刻意的近似。
+   */
+  const outlines = useMemo<readonly StageRect[]>(() => {
+    if (!enabled || !preview) return []
+    const targets = preview.translate?.entityIds ?? preview.duplicate?.entityIds ?? preview.removed
+    if (!targets || targets.length === 0) return []
+    const base = preview.reference
+    const resolved = base && pointer ? resolvePointerPoint(pointer) : null
+    const delta = base && resolved
+      ? { x: resolved.x - base.x, y: resolved.y - base.y }
+      : { x: 0, y: 0 }
+    return targets
+      .map((id) => index.getWorldBounds(id))
+      .filter((rect): rect is StageRect => rect !== null)
+      .map((rect) => ({ ...rect, x: rect.x + delta.x, y: rect.y + delta.y }))
+  }, [enabled, index, pointer, preview, resolvePointerPoint])
+
   const rubberBand = useMemo(() => {
     if (!enabled || !reference || !pointer) return null
     return { start: reference, end: resolvePointerPoint(pointer) }
@@ -259,6 +340,10 @@ export function useStageDrafting(options: StageDraftingOptions) {
 
   return {
     pointerScreen,
+    outlines,
+    selectionCount: enabled && prompt?.accepts.includes('selection') === true
+      ? selectedIds.length
+      : null,
     awaitingPoint: enabled && prompt?.accepts.includes('point') === true,
     prompt: enabled ? prompt : null,
     notice: enabled ? notice : null,
