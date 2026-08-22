@@ -1974,6 +1974,70 @@ test('OpenSpec: cad-document / DXF 导入器 / 右键导入演示图纸并看得
   await expect(editor.locator('.compose-editor__page-notice')).toContainText('SPLINE × 1')
 })
 
+test('OpenSpec: cad-document / CAD COLOR、LWEIGHT 与 LTYPE 命令 / 改外观并回退到图层', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Appearance')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const line = surface.locator('[data-cad-entity]').first()
+
+  const type = async (text: string) => {
+    await page.keyboard.type(text)
+    await page.keyboard.press('Enter')
+  }
+
+  await type('l')
+  await type('100,100')
+  await type('300,100')
+  await type('f')
+  await expect(line).toHaveAttribute('x1', '100')
+  const layerColor = await line.getAttribute('stroke')
+  expect(layerColor).not.toBeNull()
+
+  // 1) 选中后改颜色、线宽与线型
+  const box = await surface.boundingBox()
+  if (!box) throw new Error('surface has no box')
+  await page.mouse.click(box.x + 200, box.y + 100)
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(1)
+
+  await type('col')
+  await expect(canvas.locator('[data-testid="cad-command-prompt"]')).toContainText('输入颜色')
+  await type('red')
+  await type('lw')
+  await type('3')
+  await type('lt')
+  await type('8,4')
+
+  // 选中态与悬停态的颜色都交给 CSS，因此要先清空选择**并把指针移开**才读得到解析出来的颜色。
+  await page.keyboard.press('Escape')
+  await page.mouse.move(box.x + 60, box.y + 260)
+  await expect(line).toHaveAttribute('stroke', '#ff0000')
+  await expect(line).toHaveAttribute('stroke-width', '3')
+  await expect(line).toHaveAttribute('stroke-dasharray', '8 4')
+
+  // 2) BYLAYER 清除颜色覆盖，回到图层色；线宽与线型不受影响
+  await page.mouse.click(box.x + 200, box.y + 100)
+  await type('col')
+  await type('BYLAYER')
+  await page.keyboard.press('Escape')
+  await page.mouse.move(box.x + 60, box.y + 260)
+  await expect(line).toHaveAttribute('stroke', layerColor!)
+  await expect(line).toHaveAttribute('stroke-width', '3')
+})
+
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

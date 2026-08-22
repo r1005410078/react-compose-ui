@@ -1,4 +1,5 @@
 import type { CommandHandler, ComposeEntity } from '@compose-ui/core'
+import { applyCadStrokePatch, type CadStrokePatch } from '../appearance'
 import { inverseCadBlockPoint } from '../block'
 import { collectCadInstancePorts, resolveCadWireEndpoint } from '../connection'
 import { translateCadEntity } from '../transform'
@@ -8,6 +9,7 @@ import {
   getCadInsert,
   getCadLine,
   getCadPlacement,
+  getCadStroke,
   getCadWire,
   type CadDocument,
   type CadPoint,
@@ -22,6 +24,7 @@ export const CAD_COMMAND_TYPES = {
   createBlock: 'cad.block.create',
   addBlockPort: 'cad.block.add-port',
   addWire: 'cad.wire.add',
+  setStroke: 'cad.entity.stroke.set',
   translateEntities: 'cad.entity.translate',
   duplicateEntities: 'cad.entity.duplicate',
 } as const
@@ -249,6 +252,44 @@ const addBlockPort: CommandHandler<CadDocument> = {
   },
 }
 
+/** `cad.entity.stroke.set` 的载荷。 @public */
+export interface CadSetStrokePayload {
+  readonly entityIds: readonly string[]
+  /** 每一项：给值即设置，`null` 即清除，缺席即不动。 */
+  readonly patch: CadStrokePatch
+}
+
+/**
+ * 设置或清除若干 Entity 的描边覆盖。
+ *
+ * @remarks
+ * 三项全被清除时**删掉整个 Component**，否则文档会攒下一堆没有任何字段的空壳——它们不影响
+ * 呈现，但会让「这个图元有没有被改过外观」再也读不出来。
+ */
+const setStroke: CommandHandler<CadDocument> = {
+  type: CAD_COMMAND_TYPES.setStroke,
+  execute(document, command) {
+    const { entityIds, patch } = command.payload as unknown as CadSetStrokePayload
+    const targets = entityIds.filter((id) => document.entities[id])
+    if (targets.length === 0) return { status: 'noop', reason: '没有可修改的 Entity' }
+    return {
+      status: 'patches',
+      patches: targets.map((id) => {
+        const entity = document.entities[id]!
+        const next = applyCadStrokePatch(getCadStroke(entity), patch)
+        const components = { ...entity.components }
+        if (next === null) delete components[CAD_COMPONENT_KEYS.stroke]
+        else components[CAD_COMPONENT_KEYS.stroke] = next
+        return {
+          op: 'set' as const,
+          path: ['entities', id],
+          value: { ...entity, components } as never,
+        }
+      }),
+    }
+  },
+}
+
 /** `cad.entity.translate` 的载荷。 @public */
 export interface CadTranslateEntitiesPayload {
   readonly entityIds: readonly string[]
@@ -456,6 +497,7 @@ export function createCadCommandHandlers(): readonly CommandHandler<CadDocument>
     createBlock,
     addBlockPort,
     addWire,
+    setStroke,
     translateEntities,
     duplicateEntities,
   ]

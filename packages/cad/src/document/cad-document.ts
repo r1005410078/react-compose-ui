@@ -125,6 +125,26 @@ function validateEntityComponents(
       ))
     }
   }
+  const stroke = entity.components[CAD_COMPONENT_KEYS.stroke]
+  if (stroke !== undefined) {
+    // 三个字段各自可选，但**给了就必须合法**：线宽为 0 的线画不出来，负的虚线段会让
+    // `stroke-dasharray` 整条失效——两者都表现为「这根线不见了」。
+    const dash = isRecord(stroke) ? stroke.dashPattern : undefined
+    if (!isRecord(stroke)
+      || (stroke.color !== undefined
+        && (typeof stroke.color !== 'string' || stroke.color.length === 0))
+      || (stroke.width !== undefined
+        && (typeof stroke.width !== 'number' || !(stroke.width > 0)))
+      || (dash !== undefined
+        && (!Array.isArray(dash)
+          || dash.some((value) => typeof value !== 'number' || !(value > 0))))) {
+      issues.push(issue(
+        'entity.invalid-geometry',
+        [...prefix, 'entities', entity.id, CAD_COMPONENT_KEYS.stroke],
+        '描边颜色必须是非空字符串，线宽与虚线段必须为正数',
+      ))
+    }
+  }
   const polyline = entity.components[CAD_COMPONENT_KEYS.polyline]
   if (polyline !== undefined) {
     const vertices = isRecord(polyline) ? polyline.vertices : undefined
