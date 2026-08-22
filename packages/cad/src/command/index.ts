@@ -33,6 +33,12 @@ export {
 } from './cad-curve-commands'
 export { createCadLineCommand, createCadLineSession } from './cad-line-command'
 export {
+  createCadPolylineCommand,
+  createCadPolylineSession,
+  createCadRectangleCommand,
+  createCadRectangleSession,
+} from './cad-polyline-commands'
+export {
   CAD_DEFAULT_TEXT_HEIGHT,
   createCadTextCommand,
   createCadTextSession,

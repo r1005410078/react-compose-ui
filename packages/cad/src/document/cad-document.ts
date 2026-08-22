@@ -1,5 +1,6 @@
 import type { ComposeEntity, DocumentValidationResultOf } from '@compose-ui/core'
 import { CAD_COMPONENT_KEYS, type CadPoint, type CadPort } from './cad-entity'
+import { isDegenerateCadPolyline } from '../geometry'
 import {
   type CadBlockDefinition,
   CAD_DEFAULT_LAYER_ID,
@@ -121,6 +122,24 @@ function validateEntityComponents(
         'entity.invalid-geometry',
         [...prefix, 'entities', entity.id, CAD_COMPONENT_KEYS.line],
         '直线端点必须是有限数值',
+      ))
+    }
+  }
+  const polyline = entity.components[CAD_COMPONENT_KEYS.polyline]
+  if (polyline !== undefined) {
+    const vertices = isRecord(polyline) ? polyline.vertices : undefined
+    // 全部顶点重合的多段线在屏幕上不存在，却仍然参与命中与捕捉——与半径为零的圆、内容为空的
+    // 文字是同一类幽灵。
+    if (!isRecord(polyline)
+      || typeof polyline.closed !== 'boolean'
+      || !Array.isArray(vertices)
+      || vertices.length < 2
+      || !vertices.every((vertex) => isFinitePoint(vertex))
+      || isDegenerateCadPolyline(vertices as CadPoint[])) {
+      issues.push(issue(
+        'entity.invalid-geometry',
+        [...prefix, 'entities', entity.id, CAD_COMPONENT_KEYS.polyline],
+        '多段线至少需要两个不重合的顶点，且坐标必须是有限数值',
       ))
     }
   }

@@ -1241,3 +1241,70 @@ describe('CAD 文字', () => {
     expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('文字内容不能为空')
   })
 })
+
+describe('CAD 多段线与矩形', () => {
+  it('OpenSpec: cad-document / CAD PLINE 与 RECTANG 命令 / 两点画矩形', () => {
+    const { runtime, rerender } = setup()
+    submit('REC')
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('指定第一个角点')
+    clickAt(100, 100)
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('指定另一个角点')
+    clickAt(200, 150)
+    rerender()
+
+    // 一个 Entity，四条线段——展开只发生在遍历里，文档里它是一个对象。
+    expect(runtime.document.rootIds).toHaveLength(1)
+    expect(document.querySelectorAll('[data-cad-entity]')).toHaveLength(4)
+
+    runtime.undo()
+    expect(runtime.document.rootIds).toEqual([])
+  })
+
+  it('OpenSpec: cad-document / CAD 多段线在遍历中展开为线段 / 点中一段选中整条', () => {
+    const { rerender } = setup()
+    submit('REC')
+    clickAt(100, 100)
+    clickAt(200, 150)
+    rerender()
+
+    // 点上边。
+    clickAt(150, 100)
+    rerender()
+    // 四条线段各是一个 DOM 节点，但 data-cad-entity 全都指向同一个 Entity。
+    expect(new Set(selectedIds()).size).toBe(1)
+    // 四条线段全部带上选中态——它们是同一个对象。
+    expect(document.querySelectorAll('[data-cad-entity][data-selected]')).toHaveLength(4)
+  })
+
+  it('OpenSpec: cad-document / CAD 多段线在遍历中展开为线段 / 窗口框选整体判定', () => {
+    const { rerender } = setup()
+    submit('REC')
+    clickAt(100, 100)
+    clickAt(200, 150)
+    rerender()
+
+    // 只框住左半边：窗口模式要求每一段都在框内，因此不选中。
+    dragAt([90, 90], [150, 160])
+    rerender()
+    expect(selectedIds()).toEqual([])
+
+    cancel()
+    dragAt([90, 90], [210, 160])
+    rerender()
+    expect(document.querySelectorAll('[data-cad-entity][data-selected]')).toHaveLength(4)
+  })
+
+  it('OpenSpec: cad-document / CAD PLINE 与 RECTANG 命令 / PL 连点产出一个对象', () => {
+    const { runtime, rerender } = setup()
+    submit('PL')
+    clickAt(100, 100)
+    clickAt(200, 100)
+    clickAt(200, 150)
+    submit('C')
+    rerender()
+
+    expect(runtime.document.rootIds).toHaveLength(1)
+    // 闭合，因此三个顶点画出三条边。
+    expect(document.querySelectorAll('[data-cad-entity]')).toHaveLength(3)
+  })
+})

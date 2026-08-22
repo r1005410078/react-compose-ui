@@ -70,6 +70,12 @@ export interface CadCommandMessages {
   readonly textContent: string
   readonly expectedTextHeight: string
   readonly expectedTextContent: string
+  readonly keywordClose: string
+  readonly polylineTitle: string
+  readonly rectangleTitle: string
+  readonly rectangleFirstCorner: string
+  readonly rectangleSecondCorner: string
+  readonly degenerateRectangle: string
 }
 
 /**

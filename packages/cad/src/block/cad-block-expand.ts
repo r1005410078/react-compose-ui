@@ -3,6 +3,7 @@ import {
   getCadInsert,
   getCadLine,
   getCadPlacement,
+  getCadPolyline,
   getCadText,
   getCadWire,
   type CadArc,
@@ -15,6 +16,7 @@ import {
 import { resolveCadWireSegment } from '../connection/cad-wire-geometry'
 import {
   arcCurve,
+  cadPolylineSegments,
   flattenCadArc,
   segmentCurve,
   textGeometry,
@@ -138,6 +140,16 @@ export function collectCadVisibleGeometry(document: CadDocument): readonly CadVi
       continue
     }
 
+    const polyline = getCadPolyline(entity)
+    if (polyline) {
+      // 展开成线段，全部共用同一个 ownerId——因此点中任意一段选中的都是整条。这不是「拍扁」：
+      // 多段线本来就是一串线段，顶点仍是各段端点、各段仍有中点，一个特征点都没少。
+      for (const segment of cadPolylineSegments(polyline.vertices, polyline.closed)) {
+        result.push({ ownerId: id, geometry: segmentCurve(segment) })
+      }
+      continue
+    }
+
     const wire = getCadWire(entity)
     if (wire) {
       const segment = resolveCadWireSegment(document, wire)
@@ -157,6 +169,20 @@ export function collectCadVisibleGeometry(document: CadDocument): readonly CadVi
       const memberText = getCadText(member)
       if (memberText) {
         result.push({ ownerId: id, geometry: textGeometry(transformCadBlockText(memberText, insert)) })
+        continue
+      }
+
+      const memberPolyline = getCadPolyline(member)
+      if (memberPolyline) {
+        for (const segment of cadPolylineSegments(memberPolyline.vertices, memberPolyline.closed)) {
+          result.push({
+            ownerId: id,
+            geometry: segmentCurve({
+              start: transformCadBlockPoint(segment.start, insert),
+              end: transformCadBlockPoint(segment.end, insert),
+            }),
+          })
+        }
         continue
       }
 

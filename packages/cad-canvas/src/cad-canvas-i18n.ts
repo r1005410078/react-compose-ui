@@ -60,6 +60,12 @@ const messages = {
     textContent: '键入文字',
     expectedTextHeight: '字高必须是一个正数',
     expectedTextContent: '文字内容不能为空',
+    keywordClose: '闭合',
+    polylineTitle: '多段线',
+    rectangleTitle: '矩形',
+    rectangleFirstCorner: '指定第一个角点',
+    rectangleSecondCorner: '指定另一个角点',
+    degenerateRectangle: '两个角点不能在同一条水平或垂直线上',
   },
   'en-US': {
     canvasLabel: 'CAD drawing',
@@ -119,6 +125,12 @@ const messages = {
     textContent: 'Enter text',
     expectedTextHeight: 'Height must be a positive number',
     expectedTextContent: 'Text content must not be empty',
+    keywordClose: 'Close',
+    polylineTitle: 'Polyline',
+    rectangleTitle: 'Rectangle',
+    rectangleFirstCorner: 'Specify first corner point',
+    rectangleSecondCorner: 'Specify other corner point',
+    degenerateRectangle: 'The two corners must not share an axis',
   },
 } as const
 

@@ -49,3 +49,7 @@ export {
   type CadTextAlign,
   type CadTextShape,
 } from './cad-text-geometry'
+export {
+  cadPolylineSegments,
+  isDegenerateCadPolyline,
+} from './cad-polyline-geometry'
