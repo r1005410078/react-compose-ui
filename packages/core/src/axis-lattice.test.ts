@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createAxisLattice, latticeLineBand, latticeLinePosition } from './canvas-geometry'
+import { createAxisLattice, latticeLineBand, latticeLinePosition } from './axis-lattice'
 
 /*
  * 标尺与画布网格必须由同一点阵产出。这些测试锁定「构造性对齐」：只要两侧用同一个

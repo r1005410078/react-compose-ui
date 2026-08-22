@@ -29,7 +29,26 @@ export {
   getFrameAnimations,
   resolveAnimationHostFrameId,
 } from './animations'
+export {
+  createAxisLattice,
+  createRulerTicks,
+  latticeLineBand,
+  latticeLinePosition,
+  type ComposeAxisLattice,
+  type ComposeLatticeBand,
+  type ComposeRulerTick,
+} from './axis-lattice'
 export { createDefaultCanvasSettings } from './canvas-settings'
+export {
+  composeCanvasPan,
+  composeCanvasScreenToWorld,
+  composeCanvasWorldToScreen,
+  composeCanvasZoomAt,
+  type ComposeCanvasPoint,
+  type ComposeCanvasRect,
+  type ComposeCanvasViewport,
+  type ComposeZoomRange,
+} from './canvas-viewport'
 export {
   COMPOSE_GEOMETRY_PRECISION,
   formatComposeNumber,

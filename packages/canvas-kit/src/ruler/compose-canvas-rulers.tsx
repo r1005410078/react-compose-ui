@@ -7,38 +7,39 @@ import {
   useState,
 } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type {
-  StageRect,
-  StageRulerTick,
-} from '@compose-ui/stage-engine'
-import { paintRuler, type RulerPaintInput, type RulerPalette } from './ruler-painter'
+import type { ComposeCanvasRect, ComposeRulerTick } from '@compose-ui/core'
+import {
+  paintRuler,
+  type ComposeRulerPaintInput,
+  type ComposeRulerPalette,
+} from './ruler-painter'
 
 function formatDimension(value: number) {
   const rounded = Math.round(value * 100) / 100
   return Object.is(rounded, -0) ? '0' : String(rounded)
 }
 
-const PALETTE_PROPERTIES: Readonly<Record<keyof RulerPalette, string>> = {
-  tick: '--compose-stage-ruler-tick',
-  tickMajor: '--compose-stage-ruler-tick-major',
-  label: '--compose-stage-ruler-label',
-  selection: '--compose-stage-ruler-selection',
-  selectionLabel: '--compose-stage-ruler-selection-label',
-  selectionShadow: '--compose-stage-ruler-selection-shadow',
-  cursor: '--compose-stage-ruler-cursor',
+const PALETTE_PROPERTIES: Readonly<Record<keyof ComposeRulerPalette, string>> = {
+  tick: '--compose-canvas-ruler-tick',
+  tickMajor: '--compose-canvas-ruler-tick-major',
+  label: '--compose-canvas-ruler-label',
+  selection: '--compose-canvas-ruler-selection',
+  selectionLabel: '--compose-canvas-ruler-selection-label',
+  selectionShadow: '--compose-canvas-ruler-selection-shadow',
+  cursor: '--compose-canvas-ruler-cursor',
 }
 
 /*
  * Canvas 无法套用 CSS class，颜色改从容器的自定义属性读取，主题切换与浅色覆盖仍然只在
  * styles.css 里定义。读取会触发样式计算，因此只在主题变化时取一次并缓存。
  */
-function readPalette(element: HTMLElement): RulerPalette {
+function readPalette(element: HTMLElement): ComposeRulerPalette {
   const computed = getComputedStyle(element)
   const entries = Object.entries(PALETTE_PROPERTIES).map(([key, property]) => [
     key,
     computed.getPropertyValue(property).trim(),
   ])
-  return Object.fromEntries(entries) as unknown as RulerPalette
+  return Object.fromEntries(entries) as unknown as ComposeRulerPalette
 }
 
 /** 单条标尺画布；沿轴的指针位置由命令式接口更新，避免 pointermove 触发 React 重渲染。 */
@@ -48,8 +49,8 @@ interface RulerCanvasHandle {
 
 interface RulerCanvasProps {
   readonly axis: 'x' | 'y'
-  readonly ticks: readonly StageRulerTick[]
-  readonly selection: RulerPaintInput['selection']
+  readonly ticks: readonly ComposeRulerTick[]
+  readonly selection: ComposeRulerPaintInput['selection']
   readonly themeKey: string | undefined
 }
 
@@ -59,7 +60,7 @@ const RulerCanvas = forwardRef<RulerCanvasHandle, RulerCanvasProps>(function Rul
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cursorRef = useRef<number | null>(null)
-  const paletteRef = useRef<RulerPalette | null>(null)
+  const paletteRef = useRef<ComposeRulerPalette | null>(null)
   const frameRef = useRef<number | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
 
@@ -139,39 +140,58 @@ const RulerCanvas = forwardRef<RulerCanvasHandle, RulerCanvasProps>(function Rul
     }
   }, [schedule])
 
-  return <canvas aria-hidden="true" className="compose-stage__ruler-canvas" ref={canvasRef} />
+  return <canvas aria-hidden="true" className="compose-canvas__ruler-canvas" ref={canvasRef} />
 })
 
 /** 命令式更新指针游标的句柄。 */
-export interface StageRulersHandle {
-  /** 传入 surface 坐标系中的指针位置；离开 Stage 时传 `null`。 */
+export interface ComposeCanvasRulersHandle {
+  /** 传入 surface 坐标系中的指针位置；离开画布时传 `null`。 */
   setCursor: (point: { readonly x: number; readonly y: number } | null) => void
 }
 
-interface StageRulersProps {
-  readonly bounds: StageRect | null
-  readonly screenBounds: StageRect | null
-  readonly horizontalTicks: readonly StageRulerTick[]
-  readonly verticalTicks: readonly StageRulerTick[]
+export interface ComposeCanvasRulersProps {
+  readonly bounds: ComposeCanvasRect | null
+  readonly screenBounds: ComposeCanvasRect | null
+  readonly horizontalTicks: readonly ComposeRulerTick[]
+  readonly verticalTicks: readonly ComposeRulerTick[]
   readonly themeKey: string | undefined
   readonly labels: {
     readonly origin: string
     readonly horizontal: string
     readonly vertical: string
   }
+  /**
+   * `data-testid` 的前缀，各画布自取。
+   *
+   * @remarks
+   * 由调用方给出而不是本包写死：测试 id 属于消费它的那块画布，写死会让共享组件带上某一个
+   * 画布的命名。
+   */
+  readonly testIdPrefix: string
   readonly onCornerPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
   readonly onHorizontalPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
   readonly onVerticalPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
 }
 
-/** 固定于 viewport 的标尺 chrome；只消费 engine 几何结果，由 Canvas 绘制。 */
-export const StageRulers = forwardRef<StageRulersHandle, StageRulersProps>(function StageRulers({
+/**
+ * 固定于视口边缘的标尺。
+ *
+ * @remarks
+ * 完全受控：刻度、选择区间与交互回调全部由调用方给出。本组件不求解刻度，也不因标尺上的按下
+ * 产生辅助线、选择或任何文档变更——那些属于消费它的那块画布。
+ *
+ * 摆放位置由调用方的样式表决定，本包只提供画布元素自身的样式。
+ *
+ * @public
+ */
+export const ComposeCanvasRulers = forwardRef<ComposeCanvasRulersHandle, ComposeCanvasRulersProps>(function ComposeCanvasRulers({
   bounds,
   screenBounds,
   horizontalTicks,
   verticalTicks,
   themeKey,
   labels,
+  testIdPrefix,
   onCornerPointerDown,
   onHorizontalPointerDown,
   onVerticalPointerDown,
@@ -205,8 +225,8 @@ export const StageRulers = forwardRef<StageRulersHandle, StageRulersProps>(funct
     <>
       <div
         aria-label={labels.origin}
-        className="compose-stage__ruler-corner"
-        data-testid="stage-ruler-corner"
+        className="compose-canvas__ruler-corner"
+        data-testid={`${testIdPrefix}-corner`}
         role="img"
         onPointerDown={onCornerPointerDown}
       >
@@ -214,8 +234,8 @@ export const StageRulers = forwardRef<StageRulersHandle, StageRulersProps>(funct
       </div>
       <div
         aria-label={labels.horizontal}
-        className="compose-stage__ruler is-horizontal"
-        data-testid="stage-ruler-x"
+        className="compose-canvas__ruler is-horizontal"
+        data-testid={`${testIdPrefix}-x`}
         role="group"
         onPointerDown={onHorizontalPointerDown}
       >
@@ -229,8 +249,8 @@ export const StageRulers = forwardRef<StageRulersHandle, StageRulersProps>(funct
       </div>
       <div
         aria-label={labels.vertical}
-        className="compose-stage__ruler is-vertical"
-        data-testid="stage-ruler-y"
+        className="compose-canvas__ruler is-vertical"
+        data-testid={`${testIdPrefix}-y`}
         role="group"
         onPointerDown={onVerticalPointerDown}
       >

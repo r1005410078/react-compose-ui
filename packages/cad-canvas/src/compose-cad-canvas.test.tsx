@@ -73,6 +73,21 @@ function setup(props: Partial<Parameters<typeof ComposeCadCanvas>[0]> = {}) {
   return { runtime, rerender }
 }
 
+describe('画布标尺', () => {
+  it('OpenSpec: cad-document / CAD 画布网格与标尺 / 默认显示上左标尺与原点角', () => {
+    setup()
+    expect(screen.getByTestId('cad-ruler-x')).toHaveAttribute('aria-label', '水平标尺')
+    expect(screen.getByTestId('cad-ruler-y')).toHaveAttribute('aria-label', '垂直标尺')
+    expect(screen.getByTestId('cad-ruler-corner')).toHaveAttribute('aria-label', '世界原点')
+  })
+
+  it('OpenSpec: cad-document / CAD 画布网格与标尺 / 宿主可以关闭标尺', () => {
+    setup({ showRulers: false })
+    expect(screen.queryByTestId('cad-ruler-x')).toBeNull()
+    expect(screen.queryByTestId('cad-ruler-corner')).toBeNull()
+  })
+})
+
 describe('十字光标', () => {
   function lines() {
     return screen.getByTestId('cad-surface').querySelectorAll('[data-cad-crosshair-line]')

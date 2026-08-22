@@ -25,6 +25,7 @@ export default defineConfig({
     rollupOptions: {
       external: [
         '@compose-ui/cad',
+        '@compose-ui/canvas-kit',
         '@compose-ui/commands',
         '@compose-ui/components',
         '@compose-ui/core',

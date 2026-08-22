@@ -1,5 +1,5 @@
 {
-  "name": "@compose-ui/cad-canvas",
+  "name": "@compose-ui/canvas-kit",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": [
@@ -22,10 +22,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@compose-ui/cad": "workspace:*",
-    "@compose-ui/canvas-kit": "workspace:*",
-    "@compose-ui/commands": "workspace:*",
-    "@compose-ui/components": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/ui-context": "workspace:*"
   },

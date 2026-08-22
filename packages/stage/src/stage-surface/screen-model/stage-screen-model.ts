@@ -24,7 +24,7 @@ import {
   type StageFrameScreenBounds,
   type StageScreenRect,
 } from './stage-screen-geometry'
-import type { StageSurfaceSize } from '../use-stage-surface-size'
+import type { ComposeCanvasSurfaceSize } from '@compose-ui/canvas-kit'
 
 /** 求屏幕模型所需的输入。 */
 export interface StageScreenModelInput {
@@ -36,7 +36,7 @@ export interface StageScreenModelInput {
   readonly previewLayoutSnapshot: ComposeLayoutSnapshot
   readonly hiddenEntityIds: ReadonlySet<string>
   readonly viewport: StageViewport
-  readonly surfaceSize: StageSurfaceSize
+  readonly surfaceSize: ComposeCanvasSurfaceSize
   /** 选区世界包围盒；无选区时为 null。 */
   readonly selectionBounds: StageRect | null
   /** 框选矩形（世界坐标）；不在框选中时为 null。 */
@@ -121,16 +121,16 @@ export function resolveStageScreenModel(input: StageScreenModelInput): StageScre
     marqueeScreen: worldRectToScreen(marquee, viewport),
     handlePoints: resizeHandlePoints(screenBounds),
     horizontalTicks: createRulerTicks({
-      axis: 'x',
-      viewport,
+      viewportOffset: viewport.x,
+      zoom: viewport.zoom,
       length: surfaceSize.width,
       step: grid.stepX,
       offset: grid.offsetX,
       primaryLineEvery: grid.primaryLineEvery,
     }),
     verticalTicks: createRulerTicks({
-      axis: 'y',
-      viewport,
+      viewportOffset: viewport.y,
+      zoom: viewport.zoom,
       length: surfaceSize.height,
       step: grid.stepY,
       offset: grid.offsetY,

@@ -10,6 +10,7 @@ import {
   createCadPluginRegistry,
   createCadSceneIndex,
   createCadSessionArbiter,
+  collectCadVisibleSegments,
   findCadHit,
   parseCadCoordinate,
   pruneCadSelection,
@@ -29,10 +30,16 @@ import {
   type ComposeCommandPrompt,
   type ComposeCommandSession,
 } from '@compose-ui/commands'
-import { formatComposeNumber, type EditorCommand } from '@compose-ui/core'
+import { createRulerTicks, formatComposeNumber, type EditorCommand } from '@compose-ui/core'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { getCadCanvasMessages } from './cad-canvas-i18n'
 import { CadCommandLine } from './command-line'
+import {
+  ComposeCanvasRulers,
+  useCanvasSurfaceSize,
+  type ComposeCanvasRulersHandle,
+} from '@compose-ui/canvas-kit'
+import { CAD_GRID } from './grid'
 import { useCadIndicatedPoint } from './indicated-point'
 import {
   CadSurface,
@@ -91,6 +98,17 @@ export interface ComposeCadCanvasProps {
    * @defaultValue true
    */
   readonly showCrosshair?: boolean
+  /**
+   * 是否显示上边与左侧标尺。
+   *
+   * @remarks
+   * AutoCAD 没有标尺——无限图纸上钉在视口边缘的标尺不如坐标读数加网格有用。这里默认开启是
+   * 一处有意偏离：本产品的用户是从页面编辑器过来的实施工程师而不是 AutoCAD 老手，两块画布
+   * 行为一致的价值更高。
+   *
+   * @defaultValue true
+   */
+  readonly showRulers?: boolean
 }
 
 function defaultIdFactory() {
@@ -123,10 +141,14 @@ export function ComposeCadCanvas({
   pickRadius = 8,
   crosshairSize = 100,
   showCrosshair = true,
+  showRulers = true,
 }: ComposeCadCanvasProps) {
   const i18n = useComposeI18nContext()
   const messages = getCadCanvasMessages(i18n?.locale ?? 'zh-CN')
   const [viewport, setViewport] = useState<CadViewport>(CAD_INITIAL_VIEWPORT)
+  const surfaceRef = useRef<HTMLDivElement | null>(null)
+  const rulersRef = useRef<ComposeCanvasRulersHandle>(null)
+  const { size: surfaceSize } = useCanvasSurfaceSize(surfaceRef)
   const [prompt, setPrompt] = useState<ComposeCommandPrompt | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [preview, setPreview] = useState<readonly CadPreviewSegment[]>([])
@@ -271,6 +293,39 @@ export function ComposeCadCanvas({
     if (!lines && !box) return null
     return { screen: indicated.screen, lines, box, boxRadius: pickRadius, size: crosshairSize }
   }, [crosshairSize, indicated, pickRadius, prompt, showCrosshair])
+
+  const rulerTicks = useMemo(() => {
+    const shared = { step: CAD_GRID.step, offset: 0, primaryLineEvery: CAD_GRID.primaryLineEvery }
+    return {
+      horizontal: createRulerTicks({
+        ...shared, viewportOffset: viewport.offset.x, zoom: viewport.zoom, length: surfaceSize.width,
+      }),
+      vertical: createRulerTicks({
+        ...shared, viewportOffset: viewport.offset.y, zoom: viewport.zoom, length: surfaceSize.height,
+      }),
+    }
+  }, [surfaceSize.height, surfaceSize.width, viewport])
+
+  /** 选择集的世界包围盒；标尺据此画出区间条与尺寸。 */
+  const selectionBounds = useMemo(() => {
+    const selected = new Set(interaction.selection)
+    if (selected.size === 0) return null
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const { ownerId, segment } of collectCadVisibleSegments(document)) {
+      if (!selected.has(ownerId)) continue
+      minX = Math.min(minX, segment.start.x, segment.end.x)
+      minY = Math.min(minY, segment.start.y, segment.end.y)
+      maxX = Math.max(maxX, segment.start.x, segment.end.x)
+      maxY = Math.max(maxY, segment.start.y, segment.end.y)
+    }
+    if (!Number.isFinite(minX)) return null
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+  }, [document, interaction.selection])
+
+  // 标尺游标走命令式接口：指针移动是高频事件，每次移动重渲染整条标尺不划算。
+  useEffect(() => {
+    rulersRef.current?.setCursor(indicated ? indicated.screen : null)
+  }, [indicated])
 
   const previewSegments = useMemo<readonly CadPreviewSegment[]>(() => {
     if (!reference || !pointerPoint || !prompt?.accepts.includes('point')) return preview
@@ -456,7 +511,32 @@ export function ComposeCadCanvas({
 
   return (
     <div className="compose-cad-canvas" data-testid="cad-canvas" onKeyDown={handleKeyDown}>
-      <div className="compose-cad-canvas__viewport">
+      <div className="compose-cad-canvas__viewport" data-rulers={showRulers ? '' : undefined} ref={surfaceRef}>
+        {showRulers ? (
+          <ComposeCanvasRulers
+            bounds={selectionBounds}
+            horizontalTicks={rulerTicks.horizontal}
+            ref={rulersRef}
+            labels={{
+              origin: messages.rulerOrigin,
+              horizontal: messages.horizontalRuler,
+              vertical: messages.verticalRuler,
+            }}
+            screenBounds={selectionBounds ? {
+              x: selectionBounds.x * viewport.zoom + viewport.offset.x,
+              y: selectionBounds.y * viewport.zoom + viewport.offset.y,
+              width: selectionBounds.width * viewport.zoom,
+              height: selectionBounds.height * viewport.zoom,
+            } : null}
+            testIdPrefix="cad-ruler"
+            themeKey={i18n?.locale}
+            verticalTicks={rulerTicks.vertical}
+            // 标尺上的拖拽在页面画布里用来拉辅助线；CAD 还没有辅助线，因此这里不接管。
+            onCornerPointerDown={() => {}}
+            onHorizontalPointerDown={() => {}}
+            onVerticalPointerDown={() => {}}
+          />
+        ) : null}
         <CadSurface
           document={document}
           crosshair={crosshair}

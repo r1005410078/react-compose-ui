@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@compose-ui/assets": "workspace:*",
+    "@compose-ui/canvas-kit": "workspace:*",
     "@compose-ui/commands": "workspace:*",
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/components": "workspace:*",

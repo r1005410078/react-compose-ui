@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { RefObject } from 'react'
 
 /** Surface 尺寸；单位是 CSS 像素。 */
-export interface StageSurfaceSize {
+export interface ComposeCanvasSurfaceSize {
   readonly width: number
   readonly height: number
 }
@@ -14,7 +14,7 @@ export interface StageSurfaceSize {
  * surface 挂载前没有可测的矩形，但视口换算、标尺刻度与滚动范围都要在首帧就有值。取一个
  * 常见画布尺寸而不是 0：零尺寸会让缩放换算除零，也会让首帧的滚动范围退化成一个点。
  */
-const FALLBACK_SURFACE_SIZE: StageSurfaceSize = { width: 900, height: 600 }
+const FALLBACK_SURFACE_SIZE: ComposeCanvasSurfaceSize = { width: 900, height: 600 }
 
 /**
  * 观测结果：尺寸，以及是否已经量到过真实尺寸。
@@ -24,13 +24,13 @@ const FALLBACK_SURFACE_SIZE: StageSurfaceSize = { width: 900, height: 600 }
  * 比较会给出错误答案，而首次视口适配必须等到真的量过——按 900×600 算出来的缩放与可视区域
  * 无关，用户会看到画面先跳一次再定住。
  */
-export interface StageSurfaceMeasurement {
-  readonly size: StageSurfaceSize
+export interface ComposeCanvasSurfaceMeasurement {
+  readonly size: ComposeCanvasSurfaceSize
   readonly measured: boolean
 }
 
 /**
- * 观测 Scene surface 的尺寸。
+ * 观测画布 surface 的尺寸。
  *
  * @remarks
  * 两处判定不是样板，删掉都会出问题：
@@ -38,15 +38,15 @@ export interface StageSurfaceMeasurement {
  * - **零尺寸直接返回**——挂在隐藏容器里时 `getBoundingClientRect` 给出 0×0，写进 state 会把
  *   回退尺寸覆盖成零，之后所有除以尺寸的换算全部失效，而容器再显示时未必会触发新的观测。
  * - **同值短路**——`ResizeObserver` 会因祖先重排而触发，尺寸往往没变；不短路就是每次重排
- *   都让整棵 Scene 重渲染一次。
+ *   都让整块画布重渲染一次。
  *
  * @param onChange - 宿主侧的尺寸通知；**只在实测到新尺寸时调用**，与内部 state 是否更新无关。
  */
-export function useStageSurfaceSize(
-  surfaceRef: RefObject<HTMLDivElement | null>,
-  onChange?: (size: StageSurfaceSize) => void,
-): StageSurfaceMeasurement {
-  const [surfaceSize, setSurfaceSize] = useState<StageSurfaceSize>(FALLBACK_SURFACE_SIZE)
+export function useCanvasSurfaceSize(
+  surfaceRef: RefObject<Element | null>,
+  onChange?: (size: ComposeCanvasSurfaceSize) => void,
+): ComposeCanvasSurfaceMeasurement {
+  const [surfaceSize, setSurfaceSize] = useState<ComposeCanvasSurfaceSize>(FALLBACK_SURFACE_SIZE)
   const [measured, setMeasured] = useState(false)
 
   useEffect(() => {

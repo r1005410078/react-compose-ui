@@ -8,6 +8,7 @@ import {
   type CadPointerModifiers,
   type CadSnapCandidate,
 } from '@compose-ui/cad'
+import { CAD_GRID, createCadGridStyle } from '../grid'
 import {
   cadPanViewport,
   cadScreenToWorld,
@@ -105,7 +106,6 @@ export interface CadSurfaceProps {
 const WHEEL_ZOOM_STEP = 1.1
 
 /** 网格线的最小屏幕间距；低于它就不画，否则缩小视图时网格糊成一片。 */
-const MIN_GRID_SPACING = 8
 
 /**
  * 求解当前视口内要画的网格线。
@@ -114,27 +114,6 @@ const MIN_GRID_SPACING = 8
  * 按**屏幕间距**而不是缩放比例决定画不画：同一个 zoom 下，步长 1 与步长 100 的疏密差两个
  * 数量级，用 zoom 做门槛会在其中一边失效。
  */
-function gridLines(
-  step: number | null,
-  viewport: CadViewport,
-  size: { readonly width: number; readonly height: number },
-) {
-  if (step === null || !(step > 0)) return []
-  const spacing = step * viewport.zoom
-  if (spacing < MIN_GRID_SPACING) return []
-  const { width, height } = size
-  const lines: { key: string; x1: number; y1: number; x2: number; y2: number }[] = []
-  const firstX = Math.ceil((0 - viewport.offset.x) / spacing) * spacing + viewport.offset.x
-  for (let x = firstX; x <= width; x += spacing) {
-    lines.push({ key: `v${x}`, x1: x, y1: 0, x2: x, y2: height })
-  }
-  const firstY = Math.ceil((0 - viewport.offset.y) / spacing) * spacing + viewport.offset.y
-  for (let y = firstY; y <= height; y += spacing) {
-    lines.push({ key: `h${y}`, x1: 0, y1: y, x2: width, y2: y })
-  }
-  return lines
-}
-
 /**
  * 渲染 CAD 图面并把指针输入归一化为世界坐标。
  *
@@ -312,7 +291,6 @@ export function CadSurface({
   const layerColors = new Map(document.layers.map((layer) => [layer.id, layer]))
   // 与命中、框选、捕捉共用同一条可见性遍历：渲染跟它们分叉时，会出现「看得见却点不中」。
   const segments = collectCadVisibleSegments(document)
-  const grid = gridLines(gridStep, viewport, size)
   const selected = new Set(interaction.selection)
 
   return (
@@ -320,6 +298,7 @@ export function CadSurface({
       ref={surfaceRef}
       aria-label={label}
       className="compose-cad-canvas__surface"
+      style={createCadGridStyle(gridStep, CAD_GRID, viewport, globalThis.devicePixelRatio || 1)}
       data-crosshair={crosshair ? '' : undefined}
       data-testid="cad-surface"
       role="img"
@@ -330,16 +309,6 @@ export function CadSurface({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      {grid.map(({ key, x1, y1, x2, y2 }) => (
-        <line
-          key={key}
-          className="compose-cad-canvas__grid-line"
-          x1={x1}
-          x2={x2}
-          y1={y1}
-          y2={y2}
-        />
-      ))}
       {segments.map(({ ownerId, segment }, index) => {
         const owner = document.entities[ownerId]
         const layer = owner ? layerColors.get(getCadPlacement(owner)?.layerId ?? '') : undefined

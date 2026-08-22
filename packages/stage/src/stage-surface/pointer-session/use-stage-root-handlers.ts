@@ -6,14 +6,14 @@ import type {
   RefObject,
 } from 'react'
 import type { StageInteractionHit } from '@compose-ui/stage-engine'
-import type { StageRulersHandle } from '../../stage-ruler'
+import type { ComposeCanvasRulersHandle } from '@compose-ui/canvas-kit'
 import { screenPoint } from './stage-pointer-geometry'
 
 /** 根元素事件接线的依赖清单。 */
 export interface StageRootHandlersParams {
   readonly rootRef: RefObject<HTMLDivElement | null>
   readonly surfaceRef: RefObject<HTMLDivElement | null>
-  readonly rulersRef: RefObject<StageRulersHandle | null>
+  readonly rulersRef: RefObject<ComposeCanvasRulersHandle | null>
   /** 已归一化的选区；右键命中选区外的对象时要先改选区。 */
   readonly normalizedSelection: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void

@@ -3,7 +3,7 @@ import {
   RULER_MINOR_TICK_TOP,
   RULER_TICK_TOP,
   paintRuler,
-  type RulerPaintInput,
+  type ComposeRulerPaintInput,
 } from './ruler-painter'
 
 /** 记录调用而不依赖真实 Canvas；断言的是几何，不是像素。 */
@@ -39,7 +39,7 @@ const palette = {
   cursor: '#68a9ff',
 }
 
-function input(overrides: Partial<RulerPaintInput> = {}): RulerPaintInput {
+function input(overrides: Partial<ComposeRulerPaintInput> = {}): ComposeRulerPaintInput {
   return {
     axis: 'x',
     ticks: [

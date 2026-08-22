@@ -1,4 +1,4 @@
-import type { StageRulerTick } from '@compose-ui/stage-engine'
+import type { ComposeRulerTick } from '@compose-ui/core'
 
 /** 带数字刻度的上边界；比细刻度更长以形成层级。 */
 export const RULER_TICK_TOP = 12
@@ -16,7 +16,7 @@ const SELECTION_BAR_TOP = 20
 const SELECTION_CAP_TOP = 14
 
 /** 标尺绘制使用的颜色；由容器 CSS 自定义属性提供，保持主题可覆盖。 */
-export interface RulerPalette {
+export interface ComposeRulerPalette {
   readonly tick: string
   readonly tickMajor: string
   readonly label: string
@@ -27,13 +27,13 @@ export interface RulerPalette {
 }
 
 /** 单条标尺一次绘制所需的全部输入。 */
-export interface RulerPaintInput {
+export interface ComposeRulerPaintInput {
   readonly axis: 'x' | 'y'
-  readonly ticks: readonly StageRulerTick[]
+  readonly ticks: readonly ComposeRulerTick[]
   /** 标尺的 CSS 像素尺寸。 */
   readonly size: { readonly width: number; readonly height: number }
   readonly devicePixelRatio: number
-  readonly palette: RulerPalette
+  readonly palette: ComposeRulerPalette
   /** 选区在本轴上的屏幕区间与尺寸文本；无选区时为空。 */
   readonly selection: {
     readonly start: number
@@ -50,7 +50,7 @@ export interface RulerPaintInput {
  */
 function applyAxisTransform(
   ctx: CanvasRenderingContext2D,
-  input: RulerPaintInput,
+  input: ComposeRulerPaintInput,
 ) {
   if (input.axis === 'x') return
   ctx.translate(0, 0)
@@ -59,12 +59,12 @@ function applyAxisTransform(
 }
 
 /** 沿轴方向的可绘制长度。 */
-function axisLength(input: RulerPaintInput) {
+function axisLength(input: ComposeRulerPaintInput) {
   return input.axis === 'x' ? input.size.width : input.size.height
 }
 
 /** 厚度方向的尺寸。 */
-function axisThickness(input: RulerPaintInput) {
+function axisThickness(input: ComposeRulerPaintInput) {
   return input.axis === 'x' ? input.size.height : input.size.width
 }
 
@@ -76,7 +76,7 @@ function axisThickness(input: RulerPaintInput) {
  * `linear-gradient(色 1px, transparent 1px)` 语义一致；这是标尺与网格能够严格对齐的前提。
  * 数字以该带的中心（`position + 0.5`）居中，不再左对齐。
  */
-export function paintRuler(ctx: CanvasRenderingContext2D, input: RulerPaintInput): void {
+export function paintRuler(ctx: CanvasRenderingContext2D, input: ComposeRulerPaintInput): void {
   const { devicePixelRatio: dpr, palette } = input
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, input.size.width, input.size.height)

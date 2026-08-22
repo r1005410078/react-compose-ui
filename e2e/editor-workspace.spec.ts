@@ -1269,6 +1269,9 @@ test('OpenSpec: cad-document / CAD 指针反馈 / 橡皮筋、悬停高亮与坐
   const band = surface.locator('[data-cad-preview="pending"]')
   const box = await surface.boundingBox()
   if (!box) throw new Error('surface has no box')
+  // 取点按图面实际尺寸算：图面上下要给标尺与命令行让位，写死的纵坐标会随 chrome 变化而落到
+  // 图面之外，那时指针根本不在图面上，失败原因看起来却像是橡皮筋没画。
+  const lower = Math.round(box.height * 0.7)
 
   // 1) 指针一进图面就有坐标读数
   await page.mouse.move(box.x + 200, box.y + 160)
@@ -1279,12 +1282,12 @@ test('OpenSpec: cad-document / CAD 指针反馈 / 橡皮筋、悬停高亮与坐
   await page.keyboard.press('Enter')
   await expect(band).toHaveCount(0)
   await surface.click({ position: { x: 200, y: 160 } })
-  await page.mouse.move(box.x + 460, box.y + 320)
+  await page.mouse.move(box.x + 460, box.y + lower)
   await expect(band).toHaveCount(1)
   await expect(band).toHaveAttribute('x2', '460')
 
   // 3) 取第二点后橡皮筋换成从新顶点起算，结束命令后消失
-  await surface.click({ position: { x: 460, y: 320 } })
+  await surface.click({ position: { x: 460, y: lower } })
   await page.mouse.move(box.x + 600, box.y + 200)
   await expect(band).toHaveAttribute('x1', '460')
   await page.keyboard.type('f')
@@ -1293,9 +1296,9 @@ test('OpenSpec: cad-document / CAD 指针反馈 / 橡皮筋、悬停高亮与坐
   await expect(surface.locator('[data-cad-entity]')).toHaveCount(1)
 
   // 4) 空闲时压在图元上出现悬停高亮，移开即消失
-  await page.mouse.move(box.x + 330, box.y + 240)
+  await page.mouse.move(box.x + 330, box.y + Math.round((160 + lower) / 2))
   await expect(surface.locator('[data-cad-entity][data-hovered]')).toHaveCount(1)
-  await page.mouse.move(box.x + 330, box.y + 500)
+  await page.mouse.move(box.x + 330, box.y + 20)
   await expect(surface.locator('[data-cad-entity][data-hovered]')).toHaveCount(0)
 })
 
@@ -1345,6 +1348,51 @@ test('OpenSpec: cad-document / CAD 十字光标 / 三种形态与系统光标隐
   await page.mouse.move(box.x + 340, box.y + 240)
   await expect(lines).toHaveCount(0)
   await expect(pickbox).toHaveCount(1)
+})
+
+test('OpenSpec: cad-document / CAD 画布网格与标尺 / 缩小后网格仍在，标尺随视口更新', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Grid')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const box = await surface.boundingBox()
+  if (!box) throw new Error('surface has no box')
+
+  // 1) 标尺与原点角在位
+  await expect(canvas.locator('[data-testid="cad-ruler-x"]')).toBeVisible()
+  await expect(canvas.locator('[data-testid="cad-ruler-y"]')).toBeVisible()
+  await expect(canvas.locator('[data-testid="cad-ruler-corner"]')).toBeVisible()
+
+  // 2) 网格是四层 gradient（主线与细线各两轴），不是 SVG 节点
+  const layers = async () => (await surface.evaluate((node) => getComputedStyle(node).backgroundImage))
+    .split('gradient').length - 1
+  expect(await layers()).toBe(4)
+
+  const minorSpacing = async () => {
+    const size = await surface.evaluate((node) => getComputedStyle(node).backgroundSize)
+    return Number.parseFloat(size.split(', ')[2] ?? '0')
+  }
+  const before = await minorSpacing()
+
+  // 3) 缩小很多之后网格**仍然存在**，只是按二次幂 stride 抽稀——旧实现在这里整片消失
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  for (let step = 0; step < 12; step += 1) await page.mouse.wheel(0, 200)
+  await expect.poll(minorSpacing).not.toBe(before)
+  expect(await layers()).toBe(4)
+  expect(await minorSpacing()).toBeGreaterThanOrEqual(2)
 })
 
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {

@@ -30,6 +30,7 @@ export {
   rotationFromPointer,
   rotationMatrixAround,
   screenToWorld,
+  STAGE_ZOOM_RANGE,
   scrollAxisToViewport,
   snapResizePoint,
   snapTranslation,
