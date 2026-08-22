@@ -25,5 +25,11 @@ export {
   createCadInsertCommand,
   createCadInsertSession,
 } from './cad-block-commands'
+export {
+  createCadArcCommand,
+  createCadArcSession,
+  createCadCircleCommand,
+  createCadCircleSession,
+} from './cad-curve-commands'
 export { createCadLineCommand, createCadLineSession } from './cad-line-command'
 export { createCadEraseCommand, createCadEraseSession } from './cad-erase-command'

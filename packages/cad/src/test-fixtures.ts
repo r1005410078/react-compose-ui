@@ -36,6 +36,15 @@ export const cadTestCommandMessages: CadCommandMessages = {
   portTitle: '添加端口',
   portSelectInstance: '选择一个块实例',
   portPoint: '指定端口位置',
+  circleTitle: '圆',
+  circleCenter: '指定圆心',
+  circleRadius: '指定半径',
+  degenerateRadius: '半径不能为零',
+  arcTitle: '圆弧',
+  arcStartPoint: '指定起点',
+  arcThroughPoint: '指定弧上一点',
+  arcEndPoint: '指定终点',
+  collinearArc: '三点共线，无法定弧',
 }
 
 /**

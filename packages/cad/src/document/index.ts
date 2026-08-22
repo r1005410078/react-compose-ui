@@ -4,12 +4,15 @@ export {
 } from './cad-document'
 export {
   CAD_COMPONENT_KEYS,
+  createCadArcEntity,
   createCadLineEntity,
   createCadWireEntity,
+  getCadArc,
   getCadInsert,
   getCadLine,
   getCadPlacement,
   getCadWire,
+  type CadArc,
   type CadFreeEndpoint,
   type CadInsert,
   type CadLine,

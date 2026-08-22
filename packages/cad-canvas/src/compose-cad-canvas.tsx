@@ -10,13 +10,17 @@ import {
   createCadInteractionPlugins,
   createCadLineCommand,
   createCadMoveCommand,
+  createCadArcCommand,
+  createCadCircleCommand,
   createCadPortCommand,
   createCadWireCommand,
   createCadPluginRegistry,
   createCadSceneIndex,
   createCadSessionArbiter,
-  collectCadVisibleSegments,
+  collectCadVisibleCurves,
+  curveBounds,
   findCadHit,
+  findCadSnap,
   parseCadCoordinate,
   pruneCadSelection,
   resolveCadPoint,
@@ -52,7 +56,7 @@ import {
   type CadPreviewSegment,
   type CadSurfacePointerEvent,
 } from './canvas-surface'
-import { CAD_INITIAL_VIEWPORT, type CadViewport } from './viewport'
+import { CAD_INITIAL_VIEWPORT, type CadCanvasPoint, type CadViewport } from './viewport'
 
 /**
  * 受控 CAD 编辑画布的属性。
@@ -194,6 +198,8 @@ export function ComposeCadCanvas({
       createCadCopyCommand(messages),
       createCadWireCommand(messages),
       createCadPortCommand(messages),
+      createCadCircleCommand(messages),
+      createCadArcCommand(messages),
     ]),
     [messages],
   )
@@ -273,13 +279,20 @@ export function ComposeCadCanvas({
    * 提交一个点时用的完整求解上下文。
    *
    * @remarks
-   * 必须带上当前捕捉点：`pointContext` 只含参照点、正交与网格，少了 `snapped` 会让按下不再
-   * 吸到特征点上——而橡皮筋和十字线仍然吸着，用户看到的是「明明吸住了，落点却偏了」。
+   * 必须带上捕捉点：`pointContext` 只含参照点、正交与网格，少了 `snapped` 会让按下不再吸到
+   * 特征点上——而橡皮筋和十字线仍然吸着，用户看到的是「明明吸住了，落点却偏了」。
+   *
+   * 捕捉按**这次按下自己的坐标**重算，而不是沿用上一帧 hover 解出的那个：`pointerdown` 可能
+   * 在 React 为上一次 `pointermove` 重渲染之前就到达，那时 `indicated.snap` 还停在旧位置，
+   * 落点会被吸到用户已经离开的特征点上。指针移得快、或者一次点按只产生一个 move 时都会
+   * 撞上，而症状是「落点莫名其妙跑回上一个特征点」。
    */
-  const resolutionContext = useMemo(
-    () => ({ ...pointContext, snapped: snap?.point }),
-    [pointContext, snap],
-  )
+  const resolveCommittedPoint = useCallback((point: CadCanvasPoint) => {
+    const snapped = snapEnabled && prompt?.accepts.includes('point')
+      ? findCadSnap(document, point, snapRadius / viewport.zoom)
+      : null
+    return resolveCadPoint(point, 'pointer', { ...pointContext, snapped: snapped?.point })
+  }, [document, pointContext, prompt, snapEnabled, snapRadius, viewport.zoom])
 
   /**
    * 跟随指针的橡皮筋。
@@ -324,12 +337,14 @@ export function ComposeCadCanvas({
     const selected = new Set(interaction.selection)
     if (selected.size === 0) return null
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const { ownerId, segment } of collectCadVisibleSegments(document)) {
+    for (const { ownerId, curve } of collectCadVisibleCurves(document)) {
       if (!selected.has(ownerId)) continue
-      minX = Math.min(minX, segment.start.x, segment.end.x)
-      minY = Math.min(minY, segment.start.y, segment.end.y)
-      maxX = Math.max(maxX, segment.start.x, segment.end.x)
-      maxY = Math.max(maxY, segment.start.y, segment.end.y)
+      // 圆弧用紧包围盒：整圆的盒子会让一段 90° 的弧在标尺上量出四倍长度。
+      const box = curveBounds(curve)
+      minX = Math.min(minX, box.minX)
+      minY = Math.min(minY, box.minY)
+      maxX = Math.max(maxX, box.maxX)
+      maxY = Math.max(maxY, box.maxY)
     }
     if (!Number.isFinite(minX)) return null
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
@@ -350,9 +365,10 @@ export function ComposeCadCanvas({
   const dragDelta = useMemo(() => {
     const drag = interaction.translate
     if (!drag) return null
-    const target = resolveCadPoint(drag.to, 'pointer', resolutionContext)
+    // 与松手提交调用的是**同一个函数**，因此预览与落点不可能分叉。
+    const target = resolveCommittedPoint(drag.to)
     return { x: target.x - drag.from.x, y: target.y - drag.from.y }
-  }, [interaction.translate, resolutionContext])
+  }, [interaction.translate, resolveCommittedPoint])
 
   const previewSegments = useMemo<readonly CadPreviewSegment[]>(() => {
     if (!reference || !pointerPoint || !prompt?.accepts.includes('point')) return preview
@@ -385,7 +401,8 @@ export function ComposeCadCanvas({
         const parsed = parseCadCoordinate(text, reference)
         if (parsed.ok) {
           // 键入的坐标是精确值，不再经过正交与网格。
-          applyStep(session, { kind: 'point', point: resolveCadPoint(parsed.point, 'typed', resolutionContext) })
+          // 键入的坐标跳过全部吸附，因此不需要捕捉点，`pointContext` 即可。
+          applyStep(session, { kind: 'point', point: resolveCadPoint(parsed.point, 'typed', pointContext) })
           return
         }
         if (parsed.reason === 'missing-reference') {
@@ -418,7 +435,7 @@ export function ComposeCadCanvas({
     }))
   }, [
     activeLayerId, applyStep, document.blocks, idFactory, interaction.selection, messages,
-    prompt, reference, registry, resolutionContext, startSession,
+    pointContext, prompt, reference, registry, startSession,
   ])
 
   /**
@@ -461,7 +478,7 @@ export function ComposeCadCanvas({
       // 拖动移动不需要活动命令：它自己就是一次完整的操作。位移在这里解算——插件给的是两个
       // 原始世界坐标，捕捉/正交/网格住在宿主。
       if (effect.kind === 'entities.translate') {
-        const target = resolveCadPoint(effect.to, 'pointer', resolutionContext)
+        const target = resolveCommittedPoint(effect.to)
         onDispatch({
           id: idFactory(),
           type: CAD_COMMAND_TYPES.translateEntities,
@@ -475,12 +492,12 @@ export function ComposeCadCanvas({
       const session = sessionRef.current
       if (!session) continue
       if (effect.kind === 'command.point') {
-        applyStep(session, { kind: 'point', point: resolveCadPoint(effect.point, 'pointer', resolutionContext) })
+        applyStep(session, { kind: 'point', point: resolveCommittedPoint(effect.point) })
         continue
       }
       if (effect.kind === 'command.selection') applyStep(session, { kind: 'selection', ids: effect.ids })
     }
-  }, [applyStep, idFactory, onDispatch, resolutionContext])
+  }, [applyStep, idFactory, onDispatch, resolveCommittedPoint])
 
   const pluginContext = useCallback((): CadPluginContext => {
     const snapshot = latest.current

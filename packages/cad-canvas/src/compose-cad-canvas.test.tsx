@@ -1081,3 +1081,98 @@ describe('CAD 端口与导线', () => {
       .toBe('220')
   })
 })
+
+describe('CAD 圆与圆弧', () => {
+  it('OpenSpec: cad-document / CAD CIRCLE 与 ARC 命令 / 两点画圆', () => {
+    const { runtime, rerender } = setup()
+    submit('C')
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('指定圆心')
+    clickAt(100, 100)
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('指定半径')
+    clickAt(140, 100)
+    rerender()
+
+    expect(runtime.document.rootIds).toHaveLength(1)
+    // 整圆走 `<circle>`：SVG 的 A 命令在起终点重合时画不出任何东西。
+    const drawn = document.querySelector('[data-cad-entity]')!
+    expect(drawn.tagName.toLowerCase()).toBe('circle')
+    expect(drawn.getAttribute('r')).toBe('40')
+
+    runtime.undo()
+    expect(runtime.document.rootIds).toEqual([])
+  })
+
+  it('OpenSpec: cad-document / CAD CIRCLE 与 ARC 命令 / 三点画弧', () => {
+    const { runtime, rerender } = setup()
+    submit('A')
+    clickAt(100, 100)
+    clickAt(150, 50)
+    clickAt(200, 100)
+    rerender()
+
+    expect(runtime.document.rootIds).toHaveLength(1)
+    // 部分弧走 `<path>` 的 A 命令。终点坐标由三角函数算出，带浮点残渣（99.99999…），因此
+    // 逐个数值近似比较而不是匹配整串——线段那条路径的坐标直接来自世界坐标，没有这个问题。
+    const drawn = document.querySelector('[data-cad-entity]')!
+    expect(drawn.tagName.toLowerCase()).toBe('path')
+    const [, ...numbers] = drawn.getAttribute('d')!.match(
+      /^M ([\d.-]+) ([\d.-]+) A ([\d.-]+) ([\d.-]+) 0 (\d) (\d) ([\d.-]+) ([\d.-]+)$/,
+    )!
+    const [x1, y1, rx, ry, largeArc, sweepFlag, x2, y2] = numbers.map(Number)
+    expect([x1, y1]).toEqual([100, 100])
+    expect([rx, ry]).toEqual([50, 50])
+    // 恰好半圈，因此 large-arc 为 0。sweep-flag 才是「往哪边鼓」的唯一编码——同样的两个端点
+    // 加同样的半径，0 与 1 是两条不同的弧，所以这一位就是本用例的判别断言。
+    expect([largeArc, sweepFlag]).toEqual([0, 1])
+    expect(x2).toBeCloseTo(200)
+    expect(y2).toBeCloseTo(100)
+  })
+
+  it('OpenSpec: cad-document / CAD CIRCLE 与 ARC 命令 / 中间点换一侧弧就换向', () => {
+    const { rerender } = setup()
+    submit('A')
+    clickAt(100, 100)
+    clickAt(150, 150)
+    clickAt(200, 100)
+    rerender()
+
+    const d = document.querySelector('[data-cad-entity]')!.getAttribute('d')!
+    // 端点与半径都不变，只有 sweep-flag 翻过来。
+    expect(d).toMatch(/^M 100 100 A 50 50 0 0 0 /)
+  })
+
+  it('OpenSpec: cad-document / CAD 圆心与象限点捕捉 / 圆心与象限点', () => {
+    const { rerender } = setup()
+    submit('C')
+    clickAt(100, 100)
+    clickAt(140, 100)
+    rerender()
+
+    submit('L')
+    hoverAt(102, 101)
+    expect(screen.getByTestId('cad-snap-marker')).toHaveAttribute('data-snap-mode', 'center')
+
+    // 整圆没有端点：起始角写在 0°，若给端点候选它会压过象限点，而那个「端点」只是
+    // 「起始角写在哪」的产物。
+    hoverAt(139, 101)
+    expect(screen.getByTestId('cad-snap-marker')).toHaveAttribute('data-snap-mode', 'quadrant')
+  })
+
+  it('OpenSpec: cad-document / CAD 圆弧的命中与框选 / 点在圆心不命中', () => {
+    const { rerender } = setup()
+    submit('C')
+    clickAt(100, 100)
+    clickAt(140, 100)
+    rerender()
+
+    // 包围盒判定会把圆心算成命中；距离判定不会。
+    clickAt(100, 100)
+    rerender()
+    expect(selectedIds()).toEqual([])
+
+    clickAt(140, 100)
+    rerender()
+    expect(selectedIds()).toHaveLength(1)
+  })
+})
+

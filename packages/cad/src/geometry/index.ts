@@ -10,3 +10,28 @@ export {
   type CadBounds,
   type CadSegment,
 } from './cad-segment-geometry'
+export {
+  arcBounds,
+  arcContainsAngle,
+  arcEndpoints,
+  arcMidpoint,
+  arcPointAt,
+  arcQuadrants,
+  arcThroughPoints,
+  flattenCadArc,
+  isFullCircle,
+  pointToArcDistanceSquared,
+  type CadArcShape,
+} from './cad-arc-geometry'
+export {
+  arcCurve,
+  curveBounds,
+  curveCrossesBounds,
+  curveNearPoint,
+  curveWithinBounds,
+  pointToCurveDistanceSquared,
+  segmentCurve,
+  type CadArcCurve,
+  type CadCurve,
+  type CadSegmentCurve,
+} from './cad-curve'

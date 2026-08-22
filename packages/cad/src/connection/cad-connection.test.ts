@@ -1,3 +1,4 @@
+import { segmentAt } from '../test-curves'
 import { describe, expect, it } from 'vitest'
 import {
   createCadLineEntity,
@@ -7,7 +8,7 @@ import {
   type CadBlockDefinition,
   type CadDocument,
 } from '../document'
-import { collectCadVisibleSegments, createCadInsert, inverseCadBlockPoint } from '../block'
+import { collectCadVisibleCurves, createCadInsert, inverseCadBlockPoint } from '../block'
 import { previewCadTranslate, translateCadEntity } from '../transform'
 import { findCadSnap } from '../snap'
 import { collectCadInstancePorts, resolveCadPortPoint, resolveCadWireSegment } from './index'
@@ -171,10 +172,10 @@ describe('OpenSpec: cad-document / CAD 导线', () => {
         i1: translateCadEntity(document.entities.i1!, { x: 0, y: 50 }),
       },
     }
-    const wire = collectCadVisibleSegments(moved).find(({ ownerId }) => ownerId === 'w1')!
-    expect(wire.segment.start).toEqual({ x: 110, y: 150 })
+    const wire = segmentAt(collectCadVisibleCurves(moved), 'w1')
+    expect(wire.start).toEqual({ x: 110, y: 150 })
     // 另一端没动。
-    expect(wire.segment.end).toEqual({ x: 300, y: 100 })
+    expect(wire.end).toEqual({ x: 300, y: 100 })
     // 导线自身一个字节都没写。
     expect(moved.entities.w1).toBe(document.entities.w1)
   })
@@ -199,7 +200,7 @@ describe('OpenSpec: cad-document / CAD 导线', () => {
   })
 
   it('导线参与可见性遍历，因此命中、框选与捕捉都看得见它', () => {
-    const segments = collectCadVisibleSegments(wiredDocument())
+    const segments = collectCadVisibleCurves(wiredDocument())
     expect(segments.filter(({ ownerId }) => ownerId === 'w1')).toHaveLength(1)
     // 导线中点是捕捉候选。
     const snap = findCadSnap(wiredDocument(), { x: 205, y: 100 }, 3, ['midpoint'])
@@ -301,8 +302,8 @@ describe('OpenSpec: cad-document / CAD 拖动预览与提交同源', () => {
   it('预览文档里导线跟着被拖的设备走', () => {
     const document = wiredDocument()
     const preview = previewCadTranslate(document, ['i1'], { x: 0, y: 50 })
-    const wire = collectCadVisibleSegments(preview).find(({ ownerId }) => ownerId === 'w1')!
-    expect(wire.segment.start).toEqual({ x: 110, y: 150 })
+    expect(segmentAt(collectCadVisibleCurves(preview), 'w1').start)
+      .toEqual({ x: 110, y: 150 })
   })
 
   it('没有可平移的 Entity 时返回入参本身', () => {

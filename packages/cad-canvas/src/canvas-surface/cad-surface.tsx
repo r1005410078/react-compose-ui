@@ -2,9 +2,11 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import {
   collectCadInstancePorts,
-  collectCadVisibleSegments,
+  collectCadVisibleCurves,
   getCadPlacement,
+  isFullCircle,
   previewCadTranslate,
+  type CadArcCurve,
   type CadDocument,
   type CadInteractionSnapshot,
   type CadPointerModifiers,
@@ -308,7 +310,7 @@ export function CadSurface({
     ? previewCadTranslate(document, interaction.selection, { x: dragDelta.x, y: dragDelta.y })
     : document
   // 与命中、框选、捕捉共用同一条可见性遍历：渲染跟它们分叉时，会出现「看得见却点不中」。
-  const segments = collectCadVisibleSegments(previewDocument)
+  const curves = collectCadVisibleCurves(previewDocument)
   const ports = collectCadInstancePorts(previewDocument)
   const selected = new Set(interaction.selection)
 
@@ -327,32 +329,30 @@ export function CadSurface({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      {segments.map(({ ownerId, segment }, index) => {
+      {curves.map(({ ownerId, curve }, index) => {
         const owner = previewDocument.entities[ownerId]
         const layer = owner ? layerColors.get(getCadPlacement(owner)?.layerId ?? '') : undefined
         if (!layer) return null
         const isSelected = selected.has(ownerId)
-        const start = cadWorldToScreen(viewport, segment.start)
-        const end = cadWorldToScreen(viewport, segment.end)
         const isHovered = !isSelected && ownerId === hovered
-        return (
-          <line
-            // 块实例展开成多段，各段共用 ownerId，因此 key 要带上序号。
-            key={`${ownerId}-${index}`}
-            className="compose-cad-canvas__entity"
-            data-cad-entity={ownerId}
-            data-hovered={isHovered ? '' : undefined}
-            data-selected={isSelected ? '' : undefined}
-            // 选中态不改 stroke 属性而是交给 CSS：图元颜色来自图层（ByLayer），把高亮写死在
-            // 属性上会让「这条线是什么颜色」有两个答案。
-            stroke={isSelected || isHovered ? undefined : layer.color}
-            strokeWidth={1}
-            x1={start.x}
-            x2={end.x}
-            y1={start.y}
-            y2={end.y}
-          />
-        )
+        const shared = {
+          className: 'compose-cad-canvas__entity',
+          'data-cad-entity': ownerId,
+          'data-hovered': isHovered ? '' : undefined,
+          'data-selected': isSelected ? '' : undefined,
+          // 选中态不改 stroke 属性而是交给 CSS：图元颜色来自图层（ByLayer），把高亮写死在
+          // 属性上会让「这条线是什么颜色」有两个答案。
+          stroke: isSelected || isHovered ? undefined : layer.color,
+          strokeWidth: 1,
+        }
+        // 块实例展开成多段，各段共用 ownerId，因此 key 要带上序号。
+        const key = `${ownerId}-${index}`
+        if (curve.kind === 'arc') {
+          return <ArcShape key={key} arc={curve} shared={shared} viewport={viewport} />
+        }
+        const start = cadWorldToScreen(viewport, curve.start)
+        const end = cadWorldToScreen(viewport, curve.end)
+        return <line {...shared} key={key} x1={start.x} x2={end.x} y1={start.y} y2={end.y} />
       })}
       {ports.map(({ entityId, portId, point }) => {
         const { x, y } = cadWorldToScreen(viewport, point)
@@ -441,6 +441,49 @@ function Crosshair({ crosshair, size }: {
 
 
 /** 捕捉标记的屏幕半径（CSS 像素）。 */
+/**
+ * 渲染一段圆弧。
+ *
+ * @remarks
+ * 视口是**等比**缩放，因此世界里的圆在屏幕上仍是圆，半径乘 `zoom` 即可，不必退化成椭圆弧。
+ *
+ * 整圆走 `<circle>`：SVG 的 `A` 命令在起终点重合时画不出任何东西（弧长为零是合法解），
+ * 而整圆的起终点恰恰重合。这一处分支只存在于渲染，协议里整圆仍是扫掠 ±360 的弧。
+ */
+function ArcShape({ arc, shared, viewport }: {
+  readonly arc: CadArcCurve
+  readonly shared: Record<string, unknown>
+  readonly viewport: CadViewport
+}) {
+  const center = cadWorldToScreen(viewport, arc.center)
+  const radius = arc.radius * viewport.zoom
+  if (isFullCircle(arc)) {
+    return <circle {...shared} cx={center.x} cy={center.y} fill="none" r={radius} />
+  }
+  const start = cadWorldToScreen(viewport, arcPointOnCurve(arc, arc.startAngle))
+  const end = cadWorldToScreen(viewport, arcPointOnCurve(arc, arc.startAngle + arc.sweep))
+  // large-arc 看扫掠是否超过半圈；sweep-flag 的 1 是 SVG 的「正角方向」，与本仓的屏幕顺时针
+  // 为正是同一个方向。
+  const largeArc = Math.abs(arc.sweep) > 180 ? 1 : 0
+  const sweepFlag = arc.sweep >= 0 ? 1 : 0
+  return (
+    <path
+      {...shared}
+      d={`M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} ${sweepFlag} ${end.x} ${end.y}`}
+      fill="none"
+    />
+  )
+}
+
+/** 圆弧上给定角度处的世界坐标。 */
+function arcPointOnCurve(arc: CadArcCurve, degrees: number) {
+  const radians = (degrees * Math.PI) / 180
+  return {
+    x: arc.center.x + arc.radius * Math.cos(radians),
+    y: arc.center.y + arc.radius * Math.sin(radians),
+  }
+}
+
 /** 端口标记的半径（CSS 像素）；比捕捉标记小，它是常驻的，不该盖住几何。 */
 const PORT_MARKER_RADIUS = 3
 
@@ -450,9 +493,9 @@ const SNAP_MARKER_RADIUS = 5
  * 按模式渲染捕捉标记。
  *
  * @remarks
- * 形状沿用 AutoCAD 的约定：端点方框、中点三角、交点叉号。端口用菱形——方框、三角、叉号都已
- * 占用，而形状必须两两可分：用户要在扫视中判断「捕到的是不是我想要的那个特征」，形状在余光
- * 里也分得清，颜色不行。
+ * 形状沿用 AutoCAD 的约定：端点方框、中点三角、圆心圆圈、象限点棱形框、交点叉号。端口用
+ * 菱形。形状必须两两可分：用户要在扫视中判断「捕到的是不是我想要的那个特征」，形状在余光里
+ * 也分得清，颜色不行。
  */
 function SnapMarker({ snap, viewport }: {
   readonly snap: CadSnapCandidate
@@ -468,6 +511,18 @@ function SnapMarker({ snap, viewport }: {
   if (snap.mode === 'port') {
     return (
       <polygon {...shared} points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`} />
+    )
+  }
+  if (snap.mode === 'center') {
+    return <circle {...shared} cx={x} cy={y} r={r} />
+  }
+  if (snap.mode === 'quadrant') {
+    return (
+      <polygon
+        {...shared}
+        points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`}
+        transform={`rotate(45 ${x} ${y})`}
+      />
     )
   }
   if (snap.mode === 'endpoint') {

@@ -10,6 +10,8 @@ export const CAD_COMPONENT_KEYS = {
   insert: 'CadInsert',
   /** 一条导线，端点可绑定到块实例的端口。 */
   wire: 'CadWire',
+  /** 一段圆弧；整圆是扫掠 ±360 的弧。 */
+  arc: 'CadArc',
 } as const
 
 /** 世界坐标中的一个点。 @public */
@@ -128,6 +130,40 @@ export interface CadPort extends JsonObject {
   readonly position: CadPoint
 }
 
+/**
+ * 一段圆弧。
+ *
+ * @remarks
+ * **整圆是 `sweep` 为 ±360 的弧**，不另立 `CadCircle`：命中、框选、捕捉、平移、块变换与校验
+ * 因此各只有一份实现，整圆自然退化成「角度判断永远为真」的那一支。渲染是唯一分支的地方——
+ * SVG 的 `A` 命令在起终点重合时画不出东西，整圆走 `<circle>`。
+ *
+ * 角度以度为单位，**正值是屏幕上的顺时针**，与 `CadInsert.rotation` 及极坐标输入取同一约定；
+ * 三处不一致会让「45 度」在不同入口指向不同方向。
+ *
+ * @public
+ */
+export interface CadArc extends JsonObject {
+  readonly center: CadPoint
+  /** 半径，必须为正。 */
+  readonly radius: number
+  /** 起始角，度。 */
+  readonly startAngle: number
+  /**
+   * 扫掠角，度；正为顺时针，±360 及以上是整圆。
+   *
+   * @remarks
+   * 用带符号的扫掠角而不是终止角：单给终止角分不出 10° 的短弧与 350° 的长弧，而这个歧义只在
+   * 特定角度组合下现形。
+   */
+  readonly sweep: number
+}
+
+/** 读取圆弧；不是圆弧时为 undefined。 @public */
+export function getCadArc(entity: ComposeEntity): CadArc | undefined {
+  return entity.components[CAD_COMPONENT_KEYS.arc] as CadArc | undefined
+}
+
 /** 读取导线；不是导线时为 undefined。 @public */
 export function getCadWire(entity: ComposeEntity): CadWire | undefined {
   return entity.components[CAD_COMPONENT_KEYS.wire] as CadWire | undefined
@@ -195,6 +231,38 @@ export function createCadWireEntity(
     components: {
       [CAD_COMPONENT_KEYS.placement]: { layerId: input.layerId },
       [CAD_COMPONENT_KEYS.wire]: { start: input.start, end: input.end },
+    },
+  }
+}
+
+/**
+ * 构造一个圆弧图元。
+ *
+ * @param id - 由调用方给出的稳定 Entity ID。
+ * @public
+ */
+export function createCadArcEntity(
+  id: string,
+  input: {
+    readonly layerId: string
+    readonly center: { readonly x: number; readonly y: number }
+    readonly radius: number
+    readonly startAngle: number
+    readonly sweep: number
+  },
+): ComposeEntity {
+  return {
+    id,
+    // 整圆与部分弧共用一个 Component，但名字按用户看到的东西给。
+    name: Math.abs(input.sweep) >= 360 ? 'Circle' : 'Arc',
+    components: {
+      [CAD_COMPONENT_KEYS.placement]: { layerId: input.layerId },
+      [CAD_COMPONENT_KEYS.arc]: {
+        center: { x: input.center.x, y: input.center.y },
+        radius: input.radius,
+        startAngle: input.startAngle,
+        sweep: input.sweep,
+      },
     },
   }
 }

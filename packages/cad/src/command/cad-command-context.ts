@@ -55,6 +55,15 @@ export interface CadCommandMessages {
   readonly portTitle: string
   readonly portSelectInstance: string
   readonly portPoint: string
+  readonly circleTitle: string
+  readonly circleCenter: string
+  readonly circleRadius: string
+  readonly degenerateRadius: string
+  readonly arcTitle: string
+  readonly arcStartPoint: string
+  readonly arcThroughPoint: string
+  readonly arcEndPoint: string
+  readonly collinearArc: string
 }
 
 /**

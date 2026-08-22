@@ -25,7 +25,7 @@ export interface CadInstancePort {
  *
  * @remarks
  * 隐藏图层上的实例不参与：它在屏幕上看不见，捕捉到它的端口会让光标莫名其妙地跳走。这与
- * `collectCadVisibleSegments` 对可见性的判断是同一条。
+ * `collectCadVisibleCurves` 对可见性的判断是同一条。
  *
  * @public
  */
