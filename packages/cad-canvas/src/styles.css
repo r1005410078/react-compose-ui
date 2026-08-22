@@ -1,3 +1,5 @@
+@import '@compose-ui/canvas-kit/styles.css';
+
 .compose-cad-canvas {
   display: flex;
   width: 100%;
@@ -15,10 +17,69 @@
  * 图面的盒子才与可见区域严格一致——否则画布上的点击会落到命令行上。
  */
 .compose-cad-canvas__viewport {
+  --compose-cad-ruler-size: 24px;
+  --compose-canvas-ruler-tick: rgb(135 145 158 / 68%);
+  --compose-canvas-ruler-tick-major: rgb(199 206 215 / 94%);
+  --compose-canvas-ruler-label: #c0c7d1;
+  --compose-canvas-ruler-selection: #f29b64;
+  --compose-canvas-ruler-selection-label: #ffd0b3;
+  --compose-canvas-ruler-selection-shadow: #141a23;
+  --compose-canvas-ruler-cursor: rgb(104 169 255 / 90%);
+
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+}
+
+/*
+ * 标尺占掉图面的上边与左边。摆位住在这里而不是 canvas-kit：一个 Pattern 不该规定自己坐在
+ * 哪里，页面画布还要给自定义滚动条让位，两处的留白不同。
+ */
+.compose-cad-canvas__viewport[data-rulers] .compose-cad-canvas__surface {
+  top: var(--compose-cad-ruler-size);
+  left: var(--compose-cad-ruler-size);
+  width: calc(100% - var(--compose-cad-ruler-size));
+  height: calc(100% - var(--compose-cad-ruler-size));
+}
+
+.compose-cad-canvas .compose-canvas__ruler-corner,
+.compose-cad-canvas .compose-canvas__ruler {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #aeb7c4;
+  background: #1a212b;
+  font: 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.compose-cad-canvas .compose-canvas__ruler-corner {
+  top: 0;
+  left: 0;
+  display: grid;
+  width: var(--compose-cad-ruler-size);
+  height: var(--compose-cad-ruler-size);
+  place-items: center;
+  border-right: 1px solid var(--compose-border, #1e2733);
+  border-bottom: 1px solid var(--compose-border, #1e2733);
+  color: #7f8997;
+}
+
+.compose-cad-canvas .compose-canvas__ruler.is-horizontal {
+  top: 0;
+  right: 0;
+  left: var(--compose-cad-ruler-size);
+  height: var(--compose-cad-ruler-size);
+  border-bottom: 1px solid var(--compose-border, #1e2733);
+}
+
+.compose-cad-canvas .compose-canvas__ruler.is-vertical {
+  top: var(--compose-cad-ruler-size);
+  bottom: 0;
+  left: 0;
+  width: var(--compose-cad-ruler-size);
+  border-right: 1px solid var(--compose-border, #1e2733);
 }
 
 .compose-cad-canvas__surface {
@@ -103,11 +164,13 @@
   white-space: nowrap;
 }
 
-/* 网格线用极低对比：它是参考而不是内容，抢眼会盖过图元。 */
-.compose-cad-canvas__grid-line {
-  stroke: var(--compose-border, #1e2733);
-  stroke-width: 1;
-  opacity: 0.45;
+/*
+ * 网格用极低对比：它是参考而不是内容，抢眼会盖过图元。颜色由自定义属性给出，与页面画布同名
+ * 语义、各自取值——两块画布的底色不同。
+ */
+.compose-cad-canvas {
+  --compose-cad-grid-primary: rgb(151 166 185 / 30%);
+  --compose-cad-grid-minor: rgb(120 137 158 / 15%);
 }
 
 /* 正交等模式指示；关闭时压暗而不是隐藏，让用户知道有这个开关。 */

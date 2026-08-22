@@ -4,6 +4,9 @@ import type { ComposeLocale } from '@compose-ui/ui-context'
 const messages = {
   'zh-CN': {
     canvasLabel: 'CAD 图面',
+    rulerOrigin: '世界原点',
+    horizontalRuler: '水平标尺',
+    verticalRuler: '垂直标尺',
     commandLineLabel: '命令行',
     commandPlaceholder: '键入命令',
     unknownCommand: '未知命令',
@@ -35,6 +38,9 @@ const messages = {
   },
   'en-US': {
     canvasLabel: 'CAD drawing',
+    rulerOrigin: 'World origin',
+    horizontalRuler: 'Horizontal ruler',
+    verticalRuler: 'Vertical ruler',
     commandLineLabel: 'Command line',
     commandPlaceholder: 'Type a command',
     unknownCommand: 'Unknown command',

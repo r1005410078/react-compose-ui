@@ -1,23 +1,25 @@
+import {
+  composeCanvasPan,
+  composeCanvasScreenToWorld,
+  composeCanvasWorldToScreen,
+  composeCanvasZoomAt,
+  type ComposeCanvasPoint,
+  type ComposeCanvasViewport,
+} from '@compose-ui/core'
+
 /**
  * CAD 画布视口。
  *
  * @remarks
- * `offset` 是**世界原点在屏幕上的位置**（CSS 像素），`zoom` 是每世界单位对应的屏幕像素数。
- * 记成这个方向而不是「视口左上角的世界坐标」，是因为缩放要绕光标进行：绕点缩放只需要保持
- * 该点的屏幕坐标不变，用前者是一步代数，用后者要先反解视口原点。
+ * 与页面画布共用 `core` 的视口模型：世界↔屏幕换算、平移与绕锚点缩放都是同一份代数，两个
+ * 画布只在缩放区间上不同——页面画布有确定尺寸，无限图纸既要看总图也要看一个端子。
  *
  * @public
  */
-export interface CadViewport {
-  readonly offset: { readonly x: number; readonly y: number }
-  readonly zoom: number
-}
+export type CadViewport = ComposeCanvasViewport
 
 /** 一个点。 @public */
-export interface CadCanvasPoint {
-  readonly x: number
-  readonly y: number
-}
+export type CadCanvasPoint = ComposeCanvasPoint
 
 /** 缩放下限与上限；超出这个范围的图面在屏幕上不再可读。 @public */
 export const CAD_ZOOM_RANGE = { min: 0.02, max: 256 } as const
@@ -26,28 +28,13 @@ export const CAD_ZOOM_RANGE = { min: 0.02, max: 256 } as const
 export const CAD_INITIAL_VIEWPORT: CadViewport = { offset: { x: 0, y: 0 }, zoom: 1 }
 
 /** 世界坐标 → 屏幕坐标。 @public */
-export function cadWorldToScreen(viewport: CadViewport, point: CadCanvasPoint): CadCanvasPoint {
-  return {
-    x: point.x * viewport.zoom + viewport.offset.x,
-    y: point.y * viewport.zoom + viewport.offset.y,
-  }
-}
+export const cadWorldToScreen = composeCanvasWorldToScreen
 
 /** 屏幕坐标 → 世界坐标。 @public */
-export function cadScreenToWorld(viewport: CadViewport, point: CadCanvasPoint): CadCanvasPoint {
-  return {
-    x: (point.x - viewport.offset.x) / viewport.zoom,
-    y: (point.y - viewport.offset.y) / viewport.zoom,
-  }
-}
+export const cadScreenToWorld = composeCanvasScreenToWorld
 
 /** 按屏幕位移平移视口。 @public */
-export function cadPanViewport(viewport: CadViewport, delta: CadCanvasPoint): CadViewport {
-  return {
-    ...viewport,
-    offset: { x: viewport.offset.x + delta.x, y: viewport.offset.y + delta.y },
-  }
-}
+export const cadPanViewport = composeCanvasPan
 
 /**
  * 绕一个屏幕锚点缩放。
@@ -63,12 +50,5 @@ export function cadZoomViewport(
   factor: number,
   anchor: CadCanvasPoint,
 ): CadViewport {
-  const zoom = Math.min(CAD_ZOOM_RANGE.max, Math.max(CAD_ZOOM_RANGE.min, viewport.zoom * factor))
-  // 先按旧视口解出锚点的世界坐标，再让新 zoom 下的它落回同一个屏幕位置。钳制之后仍然成立，
-  // 因为这里用的是**钳制后**的 zoom 反算 offset，而不是假设倍率一定被完整应用。
-  const world = cadScreenToWorld(viewport, anchor)
-  return {
-    zoom,
-    offset: { x: anchor.x - world.x * zoom, y: anchor.y - world.y * zoom },
-  }
+  return composeCanvasZoomAt(viewport, anchor, viewport.zoom * factor, CAD_ZOOM_RANGE)
 }

@@ -553,8 +553,13 @@
   stroke-width: 2;
 }
 
-.compose-canvas__ruler-corner,
-.compose-canvas__ruler {
+/*
+ * 摆位规则必须限定在自己的画布根下。两块画布共用同一个标尺组件，因此也共用它的类名；
+ * 不加根选择器时两边的定位规则特异度相同，后加载的那份会静默覆盖另一份——表现是标尺退回
+ * canvas 的 intrinsic 300×150，一条刻度都画不出来。
+ */
+.compose-stage .compose-canvas__ruler-corner,
+.compose-stage .compose-canvas__ruler {
   position: absolute;
   z-index: 5;
   box-sizing: border-box;
@@ -565,7 +570,7 @@
   font: 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.compose-canvas__ruler-corner {
+.compose-stage .compose-canvas__ruler-corner {
   top: 0;
   left: 0;
   display: grid;
@@ -578,7 +583,7 @@
   cursor: crosshair;
 }
 
-.compose-canvas__ruler.is-horizontal {
+.compose-stage .compose-canvas__ruler.is-horizontal {
   top: 0;
   right: var(--compose-stage-scrollbar-size);
   left: var(--compose-stage-ruler-size);
@@ -587,7 +592,7 @@
   cursor: ns-resize;
 }
 
-.compose-canvas__ruler.is-vertical {
+.compose-stage .compose-canvas__ruler.is-vertical {
   top: var(--compose-stage-ruler-size);
   bottom: var(--compose-stage-scrollbar-size);
   left: 0;
@@ -596,14 +601,14 @@
   cursor: ew-resize;
 }
 
-.compose-canvas__ruler-canvas {
+.compose-stage .compose-canvas__ruler-canvas {
   display: block;
   width: 100%;
   height: 100%;
 }
 
 /* Canvas 读取这些自定义属性上色，浅色主题只需覆盖变量，不必改绘制代码。 */
-.compose-canvas__ruler {
+.compose-stage .compose-canvas__ruler {
   --compose-canvas-ruler-tick: rgb(135 145 158 / 68%);
   --compose-canvas-ruler-tick-major: rgb(199 206 215 / 94%);
   --compose-canvas-ruler-label: #c0c7d1;
