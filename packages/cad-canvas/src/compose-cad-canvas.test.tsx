@@ -95,8 +95,11 @@ describe('十字光标', () => {
   function pickbox() {
     return screen.queryByTestId('cad-pickbox')
   }
+  /** 隐藏系统光标的标记挂在整个图面区域上——标尺与留白同属画布。 */
   function surfaceHidesCursor() {
-    return screen.getByTestId('cad-surface').hasAttribute('data-crosshair')
+    return screen.getByTestId('cad-canvas')
+      .querySelector('.compose-cad-canvas__viewport')
+      ?.hasAttribute('data-crosshair') ?? false
   }
   function reach() {
     const [line] = lines()

@@ -513,7 +513,12 @@ export function ComposeCadCanvas({
 
   return (
     <div className="compose-cad-canvas" data-testid="cad-canvas" onKeyDown={handleKeyDown}>
-      <div className="compose-cad-canvas__viewport" data-rulers={showRulers ? '' : undefined} ref={surfaceRef}>
+      <div
+        className="compose-cad-canvas__viewport"
+        data-crosshair={crosshair ? '' : undefined}
+        data-rulers={showRulers ? '' : undefined}
+        ref={surfaceRef}
+      >
         {showRulers ? (
           <ComposeCanvasRulers
             bounds={selectionBounds}

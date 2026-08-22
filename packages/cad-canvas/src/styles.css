@@ -97,9 +97,14 @@
  *
  * 作用域是**整个图面区域**而不只是 SVG：标尺与它们让出的留白同属画布，指针滑过时冒出一支
  * 箭头会让人以为十字光标失效了。命令行在 viewport 之外，文本光标不受影响。
+ *
+ * 标记挂在 viewport 自己身上而不是用 `:has(> [data-crosshair])` 去够图面：`:has` 在旧一些的
+ * 浏览器里整条规则会被丢弃，退回图面基础样式的 `cursor: crosshair`——**表现正是「系统光标
+ * 没隐藏，还是个十字」**，而且只在部分浏览器上出现。宿主本来就拥有这个容器，没有理由把
+ * 确定性押在选择器支持度上。
  */
-.compose-cad-canvas__viewport:has(> [data-crosshair]),
-.compose-cad-canvas__viewport:has(> [data-crosshair]) * {
+.compose-cad-canvas__viewport[data-crosshair],
+.compose-cad-canvas__viewport[data-crosshair] * {
   cursor: none;
 }
 

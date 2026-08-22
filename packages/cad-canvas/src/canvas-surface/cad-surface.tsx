@@ -299,7 +299,6 @@ export function CadSurface({
       aria-label={label}
       className="compose-cad-canvas__surface"
       style={createCadGridStyle(gridStep, CAD_GRID, viewport, globalThis.devicePixelRatio || 1)}
-      data-crosshair={crosshair ? '' : undefined}
       data-testid="cad-surface"
       role="img"
       onPointerCancel={handlePointerAbort}
