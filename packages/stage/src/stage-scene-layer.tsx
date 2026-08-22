@@ -6,7 +6,6 @@ import {
   composeEntitySceneStyle,
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposePageDocumentLoader } from '@compose-ui/core'
 import {
   getComposeFrame,
   getComposeHierarchy,
@@ -63,7 +62,6 @@ interface StageSceneLayerProps {
   readonly registry: ComposeEntityRegistry
   readonly assetResolver?: ComposeAssetResolver
   /** 页面型物料使用的文档加载端口；类型来自 core，Stage 不实现加载。 */
-  readonly pageLoader?: ComposePageDocumentLoader
   readonly scriptScope?: ComposePageScriptScope
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
   readonly viewport: StageViewport
@@ -98,7 +96,6 @@ export function StageSceneLayer({
   layoutSnapshot,
   registry,
   assetResolver,
-  pageLoader,
   scriptScope,
   scriptModuleLoader,
   viewport,
@@ -168,7 +165,6 @@ export function StageSceneLayer({
           />
           <ComposeRegistryEntityRenderer
             assetResolver={assetResolver}
-            pageDocumentPort={pageLoader}
             entity={entity}
             mode="editor"
             registry={registry}
@@ -193,8 +189,7 @@ export function StageSceneLayer({
     document,
     hiddenEntityIds,
     layoutSnapshot,
-    pageLoader,
-    paintPreview,
+      paintPreview,
     registry,
     scriptModuleLoader,
     scriptScope,

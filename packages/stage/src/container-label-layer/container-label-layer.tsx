@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import type { ComposeDocument, ComposeLayoutSnapshot } from '@compose-ui/core'
+import {
+  formatComposeSceneSize,
+  type ComposeDocument,
+  type ComposeLayoutSnapshot,
+  type ComposeSize,
+} from '@compose-ui/core'
 import type { StageViewport } from '@compose-ui/stage-engine'
+import { ComposeSceneSizeDialog } from '../scene-size-dialog'
 import { resolveComposeContainerLabels } from './container-labels'
 
 /**
@@ -49,6 +55,16 @@ export interface ComposeContainerLabelLayerProps {
   readonly sceneActiveLabel?: (name: string) => string
   readonly sceneInactiveLabel?: (name: string) => string
   readonly scenePreviewLabel?: (name: string) => string
+  /**
+   * 提交场景的新尺寸。
+   *
+   * @remarks
+   * 未提供时尺寸胶囊只读：双击不打开弹框。与重命名同理，写文档的那一步始终由持有
+   * `dispatch` 的宿主完成，标签层只负责收集用户输入。
+   */
+  readonly onSceneSizeChange?: (entityId: string, size: ComposeSize) => void
+  /** 尺寸胶囊的无障碍名称。 */
+  readonly sceneSizeLabel?: (name: string) => string
 }
 
 /**
@@ -74,8 +90,12 @@ export function ComposeContainerLabelLayer({
   sceneActiveLabel,
   sceneInactiveLabel,
   scenePreviewLabel,
+  onSceneSizeChange,
+  sceneSizeLabel,
 }: ComposeContainerLabelLayerProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
+  // 尺寸弹框只在打开期间挂载：关闭即卸载，草稿因此天然回到该场景的当前尺寸。
+  const [sizingId, setSizingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   // 按 entityId 区分：整层共享一个 ref 时，先点 A 再点 B 会被 5px slop 误判成双击 B。
@@ -94,6 +114,11 @@ export function ComposeContainerLabelLayer({
   const activeEditingId = editingId !== null
     && labels.some((item) => item.entityId === editingId)
     ? editingId
+    : null
+  // 弹框目标同理按渲染派生：场景在弹框开着的时候被删掉，弹框就该跟着消失。
+  const sizingCandidate = labels.find((item) => item.entityId === sizingId)
+  const sizingTarget = sizingCandidate?.size
+    ? { entityId: sizingCandidate.entityId, name: sizingCandidate.name, size: sizingCandidate.size }
     : null
 
   useEffect(() => {
@@ -114,20 +139,13 @@ export function ComposeContainerLabelLayer({
       {labels.map((item) => {
         const selected = selectedIds.includes(item.entityId)
         const editing = activeEditingId === item.entityId
-        // 锁定容器退出画布交互，标签只剩「这是谁」的信息；改名与选中都回到场景树。
-        if (item.locked) {
-          return (
-            <span
-              className="compose-stage__container-label is-locked"
-              data-testid={`stage-container-label-${item.entityId}`}
-              key={item.entityId}
-              style={{ left: item.x, top: item.y, maxWidth: item.maxWidth }}
-            >
-              {item.name}
-            </span>
-          )
-        }
         const isActiveScene = item.scene && item.entityId === activeFrameId
+        /*
+         * 锁定只收走「改这块场景」的入口：名称不再是选中与重命名入口，尺寸胶囊退成只读。
+         * 播放、激活标记与尺寸显示照常——锁保护的是场景的内容与几何，不是「它是谁、多大、
+         * 是不是发布目标」这些读起来才知道要不要解锁的信息。
+         */
+        const sizeEditable = onSceneSizeChange !== undefined && !item.locked
         return editing
           ? (
               <input
@@ -180,6 +198,14 @@ export function ComposeContainerLabelLayer({
                     ▶
                   </button>
                 ) : null}
+              {item.locked ? (
+                <span
+                  className="compose-stage__container-label is-locked"
+                  data-testid={`stage-container-label-${item.entityId}`}
+                >
+                  {item.name}
+                </span>
+              ) : (
               <button
                 className={`compose-stage__container-label${selected ? ' is-selected' : ''}`}
                 data-testid={`stage-container-label-${item.entityId}`}
@@ -212,6 +238,7 @@ export function ComposeContainerLabelLayer({
               >
                 <span className="compose-stage__container-label-name">{item.name}</span>
               </button>
+              )}
                 {item.scene && onSceneActivate ? (
                   <button
                     aria-label={isActiveScene
@@ -231,9 +258,37 @@ export function ComposeContainerLabelLayer({
                     {isActiveScene ? '●' : '○'}
                   </button>
                 ) : null}
+                {item.scene && item.size ? (
+                  <button
+                    aria-label={sceneSizeLabel?.(item.name)}
+                    className="compose-stage__scene-size"
+                    data-testid={`stage-scene-size-${item.entityId}`}
+                    disabled={!sizeEditable}
+                    type="button"
+                    // 与播放按钮和激活标记同一套拦截：放行的话这次按下会被 surface 捕获，
+                    // 变成对该场景的选中手势，dblclick 也就永远不会到达这里。
+                    onPointerDown={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    onDoubleClick={() => {
+                      if (sizeEditable) setSizingId(item.entityId)
+                    }}
+                  >
+                    {formatComposeSceneSize(item.size)}
+                  </button>
+                ) : null}
               </div>
             )
       })}
+      {sizingTarget && onSceneSizeChange ? (
+        <ComposeSceneSizeDialog
+          sceneName={sizingTarget.name}
+          size={sizingTarget.size}
+          onClose={() => setSizingId(null)}
+          onSubmit={(size) => onSceneSizeChange(sizingTarget.entityId, size)}
+        />
+      ) : null}
     </div>
   )
 }

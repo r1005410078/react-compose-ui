@@ -56,6 +56,32 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   图标（`frame` Preset 复用 Container 的图标与背景）。唯一的视觉区分是标题标签。
   场景默认外观与 Container 同底色但**边框宽度为 0**：布局求解把边框计入内容盒，而场景是
   绝对坐标的原点，默认边框会让按网格吸附的子级在属性面板里读成 7、15、23。
+  场景标题标签是一行 flex：`[播放按钮?] [名称] [激活标记] [尺寸胶囊]`。尺寸胶囊常驻显示
+  `Frame.size`，双击打开尺寸弹框（常见分辨率预设 + 自定义宽高）。它是改尺寸的**第二个入口
+  而不是第二份事实来源**：与 Inspector 几何分组派发同一条 `entity.frame.size.set`，撤销一步
+  即回到原尺寸；常见分辨率预设住在 `core`（`COMPOSE_SCENE_SIZE_PRESETS`），因为 `stage` 与
+  `materials` 之间没有依赖关系，各写一份必然漂移。
+  **锁定场景仍然显示播放、激活标记与尺寸**：锁保护的是场景的内容与几何，而「它是谁、多大、
+  是不是发布目标」正是用户用来判断要不要解锁的信息。锁定只收走改这块场景的入口——名称不再是
+  选中/重命名入口，尺寸胶囊退成只读。场景默认不锁定，锁定始终是用户的显式选择。
+- **视口适配有两个时机，都是会话状态**：Stage 首次量到真实 surface 尺寸后对**激活场景**适配
+  一次（宿主可用 `autoFitActiveFrame` 关掉，controller 同名选项透传，示例应用用
+  `?no-auto-fit` 演示）；场景尺寸提交成功后立刻按**刚提交的新尺寸**再适配一次——本帧的
+  `layoutSnapshot` 还是旧尺寸，等它会先给用户一帧错误的取景。适配几何是
+  `stage/stage-surface/viewport-fit.ts` 的纯函数，键盘的「适配选择/适配容器」共用它。
+  依赖确定性取景的端到端与视觉回归用例必须显式关掉自动适配，而不是把留白比例硬编码进断言。
+- **画布上每一条产出几何的手势都必须接吸附**，包括绘制。move 走 `snapTranslation`，resize、
+  两点端点与**绘制**走 `snapResizePoint`，辅助线走 `snapValueToGrid`。绘制的起点与终点各吸一次，
+  且排在 Shift 等长宽约束之前；吸附生效时终点角落在网格线/智能候选上而不是光标裸坐标上，
+  与 resize 一致。**判据是缩放**：`world = (屏幕 - 视口) / zoom`，zoom 恒为 1 时未吸附也看起来
+  是整数，因此新手势必须在非 100% 缩放下验证，否则漏掉吸附要到很久以后才暴露。
+- **几何数值统一 2 位精度**，事实来源是 core 的 `COMPOSE_GEOMETRY_PRECISION` /
+  `roundComposeGeometry` / `formatComposeNumber`。`toComposeTransform` 是 Stage 几何写回文档的
+  唯一漏斗，量化放在那里，掐掉非整数 zoom 留下的 `82.96874999999991` 这类浮点残渣；量化
+  **不能替代吸附**，该落在网格上的值由各手势自己吸附。显示层（属性面板、物料 Inspector、
+  场景尺寸胶囊）一律最多两位小数、整数不补零。量化不作用于布局求解结果——Yoga 的 box 与
+  Hug 的文字测量宽度本就是真实小数，且不进文档。property-panel 按包边界不得依赖 core，
+  因此包内自带一份等价格式化，这个重复是边界造成的，不是疏忽。
 - **动画按场景独立，脚本按页面共享。** 每块场景有自己的动画：清单挂在各自 Frame 上，动画
   文件按 Frame 分区且默认一场景一份；页面配置面板按 `rootIds` 逐场景列出绑定行并标注
   激活/编辑中场景。动画作用域跟随**选中对象所属的场景**，没有选择时回退激活场景，因此
@@ -72,6 +98,46 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   的 Clip 归一为不裁剪，与「新建场景」命令一致）；其余 Entity 落进**激活场景**并**保留世界
   落点**——换算成局部坐标后越界也不钳制，场景默认不裁剪因此仍可见。任何新建路径都不得回退到
   `rootIds[0]`——那既选错场景，又会跳过世界→局部换算。点击添加（没有落点意图）不走升格。
+- **页面之间只有跳转关系，没有嵌套关系。** Page Slot 已删除：它是「弱化版组件实例」——没有
+  属性/结构覆盖、没有变体、编辑期不能下钻、不能离线渲染。复用一块 UI 一律用 Component
+  Asset v2 与 Variant。**没有为它写迁移器**：删除时尚无线上资产使用 Page Slot，为零份文档
+  写迁移是纯粹的负债。万一残留的 `page-slot` Entity 落到 Registry 既有的「未知 Renderer」
+  占位上——几何与外观保留，占位带 `role="status"` 与可访问名称，不会静默丢失内容。
+- **跳转是 Entity 的能力，不是某个物料的能力。** `Interaction` 是可选 Entity Component，
+  可以挂在任意 Entity 上（矩形、图片、容器都能成为跳转源），v1 只有 `click` trigger 与
+  `navigate` / `navigate-back` 两种 action。同一事件在一个 Entity 上只能声明一次，因此
+  Inspector 的 trigger 列表上限等于支持的事件数量——没有这条上限，面板能加出第二行 click
+  而文档校验会拒绝，用户只看到「点了没反应」。`navigate.target` **允许为 null**：属性面板
+  的「添加项」先造默认项、用户才能在那一行挑页面，不允许 null 会让新建交互与选目标互为
+  前提；但**不完整**的引用仍然非法——「配错了」与「还没配」必须可区分。运行期 null 目标是 no-op。
+- **导航会话没有 `dispose`，这是刻意的。** 它不持有需要显式释放的资源：迟到的加载结果由
+  内部令牌挡掉，订阅由订阅方卸载时自己移除。曾经有过一个 `dispose`，而「`useState` 创建 +
+  effect cleanup 释放」是宿主最自然的写法——React StrictMode 的**挂载→清理→再挂载**会让
+  会话在首次渲染后就永久失效，此后所有跳转静默早退。同类「会话对象」在设计 API 时都要过
+  这一关：**端到端跑的是生产构建，StrictMode 双调用在那里不会发生，103 条全绿也挡不住这类
+  回归**，只能靠把组件放进 `<StrictMode>` 的组件测试。
+- **导航的类型在 `core`、实现在 `pages`、消费在 `preview`**，与 `ComposePageDocumentLoader`
+  是同一条既有分层，因此 `preview` 不依赖 `pages`。声明式 `Interaction` 与页面脚本的
+  `ctx.navigate` 必须委托**同一个** `ComposeNavigationPort` 实例，否则两条路径各自维护一份
+  当前页面与返回栈。会话在提交切换**之前**用 loader 验证目标可读，因此当前页面变化时目标
+  一定已可用；目标不存在与读取失败是两个可判别 issue，失败一律停在当前页。
+- **编辑期不跳转。** Stage 是布局态：点击带 `Interaction` 的 Entity 只选中它，命中测试与手势
+  完全不受该 Component 影响，也不为它引入新的编辑模式。跳转只在预览里生效——`ComposePageHost`
+  跟随导航端口决定当前页，渲染该页 `activeFrameId` 指向的场景，切页时给 `ComposePreview` 换
+  `key` 整棵重挂载。换 key 不是保险起见：setup 作用域按**脚本引用**去重，两个页面引用同一个
+  setup 时不换 key 就会共享 State。交互处理器挂在 Entity 自己的容器上且**不** `stopPropagation`——
+  容器是物料的祖先，点击先到达物料再冒泡到容器，两者都要执行。
+- **页面预览必须包含未保存的改动。** 宿主把正在编辑的那一页与它的 live 文档一起传给
+  `ComposePageHost`（`livePage`）：该页与当前页一致时宿主直接渲染它、**不经过 loader**；
+  跳到别的页面才走 loader，跳回来又回到 live 文档。少了这一步，「配好跳转→预览」会呈现
+  上次保存的内容，用户只会认为交互没生效——这是页面预览最容易踩的坑。
+  同理，打开预览时必须把导航会话 `reset` 到正在编辑的页面：从首页起步会让用户看到的不是
+  自己刚改的那一页。**会话还没有起点时宿主直接渲染 live 页并顺带补上起点**——正在编辑的
+  那一页就在手上，让用户看见「未设置首页」是无谓的失败态；而没有起点的跳转记不进返回栈，
+  返回会变成死键。没有打开任何页面时不进入页面预览——画布上的文档不属于任何页面。
+  示例应用的 `?page-preview` 只控制**示例页面上预置的跳转入口**，不再控制页面预览本身——
+  首页是编辑器启动时打开的页面，默认往它的内容里加东西会污染所有以空白首页为起点的
+  端到端用例。
 - 组件实例的覆盖是 `instanceOverrides`，只含结构操作并复用 Variant 的稳定操作代数；暴露属性已删除。
   组件文档只要求单根，且根必须是 Frame。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址
   寻址，只存在于表示层：持久化文档中实例仍是单个 Entity，Undo/Redo 作用在宿主实例的 Patch 上。
@@ -88,6 +154,8 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   不得依赖资源浏览 UI、编辑器、文档历史或组件注册表。
 - `@compose-ui/script-runtime` 是无 React、无 DOM 的页面 setup Signal、作用域与受信任 JavaScript
   Loader 包，只能依赖 `core` 与 `assets`；不得依赖 Registry、Stage、Preview、Editor 或 UI 包。
+  `ctx.navigate` / `ctx.navigateBack` 是宿主注入端口的**转发**，本包不实现导航；未注入时调用
+  只产生 diagnostic 而不抛出，setup 同步执行期间的调用同样被忽略。
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`、`assets`、`pages`、
   `script-runtime` 与既有领域组件，通过公开协议组合页面脚本工作流。
 - `@compose-ui/components` 是跨第一方包复用的 React 交互组件层，可依赖 `ui-context`，
@@ -118,8 +186,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   混合组件目录，可依赖 `core`、`assets`、`component-registry`、`components` 和 `ui-context`，
   不得依赖 `editor`、`stage`、`scene-tree` 或 `asset-browser`；Registry Preset 仍是代码物料，
   Project Component/Variant 才是 Provider 资源。
-- `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录与页面聚合 Store 包，只能依赖
-  `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、`editor`、`preview` 或 `stage`。
+- `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录、页面聚合 Store 与**页面导航
+  会话**包，只能依赖 `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、
+  `editor`、`preview` 或 `stage`。导航会话只决定「当前应该是哪一页」，不渲染、不执行脚本、
+  不持有文档。
 - `@compose-ui/cad` 是无 React、无 DOM 的 CAD 文档协议、命令、选择集与手势仲裁包，只能依赖
   `core`、`assets`、`commands` 与 `interaction-kernel`。**命中判据是点到几何的距离而不是包围盒**：
   直线没有盒模型，按矩形判定会让两条交叉线互相遮挡对方的命中区。选择集语义按 AutoCAD——
@@ -162,12 +232,13 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   或 `operation-log`。
 - `@compose-ui/preview` 是可独立嵌入的 React 渲染入口，可以依赖 `core`、`assets`、
   `component-registry`、`script-runtime`、`layout-engine` 和 `animation`（预览对话框的动画
-  播放采样），不得依赖 `editor` 或 `stage`。
+  播放采样），不得依赖 `editor`、`stage` 或 `pages`。`ComposePageHost` 只消费 `core` 的
+  `ComposeNavigationPort` 与 `ComposePageLoader` 两个协议类型，实现由宿主注入。
 - `@compose-ui/materials` 是 Group、Container、Rectangle、Text、Image、SVG 与 Component Instance Entity Presets、
   Renderer、Component Definitions 与 Capabilities 的独立基础物料包，可以依赖 `core`、
   `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`script-runtime`、`ui-context`、
   DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`；`layout-engine` 只用于
-  Page Slot 与组件实例的独立嵌套文档 Runtime。
+  组件实例的独立嵌套文档 Runtime。
 - `@compose-ui/cad-canvas` 是 AutoCAD 风格的受控 CAD 编辑画布（SVG 图面 + 命令行），可以依赖
   `cad`、`commands`、`core`、`components` 与 `ui-context`，不得依赖 `stage`、`stage-engine`、
   `editor`、`property-panel` 或 `scene-tree`。它**不复用 Stage 的场景渲染**：Stage 的命中单位

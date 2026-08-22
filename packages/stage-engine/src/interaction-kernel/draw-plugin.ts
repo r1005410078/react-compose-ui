@@ -3,9 +3,16 @@ import {
   isDrawingTool,
   type StageDrawingTool,
 } from '../gesture-planning'
-import { rectFromPoints, screenToWorld, type StagePoint, type StageViewport } from '../geometry'
+import {
+  rectFromPoints,
+  resolveTargetFrameId,
+  screenToWorld,
+  snapResizePoint,
+  type StagePoint,
+  type StageViewport,
+} from '../geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
-import type { StageInteractionContext } from '../interaction-controller'
+import type { StageInteractionContext, StageInteractionModifiers } from '../interaction-controller'
 import type { StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 图形绘制的注册 id。 @public */
@@ -24,6 +31,40 @@ interface DrawSessionOptions {
 /** 小于一个世界像素的框来自没有真正移动的按下，不足以创建一个图形。 */
 const MIN_DRAWN_SIZE = 1
 
+/**
+ * 绘制落点吸附。
+ *
+ * @remarks
+ * 复用 resize 的整套规则（智能候选优先、无候选回退网格、Cmd 临时禁用）：绘制此前是画布上
+ * 唯一一条没接吸附的几何手势——move 走 `snapTranslation`，resize 与两点端点走
+ * `snapResizePoint`，辅助线走 `snapValueToGrid`，只有它把原始世界坐标直接送进提交。
+ *
+ * 缩放恒为 1 时屏幕像素与世界单位一一对应，不吸附也看起来是整数，所以问题一直被盖住；
+ * 缩放一旦不是 1，`world = (屏幕 - 视口) / zoom` 每次都会写进一串小数。
+ *
+ * 起点与终点都要吸附：只吸终点的话起点仍带小数，宽高照样不是网格倍数。绘制的两个轴都
+ * 自由，等价于拖角手柄，因此 handle 取 `se`。
+ */
+function snapDrawingPoint(
+  world: StagePoint,
+  modifiers: StageInteractionModifiers,
+  ctx: StagePluginContext,
+): StagePoint {
+  const { context, index } = ctx
+  return snapResizePoint({
+    point: world,
+    handle: 'se',
+    // 绘制还没有对应的 Entity，没有需要排除的自身候选。
+    candidates: index.snapCandidates(
+      [],
+      resolveTargetFrameId(context.document, context.selectedIds, context.activeFrameId),
+    ),
+    canvas: context.document.canvas,
+    zoom: context.viewport.zoom,
+    disabled: modifiers.command,
+  }).point
+}
+
 function createDrawSession(options: DrawSessionOptions): StageSession {
   const { pointerId, viewport, tool, startWorld } = options
   let drawingStart = startWorld
@@ -36,7 +77,9 @@ function createDrawSession(options: DrawSessionOptions): StageSession {
       // 绘制使用 pointerdown 时的 viewport：宿主布局重测或受控 viewport 回传不得改变同一次
       // Pointer 手势的坐标基线。
       const world = screenToWorld(event.point, viewport)
-      const drawing = constrainedDrawingPoints(tool, startWorld, world, event.modifiers)
+      // 吸附必须排在 Shift 约束之前：先约束再吸附会把正方形的一条边单独拉走。
+      const snappedWorld = snapDrawingPoint(world, event.modifiers, ctx)
+      const drawing = constrainedDrawingPoints(tool, startWorld, snappedWorld, event.modifiers)
       drawingStart = drawing.start
       drawingEnd = drawing.end
       ctx.publish({
@@ -107,7 +150,11 @@ export function createStageDrawPlugin(): StageInteractionPlugin {
       if (!isDrawingTool(context.tool)) return null
       if (event.hit.kind !== 'surface' && event.hit.kind !== 'entity') return null
 
-      const startWorld = screenToWorld(event.point, context.viewport)
+      const startWorld = snapDrawingPoint(
+        screenToWorld(event.point, context.viewport),
+        event.modifiers,
+        ctx,
+      )
       ctx.publish({
         ...ctx.idleSnapshot(),
         phase: 'draw',

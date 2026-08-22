@@ -2,7 +2,9 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { getComposeAnimations, getComposeFrame } from '@compose-ui/core'
+import type { ComposeNavigationPort, ComposePageFile } from '@compose-ui/core'
 import { ComposePreview } from '../compose-preview'
+import { ComposePageHost } from '../page-host'
 import type { ComposePreviewProps } from '../compose-preview'
 import { advanceComposePreviewPlayhead } from '../playback/playback-model'
 import type { ComposePreviewPlayheadState } from '../playback/playback-model'
@@ -74,6 +76,21 @@ export interface ComposePreviewDialogProps extends Pick<ComposePreviewProps,
    * 通常是当前选区所属的画板。Preview 只有一种目标——一个 Frame，因此这里也只接受 Frame。
    */
   readonly selectedFrameId?: string | null
+  /**
+   * 宿主导航端口。
+   *
+   * @remarks
+   * 提供后对话框切换为**页面预览**：内容由 `ComposePageHost` 承载，`Interaction` 的跳转
+   * 在对话框内真实生效，场景选择器只列出当前页面的根 Frame。缺省时对话框保持文档预览。
+   */
+  readonly navigation?: ComposeNavigationPort
+  /**
+   * 正在编辑的那一页及其 live 文档；页面预览据此显示尚未保存的改动。
+   *
+   * @remarks
+   * 省略时页面预览只呈现 Provider 里已保存的内容。
+   */
+  readonly livePage?: { readonly pageKey: string; readonly page: ComposePageFile }
   /** 覆盖由标题派生的 Dialog 无障碍名称。 */
   readonly dialogLabel?: string
   /** 覆盖默认英文文案的本地化内容。 */
@@ -134,6 +151,8 @@ const INITIAL_PLAYHEAD: ComposePreviewPlayheadState = { timeMs: 0, direction: 1 
  */
 export function ComposePreviewDialog({
   assetResolver,
+  navigation,
+  livePage,
   selectedFrameId,
   dialogLabel,
   document: composeDocument,
@@ -157,21 +176,39 @@ export function ComposePreviewDialog({
   // 预览目标永远是一个场景：null 表示跟随宿主给出的激活场景，用户显式选过之后才固定。
   const [target, setTarget] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
+  // 页面预览模式下当前页面由 ComposePageHost 加载，对话框只是跟着它换场景列表与动画宿主。
+  const [hostPage, setHostPage] = useState<{
+    readonly pageKey: string | null
+    readonly page: ComposePageFile | null
+  }>({ pageKey: null, page: null })
+  // 跳转后重置显式选择：上一页选中的场景 id 在新页面里没有意义。
+  const [lastPageKey, setLastPageKey] = useState<string | null>(null)
+  if (navigation !== undefined && lastPageKey !== hostPage.pageKey) {
+    setLastPageKey(hostPage.pageKey)
+    setTarget(null)
+  }
+
+  // 页面预览需要两个端口同时在场：只有导航端口而没有加载端口时无法取回任何页面，
+  // 此时退回文档预览比渲染一个永远空白的宿主诚实。
+  const pageMode = navigation !== undefined && pageLoader !== undefined
+  const activeDocument = pageMode ? hostPage.page?.document : composeDocument
+  const activePage = pageMode ? hostPage.page ?? undefined : page
+  const activeDefaultFrameId = pageMode ? hostPage.page?.activeFrameId ?? null : selectedFrameId
 
   // 场景列表就是文档的根 Frame；目标解析顺序：用户显式选择 → 宿主给的激活场景 → 第一个根 Frame。
-  const sceneIds = composeDocument
-    ? composeDocument.rootIds.filter((id) => getComposeFrame(composeDocument.entities[id]))
+  const sceneIds = activeDocument
+    ? activeDocument.rootIds.filter((id) => getComposeFrame(activeDocument.entities[id]))
     : []
   const resolvedFrameId = (target && sceneIds.includes(target) ? target : null)
-    ?? (selectedFrameId && sceneIds.includes(selectedFrameId) ? selectedFrameId : null)
+    ?? (activeDefaultFrameId && sceneIds.includes(activeDefaultFrameId) ? activeDefaultFrameId : null)
     ?? sceneIds[0]
     ?? undefined
 
   // 基础能力阶段与编辑器一致：预览播放第一条动画；多动画选择留给后续提案。
   // 清单归属 Frame：预览播放的是当前目标 Frame 自己的时间线。
   const animationHostFrameId = resolvedFrameId
-  const animation = composeDocument && animationHostFrameId
-    ? getComposeAnimations(composeDocument, animationHostFrameId)[0]
+  const animation = activeDocument && animationHostFrameId
+    ? getComposeAnimations(activeDocument, animationHostFrameId)[0]
     : undefined
   const [playing, setPlaying] = useState(false)
   // 手动会话是否已接管播放头：未接管时 ComposePreview 按脚本绑定驱动（或停在 0 ms），
@@ -335,19 +372,39 @@ export function ComposePreviewDialog({
             data-testid="compose-preview-dialog-artboard"
             style={{ '--compose-preview-dialog-scale': scale } as CSSProperties}
           >
-            <ComposePreview
-              animationTimeMs={manualEngaged ? playheadMs : undefined}
-              assetResolver={assetResolver}
-              document={composeDocument}
-              page={page}
-              layoutRuntime={animation ? undefined : layoutRuntime}
-              layoutSnapshot={animation ? undefined : layoutSnapshot}
-              pageLoader={pageLoader}
-              registry={registry}
-              scriptModuleLoader={scriptModuleLoader}
-              scriptScope={scriptScope}
-              frameId={previewFrameId}
-            />
+            {pageMode && navigation && pageLoader
+              ? (
+                  <ComposePageHost
+                    animationTimeMs={manualEngaged ? playheadMs : undefined}
+                    assetResolver={assetResolver}
+                    frameId={previewFrameId}
+                    layoutRuntime={animation ? undefined : layoutRuntime}
+                    layoutSnapshot={animation ? undefined : layoutSnapshot}
+                    navigation={navigation}
+                    onPageChange={(nextPage, nextPageKey) => {
+                      setHostPage({ page: nextPage, pageKey: nextPageKey })
+                    }}
+                    livePage={livePage}
+                    pageLoader={pageLoader}
+                    registry={registry}
+                    scriptModuleLoader={scriptModuleLoader}
+                  />
+                )
+              : (
+                  <ComposePreview
+                    animationTimeMs={manualEngaged ? playheadMs : undefined}
+                    assetResolver={assetResolver}
+                    document={activeDocument}
+                    page={activePage}
+                    layoutRuntime={animation ? undefined : layoutRuntime}
+                    layoutSnapshot={animation ? undefined : layoutSnapshot}
+                    pageLoader={pageLoader}
+                    registry={registry}
+                    scriptModuleLoader={scriptModuleLoader}
+                    scriptScope={scriptScope}
+                    frameId={previewFrameId}
+                  />
+                )}
           </div>
         </div>
         <footer className="compose-preview-dialog__footer">{messages.closeHint}</footer>

@@ -11,7 +11,6 @@ import type {
   ComposeLayoutSnapshot,
   ComposeMeasureConstraint,
   ComposeMeasuredSize,
-  ComposePageDocumentLoader,
   ComposeRenderer,
   EditorCommand,
   JsonObject,
@@ -51,15 +50,7 @@ export interface ComposeRendererProps {
   readonly textEditing?: ComposeRendererTextEditing
   /** 资源型 Renderer 使用的可选运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
-  /**
-   * 页面型 Renderer 使用的可选文档加载端口。
-   *
-   * @remarks
-   * 类型来自 `@compose-ui/core`，Registry 只负责透传，不实现加载，因此 Stage 与 Preview
-   * 接受该端口时不会依赖任何页面实现包。
-   */
-  readonly pageDocumentPort?: ComposePageDocumentLoader
-  /** 页面 setup 模块的可替换加载端口；Page Slot 为每个嵌套实例单独使用。 */
+  /** 页面 setup 模块的可替换加载端口；嵌套文档 Runtime 为每个实例单独使用。 */
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
   /**
    * 当前实例的 Entity Registry。
@@ -313,7 +304,6 @@ export interface ComposeRendererPrepareInput {
   readonly props: ComposeRuntimeProps
   readonly authoredProps: JsonObject
   readonly assetResolver?: ComposeAssetResolver
-  readonly pageDocumentPort?: ComposePageDocumentLoader
   readonly signal: AbortSignal
 }
 
@@ -324,7 +314,6 @@ export interface ComposeRendererMeasurementSubscriptionInput {
   readonly props: ComposeRuntimeProps
   readonly authoredProps: JsonObject
   readonly assetResolver?: ComposeAssetResolver
-  readonly pageDocumentPort?: ComposePageDocumentLoader
   readonly invalidate: () => void
 }
 

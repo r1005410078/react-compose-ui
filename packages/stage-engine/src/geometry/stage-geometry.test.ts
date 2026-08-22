@@ -88,3 +88,27 @@ describe('Stage ECS geometry', () => {
     expect(Math.atan2(ray.y, ray.x) * 180 / Math.PI).toBeCloseTo(15, 5)
   })
 })
+
+describe('OpenSpec: stage-engine / 手势几何写入的精度上限', () => {
+  it('掐掉非整数 zoom 留下的浮点残渣', () => {
+    expect(toComposeTransform({
+      x: 82.96874999999991,
+      y: 82.96869935990924,
+      width: 373.3592610597958,
+      height: 248.9061740398639,
+      rotation: 0,
+    })).toEqual({
+      position: { x: 82.97, y: 82.97 },
+      size: { width: 373.36, height: 248.91 },
+      rotation: 0,
+    })
+  })
+
+  it('已经吸附到网格的整数值不引入误差', () => {
+    expect(toComposeTransform({ x: 80, y: 16, width: 648, height: 360, rotation: 45 })).toEqual({
+      position: { x: 80, y: 16 },
+      size: { width: 648, height: 360 },
+      rotation: 45,
+    })
+  })
+})

@@ -63,6 +63,16 @@ const translations = {
     assetDropPartial: (added: number, failed: number) =>
       `已添加 ${added} 项，${failed} 项失败。`,
     assetDropCommand: (added: number) => `添加 ${added} 个资源`,
+    sceneSize: (name: string) => `修改场景 ${name} 的尺寸`,
+    sceneSizeTitle: '场景尺寸',
+    sceneSizeDescription: (name: string) => `为场景「${name}」选择常见尺寸，或输入自定义宽高。`,
+    sceneSizeCommon: '常见尺寸',
+    sceneSizeCustom: '自定义尺寸',
+    sceneSizeWidth: '宽',
+    sceneSizeHeight: '高',
+    setSceneSize: '设置场景尺寸',
+    confirm: '确定',
+    cancel: '取消',
   },
   'en-US': {
     rulerOrigin: 'Ruler origin',
@@ -123,6 +133,17 @@ const translations = {
       `${added} added, ${failed} failed.`,
     assetDropCommand: (added: number) =>
       `Add ${added} asset${added === 1 ? '' : 's'}`,
+    sceneSize: (name: string) => `Change the size of scene ${name}`,
+    sceneSizeTitle: 'Scene size',
+    sceneSizeDescription: (name: string) =>
+      `Pick a common size for scene ${name}, or enter a custom width and height.`,
+    sceneSizeCommon: 'Common sizes',
+    sceneSizeCustom: 'Custom size',
+    sceneSizeWidth: 'Width',
+    sceneSizeHeight: 'Height',
+    setSceneSize: 'Set scene size',
+    confirm: 'Confirm',
+    cancel: 'Cancel',
   },
 } as const
 
@@ -244,5 +265,23 @@ export function getStageMessages(
       messages.assetDropCommand(added),
       { added },
     ),
+    sceneSize: (name: string) => formatMessage(
+      'stage.sceneSize',
+      messages.sceneSize(name),
+      { name },
+    ),
+    sceneSizeTitle: formatMessage('stage.sceneSizeTitle', messages.sceneSizeTitle),
+    sceneSizeDescription: (name: string) => formatMessage(
+      'stage.sceneSizeDescription',
+      messages.sceneSizeDescription(name),
+      { name },
+    ),
+    sceneSizeCommon: formatMessage('stage.sceneSizeCommon', messages.sceneSizeCommon),
+    sceneSizeCustom: formatMessage('stage.sceneSizeCustom', messages.sceneSizeCustom),
+    sceneSizeWidth: formatMessage('stage.sceneSizeWidth', messages.sceneSizeWidth),
+    sceneSizeHeight: formatMessage('stage.sceneSizeHeight', messages.sceneSizeHeight),
+    setSceneSize: formatMessage('stage.setSceneSize', messages.setSceneSize),
+    confirm: formatMessage('stage.confirm', messages.confirm),
+    cancel: formatMessage('stage.cancel', messages.cancel),
   }
 }

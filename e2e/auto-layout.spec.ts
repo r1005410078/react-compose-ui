@@ -397,7 +397,7 @@ test('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 显式脱流保持
 
 
 test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Preview 一致', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })

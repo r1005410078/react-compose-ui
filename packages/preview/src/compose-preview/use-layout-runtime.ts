@@ -9,7 +9,7 @@ import {
   type ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposeDocument, ComposePageDocumentLoader } from '@compose-ui/core'
+import type { ComposeDocument } from '@compose-ui/core'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import {
   useEffect,
@@ -24,7 +24,6 @@ export function useComposePreviewLayout(
   document: ComposeDocument,
   registry: ComposeEntityRegistry,
   assetResolver?: ComposeAssetResolver,
-  pageDocumentPort?: ComposePageDocumentLoader,
   externalRuntime?: ComposeLayoutRuntime,
   scriptScope?: ComposePageScriptScope,
 ): ComposeLayoutRuntimeState {
@@ -33,9 +32,8 @@ export function useComposePreviewLayout(
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
     registry,
     assetResolver,
-    pageDocumentPort,
     scriptScope,
-  }), [assetResolver, pageDocumentPort, registry, scriptScope])
+  }), [assetResolver, registry, scriptScope])
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const generation = useRef(0)
   const adapterGenerations = useRef(new WeakMap<ComposeRendererMeasurementAdapter, number>())

@@ -10,6 +10,7 @@ import {
   isValidComposeLayout,
   isValidComposeLayoutItem,
   isValidComposeGeometryConstraints,
+  isValidComposeInteraction,
   isValidComposeWidgetSwitcher,
 } from '@compose-ui/core'
 import { createFrameInspector } from './frame'
@@ -39,6 +40,11 @@ import {
   type InspectorIdFactory,
 } from './material-inspector-kit/renderer-inspectors'
 import { DEFAULT_WIDGET_SWITCHER, createWidgetSwitcherInspector } from './widget-switcher'
+import {
+  DEFAULT_COMPOSE_INTERACTION,
+  createInteractionInspector,
+  createInteractionMissingInspectorActions,
+} from './interaction'
 
 /**
  * 创建带 Inspector 的内建 ECS Component Registry 定义。
@@ -149,6 +155,20 @@ export function createComposeBuiltinComponentDefinitions(
       createDefault: () => ({ ...DEFAULT_WIDGET_SWITCHER }),
       validate: isValidComposeWidgetSwitcher,
       inspector: createWidgetSwitcherInspector(idFactory),
+    },
+    {
+      key: 'Interaction',
+      label: '交互',
+      // 排在裁剪之前：它描述这个 Entity"做什么"，比呈现细节更靠近用户的心智顺序。
+      order: 58,
+      createDefault: () => ({ ...DEFAULT_COMPOSE_INTERACTION }),
+      validate: isValidComposeInteraction,
+      inspector: createInteractionInspector(idFactory),
+      missingInspector: {
+        // 任意 Entity 都可以有交互：矩形、图片、容器都可能是跳转源。
+        isVisible: () => true,
+        actions: createInteractionMissingInspectorActions(idFactory),
+      },
     },
     {
       key: 'Clip',

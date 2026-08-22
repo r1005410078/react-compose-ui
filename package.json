@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev --concurrency=100",
+    "dev": "turbo run dev --filter=@compose-ui/example... --concurrency=100",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "lint": "bun run check:architecture && eslint . --max-warnings 0",
@@ -19,7 +19,7 @@
     "test:e2e": "bun run build && playwright test",
     "test:e2e:update": "bun run build && playwright test --update-snapshots=all",
     "test:e2e:ui": "bun run build && playwright test --ui --project=chromium",
-    "storybook": "bun run --cwd apps/storybook dev",
+    "storybook": "turbo run dev --filter=@compose-ui/storybook... --concurrency=100",
     "storybook:build": "bun run --cwd apps/storybook build",
     "storybook:test": "bun run --cwd apps/storybook test",
     "changeset": "changeset",

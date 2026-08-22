@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, expandInspectorSection, openPageInspector } from './support/test-helpers'
+import { pointerDrop, drawContainer, enableAutoLayout, expandInspectorSection, openPageInspector } from './support/test-helpers'
 
 test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边距', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -267,112 +267,6 @@ test('OpenSpec: page-script-runtime / 页面计数器纵向流程 / Stage、Prev
 })
 
 
-test('OpenSpec: basic-materials / Page Slot / 拖页面到画布并在画布与预览中渲染', async ({ page }) => {
-  await page.goto('/')
-  const editor = page.getByRole('region', { name: 'Compose editor' })
-  const stage = editor.getByRole('application', { name: 'Stage' })
-
-  // 1) 先在 Home 页面里放一个矩形，作为嵌套渲染的可见证据
-  await editor.locator('[data-workspace-tab="compose-assets"]').click()
-  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
-  await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).click()
-  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
-  await pagesGrid.getByRole('gridcell', { name: 'Home' }).dblclick()
-  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(1)
-  await drawContainer(page, editor)
-  const homeTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
-  await page.keyboard.press('Control+S')
-  await expect(homeTab.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
-
-  // 2) 在 Counter 页面里把 Home 页面拖进画布创建 Page Slot；Page Slot 没有 Palette 入口，
-  //    拖入资源才是它的正式创建路径，并且会顺带带上页面引用。
-  await pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
-  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')).toHaveCount(2)
-  await pagesGrid.getByRole('gridcell', { name: 'Home' }).dragTo(stage, {
-    targetPosition: { x: 220, y: 160 },
-  })
-
-  // 3) 属性面板的 node 字段直接反映拖入时写入的引用
-  const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  await expandInspectorSection(inspector, '页面')
-  const nodeField = inspector.getByTestId('semantic-editor-node')
-  await expect(nodeField).toBeVisible()
-  await expect(nodeField.getByRole('combobox')).toContainText('Home')
-
-  // 4) 画布上实时渲染被引用页面的内容
-  await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
-  await selectAxisSizing(inspector, '宽度', 'Hug')
-  await selectAxisSizing(inspector, '高度', 'Hug')
-  await expect(stage.getByTestId('stage-layout-diagnostics')).toHaveCount(0)
-
-  // 5) 预览中同样渲染
-  await editor.getByRole('button', { name: '打开预览' }).click()
-  const preview = page.getByRole('dialog').or(page.getByTestId('compose-preview-frame'))
-  await expect(preview.getByTestId('compose-page-slot-content').first()).toBeVisible()
-})
-
-
-test('回归：Page Slot / A → B → Home 冷加载不会被 StrictMode 取消', async ({ page }) => {
-  await page.goto('/?deep-page-slot')
-  const preview = page.getByTestId('compose-preview-frame')
-  await expect(page.getByTestId('deep-page-slot-demo')).toBeVisible()
-  await expect(preview.getByTestId('compose-page-slot-content')).toHaveCount(3)
-  await expect(preview.getByTestId('compose-page-slot-error')).toHaveCount(0)
-  // 每个被引用页面的根 Frame 现在也是一个被渲染实体：3 个页面各多一层。
-  await expect(preview.locator('[data-page-slot-entity-id]')).toHaveCount(7)
-})
-
-
-test('OpenSpec: basic-materials / Page Slot / 画布与预览的嵌套内容完全一致', async ({ page }) => {
-  await page.goto('/')
-  const editor = page.getByRole('region', { name: 'Compose editor' })
-  const stage = editor.getByRole('application', { name: 'Stage' })
-
-  // 在 Home 页面里放三个实体：容器、矩形、文本
-  await editor.locator('[data-workspace-tab="compose-assets"]').click()
-  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
-  await assets.getByRole('grid', { name: 'Demo Assets' })
-    .getByRole('gridcell', { name: /^Pages/ }).click()
-  await assets.getByRole('grid', { name: 'Pages' })
-    .getByRole('gridcell', { name: 'Home' }).dblclick()
-  await drawContainer(page, editor)
-  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: 'Rectangle' }).click()
-  const homeContainerBox = await stage.getByTestId('stage-container').boundingBox()
-  await drawText(page, editor, {
-    x: homeContainerBox!.x + 200,
-    y: homeContainerBox!.y + 120,
-  })
-
-  const tab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
-  await page.keyboard.press('Control+S')
-  await expect(tab.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
-
-  // Counter 页面里把 Home 拖进画布，得到一个指向 Home 的 Page Slot。
-  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
-  await pagesGrid.getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
-  await pagesGrid.getByRole('gridcell', { name: 'Home' }).dragTo(stage, {
-    targetPosition: { x: 220, y: 160 },
-  })
-  const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  await expandInspectorSection(inspector, '页面')
-  await expect(inspector.getByTestId('semantic-editor-node').getByRole('combobox'))
-    .toContainText('Home')
-
-  // 嵌套内容必须逐个实体渲染并各自定位；缺少定位包装或递归时数量会少于 3
-  await expect(stage.getByTestId('compose-page-slot-content')).toBeVisible()
-  // 被引用页面的根 Frame 也参与渲染，因此是画板 + 三个实体。
-  await expect(stage.locator('[data-page-slot-entity-id]')).toHaveCount(4)
-
-  await editor.getByRole('button', { name: '打开预览' }).click()
-  const previewDoc = page.getByTestId('compose-preview-frame')
-  await expect(previewDoc).toBeVisible()
-  // 与画布逐个实体一致：两端共用同一个 page-slot 渲染实现
-  await expect(previewDoc.locator('[data-page-slot-entity-id]')).toHaveCount(4)
-})
-
-
 test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件根属性且可 Resize', async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
@@ -424,7 +318,7 @@ test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件�
 
 
 test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时预览', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })

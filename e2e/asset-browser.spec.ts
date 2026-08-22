@@ -72,7 +72,7 @@ test('OpenSpec: asset-browser / Editor 资源面板 / 右键菜单不被其他�
 
 
 test('OpenSpec: stage / 异步资源节点创建 / 批量拖入 Image 与 SVG 并原子撤销重做', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   const surface = stage.getByTestId('stage-surface')

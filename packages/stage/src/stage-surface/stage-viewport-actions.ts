@@ -28,6 +28,8 @@ export function fitViewportTo(
   surface: StageSurfaceSize,
 ): StageViewport | null {
   if (!target || target.width <= 0 || target.height <= 0) return null
+  // 可视区尚未测量时宽高为 0，除法会给出 Infinity，钳制之后是上限而不是「不动」。
+  if (surface.width <= 0 || surface.height <= 0) return null
   const zoom = Math.min(
     MAX_FIT_ZOOM,
     Math.max(

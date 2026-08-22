@@ -17,6 +17,19 @@ export interface StageSurfaceSize {
 const FALLBACK_SURFACE_SIZE: StageSurfaceSize = { width: 900, height: 600 }
 
 /**
+ * 观测结果：尺寸，以及是否已经量到过真实尺寸。
+ *
+ * @remarks
+ * `measured` 单独给出而不是让调用方拿 `size` 与回退值比较：回退尺寸恰好等于真实尺寸时那种
+ * 比较会给出错误答案，而首次视口适配必须等到真的量过——按 900×600 算出来的缩放与可视区域
+ * 无关，用户会看到画面先跳一次再定住。
+ */
+export interface StageSurfaceMeasurement {
+  readonly size: StageSurfaceSize
+  readonly measured: boolean
+}
+
+/**
  * 观测 Scene surface 的尺寸。
  *
  * @remarks
@@ -32,8 +45,9 @@ const FALLBACK_SURFACE_SIZE: StageSurfaceSize = { width: 900, height: 600 }
 export function useStageSurfaceSize(
   surfaceRef: RefObject<HTMLDivElement | null>,
   onChange?: (size: StageSurfaceSize) => void,
-): StageSurfaceSize {
+): StageSurfaceMeasurement {
   const [surfaceSize, setSurfaceSize] = useState<StageSurfaceSize>(FALLBACK_SURFACE_SIZE)
+  const [measured, setMeasured] = useState(false)
 
   useEffect(() => {
     const surface = surfaceRef.current
@@ -45,6 +59,7 @@ export function useStageSurfaceSize(
       setSurfaceSize((current) => current.width === next.width && current.height === next.height
         ? current
         : next)
+      setMeasured(true)
       onChange?.(next)
     }
     measure()
@@ -55,5 +70,5 @@ export function useStageSurfaceSize(
     return () => observer.disconnect()
   }, [onChange, surfaceRef])
 
-  return surfaceSize
+  return { size: surfaceSize, measured }
 }

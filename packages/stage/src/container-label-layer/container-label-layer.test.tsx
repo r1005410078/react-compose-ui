@@ -31,6 +31,7 @@ const unlockedDocument = {
         Lock: { locked: false },
         Hierarchy: { childIds: [] },
         Clip: { enabled: true },
+        Frame: { size: { width: 320, height: 240 }, guides: [] },
       },
     },
   },
@@ -63,6 +64,7 @@ function renderLayer(overrides: {
   readonly activeFrameId?: string | null
   readonly onSceneActivate?: (entityId: string) => void
   readonly onScenePreview?: (entityId: string) => void
+  readonly onSceneSizeChange?: (entityId: string, size: { width: number; height: number }) => void
 } = {}) {
   const document_ = overrides.locked ? lockedDocument : unlockedDocument
   return render(
@@ -75,12 +77,14 @@ function renderLayer(overrides: {
       sceneActiveLabel={(name) => `${name} 是当前激活场景`}
       sceneInactiveLabel={(name) => `把 ${name} 设为激活场景`}
       scenePreviewLabel={(name) => `预览场景 ${name}`}
+      sceneSizeLabel={(name) => `修改场景 ${name} 的尺寸`}
       selectedIds={overrides.selectedIds ?? []}
       viewport={{ x: 0, y: 0, zoom: 1 }}
       onLabelPointerDown={overrides.onLabelPointerDown ?? (() => {})}
       onRename={overrides.onRename}
       onSceneActivate={overrides.onSceneActivate}
       onScenePreview={overrides.onScenePreview}
+      onSceneSizeChange={overrides.onSceneSizeChange}
     />,
   )
 }
@@ -148,6 +152,35 @@ describe('OpenSpec: 锁定容器与 Group 退出画布选中', () => {
     expect(screen.queryByLabelText('重命名容器 登录页')).toBeNull()
   })
 
+  it('OpenSpec: stage / 场景标签的激活与预览入口 / 锁定场景仍显示播放、激活与尺寸', () => {
+    const onSceneActivate = vi.fn()
+    const onScenePreview = vi.fn()
+    renderLayer({
+      activeFrameId: 'frame',
+      locked: true,
+      onSceneActivate,
+      onScenePreview,
+      onSceneSizeChange: vi.fn(),
+    })
+    expect(screen.getByRole('button', { name: '修改场景 登录页 的尺寸' })).toHaveTextContent(
+      '320 × 240',
+    )
+    // 播放与激活不改场景内容，锁定下仍然可用。
+    fireEvent.click(screen.getByRole('button', { name: '预览场景 登录页' }))
+    expect(onScenePreview).toHaveBeenCalledWith('frame')
+    expect(screen.getByRole('button', { name: '登录页 是当前激活场景' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / 场景尺寸弹框 / 锁定场景的尺寸胶囊只读', () => {
+    const onSceneSizeChange = vi.fn()
+    renderLayer({ activeFrameId: 'frame', locked: true, onSceneSizeChange })
+    const chip = screen.getByRole('button', { name: '修改场景 登录页 的尺寸' })
+    expect(chip).toBeDisabled()
+    fireEvent.doubleClick(chip)
+    expect(screen.queryByTestId('stage-scene-size-dialog')).not.toBeInTheDocument()
+    expect(onSceneSizeChange).not.toHaveBeenCalled()
+  })
+
   it('OpenSpec: stage / 场景标签的激活与预览入口 / 激活场景显示播放按钮与实心标记', () => {
     renderLayer({
       activeFrameId: 'frame',
@@ -189,5 +222,95 @@ describe('OpenSpec: 锁定容器与 Group 退出画布选中', () => {
     fireEvent.pointerDown(tag, { clientX: 10, clientY: 10 })
     expect(onLabelPointerDown).not.toHaveBeenCalled()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+})
+
+describe('OpenSpec: stage / 场景标签的激活与预览入口 / 尺寸胶囊', () => {
+  it('场景标签显示当前尺寸', () => {
+    renderLayer({ activeFrameId: 'frame', onSceneSizeChange: vi.fn() })
+    expect(screen.getByRole('button', { name: '修改场景 登录页 的尺寸' })).toHaveTextContent(
+      '320 × 240',
+    )
+  })
+
+  it('尺寸胶囊不触发选中也不进入重命名', () => {
+    const onLabelPointerDown = vi.fn()
+    const onRename = vi.fn()
+    renderLayer({ onLabelPointerDown, onRename, onSceneSizeChange: vi.fn() })
+    const chip = screen.getByRole('button', { name: '修改场景 登录页 的尺寸' })
+    fireEvent.pointerDown(chip, { clientX: 10, clientY: 10 })
+    fireEvent.pointerDown(chip, { clientX: 10, clientY: 10 })
+    expect(onLabelPointerDown).not.toHaveBeenCalled()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('未提供写入口时胶囊只读，双击不打开弹框', () => {
+    renderLayer()
+    const chip = screen.getByRole('button', { name: '修改场景 登录页 的尺寸' })
+    expect(chip).toBeDisabled()
+    fireEvent.doubleClick(chip)
+    expect(screen.queryByTestId('stage-scene-size-dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('OpenSpec: stage / 场景尺寸弹框', () => {
+  const openDialog = (onSceneSizeChange = vi.fn()) => {
+    renderLayer({ activeFrameId: 'frame', onSceneSizeChange })
+    fireEvent.doubleClick(screen.getByRole('button', { name: '修改场景 登录页 的尺寸' }))
+    return onSceneSizeChange
+  }
+
+  it('选择预设并确认提交一次新尺寸', () => {
+    const onSceneSizeChange = openDialog()
+    fireEvent.click(screen.getByTestId('stage-scene-size-preset-1920x1080'))
+    expect(screen.getByTestId('stage-scene-size-preset-1920x1080')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    fireEvent.click(screen.getByTestId('stage-scene-size-confirm'))
+    expect(onSceneSizeChange).toHaveBeenCalledTimes(1)
+    expect(onSceneSizeChange).toHaveBeenCalledWith('frame', { width: 1920, height: 1080 })
+    expect(screen.queryByTestId('stage-scene-size-dialog')).not.toBeInTheDocument()
+  })
+
+  it('自定义尺寸不选中任何预设', () => {
+    const onSceneSizeChange = openDialog()
+    fireEvent.change(screen.getByTestId('stage-scene-size-width'), { target: { value: '1000' } })
+    fireEvent.change(screen.getByTestId('stage-scene-size-height'), { target: { value: '800' } })
+    expect(screen.queryByRole('button', { pressed: true })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('stage-scene-size-confirm'))
+    expect(onSceneSizeChange).toHaveBeenCalledWith('frame', { width: 1000, height: 800 })
+  })
+
+  it('预设选中后仍可继续微调', () => {
+    const onSceneSizeChange = openDialog()
+    fireEvent.click(screen.getByTestId('stage-scene-size-preset-1920x1080'))
+    fireEvent.change(screen.getByTestId('stage-scene-size-width'), { target: { value: '1900' } })
+    fireEvent.click(screen.getByTestId('stage-scene-size-confirm'))
+    expect(onSceneSizeChange).toHaveBeenCalledWith('frame', { width: 1900, height: 1080 })
+  })
+
+  it('非法宽高禁用确认', () => {
+    openDialog()
+    fireEvent.change(screen.getByTestId('stage-scene-size-width'), { target: { value: '0' } })
+    expect(screen.getByTestId('stage-scene-size-confirm')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('stage-scene-size-width'), { target: { value: '' } })
+    expect(screen.getByTestId('stage-scene-size-confirm')).toBeDisabled()
+  })
+
+  it('尺寸没变时确认只关闭弹框', () => {
+    const onSceneSizeChange = openDialog()
+    fireEvent.click(screen.getByTestId('stage-scene-size-confirm'))
+    expect(onSceneSizeChange).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('stage-scene-size-dialog')).not.toBeInTheDocument()
+  })
+
+  it('取消不写文档，重新打开回到当前尺寸', () => {
+    const onSceneSizeChange = openDialog()
+    fireEvent.change(screen.getByTestId('stage-scene-size-width'), { target: { value: '1000' } })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(onSceneSizeChange).not.toHaveBeenCalled()
+    fireEvent.doubleClick(screen.getByRole('button', { name: '修改场景 登录页 的尺寸' }))
+    expect(screen.getByTestId('stage-scene-size-width')).toHaveValue(320)
   })
 })

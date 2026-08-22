@@ -1,3 +1,5 @@
+import type { ComposePageReference } from '@compose-ui/core'
+
 /** 页面脚本运行时的稳定诊断码。 @public */
 export type ComposeScriptDiagnosticCode =
   | 'script.missing-setup'
@@ -18,6 +20,10 @@ export type ComposeScriptDiagnosticCode =
   | 'script.binding-type-mismatch'
   | 'script.module-load-failed'
   | 'script.module-load-cancelled'
+  /** 脚本调用了导航，但宿主没有注入导航端口。 */
+  | 'script.navigation-unavailable'
+  /** setup 同步执行期间调用导航；此时页面尚未挂载完成。 */
+  | 'script.navigation-during-setup'
 
 /** 不进入文档历史的页面脚本运行诊断。 @public */
 export interface ComposeScriptDiagnostic {
@@ -96,7 +102,37 @@ export interface ComposePageScriptContext {
    * ```
    */
   effect(run: () => void | (() => void)): void
+
+  /**
+   * 跳转到目标页面。
+   *
+   * @param target - 目标页面的稳定资源 key，或一个完整的页面引用。
+   * @remarks
+   * 声明式 `Interaction` 与本方法委托同一个导航端口，因此两者共享当前页面与返回栈。
+   * 宿主未注入导航端口时调用只产生 diagnostic；在 setup 同步执行期间调用同样被忽略——
+   * 页面尚未挂载完成时跳转会让当前页的 effect cleanup 与新页的 setup 交错。
+   * @example
+   * ```js
+   * const openDetail = () => ctx.navigate('pages/detail.page.json')
+   * ```
+   */
+  navigate(target: string | ComposePageReference): Promise<void>
+
+  /** 返回上一页；返回栈为空时是无副作用的 no-op。 */
+  navigateBack(): Promise<void>
 }
+
+/**
+ * `ComposePageScriptContext` 中的响应式原语子集。
+ *
+ * @remarks
+ * 导航来自宿主注入的端口，因此响应式 owner 只产出这一半。
+ * @internal
+ */
+export type ComposeReactivePrimitives = Pick<
+  ComposePageScriptContext,
+  'computed' | 'effect' | 'state'
+>
 
 /** 页面 setup 函数。 @public */
 export type ComposePageSetup = (context: ComposePageScriptContext) => Record<string, unknown>

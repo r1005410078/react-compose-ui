@@ -589,3 +589,44 @@ describe('Yoga Compose layout runtime', () => {
     runtime.dispose()
   })
 })
+
+describe('Interaction 不参与布局求解', () => {
+  it('OpenSpec: 可选 Interaction Component / 任意 Entity 携带 Interaction', async () => {
+    const container = entity('container', fixedItem(10, 20, 300, 200), ['first', 'second'])
+    const first = entity('first', fixedItem(0, 0, 120, 60, 'flow'))
+    const second = entity('second', fixedItem(0, 0, 90, 40, 'flow'))
+    const plain = documentFixture({ container, first, second })
+    // 同一份文档，只在两个 Entity 上加 Interaction；求解结果必须逐字段一致。
+    const interactive = documentFixture({
+      container: {
+        ...container,
+        components: {
+          ...container.components,
+          Interaction: { version: 1, triggers: [{ event: 'click', action: { type: 'navigate-back' } }] },
+        },
+      },
+      first: {
+        ...first,
+        components: {
+          ...first.components,
+          Interaction: {
+            version: 1,
+            triggers: [{
+              event: 'click',
+              action: {
+                type: 'navigate',
+                target: { kind: 'page', providerId: 'demo', assetKey: 'pages/a.page.json', scope: 'persistent' },
+              },
+            }],
+          },
+        },
+      },
+      second,
+    })
+
+    const before = await resolveComposeDocumentLayout(plain)
+    const after = await resolveComposeDocumentLayout(interactive)
+
+    expect(after.boxes).toEqual(before.boxes)
+  })
+})

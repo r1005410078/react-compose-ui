@@ -20,7 +20,6 @@ export {
   ComposeGroupMaterialIcon,
   ComposeImageMaterialIcon,
   ComposeLineMaterialIcon,
-  ComposePageSlotMaterialIcon,
   ComposeRectangleMaterialIcon,
   ComposeSvgMaterialIcon,
   ComposeTextMaterialIcon,
@@ -58,10 +57,6 @@ export {
   DEFAULT_COMPOSE_LINE_PRESET,
   DEFAULT_COMPOSE_SHAPE_RENDERER,
 } from './shape'
-export {
-  DEFAULT_COMPOSE_PAGE_SLOT_PRESET,
-  DEFAULT_COMPOSE_PAGE_SLOT_RENDERER,
-} from './page-slot'
 export {
   DEFAULT_COMPOSE_COMPONENT_INSTANCE_PRESET,
   DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER,

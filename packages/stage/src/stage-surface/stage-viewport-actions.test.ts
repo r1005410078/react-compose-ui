@@ -32,6 +32,11 @@ describe('OpenSpec: stage / 视口适配与缩放只有一份实现', () => {
     expect(fitViewportTo({ x: 0, y: 0, width: 10, height: -5 }, SURFACE)).toBeNull()
   })
 
+  it('可视区尚未测量时不改变视口', () => {
+    // 首帧 surface 宽高为 0，除法会给出 Infinity，钳制之后是上限而不是「不动」。
+    expect(fitViewportTo({ x: 0, y: 0, width: 100, height: 100 }, { width: 0, height: 0 })).toBeNull()
+  })
+
   it('放大与缩小互为逆运算，重置回到 100%', () => {
     const zoomedIn = zoomViewportByIntent(VIEWPORT, SURFACE, 'in')
     expect(zoomedIn.zoom).toBeCloseTo(1.2, 6)

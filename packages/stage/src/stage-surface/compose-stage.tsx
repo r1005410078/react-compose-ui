@@ -22,15 +22,20 @@ import type {
   ComposeRendererMeasurementAdapter,
 } from '@compose-ui/component-registry'
 import {
+  BUILTIN_COMMAND_TYPES,
   type ComposeLayoutSnapshot,
+  type ComposeSize,
 } from '@compose-ui/core'
 import {
   createStageInteractionController,
   createStageSceneIndex,
+  getEntityWorldBounds,
   resolveStageDropIndicator,
   scrollAxisToViewport,
   type StageDrawnEntity,
+  type StageRect,
 } from '@compose-ui/stage-engine'
+import { fitViewportTo } from './stage-viewport-actions'
 import type {
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
@@ -153,6 +158,7 @@ function ComposeStageReady({
   onEditablePathChange,
   onEditablePathVertexToggle,
   onSurfaceSizeChange,
+  autoFitActiveFrame = true,
   interactionController,
   idFactory = defaultId,
   id,
@@ -173,7 +179,6 @@ function ComposeStageReady({
     dispatch,
     layoutRuntime,
     onClipboardChange,
-    pageLoader,
     registry,
     scriptModuleLoader,
   } = services
@@ -219,7 +224,12 @@ function ComposeStageReady({
   const marquee = interaction.marquee
   const snapGuides = interaction.snapGuides
   const guidePreview = interaction.guidePreview
-  const surfaceSize = useStageSurfaceSize(surfaceRef, onSurfaceSizeChange)
+  const { size: surfaceSize, measured: surfaceMeasured } = useStageSurfaceSize(
+    surfaceRef,
+    onSurfaceSizeChange,
+  )
+  /** 首次适配只发生一次；此后文档编辑、选择变化与窗口缩放都不再自动改视口。 */
+  const autoFitDoneRef = useRef(false)
   const {
     authoredText: textEditingValue,
     changeTextEditing,
@@ -237,6 +247,78 @@ function ComposeStageReady({
     registry,
     restoreFocus: () => surfaceRef.current?.focus(),
   })
+  /**
+   * 把视口适配到一个世界矩形。
+   *
+   * @remarks
+   * 键盘的「适配选择 / 适配容器」、右键菜单、场景尺寸提交后的适配与首次进入的激活场景适配
+   * 共用 `fitViewportTo`，因此几条路径的留白与缩放钳制不可能各自漂移。目标无效时不发出任何
+   * 视口变化。
+   */
+  const fitViewport = (target: StageRect | null) => {
+    const next = fitViewportTo(target, surfaceSize)
+    if (next) onViewportChange(next)
+  }
+
+  /*
+   * 首次布局就绪后把视口适配到激活场景。
+   *
+   * 固定初始视口在任何真实场景尺寸下都不合适：1280×720 的场景在 100% 缩放下就已经超出可视
+   * 区域，用户进来第一件事永远是手动缩放。适配一次之后就交还给受控视口——依赖列表里的
+   * document/layoutSnapshot 每次编辑都会变，真正拦住重复触发的是 ref 而不是依赖。
+   *
+   * 必须等 `surfaceMeasured`：在此之前 surfaceSize 还是那份兜底的 900×600，按它算出来的
+   * 缩放和真实可视区域没有关系，用户会看到画面先跳一次再定住。
+   */
+  useEffect(() => {
+    if (!autoFitActiveFrame || autoFitDoneRef.current || !surfaceMeasured) return
+    // 激活场景缺省或已失效时回退第一块根 Frame，与 resolveTargetFrameId 的回退一致。
+    const frameId = activeFrameId && document.entities[activeFrameId]
+      ? activeFrameId
+      : document.rootIds[0]
+    if (!frameId || !document.entities[frameId]) return
+    const next = fitViewportTo(
+      getEntityWorldBounds(document, layoutSnapshot, frameId),
+      surfaceSize,
+    )
+    // 求解宽高为 0 时不占用这次机会：下一次布局就绪还应该再试。
+    if (!next) return
+    autoFitDoneRef.current = true
+    onViewportChange(next)
+  }, [
+    activeFrameId,
+    autoFitActiveFrame,
+    document,
+    layoutSnapshot,
+    onViewportChange,
+    surfaceMeasured,
+    surfaceSize,
+  ])
+
+  /**
+   * 提交场景的新尺寸，并按新尺寸适配一次视口。
+   *
+   * @remarks
+   * 适配用的矩形是「当前世界原点 + 刚提交的尺寸」，而不是重新读布局快照：命令刚派发，本帧的
+   * `layoutSnapshot` 仍是旧尺寸，按它取景会先给用户一帧错误的缩放。改尺寸不会移动场景原点，
+   * 因此原点直接沿用当前快照是准确的。
+   */
+  const changeSceneSize = (entityId: string, size: ComposeSize) => {
+    const origin = getEntityWorldBounds(document, layoutSnapshot, entityId)
+    const result = dispatch({
+      id: idFactory(),
+      type: BUILTIN_COMMAND_TYPES.setFrameSize,
+      payload: { entityId, size: { width: size.width, height: size.height } },
+      meta: {
+        label: messages.setSceneSize,
+        source: 'stage',
+        targetIds: [entityId],
+      },
+    })
+    if (result.status === 'rejected') return
+    fitViewport({ x: origin.x, y: origin.y, width: size.width, height: size.height })
+  }
+
   // 宿主回灌给 Controller 的「本次绘制创建了谁」；Controller 按 entityId 去重。
   const [lastDrawn, setLastDrawn] = useState<StageDrawnEntity | null>(null)
   const contextMenu = useComposeContextMenu<string | null>()
@@ -595,7 +677,6 @@ function ComposeStageReady({
           document={previewDocument}
           hiddenEntityIds={hiddenEntityIds}
           layoutSnapshot={sceneLayoutSnapshot}
-          pageLoader={pageLoader}
           paintPreview={interaction.paintPreview}
           registry={registry}
           scriptModuleLoader={scriptModuleLoader}
@@ -618,10 +699,12 @@ function ComposeStageReady({
           sceneActiveLabel={messages.sceneActive}
           sceneInactiveLabel={messages.sceneInactive}
           scenePreviewLabel={messages.scenePreview}
+          sceneSizeLabel={messages.sceneSize}
           onLabelPointerDown={beginContainerLabel}
           onRename={onEntityRename}
           onSceneActivate={onSceneActivate}
           onScenePreview={onScenePreview}
+          onSceneSizeChange={changeSceneSize}
         />
         {assetDropStatus
           ? (

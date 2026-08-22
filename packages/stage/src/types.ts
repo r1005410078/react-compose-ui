@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeKeybinding } from '@compose-ui/commands'
-import type { ComposeLayoutMeasurementPort, ComposePageDocumentLoader } from '@compose-ui/core'
+import type { ComposeLayoutMeasurementPort } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import type {
@@ -179,14 +179,7 @@ export interface ComposeStageServices {
   readonly registry: ComposeEntityRegistry
   /** 资源型组件解析节点内稳定引用时使用的运行时端口。 */
   readonly assetResolver?: ComposeAssetResolver
-  /**
-   * 页面型物料使用的文档加载端口。
-   *
-   * @remarks
-   * Stage 不实现页面加载或嵌套渲染，只把端口交给物料；未注入时相关实体呈现占位状态。
-   */
-  readonly pageLoader?: ComposePageDocumentLoader
-  /** 透传给嵌套 Page Slot 的模块 Loader。 */
+  /** 透传给组件实例内嵌套文档的模块 Loader。 */
   readonly scriptModuleLoader?: ComposeScriptModuleLoader
   /** Controller 拥有的同会话 Runtime；Stage 用它挂接并卸载 Registry measurement adapter。 */
   readonly layoutRuntime?: ComposeStageLayoutRuntime
@@ -307,6 +300,20 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly onSurfaceSizeChange?: (
     size: { readonly width: number; readonly height: number },
   ) => void
+  /**
+   * 首次布局就绪时是否自动把视口适配到激活场景。
+   *
+   * @remarks
+   * Stage 在第一次量到真实 surface 尺寸后适配一次，使激活场景整体可见并居中；
+   * `activeFrameId` 缺省或失效时回退第一块根 Frame。适配结果通过
+   * {@link ComposeStageProps.onViewportChange} 发出，Stage 仍然不持有视口。
+   *
+   * 该适配每次挂载只发生一次：随后的编辑、选择变化与窗口缩放都不再自动改视口。
+   * 宿主自己恢复上次保存的视口时应传 `false`，否则会被这次适配覆盖。
+   *
+   * @defaultValue true
+   */
+  readonly autoFitActiveFrame?: boolean
   /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */
   readonly interactionController?: StageInteractionController
   /** 仅当单选 Entity 的背景 Paint Inspector 打开时传入，Stage 才显示渐变画布控制柄。 */

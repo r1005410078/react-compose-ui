@@ -149,19 +149,6 @@ export function ComposeSvgMaterialIcon() {
   )
 }
 
-/** Page Slot：嵌套文档，靛蓝。 */
-export function ComposePageSlotMaterialIcon() {
-  return (
-    <svg {...svgProps} data-testid="material-icon-page-slot">
-      <rect x="4" y="3.5" width="13" height="16" rx="1.5" fill="#312e81" />
-      <rect x="4" y="3.5" width="13" height="3" rx="1.2" fill="#6366f1" />
-      <path d="M6.5 9h8M6.5 11.5h8M6.5 14h5.5" stroke="#a5b4fc" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
-      <rect x="9" y="7" width="11" height="13.5" rx="1.5" fill="#1e1b4b" stroke="#818cf8" strokeWidth="0.8" />
-      <rect x="9" y="7" width="11" height="2.6" rx="1" fill="#4f46e5" />
-      <path d="M11.5 12.5h6M11.5 15h4.5" stroke="#c7d2fe" strokeWidth="1.1" strokeLinecap="round" opacity="0.65" />
-    </svg>
-  )
-}
 
 /** Line */
 export function ComposeLineMaterialIcon() {

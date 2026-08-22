@@ -31,10 +31,19 @@ export {
 } from './animations'
 export { createDefaultCanvasSettings } from './canvas-settings'
 export {
+  COMPOSE_GEOMETRY_PRECISION,
+  formatComposeNumber,
+  roundComposeGeometry,
+} from './geometry-precision'
+export {
   COMPOSE_DEFAULT_FRAME_SIZE,
   COMPOSE_DEFAULT_SCENE_APPEARANCE,
+  COMPOSE_SCENE_SIZE_PRESETS,
   createComposeFrame,
   createComposeFrameEntity,
+  findComposeSceneSizePreset,
+  formatComposeSceneSize,
+  formatComposeSceneSizePresetLabel,
   getComposeFrame,
   getComposeFrameGuides,
   isComposeFrameEntity,
@@ -43,6 +52,7 @@ export {
   promoteComposeEntityToFrame,
   resolveOwningFrameId,
 } from './frame'
+export type { ComposeSceneSizePreset } from './frame'
 export {
   COMPOSE_GROUP_PRESET_ID,
   createComposeGroupEntitySeed,
@@ -113,6 +123,22 @@ export {
   resolveComposeSwitcherPreview,
 } from './widget-switcher'
 export type { ComposeWidgetSwitcherPreview } from './widget-switcher'
+export {
+  collectComposeInteractionValidationIssues,
+  createComposeNavigateInteraction,
+  getComposeInteraction,
+  isValidComposeInteraction,
+  resolveComposeInteractionAction,
+} from './interaction'
+export type {
+  ComposeInteraction,
+  ComposeInteractionAction,
+  ComposeInteractionEvent,
+  ComposeInteractionTrigger,
+  ComposeInteractionValidationIssue,
+  ComposeNavigateAction,
+  ComposeNavigateBackAction,
+} from './interaction'
 export { applyDocumentPatches, jsonEqual } from './patches'
 export { createDocumentTransactionRuntime, createTransactionRuntime } from './runtime'
 export {
@@ -215,7 +241,6 @@ export {
   COMPOSE_PAGE_FILE_SUFFIX,
   COMPOSE_PAGE_MEDIA_TYPE,
   COMPOSE_PAGE_SCHEMA_VERSION,
-  COMPOSE_PAGE_NEST_DEPTH_LIMIT,
   composePageDisplayName,
   composePageFileName,
   createEmptyComposeAppManifest,
@@ -230,7 +255,6 @@ export {
   resolveComposePageActiveFrameId,
   parseComposePageDocument,
   readComposePageReference,
-  resolveComposePageNestState,
   serializeComposeAppManifest,
   serializeComposePageDocument,
   serializeComposePageFile,
@@ -241,18 +265,19 @@ export type {
   ComposeAppManifestIssue,
   ComposeAppManifestIssueCode,
   ComposeAppManifestParseResult,
+  ComposeNavigationIssue,
+  ComposeNavigationIssueCode,
+  ComposeNavigationPort,
+  ComposeNavigationSnapshot,
   ComposePageAnimationReference,
-  ComposePageDocumentLoader,
   ComposePageFile,
   ComposePageFileIssue,
   ComposePageFileIssueCode,
   ComposePageLoader,
   ComposePageMigrationResult,
-  ComposePageNestState,
   ComposePageParseResult,
   ComposePageReference,
   ComposePageSetupReference,
-  ResolveComposePageNestStateInput,
 } from './page'
 
 /** `@compose-ui/core` 的稳定包标识。 @public */

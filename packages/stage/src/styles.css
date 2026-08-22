@@ -874,8 +874,8 @@
 }
 
 /*
- * 场景标签是一行 flex：[播放按钮?] [名称] [激活标记]。
- * 容器自身不接收指针事件，三个控件各自开启——否则控件之间的空隙会吞掉画布上的按下。
+ * 场景标签是一行 flex：[播放按钮?] [名称] [激活标记] [尺寸胶囊]。
+ * 容器自身不接收指针事件，各控件各自开启——否则控件之间的空隙会吞掉画布上的按下。
  */
 .compose-stage__label-row {
   position: absolute;
@@ -923,6 +923,94 @@
 .compose-stage__scene-tag.is-active {
   color: #3687ff;
   cursor: default;
+}
+
+/*
+ * 尺寸胶囊：常驻显示 Frame.size，双击打开尺寸弹框。
+ * 必须 flex: none——名称已经负责让位，胶囊再收缩就会把数字截成读不出来的半个尺寸。
+ */
+.compose-stage__scene-size {
+  flex: none;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 2px;
+  background: rgb(107 118 132 / 18%);
+  /* 与名称同色：胶囊已经靠底色和字号降了权重，再压暗一档在浅色主题下就读不出来了。 */
+  color: #6b7684;
+  font: 500 10px/14px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+  pointer-events: auto;
+}
+
+.compose-stage__scene-size:hover:enabled {
+  background: rgb(54 135 255 / 22%);
+  color: #9fc4ff;
+}
+
+/* 只读态（宿主没有提供写入口）保留信息但去掉可点击的暗示。 */
+.compose-stage__scene-size:disabled {
+  background: rgb(107 118 132 / 12%);
+  color: #6b7684;
+}
+
+/* 尺寸弹框：预设按钮网格与自定义宽高两栏。 */
+.compose-scene-size-dialog__group {
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.compose-scene-size-dialog__legend {
+  padding: 0;
+  color: var(--compose-color-text-secondary, #8d97a5);
+  font-size: 12px;
+}
+
+.compose-scene-size-dialog__presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.compose-scene-size-dialog__preset {
+  padding: 6px 8px;
+  border: 1px solid var(--compose-color-border, #333a45);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: 500 12px/16px system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compose-scene-size-dialog__preset:hover {
+  border-color: #3687ff;
+}
+
+/*
+ * 选中态用 aria-pressed 而不是额外的 class：无障碍状态与视觉状态出自同一个事实，
+ * 两者不可能漂移。
+ */
+.compose-scene-size-dialog__preset[aria-pressed='true'] {
+  border-color: #3687ff;
+  background: rgb(54 135 255 / 16%);
+}
+
+.compose-scene-size-dialog__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.compose-scene-size-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
 }
 
 .compose-stage__container-label {

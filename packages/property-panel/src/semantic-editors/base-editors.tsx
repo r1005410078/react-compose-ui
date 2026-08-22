@@ -17,6 +17,29 @@ import type {
 import { createInitialValue, getObjectEntries, inspectSchema } from '../schema-model'
 import { NodeEditor } from './node-editor'
 
+/**
+ * 数值显示保留的小数位数。
+ *
+ * @remarks
+ * 与 `@compose-ui/core` 的 `COMPOSE_GEOMETRY_PRECISION` 是同一个约定，但这里必须自带一份：
+ * property-panel 按架构边界不得依赖 core。重复只有这一个常量和三行格式化，比为了去重
+ * 把整个面板绑上文档协议划算得多。
+ */
+const NUMBER_DISPLAY_PRECISION = 2
+
+/**
+ * 把受控数值格式化为最多两位小数的显示文本。
+ *
+ * @remarks
+ * 只影响呈现：受控值仍是宿主传入的原始数字，面板不改写它。整数不补零、小数去掉尾随零，
+ * 因此 `1280` 显示为 `1280` 而不是 `1280.00`。
+ */
+function formatPanelNumber(value: unknown): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return String(value ?? '')
+  const factor = 10 ** NUMBER_DISPLAY_PRECISION
+  return String(Math.round(value * factor) / factor)
+}
+
 /** 第一方内建语义 editor 的稳定 ID。 */
 export const PROPERTY_PANEL_BASE_EDITOR_IDS = [
   'vector2',
@@ -148,16 +171,20 @@ function SemanticNumberInput({
   const target = binding?.getTarget(targetId)
   const bound = Boolean(target?.binding)
   const effectiveValue = target?.effectiveValue ?? value
+  const displayText = formatPanelNumber(effectiveValue)
   const [draft, setDraft] = useState({
     source: effectiveValue,
-    text: String(effectiveValue ?? ''),
+    text: displayText,
     error: undefined as string | undefined,
   })
   const draftActive = Object.is(draft.source, effectiveValue)
-  const text = draftActive ? draft.text : String(effectiveValue ?? '')
+  const text = draftActive ? draft.text : displayText
   const error = draftActive ? draft.error : undefined
   const submit = () => {
     if (bound || text === '') return
+    // 显示值是四舍五入后的结果，与底层值不再字面相等；不加这道判断的话，仅仅点一下
+    // 输入框再失焦就会把 82.96874999999991 "改成" 82.97，凭空产生一次事务。
+    if (text === displayText) return
     const nextNumber = Number(text)
     if (!Number.isFinite(nextNumber)) {
       setDraft({ source: effectiveValue, text, error: '请输入有效数字' })
@@ -181,7 +208,7 @@ function SemanticNumberInput({
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') submit()
     if (event.key === 'Escape') {
-      setDraft({ source: effectiveValue, text: String(effectiveValue ?? ''), error: undefined })
+      setDraft({ source: effectiveValue, text: displayText, error: undefined })
     }
   }
   const constraints = fieldSchema ? inspectSchema(fieldSchema).constraints : {}

@@ -1,6 +1,6 @@
 import { BUILTIN_COMMAND_TYPES } from '@compose-ui/core'
 import { describe, expect, it, vi } from 'vitest'
-import type { ResizeHandle } from './geometry'
+import type { ResizeHandle, StageRect } from './geometry'
 import {
   createStageInteractionController,
   type StageInteractionController,
@@ -142,9 +142,11 @@ describe('StageInteractionController ECS systems', () => {
       point: { x: 52, y: 46 },
       modifiers,
     })
+    // 起止点各自吸附：起点 (12,16) 无智能候选，回退 8 网格得到 (16,16)；终点 (52,46)
+    // 落在兄弟节点右边线 x=50 与下边线 y=50 的阈值内，因此吸到 (50,50)。
     expect(controller.getSnapshot()).toMatchObject({
       phase: 'draw',
-      drawing: { tool: 'draw-rectangle', bounds: { x: 12, y: 16, width: 40, height: 30 } },
+      drawing: { tool: 'draw-rectangle', bounds: { x: 16, y: 16, width: 34, height: 34 } },
       marquee: null,
     })
 
@@ -157,7 +159,7 @@ describe('StageInteractionController ECS systems', () => {
     expect(effects).toContainEqual(expect.objectContaining({
       type: 'drawing.commit',
       tool: 'draw-rectangle',
-      bounds: { x: 12, y: 16, width: 40, height: 30 },
+      bounds: { x: 16, y: 16, width: 34, height: 34 },
     }))
   })
 
@@ -267,6 +269,81 @@ describe('StageInteractionController ECS systems', () => {
     expect(effects.some((effect) => effect.type === 'segment.commit')).toBe(false)
   })
 
+  it('OpenSpec: Headless 绘制会话 / 非 100% 缩放下绘制仍落在网格上', () => {
+    const { controller, effects } = setup()
+    controller.updateContext({
+      // 缩放不是 1 时 world = (屏幕 - 视口) / zoom 必然带小数，吸附是唯一能把它拉回
+      // 网格的一步——这正是此前绘制漏掉吸附却一直没被发现的原因。
+      document: document(),
+      layoutSnapshot: layoutSnapshot(document()),
+      viewport: { x: 0, y: 0, zoom: 0.4822530864 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'draw-rectangle' as never,
+      selectedIds: [],
+      idFactory: () => 'draw-zoomed-id',
+    })
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 40, y: 40 },
+      hit: { kind: 'surface' },
+      modifiers,
+    })
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 220, y: 160 },
+      modifiers,
+    })
+    controller.send({
+      type: 'pointer.up',
+      pointerId: 1,
+      point: { x: 220, y: 160 },
+      modifiers,
+    })
+    const commit = effects.find((effect) => effect.type === 'drawing.commit')
+    expect(commit).toBeDefined()
+    const bounds = (commit as { bounds: StageRect }).bounds
+    for (const value of [bounds.x, bounds.y, bounds.width, bounds.height]) {
+      expect(Number.isInteger(value)).toBe(true)
+      expect(value % 8).toBe(0)
+    }
+  })
+
+  it('OpenSpec: Headless 绘制会话 / Cmd 临时禁用绘制吸附', () => {
+    const { controller } = setup()
+    const unsnapped = { ...modifiers, command: true }
+    controller.updateContext({
+      document: document(),
+      layoutSnapshot: layoutSnapshot(document()),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'draw-rectangle' as never,
+      selectedIds: [],
+      idFactory: () => 'draw-raw-id',
+    })
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 12, y: 16 },
+      hit: { kind: 'surface' },
+      modifiers: unsnapped,
+    })
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 52, y: 46 },
+      modifiers: unsnapped,
+    })
+    // 按住 Cmd 时起止点都保持原始世界坐标。
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'draw',
+      drawing: { bounds: { x: 12, y: 16, width: 40, height: 30 } },
+    })
+  })
+
   it('OpenSpec: Headless 绘制会话 / Shift 锁定正方形且指针保持在绘制终点', () => {
     const { controller, effects } = setup()
     controller.updateContext({
@@ -295,12 +372,14 @@ describe('StageInteractionController ECS systems', () => {
       modifiers: shiftedModifiers,
     })
 
+    // 吸附排在 Shift 约束之前：起点吸到 (16,16)、终点吸到兄弟边线 (50,50)，
+    // 两轴增量因此已经相等，正方形边长 34 仍然由吸附后的落点决定。
     expect(controller.getSnapshot()).toMatchObject({
       phase: 'draw',
       drawing: {
         tool: 'draw-circle',
-        bounds: { x: 12, y: 6, width: 40, height: 40 },
-        end: { x: 52, y: 46 },
+        bounds: { x: 16, y: 16, width: 34, height: 34 },
+        end: { x: 50, y: 50 },
       },
     })
 
@@ -313,8 +392,8 @@ describe('StageInteractionController ECS systems', () => {
     expect(effects).toContainEqual(expect.objectContaining({
       type: 'drawing.commit',
       tool: 'draw-circle',
-      bounds: { x: 12, y: 6, width: 40, height: 40 },
-      end: { x: 52, y: 46 },
+      bounds: { x: 16, y: 16, width: 34, height: 34 },
+      end: { x: 50, y: 50 },
     }))
   })
 

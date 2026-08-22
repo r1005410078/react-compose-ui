@@ -115,7 +115,6 @@ function Status({ children, testId, alert = false }: {
 export function ComponentInstanceRenderer({
   assetResolver,
   mode,
-  pageDocumentPort,
   props,
   registry,
   scriptModuleLoader,
@@ -148,7 +147,6 @@ export function ComponentInstanceRenderer({
       assetResolver={assetResolver}
       document={document}
       mode={mode}
-      pageDocumentPort={pageDocumentPort}
       registry={registry}
       scriptModuleLoader={scriptModuleLoader}
     />
@@ -195,7 +193,6 @@ function ResolvedComponentContent({
   assetResolver,
   document,
   mode,
-  pageDocumentPort,
   registry,
   scriptModuleLoader,
 }: {
@@ -203,7 +200,6 @@ function ResolvedComponentContent({
   readonly assetResolver: ComposeRendererProps['assetResolver']
   readonly document: ComposeDocument
   readonly mode: 'editor' | 'preview'
-  readonly pageDocumentPort: ComposeRendererProps['pageDocumentPort']
   readonly registry: ComposeEntityRegistry
   readonly scriptModuleLoader: ComposeRendererProps['scriptModuleLoader']
 }) {
@@ -214,8 +210,7 @@ function ResolvedComponentContent({
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
     registry,
     assetResolver,
-    pageDocumentPort,
-  }), [assetResolver, pageDocumentPort, registry])
+    }), [assetResolver, registry])
   const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)
   const currentState = state.document === layoutDocument
     ? state
@@ -276,8 +271,7 @@ function ResolvedComponentContent({
             key={rootId}
             layoutSnapshot={currentState.snapshot}
             mode={mode}
-            pageDocumentPort={pageDocumentPort}
-            registry={registry}
+                  registry={registry}
             scriptModuleLoader={scriptModuleLoader}
           />
         ))}
@@ -292,7 +286,6 @@ function NestedEntity({
   entityId,
   layoutSnapshot,
   mode,
-  pageDocumentPort,
   registry,
   scriptModuleLoader,
 }: {
@@ -301,7 +294,6 @@ function NestedEntity({
   readonly entityId: string
   readonly layoutSnapshot: ComposeLayoutSnapshot
   readonly mode: 'editor' | 'preview'
-  readonly pageDocumentPort: ComposeRendererProps['pageDocumentPort']
   readonly registry: ComposeEntityRegistry
   readonly scriptModuleLoader: ComposeRendererProps['scriptModuleLoader']
 }) {
@@ -324,8 +316,7 @@ function NestedEntity({
         assetResolver={assetResolver}
         entity={entity}
         mode={mode}
-        pageDocumentPort={pageDocumentPort}
-        registry={registry}
+          registry={registry}
         scriptModuleLoader={scriptModuleLoader}
       />
       {(hierarchy ? resolveComposeRenderedChildIds(document, entity.id) : []).map((childId) => (
@@ -336,8 +327,7 @@ function NestedEntity({
           key={childId}
           layoutSnapshot={layoutSnapshot}
           mode={mode}
-          pageDocumentPort={pageDocumentPort}
-          registry={registry}
+              registry={registry}
           scriptModuleLoader={scriptModuleLoader}
         />
       ))}

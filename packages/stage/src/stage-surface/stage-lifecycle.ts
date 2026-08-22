@@ -40,13 +40,12 @@ export function useComposeStageMeasurement({
 }: ComposeStageProps) {
   // 按字段消费端口而不是整个 services 对象：adapter 只应在它实际使用的那几个端口变化时
   // 重建。以对象引用作依赖会让宿主每次重新构造 services 都重建 adapter 并丢弃测量缓存。
-  const { assetResolver, layoutRuntime, pageLoader, registry } = services
+  const { assetResolver, layoutRuntime, registry } = services
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
     registry,
     assetResolver,
-    pageDocumentPort: pageLoader,
     scriptScope,
-  }), [assetResolver, pageLoader, registry, scriptScope])
+  }), [assetResolver, registry, scriptScope])
   const disposalGenerations = useRef(new WeakMap<ComposeRendererMeasurementAdapter, number>())
 
   useLayoutEffect(() => adapter.updateDocument(document), [adapter, document])

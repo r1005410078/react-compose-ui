@@ -1,3 +1,4 @@
+import type { ComposeNavigationPort, ComposePageReference } from '@compose-ui/core'
 import { ComposeReactiveOwner, isComposeComputed, isComposeState } from './reactivity'
 import type {
   ComposeComputed,
@@ -32,6 +33,15 @@ export interface CreateComposePageScriptScopeOptions {
   readonly maxEffectRunsPerFlush?: number
   /** 加载层传入的初始诊断。 */
   readonly initialDiagnostics?: readonly ComposeScriptDiagnostic[]
+  /**
+   * 宿主注入的导航端口。
+   *
+   * @remarks
+   * 必须与声明式 `Interaction` 使用**同一个实例**，否则脚本跳转与画布配的跳转会各自
+   * 维护一份当前页面与返回栈。缺省时 `ctx.navigate` 仍然存在，但调用只产生 diagnostic——
+   * 让它不存在会把"宿主没接导航"变成 TypeError，脚本其余部分跟着一起挂掉。
+   */
+  readonly navigation?: ComposeNavigationPort
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -92,13 +102,48 @@ export function createComposePageScriptScope(
     options.maxEffectRunsPerFlush ?? 100,
   )
 
+  const navigation = options.navigation
+  const resolveTarget = (target: string | ComposePageReference): ComposePageReference | null => {
+    if (typeof target !== 'string') return target
+    return navigation ? navigation.referenceFor(target) : null
+  }
+  const guardNavigation = (): boolean => {
+    if (!navigation) {
+      reportDiagnostic({
+        code: 'script.navigation-unavailable',
+        message: '宿主未注入导航端口，跳转被忽略',
+      })
+      return false
+    }
+    if (initializing) {
+      reportDiagnostic({
+        code: 'script.navigation-during-setup',
+        message: 'setup 同步执行期间不能跳转，调用被忽略',
+      })
+      return false
+    }
+    return true
+  }
+  const navigationContext = {
+    async navigate(target: string | ComposePageReference) {
+      if (!guardNavigation()) return
+      const reference = resolveTarget(target)
+      if (reference === null) return
+      await navigation!.navigate(reference)
+    },
+    async navigateBack() {
+      if (!guardNavigation()) return
+      await navigation!.back()
+    },
+  }
+
   let returned: unknown
   if (typeof setup !== 'function') {
     reportDiagnostic({ code: 'script.missing-setup', message: '页面模块必须导出 setup 函数' })
   }
   else {
     try {
-      returned = setup(owner.context())
+      returned = setup({ ...owner.context(), ...navigationContext })
     }
     catch (cause) {
       reportDiagnostic({

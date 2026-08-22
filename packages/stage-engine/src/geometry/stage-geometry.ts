@@ -3,6 +3,7 @@ import {
   getComposeTransform,
   getComposeVisibility,
   isComposeGroupEntity,
+  roundComposeGeometry,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
   type ComposeSpatialTransform,
@@ -367,12 +368,28 @@ export function toStageTransform(transform: ComposeSpatialTransform): StageTrans
   }
 }
 
-/** 将 Stage 几何值转回持久化 ECS Transform。 @public */
+/**
+ * 将 Stage 几何值转回持久化 ECS Transform。
+ *
+ * @remarks
+ * 这是 Stage 几何写回文档的唯一转换入口（move、resize、旋转、组件提取都经过），因此量化
+ * 放在这里：世界坐标由 `(屏幕 - 视口) / zoom` 得到，非整数 zoom 会留下 `82.96874999999991`
+ * 这类 14 位尾数。量化只掐残渣、给无法避免的小数（父级缩放传导到子级、旋转后的 AABB）
+ * 一个确定的位数，MUST NOT 用来替代吸附——真正该落在网格上的值由各手势自己吸附。
+ *
+ * @public
+ */
 export function toComposeTransform(transform: StageTransform): ComposeSpatialTransform {
   return {
-    position: { x: transform.x, y: transform.y },
-    size: { width: transform.width, height: transform.height },
-    rotation: transform.rotation,
+    position: {
+      x: roundComposeGeometry(transform.x),
+      y: roundComposeGeometry(transform.y),
+    },
+    size: {
+      width: roundComposeGeometry(transform.width),
+      height: roundComposeGeometry(transform.height),
+    },
+    rotation: roundComposeGeometry(transform.rotation),
   }
 }
 

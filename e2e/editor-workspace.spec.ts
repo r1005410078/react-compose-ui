@@ -62,7 +62,7 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
 
 
 test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择常见 PC 尺寸', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -307,7 +307,7 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
 
 
 test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使用完整示例完成 Stage 纵向流程', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?no-auto-fit')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })

@@ -42,7 +42,6 @@ import {
   type CommandDispatchResult,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposePageDocumentLoader,
   type EditorCommand,
   type EditorTransaction,
   type TransactionRuntime,
@@ -836,6 +835,16 @@ export interface UseComposeEditorControllerOptions {
   readonly initialExpandedIds?: readonly string[]
   /** 初始无限 Stage 视口。 @defaultValue `{ x: 80, y: 64, zoom: 1 }` */
   readonly initialViewport?: StageViewport
+  /**
+   * 首次布局就绪时是否把视口自动适配到激活场景。
+   *
+   * @remarks
+   * 关闭时 `initialViewport` 就是用户进入后看到的取景。宿主自己恢复上次保存的视口，
+   * 或需要确定性取景（视觉回归、端到端）时传 `false`。
+   *
+   * @defaultValue true
+   */
+  readonly autoFitActiveFrame?: boolean
   /** 初始 Stage 工具。 @defaultValue `"select"` */
   readonly initialTool?: ComposeStageTool
   /** ComposeCommandPanel 显示的结构化命令预设。 */
@@ -864,14 +873,6 @@ export interface UseComposeEditorControllerOptions {
    * node 字段呈现无候选状态但仍可清空。
    */
   readonly nodeEditPort?: ComposeNodeEditPort
-  /**
-   * 页面型物料使用的文档加载端口。
-   *
-   * @remarks
-   * 由宿主从页面 Store 派生（`createComposePageDocumentLoader`）；未提供时画布上的页面槽位
-   * 呈现占位状态。
-   */
-  readonly pageLoader?: ComposePageDocumentLoader
   /** 当前页面实例的 setup 返回作用域；用于 Stage value 绑定与 Inspector 候选。 */
   readonly scriptScope?: ComposePageScriptScope
 }
@@ -1067,13 +1068,13 @@ export function useComposeEditorController({
   initialSelection = [],
   initialExpandedIds = [],
   initialViewport = { x: 80, y: 64, zoom: 1 },
+  autoFitActiveFrame = true,
   initialTool = 'select',
   commandPresets,
   containerPresetId = 'container',
   onTransaction,
   idFactory = defaultIdFactory,
   nodeEditPort,
-  pageLoader,
   scriptScope,
 }: UseComposeEditorControllerOptions): ComposeEditorController {
   // Layout 订阅先于文档订阅建立，保证同一次事务的 document/Snapshot 成对发布。
@@ -1489,7 +1490,6 @@ export function useComposeEditorController({
   const stageServices = useMemo<ComposeStageServices>(() => ({
     dispatch,
     registry,
-    pageLoader,
     layoutRuntime: layoutSession.runtime,
     clipboard: sceneTreeCommands.clipboard
       ? {
@@ -1497,7 +1497,7 @@ export function useComposeEditorController({
           entityIds: sceneTreeCommands.clipboard.nodeIds,
         }
       : null,
-  }), [dispatch, registry, pageLoader, layoutSession.runtime, sceneTreeCommands.clipboard])
+  }), [dispatch, registry, layoutSession.runtime, sceneTreeCommands.clipboard])
 
   const stagePolicy = useMemo<ComposeStagePolicy>(
     () => ({ gridVisible, marqueeMode }),
@@ -1528,6 +1528,7 @@ export function useComposeEditorController({
     onCreateComponentIntent: componentStore ? requestCreateComponent : undefined,
     // 宿主有页面会话时会用页面的激活场景覆盖它；没有页面系统时回退第一个根 Frame。
     activeFrameId: document.rootIds[0] ?? null,
+    autoFitActiveFrame,
     onSurfaceSizeChange: setSurfaceSize,
     interactionController,
     paintEditing: activePaintEditing,
@@ -1543,6 +1544,7 @@ export function useComposeEditorController({
     stagePolicy,
     viewportStore,
     setViewport,
+    autoFitActiveFrame,
     tool,
     setTool,
     selectedIds,
