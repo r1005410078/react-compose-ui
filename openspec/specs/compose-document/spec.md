@@ -189,29 +189,6 @@ ComposeDocument MUST 允许 `backgroundPaint` 使用带稳定资源引用的 `im
 - **THEN** 序列化结果包含新的 `homePageKey`
 - **AND** 原有未知顶层字段被原样保留
 
-### Requirement: 页面引用值与嵌套护栏
-
-`core` MUST 定义页面引用值，其为可嵌入 `JsonObject` 的扁平字符串映射，包含 `kind` 为 `'page'`、
-`providerId`、`assetKey` 与 `scope`。`core` MUST 提供从任意值读取页面引用的判别函数，以及基于
-祖先页面链与深度上限判定嵌套状态的纯函数，结果 MUST 区分正常、循环引用与超出深度上限。
-
-#### Scenario: 读取页面引用
-
-- **WHEN** 传入含 `kind` 为 `'page'` 且字段完整的值
-- **THEN** 返回该页面引用
-- **AND** 传入 null、非对象或字段缺失的值时返回空结果
-
-#### Scenario: 检出循环引用
-
-- **WHEN** 待渲染页面的 key 已存在于祖先页面链中
-- **THEN** 嵌套状态判定为循环引用
-
-#### Scenario: 检出超出深度上限
-
-- **WHEN** 当前嵌套深度已达到深度上限
-- **THEN** 嵌套状态判定为超出深度上限
-- **AND** 深度小于上限且无循环时判定为正常
-
 ### Requirement: 可选 Flex Layout Component
 
 Layout MUST 只与 Hierarchy 组合，并保存明确的 Flex direction、wrap、alignContent、
@@ -537,4 +514,146 @@ Preset 默认外观相同——场景就是放在顶层的容器，两者 MUST N
 
 - **WHEN** Registry 构造用于 Preset 校验的探针 Frame
 - **THEN** 该探针 Frame 的外观是显式传入的透明外观，而不是场景默认外观
+
+### Requirement: 场景常见尺寸预设
+
+`@compose-ui/core` MUST 导出一组只读的场景常见尺寸预设，作为编辑器各入口共用的唯一事实
+来源。每个预设 MUST 具备稳定 id、正有限 `size`，以及可选的公认通名（如 `Full HD`）。
+core MUST 同时导出按尺寸反查预设的纯函数，尺寸不匹配任何预设时返回 `null`。
+
+预设列表 MUST 与既有 Frame Inspector 呈现的六个桌面分辨率一致：1280×720、1366×768、
+1440×900、1920×1080、2560×1440、3840×2160。消费方 MUST NOT 各自复制该列表。
+
+预设 MUST NOT 参与文档校验或迁移：它只是新建与改尺寸时的快捷入口，任何正有限尺寸都是
+合法的 `Frame.size`。
+
+#### Scenario: 反查匹配的预设
+
+- **WHEN** 以 `{ width: 1920, height: 1080 }` 反查预设
+- **THEN** 返回该预设，其通名为 `Full HD`
+
+#### Scenario: 自定义尺寸没有匹配预设
+
+- **WHEN** 以 `{ width: 1000, height: 800 }` 反查预设
+- **THEN** 返回 `null`
+
+#### Scenario: 预设不改变文档校验
+
+- **WHEN** 一个 Frame 的 `size` 是 `{ width: 1000, height: 800 }`
+- **THEN** 文档校验通过，尺寸不匹配预设不产生任何 issue
+
+### Requirement: 几何数值精度约定
+
+`@compose-ui/core` MUST 导出统一的几何数值精度约定：精度常量、把数值量化到该精度的纯函数，
+以及把数值格式化为最多该位数小数的纯函数。所有可以依赖 core 的包 MUST 共用这一份事实来源，
+MUST NOT 各自写一份四舍五入。
+
+格式化 MUST 满足：整数不补零（`1280` → `"1280"`），小数最多保留约定位数且去掉尾随零
+（`82.96874999999991` → `"82.97"`，`0.50` → `"0.5"`）。
+
+架构上不允许依赖 core 的包（如 `property-panel`）MUST 在包内保留一份等价实现，并在实现处
+说明该重复来自包边界而不是疏忽。
+
+#### Scenario: 量化掉浮点残渣
+
+- **WHEN** 对 `82.96874999999991` 调用量化函数
+- **THEN** 返回 `82.97`
+
+#### Scenario: 格式化不补零也不留尾随零
+
+- **WHEN** 分别格式化 `1280`、`82.96874999999991` 与 `0.5`
+- **THEN** 依次得到 `"1280"`、`"82.97"` 与 `"0.5"`
+
+#### Scenario: 场景尺寸沿用同一精度
+
+- **WHEN** 一块场景的 `Frame.size` 因历史数据带有小数
+- **THEN** 场景尺寸文案按同一精度呈现，MUST NOT 出现长尾小数
+
+### Requirement: 可选 Interaction Component
+
+`core` MUST 定义可选的 `Interaction` Entity Component,用于声明该 Entity 在运行期的
+trigger 与 action。它 MUST 可以与任意 Entity 组合,MUST NOT 要求 `Renderer`、`Hierarchy`
+或任何其他 Component 同时存在。
+
+`Interaction` 的形状 MUST 为 `{ version: 1, triggers: Trigger[] }`。每个 Trigger MUST 含
+`event` 与 `action`。v1 MUST 只接受 `event` 为 `'click'`;`action` MUST 是可判别联合,v1
+MUST 只接受 `{ type: 'navigate', target: PageReference | null, params?: JsonObject }` 与
+`{ type: 'navigate-back' }`。`navigate` 的 `target` MUST 复用既有页面引用值,并 MUST 允许
+为 `null` 表示"尚未选择目标"——属性面板新增一条交互时先产生一行,用户才能在这行里挑页面,
+不允许 null 会让新建交互与选目标互为前提。**不完整**的引用(缺字段)MUST 仍然被拒绝:
+那是配错了,与"还没配"是两回事。运行期 null 目标 MUST 是 no-op。
+未知的 `event` 或 `action.type` MUST 在校验时被拒绝而不是静默丢弃。
+
+`triggers` MUST 是数组且同一 `event` MUST NOT 出现多次。空数组 MUST 合法,语义等价于
+没有 `Interaction`。`Interaction` MUST NOT 影响布局求解、几何或任何编辑期语义。
+不含 `Interaction` 的既有文档 MUST 继续合法且行为不变。
+
+#### Scenario: 任意 Entity 携带 Interaction
+
+- **WHEN** 一个只有 Transform 与 Appearance 的 Entity 加上含 click→navigate 的 `Interaction`
+- **THEN** 文档通过校验
+- **AND** 该 Entity 的布局与几何求解结果与加上之前完全一致
+
+#### Scenario: 拒绝未知 trigger 与 action
+
+- **WHEN** 文档中的 `Interaction` 含 `event` 为 `'hover'` 或 `action.type` 为 `'open-url'`
+- **THEN** 校验以可判别 issue 拒绝该文档
+- **AND** 已有的合法 trigger 不被静默保留为部分结果
+
+#### Scenario: 同一事件不重复声明
+
+- **WHEN** `triggers` 中出现两个 `event` 均为 `'click'` 的条目
+- **THEN** 校验拒绝该文档
+
+#### Scenario: 目标尚未选择
+
+- **WHEN** `Interaction` 含 `{ type: 'navigate', target: null }`
+- **THEN** 文档通过校验
+- **AND** 运行期点击该 Entity 不发生跳转
+
+#### Scenario: 空 triggers 合法
+
+- **WHEN** Entity 的 `Interaction.triggers` 为空数组
+- **THEN** 文档通过校验且该 Entity 在运行期不接收任何交互
+
+### Requirement: 导航端口协议
+
+`core` MUST 定义导航端口协议 `ComposeNavigationPort`,作为文档运行时与页面导航实现之间
+唯一的类型契约。它 MUST 只使用 `core` 已有的页面引用值与纯数据,MUST NOT 引用 React、
+DOM 或 `@compose-ui/pages` 中的任何实现类型。
+
+该端口 MUST 至少表达:当前页面 key、是否可返回、按页面引用跳转、返回上一页。跳转与返回
+MUST 允许实现为异步。`core` MUST NOT 自带任何导航实现——与 `ComposePageDocumentLoader`
+一致,类型在 `core`、实现在 `@compose-ui/pages`、消费在渲染入口。
+
+#### Scenario: 在无 DOM 环境实现端口
+
+- **WHEN** 在没有 React 与 DOM 的运行时中实现 `ComposeNavigationPort`
+- **THEN** 实现只需要页面引用值与纯数据即可满足类型
+- **AND** 不需要引入任何渲染包
+
+#### Scenario: core 不提供导航实现
+
+- **WHEN** 宿主只依赖 `@compose-ui/core`
+- **THEN** 可以获得端口类型但得不到任何可直接使用的导航会话
+
+### Requirement: 页面引用值
+
+`core` MUST 定义页面引用值，其为可嵌入 `JsonObject` 的扁平字符串映射，包含 `kind` 为 `'page'`、
+`providerId`、`assetKey` 与 `scope`。`core` MUST 提供从任意值读取页面引用的判别函数。
+
+`core` MUST NOT 再提供基于祖先页面链与深度上限的嵌套状态判定——页面嵌套已被删除，组件
+实例拥有自己的循环检测与深度上限，不复用这套函数。
+
+#### Scenario: 读取页面引用
+
+- **WHEN** 传入含 `kind` 为 `'page'` 且字段完整的值
+- **THEN** 返回该页面引用
+- **AND** 传入 null、非对象或字段缺失的值时返回空结果
+
+#### Scenario: 跳转目标复用同一引用
+
+- **WHEN** `Interaction` 的 navigate 目标写入页面引用
+- **THEN** 该值与资源面板拖入产生的引用形状完全一致
+- **AND** 页面重命名或移动后引用仍然有效
 

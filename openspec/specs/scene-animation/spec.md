@@ -191,7 +191,7 @@ MUST NOT 依赖任何文档级 `animations` 字段。一条动画 MUST 只属于
 
 ### Requirement: 嵌套 Frame 只暴露播放控制
 
-宿主 Frame MUST NOT 对嵌套 Frame（组件实例、Page Slot）内部的 Entity 建立轨道或写入关键帧。
+宿主 Frame MUST NOT 对嵌套 Frame（组件实例）内部的 Entity 建立轨道或写入关键帧。
 宿主对嵌套 Frame 的唯一动画能力 MUST 是播放控制：play、pause、seek 与播放模式。命令 handler
 MUST 在写入前拒绝任何指向嵌套 Frame 内部的轨道命令，并返回稳定 issue。
 

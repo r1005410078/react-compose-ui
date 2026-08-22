@@ -57,9 +57,9 @@ Renderer Presets MUST 组合 Transform、Visibility、Lock、Appearance、Render
 第一方结构化 Shape Renderer props，不得依赖外部 SVG asset 或 Stage 专属数据。
 
 已经拥有专用创建入口的 Preset MUST 默认隐藏于 Palette，避免同一个创建动作出现两个入口：
-Text、Line、Arrow 与 Circle 由 Stage 工具栏绘制工具提供入口，Page Slot 由资源面板的页面拖入
-提供入口。默认隐藏 MUST 只影响 Palette 呈现，MUST NOT 影响 Registry 注册、拖入、键盘新增、
-资源拖放或文档反序列化；宿主 MUST 能够通过物料 options 覆盖该默认。
+Text、Line、Arrow 与 Circle 由 Stage 工具栏绘制工具提供入口。默认隐藏 MUST 只影响 Palette
+呈现，MUST NOT 影响 Registry 注册、拖入、键盘新增、资源拖放或文档反序列化；宿主 MUST
+能够通过物料 options 覆盖该默认。
 
 #### Scenario: 创建五种 ECS 物料
 
@@ -70,7 +70,7 @@ Text、Line、Arrow 与 Circle 由 Stage 工具栏绘制工具提供入口，Pag
 #### Scenario: 默认 Palette 不重复工具栏入口
 
 - **WHEN** 宿主使用默认基础物料渲染组件库 Palette
-- **THEN** Text、Line、Arrow、Circle 与 Page Slot 不出现在 Palette 中
+- **THEN** Text、Line、Arrow 与 Circle 不出现在 Palette 中
 - **AND** 这些 Preset 仍可由工具栏、资源拖入与 Registry API 正常创建
 
 #### Scenario: 形状跨入口一致渲染
@@ -179,92 +179,6 @@ MUST 校验页面引用的完整形状，并 MUST 通过 metadata 指定 `node` 
 - **THEN** 该字段使用 node 基础 editor
 - **AND** 空值与完整页面引用都通过校验，字段缺失或类型错误的引用不通过校验
 
-### Requirement: Page Slot 基础物料
-
-基础物料包 MUST 提供 Page Slot 物料，其含唯一的节点引用属性用于指向一个页面。Page Slot
-MUST 通过渲染上下文的页面文档加载端口加载被引用页面，并 MUST 递归渲染该页面的根实体。
-Page Slot MUST 在编辑模式下使嵌套内容整体不参与命中测试。未设置引用或未注入加载端口时
-MUST 呈现可访问的占位状态。
-
-#### Scenario: 渲染被引用页面
-
-- **WHEN** Page Slot 的引用指向一个含内容的页面且加载端口已注入
-- **THEN** 该页面的每个根实体都在 Page Slot 内渲染，并各自按其几何绝对定位
-- **AND** 容器实体递归渲染其 `Hierarchy` 子节点
-- **AND** 不可见实体及其子树不渲染
-- **AND** 预览与编辑画布中呈现的实体逐个一致
-
-#### Scenario: 编辑态不抢命中测试
-
-- **WHEN** Page Slot 在编辑模式下渲染嵌套内容，用户在其区域内按下指针
-- **THEN** 命中的是 Page Slot 实体本身
-- **AND** 嵌套内容不接收指针事件
-
-#### Scenario: 未设置引用
-
-- **WHEN** Page Slot 的引用为空，或未注入加载端口
-- **THEN** 呈现可访问的占位状态
-- **AND** 不发起任何加载
-
-### Requirement: Page Slot 加载状态与嵌套护栏
-
-Page Slot MUST 覆盖加载中、加载失败、目标页面为空与加载成功四种状态，加载失败 MUST 提供重试入口
-并以警示语义呈现。Page Slot MUST 依据祖先页面链与深度上限阻断循环引用与超出深度的嵌套，被阻断时
-MUST 以警示语义呈现且 MUST NOT 发起加载。引用变化或组件卸载后的迟到结果 MUST 被丢弃。
-
-#### Scenario: 加载中与加载成功
-
-- **WHEN** Page Slot 开始加载被引用页面
-- **THEN** 先呈现具备忙碌语义的加载状态
-- **AND** 加载完成后替换为页面内容
-
-#### Scenario: 加载失败可重试
-
-- **WHEN** 页面文档加载失败
-- **THEN** 以警示语义呈现失败状态并提供重试入口
-- **AND** 重试重新发起加载
-
-#### Scenario: 目标页面为空
-
-- **WHEN** 被引用页面不含任何根实体
-- **THEN** 呈现可访问的空状态
-
-#### Scenario: 阻断循环引用
-
-- **WHEN** Page Slot 直接或间接引用了祖先链中已存在的页面
-- **THEN** 以警示语义呈现循环引用状态
-- **AND** 不发起加载且不进入无限递归
-
-#### Scenario: 阻断超出深度
-
-- **WHEN** 嵌套深度达到深度上限
-- **THEN** 以警示语义呈现超出深度状态
-- **AND** 不再向下加载
-
-#### Scenario: 丢弃迟到结果
-
-- **WHEN** 组件在加载完成前卸载，或引用在加载期间变化
-- **THEN** 迟到结果被丢弃
-- **AND** 不产生卸载后的状态更新
-
-### Requirement: 页面拖入画布创建 Page Slot
-
-基础物料包 MUST 允许把页面文件从资源面板拖入画布以创建 Page Slot 实体。创建的实体 MUST 携带指向
-该页面的引用；能够读取被引用页面的输出尺寸时 MUST 以该尺寸作为初始尺寸，否则 MUST 使用默认尺寸。
-非页面文件 MUST NOT 被 Page Slot 接受。
-
-#### Scenario: 拖入页面创建实体
-
-- **WHEN** 用户把一个页面文件拖入画布空白处并放置
-- **THEN** 创建一个引用该页面的 Page Slot 实体
-- **AND** 其初始尺寸取被引用页面的输出尺寸
-
-#### Scenario: 拒绝非页面文件
-
-- **WHEN** 拖入的文件不是页面文件
-- **THEN** Page Slot 不接受该拖入
-- **AND** 既有的图片等物料拖入行为不受影响
-
 ### Requirement: Container 物料与容器能力
 
 Container Preset 与容器能力 MUST 为 v6 创建 Hierarchy、Layout、Clip、LayoutItem、rotation-only
@@ -340,16 +254,6 @@ Figma 的 Auto Height 文字拖动高度手柄自动转 Fixed Size 一致。
 - **WHEN** 用户在原地编辑中粘贴带样式的富文本内容
 - **THEN** 只有纯文本进入 `text` prop
 - **AND** 文档中不出现 HTML 标记
-
-### Requirement: Image、SVG 与 Page Slot 物料
-
-Image、SVG 与 Page Slot MUST 分别使用 resolved asset natural size、SVG intrinsic box 与目标页面 output
-size 作为 Hug measurement，并在各自 subscription revision 变化时失效。
-
-#### Scenario: 异步资源驱动 Hug
-- **WHEN** Hug Image、SVG 或 Page Slot 的资源从 loading 变为 ready 或发布新 revision
-- **THEN** 首帧使用 LayoutItem fallback，ready 后使用新的 intrinsic size 重排
-- **AND** 失败状态保持 fallback 与可访问占位，不修改文档
 
 ### Requirement: 紧凑 Auto Layout Inspector
 
@@ -774,4 +678,74 @@ undo 恢复。
 - **WHEN** 选中 Entity 的父级不是 Layout 容器
 - **THEN** 几何 Inspector 不渲染「忽略 Auto Layout」开关
 - **AND** 其余几何字段呈现不受影响
+
+### Requirement: Inspector 数值显示精度
+
+物料 Inspector 自有的数值输入（位置、尺寸、边距等）MUST 与 Property Panel 采用同一显示精度：
+最多 2 位小数，整数不补零，小数去掉尾随零。Fill/Hug 轴显示模式名而不是数值的行为不变。
+
+显示精度 MUST NOT 改写底层值，也 MUST NOT 因格式化而在用户未编辑时提交。
+
+#### Scenario: 位置与尺寸按 2 位显示
+
+- **WHEN** 一个 Entity 的 LayoutItem 偏移为 `82.96874999999991`、宽度为 `373.3592610597958`
+- **THEN** Inspector 的位置 X 显示 `82.97`，尺寸宽度显示 `373.36`
+
+#### Scenario: Fill 轴仍显示模式名
+
+- **WHEN** 宽度轴为 Fill
+- **THEN** 尺寸宽度显示 `Fill` 而不是数值
+
+### Requirement: Interaction Component 定义与 Inspector
+
+基础物料包 MUST 为 `Interaction` 注册带 Inspector 的 Component 定义,使用户可以在属性面板中
+为**任意** Entity 添加、编辑与移除交互,而不需要该 Entity 是特定物料。Inspector MUST 以
+trigger 列表呈现,每行选择事件与动作;动作为 `navigate` 时 MUST 提供页面目标选择,并 MUST
+复用既有的 node 属性页面拖入赋值,MUST NOT 另建一套页面选择器。
+
+Inspector MUST 对目标为空、目标页面不存在这两种状态给出明确呈现,并 MUST 允许移除单个
+trigger 而不移除整个 `Interaction`。trigger 列表的长度上限 MUST 等于当前支持的事件数量——
+文档拒绝重复事件,列表若能加出第二条同事件 trigger,用户只会看到"点了没反应"。
+所有编辑 MUST 通过文档命令派发,单次用户操作 MUST 只产生一条可撤销事务;Schema 之外的
+字段(如 `action.params`)MUST 在写回时原样保留。
+
+#### Scenario: 给矩形添加跳转
+
+- **WHEN** 用户选中一个 Rectangle 并在属性面板添加 click→navigate 交互
+- **THEN** 该 Entity 获得 `Interaction`,`triggers` 含一条 click 条目
+- **AND** 撤销一步即回到没有 `Interaction` 的状态
+
+#### Scenario: 拖入页面设置目标
+
+- **WHEN** 用户把资源面板中的页面文件拖到交互行的目标字段
+- **THEN** 目标写入该页面的稳定引用
+- **AND** 拖入非页面文件时不被接受
+
+#### Scenario: 目标页面缺失
+
+- **WHEN** 已配置的目标页面在当前目录中不存在
+- **THEN** Inspector 以明确的错误状态呈现该行
+- **AND** 文档中的引用不被自动清空
+
+#### Scenario: 移除 trigger 保留 Component
+
+- **WHEN** 用户移除 Entity 上唯一一条 trigger
+- **THEN** 只派发一条命令,`Interaction` 仍然附着且 `triggers` 为空数组
+- **AND** 移除整个 `Interaction` 是另一个显式操作
+
+#### Scenario: 不产生重复事件的 trigger
+
+- **WHEN** Entity 已有一条 click trigger,用户再次点击列表的添加入口
+- **THEN** 不派发任何命令
+- **AND** 文档中的 trigger 数量不变
+
+### Requirement: Image 与 SVG 物料
+
+Image 与 SVG MUST 分别使用 resolved asset natural size 与 SVG intrinsic box 作为 Hug
+measurement，并在各自 subscription revision 变化时失效。
+
+#### Scenario: 异步资源驱动 Hug
+- **WHEN** Hug Image 或 SVG 的资源从 loading 变为 ready 或发布新 revision
+- **THEN** 首帧使用 LayoutItem fallback，ready 后使用新的 intrinsic size 重排
+- **AND** 失败状态保持 fallback 与可访问占位，不修改文档
 

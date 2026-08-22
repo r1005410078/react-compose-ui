@@ -47,21 +47,24 @@ Stage 与 Preview MUST 通过 ComposeAssetResolver 解析 Image Paint 的稳定�
 
 ### Requirement: Preview 页面文档加载注入
 
-Preview MUST 接受可选的页面文档加载端口并将其注入 Registry 渲染上下文，使引用了页面的实体在预览
-中递归渲染被引用页面的内容。Preview MUST NOT 自行实现页面加载或嵌套渲染逻辑，也 MUST NOT 因此
-依赖 `editor`、`stage` 或页面 Store 实现包。未注入端口时预览 MUST 正常渲染且相关实体呈现占位状态。
+Preview MUST 接受可选的页面加载端口，供页面导航按页面引用加载目标页面。Preview MUST NOT
+自行实现页面加载逻辑，也 MUST NOT 因此依赖 `editor`、`stage` 或页面 Store 实现包——端口
+类型来自 `core`，实现来自 `@compose-ui/pages`。未注入端口时 Preview MUST 正常渲染当前文档。
 
-#### Scenario: 预览中递归渲染页面
+Preview MUST NOT 再把该端口注入 Registry 渲染上下文，也 MUST NOT 递归渲染任何"引用了页面
+的实体"——页面嵌套已被删除，端口现在只服务导航。
 
-- **WHEN** 宿主向 Preview 注入页面文档加载端口，文档中存在引用页面的实体
-- **THEN** 预览递归渲染被引用页面的内容
-- **AND** 循环引用与超出深度的嵌套被阻断并以警示语义呈现
+#### Scenario: 注入端口供导航加载
+
+- **WHEN** 宿主向 Preview 注入页面文档加载端口并发生跳转
+- **THEN** 目标页面通过该端口加载
+- **AND** Preview 不为文档中的任何实体递归加载其他页面
 
 #### Scenario: 未注入端口
 
 - **WHEN** 宿主未注入页面文档加载端口
-- **THEN** 预览正常渲染其余内容
-- **AND** 引用页面的实体呈现可访问的占位状态
+- **THEN** Preview 正常渲染当前文档的全部内容
+- **AND** 不发起任何页面加载
 
 ### Requirement: 独立只读 Preview
 
@@ -102,17 +105,6 @@ value/method runtime Props 渲染。独立只传 ComposeDocument 的既有 Previ
 - **THEN** Preview 使用 authored Props 正常渲染
 - **AND** 不猜测、搜索或执行任何页面脚本
 
-### Requirement: 嵌套页面脚本实例隔离
-
-Preview 递归渲染 Page Slot 时 MUST 为每个 Slot 页面创建独立 setup scope，并继续应用既有循环与深度
-护栏。一个嵌套脚本失败 MUST 只降级对应 Slot；Slot 卸载或页面引用变化 MUST dispose 旧 scope。
-
-#### Scenario: 两个 Page Slot 引用同一计数页面
-
-- **WHEN** 两个 Slot 同时渲染同一页面且用户只点击其中一个实例的方法
-- **THEN** 只有该 Slot 内的绑定值更新
-- **AND** 两个实例分别拥有 Effect cleanup 与 diagnostic 生命周期
-
 ### Requirement: 组件实例预览
 
 Preview MUST 从实例保存的 resolvedSnapshot 递归渲染组件内容，按实例结构操作与属性覆盖解析 Renderer
@@ -146,8 +138,8 @@ props，保留内部真实预览交互，并且不依赖实时 Component Store�
 ### Requirement: Preview 只渲染 WidgetSwitcher 的活动子项
 
 Preview MUST 跳过 core 派生的隐藏集合中的 Entity，只渲染每个 WidgetSwitcher 的活动子项。Preview
-MUST NOT 应用任何编辑期预览覆盖——运行期只认 `activeIndex`。嵌套文档 Runtime（Component Instance
-与 Page Slot）MUST 遵守同一规则。
+MUST NOT 应用任何编辑期预览覆盖——运行期只认 `activeIndex`。嵌套文档 Runtime（Component Instance）
+MUST 遵守同一规则。
 
 #### Scenario: 运行期只显示活动子项
 
@@ -156,7 +148,7 @@ MUST NOT 应用任何编辑期预览覆盖——运行期只认 `activeIndex`。
 
 #### Scenario: 嵌套文档中的 switcher
 
-- **WHEN** Component Instance 或 Page Slot 的内部文档含 WidgetSwitcher
+- **WHEN** Component Instance 的内部文档含 WidgetSwitcher
 - **THEN** 嵌套 Runtime 同样只渲染其活动子项
 
 ### Requirement: 预览对话框动画播放
@@ -218,7 +210,11 @@ MUST 停止推进循环，MUST NOT 空转。组件卸载或作用域释放时 MU
 
 ### Requirement: 受控 Preview Dialog
 
-`@compose-ui/preview` MUST 提供受控 `ComposePreviewDialog`，接受与 `ComposePreview` 相同的文档、Registry、资源 Resolver 与页面加载端口，并由宿主通过 `open` 和关闭回调控制可见性。该组件不得依赖 Editor 或 Stage。对话框 MUST 以**场景选择器**表达预览目标：列出文档中的全部根 Frame，默认选中宿主给出的激活场景；预览目标任何时刻 MUST 恰好是一个 Frame。对话框 MUST NOT 再提供「完整文档 / 指定 Container」的二选一，也 MUST NOT 在解析目标时绕过宿主给出的默认值直接取第一个根 Frame；动画播放宿主 MUST 跟随当前解析出的目标 Frame。
+`@compose-ui/preview` MUST 提供受控 `ComposePreviewDialog`,接受与 `ComposePreview` 相同的文档、Registry、资源 Resolver 与页面加载端口,并由宿主通过 `open` 和关闭回调控制可见性。该组件不得依赖 Editor 或 Stage。对话框 MUST 以**场景选择器**表达预览目标:列出文档中的全部根 Frame,默认选中宿主给出的激活场景;预览目标任何时刻 MUST 恰好是一个 Frame。对话框 MUST NOT 再提供「完整文档 / 指定 Container」的二选一,也 MUST NOT 在解析目标时绕过宿主给出的默认值直接取第一个根 Frame;动画播放宿主 MUST 跟随当前解析出的目标 Frame。
+
+宿主额外提供导航端口时,对话框 MUST 切换为**页面预览**:内容由 `ComposePageHost` 承载,
+`Interaction` 的跳转在对话框内真实生效,场景选择器 MUST 只列出**当前页面**的根 Frame 并在
+跳转后跟随新页面重置。宿主未提供导航端口时对话框 MUST 保持上述文档预览行为不变。
 
 #### Scenario: 打开完整文档预览
 
@@ -236,6 +232,18 @@ MUST 停止推进循环，MUST NOT 空转。组件卸载或作用域释放时 MU
 
 - **WHEN** 宿主传入的激活场景不是文档的第一个根 Frame
 - **THEN** 对话框打开时选中的是激活场景而不是第一个根 Frame
+
+#### Scenario: 页面预览内跳转
+
+- **WHEN** 宿主提供导航端口并在对话框中点击带 click→navigate 的 Entity
+- **THEN** 对话框内容切换到目标页面的激活场景
+- **AND** 场景选择器改为列出目标页面的根 Frame
+
+#### Scenario: 未提供导航端口保持兼容
+
+- **WHEN** 宿主只传入 document 与 registry
+- **THEN** 对话框行为与本变更前完全一致
+- **AND** `Interaction` 在其中不产生跳转
 
 ### Requirement: Preview Dialog 视图控制
 
@@ -283,7 +291,7 @@ Linear、Radial 与 Angular 描述，并保持其位于该 Frame 全部后代 En
 ### Requirement: Preview 嵌套 Frame 动画播放
 
 ComposePreview MUST 按 Frame 播放动画：每个 Frame 使用自己 `Animations` 清单中的动画和自己的
-时间轴。嵌套 Frame（组件实例、Page Slot）MUST 拥有独立播放状态，宿主 MUST 只能通过播放控制
+时间轴。嵌套 Frame（组件实例）MUST 拥有独立播放状态，宿主 MUST 只能通过播放控制
 （play/pause/seek/mode）影响嵌套 Frame，MUST NOT 采样或覆写嵌套 Frame 内部 Entity 的属性。
 
 #### Scenario: 组件实例播放自己的动画
@@ -320,4 +328,69 @@ ComposePreview MUST 按 Frame 播放动画：每个 Frame 使用自己 `Animatio
 
 - **WHEN** 用户在「播放」属性行未绑定变量时勾选开关
 - **THEN** 动画配置命令把 `autoplay` 写入清单且可撤销；取消勾选后清单不保留该字段
+
+### Requirement: 页面宿主与跳转执行
+
+`@compose-ui/preview` MUST 提供 `ComposePageHost`,接受导航端口、页面 Loader、Registry 与
+资源 Resolver,按当前页面加载页面包装并渲染其 `activeFrameId` 指向的 Frame。目标页面有多个
+根 Frame 时 MUST 只渲染激活场景,MUST NOT 提供运行期的场景选择。
+
+`ComposePageHost` MUST 为携带 `Interaction` 的 Entity 建立交互:`click` trigger 触发
+`navigate` 时 MUST 通过导航端口跳转,触发 `navigate-back` 时 MUST 请求返回。交互处理器
+MUST 挂在 Entity 容器层且 MUST NOT 阻止事件继续到达物料自身的交互,避免抢走 Renderer
+自己的行为。可交互 Entity MUST 具备可访问名称、键盘可达性与 button 语义。
+
+切换页面时 `ComposePageHost` MUST 释放上一页的 setup scope 再建立新页的 scope,并 MUST
+复用既有的页面 setup 作用域 Hook 而不是自建加载与竞态逻辑。加载中与导航失败 MUST 是可被
+宿主区分的确定状态。
+
+`ComposePageHost` MUST 接受宿主正在编辑的那一页及其 live 文档。该页与当前页一致时宿主
+MUST 直接渲染它而**不经过页面加载端口**，使预览包含尚未保存的改动；否则「配好跳转→预览」
+会呈现上次保存的内容，用户会认为交互没有生效。跳转到其他页面 MUST 仍然经过加载端口，
+跳回该页时 MUST 重新使用 live 文档。
+
+导航会话**还没有起点**时，`ComposePageHost` MUST 渲染该 live 页而不是空状态，并 MUST 顺带
+把会话起点补到该页——用户正在编辑的那一页就在手上，让他看见「未设置首页」是无谓的失败态；
+而会话没有起点时跳转记不进返回栈，返回会变成死键。
+
+#### Scenario: 会话没有起点时显示正在编辑的那一页
+
+- **WHEN** 导航会话的当前页为空，而宿主提供了正在编辑的 live 页
+- **THEN** 宿主渲染该 live 页，不呈现空状态
+- **AND** 会话起点被补到该页，随后的跳转可以正常返回
+
+#### Scenario: 未保存的改动出现在页面预览中
+
+- **WHEN** 宿主传入正在编辑页面的 live 文档，其中含一个尚未保存、带 click→navigate 的 Entity
+- **THEN** 预览中出现该 Entity 且它的跳转可用
+- **AND** 渲染该页时不发起页面加载
+
+#### Scenario: 点击跳转到另一个页面
+
+- **WHEN** 当前页面中一个带 click→navigate 的 Entity 被点击
+- **THEN** 宿主渲染目标页面激活场景的内容
+- **AND** 上一页的 setup scope 被 dispose 且其 effect cleanup 被执行
+
+#### Scenario: 只渲染激活场景
+
+- **WHEN** 目标页面含三个根 Frame
+- **THEN** 只有 `activeFrameId` 指向的 Frame 被渲染
+
+#### Scenario: 不抢走物料自身交互
+
+- **WHEN** 一个带 `Interaction` 的容器内含声明了 event-handler 的物料,用户点击该物料
+- **THEN** 物料绑定的页面方法被调用
+- **AND** 容器的跳转同样按冒泡语义生效而不被静默吞掉
+
+#### Scenario: 键盘触发跳转
+
+- **WHEN** 可交互 Entity 获得键盘焦点并被激活键触发
+- **THEN** 与指针点击产生相同的跳转
+- **AND** 该 Entity 暴露 button 语义与可访问名称
+
+#### Scenario: 跳转失败保留当前页
+
+- **WHEN** 跳转目标不可解析
+- **THEN** 宿主继续呈现当前页面内容
+- **AND** 失败状态可被宿主读取并提示
 

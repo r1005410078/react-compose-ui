@@ -100,13 +100,13 @@ Computed 的读取函数抛错时，Runtime MUST 发布 diagnostic 且当前值 
 
 ### Requirement: 页面实例隔离与脚本重载
 
-每个 Editor 页面、独立 Preview 和 Page Slot 渲染实例 MUST 拥有独立 setup scope；相同页面或相同脚本
+每个 Editor 页面与每个页面渲染实例 MUST 拥有独立 setup scope；相同页面或相同脚本
 资源不得隐式共享 State。setup 资源 revision 变化时 MUST dispose 旧实例并以新模块创建实例，首期 MUST
 重置 State 而不是保留热更新状态。
 
 #### Scenario: 同一页面的两个实例状态隔离
 
-- **WHEN** 两个 Page Slot 同时渲染引用同一 setup 的页面并只在一个实例调用方法
+- **WHEN** 两个渲染入口同时渲染引用同一 setup 的页面并只在一个实例调用方法
 - **THEN** 只有该实例的 State 和绑定视图更新
 - **AND** 另一个实例的 Effect 与方法闭包保持独立
 
@@ -209,4 +209,35 @@ MUST NOT 抛出异常或猜测类型转换，并 MUST 通过 `reportDiagnostic` 
 - **THEN** 文档中的绑定保持不变，只产生诊断
 - **WHEN** 用户把该导出改回来
 - **THEN** 动画恢复受控，不需要重新绑定
+
+### Requirement: 脚本导航逃生舱
+
+`createComposePageScriptScope` MUST 接受宿主注入的可选导航端口,并在注入后于 setup 上下文
+暴露 `navigate` 与 `navigateBack`。两者 MUST 直接委托给同一个导航端口——声明式 `Interaction`
+与脚本调用 MUST NOT 各自维护一份当前页面或返回栈。
+
+未注入导航端口时 `ctx.navigate` MUST 存在但调用即产生可判别的脚本 diagnostic,MUST NOT
+抛出未捕获异常中断整个 setup。`@compose-ui/script-runtime` MUST 只依赖 `core` 的端口类型,
+MUST NOT 依赖 `@compose-ui/pages` 或任何渲染包。
+
+在 setup 同步执行期间调用导航 MUST 产生 diagnostic 并被忽略——页面尚未挂载完成时跳转会让
+当前页的 effect cleanup 与新页的 setup 交错。
+
+#### Scenario: 脚本条件跳转
+
+- **WHEN** 宿主注入导航端口,页面方法在被事件调用时按条件调用 `ctx.navigate`
+- **THEN** 导航端口收到跳转请求且当前页面切换
+- **AND** 跳转与声明式 `Interaction` 共享同一个返回栈
+
+#### Scenario: 未注入端口
+
+- **WHEN** 宿主未注入导航端口且脚本调用 `ctx.navigate`
+- **THEN** Runtime 发布可判别的 diagnostic
+- **AND** setup 的其余部分继续正常工作
+
+#### Scenario: setup 期间调用被拒绝
+
+- **WHEN** setup 函数在同步执行过程中直接调用 `ctx.navigate`
+- **THEN** 该次调用被忽略并发布 diagnostic
+- **AND** 页面仍然完成 setup 并暴露其返回成员
 

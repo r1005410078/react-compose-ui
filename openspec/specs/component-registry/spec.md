@@ -141,25 +141,6 @@ Registry MUST 提供 Stage 与 Preview 共用的 Entity Paint layer。Solid、Li
 - **THEN** Stage 与 Preview 使用相同 descriptor 和视觉渐变
 - **AND** Inspector 只能通过 Port 发出 Paint 编辑意图
 
-### Requirement: 页面节点端口透传
-
-Component Registry MUST 在 Renderer 与 Component Inspector 的渲染上下文中透传两个可选宿主端口：
-供 Inspector 编辑节点引用属性的节点 editor 端口，以及供 Renderer 加载页面文档的页面文档加载端口。
-两个端口 MUST 以纯协议类型声明，Registry MUST NOT 解释其领域含义，也 MUST NOT 因此新增对
-`asset-browser`、`editor`、`property-panel` 或 `preview` 的依赖。端口缺省时 Registry MUST 正常渲染。
-
-#### Scenario: 端口到达 Inspector 与 Renderer
-
-- **WHEN** 宿主向 Registry 渲染上下文注入节点 editor 端口与页面文档加载端口
-- **THEN** 对应的 Component Inspector 与 Renderer 都能取到这两个端口
-- **AND** 端口对象在多次渲染间保持引用稳定
-
-#### Scenario: 端口缺省
-
-- **WHEN** 宿主未注入这两个端口
-- **THEN** Renderer 与 Inspector 正常渲染
-- **AND** 依赖端口的能力以可访问的未配置状态呈现
-
 ### Requirement: Component Inspector 标题栏 actions
 
 ComposeComponentDefinition MUST 支持可选的 inspectorHeaderActions Renderer。Registry MUST 提供与
@@ -385,7 +366,7 @@ Hook MUST 在缺省 Loader 时由 Asset Resolver 构造默认 JavaScript Loader�
 新 revision 到达时以新模块重建作用域，MUST 在卸载、引用变化和加载被取消时 dispose 自己创建的作用域，
 并且 MUST NOT 在作用域与当前 setup 引用不匹配时把它交给消费方。
 
-页面渲染入口 MUST NOT 各自实现这套加载与竞态逻辑；`preview` 与 Page Slot MUST 消费该 Hook。
+页面渲染入口 MUST NOT 各自实现这套加载与竞态逻辑；`preview` 与页面导航宿主 MUST 消费该 Hook。
 
 #### Scenario: 按页面加载并在热重载后重建
 
@@ -407,4 +388,25 @@ Hook MUST 在缺省 Loader 时由 Asset Resolver 构造默认 JavaScript Loader�
 
 - **WHEN** 同一 Container Entity 配置分轴 clip/scroll/visible
 - **THEN** Stage、Preview 与 component-instance 嵌套路径得到等价的 overflowX/overflowY 映射
+
+### Requirement: 节点端口透传
+
+Component Registry MUST 在 Renderer 与 Component Inspector 的渲染上下文中透传可选的宿主节点
+editor 端口，供 Inspector 编辑节点引用属性。端口 MUST 以纯协议类型声明，Registry MUST NOT
+解释其领域含义，也 MUST NOT 因此新增对 `asset-browser`、`editor`、`property-panel` 或
+`preview` 的依赖。端口缺省时 Registry MUST 正常渲染。
+
+Registry MUST NOT 再透传页面文档加载端口——它只为 Page Slot 存在，随页面嵌套一并删除。
+
+#### Scenario: 端口到达 Inspector 与 Renderer
+
+- **WHEN** 宿主向 Registry 渲染上下文注入节点 editor 端口
+- **THEN** 对应的 Component Inspector 与 Renderer 都能取到该端口
+- **AND** 端口对象在多次渲染间保持引用稳定
+
+#### Scenario: 端口缺省
+
+- **WHEN** 宿主未注入该端口
+- **THEN** Renderer 与 Inspector 正常渲染
+- **AND** 依赖端口的能力以可访问的未配置状态呈现
 
