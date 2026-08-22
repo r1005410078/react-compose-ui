@@ -14,14 +14,17 @@
 export {
   CAD_COMPONENT_KEYS,
   CAD_DEFAULT_LAYER_ID,
+  createCadArcEntity,
   createCadLineEntity,
   createCadWireEntity,
   createEmptyCadDocument,
+  getCadArc,
   getCadInsert,
   getCadLine,
   getCadPlacement,
   getCadWire,
   validateCadDocument,
+  type CadArc,
   type CadBlockDefinition,
   type CadDocument,
   type CadDocumentIssue,
@@ -39,12 +42,23 @@ export {
 } from './document'
 export { previewCadTranslate, translateCadEntity } from './transform'
 export {
-  collectCadVisibleSegments,
+  collectCadVisibleCurves,
   createCadInsert,
   inverseCadBlockPoint,
   transformCadBlockPoint,
-  type CadVisibleSegment,
+  type CadVisibleCurve,
 } from './block'
+export {
+  arcMidpoint,
+  arcQuadrants,
+  arcThroughPoints,
+  curveBounds,
+  isFullCircle,
+  type CadArcCurve,
+  type CadArcShape,
+  type CadCurve,
+  type CadSegmentCurve,
+} from './geometry'
 export {
   collectCadInstancePorts,
   resolveCadPortPoint,
@@ -70,8 +84,12 @@ export {
 } from './point-input'
 export {
   CAD_COMMAND_TYPES,
+  createCadArcCommand,
+  createCadArcSession,
   createCadBlockCommand,
   createCadBlockSession,
+  createCadCircleCommand,
+  createCadCircleSession,
   createCadCommandHandlers,
   createCadCopyCommand,
   createCadEraseCommand,

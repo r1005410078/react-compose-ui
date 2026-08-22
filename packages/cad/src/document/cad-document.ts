@@ -124,6 +124,22 @@ function validateEntityComponents(
       ))
     }
   }
+  const arc = entity.components[CAD_COMPONENT_KEYS.arc]
+  if (arc !== undefined) {
+    // 半径必须为正：0 半径的弧在屏幕上不存在，却仍会参与命中与捕捉，成为一个点不中也删不掉
+    // 的幽灵。角度允许任意大小（扫掠可以超过 360），只要求有限。
+    if (!isRecord(arc)
+      || !isFinitePoint(arc.center)
+      || typeof arc.radius !== 'number' || !(arc.radius > 0)
+      || typeof arc.startAngle !== 'number' || !Number.isFinite(arc.startAngle)
+      || typeof arc.sweep !== 'number' || !Number.isFinite(arc.sweep)) {
+      issues.push(issue(
+        'entity.invalid-geometry',
+        [...prefix, 'entities', entity.id, CAD_COMPONENT_KEYS.arc],
+        '圆弧的圆心与角度必须是有限数值，半径必须为正',
+      ))
+    }
+  }
 }
 
 function validateEntities(

@@ -1639,6 +1639,105 @@ test('OpenSpec: cad-document / CAD 导线 / 端口连线后拖动符号，导线
   expect(afterDrag).toEqual(await markerOf())
 })
 
+test('OpenSpec: cad-document / CAD CIRCLE 与 ARC 命令 / 非 100% 缩放下画圆并捕圆心', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Curves')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const entities = surface.locator('[data-cad-entity]')
+
+  const type = async (text: string) => {
+    await page.keyboard.type(text)
+    await page.keyboard.press('Enter')
+  }
+
+  // 一条已知世界坐标的线，既是视口基准也是后面捕捉的干扰项
+  await type('l')
+  await type('100,100')
+  await type('200,100')
+  await type('f')
+  await expect(entities.first()).toHaveAttribute('x1', '100')
+
+  const box = await surface.boundingBox()
+  if (!box) throw new Error('surface has no box')
+
+  /** 由那条线（世界 100..200、y=100）反解视口：`screen = world * zoom + offset`。 */
+  const viewport = async () => {
+    const [x1, x2, y1] = await entities.first().evaluate((node) => [
+      Number(node.getAttribute('x1')),
+      Number(node.getAttribute('x2')),
+      Number(node.getAttribute('y1')),
+    ])
+    const zoom = (x2 - x1) / 100
+    return { zoom, offsetX: x1 - 100 * zoom, offsetY: y1 - 100 * zoom }
+  }
+  type Viewport = Awaited<ReturnType<typeof viewport>>
+  const screenOf = (vp: Viewport, x: number, y: number) => ({
+    x: box.x + x * vp.zoom + vp.offsetX,
+    y: box.y + y * vp.zoom + vp.offsetY,
+  })
+
+  // 缩放到非 100%：zoom 恒为 1 时未吸附也看起来是整数，那样的断言证明不了吸附
+  await page.mouse.move(box.x + 60, box.y + 60)
+  await page.keyboard.down('Control')
+  await page.mouse.wheel(0, 240)
+  await page.keyboard.up('Control')
+  const vp = await viewport()
+  expect(vp.zoom).not.toBe(1)
+
+  // 1) 圆心取在既有线段的中点上——捕捉命中时落点是精确中点，而不是指针裸坐标
+  await type('c')
+  await expect(canvas.locator('[data-testid="cad-command-prompt"]')).toContainText('指定圆心')
+  const near = screenOf(vp, 150, 100)
+  await page.mouse.move(near.x + 2, near.y + 2)
+  await expect(canvas.locator('[data-testid="cad-snap-marker"]'))
+    .toHaveAttribute('data-snap-mode', 'midpoint')
+  await page.mouse.click(near.x + 2, near.y + 2)
+  await expect(canvas.locator('[data-testid="cad-command-prompt"]')).toContainText('指定半径')
+  const rim = screenOf(vp, 200, 100)
+  await page.mouse.click(rim.x, rim.y)
+
+  await expect(entities).toHaveCount(2)
+  const circle = entities.nth(1)
+  // 整圆走 `<circle>`，半径按缩放换算回世界仍是 50
+  await expect(circle).toHaveJSProperty('tagName', 'circle')
+  const worldRadius = await circle.evaluate((node) => Number(node.getAttribute('r'))) / vp.zoom
+  expect(worldRadius).toBeCloseTo(50, 6)
+
+  // 2) 第二个圆画在远离既有几何处：第一个圆的圆心与那条线的中点重合，而中点优先级更高，
+  //    拿它验证圆心捕捉只会一直捕到中点
+  await type('c')
+  await type('150,300')
+  await type('200,300')
+  await expect(entities).toHaveCount(3)
+
+  await type('l')
+  const center = screenOf(vp, 150, 300)
+  await page.mouse.move(center.x + 1, center.y - 2)
+  await expect(canvas.locator('[data-testid="cad-snap-marker"]'))
+    .toHaveAttribute('data-snap-mode', 'center')
+  await page.keyboard.press('Escape')
+
+  // 3) 点在圆心不命中——判据是到弧的距离，不是包围盒
+  await page.mouse.click(center.x, center.y)
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(0)
+  await page.mouse.click(screenOf(vp, 200, 300).x, screenOf(vp, 200, 300).y)
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(1)
+})
+
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

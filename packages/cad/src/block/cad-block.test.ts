@@ -1,3 +1,4 @@
+import { segmentAt } from '../test-curves'
 import { describe, expect, it } from 'vitest'
 import {
   createCadLineEntity,
@@ -9,7 +10,7 @@ import {
 import { findCadHit, findCadEntitiesInBounds, cadSelectionBoundsFromDrag } from '../selection'
 import { findCadSnap } from '../snap'
 import { parseComposeCadDocument, serializeComposeCadDocument } from '../store'
-import { collectCadVisibleSegments } from './cad-block-expand'
+import { collectCadVisibleCurves } from './cad-block-expand'
 import { createCadInsert, transformCadBlockPoint } from './cad-block-transform'
 
 /** 一个 10×10 的方角符号：从原点向右 10、再向下 10。 */
@@ -111,7 +112,7 @@ describe('OpenSpec: cad-document / CAD 块实例 / 改块定义，全部实例�
       },
     }
 
-    expect(collectCadVisibleSegments(document)).toHaveLength(4)
+    expect(collectCadVisibleCurves(document)).toHaveLength(4)
 
     // 把定义里的第一段拉长一倍，两个实例的几何同时改变——不必逐个更新实例。
     const longer: CadBlockDefinition = {
@@ -121,10 +122,10 @@ describe('OpenSpec: cad-document / CAD 块实例 / 改块定义，全部实例�
         m1: createCadLineEntity('m1', { layerId: '0', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } }),
       },
     }
-    const changed = collectCadVisibleSegments({ ...document, blocks: { [block.id]: longer } })
+    const changed = collectCadVisibleCurves({ ...document, blocks: { [block.id]: longer } })
 
-    expect(changed.filter(({ ownerId }) => ownerId === 'i1')[0]!.segment.end.x).toBe(20)
-    expect(changed.filter(({ ownerId }) => ownerId === 'i2')[0]!.segment.end.x).toBe(120)
+    expect(segmentAt(changed, 'i1').end.x).toBe(20)
+    expect(segmentAt(changed, 'i2').end.x).toBe(120)
   })
 })
 

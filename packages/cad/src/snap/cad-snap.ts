@@ -1,12 +1,17 @@
-import { collectCadVisibleSegments } from '../block'
+import { collectCadVisibleCurves } from '../block'
 import { collectCadInstancePorts } from '../connection'
 import type { CadDocument } from '../document'
 import type { CadInputPoint } from '../point-input'
 import {
+  arcEndpoints,
+  isFullCircle,
+  arcMidpoint,
+  arcQuadrants,
+  curveNearPoint,
   segmentIntersection,
   segmentMidpoint,
-  segmentNearPoint,
   squaredDistance,
+  type CadCurve,
   type CadSegment,
 } from '../geometry'
 
@@ -14,12 +19,18 @@ import {
  * 对象捕捉模式。
  *
  * @remarks
- * 端口是块声明的接线点，其余三种覆盖直线图元的全部几何特征。圆心、切点、垂足等随对应图元
- * 一并加入。
+ * 端口是块声明的接线点，圆心与象限点属于圆弧，其余覆盖直线图元的全部几何特征。切点、垂足等
+ * 随需要一并加入。
  *
  * @public
  */
-export type CadSnapMode = 'port' | 'endpoint' | 'midpoint' | 'intersection'
+export type CadSnapMode =
+  | 'port'
+  | 'endpoint'
+  | 'midpoint'
+  | 'center'
+  | 'quadrant'
+  | 'intersection'
 
 /** 一个捕捉候选。 @public */
 export interface CadSnapCandidate {
@@ -38,12 +49,16 @@ export interface CadSnapCandidate {
  * 短线的头）。同等距离下若端点胜出，用户点在接线柱上得到的是一条自由端点的导线——屏幕上像素
  * 级正确，要等到移动符号时才暴露，而画的当刻没有任何视觉线索。
  *
+ * 圆心排在象限点之前，两者都排在端点、中点之后——这是 AutoCAD 的次序。
+ *
  * @public
  */
 export const CAD_SNAP_MODES: readonly CadSnapMode[] = [
   'port',
   'endpoint',
   'midpoint',
+  'center',
+  'quadrant',
   'intersection',
 ]
 
@@ -55,8 +70,8 @@ function priorityOf(mode: CadSnapMode) {
  * 在捕捉半径内求出最佳特征点。
  *
  * @remarks
- * **交点是 O(n²)**，因此先用捕捉半径的包围盒过滤出候选线段（O(n)，通常剩不到五条），再在候选
- * 之间两两求交。不建空间索引：候选过滤已经把常数压得很低，而索引要处理增量维护与失效，属于
+ * **交点是 O(n²)**，因此先用捕捉半径的包围盒过滤出候选几何（O(n)，通常剩不到五条），再在候选
+ * 的**线段**之间两两求交——线–弧与弧–弧求交是另一笔工作，接线时想捕的是圆心与象限点。不建空间索引：候选过滤已经把常数压得很低，而索引要处理增量维护与失效，属于
  * 当前没有证据支持的复杂度。图元数量真正上去时再说，届时本函数的签名不必变。
  *
  * 隐藏图层上的图元不参与——它在屏幕上看不见，捕捉到它会让光标莫名其妙地跳走。
@@ -79,11 +94,14 @@ export function findCadSnap(
 
   // 与命中、框选共用同一条可见性遍历：三者对「什么算可见」必须给出同一个答案。块实例在这里
   // 同样被展开——插完符号要能捕到它的接线端点，否则块只是一张贴图。
-  const nearby: CadSegment[] = []
-  for (const { segment } of collectCadVisibleSegments(document)) {
-    if (!segmentNearPoint(segment, point, radius)) continue
-    nearby.push(segment)
+  const nearby: CadCurve[] = []
+  for (const { curve } of collectCadVisibleCurves(document)) {
+    if (!curveNearPoint(curve, point, radius)) continue
+    nearby.push(curve)
   }
+  const nearbySegments: CadSegment[] = nearby.filter(
+    (curve): curve is CadCurve & { kind: 'segment' } => curve.kind === 'segment',
+  )
 
   const candidates: CadSnapCandidate[] = []
   if (enabled.has('port')) {
@@ -91,19 +109,39 @@ export function findCadSnap(
       candidates.push({ mode: 'port', point: candidate })
     }
   }
-  for (const segment of nearby) {
-    if (enabled.has('endpoint')) {
-      candidates.push({ mode: 'endpoint', point: segment.start })
-      candidates.push({ mode: 'endpoint', point: segment.end })
+  for (const curve of nearby) {
+    // 整圆没有端点也没有中点：它们只是「起始角写在哪」的产物，会随一次等价的重写而跳到别处。
+    // AutoCAD 对圆同样只给圆心与象限点。
+    const hasEnds = curve.kind === 'segment' || !isFullCircle(curve)
+    if (hasEnds) {
+      const [start, end] = curve.kind === 'segment'
+        ? [curve.start, curve.end]
+        : arcEndpoints(curve)
+      if (enabled.has('endpoint')) {
+        candidates.push({ mode: 'endpoint', point: start })
+        candidates.push({ mode: 'endpoint', point: end })
+      }
+      if (enabled.has('midpoint')) {
+        candidates.push({
+          mode: 'midpoint',
+          point: curve.kind === 'segment' ? segmentMidpoint(curve) : arcMidpoint(curve),
+        })
+      }
     }
-    if (enabled.has('midpoint')) {
-      candidates.push({ mode: 'midpoint', point: segmentMidpoint(segment) })
+    if (curve.kind !== 'arc') continue
+    if (enabled.has('center')) {
+      candidates.push({ mode: 'center', point: curve.center })
+    }
+    if (enabled.has('quadrant')) {
+      for (const quadrant of arcQuadrants(curve)) {
+        candidates.push({ mode: 'quadrant', point: quadrant })
+      }
     }
   }
   if (enabled.has('intersection')) {
-    for (let i = 0; i < nearby.length; i += 1) {
-      for (let j = i + 1; j < nearby.length; j += 1) {
-        const crossing = segmentIntersection(nearby[i]!, nearby[j]!)
+    for (let i = 0; i < nearbySegments.length; i += 1) {
+      for (let j = i + 1; j < nearbySegments.length; j += 1) {
+        const crossing = segmentIntersection(nearbySegments[i]!, nearbySegments[j]!)
         if (crossing) candidates.push({ mode: 'intersection', point: crossing })
       }
     }
