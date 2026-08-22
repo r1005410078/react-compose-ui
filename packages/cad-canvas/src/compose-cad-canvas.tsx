@@ -10,6 +10,7 @@ import {
   createCadPluginRegistry,
   createCadSceneIndex,
   createCadSessionArbiter,
+  findCadHit,
   findCadSnap,
   parseCadCoordinate,
   pruneCadSelection,
@@ -30,7 +31,7 @@ import {
   type ComposeCommandPrompt,
   type ComposeCommandSession,
 } from '@compose-ui/commands'
-import type { EditorCommand } from '@compose-ui/core'
+import { formatComposeNumber, type EditorCommand } from '@compose-ui/core'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { getCadCanvasMessages } from './cad-canvas-i18n'
 import { CadCommandLine } from './command-line'
@@ -55,7 +56,15 @@ export interface ComposeCadCanvasProps {
   readonly gridStep?: number
   /** 对象捕捉的屏幕半径（CSS 像素）。 @defaultValue 12 */
   readonly snapRadius?: number
-  /** 点选命中的屏幕容差（CSS 像素）。 @defaultValue 5 */
+  /**
+   * 点选命中的屏幕容差（CSS 像素）。
+   *
+   * @remarks
+   * 只作用于点选；框选走几何包含，不受它影响。线宽只有 1px，容差太小时用户会反复点空——
+   * 悬停高亮让容差变得可见，但触控板的落点精度本就到不了几个像素。
+   *
+   * @defaultValue 8
+   */
   readonly pickRadius?: number
 }
 
@@ -86,7 +95,7 @@ export function ComposeCadCanvas({
   activeLayerId = CAD_DEFAULT_LAYER_ID,
   gridStep = 10,
   snapRadius = 12,
-  pickRadius = 5,
+  pickRadius = 8,
 }: ComposeCadCanvasProps) {
   const i18n = useComposeI18nContext()
   const messages = getCadCanvasMessages(i18n?.locale ?? 'zh-CN')
@@ -205,6 +214,37 @@ export function ComposeCadCanvas({
     ortho,
     grid: { enabled: gridEnabled, step: gridStep },
   }), [gridEnabled, gridStep, ortho, reference, snap])
+
+  /** 指针当前解算出的落点；与真实按下走同一条管线，因此「看到的」与「点下去的」不会分叉。 */
+  const pointerPoint = useMemo(
+    () => (hover ? resolveCadPoint(hover, 'pointer', pointContext) : null),
+    [hover, pointContext],
+  )
+
+  /**
+   * 跟随指针的橡皮筋。
+   *
+   * @remarks
+   * 不进命令状态机：让会话认识指针位置意味着每次移动都要 `advance` 一次，撤销、取消与「放弃
+   * 上一个顶点」的边界全都要重新定义。两个端点宿主本来就有——参照点来自会话给的
+   * `preview.reference`，落点来自上面的 `pointerPoint`。
+   */
+  const previewSegments = useMemo<readonly CadPreviewSegment[]>(() => {
+    if (!reference || !pointerPoint || !prompt?.accepts.includes('point')) return preview
+    return [...preview, { start: reference, end: pointerPoint, pending: true }]
+  }, [pointerPoint, preview, prompt, reference])
+
+  /**
+   * 指针**会选中**的图元。
+   *
+   * @remarks
+   * 判据是「这一下按下会不会产生选择」而不是「离得近不近」：命令正在吃点时按下是给命令的一个
+   * 点，此时高亮会撒谎。容差与选择插件同源，两处分叉就会出现「亮着却点不中」。
+   */
+  const hovered = useMemo(() => {
+    if (!hover || prompt?.accepts.includes('point')) return null
+    return findCadHit(document, hover, pickRadius / viewport.zoom)
+  }, [document, hover, pickRadius, prompt, viewport.zoom])
 
   const handleSubmit = useCallback((text: string) => {
     const session = sessionRef.current
@@ -377,9 +417,10 @@ export function ComposeCadCanvas({
         <CadSurface
           document={document}
           gridStep={gridEnabled ? gridStep : null}
+          hovered={hovered}
           interaction={interaction}
           label={messages.canvasLabel}
-          previewSegments={preview}
+          previewSegments={previewSegments}
           snap={snap}
           viewport={viewport}
           onHoverPoint={setHover}
@@ -393,6 +434,9 @@ export function ComposeCadCanvas({
       <CadCommandLine
         inputRef={commandInputRef}
         messages={messages}
+        pointer={pointerPoint
+          ? `${formatComposeNumber(pointerPoint.x)}, ${formatComposeNumber(pointerPoint.y)}`
+          : null}
         notice={notice}
         ortho={ortho}
         prompt={prompt}

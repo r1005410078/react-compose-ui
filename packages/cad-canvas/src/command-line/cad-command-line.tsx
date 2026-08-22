@@ -22,6 +22,8 @@ export interface CadCommandLineProps {
   readonly onCancel: () => void
   /** 指向输入框的 ref；宿主用它把键盘落点收回命令行。 */
   readonly inputRef?: RefObject<HTMLInputElement | null>
+  /** 指针当前解算落点的读数；指针不在图面上时为 null。 */
+  readonly pointer?: string | null
 }
 
 /**
@@ -59,6 +61,7 @@ export function CadCommandLine({
   onSubmit,
   onCancel,
   inputRef,
+  pointer,
 }: CadCommandLineProps) {
   const [text, setText] = useState('')
 
@@ -93,6 +96,11 @@ export function CadCommandLine({
         onChange={(event) => { setText(event.target.value) }}
         onKeyDown={handleKeyDown}
       />
+      {pointer === null || pointer === undefined ? null : (
+        <span className="compose-cad-canvas__readout" data-testid="cad-pointer-readout">
+          {pointer}
+        </span>
+      )}
       {selectionCount > 0 ? (
         <span
           className="compose-cad-canvas__mode"

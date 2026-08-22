@@ -59,6 +59,30 @@
   outline: none;
 }
 
+/*
+ * 预览段：已放置的顶点连成的段用短划，跟随指针的橡皮筋用更疏的划并压低不透明度——两者都还
+ * 没进文档，但「已经定下来的」和「还在动的」必须一眼分得开。
+ */
+.compose-cad-canvas__preview {
+  stroke: var(--compose-accent, #63b3ed);
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.compose-cad-canvas__preview--pending {
+  stroke-dasharray: 6 5;
+  opacity: 0.7;
+}
+
+/* 坐标读数用等宽数字：位数变化时不该让右侧的模式指示跟着抖。 */
+.compose-cad-canvas__readout {
+  flex: none;
+  color: var(--compose-text-subtle, #8b97a8);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* 网格线用极低对比：它是参考而不是内容，抢眼会盖过图元。 */
 .compose-cad-canvas__grid-line {
   stroke: var(--compose-border, #1e2733);
@@ -96,6 +120,15 @@
  */
 .compose-cad-canvas__entity[data-selected] {
   stroke: var(--compose-accent, #63b3ed);
+  stroke-width: 2;
+}
+
+/*
+ * 悬停态回答的是「现在按下会选中它吗」，因此必须与选中态区分：加粗但不换成强调色，否则用户
+ * 分不出「已经选上的」和「按下才会选上的」。
+ */
+.compose-cad-canvas__entity[data-hovered] {
+  stroke: var(--compose-text, #e6edf5);
   stroke-width: 2;
 }
 

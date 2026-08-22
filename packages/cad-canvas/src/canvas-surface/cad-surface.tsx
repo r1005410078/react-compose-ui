@@ -21,6 +21,14 @@ import {
 export interface CadPreviewSegment {
   readonly start: CadCanvasPoint
   readonly end: CadCanvasPoint
+  /**
+   * 这一段是跟随指针的橡皮筋而不是已放置的顶点连成的段。
+   *
+   * @remarks
+   * 两者都还没进文档，但含义不同：已放置的段再按一次也不会变，橡皮筋每次移动都在变。用同一种
+   * 画法会让用户分不清「哪一段已经定下来了」。
+   */
+  readonly pending?: boolean
 }
 
 /** 归一化后的图面指针事件；点已换算为世界坐标。 @internal */
@@ -55,6 +63,8 @@ export interface CadSurfaceProps {
   /** 选择集与框选；由宿主的交互仲裁发布。 */
   readonly interaction: CadInteractionSnapshot
   readonly previewSegments: readonly CadPreviewSegment[]
+  /** 指针悬停命中的图元；没有命中或当前按下不会产生选择时为 `null`。 */
+  readonly hovered: string | null
   readonly label: string
 }
 
@@ -117,6 +127,7 @@ export function CadSurface({
   snap,
   interaction,
   previewSegments,
+  hovered,
   label,
 }: CadSurfaceProps) {
   const surfaceRef = useRef<SVGSVGElement | null>(null)
@@ -301,16 +312,18 @@ export function CadSurface({
         const start = cadWorldToScreen(viewport, segment.start)
         const end = cadWorldToScreen(viewport, segment.end)
         const isSelected = selected.has(ownerId)
+        const isHovered = !isSelected && ownerId === hovered
         return (
           <line
             // 块实例展开成多段，各段共用 ownerId，因此 key 要带上序号。
             key={`${ownerId}-${index}`}
             className="compose-cad-canvas__entity"
             data-cad-entity={ownerId}
+            data-hovered={isHovered ? '' : undefined}
             data-selected={isSelected ? '' : undefined}
             // 选中态不改 stroke 属性而是交给 CSS：图元颜色来自图层（ByLayer），把高亮写死在
             // 属性上会让「这条线是什么颜色」有两个答案。
-            stroke={isSelected ? undefined : layer.color}
+            stroke={isSelected || isHovered ? undefined : layer.color}
             strokeWidth={1}
             x1={start.x}
             x2={end.x}
@@ -329,9 +342,10 @@ export function CadSurface({
         return (
           <line
             key={`preview-${index}`}
-            data-cad-preview=""
-            stroke="currentColor"
-            strokeDasharray="4 4"
+            className={segment.pending
+              ? 'compose-cad-canvas__preview compose-cad-canvas__preview--pending'
+              : 'compose-cad-canvas__preview'}
+            data-cad-preview={segment.pending ? 'pending' : ''}
             strokeWidth={1}
             x1={start.x}
             x2={end.x}

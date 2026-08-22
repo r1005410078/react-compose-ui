@@ -71,6 +71,74 @@ function setup() {
   return { runtime, rerender }
 }
 
+describe('指针反馈', () => {
+  function pendingPreview() {
+    return screen.queryAllByTestId('cad-surface')[0]
+      ?.querySelectorAll('[data-cad-preview="pending"]') ?? []
+  }
+  function hovered() {
+    return screen.getByTestId('cad-surface').querySelectorAll('[data-hovered]')
+  }
+
+  it('OpenSpec: cad-document / CAD 指针反馈 / 橡皮筋跟随指针并在命令结束后消失', () => {
+    setup()
+    submit('L')
+    // 还没取到第一点：没有参照点，橡皮筋无从画起。
+    hoverAt(200, 200)
+    expect(pendingPreview()).toHaveLength(0)
+
+    clickAt(100, 100)
+    hoverAt(300, 240)
+    const [band] = pendingPreview()
+    expect(band).toBeDefined()
+    expect(band?.getAttribute('x1')).toBe('100')
+    expect(band?.getAttribute('x2')).toBe('300')
+
+    submit('F')
+    expect(pendingPreview()).toHaveLength(0)
+  })
+
+  it('OpenSpec: cad-document / CAD 指针反馈 / 正交把橡皮筋约束成水平或垂直', () => {
+    setup()
+    fireEvent.keyDown(screen.getByTestId('cad-canvas'), { key: 'F8' })
+    submit('L')
+    clickAt(100, 100)
+    // 斜向移动，水平分量更大 -> 落点应当被压回同一条水平线。
+    hoverAt(300, 140)
+    const [band] = pendingPreview()
+    expect(band?.getAttribute('y1')).toBe(band?.getAttribute('y2'))
+  })
+
+  it('OpenSpec: cad-document / CAD 指针反馈 / 悬停高亮只在按下会产生选择时出现', () => {
+    const { rerender } = setup()
+    submit('L')
+    clickAt(100, 100)
+    clickAt(300, 100)
+    submit('F')
+    rerender()
+
+    hoverAt(200, 100)
+    expect(hovered()).toHaveLength(1)
+
+    // 命令正在吃点时，一次按下是给命令的一个点而不是选择，此时高亮会撒谎。
+    submit('L')
+    hoverAt(200, 100)
+    expect(hovered()).toHaveLength(0)
+
+    submit('')
+    hoverAt(2000, 2000)
+    expect(hovered()).toHaveLength(0)
+  })
+
+  it('OpenSpec: cad-document / CAD 指针反馈 / 坐标读数跟随指针并在离开后隐藏', () => {
+    setup()
+    hoverAt(120, 80)
+    expect(screen.getByTestId('cad-pointer-readout')).toHaveTextContent('120, 80')
+    fireEvent.pointerLeave(screen.getByTestId('cad-surface'))
+    expect(screen.queryByTestId('cad-pointer-readout')).toBeNull()
+  })
+})
+
 describe('命令行焦点', () => {
   /**
    * @remarks
