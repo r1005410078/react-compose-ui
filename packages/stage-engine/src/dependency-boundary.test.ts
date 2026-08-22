@@ -29,7 +29,10 @@ describe('stage-engine dependency boundary', () => {
       .join('\n')
     const executableSource = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
 
+    // `commands` 是零运行时依赖的 Layer 1 包，且不认识任何文档协议——绘图命令因此复用它的
+    // 命令定义与四态推进，而不是在本包里再写一套会话。
     expect(manifest.dependencies).toEqual({
+      '@compose-ui/commands': 'workspace:*',
       '@compose-ui/core': 'workspace:*',
       '@compose-ui/interaction-kernel': 'workspace:*',
     })

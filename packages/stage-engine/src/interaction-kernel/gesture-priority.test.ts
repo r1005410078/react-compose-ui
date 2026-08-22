@@ -15,6 +15,7 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 优先级表锁定
     expect(STAGE_GESTURE_PRIORITY.map(({ id }) => id)).toEqual([
       'text-edit-guard',
       'pan',
+      'drafting-point',
       'rotate-tool',
       'paint-sample',
       'path',
@@ -39,8 +40,17 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 优先级表锁定
       const previous = STAGE_GESTURE_PRIORITY[i - 1]!
       const current = STAGE_GESTURE_PRIORITY[i]!
       expect(previous.priority).toBeGreaterThan(current.priority)
-      // 行号同序是抄录正确性的独立校验：级联在源文件里是自上而下的。
-      expect(previous.sourceLine).toBeLessThan(current.sourceLine)
+    }
+  })
+
+  it('抄录而来的项行号同序', () => {
+    // 行号同序是抄录正确性的独立校验：级联在源文件里是自上而下的。后来新增的插件没有原行号，
+    // 因此只在带行号的项之间比较。
+    const transcribed = STAGE_GESTURE_PRIORITY
+      .filter((entry): entry is typeof entry & { readonly sourceLine: number } =>
+        entry.sourceLine !== undefined)
+    for (let i = 1; i < transcribed.length; i += 1) {
+      expect(transcribed[i - 1]!.sourceLine).toBeLessThan(transcribed[i]!.sourceLine)
     }
   })
 

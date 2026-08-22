@@ -218,6 +218,19 @@ export interface ComposeStagePolicy {
   readonly lockGestureParent?: boolean
   /** 是否显示会话级网格；不会修改文档中的网格吸附设置。 @defaultValue true */
   readonly gridVisible?: boolean
+  /**
+   * 是否进入绘图模式。
+   *
+   * @remarks
+   * 绘图模式换的是**输入方式**：十字线、命令行、对象捕捉、方向敏感的框选判定。它不改变
+   * 对象世界——画出来的仍是普通页面 Entity，切回设计模式后在场景树、属性面板、动画与撤销
+   * 里的行为没有任何差别。
+   *
+   * 模式是会话状态，不写进文档。
+   *
+   * @defaultValue false
+   */
+  readonly drafting?: boolean
 }
 
 /**

@@ -122,6 +122,27 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   两处必须给出一致语义：对角线包围盒的空角在任何一条路径上都不得命中曲线。线状判定按
   `Curve` Component 而不是 Renderer 类型——按物料类型枚举，每加一种线状物料都会漏掉一处。
   `world = (屏幕 − 视口) / zoom`，因此命中相关用例**必须在非 100% 缩放下断言**。
+- **绘图是 Stage 的第三种模式，不是新工具。** 工具回答「现在这一下要干什么」，模式回答「整块
+  画布按哪套规矩工作」：绘图模式同时换掉工具集、光标、框选默认判定与底部 chrome。塞进
+  `StageInteractionTool` 会让每一处消费 tool 的代码都再判断一次模式，而那不是它们的职责。
+  模式是**会话状态**，不写进文档，也**不隐藏或改造场景树、属性面板与 Palette**——对象世界归
+  页面，绘图模式只换输入方式，画出来的仍是普通 Entity。
+  命令会话状态住在 **Stage 自己**（命令行由 Stage 渲染）：提示文本、橡皮筋预览与捕捉标记是
+  同一份状态的三种呈现，交给宿主渲染会凭空造出一个逐帧回传的跨包协议。
+  取点插件的优先级排在 **`pan` 之下**——这是对 CAD「命令取点最高」的有意偏离：`pan` 在 Stage
+  里是按住空格/中键的临时覆盖，命令进行中仍要能平移画布去看远处那个点。它在**任何命中类型上
+  都接管**：命令等着取点时点到已有 Entity，意图是「在那里取一个点」而不是「选中它」。
+- **点输入管线与坐标语法住在 `core`，两块画布共用。** 优先级是**键入坐标 > 对象捕捉 > 正交 >
+  网格**，其中「键入的坐标不被任何吸附改写」是一条不变量：用户打了 `100,50` 却落在 `96,48`
+  看起来像浮点误差、实际是流程错误。捕捉命中后直接短路，不再过正交与网格——捕捉到端点又被
+  网格挪走等于捕捉没发生。指针取点与键入坐标**必须走同一条管线**，分叉的症状是「键盘画的和
+  鼠标画的落点不一样」，而用户无法判断哪个才对。网格设置两轴独立（`stepX`/`stepY`），CAD 填
+  同一个值。
+- **特征点捕捉与对齐吸附是姐妹查询，不是一个。** `snapCandidates` 返回 `{ axis, value }` 的
+  参考**线**（Figma 式对齐），`findStageFeaturePoint` 返回一个二维**点**（落在端点上）。v1 的
+  候选只来自带 `Curve` 的 Entity 的端点与中点，**刻意不出盒的角点**——那正是对齐吸附覆盖的
+  语义，两套同时生效会在同一次取点里给出互相拉扯的答案。优先级**严格先于距离**（端点压过
+  中点，即使中点更近），与 CAD 侧 `findCadSnap` 同一条判定：两块画布的捕捉手感必须相同。
 - **页面之间只有跳转关系，没有嵌套关系。** Page Slot 已删除：它是「弱化版组件实例」——没有
   属性/结构覆盖、没有变体、编辑期不能下钻、不能离线渲染。复用一块 UI 一律用 Component
   Asset v2 与 Variant。**没有为它写迁移器**：删除时尚无线上资产使用 Page Slot，为零份文档
@@ -347,9 +368,11 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   标尺**只提供画布元素自身的样式，不规定自己坐在哪里**：摆位由各画布的样式表决定，页面画布
   还要给自定义滚动条让位，两处留白不同。`data-testid` 前缀由调用方给出。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
-  包，只能依赖 `core` 与 `interaction-kernel`，不得依赖任何 React chrome、registry 或 UI
-  Context 包。仲裁器与注册表来自 `interaction-kernel`，Stage 侧只保留 `StageKernelProfile`
-  这一处绑定与既有名称别名，不得再实现第二份仲裁。
+  包，只能依赖 `core`、`interaction-kernel` 与 `commands`，不得依赖任何 React chrome、registry
+  或 UI Context 包。仲裁器与注册表来自 `interaction-kernel`，Stage 侧只保留 `StageKernelProfile`
+  这一处绑定与既有名称别名，不得再实现第二份仲裁。绘图命令复用 `commands` 的定义与四态推进，
+  **本包不实现第二套命令会话**——那个包对 `TContext`/`TEffect` 泛型且零运行时依赖，因此这条
+  依赖不引入任何文档知识。
 - `@compose-ui/layout-engine` 是无 React、无 DOM 的 Yoga 布局求解包，只能依赖 `core` 与
   `yoga-layout`；Yoga 类型、Node 与 WASM 指针不得进入公共 API。
 - `@compose-ui/animation` 是无 React、无 DOM 的场景动画领域包，只能依赖 `core`，不得依赖
@@ -380,6 +403,10 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`script-runtime`、`ui-context`、
   DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`；`layout-engine` 只用于
   组件实例的独立嵌套文档 Runtime。
+- `@compose-ui/components` 的命令行是**共享 Pattern**：它只消费 `ComposeCommandPrompt` 与一组
+  注入的文案与状态标记，不认识文档、选择集或任何具体命令。两块画布共用它——正交/捕捉/选择集
+  计数这类各不相同的东西以 `status` 标记传入，`data-testid` 前缀由调用方给出。二态标记两种
+  状态都要渲染：只在开启时出现会让用户无法确认它现在是关的。
 - `@compose-ui/cad-canvas` 是 AutoCAD 风格的受控 CAD 编辑画布（SVG 图面 + 命令行），可以依赖
   `cad`、`canvas-kit`、`commands`、`core`、`components` 与 `ui-context`，不得依赖 `stage`、`stage-engine`、
   `editor`、`property-panel` 或 `scene-tree`。它**不复用 Stage 的场景渲染**：Stage 的命中单位

@@ -51,7 +51,7 @@ import { applyComposeAnimationAtTime } from '@compose-ui/animation'
 import { createRulerTicks, formatComposeNumber, type EditorCommand } from '@compose-ui/core'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { getCadCanvasMessages } from './cad-canvas-i18n'
-import { CadCommandLine } from './command-line'
+import { ComposeCommandLine } from '@compose-ui/components'
 import {
   ComposeCanvasRulers,
   useCanvasSurfaceSize,
@@ -313,7 +313,8 @@ export function ComposeCadCanvas({
   const pointContext = useMemo(() => ({
     reference,
     ortho,
-    grid: { enabled: gridEnabled, step: gridStep },
+    // CAD 的网格是等步的，两轴填同一个值。
+    grid: { enabled: gridEnabled, stepX: gridStep, stepY: gridStep },
   }), [gridEnabled, gridStep, ortho, reference])
 
   // 指示点是十字光标、橡皮筋终点、坐标读数与捕捉标记的唯一来源；它不属于任何手势会话。
@@ -634,6 +635,29 @@ export function ComposeCadCanvas({
     }
   }, [runEffects])
 
+  // 命令行是共享 Pattern，它不认识正交、对象捕捉与选择集；CAD 侧把这三样连同坐标读数
+  // 翻成一列状态标记。二态标记两种状态都给出——只在开启时渲染会让用户无法确认它现在是关的。
+  const commandLineMessages = useMemo(() => ({
+    ready: messages.ready,
+    inputLabel: messages.commandLineLabel,
+    placeholder: messages.commandPlaceholder,
+    keywordsPrefix: messages.keywordsPrefix,
+  }), [messages])
+
+  const commandLineStatus = useMemo(() => [
+    ...(pointerPoint
+      ? [{
+          id: 'pointer-readout',
+          label: `${formatComposeNumber(pointerPoint.x)}, ${formatComposeNumber(pointerPoint.y)}`,
+        }]
+      : []),
+    ...(interaction.selection.length > 0
+      ? [{ id: 'selection-count', label: String(interaction.selection.length), active: true }]
+      : []),
+    { id: 'snap-state', label: snapEnabled ? messages.snapOn : messages.snapOff, active: snapEnabled },
+    { id: 'ortho-state', label: ortho ? messages.orthoOn : messages.orthoOff, active: ortho },
+  ], [interaction.selection.length, messages, ortho, pointerPoint, snapEnabled])
+
   const handlePointerDown = useCallback((event: CadSurfacePointerEvent) => {
     focusCommandLine()
     const result = arbiterRef.current.begin(
@@ -733,17 +757,13 @@ export function ComposeCadCanvas({
           onViewportChange={setViewport}
         />
       </div>
-      <CadCommandLine
+      <ComposeCommandLine
         inputRef={commandInputRef}
-        messages={messages}
-        pointer={pointerPoint
-          ? `${formatComposeNumber(pointerPoint.x)}, ${formatComposeNumber(pointerPoint.y)}`
-          : null}
+        messages={commandLineMessages}
         notice={notice}
-        ortho={ortho}
         prompt={prompt}
-        selectionCount={interaction.selection.length}
-        snap={snapEnabled}
+        status={commandLineStatus}
+        testIdPrefix="cad"
         onCancel={handleCancel}
         onSubmit={handleSubmit}
       />

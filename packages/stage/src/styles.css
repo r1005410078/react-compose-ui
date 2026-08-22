@@ -1051,3 +1051,43 @@
   cursor: text;
   outline: none;
 }
+
+/*
+ * 绘图模式的图面反馈：十字线、橡皮筋与捕捉标记。整层不接收指针事件——它画在图面之上，
+ * 拦下点击就等于取点永远落不到画布。
+ */
+.compose-stage__drafting {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.compose-stage__drafting-crosshair line {
+  stroke: var(--compose-stage-crosshair, rgb(230 237 247 / 45%));
+  stroke-width: 1;
+}
+
+.compose-stage__drafting-band {
+  stroke: var(--compose-accent, #4c8dff);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.compose-stage__drafting-snap {
+  fill: none;
+  stroke: var(--compose-accent, #4c8dff);
+  stroke-width: 1.5;
+}
+
+/* 绘图模式下光标交给十字线，系统光标会与它重影。 */
+.compose-stage[data-drafting] .compose-stage__surface {
+  cursor: none;
+}
+
+.compose-stage__command-line {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+}

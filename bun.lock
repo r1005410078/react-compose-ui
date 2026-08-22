@@ -410,6 +410,7 @@
       "name": "@compose-ui/stage-engine",
       "version": "0.1.0",
       "dependencies": {
+        "@compose-ui/commands": "workspace:*",
         "@compose-ui/core": "workspace:*",
         "@compose-ui/interaction-kernel": "workspace:*",
       },

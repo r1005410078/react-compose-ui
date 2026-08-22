@@ -116,6 +116,7 @@ import {
 } from '../workspace-layout'
 import type {
   ComposeComponentDocumentSession,
+  ComposeEditorMode,
   ComposePageDocumentSession,
   ComposeCadDocumentSession,
   ComposeWorkspaceDocumentSession,
@@ -2007,6 +2008,8 @@ export function ComposeEditor({
     settingsButtonRef.current = element
   }, [])
 
+  /** 绘图模式是会话状态：只改 Stage 的输入方式，不进文档也不重组面板。 */
+  const [drafting, setDrafting] = useState(false)
   /** setEditorMode 正在重组底部面板时抑制 onDidActivePanelChange 的回流。 */
   const editorModeGuardRef = useRef(false)
   /** 进入动画模式前底部组的折叠状态；切回设计模式时恢复。 */
@@ -2020,9 +2023,11 @@ export function ComposeEditor({
    * `onDidActivePanelChange`，用 guard 防止监听器把切换路由回自己形成循环。
    */
   const setEditorMode = useCallback((
-    mode: 'design' | 'animation',
+    mode: ComposeEditorMode,
     options?: { readonly restoreCollapsed?: boolean },
   ) => {
+    // 绘图只换 Stage 的输入方式，不重组任何面板——对象世界归页面，场景树与属性面板照常在。
+    setDrafting(mode === 'drafting')
     const rawApi = outerApiRef.current
     if (!rawApi || editorModeGuardRef.current) return
     const active = animationModeRef.current.active
@@ -2247,7 +2252,10 @@ export function ComposeEditor({
           },
           // 动画模式拖拽锁定原父级：拖动表达姿态编辑（关键帧/offset），不得跨场景挂载——
           // 否则对象被静默挂进激活场景，后续打点全部落进别块场景的动画。
-          policy: { lockGestureParent: animationMode.active || undefined },
+          policy: {
+            lockGestureParent: animationMode.active || undefined,
+            drafting: drafting || undefined,
+          },
           onToolChange: controller.setTool,
           scriptScope: activePageSession?.scriptScope,
           // 无选择时 Frame 动作与辅助线的回退目标是页面的激活场景，不是第一个根 Frame。
@@ -2302,7 +2310,9 @@ export function ComposeEditor({
       })(),
       // 空态触发条件是「镜像无动画」而不是「无轨道」：已绑定且零轨道显示正常时间线。
       animationEmpty: animationMode.animationId === null,
-      editorMode: animationMode.active ? 'animation' as const : 'design' as const,
+      editorMode: animationMode.active
+        ? 'animation' as const
+        : drafting ? 'drafting' as const : 'design' as const,
       onEditorModeChange: setEditorMode,
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
