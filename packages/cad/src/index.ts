@@ -178,6 +178,12 @@ export {
   type CadSessionArbiter,
 } from './interaction'
 export {
+  importDxfDocument,
+  type DxfDiagnostic,
+  type DxfDiagnosticCode,
+  type DxfImportResult,
+} from './dxf'
+export {
   COMPOSE_CAD_FILE_SUFFIX,
   COMPOSE_CAD_MEDIA_TYPE,
   composeCadDisplayName,
