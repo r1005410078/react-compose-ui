@@ -5,6 +5,8 @@ import type {
   ComposeCommandSession,
   ComposeCommandStep,
 } from '@compose-ui/commands'
+import { createStageCopyCommand, createStageMoveCommand } from './move-copy-command'
+import { createStageEraseCommand } from './erase-command'
 import type { StageDraftingContext, StageDraftingEffect, StageDraftingMessages } from './drafting-types'
 
 function firstPrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
@@ -58,7 +60,7 @@ export function createStageLineSession(
       return {
         status: 'prompt',
         prompt,
-        preview: { segments: [], reference: point },
+        preview: { reference: point },
         // 第一点只是起点，还构不成一段。
         ...(reference ? { commit: { segments: [{ start: reference, end: point }], reference: point } } : {}),
       }
@@ -82,5 +84,10 @@ export function createStageLineCommand(
 export function createStageDraftingCommands(
   messages: StageDraftingMessages,
 ): readonly ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect>[] {
-  return [createStageLineCommand(messages)]
+  return [
+    createStageLineCommand(messages),
+    createStageMoveCommand(messages),
+    createStageCopyCommand(messages),
+    createStageEraseCommand(messages),
+  ]
 }

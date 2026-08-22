@@ -10,6 +10,13 @@ const messages = {
   specifyNextPoint: '指定下一点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
+  selectObjects: '选择对象',
+  expectedSelection: '需要选择对象',
+  basePoint: '指定基点',
+  displacementPoint: '指定第二点',
+  moveTitle: '移动',
+  copyTitle: '复制',
+  eraseTitle: '删除',
 }
 
 const context: StageDraftingContext = { messages }
@@ -65,7 +72,7 @@ describe('LINE 命令', () => {
 
   it('命令按名称与别名解析', () => {
     const commands = createStageDraftingCommands(messages)
-    expect(commands.map(({ id }) => id)).toEqual(['LINE'])
+    expect(commands.map(({ id }) => id)).toEqual(['LINE', 'MOVE', 'COPY', 'ERASE'])
     expect(commands[0]?.aliases).toEqual(['L'])
   })
 })

@@ -1,4 +1,4 @@
-import { worldToScreen, type StagePoint, type StageViewport } from '@compose-ui/stage-engine'
+import { worldToScreen, type StagePoint, type StageRect, type StageViewport } from '@compose-ui/stage-engine'
 import type { StageFeaturePoint } from '@compose-ui/stage-engine'
 
 /** 捕捉标记的边长（屏幕像素）。 */
@@ -12,6 +12,14 @@ export interface StageDraftingOverlayProps {
   readonly crosshair: StagePoint | null
   readonly snap: StageFeaturePoint | null
   readonly rubberBand: { readonly start: StagePoint; readonly end: StagePoint } | null
+  /**
+   * 被作用对象的世界包围盒轮廓，已按当前位移平移。
+   *
+   * @remarks
+   * 刻意只画轮廓：完整幽灵渲染要把绘图会话的位移接进仲裁器的 `previewTransforms` 通道，
+   * 而绘图会话不在仲裁器里——它是 Stage 自己的状态。
+   */
+  readonly outlines: readonly StageRect[]
 }
 
 /**
@@ -32,6 +40,7 @@ export function StageDraftingOverlay({
   crosshair,
   snap,
   rubberBand,
+  outlines,
 }: StageDraftingOverlayProps) {
   const snapScreen = snap ? worldToScreen(snap.point, viewport) : null
   const bandStart = rubberBand ? worldToScreen(rubberBand.start, viewport) : null
@@ -61,6 +70,20 @@ export function StageDraftingOverlay({
           y2={bandEnd.y}
         />
       ) : null}
+      {outlines.map((rect, position) => {
+        const origin = worldToScreen({ x: rect.x, y: rect.y }, viewport)
+        return (
+          <rect
+            className="compose-stage__drafting-outline"
+            data-testid="stage-drafting-outline"
+            height={rect.height * viewport.zoom}
+            key={`${position}:${rect.x}:${rect.y}`}
+            width={rect.width * viewport.zoom}
+            x={origin.x}
+            y={origin.y}
+          />
+        )
+      })}
       {snapScreen ? (
         <rect
           className="compose-stage__drafting-snap"

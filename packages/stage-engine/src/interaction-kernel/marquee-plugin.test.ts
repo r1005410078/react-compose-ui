@@ -67,6 +67,38 @@ describe('OpenSpec: stage-engine / 框选工具与选区布尔组合 / 工具入
     expect(effects.filter((effect) => effect.type === 'selection.change')).toHaveLength(0)
   })
 
+  it('累加模式下无修饰键框选并入既有选区', () => {
+    const { controller, selections } = marqueeSetup({
+      selectedIds: ['b'],
+      selectionMode: 'accumulate',
+    })
+
+    controller.send(down({ kind: 'surface' }))
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 60, y: 60 }, modifiers: MODIFIERS })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 60, y: 60 }, modifiers: MODIFIERS })
+
+    // 与点选同一张表：CAD 里框选也是加法。
+    expect(selections()).toEqual([{ type: 'selection.change', selectedIds: ['b', 'a'] }])
+  })
+
+  it('累加模式下 Shift 框选是移出', () => {
+    const { controller, selections } = marqueeSetup({
+      selectedIds: ['a', 'b'],
+      selectionMode: 'accumulate',
+    })
+
+    controller.send(down({ kind: 'surface' }))
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 60, y: 60 }, modifiers: MODIFIERS })
+    controller.send({
+      type: 'pointer.up',
+      pointerId: 1,
+      point: { x: 60, y: 60 },
+      modifiers: { ...MODIFIERS, shift: true },
+    })
+
+    expect(selections()).toEqual([{ type: 'selection.change', selectedIds: ['b'] }])
+  })
+
   it('松手按框住的节点请求一次选区变更', () => {
     const { controller, selections } = marqueeSetup()
 

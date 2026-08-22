@@ -297,6 +297,36 @@ function renderStage(
   return { dispatch: dispatchSpy, runtime, selection: selectionSpy }
 }
 
+/**
+ * 渲染一个可以改选择集的 Stage。
+ *
+ * @remarks
+ * 绘图命令等待选择对象时读的是宿主的选择集，因此必须能在命令进行中把它换掉——这正是
+ * 「选择集归宿主、会话只是镜像」这条设计要钉住的行为。
+ */
+function renderStageWithRerender(
+  value: ComposeDocument,
+  options: { drafting?: boolean } = {},
+) {
+  const runtime = createTransactionRuntime({ document: value })
+  const dispatch: ComposeStageDispatch = (command) => runtime.dispatch(command)
+  const view = (selectedIds: readonly string[]) => (
+    <ComposeStage
+      document={value}
+      layoutSnapshot={layoutSnapshot(value)}
+      onSelectedIdsChange={vi.fn()}
+      onViewportChange={vi.fn()}
+      policy={{ drafting: options.drafting }}
+      services={{ dispatch, registry }}
+      selectedIds={selectedIds}
+      tool="select"
+      viewport={{ x: 0, y: 0, zoom: 1 }}
+    />
+  )
+  const result = render(view([]))
+  return { runtime, rerender: (ids: readonly string[]) => { result.rerender(view(ids)) } }
+}
+
 describe('ComposeStage ECS', () => {
   afterEach(cleanup)
 
@@ -1643,6 +1673,82 @@ describe('绘图模式', () => {
     fireEvent.keyDown(input, { key: 'Escape' })
     expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('已取消')
     expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  function runCommand(name: string) {
+    const input = screen.getByRole('textbox', { name: '命令行' })
+    fireEvent.change(input, { target: { value: name } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    return input
+  }
+
+  it('OpenSpec: stage / 绘图模式的编辑命令 / 先选后执行的 MOVE 直接问基点', () => {
+    const value = document()
+    const before = (value.entities.a!.components.LayoutItem as {
+      readonly offset: { x: number; y: number }
+    }).offset
+    const { dispatch, runtime } = renderStage(value, {
+      drafting: true,
+      selectedIds: ['a'],
+    })
+    const input = runCommand('M')
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定基点')
+
+    for (const text of ['0,0', '30,20']) {
+      fireEvent.change(input, { target: { value: text } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    }
+
+    // 一条命令等于一步撤销。
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    const item = runtime.document.entities.a!.components.LayoutItem as {
+      readonly offset: { x: number; y: number }
+    }
+    // 键入的位移不被网格吸附改写：30 与 20 都不在步长 8 的网格上。
+    expect(item.offset).toEqual({ x: before.x + 30, y: before.y + 20 })
+  })
+
+  it('OpenSpec: stage / 绘图命令消费宿主的选择集 / 选择集变化后作用范围同步', () => {
+    const { rerender } = renderStageWithRerender(document(), { drafting: true })
+    runCommand('M')
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('选择对象')
+    // 命令进行中宿主的选择集变了：会话必须跟着变，否则它会作用在用户已经移出的对象上。
+    rerender(['a'])
+    expect(screen.getByTestId('stage-drafting-selection-count')).toHaveTextContent('已选 1')
+  })
+
+  it('OpenSpec: stage / 绘图模式的编辑命令 / 先选后执行的 ERASE 当场删除并清空选择集', () => {
+    const { runtime, selection } = renderStage(document(), {
+      drafting: true,
+      selectedIds: ['a'],
+    })
+
+    runCommand('E')
+
+    expect(runtime.document.entities.a).toBeUndefined()
+    expect(selection).toHaveBeenCalledWith([])
+  })
+
+  it('OpenSpec: stage / 编辑命令显示作用对象的轮廓预览 / 取消后预览消失', () => {
+    renderStage(document(), { drafting: true, selectedIds: ['a'] })
+    const input = runCommand('M')
+    expect(screen.queryAllByTestId('stage-drafting-outline')).toHaveLength(0)
+
+    fireEvent.change(input, { target: { value: '0,0' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.queryAllByTestId('stage-drafting-outline')).toHaveLength(1)
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(screen.queryAllByTestId('stage-drafting-outline')).toHaveLength(0)
+  })
+
+  it('没有命令在跑时 Esc 清空选择集', () => {
+    const { selection } = renderStage(document(), { drafting: true, selectedIds: ['a'] })
+
+    // 累加语义下点空白不会清空（那是一次没框住东西的框选），Esc 是唯一的清空入口。
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '命令行' }), { key: 'Escape' })
+
+    expect(selection).toHaveBeenCalledWith([])
   })
 
   it('F8 切换正交，F3 切换对象捕捉', () => {

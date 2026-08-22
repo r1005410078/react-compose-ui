@@ -93,3 +93,142 @@ test('OpenSpec: stage-engine / 取点接管排在画布平移之下 / 命令进�
   // 平移没有把命令吃掉。
   await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('指定第一点')
 })
+
+const LINES: readonly (readonly [readonly [number, number], readonly [number, number]])[] = [
+  [[200, 180], [400, 180]],
+  [[200, 300], [400, 300]],
+]
+
+/**
+ * 在绘图模式画出 {@link LINES} 两条互不相交的线。
+ *
+ * @remarks
+ * 返回按线身中点取的点击位置——**从实测包围盒算而不是从落笔坐标算**：落笔点会被网格吸附
+ * 挪动最多半格，而线状节点的命中区只有十几个屏幕像素，按落笔坐标点会时中时不中。
+ */
+async function drawTwoLines(page: import('@playwright/test').Page, stage: import('@playwright/test').Locator) {
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  for (const [from, to] of LINES) {
+    await commandInput.fill('L')
+    await commandInput.press('Enter')
+    await page.mouse.click(box.x + from[0], box.y + from[1])
+    await page.mouse.click(box.x + to[0], box.y + to[1])
+    await commandInput.press('Escape')
+  }
+  const strokes = stage.getByTestId('compose-material-curve-stroke')
+  await expect(strokes).toHaveCount(2)
+  const centers = await strokes.evaluateAll((nodes) => nodes.map((node) => {
+    const rect = node.getBoundingClientRect()
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+  }))
+  return { strokes, centers }
+}
+
+test('OpenSpec: stage / 绘图模式使用 CAD 选择语义 / 点中累加、Shift 移出、Esc 清空', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.getByRole('radio', { name: '绘图' }).click()
+
+  // 命中相关断言必须在非 100% 缩放下做：`world = (屏幕 − 视口) / zoom`。
+  await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
+
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const { centers } = await drawTwoLines(page, stage)
+
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  const selectedRows = sceneTree.getByRole('row').and(page.locator('[aria-selected="true"]'))
+
+  // 点中即加入，不需要修饰键——这与设计模式的「点一下换一个」相反，是刻意的。
+  await page.mouse.click(centers[0]!.x, centers[0]!.y)
+  await expect(selectedRows).toHaveCount(1)
+  await page.mouse.click(centers[1]!.x, centers[1]!.y)
+  await expect(selectedRows).toHaveCount(2)
+
+  // Shift 是移出。
+  await page.keyboard.down('Shift')
+  await page.mouse.click(centers[1]!.x, centers[1]!.y)
+  await page.keyboard.up('Shift')
+  await expect(selectedRows).toHaveCount(1)
+
+  // 累加语义下点空白不清空（那是一次没框住东西的框选），Esc 才是清空入口。
+  await commandInput.press('Escape')
+  await expect(selectedRows).toHaveCount(0)
+
+  // 切回设计模式恢复替换语义：点第二条只剩它一个。
+  await editor.getByRole('radio', { name: '设计' }).click()
+  await page.mouse.click(centers[0]!.x, centers[0]!.y)
+  await page.mouse.click(centers[1]!.x, centers[1]!.y)
+  await expect(selectedRows).toHaveCount(1)
+})
+
+test('OpenSpec: stage / 绘图模式的编辑命令 / MOVE 一步撤销、ERASE 先选后执行、COPY 连续放置', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.getByRole('radio', { name: '绘图' }).click()
+
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const prompt = stage.getByTestId('stage-drafting-command-prompt')
+  const { strokes, centers } = await drawTwoLines(page, stage)
+
+  const screenX = async () => strokes.evaluateAll((nodes) =>
+    nodes.map((node) => Math.round(node.getBoundingClientRect().x)))
+  const before = await screenX()
+
+  // 命令进行中选择对象：选择集归宿主，命令读的是宿主那一份。
+  await commandInput.fill('M')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('选择对象')
+  await page.mouse.click(centers[0]!.x, centers[0]!.y)
+  await page.mouse.click(centers[1]!.x, centers[1]!.y)
+  await expect(stage.getByTestId('stage-drafting-selection-count')).toContainText('已选 2')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('指定基点')
+
+  await commandInput.fill('0,0')
+  await commandInput.press('Enter')
+  await commandInput.fill('@60,0')
+  await commandInput.press('Enter')
+
+  // 两条线一起走同样的位移。屏幕位移是 60 × zoom，而 zoom 由自动适配决定，因此这里断言
+  // 「两条相等且为正」——精确的 60 由 zoom 恒为 1 的组件测试钉住。
+  const moved = await screenX()
+  expect(moved[0]! - before[0]!).toBeGreaterThan(0)
+  expect(moved[1]! - before[1]!).toBe(moved[0]! - before[0]!)
+
+  // 多选移动只占一步撤销。
+  await page.keyboard.press('Control+z')
+  await expect.poll(screenX).toEqual(before)
+
+  // 先选后执行：`M` 结束后选择集还在，`E↵` 当场删除并清空选择集。
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  const selectedRows = sceneTree.getByRole('row').and(page.locator('[aria-selected="true"]'))
+  await expect(selectedRows).toHaveCount(2)
+  await commandInput.fill('E')
+  await commandInput.press('Enter')
+  await expect(strokes).toHaveCount(0)
+  await expect(selectedRows).toHaveCount(0)
+
+  await page.keyboard.press('Control+z')
+  await expect(strokes).toHaveCount(2)
+
+  // COPY 连续放置：放下一份继续等下一个落点，位移始终相对最初的基点。
+  await commandInput.press('Escape')
+  await page.mouse.click(centers[0]!.x, centers[0]!.y)
+  await commandInput.fill('CO')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('指定基点')
+  await commandInput.fill('0,0')
+  await commandInput.press('Enter')
+  await commandInput.fill('0,40')
+  await commandInput.press('Enter')
+  await expect(strokes).toHaveCount(3)
+  await commandInput.fill('0,80')
+  await commandInput.press('Enter')
+  await expect(strokes).toHaveCount(4)
+  await commandInput.press('Escape')
+})
