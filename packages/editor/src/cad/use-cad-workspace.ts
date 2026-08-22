@@ -49,7 +49,25 @@ export function useCadWorkspace({
     () => (provider ? createComposeCadStore({ provider }) : undefined),
     [provider],
   )
-  useEffect(() => () => { store?.dispose() }, [store])
+  /*
+   * 卸载时释放 Store，但**延后一个微任务并按代次判定**。
+   *
+   * StrictMode 在开发期会模拟一次「挂载 → 卸载 → 再挂载」，而 `useMemo` 不会因此重算——
+   * 直接在卸载清理里 dispose，会把仍在使用的那一个 Store 永久释放掉，随后每次
+   * createDocument/readDocument 都抛「CAD Store 已释放」。生产构建没有这次双调用，因此
+   * 只有开发期现形，端到端用例（跑的是 vite preview）也照样全绿。
+   *
+   * 与 `use-layout-runtime.ts` 的 Runtime 释放用同一套代次判定：再挂载会让代次前进，
+   * 微任务里发现代次已变就不释放；真正的卸载没有后续挂载，代次不变，照常释放。
+   */
+  const generation = useRef(0)
+  useEffect(() => {
+    generation.current += 1
+    const mounted = generation.current
+    return () => queueMicrotask(() => {
+      if (generation.current === mounted) store?.dispose()
+    })
+  }, [store])
 
   // 会话与更新入口从 ref 读取而不进依赖数组：宿主每帧新建这些引用，进依赖数组会让
   // openDocument / saveDocument 每帧换身份，注册进宿主保存表的回调随之每帧重建。
