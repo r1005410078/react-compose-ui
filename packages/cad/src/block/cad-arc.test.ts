@@ -12,7 +12,7 @@ import { findCadEntitiesInBounds, findCadHit } from '../selection'
 import { findCadSnap } from '../snap'
 import { translateCadEntity } from '../transform'
 import { arcMidpoint } from '../geometry'
-import { collectCadVisibleCurves } from './cad-block-expand'
+import { collectCadVisibleGeometry } from './cad-block-expand'
 import { createCadInsert } from './cad-block-transform'
 
 /** 圆心 (100,100)、半径 20、从 0° 顺时针扫 90° 的弧。 */
@@ -72,14 +72,14 @@ function documentWithInstance(scale: { x: number, y: number }, rotation = 0): Ca
 
 describe('OpenSpec: cad-document / CAD 可见几何遍历', () => {
   it('圆弧原样进入遍历，不被拍扁成线段', () => {
-    const curves = collectCadVisibleCurves(documentWithArc())
+    const curves = collectCadVisibleGeometry(documentWithArc())
     expect(curves).toHaveLength(1)
-    expect(curves[0]!.curve.kind).toBe('arc')
+    expect(curves[0]!.geometry.kind).toBe('arc')
   })
 
   it('隐藏图层上的圆弧不参与', () => {
     const document = documentWithArc()
-    expect(collectCadVisibleCurves({
+    expect(collectCadVisibleGeometry({
       ...document,
       layers: document.layers.map((layer) => ({ ...layer, visible: false })),
     })).toEqual([])
@@ -188,8 +188,10 @@ describe('OpenSpec: cad-document / CAD 几何位移 / 圆弧只移圆心', () =>
 
 describe('OpenSpec: cad-document / CAD 块内圆弧的缩放', () => {
   const arcOf = (document: CadDocument) => {
-    const found = collectCadVisibleCurves(document).find(({ curve }) => curve.kind === 'arc')
-    return found?.curve.kind === 'arc' ? found.curve : null
+    const found = collectCadVisibleGeometry(document).find(
+      ({ geometry }) => geometry.kind === 'arc',
+    )
+    return found?.geometry.kind === 'arc' ? found.geometry : null
   }
 
   it('等比缩放仍是精确弧', () => {
@@ -216,10 +218,10 @@ describe('OpenSpec: cad-document / CAD 块内圆弧的缩放', () => {
   it('非等比缩放降级为线段但形状仍对', () => {
     const document = documentWithInstance({ x: 2, y: 1 })
     expect(arcOf(document)).toBeNull()
-    const curves = collectCadVisibleCurves(document)
+    const curves = collectCadVisibleGeometry(document)
     // 一条线段（块内直线）加上拍扁出来的若干段。
     expect(curves.length).toBeGreaterThan(2)
-    expect(curves.every(({ curve }) => curve.kind === 'segment')).toBe(true)
+    expect(curves.every(({ geometry }) => geometry.kind === 'segment')).toBe(true)
     // 半轴 (10,5)、圆心 (120,100)。45° 参数处椭圆在 (127.07,103.54)，同角度的圆在
     // (127.07,107.07)——两点相距 3.5，容差 1 足以区分「拍扁的是椭圆」还是「按某一轴硬算成圆」。
     expect(findCadHit(document, { x: 127.07, y: 103.54 }, 1)).toBe('i1')

@@ -13,12 +13,13 @@ import {
   createCadArcCommand,
   createCadCircleCommand,
   createCadPortCommand,
+  createCadTextCommand,
   createCadWireCommand,
   createCadPluginRegistry,
   createCadSceneIndex,
   createCadSessionArbiter,
-  collectCadVisibleCurves,
-  curveBounds,
+  collectCadVisibleGeometry,
+  geometryBounds,
   findCadHit,
   findCadSnap,
   parseCadCoordinate,
@@ -200,6 +201,7 @@ export function ComposeCadCanvas({
       createCadPortCommand(messages),
       createCadCircleCommand(messages),
       createCadArcCommand(messages),
+      createCadTextCommand(messages),
     ]),
     [messages],
   )
@@ -337,10 +339,10 @@ export function ComposeCadCanvas({
     const selected = new Set(interaction.selection)
     if (selected.size === 0) return null
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const { ownerId, curve } of collectCadVisibleCurves(document)) {
+    for (const { ownerId, geometry } of collectCadVisibleGeometry(document)) {
       if (!selected.has(ownerId)) continue
       // 圆弧用紧包围盒：整圆的盒子会让一段 90° 的弧在标尺上量出四倍长度。
-      const box = curveBounds(curve)
+      const box = geometryBounds(geometry)
       minX = Math.min(minX, box.minX)
       minY = Math.min(minY, box.minY)
       maxX = Math.max(maxX, box.maxX)

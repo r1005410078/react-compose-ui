@@ -54,6 +54,12 @@ const messages = {
     arcThroughPoint: '指定弧上一点',
     arcEndPoint: '指定弧的终点',
     collinearArc: '三点共线，无法定弧',
+    textTitle: '文字',
+    textPosition: '指定文字插入点',
+    textHeight: '指定字高',
+    textContent: '键入文字',
+    expectedTextHeight: '字高必须是一个正数',
+    expectedTextContent: '文字内容不能为空',
   },
   'en-US': {
     canvasLabel: 'CAD drawing',
@@ -107,6 +113,12 @@ const messages = {
     arcThroughPoint: 'Specify second point on arc',
     arcEndPoint: 'Specify end point of arc',
     collinearArc: 'The three points are collinear',
+    textTitle: 'Text',
+    textPosition: 'Specify text insertion point',
+    textHeight: 'Specify height',
+    textContent: 'Enter text',
+    expectedTextHeight: 'Height must be a positive number',
+    expectedTextContent: 'Text content must not be empty',
   },
 } as const
 

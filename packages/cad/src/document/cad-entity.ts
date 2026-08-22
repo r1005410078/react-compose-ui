@@ -1,4 +1,5 @@
 import type { ComposeEntity, JsonObject } from '@compose-ui/core'
+import type { CadTextAlign } from '../geometry'
 
 /** CAD Component 的稳定 Key。 @public */
 export const CAD_COMPONENT_KEYS = {
@@ -12,6 +13,8 @@ export const CAD_COMPONENT_KEYS = {
   wire: 'CadWire',
   /** 一段圆弧；整圆是扫掠 ±360 的弧。 */
   arc: 'CadArc',
+  /** 一段单行文字。 */
+  text: 'CadText',
 } as const
 
 /** 世界坐标中的一个点。 @public */
@@ -159,6 +162,35 @@ export interface CadArc extends JsonObject {
   readonly sweep: number
 }
 
+/**
+ * 一段单行文字。
+ *
+ * @remarks
+ * `position` 是**基线上的对齐锚点**，与 DXF 的 TEXT 同构：左对齐时在文字左端、居中时在中点、
+ * 右对齐时在右端。
+ *
+ * `height` 是**字号（em 尺寸）**而不是 AutoCAD 的大写字高。字号是渲染直接要的那个数，也是
+ * 命中框直接要的那个数；存大写字高会让渲染除以一个随字体而变的比例、命中再乘回来，同一个
+ * 猜测被钉进两处然后各自漂移。DXF 导入时做一次显式换算。
+ *
+ * @public
+ */
+export interface CadText extends JsonObject {
+  readonly position: CadPoint
+  /** 文字内容，不得为空。 */
+  readonly content: string
+  /** 字号（em）在世界单位下的大小，必须为正。 */
+  readonly height: number
+  /** 绕插入点的旋转，度；正为屏幕顺时针。 */
+  readonly rotation: number
+  readonly align: CadTextAlign
+}
+
+/** 读取文字；不是文字时为 undefined。 @public */
+export function getCadText(entity: ComposeEntity): CadText | undefined {
+  return entity.components[CAD_COMPONENT_KEYS.text] as CadText | undefined
+}
+
 /** 读取圆弧；不是圆弧时为 undefined。 @public */
 export function getCadArc(entity: ComposeEntity): CadArc | undefined {
   return entity.components[CAD_COMPONENT_KEYS.arc] as CadArc | undefined
@@ -262,6 +294,40 @@ export function createCadArcEntity(
         radius: input.radius,
         startAngle: input.startAngle,
         sweep: input.sweep,
+      },
+    },
+  }
+}
+
+/**
+ * 构造一个文字图元。
+ *
+ * @param id - 由调用方给出的稳定 Entity ID。
+ * @public
+ */
+export function createCadTextEntity(
+  id: string,
+  input: {
+    readonly layerId: string
+    readonly position: { readonly x: number; readonly y: number }
+    readonly content: string
+    readonly height: number
+    readonly rotation?: number
+    readonly align?: CadTextAlign
+  },
+): ComposeEntity {
+  return {
+    id,
+    // 内容即名字：场景树里「Text」全都一样，标签本身才是用户认得出的那个。
+    name: input.content,
+    components: {
+      [CAD_COMPONENT_KEYS.placement]: { layerId: input.layerId },
+      [CAD_COMPONENT_KEYS.text]: {
+        position: { x: input.position.x, y: input.position.y },
+        content: input.content,
+        height: input.height,
+        rotation: input.rotation ?? 0,
+        align: input.align ?? 'left',
       },
     },
   }

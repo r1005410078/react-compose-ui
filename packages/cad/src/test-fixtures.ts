@@ -45,6 +45,12 @@ export const cadTestCommandMessages: CadCommandMessages = {
   arcThroughPoint: '指定弧上一点',
   arcEndPoint: '指定终点',
   collinearArc: '三点共线，无法定弧',
+  textTitle: '文字',
+  textPosition: '指定文字插入点',
+  textHeight: '指定字高',
+  textContent: '键入文字',
+  expectedTextHeight: '需要一个正数字高',
+  expectedTextContent: '文字内容不能为空',
 }
 
 /**

@@ -8,7 +8,7 @@ import {
   type CadBlockDefinition,
   type CadDocument,
 } from '../document'
-import { collectCadVisibleCurves, createCadInsert, inverseCadBlockPoint } from '../block'
+import { collectCadVisibleGeometry, createCadInsert, inverseCadBlockPoint } from '../block'
 import { previewCadTranslate, translateCadEntity } from '../transform'
 import { findCadSnap } from '../snap'
 import { collectCadInstancePorts, resolveCadPortPoint, resolveCadWireSegment } from './index'
@@ -172,7 +172,7 @@ describe('OpenSpec: cad-document / CAD 导线', () => {
         i1: translateCadEntity(document.entities.i1!, { x: 0, y: 50 }),
       },
     }
-    const wire = segmentAt(collectCadVisibleCurves(moved), 'w1')
+    const wire = segmentAt(collectCadVisibleGeometry(moved), 'w1')
     expect(wire.start).toEqual({ x: 110, y: 150 })
     // 另一端没动。
     expect(wire.end).toEqual({ x: 300, y: 100 })
@@ -200,7 +200,7 @@ describe('OpenSpec: cad-document / CAD 导线', () => {
   })
 
   it('导线参与可见性遍历，因此命中、框选与捕捉都看得见它', () => {
-    const segments = collectCadVisibleCurves(wiredDocument())
+    const segments = collectCadVisibleGeometry(wiredDocument())
     expect(segments.filter(({ ownerId }) => ownerId === 'w1')).toHaveLength(1)
     // 导线中点是捕捉候选。
     const snap = findCadSnap(wiredDocument(), { x: 205, y: 100 }, 3, ['midpoint'])
@@ -302,7 +302,7 @@ describe('OpenSpec: cad-document / CAD 拖动预览与提交同源', () => {
   it('预览文档里导线跟着被拖的设备走', () => {
     const document = wiredDocument()
     const preview = previewCadTranslate(document, ['i1'], { x: 0, y: 50 })
-    expect(segmentAt(collectCadVisibleCurves(preview), 'w1').start)
+    expect(segmentAt(collectCadVisibleGeometry(preview), 'w1').start)
       .toEqual({ x: 110, y: 150 })
   })
 

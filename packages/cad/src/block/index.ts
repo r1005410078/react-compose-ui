@@ -1,6 +1,6 @@
 export {
-  collectCadVisibleCurves,
-  type CadVisibleCurve,
+  collectCadVisibleGeometry,
+  type CadVisibleGeometry,
 } from './cad-block-expand'
 export {
   createCadInsert,

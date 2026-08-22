@@ -1,5 +1,5 @@
-import { collectCadVisibleCurves } from '../block'
-import { collectCadInstancePorts } from '../connection'
+import { collectCadVisibleGeometry } from '../block'
+import { collectCadInsertPositions, collectCadInstancePorts } from '../connection'
 import type { CadDocument } from '../document'
 import type { CadInputPoint } from '../point-input'
 import {
@@ -7,11 +7,11 @@ import {
   isFullCircle,
   arcMidpoint,
   arcQuadrants,
-  curveNearPoint,
+  geometryNearPoint,
   segmentIntersection,
   segmentMidpoint,
   squaredDistance,
-  type CadCurve,
+  type CadGeometry,
   type CadSegment,
 } from '../geometry'
 
@@ -19,8 +19,8 @@ import {
  * 对象捕捉模式。
  *
  * @remarks
- * 端口是块声明的接线点，圆心与象限点属于圆弧，其余覆盖直线图元的全部几何特征。切点、垂足等
- * 随需要一并加入。
+ * 端口是块声明的接线点，圆心与象限点属于圆弧，插入点是「这个对象是从哪个点放下去的」（文字
+ * 锚点与块实例插入点），其余覆盖直线图元的全部几何特征。切点、垂足等随需要一并加入。
  *
  * @public
  */
@@ -30,6 +30,7 @@ export type CadSnapMode =
   | 'midpoint'
   | 'center'
   | 'quadrant'
+  | 'insertion'
   | 'intersection'
 
 /** 一个捕捉候选。 @public */
@@ -49,7 +50,7 @@ export interface CadSnapCandidate {
  * 短线的头）。同等距离下若端点胜出，用户点在接线柱上得到的是一条自由端点的导线——屏幕上像素
  * 级正确，要等到移动符号时才暴露，而画的当刻没有任何视觉线索。
  *
- * 圆心排在象限点之前，两者都排在端点、中点之后——这是 AutoCAD 的次序。
+ * 圆心排在象限点之前，两者都排在端点、中点之后，插入点再靠后——这是 AutoCAD 的次序。
  *
  * @public
  */
@@ -59,6 +60,7 @@ export const CAD_SNAP_MODES: readonly CadSnapMode[] = [
   'midpoint',
   'center',
   'quadrant',
+  'insertion',
   'intersection',
 ]
 
@@ -94,13 +96,13 @@ export function findCadSnap(
 
   // 与命中、框选共用同一条可见性遍历：三者对「什么算可见」必须给出同一个答案。块实例在这里
   // 同样被展开——插完符号要能捕到它的接线端点，否则块只是一张贴图。
-  const nearby: CadCurve[] = []
-  for (const { curve } of collectCadVisibleCurves(document)) {
-    if (!curveNearPoint(curve, point, radius)) continue
-    nearby.push(curve)
+  const nearby: CadGeometry[] = []
+  for (const { geometry } of collectCadVisibleGeometry(document)) {
+    if (!geometryNearPoint(geometry, point, radius)) continue
+    nearby.push(geometry)
   }
   const nearbySegments: CadSegment[] = nearby.filter(
-    (curve): curve is CadCurve & { kind: 'segment' } => curve.kind === 'segment',
+    (geometry): geometry is CadGeometry & { kind: 'segment' } => geometry.kind === 'segment',
   )
 
   const candidates: CadSnapCandidate[] = []
@@ -109,7 +111,19 @@ export function findCadSnap(
       candidates.push({ mode: 'port', point: candidate })
     }
   }
+  if (enabled.has('insertion')) {
+    // 文字锚点与块实例插入点是同一件事——「这个对象是从哪个点放下去的」，AutoCAD 的 INS 也
+    // 同时管这两个。块实例走文档而不是 `nearby`：遍历把实例展开成了它的内容，插入点本身不在
+    // 里面。
+    for (const geometry of nearby) {
+      if (geometry.kind === 'text') candidates.push({ mode: 'insertion', point: geometry.position })
+    }
+    for (const position of collectCadInsertPositions(document)) {
+      candidates.push({ mode: 'insertion', point: position })
+    }
+  }
   for (const curve of nearby) {
+    if (curve.kind === 'text') continue
     // 整圆没有端点也没有中点：它们只是「起始角写在哪」的产物，会随一次等价的重写而跳到别处。
     // AutoCAD 对圆同样只给圆心与象限点。
     const hasEnds = curve.kind === 'segment' || !isFullCircle(curve)

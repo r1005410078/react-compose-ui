@@ -1,11 +1,11 @@
-import { collectCadVisibleCurves } from '../block'
+import { collectCadVisibleGeometry } from '../block'
 import type { CadDocument } from '../document'
 import type { CadInputPoint } from '../point-input'
 import {
   boundsFromPoints,
-  curveCrossesBounds,
-  curveWithinBounds,
-  pointToCurveDistanceSquared,
+  geometryCrossesBounds,
+  geometryWithinBounds,
+  pointToGeometryDistanceSquared,
   type CadBounds,
 } from '../geometry'
 
@@ -53,7 +53,8 @@ export function cadSelectionBoundsFromDrag(
  * @remarks
  * 判据是**点到几何的距离**，不是包围盒。直线没有盒模型：一条对角线的包围盒里绝大部分是空的，
  * 按矩形判定会让两条交叉线互相遮挡对方的命中区。圆弧更极端——它的包围盒中心是空的，按盒判定
- * 会让点在圆心也算命中。这也是 CAD 不复用页面 Stage 那套 SceneIndex 的根本原因——那边命中的
+ * 会让点在圆心也算命中。**文字是例外中的正解**：它占满自己的盒子，因此「到它的距离」在框内
+ * 就是 0——规则没有被破坏，只是它对不同几何给出了不同的、正确的答案。这也是 CAD 不复用页面 Stage 那套 SceneIndex 的根本原因——那边命中的
  * 单位就是矩形。
  *
  * 同样距离时取 `rootIds` 中更靠后的：后画的在视觉上更靠上，用户点的是看得见的那条。
@@ -75,8 +76,8 @@ export function findCadHit(
   const limit = tolerance * tolerance
   let hit: string | null = null
   let best = Number.POSITIVE_INFINITY
-  for (const { ownerId, curve } of collectCadVisibleCurves(document)) {
-    const distance = pointToCurveDistanceSquared(curve, point)
+  for (const { ownerId, geometry } of collectCadVisibleGeometry(document)) {
+    const distance = pointToGeometryDistanceSquared(geometry, point)
     if (distance > limit) continue
     // `<=` 而不是 `<`：同距时后遍历到的（rootIds 靠后、视觉上更靠上）胜出。
     if (distance <= best) {
@@ -101,12 +102,12 @@ export function findCadEntitiesInBounds(
   bounds: CadSelectionBounds,
   mode: CadSelectionMode,
 ): readonly string[] {
-  const inside = mode === 'window' ? curveWithinBounds : curveCrossesBounds
+  const inside = mode === 'window' ? geometryWithinBounds : geometryCrossesBounds
   // 按 owner 聚合再判定：块实例的多段几何属于同一个对象，窗口模式要求它**整体**落在框内，
   // 逐段判定会让「框住了一半的符号」在窗口模式下也被选中。
   const byOwner = new Map<string, boolean>()
-  for (const { ownerId, curve } of collectCadVisibleCurves(document)) {
-    const hit = inside(curve, bounds)
+  for (const { ownerId, geometry } of collectCadVisibleGeometry(document)) {
+    const hit = inside(geometry, bounds)
     const previous = byOwner.get(ownerId)
     if (previous === undefined) {
       byOwner.set(ownerId, hit)

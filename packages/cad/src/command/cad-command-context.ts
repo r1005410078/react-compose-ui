@@ -64,6 +64,12 @@ export interface CadCommandMessages {
   readonly arcThroughPoint: string
   readonly arcEndPoint: string
   readonly collinearArc: string
+  readonly textTitle: string
+  readonly textPosition: string
+  readonly textHeight: string
+  readonly textContent: string
+  readonly expectedTextHeight: string
+  readonly expectedTextContent: string
 }
 
 /**

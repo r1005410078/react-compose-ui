@@ -3,10 +3,12 @@ import {
   getCadInsert,
   getCadLine,
   getCadPlacement,
+  getCadText,
   getCadWire,
   type CadArc,
   type CadDocument,
   type CadInsert,
+  type CadText,
 } from '../document'
 // 直接指向实现文件而不是 `../connection`：本文件被 `../block` 的入口再导出，走目录入口会在
 // block ⇄ connection 之间形成一条只在打包顺序变化时才现形的循环。
@@ -15,13 +17,15 @@ import {
   arcCurve,
   flattenCadArc,
   segmentCurve,
+  textGeometry,
   type CadArcShape,
-  type CadCurve,
+  type CadGeometry,
+  type CadTextShape,
 } from '../geometry'
 import { transformCadBlockPoint } from './cad-block-transform'
 
 /**
- * 图纸上一段可见几何，连同它归属哪个顶层 Entity。
+ * 图纸上一个可见对象的几何，连同它归属哪个顶层 Entity。
  *
  * @remarks
  * `ownerId` 是**顶层**对象：块实例内的几何全部归属该实例。命中与框选的结果必须是实例而不是
@@ -29,9 +33,9 @@ import { transformCadBlockPoint } from './cad-block-transform'
  *
  * @public
  */
-export interface CadVisibleCurve {
+export interface CadVisibleGeometry {
   readonly ownerId: string
-  readonly curve: CadCurve
+  readonly geometry: CadGeometry
 }
 
 /** 两轴比例的绝对值相等；负值是镜像，仍然保持圆是圆。 */
@@ -49,6 +53,26 @@ function isUniformScale(insert: CadInsert) {
  * 非等比缩放把圆变成椭圆，而本步不引入椭圆图元，此时返回 `null` 由调用方拍扁。按某一轴的
  * 比例硬算成圆是第三条路，但它会画出一个用户从未画过的形状，且没有任何提示。
  */
+/**
+ * 把块局部的文字变换到世界坐标。
+ *
+ * @remarks
+ * 文字不是曲线，**非等比缩放时不拍扁**——把一串字拆成线段既不是那串字，也没人能读。此时按
+ * `|scale.x|` 缩放字号：横向比例决定一行字占多宽，而那正是版面上唯一有意义的量。
+ *
+ * 镜像不翻转文字本身：镜像的符号里，标注仍然要正着读。
+ */
+function transformCadBlockText(text: CadText, insert: CadInsert): CadTextShape {
+  const position = transformCadBlockPoint(text.position, insert)
+  return {
+    position: { x: position.x, y: position.y },
+    content: text.content,
+    height: text.height * Math.abs(insert.scale.x),
+    rotation: text.rotation + insert.rotation,
+    align: text.align,
+  }
+}
+
 function transformCadBlockArc(arc: CadArc, insert: CadInsert): CadArcShape | null {
   if (!isUniformScale(insert)) return null
   const center = transformCadBlockPoint(arc.center, insert)
@@ -73,7 +97,7 @@ function transformCadBlockArc(arc: CadArc, insert: CadInsert): CadArcShape | nul
  * 实现会在块展开这类逻辑上分叉——点得中却捕不到是最难排查的一类不一致。
  *
  * 返回**几何联合**而不是把圆弧拍扁成线段：拍扁会迫使渲染要么画出可见的多边形，要么绕开这条
- * 遍历而与命中分叉，并且会让圆心与象限点消失。
+ * 遍历而与命中分叉，并且会让圆心与象限点消失。文字同理，而且它连「拍扁成什么」都没有答案。
  *
  * 块实例在这里被**展开**而不是当作不可分的整体：插完一个断路器之后要能从它的接线端点起笔画
  * 导线，看不见端点等于块只是一张贴图。
@@ -85,11 +109,11 @@ function transformCadBlockArc(arc: CadArc, insert: CadInsert): CadArcShape | nul
  * @returns 全部可见几何，顺序与 `rootIds` 一致。
  * @public
  */
-export function collectCadVisibleCurves(document: CadDocument): readonly CadVisibleCurve[] {
+export function collectCadVisibleGeometry(document: CadDocument): readonly CadVisibleGeometry[] {
   const visibleLayers = new Set(
     document.layers.filter(({ visible }) => visible).map(({ id }) => id),
   )
-  const result: CadVisibleCurve[] = []
+  const result: CadVisibleGeometry[] = []
 
   for (const id of document.rootIds) {
     const entity = document.entities[id]
@@ -98,20 +122,26 @@ export function collectCadVisibleCurves(document: CadDocument): readonly CadVisi
 
     const line = getCadLine(entity)
     if (line) {
-      result.push({ ownerId: id, curve: segmentCurve(line) })
+      result.push({ ownerId: id, geometry: segmentCurve(line) })
       continue
     }
 
     const arc = getCadArc(entity)
     if (arc) {
-      result.push({ ownerId: id, curve: arcCurve(arc) })
+      result.push({ ownerId: id, geometry: arcCurve(arc) })
+      continue
+    }
+
+    const text = getCadText(entity)
+    if (text) {
+      result.push({ ownerId: id, geometry: textGeometry(text) })
       continue
     }
 
     const wire = getCadWire(entity)
     if (wire) {
       const segment = resolveCadWireSegment(document, wire)
-      if (segment) result.push({ ownerId: id, curve: segmentCurve(segment) })
+      if (segment) result.push({ ownerId: id, geometry: segmentCurve(segment) })
       continue
     }
 
@@ -124,11 +154,17 @@ export function collectCadVisibleCurves(document: CadDocument): readonly CadVisi
       const member = block.entities[memberId]
       if (!member) continue
 
+      const memberText = getCadText(member)
+      if (memberText) {
+        result.push({ ownerId: id, geometry: textGeometry(transformCadBlockText(memberText, insert)) })
+        continue
+      }
+
       const memberLine = getCadLine(member)
       if (memberLine) {
         result.push({
           ownerId: id,
-          curve: segmentCurve({
+          geometry: segmentCurve({
             start: transformCadBlockPoint(memberLine.start, insert),
             end: transformCadBlockPoint(memberLine.end, insert),
           }),
@@ -140,7 +176,7 @@ export function collectCadVisibleCurves(document: CadDocument): readonly CadVisi
       if (!memberArc) continue
       const transformed = transformCadBlockArc(memberArc, insert)
       if (transformed) {
-        result.push({ ownerId: id, curve: arcCurve(transformed) })
+        result.push({ ownerId: id, geometry: arcCurve(transformed) })
         continue
       }
       // 非等比缩放：圆变椭圆，本步没有椭圆图元，因此按局部弧拍扁后逐点变换。形状仍与椭圆
@@ -148,7 +184,7 @@ export function collectCadVisibleCurves(document: CadDocument): readonly CadVisi
       for (const segment of flattenCadArc(memberArc)) {
         result.push({
           ownerId: id,
-          curve: segmentCurve({
+          geometry: segmentCurve({
             start: transformCadBlockPoint(segment.start, insert),
             end: transformCadBlockPoint(segment.end, insert),
           }),
