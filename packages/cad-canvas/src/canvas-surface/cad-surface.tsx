@@ -31,6 +31,28 @@ export interface CadPreviewSegment {
   readonly pending?: boolean
 }
 
+/**
+ * 十字光标的一次绘制。
+ *
+ * @remarks
+ * 形态由宿主按「当前等待的输入类型」给出，图面只负责画：没有活动命令时线与框都画，等待取点
+ * 时只画线，等待选择对象时只画框。
+ *
+ * @internal
+ */
+export interface CadCrosshair {
+  /** 光标中心的屏幕位置。 */
+  readonly screen: CadCanvasPoint
+  /** 画十字线。 */
+  readonly lines: boolean
+  /** 画拾取框。 */
+  readonly box: boolean
+  /** 拾取框的半边长（CSS 像素），等于点选命中容差。 */
+  readonly boxRadius: number
+  /** 十字线单侧长度占视口较短边的百分比（1–100）。 */
+  readonly size: number
+}
+
 /** 归一化后的图面指针事件；点已换算为世界坐标。 @internal */
 export interface CadSurfacePointerEvent {
   readonly pointerId: number
@@ -56,8 +78,17 @@ export interface CadSurfaceProps {
   readonly onPointerUp: (event: CadSurfacePointerEvent) => void
   /** 指针捕获被浏览器收走或手势被中止。 */
   readonly onPointerAbort: (pointerId: number) => void
-  /** 指针在图面上移动，已换算为世界坐标；离开图面时为 `null`。 */
-  readonly onHoverPoint: (point: CadCanvasPoint | null) => void
+  /**
+   * 指针在图面上移动，给出相对图面的**屏幕**位置；离开图面时为 `null`。
+   *
+   * @remarks
+   * 报屏幕而不是世界坐标：世界坐标会在不以光标为锚点的视口变化后失效，宿主存下来就会与真实
+   * 光标分离。换算由宿主在读取时完成。
+   *
+   * `pointerType` 一并给出：触摸没有光标，十字光标对它毫无意义，而这个判断只有事件本身
+   * 知道。
+   */
+  readonly onHoverPoint: (point: CadCanvasPoint | null, pointerType: string) => void
   /** 当前捕捉命中的特征点；没有命中时为 `null`。 */
   readonly snap: CadSnapCandidate | null
   /** 选择集与框选；由宿主的交互仲裁发布。 */
@@ -65,6 +96,8 @@ export interface CadSurfaceProps {
   readonly previewSegments: readonly CadPreviewSegment[]
   /** 指针悬停命中的图元；没有命中或当前按下不会产生选择时为 `null`。 */
   readonly hovered: string | null
+  /** 十字光标的形态与位置；不绘制时为 `null`。 */
+  readonly crosshair: CadCrosshair | null
   readonly label: string
 }
 
@@ -128,6 +161,7 @@ export function CadSurface({
   interaction,
   previewSegments,
   hovered,
+  crosshair,
   label,
 }: CadSurfaceProps) {
   const surfaceRef = useRef<SVGSVGElement | null>(null)
@@ -238,7 +272,7 @@ export function CadSurface({
     const pan = panRef.current
     if (!pan || pan.pointerId !== event.pointerId) {
       // 不在平移中才上报悬停：平移时光标位置代表的是视图位移，拿它求捕捉毫无意义。
-      latest.current.onHoverPoint(cadScreenToWorld(latest.current.viewport, localPoint(event)))
+      latest.current.onHoverPoint(localPoint(event), event.pointerType)
       latest.current.onPointerMove(normalize(event))
       return
     }
@@ -286,12 +320,13 @@ export function CadSurface({
       ref={surfaceRef}
       aria-label={label}
       className="compose-cad-canvas__surface"
+      data-crosshair={crosshair ? '' : undefined}
       data-testid="cad-surface"
       role="img"
       onPointerCancel={handlePointerAbort}
       onMouseDown={handleMouseDown}
       onPointerDown={handlePointerDown}
-      onPointerLeave={() => { latest.current.onHoverPoint(null) }}
+      onPointerLeave={(event) => { latest.current.onHoverPoint(null, event.pointerType) }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
@@ -354,7 +389,53 @@ export function CadSurface({
           />
         )
       })}
+      {crosshair ? <Crosshair crosshair={crosshair} size={size} /> : null}
     </svg>
+  )
+}
+
+/**
+ * 绘制十字光标。
+ *
+ * @remarks
+ * **十字线在拾取框处断开。**容差 8px 意味着框约 16px 见方，而那正是用户要看清的靶区；两条
+ * 1px 的线直穿过去，等于用光标盖住自己正对准的东西。
+ *
+ * 线按一对轴向量绘制而不是写死 `x1=0/x2=width`：AutoCAD 的十字线对齐的是 UCS 轴，转了 UCS
+ * 就跟着转。我们现在没有 UCS，屏幕轴对齐是对的，但以后加进来时改的是向量来源而不是这里。
+ */
+function Crosshair({ crosshair, size }: {
+  readonly crosshair: CadCrosshair
+  readonly size: { readonly width: number; readonly height: number }
+}) {
+  const { screen, lines, box, boxRadius, size: percent } = crosshair
+  // 长度按视口较短边取百分比，与 AutoCAD 的 CURSORSIZE 同义；100 时贯穿整个图面。
+  const reach = (Math.min(size.width, size.height) * percent) / 100
+  const gap = box ? boxRadius : 0
+  const AXES = [{ x: 1, y: 0 }, { x: 0, y: 1 }] as const
+  return (
+    <g className="compose-cad-canvas__crosshair" data-testid="cad-crosshair">
+      {lines ? AXES.flatMap((axis, index) => [-1, 1].map((direction) => (
+        <line
+          key={`axis-${index}-${direction}`}
+          data-cad-crosshair-line=""
+          x1={screen.x + axis.x * gap * direction}
+          x2={screen.x + axis.x * reach * direction}
+          y1={screen.y + axis.y * gap * direction}
+          y2={screen.y + axis.y * reach * direction}
+        />
+      ))) : null}
+      {box ? (
+        <rect
+          data-cad-crosshair-box=""
+          data-testid="cad-pickbox"
+          height={boxRadius * 2}
+          width={boxRadius * 2}
+          x={screen.x - boxRadius}
+          y={screen.y - boxRadius}
+        />
+      ) : null}
+    </g>
   )
 }
 

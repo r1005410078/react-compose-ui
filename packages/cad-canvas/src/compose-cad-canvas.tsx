@@ -11,7 +11,6 @@ import {
   createCadSceneIndex,
   createCadSessionArbiter,
   findCadHit,
-  findCadSnap,
   parseCadCoordinate,
   pruneCadSelection,
   resolveCadPoint,
@@ -23,7 +22,6 @@ import {
   type CadInteractionEffect,
   type CadInteractionSnapshot,
   type CadPluginContext,
-  type CadSnapCandidate,
 } from '@compose-ui/cad'
 import {
   createComposeCommandRegistry,
@@ -35,8 +33,14 @@ import { formatComposeNumber, type EditorCommand } from '@compose-ui/core'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { getCadCanvasMessages } from './cad-canvas-i18n'
 import { CadCommandLine } from './command-line'
-import { CadSurface, type CadPreviewSegment, type CadSurfacePointerEvent } from './canvas-surface'
-import { CAD_INITIAL_VIEWPORT, type CadCanvasPoint, type CadViewport } from './viewport'
+import { useCadIndicatedPoint } from './indicated-point'
+import {
+  CadSurface,
+  type CadCrosshair,
+  type CadPreviewSegment,
+  type CadSurfacePointerEvent,
+} from './canvas-surface'
+import { CAD_INITIAL_VIEWPORT, type CadViewport } from './viewport'
 
 /**
  * 受控 CAD 编辑画布的属性。
@@ -66,6 +70,27 @@ export interface ComposeCadCanvasProps {
    * @defaultValue 8
    */
   readonly pickRadius?: number
+  /**
+   * 十字线单侧长度占视口较短边的百分比。
+   *
+   * @remarks
+   * 语义与 AutoCAD 的 `CURSORSIZE` 一致（1–100）。默认取贯穿全视口而不是 AutoCAD 的 5——
+   * 5% 是在整块显示器上取的，而图面是编辑器里的一块面板，5% 会小到看不出是十字线；贯穿全
+   * 视口同时让十字线兼任一条免费的对齐参考线。
+   *
+   * @defaultValue 100
+   */
+  readonly crosshairSize?: number
+  /**
+   * 是否绘制十字光标并隐藏系统光标。
+   *
+   * @remarks
+   * 隐藏系统光标会一并丢掉操作系统的光标辅助设置（放大光标、高对比光标），而这一需求无法被
+   * 探测——没有对应的媒体查询。因此必须留一个出口。
+   *
+   * @defaultValue true
+   */
+  readonly showCrosshair?: boolean
 }
 
 function defaultIdFactory() {
@@ -96,6 +121,8 @@ export function ComposeCadCanvas({
   gridStep = 10,
   snapRadius = 12,
   pickRadius = 8,
+  crosshairSize = 100,
+  showCrosshair = true,
 }: ComposeCadCanvasProps) {
   const i18n = useComposeI18nContext()
   const messages = getCadCanvasMessages(i18n?.locale ?? 'zh-CN')
@@ -106,7 +133,6 @@ export function ComposeCadCanvas({
   const [ortho, setOrtho] = useState(false)
   const [gridEnabled, setGridEnabled] = useState(true)
   const [snapEnabled, setSnapEnabled] = useState(true)
-  const [hover, setHover] = useState<CadCanvasPoint | null>(null)
   const [interaction, setInteraction] = useState<CadInteractionSnapshot>(EMPTY_INTERACTION)
   // 后续相对输入的参照点由会话给出：「放弃」会退回上一个顶点，宿主自行记账会与会话失步。
   const [reference, setReference] = useState<CadInputPoint | undefined>(undefined)
@@ -195,30 +221,29 @@ export function ComposeCadCanvas({
     setPrompt(session.prompt)
   }, [applyStep])
 
-  /**
-   * 当前捕捉命中的特征点。
-   *
-   * @remarks
-   * 只在命令**正等待取点**时求解：空闲时算捕捉既没有消费者，又会在每次指针移动上做无谓的
-   * 几何计算。捕捉半径按屏幕像素给出，除以缩放换成世界单位——视图缩小时同样的屏幕半径必须
-   * 覆盖更大的世界范围，否则放远了就再也捕不到。
-   */
-  const snap = useMemo<CadSnapCandidate | null>(() => {
-    if (!snapEnabled || !hover || !prompt?.accepts.includes('point')) return null
-    return findCadSnap(document, hover, snapRadius / viewport.zoom)
-  }, [document, hover, prompt, snapEnabled, snapRadius, viewport.zoom])
-
   const pointContext = useMemo(() => ({
-    snapped: snap?.point,
     reference,
     ortho,
     grid: { enabled: gridEnabled, step: gridStep },
-  }), [gridEnabled, gridStep, ortho, reference, snap])
+  }), [gridEnabled, gridStep, ortho, reference])
 
-  /** 指针当前解算出的落点；与真实按下走同一条管线，因此「看到的」与「点下去的」不会分叉。 */
-  const pointerPoint = useMemo(
-    () => (hover ? resolveCadPoint(hover, 'pointer', pointContext) : null),
-    [hover, pointContext],
+  // 指示点是十字光标、橡皮筋终点、坐标读数与捕捉标记的唯一来源；它不属于任何手势会话。
+  const { indicated, setPointerScreen } = useCadIndicatedPoint({
+    document, viewport, prompt, pointContext, snapEnabled, snapRadius,
+  })
+  const snap = indicated?.snap ?? null
+
+  const pointerPoint = indicated?.world ?? null
+  /**
+   * 提交一个点时用的完整求解上下文。
+   *
+   * @remarks
+   * 必须带上当前捕捉点：`pointContext` 只含参照点、正交与网格，少了 `snapped` 会让按下不再
+   * 吸到特征点上——而橡皮筋和十字线仍然吸着，用户看到的是「明明吸住了，落点却偏了」。
+   */
+  const resolutionContext = useMemo(
+    () => ({ ...pointContext, snapped: snap?.point }),
+    [pointContext, snap],
   )
 
   /**
@@ -229,6 +254,24 @@ export function ComposeCadCanvas({
    * 上一个顶点」的边界全都要重新定义。两个端点宿主本来就有——参照点来自会话给的
    * `preview.reference`，落点来自上面的 `pointerPoint`。
    */
+  /**
+   * 十字光标的形态。
+   *
+   * @remarks
+   * 三种形态与 AutoCAD 一致，判据是**当前等待的输入类型**——`accepts` 本来就在协议里，不需要
+   * 引入任何新状态。既不取点也不选对象的步骤（例如 INSERT 等块名）不画：那一步键盘才是输入
+   * 设备。
+   *
+   * 触摸指针不画也不隐藏系统光标——触摸屏上根本没有光标可言。
+   */
+  const crosshair = useMemo<CadCrosshair | null>(() => {
+    if (!showCrosshair || !indicated || indicated.pointerType === 'touch') return null
+    const lines = prompt === null || prompt.accepts.includes('point')
+    const box = prompt === null || prompt.accepts.includes('selection')
+    if (!lines && !box) return null
+    return { screen: indicated.screen, lines, box, boxRadius: pickRadius, size: crosshairSize }
+  }, [crosshairSize, indicated, pickRadius, prompt, showCrosshair])
+
   const previewSegments = useMemo<readonly CadPreviewSegment[]>(() => {
     if (!reference || !pointerPoint || !prompt?.accepts.includes('point')) return preview
     return [...preview, { start: reference, end: pointerPoint, pending: true }]
@@ -242,9 +285,9 @@ export function ComposeCadCanvas({
    * 点，此时高亮会撒谎。容差与选择插件同源，两处分叉就会出现「亮着却点不中」。
    */
   const hovered = useMemo(() => {
-    if (!hover || prompt?.accepts.includes('point')) return null
-    return findCadHit(document, hover, pickRadius / viewport.zoom)
-  }, [document, hover, pickRadius, prompt, viewport.zoom])
+    if (!indicated || prompt?.accepts.includes('point')) return null
+    return findCadHit(document, indicated.raw, pickRadius / viewport.zoom)
+  }, [document, indicated, pickRadius, prompt, viewport.zoom])
 
   const handleSubmit = useCallback((text: string) => {
     const session = sessionRef.current
@@ -260,7 +303,7 @@ export function ComposeCadCanvas({
         const parsed = parseCadCoordinate(text, reference)
         if (parsed.ok) {
           // 键入的坐标是精确值，不再经过正交与网格。
-          applyStep(session, { kind: 'point', point: resolveCadPoint(parsed.point, 'typed', pointContext) })
+          applyStep(session, { kind: 'point', point: resolveCadPoint(parsed.point, 'typed', resolutionContext) })
           return
         }
         if (parsed.reason === 'missing-reference') {
@@ -293,7 +336,7 @@ export function ComposeCadCanvas({
     }))
   }, [
     activeLayerId, applyStep, document.blocks, idFactory, interaction.selection, messages,
-    pointContext, prompt, reference, registry, startSession,
+    prompt, reference, registry, resolutionContext, startSession,
   ])
 
   /**
@@ -336,12 +379,12 @@ export function ComposeCadCanvas({
       const session = sessionRef.current
       if (!session) continue
       if (effect.kind === 'command.point') {
-        applyStep(session, { kind: 'point', point: resolveCadPoint(effect.point, 'pointer', pointContext) })
+        applyStep(session, { kind: 'point', point: resolveCadPoint(effect.point, 'pointer', resolutionContext) })
         continue
       }
       applyStep(session, { kind: 'selection', ids: effect.ids })
     }
-  }, [applyStep, pointContext])
+  }, [applyStep, resolutionContext])
 
   const pluginContext = useCallback((): CadPluginContext => {
     const snapshot = latest.current
@@ -416,6 +459,7 @@ export function ComposeCadCanvas({
       <div className="compose-cad-canvas__viewport">
         <CadSurface
           document={document}
+          crosshair={crosshair}
           gridStep={gridEnabled ? gridStep : null}
           hovered={hovered}
           interaction={interaction}
@@ -423,7 +467,7 @@ export function ComposeCadCanvas({
           previewSegments={previewSegments}
           snap={snap}
           viewport={viewport}
-          onHoverPoint={setHover}
+          onHoverPoint={setPointerScreen}
           onPointerAbort={handlePointerAbort}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
