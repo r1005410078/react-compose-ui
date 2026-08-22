@@ -15,6 +15,8 @@ export const CAD_COMPONENT_KEYS = {
   arc: 'CadArc',
   /** 一段单行文字。 */
   text: 'CadText',
+  /** 一条多段线；矩形是四顶点的闭合多段线。 */
+  polyline: 'CadPolyline',
 } as const
 
 /** 世界坐标中的一个点。 @public */
@@ -186,6 +188,34 @@ export interface CadText extends JsonObject {
   readonly align: CadTextAlign
 }
 
+/**
+ * 一条多段线。
+ *
+ * @remarks
+ * **矩形就是四个顶点的闭合多段线**，不另立 `CadRect`：矩形没有任何多段线没有的性质，另立
+ * 类型会让命中、框选、捕捉、平移、块变换与校验各多一支逐字相同的实现。它唯一多出来的是
+ * 「四个角是直角」这条约束，而那条约束在用户拖动某个顶点之后就不再成立。
+ *
+ * `closed` 是布尔而不是「首尾顶点重复」，与 DXF 的 LWPOLYLINE 一致：重复表示法里
+ * `[A,B,C,A]` 是闭合三角形还是回到起点的开放折线无法区分。
+ *
+ * 没有 `bulge`（DXF 用它表示圆弧段）：现在没有命令产出它，加进来意味着遍历、命中、捕捉与
+ * 框选各多一条没有用户走过的分支。它的位置已经让好了——遍历本就逐段产出几何。
+ *
+ * @public
+ */
+export interface CadPolyline extends JsonObject {
+  /** 至少两个顶点。 */
+  readonly vertices: readonly CadPoint[]
+  /** 闭合时末点连回首点。 */
+  readonly closed: boolean
+}
+
+/** 读取多段线；不是多段线时为 undefined。 @public */
+export function getCadPolyline(entity: ComposeEntity): CadPolyline | undefined {
+  return entity.components[CAD_COMPONENT_KEYS.polyline] as CadPolyline | undefined
+}
+
 /** 读取文字；不是文字时为 undefined。 @public */
 export function getCadText(entity: ComposeEntity): CadText | undefined {
   return entity.components[CAD_COMPONENT_KEYS.text] as CadText | undefined
@@ -328,6 +358,35 @@ export function createCadTextEntity(
         height: input.height,
         rotation: input.rotation ?? 0,
         align: input.align ?? 'left',
+      },
+    },
+  }
+}
+
+/**
+ * 构造一条多段线图元。
+ *
+ * @param id - 由调用方给出的稳定 Entity ID。
+ * @public
+ */
+export function createCadPolylineEntity(
+  id: string,
+  input: {
+    readonly layerId: string
+    readonly vertices: readonly { readonly x: number; readonly y: number }[]
+    readonly closed?: boolean
+  },
+): ComposeEntity {
+  const closed = input.closed ?? false
+  return {
+    id,
+    // 闭合四顶点在用户眼里就是「矩形」，名字跟着用户的说法走。
+    name: closed && input.vertices.length === 4 ? 'Rectangle' : 'Polyline',
+    components: {
+      [CAD_COMPONENT_KEYS.placement]: { layerId: input.layerId },
+      [CAD_COMPONENT_KEYS.polyline]: {
+        vertices: input.vertices.map(({ x, y }) => ({ x, y })),
+        closed,
       },
     },
   }

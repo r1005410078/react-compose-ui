@@ -3,6 +3,7 @@ import {
   getCadArc,
   getCadInsert,
   getCadLine,
+  getCadPolyline,
   getCadText,
   getCadWire,
   type CadDocument,
@@ -24,6 +25,7 @@ import type { ComposeEntity } from '@compose-ui/core'
  *   两端都绑定的导线因此平移是 no-op。
  * - `CadArc`：只移圆心，半径与角度不动。
  * - `CadText`：只移插入点，字号与旋转不动。
+ * - `CadPolyline`：全部顶点各加一个位移。
  *
  * 新增图元类型时在这里补一支，而不是让每个调用方各自认识所有 Component。认不出来的 Entity
  * 原样返回——静默不动好过按错误的语义搬走它。
@@ -42,6 +44,20 @@ export function translateCadEntity(entity: ComposeEntity, delta: CadPoint): Comp
       components: {
         ...entity.components,
         [CAD_COMPONENT_KEYS.line]: { start: shift(line.start), end: shift(line.end) },
+      },
+    }
+  }
+
+  const polyline = getCadPolyline(entity)
+  if (polyline) {
+    return {
+      ...entity,
+      components: {
+        ...entity.components,
+        [CAD_COMPONENT_KEYS.polyline]: {
+          ...polyline,
+          vertices: polyline.vertices.map(shift),
+        },
       },
     }
   }

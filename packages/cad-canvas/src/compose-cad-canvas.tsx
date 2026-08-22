@@ -12,7 +12,9 @@ import {
   createCadMoveCommand,
   createCadArcCommand,
   createCadCircleCommand,
+  createCadPolylineCommand,
   createCadPortCommand,
+  createCadRectangleCommand,
   createCadTextCommand,
   createCadWireCommand,
   createCadPluginRegistry,
@@ -202,6 +204,8 @@ export function ComposeCadCanvas({
       createCadCircleCommand(messages),
       createCadArcCommand(messages),
       createCadTextCommand(messages),
+      createCadPolylineCommand(messages),
+      createCadRectangleCommand(messages),
     ]),
     [messages],
   )
