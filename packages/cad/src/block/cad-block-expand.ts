@@ -1,4 +1,7 @@
-import { getCadInsert, getCadLine, getCadPlacement, type CadDocument } from '../document'
+import { getCadInsert, getCadLine, getCadPlacement, getCadWire, type CadDocument } from '../document'
+// 直接指向实现文件而不是 `../connection`：本文件被 `../block` 的入口再导出，走目录入口会在
+// block ⇄ connection 之间形成一条只在打包顺序变化时才现形的循环。
+import { resolveCadWireSegment } from '../connection/cad-wire-geometry'
 import type { CadSegment } from '../geometry'
 import { transformCadBlockPoint } from './cad-block-transform'
 
@@ -47,6 +50,13 @@ export function collectCadVisibleSegments(document: CadDocument): readonly CadVi
     const line = getCadLine(entity)
     if (line) {
       result.push({ ownerId: id, segment: line })
+      continue
+    }
+
+    const wire = getCadWire(entity)
+    if (wire) {
+      const segment = resolveCadWireSegment(document, wire)
+      if (segment) result.push({ ownerId: id, segment })
       continue
     }
 

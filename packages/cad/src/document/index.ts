@@ -5,13 +5,20 @@ export {
 export {
   CAD_COMPONENT_KEYS,
   createCadLineEntity,
+  createCadWireEntity,
   getCadInsert,
   getCadLine,
   getCadPlacement,
+  getCadWire,
+  type CadFreeEndpoint,
   type CadInsert,
   type CadLine,
   type CadPlacement,
   type CadPoint,
+  type CadPort,
+  type CadPortEndpoint,
+  type CadWire,
+  type CadWireEndpoint,
 } from './cad-entity'
 export {
   CAD_DEFAULT_LAYER_ID,

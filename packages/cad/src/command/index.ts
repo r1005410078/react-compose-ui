@@ -7,10 +7,18 @@ export { createCadCopyCommand, createCadMoveCommand } from './cad-transform-comm
 export {
   CAD_COMMAND_TYPES,
   createCadCommandHandlers,
+  type CadAddBlockPortPayload,
   type CadAddEntityPayload,
+  type CadAddWirePayload,
   type CadCreateBlockPayload,
   type CadRemoveEntityPayload,
 } from './cad-command-handlers'
+export {
+  createCadPortCommand,
+  createCadPortSession,
+  createCadWireCommand,
+  createCadWireSession,
+} from './cad-connection-commands'
 export {
   createCadBlockCommand,
   createCadBlockSession,

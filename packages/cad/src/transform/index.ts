@@ -1,1 +1,1 @@
-export { translateCadEntity } from './cad-translate'
+export { previewCadTranslate, translateCadEntity } from './cad-translate'

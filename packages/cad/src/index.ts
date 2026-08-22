@@ -15,10 +15,12 @@ export {
   CAD_COMPONENT_KEYS,
   CAD_DEFAULT_LAYER_ID,
   createCadLineEntity,
+  createCadWireEntity,
   createEmptyCadDocument,
   getCadInsert,
   getCadLine,
   getCadPlacement,
+  getCadWire,
   validateCadDocument,
   type CadBlockDefinition,
   type CadDocument,
@@ -27,16 +29,29 @@ export {
   type CadInsert,
   type CadLayer,
   type CadLine,
+  type CadFreeEndpoint,
   type CadPlacement,
   type CadPoint,
+  type CadPort,
+  type CadPortEndpoint,
+  type CadWire,
+  type CadWireEndpoint,
 } from './document'
-export { translateCadEntity } from './transform'
+export { previewCadTranslate, translateCadEntity } from './transform'
 export {
   collectCadVisibleSegments,
   createCadInsert,
+  inverseCadBlockPoint,
   transformCadBlockPoint,
   type CadVisibleSegment,
 } from './block'
+export {
+  collectCadInstancePorts,
+  resolveCadPortPoint,
+  resolveCadWireEndpoint,
+  resolveCadWireSegment,
+  type CadInstancePort,
+} from './connection'
 export {
   CAD_SNAP_MODES,
   findCadSnap,
@@ -66,7 +81,13 @@ export {
   createCadLineCommand,
   createCadMoveCommand,
   createCadLineSession,
+  createCadPortCommand,
+  createCadPortSession,
+  createCadWireCommand,
+  createCadWireSession,
+  type CadAddBlockPortPayload,
   type CadAddEntityPayload,
+  type CadAddWirePayload,
   type CadCreateBlockPayload,
   type CadCommandContext,
   type CadCommandEffect,

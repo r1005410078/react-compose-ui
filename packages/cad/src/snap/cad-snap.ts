@@ -1,4 +1,5 @@
 import { collectCadVisibleSegments } from '../block'
+import { collectCadInstancePorts } from '../connection'
 import type { CadDocument } from '../document'
 import type { CadInputPoint } from '../point-input'
 import {
@@ -13,11 +14,12 @@ import {
  * 对象捕捉模式。
  *
  * @remarks
- * 目前只有直线图元，这三种即覆盖它的全部几何特征。圆心、切点、垂足等随对应图元一并加入。
+ * 端口是块声明的接线点，其余三种覆盖直线图元的全部几何特征。圆心、切点、垂足等随对应图元
+ * 一并加入。
  *
  * @public
  */
-export type CadSnapMode = 'endpoint' | 'midpoint' | 'intersection'
+export type CadSnapMode = 'port' | 'endpoint' | 'midpoint' | 'intersection'
 
 /** 一个捕捉候选。 @public */
 export interface CadSnapCandidate {
@@ -32,9 +34,18 @@ export interface CadSnapCandidate {
  * 端点压过中点、中点压过交点：这是 AutoCAD 的惯例，也是可预期性的一部分——同等距离下总是
  * 命中端点，用户才敢直接点过去而不用先放大确认。
  *
+ * **端口排在最前**，理由是一个静默失败：端口几乎总是画在符号线段的端点上（接线柱就是那根
+ * 短线的头）。同等距离下若端点胜出，用户点在接线柱上得到的是一条自由端点的导线——屏幕上像素
+ * 级正确，要等到移动符号时才暴露，而画的当刻没有任何视觉线索。
+ *
  * @public
  */
-export const CAD_SNAP_MODES: readonly CadSnapMode[] = ['endpoint', 'midpoint', 'intersection']
+export const CAD_SNAP_MODES: readonly CadSnapMode[] = [
+  'port',
+  'endpoint',
+  'midpoint',
+  'intersection',
+]
 
 function priorityOf(mode: CadSnapMode) {
   return CAD_SNAP_MODES.indexOf(mode)
@@ -75,6 +86,11 @@ export function findCadSnap(
   }
 
   const candidates: CadSnapCandidate[] = []
+  if (enabled.has('port')) {
+    for (const { point: candidate } of collectCadInstancePorts(document)) {
+      candidates.push({ mode: 'port', point: candidate })
+    }
+  }
   for (const segment of nearby) {
     if (enabled.has('endpoint')) {
       candidates.push({ mode: 'endpoint', point: segment.start })

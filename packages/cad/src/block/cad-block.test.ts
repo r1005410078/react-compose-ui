@@ -22,6 +22,7 @@ function corner(id = 'block-1'): CadBlockDefinition {
       m1: createCadLineEntity('m1', { layerId: '0', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } }),
       m2: createCadLineEntity('m2', { layerId: '0', start: { x: 10, y: 0 }, end: { x: 10, y: 10 } }),
     },
+    ports: [],
   }
 }
 

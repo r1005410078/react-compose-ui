@@ -1,4 +1,5 @@
 import type { ComposeEntity } from '@compose-ui/core'
+import type { CadPort } from './cad-entity'
 
 /**
  * 一个 CAD 图层。
@@ -41,6 +42,14 @@ export interface CadBlockDefinition {
   readonly rootIds: readonly string[]
   /** 块局部坐标下的图元。 */
   readonly entities: Readonly<Record<string, ComposeEntity>>
+  /**
+   * 块声明的接线端口，块局部坐标。
+   *
+   * @remarks
+   * 旧文件没有这个字段时按空列表读入，`schemaVersion` 不因此改变——加一个空列表不会让任何
+   * 既有文档变得不可读。
+   */
+  readonly ports: readonly CadPort[]
 }
 
 /**
@@ -107,8 +116,15 @@ export type CadDocumentIssueCode =
   | 'block.duplicate-root'
   | 'block.orphan-entity'
   | 'block.nested-insert'
+  | 'block.nested-wire'
+  | 'port.invalid'
+  | 'port.duplicate-id'
   | 'insert.unknown-block'
   | 'insert.invalid'
+  | 'wire.invalid'
+  | 'wire.unknown-entity'
+  | 'wire.not-instance'
+  | 'wire.unknown-port'
 
 /** 一条 CAD 文档校验问题。 @public */
 export interface CadDocumentIssue {

@@ -1,12 +1,18 @@
 import type { CommandHandler, ComposeEntity } from '@compose-ui/core'
+import { inverseCadBlockPoint } from '../block'
+import { collectCadInstancePorts, resolveCadWireEndpoint } from '../connection'
 import { translateCadEntity } from '../transform'
 import {
   CAD_COMPONENT_KEYS,
+  createCadWireEntity,
   getCadInsert,
   getCadLine,
   getCadPlacement,
+  getCadWire,
   type CadDocument,
   type CadPoint,
+  type CadPort,
+  type CadWireEndpoint,
 } from '../document'
 
 /** CAD 文档命令的稳定 type。 @public */
@@ -14,6 +20,8 @@ export const CAD_COMMAND_TYPES = {
   addEntity: 'cad.entity.add',
   removeEntity: 'cad.entity.remove',
   createBlock: 'cad.block.create',
+  addBlockPort: 'cad.block.add-port',
+  addWire: 'cad.wire.add',
   translateEntities: 'cad.entity.translate',
   duplicateEntities: 'cad.entity.duplicate',
 } as const
@@ -63,9 +71,180 @@ const removeEntity: CommandHandler<CadDocument> = {
     return {
       status: 'patches',
       patches: [
+        ...freezeWirePatches(document, entityId),
         { op: 'remove', path: ['rootIds', index] },
         { op: 'remove', path: ['entities', entityId] },
       ],
+    }
+  },
+}
+
+/**
+ * 把绑定到即将被删 Entity 的导线端点冻结成自由端点。
+ *
+ * @remarks
+ * 三个选项里只有这一个站得住：连带删除会让用户没选中的东西消失；留下悬空引用会被文档校验
+ * 整批打回，删除动作直接失败。冻结用的是删除前最后一次解算的世界坐标，因此**图上什么都没
+ * 变**——设备没了，线还在原处、末端悬空，撤销一步完全恢复。
+ *
+ * 保持文档合法本来就是删除 handler 的职责，与 `rootIds`/`entities` 必须同批写入是同一条理由。
+ */
+function freezeWirePatches(document: CadDocument, removedId: string) {
+  const patches: { op: 'set'; path: (string | number)[]; value: never }[] = []
+  for (const [id, entity] of Object.entries(document.entities)) {
+    if (id === removedId) continue
+    const wire = getCadWire(entity)
+    if (!wire) continue
+    const affected = (['start', 'end'] as const)
+      .some((side) => wire[side].kind === 'port' && wire[side].entityId === removedId)
+    if (!affected) continue
+    const freeze = (endpoint: CadWireEndpoint): CadWireEndpoint => {
+      if (endpoint.kind === 'free' || endpoint.entityId !== removedId) return endpoint
+      const point = resolveCadWireEndpoint(document, endpoint)
+      // 解不出来只可能是文档已经不合法；退到原点会把线甩到图纸另一头，保留引用则删除会被
+      // 校验打回——两害相权，冻在零点仍然可见可选，用户能自己收拾。
+      return { kind: 'free', point: point ?? { x: 0, y: 0 } }
+    }
+    patches.push({
+      op: 'set',
+      path: ['entities', id],
+      value: {
+        ...entity,
+        components: {
+          ...entity.components,
+          [CAD_COMPONENT_KEYS.wire]: { start: freeze(wire.start), end: freeze(wire.end) },
+        },
+      } as never,
+    })
+  }
+  return patches
+}
+
+/** `cad.wire.add` 的载荷。 @public */
+export interface CadAddWirePayload {
+  /** 新导线的 Entity id。 */
+  readonly id: string
+  readonly layerId: string
+  /** 已经过点求解管线的两个世界坐标落点。 */
+  readonly start: CadPoint
+  readonly end: CadPoint
+}
+
+/**
+ * 落点与端口视为同一点的容差。
+ *
+ * @remarks
+ * 落点是**捕捉管线吐出来的**：端口捕捉命中时 `resolveCadPoint` 直接短路返回捕捉点，而端口
+ * 世界坐标由同一段代码、同一批输入算出，逐位相同。容差只吸收将来可能插入的中间运算，
+ * MUST NOT 用来表达「靠近就算」——那是捕捉的语义，不该有第二处实现。
+ */
+const PORT_BIND_EPSILON = 1e-9
+
+function bindEndpoint(document: CadDocument, point: CadPoint): CadWireEndpoint {
+  for (const port of collectCadInstancePorts(document)) {
+    if (Math.abs(port.point.x - point.x) <= PORT_BIND_EPSILON
+      && Math.abs(port.point.y - point.y) <= PORT_BIND_EPSILON) {
+      return { kind: 'port', entityId: port.entityId, portId: port.portId }
+    }
+  }
+  return { kind: 'free', point: { x: point.x, y: point.y } }
+}
+
+/**
+ * 画一条导线。
+ *
+ * @remarks
+ * **绑定在这里做而不是在会话里做**：会话是不认识文档的纯状态机，而 handler 是纯函数——同一份
+ * 文档加同一条命令必然产出同一批绑定，撤销后重做不会绑到别处。
+ */
+const addWire: CommandHandler<CadDocument> = {
+  type: CAD_COMMAND_TYPES.addWire,
+  execute(document, command) {
+    const { id, layerId, start, end } = command.payload as unknown as CadAddWirePayload
+    if (document.entities[id]) {
+      return {
+        status: 'rejected',
+        issues: [{ code: 'cad.duplicate-entity', message: `Entity 已存在：${id}` }],
+      }
+    }
+    const startPoint = bindEndpoint(document, start)
+    const endPoint = bindEndpoint(document, end)
+    const samePort = startPoint.kind === 'port' && endPoint.kind === 'port'
+      && startPoint.entityId === endPoint.entityId && startPoint.portId === endPoint.portId
+    if (samePort || (start.x === end.x && start.y === end.y)) {
+      return {
+        status: 'rejected',
+        issues: [{ code: 'cad.degenerate-wire', message: '导线两端不能是同一个点' }],
+      }
+    }
+    const entity = createCadWireEntity(id, { layerId, start: startPoint, end: endPoint })
+    return {
+      status: 'patches',
+      patches: [
+        { op: 'set', path: ['entities', id], value: entity as never },
+        { op: 'insert', path: ['rootIds'], index: document.rootIds.length, value: id },
+      ],
+    }
+  },
+}
+
+/** `cad.block.add-port` 的载荷。 @public */
+export interface CadAddBlockPortPayload {
+  /** 用来定位块并提供变换的块实例。 */
+  readonly entityId: string
+  /** 新端口的 id，块内唯一。 */
+  readonly portId: string
+  /** 世界坐标；由 handler 换算为块局部坐标。 */
+  readonly point: CadPoint
+}
+
+/**
+ * 给块**定义**加一个端口。
+ *
+ * @remarks
+ * 逆变换在这里做——它要读实例的插入参数，而命令会话拿不到文档。加完之后同一个块的全部实例
+ * 都有这个端口，这正是端口声明在定义上而不是实例上的意义。
+ */
+const addBlockPort: CommandHandler<CadDocument> = {
+  type: CAD_COMMAND_TYPES.addBlockPort,
+  execute(document, command) {
+    const { entityId, portId, point } = command.payload as unknown as CadAddBlockPortPayload
+    const entity = document.entities[entityId]
+    const insert = entity ? getCadInsert(entity) : undefined
+    if (!insert) {
+      return {
+        status: 'rejected',
+        issues: [{ code: 'cad.not-instance', message: `不是块实例：${entityId}` }],
+      }
+    }
+    const block = document.blocks[insert.blockId]
+    if (!block) {
+      return {
+        status: 'rejected',
+        issues: [{ code: 'cad.unknown-block', message: `块不存在：${insert.blockId}` }],
+      }
+    }
+    if (block.ports.some(({ id }) => id === portId)) {
+      return {
+        status: 'rejected',
+        issues: [{ code: 'cad.duplicate-port', message: `端口已存在：${portId}` }],
+      }
+    }
+    const local = inverseCadBlockPoint(point, insert)
+    if (!local) {
+      return {
+        status: 'rejected',
+        issues: [{ code: 'cad.singular-insert', message: '实例比例为 0，无法换算块局部坐标' }],
+      }
+    }
+    const port: CadPort = { id: portId, position: { x: local.x, y: local.y } }
+    return {
+      status: 'patches',
+      patches: [{
+        op: 'set',
+        path: ['blocks', insert.blockId, 'ports'],
+        value: [...block.ports, port] as never,
+      }],
     }
   },
 }
@@ -240,7 +419,13 @@ const createBlock: CommandHandler<CadDocument> = {
         {
           op: 'set',
           path: ['blocks', blockId],
-          value: { id: blockId, name, rootIds: members, entities: blockEntities } as never,
+          value: {
+            id: blockId,
+            name,
+            rootIds: members,
+            entities: blockEntities,
+            ports: [],
+          } as never,
         },
         ...members.map((id) => ({ op: 'remove' as const, path: ['entities', id] })),
         { op: 'set', path: ['entities', insertId], value: insert as never },
@@ -265,5 +450,13 @@ const createBlock: CommandHandler<CadDocument> = {
  * @public
  */
 export function createCadCommandHandlers(): readonly CommandHandler<CadDocument>[] {
-  return [addEntity, removeEntity, createBlock, translateEntities, duplicateEntities]
+  return [
+    addEntity,
+    removeEntity,
+    createBlock,
+    addBlockPort,
+    addWire,
+    translateEntities,
+    duplicateEntities,
+  ]
 }

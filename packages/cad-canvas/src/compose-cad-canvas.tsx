@@ -10,6 +10,8 @@ import {
   createCadInteractionPlugins,
   createCadLineCommand,
   createCadMoveCommand,
+  createCadPortCommand,
+  createCadWireCommand,
   createCadPluginRegistry,
   createCadSceneIndex,
   createCadSessionArbiter,
@@ -190,6 +192,8 @@ export function ComposeCadCanvas({
       createCadInsertCommand(messages),
       createCadMoveCommand(messages),
       createCadCopyCommand(messages),
+      createCadWireCommand(messages),
+      createCadPortCommand(messages),
     ]),
     [messages],
   )

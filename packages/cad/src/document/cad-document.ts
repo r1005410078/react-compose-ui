@@ -1,5 +1,5 @@
 import type { ComposeEntity, DocumentValidationResultOf } from '@compose-ui/core'
-import { CAD_COMPONENT_KEYS, type CadPoint } from './cad-entity'
+import { CAD_COMPONENT_KEYS, type CadPoint, type CadPort } from './cad-entity'
 import {
   type CadBlockDefinition,
   CAD_DEFAULT_LAYER_ID,
@@ -231,6 +231,9 @@ export function validateCadDocument(
   for (const entity of Object.values(entities)) {
     validateInsertReference(entity, blocks, issues)
   }
+  for (const entity of Object.values(entities)) {
+    validateWireEndpoints(entity, entities, blocks, issues)
+  }
 
   if (issues.length > 0) return { valid: false, issues }
   return {
@@ -290,6 +293,14 @@ function validateBlocks(
           `块内不得再插入块：${entity.id}`,
         ))
       }
+      // 块内容是块局部且自包含的，而导线端点引用顶层 Entity id——两者语义不相容。
+      if (entity.components[CAD_COMPONENT_KEYS.wire] !== undefined) {
+        issues.push(issue(
+          'block.nested-wire',
+          ['blocks', key, 'entities', entity.id],
+          `块内不得包含导线：${entity.id}`,
+        ))
+      }
     }
 
     const rootIds: string[] = []
@@ -329,9 +340,109 @@ function validateBlocks(
       }
     }
 
-    blocks[key] = { id: key, name, rootIds, entities }
+    blocks[key] = { id: key, name, rootIds, entities, ports: validatePorts(candidate.ports, key, issues) }
   }
   return blocks
+}
+
+/**
+ * 校验块声明的端口。
+ *
+ * @remarks
+ * 字段缺失按空列表处理，理由与块表相同。
+ */
+function validatePorts(
+  input: unknown,
+  blockKey: string,
+  issues: CadDocumentIssue[],
+): readonly CadPort[] {
+  if (input === undefined) return []
+  if (!Array.isArray(input)) {
+    issues.push(issue('port.invalid', ['blocks', blockKey, 'ports'], 'ports 必须是数组'))
+    return []
+  }
+  const seen = new Set<string>()
+  const ports: CadPort[] = []
+  input.forEach((candidate, index) => {
+    const path = ['blocks', blockKey, 'ports', index]
+    if (!isRecord(candidate)
+      || typeof candidate.id !== 'string' || candidate.id.length === 0
+      || !isFinitePoint(candidate.position)) {
+      issues.push(issue('port.invalid', path, '端口字段不完整或类型错误'))
+      return
+    }
+    if (seen.has(candidate.id)) {
+      issues.push(issue('port.duplicate-id', path, `端口 id 重复：${candidate.id}`))
+      return
+    }
+    seen.add(candidate.id)
+    const position = candidate.position as CadPoint
+    ports.push({ id: candidate.id, position: { x: position.x, y: position.y } })
+  })
+  return ports
+}
+
+/**
+ * 校验导线端点引用完整。
+ *
+ * @remarks
+ * 「切换实例的块定义时端口 id 必须稳定」这条不变量落在这里，而不是落在某条命令里：改
+ * `blockId` 的路径不止一条（命令、外部写入、DXF 导入），命令级检查只挡得住写过检查的那条。
+ *
+ * 三种失败给三个不同的机器码——「引用的东西没了」「引用错了类型」「端口名对不上」对用户是
+ * 三件事，合成一个码会让提示只能说「导线有问题」。
+ */
+function validateWireEndpoints(
+  entity: ComposeEntity,
+  entities: Readonly<Record<string, ComposeEntity>>,
+  blocks: Readonly<Record<string, CadBlockDefinition>>,
+  issues: CadDocumentIssue[],
+) {
+  const wire = entity.components[CAD_COMPONENT_KEYS.wire]
+  if (wire === undefined) return
+  const base = ['entities', entity.id, CAD_COMPONENT_KEYS.wire]
+  if (!isRecord(wire)) {
+    issues.push(issue('wire.invalid', base, '导线必须是对象'))
+    return
+  }
+  for (const side of ['start', 'end'] as const) {
+    const path = [...base, side]
+    const endpoint = wire[side]
+    if (!isRecord(endpoint)) {
+      issues.push(issue('wire.invalid', path, '导线端点必须是对象'))
+      continue
+    }
+    if (endpoint.kind === 'free') {
+      if (!isFinitePoint(endpoint.point)) {
+        issues.push(issue('wire.invalid', path, '自由端点坐标必须是有限数值'))
+      }
+      continue
+    }
+    if (endpoint.kind !== 'port'
+      || typeof endpoint.entityId !== 'string'
+      || typeof endpoint.portId !== 'string') {
+      issues.push(issue('wire.invalid', path, '导线端点必须是自由点或端口引用'))
+      continue
+    }
+    const target = entities[endpoint.entityId]
+    if (!target) {
+      issues.push(issue('wire.unknown-entity', path, `端点引用的 Entity 不存在：${endpoint.entityId}`))
+      continue
+    }
+    const insert = target.components[CAD_COMPONENT_KEYS.insert]
+    if (!isRecord(insert) || typeof insert.blockId !== 'string') {
+      issues.push(issue('wire.not-instance', path, `端点只能绑定块实例：${endpoint.entityId}`))
+      continue
+    }
+    const block = blocks[insert.blockId]
+    if (!block?.ports.some(({ id }) => id === endpoint.portId)) {
+      issues.push(issue(
+        'wire.unknown-port',
+        path,
+        `实例 ${endpoint.entityId} 的块没有声明端口：${endpoint.portId}`,
+      ))
+    }
+  }
 }
 
 /** 校验实例引用的块存在，以及插入参数是有限数值。 */

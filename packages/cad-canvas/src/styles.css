@@ -197,6 +197,17 @@
   opacity: 1;
 }
 
+/*
+ * 端口标记是常驻的：用户要在开始画线之前就看见「可以连到哪里」，只在捕捉命中时才显示等于让
+ * 人先去撞。因此画得比捕捉标记小、且不用强调色——它是背景信息，不是当前焦点。
+ */
+.compose-cad-canvas__port {
+  fill: var(--compose-surface, #141a22);
+  stroke: var(--compose-text-muted, #8fa3ba);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
 /* 捕捉标记：描边不填充，压在图元之上但不遮挡它。 */
 .compose-cad-canvas__snap-marker {
   fill: none;
