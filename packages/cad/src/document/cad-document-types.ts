@@ -23,6 +23,27 @@ export interface CadLayer {
 }
 
 /**
+ * 一个块定义。
+ *
+ * @remarks
+ * 与 DXF 的 BLOCK 表同构：一份自己的**平坦、块局部坐标**图元集合，原点即插入基点。做成与
+ * `entities` 平级的表而不是把块内图元混进顶层，有两个理由：顶层继续保持平坦（命中、框选与
+ * DXF 导入都不必处理递归），以及块内图元本来就不是图纸上的对象——它们只有被插入时才可见。
+ *
+ * @public
+ */
+export interface CadBlockDefinition {
+  /** 文档内唯一的块 id。 */
+  readonly id: string
+  /** 面向用户的块名，`INSERT` 按它查找。 */
+  readonly name: string
+  /** 块内绘制顺序；元素必须存在于本块的 `entities`。 */
+  readonly rootIds: readonly string[]
+  /** 块局部坐标下的图元。 */
+  readonly entities: Readonly<Record<string, ComposeEntity>>
+}
+
+/**
  * CAD 文档 v1。
  *
  * @remarks
@@ -54,6 +75,14 @@ export interface CadDocument {
   readonly rootIds: readonly string[]
   /** 以 Entity 自身 id 为 key。 */
   readonly entities: Readonly<Record<string, ComposeEntity>>
+  /**
+   * 块定义表，以块 id 为 key。
+   *
+   * @remarks
+   * 与 `entities` 平级。旧文件没有这个字段时按空表读入，`schemaVersion` 不因此改变——
+   * 加一张空表不会让任何既有文档变得不可读。
+   */
+  readonly blocks: Readonly<Record<string, CadBlockDefinition>>
 }
 
 /** CAD 文档校验问题的稳定机器码。 @public */
@@ -71,6 +100,15 @@ export type CadDocumentIssueCode =
   | 'document.orphan-entity'
   | 'entity.missing-layer'
   | 'entity.invalid-geometry'
+  | 'block.invalid'
+  | 'block.duplicate-id'
+  | 'block.id-mismatch'
+  | 'block.missing-root'
+  | 'block.duplicate-root'
+  | 'block.orphan-entity'
+  | 'block.nested-insert'
+  | 'insert.unknown-block'
+  | 'insert.invalid'
 
 /** 一条 CAD 文档校验问题。 @public */
 export interface CadDocumentIssue {

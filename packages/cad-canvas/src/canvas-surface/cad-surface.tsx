@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import {
-  getCadLine,
+  collectCadVisibleSegments,
   getCadPlacement,
   type CadDocument,
   type CadInteractionSnapshot,
@@ -251,6 +251,8 @@ export function CadSurface({
   }, [])
 
   const layerColors = new Map(document.layers.map((layer) => [layer.id, layer]))
+  // 与命中、框选、捕捉共用同一条可见性遍历：渲染跟它们分叉时，会出现「看得见却点不中」。
+  const segments = collectCadVisibleSegments(document)
   const grid = gridLines(gridStep, viewport, size)
   const selected = new Set(interaction.selection)
 
@@ -277,19 +279,19 @@ export function CadSurface({
           y2={y2}
         />
       ))}
-      {document.rootIds.map((id) => {
-        const entity = document.entities[id]
-        const line = entity ? getCadLine(entity) : undefined
-        const layer = entity ? layerColors.get(getCadPlacement(entity)?.layerId ?? '') : undefined
-        if (!line || !layer || !layer.visible) return null
-        const start = cadWorldToScreen(viewport, line.start)
-        const end = cadWorldToScreen(viewport, line.end)
-        const isSelected = selected.has(id)
+      {segments.map(({ ownerId, segment }, index) => {
+        const owner = document.entities[ownerId]
+        const layer = owner ? layerColors.get(getCadPlacement(owner)?.layerId ?? '') : undefined
+        if (!layer) return null
+        const start = cadWorldToScreen(viewport, segment.start)
+        const end = cadWorldToScreen(viewport, segment.end)
+        const isSelected = selected.has(ownerId)
         return (
           <line
-            key={id}
+            // 块实例展开成多段，各段共用 ownerId，因此 key 要带上序号。
+            key={`${ownerId}-${index}`}
             className="compose-cad-canvas__entity"
-            data-cad-entity={id}
+            data-cad-entity={ownerId}
             data-selected={isSelected ? '' : undefined}
             // 选中态不改 stroke 属性而是交给 CSS：图元颜色来自图层（ByLayer），把高亮写死在
             // 属性上会让「这条线是什么颜色」有两个答案。

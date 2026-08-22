@@ -14,6 +14,14 @@ export interface CadCommandContext {
    * 「先选后执行」靠的就是它：编辑类命令在这里拿到非空选择时直接干活，不再提示选择对象。
    */
   readonly selection: readonly string[]
+  /**
+   * 文档现有的块，供命令按名字解析。
+   *
+   * @remarks
+   * 只给 id 与名字而不是整份文档：命令是纯状态机，需要的只是「这个名字存不存在、对应哪个
+   * id」。给整份文档会让每条命令都能顺手读文档，规划与求解的界线随之消失。
+   */
+  readonly blocks: readonly { readonly id: string; readonly name: string }[]
   /** 已本地化的命令提示文案。 */
   readonly messages: CadCommandMessages
 }
@@ -29,6 +37,14 @@ export interface CadCommandMessages {
   readonly eraseTitle: string
   readonly selectObjects: string
   readonly expectedSelection: string
+  readonly blockTitle: string
+  readonly blockName: string
+  readonly blockBasePoint: string
+  readonly expectedName: string
+  readonly insertTitle: string
+  readonly insertName: string
+  readonly insertPoint: string
+  readonly unknownBlock: string
 }
 
 /**
@@ -60,6 +76,8 @@ export interface CadCommandEffect {
    * 记账会与会话失步，随后的正交与相对坐标全部以错误的点为基准。
    */
   readonly reference?: ComposeCommandPoint
+  /** 本次提交新建的块 id；宿主据此更新可插入的块列表。 */
+  readonly createdBlockId?: string
   /**
    * 本次提交删除的 Entity。
    *

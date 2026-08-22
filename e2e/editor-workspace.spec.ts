@@ -1358,3 +1358,69 @@ test('OpenSpec: cad-document / CAD 选择集与手势仲裁 / 交叉框选两条
   await page.keyboard.press('Control+z')
   await expect(surface.locator('[data-cad-entity]')).toHaveCount(2)
 })
+
+test('OpenSpec: cad-document / CAD 块定义与插入 / 建块、插两次、改定义两处同时变', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Blocks')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  const commandInput = canvas.locator('[data-testid="cad-command-input"]')
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+
+  // 1) 画一个方角符号：(40,40) → (80,40) → (80,80)
+  for (const text of ['L', '40,40', '80,40', '80,80', 'F']) {
+    await commandInput.fill(text)
+    await commandInput.press('Enter')
+  }
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(2)
+
+  // 2) 全选后建块，基点取符号的拐角。
+  // 拖拽用绝对坐标而不是 locator.hover：按下之后指针被 surface 捕获，hover 的可操作性检查
+  // 会认为元素被别的节点挡住而重试到超时。
+  const box = (await surface.boundingBox())!
+  const at = (x: number, y: number) => ({ x: box.x + x, y: box.y + y })
+  const from = at(20, 20)
+  const to = at(200, 200)
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y)
+  await page.mouse.up()
+  await expect(canvas.locator('[data-testid="cad-selection-count"]')).toHaveText('2')
+
+  for (const text of ['B', 'CORNER', '80,40'] as const) {
+    await commandInput.fill(text)
+    await commandInput.press('Enter')
+  }
+  // 两条线被一个实例取代，但画面上仍是两段——实例被展开渲染。
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(2)
+
+  // 3) 再插一个到别处：现在图纸上有两个实例、四段
+  for (const text of ['I', 'CORNER', '200,40'] as const) {
+    await commandInput.fill(text)
+    await commandInput.press('Enter')
+  }
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(4)
+
+  // 4) 点中第二个实例的一段：整个实例进入选中态，两段一起高亮。
+  // 基点取的是拐角 (80,40)，因此块局部几何是 (-40,0)→(0,0)→(0,40)；插到 (200,40) 之后这个
+  // 实例横跨 160→200，点 (180,40) 落在它的水平段上。
+  await surface.click({ position: { x: 180, y: 40 } })
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(2)
+  await expect(canvas.locator('[data-testid="cad-selection-count"]')).toHaveText('1')
+
+  // 5) 撤销回到插入之前
+  await commandInput.press('Escape')
+  await page.keyboard.press('Control+z')
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(2)
+})
