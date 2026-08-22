@@ -619,7 +619,7 @@ describe('ComposePreview', () => {
       />,
     )
 
-    expect(screen.getByTestId('compose-preview-entity-paint-desktop'))
+    expect(screen.getByTestId('compose-preview-paint-desktop'))
       .toHaveAttribute('data-compose-paint', 'angular-gradient')
   })
 

@@ -376,7 +376,7 @@ function ComposePreviewReady({
                     <ComposeEntityPaintLayer
                       assetResolver={assetResolver}
                       entity={entity}
-                      testId={`compose-preview-entity-paint-${entity.id}`}
+                      testId={`compose-preview-paint-${entity.id}`}
                     />
                     <ComposeRegistryEntityRenderer
                       assetResolver={assetResolver}

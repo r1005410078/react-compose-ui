@@ -310,19 +310,28 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
 
   // 打开预览：animate 初始为 true，动画自动播放——实体位置随时间变化。
   await editor.getByRole('button', { name: '打开预览' }).click()
-  const previewEntity = page
-    .getByTestId('compose-preview-dialog-artboard')
-    .locator('[data-testid^="compose-preview-entity-"]')
-    .first()
+  const artboard = page.getByTestId('compose-preview-dialog-artboard')
+  const previewEntity = artboard.locator('[data-testid^="compose-preview-entity-"]').first()
   await expect(previewEntity).toBeVisible()
-  // 位置必须用 getBoundingClientRect 读：boundingBox() 会等元素连续两帧几何稳定，
-  // 而这里的元素正在被动画持续驱动，它多数时候直接返回 null。
-  const measureX = async () => previewEntity.evaluate(
-    (element) => element.getBoundingClientRect().x,
-  )
-  const initial = await measureX()
+
+  /**
+   * 量的是实体在**场景内**的横向偏移，而不是它的屏幕坐标。
+   *
+   * 屏幕坐标里混着预览对话框自己的布局：对话框展开、artboard 缩放定下来的过程会让整块画面
+   * 平移十几个像素，而那与动画毫无关系。减去场景自身的位置之后，剩下的只可能是动画。
+   *
+   * 位置必须用 `getBoundingClientRect` 读：`boundingBox()` 会等元素连续两帧几何稳定，
+   * 而这里的元素正在被动画持续驱动，它多数时候直接返回 null。
+   */
+  const measureOffsetX = async () => artboard.evaluate((root) => {
+    const frame = root.querySelector('[data-testid="compose-preview-frame"]')
+    const entity = root.querySelector('[data-testid^="compose-preview-entity-"]')
+    if (!frame || !entity) throw new Error('preview frame or entity missing')
+    return entity.getBoundingClientRect().x - frame.getBoundingClientRect().x
+  })
+  const initial = await measureOffsetX()
   await expect
-    .poll(async () => Math.abs(await measureX() - initial), { timeout: 4000 })
+    .poll(async () => Math.abs(await measureOffsetX() - initial), { timeout: 4000 })
     .toBeGreaterThan(10)
 })
 
