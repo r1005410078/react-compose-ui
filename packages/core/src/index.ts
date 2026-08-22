@@ -170,6 +170,18 @@ export {
   normalizeComposeCurveGeometry,
   translateComposeCurve,
 } from './curve'
+export {
+  parseComposeCoordinate,
+  resolveComposePoint,
+} from './point-input'
+export type {
+  ComposeCoordinateFailure,
+  ComposeGridSettings,
+  ComposeInputPoint,
+  ComposePointContext,
+  ComposePointSource,
+  ParseComposeCoordinateResult,
+} from './point-input'
 export type {
   ComposeCurve,
   ComposeCurveKind,

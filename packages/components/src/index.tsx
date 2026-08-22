@@ -13,6 +13,12 @@ export { ComposeAnglePicker, normalizeComposeAngle } from './angle-picker'
 export type { ComposeAnglePickerProps } from './angle-picker'
 export { ComposeButton } from './button'
 export type { ComposeButtonProps } from './button'
+export { ComposeCommandLine } from './command-line'
+export type {
+  ComposeCommandLineMessages,
+  ComposeCommandLineProps,
+  ComposeCommandLineStatus,
+} from './command-line'
 export {
   ComposeColorHistoryProvider,
   ComposeColorPicker,

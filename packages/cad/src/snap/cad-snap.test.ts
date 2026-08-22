@@ -85,7 +85,7 @@ describe('CAD 对象捕捉', () => {
       snapped,
       reference: { x: 0, y: 0 },
       ortho: true,
-      grid: { enabled: true, step: 10 },
+      grid: { enabled: true, stepX: 10, stepY: 10 },
     })).toEqual(snapped)
   })
 
@@ -94,7 +94,7 @@ describe('CAD 对象捕捉', () => {
     expect(resolveCadPoint({ x: 3, y: 7 }, 'typed', {
       snapped: { x: 100, y: 100 },
       ortho: true,
-      grid: { enabled: true, step: 10 },
+      grid: { enabled: true, stepX: 10, stepY: 10 },
     })).toEqual({ x: 3, y: 7 })
   })
 })

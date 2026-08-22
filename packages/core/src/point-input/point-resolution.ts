@@ -1,14 +1,24 @@
-import type { CadInputPoint } from './cad-coordinate'
+import type { ComposeInputPoint } from './coordinate'
 
-/** 网格吸附设置。 @public */
-export interface CadGridSettings {
+/**
+ * 网格吸附设置。
+ *
+ * @remarks
+ * 两轴各有步长：页面画布的网格本来就允许 X 与 Y 不同，写成单一步长会在两者不等时把一个轴
+ * 吸到错误的位置。CAD 的网格是等步的，两个字段填同一个值即可。
+ *
+ * @public
+ */
+export interface ComposeGridSettings {
   readonly enabled: boolean
-  /** 世界单位的步长；非正值视为关闭。 */
-  readonly step: number
+  /** X 轴世界单位步长；非正值视为该轴关闭。 */
+  readonly stepX: number
+  /** Y 轴世界单位步长；非正值视为该轴关闭。 */
+  readonly stepY: number
 }
 
 /** 求解一个点时可用的上下文。 @public */
-export interface CadPointContext {
+export interface ComposePointContext {
   /**
    * 对象捕捉命中的特征点。
    *
@@ -17,17 +27,17 @@ export interface CadPointContext {
    * 等于捕捉没发生。由宿主求解后传入而不是在这里查文档：宿主本来就要拿它渲染捕捉标记，
    * 让本函数保持无依赖的纯计算。
    */
-  readonly snapped?: CadInputPoint
+  readonly snapped?: ComposeInputPoint
   /**
    * 上一个已确定的点。
    *
    * @remarks
    * 正交、相对坐标与极坐标都以它为参照；命令的第一步没有它，这三者随之不生效。
    */
-  readonly reference?: CadInputPoint
+  readonly reference?: ComposeInputPoint
   /** 正交模式是否开启。 */
   readonly ortho: boolean
-  readonly grid: CadGridSettings
+  readonly grid: ComposeGridSettings
 }
 
 /**
@@ -39,9 +49,12 @@ export interface CadPointContext {
  *
  * @public
  */
-export type CadPointSource = 'pointer' | 'typed'
+export type ComposePointSource = 'pointer' | 'typed'
 
-function applyOrtho(point: CadInputPoint, reference: CadInputPoint | undefined): CadInputPoint {
+function applyOrtho(
+  point: ComposeInputPoint,
+  reference: ComposeInputPoint | undefined,
+): ComposeInputPoint {
   if (!reference) return point
   const dx = point.x - reference.x
   const dy = point.y - reference.y
@@ -51,12 +64,13 @@ function applyOrtho(point: CadInputPoint, reference: CadInputPoint | undefined):
     : { x: reference.x, y: point.y }
 }
 
-function applyGrid(point: CadInputPoint, grid: CadGridSettings): CadInputPoint {
-  if (!grid.enabled || !(grid.step > 0)) return point
-  return {
-    x: Math.round(point.x / grid.step) * grid.step,
-    y: Math.round(point.y / grid.step) * grid.step,
-  }
+function snapAxis(value: number, step: number) {
+  return step > 0 ? Math.round(value / step) * step : value
+}
+
+function applyGrid(point: ComposeInputPoint, grid: ComposeGridSettings): ComposeInputPoint {
+  if (!grid.enabled) return point
+  return { x: snapAxis(point.x, grid.stepX), y: snapAxis(point.y, grid.stepY) }
 }
 
 /**
@@ -66,16 +80,19 @@ function applyGrid(point: CadInputPoint, grid: CadGridSettings): CadInputPoint {
  * 这是一条**有序管线**：对象捕捉 > 正交 > 网格，另有「键入的坐标跳过全部吸附」这条总闸。
  * 新增一级只需在这里插一句并给上下文加一个字段，调用方不必改动——捕捉正是这样加进来的。
  *
+ * 页面画布与 CAD 画布共用本实现：两份实现的分叉症状是「键盘画的和鼠标画的落点不一样」，
+ * 而用户无法判断哪一个才是对的。
+ *
  * @param point - 原始点：指针取点时是世界坐标，键入坐标时是解析结果。
  * @param source - 点的来源；`typed` 跳过全部吸附。
  * @param context - 上一个点与各项设置。
  * @public
  */
-export function resolveCadPoint(
-  point: CadInputPoint,
-  source: CadPointSource,
-  context: CadPointContext,
-): CadInputPoint {
+export function resolveComposePoint(
+  point: ComposeInputPoint,
+  source: ComposePointSource,
+  context: ComposePointContext,
+): ComposeInputPoint {
   if (source === 'typed') return point
   if (context.snapped) return context.snapped
   return applyGrid(context.ortho ? applyOrtho(point, context.reference) : point, context.grid)

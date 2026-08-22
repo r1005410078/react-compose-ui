@@ -132,12 +132,20 @@ export function getComposeCurve(entity: ComposeEntity | undefined): ComposeCurve
   return entity?.components[COMPOSE_BUILTIN_COMPONENT_KEYS.curve] as ComposeCurve | undefined
 }
 
-/** 创建一条直线段 Curve。 @public */
+/**
+ * 创建一条直线段 Curve。
+ *
+ * @remarks
+ * 端点接受任意 `{ x, y }`：调用方手里通常是屏幕/世界坐标这类结构类型，逼它们先转成带索引
+ * 签名的 `ComposePosition` 只会让每个调用点多一次重建。
+ *
+ * @public
+ */
 export function createComposeLineCurve(
-  start: ComposePosition,
-  end: ComposePosition,
+  start: { readonly x: number; readonly y: number },
+  end: { readonly x: number; readonly y: number },
 ): ComposeLineCurve {
-  return { kind: 'line', start, end }
+  return { kind: 'line', start: { x: start.x, y: start.y }, end: { x: end.x, y: end.y } }
 }
 
 /**

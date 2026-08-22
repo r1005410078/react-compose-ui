@@ -2,6 +2,7 @@
 @import 'tailwindcss/utilities.css' layer(utilities) prefix(cu);
 @import './angle-picker/styles.css';
 @import './color-picker/styles.css';
+@import './command-line/styles.css';
 @import './tree/styles.css';
 
 @source './';

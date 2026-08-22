@@ -144,6 +144,17 @@ const preset: ComposeEntityPreset = {
   }),
 }
 
+/** 绘图模式创建的是曲线，因此测试 Registry 必须能给出 `curve` seed。 */
+const curvePreset: ComposeEntityPreset = {
+  id: 'curve',
+  label: '线',
+  createComponents: () => ({
+    ...preset.createComponents(),
+    Renderer: { type: 'curve', props: {} },
+    Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 50 } },
+  }),
+}
+
 const registry = createComposeEntityRegistry({
   renderers: [{
     type: 'test',
@@ -153,8 +164,12 @@ const registry = createComposeEntityRegistry({
     type: 'shape',
     label: '线条',
     renderer: () => null,
+  }, {
+    type: 'curve',
+    label: '曲线',
+    renderer: () => null,
   }],
-  presets: [preset],
+  presets: [preset, curvePreset],
 })
 
 function lineEntity(id = 'line', kind: 'line' | 'arrow' = 'line'): ComposeEntity {
@@ -248,6 +263,8 @@ function renderStage(
     onCreateComponentIntent?: (entityIds: readonly string[]) => void
     tool?: import('../types').ComposeStageTool
     marqueeMode?: import('../types').ComposeStageMarqueeMode
+    drafting?: boolean
+    viewport?: { readonly x: number; readonly y: number; readonly zoom: number }
   } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
@@ -267,13 +284,14 @@ function renderStage(
       policy={{
         gridVisible: options.gridVisible,
         marqueeMode: options.marqueeMode,
+        drafting: options.drafting,
       }}
       scriptScope={options.scope}
       services={{ dispatch, registry: options.registry ?? registry }}
       paintEditing={options.paintEditing}
       selectedIds={options.selectedIds ?? []}
       tool={options.tool ?? 'select'}
-      viewport={{ x: 0, y: 0, zoom: 1 }}
+      viewport={options.viewport ?? { x: 0, y: 0, zoom: 1 }}
     />,
   )
   return { dispatch: dispatchSpy, runtime, selection: selectionSpy }
@@ -1547,5 +1565,95 @@ describe('OpenSpec: stage / 场景视口适配', () => {
     // 适配必须按刚提交的 1920×1080 算，而不是本帧快照里的 1280×720。
     expect(viewport).toHaveBeenCalledTimes(1)
     expect(viewport.mock.calls[0]![0].zoom).toBeCloseTo(1000 / 1920 * 0.85)
+  })
+})
+
+describe('绘图模式', () => {
+  afterEach(cleanup)
+
+  function surfacePoint(x: number, y: number) {
+    return { clientX: x, clientY: y, pointerId: 1, button: 0, bubbles: true }
+  }
+
+  function startLine() {
+    const input = screen.getByRole('textbox', { name: '命令行' })
+    fireEvent.change(input, { target: { value: 'L' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    return input
+  }
+
+  it('OpenSpec: stage / 绘图模式 / 命令行与十字线随模式出现', () => {
+    renderStage(document(), { drafting: true })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+    expect(screen.getByTestId('stage-drafting-overlay')).toBeInTheDocument()
+  })
+
+  it('设计模式下没有命令行', () => {
+    renderStage(document())
+    expect(screen.queryByTestId('stage-drafting-command-prompt')).toBeNull()
+  })
+
+  it('OpenSpec: stage-engine / 绘图命令 / L↵ 后两次取点画出一条线', () => {
+    const { dispatch, runtime } = renderStage(document(), { drafting: true })
+    startLine()
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+
+    const surface = screen.getByTestId('stage-surface')
+    fireEvent.pointerDown(surface, surfacePoint(100, 100))
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定下一点')
+    // 第一点只是起点，还没有东西落地。
+    expect(dispatch).not.toHaveBeenCalled()
+
+    fireEvent.pointerDown(surface, surfacePoint(300, 200))
+    const created = Object.values(runtime.document.entities)
+      .filter((candidate) => candidate.components.Curve !== undefined)
+    expect(created).toHaveLength(1)
+    // 会话继续等待下一点——连续画线是这条命令的语义。
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定下一点')
+  })
+
+  it('OpenSpec: stage / 键入坐标与指针取点共用同一条求解 / 键入坐标不被吸附改写', () => {
+    const value = document()
+    const { runtime } = renderStage(value, { drafting: true })
+    const input = startLine()
+    // 网格步长 8 时 100,50 与 260,130 都不在网格点上；键入的坐标必须原样落地。
+    for (const text of ['100,50', '260,130']) {
+      fireEvent.change(input, { target: { value: text } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    }
+    const curve = Object.values(runtime.document.entities)
+      .find((candidate) => candidate.components.Curve !== undefined)
+    expect(curve).toBeDefined()
+    const item = curve!.components.LayoutItem as { readonly offset: { x: number; y: number } }
+    expect(item.offset).toEqual({ x: 100, y: 50 })
+  })
+
+  it('未知命令给出提示且不开始会话', () => {
+    renderStage(document(), { drafting: true })
+    const input = screen.getByRole('textbox', { name: '命令行' })
+    fireEvent.change(input, { target: { value: 'NOPE' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('未知命令')
+  })
+
+  it('Esc 中止命令且不写入文档', () => {
+    const { dispatch } = renderStage(document(), { drafting: true })
+    const input = startLine()
+    fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(100, 100))
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('已取消')
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('F8 切换正交，F3 切换对象捕捉', () => {
+    renderStage(document(), { drafting: true })
+    expect(screen.getByTestId('stage-drafting-ortho-state')).toHaveTextContent('正交 关')
+    expect(screen.getByTestId('stage-drafting-snap-state')).toHaveAttribute('data-active')
+
+    fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'F8' })
+    expect(screen.getByTestId('stage-drafting-ortho-state')).toHaveTextContent('正交 开')
+    fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'F3' })
+    // 二态标记关闭时也要显示——只在开启时渲染会让用户无法确认它现在是关的。
+    expect(screen.getByTestId('stage-drafting-snap-state')).toHaveTextContent('对象捕捉 关')
   })
 })

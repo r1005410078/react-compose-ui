@@ -66,6 +66,7 @@ const messages = {
       selectSingleNode: '同时选中了多个组件；只选中一个才能编辑属性',
       modeSwitcher: '编辑模式',
       modeDesign: '设计',
+      modeDrafting: '绘图',
       modeAnimation: '动画',
     },
     animationMode: {
@@ -294,6 +295,7 @@ const messages = {
       selectSingleNode: 'Multiple components selected; select exactly one to edit properties',
       modeSwitcher: 'Editor mode',
       modeDesign: 'Design',
+      modeDrafting: 'Draft',
       modeAnimation: 'Animation',
     },
     animationMode: {

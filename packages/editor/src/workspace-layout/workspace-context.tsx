@@ -17,6 +17,7 @@ import type {
   ComposeHistoryShortcuts,
 } from '@compose-ui/history'
 import type { DockviewReadyEvent } from 'dockview-react'
+import type { ComposeEditorMode } from './editor-mode-switcher'
 
 export interface WorkspaceContent {
   sceneGraphPanel?: ReactNode
@@ -32,9 +33,9 @@ export interface WorkspaceContent {
   /** 受控的时间线空态：会话镜像没有动画即为 true；缺省回退面板自身的轨道判定。 */
   animationEmpty?: boolean
   /** 当前编辑模式；驱动页面文档工具栏的 设计/动画 切换器。 */
-  editorMode?: 'design' | 'animation'
+  editorMode?: ComposeEditorMode
   /** 模式切换回调；由 compose-editor 集中完成会话与底部 Dockview 重组。 */
-  onEditorModeChange?: (mode: 'design' | 'animation') => void
+  onEditorModeChange?: (mode: ComposeEditorMode) => void
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
   assetBrowserPanel?: ReactNode

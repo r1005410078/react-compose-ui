@@ -1,3 +1,4 @@
+import { createStageDraftingPointPlugin } from '../drafting/drafting-point-plugin'
 import { createStageDrawPlugin } from './draw-plugin'
 import {
   createStageLegacyRotateHitPlugin,
@@ -44,6 +45,7 @@ import type { StageInteractionPlugin } from './stage-kernel-profile'
 export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionPlugin)[] = [
   createStageTextEditGuardPlugin,
   createStagePanPlugin,
+  createStageDraftingPointPlugin,
   createStageRotatePlugin,
   createStagePaintSamplePlugin,
   createStagePathPlugin,

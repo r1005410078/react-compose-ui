@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { parseCadCoordinate } from './cad-coordinate'
-import { resolveCadPoint, type CadPointContext } from './cad-point-resolution'
+import { parseCadCoordinate } from './index'
+import { resolveCadPoint, type CadPointContext } from './index'
 
 const origin = { x: 0, y: 0 }
 
 function context(overrides: Partial<CadPointContext> = {}): CadPointContext {
-  return { ortho: false, grid: { enabled: false, step: 10 }, ...overrides }
+  return { ortho: false, grid: { enabled: false, stepX: 10, stepY: 10 }, ...overrides }
 }
 
 describe('CAD 坐标语法', () => {
@@ -55,7 +55,7 @@ describe('CAD 点求解管线', () => {
     const settings = context({
       reference: origin,
       ortho: true,
-      grid: { enabled: true, step: 10 },
+      grid: { enabled: true, stepX: 10, stepY: 10 },
     })
     // 既不落在网格上、也不在轴向上，但因为是键入的，原样保留。
     expect(resolveCadPoint({ x: 103, y: 47 }, 'typed', settings)).toEqual({ x: 103, y: 47 })
@@ -65,7 +65,7 @@ describe('CAD 点求解管线', () => {
     const settings = context({
       reference: origin,
       ortho: true,
-      grid: { enabled: true, step: 10 },
+      grid: { enabled: true, stepX: 10, stepY: 10 },
     })
     // 水平位移更大 → 钳到与参照点等高 → 再按步长取整。
     expect(resolveCadPoint({ x: 103, y: 47 }, 'pointer', settings)).toEqual({ x: 100, y: 0 })
@@ -89,7 +89,8 @@ describe('CAD 点求解管线', () => {
 
   it('非正步长视为关闭网格', () => {
     for (const step of [0, -10, Number.NaN]) {
-      expect(resolveCadPoint({ x: 103, y: 47 }, 'pointer', context({ grid: { enabled: true, step } })))
+      const grid = { enabled: true, stepX: step, stepY: step }
+      expect(resolveCadPoint({ x: 103, y: 47 }, 'pointer', context({ grid })))
         .toEqual({ x: 103, y: 47 })
     }
   })

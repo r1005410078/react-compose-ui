@@ -171,3 +171,18 @@ export {
 
 /** `@compose-ui/stage-engine` 的稳定包标识。 @public */
 export const COMPOSE_UI_STAGE_ENGINE_PACKAGE = '@compose-ui/stage-engine' as const
+export {
+  createStageDraftingCommands,
+  createStageDraftingPointPlugin,
+  createStageLineCommand,
+  createStageLineSession,
+  STAGE_DRAFTING_POINT_PLUGIN_ID,
+} from './drafting'
+export type {
+  StageDraftingContext,
+  StageDraftingEffect,
+  StageDraftingMessages,
+  StageDraftingSegment,
+} from './drafting'
+export { findStageFeaturePoint } from './hit-testing'
+export type { StageFeaturePoint, StageFeatureSnapMode } from './hit-testing'

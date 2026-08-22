@@ -272,6 +272,16 @@ export interface StageInteractionContext {
    * @defaultValue 'intersect'
    */
   readonly marqueeMode?: StageMarqueeMode
+  /**
+   * 绘图命令是否正在等待一个点。
+   *
+   * @remarks
+   * 只是一个布尔而不是整个会话：引擎不需要认识命令，只需要知道这次按下该不该被交给它。
+   * 会话住在宿主——提示文本、预览几何与捕捉标记是同一份状态的三种呈现。
+   *
+   * @defaultValue false
+   */
+  readonly draftingAwaitingPoint?: boolean
   /** 最新受控选择，按宿主顺序排列。 */
   readonly selectedIds: readonly string[]
   /**
@@ -335,6 +345,14 @@ export type StageInteractionEffect =
   | { readonly type: 'viewport.change'; readonly viewport: StageViewport }
   | { readonly type: 'selection.change'; readonly selectedIds: readonly string[] }
   | { readonly type: 'paint.sample.complete' }
+  /**
+   * 绘图命令取到的一个世界坐标。
+   *
+   * @remarks
+   * 引擎只给出原始世界点：捕捉、正交与网格由宿主经点输入管线求解——它本来就要拿捕捉结果去
+   * 渲染标记，在这里再解一次会得到两份可能分叉的答案。
+   */
+  | { readonly type: 'drafting.point'; readonly point: StagePoint }
   | { readonly type: 'command.dispatch'; readonly command: EditorCommand }
   | {
       readonly type: 'drawing.commit'

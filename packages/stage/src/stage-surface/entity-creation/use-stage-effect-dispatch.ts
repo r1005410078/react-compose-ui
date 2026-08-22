@@ -84,6 +84,8 @@ export interface StageEffectDispatchParams {
   readonly exitTextEditing: () => void
   /** 绘制完成后回灌给内核的「本次创建了谁」。 */
   readonly onDrawn: (drawn: StageDrawnEntity) => void
+  /** 绘图命令取到一个世界坐标；只在绘图模式下由取点插件产生。 */
+  readonly onDraftingPoint?: (point: StagePoint) => void
   /** 绘制提交后切回选择工具；仅点击创建文字时需要。 */
   readonly onToolChange?: (tool: ComposeStageTool) => void
 }
@@ -488,6 +490,10 @@ export function useStageEffectDispatch(
         }
         if (effect.type === 'text-editing.exit') {
           exitTextEditing()
+          return
+        }
+        if (effect.type === 'drafting.point') {
+          latestRef.current.onDraftingPoint?.(effect.point)
           return
         }
         if (effect.item.kind === 'assets') {

@@ -19,8 +19,14 @@ export interface StageGesturePriorityEntry {
   readonly id: string
   /** 询问优先级，数值大的先被询问。 */
   readonly priority: number
-  /** `begin()` 中对应分支的原行号（抄录时的 `interaction-controller.ts`）。 */
-  readonly sourceLine: number
+  /**
+   * `begin()` 中对应分支的原行号（抄录时的 `interaction-controller.ts`）。
+   *
+   * @remarks
+   * 只有从那次级联抄录而来的项有行号，它用于独立校验抄录顺序。**后来新增的插件没有原行号**
+   * ——它们从未出现在级联里，编一个数字反而会让「行号同序」这条校验失去意义。
+   */
+  readonly sourceLine?: number
   /** 该分支的判定条件，用抄录时的表达式原样描述。 */
   readonly condition: string
 }
@@ -37,6 +43,7 @@ export interface StageGesturePriorityEntry {
 export const STAGE_GESTURE_PRIORITY: readonly StageGesturePriorityEntry[] = Object.freeze([
   { id: 'text-edit-guard', priority: 1800, sourceLine: 1702, condition: 'context.textEditing 且命中编辑目标或变换手柄（consumed）' },
   { id: 'pan', priority: 1700, sourceLine: 1719, condition: "tool === 'pan' || snapshot.temporaryPan || button === 1" },
+  { id: 'drafting-point', priority: 1650, condition: '绘图命令正在等待一个点（consumed）' },
   { id: 'rotate-tool', priority: 1600, sourceLine: 1839, condition: "tool === 'rotate' 且命中非标尺/辅助线/Paint 柄/路径柄" },
   { id: 'paint-sample', priority: 1500, sourceLine: 1875, condition: 'context.paintSampling 存在' },
   { id: 'path', priority: 1400, sourceLine: 1896, condition: "hit.kind === 'path-handle'" },

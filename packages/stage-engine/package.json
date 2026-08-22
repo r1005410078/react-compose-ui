@@ -27,6 +27,7 @@
     "pack:dry-run": "bun pm pack --dry-run"
   },
   "dependencies": {
+    "@compose-ui/commands": "workspace:*",
     "@compose-ui/core": "workspace:*",
     "@compose-ui/interaction-kernel": "workspace:*"
   }
