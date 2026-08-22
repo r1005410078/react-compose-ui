@@ -98,6 +98,13 @@ describe('十字光标', () => {
   function surfaceHidesCursor() {
     return screen.getByTestId('cad-surface').hasAttribute('data-crosshair')
   }
+  function reach() {
+    const [line] = lines()
+    return Math.max(
+      Math.abs(Number(line?.getAttribute('x2')) - 200),
+      Math.abs(Number(line?.getAttribute('y2')) - 160),
+    )
+  }
 
   it('OpenSpec: cad-document / CAD 十字光标 / 三种形态随等待的输入类型切换', () => {
     setup()
@@ -122,6 +129,13 @@ describe('十字光标', () => {
     hoverAt(200, 160)
     expect(lines()).toHaveLength(0)
     expect(pickbox()).not.toBeNull()
+  })
+
+  it('OpenSpec: cad-document / CAD 十字光标 / 十字线长度按图面较短边取百分比', () => {
+    setup({ crosshairSize: 10 })
+    hoverAt(200, 160)
+    // 夹具图面 800×600，较短边 600 的 10% = 60。
+    expect(reach()).toBe(60)
   })
 
   it('OpenSpec: cad-document / CAD 十字光标 / 拾取框半边长等于命中容差且线在框处断开', () => {

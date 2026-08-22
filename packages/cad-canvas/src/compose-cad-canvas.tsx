@@ -81,11 +81,13 @@ export interface ComposeCadCanvasProps {
    * 十字线单侧长度占视口较短边的百分比。
    *
    * @remarks
-   * 语义与 AutoCAD 的 `CURSORSIZE` 一致（1–100）。默认取贯穿全视口而不是 AutoCAD 的 5——
-   * 5% 是在整块显示器上取的，而图面是编辑器里的一块面板，5% 会小到看不出是十字线；贯穿全
-   * 视口同时让十字线兼任一条免费的对齐参考线。
+   * 语义与 AutoCAD 的 `CURSORSIZE` 一致（1–100），按图面较短边取百分比。
    *
-   * @defaultValue 100
+   * 默认 15 而不是 AutoCAD 的 5：5% 是在整块显示器上取的，图面只是编辑器里的一块面板，同样的
+   * 百分比会小到看不出是十字线。也不取 100——贯穿全视口的十字线在这个尺寸的面板里会盖住整幅
+   * 图，反而干扰读图。需要全屏十字线（很多 AutoCAD 老手的习惯）时由宿主传 100。
+   *
+   * @defaultValue 15
    */
   readonly crosshairSize?: number
   /**
@@ -139,7 +141,7 @@ export function ComposeCadCanvas({
   gridStep = 10,
   snapRadius = 12,
   pickRadius = 8,
-  crosshairSize = 100,
+  crosshairSize = 15,
   showCrosshair = true,
   showRulers = true,
 }: ComposeCadCanvasProps) {

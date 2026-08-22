@@ -93,10 +93,13 @@
 }
 
 /*
- * 画了十字光标就必须收走系统箭头，否则屏幕上有两个光标。只作用于图面，命令行与工具栏不受
- * 影响；宿主关掉十字光标时这个类不加，系统光标照常可见。
+ * 画了十字光标就必须收走系统箭头，否则屏幕上有两个光标。
+ *
+ * 作用域是**整个图面区域**而不只是 SVG：标尺与它们让出的留白同属画布，指针滑过时冒出一支
+ * 箭头会让人以为十字光标失效了。命令行在 viewport 之外，文本光标不受影响。
  */
-.compose-cad-canvas__surface[data-crosshair] {
+.compose-cad-canvas__viewport:has(> [data-crosshair]),
+.compose-cad-canvas__viewport:has(> [data-crosshair]) * {
   cursor: none;
 }
 
