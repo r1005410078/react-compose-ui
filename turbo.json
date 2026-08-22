@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["vitest.shared.ts", "test/setup.ts"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
