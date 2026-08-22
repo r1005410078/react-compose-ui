@@ -23,6 +23,7 @@ import {
   defaultTextLineHeight,
 } from '../text/defaults'
 import { SHAPE_RENDERER_PROP_SCHEMAS } from '../shape/props'
+import { CURVE_RENDERER_PROP_SCHEMAS } from '../curve/props'
 import { TEXT_RENDERER_PROP_SCHEMAS } from '../text/props'
 
 /** Inspector 命令 ID factory。 @internal */
@@ -362,6 +363,69 @@ export function createShapeRendererInspector(idFactory: InspectorIdFactory) {
     return (
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} line`, `${context.entity.name} 线条`)}
+        binding={createPropsBinding(context)}
+        readOnly={context.readOnly}
+        schema={schema}
+        value={value}
+        onValueChange={(next, change) => {
+          const propName = change.path[0]
+          if (change.path.length !== 1 || typeof propName !== 'string' || !(propName in next)) return
+          dispatchProps(context, {
+            ...context.authoredProps,
+            [propName]: change.value as JsonValue,
+          }, idFactory)
+        }}
+      />
+    )
+  }
+}
+
+/** 创建 Curve Renderer 描边 Inspector。 @internal */
+export function createCurveRendererInspector(idFactory: InspectorIdFactory) {
+  return function CurveRendererInspector(context: ComposeRendererInspectorProps) {
+    const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
+    const props = inspectorBaseProps(context)
+    const schema = v.object({
+      stroke: v.pipe(
+        CURVE_RENDERER_PROP_SCHEMAS.stroke,
+        v.title(title(zh, 'Stroke', '线条颜色')),
+        v.metadata({ propertyPanel: { editor: 'color' } }),
+      ),
+      strokeWidth: v.pipe(
+        CURVE_RENDERER_PROP_SCHEMAS.strokeWidth,
+        v.title(title(zh, 'Stroke width', '线条粗细')),
+        v.metadata({ propertyPanel: { unit: 'px' } }),
+      ),
+      strokeLinecap: v.pipe(
+        CURVE_RENDERER_PROP_SCHEMAS.strokeLinecap,
+        v.title(title(zh, 'Line cap', '端点形状')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { butt: '平头', round: '圆头', square: '方头' }
+          : { butt: 'Butt', round: 'Round', square: 'Square' } } }),
+      ),
+      strokeDasharray: v.pipe(
+        CURVE_RENDERER_PROP_SCHEMAS.strokeDasharray,
+        v.title(title(zh, 'Line style', '线条样式')),
+        v.metadata({ propertyPanel: { optionLabels: zh
+          ? { none: '实线', '8 4': '虚线', '1 4': '点线' }
+          : { none: 'Solid', '8 4': 'Dashed', '1 4': 'Dotted' } } }),
+      ),
+    })
+    const value = {
+      stroke: typeof props.stroke === 'string' ? props.stroke : '#d8e2f1',
+      strokeWidth: typeof props.strokeWidth === 'number' && props.strokeWidth >= 0
+        ? props.strokeWidth
+        : 2,
+      strokeLinecap: props.strokeLinecap === 'butt'
+        ? 'butt' as const
+        : props.strokeLinecap === 'square' ? 'square' as const : 'round' as const,
+      strokeDasharray: props.strokeDasharray === '8 4'
+        ? '8 4' as const
+        : props.strokeDasharray === '1 4' ? '1 4' as const : 'none' as const,
+    }
+    return (
+      <ComposePropertyPanel
+        aria-label={title(zh, `${context.entity.name} stroke`, `${context.entity.name} 描边`)}
         binding={createPropsBinding(context)}
         readOnly={context.readOnly}
         schema={schema}

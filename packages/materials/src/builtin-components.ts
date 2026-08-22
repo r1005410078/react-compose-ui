@@ -9,11 +9,13 @@ import {
   createDefaultComposeLayoutItem,
   isValidComposeLayout,
   isValidComposeLayoutItem,
+  isValidComposeCurve,
   isValidComposeGeometryConstraints,
   isValidComposeInteraction,
   isValidComposeWidgetSwitcher,
 } from '@compose-ui/core'
 import { createFrameInspector } from './frame'
+import { DEFAULT_CURVE_GEOMETRY as DEFAULT_COMPOSE_CURVE } from './curve'
 import {
   DEFAULT_COMPOSE_CLIP,
   DEFAULT_COMPOSE_GEOMETRY_CONSTRAINTS,
@@ -30,6 +32,7 @@ import {
 import {
   createAppearanceInspector,
   createConstraintsInspector,
+  createCurveInspector,
   createHierarchyInspector,
   createLockInspector,
   createLayoutItemInspector,
@@ -169,6 +172,16 @@ export function createComposeBuiltinComponentDefinitions(
         isVisible: () => true,
         actions: createInteractionMissingInspectorActions(idFactory),
       },
+    },
+    {
+      key: 'Curve',
+      label: '几何',
+      // 排在交互之后、裁剪之前：它是这条线"长什么样"，与外观同一层级的关注点。
+      order: 59,
+      createDefault: () => ({ ...DEFAULT_COMPOSE_CURVE }),
+      validate: isValidComposeCurve,
+      inspector: createCurveInspector(idFactory),
+      inspectorDefaultExpanded: true,
     },
     {
       key: 'Clip',

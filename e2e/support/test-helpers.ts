@@ -2,6 +2,9 @@ import { expect } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
 
 export async function pointerDrop(page: Page, source: Locator, target: { x: number; y: number }) {
+  // 拖起点必须在可视区域内：Palette 是可滚动的，新增一个 Preset 就会把靠后的物料挤出视口，
+  // 此时 boundingBox 仍然返回坐标（CSS 上可见），而按下的位置已经落在面板之外。
+  await source.scrollIntoViewIfNeeded()
   const sourceBox = await source.boundingBox()
   expect(sourceBox).not.toBeNull()
   await page.mouse.move(

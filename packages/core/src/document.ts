@@ -19,6 +19,7 @@ import {
 } from './layout'
 import { isComposeColor, isValidComposePaint } from './paint'
 import { collectComposeInteractionValidationIssues } from './interaction'
+import { collectComposeCurveValidationIssues } from './curve'
 
 type Path = readonly (string | number)[]
 type UnknownRecord = Record<string, unknown>
@@ -617,6 +618,7 @@ function validateEntity(
   const hasClip = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.clip])
   const hasFrame = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.frame])
   const hasAnimations = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.animations])
+  const hasCurve = isRecord(components[COMPOSE_BUILTIN_COMPONENT_KEYS.curve])
   if (!hasHierarchy && !hasRenderer) {
     addIssue(
       issues,
@@ -657,6 +659,22 @@ function validateEntity(
       'Animations 必须与 Frame 组合',
     )
   }
+  if (hasCurve && !hasRenderer) {
+    addIssue(
+      issues,
+      'component.invalid-combination',
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.curve],
+      'Curve 必须与 Renderer 组合',
+    )
+  }
+  if (hasCurve && hasHierarchy) {
+    addIssue(
+      issues,
+      'component.invalid-combination',
+      [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.curve],
+      'Curve 不能与 Hierarchy 组合',
+    )
+  }
   if (hasLayout && !hasHierarchy) {
     addIssue(
       issues,
@@ -690,6 +708,14 @@ function validateEntity(
       components[COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem],
     ).forEach((issue) => {
       addIssue(issues, 'layout-item.invalid', [...layoutItemPath, ...issue.path], issue.message)
+    })
+  }
+  if (hasCurve) {
+    const curvePath = [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.curve] as const
+    collectComposeCurveValidationIssues(
+      components[COMPOSE_BUILTIN_COMPONENT_KEYS.curve],
+    ).forEach((issue) => {
+      addIssue(issues, 'curve.invalid', [...curvePath, ...issue.path], issue.message)
     })
   }
   if (hasVisibility) {

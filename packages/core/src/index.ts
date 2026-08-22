@@ -158,6 +158,25 @@ export type {
   ComposeNavigateAction,
   ComposeNavigateBackAction,
 } from './interaction'
+export {
+  COMPOSE_CURVE_MIN_EXTENT,
+  collectComposeCurveValidationIssues,
+  composeCurveBounds,
+  composeCurvePoints,
+  createComposeLineCurve,
+  distanceToComposeCurve,
+  getComposeCurve,
+  isValidComposeCurve,
+  normalizeComposeCurveGeometry,
+  translateComposeCurve,
+} from './curve'
+export type {
+  ComposeCurve,
+  ComposeCurveKind,
+  ComposeCurveValidationIssue,
+  ComposeLineCurve,
+  ComposeNormalizedCurveGeometry,
+} from './curve'
 export { applyDocumentPatches, jsonEqual } from './patches'
 export { createDocumentTransactionRuntime, createTransactionRuntime } from './runtime'
 export {

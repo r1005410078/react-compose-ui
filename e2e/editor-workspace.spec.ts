@@ -12,8 +12,8 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   const componentLibrary = editor.locator('[data-workspace-panel="component-library"]')
   await expect(componentLibrary).toBeVisible()
   // Palette 只保留没有专用创建入口的 Preset：Text/Line/Arrow/Circle 走工具栏绘制工具，
-  // Page Slot 走资源面板的页面拖入；Widget Switcher 物料加入后计数为 4。
-  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (4)' })).toBeVisible()
+  // Page Slot 走资源面板的页面拖入；Widget Switcher 与 Curve 物料加入后计数为 5。
+  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (5)' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Rectangle' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Widget Switcher' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toHaveCount(0)

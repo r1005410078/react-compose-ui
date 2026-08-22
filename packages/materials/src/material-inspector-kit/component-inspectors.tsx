@@ -9,14 +9,17 @@ import {
   getComposeClip,
   getComposeHierarchy,
   getComposeLayout,
+  getComposeLayoutItem,
   getComposeRenderer,
   getComposeSpatialTransform,
   formatComposeNumber,
+  roundComposeGeometry,
   resolveComposeAppearance,
   resolveComposeOverflow,
   type ComposeAppearance,
   type ComposeAxisSizing,
   type ComposeColor,
+  type ComposeCurve,
   type ComposeEdges,
   type ComposeEntity,
   type ComposeGeometryConstraints,
@@ -695,6 +698,60 @@ export function createVisibilityInspector(
             next.visible
               ? (zh ? `显示 ${entity.name}` : `Show ${entity.name}`)
               : (zh ? `隐藏 ${entity.name}` : `Hide ${entity.name}`),
+          ))
+        }}
+      />
+    )
+  }
+}
+
+/**
+ * 创建 Curve Component Inspector。
+ *
+ * @remarks
+ * 面板里的端点是 **parent 局部坐标**——用户读到的是「这条线画在场景的哪里」，而文档里存的
+ * 是盒局部坐标。两者相差一个 `LayoutItem.offset`，换算只在这里做一次：写回派发
+ * `entity.curve.set`，由那条漏斗负责重新归一化盒与几何。
+ *
+ * @internal
+ */
+export function createCurveInspector(
+  idFactory: InspectorIdFactory,
+): ComponentType<ComposeComponentInspectorProps> {
+  return function CurveInspector({ entity, dispatch, readOnly, value }) {
+    const zh = useZh()
+    const schema = useMemo(() => v.object({
+      start: v.pipe(
+        v.object({ x: v.number(), y: v.number() }),
+        v.title(zh ? '起点' : 'Start'),
+        v.metadata({ propertyPanel: { editor: 'vector2' } }),
+      ),
+      end: v.pipe(
+        v.object({ x: v.number(), y: v.number() }),
+        v.title(zh ? '终点' : 'End'),
+        v.metadata({ propertyPanel: { editor: 'vector2' } }),
+      ),
+    }), [zh])
+    const curve = value as unknown as ComposeCurve
+    const offset = getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 }
+    const toParent = (point: { readonly x: number; readonly y: number }) => ({
+      x: roundComposeGeometry(point.x + offset.x),
+      y: roundComposeGeometry(point.y + offset.y),
+    })
+    return (
+      <ComposePropertyPanel
+        aria-label={zh ? '曲线属性' : 'Curve properties'}
+        readOnly={readOnly}
+        schema={schema}
+        value={{ start: toParent(curve.start), end: toParent(curve.end) }}
+        onValueChange={(next) => {
+          if (readOnly) return
+          dispatch(command(
+            idFactory,
+            entity,
+            BUILTIN_COMMAND_TYPES.setCurve,
+            { entityId: entity.id, curve: { ...curve, start: next.start, end: next.end } },
+            zh ? `编辑 ${entity.name} 的几何` : `Edit ${entity.name} geometry`,
           ))
         }}
       />
