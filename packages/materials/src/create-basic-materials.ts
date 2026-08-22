@@ -45,6 +45,7 @@ import {
   DEFAULT_COMPOSE_LINE_PRESET,
   DEFAULT_COMPOSE_SHAPE_RENDERER,
 } from './shape'
+import { createCurveMaterial } from './curve'
 import type { ComposeBasicMaterials, ComposeCreateBasicMaterialsOptions } from './types'
 
 /** `@compose-ui/materials` 的稳定包标识。 @public */
@@ -91,6 +92,7 @@ export function createComposeBasicMaterials(
   const image = createImageMaterial(options.image, idFactory)
   const svg = createSvgMaterial(options.svg, idFactory)
   const shape = createShapeMaterial(options.shape, idFactory)
+  const curve = createCurveMaterial(options.curve, idFactory)
   const componentInstance = createComponentInstanceMaterial()
   const rendererDefinitions = Object.freeze([
     rectangle.renderer,
@@ -98,6 +100,7 @@ export function createComposeBasicMaterials(
     image.renderer,
     svg.renderer,
     shape.renderer,
+    curve.renderer,
     componentInstance.renderer,
     ...(options.extensions?.renderers ?? []),
   ])
@@ -116,6 +119,7 @@ export function createComposeBasicMaterials(
     svg.preset,
     componentInstance.preset,
     ...shape.presets,
+    curve.preset,
     ...(options.extensions?.presets ?? []),
   ])
   const capabilities = Object.freeze([

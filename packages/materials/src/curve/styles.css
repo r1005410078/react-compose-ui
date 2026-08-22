@@ -1,0 +1,7 @@
+.compose-material--curve {
+  display: block;
+  /* 几何贴着退化盒的边绘制（水平线的盒高被钳到 1），裁掉就什么都看不见。 */
+  overflow: visible;
+  /* 命中只交给透明的加宽 stroke，避免整个外接矩形都可点击。 */
+  pointer-events: none;
+}

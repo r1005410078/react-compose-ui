@@ -1,0 +1,11 @@
+export {
+  DEFAULT_CURVE_APPEARANCE,
+  DEFAULT_CURVE_GEOMETRY,
+  DEFAULT_CURVE_PROPS,
+  DEFAULT_CURVE_SIZE,
+} from './defaults'
+export {
+  createCurveMaterial,
+  DEFAULT_COMPOSE_CURVE_PRESET,
+  DEFAULT_COMPOSE_CURVE_RENDERER,
+} from './definition'

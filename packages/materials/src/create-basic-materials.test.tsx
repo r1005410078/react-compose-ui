@@ -70,8 +70,9 @@ describe('Basic ECS materials', () => {
     const paletteVisible = materials.presets
       .filter((preset) => !preset.paletteHidden)
       .map(({ id }) => id)
-    // 工具栏已有 text/line/arrow/circle 绘制工具，因此它们默认不进 Palette。
-    expect(paletteVisible).toEqual(['container', 'widget-switcher', 'rectangle'])
+    // 工具栏已有 text/line/arrow/circle 绘制工具，因此它们默认不进 Palette；曲线相反——
+    // 它的创建路径就是「点击添加」，绘制手势属于后续的绘图模式。
+    expect(paletteVisible).toEqual(['container', 'widget-switcher', 'rectangle', 'curve'])
     // 隐藏只影响 Palette 呈现，Registry 仍然注册全部 Preset。
     expect(materials.registry.getPreset('text')).toBeDefined()
     expect(materials.registry.getPreset('circle')).toBeDefined()
@@ -123,6 +124,7 @@ describe('Basic ECS materials', () => {
       'line',
       'arrow',
       'circle',
+      'curve',
     ])
     const container = seedEntity(materials, 'container')
     expect(getComposeHierarchy(container)?.childIds).toEqual([])
@@ -136,7 +138,7 @@ describe('Basic ECS materials', () => {
     expect(getComposeComposition(container).baseComponentKeys).toContain('Hierarchy')
     expect(getComposeComposition(container).baseComponentKeys).not.toContain('Layout')
 
-    for (const id of ['rectangle', 'text', 'image', 'svg', 'line', 'arrow', 'circle']) {
+    for (const id of ['rectangle', 'text', 'image', 'svg', 'line', 'arrow', 'circle', 'curve']) {
       const entity = seedEntity(materials, id)
       expect(getComposeRenderer(entity)?.type).toBe(
         ['line', 'arrow', 'circle'].includes(id) ? 'shape' : id,

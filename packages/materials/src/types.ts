@@ -44,6 +44,8 @@ export interface ComposeCreateBasicMaterialsOptions {
   readonly svg?: ComposeBasicMaterialOptions
   /** Line、Arrow、Circle 绘图物料选项。 */
   readonly shape?: ComposeShapeMaterialOptions
+  /** 曲线物料的默认值覆盖。 */
+  readonly curve?: ComposeBasicMaterialOptions
   /** 按分类追加的宿主 Registry 定义。 */
   readonly extensions?: {
     readonly renderers?: readonly ComposeRendererDefinition[]

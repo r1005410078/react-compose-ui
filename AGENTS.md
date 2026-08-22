@@ -104,6 +104,24 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   的 Clip 归一为不裁剪，与「新建场景」命令一致）；其余 Entity 落进**激活场景**并**保留世界
   落点**——换算成局部坐标后越界也不钳制，场景默认不裁剪因此仍可见。任何新建路径都不得回退到
   `rootIds[0]`——那既选错场景，又会跳过世界→局部换算。点击添加（没有落点意图）不走升格。
+- **曲线是带盒的普通 Entity。** 线（后续还有弧、多段线）由可选的 `Curve` Component 承载几何，
+  但**保留 `LayoutItem`**：位置的事实来源仍是 `LayoutItem.offset`（动画位置轨道的路径就是它、
+  move 插件写的也是它，`Transform` 只有 `rotation`），形状的事实来源是 `Curve`，盒尺寸是几何的
+  派生（紧包围盒）。去掉盒等于把移动、位置动画、场景树、Group 包围盒每条既有轨道各 fork 一份，
+  而每条分支都是一处等着漏的钩子。因此曲线一落地就自动拥有场景树节点、属性面板、关键帧与预览。
+  几何点是**盒局部坐标**，且归一化后紧包围盒左上角恒为盒原点；水平线的退化轴把盒钳到
+  `COMPOSE_CURVE_MIN_EXTENT`（`LayoutItem` 尺寸要求正数），几何不受影响——渲染与命中都读几何。
+  `entity.curve.set` 是几何写入的**唯一漏斗**：载荷是 parent 局部坐标，命令在同一事务里写
+  `Curve` 与 `LayoutItem`，拆成两条会产生可观察的不一致中间态且撤销变两步。
+  几何住 core 的 Component（跨包契约：命中、捕捉、未来的导线求解都读它），描边住 Renderer
+  props（只有渲染与 Inspector 读，因此白拿绑定与外观轨道）。
+- **曲线的命中判据是点到几何的距离，而这条判据落在两处。** Stage 的**点选是 DOM 驱动**的——
+  Entity 节点上挂 `onPointerDown`，命中由浏览器决定，因此线状节点靠 `.is-segment`
+  （`pointer-events: none`）加物料内部**透明加宽 stroke**（`pointer-events: stroke`）承担；
+  `StageSceneIndex.entityAtPoint` 是另一条路径（取色采样），在 Entity 局部坐标按距离判定。
+  两处必须给出一致语义：对角线包围盒的空角在任何一条路径上都不得命中曲线。线状判定按
+  `Curve` Component 而不是 Renderer 类型——按物料类型枚举，每加一种线状物料都会漏掉一处。
+  `world = (屏幕 − 视口) / zoom`，因此命中相关用例**必须在非 100% 缩放下断言**。
 - **页面之间只有跳转关系，没有嵌套关系。** Page Slot 已删除：它是「弱化版组件实例」——没有
   属性/结构覆盖、没有变体、编辑期不能下钻、不能离线渲染。复用一块 UI 一律用 Component
   Asset v2 与 Variant。**没有为它写迁移器**：删除时尚无线上资产使用 Page Slot，为零份文档

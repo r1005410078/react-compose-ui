@@ -7,6 +7,7 @@ import {
 } from '@compose-ui/component-registry'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
+  getComposeCurve,
   getComposeFrame,
   getComposeHierarchy,
   getComposeLock,
@@ -134,8 +135,12 @@ export function StageSceneLayer({
       if (hiddenEntityIds?.has(entityId)) return null
       const hierarchy = getComposeHierarchy(entity)
       const renderer = getComposeRenderer(entity)
-      const isSegment = renderer?.type === 'shape'
-        && (renderer.props.kind === 'line' || renderer.props.kind === 'arrow')
+      // 线状节点的外接矩形里绝大部分是空的，不能让它拦截画布点击：盒交给 pointer-events:none，
+      // 命中由物料自己的加宽透明 stroke 承担。曲线按 Component 判定而不是再加一条 Renderer
+      // type 分支——「这个 Entity 是不是线状的」是几何问题，不是某个物料的私事。
+      const isSegment = Boolean(getComposeCurve(entity))
+        || (renderer?.type === 'shape'
+          && (renderer.props.kind === 'line' || renderer.props.kind === 'arrow'))
       const box = layoutSnapshot.boxes[entityId]
       if (!box) return null
       const locked = getComposeLock(entity).locked

@@ -1,5 +1,7 @@
 import {
+  distanceToComposeCurve,
   getComposeClip,
+  getComposeCurve,
   isComposeFrameEntity,
   getComposeHierarchy,
   getComposeLock,
@@ -56,8 +58,20 @@ export interface StageSceneIndex {
     point: { readonly x: number; readonly y: number },
     excludedIds?: readonly string[],
   ): string | null
-  /** 按 paint order 查询包含世界点且未被裁剪祖先遮蔽的最上层可见 Entity。 */
-  entityAtPoint(point: { readonly x: number; readonly y: number }): string | null
+  /**
+   * 按 paint order 查询命中世界点且未被裁剪祖先遮蔽的最上层可见 Entity。
+   *
+   * @remarks
+   * 盒模型 Entity 按盒包含判定；带 `Curve` 的 Entity 改按**点到几何的距离**——一条对角线的
+   * 包围盒里绝大部分是空的，按盒判定会让空白区抢走下层内容。判定在 Entity 局部坐标进行，
+   * 因此旋转后自动正确。
+   *
+   * @param tolerance - 曲线命中的世界单位容差；由调用方从屏幕像素按 zoom 换算。
+   */
+  entityAtPoint(
+    point: { readonly x: number; readonly y: number },
+    tolerance?: number,
+  ): string | null
   /** 查询 Frame 局部原点的世界坐标；不是 Frame 或缺失时返回 null。 */
   getFrameOrigin(frameId: string): StagePoint | null
   /**
@@ -238,11 +252,16 @@ export function createStageSceneIndex(
           && isExposed(entityId)
       }) ?? null
     },
-    entityAtPoint(point) {
+    entityAtPoint(point, tolerance = 0) {
       const contains = (entityId: string) => {
         const entity = document.entities[entityId]
         const matrix = matrices.get(entityId)
         if (!entity || !matrix) return false
+        const curve = getComposeCurve(entity)
+        if (curve) {
+          // 几何是盒局部坐标，而矩阵求逆得到的正是盒局部坐标，因此无需再补偏移。
+          return distanceToComposeCurve(curve, applyMatrix(invertMatrix(matrix), point)) <= tolerance
+        }
         if (isComposeGroupEntity(entity)) {
           const rect = bounds.get(entityId)
           return Boolean(rect

@@ -24,6 +24,12 @@ import { isComposeColor, isValidComposePaint } from './paint'
 import { jsonEqual } from './patches'
 import { isComposeGroupEntity, isComposeUngroupableEntity } from './group'
 import { getComposeFrame } from './frame'
+import {
+  getComposeCurve,
+  isValidComposeCurve,
+  normalizeComposeCurveGeometry,
+  type ComposeCurve,
+} from './curve'
 import type {
   CommandHandler,
   CommandHandlerResult,
@@ -53,6 +59,7 @@ export const BUILTIN_COMMAND_TYPES = {
   setRendererProps: 'entity.renderer.props.set',
   setAppearance: 'entity.appearance.set',
   setTransform: 'entity.transform.set',
+  setCurve: 'entity.curve.set',
   setClip: 'entity.clip.set',
   configureClip: 'entity.clip.configure',
   groupEntity: 'entity.group',
@@ -1058,11 +1065,58 @@ function ungroupHandler(): CommandHandler {
   }
 }
 
+/**
+ * 设置曲线几何。
+ *
+ * @remarks
+ * 曲线几何写入的**唯一漏斗**：载荷是 parent 局部坐标下的几何，这里换算成「盒 + 盒局部
+ * 几何」并在同一事务里写 `Curve` 与 `LayoutItem`。分成两条命令会让盒与几何之间出现一个
+ * 可观察的不一致中间态，撤销也会变成两步。
+ *
+ * `LayoutItem` 的 fixed fallback 与 offset 一起对齐——盒尺寸是几何的派生，不是第二份事实。
+ */
+function setCurveHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.setCurve,
+    execute(document, command) {
+      const entityId = valueAt(command.payload, 'entityId')
+      if (typeof entityId !== 'string') return issue('curve.invalid-target', 'entityId 无效')
+      const entity = document.entities[entityId]
+      if (!entity || !getComposeCurve(entity)) {
+        return issue('curve.missing', `Entity ${entityId} 不是曲线`)
+      }
+      if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${entityId} 已锁定`)
+      const candidate = valueAt(command.payload, 'curve')
+      if (!isValidComposeCurve(candidate)) {
+        return issue('curve.invalid-geometry', 'entity.curve.set 几何无效')
+      }
+      const item = getComposeLayoutItem(entity)
+      if (!item) return issue('curve.invalid-target', `Entity ${entityId} 缺少 LayoutItem`)
+      const next = normalizeComposeCurveGeometry(candidate as ComposeCurve)
+      const curvePath = ['entities', entityId, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.curve]
+      const itemPath = ['entities', entityId, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem]
+      if (
+        jsonEqual(entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.curve] as JsonValue, next.curve as unknown as JsonValue)
+        && jsonEqual(item.offset as unknown as JsonValue, next.offset as unknown as JsonValue)
+        && item.width.value === next.size.width
+        && item.height.value === next.size.height
+      ) return { status: 'noop', reason: '曲线几何没有变化' }
+      return patches([
+        { op: 'set', path: curvePath, value: next.curve as unknown as JsonValue },
+        { op: 'set', path: [...itemPath, 'offset'], value: next.offset as unknown as JsonValue },
+        { op: 'set', path: [...itemPath, 'width', 'value'], value: next.size.width },
+        { op: 'set', path: [...itemPath, 'height', 'value'], value: next.size.height },
+      ])
+    },
+  }
+}
+
 /** 创建 ComposeDocument v6 内置命令处理器。 @public */
 export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
   return [
     configureCanvasHandler(),
     setFrameSizeHandler(),
+    setCurveHandler(),
     createFrameGuideHandler(),
     frameGuideHandler(BUILTIN_COMMAND_TYPES.moveFrameGuide),
     frameGuideHandler(BUILTIN_COMMAND_TYPES.deleteFrameGuide),
