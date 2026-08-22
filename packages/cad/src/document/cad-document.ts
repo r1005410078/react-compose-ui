@@ -1,4 +1,8 @@
-import type { ComposeEntity, DocumentValidationResultOf } from '@compose-ui/core'
+import type {
+  ComposeAnimation,
+  ComposeEntity,
+  DocumentValidationResultOf,
+} from '@compose-ui/core'
 import { CAD_COMPONENT_KEYS, type CadPoint, type CadPort } from './cad-entity'
 import { isDegenerateCadPolyline } from '../geometry'
 import {
@@ -36,6 +40,7 @@ export function createEmptyCadDocument(): CadDocument {
     rootIds: [],
     entities: {},
     blocks: {},
+    animations: [],
   }
 }
 
@@ -137,7 +142,9 @@ function validateEntityComponents(
         && (typeof stroke.width !== 'number' || !(stroke.width > 0)))
       || (dash !== undefined
         && (!Array.isArray(dash)
-          || dash.some((value) => typeof value !== 'number' || !(value > 0))))) {
+          || dash.some((value) => typeof value !== 'number' || !(value > 0))))
+      || (stroke.dashOffset !== undefined
+        && (typeof stroke.dashOffset !== 'number' || !Number.isFinite(stroke.dashOffset)))) {
       issues.push(issue(
         'entity.invalid-geometry',
         [...prefix, 'entities', entity.id, CAD_COMPONENT_KEYS.stroke],
@@ -299,6 +306,7 @@ export function validateCadDocument(
     }
   }
 
+  const animations = validateAnimations(input.animations, issues)
   const blocks = validateBlocks(input.blocks, layerIds, issues)
   for (const entity of Object.values(entities)) {
     validateInsertReference(entity, blocks, issues)
@@ -310,8 +318,50 @@ export function validateCadDocument(
   if (issues.length > 0) return { valid: false, issues }
   return {
     valid: true,
-    document: { schemaVersion: 1, units: 'px', layers, rootIds, entities, blocks },
+    document: { schemaVersion: 1, units: 'px', layers, rootIds, entities, blocks, animations },
   }
+}
+
+/**
+ * 校验动画清单。
+ *
+ * @remarks
+ * 只校验清单本身能判定的事。**轨道指向不存在的 Component 不算错误**——采样本就静默跳过那种
+ * 轨道，而「先建动画、后改线型」是完全合理的顺序，把它升级成校验失败会让一条正常的操作次序
+ * 变成非法。
+ */
+function validateAnimations(
+  input: unknown,
+  issues: CadDocumentIssue[],
+): readonly ComposeAnimation[] {
+  if (input === undefined) return []
+  if (!Array.isArray(input)) {
+    issues.push(issue('animation.invalid', ['animations'], 'animations 必须是数组'))
+    return []
+  }
+  const seen = new Set<string>()
+  const animations: ComposeAnimation[] = []
+  input.forEach((candidate, index) => {
+    const path = ['animations', index]
+    if (!isRecord(candidate)
+      || typeof candidate.id !== 'string' || candidate.id.length === 0
+      || typeof candidate.name !== 'string'
+      || typeof candidate.durationMs !== 'number'
+      || !Number.isFinite(candidate.durationMs) || candidate.durationMs <= 0
+      || (candidate.playbackMode !== 'play-once'
+        && candidate.playbackMode !== 'loop'
+        && candidate.playbackMode !== 'ping-pong')) {
+      issues.push(issue('animation.invalid', path, '动画字段不完整或类型错误'))
+      return
+    }
+    if (seen.has(candidate.id)) {
+      issues.push(issue('animation.duplicate-id', path, `动画 id 重复：${candidate.id}`))
+      return
+    }
+    seen.add(candidate.id)
+    animations.push(candidate as unknown as ComposeAnimation)
+  })
+  return animations
 }
 
 /**

@@ -238,6 +238,14 @@ export type CadStroke = JsonObject & {
   readonly width?: number
   /** 虚线段长（世界单位），全为正数；缺席或为空时是实线。 */
   readonly dashPattern?: readonly number[]
+  /**
+   * 虚线图案的偏移（世界单位），与 `dashPattern` 同样随缩放变化。
+   *
+   * @remarks
+   * 它存在的理由是**被动画**——`FLOW` 建的就是这条属性上的轨道。静态图纸没有理由设它，
+   * 因此没有对应的命令。只对虚线有意义：实线上的偏移在屏幕上没有任何变化。
+   */
+  readonly dashOffset?: number
 }
 
 /** 读取描边覆盖；没有覆盖时为 undefined。 @public */

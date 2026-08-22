@@ -1,4 +1,4 @@
-import type { ComposeEntity } from '@compose-ui/core'
+import type { ComposeAnimation, ComposeEntity } from '@compose-ui/core'
 import type { CadPort } from './cad-entity'
 
 /**
@@ -92,6 +92,20 @@ export interface CadDocument {
    * 加一张空表不会让任何既有文档变得不可读。
    */
   readonly blocks: Readonly<Record<string, CadBlockDefinition>>
+  /**
+   * 动画清单。
+   *
+   * @remarks
+   * 落在**文档级**而不是像页面文档那样挂在某个分区实体上：Frame 是页面里的动画时间线边界，
+   * 而 CadDocument 没有 Frame，也不需要有——一份图纸就是一个时间线作用域。硬移植分区意味着
+   * 先在 CAD 里造一个没有别的用途的分组概念，只为了让两边的代码长得像。
+   *
+   * 关键帧轨道仍住在被动画 Entity 的 `Animation` Component 上（与页面相同）：删除一根导线时
+   * 它的轨道随之消失、复制一个符号时动画随之复制，两处都不需要补偿代码。
+   *
+   * 旧文件没有这个字段时按空数组读入，`schemaVersion` 不因此改变。
+   */
+  readonly animations: readonly ComposeAnimation[]
 }
 
 /** CAD 文档校验问题的稳定机器码。 @public */
@@ -125,6 +139,8 @@ export type CadDocumentIssueCode =
   | 'wire.unknown-entity'
   | 'wire.not-instance'
   | 'wire.unknown-port'
+  | 'animation.invalid'
+  | 'animation.duplicate-id'
 
 /** 一条 CAD 文档校验问题。 @public */
 export interface CadDocumentIssue {

@@ -6,8 +6,11 @@ export type {
 export { createCadCopyCommand, createCadMoveCommand } from './cad-transform-commands'
 export {
   CAD_COMMAND_TYPES,
+  CAD_FLOW_DEFAULT_DASH,
+  CAD_FLOW_DURATION_MS,
   createCadCommandHandlers,
   type CadAddBlockPortPayload,
+  type CadFlowPayload,
   type CadSetStrokePayload,
   type CadAddEntityPayload,
   type CadAddWirePayload,
@@ -32,6 +35,7 @@ export {
   createCadCircleCommand,
   createCadCircleSession,
 } from './cad-curve-commands'
+export { createCadFlowCommand, createCadFlowSession } from './cad-flow-command'
 export { createCadLineCommand, createCadLineSession } from './cad-line-command'
 export {
   createCadColorCommand,

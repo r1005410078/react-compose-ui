@@ -2038,6 +2038,60 @@ test('OpenSpec: cad-document / CAD COLOR、LWEIGHT 与 LTYPE 命令 / 改外观�
   await expect(line).toHaveAttribute('stroke-width', '3')
 })
 
+test('OpenSpec: cad-document / CAD 虚线偏移与 FLOW 命令 / 一条命令让线流动起来', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Flow')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const line = surface.locator('[data-cad-entity]').first()
+
+  const type = async (text: string) => {
+    await page.keyboard.type(text)
+    await page.keyboard.press('Enter')
+  }
+
+  await type('l')
+  await type('100,100')
+  await type('300,100')
+  await type('f')
+  await expect(line).toHaveAttribute('x1', '100')
+  // 实线：没有虚线就没有偏移可言。
+  await expect(line).not.toHaveAttribute('stroke-dasharray', /.*/u)
+
+  const box = await surface.boundingBox()
+  if (!box) throw new Error('surface has no box')
+  await page.mouse.click(box.x + 200, box.y + 100)
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(1)
+  await type('fl')
+
+  // 命令补上默认线型——实线上的偏移动画在屏幕上没有任何变化。
+  await expect(line).toHaveAttribute('stroke-dasharray', '8 6')
+
+  const offset = async () => Number(await line.getAttribute('stroke-dashoffset'))
+  const initial = await offset()
+  await expect.poll(async () => Math.abs(await offset() - initial), { timeout: 3000 })
+    .toBeGreaterThan(1)
+
+  // 采样只作用于渲染：几何纹丝不动，作者坐标上照样点得中。
+  await page.keyboard.press('Escape')
+  await page.mouse.click(box.x + 200, box.y + 100)
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(1)
+  await expect(line).toHaveAttribute('x1', '100')
+})
+
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

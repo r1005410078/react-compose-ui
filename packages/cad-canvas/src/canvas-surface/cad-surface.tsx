@@ -354,6 +354,10 @@ export function CadSurface({
           strokeDasharray: stroke.dashPattern.length > 0
             ? stroke.dashPattern.map((value) => value * viewport.zoom).join(' ')
             : undefined,
+          // 偏移与间隔同一条规则：都是世界单位，都乘 zoom。实线上它没有意义，因此不发。
+          strokeDashoffset: stroke.dashPattern.length > 0
+            ? stroke.dashOffset * viewport.zoom
+            : undefined,
         }
         // 块实例展开成多段，各段共用 ownerId，因此 key 要带上序号。
         const key = `${ownerId}-${index}`

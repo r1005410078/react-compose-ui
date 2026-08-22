@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
   createCadCommandHandlers,
   createEmptyCadDocument,
@@ -1372,5 +1372,71 @@ describe('CAD 图元外观', () => {
     const dash = drawn().getAttribute('stroke-dasharray')!.split(' ').map(Number)
     expect(dash[0]).toBeGreaterThan(6)
     expect(dash[1] / dash[0]).toBeCloseTo(0.5)
+  })
+})
+
+describe('CAD 动画', () => {
+  // 播放靠 rAF 推进：用假计时器把「过了多久」变成可控的输入，而不是去赌真实的一帧。
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  /** 画一条线并给它加上流动。 */
+  function flowingLine(rerender: () => void) {
+    submit('L')
+    submit('100,100')
+    submit('300,100')
+    submit('F')
+    rerender()
+    clickAt(200, 100)
+    rerender()
+    submit('FL')
+    rerender()
+    cancel()
+    rerender()
+  }
+
+  it('OpenSpec: cad-document / CAD 虚线偏移与 FLOW 命令 / 一条命令得到一根流动的线', () => {
+    const { runtime, rerender } = setup()
+    flowingLine(rerender)
+
+    expect(runtime.document.animations).toHaveLength(1)
+    const drawn = document.querySelector('[data-cad-entity]')!
+    expect(drawn.getAttribute('stroke-dasharray')).toBe('8 6')
+    expect(drawn.getAttribute('stroke-dashoffset')).toBe('0')
+  })
+
+  it('OpenSpec: cad-document / CAD 画布播放动画 / 播放推进虚线偏移', () => {
+    const { rerender } = setup()
+    flowingLine(rerender)
+
+    const offset = () => Number(document.querySelector('[data-cad-entity]')!
+      .getAttribute('stroke-dashoffset'))
+    expect(offset()).toBe(0)
+
+    // rAF 在 jsdom 里由 vitest 的计时器驱动：推进一帧即可看到偏移前进。
+    act(() => { vi.advanceTimersByTime(200) })
+    expect(offset()).toBeLessThan(0)
+  })
+
+  it('OpenSpec: cad-document / CAD 画布播放动画 / 宿主关闭后停在起点', () => {
+    const { runtime, rerender } = setup({ animationEnabled: false })
+    flowingLine(rerender)
+    expect(runtime.document.animations).toHaveLength(1)
+
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(document.querySelector('[data-cad-entity]')!.getAttribute('stroke-dashoffset'))
+      .toBe('0')
+  })
+
+  it('OpenSpec: cad-document / CAD 动画采样只作用于渲染 / 播放中仍然点得中', () => {
+    const { rerender } = setup()
+    flowingLine(rerender)
+    act(() => { vi.advanceTimersByTime(200) })
+    rerender()
+
+    // 采样只改外观，几何纹丝不动——作者坐标上照样命中。
+    clickAt(200, 100)
+    rerender()
+    expect(new Set(selectedIds()).size).toBe(1)
   })
 })

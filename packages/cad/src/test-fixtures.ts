@@ -66,6 +66,8 @@ export const cadTestCommandMessages: CadCommandMessages = {
   invalidColor: '颜色必须是十六进制或标准色名',
   invalidStrokeWidth: '线宽必须是正数',
   invalidStrokeDash: '线型必须是一串正数',
+  flowTitle: '流动',
+  flowAnimationName: '流动',
 }
 
 /**

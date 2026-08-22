@@ -41,6 +41,8 @@ export interface CadResolvedStroke {
   readonly width: number
   /** 世界单位；空数组表示实线。 */
   readonly dashPattern: readonly number[]
+  /** 虚线图案的偏移（世界单位）；`FLOW` 动画驱动的就是它。 */
+  readonly dashOffset: number
 }
 
 /**
@@ -67,6 +69,7 @@ export function resolveCadStroke(
     color: stroke?.color ?? layer?.color ?? CAD_COLOR_NAMES.white!,
     width: stroke?.width ?? CAD_DEFAULT_STROKE_WIDTH,
     dashPattern: stroke?.dashPattern ?? [],
+    dashOffset: stroke?.dashOffset ?? 0,
   }
 }
 
@@ -75,6 +78,7 @@ export interface CadStrokePatch {
   readonly color?: string | null
   readonly width?: number | null
   readonly dashPattern?: readonly number[] | null
+  readonly dashOffset?: number | null
 }
 
 /**
@@ -93,7 +97,7 @@ export function applyCadStrokePatch(
   patch: CadStrokePatch,
 ): CadStroke | null {
   const next: Record<string, unknown> = { ...current }
-  for (const key of ['color', 'width', 'dashPattern'] as const) {
+  for (const key of ['color', 'width', 'dashPattern', 'dashOffset'] as const) {
     if (!(key in patch)) continue
     const value = patch[key]
     if (value === null) delete next[key]
