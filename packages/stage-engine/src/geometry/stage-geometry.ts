@@ -1,6 +1,7 @@
 import {
   getComposeHierarchy,
   getComposeTransform,
+  composeCanvasZoomAt,
   getComposeVisibility,
   isComposeGroupEntity,
   roundComposeGeometry,
@@ -108,18 +109,21 @@ export function screenToWorld(point: StagePoint, viewport: StageViewport): Stage
  *
  * @public
  */
+export const STAGE_ZOOM_RANGE = { min: 0.1, max: 8 } as const
+
 export function zoomViewportAt(
   viewport: StageViewport,
   screenPoint: StagePoint,
   requestedZoom: number,
 ): StageViewport {
-  const zoom = Math.min(8, Math.max(0.1, requestedZoom))
-  const anchor = screenToWorld(screenPoint, viewport)
-  return {
-    x: screenPoint.x - anchor.x * zoom,
-    y: screenPoint.y - anchor.y * zoom,
-    zoom,
-  }
+  // 代数住在 core：CAD 画布用同一份，只有钳制区间不同（页面画布有确定尺寸，无限图纸没有）。
+  const next = composeCanvasZoomAt(
+    { offset: { x: viewport.x, y: viewport.y }, zoom: viewport.zoom },
+    screenPoint,
+    requestedZoom,
+    STAGE_ZOOM_RANGE,
+  )
+  return { x: next.offset.x, y: next.offset.y, zoom: next.zoom }
 }
 
 /**

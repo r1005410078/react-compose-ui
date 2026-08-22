@@ -1,5 +1,5 @@
 {
-  "name": "@compose-ui/stage",
+  "name": "@compose-ui/canvas-kit",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": [
@@ -21,6 +21,10 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@compose-ui/core": "workspace:*",
+    "@compose-ui/ui-context": "workspace:*"
+  },
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch --emptyOutDir false",
@@ -28,17 +32,6 @@
     "test": "vitest run",
     "lint": "eslint . --max-warnings 0",
     "pack:dry-run": "vite build && bun pm pack --dry-run"
-  },
-  "dependencies": {
-    "@compose-ui/assets": "workspace:*",
-    "@compose-ui/canvas-kit": "workspace:*",
-    "@compose-ui/commands": "workspace:*",
-    "@compose-ui/component-registry": "workspace:*",
-    "@compose-ui/components": "workspace:*",
-    "@compose-ui/core": "workspace:*",
-    "@compose-ui/script-runtime": "workspace:*",
-    "@compose-ui/stage-engine": "workspace:*",
-    "@compose-ui/ui-context": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.3.0 || ^19.0.0",

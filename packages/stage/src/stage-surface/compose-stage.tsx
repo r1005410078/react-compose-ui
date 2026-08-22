@@ -32,6 +32,7 @@ import {
   getEntityWorldBounds,
   resolveStageDropIndicator,
   scrollAxisToViewport,
+  STAGE_ZOOM_RANGE,
   type StageDrawnEntity,
   type StageRect,
 } from '@compose-ui/stage-engine'
@@ -64,16 +65,19 @@ import {
   unlockedStageIds,
 } from './screen-model'
 import { useStageHiddenEntityIds } from './use-stage-hidden-entities'
-import { useStageSurfaceSize } from './use-stage-surface-size'
 import { useStageInstanceDrilldown } from './instance-drilldown'
 import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-lifecycle'
 import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './entity-creation'
 import { useStagePointerSession, useStageRootHandlers } from './pointer-session'
-import { useStageWheelNavigation } from './use-stage-wheel-navigation'
 import { useStageTextEditing } from './use-stage-text-editing'
 import { useStageClipboard } from './use-stage-clipboard'
-import { StageRulers, type StageRulersHandle } from '../stage-ruler'
+import {
+  ComposeCanvasRulers,
+  useCanvasSurfaceSize,
+  useCanvasWheelNavigation,
+  type ComposeCanvasRulersHandle,
+} from '@compose-ui/canvas-kit'
 import { StageSceneLayer } from '../stage-scene-layer'
 import { getStageMessages } from '../stage-i18n'
 import { createVisualGridStyle } from '../grid-rendering'
@@ -196,7 +200,7 @@ function ComposeStageReady({
   const surfaceId = id ? `${id}-surface` : generatedSurfaceId
   const rootRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
-  const rulersRef = useRef<StageRulersHandle>(null)
+  const rulersRef = useRef<ComposeCanvasRulersHandle>(null)
   const [privateController] = useState(createStageInteractionController)
   const controller = interactionController ?? privateController
   const interaction = useSyncExternalStore(
@@ -224,7 +228,7 @@ function ComposeStageReady({
   const marquee = interaction.marquee
   const snapGuides = interaction.snapGuides
   const guidePreview = interaction.guidePreview
-  const { size: surfaceSize, measured: surfaceMeasured } = useStageSurfaceSize(
+  const { size: surfaceSize, measured: surfaceMeasured } = useCanvasSurfaceSize(
     surfaceRef,
     onSurfaceSizeChange,
   )
@@ -423,7 +427,17 @@ function ComposeStageReady({
     onViewportChange,
   })
 
-  useStageWheelNavigation({ rootRef, surfaceRef, viewport, onViewportChange })
+  // 视口形状在这里适配：Stage 用 `{x,y,zoom}`，共享底座用 `{offset,zoom}`。两边都不必改自己
+  // 的类型，适配只在这一个调用点。
+  useCanvasWheelNavigation({
+    containerRef: rootRef,
+    surfaceRef,
+    viewport: { offset: { x: viewport.x, y: viewport.y }, zoom: viewport.zoom },
+    zoomRange: STAGE_ZOOM_RANGE,
+    onViewportChange: (next) => {
+      onViewportChange({ x: next.offset.x, y: next.offset.y, zoom: next.zoom })
+    },
+  })
 
   // 引擎只需要会话（entityId + 活动顶点），几何直接交给 Overlay。memo 保持引用稳定，
   // 避免每次渲染都触发 updateContext 的手势兼容性检查。
@@ -632,7 +646,8 @@ function ComposeStageReady({
           {layoutSnapshot.diagnostics.map(({ message }) => message).join('；')}
         </span>
       ) : null}
-      <StageRulers
+      <ComposeCanvasRulers
+        testIdPrefix="stage-ruler"
         bounds={bounds}
         horizontalTicks={horizontalTicks}
         ref={rulersRef}

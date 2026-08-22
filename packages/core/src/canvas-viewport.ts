@@ -21,6 +21,12 @@ export interface ComposeCanvasPoint {
   readonly y: number
 }
 
+/** 画布上的一个矩形。 @public */
+export interface ComposeCanvasRect extends ComposeCanvasPoint {
+  readonly width: number
+  readonly height: number
+}
+
 /** 缩放的合法区间。 @public */
 export interface ComposeZoomRange {
   readonly min: number

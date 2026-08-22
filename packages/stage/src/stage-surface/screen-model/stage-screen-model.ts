@@ -24,7 +24,7 @@ import {
   type StageFrameScreenBounds,
   type StageScreenRect,
 } from './stage-screen-geometry'
-import type { StageSurfaceSize } from '../use-stage-surface-size'
+import type { ComposeCanvasSurfaceSize } from '@compose-ui/canvas-kit'
 
 /** 求屏幕模型所需的输入。 */
 export interface StageScreenModelInput {
@@ -36,7 +36,7 @@ export interface StageScreenModelInput {
   readonly previewLayoutSnapshot: ComposeLayoutSnapshot
   readonly hiddenEntityIds: ReadonlySet<string>
   readonly viewport: StageViewport
-  readonly surfaceSize: StageSurfaceSize
+  readonly surfaceSize: ComposeCanvasSurfaceSize
   /** 选区世界包围盒；无选区时为 null。 */
   readonly selectionBounds: StageRect | null
   /** 框选矩形（世界坐标）；不在框选中时为 null。 */

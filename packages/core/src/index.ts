@@ -45,6 +45,7 @@ export {
   composeCanvasWorldToScreen,
   composeCanvasZoomAt,
   type ComposeCanvasPoint,
+  type ComposeCanvasRect,
   type ComposeCanvasViewport,
   type ComposeZoomRange,
 } from './canvas-viewport'
