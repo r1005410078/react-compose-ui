@@ -1309,3 +1309,68 @@ describe('CAD 多段线与矩形', () => {
   })
 })
 
+
+describe('CAD 图元外观', () => {
+  it('OpenSpec: cad-document / CAD COLOR、LWEIGHT 与 LTYPE 命令 / 改色改线型', () => {
+    const { rerender } = setup()
+    submit('L')
+    submit('100,100')
+    submit('200,100')
+    submit('F')
+    rerender()
+
+    clickAt(150, 100)
+    rerender()
+    submit('COL')
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('输入颜色')
+    submit('red')
+    // 选中态的颜色交给 CSS，属性上是 undefined——先清空选择才读得到解析出来的颜色。
+    cancel()
+    rerender()
+    expect(document.querySelector('[data-cad-entity]')!.getAttribute('stroke')).toBe('#ff0000')
+
+    clickAt(150, 100)
+    rerender()
+    submit('LT')
+    submit('6,3')
+    rerender()
+    expect(document.querySelector('[data-cad-entity]')!.getAttribute('stroke-dasharray'))
+      .toBe('6 3')
+  })
+
+  it('OpenSpec: cad-document / CAD 线宽与虚线的单位 / 缩放时线宽不变而虚线变密', () => {
+    const { rerender } = setup()
+    submit('L')
+    submit('100,100')
+    submit('200,100')
+    submit('F')
+    rerender()
+    clickAt(150, 100)
+    rerender()
+    submit('LW')
+    submit('3')
+    rerender()
+    cancel()
+    clickAt(150, 100)
+    rerender()
+    submit('LT')
+    submit('6,3')
+    rerender()
+    cancel()
+    rerender()
+
+    const drawn = () => document.querySelector('[data-cad-entity]')!
+    expect(drawn().getAttribute('stroke-width')).toBe('3')
+    expect(drawn().getAttribute('stroke-dasharray')).toBe('6 3')
+
+    // Ctrl+滚轮放大一格：线宽是显示宽度所以不变，虚线是图上的实际长度所以跟着放大。
+    fireEvent.wheel(screen.getByTestId('cad-surface'), {
+      ctrlKey: true, deltaY: -100, clientX: 150, clientY: 100,
+    })
+    rerender()
+    expect(drawn().getAttribute('stroke-width')).toBe('3')
+    const dash = drawn().getAttribute('stroke-dasharray')!.split(' ').map(Number)
+    expect(dash[0]).toBeGreaterThan(6)
+    expect(dash[1] / dash[0]).toBeCloseTo(0.5)
+  })
+})

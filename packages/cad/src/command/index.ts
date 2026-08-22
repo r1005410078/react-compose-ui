@@ -8,6 +8,7 @@ export {
   CAD_COMMAND_TYPES,
   createCadCommandHandlers,
   type CadAddBlockPortPayload,
+  type CadSetStrokePayload,
   type CadAddEntityPayload,
   type CadAddWirePayload,
   type CadCreateBlockPayload,
@@ -32,6 +33,14 @@ export {
   createCadCircleSession,
 } from './cad-curve-commands'
 export { createCadLineCommand, createCadLineSession } from './cad-line-command'
+export {
+  createCadColorCommand,
+  createCadColorSession,
+  createCadLineTypeCommand,
+  createCadLineTypeSession,
+  createCadLineWeightCommand,
+  createCadLineWeightSession,
+} from './cad-stroke-commands'
 export {
   createCadPolylineCommand,
   createCadPolylineSession,

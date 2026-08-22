@@ -17,6 +17,8 @@ export const CAD_COMPONENT_KEYS = {
   text: 'CadText',
   /** 一条多段线；矩形是四顶点的闭合多段线。 */
   polyline: 'CadPolyline',
+  /** 图元级描边覆盖；缺席即回退到图层。 */
+  stroke: 'CadStroke',
 } as const
 
 /** 世界坐标中的一个点。 @public */
@@ -209,6 +211,38 @@ export interface CadPolyline extends JsonObject {
   readonly vertices: readonly CadPoint[]
   /** 闭合时末点连回首点。 */
   readonly closed: boolean
+}
+
+/**
+ * 图元级描边覆盖。
+ *
+ * @remarks
+ * 三个字段**各自可选**，缺席即回退：颜色回退到所属图层、线宽回退到默认值、线型回退到实线。
+ * 因此「把一根线改成红色」不会顺带把它的线宽钉死成当前值。
+ *
+ * 清除某一项表现为**删掉那个键**而不是写哨兵值——JSON 里没有 `undefined`，写 `color: null`
+ * 会让「显式设成无色」与「跟随图层」变成两个都要处理的状态。
+ *
+ * `width` 是**屏幕像素**（不随缩放变化），`dashPattern` 是**世界单位**（随缩放变化）。这个
+ * 不对称照抄 AutoCAD 的 lineweight 与 linetype，两者本来就不是一回事。
+ *
+ * 用 `JsonObject &` 交叉而不是 `extends JsonObject`，因为索引签名的 `JsonValue` 不接受
+ * `undefined`；`ComposeFrame` 与 `ComposeAppearance` 出于同样原因采用这种写法。
+ *
+ * @public
+ */
+export type CadStroke = JsonObject & {
+  /** 十六进制颜色；缺席时跟随图层。 */
+  readonly color?: string
+  /** 线宽（屏幕像素），必须为正；缺席时用默认值。 */
+  readonly width?: number
+  /** 虚线段长（世界单位），全为正数；缺席或为空时是实线。 */
+  readonly dashPattern?: readonly number[]
+}
+
+/** 读取描边覆盖；没有覆盖时为 undefined。 @public */
+export function getCadStroke(entity: ComposeEntity): CadStroke | undefined {
+  return entity.components[CAD_COMPONENT_KEYS.stroke] as CadStroke | undefined
 }
 
 /** 读取多段线；不是多段线时为 undefined。 @public */

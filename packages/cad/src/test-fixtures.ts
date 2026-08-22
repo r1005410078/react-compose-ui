@@ -57,6 +57,15 @@ export const cadTestCommandMessages: CadCommandMessages = {
   rectangleFirstCorner: '指定第一个角点',
   rectangleSecondCorner: '指定另一个角点',
   degenerateRectangle: '两个角点不能在同一条水平或垂直线上',
+  colorTitle: '颜色',
+  lineWeightTitle: '线宽',
+  lineTypeTitle: '线型',
+  strokeColor: '输入颜色 <BYLAYER>',
+  strokeWidth: '输入线宽 <BYLAYER>',
+  strokeDash: '输入线型 <CONTINUOUS>',
+  invalidColor: '颜色必须是十六进制或标准色名',
+  invalidStrokeWidth: '线宽必须是正数',
+  invalidStrokeDash: '线型必须是一串正数',
 }
 
 /**

@@ -3,9 +3,9 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import {
   collectCadInstancePorts,
   collectCadVisibleGeometry,
-  getCadPlacement,
   isFullCircle,
   previewCadTranslate,
+  resolveCadStroke,
   type CadArcCurve,
   type CadTextGeometry,
   type CadDocument,
@@ -302,7 +302,7 @@ export function CadSurface({
     latest.current.onPointerAbort(event.pointerId)
   }, [])
 
-  const layerColors = new Map(document.layers.map((layer) => [layer.id, layer]))
+
   // 拖动预览走与提交**完全相同**的平移，再重跑同一条可见性遍历。按屏幕位移平移已渲染线段
   // 是行不通的：拖一台设备时它的导线并未被选中，那种预览里导线不动而提交后会动；反过来，
   // 两端都绑定的导线平移是 no-op，屏幕位移会让它跟着走再在松手时弹回。
@@ -332,8 +332,10 @@ export function CadSurface({
     >
       {geometry.map(({ ownerId, geometry: shape }, index) => {
         const owner = previewDocument.entities[ownerId]
-        const layer = owner ? layerColors.get(getCadPlacement(owner)?.layerId ?? '') : undefined
-        if (!layer) return null
+        if (!owner) return null
+        // 外观**只从解析入口读**：颜色可能来自图元覆盖，也可能回退到图层，渲染不该知道是哪
+        // 一种。块实例按实例自身的外观画，与图层的既有判断一致。
+        const stroke = resolveCadStroke(previewDocument, owner)
         const isSelected = selected.has(ownerId)
         const isHovered = !isSelected && ownerId === hovered
         const shared = {
@@ -341,10 +343,17 @@ export function CadSurface({
           'data-cad-entity': ownerId,
           'data-hovered': isHovered ? '' : undefined,
           'data-selected': isSelected ? '' : undefined,
-          // 选中态不改 stroke 属性而是交给 CSS：图元颜色来自图层（ByLayer），把高亮写死在
-          // 属性上会让「这条线是什么颜色」有两个答案。
-          stroke: isSelected || isHovered ? undefined : layer.color,
-          strokeWidth: 1,
+          // 选中态不改 stroke 属性而是交给 CSS：图元颜色来自解析结果，把高亮写死在属性上会让
+          // 「这条线是什么颜色」有两个答案。
+          stroke: isSelected || isHovered ? undefined : stroke.color,
+          // 线宽是**屏幕像素**，不乘 zoom——它是显示宽度（AutoCAD 的 lineweight）；放大图纸时
+          // 跟着放大会让一根粗线变成色带，而用户放大恰恰是为了看清结构。
+          strokeWidth: stroke.width,
+          // 虚线间隔是**世界单位**，必须乘 zoom——它是图上的实际长度（AutoCAD 的 linetype）；
+          // 写成屏幕像素会让虚线密度在任何缩放下都一样，那条线因此不再携带长度信息。
+          strokeDasharray: stroke.dashPattern.length > 0
+            ? stroke.dashPattern.map((value) => value * viewport.zoom).join(' ')
+            : undefined,
         }
         // 块实例展开成多段，各段共用 ownerId，因此 key 要带上序号。
         const key = `${ownerId}-${index}`
@@ -355,7 +364,7 @@ export function CadSurface({
           return (
             <TextShape
               key={key}
-              color={isSelected || isHovered ? undefined : layer.color}
+              color={isSelected || isHovered ? undefined : stroke.color}
               shared={shared}
               text={shape}
               viewport={viewport}

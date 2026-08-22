@@ -76,6 +76,15 @@ export interface CadCommandMessages {
   readonly rectangleFirstCorner: string
   readonly rectangleSecondCorner: string
   readonly degenerateRectangle: string
+  readonly colorTitle: string
+  readonly lineWeightTitle: string
+  readonly lineTypeTitle: string
+  readonly strokeColor: string
+  readonly strokeWidth: string
+  readonly strokeDash: string
+  readonly invalidColor: string
+  readonly invalidStrokeWidth: string
+  readonly invalidStrokeDash: string
 }
 
 /**
