@@ -25,7 +25,7 @@ export interface CadInstancePort {
  *
  * @remarks
  * 隐藏图层上的实例不参与：它在屏幕上看不见，捕捉到它的端口会让光标莫名其妙地跳走。这与
- * `collectCadVisibleCurves` 对可见性的判断是同一条。
+ * `collectCadVisibleGeometry` 对可见性的判断是同一条。
  *
  * @public
  */
@@ -73,4 +73,31 @@ export function resolveCadPortPoint(
   if (!port) return null
   const { x, y } = transformCadBlockPoint(port.position, insert)
   return { x, y }
+}
+
+/**
+ * 求出图纸上全部可见块实例的插入点。
+ *
+ * @remarks
+ * 与 {@link collectCadInstancePorts} 共用同一条可见性判断——两者遍历的是同一批实例，各写一遍
+ * 必然在「什么算可见」上分叉。
+
+ * 插入点不在可见性遍历的结果里：那条遍历把实例**展开**成了它的内容，而插入点是实例自身的
+ * 属性，块里没有任何图元画在那儿。
+ *
+ * @public
+ */
+export function collectCadInsertPositions(document: CadDocument): readonly CadPoint[] {
+  const visibleLayers = new Set(
+    document.layers.filter(({ visible }) => visible).map(({ id }) => id),
+  )
+  const result: CadPoint[] = []
+  for (const id of document.rootIds) {
+    const entity = document.entities[id]
+    if (!entity) continue
+    if (!visibleLayers.has(getCadPlacement(entity)?.layerId ?? '')) continue
+    const insert = getCadInsert(entity)
+    if (insert) result.push(insert.position)
+  }
+  return result
 }

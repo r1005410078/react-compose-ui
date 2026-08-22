@@ -3,6 +3,7 @@ import {
   getCadArc,
   getCadInsert,
   getCadLine,
+  getCadText,
   getCadWire,
   type CadDocument,
   type CadPoint,
@@ -22,6 +23,7 @@ import type { ComposeEntity } from '@compose-ui/core'
  * - `CadWire`：只动自由端点，**端口端点保持绑定**。导线的位置由它连着谁决定，不由自己决定；
  *   两端都绑定的导线因此平移是 no-op。
  * - `CadArc`：只移圆心，半径与角度不动。
+ * - `CadText`：只移插入点，字号与旋转不动。
  *
  * 新增图元类型时在这里补一支，而不是让每个调用方各自认识所有 Component。认不出来的 Entity
  * 原样返回——静默不动好过按错误的语义搬走它。
@@ -40,6 +42,17 @@ export function translateCadEntity(entity: ComposeEntity, delta: CadPoint): Comp
       components: {
         ...entity.components,
         [CAD_COMPONENT_KEYS.line]: { start: shift(line.start), end: shift(line.end) },
+      },
+    }
+  }
+
+  const text = getCadText(entity)
+  if (text) {
+    return {
+      ...entity,
+      components: {
+        ...entity.components,
+        [CAD_COMPONENT_KEYS.text]: { ...text, position: shift(text.position) },
       },
     }
   }

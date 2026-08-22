@@ -25,13 +25,27 @@ export {
 } from './cad-arc-geometry'
 export {
   arcCurve,
-  curveBounds,
-  curveCrossesBounds,
-  curveNearPoint,
-  curveWithinBounds,
-  pointToCurveDistanceSquared,
+  geometryBounds,
+  geometryCrossesBounds,
+  geometryNearPoint,
+  geometryWithinBounds,
+  pointToGeometryDistanceSquared,
   segmentCurve,
+  textGeometry,
   type CadArcCurve,
   type CadCurve,
+  type CadGeometry,
   type CadSegmentCurve,
+  type CadTextGeometry,
 } from './cad-curve'
+export {
+  CAD_TEXT_ADVANCE_RATIO,
+  CAD_TEXT_ASCENT_RATIO,
+  CAD_TEXT_DESCENT_RATIO,
+  cadTextBounds,
+  cadTextCorners,
+  cadTextWidth,
+  pointToTextDistanceSquared,
+  type CadTextAlign,
+  type CadTextShape,
+} from './cad-text-geometry'

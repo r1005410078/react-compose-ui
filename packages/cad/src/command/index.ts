@@ -32,4 +32,9 @@ export {
   createCadCircleSession,
 } from './cad-curve-commands'
 export { createCadLineCommand, createCadLineSession } from './cad-line-command'
+export {
+  CAD_DEFAULT_TEXT_HEIGHT,
+  createCadTextCommand,
+  createCadTextSession,
+} from './cad-text-command'
 export { createCadEraseCommand, createCadEraseSession } from './cad-erase-command'

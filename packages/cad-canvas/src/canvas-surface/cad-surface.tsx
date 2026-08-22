@@ -2,11 +2,12 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import {
   collectCadInstancePorts,
-  collectCadVisibleCurves,
+  collectCadVisibleGeometry,
   getCadPlacement,
   isFullCircle,
   previewCadTranslate,
   type CadArcCurve,
+  type CadTextGeometry,
   type CadDocument,
   type CadInteractionSnapshot,
   type CadPointerModifiers,
@@ -310,7 +311,7 @@ export function CadSurface({
     ? previewCadTranslate(document, interaction.selection, { x: dragDelta.x, y: dragDelta.y })
     : document
   // 与命中、框选、捕捉共用同一条可见性遍历：渲染跟它们分叉时，会出现「看得见却点不中」。
-  const curves = collectCadVisibleCurves(previewDocument)
+  const geometry = collectCadVisibleGeometry(previewDocument)
   const ports = collectCadInstancePorts(previewDocument)
   const selected = new Set(interaction.selection)
 
@@ -329,7 +330,7 @@ export function CadSurface({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      {curves.map(({ ownerId, curve }, index) => {
+      {geometry.map(({ ownerId, geometry: shape }, index) => {
         const owner = previewDocument.entities[ownerId]
         const layer = owner ? layerColors.get(getCadPlacement(owner)?.layerId ?? '') : undefined
         if (!layer) return null
@@ -347,11 +348,22 @@ export function CadSurface({
         }
         // 块实例展开成多段，各段共用 ownerId，因此 key 要带上序号。
         const key = `${ownerId}-${index}`
-        if (curve.kind === 'arc') {
-          return <ArcShape key={key} arc={curve} shared={shared} viewport={viewport} />
+        if (shape.kind === 'arc') {
+          return <ArcShape key={key} arc={shape} shared={shared} viewport={viewport} />
         }
-        const start = cadWorldToScreen(viewport, curve.start)
-        const end = cadWorldToScreen(viewport, curve.end)
+        if (shape.kind === 'text') {
+          return (
+            <TextShape
+              key={key}
+              color={isSelected || isHovered ? undefined : layer.color}
+              shared={shared}
+              text={shape}
+              viewport={viewport}
+            />
+          )
+        }
+        const start = cadWorldToScreen(viewport, shape.start)
+        const end = cadWorldToScreen(viewport, shape.end)
         return <line {...shared} key={key} x1={start.x} x2={end.x} y1={start.y} y2={end.y} />
       })}
       {ports.map(({ entityId, portId, point }) => {
@@ -475,6 +487,45 @@ function ArcShape({ arc, shared, viewport }: {
   )
 }
 
+const TEXT_ANCHORS = { left: 'start', center: 'middle', right: 'end' } as const
+
+/**
+ * 渲染一段文字。
+ *
+ * @remarks
+ * 字体栈**必须是等宽的**：包里按 `CAD_TEXT_ADVANCE_RATIO` 算命中框宽度，而那个比例只有在等宽
+ * 字体下才接近精确。换字体就要同时换比例，否则命中框会从字形上慢慢漂开——这种偏差在短标签上
+ * 看不出来，要等到有人写一串长文字才暴露。
+ *
+ * 文字用 `fill` 而不是 `stroke` 上色：描边文字在小字号下会糊成一团。选中态仍然交给 CSS，
+ * 与其他图元一致。
+ */
+function TextShape({ color, shared, text, viewport }: {
+  readonly color: string | undefined
+  readonly shared: Record<string, unknown>
+  readonly text: CadTextGeometry
+  readonly viewport: CadViewport
+}) {
+  const { x, y } = cadWorldToScreen(viewport, text.position)
+  const fontSize = text.height * viewport.zoom
+  return (
+    <text
+      {...shared}
+      dominantBaseline="alphabetic"
+      fill={color}
+      fontSize={fontSize}
+      // stroke 属性由 `shared` 带进来，对文字没有意义且会让字变粗。
+      stroke="none"
+      textAnchor={TEXT_ANCHORS[text.align]}
+      transform={text.rotation === 0 ? undefined : `rotate(${text.rotation} ${x} ${y})`}
+      x={x}
+      y={y}
+    >
+      {text.content}
+    </text>
+  )
+}
+
 /** 圆弧上给定角度处的世界坐标。 */
 function arcPointOnCurve(arc: CadArcCurve, degrees: number) {
   const radians = (degrees * Math.PI) / 180
@@ -493,8 +544,8 @@ const SNAP_MARKER_RADIUS = 5
  * 按模式渲染捕捉标记。
  *
  * @remarks
- * 形状沿用 AutoCAD 的约定：端点方框、中点三角、圆心圆圈、象限点棱形框、交点叉号。端口用
- * 菱形。形状必须两两可分：用户要在扫视中判断「捕到的是不是我想要的那个特征」，形状在余光里
+ * 形状沿用 AutoCAD 的约定：端点方框、中点三角、圆心圆圈、象限点棱形框、插入点双方框、交点
+ * 叉号。端口用菱形。形状必须两两可分：用户要在扫视中判断「捕到的是不是我想要的那个特征」，形状在余光里
  * 也分得清，颜色不行。
  */
 function SnapMarker({ snap, viewport }: {
@@ -511,6 +562,15 @@ function SnapMarker({ snap, viewport }: {
   if (snap.mode === 'port') {
     return (
       <polygon {...shared} points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`} />
+    )
+  }
+  if (snap.mode === 'insertion') {
+    // 双方框：AutoCAD 的 INS 标记就是套着的两个方框，与端点的单方框在余光里也分得清。
+    return (
+      <g {...shared}>
+        <rect height={r * 2} width={r * 2} x={x - r} y={y - r} />
+        <rect height={r} width={r} x={x - r / 2} y={y - r / 2} />
+      </g>
     )
   }
   if (snap.mode === 'center') {

@@ -9,7 +9,7 @@ import {
   pointToArcDistanceSquared,
   type CadArcShape,
 } from './cad-arc-geometry'
-import { curveWithinBounds, segmentCurve, arcCurve } from './cad-curve'
+import { geometryWithinBounds, segmentCurve, arcCurve } from './cad-curve'
 
 /** 圆心在原点、半径 10、从 0° 顺时针扫 90° 的四分之一弧。 */
 const quarter: CadArcShape = { center: { x: 0, y: 0 }, radius: 10, startAngle: 0, sweep: 90 }
@@ -70,13 +70,13 @@ describe('OpenSpec: cad-document / CAD 圆弧的命中与框选 / 紧包围盒',
   it('窗口框选用紧盒因此框得住四分之一弧', () => {
     // 这个框套不住整圆的包围盒，但套得住这段弧。
     const bounds = { minX: -1, minY: -1, maxX: 11, maxY: 11 }
-    expect(curveWithinBounds(arcCurve(quarter), bounds)).toBe(true)
-    expect(curveWithinBounds(arcCurve(circle), bounds)).toBe(false)
+    expect(geometryWithinBounds(arcCurve(quarter), bounds)).toBe(true)
+    expect(geometryWithinBounds(arcCurve(circle), bounds)).toBe(false)
   })
 
   it('线段的盒子照旧', () => {
     const bounds = { minX: 0, minY: 0, maxX: 10, maxY: 10 }
-    expect(curveWithinBounds(segmentCurve({ start: { x: 1, y: 1 }, end: { x: 9, y: 9 } }), bounds))
+    expect(geometryWithinBounds(segmentCurve({ start: { x: 1, y: 1 }, end: { x: 9, y: 9 } }), bounds))
       .toBe(true)
   })
 })

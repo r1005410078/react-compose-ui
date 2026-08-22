@@ -1,4 +1,5 @@
 export {
+  collectCadInsertPositions,
   collectCadInstancePorts,
   resolveCadPortPoint,
   type CadInstancePort,

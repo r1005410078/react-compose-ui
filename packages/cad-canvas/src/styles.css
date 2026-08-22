@@ -220,6 +220,31 @@
  * 图元颜色来自所属图层（ByLayer），因此未选中时由 stroke 属性给出，这里只兜底。选中态改用
  * 强调色并加粗：CAD 图上线条又细又多，只靠改色在余光里分不出来。
  */
+/*
+ * 文字用等宽字体：包里按固定的「前进宽度 / 字号」比例算命中框，那个比例只有在等宽字体下才
+ * 接近精确。换掉这个字体栈就必须同时改 `CAD_TEXT_ADVANCE_RATIO`，否则命中框会从字形上漂开。
+ * 等宽也是 CAD 的惯例——AutoCAD 的默认 txt.shx 本来就是等宽的。
+ */
+text.compose-cad-canvas__entity {
+  font-family: ui-monospace, sfmono-regular, menlo, consolas, monospace;
+  /* 图元的选中由我们自己的命中判定，浏览器的文字选区只会碍事。 */
+  user-select: none;
+}
+
+/* 文字靠 fill 上色，选中态同样只改 fill——描边文字在小字号下会糊成一团。 */
+text.compose-cad-canvas__entity[data-selected],
+text.compose-cad-canvas__entity[data-hovered] {
+  stroke: none;
+}
+
+text.compose-cad-canvas__entity[data-selected] {
+  fill: var(--compose-accent, #63b3ed);
+}
+
+text.compose-cad-canvas__entity[data-hovered] {
+  fill: var(--compose-text, #e6edf5);
+}
+
 .compose-cad-canvas__entity[data-selected] {
   stroke: var(--compose-accent, #63b3ed);
   stroke-width: 2;

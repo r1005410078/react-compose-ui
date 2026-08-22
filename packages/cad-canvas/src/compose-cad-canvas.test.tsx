@@ -1176,3 +1176,68 @@ describe('CAD 圆与圆弧', () => {
   })
 })
 
+
+describe('CAD 文字', () => {
+  /** 在 (100,100) 写一段字号 20 的标注。 */
+  function writeLabel(rerender: () => void, content = 'QF01') {
+    submit('T')
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('指定文字插入点')
+    clickAt(100, 100)
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('指定字高')
+    submit('20')
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('键入文字')
+    submit(content)
+    rerender()
+  }
+
+  it('OpenSpec: cad-document / CAD TEXT 命令 / 三步写出一段文字', () => {
+    const { runtime, rerender } = setup()
+    writeLabel(rerender)
+
+    expect(runtime.document.rootIds).toHaveLength(1)
+    const drawn = document.querySelector('[data-cad-entity]')!
+    expect(drawn.tagName.toLowerCase()).toBe('text')
+    expect(drawn.textContent).toBe('QF01')
+    // 字号按缩放换算；测试里 zoom 为 1。
+    expect(drawn.getAttribute('font-size')).toBe('20')
+
+    runtime.undo()
+    expect(runtime.document.rootIds).toEqual([])
+  })
+
+  it('OpenSpec: cad-document / CAD 文字按包围盒命中 / 点在笔画空隙上仍然命中', () => {
+    const { rerender } = setup()
+    writeLabel(rerender)
+
+    // 四个字符、字号 20、前进宽度比例 0.6 → 宽 48。点在中间偏上，正落在两笔之间。
+    clickAt(124, 94)
+    rerender()
+    expect(selectedIds()).toHaveLength(1)
+
+    cancel()
+    clickAt(200, 94)
+    rerender()
+    expect(selectedIds()).toEqual([])
+  })
+
+  it('OpenSpec: cad-document / CAD 插入点捕捉 / 捕捉到文字锚点', () => {
+    const { rerender } = setup()
+    writeLabel(rerender)
+
+    submit('L')
+    hoverAt(101, 101)
+    expect(screen.getByTestId('cad-snap-marker')).toHaveAttribute('data-snap-mode', 'insertion')
+  })
+
+  it('OpenSpec: cad-document / CAD TEXT 命令 / 空内容被拒绝', () => {
+    const { runtime, rerender } = setup()
+    submit('T')
+    clickAt(100, 100)
+    submit('20')
+    submit('')
+    rerender()
+    expect(runtime.document.rootIds).toEqual([])
+    // 命令没有结束，仍在等内容。
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('文字内容不能为空')
+  })
+})

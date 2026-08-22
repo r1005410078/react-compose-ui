@@ -1,4 +1,4 @@
-import type { CadSegmentCurve, CadVisibleCurve } from './index'
+import type { CadSegmentCurve, CadVisibleGeometry } from './index'
 
 /**
  * 取出某个 owner 的第一段线段几何。
@@ -10,12 +10,14 @@ import type { CadSegmentCurve, CadVisibleCurve } from './index'
  * @internal
  */
 export function segmentAt(
-  curves: readonly CadVisibleCurve[],
+  geometry: readonly CadVisibleGeometry[],
   ownerId: string,
 ): CadSegmentCurve {
-  const found = curves.find((item) => item.ownerId === ownerId && item.curve.kind === 'segment')
-  if (!found || found.curve.kind !== 'segment') {
+  const found = geometry.find(
+    (item) => item.ownerId === ownerId && item.geometry.kind === 'segment',
+  )
+  if (!found || found.geometry.kind !== 'segment') {
     throw new Error(`没有找到线段几何：${ownerId}`)
   }
-  return found.curve
+  return found.geometry
 }

@@ -124,6 +124,23 @@ function validateEntityComponents(
       ))
     }
   }
+  const text = entity.components[CAD_COMPONENT_KEYS.text]
+  if (text !== undefined) {
+    // 空文字与零半径的圆同一条理由：屏幕上不存在，却仍然参与命中与捕捉，成为一个点不中也
+    // 删不掉的幽灵。
+    if (!isRecord(text)
+      || !isFinitePoint(text.position)
+      || typeof text.content !== 'string' || text.content.length === 0
+      || typeof text.height !== 'number' || !(text.height > 0)
+      || typeof text.rotation !== 'number' || !Number.isFinite(text.rotation)
+      || (text.align !== 'left' && text.align !== 'center' && text.align !== 'right')) {
+      issues.push(issue(
+        'entity.invalid-geometry',
+        [...prefix, 'entities', entity.id, CAD_COMPONENT_KEYS.text],
+        '文字内容不得为空，字号必须为正，旋转与对齐必须合法',
+      ))
+    }
+  }
   const arc = entity.components[CAD_COMPONENT_KEYS.arc]
   if (arc !== undefined) {
     // 半径必须为正：0 半径的弧在屏幕上不存在，却仍会参与命中与捕捉，成为一个点不中也删不掉
