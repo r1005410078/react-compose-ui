@@ -35,6 +35,10 @@ const messages = {
     insertName: '输入块名',
     insertPoint: '指定插入点',
     unknownBlock: '未知块名',
+    moveTitle: '移动',
+    copyTitle: '复制',
+    basePoint: '指定基点',
+    displacementPoint: '指定第二点',
   },
   'en-US': {
     canvasLabel: 'CAD drawing',
@@ -69,6 +73,10 @@ const messages = {
     insertName: 'Enter block name',
     insertPoint: 'Specify insertion point',
     unknownBlock: 'Unknown block',
+    moveTitle: 'Move',
+    copyTitle: 'Copy',
+    basePoint: 'Specify base point',
+    displacementPoint: 'Specify second point',
   },
 } as const
 

@@ -1395,6 +1395,129 @@ test('OpenSpec: cad-document / CAD 画布网格与标尺 / 缩小后网格仍在
   expect(await minorSpacing()).toBeGreaterThanOrEqual(2)
 })
 
+test('OpenSpec: cad-document / CAD 几何位移 / M↵ 移动、拖动移动与一次撤销', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Move')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const first = surface.locator('[data-cad-entity]').first()
+
+  // 用键入坐标画一条确定位置的线
+  await page.keyboard.type('l')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('100,100')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('300,100')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('f')
+  await page.keyboard.press('Enter')
+  await expect(first).toHaveAttribute('x1', '100')
+
+  // 1) 选中后用 M↵ 移动，位移同样可以键入
+  await surface.click({ position: { x: 200, y: 100 } })
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(1)
+  await page.keyboard.type('m')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('0,0')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('60,40')
+  await page.keyboard.press('Enter')
+  await expect(first).toHaveAttribute('x1', '160')
+
+  // 2) 一次撤销回到移动之前——整次移动是一个事务
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(first).toHaveAttribute('x1', '100')
+})
+
+test('OpenSpec: cad-document / CAD 拖动移动 / 非 100% 缩放下拖动仍然吸附到网格', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Drag')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const first = surface.locator('[data-cad-entity]').first()
+
+  // 已知世界坐标的一条线：(100,100) → (300,100)
+  await page.keyboard.type('l')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('100,100')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('300,100')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('f')
+  await page.keyboard.press('Enter')
+  await expect(first).toHaveAttribute('x1', '100')
+
+  const box = await surface.boundingBox()
+  if (!box) throw new Error('surface has no box')
+
+  /**
+   * 由两个已知世界坐标反解当前视口：`screen = world * zoom + offset`。
+   *
+   * **只在图元还在原位时有效**——它拿这条线自己的坐标当基准。移动之后必须沿用移动前解出的
+   * 视口，否则换算会恒等地把结果算回原位置，测试永远通过。
+   */
+  const viewport = async () => {
+    const [x1, x2, y1] = await first.evaluate((node) => [
+      Number(node.getAttribute('x1')),
+      Number(node.getAttribute('x2')),
+      Number(node.getAttribute('y1')),
+    ])
+    const zoom = (x2 - x1) / 200
+    return { zoom, offsetX: x1 - 100 * zoom, screenY: y1 }
+  }
+
+  // 缩放到非 100%：zoom 恒为 1 时未吸附也看起来是整数，那样的断言证明不了吸附。
+  await page.mouse.move(box.x + 60, box.y + 60)
+  await page.keyboard.down('Control')
+  await page.mouse.wheel(0, -240)
+  await page.keyboard.up('Control')
+  const before = await viewport()
+  expect(before.zoom).not.toBe(1)
+
+  // 选中，然后拖一个刻意不落在网格上的屏幕位移
+  const grabX = box.x + 200 * before.zoom + before.offsetX
+  const grabY = box.y + before.screenY
+  await page.mouse.click(grabX, grabY)
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(1)
+
+  await page.mouse.move(grabX, grabY)
+  await page.mouse.down()
+  await page.mouse.move(grabX + 71, grabY + 43, { steps: 6 })
+  await page.mouse.up()
+
+  // 松手后端点的**世界坐标**必须落在网格步长 10 的整数倍上。视口在拖动期间没有变化，因此
+  // 沿用移动前解出的那一组。
+  const movedScreenX = await first.evaluate((node) => Number(node.getAttribute('x1')))
+  const worldStart = (movedScreenX - before.offsetX) / before.zoom
+  expect(worldStart).not.toBe(100)
+  expect(Math.abs(worldStart % 10)).toBeLessThan(0.001)
+})
+
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

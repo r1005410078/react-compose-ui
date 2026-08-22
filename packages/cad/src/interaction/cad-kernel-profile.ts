@@ -105,12 +105,33 @@ export type CadInteractionEffect =
   | { readonly kind: 'command.point'; readonly point: CadInputPoint }
   /** 把这批 Entity 交给活动命令。 */
   | { readonly kind: 'command.selection'; readonly ids: readonly string[] }
+  /**
+   * 按位移平移这批 Entity。
+   *
+   * @remarks
+   * 给的是**两个原始世界坐标**而不是算好的位移：点求解管线（捕捉/正交/网格）住在宿主，
+   * 与 `command.point` 同理。插件不认识吸附，也不该认识。
+   */
+  | {
+      readonly kind: 'entities.translate'
+      readonly ids: readonly string[]
+      readonly from: CadInputPoint
+      readonly to: CadInputPoint
+    }
 
 /** 对外发布的交互快照。 @public */
 export interface CadInteractionSnapshot {
   readonly selection: readonly string[]
   /** 框选进行中的选框；没有框选时为 `null`。 */
   readonly marquee: { readonly bounds: CadSelectionBounds; readonly mode: CadSelectionMode } | null
+  /**
+   * 拖动移动进行中的起止点；没有拖动时为 `null`。
+   *
+   * @remarks
+   * 与 `entities.translate` 一样给原始坐标：宿主解算一次，预览与提交用**同一个**位移，
+   * 因此「拖到哪里」与「落在哪里」不可能分叉。
+   */
+  readonly translate: { readonly from: CadInputPoint; readonly to: CadInputPoint } | null
 }
 
 /**

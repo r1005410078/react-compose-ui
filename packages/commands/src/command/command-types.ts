@@ -82,6 +82,18 @@ export type ComposeCommandStep<TEffect> =
       readonly prompt: ComposeCommandPrompt
       /** 当前的预览效果；宿主据此绘制未提交的几何。 */
       readonly preview?: TEffect
+      /**
+       * 本步**已经产出**的变更；宿主派发它，但会话继续。
+       *
+       * @remarks
+       * 与 `commit` 状态的区别是会话不结束。AutoCAD 的 `COPY` 放下一个副本之后继续等下一个
+       * 落点，直到用户显式结束——把同一个符号摆一排是高频动作，每放一个都要重敲一次命令会让
+       * 用户放弃使用它。
+       *
+       * 与 `preview` 的区别是**已经落进文档**：`preview` 是还没提交、用来画的几何，本字段是
+       * 已经发生的事实。两者可以同时出现。
+       */
+      readonly commit?: TEffect
     }
   | { readonly status: 'commit'; readonly effect: TEffect }
   | { readonly status: 'cancelled' }

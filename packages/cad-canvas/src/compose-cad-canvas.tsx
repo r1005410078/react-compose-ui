@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
+  CAD_COMMAND_TYPES,
   CAD_DEFAULT_LAYER_ID,
   createCadBlockCommand,
+  createCadCopyCommand,
   createCadEraseCommand,
   createCadInsertCommand,
   createCadInteractionPlugins,
   createCadLineCommand,
+  createCadMoveCommand,
   createCadPluginRegistry,
   createCadSceneIndex,
   createCadSessionArbiter,
@@ -118,7 +121,7 @@ function defaultIdFactory() {
   return `cad-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-const EMPTY_INTERACTION: CadInteractionSnapshot = { selection: [], marquee: null }
+const EMPTY_INTERACTION: CadInteractionSnapshot = { selection: [], marquee: null, translate: null }
 
 /**
  * AutoCAD 风格的 CAD 编辑画布。
@@ -185,6 +188,8 @@ export function ComposeCadCanvas({
       createCadEraseCommand(messages),
       createCadBlockCommand(messages),
       createCadInsertCommand(messages),
+      createCadMoveCommand(messages),
+      createCadCopyCommand(messages),
     ]),
     [messages],
   )
@@ -200,6 +205,8 @@ export function ComposeCadCanvas({
   const applyStep = useCallback((session: ComposeCommandSession<CadCommandEffect>, input: ComposeCommandInput) => {
     const step = session.advance(input)
     if (step.status === 'prompt') {
+      // 本步可能已经产出一条变更而会话仍在继续——COPY 放下一个副本之后继续等下一个落点。
+      if (step.commit?.command) onDispatch(step.commit.command)
       setPrompt(step.prompt)
       setPreview(step.preview?.segments ?? [])
       setReference(step.preview?.reference)
@@ -329,6 +336,20 @@ export function ComposeCadCanvas({
     rulersRef.current?.setCursor(indicated ? indicated.screen : null)
   }, [indicated])
 
+  /**
+   * 拖动中的位移，已经过点求解管线。
+   *
+   * @remarks
+   * 与松手提交时**用同一条管线解算同一个终点**，因此预览与落点不可能分叉。开着正交拖动时
+   * 图元会沿轴走，这一点在按下之前就看得见。
+   */
+  const dragDelta = useMemo(() => {
+    const drag = interaction.translate
+    if (!drag) return null
+    const target = resolveCadPoint(drag.to, 'pointer', resolutionContext)
+    return { x: target.x - drag.from.x, y: target.y - drag.from.y }
+  }, [interaction.translate, resolutionContext])
+
   const previewSegments = useMemo<readonly CadPreviewSegment[]>(() => {
     if (!reference || !pointerPoint || !prompt?.accepts.includes('point')) return preview
     return [...preview, { start: reference, end: pointerPoint, pending: true }]
@@ -433,15 +454,29 @@ export function ComposeCadCanvas({
     for (const effect of effects) {
       // 指针捕获由图面自己按「按下是否被接管」处理，这里不重复执行。
       if (effect.kind === 'pointer.capture' || effect.kind === 'pointer.release') continue
+      // 拖动移动不需要活动命令：它自己就是一次完整的操作。位移在这里解算——插件给的是两个
+      // 原始世界坐标，捕捉/正交/网格住在宿主。
+      if (effect.kind === 'entities.translate') {
+        const target = resolveCadPoint(effect.to, 'pointer', resolutionContext)
+        onDispatch({
+          id: idFactory(),
+          type: CAD_COMMAND_TYPES.translateEntities,
+          payload: {
+            entityIds: effect.ids,
+            delta: { x: target.x - effect.from.x, y: target.y - effect.from.y },
+          } as never,
+        })
+        continue
+      }
       const session = sessionRef.current
       if (!session) continue
       if (effect.kind === 'command.point') {
         applyStep(session, { kind: 'point', point: resolveCadPoint(effect.point, 'pointer', resolutionContext) })
         continue
       }
-      applyStep(session, { kind: 'selection', ids: effect.ids })
+      if (effect.kind === 'command.selection') applyStep(session, { kind: 'selection', ids: effect.ids })
     }
-  }, [applyStep, resolutionContext])
+  }, [applyStep, idFactory, onDispatch, resolutionContext])
 
   const pluginContext = useCallback((): CadPluginContext => {
     const snapshot = latest.current
@@ -460,7 +495,11 @@ export function ComposeCadCanvas({
       },
       apply: runEffects,
       publish: setInteraction,
-      idleSnapshot: () => ({ selection: latest.current.interaction.selection, marquee: null }),
+      idleSnapshot: () => ({
+        selection: latest.current.interaction.selection,
+        marquee: null,
+        translate: null,
+      }),
     }
   }, [runEffects])
 
@@ -547,6 +586,7 @@ export function ComposeCadCanvas({
         <CadSurface
           document={document}
           crosshair={crosshair}
+          dragDelta={dragDelta}
           gridStep={gridEnabled ? gridStep : null}
           hovered={hovered}
           interaction={interaction}

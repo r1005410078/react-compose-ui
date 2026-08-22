@@ -3,6 +3,7 @@ export type {
   CadCommandEffect,
   CadCommandMessages,
 } from './cad-command-context'
+export { createCadCopyCommand, createCadMoveCommand } from './cad-transform-commands'
 export {
   CAD_COMMAND_TYPES,
   createCadCommandHandlers,

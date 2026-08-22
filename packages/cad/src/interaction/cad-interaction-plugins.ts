@@ -18,7 +18,8 @@ const PRIMARY_BUTTON = 0
  * CAD 的手势优先级表。
  *
  * @remarks
- * 同一次左键按下在 CAD 里有三种互斥含义：交给活动命令当一个点、点中图元、在空白处拉框。
+ * 同一次左键按下在 CAD 里有四种互斥含义：交给活动命令当一个点、拖动已选中的图元、点中图元、
+ * 在空白处拉框。
  * 谁赢必须是**声明出来的**，不是实现里 `if` 的书写顺序——顺序写错会静默改变行为，没有可见
  * 的失败。
  *
@@ -26,12 +27,15 @@ const PRIMARY_BUTTON = 0
  */
 export const CAD_GESTURE_PRIORITY = [
   { id: 'cad.command-point', priority: 30 },
+  { id: 'cad.move', priority: 25 },
   { id: 'cad.select', priority: 20 },
   { id: 'cad.marquee', priority: 10 },
 ] as const
 
 /** 命令取点插件的 id。 @public */
 export const CAD_COMMAND_POINT_PLUGIN_ID = 'cad.command-point'
+/** 拖动移动插件的 id。 @public */
+export const CAD_MOVE_PLUGIN_ID = 'cad.move'
 /** 点选插件的 id。 @public */
 export const CAD_SELECT_PLUGIN_ID = 'cad.select'
 /** 框选插件的 id。 @public */
@@ -99,6 +103,68 @@ export function createCadSelectPlugin(): CadInteractionPlugin {
 }
 
 /**
+ * 拖动**已选中**的图元来移动它。
+ *
+ * @remarks
+ * claim 条件是按下点命中的图元**已经在选择集里**——这正是 AutoCAD 的行为：点未选中的对象是
+ * 选中它，点已选中的对象并拖动是移动它。写成「命中任何图元」的话，第一次点击就会变成一次
+ * 零位移的移动，用户再也选不中东西。
+ *
+ * 优先级排在 `cad.select` 之上、`cad.command-point` 之下：命令正在吃点时按下是给命令的一个
+ * 点，这一条由顺序天然保证，不需要在这里再判一次。
+ *
+ * @public
+ */
+export function createCadMovePlugin(): CadInteractionPlugin {
+  return {
+    id: CAD_MOVE_PLUGIN_ID,
+    priority: priorityOf(CAD_MOVE_PLUGIN_ID),
+    claim(event, ctx) {
+      if (event.button !== PRIMARY_BUTTON) return null
+      // Shift 是「从选择集移出」的修饰键。不让本插件参与，否则 Shift 点一个已选中的图元会
+      // 变成拖动，用户再也无法把它移出选择集。
+      if (event.modifiers.shift) return null
+      const hit = ctx.index.hitTest(event.point)
+      if (hit === null || !ctx.context.selection.includes(hit)) return null
+      ctx.apply([{ kind: 'pointer.capture', pointerId: event.pointerId }])
+      return createCadMoveSession(event, ctx)
+    },
+  }
+}
+
+/** 建立一次拖动移动会话。 @internal */
+function createCadMoveSession(event: CadPointerDownEvent, initial: CadPluginContext): CadSession {
+  const origin = event.point
+  const moving = [...initial.context.selection]
+  let current: CadInputPoint = origin
+  const dragged = () => current.x !== origin.x || current.y !== origin.y
+
+  return {
+    pointerId: event.pointerId,
+    update(next, ctx) {
+      if (next.type !== 'pointer.move' && next.type !== 'pointer.up') return
+      current = next.point
+      ctx.publish({
+        selection: moving,
+        marquee: null,
+        translate: dragged() ? { from: origin, to: current } : null,
+      })
+    },
+    commit(ctx) {
+      ctx.apply([{ kind: 'pointer.release', pointerId: event.pointerId }])
+      ctx.publish({ selection: moving, marquee: null, translate: null })
+      // 原地松手不产生位移：那只是一次点击，文档不该因此进一条撤销记录。
+      if (!dragged()) return
+      ctx.apply([{ kind: 'entities.translate', ids: moving, from: origin, to: current }])
+    },
+    cancel(ctx) {
+      ctx.apply([{ kind: 'pointer.release', pointerId: event.pointerId }])
+      ctx.publish({ selection: moving, marquee: null, translate: null })
+    },
+  }
+}
+
+/**
  * 在空白处按下时拉出选框。
  *
  * @remarks
@@ -137,6 +203,7 @@ function createCadMarqueeSession(event: CadPointerDownEvent, initial: CadPluginC
             mode: cadSelectionModeFromDrag(origin, current),
           }
         : null,
+      translate: null,
     })
   }
 
@@ -153,21 +220,21 @@ function createCadMarqueeSession(event: CadPointerDownEvent, initial: CadPluginC
       ctx.apply([{ kind: 'pointer.release', pointerId: event.pointerId }])
       if (!dragged()) {
         // 原地松手：空窗口选不中任何东西，等同于取消当前选择。
-        ctx.publish({ selection: applyCadSelection(baseSelection, { kind: 'clear' }), marquee: null })
+        ctx.publish({ selection: applyCadSelection(baseSelection, { kind: 'clear' }), marquee: null, translate: null })
         return
       }
       const bounds = cadSelectionBoundsFromDrag(origin, current)
       const mode = cadSelectionModeFromDrag(origin, current)
       const ids = ctx.index.hitBounds(bounds, mode)
       const selection = applyCadSelection(baseSelection, { kind: 'add', ids })
-      ctx.publish({ selection, marquee: null })
+      ctx.publish({ selection, marquee: null, translate: null })
       if (ids.length > 0 && ctx.context.prompt?.accepts.includes('selection')) {
         ctx.apply([{ kind: 'command.selection', ids }])
       }
     },
     cancel(ctx) {
       ctx.apply([{ kind: 'pointer.release', pointerId: event.pointerId }])
-      ctx.publish({ selection: baseSelection, marquee: null })
+      ctx.publish({ selection: baseSelection, marquee: null, translate: null })
     },
   }
 }
@@ -185,6 +252,7 @@ function createCadMarqueeSession(event: CadPointerDownEvent, initial: CadPluginC
 export function createCadInteractionPlugins(): readonly CadInteractionPlugin[] {
   return [
     createCadCommandPointPlugin(),
+    createCadMovePlugin(),
     createCadSelectPlugin(),
     createCadMarqueePlugin(),
   ]

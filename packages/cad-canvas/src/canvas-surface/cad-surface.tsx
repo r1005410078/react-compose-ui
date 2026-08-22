@@ -99,6 +99,14 @@ export interface CadSurfaceProps {
   readonly hovered: string | null
   /** 十字光标的形态与位置；不绘制时为 `null`。 */
   readonly crosshair: CadCrosshair | null
+  /**
+   * 拖动移动进行中的位移（世界坐标）；没有拖动时为 `null`。
+   *
+   * @remarks
+   * 由宿主解算后给出，与松手时提交的位移是**同一个值**——否则「拖到哪里」与「落在哪里」会
+   * 分叉，而那种偏差只在开着捕捉或正交时出现。
+   */
+  readonly dragDelta: CadCanvasPoint | null
   readonly label: string
 }
 
@@ -141,6 +149,7 @@ export function CadSurface({
   previewSegments,
   hovered,
   crosshair,
+  dragDelta,
   label,
 }: CadSurfaceProps) {
   const surfaceRef = useRef<SVGSVGElement | null>(null)
@@ -312,9 +321,14 @@ export function CadSurface({
         const owner = document.entities[ownerId]
         const layer = owner ? layerColors.get(getCadPlacement(owner)?.layerId ?? '') : undefined
         if (!layer) return null
-        const start = cadWorldToScreen(viewport, segment.start)
-        const end = cadWorldToScreen(viewport, segment.end)
         const isSelected = selected.has(ownerId)
+        // 拖动中选中的图元跟着指针走：预览与提交用同一个位移。
+        const offset = dragDelta && isSelected ? dragDelta : null
+        const shift = (point: CadCanvasPoint) => (offset
+          ? { x: point.x + offset.x, y: point.y + offset.y }
+          : point)
+        const start = cadWorldToScreen(viewport, shift(segment.start))
+        const end = cadWorldToScreen(viewport, shift(segment.end))
         const isHovered = !isSelected && ownerId === hovered
         return (
           <line
