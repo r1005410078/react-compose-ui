@@ -39,6 +39,12 @@ const messages = {
     copyTitle: '复制',
     basePoint: '指定基点',
     displacementPoint: '指定第二点',
+    wireTitle: '导线',
+    wireFirstPoint: '指定导线起点',
+    wireNextPoint: '指定导线终点',
+    portTitle: '添加端口',
+    portSelectInstance: '选择一个块实例',
+    portPoint: '指定端口位置',
   },
   'en-US': {
     canvasLabel: 'CAD drawing',
@@ -77,6 +83,12 @@ const messages = {
     copyTitle: 'Copy',
     basePoint: 'Specify base point',
     displacementPoint: 'Specify second point',
+    wireTitle: 'Wire',
+    wireFirstPoint: 'Specify wire start point',
+    wireNextPoint: 'Specify wire end point',
+    portTitle: 'Add port',
+    portSelectInstance: 'Select one block instance',
+    portPoint: 'Specify port position',
   },
 } as const
 

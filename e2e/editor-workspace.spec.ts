@@ -1518,6 +1518,127 @@ test('OpenSpec: cad-document / CAD 拖动移动 / 非 100% 缩放下拖动仍然
   expect(Math.abs(worldStart % 10)).toBeLessThan(0.001)
 })
 
+test('OpenSpec: cad-document / CAD 导线 / 端口连线后拖动符号，导线跟着走', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Ports')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const first = surface.locator('[data-cad-entity]').first()
+  const ports = surface.locator('[data-testid="cad-port"]')
+
+  const type = async (text: string) => {
+    await page.keyboard.type(text)
+    await page.keyboard.press('Enter')
+  }
+
+  // 一条已知世界坐标的线：(100,100) → (200,100)
+  await type('l')
+  await type('100,100')
+  await type('200,100')
+  await type('f')
+  await expect(first).toHaveAttribute('x1', '100')
+
+  const box = await surface.boundingBox()
+  if (!box) throw new Error('surface has no box')
+
+  /**
+   * 由那条线（世界 100..200、y=100）反解视口：`screen = world * zoom + offset`。
+   *
+   * 建块之后它变成实例的展开线段，世界坐标不变，因此同一段推导继续成立。
+   */
+  const viewport = async () => {
+    const [x1, x2, y1] = await first.evaluate((node) => [
+      Number(node.getAttribute('x1')),
+      Number(node.getAttribute('x2')),
+      Number(node.getAttribute('y1')),
+    ])
+    const zoom = (x2 - x1) / 100
+    return { zoom, offsetX: x1 - 100 * zoom, offsetY: y1 - 100 * zoom }
+  }
+  type Viewport = Awaited<ReturnType<typeof viewport>>
+  const screenOf = (vp: Viewport, x: number, y: number) => ({
+    x: box.x + x * vp.zoom + vp.offsetX,
+    y: box.y + y * vp.zoom + vp.offsetY,
+  })
+
+  // 1) 收成一个块，并在它的右端点上声明一个端口
+  const unzoomed = await viewport()
+  const mid = screenOf(unzoomed, 150, 100)
+  await page.mouse.click(mid.x, mid.y)
+  await type('b')
+  await type('SYMBOL')
+  await type('100,100')
+
+  await page.mouse.click(mid.x, mid.y)
+  await type('po')
+  await type('200,100')
+  await expect(ports).toHaveCount(1)
+
+  // 2) 再插一个实例：端口是块**定义**的一部分，一次声明两个实例都有
+  await type('i')
+  await type('SYMBOL')
+  await type('100,300')
+  await expect(ports).toHaveCount(2)
+
+  // 3) 缩放到非 100%：zoom 恒为 1 时未吸附也看起来是整数，那样的断言证明不了吸附。
+  //    往**外**缩：放大会把下面那个实例推出图面，取点就落在画布之外了。
+  await page.mouse.move(box.x + 60, box.y + 60)
+  await page.keyboard.down('Control')
+  await page.mouse.wheel(0, 240)
+  await page.keyboard.up('Control')
+  const zoomed = await viewport()
+  expect(zoomed.zoom).not.toBe(1)
+
+  // 4) 画导线：点在端口**附近**而不是正中，落点该被端口捕捉吸过去
+  const p1 = screenOf(zoomed, 200, 100)
+  const p2 = screenOf(zoomed, 200, 300)
+  await type('w')
+  await expect(canvas.locator('[data-testid="cad-command-prompt"]')).toContainText('指定导线起点')
+  await page.mouse.click(p1.x + 3, p1.y + 3)
+  await page.mouse.click(p2.x + 3, p2.y + 3)
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(3)
+
+  const wire = surface.locator('[data-cad-entity]').last()
+  const endpointOf = async () => wire.evaluate((node) => ({
+    x: Number(node.getAttribute('x2')),
+    y: Number(node.getAttribute('y2')),
+  }))
+  const markerOf = async () => ports.nth(1).evaluate((node) => ({
+    x: Number(node.getAttribute('cx')),
+    y: Number(node.getAttribute('cy')),
+  }))
+  expect(await endpointOf()).toEqual(await markerOf())
+  const beforeDrag = await endpointOf()
+
+  // 5) 拖走第二个实例。选择集是累加的，先 Esc 清空，否则两个实例一起走。
+  await page.keyboard.press('Escape')
+  const grab = screenOf(zoomed, 150, 300)
+  await page.mouse.click(grab.x, grab.y)
+  await expect(surface.locator('[data-cad-entity][data-selected]')).toHaveCount(1)
+  await page.mouse.move(grab.x, grab.y)
+  await page.mouse.down()
+  await page.mouse.move(grab.x + 37, grab.y + 64, { steps: 6 })
+  await page.mouse.up()
+
+  // 导线端点仍然贴在端口上，而导线自己一个坐标都没被写过——几何是解出来的。
+  const afterDrag = await endpointOf()
+  expect(afterDrag).not.toEqual(beforeDrag)
+  expect(afterDrag).toEqual(await markerOf())
+})
+
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

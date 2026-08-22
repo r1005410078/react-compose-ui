@@ -41,3 +41,32 @@ export function createCadInsert(
     scale: overrides.scale ? { x: overrides.scale.x, y: overrides.scale.y } : { x: 1, y: 1 },
   }
 }
+
+/**
+ * 把世界坐标反变换回块局部坐标。
+ *
+ * @remarks
+ * {@link transformCadBlockPoint} 的逆：平移 → 旋转 → 比例，每一步都反着来。`PORT` 命令用它把
+ * 用户在图面上指的点写回块定义。
+ *
+ * 任一轴比例为 0 时变换不可逆，返回 `null` 而不是产出 `Infinity`。这不是理论情况——镜像符号
+ * 用负比例是常规用法，手滑写成 0 完全可能，而 `Infinity` 会一路流进文档。
+ *
+ * @returns 块局部坐标；不可逆时为 `null`。
+ * @public
+ */
+export function inverseCadBlockPoint(
+  point: CadInputPoint,
+  insert: CadInsert,
+): CadInputPoint | null {
+  if (insert.scale.x === 0 || insert.scale.y === 0) return null
+  const dx = point.x - insert.position.x
+  const dy = point.y - insert.position.y
+  const radians = (insert.rotation * Math.PI) / 180
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+  // 旋转矩阵是正交的，因此逆旋转即转置：绕 -θ 转。
+  const unrotatedX = dx * cos + dy * sin
+  const unrotatedY = -dx * sin + dy * cos
+  return { x: unrotatedX / insert.scale.x, y: unrotatedY / insert.scale.y }
+}

@@ -5,6 +5,7 @@ import {
   createEmptyCadDocument,
   getCadInsert,
   getCadLine,
+  getCadWire,
   validateCadDocument,
   type CadDocument,
 } from '@compose-ui/cad'
@@ -958,5 +959,125 @@ describe('CAD 块定义与插入', () => {
 
     expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('未知块名')
     expect(runtime.document).toBe(before)
+  })
+})
+
+describe('CAD 端口与导线', () => {
+  /**
+   * 建一个带端口的符号并插入第二个实例。
+   *
+   * @remarks
+   * 端口画在 (110,20)——它**正好是符号线段的端点**，这正是端口捕捉必须压过端点捕捉的那个
+   * 重合情形。
+   */
+  function twoWiredInstances(rerender: () => void) {
+    submit('L')
+    clickAt(10, 20)
+    clickAt(110, 20)
+    submit('')
+    rerender()
+
+    dragAt([0, 0], [200, 200])
+    rerender()
+    submit('B')
+    submit('SYMBOL')
+    clickAt(10, 20)
+    rerender()
+
+    // 先选中实例再执行 PORT：端口加在**一个**块定义上，「加给哪个」不能靠猜，因此没有选择时
+    // 命令会先要一个选择，而不是把随后的点当成端口位置。
+    clickAt(60, 20)
+    rerender()
+    submit('PO')
+    clickAt(110, 20)
+    rerender()
+
+    submit('I')
+    submit('SYMBOL')
+    clickAt(10, 220)
+    rerender()
+  }
+
+  it('OpenSpec: cad-document / CAD PORT 命令 / 加端口对全部实例生效', () => {
+    const { runtime, rerender } = setup()
+    twoWiredInstances(rerender)
+
+    expect(runtime.document.blocks[Object.keys(runtime.document.blocks)[0]!]!.ports)
+      .toHaveLength(1)
+    // 一次声明，两个实例各按自己的插入点解出一个端口。
+    expect(screen.getAllByTestId('cad-port')).toHaveLength(2)
+  })
+
+  it('OpenSpec: cad-document / CAD 端口捕捉 / 端口压过端点', () => {
+    const { rerender } = setup()
+    twoWiredInstances(rerender)
+
+    submit('W')
+    hoverAt(111, 21)
+    expect(screen.getByTestId('cad-snap-marker')).toHaveAttribute('data-snap-mode', 'port')
+  })
+
+  it('OpenSpec: cad-document / CAD 导线 / 移动符号，导线跟着走', () => {
+    const { runtime, rerender } = setup()
+    twoWiredInstances(rerender)
+
+    submit('W')
+    clickAt(111, 21)
+    clickAt(111, 221)
+    rerender()
+
+    const wireId = runtime.document.rootIds[runtime.document.rootIds.length - 1]!
+    expect(getCadWire(runtime.document.entities[wireId]!)).toEqual({
+      start: { kind: 'port', entityId: runtime.document.rootIds[0], portId: expect.any(String) },
+      end: { kind: 'port', entityId: runtime.document.rootIds[1], portId: expect.any(String) },
+    })
+
+    // 拖动第二个实例。CAD 的点选是**累加**的，因此先 Esc 清空——否则第一个实例还留在选择集
+    // 里，两个实例一起走，用例就证明不了导线跟的是被拖的那一个。
+    cancel()
+    clickAt(60, 220)
+    rerender()
+    expect(selectedIds()).toEqual([runtime.document.rootIds[1]])
+    const surface = screen.getByTestId('cad-surface')
+    fireEvent.pointerDown(surface, { button: 0, clientX: 60, clientY: 220, pointerId: 1 })
+    fireEvent.pointerMove(surface, { clientX: 60, clientY: 320, pointerId: 1 })
+    // 拖动**过程中**导线就该跟着走：导线并没有被选中，靠按屏幕位移平移已渲染线段的预览
+    // 做不到这件事，而松手后它会动——预览与提交在那种实现下必然分叉。
+    expect(document.querySelector(`[data-cad-entity="${wireId}"]`)?.getAttribute('y2'))
+      .toBe('320')
+    fireEvent.pointerUp(surface, { button: 0, clientX: 60, clientY: 320, pointerId: 1 })
+    rerender()
+
+    // 导线自身没有被写入任何坐标，几何却已经跟到新位置。
+    expect(getCadWire(runtime.document.entities[wireId]!)?.end)
+      .toEqual({ kind: 'port', entityId: runtime.document.rootIds[1], portId: expect.any(String) })
+    const drawn = [...document.querySelectorAll(`[data-cad-entity="${wireId}"]`)]
+    expect(drawn).toHaveLength(1)
+    expect(drawn[0]!.getAttribute('y2')).toBe('320')
+  })
+
+  it('OpenSpec: cad-document / CAD 删除绑定目标时冻结导线端点 / 导线留在原处', () => {
+    const { runtime, rerender } = setup()
+    twoWiredInstances(rerender)
+    submit('W')
+    clickAt(111, 21)
+    clickAt(111, 221)
+    rerender()
+
+    const wireId = runtime.document.rootIds[runtime.document.rootIds.length - 1]!
+    const instanceId = runtime.document.rootIds[1]!
+    cancel()
+    clickAt(60, 220)
+    rerender()
+    expect(selectedIds()).toEqual([instanceId])
+    submit('E')
+    rerender()
+
+    expect(runtime.document.entities[instanceId]).toBeUndefined()
+    expect(getCadWire(runtime.document.entities[wireId]!)?.end)
+      .toEqual({ kind: 'free', point: { x: 110, y: 220 } })
+    // 图上什么都没变：线还在原处，末端悬空。
+    expect(document.querySelector(`[data-cad-entity="${wireId}"]`)?.getAttribute('y2'))
+      .toBe('220')
   })
 })

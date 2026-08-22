@@ -49,6 +49,12 @@ export interface CadCommandMessages {
   readonly copyTitle: string
   readonly basePoint: string
   readonly displacementPoint: string
+  readonly wireTitle: string
+  readonly wireFirstPoint: string
+  readonly wireNextPoint: string
+  readonly portTitle: string
+  readonly portSelectInstance: string
+  readonly portPoint: string
 }
 
 /**

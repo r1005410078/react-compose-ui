@@ -1,8 +1,10 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import {
+  collectCadInstancePorts,
   collectCadVisibleSegments,
   getCadPlacement,
+  previewCadTranslate,
   type CadDocument,
   type CadInteractionSnapshot,
   type CadPointerModifiers,
@@ -298,8 +300,16 @@ export function CadSurface({
   }, [])
 
   const layerColors = new Map(document.layers.map((layer) => [layer.id, layer]))
+  // 拖动预览走与提交**完全相同**的平移，再重跑同一条可见性遍历。按屏幕位移平移已渲染线段
+  // 是行不通的：拖一台设备时它的导线并未被选中，那种预览里导线不动而提交后会动；反过来，
+  // 两端都绑定的导线平移是 no-op，屏幕位移会让它跟着走再在松手时弹回。
+  const previewDocument = dragDelta
+    // 显式重建：`CadPoint` 要求是纯 JSON 对象，画布的点类型只满足结构。
+    ? previewCadTranslate(document, interaction.selection, { x: dragDelta.x, y: dragDelta.y })
+    : document
   // 与命中、框选、捕捉共用同一条可见性遍历：渲染跟它们分叉时，会出现「看得见却点不中」。
-  const segments = collectCadVisibleSegments(document)
+  const segments = collectCadVisibleSegments(previewDocument)
+  const ports = collectCadInstancePorts(previewDocument)
   const selected = new Set(interaction.selection)
 
   return (
@@ -318,17 +328,12 @@ export function CadSurface({
       onPointerUp={handlePointerUp}
     >
       {segments.map(({ ownerId, segment }, index) => {
-        const owner = document.entities[ownerId]
+        const owner = previewDocument.entities[ownerId]
         const layer = owner ? layerColors.get(getCadPlacement(owner)?.layerId ?? '') : undefined
         if (!layer) return null
         const isSelected = selected.has(ownerId)
-        // 拖动中选中的图元跟着指针走：预览与提交用同一个位移。
-        const offset = dragDelta && isSelected ? dragDelta : null
-        const shift = (point: CadCanvasPoint) => (offset
-          ? { x: point.x + offset.x, y: point.y + offset.y }
-          : point)
-        const start = cadWorldToScreen(viewport, shift(segment.start))
-        const end = cadWorldToScreen(viewport, shift(segment.end))
+        const start = cadWorldToScreen(viewport, segment.start)
+        const end = cadWorldToScreen(viewport, segment.end)
         const isHovered = !isSelected && ownerId === hovered
         return (
           <line
@@ -346,6 +351,19 @@ export function CadSurface({
             x2={end.x}
             y1={start.y}
             y2={end.y}
+          />
+        )
+      })}
+      {ports.map(({ entityId, portId, point }) => {
+        const { x, y } = cadWorldToScreen(viewport, point)
+        return (
+          <circle
+            key={`${entityId}/${portId}`}
+            className="compose-cad-canvas__port"
+            cx={x}
+            cy={y}
+            data-testid="cad-port"
+            r={PORT_MARKER_RADIUS}
           />
         )
       })}
@@ -423,14 +441,18 @@ function Crosshair({ crosshair, size }: {
 
 
 /** 捕捉标记的屏幕半径（CSS 像素）。 */
+/** 端口标记的半径（CSS 像素）；比捕捉标记小，它是常驻的，不该盖住几何。 */
+const PORT_MARKER_RADIUS = 3
+
 const SNAP_MARKER_RADIUS = 5
 
 /**
  * 按模式渲染捕捉标记。
  *
  * @remarks
- * 形状沿用 AutoCAD 的约定：端点方框、中点三角、交点叉号。用形状而不是颜色区分，是因为用户
- * 要在扫视中判断「捕到的是不是我想要的那个特征」，形状在余光里也分得清。
+ * 形状沿用 AutoCAD 的约定：端点方框、中点三角、交点叉号。端口用菱形——方框、三角、叉号都已
+ * 占用，而形状必须两两可分：用户要在扫视中判断「捕到的是不是我想要的那个特征」，形状在余光
+ * 里也分得清，颜色不行。
  */
 function SnapMarker({ snap, viewport }: {
   readonly snap: CadSnapCandidate
@@ -442,6 +464,11 @@ function SnapMarker({ snap, viewport }: {
     className: 'compose-cad-canvas__snap-marker',
     'data-snap-mode': snap.mode,
     'data-testid': 'cad-snap-marker',
+  }
+  if (snap.mode === 'port') {
+    return (
+      <polygon {...shared} points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`} />
+    )
   }
   if (snap.mode === 'endpoint') {
     return <rect {...shared} height={r * 2} width={r * 2} x={x - r} y={y - r} />

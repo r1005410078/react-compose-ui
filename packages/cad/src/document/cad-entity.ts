@@ -8,6 +8,8 @@ export const CAD_COMPONENT_KEYS = {
   line: 'CadLine',
   /** 一次块插入。 */
   insert: 'CadInsert',
+  /** 一条导线，端点可绑定到块实例的端口。 */
+  wire: 'CadWire',
 } as const
 
 /** 世界坐标中的一个点。 @public */
@@ -57,6 +59,80 @@ export interface CadInsert extends JsonObject {
   readonly scale: CadPoint
 }
 
+/**
+ * 导线的一个自由端点。
+ *
+ * @remarks
+ * 坐标是世界坐标，随导线一起平移。它与 {@link CadPortEndpoint} 的差别不只是「存不存坐标」：
+ * 自由端点是作者写死的位置，端口端点是一条**引用**，位置由被引用的实例当刻决定。
+ *
+ * @public
+ */
+export interface CadFreeEndpoint extends JsonObject {
+  readonly kind: 'free'
+  readonly point: CadPoint
+}
+
+/**
+ * 导线绑定到某个块实例端口的端点。
+ *
+ * @remarks
+ * **存引用而不是坐标**，与块实例几何求解不复制是同一条原则：没有存下来的东西就没有会过期的
+ * 东西。移动、复制、撤销、导入——任何改变实例位置的路径都自动正确，不需要在每条路径上挂一个
+ * 重解钩子。
+ *
+ * @public
+ */
+export interface CadPortEndpoint extends JsonObject {
+  readonly kind: 'port'
+  /** 被绑定的**顶层**块实例 Entity id。 */
+  readonly entityId: string
+  /** 该实例所引用块定义中声明的端口 id。 */
+  readonly portId: string
+}
+
+/** 导线端点。 @public */
+export type CadWireEndpoint = CadFreeEndpoint | CadPortEndpoint
+
+/**
+ * 一条导线。
+ *
+ * @remarks
+ * 只有两个端点，没有中间拐点：折线导线的价值几乎全部来自自动路由（曼哈顿走线、避障），
+ * 单独加拐点而没有路由，只是把手工维护线形的负担交回给用户。
+ *
+ * @public
+ */
+export interface CadWire extends JsonObject {
+  readonly start: CadWireEndpoint
+  readonly end: CadWireEndpoint
+}
+
+/**
+ * 块上的一个接线端口。
+ *
+ * @remarks
+ * 端口是**符号的一部分**：声明在块定义上，一次声明、全部实例都有。挂在实例上意味着同一个
+ * 符号的不同实例可以有不同端口——那样它就不是同一个符号了。
+ *
+ * `position` 是块局部坐标，因此端口与块内几何走同一条比例 → 旋转 → 平移。
+ *
+ * 只有 id 与位置：`id` 稳定是导线绑定不断的前提，而面向用户的名称眼下没有任何消费者。
+ *
+ * @public
+ */
+export interface CadPort extends JsonObject {
+  /** 块内唯一且稳定的端口 id。 */
+  readonly id: string
+  /** 块局部坐标下的位置。 */
+  readonly position: CadPoint
+}
+
+/** 读取导线；不是导线时为 undefined。 @public */
+export function getCadWire(entity: ComposeEntity): CadWire | undefined {
+  return entity.components[CAD_COMPONENT_KEYS.wire] as CadWire | undefined
+}
+
 /** 读取块插入；不是实例时为 undefined。 @public */
 export function getCadInsert(entity: ComposeEntity): CadInsert | undefined {
   return entity.components[CAD_COMPONENT_KEYS.insert] as CadInsert | undefined
@@ -95,6 +171,30 @@ export function createCadLineEntity(
     components: {
       [CAD_COMPONENT_KEYS.placement]: { layerId: input.layerId },
       [CAD_COMPONENT_KEYS.line]: { start: point(input.start), end: point(input.end) },
+    },
+  }
+}
+
+/**
+ * 构造一条导线图元。
+ *
+ * @param id - 由调用方给出的稳定 Entity ID。
+ * @public
+ */
+export function createCadWireEntity(
+  id: string,
+  input: {
+    readonly layerId: string
+    readonly start: CadWireEndpoint
+    readonly end: CadWireEndpoint
+  },
+): ComposeEntity {
+  return {
+    id,
+    name: 'Wire',
+    components: {
+      [CAD_COMPONENT_KEYS.placement]: { layerId: input.layerId },
+      [CAD_COMPONENT_KEYS.wire]: { start: input.start, end: input.end },
     },
   }
 }
