@@ -8,6 +8,7 @@
 @import '@compose-ui/stage/styles.css';
 @import '@compose-ui/command-panel/styles.css';
 @import '@compose-ui/asset-browser/styles.css';
+@import '@compose-ui/cad-canvas/styles.css';
 @import '@compose-ui/component-library/styles.css';
 
 @layer theme, base, components, utilities;
