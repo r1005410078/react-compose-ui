@@ -43,7 +43,7 @@ function stubSurfaceRect() {
   vi.stubGlobal('ResizeObserver', ResizeObserverFixture)
 }
 
-function setup() {
+function setup(props: Partial<Parameters<typeof ComposeCadCanvas>[0]> = {}) {
   stubSurfaceRect()
   let counter = 0
   const runtime = createDocumentTransactionRuntime<CadDocument, DocumentValidationIssueShape>({
@@ -57,6 +57,7 @@ function setup() {
       document={runtime.document}
       idFactory={() => `id-${++counter}`}
       onDispatch={dispatch}
+      {...props}
     />,
   )
   const rerender = () => {
@@ -65,11 +66,94 @@ function setup() {
         document={runtime.document}
         idFactory={() => `id-${++counter}`}
         onDispatch={dispatch}
+        {...props}
       />,
     )
   }
   return { runtime, rerender }
 }
+
+describe('十字光标', () => {
+  function lines() {
+    return screen.getByTestId('cad-surface').querySelectorAll('[data-cad-crosshair-line]')
+  }
+  function pickbox() {
+    return screen.queryByTestId('cad-pickbox')
+  }
+  function surfaceHidesCursor() {
+    return screen.getByTestId('cad-surface').hasAttribute('data-crosshair')
+  }
+
+  it('OpenSpec: cad-document / CAD 十字光标 / 三种形态随等待的输入类型切换', () => {
+    setup()
+    // 空闲：线与框都在，系统光标被收走。
+    hoverAt(200, 160)
+    expect(lines()).toHaveLength(4)
+    expect(pickbox()).not.toBeNull()
+    expect(surfaceHidesCursor()).toBe(true)
+
+    // 等待取点：只剩线。
+    submit('L')
+    hoverAt(200, 160)
+    expect(lines()).toHaveLength(4)
+    expect(pickbox()).toBeNull()
+
+    // 等待选择对象：只剩框。
+    submit('')
+    clickAt(100, 100)
+    clickAt(300, 100)
+    submit('F')
+    submit('E')
+    hoverAt(200, 160)
+    expect(lines()).toHaveLength(0)
+    expect(pickbox()).not.toBeNull()
+  })
+
+  it('OpenSpec: cad-document / CAD 十字光标 / 拾取框半边长等于命中容差且线在框处断开', () => {
+    setup({ pickRadius: 12 })
+    hoverAt(200, 160)
+    const box = pickbox()
+    expect(box?.getAttribute('width')).toBe('24')
+    expect(box?.getAttribute('x')).toBe('188')
+
+    // 四条线都从框边起步，框内不留线段。
+    const starts = [...lines()].map((line) => ({
+      x: Number(line.getAttribute('x1')), y: Number(line.getAttribute('y1')),
+    }))
+    for (const start of starts) {
+      expect(Math.max(Math.abs(start.x - 200), Math.abs(start.y - 160))).toBe(12)
+    }
+  })
+
+  it('OpenSpec: cad-document / CAD 十字光标 / 触摸指针不绘制也不隐藏系统光标', () => {
+    setup()
+    fireEvent.pointerMove(screen.getByTestId('cad-surface'), {
+      clientX: 200, clientY: 160, pointerId: 1, pointerType: 'touch',
+    })
+    expect(lines()).toHaveLength(0)
+    expect(pickbox()).toBeNull()
+    expect(surfaceHidesCursor()).toBe(false)
+  })
+
+  it('OpenSpec: cad-document / CAD 十字光标 / 宿主关闭时不绘制也不隐藏系统光标', () => {
+    setup({ showCrosshair: false })
+    hoverAt(200, 160)
+    expect(lines()).toHaveLength(0)
+    expect(pickbox()).toBeNull()
+    expect(surfaceHidesCursor()).toBe(false)
+  })
+
+  it('OpenSpec: cad-document / CAD 指示点 / 手势进行中继续更新，且不被手势会话接管', () => {
+    setup()
+    const surface = screen.getByTestId('cad-surface')
+    // 框选拖拽期间指示点仍随指针走。
+    fireEvent.pointerDown(surface, { button: 0, clientX: 400, clientY: 300, pointerId: 1 })
+    hoverAt(260, 210)
+    expect(pickbox()?.getAttribute('x')).toBe('252')
+    fireEvent.pointerUp(surface, { button: 0, clientX: 260, clientY: 210, pointerId: 1 })
+    expect(pickbox()?.getAttribute('x')).toBe('252')
+  })
+})
 
 describe('指针反馈', () => {
   function pendingPreview() {

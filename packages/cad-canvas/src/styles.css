@@ -31,6 +31,26 @@
   cursor: crosshair;
 }
 
+/*
+ * 画了十字光标就必须收走系统箭头，否则屏幕上有两个光标。只作用于图面，命令行与工具栏不受
+ * 影响；宿主关掉十字光标时这个类不加，系统光标照常可见。
+ */
+.compose-cad-canvas__surface[data-crosshair] {
+  cursor: none;
+}
+
+/*
+ * 十字线与拾取框用同一支笔，不填充。线在拾取框处断开——框覆盖的正是用户要看清的靶区，线穿
+ * 过去等于用光标盖住自己正对准的东西。
+ */
+.compose-cad-canvas__crosshair {
+  fill: none;
+  stroke: var(--compose-text, #e6edf5);
+  stroke-width: 1;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
 /* 命令行贴在底部，与 AutoCAD 一致：它是主输入位置，不该随内容滚走。 */
 .compose-cad-canvas__command-line {
   display: flex;

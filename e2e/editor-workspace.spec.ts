@@ -1299,6 +1299,54 @@ test('OpenSpec: cad-document / CAD 指针反馈 / 橡皮筋、悬停高亮与坐
   await expect(surface.locator('[data-cad-entity][data-hovered]')).toHaveCount(0)
 })
 
+test('OpenSpec: cad-document / CAD 十字光标 / 三种形态与系统光标隐藏', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Crosshair')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const lines = surface.locator('[data-cad-crosshair-line]')
+  const pickbox = canvas.locator('[data-testid="cad-pickbox"]')
+  const box = await surface.boundingBox()
+  if (!box) throw new Error('surface has no box')
+
+  // 1) 空闲：十字线与拾取框都在，系统光标被收走
+  await page.mouse.move(box.x + 300, box.y + 200)
+  await expect(lines).toHaveCount(4)
+  await expect(pickbox).toHaveCount(1)
+  await expect(surface).toHaveCSS('cursor', 'none')
+
+  // 2) 等待取点：拾取框消失
+  await page.keyboard.type('l')
+  await page.keyboard.press('Enter')
+  await page.mouse.move(box.x + 320, box.y + 220)
+  await expect(lines).toHaveCount(4)
+  await expect(pickbox).toHaveCount(0)
+
+  // 3) 等待选择对象：十字线消失
+  await surface.click({ position: { x: 200, y: 160 } })
+  await surface.click({ position: { x: 400, y: 260 } })
+  await page.keyboard.type('f')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('e')
+  await page.keyboard.press('Enter')
+  await page.mouse.move(box.x + 340, box.y + 240)
+  await expect(lines).toHaveCount(0)
+  await expect(pickbox).toHaveCount(1)
+})
+
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
