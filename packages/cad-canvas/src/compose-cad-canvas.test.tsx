@@ -73,6 +73,76 @@ function setup(props: Partial<Parameters<typeof ComposeCadCanvas>[0]> = {}) {
   return { runtime, rerender }
 }
 
+describe('移动与复制', () => {
+  function lineAt(index: number) {
+    return [...screen.getByTestId('cad-surface').querySelectorAll('[data-cad-entity]')][index]
+  }
+
+  it('OpenSpec: cad-document / CAD 几何位移 / M↵ 移动选中的图元，一次撤销回到原位', () => {
+    const { runtime, rerender } = setup()
+    submit('L')
+    clickAt(100, 100)
+    clickAt(300, 100)
+    submit('F')
+    rerender()
+    clickAt(200, 100)
+    rerender()
+
+    submit('M')
+    clickAt(200, 100)
+    clickAt(260, 140)
+    rerender()
+    expect(lineAt(0)?.getAttribute('x1')).toBe('160')
+
+    runtime.undo()
+    rerender()
+    expect(lineAt(0)?.getAttribute('x1')).toBe('100')
+  })
+
+  it('OpenSpec: cad-document / CAD 拖动移动 / 拖动已选中的图元把它移走', () => {
+    const { runtime, rerender } = setup()
+    submit('L')
+    clickAt(100, 100)
+    clickAt(300, 100)
+    submit('F')
+    rerender()
+    clickAt(200, 100)
+    rerender()
+
+    const surface = screen.getByTestId('cad-surface')
+    fireEvent.pointerDown(surface, { button: 0, clientX: 200, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(surface, { clientX: 250, clientY: 130, pointerId: 1 })
+    fireEvent.pointerUp(surface, { button: 0, clientX: 250, clientY: 130, pointerId: 1 })
+    rerender()
+
+    expect(lineAt(0)?.getAttribute('x1')).toBe('150')
+    runtime.undo()
+    rerender()
+    expect(lineAt(0)?.getAttribute('x1')).toBe('100')
+  })
+
+  it('OpenSpec: cad-document / CAD COPY 连续放置 / 每个落点各产生一个副本', () => {
+    const { rerender } = setup()
+    submit('L')
+    clickAt(100, 100)
+    clickAt(300, 100)
+    submit('F')
+    rerender()
+    clickAt(200, 100)
+    rerender()
+
+    submit('CO')
+    clickAt(200, 100)
+    clickAt(200, 200)
+    rerender()
+    expect(screen.getByTestId('cad-surface').querySelectorAll('[data-cad-entity]')).toHaveLength(2)
+
+    clickAt(200, 300)
+    rerender()
+    expect(screen.getByTestId('cad-surface').querySelectorAll('[data-cad-entity]')).toHaveLength(3)
+  })
+})
+
 describe('画布标尺', () => {
   it('OpenSpec: cad-document / CAD 画布网格与标尺 / 默认显示上左标尺与原点角', () => {
     setup()

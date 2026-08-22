@@ -20,10 +20,12 @@ export {
   CAD_COMMAND_POINT_PLUGIN_ID,
   CAD_GESTURE_PRIORITY,
   CAD_MARQUEE_PLUGIN_ID,
+  CAD_MOVE_PLUGIN_ID,
   CAD_SELECT_PLUGIN_ID,
   createCadCommandPointPlugin,
   createCadInteractionPlugins,
   createCadMarqueePlugin,
+  createCadMovePlugin,
   createCadSelectPlugin,
 } from './cad-interaction-plugins'
 export { createCadSceneIndex } from './cad-scene-index'

@@ -1,4 +1,5 @@
 import type { CommandHandler, ComposeEntity } from '@compose-ui/core'
+import { translateCadEntity } from '../transform'
 import {
   CAD_COMPONENT_KEYS,
   getCadInsert,
@@ -13,6 +14,8 @@ export const CAD_COMMAND_TYPES = {
   addEntity: 'cad.entity.add',
   removeEntity: 'cad.entity.remove',
   createBlock: 'cad.block.create',
+  translateEntities: 'cad.entity.translate',
+  duplicateEntities: 'cad.entity.duplicate',
 } as const
 
 /** `cad.entity.add` 的载荷。 @public */
@@ -63,6 +66,81 @@ const removeEntity: CommandHandler<CadDocument> = {
         { op: 'remove', path: ['rootIds', index] },
         { op: 'remove', path: ['entities', entityId] },
       ],
+    }
+  },
+}
+
+/** `cad.entity.translate` 的载荷。 @public */
+export interface CadTranslateEntitiesPayload {
+  readonly entityIds: readonly string[]
+  /** 世界坐标的位移。 */
+  readonly delta: CadPoint
+}
+
+/** `cad.entity.duplicate` 的载荷。 @public */
+export interface CadDuplicateEntitiesPayload {
+  readonly entityIds: readonly string[]
+  readonly delta: CadPoint
+  /** 副本的 Entity id，与 `entityIds` 一一对应。 */
+  readonly newIds: readonly string[]
+}
+
+/**
+ * 平移若干 Entity。
+ *
+ * @remarks
+ * 位移由命令会话求得（它有点求解管线），**平移本身在这里做**——会话是纯状态机，拿不到文档。
+ * 这条界线是刻意的：给会话整份文档，规划与求解的界线就消失了。
+ */
+const translateEntities: CommandHandler<CadDocument> = {
+  type: CAD_COMMAND_TYPES.translateEntities,
+  execute(document, command) {
+    const { entityIds, delta } = command.payload as unknown as CadTranslateEntitiesPayload
+    const targets = entityIds.filter((id) => document.entities[id])
+    if (targets.length === 0) return { status: 'noop', reason: '没有可平移的 Entity' }
+    if (delta.x === 0 && delta.y === 0) return { status: 'noop', reason: '位移为零' }
+    return {
+      status: 'patches',
+      patches: targets.map((id) => ({
+        op: 'set' as const,
+        path: ['entities', id],
+        value: translateCadEntity(document.entities[id]!, delta) as never,
+      })),
+    }
+  },
+}
+
+/**
+ * 按位移复制若干 Entity。
+ *
+ * @remarks
+ * 副本的 id 由会话给出而不是在这里生成：handler 必须是纯函数，否则同一条命令重放（撤销后
+ * 重做）会产出不同的 id，而 Patch 记的是上一次那批。
+ */
+const duplicateEntities: CommandHandler<CadDocument> = {
+  type: CAD_COMMAND_TYPES.duplicateEntities,
+  execute(document, command) {
+    const { entityIds, delta, newIds } = command.payload as unknown as CadDuplicateEntitiesPayload
+    const pairs = entityIds
+      .map((id, index) => ({ source: document.entities[id], id: newIds[index] }))
+      .filter((pair): pair is { source: ComposeEntity; id: string } =>
+        Boolean(pair.source) && Boolean(pair.id) && !document.entities[pair.id!])
+    if (pairs.length === 0) return { status: 'noop', reason: '没有可复制的 Entity' }
+    return {
+      status: 'patches',
+      patches: pairs.flatMap(({ source, id }, index) => [
+        {
+          op: 'set' as const,
+          path: ['entities', id],
+          value: { ...translateCadEntity(source, delta), id } as never,
+        },
+        {
+          op: 'insert' as const,
+          path: ['rootIds'],
+          index: document.rootIds.length + index,
+          value: id,
+        },
+      ]),
     }
   },
 }
@@ -187,5 +265,5 @@ const createBlock: CommandHandler<CadDocument> = {
  * @public
  */
 export function createCadCommandHandlers(): readonly CommandHandler<CadDocument>[] {
-  return [addEntity, removeEntity, createBlock]
+  return [addEntity, removeEntity, createBlock, translateEntities, duplicateEntities]
 }

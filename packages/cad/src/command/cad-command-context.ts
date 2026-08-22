@@ -45,6 +45,10 @@ export interface CadCommandMessages {
   readonly insertName: string
   readonly insertPoint: string
   readonly unknownBlock: string
+  readonly moveTitle: string
+  readonly copyTitle: string
+  readonly basePoint: string
+  readonly displacementPoint: string
 }
 
 /**

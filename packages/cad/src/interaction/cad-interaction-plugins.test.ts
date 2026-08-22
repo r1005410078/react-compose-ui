@@ -47,7 +47,7 @@ function harness(input: {
     selection: input.selection ?? [],
     hitTolerance: 5,
   }
-  let snapshot: CadInteractionSnapshot = { selection: context.selection, marquee: null }
+  let snapshot: CadInteractionSnapshot = { selection: context.selection, marquee: null, translate: null }
   const ctx: CadPluginContext = {
     context,
     index: createCadSceneIndex(input.document, context),
@@ -56,7 +56,7 @@ function harness(input: {
     },
     apply: (next) => { effects.push(...next) },
     publish: (next) => { published.push(next); snapshot = next },
-    idleSnapshot: () => ({ selection: snapshot.selection, marquee: null }),
+    idleSnapshot: () => ({ selection: snapshot.selection, marquee: null, translate: null }),
   }
   const arbiter = createCadSessionArbiter(createCadPluginRegistry(createCadInteractionPlugins()))
   return { arbiter, ctx, effects, published, latest: () => snapshot }
@@ -88,9 +88,10 @@ const up = (x: number, y: number): CadInteractionEvent => ({
 const line = { id: 'l1', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }
 
 describe('OpenSpec: cad-document / CAD 指针手势仲裁 / 优先级表', () => {
-  it('顺序是命令取点 > 点选 > 框选，且严格递减', () => {
+  it('顺序是命令取点 > 拖动 > 点选 > 框选，且严格递减', () => {
     expect(CAD_GESTURE_PRIORITY.map(({ id }) => id)).toEqual([
       'cad.command-point',
+      'cad.move',
       'cad.select',
       'cad.marquee',
     ])
@@ -165,6 +166,65 @@ describe('OpenSpec: cad-document / CAD 选择集语义 / 点选', () => {
   })
 })
 
+describe('OpenSpec: cad-document / CAD 拖动移动', () => {
+  it('拖动已选中的图元发出位移效果', () => {
+    const h = harness({ document: documentWith([line]), selection: ['l1'] })
+
+    expect(h.arbiter.begin(down(50, 0), h.ctx)).toBe('claimed')
+    h.arbiter.update(move(80, 30), h.ctx)
+    expect(h.latest().translate).toEqual({ from: { x: 50, y: 0 }, to: { x: 80, y: 30 } })
+
+    h.arbiter.commit(up(80, 30), h.ctx)
+    expect(h.effects).toContainEqual({
+      kind: 'entities.translate', ids: ['l1'], from: { x: 50, y: 0 }, to: { x: 80, y: 30 },
+    })
+    expect(h.latest().translate).toBeNull()
+  })
+
+  /**
+   * @remarks
+   * 写成「命中任何图元」的话，第一次点击就会变成一次零位移的移动，用户再也选不中东西。
+   */
+  it('按下未选中的图元只是选中它，不开始拖动', () => {
+    const h = harness({ document: documentWith([line]) })
+
+    expect(h.arbiter.begin(down(50, 0), h.ctx)).toBe('consumed')
+
+    expect(h.latest().selection).toEqual(['l1'])
+    expect(h.effects).toEqual([])
+  })
+
+  it('命令等待取点时按下已选中的图元交给命令，不产生移动', () => {
+    const h = harness({
+      document: documentWith([line]),
+      selection: ['l1'],
+      prompt: { message: '指定下一点', accepts: ['point'] },
+    })
+
+    h.arbiter.begin(down(50, 0), h.ctx)
+
+    expect(h.effects).toEqual([{ kind: 'command.point', point: { x: 50, y: 0 } }])
+  })
+
+  it('原地松手不产生位移', () => {
+    const h = harness({ document: documentWith([line]), selection: ['l1'] })
+    h.arbiter.begin(down(50, 0), h.ctx)
+    h.arbiter.commit(up(50, 0), h.ctx)
+
+    expect(h.effects.some((effect) => effect.kind === 'entities.translate')).toBe(false)
+  })
+
+  it('取消不产生位移', () => {
+    const h = harness({ document: documentWith([line]), selection: ['l1'] })
+    h.arbiter.begin(down(50, 0), h.ctx)
+    h.arbiter.update(move(90, 40), h.ctx)
+    h.arbiter.cancel(h.ctx)
+
+    expect(h.effects.some((effect) => effect.kind === 'entities.translate')).toBe(false)
+    expect(h.latest().translate).toBeNull()
+  })
+})
+
 describe('OpenSpec: cad-document / CAD 指针手势仲裁 / 空白处按下开始框选', () => {
   it('拖动中发布选框并按方向给出模式', () => {
     const h = harness({ document: documentWith([line]) })
@@ -191,7 +251,7 @@ describe('OpenSpec: cad-document / CAD 指针手势仲裁 / 空白处按下开�
     h.arbiter.begin(down(-10, -10), h.ctx)
     h.arbiter.commit(up(110, 10), h.ctx)
 
-    expect(h.latest()).toEqual({ selection: ['l1'], marquee: null })
+    expect(h.latest()).toEqual({ selection: ['l1'], marquee: null, translate: null })
     expect(h.effects).toContainEqual({ kind: 'pointer.release', pointerId: 1 })
   })
 
@@ -224,7 +284,7 @@ describe('OpenSpec: cad-document / CAD 指针手势仲裁 / 空白处按下开�
 
     h.arbiter.cancel(h.ctx)
 
-    expect(h.latest()).toEqual({ selection: ['l1'], marquee: null })
+    expect(h.latest()).toEqual({ selection: ['l1'], marquee: null, translate: null })
     expect(h.effects).toContainEqual({ kind: 'pointer.release', pointerId: 1 })
   })
 })
