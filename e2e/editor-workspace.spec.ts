@@ -1248,6 +1248,57 @@ test('OpenSpec: cad-document / CAD 命令行焦点 / 全程不碰输入框也能
   await expect(surface.locator('[data-cad-entity]')).toHaveCount(1)
 })
 
+test('OpenSpec: cad-document / CAD 指针反馈 / 橡皮筋、悬停高亮与坐标读数', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Feedback')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+  const band = surface.locator('[data-cad-preview="pending"]')
+  const box = await surface.boundingBox()
+  if (!box) throw new Error('surface has no box')
+
+  // 1) 指针一进图面就有坐标读数
+  await page.mouse.move(box.x + 200, box.y + 160)
+  await expect(canvas.locator('[data-testid="cad-pointer-readout"]')).toBeVisible()
+
+  // 2) 取得第一点后橡皮筋跟随指针；本帧的终点必须是移动之后的位置
+  await page.keyboard.type('l')
+  await page.keyboard.press('Enter')
+  await expect(band).toHaveCount(0)
+  await surface.click({ position: { x: 200, y: 160 } })
+  await page.mouse.move(box.x + 460, box.y + 320)
+  await expect(band).toHaveCount(1)
+  await expect(band).toHaveAttribute('x2', '460')
+
+  // 3) 取第二点后橡皮筋换成从新顶点起算，结束命令后消失
+  await surface.click({ position: { x: 460, y: 320 } })
+  await page.mouse.move(box.x + 600, box.y + 200)
+  await expect(band).toHaveAttribute('x1', '460')
+  await page.keyboard.type('f')
+  await page.keyboard.press('Enter')
+  await expect(band).toHaveCount(0)
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(1)
+
+  // 4) 空闲时压在图元上出现悬停高亮，移开即消失
+  await page.mouse.move(box.x + 330, box.y + 240)
+  await expect(surface.locator('[data-cad-entity][data-hovered]')).toHaveCount(1)
+  await page.mouse.move(box.x + 330, box.y + 500)
+  await expect(surface.locator('[data-cad-entity][data-hovered]')).toHaveCount(0)
+})
+
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
