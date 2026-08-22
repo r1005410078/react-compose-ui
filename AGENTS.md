@@ -200,6 +200,12 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   事务实现。CAD 是**无限图纸**：文档不带任何画布或输出尺寸，也没有 Frame，因此不受
   「`Frame.size` 是尺寸唯一事实来源」这条不变量约束；单位固定 `px`，没有图纸比例。
   文档以 `.cad.json` 持久化，Store 在写入前必检查，非法内容不落盘。
+  **CAD 没有盒模型**：不引入 `Hierarchy`、`Layout` 或 `LayoutItem`。Auto Layout 是从盒模型
+  求解位置，而 CAD 的位置是作者写死的坐标——一条线的两个端点就是事实本身，没有未知数可解；
+  没有画布尺寸也就没有 `fill`/`hug` 的参照系。Container 拆开看就是 `Hierarchy + Layout`，
+  因此「不要容器」与「不要自动布局」是同一句话。注意 Compose 的 `Group` 同样带 `LayoutItem`
+  盒（Stage 的命中与渲染是盒模型的），**不得直接复用**。`rootIds` 保持平坦：CAD 的层级需求
+  只有块实例那一层变换，编组是扁平成员集合，两者都不需要通用容器。
 - `@compose-ui/interaction-kernel` 是**零运行时依赖**的交互内核包：插件契约、按优先级排序的
   注册表、同时至多一个会话的仲裁器。连 `core` 都不依赖——内核逻辑不认识文档，只有类型签名
   通过 `InteractionKernelProfile` 认识。「内核不认识文档」这条边界由**包依赖**承载而不是命名

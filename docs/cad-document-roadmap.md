@@ -340,6 +340,34 @@ controller/surface 分离带来的竞态，搬过来是把别人的问题一起�
 两个方向共用同一套 Component Asset v2 机制，差别只在谁引用谁。**块的插入点必须能捕捉**，
 因此本步排在步骤 6 之后——反过来做会让插入流程返工。
 
+#### CAD 不引入容器与自动布局（2026-08-22 定）
+
+Auto Layout 是**从盒模型求解位置**，而 CAD 的位置是作者写死的坐标——一条线的两个端点就是
+事实本身，没有未知数可解。CAD 又是无限图纸、没有画布尺寸，`fill`/`hug` 连参照系都没有。
+Container 拆开看就是 `Hierarchy + Layout`，所以「不要容器」与「不要自动布局」是同一句话。
+
+**Compose 的 `Group` 也不能直接复用**：`createComposeGroupEntitySeed` 里它同样带
+`LayoutItem`（fixed 宽高），因为 Stage 的命中与渲染是盒模型的。复用它等于把 6c 刚论证过
+不能用的那套东西引回来——CAD 的命中判据是点到线段的距离，不是矩形。
+
+#### 「块」与「编组」是两件事，不要合并
+
+AutoCAD 里这两个概念长得像，语义完全不同：
+
+| | 是什么 | 是层级吗 |
+| --- | --- | --- |
+| **BLOCK / INSERT** | 定义 + 实例，带插入点、旋转、比例 | 是，一层变换 |
+| **GROUP** | 命名的**选择集** | **不是**——一个对象可以同时属于多个组 |
+
+「一个对象同时在多个组里」在树里根本表达不了（一个 Entity 只有一个父）。AutoCAD 的组解决的
+是「选中一个就选中一伙」，是选择集的便利，不是层级。
+
+因此本步只做 **BLOCK/INSERT**：实例自己的那一层变换，与 Component Asset v2 对接。编组是
+扁平成员集合，另算，不进 `rootIds` 树。
+
+**`CadDocument.rootIds` 保持平坦。** 今天就是平坦的（`cad-document.ts` 里「可达等价于被
+`rootIds` 引用」）。平坦意味着命中、框选与 DXF 导入都不必处理递归，这是白赚的。
+
 ### 步骤 8 · 连接语义 — `add-cad-ports-and-wires`
 
 全仓搜索 `connector` / `port` / `anchor` / `ConnectionPoint` **零命中**，这是画示意图的
