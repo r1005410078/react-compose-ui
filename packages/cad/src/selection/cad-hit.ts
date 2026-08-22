@@ -1,4 +1,5 @@
-import { getCadLine, getCadPlacement, type CadDocument } from '../document'
+import { collectCadVisibleSegments } from '../block'
+import type { CadDocument } from '../document'
 import type { CadInputPoint } from '../point-input'
 import {
   boundsFromPoints,
@@ -6,7 +7,6 @@ import {
   segmentCrossesBounds,
   segmentWithinBounds,
   type CadBounds,
-  type CadSegment,
 } from '../geometry'
 
 /**
@@ -47,28 +47,6 @@ export function cadSelectionBoundsFromDrag(
   return boundsFromPoints(from, to)
 }
 
-/** 可见图元及其几何；命中与框选共用同一次遍历规则。 */
-interface VisibleLine {
-  readonly id: string
-  readonly segment: CadSegment
-}
-
-function visibleLines(document: CadDocument): readonly VisibleLine[] {
-  const visibleLayers = new Set(
-    document.layers.filter(({ visible }) => visible).map(({ id }) => id),
-  )
-  const lines: VisibleLine[] = []
-  for (const id of document.rootIds) {
-    const entity = document.entities[id]
-    if (!entity) continue
-    const line = getCadLine(entity)
-    if (!line) continue
-    if (!visibleLayers.has(getCadPlacement(entity)?.layerId ?? '')) continue
-    lines.push({ id, segment: line })
-  }
-  return lines
-}
-
 /**
  * 求指定点命中的图元。
  *
@@ -96,13 +74,13 @@ export function findCadHit(
   const limit = tolerance * tolerance
   let hit: string | null = null
   let best = Number.POSITIVE_INFINITY
-  for (const { id, segment } of visibleLines(document)) {
+  for (const { ownerId, segment } of collectCadVisibleSegments(document)) {
     const distance = pointToSegmentDistanceSquared(segment, point)
     if (distance > limit) continue
     // `<=` 而不是 `<`：同距时后遍历到的（rootIds 靠后、视觉上更靠上）胜出。
     if (distance <= best) {
       best = distance
-      hit = id
+      hit = ownerId
     }
   }
   return hit
@@ -123,7 +101,18 @@ export function findCadEntitiesInBounds(
   mode: CadSelectionMode,
 ): readonly string[] {
   const inside = mode === 'window' ? segmentWithinBounds : segmentCrossesBounds
-  return visibleLines(document)
-    .filter(({ segment }) => inside(segment, bounds))
-    .map(({ id }) => id)
+  // 按 owner 聚合再判定：块实例的多条线段属于同一个对象，窗口模式要求它**整体**落在框内，
+  // 逐段判定会让「框住了一半的符号」在窗口模式下也被选中。
+  const byOwner = new Map<string, boolean>()
+  for (const { ownerId, segment } of collectCadVisibleSegments(document)) {
+    const hit = inside(segment, bounds)
+    const previous = byOwner.get(ownerId)
+    if (previous === undefined) {
+      byOwner.set(ownerId, hit)
+      continue
+    }
+    // 窗口要求每一段都在框内；交叉只要有一段碰到即可。
+    byOwner.set(ownerId, mode === 'window' ? previous && hit : previous || hit)
+  }
+  return [...byOwner.entries()].filter(([, hit]) => hit).map(([ownerId]) => ownerId)
 }

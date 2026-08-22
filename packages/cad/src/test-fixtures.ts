@@ -18,22 +18,33 @@ export const cadTestCommandMessages: CadCommandMessages = {
   eraseTitle: '删除',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
+  blockTitle: '创建块',
+  blockName: '输入块名',
+  blockBasePoint: '指定插入基点',
+  expectedName: '需要一个名字',
+  insertTitle: '插入块',
+  insertName: '输入块名',
+  insertPoint: '指定插入点',
+  unknownBlock: '未知块名',
 }
 
 /**
  * 测试用命令上下文，ID 递增可预期。
  *
  * @param selection - 启动当刻的选择集；「先选后执行」的用例靠它区分两条次序。
+ * @param blocks - 文档现有的块，供 INSERT 按名字解析。
  * @internal
  */
 export function createCadTestCommandContext(
   selection: readonly string[] = [],
+  blocks: readonly { readonly id: string; readonly name: string }[] = [],
 ): CadCommandContext {
   let counter = 0
   return {
     layerId: '0',
     idFactory: () => `id-${++counter}`,
     selection,
+    blocks,
     messages: cadTestCommandMessages,
   }
 }

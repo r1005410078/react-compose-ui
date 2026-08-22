@@ -1,6 +1,7 @@
 import type { ComposeEntity, DocumentValidationResultOf } from '@compose-ui/core'
 import { CAD_COMPONENT_KEYS, type CadPoint } from './cad-entity'
 import {
+  type CadBlockDefinition,
   CAD_DEFAULT_LAYER_ID,
   type CadDocument,
   type CadDocumentIssue,
@@ -33,6 +34,7 @@ export function createEmptyCadDocument(): CadDocument {
     layers: [defaultLayer()],
     rootIds: [],
     entities: {},
+    blocks: {},
   }
 }
 
@@ -98,6 +100,8 @@ function validateEntityComponents(
   entity: ComposeEntity,
   layerIds: ReadonlySet<string>,
   issues: CadDocumentIssue[],
+  // 块内图元的错误路径要指向 blocks/<id>/entities/…，否则用户只看到一个孤零零的 Entity id。
+  prefix: readonly (string | number)[] = [],
 ) {
   const placement = entity.components[CAD_COMPONENT_KEYS.placement]
   if (placement !== undefined) {
@@ -105,7 +109,7 @@ function validateEntityComponents(
     if (typeof layerId !== 'string' || !layerIds.has(layerId)) {
       issues.push(issue(
         'entity.missing-layer',
-        ['entities', entity.id, CAD_COMPONENT_KEYS.placement],
+        [...prefix, 'entities', entity.id, CAD_COMPONENT_KEYS.placement],
         `图元所属图层不存在：${String(layerId)}`,
       ))
     }
@@ -115,7 +119,7 @@ function validateEntityComponents(
     if (!isRecord(line) || !isFinitePoint(line.start) || !isFinitePoint(line.end)) {
       issues.push(issue(
         'entity.invalid-geometry',
-        ['entities', entity.id, CAD_COMPONENT_KEYS.line],
+        [...prefix, 'entities', entity.id, CAD_COMPONENT_KEYS.line],
         '直线端点必须是有限数值',
       ))
     }
@@ -125,9 +129,10 @@ function validateEntityComponents(
 function validateEntities(
   input: unknown,
   issues: CadDocumentIssue[],
+  prefix: readonly (string | number)[] = [],
 ): Readonly<Record<string, ComposeEntity>> {
   if (!isRecord(input)) {
-    issues.push(issue('document.invalid', ['entities'], 'entities 必须是对象'))
+    issues.push(issue('document.invalid', [...prefix, 'entities'], 'entities 必须是对象'))
     return {}
   }
   const entities: Record<string, ComposeEntity> = {}
@@ -136,13 +141,13 @@ function validateEntities(
       || typeof candidate.id !== 'string'
       || typeof candidate.name !== 'string'
       || !isRecord(candidate.components)) {
-      issues.push(issue('entity.invalid', ['entities', key], 'Entity 字段不完整或类型错误'))
+      issues.push(issue('entity.invalid', [...prefix, 'entities', key], 'Entity 字段不完整或类型错误'))
       continue
     }
     if (candidate.id !== key) {
       issues.push(issue(
         'entity.id-mismatch',
-        ['entities', key],
+        [...prefix, 'entities', key],
         `entities 的 key 与 Entity id 不一致：${key} ≠ ${candidate.id}`,
       ))
       continue
@@ -215,17 +220,138 @@ export function validateCadDocument(
     })
   }
 
-  // 步骤 4 尚无图元词汇，因此「可达」等价于「被 rootIds 引用」。第一个图元落地时这里要
-  // 跟着扩展成按层级遍历，否则子级会被误判成孤儿。
+  // 顶层是平坦的（块内图元住在块表里，不进 rootIds），因此「可达」等价于「被 rootIds 引用」。
   for (const id of Object.keys(entities)) {
     if (!rootIds.includes(id)) {
       issues.push(issue('document.orphan-entity', ['entities', id], `Entity 未被任何根引用：${id}`))
     }
   }
 
+  const blocks = validateBlocks(input.blocks, layerIds, issues)
+  for (const entity of Object.values(entities)) {
+    validateInsertReference(entity, blocks, issues)
+  }
+
   if (issues.length > 0) return { valid: false, issues }
   return {
     valid: true,
-    document: { schemaVersion: 1, units: 'px', layers, rootIds, entities },
+    document: { schemaVersion: 1, units: 'px', layers, rootIds, entities, blocks },
+  }
+}
+
+/**
+ * 校验块表。
+ *
+ * @remarks
+ * 字段缺失按空表处理：加一张空表不会让任何既有文档变得不可读，因此 `schemaVersion` 不必动。
+ */
+function validateBlocks(
+  input: unknown,
+  layerIds: ReadonlySet<string>,
+  issues: CadDocumentIssue[],
+): Readonly<Record<string, CadBlockDefinition>> {
+  if (input === undefined) return {}
+  if (!isRecord(input)) {
+    issues.push(issue('block.invalid', ['blocks'], 'blocks 必须是对象'))
+    return {}
+  }
+
+  const blocks: Record<string, CadBlockDefinition> = {}
+  const names = new Set<string>()
+  for (const [key, candidate] of Object.entries(input)) {
+    if (!isRecord(candidate)) {
+      issues.push(issue('block.invalid', ['blocks', key], `块定义必须是对象：${key}`))
+      continue
+    }
+    if (candidate.id !== key) {
+      issues.push(issue('block.id-mismatch', ['blocks', key, 'id'], `块 id 与键不一致：${key}`))
+      continue
+    }
+    const name = candidate.name
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      issues.push(issue('block.invalid', ['blocks', key, 'name'], `块名必须是非空字符串：${key}`))
+      continue
+    }
+    // 块名是 INSERT 的查找键，重名会让「插哪一个」不可判定。
+    if (names.has(name)) {
+      issues.push(issue('block.duplicate-id', ['blocks', key, 'name'], `块名重复：${name}`))
+      continue
+    }
+    names.add(name)
+
+    const entities = validateEntities(candidate.entities, issues, ['blocks', key])
+    for (const entity of Object.values(entities)) {
+      validateEntityComponents(entity, layerIds, issues, ['blocks', key])
+      // 嵌套块在示意图里极少用；显式拒绝好过让后来者以为它碰巧能用。
+      if (entity.components[CAD_COMPONENT_KEYS.insert] !== undefined) {
+        issues.push(issue(
+          'block.nested-insert',
+          ['blocks', key, 'entities', entity.id],
+          `块内不得再插入块：${entity.id}`,
+        ))
+      }
+    }
+
+    const rootIds: string[] = []
+    if (!Array.isArray(candidate.rootIds)) {
+      issues.push(issue('block.invalid', ['blocks', key, 'rootIds'], 'rootIds 必须是数组'))
+    }
+    else {
+      const seen = new Set<string>()
+      candidate.rootIds.forEach((id, index) => {
+        if (typeof id !== 'string' || !(id in entities)) {
+          issues.push(issue(
+            'block.missing-root',
+            ['blocks', key, 'rootIds', index],
+            `块内根引用不存在：${String(id)}`,
+          ))
+          return
+        }
+        if (seen.has(id)) {
+          issues.push(issue(
+            'block.duplicate-root',
+            ['blocks', key, 'rootIds', index],
+            `块内根引用重复：${id}`,
+          ))
+          return
+        }
+        seen.add(id)
+        rootIds.push(id)
+      })
+    }
+    for (const id of Object.keys(entities)) {
+      if (!rootIds.includes(id)) {
+        issues.push(issue(
+          'block.orphan-entity',
+          ['blocks', key, 'entities', id],
+          `块内 Entity 未被引用：${id}`,
+        ))
+      }
+    }
+
+    blocks[key] = { id: key, name, rootIds, entities }
+  }
+  return blocks
+}
+
+/** 校验实例引用的块存在，以及插入参数是有限数值。 */
+function validateInsertReference(
+  entity: ComposeEntity,
+  blocks: Readonly<Record<string, CadBlockDefinition>>,
+  issues: CadDocumentIssue[],
+) {
+  const insert = entity.components[CAD_COMPONENT_KEYS.insert]
+  if (insert === undefined) return
+  const path = ['entities', entity.id, CAD_COMPONENT_KEYS.insert]
+  if (!isRecord(insert)
+    || !isFinitePoint(insert.position)
+    || !isFinitePoint(insert.scale)
+    || typeof insert.rotation !== 'number'
+    || !Number.isFinite(insert.rotation)) {
+    issues.push(issue('insert.invalid', path, '插入参数必须是有限数值'))
+    return
+  }
+  if (typeof insert.blockId !== 'string' || !(insert.blockId in blocks)) {
+    issues.push(issue('insert.unknown-block', path, `引用的块不存在：${String(insert.blockId)}`))
   }
 }

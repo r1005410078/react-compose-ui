@@ -2,7 +2,9 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   CAD_DEFAULT_LAYER_ID,
+  createCadBlockCommand,
   createCadEraseCommand,
+  createCadInsertCommand,
   createCadInteractionPlugins,
   createCadLineCommand,
   createCadPluginRegistry,
@@ -107,6 +109,8 @@ export function ComposeCadCanvas({
     () => createComposeCommandRegistry<CadCommandContext, CadCommandEffect>([
       createCadLineCommand(messages),
       createCadEraseCommand(messages),
+      createCadBlockCommand(messages),
+      createCadInsertCommand(messages),
     ]),
     [messages],
   )
@@ -209,6 +213,12 @@ export function ComposeCadCanvas({
           return
         }
       }
+      // 自由文本（块名）排在坐标之后、关键字之前：块名是任意输入，关键字是命令列出的有限
+      // 集合，两者靠本步的 accepts 区分而不是靠猜内容。
+      if (prompt?.accepts.includes('text')) {
+        applyStep(session, { kind: 'text', text })
+        return
+      }
       applyStep(session, { kind: 'keyword', key: text })
       return
     }
@@ -222,11 +232,13 @@ export function ComposeCadCanvas({
       layerId: activeLayerId,
       idFactory,
       selection: interaction.selection,
+      // 块列表现取：刚建的块要能立刻插入，缓存一份会让 BLOCK 之后的第一次 INSERT 找不到它。
+      blocks: Object.values(document.blocks).map(({ id, name }) => ({ id, name })),
       messages,
     }))
   }, [
-    activeLayerId, applyStep, idFactory, interaction.selection, messages, pointContext,
-    prompt, reference, registry, startSession,
+    activeLayerId, applyStep, document.blocks, idFactory, interaction.selection, messages,
+    pointContext, prompt, reference, registry, startSession,
   ])
 
   /**

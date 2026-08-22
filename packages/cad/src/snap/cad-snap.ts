@@ -1,4 +1,5 @@
-import { getCadLine, getCadPlacement, type CadDocument } from '../document'
+import { collectCadVisibleSegments } from '../block'
+import type { CadDocument } from '../document'
 import type { CadInputPoint } from '../point-input'
 import {
   segmentIntersection,
@@ -64,19 +65,13 @@ export function findCadSnap(
 ): CadSnapCandidate | null {
   if (!(radius > 0) || modes.length === 0) return null
   const enabled = new Set(modes)
-  const visibleLayers = new Set(
-    document.layers.filter(({ visible }) => visible).map(({ id }) => id),
-  )
 
+  // 与命中、框选共用同一条可见性遍历：三者对「什么算可见」必须给出同一个答案。块实例在这里
+  // 同样被展开——插完符号要能捕到它的接线端点，否则块只是一张贴图。
   const nearby: CadSegment[] = []
-  for (const id of document.rootIds) {
-    const entity = document.entities[id]
-    if (!entity) continue
-    const line = getCadLine(entity)
-    if (!line) continue
-    if (!visibleLayers.has(getCadPlacement(entity)?.layerId ?? '')) continue
-    if (!segmentNearPoint(line, point, radius)) continue
-    nearby.push(line)
+  for (const { segment } of collectCadVisibleSegments(document)) {
+    if (!segmentNearPoint(segment, point, radius)) continue
+    nearby.push(segment)
   }
 
   const candidates: CadSnapCandidate[] = []

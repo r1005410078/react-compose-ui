@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
   createCadCommandHandlers,
   createEmptyCadDocument,
+  getCadInsert,
   getCadLine,
   validateCadDocument,
   type CadDocument,
@@ -577,5 +578,106 @@ describe('CAD 选择集与手势仲裁', () => {
     // 视图右移 40，图元跟着走。
     const first = document.querySelector('[data-cad-entity]')
     expect(first).toHaveAttribute('x1', '50')
+  })
+})
+
+describe('CAD 块定义与插入', () => {
+  /** 画一个方角：(10,20)→(110,20)→(110,120)。 */
+  function drawCorner(rerender: () => void) {
+    submit('L')
+    clickAt(10, 20)
+    clickAt(110, 20)
+    clickAt(110, 120)
+    submit('')
+    rerender()
+  }
+
+  it('OpenSpec: cad-document / CAD BLOCK 与 INSERT 命令 / 先选后执行建块', () => {
+    const { runtime, rerender } = setup()
+    drawCorner(rerender)
+    dragAt([0, 0], [200, 200])
+    rerender()
+    expect(selectedIds()).toHaveLength(2)
+
+    submit('B')
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('输入块名')
+    submit('CORNER')
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('指定插入基点')
+    clickAt(10, 20)
+    rerender()
+
+    // 两条线被一个实例取代，块内几何按基点换算成局部坐标。
+    expect(runtime.document.rootIds).toHaveLength(1)
+    expect(Object.keys(runtime.document.blocks)).toHaveLength(1)
+    // 画面上仍是两段——实例被展开渲染，不是一张贴图。
+    expect(document.querySelectorAll('[data-cad-entity]')).toHaveLength(2)
+
+    runtime.undo()
+    expect(runtime.document.rootIds).toHaveLength(2)
+    expect(runtime.document.blocks).toEqual({})
+  })
+
+  it('OpenSpec: cad-document / CAD BLOCK 与 INSERT 命令 / 插入点捕捉到既有几何', () => {
+    const { runtime, rerender } = setup()
+    drawCorner(rerender)
+    dragAt([0, 0], [200, 200])
+    rerender()
+    submit('B')
+    submit('CORNER')
+    clickAt(10, 20)
+    rerender()
+
+    // 再画一条端点**不在网格上**的线，用它当捕捉目标——端点在网格上时，捕捉与网格给出同一个
+    // 答案，用例就证明不了是哪一个在起作用。
+    submit('L')
+    submit('143,87')
+    submit('243,87')
+    submit('F')
+    rerender()
+
+    submit('I')
+    submit('CORNER')
+    hoverAt(145, 89)
+    expect(screen.getByTestId('cad-snap-marker')).toHaveAttribute('data-snap-mode', 'endpoint')
+    clickAt(145, 89)
+    rerender()
+
+    const inserts = runtime.document.rootIds
+      .map((id) => getCadInsert(runtime.document.entities[id]!))
+      .filter(Boolean)
+    expect(inserts).toHaveLength(2)
+    // 落在精确端点 (143,87) 上，而不是被网格取整到 (140,90)。
+    expect(inserts[1]!.position).toEqual({ x: 143, y: 87 })
+  })
+
+  it('OpenSpec: cad-document / 块实例参与命中、框选与捕捉 / 点选块实例得到实例', () => {
+    const { runtime, rerender } = setup()
+    drawCorner(rerender)
+    dragAt([0, 0], [200, 200])
+    rerender()
+    submit('B')
+    submit('CORNER')
+    clickAt(10, 20)
+    rerender()
+
+    clickAt(60, 20)
+    rerender()
+
+    // 选中的是实例：两段都进入选中态，因为它们同属一个 owner。
+    expect(selectedIds()).toEqual([runtime.document.rootIds[0], runtime.document.rootIds[0]])
+    expect(screen.getByTestId('cad-selection-count')).toHaveTextContent('1')
+  })
+
+  it('OpenSpec: cad-document / CAD BLOCK 与 INSERT 命令 / 未知块名被拒绝', () => {
+    const { runtime, rerender } = setup()
+    drawCorner(rerender)
+    const before = runtime.document
+
+    submit('I')
+    submit('NOPE')
+    rerender()
+
+    expect(screen.getByTestId('cad-command-prompt')).toHaveTextContent('未知块名')
+    expect(runtime.document).toBe(before)
   })
 })
