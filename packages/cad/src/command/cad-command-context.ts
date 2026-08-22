@@ -85,6 +85,8 @@ export interface CadCommandMessages {
   readonly invalidColor: string
   readonly invalidStrokeWidth: string
   readonly invalidStrokeDash: string
+  readonly flowTitle: string
+  readonly flowAnimationName: string
 }
 
 /**

@@ -1,3 +1,4 @@
+export { findCadAnimation, getCadAnimations } from './cad-animations'
 export {
   createEmptyCadDocument,
   validateCadDocument,

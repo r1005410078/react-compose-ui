@@ -13,6 +13,7 @@ import {
   createCadArcCommand,
   createCadCircleCommand,
   createCadColorCommand,
+  createCadFlowCommand,
   createCadLineTypeCommand,
   createCadLineWeightCommand,
   createCadPolylineCommand,
@@ -27,6 +28,7 @@ import {
   geometryBounds,
   findCadHit,
   findCadSnap,
+  getCadAnimations,
   parseCadCoordinate,
   pruneCadSelection,
   resolveCadPoint,
@@ -45,6 +47,7 @@ import {
   type ComposeCommandPrompt,
   type ComposeCommandSession,
 } from '@compose-ui/commands'
+import { applyComposeAnimationAtTime } from '@compose-ui/animation'
 import { createRulerTicks, formatComposeNumber, type EditorCommand } from '@compose-ui/core'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { getCadCanvasMessages } from './cad-canvas-i18n'
@@ -144,6 +147,18 @@ export interface ComposeCadCanvasProps {
    * @defaultValue true
    */
   readonly autoFitContent?: boolean
+  /**
+   * 是否播放文档里的动画。
+   *
+   * @remarks
+   * CAD 的动画是**环境性**的（电流一直在流、告警一直在闪）而不是入场动画，因此有动画就播、
+   * 没有就不起逐帧循环。播放头是会话状态，与视口、网格一样不写进文档。
+   *
+   * 依赖确定性画面的用例必须显式关掉它，而不是去赌某一帧的相位。
+   *
+   * @defaultValue true
+   */
+  readonly animationEnabled?: boolean
 }
 
 function defaultIdFactory() {
@@ -178,6 +193,7 @@ export function ComposeCadCanvas({
   showCrosshair = true,
   showRulers = true,
   autoFitContent = true,
+  animationEnabled = true,
 }: ComposeCadCanvasProps) {
   const i18n = useComposeI18nContext()
   const messages = getCadCanvasMessages(i18n?.locale ?? 'zh-CN')
@@ -231,6 +247,7 @@ export function ComposeCadCanvas({
       createCadColorCommand(messages),
       createCadLineWeightCommand(messages),
       createCadLineTypeCommand(messages),
+      createCadFlowCommand(messages),
     ]),
     [messages],
   )
@@ -362,6 +379,36 @@ export function ComposeCadCanvas({
       }),
     }
   }, [surfaceSize.height, surfaceSize.width, viewport])
+
+  /**
+   * 动画播放头（毫秒），会话状态。
+   *
+   * @remarks
+   * 采样结果**只喂渲染**：命中、捕捉、框选与命令继续读作者写下的那份文档。动画是文档在某一
+   * 时刻的呈现而不是文档本身——让命中跟着采样跑，用户要去点一个正在移动的目标，而拖动的基准
+   * 还会每帧变化。既有的拖动预览走的是同一条路子。
+   */
+  const animation = animationEnabled ? getCadAnimations(document)[0] : undefined
+  const [timeMs, setTimeMs] = useState(0)
+  useEffect(() => {
+    if (!animation) return
+    let raf = 0
+    let last = performance.now()
+    const step = (now: number) => {
+      const delta = now - last
+      last = now
+      // 循环取模而不是累加后再判：长时间播放的累加值会大到丢失毫秒精度。
+      setTimeMs((current) => (current + delta) % animation.durationMs)
+      raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [animation])
+
+  const renderDocument = useMemo(
+    () => (animation ? applyComposeAnimationAtTime(document, animation.id, timeMs) : document),
+    [animation, document, timeMs],
+  )
 
   /**
    * 打开时按内容取景，只做一次。
@@ -668,7 +715,7 @@ export function ComposeCadCanvas({
           />
         ) : null}
         <CadSurface
-          document={document}
+          document={renderDocument}
           crosshair={crosshair}
           dragDelta={dragDelta}
           gridStep={gridEnabled ? gridStep : null}

@@ -1,4 +1,5 @@
 import type { CommandHandler, ComposeEntity } from '@compose-ui/core'
+import { COMPOSE_ANIMATION_COMPONENT_KEY } from '@compose-ui/animation'
 import { applyCadStrokePatch, type CadStrokePatch } from '../appearance'
 import { inverseCadBlockPoint } from '../block'
 import { collectCadInstancePorts, resolveCadWireEndpoint } from '../connection'
@@ -11,6 +12,7 @@ import {
   getCadPlacement,
   getCadStroke,
   getCadWire,
+  getCadAnimations,
   type CadDocument,
   type CadPoint,
   type CadPort,
@@ -25,6 +27,7 @@ export const CAD_COMMAND_TYPES = {
   addBlockPort: 'cad.block.add-port',
   addWire: 'cad.wire.add',
   setStroke: 'cad.entity.stroke.set',
+  flow: 'cad.animation.flow',
   translateEntities: 'cad.entity.translate',
   duplicateEntities: 'cad.entity.duplicate',
 } as const
@@ -290,6 +293,111 @@ const setStroke: CommandHandler<CadDocument> = {
   },
 }
 
+/** `cad.animation.flow` 的载荷。 @public */
+export interface CadFlowPayload {
+  readonly animationId: string
+  readonly name: string
+  readonly entityIds: readonly string[]
+}
+
+/** 没有线型的图元被补上的默认虚线（世界单位）。 @public */
+export const CAD_FLOW_DEFAULT_DASH: readonly number[] = [8, 6]
+
+/** 流动一个周期的时长（毫秒）。 @public */
+export const CAD_FLOW_DURATION_MS = 900
+
+/**
+ * 给选中图元建立一条循环的虚线流动动画。
+ *
+ * @remarks
+ * 命令一次做两件事——补线型、建轨道——因为用户的意图是一件事。`stroke-dashoffset` 只对虚线
+ * 有意义，实线上的偏移动画在屏幕上**没有任何变化**；只建轨道的话，用户执行完命令看着一根
+ * 纹丝不动的实线，会认为命令失败了。已经有线型的图元保留自己的线型。
+ *
+ * 轨道从 0 走到**一个完整虚线周期**（各段之和），配合 `loop` 使接缝处的图案与起点逐像素相同。
+ * 取半个周期或一个随手的常数会让每次循环闪一下，而那种缺陷要盯着看几秒才能确认。
+ *
+ * 偏移取**负值**方向：`stroke-dashoffset` 增大时图案朝起点退，而用户期待的「流动」是顺着线
+ * 的方向走。
+ */
+const flow: CommandHandler<CadDocument> = {
+  type: CAD_COMMAND_TYPES.flow,
+  execute(document, command) {
+    const { animationId, name, entityIds } = command.payload as unknown as CadFlowPayload
+    const targets = entityIds.filter((id) => document.entities[id])
+    if (targets.length === 0) return { status: 'noop', reason: '没有可设置流动的 Entity' }
+    if (getCadAnimations(document).some((item) => item.id === animationId)) {
+      return {
+        status: 'rejected',
+        issues: [{ code: 'cad.duplicate-animation', message: `动画已存在：${animationId}` }],
+      }
+    }
+
+    const patches: { op: 'set'; path: (string | number)[]; value: never }[] = targets.map((id) => {
+      const entity = document.entities[id]!
+      const stroke = getCadStroke(entity)
+      const dashPattern = stroke?.dashPattern?.length ? stroke.dashPattern : CAD_FLOW_DEFAULT_DASH
+      const period = dashPattern.reduce((sum, value) => sum + value, 0)
+      const existing = entity.components[COMPOSE_ANIMATION_COMPONENT_KEY] as
+        { readonly clips?: Record<string, unknown> } | undefined
+      return {
+        op: 'set' as const,
+        path: ['entities', id],
+        value: {
+          ...entity,
+          components: {
+            ...entity.components,
+            [CAD_COMPONENT_KEYS.stroke]: { ...stroke, dashPattern, dashOffset: 0 },
+            [COMPOSE_ANIMATION_COMPONENT_KEY]: {
+              clips: {
+                ...existing?.clips,
+                [animationId]: [{
+                  path: [CAD_COMPONENT_KEYS.stroke, 'dashOffset'],
+                  valueKind: 'number',
+                  keyframes: [
+                    {
+                      id: `${animationId}-0`,
+                      timeMs: 0,
+                      value: 0,
+                      interpolation: { kind: 'linear' },
+                    },
+                    {
+                      id: `${animationId}-1`,
+                      timeMs: CAD_FLOW_DURATION_MS,
+                      value: -period,
+                      interpolation: { kind: 'linear' },
+                    },
+                  ],
+                }],
+              },
+            },
+          },
+        } as never,
+      }
+    })
+
+    return {
+      status: 'patches',
+      patches: [
+        ...patches,
+        {
+          op: 'set',
+          path: ['animations'],
+          value: [
+            ...getCadAnimations(document),
+            {
+              id: animationId,
+              name,
+              durationMs: CAD_FLOW_DURATION_MS,
+              playbackMode: 'loop',
+            },
+          ] as never,
+        },
+      ],
+    }
+  },
+}
+
 /** `cad.entity.translate` 的载荷。 @public */
 export interface CadTranslateEntitiesPayload {
   readonly entityIds: readonly string[]
@@ -498,6 +606,7 @@ export function createCadCommandHandlers(): readonly CommandHandler<CadDocument>
     addBlockPort,
     addWire,
     setStroke,
+    flow,
     translateEntities,
     duplicateEntities,
   ]

@@ -57,6 +57,7 @@ describe('OpenSpec: cad-document / CAD 图元外观覆盖 / 解析', () => {
       color: LAYER_COLOR,
       width: CAD_DEFAULT_STROKE_WIDTH,
       dashPattern: [],
+      dashOffset: 0,
     })
   })
 
@@ -66,6 +67,7 @@ describe('OpenSpec: cad-document / CAD 图元外观覆盖 / 解析', () => {
       color: '#ff0000',
       width: CAD_DEFAULT_STROKE_WIDTH,
       dashPattern: [],
+      dashOffset: 0,
     })
   })
 
@@ -88,6 +90,7 @@ describe('OpenSpec: cad-document / CAD 图元外观覆盖 / 解析', () => {
       color: LAYER_COLOR,
       width: 3,
       dashPattern: [4, 2],
+      dashOffset: 0,
     })
   })
 })

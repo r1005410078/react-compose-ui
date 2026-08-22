@@ -22,6 +22,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@compose-ui/animation": "workspace:*",
     "@compose-ui/cad": "workspace:*",
     "@compose-ui/canvas-kit": "workspace:*",
     "@compose-ui/commands": "workspace:*",

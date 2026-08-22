@@ -131,6 +131,7 @@
       "name": "@compose-ui/cad",
       "version": "0.1.0",
       "dependencies": {
+        "@compose-ui/animation": "workspace:*",
         "@compose-ui/assets": "workspace:*",
         "@compose-ui/commands": "workspace:*",
         "@compose-ui/core": "workspace:*",
@@ -141,6 +142,7 @@
       "name": "@compose-ui/cad-canvas",
       "version": "0.1.0",
       "dependencies": {
+        "@compose-ui/animation": "workspace:*",
         "@compose-ui/cad": "workspace:*",
         "@compose-ui/canvas-kit": "workspace:*",
         "@compose-ui/commands": "workspace:*",
