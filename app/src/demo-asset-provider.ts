@@ -229,6 +229,37 @@ const demoCounterPageText = (navigation: boolean) => serializeComposePageFile({
 /**
  * 示例应用的实例级内存 Provider，只用于展示资源协议，不属于公共持久化实现。
  */
+/**
+ * 一份最小的演示 DXF：两个图层、一个符号块与它的两次插入、一条导线、一段标注与一个圆。
+ *
+ * @remarks
+ * 坐标全部取在 Y **正**方向上（DXF 的 Y 朝上），因此导入之后应当落在负 Y 上——这份夹具同时
+ * 在演示与端到端里承担「翻转做没做对」的判据。末尾故意留一个 `SPLINE`：它没有对应图元，
+ * 用来演示「导入能导的，报告导不了的」。
+ */
+const demoDxfText = [
+  '0', 'SECTION', '2', 'TABLES',
+  '0', 'TABLE', '2', 'LAYER',
+  '0', 'LAYER', '2', '0', '62', '7', '70', '0',
+  '0', 'LAYER', '2', 'WIRE', '62', '1', '70', '0',
+  '0', 'ENDTAB', '0', 'ENDSEC',
+  '0', 'SECTION', '2', 'BLOCKS',
+  '0', 'BLOCK', '2', 'SWITCH', '10', '0', '20', '0',
+  '0', 'LWPOLYLINE', '8', '0', '70', '1',
+  '10', '-20', '20', '-10', '10', '20', '20', '-10',
+  '10', '20', '20', '10', '10', '-20', '20', '10',
+  '0', 'ENDBLK',
+  '0', 'ENDSEC',
+  '0', 'SECTION', '2', 'ENTITIES',
+  '0', 'INSERT', '8', '0', '2', 'SWITCH', '10', '100', '20', '300',
+  '0', 'INSERT', '8', '0', '2', 'SWITCH', '10', '300', '20', '300',
+  '0', 'LINE', '8', 'WIRE', '10', '120', '20', '300', '11', '280', '21', '300',
+  '0', 'TEXT', '8', '0', '10', '100', '20', '330', '40', '12', '1', 'SW-01', '72', '1',
+  '0', 'CIRCLE', '8', 'WIRE', '10', '200', '20', '360', '40', '18',
+  '0', 'SPLINE', '8', '0',
+  '0', 'ENDSEC', '0', 'EOF',
+].join('\n') + '\n'
+
 export function createDemoAssetProvider(options: {
   readonly pages?: readonly DemoPageSeed[]
   /**
@@ -305,6 +336,19 @@ export function createDemoAssetProvider(options: {
       content: new Blob([
         "export const dashboard = {\n  title: 'Operations overview',\n  refreshInterval: 30,\n  theme: 'dark',\n}\n",
       ], { type: 'text/typescript' }),
+    }],
+    ['demo-topology-dxf', {
+      entry: {
+        id: 'demo-topology-dxf',
+        parentId: root.id,
+        name: 'Topology.dxf',
+        kind: 'file',
+        mediaType: 'image/vnd.dxf',
+        size: demoDxfText.length,
+        revision: revision(revisionNumber),
+        assetKey: 'demo-topology-dxf',
+      },
+      content: new Blob([demoDxfText], { type: 'image/vnd.dxf' }),
     }],
     ['demo-pages', {
       entry: {

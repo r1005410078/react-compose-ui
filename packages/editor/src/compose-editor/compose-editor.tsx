@@ -1485,6 +1485,8 @@ export function ComposeEditor({
       messages: editorMessages,
       onDocumentCreated: openCadDocument,
       onError: setCadNotice,
+      // 诊断与失败都走同一条提示：用户要看的是「有没有东西没导进来」，而不是它属于哪一类。
+      onNotice: setCadNotice,
       provider: assets?.browser?.provider,
       store: cadWorkspace.store,
     })

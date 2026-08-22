@@ -1308,3 +1308,4 @@ describe('CAD 多段线与矩形', () => {
     expect(document.querySelectorAll('[data-cad-entity]')).toHaveLength(3)
   })
 })
+

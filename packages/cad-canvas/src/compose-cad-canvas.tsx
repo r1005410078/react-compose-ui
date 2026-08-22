@@ -59,7 +59,12 @@ import {
   type CadPreviewSegment,
   type CadSurfacePointerEvent,
 } from './canvas-surface'
-import { CAD_INITIAL_VIEWPORT, type CadCanvasPoint, type CadViewport } from './viewport'
+import {
+  CAD_INITIAL_VIEWPORT,
+  cadFitViewport,
+  type CadCanvasPoint,
+  type CadViewport,
+} from './viewport'
 
 /**
  * 受控 CAD 编辑画布的属性。
@@ -123,6 +128,19 @@ export interface ComposeCadCanvasProps {
    * @defaultValue true
    */
   readonly showRulers?: boolean
+  /**
+   * 打开时是否按内容取景。
+   *
+   * @remarks
+   * 真实图纸的坐标动辄几千、几十万——例如从 DXF 导入的一张图。按默认视口打开会是一片空白，
+   * 而用户会认为导入失败了，实际上图就在两屏之外。**一次看不见的导入等于没有导入。**
+   *
+   * 只在首次量到真实图面尺寸时做一次，且只对**有可见几何**的文档生效：空文档不动视口，
+   * 新建流程的手感因此不变。取景是会话状态，不写进文档。
+   *
+   * @defaultValue true
+   */
+  readonly autoFitContent?: boolean
 }
 
 function defaultIdFactory() {
@@ -156,13 +174,14 @@ export function ComposeCadCanvas({
   crosshairSize = 15,
   showCrosshair = true,
   showRulers = true,
+  autoFitContent = true,
 }: ComposeCadCanvasProps) {
   const i18n = useComposeI18nContext()
   const messages = getCadCanvasMessages(i18n?.locale ?? 'zh-CN')
   const [viewport, setViewport] = useState<CadViewport>(CAD_INITIAL_VIEWPORT)
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const rulersRef = useRef<ComposeCanvasRulersHandle>(null)
-  const { size: surfaceSize } = useCanvasSurfaceSize(surfaceRef)
+  const { size: surfaceSize, measured: surfaceMeasured } = useCanvasSurfaceSize(surfaceRef)
   const [prompt, setPrompt] = useState<ComposeCommandPrompt | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [preview, setPreview] = useState<readonly CadPreviewSegment[]>([])
@@ -337,6 +356,38 @@ export function ComposeCadCanvas({
       }),
     }
   }, [surfaceSize.height, surfaceSize.width, viewport])
+
+  /**
+   * 打开时按内容取景，只做一次。
+   *
+   * @remarks
+   * **必须等 `surfaceMeasured`**：在此之前 `surfaceSize` 是一份兜底值，按它算出来的缩放与真实
+   * 可视区域没有关系，内容会被摆到图面之外——症状与「根本没取景」一模一样，因此很容易被当成
+   * 取景没生效而去改错地方。
+   *
+   * `fitted` 这道闸是「只做一次」的唯一保证——没有它，用户每画一条线视口都会跳一次。
+   */
+  const fitted = useRef(false)
+  useEffect(() => {
+    if (!autoFitContent || fitted.current || !surfaceMeasured) return
+    fitted.current = true
+    const geometry = collectCadVisibleGeometry(document)
+    // 空文档不动视口：新建流程的手感不变，既有用例也因此不受影响。
+    if (geometry.length === 0) return
+    let box = geometryBounds(geometry[0]!.geometry)
+    for (const { geometry: shape } of geometry.slice(1)) {
+      const next = geometryBounds(shape)
+      box = {
+        minX: Math.min(box.minX, next.minX),
+        minY: Math.min(box.minY, next.minY),
+        maxX: Math.max(box.maxX, next.maxX),
+        maxY: Math.max(box.maxY, next.maxY),
+      }
+    }
+    const next = cadFitViewport(box, surfaceSize, CAD_INITIAL_VIEWPORT)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 取景要等图面被真正量到，这个尺寸只有 effect 里拿得到；`fitted` 保证只发生一次，不会级联。
+    if (next) setViewport(next)
+  }, [autoFitContent, document, surfaceMeasured, surfaceSize])
 
   /** 选择集的世界包围盒；标尺据此画出区间条与尺寸。 */
   const selectionBounds = useMemo(() => {

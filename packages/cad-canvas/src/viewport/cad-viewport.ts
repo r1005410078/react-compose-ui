@@ -52,3 +52,55 @@ export function cadZoomViewport(
 ): CadViewport {
   return composeCanvasZoomAt(viewport, anchor, viewport.zoom * factor, CAD_ZOOM_RANGE)
 }
+
+/** 取景时四周留出的边距比例；一点留白让内容不贴着标尺。 */
+const FIT_PADDING = 0.08
+
+/**
+ * 求把一块世界矩形取到图面上的视口。
+ *
+ * @remarks
+ * 纯函数，与页面画布的取景是同一种「会话级取景」——它不写进文档。缩放取两轴中较小的那个，
+ * 因此内容整体可见而不是某一轴被裁掉。
+ *
+ * 内容跨度为零（例如只有一个点）时保持当前缩放，只把它移到图面中心：按跨度算缩放会得到
+ * 无穷大。
+ *
+ * @param bounds - 要取景的世界矩形。
+ * @param size - 图面尺寸（CSS 像素）。
+ * @param current - 当前视口；跨度为零时沿用它的缩放。
+ * @returns 新视口；图面尺寸还没量到时返回 `null`。
+ * @public
+ */
+export function cadFitViewport(
+  bounds: { readonly minX: number, readonly minY: number, readonly maxX: number, readonly maxY: number },
+  size: { readonly width: number, readonly height: number },
+  current: CadViewport,
+): CadViewport | null {
+  if (!(size.width > 0) || !(size.height > 0)) return null
+  const spanX = bounds.maxX - bounds.minX
+  const spanY = bounds.maxY - bounds.minY
+  const usableWidth = size.width * (1 - FIT_PADDING * 2)
+  const usableHeight = size.height * (1 - FIT_PADDING * 2)
+  const zoom = spanX > 0 || spanY > 0
+    ? Math.min(
+      CAD_ZOOM_RANGE.max,
+      Math.max(
+        CAD_ZOOM_RANGE.min,
+        Math.min(
+          spanX > 0 ? usableWidth / spanX : Number.POSITIVE_INFINITY,
+          spanY > 0 ? usableHeight / spanY : Number.POSITIVE_INFINITY,
+        ),
+      ),
+    )
+    : current.zoom
+  const centerX = (bounds.minX + bounds.maxX) / 2
+  const centerY = (bounds.minY + bounds.maxY) / 2
+  return {
+    zoom,
+    offset: {
+      x: size.width / 2 - centerX * zoom,
+      y: size.height / 2 - centerY * zoom,
+    },
+  }
+}
