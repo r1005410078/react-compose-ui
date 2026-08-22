@@ -71,6 +71,31 @@ function setup() {
   return { runtime, rerender }
 }
 
+describe('命令行焦点', () => {
+  /**
+   * @remarks
+   * AutoCAD 里命令行是常驻的键盘落点：点完图面直接敲 `F↵` 就结束，光标从不需要挪回去。
+   * SVG 图面不可聚焦，一次点击会把焦点甩到 `body`——此后关键字与坐标全部落空，用户看到的是
+   * 「点了两下然后回车没反应」。
+   *
+   * 这里只覆盖挂载聚焦与按下后收回；「浏览器在 `mousedown` 上把焦点甩掉」是真实浏览器行为，
+   * jsdom 不模拟，由端到端用例守。
+   */
+  it('OpenSpec: cad-document / CAD 命令行焦点 / 挂载即聚焦，图面按下后收回', () => {
+    setup()
+    const input = screen.getByTestId('cad-command-input')
+    expect(document.activeElement).toBe(input)
+
+    input.blur()
+    expect(document.activeElement).not.toBe(input)
+
+    fireEvent.pointerDown(screen.getByTestId('cad-surface'), {
+      button: 0, buttons: 1, clientX: 120, clientY: 120, pointerId: 1,
+    })
+    expect(document.activeElement).toBe(input)
+  })
+})
+
 function hoverAt(x: number, y: number) {
   fireEvent.pointerMove(screen.getByTestId('cad-surface'), { clientX: x, clientY: y, pointerId: 1 })
 }

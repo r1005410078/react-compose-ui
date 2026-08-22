@@ -1209,6 +1209,45 @@ test('OpenSpec: cad-document / CAD 直线命令 / 敲 L 画两点、撤销、存
   await expect(editor.locator('[data-cad-entity]')).toHaveCount(1)
 })
 
+test('OpenSpec: cad-document / CAD 命令行焦点 / 全程不碰输入框也能画完一条线', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  const pagesGrid = assets.getByRole('grid', { name: 'Pages' })
+  await pagesGrid.getByRole('gridcell', { name: 'Home' }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '创建 CAD', exact: true }).click()
+  const nameDialog = page.getByRole('dialog')
+  await nameDialog.getByLabel('名称').fill('Focus')
+  await nameDialog.getByRole('button', { name: '创建' }).click()
+
+  const canvas = editor.locator('[data-testid="cad-canvas"]')
+  await expect(canvas).toBeVisible()
+  const commandInput = canvas.locator('[data-testid="cad-command-input"]')
+  const surface = canvas.locator('[data-testid="cad-surface"]')
+
+  // 1) 打开标签即聚焦命令行——不点输入框就能敲命令
+  await expect(commandInput).toBeFocused()
+  await page.keyboard.type('l')
+  await page.keyboard.press('Enter')
+  await expect(canvas.locator('[data-testid="cad-command-prompt"]')).toContainText('指定第一点')
+
+  // 2) 在图面上点两下后焦点仍在命令行。焦点移动是 mousedown 的默认动作，图面必须把它拦掉，
+  //    否则第一次点击之后所有关键字与坐标都落空。
+  await surface.click({ position: { x: 120, y: 120 } })
+  await expect(commandInput).toBeFocused()
+  await surface.click({ position: { x: 320, y: 220 } })
+  await expect(commandInput).toBeFocused()
+
+  // 3) 直接敲结束关键字（小写），不先把光标挪回输入框
+  await page.keyboard.type('f')
+  await page.keyboard.press('Enter')
+  await expect(surface.locator('[data-cad-entity]')).toHaveCount(1)
+})
+
 test('OpenSpec: cad-document / CAD 坐标语法 / 键入坐标与正交约束', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

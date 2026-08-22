@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import type { ComposeCommandPrompt } from '@compose-ui/commands'
 import type { CadCanvasMessages } from '../cad-canvas-i18n'
 
@@ -20,6 +20,8 @@ export interface CadCommandLineProps {
   readonly onSubmit: (text: string) => void
   /** 用户按下 Esc。 */
   readonly onCancel: () => void
+  /** 指向输入框的 ref；宿主用它把键盘落点收回命令行。 */
+  readonly inputRef?: RefObject<HTMLInputElement | null>
 }
 
 /**
@@ -56,6 +58,7 @@ export function CadCommandLine({
   selectionCount,
   onSubmit,
   onCancel,
+  inputRef,
 }: CadCommandLineProps) {
   const [text, setText] = useState('')
 
@@ -79,6 +82,7 @@ export function CadCommandLine({
         {notice ?? promptText(prompt, messages)}
       </span>
       <input
+        ref={inputRef}
         aria-label={messages.commandLineLabel}
         className="compose-cad-canvas__command-input"
         data-testid="cad-command-input"

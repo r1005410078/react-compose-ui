@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   CAD_DEFAULT_LAYER_ID,
@@ -104,6 +104,21 @@ export function ComposeCadCanvas({
   // 活动会话不进 state：它是可变对象，进 state 既不会触发正确的重渲染，也会让「同一次命令」
   // 在严格模式的双调用下变成两个。
   const sessionRef = useRef<ComposeCommandSession<CadCommandEffect> | null>(null)
+
+  /**
+   * 命令行输入框是**常驻的键盘落点**。
+   *
+   * @remarks
+   * AutoCAD 里光标从不需要挪回命令行：点完图面直接敲 `F↵` 就结束，键入的坐标也直接进命令行。
+   * 而 SVG 图面不可聚焦，一次点击会把焦点甩到 `body`——此后关键字与坐标全部落空，用户看到的
+   * 是「点了两下然后回车没反应」。因此挂载时聚焦一次，每次在图面上按下再收回来。
+   */
+  const commandInputRef = useRef<HTMLInputElement | null>(null)
+  const focusCommandLine = useCallback(() => {
+    // preventScroll：图面通常比可视区大，聚焦引发的滚动会把画布挪走。
+    commandInputRef.current?.focus({ preventScroll: true })
+  }, [])
+  useEffect(focusCommandLine, [focusCommandLine])
 
   const registry = useMemo(
     () => createComposeCommandRegistry<CadCommandContext, CadCommandEffect>([
@@ -310,6 +325,7 @@ export function ComposeCadCanvas({
   }, [runEffects])
 
   const handlePointerDown = useCallback((event: CadSurfacePointerEvent) => {
+    focusCommandLine()
     const result = arbiterRef.current.begin(
       { type: 'pointer.down', ...event },
       pluginContext(),
@@ -317,7 +333,7 @@ export function ComposeCadCanvas({
     // `consumed` 也算被接管：它表示这次按下已被处理掉，图面不该再走中键平移兜底。但只有
     // `claimed` 才真正开了会话，需要捕获指针。
     return result === 'claimed'
-  }, [pluginContext])
+  }, [focusCommandLine, pluginContext])
 
   const handlePointerMove = useCallback((event: CadSurfacePointerEvent) => {
     arbiterRef.current.update({ type: 'pointer.move', ...event }, pluginContext())
@@ -375,6 +391,7 @@ export function ComposeCadCanvas({
         />
       </div>
       <CadCommandLine
+        inputRef={commandInputRef}
         messages={messages}
         notice={notice}
         ortho={ortho}

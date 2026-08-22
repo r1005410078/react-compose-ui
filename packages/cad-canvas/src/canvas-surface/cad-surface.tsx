@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import {
   collectCadVisibleSegments,
   getCadPlacement,
@@ -209,6 +209,20 @@ export function CadSurface({
     event.currentTarget.setPointerCapture(event.pointerId)
   }, [localPoint, normalize])
 
+  /**
+   * 图面永远不接管键盘焦点。
+   *
+   * @remarks
+   * 焦点移动是 `mousedown` 的默认动作，而对 `pointertype` 为 mouse 的指针，`pointerdown` 上的
+   * `preventDefault` 并不抑制随后的兼容鼠标事件——所以宿主在 `pointerdown` 里把焦点收回命令行
+   * 之后，浏览器仍会在 `mousedown` 上把它甩掉。必须在这里拦住。
+   *
+   * 顺带也拦掉了图面上的文字拖选与中键自动滚动，两者在无限图纸上都只是干扰。
+   */
+  const handleMouseDown = useCallback((event: ReactMouseEvent<SVGSVGElement>) => {
+    event.preventDefault()
+  }, [])
+
   const handlePointerMove = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     const pan = panRef.current
     if (!pan || pan.pointerId !== event.pointerId) {
@@ -264,6 +278,7 @@ export function CadSurface({
       data-testid="cad-surface"
       role="img"
       onPointerCancel={handlePointerAbort}
+      onMouseDown={handleMouseDown}
       onPointerDown={handlePointerDown}
       onPointerLeave={() => { latest.current.onHoverPoint(null) }}
       onPointerMove={handlePointerMove}
