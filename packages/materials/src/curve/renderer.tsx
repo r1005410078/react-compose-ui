@@ -26,18 +26,6 @@ function dasharray(value: unknown, strokeWidth: number): string | undefined {
 }
 
 /**
- * 曲线 Renderer。
- *
- * @remarks
- * 几何来自 `Curve` Component 而不是 Props——它是文档级契约，命中、捕捉与未来的导线求解
- * 都读同一份。Props 只承载描边。
- *
- * 命中由**透明的加宽 stroke** 承担，SVG 自身 `pointer-events: none`：一条对角线的外接矩形
- * 里绝大部分是空的，让整个盒可点会让空白区抢走下层内容的点击。
- *
- * @internal
- */
-/**
  * 弧的 SVG `path` 数据。
  *
  * @remarks
@@ -82,7 +70,33 @@ function geometryElement(
     : <polyline {...shared} points={points} />
 }
 
-export function CurveRenderer({ entity, props }: ComposeRendererProps) {
+/**
+ * 曲线 Renderer。
+ *
+ * @remarks
+ * 几何来自 `Curve` Component 而不是 Props——它是文档级契约，命中、捕捉与未来的导线求解
+ * 都读同一份。Props 只承载描边。
+ *
+ * 命中由**透明的加宽 stroke** 承担，SVG 自身 `pointer-events: none`：一条对角线的外接矩形
+ * 里绝大部分是空的，让整个盒可点会让空白区抢走下层内容的点击。
+ *
+ * **编辑画布上线宽是屏幕像素，预览里是页面单位**，靠 `mode` 分流。Stage 的 Scene 是一棵靠
+ * `transform: scale(zoom)` 整体缩放的 DOM 树（HTML 物料指着它活），曲线的 `stroke-width`
+ * 因此被浏览器乘了一遍 zoom：实测适配缩放 0.376 时屏幕上只剩 0.75px、放大到 4.22 倍时涨到
+ * 8.4px。三个症状是同一个根因——放大变粗、缩小时落到子像素而**同一批线看起来有粗有细**、
+ * 尖角的 round cap 跟着涨到 8px 把 `LINE` 逐段落地的折线顶端磨圆。`non-scaling-stroke`
+ * 让描边在变换**之后**算，等价于 CAD 侧「线宽不乘 zoom」那条 lineweight 语义。
+ *
+ * 预览**不加**：`ComposePreview` 的 `fit` 会整体缩放页面，非缩放描边会让预览不再是页面的
+ * 忠实缩略图。代价是虚线间隔在编辑期也变成屏幕单位（CAD 那边是世界单位），这里可以接受——
+ * 页面的 `strokeDasharray` 是按线宽算出来的装饰性 picklist，不是携带长度信息的 linetype。
+ *
+ * 命中宽度同样跟着走：`MIN_HIT_WIDTH` 表达的是鼠标容差，那本来就是屏幕量，写成世界单位会让
+ * 它在缩小时不够点、放大时抢走旁边的东西。
+ *
+ * @internal
+ */
+export function CurveRenderer({ entity, mode, props }: ComposeRendererProps) {
   const curve = getComposeCurve(entity) ?? DEFAULT_CURVE_GEOMETRY
   const stroke = typeof props.stroke === 'string' ? props.stroke : '#d8e2f1'
   const strokeWidth = typeof props.strokeWidth === 'number' && props.strokeWidth >= 0
@@ -90,6 +104,8 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
     : 2
   const cap = linecap(props.strokeLinecap)
   const pattern = dasharray(props.strokeDasharray, strokeWidth)
+  // 编辑画布上线宽是**屏幕像素**（AutoCAD 的 lineweight），预览里是页面单位；理由见上方 remarks。
+  const vectorEffect = mode === 'editor' ? 'non-scaling-stroke' : undefined
 
   return (
     <svg
@@ -105,6 +121,7 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
         stroke: 'transparent',
         strokeLinecap: 'round',
         strokeWidth: Math.max(MIN_HIT_WIDTH, strokeWidth * 2),
+        vectorEffect,
       })}
       {geometryElement(curve, {
         'data-testid': 'compose-material-curve-stroke',
@@ -113,6 +130,7 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
         // 圆点线型必须配 round cap，否则零长度 dash 画不出任何东西。
         strokeLinecap: props.strokeDasharray === '1 4' ? 'round' : cap,
         strokeWidth,
+        vectorEffect,
       })}
     </svg>
   )

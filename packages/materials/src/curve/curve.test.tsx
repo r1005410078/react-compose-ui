@@ -207,4 +207,26 @@ describe('curve 物料的弧与多段线渲染', () => {
     expect(hit).toHaveAttribute('stroke', 'transparent')
     expect(hit).toHaveAttribute('pointer-events', 'stroke')
   })
+
+  it('OpenSpec: materials / 曲线线宽 / 编辑画布按屏幕像素、预览按页面单位', () => {
+    const { entity, materials } = withCurve({
+      kind: 'line',
+      start: { x: 0, y: 0 },
+      end: { x: 40, y: 30 },
+    })
+
+    // Stage 的 Scene 靠 `transform: scale(zoom)` 整体缩放，描边会被一起乘；命中容差同理。
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+    expect(screen.getByTestId('compose-material-curve-stroke'))
+      .toHaveAttribute('vector-effect', 'non-scaling-stroke')
+    expect(screen.getByTestId('compose-material-curve-hit'))
+      .toHaveAttribute('vector-effect', 'non-scaling-stroke')
+
+    cleanup()
+
+    // 预览可能被宿主的 `fit` 整体缩放，非缩放描边会让它不再是页面的忠实缩略图。
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="preview" registry={materials.registry} />)
+    expect(screen.getByTestId('compose-material-curve-stroke'))
+      .not.toHaveAttribute('vector-effect')
+  })
 })
