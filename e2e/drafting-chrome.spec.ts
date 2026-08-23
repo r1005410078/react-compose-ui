@@ -115,3 +115,35 @@ test('OpenSpec: materials / 曲线线宽 / 放大后描边的实际触达不变'
   expect(before.reach).toBeGreaterThan(3)
   expect(Math.abs(after.reach - before.reach)).toBeLessThanOrEqual(1)
 })
+
+test('OpenSpec: materials / 曲线的盒不裁描边 / 水平线在容差内点得中', async ({ page }) => {
+  const { stage } = await enterDrafting(page)
+
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
+
+  // 水平线的紧包围盒高度被钳到 `COMPOSE_CURVE_MIN_EXTENT`，是「盒裁掉描边」最极端的一例：
+  // 裁剪生效时命中区只剩几何那一条线，偏 2 个像素就点不中，而接线图里水平与垂直最常见。
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await page.mouse.click(at(120, 260).x, at(120, 260).y)
+  await page.mouse.click(at(420, 260).x, at(420, 260).y)
+  await page.keyboard.press('Enter')
+
+  const reach = await page.evaluate(() => {
+    const hit = document.querySelector('[data-testid="compose-material-curve-hit"]')!
+    const rect = hit.getBoundingClientRect()
+    const cx = rect.x + rect.width / 2
+    const cy = rect.y + rect.height / 2
+    let found = -1
+    for (let dy = 0; dy <= 40; dy += 1) {
+      if (document.elementFromPoint(cx, cy - dy) !== hit) break
+      found = dy
+    }
+    return found
+  })
+
+  // 命中 stroke 宽 12（屏幕像素），半宽 6。裁剪生效时这个数是 0。
+  expect(reach).toBeGreaterThanOrEqual(4)
+})

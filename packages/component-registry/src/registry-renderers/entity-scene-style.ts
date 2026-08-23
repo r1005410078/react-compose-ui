@@ -1,4 +1,5 @@
 import {
+  getComposeCurve,
   getComposeHierarchy,
   getComposeRenderer,
   getComposeTransform,
@@ -63,9 +64,18 @@ export function composeEntityAppearanceStyle(entity: ComposeEntity): CSSProperti
  * 叶子 MUST 为 `hidden`，否则 borderRadius 无法裁剪 Paint/Material 子层。
  * 容器按 `resolveComposeOverflow` 分轴映射：`scroll`→`auto`、`clip`→`hidden`、`visible` 保持。
  *
+ * **带 `Curve` 的 Entity 是例外**：它的盒是几何的**派生**（紧包围盒），而描边以几何为中心
+ * 画，必然向外超出半个线宽。按叶子裁掉的后果是尖角被削平、端点圆头被切掉、水平线连命中都
+ * 只剩几何那一条线——三个看起来毫不相干的症状同一个根因。这个盒本来也不是视觉盒：曲线的
+ * Appearance 透明、圆角为 0，没有任何东西需要它裁。
+ *
+ * 判据是 `Curve` Component 而不是 Renderer 类型：按物料类型枚举，每加一种线状物料都会漏掉
+ * 这一处。
+ *
  * @public
  */
 export function composeEntityOverflowStyle(entity: ComposeEntity): CSSProperties {
+  if (getComposeCurve(entity)) return { overflow: 'visible' }
   if (!getComposeHierarchy(entity)) return { overflow: 'hidden' }
   const overflow = resolveComposeOverflow(entity)
   const cssValue = (value: typeof overflow.horizontal): 'auto' | 'hidden' | 'visible' => {

@@ -326,6 +326,15 @@ DXF 导入产出场景 + 组件（BLOCK → Component Asset），按内容包围
 
 ## 踩过的坑
 
+- **曲线的「接缝」「尖角被削平」「水平线点不中」是同一个根因**（2026-08-23 实测定位）。
+  不是 SVG 的 `overflow`——`composeEntityOverflowStyle` 对叶子恒发**内联** `overflow: hidden`，
+  内联压过样式表，`.compose-stage__node.is-segment { overflow: visible }` 那一条**从来没有
+  生效过**。而曲线的盒是几何的紧包围盒，描边以几何为中心画、必然超出半个线宽，于是被盒切掉：
+  尖角削平、端点圆头被切、水平线（盒高被钳到 1px）连命中都只剩几何那一条线，实测触达 0px。
+  判据必须是 `Curve` Component 而不是 Renderer 类型——按物料类型枚举，每加一种线状物料都会
+  漏掉这一处。**量具**：把线宽临时调到 24px 截图，裁剪与否一眼可见；命中则沿法向扫
+  `elementFromPoint`。我最初把它错记成 SVG 的 `overflow`，那条记录已更正。
+
 - **`vector-effect: non-scaling-stroke` 中和不了 HTML 祖先上的 CSS 变换**（2026-08-23）。
   它只作用于 SVG 文档片段**内部**的变换，而 Stage 的缩放来自 `.compose-stage__scene` 那个
   HTML 节点。症状最阴险的地方是 computed 值老老实实报 `non-scaling-stroke`，只断言属性
@@ -337,15 +346,10 @@ DXF 导入产出场景 + 组件（BLOCK → Component Asset），按内容包围
 
 ## 待修的缺陷
 
-- **水平线与垂直线几乎点不中**（2026-08-23 手工测试发现，已实测确认）。曲线的命中靠物料
-  内部那条透明加宽 stroke，而 SVG 的 `overflow: visible` **只让描边画出去，不让它接命中**——
-  命中被 SVG viewport 裁掉，而水平线的 viewport 高度正是被钳到 `COMPOSE_CURVE_MIN_EXTENT`
-  的那 1px。实测：斜线（盒 296×104）在离线 0–6px 内都命中，正是 12px stroke 的半宽；水平线
-  （盒 296×1）只有 0px 命中，偏 2px 就落空。接线图里水平与垂直恰恰是最常见的两种线。
-  Shape 物料的 line/arrow 是同一个形状的问题，因此这是**既有缺陷**而不是曲线引入的。
-  修法要答一个问题：外扩量必须是**屏幕像素**（命中容差本来就是屏幕量），而物料不知道 zoom；
-  候选是 Stage 把 zoom 作为 CSS 变量传下去用 `calc()` 外扩，或者慷慨地外扩一个大的世界量——
-  后者不会造成误命中，因为实际命中区仍由非缩放的 stroke 决定，外扩只是给它让出地方。
+- **Shape 物料的 line / arrow 大概率有与曲线相同的裁剪问题**（2026-08-23 推断，未实测）。
+  它们同样是叶子、同样把描边画在盒边上，`composeEntityOverflowStyle` 的叶子恒 `hidden`
+  因此同样适用；曲线那条例外按 `Curve` Component 判定，覆盖不到它们。要不要一起收进
+  「叶子的描边可以超出盒」这条通则，等 Shape 的去留（见步骤 4b 之后）定下来再说。
 
 ## 未定的决策
 

@@ -169,7 +169,10 @@
 
 .compose-stage__node.is-segment {
   /* Line/Arrow 的轴对齐外接矩形包含两个透明三角区，不能让它们拦截画布点击。 */
-  overflow: visible;
+  /*
+   * 这里**不写 overflow**：盒的裁剪由 `composeEntityOverflowStyle` 以内联样式决定，
+   * 内联压过样式表，写在这里的那一条从来没有生效过——它曾经让人以为描边不会被裁。
+   */
   pointer-events: none;
 }
 

@@ -131,6 +131,18 @@ describe('composeEntityOverflowStyle', () => {
     }))
     expect(bothScroll).toEqual({ overflow: 'auto' })
   })
+
+  it('OpenSpec: 共享 Entity overflow 解析辅助 / 带 Curve 的叶子不裁剪', () => {
+    // 曲线的盒是几何的派生（紧包围盒），描边以几何为中心画，必然向外超出半个线宽。
+    // 按叶子裁掉的后果是尖角被削平、端点圆头被切、水平线连命中都只剩几何那一条线。
+    const curve = composeEntityOverflowStyle(entity({
+      Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 40, y: 30 } },
+    }))
+    expect(curve).toEqual({ overflow: 'visible' })
+
+    // 普通叶子照旧裁剪——borderRadius 要靠它裁 Paint 与物料子层。
+    expect(composeEntityOverflowStyle(entity({}))).toEqual({ overflow: 'hidden' })
+  })
 })
 
 describe('composeEntitySceneStyle', () => {
