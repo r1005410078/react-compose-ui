@@ -6,7 +6,10 @@ import type {
 } from '@compose-ui/core'
 import type { ComposeRendererInspectorBindingPort } from '@compose-ui/component-registry'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createTextRendererInspector } from './renderer-inspectors'
+import {
+  createComponentInstanceAnimationInspector,
+  createTextRendererInspector,
+} from './renderer-inspectors'
 
 /*
  * 属性行的操作列默认只有一个直接槽位。属性同时拥有绑定入口和重置动作时，两者都会收进
@@ -228,5 +231,135 @@ describe('Text Renderer Inspector', () => {
     expect(propertyAction('字重', /绑定\s*字重/u)).toBeEnabled()
     expect(propertyAction('字间距', /绑定\s*字间距/u)).toBeEnabled()
     expect(propertyAction('行高', /绑定\s*行高/u)).toBeEnabled()
+  })
+})
+
+describe('Component Instance Animation Inspector', () => {
+  /** 组件快照的最小形状：Inspector 只从里面读根 Frame 的动画清单。 */
+  function snapshot(items: readonly JsonObject[]): JsonObject {
+    return {
+      componentId: 'switch',
+      kind: 'base',
+      revision: '1',
+      appliedLineage: [],
+      document: {
+        schemaVersion: 7,
+        rootIds: ['root'],
+        entities: {
+          root: {
+            id: 'root',
+            name: 'Switch',
+            components: { Animations: { items } },
+          },
+        },
+      },
+    } as unknown as JsonObject
+  }
+
+  function instance(props: JsonObject) {
+    const target = entity({ Renderer: { type: 'component-instance', props } })
+    return { target, authoredProps: target.components.Renderer!.props as JsonObject }
+  }
+
+  const SWITCH: JsonObject = {
+    id: 'switch',
+    name: '合分闸',
+    durationMs: 1000,
+    playbackMode: 'play-once',
+  }
+
+  it('OpenSpec: basic-materials / 组件实例的动画播放头 / 下拉列出组件自己的动画', () => {
+    const Inspector = createComponentInstanceAnimationInspector(() => 'command-id')
+    const { target, authoredProps } = instance({
+      resolvedSnapshot: snapshot([SWITCH]),
+      animation: 'switch',
+      animationTime: 250,
+    })
+    render(
+      <Inspector
+        authoredProps={authoredProps}
+        dispatch={vi.fn()}
+        entity={target}
+        props={authoredProps}
+        readOnly={false}
+        renderer={{ type: 'component-instance', props: authoredProps }}
+      />,
+    )
+
+    expect(screen.getByRole('combobox', { name: '动画' })).toHaveValue('switch')
+    expect(screen.getByRole('option', { name: '合分闸' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: '播放头' })).toHaveValue(250)
+  })
+
+  it('OpenSpec: basic-materials / 组件实例的动画播放头 / 失效 id 与未选择可判别', () => {
+    const Inspector = createComponentInstanceAnimationInspector(() => 'command-id')
+    const stale = instance({
+      resolvedSnapshot: snapshot([SWITCH]),
+      animation: 'removed-clip',
+      animationTime: 0,
+    })
+    const view = render(
+      <Inspector
+        authoredProps={stale.authoredProps}
+        dispatch={vi.fn()}
+        entity={stale.target}
+        props={stale.authoredProps}
+        readOnly={false}
+        renderer={{ type: 'component-instance', props: stale.authoredProps }}
+      />,
+    )
+
+    // 保留原值而不是静默回落到「未选择」：组件作者临时改错一个 id，不该在用户那边表现成
+    // 「我的配置被吃掉了」。
+    const select = screen.getByRole('combobox', { name: '动画' })
+    expect(select).toHaveValue('removed-clip')
+    expect(screen.getByRole('option', { name: '已失效：removed-clip' })).toBeInTheDocument()
+
+    const unset = instance({ resolvedSnapshot: snapshot([SWITCH]), animation: null })
+    view.rerender(
+      <Inspector
+        authoredProps={unset.authoredProps}
+        dispatch={vi.fn()}
+        entity={unset.target}
+        props={unset.authoredProps}
+        readOnly={false}
+        renderer={{ type: 'component-instance', props: unset.authoredProps }}
+      />,
+    )
+
+    expect(screen.getByRole('combobox', { name: '动画' })).toHaveValue('')
+    expect(screen.getByRole('option', { name: '未选择' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /已失效/ })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: basic-materials / 组件实例的动画播放头 / 选回未选择写 null', () => {
+    const dispatch = vi.fn()
+    const Inspector = createComponentInstanceAnimationInspector(() => 'command-id')
+    const { target, authoredProps } = instance({
+      resolvedSnapshot: snapshot([SWITCH]),
+      animation: 'switch',
+      animationTime: 250,
+      // schema 之外的 props 必须原样保留。
+      hostTag: 'switch-3',
+    })
+    render(
+      <Inspector
+        authoredProps={authoredProps}
+        dispatch={dispatch}
+        entity={target}
+        props={authoredProps}
+        readOnly={false}
+        renderer={{ type: 'component-instance', props: authoredProps }}
+      />,
+    )
+
+    fireEvent.change(screen.getByRole('combobox', { name: '动画' }), { target: { value: '' } })
+
+    // 面板里「未选择」是空串，文档里必须是 null——空串不是一个动画 id。
+    const command = dispatch.mock.calls[0]?.[0] as EditorCommand
+    expect(command.payload).toMatchObject({
+      entityId: 'entity-a',
+      props: { animation: null, animationTime: 250, hostTag: 'switch-3' },
+    })
   })
 })

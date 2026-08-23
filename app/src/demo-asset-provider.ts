@@ -3,6 +3,7 @@ import {
   validateAssetName,
 } from '@compose-ui/assets'
 import {
+  COMPOSE_COMPONENT_MEDIA_TYPE,
   COMPOSE_PAGE_MEDIA_TYPE,
   createDefaultComposeLayoutItem,
   createEmptyComposeAppManifest,
@@ -10,6 +11,7 @@ import {
   createEmptyComposePageDocument,
   createEmptyComposePageFile,
   serializeComposeAppManifest,
+  serializeComposeComponentAsset,
   serializeComposePageFile,
 } from '@compose-ui/core'
 import type {
@@ -173,6 +175,122 @@ function demoNavigationEntity(input: {
 }
 
 /**
+ * 示例组件「刀闸」：一块底座加一片可绕左端摆动的闸刀。
+ *
+ * @remarks
+ * 它存在的理由是**组件内动画在实例里播放**这条能力需要一份带动画的组件才能演示，而目前
+ * 还没有任何 UI 路径能把动画做进组件文档——模式切换器只挂在页面文档，创建组件也不搬运
+ * 动画清单。因此这份资源是手写的，等那条路径补上之后它就只是一个普通示例。
+ *
+ * 时长 200 ms 与 setup 导出的 `openMs` / `closedMs` 对齐：合闸与分闸是时间轴上的两个位置，
+ * 而不是「播」与「不播」——刀闸是状态，一个布尔表达不了「停在半开」。
+ */
+function demoSwitchComponentDocument(): ComposeDocument {
+  const blade: ComposeEntity = {
+    id: 'demo-switch-blade',
+    name: '闸刀',
+    components: {
+      Composition: { presetId: 'rectangle', baseComponentKeys: [], capabilityIds: [] },
+      // 基点在左端中点：刀闸绕固定触头摆动，绕自身中心转出来的是另一种东西。
+      Transform: { rotation: 0, pivot: { x: 0, y: 0.5 } },
+      LayoutItem: createDefaultComposeLayoutItem(96, 10, { x: 24, y: 55 }),
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#f59e0b' }, borderRadius: 5 },
+      Renderer: { type: 'rectangle', props: {} },
+      Animation: {
+        clips: {
+          'demo-switch-clip': [{
+            path: ['Transform', 'rotation'],
+            valueKind: 'number',
+            keyframes: [
+              { id: 'closed', timeMs: 0, value: 0, interpolation: { kind: 'linear' } },
+              { id: 'open', timeMs: 200, value: -60, interpolation: { kind: 'linear' } },
+            ],
+          }],
+        },
+      },
+    },
+  }
+  const base: ComposeEntity = {
+    id: 'demo-switch-base',
+    name: '底座',
+    components: {
+      Composition: { presetId: 'rectangle', baseComponentKeys: [], capabilityIds: [] },
+      Transform: { rotation: 0 },
+      LayoutItem: createDefaultComposeLayoutItem(16, 16, { x: 16, y: 52 }),
+      Visibility: { visible: true },
+      Lock: { locked: false },
+      Appearance: { backgroundPaint: { kind: 'solid', color: '#94a3b8' }, borderRadius: 8 },
+      Renderer: { type: 'rectangle', props: {} },
+    },
+  }
+  const root = createComposeFrameEntity({
+    id: 'demo-switch-root',
+    name: '刀闸',
+    childIds: [base.id, blade.id],
+    size: { width: 160, height: 120 },
+    appearance: {
+      backgroundPaint: { kind: 'solid', color: 'transparent' },
+      borderColor: 'transparent',
+      borderWidth: 0,
+      borderRadius: 0,
+      opacity: 1,
+      shadow: null,
+    },
+    animations: [{
+      id: 'demo-switch-clip',
+      name: '合分闸',
+      durationMs: 200,
+      playbackMode: 'play-once',
+    }],
+  })
+  return {
+    ...createEmptyComposePageDocument(),
+    rootIds: [root.id],
+    entities: { [root.id]: root, [base.id]: base, [blade.id]: blade },
+  }
+}
+
+/**
+ * 首页 setup 脚本。
+ *
+ * @remarks
+ * `openMs` / `closedMs` 只在刀闸演示下导出：页面脚本的返回成员会出现在属性面板里，
+ * 默认多两个成员会改变所有以既有成员表为前提的端到端用例——与「首页默认不放跳转入口」
+ * 是同一条判断。
+ */
+function demoHomeSetupText(switchDemo: boolean): string {
+  const switchExports = switchDemo
+    ? `
+  // 组件实例播放头示例：同一个组件的两个实例各绑一个数，同一帧呈现两个姿态。
+  // 业务侧给的是「这台设备现在什么状态」，而不是「播还是不播」——状态用时间轴表达。
+  const openMs = ctx.state(0)
+  const closedMs = ctx.state(200)`
+    : ''
+  const switchMembers = switchDemo ? ', openMs, closedMs' : ''
+  return `export function setup(ctx) {
+  const num = ctx.state(0)
+  const onAdd = () => { num.value += 1 }
+  const buttonLabel = ctx.computed(() => num.value === 0 ? 'Add' : \`Add \${num.value}\`)
+  // 动画播放控制示例：把 animate 绑定到动画检查器的"播放"，预览中即自动播放；
+  // onToggleAnimate 可绑到按钮，false -> true 的上升沿会让动画从头重播。
+  const animate = ctx.state(true)
+  const onToggleAnimate = () => { animate.value = !animate.value }${switchExports}
+  return { num, onAdd, buttonLabel, animate, onToggleAnimate${switchMembers} }
+}
+`
+}
+
+const demoSwitchComponentText = serializeComposeComponentAsset({
+  schemaVersion: 2,
+  kind: 'base',
+  componentId: 'demo-switch',
+  name: '刀闸',
+  document: demoSwitchComponentDocument(),
+})
+
+/**
  * 首页文档。
  *
  * @remarks
@@ -270,8 +388,20 @@ export function createDemoAssetProvider(options: {
    * 首页为前提的端到端用例。示例应用用 `?page-preview` 打开。
    */
   readonly navigationDemo?: boolean
+  /**
+   * 是否提供「刀闸」示例组件与它配套的两个脚本导出。
+   *
+   * @remarks
+   * 默认关闭，理由与 `navigationDemo` 相同：项目组件清单与页面脚本返回成员都被既有端到端
+   * 用例断言，默认多一份资源会改掉它们。示例应用用 `?switch-demo` 打开。
+   *
+   * 这份组件是手写的，因为目前还没有 UI 路径能把动画做进组件文档——模式切换器只挂在页面
+   * 文档，创建组件也不搬运动画清单。那条路径补上之后它就只是个普通示例。
+   */
+  readonly switchDemo?: boolean
 } = {}): DemoAssetProvider {
   const navigationDemo = options.navigationDemo ?? false
+  const switchDemo = options.switchDemo ?? false
   const homePageText = demoHomePageText(navigationDemo)
   const counterPageText = demoCounterPageText(navigationDemo)
   let revisionNumber = 1
@@ -408,17 +538,7 @@ export function createDemoAssetProvider(options: {
         revision: revision(revisionNumber),
         assetKey: 'demo-home-setup',
       },
-      content: new Blob([`export function setup(ctx) {
-  const num = ctx.state(0)
-  const onAdd = () => { num.value += 1 }
-  const buttonLabel = ctx.computed(() => num.value === 0 ? 'Add' : \`Add \${num.value}\`)
-  // 动画播放控制示例：把 animate 绑定到动画检查器的"播放"，预览中即自动播放；
-  // onToggleAnimate 可绑到按钮，false -> true 的上升沿会让动画从头重播。
-  const animate = ctx.state(true)
-  const onToggleAnimate = () => { animate.value = !animate.value }
-  return { num, onAdd, buttonLabel, animate, onToggleAnimate }
-}
-`], { type: 'text/javascript' }),
+      content: new Blob([demoHomeSetupText(switchDemo)], { type: 'text/javascript' }),
     }],
     ['readme', {
       entry: {
@@ -434,6 +554,22 @@ export function createDemoAssetProvider(options: {
       content: new Blob(['# Demo assets\n\nFiles are stored by an in-memory ComposeAssetProvider.\n']),
     }],
   ])
+
+  if (switchDemo) {
+    assets.set('demo-switch-component', {
+      entry: {
+        id: 'demo-switch-component',
+        parentId: root.id,
+        name: '刀闸.component.json',
+        kind: 'file',
+        mediaType: COMPOSE_COMPONENT_MEDIA_TYPE,
+        size: demoSwitchComponentText.length,
+        revision: revision(revisionNumber),
+        assetKey: 'demo-switch-component',
+      },
+      content: new Blob([demoSwitchComponentText], { type: COMPOSE_COMPONENT_MEDIA_TYPE }),
+    })
+  }
 
   options.pages?.forEach((page) => {
     const text = serializeComposePageFile({ ...createEmptyComposePageFile(), document: page.document })

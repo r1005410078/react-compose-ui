@@ -1,6 +1,7 @@
 import type {
   ComposeEntityPreset,
   ComposeRendererDefinition,
+  ComposeRendererPropContract,
 } from '@compose-ui/component-registry'
 import {
   COMPOSE_COMPONENT_MEDIA_TYPE,
@@ -13,9 +14,31 @@ import {
   type ComposeAppearance,
   type JsonObject,
 } from '@compose-ui/core'
+import * as v from 'valibot'
+import {
+  createComponentInstanceAnimationInspector,
+  createDefaultInspectorId,
+  type InspectorIdFactory,
+} from '../material-inspector-kit/renderer-inspectors'
 import { rendererPresetComponents } from '../material-preset'
 import { ComponentInstanceRenderer } from './renderer'
 import { COMPONENT_INSTANCE_RENDERER_MEASUREMENT } from './measurement'
+import { COMPONENT_INSTANCE_RENDERER_PROP_SCHEMAS } from './props'
+
+function valueContract(
+  name: keyof typeof COMPONENT_INSTANCE_RENDERER_PROP_SCHEMAS,
+  label: string,
+): ComposeRendererPropContract {
+  return {
+    name,
+    kind: 'value',
+    label,
+    category: 'animation',
+    validate: (value) => v.safeParse(COMPONENT_INSTANCE_RENDERER_PROP_SCHEMAS[name], value).success
+      ? true
+      : `${label} 取值非法`,
+  }
+}
 
 /** component-instance 使用的透明外观。 */
 const TRANSPARENT_APPEARANCE: ComposeAppearance = {
@@ -28,7 +51,9 @@ const TRANSPARENT_APPEARANCE: ComposeAppearance = {
 }
 
 /** 创建隐藏的关联组件实例 Renderer 与 Preset。 @internal */
-export function createComponentInstanceMaterial(): {
+export function createComponentInstanceMaterial(
+  idFactory: InspectorIdFactory = createDefaultInspectorId,
+): {
   renderer: ComposeRendererDefinition
   preset: ComposeEntityPreset
 } {
@@ -37,6 +62,13 @@ export function createComponentInstanceMaterial(): {
       type: 'component-instance',
       label: 'Component Instance',
       renderer: ComponentInstanceRenderer,
+      propContracts: [
+        valueContract('animation', '动画'),
+        valueContract('animationTime', '播放头'),
+      ],
+      propCategories: [{ id: 'animation', label: '动画', inspectorDefaultExpanded: true }],
+      inspectorPropNames: ['animation', 'animationTime'],
+      inspector: createComponentInstanceAnimationInspector(idFactory),
       measurement: COMPONENT_INSTANCE_RENDERER_MEASUREMENT,
     },
     preset: {

@@ -38,6 +38,7 @@ import {
 import {
   ComposeComponentInstanceNestProvider,
 } from './nest-context'
+import { sampleComponentInstanceDocument } from './animation'
 import { useComposeComponentInstanceNest } from './nest-state'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -144,6 +145,8 @@ export function ComponentInstanceRenderer({
   return (
     <ResolvedComponentContent
       ancestorKey={key}
+      animationId={props.animation}
+      animationTime={props.animationTime}
       assetResolver={assetResolver}
       document={document}
       mode={mode}
@@ -190,6 +193,8 @@ function alignComponentDocumentOutput(document: ComposeDocument): ComposeDocumen
 
 function ResolvedComponentContent({
   ancestorKey,
+  animationId,
+  animationTime,
   assetResolver,
   document,
   mode,
@@ -197,6 +202,8 @@ function ResolvedComponentContent({
   scriptModuleLoader,
 }: {
   readonly ancestorKey: string
+  readonly animationId: unknown
+  readonly animationTime: unknown
   readonly assetResolver: ComposeRendererProps['assetResolver']
   readonly document: ComposeDocument
   readonly mode: 'editor' | 'preview'
@@ -204,8 +211,25 @@ function ResolvedComponentContent({
   readonly scriptModuleLoader: ComposeRendererProps['scriptModuleLoader']
 }) {
   const nest = useComposeComponentInstanceNest()
-  // 布局文档：output 与根 fixed 对齐，保证嵌套 Auto Layout 重算
-  const layoutDocument = useMemo(() => alignComponentDocumentOutput(document), [document])
+  /*
+   * 顺序是「快照 → 实例覆盖 → 采样 → 嵌套 Yoga」。
+   *
+   * 覆盖表达作者意图，采样表达此刻的呈现；反过来的话覆盖会去改一份已经被时间改写过的文档，
+   * 同一份覆盖在不同时刻算出不同结果。
+   *
+   * 采样也排在 `alignComponentDocumentOutput` 之前：对齐读的是根的 Frame 尺寸与 LayoutItem，
+   * 两者都可能被轨道改写，对齐必须看到采样后的值。
+   *
+   * PERF：播放头一变就产生新的 document 引用，这个实例的 Yoga 树因此重解一次。成本形状与
+   * 页面级动画完全一样（`useComposeAnimationPlayback` 同样是采样后重解），不是新的性能类别；
+   * 状态驱动的实例一次业务事件才变一次。没选动画时采样返回原引用，一次多余的重解都不会发生。
+   */
+  const layoutDocument = useMemo(
+    () => alignComponentDocumentOutput(
+      sampleComponentInstanceDocument(document, animationId, animationTime),
+    ),
+    [animationId, animationTime, document],
+  )
   const [runtime] = useState(() => createComposeLayoutRuntime({ document: layoutDocument }))
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
     registry,

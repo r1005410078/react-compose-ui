@@ -93,7 +93,7 @@ export function createComposeBasicMaterials(
   const svg = createSvgMaterial(options.svg, idFactory)
   const shape = createShapeMaterial(options.shape, idFactory)
   const curve = createCurveMaterial(options.curve, idFactory)
-  const componentInstance = createComponentInstanceMaterial()
+  const componentInstance = createComponentInstanceMaterial(idFactory)
   const rendererDefinitions = Object.freeze([
     rectangle.renderer,
     text.renderer,

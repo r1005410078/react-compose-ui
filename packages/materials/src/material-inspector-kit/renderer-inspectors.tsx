@@ -24,6 +24,7 @@ import {
 } from '../text/defaults'
 import { SHAPE_RENDERER_PROP_SCHEMAS } from '../shape/props'
 import { CURVE_RENDERER_PROP_SCHEMAS } from '../curve/props'
+import { readComponentInstanceAnimations } from '../component-instance/animation'
 import { TEXT_RENDERER_PROP_SCHEMAS } from '../text/props'
 
 /** Inspector 命令 ID factory。 @internal */
@@ -558,6 +559,82 @@ export function createSvgRendererInspector(idFactory: InspectorIdFactory) {
           { ...context.authoredProps, ...next },
           idFactory,
         )}
+      />
+    )
+  }
+}
+
+/**
+ * 创建组件实例的动画 Inspector：选一条动画，给一个播放头。
+ *
+ * @remarks
+ * 下拉的选项来自实例保存的 `resolvedSnapshot`，因此 schema 每次渲染现建——组件换了、
+ * 动画增删了，选项跟着变。这与其余物料的静态 schema 不同，是数据本身决定的。
+ *
+ * **失效 id 保留在下拉里并标注**：`animation` 指向清单中已不存在的动画时，把当前值作为一个
+ * 额外条目留下，而不是静默回落到「未选择」。「还没配」与「配错了」必须可区分——静默清空会
+ * 让「组件作者临时改错了一个 id」在用户那边表现成「我的配置被吃掉了」。
+ *
+ * 两条 Prop 都进 `inspectorPropNames`，因此各自带一个绑定入口：逐实例绑到不同的页面导出，
+ * 正是同一个组件的多个实例各走各的播放头的实现方式。
+ *
+ * @internal
+ */
+export function createComponentInstanceAnimationInspector(idFactory: InspectorIdFactory) {
+  const UNSET = ''
+  return function ComponentInstanceAnimationInspector(context: ComposeRendererInspectorProps) {
+    const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
+    const props = inspectorBaseProps(context)
+    const animations = readComponentInstanceAnimations(props.resolvedSnapshot)
+    const selected = typeof props.animation === 'string' && props.animation.length > 0
+      ? props.animation
+      : UNSET
+    const stale = selected !== UNSET && !animations.some((item) => item.id === selected)
+    const optionIds = [UNSET, ...animations.map((item) => item.id), ...(stale ? [selected] : [])]
+    const optionLabels: Record<string, string> = {
+      [UNSET]: title(zh, 'None', '未选择'),
+      ...Object.fromEntries(animations.map((item) => [item.id, item.name || item.id])),
+      ...(stale
+        ? { [selected]: title(zh, `Missing: ${selected}`, `已失效：${selected}`) }
+        : {}),
+    }
+    const schema = v.object({
+      animation: v.pipe(
+        v.picklist(optionIds),
+        v.title(title(zh, 'Animation', '动画')),
+        v.metadata({ propertyPanel: { optionLabels } }),
+      ),
+      animationTime: v.pipe(
+        v.number(),
+        v.title(title(zh, 'Playhead', '播放头')),
+        v.metadata({ propertyPanel: { unit: 'ms' } }),
+      ),
+    })
+    const value = {
+      animation: selected,
+      animationTime: typeof props.animationTime === 'number' && Number.isFinite(props.animationTime)
+        ? props.animationTime
+        : 0,
+    }
+    return (
+      <ComposePropertyPanel
+        aria-label={title(zh, `${context.entity.name} animation`, `${context.entity.name} 动画`)}
+        binding={createPropsBinding(context)}
+        readOnly={context.readOnly}
+        schema={schema}
+        value={value}
+        onValueChange={(next, change) => {
+          const propName = change.path[0]
+          if (change.path.length !== 1 || typeof propName !== 'string' || !(propName in next)) return
+          // 面板里「未选择」是空串，文档里是 null——空串不是一个动画 id。
+          const written = propName === 'animation' && change.value === UNSET
+            ? null
+            : change.value as JsonValue
+          dispatchProps(context, {
+            ...context.authoredProps,
+            [propName]: written,
+          }, idFactory)
+        }}
       />
     )
   }

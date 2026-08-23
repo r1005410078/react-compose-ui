@@ -440,8 +440,17 @@ export function StageDemoWorkspace() {
   const [navigationDemo] = useState(
     () => new URLSearchParams(window.location.search).has('page-preview'),
   )
+  /**
+   * 刀闸示例组件与它配套的两个脚本导出，用 `?switch-demo` 打开。
+   *
+   * 与首页跳转入口同一条判断：项目组件清单与页面脚本返回成员都被既有端到端用例断言，
+   * 默认多一份资源会改掉它们。
+   */
+  const [switchDemo] = useState(
+    () => new URLSearchParams(window.location.search).has('switch-demo'),
+  )
   const [assetProvider] = useState(
-    () => createDemoAssetProvider({ navigationDemo }),
+    () => createDemoAssetProvider({ navigationDemo, switchDemo }),
   )
   const [providerOffline, setProviderOffline] = useState(false)
   const [componentStore] = useState(() => createComposeComponentStore({ provider: assetProvider }))

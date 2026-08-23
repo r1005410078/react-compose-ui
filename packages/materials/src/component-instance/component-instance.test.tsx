@@ -295,3 +295,135 @@ describe('OpenSpec: basic-materials / 关联组件实例物料', () => {
     expect(screen.getByTestId('compose-component-instance-depth')).toHaveAttribute('role', 'alert')
   })
 })
+
+/**
+ * 组件文档：矩形带一条 0 → 90 度的旋转轨道，清单挂在根 Frame 上。
+ *
+ * @remarks
+ * 用 `Transform.rotation` 而不是 `LayoutItem.offset`：旋转直接落在
+ * `composeEntitySceneStyle` 产出的 `transform` 上，断言读的是浏览器要画的那个值，
+ * 中间不隔着 Yoga 求解。轨道指向的 Component 必须真实存在，否则采样器会把它当失效数据跳过。
+ */
+function animatedComponentDocument(): ComposeDocument {
+  const base = componentDocument()
+  const rootId = base.rootIds[0]!
+  const root = base.entities[rootId]!
+  const rectangle = base.entities.rectangle!
+  return {
+    ...base,
+    entities: {
+      [rootId]: {
+        ...root,
+        components: {
+          ...root.components,
+          Animations: {
+            items: [{
+              id: 'switch',
+              name: '合分闸',
+              durationMs: 1000,
+              playbackMode: 'play-once',
+            }],
+          },
+        },
+      },
+      rectangle: {
+        ...rectangle,
+        components: {
+          ...rectangle.components,
+          Animation: {
+            clips: {
+              switch: [{
+                path: ['Transform', 'rotation'],
+                valueKind: 'number',
+                keyframes: [
+                  { id: 'a', timeMs: 0, value: 0, interpolation: { kind: 'linear' } },
+                  { id: 'b', timeMs: 1000, value: 90, interpolation: { kind: 'linear' } },
+                ],
+              }],
+            },
+          },
+        },
+      },
+    },
+  }
+}
+
+function animatedSnapshot(): ComposeResolvedComponentSnapshot {
+  return { ...snapshot(), document: animatedComponentDocument() }
+}
+
+function animatedProps(animation: string | null, animationTime: number) {
+  return {
+    reference,
+    resolvedSnapshot: animatedSnapshot(),
+    instanceOverrides: { properties: {}, operations: [] },
+    animation,
+    animationTime,
+  } as unknown as JsonObject
+}
+
+/** 读嵌套矩形实际拿到的 `transform`。 */
+async function nestedRotation(container: HTMLElement): Promise<string> {
+  await waitFor(() => {
+    expect(container.querySelector('[data-component-instance-entity-id="rectangle"]'))
+      .not.toBeNull()
+  })
+  const node = container.querySelector<HTMLElement>(
+    '[data-component-instance-entity-id="rectangle"]',
+  )!
+  return node.style.transform
+}
+
+describe('OpenSpec: basic-materials / 组件实例的动画播放头', () => {
+  it('播放头驱动实例内部姿态', async () => {
+    const materials = createComposeBasicMaterials()
+    const Renderer = materials.registry.getRenderer('component-instance')!.renderer
+    const entity = { id: 'instance', name: 'Switch', components: {} } as ComposeEntity
+    const at = (timeMs: number) => {
+      const props = animatedProps('switch', timeMs)
+      return (
+        <Renderer
+          authoredProps={props}
+          entity={entity}
+          mode="preview"
+          props={props}
+          registry={materials.registry}
+          renderer={{ type: 'component-instance', props }}
+        />
+      )
+    }
+
+    const { container, rerender } = render(at(0))
+    expect(await nestedRotation(container)).toBe('rotate(0deg)')
+
+    rerender(at(1000))
+    expect(await nestedRotation(container)).toBe('rotate(90deg)')
+  })
+
+  it('同一组件的两个实例各走各的播放头', async () => {
+    const materials = createComposeBasicMaterials()
+    const Renderer = materials.registry.getRenderer('component-instance')!.renderer
+    const instance = (id: string, timeMs: number) => {
+      const props = animatedProps('switch', timeMs)
+      return (
+        <div data-testid={id} key={id}>
+          <Renderer
+            authoredProps={props}
+            entity={{ id, name: 'Switch', components: {} } as ComposeEntity}
+            mode="preview"
+            props={props}
+            registry={materials.registry}
+            renderer={{ type: 'component-instance', props }}
+          />
+        </div>
+      )
+    }
+
+    render(<>{instance('open', 0)}{instance('closed', 1000)}</>)
+
+    // 判别点在这里：只测一个实例的话，把播放头做成全局单值的实现同样能全绿。
+    // 「粒度」这个问题在屏幕上的样子，就是同一帧里两个实例姿态不同。
+    expect(await nestedRotation(screen.getByTestId('open'))).toBe('rotate(0deg)')
+    expect(await nestedRotation(screen.getByTestId('closed'))).toBe('rotate(90deg)')
+  })
+})

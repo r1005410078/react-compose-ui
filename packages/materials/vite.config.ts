@@ -24,6 +24,7 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
+        '@compose-ui/animation',
         '@compose-ui/assets',
         '@compose-ui/component-registry',
         '@compose-ui/core',

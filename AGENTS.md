@@ -459,9 +459,25 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   `ComposeNavigationPort` 与 `ComposePageLoader` 两个协议类型，实现由宿主注入。
 - `@compose-ui/materials` 是 Group、Container、Rectangle、Text、Image、SVG 与 Component Instance Entity Presets、
   Renderer、Component Definitions 与 Capabilities 的独立基础物料包，可以依赖 `core`、
-  `assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、`script-runtime`、`ui-context`、
-  DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或 `asset-browser`；`layout-engine` 只用于
-  组件实例的独立嵌套文档 Runtime。
+  `animation`、`assets`、`component-registry`、`components`、`layout-engine`、`property-panel`、
+  `script-runtime`、`ui-context`、DOMPurify 和 Valibot，不得依赖 `stage`、`editor` 或
+  `asset-browser`；`layout-engine` 与 `animation` 都只用于组件实例的独立嵌套文档 Runtime——
+  前者求解它的布局，后者按实例播放头采样它。
+- **组件实例的播放头是宿主侧的两条 Renderer Prop**（`animation` 与 `animationTime`），走既有的
+  `Bindings.rendererProps` 绑定。绑定住在**宿主页面上那个实例 Entity** 自己的 `Bindings` 上，
+  因此「每个实例一个值」是构造上成立的：八个刀闸就是八个 Entity，各自绑到页面脚本的八个导出。
+  把绑定放进组件文档的 `Animations.bindings` 会撞上「数组只作为字段整体写入」——每个实例都要
+  攒一份完整的 `items` 副本，组件作者以后改时长要改八处；而且嵌套文档**根本没有脚本作用域**
+  （实例渲染器不向内传 `scriptScope`），那份声明在实例里永远解析不出东西。
+  实例内**不持有时钟**：清单条目的 `autoplay` 与 `playbackMode` 被忽略，采样是
+  `(document, id, timeMs) → document` 的纯函数，需要连续播放时由页面脚本驱动那个数值。
+  养一个每实例的 rAF 会重演「导航会话没有 `dispose`」那条坑——StrictMode 的挂载→清理→再挂载
+  会让它在首次渲染后就失效，而端到端跑生产构建，全绿也挡不住。
+  采样顺序是**快照 → 实例覆盖 → 采样 → 嵌套 Yoga**：覆盖表达作者意图，采样表达此刻的呈现，
+  反过来会让同一份覆盖在不同时刻算出不同结果。`animation` 缺席不采样且**不回退到清单第一条**，
+  指向不存在的 id 时保留原值并在 Inspector 标为失效——「还没配」与「配错了」必须可区分。
+  **目前还没有 UI 路径能把动画做进组件文档**：模式切换器只挂在页面文档，创建组件也不搬运
+  动画清单，因此示例应用里的「刀闸」组件资源是手写的。
 - `@compose-ui/components` 的命令行是**共享 Pattern**：它只消费 `ComposeCommandPrompt` 与一组
   注入的文案与状态标记，不认识文档、选择集或任何具体命令。两块画布共用它——正交/捕捉/选择集
   计数这类各不相同的东西以 `status` 标记传入，`data-testid` 前缀由调用方给出。二态标记两种
