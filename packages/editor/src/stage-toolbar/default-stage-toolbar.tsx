@@ -48,7 +48,6 @@ function marqueeMode(mode: ComposeStageMarqueeMode) {
 
 const SHAPE_TOOLS = [
   ['draw-rectangle', 'rectangle', 'rectangle', 'stage.drawRectangleTool'],
-  ['draw-line', 'line', 'line', 'stage.drawLineTool'],
   ['draw-arrow', 'arrow', 'arrow', 'stage.drawArrowTool'],
   ['draw-circle', 'circle', 'circle', 'stage.drawCircleTool'],
 ] as const
@@ -178,18 +177,20 @@ export function DefaultStageToolbar({
   return (
     <div aria-label={messages.label} className="compose-editor__stage-toolbar" role="toolbar">
       <div aria-label={messages.interactionTools} className="compose-editor__toolbar-group" role="group">
-        <button {...titled(messages.select, shortcut('stage.selectTool'))} aria-pressed={tool === 'select'} type="button" onClick={() => setTool('select')}>
-          <StageToolbarIcon name="select" />
-        </button>
+        {/*
+          * 判定模式菜单挂在**选择工具**上，而不是一个独立的框选工具位：`select` 在空白处
+          * 拖拽本来就是框选，判定模式正是这个动作的参数。原先那个 marquee 工具位与这个
+          * 手势完全重复。
+          */}
         <div className="compose-editor__toolbar-menu-anchor">
           <button
-            {...titled(messages.marquee, shortcut('stage.marqueeTool'))}
-            aria-pressed={tool === 'marquee'}
+            {...titled(messages.select, shortcut('stage.selectTool'))}
+            aria-pressed={tool === 'select'}
             data-active-marquee-mode={activeMarquee[0]}
             type="button"
-            onClick={() => setTool('marquee')}
+            onClick={() => setTool('select')}
           >
-            <StageToolbarIcon name={activeMarquee[2]} />
+            <StageToolbarIcon name="select" />
           </button>
           <button
             {...titled(messages.marqueeMode)}
@@ -235,17 +236,11 @@ export function DefaultStageToolbar({
             </div>
           ) : null}
         </div>
-        <button {...titled(messages.move, shortcut('stage.moveTool'))} aria-pressed={tool === 'move'} type="button" onClick={() => setTool('move')}>
-          <StageToolbarIcon name="move" />
-        </button>
         <button {...titled(messages.scale, shortcut('stage.scaleTool'))} aria-pressed={tool === 'scale'} type="button" onClick={() => setTool('scale')}>
           <StageToolbarIcon name="scale" />
         </button>
         <button {...titled(messages.rotate, shortcut('stage.rotateTool'))} aria-pressed={tool === 'rotate'} type="button" onClick={() => setTool('rotate')}>
           <StageToolbarIcon name="rotate" />
-        </button>
-        <button {...titled(messages.pan, shortcut('stage.panTool'))} aria-pressed={tool === 'pan'} type="button" onClick={() => setTool('pan')}>
-          <StageToolbarIcon name="pan" />
         </button>
       </div>
       <div aria-label={messages.snapTools} className="compose-editor__toolbar-group" role="group">

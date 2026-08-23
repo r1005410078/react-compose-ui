@@ -15,7 +15,6 @@
    * 这个变量同时是**留白量与命令行自身的高度**，两处不可能对不上；非绘图模式为 0，因此
    * 设计模式的布局一像素不变。
    */
-  --compose-stage-command-size: 0px;
 
   position: relative;
   width: 100%;
@@ -1108,8 +1107,8 @@
   stroke-dasharray: 3 3;
 }
 
-/* 绘图模式下光标交给十字线，系统光标会与它重影。 */
-.compose-stage[data-drafting] .compose-stage__surface {
+/* 命令等取点时光标交给十字线，系统光标会与它重影；其余时候是常规光标。 */
+.compose-stage__surface:has(> .compose-stage__drafting) {
   cursor: none;
 }
 
@@ -1120,7 +1119,11 @@
  * 高度锁在 `--compose-stage-command-size` 上：那正是上面各层让出的留白量，写死在同一个
  * 变量里两者才不会漂开。
  */
-.compose-stage[data-drafting] {
+.compose-stage {
+  /*
+   * 命令行常驻，因此这条留白恒定存在。曾经它由 `[data-drafting]` 驱动，只有进绘图模式才
+   * 出现——而「不进模式就看不见命令行」正是「能力不可发现」那条毛病本身。
+   */
   --compose-stage-command-size: 30px;
 }
 

@@ -42,16 +42,14 @@ export interface StageGesturePriorityEntry {
  */
 export const STAGE_GESTURE_PRIORITY: readonly StageGesturePriorityEntry[] = Object.freeze([
   { id: 'text-edit-guard', priority: 1800, sourceLine: 1702, condition: 'context.textEditing 且命中编辑目标或变换手柄（consumed）' },
-  { id: 'pan', priority: 1700, sourceLine: 1719, condition: "tool === 'pan' || snapshot.temporaryPan || button === 1" },
+  { id: 'pan', priority: 1700, sourceLine: 1719, condition: 'snapshot.temporaryPan || button === 1' },
   { id: 'drafting-point', priority: 1650, condition: '绘图命令正在等待一个点（consumed）' },
   { id: 'rotate-tool', priority: 1600, sourceLine: 1839, condition: "tool === 'rotate' 且命中非标尺/辅助线/Paint 柄/路径柄" },
   { id: 'paint-sample', priority: 1500, sourceLine: 1875, condition: 'context.paintSampling 存在' },
   { id: 'path', priority: 1400, sourceLine: 1896, condition: "hit.kind === 'path-handle'" },
   { id: 'paint', priority: 1300, sourceLine: 1940, condition: "hit.kind === 'paint-handle'" },
   { id: 'segment-resize', priority: 1200, sourceLine: 1966, condition: "hit.kind === 'segment-endpoint'" },
-  { id: 'marquee-tool', priority: 1100, sourceLine: 2028, condition: "tool === 'marquee' 且命中 surface 或 entity" },
   { id: 'draw', priority: 1000, sourceLine: 2038, condition: 'isDrawingTool(tool) 且命中 surface 或 entity' },
-  { id: 'move-axis', priority: 900, sourceLine: 2068, condition: "hit.kind === 'move-axis'" },
   { id: 'marquee-converge', priority: 800, sourceLine: 2075, condition: "hit.kind === 'entity' 且 shouldConvergeToMarquee" },
   { id: 'entity-select-move', priority: 700, sourceLine: 2088, condition: "hit.kind === 'entity'（含双击进入文字编辑）" },
   { id: 'resize', priority: 600, sourceLine: 2118, condition: "hit.kind === 'resize'" },

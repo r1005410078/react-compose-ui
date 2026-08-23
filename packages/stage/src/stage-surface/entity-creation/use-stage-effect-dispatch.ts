@@ -300,7 +300,7 @@ export function useStageEffectDispatch(
         seedResult.seed,
         entityId,
         bounds,
-        effect.tool === 'draw-line' || effect.tool === 'draw-arrow'
+        effect.tool === 'draw-arrow'
           ? {
               x: directionAxis(effect.end.x - effect.start.x),
               y: directionAxis(effect.end.y - effect.start.y),

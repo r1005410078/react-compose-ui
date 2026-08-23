@@ -2008,8 +2008,6 @@ export function ComposeEditor({
     settingsButtonRef.current = element
   }, [])
 
-  /** 绘图模式是会话状态：只改 Stage 的输入方式，不进文档也不重组面板。 */
-  const [drafting, setDrafting] = useState(false)
   /** setEditorMode 正在重组底部面板时抑制 onDidActivePanelChange 的回流。 */
   const editorModeGuardRef = useRef(false)
   /** 进入动画模式前底部组的折叠状态；切回设计模式时恢复。 */
@@ -2026,8 +2024,6 @@ export function ComposeEditor({
     mode: ComposeEditorMode,
     options?: { readonly restoreCollapsed?: boolean },
   ) => {
-    // 绘图只换 Stage 的输入方式，不重组任何面板——对象世界归页面，场景树与属性面板照常在。
-    setDrafting(mode === 'drafting')
     const rawApi = outerApiRef.current
     if (!rawApi || editorModeGuardRef.current) return
     const active = animationModeRef.current.active
@@ -2272,7 +2268,6 @@ export function ComposeEditor({
           // 否则对象被静默挂进激活场景，后续打点全部落进别块场景的动画。
           policy: {
             lockGestureParent: animationMode.active || undefined,
-            drafting: drafting || undefined,
           },
           onToolChange: controller.setTool,
           scriptScope: activePageSession?.scriptScope,
@@ -2328,9 +2323,7 @@ export function ComposeEditor({
       })(),
       // 空态触发条件是「镜像无动画」而不是「无轨道」：已绑定且零轨道显示正常时间线。
       animationEmpty: animationMode.animationId === null,
-      editorMode: animationMode.active
-        ? 'animation' as const
-        : drafting ? 'drafting' as const : 'design' as const,
+      editorMode: animationMode.active ? 'animation' as const : 'design' as const,
       onEditorModeChange: setEditorMode,
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined

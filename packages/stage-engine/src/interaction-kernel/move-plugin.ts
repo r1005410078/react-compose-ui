@@ -16,7 +16,6 @@ import type { StageInteractionModifiers } from '../interaction-controller'
 import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 轴向移动手柄入口的注册 id。 @public */
-export const STAGE_MOVE_AXIS_PLUGIN_ID = 'move-axis'
 
 /** 实体选中并拖动入口的注册 id。 @public */
 export const STAGE_ENTITY_SELECT_MOVE_PLUGIN_ID = 'entity-select-move'
@@ -185,27 +184,6 @@ export function claimStageMove(
   })
 }
 
-/**
- * 轴向移动手柄插件。
- *
- * @remarks
- * Godot 风格的 move 工具在选区上画出 X/Y 两根轴，拖动其中一根把位移约束到该轴。命中手柄但
- * 工具已经不是 move、或选区没有可移动目标时消费这次按下——手柄画在选区之上，放行会让它退化
- * 成一次自由拖动。
- *
- * @public
- */
-export function createStageMoveAxisPlugin(): StageInteractionPlugin {
-  return {
-    id: STAGE_MOVE_AXIS_PLUGIN_ID,
-    priority: priorityOf(STAGE_MOVE_AXIS_PLUGIN_ID),
-    claim(event: StagePointerDownEvent, ctx: StagePluginContext): StageClaimResult {
-      if (event.hit.kind !== 'move-axis') return null
-      if (ctx.context.tool !== 'move') return 'consumed'
-      return claimStageMove(event, ctx, ctx.context.selectedIds, event.hit.axis) ?? 'consumed'
-    },
-  }
-}
 
 /**
  * 实体选中并拖动插件。
@@ -256,7 +234,7 @@ export function createStageEntitySelectMovePlugin(): StageInteractionPlugin {
         return 'consumed'
       }
 
-      if (locked || (context.tool !== 'select' && context.tool !== 'move')) return 'consumed'
+      if (locked || context.tool !== 'select') return 'consumed'
       return claimStageMove(event, ctx, nextSelection) ?? 'consumed'
     },
   }

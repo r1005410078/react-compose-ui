@@ -226,14 +226,10 @@ export function createComposeEditorActionHandlers(
 
   return {
     'stage.selectTool': handler(undefined, () => { context.setTool('select') }),
-    'stage.marqueeTool': handler(undefined, () => { context.setTool('marquee') }),
-    'stage.moveTool': handler(undefined, () => { context.setTool('move') }),
     'stage.scaleTool': handler(undefined, () => { context.setTool('scale') }),
     'stage.rotateTool': handler(undefined, () => { context.setTool('rotate') }),
-    'stage.panTool': handler(undefined, () => { context.setTool('pan') }),
     'stage.drawContainerTool': handler(undefined, () => { context.setTool('draw-container') }),
     'stage.drawRectangleTool': handler(undefined, () => { context.setTool('draw-rectangle') }),
-    'stage.drawLineTool': handler(undefined, () => { context.setTool('draw-line') }),
     'stage.drawArrowTool': handler(undefined, () => { context.setTool('draw-arrow') }),
     'stage.drawCircleTool': handler(undefined, () => { context.setTool('draw-circle') }),
     'stage.drawTextTool': handler(undefined, () => { context.setTool('draw-text') }),
@@ -396,14 +392,10 @@ export function createComposeEditorActionHandlers(
 /** 目录呈现顺序；与执行层解耦，改动顺序不影响行为。 */
 const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'stage.selectTool',
-  'stage.marqueeTool',
-  'stage.moveTool',
   'stage.scaleTool',
   'stage.rotateTool',
-  'stage.panTool',
   'stage.drawContainerTool',
   'stage.drawRectangleTool',
-  'stage.drawLineTool',
   'stage.drawArrowTool',
   'stage.drawCircleTool',
   'stage.drawTextTool',

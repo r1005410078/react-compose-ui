@@ -316,7 +316,15 @@ export function useStageDrafting(options: StageDraftingOptions) {
       return true
     }
     if (event.key === 'Escape') {
-      if (!sessionRef.current && latest.current.selectedIds.length === 0) return false
+      /*
+       * 只有命令在跑时才吃 Esc。
+       *
+       * 曾经它在没有命令时也吃——那是累加选择语义的配套（点空白不清空，Esc 是唯一的清空
+       * 入口）。语义统一成替换之后点空白就清空了，这条不再是唯一入口；而绘图能力恒开
+       * 之后，继续吃 Esc 会**抢在文字编辑的退出分支之前**，用户在画布上改完字按 Esc
+       * 会变成清空选择集而不是提交。
+       */
+      if (!sessionRef.current) return false
       event.preventDefault()
       cancel()
       return true

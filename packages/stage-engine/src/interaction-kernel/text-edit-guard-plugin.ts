@@ -37,7 +37,6 @@ export function createStageTextEditGuardPlugin(): StageInteractionPlugin {
       // Stage 在编辑态本就不渲染这些手柄，这里是协议层的兜底。
       const onEditingHandle = event.hit.kind === 'resize'
         || event.hit.kind === 'rotate'
-        || event.hit.kind === 'move-axis'
         || (event.hit.kind === 'segment-endpoint' && event.hit.entityId === editing.entityId)
       if (onEditingTarget || onEditingHandle) return 'consumed'
       ctx.apply([{ type: 'text-editing.exit' }])

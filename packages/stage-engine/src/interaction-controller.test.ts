@@ -75,41 +75,6 @@ describe('StageInteractionController ECS systems', () => {
     })
   })
 
-  it('OpenSpec: 受控工具模式与专属选区反馈 / move 轴 gizmo 只改变对应坐标', () => {
-    const { controller } = setup()
-    controller.updateContext({
-      document: document(),
-      layoutSnapshot: layoutSnapshot(document()),
-      viewport: { x: 0, y: 0, zoom: 1 },
-      surfaceSize: { width: 800, height: 600 },
-      tool: 'move' as never,
-      selectedIds: ['a'],
-      idFactory: () => 'move-axis-id',
-    })
-
-    controller.send({
-      type: 'pointer.down',
-      pointerId: 1,
-      button: 0,
-      point: { x: 10, y: 10 },
-      hit: { kind: 'move-axis', axis: 'x' } as never,
-      modifiers,
-    })
-    controller.send({
-      type: 'pointer.move',
-      pointerId: 1,
-      point: { x: 42, y: 55 },
-      modifiers,
-    })
-
-    expect(controller.getSnapshot()).toMatchObject({
-      phase: 'move',
-      previewTransforms: {
-        a: expect.objectContaining({ x: 32, y: 0 }),
-      },
-    })
-  })
-
   it('OpenSpec: Headless 绘制会话 / draw tool 只在松手请求绘制提交', () => {
     const { controller, effects } = setup()
     controller.updateContext({
@@ -1251,7 +1216,6 @@ describe('StageInteractionController 画布内文字编辑会话', () => {
     for (const hit of [
       { kind: 'resize', handle: 'se' },
       { kind: 'rotate' },
-      { kind: 'move-axis', axis: 'x' },
     ] as const) {
       const { controller, effects } = textSetup({
         selectedIds: ['a'],
@@ -1622,16 +1586,6 @@ describe('框选工具与选区布尔组合', () => {
     return { controller, drag, effects, selection }
   }
 
-  it('OpenSpec: 框选工具从节点上起框', () => {
-    const { controller, drag, effects, selection } = marqueeSetup({ tool: 'marquee' })
-    const duringDrag = drag({ x: 10, y: 10 }, { x: 280, y: 40 }, { kind: 'entity', entityId: 'left' })
-    expect(duringDrag.phase).toBe('marquee')
-    expect(controller.getSnapshot().phase).toBe('idle')
-    // 起框而非移动：不得产生任何 transform 命令。
-    expect(effects.some((effect) => effect.type === 'command.dispatch')).toBe(false)
-    expect(selection()).toMatchObject({ selectedIds: ['left', 'right'] })
-  })
-
   it('OpenSpec: 选择工具保持空白起框', () => {
     const { controller, drag } = marqueeSetup({ tool: 'select', selectedIds: ['left'] })
     const duringDrag = drag({ x: 10, y: 10 }, { x: 40, y: 30 }, { kind: 'entity', entityId: 'left' })
@@ -1677,7 +1631,7 @@ describe('框选工具与选区布尔组合', () => {
   })
 
   it('OpenSpec: 手势预览与原子提交 / 框选不产生文档事务', () => {
-    const { drag, effects } = marqueeSetup({ tool: 'marquee' })
+    const { drag, effects } = marqueeSetup()
     drag({ x: -10, y: -10 }, { x: 400, y: 100 })
     expect(effects.some((effect) => effect.type === 'command.dispatch')).toBe(false)
   })

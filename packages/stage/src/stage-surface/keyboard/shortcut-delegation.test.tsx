@@ -135,8 +135,10 @@ describe('ComposeStage 快捷键接管', () => {
     const onToolChange = vi.fn()
     const { dispatch, stage } = renderStage({ onToolChange })
 
-    fireEvent.keyDown(stage, { code: 'KeyH', key: 'h' })
-    expect(onToolChange).toHaveBeenCalledWith('pan')
+    // 原先用的是 pan 工具的 H。pan 工具已删除——空格与中键是随时可用的临时覆盖，
+    // 不需要一个有状态的工具位。这里换成仍然存在的 rotate。
+    fireEvent.keyDown(stage, { code: 'KeyR', key: 'R', shiftKey: true })
+    expect(onToolChange).toHaveBeenCalledWith('rotate')
 
     fireEvent.keyDown(stage, { code: 'KeyG', key: 'g', metaKey: true })
     expect(dispatch).toHaveBeenCalledTimes(1)
@@ -147,9 +149,9 @@ describe('ComposeStage 快捷键接管', () => {
     const onToolChange = vi.fn()
     const { stage } = renderStage({ onShortcutAction, onToolChange })
 
-    fireEvent.keyDown(stage, { code: 'KeyH', key: 'h' })
+    fireEvent.keyDown(stage, { code: 'KeyR', key: 'R', shiftKey: true })
 
-    expect(onShortcutAction).toHaveBeenCalledWith('stage.panTool')
+    expect(onShortcutAction).toHaveBeenCalledWith('stage.rotateTool')
     // 接管后 Stage 不再自行切换工具，避免与宿主重复执行。
     expect(onToolChange).not.toHaveBeenCalled()
   })

@@ -503,13 +503,19 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动�
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
   const zeroBox = (await instanceContent.boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
-  const midBox = (await instanceContent.boundingBox())!
-  // 实例大于画布视口（1280×720，左缘在画布外）：1/4 点会落到画布外的面板上。
-  // 用中心加小偏移抓取——既落在画布内，又避开物体中心的运动路径顶点。
-  await page.mouse.move(midBox.x + midBox.width / 2 + 60, midBox.y + midBox.height / 2 + 40)
-  await page.mouse.down()
-  await page.mouse.move(midBox.x + midBox.width / 2 + 200, midBox.y + midBox.height / 2 + 40, { steps: 4 })
-  await page.mouse.up()
+  /*
+   * 第二帧走 Inspector 而不是画布拖拽。
+   *
+   * 这条用例的主题是**组件实例能不能参与动画**，不是拖拽自动记录（那有自己的用例）。而实例
+   * 大于画布视口、左缘在画布外，抓取点得同时落在实例与图面里——写死的偏移量随 chrome 一变
+   * 就失效（命令行常驻之后图面底部少了 30px）。Inspector 的属性编辑同样走自动记录，
+   * 且与画布几何无关。
+   */
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  const positionX = inspector.getByRole('spinbutton', { name: '位置 X' })
+  const startX = Number(await positionX.inputValue())
+  await positionX.fill(String(startX + 140))
+  await positionX.press('Enter')
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
   await expect(animationPanel.getByRole('button', { name: /^动画片段 Anim Card：/u })).toBeVisible()
 

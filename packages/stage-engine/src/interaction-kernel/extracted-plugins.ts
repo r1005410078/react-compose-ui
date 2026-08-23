@@ -11,11 +11,9 @@ import {
 } from './guide-plugin'
 import {
   createStageMarqueeConvergePlugin,
-  createStageMarqueeToolPlugin,
 } from './marquee-plugin'
 import {
   createStageEntitySelectMovePlugin,
-  createStageMoveAxisPlugin,
 } from './move-plugin'
 import { createStagePaintPlugin } from './paint-plugin'
 import { createStagePaintSamplePlugin } from './paint-sample-plugin'
@@ -51,9 +49,7 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStagePathPlugin,
   createStagePaintPlugin,
   createStageSegmentResizePlugin,
-  createStageMarqueeToolPlugin,
   createStageDrawPlugin,
-  createStageMoveAxisPlugin,
   createStageMarqueeConvergePlugin,
   createStageEntitySelectMovePlugin,
   createStageResizePlugin,

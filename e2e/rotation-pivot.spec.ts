@@ -16,7 +16,6 @@ test('OpenSpec: compose-document / 旋转基点 / 画线、设基点、刻角度
   await expect(stage).toBeVisible()
 
   // 1. 绘图模式画一条水平线。
-  await editor.getByRole('radio', { name: '绘图' }).click()
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
@@ -30,7 +29,6 @@ test('OpenSpec: compose-document / 旋转基点 / 画线、设基点、刻角度
   await expect(stroke).toHaveCount(1)
 
   // 2. 回设计模式并选中它。命中点从实测包围盒算：落笔点会被网格吸附挪动最多半格。
-  await editor.getByRole('radio', { name: '设计' }).click()
   const drawn = (await stroke.boundingBox())!
   await page.mouse.click(drawn.x + drawn.width / 2, drawn.y + drawn.height / 2)
   const inspector = editor.locator('[data-workspace-panel="inspector"]')

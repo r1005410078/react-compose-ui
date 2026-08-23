@@ -59,11 +59,10 @@ export function createStagePanPlugin(): StageInteractionPlugin {
     id: STAGE_PAN_PLUGIN_ID,
     priority: PAN_PRIORITY,
     claim(event, ctx: StagePluginContext) {
-      // 三个入口：显式 pan 工具、按住空格的临时平移、中键。temporaryPan 是跨会话存活的
-      // 内核状态，必须在判定当刻读取。
-      const shouldPan = ctx.context.tool === 'pan'
-        || ctx.snapshot.temporaryPan
-        || event.button === MIDDLE_BUTTON
+      // 两个入口：按住空格的临时平移与中键。pan 工具已删除——它与这两个入口完全重复，
+      // 而工具是有状态的：选了 pan 之后要再选回 select 才能做别的事。temporaryPan 是
+      // 跨会话存活的内核状态，必须在判定当刻读取。
+      const shouldPan = ctx.snapshot.temporaryPan || event.button === MIDDLE_BUTTON
       if (!shouldPan) return null
       ctx.publish({ ...ctx.idleSnapshot(), phase: 'pan' })
       ctx.apply([{ type: 'pointer.capture', pointerId: event.pointerId }])

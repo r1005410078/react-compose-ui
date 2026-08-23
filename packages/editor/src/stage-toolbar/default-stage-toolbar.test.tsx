@@ -17,7 +17,7 @@ function document() {
 
 function renderToolbar(
   tool: import('@compose-ui/stage').ComposeStageTool = 'select',
-  lastShapeTool: 'draw-rectangle' | 'draw-line' | 'draw-arrow' | 'draw-circle' = 'draw-rectangle',
+  lastShapeTool: 'draw-rectangle' | 'draw-arrow' | 'draw-circle' = 'draw-rectangle',
   marqueeMode: import('@compose-ui/stage').ComposeStageMarqueeMode = 'intersect',
 ) {
   const setTool = vi.fn()
@@ -52,18 +52,24 @@ describe('DefaultStageToolbar', () => {
   it('OpenSpec: editor-workspace-layout / 扁平工具栏 / 按产品顺序暴露所有工具', () => {
     renderToolbar()
 
-    for (const label of ['选择', '移动', '缩放', '旋转', '平移', '吸附', '显示网格', '创建容器', '文字']) {
+    for (const label of ['选择', '缩放', '旋转', '吸附', '显示网格', '创建容器', '文字']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
-    expect(screen.getByRole('button', { name: '框选' })).toBeInTheDocument()
+    // 三个与既有手势完全重复的工具位已删除：`select` 空白拖拽即框选、`MOVE` 命令能键入
+    // 精确位移、空格与中键是随时可用的临时平移覆盖。
+    for (const label of ['框选', '移动', '平移']) {
+      expect(screen.queryByRole('button', { name: label })).toBeNull()
+    }
   })
 
-  it('OpenSpec: editor-workspace-layout / 框选工具 / 主按钮切换到 marquee 工具', () => {
+  it('OpenSpec: editor-workspace-layout / 框选工具与判定模式菜单 / 判定挂在选择工具上', () => {
     const { setMarqueeMode, setTool } = renderToolbar()
 
-    fireEvent.click(screen.getByRole('button', { name: '框选' }))
+    // 判定模式是「select 在空白处拖拽」这个动作的参数，因此菜单挂在 select 上，
+    // 而不是一个与该手势完全重复的独立工具位。
+    fireEvent.click(screen.getByRole('button', { name: '选择' }))
 
-    expect(setTool).toHaveBeenCalledWith('marquee')
+    expect(setTool).toHaveBeenCalledWith('select')
     expect(setMarqueeMode).not.toHaveBeenCalled()
   })
 
@@ -93,29 +99,27 @@ describe('DefaultStageToolbar', () => {
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
-  it('OpenSpec: editor-workspace-layout / 框选主按钮 / 图标跟随当前模式且不展开菜单也可辨认', () => {
-    renderToolbar('marquee', 'draw-rectangle', 'directional')
+  it('OpenSpec: editor-workspace-layout / 框选工具与判定模式菜单 / 当前判定可在按钮上读出', () => {
+    renderToolbar('select', 'draw-rectangle', 'directional')
 
-    const primary = screen.getByRole('button', { name: '框选' })
+    const primary = screen.getByRole('button', { name: '选择' })
     expect(primary).toHaveAttribute('data-active-marquee-mode', 'directional')
     expect(primary).toHaveAttribute('aria-pressed', 'true')
-    // 方向决定图标独有的左右箭头基线。
-    expect(primary.querySelector('path[d="M4.5 19h15"]')).toBeInTheDocument()
 
     cleanup()
-    renderToolbar('marquee', 'draw-rectangle', 'contain')
-    expect(screen.getByRole('button', { name: '框选' }))
+    renderToolbar('select', 'draw-rectangle', 'contain')
+    expect(screen.getByRole('button', { name: '选择' }))
       .toHaveAttribute('data-active-marquee-mode', 'contain')
   })
 
-  it('OpenSpec: editor-workspace-layout / 专属移动与绘图工具 / 入口切换受控工具状态', () => {
+  it('OpenSpec: editor-workspace-layout / 绘图工具 / 入口切换受控工具状态', () => {
     const { setTool } = renderToolbar()
 
-    fireEvent.click(screen.getByRole('button', { name: '移动' }))
+    fireEvent.click(screen.getByRole('button', { name: '旋转' }))
     fireEvent.click(screen.getByRole('button', { name: '创建容器' }))
     fireEvent.click(screen.getByRole('button', { name: '文字' }))
 
-    expect(setTool).toHaveBeenNthCalledWith(1, 'move')
+    expect(setTool).toHaveBeenNthCalledWith(1, 'rotate')
     expect(setTool).toHaveBeenNthCalledWith(2, 'draw-container')
     expect(setTool).toHaveBeenNthCalledWith(3, 'draw-text')
   })
@@ -139,7 +143,9 @@ describe('DefaultStageToolbar', () => {
 
     const menu = screen.getByRole('menu', { name: '形状' })
     expect(menu).toBeInTheDocument()
-    expect(screen.getByText('L', { selector: 'kbd' })).toBeInTheDocument()
+    // 形状菜单不再有 Line：`LINE` 命令产出 Curve，那才是步骤 8 要留下的一种。
+    expect(screen.queryByRole('menuitemradio', { name: /线/ })).toBeNull()
+    expect(screen.getByText('R', { selector: 'kbd' })).toBeInTheDocument()
     fireEvent.keyDown(menu, { key: 'Escape' })
 
     expect(screen.queryByRole('menu', { name: '形状' })).not.toBeInTheDocument()

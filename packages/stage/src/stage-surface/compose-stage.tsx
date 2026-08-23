@@ -191,7 +191,6 @@ function ComposeStageReady({
   } = services
   // policy 的每一项都有自身缺省值，宿主整体省略与逐项省略必须等价。
   const {
-    drafting = false,
     gridVisible = true,
     lockGestureParent,
     marqueeMode,
@@ -442,7 +441,9 @@ function ComposeStageReady({
   }), [messages])
 
   const draftingSession = useStageDrafting({
-    enabled: drafting,
+    // 绘图能力恒开：命令行常驻，命令随时可启动。模式已取消——它提供的四样没有一样
+    // 需要模式承载，而模式本身与动画互斥、把同一件事拆成两套、并让能力不可发现。
+    enabled: true,
     document,
     layoutSnapshot,
     viewport,
@@ -525,9 +526,9 @@ function ComposeStageReady({
       tool,
       // 绘图模式的框选按方向判定（左→右窗口、右→左交叉）：这是 AutoCAD 的惯例，也是宿主
       // 没有显式指定时该模式下最合理的默认，宿主显式给出的值仍然优先。
-      marqueeMode: marqueeMode ?? (drafting ? 'directional' : undefined),
+      // 判定模式只由宿主受控：模式不该偷改用户的设置。
+      marqueeMode,
       // 绘图模式用 CAD 选择语义：点中即加入、Shift 移出。点选与框选读同一个标记。
-      selectionMode: drafting ? 'accumulate' : undefined,
       lockGestureParent,
       draftingAwaitingPoint: draftingSession.awaitingPoint,
       selectedIds: normalizedSelection,
@@ -550,7 +551,6 @@ function ComposeStageReady({
     contentReflowsWithWidth,
     controller,
     document,
-    drafting,
     draftingSession.awaitingPoint,
     hiddenEntityIds,
     isTextEditable,
@@ -669,7 +669,8 @@ function ComposeStageReady({
     surfaceRef,
     onSelectedIdsChange,
     keyboardCommand: (event) => {
-      // 绘图模式的 F8/F3 先于既有键位级联：它们在设计模式下没有绑定，因此不会抢走任何东西。
+      // 绘图的 F8/F3 先于既有键位级联：它们在别处没有绑定，因此不会抢走任何东西。
+      // Esc 只在命令进行中被这里消费，其余情况交回级联——文字编辑的退出分支在那里。
       if (draftingRef.current.handleKeyDown(event)) return
       keyboardCommand(event)
     },
@@ -689,7 +690,6 @@ function ComposeStageReady({
       {...props}
       aria-label={props['aria-label'] ?? 'Stage'}
       className={['compose-stage', className].filter(Boolean).join(' ')}
-      data-drafting={drafting ? '' : undefined}
       data-compose-theme={theme?.resolvedTheme}
       data-interaction-cursor={interaction.cursor}
       data-interaction-phase={interaction.phase}
@@ -750,8 +750,11 @@ function ComposeStageReady({
         data-testid="stage-surface"
         id={surfaceId}
         ref={surfaceRef}
-        onPointerLeave={drafting ? () => { draftingSession.setPointer(null) } : undefined}
-        onPointerMove={drafting
+        // 只在命令等取点时跟踪指针：常态下每帧解一次世界坐标是白花的。
+        onPointerLeave={draftingSession.awaitingPoint
+          ? () => { draftingSession.setPointer(null) }
+          : undefined}
+        onPointerMove={draftingSession.awaitingPoint
           ? (event) => {
               const rect = event.currentTarget.getBoundingClientRect()
               draftingSession.setPointer(screenToWorld(
@@ -811,7 +814,11 @@ function ComposeStageReady({
               </div>
             )
           : null}
-        {drafting ? (
+        {/*
+          * 十字光标与取点预览跟随**当前是否在取点**，不跟随任何全局模式：没有命令在跑时
+          * 图面是常规光标，命令一开始等点就换成十字。
+          */}
+        {draftingSession.awaitingPoint ? (
           <StageDraftingOverlay
             crosshair={draftingSession.pointerScreen}
             outlines={draftingSession.outlines}
@@ -868,41 +875,40 @@ function ComposeStageReady({
         onValueChange={(value) => onViewportChange(scrollAxisToViewport(viewport, 'y', value))}
       />
       <div aria-hidden="true" className="compose-stage__scroll-corner" />
-      {drafting ? (
-        <ComposeCommandLine
-          className="compose-stage__command-line"
-          messages={{
-            ready: messages.draftingReady,
-            inputLabel: messages.draftingCommandLineLabel,
-            placeholder: messages.draftingCommandPlaceholder,
-            keywordsPrefix: messages.draftingKeywordsPrefix,
-          }}
-          notice={draftingSession.notice}
-          prompt={draftingSession.prompt}
-          status={[
-            ...(draftingSession.selectionCount === null
-              ? []
-              : [{
-                  id: 'selection-count',
-                  label: messages.draftingSelectionCount(draftingSession.selectionCount),
-                  active: draftingSession.selectionCount > 0,
-                }]),
-            {
-              id: 'snap-state',
-              label: draftingSession.snapEnabled ? messages.draftingSnapOn : messages.draftingSnapOff,
-              active: draftingSession.snapEnabled,
-            },
-            {
-              id: 'ortho-state',
-              label: draftingSession.ortho ? messages.draftingOrthoOn : messages.draftingOrthoOff,
-              active: draftingSession.ortho,
-            },
-          ]}
-          testIdPrefix="stage-drafting"
-          onCancel={draftingSession.cancel}
-          onSubmit={draftingSession.submit}
-        />
-      ) : null}
+      {/* 命令行常驻：不进模式就看不见命令行，正是「能力不可发现」那条毛病。 */}
+      <ComposeCommandLine
+        className="compose-stage__command-line"
+        messages={{
+          ready: messages.draftingReady,
+          inputLabel: messages.draftingCommandLineLabel,
+          placeholder: messages.draftingCommandPlaceholder,
+          keywordsPrefix: messages.draftingKeywordsPrefix,
+        }}
+        notice={draftingSession.notice}
+        prompt={draftingSession.prompt}
+        status={[
+          ...(draftingSession.selectionCount === null
+            ? []
+            : [{
+                id: 'selection-count',
+                label: messages.draftingSelectionCount(draftingSession.selectionCount),
+                active: draftingSession.selectionCount > 0,
+              }]),
+          {
+            id: 'snap-state',
+            label: draftingSession.snapEnabled ? messages.draftingSnapOn : messages.draftingSnapOff,
+            active: draftingSession.snapEnabled,
+          },
+          {
+            id: 'ortho-state',
+            label: draftingSession.ortho ? messages.draftingOrthoOn : messages.draftingOrthoOff,
+            active: draftingSession.ortho,
+          },
+        ]}
+        testIdPrefix="stage-drafting"
+        onCancel={draftingSession.cancel}
+        onSubmit={draftingSession.submit}
+      />
       <StageContextMenu
         activeFrameId={activeFrameId}
         clipboardAvailability={clipboardAvailability}
@@ -917,13 +923,11 @@ function ComposeStageReady({
         selectionBounds={bounds}
         shortcuts={resolvedShortcuts}
         surfaceSize={surfaceSize}
-        tool={tool}
         viewport={viewport}
         onClipboardAction={executeClipboard}
         onCreateComponentIntent={onCreateComponentIntent}
         onSceneActivate={onSceneActivate}
         onSelectedIdsChange={onSelectedIdsChange}
-        onToolChange={onToolChange}
         onViewportChange={onViewportChange}
       />
     </div>

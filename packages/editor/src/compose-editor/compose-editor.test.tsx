@@ -1220,8 +1220,9 @@ describe('ComposeEditor', () => {
     render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
     fireEvent.click(screen.getByRole('button', { name: '设置' }))
     fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
-    fireEvent.click(screen.getByRole('button', { name: '修改平移工具快捷键' }))
-    fireEvent.keyDown(screen.getByRole('button', { name: '修改平移工具快捷键' }), {
+    // 原先用的是「平移工具」——pan 工具已删除，换成仍然存在的旋转工具。
+    fireEvent.click(screen.getByRole('button', { name: '修改旋转工具快捷键' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: '修改旋转工具快捷键' }), {
       code: 'KeyV',
       key: 'v',
     })

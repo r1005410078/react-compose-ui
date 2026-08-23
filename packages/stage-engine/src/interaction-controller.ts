@@ -72,17 +72,23 @@ export type StageInteractionPhase =
   | 'path-edit'
   | 'external'
 
-/** Stage 的受控工具模式；不包含 React 或 DOM 类型。 @public */
+/**
+ * Stage 的受控工具模式；不包含 React 或 DOM 类型。
+ *
+ * @remarks
+ * 工具集只保留**没有别的入口**的动作。曾经有过 `marquee`、`move`、`pan` 与 `draw-line`
+ * 四个值，各自都与既有手势完全重复：`select` 在空白处拖拽即框选、`MOVE` 命令能键入精确
+ * 位移（严格更强）、空格与中键是随时可用的临时平移覆盖（不占用工具状态）、`LINE` 命令
+ * 产出 `Curve` Entity。同一个动作有两个不同手感的触发方式，用户要先想「我在用哪个」。
+ *
+ * @public
+ */
 export type StageInteractionTool =
   | 'select'
-  | 'marquee'
-  | 'move'
   | 'scale'
   | 'rotate'
-  | 'pan'
   | 'draw-container'
   | 'draw-rectangle'
-  | 'draw-line'
   | 'draw-arrow'
   | 'draw-circle'
   | 'draw-text'
@@ -140,7 +146,6 @@ export type StageInteractionHit =
       readonly end: StagePoint
     }
   | { readonly kind: 'rotate' }
-  | { readonly kind: 'move-axis'; readonly axis: 'x' | 'y' }
   | { readonly kind: 'ruler'; readonly axis: 'x' | 'y' }
   | { readonly kind: 'ruler-corner' }
   | { readonly kind: 'guide'; readonly guideId: string }
@@ -828,11 +833,11 @@ export function createStageInteractionController(): StageInteractionController {
               ? 'crosshair'
               : next.phase === 'external'
                 ? 'copy'
-                : next.temporaryPan || context?.tool === 'pan'
+                : next.temporaryPan
                   ? 'grab'
                   : context?.tool === 'rotate'
                     ? 'grab'
-                  : isDrawingTool(context?.tool ?? 'select') || context?.tool === 'marquee'
+                  : isDrawingTool(context?.tool ?? 'select')
                     ? 'crosshair'
                   : 'default'
     return {

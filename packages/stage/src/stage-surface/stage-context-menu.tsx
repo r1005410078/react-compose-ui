@@ -4,8 +4,6 @@ import {
   ComposeContextMenuCheckboxItem,
   ComposeContextMenuContent,
   ComposeContextMenuItem,
-  ComposeContextMenuRadioGroup,
-  ComposeContextMenuRadioItem,
   ComposeContextMenuSeparator,
   ComposeContextMenuShortcut,
   ComposeContextMenuSub,
@@ -37,7 +35,6 @@ import type {
   ComposeStageDispatch,
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
-  ComposeStageTool,
 } from '../types'
 import type { getStageMessages } from '../stage-i18n'
 import type { StageClipboardAction, StageClipboardAvailability } from './use-stage-clipboard'
@@ -80,7 +77,6 @@ export interface StageContextMenuProps {
   readonly surfaceSize: StageSurfaceSize
   /** 选区世界包围盒，「适配选择」的目标。 */
   readonly selectionBounds: StageRect | null
-  readonly tool: ComposeStageTool
   readonly activeFrameId: string | null | undefined
   readonly shortcuts: Readonly<
     Record<ComposeStageShortcutAction, readonly ComposeStageKeybinding[]>
@@ -90,7 +86,6 @@ export interface StageContextMenuProps {
   readonly idFactory: () => string
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   readonly onViewportChange: (viewport: StageViewport) => void
-  readonly onToolChange?: (tool: ComposeStageTool) => void
   readonly onSceneActivate?: (frameId: string) => void
   readonly onCreateComponentIntent?: (entityIds: readonly string[]) => void
 }
@@ -119,13 +114,11 @@ export function StageContextMenu({
   onCreateComponentIntent,
   onSceneActivate,
   onSelectedIdsChange,
-  onToolChange,
   onViewportChange,
   rootProps,
   selectionBounds,
   shortcuts,
   surfaceSize,
-  tool,
   viewport,
 }: StageContextMenuProps) {
   const shortcutHint = (action: ComposeStageShortcutAction): ReactNode => {
@@ -287,22 +280,6 @@ export function StageContextMenu({
               onClick={() =>
                 onViewportChange(zoomViewportByIntent(viewport, surfaceSize, 'reset'))}
             >{messages.zoomReset}{shortcutHint('stage.zoomReset')}</ComposeContextMenuItem>
-          </ComposeContextMenuSubContent>
-        </ComposeContextMenuSub>
-        <ComposeContextMenuSub>
-          <ComposeContextMenuSubTrigger>{messages.toolsMenu}</ComposeContextMenuSubTrigger>
-          <ComposeContextMenuSubContent aria-label={messages.toolsMenu}>
-            <ComposeContextMenuRadioGroup
-              value={tool}
-              onValueChange={(value) => onToolChange?.(value as ComposeStageTool)}
-            >
-              <ComposeContextMenuRadioItem value="select">
-                {messages.selectTool}{shortcutHint('stage.selectTool')}
-              </ComposeContextMenuRadioItem>
-              <ComposeContextMenuRadioItem value="pan">
-                {messages.panTool}{shortcutHint('stage.panTool')}
-              </ComposeContextMenuRadioItem>
-            </ComposeContextMenuRadioGroup>
           </ComposeContextMenuSubContent>
         </ComposeContextMenuSub>
         <ComposeContextMenuCheckboxItem

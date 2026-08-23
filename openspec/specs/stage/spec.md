@@ -602,32 +602,39 @@ Stage 作为 Controller 的宿主，MUST 供给编辑会话所需的三项事实
 
 ### Requirement: 受控工具模式与专属选区反馈
 
-Stage MUST 支持受控的 `select`、`move`、`scale`、`rotate`、`pan`、`draw-container`、
-`draw-rectangle`、`draw-line`、`draw-arrow`、`draw-circle` 与 `draw-text` 工具，并通过既有
-`onToolChange` 请求切换。`select` MUST 保持普通选择箭头、四角缩放和本体移动；`move` 激活时才显示
-红 X/绿 Y 移动 gizmo；`scale` 与 `rotate` MUST 只暴露各自变换命中。
+Stage MUST 接受受控的 `tool` 值并按它改变手势语义。工具集 MUST 只包含**没有其他入口**的
+动作：`select`、`scale`、`rotate` 与各 `draw-*` 绘制工具。
 
-#### Scenario: 选择工具显示四角与边缘缩放
+以下四个工具值 MUST NOT 存在，因为各自都有严格不弱的既有入口：`marquee`（`select` 在空白处
+拖拽即框选）、`move`（`MOVE` 命令能键入精确位移）、`pan`（空格与中键是随时可用的临时覆盖，
+不占用工具状态）、`draw-line`（`LINE` 命令产出 `Curve` Entity）。
 
-- **WHEN** 可 resize 的 Entity 在 select 工具中被选中
-- **THEN** Overlay 只渲染四个角上的小方块
-- **AND** 选择框边缘的 hover 提供对应方向 resize cursor，而不显示中点方块
+`select` 工具在空白处拖拽 MUST 按当前判定模式框选；判定模式 MUST 由宿主受控，MUST NOT 被任何
+模式或工具切换偷偷改写。
 
-#### Scenario: 精确移动工具显示轴 gizmo
+Stage MUST 为当前工具提供专属选区反馈：`scale` 显示缩放手柄，`rotate` 显示旋转手柄，
+绘制工具显示落点预览。
 
-- **WHEN** move 工具激活且存在可移动的选择
-- **THEN** Overlay 在选择的左上显示向右的红 X 与向下的绿 Y gizmo
-- **AND** 拖动任一轴只修改相应坐标轴，切换到其他工具后 gizmo 消失
+#### Scenario: select 在空白处拖拽即框选
 
-#### Scenario: 旋转与缩放工具隔离命中
+- **WHEN** 当前工具是 `select`，用户从空白处拖出一个矩形
+- **THEN** 按当前判定模式选中命中的节点
 
-- **WHEN** 用户分别激活 scale 或 rotate 工具
-- **THEN** 前者只能启动 resize，后者只能启动 rotate
-- **AND** select 与 pan 的既有选择和视口行为不被拦截
+#### Scenario: 判定模式不被工具切换改写
+
+- **WHEN** 用户把判定模式设为包含，然后切换工具再切回
+- **THEN** 判定模式仍是包含
+
+#### Scenario: 专属选区反馈
+
+- **WHEN** 当前工具是 `rotate`
+- **THEN** 选区显示旋转手柄而不是缩放手柄
 
 ### Requirement: 直接绘制 Preset
 
-Stage MUST 为 container、rectangle、line、arrow、circle 与 text 提供受控绘制工具。绘制工具 MUST 在拖拽期间展示瞬时预览，正常松手时通过 Registry Preset 创建一个合法 Entity，取消时不得产生文档事务。container 工具在拖拽距离小于有效阈值时 MUST 回退到 Container Preset 的默认尺寸并以按下点为左上角，MUST NOT 创建退化尺寸的容器。
+Stage MUST 为 container、rectangle、arrow、circle 与 text 提供受控绘制工具。绘制工具 MUST 在拖拽期间展示瞬时预览，正常松手时通过 Registry Preset 创建一个合法 Entity，取消时不得产生文档事务。container 工具在拖拽距离小于有效阈值时 MUST 回退到 Container Preset 的默认尺寸并以按下点为左上角，MUST NOT 创建退化尺寸的容器。
+
+line MUST NOT 出现在绘制工具里：`LINE` 命令产出 `Curve` Entity，而拖拽绘制产出的是 shape 物料的线，两者是同一件事的两种表示。留下的是命令那一种。
 
 #### Scenario: 拖拽绘制容器与形状
 
@@ -638,17 +645,13 @@ Stage MUST 为 container、rectangle、line、arrow、circle 与 text 提供受�
 #### Scenario: 点击绘制容器回退默认尺寸
 
 - **WHEN** 用户使用 container 工具在 surface 上单击而没有产生有效拖拽距离
-- **THEN** Stage 以按下点为左上角、按 Container Preset 的默认尺寸创建容器
-- **AND** 不创建 1×1 或其他退化尺寸的容器
+- **THEN** Stage 以按下点为左上角、按 Container Preset 默认尺寸创建容器
 
-#### Scenario: 点击或拖拽绘制文字
+#### Scenario: 没有 line 绘制工具
 
-- **WHEN** 用户使用 text 工具点击 surface
-- **THEN** Stage 在点击点创建保留 Text Preset `hug × hug` 轴的文字，初始预览使用 Text 的默认回退尺寸
-- **AND** Layout measurement 完成后选区贴合实际文字内容
-- **WHEN** 用户使用 text 工具拖拽 surface
-- **THEN** Stage 创建两轴为 `fixed` 且使用精确拖拽 bounds 的 text box
-- **AND** Escape、pointercancel 或无效 geometry 不创建 Entity
+- **WHEN** 宿主枚举可用的绘制工具
+- **THEN** 其中不包含 line
+- **AND** 用户仍可用 `LINE` 命令画线
 
 ### Requirement: 两点 Shape 的端点选区
 
@@ -1755,32 +1758,6 @@ Stage MAY 以不可交互的视觉标记提示该 Entity 带有交互,但该标�
 - **WHEN** 点击曲线的线身
 - **THEN** 该曲线被选中并打开其属性面板
 
-### Requirement: 绘图模式改变输入方式而不改变对象世界
-
-Stage MUST 支持受控的绘图模式：光标改为十字线、底部出现命令行、取点显示捕捉标记与橡皮筋
-预览、框选默认判定改为方向敏感（左→右窗口、右→左交叉）。
-
-绘图模式 MUST 是会话状态，MUST NOT 写入文档。绘图模式产出的 Entity MUST 与设计模式创建的
-完全同类——切回设计模式后它在场景树、属性面板、动画与撤销里的行为 MUST 没有任何差别。
-
-命令会话状态 MUST 住在 Stage：提示文本、预览几何与捕捉标记是同一份状态的三种呈现，交给
-宿主渲染会凭空造出一个逐帧回传的跨包协议。
-
-#### Scenario: 进入绘图模式换掉输入方式
-
-- **WHEN** 宿主把 Stage 切到绘图模式
-- **THEN** 光标为十字线，命令行可见
-
-#### Scenario: 画出的对象不特殊
-
-- **WHEN** 在绘图模式画出一条线后切回设计模式
-- **THEN** 该线出现在场景树中、可被选中、可撤销
-
-#### Scenario: 模式不进文档
-
-- **WHEN** 切换绘图模式
-- **THEN** 文档未发生变化，撤销历史不增加条目
-
 ### Requirement: 键入坐标与指针取点共用同一条求解
 
 命令行键入的坐标与指针取点 MUST 经过同一条点输入管线，MUST NOT 各自求解——两条路径分叉的
@@ -1797,29 +1774,6 @@ Stage MUST 支持受控的绘图模式：光标改为十字线、底部出现命
 
 - **WHEN** 指针在已有线的端点容差内取点
 - **THEN** 落点是该端点而不是光标裸坐标
-
-### Requirement: 绘图模式使用 CAD 选择语义
-
-绘图模式下 Stage MUST 把选择语义切到累加：无修饰键点击**加入**选择集、Shift 点击**移出**，
-框选沿用同一套。设计模式 MUST 保持既有的替换语义。
-
-两套语义是刻意的差别而不是不一致：选择集在绘图里是每分钟要用几十次的动作，用户的肌肉
-记忆来自 AutoCAD；在设计模式里来自 Figma。折中只会两边都不像。
-
-#### Scenario: 绘图模式点击累加
-
-- **WHEN** 在绘图模式依次点击两条线
-- **THEN** 两条线都被选中
-
-#### Scenario: 绘图模式 Shift 移出
-
-- **WHEN** 在绘图模式 Shift 点击一条已选中的线
-- **THEN** 该线被移出选择集
-
-#### Scenario: 切回设计模式恢复替换语义
-
-- **WHEN** 切回设计模式后依次点击两个对象
-- **THEN** 只有后点的那个被选中
 
 ### Requirement: 绘图命令消费宿主的选择集
 
@@ -1844,28 +1798,6 @@ Stage MUST NOT 让命令会话自己拦截点选。
 - **WHEN** `MOVE` 等待选择对象时选中三条线、Shift 移出一条再确认
 - **THEN** 命令只作用在剩下两条线上
 
-### Requirement: 绘图模式的编辑命令产出普通文档变更
-
-绘图模式的 `MOVE` / `COPY` / `ERASE` MUST 派发普通文档命令：位移与设计模式拖动落到同一条
-变换命令，复制产出普通 Entity，删除是普通删除。切回设计模式后 MUST 没有任何行为差别。
-
-`ERASE` 提交后 Stage MUST 清空选择集——已删标识留在选择集里会指向不存在的 Entity。
-
-#### Scenario: 绘图模式移动后可撤销
-
-- **WHEN** 在绘图模式用 `MOVE` 移动一条线后撤销
-- **THEN** 该线回到原位
-
-#### Scenario: 复制出的对象不特殊
-
-- **WHEN** 在绘图模式用 `COPY` 复制一条线后切回设计模式
-- **THEN** 副本出现在场景树中、可被选中、可打关键帧
-
-#### Scenario: 删除后选择集为空
-
-- **WHEN** 在绘图模式用 `ERASE` 删除选中的对象
-- **THEN** 选择集为空，属性面板不再指向已删对象
-
 ### Requirement: 编辑命令显示作用对象的轮廓预览
 
 `MOVE` 与 `COPY` 取到基点后 MUST 显示被作用对象按当前位移平移后的包围盒轮廓；
@@ -1883,4 +1815,65 @@ Stage MUST NOT 让命令会话自己拦截点选。
 
 - **WHEN** 预览显示中取消命令
 - **THEN** 轮廓消失，文档未发生变化
+
+### Requirement: 绘图能力恒开
+
+Stage MUST 恒定提供绘图能力，MUST NOT 由任何模式开关控制：命令行 MUST 常驻可见并随时接受
+命令名；绘图与编辑命令 MUST 随时可启动；取点 MUST 走既有的点输入管线并显示捕捉标记与橡皮筋
+预览。
+
+绘图能力 MUST NOT 与动画开关互斥：动画开关打开时 MUST 仍能启动并完成一条绘图命令。动画改变
+的是「拖动的结果落在哪里」，与「用什么方式输入」是两根正交的轴。
+
+光标 MUST 按**当前是否在取点**切换：命令等待取点时是十字光标，其余时候是常规光标；
+MUST NOT 由一个全局模式决定。
+
+绘图命令产出的 Entity MUST 与工具栏拖拽创建的完全同类，在场景树、属性面板、动画与撤销里
+MUST 没有任何差别。命令会话状态 MUST 住在 Stage：提示文本、预览几何与捕捉标记是同一份状态的
+三种呈现。
+
+#### Scenario: 动画开关打开时仍能画线
+
+- **WHEN** 用户打开动画开关，然后在命令行键入 `LINE` 并取两个点
+- **THEN** 命令正常完成并产出一条线
+- **AND** 动画开关仍处于打开状态
+
+#### Scenario: 命令行随时可用
+
+- **WHEN** 编辑器处于默认状态，用户没有做任何模式切换
+- **THEN** 命令行可见并接受命令名
+
+#### Scenario: 光标跟随取点而不是模式
+
+- **WHEN** 没有命令在跑
+- **THEN** 图面使用常规光标
+- **WHEN** 一条命令开始等待取点
+- **THEN** 图面使用十字光标
+
+#### Scenario: 画出的对象不特殊
+
+- **WHEN** 用命令画出一条线
+- **THEN** 该线出现在场景树中、可被选中、可撤销
+
+### Requirement: 编辑命令产出普通文档变更
+
+`MOVE` / `COPY` / `ERASE` MUST 派发普通文档命令：位移与画布拖动落到同一条提交漏斗，复制产出
+普通 Entity，删除走既有的删除命令。三者 MUST 全部可撤销，且多选 MUST 只占一步撤销。
+
+命令 MUST NOT 产出任何只有命令才认识的中间状态或私有字段。
+
+#### Scenario: 移动后可撤销
+
+- **WHEN** 用 `MOVE` 移动一条线后撤销
+- **THEN** 线回到原位，撤销历史只消耗一步
+
+#### Scenario: 复制产出普通 Entity
+
+- **WHEN** 用 `COPY` 复制一条线
+- **THEN** 副本出现在场景树中并与原件同类
+
+#### Scenario: 删除走既有命令
+
+- **WHEN** 用 `ERASE` 删除选中的对象
+- **THEN** 对象被删除且可撤销
 

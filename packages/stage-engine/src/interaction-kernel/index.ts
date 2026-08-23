@@ -57,10 +57,8 @@ export {
 export {
   claimStageMove,
   createStageEntitySelectMovePlugin,
-  createStageMoveAxisPlugin,
   createStageMoveSession,
   STAGE_ENTITY_SELECT_MOVE_PLUGIN_ID,
-  STAGE_MOVE_AXIS_PLUGIN_ID,
   type StageMoveSessionOptions,
 } from './move-plugin'
 export {
@@ -71,10 +69,8 @@ export {
   claimStageMarquee,
   createStageMarqueeConvergePlugin,
   createStageMarqueeSession,
-  createStageMarqueeToolPlugin,
   shouldConvergeToMarquee,
   STAGE_MARQUEE_CONVERGE_PLUGIN_ID,
-  STAGE_MARQUEE_TOOL_PLUGIN_ID,
   type StageMarqueeSessionOptions,
 } from './marquee-plugin'
 export {

@@ -250,8 +250,10 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
 
   const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
   await shapeButtons.nth(1).click()
-  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '线条' }).click()
-  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-line')
+  // 形状菜单里的「线条」已删除：`LINE` 命令产出的 `Curve` 才是步骤 8 要留下的那一种。
+  // 箭头同为线状物料，走同一条端点预览与命中路径。
+  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '箭头' }).click()
+  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-arrow')
 
   const start = { x: outputBox!.x + 196, y: outputBox!.y + 128 }
   const target = { x: start.x, y: start.y + 144 }
@@ -260,12 +262,12 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
   await page.mouse.move(target.x, target.y, { steps: 4 })
 
   const preview = stage.getByTestId('stage-drawing-preview')
-  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-line')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-arrow')
   await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('0 × 144')
   await page.mouse.up()
 
   await expect(editor.getByRole('button', { name: '选择', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-line')
+  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-arrow')
   await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
   await expect(stage.getByTestId('stage-line-selection-start')).toBeVisible()
   await expect(stage.getByTestId('stage-line-selection-end')).toBeVisible()
@@ -320,7 +322,7 @@ test('OpenSpec: stage / 线段命中 / 透明外接矩形不选中，线身仍�
 
   const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
   await shapeButtons.nth(1).click()
-  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '线条' }).click()
+  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '箭头' }).click()
 
   const start = { x: outputBox!.x + 180, y: outputBox!.y + 420 }
   const end = { x: start.x + 360, y: start.y - 240 }
@@ -355,26 +357,13 @@ test('OpenSpec: stage / 画布平移手势 / 空闲张手且拖动时握手', as
   expect(rulerBox).not.toBeNull()
   const point = { x: outputBox!.x + 320, y: outputBox!.y + 240 }
 
-  await editor.getByRole('button', { name: '平移', exact: true }).click()
-  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
-  await expect(output).toHaveCSS('cursor', 'grab')
-
-  await page.mouse.move(point.x, point.y)
-  await page.mouse.down()
-  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
-  await expect(output).toHaveCSS('cursor', 'grabbing')
-  await page.mouse.move(point.x + 40, point.y + 24, { steps: 3 })
-  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
-  await expect(output).toHaveCSS('cursor', 'grabbing')
-  // Pointer capture 期间即使拖过标尺，也不能跳回标尺自己的准星手势。
-  await page.mouse.move(point.x + 40, rulerBox!.y + rulerBox!.height / 2, { steps: 3 })
-  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
-  await expect(horizontalRuler).toHaveCSS('cursor', 'grabbing')
-  await page.mouse.up()
-  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grab')
-  await expect(output).toHaveCSS('cursor', 'grab')
-
-  // 临时 Space 平移沿用同一组手势，松开后恢复选择工具的默认光标。
+  /*
+   * 平移只剩两个入口：按住空格与中键。
+   *
+   * 曾经还有一个 pan 工具位——它与这两个随时可用的临时覆盖完全重复，而工具是**有状态的**：
+   * 选了 pan 之后要再选回 select 才能做别的事。
+   */
+  // 临时 Space 平移，松开后恢复选择工具的默认光标。
   await editor.getByRole('button', { name: '选择', exact: true }).click()
   await stage.focus()
   await page.keyboard.down('Space')
@@ -386,6 +375,14 @@ test('OpenSpec: stage / 画布平移手势 / 空闲张手且拖动时握手', as
   await expect(output).toHaveCSS('cursor', 'grabbing')
   await page.mouse.up()
   await page.keyboard.up('Space')
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'default')
+
+  // 中键：与工具无关，Pointer capture 期间同样是握手。
+  await page.mouse.move(point.x, point.y)
+  await page.mouse.down({ button: 'middle' })
+  await expect(stage).toHaveAttribute('data-interaction-cursor', 'grabbing')
+  await page.mouse.move(point.x + 40, point.y + 24, { steps: 3 })
+  await page.mouse.up({ button: 'middle' })
   await expect(stage).toHaveAttribute('data-interaction-cursor', 'default')
 })
 

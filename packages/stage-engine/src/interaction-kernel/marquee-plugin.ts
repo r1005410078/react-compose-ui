@@ -21,7 +21,6 @@ import type {
 import type { StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
 
 /** 框选工具入口的注册 id。 @public */
-export const STAGE_MARQUEE_TOOL_PLUGIN_ID = 'marquee-tool'
 
 /** 容器体收敛入口的注册 id。 @public */
 export const STAGE_MARQUEE_CONVERGE_PLUGIN_ID = 'marquee-converge'
@@ -144,30 +143,6 @@ export function claimStageMarquee(
   })
 }
 
-/**
- * 框选工具入口插件。
- *
- * @remarks
- * marquee 工具压在节点上也起框，这是它与 select 唯一的行为差异——密集画布上用户否则无处下手。
- * 命中判定与组合规则两者完全一致。
- *
- * 这是三个框选入口中位次最高的一个；另外两个（容器体收敛、默认兜底）在优先级表中分别位于
- * 800 与 100，中间夹着 draw、move、resize、guide 等尚未抽取的分支，因此**不能**与本插件
- * 一次抽完，只能各自在自己的位次落地并复用 {@link createStageMarqueeSession}。
- *
- * @public
- */
-export function createStageMarqueeToolPlugin(): StageInteractionPlugin {
-  return {
-    id: STAGE_MARQUEE_TOOL_PLUGIN_ID,
-    priority: priorityOf(STAGE_MARQUEE_TOOL_PLUGIN_ID),
-    claim(event: StagePointerDownEvent, ctx: StagePluginContext) {
-      if (ctx.context.tool !== 'marquee') return null
-      if (event.hit.kind !== 'surface' && event.hit.kind !== 'entity') return null
-      return claimStageMarquee(event, ctx)
-    },
-  }
-}
 
 /**
  * 判断一次 entity 命中是否应当收敛为框选而不是选中该 Entity。
@@ -188,7 +163,7 @@ export function shouldConvergeToMarquee(
   selectedIds: readonly string[],
   hit: Extract<StageInteractionHit, { kind: 'entity' }>,
 ): boolean {
-  if (tool !== 'select' && tool !== 'move') return false
+  if (tool !== 'select') return false
   const entity = document.entities[hit.entityId]
   if (!entity) return false
   const hierarchy = getComposeHierarchy(entity)

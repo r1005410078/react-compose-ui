@@ -3,7 +3,6 @@ import { DrawingLayer } from './layers/drawing-layer'
 import { DropIndicatorLayer } from './layers/drop-indicator-layer'
 import { EditablePathContribution } from './layers/editable-path-layer'
 import { MarqueeLayer } from './layers/marquee-layer'
-import { MoveGizmoLayer } from './layers/move-gizmo-layer'
 import { PaintHandlesLayer } from './layers/paint-handles-layer'
 import { PaintSampleLayer } from './layers/paint-sample-layer'
 import { ResizeHandlesLayer } from './layers/resize-handles-layer'
@@ -31,7 +30,6 @@ const CONTRIBUTIONS: readonly StageOverlayContribution[] = [
   { id: 'resize-handles', order: 800, Layer: ResizeHandlesLayer },
   { id: 'editable-path', order: 700, Layer: EditablePathContribution },
   { id: 'rotation', order: 600, Layer: RotationContribution },
-  { id: 'move-gizmo', order: 500, Layer: MoveGizmoLayer },
   { id: 'paint-handles', order: 400, Layer: PaintHandlesLayer },
   { id: 'paint-sample', order: 350, Layer: PaintSampleLayer },
   { id: 'marquee', order: 300, Layer: MarqueeLayer },

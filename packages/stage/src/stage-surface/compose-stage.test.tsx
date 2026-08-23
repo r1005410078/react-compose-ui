@@ -263,7 +263,6 @@ function renderStage(
     onCreateComponentIntent?: (entityIds: readonly string[]) => void
     tool?: import('../types').ComposeStageTool
     marqueeMode?: import('../types').ComposeStageMarqueeMode
-    drafting?: boolean
     viewport?: { readonly x: number; readonly y: number; readonly zoom: number }
   } = {},
 ) {
@@ -284,7 +283,6 @@ function renderStage(
       policy={{
         gridVisible: options.gridVisible,
         marqueeMode: options.marqueeMode,
-        drafting: options.drafting,
       }}
       scriptScope={options.scope}
       services={{ dispatch, registry: options.registry ?? registry }}
@@ -304,10 +302,7 @@ function renderStage(
  * 绘图命令等待选择对象时读的是宿主的选择集，因此必须能在命令进行中把它换掉——这正是
  * 「选择集归宿主、会话只是镜像」这条设计要钉住的行为。
  */
-function renderStageWithRerender(
-  value: ComposeDocument,
-  options: { drafting?: boolean } = {},
-) {
+function renderStageWithRerender(value: ComposeDocument) {
   const runtime = createTransactionRuntime({ document: value })
   const dispatch: ComposeStageDispatch = (command) => runtime.dispatch(command)
   const view = (selectedIds: readonly string[]) => (
@@ -316,7 +311,6 @@ function renderStageWithRerender(
       layoutSnapshot={layoutSnapshot(value)}
       onSelectedIdsChange={vi.fn()}
       onViewportChange={vi.fn()}
-      policy={{ drafting: options.drafting }}
       services={{ dispatch, registry }}
       selectedIds={selectedIds}
       tool="select"
@@ -429,20 +423,9 @@ describe('ComposeStage ECS', () => {
     expect(getComposeRenderer(dragged)?.props).toMatchObject({ text: 'Text' })
   })
 
-  it('OpenSpec: 受控工具模式与专属选区反馈 / 仅移动工具显示轴向 gizmo，网格可独立隐藏', () => {
-    const value = document()
-    renderStage(value, { gridVisible: false, selectedIds: ['a'], tool: 'move' })
-
-    expect(screen.getByTestId('stage-move-gizmo')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-move-axis-x')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-move-axis-y')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-grid')).toHaveStyle({ display: 'none' })
-  })
-
   it('OpenSpec: 受控工具模式与专属选区反馈 / 选择工具保留四角控点且不显示移动 gizmo', () => {
     renderStage(document(), { selectedIds: ['a'], tool: 'select' })
 
-    expect(screen.queryByTestId('stage-move-gizmo')).not.toBeInTheDocument()
     // free：仅四角可见；边方向靠透明 hit，不渲染中点方块。
     for (const handle of ['ne', 'se', 'sw', 'nw'] as const) {
       expect(screen.getByTestId(`stage-resize-${handle}`)).toBeInTheDocument()
@@ -1313,11 +1296,13 @@ describe('ComposeStage 框选判定模式', () => {
     expect(selection).toHaveBeenLastCalledWith(['a'])
   })
 
-  it('OpenSpec: 选择与框选 / 使用框选工具从节点上起框', () => {
-    const { dispatch, selection } = renderStage(document(), { tool: 'marquee' })
-    const entity = screen.getByTestId('stage-entity-a')
-    dragMarquee({ x: 30, y: 40 }, { x: 200, y: 200 }, entity)
-    releaseMarquee({ x: 200, y: 200 }, entity)
+  it('OpenSpec: 选择与框选 / select 从空白处起框', () => {
+    // 独立的框选工具已删除：`select` 在空白处拖拽本来就是框选，两者完全重复，
+    // 而多一个工具位意味着用户要先想「我在用哪个」。
+    const { dispatch, selection } = renderStage(document(), { tool: 'select' })
+    const surface = screen.getByTestId('stage-surface')
+    dragMarquee({ x: 30, y: 40 }, { x: 200, y: 200 }, surface)
+    releaseMarquee({ x: 200, y: 200 }, surface)
     // 起框而非移动：不得产生任何事务。
     expect(dispatch).not.toHaveBeenCalled()
     expect(selection).toHaveBeenLastCalledWith(['a'])
@@ -1612,19 +1597,19 @@ describe('绘图模式', () => {
     return input
   }
 
-  it('OpenSpec: stage / 绘图模式 / 命令行与十字线随模式出现', () => {
-    renderStage(document(), { drafting: true })
+  it('OpenSpec: stage / 绘图能力恒开 / 命令行常驻，十字线只在取点时出现', () => {
+    renderStage(document())
+    // 命令行常驻：不进模式就看不见命令行，正是「能力不可发现」那条毛病。
     expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+    // 没有命令在跑时图面是常规光标，十字线不画。
+    expect(screen.queryByTestId('stage-drafting-overlay')).toBeNull()
+
+    startLine()
     expect(screen.getByTestId('stage-drafting-overlay')).toBeInTheDocument()
   })
 
-  it('设计模式下没有命令行', () => {
-    renderStage(document())
-    expect(screen.queryByTestId('stage-drafting-command-prompt')).toBeNull()
-  })
-
   it('OpenSpec: stage-engine / 绘图命令 / L↵ 后两次取点画出一条线', () => {
-    const { dispatch, runtime } = renderStage(document(), { drafting: true })
+    const { dispatch, runtime } = renderStage(document())
     startLine()
     expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
 
@@ -1644,7 +1629,7 @@ describe('绘图模式', () => {
 
   it('OpenSpec: stage / 键入坐标与指针取点共用同一条求解 / 键入坐标不被吸附改写', () => {
     const value = document()
-    const { runtime } = renderStage(value, { drafting: true })
+    const { runtime } = renderStage(value)
     const input = startLine()
     // 网格步长 8 时 100,50 与 260,130 都不在网格点上；键入的坐标必须原样落地。
     for (const text of ['100,50', '260,130']) {
@@ -1659,7 +1644,7 @@ describe('绘图模式', () => {
   })
 
   it('未知命令给出提示且不开始会话', () => {
-    renderStage(document(), { drafting: true })
+    renderStage(document())
     const input = screen.getByRole('textbox', { name: '命令行' })
     fireEvent.change(input, { target: { value: 'NOPE' } })
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -1667,7 +1652,7 @@ describe('绘图模式', () => {
   })
 
   it('OpenSpec: stage / 绘图模式 / 画布上按 Enter 正常结束 LINE', () => {
-    const { runtime } = renderStage(document(), { drafting: true })
+    const { runtime } = renderStage(document())
     startLine()
     const surface = screen.getByTestId('stage-surface')
     fireEvent.pointerDown(surface, surfacePoint(100, 100))
@@ -1684,7 +1669,7 @@ describe('绘图模式', () => {
   })
 
   it('OpenSpec: stage / 绘图模式 / 画布上按 Esc 中止 LINE', () => {
-    renderStage(document(), { drafting: true })
+    renderStage(document())
     startLine()
     fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(100, 100))
     fireEvent.keyDown(screen.getByRole('application'), { key: 'Escape' })
@@ -1692,7 +1677,7 @@ describe('绘图模式', () => {
   })
 
   it('命令行输入框里的 Enter 不被图面再消费一次', () => {
-    const { runtime } = renderStage(document(), { drafting: true })
+    const { runtime } = renderStage(document())
     const input = startLine()
     // 事件从输入框冒到 Stage 根节点。根上再推进一次的话，第二个坐标会被当成第三点，
     // 落地的曲线会变成两条。
@@ -1705,7 +1690,7 @@ describe('绘图模式', () => {
   })
 
   it('Esc 中止命令且不写入文档', () => {
-    const { dispatch } = renderStage(document(), { drafting: true })
+    const { dispatch } = renderStage(document())
     const input = startLine()
     fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(100, 100))
     fireEvent.keyDown(input, { key: 'Escape' })
@@ -1726,7 +1711,6 @@ describe('绘图模式', () => {
       readonly offset: { x: number; y: number }
     }).offset
     const { dispatch, runtime } = renderStage(value, {
-      drafting: true,
       selectedIds: ['a'],
     })
     const input = runCommand('M')
@@ -1747,7 +1731,7 @@ describe('绘图模式', () => {
   })
 
   it('OpenSpec: stage / 绘图命令消费宿主的选择集 / 选择集变化后作用范围同步', () => {
-    const { rerender } = renderStageWithRerender(document(), { drafting: true })
+    const { rerender } = renderStageWithRerender(document())
     runCommand('M')
     expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('选择对象')
     // 命令进行中宿主的选择集变了：会话必须跟着变，否则它会作用在用户已经移出的对象上。
@@ -1757,7 +1741,6 @@ describe('绘图模式', () => {
 
   it('OpenSpec: stage / 绘图模式的编辑命令 / 先选后执行的 ERASE 当场删除并清空选择集', () => {
     const { runtime, selection } = renderStage(document(), {
-      drafting: true,
       selectedIds: ['a'],
     })
 
@@ -1768,7 +1751,7 @@ describe('绘图模式', () => {
   })
 
   it('OpenSpec: stage / 编辑命令显示作用对象的轮廓预览 / 取消后预览消失', () => {
-    renderStage(document(), { drafting: true, selectedIds: ['a'] })
+    renderStage(document(), { selectedIds: ['a'] })
     const input = runCommand('M')
     expect(screen.queryAllByTestId('stage-drafting-outline')).toHaveLength(0)
 
@@ -1780,17 +1763,18 @@ describe('绘图模式', () => {
     expect(screen.queryAllByTestId('stage-drafting-outline')).toHaveLength(0)
   })
 
-  it('没有命令在跑时 Esc 清空选择集', () => {
-    const { selection } = renderStage(document(), { drafting: true, selectedIds: ['a'] })
+  it('没有命令在跑时 Esc 交回既有键位级联', () => {
+    const { selection } = renderStage(document(), { selectedIds: ['a'] })
 
-    // 累加语义下点空白不会清空（那是一次没框住东西的框选），Esc 是唯一的清空入口。
-    fireEvent.keyDown(screen.getByRole('textbox', { name: '命令行' }), { key: 'Escape' })
+    // 绘图只在命令进行中吃 Esc。继续吃下去会抢在文字编辑的退出分支之前——用户在画布上
+    // 改完字按 Esc 会变成清空选择集而不是提交。
+    fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'Escape' })
 
-    expect(selection).toHaveBeenCalledWith([])
+    expect(selection).not.toHaveBeenCalled()
   })
 
   it('F8 切换正交，F3 切换对象捕捉', () => {
-    renderStage(document(), { drafting: true })
+    renderStage(document())
     expect(screen.getByTestId('stage-drafting-ortho-state')).toHaveTextContent('正交 关')
     expect(screen.getByTestId('stage-drafting-snap-state')).toHaveAttribute('data-active')
 

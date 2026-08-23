@@ -13,7 +13,6 @@ async function enterDrafting(page: import('@playwright/test').Page) {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('radio', { name: '绘图' }).click()
   return { editor, stage }
 }
 
@@ -22,6 +21,7 @@ test('OpenSpec: stage / 绘图模式 / 手在画布上时 Enter 结束命令', a
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
@@ -48,6 +48,7 @@ test('OpenSpec: stage / 绘图模式 / 命令行不被标尺与图面压住', as
   const { stage } = await enterDrafting(page)
 
   const commandLine = (await stage.getByTestId('stage-drafting-command-line').boundingBox())!
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const surface = (await stage.getByTestId('stage-surface').boundingBox())!
   const verticalRuler = (await stage.getByTestId('stage-ruler-y').boundingBox())!
 
@@ -65,6 +66,7 @@ test('OpenSpec: materials / 曲线线宽 / 放大后描边的实际触达不变'
   const { stage } = await enterDrafting(page)
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
@@ -120,6 +122,7 @@ test('OpenSpec: materials / 曲线的盒不裁描边 / 水平线在容差内点�
   const { stage } = await enterDrafting(page)
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 

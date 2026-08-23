@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createStageInteractionController } from '../interaction-controller'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
-import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
-import { createStageMoveAxisPlugin, STAGE_MOVE_AXIS_PLUGIN_ID } from './move-plugin'
 import type { StageInteractionEffect } from '../interaction-controller'
 
 // command 关掉网格吸附，让断言直接落在指针位移上。
@@ -13,7 +11,15 @@ const value = document([
   entity('target', { x: 400, y: 0, width: 200, height: 200, childIds: [] }),
 ])
 
-function moveAxisSetup(patch: Record<string, unknown> = {}) {
+/**
+ * 起一次移动手势。
+ *
+ * @remarks
+ * 从 `move` 工具的轴向手柄改成 `select` 工具直接拖实体——轴向手柄随 `move` 工具一起删除了
+ * （`MOVE` 命令能键入精确位移，严格更强）。这几条用例要的是「移动进行中」这个状态，
+ * 至于它是怎么起来的无关紧要。
+ */
+function moveSetup(patch: Record<string, unknown> = {}) {
   const effects: StageInteractionEffect[] = []
   const controller = createStageInteractionController()
   controller.connectSurface({
@@ -26,7 +32,7 @@ function moveAxisSetup(patch: Record<string, unknown> = {}) {
       layoutSnapshot: layoutSnapshot(value),
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
-      tool: 'move',
+      tool: 'select',
       selectedIds: ['dragged'],
       idFactory: () => 'move-id',
       ...patch,
@@ -34,81 +40,27 @@ function moveAxisSetup(patch: Record<string, unknown> = {}) {
     } as never)
   }
   update()
-  const grabAxis = (axis: 'x' | 'y' = 'x') => controller.send({
-    type: 'pointer.down',
-    pointerId: 1,
-    button: 0,
-    point: { x: 10, y: 10 },
-    hit: { kind: 'move-axis', axis },
-    modifiers: FREE,
-  })
-  const commands = () => effects.filter((effect) => effect.type === 'command.dispatch')
-  return { controller, effects, update, grabAxis, commands }
-}
-
-describe('OpenSpec: stage-engine / 受约束变换 System / 轴向移动手柄插件', () => {
-  it('move-axis 插件优先级与表一致', () => {
-    const fromTable = STAGE_GESTURE_PRIORITY
-      .find(({ id }) => id === STAGE_MOVE_AXIS_PLUGIN_ID)
-
-    expect(createStageMoveAxisPlugin().priority).toBe(fromTable?.priority)
-  })
-
-  it('拖动 X 轴手柄只改变 X', () => {
-    const { controller, grabAxis } = moveAxisSetup()
-    grabAxis('x')
-
-    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 210, y: 130 }, modifiers: FREE })
-
-    expect(controller.getSnapshot().previewTransforms.dragged).toMatchObject({ x: 200, y: 0 })
-  })
-
-  it('非 move 工具下命中手柄被消费，不退化成自由拖动', () => {
-    const { controller, effects } = moveAxisSetup({ tool: 'select' })
-
+  const grab = () => {
     controller.send({
       type: 'pointer.down',
       pointerId: 1,
       button: 0,
       point: { x: 10, y: 10 },
-      hit: { kind: 'move-axis', axis: 'x' },
+      hit: { kind: 'entity', entityId: 'dragged' },
       modifiers: FREE,
     })
+    // 移动有激活阈值：不越过它手势还停在 idle。
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 30, y: 30 }, modifiers: FREE })
+  }
+  const commands = () => effects.filter((effect) => effect.type === 'command.dispatch')
+  return { controller, effects, update, grab, commands }
+}
 
-    expect(effects).toEqual([])
-    expect(controller.getSnapshot().phase).toBe('idle')
-  })
-
-  it('松手请求一次命令', () => {
-    const { controller, grabAxis, commands } = moveAxisSetup()
-    grabAxis('x')
-    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 210, y: 130 }, modifiers: FREE })
-    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 210, y: 130 }, modifiers: FREE })
-
-    expect(commands()).toHaveLength(1)
-  })
-
-  it('并发文档变化中止移动且不提交', () => {
-    const { controller, update, grabAxis, commands } = moveAxisSetup()
-    grabAxis('x')
-    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 210, y: 130 }, modifiers: FREE })
-
-    const next = document([
-      entity('dragged', { x: 0, y: 0, width: 40, height: 40 }),
-      entity('target', { x: 400, y: 0, width: 200, height: 200, childIds: [] }),
-    ])
-    update({ document: next, layoutSnapshot: layoutSnapshot(next) })
-
-    expect(controller.getSnapshot().phase).toBe('idle')
-    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 210, y: 130 }, modifiers: FREE })
-    expect(commands()).toHaveLength(0)
-  })
-})
 
 describe('OpenSpec: stage-engine / 画布拖拽 reparent 会话 / Space 在移动中表达锁定原父级', () => {
   it('移动进行中按 Space 不切换临时平移标志', () => {
-    const { controller, grabAxis } = moveAxisSetup()
-    grabAxis('x')
+    const { controller, grab } = moveSetup()
+    grab()
     controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 210, y: 130 }, modifiers: FREE })
 
     controller.send({ type: 'temporary-pan.start' })
@@ -120,7 +72,7 @@ describe('OpenSpec: stage-engine / 画布拖拽 reparent 会话 / Space 在移�
   })
 
   it('空闲时按 Space 仍然切换临时平移标志', () => {
-    const { controller } = moveAxisSetup()
+    const { controller } = moveSetup()
 
     controller.send({ type: 'temporary-pan.start' })
 
@@ -128,8 +80,8 @@ describe('OpenSpec: stage-engine / 画布拖拽 reparent 会话 / Space 在移�
   })
 
   it('Space 锁定原父级后经过容器不产生 reparent 落点', () => {
-    const { controller, grabAxis } = moveAxisSetup()
-    grabAxis('x')
+    const { controller, grab } = moveSetup()
+    grab()
     // 拖到 target 容器体上：默认解析出 reparent 落点。
     controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 500, y: 110 }, modifiers: FREE })
     expect(controller.getSnapshot().dropTarget).toMatchObject({ kind: 'reparent', containerId: 'target' })
@@ -142,8 +94,8 @@ describe('OpenSpec: stage-engine / 画布拖拽 reparent 会话 / Space 在移�
   })
 
   it('松开 Space 后落点恢复', () => {
-    const { controller, grabAxis } = moveAxisSetup()
-    grabAxis('x')
+    const { controller, grab } = moveSetup()
+    grab()
     controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 500, y: 110 }, modifiers: FREE })
     controller.send({ type: 'temporary-pan.start' })
     controller.send({ type: 'temporary-pan.end' })

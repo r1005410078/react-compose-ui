@@ -16,14 +16,10 @@ export type ComposeEditorShortcutAction =
   | 'editor.settings'
   | 'stage.temporaryPan'
   | 'stage.selectTool'
-  | 'stage.marqueeTool'
-  | 'stage.moveTool'
   | 'stage.scaleTool'
   | 'stage.rotateTool'
-  | 'stage.panTool'
   | 'stage.drawContainerTool'
   | 'stage.drawRectangleTool'
-  | 'stage.drawLineTool'
   | 'stage.drawArrowTool'
   | 'stage.drawCircleTool'
   | 'stage.drawTextTool'
@@ -83,14 +79,10 @@ export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'editor.settings',
   'stage.temporaryPan',
   'stage.selectTool',
-  'stage.marqueeTool',
-  'stage.moveTool',
   'stage.scaleTool',
   'stage.rotateTool',
-  'stage.panTool',
   'stage.drawContainerTool',
   'stage.drawRectangleTool',
-  'stage.drawLineTool',
   'stage.drawArrowTool',
   'stage.drawCircleTool',
   'stage.drawTextTool',
@@ -124,14 +116,10 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
   'editor.settings': 'editor',
   'stage.temporaryPan': 'stage',
   'stage.selectTool': 'stage',
-  'stage.marqueeTool': 'stage',
-  'stage.moveTool': 'stage',
   'stage.scaleTool': 'stage',
   'stage.rotateTool': 'stage',
-  'stage.panTool': 'stage',
   'stage.drawContainerTool': 'stage',
   'stage.drawRectangleTool': 'stage',
-  'stage.drawLineTool': 'stage',
   'stage.drawArrowTool': 'stage',
   'stage.drawCircleTool': 'stage',
   'stage.drawTextTool': 'stage',
@@ -174,7 +162,6 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
     shortcuts: cloneShortcutMap({
       ...DEFAULT_STAGE_SHORTCUTS,
       'editor.settings': [{ code: 'Comma', primary: true }],
-      'stage.marqueeTool': [{ code: 'KeyB' }],
       'edit.createComponent': [],
       'scene.create': [],
       'history.undo': [{ code: 'KeyZ', primary: true }],

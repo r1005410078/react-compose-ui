@@ -1,16 +1,13 @@
 import { expect, test } from '@playwright/test'
 
-test('OpenSpec: stage / 绘图模式纵向流程 / 进入模式、L↵ 画线、捕捉端点、切回设计模式', async ({ page }) => {
+test('OpenSpec: stage / 绘图能力恒开 / L↵ 画线、捕捉端点、画出的是普通 Entity', async ({ page }) => {
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  // 设计模式下没有命令行——绘图模式换的是输入方式，而不是常驻多一条工具栏。
-  await expect(stage.getByTestId('stage-drafting-command-input')).toHaveCount(0)
-
-  await editor.getByRole('radio', { name: '绘图' }).click()
+  // 命令行常驻：不进模式就看不见命令行，正是「能力不可发现」那条毛病。
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   await expect(commandInput).toBeVisible()
   await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('命令：')
@@ -56,9 +53,7 @@ test('OpenSpec: stage / 绘图模式纵向流程 / 进入模式、L↵ 画线、
   const secondStart = endpoints[1]!.x + endpoints[1]!.width
   expect(Math.abs(firstEnd - secondStart)).toBeLessThan(1.5)
 
-  // 切回设计模式：画出来的是普通页面 Entity——场景树里有、点得中、撤得掉。
-  await editor.getByRole('radio', { name: '设计' }).click()
-  await expect(stage.getByTestId('stage-drafting-command-input')).toHaveCount(0)
+  // 画出来的是普通页面 Entity——场景树里有、点得中、撤得掉。
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
   await expect(sceneTree.getByRole('row').filter({ hasText: 'Curve' })).toHaveCount(2)
 
@@ -71,7 +66,6 @@ test('OpenSpec: stage-engine / 取点接管排在画布平移之下 / 命令进�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('radio', { name: '绘图' }).click()
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   await commandInput.fill('L')
@@ -82,6 +76,7 @@ test('OpenSpec: stage-engine / 取点接管排在画布平移之下 / 命令进�
   expect(before).not.toBeNull()
 
   // 中键平移：命令进行中仍然要能去看远处那个目标点，AutoCAD 同样如此。
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   await page.mouse.move(box.x + 300, box.y + 240)
   await page.mouse.down({ button: 'middle' })
@@ -100,7 +95,7 @@ const LINES: readonly (readonly [readonly [number, number], readonly [number, nu
 ]
 
 /**
- * 在绘图模式画出 {@link LINES} 两条互不相交的线。
+ * 用 `LINE` 命令画出 {@link LINES} 两条互不相交的线。
  *
  * @remarks
  * 返回按线身中点取的点击位置——**从实测包围盒算而不是从落笔坐标算**：落笔点会被网格吸附
@@ -108,6 +103,7 @@ const LINES: readonly (readonly [readonly [number, number], readonly [number, nu
  */
 async function drawTwoLines(page: import('@playwright/test').Page, stage: import('@playwright/test').Locator) {
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   for (const [from, to] of LINES) {
     await commandInput.fill('L')
@@ -125,51 +121,44 @@ async function drawTwoLines(page: import('@playwright/test').Page, stage: import
   return { strokes, centers }
 }
 
-test('OpenSpec: stage / 绘图模式使用 CAD 选择语义 / 点中累加、Shift 移出、Esc 清空', async ({ page }) => {
+test('OpenSpec: stage / 统一的替换选择语义 / 点击替换、Shift 累加', async ({ page }) => {
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('radio', { name: '绘图' }).click()
 
   // 命中相关断言必须在非 100% 缩放下做：`world = (屏幕 − 视口) / zoom`。
   await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
   const { centers } = await drawTwoLines(page, stage)
 
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
   const selectedRows = sceneTree.getByRole('row').and(page.locator('[aria-selected="true"]'))
 
-  // 点中即加入，不需要修饰键——这与设计模式的「点一下换一个」相反，是刻意的。
+  /*
+   * 选择语义只剩一套：Figma 的替换 + Shift 累加。
+   *
+   * 曾经绘图模式有第二套 CAD 语义（点中即加入、Shift 移出），理由写的是「用户的肌肉记忆
+   * 来自 AutoCAD」——而那条前提已被推翻（用户不熟 AutoCAD，判据换成「任务需要什么」）。
+   * 任务需要的只是「能选中多个」，Shift 累加就够。
+   */
   await page.mouse.click(centers[0]!.x, centers[0]!.y)
   await expect(selectedRows).toHaveCount(1)
   await page.mouse.click(centers[1]!.x, centers[1]!.y)
-  await expect(selectedRows).toHaveCount(2)
+  await expect(selectedRows).toHaveCount(1)
 
-  // Shift 是移出。
+  // Shift 累加。
   await page.keyboard.down('Shift')
-  await page.mouse.click(centers[1]!.x, centers[1]!.y)
-  await page.keyboard.up('Shift')
-  await expect(selectedRows).toHaveCount(1)
-
-  // 累加语义下点空白不清空（那是一次没框住东西的框选），Esc 才是清空入口。
-  await commandInput.press('Escape')
-  await expect(selectedRows).toHaveCount(0)
-
-  // 切回设计模式恢复替换语义：点第二条只剩它一个。
-  await editor.getByRole('radio', { name: '设计' }).click()
   await page.mouse.click(centers[0]!.x, centers[0]!.y)
-  await page.mouse.click(centers[1]!.x, centers[1]!.y)
-  await expect(selectedRows).toHaveCount(1)
+  await page.keyboard.up('Shift')
+  await expect(selectedRows).toHaveCount(2)
 })
 
-test('OpenSpec: stage / 绘图模式的编辑命令 / MOVE 一步撤销、ERASE 先选后执行、COPY 连续放置', async ({ page }) => {
+test('OpenSpec: stage / 编辑命令 / MOVE 一步撤销、ERASE 先选后执行、COPY 连续放置', async ({ page }) => {
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('radio', { name: '绘图' }).click()
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
@@ -184,7 +173,10 @@ test('OpenSpec: stage / 绘图模式的编辑命令 / MOVE 一步撤销、ERASE 
   await commandInput.press('Enter')
   await expect(prompt).toContainText('选择对象')
   await page.mouse.click(centers[0]!.x, centers[0]!.y)
+  // 多选走 Shift：选择语义只剩 Figma 那一套，命令读的仍是宿主那一份选择集。
+  await page.keyboard.down('Shift')
   await page.mouse.click(centers[1]!.x, centers[1]!.y)
+  await page.keyboard.up('Shift')
   await expect(stage.getByTestId('stage-drafting-selection-count')).toContainText('已选 2')
   await commandInput.press('Enter')
   await expect(prompt).toContainText('指定基点')
@@ -231,4 +223,41 @@ test('OpenSpec: stage / 绘图模式的编辑命令 / MOVE 一步撤销、ERASE 
   await commandInput.press('Enter')
   await expect(strokes).toHaveCount(4)
   await commandInput.press('Escape')
+})
+
+/**
+ * 动画开关打开时仍能画线。
+ *
+ * @remarks
+ * 这是「动画是另一根轴」这句判断的实证。动画改变的是**拖动的结果落在哪里**（写关键帧而不是
+ * 写 LayoutItem），而绘图改变的是**用什么方式输入**——两者正交，不该互斥。
+ *
+ * 取消绘图模式之前这条必然红：`setDrafting(mode === 'drafting')` 是三选一切换器的直接后果，
+ * 切到动画就把绘图强制关掉了。
+ */
+test('OpenSpec: stage / 绘图能力恒开 / 动画开关打开时仍能画线', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  await editor.getByRole('radio', { name: '动画' }).click()
+  await expect(editor.locator('[data-workspace-panel="animation"]')).toBeVisible()
+
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  await expect(commandInput).toBeVisible()
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
+  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
+  await page.mouse.click(at(240, 200).x, at(240, 200).y)
+  await page.mouse.click(at(440, 200).x, at(440, 200).y)
+  await commandInput.press('Escape')
+
+  await expect(stage.getByTestId('compose-material-curve-stroke')).toHaveCount(1)
+  // 动画开关没有被画线这件事关掉——两根轴各自独立。
+  await expect(editor.getByRole('radio', { name: '动画' })).toHaveAttribute('aria-checked', 'true')
 })

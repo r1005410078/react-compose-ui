@@ -19,8 +19,8 @@ export function DrawingLayer({ drawing, viewport }: StageOverlayContext) {
     : drawingScreen
   // 文字不显示尺寸：它没有可拖出的尺寸，标注一个用户改不了的数字只会误导。
   const drawingDimensionLabel = drawing && drawingPreviewBounds && drawing.tool !== 'draw-text'
-    ? drawing.tool === 'draw-line' || drawing.tool === 'draw-arrow'
-      // 线条的真实几何来自两个端点，而不是落盘时为 LayoutItem 保留的最小 1px 尺寸。
+    ? drawing.tool === 'draw-arrow'
+      // 线状物料的真实几何来自两个端点，而不是落盘时为 LayoutItem 保留的最小 1px 尺寸。
       ? `${Math.round(Math.abs(drawing.end.x - drawing.start.x))} × ${Math.round(Math.abs(drawing.end.y - drawing.start.y))}`
       : `${Math.round(drawingPreviewBounds.width / viewport.zoom)} × ${Math.round(drawingPreviewBounds.height / viewport.zoom)}`
     : null
@@ -42,7 +42,7 @@ export function DrawingLayer({ drawing, viewport }: StageOverlayContext) {
               rx={drawingPreviewBounds.width / 2}
               ry={drawingPreviewBounds.height / 2}
             />
-          ) : drawing.tool === 'draw-line' || drawing.tool === 'draw-arrow' ? (
+          ) : drawing.tool === 'draw-arrow' ? (
             <>
               <line x1={drawingStart.x} x2={drawingEnd.x} y1={drawingStart.y} y2={drawingEnd.y} />
               {drawing.tool === 'draw-arrow' ? (

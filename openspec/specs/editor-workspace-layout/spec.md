@@ -708,23 +708,34 @@ controller 时 MUST 不猜测页面 setup。
 
 ### Requirement: 平铺式默认画布工具栏
 
-默认 Stage toolbar MUST 按下列顺序提供：选择/变换、精确移动、缩放、旋转、移动画布、吸附、网格及其大小
-菜单、分割线、容器绘制、形状及其菜单、文字绘制。button 常态 MUST 不具有逐项 Card、边框或胶囊背景；当前
-工具与 hover/focus 可以使用低调状态底色，工具类别 MUST 使用细分割线分组。默认 toolbar MUST 不渲染 zoom、
-fit 或单独 canvas settings 图标；宿主 `stageToolbar` slot 不受影响。
+默认 Stage toolbar MUST 按下列顺序提供：选择及其判定模式菜单、缩放、旋转、吸附、网格及其大小
+菜单、分割线、容器绘制、形状及其菜单、文字绘制。
+
+框选、精确移动与移动画布三个工具位 MUST NOT 出现：它们各自与既有手势完全重复——`select` 在
+空白处拖拽即框选、`MOVE` 命令能键入精确位移且严格更强、空格与中键本来就是随时可用的临时平移
+覆盖。形状菜单 MUST NOT 包含 Line。
+
+button 常态 MUST 不具有逐项 Card、边框或胶囊背景；当前工具与 hover/focus 可以使用低调状态底色，
+工具类别 MUST 使用细分割线分组。默认 toolbar MUST 不渲染 zoom、fit 或单独 canvas settings
+图标；宿主 `stageToolbar` slot 不受影响。
 
 #### Scenario: 渲染默认工具栏
 
 - **WHEN** 未提供 `stageToolbar` slot 的 `ComposeEditor` 渲染默认工作区
-- **THEN** toolbar 按规定顺序显示全部工具与两个 menu trigger
+- **THEN** toolbar 按规定顺序显示全部工具与三个 menu trigger
 - **AND** 缩放与居中视图只出现在画布内控件组
+
+#### Scenario: 不再出现三个重复工具位
+
+- **WHEN** 用户查看默认工具栏
+- **THEN** 其中没有框选、精确移动与移动画布三个按钮
 
 #### Scenario: 使用网格与形状菜单
 
 - **WHEN** 用户打开网格或形状的 chevron menu
 - **THEN** menu 具有 menu-button ARIA、键盘导航、Escape 关闭和焦点恢复
 - **AND** 网格菜单能切换会话级可见性、选择 4/8/16/32 等网格间距或进入更多画布设置
-- **AND** 形状菜单能选择 Rectangle、Line、Arrow 或 Circle 绘制工具并显示当前快捷键；主按钮图标 MUST 反映最后选择的形状，并重新激活该形状工具
+- **AND** 形状菜单能选择 Rectangle、Arrow 或 Circle 绘制工具并显示当前快捷键；主按钮图标 MUST 反映最后选择的形状，并重新激活该形状工具
 
 ### Requirement: 从场景选择创建项目组件
 
@@ -1167,26 +1178,29 @@ MUST 作为基础组件的同组真实标签加入；未提供时系统不得显
 
 ### Requirement: 框选工具与判定模式菜单
 
-默认舞台工具栏 MUST 在交互工具分组内提供框选工具入口：主按钮切换到 marquee 工具，紧邻的
-chevron 触发器打开判定模式菜单。模式菜单 MUST 提供相交、包含与方向决定三项，且 MUST 复用现有
-形状工具 split button 的 ARIA 与键盘结构——触发器使用 `aria-haspopup="menu"` 与
-`aria-expanded`，菜单项使用 `menuitemradio` 并通过 `aria-pressed` 表达当前模式，方向键在菜单项
-之间移动焦点，Escape 关闭菜单并把焦点还给触发器。模式 MUST 由编辑器持有并作为受控值传给
-Stage，选择模式本身 MUST NOT 切换当前工具，也 MUST NOT 产生文档事务。主按钮图标 MUST 反映当前
-模式，使用户不展开菜单也能看出生效判定。
+默认舞台工具栏 MUST 把判定模式菜单挂在**选择工具**上：主按钮切换到 `select` 工具，紧邻的
+chevron 触发器打开判定模式菜单。挂在 `select` 上而不是一个独立的框选工具位，是因为
+**`select` 在空白处拖拽本来就是框选**，判定模式正是这个动作的参数。
 
-#### Scenario: 切换到框选工具
+模式菜单 MUST 提供相交、包含与方向决定三项，且 MUST 复用现有形状工具 split button 的 ARIA 与
+键盘结构——触发器使用 `aria-haspopup="menu"` 与 `aria-expanded`，菜单项使用 `menuitemradio`
+并通过 `aria-pressed` 表达当前模式，方向键在菜单项之间移动焦点，Escape 关闭菜单并把焦点还给
+触发器。模式 MUST 由编辑器持有并作为受控值传给 Stage，选择模式本身 MUST NOT 切换当前工具，
+也 MUST NOT 产生文档事务。主按钮图标 MUST 反映当前工具而不是判定模式；当前判定 MUST 以其他
+可访问方式（如菜单项的选中态）表达。
 
-- **WHEN** 用户点击框选主按钮
-- **THEN** Stage 工具变为 marquee 且按钮呈现选中态
-- **AND** 当前判定模式保持不变
+任何模式切换 MUST NOT 改写用户选定的判定模式。
+
+#### Scenario: 判定模式菜单挂在选择工具上
+
+- **WHEN** 用户查看交互工具分组
+- **THEN** 选择按钮紧邻一个 chevron 触发器，展开后是判定模式菜单
 
 #### Scenario: 从菜单切换判定模式
 
 - **WHEN** 用户展开模式菜单并选择包含
 - **THEN** Stage 收到的受控模式变为包含
 - **AND** 菜单关闭、焦点回到触发器、当前工具保持不变
-- **AND** 主按钮图标切换为包含模式图标
 
 #### Scenario: 键盘操作模式菜单
 
@@ -1194,9 +1208,9 @@ Stage，选择模式本身 MUST NOT 切换当前工具，也 MUST NOT 产生文�
 - **THEN** 菜单展开并把焦点移到第一项
 - **AND** 按 Escape 关闭菜单并把焦点还给触发器
 
-#### Scenario: 模式在选择工具下同样生效
+#### Scenario: 判定在空白拖拽时生效
 
-- **WHEN** 判定模式为包含且用户切回 select 工具从空白拖出 marquee
+- **WHEN** 判定模式为包含且用户用 select 工具从空白拖出 marquee
 - **THEN** 框选按包含判定命中节点
 
 ### Requirement: 组件实例合成 Inspector 表面
@@ -1349,11 +1363,16 @@ MUST 解析为该选择所属的最近祖先 Frame；没有任何选择时 MUST 
 
 ### Requirement: 设计与动画模式切换器
 
-页面文档**与组件文档**的画布工具栏行 MUST 在保存入口旁提供「设计 / 动画」模式切换器，
-作为动画模式的唯一入口；底部工具组 MUST NOT 再默认包含动画标签。切到动画模式时，编辑器
-MUST 在底部 Dockview 工具组中动态加入并激活时间线面板，并展开底部组；切回设计模式时 MUST
-移除时间线面板、恢复 资源/命令/日志 标签与切换前的折叠状态。切换器 MUST 实现 radiogroup
-可访问语义。未启用页面系统的宿主本期仍不提供动画模式入口。
+页面文档与组件文档的画布工具栏行 MUST 在保存入口旁提供「设计 / 动画」**两段**模式切换器，
+作为动画模式的唯一入口；MUST NOT 提供绘图段——绘图能力恒开，不属于任何模式。底部工具组
+MUST NOT 再默认包含动画标签。切到动画模式时，编辑器 MUST 在底部 Dockview 工具组中动态加入并
+激活时间线面板，并展开底部组；切回设计模式时 MUST 移除时间线面板、恢复 资源/命令/日志 标签与
+切换前的折叠状态。切换器 MUST 实现 radiogroup 可访问语义，方向键 MUST 按索引循环而不是
+「另一个就是对面那个」——后者在段数变化时会静默退化。未启用页面系统的宿主本期仍不提供动画
+模式入口。
+
+切到动画模式 MUST NOT 关闭任何绘图能力：动画改变的是「拖动的结果落在哪里」，与「用什么方式
+输入」是两根正交的轴。
 
 组件文档下动画作用域 MUST 解析到组件根 Frame，动画命令 MUST 走组件文档自己的事务运行时，
 因此撤销与重做 MUST 只作用于组件文档的历史。
@@ -1363,11 +1382,22 @@ MUST 在底部 Dockview 工具组中动态加入并激活时间线面板，并�
 - **WHEN** Dockview 工作区完成初始化
 - **THEN** 底部工具组只包含 资源、命令 与 Transaction Log 标签，不包含动画标签
 
+#### Scenario: 切换器只有两段
+
+- **WHEN** 用户查看画布工具栏行的模式切换器
+- **THEN** 只有「设计」与「动画」两段，没有「绘图」
+
 #### Scenario: 切换到动画模式
 
 - **WHEN** 用户在页面文档工具栏把模式切换到「动画」
 - **THEN** 底部工具组加入并激活时间线面板，且底部组展开
 - **AND** 编辑器进入动画模式
+
+#### Scenario: 动画模式不关掉绘图能力
+
+- **WHEN** 用户切到动画模式
+- **THEN** 命令行仍可见并接受命令名
+- **AND** 一条绘图命令可以正常启动并完成
 
 #### Scenario: 组件文档进入动画模式
 
@@ -1823,30 +1853,4 @@ CAD 文档类型的初值 MUST 是收起；其他文档类型 MUST 保持既有�
 
 - **WHEN** 宿主把 controller 的自动适配选项设为 false
 - **THEN** 进入后画布停在 `initialViewport`，缩放为 100%
-
-### Requirement: 编辑器提供绘图模式
-
-编辑器的模式切换器 MUST 提供设计、绘图、动画三段，切换到绘图 MUST 把 Stage 切进绘图模式并
-把画布工具栏换成绘图工具。
-
-切换器 MUST 保持 radiogroup 语义：方向键在各段之间移动并立即生效，且 MUST NOT 假设只有两个
-选项——按索引循环而不是「另一个就是对面那个」。
-
-绘图模式 MUST NOT 隐藏或改造场景树、属性面板与 Palette：对象世界归页面，绘图模式只换输入
-方式。
-
-#### Scenario: 三段切换
-
-- **WHEN** 用户在切换器上选择绘图
-- **THEN** Stage 进入绘图模式，工具栏显示绘图工具
-
-#### Scenario: 方向键循环
-
-- **WHEN** 焦点在切换器上并连续按方向键
-- **THEN** 依次经过三段并立即生效
-
-#### Scenario: 面板不受模式影响
-
-- **WHEN** 进入绘图模式
-- **THEN** 场景树与属性面板仍然可见且可用
 

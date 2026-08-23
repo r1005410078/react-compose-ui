@@ -95,7 +95,9 @@ describe('createComposeEditorActions', () => {
     const actions = createComposeEditorActions(context())
     // 按住不放的临时平移做成一次性列表项没有意义，必须整条缺席而不是以不可用形式出现。
     expect(byId(actions)).not.toContain('stage.temporaryPan')
-    expect(byId(actions)).toContain('stage.panTool')
+    expect(byId(actions)).toContain('stage.selectTool')
+    // pan 工具已删除：临时平移（空格/中键）已经覆盖它，而工具是有状态的。
+    expect(byId(actions)).not.toContain('stage.panTool')
   })
 
   it('OpenSpec: editor-preferences / 编辑器动作目录 / 宿主未提供入口时省略动作', () => {
@@ -195,10 +197,10 @@ describe('createComposeEditorActions', () => {
     const actions = createComposeEditorActions(context({ dispatch, setTool, zoomBy }))
 
     actions.find((action) => action.id === 'stage.zoomIn')?.run()
-    actions.find((action) => action.id === 'stage.panTool')?.run()
+    actions.find((action) => action.id === 'stage.rotateTool')?.run()
 
     expect(zoomBy).toHaveBeenCalledTimes(1)
-    expect(setTool).toHaveBeenCalledWith('pan')
+    expect(setTool).toHaveBeenCalledWith('rotate')
     // 关键契约：视口与工具动作绝不派发命令，因此不会污染撤销栈。
     expect(dispatch).not.toHaveBeenCalled()
   })

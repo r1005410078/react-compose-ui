@@ -49,9 +49,11 @@ function pointerDown(overrides: Partial<StagePointerDownEvent> = {}): StagePoint
   } as StagePointerDownEvent
 }
 
-describe('OpenSpec: stage-engine / 平移手势插件 / 三种入口都接管平移', () => {
-  it('pan 工具下接管', () => {
-    const { ctx, effects } = harness({ tool: 'pan' })
+describe('OpenSpec: stage-engine / 平移手势插件 / 两种入口都接管平移', () => {
+  it('临时平移状态下接管并捕获指针', () => {
+    // pan 工具已删除：它与空格/中键这两个随时可用的临时覆盖完全重复，而工具是有状态的
+    // ——选了 pan 之后要再选回 select 才能做别的事。
+    const { ctx, effects } = harness({ tool: 'select', temporaryPan: true })
 
     const session = createStagePanPlugin().claim(pointerDown(), ctx)
 
@@ -91,7 +93,7 @@ describe('OpenSpec: stage-engine / 平移手势插件 / 三种入口都接管平
 
 describe('OpenSpec: stage-engine / 平移手势插件 / 位移以按下时视口为基线', () => {
   it('每帧位移都相对按下点与按下时视口', () => {
-    const { ctx, effects } = harness({ tool: 'pan' })
+    const { ctx, effects } = harness({ tool: 'select', temporaryPan: true })
     const session = createStagePanPlugin().claim(pointerDown(), ctx)
     if (session === null || session === 'consumed') throw new Error('应当接管')
 
@@ -106,7 +108,7 @@ describe('OpenSpec: stage-engine / 平移手势插件 / 位移以按下时视口
   })
 
   it('忽略与平移无关的事件', () => {
-    const { ctx, effects } = harness({ tool: 'pan' })
+    const { ctx, effects } = harness({ tool: 'select', temporaryPan: true })
     const session = createStagePanPlugin().claim(pointerDown(), ctx)
     if (session === null || session === 'consumed') throw new Error('应当接管')
     effects.length = 0
@@ -119,7 +121,7 @@ describe('OpenSpec: stage-engine / 平移手势插件 / 位移以按下时视口
 
 describe('OpenSpec: stage-engine / 平移手势插件 / 平移不产生文档命令', () => {
   it('松手只回到空闲并释放捕获', () => {
-    const { ctx, effects, published } = harness({ tool: 'pan' })
+    const { ctx, effects, published } = harness({ tool: 'select', temporaryPan: true })
     const session = createStagePanPlugin().claim(pointerDown(), ctx)
     if (session === null || session === 'consumed') throw new Error('应当接管')
     effects.length = 0
@@ -136,7 +138,7 @@ describe('OpenSpec: stage-engine / 平移手势插件 / 平移不产生文档命
 
 describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 依据活动插件身份处理非指针事件', () => {
   it('接管后暴露插件 id，释放后归空', () => {
-    const { ctx } = harness({ tool: 'pan' })
+    const { ctx } = harness({ tool: 'select', temporaryPan: true })
     const arbiter = createStageSessionArbiter(
       createStagePluginRegistry([createStagePanPlugin()]),
     )

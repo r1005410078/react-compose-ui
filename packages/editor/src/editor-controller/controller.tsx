@@ -102,11 +102,10 @@ import { createViewportStore } from './viewport-store'
 import { useComposeEditorLayout } from './use-layout-runtime'
 
 type InspectionTarget = 'entities' | null
-type ShapeDrawingTool = 'draw-rectangle' | 'draw-line' | 'draw-arrow' | 'draw-circle'
+type ShapeDrawingTool = 'draw-rectangle' | 'draw-arrow' | 'draw-circle'
 
 function isShapeDrawingTool(tool: ComposeStageTool): tool is ShapeDrawingTool {
   return tool === 'draw-rectangle'
-    || tool === 'draw-line'
     || tool === 'draw-arrow'
     || tool === 'draw-circle'
 }

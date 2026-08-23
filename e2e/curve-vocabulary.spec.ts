@@ -12,10 +12,10 @@ test('OpenSpec: compose-document / 弧与多段线 / 画圆、矩形、弧并各
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('radio', { name: '绘图' }).click()
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
@@ -49,7 +49,6 @@ test('OpenSpec: compose-document / 弧与多段线 / 画圆、矩形、弧并各
   expect(tags.sort()).toEqual(['circle', 'path', 'polygon'])
 
   // 切回设计模式：三个都是普通页面 Entity，场景树里各一行。
-  await editor.getByRole('radio', { name: '设计' }).click()
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
   await expect(sceneTree.getByRole('row').filter({ hasText: 'Curve' })).toHaveCount(3)
 
@@ -62,9 +61,9 @@ test('OpenSpec: stage-engine / 绘图命令 / PLINE 攒成一个 Entity 且可�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('radio', { name: '绘图' }).click()
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const strokes = stage.getByTestId('compose-material-curve-stroke')
@@ -97,12 +96,12 @@ test('OpenSpec: stage-engine / 特征点捕捉 / 圆心可捕捉', async ({ page
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await editor.getByRole('radio', { name: '绘图' }).click()
 
   // 命中与捕捉的断言必须在非 100% 缩放下做：`world = (屏幕 − 视口) / zoom`。
   await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
