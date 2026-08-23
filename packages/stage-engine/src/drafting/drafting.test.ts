@@ -66,14 +66,21 @@ describe('LINE 命令', () => {
     expect(step.preview?.reference).toEqual({ x: 30, y: 40 })
   })
 
-  it('Esc 与 Enter 都结束会话', () => {
+  it('Esc 中止会话，Enter 是正常结束', () => {
     const escaped = createStageLineSession(context)
     escaped.advance({ kind: 'point', point: { x: 0, y: 0 } })
     expect(escaped.advance({ kind: 'cancel' }).status).toBe('cancelled')
 
+    // 两者都留住已画的线，因此宿主只能靠 status 区分提示文案；回 cancelled 的话，用户
+    // 画完一条线按 Enter 会看到「已取消」。
     const accepted = createStageLineSession(context)
     accepted.advance({ kind: 'point', point: { x: 0, y: 0 } })
-    expect(accepted.advance({ kind: 'accept' }).status).toBe('cancelled')
+    expect(accepted.advance({ kind: 'accept' }).status).toBe('commit')
+  })
+
+  it('一点都没取时 Enter 什么也没发生', () => {
+    const session = createStageLineSession(context)
+    expect(session.advance({ kind: 'accept' }).status).toBe('cancelled')
   })
 
   it('非点输入被拒绝且不结束会话', () => {

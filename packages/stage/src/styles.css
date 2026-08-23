@@ -5,6 +5,18 @@
   --compose-stage-ruler-size: 24px;
   --compose-stage-scrollbar-size: 10px;
 
+  /*
+   * 绘图模式给命令行**留出底部一条**，而不是让它浮在图面上。
+   *
+   * 命令行原先是 `bottom: 0` 的绝对定位层，横跨整个 Stage 宽度：左端 24px 压在竖标尺
+   * （z-index 5）下面，底部 10px 压在横滚动条（z-index 6）下面——提示文字的第一个字与
+   * 整条下边框都被切掉。抬高层级只会反过来盖住标尺与滚动条，因为它们本来就占着那块地方。
+   *
+   * 这个变量同时是**留白量与命令行自身的高度**，两处不可能对不上；非绘图模式为 0，因此
+   * 设计模式的布局一像素不变。
+   */
+  --compose-stage-command-size: 0px;
+
   position: relative;
   width: 100%;
   height: 100%;
@@ -61,7 +73,7 @@
   z-index: 1;
   top: var(--compose-stage-ruler-size);
   right: var(--compose-stage-scrollbar-size);
-  bottom: var(--compose-stage-scrollbar-size);
+  bottom: calc(var(--compose-stage-scrollbar-size) + var(--compose-stage-command-size));
   left: var(--compose-stage-ruler-size);
   overflow: hidden;
   background: var(--compose-surface-sunken, #25282d);
@@ -594,7 +606,7 @@
 
 .compose-stage .compose-canvas__ruler.is-vertical {
   top: var(--compose-stage-ruler-size);
-  bottom: var(--compose-stage-scrollbar-size);
+  bottom: calc(var(--compose-stage-scrollbar-size) + var(--compose-stage-command-size));
   left: 0;
   width: var(--compose-stage-ruler-size);
   border-right: 1px solid #17191d;
@@ -636,7 +648,7 @@
 
 .compose-stage__scrollbar.is-x {
   right: var(--compose-stage-scrollbar-size);
-  bottom: 0;
+  bottom: var(--compose-stage-command-size);
   left: var(--compose-stage-ruler-size);
   height: var(--compose-stage-scrollbar-size);
 }
@@ -644,7 +656,7 @@
 .compose-stage__scrollbar.is-y {
   top: var(--compose-stage-ruler-size);
   right: 0;
-  bottom: var(--compose-stage-scrollbar-size);
+  bottom: calc(var(--compose-stage-scrollbar-size) + var(--compose-stage-command-size));
   width: var(--compose-stage-scrollbar-size);
 }
 
@@ -677,7 +689,7 @@
   position: absolute;
   z-index: 7;
   right: 0;
-  bottom: 0;
+  bottom: var(--compose-stage-command-size);
   width: var(--compose-stage-scrollbar-size);
   height: var(--compose-stage-scrollbar-size);
   background: #1d2024;
@@ -1057,7 +1069,13 @@
  * 拦下点击就等于取点永远落不到画布。
  */
 .compose-stage__drafting {
+  /*
+   * 必须排在 Scene（2）与编辑 Overlay（3）之上。缺 `z-index` 时它以 auto 参与堆叠，任何带
+   * z-index 的定位兄弟都会盖住它——表现是十字线、橡皮筋与捕捉标记**钻到场景底下**，而画在
+   * 空白画布上时一切正常，因此很容易在只有空文档的用例里漏掉。
+   */
   position: absolute;
+  z-index: 4;
   inset: 0;
   pointer-events: none;
 }
@@ -1092,10 +1110,23 @@
   cursor: none;
 }
 
+/*
+ * 命令行独占底部一条，与图面**不重叠**——AutoCAD 的命令行同样是绘图区下面的一块，而不是
+ * 浮在图上的 HUD：它是主输入位置，被图面内容或滚动条盖掉一半就没法用了。
+ *
+ * 高度锁在 `--compose-stage-command-size` 上：那正是上面各层让出的留白量，写死在同一个
+ * 变量里两者才不会漂开。
+ */
+.compose-stage[data-drafting] {
+  --compose-stage-command-size: 30px;
+}
+
 .compose-stage__command-line {
   position: absolute;
   right: 0;
   bottom: 0;
   left: 0;
-  z-index: 3;
+  z-index: 8;
+  box-sizing: border-box;
+  height: var(--compose-stage-command-size);
 }

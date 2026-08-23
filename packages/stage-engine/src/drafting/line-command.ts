@@ -52,9 +52,16 @@ export function createStageLineSession(
     },
     advance(input): ComposeCommandStep<StageDraftingEffect> {
       if (input.kind === 'cancel') return { status: 'cancelled' }
-      // 没有 `defaultKeyword`，因此 Enter 的含义由命令自己给：已经画过就是结束，一点都没取
-      // 就是什么也没发生。
-      if (input.kind === 'accept') return { status: 'cancelled' }
+      // 没有 `defaultKeyword`，因此 Enter 的含义由命令自己给：已经取过点就是**正常结束**，
+      // 一点都没取才是什么也没发生。
+      //
+      // 结束必须是 `commit` 而不是 `cancelled`：逐段落地意味着此刻文档上已经没有待提交的
+      // 东西，`effect` 因此是空的——但宿主是按 status 决定提示文案的，回 `cancelled` 会让
+      // 用户画完一条线看到「已取消」。空 effect 是合法的：字段全部可选，它表达的正是
+      // 「命令正常结束，本步没有新产出」。
+      if (input.kind === 'accept') {
+        return previous ? { status: 'commit', effect: {} } : { status: 'cancelled' }
+      }
 
       if (input.kind !== 'point') {
         return { status: 'rejected', message: messages.expectedPoint }

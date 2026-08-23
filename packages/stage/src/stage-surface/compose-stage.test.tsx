@@ -1666,6 +1666,44 @@ describe('绘图模式', () => {
     expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('未知命令')
   })
 
+  it('OpenSpec: stage / 绘图模式 / 画布上按 Enter 正常结束 LINE', () => {
+    const { runtime } = renderStage(document(), { drafting: true })
+    startLine()
+    const surface = screen.getByTestId('stage-surface')
+    fireEvent.pointerDown(surface, surfacePoint(100, 100))
+    fireEvent.pointerDown(surface, surfacePoint(300, 200))
+
+    // 焦点在图面上，不是命令行输入框——真实操作里用户取完点手还在画布上。
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'Enter' })
+
+    // 回到空闲提示。断言的是「不是已取消」：正常结束与中止都留住已画的线，两者只能靠
+    // 提示文案区分，而回 cancelled 时这里会是「已取消」。
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+    expect(Object.values(runtime.document.entities)
+      .filter((candidate) => candidate.components.Curve !== undefined)).toHaveLength(1)
+  })
+
+  it('OpenSpec: stage / 绘图模式 / 画布上按 Esc 中止 LINE', () => {
+    renderStage(document(), { drafting: true })
+    startLine()
+    fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(100, 100))
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'Escape' })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('已取消')
+  })
+
+  it('命令行输入框里的 Enter 不被图面再消费一次', () => {
+    const { runtime } = renderStage(document(), { drafting: true })
+    const input = startLine()
+    // 事件从输入框冒到 Stage 根节点。根上再推进一次的话，第二个坐标会被当成第三点，
+    // 落地的曲线会变成两条。
+    for (const text of ['100,50', '260,130']) {
+      fireEvent.change(input, { target: { value: text } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    }
+    expect(Object.values(runtime.document.entities)
+      .filter((candidate) => candidate.components.Curve !== undefined)).toHaveLength(1)
+  })
+
   it('Esc 中止命令且不写入文档', () => {
     const { dispatch } = renderStage(document(), { drafting: true })
     const input = startLine()

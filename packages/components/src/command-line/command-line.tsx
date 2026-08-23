@@ -59,7 +59,10 @@ export function ComposeCommandLine({
   }, [onCancel, onSubmit, text])
 
   return (
-    <div className={`compose-command-line${className ? ` ${className}` : ''}`}>
+    <div
+      className={`compose-command-line${className ? ` ${className}` : ''}`}
+      data-testid={`${testIdPrefix}-command-line`}
+    >
       <span className="compose-command-line__prompt" data-testid={`${testIdPrefix}-command-prompt`}>
         {notice ?? promptText(prompt, messages)}
       </span>

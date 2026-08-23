@@ -26,6 +26,7 @@ import {
   type StageRect,
   type StageViewport,
 } from '@compose-ui/stage-engine'
+import { isEditableTarget } from '../stage-surface/keyboard'
 import type { ComposeStageDispatch } from '../types'
 import { createStageDraftingCurveCommand } from './drafting-entity'
 
@@ -280,6 +281,21 @@ export function useStageDrafting(options: StageDraftingOptions) {
     applyStep(session.advance({ kind: 'cancel' }))
   }, [applyStep])
 
+  /**
+   * 绘图模式的键盘入口。
+   *
+   * @remarks
+   * `Enter` 与 `Esc` 必须在**图面上**也生效：取完点之后焦点在 Stage 根节点上，只把这两个键
+   * 挂在命令行输入框上等于要求用户先点回输入框才能结束命令，而他的手正在画布上。AutoCAD
+   * 里这两个键在任何位置都结束命令。
+   *
+   * 可编辑目标要放过：命令行输入框自己已经处理了 `Enter`/`Esc` 且不阻止冒泡，在根上再消费
+   * 一次会让一次按键推进两步。`F8`/`F3` 排在这条守卫之前——正交与捕捉在键入坐标的过程中
+   * 同样要能切。
+   *
+   * 两个键都只在**确实有事可做**时接管，否则交还既有键位级联：`Enter` 没有会话时无所作为，
+   * `Esc` 没有会话且选择集为空时同理，而设计模式的 `Esc` 还要负责中止进行中的指针手势。
+   */
   const handleKeyDown = useCallback((event: ReactKeyboardEvent<Element>) => {
     if (!enabled) return false
     if (event.key === 'F8') {
@@ -292,8 +308,21 @@ export function useStageDrafting(options: StageDraftingOptions) {
       setSnapEnabled((value) => !value)
       return true
     }
+    if (isEditableTarget(event.target)) return false
+    if (event.key === 'Enter') {
+      if (!sessionRef.current) return false
+      event.preventDefault()
+      submit('')
+      return true
+    }
+    if (event.key === 'Escape') {
+      if (!sessionRef.current && latest.current.selectedIds.length === 0) return false
+      event.preventDefault()
+      cancel()
+      return true
+    }
     return false
-  }, [enabled])
+  }, [cancel, enabled, submit])
 
   // 选择集归宿主：命令等着选对象时，把**当前完整选择集**喂进去，并在它变化时重新喂。
   // 让命令会话自己拦截点选等于同一次点击有两个消费者，而用户无法预期哪一个赢。
