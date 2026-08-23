@@ -324,6 +324,17 @@ DXF 导入产出场景 + 组件（BLOCK → Component Asset），按内容包围
 聚合原样复用，映射层重写目标。然后**删除** CadDocument、CAD 标签页、`cad-canvas`；`cad`
 包中仍被引用的纯数学下沉或随消费者搬家；AGENTS.md 与 README 的 CAD 段落重写。
 
+## 踩过的坑
+
+- **`vector-effect: non-scaling-stroke` 中和不了 HTML 祖先上的 CSS 变换**（2026-08-23）。
+  它只作用于 SVG 文档片段**内部**的变换，而 Stage 的缩放来自 `.compose-stage__scene` 那个
+  HTML 节点。症状最阴险的地方是 computed 值老老实实报 `non-scaling-stroke`，只断言属性
+  生效的用例因此全绿，而屏幕上描边照样跟着涨——实测放大 4.22 倍后触达从 6px 变 29px。
+  正确做法是反向除掉画布缩放：Stage 把 zoom 发成 `--compose-canvas-zoom`，物料写
+  `calc(<宽度>px / var(--compose-canvas-zoom, 1))`；变量缺席即 1，预览与其它宿主自动回到
+  页面单位。**量具是沿法向扫 `elementFromPoint` 量实际触达**——`getBoundingClientRect` 在
+  SVG 几何元素上不含描边，量不出来。
+
 ## 待修的缺陷
 
 - **水平线与垂直线几乎点不中**（2026-08-23 手工测试发现，已实测确认）。曲线的命中靠物料

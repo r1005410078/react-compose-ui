@@ -207,6 +207,18 @@ export function StageSceneLayer({
       data-testid="stage-scene-layer"
       style={{
         transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+        /*
+         * 把缩放同时发成 CSS 自定义属性，供需要**屏幕像素**语义的物料反向除掉它。
+         *
+         * `vector-effect: non-scaling-stroke` 在这里**不管用**：它只中和 SVG 文档片段
+         * *内部*的变换，而这里的缩放来自 SVG 之外的 HTML 祖先。实测放大 4.22 倍后描边
+         * 的实际触达从 6px 涨到 29px，computed 值却老老实实是 `non-scaling-stroke`——
+         * 只断言属性生效的用例会全绿。
+         *
+         * 走 CSS 变量而不是把 zoom 塞进 Renderer 协议：预览没有画布缩放，那边读不到这个
+         * 变量就回退到 1，页面单位因此自动成立，物料不需要认识「编辑期还是渲染期」。
+         */
+        ['--compose-canvas-zoom' as string]: viewport.zoom,
       }}
     >
       {content}

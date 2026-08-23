@@ -127,11 +127,21 @@ describe('curve 物料', () => {
 })
 
 describe('curve 物料的弧与多段线渲染', () => {
-  function withCurve(curve: unknown) {
+  function withCurve(curve: unknown, props?: Record<string, unknown>) {
     const { entity, materials } = curveSeed()
+    const renderer = entity.components.Renderer as { readonly props?: Record<string, unknown> }
     return {
       materials,
-      entity: { ...entity, components: { ...entity.components, Curve: curve } } as ComposeEntity,
+      entity: {
+        ...entity,
+        components: {
+          ...entity.components,
+          Curve: curve,
+          ...(props
+            ? { Renderer: { ...renderer, props: { ...renderer.props, ...props } } }
+            : {}),
+        },
+      } as ComposeEntity,
     }
   }
 
@@ -208,25 +218,38 @@ describe('curve 物料的弧与多段线渲染', () => {
     expect(hit).toHaveAttribute('pointer-events', 'stroke')
   })
 
-  it('OpenSpec: materials / 曲线线宽 / 编辑画布按屏幕像素、预览按页面单位', () => {
+  it('OpenSpec: materials / 曲线线宽 / 线宽反向除掉画布缩放，虚线不除', () => {
     const { entity, materials } = withCurve({
       kind: 'line',
       start: { x: 0, y: 0 },
       end: { x: 40, y: 30 },
     })
-
-    // Stage 的 Scene 靠 `transform: scale(zoom)` 整体缩放，描边会被一起乘；命中容差同理。
     render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
-    expect(screen.getByTestId('compose-material-curve-stroke'))
-      .toHaveAttribute('vector-effect', 'non-scaling-stroke')
-    expect(screen.getByTestId('compose-material-curve-hit'))
-      .toHaveAttribute('vector-effect', 'non-scaling-stroke')
 
-    cleanup()
+    // 线宽是显示宽度，必须除掉画布缩放；`--compose-canvas-zoom` 缺席即 1，因此预览与任何
+    // 不发这个变量的宿主自动回到页面单位。属性上仍是作者写的那个数（页面单位）。
+    const stroke = screen.getByTestId('compose-material-curve-stroke')
+    expect(stroke.getAttribute('style'))
+      .toContain('calc(2px / var(--compose-canvas-zoom, 1))')
+    expect(stroke).toHaveAttribute('stroke-width', '2')
 
-    // 预览可能被宿主的 `fit` 整体缩放，非缩放描边会让它不再是页面的忠实缩略图。
-    render(<ComposeRegistryEntityRenderer entity={entity} mode="preview" registry={materials.registry} />)
-    expect(screen.getByTestId('compose-material-curve-stroke'))
-      .not.toHaveAttribute('vector-effect')
+    // 命中容差表达的是鼠标能点多准，同样是屏幕量。
+    expect(screen.getByTestId('compose-material-curve-hit').getAttribute('style'))
+      .toContain('calc(12px / var(--compose-canvas-zoom, 1))')
+  })
+
+  it('虚线间隔留在世界单位', () => {
+    const { entity, materials } = withCurve(
+      { kind: 'line', start: { x: 0, y: 0 }, end: { x: 40, y: 30 } },
+      { strokeDasharray: '8 4' },
+    )
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    // 间隔是图上的实际长度（AutoCAD 的 linetype），跟着缩放变才携带长度信息——与线宽相反。
+    // 一个除一个不除是照抄 CAD 的判断，不是漏写。
+    const dash = screen.getByTestId('compose-material-curve-stroke').getAttribute('stroke-dasharray')
+    expect(dash).toBe('8 4')
+    expect(screen.getByTestId('compose-material-curve-stroke').getAttribute('style'))
+      .not.toContain('stroke-dasharray')
   })
 })

@@ -61,7 +61,7 @@ test('OpenSpec: stage / 绘图模式 / 命令行不被标尺与图面压住', as
   expect(promptBox.y).toBeGreaterThanOrEqual(commandLine.y - 0.5)
 })
 
-test('OpenSpec: materials / 曲线线宽 / 非 100% 缩放下线宽与命中容差都是屏幕像素', async ({ page }) => {
+test('OpenSpec: materials / 曲线线宽 / 放大后描边的实际触达不变', async ({ page }) => {
   const { stage } = await enterDrafting(page)
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
@@ -70,39 +70,48 @@ test('OpenSpec: materials / 曲线线宽 / 非 100% 缩放下线宽与命中容�
 
   await commandInput.fill('L')
   await commandInput.press('Enter')
-  await page.mouse.click(at(120, 260).x, at(120, 260).y)
-  await page.mouse.click(at(420, 260).x, at(420, 260).y)
+  await page.mouse.click(at(120, 340).x, at(120, 340).y)
+  await page.mouse.click(at(400, 180).x, at(400, 180).y)
   await page.keyboard.press('Enter')
 
-  // 缩小而不是放大：世界单位的命中容差在缩小时会瘪掉，那正是「线点不中」的方向；
-  // 放大方向反而被曲线自己的退化包围盒挡着，量不出差别。
+  /**
+   * 量的是**实际触达**而不是属性。
+   *
+   * 这里踩过一次：`vector-effect: non-scaling-stroke` 只中和 SVG 文档片段*内部*的变换，
+   * 而 Stage 的缩放来自 SVG 之外的 HTML 祖先——computed 值老老实实是 `non-scaling-stroke`，
+   * 描边照样跟着涨。只断言属性生效的用例在那个错误实现下是全绿的。
+   *
+   * 沿法向逐像素扫 `elementFromPoint`，答案是浏览器画出来的那一份。
+   */
+  const measure = () => page.evaluate(() => {
+    const scene = document.querySelector('.compose-stage__scene') as HTMLElement
+    const hit = document.querySelector('[data-testid="compose-material-curve-hit"]')!
+    const rect = hit.getBoundingClientRect()
+    const cx = rect.x + rect.width / 2
+    const cy = rect.y + rect.height / 2
+    let reach = -1
+    for (let dy = 0; dy <= 80; dy += 1) {
+      if (document.elementFromPoint(cx, cy - dy) !== hit) break
+      reach = dy
+    }
+    return { zoom: new DOMMatrixReadOnly(getComputedStyle(scene).transform).a, reach }
+  })
+
+  const before = await measure()
   await page.keyboard.down('Control')
-  for (let i = 0; i < 4; i += 1) {
-    await page.mouse.move(at(270, 260).x, at(270, 260).y)
-    await page.mouse.wheel(0, 120)
+  for (let i = 0; i < 6; i += 1) {
+    await page.mouse.move(at(260, 260).x, at(260, 260).y)
+    await page.mouse.wheel(0, -120)
     await page.waitForTimeout(30)
   }
   await page.keyboard.up('Control')
+  const after = await measure()
 
-  const live = await page.evaluate(() => {
-    const scene = document.querySelector('.compose-stage__scene') as HTMLElement
-    const node = (testId: string) => document.querySelector(`[data-testid="${testId}"]`)!
-    return {
-      zoom: new DOMMatrixReadOnly(getComputedStyle(scene).transform).a,
-      stroke: getComputedStyle(node('compose-material-curve-stroke')).vectorEffect,
-      hit: getComputedStyle(node('compose-material-curve-hit')).vectorEffect,
-    }
-  })
+  // 判据是缩放：两次 zoom 一样的话下面那条断言什么也证明不了。
+  expect(after.zoom / before.zoom).toBeGreaterThan(3)
 
-  // 判据是缩放：zoom 恒为 1 时两种语义给出同一个数，下面的断言什么也证明不了。
-  expect(live.zoom).toBeLessThan(0.5)
-  // 线宽是显示宽度（AutoCAD 的 lineweight），不跟着图纸放大——否则一根 2px 的线在 4 倍下变成
-  // 8px 的色带，而用户放大恰恰是为了看清结构。属性要在**变换过的 Scene 里**真正生效，
-  // 因此读 computed 而不是 attribute。
-  expect(live.stroke).toBe('non-scaling-stroke')
-  expect(live.hit).toBe('non-scaling-stroke')
-
-  // 命中容差同样是屏幕量：`MIN_HIT_WIDTH` 表达的是鼠标能点多准。这里只断言属性生效——
-  // 想直接量「点得中点不中」还差一步，水平线与垂直线的命中被自己那个退化的 SVG viewport
-  // 裁着，与线宽无关，见 docs/drafting-unification-roadmap.md 的待修项。
+  // 线宽是显示宽度（AutoCAD 的 lineweight），不跟着图纸放大——否则一根 2px 的线在 4 倍下
+  // 变成 8px 的色带，而用户放大恰恰是为了看清结构。容 1px 的光栅化误差。
+  expect(before.reach).toBeGreaterThan(3)
+  expect(Math.abs(after.reach - before.reach)).toBeLessThanOrEqual(1)
 })
