@@ -228,10 +228,14 @@ export function createComposeLineCurve(
 }
 
 /**
- * 曲线的特征点。
+ * 决定曲线**紧包围盒**的那组点。
  *
  * @remarks
- * 供包围盒、平移与捕捉共用。弧与多段线加入后在此扩展，包围盒与平移因此不必各自认识 kind。
+ * 只服务包围盒。**不要拿它当端点集合用**：对弧它返回的是端点加落在扫掠内的象限点，
+ * 当成端点会让象限点以端点优先级参与捕捉，还会凭空造出一批相邻点的中点。捕捉的特征点由
+ * `stage-engine` 自己按 kind 分派。
+ *
+ * 平移也不复用它：弧平移只搬圆心，半径与角度是形状本身。
  * @public
  */
 export function composeCurvePoints(curve: ComposeCurve): readonly ComposePosition[] {
