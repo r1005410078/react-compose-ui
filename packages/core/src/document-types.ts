@@ -33,9 +33,27 @@ export interface ComposeSize extends JsonObject {
 }
 
 /** Entity 在布局盒之后应用的二维变换 Component。 @public */
-export interface ComposeTransform extends JsonObject {
+export type ComposeTransform = JsonObject & {
   readonly rotation: number
+  /**
+   * 旋转基点，**归一化盒坐标**（`{ x: 0, y: 0.5 }` 是左边中点）。
+   *
+   * @remarks
+   * 缺席等价于盒中心，因此没设过基点的文档渲染与几何求解**逐像素不变**——本字段不需要迁移。
+   * 读取一律走 `getComposeTransformPivot`，不要各自写回退。
+   *
+   * 归一化而不是像素：resize 之后「铰点在左边缘」比「铰点距顶边 0.5px」成立得多，
+   * 且 CSS `transform-origin` 原生吃百分比。
+   *
+   * **不钳制到 `[0, 1]`**：基点落在盒外表达「绕一个外部支点摆动」，是正当用法。
+   *
+   * @defaultValue `{ x: 0.5, y: 0.5 }`
+   */
+  readonly pivot?: ComposePosition
 }
+
+/** 旋转基点缺席时的回退值：盒中心。 @public */
+export const COMPOSE_DEFAULT_TRANSFORM_PIVOT: ComposePosition = { x: 0.5, y: 0.5 }
 
 /** 编辑命令与 Stage 适配使用的完整局部盒变换；不是持久化 Component。 @public */
 export interface ComposeSpatialTransform extends JsonObject {

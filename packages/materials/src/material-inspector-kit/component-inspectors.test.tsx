@@ -285,6 +285,36 @@ describe('内建 Component inspectors', () => {
     })
   })
 
+  it('OpenSpec: basic-materials / 几何 Inspector 提供旋转基点 / 选锚点写入 Transform.pivot', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('LayoutItem')
+    const target = entity()
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={dispatch}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    const pivot = screen.getByRole('combobox', { name: '旋转基点' })
+    // 未设基点时显示为中心。
+    expect(pivot).toHaveValue('center')
+
+    fireEvent.change(pivot, { target: { value: 'middle-left' } })
+
+    const command = dispatch.mock.lastCall?.[0] as EditorCommand
+    // 基点是 Transform 上的普通字段，走通用 Component 更新命令而不是几何变换命令。
+    expect(command.type).toBe(BUILTIN_COMMAND_TYPES.updateComponent)
+    expect(command.payload).toMatchObject({
+      entityId: 'entity-a',
+      key: 'Transform',
+      value: { pivot: { x: 0, y: 0.5 } },
+    })
+  })
+
   it('OpenSpec: basic-materials / 紧凑 Auto Layout Inspector / Flow 显示自身对齐与融合尺寸', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('LayoutItem')

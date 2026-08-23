@@ -1,4 +1,6 @@
 import {
+  COMPOSE_DEFAULT_TRANSFORM_PIVOT,
+  getComposeTransformPivot,
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
   createComposeGroupEntitySeed,
@@ -133,6 +135,7 @@ function transformRelativeTo(
     ),
     box.width,
     box.height,
+    getComposeTransformPivot(document.entities[entityId]!),
   ))
 }
 
@@ -148,7 +151,8 @@ function transformUnderParent(
     ? null
     : getEntityWorldMatrix(document, snapshot, parentId)
   const local = parentWorld ? multiplyMatrices(invertMatrix(parentWorld), world) : world
-  return toComposeTransform(decomposeMatrix(local, width, height))
+  // 唯一调用方求的是**本次新建**的组件实例的几何，它还没有基点。
+  return toComposeTransform(decomposeMatrix(local, width, height, COMPOSE_DEFAULT_TRANSFORM_PIVOT))
 }
 
 /**

@@ -149,8 +149,19 @@ describe('composeEntitySceneStyle', () => {
       height: 100,
       position: 'absolute',
       transform: 'rotate(45deg)',
-      transformOrigin: 'center',
+      // 未设基点仍居中：零迁移护栏。
+      transformOrigin: '50% 50%',
     })
     expect(styled.overflow).toBeUndefined()
+  })
+
+  it('OpenSpec: 共享渲染语义 / 基点反映到变换原点', () => {
+    const styled = composeEntitySceneStyle(
+      entity({ Transform: { rotation: 45, pivot: { x: 0, y: 0.5 } } }),
+      { x: 12, y: 34, width: 200, height: 100, positioning: 'absolute' },
+    )
+
+    // 左边中点。Stage、Preview 与组件实例三条渲染路径共用本函数。
+    expect(styled.transformOrigin).toBe('0% 50%')
   })
 })

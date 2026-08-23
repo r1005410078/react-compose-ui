@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { validateComposeDocument } from './document'
-import { getComposeBindings, resolveComposeOverflow } from './entity'
+import { getComposeBindings, getComposeTransformPivot, resolveComposeOverflow } from './entity'
 
 function rectangleDocument() {
   return {
@@ -107,6 +107,48 @@ describe('ComposeDocument v7 ECS', () => {
         stable: true,
       })
     }
+  })
+
+  it('OpenSpec: compose-document / Transform 承载可选的旋转基点 / 缺席即盒中心', () => {
+    const input = structuredClone(rectangleDocument())
+    const transform = input.entities['rectangle-1']!.components.Transform as Record<string, unknown>
+    // 既有文档一律没有 pivot：这条是「零迁移」的护栏。
+    expect(transform.pivot).toBeUndefined()
+    const result = validateComposeDocument(input)
+    if (!result.valid) throw new Error('夹具应当合法')
+    expect(getComposeTransformPivot(result.document.entities['rectangle-1']!))
+      .toEqual({ x: 0.5, y: 0.5 })
+  })
+
+  it('OpenSpec: compose-document / Transform 承载可选的旋转基点 / 基点可以落在盒外', () => {
+    const input = structuredClone(rectangleDocument())
+    const transform = input.entities['rectangle-1']!.components.Transform as Record<string, unknown>
+    // 绕一个外部支点摆动是正当用法，钳制会把它判成非法。
+    transform.pivot = { x: 1.5, y: -0.25 }
+    expect(validateComposeDocument(input).valid).toBe(true)
+  })
+
+  it('OpenSpec: compose-document / Transform 承载可选的旋转基点 / 坐标不是数字时非法', () => {
+    const input = structuredClone(rectangleDocument())
+    const transform = input.entities['rectangle-1']!.components.Transform as Record<string, unknown>
+    // 用非数字而不是 NaN：NaN 已经被通用的 `json.non-finite-number` 挡住，
+    // 拿它做断言测不出本条规则在不在。
+    transform.pivot = { x: 'left', y: 0.5 }
+    const wrongType = validateComposeDocument(input)
+    expect(wrongType.valid).toBe(false)
+    if (!wrongType.valid) {
+      expect(wrongType.issues.some((issue) => issue.code === 'transform.invalid'
+        && issue.path.includes('pivot'))).toBe(true)
+    }
+
+    // 整个 pivot 不是二维点。
+    transform.pivot = 5
+    const notAPoint = validateComposeDocument(input)
+    expect(notAPoint.valid).toBe(false)
+
+    // 未知字段一并拒绝：写错名字的基点会静默退回中心，用户只看到「基点没生效」。
+    transform.pivot = { x: 0, y: 0.5, z: 1 }
+    expect(validateComposeDocument(input).valid).toBe(false)
   })
 
   it('OpenSpec: compose-document / 场景 Entity 最小组合 / 可渲染容器', () => {

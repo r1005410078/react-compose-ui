@@ -81,6 +81,21 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   且排在 Shift 等长宽约束之前；吸附生效时终点角落在网格线/智能候选上而不是光标裸坐标上，
   与 resize 一致。**判据是缩放**：`world = (屏幕 - 视口) / zoom`，zoom 恒为 1 时未吸附也看起来
   是整数，因此新手势必须在非 100% 缩放下验证，否则漏掉吸附要到很久以后才暴露。
+- **旋转基点缺席即盒中心。** `Transform.pivot` 是可选的**归一化盒坐标**（`{x:0,y:0.5}` 是左边
+  中点），读取一律走 `getComposeTransformPivot`。缺席即中心这条回退让「没设过基点的文档渲染
+  逐像素不变」自动成立，因此本字段**不需要迁移**、协议版本不变。**不钳制到 `[0,1]`**：基点
+  落在盒外表达「绕外部支点摆动」，是正当用法。归一化而不是像素，是因为 `decomposeMatrix` 里的
+  `width / 2` 本来就是 `width * 0.5`，改成 `width * pivot.x` 是这条数学上最小的一处编辑，
+  且 CSS `transform-origin` 原生吃百分比。
+  **`matrixFromTransform` 与 `decomposeMatrix` 是一对互逆函数，必须拿到同一个基点**：手势每帧
+  都要走一个来回，任何一处漏传的症状是**提交后对象跳一下、位移量恰好等于基点偏移，且只在
+  非中心基点的对象上出现**。因此 `decomposeMatrix` 的基点参数**必填**——给默认值等于把这个
+  错误变成静默的；新建容器与新建组件实例那两处显式传中心，是可复查的决定。
+  **变换原点只有一个入口**：`composeEntitySceneStyle` 被 Stage Scene、Preview 与组件实例三条
+  渲染路径共用，基点相关的渲染改动只改这一处，不得在各路径分别实现。
+  UI 上 v1 只给九个锚点（`v.picklist`，零新 editor），但**文档字段是自由二维点**——UI 的取值
+  约束不上升为协议的约束。基点走 `entity.component.update` 写入，不塞进 `entity.transform.set`：
+  后者的载荷是 position/size/rotation 的合成值，本来就没有基点的位置。
 - **几何数值统一 2 位精度**，事实来源是 core 的 `COMPOSE_GEOMETRY_PRECISION` /
   `roundComposeGeometry` / `formatComposeNumber`。`toComposeTransform` 是 Stage 几何写回文档的
   唯一漏斗，量化放在那里，掐掉非整数 zoom 留下的 `82.96874999999991` 这类浮点残渣；量化

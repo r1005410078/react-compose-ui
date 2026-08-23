@@ -163,9 +163,30 @@ function validateTransform(
   issues: DocumentValidationIssue[],
 ) {
   if (!isRecord(value)) return
-  rejectUnknownFields(value, ['rotation'], path, issues, 'transform.invalid')
+  rejectUnknownFields(value, ['rotation', 'pivot'], path, issues, 'transform.invalid')
   if (!finite(value.rotation)) {
     addIssue(issues, 'transform.invalid', [...path, 'rotation'], 'rotation 必须是有限数')
+  }
+  // 基点缺席即盒中心，因此「没有」是合法的；有就必须是两个有限数。
+  // **刻意不钳制到 [0, 1]**：基点落在盒外表达「绕外部支点摆动」，是正当用法。
+  if (value.pivot !== undefined) {
+    const pivot = value.pivot
+    if (!isRecord(pivot)) {
+      addIssue(issues, 'transform.invalid', [...path, 'pivot'], 'pivot 必须是二维点')
+    }
+    else {
+      rejectUnknownFields(pivot, ['x', 'y'], [...path, 'pivot'], issues, 'transform.invalid')
+      for (const axis of ['x', 'y'] as const) {
+        if (!finite(pivot[axis])) {
+          addIssue(
+            issues,
+            'transform.invalid',
+            [...path, 'pivot', axis],
+            `pivot.${axis} 必须是有限数`,
+          )
+        }
+      }
+    }
   }
 }
 
