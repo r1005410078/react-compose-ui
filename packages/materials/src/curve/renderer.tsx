@@ -119,9 +119,10 @@ function geometryElement(
 export function CurveRenderer({ entity, props }: ComposeRendererProps) {
   const curve = getComposeCurve(entity) ?? DEFAULT_CURVE_GEOMETRY
   const stroke = typeof props.stroke === 'string' ? props.stroke : '#d8e2f1'
+  // 回退值与 `DEFAULT_CURVE_PROPS.strokeWidth` 必须一致：发丝线，与 CAD 画布同值。
   const strokeWidth = typeof props.strokeWidth === 'number' && props.strokeWidth >= 0
     ? props.strokeWidth
-    : 2
+    : 1
   const cap = linecap(props.strokeLinecap)
   const pattern = dasharray(props.strokeDasharray, strokeWidth)
 

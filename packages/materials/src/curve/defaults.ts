@@ -28,10 +28,23 @@ export const DEFAULT_CURVE_APPEARANCE: ComposeAppearance = Object.freeze({
   shadow: null,
 } satisfies ComposeAppearance)
 
-/** 曲线的默认描边 Renderer Props。 @internal */
+/**
+ * 曲线的默认描边 Renderer Props。
+ *
+ * @remarks
+ * 线宽 1 是**发丝线**，与 CAD 画布的 `CAD_DEFAULT_STROKE_WIDTH` 同值，也是 AutoCAD 出厂时
+ * 屏幕上的样子——默认 lineweight 是 0.25mm，而模型空间默认不显示 lineweight，于是所有线都按
+ * 一个像素画。曾经写的 2 在图面上明显偏粗：接线图靠**线的走向**而不是线的分量传达信息，
+ * 加粗只会让密集区糊成一片。
+ *
+ * 不为这个数在 `core` 立共享常量：`cad` 那一份按路线图步骤 7 要随 `CadDocument` 一起删除，
+ * 为一个即将只剩一处的值提前抽象，收益是负的。
+ *
+ * @internal
+ */
 export const DEFAULT_CURVE_PROPS: JsonObject = Object.freeze({
   stroke: '#d8e2f1',
-  strokeWidth: 2,
+  strokeWidth: 1,
   strokeLinecap: 'round',
   strokeDasharray: 'none',
 })

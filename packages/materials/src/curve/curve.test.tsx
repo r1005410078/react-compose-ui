@@ -121,7 +121,7 @@ describe('curve 物料', () => {
         registry={materials.registry}
       />,
     )
-    expect(screen.getByRole('spinbutton', { name: '线条粗细' })).toHaveValue(2)
+    expect(screen.getByRole('spinbutton', { name: '线条粗细' })).toHaveValue(1)
     expect(screen.getByRole('combobox', { name: '线条样式' })).toHaveValue('none')
   })
 })
@@ -230,8 +230,8 @@ describe('curve 物料的弧与多段线渲染', () => {
     // 不发这个变量的宿主自动回到页面单位。属性上仍是作者写的那个数（页面单位）。
     const stroke = screen.getByTestId('compose-material-curve-stroke')
     expect(stroke.getAttribute('style'))
-      .toContain('calc(2px / var(--compose-canvas-zoom, 1))')
-    expect(stroke).toHaveAttribute('stroke-width', '2')
+      .toContain('calc(1px / var(--compose-canvas-zoom, 1))')
+    expect(stroke).toHaveAttribute('stroke-width', '1')
 
     // 命中容差表达的是鼠标能点多准，同样是屏幕量。
     expect(screen.getByTestId('compose-material-curve-hit').getAttribute('style'))
@@ -247,8 +247,10 @@ describe('curve 物料的弧与多段线渲染', () => {
 
     // 间隔是图上的实际长度（AutoCAD 的 linetype），跟着缩放变才携带长度信息——与线宽相反。
     // 一个除一个不除是照抄 CAD 的判断，不是漏写。
+    // 图案由作者写的线宽推出（4 倍划、2 倍空），单位是**世界**——线宽已经改成屏幕像素，
+    // 这里刻意不跟着走。
     const dash = screen.getByTestId('compose-material-curve-stroke').getAttribute('stroke-dasharray')
-    expect(dash).toBe('8 4')
+    expect(dash).toBe('4 2')
     expect(screen.getByTestId('compose-material-curve-stroke').getAttribute('style'))
       .not.toContain('stroke-dasharray')
   })
