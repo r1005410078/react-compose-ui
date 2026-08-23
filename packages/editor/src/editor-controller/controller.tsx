@@ -11,6 +11,7 @@ import {
   type ComposeComponentSnapshot,
   type ComposeComponentStore,
 } from '@compose-ui/component-library'
+import { getComposeAnimationComponent } from '@compose-ui/animation'
 import {
   createComponentExtractionPlan,
   createReplaceSelectionWithEntityCommand,
@@ -1269,6 +1270,12 @@ export function useComposeEditorController({
       selectedIds: input.entityIds ?? selectedIds,
       groupId: nextId(),
       name: input.name.trim(),
+      // 轨道 Component 属于 `@compose-ui/animation` 的词汇，stage-engine 不依赖那个包，
+      // 因此「一个 Entity 参与了哪几条动画」由这里注入。少了它组件会拿到一份有轨道没清单
+      // 的文档，而清单才是「有哪些动画」的事实来源。
+      readEntityAnimationIds: (entity) => Object.keys(
+        getComposeAnimationComponent(entity)?.clips ?? {},
+      ),
     })
     if (extraction.status !== 'ready') {
       return { status: 'unavailable', reason: extraction.reason }

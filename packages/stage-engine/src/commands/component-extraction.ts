@@ -7,12 +7,15 @@ import {
   getComposeHierarchy,
   getComposeLayoutItem,
   getComposeLock,
+  getComposeAnimations,
   promoteComposeEntityToFrame,
+  resolveOwningFrameId,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
   type ComposeSpatialTransform,
   type EditorCommand,
+  type JsonObject,
   type JsonValue,
 } from '@compose-ui/core'
 import {
@@ -164,12 +167,79 @@ function transformUnderParent(
  *
  * @public
  */
+
+/**
+ * 收集应当跟着组件走的动画清单条目。
+ *
+ * @remarks
+ * 判据是「这条动画**至少有一条轨道落在被提取的实体上**」。整份清单照抄会让组件多出几条
+ * 它一根轨道都没有的动画；只按选区顶层判断则会漏掉后代身上的轨道。
+ *
+ * **id 逐字保留。**轨道按动画 id 分组（`Animation.clips[animationId]`），换一个新 id 会让
+ * 刚提取出来的轨道全部变成悬空分组——时间线上什么都不动，而文档校验不会拒绝它，因为悬空
+ * 分组本来就只是一条 issue。这是本函数唯一真正容易写错的地方。
+ *
+ * **复制而不是搬运**：源文档一个字节都不改。选区可能只是这条动画的一部分——同一条动画给
+ * A 和 B 都打了点，用户只把 A 存成组件时删掉源条目，会让 B 的轨道全部悬空，而用户根本没有
+ * 选中 B。留下一条零轨道的清单条目不是数据丢失，它在时间线上看得见。
+ *
+ * `bindings` 被丢弃：它指向页面 setup 的导出名，而嵌套文档没有脚本作用域，那份声明在任何
+ * 实例上都解析不出值。驱动实例的是宿主侧实例 Entity 上的播放头 Renderer Prop。
+ *
+ * 轨道 Component（`Animation`）属于 `@compose-ui/animation` 的词汇，本包不依赖它，因此
+ * 「一个 Entity 参与了哪几条动画」由调用方以 `readEntityAnimationIds` 注入。清单
+ * （`Animations`）是 core 的内建 Component，直接读。
+ */
+/** 整体重写组件根的 `Animations`；没有条目时连 Component 一起去掉。 */
+function withAnimations(
+  entity: ComposeEntity,
+  items: readonly JsonObject[],
+): ComposeEntity {
+  if (items.length === 0) {
+    if (entity.components.Animations === undefined) return entity
+    const components = Object.fromEntries(
+      Object.entries(entity.components).filter(([key]) => key !== 'Animations'),
+    )
+    return { ...entity, components }
+  }
+  return { ...entity, components: { ...entity.components, Animations: { items } } }
+}
+
+function collectExtractedAnimations(
+  document: ComposeDocument,
+  extracted: Readonly<Record<string, ComposeEntity>>,
+  anchorId: string,
+  readEntityAnimationIds: ((entity: ComposeEntity) => readonly string[]) | undefined,
+): readonly JsonObject[] {
+  if (!readEntityAnimationIds) return []
+  const used = new Set<string>()
+  Object.values(extracted).forEach((item) => {
+    readEntityAnimationIds(item).forEach((id) => used.add(id))
+  })
+  if (used.size === 0) return []
+  const frameId = resolveOwningFrameId(document, anchorId)
+  if (!frameId) return []
+  return getComposeAnimations(document, frameId)
+    .filter((item) => used.has(item.id))
+    .map((item) => Object.fromEntries(
+      Object.entries(structuredClone(item as JsonObject)).filter(([key]) => key !== 'bindings'),
+    ))
+}
+
 export function createComponentExtractionPlan(input: {
   readonly document: ComposeDocument
   readonly layoutSnapshot: ComposeLayoutSnapshot
   readonly selectedIds: readonly string[]
   readonly groupId: string
   readonly name: string
+  /**
+   * 读一个 Entity 参与了哪几条动画（即它 `Animation.clips` 的分组键）。
+   *
+   * @remarks
+   * 轨道 Component 属于 `@compose-ui/animation` 的词汇，本包不依赖那个包，因此这一步由
+   * 调用方注入。省略时不搬运任何清单，既有调用方行为不变。
+   */
+  readonly readEntityAnimationIds?: (entity: ComposeEntity) => readonly string[]
 }): ComposeComponentExtractionResult {
   const roots = normalizeSelection(input.document, input.selectedIds)
   if (!roots) return { status: 'unavailable', reason: 'selection-empty' }
@@ -236,6 +306,25 @@ export function createComponentExtractionPlan(input: {
     entities[componentRootId]!,
     { width: safeBounds.width, height: safeBounds.height },
   )
+  /*
+   * 动画清单跟着走。轨道住在 Entity 的 `Animation` 上，已经被 `collectSubtree` 带过来了；
+   * 清单住在 Frame 的 `Animations` 上，留在源页面——两者分家的结果是一份有轨道没清单的
+   * 文档，而清单才是「有哪些动画」的事实来源。
+   *
+   * 写在升格**之后**而不是塞进 `promoteComposeEntityToFrame`：升格只做一件事是一条不变量，
+   * 而它还有「在场景外画容器」等调用方，那些调用方没有源清单可搬。
+   *
+   * 整体重写 `Animations` 而不是合并：复用的根可能本来就是一块场景，带着自己的 `source`
+   * 与别的清单条目；组件不该有文件引用（见 `collectExtractedAnimations`）。没有条目时
+   * 连 Component 一起去掉，避免文档里攒下读不出意图的空壳。
+   */
+  const extractedAnimations = collectExtractedAnimations(
+    input.document,
+    entities,
+    roots[0]!,
+    input.readEntityAnimationIds,
+  )
+  entities[componentRootId] = withAnimations(entities[componentRootId]!, extractedAnimations)
   const siblings = childrenOf(input.document, parentId)
   const siblingIndex = Math.min(...roots.map((id) => siblings.indexOf(id)))
   const componentDocument: ComposeDocument = {

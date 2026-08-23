@@ -541,6 +541,8 @@ export function ComponentDocumentPanel(props: IDockviewPanelProps) {
   const {
     documents,
     children,
+    editorMode,
+    onEditorModeChange,
     saveDocument,
     stageHostPanelId,
     stageToolbar,
@@ -573,6 +575,19 @@ export function ComponentDocumentPanel(props: IDockviewPanelProps) {
           {parentHint}
         </span>
         {stageToolbar}
+        {/*
+          * 组件文档同样提供设计/动画切换器。原先这里没有它，理由写的是「动画绑定是页面级
+          * 概念」——而 `add-instance-animation` 之后绑定住在宿主页面上那个实例 Entity 的
+          * `Bindings` 上，根本不在组件文档里；组件文档里剩下的只有清单与轨道，两样都是纯粹
+          * 的文档内容。那条理由自己失效了。
+          *
+          * 作用域与运行时不用另外接：动画作用域解析的是 controller 的当前文档，组件文档
+          * 单根且根必须是 Frame；动画命令 handler 注册在 controller 自己的 runtime 上，
+          * 因此撤销天然只回退组件文档。
+          */}
+        {editorMode !== undefined && onEditorModeChange !== undefined ? (
+          <EditorModeSwitcher mode={editorMode} onModeChange={onEditorModeChange} />
+        ) : null}
         <button
           aria-label={`保存${kindLabel} ${session.displayName}`}
           className="compose-editor__page-save"

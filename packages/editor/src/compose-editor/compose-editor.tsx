@@ -2079,20 +2079,36 @@ export function ComposeEditor({
   /** 空态创建引导：在页面同目录创建动画文件、绑定并水合镜像。 */
   const animationModeMessages = editorMessages.animationMode
   const handleCreateAnimationFromEmptyState = useCallback(async () => {
-    if (!activePageSession || !pageProvider) return
     // 先确认有可绑定的作用域场景再落文件：顺序反过来的话，任何前置校验失败都会在用户的
     // 资源目录里留下一个没有任何引用的孤儿动画文件。
     if (!animationScopeFrameId) {
-      setPageNotice(animationModeMessages.animationOperationFailed)
+      if (activePageSession || activeComponentSession) {
+        setPageNotice(animationModeMessages.animationOperationFailed)
+      }
       return
     }
+    const manifest = {
+      id: animationCommandId(),
+      name: animationModeMessages.defaultAnimationName,
+      durationMs: DEFAULT_ANIMATION_DURATION_MS,
+      playbackMode: 'play-once' as const,
+    }
+    /*
+     * 组件文档不落动画文件，直接把清单写进文档。
+     *
+     * 组件的动画**内嵌在资产里**：实例渲染的是 `resolvedSnapshot.document`，它把整份组件
+     * 文档原样嵌进宿主 Entity，清单就在其中。再配一份 `.animation.json` 会出现两份清单——
+     * 快照里那份是实例真正播的，文件那份谁也读不到，而两份在刚创建时一模一样，不会被察觉。
+     *
+     * 顺带两件事白拿：组件保持是一份可移植的文件，保存路径也不需要「把镜像聚合回文件」
+     * 那段回写逻辑——清单在文档里，组件保存本来就写整份文档。
+     */
+    if (activeComponentSession) {
+      hydrateAnimation(manifest, animationScopeFrameId)
+      return
+    }
+    if (!activePageSession || !pageProvider) return
     try {
-      const manifest = {
-        id: animationCommandId(),
-        name: animationModeMessages.defaultAnimationName,
-        durationMs: DEFAULT_ANIMATION_DURATION_MS,
-        playbackMode: 'play-once' as const,
-      }
       // 每块场景一份自己的动画文件：按「页面名-场景名」命名创建，不复用其他场景已绑定的
       // 引用；同名冲突由 createPageAnimationFile 追加序号解决。新文件带着这条清单落盘，
       // 绑定时会把它水合回镜像。
@@ -2122,11 +2138,13 @@ export function ComposeEditor({
       setPageNotice(animationModeMessages.animationOperationFailed)
     }
   }, [
+    activeComponentSession,
     activePageSession,
     animationModeMessages,
     animationScopeFrameId,
     controller,
     handlePageAnimationChanged,
+    hydrateAnimation,
     pageProvider,
   ])
 
@@ -2296,7 +2314,7 @@ export function ComposeEditor({
         return (
           <div className="compose-editor__animation-empty">
             <p>{editorMessages.animationMode.emptyTimeline}</p>
-            {activePageSession && pageProvider ? (
+            {(activePageSession && pageProvider) || activeComponentSession ? (
               <ComposeButton
                 size="sm"
                 variant="secondary"
