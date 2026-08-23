@@ -383,39 +383,6 @@ StageInteractionController MUST 通过普通数据 context、event、snapshot �
 - **WHEN** draw gesture 收到 Escape、pointercancel、window blur 或失去有效 pointer capture
 - **THEN** draw preview 被清理且不存在 commit 或 command dispatch effect
 
-### Requirement: Headless 两点端点会话
-
-Engine MUST 支持两点图形的端点拖拽会话：移动期间只发布端点 preview 与吸附参考线，松手时
-请求一次端点提交，MUST NOT 自行决定文档表示。
-
-端点拖拽 MUST 由独立交互插件承担。插件 MUST 在接管当刻冻结端点与指针的世界坐标偏移，使拖动
-从端点原位开始——端点命中区大于端点本身，直接采用指针位置会让首次移动把端点吸到指针上。
-
-命中端点但接管条件不成立时（目标不存在或不可见、顶层选区不是该 Entity、目标被锁定、几何约束
-禁止 resize、工具既非 select 也非 scale），插件 MUST 消费这次按下而不是放行——端点手柄画在
-图形自身两端，放行会让它退化成一次移动手势。
-
-#### Scenario: 端点预览只在松手请求一次提交
-
-- **WHEN** 用户拖动线段端点后松手
-- **THEN** 移动期间只发布 preview，松手请求一次端点提交
-- **AND** 拖动期间不产生任何文档命令
-
-#### Scenario: 抓取偏移避免首次移动跳点
-
-- **WHEN** 用户按在端点命中区内但偏离端点本身的位置并开始拖动
-- **THEN** 端点保持与指针的原始偏移，不跳到指针位置
-
-#### Scenario: 锁定目标上的端点按下不退化成移动
-
-- **WHEN** 目标已被锁定，用户在其端点手柄上按下
-- **THEN** 本次按下被消费，不产生任何效果，也不开始移动手势
-
-#### Scenario: 并发变化中止端点拖拽
-
-- **WHEN** 端点拖拽进行中，`document` 被别处的编辑替换，或选区不再是该 Entity
-- **THEN** 会话被取消，松手不产生端点提交
-
 ### Requirement: Group 动态编辑范围
 
 Stage Engine MUST 使用 Group 的可见后代世界 bounds 并集作为命中、吸附和选择反馈范围，不得因后代
@@ -1160,6 +1127,12 @@ Stage 自身的内核类型 MUST 保持既有公共名称，作为 Stage profile
 按盒包含判定——一条对角线的盒里绝大部分是空的。距离判定 MUST 在 Entity 局部坐标进行，
 使旋转后的命中自动正确。容差 MUST 从屏幕像素按 zoom 换算成世界单位。
 
+该 Entity 有**可见填充**（`Appearance.backgroundPaint` 为不透明纯色）时，距离判定不中的点
+MUST 再按「点是否落在几何内部」判定一次：填色区域是用户看见的墨，与 DOM 路径 MUST 给出同一
+结论。没有填充时 MUST NOT 做这一步——空心图形的内部正是「盒里绝大部分是空的」覆盖的情形。
+
+填充判定 MUST 读 `Appearance` 而不是 Renderer props：命中路径读的字段必须是文档级契约。
+
 宽相位（bounds 映射、框选候选、裁剪判定）MUST 保持按盒不变。
 
 #### Scenario: 点击线附近选中
@@ -1181,6 +1154,16 @@ Stage 自身的内核类型 MUST 保持既有公共名称，作为 Stage profile
 
 - **WHEN** Entity 带非零 `Transform.rotation` 时点击旋转后的线身
 - **THEN** 命中正确，点击旋转前的原位置不命中
+
+#### Scenario: 填充过的闭合几何内部命中
+
+- **WHEN** 一个带不透明填充的闭合多段线，点击它内部远离任何边的位置
+- **THEN** 该 Entity 被命中
+
+#### Scenario: 未填充的同一几何内部不命中
+
+- **WHEN** 同一条闭合多段线没有填充，点击同一位置
+- **THEN** 该 Entity 不被命中
 
 ### Requirement: 特征点捕捉是独立于对齐吸附的查询
 

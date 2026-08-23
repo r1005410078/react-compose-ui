@@ -51,32 +51,42 @@ materials MUST 发布默认隐藏于 Palette 的 SVG Entity Preset。SVG MUST �
 
 ### Requirement: 基础 Entity Presets
 
-Materials MUST 发布 Container、Rectangle、Text、Image、SVG、Line、Arrow 与 Circle Entity Presets。Container
-MUST 组合 Transform、Visibility、Lock、Hierarchy、Clip、Appearance；Rectangle、Text、Image、SVG 与形状
-Renderer Presets MUST 组合 Transform、Visibility、Lock、Appearance、Renderer。Line、Arrow 与 Circle MUST 使用
-第一方结构化 Shape Renderer props，不得依赖外部 SVG asset 或 Stage 专属数据。
+Materials MUST 发布 Container、Rectangle、Text、Image、SVG、Curve、Arrow 与 Circle
+Entity Presets。Container MUST 组合 Transform、Visibility、Lock、Hierarchy、Clip、Appearance；
+Rectangle、Text、Image 与 SVG Presets MUST 组合 Transform、Visibility、Lock、Appearance、Renderer。
+
+Curve、Arrow 与 Circle MUST 是**同一个 `curve` 物料的三个起点**：三者 MUST 在上述 Component
+之外组合 `Curve`，差别只在默认几何与默认描边（Arrow 默认终点 marker 为箭头，Circle 默认几何
+是扫掠 360 的弧）。MUST NOT 为它们注册第二个 Renderer 类型——「盒 + 方向」与「坐标」不得同时
+存在两种线的表示，用户看不出区别却会得到不同的编辑手感。
 
 已经拥有专用创建入口的 Preset MUST 默认隐藏于 Palette，避免同一个创建动作出现两个入口：
-Text、Line、Arrow 与 Circle 由 Stage 工具栏绘制工具提供入口。默认隐藏 MUST 只影响 Palette
+Text、Arrow 与 Circle 由 Stage 工具栏绘制工具提供入口。默认隐藏 MUST 只影响 Palette
 呈现，MUST NOT 影响 Registry 注册、拖入、键盘新增、资源拖放或文档反序列化；宿主 MUST
 能够通过物料 options 覆盖该默认。
 
-#### Scenario: 创建五种 ECS 物料
+#### Scenario: 创建基础 ECS 物料
 
 - **WHEN** Registry 从所有内建 Preset 创建 seed
 - **THEN** 每个 seed 是合法独立 ComposeEntity
-- **AND** Composition 记录正确 Preset、基础 Component Keys 与 Shape Renderer 类型
+- **AND** Composition 记录正确 Preset 与基础 Component Keys
+
+#### Scenario: 三个曲线起点共用一个 Renderer
+
+- **WHEN** Registry 从 Curve、Arrow 与 Circle Preset 各创建一个 seed
+- **THEN** 三者的 Renderer 类型相同，且都带 `Curve` Component
+- **AND** Registry 中不存在第二个绘制线条的 Renderer 类型
 
 #### Scenario: 默认 Palette 不重复工具栏入口
 
 - **WHEN** 宿主使用默认基础物料渲染组件库 Palette
-- **THEN** Text、Line、Arrow 与 Circle 不出现在 Palette 中
+- **THEN** Text、Arrow 与 Circle 不出现在 Palette 中
 - **AND** 这些 Preset 仍可由工具栏、资源拖入与 Registry API 正常创建
 
 #### Scenario: 形状跨入口一致渲染
 
-- **WHEN** Stage 或 Preview 渲染 Line、Arrow 或 Circle Entity
-- **THEN** 两个入口基于同一 Renderer props 输出相同形状与方向
+- **WHEN** Stage 或 Preview 渲染 Arrow 或 Circle Entity
+- **THEN** 两个入口基于同一 `Curve` 几何输出相同形状与方向
 - **AND** 反向拖拽不产生负 LayoutItem 尺寸
 
 ### Requirement: 语义 Component Inspector
@@ -391,25 +401,6 @@ Container MUST 支持显式启用与移除 Auto Layout。启用 MUST 在一个�
 - **WHEN** 有人在 materials 样式表里写下 `property-panel__` 前缀选择器
 - **THEN** materials 的样式契约测试失败并指出应改用 `data-property-part`
 
-### Requirement: Line 与 Arrow 的常用描边属性
-
-Line 与 Arrow MUST 在其结构化 Shape Renderer props 中持久化 `stroke`、`strokeWidth`、
-`strokeLinecap`、`strokeDasharray`、`markerStart` 与 `markerEnd`。Inspector MUST 提供颜色、粗细、
-平头/圆头/方头、实线/虚线/点线以及起点/终点箭头；不为单根直线提供 fill、line join、marker mid 或
-dash offset。Line 默认没有 marker，Arrow 默认终点 marker 为箭头；缺少新 props 的旧 Arrow 仍必须显示终点箭头。
-
-#### Scenario: 编辑线条外观
-
-- **WHEN** 用户在 Inspector 编辑 Line 或 Arrow 的线条属性
-- **THEN** Stage 与 Preview 使用同一 Shape Renderer 立即显示对应描边、端点和箭头
-- **AND** Renderer props 之外的 authored fields 保持不变
-
-#### Scenario: 水平或垂直线
-
-- **WHEN** 用户绘制或编辑水平、垂直的 Line 或 Arrow
-- **THEN** `direction` 可以使用零轴表达重合坐标
-- **AND** 为 LayoutItem 保留的最小 1px 尺寸不产生可见的斜线偏移
-
 ### Requirement: Group 基础物料
 
 materials MUST 注册使用 Core seed 的 `group` Preset，供文档识别、图标和 Inspector 使用，但 MUST 将其
@@ -582,6 +573,10 @@ Text Preset MUST 为 `hug × hug` 提供不大于默认文字内容的回退尺�
 
 形状类基础物料（至少包含 Rectangle）的 Renderer 根节点 MUST NOT 使用不透明 CSS 默认背景覆盖 Entity Appearance。填色、圆角与阴影 MUST 由共享 Appearance / Paint 层表达；Material 仅承担内容占位或非填色职责。默认视觉值 MUST 写在 Preset/seed 的 Appearance 上，不得依赖 Material 样式表中的第二套默认色。
 
+**带 `Curve` 的 Entity 是本条唯一的例外**：它的填色由 Material 自己的 SVG `fill` 绘制，
+宿主盒与共享 Paint 层 MUST NOT 为它绘制任何背景。盒是矩形而形状不是，让共享层画等于把
+一块矩形色块摆在形状后面。判据 MUST 是 `Curve` Component 而不是 Renderer 类型。
+
 #### Scenario: Rectangle 改色不被 Material CSS 盖住
 
 - **WHEN** Rectangle Entity 的 Appearance.backgroundPaint 为非默认 solid 色且 borderRadius 非 0
@@ -593,7 +588,12 @@ Text Preset MUST 为 `hug × hug` 提供不大于默认文字内容的回退尺�
 
 - **WHEN** Registry 从默认 rectangle Preset 创建 seed
 - **THEN** Appearance 含明确的默认 solid 填色与 borderRadius
-- **AND** 渲染不依赖 Material CSS 变量提供填色
+
+#### Scenario: 曲线的填色不落在宿主盒上
+
+- **WHEN** 一个闭合曲线 Entity 的 Appearance.backgroundPaint 为不透明 solid 色
+- **THEN** 宿主盒的 computed 背景是透明的
+- **AND** 可见色块的轮廓是该几何而不是矩形
 
 ### Requirement: 页面实例使用空心组件符号
 
@@ -756,11 +756,12 @@ measurement，并在各自 subscription revision 变化时失效。
 Definition 的端点编辑 MUST 派发曲线几何写入漏斗命令，MUST NOT 直接写文档。
 
 描边（颜色、线宽、线型）MUST 作为 Renderer props 承载，复用 Inspector、数据绑定与外观
-轨道的既有机制。既有 `shape` 物料 MUST 保持不变——「盒 + 方向」与「坐标」是两种语义。
+轨道的既有机制。仓库中 MUST NOT 再存在第二个绘制线条的物料——「盒 + 方向」与「坐标」是同一件
+事的两种表示，留下的是坐标那一种。
 
 Renderer MUST 按 `kind` 分派 SVG 元素：`line` 与 `polyline` 各用**一个**元素（闭合多段线用
 `polygon`），弧用 `path`，**整圆用 `circle`**——SVG 的 `A` 命令在起终点重合时画不出东西。
-命中 MUST 继续由透明加宽 stroke 承担，MUST NOT 因 `kind` 变化而改用盒判定。
+未填充时命中 MUST 继续由透明加宽 stroke 承担，MUST NOT 因 `kind` 变化而改用盒判定。
 
 Inspector MUST 按 `kind` 呈现对应的几何字段，全部写入 MUST 走同一条漏斗命令。
 
@@ -791,7 +792,7 @@ Inspector MUST 按 `kind` 呈现对应的几何字段，全部写入 MUST 走同
 
 #### Scenario: 空角仍不命中
 
-- **WHEN** 点击一段弧包围盒内远离弧身的位置
+- **WHEN** 点击一段未填充的弧包围盒内远离弧身的位置
 - **THEN** 该弧不被选中
 
 ### Requirement: 几何 Inspector 提供旋转基点
@@ -909,4 +910,42 @@ MUST 写明这个区别——既有注释里「`non-scaling-stroke` 在这里不
 
 - **WHEN** 渲染一条水平线
 - **THEN** 它按盒的宽度伸缩，且没有出现除零导致的空白
+
+### Requirement: 曲线承载填充与端点 marker
+
+`curve` 物料 MUST 支持填充与端点 marker，两者合起来是 `shape` 物料相对它仅有的差额。
+
+**填充 MUST 复用 `Appearance.backgroundPaint`**，MUST NOT 新增 Renderer prop：填充要参与
+命中，而命中路径读的字段 MUST 是文档级契约。复用还让外观 Inspector、数据绑定与外观动画
+轨道一样都不用做。v1 MUST 只绘制 `solid`；非纯色 Paint 在曲线上不填充。
+
+填充 MUST 按 SVG 自身的规则作用于几何，MUST NOT 前置判断 `closed`：开放几何按隐式闭合填充，
+渲染与命中因此自动一致。
+
+**端点 marker MUST 作为 Renderer props 承载**（`markerStart` / `markerEnd`，取值至少含
+`none` 与 `arrow`）：只有渲染与 Inspector 读它。默认无 marker，Arrow Preset 默认终点为箭头。
+
+marker MUST 参与 `viewBox` 变换——它是画在端点上的一小片形状，属于「几何参与变换，描边不
+参与」里的几何那一半。MUST NOT 为它开例外：整个图形被非等比盒拉扁时，箭头不跟着扁才是错的。
+
+#### Scenario: 填充跟随形状而不是盒
+
+- **WHEN** 把一个整圆曲线的 Appearance 背景设成不透明纯色
+- **THEN** SVG 的几何元素以该颜色填充
+- **AND** 宿主盒不绘制背景
+
+#### Scenario: 默认曲线不填充
+
+- **WHEN** 从默认 Curve Preset 创建 Entity 并渲染
+- **THEN** 几何不被填充，渲染结果与本能力之前逐像素相同
+
+#### Scenario: 箭头附着在终点
+
+- **WHEN** 渲染一个 `markerEnd` 为箭头的两点直线
+- **THEN** 箭头画在几何的终点上并朝向线的方向
+
+#### Scenario: 箭头跟随非等比盒变形
+
+- **WHEN** 把带箭头的直线的盒拉成宽扁形状
+- **THEN** 箭头按与线相同的比例变形
 

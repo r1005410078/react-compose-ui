@@ -634,11 +634,17 @@ Stage MUST 为当前工具提供专属选区反馈：`scale` 显示缩放手柄�
 
 Stage MUST 为 container、rectangle、arrow、circle 与 text 提供受控绘制工具。绘制工具 MUST 在拖拽期间展示瞬时预览，正常松手时通过 Registry Preset 创建一个合法 Entity，取消时不得产生文档事务。container 工具在拖拽距离小于有效阈值时 MUST 回退到 Container Preset 的默认尺寸并以按下点为左上角，MUST NOT 创建退化尺寸的容器。
 
-line MUST NOT 出现在绘制工具里：`LINE` 命令产出 `Curve` Entity，而拖拽绘制产出的是 shape 物料的线，两者是同一件事的两种表示。留下的是命令那一种。
+arrow 与 circle 工具 MUST 产出带 `Curve` 的 Entity，落地时 MUST 写入**真实几何**——直线写
+两个端点，整圆写圆心与半径。MUST NOT 用三态方向编码表达朝向：方向是两个坐标的差，多一层
+编码就多一处要与渲染、命中、捕捉分别对齐的表示。退化轴（拖成水平或垂直）MUST 由既有的曲线
+最小范围常量钳住，MUST NOT 引入第二套像素偏移补丁。
+
+line MUST NOT 出现在绘制工具里：`LINE` 命令产出同一种 `Curve` Entity，而同一个动作有两个
+手感不同的入口会让用户先想「我在用哪个」。留下的是命令那一种。
 
 #### Scenario: 拖拽绘制容器与形状
 
-- **WHEN** 用户在任一 container 或 shape 绘制工具中从 surface 拖出有效 bounds 并松手
+- **WHEN** 用户在任一 container 或形状绘制工具中从 surface 拖出有效 bounds 并松手
 - **THEN** Stage 创建一个具有相同规范化世界 bounds 的对应 Preset Entity
 - **AND** 该 Entity 成为选区，写入一个可撤销事务后请求切换到 select 工具，避免后续点击继续绘制
 
@@ -647,29 +653,17 @@ line MUST NOT 出现在绘制工具里：`LINE` 命令产出 `Curve` Entity，�
 - **WHEN** 用户使用 container 工具在 surface 上单击而没有产生有效拖拽距离
 - **THEN** Stage 以按下点为左上角、按 Container Preset 默认尺寸创建容器
 
+#### Scenario: 反向拖拽的箭头指向拖拽方向
+
+- **WHEN** 用户用 arrow 工具从右下向左上拖拽并松手
+- **THEN** 几何的终点在左上，箭头朝左上
+- **AND** LayoutItem 尺寸为正
+
 #### Scenario: 没有 line 绘制工具
 
 - **WHEN** 宿主枚举可用的绘制工具
 - **THEN** 其中不包含 line
 - **AND** 用户仍可用 `LINE` 命令画线
-
-### Requirement: 两点 Shape 的端点选区
-
-当且仅当单选可编辑的 Shape Renderer Line 或 Arrow 时，Stage MUST 使用其真实首尾世界坐标绘制蓝色线段、
-两个白底蓝边端点控制点及 `长度 × 0` 浮标。它 MUST 不渲染通用矩形 selection bounds、边缘 hit area 或四角
-缩放点；普通 Entity 继续使用通用选区。
-
-#### Scenario: 单选 Line 或 Arrow
-
-- **WHEN** 用户在 select、scale、move 或 rotate 工具中单选 Line 或 Arrow
-- **THEN** 选区始终沿真实线段显示，且没有矩形选框
-- **AND** 仅 select/scale 工具中的首尾控制点可启动 resize，move/rotate 保留各自专属手势
-
-#### Scenario: 拖拽端点并越过另一端
-
-- **WHEN** 用户拖动首端或尾端，并把它越过另一端
-- **THEN** 未拖动端保持固定，预览持续跟随指针和 snap
-- **AND** 松手以一个可撤销 batch 更新空间几何与 Shape `direction`，marker 始终附着在对应语义端点
 
 ### Requirement: Group 动态选择反馈
 
@@ -1748,6 +1742,10 @@ Stage MAY 以不可交互的视觉标记提示该 Entity 带有交互,但该标�
 线状判定 MUST 依据 `Curve` Component 而不是 Renderer 类型——「这个 Entity 是不是线状的」是
 几何问题，按物料类型枚举会在每加一种线状物料时漏掉一处。
 
+**填充过的曲线是例外中的例外**：填色区域是用户看见的墨，因此它 MUST 接收指针事件——命中层
+在有可见填充时 MUST 同时覆盖填充区域，未填充时 MUST 只覆盖描边。空心图形的内部 MUST NOT
+命中：那正是「包围盒里绝大部分是空的」这条理由覆盖的情形。
+
 #### Scenario: 包围盒空角不选中曲线
 
 - **WHEN** 在非 100% 缩放下点击对角线包围盒内远离线身的空角
@@ -1757,6 +1755,16 @@ Stage MAY 以不可交互的视觉标记提示该 Entity 带有交互,但该标�
 
 - **WHEN** 点击曲线的线身
 - **THEN** 该曲线被选中并打开其属性面板
+
+#### Scenario: 填充过的形状内部可点
+
+- **WHEN** 一个整圆曲线有不透明填充，用户点击它的圆心附近
+- **THEN** 该曲线被选中
+
+#### Scenario: 空心形状内部不可点
+
+- **WHEN** 同一个整圆曲线没有填充，用户点击它的圆心附近
+- **THEN** 该曲线不被选中
 
 ### Requirement: 键入坐标与指针取点共用同一条求解
 
@@ -1964,6 +1972,9 @@ Stage 的 DOM 点选与场景索引的距离判定 MUST 对同一个位置给出
 几何数值**分别有用例：渲染侧断言取景框与拉伸比例，索引侧断言同一位置的命中结论。
 MUST NOT 只验其中一条。
 
+**填充带来的命中面积同样落在这条一致性下**：DOM 侧由指针事件规则覆盖填充区域，索引侧由点在
+几何内的判定覆盖，两者 MUST 对同一位置给出同一结论。
+
 端到端 MUST 在**非 100% 缩放**下覆盖 DOM 点选：`world = (屏幕 − 视口) / 缩放`，缩放恒为 1 时
 盒到几何的比例与视口缩放会互相掩盖，漏掉的换算要到很久以后才暴露。
 
@@ -1982,4 +1993,9 @@ MUST NOT 只验其中一条。
 - **WHEN** 一条曲线的盒被拉成紧包围盒的两倍宽
 - **THEN** 渲染侧的用例断言取景框仍是紧包围盒且允许非等比拉伸
 - **AND** 索引侧的用例按同一组数值断言新形状命中、旧形状不命中
+
+#### Scenario: 填充区域两条路径同答案
+
+- **WHEN** 在填充过的闭合曲线内部取一个远离描边的点
+- **THEN** DOM 点选与索引判定都认为命中
 
