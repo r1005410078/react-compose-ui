@@ -7,9 +7,13 @@ import {
   type ComposeLayoutSnapshot,
   type EditorCommand,
 } from '@compose-ui/core'
+import { createComposeCommandRegistry } from '@compose-ui/commands'
+import { createStageDraftingCommands } from '@compose-ui/stage-engine'
 import {
+  COMPOSE_EDITOR_COMMAND_ALIASES,
   createComposeEditorActionHandlers,
   createComposeEditorActions,
+  createComposeEditorCommands,
 } from './action-catalog'
 import { createDefaultComposeEditorPreferences } from '../editor-preferences/preferences'
 import type {
@@ -297,3 +301,88 @@ describe('createComposeEditorActionHandlers', () => {
     expect(zoomBy).toHaveBeenCalledWith(1.2)
   })
 })
+
+describe('OpenSpec: editor-preferences / 编辑器动作可在命令行键入', () => {
+  /** 目录里所有动作的 id，含宿主入口才产出的那两条。 */
+  const catalogIds = () => byId(createComposeEditorActions(context({
+    createComponent: () => {},
+    openSettings: () => {},
+  })))
+
+  it('键入别名执行动作', () => {
+    const undo = vi.fn()
+    const commands = createComposeEditorCommands(context({ canUndo: true, undo }))
+    const registry = createComposeCommandRegistry(commands)
+
+    const definition = registry.resolve('undo')
+    expect(definition?.id).toBe('history.undo')
+    // 退化会话：没有提示，一次确认就执行。
+    const session = definition!.start({ messages: draftingMessages(), selection: [] })
+    expect(session.prompt).toBeNull()
+    session.advance({ kind: 'accept' })
+    expect(undo).toHaveBeenCalledTimes(1)
+  })
+
+  it('不可用的动作把原因带进定义', () => {
+    const commands = createComposeEditorCommands(context({ canUndo: false }))
+    const undo = commands.find((command) => command.id === 'history.undo')
+    expect(undo?.disabledReason).toBe('没有可撤销的操作')
+  })
+
+  it('别名不随界面语言改变，只有显示名改变', () => {
+    const zh = createComposeEditorCommands(context({ locale: 'zh-CN' }))
+    const en = createComposeEditorCommands(context({ locale: 'en-US' }))
+    const pick = (list: typeof zh, id: string) => list.find((command) => command.id === id)
+
+    expect(pick(zh, 'edit.group')?.aliases).toEqual(pick(en, 'edit.group')?.aliases)
+    expect(pick(zh, 'edit.group')?.title).not.toBe(pick(en, 'edit.group')?.title)
+  })
+
+  it('不与画布命令抢词：工具切换与 edit.delete 不声明别名', () => {
+    const commands = createComposeEditorCommands(context({ createComponent: () => {} }))
+    /*
+     * 这九条已经有等价的画布命令：八个工具切换与绘图命令是同一能力的两个入口
+     * （`RECTANGLE` 这个词属于命令），`edit.delete` 则被 `ERASE`/`E` 严格覆盖——后者没选中
+     * 时会提示选择对象。断言写在这里是为了挡住后来者顺手补上第二个词。
+     */
+    const withoutAlias = [
+      'stage.selectTool',
+      'stage.scaleTool',
+      'stage.rotateTool',
+      'stage.drawContainerTool',
+      'stage.drawRectangleTool',
+      'stage.drawArrowTool',
+      'stage.drawCircleTool',
+      'stage.drawTextTool',
+      'edit.delete',
+    ]
+    for (const id of withoutAlias) {
+      expect(commands.find((command) => command.id === id)?.aliases).toBeUndefined()
+    }
+  })
+
+  it('别名表只覆盖目录里真实存在的动作', () => {
+    const ids = catalogIds()
+    for (const id of Object.keys(COMPOSE_EDITOR_COMMAND_ALIASES)) {
+      expect(ids).toContain(id)
+    }
+  })
+
+  it('与内建绘图命令不重名，因此可以合成一份注册表', () => {
+    const commands = createComposeEditorCommands(context({
+      createComponent: () => {},
+      openSettings: () => {},
+    }))
+    // 重名会让 `createComposeCommandRegistry` 抛错。这条断言把那次崩溃从「用户敲下那个词」
+    // 提前到构建期。
+    expect(() => createComposeCommandRegistry([
+      ...createStageDraftingCommands(draftingMessages()),
+      ...commands,
+    ])).not.toThrow()
+  })
+})
+
+/** 绘图命令只用到文案，这里给一份占位即可。 */
+function draftingMessages() {
+  return new Proxy({}, { get: (_target, key) => String(key) }) as never
+}

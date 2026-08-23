@@ -261,3 +261,82 @@ test('OpenSpec: stage / 绘图能力恒开 / 动画开关打开时仍能画线',
   // 动画开关没有被画线这件事关掉——两根轴各自独立。
   await expect(editor.getByRole('radio', { name: '动画' })).toHaveAttribute('aria-checked', 'true')
 })
+
+/**
+ * 宿主动作在命令行里敲得出来。
+ *
+ * @remarks
+ * 合并之前这条必然红：`UNDO` 不在注册表里，命令行只会回「未知命令」。撤销住在命令面板，
+ * 而面板在默认布局里是底部折叠组中的非活动标签——同一件事在两个入口里只有一个够得着。
+ */
+test('OpenSpec: stage / 命令词汇表合并 / 命令行键入 UNDO 撤销上一步', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
+  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
+  await page.mouse.click(at(240, 200).x, at(240, 200).y)
+  await page.mouse.click(at(440, 200).x, at(440, 200).y)
+  await commandInput.press('Escape')
+
+  const strokes = stage.getByTestId('compose-material-curve-stroke')
+  await expect(strokes).toHaveCount(1)
+
+  await commandInput.fill('UNDO')
+  await commandInput.press('Enter')
+
+  await expect(strokes).toHaveCount(0)
+  // 敲得出来的证据不止是结果：解析成功就不该留下「未知命令」。
+  await expect(stage.getByTestId('stage-drafting-command-prompt')).not.toContainText('未知命令')
+})
+
+/**
+ * 三种拒绝互相可分。
+ *
+ * @remarks
+ * 八条内建绘图命令恒可用，因此命令行至今只有「未知命令」一种拒绝。宿主动作不是——没选够
+ * 对象时编组不能执行。没有可用性标记，敲 `GROUP` 会**什么都不发生**，而这在屏幕上与敲错字
+ * 无法区分。
+ */
+test('OpenSpec: stage / 命令词汇表合并 / 不可用的命令给出原因而不是静默', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const prompt = stage.getByTestId('stage-drafting-command-prompt')
+
+  // 词不在词汇表里。
+  await commandInput.fill('NOSUCHCOMMAND')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('未知命令')
+
+  // 词在词汇表里但此刻不可用：给的是缺什么，而不是「未知命令」，更不是静默。
+  await commandInput.fill('GROUP')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('请至少选中两个对象')
+
+  // 前提满足之后同一个词就执行了：可用性跟着选择集走，而不是停在启动那一刻的判断上。
+  const { strokes, centers } = await drawTwoLines(page, stage)
+  await page.mouse.click(centers[0]!.x, centers[0]!.y)
+  await page.keyboard.down('Shift')
+  await page.mouse.click(centers[1]!.x, centers[1]!.y)
+  await page.keyboard.up('Shift')
+
+  await commandInput.fill('GROUP')
+  await commandInput.press('Enter')
+
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  await expect(sceneTree.getByRole('row').filter({ hasText: 'Group' })).toHaveCount(1)
+  await expect(strokes).toHaveCount(2)
+})

@@ -8,6 +8,8 @@ import {
 import type { StageDraftingContext, StageDraftingMessages } from './drafting-types'
 
 const messages: StageDraftingMessages = {
+  drawCategory: '绘图',
+  editCategory: '编辑',
   specifyFirstPoint: '指定第一点',
   specifyNextPoint: '指定下一点',
   expectedPoint: '需要一个点',

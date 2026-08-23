@@ -15,6 +15,7 @@ import {
   createComposeFrameEntity,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createComposeImmediateCommand } from '@compose-ui/commands'
 import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
 import { ComposeStage } from './compose-stage'
 import { entityFromDrawingSeed } from './entity-creation'
@@ -264,6 +265,7 @@ function renderStage(
     tool?: import('../types').ComposeStageTool
     marqueeMode?: import('../types').ComposeStageMarqueeMode
     viewport?: { readonly x: number; readonly y: number; readonly zoom: number }
+    commands?: import('../types').ComposeStageProps['commands']
   } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
@@ -275,6 +277,7 @@ function renderStage(
   }
   render(
     <ComposeStage
+      commands={options.commands}
       document={value}
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
       onSelectedIdsChange={selectionSpy}
@@ -1783,5 +1786,111 @@ describe('绘图模式', () => {
     fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'F3' })
     // 二态标记关闭时也要显示——只在开启时渲染会让用户无法确认它现在是关的。
     expect(screen.getByTestId('stage-drafting-snap-state')).toHaveTextContent('对象捕捉 关')
+  })
+})
+
+describe('命令词汇表合并', () => {
+  afterEach(cleanup)
+
+  function typeCommand(text: string) {
+    const input = screen.getByRole('textbox', { name: '命令行' })
+    fireEvent.change(input, { target: { value: text } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    return input
+  }
+
+  it('OpenSpec: stage / 宿主注入的命令与内建命令同属一份词汇表 / 键入宿主动作名执行该动作', () => {
+    const run = vi.fn()
+    renderStage(document(), {
+      commands: [createComposeImmediateCommand({
+        id: 'history.undo',
+        aliases: ['UNDO', 'U'],
+        title: '撤销',
+        run,
+      })],
+    })
+
+    typeCommand('UNDO')
+    expect(run).toHaveBeenCalledTimes(1)
+
+    // 别名与全名共用同一个大小写无关的命名空间，宿主命令不例外。
+    typeCommand('u')
+    expect(run).toHaveBeenCalledTimes(2)
+
+    // 内建命令的解析不受影响。
+    typeCommand('L')
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+  })
+
+  it('OpenSpec: stage / 宿主注入的命令与内建命令同属一份词汇表 / 不可用的命令给出原因而不是静默', () => {
+    const run = vi.fn()
+    renderStage(document(), {
+      commands: [createComposeImmediateCommand({
+        id: 'edit.group',
+        aliases: ['GROUP'],
+        title: '编组',
+        disabledReason: '请至少选中两个对象',
+        run,
+      })],
+    })
+
+    typeCommand('GROUP')
+
+    expect(run).not.toHaveBeenCalled()
+    // 三种拒绝互相可分：这里给的是缺什么，而不是「未知命令」，更不是什么都不显示。
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('请至少选中两个对象')
+
+    typeCommand('NOPE')
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('未知命令')
+  })
+
+  it('OpenSpec: stage / 命令行历史与重复上一条 / 空确认重复上一条命令', () => {
+    const run = vi.fn()
+    renderStage(document(), {
+      commands: [createComposeImmediateCommand({ id: 'history.undo', aliases: ['UNDO'], title: '撤销', run })],
+    })
+
+    typeCommand('UNDO')
+    expect(run).toHaveBeenCalledTimes(1)
+
+    // 空闲时的空确认重复上一条命令；没有命令跑过时它什么也不做。
+    typeCommand('')
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('OpenSpec: stage / 命令行历史与重复上一条 / 取过点之后重复的仍是命令', () => {
+    const { runtime } = renderStage(document())
+    const input = screen.getByRole('textbox', { name: '命令行' })
+
+    fireEvent.change(input, { target: { value: 'L' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    for (const text of ['100,50', '260,130']) {
+      fireEvent.change(input, { target: { value: text } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    }
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    const before = Object.values(runtime.document.entities)
+      .filter((candidate) => candidate.components.Curve !== undefined).length
+    expect(before).toBe(1)
+
+    // 重的是 `LINE` 而不是最后键入的那行坐标——后者不是命令名。
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+  })
+
+  it('OpenSpec: stage / 命令行历史与重复上一条 / 会话进行中的空确认不变', () => {
+    const run = vi.fn()
+    renderStage(document(), {
+      commands: [createComposeImmediateCommand({ id: 'history.undo', aliases: ['UNDO'], title: '撤销', run })],
+    })
+
+    typeCommand('UNDO')
+    typeCommand('L')
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+
+    // 会话进行中的空确认按既有语义推进一步（一个点都没取的 LINE 就此结束），不重启 UNDO。
+    typeCommand('')
+    expect(run).toHaveBeenCalledTimes(1)
   })
 })

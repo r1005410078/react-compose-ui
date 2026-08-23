@@ -17,7 +17,10 @@ import {
   getComposeLock,
 } from '@compose-ui/core'
 import type { JsonValue } from '@compose-ui/core'
+import { createComposeImmediateCommand } from '@compose-ui/commands'
 import type { ComposeCommandAction } from '@compose-ui/command-panel'
+import type { ComposeCommandDefinition, ComposeCommandDescriptor } from '@compose-ui/commands'
+import type { StageDraftingContext, StageDraftingEffect } from '@compose-ui/stage-engine'
 import type {
   CommandDispatchResult,
   ComposeDocument,
@@ -425,15 +428,78 @@ const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
 ]
 
 /**
- * 在执行层之上补齐本地化名称、分组与不可用原因。
+ * 动作在命令行里的键入写法。
  *
- * @param context - 执行层上下文加界面语言与当前键位。
- * @returns 可直接交给命令面板的动作列表。
+ * @remarks
+ * **不本地化**：它是用户键入的标识，与 `LINE`、`MOVE` 同类。本地化会让同一条动作在中英文
+ * 界面下敲法不同，而肌肉记忆、文档与截图全部会失效——AutoCAD 的本地化版本正是靠 `_LINE`
+ * 这个下划线前缀保住英文名的。
+ *
+ * 表里**故意缺席**的九条不是漏掉的，它们已经有等价的画布命令：
+ *
+ * - 八个工具切换（`stage.selectTool` … `stage.drawTextTool`）——绘制工具与绘图命令是同一
+ *   能力的两个入口，`RECTANGLE` 这个词已经属于命令。
+ * - `edit.delete`——`ERASE`/`E` 严格更强：没选中时它会提示选择对象，而本动作只能报「没有
+ *   选中对象」。给它一个 `DELETE` 别名等于给同一件事造两个词，其中一个还更差。
+ *
+ * 缺席不等于敲不出来：`resolve` 大小写无关，`EDIT.DELETE` 仍然命中。
+ *
+ * 剪贴板三条借 AutoCAD 的既有解法（`COPYCLIP` / `CUTCLIP` / `PASTECLIP`），因为 `COPY`
+ * 已经被几何复制命令占着。
+ *
  * @public
  */
-export function createComposeEditorActions(
+export const COMPOSE_EDITOR_COMMAND_ALIASES: Partial<
+  Record<ComposeEditorActionId, readonly string[]>
+> = {
+  'stage.zoomIn': ['ZOOMIN'],
+  'stage.zoomOut': ['ZOOMOUT'],
+  'stage.zoomReset': ['ZOOMRESET'],
+  'stage.fitSelection': ['FITSELECTION'],
+  'stage.fitContainer': ['FITCONTAINER'],
+  'stage.toggleGridSnap': ['GRIDSNAP'],
+  'stage.toggleSmartSnap': ['SMARTSNAP'],
+  'edit.duplicate': ['DUPLICATE'],
+  'edit.copy': ['COPYCLIP'],
+  'edit.cut': ['CUTCLIP'],
+  'edit.paste': ['PASTECLIP'],
+  'edit.bringForward': ['BRINGFORWARD'],
+  'edit.sendBackward': ['SENDBACKWARD'],
+  'edit.bringToFront': ['BRINGTOFRONT'],
+  'edit.sendToBack': ['SENDTOBACK'],
+  'edit.group': ['GROUP'],
+  'edit.ungroup': ['UNGROUP'],
+  'edit.createComponent': ['COMPONENT'],
+  'scene.create': ['SCENE'],
+  'history.undo': ['UNDO', 'U'],
+  'history.redo': ['REDO'],
+  'editor.settings': ['SETTINGS'],
+}
+
+/**
+ * 目录的一条：可呈现半边加一个执行入口。
+ *
+ * @remarks
+ * 命令面板与画布命令行都从它派生，因此可用性只算一次。两个入口各自装配会让同一条动作在两处
+ * 出现不同的名称、分组或可用性，而用户无法判断哪一个才对。
+ *
+ * @public
+ */
+export interface ComposeEditorCatalogEntry {
+  readonly descriptor: ComposeCommandDescriptor
+  run(): void
+}
+
+/**
+ * 在执行层之上补齐本地化名称、分组、别名与不可用原因。
+ *
+ * @param context - 执行层上下文加界面语言与当前键位。
+ * @returns 命令面板与命令行共用的目录。
+ * @public
+ */
+export function createComposeEditorCatalog(
   context: ComposeEditorActionContext,
-): readonly ComposeCommandAction[] {
+): readonly ComposeEditorCatalogEntry[] {
   const { formatMessage, locale } = context
   const reasons = getEditorActionReasons(locale, formatMessage)
   const handlers = createComposeEditorActionHandlers(context)
@@ -446,17 +512,57 @@ export function createComposeEditorActions(
     ))
     .map((id) => {
       const entry = handlers[id]
+      const aliases = COMPOSE_EDITOR_COMMAND_ALIASES[id]
       return {
-        id,
-        title: getEditorShortcutActionLabel(locale, id, formatMessage),
-        category: getEditorActionCategory(
-          locale,
-          COMPOSE_EDITOR_SHORTCUT_SCOPES[id],
-          formatMessage,
-        ),
-        shortcut: context.shortcuts[id],
-        disabledReason: entry.disabled === undefined ? undefined : reasons[entry.disabled],
+        descriptor: {
+          id,
+          ...(aliases ? { aliases } : {}),
+          title: getEditorShortcutActionLabel(locale, id, formatMessage),
+          category: getEditorActionCategory(
+            locale,
+            COMPOSE_EDITOR_SHORTCUT_SCOPES[id],
+            formatMessage,
+          ),
+          shortcut: context.shortcuts[id],
+          disabledReason: entry.disabled === undefined ? undefined : reasons[entry.disabled],
+        },
         run: entry.run,
       }
     })
+}
+
+/**
+ * 装配可直接交给命令面板的动作列表。
+ *
+ * @param context - 执行层上下文加界面语言与当前键位。
+ * @returns 面板动作，与命令行的定义同源。
+ * @public
+ */
+export function createComposeEditorActions(
+  context: ComposeEditorActionContext,
+): readonly ComposeCommandAction[] {
+  return createComposeEditorCatalog(context)
+    .map(({ descriptor, run }) => ({ ...descriptor, run }))
+}
+
+/**
+ * 装配注入画布命令行的命令定义。
+ *
+ * @remarks
+ * 一次性动作是命令会话的**退化情形**，因此这里不需要第二种形状：包一层就与内建的 `LINE`、
+ * `MOVE` 同类，可以直接放进同一个注册表。动作所需的依赖已经在 `context` 上闭包捕获，因此
+ * 命令启动上下文保持窄，不需要为它们加任何字段。
+ *
+ * @param context - 执行层上下文加界面语言与当前键位。
+ * @returns 命令定义，与命令面板的动作同源。
+ * @public
+ */
+export function createComposeEditorCommands(
+  context: ComposeEditorActionContext,
+): readonly ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect>[] {
+  return createComposeEditorCatalog(context)
+    .map(({ descriptor, run }) => createComposeImmediateCommand<
+      StageDraftingContext,
+      StageDraftingEffect
+    >({ ...descriptor, run }))
 }

@@ -17,7 +17,7 @@ const actions: readonly ComposeCommandAction[] = [
   action('stage.zoomIn', '放大', { category: '舞台', keywords: ['zoom in'] }),
   action('stage.zoomOut', '缩小', { category: '舞台', keywords: ['zoom out'] }),
   action('edit.group', '编组', { category: '编辑', disabledReason: '至少选中两个对象' }),
-  action('history.undo', '撤销', { category: '历史' }),
+  action('history.undo', '撤销', { aliases: ['UNDO', 'U'], category: '历史' }),
   action('misc.noCategory', '未分组动作'),
 ]
 
@@ -77,6 +77,14 @@ describe('filterComposeCommandActions', () => {
 
   it('OpenSpec: command-panel / 命令动作检索与执行 / 无匹配返回空结果', () => {
     expect(filterComposeCommandActions(actions, '不存在的动作')).toEqual([])
+  })
+
+  it('OpenSpec: command-panel / 命令动作检索与执行 / 按命令行别名检索', () => {
+    // 别名是用户在命令行里键入的写法；搜不到它，两个入口的词汇表在用户看来仍是两份。
+    const groups = filterComposeCommandActions(actions, 'undo')
+    expect(groups[0]?.actions).toHaveLength(1)
+    // 结果项显示的仍是已本地化的 title，别名只参与匹配。
+    expect(groups[0]?.actions[0]?.title).toBe('撤销')
   })
 
   it('OpenSpec: command-panel / 命令动作检索与执行 / 不可用动作仍参与检索', () => {

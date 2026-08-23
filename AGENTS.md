@@ -270,6 +270,25 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   同时承载归一化、序列化、事件匹配与平台格式化，以及动作 id 到键位列表的泛型映射；
   `components`、`stage`、`editor` 的键位类型都是它的别名。平台格式化的 `platform` 必填，
   本包不读取 `navigator`。
+- **「能敲什么」只有一种形状。**一次性动作（`id/title/run()`）是命令会话（`id/aliases/title/
+  `start()`）的**退化情形**——`prompt` 为 `null`、收到确认就提交，而这一档本来就在跑：`ERASE`
+  预选时 `prompt` 就是 `null`。因此 `createComposeImmediateCommand` 把动作包成定义，
+  `runComposeCommandImmediately` 是跑退化会话的**唯一**实现；各消费者内联「`prompt` 为 null
+  就 accept」会让同一条命令在不同入口给出不同结果。合并方向是单向的：会话表达得了一步，
+  动作表达不了多步。
+  命令的**可呈现半边**独立成 `ComposeCommandDescriptor`（id/别名/标题/分组/检索词/键位/
+  不可用原因）且**不带泛型**——只需要列出与检索命令的消费者（命令面板）不该被 `TContext` /
+  `TEffect` 传染，「谁能列出」与「谁能跑」因此是两个门槛。可用性是描述符**自己的字段**而不是
+  注册表上的查询：列出命令的一方拿到的是一份列表而不是注册表，做成查询会让两处各自判断而漂移；
+  它是**已本地化的文案**，本包不认识 locale。
+  **别名不本地化。**`title` 随语言变，`id` 与 `aliases` 不变——它们是用户键入的标识，本地化会让
+  同一条命令在中英文界面下敲法不同，而肌肉记忆、文档与截图全部失效（AutoCAD 靠 `_LINE` 的下划线
+  前缀保住英文名）。别名**只给用户真会去敲的那些**，其余仍可用 `id` 键入；已经有等价画布命令的
+  动作**不再造第二个词**（工具切换让给 `RECTANGLE` 这类命令，`edit.delete` 让给严格更强的
+  `ERASE`），剪贴板借 AutoCAD 的 `COPYCLIP`/`CUTCLIP`/`PASTECLIP` 避开几何 `COPY`。
+  **重名抛错，不兜底**：丢弃后来的会让宿主命令静默消失，覆盖先前的会让内建命令被意外改写，
+  两者都要等用户敲下那个词才暴露；重名的含义是「这个词该执行哪条命令无法从注册处读出」，
+  运行期没有正确答案。这条由构建期的用例挡在前面。
 - `@compose-ui/scene-tree` 是独立受控 React 树组件，可依赖 `components` 和 `ui-context`，
   不得依赖 `core` 或 `editor`；`editor` 可以通过公共入口依赖并默认集成它。
 - `@compose-ui/asset-browser` 是独立文件浏览预览和 Monaco 编辑包，可依赖 `assets`、
@@ -451,6 +470,18 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   聚合回写（同一份文件只写一次，单份失败不阻塞其余）；解除引用不删除文件
   资源。`Animations` 整体写入，清单命令与 `animation.source.set` 共用同一个写入口各自带上
   另一半——只写 `items` 会抹掉绑定，只写 `source` 会抹掉清单。
+- **命令行只认一份词汇表。**Stage 把宿主注入的命令定义（`ComposeStageProps.commands`）与内建的
+  八条合成**一个**注册表，因此不存在「面板里有、命令行敲不出来」的动作。注入的是**定义**不是
+  会话——会话仍住 Stage，搬走意味着提示、预览与捕捉标记要逐帧回传。宿主命令的依赖在**注册时
+  闭包捕获**，启动上下文保持窄（文案 + 选择集），硬合并会让每加一条命令就往上下文塞一个绝大
+  多数命令用不到的字段。启动前先看 `disabledReason`：命令行的三种拒绝必须互相可分——词不在表里
+  （未知命令）、词在表里但此刻不可用（缺什么）、会话进行中的非法输入。少了中间这种，敲 `GROUP`
+  而没选够对象会什么都不发生，与敲错字在屏幕上无法区分。
+  **命令历史分两处**：`ComposeCommandLine` 用上下方向键召回**提交过的文本行**（组件会话状态，
+  终端通用行为），Stage 在空闲时把空 Enter 解释成**重复上一条命令**（宿主状态）。两者记的不是
+  同一个序列——文本行里混着坐标与关键字，共用会让空确认把上一次键入的坐标拿去当命令解析。
+  它们与 `operation-log` 的事务日志也是两件事：一个记「我敲了什么」，一个记「文档变了什么」，
+  一条命令可能产生零条或多条事务。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`canvas-kit`、`script-runtime`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。

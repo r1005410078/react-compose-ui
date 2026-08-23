@@ -55,6 +55,10 @@ export interface StageDraftingEffect {
 
 /** 绘图命令的已本地化文案。 @public */
 export interface StageDraftingMessages {
+  /** 产出新几何的那几条命令的分组名。 */
+  readonly drawCategory: string
+  /** 作用在既有对象上的那几条命令的分组名。 */
+  readonly editCategory: string
   readonly specifyFirstPoint: string
   readonly specifyNextPoint: string
   readonly expectedPoint: string

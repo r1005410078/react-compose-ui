@@ -66,6 +66,7 @@ export function createStageEraseCommand(
     id: 'ERASE',
     aliases: ['E'],
     title: messages.eraseTitle,
+    category: messages.editCategory,
     start: createStageEraseSession,
   }
 }

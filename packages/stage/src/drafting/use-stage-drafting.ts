@@ -9,6 +9,8 @@ import {
 } from '@compose-ui/core'
 import {
   createComposeCommandRegistry,
+  runComposeCommandImmediately,
+  type ComposeCommandDefinition,
   type ComposeCommandSession,
 } from '@compose-ui/commands'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
@@ -54,6 +56,16 @@ export interface StageDraftingOptions {
   readonly dispatch: ComposeStageDispatch
   readonly idFactory: () => string
   readonly messages: StageDraftingHookMessages
+  /**
+   * 宿主注入的命令定义。
+   *
+   * @remarks
+   * 与内建八条合成一份注册表。重名由 `createComposeCommandRegistry` 抛错，本 Hook 不兜底。
+   */
+  readonly commands?: readonly ComposeCommandDefinition<
+    StageDraftingContext,
+    StageDraftingEffect
+  >[]
   readonly activeFrameId?: string | null
   /** 当前选择集；命令的「先选后执行」与「选择对象」步骤都读它。 */
   readonly selectedIds: readonly string[]
@@ -87,6 +99,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     dispatch,
     idFactory,
     messages,
+    commands: hostCommands,
     activeFrameId,
     selectedIds,
     onSelectedIdsChange,
@@ -94,6 +107,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
   } = options
 
   const sessionRef = useRef<ComposeCommandSession<StageDraftingEffect> | null>(null)
+  /** 上一条成功启动的命令 id；空闲时的空确认按它重启。取消过的命令仍算数。 */
+  const lastCommandRef = useRef<string | null>(null)
   const [prompt, setPrompt] = useState<ComposeCommandSession<StageDraftingEffect>['prompt']>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [reference, setReference] = useState<ComposeInputPoint | null>(null)
@@ -102,8 +117,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const [ortho, setOrtho] = useState(false)
   const [snapEnabled, setSnapEnabled] = useState(true)
 
-  const commands = useMemo(() => createStageDraftingCommands(messages), [messages])
-  const registryOfCommands = useMemo(() => createComposeCommandRegistry(commands), [commands])
+  const builtInCommands = useMemo(() => createStageDraftingCommands(messages), [messages])
   const index = useMemo(
     () => createStageSceneIndex(document, layoutSnapshot),
     [document, layoutSnapshot],
@@ -116,6 +130,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
   }), [document.canvas.grid])
 
   const snapshot = {
+    builtInCommands,
+    hostCommands,
     document,
     layoutSnapshot,
     index,
@@ -219,34 +235,77 @@ export function useStageDrafting(options: StageDraftingOptions) {
     applyStep(session.advance({ kind: 'point', point: resolvePointerPoint(world) }))
   }, [applyStep, resolvePointerPoint])
 
+  /**
+   * 按名称启动一条命令。
+   *
+   * @remarks
+   * 内建绘图命令与宿主注入的动作走的是同一条路径：解析、查可用性、启动。两者分头处理会让
+   * 同一条命令在「敲名字」与「点面板」之间给出不同结果。
+   */
+  const start = useCallback((name: string) => {
+    /*
+     * 注册表在**提交那一刻**才建，不随 props 每次变化重建。
+     *
+     * 宿主注入的定义每次都是新数组——它们携带的可用性必须跟着选择集与文档走，因此不可能
+     * 引用稳定。把注册表挂在 `useMemo` 上会让这条身份变化一路传染到 `submit`、`handleKeyDown`
+     * 与整个会话对象，而 Stage 的每一帧都要重挂这些回调。解析只在用户按下 Enter 时发生，
+     * 每次现建一张表的代价（几十个键）远小于让它污染渲染路径。
+     *
+     * 内建在前、宿主在后只是一个可读的次序：重名两边都不赢，注册表直接抛错。
+     */
+    const current = latest.current
+    const definition = createComposeCommandRegistry([
+      ...current.builtInCommands,
+      ...(current.hostCommands ?? []),
+    ]).resolve(name)
+    if (!definition) {
+      setNotice(messages.unknownCommand)
+      return
+    }
+    /*
+     * 命令行的三种拒绝必须互相可分：词不在词汇表里、词在词汇表里但此刻不可用、会话进行中的
+     * 非法输入。少了中间这种，敲 `GROUP` 而没选够对象会**什么都不发生**，而这在屏幕上与敲
+     * 错字无法区分。内建八条恒可用，因此这一档是宿主动作进来之后才有的。
+     */
+    if (definition.disabledReason !== undefined && definition.disabledReason.length > 0) {
+      setNotice(definition.disabledReason)
+      return
+    }
+    const context: StageDraftingContext = {
+      messages,
+      // 先选后执行：命令要么在启动上下文里拿到目标，要么自己提示选择。
+      selection: latest.current.selectedIds,
+    }
+    setReference(null)
+    setPreview(null)
+    setNotice(null)
+    // 「`prompt` 为 null 就立即 accept」只有一处实现（`runComposeCommandImmediately`）：先选好
+    // 对象再敲 `E↵` 对象当场就删，走的正是这一支，宿主一次性动作走的也是它。
+    const outcome = runComposeCommandImmediately(definition, context)
+    lastCommandRef.current = definition.id
+    if (outcome.status === 'ran') {
+      applyStep(outcome.step)
+      return
+    }
+    sessionRef.current = outcome.session
+    setPrompt(outcome.session.prompt)
+  }, [applyStep, messages])
+
   const submit = useCallback((text: string) => {
     const trimmed = text.trim()
     const session = sessionRef.current
 
     if (!session) {
-      if (trimmed.length === 0) return
-      const definition = registryOfCommands.resolve(trimmed)
-      if (!definition) {
-        setNotice(messages.unknownCommand)
+      /*
+       * 空闲时的空确认重复**上一条命令**，而不是上一行文本。两者不是同一个序列：文本行里
+       * 混着坐标与关键字，而它们不是命令名——共用一个序列会让空确认把上一次键入的坐标拿去
+       * 当命令解析。召回文本行是命令行组件自己的事（上下方向键）。
+       */
+      if (trimmed.length === 0) {
+        if (lastCommandRef.current !== null) start(lastCommandRef.current)
         return
       }
-      const context: StageDraftingContext = {
-        messages,
-        // 先选后执行：命令要么在启动上下文里拿到目标，要么自己提示选择。
-        selection: latest.current.selectedIds,
-      }
-      const next = definition.start(context)
-      sessionRef.current = next
-      setReference(null)
-      setPreview(null)
-      setNotice(null)
-      // `prompt` 为 null 表示命令从启动上下文里已经拿全了所需信息——先选好对象再敲 `E↵`，
-      // 对象当场就删。没有这一档，宿主只能靠认识命令 id 来特判。
-      if (next.prompt === null) {
-        applyStep(next.advance({ kind: 'accept' }))
-        return
-      }
-      setPrompt(next.prompt)
+      start(trimmed)
       return
     }
 
@@ -267,7 +326,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       return
     }
     applyStep(session.advance({ kind: 'keyword', key: trimmed }))
-  }, [applyStep, gridSettings, messages, ortho, reference, registryOfCommands])
+  }, [applyStep, gridSettings, messages, ortho, reference, start])
 
   const cancel = useCallback(() => {
     const session = sessionRef.current

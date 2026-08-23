@@ -140,6 +140,7 @@ export function createStageMoveCommand(
     id: 'MOVE',
     aliases: ['M'],
     title: messages.moveTitle,
+    category: messages.editCategory,
     start: createStageMoveSession,
   }
 }
@@ -152,6 +153,7 @@ export function createStageCopyCommand(
     id: 'COPY',
     aliases: ['CO'],
     title: messages.copyTitle,
+    category: messages.editCategory,
     start: createStageCopySession,
   }
 }

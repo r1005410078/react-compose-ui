@@ -92,4 +92,71 @@ describe('ComposeCommandLine', () => {
     renderLine({ testIdPrefix: 'cad' })
     expect(screen.getByTestId('cad-command-input')).toBeInTheDocument()
   })
+
+  describe('OpenSpec: stage / 命令行历史与重复上一条 / 上箭头召回敲过的行', () => {
+    /** 提交若干行；返回输入框。 */
+    function submitLines(lines: readonly string[]) {
+      renderLine()
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      for (const line of lines) {
+        fireEvent.change(input, { target: { value: line } })
+        fireEvent.keyDown(input, { key: 'Enter' })
+      }
+      return input
+    }
+
+    it('上箭头依次召回更早的行，下箭头回到更近的行再回到空输入', () => {
+      const input = submitLines(['LINE', '100,50', '260,130'])
+      expect(input).toHaveValue('')
+
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('260,130')
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('100,50')
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('LINE')
+
+      // 到底了就停住，不绕回最近一行。
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('LINE')
+
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      expect(input).toHaveValue('100,50')
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      expect(input).toHaveValue('260,130')
+      // 走过最近一行之后回到正在编辑的那一行新的。
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      expect(input).toHaveValue('')
+    })
+
+    it('方向键阻止默认的行内光标移动', () => {
+      const input = submitLines(['LINE'])
+      const event = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })
+      fireEvent(input, event)
+      expect(event.defaultPrevented).toBe(true)
+    })
+
+    it('空行不进历史，提交后从最近一行重新开始召回', () => {
+      const input = submitLines(['LINE'])
+      // 空确认在宿主侧另有含义（重复上一条命令），但它不是一行可召回的文本。
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('LINE')
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('LINE')
+    })
+
+    it('Esc 清空输入并把召回位置退回新的一行', () => {
+      const input = submitLines(['LINE', 'ARC'])
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('ARC')
+
+      fireEvent.keyDown(input, { key: 'Escape' })
+      expect(input).toHaveValue('')
+
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('ARC')
+    })
+  })
 })

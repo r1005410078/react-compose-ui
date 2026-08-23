@@ -6,6 +6,8 @@ import { createStageSceneIndex, findStageFeaturePoint } from '../hit-testing'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
 
 const messages = {
+  drawCategory: '绘图',
+  editCategory: '编辑',
   specifyFirstPoint: '指定第一点',
   specifyNextPoint: '指定下一点',
   expectedPoint: '需要一个点',

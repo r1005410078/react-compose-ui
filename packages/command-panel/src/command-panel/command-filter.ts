@@ -5,6 +5,8 @@ function matchesTerm(action: ComposeCommandAction, term: string) {
   if (action.title.toLowerCase().includes(term)) return true
   if (action.id.toLowerCase().includes(term)) return true
   if (action.category?.toLowerCase().includes(term) === true) return true
+  // 别名是用户在命令行里键入的写法。搜不到它意味着两个入口的词汇表在用户看来仍是两份。
+  if (action.aliases?.some((alias) => alias.toLowerCase().includes(term)) === true) return true
   return action.keywords?.some((keyword) => keyword.toLowerCase().includes(term)) === true
 }
 

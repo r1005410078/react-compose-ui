@@ -1,3 +1,5 @@
+import type { ComposeKeybinding } from '../keybinding'
+
 /**
  * 一步提示接受的输入种类。
  *
@@ -121,6 +123,41 @@ export interface ComposeCommandSession<TEffect> {
 }
 
 /**
+ * 一条命令的可呈现信息。
+ *
+ * @remarks
+ * 这半边是**列出、检索与判断可用性**所需的全部，因此它**不带泛型**：只需要把命令摆出来的
+ * 消费者（命令面板）不应被 `TContext` / `TEffect` 这两个它永远不使用的类型参数传染。
+ * 「谁能列出命令」与「谁能跑命令」因此是两个不同的门槛。
+ *
+ * @public
+ */
+export interface ComposeCommandDescriptor {
+  /** 命令的稳定标识，同时是用户可键入的全名，例如 `LINE`。 */
+  readonly id: string
+  /** 其他可键入的写法，例如 `L`。匹配不区分大小写。 */
+  readonly aliases?: readonly string[]
+  /** 已本地化的显示名。 */
+  readonly title: string
+  /** 结果分组标题；省略时归入未分组区。 */
+  readonly category?: string
+  /** 除名称与别名外的额外检索词。 */
+  readonly keywords?: readonly string[]
+  /** 仅用于展示的键位；本包不注册任何监听。 */
+  readonly shortcut?: readonly ComposeKeybinding[]
+  /**
+   * 非空表示命令此刻不能执行，同时作为原因展示给用户。
+   *
+   * @remarks
+   * 是**已本地化的文案**而不是稳定标识：本包不认识界面语言，翻译由产出描述符的一方完成。
+   *
+   * 可用性是描述符自己的字段而不是注册表上的查询——列出命令的一方拿到的是一份描述符列表
+   * 而不是注册表，做成查询会让两处各自判断而漂移。
+   */
+  readonly disabledReason?: string
+}
+
+/**
  * 一条可由名称启动的命令。
  *
  * @remarks
@@ -128,12 +165,6 @@ export interface ComposeCommandSession<TEffect> {
  *
  * @public
  */
-export interface ComposeCommandDefinition<TContext, TEffect> {
-  /** 命令的稳定标识，同时是用户可键入的全名，例如 `LINE`。 */
-  readonly id: string
-  /** 其他可键入的写法，例如 `L`。匹配不区分大小写。 */
-  readonly aliases?: readonly string[]
-  /** 已本地化的显示名。 */
-  readonly title: string
+export interface ComposeCommandDefinition<TContext, TEffect> extends ComposeCommandDescriptor {
   start(context: TContext): ComposeCommandSession<TEffect>
 }

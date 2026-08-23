@@ -157,6 +157,7 @@ import {
   isComposePageSetupScriptName,
 } from '../pages/page-script-intelligence'
 import { WorkspaceTab } from '../workspace-layout'
+import { createComposeEditorCommands } from '../editor-controller/action-catalog'
 import type { ComposeEditorController } from '../editor-controller'
 import { useComponentCatalog, useComponentWorkspace } from '../component-workspace'
 import type { ComposeEditorComponentsConfig } from '../component-workspace'
@@ -2237,6 +2238,37 @@ export function ComposeEditor({
     })
   }, [components, hostI18n?.formatMessage, pages, resolvedPreferences.locale])
 
+  /**
+   * 注入 Stage 命令行的宿主动作。
+   *
+   * @remarks
+   * 与命令面板的动作**同源**：两者都由 `createComposeEditorCatalog` 派生，因此同一条动作
+   * 在「敲名字」与「点面板」两个入口拿到的是同一份名称、分组与可用性。
+   *
+   * 界面语言在这里补齐而不是在控制器里：控制器由宿主在 `ComposeUIProvider` 之外创建，读不到
+   * 语言，这与命令面板的装配位置是同一条既有理由。
+   */
+  const actionContext = controller?.actionContext
+  const stageCommands = useMemo(() => {
+    // 与 `controller?.renderStage` 一样按可选消费：`ComposeEditorController` 是宿主可以自己
+    // 实现的接口，只实现关心的那几项是正当用法（既有测试与插槽宿主就是这么做的）。缺席时
+    // 命令行退回只认内建命令，而不是让整个编辑器挂掉。
+    if (!actionContext) return undefined
+    return createComposeEditorCommands({
+      ...actionContext,
+      formatMessage: hostI18n?.formatMessage,
+      locale: resolvedPreferences.locale,
+      openSettings: toggleSettings,
+      shortcuts: resolvedPreferences.shortcuts,
+    })
+  }, [
+    actionContext,
+    hostI18n?.formatMessage,
+    resolvedPreferences.locale,
+    resolvedPreferences.shortcuts,
+    toggleSettings,
+  ])
+
   const content = {
       sceneGraphPanel: slots?.sceneGraph !== undefined
         ? slots.sceneGraph
@@ -2260,6 +2292,7 @@ export function ComposeEditor({
       children: slots?.stage !== undefined
         ? slots.stage
         : controller?.renderStage({
+          commands: stageCommands,
           services: {
             assetResolver: resolvedAssetResolver,
             scriptModuleLoader: pages?.scriptModuleLoader,

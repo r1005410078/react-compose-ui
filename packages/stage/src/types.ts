@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
-import type { ComposeKeybinding } from '@compose-ui/commands'
+import type { ComposeCommandDefinition, ComposeKeybinding } from '@compose-ui/commands'
 import type { ComposeLayoutMeasurementPort } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
@@ -11,6 +11,8 @@ import type {
   EditorCommand,
 } from '@compose-ui/core'
 import type {
+  StageDraftingContext,
+  StageDraftingEffect,
   StageEditablePath,
   StageInteractionController,
   StageInteractionModifiers,
@@ -272,6 +274,27 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly onEntityRename?: (entityId: string, name: string) => void
   /** 为当前规范化选区打开宿主的项目组件创建流程；省略时菜单不显示该入口。 */
   readonly onCreateComponentIntent?: (entityIds: readonly string[]) => void
+  /**
+   * 宿主注入的命令定义。
+   *
+   * @remarks
+   * 与内建的绘图/编辑命令合成**一份**词汇表：用户在命令行键入的名称在合并后的注册表里解析，
+   * 因此不存在「面板里有、命令行敲不出来」的动作。
+   *
+   * 注入的是**定义**而不是会话：解析、启动、推进与提示渲染仍住在 Stage。合并的是「能敲
+   * 什么」，不是「谁在跑」——把会话搬给宿主意味着提示文本、预览几何与捕捉标记这三种同一份
+   * 状态的呈现要逐帧回传。
+   *
+   * 命令所需的依赖 MUST 在构造这些定义时闭包捕获，不经由启动上下文传入：上下文保持窄（文案
+   * 与选择集），否则每加一条命令就要往它上面加一个绝大多数命令用不到的字段。
+   *
+   * 名称与内建命令重复时注册表**抛错**：重名的含义是「敲这个词该执行哪条命令无法从注册处
+   * 读出」，在运行期没有正确答案，兜底只会让它推迟到用户敲下那个词时才暴露。
+   */
+  readonly commands?: readonly ComposeCommandDefinition<
+    StageDraftingContext,
+    StageDraftingEffect
+  >[]
   /**
    * 页面的激活场景。
    *

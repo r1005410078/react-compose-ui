@@ -244,7 +244,13 @@ export function createStagePolylineSession(
 export function createStageArcCommand(
   messages: StageDraftingMessages,
 ): ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect> {
-  return { id: 'ARC', aliases: ['A'], title: messages.arcTitle, start: createStageArcSession }
+  return {
+    id: 'ARC',
+    aliases: ['A'],
+    title: messages.arcTitle,
+    category: messages.drawCategory,
+    start: createStageArcSession,
+  }
 }
 
 /** CIRCLE 命令定义。 @public */
@@ -255,6 +261,7 @@ export function createStageCircleCommand(
     id: 'CIRCLE',
     aliases: ['C'],
     title: messages.circleTitle,
+    category: messages.drawCategory,
     start: createStageCircleSession,
   }
 }
@@ -267,6 +274,7 @@ export function createStageRectangleCommand(
     id: 'RECTANGLE',
     aliases: ['REC'],
     title: messages.rectangleTitle,
+    category: messages.drawCategory,
     start: createStageRectangleSession,
   }
 }
@@ -279,6 +287,7 @@ export function createStagePolylineCommand(
     id: 'PLINE',
     aliases: ['PL'],
     title: messages.polylineTitle,
+    category: messages.drawCategory,
     start: createStagePolylineSession,
   }
 }

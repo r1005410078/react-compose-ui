@@ -92,6 +92,7 @@ export function createStageLineCommand(
     id: 'LINE',
     aliases: ['L'],
     title: messages.lineTitle,
+    category: messages.drawCategory,
     start: createStageLineSession,
   }
 }

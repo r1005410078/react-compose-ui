@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from 'react'
-import type { ComposeKeybinding } from '@compose-ui/components'
+import type { ComposeCommandDescriptor } from '@compose-ui/commands'
 import type {
   EditorCommand,
   JsonValue,
@@ -10,24 +10,15 @@ import type {
  * 可从命令面板检索并执行的宿主动作。
  *
  * @remarks
- * 动作是 UI 层概念，与 `EditorCommand` 这一文档变更载荷不同：`run` 既可以派发命令进入事务
- * 历史，也可以只修改宿主会话状态。面板不解释这一差异，也不本地化 `title`。
+ * 动作是命令会话的**退化情形**，因此它的可呈现半边就是 `ComposeCommandDescriptor`——命令行
+ * 与面板从同一份描述符读取，否则同一条命令在两个入口会呈现出不同的名称、分组或可用性。面板
+ * 只额外要一个 `run`：它不跑会话，也不解释副作用是否进入事务历史。
+ *
+ * 面板不本地化 `title`，也不注册 `shortcut` 对应的监听。
  *
  * @public
  */
-export interface ComposeCommandAction {
-  /** 宿主内稳定且唯一的动作 ID，同时参与检索匹配。 */
-  readonly id: string
-  /** 已由宿主本地化的显示名。 */
-  readonly title: string
-  /** 结果分组标题；省略时归入未分组区。 */
-  readonly category?: string
-  /** 除名称外的额外检索词，例如英文别名。 */
-  readonly keywords?: readonly string[]
-  /** 仅用于展示的键位；面板不注册对应监听。 */
-  readonly shortcut?: readonly ComposeKeybinding[]
-  /** 非空表示动作当前不可执行，同时作为原因展示给用户。 */
-  readonly disabledReason?: string
+export interface ComposeCommandAction extends ComposeCommandDescriptor {
   /** 执行动作；面板不关心其副作用是否进入事务历史。 */
   run(): void
 }

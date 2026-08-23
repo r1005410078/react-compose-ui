@@ -979,6 +979,15 @@ export interface ComposeEditorController {
   readonly instanceRootInspector: ReactNode
   /** 默认 ComposeCommandPanel 内容。 */
   readonly commandPanel: ReactNode
+  /**
+   * 与界面语言无关的动作执行层上下文。
+   *
+   * @remarks
+   * 命令面板与画布命令行都从它派生：前者要动作列表，后者要命令定义，而两者的可用性判断
+   * 必须是同一次计算。控制器由宿主在 `ComposeUIProvider` 之外创建，读不到界面语言，因此
+   * 本字段只给出执行层，本地化由消费方在 Provider 内补齐。
+   */
+  readonly actionContext: ComposeEditorActionHandlerContext
   /** 默认 Stage 工具栏内容。 */
   readonly stageToolbar: ReactNode
 }
@@ -1928,6 +1937,7 @@ export function useComposeEditorController({
     instanceInnerSelection,
     instanceRootSelection,
     instanceRootInspector,
+    actionContext,
     commandPanel: (
       <CommandPanelWithActions
         actionContext={actionContext}
