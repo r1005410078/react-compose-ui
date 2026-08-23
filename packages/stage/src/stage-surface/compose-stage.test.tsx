@@ -162,10 +162,6 @@ const registry = createComposeEntityRegistry({
     label: '测试',
     renderer: ({ props }) => <span>{String(props.text)}</span>,
   }, {
-    type: 'shape',
-    label: '线条',
-    renderer: () => null,
-  }, {
     type: 'curve',
     label: '曲线',
     renderer: () => null,
@@ -173,21 +169,14 @@ const registry = createComposeEntityRegistry({
   presets: [preset, curvePreset],
 })
 
-function lineEntity(id = 'line', kind: 'line' | 'arrow' = 'line'): ComposeEntity {
+function curveEntity(id = 'curve-a'): ComposeEntity {
   const base = entity(id)
   return {
     ...base,
     components: {
       ...base.components,
-      Renderer: {
-        type: 'shape',
-        props: {
-          kind,
-          direction: { x: 1, y: 1 },
-          stroke: '#d8e2f1',
-          strokeWidth: 2,
-        },
-      },
+      Renderer: { type: 'curve', props: { stroke: '#d8e2f1', strokeWidth: 1 } },
+      Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 50 } },
     },
   }
 }
@@ -439,55 +428,16 @@ describe('ComposeStage ECS', () => {
     }
   })
 
-  it('OpenSpec: 线段端点选择 / Line 与 Arrow 单选仅显示首尾控制点而不显示矩形框', () => {
-    renderStage(document([lineEntity()]), { selectedIds: ['line'], tool: 'select' })
+  it('OpenSpec: 物料统一 / 曲线单选走通用矩形选区与盒手柄', () => {
+    renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
 
-    expect(screen.getByTestId('stage-entity-line')).toHaveClass('is-segment')
-    expect(screen.getByTestId('stage-line-selection')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-line-selection-start')).toHaveAttribute('r', '10')
-    expect(screen.getByTestId('stage-line-selection-end')).toHaveAttribute('r', '10')
-    expect(screen.getByTestId('stage-line-selection-start')).toHaveStyle({ cursor: 'nwse-resize' })
-    expect(screen.getByTestId('stage-line-selection-start-handle')).toHaveAttribute(
-      'transform',
-      expect.stringMatching(/^rotate\(26\.565/),
-    )
-    expect(screen.getByTestId('stage-line-selection-dimensions')).toHaveTextContent('× 0')
-    expect(screen.queryByTestId('stage-selection-bounds')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('stage-resize-nw')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('stage-resize-ne')).not.toBeInTheDocument()
+    // 线状节点仍不以包围盒拦截指针，但选区回到通用那一套：两点直线的端点就在盒的对角，
+    // 拖盒角手柄与拖端点落点相同，因此不再有第二套端点 UI。
+    expect(screen.getByTestId('stage-entity-curve-a')).toHaveClass('is-segment')
+    expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-line-selection')).not.toBeInTheDocument()
   })
-
-  it.each(['start', 'end'] as const)(
-    'OpenSpec: 线段端点选择 / %s 端点命中后拖动并提交一次事务',
-    (endpoint) => {
-      const { dispatch } = renderStage(
-        document([lineEntity()]),
-        { selectedIds: ['line'], tool: 'select' },
-      )
-      const handle = screen.getByTestId(`stage-line-selection-${endpoint}`)
-
-      fireEvent.pointerDown(handle, {
-        pointerId: 1,
-        button: 0,
-        buttons: 1,
-        clientX: endpoint === 'start' ? 20 : 120,
-        clientY: endpoint === 'start' ? 30 : 80,
-      })
-      fireEvent.pointerUp(window, {
-        pointerId: 1,
-        button: 0,
-        buttons: 0,
-        clientX: endpoint === 'start' ? 44 : 144,
-        clientY: endpoint === 'start' ? 54 : 104,
-      })
-
-      expect(dispatch).toHaveBeenCalledTimes(1)
-      expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
-        type: 'transaction.batch',
-        meta: expect.objectContaining({ mergeKey: 'stage:segment:line' }),
-      }))
-    },
-  )
 
   it('OpenSpec: 绘制工具 / 空闲即为十字光标，并以实际形状预览替代框选虚线', () => {
     renderStage(document(), { selectedIds: ['a'], tool: 'draw-circle' })
@@ -1112,10 +1062,6 @@ describe('ComposeStage 画布内原地文字编辑', () => {
             )
           : <span>{String(props.text)}</span>
       ),
-    }, {
-      type: 'shape',
-      label: '线条',
-      renderer: () => null,
     }],
     presets: [preset],
   })

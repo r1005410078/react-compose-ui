@@ -36,7 +36,6 @@ import {
   applyMatrix,
   matrixFromTransform,
   multiplyMatrices,
-  rectFromPoints,
   screenToWorld,
   unionRects,
 } from './geometry'
@@ -62,7 +61,6 @@ export type StageInteractionPhase =
   | 'marquee'
   | 'move'
   | 'resize'
-  | 'segment-resize'
   | 'rotate'
   | 'draw'
   | 'guide-create'
@@ -137,14 +135,6 @@ export type StageInteractionHit =
       readonly source?: 'body' | 'label'
     }
   | { readonly kind: 'resize'; readonly handle: ResizeHandle }
-  | {
-      /** 由 surface 从任意两点图形推导的端点；Engine 不依赖 Renderer 或物料类型。 */
-      readonly kind: 'segment-endpoint'
-      readonly entityId: string
-      readonly endpoint: 'start' | 'end'
-      readonly start: StagePoint
-      readonly end: StagePoint
-    }
   | { readonly kind: 'rotate' }
   | { readonly kind: 'ruler'; readonly axis: 'x' | 'y' }
   | { readonly kind: 'ruler-corner' }
@@ -242,13 +232,6 @@ export interface StagePaintHandle {
   readonly kind: StagePaintHandleKind
   readonly point: StagePoint
   readonly stopId?: string
-}
-
-/** 任意两点图形在端点拖拽过程中的世界坐标预览。 @public */
-export interface StageSegmentPreview {
-  readonly entityId: string
-  readonly start: StagePoint
-  readonly end: StagePoint
 }
 
 /** Stage surface 最新受控上下文。 @public */
@@ -383,13 +366,6 @@ export type StageInteractionEffect =
       readonly parentId: string | null
     }
   | {
-      /** Engine 只回传两端世界坐标，surface 决定如何持久化其图形语义。 */
-      readonly type: 'segment.commit'
-      readonly entityId: string
-      readonly start: StagePoint
-      readonly end: StagePoint
-    }
-  | {
       readonly type: 'external.drop'
       readonly item: StageExternalDragItem
       readonly clientPoint: StagePoint | null
@@ -503,8 +479,6 @@ export interface StageInteractionSnapshot {
   } | null
   /** 绘制工具在 pointerup 前的世界坐标预览。 */
   readonly drawing: StageDrawingPreview | null
-  /** 两点图形端点拖动的世界坐标预览。 */
-  readonly segmentPreview: StageSegmentPreview | null
   /**
    * 旋转拉线预览（Godot 风格）：从选区中心到当前指针的世界坐标。
    *
@@ -618,7 +592,6 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   paintSample: null,
   external: null,
   drawing: null,
-  segmentPreview: null,
   rotationPreview: null,
   temporaryPan: false,
   selectionBounds: null,
@@ -776,9 +749,7 @@ export function createStageInteractionController(): StageInteractionController {
 
 
   const enrich = (next: StageInteractionSnapshot): StageInteractionSnapshot => {
-    const selected = next.segmentPreview
-      ? rectFromPoints(next.segmentPreview.start, next.segmentPreview.end)
-      : context && index
+    const selected = context && index
       ? previewSelectionBounds(
           index,
           context.selectedIds,
@@ -821,7 +792,7 @@ export function createStageInteractionController(): StageInteractionController {
       ? 'grabbing'
       : next.phase === 'move'
         ? 'move'
-        : next.phase === 'resize' || next.phase === 'segment-resize'
+        : next.phase === 'resize'
           ? 'resize'
             : next.phase === 'draw'
               ? 'crosshair'

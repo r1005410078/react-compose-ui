@@ -11,7 +11,6 @@ import {
   getComposeFrame,
   getComposeHierarchy,
   getComposeLock,
-  getComposeRenderer,
   getComposeVisibility,
   resolveComposeOverflow,
   type ComposeDocument,
@@ -134,13 +133,11 @@ export function StageSceneLayer({
       if (!entity || !getComposeVisibility(entity).visible) return null
       if (hiddenEntityIds?.has(entityId)) return null
       const hierarchy = getComposeHierarchy(entity)
-      const renderer = getComposeRenderer(entity)
       // 线状节点的外接矩形里绝大部分是空的，不能让它拦截画布点击：盒交给 pointer-events:none，
-      // 命中由物料自己的加宽透明 stroke 承担。曲线按 Component 判定而不是再加一条 Renderer
-      // type 分支——「这个 Entity 是不是线状的」是几何问题，不是某个物料的私事。
+      // 命中由物料自己的加宽透明 stroke 承担（填过色时那块面积也由物料自己接住）。判据是
+      // `Curve` Component 而不是 Renderer 类型——「这个 Entity 是不是线状的」是几何问题，
+      // 不是某个物料的私事。
       const isSegment = Boolean(getComposeCurve(entity))
-        || (renderer?.type === 'shape'
-          && (renderer.props.kind === 'line' || renderer.props.kind === 'arrow'))
       const box = layoutSnapshot.boxes[entityId]
       if (!box) return null
       const locked = getComposeLock(entity).locked

@@ -26,9 +26,16 @@ export interface ComposeBasicContainerOptions {
   readonly defaultClip?: boolean
 }
 
-/** Shape 绘图 Preset 的覆盖项。 @public */
-export interface ComposeShapeMaterialOptions {
-  readonly line?: ComposeBasicMaterialOptions
+/**
+ * 曲线三个起点的覆盖项。
+ *
+ * @remarks
+ * Curve、Arrow 与 Circle 是同一个物料的三个默认值，不是三种物料。
+ *
+ * @public
+ */
+export interface ComposeCurveMaterialOptions {
+  readonly curve?: ComposeBasicMaterialOptions
   readonly arrow?: ComposeBasicMaterialOptions
   readonly circle?: ComposeBasicMaterialOptions
 }
@@ -42,10 +49,8 @@ export interface ComposeCreateBasicMaterialsOptions {
   readonly text?: ComposeBasicMaterialOptions
   readonly image?: ComposeBasicMaterialOptions
   readonly svg?: ComposeBasicMaterialOptions
-  /** Line、Arrow、Circle 绘图物料选项。 */
-  readonly shape?: ComposeShapeMaterialOptions
-  /** 曲线物料的默认值覆盖。 */
-  readonly curve?: ComposeBasicMaterialOptions
+  /** 曲线物料三个起点的默认值覆盖。 */
+  readonly curve?: ComposeCurveMaterialOptions
   /** 按分类追加的宿主 Registry 定义。 */
   readonly extensions?: {
     readonly renderers?: readonly ComposeRendererDefinition[]

@@ -52,13 +52,9 @@ export {
   DEFAULT_COMPOSE_SVG_RENDERER,
 } from './svg'
 export {
+  createCurveMaterial,
   DEFAULT_COMPOSE_ARROW_PRESET,
   DEFAULT_COMPOSE_CIRCLE_PRESET,
-  DEFAULT_COMPOSE_LINE_PRESET,
-  DEFAULT_COMPOSE_SHAPE_RENDERER,
-} from './shape'
-export {
-  createCurveMaterial,
   DEFAULT_COMPOSE_CURVE_PRESET,
   DEFAULT_COMPOSE_CURVE_RENDERER,
   DEFAULT_CURVE_GEOMETRY,
@@ -73,5 +69,5 @@ export type {
   ComposeBasicMaterialOptions,
   ComposeBasicMaterials,
   ComposeCreateBasicMaterialsOptions,
-  ComposeShapeMaterialOptions,
+  ComposeCurveMaterialOptions,
 } from './types'

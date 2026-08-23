@@ -146,7 +146,6 @@ export {
   type StagePathEditing,
   type StagePathHandleKind,
   type StagePreviewGuide,
-  type StageSegmentPreview,
   type StageTextEditing,
 } from './interaction-controller'
 

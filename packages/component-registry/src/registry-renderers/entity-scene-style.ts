@@ -1,7 +1,6 @@
 import {
   getComposeCurve,
   getComposeHierarchy,
-  getComposeRenderer,
   getComposeTransform,
   getComposeTransformPivot,
   resolveComposeAppearance,
@@ -12,16 +11,6 @@ import {
 import type { CSSProperties } from 'react'
 
 /**
- * Circle Shape 的背景/边框 Paint 走 Entity 壳矩形盒；必须以 50% 圆角裁成椭圆，
- * 否则 `Appearance.backgroundPaint` 会显示成矩形。
- */
-function isCircleShapeEntity(entity: ComposeEntity): boolean {
-  const renderer = getComposeRenderer(entity)
-  if (!renderer || renderer.type !== 'shape') return false
-  return renderer.props.kind === 'circle'
-}
-
-/**
  * Stage 与 Preview 共享的 Entity appearance 样式（不含 Transform 几何与 overflow）。
  *
  * @remarks
@@ -29,14 +18,19 @@ function isCircleShapeEntity(entity: ComposeEntity): boolean {
  * context 内，避免高层级边框越过相邻 Entity。overflow 是 Stage 与 Preview 各自的运行时
  * 行为，不属于共享 appearance。
  *
- * Circle Shape 强制 `borderRadius: 50%`，让 solid/渐变背景与边框覆盖层随盒体呈椭圆，
- * 与 SVG ellipse stroke 几何一致；不改写文档里的 Appearance.borderRadius。
+ * **带 `Curve` 的 Entity 不在这里画背景**：盒是矩形而形状不是，把纯色写进宿主盒画出来的是
+ * 一块矩形色块而不是形状内部。它的填充由物料自己的 SVG `fill` 绘制，读取走
+ * `getComposeCurveFill`——渲染与命中共用同一个判断。判据是 `Curve` Component 而不是 Renderer
+ * 类型，与下面那条 overflow 例外同一个谓词。
+ *
+ * 这一条替换掉了曾经的「Circle Shape 强制 `borderRadius: 50%`」——那是没有 `viewBox` 时代把
+ * 矩形背景裁成椭圆的补丁。
  *
  * @public
  */
 export function composeEntityAppearanceStyle(entity: ComposeEntity): CSSProperties {
   const visual = resolveComposeAppearance(entity)
-  const backgroundColor = visual.backgroundPaint.kind === 'solid'
+  const backgroundColor = visual.backgroundPaint.kind === 'solid' && !getComposeCurve(entity)
     ? visual.backgroundPaint.color
     : 'transparent'
   const shadows: string[] = []
@@ -49,8 +43,9 @@ export function composeEntityAppearanceStyle(entity: ComposeEntity): CSSProperti
   return {
     position: 'relative',
     // 纯色同时写入宿主盒子，维持 DOM Scene 的稳定视觉与命中盒契约；复杂 Paint 仍由共享图层绘制。
+    // 曲线除外：它的盒不是它的形状。
     backgroundColor,
-    borderRadius: isCircleShapeEntity(entity) ? '50%' : visual.borderRadius,
+    borderRadius: visual.borderRadius,
     opacity: visual.opacity,
     isolation: 'isolate',
     boxShadow: shadows.length > 0 ? shadows.join(', ') : 'none',

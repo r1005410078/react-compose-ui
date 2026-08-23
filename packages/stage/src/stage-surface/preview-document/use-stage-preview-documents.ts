@@ -1,16 +1,11 @@
 import { useEffect, useMemo } from 'react'
 import type { ComposeDocument, ComposeLayoutSnapshot } from '@compose-ui/core'
-import type {
-  StageInteractionPhase,
-  StageSegmentPreview,
-} from '@compose-ui/stage-engine'
+import type { StageInteractionPhase } from '@compose-ui/stage-engine'
 import type { ComposeStageLayoutRuntime } from '../../types'
 import { buildResizePreviewSolveDocument } from './resize-preview'
 import {
-  lineSegmentTransform,
   transformDocument,
   transformLayoutSnapshot,
-  type ShapeDirection,
   type StageTransformMap,
 } from './stage-preview-document'
 
@@ -24,15 +19,6 @@ export interface StagePreviewDocumentsParams {
   readonly interactionPhase: StageInteractionPhase
   /** 内核发布的几何覆盖；键为 Entity ID。 */
   readonly transforms: StageTransformMap
-  /**
-   * 内核发布的两点图形端点预览。
-   *
-   * @remarks
-   * 它与 `transforms` 是两条独立的预览通道：端点拖动改的是线段的两个端点，换算成盒变换
-   * 之后才能和其余手势的覆盖合并。合并在本 Hook 内完成——它是唯一的消费者，放在宿主只会
-   * 让宿主多出两个除了往下传什么都不做的中间值。
-   */
-  readonly segmentPreview: StageSegmentPreview | null
 }
 
 /** 预览文档能力的出口。 */
@@ -67,30 +53,13 @@ export function useStagePreviewDocuments(
     layoutPreviewSnapshot,
     layoutRuntime,
     layoutSnapshot,
-    segmentPreview,
     transforms,
   } = params
 
-  const segmentTransform = useMemo(
-    () => segmentPreview
-      ? lineSegmentTransform(document, layoutSnapshot, segmentPreview)
-      : null,
-    [document, layoutSnapshot, segmentPreview],
-  )
-  const previewTransforms = useMemo<StageTransformMap>(() => ({
-    ...transforms,
-    ...(segmentTransform && segmentPreview
-      ? { [segmentPreview.entityId]: segmentTransform.transform }
-      : {}),
-  }), [segmentPreview, segmentTransform, transforms])
-  const previewDirections = useMemo<Readonly<Record<string, ShapeDirection>>>(() => (
-    segmentTransform && segmentPreview
-      ? { [segmentPreview.entityId]: segmentTransform.direction }
-      : {}
-  ), [segmentPreview, segmentTransform])
+  const previewTransforms = transforms
   const previewDocument = useMemo(
-    () => transformDocument(document, previewTransforms, previewDirections),
-    [document, previewDirections, previewTransforms],
+    () => transformDocument(document, previewTransforms),
+    [document, previewTransforms],
   )
   const previewLayoutSnapshot = useMemo(
     () => transformLayoutSnapshot(layoutSnapshot, previewTransforms),

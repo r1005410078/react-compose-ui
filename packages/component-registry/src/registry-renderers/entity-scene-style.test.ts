@@ -62,8 +62,8 @@ describe('composeEntityVisualStyle', () => {
     expect(plain.boxShadow).toBe('none')
   })
 
-  it('Circle Shape 的背景 Paint 强制 50% 圆角，避免显示成矩形', () => {
-    const circle = composeEntityAppearanceStyle(entity({
+  it('曲线的填色不写进宿主盒：盒是矩形而形状不是', () => {
+    const curve = composeEntityAppearanceStyle(entity({
       Appearance: {
         backgroundPaint: { kind: 'solid', color: '#2f7df6' },
         borderColor: 'transparent',
@@ -72,15 +72,13 @@ describe('composeEntityVisualStyle', () => {
         opacity: 1,
         shadow: null,
       },
-      Renderer: {
-        type: 'shape',
-        props: { kind: 'circle', stroke: '#d8e2f1', strokeWidth: 2 },
-      },
+      Renderer: { type: 'curve', props: {} },
+      Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 60 } },
     }))
-    expect(circle.backgroundColor).toBe('#2f7df6')
-    expect(circle.borderRadius).toBe('50%')
+    // 颜色仍在文档里，由物料自己的 SVG `fill` 画出来。
+    expect(curve.backgroundColor).toBe('transparent')
 
-    const line = composeEntityAppearanceStyle(entity({
+    const rectangle = composeEntityAppearanceStyle(entity({
       Appearance: {
         backgroundPaint: { kind: 'solid', color: '#2f7df6' },
         borderColor: 'transparent',
@@ -89,12 +87,9 @@ describe('composeEntityVisualStyle', () => {
         opacity: 1,
         shadow: null,
       },
-      Renderer: {
-        type: 'shape',
-        props: { kind: 'line', stroke: '#d8e2f1', strokeWidth: 2 },
-      },
+      Renderer: { type: 'rectangle', props: {} },
     }))
-    expect(line.borderRadius).toBe(0)
+    expect(rectangle.backgroundColor).toBe('#2f7df6')
   })
 
   it('OpenSpec: 共享渲染语义 / Container 的 overflow 由 Clip 控制', () => {

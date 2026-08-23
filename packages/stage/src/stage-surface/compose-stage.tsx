@@ -49,7 +49,6 @@ import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
 import {
   bootstrapSelectionBounds,
-  lineSegmentForEntity,
   useStagePreviewDocuments,
 } from './preview-document'
 import {
@@ -349,7 +348,6 @@ function ComposeStageReady({
     layoutPreviewSnapshot,
     layoutRuntime,
     layoutSnapshot,
-    segmentPreview: interaction.segmentPreview,
     transforms: interaction.previewTransforms,
   })
   const normalizedSelection = useMemo(
@@ -374,12 +372,6 @@ function ComposeStageReady({
 
   const hiddenEntityIds = useStageHiddenEntityIds(document, normalizedSelection)
 
-  const lineSelection = useMemo(
-    () => normalizedSelection.length === 1
-      ? lineSegmentForEntity(previewDocument, previewLayoutSnapshot, normalizedSelection[0]!)
-      : null,
-    [normalizedSelection, previewDocument, previewLayoutSnapshot],
-  )
   // 落点几何用未经 preview 变形的原始文档：拖动中的目标已被移开，兄弟与容器的真实位置
   // 才是插入线该贴的地方。
   const dropTarget = interaction.dropTarget
@@ -839,7 +831,6 @@ function ComposeStageReady({
           editableSelection={editableSelection}
           handlePoints={handlePoints}
           label={messages.editingOverlay}
-          lineSelection={lineSelection}
           marqueeHitTest={interaction.marqueeHitTest}
           marqueeScreen={marqueeScreen}
           paintHandles={interaction.paintHandles}

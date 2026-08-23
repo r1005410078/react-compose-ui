@@ -13,6 +13,7 @@ import {
   getComposeClip,
   getComposeFrame,
   getComposeComposition,
+  getComposeCurve,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLayoutItem,
@@ -121,10 +122,9 @@ describe('Basic ECS materials', () => {
       'image',
       'svg',
       'component-instance',
-      'line',
+      'curve',
       'arrow',
       'circle',
-      'curve',
     ])
     const container = seedEntity(materials, 'container')
     expect(getComposeHierarchy(container)?.childIds).toEqual([])
@@ -138,20 +138,21 @@ describe('Basic ECS materials', () => {
     expect(getComposeComposition(container).baseComponentKeys).toContain('Hierarchy')
     expect(getComposeComposition(container).baseComponentKeys).not.toContain('Layout')
 
-    for (const id of ['rectangle', 'text', 'image', 'svg', 'line', 'arrow', 'circle', 'curve']) {
+    for (const id of ['rectangle', 'text', 'image', 'svg', 'arrow', 'circle', 'curve']) {
       const entity = seedEntity(materials, id)
+      // Arrow 与 Circle 是曲线的两个起点，不是两种物料。
       expect(getComposeRenderer(entity)?.type).toBe(
-        ['line', 'arrow', 'circle'].includes(id) ? 'shape' : id,
+        ['arrow', 'circle'].includes(id) ? 'curve' : id,
       )
       expect(getComposeLayoutItem(entity).width.value).toBeGreaterThan(0)
       expect(getComposeComposition(entity).baseComponentKeys).toContain('Renderer')
     }
   })
 
-  it('OpenSpec: Shape materials / 绘图物料使用同一 SVG renderer 保留形状语义', () => {
+  it('OpenSpec: 物料统一 / Curve、Arrow 与 Circle 共用一个 Renderer', () => {
     const materials = createComposeBasicMaterials()
-    const line = seedEntity(materials, 'line')
     const arrow = seedEntity(materials, 'arrow')
+    const circle = seedEntity(materials, 'circle')
     render(
       <ComposeRegistryEntityRenderer
         entity={arrow}
@@ -159,24 +160,20 @@ describe('Basic ECS materials', () => {
         registry={materials.registry}
       />,
     )
-    expect(screen.getByTestId('compose-material-shape-arrow')).toBeInTheDocument()
+    expect(screen.getByTestId(`compose-material-curve-${arrow.id}`)).toBeInTheDocument()
     expect(getComposeRenderer(arrow)?.props).toEqual(expect.objectContaining({
-      kind: 'arrow',
-      direction: { x: 1, y: 1 },
       markerStart: 'none',
       markerEnd: 'arrow',
       strokeDasharray: 'none',
-      strokeLinecap: 'butt',
     }))
-    expect(getComposeRenderer(line)?.props).toEqual(expect.objectContaining({
-      kind: 'line',
-      markerStart: 'none',
-      markerEnd: 'none',
-    }))
-    expect(materials.registry.getRenderer('shape')?.inspector).toBeDefined()
+    // 椭圆不是新 kind：整圆放进非正方盒，`viewBox` 就把它拉成椭圆。
+    expect(getComposeCurve(circle)).toMatchObject({ kind: 'arc', sweep: 360 })
+    expect(getComposeRenderer(circle)?.type).toBe('curve')
+    // 仓库里不再有第二个画线的 Renderer。
+    expect(materials.registry.getRenderer('shape')).toBeUndefined()
   })
 
-  it('OpenSpec: Shape materials / 描边、线型与箭头不随非等比包围盒变形', () => {
+  it('OpenSpec: 物料统一 / 箭头 marker 附在终点，描边不随非等比盒变形', () => {
     const materials = createComposeBasicMaterials()
     const arrow = seedEntity(materials, 'arrow')
     const renderer = getComposeRenderer(arrow)!
@@ -186,16 +183,11 @@ describe('Basic ECS materials', () => {
         ...arrow.components,
         Renderer: {
           ...renderer,
-          props: {
-            ...renderer.props,
-            direction: { x: -1, y: 1 },
-            strokeDasharray: '8 4',
-            strokeWidth: 6,
-          },
+          props: { ...renderer.props, strokeDasharray: '8 4', strokeWidth: 6 },
         },
       },
     }
-    const view = render(
+    render(
       <ComposeRegistryEntityRenderer
         entity={dashedArrow}
         mode="editor"
@@ -203,68 +195,62 @@ describe('Basic ECS materials', () => {
       />,
     )
 
-    const svg = screen.getByTestId('compose-material-shape-arrow')
-    const line = screen.getByTestId('compose-material-shape-stroke')
-    const hit = screen.getByTestId('compose-material-shape-hit')
-    const marker = svg.querySelector('marker')!
-    expect(svg).not.toHaveAttribute('viewBox')
-    expect(svg).not.toHaveAttribute('preserveAspectRatio')
-    expect(svg).toHaveClass('compose-material--interactive-segment')
-    expect(hit).toHaveAttribute('pointer-events', 'stroke')
-    expect(hit).toHaveAttribute('stroke', 'transparent')
-    expect(hit).toHaveAttribute('stroke-width', '12')
-    expect(line).toHaveAttribute('x1', '100%')
-    expect(line).toHaveAttribute('y1', '0%')
-    expect(line).toHaveAttribute('x2', '0%')
-    expect(line).toHaveAttribute('y2', '100%')
-    expect(line).toHaveAttribute('stroke-width', '6')
-    expect(line).toHaveAttribute('stroke-dasharray', '24 12')
-    expect(line).toHaveAttribute('stroke-linecap', 'butt')
-    expect(line.getAttribute('marker-end')).toMatch(/^url\(#compose-shape-arrow-/)
+    const stroke = screen.getByTestId('compose-material-curve-stroke')
+    const hit = screen.getByTestId('compose-material-curve-hit')
+    const marker = screen.getByTestId(`compose-material-curve-${arrow.id}`).querySelector('marker')!
+    expect(stroke.getAttribute('marker-end')).toMatch(/^url\(#compose-curve-arrow-/)
+    expect(stroke).not.toHaveAttribute('marker-start')
     expect(marker).toHaveAttribute('markerUnits', 'strokeWidth')
-    expect(marker).toHaveAttribute('viewBox', '0 0 6 6')
+    // 描边中和 viewBox 变换，marker 不中和——marker 是几何。
+    expect(stroke).toHaveAttribute('vector-effect', 'non-scaling-stroke')
+    expect(stroke).toHaveAttribute('stroke-dasharray', '24 12')
+    // 没填色时命中只覆盖描边。
+    expect(hit).toHaveAttribute('pointer-events', 'stroke')
+    expect(hit).toHaveAttribute('fill', 'none')
+  })
 
-    view.rerender(
+  it('OpenSpec: 物料统一 / 填色画在几何上而不是宿主盒上', () => {
+    const materials = createComposeBasicMaterials()
+    const circle = seedEntity(materials, 'circle')
+    const filled: ComposeEntity = {
+      ...circle,
+      components: {
+        ...circle.components,
+        Appearance: {
+          ...(circle.components.Appearance as Record<string, unknown>),
+          backgroundPaint: { kind: 'solid', color: '#ff3366' },
+        },
+      },
+    }
+    render(
       <ComposeRegistryEntityRenderer
-        entity={{
-          ...dashedArrow,
-          components: {
-            ...dashedArrow.components,
-            Renderer: {
-              ...renderer,
-              props: { ...renderer.props, strokeDasharray: '1 4' },
-            },
-          },
-        }}
-        mode="preview"
+        entity={filled}
+        mode="editor"
         registry={materials.registry}
       />,
     )
-    const previewSvg = screen.getByTestId('compose-material-shape-arrow')
-    const dottedLine = screen.getByTestId('compose-material-shape-stroke')
-    expect(previewSvg).not.toHaveClass('compose-material--interactive-segment')
-    expect(screen.queryByTestId('compose-material-shape-hit')).not.toBeInTheDocument()
-    expect(dottedLine).toHaveAttribute('stroke-dasharray', '0 4')
-    expect(dottedLine).toHaveAttribute('stroke-linecap', 'round')
+
+    expect(screen.getByTestId('compose-material-curve-stroke')).toHaveAttribute('fill', '#ff3366')
+    // 填过色的面积也要接住点击：那是用户看见的墨。
+    expect(screen.getByTestId('compose-material-curve-hit')).toHaveAttribute('pointer-events', 'all')
   })
 
-  it('OpenSpec: Shape materials / Inspector 暴露常用线条与首尾箭头属性', () => {
-    const materials = createComposeBasicMaterials({ idFactory: () => 'shape-command' })
-    const line = seedEntity(materials, 'line')
+  it('OpenSpec: 物料统一 / Inspector 暴露描边与首尾箭头', () => {
+    const materials = createComposeBasicMaterials({ idFactory: () => 'curve-command' })
+    const curve = seedEntity(materials, 'curve')
     const dispatch = vi.fn()
     render(
       <ComposeRegistryRendererInspector
         dispatch={dispatch}
-        entity={line}
-        propCategory={{ id: 'shape', label: '线条' }}
+        entity={curve}
+        propCategory={{ id: 'stroke', label: '描边' }}
         readOnly={false}
         registry={materials.registry}
       />,
     )
 
     expect(screen.getByRole('button', { name: '选择线条颜色' })).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton', { name: '线条粗细' })).toHaveValue(2)
-    expect(screen.getByRole('combobox', { name: '端点形状' })).toHaveValue('butt')
+    expect(screen.getByRole('spinbutton', { name: '线条粗细' })).toHaveValue(1)
     expect(screen.getByRole('combobox', { name: '线条样式' })).toHaveValue('none')
     expect(screen.getByRole('combobox', { name: '起点箭头' })).toHaveValue('none')
     expect(screen.getByRole('combobox', { name: '终点箭头' })).toHaveValue('none')

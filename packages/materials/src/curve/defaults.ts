@@ -47,4 +47,30 @@ export const DEFAULT_CURVE_PROPS: JsonObject = Object.freeze({
   strokeWidth: 1,
   strokeLinecap: 'round',
   strokeDasharray: 'none',
+  markerStart: 'none',
+  markerEnd: 'none',
+})
+
+/**
+ * 圆的默认几何：扫掠 360 的弧。
+ *
+ * @remarks
+ * 不另立圆或椭圆类型——**椭圆是非正方盒里的整圆**：`viewBox` 等于紧包围盒（一个正方形），
+ * 盒是 240×140 时 `preserveAspectRatio="none"` 就把它拉成椭圆，命中侧的投影也已经跟着走。
+ * 新类型要能带来别的类型带不来的性质，而椭圆带不来。
+ *
+ * @internal
+ */
+export const DEFAULT_CIRCLE_GEOMETRY: ComposeCurve = Object.freeze({
+  kind: 'arc',
+  center: { x: 50, y: 50 },
+  radius: 50,
+  startAngle: 0,
+  sweep: 360,
+} satisfies ComposeCurve)
+
+/** Arrow 的默认描边：终点箭头。 @internal */
+export const DEFAULT_ARROW_PROPS: JsonObject = Object.freeze({
+  ...DEFAULT_CURVE_PROPS,
+  markerEnd: 'arrow',
 })

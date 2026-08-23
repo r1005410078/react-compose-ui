@@ -3,12 +3,13 @@ import {
   adoptComposeCrossAxisSizing,
   getComposeLayoutItem,
   getComposeSpatialTransform,
+  type ComposeCurve,
   type ComposeEntity,
   type ComposeFlexLayout,
+  type JsonObject,
   type JsonValue,
 } from '@compose-ui/core'
 import type { StagePoint, StageRect } from '@compose-ui/stage-engine'
-import type { ShapeDirection } from '../preview-document'
 
 /**
  * 用 Preset 的默认尺寸将 Entity 放在指定世界中心。
@@ -69,12 +70,22 @@ export function expandClickDrawingBounds(seed: ComposeEntitySeed, bounds: StageR
   }
 }
 
-/** 将绘制 bounds 映射为独立 Entity；Text click 会保留 Preset 的 Hug 轴。 @internal */
+/**
+ * 将绘制 bounds 映射为独立 Entity；Text click 会保留 Preset 的 Hug 轴。
+ *
+ * @remarks
+ * `curve` 是**盒局部坐标**的真实几何（原点在 `bounds` 左上角）。方向因此由两个坐标的差
+ * 表达，不再需要 Shape 那套 `direction ∈ {-1,0,1}²` 编码——多一层编码就多一处要与渲染、
+ * 命中、捕捉分别对齐的表示。退化轴由曲线自己的最小范围常量钳住，因此也不再需要那个
+ * 「零轴按 0.5px 偏移」的补丁。
+ *
+ * @internal
+ */
 export function entityFromDrawingSeed(
   seed: ComposeEntitySeed,
   id: string,
   bounds: StageRect,
-  direction?: ShapeDirection,
+  curve?: ComposeCurve,
   options?: {
     readonly preserveHugSizing?: boolean
     /**
@@ -99,10 +110,7 @@ export function entityFromDrawingSeed(
       LayoutItem: {
         ...item,
         positioning: 'absolute',
-        offset: {
-          x: direction?.x === 0 ? bounds.x - 0.5 : bounds.x,
-          y: direction?.y === 0 ? bounds.y - 0.5 : bounds.y,
-        },
+        offset: { x: bounds.x, y: bounds.y },
         width: {
           ...item.width,
           mode: options?.preserveHugSizing ? item.width.mode : 'fixed',
@@ -114,14 +122,14 @@ export function entityFromDrawingSeed(
           value: options?.preserveHugSizing ? item.height.value : Math.max(1, bounds.height),
         },
       },
-      ...(renderer && (direction || options?.emptyTextPropName)
+      ...(curve ? { Curve: curve as unknown as JsonObject } : {}),
+      ...(renderer && options?.emptyTextPropName
         ? {
             Renderer: {
               ...renderer,
               props: {
                 ...(renderer.props as Record<string, JsonValue>),
-                ...(direction ? { direction: direction as unknown as JsonValue } : {}),
-                ...(options?.emptyTextPropName ? { [options.emptyTextPropName]: '' } : {}),
+                [options.emptyTextPropName]: '',
               },
             },
           }

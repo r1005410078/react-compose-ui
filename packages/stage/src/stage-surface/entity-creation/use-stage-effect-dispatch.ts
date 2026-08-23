@@ -8,12 +8,13 @@ import type {
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  getComposeCurve,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLock,
-  getComposeRenderer,
   getComposeVisibility,
   resolveComposeAppearance,
+  type ComposeCurve,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
   type EditorCommand,
@@ -30,7 +31,6 @@ import {
   type StagePoint,
   type StageRect,
   type StageViewport,
-  toComposeTransform,
 } from '@compose-ui/stage-engine'
 import type {
   ComposeStageDispatch,
@@ -47,11 +47,6 @@ import {
 } from './drawing-entity'
 import { boundsInParentSpace, resolveRootLanding } from './root-landing'
 import { assetSeedCenters, mapWithConcurrency, presetForDrawingTool } from './stage-asset-drop'
-import {
-  directionAxis,
-  lineSegmentForEntity,
-  lineSegmentTransform,
-} from '../preview-document'
 import { resolveClientPoint } from '../pointer-session'
 
 /** 并行解析拖入资源的并发上限；超过之后 Provider 侧的排队收益递减。 */
@@ -294,18 +289,31 @@ export function useStageEffectDispatch(
       ? expandClickDrawingBounds(seedResult.seed, drawnBounds)
       : drawnBounds
     const entityId = current.idFactory()
+    // 落笔方向由两个真实坐标的差表达：盒是它们的归一化矩形，因此只要两个符号就能把几何摆回
+    // 正确的对角。Shape 那套 `direction ∈ {-1,0,1}²` 编码随物料一起删除。
+    const startLocal = inverseParent ? applyMatrix(inverseParent, effect.start) : effect.start
+    const endLocal = inverseParent ? applyMatrix(inverseParent, effect.end) : effect.end
+    const flipX = endLocal.x < startLocal.x
+    const flipY = endLocal.y < startLocal.y
+    // 判据是 seed 自己的几何而不是工具名：Stage 不认识哪个工具画的是直线。非直线（圆的整圆
+    // 弧）保留 Preset 的几何，`viewBox` 会按盒把它拉成用户拖出来的那个形状。
+    const seedCurve = getComposeCurve({ id: entityId, ...seedResult.seed })
+    const drawnCurve = (bounds: StageRect): ComposeCurve | undefined => (
+      seedCurve?.kind === 'line'
+        ? {
+            kind: 'line',
+            start: { x: flipX ? bounds.width : 0, y: flipY ? bounds.height : 0 },
+            end: { x: flipX ? 0 : bounds.width, y: flipY ? 0 : bounds.height },
+          }
+        : undefined
+    )
     const buildEntity = (bounds: StageRect) => {
       const textClick = effect.tool === 'draw-text' && bounds.width < 1 && bounds.height < 1
       const drawnEntity = entityFromDrawingSeed(
         seedResult.seed,
         entityId,
         bounds,
-        effect.tool === 'draw-arrow'
-          ? {
-              x: directionAxis(effect.end.x - effect.start.x),
-              y: directionAxis(effect.end.y - effect.start.y),
-            }
-          : undefined,
+        drawnCurve(bounds),
         textClick
           ? {
               preserveHugSizing: true,
@@ -361,74 +369,6 @@ export function useStageEffectDispatch(
     }
   }, [])
 
-  const commitSegment = useCallback((
-    effect: Extract<StageInteractionEffect, { readonly type: 'segment.commit' }>,
-  ) => {
-    const current = latestRef.current
-    const entity = current.document.entities[effect.entityId]
-    const renderer = entity ? getComposeRenderer(entity) : null
-    const currentSegment = lineSegmentForEntity(
-      current.document,
-      current.layoutSnapshot,
-      effect.entityId,
-    )
-    const next = lineSegmentTransform(
-      current.document,
-      current.layoutSnapshot,
-      effect,
-    )
-    if (
-      !entity
-      || !renderer
-      || renderer.type !== 'shape'
-      || !currentSegment
-      || !next
-      || getComposeLock(entity).locked
-      || (
-        currentSegment.start.x === effect.start.x
-        && currentSegment.start.y === effect.start.y
-        && currentSegment.end.x === effect.end.x
-        && currentSegment.end.y === effect.end.y
-      )
-    ) return
-    current.dispatch({
-      id: current.idFactory(),
-      type: 'transaction.batch',
-      payload: {
-        commands: [
-          {
-            id: current.idFactory(),
-            type: BUILTIN_COMMAND_TYPES.setTransform,
-            payload: {
-              operation: 'resize',
-              updates: [{
-                entityId: entity.id,
-                transform: toComposeTransform(next.transform),
-              }],
-            },
-          },
-          {
-            id: current.idFactory(),
-            type: BUILTIN_COMMAND_TYPES.setRendererProps,
-            payload: {
-              entityId: entity.id,
-              props: {
-                ...renderer.props,
-                direction: next.direction,
-              },
-            },
-          },
-        ] as unknown as JsonValue,
-      },
-      meta: {
-        label: `Resize ${entity.name} endpoints`,
-        mergeKey: `stage:segment:${entity.id}`,
-        source: 'stage',
-        targetIds: [entity.id],
-      },
-    })
-  }, [])
-
   useEffect(() => controller.connectSurface({
     resolveClientPoint(point) {
       const surface = surfaceRef.current
@@ -474,10 +414,6 @@ export function useStageEffectDispatch(
         }
         if (effect.type === 'command.dispatch') {
           current.dispatch(effect.command)
-          return
-        }
-        if (effect.type === 'segment.commit') {
-          commitSegment(effect)
           return
         }
         if (effect.type === 'drawing.commit') {
@@ -557,7 +493,6 @@ export function useStageEffectDispatch(
     },
   }), [
     capturePointer,
-    commitSegment,
     controller,
     createDrawing,
     rootRef,

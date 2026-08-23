@@ -38,12 +38,6 @@ export interface StageOverlayProps {
    * 几何编辑要经由实例覆盖，尚未接线。
    */
   readonly instanceSelectionBounds?: StageRect | null
-  /** 单选两点图形的精确世界端点；存在时替代通用矩形选区。 */
-  readonly lineSelection?: {
-    readonly entityId: string
-    readonly start: StagePoint
-    readonly end: StagePoint
-  } | null
   readonly handlePoints: Readonly<
     Record<ResizeHandle, readonly [number, number]>
   > | null

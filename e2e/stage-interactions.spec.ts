@@ -249,12 +249,16 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
   expect(outputBox).not.toBeNull()
 
   const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
-  await shapeButtons.nth(1).click()
-  // 形状菜单里的「线条」已删除：`LINE` 命令产出的 `Curve` 才是步骤 8 要留下的那一种。
-  // 箭头同为线状物料，走同一条端点预览与命中路径。
-  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '箭头' }).click()
+  const pickArrow = async () => {
+    await shapeButtons.nth(1).click()
+    // 形状菜单里的「线条」已删除：`LINE` 命令产出的 `Curve` 才是留下的那一种。箭头现在也是
+    // 曲线——它只是默认带终点 marker 的那个起点。
+    await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '箭头' }).click()
+  }
+  await pickArrow()
   await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-arrow')
 
+  // 竖直拖：退化轴由曲线自己的最小范围钳住，不再需要 Shape 那个 0.5px 偏移补丁。
   const start = { x: outputBox!.x + 196, y: outputBox!.y + 128 }
   const target = { x: start.x, y: start.y + 144 }
   await page.mouse.move(start.x, start.y)
@@ -268,44 +272,29 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
 
   await expect(editor.getByRole('button', { name: '选择', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-arrow')
-  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
-  await expect(stage.getByTestId('stage-line-selection-start')).toBeVisible()
-  await expect(stage.getByTestId('stage-line-selection-end')).toBeVisible()
-  await expect(stage.getByTestId('stage-line-selection-dimensions')).toContainText('× 0')
-  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
-  await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(0)
 
-  const startEndpoint = stage.getByTestId('stage-line-selection-start')
-  const startHandle = await startEndpoint.boundingBox()
-  expect(startHandle).not.toBeNull()
-  await expect.poll(() => startEndpoint.evaluate((element) => getComputedStyle(element).cursor)).toBe('ns-resize')
+  // 画出来的是曲线，箭头挂在几何终点上。
+  const strokes = stage.getByTestId('compose-material-curve-stroke')
+  await expect(strokes).toHaveCount(1)
+  expect(await strokes.first().getAttribute('marker-end')).toMatch(/^url\(#/)
+  // 向下拖，终点在下：方向由两个真实坐标表达，不再有三态编码。
+  expect(Number(await strokes.first().getAttribute('y2')))
+    .toBeGreaterThan(Number(await strokes.first().getAttribute('y1')))
 
-  // 命中圆比可见控制柄大；从圆的边缘抓取时，拖动应保持按下偏移而不是让端点跳到指针。
-  await editor.getByRole('button', { name: '吸附', exact: true }).click()
-  const edgeGrab = {
-    x: startHandle!.x + startHandle!.width - 2,
-    y: startHandle!.y + startHandle!.height / 2,
-  }
-  await page.mouse.move(edgeGrab.x, edgeGrab.y)
+  // 选区回到通用那一套：曲线的盒手柄自「曲线按 viewBox 跟随盒伸缩」起就是端点编辑本身。
+  await expect(stage.getByTestId('stage-selection-bounds')).toBeVisible()
+  await expect(stage.getByTestId('stage-resize-se')).toBeVisible()
+  await expect(stage.getByTestId('stage-line-selection')).toHaveCount(0)
+
+  // 反向拖出第二条：终点在上，几何跟着翻过来。
+  await pickArrow()
+  await page.mouse.move(target.x + 120, target.y)
   await page.mouse.down()
-  await page.mouse.move(edgeGrab.x + 24, edgeGrab.y + 32, { steps: 3 })
+  await page.mouse.move(start.x + 120, start.y, { steps: 4 })
   await page.mouse.up()
-  const movedStartHandle = await startEndpoint.boundingBox()
-  expect(movedStartHandle).not.toBeNull()
-  expect(movedStartHandle!.x).toBeCloseTo(startHandle!.x + 24, 0)
-  expect(movedStartHandle!.y).toBeCloseTo(startHandle!.y + 32, 0)
-
-  await page.mouse.move(
-    movedStartHandle!.x + movedStartHandle!.width / 2,
-    movedStartHandle!.y + movedStartHandle!.height / 2,
-  )
-  await page.mouse.down()
-  // 拖过另一端：固定终点不动，底层方向会翻转，但可见选择态始终保持两个端点。
-  await page.mouse.move(target.x + 72, target.y + 32, { steps: 4 })
-  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
-  await page.mouse.up()
-  await expect(stage.getByTestId('stage-line-selection-start')).toBeVisible()
-  await expect(stage.getByTestId('stage-line-selection-end')).toBeVisible()
+  await expect(strokes).toHaveCount(2)
+  expect(Number(await strokes.nth(1).getAttribute('y2')))
+    .toBeLessThan(Number(await strokes.nth(1).getAttribute('y1')))
 })
 
 
@@ -330,15 +319,17 @@ test('OpenSpec: stage / 线段命中 / 透明外接矩形不选中，线身仍�
   await page.mouse.down()
   await page.mouse.move(end.x, end.y, { steps: 4 })
   await page.mouse.up()
-  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+  // 曲线走通用矩形选区：两点直线的端点就在盒的对角，拖盒角手柄与拖端点是同一件事。
+  const selection = stage.getByTestId('stage-selection-bounds')
+  await expect(selection).toBeVisible()
 
   // 位于轴对齐外接矩形内部，但离实际线段很远；点击应落到画布并清除选择。
   await page.mouse.click(end.x - 24, start.y - 24)
-  await expect(stage.getByTestId('stage-line-selection')).toHaveCount(0)
+  await expect(selection).toHaveCount(0)
 
   // 加宽的透明 stroke 仍给细线保留易用的点击命中带。
   await page.mouse.click((start.x + end.x) / 2, (start.y + end.y) / 2)
-  await expect(stage.getByTestId('stage-line-selection')).toBeVisible()
+  await expect(selection).toBeVisible()
 })
 
 

@@ -206,3 +206,91 @@ test('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 拖盒手�
   await page.mouse.click(rect1.x + rect0.width / 2, rect1.y + rect1.height / 2)
   await expect(selectedRows).toHaveCount(0)
 })
+
+/**
+ * 形状搬进曲线。
+ *
+ * @remarks
+ * 合并之前这条必然红：工具栏的箭头与圆产出的是 `shape` 物料，画出来的 testid 是
+ * `compose-material-shape-*`，填色画在宿主盒上（圆靠 `borderRadius: 50%` 裁成椭圆）。
+ *
+ * 判别点有三处，都指向同一件事——**盒不是形状**：
+ *
+ * 1. 画出来的必须是曲线物料，且箭头 marker 附在几何终点上；
+ * 2. 填色画在 SVG 的几何上，宿主盒不画背景；
+ * 3. 填过色的内部可点，没填色的同一位置不可点——空心图形的内部仍是空的。
+ */
+test('OpenSpec: basic-materials / 物料统一 / 箭头与圆是曲线，填充跟着形状而不是盒', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const frame = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frame).toBeVisible()
+  const frameBox = (await frame.boundingBox())!
+  const at = (dx: number, dy: number) => ({ x: frameBox.x + dx, y: frameBox.y + dy })
+
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  const selectedRows = sceneTree.getByRole('row').and(page.locator('[aria-selected="true"]'))
+  const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
+  const strokes = stage.getByTestId('compose-material-curve-stroke')
+
+  const pickShape = async (name: string) => {
+    await shapeButtons.nth(1).click()
+    await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name }).click()
+  }
+  const drag = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(to.x, to.y, { steps: 6 })
+    await page.mouse.up()
+  }
+
+  // 反向拖：从右下拖向左上。方向由两个真实坐标表达，不再有三态编码。
+  await pickShape('箭头')
+  await drag(at(420, 300), at(220, 160))
+  await expect(strokes).toHaveCount(1)
+  expect(await strokes.first().getAttribute('marker-end')).toMatch(/^url\(#/)
+  await expect(stage.getByTestId('compose-material-shape-arrow')).toHaveCount(0)
+
+  // 圆：拖一个非正方盒，画出来就是椭圆——不需要第二个半径字段。
+  await pickShape('圆形')
+  await drag(at(560, 160), at(800, 320))
+  await expect(strokes).toHaveCount(2)
+  const circle = strokes.nth(1)
+  expect(await circle.evaluate((node) => node.tagName.toLowerCase())).toBe('circle')
+
+  // 填色走通用的「背景填充」Paint 编辑器，不是曲线自己的 prop。
+  await editor.getByRole('button', { name: '背景填充', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: '背景填充', exact: true })
+  await picker.getByRole('button', { name: '#ef4444', exact: true }).click()
+  await page.keyboard.press('Escape')
+
+  // 判别性断言：颜色落在几何上，宿主盒一片透明。
+  await expect
+    .poll(() => circle.evaluate((node) => getComputedStyle(node).fill))
+    .toBe('rgb(239, 68, 68)')
+  const hostBackground = await circle.evaluate((node) => {
+    const host = node.closest('.compose-stage__node')!
+    return getComputedStyle(host).backgroundColor
+  })
+  expect(hostBackground).toBe('rgba(0, 0, 0, 0)')
+
+  // 填过色的内部是用户看见的墨，点得中。
+  const filled = (await circle.boundingBox())!
+  await page.mouse.click(at(60, 60).x, at(60, 60).y)
+  await expect(selectedRows).toHaveCount(0)
+  await page.mouse.click(filled.x + filled.width / 2, filled.y + filled.height / 2)
+  await expect(selectedRows).toHaveCount(1)
+
+  // 而没填色的同一位置点不中——空心图形的包围盒里仍然绝大部分是空的。
+  await pickShape('圆形')
+  await drag(at(560, 420), at(800, 580))
+  await expect(strokes).toHaveCount(3)
+  const hollow = (await strokes.nth(2).boundingBox())!
+  await page.mouse.click(at(60, 60).x, at(60, 60).y)
+  await expect(selectedRows).toHaveCount(0)
+  await page.mouse.click(hollow.x + hollow.width / 2, hollow.y + hollow.height / 2)
+  await expect(selectedRows).toHaveCount(0)
+})

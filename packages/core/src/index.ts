@@ -169,6 +169,8 @@ export {
   createComposeLineCurve,
   distanceToComposeCurve,
   getComposeCurve,
+  getComposeCurveFill,
+  isPointInsideComposeCurve,
   isValidComposeCurve,
   normalizeComposeCurveGeometry,
   projectComposeCurveToBox,

@@ -4,10 +4,5 @@ export type {
   StagePreviewDocuments,
   StagePreviewDocumentsParams,
 } from './use-stage-preview-documents'
-export {
-  bootstrapSelectionBounds,
-  directionAxis,
-  lineSegmentForEntity,
-  lineSegmentTransform,
-} from './stage-preview-document'
-export type { ShapeDirection, StageTransformMap } from './stage-preview-document'
+export { bootstrapSelectionBounds } from './stage-preview-document'
+export type { StageTransformMap } from './stage-preview-document'

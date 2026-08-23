@@ -2,6 +2,7 @@ import {
   composeArcEndpoints,
   composeCurveViewBox,
   getComposeCurve,
+  getComposeCurveFill,
   isComposeFullCircle,
   type ComposeArcCurve,
   type ComposeCurve,
@@ -11,12 +12,17 @@ import type { ComposeRendererProps } from '@compose-ui/component-registry'
 import { DEFAULT_CURVE_GEOMETRY } from './defaults'
 
 type StrokeLinecap = 'butt' | 'round' | 'square'
+type Marker = 'none' | 'arrow'
 
 /** 命中 stroke 的最小屏幕宽度；细线只有 1–2px，按视觉宽度取命中会让用户反复点空。 */
 const MIN_HIT_WIDTH = 12
 
 function linecap(value: unknown): StrokeLinecap {
   return value === 'round' || value === 'square' ? value : 'butt'
+}
+
+function marker(value: unknown, fallback: Marker): Marker {
+  return value === 'arrow' || value === 'none' ? value : fallback
 }
 
 /**
@@ -127,10 +133,20 @@ function geometryElement(
  * 命中宽度跟着线宽一起除：`MIN_HIT_WIDTH` 表达的是鼠标容差，那本来就是屏幕量，留在世界单位
  * 会让它在缩小时不够点、放大时抢走旁边的东西。
  *
+ * **填充来自 `Appearance.backgroundPaint`，不是 Renderer prop**：它要参与命中，而命中路径读的
+ * 字段必须是文档级契约。读取只走 `getComposeCurveFill`，`stage-engine` 的索引路径读的是同一个
+ * 函数——两处各判一次「算不算填了色」必然漂移。宿主盒因此不再为曲线画背景（盒是矩形而形状
+ * 不是），这一条落在 `composeEntityAppearanceStyle` 里。
+ *
+ * **marker 参与 `viewBox` 变换**，因此非等比盒里的箭头跟着扁。这不是缺陷：整个图形被拉扁了，
+ * 箭头没跟着扁才是错的。SVG 也没有 `non-scaling-marker` 这种开关，规则保持「几何参与变换、
+ * 描边不参与」一句话，没有例外。
+ *
  * @internal
  */
 export function CurveRenderer({ entity, props }: ComposeRendererProps) {
   const curve = getComposeCurve(entity) ?? DEFAULT_CURVE_GEOMETRY
+  const fill = getComposeCurveFill(entity)
   const stroke = typeof props.stroke === 'string' ? props.stroke : '#d8e2f1'
   // 回退值与 `DEFAULT_CURVE_PROPS.strokeWidth` 必须一致：发丝线，与 CAD 画布同值。
   const strokeWidth = typeof props.strokeWidth === 'number' && props.strokeWidth >= 0
@@ -138,6 +154,11 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
     : 1
   const cap = linecap(props.strokeLinecap)
   const pattern = dasharray(props.strokeDasharray, strokeWidth)
+  const markerStart = marker(props.markerStart, 'none')
+  const markerEnd = marker(props.markerEnd, 'none')
+  // marker 的 id 必须逐 Entity 唯一：同一页面上两条颜色不同的箭头共用一个 id 时，后挂载的
+  // 那份定义会把先挂载的箭头一起改色。
+  const markerId = `compose-curve-arrow-${entity.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
 
   // 几何住在自己的取景框里，盒按比例把它拉开。`preserveAspectRatio="none"` 是重点：
   // 默认值会保持长宽比并留白，那样盒变了形状却不跟着变，等于这条能力没有生效。
@@ -153,9 +174,28 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
       role="img"
       viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
     >
+      {markerStart === 'arrow' || markerEnd === 'arrow' ? (
+        <defs>
+          <marker
+            id={markerId}
+            markerHeight="6"
+            markerUnits="strokeWidth"
+            markerWidth="6"
+            orient="auto-start-reverse"
+            refX="5"
+            refY="3"
+            viewBox="0 0 6 6"
+          >
+            <path d="M0,0 L6,3 L0,6 Z" fill={stroke} />
+          </marker>
+        </defs>
+      ) : null}
       {geometryElement(curve, {
         'data-testid': 'compose-material-curve-hit',
-        pointerEvents: 'stroke',
+        // 填充过的面积是用户看见的墨，因此它也要接住点击；空心时只有描边可点——「一条对角线
+        // 的包围盒里绝大部分是空的」这条理由对空心图形同样成立。
+        pointerEvents: fill ? 'all' : 'stroke',
+        fill: fill ? 'transparent' : 'none',
         vectorEffect: 'non-scaling-stroke',
         stroke: 'transparent',
         strokeLinecap: 'round',
@@ -164,6 +204,9 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
       })}
       {geometryElement(curve, {
         'data-testid': 'compose-material-curve-stroke',
+        fill: fill ?? 'none',
+        markerEnd: markerEnd === 'arrow' ? `url(#${markerId})` : undefined,
+        markerStart: markerStart === 'arrow' ? `url(#${markerId})` : undefined,
         stroke,
         vectorEffect: 'non-scaling-stroke',
         strokeDasharray: pattern,

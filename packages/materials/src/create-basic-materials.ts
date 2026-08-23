@@ -39,13 +39,12 @@ import {
   DEFAULT_COMPOSE_SVG_RENDERER,
 } from './svg'
 import {
-  createShapeMaterial,
+  createCurveMaterial,
   DEFAULT_COMPOSE_ARROW_PRESET,
   DEFAULT_COMPOSE_CIRCLE_PRESET,
-  DEFAULT_COMPOSE_LINE_PRESET,
-  DEFAULT_COMPOSE_SHAPE_RENDERER,
-} from './shape'
-import { createCurveMaterial } from './curve'
+  DEFAULT_COMPOSE_CURVE_PRESET,
+  DEFAULT_COMPOSE_CURVE_RENDERER,
+} from './curve'
 import type { ComposeBasicMaterials, ComposeCreateBasicMaterialsOptions } from './types'
 
 /** `@compose-ui/materials` 的稳定包标识。 @public */
@@ -57,7 +56,7 @@ export const DEFAULT_COMPOSE_BASIC_RENDERERS = Object.freeze([
   DEFAULT_COMPOSE_TEXT_RENDERER,
   DEFAULT_COMPOSE_IMAGE_RENDERER,
   DEFAULT_COMPOSE_SVG_RENDERER,
-  DEFAULT_COMPOSE_SHAPE_RENDERER,
+  DEFAULT_COMPOSE_CURVE_RENDERER,
   DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER,
 ])
 
@@ -72,7 +71,7 @@ export const DEFAULT_COMPOSE_BASIC_PRESETS = Object.freeze([
   DEFAULT_COMPOSE_IMAGE_PRESET,
   DEFAULT_COMPOSE_SVG_PRESET,
   DEFAULT_COMPOSE_COMPONENT_INSTANCE_PRESET,
-  DEFAULT_COMPOSE_LINE_PRESET,
+  DEFAULT_COMPOSE_CURVE_PRESET,
   DEFAULT_COMPOSE_ARROW_PRESET,
   DEFAULT_COMPOSE_CIRCLE_PRESET,
 ])
@@ -91,7 +90,6 @@ export function createComposeBasicMaterials(
   const text = createTextMaterial(options.text, idFactory)
   const image = createImageMaterial(options.image, idFactory)
   const svg = createSvgMaterial(options.svg, idFactory)
-  const shape = createShapeMaterial(options.shape, idFactory)
   const curve = createCurveMaterial(options.curve, idFactory)
   const componentInstance = createComponentInstanceMaterial(idFactory)
   const rendererDefinitions = Object.freeze([
@@ -99,7 +97,6 @@ export function createComposeBasicMaterials(
     text.renderer,
     image.renderer,
     svg.renderer,
-    shape.renderer,
     curve.renderer,
     componentInstance.renderer,
     ...(options.extensions?.renderers ?? []),
@@ -118,8 +115,7 @@ export function createComposeBasicMaterials(
     image.preset,
     svg.preset,
     componentInstance.preset,
-    ...shape.presets,
-    curve.preset,
+    ...curve.presets,
     ...(options.extensions?.presets ?? []),
   ])
   const capabilities = Object.freeze([

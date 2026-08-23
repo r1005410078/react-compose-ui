@@ -90,10 +90,6 @@ export {
   STAGE_ROTATE_PLUGIN_ID,
 } from './rotate-plugin'
 export {
-  createStageSegmentResizePlugin,
-  STAGE_SEGMENT_RESIZE_PLUGIN_ID,
-} from './segment-resize-plugin'
-export {
   createStagePanPlugin,
   STAGE_PAN_PLUGIN_ID,
 } from './pan-plugin'

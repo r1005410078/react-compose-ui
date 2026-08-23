@@ -48,7 +48,6 @@ export const STAGE_GESTURE_PRIORITY: readonly StageGesturePriorityEntry[] = Obje
   { id: 'paint-sample', priority: 1500, sourceLine: 1875, condition: 'context.paintSampling 存在' },
   { id: 'path', priority: 1400, sourceLine: 1896, condition: "hit.kind === 'path-handle'" },
   { id: 'paint', priority: 1300, sourceLine: 1940, condition: "hit.kind === 'paint-handle'" },
-  { id: 'segment-resize', priority: 1200, sourceLine: 1966, condition: "hit.kind === 'segment-endpoint'" },
   { id: 'draw', priority: 1000, sourceLine: 2038, condition: 'isDrawingTool(tool) 且命中 surface 或 entity' },
   { id: 'marquee-converge', priority: 800, sourceLine: 2075, condition: "hit.kind === 'entity' 且 shouldConvergeToMarquee" },
   { id: 'entity-select-move', priority: 700, sourceLine: 2088, condition: "hit.kind === 'entity'（含双击进入文字编辑）" },

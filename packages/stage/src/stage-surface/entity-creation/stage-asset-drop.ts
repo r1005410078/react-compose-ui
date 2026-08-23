@@ -74,7 +74,6 @@ export function presetForDrawingTool(tool: Extract<StageInteractionTool, `draw-$
   const presets = {
     'draw-container': 'container',
     'draw-rectangle': 'rectangle',
-    'draw-line': 'line',
     'draw-arrow': 'arrow',
     'draw-circle': 'circle',
     'draw-text': 'text',

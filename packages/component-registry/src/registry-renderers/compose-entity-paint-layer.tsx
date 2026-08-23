@@ -1,5 +1,6 @@
 import {
   describeComposePaint,
+  getComposeCurve,
   resolveComposeAppearance,
   type ComposeEntity,
   type ComposePaint,
@@ -152,6 +153,9 @@ export function ComposePaintLayer({
  * 受控 SVG，避免不同 CSS 实现对局部端点或椭圆半径的解释漂移；角向渐变则映射为原生
  * `conic-gradient`，并始终位于 Renderer 与子 Entity 之下。
  *
+ * **带 `Curve` 的 Entity 不画这一层**：它画的是盒形的矩形，摆在形状后面只会是一块色块。
+ * 曲线的填充由物料自己的 SVG `fill` 承担，v1 因此只支持纯色。
+ *
  * @public
  */
 export function ComposeEntityPaintLayer({
@@ -161,6 +165,7 @@ export function ComposeEntityPaintLayer({
   assetResolver,
   testId,
 }: ComposeEntityPaintLayerProps) {
+  if (getComposeCurve(entity)) return null
   const resolvedPaint = paint ?? resolveComposeAppearance(entity).backgroundPaint
   // 透明 Container 只有编辑 Stage 需要补足 Pointer 命中；Preview 始终保持不可交互。
   return (

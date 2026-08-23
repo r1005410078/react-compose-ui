@@ -7,6 +7,7 @@ import {
   createComposeLineCurve,
   distanceToComposeCurve,
   getComposeCurve,
+  isPointInsideComposeCurve,
   isValidComposeCurve,
   normalizeComposeCurveGeometry,
   projectComposeCurveToBox,
@@ -463,5 +464,50 @@ describe('OpenSpec: compose-document / 盒与几何之间只有一个换算入�
     const bounds = composeCurveBounds(projected)
 
     expect(bounds).toMatchObject({ x: 0, y: 0, width: 200, height: 150 })
+  })
+})
+
+describe('isPointInsideComposeCurve', () => {
+  const square: ComposeCurve = {
+    kind: 'polyline',
+    vertices: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }],
+    closed: true,
+  }
+
+  it('闭合多段线内外分明', () => {
+    expect(isPointInsideComposeCurve(square, { x: 10, y: 10 })).toBe(true)
+    expect(isPointInsideComposeCurve(square, { x: 30, y: 10 })).toBe(false)
+  })
+
+  it('整圆的圆心在内部', () => {
+    const circle: ComposeCurve = {
+      kind: 'arc',
+      center: { x: 10, y: 10 },
+      radius: 10,
+      startAngle: 0,
+      sweep: 360,
+    }
+
+    expect(isPointInsideComposeCurve(circle, { x: 10, y: 10 })).toBe(true)
+    // 盒角落在圆外：正是「包围盒里绝大部分是空的」那一片。
+    expect(isPointInsideComposeCurve(circle, { x: 0.5, y: 0.5 })).toBe(false)
+  })
+
+  it('开放几何按隐式闭合，与 SVG 填充它时画出的区域一致', () => {
+    const open: ComposeCurve = {
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }],
+      closed: false,
+    }
+
+    // 首尾连线围出的是右上三角形。
+    expect(isPointInsideComposeCurve(open, { x: 15, y: 8 })).toBe(true)
+    expect(isPointInsideComposeCurve(open, { x: 5, y: 15 })).toBe(false)
+  })
+
+  it('直线没有可填充的面积', () => {
+    const line: ComposeCurve = { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 100 } }
+
+    expect(isPointInsideComposeCurve(line, { x: 50, y: 50 })).toBe(false)
   })
 })

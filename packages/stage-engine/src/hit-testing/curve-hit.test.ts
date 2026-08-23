@@ -150,3 +150,38 @@ describe('OpenSpec: stage-engine / 命中与捕捉应用同一个盒到几何的
     expect(index.entityAtPoint({ x: 40, y: 10 }, 4)).not.toBe('arc')
   })
 })
+
+describe('填充过的曲线内部也命中', () => {
+  /** 一个 20×20 的闭合方框，盒与紧包围盒对齐。 */
+  function squareEntity(fill: string) {
+    const base = entity('square', { x: 100, y: 100, width: 20, height: 20 })
+    return {
+      ...base,
+      components: {
+        ...base.components,
+        Appearance: { backgroundPaint: { kind: 'solid', color: fill } },
+        Renderer: { type: 'curve', props: {} },
+        Curve: {
+          kind: 'polyline',
+          vertices: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }],
+          closed: true,
+        },
+      },
+    }
+  }
+
+  it('填了色时内部远离描边的位置命中', () => {
+    const index = indexFor(document([squareEntity('#ff3366')], ['square']))
+    expect(index.entityAtPoint({ x: 110, y: 110 }, 2)).toBe('square')
+  })
+
+  it('同一几何没填色时同一位置不命中', () => {
+    const index = indexFor(document([squareEntity('transparent')], ['square']))
+    expect(index.entityAtPoint({ x: 110, y: 110 }, 2)).not.toBe('square')
+  })
+
+  it('填了色也不会把盒外的点算进来', () => {
+    const index = indexFor(document([squareEntity('#ff3366')], ['square']))
+    expect(index.entityAtPoint({ x: 130, y: 110 }, 2)).not.toBe('square')
+  })
+})

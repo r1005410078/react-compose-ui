@@ -21,7 +21,6 @@ import { createStagePanPlugin } from './pan-plugin'
 import { createStagePathPlugin } from './path-plugin'
 import { createStageResizePlugin } from './resize-plugin'
 import { createStageRotatePlugin } from './rotate-plugin'
-import { createStageSegmentResizePlugin } from './segment-resize-plugin'
 import { createStageTextEditGuardPlugin } from './text-edit-guard-plugin'
 import type { StageInteractionPlugin } from './stage-kernel-profile'
 
@@ -48,7 +47,6 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStagePaintSamplePlugin,
   createStagePathPlugin,
   createStagePaintPlugin,
-  createStageSegmentResizePlugin,
   createStageDrawPlugin,
   createStageMarqueeConvergePlugin,
   createStageEntitySelectMovePlugin,

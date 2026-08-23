@@ -26,6 +26,7 @@ import {
   pointToComposeArcDistance,
   pointToComposeSegmentDistance,
 } from './curve-geometry'
+import { resolveComposeAppearance } from './appearance'
 import { roundComposeGeometry } from './geometry-precision'
 
 /**
@@ -455,4 +456,83 @@ export function distanceToComposeCurve(
     (nearest, segment) => Math.min(nearest, pointToComposeSegmentDistance(segment, point)),
     Number.POSITIVE_INFINITY,
   )
+}
+
+/**
+ * 点是否落在曲线几何的内部。
+ *
+ * @remarks
+ * 填充过的区域是用户看见的墨，因此它参与命中——与 CAD 侧「文字按包围盒命中不是破例，因为
+ * 文字占满自己的盒子」是同一条判断。**没有填充时调用方不该问这个问题**：空心图形的内部正是
+ * 「一条对角线的包围盒里绝大部分是空的」覆盖的情形。
+ *
+ * **不检查 `closed`**：开放几何按**隐式闭合**处理，与 SVG 填充开放几何的规则相同（
+ * `<polyline fill>` 画的就是首尾相连围出的那块）。渲染与命中因此自动一致，不需要在两处
+ * 各写一遍「什么算封闭」。直线没有可填充的面积，恒为假。
+ *
+ * 输入几何 MUST 已经由 `projectComposeCurveToBox` 投影进盒坐标系——盒到几何的换算只有一个
+ * 入口，这里再做一次就会有第二份。
+ *
+ * @public
+ */
+export function isPointInsideComposeCurve(
+  curve: ComposeCurve,
+  point: { readonly x: number; readonly y: number },
+): boolean {
+  const vertices = curve.kind === 'line'
+    ? []
+    : curve.kind === 'polyline'
+      ? curve.vertices
+      : arcOutline(curve)
+  if (vertices.length < 3) return false
+  // 奇偶规则射线法：向 +x 射一条线，数它穿过多少条边。半开区间 `[y0, y1)` 让顶点恰好落在
+  // 射线上时只被计一次，否则穿过顶点的射线会数出两次而把内外判反。
+  let inside = false
+  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i, i += 1) {
+    const a = vertices[i]!
+    const b = vertices[j]!
+    if ((a.y > point.y) === (b.y > point.y)) continue
+    const crossX = a.x + ((point.y - a.y) / (b.y - a.y)) * (b.x - a.x)
+    if (point.x < crossX) inside = !inside
+  }
+  return inside
+}
+
+/** 弧的填充轮廓：拍扁成顶点序列，整圆因此自然闭合。 */
+function arcOutline(curve: ComposeArcCurve): readonly ComposePosition[] {
+  const segments = flattenComposeArc(curve)
+  const first = segments[0]
+  if (!first) return []
+  return [
+    { x: first.start.x, y: first.start.y },
+    ...segments.map(({ end }) => ({ x: end.x, y: end.y })),
+  ]
+}
+
+/**
+ * 曲线的可见填充色，没有则 `null`。
+ *
+ * @remarks
+ * 填充复用 `Appearance.backgroundPaint` 而不是新开一个 Renderer prop：填充要参与命中，而
+ * **命中路径读的字段必须是文档级契约**。复用还让外观 Inspector、数据绑定与外观动画轨道一样
+ * 都不用做。
+ *
+ * v1 只认 `solid`：非纯色 Paint 由共享 Paint 层绘制，而那一层画的是盒形的矩形，在曲线上
+ * 只会是一块摆在形状后面的色块。
+ *
+ * **全透明等于没填充**：一块看不见的墨若参与命中，就等于把刚拆掉的「整个盒接管点击」那个
+ * bug 换个地方装回来。
+ *
+ * 渲染与命中 MUST 共用本函数，两处各判一次必然漂移——症状是「看得见的填充点不中」或者反过来。
+ *
+ * @public
+ */
+export function getComposeCurveFill(entity: ComposeEntity): string | null {
+  const paint = resolveComposeAppearance(entity).backgroundPaint
+  if (paint.kind !== 'solid') return null
+  const color = paint.color.trim()
+  if (color === '' || color === 'transparent' || color === 'none') return null
+  if (/^#(?:[0-9a-f]{4}|[0-9a-f]{8})$/i.test(color) && /00$/i.test(color)) return null
+  if (/^rgba?\([^)]*,\s*0(?:\.0+)?\s*\)$/i.test(color)) return null
+  return color
 }

@@ -20,7 +20,6 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 优先级表锁定
       'paint-sample',
       'path',
       'paint',
-      'segment-resize',
       'draw',
       'marquee-converge',
       'entity-select-move',

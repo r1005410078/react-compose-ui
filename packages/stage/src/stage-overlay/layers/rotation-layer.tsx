@@ -97,11 +97,9 @@ function RotationRubberBand({
  * Godot 旋转层。
  *
  * @remarks
- * 空闲时只在选区中心显示枢轴，按下后拉线跟随鼠标。中心取自选区外接盒；两点图形没有外接盒，
- * 改取两端点的中点。
+ * 空闲时只在选区中心显示枢轴，按下后拉线跟随鼠标。中心取自选区外接盒。
  */
 export function RotationContribution({
-  lineSelection = null,
   rotatable,
   rotationPreview = null,
   screenBounds,
@@ -109,8 +107,6 @@ export function RotationContribution({
   tool,
   viewport,
 }: StageOverlayContext) {
-  const lineStartScreen = lineSelection ? worldToScreen(lineSelection.start, viewport) : null
-  const lineEndScreen = lineSelection ? worldToScreen(lineSelection.end, viewport) : null
   const rotationPreviewScreen = rotationPreview
     ? {
         center: worldToScreen(rotationPreview.center, viewport),
@@ -129,19 +125,7 @@ export function RotationContribution({
           },
           active: false as const,
         }
-      : rotatable && tool === 'rotate' && !textEditing && lineStartScreen && lineEndScreen
-        ? {
-            center: {
-              x: (lineStartScreen.x + lineEndScreen.x) / 2,
-              y: (lineStartScreen.y + lineEndScreen.y) / 2,
-            },
-            pointer: {
-              x: (lineStartScreen.x + lineEndScreen.x) / 2,
-              y: (lineStartScreen.y + lineEndScreen.y) / 2,
-            },
-            active: false as const,
-          }
-        : null
+      : null
   if (!rotationPreviewScreen) return null
   return (
     <RotationRubberBand
