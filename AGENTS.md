@@ -198,7 +198,17 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   示例应用的 `?page-preview` 只控制**示例页面上预置的跳转入口**，不再控制页面预览本身——
   首页是编辑器启动时打开的页面，默认往它的内容里加东西会污染所有以空白首页为起点的
   端到端用例。
-- 组件实例的覆盖是 `instanceOverrides`，只含结构操作并复用 Variant 的稳定操作代数；暴露属性已删除。
+- 组件实例的覆盖是 `instanceOverrides`，复用 Variant 的稳定操作代数——**七种操作,值与结构各一半**：
+  `set-field` / `remove-field` / `add-component` / `remove-component` 改值，
+  `add-entity` / `remove-entity` / `move-entity` 改结构。因此在场景里下钻选中实例内部的任意
+  Entity、改它任意 Component 的任意字段，都是合法覆盖，**不需要组件预先声明什么可改**。
+  「暴露属性已删除」删掉的是那层**声明**（`ComposeComponentPropertyDefinition`），能力本身被
+  严格更强的 `set-field` 接管了——旧的暴露属性正是被迁移成 `set-field` 覆盖的
+  （`migrateLegacyComposeInstanceOverrides`）。把这条读成「实例只能改结构」会得出「每实例状态
+  无处安放」的错误结论。
+  一处已知粒度限制：**数组只作为字段整体写入，绝不生成数组下标路径**，因此覆盖清单
+  （`Animations.items`）里的一项等于替换整份数组，之后定义端对该数组的改动会被实例遮住；
+  这由 Apply/Revert chrome 兜底。
   组件文档只要求单根，且根必须是 Frame。实例内部层级在编辑期用 `实例ID/内部ID` 复合地址
   寻址，只存在于表示层：持久化文档中实例仍是单个 Entity，Undo/Redo 作用在宿主实例的 Patch 上。
   实例的几何与容器属性跟随组件根，尺寸的唯一事实来源是根本身。
