@@ -118,6 +118,7 @@ describe('曲线几何', () => {
       createComposeLineCurve({ x: 10, y: 50 }, { x: 90, y: 50 }),
     )
     expect(next.size.height).toBe(COMPOSE_CURVE_MIN_EXTENT)
+    if (next.curve.kind !== 'line') throw new Error('kind 应当保持 line')
     expect(next.curve.start.y).toBe(0)
     expect(next.curve.end.y).toBe(0)
   })
@@ -245,5 +246,111 @@ describe('entity.curve.set 漏斗', () => {
       entityId: 'curve-1',
       curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: Number.POSITIVE_INFINITY, y: 1 } },
     }).status).toBe('rejected')
+  })
+})
+
+describe('弧与多段线词汇', () => {
+  const quarterArc = {
+    kind: 'arc' as const,
+    center: { x: 0, y: 0 },
+    radius: 10,
+    startAngle: 0,
+    sweep: 90,
+  }
+
+  it('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 弧与多段线通过校验', () => {
+    expect(isValidComposeCurve(quarterArc)).toBe(true)
+    expect(isValidComposeCurve({
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }],
+      closed: false,
+    })).toBe(true)
+  })
+
+  it('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 非法弧与多段线被拒绝', () => {
+    // 半径为零、扫掠为零都是点不中也删不掉的幽灵。
+    expect(isValidComposeCurve({ ...quarterArc, radius: 0 })).toBe(false)
+    expect(isValidComposeCurve({ ...quarterArc, sweep: 0 })).toBe(false)
+    expect(isValidComposeCurve({ kind: 'polyline', vertices: [{ x: 0, y: 0 }], closed: false }))
+      .toBe(false)
+    expect(isValidComposeCurve({
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+      closed: 'yes',
+    })).toBe(false)
+  })
+
+  it('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 跨象限的弧不被盒裁掉', () => {
+    // −45°→45° 的弧，两个端点的 x 都是 10cos45≈7.07，而弧鼓到 0° 象限点 x=10。
+    const wide = { ...quarterArc, startAngle: -45, sweep: 90 }
+    const bounds = composeCurveBounds(wide)
+
+    // 只用端点算会短 2.93 —— 弧被自己的盒裁掉一块。
+    expect(bounds.x + bounds.width).toBeCloseTo(10, 6)
+  })
+
+  it('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 整圆是扫掠 360 的弧', () => {
+    const bounds = composeCurveBounds({ ...quarterArc, sweep: 360 })
+
+    expect(bounds.x).toBeCloseTo(-10, 6)
+    expect(bounds.y).toBeCloseTo(-10, 6)
+    expect(bounds.width).toBeCloseTo(20, 6)
+    expect(bounds.height).toBeCloseTo(20, 6)
+  })
+
+  it('OpenSpec: compose-document / 曲线几何经由单一写入漏斗 / 弧归一化到盒原点', () => {
+    const normalized = normalizeComposeCurveGeometry(quarterArc)
+
+    // 紧盒左上角恒为盒原点：圆心随之平移，半径与角度不变。
+    expect(normalized.offset).toEqual({ x: 0, y: 0 })
+    expect(normalized.size).toEqual({ width: 10, height: 10 })
+    if (normalized.curve.kind !== 'arc') throw new Error('kind 应当保持 arc')
+    expect(normalized.curve.center).toEqual({ x: 0, y: 0 })
+    expect(normalized.curve.radius).toBe(10)
+  })
+
+  it('OpenSpec: compose-document / 曲线几何经由单一写入漏斗 / 多段线归一化到盒原点', () => {
+    const normalized = normalizeComposeCurveGeometry({
+      kind: 'polyline',
+      vertices: [{ x: 5, y: 7 }, { x: 25, y: 7 }, { x: 25, y: 27 }],
+      closed: true,
+    })
+
+    expect(normalized.offset).toEqual({ x: 5, y: 7 })
+    if (normalized.curve.kind !== 'polyline') throw new Error('kind 应当保持 polyline')
+    expect(normalized.curve.vertices).toEqual([{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }])
+    expect(normalized.curve.closed).toBe(true)
+  })
+
+  it('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 命中按到几何的距离', () => {
+    // 弧的包围盒里，靠近圆心的位置离弧身有整整一个半径。
+    expect(distanceToComposeCurve(quarterArc, { x: 0, y: 0 })).toBeCloseTo(10, 6)
+    expect(distanceToComposeCurve(quarterArc, { x: 10, y: 0 })).toBeCloseTo(0, 6)
+    // 扫掠之外的方位取最近**端点**而不是径向距离：(-10,0) 的方位角是 180°，不在 [0,90]，
+    // 因此答案是到 (0,10) 的 14.14，而不是「到圆心距离 − 半径」给出的 20。
+    expect(distanceToComposeCurve(quarterArc, { x: -10, y: 0 }))
+      .toBeCloseTo(Math.hypot(10, 10), 6)
+
+    const polyline = {
+      kind: 'polyline' as const,
+      vertices: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }],
+      closed: false,
+    }
+    expect(distanceToComposeCurve(polyline, { x: 10, y: 5 })).toBeCloseTo(5, 6)
+    // (11,11) 正落在闭合边（(20,20)→(0,0) 的对角线）上，而离两条既有边分别有 11 与 9：
+    // 开放时点不中，闭合之后那条边把它接住。这条断言正是 `closed` 必须是布尔的理由——
+    // 它改变的是候选几何，不只是渲染。
+    expect(distanceToComposeCurve(polyline, { x: 11, y: 11 })).toBeCloseTo(9, 6)
+    expect(distanceToComposeCurve({ ...polyline, closed: true }, { x: 11, y: 11 }))
+      .toBeCloseTo(0, 6)
+  })
+
+  it('既有直线的归一化与距离逐值不变', () => {
+    const line = createComposeLineCurve({ x: 5, y: 5 }, { x: 105, y: 5 })
+    const normalized = normalizeComposeCurveGeometry(line)
+
+    expect(normalized.offset).toEqual({ x: 5, y: 5 })
+    expect(normalized.size).toEqual({ width: 100, height: COMPOSE_CURVE_MIN_EXTENT })
+    expect(distanceToComposeCurve(line, { x: 55, y: 15 })).toBeCloseTo(10, 6)
   })
 })

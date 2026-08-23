@@ -1,4 +1,11 @@
-import { composeCurvePoints, getComposeCurve, getComposeVisibility } from '@compose-ui/core'
+import {
+  composeArcEndpoints,
+  composeArcMidpoint,
+  composeArcQuadrants,
+  composePolylineSegments,
+  getComposeCurve,
+  getComposeVisibility,
+} from '@compose-ui/core'
 import type { ComposeDocument, ComposeEntity } from '@compose-ui/core'
 import { applyMatrix } from '../geometry'
 import type { StagePoint } from '../geometry'
@@ -11,11 +18,12 @@ import type { StageSceneIndex } from './scene-index'
  * 同时定义**优先级顺序**：端点压过中点。这是 AutoCAD 的惯例，也是可预期性的一部分——
  * 同等距离下总是命中端点，用户才敢直接点过去而不用先放大确认。
  *
- * 圆心与象限点随圆弧一起加入，届时插在中点之后。
+ * 圆心与象限点插在中点之后，圆心先于象限点——与 CAD 侧 `CAD_SNAP_MODES` 同一次序。两块画布的
+ * 捕捉手感必须相同，否则用户在两处画同一张图会得到不同的落点。
  *
  * @public
  */
-export type StageFeatureSnapMode = 'endpoint' | 'midpoint'
+export type StageFeatureSnapMode = 'endpoint' | 'midpoint' | 'center' | 'quadrant'
 
 /** 一个特征点候选。 @public */
 export interface StageFeaturePoint {
@@ -25,25 +33,60 @@ export interface StageFeaturePoint {
   readonly point: StagePoint
 }
 
-const MODE_ORDER: readonly StageFeatureSnapMode[] = ['endpoint', 'midpoint']
+const MODE_ORDER: readonly StageFeatureSnapMode[] = ['endpoint', 'midpoint', 'center', 'quadrant']
 
 function midpoint(a: StagePoint, b: StagePoint): StagePoint {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
 }
 
+interface LocalFeaturePoint {
+  readonly mode: StageFeatureSnapMode
+  readonly point: StagePoint
+}
+
+/**
+ * 按 `kind` 产出候选。
+ *
+ * @remarks
+ * **不能拿 `composeCurvePoints` 当端点集合用**：它返回的是「决定紧包围盒的那组点」，对弧来说
+ * 包含象限点。当成端点会让象限点以端点优先级参与，还会凭空造出一批相邻点的中点。
+ *
+ * 多段线**不引入新语义**：顶点就是各段端点、各段中点就是中点。这与「展开是恒等变换」是同一
+ * 件事。闭合时多出的那一段同样产出中点。
+ */
 function curveFeaturePoints(
   entity: ComposeEntity,
   toWorld: (point: StagePoint) => StagePoint,
-): readonly { readonly mode: StageFeatureSnapMode; readonly point: StagePoint }[] {
+): readonly LocalFeaturePoint[] {
   const curve = getComposeCurve(entity)
   if (!curve) return []
-  const points = composeCurvePoints(curve).map(toWorld)
-  const result: { readonly mode: StageFeatureSnapMode; readonly point: StagePoint }[] = []
-  points.forEach((point) => result.push({ mode: 'endpoint', point }))
-  points.slice(0, -1).forEach((point, index) => {
-    result.push({ mode: 'midpoint', point: midpoint(point, points[index + 1]!) })
-  })
-  return result
+
+  if (curve.kind === 'arc') {
+    const [start, end] = composeArcEndpoints(curve)
+    return [
+      { mode: 'endpoint' as const, point: toWorld(start) },
+      { mode: 'endpoint' as const, point: toWorld(end) },
+      { mode: 'midpoint' as const, point: toWorld(composeArcMidpoint(curve)) },
+      // 圆心不是任何线段的端点，却是画同心圆、把符号钉在轴上时用户真正要对齐的点。
+      { mode: 'center' as const, point: toWorld(curve.center) },
+      ...composeArcQuadrants(curve).map((point) => ({
+        mode: 'quadrant' as const,
+        point: toWorld(point),
+      })),
+    ]
+  }
+
+  const segments = curve.kind === 'line'
+    ? [{ start: curve.start, end: curve.end }]
+    : composePolylineSegments(curve.vertices, curve.closed)
+  const vertices = curve.kind === 'line' ? [curve.start, curve.end] : curve.vertices
+  return [
+    ...vertices.map((point) => ({ mode: 'endpoint' as const, point: toWorld(point) })),
+    ...segments.map((segment) => ({
+      mode: 'midpoint' as const,
+      point: midpoint(toWorld(segment.start), toWorld(segment.end)),
+    })),
+  ]
 }
 
 /**

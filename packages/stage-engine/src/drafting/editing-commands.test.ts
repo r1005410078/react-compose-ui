@@ -17,6 +17,18 @@ const messages: StageDraftingMessages = {
   moveTitle: '移动',
   copyTitle: '复制',
   eraseTitle: '删除',
+  arcTitle: '圆弧',
+  circleTitle: '圆',
+  rectangleTitle: '矩形',
+  polylineTitle: '多段线',
+  specifyThroughPoint: '指定圆弧上的一点',
+  specifyCenter: '指定圆心',
+  specifyRadius: '指定半径',
+  specifyCorner: '指定第一个角点',
+  specifyOppositeCorner: '指定对角点',
+  undoKeyword: '放弃',
+  collinearArc: '三点共线，无法定弧',
+  degenerateShape: '这个形状是退化的',
 }
 
 const empty: StageDraftingContext = { messages }

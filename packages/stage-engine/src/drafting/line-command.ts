@@ -5,8 +5,15 @@ import type {
   ComposeCommandSession,
   ComposeCommandStep,
 } from '@compose-ui/commands'
+import { createComposeLineCurve } from '@compose-ui/core'
 import { createStageCopyCommand, createStageMoveCommand } from './move-copy-command'
 import { createStageEraseCommand } from './erase-command'
+import {
+  createStageArcCommand,
+  createStageCircleCommand,
+  createStagePolylineCommand,
+  createStageRectangleCommand,
+} from './shape-commands'
 import type { StageDraftingContext, StageDraftingEffect, StageDraftingMessages } from './drafting-types'
 
 function firstPrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
@@ -62,7 +69,9 @@ export function createStageLineSession(
         prompt,
         preview: { reference: point },
         // 第一点只是起点，还构不成一段。
-        ...(reference ? { commit: { segments: [{ start: reference, end: point }], reference: point } } : {}),
+        ...(reference
+          ? { commit: { curves: [createComposeLineCurve(reference, point)], reference: point } }
+          : {}),
       }
     },
   }
@@ -86,6 +95,10 @@ export function createStageDraftingCommands(
 ): readonly ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect>[] {
   return [
     createStageLineCommand(messages),
+    createStageArcCommand(messages),
+    createStageCircleCommand(messages),
+    createStageRectangleCommand(messages),
+    createStagePolylineCommand(messages),
     createStageMoveCommand(messages),
     createStageCopyCommand(messages),
     createStageEraseCommand(messages),

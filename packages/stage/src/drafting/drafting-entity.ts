@@ -1,12 +1,13 @@
 import {
   BUILTIN_COMMAND_TYPES,
-  createComposeLineCurve,
+  composeCurveBounds,
   getComposeHierarchy,
   getComposeLock,
   getComposeVisibility,
   normalizeComposeCurveGeometry,
   type ComposeDocument,
   type ComposeEntity,
+  type ComposeCurve,
   type ComposeLayoutSnapshot,
   type EditorCommand,
   type JsonValue,
@@ -19,7 +20,6 @@ import {
   type StagePoint,
   type StageSceneIndex,
 } from '@compose-ui/stage-engine'
-import type { StageDraftingSegment } from '@compose-ui/stage-engine'
 
 /** 绘图落地一段线所需的最小上下文。 @internal */
 export interface StageDraftingCommitContext {
@@ -43,7 +43,38 @@ function usableParent(document: ComposeDocument, entityId: string | null): Compo
 }
 
 /**
- * 把一段世界坐标的线变成一条 `entity.create` 命令。
+ * 把世界坐标下的一条曲线换算到父级局部坐标。
+ *
+ * @remarks
+ * Stage 的世界矩阵链只有平移与旋转（缩放由 `LayoutItem` 的宽高表达，不进矩阵），因此弧
+ * 只需搬圆心、把起始角加上矩阵的旋转量——半径不受影响。矩阵若带非等比缩放，弧就不再是弧，
+ * 那是另一件事，本条链上不会出现。
+ */
+function toParentCurve(
+  curve: ComposeCurve,
+  mapPoint: (point: StagePoint) => StagePoint,
+  rotationDegrees: number,
+): ComposeCurve {
+  // `StagePoint` 没有索引签名，`ComposePosition` 有；重建一次比放宽协议类型便宜。
+  const toParent = (point: StagePoint) => {
+    const next = mapPoint(point)
+    return { x: next.x, y: next.y }
+  }
+  if (curve.kind === 'line') {
+    return { ...curve, start: toParent(curve.start), end: toParent(curve.end) }
+  }
+  if (curve.kind === 'polyline') {
+    return { ...curve, vertices: curve.vertices.map(toParent) }
+  }
+  return {
+    ...curve,
+    center: toParent(curve.center),
+    startAngle: curve.startAngle + rotationDegrees,
+  }
+}
+
+/**
+ * 把一条世界坐标的曲线变成一条 `entity.create` 命令。
  *
  * @remarks
  * **引擎不创建 Entity**，因此这一步在宿主完成：Preset 与 ID 都在这里定。几何写进 `Curve`
@@ -58,23 +89,26 @@ function usableParent(document: ComposeDocument, entityId: string | null): Compo
  */
 export function createStageDraftingCurveCommand(
   context: StageDraftingCommitContext,
-  segment: StageDraftingSegment,
+  curve: ComposeCurve,
 ): EditorCommand | null {
   const seed = context.registry.createSeed('curve')
   if (!seed.ok) return null
 
-  const midpoint: StagePoint = {
-    x: (segment.start.x + segment.end.x) / 2,
-    y: (segment.start.y + segment.end.y) / 2,
+  // 落点父级按几何紧包围盒的中心判定：对线来说就是原来的线段中点，对弧与多段线也自然成立。
+  const bounds = composeCurveBounds(curve)
+  const anchor: StagePoint = {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
   }
-  const parent = usableParent(context.document, context.index.containerAtPoint(midpoint))
+  const parent = usableParent(context.document, context.index.containerAtPoint(anchor))
     ?? usableParent(context.document, context.activeFrameId ?? null)
   const inverse = parent
     ? invertMatrix(getEntityWorldMatrix(context.document, context.layoutSnapshot, parent.id))
     : null
   const toParent = (point: StagePoint) => (inverse ? applyMatrix(inverse, point) : point)
+  const rotationDegrees = inverse ? Math.atan2(inverse.b, inverse.a) * 180 / Math.PI : 0
   const normalized = normalizeComposeCurveGeometry(
-    createComposeLineCurve(toParent(segment.start), toParent(segment.end)),
+    toParentCurve(curve, toParent, rotationDegrees),
   )
 
   const entityId = context.idFactory()

@@ -796,37 +796,82 @@ export function createCurveInspector(
 ): ComponentType<ComposeComponentInspectorProps> {
   return function CurveInspector({ entity, dispatch, readOnly, value }) {
     const zh = useZh()
-    const schema = useMemo(() => v.object({
-      start: v.pipe(
-        v.object({ x: v.number(), y: v.number() }),
-        v.title(zh ? '起点' : 'Start'),
-        v.metadata({ propertyPanel: { editor: 'vector2' } }),
-      ),
-      end: v.pipe(
-        v.object({ x: v.number(), y: v.number() }),
-        v.title(zh ? '终点' : 'End'),
-        v.metadata({ propertyPanel: { editor: 'vector2' } }),
-      ),
-    }), [zh])
     const curve = value as unknown as ComposeCurve
+    const kind = curve.kind
+    const schema = useMemo(() => {
+      const point = (title: string) => v.pipe(
+        v.object({ x: v.number(), y: v.number() }),
+        v.title(title),
+        v.metadata({ propertyPanel: { editor: 'vector2' } }),
+      )
+      if (kind === 'line') {
+        return v.object({
+          start: point(zh ? '起点' : 'Start'),
+          end: point(zh ? '终点' : 'End'),
+        })
+      }
+      if (kind === 'arc') {
+        return v.object({
+          center: point(zh ? '圆心' : 'Center'),
+          radius: v.pipe(
+            v.number(),
+            v.minValue(0.01, zh ? '半径必须为正' : 'Radius must be positive'),
+            v.title(zh ? '半径' : 'Radius'),
+          ),
+          startAngle: v.pipe(
+            v.number(),
+            v.title(zh ? '起始角' : 'Start angle'),
+            v.metadata({ propertyPanel: { editor: 'angle' } }),
+          ),
+          // 扫掠角刻意用普通数字而不是 angle editor：angle 会把值归一到一圈之内，
+          // 而 ±360 正是整圆的表达方式，归一化会把整圆变成零长弧。
+          sweep: v.pipe(
+            v.number(),
+            v.title(zh ? '扫掠角' : 'Sweep'),
+            v.description(zh
+              ? '正为顺时针；绝对值 360 表示整圆。'
+              : 'Positive is clockwise; an absolute value of 360 is a full circle.'),
+          ),
+        })
+      }
+      return v.object({
+        vertices: v.pipe(
+          v.array(point(zh ? '顶点' : 'Vertex')),
+          v.title(zh ? '顶点' : 'Vertices'),
+        ),
+        closed: v.pipe(v.boolean(), v.title(zh ? '闭合' : 'Closed')),
+      })
+    }, [kind, zh])
+
     const offset = getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 }
     const toParent = (point: { readonly x: number; readonly y: number }) => ({
       x: roundComposeGeometry(point.x + offset.x),
       y: roundComposeGeometry(point.y + offset.y),
     })
+    const viewValue = curve.kind === 'line'
+      ? { start: toParent(curve.start), end: toParent(curve.end) }
+      : curve.kind === 'arc'
+        ? {
+            center: toParent(curve.center),
+            radius: curve.radius,
+            startAngle: curve.startAngle,
+            sweep: curve.sweep,
+          }
+        : { vertices: curve.vertices.map(toParent), closed: curve.closed }
+
     return (
       <ComposePropertyPanel
         aria-label={zh ? '曲线属性' : 'Curve properties'}
         readOnly={readOnly}
-        schema={schema}
-        value={{ start: toParent(curve.start), end: toParent(curve.end) }}
+        schema={schema as v.GenericSchema<Record<string, unknown>>}
+        value={viewValue}
         onValueChange={(next) => {
           if (readOnly) return
           dispatch(command(
             idFactory,
             entity,
             BUILTIN_COMMAND_TYPES.setCurve,
-            { entityId: entity.id, curve: { ...curve, start: next.start, end: next.end } },
+            { entityId: entity.id, curve: { ...curve, ...next } as unknown as JsonValue },
             zh ? `编辑 ${entity.name} 的几何` : `Edit ${entity.name} geometry`,
           ))
         }}
