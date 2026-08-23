@@ -197,6 +197,34 @@ describe('弧与多段线的特征点', () => {
   })
 })
 
+describe('OpenSpec: stage-engine / 命中与捕捉应用同一个盒到几何的变换 / 特征点跟着几何走', () => {
+  it('拉宽后端点落在新形状上', () => {
+    const next = normalizeComposeCurveGeometry(
+      createComposeLineCurve({ x: 100, y: 100 }, { x: 200, y: 200 }),
+    )
+    const base = entity('curve', {
+      x: next.offset.x,
+      y: next.offset.y,
+      // 盒拉到几何紧包围盒的两倍宽；几何数值一个都没变。
+      width: next.size.width * 2,
+      height: next.size.height,
+    })
+    const stretched = {
+      ...base,
+      components: { ...base.components, Renderer: { type: 'curve', props: {} }, Curve: next.curve },
+    }
+    const value = document([stretched], ['curve'])
+    const index = indexFor(value)
+
+    // 端点搬到了 x = 300。漏掉投影时它会停在旧位置 200，而那正是「捕捉到看不见的点」。
+    const moved = findStageFeaturePoint(value, index, { x: 300, y: 200 }, 8)
+    expect(moved).toMatchObject({ mode: 'endpoint', entityId: 'curve' })
+    expect(moved?.point.x).toBeCloseTo(300, 6)
+
+    expect(findStageFeaturePoint(value, index, { x: 200, y: 200 }, 8)).toBeNull()
+  })
+})
+
 describe('特征点捕捉', () => {
   const line = curveEntity('line', { x: 100, y: 100 }, { x: 300, y: 100 })
   const doc = document([line], ['line'])

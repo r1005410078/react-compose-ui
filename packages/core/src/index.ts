@@ -163,13 +163,18 @@ export {
   COMPOSE_CURVE_MIN_EXTENT,
   collectComposeCurveValidationIssues,
   composeCurveBounds,
+  composeCurveBoxScale,
   composeCurvePoints,
+  composeCurveViewBox,
   createComposeLineCurve,
   distanceToComposeCurve,
   getComposeCurve,
   isValidComposeCurve,
   normalizeComposeCurveGeometry,
+  projectComposeCurveToBox,
   translateComposeCurve,
+  type ComposeCurveBoxScale,
+  type ComposeCurveViewBox,
 } from './curve'
 export {
   composeArcBoundsPoints,

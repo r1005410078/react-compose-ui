@@ -4,6 +4,7 @@ import {
   composeArcQuadrants,
   composePolylineSegments,
   getComposeCurve,
+  projectComposeCurveToBox,
   getComposeVisibility,
 } from '@compose-ui/core'
 import type { ComposeDocument, ComposeEntity } from '@compose-ui/core'
@@ -56,10 +57,13 @@ interface LocalFeaturePoint {
  */
 function curveFeaturePoints(
   entity: ComposeEntity,
+  box: { readonly width: number; readonly height: number } | undefined,
   toWorld: (point: StagePoint) => StagePoint,
 ): readonly LocalFeaturePoint[] {
-  const curve = getComposeCurve(entity)
-  if (!curve) return []
+  const geometry = getComposeCurve(entity)
+  if (!geometry || !box) return []
+  // 与命中同一个投影：特征点必须落在**画出来的**那条线上，否则拉宽之后端点会停在旧位置。
+  const curve = projectComposeCurveToBox(geometry, box)
 
   if (curve.kind === 'arc') {
     const [start, end] = composeArcEndpoints(curve)
@@ -124,7 +128,8 @@ export function findStageFeaturePoint(
     const matrix = index.getWorldMatrix(entityId)
     if (!matrix) continue
     const toWorld = (local: StagePoint) => applyMatrix(matrix, local)
-    for (const candidate of curveFeaturePoints(entity, toWorld)) {
+    const box = index.layoutSnapshot.boxes[entityId]
+    for (const candidate of curveFeaturePoints(entity, box, toWorld)) {
       const dx = candidate.point.x - point.x
       const dy = candidate.point.y - point.y
       const distance = dx * dx + dy * dy

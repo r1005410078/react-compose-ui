@@ -1,5 +1,6 @@
 import {
   composeArcEndpoints,
+  composeCurveViewBox,
   getComposeCurve,
   isComposeFullCircle,
   type ComposeArcCurve,
@@ -111,6 +112,18 @@ function geometryElement(
  * `strokeDasharray` **不除**：间隔是图上的实际长度（AutoCAD 的 linetype），跟着缩放变才
  * 携带长度信息。两者一个除一个不除是照抄 CAD 的判断，不是漏写。
  *
+ * **`vector-effect: non-scaling-stroke` 与上面那条不重复，两者各中和一段变换。**
+ *
+ * | 变换来源 | 谁中和它 |
+ * | --- | --- |
+ * | `viewBox` → 盒（非等比时把线宽拉成「横细竖粗」） | `vector-effect` |
+ * | Stage Scene 外层 HTML 的 `transform: scale(zoom)` | `calc(px / --compose-canvas-zoom)` |
+ *
+ * 上面那句「`non-scaling-stroke` 在这里不管用」说的是**外层 HTML 变换**——它只中和 SVG 文档
+ * 片段*内部*的变换。而 `viewBox` 恰恰就在片段内部，所以对它管用。两句结论都对，区别只在
+ * 变换发生在 SVG 里面还是外面；不写清楚，下一个人会把这里的 `vector-effect` 当成无效代码
+ * 删掉。
+ *
  * 命中宽度跟着线宽一起除：`MIN_HIT_WIDTH` 表达的是鼠标容差，那本来就是屏幕量，留在世界单位
  * 会让它在缩小时不够点、放大时抢走旁边的东西。
  *
@@ -126,17 +139,24 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
   const cap = linecap(props.strokeLinecap)
   const pattern = dasharray(props.strokeDasharray, strokeWidth)
 
+  // 几何住在自己的取景框里，盒按比例把它拉开。`preserveAspectRatio="none"` 是重点：
+  // 默认值会保持长宽比并留白，那样盒变了形状却不跟着变，等于这条能力没有生效。
+  const view = composeCurveViewBox(curve)
+
   return (
     <svg
       aria-label="Curve"
       className="compose-material compose-material--curve"
       data-testid={`compose-material-curve-${entity.id}`}
       fill="none"
+      preserveAspectRatio="none"
       role="img"
+      viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
     >
       {geometryElement(curve, {
         'data-testid': 'compose-material-curve-hit',
         pointerEvents: 'stroke',
+        vectorEffect: 'non-scaling-stroke',
         stroke: 'transparent',
         strokeLinecap: 'round',
         strokeWidth: Math.max(MIN_HIT_WIDTH, strokeWidth * 2),
@@ -145,6 +165,7 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
       {geometryElement(curve, {
         'data-testid': 'compose-material-curve-stroke',
         stroke,
+        vectorEffect: 'non-scaling-stroke',
         strokeDasharray: pattern,
         // 圆点线型必须配 round cap，否则零长度 dash 画不出任何东西。
         strokeLinecap: props.strokeDasharray === '1 4' ? 'round' : cap,

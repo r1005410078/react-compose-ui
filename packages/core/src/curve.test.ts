@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   COMPOSE_CURVE_MIN_EXTENT,
   composeCurveBounds,
+  composeCurveBoxScale,
+  composeCurveViewBox,
   createComposeLineCurve,
   distanceToComposeCurve,
   getComposeCurve,
   isValidComposeCurve,
   normalizeComposeCurveGeometry,
+  projectComposeCurveToBox,
   translateComposeCurve,
+  type ComposeCurve,
 } from './curve'
 import { validateComposeDocument } from './document'
 import { BUILTIN_COMMAND_TYPES } from './builtin-commands'
@@ -352,5 +356,112 @@ describe('弧与多段线词汇', () => {
     expect(normalized.offset).toEqual({ x: 5, y: 5 })
     expect(normalized.size).toEqual({ width: 100, height: COMPOSE_CURVE_MIN_EXTENT })
     expect(distanceToComposeCurve(line, { x: 55, y: 15 })).toBeCloseTo(10, 6)
+  })
+})
+
+describe('OpenSpec: compose-document / 盒与几何之间只有一个换算入口', () => {
+  const diagonal: ComposeCurve = {
+    kind: 'line',
+    start: { x: 0, y: 0 },
+    end: { x: 100, y: 50 },
+  }
+
+  it('非等比盒给出两个不同的轴比例', () => {
+    const scale = composeCurveBoxScale(diagonal, { width: 200, height: 50 })
+
+    expect(scale).toEqual({ x: 2, y: 1 })
+  })
+
+  it('退化轴不除零，钳值与 LayoutItem 尺寸同一个常量', () => {
+    const horizontal: ComposeCurve = {
+      kind: 'line',
+      start: { x: 0, y: 0 },
+      end: { x: 80, y: 0 },
+    }
+
+    const view = composeCurveViewBox(horizontal)
+
+    expect(view.height).toBe(COMPOSE_CURVE_MIN_EXTENT)
+    expect(Number.isFinite(composeCurveBoxScale(horizontal, { width: 80, height: 40 }).y)).toBe(true)
+  })
+
+  it('比例为 1 时原样返回，不产生新对象', () => {
+    expect(projectComposeCurveToBox(diagonal, { width: 100, height: 50 })).toBe(diagonal)
+  })
+
+  it('直线与多段线按轴缩放', () => {
+    expect(projectComposeCurveToBox(diagonal, { width: 200, height: 50 })).toEqual({
+      kind: 'line',
+      start: { x: 0, y: 0 },
+      end: { x: 200, y: 50 },
+    })
+
+    const polyline: ComposeCurve = {
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 20 }],
+      closed: true,
+    }
+    expect(projectComposeCurveToBox(polyline, { width: 80, height: 20 })).toMatchObject({
+      vertices: [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 20 }],
+      closed: true,
+    })
+  })
+
+  it('等比缩放的弧仍是弧', () => {
+    const arc: ComposeCurve = {
+      kind: 'arc',
+      center: { x: 10, y: 10 },
+      radius: 10,
+      startAngle: 0,
+      sweep: 360,
+    }
+
+    const projected = projectComposeCurveToBox(arc, { width: 40, height: 40 })
+
+    // 圆心与象限点是圆弧最有用的两个特征点；拍扁会让它们消失，因此等比时不能拍。
+    expect(projected).toMatchObject({ kind: 'arc', radius: 20, center: { x: 20, y: 20 } })
+  })
+
+  it('非等比缩放的弧拍扁成多段线，整圆仍闭合', () => {
+    const circle: ComposeCurve = {
+      kind: 'arc',
+      center: { x: 10, y: 10 },
+      radius: 10,
+      startAngle: 0,
+      sweep: 360,
+    }
+
+    const projected = projectComposeCurveToBox(circle, { width: 40, height: 20 })
+
+    expect(projected.kind).toBe('polyline')
+    if (projected.kind !== 'polyline') throw new Error('unreachable')
+    expect(projected.closed).toBe(true)
+    // 按 x 拉伸两倍：最右点到 40，最下点仍是 20。硬按某一轴算成圆会得到一个正圆。
+    const xs = projected.vertices.map((vertex) => vertex.x)
+    const ys = projected.vertices.map((vertex) => vertex.y)
+    expect(Math.max(...xs)).toBeCloseTo(40, 0)
+    expect(Math.max(...ys)).toBeCloseTo(20, 0)
+  })
+
+  it('开放弧拍扁后不闭合', () => {
+    const arc: ComposeCurve = {
+      kind: 'arc',
+      center: { x: 10, y: 10 },
+      radius: 10,
+      startAngle: 0,
+      sweep: 90,
+    }
+
+    const projected = projectComposeCurveToBox(arc, { width: 40, height: 20 })
+
+    // 闭合它会凭空多出一条弦。
+    expect(projected).toMatchObject({ kind: 'polyline', closed: false })
+  })
+
+  it('映射后的几何与盒同尺寸，因此命中与渲染落在同一处', () => {
+    const projected = projectComposeCurveToBox(diagonal, { width: 200, height: 150 })
+    const bounds = composeCurveBounds(projected)
+
+    expect(bounds).toMatchObject({ x: 0, y: 0, width: 200, height: 150 })
   })
 })

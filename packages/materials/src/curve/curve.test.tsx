@@ -36,9 +36,11 @@ describe('curve 物料', () => {
     expect(curve.end).toEqual({ x: item.width.value, y: item.height.value })
   })
 
-  it('v1 不接受盒 resize', () => {
+  it('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 曲线有盒手柄', () => {
     const { entity } = curveSeed()
-    expect(entity.components.GeometryConstraints).toMatchObject({ resize: 'none' })
+    // 曾经写死 `resize: 'none'`，理由是「盒缩放该不该等比缩放几何点还没定」。定了：盒自由，
+    // 几何按 viewBox 与盒的比例呈现，因此曲线走所有 Entity 共用的那一条缩放路径。
+    expect(entity.components.GeometryConstraints).toBeUndefined()
   })
 
   it('渲染读 Curve Component 而不是 Renderer props', () => {
@@ -253,5 +255,73 @@ describe('curve 物料的弧与多段线渲染', () => {
     expect(dash).toBe('4 2')
     expect(screen.getByTestId('compose-material-curve-stroke').getAttribute('style'))
       .not.toContain('stroke-dasharray')
+  })
+})
+
+describe('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩', () => {
+  /**
+   * 渲染一条几何紧包围盒为 100×100 的对角线。
+   *
+   * @remarks
+   * 断言的数值与 `stage-engine` 的 `curve-hit.test.ts` **是同一组**：渲染侧证明浏览器会怎么
+   * 拉伸，索引侧证明命中跟着同一个比例走。两侧各做各的变换，只验一边挡不住分叉。
+   */
+  function renderDiagonal() {
+    const { entity, materials } = curveSeed()
+    const stretched: ComposeEntity = {
+      ...entity,
+      components: {
+        ...entity.components,
+        Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 100 } },
+      },
+    }
+    render(
+      <ComposeRegistryEntityRenderer
+        entity={stretched}
+        mode="editor"
+        registry={materials.registry}
+      />,
+    )
+    // 盒尺寸由宿主写在外层节点上，物料只负责取景框——因此这里不需要造一个盒。
+    return { node: screen.getByTestId(`compose-material-curve-${entity.id}`) }
+  }
+
+  it('取景框是几何的紧包围盒，且允许非等比拉伸', () => {
+    const { node } = renderDiagonal()
+
+    expect(node).toHaveAttribute('viewBox', '0 0 100 100')
+    // 默认值会保持长宽比并留白，那样盒变了形状却不跟着变，等于这条能力没有生效。
+    expect(node).toHaveAttribute('preserveAspectRatio', 'none')
+  })
+
+  it('描边不参与 viewBox 变换', () => {
+    const { node } = renderDiagonal()
+
+    // SVG 没有「只中和线宽、不中和虚线」的开关，因此规则收成一句：几何参与、描边不参与。
+    for (const testId of ['compose-material-curve-hit', 'compose-material-curve-stroke']) {
+      expect(node.querySelector(`[data-testid="${testId}"]`))
+        .toHaveAttribute('vector-effect', 'non-scaling-stroke')
+    }
+  })
+
+  it('水平线的取景框退化轴被钳住，不产生除零', () => {
+    const { entity, materials } = curveSeed()
+    const horizontal: ComposeEntity = {
+      ...entity,
+      components: {
+        ...entity.components,
+        Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 80, y: 0 } },
+      },
+    }
+    render(
+      <ComposeRegistryEntityRenderer
+        entity={horizontal}
+        mode="editor"
+        registry={materials.registry}
+      />,
+    )
+
+    expect(screen.getByTestId(`compose-material-curve-${entity.id}`))
+      .toHaveAttribute('viewBox', '0 0 80 1')
   })
 })

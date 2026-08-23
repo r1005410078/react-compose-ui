@@ -1,5 +1,6 @@
 import {
   distanceToComposeCurve,
+  projectComposeCurveToBox,
   getComposeClip,
   getComposeCurve,
   isComposeFrameEntity,
@@ -258,9 +259,20 @@ export function createStageSceneIndex(
         const matrix = matrices.get(entityId)
         if (!entity || !matrix) return false
         const curve = getComposeCurve(entity)
-        if (curve) {
-          // 几何是盒局部坐标，而矩阵求逆得到的正是盒局部坐标，因此无需再补偏移。
-          return distanceToComposeCurve(curve, applyMatrix(invertMatrix(matrix), point)) <= tolerance
+        const curveBox = curve ? layoutSnapshot.boxes[entityId] : undefined
+        if (curve && curveBox) {
+          /*
+           * 几何住在自己的取景框里，盒按比例把它拉开，因此**必须先投影**——直接拿文档里的
+           * 数值比，盒一旦不等于紧包围盒两者就不在同一个坐标系，症状是「画出来的和点得中的
+           * 不在一处」。
+           *
+           * 投影到盒坐标系而不是把光标点投进几何空间：后者会把圆形容差变成椭圆，距离比较
+           * 不再是标量，而这个错误只在扁盒上现形。矩阵只含旋转与平移，因此求逆得到的盒局部
+           * 坐标与世界同尺度，容差可以直接用。
+           */
+          const projected = projectComposeCurveToBox(curve, curveBox)
+          return distanceToComposeCurve(projected, applyMatrix(invertMatrix(matrix), point))
+            <= tolerance
         }
         if (isComposeGroupEntity(entity)) {
           const rect = bounds.get(entityId)

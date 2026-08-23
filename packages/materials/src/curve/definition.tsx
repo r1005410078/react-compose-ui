@@ -41,9 +41,11 @@ function valueContract(
  * 创建曲线 Renderer 与 Preset。
  *
  * @remarks
- * Preset 在 `rendererPresetComponents` 之外补两个 Component：`Curve` 承载几何，
- * `GeometryConstraints` 关掉 resize——盒缩放该不该等比缩放几何点要与端点夹点一起决定，
- * 在此之前提供一个语义未定的手势只会产生用户无法预期的结果。
+ * Preset 在 `rendererPresetComponents` 之外补一个 `Curve` 承载几何。
+ *
+ * 曾经还补一个 `GeometryConstraints` 关掉 resize，理由是「盒缩放该不该等比缩放几何点还没
+ * 定」。**现在定了**：盒自由，几何按 `viewBox` 与盒的比例呈现，因此手柄回来，走的是所有
+ * Entity 共用的那一条缩放路径。
  *
  * @internal
  */
@@ -80,7 +82,6 @@ export function createCurveMaterial(
           ...DEFAULT_CURVE_GEOMETRY,
           end: { x: size.width, y: size.height },
         },
-        GeometryConstraints: { movable: true, resize: 'none', rotatable: true },
       }),
     },
   }

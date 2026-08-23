@@ -21,6 +21,8 @@ import {
 import {
   composeArcBoundsPoints,
   composePolylineSegments,
+  flattenComposeArc,
+  isComposeFullCircle,
   pointToComposeArcDistance,
   pointToComposeSegmentDistance,
 } from './curve-geometry'
@@ -312,6 +314,115 @@ export function normalizeComposeCurveGeometry(
       width: roundComposeGeometry(Math.max(bounds.width, COMPOSE_CURVE_MIN_EXTENT)),
       height: roundComposeGeometry(Math.max(bounds.height, COMPOSE_CURVE_MIN_EXTENT)),
     },
+  }
+}
+
+/**
+ * 几何空间的取景框。
+ *
+ * @remarks
+ * 等于几何的紧包围盒，退化轴钳到 {@link COMPOSE_CURVE_MIN_EXTENT}。它就是渲染时写进 SVG
+ * `viewBox` 的那四个数：盒与它的比例决定形状被拉伸多少。
+ *
+ * @public
+ */
+export interface ComposeCurveViewBox {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * 求几何空间的取景框。
+ *
+ * @remarks
+ * 退化轴的钳值 MUST 与 `LayoutItem` 尺寸用的是同一个常量：它同时是渲染的分母与命中的分母，
+ * 两处取不同的值会让水平线被拉伸一个说不清的比例。
+ *
+ * @public
+ */
+export function composeCurveViewBox(curve: ComposeCurve): ComposeCurveViewBox {
+  const bounds = composeCurveBounds(curve)
+  return {
+    x: bounds.x,
+    y: bounds.y,
+    width: Math.max(bounds.width, COMPOSE_CURVE_MIN_EXTENT),
+    height: Math.max(bounds.height, COMPOSE_CURVE_MIN_EXTENT),
+  }
+}
+
+/** 盒相对几何空间的按轴比例。 @public */
+export interface ComposeCurveBoxScale {
+  readonly x: number
+  readonly y: number
+}
+
+/**
+ * 求盒相对几何空间的比例。
+ *
+ * @remarks
+ * **按轴独立**，不取单一标量：盒可以被非等比地拉伸，强行取一个比例会画出一个用户从未画过
+ * 的形状。分母来自 {@link composeCurveViewBox}，因此不会除零。
+ *
+ * @public
+ */
+export function composeCurveBoxScale(
+  curve: ComposeCurve,
+  size: { readonly width: number; readonly height: number },
+): ComposeCurveBoxScale {
+  const view = composeCurveViewBox(curve)
+  return { x: size.width / view.width, y: size.height / view.height }
+}
+
+/** 等比判定的容差；两个比例差到这个量级以内就当作等比。 */
+const UNIFORM_SCALE_EPSILON = 1e-6
+
+/**
+ * 把几何映射进盒坐标系。
+ *
+ * @remarks
+ * 这是**盒与几何之间唯一的换算**：渲染由浏览器按 `viewBox` 完成，而命中与捕捉调用本函数，
+ * 之后下游（`distanceToComposeCurve`、特征点、包围盒）一行不改——它们拿到的已经是盒坐标系
+ * 里的几何。各自算一遍的话，下一个改盒语义的人只会改到其中一处，而漏掉的那处症状是
+ * 「某些缩放下点不中」。
+ *
+ * **弧按缩放是否等比分流**：等比仍是精确弧，非等比拍扁成多段线。照抄 `cad` 侧块内弧的既有
+ * 判断——按某一轴的比例硬算成圆会画出一个用户从未画过的形状；一律拍扁会让圆心与象限点消失，
+ * 而它们不是任何线段的特征点。
+ *
+ * 结果是**瞬态**的，不进文档，因此不做几何量化：量化是写入漏斗的规矩，在这里只会白丢精度。
+ *
+ * @param curve - 几何空间中的曲线
+ * @param size - 目标盒尺寸
+ * @returns 盒坐标系中的曲线；比例为 1 时原样返回
+ * @public
+ */
+export function projectComposeCurveToBox(
+  curve: ComposeCurve,
+  size: { readonly width: number; readonly height: number },
+): ComposeCurve {
+  const view = composeCurveViewBox(curve)
+  const scaleX = size.width / view.width
+  const scaleY = size.height / view.height
+  if (scaleX === 1 && scaleY === 1 && view.x === 0 && view.y === 0) return curve
+  const map = (point: { readonly x: number; readonly y: number }): ComposePosition => ({
+    x: (point.x - view.x) * scaleX,
+    y: (point.y - view.y) * scaleY,
+  })
+  if (curve.kind === 'line') return { ...curve, start: map(curve.start), end: map(curve.end) }
+  if (curve.kind === 'polyline') return { ...curve, vertices: curve.vertices.map(map) }
+  if (Math.abs(scaleX - scaleY) <= UNIFORM_SCALE_EPSILON) {
+    return { ...curve, center: map(curve.center), radius: curve.radius * scaleX }
+  }
+  const segments = flattenComposeArc(curve)
+  const first = segments[0]
+  if (!first) return { ...curve, center: map(curve.center), radius: curve.radius * scaleX }
+  return {
+    kind: 'polyline',
+    vertices: [map(first.start), ...segments.map((segment) => map(segment.end))],
+    // 整圆拍扁后是闭合多段线；开放弧的首尾不相接，闭合它会凭空多出一条弦。
+    closed: isComposeFullCircle(curve),
   }
 }
 

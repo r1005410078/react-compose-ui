@@ -88,3 +88,65 @@ describe('旋转后的曲线命中跟随几何', () => {
     expect(upright.entityAtPoint({ x: 50, y: 50 }, 4)).toBe('curve')
   })
 })
+
+describe('OpenSpec: stage-engine / 命中与捕捉应用同一个盒到几何的变换', () => {
+  /** 盒被拉宽到几何紧包围盒的两倍；几何数值一个都没变。 */
+  function stretched(scaleX: number, scaleY = 1) {
+    const next = normalizeComposeCurveGeometry(
+      createComposeLineCurve({ x: 100, y: 100 }, { x: 200, y: 200 }),
+    )
+    const base = entity('curve', {
+      x: next.offset.x,
+      y: next.offset.y,
+      width: next.size.width * scaleX,
+      height: next.size.height * scaleY,
+    })
+    return {
+      ...base,
+      components: {
+        ...base.components,
+        Renderer: { type: 'curve', props: {} },
+        Curve: next.curve,
+      },
+    }
+  }
+
+  it('拉宽后按新形状命中', () => {
+    const index = indexFor(document([stretched(2)], ['curve']))
+
+    // 盒 200×100，几何仍是 100×100 的对角线：新形状从 (100,100) 到 (300,200)。
+    expect(index.entityAtPoint({ x: 200, y: 150 }, 6)).toBe('curve')
+  })
+
+  it('旧几何的位置不再命中', () => {
+    const index = indexFor(document([stretched(2)], ['curve']))
+
+    // (150,150) 是拉宽**前**的中点；拉宽后那里离新线 25 个单位。
+    expect(index.entityAtPoint({ x: 150, y: 150 }, 6)).not.toBe('curve')
+  })
+
+  it('盒角的空区仍然不命中', () => {
+    const index = indexFor(document([stretched(2)], ['curve']))
+
+    // 换算漏掉时这里会因为「按旧几何算」而误判，因此它同时守着两件事。
+    expect(index.entityAtPoint({ x: 296, y: 104 }, 6)).not.toBe('curve')
+  })
+
+  it('非等比拉伸的弧仍可命中', () => {
+    const base = entity('arc', { x: 0, y: 0, width: 80, height: 20 })
+    const arcEntity = {
+      ...base,
+      components: {
+        ...base.components,
+        Renderer: { type: 'curve', props: {} },
+        // 半径 10 的整圆，紧包围盒 20×20；盒 80×20 即 x 拉伸四倍。
+        Curve: { kind: 'arc', center: { x: 10, y: 10 }, radius: 10, startAngle: 0, sweep: 360 },
+      },
+    }
+    const index = indexFor(document([arcEntity], ['arc']))
+
+    // 拉伸后的最右点在 x = 80；按某一轴硬算成正圆会把它留在 x = 20。
+    expect(index.entityAtPoint({ x: 79, y: 10 }, 4)).toBe('arc')
+    expect(index.entityAtPoint({ x: 40, y: 10 }, 4)).not.toBe('arc')
+  })
+})
