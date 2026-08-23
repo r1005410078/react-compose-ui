@@ -125,3 +125,86 @@ describe('curve 物料', () => {
     expect(screen.getByRole('combobox', { name: '线条样式' })).toHaveValue('none')
   })
 })
+
+describe('curve 物料的弧与多段线渲染', () => {
+  function withCurve(curve: unknown) {
+    const { entity, materials } = curveSeed()
+    return {
+      materials,
+      entity: { ...entity, components: { ...entity.components, Curve: curve } } as ComposeEntity,
+    }
+  }
+
+  it('OpenSpec: basic-materials / curve 物料 / 整圆用 circle 渲染', () => {
+    const { entity, materials } = withCurve({
+      kind: 'arc',
+      center: { x: 50, y: 50 },
+      radius: 50,
+      startAngle: 0,
+      sweep: 360,
+    })
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    // SVG 的 `A` 命令在起终点重合时画不出东西——整圆是这条判断里唯一需要分支的地方。
+    const stroke = screen.getByTestId('compose-material-curve-stroke')
+    expect(stroke.tagName.toLowerCase()).toBe('circle')
+    expect(stroke).toHaveAttribute('r', '50')
+  })
+
+  it('非整圆的弧用 path 渲染', () => {
+    const { entity, materials } = withCurve({
+      kind: 'arc',
+      center: { x: 50, y: 50 },
+      radius: 50,
+      startAngle: 0,
+      sweep: 90,
+    })
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    const stroke = screen.getByTestId('compose-material-curve-stroke')
+    expect(stroke.tagName.toLowerCase()).toBe('path')
+    expect(stroke.getAttribute('d')).toMatch(/^M .+ A 50 50 /)
+  })
+
+  it('OpenSpec: basic-materials / curve 物料 / 多段线是一个元素', () => {
+    const { entity, materials } = withCurve({
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }],
+      closed: false,
+    })
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    // CAD 侧一条多段线在 DOM 里是 N 个 `<line>`；页面这边是一个元素，命中由加宽 stroke 承担。
+    const stroke = screen.getByTestId('compose-material-curve-stroke')
+    expect(stroke.tagName.toLowerCase()).toBe('polyline')
+    expect(stroke).toHaveAttribute('points', '0,0 40,0 40,40 0,40')
+  })
+
+  it('闭合多段线用 polygon 渲染', () => {
+    const { entity, materials } = withCurve({
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }],
+      closed: true,
+    })
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    expect(screen.getByTestId('compose-material-curve-stroke').tagName.toLowerCase())
+      .toBe('polygon')
+  })
+
+  it('命中元素与可见元素同形，且仍是透明加宽 stroke', () => {
+    const { entity, materials } = withCurve({
+      kind: 'arc',
+      center: { x: 50, y: 50 },
+      radius: 50,
+      startAngle: 0,
+      sweep: 360,
+    })
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    const hit = screen.getByTestId('compose-material-curve-hit')
+    expect(hit.tagName.toLowerCase()).toBe('circle')
+    expect(hit).toHaveAttribute('stroke', 'transparent')
+    expect(hit).toHaveAttribute('pointer-events', 'stroke')
+  })
+})

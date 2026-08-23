@@ -18,22 +18,68 @@ import {
   type ComposeSize,
   type JsonObject,
 } from './document-types'
+import {
+  composeArcBoundsPoints,
+  composePolylineSegments,
+  pointToComposeArcDistance,
+  pointToComposeSegmentDistance,
+} from './curve-geometry'
 import { roundComposeGeometry } from './geometry-precision'
 
 /**
  * 曲线的几何种类。
  *
  * @remarks
- * v1 只有 `line`。保留为联合类型而不是字面量，使新增弧、多段线时既有文档不需要迁移。
+ * 新增 kind 是新增分支，既有文档一行不动——这正是当初把它留成联合类型的理由。
  * @public
  */
-export type ComposeCurveKind = 'line'
+export type ComposeCurveKind = 'line' | 'arc' | 'polyline'
 
 /** 直线段：两个盒局部端点。 @public */
 export interface ComposeLineCurve extends JsonObject {
   readonly kind: 'line'
   readonly start: ComposePosition
   readonly end: ComposePosition
+}
+
+/**
+ * 圆弧：盒局部圆心、半径、起始角与**带符号的扫掠角**。
+ *
+ * @remarks
+ * **整圆是 `sweep` 绝对值为 360 的弧，不另立类型**：归一化、平移、距离、特征点、渲染与校验
+ * 六条路径因此各只有一份实现，整圆自然退化成「角度包含判断永远为真」的那一支。渲染是唯一
+ * 分支的地方——SVG 的 `A` 命令在起终点重合时画不出东西，整圆走 `<circle>`。
+ *
+ * 用扫掠角而不是终止角：单给终止角分不出 10° 的短弧与 350° 的长弧，而这个歧义只在特定角度
+ * 组合下现形。
+ *
+ * @public
+ */
+export interface ComposeArcCurve extends JsonObject {
+  readonly kind: 'arc'
+  readonly center: ComposePosition
+  readonly radius: number
+  readonly startAngle: number
+  readonly sweep: number
+}
+
+/**
+ * 多段线：盒局部顶点序列加闭合标志。
+ *
+ * @remarks
+ * **矩形是四顶点的闭合多段线，不另立类型**：矩形没有任何多段线没有的性质，另立类型只会让
+ * 六条路径各多一支逐字相同的实现；它唯一多出来的「四角是直角」在用户拖动某个顶点之后就
+ * 不再成立。
+ *
+ * `closed` 是布尔而不是「首尾顶点重复」：重复表示法里 `[A,B,C,A]` 是闭合三角形还是回到起点
+ * 的开放折线无法区分，而两者在框选与捕捉上给出不同候选——重复的那个顶点会产生两个端点候选。
+ *
+ * @public
+ */
+export interface ComposePolylineCurve extends JsonObject {
+  readonly kind: 'polyline'
+  readonly vertices: readonly ComposePosition[]
+  readonly closed: boolean
 }
 
 /**
@@ -44,7 +90,7 @@ export interface ComposeLineCurve extends JsonObject {
  * 组合规则由 `validateComposeDocument` 强制。
  * @public
  */
-export type ComposeCurve = ComposeLineCurve
+export type ComposeCurve = ComposeLineCurve | ComposeArcCurve | ComposePolylineCurve
 
 /**
  * 归一化后盒在退化轴上的最小尺寸。
@@ -63,6 +109,8 @@ export interface ComposeCurveValidationIssue {
 }
 
 const LINE_FIELDS = ['kind', 'start', 'end'] as const
+const ARC_FIELDS = ['kind', 'center', 'radius', 'startAngle', 'sweep'] as const
+const POLYLINE_FIELDS = ['kind', 'vertices', 'closed'] as const
 const POINT_FIELDS = ['x', 'y'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -112,13 +160,44 @@ export function collectComposeCurveValidationIssues(
     return [{ path: [], message: 'Curve 必须是对象' }]
   }
   // 未知 kind 必须拒绝而不是静默忽略：静默忽略会让一条画好的曲线在升级后无声消失。
-  if (value.kind !== 'line') {
+  if (value.kind !== 'line' && value.kind !== 'arc' && value.kind !== 'polyline') {
     return [{ path: ['kind'], message: `不支持的 kind ${String(value.kind)}` }]
   }
   const issues: ComposeCurveValidationIssue[] = []
-  collectUnknownFields(value, LINE_FIELDS, [], issues)
-  collectPointIssues(value.start, ['start'], issues)
-  collectPointIssues(value.end, ['end'], issues)
+  if (value.kind === 'line') {
+    collectUnknownFields(value, LINE_FIELDS, [], issues)
+    collectPointIssues(value.start, ['start'], issues)
+    collectPointIssues(value.end, ['end'], issues)
+    return issues
+  }
+
+  if (value.kind === 'arc') {
+    collectUnknownFields(value, ARC_FIELDS, [], issues)
+    collectPointIssues(value.center, ['center'], issues)
+    // 半径为零的圆与扫掠为零的弧是同一类幽灵：屏幕上什么都没有，点不中也删不掉。
+    if (typeof value.radius !== 'number' || !Number.isFinite(value.radius) || value.radius <= 0) {
+      issues.push({ path: ['radius'], message: 'radius 必须是有限正数' })
+    }
+    if (typeof value.startAngle !== 'number' || !Number.isFinite(value.startAngle)) {
+      issues.push({ path: ['startAngle'], message: 'startAngle 必须是有限数' })
+    }
+    if (typeof value.sweep !== 'number' || !Number.isFinite(value.sweep) || value.sweep === 0) {
+      issues.push({ path: ['sweep'], message: 'sweep 必须是非零有限数' })
+    }
+    return issues
+  }
+
+  collectUnknownFields(value, POLYLINE_FIELDS, [], issues)
+  if (typeof value.closed !== 'boolean') {
+    issues.push({ path: ['closed'], message: 'closed 必须是布尔' })
+  }
+  if (!Array.isArray(value.vertices) || value.vertices.length < 2) {
+    issues.push({ path: ['vertices'], message: 'vertices 至少要有两个顶点' })
+    return issues
+  }
+  value.vertices.forEach((vertex, index) => {
+    collectPointIssues(vertex, ['vertices', index], issues)
+  })
   return issues
 }
 
@@ -156,7 +235,11 @@ export function createComposeLineCurve(
  * @public
  */
 export function composeCurvePoints(curve: ComposeCurve): readonly ComposePosition[] {
-  return [curve.start, curve.end]
+  if (curve.kind === 'line') return [curve.start, curve.end]
+  if (curve.kind === 'polyline') return curve.vertices
+  // 弧不能只用两个端点：90° 到 270° 的弧鼓出来的那一侧在端点之外，盒会把弧裁掉一块，
+  // 而这只在跨象限的弧上出现。落在扫掠内的象限点必须一并纳入。
+  return composeArcBoundsPoints(curve).map(({ x, y }) => ({ x, y }))
 }
 
 /** 曲线的紧包围盒；**不**做退化轴钳制。 @public */
@@ -177,11 +260,18 @@ export function translateComposeCurve(
   dx: number,
   dy: number,
 ): ComposeCurve {
+  // `+ 0` 把 `-0` 归一成 `0`：归一化平移的位移是 `-bounds.x`，正好在原点上产出 `-0`。
+  // JSON 序列化会把它写成 `0`，因此内存里的 `-0` 是一个只在 `Object.is` 与断言里现形的
+  // 幽灵差异。
+  const round = (value: number) => roundComposeGeometry(value) + 0
   const shift = (point: ComposePosition): ComposePosition => ({
-    x: roundComposeGeometry(point.x + dx),
-    y: roundComposeGeometry(point.y + dy),
+    x: round(point.x + dx),
+    y: round(point.y + dy),
   })
-  return { ...curve, start: shift(curve.start), end: shift(curve.end) }
+  if (curve.kind === 'line') return { ...curve, start: shift(curve.start), end: shift(curve.end) }
+  if (curve.kind === 'polyline') return { ...curve, vertices: curve.vertices.map(shift) }
+  // 弧只动圆心：半径与角度是形状本身，平移不改变它们。
+  return { ...curve, center: shift(curve.center) }
 }
 
 /** {@link normalizeComposeCurveGeometry} 的结果。 @public */
@@ -237,14 +327,17 @@ export function distanceToComposeCurve(
   curve: ComposeCurve,
   point: { readonly x: number; readonly y: number },
 ): number {
-  const { start, end } = curve
-  const dx = end.x - start.x
-  const dy = end.y - start.y
-  const lengthSquared = dx * dx + dy * dy
-  const px = point.x - start.x
-  const py = point.y - start.y
-  // 零长度线段退化成点，否则除法产生 NaN 而 NaN 的一切比较都为 false——命中会静默失效。
-  if (lengthSquared === 0) return Math.hypot(px, py)
-  const t = Math.min(1, Math.max(0, (px * dx + py * dy) / lengthSquared))
-  return Math.hypot(px - t * dx, py - t * dy)
+  if (curve.kind === 'line') return pointToComposeSegmentDistance(curve, point)
+  // 弧有闭式解，比线段还便宜：方位角落在扫掠内时距离就是 `|到圆心距离 − 半径|`。
+  if (curve.kind === 'arc') return pointToComposeArcDistance(curve, point)
+  const segments = composePolylineSegments(curve.vertices, curve.closed)
+  // 单顶点多段线（校验会拒，但命中不该因此抛错）退化成到那个点的距离。
+  if (segments.length === 0) {
+    const first = curve.vertices[0]
+    return first ? Math.hypot(point.x - first.x, point.y - first.y) : Number.POSITIVE_INFINITY
+  }
+  return segments.reduce(
+    (nearest, segment) => Math.min(nearest, pointToComposeSegmentDistance(segment, point)),
+    Number.POSITIVE_INFINITY,
+  )
 }

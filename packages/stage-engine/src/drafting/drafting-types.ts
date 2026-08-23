@@ -1,4 +1,5 @@
 import type { ComposeCommandPoint } from '@compose-ui/commands'
+import type { ComposeCurve } from '@compose-ui/core'
 
 /** 一段已定下来的线。 @public */
 export interface StageDraftingSegment {
@@ -28,8 +29,14 @@ export interface StageDraftingTranslation {
  * @public
  */
 export interface StageDraftingEffect {
-  /** 本步要创建的线段。 */
-  readonly segments?: readonly StageDraftingSegment[]
+  /**
+   * 本步要创建的曲线，**世界坐标**。
+   *
+   * @remarks
+   * 直线、弧与多段线共用这一个字段而不是各开一个：宿主对它们做的事完全一样——换算到父级
+   * 局部坐标、归一化、创建 Entity。分成三个字段会让那段代码复制三遍。
+   */
+  readonly curves?: readonly ComposeCurve[]
   /** 本步要平移的既有 Entity。 */
   readonly translate?: StageDraftingTranslation
   /** 本步要复制并平移的既有 Entity。 */
@@ -52,6 +59,18 @@ export interface StageDraftingMessages {
   readonly specifyNextPoint: string
   readonly expectedPoint: string
   readonly lineTitle: string
+  readonly arcTitle: string
+  readonly circleTitle: string
+  readonly rectangleTitle: string
+  readonly polylineTitle: string
+  readonly specifyThroughPoint: string
+  readonly specifyCenter: string
+  readonly specifyRadius: string
+  readonly specifyCorner: string
+  readonly specifyOppositeCorner: string
+  readonly undoKeyword: string
+  readonly collinearArc: string
+  readonly degenerateShape: string
   readonly selectObjects: string
   readonly expectedSelection: string
   readonly basePoint: string

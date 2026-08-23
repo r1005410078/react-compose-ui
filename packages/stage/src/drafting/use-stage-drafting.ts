@@ -134,7 +134,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     if (!effect) return
     const current = latest.current
 
-    for (const segment of effect.segments ?? []) {
+    for (const curve of effect.curves ?? []) {
       const command = createStageDraftingCurveCommand({
         document: current.document,
         layoutSnapshot: current.layoutSnapshot,
@@ -142,7 +142,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
         registry: current.registry,
         idFactory: current.idFactory,
         activeFrameId: current.activeFrameId,
-      }, segment)
+      }, curve)
       if (command) current.dispatch(command)
     }
 

@@ -1,3 +1,13 @@
+export {
+  createStageArcCommand,
+  createStageArcSession,
+  createStageCircleCommand,
+  createStageCircleSession,
+  createStagePolylineCommand,
+  createStagePolylineSession,
+  createStageRectangleCommand,
+  createStageRectangleSession,
+} from './shape-commands'
 export { planStageDraftingEdits, type StageDraftingEditQuery } from './drafting-edits'
 export { createStageEraseCommand, createStageEraseSession } from './erase-command'
 export {

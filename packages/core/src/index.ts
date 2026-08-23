@@ -172,6 +172,28 @@ export {
   translateComposeCurve,
 } from './curve'
 export {
+  composeArcBoundsPoints,
+  composeArcContainsAngle,
+  composeArcEndpoints,
+  composeArcMidpoint,
+  composeArcPointAt,
+  composeArcQuadrants,
+  composeArcThroughPoints,
+  composePolylineSegments,
+  composeSegmentMidpoint,
+  composeSquaredDistance,
+  flattenComposeArc,
+  isComposeFullCircle,
+  isDegenerateComposePolyline,
+  pointToComposeArcDistance,
+  pointToComposeSegmentDistance,
+} from './curve-geometry'
+export type {
+  ComposeArcShape,
+  ComposePlanarPoint,
+  ComposeSegmentShape,
+} from './curve-geometry'
+export {
   parseComposeCoordinate,
   resolveComposePoint,
 } from './point-input'
@@ -184,11 +206,13 @@ export type {
   ParseComposeCoordinateResult,
 } from './point-input'
 export type {
+  ComposeArcCurve,
   ComposeCurve,
   ComposeCurveKind,
   ComposeCurveValidationIssue,
   ComposeLineCurve,
   ComposeNormalizedCurveGeometry,
+  ComposePolylineCurve,
 } from './curve'
 export { applyDocumentPatches, jsonEqual } from './patches'
 export { createDocumentTransactionRuntime, createTransactionRuntime } from './runtime'

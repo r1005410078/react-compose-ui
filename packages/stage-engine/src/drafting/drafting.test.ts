@@ -1,4 +1,4 @@
-import { createComposeLineCurve, normalizeComposeCurveGeometry } from '@compose-ui/core'
+import { createComposeLineCurve, normalizeComposeCurveGeometry, type ComposeCurve } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import { createStageDraftingCommands, createStageLineSession } from './line-command'
 import type { StageDraftingContext } from './drafting-types'
@@ -17,6 +17,18 @@ const messages = {
   moveTitle: '移动',
   copyTitle: '复制',
   eraseTitle: '删除',
+  arcTitle: '圆弧',
+  circleTitle: '圆',
+  rectangleTitle: '矩形',
+  polylineTitle: '多段线',
+  specifyThroughPoint: '指定圆弧上的一点',
+  specifyCenter: '指定圆心',
+  specifyRadius: '指定半径',
+  specifyCorner: '指定第一个角点',
+  specifyOppositeCorner: '指定对角点',
+  undoKeyword: '放弃',
+  collinearArc: '三点共线，无法定弧',
+  degenerateShape: '这个形状是退化的',
 }
 
 const context: StageDraftingContext = { messages }
@@ -34,12 +46,16 @@ describe('LINE 命令', () => {
 
     const second = session.advance({ kind: 'point', point: { x: 100, y: 0 } })
     if (second.status !== 'prompt') throw new Error('第二点应当继续等待下一点')
-    expect(second.commit?.segments).toEqual([{ start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }])
+    expect(second.commit?.curves).toEqual([
+      { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+    ])
 
     const third = session.advance({ kind: 'point', point: { x: 100, y: 50 } })
     if (third.status !== 'prompt') throw new Error('第三点应当继续等待下一点')
     // 每一段只提交自己，不重复提交上一段。
-    expect(third.commit?.segments).toEqual([{ start: { x: 100, y: 0 }, end: { x: 100, y: 50 } }])
+    expect(third.commit?.curves).toEqual([
+      { kind: 'line', start: { x: 100, y: 0 }, end: { x: 100, y: 50 } },
+    ])
   })
 
   it('参照点始终是上一个已确定的点', () => {
@@ -72,7 +88,9 @@ describe('LINE 命令', () => {
 
   it('命令按名称与别名解析', () => {
     const commands = createStageDraftingCommands(messages)
-    expect(commands.map(({ id }) => id)).toEqual(['LINE', 'MOVE', 'COPY', 'ERASE'])
+    expect(commands.map(({ id }) => id)).toEqual([
+      'LINE', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE', 'MOVE', 'COPY', 'ERASE',
+    ])
     expect(commands[0]?.aliases).toEqual(['L'])
   })
 })
@@ -95,9 +113,80 @@ function curveEntity(
   }
 }
 
+function shapeEntity(id: string, curve: ComposeCurve) {
+  const next = normalizeComposeCurveGeometry(curve)
+  const base = entity(id, {
+    x: next.offset.x,
+    y: next.offset.y,
+    width: next.size.width,
+    height: next.size.height,
+  })
+  return {
+    ...base,
+    components: { ...base.components, Renderer: { type: 'curve', props: {} }, Curve: next.curve },
+  }
+}
+
 function indexFor(value: ReturnType<typeof document>) {
   return createStageSceneIndex(value, layoutSnapshot(value))
 }
+
+describe('弧与多段线的特征点', () => {
+  // 圆心 (200,200)、半径 100、0°→90°：端点 (300,200) 与 (200,300)，象限点同为这两个。
+  const arc = shapeEntity('arc', {
+    kind: 'arc',
+    center: { x: 200, y: 200 },
+    radius: 100,
+    startAngle: 0,
+    sweep: 90,
+  })
+  const arcDoc = document([arc], ['arc'])
+
+  it('OpenSpec: stage-engine / 特征点捕捉 / 弧提供圆心', () => {
+    const hit = findStageFeaturePoint(arcDoc, indexFor(arcDoc), { x: 202, y: 201 }, 8)
+
+    // 圆心不是任何线段的端点，只能由弧提供。
+    expect(hit).toMatchObject({ mode: 'center', entityId: 'arc' })
+    expect(hit?.point.x).toBeCloseTo(200, 6)
+    expect(hit?.point.y).toBeCloseTo(200, 6)
+  })
+
+  it('OpenSpec: stage-engine / 特征点捕捉 / 弧的象限点排在圆心之后', () => {
+    // 180° 象限点 (100,200) 不在 0°→90° 的扫掠内，因此不产生候选。
+    expect(findStageFeaturePoint(arcDoc, indexFor(arcDoc), { x: 100, y: 200 }, 8)).toBeNull()
+  })
+
+  it('OpenSpec: stage-engine / 特征点捕捉 / 多段线顶点按端点优先级返回', () => {
+    const polyline = shapeEntity('poly', {
+      kind: 'polyline',
+      vertices: [{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 300, y: 300 }],
+      closed: false,
+    })
+    const value = document([polyline], ['poly'])
+
+    // 中间顶点是两段共用的端点，不是任何一段的中点。
+    const hit = findStageFeaturePoint(value, indexFor(value), { x: 302, y: 101 }, 8)
+    expect(hit).toMatchObject({ mode: 'endpoint', entityId: 'poly' })
+    expect(hit?.point).toEqual({ x: 300, y: 100 })
+
+    // 第二段的中点照常提供。
+    expect(findStageFeaturePoint(value, indexFor(value), { x: 301, y: 201 }, 8))
+      .toMatchObject({ mode: 'midpoint' })
+  })
+
+  it('闭合多段线多出的那一段同样提供中点', () => {
+    const closed = shapeEntity('closed', {
+      kind: 'polyline',
+      vertices: [{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 300, y: 300 }],
+      closed: true,
+    })
+    const value = document([closed], ['closed'])
+
+    // 闭合边 (300,300)→(100,100) 的中点是 (200,200)。
+    expect(findStageFeaturePoint(value, indexFor(value), { x: 201, y: 200 }, 8))
+      .toMatchObject({ mode: 'midpoint' })
+  })
+})
 
 describe('特征点捕捉', () => {
   const line = curveEntity('line', { x: 100, y: 100 }, { x: 300, y: 100 })
