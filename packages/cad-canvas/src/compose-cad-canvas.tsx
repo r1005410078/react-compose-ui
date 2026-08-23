@@ -54,6 +54,7 @@ import { getCadCanvasMessages } from './cad-canvas-i18n'
 import { ComposeCommandLine } from '@compose-ui/components'
 import {
   ComposeCanvasRulers,
+  resolveComposeCanvasCrosshair,
   useCanvasSurfaceSize,
   type ComposeCanvasRulersHandle,
 } from '@compose-ui/canvas-kit'
@@ -61,13 +62,13 @@ import { CAD_GRID } from './grid'
 import { useCadIndicatedPoint } from './indicated-point'
 import {
   CadSurface,
-  type CadCrosshair,
   type CadPreviewSegment,
   type CadSurfacePointerEvent,
 } from './canvas-surface'
 import {
   CAD_INITIAL_VIEWPORT,
   cadFitViewport,
+  cadWorldToScreen,
   type CadCanvasPoint,
   type CadViewport,
 } from './viewport'
@@ -357,17 +358,25 @@ export function ComposeCadCanvas({
    * @remarks
    * 三种形态与 AutoCAD 一致，判据是**当前等待的输入类型**——`accepts` 本来就在协议里，不需要
    * 引入任何新状态。既不取点也不选对象的步骤（例如 INSERT 等块名）不画：那一步键盘才是输入
-   * 设备。
+   * 设备。这一步留在本包：`accepts` 属于命令协议，而 canvas-kit 不依赖它，两块画布的推导
+   * 规则也本来就不同（页面画布空闲时什么都不画）。
    *
-   * 触摸指针不画也不隐藏系统光标——触摸屏上根本没有光标可言。
+   * **钉在解算后的落点上，不是裸指针。**同一个 `CadIndicatedPoint` 上，橡皮筋终点、坐标读数
+   * 与捕捉标记读的都是 `world`；十字光标曾经读 `screen`，于是开着栅格吸附时它停在用户不会
+   * 落笔的地方——差的那几个像素正是他要对齐的。
+   *
+   * 「画不画」由 `resolveComposeCanvasCrosshair` 独家判定（含触摸豁免），隐藏系统光标读的是
+   * 同一个返回值：两处各判一次必然出现「画了但没隐藏」。
    */
-  const crosshair = useMemo<CadCrosshair | null>(() => {
-    if (!showCrosshair || !indicated || indicated.pointerType === 'touch') return null
-    const lines = prompt === null || prompt.accepts.includes('point')
-    const box = prompt === null || prompt.accepts.includes('selection')
-    if (!lines && !box) return null
-    return { screen: indicated.screen, lines, box, boxRadius: pickRadius, size: crosshairSize }
-  }, [crosshairSize, indicated, pickRadius, prompt, showCrosshair])
+  const crosshair = useMemo(() => resolveComposeCanvasCrosshair({
+    show: showCrosshair,
+    pointerType: indicated?.pointerType ?? 'mouse',
+    center: indicated ? cadWorldToScreen(viewport, indicated.world) : null,
+    lines: prompt === null || prompt.accepts.includes('point'),
+    box: prompt === null || prompt.accepts.includes('selection'),
+    boxRadius: pickRadius,
+    size: crosshairSize,
+  }), [crosshairSize, indicated, pickRadius, prompt, showCrosshair, viewport])
 
   const rulerTicks = useMemo(() => {
     const shared = { step: CAD_GRID.step, offset: 0, primaryLineEvery: CAD_GRID.primaryLineEvery }

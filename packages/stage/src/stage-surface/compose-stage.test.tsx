@@ -255,6 +255,7 @@ function renderStage(
     marqueeMode?: import('../types').ComposeStageMarqueeMode
     viewport?: { readonly x: number; readonly y: number; readonly zoom: number }
     commands?: import('../types').ComposeStageProps['commands']
+    showCrosshair?: boolean
   } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
@@ -264,9 +265,10 @@ function renderStage(
     dispatchSpy(command)
     return runtime.dispatch(command)
   }
-  render(
+  const view = render(
     <ComposeStage
       commands={options.commands}
+      showCrosshair={options.showCrosshair}
       document={value}
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
       onSelectedIdsChange={selectionSpy}
@@ -284,7 +286,7 @@ function renderStage(
       viewport={options.viewport ?? { x: 0, y: 0, zoom: 1 }}
     />,
   )
-  return { dispatch: dispatchSpy, runtime, selection: selectionSpy }
+  return { container: view.container, dispatch: dispatchSpy, runtime, selection: selectionSpy }
 }
 
 /**
@@ -1539,6 +1541,12 @@ describe('绘图模式', () => {
     return { clientX: x, clientY: y, pointerId: 1, button: 0, bubbles: true }
   }
 
+  /** 十字线画在绘图覆盖层里；覆盖层不存在就等于一条都没画。 */
+  function crosshairLines() {
+    return screen.queryByTestId('stage-drafting-overlay')
+      ?.querySelectorAll('[data-stage-crosshair-line]') ?? []
+  }
+
   function startLine() {
     const input = screen.getByRole('textbox', { name: '命令行' })
     fireEvent.change(input, { target: { value: 'L' } })
@@ -1555,6 +1563,57 @@ describe('绘图模式', () => {
 
     startLine()
     expect(screen.getByTestId('stage-drafting-overlay')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / Stage 十字光标 / 三形态与隐藏系统光标的标记', () => {
+    const { container } = renderStage(document(), { selectedIds: ['a'] })
+    const root = container.querySelector('.compose-stage')!
+    const surface = screen.getByTestId('stage-surface')
+    const lines = () => crosshairLines()
+    const hover = (pointerType = 'mouse') => {
+      fireEvent.pointerMove(surface, { clientX: 120, clientY: 90, pointerId: 1, pointerType })
+    }
+
+    // 空闲什么都不画——与 CAD 刻意的不对称：页面编辑器的静息光标是箭头。
+    hover()
+    expect(lines()).toHaveLength(0)
+    expect(root.hasAttribute('data-crosshair')).toBe(false)
+
+    // 等待取点：四条线（两轴各两个方向），没有拾取框，系统光标被收走。
+    startLine()
+    hover()
+    expect(lines()).toHaveLength(4)
+    expect(screen.queryByTestId('stage-pickbox')).toBeNull()
+    expect(root.hasAttribute('data-crosshair')).toBe(true)
+
+    // 触摸既不画也不隐藏系统光标。
+    hover('touch')
+    expect(lines()).toHaveLength(0)
+    expect(root.hasAttribute('data-crosshair')).toBe(false)
+  })
+
+  it('OpenSpec: stage / Stage 十字光标 / 等待选择对象时只有拾取框', () => {
+    renderStage(document())
+    const input = screen.getByRole('textbox', { name: '命令行' })
+    fireEvent.change(input, { target: { value: 'ERASE' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('选择对象')
+
+    fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+      clientX: 120, clientY: 90, pointerId: 1, pointerType: 'mouse',
+    })
+    expect(crosshairLines()).toHaveLength(0)
+    expect(screen.getByTestId('stage-pickbox')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / Stage 十字光标 / 宿主可以关闭', () => {
+    const { container } = renderStage(document(), { showCrosshair: false })
+    startLine()
+    fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+      clientX: 120, clientY: 90, pointerId: 1, pointerType: 'mouse',
+    })
+    expect(crosshairLines()).toHaveLength(0)
+    expect(container.querySelector('.compose-stage')!.hasAttribute('data-crosshair')).toBe(false)
   })
 
   it('OpenSpec: stage-engine / 绘图命令 / L↵ 后两次取点画出一条线', () => {

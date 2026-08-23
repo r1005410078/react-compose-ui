@@ -340,3 +340,56 @@ test('OpenSpec: stage / 命令词汇表合并 / 不可用的命令给出原因�
   await expect(sceneTree.getByRole('row').filter({ hasText: 'Group' })).toHaveCount(1)
   await expect(strokes).toHaveCount(2)
 })
+
+/**
+ * Stage 的十字光标。
+ *
+ * @remarks
+ * 合并之前这条必然红：Stage 今天画的是**两条**贯穿视口的线（共享组件是两轴各两个方向，
+ * 共四条），而且**没有收走系统光标**——绘图命令不改工具，游标推导只看 `isDrawingTool`，
+ * 于是屏幕上一支箭头压着一副十字线。等待选择对象那一档更彻底：图面上什么都不画。
+ */
+test('OpenSpec: stage / Stage 十字光标 / 三形态与系统光标隐藏', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const surface = stage.getByTestId('stage-surface')
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const prompt = stage.getByTestId('stage-drafting-command-prompt')
+  const lines = stage.locator('[data-stage-crosshair-line]')
+  const pickbox = stage.getByTestId('stage-pickbox')
+
+  await expect(surface).toBeVisible()
+  const box = (await surface.boundingBox())!
+  const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
+
+  // 1) 空闲：什么都不画，系统光标可见。这是与 CAD 刻意的不对称——页面编辑器的静息光标是箭头。
+  await page.mouse.move(at(300, 220).x, at(300, 220).y)
+  await expect(lines).toHaveCount(0)
+  await expect(pickbox).toHaveCount(0)
+  await expect(surface).not.toHaveCSS('cursor', 'none')
+
+  // 2) 等待取点：四条线（两轴各两个方向），没有拾取框，系统光标被收走。
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('指定第一点')
+  await page.mouse.move(at(300, 220).x, at(300, 220).y)
+  await expect(lines).toHaveCount(4)
+  await expect(pickbox).toHaveCount(0)
+  await expect(surface).toHaveCSS('cursor', 'none')
+
+  // 3) 取消后回到空闲：不残留。
+  await commandInput.press('Escape')
+  await expect(lines).toHaveCount(0)
+  await expect(surface).not.toHaveCSS('cursor', 'none')
+
+  // 4) 等待选择对象：只剩拾取框。
+  await commandInput.fill('E')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('选择对象')
+  await page.mouse.move(at(320, 240).x, at(320, 240).y)
+  await expect(lines).toHaveCount(0)
+  await expect(pickbox).toHaveCount(1)
+  await expect(surface).toHaveCSS('cursor', 'none')
+})

@@ -10,3 +10,18 @@
   width: 100%;
   height: 100%;
 }
+
+/*
+ * 十字光标只提供**画笔**：描边色、线宽与不透明度。摆在哪里由各画布决定——它是一个 `<g>`，
+ * 落在调用方自己的 SVG 里。
+ *
+ * 隐藏系统光标那条规则**不在这里**：它作用于整个图面区域（含标尺与它们让出的留白），
+ * 是容器的事，而容器归各画布所有。
+ */
+.compose-canvas__crosshair {
+  fill: none;
+  stroke: var(--compose-canvas-crosshair, var(--compose-text, #e6edf5));
+  stroke-width: 1;
+  pointer-events: none;
+  opacity: 0.85;
+}

@@ -108,18 +108,6 @@
   cursor: none;
 }
 
-/*
- * 十字线与拾取框用同一支笔，不填充。线在拾取框处断开——框覆盖的正是用户要看清的靶区，线穿
- * 过去等于用光标盖住自己正对准的东西。
- */
-.compose-cad-canvas__crosshair {
-  fill: none;
-  stroke: var(--compose-text, #e6edf5);
-  stroke-width: 1;
-  pointer-events: none;
-  opacity: 0.85;
-}
-
 /* 命令行贴在底部，与 AutoCAD 一致：它是主输入位置，不该随内容滚走。 */
 /*
  * 预览段：已放置的顶点连成的段用短划，跟随指针的橡皮筋用更疏的划并压低不透明度——两者都还

@@ -76,6 +76,7 @@ import { useStageTextEditing } from './use-stage-text-editing'
 import { useStageClipboard } from './use-stage-clipboard'
 import {
   ComposeCanvasRulers,
+  resolveComposeCanvasCrosshair,
   useCanvasSurfaceSize,
   useCanvasWheelNavigation,
   type ComposeCanvasRulersHandle,
@@ -166,6 +167,9 @@ function ComposeStageReady({
   onEditablePathVertexToggle,
   onSurfaceSizeChange,
   autoFitActiveFrame = true,
+  showCrosshair = true,
+  crosshairSize = 15,
+  pickRadius = 8,
   interactionController,
   idFactory = defaultId,
   id,
@@ -451,6 +455,39 @@ function ComposeStageReady({
     selectedIds: normalizedSelection,
     onSelectedIdsChange,
   })
+  // 命令等着取点或等着选对象时才跟踪指针；两档合成一个标记，跟踪、挂载与推导读同一个。
+  const draftingPointerTracked = draftingSession.awaitingPoint || draftingSession.awaitingSelection
+
+  /**
+   * 十字光标的形态。
+   *
+   * @remarks
+   * 判据是**当前等待的输入类型**：等待取点画线、等待选择对象画框、其余不画。
+   *
+   * **空闲什么都不画**是与 CAD 画布刻意的不对称——那边空闲时线与框都画（AutoCAD 惯例），
+   * 而页面编辑器的静息光标是箭头。推导留在各自的包里，共享组件不认识这条差异。
+   *
+   * 「画不画」由 `resolveComposeCanvasCrosshair` 独家判定（含触摸豁免），隐藏系统光标读的是
+   * 同一个返回值：两处各判一次必然出现「画了但没隐藏」——那正是本能力之前 Stage 的样子。
+   */
+  const crosshair = useMemo(() => resolveComposeCanvasCrosshair({
+    show: showCrosshair,
+    pointerType: draftingSession.pointerType,
+    center: draftingSession.pointerScreen,
+    lines: draftingSession.awaitingPoint,
+    box: draftingSession.awaitingSelection,
+    boxRadius: pickRadius,
+    size: crosshairSize,
+  }), [
+    crosshairSize,
+    draftingSession.awaitingPoint,
+    draftingSession.awaitingSelection,
+    draftingSession.pointerScreen,
+    draftingSession.pointerType,
+    pickRadius,
+    showCrosshair,
+  ])
+
   // 取点效果在 effect dispatch 里被消费，而会话又依赖它——用 ref 打断这条循环，会话对象
   // 每帧重建也不会让 effect dispatch 的记忆化失效。
   const draftingRef = useRef(draftingSession)
@@ -687,6 +724,7 @@ function ComposeStageReady({
       aria-label={props['aria-label'] ?? 'Stage'}
       className={['compose-stage', className].filter(Boolean).join(' ')}
       data-compose-theme={theme?.resolvedTheme}
+      data-crosshair={crosshair ? '' : undefined}
       data-interaction-cursor={interaction.cursor}
       data-interaction-phase={interaction.phase}
       id={id}
@@ -746,17 +784,21 @@ function ComposeStageReady({
         data-testid="stage-surface"
         id={surfaceId}
         ref={surfaceRef}
-        // 只在命令等取点时跟踪指针：常态下每帧解一次世界坐标是白花的。
-        onPointerLeave={draftingSession.awaitingPoint
+        // 只在命令等着输入时跟踪指针：常态下每帧解一次世界坐标是白花的。等待选择对象那一档
+        // 也要跟——拾取框需要一个中心。
+        onPointerLeave={draftingPointerTracked
           ? () => { draftingSession.setPointer(null) }
           : undefined}
-        onPointerMove={draftingSession.awaitingPoint
+        onPointerMove={draftingPointerTracked
           ? (event) => {
               const rect = event.currentTarget.getBoundingClientRect()
-              draftingSession.setPointer(screenToWorld(
-                { x: event.clientX - rect.left, y: event.clientY - rect.top },
-                viewport,
-              ))
+              draftingSession.setPointer(
+                screenToWorld(
+                  { x: event.clientX - rect.left, y: event.clientY - rect.top },
+                  viewport,
+                ),
+                event.pointerType,
+              )
             }
           : undefined}
       >
@@ -811,12 +853,13 @@ function ComposeStageReady({
             )
           : null}
         {/*
-          * 十字光标与取点预览跟随**当前是否在取点**，不跟随任何全局模式：没有命令在跑时
-          * 图面是常规光标，命令一开始等点就换成十字。
+          * 十字光标与取点预览跟随**当前等待的输入类型**，不跟随任何全局模式：没有命令在跑时
+          * 图面是常规光标，命令一开始等输入就换成十字光标。挂载条件放宽到「有东西要画」——
+          * 只看等待取点的话，等待选择对象那一档的拾取框挂不上。
           */}
-        {draftingSession.awaitingPoint ? (
+        {draftingPointerTracked ? (
           <StageDraftingOverlay
-            crosshair={draftingSession.pointerScreen}
+            crosshair={crosshair}
             outlines={draftingSession.outlines}
             rubberBand={draftingSession.rubberBand}
             snap={draftingSession.snap}

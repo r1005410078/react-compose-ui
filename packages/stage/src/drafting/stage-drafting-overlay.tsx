@@ -1,5 +1,9 @@
 import { worldToScreen, type StagePoint, type StageRect, type StageViewport } from '@compose-ui/stage-engine'
 import type { StageFeaturePoint } from '@compose-ui/stage-engine'
+import {
+  ComposeCanvasCrosshairLayer,
+  type ComposeCanvasCrosshair,
+} from '@compose-ui/canvas-kit'
 
 /** 捕捉标记的边长（屏幕像素）。 */
 const MARKER_SIZE = 10
@@ -8,8 +12,8 @@ const MARKER_SIZE = 10
 export interface StageDraftingOverlayProps {
   readonly viewport: StageViewport
   readonly surfaceSize: { readonly width: number; readonly height: number }
-  /** 十字线中心；指针不在图面上时为 null。 */
-  readonly crosshair: StagePoint | null
+  /** 共享十字光标的解析结果；不绘制时为 `null`。 */
+  readonly crosshair: ComposeCanvasCrosshair | null
   readonly snap: StageFeaturePoint | null
   readonly rubberBand: { readonly start: StagePoint; readonly end: StagePoint } | null
   /**
@@ -23,11 +27,15 @@ export interface StageDraftingOverlayProps {
 }
 
 /**
- * 绘图模式的图面反馈层：十字线、捕捉标记与橡皮筋。
+ * 绘图命令的图面反馈层：十字光标、捕捉标记与橡皮筋。
  *
  * @remarks
- * 独立于既有 overlay：这三样只在绘图模式存在，塞进 `StageOverlayContext` 会让每个既有层的
- * 上下文都多背三个永远为空的字段。
+ * 独立于既有 overlay：这三样只在绘图命令进行期间存在，塞进 `StageOverlayContext` 会让每个
+ * 既有层的上下文都多背三个永远为空的字段。
+ *
+ * 十字光标本身走 `canvas-kit` 的共享实现——两块画布同一个组件，第二份实现必然与第一份漂移。
+ * 形态推导（等待取点画线、等待选择画框、其余不画）留在 Stage 这边：`accepts` 属于命令协议，
+ * 而 canvas-kit 不依赖它，两块画布的规则也本来就不同。
  *
  * 捕捉标记与落点求解读的是**同一个** `snap`——各解一次会在指针快速移动时给出两个不同的答案，
  * 而用户看见标记贴在端点上、线却落在别处。
@@ -54,12 +62,11 @@ export function StageDraftingOverlay({
       height={surfaceSize.height}
       width={surfaceSize.width}
     >
-      {crosshair ? (
-        <g className="compose-stage__drafting-crosshair" data-testid="stage-drafting-crosshair">
-          <line x1={0} x2={surfaceSize.width} y1={crosshair.y} y2={crosshair.y} />
-          <line x1={crosshair.x} x2={crosshair.x} y1={0} y2={surfaceSize.height} />
-        </g>
-      ) : null}
+      <ComposeCanvasCrosshairLayer
+        crosshair={crosshair}
+        surfaceSize={surfaceSize}
+        testIdPrefix="stage"
+      />
       {bandStart && bandEnd ? (
         <line
           className="compose-stage__drafting-band"

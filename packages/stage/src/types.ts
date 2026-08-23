@@ -334,6 +334,36 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * @defaultValue true
    */
   readonly autoFitActiveFrame?: boolean
+  /**
+   * 是否绘制十字光标并在绘制期间隐藏系统光标。
+   *
+   * @remarks
+   * 隐藏系统光标会一并丢掉操作系统的光标辅助设置（放大光标、高对比光标），而这一需求无法被
+   * 探测——没有对应的媒体查询。因此必须留一个出口。关闭时不隐藏系统光标。
+   *
+   * @defaultValue true
+   */
+  readonly showCrosshair?: boolean
+  /**
+   * 十字线单侧长度占图面较短边的百分比。
+   *
+   * @remarks
+   * 与 AutoCAD 的 `CURSORSIZE` 同义，取 100 时贯穿整个图面。默认 15 与 CAD 画布一致。
+   *
+   * @defaultValue 15
+   */
+  readonly crosshairSize?: number
+  /**
+   * 拾取框的半边长（CSS 像素）。
+   *
+   * @remarks
+   * **在 Stage 上它只表达靶区位置，不参与任何命中判定**——这是与 CAD 画布的一处诚实不对等。
+   * CAD 的拾取框半边长等于点选命中容差，因此「框压住了就点得中」在那边成立；而 Stage 的点选
+   * 是 DOM 驱动的（浏览器决定命中），容差散在各物料的 stroke 宽度里，没有全局的那个数。
+   *
+   * @defaultValue 8
+   */
+  readonly pickRadius?: number
   /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */
   readonly interactionController?: StageInteractionController
   /** 仅当单选 Entity 的背景 Paint Inspector 打开时传入，Stage 才显示渐变画布控制柄。 */

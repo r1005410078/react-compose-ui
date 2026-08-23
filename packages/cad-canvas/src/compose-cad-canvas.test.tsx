@@ -205,6 +205,17 @@ describe('十字光标', () => {
     expect(pickbox()).not.toBeNull()
   })
 
+  it('OpenSpec: cad-document / CAD 十字光标 / 钉在解算后的落点而不是裸指针', () => {
+    setup({ crosshairSize: 10 })
+    // 栅格步长 10：指针停在两个栅格点之间，十字光标必须跟着吸附后的那个点走。曾经它读的是
+    // 裸指针，于是停在用户不会落笔的地方，而差的那几个像素正是他要对齐的。
+    hoverAt(204, 163)
+    // 拾取框的左上角是 `中心 − 半边长`，读它比从四条线里挑一条更直接。
+    const box = pickbox()!
+    expect(Number(box.getAttribute('x')) + 8).toBe(200)
+    expect(Number(box.getAttribute('y')) + 8).toBe(160)
+  })
+
   it('OpenSpec: cad-document / CAD 十字光标 / 十字线长度按图面较短边取百分比', () => {
     setup({ crosshairSize: 10 })
     hoverAt(200, 160)

@@ -13,6 +13,10 @@ import {
   type CadPointerModifiers,
   type CadSnapCandidate,
 } from '@compose-ui/cad'
+import {
+  ComposeCanvasCrosshairLayer,
+  type ComposeCanvasCrosshair,
+} from '@compose-ui/canvas-kit'
 import { CAD_GRID, createCadGridStyle } from '../grid'
 import {
   cadPanViewport,
@@ -35,28 +39,6 @@ export interface CadPreviewSegment {
    * 画法会让用户分不清「哪一段已经定下来了」。
    */
   readonly pending?: boolean
-}
-
-/**
- * 十字光标的一次绘制。
- *
- * @remarks
- * 形态由宿主按「当前等待的输入类型」给出，图面只负责画：没有活动命令时线与框都画，等待取点
- * 时只画线，等待选择对象时只画框。
- *
- * @internal
- */
-export interface CadCrosshair {
-  /** 光标中心的屏幕位置。 */
-  readonly screen: CadCanvasPoint
-  /** 画十字线。 */
-  readonly lines: boolean
-  /** 画拾取框。 */
-  readonly box: boolean
-  /** 拾取框的半边长（CSS 像素），等于点选命中容差。 */
-  readonly boxRadius: number
-  /** 十字线单侧长度占视口较短边的百分比（1–100）。 */
-  readonly size: number
 }
 
 /** 归一化后的图面指针事件；点已换算为世界坐标。 @internal */
@@ -103,7 +85,7 @@ export interface CadSurfaceProps {
   /** 指针悬停命中的图元；没有命中或当前按下不会产生选择时为 `null`。 */
   readonly hovered: string | null
   /** 十字光标的形态与位置；不绘制时为 `null`。 */
-  readonly crosshair: CadCrosshair | null
+  readonly crosshair: ComposeCanvasCrosshair | null
   /**
    * 拖动移动进行中的位移（世界坐标）；没有拖动时为 `null`。
    *
@@ -414,56 +396,10 @@ export function CadSurface({
           />
         )
       })}
-      {crosshair ? <Crosshair crosshair={crosshair} size={size} /> : null}
+      <ComposeCanvasCrosshairLayer crosshair={crosshair} surfaceSize={size} testIdPrefix="cad" />
     </svg>
   )
 }
-
-/**
- * 绘制十字光标。
- *
- * @remarks
- * **十字线在拾取框处断开。**容差 8px 意味着框约 16px 见方，而那正是用户要看清的靶区；两条
- * 1px 的线直穿过去，等于用光标盖住自己正对准的东西。
- *
- * 线按一对轴向量绘制而不是写死 `x1=0/x2=width`：AutoCAD 的十字线对齐的是 UCS 轴，转了 UCS
- * 就跟着转。我们现在没有 UCS，屏幕轴对齐是对的，但以后加进来时改的是向量来源而不是这里。
- */
-function Crosshair({ crosshair, size }: {
-  readonly crosshair: CadCrosshair
-  readonly size: { readonly width: number; readonly height: number }
-}) {
-  const { screen, lines, box, boxRadius, size: percent } = crosshair
-  // 长度按视口较短边取百分比，与 AutoCAD 的 CURSORSIZE 同义；100 时贯穿整个图面。
-  const reach = (Math.min(size.width, size.height) * percent) / 100
-  const gap = box ? boxRadius : 0
-  const AXES = [{ x: 1, y: 0 }, { x: 0, y: 1 }] as const
-  return (
-    <g className="compose-cad-canvas__crosshair" data-testid="cad-crosshair">
-      {lines ? AXES.flatMap((axis, index) => [-1, 1].map((direction) => (
-        <line
-          key={`axis-${index}-${direction}`}
-          data-cad-crosshair-line=""
-          x1={screen.x + axis.x * gap * direction}
-          x2={screen.x + axis.x * reach * direction}
-          y1={screen.y + axis.y * gap * direction}
-          y2={screen.y + axis.y * reach * direction}
-        />
-      ))) : null}
-      {box ? (
-        <rect
-          data-cad-crosshair-box=""
-          data-testid="cad-pickbox"
-          height={boxRadius * 2}
-          width={boxRadius * 2}
-          x={screen.x - boxRadius}
-          y={screen.y - boxRadius}
-        />
-      ) : null}
-    </g>
-  )
-}
-
 
 /** 捕捉标记的屏幕半径（CSS 像素）。 */
 /**

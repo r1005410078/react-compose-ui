@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- 库公共入口必须同时导出标尺组件、视口 Hook 与纯画笔函数。 */
 /**
- * 无限画布的共享底座：视口导航、尺寸观测与标尺。
+ * 无限画布的共享底座：视口导航、尺寸观测、标尺与十字光标。
  *
  * @packageDocumentation
  *
@@ -30,6 +30,13 @@ export {
   type ComposeRulerPaintInput,
   type ComposeRulerPalette,
 } from './ruler'
+export {
+  ComposeCanvasCrosshairLayer,
+  resolveComposeCanvasCrosshair,
+  type ComposeCanvasCrosshair,
+  type ComposeCanvasCrosshairInput,
+  type ComposeCanvasCrosshairLayerProps,
+} from './crosshair'
 export {
   useCanvasSurfaceSize,
   type ComposeCanvasSurfaceMeasurement,

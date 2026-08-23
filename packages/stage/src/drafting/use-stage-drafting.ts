@@ -113,7 +113,14 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const [notice, setNotice] = useState<string | null>(null)
   const [reference, setReference] = useState<ComposeInputPoint | null>(null)
   const [preview, setPreview] = useState<StageDraftingEffect | null>(null)
-  const [pointer, setPointer] = useState<StagePoint | null>(null)
+  const [pointer, setPointerPoint] = useState<StagePoint | null>(null)
+  // 指针类型只服务触摸豁免：触摸屏上没有光标，十字光标对它毫无意义，而这个判断只有事件
+  // 本身知道。
+  const [pointerType, setPointerType] = useState('mouse')
+  const setPointer = useCallback((point: StagePoint | null, type = 'mouse') => {
+    setPointerPoint(point)
+    setPointerType(type)
+  }, [])
   const [ortho, setOrtho] = useState(false)
   const [snapEnabled, setSnapEnabled] = useState(true)
 
@@ -441,6 +448,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
       ? selectedIds.length
       : null,
     awaitingPoint: enabled && prompt?.accepts.includes('point') === true,
+    awaitingSelection: enabled && prompt?.accepts.includes('selection') === true,
+    pointerType,
     prompt: enabled ? prompt : null,
     notice: enabled ? notice : null,
     ortho,
