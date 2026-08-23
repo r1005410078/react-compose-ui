@@ -125,8 +125,15 @@ CommandPanel MUST 为会话事件提供详情、复制、确认重放和确认�
 ### Requirement: 命令动作检索与执行
 
 `@compose-ui/command-panel` MUST 接受宿主提供的 `ComposeCommandAction` 列表，并在面板内提供检索输入框。
-动作 MUST 携带稳定 `id`、已本地化的 `title`，MAY 携带 `category`、`keywords`、展示用 `shortcut` 与
-`disabledReason`。面板不得自行本地化动作名称，不得注册动作快捷键监听，也不得依赖 `@compose-ui/editor`。
+`ComposeCommandAction` MUST 由 `@compose-ui/commands` 的 `ComposeCommandDescriptor` 与一个 `run()`
+组成：稳定 `id`、已本地化的 `title`，MAY 携带 `aliases`、`category`、`keywords`、展示用 `shortcut` 与
+`disabledReason`。面板 MUST NOT 自行定义这半边形状——命令行与面板 MUST 从同一份描述符读取，否则同一条
+命令在两个入口会呈现出不同的名称、分组或可用性。
+
+检索匹配 MUST 覆盖 `aliases`：别名是用户在命令行里键入的写法，搜不到它意味着两个入口的词汇表在
+用户看来仍是两份。
+
+面板不得自行本地化动作名称，不得注册动作快捷键监听，也不得依赖 `@compose-ui/editor`。
 
 #### Scenario: 空查询保持调试台形态
 
@@ -143,8 +150,14 @@ CommandPanel MUST 为会话事件提供详情、复制、确认重放和确认�
 #### Scenario: 按关键词过滤
 
 - **WHEN** 用户输入文本，或输入以 `/` 开头的文本
-- **THEN** 面板剥离前导 `/` 后对 `title`、`category`、`keywords` 与 `id` 做大小写不敏感匹配
+- **THEN** 面板剥离前导 `/` 后对 `title`、`category`、`keywords`、`aliases` 与 `id` 做大小写不敏感匹配
 - **AND** 无匹配时显示空结果提示，而不是保留上一次结果
+
+#### Scenario: 按命令行别名检索
+
+- **WHEN** 用户输入一条命令在命令行里的键入写法
+- **THEN** 该命令出现在结果中
+- **AND** 结果项显示的仍是它已本地化的 `title`
 
 #### Scenario: 执行动作
 
