@@ -63,6 +63,19 @@ CAD 侧写的是 `.compose-cad-canvas__viewport[data-crosshair], …[data-crossh
 RECTANGLE PLINE` 产出新几何，`MOVE COPY ERASE` 作用于既有对象，这是用户脑子里本来就有的那
 一刀。
 
+## 4b. 画线的主入口是 `PLINE`，不是 `LINE`
+
+AutoCAD 的 `LINE` 同样一段一个对象——这正是 `PLINE` 存在的原因，也是老手画连续几何一律敲
+`PL` 的原因。因此我们两条都留，改的不是协议而是**默认摆在手边的那一条**。
+
+判据是「一个 Entity 在这边比在 AutoCAD 里贵」：AutoCAD 的对象列表不是主要 UI，而这边一个
+Entity 就是场景树的一行、动画的一个目标、脚本绑定的一个名字。画一根四折的导线得到四行，
+这个代价 AutoCAD 不用付。
+
+**不把 `LINE` 改成攒成一条 path**：那样它就等于 `PLINE`，必须删掉一个；还会推翻既有决定
+（`LINE` 的「放弃上一点」等于一次文档撤销，`PLINE` 的还在会话里），并失去「单独删掉其中
+一段」。换个默认按钮就能得到的东西，不值得动协议。
+
 ## 5. 只去 `draw-line`，圆与箭头留着
 
 判据是**能不能被严格更强的东西接管**：
