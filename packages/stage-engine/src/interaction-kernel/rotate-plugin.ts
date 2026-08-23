@@ -8,6 +8,7 @@ import {
   type StageRect,
   type StageViewport,
 } from '../geometry'
+import { resolveStageClickSelection } from '../hit-testing'
 import { resolveTransformTargets } from '../gesture-planning'
 import { planTransformCommit } from '../gesture-planning'
 import { transformedSelection } from '../gesture-planning'
@@ -161,11 +162,14 @@ export function createStageRotatePlugin(): StageInteractionPlugin {
         // 命中一个不存在的 Entity：这次按下已被旋转工具吃掉，不该再落到框选。
         if (!entity) return 'consumed'
         const selected = context.selectedIds.filter((id) => context.document.entities[id])
-        const nextSelection = event.modifiers.shift
-          ? selected.includes(entity.id)
-            ? selected.filter((id) => id !== entity.id)
-            : [...selected, entity.id]
-          : selected.includes(entity.id) ? selected : [entity.id]
+        // 读与点选、框选同一张语义表：第三条各写各的点选路径会让「点着累加、框着替换」
+        // 这类组合在某个工具下悄悄出现。
+        const nextSelection = resolveStageClickSelection({
+          mode: context.selectionMode,
+          current: selected,
+          entityId: entity.id,
+          shift: event.modifiers.shift,
+        })
         ctx.apply([{ type: 'selection.change', selectedIds: nextSelection }])
         const session = getComposeLock(entity).locked ? null : start(nextSelection)
         if (!session) return 'consumed'

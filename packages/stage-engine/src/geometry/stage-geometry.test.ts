@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyMatrix,
+  decomposeMatrix,
   getEntityParentId,
   getEntityWorldBounds,
   getEntityWorldMatrix,
@@ -45,6 +47,47 @@ describe('Stage ECS geometry', () => {
       e: expect.any(Number),
       f: expect.any(Number),
     })
+  })
+
+  it('OpenSpec: stage-engine / 局部矩阵与分解按旋转基点 / 非中心基点下互逆', () => {
+    const transform = {
+      x: 12,
+      y: 34,
+      width: 320,
+      height: 180,
+      rotation: 15,
+      pivot: { x: 0, y: 0.5 },
+    }
+
+    const restored = decomposeMatrix(
+      matrixFromTransform(transform),
+      transform.width,
+      transform.height,
+      transform.pivot,
+    )
+
+    // 合成与分解是手势每一帧都要走的一个来回。不互逆的症状是提交后对象跳一下，
+    // 位移量恰好等于基点偏移，而且只在非中心基点的对象上出现。
+    expect(restored.x).toBeCloseTo(transform.x, 6)
+    expect(restored.y).toBeCloseTo(transform.y, 6)
+    expect(restored.rotation).toBeCloseTo(transform.rotation, 6)
+  })
+
+  it('OpenSpec: stage-engine / 局部矩阵与分解按旋转基点 / 基点决定旋转中心', () => {
+    const box = { x: 0, y: 0, width: 100, height: 40 }
+    const matrix = matrixFromTransform({ ...box, rotation: 90, pivot: { x: 0, y: 0.5 } })
+
+    // 左边中点是基点，旋转前后位置不变；盒中心基点下它会被甩到别处。
+    expect(applyMatrix(matrix, { x: 0, y: 20 })).toEqual({ x: 0, y: 20 })
+  })
+
+  it('OpenSpec: stage-engine / 局部矩阵与分解按旋转基点 / 未设基点仍绕盒中心', () => {
+    const box = { x: 0, y: 0, width: 100, height: 40, rotation: 90 }
+
+    // 零迁移护栏：没设基点的既有文档必须与本变更之前逐值一致。
+    expect(matrixFromTransform(box)).toEqual(
+      matrixFromTransform({ ...box, pivot: { x: 0.5, y: 0.5 } }),
+    )
   })
 
   it('OpenSpec: Resize System / 计算四角与单轴边界', () => {

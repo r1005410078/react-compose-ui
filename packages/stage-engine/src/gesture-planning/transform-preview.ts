@@ -1,6 +1,8 @@
 import {
+  COMPOSE_DEFAULT_TRANSFORM_PIVOT,
   getComposeLayoutItem,
   getComposeTransform,
+  getComposeTransformPivot,
   resolveComposeGeometryConstraints,
 } from '@compose-ui/core'
 import {
@@ -65,7 +67,13 @@ export function targetTransform(
   const local = parentWorld
     ? multiplyMatrices(invertMatrix(parentWorld), targetWorld)
     : targetWorld
-  return decomposeMatrix(local, width, height)
+  const entity = index.document.entities[entityId]
+  return decomposeMatrix(
+    local,
+    width,
+    height,
+    entity ? getComposeTransformPivot(entity) : COMPOSE_DEFAULT_TRANSFORM_PIVOT,
+  )
 }
 export function transformedSelection(
   index: StageSceneIndex,

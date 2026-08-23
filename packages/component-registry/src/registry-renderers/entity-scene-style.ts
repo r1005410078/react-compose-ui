@@ -2,6 +2,7 @@ import {
   getComposeHierarchy,
   getComposeRenderer,
   getComposeTransform,
+  getComposeTransformPivot,
   resolveComposeAppearance,
   resolveComposeOverflow,
   type ComposeEntity,
@@ -107,6 +108,7 @@ export function composeEntitySceneStyle(
   box: ComposeResolvedLayoutBox,
 ): CSSProperties {
   const transform = getComposeTransform(entity)
+  const pivot = getComposeTransformPivot(entity)
   return {
     ...composeEntityAppearanceStyle(entity),
     // 共享外观层需要 relative 作为 Paint Layer 的 containing block；Stage Scene 的节点
@@ -117,6 +119,8 @@ export function composeEntitySceneStyle(
     width: box.width,
     height: box.height,
     transform: `rotate(${transform.rotation}deg)`,
-    transformOrigin: 'center',
+    // 基点是归一化盒坐标，`transform-origin` 原生吃百分比，因此这里不需要盒尺寸。
+    // Stage Scene、Preview 与组件实例三条渲染路径共用本函数，改这一处即三处一起对。
+    transformOrigin: `${pivot.x * 100}% ${pivot.y * 100}%`,
   }
 }

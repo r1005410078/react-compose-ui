@@ -54,6 +54,23 @@ describe('OpenSpec: stage-engine / 受约束变换 System / 旋转工具接管',
     expect(controller.getSnapshot().phase).toBe('rotate')
   })
 
+  it('OpenSpec: stage-engine / 旋转工具插件 / 累加语义下点中即加入', () => {
+    const { controller, effects, update } = rotateSetup(['a'])
+    update({ selectionMode: 'accumulate' })
+
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 40, y: 20 },
+      hit: { kind: 'entity', entityId: 'b' },
+      modifiers: MODIFIERS,
+    })
+
+    // 旋转工具是点选的第三条路径，必须读同一张语义表。
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: ['a', 'b'] })
+  })
+
   it('在空白按下对既有选区开始旋转', () => {
     const { controller } = rotateSetup(['a'])
 

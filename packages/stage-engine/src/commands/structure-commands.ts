@@ -1,4 +1,6 @@
 import {
+  COMPOSE_DEFAULT_TRANSFORM_PIVOT,
+  getComposeTransformPivot,
   BUILTIN_COMMAND_TYPES,
   createComposeGroupEntitySeed,
   getComposeHierarchy,
@@ -13,6 +15,7 @@ import {
   type ComposeEntity,
   type ComposeLayoutItem,
   type ComposeLayoutSnapshot,
+  type ComposePosition,
   type ComposeSpatialTransform,
   type EditorCommand,
   type JsonObject,
@@ -279,6 +282,8 @@ function transformUnderParent(
   parentId: string | null,
   width: number,
   height: number,
+  // 被换算的那个 Entity 自己的基点。新建的容器还不存在，由调用方显式传中心。
+  pivot: ComposePosition,
 ): ComposeSpatialTransform {
   const parentWorld = parentId
     ? getEntityWorldMatrix(document, layoutSnapshot, parentId)
@@ -286,7 +291,7 @@ function transformUnderParent(
   const local = parentWorld
     ? multiplyMatrices(invertMatrix(parentWorld), worldMatrix)
     : worldMatrix
-  return toComposeTransform(decomposeMatrix(local, width, height))
+  return toComposeTransform(decomposeMatrix(local, width, height, pivot))
 }
 
 /** 创建保持后代世界几何不变的 entity.group 命令。 @public */
@@ -310,6 +315,8 @@ export function createGroupCommand(
     parentId,
     safeBounds.width,
     safeBounds.height,
+    // 编组容器是本次新建的，还没有基点。
+    COMPOSE_DEFAULT_TRANSFORM_PIVOT,
   )
   const container: ComposeEntity = createComposeGroupEntitySeed({
     id: containerId,
@@ -331,6 +338,7 @@ export function createGroupCommand(
       ),
       box.width,
       box.height,
+      getComposeTransformPivot(entity),
     )) as unknown as JsonValue
   }
   return {
@@ -371,6 +379,7 @@ export function createUngroupCommand(
       parentId,
       box.width,
       box.height,
+      getComposeTransformPivot(child),
     ) as unknown as JsonValue
   }
   return {
@@ -435,6 +444,7 @@ export function createReparentCommand(
           parentId,
           size.width,
           size.height,
+          getComposeTransformPivot(entity),
         )
       : {
           position: { x: 0, y: 0 },

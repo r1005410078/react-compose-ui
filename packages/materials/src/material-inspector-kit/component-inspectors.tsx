@@ -12,6 +12,8 @@ import {
   getComposeLayoutItem,
   getComposeRenderer,
   getComposeSpatialTransform,
+  getComposeTransform,
+  getComposeTransformPivot,
   formatComposeNumber,
   roundComposeGeometry,
   resolveComposeAppearance,
@@ -24,6 +26,7 @@ import {
   type ComposeEntity,
   type ComposeGeometryConstraints,
   type ComposeLayoutItem,
+  type ComposePosition,
   type ComposePaint,
   type EditorCommand,
   type JsonObject,
@@ -105,8 +108,50 @@ interface BasicGeometryValue {
   readonly position?: { readonly x: number; readonly y: number }
   readonly alignSelf?: ComposeLayoutItem['alignSelf']
   readonly rotation: number
+  readonly pivot: PivotAnchor
   readonly size: BasicSizeValue
   readonly margin: ComposeEdges
+}
+
+/**
+ * 旋转基点的九个锚点。
+ *
+ * @remarks
+ * 曲线几何归一化后紧包围盒左上角恒为盒原点，因此一条线的端点必定落在盒的角或边中点上——
+ * 刀闸的铰点正是端点。九个锚点覆盖真实用法，且不需要在 property-panel 里新写一个 editor。
+ *
+ * 文档字段仍是自由二维点：**UI 的取值约束不上升为协议的约束**，将来补自定义数值输入或
+ * 画布手柄都不动协议。
+ */
+const PIVOT_ANCHORS = {
+  'top-left': { x: 0, y: 0 },
+  'top-center': { x: 0.5, y: 0 },
+  'top-right': { x: 1, y: 0 },
+  'middle-left': { x: 0, y: 0.5 },
+  center: { x: 0.5, y: 0.5 },
+  'middle-right': { x: 1, y: 0.5 },
+  'bottom-left': { x: 0, y: 1 },
+  'bottom-center': { x: 0.5, y: 1 },
+  'bottom-right': { x: 1, y: 1 },
+} as const satisfies Record<string, ComposePosition>
+
+type PivotAnchor = keyof typeof PIVOT_ANCHORS
+
+const PIVOT_ANCHOR_VALUES = Object.keys(PIVOT_ANCHORS) as [PivotAnchor, ...PivotAnchor[]]
+
+/**
+ * 把基点映射回九个锚点之一。
+ *
+ * @remarks
+ * 落在九点之外（将来的自定义输入或画布手柄写出的值）时回退显示为最近的锚点是错的——那会让
+ * 面板显示一个用户没设过的值。这里回退到 `center` 之外的做法是：只在精确相等时命中，
+ * 否则返回 null，由调用方决定怎么显示。
+ */
+function pivotAnchorOf(pivot: ComposePosition): PivotAnchor | null {
+  for (const [name, candidate] of Object.entries(PIVOT_ANCHORS) as [PivotAnchor, ComposePosition][]) {
+    if (candidate.x === pivot.x && candidate.y === pivot.y) return name
+  }
+  return null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -466,6 +511,13 @@ export function createLayoutItemInspector(
           v.title(zh ? '旋转' : 'Rotation'),
           v.metadata({ propertyPanel: { editor: 'angle' } }),
         ),
+        pivot: v.pipe(
+          v.picklist(PIVOT_ANCHOR_VALUES),
+          v.title(zh ? '旋转基点' : 'Rotation pivot'),
+          v.description(zh
+            ? '旋转绕这个点进行。刀闸这类绕铰点摆动的对象把它设到铰点所在的那一端。'
+            : 'Rotation happens around this point. Set it to the hinge for objects that swing.'),
+        ),
         size: v.pipe(v.custom<BasicSizeValue>((candidate) => {
           if (!isBasicSizeValue(candidate)) return false
           const allowedModes: readonly ComposeAxisSizing['mode'][] = sizingModes
@@ -521,6 +573,9 @@ export function createLayoutItemInspector(
       ...(detachAllowed ? { ignoreLayout: item.positioning === 'absolute' } : {}),
       ...placementValue,
       rotation: transform.rotation,
+      // 落在九点之外的基点（将来的自定义输入写出的值）显示为中心：面板此刻表达不了它，
+      // 而九选一里没有「其它」这一档。
+      pivot: pivotAnchorOf(getComposeTransformPivot(entity)) ?? 'center',
       size: { width: item.width, height: item.height },
       margin: item.margin,
     }
@@ -536,6 +591,7 @@ export function createLayoutItemInspector(
         ? { position: { x: item.offset.x, y: item.offset.y } }
         : { alignSelf: createDefaultComposeLayoutItem().alignSelf }),
       rotation: DEFAULT_COMPOSE_TRANSFORM.rotation,
+      pivot: 'center',
       size: { width: item.width, height: item.height },
       margin: createDefaultComposeLayoutItem().margin,
     }), [detachAllowed, item.offset.x, item.offset.y, item.positioning, item.width, item.height])
@@ -647,6 +703,26 @@ export function createLayoutItemInspector(
                     }] as unknown as JsonValue,
                   },
                   zh ? `修改 ${entity.name} 变换` : `Update ${entity.name} transform`,
+                ))
+                return
+              }
+              if (field === 'pivot') {
+                // 基点是 Transform 上的普通字段，用通用的 Component 更新命令写。
+                // `entity.transform.set` 的载荷是 position/size/rotation 的合成值，
+                // 本来就没有基点的位置，硬塞会让一个纯几何命令开始携带非几何字段。
+                dispatch(command(
+                  idFactory,
+                  entity,
+                  BUILTIN_COMMAND_TYPES.updateComponent,
+                  {
+                    entityId: entity.id,
+                    key: 'Transform',
+                    value: {
+                      ...getComposeTransform(entity),
+                      pivot: PIVOT_ANCHORS[next.pivot],
+                    } as unknown as JsonValue,
+                  },
+                  zh ? `修改 ${entity.name} 旋转基点` : `Update ${entity.name} rotation pivot`,
                 ))
                 return
               }

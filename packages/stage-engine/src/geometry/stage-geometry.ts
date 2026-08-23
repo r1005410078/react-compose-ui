@@ -1,12 +1,15 @@
 import {
+  COMPOSE_DEFAULT_TRANSFORM_PIVOT,
   getComposeHierarchy,
   getComposeTransform,
+  getComposeTransformPivot,
   composeCanvasZoomAt,
   getComposeVisibility,
   isComposeGroupEntity,
   roundComposeGeometry,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
+  type ComposePosition,
   type ComposeSpatialTransform,
 } from '@compose-ui/core'
 
@@ -61,6 +64,15 @@ export interface StageTransform {
   readonly width: number
   readonly height: number
   readonly rotation: number
+  /**
+   * 旋转基点，归一化盒坐标；缺席即盒中心。
+   *
+   * @remarks
+   * 基点**跟着 `StageTransform` 一起流动**而不是单独传参：合成与分解是一对互逆函数，任何一个
+   * 调用点漏传都会让它们不再互逆，症状是手势提交后对象跳一下、位移量恰好等于基点偏移，
+   * 且只在非中心基点的对象上出现。让它跟着值走，编译器就替我们盯着这件事。
+   */
+  readonly pivot?: ComposePosition
 }
 
 /**
@@ -195,11 +207,12 @@ function rotation(degrees: number): StageMatrix {
  * @public
  */
 export function matrixFromTransform(transform: StageTransform): StageMatrix {
-  const centerX = transform.width / 2
-  const centerY = transform.height / 2
+  const pivot = transform.pivot ?? COMPOSE_DEFAULT_TRANSFORM_PIVOT
+  const pivotX = transform.width * pivot.x
+  const pivotY = transform.height * pivot.y
   return multiplyMatrices(
-    translation(transform.x + centerX, transform.y + centerY),
-    multiplyMatrices(rotation(transform.rotation), translation(-centerX, -centerY)),
+    translation(transform.x + pivotX, transform.y + pivotY),
+    multiplyMatrices(rotation(transform.rotation), translation(-pivotX, -pivotY)),
   )
 }
 
@@ -210,27 +223,33 @@ export function matrixFromTransform(transform: StageTransform): StageMatrix {
  * @param matrix - 要分解的二维矩阵。
  * @param width - 结果节点宽度。
  * @param height - 结果节点高度。
+ * @param pivot - 该 Entity 的旋转基点，**必填**：给默认值会让漏传的调用点静默按中心分解，
+ *   而合成那一侧按真实基点，两者不再互逆。必填让编译器替我们盯着每一个调用点。
  * @public
  */
 export function decomposeMatrix(
   matrix: StageMatrix,
   width: number,
   height: number,
+  pivot: ComposePosition,
 ): StageTransform {
   const rotationRadians = Math.atan2(matrix.b, matrix.a)
   const rotation = rotationRadians * 180 / Math.PI
   const cosine = Math.cos(rotationRadians)
   const sine = Math.sin(rotationRadians)
-  const centerX = width / 2
-  const centerY = height / 2
+  const pivotX = width * pivot.x
+  const pivotY = height * pivot.y
   return {
     // Resize mapping 已把 scale 写入目标 width/height；位置反解只能使用纯旋转分量，
     // 否则会再次应用 scale，导致手柄相对指针向固定边的反方向漂移。
-    x: matrix.e - centerX + cosine * centerX - sine * centerY,
-    y: matrix.f - centerY + sine * centerX + cosine * centerY,
+    x: matrix.e - pivotX + cosine * pivotX - sine * pivotY,
+    y: matrix.f - pivotY + sine * pivotX + cosine * pivotY,
     width,
     height,
     rotation,
+    // 基点原样带出：预览渲染要用同一个基点合成矩阵，丢在这里会让预览绕中心转、
+    // 提交后绕基点转。
+    pivot,
   }
 }
 
@@ -305,6 +324,7 @@ export function getEntityWorldMatrix(
     width: box.width,
     height: box.height,
     rotation: getComposeTransform(entity).rotation,
+    pivot: getComposeTransformPivot(entity),
   })
   const parentId = getEntityParentId(document, entityId)
   return parentId === null

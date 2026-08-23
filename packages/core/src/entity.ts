@@ -1,5 +1,6 @@
 import {
   COMPOSE_BUILTIN_COMPONENT_KEYS,
+  COMPOSE_DEFAULT_TRANSFORM_PIVOT,
   type ComposeAppearance,
   type ComposeBindings,
   type ComposeClip,
@@ -11,6 +12,7 @@ import {
   type ComposeLock,
   type ComposeLayout,
   type ComposeOverflowMode,
+  type ComposePosition,
   type ComposeRenderer,
   type ComposeResolvedOverflow,
   type ComposeSpatialTransform,
@@ -43,6 +45,19 @@ export function getComposeComposition(entity: ComposeEntity): ComposeComposition
 /** 读取 Entity 的 Transform。 @public */
 export function getComposeTransform(entity: ComposeEntity): ComposeTransform {
   return entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.transform] as ComposeTransform
+}
+
+/**
+ * 读取 Entity 的旋转基点，缺席回退盒中心。
+ *
+ * @remarks
+ * **唯一读取入口**。基点缺席即中心这条回退散落到各处的话，漏掉一处的症状是那条路径上的
+ * 旋转中心与别处不一致——而矩阵合成与分解必须给出同一个基点，否则手势提交后对象会跳一下。
+ *
+ * @public
+ */
+export function getComposeTransformPivot(entity: ComposeEntity): ComposePosition {
+  return getComposeTransform(entity).pivot ?? COMPOSE_DEFAULT_TRANSFORM_PIVOT
 }
 
 /** 把持久化 LayoutItem box 与 Transform rotation 合成为 Stage 编辑值。 @public */

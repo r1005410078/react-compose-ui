@@ -124,6 +124,7 @@ export {
   getComposeRenderer,
   getComposeSpatialTransform,
   getComposeTransform,
+  getComposeTransformPivot,
   getComposeVisibility,
   getComposeWidgetSwitcher,
   isComposeComponentKey,
@@ -284,7 +285,7 @@ export type {
   JsonValue,
   ResolvedComposeAppearance,
 } from './document-types'
-export { COMPOSE_BUILTIN_COMPONENT_KEYS } from './document-types'
+export { COMPOSE_BUILTIN_COMPONENT_KEYS, COMPOSE_DEFAULT_TRANSFORM_PIVOT } from './document-types'
 export {
   COMPOSE_APP_MANIFEST_FILE_NAME,
   COMPOSE_APP_MANIFEST_SCHEMA_VERSION,
