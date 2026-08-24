@@ -45,6 +45,20 @@ function dasharray(value: unknown, strokeWidth: number): string | undefined {
 }
 
 /**
+ * 虚线图案沿线的偏移量。
+ *
+ * @remarks
+ * 缺席与 0 都返回 `undefined`：偏移 0 就是不偏移，写进 DOM 只会让「没设过这个属性的曲线」
+ * 与「设成 0 的曲线」渲染出不同的属性集，而两者在屏幕上一模一样。
+ *
+ * **不除画布缩放**，与 `strokeDasharray` 同单位——偏移量是沿着图案量的，图案是世界量，
+ * 偏移跟着变成屏幕量会让同一个数在不同缩放下推过不同长度的图案。
+ */
+function dashoffset(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value !== 0 ? value : undefined
+}
+
+/**
  * 弧的 SVG `path` 数据。
  *
  * @remarks
@@ -67,8 +81,8 @@ function polylinePoints(curve: ComposePolylineCurve): string {
  *
  * @remarks
  * 多段线是**一个** `<polyline>` / `<polygon>` 而不是 N 个 `<line>`：命中由
- * `pointer-events: stroke` 天然承担，与直线用的是同一个机制。CAD 侧那句「一条多段线在 DOM 里
- * 是 N 个 `<line>`」的代价在这边不存在。
+ * `pointer-events: stroke` 天然承担，与直线用的是同一个机制，因此拆成 N 个元素换不来任何
+ * 东西。
  */
 function geometryElement(
   curve: ComposeCurve,
@@ -115,8 +129,9 @@ function geometryElement(
  * `fit` 会整体缩放页面，那里的线宽必须跟着缩才是页面的忠实缩略图。物料因此不需要认识
  * 「编辑期还是渲染期」。
  *
- * `strokeDasharray` **不除**：间隔是图上的实际长度（AutoCAD 的 linetype），跟着缩放变才
- * 携带长度信息。两者一个除一个不除是照抄 CAD 的判断，不是漏写。
+ * `strokeDasharray` 与 `strokeDashoffset` **都不除**：间隔是图上的实际长度（AutoCAD 的
+ * linetype），跟着缩放变才携带长度信息；偏移量沿着图案量，必须与图案同单位。线宽除、图案
+ * 不除，一个除一个不除是有意的，不是漏写。
  *
  * **`vector-effect: non-scaling-stroke` 与上面那条不重复，两者各中和一段变换。**
  *
@@ -148,12 +163,13 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
   const curve = getComposeCurve(entity) ?? DEFAULT_CURVE_GEOMETRY
   const fill = getComposeCurveFill(entity)
   const stroke = typeof props.stroke === 'string' ? props.stroke : '#d8e2f1'
-  // 回退值与 `DEFAULT_CURVE_PROPS.strokeWidth` 必须一致：发丝线，与 CAD 画布同值。
+  // 回退值与 `DEFAULT_CURVE_PROPS.strokeWidth` 必须一致：发丝线。
   const strokeWidth = typeof props.strokeWidth === 'number' && props.strokeWidth >= 0
     ? props.strokeWidth
     : 1
   const cap = linecap(props.strokeLinecap)
   const pattern = dasharray(props.strokeDasharray, strokeWidth)
+  const offset = dashoffset(props.strokeDashoffset)
   const markerStart = marker(props.markerStart, 'none')
   const markerEnd = marker(props.markerEnd, 'none')
   // marker 的 id 必须逐 Entity 唯一：同一页面上两条颜色不同的箭头共用一个 id 时，后挂载的
@@ -210,6 +226,7 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
         stroke,
         vectorEffect: 'non-scaling-stroke',
         strokeDasharray: pattern,
+        strokeDashoffset: offset,
         // 圆点线型必须配 round cap，否则零长度 dash 画不出任何东西。
         strokeLinecap: props.strokeDasharray === '1 4' ? 'round' : cap,
         strokeWidth,

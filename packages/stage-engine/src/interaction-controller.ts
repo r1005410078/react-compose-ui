@@ -265,9 +265,9 @@ export interface StageInteractionContext {
    * 点选与框选的组合语义。
    *
    * @remarks
-   * 页面语义（`'replace'`）来自 Figma：点一下换一个，Shift 切换。CAD 语义（`'accumulate'`）
-   * 点中即加入、Shift 移出。两者是刻意的差别而不是不一致——选择集是每分钟要用几十次的动作，
-   * 用户的肌肉记忆在两个模式里来自不同的工具，折中只会两边都不像。
+   * 页面语义（`'replace'`）来自 Figma：点一下换一个，Shift 切换，这是第一方唯一使用的值。
+   * `'accumulate'`（点中即加入、Shift 移出）是 AutoCAD 惯例，留给宿主受控设置，第一方不再
+   * 有调用点。
    *
    * 点选与框选 MUST 读同一个值：分别判断模式会让「点着累加、框着替换」这种没人设计过的
    * 组合悄悄出现。

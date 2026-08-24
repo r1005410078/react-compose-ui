@@ -13,7 +13,6 @@ import type {
   IDockviewPanelProps,
 } from 'dockview-react'
 import { EditorModeSwitcher } from './editor-mode-switcher'
-import { CadDocumentPanel } from '../cad/cad-document-panel'
 import { useWorkspaceContent } from './workspace-context'
 import { WORKSPACE_COMPONENT_IDS, WORKSPACE_PANEL_IDS } from './workspace-layout'
 import { WorkspaceHeaderActions, WorkspaceTab } from './workspace-tab'
@@ -494,7 +493,6 @@ const coreComponents = {
   [WORKSPACE_COMPONENT_IDS.assetDocument]: AssetDocumentPanel,
   [WORKSPACE_COMPONENT_IDS.pageDocument]: PageDocumentPanel,
   [WORKSPACE_COMPONENT_IDS.componentDocument]: ComponentDocumentPanel,
-  [WORKSPACE_COMPONENT_IDS.cadDocument]: CadDocumentPanel,
 } satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
 const coreTabComponents = { workspaceTab: WorkspaceTab }
 

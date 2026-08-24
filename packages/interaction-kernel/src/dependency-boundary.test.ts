@@ -46,6 +46,6 @@ describe('interaction-kernel dependency boundary', () => {
       .join('\n')
       .replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
 
-    expect(executableSource).not.toMatch(/\b(?:Stage|Compose|Cad)[A-Z]\w*/)
+    expect(executableSource).not.toMatch(/\b(?:Stage|Compose)[A-Z]\w*/)
   })
 })

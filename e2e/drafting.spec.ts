@@ -138,7 +138,7 @@ test('OpenSpec: stage / 统一的替换选择语义 / 点击替换、Shift 累�
   /*
    * 选择语义只剩一套：Figma 的替换 + Shift 累加。
    *
-   * 曾经绘图模式有第二套 CAD 语义（点中即加入、Shift 移出），理由写的是「用户的肌肉记忆
+   * 曾经绘图模式有第二套语义（点中即加入、Shift 移出），理由写的是「用户的肌肉记忆
    * 来自 AutoCAD」——而那条前提已被推翻（用户不熟 AutoCAD，判据换成「任务需要什么」）。
    * 任务需要的只是「能选中多个」，Shift 累加就够。
    */
@@ -364,7 +364,7 @@ test('OpenSpec: stage / Stage 十字光标 / 三形态与系统光标隐藏', as
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
-  // 1) 空闲：什么都不画，系统光标可见。这是与 CAD 刻意的不对称——页面编辑器的静息光标是箭头。
+  // 1) 空闲：什么都不画，系统光标可见——页面编辑器的静息光标是箭头。
   await page.mouse.move(at(300, 220).x, at(300, 220).y)
   await expect(lines).toHaveCount(0)
   await expect(pickbox).toHaveCount(0)

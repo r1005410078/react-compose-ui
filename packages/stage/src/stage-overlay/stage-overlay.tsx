@@ -6,7 +6,7 @@ interface StageOverlayComponentProps extends StageOverlayProps {
    * 覆盖默认的层注册表。
    *
    * @remarks
-   * 留给新文档类型（例如 CAD）贡献自己的层；缺省即第一方全套。
+   * 留给宿主贡献自己的层；缺省即第一方全套。
    */
   readonly contributions?: readonly StageOverlayContribution[]
 }

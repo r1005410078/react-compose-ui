@@ -30,7 +30,7 @@ export interface InteractionKernelProfile {
    *
    * @remarks
    * 由 profile 声明而不是由内核推导：内核若写死 `Extract<event, { type: 'pointer.down' }>`，
-   * 就假设了交互一定由指针按下发起。命令驱动的文档类型（CAD 的 `L↵`）不成立。
+   * 就假设了交互一定由指针按下发起。而命令驱动的编辑（敲 `L↵` 开始画线）由键盘发起。
    */
   readonly claimEvent: unknown
   /** 发往 surface 的效果。 */

@@ -8,6 +8,7 @@ import {
   findComposeAnimation,
   getComposeAppearance,
   getComposeLayoutItem,
+  getComposeRenderer,
   getComposeSpatialTransform,
   jsonEqual,
 } from '@compose-ui/core'
@@ -44,6 +45,65 @@ const HEIGHT_PATH = ['LayoutItem', 'height', 'value'] as const
 const ROTATION_PATH = ['Transform', 'rotation'] as const
 const OPACITY_PATH = ['Appearance', 'opacity'] as const
 const COLOR_PATH = ['Appearance', 'backgroundPaint', 'color'] as const
+const DASH_OFFSET_PATH = ['Renderer', 'props', 'strokeDashoffset'] as const
+
+/**
+ * 可自动记录的 Renderer prop 白名单。
+ *
+ * @remarks
+ * Renderer props 是**开放**记录（每个物料自定义），因此这里必须逐条列白名单，不能像
+ * `Appearance` 那样「除了这几个都不许变」——那条规则在一个开放集合上会把每一次普通的
+ * props 编辑都判成不可改写。
+ *
+ * 与 `ANIMATABLE_FIELDS` 中的 Renderer 条目 MUST 保持一致：一边给了菱形而另一边不改写，
+ * 用户会看到打点按钮在，但改值写成静态值。
+ */
+const ANIMATABLE_RENDERER_PROPS: Readonly<Record<string, {
+  readonly path: readonly string[]
+  readonly valueKind: ComposeAnimationValueKind
+  readonly fallback: JsonValue
+}>> = {
+  strokeDashoffset: { path: DASH_OFFSET_PATH, valueKind: 'number', fallback: 0 },
+}
+
+/**
+ * 收集一次 Renderer props 编辑里落在白名单上的关键帧草稿。
+ *
+ * @remarks
+ * 白名单之外的 prop 只要变了就整条放行（返回 `null`）：半改写会把一次编辑拆成
+ * 「一半进关键帧、一半进静态值」，与 Appearance 那条是同一个判断。
+ */
+function collectRendererPropsDrafts(
+  entityId: string,
+  entity: ComposeEntity,
+  next: Record<string, unknown>,
+): DraftCollection {
+  const current = getComposeRenderer(entity)?.props as Record<string, unknown> | undefined
+  if (!current) return null
+  const drafts: KeyframeDraft[] = []
+  for (const key of new Set([...Object.keys(current), ...Object.keys(next)])) {
+    const animatable = ANIMATABLE_RENDERER_PROPS[key]
+    const before = (current[key] ?? null) as JsonValue
+    const after = (next[key] ?? null) as JsonValue
+    if (!animatable) {
+      if (!jsonEqual(before, after)) return null
+      continue
+    }
+    // 缺席即回退值：`strokeDashoffset` 不写就是 0，与渲染和面板读的是同一条规则。
+    const beforeValue = before === null ? animatable.fallback : before
+    const afterValue = after === null ? animatable.fallback : after
+    if (typeof afterValue !== 'number' || !Number.isFinite(afterValue)) return null
+    if (!jsonEqual(beforeValue, afterValue)) {
+      drafts.push({
+        entityId,
+        path: animatable.path,
+        valueKind: animatable.valueKind,
+        value: afterValue,
+      })
+    }
+  }
+  return drafts
+}
 
 /** 收集结果：`null` 表示命令含不可改写的变更，必须整条放行。 */
 type DraftCollection = readonly KeyframeDraft[] | null
@@ -256,6 +316,23 @@ export function rewriteAutoRecordCommand(
       payload.entityId,
       entity,
       payload.appearance as Record<string, unknown>,
+    )
+  }
+  else if (command.type === BUILTIN_COMMAND_TYPES.setRendererProps) {
+    const payload = command.payload as {
+      readonly entityId?: unknown
+      readonly props?: unknown
+    }
+    if (
+      typeof payload.entityId !== 'string'
+      || !payload.props || typeof payload.props !== 'object'
+    ) return null
+    const entity = document.entities[payload.entityId]
+    if (!entity) return null
+    drafts = collectRendererPropsDrafts(
+      payload.entityId,
+      entity,
+      payload.props as Record<string, unknown>,
     )
   }
 

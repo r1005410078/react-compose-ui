@@ -554,8 +554,8 @@ export interface DocumentValidationIssue {
  *
  * @remarks
  * `code` 在这里只约束为 string：稳定机器码的**取值集合**属于各文档协议自己
- * （ComposeDocument 是 {@link DocumentValidationIssueCode}，CAD 有自己的一套），
- * 但事务运行时把它们一律转成 `CommandIssue`，只需要这三个字段。
+ * （ComposeDocument 是 {@link DocumentValidationIssueCode}），但事务运行时把它们一律转成
+ * `CommandIssue`，只需要这三个字段。
  *
  * @public
  */

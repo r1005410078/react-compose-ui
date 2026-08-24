@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import type { Locator } from '@playwright/test'
 
 /**
  * 绘图模式的 chrome 与键盘。
@@ -8,6 +9,23 @@ import { expect, test } from '@playwright/test'
  * 触发，因此「取完点之后焦点到底在谁身上」这个问题在 jsdom 里根本不会被问；布局遮盖同理，
  * jsdom 不做排版，所有元素的盒都是零。
  */
+
+/**
+ * 量一个元素的盒，直到量得到为止。
+ *
+ * @remarks
+ * `toBeVisible()` 之后紧跟 `boundingBox()` **仍可能读到 null**：编辑器挂载后 Stage 还会按
+ * 量到的 surface 尺寸重排一次，两次调用之间落在那一帧上就读到空盒。实测在未改动的主干上
+ * 约六次隔离运行抖一次，与删除 CAD 无关。把读取放进 poll 里，读到的就是同一次成功的那个盒。
+ */
+async function boxOf(locator: Locator) {
+  let box: Awaited<ReturnType<Locator['boundingBox']>> = null
+  await expect.poll(async () => {
+    box = await locator.boundingBox()
+    return box !== null
+  }).toBe(true)
+  return box!
+}
 
 async function enterDrafting(page: import('@playwright/test').Page) {
   await page.goto('/')
@@ -22,7 +40,7 @@ test('OpenSpec: stage / 绘图模式 / 手在画布上时 Enter 结束命令', a
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await boxOf(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   await commandInput.fill('L')
@@ -47,10 +65,10 @@ test('OpenSpec: stage / 绘图模式 / 手在画布上时 Enter 结束命令', a
 test('OpenSpec: stage / 绘图模式 / 命令行不被标尺与图面压住', async ({ page }) => {
   const { stage } = await enterDrafting(page)
 
-  const commandLine = (await stage.getByTestId('stage-drafting-command-line').boundingBox())!
+  const commandLine = await boxOf(stage.getByTestId('stage-drafting-command-line'))
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
-  const verticalRuler = (await stage.getByTestId('stage-ruler-y').boundingBox())!
+  const surface = await boxOf(stage.getByTestId('stage-surface'))
+  const verticalRuler = await boxOf(stage.getByTestId('stage-ruler-y'))
 
   // 命令行独占底部一条：图面与竖标尺都必须停在它上边缘之前。原先它是 `bottom: 0` 的浮层，
   // 左端 24px 压在竖标尺下、底部 10px 压在横滚动条下，第一个字与整条下边框都看不见。
@@ -58,7 +76,7 @@ test('OpenSpec: stage / 绘图模式 / 命令行不被标尺与图面压住', as
   expect(verticalRuler.y + verticalRuler.height).toBeLessThanOrEqual(commandLine.y + 0.5)
 
   // 提示文字完整可见——被压住时它的左端会落在竖标尺的宽度之内。
-  const promptBox = (await stage.getByTestId('stage-drafting-command-prompt').boundingBox())!
+  const promptBox = await boxOf(stage.getByTestId('stage-drafting-command-prompt'))
   expect(promptBox.y).toBeGreaterThanOrEqual(commandLine.y - 0.5)
 })
 
@@ -67,7 +85,7 @@ test('OpenSpec: materials / 曲线线宽 / 放大后描边的实际触达不变'
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await boxOf(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   await commandInput.fill('L')
@@ -123,7 +141,7 @@ test('OpenSpec: materials / 曲线的盒不裁描边 / 水平线在容差内点�
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await boxOf(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   // 水平线的紧包围盒高度被钳到 `COMPOSE_CURVE_MIN_EXTENT`，是「盒裁掉描边」最极端的一例：

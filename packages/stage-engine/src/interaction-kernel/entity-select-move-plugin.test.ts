@@ -124,7 +124,7 @@ describe('OpenSpec: stage-engine / ECS SceneIndex / 实体选中并拖动插件'
   it('累加模式下 Shift 点中未选中的对象不把它加进来', () => {
     const { down, selections } = selectSetup({ selectedIds: ['a'], selectionMode: 'accumulate' })
 
-    // Shift 在 CAD 里只有「移出」一个含义，点未选中的对象是 no-op。
+    // `accumulate` 下的 Shift 只有「移出」一个含义，点未选中的对象是 no-op。
     down('b', { modifiers: { ...MODIFIERS, shift: true } })
 
     expect(selections()).toEqual([{ type: 'selection.change', selectedIds: ['a'] }])

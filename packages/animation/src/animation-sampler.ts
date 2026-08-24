@@ -177,9 +177,9 @@ function applyTracksToEntity(
  * 失效路径与坏数据被静默跳过，采样绝不抛错。
  *
  * 类型参数放宽到「任何带 `entities` 的文档」而不是钉死 `ComposeDocument`：本函数只遍历
- * `entities`、只写 `entities`，不认识 Frame、清单或文档的其余字段。CAD 文档因此复用同一份
- * 实现——第二份的代价不是行数，而是那段由 x 反解 t、近水平处退回二分的缓动求解，抄一遍就是
- * 给自己安排两处都要修的 bug。
+ * `entities`、只写 `entities`，不认识 Frame、清单或文档的其余字段。放宽在只有一个消费者时
+ * 依然正确，因此不收窄——真正的代价从来不是行数，而是那段由 x 反解 t、近水平处退回二分的
+ * 缓动求解，抄第二遍就是给自己安排两处都要修的 bug。
  *
  * @param animationId - 文档动画清单中的动画 ID；不存在时原样返回文档。
  * @public

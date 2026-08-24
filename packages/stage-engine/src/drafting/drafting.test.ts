@@ -270,7 +270,7 @@ describe('特征点捕捉', () => {
 
   it('容差内端点压过中点，即使中点更近', () => {
     // 光标 (210,100)：中点 (200,100) 距离 10，端点 (300,100) 距离 90，两者都在容差内。
-    // 优先级严格先于距离——与 CAD 侧 `findCadSnap` 同一条判定，两块画布的捕捉手感必须一致。
+    // 优先级严格先于距离：端点压过中点，即使中点更近。
     const hit = findStageFeaturePoint(doc, indexFor(doc), { x: 210, y: 100 }, 100)
     expect(hit?.mode).toBe('endpoint')
   })

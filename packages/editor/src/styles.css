@@ -8,7 +8,6 @@
 @import '@compose-ui/stage/styles.css';
 @import '@compose-ui/command-panel/styles.css';
 @import '@compose-ui/asset-browser/styles.css';
-@import '@compose-ui/cad-canvas/styles.css';
 @import '@compose-ui/component-library/styles.css';
 
 @layer theme, base, components, utilities;
@@ -111,8 +110,7 @@
   box-shadow: inset 0 1px rgb(255 255 255 / 2%);
 }
 
-.compose-editor__component-kind-label,
-.compose-editor__cad-kind-label {
+.compose-editor__component-kind-label {
   @apply ct:shrink-0 ct:truncate ct:px-3 ct:text-xs;
   color: var(--compose-text-subtle);
   max-width: 14rem;
@@ -977,8 +975,7 @@
  * flex 列布局：.compose-editor__canvas-content 依赖 flex-1 撑开，放进 grid 容器会塌陷。
  */
 .compose-editor__page-document,
-.compose-editor__component-document,
-.compose-editor__cad-document {
+.compose-editor__component-document {
   display: flex;
   width: 100%;
   height: 100%;

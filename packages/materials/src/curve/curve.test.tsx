@@ -186,7 +186,7 @@ describe('curve 物料的弧与多段线渲染', () => {
     })
     render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
 
-    // CAD 侧一条多段线在 DOM 里是 N 个 `<line>`；页面这边是一个元素，命中由加宽 stroke 承担。
+    // 一条多段线在 DOM 里是一个元素而不是 N 个 `<line>`，命中由加宽 stroke 承担。
     const stroke = screen.getByTestId('compose-material-curve-stroke')
     expect(stroke.tagName.toLowerCase()).toBe('polyline')
     expect(stroke).toHaveAttribute('points', '0,0 40,0 40,40 0,40')
@@ -248,13 +248,53 @@ describe('curve 物料的弧与多段线渲染', () => {
     render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
 
     // 间隔是图上的实际长度（AutoCAD 的 linetype），跟着缩放变才携带长度信息——与线宽相反。
-    // 一个除一个不除是照抄 CAD 的判断，不是漏写。
+    // 一个除一个不除是有意的，不是漏写。
     // 图案由作者写的线宽推出（4 倍划、2 倍空），单位是**世界**——线宽已经改成屏幕像素，
     // 这里刻意不跟着走。
     const dash = screen.getByTestId('compose-material-curve-stroke').getAttribute('stroke-dasharray')
     expect(dash).toBe('4 2')
     expect(screen.getByTestId('compose-material-curve-stroke').getAttribute('style'))
       .not.toContain('stroke-dasharray')
+  })
+
+  it('OpenSpec: basic-materials / 曲线的虚线偏移 / 缺席即不偏移', () => {
+    // 引入 `strokeDashoffset` 之前的曲线不写这个 prop，渲染输出必须与那时逐字一致——
+    // 这是决策 A 的回归护栏：新属性不许让任何既有文档动一下。
+    const { entity, materials } = withCurve(
+      { kind: 'line', start: { x: 0, y: 0 }, end: { x: 40, y: 30 } },
+      { strokeDasharray: '8 4' },
+    )
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    expect(screen.getByTestId('compose-material-curve-stroke'))
+      .not.toHaveAttribute('stroke-dashoffset')
+  })
+
+  it('OpenSpec: basic-materials / 曲线的虚线偏移 / 写成 0 与缺席同结果', () => {
+    // 偏移 0 就是不偏移。两者渲染出不同的属性集会让「设过」与「没设过」在 DOM 上可分，
+    // 而它们在屏幕上一模一样。
+    const { entity, materials } = withCurve(
+      { kind: 'line', start: { x: 0, y: 0 }, end: { x: 40, y: 30 } },
+      { strokeDasharray: '8 4', strokeDashoffset: 0 },
+    )
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    expect(screen.getByTestId('compose-material-curve-stroke'))
+      .not.toHaveAttribute('stroke-dashoffset')
+  })
+
+  it('OpenSpec: basic-materials / 曲线的虚线偏移 / 偏移与图案同单位，负值合法', () => {
+    const { entity, materials } = withCurve(
+      { kind: 'line', start: { x: 0, y: 0 }, end: { x: 40, y: 30 } },
+      { strokeDasharray: '8 4', strokeDashoffset: -6 },
+    )
+    render(<ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />)
+
+    const stroke = screen.getByTestId('compose-material-curve-stroke')
+    // 负值把图案朝线的终点推，正是「流动」要的方向，因此不钳制符号。
+    expect(stroke).toHaveAttribute('stroke-dashoffset', '-6')
+    // 偏移沿着图案量，必须与 `strokeDasharray` 同单位——两者都不除画布缩放。
+    expect(stroke.getAttribute('style')).not.toContain('stroke-dashoffset')
   })
 })
 

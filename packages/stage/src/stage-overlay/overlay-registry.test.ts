@@ -40,12 +40,12 @@ describe('OpenSpec: stage / Overlay 层注册表 / 绘制顺序', () => {
   })
 
   it('宿主追加的层与第一方层按同一套 order 排序', () => {
-    const registry = createStageOverlayRegistry([stub('cad-dimensions', 450)])
+    const registry = createStageOverlayRegistry([stub('host-dimensions', 450)])
     const ids = registry.map(({ id }) => id)
 
     // 450 落在 move-gizmo(500) 与 paint-handles(400) 之间：降序排列下即在两者中间。
-    expect(ids.indexOf('cad-dimensions')).toBeGreaterThan(ids.indexOf('move-gizmo'))
-    expect(ids.indexOf('cad-dimensions')).toBeLessThan(ids.indexOf('paint-handles'))
+    expect(ids.indexOf('host-dimensions')).toBeGreaterThan(ids.indexOf('move-gizmo'))
+    expect(ids.indexOf('host-dimensions')).toBeLessThan(ids.indexOf('paint-handles'))
   })
 
   it('id 重复时拒绝注册', () => {

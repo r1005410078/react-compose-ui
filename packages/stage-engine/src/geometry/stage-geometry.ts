@@ -128,7 +128,7 @@ export function zoomViewportAt(
   screenPoint: StagePoint,
   requestedZoom: number,
 ): StageViewport {
-  // 代数住在 core：CAD 画布用同一份，只有钳制区间不同（页面画布有确定尺寸，无限图纸没有）。
+  // 代数住在 core：它不认识文档，钳制区间由调用方给出。
   const next = composeCanvasZoomAt(
     { offset: { x: viewport.x, y: viewport.y }, zoom: viewport.zoom },
     screenPoint,
@@ -650,7 +650,7 @@ export function pointOnRotationRay(
  * 由任意两个点求归一化矩形。
  *
  * @remarks
- * 结果始终是左上原点的正尺寸矩形，因此**丢失了拖拽方向**。需要方向的判定（例如 CAD 惯例的
+ * 结果始终是左上原点的正尺寸矩形，因此**丢失了拖拽方向**。需要方向的判定（例如 AutoCAD 惯例的
  * directional 框选）必须另行从起止点取，不能从矩形反推。
  *
  * @public

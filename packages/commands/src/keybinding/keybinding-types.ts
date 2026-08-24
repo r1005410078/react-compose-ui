@@ -42,7 +42,7 @@ export interface ComposeKeyboardEventShape {
  * 动作 id 到其全部生效键位的映射。
  *
  * @remarks
- * 对动作 id 集合泛型，因此 Stage 的动作、Editor 的动作与将来 CAD 的命令可以共用同一套
+ * 对动作 id 集合泛型，因此 Stage 的动作、Editor 的动作与任何后来的动作集合可以共用同一套
  * 归一化、去重、冲突检测与命中解析。空数组表示该动作被显式禁用，与「未配置」不同。
  *
  * @public

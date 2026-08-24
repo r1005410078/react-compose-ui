@@ -89,8 +89,8 @@ describe('ComposeCommandLine', () => {
   })
 
   it('testid 前缀由调用方给出', () => {
-    renderLine({ testIdPrefix: 'cad' })
-    expect(screen.getByTestId('cad-command-input')).toBeInTheDocument()
+    renderLine({ testIdPrefix: 'drafting' })
+    expect(screen.getByTestId('drafting-command-input')).toBeInTheDocument()
   })
 
   describe('OpenSpec: stage / 命令行历史与重复上一条 / 上箭头召回敲过的行', () => {

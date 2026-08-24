@@ -115,3 +115,57 @@ test('OpenSpec: compose-document / 曲线 Entity / 位置关键帧零改动可�
     .poll(async () => Math.abs((await stroke.boundingBox())!.x - animBox!.x))
     .toBeLessThan(2)
 })
+
+test('OpenSpec: basic-materials / 曲线的虚线偏移 / 打两个关键帧让虚线沿线流动', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Curve' }).click()
+
+  const stroke = stage.getByTestId('compose-material-curve-stroke')
+  const box = await stroke.boundingBox()
+  expect(box).not.toBeNull()
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2)
+
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  // 实线上的偏移在屏幕上没有任何变化——先有图案，偏移才谈得上「流动」。
+  await inspector.getByRole('combobox', { name: '线条样式' }).selectOption('8 4')
+  await expect(stroke).toHaveAttribute('stroke-dasharray', '4 2')
+  // 没设过偏移的曲线不写这个属性，与引入本能力之前逐字一致。
+  await expect(stroke).not.toHaveAttribute('stroke-dashoffset', /.*/u)
+
+  await editor.getByRole('radio', { name: '动画' }).click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+
+  // 0 ms 打点：偏移从 0 起步。
+  await inspector.getByRole('button', { name: '为 虚线偏移 添加关键帧' }).click()
+  await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：虚线偏移' })).toBeVisible()
+
+  // 200 ms 改值：自动记录把 Renderer props 的编辑改写成播放头处的关键帧，而不是静态值。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  await inspector.getByRole('spinbutton', { name: '虚线偏移' }).fill('-12')
+  await inspector.getByRole('spinbutton', { name: '虚线偏移' }).press('Enter')
+  await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：虚线偏移' })).toBeVisible()
+
+  // 图案真的在动：中间时刻是插值出来的第三个值，而不是两端之一。
+  const offsetAt = async (timeMs: string) => {
+    await animationPanel.getByRole('slider', { name: '当前时间' }).fill(timeMs)
+    // 缺席即 0：渲染不写这个属性与写 0 是同一件事，读数因此对两者都成立。
+    return expect.poll(async () => Number(await stroke.getAttribute('stroke-dashoffset') ?? 0))
+  }
+  await (await offsetAt('200')).toBeCloseTo(-12, 1)
+  await (await offsetAt('100')).toBeCloseTo(-6, 0)
+  await (await offsetAt('0')).toBe(0)
+
+  // 采样只作用于渲染：偏移走满两个关键帧，几何一动不动。基准必须在动画模式下重量——
+  // 面板从底部展开会压缩 Stage 并让图面重新取景，沿用设计模式量到的盒会误报成位移。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('0')
+  const animBox = await stroke.boundingBox()
+  expect(animBox).not.toBeNull()
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
+  await expect.poll(async () => Math.round((await stroke.boundingBox())!.x))
+    .toBe(Math.round(animBox!.x))
+})

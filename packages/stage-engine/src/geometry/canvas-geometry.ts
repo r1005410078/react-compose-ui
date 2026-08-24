@@ -15,7 +15,7 @@ import type {
 
 /*
  * 点阵与标尺刻度住在 core：它们只吃 step/offset/viewportOffset/zoom 一串数字，不认识文档，
- * 因此待在本包只是历史位置而不是边界要求。CAD 画布同样需要它们，而 cad-canvas 不得依赖
+ * 因此待在本包只是历史位置而不是边界要求；headless 的消费者也用得上它们，而那些包不得依赖
  * stage-engine。这里保留既有导出名，Stage 侧调用点一行不改。
  */
 export {

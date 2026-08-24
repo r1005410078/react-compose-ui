@@ -38,11 +38,11 @@ describe('canvas-kit 依赖边界', () => {
       .join('\n')
     const executable = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
 
-    for (const forbidden of ['stage', 'stage-engine', 'cad', 'cad-canvas', 'editor', 'preview']) {
+    for (const forbidden of ['stage', 'stage-engine', 'editor', 'preview']) {
       expect(executable).not.toMatch(new RegExp(`@compose-ui/${forbidden}['"]`))
     }
     // 文档词汇：出现即说明本包开始认识领域模型。标尺的 `selection` 是一段屏幕区间与尺寸文本，
     // 不是选择集，因此不在此列。
-    expect(executable).not.toMatch(/\bComposeDocument\b|\bCadDocument\b|\bComposeEntity\b/)
+    expect(executable).not.toMatch(/\bComposeDocument\b|\bComposeEntity\b/)
   })
 })

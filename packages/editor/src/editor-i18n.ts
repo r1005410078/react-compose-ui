@@ -93,6 +93,7 @@ const messages = {
       propertyHeight: '高度',
       propertyOpacity: '透明度',
       propertyBackgroundColor: '背景色',
+      propertyDashOffset: '虚线偏移',
       createAnimation: '创建动画',
       defaultAnimationName: '动画 1',
       keyNone: (label: string) => `为 ${label} 添加关键帧`,
@@ -153,16 +154,6 @@ const messages = {
       resetZoom: '还原到 100%',
       zoomIn: '放大',
       toggleSnapTransaction: '切换画布吸附',
-    },
-    cad: {
-      createDocument: '创建 CAD',
-      createDocumentTitle: '新建 CAD',
-      defaultDocumentName: 'untitled',
-      documentLabel: 'CAD',
-      save: '保存 CAD',
-      createFailed: 'CAD 创建失败',
-      openFailed: 'CAD 打开失败',
-      saveFailed: 'CAD 保存失败',
     },
     dxf: {
       importAsPage: '导入为页面',
@@ -323,6 +314,7 @@ const messages = {
       propertyHeight: 'Height',
       propertyOpacity: 'Opacity',
       propertyBackgroundColor: 'Background color',
+      propertyDashOffset: 'Dash offset',
       createAnimation: 'Create animation',
       defaultAnimationName: 'Animation 1',
       keyNone: (label: string) => `Add keyframe for ${label}`,
@@ -384,16 +376,6 @@ const messages = {
       resetZoom: 'Reset to 100%',
       zoomIn: 'Zoom in',
       toggleSnapTransaction: 'Toggle canvas snapping',
-    },
-    cad: {
-      createDocument: 'New CAD',
-      createDocumentTitle: 'New CAD',
-      defaultDocumentName: 'untitled',
-      documentLabel: 'CAD',
-      save: 'Save CAD',
-      createFailed: 'Failed to create the CAD document',
-      openFailed: 'Failed to open the CAD document',
-      saveFailed: 'Failed to save the CAD document',
     },
     dxf: {
       importAsPage: 'Import as page',
@@ -778,6 +760,10 @@ export function getEditorMessages(
         'animationMode.propertyBackgroundColor',
         current.animationMode.propertyBackgroundColor,
       ),
+      propertyDashOffset: format(
+        'animationMode.propertyDashOffset',
+        current.animationMode.propertyDashOffset,
+      ),
       createAnimation: format('animationMode.createAnimation', current.animationMode.createAnimation),
       defaultAnimationName: format(
         'animationMode.defaultAnimationName',
@@ -820,9 +806,6 @@ export function getEditorMessages(
         format(`stageToolbar.${key}`, fallback),
       ]),
     ) as Record<keyof typeof current.stageToolbar, string>,
-    cad: Object.fromEntries(
-      Object.entries(current.cad).map(([key, fallback]) => [key, format(`cad.${key}`, fallback)]),
-    ) as Record<keyof typeof current.cad, string>,
     dxf: Object.fromEntries(
       Object.entries(current.dxf).map(([key, fallback]) => [key, format(`dxf.${key}`, fallback)]),
     ) as Record<keyof typeof current.dxf, string>,

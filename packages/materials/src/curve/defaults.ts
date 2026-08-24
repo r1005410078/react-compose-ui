@@ -37,8 +37,7 @@ export const DEFAULT_CURVE_APPEARANCE: ComposeAppearance = Object.freeze({
  * 一个像素画。曾经写的 2 在图面上明显偏粗：接线图靠**线的走向**而不是线的分量传达信息，
  * 加粗只会让密集区糊成一片。
  *
- * 不为这个数在 `core` 立共享常量：`cad` 那一份按路线图步骤 7 要随 `CadDocument` 一起删除，
- * 为一个即将只剩一处的值提前抽象，收益是负的。
+ * 不为这个数在 `core` 立共享常量：全仓库只有这一处用它，为一个单点的值抽象收益是负的。
  *
  * @internal
  */

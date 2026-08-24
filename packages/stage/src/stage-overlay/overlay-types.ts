@@ -113,8 +113,8 @@ export type StageOverlayContext = StageOverlayProps
  * 一个可注册的 Overlay 层。
  *
  * @remarks
- * 层是纯呈现：输入是上下文，输出是 SVG 片段，不持有状态也不写文档。这让 CAD 之类的新文档
- * 类型可以贡献自己的层，而不必改动 Overlay 本体。
+ * 层是纯呈现：输入是上下文，输出是 SVG 片段，不持有状态也不写文档。宿主因此可以贡献自己的
+ * 层，而不必改动 Overlay 本体。
  *
  * @public
  */

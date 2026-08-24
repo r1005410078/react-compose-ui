@@ -414,6 +414,7 @@ export function EntityInspector({
           <ComposePropertyPanelSection
             defaultExpanded={category.inspectorDefaultExpanded ?? true}
             key={`renderer-category:${category.id}`}
+            renderFieldAdornment={fieldAdornment}
             title={category.label}
           >
             {rendererDefinition.inspector ? (

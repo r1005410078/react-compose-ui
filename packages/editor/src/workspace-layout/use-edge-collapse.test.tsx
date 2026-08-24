@@ -47,44 +47,46 @@ function renderWith(kind: ComposeWorkspaceDocumentKind) {
 }
 
 describe('边缘面板按文档类型记忆展开状态', () => {
-  it('OpenSpec: editor-workspace-layout / 边缘面板按文档类型记忆展开状态 / CAD 默认收起', () => {
+  it('OpenSpec: editor-workspace-layout / 边缘面板按文档类型记忆展开状态 / 初值一致为展开', () => {
     const { rerender, left, right } = renderWith('page')
     expect(left.isCollapsed()).toBe(false)
     expect(right.isCollapsed()).toBe(false)
 
-    rerender({ activeKind: 'cad' })
-    expect(left.isCollapsed()).toBe(true)
-    expect(right.isCollapsed()).toBe(true)
+    // 曾经有过一个初值收起的类型（CAD），随那套文档一起删除；余下三种初值一致。
+    rerender({ activeKind: 'component' })
+    expect(left.isCollapsed()).toBe(false)
+    expect(right.isCollapsed()).toBe(false)
 
-    rerender({ activeKind: 'page' })
+    rerender({ activeKind: 'asset' })
     expect(left.isCollapsed()).toBe(false)
     expect(right.isCollapsed()).toBe(false)
   })
 
   it('OpenSpec: editor-workspace-layout / 边缘面板按文档类型记忆展开状态 / 用户选择被记住', () => {
-    const { rerender, left, right } = renderWith('cad')
-    expect(left.isCollapsed()).toBe(true)
+    const { rerender, left, right } = renderWith('component')
 
-    // 用户在 CAD 标签里展开左侧面板。
-    left.expand()
+    // 用户在组件标签里收起左侧面板。
+    left.collapse()
 
     rerender({ activeKind: 'page' })
+    // 页面标签是另一种类型，用的是它自己的初值。
     expect(left.isCollapsed()).toBe(false)
 
-    rerender({ activeKind: 'cad' })
-    // 恢复用户的选择，而不是重置回 CAD 的初值。
-    expect(left.isCollapsed()).toBe(false)
-    // 右侧未被用户动过，仍是 CAD 的初值。
-    expect(right.isCollapsed()).toBe(true)
+    rerender({ activeKind: 'component' })
+    // 恢复用户的选择，而不是重置回初值。
+    expect(left.isCollapsed()).toBe(true)
+    // 右侧未被用户动过，仍是初值。
+    expect(right.isCollapsed()).toBe(false)
   })
 
-  it('页面标签的展开状态不受 CAD 中的操作影响', () => {
+  it('一种标签里的收起不影响另一种', () => {
+    // 初值一致之后，这条才是「按类型记忆」唯一还看得出来的地方：状态若是工作区级的
+    // 单一全局值，切过去就会串台。
     const { rerender, right } = renderWith('page')
-    // 用户在页面标签里收起右侧。
     right.collapse()
 
-    rerender({ activeKind: 'cad' })
-    expect(right.isCollapsed()).toBe(true)
+    rerender({ activeKind: 'component' })
+    expect(right.isCollapsed()).toBe(false)
 
     rerender({ activeKind: 'page' })
     expect(right.isCollapsed()).toBe(true)

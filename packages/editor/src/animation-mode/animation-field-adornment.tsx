@@ -1,5 +1,10 @@
 import type { ComposeDocument, JsonValue } from '@compose-ui/core'
-import { getComposeAppearance, getComposeLayoutItem, getComposeTransform } from '@compose-ui/core'
+import {
+  getComposeAppearance,
+  getComposeLayoutItem,
+  getComposeRenderer,
+  getComposeTransform,
+} from '@compose-ui/core'
 import type { ComposeAnimationValueKind } from '@compose-ui/animation'
 import type {
   ComposePropertyPanelFieldAdornmentContext,
@@ -24,6 +29,10 @@ interface AnimatableFieldTarget {
  * key 是 Inspector Schema 中的字段名（各分组间不重名），不是 Entity 内路径——
  * Inspector 的几何分组把 `Transform.rotation` 与 `LayoutItem.offset` 拼在同一个
  * Schema 里。白名单之外的字段不渲染菱形。
+ *
+ * 字段名在**组件分组与 Renderer 分组之间**同样不得重名：Renderer 分组的字段现在也走这套
+ * 装饰，一个同名字段会把菱形指到另一个 Component 的路径上，而屏幕上看不出区别。眼下没有
+ * 重名，加新条目前先确认这一点。
  */
 const ANIMATABLE_FIELDS: Readonly<Record<string, readonly AnimatableFieldTarget[]>> = {
   position: [{
@@ -69,6 +78,20 @@ const ANIMATABLE_FIELDS: Readonly<Record<string, readonly AnimatableFieldTarget[
     readValue: (document, entityId) => {
       const entity = document.entities[entityId]
       return entity ? getComposeAppearance(entity)?.opacity ?? 1 : undefined
+    },
+  }],
+  // 虚线偏移是「让导线看起来在流动」的唯一机制：给属性、不给命令（见 remove-cad-world
+  // 决策 A）。它是本白名单里第一条落在 Renderer props 上的轨道——采样器按
+  // `[componentKey, ...rest]` 写值，因此 `['Renderer','props',…]` 不需要引擎配合。
+  strokeDashoffset: [{
+    path: ['Renderer', 'props', 'strokeDashoffset'],
+    valueKind: 'number',
+    readValue: (document, entityId) => {
+      const entity = document.entities[entityId]
+      const props = entity ? getComposeRenderer(entity)?.props : undefined
+      const value = props?.strokeDashoffset
+      // 缺席即 0：面板显示 0 与渲染不写该属性说的是同一件事，打点从 0 起步。
+      return typeof value === 'number' && Number.isFinite(value) ? value : 0
     },
   }],
   backgroundPaint: [{

@@ -5,7 +5,8 @@ import type { StageMarqueeCombine } from './marquee-selection'
  *
  * @remarks
  * - `'replace'`——页面语义（Figma）：点一下换一个，Shift 切换。
- * - `'accumulate'`——CAD 语义：点中即加入（不需要修饰键），Shift 移出。
+ * - `'accumulate'`——AutoCAD 语义：点中即加入（不需要修饰键），Shift 移出。第一方不使用，
+ *   留给宿主受控设置。
  *
  * @public
  */

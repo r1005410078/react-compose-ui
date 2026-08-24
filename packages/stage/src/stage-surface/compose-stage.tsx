@@ -609,7 +609,6 @@ function ComposeStageReady({
       // 没有显式指定时该模式下最合理的默认，宿主显式给出的值仍然优先。
       // 判定模式只由宿主受控：模式不该偷改用户的设置。
       marqueeMode,
-      // 绘图模式用 CAD 选择语义：点中即加入、Shift 移出。点选与框选读同一个标记。
       lockGestureParent,
       draftingAwaitingPoint: draftingSession.awaitingPoint,
       selectedIds: normalizedSelection,

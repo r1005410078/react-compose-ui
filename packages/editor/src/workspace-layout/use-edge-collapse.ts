@@ -16,22 +16,22 @@ interface EdgeCollapsedState {
  * 各文档类型的边缘面板初值。
  *
  * @remarks
- * CAD 参考 AutoCAD：命令行驱动、无限图纸，左右面板存在但默认收起。其余文档类型保持既有的
- * 展开行为。
+ * 三种类型的初值一致为展开。曾经有过一个初值收起的类型（CAD），它随那套文档一起删除；
+ * **按类型记忆本身留着**——去掉之后一种标签里的收起会连带影响另一种，那是一次与删除
+ * CAD 无关的行为变化。
  */
 const DEFAULT_COLLAPSED: Readonly<Record<ComposeWorkspaceDocumentKind, EdgeCollapsedState>> = {
   asset: { left: false, right: false },
   page: { left: false, right: false },
   component: { left: false, right: false },
-  cad: { left: true, right: true },
 }
 
 /**
  * 让左右边缘面板的展开状态成为「当前激活文档类型」的函数。
  *
  * @remarks
- * 边缘组是工作区级的，而文档标签在中央——若展开状态也是工作区级的单一全局值，在 CAD 里收起
- * 面板会连带影响页面标签，反之亦然。因此这里按**文档类型**记忆：初值来自
+ * 边缘组是工作区级的，而文档标签在中央——若展开状态也是工作区级的单一全局值，在组件标签里
+ * 收起面板会连带影响页面标签，反之亦然。因此这里按**文档类型**记忆：初值来自
  * {@link DEFAULT_COLLAPSED}，用户手动展开或收起记入当前类型，切走再切回同类型时恢复用户的
  * 选择而不是重置。
  *

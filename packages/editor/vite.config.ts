@@ -29,8 +29,6 @@ export default defineConfig({
         '@compose-ui/animation',
         '@compose-ui/asset-browser',
         '@compose-ui/assets',
-        '@compose-ui/cad',
-        '@compose-ui/cad-canvas',
         '@compose-ui/command-panel',
         '@compose-ui/commands',
         '@compose-ui/core',

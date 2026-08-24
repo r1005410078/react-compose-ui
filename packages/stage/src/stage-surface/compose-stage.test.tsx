@@ -1672,7 +1672,7 @@ describe('绘图模式', () => {
       fireEvent.pointerMove(surface, { clientX: 120, clientY: 90, pointerId: 1, pointerType })
     }
 
-    // 空闲什么都不画——与 CAD 刻意的不对称：页面编辑器的静息光标是箭头。
+    // 空闲什么都不画：页面编辑器的静息光标是箭头。
     hover()
     expect(lines()).toHaveLength(0)
     expect(root.hasAttribute('data-crosshair')).toBe(false)

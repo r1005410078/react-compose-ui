@@ -275,9 +275,9 @@ export function createStageSceneIndex(
           const projected = projectComposeCurveToBox(curve, curveBox)
           const local = applyMatrix(invertMatrix(matrix), point)
           if (distanceToComposeCurve(projected, local) <= tolerance) return true
-          // 填过色的那块面积是用户看见的墨，因此它也命中——与 CAD 侧「文字按包围盒命中不是
-          // 破例，因为文字占满自己的盒子」同一条判断。空心时不做这一步：那正是「盒里绝大
-          // 部分是空的」覆盖的情形。判断走 `getComposeCurveFill`，与物料渲染读的是同一个。
+          // 填过色的那块面积是用户看见的墨，因此它也命中——「按距离而不是按包围盒」挡的是
+          // 空白，不是墨。空心时不做这一步：那正是「盒里绝大部分是空的」覆盖的情形。
+          // 判断走 `getComposeCurveFill`，与物料渲染读的是同一个。
           return getComposeCurveFill(entity) !== null
             && isPointInsideComposeCurve(projected, local)
         }

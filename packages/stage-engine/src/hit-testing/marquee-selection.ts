@@ -71,7 +71,7 @@ export interface StageMarqueeQuery {
  * 把模式与拖拽方向归约为实际生效的判定。
  *
  * @remarks
- * `directional` 采用 CAD 惯例：从左往右拖要求完全框住，从右往左拖碰到即选中。Overlay 也用
+ * `directional` 采用 AutoCAD 惯例：从左往右拖要求完全框住，从右往左拖碰到即选中。Overlay 也用
  * 这个结果决定实线还是虚线，因此判定归约必须只有这一处实现。
  * @public
  */

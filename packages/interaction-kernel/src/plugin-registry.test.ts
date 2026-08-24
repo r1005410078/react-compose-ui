@@ -45,7 +45,7 @@ describe('OpenSpec: interaction-kernel / 插件注册与会话仲裁 / 注册表
   it('拒绝信息不提及任何具体文档类型', () => {
     // 这条不是文字洁癖：错误串一旦写上「Stage」，第二个消费者拿到的报错就是错的。
     expect(() => createInteractionPluginRegistry([plugin('dup', 10), plugin('dup', 20)]))
-      .toThrow(/^(?!.*(?:Stage|Cad|Compose)).*$/)
+      .toThrow(/^(?!.*(?:Stage|Compose)).*$/)
   })
 
   it('排序结果引用稳定，不在每次询问时重排', () => {

@@ -325,6 +325,10 @@ export function createCurveRendererInspector(idFactory: InspectorIdFactory) {
           ? { none: '实线', '8 4': '虚线', '1 4': '点线' }
           : { none: 'Solid', '8 4': 'Dashed', '1 4': 'Dotted' } } }),
       ),
+      strokeDashoffset: v.pipe(
+        CURVE_RENDERER_PROP_SCHEMAS.strokeDashoffset,
+        v.title(title(zh, 'Dash offset', '虚线偏移')),
+      ),
       markerStart: v.pipe(
         CURVE_RENDERER_PROP_SCHEMAS.markerStart,
         v.title(title(zh, 'Start arrow', '起点箭头')),
@@ -353,6 +357,11 @@ export function createCurveRendererInspector(idFactory: InspectorIdFactory) {
       strokeDasharray: props.strokeDasharray === '8 4'
         ? '8 4' as const
         : props.strokeDasharray === '1 4' ? '1 4' as const : 'none' as const,
+      // 缺席即 0：偏移 0 就是不偏移，面板显示 0 与渲染不写该属性说的是同一件事。
+      strokeDashoffset: typeof props.strokeDashoffset === 'number'
+        && Number.isFinite(props.strokeDashoffset)
+        ? props.strokeDashoffset
+        : 0,
     }
     return (
       <ComposePropertyPanel
