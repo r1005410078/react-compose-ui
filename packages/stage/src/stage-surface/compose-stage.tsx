@@ -7,6 +7,7 @@ import {
   useComposeContextMenu,
 } from '@compose-ui/components'
 import {
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -35,6 +36,7 @@ import {
   scrollAxisToViewport,
   STAGE_ZOOM_RANGE,
   type StageDrawnEntity,
+  type StagePoint,
   type StageRect,
 } from '@compose-ui/stage-engine'
 import { fitViewportTo } from './stage-viewport-actions'
@@ -71,6 +73,7 @@ import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-
 import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './entity-creation'
 import { StageDraftingOverlay, useStageDrafting } from '../drafting'
+import { useStageGeometryEditing } from '../geometry-editing'
 import { useStagePointerSession, useStageRootHandlers } from './pointer-session'
 import { useStageTextEditing } from './use-stage-text-editing'
 import { useStageClipboard } from './use-stage-clipboard'
@@ -439,6 +442,39 @@ function ComposeStageReady({
     snapOff: messages.draftingSnapOff,
   }), [messages])
 
+  // 命令与几何编辑共用一份场景索引：几何编辑要把正在编辑的 Entity 从捕捉里排除，而它又要读
+  // 命令那条落点解算，两个 Hook 因此不能各自建索引，也不能互为前提。
+  const sceneIndex = useMemo(
+    () => createStageSceneIndex(document, layoutSnapshot),
+    [document, layoutSnapshot],
+  )
+  // 取点效果在 effect dispatch 里被消费，而会话又依赖它——用 ref 打断这条循环，会话对象
+  // 每帧重建也不会让 effect dispatch 的记忆化失效。几何编辑读落点解算走的也是这个 ref。
+  const draftingRef = useRef<ReturnType<typeof useStageDrafting> | null>(null)
+  const resolveDraftingPoint = useCallback(
+    (world: StagePoint) => draftingRef.current?.resolvePoint(world) ?? world,
+    [],
+  )
+
+  const geometryEditing = useStageGeometryEditing({
+    document,
+    index: sceneIndex,
+    dispatch,
+    idFactory,
+    selectedIds: normalizedSelection,
+    tool,
+    // 覆盖层至多渲染一条路径，宿主传入的优先：它是宿主明确要求画的，Stage 不该把它顶掉。
+    hostPathActive: editablePath !== null,
+    resolvePoint: resolveDraftingPoint,
+    label: messages.editGeometry,
+  })
+  const geometryEditingActive = geometryEditing.entityId !== null
+  // 几何编辑的目标不参与捕捉：它自己的端点就在指针底下，夹点会被吸回原处。
+  const geometryEditingIds = useMemo(
+    () => (geometryEditing.entityId === null ? [] : [geometryEditing.entityId]),
+    [geometryEditing.entityId],
+  )
+
   const draftingSession = useStageDrafting({
     // 绘图能力恒开：命令行常驻，命令随时可启动。模式已取消——它提供的四样没有一样
     // 需要模式承载，而模式本身与动画互斥、把同一件事拆成两套、并让能力不可发现。
@@ -450,13 +486,17 @@ function ComposeStageReady({
     dispatch,
     idFactory,
     activeFrameId,
+    index: sceneIndex,
+    snapExcludedIds: geometryEditingIds,
     messages: draftingMessages,
     commands,
     selectedIds: normalizedSelection,
     onSelectedIdsChange,
   })
   // 命令等着取点或等着选对象时才跟踪指针；两档合成一个标记，跟踪、挂载与推导读同一个。
+  // 几何编辑期间也跟踪：这个模式的全部动作都是在取点，十字光标需要一个中心。
   const draftingPointerTracked = draftingSession.awaitingPoint || draftingSession.awaitingSelection
+  const pointerTracked = draftingPointerTracked || geometryEditingActive
 
   /**
    * 十字光标的形态。
@@ -474,7 +514,7 @@ function ComposeStageReady({
     show: showCrosshair,
     pointerType: draftingSession.pointerType,
     center: draftingSession.pointerScreen,
-    lines: draftingSession.awaitingPoint,
+    lines: draftingSession.awaitingPoint || geometryEditingActive,
     box: draftingSession.awaitingSelection,
     boxRadius: pickRadius,
     size: crosshairSize,
@@ -484,15 +524,17 @@ function ComposeStageReady({
     draftingSession.awaitingSelection,
     draftingSession.pointerScreen,
     draftingSession.pointerType,
+    geometryEditingActive,
     pickRadius,
     showCrosshair,
   ])
 
-  // 取点效果在 effect dispatch 里被消费，而会话又依赖它——用 ref 打断这条循环，会话对象
-  // 每帧重建也不会让 effect dispatch 的记忆化失效。
-  const draftingRef = useRef(draftingSession)
   useLayoutEffect(() => {
     draftingRef.current = draftingSession
+  })
+  const geometryRef = useRef(geometryEditing)
+  useLayoutEffect(() => {
+    geometryRef.current = geometryEditing
   })
 
   const { assetDropStatus } = useStageEffectDispatch({
@@ -515,7 +557,12 @@ function ComposeStageReady({
     onDrawn: setLastDrawn,
     onDraftingPoint: (point) => { draftingRef.current?.handlePoint(point) },
     onToolChange,
-    onEditablePathChange,
+    onEnterGeometryEditing: geometryEditing.enter,
+    // 几何编辑的夹点由 Stage 自己写文档；宿主传入的那条路径仍然只上报，事实来源在宿主。
+    onEditablePathChange: (change) => {
+      if (geometryRef.current.handlePathChange(change)) return
+      onEditablePathChange?.(change)
+    },
     onEditablePathVertexToggle,
     onPaintSamplingComplete,
     onSelectedIdsChange,
@@ -536,7 +583,7 @@ function ComposeStageReady({
 
   // 引擎只需要会话（entityId + 活动顶点），几何直接交给 Overlay。memo 保持引用稳定，
   // 避免每次渲染都触发 updateContext 的手势兼容性检查。
-  const editablePathEntityId = editablePath?.entityId ?? null
+  const editablePathEntityId = editablePath?.entityId ?? geometryEditing.entityId
   const pathEditing = useMemo(
     () => (editablePathEntityId === null
       ? null
@@ -572,6 +619,7 @@ function ComposeStageReady({
       drawnEntity: lastDrawn,
       contentReflowsWithWidth,
       isTextEditable,
+      isGeometryEditable: geometryEditing.isGeometryEditable,
       idFactory,
       labels: {
         createGuide: messages.createGuide,
@@ -586,6 +634,7 @@ function ComposeStageReady({
     document,
     draftingSession.awaitingPoint,
     hiddenEntityIds,
+    geometryEditing.isGeometryEditable,
     isTextEditable,
     lastDrawn,
     layoutSnapshot,
@@ -704,7 +753,13 @@ function ComposeStageReady({
     keyboardCommand: (event) => {
       // 绘图的 F8/F3 先于既有键位级联：它们在别处没有绑定，因此不会抢走任何东西。
       // Esc 只在命令进行中被这里消费，其余情况交回级联——文字编辑的退出分支在那里。
-      if (draftingRef.current.handleKeyDown(event)) return
+      if (draftingRef.current?.handleKeyDown(event)) return
+      // 几何编辑的退出排在命令之后、既有级联之前：命令进行中的 Esc 属于命令，而级联里的
+      // Esc 会去中止手势并清空选区——那会顺带把会话的目标一起收走，用户看不出是哪一条生效。
+      if (event.key === 'Escape' && geometryRef.current.entityId !== null) {
+        geometryRef.current.exit()
+        return
+      }
       keyboardCommand(event)
     },
     host: {
@@ -786,10 +841,10 @@ function ComposeStageReady({
         ref={surfaceRef}
         // 只在命令等着输入时跟踪指针：常态下每帧解一次世界坐标是白花的。等待选择对象那一档
         // 也要跟——拾取框需要一个中心。
-        onPointerLeave={draftingPointerTracked
+        onPointerLeave={pointerTracked
           ? () => { draftingSession.setPointer(null) }
           : undefined}
-        onPointerMove={draftingPointerTracked
+        onPointerMove={pointerTracked
           ? (event) => {
               const rect = event.currentTarget.getBoundingClientRect()
               draftingSession.setPointer(
@@ -857,7 +912,7 @@ function ComposeStageReady({
           * 图面是常规光标，命令一开始等输入就换成十字光标。挂载条件放宽到「有东西要画」——
           * 只看等待取点的话，等待选择对象那一档的拾取框挂不上。
           */}
-        {draftingPointerTracked ? (
+        {pointerTracked ? (
           <StageDraftingOverlay
             crosshair={crosshair}
             outlines={draftingSession.outlines}
@@ -878,7 +933,8 @@ function ComposeStageReady({
           marqueeScreen={marqueeScreen}
           paintHandles={interaction.paintHandles}
           paintSample={interaction.paintSample}
-          editablePath={editablePath}
+          editablePath={editablePath ?? geometryEditing.editablePath}
+          geometryEditing={geometryEditingActive}
           activePathVertexId={editablePathActiveVertexId}
           resizeHandles={resizeHandles}
           rotatable={selectionRotatable}

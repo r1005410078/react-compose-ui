@@ -194,3 +194,11 @@ export type {
 } from './drafting'
 export { findStageFeaturePoint, resolveStageClickSelection, resolveStageMarqueeCombine } from './hit-testing'
 export type { StageFeaturePoint, StageFeatureSnapMode, StageSelectionMode } from './hit-testing'
+export {
+  applyStageCurveGrip,
+  stageCurveBoxGeometry,
+  stageCurveGrips,
+  stageCurveLocalPoint,
+  stageCurveOutline,
+} from './geometry-editing'
+export type { StageCurveGrip } from './geometry-editing'

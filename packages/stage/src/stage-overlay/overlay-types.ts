@@ -52,6 +52,14 @@ export interface StageOverlayProps {
    * 拖拽的语义是选择文本。该抑制与 TransformConstraints 的抑制是两条独立规则，叠加生效。
    */
   readonly textEditing: boolean
+  /**
+   * 处于曲线几何编辑会话。
+   *
+   * @remarks
+   * 与文字编辑那条同构：此时不显示 Resize 与旋转手柄，改为显示夹点——盒的角手柄与角顶点
+   * 几乎压在同一个像素上，两个含义叠在一起谁也点不准。
+   */
+  readonly geometryEditing: boolean
   readonly tool: StageInteractionTool
   readonly drawing: StageDrawingPreview | null
   /**

@@ -133,6 +133,19 @@ export function createStageResizePlugin(): StageInteractionPlugin {
       if (event.hit.kind !== 'resize') return null
       const { context, index } = ctx
       if (context.tool !== 'select' && context.tool !== 'scale') return 'consumed'
+      // 双击进入几何编辑，即使这一下落在手柄上。**这不是顺手加的分支**：一条水平线的包围盒
+      // 高度接近零，n/s 两条边缘命中区把整条线盖住，双击永远打不到实体本身——而水平线正是
+      // 最需要几何编辑的那一类。双击手柄本来也没有别的语义。
+      const target = context.selectedIds.length === 1 ? context.selectedIds[0]! : null
+      if (
+        context.tool === 'select'
+        && (event.clickCount ?? 1) >= 2
+        && target !== null
+        && context.isGeometryEditable?.(target) === true
+      ) {
+        ctx.apply([{ type: 'geometry-editing.enter', entityId: target }])
+        return 'consumed'
+      }
       const targets = resolveTransformTargets({
         document: context.document,
         index,

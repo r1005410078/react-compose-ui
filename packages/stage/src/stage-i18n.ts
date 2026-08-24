@@ -99,6 +99,7 @@ const translations = {
     assetDropPartial: (added: number, failed: number) =>
       `已添加 ${added} 项，${failed} 项失败。`,
     assetDropCommand: (added: number) => `添加 ${added} 个资源`,
+    editGeometry: (name: string) => `编辑 ${name} 的几何`,
     sceneSize: (name: string) => `修改场景 ${name} 的尺寸`,
     sceneSizeTitle: '场景尺寸',
     sceneSizeDescription: (name: string) => `为场景「${name}」选择常见尺寸，或输入自定义宽高。`,
@@ -205,6 +206,7 @@ const translations = {
       `${added} added, ${failed} failed.`,
     assetDropCommand: (added: number) =>
       `Add ${added} asset${added === 1 ? '' : 's'}`,
+    editGeometry: (name: string) => `Edit ${name} geometry`,
     sceneSize: (name: string) => `Change the size of scene ${name}`,
     sceneSizeTitle: 'Scene size',
     sceneSizeDescription: (name: string) =>
@@ -375,6 +377,11 @@ export function getStageMessages(
       'stage.assetDropCommand',
       messages.assetDropCommand(added),
       { added },
+    ),
+    editGeometry: (name: string) => formatMessage(
+      'stage.editGeometry',
+      messages.editGeometry(name),
+      { name },
     ),
     sceneSize: (name: string) => formatMessage(
       'stage.sceneSize',

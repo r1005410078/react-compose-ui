@@ -281,10 +281,15 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
   expect(Number(await strokes.first().getAttribute('y2')))
     .toBeGreaterThan(Number(await strokes.first().getAttribute('y1')))
 
-  // 选区回到通用那一套：曲线的盒手柄自「曲线按 viewBox 跟随盒伸缩」起就是端点编辑本身。
+  // 画完曲线直接停在几何编辑里：两个端点夹点显形，盒手柄让位——与「画完文字直接进文字编辑」
+  // 是同一条规则的第二个实例。选区边框仍在，第二套端点 UI 仍然没有。
   await expect(stage.getByTestId('stage-selection-bounds')).toBeVisible()
-  await expect(stage.getByTestId('stage-resize-se')).toBeVisible()
+  await expect(stage.locator('[data-testid^="stage-path-vertex-hit-"]')).toHaveCount(2)
+  await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
   await expect(stage.getByTestId('stage-line-selection')).toHaveCount(0)
+  // 退出会话之后盒手柄回来，几何编辑不是一条单行道。
+  await page.keyboard.press('Escape')
+  await expect(stage.getByTestId('stage-resize-se')).toBeVisible()
 
   // 反向拖出第二条：终点在上，几何跟着翻过来。
   await pickArrow()

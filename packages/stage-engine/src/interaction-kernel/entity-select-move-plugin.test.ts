@@ -149,6 +149,37 @@ describe('OpenSpec: stage-engine / ECS SceneIndex / 实体选中并拖动插件'
     expect(controller.getSnapshot().phase).toBe('move')
   })
 
+  it('双击可几何编辑 Entity 进入几何编辑且不开始移动', () => {
+    const { controller, effects, down } = selectSetup({ isGeometryEditable: () => true })
+
+    down('a', { clickCount: 2 })
+
+    expect(effects).toContainEqual({ type: 'geometry-editing.enter', entityId: 'a' })
+    expect(controller.getSnapshot().phase).toBe('idle')
+  })
+
+  it('文字可编辑优先于几何可编辑', () => {
+    const { effects, down } = selectSetup({
+      isTextEditable: () => true,
+      isGeometryEditable: () => true,
+    })
+
+    down('a', { clickCount: 2 })
+
+    // 一次双击只能进一个会话。
+    expect(effects).toContainEqual({ type: 'text-editing.enter', entityId: 'a' })
+    expect(effects).not.toContainEqual({ type: 'geometry-editing.enter', entityId: 'a' })
+  })
+
+  it('宿主没有注入几何判定时行为不变', () => {
+    const { controller, effects, down } = selectSetup()
+
+    down('a', { clickCount: 2 })
+
+    expect(effects.some((effect) => effect.type === 'geometry-editing.enter')).toBe(false)
+    expect(controller.getSnapshot().phase).toBe('move')
+  })
+
   it('锁定目标改选区但不开始移动，也不落到框选', () => {
     const { controller, down, selections } = selectSetup()
 

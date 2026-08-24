@@ -224,13 +224,14 @@ export function createStageEntitySelectMovePlugin(): StageInteractionPlugin {
       const locked = getComposeLock(entity).locked
       // 双击可编辑 Entity 进入原地编辑，且不开始移动手势——否则一次双击会同时打开编辑器并
       // 拖动目标。这里用 >=2 而不是 ==2：连击计数继续增长仍应停留在编辑态。
-      if (
-        context.tool === 'select'
-        && (event.clickCount ?? 1) >= 2
-        && !locked
-        && context.isTextEditable?.(entity.id) === true
-      ) {
+      const doubleClick = context.tool === 'select' && (event.clickCount ?? 1) >= 2 && !locked
+      if (doubleClick && context.isTextEditable?.(entity.id) === true) {
         ctx.apply([{ type: 'text-editing.enter', entityId: entity.id }])
+        return 'consumed'
+      }
+      // 文字优先于几何：一次双击只能进一个会话，而两者不会同时成立（曲线不是文字）。
+      if (doubleClick && context.isGeometryEditable?.(entity.id) === true) {
+        ctx.apply([{ type: 'geometry-editing.enter', entityId: entity.id }])
         return 'consumed'
       }
 

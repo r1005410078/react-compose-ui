@@ -7,9 +7,10 @@ import type { ResizeHandle } from '@compose-ui/stage-engine'
  *
  * @remarks
  * 编辑态与 Paint 编辑态下一律不显示——前者的拖拽语义是选择文本，后者的手柄归 Paint 层。
+ * 几何编辑态同理：角手柄与角顶点几乎压在同一个像素上，两个含义叠在一起谁也点不准。
  */
-export function ResizeHandlesLayer({ editableSelection, handlePoints, paintHandles, resizeHandles, screenBounds, textEditing, tool, visibleResizeHandles, onInteraction }: StageOverlayContext) {
-  const resizeVisible = (tool === 'select' || tool === 'scale') && !textEditing
+export function ResizeHandlesLayer({ editableSelection, geometryEditing, handlePoints, paintHandles, resizeHandles, screenBounds, textEditing, tool, visibleResizeHandles, onInteraction }: StageOverlayContext) {
+  const resizeVisible = (tool === 'select' || tool === 'scale') && !textEditing && !geometryEditing
   // 边缘命中区两端各让出 8px 是为了不压住角手柄，但让位不能把命中区挤没：单行文字这种
   // 只有十几像素高的选区，固定让 16px 后 E/W 命中区高度会算成 0，边根本抓不住。按可用
   // 长度收缩让位，至少保留 8px 可抓长度。

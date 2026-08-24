@@ -104,6 +104,7 @@ export function RotationContribution({
   rotationPreview = null,
   screenBounds,
   textEditing,
+  geometryEditing,
   tool,
   viewport,
 }: StageOverlayContext) {
@@ -113,7 +114,7 @@ export function RotationContribution({
         pointer: worldToScreen(rotationPreview.pointer, viewport),
         active: true as const,
       }
-    : rotatable && tool === 'rotate' && !textEditing && screenBounds
+    : rotatable && tool === 'rotate' && !textEditing && !geometryEditing && screenBounds
       ? {
           center: {
             x: screenBounds.x + screenBounds.width / 2,

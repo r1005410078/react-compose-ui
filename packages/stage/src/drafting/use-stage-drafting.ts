@@ -16,7 +16,6 @@ import {
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createStageDraftingCommands,
-  createStageSceneIndex,
   findStageFeaturePoint,
   planStageDraftingEdits,
   worldToScreen,
@@ -26,6 +25,7 @@ import {
   type StageFeaturePoint,
   type StagePoint,
   type StageRect,
+  type StageSceneIndex,
   type StageViewport,
 } from '@compose-ui/stage-engine'
 import { isEditableTarget } from '../stage-surface/keyboard'
@@ -72,9 +72,29 @@ export interface StageDraftingOptions {
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   /** 捕捉的屏幕半径（CSS 像素）。 @defaultValue 12 */
   readonly snapRadius?: number
+  /**
+   * 场景索引；由宿主建一份给命令与几何编辑共用。
+   *
+   * @remarks
+   * 由外面注入而不是本 Hook 自建，只为一件事：几何编辑要把正在编辑的 Entity 从捕捉里排除，
+   * 而那个会话又要读本 Hook 的落点解算。两个 Hook 因此不能都自建索引，也不能互为前提。
+   */
+  readonly index: StageSceneIndex
+  /**
+   * 不参与特征点捕捉的 Entity。
+   *
+   * @remarks
+   * 几何编辑期间传入正在被编辑的那一个：它自己的端点就在指针底下，不排除的话夹点会被吸回
+   * 原处，用户要把指针拖出容差半径才动得了。悬停标记与落点解算读同一份排除表，因此不会
+   * 出现「标记在这里、点落在那里」。
+   */
+  readonly snapExcludedIds?: readonly string[]
 }
 
 const DEFAULT_SNAP_RADIUS = 12
+
+/** 稳定引用的空排除表：每帧新建数组会让捕捉的记忆化整片失效。 */
+const EMPTY_EXCLUSIONS: readonly string[] = []
 
 /**
  * 绘图模式的命令会话。
@@ -104,6 +124,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
     selectedIds,
     onSelectedIdsChange,
     snapRadius = DEFAULT_SNAP_RADIUS,
+    snapExcludedIds,
+    index,
   } = options
 
   const sessionRef = useRef<ComposeCommandSession<StageDraftingEffect> | null>(null)
@@ -125,10 +147,6 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const [snapEnabled, setSnapEnabled] = useState(true)
 
   const builtInCommands = useMemo(() => createStageDraftingCommands(messages), [messages])
-  const index = useMemo(
-    () => createStageSceneIndex(document, layoutSnapshot),
-    [document, layoutSnapshot],
-  )
   // 页面网格两轴独立，且开关是 `snapEnabled` 而不是「网格是否可见」——看得见与吸不吸是两件事。
   const gridSettings = useMemo(() => ({
     enabled: document.canvas.grid.snapEnabled,
@@ -217,14 +235,15 @@ export function useStageDrafting(options: StageDraftingOptions) {
   }, [commit, endSession, messages.cancelled])
 
   /** 光标附近的捕捉命中；同时用于渲染标记与求解落点，两者因此不可能分叉。 */
+  const excluded = snapExcludedIds ?? EMPTY_EXCLUSIONS
   const snap: StageFeaturePoint | null = useMemo(() => {
     if (!enabled || !snapEnabled || !pointer) return null
-    return findStageFeaturePoint(document, index, pointer, snapRadius / viewport.zoom)
-  }, [document, enabled, index, pointer, snapEnabled, snapRadius, viewport.zoom])
+    return findStageFeaturePoint(document, index, pointer, snapRadius / viewport.zoom, excluded)
+  }, [document, enabled, excluded, index, pointer, snapEnabled, snapRadius, viewport.zoom])
 
   const resolvePointerPoint = useCallback((world: StagePoint): ComposeInputPoint => {
     const hit = snapEnabled
-      ? findStageFeaturePoint(document, index, world, snapRadius / viewport.zoom)
+      ? findStageFeaturePoint(document, index, world, snapRadius / viewport.zoom, excluded)
       : null
     return resolveComposePoint(world, 'pointer', {
       ...(hit ? { snapped: hit.point } : {}),
@@ -232,7 +251,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       ortho,
       grid: gridSettings,
     })
-  }, [document, gridSettings, index, ortho, reference, snapEnabled, snapRadius, viewport.zoom])
+  }, [document, excluded, gridSettings, index, ortho, reference, snapEnabled, snapRadius, viewport.zoom])
 
   const handlePoint = useCallback((world: StagePoint) => {
     const session = sessionRef.current
@@ -442,6 +461,10 @@ export function useStageDrafting(options: StageDraftingOptions) {
   }, [enabled, pointer, resolvePointerPoint, viewport])
 
   return {
+    index,
+    // 几何编辑的夹点拖动读同一个解算：两份实现的分叉症状是「画线时吸端点、拖顶点时不吸」，
+    // 而用户无法判断哪个才是对的。
+    resolvePoint: resolvePointerPoint,
     pointerScreen,
     outlines,
     selectionCount: enabled && prompt?.accepts.includes('selection') === true

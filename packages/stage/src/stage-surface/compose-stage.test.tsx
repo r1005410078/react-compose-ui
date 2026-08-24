@@ -430,6 +430,101 @@ describe('ComposeStage ECS', () => {
     }
   })
 
+  it('OpenSpec: 曲线几何编辑会话 / 双击曲线显形夹点并让位盒手柄', () => {
+    renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
+
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
+      pointerId: 1,
+      button: 0,
+      detail: 2,
+      clientX: 30,
+      clientY: 40,
+    })
+
+    expect(screen.getByTestId('stage-editable-path')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-path-vertex-hit-start')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-path-vertex-hit-end')).toBeInTheDocument()
+    // 盒的角手柄与角顶点几乎压在同一个像素上，两个含义叠在一起谁也点不准。
+    expect(screen.queryByTestId('stage-resize-se')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 曲线几何编辑会话 / 拖夹点派发一条 entity.curve.set 并按 parent 局部坐标写入', () => {
+    const { dispatch } = renderStage(document([curveEntity()]), {
+      selectedIds: ['curve-a'],
+      tool: 'select',
+    })
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
+      pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
+    })
+
+    const surface = screen.getByTestId('stage-surface')
+    fireEvent.pointerDown(screen.getByTestId('stage-path-vertex-hit-end'), {
+      pointerId: 2, button: 0, clientX: 100, clientY: 50,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 2, buttons: 1, clientX: 140, clientY: 90 })
+    // 移动阶段只更新预览：文档要等松手才动。
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: BUILTIN_COMMAND_TYPES.setCurve }),
+    )
+
+    fireEvent.pointerUp(surface, { pointerId: 2, clientX: 140, clientY: 90 })
+    const written = dispatch.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.type === BUILTIN_COMMAND_TYPES.setCurve)
+    expect(written).toHaveLength(1)
+    // 载荷是 parent 局部坐标（盒局部加 `LayoutItem.offset`），起点因此是 (20,30) 而不是原点。
+    // 终点落在 (144,88) 而不是指针的 (140,90)：夹点拖动与绘图命令走同一条解算，网格吸附
+    // 因此照常生效——这正是「不要第二份落点解算」要钉住的行为。
+    expect(written[0]!.payload).toMatchObject({
+      entityId: 'curve-a',
+      curve: { kind: 'line', start: { x: 20, y: 30 }, end: { x: 144, y: 88 } },
+    })
+  })
+
+  it('OpenSpec: 曲线几何编辑会话 / 退出后恢复盒手柄', () => {
+    renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
+      pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
+    })
+    expect(screen.getByTestId('stage-editable-path')).toBeInTheDocument()
+
+    fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'Escape' })
+
+    expect(screen.queryByTestId('stage-editable-path')).not.toBeInTheDocument()
+    expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: 画布可编辑路径覆盖层 / 宿主传入路径时不进入几何编辑', () => {
+    const value = document([curveEntity()])
+    render(
+      <ComposeStage
+        document={value}
+        editablePath={{
+          entityId: 'curve-a',
+          polyline: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+          dots: [],
+          vertices: [
+            { id: 'k0', point: { x: 0, y: 0 }, inTangent: null, outTangent: null, mode: 'corner' },
+          ],
+        }}
+        layoutSnapshot={layoutSnapshot(value)}
+        selectedIds={['curve-a']}
+        services={{ dispatch: vi.fn() as never, registry }}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
+      pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
+    })
+
+    // 覆盖层至多渲染一条路径：宿主那条还在，几何编辑的夹点没有出现。
+    expect(screen.getByTestId('stage-path-vertex-hit-k0')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-path-vertex-hit-start')).not.toBeInTheDocument()
+  })
+
   it('OpenSpec: 物料统一 / 曲线单选走通用矩形选区与盒手柄', () => {
     renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
 
@@ -453,6 +548,7 @@ describe('ComposeStage ECS', () => {
     const preview = render(
       <StageOverlay
         canvasGuides={[]}
+        geometryEditing={false}
         drawing={{
           tool: 'draw-arrow',
           bounds: { x: 16, y: 20, width: 80, height: 40 },
@@ -489,6 +585,7 @@ describe('ComposeStage ECS', () => {
       drawing: null,
       editableSelection: true,
       textEditing: false,
+      geometryEditing: false,
       handlePoints: null,
       label: 'Editing overlay',
       marqueeHitTest: null,
@@ -1295,6 +1392,7 @@ describe('OpenSpec: stage / 画布可编辑路径覆盖层与手势上报', () =
     dropIndicator: null,
     editableSelection: false,
     textEditing: false,
+    geometryEditing: false,
     handlePoints: null,
     label: 'Editing overlay',
     marqueeHitTest: null,

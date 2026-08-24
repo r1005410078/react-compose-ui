@@ -311,6 +311,14 @@ export interface StageInteractionContext {
    * 以判定入口传入。Controller 只消费判定结果，不感知 Renderer type 或 prop 名称。
    */
   readonly isTextEditable?: (entityId: string) => boolean
+  /**
+   * 判定一个 Entity 能否进入几何编辑；缺省时视为全部不可编辑，行为与不传时完全一致。
+   *
+   * @remarks
+   * 与 {@link StageInteractionContext.isTextEditable} 是同一条边界：可编辑性来自文档协议
+   * （带 `Curve` 的 Entity），而引擎不认识文档协议，因此由宿主查询后以判定入口传入。
+   */
+  readonly isGeometryEditable?: (entityId: string) => boolean
   /** 宿主回灌的最近一次绘制创建结果；`draw-text` 的创建据此进入编辑。 */
   readonly drawnEntity?: StageDrawnEntity | null
   /**
@@ -376,6 +384,15 @@ export type StageInteractionEffect =
   | { readonly type: 'text-editing.enter'; readonly entityId: string }
   /** 请求宿主结束文字编辑会话并按内容收敛为最多一条事务。 */
   | { readonly type: 'text-editing.exit' }
+  /**
+   * 请求宿主开启曲线几何编辑会话。
+   *
+   * @remarks
+   * 只有进入没有退出：退出的四个入口（`Escape`、点空白、换工具、选中别的对象）里，
+   * 后三个在宿主那边表现为选区或工具变化，宿主自己就看得见；为它们再发一条效果等于让
+   * 同一件事有两个说法。
+   */
+  | { readonly type: 'geometry-editing.enter'; readonly entityId: string }
   | {
       /**
        * 路径手柄手势的阶段性世界坐标结果；引擎不理解它对应的文档语义，也绝不因此
@@ -944,14 +961,18 @@ export function createStageInteractionController(): StageInteractionController {
           !nextContext.document.entities[editingTarget]
           || !nextContext.selectedIds.includes(editingTarget)
         )
-      // 回灌只对 draw-text 生效，且同一个 Entity 只消费一次。
+      // 回灌对 draw-text 与曲线绘制生效，且同一个 Entity 只消费一次。
       const drawn = nextContext.drawnEntity
-      const enterDrawnEditing = Boolean(
+      const drawnPending = Boolean(
         drawn
-        && drawn.tool === 'draw-text'
         && drawn.entityId !== consumedDrawnEntityId
         && nextContext.document.entities[drawn.entityId],
       )
+      const enterDrawnEditing = drawnPending && drawn!.tool === 'draw-text'
+      // 画完曲线直接进几何编辑，与「画完文字直接进文字编辑」是同一条规则的第二个实例。
+      const enterDrawnGeometry = drawnPending
+        && drawn!.tool !== 'draw-text'
+        && Boolean(nextContext.isGeometryEditable?.(drawn!.entityId))
 
       context = nextContext
       index = nextIndex
@@ -959,6 +980,10 @@ export function createStageInteractionController(): StageInteractionController {
       if (enterDrawnEditing) {
         consumedDrawnEntityId = drawn!.entityId
         apply([{ type: 'text-editing.enter', entityId: drawn!.entityId }])
+      }
+      if (enterDrawnGeometry) {
+        consumedDrawnEntityId = drawn!.entityId
+        apply([{ type: 'geometry-editing.enter', entityId: drawn!.entityId }])
       }
       // 会话自己判断是否仍然成立：内核不再枚举手势种类，也不再保留任何按手势分类的判定。
       if (arbiter.revalidate(nextContext, nextIndex, pluginContext)) return
