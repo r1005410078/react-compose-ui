@@ -173,7 +173,7 @@ function ComposeStageReady({
   onSurfaceSizeChange,
   autoFitActiveFrame = true,
   showCrosshair = true,
-  crosshairSize = 15,
+  crosshairSize = 10,
   pickRadius = 8,
   interactionController,
   idFactory = defaultId,

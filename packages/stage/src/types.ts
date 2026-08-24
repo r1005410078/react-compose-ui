@@ -348,9 +348,17 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * 十字线单侧长度占图面较短边的百分比。
    *
    * @remarks
-   * 与 AutoCAD 的 `CURSORSIZE` 同义，取 100 时贯穿整个图面。默认 15 与 CAD 画布一致。
+   * 与 AutoCAD 的 `CURSORSIZE` 同义，取 100 时贯穿整个图面。
    *
-   * @defaultValue 15
+   * 默认 10 是按与**拾取框的比例**定的：拾取框在两边都是十几个 CSS 像素的固定量，因此它是
+   * 唯一能跨应用比较的尺子（图面本身的尺寸两边差得远，直接比百分比没有意义）。10% 在常见
+   * 图面尺寸上给出的臂长约是拾取框半边的十倍，与 AutoCAD 的观感相当。曾经的默认 15 是为了
+   * 与一块已经删掉的画布保持一致，那个理由已经不在。
+   *
+   * 本值是**百分比**而不是像素：AutoCAD 允许把 `CURSORSIZE` 调到 100 做跨图对齐，那条用法
+   * 只有百分比表达得了。
+   *
+   * @defaultValue 10
    */
   readonly crosshairSize?: number
   /**

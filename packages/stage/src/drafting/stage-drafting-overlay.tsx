@@ -5,8 +5,17 @@ import {
   type ComposeCanvasCrosshair,
 } from '@compose-ui/canvas-kit'
 
-/** 捕捉标记的边长（屏幕像素）。 */
-const MARKER_SIZE = 10
+/**
+ * 捕捉标记的最小边长（屏幕像素）。
+ *
+ * @remarks
+ * 实际边长还要**把拾取框套进去**：两者钉在同一个解算落点上，标记比框小就整个藏在框里面，
+ * 而它恰恰是「吸上了」的唯一凭据。框的半边长由调用方给出，因此这里按当前那一帧的框现算。
+ */
+const MARKER_MIN_SIZE = 20
+
+/** 标记与拾取框之间留出的可见间隙（屏幕像素）。 */
+const MARKER_CLEARANCE = 8
 
 /** {@link StageDraftingOverlay} 的属性。 @internal */
 export interface StageDraftingOverlayProps {
@@ -40,6 +49,9 @@ export interface StageDraftingOverlayProps {
  * 捕捉标记与落点求解读的是**同一个** `snap`——各解一次会在指针快速移动时给出两个不同的答案，
  * 而用户看见标记贴在端点上、线却落在别处。
  *
+ * 标记**不用 accent 上色**：橡皮筋、作用对象轮廓、选区框已经全是 accent，同色的标记在它们
+ * 中间读不出来，而它要回答的是一个是非问题——**吸上了没有**。
+ *
  * @internal
  */
 export function StageDraftingOverlay({
@@ -51,6 +63,10 @@ export function StageDraftingOverlay({
   outlines,
 }: StageDraftingOverlayProps) {
   const snapScreen = snap ? worldToScreen(snap.point, viewport) : null
+  const markerSize = Math.max(
+    MARKER_MIN_SIZE,
+    (crosshair?.box ? crosshair.boxRadius : 0) * 2 + MARKER_CLEARANCE,
+  )
   const bandStart = rubberBand ? worldToScreen(rubberBand.start, viewport) : null
   const bandEnd = rubberBand ? worldToScreen(rubberBand.end, viewport) : null
 
@@ -96,10 +112,10 @@ export function StageDraftingOverlay({
           className="compose-stage__drafting-snap"
           data-snap-mode={snap?.mode}
           data-testid="stage-drafting-snap"
-          height={MARKER_SIZE}
-          width={MARKER_SIZE}
-          x={snapScreen.x - MARKER_SIZE / 2}
-          y={snapScreen.y - MARKER_SIZE / 2}
+          height={markerSize}
+          width={markerSize}
+          x={snapScreen.x - markerSize / 2}
+          y={snapScreen.y - markerSize / 2}
         />
       ) : null}
     </svg>

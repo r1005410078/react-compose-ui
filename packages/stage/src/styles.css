@@ -6,6 +6,13 @@
   --compose-stage-scrollbar-size: 10px;
 
   /*
+   * 捕捉标记的颜色。**刻意不是 accent**：橡皮筋、作用对象轮廓与选区框已经全是 accent，
+   * 标记混在里面读不出来，而它回答的是一个是非问题——吸上了没有。也**不复用 danger**：
+   * 吸附成功不是危险，借那个 token 会让重新配色的人一改就把两件事一起改掉。
+   */
+  --compose-stage-snap: #ff9c9c;
+
+  /*
    * 绘图模式给命令行**留出底部一条**，而不是让它浮在图面上。
    *
    * 命令行原先是 `bottom: 0` 的绝对定位层，横跨整个 Stage 宽度：左端 24px 压在竖标尺
@@ -32,6 +39,9 @@
 .compose-stage[data-compose-theme='light'] {
   --compose-stage-grid-minor: rgb(71 84 103 / 14%);
   --compose-stage-grid-primary: rgb(52 64 84 / 27%);
+
+  /* 浅底上的浅红读不出来，换成同色相的深色。 */
+  --compose-stage-snap: #b42318;
 }
 
 .compose-stage[data-compose-theme='light'] .compose-stage__surface {
@@ -1123,10 +1133,14 @@
   stroke-dasharray: 4 3;
 }
 
+/*
+ * 捕捉标记：套住拾取框的空心方框。空心是必须的——它罩着的正是用户要看清的那个点，实心会
+ * 把它盖掉；这与十字线在拾取框处断开是同一条理由。
+ */
 .compose-stage__drafting-snap {
   fill: none;
-  stroke: var(--compose-accent, #4c8dff);
-  stroke-width: 1.5;
+  stroke: var(--compose-stage-snap, #ff9c9c);
+  stroke-width: 2;
 }
 
 /* 被 MOVE/COPY/ERASE 作用的对象轮廓。虚线以区别于选中框的实线。 */
