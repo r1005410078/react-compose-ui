@@ -160,6 +160,18 @@ export type {
   ComposeNavigateBackAction,
 } from './interaction'
 export {
+  collectComposePortsValidationIssues,
+  getComposeEntityPorts,
+  getComposePortItems,
+  getComposePorts,
+  isValidComposePorts,
+} from './ports'
+export type {
+  ComposePort,
+  ComposePorts,
+  ComposePortsValidationIssue,
+} from './ports'
+export {
   COMPOSE_CURVE_MIN_EXTENT,
   collectComposeCurveValidationIssues,
   composeCurveBounds,

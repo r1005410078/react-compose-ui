@@ -165,6 +165,32 @@ describe('弧与多段线的特征点', () => {
     expect(findStageFeaturePoint(arcDoc, indexFor(arcDoc), { x: 100, y: 200 }, 8)).toBeNull()
   })
 
+  it('OpenSpec: stage-engine / 端口捕捉 / 端口压过更近的端点', () => {
+    // 端口落在 (300,200)，与弧的一个端点重合；另一条线的端点落在 (302,201)，离光标更近。
+    const port = {
+      ...entity('device', { x: 300, y: 200, width: 40, height: 40 }),
+      components: {
+        ...entity('device', { x: 300, y: 200, width: 40, height: 40 }).components,
+        Ports: { items: [{ id: 'L1', position: { x: 0, y: 0 } }] },
+      },
+    }
+    const near = curveEntity('near', { x: 302, y: 201 }, { x: 400, y: 300 })
+    const value = document([port, near], ['device', 'near'])
+
+    const hit = findStageFeaturePoint(value, indexFor(value), { x: 302, y: 201 }, 8)
+
+    // 端点正落在光标上，端口差 2 个单位——优先级严格先于距离。
+    expect(hit).toMatchObject({ mode: 'port', entityId: 'device' })
+    expect(hit?.point).toMatchObject({ x: 300, y: 200 })
+  })
+
+  it('OpenSpec: stage-engine / 端口捕捉 / 没有端口的 Entity 不产生候选', () => {
+    const plain = entity('plain', { x: 300, y: 200, width: 40, height: 40 })
+    const value = document([plain], ['plain'])
+
+    expect(findStageFeaturePoint(value, indexFor(value), { x: 300, y: 200 }, 8)).toBeNull()
+  })
+
   it('OpenSpec: stage-engine / 特征点捕捉 / 多段线顶点按端点优先级返回', () => {
     const polyline = shapeEntity('poly', {
       kind: 'polyline',

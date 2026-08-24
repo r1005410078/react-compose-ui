@@ -302,6 +302,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   bindings: 'Bindings',
   interaction: 'Interaction',
   curve: 'Curve',
+  ports: 'Ports',
 } as const
 
 /** ComposeDocument v7 内建 Component Key 联合。 @public */
@@ -528,6 +529,7 @@ export type DocumentValidationIssueCode =
   | 'renderer.invalid'
   | 'bindings.invalid'
   | 'interaction.invalid'
+  | 'ports.invalid'
   | 'curve.invalid'
   | 'animation.invalid'
   | 'animation.duplicate-id'

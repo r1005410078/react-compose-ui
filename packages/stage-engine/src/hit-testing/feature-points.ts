@@ -4,6 +4,7 @@ import {
   composeArcQuadrants,
   composePolylineSegments,
   getComposeCurve,
+  getComposeEntityPorts,
   projectComposeCurveToBox,
   getComposeVisibility,
 } from '@compose-ui/core'
@@ -22,9 +23,12 @@ import type { StageSceneIndex } from './scene-index'
  * 圆心与象限点插在中点之后，圆心先于象限点——与 CAD 侧 `CAD_SNAP_MODES` 同一次序。两块画布的
  * 捕捉手感必须相同，否则用户在两处画同一张图会得到不同的落点。
  *
+ * **端口排在最前**，理由同样与 CAD 一致：端口几乎总是画在符号线段的端点上，端点若在同等距离下
+ * 胜出，用户会画出一条像素级正确但**没有绑定**的导线——而这个错误在屏幕上完全不可见。
+ *
  * @public
  */
-export type StageFeatureSnapMode = 'endpoint' | 'midpoint' | 'center' | 'quadrant'
+export type StageFeatureSnapMode = 'port' | 'endpoint' | 'midpoint' | 'center' | 'quadrant'
 
 /** 一个特征点候选。 @public */
 export interface StageFeaturePoint {
@@ -34,7 +38,13 @@ export interface StageFeaturePoint {
   readonly point: StagePoint
 }
 
-const MODE_ORDER: readonly StageFeatureSnapMode[] = ['endpoint', 'midpoint', 'center', 'quadrant']
+const MODE_ORDER: readonly StageFeatureSnapMode[] = [
+  'port',
+  'endpoint',
+  'midpoint',
+  'center',
+  'quadrant',
+]
 
 function midpoint(a: StagePoint, b: StagePoint): StagePoint {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
@@ -101,8 +111,9 @@ function curveFeaturePoints(
  * `{ axis, value }` 的参考**线**，服务「与那个盒的左边对齐」；本查询返回一个二维**点**，
  * 服务「正好落在那条线的端点上」。两者输入相同、输出形状不同、消费方式也不同。
  *
- * 候选**只来自带 `Curve` 的 Entity**。盒的角点与中心刻意不出：那正是对齐吸附覆盖的语义，
- * 两套同时生效会在同一次取点里给出互相拉扯的答案，而用户看不出是哪一套在起作用。
+ * 候选只来自带 `Curve` 或带 `Ports` 的 Entity。盒的角点与中心刻意不出：那正是对齐吸附覆盖的
+ * 语义，两套同时生效会在同一次取点里给出互相拉扯的答案，而用户看不出是哪一套在起作用。端口
+ * 不在此列——那条挡的是从盒**推**出来的点，而端口是作者**显式写下**的。
  *
  * @param tolerance - 世界单位的容差；调用方用屏幕像素除以 zoom 换算。
  * @param excludedIds - 不参与捕捉的 Entity，例如正在被这条命令编辑的那个。
@@ -129,7 +140,15 @@ export function findStageFeaturePoint(
     if (!matrix) continue
     const toWorld = (local: StagePoint) => applyMatrix(matrix, local)
     const box = index.layoutSnapshot.boxes[entityId]
-    for (const candidate of curveFeaturePoints(entity, box, toWorld)) {
+    const candidates = [
+      // 端口与曲线特征点共用同一个世界矩阵：各算一遍必然在某个缩放下差半个像素。
+      ...getComposeEntityPorts(entity).map((port) => ({
+        mode: 'port' as const,
+        point: toWorld(port.position),
+      })),
+      ...curveFeaturePoints(entity, box, toWorld),
+    ]
+    for (const candidate of candidates) {
       const dx = candidate.point.x - point.x
       const dy = candidate.point.y - point.y
       const distance = dx * dx + dy * dy

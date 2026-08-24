@@ -12,6 +12,7 @@ import {
   isValidComposeCurve,
   isValidComposeGeometryConstraints,
   isValidComposeInteraction,
+  isValidComposePorts,
   isValidComposeWidgetSwitcher,
 } from '@compose-ui/core'
 import { createFrameInspector } from './frame'
@@ -48,6 +49,11 @@ import {
   createInteractionInspector,
   createInteractionMissingInspectorActions,
 } from './interaction'
+import {
+  DEFAULT_COMPOSE_PORTS,
+  createPortsInspector,
+  createPortsMissingInspectorActions,
+} from './ports'
 
 /**
  * 创建带 Inspector 的内建 ECS Component Registry 定义。
@@ -171,6 +177,20 @@ export function createComposeBuiltinComponentDefinitions(
         // 任意 Entity 都可以有交互：矩形、图片、容器都可能是跳转源。
         isVisible: () => true,
         actions: createInteractionMissingInspectorActions(idFactory),
+      },
+    },
+    {
+      key: 'Ports',
+      label: '端口',
+      // 紧随交互：两者都在说这个 Entity「对外提供什么」，而不是它长什么样。
+      order: 59,
+      createDefault: () => ({ ...DEFAULT_COMPOSE_PORTS }),
+      validate: isValidComposePorts,
+      inspector: createPortsInspector(idFactory),
+      missingInspector: {
+        // 端口是 Entity 的能力，不是组件库的能力：矩形、图片、组件实例都可以有接线点。
+        isVisible: () => true,
+        actions: createPortsMissingInspectorActions(idFactory),
       },
     },
     {

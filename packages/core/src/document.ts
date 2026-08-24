@@ -19,6 +19,7 @@ import {
 } from './layout'
 import { isComposeColor, isValidComposePaint } from './paint'
 import { collectComposeInteractionValidationIssues } from './interaction'
+import { collectComposePortsValidationIssues } from './ports'
 import { collectComposeCurveValidationIssues } from './curve'
 
 type Path = readonly (string | number)[]
@@ -849,6 +850,14 @@ function validateEntity(
     ] as const
     collectComposeInteractionValidationIssues(interaction).forEach((issue) => {
       addIssue(issues, 'interaction.invalid', [...interactionPath, ...issue.path], issue.message)
+    })
+  }
+  // Ports 同样可与任意 Entity 组合：端口是 Entity 的能力，不是某一种物料的能力。
+  const ports = components[COMPOSE_BUILTIN_COMPONENT_KEYS.ports]
+  if (ports !== undefined) {
+    const portsPath = [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.ports] as const
+    collectComposePortsValidationIssues(ports).forEach((issue) => {
+      addIssue(issues, 'ports.invalid', [...portsPath, ...issue.path], issue.message)
     })
   }
   return value as unknown as ComposeEntity
