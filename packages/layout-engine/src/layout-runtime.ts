@@ -5,6 +5,7 @@ import {
   getComposeLayoutItem,
   getComposeRenderer,
   resolveComposeAppearance,
+  resolveComposeWires,
   type ComposeAlignContent,
   type ComposeAlignItems,
   type ComposeAxisSizing,
@@ -26,7 +27,16 @@ export type ComposeLayoutRuntimeState =
   | { readonly status: 'loading'; readonly document: ComposeDocument }
   | {
       readonly status: 'ready'
+      /**
+       * 求解结果对应的文档。
+       *
+       * @remarks
+       * 导线解算之后这里是**已解算**的那份，与 `snapshot` 是同一次求解的一致对；订阅方渲染与
+       * 命中都读它。要判断「这个状态是不是我传进来的那份文档产出的」，读 `sourceDocument`。
+       */
       readonly document: ComposeDocument
+      /** 产出本状态的输入文档；只用于身份判定。 */
+      readonly sourceDocument: ComposeDocument
       readonly snapshot: ComposeLayoutSnapshot
       /**
        * 该 Snapshot 是否来自手势期预览求解。
@@ -650,15 +660,21 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
           })
         }
       })
+      // 导线解算排在布局求解之后、发布之前：它既改文档又改导线自己的盒，两者分头产出会让
+      // 命中读到的盒与渲染画出的几何差一帧，而这种偏差只在拖动符号的那一瞬出现、极难复现。
+      // Runtime 是唯一同时握有文档与快照的地方，因此解算住在这里，三条渲染路径各自零改动。
+      // 导线是绝对定位，改它的盒不影响任何其他 Entity 的求解，因此不触发二次求解。
+      const resolved = resolveComposeWires(this.document, {
+        revision: ++this.revision,
+        boxes: Object.freeze(boxes),
+        diagnostics: Object.freeze(diagnostics),
+      })
       this.setState({
         status: 'ready',
-        document: this.document,
+        document: resolved.document,
+        sourceDocument: this.document,
         preview: this.previewing,
-        snapshot: Object.freeze({
-          revision: ++this.revision,
-          boxes: Object.freeze(boxes),
-          diagnostics: Object.freeze(diagnostics),
-        }),
+        snapshot: Object.freeze(resolved.snapshot),
       })
       this.emit()
     }

@@ -12,6 +12,7 @@ const messages = {
   specifyNextPoint: '指定下一点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
+  wireTitle: '导线',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
   basePoint: '指定基点',
@@ -98,7 +99,7 @@ describe('LINE 命令', () => {
   it('命令按名称与别名解析', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
-      'LINE', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE', 'MOVE', 'COPY', 'ERASE',
+      'LINE', 'WIRE', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE', 'MOVE', 'COPY', 'ERASE',
     ])
     expect(commands[0]?.aliases).toEqual(['L'])
   })

@@ -44,6 +44,7 @@ vi.mock('@compose-ui/layout-engine', () => ({
     const solve = () => ({
       status: 'ready' as const,
       document: current,
+      sourceDocument: current,
       preview: false,
       snapshot: {
         revision: ++revision,

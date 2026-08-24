@@ -13,6 +13,7 @@ import {
   isValidComposeGeometryConstraints,
   isValidComposeInteraction,
   isValidComposePorts,
+  isValidComposeWire,
   isValidComposeWidgetSwitcher,
 } from '@compose-ui/core'
 import { createFrameInspector } from './frame'
@@ -54,6 +55,7 @@ import {
   createPortsInspector,
   createPortsMissingInspectorActions,
 } from './ports'
+import { createWireInspector } from './wire'
 
 /**
  * 创建带 Inspector 的内建 ECS Component Registry 定义。
@@ -192,6 +194,15 @@ export function createComposeBuiltinComponentDefinitions(
         isVisible: () => true,
         actions: createPortsMissingInspectorActions(idFactory),
       },
+    },
+    {
+      key: 'Wire',
+      label: '接线',
+      // 紧随端口：一个说「这里可以接」，一个说「这一端接到了哪里」。
+      order: 59.5,
+      createDefault: () => ({}),
+      validate: isValidComposeWire,
+      inspector: createWireInspector(),
     },
     {
       key: 'Curve',

@@ -36,6 +36,14 @@ export interface StageFeaturePoint {
   readonly entityId: string
   /** 世界坐标。 */
   readonly point: StagePoint
+  /**
+   * 端口 id；只有 `port` 候选带它。
+   *
+   * @remarks
+   * 导线的绑定来自**取点时记下的来源**，因此这个 id 必须随捕捉结果一起交出去。事后按坐标
+   * 反查已有端口会让一条恰好路过端口的普通线莫名其妙地绑上，而那个绑定在屏幕上不可见。
+   */
+  readonly portId?: string
 }
 
 const MODE_ORDER: readonly StageFeatureSnapMode[] = [
@@ -53,6 +61,7 @@ function midpoint(a: StagePoint, b: StagePoint): StagePoint {
 interface LocalFeaturePoint {
   readonly mode: StageFeatureSnapMode
   readonly point: StagePoint
+  readonly portId?: string
 }
 
 /**
@@ -145,6 +154,7 @@ export function findStageFeaturePoint(
       ...getComposeEntityPorts(entity).map((port) => ({
         mode: 'port' as const,
         point: toWorld(port.position),
+        portId: port.id,
       })),
       ...curveFeaturePoints(entity, box, toWorld),
     ]

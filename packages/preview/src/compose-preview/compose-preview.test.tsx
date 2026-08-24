@@ -232,6 +232,7 @@ describe('ComposePreview', () => {
     const layoutState = {
       status: 'ready' as const,
       document: value,
+      sourceDocument: value,
       snapshot: snapshot(value),
       preview: false,
     }

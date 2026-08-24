@@ -20,6 +20,7 @@ import {
 import { isComposeColor, isValidComposePaint } from './paint'
 import { collectComposeInteractionValidationIssues } from './interaction'
 import { collectComposePortsValidationIssues } from './ports'
+import { collectComposeWireValidationIssues, getComposeWire } from './wire'
 import { collectComposeCurveValidationIssues } from './curve'
 
 type Path = readonly (string | number)[]
@@ -852,6 +853,24 @@ function validateEntity(
       addIssue(issues, 'interaction.invalid', [...interactionPath, ...issue.path], issue.message)
     })
   }
+  // Wire 只做字段级校验：指向不存在的实体或端口是**解算失败**而不是文档非法，与实例动画
+  // 「指向不存在的 id 时保留原值并标为失效」是同一条判断。同父级那条要看整篇文档，在拓扑里做。
+  const wire = components[COMPOSE_BUILTIN_COMPONENT_KEYS.wire]
+  if (wire !== undefined) {
+    const wirePath = [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.wire] as const
+    collectComposeWireValidationIssues(wire).forEach((issue) => {
+      addIssue(issues, 'wire.invalid', [...wirePath, ...issue.path], issue.message)
+    })
+    const curve = components[COMPOSE_BUILTIN_COMPONENT_KEYS.curve] as { readonly kind?: unknown }
+      | undefined
+    if (!curve) {
+      addIssue(issues, 'wire.missing-curve', wirePath, 'Wire MUST 与 Curve 组合')
+    }
+    else if (curve.kind !== 'line') {
+      // v1 只有两个端点的导线：折线导线的价值几乎全部来自自动路由，而路由还没有。
+      addIssue(issues, 'wire.unsupported-geometry', wirePath, 'Wire 只支持 kind 为 line 的 Curve')
+    }
+  }
   // Ports 同样可与任意 Entity 组合：端口是 Entity 的能力，不是某一种物料的能力。
   const ports = components[COMPOSE_BUILTIN_COMPONENT_KEYS.ports]
   if (ports !== undefined) {
@@ -934,6 +953,26 @@ function validateTopology(
       }
       parentById.set(childId, parentId)
     })
+  })
+
+  // 导线与它绑定的实体必须同父级：端口的父级坐标要按实例的盒与旋转基点换算，跨层级还要合成
+  // 整条祖先链的变换。限制在同一父级把「嵌套时静默错位」变成一条读得出来的问题。
+  Object.entries(entities).forEach(([id, entity]) => {
+    const wire = getComposeWire(entity)
+    if (!wire) return
+    const parentId = parentById.get(id) ?? null
+    for (const key of ['start', 'end'] as const) {
+      const binding = wire[key]
+      if (!binding || !entities[binding.entityId]) continue
+      if ((parentById.get(binding.entityId) ?? null) !== parentId) {
+        addIssue(
+          issues,
+          'wire.parent-mismatch',
+          ['entities', id, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.wire, key],
+          `导线与它绑定的 Entity ${binding.entityId} 不在同一父级下`,
+        )
+      }
+    }
   })
 
   const visited = new Set<string>()

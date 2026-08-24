@@ -6,6 +6,7 @@ import {
   type ComposeDocument,
   type ComposeInputPoint,
   type ComposeLayoutSnapshot,
+  type ComposeWireBinding,
 } from '@compose-ui/core'
 import {
   createComposeCommandRegistry,
@@ -30,7 +31,7 @@ import {
 } from '@compose-ui/stage-engine'
 import { isEditableTarget } from '../stage-surface/keyboard'
 import type { ComposeStageDispatch } from '../types'
-import { createStageDraftingCurveCommand } from './drafting-entity'
+import { anchorKey, createStageDraftingCurveCommand, wireBindingsFor } from './drafting-entity'
 
 /** 绘图模式需要的额外文案。 @internal */
 export interface StageDraftingHookMessages extends StageDraftingMessages {
@@ -129,6 +130,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
   } = options
 
   const sessionRef = useRef<ComposeCommandSession<StageDraftingEffect> | null>(null)
+  /** 本次命令里落在端口上的取点；键是解算后的世界坐标。 */
+  const portAnchors = useRef(new Map<string, ComposeWireBinding>())
   /** 上一条成功启动的命令 id；空闲时的空确认按它重启。取消过的命令仍算数。 */
   const lastCommandRef = useRef<string | null>(null)
   const [prompt, setPrompt] = useState<ComposeCommandSession<StageDraftingEffect>['prompt']>(null)
@@ -184,7 +187,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
         registry: current.registry,
         idFactory: current.idFactory,
         activeFrameId: current.activeFrameId,
-      }, curve)
+      }, curve, effect.wire ? wireBindingsFor(portAnchors.current, curve) : undefined)
       if (command) current.dispatch(command)
     }
 
@@ -206,6 +209,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
 
   const endSession = useCallback((message: string | null) => {
     sessionRef.current = null
+    portAnchors.current.clear()
     setPrompt(null)
     setReference(null)
     setPreview(null)
@@ -241,25 +245,48 @@ export function useStageDrafting(options: StageDraftingOptions) {
     return findStageFeaturePoint(document, index, pointer, snapRadius / viewport.zoom, excluded)
   }, [document, enabled, excluded, index, pointer, snapEnabled, snapRadius, viewport.zoom])
 
-  const resolvePointerPoint = useCallback((world: StagePoint): ComposeInputPoint => {
+  /**
+   * 解算一次落点，并带上它的来源。
+   *
+   * @remarks
+   * 来源只有落在端口上时才有值。导线的绑定读它，因此「拖到端口上就绑、拖到别处就解绑」与
+   * 落点解算读的是同一次捕捉，不可能分叉。
+   */
+  const resolvePointerHit = useCallback((world: StagePoint): {
+    readonly point: ComposeInputPoint
+    readonly port?: ComposeWireBinding
+  } => {
     const hit = snapEnabled
       ? findStageFeaturePoint(document, index, world, snapRadius / viewport.zoom, excluded)
       : null
-    return resolveComposePoint(world, 'pointer', {
+    const point = resolveComposePoint(world, 'pointer', {
       ...(hit ? { snapped: hit.point } : {}),
       ...(reference ? { reference } : {}),
       ortho,
       grid: gridSettings,
     })
+    return hit?.mode === 'port' && hit.portId
+      ? { point, port: { entityId: hit.entityId, portId: hit.portId } }
+      : { point }
   }, [document, excluded, gridSettings, index, ortho, reference, snapEnabled, snapRadius, viewport.zoom])
+
+  const resolvePointerPoint = useCallback(
+    (world: StagePoint): ComposeInputPoint => resolvePointerHit(world).point,
+    [resolvePointerHit],
+  )
 
   const handlePoint = useCallback((world: StagePoint) => {
     const session = sessionRef.current
     if (!session) return
     // 按这次按下自己的坐标重算捕捉，不沿用上一帧 hover 的结果：pointerdown 可能赶在 React
     // 为上一次 pointermove 重渲染之前到达，落点会被吸回用户已经离开的特征点上。
-    applyStep(session.advance({ kind: 'point', point: resolvePointerPoint(world) }))
-  }, [applyStep, resolvePointerPoint])
+    const { point, port } = resolvePointerHit(world)
+    // 导线的绑定来自**取点时记下的来源**，不是事后按坐标反查已有端口：反查会让一条恰好路过
+    // 端口的普通线莫名其妙地绑上，而那个绑定在屏幕上完全不可见。键入的坐标因此永远不绑——
+    // 它没有来源可言。
+    if (port) portAnchors.current.set(anchorKey(point), port)
+    applyStep(session.advance({ kind: 'point', point }))
+  }, [applyStep, resolvePointerHit])
 
   /**
    * 按名称启动一条命令。
@@ -463,8 +490,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
   return {
     index,
     // 几何编辑的夹点拖动读同一个解算：两份实现的分叉症状是「画线时吸端点、拖顶点时不吸」，
-    // 而用户无法判断哪个才是对的。
-    resolvePoint: resolvePointerPoint,
+    // 而用户无法判断哪个才是对的。它同时带回落点的来源，导线的改接线因此与落点同源。
+    resolvePoint: resolvePointerHit,
     pointerScreen,
     outlines,
     selectionCount: enabled && prompt?.accepts.includes('selection') === true

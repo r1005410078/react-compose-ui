@@ -1520,7 +1520,9 @@ export function useComposeEditorController({
   )
 
   const stageProps = useMemo<ComposeStageProps>(() => ({
-    document,
+    // 交给画布的是布局 Runtime 那份**已解算**的文档：它与快照是同一次求解的一致对，而导线
+    // 解算既改文档又改导线自己的盒，分头取会让命中读到的盒与渲染画出的几何差一帧。
+    document: layoutState.status === 'ready' ? layoutState.document : document,
     layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : undefined,
     // resize 实时布局的预览结果只进场景渲染，交互 context 仍用上面的提交态 Snapshot。
     layoutPreviewSnapshot: layoutSession.previewSnapshot ?? undefined,

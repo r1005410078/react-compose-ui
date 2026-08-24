@@ -37,6 +37,14 @@ export interface StageDraftingEffect {
    * 局部坐标、归一化、创建 Entity。分成三个字段会让那段代码复制三遍。
    */
   readonly curves?: readonly ComposeCurve[]
+  /**
+   * 本步产出的曲线是**导线**。
+   *
+   * @remarks
+   * 只是一个标记：引擎不认识端口，也不知道这条线的端点落在谁身上。绑到哪个端口由宿主按
+   * **取点时记下的来源**决定——它才是那个知道「这一下点在端口上」的地方。
+   */
+  readonly wire?: boolean
   /** 本步要平移的既有 Entity。 */
   readonly translate?: StageDraftingTranslation
   /** 本步要复制并平移的既有 Entity。 */
@@ -63,6 +71,7 @@ export interface StageDraftingMessages {
   readonly specifyNextPoint: string
   readonly expectedPoint: string
   readonly lineTitle: string
+  readonly wireTitle: string
   readonly arcTitle: string
   readonly circleTitle: string
   readonly rectangleTitle: string

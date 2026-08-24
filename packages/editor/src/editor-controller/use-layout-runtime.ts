@@ -50,7 +50,7 @@ export function useComposeEditorLayout(
   return {
     runtime,
     previewSnapshot,
-    state: state.document === documentRuntime.document
+    state: (state.status === 'ready' ? state.sourceDocument : state.document) === documentRuntime.document
       ? state
       : { status: 'loading', document: documentRuntime.document },
   }

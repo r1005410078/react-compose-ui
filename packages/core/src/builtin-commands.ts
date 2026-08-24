@@ -24,6 +24,7 @@ import { isComposeColor, isValidComposePaint } from './paint'
 import { jsonEqual } from './patches'
 import { isComposeGroupEntity, isComposeUngroupableEntity } from './group'
 import { getComposeFrame } from './frame'
+import { isValidComposeWire } from './wire'
 import {
   getComposeCurve,
   isValidComposeCurve,
@@ -1092,16 +1093,30 @@ function setCurveHandler(): CommandHandler {
       }
       const item = getComposeLayoutItem(entity)
       if (!item) return issue('curve.invalid-target', `Entity ${entityId} 缺少 LayoutItem`)
+      // 导线的接线改动**必须与几何同一个事务**：拖端点落到另一个端口上时几何与绑定一起变，
+      // 分成两条命令会产生一个可观察的不一致中间态（几何已经动了、绑定还指着旧端口），
+      // 撤销也会变成两步。缺席即不动 `Wire`，因此 Inspector 那条写入路径一行不改。
+      const wire = valueAt(command.payload, 'wire')
+      const wirePath = ['entities', entityId, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.wire]
+      if (wire !== undefined && wire !== null && !isValidComposeWire(wire)) {
+        return issue('curve.invalid-geometry', 'entity.curve.set 的 wire 无效')
+      }
       const next = normalizeComposeCurveGeometry(candidate as ComposeCurve)
       const curvePath = ['entities', entityId, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.curve]
       const itemPath = ['entities', entityId, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.layoutItem]
       if (
-        jsonEqual(entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.curve] as JsonValue, next.curve as unknown as JsonValue)
+        wire === undefined
+        && jsonEqual(entity.components[COMPOSE_BUILTIN_COMPONENT_KEYS.curve] as JsonValue, next.curve as unknown as JsonValue)
         && jsonEqual(item.offset as unknown as JsonValue, next.offset as unknown as JsonValue)
         && item.width.value === next.size.width
         && item.height.value === next.size.height
       ) return { status: 'noop', reason: '曲线几何没有变化' }
       return patches([
+        ...(wire === undefined
+          ? []
+          : wire === null
+            ? [{ op: 'remove' as const, path: wirePath }]
+            : [{ op: 'set' as const, path: wirePath, value: wire as JsonValue }]),
         { op: 'set', path: curvePath, value: next.curve as unknown as JsonValue },
         { op: 'set', path: [...itemPath, 'offset'], value: next.offset as unknown as JsonValue },
         { op: 'set', path: [...itemPath, 'width', 'value'], value: next.size.width },

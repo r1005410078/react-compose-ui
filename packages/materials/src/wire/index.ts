@@ -1,0 +1,1 @@
+export { createWireInspector } from './inspector'

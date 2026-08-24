@@ -12,6 +12,7 @@ import {
   type EditorCommand,
   type JsonValue,
 } from '@compose-ui/core'
+import type { ComposeWire, ComposeWireBinding } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   applyMatrix,
@@ -20,6 +21,38 @@ import {
   type StagePoint,
   type StageSceneIndex,
 } from '@compose-ui/stage-engine'
+
+/**
+ * 取点落点到端口绑定的键。
+ *
+ * @remarks
+ * 键是**解算后**的世界坐标：命令拿到的就是这个值，因此曲线端点与这里的键逐位相同，不需要
+ * 容差比较。用容差反而会让一条恰好路过端口的线绑上。
+ * @internal
+ */
+export function anchorKey(point: { readonly x: number; readonly y: number }): string {
+  return `${point.x},${point.y}`
+}
+
+/**
+ * 按取点记录求出一条导线两端的绑定。
+ *
+ * @remarks
+ * 只有直线是导线（v1 没有拐点），其余 kind 一律没有绑定。
+ * @internal
+ */
+export function wireBindingsFor(
+  anchors: ReadonlyMap<string, ComposeWireBinding>,
+  curve: ComposeCurve,
+): ComposeWire | undefined {
+  if (curve.kind !== 'line') return undefined
+  const start = anchors.get(anchorKey(curve.start))
+  const end = anchors.get(anchorKey(curve.end))
+  return {
+    ...(start ? { start } : {}),
+    ...(end ? { end } : {}),
+  }
+}
 
 /** 绘图落地一段线所需的最小上下文。 @internal */
 export interface StageDraftingCommitContext {
@@ -90,6 +123,7 @@ function toParentCurve(
 export function createStageDraftingCurveCommand(
   context: StageDraftingCommitContext,
   curve: ComposeCurve,
+  wire?: ComposeWire,
 ): EditorCommand | null {
   const seed = context.registry.createSeed('curve')
   if (!seed.ok) return null
@@ -119,6 +153,9 @@ export function createStageDraftingCurveCommand(
     components: {
       ...seed.seed.components,
       Curve: normalized.curve,
+      // 两端都没绑到端口的「导线」不带 `Wire`：一条谁也没接的线与普通线没有任何差别，
+      // 留一个空 Component 只会让文档攒下读不出意图的空壳。
+      ...(wire && (wire.start || wire.end) ? { Wire: wire } : {}),
       LayoutItem: {
         ...layoutItem,
         offset: normalized.offset,

@@ -417,6 +417,7 @@ function ComposeStageReady({
     drawCategory: messages.draftingDrawCategory,
     editCategory: messages.draftingEditCategory,
     lineTitle: messages.draftingLineTitle,
+    wireTitle: messages.draftingWireTitle,
     arcTitle: messages.draftingArcTitle,
     circleTitle: messages.draftingCircleTitle,
     rectangleTitle: messages.draftingRectangleTitle,
@@ -452,7 +453,7 @@ function ComposeStageReady({
   // 每帧重建也不会让 effect dispatch 的记忆化失效。几何编辑读落点解算走的也是这个 ref。
   const draftingRef = useRef<ReturnType<typeof useStageDrafting> | null>(null)
   const resolveDraftingPoint = useCallback(
-    (world: StagePoint) => draftingRef.current?.resolvePoint(world) ?? world,
+    (world: StagePoint) => draftingRef.current?.resolvePoint(world) ?? { point: world },
     [],
   )
 

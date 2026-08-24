@@ -495,7 +495,9 @@ function ManagedComposePreview(props: ComposePreviewProps & { readonly document:
       </section>
     )
   }
-  return <ComposePreviewReady {...props} layoutSnapshot={state.snapshot} />
+  // 文档与快照必须是同一次求解的一致对：导线解算既改文档又改导线自己的盒，配错了会让
+  // 渲染出来的线与它的盒对不上。
+  return <ComposePreviewReady {...props} document={state.document} layoutSnapshot={state.snapshot} />
 }
 
 /** 用普通 DOM 预览 ComposeDocument v6 输出。 @public */

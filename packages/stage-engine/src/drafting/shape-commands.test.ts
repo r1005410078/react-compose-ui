@@ -5,6 +5,7 @@ import {
   createStagePolylineSession,
   createStageRectangleSession,
 } from './shape-commands'
+import { createStageLineSession, createStageWireSession } from './line-command'
 import type { StageDraftingContext, StageDraftingMessages } from './drafting-types'
 
 const messages: StageDraftingMessages = {
@@ -14,6 +15,7 @@ const messages: StageDraftingMessages = {
   specifyNextPoint: '指定下一点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
+  wireTitle: '导线',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
   basePoint: '指定基点',
@@ -36,6 +38,29 @@ const messages: StageDraftingMessages = {
 }
 
 const context: StageDraftingContext = { messages }
+
+describe('WIRE 命令', () => {
+  it('取两个点即结束，产出的曲线带 wire 标记', () => {
+    const session = createStageWireSession({ messages } as never)
+    expect(session.advance({ kind: 'point', point: { x: 0, y: 0 } }).status).toBe('prompt')
+    const step = session.advance({ kind: 'point', point: { x: 100, y: 0 } })
+
+    expect(step.status).toBe('commit')
+    expect(step.status === 'commit' ? step.effect : null).toMatchObject({
+      wire: true,
+      curves: [{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
+    })
+  })
+
+  it('LINE 不带 wire 标记，即使端点吸附到了端口上', () => {
+    // 绑定改变对象此后的行为，意图必须显式——捕捉到端口不等于用户想接线。
+    const session = createStageLineSession({ messages } as never)
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    const step = session.advance({ kind: 'point', point: { x: 100, y: 0 } })
+
+    expect(step.status === 'prompt' ? step.commit?.wire : undefined).toBeUndefined()
+  })
+})
 
 describe('ARC 命令', () => {
   it('OpenSpec: stage-engine / 绘图命令 / 三点定弧', () => {

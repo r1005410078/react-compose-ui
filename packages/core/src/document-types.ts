@@ -303,6 +303,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   interaction: 'Interaction',
   curve: 'Curve',
   ports: 'Ports',
+  wire: 'Wire',
 } as const
 
 /** ComposeDocument v7 内建 Component Key 联合。 @public */
@@ -530,6 +531,10 @@ export type DocumentValidationIssueCode =
   | 'bindings.invalid'
   | 'interaction.invalid'
   | 'ports.invalid'
+  | 'wire.invalid'
+  | 'wire.missing-curve'
+  | 'wire.unsupported-geometry'
+  | 'wire.parent-mismatch'
   | 'curve.invalid'
   | 'animation.invalid'
   | 'animation.duplicate-id'

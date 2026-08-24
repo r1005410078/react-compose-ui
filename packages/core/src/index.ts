@@ -172,6 +172,19 @@ export type {
   ComposePortsValidationIssue,
 } from './ports'
 export {
+  collectComposeWireValidationIssues,
+  getComposeWire,
+  isValidComposeWire,
+  resolveComposePortPoint,
+  resolveComposeWires,
+} from './wire'
+export type {
+  ComposeResolvedWires,
+  ComposeWire,
+  ComposeWireBinding,
+  ComposeWireValidationIssue,
+} from './wire'
+export {
   COMPOSE_CURVE_MIN_EXTENT,
   collectComposeCurveValidationIssues,
   composeCurveBounds,

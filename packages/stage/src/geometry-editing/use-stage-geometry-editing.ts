@@ -4,6 +4,7 @@ import {
   getComposeCurve,
   getComposeLayoutItem,
   getComposeLock,
+  getComposeWire,
   translateComposeCurve,
 } from '@compose-ui/core'
 import {
@@ -13,9 +14,48 @@ import {
   stageCurveLocalPoint,
   stageCurveOutline,
 } from '@compose-ui/stage-engine'
-import type { ComposeCurve, ComposeDocument, JsonValue } from '@compose-ui/core'
+import type {
+  ComposeCurve,
+  ComposeDocument,
+  ComposeEntity,
+  ComposeWire,
+  ComposeWireBinding,
+  JsonValue,
+} from '@compose-ui/core'
 import type { StageEditablePath, StagePoint, StageSceneIndex } from '@compose-ui/stage-engine'
 import type { ComposeStageDispatch, ComposeStageEditablePathChange, ComposeStageTool } from '../types'
+
+/** 直线两端的夹点 id；只有它们能承载导线绑定。 */
+const WIRE_ENDS: Readonly<Record<string, 'start' | 'end'>> = { start: 'start', end: 'end' }
+
+/**
+ * 求出拖完这一下之后的 `Wire`。
+ *
+ * @remarks
+ * 落在端口上就绑到它，落在别处就把这一端解绑——这是改错接线的唯一入口。两端都变自由时返回
+ * `null`（删掉整个 Component）：一条谁也没接的线与普通线没有任何差别，留个空壳读不出意图。
+ *
+ * @returns `undefined` 表示这次拖动与接线无关，命令因此不带 `wire` 字段。
+ */
+function nextWireFor(
+  entity: ComposeEntity | undefined,
+  gripId: string,
+  port: ComposeWireBinding | undefined,
+): ComposeWire | null | undefined {
+  const end = WIRE_ENDS[gripId]
+  if (!end) return undefined
+  const current = getComposeWire(entity)
+  if (!current && !port) return undefined
+  const next: ComposeWire = {
+    ...(current ?? {}),
+    ...(port ? { [end]: port } : {}),
+  }
+  if (!port && current) {
+    // 显式删掉这一端：展开赋值改不掉已经存在的键。
+    delete (next as Record<string, unknown>)[end]
+  }
+  return next.start || next.end ? next : null
+}
 
 /** {@link useStageGeometryEditing} 的输入。 @internal */
 export interface StageGeometryEditingOptions {
@@ -27,8 +67,17 @@ export interface StageGeometryEditingOptions {
   readonly tool: ComposeStageTool
   /** 宿主传入了自己的可编辑路径；此时不进入几何编辑，覆盖层至多渲染一条路径。 */
   readonly hostPathActive: boolean
-  /** 与绘图命令**同一条**落点解算；分叉的症状是「画线时吸端点、拖顶点时不吸」。 */
-  readonly resolvePoint: (world: StagePoint) => StagePoint
+  /**
+   * 与绘图命令**同一条**落点解算；分叉的症状是「画线时吸端点、拖顶点时不吸」。
+   *
+   * @remarks
+   * 返回值带上落点的来源：导线的「拖到端口上就绑、拖到别处就解绑」读它，因此改接线与落点
+   * 出自同一次捕捉。
+   */
+  readonly resolvePoint: (world: StagePoint) => {
+    readonly point: StagePoint
+    readonly port?: ComposeWireBinding
+  }
   readonly label: (name: string) => string
 }
 
@@ -122,8 +171,10 @@ export function useStageGeometryEditing(
     const current = latest.current
     const geometry = stageCurveBoxGeometry(current.document, current.index, target)
     if (!geometry) return null
-    const local = stageCurveLocalPoint(current.index, target, current.resolvePoint(world))
-    return local ? applyStageCurveGrip(geometry, gripId, local) : null
+    const resolved = current.resolvePoint(world)
+    const local = stageCurveLocalPoint(current.index, target, resolved.point)
+    const next = local ? applyStageCurveGrip(geometry, gripId, local) : null
+    return next ? { curve: next, ...(resolved.port ? { port: resolved.port } : {}) } : null
   }, [])
 
   const handlePathChange = useCallback((change: ComposeStageEditablePathChange) => {
@@ -135,20 +186,23 @@ export function useStageGeometryEditing(
     const next = solve(entityId, change.vertexId, change.worldPoint)
     if (change.phase !== 'end') {
       // 开始阶段也解一次：按下即吸附，用户不必先移动一下才看到落点。
-      if (next) setPreview(next)
+      if (next) setPreview(next.curve)
       return true
     }
     setPreview(null)
     if (!next) return true
     const entity = latest.current.document.entities[entityId]
     const offset = entity ? getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 } : { x: 0, y: 0 }
+    const wire = nextWireFor(entity, change.vertexId, next.port)
     dispatch({
       id: idFactory(),
       type: BUILTIN_COMMAND_TYPES.setCurve,
       payload: {
         entityId,
         // 载荷是 parent 局部坐标；盒与几何由那条唯一漏斗重新归一化，越界不需要钳制。
-        curve: translateComposeCurve(next, offset.x, offset.y) as unknown as JsonValue,
+        curve: translateComposeCurve(next.curve, offset.x, offset.y) as unknown as JsonValue,
+        // 改接线与几何写在同一条命令里：分成两条会产生一个可观察的不一致中间态，撤销也变两步。
+        ...(wire === undefined ? {} : { wire: wire as unknown as JsonValue }),
       },
       meta: {
         label: label(entity?.name ?? ''),

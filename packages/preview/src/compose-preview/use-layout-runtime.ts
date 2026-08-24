@@ -62,5 +62,7 @@ export function useComposePreviewLayout(
       generations.delete(adapter)
     })
   }, [adapter])
-  return state.document === document ? state : { status: 'loading', document }
+  // 身份判定读 `sourceDocument`：`document` 在导线解算之后已经不是传进来的那一份了。
+  const source = state.status === 'ready' ? state.sourceDocument : state.document
+  return source === document ? state : { status: 'loading', document }
 }

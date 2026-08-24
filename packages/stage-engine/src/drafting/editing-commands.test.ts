@@ -12,6 +12,7 @@ const messages: StageDraftingMessages = {
   specifyNextPoint: '指定下一点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
+  wireTitle: '导线',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
   basePoint: '指定基点',

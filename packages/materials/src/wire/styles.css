@@ -1,0 +1,27 @@
+.compose-material-wire {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.compose-material-wire__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compose-material-wire__row dt {
+  color: var(--compose-text-muted, #94a3b8);
+}
+
+.compose-material-wire__row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 失效必须一眼可辨：它与自由端的几何完全一样，只有含义不同。 */
+.compose-material-wire__row dd[data-wire-end='dangling'] {
+  color: var(--compose-danger, #f87171);
+}

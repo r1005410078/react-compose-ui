@@ -84,6 +84,63 @@ export function createStageLineSession(
   }
 }
 
+/**
+ * 建立一次 WIRE 执行的状态机。
+ *
+ * @remarks
+ * 与 LINE 的差别只有两处：取两个点就结束（导线只有两个端点，折线导线的价值几乎全部来自
+ * 自动路由，而路由还没有），以及产出的曲线带 `wire` 标记。
+ *
+ * **`LINE` 不绑定，即使端点吸附到了端口上**：绑定改变对象此后的行为，意图必须显式。
+ *
+ * @public
+ */
+export function createStageWireSession(
+  context: StageDraftingContext,
+): ComposeCommandSession<StageDraftingEffect> {
+  const { messages } = context
+  let start: ComposeCommandPoint | null = null
+  let prompt = firstPrompt(messages)
+
+  return {
+    get prompt() {
+      return prompt
+    },
+    advance(input): ComposeCommandStep<StageDraftingEffect> {
+      if (input.kind === 'cancel') return { status: 'cancelled' }
+      if (input.kind !== 'point') {
+        return { status: 'rejected', message: messages.expectedPoint }
+      }
+      if (!start) {
+        start = input.point
+        prompt = nextPrompt(messages)
+        return { status: 'prompt', prompt, preview: { reference: input.point } }
+      }
+      return {
+        status: 'commit',
+        effect: {
+          curves: [createComposeLineCurve(start, input.point)],
+          wire: true,
+          reference: input.point,
+        },
+      }
+    },
+  }
+}
+
+/** WIRE 命令定义。 @public */
+export function createStageWireCommand(
+  messages: StageDraftingMessages,
+): ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect> {
+  return {
+    id: 'WIRE',
+    aliases: ['WI'],
+    title: messages.wireTitle,
+    category: messages.drawCategory,
+    start: createStageWireSession,
+  }
+}
+
 /** LINE 命令定义。 @public */
 export function createStageLineCommand(
   messages: StageDraftingMessages,
@@ -103,6 +160,7 @@ export function createStageDraftingCommands(
 ): readonly ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect>[] {
   return [
     createStageLineCommand(messages),
+    createStageWireCommand(messages),
     createStageArcCommand(messages),
     createStageCircleCommand(messages),
     createStageRectangleCommand(messages),
