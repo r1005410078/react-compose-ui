@@ -161,11 +161,13 @@ const messages = {
       documentLabel: 'CAD',
       save: '保存 CAD',
       createFailed: 'CAD 创建失败',
-      importDxf: '从 DXF 导入',
-      importDxfPartial: '部分内容未能完整导入',
-      importDxfFailed: 'DXF 导入失败',
       openFailed: 'CAD 打开失败',
       saveFailed: 'CAD 保存失败',
+    },
+    dxf: {
+      importAsPage: '导入为页面',
+      importPartial: '部分内容未能完整导入',
+      importFailed: 'DXF 导入失败',
     },
     pages: {
       createPage: '创建页面',
@@ -390,11 +392,13 @@ const messages = {
       documentLabel: 'CAD',
       save: 'Save CAD',
       createFailed: 'Failed to create the CAD document',
-      importDxf: 'Import from DXF',
-      importDxfPartial: 'Some content could not be fully imported',
-      importDxfFailed: 'Failed to import the DXF file',
       openFailed: 'Failed to open the CAD document',
       saveFailed: 'Failed to save the CAD document',
+    },
+    dxf: {
+      importAsPage: 'Import as page',
+      importPartial: 'Some content could not be fully imported',
+      importFailed: 'Failed to import the DXF file',
     },
     pages: {
       createPage: 'New page',
@@ -819,6 +823,9 @@ export function getEditorMessages(
     cad: Object.fromEntries(
       Object.entries(current.cad).map(([key, fallback]) => [key, format(`cad.${key}`, fallback)]),
     ) as Record<keyof typeof current.cad, string>,
+    dxf: Object.fromEntries(
+      Object.entries(current.dxf).map(([key, fallback]) => [key, format(`dxf.${key}`, fallback)]),
+    ) as Record<keyof typeof current.dxf, string>,
     pages: {
       createPage: format('pages.createPage', current.pages.createPage),
       createPageTitle: format('pages.createPageTitle', current.pages.createPageTitle),

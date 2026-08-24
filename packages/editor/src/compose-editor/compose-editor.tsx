@@ -24,6 +24,7 @@ import {
 import { AnimationInspector } from '../animation-mode/animation-inspector'
 import { createPageAnimationFile } from '../animation-mode/animation-asset-store'
 import { createCadContextMenuItems, useCadWorkspace } from '../cad'
+import { createDxfContextMenuItems } from '../dxf'
 import { composeCadDisplayName, isComposeCadFileName } from '@compose-ui/cad'
 import type { ComposeCadDescriptor } from '@compose-ui/cad'
 import { PageAnimationScopePanel } from '../animation-mode/page-animation-scope-panel'
@@ -1487,22 +1488,49 @@ export function ComposeEditor({
       messages: editorMessages,
       onDocumentCreated: openCadDocument,
       onError: setCadNotice,
-      // 诊断与失败都走同一条提示：用户要看的是「有没有东西没导进来」，而不是它属于哪一类。
-      onNotice: setCadNotice,
       provider: assets?.browser?.provider,
       store: cadWorkspace.store,
     })
   }, [assets?.browser?.provider, cadWorkspace.store, editorMessages, openCadDocument])
 
+  const dxfContextMenuItems = useMemo(() => {
+    // eslint-disable-next-line react-hooks/refs -- 菜单项的 onSelect 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
+    return createDxfContextMenuItems({
+      componentStore: componentWorkspace.store,
+      idFactory: animationCommandId,
+      messages: editorMessages,
+      onError: setPageNotice,
+      // 诊断与失败都走同一条提示：用户要看的是「有没有东西没导进来」，而不是它属于哪一类。
+      onNotice: setPageNotice,
+      onPageCreated: handlePageCreated,
+      pageStore,
+      provider: assets?.browser?.provider,
+      registry: controller?.registry,
+    })
+  }, [
+    assets?.browser?.provider,
+    componentWorkspace.store,
+    controller?.registry,
+    editorMessages,
+    handlePageCreated,
+    pageStore,
+  ])
+
   const hostContextMenuItems = useMemo(() => {
     const hostItems = assets?.browser?.contextMenuItems ?? []
-    // 这里不需要单独抑制 react-hooks/refs：读 ref 的回调在 cadContextMenuItems 处已被抑制，
-    // 规则不会对同一条链路重复上报。
-    return [...hostItems, ...pageContextMenuItems, ...componentContextMenuItems, ...cadContextMenuItems]
+    return [
+      ...hostItems,
+      ...pageContextMenuItems,
+      // eslint-disable-next-line react-hooks/refs -- 同上：这里只是把各来源的菜单项拼成一个数组，读 ref 的是它们各自的 onSelect。
+      ...componentContextMenuItems,
+      ...cadContextMenuItems,
+      ...dxfContextMenuItems,
+    ]
   }, [
     assets?.browser?.contextMenuItems,
     cadContextMenuItems,
     componentContextMenuItems,
+    dxfContextMenuItems,
     pageContextMenuItems,
   ])
 

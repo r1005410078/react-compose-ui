@@ -238,6 +238,13 @@
       "name": "@compose-ui/core",
       "version": "0.1.0",
     },
+    "packages/dxf": {
+      "name": "@compose-ui/dxf",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/core": "workspace:*",
+      },
+    },
     "packages/editor": {
       "name": "@compose-ui/editor",
       "version": "0.1.0",
@@ -254,6 +261,7 @@
         "@compose-ui/component-registry": "workspace:*",
         "@compose-ui/components": "workspace:*",
         "@compose-ui/core": "workspace:*",
+        "@compose-ui/dxf": "workspace:*",
         "@compose-ui/history": "workspace:*",
         "@compose-ui/layout-engine": "workspace:*",
         "@compose-ui/pages": "workspace:*",
@@ -566,6 +574,8 @@
     "@compose-ui/components": ["@compose-ui/components@workspace:packages/components"],
 
     "@compose-ui/core": ["@compose-ui/core@workspace:packages/core"],
+
+    "@compose-ui/dxf": ["@compose-ui/dxf@workspace:packages/dxf"],
 
     "@compose-ui/editor": ["@compose-ui/editor@workspace:packages/editor"],
 

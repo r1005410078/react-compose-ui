@@ -1927,53 +1927,6 @@ test('OpenSpec: cad-document / CAD PLINE 与 RECTANG 命令 / 非 100% 缩放下
   expect(Math.abs(worldLeft % 10)).toBeLessThan(0.001)
 })
 
-test('OpenSpec: cad-document / DXF 导入器 / 右键导入演示图纸并看得见', async ({ page }) => {
-  await page.goto('/')
-  const editor = page.getByRole('region', { name: 'Compose editor' })
-  await editor.locator('[data-workspace-tab="compose-assets"]').click()
-
-  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
-  const rootGrid = assets.getByRole('grid', { name: 'Demo Assets' })
-  await rootGrid.getByRole('gridcell', { name: /^Topology\.dxf/ }).click({ button: 'right' })
-  await page.getByRole('menu').getByRole('menuitem', { name: '从 DXF 导入', exact: true }).click()
-
-  const canvas = editor.locator('[data-testid="cad-canvas"]')
-  await expect(canvas).toBeVisible()
-  const surface = canvas.locator('[data-testid="cad-surface"]')
-
-  // 两个块实例各四段、一条导线、一段文字、一个圆
-  await expect(surface.locator('[data-cad-entity]')).toHaveCount(11)
-  await expect(surface.locator('text[data-cad-entity]')).toHaveText('SW-01')
-  await expect(surface.locator('circle[data-cad-entity]')).toHaveCount(1)
-
-  // 打开即可见：夹具的坐标在 y=300 一带，按默认视口打开会掉到图面之外
-  const box = await surface.boundingBox()
-  if (!box) throw new Error('surface has no box')
-  const positions = await surface.locator('line[data-cad-entity]').evaluateAll(
-    (nodes) => nodes.map((node) => ({
-      x: Number(node.getAttribute('x1')),
-      y: Number(node.getAttribute('y1')),
-    })),
-  )
-  expect(positions.length).toBeGreaterThan(0)
-  for (const { x, y } of positions) {
-    expect(x).toBeGreaterThanOrEqual(0)
-    expect(x).toBeLessThanOrEqual(box.width)
-    expect(y).toBeGreaterThanOrEqual(0)
-    expect(y).toBeLessThanOrEqual(box.height)
-  }
-
-  // Y 轴翻转做对了，标注才在导线**上方**：DXF 里标注的 y 比导线大（Y 朝上），不翻转的话它会
-  // 跑到下方，而那种「图看起来像镜像的」症状很容易被误当成源文件的问题。
-  const labelY = await surface.locator('text[data-cad-entity]')
-    .evaluate((node) => Number(node.getAttribute('y')))
-  const wireY = Math.min(...positions.map(({ y }) => y))
-  expect(labelY).toBeLessThan(wireY)
-
-  // 没能完整导入的部分要说出来，而不是静默丢弃
-  await expect(editor.locator('.compose-editor__page-notice')).toContainText('SPLINE × 1')
-})
-
 test('OpenSpec: cad-document / CAD COLOR、LWEIGHT 与 LTYPE 命令 / 改外观并回退到图层', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })

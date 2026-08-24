@@ -48,6 +48,13 @@ describe('entity clipboard planner', () => {
       parentId: ROOT_FRAME_ID,
       index: 1,
     })
+
+    // 回退目标不在这份文档里时退回首块根场景。`activeFrameId` 住在页面文件上，切换页面标签
+    // 时它与文档各自更新，中间会有一帧对不上——不校验就会读到 undefined 的 Entity。
+    expect(resolveSuggestedEntityInsertion(value, null, 'frame-from-another-page')).toEqual({
+      parentId: ROOT_FRAME_ID,
+      index: 1,
+    })
   })
 
   it('OpenSpec: stage-engine / Entity 会话剪贴板规划 / 复制到指定父级', () => {

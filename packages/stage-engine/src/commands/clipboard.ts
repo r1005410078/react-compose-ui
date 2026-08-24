@@ -92,8 +92,12 @@ export function resolveSuggestedEntityInsertion(
 ): ComposeEntityInsertion | null {
   // v7 的文档根只接受 Frame：没有命中目标时落点是某块画板，而不是文档根。
   if (targetId === null) {
-    const frameId = fallbackFrameId
-      ?? document.rootIds.find((id) => isComposeFrameEntity(document.entities[id]))
+    // 回退目标必须是**这份文档里**的 Frame：宿主传来的 `activeFrameId` 住在页面文件上，
+    // 切换页面标签时它与文档各自更新，中间会有一帧对不上——不校验就会读到 undefined 的
+    // Entity 而整块画布卸载。既有的 `resolveTargetFrameId` 与 Stage 都是这么判的。
+    const frameId = (fallbackFrameId && isComposeFrameEntity(document.entities[fallbackFrameId])
+      ? fallbackFrameId
+      : document.rootIds.find((id) => isComposeFrameEntity(document.entities[id])))
       ?? null
     if (frameId === null) return null
     return {

@@ -42,6 +42,7 @@
     "@compose-ui/component-registry": "workspace:*",
     "@compose-ui/components": "workspace:*",
     "@compose-ui/core": "workspace:*",
+    "@compose-ui/dxf": "workspace:*",
     "@compose-ui/history": "workspace:*",
     "@compose-ui/layout-engine": "workspace:*",
     "@compose-ui/pages": "workspace:*",
