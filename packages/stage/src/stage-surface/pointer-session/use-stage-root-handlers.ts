@@ -19,6 +19,20 @@ export interface StageRootHandlersParams {
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   /** 右键菜单的打开入口。 */
   readonly openContextMenu: (event: ReactMouseEvent, payload: string | null) => void
+  /**
+   * 十字光标的指针跟踪；不需要跟踪时为 `null`。
+   *
+   * @remarks
+   * 它 **MUST** 挂在根元素上而不是图面上：手势会在根元素取得指针捕获，而按 Pointer Events
+   * 规范，取得捕获会向原目标链派发 `pointerleave`，此后的 `pointermove` 一律重定向到捕获
+   * 元素。挂在图面上时每次拖动都会先被清空一次位置、再也收不到后续移动——症状是**一拖动
+   * 十字线就断**，而系统光标此时已经收走，屏幕上一个光标都没有。
+   *
+   * 传 `null` 表示这一帧不跟踪；标尺游标不受它影响，那是另一条一直都在的跟踪。
+   */
+  readonly trackPointer: ((event: ReactPointerEvent<HTMLDivElement>) => void) | null
+  /** 指针离开整块 Stage 时清空跟踪。 */
+  readonly clearPointer: () => void
   /** 指针会话与键盘能力提供的入口。 */
   readonly beginInteraction: (hit: StageInteractionHit, event: ReactPointerEvent<Element>) => void
   readonly handleLostPointerCapture: (event: ReactPointerEvent<HTMLDivElement>) => void
@@ -68,12 +82,14 @@ export function useStageRootHandlers({
   host,
   keyboardCommand,
   keyboardRelease,
+  clearPointer,
   normalizedSelection,
   onSelectedIdsChange,
   openContextMenu,
   rootRef,
   rulersRef,
   surfaceRef,
+  trackPointer,
 }: StageRootHandlersParams): StageRootHandlers {
   return {
     onContextMenu: (event) => {
@@ -118,9 +134,13 @@ export function useStageRootHandlers({
       // 指针位置是瞬时视图状态：走命令式接口直接重绘标尺，不进 React state，也不入文档。
       const surface = surfaceRef.current
       if (surface) rulersRef.current?.setCursor(screenPoint(event, surface))
+      trackPointer?.(event)
       host.onPointerMove?.(event)
     },
-    onPointerLeave: () => { rulersRef.current?.setCursor(null) },
+    onPointerLeave: () => {
+      rulersRef.current?.setCursor(null)
+      clearPointer()
+    },
     onPointerUp: (event) => {
       host.onPointerUp?.(event)
     },

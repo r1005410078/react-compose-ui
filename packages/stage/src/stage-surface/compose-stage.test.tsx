@@ -528,6 +528,55 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
   })
 
+  it('OpenSpec: 曲线几何编辑会话 / 多选时不进入会话', () => {
+    renderStage(document([curveEntity(), entity('b')]), {
+      selectedIds: ['curve-a', 'b'],
+      tool: 'select',
+    })
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
+      pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
+    })
+
+    expect(screen.queryByTestId('stage-editable-path')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 曲线几何编辑会话 / 选中集变成两个即退出', () => {
+    const value = document([curveEntity(), entity('b')])
+    const view = render(
+      <ComposeStage
+        document={value}
+        layoutSnapshot={layoutSnapshot(value)}
+        selectedIds={['curve-a']}
+        services={{ dispatch: vi.fn() as never, registry }}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
+      pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
+    })
+    expect(screen.getByTestId('stage-editable-path')).toBeInTheDocument()
+
+    // Shift 累加进来的第二个对象在图面上没有任何呈现——会话抑制了选区盒与手柄，而夹点
+    // 只描述第一个。因此会话必须退出。
+    view.rerender(
+      <ComposeStage
+        document={value}
+        layoutSnapshot={layoutSnapshot(value)}
+        selectedIds={['curve-a', 'b']}
+        services={{ dispatch: vi.fn() as never, registry }}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+      />,
+    )
+    expect(screen.queryByTestId('stage-editable-path')).not.toBeInTheDocument()
+    expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
+  })
+
   it('OpenSpec: 画布可编辑路径覆盖层 / 宿主传入路径时不进入几何编辑', () => {
     const value = document([curveEntity()])
     render(
@@ -1667,7 +1716,22 @@ describe('OpenSpec: stage / 场景视口适配', () => {
 })
 
 describe('绘图模式', () => {
-  afterEach(cleanup)
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  /**
+   * jsdom 里所有元素的 rect 恒为 0，而十字光标的指针跟踪要判断落点在不在图面之内——拖动中
+   * 指针可以合法地移出图面，不在拖动又不在图面上则说明它去了命令行或标尺。替身出一块可视
+   * 区域，让这条判断有几何可判。
+   */
+  function measureSurfaceAs(width: number, height: number) {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width, height, x: 0, y: 0, top: 0, left: 0, right: width, bottom: height,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
 
   function surfacePoint(x: number, y: number) {
     return { clientX: x, clientY: y, pointerId: 1, button: 0, bubbles: true }
@@ -1698,6 +1762,7 @@ describe('绘图模式', () => {
   })
 
   it('OpenSpec: stage / Stage 十字光标 / 三形态与隐藏系统光标的标记', () => {
+    measureSurfaceAs(1000, 800)
     const { container } = renderStage(document(), { selectedIds: ['a'] })
     const root = container.querySelector('.compose-stage')!
     const surface = screen.getByTestId('stage-surface')
@@ -1725,6 +1790,7 @@ describe('绘图模式', () => {
   })
 
   it('OpenSpec: stage / Stage 十字光标 / 等待选择对象时只有拾取框', () => {
+    measureSurfaceAs(1000, 800)
     renderStage(document())
     const input = screen.getByRole('textbox', { name: '命令行' })
     fireEvent.change(input, { target: { value: 'ERASE' } })
@@ -1736,6 +1802,60 @@ describe('绘图模式', () => {
     })
     expect(crosshairLines()).toHaveLength(0)
     expect(screen.getByTestId('stage-pickbox')).toBeInTheDocument()
+  })
+
+  it('OpenSpec: stage / Stage 十字光标 / 根元素收到的 pointermove 同样跟踪', () => {
+    measureSurfaceAs(1000, 800)
+    const { container } = renderStage(document())
+    const root = container.querySelector('.compose-stage') as HTMLElement
+    startLine()
+
+    // 手势会在**根元素**上取得指针捕获，此后 `pointermove` 一律重定向到它，图面再也收不到。
+    // 跟踪因此必须挂在根元素上——挂在图面上时一拖动十字线就断，而系统光标已经收走。
+    fireEvent.pointerMove(root, { clientX: 120, clientY: 90, pointerId: 1, pointerType: 'mouse' })
+    expect(crosshairLines()).toHaveLength(4)
+    expect(root.hasAttribute('data-crosshair')).toBe(true)
+
+    // 拖动中指针可以合法地移出图面，此时仍要跟：甩到边界外再拉回来是常见操作。
+    fireEvent.pointerMove(root, {
+      clientX: 1400, clientY: 90, pointerId: 1, pointerType: 'mouse', buttons: 1,
+    })
+    expect(crosshairLines()).toHaveLength(4)
+
+    // 既不在拖动、又不在图面上：指针去了命令行或标尺，那里不该有十字光标。
+    fireEvent.pointerMove(root, {
+      clientX: 1400, clientY: 90, pointerId: 1, pointerType: 'mouse', buttons: 0,
+    })
+    expect(crosshairLines()).toHaveLength(0)
+    expect(root.hasAttribute('data-crosshair')).toBe(false)
+  })
+
+  it('OpenSpec: stage / 曲线几何编辑会话 / 未拖动时线与框都画，拖住之后框让位', () => {
+    measureSurfaceAs(1000, 800)
+    const { container } = renderStage(document([curveEntity()]), {
+      selectedIds: ['curve-a'],
+      tool: 'select',
+    })
+    const root = container.querySelector('.compose-stage') as HTMLElement
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
+      pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
+    })
+    fireEvent.pointerMove(root, { clientX: 120, clientY: 90, pointerId: 1, pointerType: 'mouse' })
+
+    // 会话在等着抓夹点，框表达可抓的靶区；这一档与 AutoCAD 的 `Command:` 同构。
+    expect(crosshairLines()).toHaveLength(4)
+    expect(screen.getByTestId('stage-pickbox')).toBeInTheDocument()
+
+    fireEvent.pointerDown(screen.getByTestId('stage-path-vertex-hit-move'), {
+      pointerId: 2, button: 0, clientX: 60, clientY: 40,
+    })
+    fireEvent.pointerMove(root, {
+      clientX: 100, clientY: 80, pointerId: 2, pointerType: 'mouse', buttons: 1,
+    })
+
+    // 抓住了，那件事已经发生；框只会挡住落点。线必须还在。
+    expect(screen.queryByTestId('stage-pickbox')).toBeNull()
+    expect(crosshairLines()).toHaveLength(4)
   })
 
   it('OpenSpec: stage / Stage 十字光标 / 宿主可以关闭', () => {

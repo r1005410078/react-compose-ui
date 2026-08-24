@@ -18,6 +18,7 @@ import {
 } from 'react'
 import type {
   CSSProperties,
+  PointerEvent as ReactPointerEvent,
 } from 'react'
 import type {
   ComposeRendererMeasurementAdapter,
@@ -49,6 +50,7 @@ import type {
 import { ComposeCommandLine } from '@compose-ui/components'
 import { StageScrollbar } from '../scrollbar'
 import { StageOverlay } from '../stage-overlay'
+import { GRIP_PICK_RADIUS } from '../stage-overlay/overlay-geometry'
 import {
   bootstrapSelectionBounds,
   useStagePreviewDocuments,
@@ -503,7 +505,9 @@ function ComposeStageReady({
    * 十字光标的形态。
    *
    * @remarks
-   * 判据是**当前等待的输入类型**：等待取点画线、等待选择对象画框、其余不画。
+   * 判据是**当前等待的输入类型**：等待取点画线、等待选择对象画框、其余不画。几何编辑会话
+   * 是「等着抓夹点」，因此未拖动时线与框都画，拖住之后框让位——那件事已经发生，框只会
+   * 挡住落点。这与 AutoCAD 的 `Command:` / `Select objects:` / `Specify point:` 三态同构。
    *
    * **空闲什么都不画**是与 CAD 画布刻意的不对称——那边空闲时线与框都画（AutoCAD 惯例），
    * 而页面编辑器的静息光标是箭头。推导留在各自的包里，共享组件不认识这条差异。
@@ -516,8 +520,10 @@ function ComposeStageReady({
     pointerType: draftingSession.pointerType,
     center: draftingSession.pointerScreen,
     lines: draftingSession.awaitingPoint || geometryEditingActive,
-    box: draftingSession.awaitingSelection,
-    boxRadius: pickRadius,
+    box: draftingSession.awaitingSelection || (geometryEditingActive && !geometryEditing.dragging),
+    // 命令那一档用宿主配置的 `pickRadius`；顶点模式用夹点命中圆的内切正方形。两档的框含义
+    // 不同，共用一个数会让顶点模式那个框慢慢说谎。
+    boxRadius: draftingSession.awaitingSelection ? pickRadius : GRIP_PICK_RADIUS,
     size: crosshairSize,
   }), [
     crosshairSize,
@@ -525,6 +531,7 @@ function ComposeStageReady({
     draftingSession.awaitingSelection,
     draftingSession.pointerScreen,
     draftingSession.pointerType,
+    geometryEditing.dragging,
     geometryEditingActive,
     pickRadius,
     showCrosshair,
@@ -740,7 +747,33 @@ function ComposeStageReady({
     return () => window.removeEventListener('blur', handleBlur)
   }, [cancelGesture, stopTemporaryPan])
 
+  /**
+   * 十字光标的指针跟踪。
+   *
+   * @remarks
+   * 挂在**根元素**上（见 `useStageRootHandlers` 的 `trackPointer`），因此拖动期间十字线不断。
+   *
+   * 拖动中指针可以合法地移出图面——甩到边界外再拉回来是常见操作，此时仍要跟。既不在拖动、
+   * 又不在图面上，说明指针去了命令行或标尺，那里不该有十字光标。判据用事件自带的
+   * `buttons`，不必再引一个「手势是否在跑」的外部状态。
+   */
+  const trackPointer = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const surface = surfaceRef.current
+    if (!surface) return
+    const rect = surface.getBoundingClientRect()
+    const local = { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    const inside = local.x >= 0 && local.y >= 0 && local.x <= rect.width && local.y <= rect.height
+    if (!inside && event.buttons === 0) {
+      draftingSession.setPointer(null)
+      return
+    }
+    draftingSession.setPointer(screenToWorld(local, viewport), event.pointerType)
+  }, [draftingSession, viewport])
+  const clearPointer = useCallback(() => { draftingSession.setPointer(null) }, [draftingSession])
+
   const rootHandlers = useStageRootHandlers({
+    clearPointer,
+    trackPointer: pointerTracked ? trackPointer : null,
     beginInteraction,
     handleLostPointerCapture,
     keyboardRelease,
@@ -839,23 +872,6 @@ function ComposeStageReady({
         data-testid="stage-surface"
         id={surfaceId}
         ref={surfaceRef}
-        // 只在命令等着输入时跟踪指针：常态下每帧解一次世界坐标是白花的。等待选择对象那一档
-        // 也要跟——拾取框需要一个中心。
-        onPointerLeave={pointerTracked
-          ? () => { draftingSession.setPointer(null) }
-          : undefined}
-        onPointerMove={pointerTracked
-          ? (event) => {
-              const rect = event.currentTarget.getBoundingClientRect()
-              draftingSession.setPointer(
-                screenToWorld(
-                  { x: event.clientX - rect.left, y: event.clientY - rect.top },
-                  viewport,
-                ),
-                event.pointerType,
-              )
-            }
-          : undefined}
       >
         <div
           aria-hidden="true"

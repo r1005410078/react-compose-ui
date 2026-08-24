@@ -99,6 +99,10 @@
 
 /*
  * 画了十字光标就必须收走系统箭头，否则屏幕上有两个光标——用户会以为十字光标失效了。
+ * **反向同样违规**：收走了箭头却没画十字线时屏幕上一个光标都没有，而那通常发生在用户最
+ * 需要看清落点的那一下。因此隐藏只有这一个来源，它读的是 `resolveComposeCanvasCrosshair`
+ * 的返回值。曾经还有一条读「取点覆盖层挂没挂」的 `:has()` 规则——那个条件比十字光标宽
+ * （覆盖层还承载捕捉标记与橡皮筋），拖动中十字光标已经不画而它仍然命中。
  *
  * 作用域**只到图面**，不是整个 Stage：命令行由 Stage 自己渲染且就在 Stage 里，连它一起
  * 收走会让文本光标也消失，而那是用户正在打字的地方。CAD 那边命令行在 viewport 之外，
@@ -544,6 +548,22 @@
 
 .compose-stage__editable-path-vertex[data-vertex-active] {
   fill: var(--compose-accent, #3b82f6);
+}
+
+/*
+ * 悬停态：夹点的可见菱形（8px）比命中区（半径 10）小，没有反馈时用户唯一能确认「按下去会
+ * 抓到它」的办法是按下去试。填充取冷态与活动态之间的一档，三者因此互相可分。
+ *
+ * `:not([data-vertex-active])` 是必要的：邻接选择器的特度高于属性选择器，不排除的话悬停
+ * 会把活动顶点**淡下去**，看起来像取消了选中。
+ */
+.compose-stage__editable-path-hit:hover
+  + .compose-stage__editable-path-vertex:not([data-vertex-active]) {
+  fill: color-mix(
+    in srgb,
+    var(--compose-accent, #3b82f6) 45%,
+    var(--compose-surface-raised, #f8fbff)
+  );
 }
 
 .compose-stage__editable-path-tangent {
@@ -1115,11 +1135,6 @@
   stroke: var(--compose-accent, #4c8dff);
   stroke-width: 1;
   stroke-dasharray: 3 3;
-}
-
-/* 命令等取点时光标交给十字线，系统光标会与它重影；其余时候是常规光标。 */
-.compose-stage__surface:has(> .compose-stage__drafting) {
-  cursor: none;
 }
 
 /*

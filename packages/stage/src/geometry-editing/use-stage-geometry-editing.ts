@@ -87,6 +87,14 @@ export interface StageGeometryEditing {
   readonly entityId: string | null
   /** 会话的夹点与轮廓，交给既有的可编辑路径覆盖层渲染。 */
   readonly editablePath: StageEditablePath | null
+  /**
+   * 正在拖某个夹点。
+   *
+   * @remarks
+   * 拾取框读它：未拖动的会话正是「等着抓点什么」的状态，框表达可抓的靶区；一旦抓住，
+   * 那件事已经发生，框只会挡住落点。事实来源就是拖动期的本地预览几何，不另存一份状态。
+   */
+  readonly dragging: boolean
   readonly isGeometryEditable: (entityId: string) => boolean
   readonly enter: (entityId: string) => void
   readonly exit: () => void
@@ -134,8 +142,13 @@ export function useStageGeometryEditing(
 
   // 会话的存续**在渲染时求值**而不是靠 effect 去清状态：点空白、选中别的对象、换工具、撤销
   // 删掉目标都表现为这几个输入的变化，派生一次就全覆盖了，而 effect 版本要多渲染一帧才收敛。
+  //
+  // 条件是选中集**恰好只有目标**，不是「包含目标」：会话是单对象作用域。它的全部呈现
+  // （夹点、轮廓、十字光标、被排除出捕捉的那一个 Entity）都只描述一个对象，而会话又抑制了
+  // 选区包围盒与手柄——Shift 累加进来的第二个对象因此在图面上完全隐身，它明明被选中了。
   const entityId = target !== null
-    && selectedIds.includes(target)
+    && selectedIds.length === 1
+    && selectedIds[0] === target
     && isGeometryEditable(target)
     && tool === 'select'
     && !hostPathActive
@@ -213,5 +226,13 @@ export function useStageGeometryEditing(
     return true
   }, [dispatch, entityId, hostPathActive, idFactory, label, solve])
 
-  return { entityId, editablePath, isGeometryEditable, enter, exit, handlePathChange }
+  return {
+    entityId,
+    editablePath,
+    dragging: entityId !== null && preview !== null,
+    isGeometryEditable,
+    enter,
+    exit,
+    handlePathChange,
+  }
 }

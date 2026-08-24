@@ -78,18 +78,10 @@ function EditablePathLayer({
         />
       ))}
       {vertices.map((vertex) => (
+        // 命中圆排在可见菱形**之前**：悬停态靠 `:hover +` 邻接选择器读它，纯 CSS 因此不必为
+        // 一个视觉反馈引入每帧 `pointermove` 都要写的 React 状态。菱形是 `pointer-events:
+        // none`，排在命中圆之后不改变**可命中元素**之间的先后，切线仍然优先于顶点。
         <g key={`vertex:${vertex.id}`}>
-          <rect
-            className="compose-stage__editable-path-vertex"
-            data-testid={`stage-path-vertex-${vertex.id}`}
-            data-vertex-active={vertex.id === activeVertexId || undefined}
-            data-vertex-mode={vertex.mode}
-            height={PATH_VERTEX_SIZE}
-            transform={`rotate(45 ${vertex.screen.x} ${vertex.screen.y})`}
-            width={PATH_VERTEX_SIZE}
-            x={vertex.screen.x - PATH_VERTEX_SIZE / 2}
-            y={vertex.screen.y - PATH_VERTEX_SIZE / 2}
-          />
           <circle
             className="compose-stage__editable-path-hit"
             cx={vertex.screen.x}
@@ -100,6 +92,17 @@ function EditablePathLayer({
               { kind: 'path-handle', handle: 'vertex', vertexId: vertex.id },
               event,
             )}
+          />
+          <rect
+            className="compose-stage__editable-path-vertex"
+            data-testid={`stage-path-vertex-${vertex.id}`}
+            data-vertex-active={vertex.id === activeVertexId || undefined}
+            data-vertex-mode={vertex.mode}
+            height={PATH_VERTEX_SIZE}
+            transform={`rotate(45 ${vertex.screen.x} ${vertex.screen.y})`}
+            width={PATH_VERTEX_SIZE}
+            x={vertex.screen.x - PATH_VERTEX_SIZE / 2}
+            y={vertex.screen.y - PATH_VERTEX_SIZE / 2}
           />
         </g>
       ))}

@@ -4,6 +4,21 @@ import type { StagePoint } from '@compose-ui/stage-engine'
 export const LINE_ENDPOINT_HANDLE_SIZE = 8
 // 可见方块保持轻量，命中区独立放大，避免高分屏上必须像素级对准才能开始端点手势。
 export const LINE_ENDPOINT_HIT_RADIUS = 10
+
+/**
+ * 几何编辑会话里拾取框的半边长（屏幕 px）。
+ *
+ * @remarks
+ * 顶点模式是 Stage 里唯一一处存在**统一命中容差**的地方——可抓目标只有夹点，而每个夹点的
+ * 命中区都是 {@link LINE_ENDPOINT_HIT_RADIUS}。因此这里的框可以真的表达「压住了就抓得到」，
+ * 而不像命令那一档只是靶区示意。
+ *
+ * 取命中圆的**内切**正方形而不是外接：外接的四个角伸到 `r√2`，用户在角上按下去会落空，
+ * 而那正是他最相信框的时候。宁可少说不可多说。
+ *
+ * 定义**紧挨着**它派生的那个常量：两处分开写死会让下一个改命中半径的人漏掉框。
+ */
+export const GRIP_PICK_RADIUS = LINE_ENDPOINT_HIT_RADIUS / Math.SQRT2
 /** 四角缩放手柄边长（屏幕 px）；边方向只靠透明 hit，不渲染中点方块。 */
 export const CORNER_HANDLE_SIZE = 7
 
