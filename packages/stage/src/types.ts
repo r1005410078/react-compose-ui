@@ -350,15 +350,18 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * @remarks
    * 与 AutoCAD 的 `CURSORSIZE` 同义，取 100 时贯穿整个图面。
    *
-   * 默认 10 是按与**拾取框的比例**定的：拾取框在两边都是十几个 CSS 像素的固定量，因此它是
-   * 唯一能跨应用比较的尺子（图面本身的尺寸两边差得远，直接比百分比没有意义）。10% 在常见
-   * 图面尺寸上给出的臂长约是拾取框半边的十倍，与 AutoCAD 的观感相当。曾经的默认 15 是为了
-   * 与一块已经删掉的画布保持一致，那个理由已经不在。
+   * 默认 5 直接取 AutoCAD 的 `CURSORSIZE` 默认值。曾经的 15 是为了与一块已经删掉的画布保持
+   * 一致，那个理由已经不在。
+   *
+   * 中间试过按「臂长与拾取框的比例」去推一个值，理由是拾取框在两边都是十几个 CSS 像素的
+   * 固定量、比图面百分比更可比。**那条推理没站住**：比例是从一张截图上目测的，而按它推出来
+   * 的 10% 在实机上仍然明显偏长。留这段是为了让下一个想重推的人知道这条路走过了——十字光标
+   * 的长度是观感问题，照抄那个久经使用的默认值比自己推一个更可靠。
    *
    * 本值是**百分比**而不是像素：AutoCAD 允许把 `CURSORSIZE` 调到 100 做跨图对齐，那条用法
    * 只有百分比表达得了。
    *
-   * @defaultValue 10
+   * @defaultValue 5
    */
   readonly crosshairSize?: number
   /**
@@ -370,7 +373,10 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * 容差散在各物料的 stroke 宽度里，没有全局的那个数。写明这一条，避免后来者去找一个不存在
    * 的容差，或者为了让框「准确」而发明一个。
    *
-   * @defaultValue 8
+   * 默认 6（框宽 12px）与顶点模式那一档（11.3px）对齐：同一个东西在两处差一大圈时，用户会
+   * 以为它们含义不同。AutoCAD 的 `PICKBOX` 折算成 CSS 像素也在这个量级。
+   *
+   * @defaultValue 6
    */
   readonly pickRadius?: number
   /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */

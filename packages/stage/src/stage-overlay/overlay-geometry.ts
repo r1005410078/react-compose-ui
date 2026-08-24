@@ -3,7 +3,10 @@ import type { StagePoint } from '@compose-ui/stage-engine'
 /** 端点方块边长（屏幕 px）。 */
 export const LINE_ENDPOINT_HANDLE_SIZE = 8
 // 可见方块保持轻量，命中区独立放大，避免高分屏上必须像素级对准才能开始端点手势。
-export const LINE_ENDPOINT_HIT_RADIUS = 10
+//
+// 8 而不是更大：它同时是顶点模式那个拾取框的来源（见下），而框画得太大就不再像 AutoCAD 的
+// 靶区、反倒像一个色块。16px 直径的抓取圈对 8px 的夹点仍然宽裕。
+export const LINE_ENDPOINT_HIT_RADIUS = 8
 
 /**
  * 几何编辑会话里拾取框的半边长（屏幕 px）。
