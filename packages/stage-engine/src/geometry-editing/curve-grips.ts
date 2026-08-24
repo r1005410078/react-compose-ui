@@ -5,6 +5,7 @@ import {
   getComposeCurve,
   isComposeFullCircle,
   projectComposeCurveToBox,
+  translateComposeCurve,
 } from '@compose-ui/core'
 import type { ComposeArcCurve, ComposeCurve, ComposeDocument, ComposePosition } from '@compose-ui/core'
 import { applyMatrix, invertMatrix } from '../geometry'
@@ -29,6 +30,16 @@ const ARC_CENTER = 'center'
 const ARC_MID = 'mid'
 const START = 'start'
 const END = 'end'
+
+/**
+ * 直线中点的平移夹点 id。
+ *
+ * @remarks
+ * 刻意**不**叫 `mid`：那个词在弧上表示「改半径」。两个含义不同的自由度共用一个 id 时，
+ * 按 id 查表的调用方（导线那张「哪个夹点承载绑定」的表就是）必须先拿到 kind 才读得出来，
+ * 而它们手上只有 id。
+ */
+const MOVE = 'move'
 
 /** 多段线顶点 id 的前缀；下标即顺序。 */
 const VERTEX_PREFIX = 'v'
@@ -63,7 +74,16 @@ function normalizeSweep(delta: number, sign: number) {
  */
 function localGrips(curve: ComposeCurve): readonly StageCurveGrip[] {
   if (curve.kind === 'line') {
-    return [{ id: START, point: curve.start }, { id: END, point: curve.end }]
+    // 中点夹点表达的是「按中点捕捉着移动」，而不是盒拖动的第二个入口：盒拖动走
+    // `snapTranslation`，吸的是其他 Entity 的包围盒参考线且逐轴独立；这里走落点解算，
+    // 吸的是二维特征点，带 `port > endpoint > midpoint > center > quadrant` 的优先级与
+    // 捕捉标记。多段线的段中点**留给顶点增删**，因此这里只有直线有。
+    const mid = { x: (curve.start.x + curve.end.x) / 2, y: (curve.start.y + curve.end.y) / 2 }
+    return [
+      { id: START, point: curve.start },
+      { id: MOVE, point: mid },
+      { id: END, point: curve.end },
+    ]
   }
   if (curve.kind === 'polyline') {
     return curve.vertices.map((point, index) => ({ id: `${VERTEX_PREFIX}${index}`, point }))
@@ -170,6 +190,15 @@ export function applyStageCurveGrip(
   if (curve.kind === 'line') {
     if (gripId === START) return { ...curve, start: position(point) }
     if (gripId === END) return { ...curve, end: position(point) }
+    if (gripId === MOVE) {
+      // 位移按**中点**到落点算，因此落点被捕捉纠正过之后中点精确落在那个特征点上；
+      // 两端同步平移，长度与方向一个都不动。
+      return translateComposeCurve(
+        curve,
+        point.x - (curve.start.x + curve.end.x) / 2,
+        point.y - (curve.start.y + curve.end.y) / 2,
+      )
+    }
     return null
   }
   if (curve.kind === 'polyline') {

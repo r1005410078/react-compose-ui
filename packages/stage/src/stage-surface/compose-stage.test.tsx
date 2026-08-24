@@ -444,8 +444,41 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId('stage-editable-path')).toBeInTheDocument()
     expect(screen.getByTestId('stage-path-vertex-hit-start')).toBeInTheDocument()
     expect(screen.getByTestId('stage-path-vertex-hit-end')).toBeInTheDocument()
+    // 直线的第三个夹点在中点上：拖它平移整条线。
+    expect(screen.getByTestId('stage-path-vertex-hit-move')).toBeInTheDocument()
     // 盒的角手柄与角顶点几乎压在同一个像素上，两个含义叠在一起谁也点不准。
     expect(screen.queryByTestId('stage-resize-se')).not.toBeInTheDocument()
+    // 选区盒一并让位：盒不是曲线的轮廓，而拖夹点时它还停在拖动之前的位置。
+    expect(screen.queryByTestId('stage-selection-bounds')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 曲线几何编辑会话 / 拖中点夹点平移整条线', () => {
+    const { dispatch } = renderStage(document([curveEntity()]), {
+      selectedIds: ['curve-a'],
+      tool: 'select',
+    })
+    fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
+      pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
+    })
+
+    const surface = screen.getByTestId('stage-surface')
+    fireEvent.pointerDown(screen.getByTestId('stage-path-vertex-hit-move'), {
+      pointerId: 2, button: 0, clientX: 60, clientY: 40,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 2, buttons: 1, clientX: 100, clientY: 80 })
+    fireEvent.pointerUp(surface, { pointerId: 2, clientX: 100, clientY: 80 })
+
+    const written = dispatch.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.type === BUILTIN_COMMAND_TYPES.setCurve)
+    expect(written).toHaveLength(1)
+    // 中点落在网格吸附后的 (104,80)，两端因此各加 (34,25)：起点 (20,30)→(54,55)、
+    // 终点 (120,80)→(154,105)。差向量仍是 (100,50)——长度与方向一个都没变，这正是它与
+    // 端点夹点的区别。
+    expect(written[0]!.payload).toMatchObject({
+      entityId: 'curve-a',
+      curve: { kind: 'line', start: { x: 54, y: 55 }, end: { x: 154, y: 105 } },
+    })
   })
 
   it('OpenSpec: 曲线几何编辑会话 / 拖夹点派发一条 entity.curve.set 并按 parent 局部坐标写入', () => {
@@ -492,6 +525,7 @@ describe('ComposeStage ECS', () => {
 
     expect(screen.queryByTestId('stage-editable-path')).not.toBeInTheDocument()
     expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
   })
 
   it('OpenSpec: 画布可编辑路径覆盖层 / 宿主传入路径时不进入几何编辑', () => {

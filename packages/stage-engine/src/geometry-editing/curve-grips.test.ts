@@ -30,8 +30,38 @@ describe('stageCurveGrips', () => {
     const grips = stageCurveGrips(value, index, 'curve-a')
 
     // 盒宽翻倍而高不变：终点的 x 跟着翻倍，y 不动——与命中、捕捉读的是同一个投影。
-    expect(grips.map(({ id }) => id)).toEqual(['start', 'end'])
-    expect(grips[1]!.point).toMatchObject({ x: 200, y: 50 })
+    expect(grips.map(({ id }) => id)).toEqual(['start', 'move', 'end'])
+    expect(grips[1]!.point).toMatchObject({ x: 100, y: 25 })
+    expect(grips[2]!.point).toMatchObject({ x: 200, y: 50 })
+  })
+
+  it('多段线与弧的夹点集不受直线的中点夹点影响', () => {
+    const withCurve = (curve: ComposeCurve, width: number, height: number): ComposeEntity => {
+      const base = curveEntity(width, height)
+      return {
+        ...base,
+        components: { ...base.components, [COMPOSE_BUILTIN_COMPONENT_KEYS.curve]: curve as never },
+      }
+    }
+    const polyline = document([withCurve({
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }],
+      closed: false,
+    }, 100, 50)])
+    // 弧的盒必须与它的紧包围盒等比，否则投影会把它拍成多段线——那是另一条规则，不是本条。
+    const arcDoc = document([withCurve({
+      kind: 'arc', center: { x: 0, y: 0 }, radius: 25, startAngle: 0, sweep: 90,
+    }, 25, 25)])
+
+    // 段中点**留给顶点增删**，弧的圆心仍是它的平移夹点：两处都是声明过的例外，要有护栏。
+    expect(
+      stageCurveGrips(polyline, createStageSceneIndex(polyline, layoutSnapshot(polyline)), 'curve-a')
+        .map(({ id }) => id),
+    ).toEqual(['v0', 'v1', 'v2'])
+    expect(
+      stageCurveGrips(arcDoc, createStageSceneIndex(arcDoc, layoutSnapshot(arcDoc)), 'curve-a')
+        .map(({ id }) => id),
+    ).toEqual(['center', 'start', 'end', 'mid'])
   })
 
   it('不是曲线时没有夹点', () => {
@@ -56,6 +86,14 @@ describe('applyStageCurveGrip', () => {
     expect(applyStageCurveGrip(line, 'end', { x: 100, y: 60 }))
       .toEqual({ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 60 } })
     expect(applyStageCurveGrip(line, 'nope', { x: 0, y: 0 })).toBeNull()
+  })
+
+  it('中点夹点平移整条线：两端位移相同，长度与方向不变', () => {
+    const line: ComposeCurve = { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 40 } }
+
+    // 中点原本在 (50,20)，落点在 (63,27)：位移 (13,7)，两端各加同一份。
+    expect(applyStageCurveGrip(line, 'move', { x: 63, y: 27 }))
+      .toEqual({ kind: 'line', start: { x: 13, y: 7 }, end: { x: 113, y: 47 } })
   })
 
   it('多段线只替换被拖的那个顶点', () => {
