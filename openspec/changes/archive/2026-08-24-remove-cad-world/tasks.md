@@ -73,7 +73,13 @@
 
 ## 7. 规范增量
 
-- [x] 7.1 `cad-document` 能力整体 REMOVED（62 条），每条指向它的页面对应物或说明为何无对应物
+- [x] 7.1 `cad-document` 能力整体删除，62 条逐条列出并各指向它的页面对应物。
+      **归档时才发现工具没有这个出口**：把一个能力的全部 Requirement 都 REMOVED 之后，
+      `openspec archive` 拒绝写出零 Requirement 的规范（「Spec must have at least one
+      requirement」）并整刀中止。改为直接删除 `openspec/specs/cad-document/`，清单挪到
+      `removed-cad-document.md` 保留——它是「删得干不干净」的检查表，不该随中止一起丢掉。
+      另：那次中止**并非无副作用**，`basic-materials` 的 ADDED 已经落盘而输出仍打印
+      「Aborted. No files were changed.」，重跑会撞上「already exists」
 - [x] 7.2 `editor-workspace-layout`：REMOVED「CAD 文档标签」+ MODIFIED「边缘面板按文档类型
       记忆展开状态」
 - [x] 7.3 `basic-materials`：ADDED 曲线虚线偏移

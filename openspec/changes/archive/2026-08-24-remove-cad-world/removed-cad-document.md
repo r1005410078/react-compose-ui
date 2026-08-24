@@ -1,7 +1,11 @@
-# 说明
+# 已删除的 `cad-document` 能力
 
-`cad-document` 能力整体删除。以下 62 条即该能力的全部 Requirement，逐条列出是因为
-`openspec archive` 按标题匹配——不列出的会留在 `specs/` 里成为孤儿。
+`cad-document` 能力整体删除，`openspec/specs/cad-document/` 随本刀移除。
+
+**本文不是规范增量，是删除清单。**它原本写成 `specs/cad-document/spec.md` 的 REMOVED 增量，
+但 `openspec archive` 拒绝写出零 Requirement 的规范（「Spec must have at least one
+requirement」）——把一个能力的**全部** Requirement 删掉，工具没有对应的出口。因此规范目录直接
+删除，这份逐条清单挪到变更根目录保留：它是「删得干不干净」的检查表，每条指向它的页面对应物。
 
 **共同原因**：路线图决策 1「没有第二个世界」。`CadDocument` 是第二套文档协议、第二套选择
 语义、第二个标签种类与第二块画布；页面世界在步骤 8–11 之后对每一项都有对应物。
