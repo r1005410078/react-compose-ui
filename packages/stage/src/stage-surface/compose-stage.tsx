@@ -77,6 +77,7 @@ import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './entity-creation'
 import { StageDraftingOverlay, useStageDrafting } from '../drafting'
 import { useStageGeometryEditing } from '../geometry-editing'
+import type { StageGeometryEditing } from '../geometry-editing'
 import { useStagePointerSession, useStageRootHandlers } from './pointer-session'
 import { useStageTextEditing } from './use-stage-text-editing'
 import { useStageClipboard } from './use-stage-clipboard'
@@ -464,6 +465,20 @@ function ComposeStageReady({
     [],
   )
 
+  /*
+   * 绘图 Hook 排在几何编辑**之前**：点亮期的预览要读它解算后的落点，而读得晚一拍就等于让
+   * 预览慢光标一帧。反方向的两处依赖（进入几何编辑、判断能不能几何编辑）改走 `geometryRef`，
+   * 它们只在事件回调里调用，那时 ref 早已就位。
+   */
+  const geometryRef = useRef<StageGeometryEditing | null>(null)
+  const enterGeometryEditing = useCallback((entityId: string) => {
+    geometryRef.current?.enter(entityId)
+  }, [])
+  const isGeometryEditable = useCallback(
+    (entityId: string) => geometryRef.current?.isGeometryEditable(entityId) ?? false,
+    [],
+  )
+
   // 夹点取点的会话住在绘图 Hook 里，而它又要读几何编辑的状态——同一条 ref 打断两个方向。
   const geometrySession = useMemo(() => ({
     start: (target: StageGripTarget) => { draftingRef.current?.startGripSession(target) },
@@ -471,18 +486,6 @@ function ComposeStageReady({
     cancel: () => { draftingRef.current?.cancel() },
     clearNotice: () => { draftingRef.current?.clearNotice() },
   }), [])
-
-  const geometryEditing = useStageGeometryEditing({
-    document,
-    index: sceneIndex,
-    session: geometrySession,
-    selectedIds: normalizedSelection,
-    tool,
-    // 覆盖层至多渲染一条路径，宿主传入的优先：它是宿主明确要求画的，Stage 不该把它顶掉。
-    hostPathActive: editablePath !== null,
-    resolvePoint: resolveDraftingPoint,
-  })
-  const geometryEditingActive = geometryEditing.entityId !== null
 
   const draftingSession = useStageDrafting({
     // 绘图能力恒开：命令行常驻，命令随时可启动。模式已取消——它提供的四样没有一样
@@ -501,9 +504,24 @@ function ComposeStageReady({
     selectedIds: normalizedSelection,
     onSelectedIdsChange,
     // `VERTEX` 是几何编辑的第二个入口，与双击产出同一个会话。
-    onEnterGeometryEditing: geometryEditing.enter,
-    isGeometryEditable: geometryEditing.isGeometryEditable,
+    onEnterGeometryEditing: enterGeometryEditing,
+    isGeometryEditable,
   })
+  const geometryEditing = useStageGeometryEditing({
+    document,
+    index: sceneIndex,
+    session: geometrySession,
+    armedGripId: draftingSession.gripTarget?.gripId ?? null,
+    // 点亮期的预览钉在**解算后**的落点上，与十字线、橡皮筋终点和捕捉标记同一个值。
+    resolvedPointer: draftingSession.resolvedPointer,
+    selectedIds: normalizedSelection,
+    tool,
+    // 覆盖层至多渲染一条路径，宿主传入的优先：它是宿主明确要求画的，Stage 不该把它顶掉。
+    hostPathActive: editablePath !== null,
+    resolvePoint: resolveDraftingPoint,
+  })
+  const geometryEditingActive = geometryEditing.entityId !== null
+
   // 命令等着取点或等着选对象时才跟踪指针；两档合成一个标记，跟踪、挂载与推导读同一个。
   // 几何编辑期间也跟踪：这个模式的全部动作都是在取点，十字光标需要一个中心。
   const draftingPointerTracked = draftingSession.awaitingPoint || draftingSession.awaitingSelection
@@ -550,7 +568,6 @@ function ComposeStageReady({
   useLayoutEffect(() => {
     draftingRef.current = draftingSession
   })
-  const geometryRef = useRef(geometryEditing)
   useLayoutEffect(() => {
     geometryRef.current = geometryEditing
   })
@@ -578,7 +595,7 @@ function ComposeStageReady({
     onEnterGeometryEditing: geometryEditing.enter,
     // 几何编辑的夹点由 Stage 自己写文档；宿主传入的那条路径仍然只上报，事实来源在宿主。
     onEditablePathChange: (change) => {
-      if (geometryRef.current.handlePathChange(change)) return
+      if (geometryRef.current?.handlePathChange(change) === true) return
       onEditablePathChange?.(change)
     },
     onEditablePathVertexToggle,
@@ -799,7 +816,7 @@ function ComposeStageReady({
       if (draftingRef.current?.handleKeyDown(event)) return
       // 几何编辑的退出排在命令之后、既有级联之前：命令进行中的 Esc 属于命令，而级联里的
       // Esc 会去中止手势并清空选区——那会顺带把会话的目标一起收走，用户看不出是哪一条生效。
-      if (event.key === 'Escape' && geometryRef.current.entityId !== null) {
+      if (event.key === 'Escape' && geometryRef.current?.entityId != null) {
         geometryRef.current.exit()
         return
       }

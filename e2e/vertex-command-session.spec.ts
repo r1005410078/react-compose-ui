@@ -89,6 +89,8 @@ test('OpenSpec: stage / 顶点取点是一条命令会话 / 按下夹点即出�
   await drawLine(commandInput, A, B)
   const view = await worldToScreen(page)
   expect(view.zoom).not.toBe(1)
+  const stroke = stage.getByTestId('compose-material-curve-stroke')
+  const drawn = (await stroke.boundingBox())!
   await enterGeometryEditing(page, stage, view.at, MID)
 
   // 进入会话要清掉上一条命令留下的残句：用户此刻站在一个会取点的状态里。
@@ -102,9 +104,12 @@ test('OpenSpec: stage / 顶点取点是一条命令会话 / 按下夹点即出�
   await page.mouse.up()
   await expect(stage.getByTestId('stage-path-vertex-end')).toHaveAttribute('data-vertex-hot')
   await expect(prompt).toContainText('新位置')
-  // 原地松手 MUST NOT 改动几何。
-  const after = await gripCenter(stage, 'end')
-  expect(Math.hypot(after.x - end.x, after.y - end.y)).toBeLessThan(0.6)
+  // 原地松手 MUST NOT 改动几何。量的是**画出来的那条线**而不是夹点：夹点跟着预览走，而按下
+  // 那一刻就解了一次落点，开着网格吸附时它已经把顶点挪了半格——与拖动按下即预览同一条行为。
+  const after = (await stroke.boundingBox())!
+  expect(Math.abs(after.width - drawn.width)).toBeLessThan(0.5)
+  expect(Math.abs(after.height - drawn.height)).toBeLessThan(0.5)
+  expect(Math.abs(after.x - drawn.x)).toBeLessThan(0.5)
   await expect(editablePath).toHaveCount(1)
 })
 

@@ -587,17 +587,29 @@ export function useStageDrafting(options: StageDraftingOptions) {
       .map((rect) => ({ ...rect, x: rect.x + delta.x, y: rect.y + delta.y }))
   }, [enabled, index, pointer, preview, resolvePointerPoint])
 
+  /**
+   * 解算后的世界落点。
+   *
+   * @remarks
+   * 十字线、橡皮筋终点、坐标读数、捕捉标记与几何编辑点亮期的预览读的**都是它**。各算一遍的
+   * 症状是「十字线停在一处、点却落在另一处」，而这只在开着吸附时才现形。
+   */
+  const resolvedPointer = useMemo(() => {
+    if (!enabled || !pointer) return null
+    return resolvePointerPoint(pointer)
+  }, [enabled, pointer, resolvePointerPoint])
+
   const rubberBand = useMemo(() => {
-    if (!enabled || !reference || !pointer) return null
-    return { start: reference, end: resolvePointerPoint(pointer) }
-  }, [enabled, pointer, reference, resolvePointerPoint])
+    if (!reference || !resolvedPointer) return null
+    return { start: reference, end: resolvedPointer }
+  }, [reference, resolvedPointer])
 
   // 十字线画在捕捉/正交求解**之后**的落点上：让它跟着裸光标走，用户会看见十字线与最终
   // 落点差着几个像素，而那正是他要对齐的地方。
-  const pointerScreen = useMemo(() => {
-    if (!enabled || !pointer) return null
-    return worldToScreen(resolvePointerPoint(pointer), viewport)
-  }, [enabled, pointer, resolvePointerPoint, viewport])
+  const pointerScreen = useMemo(
+    () => (resolvedPointer ? worldToScreen(resolvedPointer, viewport) : null),
+    [resolvedPointer, viewport],
+  )
 
   return {
     index,
@@ -620,6 +632,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     rubberBand,
     // 拖动与点亮共用同一份事实：拾取框画不画、哪个夹点是热的、排除哪个点都读它。
     gripTarget,
+    resolvedPointer,
     cancel,
     clearNotice,
     handleKeyDown,
