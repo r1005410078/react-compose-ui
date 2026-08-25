@@ -31,11 +31,17 @@ export type StageMarqueeDirection = 'ltr' | 'rtl'
 export type StageMarqueeCombine = 'replace' | 'add' | 'subtract'
 
 /**
- * 宿主未提供模式时使用的判定，保持与历史行为一致。
+ * 宿主未提供模式时使用的判定。
+ *
+ * @remarks
+ * **是 `directional` 而不是某一种固定判定。**方向决定这套代数一直都在，而默认落在
+ * `intersect` 上时它等于不存在：不去菜单里手动选一次，拖拽方向就什么都不做——功能在，
+ * 可达不到。两种判定各自都有真实用途（框住整根导线 / 抓一把穿过某片区域的线），而拖拽
+ * 方向是它们之间最快的切换。
  *
  * @public
  */
-export const DEFAULT_STAGE_MARQUEE_MODE: StageMarqueeMode = 'intersect'
+export const DEFAULT_STAGE_MARQUEE_MODE: StageMarqueeMode = 'directional'
 
 /**
  * 视为「点击」而非「拖框」的世界尺寸阈值。

@@ -20,6 +20,15 @@
   --compose-stage-grip-hot: #f2545b;
 
   /*
+   * 框选的两种判定各有自己的颜色，沿用 AutoCAD 的 `WINDOWAREACOLOR` / `CROSSINGAREACOLOR`。
+   * 颜色回答「哪一种判定在生效」，虚实边框是同一句话的第二遍——拖动中的细边框在密集图纸上
+   * 分辨率很低，两条都用得上。窗口色与选中框同色是有意的：包含判定框住的就是「会被选中的
+   * 那一块」，而窗交色必须跳出来，因为它还会捞走框外的东西。
+   */
+  --compose-stage-marquee-window: #3687ff;
+  --compose-stage-marquee-crossing: #3ddc84;
+
+  /*
    * 绘图模式给命令行**留出底部一条**，而不是让它浮在图面上。
    *
    * 命令行原先是 `bottom: 0` 的绝对定位层，横跨整个 Stage 宽度：左端 24px 压在竖标尺
@@ -50,6 +59,7 @@
   /* 浅底上的浅橙读不出来，换成同色相的深色。 */
   --compose-stage-snap: #b45309;
   --compose-stage-grip-hot: #c81e2a;
+  --compose-stage-marquee-crossing: #15803d;
 }
 
 .compose-stage[data-compose-theme='light'] .compose-stage__surface {
@@ -275,10 +285,16 @@
   pointer-events: none;
 }
 
-.compose-stage__selection,
-.compose-stage__marquee {
+.compose-stage__selection {
   fill: rgb(54 135 255 / 10%);
   stroke: #3687ff;
+  stroke-width: 1;
+}
+
+/* 缺省是包含判定的窗口色；相交判定在下面整体换一次色，虚实同时切。 */
+.compose-stage__marquee {
+  fill: color-mix(in srgb, var(--compose-stage-marquee-window, #3687ff) 10%, transparent);
+  stroke: var(--compose-stage-marquee-window, #3687ff);
   stroke-width: 1;
 }
 
@@ -337,10 +353,15 @@
 }
 
 /*
- * 相交判定用虚线、包含判定用实线，沿用 CAD 的既有心智。方向决定模式下判定随拖拽方向切换，
- * 这条边框是用户唯一能看出当前生效判定的反馈。
+ * 相交判定用虚线加窗交色、包含判定用实线加窗口色，沿用 CAD 的既有心智。
+ *
+ * 依据是**当前生效判定**而不是模式：钉死相交时它一直是窗交色，那正是此刻生效的判定；方向
+ * 决定模式下它随拖拽方向切换。`data-marquee-mode` 拿到的已经是归约过的值，因此这里不需要
+ * 认识 `directional`。
  */
 .compose-stage__marquee[data-marquee-mode='intersect'] {
+  fill: color-mix(in srgb, var(--compose-stage-marquee-crossing, #3ddc84) 10%, transparent);
+  stroke: var(--compose-stage-marquee-crossing, #3ddc84);
   stroke-dasharray: 4 3;
 }
 

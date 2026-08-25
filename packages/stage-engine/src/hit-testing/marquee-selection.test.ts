@@ -57,38 +57,48 @@ describe('框选判定模式协议', () => {
     expect(resolveMarqueeHitTest('contain', 'rtl')).toBe('contain')
   })
 
-  it('OpenSpec: 未传入模式时回退相交', () => {
-    expect(resolveMarqueeHitTest(undefined, 'ltr')).toBe('intersect')
-    expect(resolveMarqueeSelection(query({ x: -10, y: -10, width: 60, height: 70 })))
+  it('OpenSpec: 未传入模式时按方向决定', () => {
+    // 默认不是某一种固定判定：方向决定这套代数落在默认上，用户才不必先去菜单里发现它。
+    expect(resolveMarqueeHitTest(undefined, 'ltr')).toBe('contain')
+    expect(resolveMarqueeHitTest(undefined, 'rtl')).toBe('intersect')
+    const half = { x: -10, y: -10, width: 60, height: 70 }
+    expect(resolveMarqueeSelection(query(half))).toEqual([])
+    expect(resolveMarqueeSelection(query(half, { direction: 'rtl' })))
       .toEqual([ROOT_FRAME_ID, 'left'])
   })
 
   it('OpenSpec: 排除 hidden 与 locked 节点', () => {
     const hidden = entity('hidden', { x: 0, y: 0, visible: false })
     const locked = entity('locked', { x: 0, y: 0, locked: true })
+    // 判定模式与本条无关，钉死一种免得跟着默认值漂。
     expect(resolveMarqueeSelection(query(
       { x: -10, y: -10, width: 400, height: 100 },
-      {},
+      { mode: 'intersect' },
       [left, right, hidden, locked],
     ))).toEqual([ROOT_FRAME_ID, 'left', 'right'])
   })
 
   it('OpenSpec: 按确定性场景顺序返回并保留既有选区顺序', () => {
     const area = { x: -10, y: -10, width: 400, height: 100 }
-    expect(resolveMarqueeSelection(query(area))).toEqual([ROOT_FRAME_ID, 'left', 'right'])
+    const crossing = { mode: 'intersect' } as const
+    expect(resolveMarqueeSelection(query(area, crossing)))
+      .toEqual([ROOT_FRAME_ID, 'left', 'right'])
     // 既有选区顺序来自宿主的交互顺序，加选只在其后追加新命中。
-    expect(resolveMarqueeSelection(query(area, { base: ['right'], combine: 'add' })))
+    expect(resolveMarqueeSelection(query(area, { ...crossing, base: ['right'], combine: 'add' })))
       .toEqual(['right', ROOT_FRAME_ID, 'left'])
   })
 
   it('OpenSpec: Shift 加选与 Alt 减选', () => {
     const leftOnly = { x: -10, y: -10, width: 60, height: 70 }
-    expect(resolveMarqueeSelection(query(leftOnly, { base: ['right'], combine: 'add' })))
+    const crossing = { mode: 'intersect' } as const
+    expect(resolveMarqueeSelection(query(leftOnly, { ...crossing, base: ['right'], combine: 'add' })))
       .toEqual(['right', ROOT_FRAME_ID, 'left'])
-    expect(resolveMarqueeSelection(query(leftOnly, { base: ['left', 'right'], combine: 'add' })))
-      .toEqual(['left', 'right', ROOT_FRAME_ID])
-    expect(resolveMarqueeSelection(query(leftOnly, { base: ['left', 'right'], combine: 'subtract' })))
-      .toEqual(['right'])
+    expect(resolveMarqueeSelection(
+      query(leftOnly, { ...crossing, base: ['left', 'right'], combine: 'add' }),
+    )).toEqual(['left', 'right', ROOT_FRAME_ID])
+    expect(resolveMarqueeSelection(
+      query(leftOnly, { ...crossing, base: ['left', 'right'], combine: 'subtract' }),
+    )).toEqual(['right'])
   })
 
   it('在画板内部拖框不选中画板本身', () => {

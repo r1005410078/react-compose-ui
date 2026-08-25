@@ -1487,11 +1487,16 @@ describe('框选工具与选区布尔组合', () => {
     expect(controller.getSnapshot().phase).toBe('idle')
   })
 
-  it('OpenSpec: 未传入模式时回退相交', () => {
-    const { drag, selection } = marqueeSetup()
+  it('OpenSpec: 未传入模式时按方向决定', () => {
+    // 默认不是某一种固定判定：从左往右只选完全框住的，从右往左碰到就选。
+    const rightward = marqueeSetup()
+    rightward.drag({ x: -10, y: -10 }, { x: 50, y: 60 })
+    expect(rightward.selection()).toMatchObject({ selectedIds: [] })
+
     // 框从画板外面起手，因此也相交到根 Frame。
-    drag({ x: -10, y: -10, }, { x: 50, y: 60 })
-    expect(selection()).toMatchObject({ selectedIds: [ROOT_FRAME_ID, 'left'] })
+    const leftward = marqueeSetup()
+    leftward.drag({ x: 50, y: 60 }, { x: -10, y: -10 })
+    expect(leftward.selection()).toMatchObject({ selectedIds: [ROOT_FRAME_ID, 'left'] })
   })
 
   it('OpenSpec: 框选判定模式协议 / 包含模式排除部分重叠节点', () => {
@@ -1515,11 +1520,12 @@ describe('框选工具与选区布尔组合', () => {
   })
 
   it('OpenSpec: Shift 加选与 Alt 减选', () => {
-    const added = marqueeSetup({ selectedIds: ['right'] })
+    // 判定模式与布尔组合无关，钉死一种免得跟着默认值漂。
+    const added = marqueeSetup({ selectedIds: ['right'], marqueeMode: 'intersect' })
     added.drag({ x: -10, y: -10 }, { x: 50, y: 60 }, { kind: 'surface' }, { ...modifiers, shift: true })
     expect(added.selection()).toMatchObject({ selectedIds: ['right', ROOT_FRAME_ID, 'left'] })
 
-    const subtracted = marqueeSetup({ selectedIds: ['left', 'right'] })
+    const subtracted = marqueeSetup({ selectedIds: ['left', 'right'], marqueeMode: 'intersect' })
     subtracted.drag({ x: -10, y: -10 }, { x: 50, y: 60 }, { kind: 'surface' }, { ...modifiers, alt: true })
     expect(subtracted.selection()).toMatchObject({ selectedIds: ['right'] })
   })

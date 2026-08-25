@@ -1430,7 +1430,12 @@ describe('ComposeStage 框选判定模式', () => {
   it('OpenSpec: 选择与框选 / select 从空白处起框', () => {
     // 独立的框选工具已删除：`select` 在空白处拖拽本来就是框选，两者完全重复，
     // 而多一个工具位意味着用户要先想「我在用哪个」。
-    const { dispatch, selection } = renderStage(document(), { tool: 'select' })
+    // 判定模式钉死一种：本条讲的是「空白拖拽起的是框而不是移动」，与判定无关，
+    // 跟着默认值走会让它在默认从相交改成方向决定时莫名其妙地红。
+    const { dispatch, selection } = renderStage(
+      document(),
+      { tool: 'select', marqueeMode: 'intersect' },
+    )
     const surface = screen.getByTestId('stage-surface')
     dragMarquee({ x: 30, y: 40 }, { x: 200, y: 200 }, surface)
     releaseMarquee({ x: 200, y: 200 }, surface)

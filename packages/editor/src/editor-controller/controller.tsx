@@ -1105,7 +1105,7 @@ export function useComposeEditorController({
     () => isShapeDrawingTool(initialTool) ? initialTool : 'draw-rectangle',
   )
   // 框选判定模式是会话偏好而非文档数据，事实来源留在编辑器，Stage 只接收受控值。
-  const [marqueeMode, setMarqueeMode] = useState<ComposeStageMarqueeMode>('intersect')
+  const [marqueeMode, setMarqueeMode] = useState<ComposeStageMarqueeMode>('directional')
   const setTool = useCallback((nextTool: ComposeStageTool) => {
     if (isShapeDrawingTool(nextTool)) setLastShapeTool(nextTool)
     setToolState(nextTool)
