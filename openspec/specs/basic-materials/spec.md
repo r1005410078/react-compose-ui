@@ -763,6 +763,11 @@ Renderer MUST 按 `kind` 分派 SVG 元素：`line` 与 `polyline` 各用**一�
 `polygon`），弧用 `path`，**整圆用 `circle`**——SVG 的 `A` 命令在起终点重合时画不出东西。
 未填充时命中 MUST 继续由透明加宽 stroke 承担，MUST NOT 因 `kind` 变化而改用盒判定。
 
+命中层的宽度 MUST 由 `COMPOSE_CURVE_PICK_TOLERANCE` 推出（两倍容差，与视觉线宽取较大者），
+MUST NOT 在本包另写一个数——它同时是 Stage 拾取框的来源，各写一份必然漂移。命中层的
+`stroke-linecap` MUST 为 `butt`，MUST NOT 为 `round`：后者让命中区从两端各伸出半个带宽，
+成为包围盒的超集。这一条只作用于两个自由端，多段线拐角仍由 `stroke-linejoin` 覆盖。
+
 Inspector MUST 按 `kind` 呈现对应的几何字段，全部写入 MUST 走同一条漏斗命令。
 
 #### Scenario: 渲染跟随几何
@@ -789,6 +794,11 @@ Inspector MUST 按 `kind` 呈现对应的几何字段，全部写入 MUST 走同
 
 - **WHEN** 渲染一条含四个顶点的多段线
 - **THEN** 图面上只有一个多段线元素，而不是三个线段元素
+
+#### Scenario: 命中层不越过端点
+
+- **WHEN** 渲染任意 `kind` 的曲线
+- **THEN** 命中层的 `stroke-linecap` 为 `butt`
 
 #### Scenario: 空角仍不命中
 
