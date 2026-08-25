@@ -512,7 +512,7 @@ describe('ComposeStage ECS', () => {
     })
   })
 
-  it('OpenSpec: 曲线几何编辑会话 / 退出后恢复盒手柄', () => {
+  it('OpenSpec: 曲线几何编辑会话 / 退出后回到普通选中呈现', () => {
     renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
     fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
       pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
@@ -521,9 +521,12 @@ describe('ComposeStage ECS', () => {
 
     fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'Escape' })
 
+    // 退出之后回到**曲线的**普通选中呈现——那是轮廓，不是盒：进出会话只增减夹点，
+    // 对象的呈现不整体换一套。
     expect(screen.queryByTestId('stage-editable-path')).not.toBeInTheDocument()
-    expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
-    expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-selection-outline')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-resize-se')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-selection-bounds')).not.toBeInTheDocument()
   })
 
   it('OpenSpec: 曲线几何编辑会话 / 多选时不进入会话', () => {
@@ -606,15 +609,34 @@ describe('ComposeStage ECS', () => {
     expect(screen.queryByTestId('stage-path-vertex-hit-start')).not.toBeInTheDocument()
   })
 
-  it('OpenSpec: 物料统一 / 曲线单选走通用矩形选区与盒手柄', () => {
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 曲线单选画几何轮廓，不画盒与手柄', () => {
     renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
 
-    // 线状节点仍不以包围盒拦截指针，但选区回到通用那一套：两点直线的端点就在盒的对角，
-    // 拖盒角手柄与拖端点落点相同，因此不再有第二套端点 UI。
+    // 判据是「盒是不是这个对象的轮廓」：一条对角线的包围盒里绝大部分是空的。
     expect(screen.getByTestId('stage-entity-curve-a')).toHaveClass('is-segment')
+    expect(screen.getByTestId('stage-selection-outline')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-selection-bounds')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-resize-se')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-resize-edge-n')).not.toBeInTheDocument()
+    // 也没有第二套端点 UI：两点直线的端点就在盒的对角，那套 UI 随 `shape` 物料一起删了。
+    expect(screen.queryByTestId('stage-line-selection')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 受控工具模式与专属选区反馈 / scale 工具下曲线的盒与手柄回来', () => {
+    renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'scale' })
+
+    // 能力没有消失，只是从「随时都在」变成「进那个工具」——盒操作时盒就是用户在操作的东西。
     expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
     expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
-    expect(screen.queryByTestId('stage-line-selection')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stage-selection-outline')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 非曲线 Entity 照旧画盒', () => {
+    renderStage(document(), { selectedIds: ['a'], tool: 'select' })
+
+    // 同一条判据在矩形上的答案是「是」：它的盒就是它的轮廓。这条挡住把规则扩大到所有 Entity。
+    expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-selection-outline')).not.toBeInTheDocument()
   })
 
   it('OpenSpec: 绘制工具 / 空闲即为十字光标，并以实际形状预览替代框选虚线', () => {

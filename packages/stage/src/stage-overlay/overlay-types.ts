@@ -38,6 +38,15 @@ export interface StageOverlayProps {
    * 几何编辑要经由实例覆盖，尚未接线。
    */
   readonly instanceSelectionBounds?: StageRect | null
+  /**
+   * 单选一条曲线时的世界坐标轮廓折线；其余情形为 `null`。
+   *
+   * @remarks
+   * 存在时它**取代**选区矩形与 Resize 手柄：盒不是曲线的轮廓，一条对角线的包围盒里绝大部分
+   * 是空的。覆盖层不认识文档，也不知道「什么算曲线」——判定与派生都在宿主，这里只负责换算到
+   * 屏幕并画出来。
+   */
+  readonly selectionOutline?: readonly StagePoint[] | null
   readonly handlePoints: Readonly<
     Record<ResizeHandle, readonly [number, number]>
   > | null

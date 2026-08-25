@@ -1,11 +1,19 @@
+import { worldToScreen } from '@compose-ui/stage-engine'
 import type { StageOverlayContext } from '../overlay-types'
 
 /**
  * 选中边框层。
  *
  * @remarks
- * 两种互斥呈现按优先级降级：已下钻的实例内部实体画只读边框，其余情况画通用矩形。
- * 绘制工具激活时一律不画——那时用户看的是笔尖，不是选区。
+ * 三种互斥呈现按优先级降级：已下钻的实例内部实体画只读边框，单选一条曲线画**它的几何轮廓**，
+ * 其余情况画通用矩形。绘制工具激活时一律不画——那时用户看的是笔尖，不是选区。
+ *
+ * **曲线画轮廓不是特例，是同一条判据的第三个答案**：矩形、图片、容器的盒就是它们的轮廓；
+ * 文字占满自己的盒，因此编辑态只去掉填充；而一条对角线的包围盒里绝大部分是空的——那个矩形
+ * 宣称了对象并不占据的面积，线越接近 45 度它越大，拖端点时还一直在变。
+ *
+ * 轮廓只在 `select` 下由宿主派生：`scale` 与 `rotate` 是盒操作，那时盒正是用户在操作的东西。
+ * 多选同样不派生——多选框回答的是「这一堆的范围」，不宣称任何单个对象的轮廓。
  *
  * 几何编辑态同样不画，与盒手柄、旋转手柄一并让位，三条各自独立的理由：**盒不是曲线的
  * 轮廓**（一条对角线的包围盒里绝大部分是空的，这正是命中不按包围盒判的那条理由的视觉版本）；
@@ -24,10 +32,18 @@ export function SelectionLayer({
   geometryEditing,
   instanceSelectionBounds,
   screenBounds,
+  selectionOutline,
   textEditing,
   tool,
+  viewport,
 }: StageOverlayContext) {
   const drawingToolActive = tool.startsWith('draw-')
+  const outlinePoints = selectionOutline && !drawingToolActive && !geometryEditing
+    ? selectionOutline
+      .map((point) => worldToScreen(point, viewport))
+      .map((point) => `${point.x},${point.y}`)
+      .join(' ')
+    : null
   return (
     <>
       {instanceSelectionBounds ? (
@@ -38,6 +54,12 @@ export function SelectionLayer({
           width={instanceSelectionBounds.width}
           x={instanceSelectionBounds.x}
           y={instanceSelectionBounds.y}
+        />
+      ) : outlinePoints ? (
+        <polyline
+          className="compose-stage__selection-outline"
+          data-testid="stage-selection-outline"
+          points={outlinePoints}
         />
       ) : screenBounds && !drawingToolActive && !geometryEditing ? (
         <rect

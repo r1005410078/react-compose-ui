@@ -37,16 +37,22 @@ test('OpenSpec: stage / 几何编辑模式 / 双击曲线显形夹点，拖端�
   const drawn = (await stroke.boundingBox())!
   const onLine = { x: drawn.x + drawn.width / 2, y: drawn.y + drawn.height / 2 }
 
-  // 单击只选中：盒手柄在，夹点不在。
+  // 单击只选中：画的是几何轮廓（曲线的普通选中呈现），夹点不在。
   await page.mouse.click(onLine.x, onLine.y)
-  await expect(stage.getByTestId('stage-resize-se')).toHaveCount(1)
+  await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(1)
   await expect(stage.getByTestId('stage-editable-path')).toHaveCount(0)
 
-  // 双击进入几何编辑：三个夹点显形（两端 + 中点），盒手柄让位。
+  /*
+   * 双击进入几何编辑：三个夹点显形（两端 + 中点），轮廓**改由可编辑路径层画**（同一条
+   * `stageCurveOutline`），选区那一层让位以免两条重叠。进出会话因此只增减夹点，对象的呈现
+   * 不整体换一套。
+   *
+   * 断这两条而不是断「盒手柄让位」：曲线在 `select` 下本来就没有盒手柄，那条断言在这里恒真。
+   */
   await page.mouse.dblclick(onLine.x, onLine.y)
-  await expect(stage.getByTestId('stage-editable-path')).toHaveCount(1)
+  await expect(stage.getByTestId('stage-editable-path-line')).toHaveCount(1)
   await expect(stage.locator('[data-testid^="stage-path-vertex-hit-"]')).toHaveCount(3)
-  await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
+  await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(0)
 
   // 拖右端点往下：水平线掰成斜的。
   const endHandle = stage.getByTestId('stage-path-vertex-hit-end')
@@ -133,8 +139,8 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 拖中点夹点把整条线�
   const aBox = (await strokes.nth(0).boundingBox())!
   const aCenter = { x: aBox.x + aBox.width / 2, y: aBox.y + aBox.height / 2 }
   await page.mouse.click(aCenter.x, aCenter.y)
-  // 单击只选中：选区盒在。
-  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+  // 单击只选中：画的是几何轮廓。
+  await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(1)
   const before = {
     start: { x: await value('起点 X'), y: await value('起点 Y') },
     end: { x: await value('终点 X'), y: await value('终点 Y') },
@@ -144,8 +150,9 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 拖中点夹点把整条线�
   await expect(stage.getByTestId('stage-editable-path')).toHaveCount(1)
   // 直线现在有三个夹点：两端各一，中点一个。
   await expect(stage.locator('[data-testid^="stage-path-vertex-hit-"]')).toHaveCount(3)
-  // 盒手柄与选区盒一并让位：一条对角线的包围盒里绝大部分是空的，而拖夹点时它还是过期的。
-  await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
+  // 轮廓改由可编辑路径层画，盒与手柄始终没出现过——曲线在两态都不画盒。
+  await expect(stage.getByTestId('stage-editable-path-line')).toHaveCount(1)
+  await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(0)
   await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
 
   const moveGrip = stage.getByTestId('stage-path-vertex-hit-move')
@@ -170,8 +177,9 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 拖中点夹点把整条线�
   expect(after.end.x - after.start.x).toBeCloseTo(before.end.x - before.start.x, 1)
   expect(after.end.y - after.start.y).toBeCloseTo(before.end.y - before.start.y, 1)
 
-  // 退出会话，选区盒回来。
+  // 退出会话，回到曲线的普通选中呈现——轮廓，不是盒。
   await page.keyboard.press('Escape')
   await expect(stage.getByTestId('stage-editable-path')).toHaveCount(0)
-  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+  await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(1)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
 })

@@ -26,11 +26,13 @@ import type {
 import {
   BUILTIN_COMMAND_TYPES,
   COMPOSE_CURVE_PICK_TOLERANCE,
+  getComposeCurve,
   type ComposeLayoutSnapshot,
   type ComposeSize,
 } from '@compose-ui/core'
 import {
   createStageInteractionController,
+  stageCurveOutline,
   createStageSceneIndex,
   getEntityWorldBounds,
   resolveStageDropIndicator,
@@ -700,6 +702,29 @@ function ComposeStageReady({
     viewport,
   ])
 
+  /**
+   * 单选一条曲线时的世界坐标轮廓；其余情形为 `null`。
+   *
+   * @remarks
+   * 判据是**盒是不是这个对象的轮廓**：矩形、图片、容器的盒就是它们的轮廓，文字占满自己的盒，
+   * 而一条对角线的包围盒里绝大部分是空的——那个矩形宣称了对象并不占据的面积，线越接近 45 度
+   * 它越大。这不是给曲线开特例，是同一句话在不同形状上给出不同答案。
+   *
+   * 只在 `select` 下派生：`scale` 与 `rotate` 是**盒操作**，那时盒就是用户正在操作的东西。
+   * 多选也不派生——多选框回答的是「这一堆的范围」，不宣称任何单个对象的轮廓。
+   *
+   * 与几何编辑会话画的是**同一条**（`stageCurveOutline`），不另写一份：两份实现的分叉症状是
+   * 「双击前后线的轮廓差半个像素」，而那种偏移只在特定缩放下现形。
+   */
+  const selectionOutline = useMemo(() => {
+    if (tool !== 'select' || normalizedSelection.length !== 1) return null
+    const entityId = normalizedSelection[0]!
+    const entity = document.entities[entityId]
+    if (!entity || !getComposeCurve(entity)) return null
+    const outline = stageCurveOutline(document, sceneIndex, entityId)
+    return outline.length > 1 ? outline : null
+  }, [document, normalizedSelection, sceneIndex, tool])
+
   useFinalControllerDisposal(privateController)
 
   const {
@@ -1011,6 +1036,7 @@ function ComposeStageReady({
           rotationPreview={interaction.rotationPreview}
           instanceSelectionBounds={instanceSelectionBounds}
           screenBounds={screenBounds}
+          selectionOutline={selectionOutline}
           snapGuides={snapGuides}
           textEditing={textEditing !== null}
           tool={tool}

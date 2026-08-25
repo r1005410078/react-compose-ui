@@ -281,16 +281,17 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
   expect(Number(await strokes.first().getAttribute('y2')))
     .toBeGreaterThan(Number(await strokes.first().getAttribute('y1')))
 
-  // 画完曲线直接停在几何编辑里：三个夹点显形（两端 + 中点），盒手柄与选区盒一并让位——
-  // 与「画完文字直接进文字编辑」是同一条规则的第二个实例。第二套端点 UI 仍然没有。
+  // 画完曲线直接停在几何编辑里：三个夹点显形（两端 + 中点）——与「画完文字直接进文字编辑」
+  // 是同一条规则的第二个实例。第二套端点 UI 仍然没有。
   await expect(stage.locator('[data-testid^="stage-path-vertex-hit-"]')).toHaveCount(3)
-  await expect(stage.getByTestId('stage-resize-se')).toHaveCount(0)
   await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
   await expect(stage.getByTestId('stage-line-selection')).toHaveCount(0)
-  // 退出会话之后盒手柄与选区盒都回来，几何编辑不是一条单行道。
+  // 退出会话之后回到曲线的普通选中呈现——轮廓，不是盒。几何编辑不是一条单行道。
   await page.keyboard.press('Escape')
-  await expect(stage.getByTestId('stage-resize-se')).toBeVisible()
-  await expect(stage.getByTestId('stage-selection-bounds')).toBeVisible()
+  // 用 `toHaveCount` 而不是 `toBeVisible`：这一条画的是**竖直**箭头，轮廓折线的包围盒宽度
+  // 为零，而 Playwright 把零面积当作不可见。
+  await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(1)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
 
   // 反向拖出第二条：终点在上，几何跟着翻过来。
   await pickArrow()
@@ -327,8 +328,8 @@ test('OpenSpec: stage / 线段命中 / 透明外接矩形不选中，线身仍�
   await page.mouse.up()
   // 画完直接停在几何编辑里，那里不画选区盒；本条要验的是命中而不是几何编辑，先退出来。
   await page.keyboard.press('Escape')
-  // 曲线走通用矩形选区：两点直线的端点就在盒的对角，拖盒角手柄与拖端点是同一件事。
-  const selection = stage.getByTestId('stage-selection-bounds')
+  // 曲线的选中呈现是沿几何的轮廓，不是包围盒。
+  const selection = stage.getByTestId('stage-selection-outline')
   await expect(selection).toBeVisible()
 
   // 位于轴对齐外接矩形内部，但离实际线段很远；点击应落到画布并清除选择。

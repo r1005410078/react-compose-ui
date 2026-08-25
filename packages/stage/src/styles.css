@@ -291,6 +291,21 @@
   stroke-width: 1;
 }
 
+/*
+ * 曲线选中时沿真实几何画的轮廓，取代那个矩形。
+ *
+ * 描边比选区框粗一档：矩形靠面积就能被看见，一条线只有长度，同样的 1px 描边贴在原线上几乎
+ * 看不出「它被选中了」。不填充——形状不是矩形，填了色的是它的包围盒而不是它。
+ */
+.compose-stage__selection-outline {
+  fill: none;
+  stroke: #3687ff;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
 /* 缺省是包含判定的窗口色；相交判定在下面整体换一次色，虚实同时切。 */
 .compose-stage__marquee {
   fill: color-mix(in srgb, var(--compose-stage-marquee-window, #3687ff) 10%, transparent);

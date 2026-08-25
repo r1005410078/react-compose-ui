@@ -182,8 +182,11 @@ test('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 拖盒手�
   await page.mouse.click(rect0.x + rect0.width / 2, rect0.y + rect0.height / 2)
   await expect(selectedRows).toHaveCount(1)
 
-  // 曲线的盒手柄本来是关掉的（`GeometryConstraints.resize: 'none'`），注释写的理由正是
-  // 「盒缩放该不该等比缩放几何点还没定」。这一刀给的就是那个答案，因此手柄回来。
+  /*
+   * 盒手柄在 `scale` 工具下。`select` 下曲线画的是几何轮廓——盒不是曲线的轮廓——而这一条
+   * 断的正是**盒操作**：拖盒手柄，几何跟着变。用户明确在做盒操作时盒就在。
+   */
+  await editor.getByRole('button', { name: '缩放' }).click()
   await expect(stage.getByTestId('stage-resize-se')).toBeVisible()
   const handle = (await stage.getByTestId('stage-resize-se').boundingBox())!
   const hx = handle.x + handle.width / 2
@@ -197,6 +200,9 @@ test('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 拖盒手�
   const rect1 = (await stroke.boundingBox())!
   expect(rect1.width).toBeGreaterThan(rect0.width * 1.6)
   expect(Math.abs(rect1.height - rect0.height)).toBeLessThan(6)
+
+  // 切回 select 再验命中：`scale` 工具下按下的语义是缩放，不是选择。
+  await editor.getByRole('button', { name: '选择', exact: true }).first().click()
 
   // 命中跟着几何走：新形状的中点选得中。
   await page.mouse.click(rect1.x + rect1.width / 2, rect1.y + rect1.height / 2)

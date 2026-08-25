@@ -35,7 +35,13 @@ function setup(page: Page) {
     surface: stage.getByTestId('stage-surface'),
     commandInput: stage.getByRole('textbox', { name: '命令行' }),
     marquee: stage.locator('.compose-stage__marquee'),
-    selection: stage.getByTestId('stage-selection-bounds'),
+    /*
+     * 选中呈现按对象类型分流：曲线画几何轮廓、其余画包围盒。本用例关心的是**框选选中了
+     * 几个**，与呈现形式无关，因此两者都算——靶子是 `REC` 画出来的闭合多段线，它是曲线。
+     */
+    selection: stage.locator(
+      '[data-testid="stage-selection-bounds"], [data-testid="stage-selection-outline"]',
+    ),
   }
 }
 
