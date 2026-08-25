@@ -386,7 +386,22 @@ export type StageInteractionEffect =
    * 后三个在宿主那边表现为选区或工具变化，宿主自己就看得见；为它们再发一条效果等于让
    * 同一件事有两个说法。
    */
-  | { readonly type: 'geometry-editing.enter'; readonly entityId: string }
+  | {
+      readonly type: 'geometry-editing.enter'
+      readonly entityId: string
+      /**
+       * 触发进入的那次指针事件的世界落点。
+       *
+       * @remarks
+       * 宿主用它给十字光标**播种**：指针位置只在需要绘制时才跟踪，会话开始那一刻手上还没有
+       * 任何本次跟踪期内的观测，读上一次留下的值会让十字线停在一个很旧的地方，直到用户动一下
+       * 鼠标才跳过来。
+       *
+       * 由**非指针**路径进入时缺席（画完曲线的回灌、`VERTEX` 命令）：那时确实无从得知指针在
+       * 哪，而浏览器不提供查询接口。缺席的含义是「先不画」，不是「画在别处」。
+       */
+      readonly worldPoint?: StagePoint
+    }
   | {
       /**
        * 路径手柄手势的阶段性世界坐标结果；引擎不理解它对应的文档语义，也绝不因此
@@ -986,6 +1001,7 @@ export function createStageInteractionController(): StageInteractionController {
       }
       if (enterDrawnGeometry) {
         consumedDrawnEntityId = drawn!.entityId
+        // 这条由 context 回灌触发，手上没有指针事件，因此不播种十字光标。
         apply([{ type: 'geometry-editing.enter', entityId: drawn!.entityId }])
       }
       // 会话自己判断是否仍然成立：内核不再枚举手势种类，也不再保留任何按手势分类的判定。

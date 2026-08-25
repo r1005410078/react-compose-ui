@@ -246,7 +246,16 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 同一个形状的其他顶�
   const grips = stage.locator('[data-testid^="stage-path-vertex-hit-"]')
   await expect(grips).toHaveCount(4)
 
-  // 未拖动：本对象自己的顶点与边中点都该能吸——此刻没有任何一个点在指针底下等着把它吸回去。
+  /*
+   * 观察点落在**点亮之后**而不是空闲档：空闲档既不解算落点也不画捕捉标记（那一档的命令行
+   * 提示就是「命令：」），因此「排不排除」在那里没有任何可观察后果。点亮一个夹点之后才真的
+   * 在取点，此时本对象自己的其他顶点与边中点仍该能吸——排除是点级的，只挡被作用的那一个。
+   */
+  const armed = (await stage.getByTestId('stage-path-vertex-hit-v0').boundingBox())!
+  await page.mouse.move(armed.x + armed.width / 2, armed.y + armed.height / 2)
+  await page.mouse.down()
+  // 原地松手即点亮：一步没动的松手不提交，会话留着等下一次取点。
+  await page.mouse.up()
   for (const [label, target, mode] of [
     ['对角顶点', opposite, 'endpoint'],
     ['边中点', { x: (corner.x + opposite.x) / 2, y: corner.y }, 'midpoint'],
@@ -256,6 +265,15 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 同一个形状的其他顶�
     await expect(marker, label).toHaveCount(1)
     expect(await marker.getAttribute('data-snap-mode'), label).toBe(mode)
   }
+  // 熄灭点亮，回到空闲档；几何编辑会话仍在，夹点还在原处。
+  await page.keyboard.press('Escape')
+  /*
+   * 跨过双击窗口再按下一次。上面点亮用的按下就落在同一个夹点上，两次按下的间隔与位移都在
+   * 连击判定之内（500ms / 5px）时，这一下会被算成第二击——而夹点上的第二击是顶点开关，
+   * 手势根本不会开始。症状很有欺骗性：下面几条「不该出现捕捉标记」会因为压根没在拖动而
+   * **全部通过**。
+   */
+  await page.waitForTimeout(600)
 
   const grip = (await stage.getByTestId('stage-path-vertex-hit-v0').boundingBox())!
   const from = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 }

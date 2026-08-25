@@ -154,7 +154,12 @@ describe('OpenSpec: stage-engine / ECS SceneIndex / 实体选中并拖动插件'
 
     down('a', { clickCount: 2 })
 
-    expect(effects).toContainEqual({ type: 'geometry-editing.enter', entityId: 'a' })
+    // 带上按下点：宿主用它给十字光标播种，否则会话开始时十字线停在上一次跟踪留下的位置。
+    expect(effects).toContainEqual({
+      type: 'geometry-editing.enter',
+      entityId: 'a',
+      worldPoint: { x: 10, y: 10 },  // viewport 恒等，因此屏幕点与世界点同值
+    })
     expect(controller.getSnapshot().phase).toBe('idle')
   })
 
@@ -166,9 +171,10 @@ describe('OpenSpec: stage-engine / ECS SceneIndex / 实体选中并拖动插件'
 
     down('a', { clickCount: 2 })
 
-    // 一次双击只能进一个会话。
+    // 一次双击只能进一个会话。断言按 `type` 而不是整个对象：effect 多一个字段就让
+    // `not.toContainEqual` 无条件通过，那是一条永远绿的假用例。
     expect(effects).toContainEqual({ type: 'text-editing.enter', entityId: 'a' })
-    expect(effects).not.toContainEqual({ type: 'geometry-editing.enter', entityId: 'a' })
+    expect(effects.some((effect) => effect.type === 'geometry-editing.enter')).toBe(false)
   })
 
   it('宿主没有注入几何判定时行为不变', () => {

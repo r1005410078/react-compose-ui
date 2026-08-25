@@ -1,5 +1,16 @@
-import { getComposeLock, isComposeFrameEntity, type ComposeDocument } from '@compose-ui/core'
-import { rectContains, rectsIntersect, type StageRect } from '../geometry'
+import {
+  composeCurveSegments,
+  composeSegmentIntersectsRect,
+  getComposeCurve,
+  getComposeCurveFill,
+  getComposeLock,
+  isComposeFrameEntity,
+  isPointInsideComposeCurve,
+  projectComposeCurveToBox,
+  type ComposeDocument,
+  type ComposeEntity,
+} from '@compose-ui/core'
+import { applyMatrix, invertMatrix, rectContains, rectsIntersect, type StageRect } from '../geometry'
 import type { StageSceneIndex } from './scene-index'
 
 /**
@@ -54,7 +65,7 @@ export interface StageMarqueeQuery {
   readonly base?: readonly string[]
   /** 与已有选区的组合方式。 @defaultValue 'replace' */
   readonly combine?: StageMarqueeCombine
-  /** 拖拽方向，`directional` 模式据此切换判定。 */
+  /** 拖拽方向；判定由它归约得出，见 {@link resolveMarqueeHitTest}。 */
   readonly direction: StageMarqueeDirection
   /** 与 index 同一求解周期的文档，用于读取 lock 状态。 */
   readonly document: ComposeDocument
@@ -80,11 +91,66 @@ export function resolveMarqueeHitTest(
 }
 
 /**
+ * 按几何判定一条曲线与框的关系。
+ *
+ * @remarks
+ * 曲线**不能**按 AABB 判定：一条对角线的外接矩形里绝大部分是空的，一个从不碰线身的窗交框
+ * 会选中它，而这与「点击包围盒空角不选中曲线」是同一条判断被破坏。
+ *
+ * 复用点选与特征点走的同一条链：`projectComposeCurveToBox` 把几何投到盒里，再经世界矩阵送到
+ * 世界空间。**变换的是几何而不是框**——把框逆变换进几何空间会让非等比缩放下的矩形变成平行
+ * 四边形，四条边不再轴对齐。
+ *
+ * 填充过的曲线是例外：框落在可见填充区域内也算命中，读取入口与点选路径相同。空心时不做
+ * 这一步，那正是「盒里绝大部分是空的」覆盖的情形。
+ *
+ * @returns 曲线几何缺失（没有盒或没有矩阵）时返回 `null`，由调用方退回 AABB。
+ */
+function curveHitsArea(
+  entity: ComposeEntity,
+  entityId: string,
+  index: StageSceneIndex,
+  area: StageRect,
+  hitTest: StageMarqueeHitTest,
+): boolean | null {
+  const curve = getComposeCurve(entity)
+  const box = curve ? index.layoutSnapshot.boxes[entityId] : undefined
+  const matrix = curve ? index.getWorldMatrix(entityId) : null
+  if (!curve || !box || !matrix) return null
+  const projected = projectComposeCurveToBox(curve, box)
+  const segments = composeCurveSegments(projected).map((segment) => ({
+    start: applyMatrix(matrix, segment.start),
+    end: applyMatrix(matrix, segment.end),
+  }))
+  if (hitTest === 'contain') {
+    // 包含判定看的是几何本身而不是盒：旋转起来之后 AABB 比图形大，拿它判会把框住了整条线的
+    // 手势判成没框住。弧已被拍成线段，因此端点全在框内即可。
+    const inside = (point: { readonly x: number; readonly y: number }) =>
+      point.x >= area.x && point.x <= area.x + area.width
+      && point.y >= area.y && point.y <= area.y + area.height
+    return segments.length > 0 && segments.every(({ start, end }) => inside(start) && inside(end))
+  }
+  if (segments.some((segment) => composeSegmentIntersectsRect(segment, area))) return true
+  if (getComposeCurveFill(entity) === null) return false
+  // 框整个落在填充区里时不与任何一段相交，但那块面积是用户看见的墨。取框心即可——框的四条边
+  // 若跨出了形状，上面那一步已经命中了。
+  const center = applyMatrix(invertMatrix(matrix), {
+    x: area.x + area.width / 2,
+    y: area.y + area.height / 2,
+  })
+  return isPointInsideComposeCurve(projected, center)
+}
+
+/**
  * 解析一次框选命中的 Entity ID。
  *
  * @remarks
- * 判定几何使用节点的世界 AABB。旋转节点的 AABB 大于其实际图形，因此 `contain` 对旋转节点
- * 偏严格——这是当前变更有意接受的取舍，真实路径级判定留待后续变更。
+ * 判定几何按 Entity 类型分流，与 `StageSceneIndex.entityAtPoint` 已有的分流形状一致：盒模型
+ * 用节点的世界 AABB，带 `Curve` 的 Entity 按几何。
+ *
+ * 非曲线 Entity 的**旋转仍用 AABB**：旋转节点的 AABB 大于其实际图形，因此 `contain` 对它们
+ * 偏严格。这是一处明写的欠账——补它需要矩形对凸四边形的判定（另一套机器），而可见症状与两处
+ * 报障都在曲线上。
  *
  * hidden 与 locked 节点永远不进入结果，`subtract` 也不会因此把它们从既有选区中漏掉，因为
  * 它们本就不该出现在既有选区里。
@@ -108,6 +174,8 @@ export function resolveMarqueeSelection(query: StageMarqueeQuery): readonly stri
         if (!entity || !bounds) return false
         if (!index.isVisible(entityId) || getComposeLock(entity).locked) return false
         if (isComposeFrameEntity(entity) && rectContains(bounds, area)) return false
+        const byGeometry = curveHitsArea(entity, entityId, index, area, hitTest)
+        if (byGeometry !== null) return byGeometry
         return hitTest === 'contain'
           ? rectContains(area, bounds)
           : rectsIntersect(area, bounds)

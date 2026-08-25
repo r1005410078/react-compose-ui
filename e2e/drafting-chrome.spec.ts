@@ -132,7 +132,10 @@ test('OpenSpec: materials / 曲线线宽 / 放大后描边的实际触达不变'
 
   // 线宽是显示宽度（AutoCAD 的 lineweight），不跟着图纸放大——否则一根 2px 的线在 4 倍下
   // 变成 8px 的色带，而用户放大恰恰是为了看清结构。容 1px 的光栅化误差。
-  expect(before.reach).toBeGreaterThan(3)
+  //
+  // 下限只用来挡住「量了个零」——沿 y 扫出来的触达等于命中半宽除以线的倾角余弦，具体是几
+  // 取决于这条线的角度；本条真正断言的是**放大前后不变**。
+  expect(before.reach).toBeGreaterThanOrEqual(2)
   expect(Math.abs(after.reach - before.reach)).toBeLessThanOrEqual(1)
 })
 
@@ -165,6 +168,7 @@ test('OpenSpec: materials / 曲线的盒不裁描边 / 水平线在容差内点�
     return found
   })
 
-  // 命中 stroke 宽 12（屏幕像素），半宽 6。裁剪生效时这个数是 0。
-  expect(reach).toBeGreaterThanOrEqual(4)
+  // 命中 stroke 的半宽是 COMPOSE_CURVE_PICK_TOLERANCE（屏幕像素）。裁剪生效时这个数是 0，
+  // 而本条要挡的正是「盒把描边裁没了」，不是容差的具体大小。
+  expect(reach).toBeGreaterThanOrEqual(2)
 })

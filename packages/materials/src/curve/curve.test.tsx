@@ -6,6 +6,7 @@ import {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  COMPOSE_CURVE_PICK_TOLERANCE,
   getComposeCurve,
   getComposeLayoutItem,
   type ComposeEntity,
@@ -70,8 +71,12 @@ describe('curve 物料', () => {
     const hit = screen.getByTestId('compose-material-curve-hit')
     expect(hit).toHaveAttribute('stroke', 'transparent')
     expect(hit).toHaveAttribute('pointer-events', 'stroke')
-    // 细线的视觉宽度只有 2px，命中宽度必须显著更大，否则用户会反复点空。
-    expect(Number(hit.getAttribute('stroke-width'))).toBeGreaterThanOrEqual(12)
+    // 宽度是容差的两倍，且事实来源在 core——本包另取一个数会与 Stage 的拾取框漂移。
+    expect(Number(hit.getAttribute('stroke-width')))
+      .toBe(COMPOSE_CURVE_PICK_TOLERANCE * 2)
+    // 命中层的 cap 与描边层刻意不同：`round` 会让命中区从两端各伸出半个带宽，成为包围盒的
+    // 超集，而端点正是接线图上密度最高的地方。
+    expect(hit).toHaveAttribute('stroke-linecap', 'butt')
   })
 
   it('Inspector 编辑端点派发几何漏斗命令，坐标是 parent 局部', () => {
@@ -237,7 +242,7 @@ describe('curve 物料的弧与多段线渲染', () => {
 
     // 命中容差表达的是鼠标能点多准，同样是屏幕量。
     expect(screen.getByTestId('compose-material-curve-hit').getAttribute('style'))
-      .toContain('calc(12px / var(--compose-canvas-zoom, 1))')
+      .toContain(`calc(${COMPOSE_CURVE_PICK_TOLERANCE * 2}px / var(--compose-canvas-zoom, 1))`)
   })
 
   it('虚线间隔留在世界单位', () => {

@@ -368,15 +368,18 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * 拾取框的半边长（CSS 像素）。
    *
    * @remarks
-   * **它只表达靶区位置，不参与任何命中判定**。别处的拾取框半边长往往等于点选命中容差，
-   * 因此「框压住了就点得中」在那些地方成立；而 Stage 的点选是 DOM 驱动的（浏览器决定命中），
-   * 容差散在各物料的 stroke 宽度里，没有全局的那个数。写明这一条，避免后来者去找一个不存在
-   * 的容差，或者为了让框「准确」而发明一个。
+   * **它只表达靶区位置，不参与任何命中判定**——判定始终由物料的 stroke 完成，框只是把同一个
+   * 数画出来。
    *
-   * 默认 6（框宽 12px）与顶点模式那一档（11.3px）对齐：同一个东西在两处差一大圈时，用户会
-   * 以为它们含义不同。AutoCAD 的 `PICKBOX` 折算成 CSS 像素也在这个量级。
+   * 默认值就是 `COMPOSE_CURVE_PICK_TOLERANCE`：这一档用户选的就是曲线，而曲线的命中层宽度
+   * 正是由它推出的。`PICKBOX` 在 AutoCAD 里本来也是这两件事的同一个数。框比真实容差大好几倍
+   * 等于教用户瞄错。
    *
-   * @defaultValue 6
+   * 它与顶点模式那一档**不为了看起来一样大而互相迁就**：那个框由夹点的命中半径派生，两档
+   * 各自表达自己那一档真实抓得到的范围。夹点本来就是比发丝线更大的目标，两个框不一样大是
+   * 对的。
+   *
+   * @defaultValue COMPOSE_CURVE_PICK_TOLERANCE
    */
   readonly pickRadius?: number
   /** 共享的 headless 交互 controller；省略时 Stage 创建私有实例。 */

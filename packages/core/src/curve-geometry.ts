@@ -25,6 +25,20 @@ export interface ComposeSegmentShape {
 }
 
 /**
+ * 一个轴对齐矩形。
+ *
+ * @remarks
+ * 与 `StageRect` 同形，但本模块不依赖任何上层包：判定只做算术，坐标空间由调用方保证一致。
+ * @public
+ */
+export interface ComposeRectShape {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/**
  * 一段圆弧。
  *
  * @remarks
@@ -306,6 +320,58 @@ export function composePolylineSegments(
     segments.push({ start: vertices[vertices.length - 1]!, end: vertices[0]! })
   }
   return segments
+}
+
+/**
+ * 线段与轴对齐矩形是否相交（含线段完全落在矩形内）。
+ *
+ * @remarks
+ * 框选按几何而不是按包围盒判定时用它：一条对角线的外接矩形里绝大部分是空的，一个从不碰线身
+ * 的框不该选中它。
+ *
+ * 用 Liang-Barsky 参数化裁剪而不是「逐条边做线段相交」：后者要单独处理线段完全落在框内
+ * （不与任何一条边相交）与共线两种情形，而参数化把三者收进同一段循环。
+ *
+ * 退化线段（起止点重合）自然退化成「点是否落在矩形内」——四个 `p` 全为零，判定只剩 `q`
+ * 的符号。这一支不是巧合，是这个算法的既有性质，因此不需要在外面另加分支。
+ *
+ * 两个入参 MUST 处在同一坐标空间；本模块只做算术，不认识任何变换。
+ *
+ * @public
+ */
+export function composeSegmentIntersectsRect(
+  segment: ComposeSegmentShape,
+  rect: ComposeRectShape,
+): boolean {
+  const dx = segment.end.x - segment.start.x
+  const dy = segment.end.y - segment.start.y
+  const directions = [-dx, dx, -dy, dy]
+  const distances = [
+    segment.start.x - rect.x,
+    rect.x + rect.width - segment.start.x,
+    segment.start.y - rect.y,
+    rect.y + rect.height - segment.start.y,
+  ]
+  let enter = 0
+  let exit = 1
+  for (let axis = 0; axis < 4; axis += 1) {
+    const direction = directions[axis]!
+    const distance = distances[axis]!
+    if (direction === 0) {
+      // 与该边平行：落在外侧就永远进不来，落在内侧则这一维不约束参数区间。
+      if (distance < 0) return false
+      continue
+    }
+    const ratio = distance / direction
+    if (direction < 0) {
+      if (ratio > exit) return false
+      if (ratio > enter) enter = ratio
+    } else {
+      if (ratio < enter) return false
+      if (ratio < exit) exit = ratio
+    }
+  }
+  return true
 }
 
 /**

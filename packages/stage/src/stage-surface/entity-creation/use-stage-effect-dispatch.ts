@@ -71,7 +71,7 @@ export interface StageEffectDispatchParams {
   readonly onPaintSamplingComplete?: () => void
   readonly onEditablePathChange?: (change: ComposeStageEditablePathChange) => void
   /** 请求进入曲线几何编辑会话；会话住在 Stage 自己这里，宿主不参与。 */
-  readonly onEnterGeometryEditing?: (entityId: string) => void
+  readonly onEnterGeometryEditing?: (entityId: string, worldPoint?: StagePoint) => void
   readonly onEditablePathVertexToggle?: (vertexId: string) => void
   /** 指针会话能力提供的两个动作；效果分派只负责转交。 */
   readonly capturePointer: (root: HTMLDivElement, pointerId: number) => void
@@ -412,7 +412,7 @@ export function useStageEffectDispatch(
           return
         }
         if (effect.type === 'geometry-editing.enter') {
-          latestRef.current.onEnterGeometryEditing?.(effect.entityId)
+          latestRef.current.onEnterGeometryEditing?.(effect.entityId, effect.worldPoint)
           return
         }
         if (effect.type === 'path.vertex-toggle') {

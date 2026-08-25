@@ -25,6 +25,7 @@ import {
   isComposeFullCircle,
   pointToComposeArcDistance,
   pointToComposeSegmentDistance,
+  type ComposeSegmentShape,
 } from './curve-geometry'
 import { resolveComposeAppearance } from './appearance'
 import { roundComposeGeometry } from './geometry-precision'
@@ -104,6 +105,26 @@ export type ComposeCurve = ComposeLineCurve | ComposeArcCurve | ComposePolylineC
  * @public
  */
 export const COMPOSE_CURVE_MIN_EXTENT = 1
+
+/**
+ * 曲线的拾取容差：点到几何的距离，单位是**屏幕 CSS 像素**。
+ *
+ * @remarks
+ * 值照抄 AutoCAD `PICKBOX` 的默认值。它是抄来的而不是推来的——容差的对错只能在真实密度的
+ * 图纸上判断，而这个默认值是几十年密集图纸用出来的。同一个仓库里已有反例：十字线臂长曾按
+ * 「臂长与拾取框的比例」推导，理由听起来很硬，推出的值在实机上仍明显偏长，最终回到
+ * `CURSORSIZE` 的默认值。
+ *
+ * 它住在 `core` 而不是各消费者本地，因为读它的是两个**互不依赖**的包：`materials`（命中层
+ * 的 stroke 宽度）与 `stage`（点选那一档拾取框的默认半边长）。这与
+ * `COMPOSE_SCENE_SIZE_PRESETS` 是同一条判断——各写一份必然漂移，而这里漂移的症状恰恰是
+ * 「画出来的框与真实容差对不上」。
+ *
+ * **是屏幕量而不是世界量**：它表达鼠标能瞄多准，不随画布缩放变化。屏幕像素到世界单位的换算
+ * 留在各消费者，`core` 因此不需要认识 DOM 或缩放。
+ * @public
+ */
+export const COMPOSE_CURVE_PICK_TOLERANCE = 3
 
 /** Curve 候选值的字段级问题。 @internal */
 export interface ComposeCurveValidationIssue {
@@ -455,6 +476,34 @@ export function distanceToComposeCurve(
     (nearest, segment) => Math.min(nearest, pointToComposeSegmentDistance(segment, point)),
     Number.POSITIVE_INFINITY,
   )
+}
+
+/**
+ * 把曲线归约成一组线段。
+ *
+ * @remarks
+ * 供框选按几何判定使用：把「框与曲线相交吗」收敛成「框与这些线段中的任意一条相交吗」，
+ * 三种 `kind` 因此共用同一个下游判定。
+ *
+ * 弧走 {@link flattenComposeArc} 拍扁。**弦高误差是有意接受的**：同一条选择已经在非等比缩放
+ * 的渲染上做过，而框选产出的是「选中或不选中」的布尔判断，误差不以任何方式呈现给用户。
+ *
+ * **返回的不是特征点集合**：它只回答「几何占据了哪些线段」，端点、中点与象限点的优先级语义
+ * 与本函数无关，那由捕捉自己按 `kind` 分派。
+ *
+ * @public
+ */
+export function composeCurveSegments(curve: ComposeCurve): readonly ComposeSegmentShape[] {
+  if (curve.kind === 'line') return [{ start: curve.start, end: curve.end }]
+  if (curve.kind === 'arc') return flattenComposeArc(curve)
+  const segments = composePolylineSegments(curve.vertices, curve.closed)
+  // 单顶点多段线（校验会拒，但判定不该因此认为它不存在）退化成一条零长度线段：
+  // 下游的裁剪判定对它天然退化成「点是否落在框内」。
+  if (segments.length === 0) {
+    const only = curve.vertices[0]
+    return only ? [{ start: only, end: only }] : []
+  }
+  return segments
 }
 
 /**

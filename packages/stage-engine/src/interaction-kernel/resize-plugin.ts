@@ -143,7 +143,11 @@ export function createStageResizePlugin(): StageInteractionPlugin {
         && target !== null
         && context.isGeometryEditable?.(target) === true
       ) {
-        ctx.apply([{ type: 'geometry-editing.enter', entityId: target }])
+        ctx.apply([{
+          type: 'geometry-editing.enter',
+          entityId: target,
+          worldPoint: screenToWorld(event.point, context.viewport),
+        }])
         return 'consumed'
       }
       const targets = resolveTransformTargets({

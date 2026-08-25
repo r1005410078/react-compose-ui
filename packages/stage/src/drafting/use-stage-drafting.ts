@@ -611,6 +611,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
     [resolvedPointer, viewport],
   )
 
+  // 命令正在请求一个点：捕捉标记与十字线形态都读它，两处不得各判一次。
+  const awaitingPoint = enabled && prompt?.accepts.includes('point') === true
+
   return {
     index,
     // 几何编辑的夹点拖动读同一个解算：两份实现的分叉症状是「画线时吸端点、拖顶点时不吸」，
@@ -621,14 +624,26 @@ export function useStageDrafting(options: StageDraftingOptions) {
     selectionCount: enabled && prompt?.accepts.includes('selection') === true
       ? selectedIds.length
       : null,
-    awaitingPoint: enabled && prompt?.accepts.includes('point') === true,
+    awaitingPoint,
     awaitingSelection: enabled && prompt?.accepts.includes('selection') === true,
     pointerType,
     prompt: enabled ? prompt : null,
     notice: enabled ? notice : null,
     ortho,
     snapEnabled,
-    snap: enabled ? snap : null,
+    /**
+     * 捕捉标记读的候选。
+     *
+     * @remarks
+     * **只在正在取点时给出**：命令等待取点，或几何编辑里有夹点被作用着（拖动或点亮）。
+     * 几何编辑的空闲档没有落点可言——命令行提示就是「命令：」——而标记回答的正是「落点吸上了
+     * 什么」，在别的对象的端点上亮起它会让用户以为那些对象也能改形状。AutoCAD 的对象捕捉标记
+     * 同样只在命令正在请求一个点时出现。
+     *
+     * 判据读的是 `gripTarget` 这**同一份事实**，拾取框画不画读的也是它：两处各判一次必然
+     * 漂移，而漂移的症状是「框收起来了、标记还亮着」。
+     */
+    snap: enabled && (awaitingPoint || gripTarget !== null) ? snap : null,
     rubberBand,
     // 拖动与点亮共用同一份事实：拾取框画不画、哪个夹点是热的、排除哪个点都读它。
     gripTarget,

@@ -186,7 +186,9 @@ export type {
 } from './wire'
 export {
   COMPOSE_CURVE_MIN_EXTENT,
+  COMPOSE_CURVE_PICK_TOLERANCE,
   collectComposeCurveValidationIssues,
+  composeCurveSegments,
   composeCurveBounds,
   composeCurveBoxScale,
   composeCurvePoints,
@@ -212,6 +214,7 @@ export {
   composeArcQuadrants,
   composeArcThroughPoints,
   composePolylineSegments,
+  composeSegmentIntersectsRect,
   composeSegmentMidpoint,
   composeSquaredDistance,
   flattenComposeArc,
@@ -223,6 +226,7 @@ export {
 export type {
   ComposeArcShape,
   ComposePlanarPoint,
+  ComposeRectShape,
   ComposeSegmentShape,
 } from './curve-geometry'
 export {

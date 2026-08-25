@@ -25,6 +25,7 @@ import type {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  COMPOSE_CURVE_PICK_TOLERANCE,
   type ComposeLayoutSnapshot,
   type ComposeSize,
 } from '@compose-ui/core'
@@ -176,7 +177,7 @@ function ComposeStageReady({
   autoFitActiveFrame = true,
   showCrosshair = true,
   crosshairSize = 5,
-  pickRadius = 6,
+  pickRadius = COMPOSE_CURVE_PICK_TOLERANCE,
   interactionController,
   idFactory = defaultId,
   id,
@@ -470,7 +471,19 @@ function ComposeStageReady({
    * 它们只在事件回调里调用，那时 ref 早已就位。
    */
   const geometryRef = useRef<StageGeometryEditing | null>(null)
-  const enterGeometryEditing = useCallback((entityId: string) => {
+  /**
+   * 进入几何编辑会话，并用**触发它的那次指针事件**给十字光标播种。
+   *
+   * @remarks
+   * 指针位置只在需要绘制时才跟踪，因此会话开始那一刻手上还没有本次跟踪期内的任何观测。
+   * 不播种的话十字线会停在上一次跟踪留下的位置——那可能是上一条命令最后一次点击的地方，
+   * 与用户刚刚双击的位置相差很远，直到他动一下鼠标才跳过来。
+   *
+   * 由非指针路径进入时（画完曲线的回灌、`VERTEX` 命令）缺席，此时不画，直到第一次
+   * `pointermove`：浏览器不提供查询指针当前位置的接口，先不画是唯一诚实的答案。
+   */
+  const enterGeometryEditing = useCallback((entityId: string, worldPoint?: StagePoint) => {
+    if (worldPoint) draftingRef.current?.setPointer(worldPoint)
     geometryRef.current?.enter(entityId)
   }, [])
   const isGeometryEditable = useCallback(
@@ -591,7 +604,8 @@ function ComposeStageReady({
     onDrawn: setLastDrawn,
     onDraftingPoint: (point) => { draftingRef.current?.handlePoint(point) },
     onToolChange,
-    onEnterGeometryEditing: geometryEditing.enter,
+    // 与 `VERTEX` 命令共用同一个入口：播种十字光标那一步因此不会只在其中一条路径上生效。
+    onEnterGeometryEditing: enterGeometryEditing,
     // 几何编辑的夹点由 Stage 自己写文档；宿主传入的那条路径仍然只上报，事实来源在宿主。
     onEditablePathChange: (change) => {
       if (geometryRef.current?.handlePathChange(change) === true) return
@@ -794,6 +808,21 @@ function ComposeStageReady({
     draftingSession.setPointer(screenToWorld(local, viewport), event.pointerType)
   }, [draftingSession, viewport])
   const clearPointer = useCallback(() => { draftingSession.setPointer(null) }, [draftingSession])
+
+  /**
+   * 跟踪停止时清掉已记录的指针位置。
+   *
+   * @remarks
+   * 与进入时的播种是**一对**，缺一不可。只清不播种：双击进入几何编辑后十字线要等用户动一下
+   * 鼠标才出现，而那一下双击本来就带着坐标。只播种不清：漏掉任何一条进入路径就又画在旧位置
+   * 上，而这个缺陷只在跑过一次会话之后才出现，最容易活下来。
+   *
+   * 两件一起做之后，不变量收成一句：**十字光标只画在本次跟踪开始之后观测到的位置上。**
+   */
+  const setDraftingPointer = draftingSession.setPointer
+  useEffect(() => {
+    if (!pointerTracked) setDraftingPointer(null)
+  }, [pointerTracked, setDraftingPointer])
 
   const rootHandlers = useStageRootHandlers({
     clearPointer,

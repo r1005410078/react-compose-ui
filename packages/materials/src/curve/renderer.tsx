@@ -1,4 +1,5 @@
 import {
+  COMPOSE_CURVE_PICK_TOLERANCE,
   composeArcEndpoints,
   composeCurveViewBox,
   getComposeCurve,
@@ -14,8 +15,15 @@ import { DEFAULT_CURVE_GEOMETRY } from './defaults'
 type StrokeLinecap = 'butt' | 'round' | 'square'
 type Marker = 'none' | 'arrow'
 
-/** 命中 stroke 的最小屏幕宽度；细线只有 1–2px，按视觉宽度取命中会让用户反复点空。 */
-const MIN_HIT_WIDTH = 12
+/**
+ * 命中 stroke 的最小屏幕宽度：容差的两倍。
+ *
+ * @remarks
+ * 细线只有 1–2px，按视觉宽度取命中会让用户反复点空。宽度由 `core` 的容差常量推出而**不在
+ * 本包另取一个数**——同一个常量还是 Stage 拾取框的来源，各写一份的症状是「画出来的框与真实
+ * 容差对不上」。
+ */
+const MIN_HIT_WIDTH = COMPOSE_CURVE_PICK_TOLERANCE * 2
 
 function linecap(value: unknown): StrokeLinecap {
   return value === 'round' || value === 'square' ? value : 'butt'
@@ -145,8 +153,8 @@ function geometryElement(
  * 变换发生在 SVG 里面还是外面；不写清楚，下一个人会把这里的 `vector-effect` 当成无效代码
  * 删掉。
  *
- * 命中宽度跟着线宽一起除：`MIN_HIT_WIDTH` 表达的是鼠标容差，那本来就是屏幕量，留在世界单位
- * 会让它在缩小时不够点、放大时抢走旁边的东西。
+ * 命中宽度跟着线宽一起除：它表达的是鼠标容差，那本来就是屏幕量，留在世界单位会让它在缩小时
+ * 不够点、放大时抢走旁边的东西。事实来源是 `core` 的 `COMPOSE_CURVE_PICK_TOLERANCE`。
  *
  * **填充来自 `Appearance.backgroundPaint`，不是 Renderer prop**：它要参与命中，而命中路径读的
  * 字段必须是文档级契约。读取只走 `getComposeCurveFill`，`stage-engine` 的索引路径读的是同一个
@@ -214,7 +222,11 @@ export function CurveRenderer({ entity, props }: ComposeRendererProps) {
         fill: fill ? 'transparent' : 'none',
         vectorEffect: 'non-scaling-stroke',
         stroke: 'transparent',
-        strokeLinecap: 'round',
+        // 命中层的 cap 与描边层**刻意不同**：`round` 会让命中区从两端各伸出半个带宽，使它
+        // 成为包围盒的超集，而这条能力的整个理由是「盒里绝大部分是空的」。端点还是接线图上
+        // 密度最高的地方——`LINE` 逐段落地、相邻段共享端点，越过端点意味着它们互相偷点击，
+        // 而这个错误在屏幕上完全不可见。拐角不受影响：那由 `stroke-linejoin` 承担。
+        strokeLinecap: 'butt',
         strokeWidth: Math.max(MIN_HIT_WIDTH, strokeWidth * 2),
         style: screenWidth(Math.max(MIN_HIT_WIDTH, strokeWidth * 2)),
       })}

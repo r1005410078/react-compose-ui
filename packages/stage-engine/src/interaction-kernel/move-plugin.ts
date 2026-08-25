@@ -231,7 +231,13 @@ export function createStageEntitySelectMovePlugin(): StageInteractionPlugin {
       }
       // 文字优先于几何：一次双击只能进一个会话，而两者不会同时成立（曲线不是文字）。
       if (doubleClick && context.isGeometryEditable?.(entity.id) === true) {
-        ctx.apply([{ type: 'geometry-editing.enter', entityId: entity.id }])
+        ctx.apply([{
+          type: 'geometry-editing.enter',
+          entityId: entity.id,
+          // `event.point` 是图面局部屏幕坐标；effect 上带的是世界坐标，与 `path.change`
+          // 的 `worldPoint` 同单位，宿主因此不需要认识这一层换算。
+          worldPoint: screenToWorld(event.point, context.viewport),
+        }])
         return 'consumed'
       }
 
