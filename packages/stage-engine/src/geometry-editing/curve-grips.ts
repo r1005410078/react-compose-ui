@@ -27,13 +27,13 @@ export interface StageCurveGrip {
    * 呈现角色。
    *
    * @remarks
-   * `vertex` 是一个可拖的既有自由度，`insert` 是「按下去会在这里插入一个新顶点」。两者
-   * 长得一样而按下去做的事不同，是最难自己发现的一类缺陷，因此角色由派生这一侧给出，
-   * 渲染层照它画形状即可，不必认识多段线。
+   * `vertex` 移动一个点，`segment` 平移它所在的那一整段。两者长得一样而按下去做的事不同，
+   * 是最难自己发现的一类缺陷，因此角色由派生这一侧给出，渲染层照它画形状即可，不必认识
+   * 多段线。
    */
   readonly role: StageCurveGripRole
   /**
-   * 方向角（度），只有 `insert` 才有。
+   * 方向角（度），只有 `segment` 才有。
    *
    * @remarks
    * 由这里给出而不是让渲染层从邻居推算：渲染层拿到的是一串**扁平的顶点**，它不知道谁和谁
@@ -46,7 +46,7 @@ export interface StageCurveGrip {
 }
 
 /** 夹点的呈现角色。 @public */
-export type StageCurveGripRole = 'vertex' | 'insert'
+export type StageCurveGripRole = 'vertex' | 'segment'
 
 /** 弧夹点的稳定 id。 */
 const ARC_CENTER = 'center'
@@ -71,10 +71,10 @@ const VERTEX_PREFIX = 'v'
  * 多段线段中点 id 的前缀；下标即**段**的顺序（第 i 段从顶点 i 连到顶点 i+1）。
  *
  * @remarks
- * 与顶点用不同前缀：求解要按 id 分派到两种完全不同的操作（移动一个既有顶点 / 插入一个新
- * 顶点），而它手上只有 id。
+ * 与顶点用不同前缀：求解要按 id 分派到两种完全不同的操作（移动一个既有顶点 / 平移一整段），
+ * 而它手上只有 id。
  */
-const INSERT_PREFIX = 'm'
+const SEGMENT_PREFIX = 'm'
 
 const TO_DEGREES = 180 / Math.PI
 
@@ -110,23 +110,19 @@ function localGrips(curve: ComposeCurve): readonly StageCurveGrip[] {
     // 中点夹点表达的是「按中点捕捉着移动」，而不是盒拖动的第二个入口：盒拖动走
     // `snapTranslation`，吸的是其他 Entity 的包围盒参考线且逐轴独立；这里走落点解算，
     // 吸的是二维特征点，带 `port > endpoint > midpoint > center > quadrant` 的优先级与
-    // 捕捉标记。多段线的段中点**留给顶点增删**，因此这里只有直线有。
-    const mid = { x: (curve.start.x + curve.end.x) / 2, y: (curve.start.y + curve.end.y) / 2 }
+    // 捕捉标记。两点直线只有一段，因此它与多段线的段中点是**同一句话**的退化情形。
     return [
       vertex(START, curve.start),
-      vertex(MOVE, mid),
+      segmentGrip(MOVE, curve.start, curve.end),
       vertex(END, curve.end),
     ]
   }
   if (curve.kind === 'polyline') {
     return [
       ...curve.vertices.map((point, index) => vertex(`${VERTEX_PREFIX}${index}`, point)),
-      ...polylineSegments(curve.vertices, curve.closed).map(({ start, end }, index) => ({
-        id: `${INSERT_PREFIX}${index}`,
-        point: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
-        role: 'insert' as const,
-        angle: Math.atan2(end.y - start.y, end.x - start.x) * TO_DEGREES,
-      })),
+      ...polylineSegments(curve.vertices, curve.closed).map(
+        ({ start, end }, index) => segmentGrip(`${SEGMENT_PREFIX}${index}`, start, end),
+      ),
     ]
   }
   const center = vertex(ARC_CENTER, curve.center)
@@ -136,6 +132,16 @@ function localGrips(curve: ComposeCurve): readonly StageCurveGrip[] {
   if (isComposeFullCircle(curve)) return [center, mid]
   const [start, end] = composeArcEndpoints(curve)
   return [center, vertex(START, start), vertex(END, end), mid]
+}
+
+/** 一段的中点夹点：位置是中点，方向角是这一段的走向。 */
+function segmentGrip(id: string, start: StagePoint, end: StagePoint): StageCurveGrip {
+  return {
+    id,
+    point: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
+    role: 'segment',
+    angle: Math.atan2(end.y - start.y, end.x - start.x) * TO_DEGREES,
+  }
 }
 
 /**
@@ -264,18 +270,30 @@ export function applyStageCurveGrip(
     return null
   }
   if (curve.kind === 'polyline') {
-    if (gripId.startsWith(INSERT_PREFIX)) {
-      const segment = Number(gripId.slice(INSERT_PREFIX.length))
-      const segments = polylineSegments(curve.vertices, curve.closed).length
-      if (!Number.isInteger(segment) || segment < 0 || segment >= segments) return null
+    if (gripId.startsWith(SEGMENT_PREFIX)) {
+      const index = Number(gripId.slice(SEGMENT_PREFIX.length))
+      const segments = polylineSegments(curve.vertices, curve.closed)
+      const segment = segments[index]
+      if (!Number.isInteger(index) || !segment) return null
       /*
-       * 每次求解只插一个：拖动期每一帧都拿**文档**里的几何加同一个 id 重求一次
-       * （见 `stageCurveBoxGeometry`），因此 `m2` 在任何一帧都表示「在第 2 段中间插一个」。
-       * 提交之后它变成一个普通的 `v{i}`，此后与别的顶点没有任何差别。
+       * 平移**这一段**：两个端点同加一个位移，相邻段因为共用端点自动跟着伸缩，顶点数不变。
+       *
+       * 位移按**中点**到落点算，与直线的中点夹点一致：落点被捕捉纠正之后，段中点精确落在
+       * 那个特征点上。按指针裸坐标算会让段中点停在离目标几个像素的地方，而用户瞄的正是
+       * 那个点。
        */
-      const vertices = [...curve.vertices]
-      vertices.splice(segment + 1, 0, position(point))
-      return { ...curve, vertices }
+      const deltaX = point.x - (segment.start.x + segment.end.x) / 2
+      const deltaY = point.y - (segment.start.y + segment.end.y) / 2
+      // 第 i 段的两个端点是 `i` 与 `(i + 1) % 顶点数`：取模只在闭合多段线的收尾段上起作用
+      // （它接回第一个顶点），开放多段线的段下标最大只到 `顶点数 - 2`，取模不改变任何东西。
+      const tail = (index + 1) % curve.vertices.length
+      const moved = new Set([index, tail])
+      return {
+        ...curve,
+        vertices: curve.vertices.map((vertex, at) => (moved.has(at)
+          ? { x: vertex.x + deltaX, y: vertex.y + deltaY }
+          : vertex)),
+      }
     }
     if (!gripId.startsWith(VERTEX_PREFIX)) return null
     const target = Number(gripId.slice(VERTEX_PREFIX.length))

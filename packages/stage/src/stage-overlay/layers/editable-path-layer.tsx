@@ -1,8 +1,8 @@
 import { worldToScreen } from '@compose-ui/stage-engine'
 import {
   LINE_ENDPOINT_HIT_RADIUS,
-  PATH_INSERT_LENGTH,
-  PATH_INSERT_THICKNESS,
+  PATH_SEGMENT_LENGTH,
+  PATH_SEGMENT_THICKNESS,
   PATH_TANGENT_HANDLE_RADIUS,
   PATH_VERTEX_SIZE,
 } from '../overlay-geometry'
@@ -100,8 +100,8 @@ function EditablePathLayer({
             )}
           />
           {/*
-            * 形状按角色分：既有自由度画方块，插入位置画一条沿段方向的条形。两个夹点长得
-            * 一样而按下去做的事不同，是最难自己发现的一类缺陷。
+            * 形状按角色分：移动一个点的画方块，平移一整段的画一条沿段方向的条形。两个夹点
+            * 长得一样而按下去做的事不同，是最难自己发现的一类缺陷。
             *
             * 菱形留给运动路径——它的理由是「与时间线关键帧同形」，而那条理由只在那里成立：
             * 那里的顶点**就是**关键帧，曲线的顶点不是。角色缺省即 `vertex`，因此宿主传入的
@@ -114,13 +114,13 @@ function EditablePathLayer({
             data-vertex-hot={vertex.id === hotVertexId || undefined}
             data-vertex-mode={vertex.mode}
             data-vertex-role={vertex.role}
-            height={vertex.role === 'insert' ? PATH_INSERT_THICKNESS : PATH_VERTEX_SIZE}
+            height={vertex.role === 'segment' ? PATH_SEGMENT_THICKNESS : PATH_VERTEX_SIZE}
             transform={`rotate(${
-              vertex.role === 'insert' ? vertex.angle : vertex.role === 'keyframe' ? 45 : 0
+              vertex.role === 'segment' ? vertex.angle : vertex.role === 'keyframe' ? 45 : 0
             } ${vertex.screen.x} ${vertex.screen.y})`}
-            width={vertex.role === 'insert' ? PATH_INSERT_LENGTH : PATH_VERTEX_SIZE}
-            x={vertex.screen.x - (vertex.role === 'insert' ? PATH_INSERT_LENGTH : PATH_VERTEX_SIZE) / 2}
-            y={vertex.screen.y - (vertex.role === 'insert' ? PATH_INSERT_THICKNESS : PATH_VERTEX_SIZE) / 2}
+            width={vertex.role === 'segment' ? PATH_SEGMENT_LENGTH : PATH_VERTEX_SIZE}
+            x={vertex.screen.x - (vertex.role === 'segment' ? PATH_SEGMENT_LENGTH : PATH_VERTEX_SIZE) / 2}
+            y={vertex.screen.y - (vertex.role === 'segment' ? PATH_SEGMENT_THICKNESS : PATH_VERTEX_SIZE) / 2}
           />
         </g>
       ))}

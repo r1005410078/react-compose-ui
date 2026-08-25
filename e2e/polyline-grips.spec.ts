@@ -49,6 +49,15 @@ function vertexCount(stroke: Locator) {
   return stroke.getAttribute('points').then((raw) => (raw ? raw.trim().split(/\s+/).length : 0))
 }
 
+/** `points` 里的顶点，按几何顺序。 */
+async function points(stroke: Locator) {
+  const raw = (await stroke.getAttribute('points')) ?? ''
+  return raw.trim().split(/\s+/).filter(Boolean).map((pair) => {
+    const [x, y] = pair.split(',')
+    return { x: Number(x), y: Number(y) }
+  })
+}
+
 test('OpenSpec: stage-engine / 多段线夹点 / 顶点之外还有每段的中点', async ({ page }) => {
   const ctx = await openEditor(page)
   await drawPolyline(page, ctx)
@@ -60,22 +69,44 @@ test('OpenSpec: stage-engine / 多段线夹点 / 顶点之外还有每段的中�
   await expect(ctx.stage.locator('[data-testid^="stage-path-vertex-hit-"]')).toHaveCount(5)
 })
 
-test('OpenSpec: stage-engine / 多段线夹点 / 拖段中点插入一个顶点', async ({ page }) => {
+test('OpenSpec: stage-engine / 多段线夹点 / 拖段中点平移那一段', async ({ page }) => {
   const ctx = await openEditor(page)
   await drawPolyline(page, ctx)
   const stroke = ctx.strokes.first()
   expect(await vertexCount(stroke)).toBe(3)
+  const before = await points(stroke)
 
+  /*
+   * 跨过双击窗口再按下：进入几何编辑用的双击就落在 `m0` 上（第一段的中点正是双击点），
+   * 紧接着的按下会被算成同一串连击里的下一击。症状很有欺骗性——几何一动不动，看起来像
+   * 求解没生效。
+   */
+  await page.waitForTimeout(600)
   const grip = await boxOf(ctx.stage.getByTestId('stage-path-vertex-hit-m0'))
   const from = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 }
-  const to = ctx.at(240, 480)
+  const to = ctx.at(240, 500)
   await page.mouse.move(from.x, from.y)
   await page.mouse.down()
   await page.mouse.move(to.x, to.y, { steps: 6 })
   await page.mouse.up()
 
-  // 判别点是**四**：拖段中点是插入而不是平移。平移的话顶点数不变。
-  await expect.poll(async () => vertexCount(stroke)).toBe(4)
+  // 顶点数不变是第一个判别点：插入的话会变成四个。
+  await expect.poll(async () => vertexCount(stroke)).toBe(3)
+  const after = await points(stroke)
+
+  /*
+   * 读的是**顶点之间的向量**而不是顶点坐标：几何每次提交都会按紧包围盒重新归一化，因此
+   * 「某个顶点没动」在这套坐标里根本观察不到——所有顶点都会跟着盒一起平移。
+   *
+   * 平移的判别性落在两句上：被拖那一段的向量原封不动（长度与方向都没变），而相邻那一段
+   * 的向量变了（它被拉着跟上）。插入顶点两句都不成立。
+   */
+  const span = (list: typeof after, from_: number, to_: number) => ({
+    x: list[to_]!.x - list[from_]!.x,
+    y: list[to_]!.y - list[from_]!.y,
+  })
+  expect(span(after, 0, 1)).toEqual(span(before, 0, 1))
+  expect(span(after, 1, 2)).not.toEqual(span(before, 1, 2))
 })
 
 test('OpenSpec: stage / 多段线夹点 / 顶点画方块，段中点画条形', async ({ page }) => {
@@ -88,7 +119,7 @@ test('OpenSpec: stage / 多段线夹点 / 顶点画方块，段中点画条形',
 
   // 两个夹点长得一样而按下去做的事不同，是最难自己发现的一类缺陷。
   expect(await shapeOf('v0')).toBe('vertex')
-  expect(await shapeOf('m0')).toBe('insert')
+  expect(await shapeOf('m0')).toBe('segment')
 
   /*
    * 量元素自己的 `width`/`height` 而不是 `boundingBox()`：条形是**转过角度**的，而
@@ -123,8 +154,12 @@ test('OpenSpec: stage-engine / 多段线夹点 / 直线的中点仍是平移', a
   await page.keyboard.press('Escape')
   await page.mouse.dblclick(at(300, 200).x, at(300, 200).y)
 
-  // 护栏：直线插一个顶点就不是直线了。这一刀不得顺手把它也改成插入。
-  await expect(stage.getByTestId('stage-path-vertex-move')).toHaveCount(1)
+  // 两点直线只有一段，因此它的中点夹点与多段线的段中点是同一句话的退化情形：也画条形。
+  const mid = stage.getByTestId('stage-path-vertex-move')
+  await expect(mid).toHaveCount(1)
+  expect(await mid.getAttribute('data-vertex-role')).toBe('segment')
+  expect(Number(await mid.getAttribute('width')))
+    .toBeGreaterThan(Number(await mid.getAttribute('height')) * 2)
   await expect(stage.getByTestId('stage-path-vertex-m0')).toHaveCount(0)
 
   const grip = await boxOf(stage.getByTestId('stage-path-vertex-hit-move'))

@@ -605,11 +605,11 @@
 }
 
 /*
- * 插入位置的条形比顶点方块淡：它标的是「这里**可以**多一个顶点」，而不是一个已经存在的
- * 自由度。同色同亮度会让一条折线上多出一倍看起来同样重要的点，密集图纸上读不出结构。
- * 悬停与点亮态照旧由上面那两条邻接规则接管，因此抓它的反馈与顶点完全一致。
+ * 段中点的条形比顶点方块淡：顶点是几何的骨架，段中点是「这一段可以整体挪」。同色同亮度会
+ * 让一条折线上多出一倍看起来同样重要的点，密集图纸上读不出结构。悬停与点亮态照旧由上面
+ * 那两条邻接规则接管，因此抓它的反馈与顶点完全一致。
  */
-.compose-stage__editable-path-vertex[data-vertex-role='insert'] {
+.compose-stage__editable-path-vertex[data-vertex-role='segment'] {
   fill: var(--compose-surface-raised, #f8fbff);
   fill-opacity: 0.55;
 }

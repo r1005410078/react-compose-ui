@@ -31,6 +31,8 @@ describe('stageCurveGrips', () => {
 
     // 盒宽翻倍而高不变：终点的 x 跟着翻倍，y 不动——与命中、捕捉读的是同一个投影。
     expect(grips.map(({ id }) => id)).toEqual(['start', 'move', 'end'])
+    // 两点直线只有一段，因此它的中点与多段线的段中点是同一句话的退化情形。
+    expect(grips.map(({ role }) => role)).toEqual(['vertex', 'segment', 'vertex'])
     expect(grips[1]!.point).toMatchObject({ x: 100, y: 25 })
     expect(grips[2]!.point).toMatchObject({ x: 200, y: 50 })
   })
@@ -59,7 +61,7 @@ describe('stageCurveGrips', () => {
     )
     expect(polylineGrips.map(({ id }) => id)).toEqual(['v0', 'v1', 'v2', 'm0', 'm1'])
     expect(polylineGrips.map(({ role }) => role))
-      .toEqual(['vertex', 'vertex', 'vertex', 'insert', 'insert'])
+      .toEqual(['vertex', 'vertex', 'vertex', 'segment', 'segment'])
     // 条形按段的方向摆；第一段是 45 度下坡。
     expect(polylineGrips[3]).toMatchObject({ point: { x: 25, y: 25 }, angle: 45 })
     expect(
@@ -172,27 +174,44 @@ describe('applyStageCurveGrip', () => {
   })
 })
 
-describe('OpenSpec: stage-engine / 多段线夹点 / 拖段中点插入一个顶点', () => {
+describe('OpenSpec: stage-engine / 多段线夹点 / 拖段中点平移那一段', () => {
   const polyline: ComposeCurve = {
     kind: 'polyline',
     vertices: [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }],
     closed: false,
   }
 
-  it('新顶点排在那一段的两个顶点之间，且落在落点上', () => {
-    const next = applyStageCurveGrip(polyline, 'm0', { x: 10, y: 90 })
+  it('那一段的两个端点各移同一位移，其余顶点不动', () => {
+    // 段中点是 (25,25)；拖到 (35,45) 即位移 (10,20)。位移按**中点**算，因此落点被捕捉
+    // 纠正之后段中点精确落在那个特征点上。
+    const next = applyStageCurveGrip(polyline, 'm0', { x: 35, y: 45 })
 
     expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
-      { x: 0, y: 0 }, { x: 10, y: 90 }, { x: 50, y: 50 }, { x: 100, y: 0 },
+      { x: 10, y: 20 }, { x: 60, y: 70 }, { x: 100, y: 0 },
     ])
   })
 
-  it('每次求解只插一个', () => {
-    // 拖动期每一帧都拿**文档**里的几何加同一个 id 重求一次，因此顶点数永远是原数加一。
-    for (const point of [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }]) {
-      const next = applyStageCurveGrip(polyline, 'm1', point)
-      expect(next?.kind === 'polyline' ? next.vertices : []).toHaveLength(4)
+  it('顶点数不变，相邻段跟着伸缩', () => {
+    const next = applyStageCurveGrip(polyline, 'm1', { x: 75, y: 5 })
+
+    // 第二段整体上移；第一个顶点一动不动，因此第一段被拉长了。
+    expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
+      { x: 0, y: 0 }, { x: 50, y: 30 }, { x: 100, y: -20 },
+    ])
+  })
+
+  it('闭合多段线的收尾段接回第一个顶点', () => {
+    const closed: ComposeCurve = {
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }],
+      closed: true,
     }
+    // 第 3 段是「最后一个顶点 → 第一个顶点」，中点 (0,50)；拖到 (-20,50) 即位移 (-20,0)。
+    const next = applyStageCurveGrip(closed, 'm3', { x: -20, y: 50 })
+
+    expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
+      { x: -20, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: -20, y: 100 },
+    ])
   })
 
   it('段下标越界时放弃这次写入', () => {
@@ -200,9 +219,11 @@ describe('OpenSpec: stage-engine / 多段线夹点 / 拖段中点插入一个顶
     expect(applyStageCurveGrip(polyline, 'm2', { x: 0, y: 0 })).toBeNull()
   })
 
-  it('直线没有插入夹点', () => {
-    // 护栏：直线插一个顶点就不是直线了。
+  it('直线的中点走它自己那条平移', () => {
+    // 护栏：两点直线的段中点 id 是 `move`，`m0` 不属于它。
     const line: ComposeCurve = { kind: 'line', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } }
     expect(applyStageCurveGrip(line, 'm0', { x: 5, y: 5 })).toBeNull()
+    expect(applyStageCurveGrip(line, 'move', { x: 5, y: 5 }))
+      .toEqual({ kind: 'line', start: { x: 0, y: 5 }, end: { x: 10, y: 5 } })
   })
 })
