@@ -252,7 +252,6 @@ function renderStage(
     registry?: ReturnType<typeof createComposeEntityRegistry>
     onCreateComponentIntent?: (entityIds: readonly string[]) => void
     tool?: import('../types').ComposeStageTool
-    marqueeMode?: import('../types').ComposeStageMarqueeMode
     viewport?: { readonly x: number; readonly y: number; readonly zoom: number }
     commands?: import('../types').ComposeStageProps['commands']
     showCrosshair?: boolean
@@ -276,7 +275,6 @@ function renderStage(
       onViewportChange={vi.fn()}
       policy={{
         gridVisible: options.gridVisible,
-        marqueeMode: options.marqueeMode,
       }}
       scriptScope={options.scope}
       services={{ dispatch, registry: options.registry ?? registry }}
@@ -1405,23 +1403,24 @@ describe('ComposeStage 框选判定模式', () => {
     )
   }
 
-  it('OpenSpec: 选择与框选 / 包含模式排除只被压住一半的节点', () => {
+  it('OpenSpec: 选择与框选 / 从左往右排除只被压住一半的节点', () => {
     const surface = () => screen.getByTestId('stage-surface')
-    const contained = renderStage(document(), { marqueeMode: 'contain' })
+    const contained = renderStage(document())
     dragMarquee({ x: 0, y: 0 }, { x: 60, y: 100 }, surface())
     releaseMarquee({ x: 60, y: 100 }, surface())
     expect(contained.selection).toHaveBeenLastCalledWith([])
 
     cleanup()
-    const intersected = renderStage(document(), { marqueeMode: 'intersect' })
-    dragMarquee({ x: 0, y: 0 }, { x: 60, y: 100 }, surface())
-    releaseMarquee({ x: 60, y: 100 }, surface())
+    // 同一个框、反向拖：判定跟着方向变成相交。
+    const intersected = renderStage(document())
+    dragMarquee({ x: 60, y: 100 }, { x: 0, y: 0 }, surface())
+    releaseMarquee({ x: 0, y: 0 }, surface())
     expect(intersected.selection).toHaveBeenLastCalledWith(['a'])
   })
 
-  it('OpenSpec: 选择与框选 / 包含模式选中被完整框住的节点', () => {
+  it('OpenSpec: 选择与框选 / 从左往右选中被完整框住的节点', () => {
     const surface = () => screen.getByTestId('stage-surface')
-    const { selection } = renderStage(document(), { marqueeMode: 'contain' })
+    const { selection } = renderStage(document())
     dragMarquee({ x: 0, y: 0 }, { x: 200, y: 200 }, surface())
     releaseMarquee({ x: 200, y: 200 }, surface())
     expect(selection).toHaveBeenLastCalledWith(['a'])
@@ -1430,41 +1429,27 @@ describe('ComposeStage 框选判定模式', () => {
   it('OpenSpec: 选择与框选 / select 从空白处起框', () => {
     // 独立的框选工具已删除：`select` 在空白处拖拽本来就是框选，两者完全重复，
     // 而多一个工具位意味着用户要先想「我在用哪个」。
-    // 判定模式钉死一种：本条讲的是「空白拖拽起的是框而不是移动」，与判定无关，
-    // 跟着默认值走会让它在默认从相交改成方向决定时莫名其妙地红。
-    const { dispatch, selection } = renderStage(
-      document(),
-      { tool: 'select', marqueeMode: 'intersect' },
-    )
+    const { dispatch, selection } = renderStage(document(), { tool: 'select' })
     const surface = screen.getByTestId('stage-surface')
-    dragMarquee({ x: 30, y: 40 }, { x: 200, y: 200 }, surface)
+    // 完全框住 'a'：本条讲的是「空白拖拽起的是框而不是移动」，与判定无关，因此挑一个
+    // 两种判定都会选中它的框，免得它跟着判定语义漂。
+    dragMarquee({ x: 0, y: 0 }, { x: 200, y: 200 }, surface)
     releaseMarquee({ x: 200, y: 200 }, surface)
     // 起框而非移动：不得产生任何事务。
     expect(dispatch).not.toHaveBeenCalled()
     expect(selection).toHaveBeenLastCalledWith(['a'])
   })
 
-  it('OpenSpec: 选择与框选 / Overlay 区分判定模式', async () => {
+  it('OpenSpec: 选择与框选 / Overlay 的判定跟着拖拽方向走', async () => {
     const surface = () => screen.getByTestId('stage-surface')
-    for (const [marqueeMode, expected] of [
-      ['intersect', 'intersect'],
-      ['contain', 'contain'],
-    ] as const) {
-      renderStage(document(), { marqueeMode })
-      dragMarquee({ x: 0, y: 0 }, { x: 60, y: 100 }, surface())
-      expect(await marqueeHitTest()).toBe(expected)
-      releaseMarquee({ x: 60, y: 100 }, surface())
-      cleanup()
-    }
-
-    // 方向决定模式下同一个框按拖拽方向切换判定。
-    renderStage(document(), { marqueeMode: 'directional' })
+    // 同一个框，两个方向：覆盖层读的是归约结果，因此它自己不需要认识方向。
+    renderStage(document())
     dragMarquee({ x: 0, y: 0 }, { x: 60, y: 100 }, surface())
     expect(await marqueeHitTest()).toBe('contain')
     releaseMarquee({ x: 60, y: 100 }, surface())
     cleanup()
 
-    renderStage(document(), { marqueeMode: 'directional' })
+    renderStage(document())
     dragMarquee({ x: 60, y: 100 }, { x: 0, y: 0 }, surface())
     expect(await marqueeHitTest()).toBe('intersect')
     releaseMarquee({ x: 0, y: 0 }, surface())

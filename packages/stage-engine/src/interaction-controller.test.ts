@@ -8,7 +8,6 @@ import {
   type StageInteractionHit,
   type StageInteractionTool,
 } from './interaction-controller'
-import type { StageMarqueeMode } from './hit-testing'
 import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from './test-fixtures'
 
 const modifiers = { shift: false, alt: false, command: false }
@@ -1441,7 +1440,6 @@ describe('框选工具与选区布尔组合', () => {
   ])
 
   function marqueeSetup(options: {
-    readonly marqueeMode?: StageMarqueeMode
     readonly selectedIds?: readonly string[]
     readonly tool?: StageInteractionTool
   } = {}) {
@@ -1457,7 +1455,6 @@ describe('框选工具与选区布尔组合', () => {
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
       tool: options.tool ?? 'select',
-      marqueeMode: options.marqueeMode,
       selectedIds: options.selectedIds ?? [],
       idFactory: () => 'marquee-id',
     })
@@ -1487,46 +1484,34 @@ describe('框选工具与选区布尔组合', () => {
     expect(controller.getSnapshot().phase).toBe('idle')
   })
 
-  it('OpenSpec: 未传入模式时按方向决定', () => {
-    // 默认不是某一种固定判定：从左往右只选完全框住的，从右往左碰到就选。
-    const rightward = marqueeSetup()
-    rightward.drag({ x: -10, y: -10 }, { x: 50, y: 60 })
-    expect(rightward.selection()).toMatchObject({ selectedIds: [] })
-
-    // 框从画板外面起手，因此也相交到根 Frame。
-    const leftward = marqueeSetup()
-    leftward.drag({ x: 50, y: 60 }, { x: -10, y: -10 })
-    expect(leftward.selection()).toMatchObject({ selectedIds: [ROOT_FRAME_ID, 'left'] })
-  })
-
-  it('OpenSpec: 框选判定模式协议 / 包含模式排除部分重叠节点', () => {
-    const { drag, selection } = marqueeSetup({ marqueeMode: 'contain' })
+  it('OpenSpec: 框选判定模式协议 / 从左往右排除部分重叠节点', () => {
+    const { drag, selection } = marqueeSetup()
     drag({ x: -10, y: -10 }, { x: 50, y: 60 })
     expect(selection()).toMatchObject({ selectedIds: [] })
     drag({ x: -10, y: -10 }, { x: 120, y: 60 })
     expect(selection()).toMatchObject({ selectedIds: ['left'] })
   })
 
-  it('OpenSpec: 框选判定模式协议 / 方向决定模式按拖拽方向切换判定', () => {
-    const rightward = marqueeSetup({ marqueeMode: 'directional' })
+  it('OpenSpec: 框选判定模式协议 / 判定按拖拽方向切换', () => {
+    const rightward = marqueeSetup()
     const rightwardDrag = rightward.drag({ x: -10, y: -10 }, { x: 50, y: 60 })
     expect(rightwardDrag.marqueeHitTest).toBe('contain')
     expect(rightward.selection()).toMatchObject({ selectedIds: [] })
 
-    const leftward = marqueeSetup({ marqueeMode: 'directional' })
+    const leftward = marqueeSetup()
     const leftwardDrag = leftward.drag({ x: 50, y: 60 }, { x: -10, y: -10 })
     expect(leftwardDrag.marqueeHitTest).toBe('intersect')
     expect(leftward.selection()).toMatchObject({ selectedIds: [ROOT_FRAME_ID, 'left'] })
   })
 
   it('OpenSpec: Shift 加选与 Alt 减选', () => {
-    // 判定模式与布尔组合无关，钉死一种免得跟着默认值漂。
-    const added = marqueeSetup({ selectedIds: ['right'], marqueeMode: 'intersect' })
-    added.drag({ x: -10, y: -10 }, { x: 50, y: 60 }, { kind: 'surface' }, { ...modifiers, shift: true })
+    // 布尔组合与判定正交：从右往左拖，让判定落在相交上，本条只看组合。
+    const added = marqueeSetup({ selectedIds: ['right'] })
+    added.drag({ x: 50, y: 60 }, { x: -10, y: -10 }, { kind: 'surface' }, { ...modifiers, shift: true })
     expect(added.selection()).toMatchObject({ selectedIds: ['right', ROOT_FRAME_ID, 'left'] })
 
-    const subtracted = marqueeSetup({ selectedIds: ['left', 'right'], marqueeMode: 'intersect' })
-    subtracted.drag({ x: -10, y: -10 }, { x: 50, y: 60 }, { kind: 'surface' }, { ...modifiers, alt: true })
+    const subtracted = marqueeSetup({ selectedIds: ['left', 'right'] })
+    subtracted.drag({ x: 50, y: 60 }, { x: -10, y: -10 }, { kind: 'surface' }, { ...modifiers, alt: true })
     expect(subtracted.selection()).toMatchObject({ selectedIds: ['right'] })
   })
 

@@ -23,7 +23,6 @@ export type {
   ComposeStageEditablePathChange,
   ComposeStageKeybinding,
   ComposeStageLayoutRuntime,
-  ComposeStageMarqueeMode,
   ComposeStagePolicy,
   ComposeStageProps,
   ComposeStageServices,

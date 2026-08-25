@@ -106,22 +106,15 @@ test('OpenSpec: stage / 选择与框选 / 缺省下两个方向的框与结果�
   expect(rtl.dash).not.toBe('none')
 })
 
-test('OpenSpec: stage / 选择与框选 / 钉死相交后两个方向同色同结果', async ({ page }) => {
+test('OpenSpec: editor / 平铺式默认画布工具栏 / 选择没有判定模式菜单，形状的菜单还在', async ({ page }) => {
   await page.goto('/')
   const view = setup(page)
   await expect(view.surface).toBeVisible()
-  await drawRect(view.commandInput)
-  const at = await worldToScreen(page)
 
-  await view.editor.getByRole('button', { name: '框选模式' }).click()
-  await view.editor.getByRole('menuitemradio', { name: '相交选中' }).click()
+  // 方向本身就是切换器：再给一个菜单等于给同一件事造第二个、更慢的入口。
+  await expect(view.editor.getByRole('button', { name: '框选模式' })).toHaveCount(0)
 
-  const ltr = await dragMarquee(page, view, at(HALF.lo.x, HALF.lo.y), at(HALF.hi.x, HALF.hi.y))
-  await page.keyboard.press('Escape')
-  const rtl = await dragMarquee(page, view, at(HALF.hi.x, HALF.hi.y), at(HALF.lo.x, HALF.lo.y))
-
-  // 分色的依据是**生效判定**而不是方向：钉死相交时它一直是窗交色。
-  expect(ltr.fill).toBe(rtl.fill)
-  expect(ltr.selected).toBe(1)
-  expect(rtl.selected).toBe(1)
+  // 形状工具的 split button 不受牵连——它的菜单项各自是独立动作，不是同一个动作的参数。
+  await view.editor.getByRole('button', { name: /形状|Shape/ }).last().click()
+  await expect(view.editor.getByRole('menu')).toBeVisible()
 })

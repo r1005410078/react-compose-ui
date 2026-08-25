@@ -59,7 +59,6 @@ export {
 
 /** 场景索引、拖放落点与框选。 */
 export {
-  DEFAULT_STAGE_MARQUEE_MODE,
   createStageSceneIndex,
   resolveMarqueeHitTest,
   resolveMarqueeSelection,
@@ -69,7 +68,7 @@ export {
   type StageDropTarget,
   type StageMarqueeCombine,
   type StageMarqueeDirection,
-  type StageMarqueeMode,
+  type StageMarqueeHitTest,
   type StageMarqueeQuery,
   type StageSceneIndex,
 } from './hit-testing'

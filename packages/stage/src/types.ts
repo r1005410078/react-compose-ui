@@ -17,7 +17,6 @@ import type {
   StageInteractionController,
   StageInteractionModifiers,
   StageInteractionTool,
-  StageMarqueeMode,
   StagePaintEditing,
   StagePaintSampling,
   StagePathHandleKind,
@@ -61,7 +60,6 @@ export type ComposeStageTool = StageInteractionTool
  *
  * @public
  */
-export type ComposeStageMarqueeMode = StageMarqueeMode
 
 /**
  * Stage 可配置的单次键位。
@@ -212,12 +210,6 @@ export interface ComposeStageServices {
  * @public
  */
 export interface ComposeStagePolicy {
-  /**
-   * 框选命中判定模式；`select` 与 `marquee` 两个入口共用同一个值。
-   *
-   * @defaultValue 'intersect'
-   */
-  readonly marqueeMode?: ComposeStageMarqueeMode
   /**
    * 宿主级「锁定原父级」：为 true 时画布 move 手势不产生跨父级 reparent 落点高亮与
    * 结构命令，同容器重排照常；缺省时行为与既有一致。

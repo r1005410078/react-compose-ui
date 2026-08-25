@@ -1,7 +1,6 @@
 import type { ComposeDocument } from '@compose-ui/core'
 import type {
   ComposeStageDispatch,
-  ComposeStageMarqueeMode,
   ComposeStageTool,
 } from '@compose-ui/stage'
 import { useRef, useState } from 'react'
@@ -23,10 +22,7 @@ type DefaultStageToolbarProps = {
   readonly gridVisible: boolean
   /** 最近一次选择的形状；主按钮在自动回到选择工具后仍用它表达下一次绘制内容。 */
   readonly lastShapeTool: ShapeTool
-  /** 当前框选判定模式；主按钮图标与菜单选中态都跟随它。 */
-  readonly marqueeMode: ComposeStageMarqueeMode
   readonly nextId: () => string
-  readonly setMarqueeMode: (mode: ComposeStageMarqueeMode) => void
   readonly setCanvasSettingsOpen: Dispatch<SetStateAction<boolean>>
   readonly setGridSize: (size: number) => void
   readonly setGridVisible: Dispatch<SetStateAction<boolean>>
@@ -34,16 +30,6 @@ type DefaultStageToolbarProps = {
   readonly shortcuts?: ComposeEditorPreferences['shortcuts']
   readonly toggleSnap: () => void
   readonly tool: ComposeStageTool
-}
-
-const MARQUEE_MODES = [
-  ['intersect', 'marqueeIntersect', 'marquee-intersect'],
-  ['contain', 'marqueeContain', 'marquee-contain'],
-  ['directional', 'marqueeDirectional', 'marquee-directional'],
-] as const
-
-function marqueeMode(mode: ComposeStageMarqueeMode) {
-  return MARQUEE_MODES.find(([candidate]) => candidate === mode) ?? MARQUEE_MODES[0]
 }
 
 const SHAPE_TOOLS = [
@@ -105,9 +91,7 @@ export function DefaultStageToolbar({
   document,
   gridVisible,
   lastShapeTool,
-  marqueeMode: currentMarqueeMode,
   nextId,
-  setMarqueeMode,
   setCanvasSettingsOpen,
   setGridSize,
   setGridVisible,
@@ -138,17 +122,6 @@ export function DefaultStageToolbar({
     setOpen: setShapeMenuOpen,
     triggerRef: shapeMenuTriggerRef,
   } = useToolbarMenu('compose-editor-shape-menu')
-  const {
-    close: closeMarqueeMenu,
-    focusFirstItem: focusFirstMarqueeItem,
-    id: marqueeMenuId,
-    menuRef: marqueeMenuRef,
-    onMenuKeyDown: onMarqueeMenuKeyDown,
-    onTriggerKeyDown: onMarqueeTriggerKeyDown,
-    open: marqueeMenuOpen,
-    setOpen: setMarqueeMenuOpen,
-    triggerRef: marqueeMenuTriggerRef,
-  } = useToolbarMenu('compose-editor-marquee-menu')
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(
     i18n?.locale ?? 'zh-CN',
@@ -172,70 +145,24 @@ export function DefaultStageToolbar({
   const selectedShape = shapeTool(tool)
   const currentShape = Boolean(selectedShape)
   const activeShape = selectedShape ?? shapeTool(lastShapeTool)!
-  const activeMarquee = marqueeMode(currentMarqueeMode)
 
   return (
     <div aria-label={messages.label} className="compose-editor__stage-toolbar" role="toolbar">
       <div aria-label={messages.interactionTools} className="compose-editor__toolbar-group" role="group">
         {/*
-          * 判定模式菜单挂在**选择工具**上，而不是一个独立的框选工具位：`select` 在空白处
-          * 拖拽本来就是框选，判定模式正是这个动作的参数。原先那个 marquee 工具位与这个
-          * 手势完全重复。
+          * 选择是一个普通按钮，没有判定模式菜单：框选判定恒由拖拽方向决定，而**方向本身
+          * 就是切换器**——一次拖拽即可选定，比开一个菜单快，也不残留状态。再给一个开关等于
+          * 给同一件事造第二个、更慢的入口。形状工具的菜单不受此约束：它的菜单项各自是独立
+          * 动作（矩形 / 箭头 / 圆），不是同一个动作的参数。
           */}
-        <div className="compose-editor__toolbar-menu-anchor">
-          <button
-            {...titled(messages.select, shortcut('stage.selectTool'))}
-            aria-pressed={tool === 'select'}
-            data-active-marquee-mode={activeMarquee[0]}
-            type="button"
-            onClick={() => setTool('select')}
-          >
-            <StageToolbarIcon name="select" />
-          </button>
-          <button
-            {...titled(messages.marqueeMode)}
-            aria-controls={marqueeMenuId}
-            aria-expanded={marqueeMenuOpen}
-            aria-haspopup="menu"
-            className="compose-editor__toolbar-menu-trigger"
-            ref={marqueeMenuTriggerRef}
-            type="button"
-            onClick={() => {
-              setMarqueeMenuOpen((open) => !open)
-              focusFirstMarqueeItem()
-            }}
-            onKeyDown={onMarqueeTriggerKeyDown}
-          >
-            <StageToolbarIcon name="chevron-down" />
-          </button>
-          {marqueeMenuOpen ? (
-            <div
-              aria-label={messages.marqueeMode}
-              className="compose-editor__toolbar-menu"
-              id={marqueeMenuId}
-              ref={marqueeMenuRef}
-              role="menu"
-              onKeyDown={onMarqueeMenuKeyDown}
-            >
-              {MARQUEE_MODES.map(([mode, label, icon]) => (
-                <button
-                  key={mode}
-                  aria-pressed={currentMarqueeMode === mode}
-                  role="menuitemradio"
-                  type="button"
-                  onClick={() => {
-                    // 只改判定模式：用户可能正拿 select 工具做框选，切模式不该把工具抢走。
-                    setMarqueeMode(mode)
-                    closeMarqueeMenu()
-                  }}
-                >
-                  <StageToolbarIcon name={icon} />
-                  {messages[label]}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <button
+          {...titled(messages.select, shortcut('stage.selectTool'))}
+          aria-pressed={tool === 'select'}
+          type="button"
+          onClick={() => setTool('select')}
+        >
+          <StageToolbarIcon name="select" />
+        </button>
         <button {...titled(messages.scale, shortcut('stage.scaleTool'))} aria-pressed={tool === 'scale'} type="button" onClick={() => setTool('scale')}>
           <StageToolbarIcon name="scale" />
         </button>

@@ -77,10 +77,7 @@ export function createStageMarqueeSession(options: StageMarqueeSessionOptions): 
         ...ctx.snapshot,
         phase: 'marquee',
         marquee: rectFromPoints(startWorld, currentWorld),
-        marqueeHitTest: resolveMarqueeHitTest(
-          ctx.context.marqueeMode,
-          marqueeDirection(startWorld, currentWorld),
-        ),
+        marqueeHitTest: resolveMarqueeHitTest(marqueeDirection(startWorld, currentWorld)),
       })
     },
     commit(ctx) {
@@ -91,7 +88,6 @@ export function createStageMarqueeSession(options: StageMarqueeSessionOptions): 
         direction: marqueeDirection(startWorld, currentWorld),
         document: ctx.context.document,
         index: ctx.index,
-        mode: ctx.context.marqueeMode,
         originEntityId,
       })
       ctx.apply([{ type: 'selection.change', selectedIds }])
@@ -130,7 +126,7 @@ export function claimStageMarquee(
     ...ctx.idleSnapshot(),
     phase: 'marquee',
     // 起点即终点，方向尚未确定；按下的一瞬间先按 ltr 归约，移动时会立即刷新。
-    marqueeHitTest: resolveMarqueeHitTest(context.marqueeMode, 'ltr'),
+    marqueeHitTest: resolveMarqueeHitTest('ltr'),
   })
   ctx.apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
   return createStageMarqueeSession({

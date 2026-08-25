@@ -27,44 +27,39 @@ function query(
 }
 
 describe('框选判定模式协议', () => {
-  it('OpenSpec: 相交模式选中部分重叠节点', () => {
+  it('OpenSpec: 相交判定选中部分重叠节点', () => {
     // 框右边缘停在 left 内部，只压住它的一半。框从画板外面起手，因此也相交到根 Frame。
     expect(resolveMarqueeSelection(query(
       { x: -10, y: -10, width: 60, height: 70 },
-      { mode: 'intersect' },
+      { direction: 'rtl' },
     ))).toEqual([ROOT_FRAME_ID, 'left'])
   })
 
   it('OpenSpec: 包含模式排除部分重叠节点', () => {
     expect(resolveMarqueeSelection(query(
       { x: -10, y: -10, width: 60, height: 70 },
-      { mode: 'contain' },
+      { direction: 'ltr' },
     ))).toEqual([])
     expect(resolveMarqueeSelection(query(
       { x: -10, y: -10, width: 130, height: 70 },
-      { mode: 'contain' },
+      { direction: 'ltr' },
     ))).toEqual(['left'])
   })
 
-  it('OpenSpec: 方向决定模式按拖拽方向切换判定', () => {
+  it('OpenSpec: 判定按拖拽方向切换', () => {
     const area = { x: -10, y: -10, width: 60, height: 70 }
-    expect(resolveMarqueeSelection(query(area, { direction: 'ltr', mode: 'directional' })))
-      .toEqual([])
-    expect(resolveMarqueeSelection(query(area, { direction: 'rtl', mode: 'directional' })))
+    expect(resolveMarqueeSelection(query(area, { direction: 'ltr' }))).toEqual([])
+    expect(resolveMarqueeSelection(query(area, { direction: 'rtl' })))
       .toEqual([ROOT_FRAME_ID, 'left'])
-    expect(resolveMarqueeHitTest('directional', 'ltr')).toBe('contain')
-    expect(resolveMarqueeHitTest('directional', 'rtl')).toBe('intersect')
-    expect(resolveMarqueeHitTest('contain', 'rtl')).toBe('contain')
+    expect(resolveMarqueeHitTest('ltr')).toBe('contain')
+    expect(resolveMarqueeHitTest('rtl')).toBe('intersect')
   })
 
-  it('OpenSpec: 未传入模式时按方向决定', () => {
-    // 默认不是某一种固定判定：方向决定这套代数落在默认上，用户才不必先去菜单里发现它。
-    expect(resolveMarqueeHitTest(undefined, 'ltr')).toBe('contain')
-    expect(resolveMarqueeHitTest(undefined, 'rtl')).toBe('intersect')
-    const half = { x: -10, y: -10, width: 60, height: 70 }
-    expect(resolveMarqueeSelection(query(half))).toEqual([])
-    expect(resolveMarqueeSelection(query(half, { direction: 'rtl' })))
-      .toEqual([ROOT_FRAME_ID, 'left'])
+  it('OpenSpec: 没有可以覆盖方向的参数', () => {
+    // 方向本身就是切换器；再给一个开关等于给同一件事造第二个、更慢的入口。
+    expect(resolveMarqueeHitTest.length).toBe(1)
+    const keys = Object.keys(query({ x: 0, y: 0, width: 1, height: 1 }))
+    expect(keys).not.toContain('mode')
   })
 
   it('OpenSpec: 排除 hidden 与 locked 节点', () => {
@@ -73,14 +68,14 @@ describe('框选判定模式协议', () => {
     // 判定模式与本条无关，钉死一种免得跟着默认值漂。
     expect(resolveMarqueeSelection(query(
       { x: -10, y: -10, width: 400, height: 100 },
-      { mode: 'intersect' },
+      { direction: 'rtl' },
       [left, right, hidden, locked],
     ))).toEqual([ROOT_FRAME_ID, 'left', 'right'])
   })
 
   it('OpenSpec: 按确定性场景顺序返回并保留既有选区顺序', () => {
     const area = { x: -10, y: -10, width: 400, height: 100 }
-    const crossing = { mode: 'intersect' } as const
+    const crossing = { direction: 'rtl' } as const
     expect(resolveMarqueeSelection(query(area, crossing)))
       .toEqual([ROOT_FRAME_ID, 'left', 'right'])
     // 既有选区顺序来自宿主的交互顺序，加选只在其后追加新命中。
@@ -90,7 +85,7 @@ describe('框选判定模式协议', () => {
 
   it('OpenSpec: Shift 加选与 Alt 减选', () => {
     const leftOnly = { x: -10, y: -10, width: 60, height: 70 }
-    const crossing = { mode: 'intersect' } as const
+    const crossing = { direction: 'rtl' } as const
     expect(resolveMarqueeSelection(query(leftOnly, { ...crossing, base: ['right'], combine: 'add' })))
       .toEqual(['right', ROOT_FRAME_ID, 'left'])
     expect(resolveMarqueeSelection(

@@ -1474,7 +1474,7 @@ describe('useComposeEditorController', () => {
     expect(merged.services.registry).toBe(baseServices.registry)
     expect(merged.policy?.lockGestureParent).toBe(true)
     // policy 的其余字段来自 controller，不因宿主只覆盖一项而丢失。
-    expect(merged.policy?.marqueeMode).toBe(result.current.stageProps.policy?.marqueeMode)
+    expect(merged.policy?.gridVisible).toBe(result.current.stageProps.policy?.gridVisible)
   })
 
   it('OpenSpec: editor-workspace-layout / 从场景选区创建组件 / 资源成功后原子替换并可撤销重做', async () => {

@@ -9,7 +9,7 @@ import {
   resolveComposeAppearance,
 } from '@compose-ui/core'
 import {
-  type StageMarqueeMode,
+  type StageMarqueeHitTest,
   type StageSelectionMode,
 } from './hit-testing'
 import { isDrawingTool } from './gesture-planning'
@@ -256,12 +256,6 @@ export interface StageInteractionContext {
   /** 当前持久工具；临时平移由独立事件控制。 */
   readonly tool: StageInteractionTool
   /**
-   * 框选命中判定模式；`select` 与 `marquee` 两个入口共用同一个值。
-   *
-   * @defaultValue 'intersect'
-   */
-  readonly marqueeMode?: StageMarqueeMode
-  /**
    * 点选与框选的组合语义。
    *
    * @remarks
@@ -480,10 +474,10 @@ export interface StageInteractionSnapshot {
    * 当前框选实际生效的判定；非框选 phase 为 null。
    *
    * @remarks
-   * `directional` 已在这里归约成 `intersect`/`contain`，Overlay 据此区分虚线与实线，
-   * 不需要自己再判断拖拽方向。
+   * 拖拽方向已在这里归约成 `intersect`/`contain`，Overlay 据此决定颜色与虚实，不需要自己再
+   * 判断方向。归约只有一处实现，两边因此不可能给出不同的答案。
    */
-  readonly marqueeHitTest: Exclude<StageMarqueeMode, 'directional'> | null
+  readonly marqueeHitTest: StageMarqueeHitTest | null
   /** 当前智能吸附反馈线。 */
   readonly snapGuides: readonly StageGuide[]
   /** 创建或移动中的文档辅助线 preview。 */

@@ -204,7 +204,6 @@ function ComposeStageReady({
   const {
     gridVisible = true,
     lockGestureParent,
-    marqueeMode,
   } = policy ?? EMPTY_STAGE_POLICY
   const i18n = useComposeI18nContext()
   const theme = useComposeThemeContext()
@@ -642,7 +641,6 @@ function ComposeStageReady({
       // 绘图模式的框选按方向判定（左→右窗口、右→左交叉）：这是 AutoCAD 的惯例，也是宿主
       // 没有显式指定时该模式下最合理的默认，宿主显式给出的值仍然优先。
       // 判定模式只由宿主受控：模式不该偷改用户的设置。
-      marqueeMode,
       lockGestureParent,
       draftingAwaitingPoint: draftingSession.awaitingPoint,
       selectedIds: normalizedSelection,
@@ -678,7 +676,6 @@ function ComposeStageReady({
     messages.deleteGuide,
     messages.moveGuide,
     lockGestureParent,
-    marqueeMode,
     normalizedSelection,
     paintEditing,
     paintSampling,

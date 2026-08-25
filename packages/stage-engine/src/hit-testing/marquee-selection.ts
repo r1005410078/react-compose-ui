@@ -3,22 +3,26 @@ import { rectContains, rectsIntersect, type StageRect } from '../geometry'
 import type { StageSceneIndex } from './scene-index'
 
 /**
- * 框选的命中判定模式。
+ * 框选的命中判定。
  *
  * @remarks
- * 只描述「判定几何」这一个维度：`intersect` 碰到即选中，`contain` 要求完全框住，
- * `directional` 把判定交给拖拽方向。与已有选区的布尔组合是正交的另一维，见
- * {@link StageMarqueeCombine}。
+ * 只描述「判定几何」这一个维度：`intersect` 碰到即选中，`contain` 要求完全框住。与已有选区的
+ * 布尔组合是正交的另一维，见 {@link StageMarqueeCombine}。
+ *
+ * **它不是一个可选的模式，而是拖拽方向的归约结果。**曾经有第三个值 `directional` 与一个宿主
+ * 可控的开关，删掉的理由是内部的：判定改变的是「同一个拖拽手势意味着什么」，而这正是
+ * 「模式必须是对象作用域且有明确的进出」禁止的那一类；何况方向本身就是切换器，一次拖拽即可
+ * 选定，比开一个菜单快也不残留状态。名字因此跟着语义走。
  * @public
  */
-export type StageMarqueeMode = 'intersect' | 'contain' | 'directional'
+export type StageMarqueeHitTest = 'intersect' | 'contain'
 
 /**
  * 框选拖拽的水平方向。
  *
  * @remarks
- * `ltr` 表示起点在终点左侧。归一化矩形丢失了方向信息，所以 `directional` 判定必须由调用方
- * 显式传入方向，而不是从矩形反推。
+ * `ltr` 表示起点在终点左侧。归一化矩形丢失了方向信息，所以方向必须由调用方显式传入，
+ * 而不是从矩形反推。
  * @public
  */
 export type StageMarqueeDirection = 'ltr' | 'rtl'
@@ -29,19 +33,6 @@ export type StageMarqueeDirection = 'ltr' | 'rtl'
  * @public
  */
 export type StageMarqueeCombine = 'replace' | 'add' | 'subtract'
-
-/**
- * 宿主未提供模式时使用的判定。
- *
- * @remarks
- * **是 `directional` 而不是某一种固定判定。**方向决定这套代数一直都在，而默认落在
- * `intersect` 上时它等于不存在：不去菜单里手动选一次，拖拽方向就什么都不做——功能在，
- * 可达不到。两种判定各自都有真实用途（框住整根导线 / 抓一把穿过某片区域的线），而拖拽
- * 方向是它们之间最快的切换。
- *
- * @public
- */
-export const DEFAULT_STAGE_MARQUEE_MODE: StageMarqueeMode = 'directional'
 
 /**
  * 视为「点击」而非「拖框」的世界尺寸阈值。
@@ -69,23 +60,22 @@ export interface StageMarqueeQuery {
   readonly document: ComposeDocument
   /** 提供确定性场景顺序与世界包围盒的场景索引。 */
   readonly index: StageSceneIndex
-  /** 判定模式。 @defaultValue 'intersect' */
-  readonly mode?: StageMarqueeMode
 }
 
 /**
- * 把模式与拖拽方向归约为实际生效的判定。
+ * 把拖拽方向归约为实际生效的判定。
  *
  * @remarks
- * `directional` 采用 AutoCAD 惯例：从左往右拖要求完全框住，从右往左拖碰到即选中。Overlay 也用
- * 这个结果决定实线还是虚线，因此判定归约必须只有这一处实现。
+ * 从左往右拖要求完全框住（窗口），从右往左拖碰到即选中（窗交）。Overlay 的颜色与虚实也读
+ * 这个结果，因此归约必须只有这一处实现。
+ *
+ * **没有可以覆盖方向的参数。**两种判定各自都有真实用途（框住整根导线 / 抓一把穿过某片区域的
+ * 线），而方向是它们之间最快的切换；再给一个开关等于给同一件事造第二个、更慢的入口。
  * @public
  */
 export function resolveMarqueeHitTest(
-  mode: StageMarqueeMode = DEFAULT_STAGE_MARQUEE_MODE,
   direction: StageMarqueeDirection,
-): Exclude<StageMarqueeMode, 'directional'> {
-  if (mode !== 'directional') return mode
+): StageMarqueeHitTest {
   return direction === 'ltr' ? 'contain' : 'intersect'
 }
 
@@ -107,9 +97,9 @@ export function resolveMarqueeHitTest(
  * @public
  */
 export function resolveMarqueeSelection(query: StageMarqueeQuery): readonly string[] {
-  const { area, base = [], combine = 'replace', direction, document, index, mode } = query
+  const { area, base = [], combine = 'replace', direction, document, index } = query
   const degenerate = area.width < DEGENERATE_AREA_SIZE && area.height < DEGENERATE_AREA_SIZE
-  const hitTest = resolveMarqueeHitTest(mode, direction)
+  const hitTest = resolveMarqueeHitTest(direction)
   const hits = degenerate
     ? []
     : index.order.filter((entityId) => {

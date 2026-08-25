@@ -6,7 +6,7 @@ import type {
   StageInteractionTool,
   StageDrawingPreview,
   StageDropIndicator,
-  StageMarqueeMode,
+  StageMarqueeHitTest,
   StagePaintHandle,
   StagePaintSamplePreview,
   StagePoint,
@@ -83,7 +83,7 @@ export interface StageOverlayProps {
     readonly snapped?: boolean
   } | null
   /** 当前框选实际生效的判定；决定 marquee 边框是实线还是虚线。 */
-  readonly marqueeHitTest: Exclude<StageMarqueeMode, 'directional'> | null
+  readonly marqueeHitTest: StageMarqueeHitTest | null
   readonly marqueeScreen: StageRect | null
   readonly snapGuides: readonly StageGuide[]
   readonly paintHandles: readonly StagePaintHandle[]
