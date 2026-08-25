@@ -31,9 +31,9 @@ Stage MUST 接收受控 viewport、tool、selectedIds 和 activeFrameId，并通
 ### Requirement: 选择与框选
 
 select 工具 MUST 支持点击选择、Shift 切换多选、点击空白清除选择和空白拖动 marquee。marquee
-工具 MUST 支持从任意位置（含节点之上）拖出 marquee。两个工具的框选 MUST 使用同一个受控
-`policy.marqueeMode`，Stage MUST 只消费该值而不得自行持有模式的事实来源——Stage 本身不提供
-切换模式的 UI。
+工具 MUST 支持从任意位置（含节点之上）拖出 marquee。框选的判定 MUST 恒由拖拽方向决定，
+MUST NOT 由任何受控 prop、宿主开关或 Stage 自持状态覆盖——方向就是切换器，再给一个开关等于
+给同一件事造第二个、更慢的入口。
 
 marquee Overlay MUST 按**当前生效判定**分色：包含（窗口）与相交（窗交）的填充与描边 MUST
 取两个不同的颜色，并 MUST 来自主题 token 而不是写死在 marquee 规则里。虚实边框保留——颜色
@@ -51,14 +51,14 @@ marquee Overlay MUST 按**当前生效判定**分色：包含（窗口）与相�
 #### Scenario: 框选节点
 
 - **WHEN** 用户从 Stage 空白处拖出 marquee
-- **THEN** 按当前 `policy.marqueeMode` 命中的可见未锁定节点按确定性场景顺序进入选择
+- **THEN** 按拖拽方向决定的判定命中的可见未锁定节点按确定性场景顺序进入选择
 - **AND** marquee 只作为瞬时 SVG Overlay，不产生文档事务
 
 #### Scenario: 使用框选工具从节点上起框
 
 - **WHEN** 工具为 marquee 且用户在一个可见节点上按下并拖动
 - **THEN** Stage 显示 marquee Overlay 而不是移动该节点
-- **AND** 释放后按当前 `policy.marqueeMode` 请求选择
+- **AND** 释放后按拖拽方向决定的判定请求选择
 
 #### Scenario: Overlay 按判定分色并区分虚实
 
@@ -67,17 +67,11 @@ marquee Overlay MUST 按**当前生效判定**分色：包含（窗口）与相�
 - **AND** 当前生效判定为相交时使用虚线边框，填充与描边取窗交色
 - **AND** 两种判定的填充与描边颜色不相同
 
-#### Scenario: 缺省下两个拖拽方向给出不同的框与不同的结果
+#### Scenario: 两个拖拽方向给出不同的框与不同的结果
 
-- **WHEN** 用户没有动过判定模式，分别从左往右与从右往左拖出只盖住某节点一半的框
+- **WHEN** 分别从左往右与从右往左拖出只盖住某节点一半的框
 - **THEN** 两次的 marquee 颜色不同
 - **AND** 从左往右那次不选中它，从右往左那次选中它
-
-#### Scenario: 点击空白清选
-
-- **WHEN** select 工具下用户点击未命中 Frame 内容或节点的空白
-- **THEN** Stage 请求空选择
-- **AND** 文档与 activeFrameId 保持不变
 
 ### Requirement: 直接移动缩放与旋转
 
@@ -1211,8 +1205,9 @@ Stage MUST NOT 自行写入激活状态——它只发出请求，由宿主决�
 `services` MUST 承载宿主拥有的能力端口（`dispatch`、`registry`、`assetResolver`、
 `pageLoader`、`scriptModuleLoader`、`clipboard`、`onClipboardChange`、`layoutRuntime`）。
 Stage MUST 按字段消费 `services`，MUST NOT 以其对象引用作为场景子树或 measurement adapter
-的缓存键。`policy` MUST 承载宿主拥有事实来源、Stage 只消费的开关（`marqueeMode`、
-`lockGestureParent`、`gridVisible`），Stage MUST NOT 为其中任何一项持有事实来源或提供切换 UI。
+的缓存键。`policy` MUST 承载宿主拥有事实来源、Stage 只消费的开关（`lockGestureParent`、
+`gridVisible`），Stage MUST NOT 为其中任何一项持有事实来源或提供切换 UI。
+框选判定 MUST NOT 出现在 `policy` 里：它恒由拖拽方向决定，宿主没有可持有的事实来源。
 
 受控协议（`viewport`、`tool`、`selectedIds`、`activeFrameId` 及其 `onChange`）、逐帧数据
 （`document`、`layoutSnapshot`、`layoutPreviewSnapshot`、`layoutError`、`scriptScope`）与

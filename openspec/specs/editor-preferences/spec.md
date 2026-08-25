@@ -264,23 +264,6 @@ Editor Preferences MUST 增加前移、后移、置顶和置底四个 Stage scop
 - **THEN** 动作通过事务运行时提交与 Stage 快捷键相同的顺序结果
 - **AND** 不可用时显示双语边界原因且不产生事务
 
-### Requirement: 框选工具快捷键
-
-Editor Preferences MUST 提供可配置的 `stage.marqueeTool` 动作，默认键位 `B`，并 MUST 与其他
-Stage 工具动作一样归入 stage 分类、出现在快捷键设置与命令面板中。该动作 MUST 只切换工具，
-不改变当前框选判定模式，并 MUST 遵守既有的快捷键输入隔离规则。
-
-#### Scenario: 使用默认键位切换框选工具
-
-- **WHEN** 焦点不在文本输入且用户按下 `B`
-- **THEN** Stage 工具切换为 marquee
-- **AND** 当前框选判定模式保持不变
-
-#### Scenario: 重新绑定框选工具键位
-
-- **WHEN** 用户在快捷键设置中为 `stage.marqueeTool` 捕获新键位
-- **THEN** 新键位生效并随 preferences 一起持久化
-
 ### Requirement: 可配置复制剪切粘贴快捷键
 
 编辑器 MUST 把 `edit.copy`、`edit.cut` 和 `edit.paste` 纳入 stage 作用域的可配置 shortcut action
