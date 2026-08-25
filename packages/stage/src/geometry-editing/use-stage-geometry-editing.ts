@@ -98,6 +98,18 @@ export interface StageGeometryEditing {
   readonly isGeometryEditable: (entityId: string) => boolean
   readonly enter: (entityId: string) => void
   readonly exit: () => void
+  /**
+   * 拖动期间不参与捕捉的那**一个**世界点：被拖顶点的**原**位置。
+   *
+   * @remarks
+   * 它就在指针底下，不排除的话夹点会被吸回原处。排除**只到这一个点**——做成整个 Entity 会把
+   * 同对象的其他顶点与各段中点一起收走，而「把这个角对到那个角上」正是最常做的事。
+   *
+   * 读的是**文档**几何而不是拖动预览：要挡的是它出发的地方，不是它此刻跟着指针到的地方。
+   *
+   * 未拖动时为 `null`：此刻没有任何一个点在指针底下等着把它吸回去，那条理由不成立。
+   */
+  readonly snapExcludedPoint: StagePoint | null
   /** 处理一次夹点手势；返回 false 表示这次手势不属于本会话，应交回宿主。 */
   readonly handlePathChange: (change: ComposeStageEditablePathChange) => boolean
 }
@@ -123,6 +135,8 @@ export function useStageGeometryEditing(
   const [target, setTarget] = useState<string | null>(null)
   /** 拖动期间的盒局部预览几何；文档要等松手才动。 */
   const [preview, setPreview] = useState<ComposeCurve | null>(null)
+  /** 正在拖的夹点 id；点级排除按它反查那个顶点的原位置。 */
+  const [dragVertexId, setDragVertexId] = useState<string | null>(null)
 
   const isGeometryEditable = useCallback((candidate: string) => {
     const entity = document.entities[candidate]
@@ -132,12 +146,14 @@ export function useStageGeometryEditing(
   const exit = useCallback(() => {
     setTarget(null)
     setPreview(null)
+    setDragVertexId(null)
   }, [])
 
   const enter = useCallback((candidate: string) => {
     if (hostPathActive) return
     setTarget(candidate)
     setPreview(null)
+    setDragVertexId(null)
   }, [hostPathActive])
 
   // 会话的存续**在渲染时求值**而不是靠 effect 去清状态：点空白、选中别的对象、换工具、撤销
@@ -175,6 +191,14 @@ export function useStageGeometryEditing(
     }
   }, [document, entityId, hostPathActive, index, preview])
 
+  const snapExcludedPoint = useMemo((): StagePoint | null => {
+    if (entityId === null || dragVertexId === null) return null
+    // 不传 override：要的是**文档**里那个顶点的位置，也就是它出发的地方。
+    const grip = stageCurveGrips(document, index, entityId)
+      .find(({ id }) => id === dragVertexId)
+    return grip?.point ?? null
+  }, [document, dragVertexId, entityId, index])
+
   /** 求解一次落点：解算 → 盒局部 → 应用夹点。 */
   const latest = useRef({ document, index, resolvePoint })
   useLayoutEffect(() => {
@@ -194,7 +218,12 @@ export function useStageGeometryEditing(
     if (entityId === null || hostPathActive) return false
     if (change.phase === 'cancel') {
       setPreview(null)
+      setDragVertexId(null)
       return true
+    }
+    // 排除点要在**解算之前**就位，否则手势的第一帧会把落点吸回顶点自己的原处。
+    if (change.phase !== 'end' && dragVertexId !== change.vertexId) {
+      setDragVertexId(change.vertexId)
     }
     const next = solve(entityId, change.vertexId, change.worldPoint)
     if (change.phase !== 'end') {
@@ -203,6 +232,7 @@ export function useStageGeometryEditing(
       return true
     }
     setPreview(null)
+    setDragVertexId(null)
     if (!next) return true
     const entity = latest.current.document.entities[entityId]
     const offset = entity ? getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 } : { x: 0, y: 0 }
@@ -224,12 +254,13 @@ export function useStageGeometryEditing(
       },
     })
     return true
-  }, [dispatch, entityId, hostPathActive, idFactory, label, solve])
+  }, [dispatch, dragVertexId, entityId, hostPathActive, idFactory, label, solve])
 
   return {
     entityId,
     editablePath,
     dragging: entityId !== null && preview !== null,
+    snapExcludedPoint,
     isGeometryEditable,
     enter,
     exit,

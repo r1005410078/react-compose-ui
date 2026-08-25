@@ -10,7 +10,7 @@
    * 标记混在里面读不出来，而它回答的是一个是非问题——吸上了没有。也**不复用 danger**：
    * 吸附成功不是危险，借那个 token 会让重新配色的人一改就把两件事一起改掉。
    */
-  --compose-stage-snap: #ff9c9c;
+  --compose-stage-snap: #ffa53c;
 
   /*
    * 绘图模式给命令行**留出底部一条**，而不是让它浮在图面上。
@@ -40,8 +40,8 @@
   --compose-stage-grid-minor: rgb(71 84 103 / 14%);
   --compose-stage-grid-primary: rgb(52 64 84 / 27%);
 
-  /* 浅底上的浅红读不出来，换成同色相的深色。 */
-  --compose-stage-snap: #b42318;
+  /* 浅底上的浅橙读不出来，换成同色相的深色。 */
+  --compose-stage-snap: #b45309;
 }
 
 .compose-stage[data-compose-theme='light'] .compose-stage__surface {
@@ -1134,12 +1134,15 @@
 }
 
 /*
- * 捕捉标记：套住拾取框的空心方框。空心是必须的——它罩着的正是用户要看清的那个点，实心会
- * 把它盖掉；这与十字线在拾取框处断开是同一条理由。
+ * 捕捉标记：套住拾取框的方框，橙色实边加半透明底。
+ *
+ * 底是**半透明**而不是实色：它罩着的正是用户要看清的那个点，实色会把点连同穿过它的线一起
+ * 盖掉；半透明既让「这一块被吸住了」一眼可见，又不遮断下面的几何。这与十字线在拾取框处
+ * 断开是同一条权衡的两个结果——那里让位给靶区，这里让位给底下的墨。
  */
 .compose-stage__drafting-snap {
-  fill: none;
-  stroke: var(--compose-stage-snap, #ff9c9c);
+  fill: color-mix(in srgb, var(--compose-stage-snap, #ffa53c) 30%, transparent);
+  stroke: var(--compose-stage-snap, #ffa53c);
   stroke-width: 2;
 }
 

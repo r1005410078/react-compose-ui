@@ -210,6 +210,26 @@ describe('弧与多段线的特征点', () => {
       .toMatchObject({ mode: 'midpoint' })
   })
 
+  it('OpenSpec: stage-engine / 特征点捕捉 / 点级排除只收走那一个点', () => {
+    const polyline = shapeEntity('poly', {
+      kind: 'polyline',
+      vertices: [{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 300, y: 300 }],
+      closed: false,
+    })
+    const value = document([polyline], ['poly'])
+    const index = indexFor(value)
+
+    // 排除首顶点：它自己不再是候选……
+    expect(findStageFeaturePoint(value, index, { x: 101, y: 101 }, 8, [], { x: 100, y: 100 }))
+      .toBeNull()
+    // ……而**同一条**多段线的其他顶点与各段中点照常命中。用整个 Entity 去排除时这两条都会
+    // 一起失效，而它们正是「把这个角对到那个角上」要用的。
+    expect(findStageFeaturePoint(value, index, { x: 302, y: 101 }, 8, [], { x: 100, y: 100 }))
+      .toMatchObject({ mode: 'endpoint', entityId: 'poly' })
+    expect(findStageFeaturePoint(value, index, { x: 201, y: 101 }, 8, [], { x: 100, y: 100 }))
+      .toMatchObject({ mode: 'midpoint', entityId: 'poly' })
+  })
+
   it('闭合多段线多出的那一段同样提供中点', () => {
     const closed = shapeEntity('closed', {
       kind: 'polyline',

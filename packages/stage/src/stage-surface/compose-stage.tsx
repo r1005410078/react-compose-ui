@@ -472,11 +472,6 @@ function ComposeStageReady({
     label: messages.editGeometry,
   })
   const geometryEditingActive = geometryEditing.entityId !== null
-  // 几何编辑的目标不参与捕捉：它自己的端点就在指针底下，夹点会被吸回原处。
-  const geometryEditingIds = useMemo(
-    () => (geometryEditing.entityId === null ? [] : [geometryEditing.entityId]),
-    [geometryEditing.entityId],
-  )
 
   const draftingSession = useStageDrafting({
     // 绘图能力恒开：命令行常驻，命令随时可启动。模式已取消——它提供的四样没有一样
@@ -490,7 +485,9 @@ function ComposeStageReady({
     idFactory,
     activeFrameId,
     index: sceneIndex,
-    snapExcludedIds: geometryEditingIds,
+    // 排除**只到被拖的那一个点**，不是整个对象：整个对象排除会把同一个形状的其他顶点与
+    // 各段中点一起收走，而「把这个角对到那个角上」正是画图时最常做的事。
+    snapExcludedPoint: geometryEditing.snapExcludedPoint,
     messages: draftingMessages,
     commands,
     selectedIds: normalizedSelection,

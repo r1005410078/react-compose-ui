@@ -54,6 +54,13 @@ const MODE_ORDER: readonly StageFeatureSnapMode[] = [
   'quadrant',
 ]
 
+/** 点级排除的判等阈值；见 {@link findStageFeaturePoint} 为什么不用容差。 */
+const SAME_POINT_EPSILON = 1e-6
+
+function isSameWorldPoint(a: StagePoint, b: StagePoint) {
+  return Math.abs(a.x - b.x) <= SAME_POINT_EPSILON && Math.abs(a.y - b.y) <= SAME_POINT_EPSILON
+}
+
 function midpoint(a: StagePoint, b: StagePoint): StagePoint {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
 }
@@ -125,7 +132,17 @@ function curveFeaturePoints(
  * 不在此列——那条挡的是从盒**推**出来的点，而端口是作者**显式写下**的。
  *
  * @param tolerance - 世界单位的容差；调用方用屏幕像素除以 zoom 换算。
- * @param excludedIds - 不参与捕捉的 Entity，例如正在被这条命令编辑的那个。
+ * @param excludedIds - 不参与捕捉的整个 Entity。
+ * @param excludedPoint - 不参与捕捉的**单个世界点**。
+ *
+ * @remarks
+ * 两级排除服务不同的事：Entity 级挡的是「这个对象整体不该出现在候选里」，点级挡的是
+ * 「**这一个点**就在指针底下，会把落点吸回原处」。拖夹点属于后者——用 Entity 级去挡它，会把
+ * 同一个对象的其他顶点与各段中点一起收走，而那些正是用户最常要对齐的目标。
+ *
+ * 点级比较用极小的 epsilon 而不是容差：排除点与候选点由**同一条**投影与世界矩阵算出，数值
+ * 上本就相等，epsilon 只是为了不依赖浮点的逐位一致。
+ *
  * @returns 容差内优先级最高、同优先级下最近的候选；没有则返回 null。
  * @public
  */
@@ -135,6 +152,7 @@ export function findStageFeaturePoint(
   point: StagePoint,
   tolerance: number,
   excludedIds: readonly string[] = [],
+  excludedPoint: StagePoint | null = null,
 ): StageFeaturePoint | null {
   if (!(tolerance > 0)) return null
   const excluded = new Set(excludedIds)
@@ -159,6 +177,7 @@ export function findStageFeaturePoint(
       ...curveFeaturePoints(entity, box, toWorld),
     ]
     for (const candidate of candidates) {
+      if (excludedPoint && isSameWorldPoint(candidate.point, excludedPoint)) continue
       const dx = candidate.point.x - point.x
       const dy = candidate.point.y - point.y
       const distance = dx * dx + dy * dy

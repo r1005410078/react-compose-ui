@@ -90,6 +90,14 @@ export interface StageDraftingOptions {
    * 出现「标记在这里、点落在那里」。
    */
   readonly snapExcludedIds?: readonly string[]
+  /**
+   * 不参与捕捉的**单个世界点**。
+   *
+   * @remarks
+   * 几何编辑拖夹点时传被拖顶点的原位置。它与 `snapExcludedIds` 是两级不同的东西：后者挡整个
+   * 对象，前者只挡一个点——用整个对象去挡拖夹点，会把同对象的其他顶点与中点一起收走。
+   */
+  readonly snapExcludedPoint?: StagePoint | null
 }
 
 const DEFAULT_SNAP_RADIUS = 12
@@ -125,6 +133,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     onSelectedIdsChange,
     snapRadius = DEFAULT_SNAP_RADIUS,
     snapExcludedIds,
+    snapExcludedPoint = null,
     index,
   } = options
 
@@ -237,12 +246,34 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setNotice(step.message)
   }, [commit, endSession, messages.cancelled])
 
+  /**
+   * 特征点捕捉的世界容差。
+   *
+   * @remarks
+   * 基数是 `snapRadius` 屏幕像素除以缩放。**开着网格吸附时再加上网格自己的够及范围**
+   * （半条对角步长）：网格已经在把落点搬走，最远就是这么远，因此把对象捕捉的靶区扩大同样
+   * 的量，不会引入任何用户尚未接受的位移。
+   *
+   * 这条**不是**在改优先级——`resolveComposePoint` 本来就是捕捉命中即短路、根本不过网格。
+   * 它解决的是另一件事：够不着的时候网格接管，把点拽到格点上，看起来就像网格把捕捉挤掉了。
+   * 网格越粗、它的拽动越violent，靶区也就跟着越大，这个联动正是想要的。
+   *
+   * 关掉网格吸附时退回基数，一个像素都不多给。
+   */
+  const featureTolerance = useMemo(() => {
+    const base = snapRadius / viewport.zoom
+    if (!gridSettings.enabled) return base
+    return base + Math.hypot(gridSettings.stepX, gridSettings.stepY) / 2
+  }, [gridSettings, snapRadius, viewport.zoom])
+
   /** 光标附近的捕捉命中；同时用于渲染标记与求解落点，两者因此不可能分叉。 */
   const excluded = snapExcludedIds ?? EMPTY_EXCLUSIONS
   const snap: StageFeaturePoint | null = useMemo(() => {
     if (!enabled || !snapEnabled || !pointer) return null
-    return findStageFeaturePoint(document, index, pointer, snapRadius / viewport.zoom, excluded)
-  }, [document, enabled, excluded, index, pointer, snapEnabled, snapRadius, viewport.zoom])
+    return findStageFeaturePoint(
+      document, index, pointer, featureTolerance, excluded, snapExcludedPoint,
+    )
+  }, [document, enabled, excluded, featureTolerance, index, pointer, snapEnabled, snapExcludedPoint])
 
   /**
    * 解算一次落点，并带上它的来源。
@@ -256,7 +287,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     readonly port?: ComposeWireBinding
   } => {
     const hit = snapEnabled
-      ? findStageFeaturePoint(document, index, world, snapRadius / viewport.zoom, excluded)
+      ? findStageFeaturePoint(document, index, world, featureTolerance, excluded, snapExcludedPoint)
       : null
     const point = resolveComposePoint(world, 'pointer', {
       ...(hit ? { snapped: hit.point } : {}),
@@ -267,7 +298,10 @@ export function useStageDrafting(options: StageDraftingOptions) {
     return hit?.mode === 'port' && hit.portId
       ? { point, port: { entityId: hit.entityId, portId: hit.portId } }
       : { point }
-  }, [document, excluded, gridSettings, index, ortho, reference, snapEnabled, snapRadius, viewport.zoom])
+  }, [
+    document, excluded, featureTolerance, gridSettings, index, ortho, reference,
+    snapEnabled, snapExcludedPoint,
+  ])
 
   const resolvePointerPoint = useCallback(
     (world: StagePoint): ComposeInputPoint => resolvePointerHit(world).point,

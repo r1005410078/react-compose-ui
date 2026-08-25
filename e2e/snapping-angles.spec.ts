@@ -173,3 +173,112 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 拖夹点在各方位角都�
   }
   expect(missed, `zoom ${view.zoom.toFixed(3)}`).toEqual([])
 })
+
+test('OpenSpec: stage-engine / 特征点捕捉 / 靶区随网格步长放大，网格拽不走端点', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const marker = stage.getByTestId('stage-drafting-snap')
+
+  // 端点刻意**不落在网格上**（步长 8）：落在网格上时网格与捕捉给出同一个答案，这条就没有
+  // 判别力了。真实图纸上的端点本来也很少正好是步长的倍数。
+  const end = { x: 403, y: 305 }
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await typePoint(commandInput, 250, 500)
+  await typePoint(commandInput, end.x, end.y)
+  await commandInput.press('Escape')
+
+  const view = await worldToScreen(page)
+  const screen = view.at(end.x, end.y)
+
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  // 15 屏幕像素：**超出**基础靶区（12），但仍在「网格反正也要把点搬走」那段之内。
+  // 网格吸附开着时这里必须仍然吸到端点，而不是被拽到最近的格点上。
+  for (const angle of [0, 45, 90, 135, 180, 225, 270, 315]) {
+    const radians = (angle * Math.PI) / 180
+    await page.mouse.move(screen.x + 15 * Math.cos(radians), screen.y + 15 * Math.sin(radians))
+    await expect(marker, `${angle}°`).toHaveCount(1)
+    expect(await marker.getAttribute('data-snap-mode'), `${angle}°`).toBe('endpoint')
+  }
+
+  // 关掉网格吸附，靶区退回基数：同样的 15 像素不再吸得上。这一条钉住「放大量来自网格」，
+  // 而不是「把靶区一律调大了」。
+  await commandInput.press('Escape')
+  await commandInput.fill('GRIDSNAP')
+  await commandInput.press('Enter')
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await page.mouse.move(screen.x + 15, screen.y)
+  await expect(marker).toHaveCount(0)
+  await page.mouse.move(screen.x + 6, screen.y)
+  await expect(marker).toHaveCount(1)
+})
+
+test('OpenSpec: stage / 曲线几何编辑会话 / 同一个形状的其他顶点仍可捕捉', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const marker = stage.getByTestId('stage-drafting-snap')
+
+  // 矩形 = 一个 Entity 上的四个顶点。坐标刻意**都不在网格上**（步长 8）：落在网格上时
+  // 网格与捕捉给出同一个答案，这条就没有判别力了——而「顶点不在网格上就永远落不上去」
+  // 正是这个缺陷在屏幕上的样子。
+  const corner = { x: 203, y: 305 }
+  const opposite = { x: 403, y: 505 }
+  await commandInput.fill('REC')
+  await commandInput.press('Enter')
+  await typePoint(commandInput, corner.x, corner.y)
+  await typePoint(commandInput, opposite.x, opposite.y)
+  await commandInput.press('Escape')
+  await expect(stage.getByTestId('compose-material-curve-stroke')).toHaveCount(1)
+
+  const view = await worldToScreen(page)
+  const shape = (await stage.getByTestId('compose-material-curve-stroke').boundingBox())!
+  await page.mouse.dblclick(shape.x + shape.width / 2, shape.y + 2)
+  const grips = stage.locator('[data-testid^="stage-path-vertex-hit-"]')
+  await expect(grips).toHaveCount(4)
+
+  // 未拖动：本对象自己的顶点与边中点都该能吸——此刻没有任何一个点在指针底下等着把它吸回去。
+  for (const [label, target, mode] of [
+    ['对角顶点', opposite, 'endpoint'],
+    ['边中点', { x: (corner.x + opposite.x) / 2, y: corner.y }, 'midpoint'],
+  ] as const) {
+    const screen = view.at(target.x, target.y)
+    await page.mouse.move(screen.x + 4, screen.y - 3)
+    await expect(marker, label).toHaveCount(1)
+    expect(await marker.getAttribute('data-snap-mode'), label).toBe(mode)
+  }
+
+  const grip = (await stage.getByTestId('stage-path-vertex-hit-v0').boundingBox())!
+  const from = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 }
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+
+  // 先验**排除仍然挡得住被拖的那一个点**：刚离开原位置几个像素时不该被吸回去。
+  // 这一条与「其他顶点恢复可捕捉」是一对——粒度放宽之后它最容易被顺手放掉，而且要在同一次
+  // 拖动里、在拖远之前查，绕开撤销那种脆弱的往返。
+  for (const distance of [3, 6, 10]) {
+    await page.mouse.move(from.x + distance, from.y + distance, { steps: 2 })
+    await expect(marker, `离原位置 ${distance}px`).toHaveCount(0)
+  }
+
+  // 再拖到对角顶点上：落点要精确落上去。
+  const screen = view.at(opposite.x, opposite.y)
+  await page.mouse.move(screen.x + 4, screen.y - 3, { steps: 4 })
+  await expect(marker).toHaveCount(1)
+  expect(await marker.getAttribute('data-snap-mode')).toBe('endpoint')
+  await page.mouse.up()
+
+  const inspector = editor.getByRole('region', { name: 'Curve 属性', exact: true })
+  const vertex0 = inspector.getByRole('spinbutton', { name: '顶点 1 X' })
+  await expect.poll(async () => Number(await vertex0.inputValue())).toBeCloseTo(opposite.x, 1)
+})
+
