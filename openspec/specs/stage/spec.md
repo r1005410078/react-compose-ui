@@ -617,11 +617,19 @@ Stage 作为 Controller 的宿主，MUST 供给编辑会话所需的三项事实
 ### Requirement: 受控工具模式与专属选区反馈
 
 Stage MUST 接受受控的 `tool` 值并按它改变手势语义。工具集 MUST 只包含**没有其他入口**的
-动作：`select`、`scale`、`rotate` 与各 `draw-*` 绘制工具。
+动作：`select`、`scale`、`rotate`、`draw-container` 与 `draw-text`。
 
-以下四个工具值 MUST NOT 存在，因为各自都有严格不弱的既有入口：`marquee`（`select` 在空白处
+以下工具值 MUST NOT 存在，因为各自都有严格不弱的既有入口：`marquee`（`select` 在空白处
 拖拽即框选）、`move`（`MOVE` 命令能键入精确位移）、`pan`（空格与中键是随时可用的临时覆盖，
-不占用工具状态）、`draw-line`（`LINE` 命令产出 `Curve` Entity）。
+不占用工具状态）、`draw-line`、`draw-rectangle`、`draw-circle`、`draw-arrow`（各有对应的
+绘图命令，且命令那一套严格更强——能键入精确坐标、能捕捉、能正交、能中途放弃上一点）。
+
+**制图几何 MUST 只有命令一套入口。**留着绘制工具会让同一件事有两套机制，还会让一处已知的
+仲裁器冲突**用鼠标就能触发**：取点插件（`drafting-point`，1650）高于绘制（`draw`，1000），
+两者同时武装时 `pointerdown` 被前者吃掉，拖动永远起不来。
+
+`draw-container` 与 `draw-text` MUST 保留：它们不是制图几何，没有命令等价物，也不与取点插件
+争抢——它们本来就是拖一个盒出来。
 
 `select` 工具在空白处拖拽 MUST 框选，判定由拖拽方向归约得出（见 stage-engine 的框选判定
 Requirement）。MUST NOT 存在任何可以覆盖方向的模式参数或宿主开关。
@@ -2474,4 +2482,30 @@ Stage MUST 让几何编辑既能用双击进入，也能用命令名进入。这
 
 - **WHEN** 用命令名进入几何编辑，点亮一个夹点，再键入一个绝对坐标
 - **THEN** 该顶点落在键入的坐标上，全程无需指针
+
+### Requirement: 宿主可以从自己的 chrome 启动一条命令会话
+
+Stage MUST 提供命令式句柄 `ComposeStageHandle`，其 `startCommand(commandId)` MUST 启动与在
+命令行敲下该名字**完全相同**的会话，MUST NOT 另走一条构造上下文、推进状态机的路径。
+
+理由与 `runComposeCommandImmediately` 只有一处实现是同一条：命令行那条路已经处理了三种拒绝
+（词不在表里、词在表里但此刻不可用、会话进行中的非法输入），另写一份必然只实现其中一两种，
+同一条命令会在不同入口给出不同结果。
+
+会话状态 MUST 仍住在 Stage，句柄 MUST NOT 暴露它——状态由 `onActiveCommandChange` 单向上报
+（结束时报 `null`），两个方向各自单一。搬走会话意味着提示、预览与捕捉标记要逐帧回传。
+
+句柄 MUST NOT 做成受控 prop（例如 `pendingCommandId` 加一次消费握手）：那把一个**事件**建模
+成状态，同一个按钮连点两次要靠 nonce 才能再次触发，而「挂着一个待启动的命令」这个中间态在
+任何时刻都不描述真实世界的任何东西。
+
+#### Scenario: 句柄启动的会话与敲名字的同一条
+
+- **WHEN** 宿主调用 `startCommand('RECTANGLE')`
+- **THEN** 命令行进入与敲 `RECTANGLE` 后完全一致的提示状态
+
+#### Scenario: 会话结束时上报 null
+
+- **WHEN** 一条由句柄启动的会话被 `Escape` 取消
+- **THEN** `onActiveCommandChange` 收到 `null`
 

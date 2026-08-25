@@ -1317,7 +1317,7 @@ Stage 侧只声明自己的上下文与效果类型。
 直到用户显式结束。非法输入 MUST 以 `rejected` 表达且 MUST NOT 结束会话——点错、打错关键字
 在这类工具里是常态，结束命令会让用户从头再来。
 
-命令集 MUST 另含 `ARC`、`CIRCLE`、`REC` 与 `PLINE`：
+命令集 MUST 另含 `ARC`、`CIRCLE`、`REC`、`PLINE` 与 `ARROW`：
 
 - `ARC` 取起点、途经点与终点；三点共线时 MUST 以 `rejected` 表达且 MUST NOT 结束会话。
 - `CIRCLE` 取圆心与半径点，产出扫掠为 360 的弧。
@@ -1325,6 +1325,16 @@ Stage 侧只声明自己的上下文与效果类型。
 - `PLINE` 连续取点，但 MUST 攒成**一个** Entity 在结束时提交——这正是它与 `LINE` 存在差别的
   理由。因此 `PLINE` MUST 提供「放弃上一点」关键字而 `LINE` MUST NOT：`LINE` 的放弃等于一次
   文档撤销，`PLINE` 的还在会话里。
+- `ARROW`（别名 `AR`）取两个点，产出一条带终点箭头的曲线。它 MUST 取两点就结束而 MUST NOT
+  像 `LINE` 那样连着画：**一支箭头只有一个头**，连着画会得到一串各自带头的箭头，而那不是
+  任何人启动这条命令时想要的东西。
+
+`ARROW` 与 `WIRE` MUST 共用同一个两点会话工厂，差别只在提交效果上的那一个标记：两者的取点
+逻辑逐字相同，复制一份只会让下一个改取点的人改到其中一处。
+
+引擎 MUST NOT 认识 Renderer props 或 Preset id：`ARROW` 只在效果上给出「这是一支箭头」的
+标记，由持有 Registry 的宿主挑那个带终点箭头的 Preset——这与 `WIRE` 的 `wire` 标记是同一条
+既有边界。
 
 #### Scenario: 连续画线逐段落地
 
@@ -1355,6 +1365,11 @@ Stage 侧只声明自己的上下文与效果类型。
 
 - **WHEN** `ARC` 的三个点共线
 - **THEN** 会话给出被拒绝的说明并停在原提示
+
+#### Scenario: 箭头取两点即结束
+
+- **WHEN** 启动 `ARROW` 后取两个点
+- **THEN** 产出一条带终点箭头的曲线，且会话结束
 
 ### Requirement: 取点接管排在画布平移之下
 
