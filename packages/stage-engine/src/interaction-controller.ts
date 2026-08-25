@@ -198,6 +198,28 @@ export interface StageEditablePathVertex {
   readonly inTangent: StagePoint | null
   readonly outTangent: StagePoint | null
   readonly mode: 'corner' | 'smooth'
+  /**
+   * 呈现角色，决定这个顶点画成什么形状。
+   *
+   * @remarks
+   * `keyframe` 画菱形——与时间线关键帧同形，因为运动路径上的顶点**就是**关键帧；`vertex`
+   * 画方块，是一个可拖的既有几何自由度；`insert` 画一条沿段方向的条形，表示「按下去会在
+   * 这里插入一个新顶点」。
+   *
+   * 缺省是 `keyframe`：宿主传入的运动路径因此一行不改地保持既有呈现。覆盖层照它画形状，
+   * MUST NOT 认识多段线或任何文档结构。
+   *
+   * @defaultValue 'keyframe'
+   */
+  readonly role?: 'keyframe' | 'vertex' | 'insert'
+  /**
+   * 方向角（度）；`insert` 用它决定条形怎么摆。
+   *
+   * @remarks
+   * 由派生这一侧给出而不是让覆盖层从邻居推算：覆盖层拿到的是一串扁平顶点，它不知道谁和谁
+   * 相邻。视口没有旋转，因此世界角度等于屏幕角度。
+   */
+  readonly angle?: number
 }
 
 /**

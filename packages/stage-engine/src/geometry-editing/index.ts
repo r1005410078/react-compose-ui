@@ -6,4 +6,4 @@ export {
   stageCurveLocalPoint,
   stageCurveOutline,
 } from './curve-grips'
-export type { StageCurveGrip } from './curve-grips'
+export type { StageCurveGrip, StageCurveGripRole } from './curve-grips'

@@ -244,6 +244,9 @@ export function useStageGeometryEditing(
         inTangent: null,
         outTangent: null,
         mode: 'corner' as const,
+        // 角色与方向角原样带上：覆盖层照它画形状，不认识多段线。
+        role: grip.role,
+        ...(grip.angle === undefined ? {} : { angle: grip.angle }),
       })),
     }
   }, [activePreview, document, entityId, hostPathActive, index])

@@ -205,4 +205,4 @@ export {
   stageCurveLocalPoint,
   stageCurveOutline,
 } from './geometry-editing'
-export type { StageCurveGrip } from './geometry-editing'
+export type { StageCurveGrip, StageCurveGripRole } from './geometry-editing'

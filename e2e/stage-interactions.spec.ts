@@ -121,10 +121,14 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
 
   /*
    * 重叠取样点落在**描边上**而不是包围盒中心：曲线按到几何的距离命中，空心矩形的内部
-   * 是空的。取第一条描边渲染出来的上边中点，不用鼠标原始坐标——角点经过了吸附。
+   * 是空的。取第一条描边渲染出来的上边，不用鼠标原始坐标——角点经过了吸附。
+   *
+   * 取四分之一处而不是中点：本条会在同一个点上连点四下，其中相邻两下会被判成双击而进入
+   * 几何编辑，而多段线的**段中点**上正好有一个夹点——落在它上面的点击会被夹点吃掉，选区
+   * 因此停在上一次的结果上。四分之一处离角点与段中点都有半段远。
    */
   const strokeBox = (await stage.getByTestId('compose-material-curve-stroke').first().boundingBox())!
-  const overlap = { x: strokeBox.x + strokeBox.width / 2, y: strokeBox.y }
+  const overlap = { x: strokeBox.x + strokeBox.width / 4, y: strokeBox.y }
 
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(2)

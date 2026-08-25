@@ -35,7 +35,7 @@ describe('stageCurveGrips', () => {
     expect(grips[2]!.point).toMatchObject({ x: 200, y: 50 })
   })
 
-  it('多段线与弧的夹点集不受直线的中点夹点影响', () => {
+  it('多段线出顶点加每段中点，弧不受影响', () => {
     const withCurve = (curve: ComposeCurve, width: number, height: number): ComposeEntity => {
       const base = curveEntity(width, height)
       return {
@@ -53,15 +53,41 @@ describe('stageCurveGrips', () => {
       kind: 'arc', center: { x: 0, y: 0 }, radius: 25, startAngle: 0, sweep: 90,
     }, 25, 25)])
 
-    // 段中点**留给顶点增删**，弧的圆心仍是它的平移夹点：两处都是声明过的例外，要有护栏。
-    expect(
-      stageCurveGrips(polyline, createStageSceneIndex(polyline, layoutSnapshot(polyline)), 'curve-a')
-        .map(({ id }) => id),
-    ).toEqual(['v0', 'v1', 'v2'])
+    // 段中点表示「在这里插入一个顶点」——这兑现的正是当初把它留白时写下的用途。
+    const polylineGrips = stageCurveGrips(
+      polyline, createStageSceneIndex(polyline, layoutSnapshot(polyline)), 'curve-a',
+    )
+    expect(polylineGrips.map(({ id }) => id)).toEqual(['v0', 'v1', 'v2', 'm0', 'm1'])
+    expect(polylineGrips.map(({ role }) => role))
+      .toEqual(['vertex', 'vertex', 'vertex', 'insert', 'insert'])
+    // 条形按段的方向摆；第一段是 45 度下坡。
+    expect(polylineGrips[3]).toMatchObject({ point: { x: 25, y: 25 }, angle: 45 })
     expect(
       stageCurveGrips(arcDoc, createStageSceneIndex(arcDoc, layoutSnapshot(arcDoc)), 'curve-a')
         .map(({ id }) => id),
     ).toEqual(['center', 'start', 'end', 'mid'])
+  })
+
+  it('闭合多段线的收尾段也有中点', () => {
+    const base = curveEntity(100, 100)
+    const closed = document([{
+      ...base,
+      components: {
+        ...base.components,
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.curve]: {
+          kind: 'polyline',
+          vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }],
+          closed: true,
+        } as never,
+      },
+    }])
+
+    // 收尾那一段在屏幕上与其他段没有任何区别，漏掉它会让一条闭合折线上恰好少一个可抓的
+    // 位置，而用户看不出为什么。
+    expect(
+      stageCurveGrips(closed, createStageSceneIndex(closed, layoutSnapshot(closed)), 'curve-a')
+        .map(({ id }) => id),
+    ).toEqual(['v0', 'v1', 'v2', 'v3', 'm0', 'm1', 'm2', 'm3'])
   })
 
   it('不是曲线时没有夹点', () => {
@@ -143,5 +169,40 @@ describe('applyStageCurveGrip', () => {
   it('圆心平移整条弧', () => {
     const next = applyStageCurveGrip(arc, 'center', { x: 20, y: 20 }) as ComposeArcCurve
     expect(next).toEqual({ ...arc, center: { x: 20, y: 20 } })
+  })
+})
+
+describe('OpenSpec: stage-engine / 多段线夹点 / 拖段中点插入一个顶点', () => {
+  const polyline: ComposeCurve = {
+    kind: 'polyline',
+    vertices: [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }],
+    closed: false,
+  }
+
+  it('新顶点排在那一段的两个顶点之间，且落在落点上', () => {
+    const next = applyStageCurveGrip(polyline, 'm0', { x: 10, y: 90 })
+
+    expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
+      { x: 0, y: 0 }, { x: 10, y: 90 }, { x: 50, y: 50 }, { x: 100, y: 0 },
+    ])
+  })
+
+  it('每次求解只插一个', () => {
+    // 拖动期每一帧都拿**文档**里的几何加同一个 id 重求一次，因此顶点数永远是原数加一。
+    for (const point of [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }]) {
+      const next = applyStageCurveGrip(polyline, 'm1', point)
+      expect(next?.kind === 'polyline' ? next.vertices : []).toHaveLength(4)
+    }
+  })
+
+  it('段下标越界时放弃这次写入', () => {
+    // 开放三顶点多段线只有两段；`m2` 不属于它。
+    expect(applyStageCurveGrip(polyline, 'm2', { x: 0, y: 0 })).toBeNull()
+  })
+
+  it('直线没有插入夹点', () => {
+    // 护栏：直线插一个顶点就不是直线了。
+    const line: ComposeCurve = { kind: 'line', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } }
+    expect(applyStageCurveGrip(line, 'm0', { x: 5, y: 5 })).toBeNull()
   })
 })

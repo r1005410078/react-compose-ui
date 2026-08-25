@@ -23,7 +23,30 @@ export interface StageCurveGrip {
   readonly id: string
   /** 世界坐标。 */
   readonly point: StagePoint
+  /**
+   * 呈现角色。
+   *
+   * @remarks
+   * `vertex` 是一个可拖的既有自由度，`insert` 是「按下去会在这里插入一个新顶点」。两者
+   * 长得一样而按下去做的事不同，是最难自己发现的一类缺陷，因此角色由派生这一侧给出，
+   * 渲染层照它画形状即可，不必认识多段线。
+   */
+  readonly role: StageCurveGripRole
+  /**
+   * 方向角（度），只有 `insert` 才有。
+   *
+   * @remarks
+   * 由这里给出而不是让渲染层从邻居推算：渲染层拿到的是一串**扁平的顶点**，它不知道谁和谁
+   * 相邻，更不知道闭合多段线的收尾段接的是第一个顶点。
+   *
+   * 是**世界角度**，而 Stage 的视口只有平移与缩放、没有旋转，因此它等于屏幕角度。将来若给
+   * 视口加了旋转，这里是会静默错位的地方之一。
+   */
+  readonly angle?: number
 }
+
+/** 夹点的呈现角色。 @public */
+export type StageCurveGripRole = 'vertex' | 'insert'
 
 /** 弧夹点的稳定 id。 */
 const ARC_CENTER = 'center'
@@ -43,6 +66,15 @@ const MOVE = 'move'
 
 /** 多段线顶点 id 的前缀；下标即顺序。 */
 const VERTEX_PREFIX = 'v'
+
+/**
+ * 多段线段中点 id 的前缀；下标即**段**的顺序（第 i 段从顶点 i 连到顶点 i+1）。
+ *
+ * @remarks
+ * 与顶点用不同前缀：求解要按 id 分派到两种完全不同的操作（移动一个既有顶点 / 插入一个新
+ * 顶点），而它手上只有 id。
+ */
+const INSERT_PREFIX = 'm'
 
 const TO_DEGREES = 180 / Math.PI
 
@@ -73,6 +105,7 @@ function normalizeSweep(delta: number, sign: number) {
  * 把手。象限点不是弧的自由度，出在这里会变成能拖却拖不动任何东西的假手柄。
  */
 function localGrips(curve: ComposeCurve): readonly StageCurveGrip[] {
+  const vertex = (id: string, point: StagePoint): StageCurveGrip => ({ id, point, role: 'vertex' })
   if (curve.kind === 'line') {
     // 中点夹点表达的是「按中点捕捉着移动」，而不是盒拖动的第二个入口：盒拖动走
     // `snapTranslation`，吸的是其他 Entity 的包围盒参考线且逐轴独立；这里走落点解算，
@@ -80,21 +113,50 @@ function localGrips(curve: ComposeCurve): readonly StageCurveGrip[] {
     // 捕捉标记。多段线的段中点**留给顶点增删**，因此这里只有直线有。
     const mid = { x: (curve.start.x + curve.end.x) / 2, y: (curve.start.y + curve.end.y) / 2 }
     return [
-      { id: START, point: curve.start },
-      { id: MOVE, point: mid },
-      { id: END, point: curve.end },
+      vertex(START, curve.start),
+      vertex(MOVE, mid),
+      vertex(END, curve.end),
     ]
   }
   if (curve.kind === 'polyline') {
-    return curve.vertices.map((point, index) => ({ id: `${VERTEX_PREFIX}${index}`, point }))
+    return [
+      ...curve.vertices.map((point, index) => vertex(`${VERTEX_PREFIX}${index}`, point)),
+      ...polylineSegments(curve.vertices, curve.closed).map(({ start, end }, index) => ({
+        id: `${INSERT_PREFIX}${index}`,
+        point: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
+        role: 'insert' as const,
+        angle: Math.atan2(end.y - start.y, end.x - start.x) * TO_DEGREES,
+      })),
+    ]
   }
-  const center = { id: ARC_CENTER, point: curve.center }
-  const mid = { id: ARC_MID, point: composeArcMidpoint(curve) }
+  const center = vertex(ARC_CENTER, curve.center)
+  const mid = vertex(ARC_MID, composeArcMidpoint(curve))
   // 整圆的起点与终点落在同一个像素上，两个含义不同的夹点叠在那里时拖到哪个全凭渲染顺序；
   // 而「改整圆的起始角」在屏幕上根本看不见。
   if (isComposeFullCircle(curve)) return [center, mid]
   const [start, end] = composeArcEndpoints(curve)
-  return [center, { id: START, point: start }, { id: END, point: end }, mid]
+  return [center, vertex(START, start), vertex(END, end), mid]
+}
+
+/**
+ * 多段线的段列表。
+ *
+ * @remarks
+ * 闭合时**包含收尾那一段**（最后一个顶点连回第一个）：它在屏幕上与其他段没有任何区别，
+ * 漏掉它会让一条闭合折线上恰好少一个可抓的位置，而用户看不出为什么。
+ */
+function polylineSegments(
+  vertices: readonly { readonly x: number; readonly y: number }[],
+  closed: boolean,
+): readonly { readonly start: StagePoint; readonly end: StagePoint }[] {
+  const segments: { readonly start: StagePoint; readonly end: StagePoint }[] = []
+  for (let index = 0; index + 1 < vertices.length; index += 1) {
+    segments.push({ start: vertices[index]!, end: vertices[index + 1]! })
+  }
+  const first = vertices[0]
+  const last = vertices[vertices.length - 1]
+  if (closed && first && last && vertices.length > 2) segments.push({ start: last, end: first })
+  return segments
 }
 
 /** 盒局部几何的轮廓点；弧按弦高拍扁，多段线与直线本来就是折线。 */
@@ -148,7 +210,7 @@ export function stageCurveGrips(
   const curve = override ?? stageCurveBoxGeometry(document, index, entityId)
   const matrix = index.getWorldMatrix(entityId)
   if (!curve || !matrix) return []
-  return localGrips(curve).map(({ id, point }) => ({ id, point: applyMatrix(matrix, point) }))
+  return localGrips(curve).map((grip) => ({ ...grip, point: applyMatrix(matrix, grip.point) }))
 }
 
 /**
@@ -202,6 +264,19 @@ export function applyStageCurveGrip(
     return null
   }
   if (curve.kind === 'polyline') {
+    if (gripId.startsWith(INSERT_PREFIX)) {
+      const segment = Number(gripId.slice(INSERT_PREFIX.length))
+      const segments = polylineSegments(curve.vertices, curve.closed).length
+      if (!Number.isInteger(segment) || segment < 0 || segment >= segments) return null
+      /*
+       * 每次求解只插一个：拖动期每一帧都拿**文档**里的几何加同一个 id 重求一次
+       * （见 `stageCurveBoxGeometry`），因此 `m2` 在任何一帧都表示「在第 2 段中间插一个」。
+       * 提交之后它变成一个普通的 `v{i}`，此后与别的顶点没有任何差别。
+       */
+      const vertices = [...curve.vertices]
+      vertices.splice(segment + 1, 0, position(point))
+      return { ...curve, vertices }
+    }
     if (!gripId.startsWith(VERTEX_PREFIX)) return null
     const target = Number(gripId.slice(VERTEX_PREFIX.length))
     if (!Number.isInteger(target) || target < 0 || target >= curve.vertices.length) return null

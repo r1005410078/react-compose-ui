@@ -244,7 +244,8 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 同一个形状的其他顶�
   const shape = (await stage.getByTestId('compose-material-curve-stroke').boundingBox())!
   await page.mouse.dblclick(shape.x + shape.width / 2, shape.y + 2)
   const grips = stage.locator('[data-testid^="stage-path-vertex-hit-"]')
-  await expect(grips).toHaveCount(4)
+  // 闭合四顶点多段线：四个顶点夹点加四段的中点夹点（收尾那一段也算）。
+  await expect(grips).toHaveCount(8)
 
   /*
    * 观察点落在**点亮之后**而不是空闲档：空闲档既不解算落点也不画捕捉标记（那一档的命令行

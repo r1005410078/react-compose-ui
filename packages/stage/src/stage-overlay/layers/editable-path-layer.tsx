@@ -1,6 +1,8 @@
 import { worldToScreen } from '@compose-ui/stage-engine'
 import {
   LINE_ENDPOINT_HIT_RADIUS,
+  PATH_INSERT_LENGTH,
+  PATH_INSERT_THICKNESS,
   PATH_TANGENT_HANDLE_RADIUS,
   PATH_VERTEX_SIZE,
 } from '../overlay-geometry'
@@ -35,6 +37,8 @@ function EditablePathLayer({
   const vertices = path.vertices.map((vertex) => ({
     id: vertex.id,
     mode: vertex.mode,
+    role: vertex.role ?? 'keyframe',
+    angle: vertex.angle ?? 0,
     screen: worldToScreen(vertex.point, viewport),
     inScreen: vertex.inTangent ? worldToScreen(vertex.inTangent, viewport) : null,
     outScreen: vertex.outTangent ? worldToScreen(vertex.outTangent, viewport) : null,
@@ -95,17 +99,28 @@ function EditablePathLayer({
               event,
             )}
           />
+          {/*
+            * 形状按角色分：既有自由度画方块，插入位置画一条沿段方向的条形。两个夹点长得
+            * 一样而按下去做的事不同，是最难自己发现的一类缺陷。
+            *
+            * 菱形留给运动路径——它的理由是「与时间线关键帧同形」，而那条理由只在那里成立：
+            * 那里的顶点**就是**关键帧，曲线的顶点不是。角色缺省即 `vertex`，因此宿主传入的
+            * 运动路径一行不改地继续画菱形。
+            */}
           <rect
             className="compose-stage__editable-path-vertex"
             data-testid={`stage-path-vertex-${vertex.id}`}
             data-vertex-active={vertex.id === activeVertexId || undefined}
             data-vertex-hot={vertex.id === hotVertexId || undefined}
             data-vertex-mode={vertex.mode}
-            height={PATH_VERTEX_SIZE}
-            transform={`rotate(45 ${vertex.screen.x} ${vertex.screen.y})`}
-            width={PATH_VERTEX_SIZE}
-            x={vertex.screen.x - PATH_VERTEX_SIZE / 2}
-            y={vertex.screen.y - PATH_VERTEX_SIZE / 2}
+            data-vertex-role={vertex.role}
+            height={vertex.role === 'insert' ? PATH_INSERT_THICKNESS : PATH_VERTEX_SIZE}
+            transform={`rotate(${
+              vertex.role === 'insert' ? vertex.angle : vertex.role === 'keyframe' ? 45 : 0
+            } ${vertex.screen.x} ${vertex.screen.y})`}
+            width={vertex.role === 'insert' ? PATH_INSERT_LENGTH : PATH_VERTEX_SIZE}
+            x={vertex.screen.x - (vertex.role === 'insert' ? PATH_INSERT_LENGTH : PATH_VERTEX_SIZE) / 2}
+            y={vertex.screen.y - (vertex.role === 'insert' ? PATH_INSERT_THICKNESS : PATH_VERTEX_SIZE) / 2}
           />
         </g>
       ))}

@@ -25,8 +25,24 @@ export const GRIP_PICK_RADIUS = LINE_ENDPOINT_HIT_RADIUS / Math.SQRT2
 /** 四角缩放手柄边长（屏幕 px）；边方向只靠透明 hit，不渲染中点方块。 */
 export const CORNER_HANDLE_SIZE = 7
 
-/** 路径顶点菱形的半对角线（屏幕 px）；与时间线关键帧菱形同形呼应。 */
+/**
+ * 路径顶点标记的边长（屏幕 px）。
+ *
+ * @remarks
+ * 运动路径上它是菱形的半对角线——与时间线关键帧菱形同形呼应，因为那里的顶点**就是**关键帧。
+ * 曲线的几何夹点是方块（AutoCAD 的形状），共用同一个尺寸，因此两种路径的手柄一样好抓。
+ */
 export const PATH_VERTEX_SIZE = 8
+
+/**
+ * 插入顶点条形的长宽（屏幕 px）。
+ *
+ * @remarks
+ * 沿段方向摆，长宽比是它与方块唯一的视觉区别——两个夹点长得一样而按下去做的事不同，是最难
+ * 自己发现的一类缺陷。短边比方块窄，因此它不会在密集折线上糊成一片。
+ */
+export const PATH_INSERT_LENGTH = 11
+export const PATH_INSERT_THICKNESS = 4
 export const PATH_TANGENT_HANDLE_RADIUS = 3.5
 
 /** 两点连线的角度（度），用于端点游标与尺寸标注的朝向。 */
