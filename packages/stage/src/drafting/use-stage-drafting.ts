@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
+  composeCurveSegments,
   parseComposeCoordinate,
   resolveComposePoint,
   type ComposeDocument,
@@ -154,7 +155,23 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const portAnchors = useRef(new Map<string, ComposeWireBinding>())
   /** 上一条成功启动的命令 id；空闲时的空确认按它重启。取消过的命令仍算数。 */
   const lastCommandRef = useRef<string | null>(null)
-  const [prompt, setPrompt] = useState<ComposeCommandSession<StageDraftingEffect>['prompt']>(null)
+  const [prompt, setPromptState] = useState<ComposeCommandSession<StageDraftingEffect>['prompt']>(null)
+  /**
+   * 会话推进过的次数。
+   *
+   * @remarks
+   * 预览几何是「会话内部状态 + 光标落点」的函数，而会话住在 ref 里、它的内部状态在
+   * `advance` 里就地变化——React 看不见那次变化，因此需要一个显式的代次来触发重算。
+   *
+   * 它**不是**可派生状态的重复：`prompt` 今天恰好每步都换一个新对象，但那是各条命令各自的
+   * 实现细节，依赖它等于把一条跨包的隐含约定当接口用。
+   */
+  const [sessionRevision, setSessionRevision] = useState(0)
+  /** 所有改会话状态的地方都走这里，代次因此不可能与会话漂移。 */
+  const setPrompt = useCallback((next: ComposeCommandSession<StageDraftingEffect>['prompt']) => {
+    setPromptState(next)
+    setSessionRevision((revision) => revision + 1)
+  }, [])
   const [notice, setNotice] = useState<string | null>(null)
   const [reference, setReference] = useState<ComposeInputPoint | null>(null)
   const [preview, setPreview] = useState<StageDraftingEffect | null>(null)
@@ -273,7 +290,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setPreview(null)
     setGripTarget(null)
     setNotice(message)
-  }, [])
+  }, [setPrompt])
 
   const applyStep = useCallback((step: ReturnType<ComposeCommandSession<StageDraftingEffect>['advance']>) => {
     if (step.status === 'prompt') {
@@ -295,7 +312,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     }
     // rejected **不结束会话**：点错、打错在这类工具里是常态，结束命令会让用户从头再来。
     setNotice(step.message)
-  }, [commit, endSession, messages.cancelled])
+  }, [commit, endSession, messages.cancelled, setPrompt])
 
   /**
    * 特征点捕捉的世界容差。
@@ -444,7 +461,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     sessionRef.current = outcome.session
     setActiveCommandId(definition.id)
     setPrompt(outcome.session.prompt)
-  }, [applyStep, messages])
+  }, [applyStep, messages, setPrompt])
 
   /**
    * 由手势启动一条夹点取点会话。
@@ -466,7 +483,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setReference(target.origin)
     setPreview(null)
     setNotice(null)
-  }, [])
+  }, [setPrompt])
 
   /** 清掉命令行上残留的说明。进入几何编辑时调用：用户此刻站在一个会取点的状态里。 */
   const clearNotice = useCallback(() => { setNotice(null) }, [])
@@ -507,6 +524,18 @@ export function useStageDrafting(options: StageDraftingOptions) {
     }
     applyStep(session.advance({ kind: 'keyword', key: trimmed }))
   }, [applyStep, gridSettings, messages, ortho, reference, start])
+
+  /**
+   * 以「没有更多输入了」推进当前会话。
+   *
+   * @remarks
+   * 与命令行里的空 Enter、图面上的 `Enter` 键是**同一步**：右键只是它的第三个来源。
+   */
+  const acceptCommand = useCallback(() => {
+    const session = sessionRef.current
+    if (!session) return
+    applyStep(session.advance({ kind: 'accept' }))
+  }, [applyStep])
 
   const cancel = useCallback(() => {
     const session = sessionRef.current
@@ -614,10 +643,39 @@ export function useStageDrafting(options: StageDraftingOptions) {
     return resolvePointerPoint(pointer)
   }, [enabled, pointer, resolvePointerPoint])
 
+  /**
+   * 待定几何的世界折线；命令给不出预览时为 `null`。
+   *
+   * @remarks
+   * 形状只有命令自己知道——两个对角点怎么变四个顶点、圆心加半径点怎么变整圆——因此这里只负责
+   * 问一句并把结果拍成折线，不参与任何形状推导。
+   *
+   * 算在 `useLayoutEffect` 里而不是渲染期：`preview` 虽然是纯查询，但它读的是住在 ref 里的
+   * 会话内部状态，而渲染期读 ref 会在并发渲染下读到撕裂的值。用 layout effect 是因为它在
+   * 绘制**之前**跑完——放进普通 `useEffect` 会让预览比十字线慢一帧，而两者钉在同一个落点上
+   * 正是这条链要保证的事。
+   *
+   * 只画第一条曲线：现有命令一步至多产出一条，多条时后面那些没有呈现语义可言。
+   */
+  const [previewOutline, setPreviewOutline] = useState<readonly StagePoint[] | null>(null)
+  useLayoutEffect(() => {
+    const session = sessionRef.current
+    const curve = enabled && session?.preview && resolvedPointer
+      ? session.preview(resolvedPointer)?.curves?.[0]
+      : undefined
+    const segments = curve ? composeCurveSegments(curve) : []
+    setPreviewOutline(
+      segments.length === 0
+        ? null
+        : [segments[0]!.start, ...segments.map(({ end }) => end)],
+    )
+  }, [enabled, resolvedPointer, sessionRevision])
+
   const rubberBand = useMemo(() => {
-    if (!reference || !resolvedPointer) return null
+    // 预览几何在场时不画橡皮筋：两者回答同一个问题，叠在一起就是同一条线画两遍。
+    if (previewOutline || !reference || !resolvedPointer) return null
     return { start: reference, end: resolvedPointer }
-  }, [reference, resolvedPointer])
+  }, [previewOutline, reference, resolvedPointer])
 
   // 十字线画在捕捉/正交求解**之后**的落点上：让它跟着裸光标走，用户会看见十字线与最终
   // 落点差着几个像素，而那正是他要对齐的地方。
@@ -659,11 +717,13 @@ export function useStageDrafting(options: StageDraftingOptions) {
      * 漂移，而漂移的症状是「框收起来了、标记还亮着」。
      */
     snap: enabled && (awaitingPoint || gripTarget !== null) ? snap : null,
+    previewOutline,
     rubberBand,
     // 拖动与点亮共用同一份事实：拾取框画不画、哪个夹点是热的、排除哪个点都读它。
     gripTarget,
     resolvedPointer,
     activeCommandId: enabled ? activeCommandId : null,
+    acceptCommand,
     cancel,
     clearNotice,
     handleKeyDown,

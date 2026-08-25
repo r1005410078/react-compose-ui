@@ -1181,10 +1181,22 @@
   pointer-events: none;
 }
 
-.compose-stage__drafting-band {
+.compose-stage__drafting-band,
+.compose-stage__drafting-preview {
   stroke: var(--compose-accent, #4c8dff);
   stroke-width: 1;
   stroke-dasharray: 4 3;
+}
+
+/*
+ * 预览是**折线**而不是线段，因此必须显式关掉填充：SVG 的 `fill` 默认是黑色，`<line>` 看不
+ * 出来（它围不出面积），`<polyline>` 会被整块涂黑。橡皮筋与预览共用描边样式但不共用这一条，
+ * 是因为它只对有面积的形状有意义。
+ */
+.compose-stage__drafting-preview {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /*

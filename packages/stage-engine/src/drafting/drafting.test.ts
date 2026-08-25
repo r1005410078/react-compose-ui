@@ -9,7 +9,8 @@ const messages = {
   drawCategory: '绘图',
   editCategory: '编辑',
   specifyFirstPoint: '指定第一点',
-  specifyNextPoint: '指定下一点',
+  specifyNextPoint: '指定下一点（回车结束）',
+  specifyEndPoint: '指定端点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
   wireTitle: '导线',
@@ -49,7 +50,7 @@ describe('LINE 命令', () => {
     expect(first.status).toBe('prompt')
     // 一个点还构不成一段，因此没有 commit。
     if (first.status === 'prompt') expect(first.commit).toBeUndefined()
-    expect(session.prompt?.message).toBe('指定下一点')
+    expect(session.prompt?.message).toBe(messages.specifyNextPoint)
 
     const second = session.advance({ kind: 'point', point: { x: 100, y: 0 } })
     if (second.status !== 'prompt') throw new Error('第二点应当继续等待下一点')
@@ -96,7 +97,7 @@ describe('LINE 命令', () => {
     const step = session.advance({ kind: 'text', text: 'WAT' })
     expect(step.status).toBe('rejected')
     // 拒绝之后提示不变，用户可以接着取点——点错、打错在这类工具里是常态。
-    expect(session.prompt?.message).toBe('指定下一点')
+    expect(session.prompt?.message).toBe(messages.specifyNextPoint)
     expect(session.advance({ kind: 'point', point: { x: 5, y: 5 } }).status).toBe('prompt')
   })
 

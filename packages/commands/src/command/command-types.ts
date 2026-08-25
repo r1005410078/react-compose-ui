@@ -120,6 +120,22 @@ export interface ComposeCommandSession<TEffect> {
    */
   readonly prompt: ComposeCommandPrompt | null
   advance(input: ComposeCommandInput): ComposeCommandStep<TEffect>
+  /**
+   * 「如果落在这里，结果会是什么样」。
+   *
+   * @remarks
+   * 这是一个**查询**而不是第五种输入：它不改会话状态、不产生事务，可以每帧调任意多次而不
+   * 影响随后的 `advance`。把光标位置做成输入是错的——`advance` 是状态机，每帧一次
+   * `pointermove` 就推进一次会让「取了几个点」跟着鼠标动，而撤销、关键字与提示都挂在那个
+   * 计数上。
+   *
+   * 可选：本包零运行时依赖且对效果类型泛型，既有命令不该因为新增一个呈现能力而全部要改。
+   * 未实现时宿主退回自己既有的呈现（例如一条橡皮筋）。
+   *
+   * @param point - 候选落点，已经过宿主的点输入管线解算。
+   * @returns 这一步的候选效果；`null` 表示这一步没有可呈现的内容（取基点、选对象都是）。
+   */
+  preview?(point: ComposeCommandPoint): TEffect | null
 }
 
 /**

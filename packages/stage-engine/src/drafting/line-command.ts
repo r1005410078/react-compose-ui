@@ -51,6 +51,10 @@ export function createStageLineSession(
     get prompt() {
       return prompt
     },
+    // 待定段：还没落地的那一条。已画完的段都已经是真的 Entity，不必也不该在预览里重画。
+    preview(point) {
+      return previous ? { curves: [createComposeLineCurve(previous, point)] } : null
+    },
     advance(input): ComposeCommandStep<StageDraftingEffect> {
       if (input.kind === 'cancel') return { status: 'cancelled' }
       // 没有 `defaultKeyword`，因此 Enter 的含义由命令自己给：已经取过点就是**正常结束**，
@@ -105,6 +109,9 @@ function createTwoPointCurveSession(
   return {
     get prompt() {
       return prompt
+    },
+    preview(point) {
+      return start ? { curves: [createComposeLineCurve(start, point)], ...extras } : null
     },
     advance(input): ComposeCommandStep<StageDraftingEffect> {
       if (input.kind === 'cancel') return { status: 'cancelled' }

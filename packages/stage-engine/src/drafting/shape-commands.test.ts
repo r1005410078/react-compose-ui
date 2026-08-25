@@ -12,7 +12,8 @@ const messages: StageDraftingMessages = {
   drawCategory: '绘图',
   editCategory: '编辑',
   specifyFirstPoint: '指定第一点',
-  specifyNextPoint: '指定下一点',
+  specifyNextPoint: '指定下一点（回车结束）',
+  specifyEndPoint: '指定端点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
   wireTitle: '导线',
@@ -90,7 +91,7 @@ describe('ARC 命令', () => {
     // 沿一条既有直线连点三下很常见：必须是可预期的拒绝而不是产出一个半径巨大的假弧，
     // 而且不能结束会话——用户只是最后一点点歪了。
     expect(step.status).toBe('rejected')
-    expect(session.prompt?.message).toBe('指定下一点')
+    expect(session.prompt?.message).toBe(messages.specifyEndPoint)
 
     // 收回第三点之后可以直接重取。
     const retry = session.advance({ kind: 'point', point: { x: 50, y: 50 } })
@@ -196,5 +197,63 @@ describe('PLINE 命令', () => {
     session.advance({ kind: 'point', point: { x: 0, y: 0 } })
 
     expect(session.advance({ kind: 'accept' }).status).toBe('cancelled')
+  })
+})
+
+describe('OpenSpec: stage-engine / 预览几何 / 会话回答「落在这里会是什么样」', () => {
+  it('多段线预览含已取的全部点，而不只是最后一段', () => {
+    const session = createStagePolylineSession(context)
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    session.advance({ kind: 'point', point: { x: 10, y: 10 } })
+    session.advance({ kind: 'point', point: { x: 20, y: 0 } })
+
+    const curve = session.preview?.({ x: 30, y: 10 })?.curves?.[0]
+    // 判别点是**四**：`PLINE` 攒到结束才提交，在那之前没画出来的部分对用户就是不存在的。
+    expect(curve).toMatchObject({ kind: 'polyline', closed: false })
+    expect(curve?.kind === 'polyline' ? curve.vertices : []).toEqual([
+      { x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 0 }, { x: 30, y: 10 },
+    ])
+  })
+
+  it('矩形预览是闭合四顶点而不是对角线', () => {
+    const session = createStageRectangleSession(context)
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+
+    const curve = session.preview?.({ x: 40, y: 20 })?.curves?.[0]
+    // 形状只有命令知道：两个对角点怎么变四个顶点，宿主算不出来。
+    expect(curve).toMatchObject({ kind: 'polyline', closed: true })
+    expect(curve?.kind === 'polyline' ? curve.vertices : []).toEqual([
+      { x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 20 }, { x: 0, y: 20 },
+    ])
+  })
+
+  it('圆预览是整圆而不是半径线', () => {
+    const session = createStageCircleSession(context)
+    session.advance({ kind: 'point', point: { x: 10, y: 10 } })
+
+    expect(session.preview?.({ x: 40, y: 10 })?.curves?.[0])
+      .toMatchObject({ kind: 'arc', radius: 30, sweep: 360 })
+  })
+
+  it('还没取到第一个点时没有可呈现的内容', () => {
+    expect(createStagePolylineSession(context).preview?.({ x: 1, y: 1 })).toBeNull()
+    expect(createStageRectangleSession(context).preview?.({ x: 1, y: 1 })).toBeNull()
+    expect(createStageCircleSession(context).preview?.({ x: 1, y: 1 })).toBeNull()
+  })
+
+  it('查询不推进会话', () => {
+    const session = createStagePolylineSession(context)
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    session.advance({ kind: 'point', point: { x: 10, y: 0 } })
+
+    const before = session.prompt
+    for (let index = 0; index < 5; index += 1) session.preview?.({ x: index, y: index })
+
+    // 查询若真的推进了状态，「取了几个点」就会跟着鼠标动——而撤销、关键字与提示都挂在
+    // 那个计数上。这里的证据是提交出来的顶点数没变。
+    expect(session.prompt).toEqual(before)
+    const step = session.advance({ kind: 'accept' })
+    const curve = step.status === 'commit' ? step.effect?.curves?.[0] : undefined
+    expect(curve?.kind === 'polyline' ? curve.vertices : []).toHaveLength(2)
   })
 })

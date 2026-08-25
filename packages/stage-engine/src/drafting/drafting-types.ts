@@ -116,7 +116,17 @@ export interface StageDraftingMessages {
   /** 作用在既有对象上的那几条命令的分组名。 */
   readonly editCategory: string
   readonly specifyFirstPoint: string
+  /**
+   * 连续取点命令的「下一点」提示。
+   *
+   * @remarks
+   * 只有 `LINE` 与 `PLINE` 用它，因此它 MUST 说明回车结束——AutoCAD 的提示不写这一句是因为
+   * 它的用户知道，而命令行是本产品这条能力唯一的说明书。取够点自己就提交的命令不得共用它，
+   * 那会让提示说一件在那里做不到的事。
+   */
   readonly specifyNextPoint: string
+  /** 三点弧的第三点；它是弧的端点，不是「下一点」。 */
+  readonly specifyEndPoint: string
   readonly expectedPoint: string
   readonly lineTitle: string
   readonly wireTitle: string

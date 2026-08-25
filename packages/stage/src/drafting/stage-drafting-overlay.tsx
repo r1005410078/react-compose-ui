@@ -22,6 +22,15 @@ export interface StageDraftingOverlayProps {
   /** 共享十字光标的解析结果；不绘制时为 `null`。 */
   readonly crosshair: ComposeCanvasCrosshair | null
   readonly snap: StageFeaturePoint | null
+  /**
+   * 待定几何的世界折线（弧已拍扁）；命令给不出时为 `null`。
+   *
+   * @remarks
+   * 与 `rubberBand` **互斥**：两者回答的是同一个问题——「松手会变成什么」。预览几何里本来
+   * 就含着那条待定段，再叠一条橡皮筋就是同一条线画两遍，重叠出来的更粗的虚线看起来像
+   * 渲染缺陷。
+   */
+  readonly previewOutline: readonly StagePoint[] | null
   readonly rubberBand: { readonly start: StagePoint; readonly end: StagePoint } | null
   /**
    * 被作用对象的世界包围盒轮廓，已按当前位移平移。
@@ -57,10 +66,15 @@ export function StageDraftingOverlay({
   surfaceSize,
   crosshair,
   snap,
+  previewOutline,
   rubberBand,
   outlines,
 }: StageDraftingOverlayProps) {
   const snapScreen = snap ? worldToScreen(snap.point, viewport) : null
+  const previewPoints = previewOutline
+    ?.map((point) => worldToScreen(point, viewport))
+    .map(({ x, y }) => `${x},${y}`)
+    .join(' ')
   const bandStart = rubberBand ? worldToScreen(rubberBand.start, viewport) : null
   const bandEnd = rubberBand ? worldToScreen(rubberBand.end, viewport) : null
 
@@ -77,6 +91,13 @@ export function StageDraftingOverlay({
         surfaceSize={surfaceSize}
         testIdPrefix="stage"
       />
+      {previewPoints ? (
+        <polyline
+          className="compose-stage__drafting-preview"
+          data-testid="stage-drafting-preview"
+          points={previewPoints}
+        />
+      ) : null}
       {bandStart && bandEnd ? (
         <line
           className="compose-stage__drafting-band"

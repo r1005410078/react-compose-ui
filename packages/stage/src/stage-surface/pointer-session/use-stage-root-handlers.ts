@@ -33,6 +33,17 @@ export interface StageRootHandlersParams {
   readonly trackPointer: ((event: ReactPointerEvent<HTMLDivElement>) => void) | null
   /** 指针离开整块 Stage 时清空跟踪。 */
   readonly clearPointer: () => void
+  /**
+   * 命令进行中右键即结束。
+   *
+   * @remarks
+   * 传 `null` 表示此刻没有「由词启动、正在等一个点」的命令，右键照旧开菜单。
+   *
+   * 判据不能只是「在等一个点」：夹点会话的提示同样接受点，而它由**手势**启动、此刻正被指针
+   * 拖着或刚点亮，右键在那里不表达「我说完了」；拖动中途提交更会把顶点丢在用户没打算落笔的
+   * 地方。这条判断留在调用方，本模块只认「给没给我这个函数」。
+   */
+  readonly acceptCommand: (() => void) | null
   /** 指针会话与键盘能力提供的入口。 */
   readonly beginInteraction: (hit: StageInteractionHit, event: ReactPointerEvent<Element>) => void
   readonly handleLostPointerCapture: (event: ReactPointerEvent<HTMLDivElement>) => void
@@ -77,6 +88,7 @@ export interface StageRootHandlers {
 }
 
 export function useStageRootHandlers({
+  acceptCommand,
   beginInteraction,
   handleLostPointerCapture,
   host,
@@ -97,6 +109,16 @@ export function useStageRootHandlers({
       // ContextMenu 的 Portal 在 React 事件树中仍会冒泡到 Stage；不能把菜单自身的右键
       // 当作新的画布右键，否则会重置根菜单。
       if (event.defaultPrevented || !rootRef.current?.contains(event.target as Node)) return
+      /*
+       * 命令正在请求一个点时，右键就是回车——AutoCAD 的既有解法。本地还有一条自己的理由：
+       * 那个菜单每一项都在说「对**选中的节点**做什么」，而命令此刻请求的是一个**点**，
+       * 既没有选择语义可言，菜单还盖住了用户正要落笔的地方。
+       */
+      if (acceptCommand) {
+        event.preventDefault()
+        acceptCommand()
+        return
+      }
       // 标签用独立属性标记归属：data-entity-id 必须唯一指向 Scene 里的那个节点，
       // 否则任何按实体查询 DOM 的地方都会同时命中标签。
       const target = (event.target as Element)

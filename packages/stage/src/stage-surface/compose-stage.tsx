@@ -233,6 +233,7 @@ function ComposeStageReady({
   const rootRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const rulersRef = useRef<ComposeCanvasRulersHandle>(null)
+  const commandInputRef = useRef<HTMLInputElement>(null)
   const [privateController] = useState(createStageInteractionController)
   const controller = interactionController ?? privateController
   const interaction = useSyncExternalStore(
@@ -435,6 +436,7 @@ function ComposeStageReady({
     cancelled: messages.draftingCancelled,
     specifyFirstPoint: messages.draftingSpecifyFirstPoint,
     specifyNextPoint: messages.draftingSpecifyNextPoint,
+    specifyEndPoint: messages.draftingSpecifyEndPoint,
     expectedPoint: messages.draftingExpectedPoint,
     drawCategory: messages.draftingDrawCategory,
     editCategory: messages.draftingEditCategory,
@@ -547,7 +549,18 @@ function ComposeStageReady({
    */
   const startDraftingCommand = draftingSession.start
   useImperativeHandle(handleRef, () => ({
-    startCommand(commandId: string) { startDraftingCommand(commandId) },
+    startCommand(commandId: string) {
+      startDraftingCommand(commandId)
+      /*
+       * 焦点跟着走，否则它留在触发这条命令的那个按钮上——而 `Enter` 落在按钮上就是再点一次
+       * 按钮，连续取点的命令因此永远结束不了。
+       *
+       * 给命令行而不是图面：要接的是 `Enter`（结束）、`Escape`（放弃）与**键入坐标**三件事，
+       * 图面接得住前两个，第三个只有命令行接得住。用户第一次点画布之后焦点自然转到图面，
+       * 那之后前两个由图面接管。
+       */
+      commandInputRef.current?.focus()
+    },
   }), [startDraftingCommand])
 
   // 单向上报：宿主 chrome 的按下态读它，事实来源留在会话这一侧。
@@ -886,7 +899,19 @@ function ComposeStageReady({
     if (!pointerTracked) setDraftingPointer(null)
   }, [pointerTracked, setDraftingPointer])
 
+  /*
+   * 右键即回车的条件：一条**由词启动**的命令正在等一个点。
+   *
+   * `gripTarget` 排掉的是夹点会话——它的提示同样接受点，但它由手势启动、此刻正被指针拖着
+   * 或刚点亮，右键在那里不表达「我说完了」。这份事实读的是既有那一份：拾取框画不画、哪个
+   * 夹点是热的、捕捉排除哪个点，读的都是它。
+   */
+  const acceptDraftingCommand = draftingSession.awaitingPoint && draftingSession.gripTarget === null
+    ? draftingSession.acceptCommand
+    : null
+
   const rootHandlers = useStageRootHandlers({
+    acceptCommand: acceptDraftingCommand,
     clearPointer,
     trackPointer: pointerTracked ? trackPointer : null,
     beginInteraction,
@@ -1048,6 +1073,7 @@ function ComposeStageReady({
             crosshair={crosshair}
             outlines={draftingSession.outlines}
             rubberBand={draftingSession.rubberBand}
+            previewOutline={draftingSession.previewOutline}
             snap={draftingSession.snap}
             surfaceSize={surfaceSize}
             viewport={viewport}
@@ -1105,6 +1131,7 @@ function ComposeStageReady({
       {/* 命令行常驻：不进模式就看不见命令行，正是「能力不可发现」那条毛病。 */}
       <ComposeCommandLine
         className="compose-stage__command-line"
+        inputRef={commandInputRef}
         messages={{
           ready: messages.draftingReady,
           inputLabel: messages.draftingCommandLineLabel,
