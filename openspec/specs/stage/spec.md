@@ -33,7 +33,13 @@ Stage MUST 接收受控 viewport、tool、selectedIds 和 activeFrameId，并通
 select 工具 MUST 支持点击选择、Shift 切换多选、点击空白清除选择和空白拖动 marquee。marquee
 工具 MUST 支持从任意位置（含节点之上）拖出 marquee。两个工具的框选 MUST 使用同一个受控
 `policy.marqueeMode`，Stage MUST 只消费该值而不得自行持有模式的事实来源——Stage 本身不提供
-切换模式的 UI。选择结果 MUST 使用稳定文档 ID，并 MUST 忽略 hidden 节点和完全位于其他 Frame
+切换模式的 UI。
+
+marquee Overlay MUST 按**当前生效判定**分色：包含（窗口）与相交（窗交）的填充与描边 MUST
+取两个不同的颜色，并 MUST 来自主题 token 而不是写死在 marquee 规则里。虚实边框保留——颜色
+回答「哪一种」，虚实是同一句话的第二遍，拖动中的细边框在密集图纸上分辨率很低，两条都用得上。
+
+分色的依据 MUST 是**生效判定**而不是模式：钉死相交时它一直是窗交色，那正是此刻生效的判定。选择结果 MUST 使用稳定文档 ID，并 MUST 忽略 hidden 节点和完全位于其他 Frame
 剪裁范围之外的内容。
 
 #### Scenario: 点击与 Shift 多选
@@ -54,11 +60,18 @@ select 工具 MUST 支持点击选择、Shift 切换多选、点击空白清除�
 - **THEN** Stage 显示 marquee Overlay 而不是移动该节点
 - **AND** 释放后按当前 `policy.marqueeMode` 请求选择
 
-#### Scenario: Overlay 区分判定模式
+#### Scenario: Overlay 按判定分色并区分虚实
 
 - **WHEN** 当前生效判定为包含
-- **THEN** marquee Overlay 使用实线边框
-- **AND** 当前生效判定为相交时使用虚线边框
+- **THEN** marquee Overlay 使用实线边框，填充与描边取窗口色
+- **AND** 当前生效判定为相交时使用虚线边框，填充与描边取窗交色
+- **AND** 两种判定的填充与描边颜色不相同
+
+#### Scenario: 缺省下两个拖拽方向给出不同的框与不同的结果
+
+- **WHEN** 用户没有动过判定模式，分别从左往右与从右往左拖出只盖住某节点一半的框
+- **THEN** 两次的 marquee 颜色不同
+- **AND** 从左往右那次不选中它，从右往左那次选中它
 
 #### Scenario: 点击空白清选
 
