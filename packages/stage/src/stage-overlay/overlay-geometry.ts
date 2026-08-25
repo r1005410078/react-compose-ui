@@ -64,17 +64,3 @@ export function lineLabelPosition(start: StagePoint, end: StagePoint) {
     y: (start.y + end.y) / 2 + normal.y * 17,
   }
 }
-
-export function arrowHeadPath(start: { readonly x: number; readonly y: number }, end: { readonly x: number; readonly y: number }) {
-  const deltaX = end.x - start.x
-  const deltaY = end.y - start.y
-  const length = Math.hypot(deltaX, deltaY)
-  if (length < 1) return null
-  const directionX = deltaX / length
-  const directionY = deltaY / length
-  const perpendicularX = -directionY
-  const perpendicularY = directionX
-  const baseX = end.x - directionX * 10
-  const baseY = end.y - directionY * 10
-  return `M${end.x} ${end.y}L${baseX + perpendicularX * 5} ${baseY + perpendicularY * 5}L${baseX - perpendicularX * 5} ${baseY - perpendicularY * 5}Z`
-}

@@ -21,6 +21,7 @@ export type {
   ComposeStageClipboard,
   ComposeStageDispatch,
   ComposeStageEditablePathChange,
+  ComposeStageHandle,
   ComposeStageKeybinding,
   ComposeStageLayoutRuntime,
   ComposeStagePolicy,

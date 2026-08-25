@@ -106,6 +106,20 @@ function toParentCurve(
   }
 }
 
+/** 一条曲线落地时的可选内容。 @internal */
+export interface StageDraftingCurveOptions {
+  /** 取点时记下的端口绑定；两端都没绑时不写 `Wire`。 */
+  readonly wire?: ComposeWire
+  /**
+   * 这条曲线带终点箭头。
+   *
+   * @remarks
+   * 走**另一个 Preset** 而不是在这里改 Renderer props：箭头的默认描边住在物料包里
+   * （`DEFAULT_ARROW_PROPS`），Stage 认识 Preset id 就够了，不必也认识 prop 名。
+   */
+  readonly arrow?: boolean
+}
+
 /**
  * 把一条世界坐标的曲线变成一条 `entity.create` 命令。
  *
@@ -123,9 +137,10 @@ function toParentCurve(
 export function createStageDraftingCurveCommand(
   context: StageDraftingCommitContext,
   curve: ComposeCurve,
-  wire?: ComposeWire,
+  options: StageDraftingCurveOptions = {},
 ): EditorCommand | null {
-  const seed = context.registry.createSeed('curve')
+  const { arrow, wire } = options
+  const seed = context.registry.createSeed(arrow ? 'arrow' : 'curve')
   if (!seed.ok) return null
 
   // 落点父级按几何紧包围盒的中心判定：对线来说就是原来的线段中点，对弧与多段线也自然成立。

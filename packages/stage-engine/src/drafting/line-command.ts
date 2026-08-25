@@ -86,18 +86,17 @@ export function createStageLineSession(
 }
 
 /**
- * 建立一次 WIRE 执行的状态机。
+ * 建立一次**两点曲线**执行的状态机。
  *
  * @remarks
- * 与 LINE 的差别只有两处：取两个点就结束（导线只有两个端点，折线导线的价值几乎全部来自
- * 自动路由，而路由还没有），以及产出的曲线带 `wire` 标记。
+ * 与 LINE 的差别只有两处：取两个点就结束，以及提交时带上调用方给的那个标记。
  *
- * **`LINE` 不绑定，即使端点吸附到了端口上**：绑定改变对象此后的行为，意图必须显式。
- *
- * @public
+ * `extras` 是提交效果上的附加标记（`wire` 或 `arrow`），**不是几何**：两条命令的取点逻辑
+ * 逐字相同，复制一份只会让下一个改取点的人改到其中一处。
  */
-export function createStageWireSession(
+function createTwoPointCurveSession(
   context: StageDraftingContext,
+  extras: Pick<StageDraftingEffect, 'arrow' | 'wire'>,
 ): ComposeCommandSession<StageDraftingEffect> {
   const { messages } = context
   let start: ComposeCommandPoint | null = null
@@ -121,12 +120,43 @@ export function createStageWireSession(
         status: 'commit',
         effect: {
           curves: [createComposeLineCurve(start, input.point)],
-          wire: true,
+          ...extras,
           reference: input.point,
         },
       }
     },
   }
+}
+
+/**
+ * 建立一次 WIRE 执行的状态机。
+ *
+ * @remarks
+ * 导线只有两个端点：折线导线的价值几乎全部来自自动路由，而路由还没有。
+ *
+ * **`LINE` 不绑定，即使端点吸附到了端口上**：绑定改变对象此后的行为，意图必须显式。
+ *
+ * @public
+ */
+export function createStageWireSession(
+  context: StageDraftingContext,
+): ComposeCommandSession<StageDraftingEffect> {
+  return createTwoPointCurveSession(context, { wire: true })
+}
+
+/**
+ * 建立一次 ARROW 执行的状态机。
+ *
+ * @remarks
+ * 取两个点而不是像 `LINE` 那样连着画：**一支箭头只有一个头**。走 LINE 那条逐段落地的路，
+ * 画三个点会得到两支各自带头的箭头——那不是任何人点这个按钮时想要的东西。
+ *
+ * @public
+ */
+export function createStageArrowSession(
+  context: StageDraftingContext,
+): ComposeCommandSession<StageDraftingEffect> {
+  return createTwoPointCurveSession(context, { arrow: true })
 }
 
 /** WIRE 命令定义。 @public */
@@ -139,6 +169,19 @@ export function createStageWireCommand(
     title: messages.wireTitle,
     category: messages.drawCategory,
     start: createStageWireSession,
+  }
+}
+
+/** ARROW 命令定义。 @public */
+export function createStageArrowCommand(
+  messages: StageDraftingMessages,
+): ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect> {
+  return {
+    id: 'ARROW',
+    aliases: ['AR'],
+    title: messages.arrowTitle,
+    category: messages.drawCategory,
+    start: createStageArrowSession,
   }
 }
 
@@ -162,6 +205,7 @@ export function createStageDraftingCommands(
   return [
     createStageLineCommand(messages),
     createStageWireCommand(messages),
+    createStageArrowCommand(messages),
     createStageArcCommand(messages),
     createStageCircleCommand(messages),
     createStageRectangleCommand(messages),

@@ -8,13 +8,10 @@ import type {
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
-  getComposeCurve,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLock,
   getComposeVisibility,
-  resolveComposeAppearance,
-  type ComposeCurve,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
   type EditorCommand,
@@ -291,31 +288,15 @@ export function useStageEffectDispatch(
       ? expandClickDrawingBounds(seedResult.seed, drawnBounds)
       : drawnBounds
     const entityId = current.idFactory()
-    // 落笔方向由两个真实坐标的差表达：盒是它们的归一化矩形，因此只要两个符号就能把几何摆回
-    // 正确的对角。Shape 那套 `direction ∈ {-1,0,1}²` 编码随物料一起删除。
-    const startLocal = inverseParent ? applyMatrix(inverseParent, effect.start) : effect.start
-    const endLocal = inverseParent ? applyMatrix(inverseParent, effect.end) : effect.end
-    const flipX = endLocal.x < startLocal.x
-    const flipY = endLocal.y < startLocal.y
-    // 判据是 seed 自己的几何而不是工具名：Stage 不认识哪个工具画的是直线。非直线（圆的整圆
-    // 弧）保留 Preset 的几何，`viewBox` 会按盒把它拉成用户拖出来的那个形状。
-    const seedCurve = getComposeCurve({ id: entityId, ...seedResult.seed })
-    const drawnCurve = (bounds: StageRect): ComposeCurve | undefined => (
-      seedCurve?.kind === 'line'
-        ? {
-            kind: 'line',
-            start: { x: flipX ? bounds.width : 0, y: flipY ? bounds.height : 0 },
-            end: { x: flipX ? 0 : bounds.width, y: flipY ? 0 : bounds.height },
-          }
-        : undefined
-    )
     const buildEntity = (bounds: StageRect) => {
       const textClick = effect.tool === 'draw-text' && bounds.width < 1 && bounds.height < 1
       const drawnEntity = entityFromDrawingSeed(
         seedResult.seed,
         entityId,
         bounds,
-        drawnCurve(bounds),
+        // 拖拽绘制只剩容器与文字，两者都没有 `Curve`：制图几何一律由绘图命令产出，
+        // 它们走的是 `createStageDraftingCurveCommand` 那条真实几何的路。
+        undefined,
         textClick
           ? {
               preserveHugSizing: true,
@@ -329,19 +310,7 @@ export function useStageEffectDispatch(
             }
           : undefined,
       )
-      // 组件库中的 Rectangle 可保留其圆角默认值；画布矩形工具遵循设计工具惯例，初始绘制为直角。
-      return effect.tool === 'draw-rectangle'
-        ? {
-            ...drawnEntity,
-            components: {
-              ...drawnEntity.components,
-              Appearance: {
-                ...resolveComposeAppearance(drawnEntity),
-                borderRadius: 0,
-              },
-            },
-          }
-        : drawnEntity
+      return drawnEntity
     }
     // 命中容器时照常做子级；落在所有场景之外时按类型分流：容器升格成新场景，其余落进激活场景。
     const landing = parent ? null : resolveRootLanding(current, localBounds, buildEntity)

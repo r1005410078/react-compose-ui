@@ -81,7 +81,7 @@ describe('StageInteractionController ECS systems', () => {
       layoutSnapshot: layoutSnapshot(document()),
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
-      tool: 'draw-rectangle' as never,
+      tool: 'draw-container',
       selectedIds: [],
       idFactory: () => 'draw-id',
     })
@@ -110,7 +110,7 @@ describe('StageInteractionController ECS systems', () => {
     // 落在兄弟节点右边线 x=50 与下边线 y=50 的阈值内，因此吸到 (50,50)。
     expect(controller.getSnapshot()).toMatchObject({
       phase: 'draw',
-      drawing: { tool: 'draw-rectangle', bounds: { x: 16, y: 16, width: 34, height: 34 } },
+      drawing: { tool: 'draw-container', bounds: { x: 16, y: 16, width: 34, height: 34 } },
       marquee: null,
     })
 
@@ -122,7 +122,7 @@ describe('StageInteractionController ECS systems', () => {
     })
     expect(effects).toContainEqual(expect.objectContaining({
       type: 'drawing.commit',
-      tool: 'draw-rectangle',
+      tool: 'draw-container',
       bounds: { x: 16, y: 16, width: 34, height: 34 },
     }))
   })
@@ -136,7 +136,7 @@ describe('StageInteractionController ECS systems', () => {
       layoutSnapshot: layoutSnapshot(document()),
       viewport: { x: 0, y: 0, zoom: 0.4822530864 },
       surfaceSize: { width: 800, height: 600 },
-      tool: 'draw-rectangle' as never,
+      tool: 'draw-container',
       selectedIds: [],
       idFactory: () => 'draw-zoomed-id',
     })
@@ -177,7 +177,7 @@ describe('StageInteractionController ECS systems', () => {
       layoutSnapshot: layoutSnapshot(document()),
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
-      tool: 'draw-rectangle' as never,
+      tool: 'draw-container',
       selectedIds: [],
       idFactory: () => 'draw-raw-id',
     })
@@ -200,59 +200,6 @@ describe('StageInteractionController ECS systems', () => {
       phase: 'draw',
       drawing: { bounds: { x: 12, y: 16, width: 40, height: 30 } },
     })
-  })
-
-  it('OpenSpec: Headless 绘制会话 / Shift 锁定正方形且指针保持在绘制终点', () => {
-    const { controller, effects } = setup()
-    controller.updateContext({
-      document: document(),
-      layoutSnapshot: layoutSnapshot(document()),
-      viewport: { x: 0, y: 0, zoom: 1 },
-      surfaceSize: { width: 800, height: 600 },
-      tool: 'draw-circle' as never,
-      selectedIds: [],
-      idFactory: () => 'draw-square-id',
-    })
-    const shiftedModifiers = { ...modifiers, shift: true }
-
-    controller.send({
-      type: 'pointer.down',
-      pointerId: 1,
-      button: 0,
-      point: { x: 12, y: 16 },
-      hit: { kind: 'surface' },
-      modifiers: shiftedModifiers,
-    })
-    controller.send({
-      type: 'pointer.move',
-      pointerId: 1,
-      point: { x: 52, y: 46 },
-      modifiers: shiftedModifiers,
-    })
-
-    // 吸附排在 Shift 约束之前：起点吸到 (16,16)、终点吸到兄弟边线 (50,50)，
-    // 两轴增量因此已经相等，正方形边长 34 仍然由吸附后的落点决定。
-    expect(controller.getSnapshot()).toMatchObject({
-      phase: 'draw',
-      drawing: {
-        tool: 'draw-circle',
-        bounds: { x: 16, y: 16, width: 34, height: 34 },
-        end: { x: 50, y: 50 },
-      },
-    })
-
-    controller.send({
-      type: 'pointer.up',
-      pointerId: 1,
-      point: { x: 52, y: 46 },
-      modifiers: shiftedModifiers,
-    })
-    expect(effects).toContainEqual(expect.objectContaining({
-      type: 'drawing.commit',
-      tool: 'draw-circle',
-      bounds: { x: 16, y: 16, width: 34, height: 34 },
-      end: { x: 50, y: 50 },
-    }))
   })
 
   it('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 无有效落点时 Flow 目标回弹', () => {
@@ -973,13 +920,13 @@ describe('StageInteractionController 画布内文字编辑会话', () => {
   const editableDocument = document([entity('a'), entity('b', { x: 300 })])
 
   function textSetup(options: {
-    readonly tool?: 'select' | 'draw-text' | 'draw-rectangle'
+    readonly tool?: 'select' | 'draw-text' | 'draw-container'
     readonly selectedIds?: readonly string[]
     readonly textEditing?: { readonly entityId: string } | null
     readonly editableIds?: readonly string[]
     readonly drawnEntity?: {
       readonly entityId: string
-      readonly tool: 'draw-text' | 'draw-rectangle'
+      readonly tool: 'draw-text' | 'draw-container'
     } | null
     readonly value?: ReturnType<typeof document>
   } = {}) {
@@ -1078,8 +1025,8 @@ describe('StageInteractionController 画布内文字编辑会话', () => {
   })
 
   it('OpenSpec: 文字编辑会话的输入协议 / 其他绘制工具创建时不进入会话', () => {
-    const { effects, update } = textSetup({ tool: 'draw-rectangle' })
-    update({ drawnEntity: { entityId: 'a', tool: 'draw-rectangle' } })
+    const { effects, update } = textSetup({ tool: 'draw-container' })
+    update({ drawnEntity: { entityId: 'a', tool: 'draw-container' } })
     expect(effects.some((effect) => effect.type === 'text-editing.enter')).toBe(false)
   })
 
@@ -1270,7 +1217,7 @@ describe('StageInteractionController 文字工具只按点创建', () => {
       layoutSnapshot: layoutSnapshot(value),
       viewport: { x: 0, y: 0, zoom: 1 },
       surfaceSize: { width: 800, height: 600 },
-      tool: 'draw-rectangle',
+      tool: 'draw-container',
       selectedIds: [],
       idFactory: () => 'draw-rect-id',
     })

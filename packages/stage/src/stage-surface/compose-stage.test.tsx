@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   createComposeEntityRegistry,
   type ComposeEntityPreset,
@@ -17,9 +17,10 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposeImmediateCommand } from '@compose-ui/commands'
 import { createComposePageScriptScope, type ComposeState } from '@compose-ui/script-runtime'
+import { createRef } from 'react'
 import { ComposeStage } from './compose-stage'
 import { entityFromDrawingSeed } from './entity-creation'
-import type { ComposeStageDispatch } from '../types'
+import type { ComposeStageDispatch, ComposeStageHandle } from '../types'
 import { StageOverlay } from '../stage-overlay'
 
 function entity(
@@ -639,8 +640,8 @@ describe('ComposeStage ECS', () => {
     expect(screen.queryByTestId('stage-selection-outline')).not.toBeInTheDocument()
   })
 
-  it('OpenSpec: 绘制工具 / 空闲即为十字光标，并以实际形状预览替代框选虚线', () => {
-    renderStage(document(), { selectedIds: ['a'], tool: 'draw-circle' })
+  it('OpenSpec: 绘制工具 / 空闲即为十字光标，并以形状预览替代框选虚线', () => {
+    renderStage(document(), { selectedIds: ['a'], tool: 'draw-container' })
 
     expect(screen.getByRole('application', { name: 'Stage' })).toHaveAttribute(
       'data-interaction-cursor',
@@ -653,7 +654,7 @@ describe('ComposeStage ECS', () => {
         canvasGuides={[]}
         geometryEditing={false}
         drawing={{
-          tool: 'draw-arrow',
+          tool: 'draw-container',
           bounds: { x: 16, y: 20, width: 80, height: 40 },
           start: { x: 16, y: 20 },
           end: { x: 96, y: 60 },
@@ -671,14 +672,16 @@ describe('ComposeStage ECS', () => {
         rotatable={false}
         screenBounds={null}
         snapGuides={[]}
-        tool="draw-arrow"
+        tool="draw-container"
         viewport={{ x: 0, y: 0, zoom: 1 }}
         visibleResizeHandles={[]}
         onInteraction={vi.fn()}
       />,
     )
-    expect(screen.getByTestId('stage-drawing-preview')).toHaveAttribute('data-drawing-tool', 'draw-arrow')
-    expect(preview.container.querySelector('.compose-stage__drawing-preview path')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-drawing-preview')).toHaveAttribute('data-drawing-tool', 'draw-container')
+    // 拖拽绘制只剩容器与文字，预览因此只有盒与光标两种形态：制图几何由命令产出，
+    // 它的预览是橡皮筋而不是这一层。
+    expect(preview.container.querySelector('.compose-stage__drawing-preview rect')).toBeInTheDocument()
     expect(screen.queryByTestId('stage-marquee')).not.toBeInTheDocument()
   })
 
@@ -1774,6 +1777,37 @@ describe('绘图模式', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     return input
   }
+
+  it('OpenSpec: stage / 宿主可以从自己的 chrome 启动一条命令会话 / 与敲名字同一条', () => {
+    const value = document()
+    const runtime = createTransactionRuntime({ document: value })
+    const dispatch: ComposeStageDispatch = (command) => runtime.dispatch(command)
+    const handle = createRef<ComposeStageHandle>()
+    const activeCommands: (string | null)[] = []
+    render(
+      <ComposeStage
+        document={value}
+        layoutSnapshot={layoutSnapshot(value)}
+        onActiveCommandChange={(commandId) => { activeCommands.push(commandId) }}
+        onSelectedIdsChange={vi.fn()}
+        onViewportChange={vi.fn()}
+        ref={handle}
+        selectedIds={[]}
+        services={{ dispatch, registry }}
+        tool="select"
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+      />,
+    )
+
+    act(() => { handle.current!.startCommand('RECTANGLE') })
+    // 提示文本来自 `RECTANGLE` 会话自己的第一步：句柄没有第二条构造上下文的路径。
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一个角点')
+    expect(activeCommands[activeCommands.length - 1]).toBe('RECTANGLE')
+
+    // 会话结束时上报 null，而不是停在「刚启动过谁」。
+    fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'Escape' })
+    expect(activeCommands[activeCommands.length - 1]).toBeNull()
+  })
 
   it('OpenSpec: stage / 绘图能力恒开 / 命令行常驻，十字线只在取点时出现', () => {
     renderStage(document())

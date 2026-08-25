@@ -79,7 +79,7 @@ function createDrawSession(options: DrawSessionOptions): StageSession {
       const world = screenToWorld(event.point, viewport)
       // 吸附必须排在 Shift 约束之前：先约束再吸附会把正方形的一条边单独拉走。
       const snappedWorld = snapDrawingPoint(world, event.modifiers, ctx)
-      const drawing = constrainedDrawingPoints(tool, startWorld, snappedWorld, event.modifiers)
+      const drawing = constrainedDrawingPoints(tool, startWorld, snappedWorld)
       drawingStart = drawing.start
       drawingEnd = drawing.end
       ctx.publish({

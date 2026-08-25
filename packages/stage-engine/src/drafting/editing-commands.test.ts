@@ -13,6 +13,7 @@ const messages: StageDraftingMessages = {
   expectedPoint: '需要一个点',
   lineTitle: '直线',
   wireTitle: '导线',
+  arrowTitle: '箭头',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
   basePoint: '指定基点',

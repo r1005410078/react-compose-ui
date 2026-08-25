@@ -7,9 +7,11 @@ import {
   useComposeContextMenu,
 } from '@compose-ui/components'
 import {
+  forwardRef,
   useCallback,
   useEffect,
   useId,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -18,6 +20,7 @@ import {
 } from 'react'
 import type {
   CSSProperties,
+  ForwardedRef,
   PointerEvent as ReactPointerEvent,
 } from 'react'
 import type {
@@ -46,6 +49,7 @@ import {
 } from '@compose-ui/stage-engine'
 import { fitViewportTo } from './stage-viewport-actions'
 import type {
+  ComposeStageHandle,
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
   ComposeStagePolicy,
@@ -106,7 +110,8 @@ function defaultId() {
 const EMPTY_STAGE_POLICY: ComposeStagePolicy = Object.freeze({})
 
 
-export function ComposeStage(props: ComposeStageProps) {
+export const ComposeStage = forwardRef<ComposeStageHandle, ComposeStageProps>(
+  function ComposeStage(props, handleRef) {
   const i18n = useComposeI18nContext()
   const measurementAdapter = useComposeStageMeasurement(props)
   if (!props.layoutSnapshot) {
@@ -131,23 +136,34 @@ export function ComposeStage(props: ComposeStageProps) {
   return (
     <ComposeStageReady
       {...readyProps}
+      handleRef={handleRef}
       layoutSnapshot={layoutSnapshot}
       measurementAdapter={measurementAdapter}
     />
   )
-}
+})
 
 type ComposeStageReadyProps = Omit<
   ComposeStageProps,
   'layoutError' | 'layoutSnapshot'
 > & {
   readonly layoutSnapshot: ComposeLayoutSnapshot
+  /**
+   * 宿主句柄；布局求解完成之后才挂上。
+   *
+   * @remarks
+   * 句柄上的动作全部作用在命令会话上，而会话住在这一层。加载态没有会话可作用，宿主读到
+   * `null`——这与「布局没好时 Stage 只渲染一条状态」是同一件事的两种呈现。
+   */
+  readonly handleRef: ForwardedRef<ComposeStageHandle>
   /** 原地编辑期间把编辑中的文本送进测量链路，使 Auto width 实时改宽。 */
   readonly measurementAdapter: ComposeRendererMeasurementAdapter
 }
 
 function ComposeStageReady({
   document,
+  handleRef,
+  onActiveCommandChange,
   layoutSnapshot,
   layoutPreviewSnapshot,
   measurementAdapter,
@@ -424,6 +440,7 @@ function ComposeStageReady({
     editCategory: messages.draftingEditCategory,
     lineTitle: messages.draftingLineTitle,
     wireTitle: messages.draftingWireTitle,
+    arrowTitle: messages.draftingArrowTitle,
     arcTitle: messages.draftingArcTitle,
     circleTitle: messages.draftingCircleTitle,
     rectangleTitle: messages.draftingRectangleTitle,
@@ -521,6 +538,26 @@ function ComposeStageReady({
     onEnterGeometryEditing: enterGeometryEditing,
     isGeometryEditable,
   })
+  /*
+   * 句柄的实现就是把 id 喂给命令行已经在用的那个启动函数。
+   *
+   * 另写一份「构造上下文、推进状态机」的路径必然只实现三种拒绝里的一两种（词不在表里、
+   * 词在表里但此刻不可用、会话进行中的非法输入），同一条命令就会在「点按钮」与「敲名字」
+   * 之间给出不同结果。
+   */
+  const startDraftingCommand = draftingSession.start
+  useImperativeHandle(handleRef, () => ({
+    startCommand(commandId: string) { startDraftingCommand(commandId) },
+  }), [startDraftingCommand])
+
+  // 单向上报：宿主 chrome 的按下态读它，事实来源留在会话这一侧。
+  const activeCommandId = draftingSession.activeCommandId
+  const latestActiveCommandChange = useRef(onActiveCommandChange)
+  useLayoutEffect(() => { latestActiveCommandChange.current = onActiveCommandChange })
+  useEffect(() => {
+    latestActiveCommandChange.current?.(activeCommandId)
+  }, [activeCommandId])
+
   const geometryEditing = useStageGeometryEditing({
     document,
     index: sceneIndex,

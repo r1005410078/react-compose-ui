@@ -112,7 +112,7 @@ test('OpenSpec: stage / 选择与框选 / 缺省下两个方向的框与结果�
   expect(rtl.dash).not.toBe('none')
 })
 
-test('OpenSpec: editor / 平铺式默认画布工具栏 / 选择没有判定模式菜单，形状的菜单还在', async ({ page }) => {
+test('OpenSpec: editor / 平铺式默认画布工具栏 / 选择没有判定模式菜单', async ({ page }) => {
   await page.goto('/')
   const view = setup(page)
   await expect(view.surface).toBeVisible()
@@ -120,7 +120,7 @@ test('OpenSpec: editor / 平铺式默认画布工具栏 / 选择没有判定模�
   // 方向本身就是切换器：再给一个菜单等于给同一件事造第二个、更慢的入口。
   await expect(view.editor.getByRole('button', { name: '框选模式' })).toHaveCount(0)
 
-  // 形状工具的 split button 不受牵连——它的菜单项各自是独立动作，不是同一个动作的参数。
-  await view.editor.getByRole('button', { name: /形状|Shape/ }).last().click()
-  await expect(view.editor.getByRole('menu')).toBeVisible()
+  // 形状的 split button 也不在了：绘图入口收敛成命令一套，菜单里那三项各自成了一个按钮。
+  await expect(view.editor.getByRole('button', { name: /形状|Shape/ })).toHaveCount(0)
+  await expect(view.editor.getByRole('button', { name: '矩形', exact: true })).toHaveCount(1)
 })

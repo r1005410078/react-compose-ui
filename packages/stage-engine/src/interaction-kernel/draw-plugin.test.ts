@@ -8,7 +8,7 @@ import type { StageInteractionEffect, StageInteractionHit } from '../interaction
 const MODIFIERS = { shift: false, alt: false, command: false }
 const value = document([entity('a', { x: 0, y: 0, width: 100, height: 50 })])
 
-function drawSetup(tool = 'draw-rectangle') {
+function drawSetup(tool = 'draw-container') {
   const effects: StageInteractionEffect[] = []
   const controller = createStageInteractionController()
   controller.connectSurface({

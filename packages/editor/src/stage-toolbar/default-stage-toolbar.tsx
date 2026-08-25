@@ -16,33 +16,45 @@ import { CanvasSettingsPopover } from './canvas-settings-popover'
 import { StageToolbarIcon } from './stage-toolbar-icons'
 
 type DefaultStageToolbarProps = {
+  /** 正在跑的那条命令的 id；绘图命令按钮的按下态读它。 */
+  readonly activeCommandId: string | null
   readonly canvasSettingsOpen: boolean
   readonly dispatch: ComposeStageDispatch
   readonly document: ComposeDocument
   readonly gridVisible: boolean
-  /** 最近一次选择的形状；主按钮在自动回到选择工具后仍用它表达下一次绘制内容。 */
-  readonly lastShapeTool: ShapeTool
   readonly nextId: () => string
   readonly setCanvasSettingsOpen: Dispatch<SetStateAction<boolean>>
   readonly setGridSize: (size: number) => void
   readonly setGridVisible: Dispatch<SetStateAction<boolean>>
   readonly setTool: (tool: ComposeStageTool) => void
   readonly shortcuts?: ComposeEditorPreferences['shortcuts']
+  /** 启动一条命令会话；与在命令行里键入这个名字等价。 */
+  readonly startCommand: (commandId: string) => void
   readonly toggleSnap: () => void
   readonly tool: ComposeStageTool
 }
 
-const SHAPE_TOOLS = [
-  ['draw-rectangle', 'rectangle', 'rectangle', 'stage.drawRectangleTool'],
-  ['draw-arrow', 'arrow', 'arrow', 'stage.drawArrowTool'],
-  ['draw-circle', 'circle', 'circle', 'stage.drawCircleTool'],
+/**
+ * 工具栏上的绘图命令：命令 id、文案键与图标名。
+ *
+ * @remarks
+ * 按钮与命令行是**同一条命令的两个入口**（拖一下是快，敲名字是精确），因此这里只有 id：
+ * 提示文本、取点、捕捉与预览全部由 Stage 那一侧的会话负责。
+ *
+ * 曾经这里是一个形状 split button（矩形 / 箭头 / 圆），走的是 `draw-*` 工具那套拖拽绘制。
+ * 三个工具随本组一起删除：制图几何一律由命令产出，而留着它们会让一处已知的仲裁器冲突
+ * 变得用鼠标就能触发——取点插件（1650）高于绘制（1000），两者同时武装时 `pointerdown`
+ * 被前者吃掉、拖动永远起不来。
+ */
+const DRAWING_COMMANDS = [
+  ['LINE', 'drawLine', 'line'],
+  ['PLINE', 'drawPolyline', 'polyline'],
+  ['RECTANGLE', 'drawRectangle', 'rectangle'],
+  ['CIRCLE', 'drawCircle', 'circle'],
+  ['ARC', 'drawArc', 'arc'],
+  ['ARROW', 'drawArrow', 'arrow'],
+  ['WIRE', 'drawWire', 'wire'],
 ] as const
-
-type ShapeTool = (typeof SHAPE_TOOLS)[number][0]
-
-function shapeTool(tool: ComposeStageTool) {
-  return SHAPE_TOOLS.find(([candidate]) => candidate === tool)
-}
 
 function useToolbarMenu(id: string) {
   const [open, setOpen] = useState(false)
@@ -86,17 +98,18 @@ function useToolbarMenu(id: string) {
 
 /** 默认舞台工具栏：扁平 Godot 风格工具分组与绘图工具入口。 @internal */
 export function DefaultStageToolbar({
+  activeCommandId,
   canvasSettingsOpen,
   dispatch,
   document,
   gridVisible,
-  lastShapeTool,
   nextId,
   setCanvasSettingsOpen,
   setGridSize,
   setGridVisible,
   setTool,
   shortcuts,
+  startCommand,
   toggleSnap,
   tool,
 }: DefaultStageToolbarProps) {
@@ -111,17 +124,6 @@ export function DefaultStageToolbar({
     setOpen: setGridMenuOpen,
     triggerRef: gridMenuTriggerRef,
   } = useToolbarMenu('compose-editor-grid-menu')
-  const {
-    close: closeShapeMenu,
-    focusFirstItem: focusFirstShapeItem,
-    id: shapeMenuId,
-    menuRef: shapeMenuRef,
-    onMenuKeyDown: onShapeMenuKeyDown,
-    onTriggerKeyDown: onShapeTriggerKeyDown,
-    open: shapeMenuOpen,
-    setOpen: setShapeMenuOpen,
-    triggerRef: shapeMenuTriggerRef,
-  } = useToolbarMenu('compose-editor-shape-menu')
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(
     i18n?.locale ?? 'zh-CN',
@@ -142,10 +144,6 @@ export function DefaultStageToolbar({
   const snapEnabled = document.canvas.grid.snapEnabled
     || document.canvas.smartSnap.nodes
     || document.canvas.smartSnap.guides
-  const selectedShape = shapeTool(tool)
-  const currentShape = Boolean(selectedShape)
-  const activeShape = selectedShape ?? shapeTool(lastShapeTool)!
-
   return (
     <div aria-label={messages.label} className="compose-editor__stage-toolbar" role="toolbar">
       <div aria-label={messages.interactionTools} className="compose-editor__toolbar-group" role="group">
@@ -251,63 +249,29 @@ export function DefaultStageToolbar({
         >
           <StageToolbarIcon name="container" />
         </button>
-        <div className="compose-editor__toolbar-menu-anchor">
-          <button
-            {...titled(messages.shape, shortcut('stage.drawRectangleTool'))}
-            aria-pressed={currentShape}
-            data-active-shape={activeShape[0]}
-            type="button"
-            onClick={() => setTool(activeShape[0])}
-          >
-            <StageToolbarIcon name={activeShape[2]} />
-          </button>
-          <button
-            {...titled(messages.shape)}
-            aria-controls={shapeMenuId}
-            aria-expanded={shapeMenuOpen}
-            aria-haspopup="menu"
-            className="compose-editor__toolbar-menu-trigger"
-            ref={shapeMenuTriggerRef}
-            type="button"
-            onClick={() => {
-              setShapeMenuOpen((open) => !open)
-              focusFirstShapeItem()
-            }}
-            onKeyDown={onShapeTriggerKeyDown}
-          >
-            <StageToolbarIcon name="chevron-down" />
-          </button>
-          {shapeMenuOpen ? (
-            <div
-              aria-label={messages.shape}
-              className="compose-editor__toolbar-menu"
-              id={shapeMenuId}
-              ref={shapeMenuRef}
-              role="menu"
-              onKeyDown={onShapeMenuKeyDown}
-            >
-              {SHAPE_TOOLS.map(([shapeTool, label, icon, action]) => (
-                <button
-                  key={shapeTool}
-                  aria-pressed={tool === shapeTool}
-                  role="menuitemradio"
-                  type="button"
-                  onClick={() => {
-                    setTool(shapeTool)
-                    closeShapeMenu()
-                  }}
-                >
-                  <StageToolbarIcon name={icon} />
-                  {messages[label]}
-                  {shortcut(action) ? <kbd>{shortcut(action)}</kbd> : null}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
         <button {...titled(messages.text, shortcut('stage.drawTextTool'))} aria-pressed={tool === 'draw-text'} type="button" onClick={() => setTool('draw-text')}>
           <StageToolbarIcon name="text" />
         </button>
+      </div>
+      <span aria-hidden="true" className="compose-editor__toolbar-divider" />
+      <div aria-label={messages.drawingCommands} className="compose-editor__toolbar-group" role="group">
+        {DRAWING_COMMANDS.map(([commandId, label, icon]) => (
+          <button
+            key={commandId}
+            {...titled(messages[label])}
+            /*
+             * 按下态读 Stage 上报的**当前命令 id**，而不是工具栏自己记「我刚点了哪个」：
+             * 命令会被 `Escape`、被并发文档变化、被另一条命令取代而结束，自己记的那一份
+             * 只会停在过去。
+             */
+            aria-pressed={activeCommandId === commandId}
+            data-command-id={commandId}
+            type="button"
+            onClick={() => startCommand(commandId)}
+          >
+            <StageToolbarIcon name={icon} />
+          </button>
+        ))}
       </div>
     </div>
   )

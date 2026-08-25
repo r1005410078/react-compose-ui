@@ -117,7 +117,7 @@ describe('OpenSpec: stage-engine / 容器标题标签与命中收敛 / 收敛判
 
   it('绘制工具下不收敛', () => {
     // 收敛只服务于选择意图；绘制工具压在场景上是起笔。
-    expect(shouldConvergeToMarquee('draw-rectangle', value, [], hit(ROOT_FRAME_ID))).toBe(false)
+    expect(shouldConvergeToMarquee('draw-container', value, [], hit(ROOT_FRAME_ID))).toBe(false)
   })
 
   it('嵌套容器不收敛', () => {

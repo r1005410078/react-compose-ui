@@ -74,6 +74,14 @@ export interface StageDraftingEffect {
    * **取点时记下的来源**决定——它才是那个知道「这一下点在端口上」的地方。
    */
   readonly wire?: boolean
+  /**
+   * 本步产出的曲线带**终点箭头**。
+   *
+   * @remarks
+   * 与 `wire` 同形的标记：引擎不认识 Renderer props，也不认识 Preset id，只说出「这是一支
+   * 箭头」，由持有 Registry 的宿主挑那个带 `markerEnd` 的 Preset。
+   */
+  readonly arrow?: boolean
   /** 本步要平移的既有 Entity。 */
   readonly translate?: StageDraftingTranslation
   /** 本步要复制并平移的既有 Entity。 */
@@ -112,6 +120,7 @@ export interface StageDraftingMessages {
   readonly expectedPoint: string
   readonly lineTitle: string
   readonly wireTitle: string
+  readonly arrowTitle: string
   readonly arcTitle: string
   readonly circleTitle: string
   readonly rectangleTitle: string

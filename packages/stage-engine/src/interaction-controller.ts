@@ -79,6 +79,13 @@ export type StageInteractionPhase =
  * 位移（严格更强）、空格与中键是随时可用的临时平移覆盖（不占用工具状态）、`LINE` 命令
  * 产出 `Curve` Entity。同一个动作有两个不同手感的触发方式，用户要先想「我在用哪个」。
  *
+ * `draw-rectangle`、`draw-circle` 与 `draw-arrow` 随后按同一条判据删除：制图几何一律由
+ * `RECTANGLE` / `CIRCLE` / `ARROW` 命令产出。留着它们还有一处**独有**的代价——取点插件
+ * （1650）高于绘制（1000），两者同时武装时 `pointerdown` 被前者吃掉、拖动永远起不来，而
+ * 把命令摆上工具栏之后这个冲突两下鼠标就能凑出来。
+ *
+ * 剩下的两个不在此列：容器与文字不是制图几何，没有命令等价物，本来就是「拖一个盒出来」。
+ *
  * @public
  */
 export type StageInteractionTool =
@@ -86,9 +93,6 @@ export type StageInteractionTool =
   | 'scale'
   | 'rotate'
   | 'draw-container'
-  | 'draw-rectangle'
-  | 'draw-arrow'
-  | 'draw-circle'
   | 'draw-text'
 
 /** 当前绘制手势的瞬时世界坐标预览。 @public */

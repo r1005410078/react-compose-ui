@@ -74,6 +74,7 @@ import {
 } from '@compose-ui/scene-tree'
 import type {
   ComposeStageDelegatableAction,
+  ComposeStageHandle,
   ComposeStagePolicy,
   ComposeStageProps,
   ComposeStageServices,
@@ -101,13 +102,6 @@ import { createViewportStore } from './viewport-store'
 import { useComposeEditorLayout } from './use-layout-runtime'
 
 type InspectionTarget = 'entities' | null
-type ShapeDrawingTool = 'draw-rectangle' | 'draw-arrow' | 'draw-circle'
-
-function isShapeDrawingTool(tool: ComposeStageTool): tool is ShapeDrawingTool {
-  return tool === 'draw-rectangle'
-    || tool === 'draw-arrow'
-    || tool === 'draw-circle'
-}
 
 function defaultIdFactory() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -1099,14 +1093,18 @@ export function useComposeEditorController({
     validExpanded(document, withExpandedRootFrames(document, initialExpandedIds)))
   const [viewportStore] = useState(() => createViewportStore(initialViewport))
   const setViewport = viewportStore.setViewport
-  const [tool, setToolState] = useState<ComposeStageTool>(initialTool)
-  const [lastShapeTool, setLastShapeTool] = useState<ShapeDrawingTool>(
-    () => isShapeDrawingTool(initialTool) ? initialTool : 'draw-rectangle',
-  )
-  // 框选判定模式是会话偏好而非文档数据，事实来源留在编辑器，Stage 只接收受控值。
-  const setTool = useCallback((nextTool: ComposeStageTool) => {
-    if (isShapeDrawingTool(nextTool)) setLastShapeTool(nextTool)
-    setToolState(nextTool)
+  const [tool, setTool] = useState<ComposeStageTool>(initialTool)
+  /**
+   * Stage 的命令式句柄与它上报的当前命令 id。
+   *
+   * @remarks
+   * 两个方向各自单一：动作走句柄（工具栏按钮启动命令），状态走回调（按钮的按下态）。
+   * 把按下态记在这里而不是工具栏里，是因为命令的结束不由点击决定。
+   */
+  const stageHandleRef = useRef<ComposeStageHandle>(null)
+  const [activeCommandId, setActiveCommandId] = useState<string | null>(null)
+  const startCommand = useCallback((commandId: string) => {
+    stageHandleRef.current?.startCommand(commandId)
   }, [])
   const [surfaceSize, setSurfaceSize] = useState<{
     readonly width: number
@@ -1536,6 +1534,8 @@ export function useComposeEditorController({
     onViewportChange: setViewport,
     tool,
     onToolChange: setTool,
+    // 按下态的事实来源在 Stage：命令的结束不由点击决定。
+    onActiveCommandChange: setActiveCommandId,
     onShortcutAction: runShortcutAction,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
@@ -1579,6 +1579,7 @@ export function useComposeEditorController({
   const stageElement = useMemo(() => (
     <ViewportBoundStage
       stageProps={stageProps}
+      stageRef={stageHandleRef}
       store={viewportStore}
       surfaceSize={surfaceSize}
     />
@@ -1589,6 +1590,7 @@ export function useComposeEditorController({
       ? (
           <ViewportBoundStage
             stageProps={composeEditorStageProps(stageProps, overrides)}
+            stageRef={stageHandleRef}
             store={viewportStore}
             surfaceSize={surfaceSize}
           />
@@ -1947,6 +1949,7 @@ export function useComposeEditorController({
     ),
     stageToolbar: (
       <DefaultStageToolbar
+        activeCommandId={activeCommandId}
         canvasSettingsOpen={canvasSettingsOpen}
         dispatch={dispatch}
         document={document}
@@ -1955,8 +1958,8 @@ export function useComposeEditorController({
         setCanvasSettingsOpen={setCanvasSettingsOpen}
         setGridSize={setGridSize}
         setGridVisible={setGridVisible}
-        lastShapeTool={lastShapeTool}
         setTool={setTool}
+        startCommand={startCommand}
         toggleSnap={toggleSnap}
         tool={tool}
       />

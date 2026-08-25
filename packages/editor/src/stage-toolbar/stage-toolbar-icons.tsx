@@ -1,4 +1,5 @@
 type StageToolbarIconName =
+  | 'arc'
   | 'arrow'
   | 'center-view'
   | 'chevron-down'
@@ -12,6 +13,7 @@ type StageToolbarIconName =
   | 'line'
   | 'move'
   | 'pan'
+  | 'polyline'
   | 'rectangle'
   | 'rotate'
   | 'save'
@@ -20,6 +22,7 @@ type StageToolbarIconName =
   | 'settings'
   | 'smart-snap'
   | 'text'
+  | 'wire'
   | 'zoom-in'
   | 'zoom-out'
 
@@ -50,6 +53,14 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
       <>
         <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
         <path d="m9 9 6 6M15 9l-6 6" />
+      </>
+    ),
+    // 弧：一段扫掠不足半圆的圆弧，两端各一个端点标记——与 `ARC` 的三点取法呼应。
+    arc: (
+      <>
+        <path d="M4 18a10 10 0 0 1 16 0" />
+        <circle cx="4" cy="18" fill="currentColor" r="1.3" stroke="none" />
+        <circle cx="20" cy="18" fill="currentColor" r="1.3" stroke="none" />
       </>
     ),
     arrow: (
@@ -93,6 +104,16 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="M11.5 9V4.5a1.5 1.5 0 0 1 3 0V10" />
         <path d="M14.5 9V6a1.5 1.5 0 0 1 3 0v5" />
         <path d="M17.5 9.5a1.5 1.5 0 0 1 3 0v4.25C20.5 18.3 17.8 21 13.25 21H12c-2.35 0-4.1-1.1-5.5-3L3.8 14.2a1.65 1.65 0 0 1 2.55-2.05L8.5 14.5" />
+      </>
+    ),
+    // 多段线：三段折线加各顶点标记，与只有两个端点的 `line` 一眼可分。
+    polyline: (
+      <>
+        <path d="M3 18l5-8 5 5 8-11" />
+        <circle cx="3" cy="18" fill="currentColor" r="1.3" stroke="none" />
+        <circle cx="8" cy="10" fill="currentColor" r="1.3" stroke="none" />
+        <circle cx="13" cy="15" fill="currentColor" r="1.3" stroke="none" />
+        <circle cx="21" cy="4" fill="currentColor" r="1.3" stroke="none" />
       </>
     ),
     rectangle: <rect height="13" rx="1" width="17" x="3.5" y="5.5" />,
@@ -139,6 +160,14 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
     text: (
       <>
         <path d="M5 5h14M12 5v14M8 19h8" />
+      </>
+    ),
+    // 导线：一段水平线，两端各接一个方块端子——它与普通直线的差别正是「接到什么上」。
+    wire: (
+      <>
+        <path d="M7 12h10" />
+        <rect height="6" width="4" x="3" y="9" />
+        <rect height="6" width="4" x="17" y="9" />
       </>
     ),
     'zoom-in': (

@@ -176,6 +176,16 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 事实。分成「正在拖的」与「已点亮的」两份状态时，三处必然有一处漏掉其中一种情形。
    */
   const [gripTarget, setGripTarget] = useState<StageGripTarget | null>(null)
+  /**
+   * 正在跑的那条命令的 id；没有命令在跑时为 `null`。
+   *
+   * @remarks
+   * 宿主的工具栏按下态读它。**事实来源必须在这里**：命令会被 `Escape`、被并发文档变化、
+   * 被另一条命令取代而结束，工具栏自己记的那一份只会停在过去。
+   *
+   * 夹点会话不算：它由手势启动而不由词启动，没有名字可报。
+   */
+  const [activeCommandId, setActiveCommandId] = useState<string | null>(null)
 
   const builtInCommands = useMemo(() => createStageDraftingCommands(messages), [messages])
   // 页面网格两轴独立，且开关是 `snapEnabled` 而不是「网格是否可见」——看得见与吸不吸是两件事。
@@ -218,7 +228,10 @@ export function useStageDrafting(options: StageDraftingOptions) {
         registry: current.registry,
         idFactory: current.idFactory,
         activeFrameId: current.activeFrameId,
-      }, curve, effect.wire ? wireBindingsFor(portAnchors.current, curve) : undefined)
+      }, curve, {
+        ...(effect.wire ? { wire: wireBindingsFor(portAnchors.current, curve) } : {}),
+        ...(effect.arrow ? { arrow: true } : {}),
+      })
       if (command) current.dispatch(command)
     }
 
@@ -253,6 +266,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
 
   const endSession = useCallback((message: string | null) => {
     sessionRef.current = null
+    setActiveCommandId(null)
     portAnchors.current.clear()
     setPrompt(null)
     setReference(null)
@@ -428,6 +442,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       return
     }
     sessionRef.current = outcome.session
+    setActiveCommandId(definition.id)
     setPrompt(outcome.session.prompt)
   }, [applyStep, messages])
 
@@ -648,11 +663,13 @@ export function useStageDrafting(options: StageDraftingOptions) {
     // 拖动与点亮共用同一份事实：拾取框画不画、哪个夹点是热的、排除哪个点都读它。
     gripTarget,
     resolvedPointer,
+    activeCommandId: enabled ? activeCommandId : null,
     cancel,
     clearNotice,
     handleKeyDown,
     handlePoint,
     setPointer,
+    start,
     startGripSession,
     submit,
   }

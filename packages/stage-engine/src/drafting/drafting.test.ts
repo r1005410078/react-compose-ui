@@ -13,6 +13,7 @@ const messages = {
   expectedPoint: '需要一个点',
   lineTitle: '直线',
   wireTitle: '导线',
+  arrowTitle: '箭头',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
   basePoint: '指定基点',
@@ -102,9 +103,27 @@ describe('LINE 命令', () => {
   it('命令按名称与别名解析', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
-      'LINE', 'WIRE', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE', 'MOVE', 'COPY', 'ERASE', 'VERTEX',
+      'LINE', 'WIRE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE',
+      'MOVE', 'COPY', 'ERASE', 'VERTEX',
     ])
     expect(commands[0]?.aliases).toEqual(['L'])
+  })
+
+  it('OpenSpec: stage-engine / 绘图命令 / ARROW 取两点即结束并标记为箭头', () => {
+    const command = createStageDraftingCommands(messages).find(({ id }) => id === 'ARROW')!
+    expect(command.aliases).toEqual(['AR'])
+    const session = command.start({ messages })
+
+    expect(session.advance({ kind: 'point', point: { x: 10, y: 10 } }).status).toBe('prompt')
+    const step = session.advance({ kind: 'point', point: { x: 60, y: 40 } })
+
+    // 一支箭头只有一个头：取两点就结束，不像 `LINE` 那样连着画。
+    expect(step.status).toBe('commit')
+    const effect = step.status === 'commit' ? step.effect : undefined
+    expect(effect?.curves).toHaveLength(1)
+    // 引擎只给出一个标记：它不认识 Renderer props，也不认识 Preset id。
+    expect(effect?.arrow).toBe(true)
+    expect(effect?.wire).toBeUndefined()
   })
 })
 

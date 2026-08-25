@@ -19,9 +19,6 @@ export type ComposeEditorShortcutAction =
   | 'stage.scaleTool'
   | 'stage.rotateTool'
   | 'stage.drawContainerTool'
-  | 'stage.drawRectangleTool'
-  | 'stage.drawArrowTool'
-  | 'stage.drawCircleTool'
   | 'stage.drawTextTool'
   | 'stage.fitSelection'
   | 'stage.fitContainer'
@@ -82,9 +79,6 @@ export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'stage.scaleTool',
   'stage.rotateTool',
   'stage.drawContainerTool',
-  'stage.drawRectangleTool',
-  'stage.drawArrowTool',
-  'stage.drawCircleTool',
   'stage.drawTextTool',
   'stage.fitSelection',
   'stage.fitContainer',
@@ -119,9 +113,6 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
   'stage.scaleTool': 'stage',
   'stage.rotateTool': 'stage',
   'stage.drawContainerTool': 'stage',
-  'stage.drawRectangleTool': 'stage',
-  'stage.drawArrowTool': 'stage',
-  'stage.drawCircleTool': 'stage',
   'stage.drawTextTool': 'stage',
   'stage.fitSelection': 'stage',
   'stage.fitContainer': 'stage',

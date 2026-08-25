@@ -17,29 +17,31 @@ function document() {
 
 function renderToolbar(
   tool: import('@compose-ui/stage').ComposeStageTool = 'select',
-  lastShapeTool: 'draw-rectangle' | 'draw-arrow' | 'draw-circle' = 'draw-rectangle',
+  activeCommandId: string | null = null,
 ) {
   const setTool = vi.fn()
   const setGridSize = vi.fn()
+  const startCommand = vi.fn()
   const toggleSnap = vi.fn()
   render(
     <DefaultStageToolbar
+      activeCommandId={activeCommandId}
       canvasSettingsOpen={false}
       dispatch={vi.fn()}
       document={document()}
       gridVisible
-      lastShapeTool={lastShapeTool}
       nextId={() => 'toolbar-id'}
       setCanvasSettingsOpen={vi.fn()}
       setGridSize={setGridSize}
       setGridVisible={vi.fn()}
       setTool={setTool}
       shortcuts={createDefaultComposeEditorPreferences().shortcuts}
+      startCommand={startCommand}
       toggleSnap={toggleSnap}
       tool={tool}
     />,
   )
-  return { setGridSize, setTool, toggleSnap }
+  return { setGridSize, setTool, startCommand, toggleSnap }
 }
 
 describe('DefaultStageToolbar', () => {
@@ -62,7 +64,7 @@ describe('DefaultStageToolbar', () => {
     const { setTool } = renderToolbar()
 
     // 框选判定恒由拖拽方向决定，方向本身就是切换器；再给一个菜单等于给同一件事造第二个、
-    // 更慢的入口。形状工具的菜单不受此约束——它的菜单项各自是独立动作。
+    // 更慢的入口。
     fireEvent.click(screen.getByRole('button', { name: '选择' }))
     expect(setTool).toHaveBeenCalledWith('select')
     expect(screen.queryByRole('button', { name: '框选模式' })).not.toBeInTheDocument()
@@ -94,26 +96,37 @@ describe('DefaultStageToolbar', () => {
 
   it('OpenSpec: editor-workspace-layout / menu button / 键盘导航、Escape 与快捷键提示', async () => {
     renderToolbar()
-    const trigger = screen.getAllByRole('button', { name: '形状' })[1]!
+    const trigger = screen.getByRole('button', { name: '网格大小' })
     trigger.focus()
     fireEvent.keyDown(trigger, { key: 'ArrowDown' })
 
-    const menu = screen.getByRole('menu', { name: '形状' })
+    const menu = screen.getByRole('menu', { name: '网格大小' })
     expect(menu).toBeInTheDocument()
-    // 形状菜单不再有 Line：`LINE` 命令产出 Curve，那才是步骤 8 要留下的一种。
-    expect(screen.queryByRole('menuitemradio', { name: /线/ })).toBeNull()
-    expect(screen.getByText('R', { selector: 'kbd' })).toBeInTheDocument()
     fireEvent.keyDown(menu, { key: 'Escape' })
 
-    expect(screen.queryByRole('menu', { name: '形状' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menu', { name: '网格大小' })).not.toBeInTheDocument()
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
-  it('OpenSpec: editor-workspace-layout / 形状主按钮 / 同步当前形状图标与重入工具', () => {
-    renderToolbar('select', 'draw-arrow')
+  it('OpenSpec: editor-workspace-layout / 绘图命令组 / 七条命令各一个按钮且点击即启动', () => {
+    const { startCommand } = renderToolbar()
 
-    const primary = screen.getAllByRole('button', { name: '形状' })[0]!
-    expect(primary).toHaveAttribute('data-active-shape', 'draw-arrow')
-    expect(primary.querySelector('path[d="M4 19 19 4"]')).toBeInTheDocument()
+    // 形状 split button 已删除：制图几何一律由命令产出，绘图入口因此只有一套。
+    expect(screen.queryByRole('button', { name: '形状' })).toBeNull()
+    for (const label of ['直线', '多段线', '矩形', '圆', '圆弧', '箭头', '导线']) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '矩形' }))
+    // 按钮不自己走一条路径：它只说出命令的名字，解析、可用性与会话全在 Stage 那一侧。
+    expect(startCommand).toHaveBeenCalledWith('RECTANGLE')
+  })
+
+  it('OpenSpec: editor-workspace-layout / 绘图命令组 / 按下态读上报的命令 id', () => {
+    renderToolbar('select', 'CIRCLE')
+
+    expect(screen.getByRole('button', { name: '圆' })).toHaveAttribute('aria-pressed', 'true')
+    // 判别点：工具栏没有第二份「我刚点了哪个」，上报什么就是什么。
+    expect(screen.getByRole('button', { name: '矩形' })).toHaveAttribute('aria-pressed', 'false')
   })
 })

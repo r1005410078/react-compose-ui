@@ -1,6 +1,7 @@
 import { ComposeStage } from '@compose-ui/stage'
 import { useSyncExternalStore } from 'react'
-import type { ComposeStageProps } from '@compose-ui/stage'
+import type { Ref } from 'react'
+import type { ComposeStageHandle, ComposeStageProps } from '@compose-ui/stage'
 import { CanvasViewportControls } from '../stage-toolbar'
 import type { ViewportStore } from './viewport-store'
 
@@ -12,10 +13,13 @@ import type { ViewportStore } from './viewport-store'
  * Inspector 与命令面板。
  */
 export function ViewportBoundStage({
+  stageRef,
   store,
   stageProps,
   surfaceSize,
 }: {
+  /** Stage 的命令式句柄；工具栏靠它启动命令会话。 */
+  readonly stageRef: Ref<ComposeStageHandle>
   readonly store: ViewportStore
   readonly stageProps: ComposeStageProps
   readonly surfaceSize: { readonly width: number; readonly height: number } | null
@@ -24,7 +28,7 @@ export function ViewportBoundStage({
   // 宿主覆盖已由 composeEditorStageProps 在上游合并进 stageProps，这一层只补当前视口快照。
   return (
     <div className="compose-editor__stage-viewport-host">
-      <ComposeStage {...stageProps} viewport={viewport} />
+      <ComposeStage {...stageProps} ref={stageRef} viewport={viewport} />
       <CanvasViewportControls store={store} surfaceSize={surfaceSize} />
     </div>
   )

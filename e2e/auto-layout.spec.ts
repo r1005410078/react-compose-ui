@@ -502,8 +502,9 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 场景 Auto Layout 子
   await expect(frame).toBeVisible()
   const frameBox = (await frame.boundingBox())!
 
-  // 场景里画一个矩形，作为 Auto Layout 采纳后的 flow 子级。
-  await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+  // 场景里画一个容器，作为 Auto Layout 采纳后的 flow 子级。拖拽绘制只剩容器与文字，
+  // 制图几何一律由绘图命令产出，而空心曲线的盒中心点不中——那正是本条要点选的地方。
+  await editor.getByRole('button', { name: '创建容器', exact: true }).click()
   await page.mouse.move(frameBox.x + 60, frameBox.y + 60)
   await page.mouse.down()
   await page.mouse.move(frameBox.x + 220, frameBox.y + 160, { steps: 4 })
@@ -516,9 +517,9 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 场景 Auto Layout 子
   await enableAutoLayout(sceneInspector)
 
   // 子级宽度 Fill：宽度跟随场景宽度，是「实时重排」的可观察信号。
-  const rect = stage.locator('[data-testid^="stage-entity-"]').first()
+  const rect = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-container').first()
   await rect.click({ force: true })
-  await selectAxisSizing(editor.getByRole('region', { name: 'Rectangle 属性', exact: true }), '宽度', 'Fill')
+  await selectAxisSizing(editor.getByRole('region', { name: 'Container 属性', exact: true }), '宽度', 'Fill')
   const before = (await rect.boundingBox())!.width
 
   // 拖场景西侧手柄加宽 240；右下角与东侧在默认视口可能被属性面板遮挡。

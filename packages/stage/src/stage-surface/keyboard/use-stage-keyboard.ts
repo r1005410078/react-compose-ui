@@ -54,9 +54,6 @@ const TOOL_SHORTCUTS: readonly (readonly [ComposeStageShortcutAction, ComposeSta
   ['stage.scaleTool', 'scale'],
   ['stage.rotateTool', 'rotate'],
   ['stage.drawContainerTool', 'draw-container'],
-  ['stage.drawRectangleTool', 'draw-rectangle'],
-  ['stage.drawArrowTool', 'draw-arrow'],
-  ['stage.drawCircleTool', 'draw-circle'],
   ['stage.drawTextTool', 'draw-text'],
 ]
 

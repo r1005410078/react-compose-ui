@@ -73,9 +73,6 @@ export function assetSeedCenters(
 export function presetForDrawingTool(tool: Extract<StageInteractionTool, `draw-${string}`>) {
   const presets = {
     'draw-container': 'container',
-    'draw-rectangle': 'rectangle',
-    'draw-arrow': 'arrow',
-    'draw-circle': 'circle',
     'draw-text': 'text',
   } as const
   return presets[tool]

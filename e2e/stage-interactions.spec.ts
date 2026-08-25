@@ -60,7 +60,7 @@ test('OpenSpec: stage / 四角缩放 / resize 手柄在预览阶段跟随鼠标'
 })
 
 
-test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形状预览与尺寸浮标', async ({ page }) => {
+test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、形状预览与尺寸浮标', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/?no-auto-fit')
 
@@ -71,7 +71,8 @@ test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形�
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
 
-  await editor.getByRole('button', { name: '形状', exact: true }).first().click()
+  // 拖拽绘制只剩容器与文字：制图几何一律由绘图命令产出。
+  await editor.getByRole('button', { name: '创建容器', exact: true }).click()
   await expect(stage).toHaveAttribute('data-interaction-cursor', 'crosshair')
   await expect(output).toHaveCSS('cursor', /crosshair/)
 
@@ -82,18 +83,18 @@ test('OpenSpec: stage / 绘制工具与框选隔离 / 十字光标、实际形�
   await page.mouse.move(target.x, target.y, { steps: 4 })
 
   const preview = stage.getByTestId('stage-drawing-preview')
-  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-rectangle')
+  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-container')
   await expect(preview.locator('rect')).toHaveCount(2)
   await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
   await expect(stage.getByTestId('stage-marquee')).toHaveCount(0)
-  await expect(stage).toHaveScreenshot('stage-drawing-rectangle-preview.png', {
+  await expect(stage).toHaveScreenshot('stage-drawing-container-preview.png', {
     animations: 'disabled',
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
 
   await page.mouse.up()
-  await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
+  await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Container', { exact: true })).toBeVisible()
 })
 
 
@@ -109,15 +110,21 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
   expect(outputBox).not.toBeNull()
   const start = { x: outputBox!.x + 240, y: outputBox!.y + 180 }
   const target = { x: start.x + 200, y: start.y + 120 }
-  const overlap = { x: start.x + 100, y: start.y + 60 }
 
+  // 两个几何完全重合的矩形：第二个的角点会被特征点捕捉吸到第一个的角上，因此两条描边
+  // 逐像素重叠，重叠处的点选正是本条要考的东西。
   for (let index = 0; index < 2; index += 1) {
-    await editor.getByRole('button', { name: '形状', exact: true }).first().click()
-    await page.mouse.move(start.x, start.y)
-    await page.mouse.down()
-    await page.mouse.move(target.x, target.y, { steps: 4 })
-    await page.mouse.up()
+    await editor.getByRole('button', { name: '矩形', exact: true }).click()
+    await page.mouse.click(start.x, start.y)
+    await page.mouse.click(target.x, target.y)
   }
+
+  /*
+   * 重叠取样点落在**描边上**而不是包围盒中心：曲线按到几何的距离命中，空心矩形的内部
+   * 是空的。取第一条描边渲染出来的上边中点，不用鼠标原始坐标——角点经过了吸附。
+   */
+  const strokeBox = (await stage.getByTestId('compose-material-curve-stroke').first().boundingBox())!
+  const overlap = { x: strokeBox.x + strokeBox.width / 2, y: strokeBox.y }
 
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(2)
@@ -237,7 +244,7 @@ test('OpenSpec: stage / 直接绘制 Preset / 文字工具只按点创建', asyn
 })
 
 
-test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主图标同步', async ({ page }) => {
+test('OpenSpec: stage / ARROW / 两点取向、marker 与反向重画', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/?no-auto-fit')
 
@@ -248,57 +255,37 @@ test('OpenSpec: stage / 线条绘制 / 端点尺寸、完成回选与形状主�
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
 
-  const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
-  const pickArrow = async () => {
-    await shapeButtons.nth(1).click()
-    // 形状菜单里的「线条」已删除：`LINE` 命令产出的 `Curve` 才是留下的那一种。箭头现在也是
-    // 曲线——它只是默认带终点 marker 的那个起点。
-    await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '箭头' }).click()
-  }
-  await pickArrow()
-  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-arrow')
+  const arrow = editor.getByRole('button', { name: '箭头', exact: true })
+  const strokes = stage.getByTestId('compose-material-curve-stroke')
 
-  // 竖直拖：退化轴由曲线自己的最小范围钳住，不再需要 Shape 那个 0.5px 偏移补丁。
+  // 竖直取两点：退化轴由曲线自己的最小范围钳住，不再需要 Shape 那个 0.5px 偏移补丁。
   const start = { x: outputBox!.x + 196, y: outputBox!.y + 128 }
   const target = { x: start.x, y: start.y + 144 }
-  await page.mouse.move(start.x, start.y)
-  await page.mouse.down()
-  await page.mouse.move(target.x, target.y, { steps: 4 })
-
-  const preview = stage.getByTestId('stage-drawing-preview')
-  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-arrow')
-  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('0 × 144')
-  await page.mouse.up()
-
-  await expect(editor.getByRole('button', { name: '选择', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(shapeButtons.first()).toHaveAttribute('data-active-shape', 'draw-arrow')
+  await arrow.click()
+  await page.mouse.click(start.x, start.y)
+  await page.mouse.click(target.x, target.y)
 
   // 画出来的是曲线，箭头挂在几何终点上。
-  const strokes = stage.getByTestId('compose-material-curve-stroke')
   await expect(strokes).toHaveCount(1)
   expect(await strokes.first().getAttribute('marker-end')).toMatch(/^url\(#/)
-  // 向下拖，终点在下：方向由两个真实坐标表达，不再有三态编码。
+  // 向下取第二点，终点在下：方向由两个真实坐标表达，不再有三态编码。
   expect(Number(await strokes.first().getAttribute('y2')))
     .toBeGreaterThan(Number(await strokes.first().getAttribute('y1')))
 
-  // 画完曲线直接停在几何编辑里：三个夹点显形（两端 + 中点）——与「画完文字直接进文字编辑」
-  // 是同一条规则的第二个实例。第二套端点 UI 仍然没有。
-  await expect(stage.locator('[data-testid^="stage-path-vertex-hit-"]')).toHaveCount(3)
-  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
-  await expect(stage.getByTestId('stage-line-selection')).toHaveCount(0)
-  // 退出会话之后回到曲线的普通选中呈现——轮廓，不是盒。几何编辑不是一条单行道。
-  await page.keyboard.press('Escape')
-  // 用 `toHaveCount` 而不是 `toBeVisible`：这一条画的是**竖直**箭头，轮廓折线的包围盒宽度
-  // 为零，而 Playwright 把零面积当作不可见。
-  await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(1)
-  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
+  /*
+   * 命令产出的对象**不进**几何编辑：命令还握着光标与提示，两个「正在取点」的东西叠在
+   * 一起会让 `Escape` 的含义说不清。「画完曲线直接进几何编辑」说的是绘制手势那条路。
+   */
+  await expect(stage.locator('[data-testid^="stage-path-vertex-hit-"]')).toHaveCount(0)
 
-  // 反向拖出第二条：终点在上，几何跟着翻过来。
-  await pickArrow()
-  await page.mouse.move(target.x + 120, target.y)
-  await page.mouse.down()
-  await page.mouse.move(start.x + 120, start.y, { steps: 4 })
-  await page.mouse.up()
+  // 命令结束即回到空闲：按钮不再是按下态，再点一下画布只是普通点选。
+  await expect(arrow).toHaveAttribute('aria-pressed', 'false')
+  await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('命令：')
+
+  // 反向取第二条：终点在上，几何跟着翻过来。
+  await arrow.click()
+  await page.mouse.click(target.x + 120, target.y)
+  await page.mouse.click(start.x + 120, start.y)
   await expect(strokes).toHaveCount(2)
   expect(Number(await strokes.nth(1).getAttribute('y2')))
     .toBeLessThan(Number(await strokes.nth(1).getAttribute('y1')))
@@ -316,20 +303,17 @@ test('OpenSpec: stage / 线段命中 / 透明外接矩形不选中，线身仍�
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
 
-  const shapeButtons = editor.getByRole('button', { name: '形状', exact: true })
-  await shapeButtons.nth(1).click()
-  await editor.getByRole('menu', { name: '形状' }).getByRole('menuitemradio', { name: '箭头' }).click()
-
   const start = { x: outputBox!.x + 180, y: outputBox!.y + 420 }
   const end = { x: start.x + 360, y: start.y - 240 }
-  await page.mouse.move(start.x, start.y)
-  await page.mouse.down()
-  await page.mouse.move(end.x, end.y, { steps: 4 })
-  await page.mouse.up()
-  // 画完直接停在几何编辑里，那里不画选区盒；本条要验的是命中而不是几何编辑，先退出来。
-  await page.keyboard.press('Escape')
-  // 曲线的选中呈现是沿几何的轮廓，不是包围盒。
+  await editor.getByRole('button', { name: '直线', exact: true }).click()
+  await page.mouse.click(start.x, start.y)
+  await page.mouse.click(end.x, end.y)
+  // `LINE` 逐段落地且不自动结束，先把命令收掉再验命中。
+  await stage.press('Escape')
+
+  // 曲线的选中呈现是沿几何的轮廓，不是包围盒。命令不回选，先点线身选中它。
   const selection = stage.getByTestId('stage-selection-outline')
+  await page.mouse.click((start.x + end.x) / 2, (start.y + end.y) / 2)
   await expect(selection).toBeVisible()
 
   // 位于轴对齐外接矩形内部，但离实际线段很远；点击应落到画布并清除选择。
@@ -384,60 +368,6 @@ test('OpenSpec: stage / 画布平移手势 / 空闲张手且拖动时握手', as
   await page.mouse.move(point.x + 40, point.y + 24, { steps: 3 })
   await page.mouse.up({ button: 'middle' })
   await expect(stage).toHaveAttribute('data-interaction-cursor', 'default')
-})
-
-
-test('OpenSpec: stage / Shift 绘制正方形与正圆 / 拖动中动态锁定预览与提交', async ({ page }) => {
-  await page.setViewportSize({ width: 1920, height: 1080 })
-  await page.goto('/?no-auto-fit')
-
-  const editor = page.getByRole('region', { name: 'Compose editor' })
-  const stage = editor.getByRole('application', { name: 'Stage' })
-  const output = stage.getByTestId('stage-frame-boundary-frame-root')
-  await expect(output).toBeVisible()
-  const outputBox = await output.boundingBox()
-  expect(outputBox).not.toBeNull()
-
-  await editor.getByRole('button', { name: '形状', exact: true }).first().click()
-  const start = { x: outputBox!.x + 180, y: outputBox!.y + 132 }
-  const target = { x: start.x + 248, y: start.y + 144 }
-  await page.mouse.move(start.x, start.y)
-  await page.mouse.down()
-  await page.mouse.move(target.x, target.y, { steps: 4 })
-
-  const preview = stage.getByTestId('stage-drawing-preview')
-  await expect(preview).toHaveAttribute('data-drawing-tool', 'draw-rectangle')
-  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
-  await page.keyboard.down('Shift')
-  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 248')
-  const squarePreviewBounds = await preview.locator('rect').first().boundingBox()
-  expect(squarePreviewBounds).not.toBeNull()
-  /*
-   * 绘制终点是**吸附后**的落点，不是光标所在的裸坐标——与 resize 一致：吸附一旦生效，
-   * 被拖动的那条边就落在网格线上，光标只是引导。这里 zoom 为 1，因此屏幕偏移等于世界
-   * 坐标，直接按 8 网格算出该落在哪。Shift 正方形仍以这个落点为终点角，向另一侧扩边。
-   * SVG 的 1.5px 白色描边会使 DOM box 向外扩 0.75px；允许一个物理像素的视觉误差。
-   */
-  const snapToGrid = (value: number) => Math.round(value / 8) * 8
-  const snappedCorner = {
-    x: outputBox!.x + snapToGrid(target.x - outputBox!.x),
-    y: outputBox!.y + snapToGrid(target.y - outputBox!.y),
-  }
-  expect(Math.abs(squarePreviewBounds!.x + squarePreviewBounds!.width - snappedCorner.x))
-    .toBeLessThan(1)
-  expect(Math.abs(squarePreviewBounds!.y + squarePreviewBounds!.height - snappedCorner.y))
-    .toBeLessThan(1)
-  await page.keyboard.up('Shift')
-  await expect(preview.locator('.compose-stage__drawing-dimensions')).toContainText('248 × 144')
-  await page.keyboard.down('Shift')
-  await page.mouse.up()
-  await page.keyboard.up('Shift')
-
-  await expect(editor.getByRole('treegrid', { name: '场景树' }).getByText('Rectangle', { exact: true })).toBeVisible()
-  const createdRectangle = stage.locator('.compose-stage__node.is-renderer').last()
-  await expect(createdRectangle).toHaveCSS('width', '248px')
-  await expect(createdRectangle).toHaveCSS('height', '248px')
-  await expect(createdRectangle).toHaveCSS('border-radius', '0px')
 })
 
 

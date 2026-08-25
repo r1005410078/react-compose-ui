@@ -83,9 +83,6 @@ export type ComposeStageShortcutAction =
   | 'stage.scaleTool'
   | 'stage.rotateTool'
   | 'stage.drawContainerTool'
-  | 'stage.drawRectangleTool'
-  | 'stage.drawArrowTool'
-  | 'stage.drawCircleTool'
   | 'stage.drawTextTool'
   | 'stage.fitSelection'
   | 'stage.fitContainer'
@@ -220,6 +217,32 @@ export interface ComposeStagePolicy {
 }
 
 /**
+ * Stage 的命令式句柄。
+ *
+ * @remarks
+ * 只暴露**动作**，状态仍由 `onActiveCommandChange` 单向上报，两个方向因此各自单一。
+ *
+ * 不做成受控 prop（`pendingCommandId` + 消费握手）：那把一个事件建模成状态，同一个按钮
+ * 连点两次要靠 nonce 才能再次触发，而「当前挂着一个待启动的命令」这个中间态在任何时刻都
+ * 不描述真实世界的任何东西。
+ *
+ * @public
+ */
+export interface ComposeStageHandle {
+  /**
+   * 启动一条命令会话。
+   *
+   * @remarks
+   * 与在命令行里键入这个名字**完全等价**：同一条解析、同一份可用性检查、同一个会话。
+   * 实现就是把 id 喂给命令行已经在用的那个启动函数——另写一份必然只实现三种拒绝里的
+   * 一两种，同一条命令就会在两个入口给出不同结果。
+   *
+   * @param commandId - 命令 id 或别名；解析不到时命令行显示「未知命令」。
+   */
+  startCommand(commandId: string): void
+}
+
+/**
  * 受控无限 Stage 属性。
  *
  * @public
@@ -295,6 +318,16 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
     StageDraftingContext,
     StageDraftingEffect
   >[]
+  /**
+   * 当前正在跑的那条命令的 id；没有命令在跑时报 `null`。
+   *
+   * @remarks
+   * 宿主用它渲染自己 chrome 上的按下态。事实来源在 Stage：命令会被 `Escape`、被并发文档
+   * 变化、被另一条命令取代而结束，宿主自己记「我刚点了哪个」的那一份只会停在过去。
+   *
+   * 由手势启动的夹点会话不上报：它没有名字，也不进「重复上一条命令」的序列。
+   */
+  readonly onActiveCommandChange?: (commandId: string | null) => void
   /**
    * 页面的激活场景。
    *

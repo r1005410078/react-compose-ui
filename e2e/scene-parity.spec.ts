@@ -7,7 +7,7 @@ import { emptyWorkspaceRect, pointerDrop } from './support/test-helpers'
  *
  * 空白区可能很窄，因此拖拽尺寸从可用区域推导而不是写死，避免落点被挤回场景里。
  */
-async function drawInEmptyWorkspace(page: Page, editor: Locator, tool: '创建容器' | '形状') {
+async function drawInEmptyWorkspace(page: Page, editor: Locator, tool: '创建容器' | '矩形') {
   const region = await emptyWorkspaceRect(page, editor)
   const width = Math.min(160, region.width - 16)
   const height = Math.min(120, region.height - 16)
@@ -17,12 +17,17 @@ async function drawInEmptyWorkspace(page: Page, editor: Locator, tool: '创建�
     x: region.x + (region.width - width) / 2,
     y: region.y + (region.height - height) / 2,
   }
-  // 「形状」是一个下拉工具组，主按钮默认就是矩形。
-  await editor.getByRole('button', { name: tool, exact: true }).first().click()
-  await page.mouse.move(start.x, start.y)
-  await page.mouse.down()
-  await page.mouse.move(start.x + width, start.y + height, { steps: 4 })
-  await page.mouse.up()
+  await editor.getByRole('button', { name: tool, exact: true }).click()
+  if (tool === '矩形') {
+    // 制图几何走命令：取两个对角点，没有拖拽阶段。
+    await page.mouse.click(start.x, start.y)
+    await page.mouse.click(start.x + width, start.y + height)
+  } else {
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(start.x + width, start.y + height, { steps: 4 })
+    await page.mouse.up()
+  }
   await editor.getByRole('button', { name: '选择', exact: true }).click()
   return { x: start.x, y: start.y, width, height }
 }
@@ -73,7 +78,7 @@ test('OpenSpec: stage / 空白工作区的新建落点 / 在场景外绘制矩�
 
   const renderers = stage.locator('.compose-stage__node.is-renderer')
   const before = await renderers.count()
-  const drawn = await drawInEmptyWorkspace(page, editor, '形状')
+  const drawn = await drawInEmptyWorkspace(page, editor, '矩形')
 
   // 先确认真的画出了东西：落在浮动工具条上时什么都不会创建，选中态不变会让下面的
   // 断言无条件通过。
@@ -84,8 +89,9 @@ test('OpenSpec: stage / 空白工作区的新建落点 / 在场景外绘制矩�
     '[data-entity-id="frame-root"] .compose-stage__node.is-renderer',
   )).toHaveCount(1)
   // 保留落点：矩形留在绘制处（越出场景边界也不被钳回），场景不裁剪因此仍然可见。
-  const selection = (await stage.getByTestId('stage-selection-bounds').boundingBox())!
-  expectContained(selection, {
+  // 量的是画出来那个 Entity 自己的盒——命令不回选，这里也没有选区框可读。
+  const created = (await renderers.first().boundingBox())!
+  expectContained(created, {
     x: drawn.x - 8, y: drawn.y - 8, width: drawn.width + 16, height: drawn.height + 16,
   })
 })
@@ -136,7 +142,7 @@ test('OpenSpec: stage / 空白工作区的新建落点 / 切换激活场景后�
 
   const renderers = stage.locator('.compose-stage__node.is-renderer')
   await expect(renderers).toHaveCount(0)
-  await drawInEmptyWorkspace(page, editor, '形状')
+  await drawInEmptyWorkspace(page, editor, '矩形')
   await expect(renderers).toHaveCount(1)
 
   // 落进的是激活场景，而不是 rootIds 里恰好排第一的那块。断言 DOM 父子关系：
