@@ -1536,6 +1536,19 @@ describe('OpenSpec: stage / 画布可编辑路径覆盖层与手势上报', () =
     expect(screen.getByTestId('stage-path-tangent-k1-in')).toBeInTheDocument()
   })
 
+  it('OpenSpec: stage / 顶点取点是一条命令会话 / 点亮的夹点与活动顶点各自独立', () => {
+    const view = render(<StageOverlay {...overlayBase} editablePath={editablePath} />)
+    expect(screen.getByTestId('stage-path-vertex-k1')).not.toHaveAttribute('data-vertex-hot')
+
+    view.rerender(
+      <StageOverlay {...overlayBase} editablePath={editablePath} hotPathVertexId="k1" />,
+    )
+    // 点亮与活动是两个问题：前者说「下一个点会挪哪个顶点」，后者是宿主运动路径的当前关键帧。
+    expect(screen.getByTestId('stage-path-vertex-k1')).toHaveAttribute('data-vertex-hot')
+    expect(screen.getByTestId('stage-path-vertex-k1')).not.toHaveAttribute('data-vertex-active')
+    expect(screen.getByTestId('stage-path-vertex-k0')).not.toHaveAttribute('data-vertex-hot')
+  })
+
   it('OpenSpec: stage / 画布可编辑路径覆盖层 / 未传入路径时不变', () => {
     render(<StageOverlay {...overlayBase} />)
     expect(screen.queryByTestId('stage-editable-path')).not.toBeInTheDocument()

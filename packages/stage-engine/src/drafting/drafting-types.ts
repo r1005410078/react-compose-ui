@@ -1,6 +1,35 @@
 import type { ComposeCommandPoint } from '@compose-ui/commands'
 import type { ComposeCurve } from '@compose-ui/core'
 
+/**
+ * 一次夹点取点。
+ *
+ * @remarks
+ * `origin` 是夹点在**文档**里的位置，不是拖动预览里的位置：它同时是橡皮筋的起点与被排除
+ * 出特征点捕捉的那一个点，而要挡的是「它出发的地方」。
+ *
+ * @public
+ */
+export interface StageGripTarget {
+  readonly entityId: string
+  readonly gripId: string
+  readonly origin: ComposeCommandPoint
+}
+
+/**
+ * 一次夹点几何变更。
+ *
+ * @remarks
+ * 只带落点而不带算好的几何：把落点应用到夹点上要读盒与世界矩阵，那是规划那一步的事。
+ * 拖动、点亮后取点与点亮后键入坐标三条路径因此汇到同一处求解。
+ *
+ * @public
+ */
+export interface StageDraftingGripEdit extends StageGripTarget {
+  /** 已经过点输入管线解算的落点，世界坐标。 */
+  readonly point: ComposeCommandPoint
+}
+
 /** 一段已定下来的线。 @public */
 export interface StageDraftingSegment {
   readonly start: ComposeCommandPoint
@@ -51,6 +80,17 @@ export interface StageDraftingEffect {
   readonly duplicate?: StageDraftingTranslation
   /** 本步要删除的 Entity。 */
   readonly removed?: readonly string[]
+  /** 本步要把某个夹点挪到某个落点。 */
+  readonly curveGrip?: StageDraftingGripEdit
+  /**
+   * 本步要让某个 Entity 进入几何编辑。
+   *
+   * @remarks
+   * 它不是文档变更，因此不经规划：宿主直接把它转成进入会话。放进同一个效果类型里是因为
+   * 「一条命令做完之后发生了什么」只该有一个出口——另开一条通道会让宿主对同一个 step
+   * 消费两次。
+   */
+  readonly enterGeometryEditing?: string
   /**
    * 上一个已确定的点。
    *
@@ -91,6 +131,9 @@ export interface StageDraftingMessages {
   readonly moveTitle: string
   readonly copyTitle: string
   readonly eraseTitle: string
+  readonly vertexTitle: string
+  readonly specifyNewLocation: string
+  readonly expectedSingleObject: string
 }
 
 /**
@@ -109,4 +152,12 @@ export interface StageDraftingContext {
   readonly messages: StageDraftingMessages
   /** 启动当刻的选择集；缺省视为空。 */
   readonly selection?: readonly string[]
+  /**
+   * 一个 Entity 能不能进入几何编辑。
+   *
+   * @remarks
+   * 由宿主注入而不是引擎自己判断：判据要读文档（有没有 `Curve`、锁没锁），而本包的命令层
+   * 不认识文档。缺席时视为全部可编辑。
+   */
+  readonly isGeometryEditable?: (entityId: string) => boolean
 }

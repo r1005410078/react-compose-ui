@@ -92,6 +92,14 @@ export interface StageOverlayProps {
   readonly editablePath?: StageEditablePath | null
   /** 当前活动顶点：corner 顶点被激活时也显示切线手柄。 */
   readonly activePathVertexId?: string | null
+  /**
+   * 已点亮的夹点（AutoCAD 的 `GRIPHOT`）。
+   *
+   * @remarks
+   * 只在**点亮**时给，拖动时不给：拖动中夹点就在光标底下，「正在动的是哪一个」已经在屏幕上；
+   * 点亮后它停在原位而光标在别处找目标点，没有它就没有任何东西说得出下一个点会挪哪个顶点。
+   */
+  readonly hotPathVertexId?: string | null
   readonly onInteraction: (
     hit: StageInteractionHit,
     event: ReactPointerEvent<Element>,

@@ -22,13 +22,20 @@ export {
   createStageLineSession,
 } from './line-command'
 export {
+  createStageGripSession,
+  createStageVertexCommand,
+  createStageVertexSession,
+} from './vertex-command'
+export {
   createStageDraftingPointPlugin,
   STAGE_DRAFTING_POINT_PLUGIN_ID,
 } from './drafting-point-plugin'
 export type {
   StageDraftingContext,
   StageDraftingEffect,
+  StageDraftingGripEdit,
   StageDraftingMessages,
   StageDraftingSegment,
   StageDraftingTranslation,
+  StageGripTarget,
 } from './drafting-types'

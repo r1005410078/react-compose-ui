@@ -37,6 +37,7 @@ import {
   scrollAxisToViewport,
   STAGE_ZOOM_RANGE,
   type StageDrawnEntity,
+  type StageGripTarget,
   type StagePoint,
   type StageRect,
 } from '@compose-ui/stage-engine'
@@ -439,6 +440,10 @@ function ComposeStageReady({
     moveTitle: messages.draftingMoveTitle,
     copyTitle: messages.draftingCopyTitle,
     eraseTitle: messages.draftingEraseTitle,
+    vertexTitle: messages.draftingVertexTitle,
+    specifyNewLocation: messages.draftingSpecifyNewLocation,
+    expectedSingleObject: messages.draftingExpectedSingleObject,
+    editGeometry: messages.editGeometry,
     orthoOn: messages.draftingOrthoOn,
     orthoOff: messages.draftingOrthoOff,
     snapOn: messages.draftingSnapOn,
@@ -459,17 +464,23 @@ function ComposeStageReady({
     [],
   )
 
+  // 夹点取点的会话住在绘图 Hook 里，而它又要读几何编辑的状态——同一条 ref 打断两个方向。
+  const geometrySession = useMemo(() => ({
+    start: (target: StageGripTarget) => { draftingRef.current?.startGripSession(target) },
+    pick: (world: StagePoint) => { draftingRef.current?.handlePoint(world) },
+    cancel: () => { draftingRef.current?.cancel() },
+    clearNotice: () => { draftingRef.current?.clearNotice() },
+  }), [])
+
   const geometryEditing = useStageGeometryEditing({
     document,
     index: sceneIndex,
-    dispatch,
-    idFactory,
+    session: geometrySession,
     selectedIds: normalizedSelection,
     tool,
     // 覆盖层至多渲染一条路径，宿主传入的优先：它是宿主明确要求画的，Stage 不该把它顶掉。
     hostPathActive: editablePath !== null,
     resolvePoint: resolveDraftingPoint,
-    label: messages.editGeometry,
   })
   const geometryEditingActive = geometryEditing.entityId !== null
 
@@ -485,13 +496,13 @@ function ComposeStageReady({
     idFactory,
     activeFrameId,
     index: sceneIndex,
-    // 排除**只到被拖的那一个点**，不是整个对象：整个对象排除会把同一个形状的其他顶点与
-    // 各段中点一起收走，而「把这个角对到那个角上」正是画图时最常做的事。
-    snapExcludedPoint: geometryEditing.snapExcludedPoint,
     messages: draftingMessages,
     commands,
     selectedIds: normalizedSelection,
     onSelectedIdsChange,
+    // `VERTEX` 是几何编辑的第二个入口，与双击产出同一个会话。
+    onEnterGeometryEditing: geometryEditing.enter,
+    isGeometryEditable: geometryEditing.isGeometryEditable,
   })
   // 命令等着取点或等着选对象时才跟踪指针；两档合成一个标记，跟踪、挂载与推导读同一个。
   // 几何编辑期间也跟踪：这个模式的全部动作都是在取点，十字光标需要一个中心。
@@ -517,7 +528,9 @@ function ComposeStageReady({
     pointerType: draftingSession.pointerType,
     center: draftingSession.pointerScreen,
     lines: draftingSession.awaitingPoint || geometryEditingActive,
-    box: draftingSession.awaitingSelection || (geometryEditingActive && !geometryEditing.dragging),
+    // 点亮与拖动同样是「已经抓住了」，框只会挡住落点；两者共用 `gripTarget` 这一份事实。
+    box: draftingSession.awaitingSelection
+      || (geometryEditingActive && draftingSession.gripTarget === null),
     // 命令那一档用宿主配置的 `pickRadius`；顶点模式用夹点命中圆的内切正方形。两档的框含义
     // 不同，共用一个数会让顶点模式那个框慢慢说谎。
     boxRadius: draftingSession.awaitingSelection ? pickRadius : GRIP_PICK_RADIUS,
@@ -526,9 +539,9 @@ function ComposeStageReady({
     crosshairSize,
     draftingSession.awaitingPoint,
     draftingSession.awaitingSelection,
+    draftingSession.gripTarget,
     draftingSession.pointerScreen,
     draftingSession.pointerType,
-    geometryEditing.dragging,
     geometryEditingActive,
     pickRadius,
     showCrosshair,
@@ -949,6 +962,7 @@ function ComposeStageReady({
           editablePath={editablePath ?? geometryEditing.editablePath}
           geometryEditing={geometryEditingActive}
           activePathVertexId={editablePathActiveVertexId}
+          hotPathVertexId={geometryEditing.dragging ? null : draftingSession.gripTarget?.gripId ?? null}
           resizeHandles={resizeHandles}
           rotatable={selectionRotatable}
           rotationPreview={interaction.rotationPreview}

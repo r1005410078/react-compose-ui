@@ -1929,6 +1929,10 @@ describe('OpenSpec: stage-engine / 可编辑路径会话、命中与手势', () 
     })
     controller.send({ type: 'pointer.up', pointerId: 2, point: { x: 100, y: 100 }, modifiers })
     expect(effects.filter((effect) => effect.type === 'path.vertex-toggle')).toHaveLength(1)
+    // 三连击仍然开手势（双击进入几何编辑之后马上拖中点是常用手法），但起始阶段把连击计数
+    // 交给宿主：宿主据此拒绝把这一下当成对夹点的点击。
+    const started = effects.find((effect) => effect.type === 'path.change')
+    expect(started).toMatchObject({ phase: 'start', clickCount: 3 })
   })
 
   it('手势中会话被关闭时发出 cancel，宿主据此丢弃预览', () => {

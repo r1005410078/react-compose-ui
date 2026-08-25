@@ -8,6 +8,7 @@ import type {
 import { createComposeLineCurve } from '@compose-ui/core'
 import { createStageCopyCommand, createStageMoveCommand } from './move-copy-command'
 import { createStageEraseCommand } from './erase-command'
+import { createStageVertexCommand } from './vertex-command'
 import {
   createStageArcCommand,
   createStageCircleCommand,
@@ -168,5 +169,6 @@ export function createStageDraftingCommands(
     createStageMoveCommand(messages),
     createStageCopyCommand(messages),
     createStageEraseCommand(messages),
+    createStageVertexCommand(messages),
   ]
 }

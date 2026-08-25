@@ -17,6 +17,7 @@ import {
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createStageDraftingCommands,
+  createStageGripSession,
   findStageFeaturePoint,
   planStageDraftingEdits,
   worldToScreen,
@@ -24,6 +25,7 @@ import {
   type StageDraftingEffect,
   type StageDraftingMessages,
   type StageFeaturePoint,
+  type StageGripTarget,
   type StagePoint,
   type StageRect,
   type StageSceneIndex,
@@ -45,6 +47,8 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly orthoOff: string
   readonly snapOn: string
   readonly snapOff: string
+  /** 夹点几何变更的撤销标签。 */
+  readonly editGeometry: (name: string) => string
 }
 
 /** {@link useStageDrafting} 的输入。 @internal */
@@ -91,13 +95,20 @@ export interface StageDraftingOptions {
    */
   readonly snapExcludedIds?: readonly string[]
   /**
-   * 不参与捕捉的**单个世界点**。
+   * 让某个 Entity 进入几何编辑。
    *
    * @remarks
-   * 几何编辑拖夹点时传被拖顶点的原位置。它与 `snapExcludedIds` 是两级不同的东西：后者挡整个
-   * 对象，前者只挡一个点——用整个对象去挡拖夹点，会把同对象的其他顶点与中点一起收走。
+   * `VERTEX` 命令的效果由此落地。它不是文档变更，因此不经 `planStageDraftingEdits`——会话
+   * 归 Stage 自己，命令只是它的第二个入口。
    */
-  readonly snapExcludedPoint?: StagePoint | null
+  readonly onEnterGeometryEditing?: (entityId: string) => void
+  /**
+   * 一个 Entity 能不能进入几何编辑；注入给 `VERTEX` 的启动上下文。
+   *
+   * @remarks
+   * 引擎不读文档，判据因此由这里给出。缺席时视为全部可编辑。
+   */
+  readonly isGeometryEditable?: (entityId: string) => boolean
 }
 
 const DEFAULT_SNAP_RADIUS = 12
@@ -133,8 +144,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
     onSelectedIdsChange,
     snapRadius = DEFAULT_SNAP_RADIUS,
     snapExcludedIds,
-    snapExcludedPoint = null,
     index,
+    onEnterGeometryEditing,
+    isGeometryEditable,
   } = options
 
   const sessionRef = useRef<ComposeCommandSession<StageDraftingEffect> | null>(null)
@@ -156,6 +168,14 @@ export function useStageDrafting(options: StageDraftingOptions) {
   }, [])
   const [ortho, setOrtho] = useState(false)
   const [snapEnabled, setSnapEnabled] = useState(true)
+  /**
+   * 正在被夹点会话作用的那个夹点；没有会话时为 `null`。
+   *
+   * @remarks
+   * 拖动与点亮共用它，因此「拾取框画不画」「哪个夹点是热的」「排除哪个点」三处读的是同一份
+   * 事实。分成「正在拖的」与「已点亮的」两份状态时，三处必然有一处漏掉其中一种情形。
+   */
+  const [gripTarget, setGripTarget] = useState<StageGripTarget | null>(null)
 
   const builtInCommands = useMemo(() => createStageDraftingCommands(messages), [messages])
   // 页面网格两轴独立，且开关是 `snapEnabled` 而不是「网格是否可见」——看得见与吸不吸是两件事。
@@ -168,6 +188,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const snapshot = {
     builtInCommands,
     hostCommands,
+    messages,
+    onEnterGeometryEditing,
+    isGeometryEditable,
     document,
     layoutSnapshot,
     index,
@@ -199,15 +222,28 @@ export function useStageDrafting(options: StageDraftingOptions) {
       if (command) current.dispatch(command)
     }
 
-    // 平移、复制与删除只认识文档，因此由引擎规划成命令；宿主只负责派发。
+    // 平移、复制、删除与夹点几何只认识文档，因此由引擎规划成命令；宿主只负责派发。
     for (const command of planStageDraftingEdits({
       document: current.document,
       layoutSnapshot: current.layoutSnapshot,
       index: current.index,
       effect,
       idFactory: current.idFactory,
+      // 绑定来自**取点时记下的来源**，与新建导线读的是同一张表。
+      ...(effect.curveGrip
+        ? (() => {
+            const port = portAnchors.current.get(anchorKey(effect.curveGrip.point))
+            return port ? { wireBinding: port } : {}
+          })()
+        : {}),
+      curveLabel: current.messages.editGeometry,
     })) {
       current.dispatch(command)
+    }
+
+    // 进入几何编辑不是文档变更：会话归 Stage 自己，命令只是它的第二个入口。
+    if (effect.enterGeometryEditing) {
+      latest.current.onEnterGeometryEditing?.(effect.enterGeometryEditing)
     }
 
     // 已删标识留在选择集里会指向不存在的 Entity，随后任何以选择集为输入的命令都会拿到
@@ -221,6 +257,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setPrompt(null)
     setReference(null)
     setPreview(null)
+    setGripTarget(null)
     setNotice(message)
   }, [])
 
@@ -265,6 +302,19 @@ export function useStageDrafting(options: StageDraftingOptions) {
     if (!gridSettings.enabled) return base
     return base + Math.hypot(gridSettings.stepX, gridSettings.stepY) / 2
   }, [gridSettings, snapRadius, viewport.zoom])
+
+  /**
+   * 不参与捕捉的**单个世界点**：被会话作用的那个夹点的**原**位置。
+   *
+   * @remarks
+   * 它就在指针底下（拖动时）或就在用户刚按过的地方（点亮时），不排除的话落点会被吸回原处。
+   * 排除**只到这一个点**——做成整个 Entity 会把同对象的其他顶点与各段中点一起收走，而
+   * 「把这个角对到那个角上」正是最常做的事。
+   *
+   * 事实来源是 `gripTarget.origin`，也就是**文档**里那个顶点的位置：要挡的是它出发的地方，
+   * 不是它此刻跟着指针到的地方。
+   */
+  const snapExcludedPoint = gripTarget?.origin ?? null
 
   /** 光标附近的捕捉命中；同时用于渲染标记与求解落点，两者因此不可能分叉。 */
   const excluded = snapExcludedIds ?? EMPTY_EXCLUSIONS
@@ -361,7 +411,11 @@ export function useStageDrafting(options: StageDraftingOptions) {
       messages,
       // 先选后执行：命令要么在启动上下文里拿到目标，要么自己提示选择。
       selection: latest.current.selectedIds,
+      ...(latest.current.isGeometryEditable
+        ? { isGeometryEditable: latest.current.isGeometryEditable }
+        : {}),
     }
+    setGripTarget(null)
     setReference(null)
     setPreview(null)
     setNotice(null)
@@ -376,6 +430,31 @@ export function useStageDrafting(options: StageDraftingOptions) {
     sessionRef.current = outcome.session
     setPrompt(outcome.session.prompt)
   }, [applyStep, messages])
+
+  /**
+   * 由手势启动一条夹点取点会话。
+   *
+   * @remarks
+   * 与按名启动并列的第二个入口：本会话由手势启动而不由词启动，因此没有名字，也不进
+   * 「重复上一条命令」的序列——那条记的是命令名，而这里没有名可记。
+   *
+   * `reference` 设成夹点的**原**位置，橡皮筋与相对坐标的参照因此白拿。
+   */
+  const startGripSession = useCallback((target: StageGripTarget) => {
+    // 文案从 ref 读：宿主每帧新建的 messages 若进依赖数组，会让 `applyStep` 每帧换身份，
+    // 而「把选择集喂给会话」那条 effect 依赖它——effect 每帧重跑又每帧 setState，就是死循环。
+    const session = createStageGripSession(latest.current.messages, target)
+    sessionRef.current = session
+    portAnchors.current.clear()
+    setGripTarget(target)
+    setPrompt(session.prompt)
+    setReference(target.origin)
+    setPreview(null)
+    setNotice(null)
+  }, [])
+
+  /** 清掉命令行上残留的说明。进入几何编辑时调用：用户此刻站在一个会取点的状态里。 */
+  const clearNotice = useCallback(() => { setNotice(null) }, [])
 
   const submit = useCallback((text: string) => {
     const trimmed = text.trim()
@@ -539,10 +618,14 @@ export function useStageDrafting(options: StageDraftingOptions) {
     snapEnabled,
     snap: enabled ? snap : null,
     rubberBand,
+    // 拖动与点亮共用同一份事实：拾取框画不画、哪个夹点是热的、排除哪个点都读它。
+    gripTarget,
     cancel,
+    clearNotice,
     handleKeyDown,
     handlePoint,
     setPointer,
+    startGripSession,
     submit,
   }
 }

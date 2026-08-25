@@ -20,6 +20,9 @@ const messages = {
   moveTitle: '移动',
   copyTitle: '复制',
   eraseTitle: '删除',
+  vertexTitle: '编辑顶点',
+  specifyNewLocation: '指定新位置',
+  expectedSingleObject: '只能选择一个对象',
   arcTitle: '圆弧',
   circleTitle: '圆',
   rectangleTitle: '矩形',
@@ -99,7 +102,7 @@ describe('LINE 命令', () => {
   it('命令按名称与别名解析', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
-      'LINE', 'WIRE', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE', 'MOVE', 'COPY', 'ERASE',
+      'LINE', 'WIRE', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE', 'MOVE', 'COPY', 'ERASE', 'VERTEX',
     ])
     expect(commands[0]?.aliases).toEqual(['L'])
   })

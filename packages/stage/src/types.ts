@@ -39,6 +39,14 @@ export interface ComposeStageEditablePathChange {
   readonly phase: 'start' | 'move' | 'end' | 'cancel'
   readonly worldPoint: StagePoint
   readonly modifiers: StageInteractionModifiers
+  /**
+   * 这次按下的连击计数；只有 `start` 阶段带它。
+   *
+   * @remarks
+   * 用来分辨「用户点了这个夹点」与「这一下只是连击中的一员」——双击进入几何编辑之后紧接着
+   * 的那一下就落在刚显形、正好压在光标底下的中点夹点上。
+   */
+  readonly clickCount?: number
 }
 
 /**

@@ -18,12 +18,14 @@ import type { StageOverlayContext } from '../overlay-types'
  */
 function EditablePathLayer({
   activeVertexId,
+  hotVertexId,
   onInteraction,
   path,
   viewport,
 }: {
   readonly path: StageEditablePath
   readonly activeVertexId: string | null
+  readonly hotVertexId: string | null
   readonly viewport: StageViewport
   readonly onInteraction: (
     hit: StageInteractionHit,
@@ -97,6 +99,7 @@ function EditablePathLayer({
             className="compose-stage__editable-path-vertex"
             data-testid={`stage-path-vertex-${vertex.id}`}
             data-vertex-active={vertex.id === activeVertexId || undefined}
+            data-vertex-hot={vertex.id === hotVertexId || undefined}
             data-vertex-mode={vertex.mode}
             height={PATH_VERTEX_SIZE}
             transform={`rotate(45 ${vertex.screen.x} ${vertex.screen.y})`}
@@ -141,6 +144,7 @@ function EditablePathLayer({
 export function EditablePathContribution({
   activePathVertexId = null,
   editablePath = null,
+  hotPathVertexId = null,
   viewport,
   onInteraction,
 }: StageOverlayContext) {
@@ -148,6 +152,7 @@ export function EditablePathContribution({
   return (
     <EditablePathLayer
       activeVertexId={activePathVertexId}
+      hotVertexId={hotPathVertexId}
       path={editablePath}
       viewport={viewport}
       onInteraction={onInteraction}

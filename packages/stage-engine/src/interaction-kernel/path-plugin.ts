@@ -120,6 +120,10 @@ export function createStagePathPlugin(): StageInteractionPlugin {
           phase: 'start',
           worldPoint: startWorld,
           modifiers: event.modifiers,
+          // 连击计数只随起始阶段交出去：宿主要能分辨这次按下是不是连击中的一下。
+          // 「双击进入几何编辑」之后紧接着的那一下就落在刚显形、正好压在光标底下的中点夹点上，
+          // 而它显然不是用户对那个夹点的一次点击。
+          ...(event.clickCount === undefined ? {} : { clickCount: event.clickCount }),
         },
       ])
       return createPathSession({

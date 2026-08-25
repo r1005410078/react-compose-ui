@@ -1,12 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import {
-  BUILTIN_COMMAND_TYPES,
-  getComposeCurve,
-  getComposeLayoutItem,
-  getComposeLock,
-  getComposeWire,
-  translateComposeCurve,
-} from '@compose-ui/core'
+import { getComposeCurve, getComposeLock } from '@compose-ui/core'
 import {
   applyStageCurveGrip,
   stageCurveBoxGeometry,
@@ -14,55 +7,38 @@ import {
   stageCurveLocalPoint,
   stageCurveOutline,
 } from '@compose-ui/stage-engine'
+import type { ComposeCurve, ComposeDocument } from '@compose-ui/core'
 import type {
-  ComposeCurve,
-  ComposeDocument,
-  ComposeEntity,
-  ComposeWire,
-  ComposeWireBinding,
-  JsonValue,
-} from '@compose-ui/core'
-import type { StageEditablePath, StagePoint, StageSceneIndex } from '@compose-ui/stage-engine'
-import type { ComposeStageDispatch, ComposeStageEditablePathChange, ComposeStageTool } from '../types'
-
-/** 直线两端的夹点 id；只有它们能承载导线绑定。 */
-const WIRE_ENDS: Readonly<Record<string, 'start' | 'end'>> = { start: 'start', end: 'end' }
+  StageEditablePath,
+  StageGripTarget,
+  StagePoint,
+  StageSceneIndex,
+} from '@compose-ui/stage-engine'
+import type { ComposeStageEditablePathChange, ComposeStageTool } from '../types'
 
 /**
- * 求出拖完这一下之后的 `Wire`。
+ * 几何编辑要用到的那一小片命令会话。
  *
  * @remarks
- * 落在端口上就绑到它，落在别处就把这一端解绑——这是改错接线的唯一入口。两端都变自由时返回
- * `null`（删掉整个 Component）：一条谁也没接的线与普通线没有任何差别，留个空壳读不出意图。
+ * 会话本身住在绘图 Hook 里——提示、橡皮筋、捕捉标记与键入坐标都在那边。这里只需要能启动它、
+ * 喂一个落点、取消它，以及知道此刻被作用的是哪个夹点。两个 Hook 因此仍然只有一条依赖方向，
+ * 由 Stage 用 ref 打断循环。
  *
- * @returns `undefined` 表示这次拖动与接线无关，命令因此不带 `wire` 字段。
+ * @internal
  */
-function nextWireFor(
-  entity: ComposeEntity | undefined,
-  gripId: string,
-  port: ComposeWireBinding | undefined,
-): ComposeWire | null | undefined {
-  const end = WIRE_ENDS[gripId]
-  if (!end) return undefined
-  const current = getComposeWire(entity)
-  if (!current && !port) return undefined
-  const next: ComposeWire = {
-    ...(current ?? {}),
-    ...(port ? { [end]: port } : {}),
-  }
-  if (!port && current) {
-    // 显式删掉这一端：展开赋值改不掉已经存在的键。
-    delete (next as Record<string, unknown>)[end]
-  }
-  return next.start || next.end ? next : null
+export interface StageGeometryCommandSession {
+  readonly start: (target: StageGripTarget) => void
+  readonly pick: (world: StagePoint) => void
+  readonly cancel: () => void
+  readonly clearNotice: () => void
 }
 
 /** {@link useStageGeometryEditing} 的输入。 @internal */
 export interface StageGeometryEditingOptions {
   readonly document: ComposeDocument
   readonly index: StageSceneIndex
-  readonly dispatch: ComposeStageDispatch
-  readonly idFactory: () => string
+  /** 夹点取点的命令会话；见 {@link StageGeometryCommandSession}。 */
+  readonly session: StageGeometryCommandSession
   readonly selectedIds: readonly string[]
   readonly tool: ComposeStageTool
   /** 宿主传入了自己的可编辑路径；此时不进入几何编辑，覆盖层至多渲染一条路径。 */
@@ -71,14 +47,9 @@ export interface StageGeometryEditingOptions {
    * 与绘图命令**同一条**落点解算；分叉的症状是「画线时吸端点、拖顶点时不吸」。
    *
    * @remarks
-   * 返回值带上落点的来源：导线的「拖到端口上就绑、拖到别处就解绑」读它，因此改接线与落点
-   * 出自同一次捕捉。
+   * 只服务拖动期的本地预览：提交那一步由会话产出效果、由引擎规划成命令，因此不在这里解算。
    */
-  readonly resolvePoint: (world: StagePoint) => {
-    readonly point: StagePoint
-    readonly port?: ComposeWireBinding
-  }
-  readonly label: (name: string) => string
+  readonly resolvePoint: (world: StagePoint) => { readonly point: StagePoint }
 }
 
 /** {@link useStageGeometryEditing} 的返回。 @internal */
@@ -91,25 +62,14 @@ export interface StageGeometryEditing {
    * 正在拖某个夹点。
    *
    * @remarks
-   * 拾取框读它：未拖动的会话正是「等着抓点什么」的状态，框表达可抓的靶区；一旦抓住，
-   * 那件事已经发生，框只会挡住落点。事实来源就是拖动期的本地预览几何，不另存一份状态。
+   * 热夹点读它的反面：拖动时夹点就在光标底下，「正在动的是哪一个」已经在屏幕上了；点亮后
+   * 它停在原位而光标在别处找目标点，那时才需要画出来。事实来源就是拖动期的本地预览几何，
+   * 不另存一份状态。
    */
   readonly dragging: boolean
   readonly isGeometryEditable: (entityId: string) => boolean
   readonly enter: (entityId: string) => void
   readonly exit: () => void
-  /**
-   * 拖动期间不参与捕捉的那**一个**世界点：被拖顶点的**原**位置。
-   *
-   * @remarks
-   * 它就在指针底下，不排除的话夹点会被吸回原处。排除**只到这一个点**——做成整个 Entity 会把
-   * 同对象的其他顶点与各段中点一起收走，而「把这个角对到那个角上」正是最常做的事。
-   *
-   * 读的是**文档**几何而不是拖动预览：要挡的是它出发的地方，不是它此刻跟着指针到的地方。
-   *
-   * 未拖动时为 `null`：此刻没有任何一个点在指针底下等着把它吸回去，那条理由不成立。
-   */
-  readonly snapExcludedPoint: StagePoint | null
   /** 处理一次夹点手势；返回 false 表示这次手势不属于本会话，应交回宿主。 */
   readonly handlePathChange: (change: ComposeStageEditablePathChange) => boolean
 }
@@ -129,14 +89,29 @@ export interface StageGeometryEditing {
 export function useStageGeometryEditing(
   options: StageGeometryEditingOptions,
 ): StageGeometryEditing {
-  const {
-    document, index, dispatch, idFactory, selectedIds, tool, hostPathActive, resolvePoint, label,
-  } = options
+  const { document, index, session, selectedIds, tool, hostPathActive, resolvePoint } = options
   const [target, setTarget] = useState<string | null>(null)
   /** 拖动期间的盒局部预览几何；文档要等松手才动。 */
   const [preview, setPreview] = useState<ComposeCurve | null>(null)
-  /** 正在拖的夹点 id；点级排除按它反查那个顶点的原位置。 */
-  const [dragVertexId, setDragVertexId] = useState<string | null>(null)
+  /**
+   * 这次手势的按下点、指针后来有没有离开过它，以及这一下算不算一次对夹点的点击。
+   *
+   * @remarks
+   * 前两者把「拖一下」与「点一下」分开：动过就在松手那一刻提交，一步没动则把会话留着、夹点
+   * 点亮。判据是**落点有没有变过**而不是一个位移阈值——阈值是本仓库别处都不需要的魔法数。
+   * 必须与按下点逐个比较，不能只看「来过 move 没有」：路径手势在 `pointerup` 上也会先发一次
+   * `move`（终点与松手修饰键都由那一次带回来），因此原地单击同样会收到一个 move 阶段。
+   *
+   * `armable` 挡的是**连击中的那一下**：用户单击选中、再双击进入几何编辑时，第三下落在刚
+   * 显形、正好压在光标底下的中点夹点上——那显然不是他对这个夹点的点击。手势本身照开（双击
+   * 进入之后马上拖中点是常用手法），只是原地松手时取消而不是点亮。计数恰好为 2 的按下到不了
+   * 这里，插件把它解释成 corner / smooth 切换。
+   */
+  const gestureRef = useRef<{
+    start: StagePoint
+    moved: boolean
+    armable: boolean
+  } | null>(null)
 
   const isGeometryEditable = useCallback((candidate: string) => {
     const entity = document.entities[candidate]
@@ -146,15 +121,17 @@ export function useStageGeometryEditing(
   const exit = useCallback(() => {
     setTarget(null)
     setPreview(null)
-    setDragVertexId(null)
+    gestureRef.current = null
   }, [])
 
   const enter = useCallback((candidate: string) => {
     if (hostPathActive) return
     setTarget(candidate)
     setPreview(null)
-    setDragVertexId(null)
-  }, [hostPathActive])
+    gestureRef.current = null
+    // 用户此刻站在一个会取点的状态里；上一条命令留下的说明在讲一件已经过去的事。
+    session.clearNotice()
+  }, [hostPathActive, session])
 
   // 会话的存续**在渲染时求值**而不是靠 effect 去清状态：点空白、选中别的对象、换工具、撤销
   // 删掉目标都表现为这几个输入的变化，派生一次就全覆盖了，而 effect 版本要多渲染一帧才收敛。
@@ -191,76 +168,73 @@ export function useStageGeometryEditing(
     }
   }, [document, entityId, hostPathActive, index, preview])
 
-  const snapExcludedPoint = useMemo((): StagePoint | null => {
-    if (entityId === null || dragVertexId === null) return null
-    // 不传 override：要的是**文档**里那个顶点的位置，也就是它出发的地方。
-    const grip = stageCurveGrips(document, index, entityId)
-      .find(({ id }) => id === dragVertexId)
-    return grip?.point ?? null
-  }, [document, dragVertexId, entityId, index])
-
-  /** 求解一次落点：解算 → 盒局部 → 应用夹点。 */
-  const latest = useRef({ document, index, resolvePoint })
+  /**
+   * 求解一次**预览**落点：解算 → 盒局部 → 应用夹点。
+   *
+   * @remarks
+   * 只画预览。提交那一步走会话与引擎规划，与点亮后取点、点亮后键入坐标同一条路——三条各自
+   * 算一遍的话，下一个改夹点数学的人只会改到其中一处。
+   */
+  const latest = useRef({ document, index, resolvePoint, session })
   useLayoutEffect(() => {
-    latest.current = { document, index, resolvePoint }
+    latest.current = { document, index, resolvePoint, session }
   })
   const solve = useCallback((target: string, gripId: string, world: StagePoint) => {
     const current = latest.current
     const geometry = stageCurveBoxGeometry(current.document, current.index, target)
     if (!geometry) return null
-    const resolved = current.resolvePoint(world)
-    const local = stageCurveLocalPoint(current.index, target, resolved.point)
-    const next = local ? applyStageCurveGrip(geometry, gripId, local) : null
-    return next ? { curve: next, ...(resolved.port ? { port: resolved.port } : {}) } : null
+    const local = stageCurveLocalPoint(current.index, target, current.resolvePoint(world).point)
+    return local ? applyStageCurveGrip(geometry, gripId, local) : null
   }, [])
 
   const handlePathChange = useCallback((change: ComposeStageEditablePathChange) => {
     if (entityId === null || hostPathActive) return false
+    const current = latest.current
     if (change.phase === 'cancel') {
       setPreview(null)
-      setDragVertexId(null)
+      gestureRef.current = null
+      current.session.cancel()
       return true
     }
-    // 排除点要在**解算之前**就位，否则手势的第一帧会把落点吸回顶点自己的原处。
-    if (change.phase !== 'end' && dragVertexId !== change.vertexId) {
-      setDragVertexId(change.vertexId)
-    }
-    const next = solve(entityId, change.vertexId, change.worldPoint)
-    if (change.phase !== 'end') {
-      // 开始阶段也解一次：按下即吸附，用户不必先移动一下才看到落点。
-      if (next) setPreview(next.curve)
+    if (change.phase === 'start') {
+      // 会话在 `pointerdown` 就开：提示要在用户按住的**那一刻**出现，等他动或不动才给已经迟了。
+      // `origin` 取**文档**里的位置——它同时是橡皮筋起点与被排除出捕捉的那一个点。
+      const grip = stageCurveGrips(current.document, current.index, entityId)
+        .find(({ id }) => id === change.vertexId)
+      if (!grip) return true
+      gestureRef.current = {
+        start: change.worldPoint,
+        moved: false,
+        armable: (change.clickCount ?? 1) <= 1,
+      }
+      current.session.start({ entityId, gripId: change.vertexId, origin: grip.point })
+      // 按下即解一次：用户不必先移动一下才看到落点。
+      const preview = solve(entityId, change.vertexId, change.worldPoint)
+      if (preview) setPreview(preview)
       return true
     }
+    const gesture = gestureRef.current
+    if (gesture
+      && (change.worldPoint.x !== gesture.start.x || change.worldPoint.y !== gesture.start.y)) {
+      gesture.moved = true
+    }
+    if (change.phase === 'move') {
+      const preview = solve(entityId, change.vertexId, change.worldPoint)
+      if (preview) setPreview(preview)
+      return true
+    }
+    // 松手：动过就提交并结束会话，一步没动则把会话留着、夹点保持点亮。
     setPreview(null)
-    setDragVertexId(null)
-    if (!next) return true
-    const entity = latest.current.document.entities[entityId]
-    const offset = entity ? getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 } : { x: 0, y: 0 }
-    const wire = nextWireFor(entity, change.vertexId, next.port)
-    dispatch({
-      id: idFactory(),
-      type: BUILTIN_COMMAND_TYPES.setCurve,
-      payload: {
-        entityId,
-        // 载荷是 parent 局部坐标；盒与几何由那条唯一漏斗重新归一化，越界不需要钳制。
-        curve: translateComposeCurve(next.curve, offset.x, offset.y) as unknown as JsonValue,
-        // 改接线与几何写在同一条命令里：分成两条会产生一个可观察的不一致中间态，撤销也变两步。
-        ...(wire === undefined ? {} : { wire: wire as unknown as JsonValue }),
-      },
-      meta: {
-        label: label(entity?.name ?? ''),
-        source: 'stage',
-        targetIds: [entityId],
-      },
-    })
+    gestureRef.current = null
+    if (gesture?.moved) current.session.pick(change.worldPoint)
+    else if (gesture && !gesture.armable) current.session.cancel()
     return true
-  }, [dispatch, dragVertexId, entityId, hostPathActive, idFactory, label, solve])
+  }, [entityId, hostPathActive, solve])
 
   return {
     entityId,
     editablePath,
     dragging: entityId !== null && preview !== null,
-    snapExcludedPoint,
     isGeometryEditable,
     enter,
     exit,

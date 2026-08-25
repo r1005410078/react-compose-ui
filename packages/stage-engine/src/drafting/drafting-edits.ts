@@ -1,5 +1,19 @@
-import { BUILTIN_COMMAND_TYPES, getComposeLock, type ComposeDocument, type ComposeLayoutSnapshot, type EditorCommand } from '@compose-ui/core'
+import {
+  BUILTIN_COMMAND_TYPES,
+  getComposeLayoutItem,
+  getComposeLock,
+  getComposeWire,
+  translateComposeCurve,
+  type ComposeDocument,
+  type ComposeEntity,
+  type ComposeLayoutSnapshot,
+  type ComposeWire,
+  type ComposeWireBinding,
+  type EditorCommand,
+  type JsonValue,
+} from '@compose-ui/core'
 import { createDuplicateCommand } from '../commands'
+import { applyStageCurveGrip, stageCurveBoxGeometry, stageCurveLocalPoint } from '../geometry-editing'
 import { translationMatrix } from '../geometry'
 import {
   planTransformCommit,
@@ -9,6 +23,38 @@ import {
 import type { StageSceneIndex } from '../hit-testing'
 import type { StageDraftingEffect } from './drafting-types'
 
+/** 直线两端的夹点 id；只有它们能承载导线绑定。 */
+const WIRE_ENDS: Readonly<Record<string, 'start' | 'end'>> = { start: 'start', end: 'end' }
+
+/**
+ * 求出拖完这一下之后的 `Wire`。
+ *
+ * @remarks
+ * 落在端口上就绑到它，落在别处就把这一端解绑——这是改错接线的唯一入口。两端都变自由时返回
+ * `null`（删掉整个 Component）：一条谁也没接的线与普通线没有任何差别，留个空壳读不出意图。
+ *
+ * @returns `undefined` 表示这次取点与接线无关，命令因此不带 `wire` 字段。
+ */
+function nextWireFor(
+  entity: ComposeEntity | undefined,
+  gripId: string,
+  port: ComposeWireBinding | undefined,
+): ComposeWire | null | undefined {
+  const end = WIRE_ENDS[gripId]
+  if (!end) return undefined
+  const current = getComposeWire(entity)
+  if (!current && !port) return undefined
+  const next: ComposeWire = {
+    ...(current ?? {}),
+    ...(port ? { [end]: port } : {}),
+  }
+  if (!port && current) {
+    // 显式删掉这一端：展开赋值改不掉已经存在的键。
+    delete (next as Record<string, unknown>)[end]
+  }
+  return next.start || next.end ? next : null
+}
+
 /** {@link planStageDraftingEdits} 的输入。 @public */
 export interface StageDraftingEditQuery {
   readonly document: ComposeDocument
@@ -16,6 +62,16 @@ export interface StageDraftingEditQuery {
   readonly index: StageSceneIndex
   readonly effect: StageDraftingEffect
   readonly idFactory: () => string
+  /**
+   * 落点来自一个端口时的绑定；只有夹点取点用得上。
+   *
+   * @remarks
+   * 由宿主给出而不是这里按坐标反查已有端口：反查会让一条恰好路过端口的线莫名其妙地绑上，
+   * 而那个绑定在屏幕上完全不可见。键入的坐标因此永远不绑——它没有来源可言。
+   */
+  readonly wireBinding?: ComposeWireBinding
+  /** 夹点几何变更的已本地化标签；缺席时退回 Entity 名。 */
+  readonly curveLabel?: (name: string) => string
 }
 
 /**
@@ -77,6 +133,36 @@ export function planStageDraftingEdits(query: StageDraftingEditQuery): readonly 
         delta,
       )
       if (duplicated) commands.push(duplicated.command)
+    }
+  }
+
+  if (effect.curveGrip) {
+    const { entityId, gripId, point } = effect.curveGrip
+    const entity = document.entities[entityId]
+    const geometry = stageCurveBoxGeometry(document, index, entityId)
+    const local = stageCurveLocalPoint(index, entityId, point)
+    const next = geometry && local ? applyStageCurveGrip(geometry, gripId, local) : null
+    if (entity && next && !getComposeLock(entity).locked) {
+      const offset = getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 }
+      const wire = nextWireFor(entity, gripId, query.wireBinding)
+      const name = entity.name ?? ''
+      commands.push({
+        id: idFactory(),
+        type: BUILTIN_COMMAND_TYPES.setCurve,
+        payload: {
+          entityId,
+          // 载荷是 parent 局部坐标；盒与几何由那条唯一漏斗重新归一化，越界不需要钳制。
+          curve: translateComposeCurve(next, offset.x, offset.y) as unknown as JsonValue,
+          // 改接线与几何写在同一条命令里：分成两条会产生一个可观察的不一致中间态，
+          // 撤销也变两步。
+          ...(wire === undefined ? {} : { wire: wire as unknown as JsonValue }),
+        },
+        meta: {
+          label: query.curveLabel ? query.curveLabel(name) : `Edit ${name}`,
+          source: 'stage',
+          targetIds: [entityId],
+        },
+      })
     }
   }
 

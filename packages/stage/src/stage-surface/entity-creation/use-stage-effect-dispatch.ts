@@ -407,6 +407,7 @@ export function useStageEffectDispatch(
             phase: effect.phase,
             worldPoint: effect.worldPoint,
             modifiers: effect.modifiers,
+            ...(effect.clickCount === undefined ? {} : { clickCount: effect.clickCount }),
           })
           return
         }

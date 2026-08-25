@@ -177,10 +177,13 @@ export {
   createStageDraftingPointPlugin,
   createStageEraseCommand,
   createStageEraseSession,
+  createStageGripSession,
   createStageLineCommand,
   createStageLineSession,
   createStageMoveCommand,
   createStageMoveSession,
+  createStageVertexCommand,
+  createStageVertexSession,
   planStageDraftingEdits,
   STAGE_DRAFTING_POINT_PLUGIN_ID,
 } from './drafting'
@@ -188,9 +191,11 @@ export type {
   StageDraftingContext,
   StageDraftingEditQuery,
   StageDraftingEffect,
+  StageDraftingGripEdit,
   StageDraftingMessages,
   StageDraftingSegment,
   StageDraftingTranslation,
+  StageGripTarget,
 } from './drafting'
 export { findStageFeaturePoint, resolveStageClickSelection, resolveStageMarqueeCombine } from './hit-testing'
 export type { StageFeaturePoint, StageFeatureSnapMode, StageSelectionMode } from './hit-testing'

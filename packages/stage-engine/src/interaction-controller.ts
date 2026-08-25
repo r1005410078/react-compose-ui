@@ -406,6 +406,15 @@ export type StageInteractionEffect =
       readonly phase: 'start' | 'move' | 'end' | 'cancel'
       readonly worldPoint: StagePoint
       readonly modifiers: StageInteractionModifiers
+      /**
+       * 这次按下的连击计数；只有 `start` 阶段带它。
+       *
+       * @remarks
+       * 宿主据此分辨「用户点了这个夹点」与「这一下只是连击中的一员」。判别点是**双击进入
+       * 几何编辑之后紧接着的那一下**：夹点是被那次双击变出来的，而直线的中点夹点正好压在
+       * 光标底下，那一下显然不是对它的点击。手势本身照开——双击进入之后马上拖中点是常用手法。
+       */
+      readonly clickCount?: number
     }
   /**
    * 双击路径顶点；宿主据此切换 corner / smooth。放在引擎而不是 DOM dblclick：
