@@ -122,14 +122,23 @@ describe('DefaultStageToolbar', () => {
     expect(startCommand).toHaveBeenCalledWith('RECTANGLE')
   })
 
-  it('OpenSpec: editor-workspace-layout / 绘图命令组 / 直线与多段线的图标标记是夹点方块', () => {
+  it('OpenSpec: editor-workspace-layout / 绘图命令组 / 图标标记的数量等于命令的取点数', () => {
     renderToolbar()
 
-    // 图标上的标记就是用户点进这条命令之后会在画布上看到的东西，因此必须与夹点同形——
-    // 顶点夹点是方块，圆点在这里说的是另一件事，混用会让图标与画布对不上。
-    for (const [label, marks] of [['直线', 2], ['多段线', 4]] as const) {
+    // 每个方块是这条命令要你点的一个点：直线两点、三点弧三点、矩形两个对角、整圆圆心加
+    // 半径点。判别点在**矩形是 2 而不是 4**——画完之后它有四个顶点夹点，但要你点的只有
+    // 两个对角，图标说的是「按下去之后会发生什么」。
+    //
+    // 形状取方块是另一条：顶点夹点是方块，圆点在这里说的是另一件事，混用会让图标与画布
+    // 对不上。
+    for (const [label, marks] of [['直线', 2], ['多段线', 4], ['圆弧', 3], ['矩形', 2], ['圆', 2]] as const) {
       const icon = screen.getByRole('button', { name: label }).querySelector('svg')
       expect(icon?.querySelectorAll('rect')).toHaveLength(marks)
+    }
+
+    // 这两个图形本身不含 circle，因此这里的零证明标记不是圆点。
+    for (const label of ['直线', '多段线']) {
+      const icon = screen.getByRole('button', { name: label }).querySelector('svg')
       expect(icon?.querySelectorAll('circle')).toHaveLength(0)
     }
   })
