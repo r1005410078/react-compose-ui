@@ -22,7 +22,6 @@ type StageToolbarIconName =
   | 'settings'
   | 'smart-snap'
   | 'text'
-  | 'wire'
   | 'zoom-in'
   | 'zoom-out'
 
@@ -232,14 +231,6 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
     text: (
       <>
         <path d="M5 5h14M12 5v14M8 19h8" />
-      </>
-    ),
-    // 导线：一段水平线，两端各接一个方块端子——它与普通直线的差别正是「接到什么上」。
-    wire: (
-      <>
-        <path d="M7 12h10" />
-        <rect height="6" width="4" x="3" y="9" />
-        <rect height="6" width="4" x="17" y="9" />
       </>
     ),
     'zoom-in': (

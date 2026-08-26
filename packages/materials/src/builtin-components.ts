@@ -202,7 +202,7 @@ export function createComposeBuiltinComponentDefinitions(
       order: 59.5,
       createDefault: () => ({}),
       validate: isValidComposeWire,
-      inspector: createWireInspector(),
+      inspector: createWireInspector(idFactory),
     },
     {
       key: 'Curve',

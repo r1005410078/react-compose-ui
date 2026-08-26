@@ -38,6 +38,10 @@ function nextPrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
  * 画一段就该在场景树里出现一行——那正是这条统一路线要让用户看见的事实。代价是撤销粒度变成
  * 一段一步，这与 AutoCAD 的 `U` 关键字粒度一致。
  *
+ * **端口绑定不在这里**：本包不认识端口，效果上也不再有导线标记。曲线的两个端点就是那两次
+ * 落点，宿主按取点时记下的来源接上绑定即可。逐段落地因此顺带成立一件事——中间那个点被两段
+ * 共用，两段都会绑到它，而两段确实都碰到了那个端子。
+ *
  * @public
  */
 export function createStageLineSession(
@@ -95,12 +99,13 @@ export function createStageLineSession(
  * @remarks
  * 与 LINE 的差别只有两处：取两个点就结束，以及提交时带上调用方给的那个标记。
  *
- * `extras` 是提交效果上的附加标记（`wire` 或 `arrow`），**不是几何**：两条命令的取点逻辑
- * 逐字相同，复制一份只会让下一个改取点的人改到其中一处。
+ * `extras` 是提交效果上的附加标记，**不是几何**。它眼下只有 `ARROW` 一个消费者——`WIRE`
+ * 合并进 `LINE` 之后没有第二种线可分。工厂仍然留着：「只有一个消费者」在本仓库不是把抽象
+ * 折回去的理由，而取点逻辑一旦复制，下一个改它的人只会改到其中一处。
  */
 function createTwoPointCurveSession(
   context: StageDraftingContext,
-  extras: Pick<StageDraftingEffect, 'arrow' | 'wire'>,
+  extras: Pick<StageDraftingEffect, 'arrow'>,
 ): ComposeCommandSession<StageDraftingEffect> {
   const { messages } = context
   let start: ComposeCommandPoint | null = null
@@ -136,22 +141,6 @@ function createTwoPointCurveSession(
 }
 
 /**
- * 建立一次 WIRE 执行的状态机。
- *
- * @remarks
- * 导线只有两个端点：折线导线的价值几乎全部来自自动路由，而路由还没有。
- *
- * **`LINE` 不绑定，即使端点吸附到了端口上**：绑定改变对象此后的行为，意图必须显式。
- *
- * @public
- */
-export function createStageWireSession(
-  context: StageDraftingContext,
-): ComposeCommandSession<StageDraftingEffect> {
-  return createTwoPointCurveSession(context, { wire: true })
-}
-
-/**
  * 建立一次 ARROW 执行的状态机。
  *
  * @remarks
@@ -164,19 +153,6 @@ export function createStageArrowSession(
   context: StageDraftingContext,
 ): ComposeCommandSession<StageDraftingEffect> {
   return createTwoPointCurveSession(context, { arrow: true })
-}
-
-/** WIRE 命令定义。 @public */
-export function createStageWireCommand(
-  messages: StageDraftingMessages,
-): ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect> {
-  return {
-    id: 'WIRE',
-    aliases: ['WI'],
-    title: messages.wireTitle,
-    category: messages.drawCategory,
-    start: createStageWireSession,
-  }
 }
 
 /** ARROW 命令定义。 @public */
@@ -211,7 +187,6 @@ export function createStageDraftingCommands(
 ): readonly ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect>[] {
   return [
     createStageLineCommand(messages),
-    createStageWireCommand(messages),
     createStageArrowCommand(messages),
     createStageArcCommand(messages),
     createStageCircleCommand(messages),

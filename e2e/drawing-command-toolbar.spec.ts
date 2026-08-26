@@ -68,10 +68,12 @@ test('OpenSpec: editor-workspace-layout / 绘图命令组 / 形状 split button 
   const { editor } = await openEditor(page)
 
   await expect(editor.getByRole('button', { name: '形状' })).toHaveCount(0)
-  // 七条绘图命令各占一个按钮。
-  for (const label of ['直线', '多段线', '矩形', '圆', '圆弧', '箭头', '导线']) {
+  // 六条绘图命令各占一个按钮。
+  for (const label of ['直线', '多段线', '矩形', '圆', '圆弧', '箭头']) {
     await expect(editor.getByRole('button', { name: label, exact: true })).toHaveCount(1)
   }
+  // 导线已合并进直线：两者画的时候一模一样，而选错的后果在屏幕上完全不可见。
+  await expect(editor.getByRole('button', { name: '导线', exact: true })).toHaveCount(0)
 })
 
 test('OpenSpec: stage / ARROW / 画出的曲线带终点箭头', async ({ page }) => {

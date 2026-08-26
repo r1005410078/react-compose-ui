@@ -50,6 +50,8 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly snapOff: string
   /** 夹点几何变更的撤销标签。 */
   readonly editGeometry: (name: string) => string
+  /** 端口与线段不在同一父级、因此没能绑上时的说明。 */
+  readonly wireParentMismatch: string
 }
 
 /** {@link useStageDrafting} 的输入。 @internal */
@@ -233,12 +235,22 @@ export function useStageDrafting(options: StageDraftingOptions) {
     latest.current = snapshot
   })
 
-  const commit = useCallback((effect: StageDraftingEffect | undefined) => {
-    if (!effect) return
+  /**
+   * 落地一步效果。
+   *
+   * @returns 需要显示的说明；没有就是 null。
+   *
+   * @remarks
+   * 说明**由返回值交出去**而不是在这里 `setNotice`：`LINE` 逐段落地，它的提交发生在
+   * `prompt` 这一档里，而那一档紧接着就会把命令行清成下一句提示——在这里写等于同一拍被抹掉。
+   */
+  const commit = useCallback((effect: StageDraftingEffect | undefined): string | null => {
+    if (!effect) return null
+    let notice: string | null = null
     const current = latest.current
 
     for (const curve of effect.curves ?? []) {
-      const command = createStageDraftingCurveCommand({
+      const created = createStageDraftingCurveCommand({
         document: current.document,
         layoutSnapshot: current.layoutSnapshot,
         index: current.index,
@@ -246,10 +258,17 @@ export function useStageDrafting(options: StageDraftingOptions) {
         idFactory: current.idFactory,
         activeFrameId: current.activeFrameId,
       }, curve, {
-        ...(effect.wire ? { wire: wireBindingsFor(portAnchors.current, curve) } : {}),
+        // 所有直线都按取点时记下的来源绑定，不再看命令是哪一条：「吸附到端口」本身就是显式
+        // 意图（用户把光标挪进容差、看着捕捉标记亮起、然后落笔），再要求他先选对一条命令
+        // 是让同一个意图说两遍。两端都没碰过端口时 `wireBindingsFor` 给出空对象，落地时
+        // 因此不写 `Wire`——没碰过端口的普通线一个字节都不变。
+        wire: wireBindingsFor(portAnchors.current, curve),
         ...(effect.arrow ? { arrow: true } : {}),
       })
-      if (command) current.dispatch(command)
+      if (!created) continue
+      current.dispatch(created.command)
+      // 跨父级的绑定被丢掉了就必须说出来：静默丢弃与「绑上了」在屏幕上无法区分。
+      if (created.droppedWireEnds.length > 0) notice = current.messages.wireParentMismatch
     }
 
     // 平移、复制、删除与夹点几何只认识文档，因此由引擎规划成命令；宿主只负责派发。
@@ -279,6 +298,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     // 已删标识留在选择集里会指向不存在的 Entity，随后任何以选择集为输入的命令都会拿到
     // 幽灵目标。AutoCAD 里 ERASE 之后选择集也是空的。
     if (effect.removed && effect.removed.length > 0) current.onSelectedIdsChange([])
+    return notice
   }, [])
 
   const endSession = useCallback((message: string | null) => {
@@ -294,16 +314,17 @@ export function useStageDrafting(options: StageDraftingOptions) {
 
   const applyStep = useCallback((step: ReturnType<ComposeCommandSession<StageDraftingEffect>['advance']>) => {
     if (step.status === 'prompt') {
-      commit(step.commit)
+      // 提交交出来的说明压过「清空」：这一档本来就要把命令行换成下一句提示，而落地时发生的
+      // 事（例如跨父级没能绑上）此刻还没被任何人看见。
+      const notice = commit(step.commit)
       setPrompt(step.prompt)
       setReference(step.preview?.reference ?? step.commit?.reference ?? null)
       setPreview(step.preview ?? null)
-      setNotice(null)
+      setNotice(notice)
       return
     }
     if (step.status === 'commit') {
-      commit(step.effect)
-      endSession(null)
+      endSession(commit(step.effect))
       return
     }
     if (step.status === 'cancelled') {

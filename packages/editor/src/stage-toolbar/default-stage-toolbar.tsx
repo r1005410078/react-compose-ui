@@ -42,6 +42,10 @@ type DefaultStageToolbarProps = {
  * 按钮与命令行是**同一条命令的两个入口**（拖一下是快，敲名字是精确），因此这里只有 id：
  * 提示文本、取点、捕捉与预览全部由 Stage 那一侧的会话负责。
  *
+ * 导线曾经在这里占一个按钮。`WIRE` 合并进 `LINE` 之后两者画的时候一模一样，而选错的后果
+ * 在屏幕上完全不可见——用不绑定的那条画出来的接线像素级正确却从未接上。这与删掉框选、
+ * 精确移动与移动画布三个工具位是同一条判断。
+ *
  * 曾经这里是一个形状 split button（矩形 / 箭头 / 圆），走的是 `draw-*` 工具那套拖拽绘制。
  * 三个工具随本组一起删除：制图几何一律由命令产出，而留着它们会让一处已知的仲裁器冲突
  * 变得用鼠标就能触发——取点插件（1650）高于绘制（1000），两者同时武装时 `pointerdown`
@@ -54,7 +58,6 @@ const DRAWING_COMMANDS = [
   ['CIRCLE', 'drawCircle', 'circle'],
   ['ARC', 'drawArc', 'arc'],
   ['ARROW', 'drawArrow', 'arrow'],
-  ['WIRE', 'drawWire', 'wire'],
 ] as const
 
 function useToolbarMenu(id: string) {

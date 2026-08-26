@@ -67,19 +67,15 @@ export interface StageDraftingEffect {
    */
   readonly curves?: readonly ComposeCurve[]
   /**
-   * 本步产出的曲线是**导线**。
-   *
-   * @remarks
-   * 只是一个标记：引擎不认识端口，也不知道这条线的端点落在谁身上。绑到哪个端口由宿主按
-   * **取点时记下的来源**决定——它才是那个知道「这一下点在端口上」的地方。
-   */
-  readonly wire?: boolean
-  /**
    * 本步产出的曲线带**终点箭头**。
    *
    * @remarks
-   * 与 `wire` 同形的标记：引擎不认识 Renderer props，也不认识 Preset id，只说出「这是一支
-   * 箭头」，由持有 Registry 的宿主挑那个带 `markerEnd` 的 Preset。
+   * 只是一个标记：引擎不认识 Renderer props，也不认识 Preset id，只说出「这是一支箭头」，
+   * 由持有 Registry 的宿主挑那个带 `markerEnd` 的 Preset。
+   *
+   * 这里曾经还有一个 `wire` 标记。`WIRE` 合并进 `LINE` 之后没有第二种线可分，恒为真的标记
+   * 只会让读代码的人以为还存在另一种情形——端点绑到哪个端口由宿主按取点时记下的来源判定，
+   * 而曲线的两个端点就是那两次落点。
    */
   readonly arrow?: boolean
   /** 本步要平移的既有 Entity。 */
@@ -129,7 +125,6 @@ export interface StageDraftingMessages {
   readonly specifyEndPoint: string
   readonly expectedPoint: string
   readonly lineTitle: string
-  readonly wireTitle: string
   readonly arrowTitle: string
   readonly arcTitle: string
   readonly circleTitle: string

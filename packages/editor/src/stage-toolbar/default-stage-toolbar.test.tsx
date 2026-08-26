@@ -113,9 +113,12 @@ describe('DefaultStageToolbar', () => {
 
     // 形状 split button 已删除：制图几何一律由命令产出，绘图入口因此只有一套。
     expect(screen.queryByRole('button', { name: '形状' })).toBeNull()
-    for (const label of ['直线', '多段线', '矩形', '圆', '圆弧', '箭头', '导线']) {
+    for (const label of ['直线', '多段线', '矩形', '圆', '圆弧', '箭头']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
+    // 导线按钮已删除：`WIRE` 合并进 `LINE` 之后两者画的时候一模一样，而选错的后果在屏幕上
+    // 完全不可见——用不绑定的那条画出来的接线像素级正确却从未接上。
+    expect(screen.queryByRole('button', { name: '导线' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '矩形' }))
     // 按钮不自己走一条路径：它只说出命令的名字，解析、可用性与会话全在 Stage 那一侧。

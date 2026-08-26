@@ -441,7 +441,7 @@ function ComposeStageReady({
     drawCategory: messages.draftingDrawCategory,
     editCategory: messages.draftingEditCategory,
     lineTitle: messages.draftingLineTitle,
-    wireTitle: messages.draftingWireTitle,
+    wireParentMismatch: messages.draftingWireParentMismatch,
     arrowTitle: messages.draftingArrowTitle,
     arcTitle: messages.draftingArcTitle,
     circleTitle: messages.draftingCircleTitle,

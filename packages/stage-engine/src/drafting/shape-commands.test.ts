@@ -5,7 +5,7 @@ import {
   createStagePolylineSession,
   createStageRectangleSession,
 } from './shape-commands'
-import { createStageLineSession, createStageWireSession } from './line-command'
+import { createStageLineSession } from './line-command'
 import type { StageDraftingContext, StageDraftingMessages } from './drafting-types'
 
 const messages: StageDraftingMessages = {
@@ -16,7 +16,6 @@ const messages: StageDraftingMessages = {
   specifyEndPoint: '指定端点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
-  wireTitle: '导线',
   arrowTitle: '箭头',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
@@ -44,26 +43,17 @@ const messages: StageDraftingMessages = {
 
 const context: StageDraftingContext = { messages }
 
-describe('WIRE 命令', () => {
-  it('取两个点即结束，产出的曲线带 wire 标记', () => {
-    const session = createStageWireSession({ messages } as never)
-    expect(session.advance({ kind: 'point', point: { x: 0, y: 0 } }).status).toBe('prompt')
-    const step = session.advance({ kind: 'point', point: { x: 100, y: 0 } })
-
-    expect(step.status).toBe('commit')
-    expect(step.status === 'commit' ? step.effect : null).toMatchObject({
-      wire: true,
-      curves: [{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
-    })
-  })
-
-  it('LINE 不带 wire 标记，即使端点吸附到了端口上', () => {
-    // 绑定改变对象此后的行为，意图必须显式——捕捉到端口不等于用户想接线。
+describe('LINE 命令', () => {
+  it('OpenSpec: stage-engine / LINE 取点落在端口上即绑定 / 效果上没有导线标记', () => {
+    // `WIRE` 合并进 `LINE` 之后没有第二种线可分，标记因此整个删掉而不是恒为真。绑定由宿主
+    // 按取点时记下的来源接上，本包不认识端口。
     const session = createStageLineSession({ messages } as never)
     session.advance({ kind: 'point', point: { x: 0, y: 0 } })
     const step = session.advance({ kind: 'point', point: { x: 100, y: 0 } })
 
-    expect(step.status === 'prompt' ? step.commit?.wire : undefined).toBeUndefined()
+    const commit = step.status === 'prompt' ? step.commit : undefined
+    expect(commit?.curves).toEqual([{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }])
+    expect(commit && 'wire' in commit).toBe(false)
   })
 })
 

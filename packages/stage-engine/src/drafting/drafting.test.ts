@@ -13,7 +13,6 @@ const messages = {
   specifyEndPoint: '指定端点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
-  wireTitle: '导线',
   arrowTitle: '箭头',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
@@ -104,10 +103,13 @@ describe('LINE 命令', () => {
   it('命令按名称与别名解析', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
-      'LINE', 'WIRE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE',
+      'LINE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE',
       'MOVE', 'COPY', 'ERASE', 'VERTEX',
     ])
     expect(commands[0]?.aliases).toEqual(['L'])
+    // WIRE 合并进 LINE 之后连别名都不留：留着会让同一件事有两个名字，而那正是这刀要消除的
+    // 重复。别名表里也不能有 `WI`，它没有第二个含义可以承接。
+    expect(commands.flatMap(({ aliases }) => aliases ?? [])).not.toContain('WI')
   })
 
   it('OpenSpec: stage-engine / 绘图命令 / ARROW 取两点即结束并标记为箭头', () => {
@@ -124,7 +126,21 @@ describe('LINE 命令', () => {
     expect(effect?.curves).toHaveLength(1)
     // 引擎只给出一个标记：它不认识 Renderer props，也不认识 Preset id。
     expect(effect?.arrow).toBe(true)
-    expect(effect?.wire).toBeUndefined()
+  })
+
+  it('OpenSpec: stage-engine / LINE 取点落在端口上即绑定 / 效果上不再有导线标记', () => {
+    const command = createStageDraftingCommands(messages).find(({ id }) => id === 'LINE')!
+    const session = command.start({ messages })
+
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    const step = session.advance({ kind: 'point', point: { x: 40, y: 0 } })
+
+    // 合并之后没有第二种线可分，因此标记整个删掉而不是恒为真——恒为真的标记会让读代码的人
+    // 以为还存在另一种情形。端点绑到哪个端口由宿主按取点时记下的来源判定，几何本身够用：
+    // 曲线的两个端点就是那两次落点。
+    const commit = step.status === 'prompt' ? step.commit : undefined
+    expect(commit?.curves).toHaveLength(1)
+    expect(commit && 'wire' in commit).toBe(false)
   })
 })
 
