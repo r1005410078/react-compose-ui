@@ -101,3 +101,41 @@ test('OpenSpec: editor-workspace-layout / 绘图命令组 / 图标夹点用 acce
   expect(grip).not.toBe(stroke)
   expect(grip).toBe('rgb(54, 135, 255)')
 })
+
+test('OpenSpec: editor-workspace-layout / 工具栏提示 / 悬停给出名称与怎么敲出来', async ({ page }) => {
+  const { editor } = await openEditor(page)
+  const tooltip = editor.getByRole('tooltip')
+
+  await expect(tooltip).toHaveCount(0)
+  const line = editor.getByRole('button', { name: '直线', exact: true })
+  await line.hover()
+
+  // 判别点是**命令名在提示里**：这几条命令没有键位，敲 LINE 就是启动它的办法，而在此之前
+  // 提示里只有「直线」，用户无从知道该敲什么。
+  await expect(tooltip).toBeVisible()
+  await expect(tooltip).toContainText('直线')
+  await expect(tooltip).toContainText('LINE')
+  await expect(line).toHaveAttribute('aria-describedby', await tooltip.getAttribute('id') ?? '')
+
+  // 有键位的按钮给键位，不是命令名。
+  await editor.getByRole('button', { name: '选择', exact: true }).hover()
+  await expect(tooltip).toContainText('选择')
+
+  // 提示会盖住下一步要点的地方，而此刻焦点在按钮上——Escape 是唯一能把它收走的办法。
+  await page.keyboard.press('Escape')
+  await expect(tooltip).toHaveCount(0)
+})
+
+test('OpenSpec: editor-workspace-layout / 工具栏提示 / 键盘聚焦也出，点击之后不出', async ({ page }) => {
+  const { editor } = await openEditor(page)
+  const tooltip = editor.getByRole('tooltip')
+  const rectangle = editor.getByRole('button', { name: '矩形', exact: true })
+
+  // 原生 title 在键盘聚焦时根本不出现，这正是自建它的一半理由。
+  await rectangle.focus()
+  await expect(tooltip).toContainText('RECTANGLE')
+
+  // 点过之后不该再弹：用户已经点了，提示只会盖住刚点的东西。
+  await rectangle.click()
+  await expect(tooltip).toHaveCount(0)
+})

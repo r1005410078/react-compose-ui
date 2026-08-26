@@ -14,6 +14,7 @@ import {
 } from '../editor-preferences'
 import { CanvasSettingsPopover } from './canvas-settings-popover'
 import { StageToolbarIcon } from './stage-toolbar-icons'
+import { useComposeToolbarTooltip } from './toolbar-tooltip'
 
 type DefaultStageToolbarProps = {
   /** 正在跑的那条命令的 id；绘图命令按钮的按下态读它。 */
@@ -137,10 +138,15 @@ export function DefaultStageToolbar({
       typeof navigator === 'undefined' ? '' : navigator.platform,
     )
   }
-  const titled = (label: string, keybinding?: string) => ({
-    'aria-label': label,
-    title: keybinding ? `${label} (${keybinding})` : label,
-  })
+  const tooltip = useComposeToolbarTooltip()
+  /**
+   * 按钮的名称与提示。
+   *
+   * @remarks
+   * 不再写原生 `title`：两套提示会同时弹出来，而工具栏自己那套才是能立刻出现、键盘聚焦也
+   * 出现的那一套。可访问名仍然只是名称，快捷键落在 `aria-describedby` 指向的提示里。
+   */
+  const titled = (key: string, label: string, hint?: string) => tooltip.trigger(key, label, hint)
   const snapEnabled = document.canvas.grid.snapEnabled
     || document.canvas.smartSnap.nodes
     || document.canvas.smartSnap.guides
@@ -154,30 +160,30 @@ export function DefaultStageToolbar({
           * 动作（矩形 / 箭头 / 圆），不是同一个动作的参数。
           */}
         <button
-          {...titled(messages.select, shortcut('stage.selectTool'))}
+          {...titled('select', messages.select, shortcut('stage.selectTool'))}
           aria-pressed={tool === 'select'}
           type="button"
           onClick={() => setTool('select')}
         >
           <StageToolbarIcon name="select" />
         </button>
-        <button {...titled(messages.scale, shortcut('stage.scaleTool'))} aria-pressed={tool === 'scale'} type="button" onClick={() => setTool('scale')}>
+        <button {...titled('scale', messages.scale, shortcut('stage.scaleTool'))} aria-pressed={tool === 'scale'} type="button" onClick={() => setTool('scale')}>
           <StageToolbarIcon name="scale" />
         </button>
-        <button {...titled(messages.rotate, shortcut('stage.rotateTool'))} aria-pressed={tool === 'rotate'} type="button" onClick={() => setTool('rotate')}>
+        <button {...titled('rotate', messages.rotate, shortcut('stage.rotateTool'))} aria-pressed={tool === 'rotate'} type="button" onClick={() => setTool('rotate')}>
           <StageToolbarIcon name="rotate" />
         </button>
       </div>
       <div aria-label={messages.snapTools} className="compose-editor__toolbar-group" role="group">
-        <button {...titled(messages.snap)} aria-pressed={snapEnabled} type="button" onClick={toggleSnap}>
+        <button {...titled('snap', messages.snap)} aria-pressed={snapEnabled} type="button" onClick={toggleSnap}>
           <StageToolbarIcon name="smart-snap" />
         </button>
         <div className="compose-editor__toolbar-menu-anchor">
-          <button {...titled(messages.grid)} aria-pressed={gridVisible} type="button" onClick={() => setGridVisible((visible) => !visible)}>
+          <button {...titled('grid', messages.grid)} aria-pressed={gridVisible} type="button" onClick={() => setGridVisible((visible) => !visible)}>
             <StageToolbarIcon name="grid" />
           </button>
           <button
-            {...titled(messages.gridSize)}
+            {...titled('grid-size', messages.gridSize)}
             aria-controls={gridMenuId}
             aria-expanded={gridMenuOpen}
             aria-haspopup="menu"
@@ -242,14 +248,14 @@ export function DefaultStageToolbar({
       <span aria-hidden="true" className="compose-editor__toolbar-divider" />
       <div aria-label={messages.containerTools} className="compose-editor__toolbar-group" role="group">
         <button
-          {...titled(messages.createContainer, shortcut('stage.drawContainerTool'))}
+          {...titled('draw-container', messages.createContainer, shortcut('stage.drawContainerTool'))}
           aria-pressed={tool === 'draw-container'}
           type="button"
           onClick={() => setTool('draw-container')}
         >
           <StageToolbarIcon name="container" />
         </button>
-        <button {...titled(messages.text, shortcut('stage.drawTextTool'))} aria-pressed={tool === 'draw-text'} type="button" onClick={() => setTool('draw-text')}>
+        <button {...titled('draw-text', messages.text, shortcut('stage.drawTextTool'))} aria-pressed={tool === 'draw-text'} type="button" onClick={() => setTool('draw-text')}>
           <StageToolbarIcon name="text" />
         </button>
       </div>
@@ -258,7 +264,13 @@ export function DefaultStageToolbar({
         {DRAWING_COMMANDS.map(([commandId, label, icon]) => (
           <button
             key={commandId}
-            {...titled(messages[label])}
+            /*
+             * 提示里的「快捷键」是**命令名本身**：这几条命令没有键位，启动它们的办法就是在
+             * 命令行里敲这个词。id 就在 `DRAWING_COMMANDS` 里、也正是 `startCommand` 派发的
+             * 那一个，因此提示与按钮读的是同一份事实。别名（`L`、`REC`…）住在 stage-engine
+             * 的命令定义上，这里够不着，抄一份就会漂。
+             */
+            {...titled(commandId, messages[label], commandId)}
             /*
              * 按下态读 Stage 上报的**当前命令 id**，而不是工具栏自己记「我刚点了哪个」：
              * 命令会被 `Escape`、被并发文档变化、被另一条命令取代而结束，自己记的那一份
@@ -273,6 +285,7 @@ export function DefaultStageToolbar({
           </button>
         ))}
       </div>
+      {tooltip.element}
     </div>
   )
 }
