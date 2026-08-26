@@ -41,14 +41,19 @@ interface StageToolbarIconProps {
  *
  * 边长 4.5 是量出来的而不是估的：描边 1.7，3 单位的方块只有描边的 1.8 倍宽，加上 round
  * 端帽之后与「线画粗了一点」在 20px 上分不出来。约 2.6 倍才读得出是一个方块。
+ *
+ * 颜色走 accent 而不是跟着描边的 `currentColor`：夹点与几何是两类东西，同色时它们读成
+ * 一条粗细不匀的线，分色之后「这是可抓的点」才说得出来——AutoCAD 的夹点同样是唯一一处
+ * 与几何不同色的标记。填充**由样式表给**（`.compose-editor__icon-grip`）而不是写成
+ * presentation attribute：`var()` 在 presentation attribute 里不是所有浏览器都替换，
+ * 而颜色必须跟着主题走。
  */
 function gripMark(x: number, y: number) {
   const size = 4.5
   return (
     <rect
-      fill="currentColor"
+      className="compose-editor__icon-grip"
       height={size}
-      stroke="none"
       width={size}
       x={x - size / 2}
       y={y - size / 2}

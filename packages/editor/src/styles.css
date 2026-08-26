@@ -180,6 +180,17 @@
   stroke-width: 1.7;
 }
 
+/**
+ * 图标上的夹点方块。
+ *
+ * @remarks
+ * 直接声明在 rect 上，因此压得过 `button svg` 那条规则继承下来的 `fill: none`。
+ */
+.compose-editor__icon-grip {
+  fill: var(--compose-accent);
+  stroke: none;
+}
+
 .compose-editor__toolbar-divider {
   @apply ct:h-6 ct:w-px ct:shrink-0 ct:mx-1;
   background: var(--compose-border);

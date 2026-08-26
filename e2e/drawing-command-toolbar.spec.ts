@@ -86,3 +86,18 @@ test('OpenSpec: stage / ARROW / 画出的曲线带终点箭头', async ({ page }
   await expect(strokes).toHaveCount(1)
   expect(await strokes.first().getAttribute('marker-end')).toMatch(/^url\(#/)
 })
+
+test('OpenSpec: editor-workspace-layout / 绘图命令组 / 图标夹点用 accent 而不是描边色', async ({ page }) => {
+  const { editor } = await openEditor(page)
+
+  const icon = editor.getByRole('button', { name: '直线', exact: true }).locator('svg')
+  const [grip, stroke] = await Promise.all([
+    icon.locator('rect').first().evaluate((node) => getComputedStyle(node).fill),
+    icon.evaluate((node) => getComputedStyle(node).stroke),
+  ])
+
+  // 判别点是**两者不同**而不是某个具体的颜色值：夹点跟着描边色走时这条才有意义，
+  // 而 accent 的字面值随主题变，写死它等于把 token 抄第二遍。
+  expect(grip).not.toBe(stroke)
+  expect(grip).toBe('rgb(54, 135, 255)')
+})
