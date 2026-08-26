@@ -31,6 +31,32 @@ interface StageToolbarIconProps {
 }
 
 /**
+ * 夹点方块：画在图标上的顶点标记。
+ *
+ * @remarks
+ * 标记**与画布上的顶点夹点同形**——用户点进这条命令、画完之后看到的就是一串方块，图标上
+ * 画圆点等于用两套词汇说同一件事。这也与 AutoCAD 的夹点一致。
+ *
+ * 填充而不描边：图标渲染在 20px 上，空心方块会糊成一个点，方与圆的差别正好全部丢在描边里。
+ *
+ * 边长 4.5 是量出来的而不是估的：描边 1.7，3 单位的方块只有描边的 1.8 倍宽，加上 round
+ * 端帽之后与「线画粗了一点」在 20px 上分不出来。约 2.6 倍才读得出是一个方块。
+ */
+function gripMark(x: number, y: number) {
+  const size = 4.5
+  return (
+    <rect
+      fill="currentColor"
+      height={size}
+      stroke="none"
+      width={size}
+      x={x - size / 2}
+      y={y - size / 2}
+    />
+  )
+}
+
+/**
  * Stage 工具栏使用内联描边图标，避免把图标库变成 editor 的运行时依赖。
  *
  * @internal
@@ -55,12 +81,12 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="m9 9 6 6M15 9l-6 6" />
       </>
     ),
-    // 弧：一段扫掠不足半圆的圆弧，两端各一个端点标记——与 `ARC` 的三点取法呼应。
+    // 弧：一段扫掠不足半圆的圆弧，两端各一个端点夹点——与 `ARC` 的三点取法呼应。
     arc: (
       <>
         <path d="M4 18a10 10 0 0 1 16 0" />
-        <circle cx="4" cy="18" fill="currentColor" r="1.3" stroke="none" />
-        <circle cx="20" cy="18" fill="currentColor" r="1.3" stroke="none" />
+        {gripMark(4, 18)}
+        {gripMark(20, 18)}
       </>
     ),
     arrow: (
@@ -91,7 +117,15 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="M8 14v2.5a4 4 0 0 0 8 0V14M8 14h3M13 14h3" />
       </g>
     ),
-    line: <path d="M4 19 20 5" />,
+    // 直线：两端各一个夹点方块。裸一条对角线与「斜的分隔线」没有区别，而夹点既说清了这是
+    // 一条可编辑的几何，也让它与同组的多段线读成同一套词汇。
+    line: (
+      <>
+        <path d="M5 18 19 6" />
+        {gripMark(5, 18)}
+        {gripMark(19, 6)}
+      </>
+    ),
     move: (
       <>
         <path d="M12 3v18M3 12h18" />
@@ -106,14 +140,18 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="M17.5 9.5a1.5 1.5 0 0 1 3 0v4.25C20.5 18.3 17.8 21 13.25 21H12c-2.35 0-4.1-1.1-5.5-3L3.8 14.2a1.65 1.65 0 0 1 2.55-2.05L8.5 14.5" />
       </>
     ),
-    // 多段线：三段折线加各顶点标记，与只有两个端点的 `line` 一眼可分。
+    // 多段线：三段折线加各顶点夹点，与只有两个端点的 `line` 一眼可分。顶点铺开到画框两角，
+    // 让四个方块彼此不粘连也不被边缘切掉——夹点占的地方比线本身大得多。
+    //
+    // 有意**不画弧段**：AutoCAD 的 PLINE 图标带一段弧，而我们的多段线顶点没有 bulge 字段，
+    // 弧段在当前 `Curve` 协议里根本表达不出来——图标不宣称做不到的事。
     polyline: (
       <>
-        <path d="M3 18l5-8 5 5 8-11" />
-        <circle cx="3" cy="18" fill="currentColor" r="1.3" stroke="none" />
-        <circle cx="8" cy="10" fill="currentColor" r="1.3" stroke="none" />
-        <circle cx="13" cy="15" fill="currentColor" r="1.3" stroke="none" />
-        <circle cx="21" cy="4" fill="currentColor" r="1.3" stroke="none" />
+        <path d="M4 19l5.5-10 5.5 6 5-10" />
+        {gripMark(4, 19)}
+        {gripMark(9.5, 9)}
+        {gripMark(15, 15)}
+        {gripMark(20, 5)}
       </>
     ),
     rectangle: <rect height="13" rx="1" width="17" x="3.5" y="5.5" />,

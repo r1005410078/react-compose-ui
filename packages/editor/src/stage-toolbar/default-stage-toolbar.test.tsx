@@ -122,6 +122,18 @@ describe('DefaultStageToolbar', () => {
     expect(startCommand).toHaveBeenCalledWith('RECTANGLE')
   })
 
+  it('OpenSpec: editor-workspace-layout / 绘图命令组 / 直线与多段线的图标标记是夹点方块', () => {
+    renderToolbar()
+
+    // 图标上的标记就是用户点进这条命令之后会在画布上看到的东西，因此必须与夹点同形——
+    // 顶点夹点是方块，圆点在这里说的是另一件事，混用会让图标与画布对不上。
+    for (const [label, marks] of [['直线', 2], ['多段线', 4]] as const) {
+      const icon = screen.getByRole('button', { name: label }).querySelector('svg')
+      expect(icon?.querySelectorAll('rect')).toHaveLength(marks)
+      expect(icon?.querySelectorAll('circle')).toHaveLength(0)
+    }
+  })
+
   it('OpenSpec: editor-workspace-layout / 绘图命令组 / 按下态读上报的命令 id', () => {
     renderToolbar('select', 'CIRCLE')
 
