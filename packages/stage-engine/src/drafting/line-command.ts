@@ -266,6 +266,14 @@ export function createStageWireSession(
     accepts: vertices.length > 1 ? ['point' as const, 'keyword' as const] : ['point' as const],
     ...(vertices.length > 1 ? { keywords: [undoKeyword] } : {}),
     fields: 'polar' as const,
+    /*
+     * 导线**只走横平竖直**，因此从第二个点起把角度约束钉死成正交——这不是辅助而是规范：
+     * 斜着走的导线在一次接线图上不是「用户的选择」，是一张画错的图。会话级的三态设置管不到
+     * 这一步。
+     *
+     * 第一个点没有上一点、量不出方向，因此不钉（`firstPrompt` 不带这个字段）。
+     */
+    constrain: 'ortho' as const,
   })
 
   let prompt: ComposeCommandPrompt = firstPrompt(messages)

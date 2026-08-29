@@ -2041,6 +2041,24 @@ describe('绘图模式', () => {
       expect(curveCount(runtime)).toBe(3)
     })
 
+    it('OpenSpec: stage / 会重开的命令与两级 Escape / 导线的第二个点被钉死在正交上', () => {
+      /*
+       * 角度约束**显式关掉**：这一条要证明的正是「提示钉死的正交管得住会话级设置」，跟着
+       * 默认值（极轴）走的话，落点碰巧被极轴吸对了也说明不了问题。
+       */
+      const { runtime } = renderStage(document(), { angleConstraint: 'off' })
+      startCommand('WIRE')
+      // 第二个点落在一个明显斜的位置上：x 差 200、y 差 90。
+      drawTwoPoints([100, 100], [300, 190], true)
+
+      const curve = Object.values(runtime.document.entities)
+        .map((entity) => entity.components.Curve as { kind?: string; start?: { x: number; y: number }; end?: { x: number; y: number } } | undefined)
+        .find((value) => value !== undefined)!
+      // 落点被拽回水平：斜着走的导线在一次接线图上是一张画错的图，不是用户的选择。
+      expect(curve.kind).toBe('line')
+      expect(curve.start!.y).toBeCloseTo(curve.end!.y, 6)
+    })
+
     it('不声明 repeat 的命令画完即结束', () => {
       renderStage(document(), { angleConstraint: 'off' })
       startCommand('RECTANGLE')

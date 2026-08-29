@@ -121,6 +121,20 @@ describe('WIRE 命令', () => {
       .toEqual([{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }])
   })
 
+  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 从第二个点起钉死正交', () => {
+    const session = createStageWireSession({ messages } as never)
+    // 第一个点没有上一点、量不出方向，因此不钉。
+    expect(session.prompt?.constrain).toBeUndefined()
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    /*
+     * 导线只走横平竖直，这是**规范**不是偏好——会话级的角度约束三态管不到这一步。斜着走的
+     * 导线在一次接线图上不是「用户的选择」，是一张画错的图。
+     */
+    expect(session.prompt?.constrain).toBe('ortho')
+    session.advance({ kind: 'point', point: { x: 100, y: 0 } })
+    expect(session.prompt?.constrain).toBe('ortho')
+  })
+
   it('OpenSpec: stage-engine / 绘图命令复用泛型命令引擎 / 连续取点的提示说出怎么结束', () => {
     const session = createStageWireSession({ messages } as never)
     session.advance({ kind: 'point', point: { x: 0, y: 0 } })

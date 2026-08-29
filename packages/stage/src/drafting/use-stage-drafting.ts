@@ -620,7 +620,12 @@ export function useStageDrafting(options: StageDraftingOptions) {
     const resolved = resolveComposePointDetail(world, 'pointer', {
       ...(hit ? { snapped: hit.point } : {}),
       ...(reference ? { reference } : {}),
-      angle: angleConstraint,
+      /*
+       * 提示钉死了角度约束时以它为准：那是**规范**而不是偏好——导线只走横平竖直，会话级的
+       * 三态设置管不到这一步。钉死的只是这一档，因此管线次序原样成立（键入 > 捕捉 > 网格 >
+       * 角度约束），捕捉命中仍然短路、键入的坐标仍然不被改写。
+       */
+      angle: prompt?.constrain ?? angleConstraint,
       polar: { increment: polarIncrement, tolerance: snapRadius / viewport.zoom },
       grid: gridSettings,
     })
@@ -634,7 +639,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
       : { point, ray: resolved.ray }
   }, [
     angleConstraint, applyFieldLocks, document, excluded, featureTolerance, gridSettings, index,
-    polarIncrement, reference, snapEnabled, snapExcludedPoint, snapRadius, viewport.zoom,
+    polarIncrement, prompt?.constrain, reference, snapEnabled, snapExcludedPoint, snapRadius,
+    viewport.zoom,
   ])
 
   const resolvePointerPoint = useCallback(
