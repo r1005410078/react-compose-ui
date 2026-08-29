@@ -119,18 +119,14 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
     await page.mouse.click(target.x, target.y)
   }
 
-  /*
-   * 重叠取样点落在**描边上**而不是包围盒中心：曲线按到几何的距离命中，空心矩形的内部
-   * 是空的。取第一条描边渲染出来的上边，不用鼠标原始坐标——角点经过了吸附。
-   *
-   * 取四分之一处而不是中点：本条会在同一个点上连点四下，其中相邻两下会被判成双击而进入
-   * 几何编辑，而多段线的**段中点**上正好有一个夹点——落在它上面的点击会被夹点吃掉，选区
-   * 因此停在上一次的结果上。四分之一处离角点与段中点都有半段远。
-   */
-  const strokeBox = (await stage.getByTestId('compose-material-curve-stroke').first().boundingBox())!
-  const overlap = { x: strokeBox.x + strokeBox.width / 4, y: strokeBox.y }
-
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
+  /*
+   * 重叠取样点取渲染节点的中心：`RECTANGLE` 产出的是矩形**物料**，是一块实心的面积，
+   * 内部就是它自己的墨。用渲染出来的盒而不是鼠标原始坐标——角点经过了吸附。
+   */
+  const nodeBox = (await nodes.first().boundingBox())!
+  const overlap = { x: nodeBox.x + nodeBox.width / 2, y: nodeBox.y + nodeBox.height / 2 }
+
   await expect(nodes).toHaveCount(2)
   const originalBackId = await nodes.nth(0).getAttribute('data-entity-id')
   const originalFrontId = await nodes.nth(1).getAttribute('data-entity-id')
@@ -282,17 +278,23 @@ test('OpenSpec: stage / ARROW / 两点取向、marker 与反向重画', async ({
    */
   await expect(stage.locator('[data-testid^="stage-path-vertex-hit-"]')).toHaveCount(0)
 
-  // 命令结束即回到空闲：按钮不再是按下态，再点一下画布只是普通点选。
-  await expect(arrow).toHaveAttribute('aria-pressed', 'false')
-  await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('命令：')
+  /*
+   * `ARROW` 声明了 `repeat`：画完一条接着画下一条，因此按钮仍是按下态、提示回到**第一步**。
+   * 判据是「用户画完之后想对它做什么」——箭头和导线一样是成批标注出来的。
+   */
+  await expect(arrow).toHaveAttribute('aria-pressed', 'true')
+  await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('指定第一点')
 
-  // 反向取第二条：终点在上，几何跟着翻过来。
-  await arrow.click()
+  // 反向取第二条：终点在上，几何跟着翻过来。命令还在跑，因此不用再点一次按钮。
   await page.mouse.click(target.x + 120, target.y)
   await page.mouse.click(start.x + 120, start.y)
   await expect(strokes).toHaveCount(2)
   expect(Number(await strokes.nth(1).getAttribute('y2')))
     .toBeLessThan(Number(await strokes.nth(1).getAttribute('y1')))
+
+  // 一个点都没取时 `Escape` 退出命令。
+  await stage.press('Escape')
+  await expect(arrow).toHaveAttribute('aria-pressed', 'false')
 })
 
 

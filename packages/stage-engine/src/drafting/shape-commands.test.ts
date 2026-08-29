@@ -5,7 +5,11 @@ import {
   createStagePolylineSession,
   createStageRectangleSession,
 } from './shape-commands'
-import { createStageLineSession, createStageWireSession } from './line-command'
+import {
+  createStageDraftingCommands,
+  createStageLineSession,
+  createStageWireSession,
+} from './line-command'
 import type { StageDraftingContext, StageDraftingMessages } from './drafting-types'
 
 const messages: StageDraftingMessages = {
@@ -35,8 +39,12 @@ const messages: StageDraftingMessages = {
   specifyThroughPoint: '指定圆弧上的一点',
   specifyCenter: '指定圆心',
   specifyRadius: '指定半径',
+  specifyDiameter: '指定直径',
+  diameterKeyword: '直径',
+  radiusKeyword: '半径',
   specifyCorner: '指定第一个角点',
   specifyOppositeCorner: '指定对角点',
+  closeKeyword: '闭合',
   undoKeyword: '放弃',
   collinearArc: '三点共线，无法定弧',
   degenerateShape: '这个形状是退化的',
@@ -44,17 +52,80 @@ const messages: StageDraftingMessages = {
 
 const context: StageDraftingContext = { messages }
 
+describe('OpenSpec: stage-engine / 成批作业的命令提交后接着画', () => {
+  const byId = new Map(createStageDraftingCommands(messages).map((c) => [c.id, c]))
+
+  it('导线与箭头声明重开', () => {
+    // 判据是「用户画完之后想对它做什么」：接线是成批的活儿，一张图上连二三十条。
+    expect(byId.get('WIRE')?.repeat).toBe(true)
+    expect(byId.get('ARROW')?.repeat).toBe(true)
+  })
+
+  it('取够即结束的形状命令不声明', () => {
+    /*
+     * 矩形、圆、弧画完九成是填色、调圆角、往里塞东西。给它们也重开的话，想调刚画的那个
+     * 得先按一次 `Escape`，而那一下按键不携带任何信息。`LINE` 与 `PLINE` 本来就连续取点。
+     */
+    for (const id of ['RECTANGLE', 'CIRCLE', 'ARC', 'LINE', 'PLINE']) {
+      expect(byId.get(id)?.repeat).toBeUndefined()
+    }
+  })
+})
+
 describe('WIRE 命令', () => {
-  it('取两个点即结束，产出的曲线带 wire 标记', () => {
+  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 取两点得到一条直线导线', () => {
     const session = createStageWireSession({ messages } as never)
     expect(session.advance({ kind: 'point', point: { x: 0, y: 0 } }).status).toBe('prompt')
-    const step = session.advance({ kind: 'point', point: { x: 100, y: 0 } })
+    expect(session.advance({ kind: 'point', point: { x: 100, y: 0 } }).status).toBe('prompt')
+    // 连续取点：取够两点不再自己提交，`Enter` 才结束这一条。
+    const step = session.advance({ kind: 'accept' })
 
     expect(step.status).toBe('commit')
     expect(step.status === 'commit' ? step.effect : null).toMatchObject({
       wire: true,
       curves: [{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
     })
+  })
+
+  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 取三个点得到一条带拐点的导线', () => {
+    const session = createStageWireSession({ messages } as never)
+    for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }]) {
+      session.advance({ kind: 'point', point })
+    }
+    const step = session.advance({ kind: 'accept' })
+
+    // 一条导线是**一个**连接，因此攒成一个 Entity：逐段落地会得到假接头。
+    expect(step.status === 'commit' ? step.effect.curves : null).toEqual([{
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }],
+      closed: false,
+    }])
+  })
+
+  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 只取一个点时回车被拒', () => {
+    const session = createStageWireSession({ messages } as never)
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    // 一个点的导线画不出来，也没有第二端可言——拒绝并停在原提示，而不是提交或放弃整条命令。
+    expect(session.advance({ kind: 'accept' }).status).toBe('rejected')
+  })
+
+  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 放弃上一点', () => {
+    const session = createStageWireSession({ messages } as never)
+    for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }]) {
+      session.advance({ kind: 'point', point })
+    }
+    // 攒到结束才提交，因此撤销够不着这一点——它得有自己的关键字。
+    expect(session.advance({ kind: 'keyword', key: 'U' }).status).toBe('prompt')
+    const step = session.advance({ kind: 'accept' })
+    expect(step.status === 'commit' ? step.effect.curves : null)
+      .toEqual([{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }])
+  })
+
+  it('OpenSpec: stage-engine / 绘图命令复用泛型命令引擎 / 连续取点的提示说出怎么结束', () => {
+    const session = createStageWireSession({ messages } as never)
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    // WIRE 现在是连续取点，因此这一句该说；`ARROW` 相反，它取够两点自己就提交。
+    expect(session.prompt?.message).toBe(messages.specifyNextPoint)
   })
 
   it('LINE 不带 wire 标记，即使端点吸附到了端口上', () => {
@@ -97,6 +168,23 @@ describe('ARC 命令', () => {
     const retry = session.advance({ kind: 'point', point: { x: 50, y: 50 } })
     expect(retry.status).toBe('commit')
   })
+
+  it('OpenSpec: stage-engine / 圆与弧各步声明自己的参数化 / 只有端点步画被量的那一段', () => {
+    const session = createStageArcSession(context)
+    expect(session.prompt).toMatchObject({ fields: 'absolute' })
+
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    // 途经点步的预览**就是**那条直线，再画一遍就是同一条线加粗。
+    expect(session.prompt).toMatchObject({ fields: 'polar' })
+    expect(session.prompt?.measured).toBeUndefined()
+    expect(session.preview?.({ x: 100, y: 0 })?.curves?.[0]).toMatchObject({ kind: 'line' })
+
+    const step = session.advance({ kind: 'point', point: { x: 50, y: 50 } })
+    // 端点步的预览换成了弧，途经点到落点那一段不在弧上。
+    expect(session.prompt).toMatchObject({ fields: 'polar', measured: true })
+    // 两个数从**上一个点**起算：第三点从途经点。
+    expect(step.status === 'prompt' && step.preview?.reference).toEqual({ x: 50, y: 50 })
+  })
 })
 
 describe('CIRCLE 命令', () => {
@@ -120,24 +208,88 @@ describe('CIRCLE 命令', () => {
     expect(step.status).toBe('rejected')
     expect(session.prompt?.message).toBe('指定半径')
   })
+
+  describe('OpenSpec: stage-engine / CIRCLE 在半径与直径之间切换', () => {
+    /** 取过圆心的 `CIRCLE`。 */
+    function afterCenter() {
+      const session = createStageCircleSession(context)
+      session.advance({ kind: 'point', point: { x: 50, y: 50 } })
+      return session
+    }
+
+    it('半径步是单字段、打开被量的那一段，且只列出能切过去的那一个', () => {
+      const session = afterCenter()
+      expect(session.prompt).toMatchObject({
+        message: '指定半径', fields: 'radius', measured: true,
+      })
+      expect(session.prompt?.keywords).toEqual([{ key: 'D', label: '直径' }])
+    })
+
+    it('D 一次改提示、参数化与关键字三样', () => {
+      const session = afterCenter()
+      const step = session.advance({ kind: 'keyword', key: 'D' })
+
+      expect(step.status).toBe('prompt')
+      expect(session.prompt).toMatchObject({
+        message: '指定直径', fields: 'diameter', measured: true,
+      })
+      // 列一个按下去只会把当前状态再确认一遍的关键字，等于给用户一个没有效果的选项。
+      expect(session.prompt?.keywords).toEqual([{ key: 'R', label: '半径' }])
+    })
+
+    it('R 切回半径', () => {
+      const session = afterCenter()
+      session.advance({ kind: 'keyword', key: 'D' })
+      session.advance({ kind: 'keyword', key: 'R' })
+      expect(session.prompt).toMatchObject({ message: '指定半径', fields: 'radius' })
+    })
+
+    it('切换不改变落地的几何——半径由落点算，不由档位算', () => {
+      const session = afterCenter()
+      session.advance({ kind: 'keyword', key: 'D' })
+      const step = session.advance({ kind: 'point', point: { x: 80, y: 90 } })
+
+      if (step.status !== 'commit') throw new Error('半径点之后应当提交')
+      const [curve] = step.effect.curves ?? []
+      if (curve?.kind !== 'arc') throw new Error('整圆应当是弧')
+      // 直径档只改「这个数怎么读」，落点仍然是圆上的一个点。
+      expect(curve.radius).toBeCloseTo(50, 6)
+    })
+
+    it('圆心还没取时无档可切', () => {
+      const session = createStageCircleSession(context)
+      expect(session.advance({ kind: 'keyword', key: 'D' }).status).toBe('rejected')
+      expect(session.prompt?.message).toBe('指定圆心')
+    })
+
+    it('下一次 CIRCLE 从半径起步', () => {
+      const used = afterCenter()
+      used.advance({ kind: 'keyword', key: 'D' })
+      // 记住上一次的选择会让这条命令有一份看不见的状态。
+      expect(afterCenter().prompt?.fields).toBe('radius')
+    })
+  })
 })
 
 describe('RECTANGLE 命令', () => {
-  it('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 矩形是闭合多段线', () => {
+  it('OpenSpec: stage-engine / 绘图命令 / 矩形产出盒而不是曲线', () => {
     const session = createStageRectangleSession(context)
     session.advance({ kind: 'point', point: { x: 10, y: 20 } })
     const step = session.advance({ kind: 'point', point: { x: 110, y: 70 } })
 
     if (step.status !== 'commit') throw new Error('对角点之后应当提交')
-    const [curve] = step.effect.curves ?? []
-    if (curve?.kind !== 'polyline') throw new Error('矩形应当是多段线')
-    expect(curve.closed).toBe(true)
-    expect(curve.vertices).toEqual([
-      { x: 10, y: 20 },
-      { x: 110, y: 20 },
-      { x: 110, y: 70 },
-      { x: 10, y: 70 },
-    ])
+    // 意图由命令显式说出：按 kind 反推是错的——`PLINE` 画四点按 `C` 同样得到闭合四顶点折线。
+    expect(step.effect.curves).toBeUndefined()
+    expect(step.effect.boxes).toEqual([{ x: 10, y: 20, width: 100, height: 50 }])
+  })
+
+  it('往左上拖也归一成左上角加正宽高', () => {
+    const session = createStageRectangleSession(context)
+    session.advance({ kind: 'point', point: { x: 110, y: 70 } })
+    const step = session.advance({ kind: 'point', point: { x: 10, y: 20 } })
+
+    if (step.status !== 'commit') throw new Error('对角点之后应当提交')
+    expect(step.effect.boxes).toEqual([{ x: 10, y: 20, width: 100, height: 50 }])
   })
 
   it('两角共轴时退化，被拒绝', () => {
@@ -149,6 +301,35 @@ describe('RECTANGLE 命令', () => {
 })
 
 describe('PLINE 命令', () => {
+  it('OpenSpec: stage-engine / 连续取点命令的闭合关键字 / PLINE 闭合置位并提交', () => {
+    const session = createStagePolylineSession(context)
+    for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }]) {
+      session.advance({ kind: 'point', point })
+    }
+    expect(session.prompt?.keywords).toEqual([
+      { key: 'C', label: '闭合' },
+      { key: 'U', label: '放弃' },
+    ])
+
+    const step = session.advance({ kind: 'keyword', key: 'C' })
+    // 攒到结束才提交，因此闭合是把 `closed` 置位——顶点仍是三个，不重复第一个。
+    if (step.status !== 'commit') throw new Error('闭合之后应当提交并结束')
+    expect(step.effect.curves?.[0]).toEqual({
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }],
+      closed: true,
+    })
+  })
+
+  it('OpenSpec: stage-engine / 连续取点命令的闭合关键字 / 两个顶点围不出面积，没有闭合', () => {
+    const session = createStagePolylineSession(context)
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    session.advance({ kind: 'point', point: { x: 100, y: 0 } })
+
+    expect(session.prompt?.keywords).toEqual([{ key: 'U', label: '放弃' }])
+    expect(session.advance({ kind: 'keyword', key: 'C' }).status).toBe('rejected')
+  })
+
   it('OpenSpec: stage-engine / 绘图命令 / 多段线攒成一个 Entity', () => {
     const session = createStagePolylineSession(context)
     for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]) {
@@ -215,16 +396,15 @@ describe('OpenSpec: stage-engine / 预览几何 / 会话回答「落在这里会
     ])
   })
 
-  it('矩形预览是闭合四顶点而不是对角线', () => {
+  it('矩形预览是一个盒而不是对角线', () => {
     const session = createStageRectangleSession(context)
     session.advance({ kind: 'point', point: { x: 0, y: 0 } })
 
-    const curve = session.preview?.({ x: 40, y: 20 })?.curves?.[0]
-    // 形状只有命令知道：两个对角点怎么变四个顶点，宿主算不出来。
-    expect(curve).toMatchObject({ kind: 'polyline', closed: true })
-    expect(curve?.kind === 'polyline' ? curve.vertices : []).toEqual([
-      { x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 20 }, { x: 0, y: 20 },
-    ])
+    // 形状只有命令知道：两个对角点怎么变一个盒，宿主算不出来。预览与提交是同一种表示，
+    // 让预览回折线、提交回盒会产生一处只有实现者知道的不对称。
+    expect(session.preview?.({ x: 40, y: 20 })).toEqual({
+      boxes: [{ x: 0, y: 0, width: 40, height: 20 }],
+    })
   })
 
   it('圆预览是整圆而不是半径线', () => {

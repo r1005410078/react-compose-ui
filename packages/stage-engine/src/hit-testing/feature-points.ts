@@ -5,10 +5,16 @@ import {
   composePolylineSegments,
   getComposeCurve,
   getComposeEntityPorts,
+  getComposeWire,
+  getComposeWireEndState,
   projectComposeCurveToBox,
   getComposeVisibility,
 } from '@compose-ui/core'
-import type { ComposeDocument, ComposeEntity } from '@compose-ui/core'
+import type {
+  ComposeDocument,
+  ComposeEntity,
+  ComposeWireEndState,
+} from '@compose-ui/core'
 import { applyMatrix } from '../geometry'
 import type { StagePoint } from '../geometry'
 import type { StageSceneIndex } from './scene-index'
@@ -193,4 +199,111 @@ export function findStageFeaturePoint(
     }
   }
   return best?.candidate ?? null
+}
+
+/** 一个符号上被显现出来的端口。 @public */
+export interface StageRevealedPorts {
+  readonly entityId: string
+  /** 该 Entity 的**全部**端口，世界坐标。 */
+  readonly points: readonly StagePoint[]
+}
+
+/**
+ * 求出光标够及范围内那个符号的**全部**端口。
+ *
+ * @remarks
+ * 与 {@link findStageFeaturePoint} 是**两个不同的问题**，因此不合并：捕捉标记回答「落点吸上了
+ * 什么」（恰好一个点），本查询回答「这个符号上有哪些接线点」（一个符号的全部）。只返回最近的
+ * 那一个时，用户读到的是「这里只有一个端子」——而接线图上端子密集（继电器的端子只隔几个
+ * 像素），旁边那两个就此不可见。
+ *
+ * 世界矩阵与容差都与捕捉共用：各算一遍必然在某个缩放下差半个像素，而「多近算靠近」在这个产品
+ * 里只该有一个数。
+ *
+ * @returns 最近的那个在容差内的符号，连同它的全部端口；没有则 `null`。
+ * @public
+ */
+export function collectStageRevealedPorts(
+  document: ComposeDocument,
+  index: StageSceneIndex,
+  point: StagePoint,
+  tolerance: number,
+): StageRevealedPorts | null {
+  if (!(tolerance > 0)) return null
+  const limit = tolerance * tolerance
+  let best: { readonly revealed: StageRevealedPorts; readonly distance: number } | null = null
+
+  for (const entityId of index.order) {
+    const entity = document.entities[entityId]
+    if (!entity || !getComposeVisibility(entity).visible) continue
+    const ports = getComposeEntityPorts(entity)
+    if (ports.length === 0) continue
+    const matrix = index.getWorldMatrix(entityId)
+    if (!matrix) continue
+    const points = ports.map((port) => applyMatrix(matrix, port.position))
+    // 符号的入选资格看它**最近的那个**端口：够到任何一个端子，整组就该显现。
+    let nearest = Number.POSITIVE_INFINITY
+    for (const candidate of points) {
+      const dx = candidate.x - point.x
+      const dy = candidate.y - point.y
+      nearest = Math.min(nearest, dx * dx + dy * dy)
+    }
+    if (nearest > limit) continue
+    if (best === null || nearest < best.distance) {
+      best = { revealed: { entityId, points }, distance: nearest }
+    }
+  }
+  return best?.revealed ?? null
+}
+
+/** 一条导线端点的呈现信息。 @public */
+export interface StageWireEnd {
+  readonly entityId: string
+  readonly key: 'start' | 'end'
+  readonly point: StagePoint
+  readonly state: ComposeWireEndState
+}
+
+/**
+ * 求出一条导线两端的世界落点与接线状态。
+ *
+ * @remarks
+ * 落点走 `projectComposeCurveToBox` 与 Entity 世界矩阵——与命中、捕捉同一条链，否则记号会在
+ * 盒被拉宽之后停在旧位置。状态走 `getComposeWireEndState`，与 Wire Inspector 同一个入口。
+ *
+ * @returns 不是导线、几何不是直线或缺少布局盒时为空。
+ * @public
+ */
+export function collectStageWireEnds(
+  document: ComposeDocument,
+  index: StageSceneIndex,
+  entityId: string,
+): readonly StageWireEnd[] {
+  const entity = document.entities[entityId]
+  if (!entity || !getComposeVisibility(entity).visible) return []
+  const wire = getComposeWire(entity)
+  const geometry = getComposeCurve(entity)
+  const box = index.layoutSnapshot.boxes[entityId]
+  const matrix = index.getWorldMatrix(entityId)
+  if (!wire || !geometry || !box || !matrix) return []
+  const curve = projectComposeCurveToBox(geometry, box)
+  /*
+   * **两端就是首尾两个顶点**，因此直线与多段线走同一条路——只认 `line` 的症状是「折线导线
+   * 选中之后两端什么都不显示」。中间的拐点不画记号：它不接任何东西。
+   */
+  if (curve.kind === 'arc') return []
+  const ends = curve.kind === 'line'
+    ? [curve.start, curve.end]
+    : [curve.vertices[0], curve.vertices[curve.vertices.length - 1]]
+  const [first, last] = ends
+  if (!first || !last) return []
+  return [
+    { key: 'start' as const, local: first, binding: wire.start },
+    { key: 'end' as const, local: last, binding: wire.end },
+  ].map(({ key, local, binding }) => ({
+    entityId,
+    key,
+    point: applyMatrix(matrix, local),
+    state: getComposeWireEndState(document, binding),
+  }))
 }

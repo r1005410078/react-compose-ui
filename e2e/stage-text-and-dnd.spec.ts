@@ -313,8 +313,13 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器�
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const frameBoundary = stage.getByTestId('stage-frame-boundary-frame-root')
+  /*
+   * `toBeVisible()` 之后再取 `boundingBox()` 是两次往返：负载高时元素可以在两次之间重新
+   * 布局，第二次拿回 null。轮询到真的量得到为止。
+   */
+  await expect.poll(() => frameBoundary.boundingBox()).not.toBeNull()
+  const outputBox = await frameBoundary.boundingBox()
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()

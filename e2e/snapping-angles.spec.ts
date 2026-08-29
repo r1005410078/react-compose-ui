@@ -228,16 +228,21 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 同一个形状的其他顶�
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
   const marker = stage.getByTestId('stage-drafting-snap')
 
-  // 矩形 = 一个 Entity 上的四个顶点。坐标刻意**都不在网格上**（步长 8）：落在网格上时
+  // 闭合多段线 = 一个 Entity 上的四个顶点。坐标刻意**都不在网格上**（步长 8）：落在网格上时
   // 网格与捕捉给出同一个答案，这条就没有判别力了——而「顶点不在网格上就永远落不上去」
   // 正是这个缺陷在屏幕上的样子。
+  //
+  // 用 `PLINE` + `C` 而不是 `RECTANGLE`：后者产出的是矩形**物料**，没有顶点可编辑。
   const corner = { x: 203, y: 305 }
   const opposite = { x: 403, y: 505 }
-  await commandInput.fill('REC')
+  await commandInput.fill('PL')
   await commandInput.press('Enter')
   await typePoint(commandInput, corner.x, corner.y)
+  await typePoint(commandInput, opposite.x, corner.y)
   await typePoint(commandInput, opposite.x, opposite.y)
-  await commandInput.press('Escape')
+  await typePoint(commandInput, corner.x, opposite.y)
+  await commandInput.fill('C')
+  await commandInput.press('Enter')
   await expect(stage.getByTestId('compose-material-curve-stroke')).toHaveCount(1)
 
   const view = await worldToScreen(page)

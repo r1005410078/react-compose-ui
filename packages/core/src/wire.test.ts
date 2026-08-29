@@ -83,6 +83,42 @@ function endpoints(value: ComposeDocument, snapshot: ComposeLayoutSnapshot, id: 
   }
 }
 
+/** 一条带两个拐点的折线导线：(100,100) → (200,100) → (200,200) → (300,260)。 */
+function polylineWireEntity(
+  id: string,
+  binding: { readonly start?: unknown; readonly end?: unknown },
+): ComposeEntity {
+  const geometry = normalizeComposeCurveGeometry({
+    kind: 'polyline',
+    vertices: [
+      { x: 100, y: 100 }, { x: 200, y: 100 }, { x: 200, y: 200 }, { x: 300, y: 260 },
+    ],
+    closed: false,
+  })
+  const base = wireEntity(id, binding)
+  return {
+    ...base,
+    components: {
+      ...base.components,
+      LayoutItem: {
+        ...(base.components.LayoutItem as Record<string, unknown>),
+        offset: geometry.offset,
+        width: { mode: 'fixed', value: geometry.size.width, min: null, max: null },
+        height: { mode: 'fixed', value: geometry.size.height, min: null, max: null },
+      },
+      Curve: geometry.curve,
+    } as ComposeEntity['components'],
+  }
+}
+
+/** 折线导线的全部顶点，世界坐标。 */
+function vertices(value: ComposeDocument, snapshot: ComposeLayoutSnapshot, id: string) {
+  const curve = value.entities[id]!.components.Curve as
+    { readonly vertices: readonly { x: number; y: number }[] }
+  const box = snapshot.boxes[id]!
+  return curve.vertices.map(({ x, y }) => ({ x: box.x + x, y: box.y + y }))
+}
+
 describe('Wire Component', () => {
   it('两端可选，缺席即自由端', () => {
     expect(isValidComposeWire({})).toBe(true)
@@ -169,6 +205,63 @@ describe('resolveComposeWires', () => {
     expect(points.start).toMatchObject({ x: 180, y: 60 })
     // 自由端一动不动。
     expect(points.end).toMatchObject({ x: 300, y: 260 })
+  })
+
+  it('OpenSpec: compose-document / 导线几何求解不存储 / 多段线只动被绑的那一端', () => {
+    const value = documentFixture(
+      {
+        device: deviceEntity('device', 100, 100),
+        wire: polylineWireEntity('wire', { start: { entityId: 'device', portId: 'L1' } }),
+      },
+      ['device', 'wire'],
+    )
+    const moved: ComposeDocument = {
+      ...value,
+      entities: { ...value.entities, device: deviceEntity('device', 180, 60) },
+    }
+    const after = resolveComposeWires(moved, snapshotOf(moved))
+    const points = vertices(after.document, after.snapshot, 'wire')
+
+    // 首顶点落到端口的新位置上。
+    expect(points[0]).toMatchObject({ x: 180, y: 60 })
+    /*
+     * 中间两个拐点与末顶点**一个都不动**——绑定端移动之后第一段会变斜，这是明写的代价。
+     * 不补偿相邻顶点：两端都可能绑定时中间该听谁的没有答案，而半条「保持正交」的规则产出的
+     * 形状用户预测不了。
+     */
+    expect(points[1]).toMatchObject({ x: 200, y: 100 })
+    expect(points[2]).toMatchObject({ x: 200, y: 200 })
+    expect(points[3]).toMatchObject({ x: 300, y: 260 })
+  })
+
+  it('OpenSpec: compose-document / 导线几何求解不存储 / 两端都绑时首尾各自落到自己的端口上', () => {
+    const value = documentFixture(
+      {
+        a: deviceEntity('a', 100, 100),
+        b: deviceEntity('b', 300, 260),
+        wire: polylineWireEntity('wire', {
+          start: { entityId: 'a', portId: 'L1' },
+          end: { entityId: 'b', portId: 'L1' },
+        }),
+      },
+      ['a', 'b', 'wire'],
+    )
+    const moved: ComposeDocument = {
+      ...value,
+      entities: {
+        ...value.entities,
+        a: deviceEntity('a', 60, 40),
+        b: deviceEntity('b', 400, 300),
+      },
+    }
+    const after = resolveComposeWires(moved, snapshotOf(moved))
+    const points = vertices(after.document, after.snapshot, 'wire')
+
+    expect(points[0]).toMatchObject({ x: 60, y: 40 })
+    expect(points[3]).toMatchObject({ x: 400, y: 300 })
+    // 中间的拐点仍然一个都不动。
+    expect(points[1]).toMatchObject({ x: 200, y: 100 })
+    expect(points[2]).toMatchObject({ x: 200, y: 200 })
   })
 
   it('绕实例自己的旋转基点转', () => {

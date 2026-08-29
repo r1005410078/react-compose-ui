@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>画圆与画弧</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --page-bg: #f4f6f9;
+    --page-panel: #ffffff;
+    --page-ink: #141a22;
+    --page-muted: #5a6472;
+    --page-line: #dde3ec;
+    --page-accent: #1f6feb;
+
+    /* 画布 token —— 取自 packages/stage/src/styles.css，两个主题下都不变 */
+    --canvas: #11151b;
+    --canvas-border: #2c3542;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #0d1117;
+      --page-panel: #151b23;
+      --page-ink: #e6edf7;
+      --page-muted: #99a3b2;
+      --page-line: #262f3b;
+      --page-accent: #4d9cff;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --page-bg: #0d1117;
+    --page-panel: #151b23;
+    --page-ink: #e6edf7;
+    --page-muted: #99a3b2;
+    --page-line: #262f3b;
+    --page-accent: #4d9cff;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--page-ink);
+    font-family: 'IBM Plex Sans SC', system-ui, -apple-system, 'PingFang SC', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede { max-width: var(--measure); color: var(--page-muted); margin: 0; }
+
+  h2 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .section-head { display: flex; flex-direction: column; gap: 4px; }
+  .section-head p { max-width: var(--measure); margin: 0; color: var(--page-muted); }
+
+  .answers { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .answer {
+    background: var(--page-panel);
+    border: 1px solid var(--page-line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .answer .q {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+  .answer .a { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .answer .why { font-size: 13.5px; color: var(--page-muted); line-height: 1.6; }
+
+  .stage {
+    border-radius: 10px;
+    overflow: hidden;
+    background:
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      var(--canvas);
+    border: 1px solid var(--canvas-border);
+  }
+  .stage svg { display: block; width: 100%; height: auto; }
+
+  .step { display: flex; flex-direction: column; gap: 12px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; }
+  .step-n {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--page-accent);
+    letter-spacing: 0.08em;
+    flex: none;
+  }
+  .step-title { font-weight: 600; letter-spacing: -0.01em; }
+  .step-note { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+  .step-note code, p code, td code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--page-accent) 12%, transparent);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 40px; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--page-line); vertical-align: top; }
+  th {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+    font-weight: 500;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 500; white-space: nowrap; }
+  .swatch {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 3px;
+    margin-right: 7px;
+    vertical-align: -1px;
+    border: 1px solid rgb(128 128 128 / 35%);
+  }
+  .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .reject {
+    border-left: 3px solid var(--page-line);
+    padding: 2px 0 2px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .reject h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .reject p { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+
+  .callout {
+    background: color-mix(in srgb, var(--page-accent) 7%, var(--page-panel));
+    border: 1px solid color-mix(in srgb, var(--page-accent) 26%, transparent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .callout strong { font-weight: 600; }
+  .callout p { margin: 0; font-size: 14px; max-width: var(--measure); }
+
+  footer {
+    border-top: 1px solid var(--page-line);
+    padding-top: 20px;
+    color: var(--page-muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">SDD 补充 · 绘图交互</div>
+    <h1>画圆与画弧</h1>
+    <p class="lede">
+      两条命令共用画线、画矩形已经定下的那副骨架，只在「这一步有几个数、量的是什么」上不同。
+      画布片段按 Stage 的真实 token 1:1 绘制，图上每一段几何都与框里的数值对得上。
+    </p>
+  </header>
+
+  <section>
+    <div class="answers">
+      <div class="answer">
+        <div class="q">圆有几个字段</div>
+        <div class="a">一个：半径</div>
+        <div class="why">
+          圆是旋转对称的，半径点的角度对结果没有任何影响。<code>D</code> 把它换成直径。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">弧有几个字段</div>
+        <div class="a">两个：距离与角度</div>
+        <div class="why">
+          与画线一样，从<strong>上一个点</strong>起算——第二点从起点，第三点从途经点。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">两点时画什么</div>
+        <div class="a">一条虚线，不是弧</div>
+        <div class="why">
+          两个点定不出弧。画一段假弧是在撒谎，而第三个点会把它整个换掉。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="callout">
+    <strong>圆只有一个数，这是「矩形不画角度弧」同一条判断的第三次应用</strong>
+    <p>
+      判据一直是同一句：<strong>这个数影响结果吗</strong>。矩形轴对齐，角度恒为 0；圆旋转对称，
+      半径点的角度落在哪儿画出来都一样。一个永远不影响结果的只读字段比没有更差——它占着屏幕、
+      占着 <code>Tab</code> 的一个去处，却什么也不回答。
+      推论：<strong><code>Tab</code> 在 <code>CIRCLE</code> 里不接管</strong>，因为没有第二个字段可去。
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>圆：四个状态</h2>
+      <p>从按下 <code>C</code> 到画完一个圆。</p>
+    </div>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">01</span>
+          <span class="step-title">按 C，指定圆心</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="命令启动后，光标旁显示绝对坐标 X 与 Y">
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M378 200h46M436 200h46M430 148v46M430 206v46"/><rect x="424" y="194" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(465.50 220.00)">
+            <rect width="69" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="69" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="25.36" y="4" width="36.28" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="11" y="16.5" fill="#4d9cff">X</text>
+            <text x="43.5" y="16.5" fill="#ffffff" text-anchor="middle">1240</text>
+            </g>
+            <g transform="translate(569.50 220.00)">
+            <rect width="61" height="24" rx="3" fill="#12171e" fill-opacity="0.94" stroke="#2c3542" stroke-width="1.5"/>
+            <text x="11" y="16.5" fill="#7d8797">Y</text>
+            <text x="39.5" y="16.5" fill="#cfd6e3" text-anchor="middle">620</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定圆心:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">与画线、画矩形完全一样：第一个点没有「上一个点」，量不出任何东西，因此这一档是绝对坐标。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">02</span>
+          <span class="step-title">指定半径</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="圆的预览与一条沿半径的标注线，数值框落在标注线的中点">
+            <circle cx="300" cy="200" r="150" stroke="#4d9cff" stroke-width="1.6" fill="none"/>
+            <path d="M300.00 200.00L420.00 110.00" stroke="#4d9cff" stroke-width="1.4" stroke-dasharray="6 4" stroke-opacity="0.8" fill="none"/>
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M300 200L326.40 235.20M420 110L446.40 145.20M326.40 235.20L362.00 208.50M410.80 171.90L446.40 145.20"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="326.40" cy="235.20" r="2"/><circle cx="446.40" cy="145.20" r="2"/></g>
+            <circle cx="300" cy="200" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M368 110h46M426 110h46M420 58v46M420 116v46"/><rect x="414" y="104" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(363.90 178.20)">
+            <rect width="45" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="45" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="8.27" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="22.5" y="16.5" fill="#ffffff" text-anchor="middle">150</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定半径或 [直径(D)]:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note"><strong>只有一个字段。</strong>圆是旋转对称的——半径点的角度对结果没有任何影响，一个永远不影响结果的只读字段比没有更差。这是「矩形不画角度弧」同一条判断的第三次应用。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">03</span>
+          <span class="step-title">打了 D，切成直径</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="标注线跨过整条直径，数值框在圆心处">
+            <circle cx="300" cy="200" r="150" stroke="#4d9cff" stroke-width="1.6" fill="none"/>
+            <path d="M180.00 290.00L420.00 110.00" stroke="#4d9cff" stroke-width="1.4" stroke-dasharray="6 4" stroke-opacity="0.8" fill="none"/>
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M180 290L206.40 325.20M420 110L446.40 145.20M206.40 325.20L295.60 258.30M357.20 212.10L446.40 145.20"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="206.40" cy="325.20" r="2"/><circle cx="446.40" cy="145.20" r="2"/></g>
+            <circle cx="300" cy="200" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M368 110h46M426 110h46M420 58v46M420 116v46"/><rect x="414" y="104" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(295.90 223.20)">
+            <rect width="61" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="61" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="25.27" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="11" y="16.5" fill="#4d9cff">⌀</text>
+            <text x="39.5" y="16.5" fill="#ffffff" text-anchor="middle">300</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定直径或 [半径(R)]:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">同一个框换一个量：标注线跟着从半径变成整条直径，用户一眼看出自己在打哪个数。画元器件时端子直径是标注直接给出的量，少一次心算。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">04</span>
+          <span class="step-title">打了 120，还没回车</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="键入的那一刻圆就跟着走：预览已经是半径 120，光标停在更外面">
+            <circle cx="300" cy="200" r="120" stroke="#4d9cff" stroke-width="1.6" fill="none"/>
+            <path d="M300.00 200.00L395.32 127.11" stroke="#4d9cff" stroke-width="1.4" stroke-dasharray="6 4" stroke-opacity="0.8" fill="none"/>
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M300 200L326.73 234.95M395.32293995726354 127.10598709150436L422.05 162.06M326.73 234.95L350.16 217.03M398.62 179.98L422.05 162.06"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="326.73" cy="234.95" r="2"/><circle cx="422.05" cy="162.06" r="2"/></g>
+            <circle cx="300" cy="200" r="3" fill="#4d9cff"/>
+            <path d="M395.32 127.11L470 70" stroke="#4d9cff" stroke-width="1" stroke-opacity="0.3" stroke-dasharray="3 5" fill="none"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M418 70h46M476 70h46M470 18v46M470 76v46"/><rect x="464" y="64" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(342.89 186.50)">
+            <rect width="63" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="63" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <text x="22.5" y="16.5" fill="#ffffff" text-anchor="middle">120</text>
+            <rect x="46" y="6" width="2" height="12" fill="#4d9cff"/>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定半径或 [直径(D)]:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note"><strong>单字段命令没有「锁定」这一档。</strong>锁定是 <code>Tab</code> 的产物，而 <code>Tab</code> 在只有一个字段时没有去处；键入一个数再回车就直接完成了，中间没有「锁住半径、继续用鼠标定别的东西」可言——圆是旋转对称的，半径一定，形状就已经定死。因此这一档画的是<strong>正在键入</strong>：预览跟着键入的值走，不再跟着光标。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>弧：四个状态</h2>
+      <p>三点定弧，从按下 <code>A</code> 开始。</p>
+    </div>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">05</span>
+          <span class="step-title">按 A，指定起点</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="弧的第一个点同样是绝对坐标">
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M378 200h46M436 200h46M430 148v46M430 206v46"/><rect x="424" y="194" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(469.50 220.00)">
+            <rect width="61" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="61" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="25.27" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="11" y="16.5" fill="#4d9cff">X</text>
+            <text x="39.5" y="16.5" fill="#ffffff" text-anchor="middle">860</text>
+            </g>
+            <g transform="translate(569.50 220.00)">
+            <rect width="61" height="24" rx="3" fill="#12171e" fill-opacity="0.94" stroke="#2c3542" stroke-width="1.5"/>
+            <text x="11" y="16.5" fill="#7d8797">Y</text>
+            <text x="39.5" y="16.5" fill="#cfd6e3" text-anchor="middle">440</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定起点:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">三点定弧。AutoCAD 有十一种起算方式，三点式覆盖鼠标绘制的绝大多数。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">06</span>
+          <span class="step-title">指定途经点</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="两点还定不出弧，预览是一条直线；长度与角度从起点起算">
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M200 300L222.00 338.11M373.205 200L395.21 238.11M222.00 338.11L282.19 303.36M335.02 272.86L395.21 238.11M200 300L400.00 300.00M400.00 300.00A200.00 200.00 0 0 0 398.81 278.18M383.08 219.49A200.00 200.00 0 0 0 373.205 200"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="222.00" cy="338.11" r="2"/><circle cx="395.21" cy="238.11" r="2"/></g>
+            <path d="M200 300L373.20 200" stroke="#4d9cff" stroke-width="1.6" stroke-dasharray="6 4" fill="none"/>
+            <circle cx="200" cy="300" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M321 200h46M379 200h46M373 148v46M373 206v46"/><rect x="367" y="194" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(286.10 276.11)">
+            <rect width="45" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="45" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="8.27" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="22.5" y="16.5" fill="#ffffff" text-anchor="middle">200</text>
+            </g>
+            <g transform="translate(370.69 236.24)">
+            <rect width="45" height="24" rx="3" fill="#12171e" fill-opacity="0.94" stroke="#2c3542" stroke-width="1.5"/>
+            <text x="22.5" y="16.5" fill="#cfd6e3" text-anchor="middle">30°</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定途经点:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note"><strong>预览画的是一条虚线而不是一段弧</strong>：两个点定不出弧，画一段假弧是在撒谎——用户会以为形状已经定了，而第三个点会把它整个换掉。虚线说的正是「还没定」。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">07</span>
+          <span class="step-title">指定端点</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="三点定出完整的弧；长度与角度从途经点起算">
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M330 190L308.00 228.10M485.88 280L463.88 318.10M308.00 228.10L359.53 257.85M412.35 288.36L463.88 318.10M330 190L510.00 190.00M510.00 190.00A180.00 180.00 0 0 1 509.55 202.61M491.80 268.86A180.00 180.00 0 0 1 485.88 280"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="308.00" cy="228.10" r="2"/><circle cx="463.88" cy="318.10" r="2"/></g>
+            <path d="M150 320A185.37 185.37 0 0 1 485.88 280" stroke="#4d9cff" stroke-width="1.6" fill="none"/>
+            <path d="M330.00 190.00L485.88 280.00" stroke="#4d9cff" stroke-width="1.4" stroke-dasharray="6 4" stroke-opacity="0.8" fill="none"/>
+            <circle cx="150" cy="320" r="3" fill="#4d9cff"/>
+            <circle cx="330" cy="190" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M434 280h46M492 280h46M486 228v46M486 286v46"/><rect x="480" y="274" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(363.44 261.10)">
+            <rect width="45" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="45" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="8.27" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="22.5" y="16.5" fill="#ffffff" text-anchor="middle">180</text>
+            </g>
+            <g transform="translate(477.36 224.59)">
+            <rect width="53" height="24" rx="3" fill="#12171e" fill-opacity="0.94" stroke="#2c3542" stroke-width="1.5"/>
+            <text x="26.5" y="16.5" fill="#cfd6e3" text-anchor="middle">-30°</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定端点:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">两个数从<strong>途经点</strong>起算，不是从起点——与 <code>LINE</code> 的「上一个点」是同一条规则。这一段弧的半径是 <span class="num">185</span>，但<strong>不给它一个只读的半径框</strong>：第三个字段没有输入语义，而屏幕上已经有两个数在跟着光标动了。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">08</span>
+          <span class="step-title">三点共线：被拒，但命令不结束</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="三点共线时给出说明并收回第三点，用户直接重取">
+            <path d="M180 300L380 230" stroke="#4d9cff" stroke-width="1.6" fill="none"/>
+            <path d="M380 230L560 167" stroke="#ffa53c" stroke-width="1.6" stroke-dasharray="6 4" fill="none"/>
+            <circle cx="180" cy="300" r="3" fill="#4d9cff"/>
+            <circle cx="380" cy="230" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M508 167h46M566 167h46M560 115v46M560 173v46"/><rect x="554" y="161" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#ffa53c" font-family="'IBM Plex Sans SC', sans-serif">三点共线，无法定弧</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">沿一条既有直线连点三下在实际操作里很常见，外接圆退化成直线、无解。<strong>结束命令会让用户从头再来</strong>，而他只是最后一点点歪了——因此收回这一点、停在原提示。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>规格</h2>
+      <p>与画线、画矩形不同的行用粗体标出；没标的都与它们逐字相同。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>部件</th><th>圆</th><th>弧</th></tr></thead>
+        <tbody>
+          <tr><td>取点</td><td>圆心 + 半径点，取够即结束</td><td>起点 + 途经点 + 端点</td></tr>
+          <tr><td>拖动</td><td>2 点，取够即结束</td><td><strong>❌ 只支持点击</strong></td></tr>
+          <tr><td>第一个点</td><td colspan="2">绝对坐标 <code>X</code> / <code>Y</code>，不画标注</td></tr>
+          <tr><td>之后每一步</td><td><strong>一个字段：半径</strong></td><td>距离 + 角度，从<strong>上一个点</strong>起算</td></tr>
+          <tr><td>角度弧</td><td><strong>不画</strong></td><td>画</td></tr>
+          <tr><td>关键字</td><td><strong><code>D</code> 直径 / <code>R</code> 半径</strong></td><td>—</td></tr>
+          <tr><td><code>Tab</code></td><td><strong>不接管（只有一个字段）</strong></td><td>锁定离开的、解开进入的</td></tr>
+          <tr><td>锁定</td><td><strong>没有这一档</strong></td><td>有，与画线一致</td></tr>
+          <tr><td>正在键入时</td><td colspan="2"><strong>预览跟着键入的值走，不再跟着光标</strong></td></tr>
+          <tr><td>预览</td><td>整圆</td><td><strong>两点时是虚线，三点时是弧</strong></td></tr>
+          <tr><td><strong>被量的那一段</strong></td><td><strong>圆心 → 光标的半径线（<code>D</code> 时是整条直径）</strong></td><td><strong>上一点 → 光标</strong></td></tr>
+          <tr><td>退化</td><td>半径为 0 时被拒</td><td><strong>三点共线时被拒，且不结束会话</strong></td></tr>
+          <tr><td>落地</td><td>扫掠 360 的弧（<code>&lt;circle&gt;</code>）</td><td>一个 <code>arc</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>拒绝的三种画法</h2>
+    </div>
+
+    <div class="reject">
+      <h3>给圆一个只读的角度框</h3>
+      <p>
+        SDD 初稿写的是「半径可编辑，角度只读」。走一遍就知道它是错的：那个数无论是多少，画出来的
+        圆一模一样。它占着屏幕、占着 <code>Tab</code> 的去处，却什么也不回答。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>给圆画一个「半径已锁定」的状态</h3>
+      <p>
+        锁定是 <code>Tab</code> 的产物，而 <code>Tab</code> 在只有一个字段时没有去处。就算画出来，
+        那一档里移动鼠标也不会改变任何东西——圆是旋转对称的，半径一定形状就定死了。
+        这与「不给圆一个只读角度框」是同一个原因：屏幕上不该出现一个鼠标动了也没反应的状态。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>弧取两点时就画一段弧</h3>
+      <p>
+        两个点定不出弧——要画就得替用户猜一个半径。用户会以为形状已经定了，而第三个点会把它整个
+        换掉。虚线说的正是「还没定」。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>给弧的第三步加一个只读的半径框</h3>
+      <p>
+        半径对弧确实有意义，但那一步已经有两个数在跟着光标动了，第三个没有输入语义的数只是噪音。
+        真要读半径，画完在属性面板里看。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>需要你拍板的一条</h2>
+    </div>
+    <div class="reject">
+      <h3><code>D</code> 是一次性切换，还是记住上次的选择？</h3>
+      <p>
+        AutoCAD 记住：上一次用了直径，下一次 <code>CIRCLE</code> 默认还是直径。这对「一张图上全是
+        标注直径的端子」很省事，代价是这条命令有了一份看不见的状态——用户过两天回来，同一条命令
+        问的问题变了。我倾向<strong>不记住</strong>：每次都从半径起步，要直径就打一下 <code>D</code>。
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    SDD：<code>docs/drafting-interaction-sdd.md</code> ·
+    画线：<code>docs/mockups/drafting-dynamic-input.html</code> ·
+    画矩形：<code>docs/mockups/drafting-rectangle-dynamic-input.html</code>
+  </footer>
+
+</div>
+
+</body>
+</html>

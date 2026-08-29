@@ -68,6 +68,37 @@ export const DEFAULT_CIRCLE_GEOMETRY: ComposeCurve = Object.freeze({
   sweep: 360,
 } satisfies ComposeCurve)
 
+/**
+ * 导线的默认描边：一次回路的红色粗实线。
+ *
+ * @remarks
+ * **红色不是装饰，它就是这个领域里导线的样子。**变电站监控画面的通行惯例是
+ * 红 = 合闸/带电、绿 = 分闸/停电，而储能、光伏这类一次接线图画的是**正常运行**的系统——
+ * 整条一次回路本来就是带电的，因此实机上通篇是红。默认画成红，与实施工程师画完之后想要的
+ * 样子一致。
+ *
+ * **绿是错的答案**：它在一次图里表示分闸/停电，正好相反。（初版曾照抄 KiCad 的导线绿——那是
+ * PCB 原理图的惯例，那张图上颜色是空闲的语义通道，而这里不是。）
+ *
+ * 颜色**仍然留给数据绑定**：`stroke` 是可绑定的 Renderer prop，项目要做拓扑着色（带电红、
+ * 停电绿）时绑它即可。红只是「还没绑」这一档的取值，而它取的正是最常见的那一档。
+ *
+ * `#ff3b30` 而不是纯红 `#ff0000`：两者都是红，但纯红在深色画布上视觉上会「振」，而这个值在
+ * 编辑画布（≈5.1:1）与浅底页面（≈3.6:1）上都过图形元素的 3:1 门槛——场景背景默认透明，导线
+ * 是会被发布出去的真实像素。
+ *
+ * 线宽 2 是一次回路的粗实线，沿用电气制图的既有读图习惯（二次回路与标注细实线）。这与
+ * {@link DEFAULT_CURVE_PROPS} 上「2 明显偏粗」那条注释不冲突：**那条的前提是所有线一起
+ * 加粗**，而只有主回路粗、标注与辅助几何细，恰恰是那条观察想要的结果。
+ *
+ * @internal
+ */
+export const DEFAULT_WIRE_PROPS: JsonObject = Object.freeze({
+  ...DEFAULT_CURVE_PROPS,
+  stroke: '#ff3b30',
+  strokeWidth: 2,
+})
+
 /** Arrow 的默认描边：终点箭头。 @internal */
 export const DEFAULT_ARROW_PROPS: JsonObject = Object.freeze({
   ...DEFAULT_CURVE_PROPS,

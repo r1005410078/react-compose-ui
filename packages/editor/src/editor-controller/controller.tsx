@@ -1,6 +1,6 @@
 import { CommandPanelWithActions } from './command-panel-actions'
 import { createComposeEditorActionHandlers } from './action-catalog'
-import type { ComposeEditorActionHandlerContext } from './action-catalog'
+import type { ComposeEditorActionHandler, ComposeEditorActionHandlerContext } from './action-catalog'
 import { ComposeComponentPalette } from '@compose-ui/stage'
 import {
   ComposeComponentLibraryPanel,
@@ -46,6 +46,7 @@ import {
   type EditorCommand,
   type EditorTransaction,
   type TransactionRuntime,
+  type ComposeAngleConstraint,
 } from '@compose-ui/core'
 import {
   useCallback,
@@ -1095,6 +1096,18 @@ export function useComposeEditorController({
   const setViewport = viewportStore.setViewport
   const [tool, setTool] = useState<ComposeStageTool>(initialTool)
   /**
+   * 角度约束与极轴增量角。
+   *
+   * @remarks
+   * 由 controller 持有而不是留在 Stage 内部：工具栏要画按下态，而事实来源只能有一份——
+   * Stage 记一份、工具栏记一份必然漂移。
+   *
+   * 它们是**会话级视图状态**，不进文档、不进撤销历史：这是「怎么画」而不是「画了什么」，
+   * 与网格显示同一条判断。默认极轴——它只在光标靠近某条射线时才吸，不挡任何画法。
+   */
+  const [angleConstraint, setAngleConstraint] = useState<ComposeAngleConstraint>('polar')
+  const [polarIncrement, setPolarIncrement] = useState(45)
+  /**
    * Stage 的命令式句柄与它上报的当前命令 id。
    *
    * @remarks
@@ -1489,7 +1502,17 @@ export function useComposeEditorController({
     const context = actionContextRef.current
     if (!context) return false
     // 执行层在按键时才构建：既避开渲染期读取 ref，也保证拿到的是最新选区与文档。
-    const handler = createComposeEditorActionHandlers(context)[action]
+    const handlers = createComposeEditorActionHandlers(context)
+    /*
+     * Stage 的动作集是编辑器目录的**超集**：绘图命令（`drafting.*`）只在 Stage 的命令注册表
+     * 里，编辑器**刻意**不给它们建目录项——那会为已经能敲 `LINE` 的动作造第二个词，正是
+     * 「已经有等价画布命令的动作不再造第二个词」禁止的那一类。
+     *
+     * 因此目录里没有的动作 MUST 回 false（= 没有接管），让 Stage 走自己的内建分支。回 true
+     * 会把这些按键静默吃掉，而症状是「按 L 没反应」，与键位没绑上无法区分。
+     */
+    const handler = (handlers as Partial<Record<ComposeStageDelegatableAction, ComposeEditorActionHandler>>)[action]
+    if (!handler) return false
     // 不可用动作也算已接管：此时执行层是空操作，回退到 Stage 内建实现反而会产生不一致行为。
     handler.run()
     return true
@@ -1536,6 +1559,9 @@ export function useComposeEditorController({
     onToolChange: setTool,
     // 按下态的事实来源在 Stage：命令的结束不由点击决定。
     onActiveCommandChange: setActiveCommandId,
+    angleConstraint,
+    onAngleConstraintChange: setAngleConstraint,
+    polarIncrement,
     onShortcutAction: runShortcutAction,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
@@ -1560,6 +1586,8 @@ export function useComposeEditorController({
     viewportStore,
     setViewport,
     autoFitActiveFrame,
+    angleConstraint,
+    polarIncrement,
     tool,
     setTool,
     selectedIds,
@@ -1962,6 +1990,10 @@ export function useComposeEditorController({
         startCommand={startCommand}
         toggleSnap={toggleSnap}
         tool={tool}
+        angleConstraint={angleConstraint}
+        setAngleConstraint={setAngleConstraint}
+        polarIncrement={polarIncrement}
+        setPolarIncrement={setPolarIncrement}
       />
     ),
   }

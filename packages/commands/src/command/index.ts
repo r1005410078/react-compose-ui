@@ -16,6 +16,7 @@ export type {
   ComposeCommandInputKind,
   ComposeCommandKeyword,
   ComposeCommandPoint,
+  ComposeCommandPointFields,
   ComposeCommandPrompt,
   ComposeCommandSession,
   ComposeCommandStep,

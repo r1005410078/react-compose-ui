@@ -5,9 +5,11 @@ import { expect, test } from '@playwright/test'
  *
  * @remarks
  * 判别点有两处：整圆必须渲染成 `<circle>`（`A` 命令在起终点重合时画不出东西），
- * 矩形必须是**一个** `<polygon>` 而不是四条线。
+ * 闭合多段线必须是**一个** `<polygon>` 而不是四条线。
+ *
+ * 闭合的那一个用 `PLINE` + `C` 画：`RECTANGLE` 产出的是矩形**物料**，不是曲线。
  */
-test('OpenSpec: compose-document / 弧与多段线 / 画圆、矩形、弧并各成一个 Entity', async ({ page }) => {
+test('OpenSpec: compose-document / 弧与多段线 / 画圆、闭合多段线、弧并各成一个 Entity', async ({ page }) => {
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
@@ -27,12 +29,15 @@ test('OpenSpec: compose-document / 弧与多段线 / 画圆、矩形、弧并各
   await expect(prompt).toContainText('指定半径')
   await page.mouse.click(at(300, 200).x, at(300, 200).y)
 
-  // 矩形：两个对角点。
-  await commandInput.fill('REC')
+  // 闭合多段线：四个顶点 + C。
+  await commandInput.fill('PL')
   await commandInput.press('Enter')
-  await expect(prompt).toContainText('指定第一个角点')
+  await expect(prompt).toContainText('指定第一点')
   await page.mouse.click(at(400, 160).x, at(400, 160).y)
+  await page.mouse.click(at(540, 160).x, at(540, 160).y)
   await page.mouse.click(at(540, 260).x, at(540, 260).y)
+  await page.mouse.click(at(400, 260).x, at(400, 260).y)
+  await stage.getByTestId('stage-drafting-command-keyword-C').click()
 
   // 弧：三点。
   await commandInput.fill('A')
@@ -45,7 +50,7 @@ test('OpenSpec: compose-document / 弧与多段线 / 画圆、矩形、弧并各
   await expect(strokes).toHaveCount(3)
 
   const tags = await strokes.evaluateAll((nodes) => nodes.map((node) => node.tagName.toLowerCase()))
-  // 整圆是 circle、矩形是**一个** polygon、弧是 path——三种 kind 各走各的渲染分支。
+  // 整圆是 circle、闭合多段线是**一个** polygon、弧是 path——三种 kind 各走各的渲染分支。
   expect(tags.sort()).toEqual(['circle', 'path', 'polygon'])
 
   // 切回设计模式：三个都是普通页面 Entity，场景树里各一行。
@@ -56,6 +61,33 @@ test('OpenSpec: compose-document / 弧与多段线 / 画圆、矩形、弧并各
   await expect(strokes).toHaveCount(2)
 })
 
+test('OpenSpec: stage-engine / 连续取点命令的闭合关键字 / LINE 的 C 补上收尾那一段', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const prompt = stage.getByTestId('stage-drafting-command-prompt')
+  await expect(stage.getByTestId('stage-surface')).toBeVisible()
+  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
+
+  await commandInput.fill('L')
+  await commandInput.press('Enter')
+  await page.mouse.click(at(240, 200).x, at(240, 200).y)
+  // 只取过一个点时够不着闭合，提示里没有它。
+  await expect(stage.getByTestId('stage-drafting-command-keyword-C')).toHaveCount(0)
+
+  await page.mouse.click(at(400, 200).x, at(400, 200).y)
+  await page.mouse.click(at(400, 320).x, at(400, 320).y)
+  await expect(prompt).toContainText('闭合(C)')
+
+  // `LINE` 逐段落地，因此闭合是补第四段——三段画出来的加上收尾那一条。
+  await stage.getByTestId('stage-drafting-command-keyword-C').click()
+  await expect(stage.getByTestId('compose-material-curve-stroke')).toHaveCount(3)
+  await expect(prompt).toContainText('命令：')
+})
+
 test('OpenSpec: stage-engine / 绘图命令 / PLINE 攒成一个 Entity 且可放弃上一点', async ({ page }) => {
   await page.goto('/')
 
@@ -63,8 +95,9 @@ test('OpenSpec: stage-engine / 绘图命令 / PLINE 攒成一个 Entity 且可�
   const stage = editor.getByRole('application', { name: 'Stage' })
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
-  await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = stage.getByTestId('stage-surface')
+  await expect.poll(() => surface.boundingBox()).not.toBeNull()
+  const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const strokes = stage.getByTestId('compose-material-curve-stroke')
 
@@ -147,8 +180,9 @@ test('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 拖盒手�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surfaceLocator = stage.getByTestId('stage-surface')
+  await expect.poll(() => surfaceLocator.boundingBox()).not.toBeNull()
+  const surface = (await surfaceLocator.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
@@ -233,7 +267,8 @@ test('OpenSpec: basic-materials / 物料统一 / 箭头与圆是曲线，填充�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
-  await expect(frame).toBeVisible()
+  // `toBeVisible()` 之后再取 box 是两次往返：负载高时元素会在两次之间重新布局，第二次拿回 null。
+  await expect.poll(() => frame.boundingBox()).not.toBeNull()
   const frameBox = (await frame.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: frameBox.x + dx, y: frameBox.y + dy })
 

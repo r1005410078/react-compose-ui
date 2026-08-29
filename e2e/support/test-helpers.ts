@@ -20,9 +20,13 @@ export async function pointerDrop(page: Page, source: Locator, target: { x: numb
 export async function drawContainer(page: Page, editor: Locator) {
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
-  await expect(output).toBeVisible()
+  /*
+   * `toBeVisible()` 之后再 `boundingBox()` 是两趟往返：布局在首帧之后还会动一下，中间那一刻
+   * 量到的可能是 `null`。轮询到量得出来为止，否则症状是这条断言在满载时偶发地红，而看起来
+   * 像画布坏了。
+   */
+  await expect.poll(() => output.boundingBox()).not.toBeNull()
   const outputBox = await output.boundingBox()
-  expect(outputBox).not.toBeNull()
 
   await editor.getByRole('button', { name: '创建容器' }).click()
   await page.mouse.move(outputBox!.x + 48, outputBox!.y + 64)
@@ -165,6 +169,12 @@ export async function emptyWorkspaceRect(page: Page, editor: Locator) {
 export async function openPageInspector(page: Page, editor: Locator) {
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
+  /*
+   * `toBeVisible()` 与 `boundingBox()` 是两趟往返，中间布局可以再动一次——切工作区标签之后
+   * 尤其如此。断言可见的那一刻它有盒，量的时候可能已经没有了，`boundingBox()` 于是回 `null`，
+   * 症状是一句与本用例毫无关系的 `Cannot read properties of null`。轮询到量得着为止。
+   */
+  await expect.poll(() => stage.boundingBox()).not.toBeNull()
   const stageBox = (await stage.boundingBox())!
   const region = largestBlankRegion(stageBox, await frameScreenBoxes(stage), MIN_CLICKABLE_BLANK)
   expect(region, 'stage 视口里找不到场景之外的空白处').toBeTruthy()

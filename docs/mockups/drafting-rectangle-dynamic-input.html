@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>画矩形的动态输入</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --page-bg: #f4f6f9;
+    --page-panel: #ffffff;
+    --page-ink: #141a22;
+    --page-muted: #5a6472;
+    --page-line: #dde3ec;
+    --page-accent: #1f6feb;
+
+    /* 画布 token —— 取自 packages/stage/src/styles.css，两个主题下都不变 */
+    --canvas: #11151b;
+    --canvas-border: #2c3542;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #0d1117;
+      --page-panel: #151b23;
+      --page-ink: #e6edf7;
+      --page-muted: #99a3b2;
+      --page-line: #262f3b;
+      --page-accent: #4d9cff;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --page-bg: #0d1117;
+    --page-panel: #151b23;
+    --page-ink: #e6edf7;
+    --page-muted: #99a3b2;
+    --page-line: #262f3b;
+    --page-accent: #4d9cff;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--page-ink);
+    font-family: 'IBM Plex Sans SC', system-ui, -apple-system, 'PingFang SC', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede { max-width: var(--measure); color: var(--page-muted); margin: 0; }
+
+  h2 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .section-head { display: flex; flex-direction: column; gap: 4px; }
+  .section-head p { max-width: var(--measure); margin: 0; color: var(--page-muted); }
+
+  .answers { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .answer {
+    background: var(--page-panel);
+    border: 1px solid var(--page-line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .answer .q {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+  .answer .a { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .answer .why { font-size: 13.5px; color: var(--page-muted); line-height: 1.6; }
+
+  .stage {
+    border-radius: 10px;
+    overflow: hidden;
+    background:
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      var(--canvas);
+    border: 1px solid var(--canvas-border);
+  }
+  .stage svg { display: block; width: 100%; height: auto; }
+
+  .step { display: flex; flex-direction: column; gap: 12px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; }
+  .step-n {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--page-accent);
+    letter-spacing: 0.08em;
+    flex: none;
+  }
+  .step-title { font-weight: 600; letter-spacing: -0.01em; }
+  .step-note { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+  .step-note code, p code, td code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--page-accent) 12%, transparent);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 40px; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--page-line); vertical-align: top; }
+  th {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+    font-weight: 500;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 500; white-space: nowrap; }
+  .swatch {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 3px;
+    margin-right: 7px;
+    vertical-align: -1px;
+    border: 1px solid rgb(128 128 128 / 35%);
+  }
+  .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .reject {
+    border-left: 3px solid var(--page-line);
+    padding: 2px 0 2px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .reject h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .reject p { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+
+  .callout {
+    background: color-mix(in srgb, var(--page-accent) 7%, var(--page-panel));
+    border: 1px solid color-mix(in srgb, var(--page-accent) 26%, transparent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .callout strong { font-weight: 600; }
+  .callout p { margin: 0; font-size: 14px; max-width: var(--measure); }
+
+  footer {
+    border-top: 1px solid var(--page-line);
+    padding-top: 20px;
+    color: var(--page-muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">SDD 补充 · 绘图交互</div>
+    <h1>画矩形的动态输入</h1>
+    <p class="lede">
+      与画线共用同一条规则，只是标注从一条变成两条正交的。画布片段按 Stage 的真实 token
+      1:1 绘制，图上每一段几何都与框里的数值对得上。
+    </p>
+  </header>
+
+  <section>
+    <div class="answers">
+      <div class="answer">
+        <div class="q">宽摆在哪里</div>
+        <div class="a">上边外侧标注线的中点</div>
+        <div class="why">
+          两条延伸线从上边的两个角点向外引 48&nbsp;px，标注线平行于所量的那条边，在框后断开。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">高摆在哪里</div>
+        <div class="a">右边外侧标注线的中点</div>
+        <div class="why">
+          同一条规则的第二次应用。两条标注互相正交，因此不会挤在一起。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">角度呢</div>
+        <div class="a">没有角度</div>
+        <div class="why">
+          矩形是轴对齐的，角度恒为 <span class="num">0°</span>。画一条永远指向 0° 的弧是噪音。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="callout">
+    <strong>与画线是同一条规则：框落在自己那条标注的中点上，标注在框后面断开</strong>
+    <p>
+      画线时那条规则管一条长度标注和一段角度弧；画矩形时它管两条正交的边长标注。
+      规则一个字没变，因此用户在两条命令之间不需要重新学任何东西——这正是把「框摆在哪里」
+      收敛成一句话的价值。
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>五个状态</h2>
+      <p>从按下 <code>R</code> 到画完一个矩形。编号是实际顺序。</p>
+    </div>
+
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">01</span>
+          <span class="step-title">按 R，还没取第一个角点</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="命令启动后，光标旁显示绝对坐标 X 与 Y">
+            <g stroke="#cbd5e4" stroke-width="1.6" fill="none"><rect x="96" y="290" width="72" height="34"/><path d="M60 307h36M168 307h34"/></g>
+            <circle cx="202" cy="307" r="3" fill="#11151b" stroke="#cbd5e4" stroke-width="1.6"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M500 210h46M558 210h46M552 158v46M552 216v46"/><rect x="546" y="204" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(570 226)"><rect width="98" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/><rect width="98" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/><text x="11" y="16.5" fill="#4d9cff">X</text><text x="30" y="16.5" fill="#ffffff">1240</text></g>
+            <g transform="translate(674 226)"><rect width="98" height="24" rx="3" fill="#12171e" fill-opacity="0.94" stroke="#2c3542" stroke-width="1.5"/><text x="11" y="16.5" fill="#7d8797">Y</text><text x="30" y="16.5" fill="#cfd6e3">620</text></g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定第一个角点</text>
+            <g font-size="11" font-family="'IBM Plex Sans SC', sans-serif"><rect x="700" y="7" width="76" height="17" rx="8" fill="#22303f"/><text x="738" y="19" fill="#8fb8e8" text-anchor="middle">对象捕捉 开</text><rect x="784" y="7" width="60" height="17" rx="8" fill="#20242b"/><text x="814" y="19" fill="#6e7787" text-anchor="middle">正交 关</text></g>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">与画线完全一样：第一个点没有「上一点」，量不出宽高，因此这一档是绝对坐标。<code>X</code> 是活动字段，直接打数字就进去了。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">02</span>
+          <span class="step-title">拖出矩形，宽是活动字段</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="矩形上方与右侧各一条标注，数值框落在标注线的中点，标注在框后断开">
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M150 140V92M590 140V92M150 92H331.00M409.00 92H590M590 140H638M590 320H638M638 140V210.00M638 250.00V320"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="150" cy="92" r="2"/><circle cx="590" cy="92" r="2"/><circle cx="638" cy="140" r="2"/><circle cx="638" cy="320" r="2"/></g>
+            <rect x="150" y="140" width="440" height="180" fill="none" stroke="#4d9cff" stroke-width="1.6"/>
+            <circle cx="150" cy="320" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M538 140h46M596 140h46M590 88v46M590 146v46"/><rect x="584" y="134" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(339.00 80.00)">
+            <rect width="62" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="62" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="16.77" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="31.0" y="16.5" fill="#ffffff" text-anchor="middle">440</text>
+            </g>
+            <g transform="translate(607.00 218.00)">
+            <rect width="62" height="24" rx="3" fill="#12171e" fill-opacity="0.94" stroke="#2c3542" stroke-width="1.5"/>
+            <text x="31.0" y="16.5" fill="#cfd6e3" text-anchor="middle">180</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定另一个角点</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">两条标注跟着光标实时重画，数值取的是<strong>解算之后的落点</strong>——与预览矩形的角、捕捉标记、十字光标是同一个值。<strong>标注摆在靠近光标的那两条边外侧</strong>：从左下往右上拖就是上边和右边，反向拖就换到下边和左边，视线始终不用离开光标。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">03</span>
+          <span class="step-title">Tab：焦点换到高，宽被锁住</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="按 Tab 后宽框变成实心蓝并带锁标记，高框接管键盘输入">
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M150 140V92M590 140V92M150 92H331.00M409.00 92H590M590 140H638M590 320H638M638 140V210.00M638 250.00V320"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="150" cy="92" r="2"/><circle cx="590" cy="92" r="2"/><circle cx="638" cy="140" r="2"/><circle cx="638" cy="320" r="2"/></g>
+            <rect x="150" y="140" width="440" height="180" fill="none" stroke="#4d9cff" stroke-width="1.6"/>
+            <circle cx="150" cy="320" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M538 140h46M596 140h46M590 88v46M590 146v46"/><rect x="584" y="134" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(339.00 80.00)">
+            <rect width="62" height="24" rx="3" fill="#4d9cff"/>
+            <text x="25.0" y="16.5" fill="#08101c" font-weight="600" text-anchor="middle">440</text>
+            <g transform="translate(43 7)"><rect x="0" y="4" width="9" height="7" fill="#08101c" fill-opacity="0.72"/><path d="M1.6 4V2.6a2.9 2.9 0 0 1 5.8 0V4" fill="none" stroke="#08101c" stroke-opacity="0.72" stroke-width="1.5"/></g>
+            </g>
+            <g transform="translate(607.00 218.00)">
+            <rect width="62" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="62" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="16.77" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="31.0" y="16.5" fill="#ffffff" text-anchor="middle">180</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定另一个角点</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note"><strong>Tab 在换焦点的同时锁住它离开的那个字段</strong>（AutoCAD 的行为）。这让「拖个大概的宽度 → Tab → 打一个精确的高度」变成两步。想解锁就再 Tab 回去重打。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">04</span>
+          <span class="step-title">打了 300 回车，光标继续往外走</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="宽度锁定为 300，矩形右边停在锁定处，只有高度还跟着光标">
+            <path d="M450 54V360" fill="none" stroke="#4d9cff" stroke-width="1" stroke-opacity="0.3" stroke-dasharray="3 5"/>
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M150 120V72M450 120V72M150 72H261.00M339.00 72H450M450 120H498M450 320H498M498 120V200.00M498 240.00V320"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="150" cy="72" r="2"/><circle cx="450" cy="72" r="2"/><circle cx="498" cy="120" r="2"/><circle cx="498" cy="320" r="2"/></g>
+            <rect x="150" y="120" width="300" height="200" fill="none" stroke="#4d9cff" stroke-width="1.6"/>
+            <circle cx="150" cy="320" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M538 120h46M596 120h46M590 68v46M590 126v46"/><rect x="584" y="114" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(269.00 60.00)">
+            <rect width="62" height="24" rx="3" fill="#4d9cff"/>
+            <text x="25.0" y="16.5" fill="#08101c" font-weight="600" text-anchor="middle">300</text>
+            <g transform="translate(43 7)"><rect x="0" y="4" width="9" height="7" fill="#08101c" fill-opacity="0.72"/><path d="M1.6 4V2.6a2.9 2.9 0 0 1 5.8 0V4" fill="none" stroke="#08101c" stroke-opacity="0.72" stroke-width="1.5"/></g>
+            </g>
+            <g transform="translate(467.00 208.00)">
+            <rect width="62" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="62" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <text x="31.0" y="16.5" fill="#ffffff" text-anchor="middle">200</text>
+            <rect x="46.73" y="6" width="2" height="12" fill="#4d9cff"/>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定另一个角点</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">锁定之后光标可以跑到锁死的那条边之外，矩形不跟过去——这是「宽已经定了、高还在跟鼠标」唯一说得清楚的画法，与画线锁定长度时画那个半径圆是同一条处理。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">05</span>
+          <span class="step-title">按住 Shift：约束成正方形</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="两个数值相等，矩形被约束成正方形">
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M180 90V42M420 90V42M180 42H261.00M339.00 42H420M420 90H468M420 330H468M468 90V190.00M468 230.00V330"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="180" cy="42" r="2"/><circle cx="420" cy="42" r="2"/><circle cx="468" cy="90" r="2"/><circle cx="468" cy="330" r="2"/></g>
+            <rect x="180" y="90" width="240" height="240" fill="none" stroke="#4d9cff" stroke-width="1.6"/>
+            <circle cx="180" cy="330" r="3" fill="#4d9cff"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M368 90h46M426 90h46M420 38v46M420 96v46"/><rect x="414" y="84" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(269.00 30.00)">
+            <rect width="62" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="62" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="16.77" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="31.0" y="16.5" fill="#ffffff" text-anchor="middle">240</text>
+            </g>
+            <g transform="translate(437.00 198.00)">
+            <rect width="62" height="24" rx="3" fill="#12171e" fill-opacity="0.94" stroke="#2c3542" stroke-width="1.5"/>
+            <text x="31.0" y="16.5" fill="#cfd6e3" text-anchor="middle">240</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定另一个角点</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note"><code>Shift</code> 是临时约束，松开即恢复。两个框仍然各自可编辑——打一个数字进去，另一个跟着变成同一个值。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>规格</h2>
+      <p>可以直接照着实现的那一份。与画线不同的行用粗体标出。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>部件</th><th>几何 / 行为</th></tr></thead>
+        <tbody>
+          <tr><td>预览矩形</td><td>第一个角点 → 当前<strong>解算之后</strong>的落点，两点为对角</td></tr>
+          <tr><td><strong>标注摆在哪两条边</strong></td><td><strong>靠近光标的那两条边外侧</strong>；反向拖时换边</td></tr>
+          <tr><td>延伸线</td><td>从所量那条边的两个角点向外引 48&nbsp;px，末端一个点</td></tr>
+          <tr><td>标注线</td><td>平行于所量的边，连接两条延伸线的末端，<strong>在框后断开</strong></td></tr>
+          <tr><td>数值框</td><td>落在标注线的中点上</td></tr>
+          <tr><td><strong>没有角度弧</strong></td><td><strong>矩形轴对齐，角度恒为 0</strong></td></tr>
+          <tr><td>活动字段</td><td>蓝框 + 数字<strong>整体选中</strong>，打第一个字符即替换全部</td></tr>
+          <tr><td>非活动字段</td><td>灰底灰字，跟着光标读数</td></tr>
+          <tr><td><code>Tab</code></td><td>焦点换到另一个字段，<strong>并锁定它离开的那个</strong></td></tr>
+          <tr><td>已锁定</td><td>实心蓝 + 锁标记；那条边不再跟光标，另画一条虚线示意锁在哪</td></tr>
+          <tr><td><code>Shift</code></td><td>约束成正方形，松开即恢复</td></tr>
+          <tr><td>十字光标</td><td>短臂，臂长按 <code>CURSORSIZE</code>；中间是拾取框</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>拒绝的三种画法</h2>
+    </div>
+
+    <div class="reject">
+      <h3>长度 + 角度（沿对角线量）</h3>
+      <p>
+        AutoCAD 的动态输入全程只有「长度/角度」一套字段，画矩形时给的是对角线长度和一个
+        <span class="num">37°</span>。用户想知道这个框多宽，还得自己开根号。我们的字段由命令
+        声明，没有必要跟着受这个限制。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>把宽高写进一个框，<span class="num">440 × 180</span></h3>
+      <p>
+        看起来更省地方，但两个数就没法分别锁定，<code>Tab</code> 也没有去处。而「锁住宽、
+        只改高」正是画元器件外框时最常做的事。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>标注永远摆在上边和右边</h3>
+      <p>
+        实现最简单，但从右上往左下拖的时候标注会跑到图形的另一头，用户的视线要在光标和标注
+        之间来回跳。跟着光标那两条边走，代价只是一次符号判断。
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    SDD：<code>docs/drafting-interaction-sdd.md</code> · 画线那一份：<code>docs/mockups/drafting-dynamic-input.html</code>
+  </footer>
+
+</div>
+
+</body>
+</html>

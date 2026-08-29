@@ -29,6 +29,19 @@
   --compose-stage-marquee-crossing: #3ddc84;
 
   /*
+   * 接线相关的三个 token。端口与「已绑定」同色——它们说的是同一件事的两个时刻（这里可以接 /
+   * 这里接上了）；自由端是中性色（没接不是错）。
+   *
+   * **失效刻意不用红**，尽管红在别处正是 `danger`：导线自己的默认墨色就是红（一次回路带电色），
+   * 红记号画在红线上等于没画。改用琥珀——告警色族里红之后的那一个。它与捕捉标记的橙相近，但
+   * 两者**形状不同**（端点是圆、捕捉是方框），而这块画布上的规则本来就是「形状先分开，颜色
+   * 再分开」。
+   */
+  --compose-stage-port: #38bdf8;
+  --compose-stage-wire-free: #8b97a8;
+  --compose-stage-wire-dangling: #f59e0b;
+
+  /*
    * 绘图模式给命令行**留出底部一条**，而不是让它浮在图面上。
    *
    * 命令行原先是 `bottom: 0` 的绝对定位层，横跨整个 Stage 宽度：左端 24px 压在竖标尺
@@ -63,6 +76,11 @@
   --compose-stage-snap: #b45309;
   --compose-stage-grip-hot: #c81e2a;
   --compose-stage-marquee-crossing: #15803d;
+
+  /* 浅底上的亮蓝、浅灰与琥珀读不出来，各压深一档。 */
+  --compose-stage-port: #0369a1;
+  --compose-stage-wire-free: #5b6675;
+  --compose-stage-wire-dangling: #a16207;
 }
 
 .compose-stage[data-compose-theme='light'] .compose-stage__surface {
@@ -1239,6 +1257,18 @@
   stroke-width: 2;
 }
 
+/*
+ * 取点期间显现的端口。
+ *
+ * 自己的 token 而不是借捕捉那个橙：两者会同时出现在同一个点上，而它们回答两个问题——
+ * 「这里可以接」与「落点吸上了它」。实心小圆 vs 空心方框，形状先分开，颜色再分开。
+ */
+.compose-stage__drafting-port {
+  fill: var(--compose-stage-port, #38bdf8);
+  stroke: var(--compose-workspace-bg, #11151b);
+  stroke-width: 1;
+}
+
 /* 被 MOVE/COPY/ERASE 作用的对象轮廓。虚线以区别于选中框的实线。 */
 .compose-stage__drafting-outline {
   fill: none;
@@ -1270,4 +1300,152 @@
   z-index: 8;
   box-sizing: border-box;
   height: var(--compose-stage-command-size);
+}
+
+/*
+ * 动态输入：光标旁的数值与它们的标注。
+ *
+ * 每个颜色都带字面量兜底。`var()` 解析不到且没有兜底时整条声明在计算期失效，`fill` 于是
+ * 退回初值**黑色**——那正好是深色画布上「什么都看不见」的样子，而它在浅色主题下反而正常，
+ * 因此极容易漏掉。
+ */
+.compose-stage__dynamic-input {
+  pointer-events: none;
+}
+
+.compose-stage__dynamic-input-guide {
+  fill: none;
+  stroke: var(--compose-stage-dynamic-input-guide, #8ab4e8);
+  stroke-dasharray: 2 4;
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+
+.compose-stage__dynamic-input-lock {
+  fill: none;
+  stroke: var(--compose-accent, #3687ff);
+  stroke-dasharray: 3 5;
+  stroke-opacity: 0.3;
+  stroke-width: 1;
+}
+
+/*
+ * 候选落点到光标的连线：正在键入时几何停在键入的值上，而光标还在动。
+ *
+ * 比锁定示意更淡：锁定画的是约束的形状（落点还能沿着它滑动），这条只是把两个已经确定的点
+ * 接起来，说的是「我在这儿、图形在那儿」。
+ */
+.compose-stage__dynamic-input-connector {
+  fill: none;
+  stroke: var(--compose-accent, #3687ff);
+  stroke-dasharray: 3 5;
+  stroke-opacity: 0.3;
+  stroke-width: 1;
+}
+
+/*
+ * 极轴/正交的追踪射线：说的是「你正沿着这条线」，不是「松手会变成什么」。
+ *
+ * 因此它属于**标注**那一族（与角度弧的 0° 参考射线同色同点画）而不是预览那一族——用 accent
+ * 上色会让它和橡皮筋、预览挤在同一个语义里，用户读不出哪条是约束、哪条是将要产出的几何。
+ */
+.compose-stage__drafting-tracking-ray {
+  stroke: var(--compose-stage-dynamic-input-guide, #8ab4e8);
+  stroke-dasharray: 2 4;
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+
+/*
+ * 被量的那一段：标注量的是哪一段，不画它两条延伸线就从空处伸出来。
+ *
+ * 它属于**标注**这一族（与延伸线同色），但比延伸线更实——更长的点画、更高的不透明度。
+ * 预览是 accent 色的另一族，因此「形状是什么」与「这个数量的是哪一段」一眼可分。
+ */
+.compose-stage__dynamic-input-measured {
+  fill: none;
+  stroke: var(--compose-stage-dynamic-input-guide, #8ab4e8);
+  stroke-dasharray: 6 4;
+  stroke-opacity: 0.8;
+  stroke-width: 1;
+}
+
+.compose-stage__dynamic-input-tick {
+  fill: var(--compose-stage-dynamic-input-guide, #8ab4e8);
+  fill-opacity: 0.75;
+}
+
+.compose-stage__dynamic-input-box {
+  fill: var(--compose-surface-raised, #12171e);
+  fill-opacity: 0.94;
+  stroke: var(--compose-border, #2c3542);
+  stroke-width: 1.5;
+}
+
+.compose-stage__dynamic-input-box[data-state='active'] {
+  stroke: var(--compose-accent, #3687ff);
+}
+
+/* 锁定：实心，与「还在跟鼠标」一眼可分。 */
+.compose-stage__dynamic-input-box[data-state='locked'] {
+  fill: var(--compose-accent, #3687ff);
+  fill-opacity: 1;
+  stroke: var(--compose-accent, #3687ff);
+}
+
+.compose-stage__dynamic-input-text,
+.compose-stage__dynamic-input-prefix {
+  font-family: var(--compose-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.compose-stage__dynamic-input-text {
+  fill: var(--compose-text, #e6edf7);
+}
+
+.compose-stage__dynamic-input-text[data-state='locked'] {
+  fill: var(--compose-surface-raised, #08101c);
+  font-weight: 600;
+}
+
+.compose-stage__dynamic-input-prefix {
+  fill: var(--compose-accent, #3687ff);
+}
+
+/* 锁标记与光标条：由框的状态派生，颜色跟着框走。 */
+.compose-stage__dynamic-input-lock-glyph {
+  fill: var(--compose-surface-raised, #08101c);
+  fill-opacity: 0.72;
+  stroke: var(--compose-surface-raised, #08101c);
+  stroke-opacity: 0.72;
+}
+
+.compose-stage__dynamic-input-caret {
+  fill: var(--compose-accent, #3687ff);
+}
+
+/*
+ * 导线端点的接线状态。
+ *
+ * 三种状态各自的颜色见 token 定义处：已绑定与端口同色（同一件事的两个时刻），自由是中性色
+ * （没接不是错），失效借 `danger`（它确实是一个缺陷）。描边取画布底色，让记号压在线上时仍
+ * 读得出边界。
+ */
+.compose-stage__wire-end {
+  stroke: var(--compose-workspace-bg, #11151b);
+  stroke-width: 1.5;
+}
+
+.compose-stage__wire-end[data-wire-end='bound'] {
+  fill: var(--compose-stage-port, #38bdf8);
+}
+
+/* 自由端是空心的：它没接上，中间不该有东西。 */
+.compose-stage__wire-end[data-wire-end='free'] {
+  fill: var(--compose-workspace-bg, #11151b);
+  stroke: var(--compose-stage-wire-free, #8b97a8);
+}
+
+.compose-stage__wire-end[data-wire-end='dangling'] {
+  fill: var(--compose-stage-wire-dangling, #f2545b);
 }

@@ -57,6 +57,24 @@ export interface ComposeCommandLineProps {
   readonly onSubmit: (text: string) => void
   /** 用户按下 Esc；两级语义由宿主判定，本组件只负责上报。 */
   readonly onCancel: () => void
+  /**
+   * 缓冲变化时上报当前完整文本。
+   *
+   * @remarks
+   * 宿主据此把正在键入的内容渲染到别处（Stage 把它显示在光标旁的数值框里）。组件仍持有
+   * 那一个缓冲，**不做成受控输入**——受控会让每一次按键都跨包往返一趟。
+   */
+  readonly onTextChange?: (text: string) => void
+  /**
+   * 接管 `Tab`：上报当前文本并清空缓冲，焦点不动。
+   *
+   * @remarks
+   * 缺省时 `Tab` 走浏览器默认行为。`Tab` 是键盘用户的焦点导航键，**无条件劫持会把人困在
+   * 输入框里**，因此接管与否由调用方按当前上下文决定，而不是本组件恒定接管。
+   *
+   * 本组件不认识数值字段、参数化或任何具体命令：它只知道「有人要接管 `Tab`」。
+   */
+  readonly onFieldAdvance?: (text: string) => void
   /** 指向输入框的 ref；宿主用它把键盘落点收回命令行。 */
   readonly inputRef?: RefObject<HTMLInputElement | null>
   /**

@@ -12,7 +12,9 @@ type StageToolbarIconName =
   | 'grid-snap'
   | 'line'
   | 'move'
+  | 'ortho'
   | 'pan'
+  | 'polar'
   | 'polyline'
   | 'rectangle'
   | 'rotate'
@@ -147,6 +149,22 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
       <>
         <circle cx="12" cy="12" r="3" />
         <path d="M19 13.5v-3l-2.1-.7-.5-1.2 1-2-2.1-2.1-2 1-1.2-.5L10.5 3h-3l-.7 2.1-1.2.5-2-1-2.1 2.1 1 2-.5 1.2-2 .7v3l2 .7.5 1.2-1 2 2.1 2.1 2-1 1.2.5.7 2.1h3l.7-2.1 1.2-.5 2 1 2.1-2.1-1-2 .5-1.2z" transform="translate(2.5 0) scale(.79 1)" />
+      </>
+    ),
+    // 正交：一个直角——它只把点钳到水平或竖直这两个方向上。
+    ortho: (
+      <>
+        <path d="M5 5v14h14" />
+        <path d="M5 12h7v7" />
+      </>
+    ),
+    // 极轴：从一点发散的几条射线，其中一条被追踪着（实线），其余是可选的方向。
+    polar: (
+      <>
+        <path d="M4 20h16" />
+        <path d="M4 20 18 6" />
+        <path d="M4 20v-16" opacity=".45" />
+        <path d="M4 20 20 12" opacity=".45" />
       </>
     ),
     'smart-snap': (

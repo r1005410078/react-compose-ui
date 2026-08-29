@@ -36,6 +36,7 @@ import {
 import {
   createStageInteractionController,
   stageCurveOutline,
+  collectStageWireEnds,
   createStageSceneIndex,
   getEntityWorldBounds,
   resolveStageDropIndicator,
@@ -46,6 +47,7 @@ import {
   type StageGripTarget,
   type StagePoint,
   type StageRect,
+  type StageWireEnd,
 } from '@compose-ui/stage-engine'
 import { fitViewportTo } from './stage-viewport-actions'
 import type {
@@ -164,6 +166,9 @@ function ComposeStageReady({
   document,
   handleRef,
   onActiveCommandChange,
+  angleConstraint,
+  onAngleConstraintChange,
+  polarIncrement,
   layoutSnapshot,
   layoutPreviewSnapshot,
   measurementAdapter,
@@ -450,8 +455,12 @@ function ComposeStageReady({
     specifyThroughPoint: messages.draftingSpecifyThroughPoint,
     specifyCenter: messages.draftingSpecifyCenter,
     specifyRadius: messages.draftingSpecifyRadius,
+    specifyDiameter: messages.draftingSpecifyDiameter,
+    diameterKeyword: messages.draftingDiameterKeyword,
+    radiusKeyword: messages.draftingRadiusKeyword,
     specifyCorner: messages.draftingSpecifyCorner,
     specifyOppositeCorner: messages.draftingSpecifyOppositeCorner,
+    closeKeyword: messages.draftingCloseKeyword,
     undoKeyword: messages.draftingUndoKeyword,
     collinearArc: messages.draftingCollinearArc,
     degenerateShape: messages.draftingDegenerateShape,
@@ -466,8 +475,9 @@ function ComposeStageReady({
     specifyNewLocation: messages.draftingSpecifyNewLocation,
     expectedSingleObject: messages.draftingExpectedSingleObject,
     editGeometry: messages.editGeometry,
-    orthoOn: messages.draftingOrthoOn,
-    orthoOff: messages.draftingOrthoOff,
+    angleOrtho: messages.draftingAngleOrtho,
+    anglePolar: messages.draftingAnglePolar,
+    angleOff: messages.draftingAngleOff,
     snapOn: messages.draftingSnapOn,
     snapOff: messages.draftingSnapOff,
   }), [messages])
@@ -539,6 +549,9 @@ function ComposeStageReady({
     // `VERTEX` 是几何编辑的第二个入口，与双击产出同一个会话。
     onEnterGeometryEditing: enterGeometryEditing,
     isGeometryEditable,
+    ...(angleConstraint ? { angleConstraint } : {}),
+    ...(onAngleConstraintChange ? { onAngleConstraintChange } : {}),
+    ...(polarIncrement === undefined ? {} : { polarIncrement }),
   })
   /*
    * 句柄的实现就是把 id 喂给命令行已经在用的那个启动函数。
@@ -565,6 +578,10 @@ function ComposeStageReady({
 
   // 单向上报：宿主 chrome 的按下态读它，事实来源留在会话这一侧。
   const activeCommandId = draftingSession.activeCommandId
+  const isCommandActive = useCallback(() => activeCommandId !== null, [activeCommandId])
+  const awaitingPoint = draftingSession.awaitingPoint
+  const isAwaitingPoint = useCallback(() => awaitingPoint, [awaitingPoint])
+  const focusCommandInput = useCallback(() => { commandInputRef.current?.focus() }, [])
   const latestActiveCommandChange = useRef(onActiveCommandChange)
   useLayoutEffect(() => { latestActiveCommandChange.current = onActiveCommandChange })
   useEffect(() => {
@@ -775,6 +792,31 @@ function ComposeStageReady({
     return outline.length > 1 ? outline : null
   }, [document, normalizedSelection, sceneIndex, tool])
 
+  /**
+   * 要画出来的导线端点记号。
+   *
+   * @remarks
+   * 判据是**用户问了才想知道，还是没问也必须知道**，两个答案因此刻意不对称：
+   *
+   * - 「这一端接到哪儿」是问的时候才想知道的 → **选中时**画。常驻的话，两百条线的图上会多出
+   *   四百个记号，而其中绝大多数此刻没人在看。
+   * - 「这个绑定坏了」是没问也必须知道的 → **常驻**。等用户主动选中那条线才显形，等于把发现
+   *   缺陷的责任推给他，而他恰恰不知道该去选哪一条。
+   *
+   * 因此这里扫的是整份文档而不只是选择集：失效端不在选择集里也要出现。
+   */
+  const wireEnds = useMemo(() => {
+    const selected = new Set(normalizedSelection)
+    const result: StageWireEnd[] = []
+    for (const entityId of sceneIndex.order) {
+      const ends = collectStageWireEnds(document, sceneIndex, entityId)
+      for (const end of ends) {
+        if (end.state === 'dangling' || selected.has(entityId)) result.push(end)
+      }
+    }
+    return result
+  }, [document, normalizedSelection, sceneIndex])
+
   useFinalControllerDisposal(privateController)
 
   const {
@@ -831,6 +873,14 @@ function ComposeStageReady({
     executeClipboard,
     hiddenEntityIds,
     idFactory,
+    // 命令取点时把图面上的坐标字符与 `Tab` 转交命令行——它是坐标与动态输入唯一的输入端，
+    // 而用户点完第一个点之后焦点就在图面上了。
+    advanceField: draftingSession.advanceField
+      ? () => { draftingSession.advanceField?.('') }
+      : null,
+    focusCommandLine: focusCommandInput,
+    isAwaitingPoint,
+    isCommandActive,
     isTextEditing: isTextEditingActive,
     layoutSnapshot,
     messages,
@@ -842,6 +892,8 @@ function ComposeStageReady({
     onViewportChange,
     selectionBounds: bounds,
     shortcuts: resolvedShortcuts,
+    // 键盘走的是命令行、工具栏按钮同一个启动函数，不另走一条。
+    startCommand: startDraftingCommand,
     surfaceSize,
     viewport,
   })
@@ -1073,8 +1125,11 @@ function ComposeStageReady({
             crosshair={crosshair}
             outlines={draftingSession.outlines}
             rubberBand={draftingSession.rubberBand}
+            trackingRay={draftingSession.trackingRay}
             previewOutline={draftingSession.previewOutline}
+            dynamicInput={draftingSession.dynamicInput}
             snap={draftingSession.snap}
+            revealedPorts={draftingSession.revealedPorts}
             surfaceSize={surfaceSize}
             viewport={viewport}
           />
@@ -1101,6 +1156,7 @@ function ComposeStageReady({
           screenBounds={screenBounds}
           selectionOutline={selectionOutline}
           snapGuides={snapGuides}
+          wireEnds={wireEnds}
           textEditing={textEditing !== null}
           tool={tool}
           visibleResizeHandles={visibleResizeHandles}
@@ -1139,6 +1195,8 @@ function ComposeStageReady({
           keywordsPrefix: messages.draftingKeywordsPrefix,
         }}
         notice={draftingSession.notice}
+        onFieldAdvance={draftingSession.advanceField ?? undefined}
+        onTextChange={draftingSession.setFieldText}
         prompt={draftingSession.prompt}
         status={[
           ...(draftingSession.selectionCount === null
@@ -1154,9 +1212,17 @@ function ComposeStageReady({
             active: draftingSession.snapEnabled,
           },
           {
-            id: 'ortho-state',
-            label: draftingSession.ortho ? messages.draftingOrthoOn : messages.draftingOrthoOff,
-            active: draftingSession.ortho,
+            /*
+             * 三态都渲染：只在开启时出现会让用户无法确认它现在是关的。三态互斥，因此这一个
+             * 标记就说得完——两个标记会让「都关」看起来像两件事。
+             */
+            id: 'angle-state',
+            label: draftingSession.angleConstraint === 'ortho'
+              ? messages.draftingAngleOrtho
+              : (draftingSession.angleConstraint === 'polar'
+                ? messages.draftingAnglePolar
+                : messages.draftingAngleOff),
+            active: draftingSession.angleConstraint !== 'off',
           },
         ]}
         testIdPrefix="stage-drafting"

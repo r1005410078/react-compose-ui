@@ -44,6 +44,7 @@ import {
   DEFAULT_COMPOSE_CIRCLE_PRESET,
   DEFAULT_COMPOSE_CURVE_PRESET,
   DEFAULT_COMPOSE_CURVE_RENDERER,
+  DEFAULT_COMPOSE_WIRE_PRESET,
 } from './curve'
 import type { ComposeBasicMaterials, ComposeCreateBasicMaterialsOptions } from './types'
 
@@ -74,6 +75,7 @@ export const DEFAULT_COMPOSE_BASIC_PRESETS = Object.freeze([
   DEFAULT_COMPOSE_CURVE_PRESET,
   DEFAULT_COMPOSE_ARROW_PRESET,
   DEFAULT_COMPOSE_CIRCLE_PRESET,
+  DEFAULT_COMPOSE_WIRE_PRESET,
 ])
 
 /** 为一个编辑器实例创建基础 ECS 物料和 Entity Registry。 @public */

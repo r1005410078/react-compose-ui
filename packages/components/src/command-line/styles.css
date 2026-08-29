@@ -42,3 +42,23 @@
   background: var(--compose-surface-raised, #1e2733);
   opacity: 1;
 }
+
+/*
+ * 关键字按钮：外观与提示行的其余文字一致，只在悬停/聚焦时显出可点。
+ * 括号里的字母本身就是操作说明，按钮不该把这一行变成一排控件。
+ */
+.compose-command-line__keyword {
+  appearance: none;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.compose-command-line__keyword:hover,
+.compose-command-line__keyword:focus-visible {
+  color: var(--compose-color-accent, currentcolor);
+  text-decoration: underline;
+}

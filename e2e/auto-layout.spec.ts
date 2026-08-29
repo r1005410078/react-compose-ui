@@ -499,7 +499,11 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 场景 Auto Layout 子
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
-  await expect(frame).toBeVisible()
+  /*
+   * `toBeVisible()` 之后再 `boundingBox()` 是两趟往返：布局在首帧之后还会动一下，中间那一刻
+   * 量到的可能是 `null`，而症状是下一行读 `.x` 报 TypeError，看起来像用例写错了。
+   */
+  await expect.poll(() => frame.boundingBox()).not.toBeNull()
   const frameBox = (await frame.boundingBox())!
 
   // 场景里画一个容器，作为 Auto Layout 采纳后的 flow 子级。拖拽绘制只剩容器与文字，

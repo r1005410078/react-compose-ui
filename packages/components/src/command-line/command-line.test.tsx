@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposeCommandLine } from './command-line'
 
@@ -42,6 +42,63 @@ describe('ComposeCommandLine', () => {
     })
     expect(screen.getByTestId('compose-command-prompt'))
       .toHaveTextContent('指定下一点或 [闭合(C)/放弃(U)]:')
+  })
+
+  describe('OpenSpec: components / 命令行上报正在键入的文本与字段推进', () => {
+    it('上报正在键入的文本', () => {
+      const onTextChange = vi.fn()
+      renderLine({ onTextChange })
+      fireEvent.change(screen.getByRole('textbox', { name: '命令行' }), { target: { value: '26' } })
+      expect(onTextChange).toHaveBeenLastCalledWith('26')
+    })
+
+    it('接管 Tab：上报文本、清空缓冲、焦点不动', () => {
+      const onFieldAdvance = vi.fn()
+      renderLine({ onFieldAdvance })
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      input.focus()
+      fireEvent.change(input, { target: { value: '260' } })
+
+      const event = createEvent.keyDown(input, { key: 'Tab' })
+      fireEvent(input, event)
+      expect(onFieldAdvance).toHaveBeenCalledWith('260')
+      expect(input).toHaveValue('')
+      expect(event.defaultPrevented).toBe(true)
+      expect(input).toHaveFocus()
+    })
+
+    it('未接管时 Tab 照常', () => {
+      renderLine()
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      // `Tab` 是键盘用户的焦点导航键，无条件劫持会把人困在输入框里。
+      const event = createEvent.keyDown(input, { key: 'Tab' })
+      fireEvent(input, event)
+      expect(event.defaultPrevented).toBe(false)
+    })
+  })
+
+  describe('OpenSpec: components / 命令行关键字可点', () => {
+    it('点关键字与键入等价', () => {
+      const { onSubmit } = renderLine({
+        prompt: {
+          message: '指定下一点',
+          accepts: ['point', 'keyword'] as const,
+          keywords: [{ key: 'C', label: '闭合' }, { key: 'U', label: '放弃' }],
+        },
+      })
+      // 那一行看起来与从前一模一样：方括号、斜杠与冒号逐字保留。
+      expect(screen.getByTestId('compose-command-prompt'))
+        .toHaveTextContent('指定下一点或 [闭合(C)/放弃(U)]:')
+
+      fireEvent.click(screen.getByRole('button', { name: '闭合(C)' }))
+      // 宿主收到的与用户键入 `C` 回车完全一致——它不需要知道走的是哪条路。
+      expect(onSubmit).toHaveBeenCalledWith('C')
+    })
+
+    it('没有关键字时不渲染按钮', () => {
+      renderLine({ prompt: { message: '指定第一点', accepts: ['point'] as const } })
+      expect(screen.queryByRole('button')).toBeNull()
+    })
   })
 
   it('引导词由文案注入而不是写死', () => {

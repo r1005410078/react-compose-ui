@@ -1,4 +1,6 @@
 import { worldToScreen, type StagePoint, type StageRect, type StageViewport } from '@compose-ui/stage-engine'
+import { StageDynamicInputLayer } from './dynamic-input'
+import type { StageDynamicInputAnnotation } from './dynamic-input'
 import type { StageFeaturePoint } from '@compose-ui/stage-engine'
 import {
   ComposeCanvasCrosshairLayer,
@@ -15,6 +17,16 @@ import {
  */
 const MARKER_SIZE = 10
 
+/**
+ * 端口记号的半径（屏幕像素）。
+ *
+ * @remarks
+ * 比捕捉标记（边长 {@link MARKER_SIZE} 的方框）**小且是圆**：两者会同时出现在同一个点上，
+ * 而它们说的是两件事——「这里可以接」与「落点吸上了它」。形状必须分开，MUST NOT 只靠颜色：
+ * 这块画布上颜色已经被捕捉、选中、框选与运行状态占了好几层。
+ */
+const PORT_MARKER_RADIUS = 3
+
 /** {@link StageDraftingOverlay} 的属性。 @internal */
 export interface StageDraftingOverlayProps {
   readonly viewport: StageViewport
@@ -22,6 +34,14 @@ export interface StageDraftingOverlayProps {
   /** 共享十字光标的解析结果；不绘制时为 `null`。 */
   readonly crosshair: ComposeCanvasCrosshair | null
   readonly snap: StageFeaturePoint | null
+  /**
+   * 取点期间显现的端口，世界坐标；不在取点时为 `null`。
+   *
+   * @remarks
+   * 是**一个符号的全部**端口而不是最近的那一个：接线图上端子密集，只画一个的话用户读到的是
+   * 「这里只有一个端子」。
+   */
+  readonly revealedPorts: readonly StagePoint[] | null
   /**
    * 待定几何的世界折线（弧已拍扁）；命令给不出时为 `null`。
    *
@@ -31,7 +51,17 @@ export interface StageDraftingOverlayProps {
    * 渲染缺陷。
    */
   readonly previewOutline: readonly StagePoint[] | null
+  /** 光标旁的数值与标注；命令没声明字段时为 `null`。 */
+  readonly dynamicInput: StageDynamicInputAnnotation | null
   readonly rubberBand: { readonly start: StagePoint; readonly end: StagePoint } | null
+  /**
+   * 角度约束命中的那条射线；没命中时为 `null`。
+   *
+   * @remarks
+   * 不画的话用户只看到点「粘」到了某个方向上，说不清是自己手稳还是有东西在吸。命中与否由
+   * 落点解算上报，这里一行都不判——各判一次的症状是「画了射线但点没落在上面」。
+   */
+  readonly trackingRay: { readonly origin: StagePoint; readonly degrees: number } | null
   /**
    * 被作用对象的世界包围盒轮廓，已按当前位移平移。
    *
@@ -66,8 +96,11 @@ export function StageDraftingOverlay({
   surfaceSize,
   crosshair,
   snap,
+  revealedPorts,
   previewOutline,
+  dynamicInput,
   rubberBand,
+  trackingRay,
   outlines,
 }: StageDraftingOverlayProps) {
   const snapScreen = snap ? worldToScreen(snap.point, viewport) : null
@@ -77,6 +110,19 @@ export function StageDraftingOverlay({
     .join(' ')
   const bandStart = rubberBand ? worldToScreen(rubberBand.start, viewport) : null
   const bandEnd = rubberBand ? worldToScreen(rubberBand.end, viewport) : null
+  /*
+   * 追踪射线画满整个图面：它说的是「这条线上的任何位置都在约束里」，画到落点为止会让它
+   * 看起来像另一条橡皮筋。长度取图面对角线，两端都伸出去，因此视口怎么滚都盖得住。
+   */
+  const rayOrigin = trackingRay ? worldToScreen(trackingRay.origin, viewport) : null
+  const raySpan = Math.hypot(surfaceSize.width, surfaceSize.height)
+  const rayUnit = trackingRay
+    ? {
+        // 屏幕 Y 轴向下，方向向量的 y 取负——与落点那一侧同一套约定。
+        x: Math.cos((trackingRay.degrees * Math.PI) / 180),
+        y: -Math.sin((trackingRay.degrees * Math.PI) / 180),
+      }
+    : null
 
   return (
     <svg
@@ -91,6 +137,17 @@ export function StageDraftingOverlay({
         surfaceSize={surfaceSize}
         testIdPrefix="stage"
       />
+      <StageDynamicInputLayer annotation={dynamicInput} testIdPrefix="stage" />
+      {rayOrigin && rayUnit ? (
+        <line
+          className="compose-stage__drafting-tracking-ray"
+          data-testid="stage-drafting-tracking-ray"
+          x1={rayOrigin.x - rayUnit.x * raySpan}
+          x2={rayOrigin.x + rayUnit.x * raySpan}
+          y1={rayOrigin.y - rayUnit.y * raySpan}
+          y2={rayOrigin.y + rayUnit.y * raySpan}
+        />
+      ) : null}
       {previewPoints ? (
         <polyline
           className="compose-stage__drafting-preview"
@@ -119,6 +176,23 @@ export function StageDraftingOverlay({
             width={rect.width * viewport.zoom}
             x={origin.x}
             y={origin.y}
+          />
+        )
+      })}
+      {/*
+        * 端口排在捕捉标记**之前**：吸上其中一个时两者叠在同一个点上，方框在后面画才不会被
+        * 圆点盖住——框说的是「吸上了」，它得读得出来。
+        */}
+      {revealedPorts?.map((port) => {
+        const screen = worldToScreen(port, viewport)
+        return (
+          <circle
+            className="compose-stage__drafting-port"
+            cx={screen.x}
+            cy={screen.y}
+            data-testid="stage-drafting-port"
+            key={`${port.x}:${port.y}`}
+            r={PORT_MARKER_RADIUS}
           />
         )
       })}

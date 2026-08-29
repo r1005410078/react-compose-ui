@@ -21,6 +21,39 @@ export interface ComposeCommandKeyword {
 }
 
 /**
+ * 一步取点的数值参数化。
+ *
+ * @remarks
+ * 说的是「这一步的两个数怎么算出来」：
+ *
+ * | 值 | 两个字段 | 原点 |
+ * | --- | --- | --- |
+ * | `absolute` | X、Y | 无（世界坐标） |
+ * | `polar` | 距离、角度 | 上一个点 |
+ * | `cartesian` | 宽、高 | 上一个点 |
+ * | `radius` | 半径（**只有一个**） | 圆心 |
+ * | `diameter` | 直径（**只有一个**） | 圆心 |
+ *
+ * `radius` 与 `diameter` 是**单字段**参数化：呈现只出一个框，`Tab` 不接管（没有第二个字段
+ * 可去），因此也不存在锁定这一档——锁定是 `Tab` 的产物。圆是旋转对称的，半径点的角度对
+ * 结果没有任何影响，一个永远不影响结果的只读字段比没有更差。
+ *
+ * **原点不在这里**：它就是会话已经上报的那个 `reference`（橡皮筋的起点），把同一个点放进
+ * 两个地方只能靠约定保持一致。
+ *
+ * 本包零运行时依赖，连坐标都不认识，因此这里只是一个**标签**，数学由宿主做——`core` 那边
+ * 有一个逐字相同的联合，这处重复是包边界造成的。
+ *
+ * @public
+ */
+export type ComposeCommandPointFields =
+  | 'absolute'
+  | 'polar'
+  | 'cartesian'
+  | 'radius'
+  | 'diameter'
+
+/**
  * 命令当前等待的一步输入。
  *
  * @remarks
@@ -38,6 +71,28 @@ export interface ComposeCommandPrompt {
   readonly keywords?: readonly ComposeCommandKeyword[]
   /** 直接确认（Enter）时等价于键入的关键字；缺省表示确认无效。 */
   readonly defaultKeyword?: string
+  /**
+   * 这一步的数值参数化；缺省表示这一步不显示数值。
+   *
+   * @remarks
+   * 选择对象、取基点这类步骤没有可读出的量，缺省时宿主的呈现与从前完全一致。
+   */
+  readonly fields?: ComposeCommandPointFields
+  /**
+   * 标注量的那一段要不要由标注自己画出来；缺省不画。
+   *
+   * @remarks
+   * **标注量的那一段必须画出来**——不画它，标注的两条延伸线就从空处伸出来，用户读不出这个
+   * 数说的是什么。但由谁画取决于它是不是形状的一部分：`LINE` 的预览线**就是**被量的那一段
+   * （再画一遍就是同一条线加粗），而 `CIRCLE` 的预览是整圆、半径线不在里面。
+   *
+   * 因此由提示声明而不由呈现层推导：只有命令知道自己的预览几何里含不含这一段，呈现层拿到的
+   * 只是一串预览折线，从里面反查「有没有一段正好从原点到落点」既贵又脆。
+   *
+   * 这**不是**「预览几何与橡皮筋互斥」的例外：那一条禁止的是同一个问题答两遍，而半径线与圆
+   * 回答的是两个问题——形状是什么、你落在圆上的哪个点。
+   */
+  readonly measured?: boolean
 }
 
 /** 世界坐标中的一个点。 @public */
@@ -182,5 +237,22 @@ export interface ComposeCommandDescriptor {
  * @public
  */
 export interface ComposeCommandDefinition<TContext, TEffect> extends ComposeCommandDescriptor {
+  /**
+   * 提交之后立刻以同一条命令重开一次**全新**会话。
+   *
+   * @remarks
+   * 「画完之后接着画」是**这条命令自己的性质**，不是画布的状态——因此它是定义上的一个标记，
+   * 不是宿主的一个模式。做成模式会让同一条命令在两种模式下行为不同，而屏幕上没有任何东西
+   * 说明为什么；做成标记则「哪些命令会接着画」可以从注册处读出来。
+   *
+   * 重开的会话**不继承上一条的任何输入**：继承上一条的终点会让两点命令退化成链，而那是
+   * `LINE` 的语义，不是这条命令的。
+   *
+   * 本包**不实现重开**——它零运行时依赖、不持有会话，这只是一个供宿主解释的标签。
+   *
+   * @defaultValue `false`（提交即结束，与未引入本字段时完全一致）
+   */
+  readonly repeat?: boolean
+
   start(context: TContext): ComposeCommandSession<TEffect>
 }

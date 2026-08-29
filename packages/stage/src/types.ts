@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeCommandDefinition, ComposeKeybinding } from '@compose-ui/commands'
-import type { ComposeLayoutMeasurementPort } from '@compose-ui/core'
+import type { ComposeAngleConstraint, ComposeLayoutMeasurementPort } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import type {
@@ -102,6 +102,13 @@ export type ComposeStageShortcutAction =
   | 'edit.group'
   | 'edit.ungroup'
   | 'edit.delete'
+  | 'drafting.line'
+  | 'drafting.polyline'
+  | 'drafting.rectangle'
+  | 'drafting.circle'
+  | 'drafting.arc'
+  | 'drafting.arrow'
+  | 'drafting.wire'
 
 /**
  * 可由宿主接管的 Stage 动作。
@@ -328,6 +335,32 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * 由手势启动的夹点会话不上报：它没有名字，也不进「重复上一条命令」的序列。
    */
   readonly onActiveCommandChange?: (commandId: string | null) => void
+  /**
+   * 角度约束：关 / 正交 / 极轴，三者互斥。
+   *
+   * @remarks
+   * 它们回答的是同一个问题——这一步的方向怎么被约束。做成两个独立布尔会造出一个「都开」的
+   * 第四态，而那一态没有正确答案。
+   *
+   * **给出即受控**，由宿主持有：工具栏要画按下态，而事实来源只能有一份，Stage 记一份、
+   * 工具栏记一份必然漂移。不给时由 Stage 自己持有，默认**极轴**——它只在光标靠近某条射线时
+   * 才吸，不挡任何画法，因此可以默认开着；正交无条件投影，一开就画不了斜线。
+   *
+   * 它是会话级视图状态，MUST NOT 写进文档：这是「怎么画」而不是「画了什么」。
+   */
+  readonly angleConstraint?: ComposeAngleConstraint
+  readonly onAngleConstraintChange?: (next: ComposeAngleConstraint) => void
+  /**
+   * 极轴的增量角（度）；射线按它成族生成。
+   *
+   * @remarks
+   * 默认 45°。这是对 AutoCAD 默认值（90°）的有意偏离，理由是前提不同：AutoCAD 的极轴默认
+   * 是关的，我们默认是开的——默认开着时增量角要覆盖用户真会画的方向，而 90° 漏掉的正是接线
+   * 图上那条斜引线。
+   *
+   * @defaultValue 45
+   */
+  readonly polarIncrement?: number
   /**
    * 页面的激活场景。
    *

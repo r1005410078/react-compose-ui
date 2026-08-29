@@ -174,6 +174,7 @@ export type {
 export {
   collectComposeWireValidationIssues,
   getComposeWire,
+  getComposeWireEndState,
   isValidComposeWire,
   resolveComposePortPoint,
   resolveComposeWires,
@@ -182,6 +183,7 @@ export type {
   ComposeResolvedWires,
   ComposeWire,
   ComposeWireBinding,
+  ComposeWireEndState,
   ComposeWireValidationIssue,
 } from './wire'
 export {
@@ -230,14 +232,27 @@ export type {
   ComposeSegmentShape,
 } from './curve-geometry'
 export {
+  applyComposeAngleConstraint,
+  applyComposeFieldOverride,
+  composeFieldsToPoint,
+  composePointToFields,
+  isComposeSingleFieldKind,
+  COMPOSE_SINGLE_FIELD_KINDS,
   parseComposeCoordinate,
   resolveComposePoint,
+  resolveComposePointDetail,
 } from './point-input'
 export type {
+  ComposeAngleConstraint,
+  ComposeAngleConstraintResult,
   ComposeCoordinateFailure,
   ComposeGridSettings,
+  ComposePolarSettings,
   ComposeInputPoint,
   ComposePointContext,
+  ComposePointFieldIndex,
+  ComposePointFieldKind,
+  ComposePointFieldValues,
   ComposePointSource,
   ParseComposeCoordinateResult,
 } from './point-input'

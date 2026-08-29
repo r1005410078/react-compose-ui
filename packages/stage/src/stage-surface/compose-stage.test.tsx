@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   createComposeEntityRegistry,
   type ComposeEntityPreset,
@@ -157,6 +157,22 @@ const curvePreset: ComposeEntityPreset = {
   }),
 }
 
+/**
+ * 导线走自己的 Preset。
+ *
+ * @remarks
+ * 与普通曲线的差别是**线宽**而不是颜色：一次接线图里颜色被运行状态（红合绿分）与电压等级
+ * 占着，那个通道留给数据绑定。宿主不注册它时 `WIRE` 落地会返回 null 而不是静默退回 `curve`。
+ */
+const wirePreset: ComposeEntityPreset = {
+  id: 'wire',
+  label: '导线',
+  createComponents: () => ({
+    ...curvePreset.createComponents(),
+    Renderer: { type: 'curve', props: { strokeWidth: 2 } },
+  }),
+}
+
 const registry = createComposeEntityRegistry({
   renderers: [{
     type: 'test',
@@ -167,7 +183,7 @@ const registry = createComposeEntityRegistry({
     label: '曲线',
     renderer: () => null,
   }],
-  presets: [preset, curvePreset],
+  presets: [preset, curvePreset, wirePreset],
 })
 
 function curveEntity(id = 'curve-a'): ComposeEntity {
@@ -256,6 +272,18 @@ function renderStage(
     viewport?: { readonly x: number; readonly y: number; readonly zoom: number }
     commands?: import('../types').ComposeStageProps['commands']
     showCrosshair?: boolean
+    onShortcutAction?: import('../types').ComposeStageProps['onShortcutAction']
+    onActiveCommandChange?: (commandId: string | null) => void
+    /**
+     * 角度约束；默认跟着 Stage 走（极轴）。
+     *
+     * @remarks
+     * **落点必须是自由角度的用例要显式传 `off`**：默认开着极轴之后，接近 0/45/90 的取点会被
+     * 吸到那条射线上，跟着默认值走的断言会在默认变化时莫名其妙地红。这与「依赖确定性取景的
+     * 用例必须显式关掉自动适配」是同一条纪律。
+     */
+    angleConstraint?: import('@compose-ui/core').ComposeAngleConstraint
+    polarIncrement?: number
   } = {},
 ) {
   const runtime = createTransactionRuntime({ document: value })
@@ -267,7 +295,11 @@ function renderStage(
   }
   const view = render(
     <ComposeStage
+      angleConstraint={options.angleConstraint}
+      polarIncrement={options.polarIncrement}
       commands={options.commands}
+      onShortcutAction={options.onShortcutAction}
+      onActiveCommandChange={options.onActiveCommandChange}
       showCrosshair={options.showCrosshair}
       document={value}
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
@@ -455,6 +487,8 @@ describe('ComposeStage ECS', () => {
     const { dispatch } = renderStage(document([curveEntity()]), {
       selectedIds: ['curve-a'],
       tool: 'select',
+      // 这一条量的是夹点数学，落点必须是自由角度；默认的极轴会把它吸到最近的射线上。
+      angleConstraint: 'off',
     })
     fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
       pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
@@ -484,6 +518,8 @@ describe('ComposeStage ECS', () => {
     const { dispatch } = renderStage(document([curveEntity()]), {
       selectedIds: ['curve-a'],
       tool: 'select',
+      // 这一条量的是夹点数学，落点必须是自由角度；默认的极轴会把它吸到最近的射线上。
+      angleConstraint: 'off',
     })
     fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), {
       pointerId: 1, button: 0, detail: 2, clientX: 30, clientY: 40,
@@ -1820,6 +1856,230 @@ describe('绘图模式', () => {
     return input
   }
 
+  describe('OpenSpec: stage / 端口在取点时按符号整组显现', () => {
+    /** 带三个端口的符号。端子挨得很近——这正是「只亮一个不够」的现实来源。 */
+    function symbol(id = 'symbol'): ComposeEntity {
+      const base = entity(id)
+      return {
+        ...base,
+        components: {
+          ...base.components,
+          Ports: {
+            items: [
+              { id: 'L1', position: { x: 0, y: 0 } },
+              { id: 'L2', position: { x: 6, y: 0 } },
+              { id: 'L3', position: { x: 12, y: 0 } },
+            ],
+          },
+        },
+      }
+    }
+
+    function startWire() {
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'WIRE' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    }
+
+    function movePointerTo(x: number, y: number) {
+      // jsdom 里所有元素的 rect 恒为 0，而指针跟踪要判断落点在不在图面之内。
+      measureSurfaceAs(1000, 800)
+      fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+        clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', bubbles: true,
+      })
+    }
+
+    it('取点时整组显现', () => {
+      renderStage(document([symbol()]), { angleConstraint: 'off' })
+      startWire()
+      // 夹具 Entity 的 offset 是 (20,30)，端口是 Entity 局部坐标，因此世界落点在那儿。
+      movePointerTo(20, 30)
+      // 三个端口一起画：只画最近的那一个时，用户读到的是「这里只有一个端子」。
+      expect(screen.getAllByTestId('stage-drafting-port')).toHaveLength(3)
+    })
+
+    it('空闲时一个都不画', () => {
+      renderStage(document([symbol()]), { angleConstraint: 'off' })
+      // 没有命令在取点：常驻会让一张接线图上多出几十个与几何无关的点。
+      movePointerTo(20, 30)
+      expect(screen.queryAllByTestId('stage-drafting-port')).toHaveLength(0)
+    })
+
+    it('吸上时端口记号与捕捉标记同时在场且不是同一种', () => {
+      renderStage(document([symbol()]), { angleConstraint: 'off' })
+      startWire()
+      movePointerTo(20, 30)
+      const port = screen.getAllByTestId('stage-drafting-port')[0]!
+      const snap = screen.getByTestId('stage-drafting-snap')
+      // 两者回答两个问题——「这里可以接」与「落点吸上了它」，因此不是同一种记号。
+      expect(port.tagName).not.toBe(snap.tagName)
+    })
+  })
+
+  describe('OpenSpec: stage / 导线两端的接线状态画在图面上', () => {
+    function wireEntity(id: string, binding: unknown): ComposeEntity {
+      const base = curveEntity(id)
+      return {
+        ...base,
+        components: { ...base.components, Wire: { start: binding } as never },
+      }
+    }
+
+    it('选中才显示自由与已绑定', () => {
+      const symbol = {
+        ...entity('symbol'),
+        components: {
+          ...entity('symbol').components,
+          Ports: { items: [{ id: 'L1', position: { x: 0, y: 0 } }] },
+        },
+      }
+      const wire = wireEntity('wire-a', { entityId: 'symbol', portId: 'L1' })
+      const value = document([symbol, wire])
+      const { container } = renderStage(value, { selectedIds: ['wire-a'] })
+      expect(container.querySelectorAll('[data-testid^="stage-wire-end-"]')).toHaveLength(2)
+      expect(screen.getAllByTestId('stage-wire-end-bound')).toHaveLength(1)
+      expect(screen.getAllByTestId('stage-wire-end-free')).toHaveLength(1)
+    })
+
+    it('OpenSpec: stage / 导线两端的接线状态画在图面上 / 多段线导线画首尾两个记号', () => {
+      const base = curveEntity('wire-a')
+      const wire: ComposeEntity = {
+        ...base,
+        components: {
+          ...base.components,
+          // 四顶点折线：中间两个拐点不接任何东西，因此不该有记号。
+          Curve: {
+            kind: 'polyline',
+            vertices: [
+              { x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 40 }, { x: 100, y: 50 },
+            ],
+            closed: false,
+          },
+          Wire: {} as never,
+        },
+      }
+      renderStage(document([wire]), { selectedIds: ['wire-a'] })
+      expect(screen.getAllByTestId('stage-wire-end-free')).toHaveLength(2)
+    })
+
+    it('不选中不显示', () => {
+      const symbol = {
+        ...entity('symbol'),
+        components: {
+          ...entity('symbol').components,
+          Ports: { items: [{ id: 'L1', position: { x: 0, y: 0 } }] },
+        },
+      }
+      const value = document([symbol, wireEntity('wire-a', { entityId: 'symbol', portId: 'L1' })])
+      const { container } = renderStage(value)
+      expect(container.querySelectorAll('[data-testid^="stage-wire-end-"]')).toHaveLength(0)
+    })
+
+    it('失效不选中也显示', () => {
+      /*
+       * 绑定指向一个不存在的实体。这是一个**缺陷**——等用户主动选中那条线才显形，等于把发现
+       * 缺陷的责任推给他，而他恰恰不知道该去选哪一条。
+       */
+      const value = document([wireEntity('wire-a', { entityId: 'gone', portId: 'L1' })])
+      renderStage(value)
+      expect(screen.getAllByTestId('stage-wire-end-dangling')).toHaveLength(1)
+      // 另一端自由，不选中因此不画。
+      expect(screen.queryAllByTestId('stage-wire-end-free')).toHaveLength(0)
+    })
+  })
+
+  describe('OpenSpec: stage / 会重开的命令与两级 Escape', () => {
+    function startCommand(name: string) {
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: name } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      return input
+    }
+
+    /**
+     * 画一条两点曲线。
+     *
+     * @remarks
+     * `WIRE` 连续取点，因此取够两点之后还要一次 `Enter` 才提交这一条；`RECTANGLE` 取够即
+     * 提交，那一下 `Enter` 落在空闲档上——本 describe 的用例都不依赖它，因此按需传入。
+     */
+    function drawTwoPoints(
+      from: [number, number],
+      to: [number, number],
+      finish = false,
+    ) {
+      const surface = screen.getByTestId('stage-surface')
+      fireEvent.pointerDown(surface, surfacePoint(from[0], from[1]))
+      fireEvent.pointerDown(surface, surfacePoint(to[0], to[1]))
+      if (finish) {
+        fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'Enter' })
+      }
+    }
+
+    function curveCount(runtime: { document: ComposeDocument }) {
+      return Object.values(runtime.document.entities)
+        .filter((candidate) => candidate.components.Curve !== undefined).length
+    }
+
+    it('画完一条接着画下一条', () => {
+      const { runtime } = renderStage(document(), { angleConstraint: 'off' })
+      startCommand('WIRE')
+      drawTwoPoints([100, 100], [300, 200], true)
+
+      expect(curveCount(runtime)).toBe(1)
+      // 命令仍在跑，且提示回到**第一步**——回到第二步会让用户以为上一条还没画完。
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+    })
+
+    it('连画三条得到三个 Entity', () => {
+      const { runtime } = renderStage(document(), { angleConstraint: 'off' })
+      startCommand('WIRE')
+      // 每条只按一次 `Enter` 结束——命令本身不必重启，那正是「成批」要省下的按键。
+      drawTwoPoints([100, 100], [200, 100], true)
+      drawTwoPoints([100, 140], [200, 140], true)
+      drawTwoPoints([100, 180], [200, 180], true)
+      expect(curveCount(runtime)).toBe(3)
+    })
+
+    it('不声明 repeat 的命令画完即结束', () => {
+      renderStage(document(), { angleConstraint: 'off' })
+      startCommand('RECTANGLE')
+      drawTwoPoints([100, 100], [300, 200])
+      // 矩形画完九成是去调它，因此这里必须回到空闲——否则想调它得先按一次 Escape。
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+    })
+
+    it('Escape 先放弃这一条，再按一次才退出', () => {
+      renderStage(document(), { angleConstraint: 'off' })
+      startCommand('WIRE')
+      const application = screen.getByRole('application', { name: 'Stage' })
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(100, 100))
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定下一点')
+
+      // 取过点：只放弃这一条，命令留着回到第一步。
+      fireEvent.keyDown(application, { key: 'Escape' })
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+
+      // 一个点都没取：这一下才退出命令。
+      fireEvent.keyDown(application, { key: 'Escape' })
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('已取消')
+    })
+
+    it('按下态在连画期间不抖', () => {
+      const activeCommands: (string | null)[] = []
+      renderStage(document(), {
+        angleConstraint: 'off',
+        onActiveCommandChange: (commandId) => { activeCommands.push(commandId) },
+      })
+      startCommand('WIRE')
+      drawTwoPoints([100, 100], [200, 100], true)
+      drawTwoPoints([100, 140], [200, 140], true)
+
+      // 工具栏的按下态读它：中途冒出一个 null 会让按钮抖一下。
+      expect(activeCommands.slice(activeCommands.indexOf('WIRE'))).toEqual(['WIRE'])
+    })
+  })
+
   it('OpenSpec: stage / 宿主可以从自己的 chrome 启动一条命令会话 / 与敲名字同一条', () => {
     const value = document()
     const runtime = createTransactionRuntime({ document: value })
@@ -1967,6 +2227,570 @@ describe('绘图模式', () => {
     })
     expect(crosshairLines()).toHaveLength(0)
     expect(container.querySelector('.compose-stage')!.hasAttribute('data-crosshair')).toBe(false)
+  })
+
+  describe('OpenSpec: stage / 命令会话的参考点跟着文档走', () => {
+    it('a→b→c 之后撤销，下一段从 b 出发', () => {
+      const value = document()
+      const runtime = createTransactionRuntime({ document: value })
+      const dispatch: ComposeStageDispatch = (command) => runtime.dispatch(command)
+      /*
+       * 这条必须跟着 runtime 重渲染：`renderStage` 传的是一份静态文档，而本条考的正是
+       * 「文档在会话脚下变了」——不把新文档喂回去，被考的那条路径根本跑不到。
+       */
+      const view = (doc: ComposeDocument) => (
+        <ComposeStage
+          document={doc}
+          layoutSnapshot={layoutSnapshot(doc)}
+          onSelectedIdsChange={vi.fn()}
+          onViewportChange={vi.fn()}
+          selectedIds={[]}
+          services={{ dispatch, registry }}
+          tool="select"
+          viewport={{ x: 0, y: 0, zoom: 1 }}
+        />
+      )
+      const { rerender } = render(view(value))
+      const sync = () => { rerender(view(runtime.document)) }
+
+      startLine()
+      const surface = screen.getByTestId('stage-surface')
+      for (const [x, y] of [[104, 104], [264, 104], [264, 200]] as const) {
+        fireEvent.pointerDown(surface, surfacePoint(x, y))
+        sync()
+      }
+      const curves = () => Object.values(runtime.document.entities)
+        .filter((entity) => entity.components.Curve !== undefined)
+      expect(curves()).toHaveLength(2)
+
+      // 外部撤销：b-c 那一段没了，而会话的 `previous` 仍停在 c。
+      act(() => { runtime.undo() })
+      sync()
+      expect(curves()).toHaveLength(1)
+
+      /*
+       * 接着取一个点：新的一段必须从 **b**（264,104）连出去。从 c 连出去的话，起点是一个
+       * 已经不存在的地方——而屏幕上只表现为「线接错了」。
+       */
+      fireEvent.pointerDown(surface, surfacePoint(400, 104))
+      const added = curves().find((entity) => {
+        const item = entity.components.LayoutItem as Record<string, { x: number }>
+        return item.offset.x >= 264
+      })
+      expect(added).toBeDefined()
+      const layoutItem = added!.components.LayoutItem as Record<string, { value: number }>
+      /*
+       * b→(400,104) 是一段**水平**线，盒高退化到曲线的最小范围；从 c 出发的话它是斜的，
+       * 盒高会是 96。判别力全在高上——两种情形的宽都是 136，只断宽的用例永远是绿的。
+       */
+      expect(layoutItem.width.value).toBe(136)
+      expect(layoutItem.height.value).toBe(1)
+    })
+  })
+
+  describe('OpenSpec: stage / 取点过程中的动态输入', () => {
+    /**
+     * jsdom 里所有元素的 rect 恒为 0，而指针跟踪要求落点在 surface 之内
+     * （`local.x <= rect.width`），因此不替身出尺寸的话指针永远被判成「在图面之外」。
+     */
+    function measureSurface() {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        width: 1000, height: 800, x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 800,
+        toJSON: () => ({}),
+      } as DOMRect)
+    }
+
+    afterEach(() => { vi.restoreAllMocks() })
+
+    /** 移动指针到图面上的某个点。 */
+    function movePointer(x: number, y: number) {
+      fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+        clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', buttons: 0,
+      })
+    }
+
+    /** 读出两个数值框里的文字。 */
+    function fieldTexts() {
+      return [0, 1].map((index) =>
+        screen.getByTestId(`stage-dynamic-input-field-${index}`).querySelector('text:last-of-type')
+          ?.textContent)
+    }
+
+    it('第一个点是绝对坐标，带 X / Y 前缀且不画标注', () => {
+      measureSurface()
+      renderStage(document())
+      startLine()
+      movePointer(240, 160)
+
+      const layer = screen.getByTestId('stage-dynamic-input')
+      // 这一步没有「上一个点」，量不出长度与角度。
+      expect(layer.querySelectorAll('.compose-stage__dynamic-input-guide')).toHaveLength(0)
+      expect(
+        [...layer.querySelectorAll('.compose-stage__dynamic-input-prefix')]
+          .map((node) => node.textContent),
+      ).toEqual(['X', 'Y'])
+    })
+
+    it('取过第一点之后显示长度与角度，且与落点一致', () => {
+      measureSurface()
+      renderStage(document())
+      startLine()
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 200)
+
+      // 网格步长 8，两个坐标都落在格点上：读数因此就是 200 与 0°。
+      expect(fieldTexts()).toEqual(['200', '0°'])
+      // 长度标注 + 角度弧都在。
+      expect(screen.getByTestId('stage-dynamic-input')
+        .querySelectorAll('.compose-stage__dynamic-input-guide').length).toBeGreaterThan(0)
+    })
+
+    it('裸数字是直接距离输入', () => {
+      measureSurface()
+      const { runtime } = renderStage(document())
+      const input = startLine()
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 200)
+
+      // 方向由鼠标定好，只打一个长度——这正是画元器件时最高频的输入方式。
+      fireEvent.change(input, { target: { value: '120' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      const curve = Object.values(runtime.document.entities)
+        .find((entity) => entity.components.Curve !== undefined)
+      expect(curve).toBeDefined()
+      const layoutItem = curve!.components.LayoutItem as Record<string, { value: number }>
+      // 水平向右 120：盒宽就是 120，高退化到曲线的最小范围。
+      expect(layoutItem.width.value).toBeCloseTo(120, 3)
+    })
+
+    it('Tab 锁定当前字段，锁定之后指针跑远几何也不跟', () => {
+      measureSurface()
+      renderStage(document())
+      const input = startLine()
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 200)
+
+      fireEvent.change(input, { target: { value: '160' } })
+      fireEvent.keyDown(input, { key: 'Tab' })
+      // 锁定的值显示成实心；活动字段移到角度。
+      const first = screen.getByTestId('stage-dynamic-input-field-0').querySelector('.compose-stage__dynamic-input-box')
+      expect(first).toHaveAttribute('data-state', 'locked')
+      expect(screen.getByTestId('stage-dynamic-input-field-1').querySelector('.compose-stage__dynamic-input-box'))
+        .toHaveAttribute('data-state', 'active')
+
+      // 指针走到 500（距离 300），长度仍然读作 160——锁定的字段不再跟光标。
+      movePointer(500, 200)
+      expect(fieldTexts()[0]).toBe('160')
+    })
+
+    it('连按两次 Tab 不会两个字段都锁上', () => {
+      measureSurface()
+      renderStage(document())
+      const input = startLine()
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 200)
+
+      const boxState = (index: 0 | 1) => screen
+        .getByTestId(`stage-dynamic-input-field-${index}`)
+        .querySelector('.compose-stage__dynamic-input-box')
+        ?.getAttribute('data-state')
+
+      fireEvent.keyDown(input, { key: 'Tab' })
+      expect([boxState(0), boxState(1)]).toEqual(['locked', 'active'])
+
+      /*
+       * 第二次 `Tab` 回到长度：它必须**解锁**。两个都锁死时落点已经完全确定，光标再也
+       * 带不动任何东西，而屏幕上没有任何东西在说这件事。
+       */
+      fireEvent.keyDown(input, { key: 'Tab' })
+      expect([boxState(0), boxState(1)]).toEqual(['active', 'locked'])
+
+      // 长度确实又跟着光标走了。落点取网格步长 8 的整数倍，免得吸附把断言里的读数挪走。
+      movePointer(520, 200)
+      expect(fieldTexts()[0]).toBe('320')
+    })
+
+    it('完整坐标写法仍然优先于裸数字', () => {
+      measureSurface()
+      const { runtime } = renderStage(document())
+      const input = startLine()
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 200)
+
+      fireEvent.change(input, { target: { value: '@100,50' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      const curve = Object.values(runtime.document.entities)
+        .find((entity) => entity.components.Curve !== undefined)
+      const layoutItem = curve!.components.LayoutItem as Record<string, { value: number }>
+      expect(layoutItem.width.value).toBeCloseTo(100, 3)
+      expect(layoutItem.height.value).toBeCloseTo(50, 3)
+    })
+
+    it('矩形显示宽高且不画角度弧', () => {
+      measureSurface()
+      renderStage(document())
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'R' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 320)
+
+      expect(fieldTexts()).toEqual(['200', '120'])
+      // 矩形轴对齐，角度恒为 0——画一条永远指向 0° 的弧是噪音。
+      const arcs = [...screen.getByTestId('stage-dynamic-input')
+        .querySelectorAll('.compose-stage__dynamic-input-guide')]
+        .filter((node) => (node.getAttribute('d') ?? '').includes('A'))
+      expect(arcs).toHaveLength(0)
+    })
+  })
+
+  describe('OpenSpec: stage / 角度约束的持有、切换与呈现', () => {
+    function measureSurface() {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        width: 1000, height: 800, x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 800,
+        toJSON: () => ({}),
+      } as DOMRect)
+    }
+
+    afterEach(() => { vi.restoreAllMocks() })
+
+    function movePointer(x: number, y: number) {
+      fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+        clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', buttons: 0,
+      })
+    }
+
+    /**
+     * 取过第一个点的 `LINE`；起点 (200,200)，其后的落点都相对它算角度。
+     *
+     * 本组的落点全部取网格步长 8 的整数倍：网格排在角度约束**之前**，因此不落在格点上的
+     * 坐标会先被取整，断言里的数就对不上了。
+     */
+    function lineFrom(options: Parameters<typeof renderStage>[1] = {}) {
+      measureSurface()
+      const rendered = renderStage(document(), options)
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'L' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      return rendered
+    }
+
+    /** 预览折线的终点。 */
+    function previewEnd() {
+      const points = (screen.getByTestId('stage-drafting-preview').getAttribute('points') ?? '')
+        .trim().split(/\s+/)
+      return points[points.length - 1]
+    }
+
+    it('默认是极轴：靠近射线时吸住并画出追踪射线', () => {
+      lineFrom()
+      // (400, 192)：偏离 0° 射线 8px，在 12px 容差内。
+      movePointer(400, 192)
+      expect(previewEnd()).toBe('400,200')
+      expect(screen.getByTestId('stage-drafting-tracking-ray')).toBeInTheDocument()
+    })
+
+    it('离每一条射线都够不着时完全自由——这正是它敢默认开着的那一处', () => {
+      lineFrom()
+      // 20° 方向，离 0°（72px）与 45°（90px）都远。
+      movePointer(400, 128)
+      expect(previewEnd()).toBe('400,128')
+      expect(screen.queryByTestId('stage-drafting-tracking-ray')).toBeNull()
+    })
+
+    it('45° 也是一条射线', () => {
+      lineFrom()
+      // (400, 8)：偏离 45° 射线约 5.7px。
+      movePointer(400, 8)
+      const [x, y] = previewEnd()!.split(',').map(Number)
+      expect(x! - 200).toBeCloseTo(200 - y!, 6)
+      expect(screen.getByTestId('stage-drafting-tracking-ray')).toBeInTheDocument()
+    })
+
+    it('增量角 90 时 45° 方向不再被吸', () => {
+      measureSurface()
+      renderStage(document(), { polarIncrement: 90 })
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'L' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 8)
+      expect(previewEnd()).toBe('400,8')
+    })
+
+    it('正交无条件投影，因此不能默认开', () => {
+      lineFrom({ angleConstraint: 'ortho' })
+      // 离 0° 射线 72px——极轴够不着，正交照钳不误。
+      movePointer(400, 128)
+      expect(previewEnd()).toBe('400,200')
+    })
+
+    it('关掉之后完全自由', () => {
+      lineFrom({ angleConstraint: 'off' })
+      movePointer(400, 192)
+      expect(previewEnd()).toBe('400,192')
+      expect(screen.queryByTestId('stage-drafting-tracking-ray')).toBeNull()
+    })
+  })
+
+  describe('OpenSpec: stage / 单字段参数化的动态输入', () => {
+    function measureSurface() {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        width: 1000, height: 800, x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 800,
+        toJSON: () => ({}),
+      } as DOMRect)
+    }
+
+    afterEach(() => { vi.restoreAllMocks() })
+
+    function movePointer(x: number, y: number) {
+      fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+        clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', buttons: 0,
+      })
+    }
+
+    /** 启动 `CIRCLE`、取过圆心、指针停在圆心正右方 200。 */
+    function circleFromCenter() {
+      measureSurface()
+      renderStage(document())
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'C' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 200)
+      return input
+    }
+
+    it('圆只出一个数值框，且不画角度弧', () => {
+      circleFromCenter()
+      expect(screen.getByTestId('stage-dynamic-input-field-0')).toBeInTheDocument()
+      expect(screen.queryByTestId('stage-dynamic-input-field-1')).toBeNull()
+
+      const arcs = [...screen.getByTestId('stage-dynamic-input')
+        .querySelectorAll('.compose-stage__dynamic-input-guide')]
+        .filter((node) => (node.getAttribute('d') ?? '').includes('A'))
+      expect(arcs).toHaveLength(0)
+    })
+
+    it('半径线画出来，D 之后跨整条直径且读数翻倍', () => {
+      const input = circleFromCenter()
+      const measured = () => screen.getByTestId('stage-dynamic-input-measured').getAttribute('d')
+      const value = () => screen.getByTestId('stage-dynamic-input-field-0')
+        .querySelector('text:last-of-type')?.textContent
+
+      expect(measured()).toBe('M200 200L400 200')
+      expect(value()).toBe('200')
+
+      fireEvent.change(input, { target: { value: 'D' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      // 同一个框换一个量：标注线跟着从半径变成整条直径。
+      expect(measured()).toBe('M0 200L400 200')
+      expect(value()).toBe('400')
+      expect(screen.getByTestId('stage-dynamic-input-field-0')
+        .querySelector('.compose-stage__dynamic-input-prefix')?.textContent).toBe('\u2300')
+    })
+
+    it('直径档下的裸数字按直径解释', () => {
+      const { runtime } = (() => {
+        measureSurface()
+        const rendered = renderStage(document())
+        const input = screen.getByRole('textbox', { name: '命令行' })
+        fireEvent.change(input, { target: { value: 'C' } })
+        fireEvent.keyDown(input, { key: 'Enter' })
+        fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+        movePointer(400, 200)
+        fireEvent.change(input, { target: { value: 'D' } })
+        fireEvent.keyDown(input, { key: 'Enter' })
+        fireEvent.change(input, { target: { value: '300' } })
+        fireEvent.keyDown(input, { key: 'Enter' })
+        return rendered
+      })()
+
+      const curve = Object.values(runtime.document.entities)
+        .find((entity) => entity.components.Curve !== undefined)
+      const layoutItem = curve!.components.LayoutItem as Record<string, { value: number }>
+      // 打 300 得到的是直径 300 的圆：盒宽就是 300。
+      expect(layoutItem.width.value).toBeCloseTo(300, 3)
+    })
+
+    it('单字段时 Tab 不被接管', () => {
+      const input = circleFromCenter()
+      const event = createEvent.keyDown(input, { key: 'Tab' })
+      fireEvent(input, event)
+      // 没有第二个字段可去，因此走浏览器默认的焦点导航。
+      expect(event.defaultPrevented).toBe(false)
+      expect(screen.getByTestId('stage-dynamic-input-field-0')
+        .querySelector('.compose-stage__dynamic-input-box'))
+        .toHaveAttribute('data-state', 'active')
+    })
+  })
+
+  describe('OpenSpec: stage / 正在键入时预览跟着键入的值走', () => {
+    /** 与上一组同一个替身：jsdom 的 rect 恒为 0，不替身出尺寸指针永远在图面之外。 */
+    function measureSurface() {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        width: 1000, height: 800, x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 800,
+        toJSON: () => ({}),
+      } as DOMRect)
+    }
+
+    afterEach(() => { vi.restoreAllMocks() })
+
+    function movePointer(x: number, y: number) {
+      fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+        clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', buttons: 0,
+      })
+    }
+
+    /** 预览折线的最后一个点；视口是 1:1，屏幕坐标就是世界坐标。 */
+    function previewEnd() {
+      const points = (screen.getByTestId('stage-drafting-preview').getAttribute('points') ?? '')
+        .trim().split(/\s+/)
+      return points[points.length - 1]
+    }
+
+    /** 取过第一个点、指针停在 (400,200) 的 `LINE`。 */
+    function lineFromOrigin() {
+      measureSurface()
+      const rendered = renderStage(document())
+      const input = startLine()
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
+      movePointer(400, 200)
+      return { ...rendered, input }
+    }
+
+    it('键入长度时预览线立刻变长，方向仍由指针决定', () => {
+      const { input, runtime } = lineFromOrigin()
+      expect(previewEnd()).toBe('400,200')
+
+      fireEvent.change(input, { target: { value: '120' } })
+      // 水平向右 120：终点落在 320，而指针还停在 400。
+      expect(previewEnd()).toBe('320,200')
+      // 尚未回车，因此文档上还什么都没有。
+      expect(Object.values(runtime.document.entities)
+        .some((entity) => entity.components.Curve !== undefined)).toBe(false)
+    })
+
+    it('半个坐标不改预览', () => {
+      const { input } = lineFromOrigin()
+      // `@100,` 是 `@100,50` 的中间态，解不出落点——猜一个会让图形在打字过程中乱跳。
+      fireEvent.change(input, { target: { value: '@100,' } })
+      expect(previewEnd()).toBe('400,200')
+    })
+
+    it('几何停在别处时画一条到光标的连线，清空即消失', () => {
+      const { input } = lineFromOrigin()
+      expect(screen.queryByTestId('stage-dynamic-input-connector')).toBeNull()
+
+      fireEvent.change(input, { target: { value: '120' } })
+      expect(screen.getByTestId('stage-dynamic-input-connector'))
+        .toHaveAttribute('d', 'M320 200L400 200')
+
+      fireEvent.change(input, { target: { value: '' } })
+      expect(screen.queryByTestId('stage-dynamic-input-connector')).toBeNull()
+    })
+  })
+
+  describe('OpenSpec: stage / 绘图命令的盒效果落地成物料 Entity', () => {
+    /** 启动 RECTANGLE 并取两个对角点；返回文档里新出现的那个 Entity。 */
+    function drawRectangle(runtime: ReturnType<typeof createTransactionRuntime>) {
+      const before = new Set(Object.keys(runtime.document.entities))
+      const input = screen.getByRole('textbox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'R' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      // 落点取网格步长 8 的整数倍，免得吸附把断言里的宽高挪走。
+      const surface = screen.getByTestId('stage-surface')
+      fireEvent.pointerDown(surface, surfacePoint(104, 104))
+      fireEvent.pointerDown(surface, surfacePoint(264, 200))
+
+      return Object.values(runtime.document.entities).find(({ id }) => !before.has(id))
+    }
+
+    it('R 画出的是矩形物料而不是曲线', () => {
+      const { runtime } = renderStage(document())
+      const created = drawRectangle(runtime)
+
+      // 画完矩形外框，下一步九成是填色、调圆角——这些 `Curve` 全都做不到。
+      expect(created?.components.Curve).toBeUndefined()
+      expect(created?.components.Appearance).toBeDefined()
+      const layoutItem = created?.components.LayoutItem as Record<string, { value: number }>
+      expect(layoutItem.width.value).toBe(160)
+      expect(layoutItem.height.value).toBe(96)
+    })
+
+    it('落在场景空白处的矩形成为激活场景的子级', () => {
+      const value = document()
+      const { runtime } = renderStage(value)
+      const created = drawRectangle(runtime)
+
+      // Rectangle Preset 没有 `Hierarchy`，因此不按「根层落点按类型分流」升格成新场景。
+      expect(runtime.document.rootIds).toEqual(value.rootIds)
+      expect(created?.id).toBeDefined()
+      expect(runtime.document.entities[ROOT_FRAME_ID]?.components.Hierarchy)
+        .toMatchObject({ childIds: expect.arrayContaining([created!.id]) })
+    })
+  })
+
+  describe('OpenSpec: stage / 绘图命令的单键快捷键', () => {
+    /** 图面上按一个不带修饰键的字母；`code` 是匹配用的物理键码。 */
+    function pressLetter(code: string, init: Record<string, unknown> = {}) {
+      fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), {
+        code,
+        key: code.replace('Key', '').toLowerCase(),
+        ...init,
+      })
+    }
+
+    it('按下 L 即开始画线，与敲 LINE↵ 同一条会话', () => {
+      renderStage(document())
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+
+      pressLetter('KeyL')
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+    })
+
+    it('按下 R 即开始画矩形', () => {
+      renderStage(document())
+      pressLetter('KeyR')
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一个角点')
+    })
+
+    it('带修饰键的同一个字母不受影响', () => {
+      renderStage(document(), { selectedIds: ['a'] })
+      // `X` 绑给 ARROW，而 primary+X 是剪切：`matchesComposeKeybinding` 精确匹配修饰键。
+      pressLetter('KeyX', { ctrlKey: true })
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+    })
+
+    it('焦点在命令行输入框时单键是文本', () => {
+      renderStage(document())
+      // 事件冒泡到 Stage 根节点，由 `isEditableTarget` 守卫挡下——用户敲命令名的过程中
+      // 每一个字母都会经过这条路径。
+      fireEvent.keyDown(screen.getByRole('textbox', { name: '命令行' }), { code: 'KeyR', key: 'r' })
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+    })
+
+    it('命令进行中单键不替换会话', () => {
+      renderStage(document())
+      startLine()
+      fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(100, 100))
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定下一点')
+
+      // 启动 RECTANGLE 会静默丢弃已经取到的那个点；什么都不做是安全子集。
+      pressLetter('KeyR')
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定下一点')
+    })
+
+    it('宿主接管后 Stage 不再自己启动', () => {
+      const onShortcutAction = vi.fn(() => true)
+      renderStage(document(), { onShortcutAction })
+      pressLetter('KeyL')
+      expect(onShortcutAction).toHaveBeenCalledWith('drafting.line')
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+    })
   })
 
   it('OpenSpec: stage-engine / 绘图命令 / L↵ 后两次取点画出一条线', () => {
@@ -2134,15 +2958,26 @@ describe('绘图模式', () => {
     expect(selection).not.toHaveBeenCalled()
   })
 
-  it('F8 切换正交，F3 切换对象捕捉', () => {
+  it('F8 切正交、F10 切极轴，两个键是同一个单选组；F3 切换对象捕捉', () => {
     renderStage(document())
-    expect(screen.getByTestId('stage-drafting-ortho-state')).toHaveTextContent('正交 关')
+    const stage = () => screen.getByRole('application', { name: 'Stage' })
+    const angle = () => screen.getByTestId('stage-drafting-angle-state')
+    // 默认极轴：它只在光标靠近某条射线时才吸，不挡任何画法，因此可以默认开着。
+    expect(angle()).toHaveTextContent('极轴')
     expect(screen.getByTestId('stage-drafting-snap-state')).toHaveAttribute('data-active')
 
-    fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'F8' })
-    expect(screen.getByTestId('stage-drafting-ortho-state')).toHaveTextContent('正交 开')
-    fireEvent.keyDown(screen.getByRole('application', { name: 'Stage' }), { key: 'F3' })
-    // 二态标记关闭时也要显示——只在开启时渲染会让用户无法确认它现在是关的。
+    fireEvent.keyDown(stage(), { key: 'F8' })
+    expect(angle()).toHaveTextContent('正交')
+    // 按下已经生效的那一个即关闭——三态互斥。
+    fireEvent.keyDown(stage(), { key: 'F8' })
+    expect(angle()).toHaveTextContent('角度约束 关')
+    // 三态都渲染：只在开启时出现会让用户无法确认它现在是关的。
+    expect(angle()).not.toHaveAttribute('data-active')
+
+    fireEvent.keyDown(stage(), { key: 'F10' })
+    expect(angle()).toHaveTextContent('极轴')
+
+    fireEvent.keyDown(stage(), { key: 'F3' })
     expect(screen.getByTestId('stage-drafting-snap-state')).toHaveTextContent('对象捕捉 关')
   })
 })
@@ -2214,6 +3049,36 @@ describe('命令词汇表合并', () => {
     // 空闲时的空确认重复上一条命令；没有命令跑过时它什么也不做。
     typeCommand('')
     expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('OpenSpec: stage / 命令行历史与重复上一条 / 图面上的空闲 Enter 同样重复', () => {
+    renderStage(document())
+    const input = typeCommand('L')
+    const application = screen.getByRole('application')
+    for (const text of ['100,50', '260,130']) {
+      fireEvent.change(input, { target: { value: text } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    }
+    // 第一下 Enter 结束这条命令——会话还在，因此走的是既有的「推进一步」。
+    fireEvent.keyDown(application, { key: 'Enter' })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
+
+    /*
+     * 第二下落在空闲档上。画完最后一个点时焦点就在图面，只在命令行里生效的话，这条能力在
+     * 手所在的位置够不着。
+     */
+    fireEvent.keyDown(application, { key: 'Enter' })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+  })
+
+  it('OpenSpec: stage / 命令行历史与重复上一条 / 没有上一条命令时不接管', () => {
+    renderStage(document())
+    const application = screen.getByRole('application')
+    const event = createEvent.keyDown(application, { key: 'Enter' })
+    fireEvent(application, event)
+    // 从未启动过命令：接管只会让 Enter 变成一个吃掉事件的黑洞，挡住既有键位级联。
+    expect(event.defaultPrevented).toBe(false)
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
   })
 
   it('OpenSpec: stage / 命令行历史与重复上一条 / 取过点之后重复的仍是命令', () => {

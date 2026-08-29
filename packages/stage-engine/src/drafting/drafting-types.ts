@@ -1,5 +1,6 @@
 import type { ComposeCommandPoint } from '@compose-ui/commands'
 import type { ComposeCurve } from '@compose-ui/core'
+import type { StageRect } from '../geometry'
 
 /**
  * 一次夹点取点。
@@ -67,6 +68,21 @@ export interface StageDraftingEffect {
    */
   readonly curves?: readonly ComposeCurve[]
   /**
+   * 本步要创建的**盒**，世界坐标。
+   *
+   * @remarks
+   * 与 `curves` 是两种意图而不是两种表示：折线表达「一段几何」，盒表达「一块有背景、边框与
+   * 圆角的面积」。`RECTANGLE` 走这一条——画一个矩形外框，下一步九成是给它填色、调圆角、往里
+   * 塞东西，而这些 `Curve` 全都做不到。
+   *
+   * **按 kind 反推是错的**：`PLINE` 画四个点按 `C` 同样得到闭合四顶点折线，而那时用户要的
+   * 确实是折线。意图必须由命令显式说出。
+   *
+   * 引擎不认识 Preset id，只说出「这一步产出一个这么大的盒」，挑哪个物料由持有 Registry 的
+   * 宿主决定——与 `wire` / `arrow` 是同一条边界。
+   */
+  readonly boxes?: readonly StageRect[]
+  /**
    * 本步产出的曲线是**导线**。
    *
    * @remarks
@@ -88,6 +104,14 @@ export interface StageDraftingEffect {
   readonly duplicate?: StageDraftingTranslation
   /** 本步要删除的 Entity。 */
   readonly removed?: readonly string[]
+  /**
+   * 删掉本次会话**上一个建出来**的 Entity。
+   *
+   * @remarks
+   * 引擎不认识 Entity id——它建不了也记不住。这个标记只说「把我上一段撤掉」，是哪一个由记着
+   * 那份栈的宿主决定，与 `wire` / `arrow` 是同一条边界。
+   */
+  readonly undoLastCreated?: boolean
   /** 本步要把某个夹点挪到某个落点。 */
   readonly curveGrip?: StageDraftingGripEdit
   /**
@@ -138,8 +162,15 @@ export interface StageDraftingMessages {
   readonly specifyThroughPoint: string
   readonly specifyCenter: string
   readonly specifyRadius: string
+  /** `CIRCLE` 打了 `D` 之后的提示。 */
+  readonly specifyDiameter: string
+  /** 切成直径的关键字标签。 */
+  readonly diameterKeyword: string
+  /** 切回半径的关键字标签。 */
+  readonly radiusKeyword: string
   readonly specifyCorner: string
   readonly specifyOppositeCorner: string
+  readonly closeKeyword: string
   readonly undoKeyword: string
   readonly collinearArc: string
   readonly degenerateShape: string

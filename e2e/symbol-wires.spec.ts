@@ -42,9 +42,18 @@ test('OpenSpec: compose-document / 符号导线 / 绑定端跟着符号走，符
   await commandInput.press('Enter')
   await page.mouse.click(beforeRect.x, beforeRect.y)
   await page.mouse.click(beforeRect.x + 220, beforeRect.y + 160)
+  // `WIRE` 连续取点（可以有拐点），回车结束这一条。
+  await stage.press('Enter')
 
   const stroke = stage.getByTestId('compose-material-curve-stroke')
   await expect(stroke).toHaveCount(1)
+  /*
+   * `WIRE` 声明了 `repeat`，画完一条就接着等下一条的第一个点。不退出的话，下面那一下按在
+   * 符号上的指针会被取点插件吃掉（它此刻要的是一个**点**，不是一次选择）。
+   */
+  await stage.press('Escape')
+  // 这一条一个点都没取，因此 `Escape` 退出的是整条命令而不只是这一条。
+  await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('已取消')
   const beforeWire = (await stroke.boundingBox())!
 
   // 3) 把符号拖走：绑定端跟着走，自由端不动。抓左下角一带——导线从左上角斜向右下，

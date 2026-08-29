@@ -21,7 +21,7 @@ import {
 } from './document-types'
 import { getComposeCurve, normalizeComposeCurveGeometry, projectComposeCurveToBox } from './curve'
 import { getComposeEntityPorts } from './ports'
-import type { ComposeCurve, ComposeLineCurve } from './curve'
+import type { ComposeCurve } from './curve'
 
 /** 导线一端绑定的端口。 @public */
 export interface ComposeWireBinding extends JsonObject {
@@ -112,6 +112,37 @@ export function getComposeWire(entity: ComposeEntity | undefined): ComposeWire |
   return entity?.components[COMPOSE_BUILTIN_COMPONENT_KEYS.wire] as ComposeWire | undefined
 }
 
+/**
+ * 导线一端的三种状态。
+ *
+ * @remarks
+ * **失效必须与自由可区分**：两者的几何都来自作者文档，屏幕上看不出差别，而含义完全不同——
+ * 一个是作者本来就没接，另一个是接过的东西没了。
+ *
+ * @public
+ */
+export type ComposeWireEndState = 'free' | 'bound' | 'dangling'
+
+/**
+ * 判定导线一端的接线状态。
+ *
+ * @remarks
+ * 住在 `core` 是因为它有**两个**消费者：Wire Inspector 与图面上的端点记号。各判一次必然
+ * 漂移，而漂移的症状是「面板说失效、图上说接着」——用户无从判断哪个才对。
+ *
+ * @public
+ */
+export function getComposeWireEndState(
+  document: ComposeDocument | undefined,
+  binding: ComposeWireBinding | undefined,
+): ComposeWireEndState {
+  if (!binding) return 'free'
+  const entity = document?.entities[binding.entityId]
+  return getComposeEntityPorts(entity).some(({ id }) => id === binding.portId)
+    ? 'bound'
+    : 'dangling'
+}
+
 const TO_RADIANS = Math.PI / 180
 
 /**
@@ -167,22 +198,37 @@ function resolveWireGeometry(
 ): ResolvedWireGeometry | null {
   const curve = getComposeCurve(entity)
   const box = snapshot.boxes[entity.id]
-  if (!curve || curve.kind !== 'line' || !box) return null
+  if (!curve || (curve.kind !== 'line' && curve.kind !== 'polyline') || !box) return null
   // 作者几何按**画出来的**那条线读：盒被拉过之后，`Curve` 里的值不再是屏幕上的位置。
-  const drawn = projectComposeCurveToBox(curve, box) as ComposeLineCurve
-  const authored = {
-    start: { x: box.x + drawn.start.x, y: box.y + drawn.start.y },
-    end: { x: box.x + drawn.end.x, y: box.y + drawn.end.y },
-  }
+  const drawn = projectComposeCurveToBox(curve, box)
+  if (drawn.kind === 'arc') return null
+  /*
+   * 首尾两个顶点就是导线的两端，中间的拐点是纯几何——`Wire` 回答的是「这一端接到了哪个端口」，
+   * 而拐点不接任何东西。两种 kind 因此收敛成同一串顶点处理，只有首尾会被写。
+   */
+  const authored: ComposePosition[] = (drawn.kind === 'line'
+    ? [drawn.start, drawn.end]
+    : drawn.vertices
+  ).map((point) => ({ x: box.x + point.x, y: box.y + point.y }))
+  if (authored.length < 2) return null
   // 任一端解算失败就用作者几何兜底：塌到原点或整条消失都会让用户以为导线被删了。
   const start = wire.start ? resolveComposePortPoint(document, snapshot, wire.start) : null
   const end = wire.end ? resolveComposePortPoint(document, snapshot, wire.end) : null
   if (!start && !end) return null
-  const next: ComposeLineCurve = {
-    kind: 'line',
-    start: start ?? authored.start,
-    end: end ?? authored.end,
-  }
+  /*
+   * **只写首尾**，其余顶点原样保留——绑定端移动之后原本水平的那一段会变斜，这是明写的代价。
+   * 不为它补偿相邻顶点：一条导线两端都可能绑定，两端各自要求「保持我这一段正交」时中间顶点
+   * 该听谁的没有答案（框选一片符号一起挪恰恰最常见）；而任何这类规则都是**自动路由的一半**，
+   * 半条规则产出的形状用户预测不了，比一条明显变斜的线更难修。
+   */
+  const points = [...authored]
+  if (start) points[0] = start
+  if (end) points[points.length - 1] = end
+  const first = points[0]!
+  const last = points[points.length - 1]!
+  const next: ComposeCurve = points.length === 2
+    ? { kind: 'line', start: first, end: last }
+    : { kind: 'polyline', vertices: points, closed: false }
   const normalized = normalizeComposeCurveGeometry(next)
   return { curve: normalized.curve, offset: normalized.offset, size: normalized.size }
 }

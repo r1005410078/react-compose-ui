@@ -9,6 +9,7 @@ import {
   COMPOSE_CURVE_PICK_TOLERANCE,
   getComposeCurve,
   getComposeLayoutItem,
+  getComposeRenderer,
   type ComposeEntity,
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -35,6 +36,37 @@ describe('curve 物料', () => {
     // 默认是斜线：退化盒不应当成为首次体验。
     expect(curve.start).toEqual({ x: 0, y: 0 })
     expect(curve.end).toEqual({ x: item.width.value, y: item.height.value })
+  })
+
+  it('OpenSpec: basic-materials / 基础 Entity Presets / 导线是红色粗实线', () => {
+    const materials = createComposeBasicMaterials()
+    const curve = materials.registry.createSeed('curve')
+    const wire = materials.registry.createSeed('wire')
+    if (!curve.ok || !wire.ok) throw new Error('curve 与 wire Preset 都必须可创建')
+    const curveProps = getComposeRenderer({ id: 'curve', ...curve.seed })?.props ?? {}
+    const wireProps = getComposeRenderer({ id: 'wire', ...wire.seed })?.props ?? {}
+    expect(Number(wireProps.strokeWidth)).toBeGreaterThan(Number(curveProps.strokeWidth))
+    /*
+     * 颜色**必须不同**，而且必须是红：一次接线图里红 = 合闸/带电，而储能、光伏这类图画的是
+     * 正常运行的系统，整条一次回路本来就是带电的。绿在这里表示分闸/停电，正好相反——这条
+     * 断言同时挡住「顺手改回中性」与「照抄 PCB 原理图的绿」两种回退。
+     */
+    expect(wireProps.stroke).not.toBe(curveProps.stroke)
+    expect(wireProps.stroke).toBe('#ff3b30')
+    expect(wireProps.strokeLinecap).toBe(curveProps.strokeLinecap)
+    expect(wireProps.markerStart).toBe(curveProps.markerStart)
+    expect(wireProps.markerEnd).toBe(curveProps.markerEnd)
+  })
+
+  it('OpenSpec: basic-materials / 基础 Entity Presets / 四个曲线起点共用一个 Renderer', () => {
+    const materials = createComposeBasicMaterials()
+    const types = ['curve', 'arrow', 'circle', 'wire'].map((id) => {
+      const seed = materials.registry.createSeed(id)
+      if (!seed.ok) throw new Error(`${id} Preset 必须可创建`)
+      expect(getComposeCurve({ id, ...seed.seed })).toBeDefined()
+      return getComposeRenderer({ id, ...seed.seed })?.type
+    })
+    expect(new Set(types)).toEqual(new Set(['curve']))
   })
 
   it('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 曲线有盒手柄', () => {

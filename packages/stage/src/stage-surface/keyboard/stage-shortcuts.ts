@@ -39,6 +39,13 @@ export const STAGE_SHORTCUT_ACTIONS = [
   'edit.group',
   'edit.ungroup',
   'edit.delete',
+  'drafting.line',
+  'drafting.polyline',
+  'drafting.rectangle',
+  'drafting.circle',
+  'drafting.arc',
+  'drafting.arrow',
+  'drafting.wire',
 ] as const satisfies readonly ComposeStageShortcutAction[]
 
 /**
@@ -76,7 +83,37 @@ export const DEFAULT_STAGE_SHORTCUTS: Readonly<
   'edit.group': [{ code: 'KeyG', primary: true }],
   'edit.ungroup': [{ code: 'KeyG', primary: true, shift: true }],
   'edit.delete': [{ code: 'Delete' }, { code: 'Backspace' }],
+  // 绘图命令按下即开始，没有确认键——AutoCAD 敲 `L` 之后那个空格不携带任何信息。
+  // 每个键 MUST 同时是对应命令的一个别名（见 `COMMAND_SHORTCUTS`），用户只记一套词。
+  'drafting.line': [{ code: 'KeyL' }],
+  'drafting.polyline': [{ code: 'KeyP' }],
+  'drafting.rectangle': [{ code: 'KeyR' }],
+  'drafting.circle': [{ code: 'KeyC' }],
+  'drafting.arc': [{ code: 'KeyA' }],
+  // `A` 只能给一条，弧比箭头更接近「基础图形」，因此箭头用空着的 `X`。
+  'drafting.arrow': [{ code: 'KeyX' }],
+  'drafting.wire': [{ code: 'KeyW' }],
 }
+
+/**
+ * 绘图命令快捷键到命令 id 的映射；按表内顺序匹配，先命中者生效。
+ *
+ * @remarks
+ * 表里的每个键 MUST 同时是该命令的一个别名（`P`/`R`/`W`/`X` 已补进各自的 `aliases`）：
+ * 用户只记一套词，按 `P` 与在命令行敲 `P↵` 指向同一条命令。反向不成立——`REC`、`WI`
+ * 这类多字母别名不需要有对应的快捷键。
+ *
+ * @public
+ */
+export const COMMAND_SHORTCUTS: readonly (readonly [ComposeStageShortcutAction, string])[] = [
+  ['drafting.line', 'LINE'],
+  ['drafting.polyline', 'PLINE'],
+  ['drafting.rectangle', 'RECTANGLE'],
+  ['drafting.circle', 'CIRCLE'],
+  ['drafting.arc', 'ARC'],
+  ['drafting.arrow', 'ARROW'],
+  ['drafting.wire', 'WIRE'],
+]
 
 export const LAYER_ORDER_SHORTCUTS = [
   ['edit.bringForward', 'bring-forward'],

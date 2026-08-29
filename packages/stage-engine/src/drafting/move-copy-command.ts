@@ -17,11 +17,12 @@ function selectPrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
 }
 
 function basePrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
-  return { message: messages.basePoint, accepts: ['point'] }
+  return { message: messages.basePoint, accepts: ['point'], fields: 'absolute' }
 }
 
 function displacementPrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
-  return { message: messages.displacementPoint, accepts: ['point'] }
+  // 位移是相对基点的距离与角度——`MOVE` 的第二个点回答的正是「往哪个方向挪多远」。
+  return { message: messages.displacementPoint, accepts: ['point'], fields: 'polar' }
 }
 
 function delta(from: ComposeCommandPoint, to: ComposeCommandPoint): ComposeCommandPoint {

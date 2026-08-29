@@ -1,21 +1,24 @@
-import { useCallback, useRef, useState } from 'react'
+import { Fragment, useCallback, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { ComposeCommandPrompt } from '@compose-ui/commands'
 import type { ComposeCommandLineMessages, ComposeCommandLineProps } from './command-line-types'
 
 /**
- * 把提示与关键字渲染成 AutoCAD 风格的一行文本。
+ * 把提示与关键字渲染成 AutoCAD 风格的一行。
  *
  * @remarks
- * 关键字写成 `[放弃(U)/结束(F)]`——括号里的字母就是用户要键入的内容，这个格式本身在告诉用户
- * 怎么操作，所以不做成下拉或按钮。
+ * 关键字写成 `[放弃(U)/结束(F)]`——括号里的字母就是用户要键入的内容，这个格式本身在告诉
+ * 用户怎么操作，因此**不换成下拉或工具栏**。可点只是在这一行上多给一条路：每个
+ * `标签(字母)` 是一个按钮，点它与键入那个字母上报同一个结果。
+ *
+ * 分片而不是拼一整个字符串，是因为按钮必须是独立元素；前后的方括号、斜杠与冒号仍然逐字
+ * 保留，这一行看起来与从前一模一样。
  */
-function promptText(prompt: ComposeCommandPrompt | null, messages: ComposeCommandLineMessages) {
-  if (!prompt) return messages.ready
+function promptParts(prompt: ComposeCommandPrompt | null, messages: ComposeCommandLineMessages) {
+  if (!prompt) return { lead: messages.ready, keywords: [] as const }
   const keywords = prompt.keywords ?? []
-  if (keywords.length === 0) return `${prompt.message}:`
-  const options = keywords.map(({ key, label }) => `${label}(${key})`).join('/')
-  return `${prompt.message}${messages.keywordsPrefix} [${options}]:`
+  if (keywords.length === 0) return { lead: `${prompt.message}:`, keywords: [] as const }
+  return { lead: `${prompt.message}${messages.keywordsPrefix} [`, keywords }
 }
 
 /**
@@ -47,6 +50,8 @@ export function ComposeCommandLine({
   status,
   onSubmit,
   onCancel,
+  onTextChange,
+  onFieldAdvance,
   inputRef,
   testIdPrefix = 'compose',
   className,
@@ -75,7 +80,20 @@ export function ComposeCommandLine({
     setText(next === -1 ? '' : history[next]!)
   }, [])
 
+  /** 写缓冲的唯一入口：上报与置位必须成对，分开写必然有一处漏掉。 */
+  const writeText = useCallback((next: string) => {
+    setText(next)
+    onTextChange?.(next)
+  }, [onTextChange])
+
   const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
+    // 只在调用方要接管时才吃掉 `Tab`：其余时候它是焦点导航键。
+    if (event.key === 'Tab' && onFieldAdvance) {
+      event.preventDefault()
+      onFieldAdvance(text)
+      writeText('')
+      return
+    }
     // 方向键默认把光标移到行首/行尾；召回要覆盖它，这是终端的既有约定。
     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
       event.preventDefault()
@@ -84,7 +102,7 @@ export function ComposeCommandLine({
     }
     if (event.key === 'Escape') {
       event.preventDefault()
-      setText('')
+      writeText('')
       historyIndexRef.current = -1
       onCancel()
       return
@@ -95,10 +113,12 @@ export function ComposeCommandLine({
     if (value.trim().length > 0) {
       historyRef.current = [value, ...historyRef.current].slice(0, HISTORY_LIMIT)
     }
-    setText('')
+    writeText('')
     historyIndexRef.current = -1
     onSubmit(value)
-  }, [onCancel, onSubmit, recall, text])
+  }, [onCancel, onFieldAdvance, onSubmit, recall, text, writeText])
+
+  const parts = promptParts(prompt, messages)
 
   return (
     <div
@@ -106,7 +126,26 @@ export function ComposeCommandLine({
       data-testid={`${testIdPrefix}-command-line`}
     >
       <span className="compose-command-line__prompt" data-testid={`${testIdPrefix}-command-prompt`}>
-        {notice ?? promptText(prompt, messages)}
+        {notice ?? (
+          <>
+            {parts.lead}
+            {parts.keywords.map(({ key, label }, index) => (
+              <Fragment key={key}>
+                {index > 0 ? '/' : null}
+                <button
+                  className="compose-command-line__keyword"
+                  data-testid={`${testIdPrefix}-command-keyword-${key}`}
+                  type="button"
+                  // 点击与键入同一条路：宿主收到的是同一个字符串，它不需要知道用户走的是哪条。
+                  onClick={() => { onSubmit(key) }}
+                >
+                  {`${label}(${key})`}
+                </button>
+              </Fragment>
+            ))}
+            {parts.keywords.length > 0 ? ']:' : null}
+          </>
+        )}
       </span>
       <input
         ref={inputRef}
@@ -117,7 +156,7 @@ export function ComposeCommandLine({
         spellCheck={false}
         type="text"
         value={text}
-        onChange={(event) => { setText(event.target.value) }}
+        onChange={(event) => { writeText(event.target.value) }}
         onKeyDown={handleKeyDown}
       />
       {(status ?? []).map((item) => (

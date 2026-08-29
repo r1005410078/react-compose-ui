@@ -41,10 +41,11 @@ test('OpenSpec: editor-workspace-layout / 绘图命令组 / 点按钮启动的�
   await page.mouse.click(at(220, 180).x, at(220, 180).y)
   await page.mouse.click(at(360, 280).x, at(360, 280).y)
 
-  // 启动的是**那条**命令：矩形是四顶点的闭合多段线，因此画出来的是一个 polygon 而不是别的。
-  const strokes = stage.getByTestId('compose-material-curve-stroke')
-  await expect(strokes).toHaveCount(1)
-  expect(await strokes.first().evaluate((node) => node.tagName.toLowerCase())).toBe('polygon')
+  // 启动的是**那条**命令：`RECTANGLE` 产出的是矩形物料，因此场景树里出现的是 Rectangle
+  // 而不是 Curve。
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  await expect(sceneTree.getByRole('row').filter({ hasText: 'Rectangle' })).toHaveCount(1)
+  await expect(stage.getByTestId('compose-material-curve-stroke')).toHaveCount(0)
 })
 
 test('OpenSpec: editor-workspace-layout / 绘图命令组 / 会话进行中按钮按下，Escape 之后不按下', async ({ page }) => {
@@ -85,4 +86,33 @@ test('OpenSpec: stage / ARROW / 画出的曲线带终点箭头', async ({ page }
   const strokes = stage.getByTestId('compose-material-curve-stroke')
   await expect(strokes).toHaveCount(1)
   expect(await strokes.first().getAttribute('marker-end')).toMatch(/^url\(#/)
+})
+
+test('OpenSpec: stage / 会重开的命令与两级 Escape / 连画多条期间按钮一直按下', async ({ page }) => {
+  const { editor, stage, at } = await openEditor(page)
+  const wire = editor.getByRole('button', { name: '导线', exact: true })
+  const strokes = stage.getByTestId('compose-material-curve-stroke')
+  const prompt = stage.getByTestId('stage-drafting-command-prompt')
+
+  await wire.click()
+  await expect(wire).toHaveAttribute('aria-pressed', 'true')
+
+  /*
+   * 连画三条，每条只按一次 `Enter` 结束——命令本身不必重启。`WIRE` 连续取点（可以有拐点），
+   * 因此那一下回车是「这一条画完了」，而不是「结束命令」。
+   */
+  for (const y of [160, 220, 280]) {
+    await page.mouse.click(at(160, y).x, at(160, y).y)
+    await page.mouse.click(at(360, y).x, at(360, y).y)
+    await stage.press('Enter')
+    // 提示回到第一步，而不是停在「指定下一点」。
+    await expect(prompt).toContainText('指定第一点')
+    // 按下态读的是 Stage 上报的当前命令 id：重开若先报一次 null，这里就会抖。
+    await expect(wire).toHaveAttribute('aria-pressed', 'true')
+  }
+  await expect(strokes).toHaveCount(3)
+
+  // 一个点都没取时 `Escape` 才退出命令。
+  await stage.press('Escape')
+  await expect(wire).toHaveAttribute('aria-pressed', 'false')
 })

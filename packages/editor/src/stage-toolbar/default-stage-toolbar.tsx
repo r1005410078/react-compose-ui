@@ -1,4 +1,5 @@
 import type { ComposeDocument } from '@compose-ui/core'
+import type { ComposeAngleConstraint } from '@compose-ui/core'
 import type {
   ComposeStageDispatch,
   ComposeStageTool,
@@ -32,7 +33,21 @@ type DefaultStageToolbarProps = {
   readonly startCommand: (commandId: string) => void
   readonly toggleSnap: () => void
   readonly tool: ComposeStageTool
+  /** 角度约束的三态；正交与极轴两个按钮是同一个单选组的两个成员。 */
+  readonly angleConstraint: ComposeAngleConstraint
+  readonly setAngleConstraint: (next: ComposeAngleConstraint) => void
+  readonly polarIncrement: number
+  readonly setPolarIncrement: (degrees: number) => void
 }
+
+/**
+ * 增量角的取值：AutoCAD 的八个 360 约数。
+ *
+ * @remarks
+ * 只有整除 360 的角才能成族铺满一圈——37° 那样的角在 AutoCAD 里属于**附加角**（一条，不是
+ * 一族），是另一张表。那张表这里不做：它需要一整套增删行的编辑面，而眼下没有消费者。
+ */
+const POLAR_INCREMENTS = [90, 45, 30, 22.5, 18, 15, 10, 5] as const
 
 /**
  * 工具栏上的绘图命令：命令 id、文案键与图标名。
@@ -112,6 +127,10 @@ export function DefaultStageToolbar({
   startCommand,
   toggleSnap,
   tool,
+  angleConstraint,
+  setAngleConstraint,
+  polarIncrement,
+  setPolarIncrement,
 }: DefaultStageToolbarProps) {
   const {
     close: closeGridMenu,
@@ -124,6 +143,17 @@ export function DefaultStageToolbar({
     setOpen: setGridMenuOpen,
     triggerRef: gridMenuTriggerRef,
   } = useToolbarMenu('compose-editor-grid-menu')
+  const {
+    close: closePolarMenu,
+    focusFirstItem: focusFirstPolarItem,
+    id: polarMenuId,
+    menuRef: polarMenuRef,
+    onMenuKeyDown: onPolarMenuKeyDown,
+    onTriggerKeyDown: onPolarTriggerKeyDown,
+    open: polarMenuOpen,
+    setOpen: setPolarMenuOpen,
+    triggerRef: polarMenuTriggerRef,
+  } = useToolbarMenu('compose-editor-polar-menu')
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(
     i18n?.locale ?? 'zh-CN',
@@ -172,6 +202,73 @@ export function DefaultStageToolbar({
         <button {...titled(messages.snap)} aria-pressed={snapEnabled} type="button" onClick={toggleSnap}>
           <StageToolbarIcon name="smart-snap" />
         </button>
+        {/*
+          * 正交与极轴是**同一个单选组的两个成员**：它们回答同一个问题——这一步的方向怎么被
+          * 约束。因此按下已经按下的那一个就是关掉，而不是各自独立开关（那会造出一个「都开」
+          * 的第四态，而那一态没有正确答案）。
+          *
+          * 这两个按钮不是键位的第二个入口：角度约束此前藏在 `F8` 后面，宿主读不到也就画不出
+          * 按下态——用户不按那个键就不知道有这回事。按下态是必需的，不是装饰。
+          */}
+        <button
+          {...titled(messages.ortho, 'F8')}
+          aria-pressed={angleConstraint === 'ortho'}
+          type="button"
+          onClick={() => setAngleConstraint(angleConstraint === 'ortho' ? 'off' : 'ortho')}
+        >
+          <StageToolbarIcon name="ortho" />
+        </button>
+        <div className="compose-editor__toolbar-menu-anchor">
+          <button
+            {...titled(messages.polar, 'F10')}
+            aria-pressed={angleConstraint === 'polar'}
+            type="button"
+            onClick={() => setAngleConstraint(angleConstraint === 'polar' ? 'off' : 'polar')}
+          >
+            <StageToolbarIcon name="polar" />
+          </button>
+          <button
+            {...titled(messages.polarIncrement)}
+            aria-controls={polarMenuId}
+            aria-expanded={polarMenuOpen}
+            aria-haspopup="menu"
+            className="compose-editor__toolbar-menu-trigger"
+            ref={polarMenuTriggerRef}
+            type="button"
+            onClick={() => {
+              setPolarMenuOpen((open) => !open)
+              focusFirstPolarItem()
+            }}
+            onKeyDown={onPolarTriggerKeyDown}
+          >
+            <StageToolbarIcon name="chevron-down" />
+          </button>
+          {polarMenuOpen ? (
+            <div
+              aria-label={messages.polarIncrement}
+              className="compose-editor__toolbar-menu"
+              id={polarMenuId}
+              ref={polarMenuRef}
+              role="menu"
+              onKeyDown={onPolarMenuKeyDown}
+            >
+              {POLAR_INCREMENTS.map((degrees) => (
+                <button
+                  key={degrees}
+                  aria-pressed={polarIncrement === degrees}
+                  role="menuitemradio"
+                  type="button"
+                  onClick={() => {
+                    setPolarIncrement(degrees)
+                    closePolarMenu()
+                  }}
+                >
+                  {`${degrees}\u00B0`}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
         <div className="compose-editor__toolbar-menu-anchor">
           <button {...titled(messages.grid)} aria-pressed={gridVisible} type="button" onClick={() => setGridVisible((visible) => !visible)}>
             <StageToolbarIcon name="grid" />

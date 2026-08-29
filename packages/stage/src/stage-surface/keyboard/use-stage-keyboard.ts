@@ -33,12 +33,23 @@ import type { getStageMessages } from '../../stage-i18n'
 import { planStageNudge } from './nudge-planning'
 import { fitViewportTo, zoomViewportByIntent } from '../stage-viewport-actions'
 import {
+  COMMAND_SHORTCUTS,
   DELEGATABLE_STAGE_ACTIONS,
   isEditableTarget,
   isStageShortcutMatch,
   keyboardEventCode,
   LAYER_ORDER_SHORTCUTS,
+  STAGE_SHORTCUT_ACTIONS,
 } from './stage-shortcuts'
+
+/**
+ * 能起一个坐标的字符。
+ *
+ * @remarks
+ * 三种写法各自的首字符与后续字符：`x,y` / `@dx,dy` / `距离<角度`，以及裸数字。字母不在其中——
+ * 它们是关键字与命令名，转交过去会把每一次误触都变成命令行里的垃圾。
+ */
+const POINT_INPUT_CHARS = /[0-9@,.<-]/
 
 /** 方向键到单位世界位移的映射；步长由 Shift 决定，不在此表内。 */
 const NUDGE_DIRECTIONS: Readonly<Record<string, { x: number; y: number }>> = {
@@ -94,6 +105,36 @@ export interface StageKeyboardCommandsParams {
   readonly isTextEditing: () => boolean
   /** 中止进行中的手势（有指针会话则取消会话，否则直接通知内核）。 */
   readonly cancelGesture: () => void
+  /**
+   * 启动一条命令会话。
+   *
+   * @remarks
+   * 与命令行、`ComposeStageHandle.startCommand` 是**同一个**函数：另走一条路必然只实现
+   * 三种拒绝里的一两种，同一条命令会在不同入口给出不同结果。
+   */
+  readonly startCommand: (commandId: string) => void
+  /**
+   * 此刻有没有命令会话在跑。
+   *
+   * @remarks
+   * 有的话图面上的单键不启动新命令——SDD 2.2 的最终形态是把这些字符转交给动态输入框，
+   * 而动态输入尚未落地；在它到来之前启动新命令会**静默丢弃**正在进行的那一条，用户已取
+   * 的点就没了。什么都不做是这条规则的安全子集。
+   */
+  readonly isCommandActive: () => boolean
+  /**
+   * 命令此刻正在等一个点。
+   *
+   * @remarks
+   * 这一档里图面上的数字、`@`、`,`、`<`、`-`、`.` 全部**转交命令行**——命令行是坐标与动态
+   * 输入唯一的输入端，而用户点完第一个点之后焦点就在图面上了。不转交的话，他必须把手移回
+   * 命令行才打得出第二个点的坐标，而屏幕上没有任何东西在说这件事。
+   */
+  readonly isAwaitingPoint: () => boolean
+  /** 把焦点交回命令行输入框。 */
+  readonly focusCommandLine: () => void
+  /** `Tab`：锁定当前数值字段并切到另一个；这一步没有字段时为 `null`。 */
+  readonly advanceField: (() => void) | null
   readonly executeClipboard: (action: 'edit.copy' | 'edit.cut' | 'edit.paste') => void
 }
 
@@ -147,6 +188,10 @@ export function useStageKeyboardCommands(
     idFactory,
     isTextEditing,
     layoutSnapshot,
+    advanceField,
+    focusCommandLine,
+    isAwaitingPoint,
+    isCommandActive,
     messages,
     normalizedSelection,
     onKeyDown,
@@ -156,6 +201,7 @@ export function useStageKeyboardCommands(
     onViewportChange,
     selectionBounds,
     shortcuts,
+    startCommand,
     surfaceSize,
     viewport,
   } = params
@@ -205,6 +251,27 @@ export function useStageKeyboardCommands(
       controller.send({ type: 'key.down', key: 'Enter' })
       return
     }
+    /*
+     * 命令正在取点时，图面上的键盘输入转交命令行。
+     *
+     * **必须排在快捷键之前**：`Shift+2` 在 US 布局上打出的正是 `@`，而它同时是「适配选择」
+     * 的默认键——不抢在前面，用户想打 `@dx,dy` 会得到一次视口适配。
+     *
+     * 带 primary/alt 的组合一律放行：那些是剪贴板与缩放，不是坐标。
+     */
+    if (isAwaitingPoint() && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key === 'Tab' && advanceField) {
+        event.preventDefault()
+        focusCommandLine()
+        advanceField()
+        return
+      }
+      if (event.key.length === 1 && POINT_INPUT_CHARS.test(event.key)) {
+        // **不** `preventDefault`：聚焦之后这个字符要落进输入框里，拦下来就白转交了。
+        focusCommandLine()
+        return
+      }
+    }
     // 宿主可以用统一的动作实现接管可配置动作，避免键盘、工具栏与命令面板各有一套行为。
     // 必须排在内建分支之前，且只在宿主确认接管时才短路，未接管时行为与不传该属性一致。
     if (onShortcutAction) {
@@ -228,6 +295,28 @@ export function useStageKeyboardCommands(
       onToolChange?.(toolAction[1])
       event.preventDefault()
       return
+    }
+    /*
+     * 绘图命令：按下即启动，与在命令行敲这个名字完全相同的会话。
+     *
+     * **命令进行中一律不接管**：不是「换一条命令」，而是连 `preventDefault` 都不做，让
+     * 这个字符落回图面。启动新命令会静默丢弃正在进行的那一条，而动态输入落地之后这一档
+     * 要把字符转交给光标旁的输入框——现在什么都不做正是那条语义的安全子集。
+     *
+     * **同一个事件上还有别的动作时让路。** 绘图键是七个**裸字母**，是本表里最容易被撞上的
+     * 一类绑定；宿主把某个动作重绑到 `P` 是一次显式选择，而 `P` 画多段线只是默认值。不让路
+     * 的话，新增这七个默认键会静默夺走宿主已经绑好的键，症状是「我绑的键失灵了」。
+     */
+    const commandAction = COMMAND_SHORTCUTS.find(([action]) => actionMatches(action))
+    if (commandAction && !isCommandActive()) {
+      const yieldsTo = STAGE_SHORTCUT_ACTIONS.some(
+        (action) => !action.startsWith('drafting.') && actionMatches(action),
+      )
+      if (!yieldsTo) {
+        startCommand(commandAction[1])
+        event.preventDefault()
+        return
+      }
     }
     const fitViewport = (target: StageRect | null) => {
       const next = fitViewportTo(target, surfaceSize)

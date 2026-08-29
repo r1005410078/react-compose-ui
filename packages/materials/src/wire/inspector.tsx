@@ -1,20 +1,11 @@
-import { getComposeEntityPorts, type ComposeDocument, type ComposeWire, type ComposeWireBinding } from '@compose-ui/core'
+import {
+  getComposeWireEndState,
+  type ComposeWire,
+  type ComposeWireEndState,
+} from '@compose-ui/core'
 import type { ComponentType } from 'react'
 import type { ComposeComponentInspectorProps } from '@compose-ui/component-registry'
 import { useZh } from '../material-inspector-kit/use-zh'
-
-/** 一端的三种状态。 */
-type WireEndState = 'free' | 'bound' | 'dangling'
-
-function endState(
-  document: ComposeDocument | undefined,
-  binding: ComposeWireBinding | undefined,
-): WireEndState {
-  if (!binding) return 'free'
-  const entity = document?.entities[binding.entityId]
-  const resolved = getComposeEntityPorts(entity).some(({ id }) => id === binding.portId)
-  return resolved ? 'bound' : 'dangling'
-}
 
 /**
  * 创建 Wire Component Inspector。
@@ -33,7 +24,7 @@ export function createWireInspector(): ComponentType<ComposeComponentInspectorPr
   return function WireInspector({ document, value }) {
     const zh = useZh()
     const wire = value as ComposeWire
-    const label: Record<WireEndState, string> = {
+    const label: Record<ComposeWireEndState, string> = {
       free: zh ? '自由端' : 'Free',
       bound: zh ? '已绑定' : 'Bound',
       dangling: zh ? '失效' : 'Dangling',
@@ -45,7 +36,8 @@ export function createWireInspector(): ComponentType<ComposeComponentInspectorPr
     return (
       <dl aria-label={zh ? '导线属性' : 'Wire properties'} className="compose-material-wire">
         {rows.map(({ key, title, binding }) => {
-          const state = endState(document, binding)
+          // 判定走 core 的共享入口：图面上的端点记号读的是同一个函数，各判一次必然漂移。
+          const state = getComposeWireEndState(document, binding)
           return (
             <div className="compose-material-wire__row" key={key}>
               <dt>{title}</dt>

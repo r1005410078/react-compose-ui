@@ -20,6 +20,7 @@ import {
   DEFAULT_CURVE_GEOMETRY,
   DEFAULT_CURVE_PROPS,
   DEFAULT_CURVE_SIZE,
+  DEFAULT_WIRE_PROPS,
 } from './defaults'
 import {
   createCurveRendererInspector,
@@ -49,11 +50,11 @@ function valueContract(
  * 曲线的一个起点。
  *
  * @remarks
- * 三个 Preset 的差别只有默认几何与默认描边，Renderer 是同一个——「盒 + 方向」与「坐标」不得
+ * 四个 Preset 的差别只有默认几何与默认描边，Renderer 是同一个——「盒 + 方向」与「坐标」不得
  * 同时存在两种线的表示，用户看不出区别却会得到不同的编辑手感。
  */
 function curvePreset(
-  id: 'curve' | 'arrow' | 'circle',
+  id: 'curve' | 'arrow' | 'circle' | 'wire',
   fallbackLabel: string,
   fallbackProps: JsonObject,
   geometry: (size: { readonly width: number; readonly height: number }) => ComposeCurve,
@@ -78,7 +79,7 @@ function curvePreset(
 }
 
 /**
- * 创建曲线 Renderer 与它的三个 Preset。
+ * 创建曲线 Renderer 与它的四个 Preset。
  *
  * @remarks
  * Preset 在 `rendererPresetComponents` 之外补一个 `Curve` 承载几何。
@@ -87,8 +88,9 @@ function curvePreset(
  * 定」。**现在定了**：盒自由，几何按 `viewBox` 与盒的比例呈现，因此手柄回来，走的是所有
  * Entity 共用的那一条缩放路径。
  *
- * `paletteHidden` 的判据是「工具栏是否已提供入口」，与物料本身无关：Arrow 与 Circle 有形状
- * 菜单，Curve 没有。
+ * `paletteHidden` 的判据是「工具栏是否已提供入口」，与物料本身无关：Arrow、Circle 与 Wire 各有
+ * 一条绘图命令，Curve 没有。Wire 还有一条自己的理由——从 Palette 拖出来的导线**没有任何端口
+ * 绑定**，而那条粗线正在宣称它是主回路。
  *
  * @internal
  */
@@ -97,7 +99,12 @@ export function createCurveMaterial(
   idFactory: InspectorIdFactory = createDefaultInspectorId,
 ): {
   renderer: ComposeRendererDefinition
-  presets: readonly [ComposeEntityPreset, ComposeEntityPreset, ComposeEntityPreset]
+  presets: readonly [
+    ComposeEntityPreset,
+    ComposeEntityPreset,
+    ComposeEntityPreset,
+    ComposeEntityPreset,
+  ]
 } {
   return {
     renderer: {
@@ -153,6 +160,15 @@ export function createCurveMaterial(
         true,
         options.circle,
       ),
+      curvePreset(
+        'wire',
+        'Wire',
+        DEFAULT_WIRE_PROPS,
+        (size) => ({ ...DEFAULT_CURVE_GEOMETRY, end: { x: size.width, y: size.height } }),
+        <ComposeLineMaterialIcon />,
+        true,
+        options.wire,
+      ),
     ],
   }
 }
@@ -166,3 +182,5 @@ export const DEFAULT_COMPOSE_CURVE_PRESET = curve.presets[0]
 export const DEFAULT_COMPOSE_ARROW_PRESET = curve.presets[1]
 /** 默认 Circle Entity Preset。 @public */
 export const DEFAULT_COMPOSE_CIRCLE_PRESET = curve.presets[2]
+/** 默认 Wire Entity Preset。 @public */
+export const DEFAULT_COMPOSE_WIRE_PRESET = curve.presets[3]

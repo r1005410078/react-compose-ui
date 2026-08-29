@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>画导线</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --page-bg: #f4f6f9;
+    --page-panel: #ffffff;
+    --page-ink: #141a22;
+    --page-muted: #5a6472;
+    --page-line: #dde3ec;
+    --page-accent: #1f6feb;
+
+    /* 画布 token —— 取自 packages/stage/src/styles.css，两个主题下都不变 */
+    --canvas: #11151b;
+    --canvas-border: #2c3542;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #0d1117;
+      --page-panel: #151b23;
+      --page-ink: #e6edf7;
+      --page-muted: #99a3b2;
+      --page-line: #262f3b;
+      --page-accent: #4d9cff;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --page-bg: #0d1117;
+    --page-panel: #151b23;
+    --page-ink: #e6edf7;
+    --page-muted: #99a3b2;
+    --page-line: #262f3b;
+    --page-accent: #4d9cff;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--page-ink);
+    font-family: 'IBM Plex Sans SC', system-ui, -apple-system, 'PingFang SC', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede { max-width: var(--measure); color: var(--page-muted); margin: 0; }
+
+  h2 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .section-head { display: flex; flex-direction: column; gap: 4px; }
+  .section-head p { max-width: var(--measure); margin: 0; color: var(--page-muted); }
+
+  .answers { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .answer {
+    background: var(--page-panel);
+    border: 1px solid var(--page-line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .answer .q {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+  .answer .a { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .answer .why { font-size: 13.5px; color: var(--page-muted); line-height: 1.6; }
+
+  .stage {
+    border-radius: 10px;
+    overflow: hidden;
+    background:
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      var(--canvas);
+    border: 1px solid var(--canvas-border);
+  }
+  .stage svg { display: block; width: 100%; height: auto; }
+
+  .step { display: flex; flex-direction: column; gap: 12px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; }
+  .step-n {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--page-accent);
+    letter-spacing: 0.08em;
+    flex: none;
+  }
+  .step-title { font-weight: 600; letter-spacing: -0.01em; }
+  .step-note { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+  .step-note code, p code, td code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--page-accent) 12%, transparent);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 40px; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--page-line); vertical-align: top; }
+  th {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+    font-weight: 500;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 500; white-space: nowrap; }
+  .swatch {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 3px;
+    margin-right: 7px;
+    vertical-align: -1px;
+    border: 1px solid rgb(128 128 128 / 35%);
+  }
+  .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .reject {
+    border-left: 3px solid var(--page-line);
+    padding: 2px 0 2px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .reject h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .reject p { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+
+  .callout {
+    background: color-mix(in srgb, var(--page-accent) 7%, var(--page-panel));
+    border: 1px solid color-mix(in srgb, var(--page-accent) 26%, transparent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .callout strong { font-weight: 600; }
+  .callout p { margin: 0; font-size: 14px; max-width: var(--measure); }
+
+  footer {
+    border-top: 1px solid var(--page-line);
+    padding-top: 20px;
+    color: var(--page-muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">SDD 补充 · 绘图交互</div>
+    <h1>画导线</h1>
+    <p class="lede">
+      取点、动态输入、结束方式全部与画线逐字相同，这份稿子只回答导线独有的两个问题：
+      <strong>端口什么时候显出来</strong>，以及<strong>画完之后怎么看出这一端接上了没有</strong>。
+      画布片段按 Stage 的真实 token 1:1 绘制。
+    </p>
+  </header>
+
+  <section>
+    <div class="answers">
+      <div class="answer">
+        <div class="q">端口什么时候显现</div>
+        <div class="a">靠近时，整组一起</div>
+        <div class="why">
+          任何一个端口进入捕捉靶区，就把它所属符号的<strong>全部</strong>端口一起亮出来。
+          不常驻，也不只亮最近的那一个。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">接上了没有</div>
+        <div class="a">选中那条导线时看</div>
+        <div class="why">
+          已绑端实心、自由端空心虚线环。两端一眼对比，而平时图面上一个记号都不留。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">绑的东西没了呢</div>
+        <div class="a">常驻标出失效</div>
+        <div class="why">
+          那是缺陷，不是未完成。「还没接」「接错了」「接的东西没了」三者必须可区分。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="callout">
+    <strong>三个记号回答三个不同的问题，因此是三种颜色</strong>
+    <p>
+      <span class="swatch" style="background:#4fd1c5"></span><strong>端口青</strong>——「这里有一个接线点」；
+      <span class="swatch" style="background:#ffa53c"></span><strong>捕捉橙</strong>——「吸上了没有」；
+      <span class="swatch" style="background:#4d9cff"></span><strong>accent 蓝</strong>——「这是选中的 / 将要产出的」。
+      三个问题可以同时有答案（光标停在一个端口上、吸住了、而这条线正被画着），所以它们不能共用一个颜色。
+      这与「捕捉标记不借 <code>danger</code>、也不用 accent」是同一条判断的第二次应用。
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>六个状态</h2>
+      <p>从按下 <code>W</code> 到一条导线的绑定失效。</p>
+    </div>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">01</span>
+          <span class="step-title">按 W，指定第一点</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="按 W，指定第一点">
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="120" y="150" width="110" height="96" rx="3"/>
+            <path d="M230 174h10"/>
+            <path d="M230 198h10"/>
+            <path d="M230 222h10"/>
+            </g>
+            <text x="175.0" y="203.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text>
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="610" y="230" width="110" height="96" rx="3"/>
+            <path d="M610 254h-10"/>
+            <path d="M610 278h-10"/>
+            <path d="M610 302h-10"/>
+            </g>
+            <text x="665.0" y="283.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M368 120h46M426 120h46M420 68v46M420 126v46"/><rect x="414" y="114" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定第一点:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">端口不常驻。一张接线图上几十个与几何无关的点会把图淹掉，而此刻用户还没有在找接线点。</p>
+      </div>
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">02</span>
+          <span class="step-title">光标靠近 KA1，整组端口一起显现</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="光标靠近 KA1，整组端口一起显现">
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="120" y="150" width="110" height="96" rx="3"/>
+            <path d="M230 174h10"/>
+            <path d="M230 198h10"/>
+            <path d="M230 222h10"/>
+            </g>
+            <text x="175.0" y="203.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text>
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="610" y="230" width="110" height="96" rx="3"/>
+            <path d="M610 254h-10"/>
+            <path d="M610 278h-10"/>
+            <path d="M610 302h-10"/>
+            </g>
+            <text x="665.0" y="283.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text>
+            <g fill="none" stroke="#4fd1c5" stroke-width="1.6"><circle cx="240" cy="174" r="4.5"/><circle cx="240" cy="198" r="4.5"/><circle cx="240" cy="222" r="4.5"/></g>
+            <rect x="233.0" y="191.0" width="14" height="14" fill="#ffa53c" fill-opacity="0.16" stroke="#ffa53c" stroke-width="1.4"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M200 208h46M258 208h46M252 156v46M252 214v46"/><rect x="246" y="202" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定第一点:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">不是只亮最近的那一个：继电器的端子只隔几个像素，只亮一个的话用户看不出旁边还有两个。</p>
+      </div>
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">03</span>
+          <span class="step-title">取了起点，拖向 XT2</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="取了起点，拖向 XT2">
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="120" y="150" width="110" height="96" rx="3"/>
+            <path d="M230 174h10"/>
+            <path d="M230 198h10"/>
+            <path d="M230 222h10"/>
+            </g>
+            <text x="175.0" y="203.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text>
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="610" y="230" width="110" height="96" rx="3"/>
+            <path d="M610 254h-10"/>
+            <path d="M610 278h-10"/>
+            <path d="M610 302h-10"/>
+            </g>
+            <text x="665.0" y="283.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text>
+            <g fill="none" stroke="#4fd1c5" stroke-width="1.6"><circle cx="600" cy="254" r="4.5"/><circle cx="600" cy="278" r="4.5"/><circle cx="600" cy="302" r="4.5"/></g>
+            <rect x="593.0" y="271.0" width="14" height="14" fill="#ffa53c" fill-opacity="0.16" stroke="#ffa53c" stroke-width="1.4"/>
+            <g stroke="#8ab4e8" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="2 4" fill="none"><path d="M240 198L230.46 240.95M600 278L590.46 320.95M230.46 240.95L380.68 274.34M440.23 287.57L590.46 320.95M240 198L608.78 198.00M608.78 198.00A368.78 368.78 0 0 1 608.74 203.82M601.22 272.31A368.78 368.78 0 0 1 600 278"/></g>
+            <g fill="#8ab4e8" fill-opacity="0.75"><circle cx="230.46" cy="240.95" r="2"/><circle cx="590.46" cy="320.95" r="2"/></g>
+            <path d="M240 198L600 278" stroke="#4d9cff" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/>
+            <circle cx="240" cy="198" r="4.5" fill="#4fd1c5"/>
+            <g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M542 284h46M600 284h46M594 232v46M594 290v46"/><rect x="588" y="278" width="12" height="12" fill="none" stroke-opacity="0.7"/></g>
+            <g font-family="'IBM Plex Mono', ui-monospace, monospace" font-variant-numeric="tabular-nums" font-size="13">
+            <g transform="translate(387.96 268.95)">
+            <rect width="45" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+            <rect width="45" height="24" rx="3" fill="#4d9cff" fill-opacity="0.08"/>
+            <rect x="8.27" y="4" width="28.46" height="16" fill="#4d9cff" fill-opacity="0.34"/>
+            <text x="22.5" y="16.5" fill="#ffffff" text-anchor="middle">369</text>
+            </g>
+            <g transform="translate(580.08 226.24)">
+            <rect width="53" height="24" rx="3" fill="#12171e" fill-opacity="0.94" stroke="#2c3542" stroke-width="1.5"/>
+            <text x="26.5" y="16.5" fill="#cfd6e3" text-anchor="middle">-13°</text>
+            </g>
+            </g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            <text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定端点:</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">起点已经锁在 KA1 的中间端子上（实心）。第二步的提示是「指定端点」，不是「指定下一点（回车结束）」。</p>
+      </div>
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">04</span>
+          <span class="step-title">画完，没有选中任何东西</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="画完，没有选中任何东西">
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="120" y="150" width="110" height="96" rx="3"/>
+            <path d="M230 174h10"/>
+            <path d="M230 198h10"/>
+            <path d="M230 222h10"/>
+            </g>
+            <text x="175.0" y="203.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text>
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="610" y="230" width="110" height="96" rx="3"/>
+            <path d="M610 254h-10"/>
+            <path d="M610 278h-10"/>
+            <path d="M610 302h-10"/>
+            </g>
+            <text x="665.0" y="283.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text>
+            <path d="M240 198L600 278" stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1"/>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">图面上只剩符号与线。端口、端点记号一个都不留——它们回答的是取点当下的问题。</p>
+      </div>
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">05</span>
+          <span class="step-title">选中一条导线：两端的接线状态</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="选中一条导线：两端的接线状态">
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="120" y="150" width="110" height="96" rx="3"/>
+            <path d="M230 174h10"/>
+            <path d="M230 198h10"/>
+            <path d="M230 222h10"/>
+            </g>
+            <text x="175.0" y="203.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text>
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="610" y="230" width="110" height="96" rx="3"/>
+            <path d="M610 254h-10"/>
+            <path d="M610 278h-10"/>
+            <path d="M610 302h-10"/>
+            </g>
+            <text x="665.0" y="283.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text>
+            <path d="M240 198L566 246" stroke="#4d9cff" stroke-width="2.2" fill="none" stroke-opacity="1"/>
+            <circle cx="240" cy="198" r="4.5" fill="#4fd1c5"/>
+            <circle cx="566" cy="246" r="5.5" fill="none" stroke="#4fd1c5" stroke-width="1.6" stroke-dasharray="3 3"/>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">这条线看起来接到了 XT2，实际右端是自由的。不选中就看不出来，而唯一的替代判据是「挪一下符号看它跟不跟」——那是破坏性的验证。</p>
+      </div>
+      <div class="step">
+        <div class="step-head">
+          <span class="step-n">06</span>
+          <span class="step-title">绑定失效：绑的那个符号没了</span>
+        </div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="绑定失效：绑的那个符号没了">
+            <g stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1">
+            <rect x="120" y="150" width="110" height="96" rx="3"/>
+            <path d="M230 174h10"/>
+            <path d="M230 198h10"/>
+            <path d="M230 222h10"/>
+            </g>
+            <text x="175.0" y="203.0" font-size="14" fill="#dfe7f3" fill-opacity="1" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text>
+            <path d="M240 198L600 278" stroke="#dfe7f3" stroke-width="1.6" fill="none" stroke-opacity="1"/>
+            <g stroke="#ff7b72" stroke-width="1.8" fill="none"><circle cx="600" cy="278" r="8" stroke-opacity="0.45"/><path d="M596.4 274.4l7.199999999999999 7.199999999999999M603.6 274.4l-7.199999999999999 7.199999999999999"/></g>
+            <g transform="translate(0 376)">
+            <rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/>
+            <text x="26" y="20" font-size="12.5" fill="#ffa53c" font-family="'IBM Plex Sans SC', sans-serif">导线的终点绑定已失效：XT2:2 不存在</text>
+            </g>
+          </svg>
+        </div>
+        <p class="step-note">这一端保留作者几何，并常驻标出失效——它是缺陷，不该等到用户选中才显形。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>规格</h2>
+      <p>与画线不同的行用粗体标出；没标的都与它逐字相同。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>部件</th><th>规格</th></tr></thead>
+        <tbody>
+          <tr><td>取点</td><td>两点，取够即结束。<strong>一条导线只有两端，这不是权衡</strong></td></tr>
+          <tr><td>第一个点</td><td>绝对坐标 <code>X</code> / <code>Y</code>，不画标注</td></tr>
+          <tr><td>第二个点</td><td>距离 + 角度，从起点起算</td></tr>
+          <tr><td>第二步的提示</td><td><strong>「指定端点」</strong>。今天写的是「指定下一点（回车结束）」，而它取够点自己就提交——那句话在说一件这里做不到的事</td></tr>
+          <tr><td>端口显现</td><td><strong>任一端口进入捕捉靶区 → 该符号的整组端口一起显现</strong>；空心青圆</td></tr>
+          <tr><td>捕捉优先级</td><td><strong><code>port</code></strong> &gt; <code>endpoint</code> &gt; <code>midpoint</code> &gt; <code>center</code> &gt; <code>quadrant</code></td></tr>
+          <tr><td>绑定来源</td><td><strong>取点时记下的来源</strong>，不是事后按坐标反查。键入的坐标永远不绑</td></tr>
+          <tr><td>已绑端</td><td><strong>选中时</strong>画实心青点</td></tr>
+          <tr><td>自由端</td><td><strong>选中时</strong>画空心青环（虚线）</td></tr>
+          <tr><td>失效绑定</td><td><strong>常驻</strong>画 danger 色断口；该端保留作者几何</td></tr>
+          <tr><td>拐点</td><td><strong>不做</strong>。见下</td></tr>
+          <tr><td>落地</td><td>一条 <code>line</code> 曲线 + 一个 <code>Wire</code> Component</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>拒绝的四种画法</h2>
+    </div>
+
+    <div class="reject">
+      <h3>端口常驻显示</h3>
+      <p>
+        一张接线图上几十个与几何无关的点，会把用户真正要看的线和符号淹掉。它们回答的是
+        <strong>取点当下</strong>的问题，因此在取点当下才出现。想确认「这个符号有哪些接线点」，
+        Inspector 是那个入口。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>只亮最近的那一个端口</h3>
+      <p>
+        继电器的端子只隔几个像素。只亮一个的话，用户看不出旁边还有两个，也就无从选择——
+        而他此刻正要在它们之间选。<strong>端口是一个闭集</strong>，这是它与「端点、中点」这类
+        几何特征点最大的不同：那些是算出来的，而端口是符号作者声明的。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>自由端常驻标出</h3>
+      <p>
+        自由端<strong>不是错误</strong>——用户可能正画到一半。给每一条未接完的线常驻一个记号，
+        画到中途的图面会长满疹子。它与失效绑定的区别正在这里：那个是缺陷，这个不是。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>手画拐点的折线导线</h3>
+      <p>
+        折线导线的价值几乎全部来自<strong>自动路由</strong>（避开元器件、走线槽），而路由还没有。
+        手画的拐点在挪一下符号之后就得重画，<strong>比直线还糟</strong>——直线至少会自己跟过去。
+        这条与 <code>ARROW</code> 改成连续取点不矛盾：箭头的弯是用户手画的，不等任何东西。
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    SDD：<code>docs/drafting-interaction-sdd.md</code> ·
+    画线：<code>docs/mockups/drafting-dynamic-input.html</code> ·
+    画圆与画弧：<code>docs/mockups/drafting-circle-arc.html</code>
+  </footer>
+
+</div>
+
+</body>
+</html>

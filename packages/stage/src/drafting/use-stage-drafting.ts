@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
+  applyComposeFieldOverride,
   composeCurveSegments,
+  composePointToFields,
+  formatComposeNumber,
+  isComposeSingleFieldKind,
   parseComposeCoordinate,
   resolveComposePoint,
+  resolveComposePointDetail,
   type ComposeDocument,
   type ComposeInputPoint,
+  type ComposeAngleConstraint,
   type ComposeLayoutSnapshot,
+  type ComposePointFieldIndex,
+  type ComposePointFieldKind,
   type ComposeWireBinding,
 } from '@compose-ui/core'
 import {
@@ -19,6 +27,7 @@ import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   createStageDraftingCommands,
   createStageGripSession,
+  collectStageRevealedPorts,
   findStageFeaturePoint,
   planStageDraftingEdits,
   worldToScreen,
@@ -33,8 +42,14 @@ import {
   type StageViewport,
 } from '@compose-ui/stage-engine'
 import { isEditableTarget } from '../stage-surface/keyboard'
+import { resolveStageDynamicInput } from './dynamic-input'
 import type { ComposeStageDispatch } from '../types'
-import { anchorKey, createStageDraftingCurveCommand, wireBindingsFor } from './drafting-entity'
+import {
+  anchorKey,
+  createStageDraftingBoxCommand,
+  createStageDraftingCurveCommand,
+  wireBindingsFor,
+} from './drafting-entity'
 
 /** 绘图模式需要的额外文案。 @internal */
 export interface StageDraftingHookMessages extends StageDraftingMessages {
@@ -44,8 +59,10 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly keywordsPrefix: string
   readonly unknownCommand: string
   readonly cancelled: string
-  readonly orthoOn: string
-  readonly orthoOff: string
+  /** 角度约束的三个状态标签；三态都要渲染。 */
+  readonly angleOrtho: string
+  readonly anglePolar: string
+  readonly angleOff: string
   readonly snapOn: string
   readonly snapOff: string
   /** 夹点几何变更的撤销标签。 */
@@ -78,6 +95,17 @@ export interface StageDraftingOptions {
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   /** 捕捉的屏幕半径（CSS 像素）。 @defaultValue 12 */
   readonly snapRadius?: number
+  /**
+   * 角度约束；给出即受控，由宿主持有。
+   *
+   * @remarks
+   * 工具栏要画按下态，而事实来源只能有一份——Stage 记一份、工具栏记一份必然漂移。不给时
+   * 由 Stage 自己持有（默认极轴）：`stage` 是可独立嵌入的包，不能要求每个宿主都接一个工具栏。
+   */
+  readonly angleConstraint?: ComposeAngleConstraint
+  readonly onAngleConstraintChange?: (next: ComposeAngleConstraint) => void
+  /** 极轴的增量角（度）。 @defaultValue 45 */
+  readonly polarIncrement?: number
   /**
    * 场景索引；由宿主建一份给命令与几何编辑共用。
    *
@@ -114,8 +142,27 @@ export interface StageDraftingOptions {
 
 const DEFAULT_SNAP_RADIUS = 12
 
+/**
+ * 极轴的默认增量角。
+ *
+ * @remarks
+ * 这是对 AutoCAD 默认值（90°）的**有意偏离**，理由是前提不同：AutoCAD 的极轴默认是关的，
+ * 我们默认是开的。默认开着时增量角要覆盖用户真会画的方向，而 90° 漏掉的正是接线图上那条
+ * 斜引线；45° 只多四条射线，容差是几个屏幕像素，误吸的代价很小。
+ */
+const DEFAULT_POLAR_INCREMENT = 45
+
 /** 稳定引用的空排除表：每帧新建数组会让捕捉的记忆化整片失效。 */
 const EMPTY_EXCLUSIONS: readonly string[] = []
+
+/**
+ * 裸数字：直接距离输入与「正在键入时预览跟着走」共用同一条判据。
+ *
+ * @remarks
+ * 两处各写一份的症状是「预览跟着变了、回车却按坐标解析」——同一段文本在两条路径上被读成
+ * 两种东西，而屏幕上没有任何线索。
+ */
+const BARE_NUMBER = /^-?\d+(\.\d+)?$/
 
 /**
  * 绘图模式的命令会话。
@@ -144,6 +191,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
     selectedIds,
     onSelectedIdsChange,
     snapRadius = DEFAULT_SNAP_RADIUS,
+    angleConstraint: controlledAngle,
+    onAngleConstraintChange,
+    polarIncrement = DEFAULT_POLAR_INCREMENT,
     snapExcludedIds,
     index,
     onEnterGeometryEditing,
@@ -183,7 +233,23 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setPointerPoint(point)
     setPointerType(type)
   }, [])
-  const [ortho, setOrtho] = useState(false)
+  /**
+   * 角度约束；宿主给了 `angleConstraint` 就以宿主那份为准。
+   *
+   * @remarks
+   * **默认极轴**：它只在光标靠近某条射线时才吸，因此不挡任何画法，可以默认开着；而只有默认
+   * 开着，最常用的那个约束才真的被用上。正交不能默认开——它无条件投影，一开就画不了斜线。
+   */
+  const [uncontrolledAngle, setUncontrolledAngle] = useState<ComposeAngleConstraint>('polar')
+  const angleConstraint = controlledAngle ?? uncontrolledAngle
+  const setAngleConstraint = useCallback((next: ComposeAngleConstraint) => {
+    setUncontrolledAngle(next)
+    onAngleConstraintChange?.(next)
+  }, [onAngleConstraintChange])
+  /** 按下已经生效的那一个即关闭——三态互斥，两个键是同一个单选组的两个成员。 */
+  const toggleAngleConstraint = useCallback((mode: 'ortho' | 'polar') => {
+    setAngleConstraint(angleConstraint === mode ? 'off' : mode)
+  }, [angleConstraint, setAngleConstraint])
   const [snapEnabled, setSnapEnabled] = useState(true)
   /**
    * 正在被夹点会话作用的那个夹点；没有会话时为 `null`。
@@ -203,6 +269,87 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 夹点会话不算：它由手势启动而不由词启动，没有名字可报。
    */
   const [activeCommandId, setActiveCommandId] = useState<string | null>(null)
+  /**
+   * 动态输入：活动字段、两个字段的锁定值、命令行里正在键入的那段文本。
+   *
+   * @remarks
+   * 缓冲**不在这里**——它住在命令行组件里，这里只是它上报过来的一份镜像，用来渲染进活动
+   * 字段的框。命令行仍是唯一的输入端：把框做成真的 `<input>` 会撞上「启动之后焦点交给命令行」
+   * 那条既有约定，而且命令由工具栏按钮启动时指针位置还未知，那一刻根本没有框可以聚焦。
+   *
+   * 三者都描述**当前这一步**，因此取到一个点就要清空——`resetFields` 是唯一的清空入口。
+   */
+  const [activeField, setActiveField] = useState<ComposePointFieldIndex>(0)
+  /**
+   * 两个字段的锁定值。
+   *
+   * @remarks
+   * **至多有一个非空**，且它永远是「此刻不在编辑的那一个」——由 `advanceField` 的写法
+   * 构造上保证（见那里）。两个都锁死时落点已经完全确定，光标再也带不动任何东西。
+   */
+  const [lockedFields, setLockedFields] = useState<
+    readonly [number | null, number | null]
+  >([null, null])
+  const [fieldText, setFieldText] = useState('')
+  /**
+   * 解算之后落点的镜像。
+   *
+   * @remarks
+   * `submit` 与 `advanceField` 定义在 `resolvedPointer` 之前（它依赖它们经手的解算），因此
+   * 靠一个 ref 打断这个方向。读的仍是同一份值——两处各算一遍会让键入的落点与屏幕上的差一帧。
+   */
+  const livePointRef = useRef<ComposeInputPoint | null>(null)
+  /**
+   * 本次会话**自己建出来**的 Entity id，按落地顺序。
+   *
+   * @remarks
+   * 参考点跟着文档走靠它：栈顶那个不在文档里了，会话就该回退一个点。判据是「我建的那个还在
+   * 不在」而不是「用户按了哪个键」——拦 `Control+Z` 只覆盖那一个键，而删除、外部同步、别的
+   * 命令都能让同一件事发生；这也让 Stage 不必复制编辑器的撤销键位。
+   *
+   * 会话结束时清空：它描述的是**这一次会话**建了什么。
+   *
+   * `seen` 是必需的：派发之后新 Entity 要过一趟 React 才到得了 `document`，而在那之前它
+   * **也不在文档里**。少了这一位，「还没到」与「被删了」分不开——症状是画第二段时第一段被
+   * 自己撤掉，只剩一条线。因此只有**曾经见过**的 id 消失才算删除。
+   */
+  const createdIdsRef = useRef<{ readonly id: string; seen: boolean }[]>([])
+  /**
+   * 当前正在跑的那条命令的定义；没有会话时为 `null`。
+   *
+   * @remarks
+   * 只为读它的 `repeat` 而留：提交之后要不要接着画是**这条命令自己的性质**，而 `applyStep`
+   * 手上只有一个 step。退化会话（`prompt` 为 null、当场提交）**不写这个 ref**，否则它那一步
+   * 会被上一条命令的 `repeat` 接管，重开成一个永不停止的循环。
+   */
+  const activeDefinitionRef = useRef<
+    ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect> | null
+  >(null)
+  /**
+   * 当前这一条取过点没有。
+   *
+   * @remarks
+   * 会重开的命令 `Escape` 分两级，判据就是这一份事实：取过点则放弃这一条、命令留着；一个点
+   * 都没取才退出。与几何编辑里「先熄灭热夹点、再退出会话」同构。
+   */
+  const pickedRef = useRef(false)
+  /**
+   * 回指 `launch`。
+   *
+   * @remarks
+   * `applyStep` 定义在 `launch` 之前（`launch` 要用它跑退化会话的那一步），而重开要从
+   * `applyStep` 回到 `launch`——直接引用会成环。`applyStep` 只从事件处理里跑，那时挂载副作用
+   * 早已完成，因此这个 ref 一定已经填好。
+   */
+  const launchRef = useRef<
+    ((definition: ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect>) => void)
+    | null
+  >(null)
+  const resetFields = useCallback(() => {
+    setActiveField(0)
+    setLockedFields([null, null])
+    setFieldText('')
+  }, [])
 
   const builtInCommands = useMemo(() => createStageDraftingCommands(messages), [messages])
   // 页面网格两轴独立，且开关是 `snapEnabled` 而不是「网格是否可见」——看得见与吸不吸是两件事。
@@ -233,9 +380,24 @@ export function useStageDrafting(options: StageDraftingOptions) {
     latest.current = snapshot
   })
 
+  /** 把一条 `entity.create` 命令建出来的 id 记进栈；`meta.targetIds` 就是它。 */
+  const recordCreated = useCallback((command: { readonly meta?: { readonly targetIds?: readonly string[] } }) => {
+    const id = command.meta?.targetIds?.[0]
+    if (id) createdIdsRef.current.push({ id, seen: false })
+  }, [])
+
   const commit = useCallback((effect: StageDraftingEffect | undefined) => {
     if (!effect) return
     const current = latest.current
+
+    /*
+     * 撤掉上一段：出栈之后当成一次普通删除派发——`removed` 那条路已经在 `ERASE` 上跑着，
+     * 另开一条只会让「删一个 Entity」有两份实现。
+     *
+     * **不是一次文档撤销**：Stage 没有撤销端口，而为这一个关键字引入一条不划算。代价是历史
+     * 里留下「新建 + 删除」两条而不是零条。
+     */
+    const undone = effect.undoLastCreated ? createdIdsRef.current.pop()?.id : undefined
 
     for (const curve of effect.curves ?? []) {
       const command = createStageDraftingCurveCommand({
@@ -246,10 +408,33 @@ export function useStageDrafting(options: StageDraftingOptions) {
         idFactory: current.idFactory,
         activeFrameId: current.activeFrameId,
       }, curve, {
-        ...(effect.wire ? { wire: wireBindingsFor(portAnchors.current, curve) } : {}),
+        /*
+         * 两端都没接到端口时也要带上这个字段（空对象）：它在不在决定走哪个 Preset，而一条
+         * 谁也没接的导线仍然是主回路。绑定为空时 `Wire` Component 自己不会被写进去。
+         */
+        ...(effect.wire ? { wire: wireBindingsFor(portAnchors.current, curve) ?? {} } : {}),
         ...(effect.arrow ? { arrow: true } : {}),
       })
-      if (command) current.dispatch(command)
+      if (command) {
+        recordCreated(command)
+        current.dispatch(command)
+      }
+    }
+
+    // 盒走另一个 Preset：`RECTANGLE` 产出的是带完整 Appearance 的矩形物料，不是曲线。
+    for (const box of effect.boxes ?? []) {
+      const command = createStageDraftingBoxCommand({
+        document: current.document,
+        layoutSnapshot: current.layoutSnapshot,
+        index: current.index,
+        registry: current.registry,
+        idFactory: current.idFactory,
+        activeFrameId: current.activeFrameId,
+      }, box)
+      if (command) {
+        recordCreated(command)
+        current.dispatch(command)
+      }
     }
 
     // 平移、复制、删除与夹点几何只认识文档，因此由引擎规划成命令；宿主只负责派发。
@@ -257,7 +442,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       document: current.document,
       layoutSnapshot: current.layoutSnapshot,
       index: current.index,
-      effect,
+      effect: undone ? { ...effect, removed: [...(effect.removed ?? []), undone] } : effect,
       idFactory: current.idFactory,
       // 绑定来自**取点时记下的来源**，与新建导线读的是同一张表。
       ...(effect.curveGrip
@@ -279,12 +464,15 @@ export function useStageDrafting(options: StageDraftingOptions) {
     // 已删标识留在选择集里会指向不存在的 Entity，随后任何以选择集为输入的命令都会拿到
     // 幽灵目标。AutoCAD 里 ERASE 之后选择集也是空的。
     if (effect.removed && effect.removed.length > 0) current.onSelectedIdsChange([])
-  }, [])
+  }, [recordCreated])
 
   const endSession = useCallback((message: string | null) => {
     sessionRef.current = null
+    activeDefinitionRef.current = null
+    pickedRef.current = false
     setActiveCommandId(null)
     portAnchors.current.clear()
+    createdIdsRef.current = []
     setPrompt(null)
     setReference(null)
     setPreview(null)
@@ -301,18 +489,48 @@ export function useStageDrafting(options: StageDraftingOptions) {
       setNotice(null)
       return
     }
+    /*
+     * 重开一条**全新**会话：不继承上一条的任何点——继承终点会让两点命令退化成链，而那是
+     * `LINE` 的语义。`activeCommandId` 一动不动（`launch` 用同一个 id 再 set 一次，React 对
+     * 相同值不重渲染），因此工具栏的按下态在整个连画过程里不会抖。
+     */
+    const repeat = () => {
+      const definition = activeDefinitionRef.current
+      if (definition?.repeat !== true || !launchRef.current) return false
+      launchRef.current(definition)
+      return true
+    }
     if (step.status === 'commit') {
       commit(step.effect)
+      if (repeat()) return
       endSession(null)
       return
     }
     if (step.status === 'cancelled') {
+      // 两级 Escape：这一条取过点就只放弃这一条，命令留着回到第一步；没取过点才退出。
+      if (pickedRef.current && repeat()) return
       endSession(messages.cancelled)
       return
     }
     // rejected **不结束会话**：点错、打错在这类工具里是常态，结束命令会让用户从头再来。
     setNotice(step.message)
   }, [commit, endSession, messages.cancelled, setPrompt])
+
+  /**
+   * 把一个点喂进当前会话。
+   *
+   * @remarks
+   * **「这一条取过点没有」记在这里**：会重开的命令 `Escape` 分两级，判据就是这一份事实，而
+   * 点有指针与键入两个来源——各记一次必然漏掉其中一条，而漏掉的那条的症状是「用键盘打了第一
+   * 个点之后按 Esc 整条命令没了」。
+   */
+  const advanceWithPoint = useCallback((
+    session: ComposeCommandSession<StageDraftingEffect>,
+    point: ComposeInputPoint,
+  ) => {
+    pickedRef.current = true
+    applyStep(session.advance({ kind: 'point', point }))
+  }, [applyStep])
 
   /**
    * 特征点捕捉的世界容差。
@@ -356,6 +574,33 @@ export function useStageDrafting(options: StageDraftingOptions) {
     )
   }, [document, enabled, excluded, featureTolerance, index, pointer, snapEnabled, snapExcludedPoint])
 
+  /** 这一步的数值参数化；命令没声明就不显示数值，也没有锁定可言。 */
+  const fieldKind: ComposePointFieldKind | null = prompt?.fields ?? null
+  /** 正在取点且这一步有字段：动态输入画不画读它。 */
+  const awaitingPointForFields = prompt?.accepts.includes('point') === true && fieldKind !== null
+  /** 这一步有**两个**字段，`Tab` 才有去处。 */
+  const takesTab = awaitingPointForFields
+    && fieldKind !== null
+    && !isComposeSingleFieldKind(fieldKind)
+
+  /**
+   * 把已锁定的字段覆盖回落点。
+   *
+   * @remarks
+   * 锁定的字段不再跟光标：指针可以走到锁定值之外，几何停在锁定处。这正是「宽已经定了、
+   * 高还在跟鼠标」在屏幕上唯一说得清楚的画法。
+   */
+  const applyFieldLocks = useCallback((point: ComposeInputPoint): ComposeInputPoint => {
+    if (!fieldKind) return point
+    let next = point
+    const origin = reference ?? undefined
+    for (const index of [0, 1] as const) {
+      const locked = lockedFields[index]
+      if (locked !== null) next = applyComposeFieldOverride(fieldKind, next, origin, index, locked)
+    }
+    return next
+  }, [fieldKind, lockedFields, reference])
+
   /**
    * 解算一次落点，并带上它的来源。
    *
@@ -366,22 +611,30 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const resolvePointerHit = useCallback((world: StagePoint): {
     readonly point: ComposeInputPoint
     readonly port?: ComposeWireBinding
+    /** 角度约束命中的那条射线；追踪射线画不画读它，不另判一次。 */
+    readonly ray: number | null
   } => {
     const hit = snapEnabled
       ? findStageFeaturePoint(document, index, world, featureTolerance, excluded, snapExcludedPoint)
       : null
-    const point = resolveComposePoint(world, 'pointer', {
+    const resolved = resolveComposePointDetail(world, 'pointer', {
       ...(hit ? { snapped: hit.point } : {}),
       ...(reference ? { reference } : {}),
-      ortho,
+      angle: angleConstraint,
+      polar: { increment: polarIncrement, tolerance: snapRadius / viewport.zoom },
       grid: gridSettings,
     })
+    /*
+     * 锁定在解算**之后**生效。锁定的值是用户键入的，因此与「键入的坐标不被任何吸附改写」
+     * 同源；反过来（先覆盖再吸附）会让网格把刚锁死的 300 挪成 296。
+     */
+    const point = applyFieldLocks(resolved.point)
     return hit?.mode === 'port' && hit.portId
-      ? { point, port: { entityId: hit.entityId, portId: hit.portId } }
-      : { point }
+      ? { point, ray: resolved.ray, port: { entityId: hit.entityId, portId: hit.portId } }
+      : { point, ray: resolved.ray }
   }, [
-    document, excluded, featureTolerance, gridSettings, index, ortho, reference,
-    snapEnabled, snapExcludedPoint,
+    angleConstraint, applyFieldLocks, document, excluded, featureTolerance, gridSettings, index,
+    polarIncrement, reference, snapEnabled, snapExcludedPoint, snapRadius, viewport.zoom,
   ])
 
   const resolvePointerPoint = useCallback(
@@ -395,12 +648,65 @@ export function useStageDrafting(options: StageDraftingOptions) {
     // 按这次按下自己的坐标重算捕捉，不沿用上一帧 hover 的结果：pointerdown 可能赶在 React
     // 为上一次 pointermove 重渲染之前到达，落点会被吸回用户已经离开的特征点上。
     const { point, port } = resolvePointerHit(world)
+    // 锁定与活动字段描述的是**这一步**；点落下之后它们说的是一件已经过去的事。
+    resetFields()
     // 导线的绑定来自**取点时记下的来源**，不是事后按坐标反查已有端口：反查会让一条恰好路过
     // 端口的普通线莫名其妙地绑上，而那个绑定在屏幕上完全不可见。键入的坐标因此永远不绑——
     // 它没有来源可言。
     if (port) portAnchors.current.set(anchorKey(point), port)
-    applyStep(session.advance({ kind: 'point', point }))
-  }, [applyStep, resolvePointerHit])
+    advanceWithPoint(session, point)
+  }, [advanceWithPoint, resetFields, resolvePointerHit])
+
+  /**
+   * 启动一条已经解析好、且此刻可用的命令。
+   *
+   * @remarks
+   * 按名启动与**提交后重开**共用它：重开只是「再跑一次同一个定义」，另写一份会让两条路径在
+   * 该清哪些状态上漂移。
+   *
+   * `setActiveCommandId` 在重开时被喂进**同一个值**，React 对相同状态不重渲染，因此工具栏的
+   * 按下态在整个连画过程里一次都不会闪成未按下。
+   */
+  const launch = useCallback((
+    definition: ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect>,
+  ) => {
+    const context: StageDraftingContext = {
+      messages,
+      // 先选后执行：命令要么在启动上下文里拿到目标，要么自己提示选择。
+      selection: latest.current.selectedIds,
+      ...(latest.current.isGeometryEditable
+        ? { isGeometryEditable: latest.current.isGeometryEditable }
+        : {}),
+    }
+    setGripTarget(null)
+    setReference(null)
+    setPreview(null)
+    setNotice(null)
+    // 全新会话：端口来源与「我建了哪些」都只描述**这一条**，重开时必须一起清掉。
+    portAnchors.current.clear()
+    createdIdsRef.current = []
+    pickedRef.current = false
+    /*
+     * **先清掉再跑**：退化会话（`prompt` 为 null）当场提交，那一步会走进 `applyStep` 的
+     * commit 分支——此刻 ref 里若还留着上一条命令的定义，它的 `repeat` 就会把这一步接管，
+     * 重开成一个永不停止的循环。
+     */
+    activeDefinitionRef.current = null
+    // 「`prompt` 为 null 就立即 accept」只有一处实现（`runComposeCommandImmediately`）：先选好
+    // 对象再敲 `E↵` 对象当场就删，走的正是这一支，宿主一次性动作走的也是它。
+    const outcome = runComposeCommandImmediately(definition, context)
+    lastCommandRef.current = definition.id
+    if (outcome.status === 'ran') {
+      applyStep(outcome.step)
+      return
+    }
+    sessionRef.current = outcome.session
+    activeDefinitionRef.current = definition
+    setActiveCommandId(definition.id)
+    setPrompt(outcome.session.prompt)
+  }, [applyStep, messages, setPrompt])
+
+  useEffect(() => { launchRef.current = launch }, [launch])
 
   /**
    * 按名称启动一条命令。
@@ -438,30 +744,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
       setNotice(definition.disabledReason)
       return
     }
-    const context: StageDraftingContext = {
-      messages,
-      // 先选后执行：命令要么在启动上下文里拿到目标，要么自己提示选择。
-      selection: latest.current.selectedIds,
-      ...(latest.current.isGeometryEditable
-        ? { isGeometryEditable: latest.current.isGeometryEditable }
-        : {}),
-    }
-    setGripTarget(null)
-    setReference(null)
-    setPreview(null)
-    setNotice(null)
-    // 「`prompt` 为 null 就立即 accept」只有一处实现（`runComposeCommandImmediately`）：先选好
-    // 对象再敲 `E↵` 对象当场就删，走的正是这一支，宿主一次性动作走的也是它。
-    const outcome = runComposeCommandImmediately(definition, context)
-    lastCommandRef.current = definition.id
-    if (outcome.status === 'ran') {
-      applyStep(outcome.step)
-      return
-    }
-    sessionRef.current = outcome.session
-    setActiveCommandId(definition.id)
-    setPrompt(outcome.session.prompt)
-  }, [applyStep, messages, setPrompt])
+    launch(definition)
+  }, [launch, messages])
+
 
   /**
    * 由手势启动一条夹点取点会话。
@@ -484,6 +769,39 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setPreview(null)
     setNotice(null)
   }, [setPrompt])
+
+  /**
+   * 参考点跟着文档走。
+   *
+   * @remarks
+   * 本次会话建出来的最后一个 Entity 不在文档里了（外部撤销、别人删掉它、任何路径），会话就
+   * 回退一个点。不这么做的症状是：`LINE` 画 a→b→c 之后按 `Control+Z`，b-c 那一段消失了而
+   * 橡皮筋仍从 c 出发，下一个点会从一个**已经不存在的地方**连出去。
+   *
+   * **丢弃这一步的效果**：文档已经先动了，`undoLastCreated` 描述的是同一件已经发生的事，
+   * 再执行一次会把它下面那一段也删掉。栈在这里自己出，因此两条路径看到的栈始终一致。
+   *
+   * 会话不认这个关键字（两点命令、`PLINE`、夹点会话都不认）时 `rejected`，什么也不会发生——
+   * 而它们本来也不会往栈里放东西。
+   */
+  useLayoutEffect(() => {
+    const session = sessionRef.current
+    const created = createdIdsRef.current
+    const last = created[created.length - 1]
+    if (!session || last === undefined) return
+    if (document.entities[last.id]) {
+      last.seen = true
+      return
+    }
+    // 还没见过：它只是没走完那趟 React，不是被删了。
+    if (!last.seen) return
+    created.pop()
+    const step = session.advance({ kind: 'keyword', key: 'U' })
+    if (step.status !== 'prompt') return
+    setPrompt(step.prompt)
+    setReference(step.preview?.reference ?? null)
+    setPreview(step.preview ?? null)
+  }, [document, setPrompt])
 
   /** 清掉命令行上残留的说明。进入几何编辑时调用：用户此刻站在一个会取点的状态里。 */
   const clearNotice = useCallback(() => { setNotice(null) }, [])
@@ -513,9 +831,28 @@ export function useStageDrafting(options: StageDraftingOptions) {
 
     const parsed = parseComposeCoordinate(trimmed, reference ?? undefined)
     if (parsed.ok) {
-      // 键入的坐标是精确值，不再经过捕捉、正交与网格。
-      const point = resolveComposePoint(parsed.point, 'typed', { ortho, grid: gridSettings })
-      applyStep(session.advance({ kind: 'point', point }))
+      // 键入的坐标是精确值，不再经过捕捉、正交与网格。**完整写法优先于裸数字**：
+      // `100,50` 是一个点，不是活动字段的值。
+      resetFields()
+      const point = resolveComposePoint(parsed.point, 'typed', { grid: gridSettings })
+      advanceWithPoint(session, point)
+      return
+    }
+    /*
+     * 裸数字 = **当前活动字段**的值，另一个字段取它此刻的值。这就是直接距离输入：方向由
+     * 鼠标定好，只打一个长度。
+     *
+     * 它不做进 `parseComposeCoordinate`：裸数字缺的是方向，而方向是活动字段之外那一个分量
+     * 此刻的值——那是呈现层的状态，不该进 `core` 的语法层。
+     */
+    const typed = Number(trimmed)
+    const livePoint = livePointRef.current
+    if (fieldKind && livePoint && Number.isFinite(typed) && BARE_NUMBER.test(trimmed)) {
+      const point = applyComposeFieldOverride(
+        fieldKind, livePoint, reference ?? undefined, activeField, typed,
+      )
+      resetFields()
+      advanceWithPoint(session, point)
       return
     }
     if (parsed.reason === 'missing-reference') {
@@ -523,7 +860,36 @@ export function useStageDrafting(options: StageDraftingOptions) {
       return
     }
     applyStep(session.advance({ kind: 'keyword', key: trimmed }))
-  }, [applyStep, gridSettings, messages, ortho, reference, start])
+  }, [
+    activeField, advanceWithPoint, applyStep, fieldKind, gridSettings, messages, reference,
+    resetFields, start,
+  ])
+
+  /**
+   * `Tab`：锁定**离开**的那个字段，同时解开**进入**的那个。
+   *
+   * @remarks
+   * 缓冲非空时锁定键入的值，为空时锁定它此刻的值——AutoCAD 的行为。这让「拖个大概的宽度 →
+   * `Tab` → 打一个精确的高度」变成两步。
+   *
+   * **进入即解锁**是这条的另一半，缺了它 `Tab` 按两下就把两个字段全锁上了：两个都锁死时
+   * 落点已经完全确定，光标再也带不动任何东西，而屏幕上没有任何东西在说这件事。因此锁定
+   * 的数量**由构造保证至多一个**——锁的永远是「此刻不在编辑的那一个」，而不是一份可以攒
+   * 起来的状态。
+   */
+  const advanceField = useCallback((text: string) => {
+    const livePoint = livePointRef.current
+    if (!fieldKind || !livePoint) return
+    const trimmed = text.trim()
+    const typed = Number(trimmed)
+    const live = composePointToFields(fieldKind, livePoint, reference ?? undefined)
+    const value = trimmed.length > 0 && Number.isFinite(typed)
+      ? typed
+      : (activeField === 0 ? live.first : live.second)
+    setLockedFields(activeField === 0 ? [value, null] : [null, value])
+    setActiveField(activeField === 0 ? 1 : 0)
+    setFieldText('')
+  }, [activeField, fieldKind, reference])
 
   /**
    * 以「没有更多输入了」推进当前会话。
@@ -561,14 +927,21 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 一次会让一次按键推进两步。`F8`/`F3` 排在这条守卫之前——正交与捕捉在键入坐标的过程中
    * 同样要能切。
    *
-   * 两个键都只在**确实有事可做**时接管，否则交还既有键位级联：`Enter` 没有会话时无所作为，
-   * `Esc` 没有会话且选择集为空时同理，而设计模式的 `Esc` 还要负责中止进行中的指针手势。
+   * 两个键都只在**确实有事可做**时接管，否则交还既有键位级联：`Enter` 在从未启动过命令时
+   * 无所作为，`Esc` 没有会话且选择集为空时同理，而设计模式的 `Esc` 还要负责中止进行中的
+   * 指针手势。
    */
   const handleKeyDown = useCallback((event: ReactKeyboardEvent<Element>) => {
     if (!enabled) return false
+    // 两个键是同一个单选组的两个成员：按下已经生效的那一个即关闭角度约束。
     if (event.key === 'F8') {
       event.preventDefault()
-      setOrtho((value) => !value)
+      toggleAngleConstraint('ortho')
+      return true
+    }
+    if (event.key === 'F10') {
+      event.preventDefault()
+      toggleAngleConstraint('polar')
       return true
     }
     if (event.key === 'F3') {
@@ -578,7 +951,16 @@ export function useStageDrafting(options: StageDraftingOptions) {
     }
     if (isEditableTarget(event.target)) return false
     if (event.key === 'Enter') {
-      if (!sessionRef.current) return false
+      /*
+       * 空闲时的 `Enter` 也重复上一条命令，与命令行的空确认走**同一条路径**（`submit('')`）。
+       *
+       * 画完一条命令的最后一个点时焦点在**图面**上——那一下点击就发生在那里。只在命令行里
+       * 生效的话，这条能力在手所在的位置够不着，而用户看不出为什么同一个键在两处行为不同。
+       *
+       * 从未启动过命令时 MUST NOT 接管：那时它没有事可做，吃掉事件只会让 `Enter` 变成一个
+       * 黑洞，挡住既有键位级联。
+       */
+      if (!sessionRef.current && lastCommandRef.current === null) return false
       event.preventDefault()
       submit('')
       return true
@@ -598,7 +980,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       return true
     }
     return false
-  }, [cancel, enabled, submit])
+  }, [cancel, enabled, submit, toggleAngleConstraint])
 
   // 选择集归宿主：命令等着选对象时，把**当前完整选择集**喂进去，并在它变化时重新喂。
   // 让命令会话自己拦截点选等于同一次点击有两个消费者，而用户无法预期哪一个赢。
@@ -638,10 +1020,58 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 十字线、橡皮筋终点、坐标读数、捕捉标记与几何编辑点亮期的预览读的**都是它**。各算一遍的
    * 症状是「十字线停在一处、点却落在另一处」，而这只在开着吸附时才现形。
    */
-  const resolvedPointer = useMemo(() => {
+  const resolvedHit = useMemo(() => {
     if (!enabled || !pointer) return null
-    return resolvePointerPoint(pointer)
-  }, [enabled, pointer, resolvePointerPoint])
+    return resolvePointerHit(pointer)
+  }, [enabled, pointer, resolvePointerHit])
+  const resolvedPointer = resolvedHit?.point ?? null
+  useLayoutEffect(() => { livePointRef.current = resolvedPointer })
+
+  /**
+   * 候选落点：解算落点之上再叠一次「正在键入的那个值」。
+   *
+   * @remarks
+   * 预览查询、十字光标、橡皮筋终点与标注几何全部读它——它们读同一个落点是既有约束，本条
+   * 只是给那个落点多了一个来源。用户打了 `120` 却要按下回车才知道结果，而那时命令已经结束，
+   * 错了只能撤销重来。
+   *
+   * 覆盖复用锁定用的那一个操作：锁定是「打完并按了 `Tab`」，这里是「正在打」，同一件事的
+   * 两个时机。另写一份的症状是两条路径对同一个输入给出不同落点。
+   *
+   * 键入覆盖的永远是**活动**字段，锁定的永远是**非活动**字段（由 `advanceField` 的写法构造
+   * 保证），因此两者不可能作用在同一个字段上，也就不需要定序。
+   *
+   * 缓冲解析不出一个数字时（空、`@100,` 这类半个坐标、关键字）退回跟着光标。猜一个会让图形
+   * 在打字过程中乱跳，停在上一次能解析的值则会让删掉数字之后几何卡住不动。
+   */
+  const candidatePoint = useMemo(() => {
+    if (!fieldKind || !resolvedPointer || !BARE_NUMBER.test(fieldText.trim())) return resolvedPointer
+    return applyComposeFieldOverride(
+      fieldKind, resolvedPointer, reference ?? undefined, activeField, Number(fieldText.trim()),
+    )
+  }, [activeField, fieldKind, fieldText, reference, resolvedPointer])
+  /** 正在键入把落点带离了光标：连线与捕捉标记两处读同一份事实。 */
+  const typedAway = candidatePoint !== resolvedPointer
+
+  /**
+   * 追踪射线：角度约束命中的那条，且落点确实还在它上面。
+   *
+   * @remarks
+   * 命中由管线上报（`resolvedHit.ray`），这里只再验一件事——**锁定与键入覆盖排在约束之后**，
+   * 它们能把点带离射线（锁死角度、或打一个坐标）。那时这条线就不再描述落点是怎么来的，画出来
+   * 是在骗人。验证读的是最终候选落点，因此「画了射线但点没落在上面」不可能发生。
+   */
+  const trackingRay = useMemo(() => {
+    const ray = resolvedHit?.ray ?? null
+    if (ray === null || !reference || !candidatePoint) return null
+    const dx = candidatePoint.x - reference.x
+    const dy = candidatePoint.y - reference.y
+    if (dx === 0 && dy === 0) return null
+    const degrees = (Math.atan2(-dy, dx) * 180) / Math.PI
+    // 归一化到 (-180, 180] 再比：0 与 360 是同一条射线。
+    const delta = Math.abs(((degrees - ray + 540) % 360) - 180)
+    return delta < 0.01 ? { origin: reference, degrees: ray } : null
+  }, [candidatePoint, reference, resolvedHit])
 
   /**
    * 待定几何的世界折线；命令给不出预览时为 `null`。
@@ -660,32 +1090,103 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const [previewOutline, setPreviewOutline] = useState<readonly StagePoint[] | null>(null)
   useLayoutEffect(() => {
     const session = sessionRef.current
-    const curve = enabled && session?.preview && resolvedPointer
-      ? session.preview(resolvedPointer)?.curves?.[0]
-      : undefined
-    const segments = curve ? composeCurveSegments(curve) : []
+    const effect = enabled && session?.preview && candidatePoint
+      ? session.preview(candidatePoint)
+      : null
+    // 盒与曲线是两种意图，但呈现只有一种：一串首尾相接的点。盒的四个角闭合回起点，
+    // 否则右边与下边这两条会缺席。
+    const box = effect?.boxes?.[0]
+    if (box) {
+      setPreviewOutline([
+        { x: box.x, y: box.y },
+        { x: box.x + box.width, y: box.y },
+        { x: box.x + box.width, y: box.y + box.height },
+        { x: box.x, y: box.y + box.height },
+        { x: box.x, y: box.y },
+      ])
+      return
+    }
+    const segments = effect?.curves?.[0] ? composeCurveSegments(effect.curves[0]!) : []
     setPreviewOutline(
       segments.length === 0
         ? null
         : [segments[0]!.start, ...segments.map(({ end }) => end)],
     )
-  }, [enabled, resolvedPointer, sessionRevision])
+  }, [candidatePoint, enabled, sessionRevision])
 
   const rubberBand = useMemo(() => {
     // 预览几何在场时不画橡皮筋：两者回答同一个问题，叠在一起就是同一条线画两遍。
-    if (previewOutline || !reference || !resolvedPointer) return null
-    return { start: reference, end: resolvedPointer }
-  }, [previewOutline, reference, resolvedPointer])
+    if (previewOutline || !reference || !candidatePoint) return null
+    return { start: reference, end: candidatePoint }
+  }, [candidatePoint, previewOutline, reference])
+
+  /**
+   * 光标旁的动态输入。
+   *
+   * @remarks
+   * 数值取**解算之后**的落点——与橡皮筋终点、十字光标、捕捉标记同一个值。读裸指针的话，
+   * 开着栅格吸附时框里的数字会与线的终点对不上。
+   *
+   * 活动字段正在被键入时，框里显示的是那段文本而不是读数：用户打了什么就该看见什么。
+   */
+  const dynamicInput = useMemo(() => {
+    if (!enabled || !awaitingPointForFields || !fieldKind || !candidatePoint) return null
+    const values = composePointToFields(fieldKind, candidatePoint, reference ?? undefined)
+    const raw = [values.first, values.second] as const
+    // 角度带上单位：它是这两个字段里唯一一个不是长度的量。正在键入时不带——用户打了什么就
+    // 该看见什么，凭空多一个字符会让他以为自己按到了别的键。
+    const unit = fieldKind === 'polar' && '\u00B0'
+    const field = (index: ComposePointFieldIndex) => {
+      const locked = lockedFields[index]
+      const typing = locked === null && index === activeField && fieldText.length > 0
+      const state = locked !== null
+        ? 'locked' as const
+        : (index === activeField ? 'active' as const : 'idle' as const)
+      if (typing) return { text: fieldText, state }
+      const value = locked ?? raw[index]
+      const suffix = unit && index === 1 ? unit : ''
+      return { text: `${formatComposeNumber(value)}${suffix}`, state }
+    }
+    return resolveStageDynamicInput({
+      kind: fieldKind,
+      origin: reference ? worldToScreen(reference, viewport) : null,
+      point: worldToScreen(candidatePoint, viewport),
+      first: field(0),
+      second: field(1),
+      // 键入把落点带离光标时才有连线可画；两者重合时传 `null`，几何层因此不需要判断这件事。
+      cursor: typedAway && resolvedPointer ? worldToScreen(resolvedPointer, viewport) : null,
+      measured: prompt?.measured === true,
+    })
+  }, [
+    activeField, awaitingPointForFields, candidatePoint, enabled, fieldKind, fieldText,
+    lockedFields, prompt, reference, resolvedPointer, typedAway, viewport,
+  ])
 
   // 十字线画在捕捉/正交求解**之后**的落点上：让它跟着裸光标走，用户会看见十字线与最终
   // 落点差着几个像素，而那正是他要对齐的地方。
   const pointerScreen = useMemo(
-    () => (resolvedPointer ? worldToScreen(resolvedPointer, viewport) : null),
-    [resolvedPointer, viewport],
+    () => (candidatePoint ? worldToScreen(candidatePoint, viewport) : null),
+    [candidatePoint, viewport],
   )
 
   // 命令正在请求一个点：捕捉标记与十字线形态都读它，两处不得各判一次。
   const awaitingPoint = enabled && prompt?.accepts.includes('point') === true
+
+  /**
+   * 光标够及范围内那个符号的**全部**端口。
+   *
+   * @remarks
+   * 与捕捉标记回答两个不同的问题——标记说「落点吸上了什么」（一个点），这里说「这个符号上有
+   * 哪些接线点」（一个符号的全部）。只显现最近的那一个时，用户读到的是「这里只有一个端子」，
+   * 而接线图上端子密集，旁边那两个就此不可见。
+   *
+   * **只在取点期间求**：常驻会让一张接线图上多出几十个与几何无关的点，而此刻用户还没有在找
+   * 接线点。容差与捕捉共用同一个数——「多近算靠近」在这个产品里只该有一个。
+   */
+  const revealedPorts = useMemo(() => {
+    if (!awaitingPoint || !pointer) return null
+    return collectStageRevealedPorts(document, index, pointer, featureTolerance)
+  }, [awaitingPoint, document, featureTolerance, index, pointer])
 
   return {
     index,
@@ -702,7 +1203,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
     pointerType,
     prompt: enabled ? prompt : null,
     notice: enabled ? notice : null,
-    ortho,
+    angleConstraint,
+    setAngleConstraint,
+    trackingRay,
     snapEnabled,
     /**
      * 捕捉标记读的候选。
@@ -716,9 +1219,29 @@ export function useStageDrafting(options: StageDraftingOptions) {
      * 判据读的是 `gripTarget` 这**同一份事实**，拾取框画不画读的也是它：两处各判一次必然
      * 漂移，而漂移的症状是「框收起来了、标记还亮着」。
      */
-    snap: enabled && (awaitingPoint || gripTarget !== null) ? snap : null,
+    /*
+     * 正在键入把落点带离了特征点时收起标记：它回答的是「落点吸上了什么」，而此刻落点由
+     * 键入的值决定，捕捉没有参与。
+     */
+    snap: enabled && !typedAway && (awaitingPoint || gripTarget !== null) ? snap : null,
+    /** 取点期间显现的端口，世界坐标；不在取点时为空。 */
+    revealedPorts: revealedPorts?.points ?? null,
     previewOutline,
     rubberBand,
+    dynamicInput,
+    /**
+     * `Tab` 接管与文本回传只在这一档挂上去。
+     *
+     * @remarks
+     * `Tab` 是键盘用户的焦点导航键，无条件劫持会把人困在命令行里；接管与否因此按「命令正在
+     * 取点且这一步声明了**两个**字段」判断，与动态输入画几个框读同一份事实。
+     *
+     * 单字段（半径 / 直径）不接管：没有第二个字段可去。因此那一档也没有锁定——锁定是 `Tab`
+     * 的产物，硬造出来的话移动鼠标不会改变任何东西，而屏幕上不该出现一个鼠标动了也没反应
+     * 的状态。
+     */
+    advanceField: enabled && takesTab ? advanceField : null,
+    setFieldText,
     // 拖动与点亮共用同一份事实：拾取框画不画、哪个夹点是热的、排除哪个点都读它。
     gripTarget,
     resolvedPointer,

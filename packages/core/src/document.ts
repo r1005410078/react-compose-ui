@@ -866,9 +866,18 @@ function validateEntity(
     if (!curve) {
       addIssue(issues, 'wire.missing-curve', wirePath, 'Wire MUST 与 Curve 组合')
     }
-    else if (curve.kind !== 'line') {
-      // v1 只有两个端点的导线：折线导线的价值几乎全部来自自动路由，而路由还没有。
-      addIssue(issues, 'wire.unsupported-geometry', wirePath, 'Wire 只支持 kind 为 line 的 Curve')
+    else if (curve.kind !== 'line' && curve.kind !== 'polyline') {
+      /*
+       * 导线可以有拐点（直角走线），因此 `polyline` 合法——两端就是首尾两个顶点，中间的拐点
+       * 是纯几何。弧仍然不行：`Wire` 回答的是「这一端接到了哪个端口」，而弧没有首尾顶点可言
+       * （它由圆心、半径与扫掠角定义）。
+       */
+      addIssue(
+        issues,
+        'wire.unsupported-geometry',
+        wirePath,
+        'Wire 只支持 kind 为 line 或 polyline 的 Curve',
+      )
     }
   }
   // Ports 同样可与任意 Entity 组合：端口是 Entity 的能力，不是某一种物料的能力。

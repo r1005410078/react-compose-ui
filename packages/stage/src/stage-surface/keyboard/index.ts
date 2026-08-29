@@ -12,6 +12,7 @@ export type {
 export { planStageNudge } from './nudge-planning'
 export type { StageNudgePlan, StageNudgeUpdate } from './nudge-planning'
 export {
+  COMMAND_SHORTCUTS,
   DEFAULT_STAGE_SHORTCUTS,
   DELEGATABLE_STAGE_ACTIONS,
   isEditableTarget,

@@ -29,9 +29,12 @@ export function createStageGripSession(
   target: StageGripTarget,
 ): ComposeCommandSession<StageDraftingEffect> {
   // 提示恒定：取到点即结束，没有第二步可走。
+  //
+  // `polar`：夹点的原位置就是 `reference`，因此两个数读作「从原来的地方挪了多远、往哪边」。
   const prompt: ComposeCommandPrompt = {
     message: messages.specifyNewLocation,
     accepts: ['point'],
+    fields: 'polar',
   }
   let done = false
   return {

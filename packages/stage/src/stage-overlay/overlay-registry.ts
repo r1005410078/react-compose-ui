@@ -9,6 +9,7 @@ import { ResizeHandlesLayer } from './layers/resize-handles-layer'
 import { RotationContribution } from './layers/rotation-layer'
 import { SelectionLayer } from './layers/selection-layer'
 import { SnapGuidesLayer } from './layers/snap-guides-layer'
+import { WireEndsLayer } from './layers/wire-ends-layer'
 import type { StageOverlayContribution } from './overlay-types'
 
 /**
@@ -35,6 +36,11 @@ const CONTRIBUTIONS: readonly StageOverlayContribution[] = [
   { id: 'marquee', order: 300, Layer: MarqueeLayer },
   { id: 'drop-indicator', order: 250, Layer: DropIndicatorLayer },
   { id: 'drawing', order: 200, Layer: DrawingLayer },
+  /*
+   * 端点记号排在选中框之上、吸附参考线之下：它描述的是某一条线的一端，被选中框盖住等于没画；
+   * 而参考线是瞬时反馈，任何东西都不该盖住它。
+   */
+  { id: 'wire-ends', order: 150, Layer: WireEndsLayer },
   { id: 'snap-guides', order: 100, Layer: SnapGuidesLayer },
 ]
 

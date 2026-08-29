@@ -196,8 +196,20 @@ export type {
   StageDraftingTranslation,
   StageGripTarget,
 } from './drafting'
-export { findStageFeaturePoint, resolveStageClickSelection, resolveStageMarqueeCombine } from './hit-testing'
-export type { StageFeaturePoint, StageFeatureSnapMode, StageSelectionMode } from './hit-testing'
+export {
+  collectStageRevealedPorts,
+  collectStageWireEnds,
+  findStageFeaturePoint,
+  resolveStageClickSelection,
+  resolveStageMarqueeCombine,
+} from './hit-testing'
+export type {
+  StageFeaturePoint,
+  StageFeatureSnapMode,
+  StageRevealedPorts,
+  StageSelectionMode,
+  StageWireEnd,
+} from './hit-testing'
 export {
   applyStageCurveGrip,
   stageCurveBoxGeometry,

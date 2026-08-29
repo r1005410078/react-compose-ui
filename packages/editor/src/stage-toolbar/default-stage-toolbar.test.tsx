@@ -18,11 +18,14 @@ function document() {
 function renderToolbar(
   tool: import('@compose-ui/stage').ComposeStageTool = 'select',
   activeCommandId: string | null = null,
+  angleConstraint: import('@compose-ui/core').ComposeAngleConstraint = 'polar',
 ) {
   const setTool = vi.fn()
   const setGridSize = vi.fn()
   const startCommand = vi.fn()
   const toggleSnap = vi.fn()
+  const setAngleConstraint = vi.fn()
+  const setPolarIncrement = vi.fn()
   render(
     <DefaultStageToolbar
       activeCommandId={activeCommandId}
@@ -39,18 +42,58 @@ function renderToolbar(
       startCommand={startCommand}
       toggleSnap={toggleSnap}
       tool={tool}
+      angleConstraint={angleConstraint}
+      setAngleConstraint={setAngleConstraint}
+      polarIncrement={45}
+      setPolarIncrement={setPolarIncrement}
     />,
   )
-  return { setGridSize, setTool, startCommand, toggleSnap }
+  return { setAngleConstraint, setGridSize, setPolarIncrement, setTool, startCommand, toggleSnap }
 }
 
 describe('DefaultStageToolbar', () => {
   afterEach(cleanup)
 
+  describe('OpenSpec: editor-workspace-layout / 工具栏上的角度约束', () => {
+    const ortho = () => screen.getByRole('button', { name: '正交' })
+    const polar = () => screen.getByRole('button', { name: '极轴追踪' })
+
+    it('两个按钮是同一个单选组：默认极轴按下、正交弹起', () => {
+      renderToolbar()
+      expect(polar()).toHaveAttribute('aria-pressed', 'true')
+      expect(ortho()).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('点另一个即切过去', () => {
+      const { setAngleConstraint } = renderToolbar()
+      fireEvent.click(ortho())
+      expect(setAngleConstraint).toHaveBeenCalledWith('ortho')
+    })
+
+    it('点已经按下的那一个即关闭', () => {
+      const { setAngleConstraint } = renderToolbar()
+      // 三态互斥，因此这两个按钮是同一个单选组的两个成员。
+      fireEvent.click(polar())
+      expect(setAngleConstraint).toHaveBeenCalledWith('off')
+    })
+
+    it('增量角下拉列出 AutoCAD 的八个 360 约数', () => {
+      const { setPolarIncrement } = renderToolbar()
+      fireEvent.click(screen.getByRole('button', { name: '增量角' }))
+      const items = screen.getAllByRole('menuitemradio')
+      expect(items.map((item) => item.textContent))
+        .toEqual(['90°', '45°', '30°', '22.5°', '18°', '15°', '10°', '5°'])
+      expect(items[1]).toHaveAttribute('aria-pressed', 'true')
+
+      fireEvent.click(items[0]!)
+      expect(setPolarIncrement).toHaveBeenCalledWith(90)
+    })
+  })
+
   it('OpenSpec: editor-workspace-layout / 扁平工具栏 / 按产品顺序暴露所有工具', () => {
     renderToolbar()
 
-    for (const label of ['选择', '缩放', '旋转', '吸附', '显示网格', '创建容器', '文字']) {
+    for (const label of ['选择', '缩放', '旋转', '吸附', '正交', '极轴追踪', '显示网格', '创建容器', '文字']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
     // 三个与既有手势完全重复的工具位已删除：`select` 空白拖拽即框选、`MOVE` 命令能键入

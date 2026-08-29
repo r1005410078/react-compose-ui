@@ -2,6 +2,7 @@ import type {
   ResizeHandle,
   StageEditablePath,
   StageGuide,
+  StageWireEnd,
   StageInteractionHit,
   StageInteractionTool,
   StageDrawingPreview,
@@ -95,6 +96,15 @@ export interface StageOverlayProps {
   readonly marqueeHitTest: StageMarqueeHitTest | null
   readonly marqueeScreen: StageRect | null
   readonly snapGuides: readonly StageGuide[]
+  /**
+   * 要画出来的导线端点记号。
+   *
+   * @remarks
+   * 由调用方按「问了才想知道 / 没问也必须知道」算好：选中的导线画两端，**失效的端点常驻**
+   * 不依赖选中集——它是一个缺陷，等用户主动选中那条线才显形，等于把发现缺陷的责任推给他，
+   * 而他恰恰不知道该去选哪一条。
+   */
+  readonly wireEnds?: readonly StageWireEnd[]
   readonly paintHandles: readonly StagePaintHandle[]
   readonly paintSample: StagePaintSamplePreview | null
   /** 宿主算好的世界坐标可编辑路径几何；null 时不渲染任何路径元素。 */

@@ -5,7 +5,8 @@ import type {
   ComposeCommandSession,
   ComposeCommandStep,
 } from '@compose-ui/commands'
-import { createComposeLineCurve } from '@compose-ui/core'
+import { createComposeLineCurve, isDegenerateComposePolyline } from '@compose-ui/core'
+import type { ComposeCurve } from '@compose-ui/core'
 import { createStageCopyCommand, createStageMoveCommand } from './move-copy-command'
 import { createStageEraseCommand } from './erase-command'
 import { createStageVertexCommand } from './vertex-command'
@@ -18,13 +19,45 @@ import {
 import type { StageDraftingContext, StageDraftingEffect, StageDraftingMessages } from './drafting-types'
 
 function firstPrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
-  return { message: messages.specifyFirstPoint, accepts: ['point'] }
+  // 第一个点没有「上一点」，量不出长度与角度，因此这一档是绝对坐标。
+  return { message: messages.specifyFirstPoint, accepts: ['point'], fields: 'absolute' }
 }
 
-function nextPrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
+function nextPrompt(
+  messages: StageDraftingMessages,
+  closable = false,
+): ComposeCommandPrompt {
   // Enter 结束命令，与 AutoCAD 一致；没有 `defaultKeyword` 时 `accept` 会被拒绝，因此这里
   // 由 session 直接把 `accept` 解释成结束。
-  return { message: messages.specifyNextPoint, accepts: ['point'] }
+  //
+  // 两个关键字都只在**够得着**时列出（至少取过两个点，也就是至少有一段）：一个点时列出
+  // 它们，等于让用户看见按下去只会被拒绝的选项。
+  return closable
+    ? {
+        message: messages.specifyNextPoint,
+        accepts: ['point', 'keyword'],
+        keywords: [
+          { key: 'C', label: messages.closeKeyword },
+          { key: 'U', label: messages.undoKeyword },
+        ],
+        fields: 'polar',
+      }
+    : { message: messages.specifyNextPoint, accepts: ['point'], fields: 'polar' }
+}
+
+/**
+ * 取够两点自己就提交的那一步的提示。
+ *
+ * @remarks
+ * **不共用 `nextPrompt`**：`specifyNextPoint` 写着「回车结束」，而这里没有「怎么结束」这个
+ * 问题——取到第二个点当场提交，回车确实什么也不结束。`repeat` 落地之后更刺眼：回车此刻连
+ * 命令都不结束。这条由既有规范明写（取够点自己就提交的命令 MUST NOT 带这句提示）。
+ *
+ * 复用 `specifyEndPoint`（「指定端点」）而不是新造一句：三点弧的第三点问的是同一件事——
+ * 这条几何的另一端在哪儿。
+ */
+function endPrompt(messages: StageDraftingMessages): ComposeCommandPrompt {
+  return { message: messages.specifyEndPoint, accepts: ['point'], fields: 'polar' }
 }
 
 /**
@@ -44,8 +77,20 @@ export function createStageLineSession(
   context: StageDraftingContext,
 ): ComposeCommandSession<StageDraftingEffect> {
   const { messages } = context
-  let previous: ComposeCommandPoint | null = null
+  /*
+   * 已取的点序列。
+   *
+   * @remarks
+   * 只留 `previous` 一个点是不够的：`U` 要回到**上上个**点。序列同时给出「够不着闭合/放弃」
+   * 的判据——不足两个点就一段都没有。
+   */
+  const points: ComposeCommandPoint[] = []
   let prompt = firstPrompt(messages)
+
+  const first = () => points[0] ?? null
+  const previousPoint = () => points[points.length - 1] ?? null
+  /** 够得着闭合与放弃：至少取过两个点，才存在「一段」。 */
+  const closable = () => points.length > 1
 
   return {
     get prompt() {
@@ -53,10 +98,46 @@ export function createStageLineSession(
     },
     // 待定段：还没落地的那一条。已画完的段都已经是真的 Entity，不必也不该在预览里重画。
     preview(point) {
+      const previous = previousPoint()
       return previous ? { curves: [createComposeLineCurve(previous, point)] } : null
     },
     advance(input): ComposeCommandStep<StageDraftingEffect> {
       if (input.kind === 'cancel') return { status: 'cancelled' }
+
+      /*
+       * 闭合：再产出**一段**从当前点回到第一个点的线，然后结束。
+       *
+       * `LINE` 逐段落地，因此这一段与前面每一段一样是独立 Entity——闭合在这里是「补最后
+       * 一段」，而 `PLINE` 的闭合是「把 `closed` 置位」。两条命令的关键字同名而机制不同，
+       * 与 `U` 是同一种情形。
+       */
+      if (input.kind === 'keyword') {
+        const key = input.key.toUpperCase()
+        if (!closable() || (key !== 'C' && key !== 'U')) {
+          return { status: 'rejected', message: messages.expectedPoint }
+        }
+        if (key === 'C') {
+          return {
+            status: 'commit',
+            effect: { curves: [createComposeLineCurve(previousPoint()!, first()!)] },
+          }
+        }
+        /*
+         * 放弃上一段：会话**只回退自己的点序列**，那一段的 Entity 由宿主删——引擎建不了
+         * Entity 也记不住 id。
+         *
+         * 与 `PLINE` 的 `U` 同名而机制不同：`PLINE` 逐点攒着，此刻文档上什么都还没有，
+         * 因此它的 `U` 只动会话。两处的注释各写一遍，免得下一个人试图合并它们。
+         */
+        points.pop()
+        prompt = nextPrompt(messages, closable())
+        return {
+          status: 'prompt',
+          prompt,
+          preview: { reference: previousPoint()! },
+          commit: { undoLastCreated: true },
+        }
+      }
       // 没有 `defaultKeyword`，因此 Enter 的含义由命令自己给：已经取过点就是**正常结束**，
       // 一点都没取才是什么也没发生。
       //
@@ -65,7 +146,7 @@ export function createStageLineSession(
       // 用户画完一条线看到「已取消」。空 effect 是合法的：字段全部可选，它表达的正是
       // 「命令正常结束，本步没有新产出」。
       if (input.kind === 'accept') {
-        return previous ? { status: 'commit', effect: {} } : { status: 'cancelled' }
+        return previousPoint() ? { status: 'commit', effect: {} } : { status: 'cancelled' }
       }
 
       if (input.kind !== 'point') {
@@ -73,9 +154,9 @@ export function createStageLineSession(
       }
 
       const point = input.point
-      const reference = previous
-      previous = point
-      prompt = nextPrompt(messages)
+      const reference = previousPoint()
+      points.push(point)
+      prompt = nextPrompt(messages, closable())
       return {
         status: 'prompt',
         prompt,
@@ -120,7 +201,7 @@ function createTwoPointCurveSession(
       }
       if (!start) {
         start = input.point
-        prompt = nextPrompt(messages)
+        prompt = endPrompt(messages)
         return { status: 'prompt', prompt, preview: { reference: input.point } }
       }
       return {
@@ -139,7 +220,19 @@ function createTwoPointCurveSession(
  * 建立一次 WIRE 执行的状态机。
  *
  * @remarks
- * 导线只有两个端点：折线导线的价值几乎全部来自自动路由，而路由还没有。
+ * **连续取点**：一条导线是**一个**连接，因此几何攒成一个 Entity 在结束时提交，而不像 `LINE`
+ * 那样逐段落地——逐段会得到 N 个 Entity，中间的接头退化成「两个自由端刚好重合」，符号一移动
+ * 接头就裂开（求解保证的是**绑定端**跟着走，假接头不是绑定）。
+ *
+ * 推论（与 `PLINE` 同一条判断）：攒到结束才提交的命令需要「放弃上一点」关键字，因为此刻文档上
+ * 什么都还没有、撤销够不着它。
+ *
+ * **不做自动路由**：横平竖直由既有的角度约束给（极轴默认开、增量角 45°，正好覆盖 H/V/45），
+ * 用户点到哪儿就是哪儿。替用户补拐角要回答「拐点该拐在哪儿」，而真答案要考虑障碍物。
+ *
+ * **只有首尾两个顶点参与绑定**，中间的拐点是纯几何——绑定由宿主按几何的首尾取。
+ *
+ * 与 `ARROW` **不再共用两点会话工厂**：那个共用的前提是取点逻辑逐字相同，现在不是了。
  *
  * **`LINE` 不绑定，即使端点吸附到了端口上**：绑定改变对象此后的行为，意图必须显式。
  *
@@ -148,7 +241,83 @@ function createTwoPointCurveSession(
 export function createStageWireSession(
   context: StageDraftingContext,
 ): ComposeCommandSession<StageDraftingEffect> {
-  return createTwoPointCurveSession(context, { wire: true })
+  const { messages } = context
+  const vertices: ComposeCommandPoint[] = []
+  const undoKeyword = { key: 'U', label: messages.undoKeyword }
+
+  const wireCurve = (points: readonly ComposeCommandPoint[]): ComposeCurve => (
+    points.length === 2
+      ? createComposeLineCurve(points[0]!, points[1]!)
+      : {
+          kind: 'polyline',
+          vertices: points.map(({ x, y }) => ({ x, y })),
+          closed: false,
+        }
+  )
+
+  /*
+   * 连续取点，因此这一步的提示**要说出怎么结束**——与 `LINE`、`PLINE` 同一档。`ARROW` 相反：
+   * 它取够两点自己就提交，那句话在那里说的是一件做不到的事。
+   *
+   * 闭合关键字不列：一条导线连接的是两个端口，闭合没有意义。
+   */
+  const nextPrompt = () => ({
+    message: messages.specifyNextPoint,
+    accepts: vertices.length > 1 ? ['point' as const, 'keyword' as const] : ['point' as const],
+    ...(vertices.length > 1 ? { keywords: [undoKeyword] } : {}),
+    fields: 'polar' as const,
+  })
+
+  let prompt: ComposeCommandPrompt = firstPrompt(messages)
+
+  return {
+    get prompt() {
+      return prompt
+    },
+    // 已取的**全部**顶点加上光标那个候选点：攒到结束才提交，没画出来的部分对用户就是不存在的。
+    preview(point) {
+      if (vertices.length === 0) return null
+      return { curves: [wireCurve([...vertices, point])], wire: true }
+    },
+    advance(input): ComposeCommandStep<StageDraftingEffect> {
+      if (input.kind === 'cancel') return { status: 'cancelled' }
+
+      if (input.kind === 'keyword') {
+        if (input.key.toUpperCase() !== 'U' || vertices.length === 0) {
+          return { status: 'rejected', message: messages.expectedPoint }
+        }
+        vertices.pop()
+        prompt = vertices.length === 0 ? firstPrompt(messages) : nextPrompt()
+        const last = vertices[vertices.length - 1]
+        return { status: 'prompt', prompt, preview: last ? { reference: last } : {} }
+      }
+
+      if (input.kind === 'accept') {
+        /*
+         * 取够两个点之前**拒绝**而不是提交：一个点的导线画不出来，也没有第二端可言。这里与
+         * `PLINE` 的 `cancelled` 刻意不同——`PLINE` 的 `Enter` 在退化时放弃整条命令，而导线
+         * 的 `Enter` 只是「这一条画完了」，此刻拒绝并停在原提示才说得通。
+         */
+        if (isDegenerateComposePolyline(vertices)) {
+          return { status: 'rejected', message: messages.expectedPoint }
+        }
+        return {
+          status: 'commit',
+          effect: {
+            curves: [wireCurve(vertices)],
+            wire: true,
+            reference: vertices[vertices.length - 1]!,
+          },
+        }
+      }
+
+      if (input.kind !== 'point') return { status: 'rejected', message: messages.expectedPoint }
+
+      vertices.push(input.point)
+      prompt = nextPrompt()
+      return { status: 'prompt', prompt, preview: { reference: input.point } }
+    },
+  }
 }
 
 /**
@@ -172,9 +341,14 @@ export function createStageWireCommand(
 ): ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect> {
   return {
     id: 'WIRE',
-    aliases: ['WI'],
+    aliases: ['WI', 'W'],
     title: messages.wireTitle,
     category: messages.drawCategory,
+    /*
+     * 接线是**成批**的活儿——一张图上连二三十条，画完一条接着画下一条。判据是既有那条：
+     * 用户画完之后想对它做什么。矩形画完九成是填色调圆角，因此那边不声明。
+     */
+    repeat: true,
     start: createStageWireSession,
   }
 }
@@ -185,9 +359,11 @@ export function createStageArrowCommand(
 ): ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect> {
   return {
     id: 'ARROW',
-    aliases: ['AR'],
+    aliases: ['AR', 'X'],
     title: messages.arrowTitle,
     category: messages.drawCategory,
+    // 与 `WIRE` 同一条判据：箭头也是成批标注出来的。
+    repeat: true,
     start: createStageArrowSession,
   }
 }

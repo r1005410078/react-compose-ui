@@ -1,5 +1,6 @@
 import { createComposeLineCurve, normalizeComposeCurveGeometry, type ComposeCurve } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
+import { createComposeCommandRegistry, resolveComposeCommand } from '@compose-ui/commands'
 import { createStageDraftingCommands, createStageLineSession } from './line-command'
 import type { StageDraftingContext } from './drafting-types'
 import { createStageSceneIndex, findStageFeaturePoint } from '../hit-testing'
@@ -32,8 +33,12 @@ const messages = {
   specifyThroughPoint: '指定圆弧上的一点',
   specifyCenter: '指定圆心',
   specifyRadius: '指定半径',
+  specifyDiameter: '指定直径',
+  diameterKeyword: '直径',
+  radiusKeyword: '半径',
   specifyCorner: '指定第一个角点',
   specifyOppositeCorner: '指定对角点',
+  closeKeyword: '闭合',
   undoKeyword: '放弃',
   collinearArc: '三点共线，无法定弧',
   degenerateShape: '这个形状是退化的',
@@ -110,9 +115,89 @@ describe('LINE 命令', () => {
     expect(commands[0]?.aliases).toEqual(['L'])
   })
 
+  describe('OpenSpec: stage-engine / 连续取点命令的闭合关键字', () => {
+    it('LINE 闭合补上收尾那一段', () => {
+      const session = createStageLineSession(context)
+      for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }]) {
+        session.advance({ kind: 'point', point })
+      }
+      const step = session.advance({ kind: 'keyword', key: 'C' })
+
+      // 逐段落地，因此闭合是「补最后一段」而不是「把 closed 置位」——两条命令的 `C` 同名
+      // 而机制不同。
+      if (step.status !== 'commit') throw new Error('闭合之后应当提交并结束')
+      expect(step.effect.curves).toEqual([
+        { kind: 'line', start: { x: 100, y: 80 }, end: { x: 0, y: 0 } },
+      ])
+    })
+
+    it('OpenSpec: stage-engine / LINE 的放弃上一段 / U 回退一个点并带上撤销标记', () => {
+      const session = createStageLineSession(context)
+      for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }]) {
+        session.advance({ kind: 'point', point })
+      }
+      const step = session.advance({ kind: 'keyword', key: 'U' })
+
+      if (step.status !== 'prompt') throw new Error('放弃之后会话应当继续')
+      // 会话只回退自己的点序列；那一段的 Entity 由宿主删——引擎建不了也记不住 id。
+      expect(step.commit).toEqual({ undoLastCreated: true })
+      expect(step.preview?.reference).toEqual({ x: 100, y: 0 })
+
+      // 回退之后从 b 接着画：新的一段从 b 连出去，而不是从已经不存在的 c。
+      const next = session.advance({ kind: 'point', point: { x: 200, y: 0 } })
+      if (next.status !== 'prompt') throw new Error('取点之后会话应当继续')
+      expect(next.commit?.curves).toEqual([
+        { kind: 'line', start: { x: 100, y: 0 }, end: { x: 200, y: 0 } },
+      ])
+    })
+
+    it('退到只剩一个点之后不再列出关键字', () => {
+      const session = createStageLineSession(context)
+      session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+      session.advance({ kind: 'point', point: { x: 100, y: 0 } })
+      session.advance({ kind: 'keyword', key: 'U' })
+
+      expect(session.prompt?.keywords ?? []).toHaveLength(0)
+      // 第一个点没有对应的段，再退一次什么都不该发生。
+      expect(session.advance({ kind: 'keyword', key: 'U' }).status).toBe('rejected')
+    })
+
+    it('只取过一个点时没有闭合关键字，键入也被拒', () => {
+      const session = createStageLineSession(context)
+      session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+      expect(session.prompt?.keywords ?? []).toHaveLength(0)
+      expect(session.advance({ kind: 'keyword', key: 'C' }).status).toBe('rejected')
+    })
+
+    it('取过两个点之后提示里出现闭合', () => {
+      const session = createStageLineSession(context)
+      session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+      session.advance({ kind: 'point', point: { x: 100, y: 0 } })
+      expect(session.prompt?.keywords).toEqual([
+        { key: 'C', label: '闭合' },
+        { key: 'U', label: '放弃' },
+      ])
+    })
+  })
+
+  it('OpenSpec: stage-engine / 单键快捷键同时是命令别名 / 七条绘图命令各有一个单字母别名', () => {
+    const registry = createComposeCommandRegistry(createStageDraftingCommands(messages))
+    // 用户只记一套词：按 `P` 与在命令行敲 `P↵` 必须指向同一条命令。
+    const single: readonly (readonly [string, string])[] = [
+      ['L', 'LINE'], ['P', 'PLINE'], ['R', 'RECTANGLE'],
+      ['C', 'CIRCLE'], ['A', 'ARC'], ['X', 'ARROW'], ['W', 'WIRE'],
+    ]
+    for (const [key, id] of single) {
+      expect(resolveComposeCommand(registry, key)?.id).toBe(id)
+    }
+    // 反向不成立：多字母别名不因此被要求有对应的快捷键，它们照旧可用。
+    expect(resolveComposeCommand(registry, 'REC')?.id).toBe('RECTANGLE')
+    expect(resolveComposeCommand(registry, 'WI')?.id).toBe('WIRE')
+  })
+
   it('OpenSpec: stage-engine / 绘图命令 / ARROW 取两点即结束并标记为箭头', () => {
     const command = createStageDraftingCommands(messages).find(({ id }) => id === 'ARROW')!
-    expect(command.aliases).toEqual(['AR'])
+    expect(command.aliases).toEqual(['AR', 'X'])
     const session = command.start({ messages })
 
     expect(session.advance({ kind: 'point', point: { x: 10, y: 10 } }).status).toBe('prompt')
