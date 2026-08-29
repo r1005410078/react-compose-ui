@@ -44,18 +44,28 @@ export function StageDynamicInputLayer({ annotation, testIdPrefix }: StageDynami
           data-testid={`${testIdPrefix}-dynamic-input-connector`}
         />
       ) : null}
-      {annotation.locks.map((d) => (
-        <path className="compose-stage__dynamic-input-lock" d={d} key={d} />
+      {/*
+        * key 用**下标**而不是内容。
+        *
+        * 这几组的语义本来就是位置性的——第 i 条延伸线永远是同一个角色，因此下标是它稳定的
+        * 身份；而内容会**撞**：轴向段让角度弧的两段退化成同一个 `d`，长度为零时两个 tick
+        * 也落在同一点上。重复 key 下 React 不保证移除多出来的节点，症状是**每取一个点就在
+        * 那个点上留一条竖虚线加一个圆点**，而它们只在鼠标移出图面、整层卸载时才消失。
+        *
+        * 直角走线让每一段都退化，因此这个缺陷在接线图上是必现而不是偶发。
+        */}
+      {annotation.locks.map((d, index) => (
+        <path className="compose-stage__dynamic-input-lock" d={d} key={index} />
       ))}
-      {annotation.guides.map((d) => (
-        <path className="compose-stage__dynamic-input-guide" d={d} key={d} />
+      {annotation.guides.map((d, index) => (
+        <path className="compose-stage__dynamic-input-guide" d={d} key={index} />
       ))}
-      {annotation.ticks.map((tick) => (
+      {annotation.ticks.map((tick, index) => (
         <circle
           className="compose-stage__dynamic-input-tick"
           cx={tick.x}
           cy={tick.y}
-          key={`${tick.x},${tick.y}`}
+          key={index}
           r={2}
         />
       ))}
