@@ -65,6 +65,52 @@ describe('OpenSpec: stage-engine / 受约束变换 System / 缩放手柄插件',
     expect(commands()).toHaveLength(1)
   })
 
+  it('OpenSpec: 缩放会话上报本次的尺寸参考 / 拖角手柄时上报对角与新角', () => {
+    const { controller, grab } = resizeSetup()
+    grab('se')
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 200, y: 150 }, modifiers: FREE })
+
+    expect(controller.getSnapshot().resizePreview).toEqual({
+      origin: { x: 0, y: 0 },
+      point: { x: 200, y: 150 },
+    })
+  })
+
+  it('OpenSpec: 缩放会话上报本次的尺寸参考 / 拖边手柄时原点仍是对角', () => {
+    // 判别性：高度这一个数在本次拖动中不动，但两点之差仍必须是盒的宽高——边手柄取错角的
+    // 症状是读数少一个维度，而它在角手柄上看不出来。
+    const { controller, grab } = resizeSetup()
+    grab('e')
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 200, y: 150 }, modifiers: FREE })
+
+    expect(controller.getSnapshot().resizePreview).toEqual({
+      origin: { x: 0, y: 0 },
+      point: { x: 200, y: 50 },
+    })
+  })
+
+  it('OpenSpec: 缩放会话上报本次的尺寸参考 / 松手后没有尺寸参考', () => {
+    const { controller, grab } = resizeSetup()
+    grab('se')
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 200, y: 150 }, modifiers: FREE })
+    controller.send({ type: 'pointer.up', pointerId: 1, point: { x: 200, y: 150 }, modifiers: FREE })
+
+    expect(controller.getSnapshot().resizePreview).toBeNull()
+  })
+
+  it('OpenSpec: 缩放会话上报本次的尺寸参考 / 从中心缩放时两点仍给出宽高', () => {
+    // 两点取自**新**盒而不是冻结盒：`alt` 下固定不动的是中心，冻结盒的对角会动。
+    const { controller, grab } = resizeSetup()
+    grab('se')
+    const alt = { ...FREE, alt: true }
+    controller.send({ type: 'pointer.move', pointerId: 1, point: { x: 200, y: 150 }, modifiers: alt })
+
+    const preview = controller.getSnapshot().resizePreview!
+    const bounds = controller.getSnapshot().selectionBounds!
+    expect(Math.abs(preview.point.x - preview.origin.x)).toBeCloseTo(bounds.width)
+    expect(Math.abs(preview.point.y - preview.origin.y)).toBeCloseTo(bounds.height)
+  })
+
   it('非 select/scale 工具下命中手柄被消费，不退化成移动或框选', () => {
     const { controller, effects } = resizeSetup({ tool: 'marquee' })
 

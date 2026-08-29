@@ -8,6 +8,7 @@ import {
   matrixFromTransform,
   pointOnRotationRay,
   resizeBounds,
+  resizeReadoutPoints,
   rotationFromPointer,
   toComposeTransform,
   toStageTransform,
@@ -153,5 +154,45 @@ describe('OpenSpec: stage-engine / 手势几何写入的精度上限', () => {
       size: { width: 648, height: 360 },
       rotation: 45,
     })
+  })
+})
+
+describe('resizeReadoutPoints', () => {
+  /** 每个手柄的读数都从这块盒子上取，左上 `(10, 20)`、右下 `(110, 80)`。 */
+  const bounds = { x: 10, y: 20, width: 100, height: 60 }
+  const size = (handle: Parameters<typeof resizeReadoutPoints>[0]) => {
+    const { origin, point } = resizeReadoutPoints(handle, bounds)
+    return { width: Math.abs(point.x - origin.x), height: Math.abs(point.y - origin.y) }
+  }
+
+  it('OpenSpec: stage-engine / 缩放会话上报本次的尺寸参考 / 原点是与手柄对角的那个角', () => {
+    expect(resizeReadoutPoints('nw', bounds)).toEqual({
+      origin: { x: 110, y: 80 },
+      point: { x: 10, y: 20 },
+    })
+    expect(resizeReadoutPoints('se', bounds)).toEqual({
+      origin: { x: 10, y: 20 },
+      point: { x: 110, y: 80 },
+    })
+  })
+
+  it('OpenSpec: stage-engine / 缩放会话上报本次的尺寸参考 / 边手柄的原点仍是对角', () => {
+    // 边手柄在它不动的那个轴上取左上/右下，因此读数仍是宽和高——用户在改的是盒，而等比
+    // 约束一开边手柄同样会改另一个轴。
+    expect(resizeReadoutPoints('e', bounds)).toEqual({
+      origin: { x: 10, y: 20 },
+      point: { x: 110, y: 80 },
+    })
+    expect(resizeReadoutPoints('n', bounds)).toEqual({
+      origin: { x: 10, y: 80 },
+      point: { x: 110, y: 20 },
+    })
+  })
+
+  it('OpenSpec: stage-engine / 缩放会话上报本次的尺寸参考 / 八个手柄都给出宽高', () => {
+    // 判别性在这里：任何一个手柄取错了角，两点之差就不再是盒的宽高。
+    for (const handle of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const) {
+      expect(size(handle)).toEqual({ width: 100, height: 60 })
+    }
   })
 })

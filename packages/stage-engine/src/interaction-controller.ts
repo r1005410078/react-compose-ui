@@ -540,6 +540,20 @@ export interface StageInteractionSnapshot {
   /** 绘制工具在 pointerup 前的世界坐标预览。 */
   readonly drawing: StageDrawingPreview | null
   /**
+   * 缩放的尺寸读数参考：本次缩放的原点与落点，均为世界坐标。
+   *
+   * @remarks
+   * 仅在 `phase === 'resize'` 时有值。原点是新包围盒上与手柄**对角**的那个角、落点是手柄
+   * 那一侧的角（见 `resizeReadoutPoints`），因此两点之差恒等于新包围盒的宽高。
+   *
+   * 渲染层**不得**自己反推手柄：手柄是插件内部状态，而预览期间选区框上八个手柄的位置都在
+   * 动，等比约束下角手柄与边手柄可以改出完全相同的新盒，反推无解。
+   */
+  readonly resizePreview: {
+    readonly origin: StagePoint
+    readonly point: StagePoint
+  } | null
+  /**
    * 旋转拉线预览（Godot 风格）：从选区中心到当前指针的世界坐标。
    *
    * @remarks
@@ -653,6 +667,7 @@ const IDLE_SNAPSHOT: StageInteractionSnapshot = {
   external: null,
   drawing: null,
   rotationPreview: null,
+  resizePreview: null,
   temporaryPan: false,
   selectionBounds: null,
   scrollRange: null,

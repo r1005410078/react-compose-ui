@@ -585,6 +585,41 @@ export function resizeBounds(
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
+/**
+ * 一次缩放的尺寸读数取哪两个点。
+ *
+ * @remarks
+ * 原点是与手柄**对角**的那个角，落点是手柄那一侧的角，两者都取自**新**包围盒。
+ * `composePointToFields('cartesian', 落点, 原点)` 因此恒等于新包围盒的 `(宽, 高)`，
+ * 八个手柄一条规则，不按手柄种类分流。
+ *
+ * 两点都取自新盒而不是冻结盒，是因为 `alt`（从中心缩放）下冻结盒的对角**会动**：那一档
+ * 固定不动的是中心而不是任何一个角。取新盒的对角在两种情形下都给出宽高，且在没有 `alt`
+ * 时它本来就等于冻结盒的对角——按冻结盒写会让 `alt` 下的读数悄悄变成另外两个数。
+ *
+ * 边手柄（`n`/`s`/`e`/`w`）在它不动的那个轴上取左上/右下，因此读数仍是宽和高：用户在改的是
+ * 盒，盒的量纲是宽和高，而等比约束一开边手柄同样会改另一个轴。
+ *
+ * @param handle - 正在拖的手柄。
+ * @param bounds - 本帧解算之后的新包围盒。
+ * @public
+ */
+export function resizeReadoutPoints(
+  handle: ResizeHandle,
+  bounds: StageRect,
+): { readonly origin: StagePoint; readonly point: StagePoint } {
+  const left = bounds.x
+  const right = bounds.x + bounds.width
+  const top = bounds.y
+  const bottom = bounds.y + bounds.height
+  const west = handle.includes('w')
+  const north = handle.includes('n')
+  return {
+    origin: { x: west ? right : left, y: north ? bottom : top },
+    point: { x: west ? left : right, y: north ? top : bottom },
+  }
+}
+
 /** 旋转角度吸附步进（度），与 Figma / Godot 默认一致。 @public */
 export const ROTATION_SNAP_DEGREES = 15
 

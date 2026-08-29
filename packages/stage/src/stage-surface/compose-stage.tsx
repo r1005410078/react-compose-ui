@@ -84,7 +84,7 @@ import { useStageInstanceDrilldown } from './instance-drilldown'
 import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-lifecycle'
 import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './entity-creation'
-import { StageDraftingOverlay, useStageDrafting } from '../drafting'
+import { StageDraftingOverlay, stageResizeReadout, useStageDrafting } from '../drafting'
 import { useStageGeometryEditing } from '../geometry-editing'
 import type { StageGeometryEditing } from '../geometry-editing'
 import { useStagePointerSession, useStageRootHandlers } from './pointer-session'
@@ -609,6 +609,21 @@ function ComposeStageReady({
   const draftingPointerTracked = draftingSession.awaitingPoint || draftingSession.awaitingSelection
   const pointerTracked = draftingPointerTracked || geometryEditingActive
 
+  /*
+   * 缩放手柄的尺寸读数。
+   *
+   * 与取点的动态输入**互斥**：命令等着取点时取点插件在任何命中类型上都接管 `pointerdown`，
+   * 缩放手势起不来；缩放进行中指针已被捕获，命令开不起来。因此这里是 `??` 而不是叠加——
+   * 写成叠加的话，将来任何一侧放宽了接管条件，屏幕上会出现两组框而没人知道该信哪一组。
+   */
+  const resizeReadout = useMemo(
+    () => (interaction.resizePreview
+      ? stageResizeReadout(interaction.resizePreview, viewport)
+      : null),
+    [interaction.resizePreview, viewport],
+  )
+  const dynamicInput = draftingSession.dynamicInput ?? resizeReadout
+
   /**
    * 十字光标的形态。
    *
@@ -1121,14 +1136,14 @@ function ComposeStageReady({
           * 图面是常规光标，命令一开始等输入就换成十字光标。挂载条件放宽到「有东西要画」——
           * 只看等待取点的话，等待选择对象那一档的拾取框挂不上。
           */}
-        {pointerTracked ? (
+        {pointerTracked || dynamicInput ? (
           <StageDraftingOverlay
             crosshair={crosshair}
             outlines={draftingSession.outlines}
             rubberBand={draftingSession.rubberBand}
             trackingRay={draftingSession.trackingRay}
             previewOutline={draftingSession.previewOutline}
-            dynamicInput={draftingSession.dynamicInput}
+            dynamicInput={dynamicInput}
             snap={draftingSession.snap}
             revealedPorts={draftingSession.revealedPorts}
             surfaceSize={surfaceSize}

@@ -26,6 +26,7 @@ export {
   rectMappingMatrix,
   rectsIntersect,
   resizeBounds,
+  resizeReadoutPoints,
   resolveTargetFrameId,
   rotationFromPointer,
   rotationMatrixAround,

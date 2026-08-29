@@ -4,6 +4,7 @@ import { resolveTargetFrameId } from '../geometry'
 import {
   rectMappingMatrix,
   resizeBounds,
+  resizeReadoutPoints,
   screenToWorld,
   type ResizeHandle,
   type StagePoint,
@@ -85,6 +86,9 @@ function createResizeSession(options: ResizeSessionOptions): StageSession {
         phase: 'resize',
         previewTransforms: transforms,
         snapGuides: snapped.guides,
+        // 读数取解算之后的新包围盒，因此与选区框、参考线是同一个值；读裸指针的症状是开着
+        // 网格时框里的数与选区框对不上。
+        resizePreview: resizeReadoutPoints(handle, nextBounds),
       })
     },
     commit(ctx) {

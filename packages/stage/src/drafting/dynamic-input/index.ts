@@ -22,4 +22,6 @@ export type {
   StageDynamicInputField,
   StageDynamicInputRequest,
 } from './dynamic-input-geometry'
+export { stageResizeReadout } from './resize-readout'
+export type { StageResizeReadoutInput } from './resize-readout'
 export { StageDynamicInputLayer } from './stage-dynamic-input-layer'
