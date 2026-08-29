@@ -155,8 +155,13 @@ function curveHitsArea(
  * hidden 与 locked 节点永远不进入结果，`subtract` 也不会因此把它们从既有选区中漏掉，因为
  * 它们本就不该出现在既有选区里。
  *
- * 完全包住框选区域的 Frame 不进入结果：在画板里拖框表达的是"选这些子级"，把画板本身
- * 一并选中会让紧接着的移动整体搬走画板。从画板外面框住它仍然选得中。
+ * 场景（`rootIds` 的直接成员）永不进入结果：框选表达的是"选这些内容"，而场景是容器不是
+ * 内容。把它一并选中会让紧接着的移动整体搬走场景，而子级是相对坐标，画面上看不出发生了
+ * 什么。排除不看框与场景的相对位置——从外面框住它同样不选中，选场景走标题标签、`command`
+ * 点体或场景树。
+ *
+ * 其余 Frame（嵌套 Frame）保持"完全包住框选区时不进入结果"：它们没有标题标签，点体仍是
+ * 唯一的画布选中入口，一并排除会让它们够不着而没有补偿。
  *
  * @returns 稳定文档 ID。`replace` 按确定性场景顺序返回；`add` 保留既有选区顺序并在其后追加
  * 新命中，避免打乱宿主依赖的「首个选中项」语义。
@@ -173,6 +178,7 @@ export function resolveMarqueeSelection(query: StageMarqueeQuery): readonly stri
         const bounds = index.getWorldBounds(entityId)
         if (!entity || !bounds) return false
         if (!index.isVisible(entityId) || getComposeLock(entity).locked) return false
+        if (document.rootIds.includes(entityId)) return false
         if (isComposeFrameEntity(entity) && rectContains(bounds, area)) return false
         const byGeometry = curveHitsArea(entity, entityId, index, area, hitTest)
         if (byGeometry !== null) return byGeometry

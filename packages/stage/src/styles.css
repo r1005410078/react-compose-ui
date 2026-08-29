@@ -56,6 +56,9 @@
   --compose-stage-grid-minor: rgb(71 84 103 / 14%);
   --compose-stage-grid-primary: rgb(52 64 84 / 27%);
 
+  /* 浅底上的浅灰边界读不出来，压深一档。 */
+  --compose-scene-outline: rgb(71 84 103 / 42%);
+
   /* 浅底上的浅橙读不出来，换成同色相的深色。 */
   --compose-stage-snap: #b45309;
   --compose-stage-grip-hot: #c81e2a;
@@ -177,11 +180,25 @@
   stroke-width: 0.5;
 }
 
-/* 场景区域只是一个可检查锚点，不画任何描边——场景与容器的外观完全来自各自的 Appearance。 */
+/* 场景区域锚点只供按 frameId 定位，几何 MUST 与场景屏幕矩形逐像素相同：边界描边是另一个
+ * 元素，描边会把这里的 `boundingBox()` 撑大半个像素，而端到端用例拿它当坐标基准。 */
 .compose-stage__output-boundary,
 .compose-stage__world-origin {
   pointer-events: none;
   stroke: none;
+}
+
+/*
+ * 场景的编辑器边界描边。它是 chrome 不是内容：场景背景默认透明，用户也可以把它改成与工作区
+ * 相同的颜色，此时边界只剩这条线——默认值只保护第一次。
+ *
+ * `stroke-width` 恒为 1 而不是除以 zoom：这个 svg 在屏幕空间，世界几何已经在换算时消化掉
+ * 缩放。`pointer-events: none` 不能去掉，否则它会吞掉绘制工具在场景区域内的按下。
+ */
+.compose-stage__scene-outline {
+  pointer-events: none;
+  stroke: var(--compose-scene-outline, rgb(148 163 184 / 45%));
+  stroke-width: 1;
 }
 
 .compose-stage__axis.is-x {

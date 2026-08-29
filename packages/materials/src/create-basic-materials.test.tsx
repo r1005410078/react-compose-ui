@@ -96,13 +96,15 @@ describe('Basic ECS materials', () => {
       .toBe((container?.icon as { type?: unknown } | undefined)?.type)
     const sceneAppearance = seedEntity(materials, 'frame').components.Appearance
     const containerAppearance = seedEntity(materials, 'container').components.Appearance
-    // 这条断言把 core 的场景默认外观与 materials 的容器默认外观锁在一起：任何一侧改了
-    // 背景色都会让这里立刻变红，而不是等到用户看见场景和容器颜色不一样。
+    // 场景背景默认透明而容器不透明：场景背景是会被发布出去的真实像素，由用户决定；两者
+    // 同色时用户读不出手上这块到底是场景还是容器。这条断言挡的是把它们重新锁在一起。
     expect(sceneAppearance).toMatchObject({
-      backgroundPaint: containerAppearance!.backgroundPaint,
+      backgroundPaint: { kind: 'solid', color: 'transparent' },
     })
+    expect(containerAppearance!.backgroundPaint)
+      .not.toEqual(sceneAppearance!.backgroundPaint)
     expect(sceneAppearance).toEqual(COMPOSE_DEFAULT_SCENE_APPEARANCE)
-    // 唯一的例外：场景不带默认边框。布局求解把边框计入内容盒，而场景是绝对坐标的原点，
+    // 场景不带默认边框：布局求解把边框计入内容盒，而场景是绝对坐标的原点，
     // 1px 边框会把每个直接子级整体推离网格 1px。
     expect(sceneAppearance).toMatchObject({ borderWidth: 0 })
     expect(containerAppearance).toMatchObject({ borderWidth: 1 })

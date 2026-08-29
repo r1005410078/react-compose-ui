@@ -149,6 +149,14 @@ describe('OpenSpec: compose-document / 场景默认外观', () => {
     expect(entity.components.Appearance).toEqual(COMPOSE_DEFAULT_SCENE_APPEARANCE)
   })
 
+  it('场景默认背景透明，且不与容器默认背景联动', () => {
+    // 场景背景是会被发布出去的真实像素而不是编辑器配色：编辑器不替用户填一个他迟早要改的
+    // 颜色。边界的可辨认性由 Stage 的编辑器边界描边承担，不由这里的字段承担。
+    expect(COMPOSE_DEFAULT_SCENE_APPEARANCE).toMatchObject({
+      backgroundPaint: { kind: 'solid', color: 'transparent' },
+    })
+  })
+
   it('场景默认不带边框', () => {
     // 布局求解把边框计入内容盒，而场景是绝对坐标的原点：1px 边框会让按网格吸附的子级
     // 在属性面板里读成 7、15、23。默认值不该埋进这个偏差。

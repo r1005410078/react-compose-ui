@@ -16,8 +16,9 @@ import { createContainerPreset } from '../container/preset'
  * 同一个。它存在的理由是文档里的 `Composition.presetId` 是 `'frame'`：没有这条注册，场景树
  * 等按 presetId 取图标的位置会掉到通用兜底图标。
  *
- * 外观改用 core 的场景默认值而不是容器默认值：两者背景相同，但场景不带默认边框（原因见
- * `COMPOSE_DEFAULT_SCENE_APPEARANCE` 的说明）。
+ * 外观改用 core 的场景默认值而不是容器默认值：场景背景默认透明、也不带默认边框，由用户
+ * 决定这块屏用什么底（原因见 `COMPOSE_DEFAULT_SCENE_APPEARANCE` 的说明）。图标仍与
+ * Container 相同——区分场景与容器的是标题标签与 Stage 的编辑器边界描边，不是图标。
  *
  * `paletteHidden`：场景由"在场景外画一个容器"或具名动作产生，从物料面板拖出一块场景没有
  * 意义——落点在某块场景里时它只会变成一个嵌套 Frame。

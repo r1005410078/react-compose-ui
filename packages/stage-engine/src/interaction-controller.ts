@@ -133,8 +133,8 @@ export type StageInteractionHit =
       /**
        * 命中来源：Entity 自身的几何（`body`）还是它在画布上的标题标签（`label`）。
        *
-       * 省略时按 `body` 处理。非空容器的 body 命中会收敛为框选，只有 `label` 能直接选中
-       * 它；见 `shouldConvergeToMarquee`。
+       * 省略时按 `body` 处理。顶层容器的 body 命中会收敛为框选，只有 `label` 与 `command`
+       * 点击能直接选中它；见 `shouldConvergeToMarquee`。
        */
       readonly source?: 'body' | 'label'
     }

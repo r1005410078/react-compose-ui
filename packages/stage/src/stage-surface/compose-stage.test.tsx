@@ -854,6 +854,48 @@ describe('ComposeStage ECS', () => {
     expect(screen.getByTestId(`stage-frame-boundary-${ROOT_FRAME_ID}`)).toBeInTheDocument()
   })
 
+  it('OpenSpec: 多 Frame 与嵌套边界 / 场景边界描边不随缩放变粗', () => {
+    // 场景背景默认透明，边界只由这条 chrome 描边承担；它画在屏幕空间，因此笔画宽度恒定。
+    const value = document([entity('leaf')])
+    const { container } = renderStage(value, { viewport: { x: 0, y: 0, zoom: 1 } })
+    const outline = container.querySelector(
+      `[data-testid="stage-frame-outline-${ROOT_FRAME_ID}"]`,
+    )
+    expect(outline).not.toBeNull()
+    expect(outline?.getAttribute('fill')).toBe('none')
+
+    cleanup()
+    const zoomed = renderStage(value, { viewport: { x: 0, y: 0, zoom: 4 } })
+    const zoomedOutline = zoomed.container.querySelector(
+      `[data-testid="stage-frame-outline-${ROOT_FRAME_ID}"]`,
+    )
+    // 缩放确实改了几何——否则下一条断言会因为两次渲染完全相同而变成一条永远绿的假用例。
+    expect(Number(zoomedOutline?.getAttribute('width')))
+      .toBeGreaterThan(Number(outline?.getAttribute('width')))
+    // 笔画宽度只写在样式表里：两处都不带内联 stroke-width，因此缩放改不到它。
+    expect(outline?.getAttribute('stroke-width')).toBeNull()
+    expect(zoomedOutline?.getAttribute('stroke-width')).toBeNull()
+    expect(getComputedStyle(zoomedOutline!).pointerEvents).toBe('none')
+  })
+
+  it('OpenSpec: 多 Frame 与嵌套边界 / 描边不改锚点矩形的几何', () => {
+    // 端到端用例拿锚点的 boundingBox() 当坐标基准，描边会把它撑大半个像素，因此分成两个元素。
+    const value = document([entity('leaf')])
+    const { container } = renderStage(value)
+    const anchor = container.querySelector(
+      `[data-testid="stage-frame-boundary-${ROOT_FRAME_ID}"]`,
+    )
+    const outline = container.querySelector(
+      `[data-testid="stage-frame-outline-${ROOT_FRAME_ID}"]`,
+    )
+
+    expect(anchor?.getAttribute('stroke')).toBeNull()
+    expect(Number(outline?.getAttribute('width')))
+      .toBeGreaterThan(Number(anchor?.getAttribute('width')))
+    expect(Number(outline?.getAttribute('x')))
+      .toBeLessThan(Number(anchor?.getAttribute('x')))
+  })
+
   it('OpenSpec: Renderer + Hierarchy / 先渲染自身 Renderer 再渲染子项', () => {
     const child = entity('child')
     const container = {

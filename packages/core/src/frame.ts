@@ -10,6 +10,7 @@ import {
   type JsonObject,
 } from './document-types'
 import { formatComposeNumber } from './geometry-precision'
+import { DEFAULT_COMPOSE_BACKGROUND_PAINT } from './paint'
 import type { ComposePaint } from './paint'
 
 /** 新建 Frame 时使用的默认尺寸。 @public */
@@ -88,19 +89,24 @@ export function formatComposeSceneSizePresetLabel(preset: ComposeSceneSizePreset
  * 新建场景使用的默认外观。
  *
  * @remarks
- * 场景就是放在顶层的容器，背景 MUST 与 `@compose-ui/materials` 的 Container Preset 默认
- * 外观相同——否则用户会看到"画一个容器"和"画一块场景"颜色不一样。core 不能依赖 materials
- * （架构边界），所以这是一份刻意的副本，由 materials 侧的断言锁住：漂移会让单测立刻变红。
+ * **背景透明，编辑器不替用户填色。** 场景背景是会被发布出去的真实像素而不是编辑器配色，
+ * 先填一个颜色等于替用户做了一个他迟早要改的决定。这条曾经反过来写着"背景 MUST 与
+ * Container Preset 默认外观相同"，理由是"否则用户会看到画容器和画场景颜色不一样"——而那
+ * 正是需要看出来的区别：两者同色时用户读不出手上这块到底是场景还是容器。
  *
- * **唯一的例外是边框宽度**：Container 默认带 1px 边框，场景默认不带。布局求解会把边框
- * 计入内容盒（`node.setBorder`），场景又是绝对坐标的原点，1px 边框会把每个直接子级整体推
- * 离网格 1px——按网格吸附拖动后，属性面板里的 X 会读成 7、15、23 而不是 8、16、24。
- * 用户当然可以给某块场景手动加边框，那是显式选择；默认值不该埋进这个偏差。
+ * **边框宽度为 0**：布局求解会把边框计入内容盒（`node.setBorder`），场景又是绝对坐标的
+ * 原点，1px 边框会把每个直接子级整体推离网格 1px——按网格吸附拖动后，属性面板里的 X 会读成
+ * 7、15、23 而不是 8、16、24。用户当然可以给某块场景手动加边框，那是显式选择。
+ *
+ * 因此**场景边界的可辨认性由 Stage 的编辑器边界描边承担，不由这里的任何字段承担**：默认值
+ * 只保护第一次，用户把背景改成与工作区相同的颜色之后，边界必须仍然读得出来。
+ *
+ * 本常量的变化**不迁移既有文档**：默认值只作用于新建，已有场景保留自己写下的背景。
  *
  * @public
  */
 export const COMPOSE_DEFAULT_SCENE_APPEARANCE: ComposeAppearance = Object.freeze({
-  backgroundPaint: { kind: 'solid', color: '#1e2229' },
+  backgroundPaint: { ...DEFAULT_COMPOSE_BACKGROUND_PAINT },
   borderColor: 'transparent',
   borderWidth: 0,
   borderRadius: 0,

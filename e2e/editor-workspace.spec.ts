@@ -76,8 +76,11 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   await expect(output).toHaveAttribute('fill', 'transparent')
   await expect(xAxis).toHaveCSS('stroke', 'rgba(216, 91, 216, 0.75)')
   await expect(yAxis).toHaveCSS('stroke', 'rgba(194, 238, 109, 0.75)')
-  // 场景与容器共用同一条呈现管线：Stage 不再为 Frame 补画任何描边，区域矩形只是几何锚点。
+  // 区域矩形只是几何锚点，描边是另一个元素——锚点带描边会把它的 boundingBox() 撑大半个像素。
   await expect(stage.locator('.compose-stage__output-edge')).toHaveCount(0)
+  await expect(output).not.toHaveAttribute('stroke', /.+/)
+  // 场景背景默认透明，边界只由这条 chrome 描边承担。
+  await expect(stage.getByTestId('stage-frame-outline-frame-root')).toHaveCount(1)
   await expect(originSilhouette).toHaveCSS('fill', 'rgb(32, 37, 45)')
   await expect(originSilhouette).toHaveCSS('fill-opacity', '0.9')
   await expect(originPosition).toHaveCSS('fill', 'rgb(164, 172, 183)')
@@ -95,7 +98,11 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
 
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
+  // 场景体不再是选中入口——裸点它是框选。选中走标题标签之外的第二个入口：command 点体。
+  // 用 Meta 而不是 Control：macOS 上 Ctrl+左键会被 Chromium 翻译成右键。
+  await page.keyboard.down('Meta')
   await page.mouse.click(outputBox!.x + 40, outputBox!.y + 40)
+  await page.keyboard.up('Meta')
 
   // 场景分组自己的面板也叫「场景属性」，这里要的是整个 Entity Inspector 根。
   const inspector = editor.getByRole('region', { name: '场景 属性', exact: true })

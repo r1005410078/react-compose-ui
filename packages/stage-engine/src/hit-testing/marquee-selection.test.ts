@@ -5,7 +5,7 @@ import {
   type StageMarqueeQuery,
 } from './marquee-selection'
 import { createStageSceneIndex } from './scene-index'
-import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from '../test-fixtures'
+import { document, entity, layoutSnapshot } from '../test-fixtures'
 
 /** 左侧节点占 0..100，右侧节点占 200..300，两者都高 50。 */
 const left = entity('left', { x: 0, y: 0, width: 100, height: 50 })
@@ -28,11 +28,11 @@ function query(
 
 describe('框选判定模式协议', () => {
   it('OpenSpec: 相交判定选中部分重叠节点', () => {
-    // 框右边缘停在 left 内部，只压住它的一半。框从画板外面起手，因此也相交到根 Frame。
+    // 框右边缘停在 left 内部，只压住它的一半。框从场景外面起手，但场景不是内容，不进结果。
     expect(resolveMarqueeSelection(query(
       { x: -10, y: -10, width: 60, height: 70 },
       { direction: 'rtl' },
-    ))).toEqual([ROOT_FRAME_ID, 'left'])
+    ))).toEqual(['left'])
   })
 
   it('OpenSpec: 包含模式排除部分重叠节点', () => {
@@ -50,7 +50,7 @@ describe('框选判定模式协议', () => {
     const area = { x: -10, y: -10, width: 60, height: 70 }
     expect(resolveMarqueeSelection(query(area, { direction: 'ltr' }))).toEqual([])
     expect(resolveMarqueeSelection(query(area, { direction: 'rtl' })))
-      .toEqual([ROOT_FRAME_ID, 'left'])
+      .toEqual(['left'])
     expect(resolveMarqueeHitTest('ltr')).toBe('contain')
     expect(resolveMarqueeHitTest('rtl')).toBe('intersect')
   })
@@ -70,37 +70,69 @@ describe('框选判定模式协议', () => {
       { x: -10, y: -10, width: 400, height: 100 },
       { direction: 'rtl' },
       [left, right, hidden, locked],
-    ))).toEqual([ROOT_FRAME_ID, 'left', 'right'])
+    ))).toEqual(['left', 'right'])
   })
 
   it('OpenSpec: 按确定性场景顺序返回并保留既有选区顺序', () => {
     const area = { x: -10, y: -10, width: 400, height: 100 }
     const crossing = { direction: 'rtl' } as const
     expect(resolveMarqueeSelection(query(area, crossing)))
-      .toEqual([ROOT_FRAME_ID, 'left', 'right'])
+      .toEqual(['left', 'right'])
     // 既有选区顺序来自宿主的交互顺序，加选只在其后追加新命中。
     expect(resolveMarqueeSelection(query(area, { ...crossing, base: ['right'], combine: 'add' })))
-      .toEqual(['right', ROOT_FRAME_ID, 'left'])
+      .toEqual(['right', 'left'])
   })
 
   it('OpenSpec: Shift 加选与 Alt 减选', () => {
     const leftOnly = { x: -10, y: -10, width: 60, height: 70 }
     const crossing = { direction: 'rtl' } as const
     expect(resolveMarqueeSelection(query(leftOnly, { ...crossing, base: ['right'], combine: 'add' })))
-      .toEqual(['right', ROOT_FRAME_ID, 'left'])
+      .toEqual(['right', 'left'])
     expect(resolveMarqueeSelection(
       query(leftOnly, { ...crossing, base: ['left', 'right'], combine: 'add' }),
-    )).toEqual(['left', 'right', ROOT_FRAME_ID])
+    )).toEqual(['left', 'right'])
     expect(resolveMarqueeSelection(
       query(leftOnly, { ...crossing, base: ['left', 'right'], combine: 'subtract' }),
     )).toEqual(['right'])
   })
 
-  it('在画板内部拖框不选中画板本身', () => {
-    // 完全落在根 Frame 内部的框表达的是"选这些子级"；把画板一并选中会让紧接着的移动
-    // 整体搬走画板。
+  it('在场景内部拖框不选中场景本身', () => {
+    // 完全落在根 Frame 内部的框表达的是"选这些子级"；把场景一并选中会让紧接着的移动
+    // 整体搬走场景。
     expect(resolveMarqueeSelection(query({ x: 0, y: 0, width: 400, height: 100 })))
       .toEqual(['left', 'right'])
+  })
+
+  it('OpenSpec: 窗交框蹭到场景边缘不选中场景', () => {
+    // 从工作区往回拖的窗交框蹭到场景边缘曾经会把整块场景选中，而紧接着的移动会把它搬走——
+    // 子级是相对坐标，画面上看不出发生了什么。
+    expect(resolveMarqueeSelection(query(
+      { x: -40, y: -40, width: 30, height: 30 },
+      { direction: 'rtl' },
+    ))).toEqual([])
+  })
+
+  it('OpenSpec: 从外面完全框住场景也不选中它', () => {
+    // 排除不看框与场景的相对位置：选场景走标题标签、command 点体或场景树。
+    expect(resolveMarqueeSelection(query(
+      { x: -500, y: -500, width: 3000, height: 3000 },
+      { direction: 'ltr' },
+    ))).toEqual(['left', 'right'])
+  })
+
+  it('OpenSpec: 嵌套 Frame 保持既有排除规则', () => {
+    // 嵌套 Frame 没有标题标签，点体仍是唯一的画布选中入口，一并排除会让它够不着。
+    const nested = entity('nested', { x: 0, y: 0, width: 200, height: 200, childIds: [] })
+    const nestedFrame = {
+      ...nested,
+      components: { ...nested.components, Frame: { size: { width: 200, height: 200 }, guides: [] } },
+    }
+    const inside = { x: 20, y: 20, width: 60, height: 60 }
+    expect(resolveMarqueeSelection(query(inside, { direction: 'rtl' }, [nestedFrame])))
+      .toEqual([])
+    const around = { x: -20, y: -20, width: 400, height: 400 }
+    expect(resolveMarqueeSelection(query(around, { direction: 'ltr' }, [nestedFrame])))
+      .toEqual(['nested'])
   })
 
   it('OpenSpec: 退化空框不命中任何节点', () => {

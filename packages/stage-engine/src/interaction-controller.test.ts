@@ -1448,14 +1448,14 @@ describe('框选工具与选区布尔组合', () => {
     const leftward = marqueeSetup()
     const leftwardDrag = leftward.drag({ x: 50, y: 60 }, { x: -10, y: -10 })
     expect(leftwardDrag.marqueeHitTest).toBe('intersect')
-    expect(leftward.selection()).toMatchObject({ selectedIds: [ROOT_FRAME_ID, 'left'] })
+    expect(leftward.selection()).toMatchObject({ selectedIds: ['left'] })
   })
 
   it('OpenSpec: Shift 加选与 Alt 减选', () => {
     // 布尔组合与判定正交：从右往左拖，让判定落在相交上，本条只看组合。
     const added = marqueeSetup({ selectedIds: ['right'] })
     added.drag({ x: 50, y: 60 }, { x: -10, y: -10 }, { kind: 'surface' }, { ...modifiers, shift: true })
-    expect(added.selection()).toMatchObject({ selectedIds: ['right', ROOT_FRAME_ID, 'left'] })
+    expect(added.selection()).toMatchObject({ selectedIds: ['right', 'left'] })
 
     const subtracted = marqueeSetup({ selectedIds: ['left', 'right'] })
     subtracted.drag({ x: 50, y: 60 }, { x: -10, y: -10 }, { kind: 'surface' }, { ...modifiers, alt: true })
@@ -1888,7 +1888,7 @@ describe('OpenSpec: stage-engine / 可编辑路径会话、命中与手势', () 
   })
 })
 
-describe('OpenSpec: 非空容器体的命中收敛', () => {
+describe('OpenSpec: 顶层容器体的命中收敛', () => {
   // 收敛只作用于带标题标签的顶层容器：v7 下即 rootIds 里的场景（夹具的 ROOT_FRAME_ID）。
   const container = () => document(
     [entity('child', { x: 20, y: 20, width: 60, height: 40 })],
@@ -1915,19 +1915,37 @@ describe('OpenSpec: 非空容器体的命中收敛', () => {
     expect(effects.some((effect) => effect.type === 'selection.change')).toBe(false)
   })
 
-  it('空容器仍然可以点体选中', () => {
+  it('空容器同样收敛', () => {
+    // 空场景整块都是拖动把手，而里面什么都没有可点——这正是最容易手滑的时刻。
     const value = empty()
     const { controller, effects } = setup(value, layoutSnapshot(value), [])
     press(controller, { kind: 'entity', entityId: ROOT_FRAME_ID })
-    expect(controller.getSnapshot().phase).toBe('move')
-    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: [ROOT_FRAME_ID] })
+    expect(controller.getSnapshot().phase).toBe('marquee')
+    expect(effects.some((effect) => effect.type === 'selection.change')).toBe(false)
   })
 
-  it('已选中的非空容器可以拖体移动', () => {
+  it('已选中的非空容器同样收敛', () => {
+    // 用户几乎总是先选中场景再去框选它的内容，此时保护恰好失效；而子级是相对坐标，
+    // 场景被搬走时画面内部没有任何变化。
     const value = container()
     const { controller } = setup(value, layoutSnapshot(value), [ROOT_FRAME_ID])
     press(controller, { kind: 'entity', entityId: ROOT_FRAME_ID })
+    expect(controller.getSnapshot().phase).toBe('marquee')
+  })
+
+  it('command 点体直接选中并拖动容器', () => {
+    const value = container()
+    const { controller, effects } = setup(value, layoutSnapshot(value), [])
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 200, y: 150 },
+      hit: { kind: 'entity', entityId: ROOT_FRAME_ID },
+      modifiers: { ...modifiers, command: true },
+    })
     expect(controller.getSnapshot().phase).toBe('move')
+    expect(effects).toContainEqual({ type: 'selection.change', selectedIds: [ROOT_FRAME_ID] })
   })
 
   it('标签来源始终直接选中容器', () => {

@@ -74,10 +74,12 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   })
 
   // Variant 使用自己的 Runtime。保存生成稳定 ID 操作；Revert 与 Apply 都显式消费当前层覆盖。
-  // 组件根现在是 Frame（因此也是容器节点），复用单选叶子作根时它不再带 is-renderer。
+  // 单选叶子提取时叶子本身就是组件根，因此这里只有一个节点，而组件根是 Frame——它的体不再
+  // 是选中入口（裸点是框选）。走 command 点体这个入口；用 Meta 而不是 Control，macOS 上
+  // Ctrl+左键会被 Chromium 翻译成右键。
   const variantChild = stage.locator('.compose-stage__scene .compose-stage__node').first()
   await expect(variantChild).toBeVisible()
-  await variantChild.click()
+  await variantChild.click({ modifiers: ['Meta'] })
   await stage.press('ArrowRight')
   const saveVariant = editor.getByRole('button', { name: '保存变体 Dragged Card Focused' })
   await expect(saveVariant).toBeEnabled()
@@ -87,7 +89,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   await expect(editor.getByText('与父源同步 · 无本地覆盖', { exact: true })).toBeVisible()
   await expect(editor.getByText('当前层覆盖已 Revert', { exact: true })).toBeVisible()
 
-  await variantChild.click()
+  await variantChild.click({ modifiers: ['Meta'] })
   await stage.press('Shift+ArrowRight')
   await expect(saveVariant).toBeEnabled()
   await saveVariant.click()
@@ -170,9 +172,9 @@ test('OpenSpec: component-library / 离线快照与 revision 冲突 / 保留旧�
     '[data-workspace-panel="component-document"][data-component-kind="base"]',
   )
   await expect(componentPanel).toBeVisible()
-  // 组件根现在是 Frame（容器节点）；复用单选叶子作根时不再带 is-renderer。
+  // 组件根是 Frame，也就是一块场景：它的体不再是选中入口，走 command 点体。
   const componentChild = stage.locator('.compose-stage__scene .compose-stage__node').first()
-  await componentChild.click()
+  await componentChild.click({ modifiers: ['Meta'] })
   await stage.press('ArrowRight')
   const saveComponent = editor.getByRole('button', { name: '保存主组件 Resilient Card' })
   await expect(saveComponent).toBeEnabled()

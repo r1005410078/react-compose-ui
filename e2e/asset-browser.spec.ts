@@ -153,7 +153,11 @@ test('OpenSpec: components / Paint Picker / 色盘与透明度滑动在真实指
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
+  // 场景体不再是选中入口——裸点它是框选。用 Meta 而不是 Control：macOS 上 Ctrl+左键会被
+  // Chromium 翻译成右键。
+  await page.keyboard.down('Meta')
   await page.mouse.click(outputBox!.x + 40, outputBox!.y + 40)
+  await page.keyboard.up('Meta')
 
   // 场景是普通容器：背景在外观分组，用的是通用的「背景填充」Paint 编辑器。
   const inspector = editor.getByRole('region', { name: '场景 属性', exact: true })
