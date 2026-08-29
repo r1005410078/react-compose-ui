@@ -14,8 +14,8 @@ const messages = {
   specifyEndPoint: '指定端点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
-  wireTitle: '导线',
   arrowTitle: '箭头',
+  wireTitle: '导线',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
   basePoint: '指定基点',
@@ -113,6 +113,9 @@ describe('LINE 命令', () => {
       'MOVE', 'COPY', 'ERASE', 'VERTEX',
     ])
     expect(commands[0]?.aliases).toEqual(['L'])
+    // 导线在一次接线图上是独立的活儿（红色粗实线、只走横平竖直、可以有拐点），因此有自己
+    // 的词；`LINE` 顺手吸上端口时同样绑定，两条路都通，没有「画错就永远接不上」这一档。
+    expect(commands.flatMap(({ aliases }) => aliases ?? [])).toContain('WI')
   })
 
   describe('OpenSpec: stage-engine / 连续取点命令的闭合关键字', () => {
@@ -180,19 +183,19 @@ describe('LINE 命令', () => {
     })
   })
 
-  it('OpenSpec: stage-engine / 单键快捷键同时是命令别名 / 七条绘图命令各有一个单字母别名', () => {
+  it('OpenSpec: stage-engine / 单键快捷键同时是命令别名 / 六条绘图命令各有一个单字母别名', () => {
     const registry = createComposeCommandRegistry(createStageDraftingCommands(messages))
     // 用户只记一套词：按 `P` 与在命令行敲 `P↵` 必须指向同一条命令。
     const single: readonly (readonly [string, string])[] = [
       ['L', 'LINE'], ['P', 'PLINE'], ['R', 'RECTANGLE'],
-      ['C', 'CIRCLE'], ['A', 'ARC'], ['X', 'ARROW'], ['W', 'WIRE'],
+      // `W` 随 `WIRE` 一起删掉：导线合并进 `LINE` 之后没有第二种线可分。
+      ['C', 'CIRCLE'], ['A', 'ARC'], ['X', 'ARROW'],
     ]
     for (const [key, id] of single) {
       expect(resolveComposeCommand(registry, key)?.id).toBe(id)
     }
     // 反向不成立：多字母别名不因此被要求有对应的快捷键，它们照旧可用。
     expect(resolveComposeCommand(registry, 'REC')?.id).toBe('RECTANGLE')
-    expect(resolveComposeCommand(registry, 'WI')?.id).toBe('WIRE')
   })
 
   it('OpenSpec: stage-engine / 绘图命令 / ARROW 取两点即结束并标记为箭头', () => {
@@ -209,7 +212,21 @@ describe('LINE 命令', () => {
     expect(effect?.curves).toHaveLength(1)
     // 引擎只给出一个标记：它不认识 Renderer props，也不认识 Preset id。
     expect(effect?.arrow).toBe(true)
-    expect(effect?.wire).toBeUndefined()
+  })
+
+  it('OpenSpec: stage-engine / LINE 取点落在端口上即绑定 / 效果上不再有导线标记', () => {
+    const command = createStageDraftingCommands(messages).find(({ id }) => id === 'LINE')!
+    const session = command.start({ messages })
+
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    const step = session.advance({ kind: 'point', point: { x: 40, y: 0 } })
+
+    // 合并之后没有第二种线可分，因此标记整个删掉而不是恒为真——恒为真的标记会让读代码的人
+    // 以为还存在另一种情形。端点绑到哪个端口由宿主按取点时记下的来源判定，几何本身够用：
+    // 曲线的两个端点就是那两次落点。
+    const commit = step.status === 'prompt' ? step.commit : undefined
+    expect(commit?.curves).toHaveLength(1)
+    expect(commit && 'wire' in commit).toBe(false)
   })
 })
 

@@ -67,6 +67,8 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly snapOff: string
   /** 夹点几何变更的撤销标签。 */
   readonly editGeometry: (name: string) => string
+  /** 端口与线段不在同一父级、因此没能绑上时的说明。 */
+  readonly wireParentMismatch: string
 }
 
 /** {@link useStageDrafting} 的输入。 @internal */
@@ -334,6 +336,22 @@ export function useStageDrafting(options: StageDraftingOptions) {
    */
   const pickedRef = useRef(false)
   /**
+   * 这一条会话到目前为止碰过端口没有。
+   *
+   * @remarks
+   * **碰过就是导线**，此后的落点钉死正交。`WIRE` 合并进 `LINE` 之后没有第二种线可分，
+   * 「这是不是一条导线」只能从取点来源读出来——而那正是绑定的判据（吸附到端口本身就是显式
+   * 意图），两者因此读同一份事实，不可能给出「绑上了但走斜线」这种自相矛盾的结果。
+   *
+   * 导线**只走横平竖直**：斜着走的导线在一次接线图上不是「用户的选择」，是一张画错的图。
+   * 而没碰过端口的普通线一个字节都不变——它照旧跟着会话级的角度约束走。
+   *
+   * 是**状态**而不是 ref：落点解算在渲染期被读到（预览、十字线、捕捉标记都要它），而渲染期
+   * 读 ref 读到的是上一帧的值。这不违反「不为反馈引入每帧都要写的状态」——它只在取点真的
+   * 碰到端口时写一次，而不是每次 `pointermove`。
+   */
+  const [wiring, setWiring] = useState(false)
+  /**
    * 回指 `launch`。
    *
    * @remarks
@@ -386,8 +404,18 @@ export function useStageDrafting(options: StageDraftingOptions) {
     if (id) createdIdsRef.current.push({ id, seen: false })
   }, [])
 
-  const commit = useCallback((effect: StageDraftingEffect | undefined) => {
-    if (!effect) return
+  /**
+   * 落地一步效果。
+   *
+   * @returns 需要显示的说明；没有就是 null。
+   *
+   * @remarks
+   * 说明**由返回值交出去**而不是在这里 `setNotice`：`LINE` 逐段落地，它的提交发生在
+   * `prompt` 这一档里，而那一档紧接着就会把命令行清成下一句提示——在这里写等于同一拍被抹掉。
+   */
+  const commit = useCallback((effect: StageDraftingEffect | undefined): string | null => {
+    if (!effect) return null
+    let notice: string | null = null
     const current = latest.current
 
     /*
@@ -400,7 +428,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     const undone = effect.undoLastCreated ? createdIdsRef.current.pop()?.id : undefined
 
     for (const curve of effect.curves ?? []) {
-      const command = createStageDraftingCurveCommand({
+      const created = createStageDraftingCurveCommand({
         document: current.document,
         layoutSnapshot: current.layoutSnapshot,
         index: current.index,
@@ -408,17 +436,19 @@ export function useStageDrafting(options: StageDraftingOptions) {
         idFactory: current.idFactory,
         activeFrameId: current.activeFrameId,
       }, curve, {
-        /*
-         * 两端都没接到端口时也要带上这个字段（空对象）：它在不在决定走哪个 Preset，而一条
-         * 谁也没接的导线仍然是主回路。绑定为空时 `Wire` Component 自己不会被写进去。
-         */
-        ...(effect.wire ? { wire: wireBindingsFor(portAnchors.current, curve) ?? {} } : {}),
+        // 所有直线都按取点时记下的来源绑定，不再看命令是哪一条：「吸附到端口」本身就是显式
+        // 意图（用户把光标挪进容差、看着捕捉标记亮起、然后落笔），再要求他先选对一条命令
+        // 是让同一个意图说两遍。两端都没碰过端口时 `wireBindingsFor` 给出空对象，落地时
+        // 因此不写 `Wire`，也不走导线 Preset——没碰过端口的普通线一个字节都不变。
+        wire: wireBindingsFor(portAnchors.current, curve),
+        ...(effect.wire ? { wiring: true } : {}),
         ...(effect.arrow ? { arrow: true } : {}),
       })
-      if (command) {
-        recordCreated(command)
-        current.dispatch(command)
-      }
+      if (!created) continue
+      recordCreated(created.command)
+      current.dispatch(created.command)
+      // 跨父级的绑定被丢掉了就必须说出来：静默丢弃与「绑上了」在屏幕上无法区分。
+      if (created.droppedWireEnds.length > 0) notice = current.messages.wireParentMismatch
     }
 
     // 盒走另一个 Preset：`RECTANGLE` 产出的是带完整 Appearance 的矩形物料，不是曲线。
@@ -464,12 +494,14 @@ export function useStageDrafting(options: StageDraftingOptions) {
     // 已删标识留在选择集里会指向不存在的 Entity，随后任何以选择集为输入的命令都会拿到
     // 幽灵目标。AutoCAD 里 ERASE 之后选择集也是空的。
     if (effect.removed && effect.removed.length > 0) current.onSelectedIdsChange([])
+    return notice
   }, [recordCreated])
 
   const endSession = useCallback((message: string | null) => {
     sessionRef.current = null
     activeDefinitionRef.current = null
     pickedRef.current = false
+    setWiring(false)
     setActiveCommandId(null)
     portAnchors.current.clear()
     createdIdsRef.current = []
@@ -482,11 +514,13 @@ export function useStageDrafting(options: StageDraftingOptions) {
 
   const applyStep = useCallback((step: ReturnType<ComposeCommandSession<StageDraftingEffect>['advance']>) => {
     if (step.status === 'prompt') {
-      commit(step.commit)
+      // 提交交出来的说明压过「清空」：这一档本来就要把命令行换成下一句提示，而落地时发生的
+      // 事（例如跨父级没能绑上）此刻还没被任何人看见。
+      const notice = commit(step.commit)
       setPrompt(step.prompt)
       setReference(step.preview?.reference ?? step.commit?.reference ?? null)
       setPreview(step.preview ?? null)
-      setNotice(null)
+      setNotice(notice)
       return
     }
     /*
@@ -501,9 +535,16 @@ export function useStageDrafting(options: StageDraftingOptions) {
       return true
     }
     if (step.status === 'commit') {
-      commit(step.effect)
-      if (repeat()) return
-      endSession(null)
+      const notice = commit(step.effect)
+      /*
+       * 重开会把命令行清成第一步的提示，因此说明要**在重开之后**再写：落地时发生的事
+       * （例如跨父级没能绑上）此刻还没被任何人看见，被下一条的提示盖掉就等于没说。
+       */
+      if (repeat()) {
+        if (notice !== null) setNotice(notice)
+        return
+      }
+      endSession(notice)
       return
     }
     if (step.status === 'cancelled') {
@@ -621,11 +662,14 @@ export function useStageDrafting(options: StageDraftingOptions) {
       ...(hit ? { snapped: hit.point } : {}),
       ...(reference ? { reference } : {}),
       /*
-       * 提示钉死了角度约束时以它为准：那是**规范**而不是偏好——导线只走横平竖直，会话级的
-       * 三态设置管不到这一步。钉死的只是这一档，因此管线次序原样成立（键入 > 捕捉 > 网格 >
-       * 角度约束），捕捉命中仍然短路、键入的坐标仍然不被改写。
+       * 导线只走横平竖直，会话级的三态设置管不到——那是**规范**而不是偏好。两个来源，任一
+       * 成立即钉死正交：`WIRE` 的提示自己声明（用户是在接线），或者这条线碰过端口（它事实上
+       * 就是导线，哪怕走的是 `LINE`）。
+       *
+       * 钉死的只是这一档，因此管线次序原样成立（键入 > 捕捉 > 网格 > 角度约束）：捕捉命中
+       * 仍然短路（最后一段够得着端口，不会被正交挡在门外），键入的坐标仍然不被改写。
        */
-      angle: prompt?.constrain ?? angleConstraint,
+      angle: prompt?.constrain ?? (wiring ? 'ortho' : angleConstraint),
       polar: { increment: polarIncrement, tolerance: snapRadius / viewport.zoom },
       grid: gridSettings,
     })
@@ -640,7 +684,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
   }, [
     angleConstraint, applyFieldLocks, document, excluded, featureTolerance, gridSettings, index,
     polarIncrement, prompt?.constrain, reference, snapEnabled, snapExcludedPoint, snapRadius,
-    viewport.zoom,
+    viewport.zoom, wiring,
   ])
 
   const resolvePointerPoint = useCallback(
@@ -659,7 +703,10 @@ export function useStageDrafting(options: StageDraftingOptions) {
     // 导线的绑定来自**取点时记下的来源**，不是事后按坐标反查已有端口：反查会让一条恰好路过
     // 端口的普通线莫名其妙地绑上，而那个绑定在屏幕上完全不可见。键入的坐标因此永远不绑——
     // 它没有来源可言。
-    if (port) portAnchors.current.set(anchorKey(point), port)
+    if (port) {
+      portAnchors.current.set(anchorKey(point), port)
+      setWiring(true)
+    }
     advanceWithPoint(session, point)
   }, [advanceWithPoint, resetFields, resolvePointerHit])
 
@@ -692,6 +739,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     portAnchors.current.clear()
     createdIdsRef.current = []
     pickedRef.current = false
+    setWiring(false)
     /*
      * **先清掉再跑**：退化会话（`prompt` 为 null）当场提交，那一步会走进 `applyStep` 的
      * commit 分支——此刻 ref 里若还留着上一条命令的定义，它的 `repeat` 就会把这一步接管，

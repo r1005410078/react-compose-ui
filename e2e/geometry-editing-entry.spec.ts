@@ -50,8 +50,10 @@ test('OpenSpec: stage / Stage 十字光标 / 位置只来自本次跟踪开始�
   await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surfaceLocator = stage.getByTestId('stage-surface')
+  // `toBeVisible()` 之后再取 box 是两次往返：负载高时元素会在两次之间重新布局，第二次拿回 null。
+  await expect.poll(() => surfaceLocator.boundingBox()).not.toBeNull()
+  const surface = (await surfaceLocator.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   // 第一条命令留下一个「最后观测到的位置」。

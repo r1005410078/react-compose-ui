@@ -173,6 +173,13 @@ const wirePreset: ComposeEntityPreset = {
   }),
 }
 
+/** 箭头与曲线共用同一个 Renderer，差别只在默认描边——这里只需要它能取到 seed。 */
+const arrowPreset: ComposeEntityPreset = {
+  id: 'arrow',
+  label: '箭头',
+  createComponents: () => curvePreset.createComponents(),
+}
+
 const registry = createComposeEntityRegistry({
   renderers: [{
     type: 'test',
@@ -183,7 +190,7 @@ const registry = createComposeEntityRegistry({
     label: '曲线',
     renderer: () => null,
   }],
-  presets: [preset, curvePreset, wirePreset],
+  presets: [preset, curvePreset, wirePreset, arrowPreset],
 })
 
 function curveEntity(id = 'curve-a'): ComposeEntity {
@@ -1876,8 +1883,9 @@ describe('绘图模式', () => {
     }
 
     function startWire() {
+      // 端口显现只看「命令正在取点」，与是哪条命令无关；`WIRE` 已并入 `LINE`。
       const input = screen.getByRole('textbox', { name: '命令行' })
-      fireEvent.change(input, { target: { value: 'WIRE' } })
+      fireEvent.change(input, { target: { value: 'L' } })
       fireEvent.keyDown(input, { key: 'Enter' })
     }
 
@@ -2023,8 +2031,8 @@ describe('绘图模式', () => {
 
     it('画完一条接着画下一条', () => {
       const { runtime } = renderStage(document(), { angleConstraint: 'off' })
-      startCommand('WIRE')
-      drawTwoPoints([100, 100], [300, 200], true)
+      startCommand('ARROW')
+      drawTwoPoints([100, 100], [300, 200])
 
       expect(curveCount(runtime)).toBe(1)
       // 命令仍在跑，且提示回到**第一步**——回到第二步会让用户以为上一条还没画完。
@@ -2033,30 +2041,55 @@ describe('绘图模式', () => {
 
     it('连画三条得到三个 Entity', () => {
       const { runtime } = renderStage(document(), { angleConstraint: 'off' })
-      startCommand('WIRE')
-      // 每条只按一次 `Enter` 结束——命令本身不必重启，那正是「成批」要省下的按键。
-      drawTwoPoints([100, 100], [200, 100], true)
-      drawTwoPoints([100, 140], [200, 140], true)
-      drawTwoPoints([100, 180], [200, 180], true)
+      startCommand('ARROW')
+      // 中途一个键都没按：`ARROW` 取够两点自己就提交，然后重开。这正是「成批」要省下的按键。
+      drawTwoPoints([100, 100], [200, 100])
+      drawTwoPoints([100, 140], [200, 140])
+      drawTwoPoints([100, 180], [200, 180])
       expect(curveCount(runtime)).toBe(3)
     })
 
-    it('OpenSpec: stage / 会重开的命令与两级 Escape / 导线的第二个点被钉死在正交上', () => {
+    it('OpenSpec: stage / 接线只走横平竖直 / 碰过端口之后落点被钉死在正交上', () => {
+      const symbol = {
+        ...entity('symbol'),
+        components: {
+          ...entity('symbol').components,
+          Ports: { items: [{ id: 'L1', position: { x: 0, y: 0 } }] },
+        },
+      }
       /*
-       * 角度约束**显式关掉**：这一条要证明的正是「提示钉死的正交管得住会话级设置」，跟着
-       * 默认值（极轴）走的话，落点碰巧被极轴吸对了也说明不了问题。
+       * 角度约束**显式关掉**：这一条要证明的正是「碰过端口就钉正交」压得住会话级设置，
+       * 跟着默认值（极轴）走的话，落点碰巧被吸对了也说明不了问题。
        */
-      const { runtime } = renderStage(document(), { angleConstraint: 'off' })
-      startCommand('WIRE')
-      // 第二个点落在一个明显斜的位置上：x 差 200、y 差 90。
-      drawTwoPoints([100, 100], [300, 190], true)
+      const { runtime } = renderStage(document([symbol]), { angleConstraint: 'off' })
+      startCommand('LINE')
+      const surface = screen.getByTestId('stage-surface')
+      // 夹具 Entity 的 offset 是 (20,30)，端口在它的局部原点上。
+      fireEvent.pointerDown(surface, surfacePoint(20, 30))
+      // 第二个点落在明显斜的位置：x 差 200、y 差 90。
+      fireEvent.pointerDown(surface, surfacePoint(220, 120))
 
       const curve = Object.values(runtime.document.entities)
-        .map((entity) => entity.components.Curve as { kind?: string; start?: { x: number; y: number }; end?: { x: number; y: number } } | undefined)
+        .map((item) => item.components.Curve as
+          { start?: { x: number; y: number }; end?: { x: number; y: number } } | undefined)
         .find((value) => value !== undefined)!
-      // 落点被拽回水平：斜着走的导线在一次接线图上是一张画错的图，不是用户的选择。
-      expect(curve.kind).toBe('line')
+      // 斜着走的导线在一次接线图上是一张画错的图，不是用户的选择。
       expect(curve.start!.y).toBeCloseTo(curve.end!.y, 6)
+    })
+
+    it('OpenSpec: stage / 接线只走横平竖直 / 没碰过端口的线不受影响', () => {
+      const { runtime } = renderStage(document(), { angleConstraint: 'off' })
+      startCommand('LINE')
+      const surface = screen.getByTestId('stage-surface')
+      fireEvent.pointerDown(surface, surfacePoint(100, 100))
+      fireEvent.pointerDown(surface, surfacePoint(300, 190))
+
+      const curve = Object.values(runtime.document.entities)
+        .map((item) => item.components.Curve as
+          { start?: { x: number; y: number }; end?: { x: number; y: number } } | undefined)
+        .find((value) => value !== undefined)!
+      // 普通线一个字节都不变：它照旧跟着会话级的角度约束走，这里是关着的。
+      expect(curve.start!.y).not.toBeCloseTo(curve.end!.y, 6)
     })
 
     it('不声明 repeat 的命令画完即结束', () => {
@@ -2069,10 +2102,10 @@ describe('绘图模式', () => {
 
     it('Escape 先放弃这一条，再按一次才退出', () => {
       renderStage(document(), { angleConstraint: 'off' })
-      startCommand('WIRE')
+      startCommand('ARROW')
       const application = screen.getByRole('application', { name: 'Stage' })
       fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(100, 100))
-      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定下一点')
+      expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定端点')
 
       // 取过点：只放弃这一条，命令留着回到第一步。
       fireEvent.keyDown(application, { key: 'Escape' })
@@ -2089,12 +2122,12 @@ describe('绘图模式', () => {
         angleConstraint: 'off',
         onActiveCommandChange: (commandId) => { activeCommands.push(commandId) },
       })
-      startCommand('WIRE')
-      drawTwoPoints([100, 100], [200, 100], true)
-      drawTwoPoints([100, 140], [200, 140], true)
+      startCommand('ARROW')
+      drawTwoPoints([100, 100], [200, 100])
+      drawTwoPoints([100, 140], [200, 140])
 
       // 工具栏的按下态读它：中途冒出一个 null 会让按钮抖一下。
-      expect(activeCommands.slice(activeCommands.indexOf('WIRE'))).toEqual(['WIRE'])
+      expect(activeCommands.slice(activeCommands.indexOf('ARROW'))).toEqual(['ARROW'])
     })
   })
 

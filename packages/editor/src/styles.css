@@ -180,6 +180,44 @@
   stroke-width: 1.7;
 }
 
+/**
+ * 图标上的夹点方块。
+ *
+ * @remarks
+ * 直接声明在 rect 上，因此压得过 `button svg` 那条规则继承下来的 `fill: none`。
+ */
+.compose-editor__icon-grip {
+  fill: var(--compose-accent);
+  stroke: none;
+}
+
+/**
+ * 工具栏悬停提示。
+ *
+ * @remarks
+ * `position: fixed` 是为了躲开祖先的 `overflow` 裁剪，坐标由 JS 按按钮实测下发。
+ * `pointer-events: none` 是必须的：提示就贴在按钮下沿，能接指针的话它会把自己盖住的那块
+ * 区域从按钮手里抢走，鼠标一往下挪提示就闪。
+ */
+.compose-editor__toolbar-tooltip {
+  @apply ct:pointer-events-none ct:fixed ct:z-[60] ct:flex ct:items-center ct:gap-2 ct:rounded-[5px] ct:border ct:px-2 ct:py-1 ct:text-xs ct:whitespace-nowrap;
+  border-color: var(--compose-border);
+  background: var(--compose-surface-raised);
+  box-shadow: 0 4px 12px var(--compose-shadow);
+}
+
+.compose-editor__toolbar-tooltip-label {
+  color: var(--compose-text-strong);
+}
+
+/* 快捷键与命令名排在名称之后并压暗：它回答的是「怎么敲出来」，不是「这是什么」。 */
+.compose-editor__toolbar-tooltip-hint {
+  @apply ct:rounded-[3px] ct:px-1;
+  background: var(--compose-surface-sunken);
+  color: var(--compose-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .compose-editor__toolbar-divider {
   @apply ct:h-6 ct:w-px ct:shrink-0 ct:mx-1;
   background: var(--compose-border);

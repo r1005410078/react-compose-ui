@@ -90,29 +90,78 @@ test('OpenSpec: stage / ARROW / 画出的曲线带终点箭头', async ({ page }
 
 test('OpenSpec: stage / 会重开的命令与两级 Escape / 连画多条期间按钮一直按下', async ({ page }) => {
   const { editor, stage, at } = await openEditor(page)
-  const wire = editor.getByRole('button', { name: '导线', exact: true })
+  const arrow = editor.getByRole('button', { name: '箭头', exact: true })
   const strokes = stage.getByTestId('compose-material-curve-stroke')
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
 
-  await wire.click()
-  await expect(wire).toHaveAttribute('aria-pressed', 'true')
+  await arrow.click()
+  await expect(arrow).toHaveAttribute('aria-pressed', 'true')
 
-  /*
-   * 连画三条，每条只按一次 `Enter` 结束——命令本身不必重启。`WIRE` 连续取点（可以有拐点），
-   * 因此那一下回车是「这一条画完了」，而不是「结束命令」。
-   */
+  // 连画三条，中途一个键都不按——`ARROW` 取够两点自己就提交，然后重开。
   for (const y of [160, 220, 280]) {
     await page.mouse.click(at(160, y).x, at(160, y).y)
     await page.mouse.click(at(360, y).x, at(360, y).y)
-    await stage.press('Enter')
-    // 提示回到第一步，而不是停在「指定下一点」。
+    // 提示回到第一步，而不是停在「指定端点」。
     await expect(prompt).toContainText('指定第一点')
     // 按下态读的是 Stage 上报的当前命令 id：重开若先报一次 null，这里就会抖。
-    await expect(wire).toHaveAttribute('aria-pressed', 'true')
+    await expect(arrow).toHaveAttribute('aria-pressed', 'true')
   }
   await expect(strokes).toHaveCount(3)
 
   // 一个点都没取时 `Escape` 才退出命令。
   await stage.press('Escape')
-  await expect(wire).toHaveAttribute('aria-pressed', 'false')
+  await expect(arrow).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('OpenSpec: editor-workspace-layout / 绘图命令组 / 图标夹点用 accent 而不是描边色', async ({ page }) => {
+  const { editor } = await openEditor(page)
+
+  const icon = editor.getByRole('button', { name: '直线', exact: true }).locator('svg')
+  const [grip, stroke] = await Promise.all([
+    icon.locator('rect').first().evaluate((node) => getComputedStyle(node).fill),
+    icon.evaluate((node) => getComputedStyle(node).stroke),
+  ])
+
+  // 判别点是**两者不同**而不是某个具体的颜色值：夹点跟着描边色走时这条才有意义，
+  // 而 accent 的字面值随主题变，写死它等于把 token 抄第二遍。
+  expect(grip).not.toBe(stroke)
+  expect(grip).toBe('rgb(54, 135, 255)')
+})
+
+test('OpenSpec: editor-workspace-layout / 工具栏提示 / 悬停给出名称与怎么敲出来', async ({ page }) => {
+  const { editor } = await openEditor(page)
+  const tooltip = editor.getByRole('tooltip')
+
+  await expect(tooltip).toHaveCount(0)
+  const line = editor.getByRole('button', { name: '直线', exact: true })
+  await line.hover()
+
+  // 判别点是**命令名在提示里**：这几条命令没有键位，敲 LINE 就是启动它的办法，而在此之前
+  // 提示里只有「直线」，用户无从知道该敲什么。
+  await expect(tooltip).toBeVisible()
+  await expect(tooltip).toContainText('直线')
+  await expect(tooltip).toContainText('LINE')
+  await expect(line).toHaveAttribute('aria-describedby', await tooltip.getAttribute('id') ?? '')
+
+  // 有键位的按钮给键位，不是命令名。
+  await editor.getByRole('button', { name: '选择', exact: true }).hover()
+  await expect(tooltip).toContainText('选择')
+
+  // 提示会盖住下一步要点的地方，而此刻焦点在按钮上——Escape 是唯一能把它收走的办法。
+  await page.keyboard.press('Escape')
+  await expect(tooltip).toHaveCount(0)
+})
+
+test('OpenSpec: editor-workspace-layout / 工具栏提示 / 键盘聚焦也出，点击之后不出', async ({ page }) => {
+  const { editor } = await openEditor(page)
+  const tooltip = editor.getByRole('tooltip')
+  const rectangle = editor.getByRole('button', { name: '矩形', exact: true })
+
+  // 原生 title 在键盘聚焦时根本不出现，这正是自建它的一半理由。
+  await rectangle.focus()
+  await expect(tooltip).toContainText('RECTANGLE')
+
+  // 点过之后不该再弹：用户已经点了，提示只会盖住刚点的东西。
+  await rectangle.click()
+  await expect(tooltip).toHaveCount(0)
 })

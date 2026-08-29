@@ -711,8 +711,12 @@ controller 时 MUST 不猜测页面 setup。
 默认 Stage toolbar MUST 按下列顺序提供：选择、缩放、旋转、吸附、网格及其大小菜单、分割线、
 容器绘制、文字绘制、分割线、**绘图命令组**。
 
-绘图命令组 MUST 为 `LINE`、`PLINE`、`RECTANGLE`、`CIRCLE`、`ARC`、`ARROW`、`WIRE` 各提供一个
+绘图命令组 MUST 为 `LINE`、`PLINE`、`RECTANGLE`、`CIRCLE`、`ARC`、`ARROW` 各提供一个
 按钮，按下 MUST 启动与在命令行敲下该名字**完全相同**的会话。
+
+**导线 MUST 占一个按钮**：一次接线图上接线是独立的活儿，它的产物有自己的规范（红色粗实线、
+只走横平竖直、可以有拐点）。而「选错命令就永远接不上」那个屏幕上看不见的错误由另一条要求
+挡住——`LINE` 顺手吸上端口时同样绑定，两条路都通。
 
 **形状 split button MUST NOT 存在**，`draw-rectangle` / `draw-arrow` / `draw-circle` 三个工具值
 MUST 一并删除。制图几何只有命令一套入口：留着绘制工具会让同一件事有两套机制，还会让取点插件
@@ -738,6 +742,11 @@ button 常态 MUST 不具有逐项 Card、边框或胶囊背景；当前工具�
 - **WHEN** 未提供 `stageToolbar` slot 的 `ComposeEditor` 渲染默认工作区
 - **THEN** toolbar 按规定顺序显示全部工具、绘图命令组与网格 menu trigger
 - **AND** 缩放与居中视图只出现在画布内控件组
+
+#### Scenario: 不再出现导线按钮
+
+- **WHEN** 用户查看默认工具栏
+- **THEN** 绘图命令组里有六个按钮，其中没有导线
 
 #### Scenario: 不再出现三个重复工具位
 

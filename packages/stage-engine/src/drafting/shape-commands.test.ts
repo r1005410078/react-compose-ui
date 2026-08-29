@@ -6,9 +6,9 @@ import {
   createStageRectangleSession,
 } from './shape-commands'
 import {
+  createStageArrowSession,
   createStageDraftingCommands,
   createStageLineSession,
-  createStageWireSession,
 } from './line-command'
 import type { StageDraftingContext, StageDraftingMessages } from './drafting-types'
 
@@ -20,8 +20,8 @@ const messages: StageDraftingMessages = {
   specifyEndPoint: '指定端点',
   expectedPoint: '需要一个点',
   lineTitle: '直线',
-  wireTitle: '导线',
   arrowTitle: '箭头',
+  wireTitle: '导线',
   selectObjects: '选择对象',
   expectedSelection: '需要选择对象',
   basePoint: '指定基点',
@@ -55,9 +55,8 @@ const context: StageDraftingContext = { messages }
 describe('OpenSpec: stage-engine / 成批作业的命令提交后接着画', () => {
   const byId = new Map(createStageDraftingCommands(messages).map((c) => [c.id, c]))
 
-  it('导线与箭头声明重开', () => {
-    // 判据是「用户画完之后想对它做什么」：接线是成批的活儿，一张图上连二三十条。
-    expect(byId.get('WIRE')?.repeat).toBe(true)
+  it('箭头声明重开', () => {
+    // 判据是「用户画完之后想对它做什么」：箭头是成批标注出来的。
     expect(byId.get('ARROW')?.repeat).toBe(true)
   })
 
@@ -72,83 +71,30 @@ describe('OpenSpec: stage-engine / 成批作业的命令提交后接着画', () 
   })
 })
 
-describe('WIRE 命令', () => {
-  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 取两点得到一条直线导线', () => {
-    const session = createStageWireSession({ messages } as never)
-    expect(session.advance({ kind: 'point', point: { x: 0, y: 0 } }).status).toBe('prompt')
-    expect(session.advance({ kind: 'point', point: { x: 100, y: 0 } }).status).toBe('prompt')
-    // 连续取点：取够两点不再自己提交，`Enter` 才结束这一条。
-    const step = session.advance({ kind: 'accept' })
-
-    expect(step.status).toBe('commit')
-    expect(step.status === 'commit' ? step.effect : null).toMatchObject({
-      wire: true,
-      curves: [{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
-    })
-  })
-
-  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 取三个点得到一条带拐点的导线', () => {
-    const session = createStageWireSession({ messages } as never)
-    for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }]) {
-      session.advance({ kind: 'point', point })
-    }
-    const step = session.advance({ kind: 'accept' })
-
-    // 一条导线是**一个**连接，因此攒成一个 Entity：逐段落地会得到假接头。
-    expect(step.status === 'commit' ? step.effect.curves : null).toEqual([{
-      kind: 'polyline',
-      vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }],
-      closed: false,
-    }])
-  })
-
-  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 只取一个点时回车被拒', () => {
-    const session = createStageWireSession({ messages } as never)
-    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
-    // 一个点的导线画不出来，也没有第二端可言——拒绝并停在原提示，而不是提交或放弃整条命令。
-    expect(session.advance({ kind: 'accept' }).status).toBe('rejected')
-  })
-
-  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 放弃上一点', () => {
-    const session = createStageWireSession({ messages } as never)
-    for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }]) {
-      session.advance({ kind: 'point', point })
-    }
-    // 攒到结束才提交，因此撤销够不着这一点——它得有自己的关键字。
-    expect(session.advance({ kind: 'keyword', key: 'U' }).status).toBe('prompt')
-    const step = session.advance({ kind: 'accept' })
-    expect(step.status === 'commit' ? step.effect.curves : null)
-      .toEqual([{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }])
-  })
-
-  it('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 从第二个点起钉死正交', () => {
-    const session = createStageWireSession({ messages } as never)
-    // 第一个点没有上一点、量不出方向，因此不钉。
-    expect(session.prompt?.constrain).toBeUndefined()
+describe('ARROW 命令', () => {
+  it('OpenSpec: stage-engine / 绘图命令复用泛型命令引擎 / 第二步不说「回车结束」', () => {
+    const session = createStageArrowSession({ messages } as never)
     session.advance({ kind: 'point', point: { x: 0, y: 0 } })
     /*
-     * 导线只走横平竖直，这是**规范**不是偏好——会话级的角度约束三态管不到这一步。斜着走的
-     * 导线在一次接线图上不是「用户的选择」，是一张画错的图。
+     * 取够两点自己就提交，因此这一步没有「怎么结束」这个问题——沿用 `LINE` 那句会让提示说
+     * 一件在这里做不到的事。既有规范明写：取够点自己就提交的命令不得带这句提示。
      */
-    expect(session.prompt?.constrain).toBe('ortho')
-    session.advance({ kind: 'point', point: { x: 100, y: 0 } })
-    expect(session.prompt?.constrain).toBe('ortho')
+    expect(session.prompt?.message).toBe(messages.specifyEndPoint)
+    expect(session.prompt?.message).not.toBe(messages.specifyNextPoint)
   })
+})
 
-  it('OpenSpec: stage-engine / 绘图命令复用泛型命令引擎 / 连续取点的提示说出怎么结束', () => {
-    const session = createStageWireSession({ messages } as never)
-    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
-    // WIRE 现在是连续取点，因此这一句该说；`ARROW` 相反，它取够两点自己就提交。
-    expect(session.prompt?.message).toBe(messages.specifyNextPoint)
-  })
-
-  it('LINE 不带 wire 标记，即使端点吸附到了端口上', () => {
-    // 绑定改变对象此后的行为，意图必须显式——捕捉到端口不等于用户想接线。
+describe('LINE 命令', () => {
+  it('OpenSpec: stage-engine / LINE 取点落在端口上即绑定 / 效果上没有导线标记', () => {
+    // `WIRE` 合并进 `LINE` 之后没有第二种线可分，标记因此整个删掉而不是恒为真。绑定由宿主
+    // 按取点时记下的来源接上，本包不认识端口。
     const session = createStageLineSession({ messages } as never)
     session.advance({ kind: 'point', point: { x: 0, y: 0 } })
     const step = session.advance({ kind: 'point', point: { x: 100, y: 0 } })
 
-    expect(step.status === 'prompt' ? step.commit?.wire : undefined).toBeUndefined()
+    const commit = step.status === 'prompt' ? step.commit : undefined
+    expect(commit?.curves).toEqual([{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }])
+    expect(commit && 'wire' in commit).toBe(false)
   })
 })
 
