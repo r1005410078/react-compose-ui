@@ -1,9 +1,15 @@
-## RENAMED Requirements
+## REMOVED Requirements
 
-- FROM: `### Requirement: 非空容器体的命中收敛`
-- TO: `### Requirement: 顶层容器体的命中收敛`
+### Requirement: 非空容器体的命中收敛
 
-## MODIFIED Requirements
+**原因**：这条要求的两条场景——「空容器仍可点体选中」与「已选中的容器可以拖体移动」——被本
+变更推翻：顶层容器（场景）的体不再承担选中与拖动，空与非空、已选中与未选中一律收敛。整条
+移除、以新名新增，而不是 RENAMED + MODIFIED：MODIFIED 只能补充与改写，丢掉两条已经不成立的
+场景需要显式说出来。
+
+**迁移**：见新需求「顶层容器体的命中收敛」，其余场景原样保留。
+
+## ADDED Requirements
 
 ### Requirement: 顶层容器体的命中收敛
 
@@ -82,6 +88,8 @@ controller MUST NOT 选中该目标，而是 MUST 起框选，判定几何、方
 
 - **WHEN** 命中来源为 `label` 且目标是含子元素的容器
 - **THEN** 该容器成为选区并进入 move 手势
+
+## MODIFIED Requirements
 
 ### Requirement: 框选判定模式协议
 

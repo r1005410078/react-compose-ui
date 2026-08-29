@@ -47,11 +47,16 @@ Text、Arrow、Circle 与 Wire 由 Stage 工具栏与绘图命令提供入口。
 - **THEN** 每个 seed 是合法独立 ComposeEntity
 - **AND** Composition 记录正确 Preset 与基础 Component Keys
 
-#### Scenario: 四个曲线起点共用一个 Renderer
+#### Scenario: 三个曲线起点共用一个 Renderer
 
-- **WHEN** Registry 从 Curve、Arrow、Circle 与 Wire Preset 各创建一个 seed
-- **THEN** 四者的 Renderer 类型相同，且都带 `Curve` Component
+- **WHEN** Registry 从 Curve、Arrow 与 Circle Preset 各创建一个 seed
+- **THEN** 三者的 Renderer 类型相同，且都带 `Curve` Component
 - **AND** Registry 中不存在第二个绘制线条的 Renderer 类型
+
+#### Scenario: 导线是第四个起点，同一个 Renderer
+
+- **WHEN** Registry 从 Wire Preset 创建一个 seed
+- **THEN** 它的 Renderer 类型与其余三个起点相同，且带 `Curve` Component
 
 #### Scenario: 导线是红色粗实线
 

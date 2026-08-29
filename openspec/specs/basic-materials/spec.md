@@ -51,19 +51,44 @@ materials MUST 发布默认隐藏于 Palette 的 SVG Entity Preset。SVG MUST �
 
 ### Requirement: 基础 Entity Presets
 
-Materials MUST 发布 Container、Rectangle、Text、Image、SVG、Curve、Arrow 与 Circle
+Materials MUST 发布 Container、Rectangle、Text、Image、SVG、Curve、Arrow、Circle 与 Wire
 Entity Presets。Container MUST 组合 Transform、Visibility、Lock、Hierarchy、Clip、Appearance；
 Rectangle、Text、Image 与 SVG Presets MUST 组合 Transform、Visibility、Lock、Appearance、Renderer。
 
-Curve、Arrow 与 Circle MUST 是**同一个 `curve` 物料的三个起点**：三者 MUST 在上述 Component
+Curve、Arrow、Circle 与 Wire MUST 是**同一个 `curve` 物料的四个起点**：四者 MUST 在上述 Component
 之外组合 `Curve`，差别只在默认几何与默认描边（Arrow 默认终点 marker 为箭头，Circle 默认几何
-是扫掠 360 的弧）。MUST NOT 为它们注册第二个 Renderer 类型——「盒 + 方向」与「坐标」不得同时
-存在两种线的表示，用户看不出区别却会得到不同的编辑手感。
+是扫掠 360 的弧，Wire 默认是一次回路的红色粗实线）。MUST NOT 为它们注册第二个 Renderer 类型——「盒 + 方向」
+与「坐标」不得同时存在两种线的表示，用户看不出区别却会得到不同的编辑手感。
+
+Wire Preset 的默认描边 MUST NOT 与其余三个起点共用同一份描边默认。导线与普通几何在文档上是
+两种东西——导线带 `Wire`、两端可以绑到端口、符号一移动它就跟着走——而共用描边会让这个差别
+在屏幕上**完全不可见**。
+
+这个差别 MUST 同时落在**颜色**与**线宽**上。
+
+**颜色 MUST 是红。**本产品画的是一次接线图，而那里红 = 合闸/带电是变电站监控画面的通行惯例；
+储能、光伏这类一次接线图画的是**正常运行**的系统，整条一次回路本来就是带电的，因此实机上通篇
+是红。默认取红，与实施工程师画完之后想要的样子一致。
+
+**绿 MUST NOT 作为默认**：它在一次图里表示分闸/停电，与红正好相反。（PCB 原理图工具用绿画导线
+是另一个领域的惯例——那张图上颜色是空闲的语义通道，而这里不是。）
+
+颜色**仍然留给数据绑定**：`stroke` 是可绑定的 Renderer prop，项目要做拓扑着色（带电红、停电
+绿）时绑它即可；红只是「还没绑」这一档的取值，而它取的正是最常见的那一档。
+
+导线色 MUST 在**编辑画布的深底与发布页面的浅底上都读得出来**（不低于图形元素的 3:1 门槛）：
+场景背景默认透明，导线与场景背景一样是「会被发布出去的真实像素」。
+
+**线宽 MUST 更粗**，沿用电气制图的既有读图习惯——一次回路粗实线，二次回路与标注细实线。
+
+Materials MUST NOT 内置电压等级色表——色表因项目而异，内置一份等于替宿主做了一个多半要改的
+决定，而改它要动物料默认值。
 
 已经拥有专用创建入口的 Preset MUST 默认隐藏于 Palette，避免同一个创建动作出现两个入口：
-Text、Arrow 与 Circle 由 Stage 工具栏绘制工具提供入口。默认隐藏 MUST 只影响 Palette
-呈现，MUST NOT 影响 Registry 注册、拖入、键盘新增、资源拖放或文档反序列化；宿主 MUST
-能够通过物料 options 覆盖该默认。
+Text、Arrow、Circle 与 Wire 由 Stage 工具栏与绘图命令提供入口。Wire 的隐藏还有一条自己的
+理由：从 Palette 拖出来的导线**没有任何端口绑定**，而那条红粗线正在宣称它是带电的主回路。默认隐藏 MUST
+只影响 Palette 呈现，MUST NOT 影响 Registry 注册、拖入、键盘新增、资源拖放或文档反序列化；
+宿主 MUST 能够通过物料 options 覆盖该默认。
 
 #### Scenario: 创建基础 ECS 物料
 
@@ -77,11 +102,23 @@ Text、Arrow 与 Circle 由 Stage 工具栏绘制工具提供入口。默认隐�
 - **THEN** 三者的 Renderer 类型相同，且都带 `Curve` Component
 - **AND** Registry 中不存在第二个绘制线条的 Renderer 类型
 
+#### Scenario: 导线是第四个起点，同一个 Renderer
+
+- **WHEN** Registry 从 Wire Preset 创建一个 seed
+- **THEN** 它的 Renderer 类型与其余三个起点相同，且带 `Curve` Component
+
+#### Scenario: 导线是红色粗实线
+
+- **WHEN** Registry 从 Curve Preset 与 Wire Preset 各创建一个 seed
+- **THEN** Wire 的 `strokeWidth` 大于 Curve 的
+- **AND** Wire 的 `stroke` 是红，且与 Curve 的不同
+- **AND** 两者的线帽与 marker 相同
+
 #### Scenario: 默认 Palette 不重复工具栏入口
 
 - **WHEN** 宿主使用默认基础物料渲染组件库 Palette
-- **THEN** Text、Arrow 与 Circle 不出现在 Palette 中
-- **AND** 这些 Preset 仍可由工具栏、资源拖入与 Registry API 正常创建
+- **THEN** Text、Arrow、Circle 与 Wire 不出现在 Palette 中
+- **AND** 这些 Preset 仍可由工具栏、绘图命令、资源拖入与 Registry API 正常创建
 
 #### Scenario: 形状跨入口一致渲染
 
@@ -635,15 +672,21 @@ Text Preset MUST 为 `hug × hug` 提供不大于默认文字内容的回退尺�
 
 基础物料 MUST 注册一个 id 与 Frame Entity 的 `Composition.presetId` 一致的 Entity Preset，
 使所有按 presetId 查询 Registry 的位置都能解析到它。该 Preset MUST 使用与 Container Preset
-相同的图标与默认外观，但默认 Clip MUST 为不裁剪——场景是绝对坐标的原点与工作区里的
-画板，内容越界默认可见，与「新建场景」命令及初始场景的行为一致；需要裁剪时由用户在
-溢出属性里显式开启。Preset MUST 标记为面板隐藏——场景由绘制或具名动作产生，MUST NOT
-出现在基础组件面板里供拖拽。
+相同的图标，但默认外观 MUST 取自 core 的场景默认外观（透明背景、无边框）而不是 Container
+Preset 的默认外观——场景背景是会被发布出去的真实像素，由用户决定；默认 Clip MUST 为不裁剪
+——场景是绝对坐标的原点与工作区里的画板，内容越界默认可见，与「新建场景」命令及初始场景的
+行为一致；需要裁剪时由用户在溢出属性里显式开启。Preset MUST 标记为面板隐藏——场景由绘制或
+具名动作产生，MUST NOT 出现在基础组件面板里供拖拽。
 
 #### Scenario: 场景 Preset 可从 Registry 解析
 
 - **WHEN** 宿主用 Frame Entity 的 `presetId` 查询 Registry
 - **THEN** 返回场景 Preset，其图标与 Container Preset 相同且默认 Clip 为不裁剪
+
+#### Scenario: 场景 Preset 背景透明而容器不透明
+
+- **WHEN** 分别用场景 Preset 与 Container Preset 创建 Entity
+- **THEN** 场景的 `Appearance.backgroundPaint` 是透明的，容器的仍是深色
 
 #### Scenario: 场景不出现在物料面板
 
@@ -964,8 +1007,9 @@ marker MUST 参与 `viewBox` 变换——它是画在端点上的一小片形状
 `Ports` MUST 自带内建 Component Inspector，能增删端口项并编辑 id 与位置，写回 MUST 走既有的
 Component 更新命令，MUST NOT 为端口新增命令——端口是一个普通 Component 的普通字段。
 
-Inspector MUST 列出当前全部端口。端口在图面上不绘制标记，因此 Inspector 是用户确认「这个符号
-有哪些接线点」的唯一入口。
+Inspector MUST 列出当前全部端口。它是端口的**编辑**入口；查看则不再限于此——端口在命令取点
+期间会在图面上按符号整组显现（见 `stage`）。Inspector 因此 MUST NOT 依赖「图面上什么都不画」
+这个前提来论证自己的存在，它的理由是编辑：改 id、改位置、增删项在图面上都做不了。
 
 #### Scenario: 增删端口各产生一条命令
 
