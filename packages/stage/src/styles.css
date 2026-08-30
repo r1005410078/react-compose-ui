@@ -1416,6 +1416,8 @@
   --compose-stage-gizmo-x: #ff6b81;
   --compose-stage-gizmo-y: #2ecc8f;
   --compose-stage-gizmo-ring: #e8e0c0;
+  --compose-stage-gizmo-center: #3b82f6;
+  --compose-stage-gizmo-center-edge: #f8fbff;
 }
 
 .compose-stage__gizmo-ring {
@@ -1497,8 +1499,20 @@
   fill: var(--compose-stage-gizmo-y, #2ecc8f);
 }
 
-/* 中心圆点只标明「绕这里转」，v1 不可拖，因此不接指针。 */
+/*
+ * 中心圆点只标明「绕这里转」，v1 不可拖，因此不接指针。
+ *
+ * 圆点画在两条轴之后，压在它们的交点上——所以它**必须**自己就读得出是个点，否则两条轴看起来
+ * 是在中间断了一截。描边就是干这个的：填充色难免撞上某个对象的颜色（原来取
+ * `--compose-stage-accent` 的 fallback #3b82f6，正好是选中态那个蓝，落在蓝色对象上整个消失），
+ * 而一圈亮描边在任何底色上都划得出边界。
+ *
+ * 颜色收在本文件顶部的 gizmo 变量里，与 x/y/ring 一致。原来那个 `--compose-stage-accent`
+ * 在 packages 里从未定义、一直靠 fallback 撑着——哪天有人定义了它，这里会跟着无声地变。
+ */
 .compose-stage__gizmo-center {
-  fill: var(--compose-stage-accent, #3b82f6);
+  fill: var(--compose-stage-gizmo-center, #3b82f6);
+  stroke: var(--compose-stage-gizmo-center-edge, #f8fbff);
+  stroke-width: 1.5;
   pointer-events: none;
 }

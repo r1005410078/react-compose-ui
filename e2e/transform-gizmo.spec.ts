@@ -118,6 +118,23 @@ test('OpenSpec: stage / Rive 式变换指示器 / 开关控制把手，画在基
   await expect(stage.getByTestId('stage-transform-gizmo')).toHaveCount(0)
 })
 
+test('OpenSpec: stage / Rive 式变换指示器 / 基点圆点带描边，压在交点上仍读得出', async ({ page }) => {
+  const { editor, stage } = await setup(page)
+  await editor.getByRole('button', { name: '变换指示器' }).click()
+
+  /*
+   * 圆点画在两条轴之后、压在它们的交点上。只有填充的话,填充色一旦撞上对象的颜色它就整个消失,
+   * 用户看到的不是「点不见了」而是「两条轴在中间断了一截」——这正是它带描边的原因。
+   */
+  const paint = await stage.getByTestId('stage-gizmo-center').evaluate((el) => {
+    const style = getComputedStyle(el)
+    return { fill: style.fill, stroke: style.stroke, width: Number.parseFloat(style.strokeWidth) }
+  })
+  expect(paint.stroke).not.toBe('none')
+  expect(paint.width).toBeGreaterThan(0)
+  expect(paint.stroke).not.toBe(paint.fill)
+})
+
 test('OpenSpec: stage / Rive 式变换指示器 / 拖轴只写位置，拖环只写角度', async ({ page }) => {
   const { editor, stage, node, inspector } = await setup(page)
   await inspector.getByRole('combobox', { name: '旋转基点' }).selectOption('middle-left')
